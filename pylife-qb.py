@@ -79,6 +79,24 @@ def parse_speed(speed_str: str) -> int:
     return int(float(value) * units[unit])
 
 
+def parse_fsize(fsize_str: str) -> int:
+    """将文件大小字符串（如 '10.5 GiB'）转换为字节"""
+    units = {
+        "B": 1,
+        "KiB": 1024,
+        "MiB": 1024**2,
+        "GiB": 1024**3,
+        "TiB": 1024**4,
+        "PiB": 1024**5,
+    }
+    pattern = re.compile(r"^([\d.]+)\s*([KMGTP]?iB)$", re.IGNORECASE)
+    match = pattern.match(fsize_str.strip().upper())
+    if not match:
+        raise ValueError(f"Invalid file size format: {fsize_str}")
+    value, unit = match.groups()
+    return int(float(value) * units[unit])
+
+
 def parse_time(time_str: str) -> int:
     """将时间字符串（如 '3D', '12H'）转换为秒"""
     if not time_str:
@@ -92,14 +110,15 @@ def parse_time(time_str: str) -> int:
     return int(float(value) * units[unit])
 
 
-def parse_hr_rule(rule_str: str) -> Tuple[int, Optional[Tuple[str, float]], int]:
+def parse_hr_rule(rule_str: str) -> Tuple[int, Tuple[str, float], int]:
     """
     解析HR规则字符串，返回 (required_time_seconds, condition, extra_time_seconds)
-    condition: 可以是 ('ratio', value) 或 ('upload', value_in_bytes) 或 None
-    示例: "3D@70%+12H" -> (3D秒数, ('ratio', 0.7), 12H秒数)
-         "20H@30%"    -> (20H秒数, ('ratio', 0.3), 0)
-         "20H@10MB"   -> (20H秒数, ('upload', 10MB字节), 0)
+    condition: 可以是 ('dlratio', value) 或 ('dlsize', value_in_bytes) 或 None
+    示例: "3D@70%+12H" -> (3D秒数, ('dlratio', 0.7), 12H秒数)
+         "20H@30%"    -> (20H秒数, ('dlratio', 0.3), 0)
+         "20H@10MB"   -> (20H秒数, ('dlsize', 10MB字节), 0)
     """
+
     extra_time = 0
     if "+" in rule_str:
         main, extra = rule_str.split("+", 1)
@@ -111,28 +130,16 @@ def parse_hr_rule(rule_str: str) -> Tuple[int, Optional[Tuple[str, float]], int]
         time_part, cond_part = main.split("@", 1)
         required_time = parse_time(time_part.strip())
         cond_part = cond_part.strip()
-        if cond_part.endswith("%"):
+        if cond_part.endswith("%"):  # 百分比, 如 "10%"
             ratio = float(cond_part[:-1]) / 100.0
-            condition = ("ratio", ratio)
-        else:
-            # 假设是上传量，如 "10MB"
-            upload_bytes = parse_speed(cond_part)  # 复用速度解析，但去掉/s
-            # 但 parse_speed 需要 "10MiB/s"，我们去掉最后的 /s
-            # 简单处理：提取数字和单位
-            pattern = re.compile(r"^([\d.]+)\s*([KMG]?i?B)$", re.IGNORECASE)
-            match = pattern.match(cond_part.strip())
-            if not match:
-                raise ValueError(f"Invalid condition format: {cond_part}")
-            value, unit = match.groups()
-            # 单位转换为字节
-            units = {"B": 1, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}
-            upload_bytes = int(float(value) * units[unit])
-            condition = ("upload", upload_bytes)
+            condition = ("dlratio", ratio)
+        else:  # 下载量，如 "10MiB"
+            download_bytes = parse_fsize(cond_part)
+            condition = ("dlsize", download_bytes)
     else:
         required_time = parse_time(main.strip())
-        condition = None  # 仅时间要求，无分享率/上传量要求（但通常PT需要分享率，我们视为100%分享率？）
         # 根据用户说明，默认80%触发，所以我们设默认ratio=0.8
-        condition = ("ratio", 0.8)
+        condition = ("dlratio", 0.8)
 
     return required_time, condition, extra_time
 
@@ -296,8 +303,8 @@ class PTManager:
         # self._apply_limits(tor, tracker_conf.upload_limit, tracker_conf.download_limit)
 
         # 7. 处理 HR 规则
-        # if tracker_conf.hr_rule:
-        #     self._handle_hr(tor, tracker_conf.hr_rule)
+        if tracker_conf.hr_rule:
+            self._add_hr_tag(tor, tracker_conf.hr_rule)
 
     # ---------- 辅助方法 ----------
 
@@ -368,26 +375,19 @@ class PTManager:
             self.client.torrents_set_download_limit(tor.hash, download_limit=down_limit)
             self.logger.info(f"Set download limit {down_limit} for {tor.hash}")
 
-    def _handle_hr(self, tor: TorrentDictionary, rule_str: str):
+    def _add_hr_tag(self, tor: TorrentDictionary, rule_str: str):
         """处理 HR 规则：添加 HR tag，检查是否满足 HR-DONE"""
         required_time, condition, extra_time = parse_hr_rule(rule_str)
 
-        # 检查做种时间是否满足
-        seeding_time = tor.seeding_time  # 秒
-        if seeding_time < required_time:
-            return  # 时间不足，不添加任何 HR tag
-
         # 检查条件（分享率或上传量）
         condition_met = False
-        if condition is None:
-            condition_met = True
-        else:
-            cond_type, cond_value = condition
-            if cond_type == "ratio":
-                ratio = tor.ratio if tor.downloaded > 0 else float("inf")
-                condition_met = ratio >= cond_value
-            elif cond_type == "upload":
-                condition_met = tor.uploaded >= cond_value
+
+        cond_type, cond_value = condition
+        if cond_type == "dlratio":
+            dlratio = tor.downloaded / tor.total_size
+            condition_met = dlratio >= cond_value
+        elif cond_type == "dlsize":
+            condition_met = tor.downloaded >= cond_value
 
         if not condition_met:
             return
@@ -395,13 +395,21 @@ class PTManager:
         # 满足基础 HR 条件，添加 HR tag
         # 从规则中提取时间部分用于 tag，如 "3D" -> "HR3D"
         time_part = re.match(r"^([\d.]+[SMHD])", rule_str)
-        hr_tag = f"HR{time_part.group(1)}" if time_part else "HR"
+        if not time_part:
+            raise ValueError(f"Invalid rule format: {rule_str}")
+
+        hr_tag = f"!!HR{time_part.group(1)}!!"
         self._add_tags(tor, [hr_tag])
 
-        # 检查额外时间是否满足（+12H等）
-        if extra_time > 0 and seeding_time >= required_time + extra_time:
-            # 满足 HR-DONE 条件
-            self._mark_hr_done(tor)
+    #         # # 检查做种时间是否满足
+    #         seeding_time = tor.seeding_time  # 秒
+    #         # if seeding_time < required_time:
+    #         #     return  # 时间不足，不添加任何 HR tag
+    #
+    #         # 检查额外时间是否满足（+12H等）
+    #         if extra_time > 0 and seeding_time >= required_time + extra_time:
+    #             # 满足 HR-DONE 条件
+    #             self._mark_hr_done(tor)
 
     def _mark_hr_done(self, tor: TorrentDictionary):
         """标记种子为 HR-DONE 分类并强制汇报"""
