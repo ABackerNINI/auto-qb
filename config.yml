@@ -1,19 +1,130 @@
 ---
 config:
-    interval: 60m
-
+    interval: 60S
     qbittorrent:
         host: 127.0.0.1
         port: 16585
         username: abacker
-        password: 132435.
-
+        password: "132435."
     trackers:
-        HHan: # 憨憨
+        HHan:
             domains:
-            - tracker.hhanclub.net
-            tags: 
-            - HHan
+                - tracker.hhanclub.net
+            tags:
+                - HHan
             U: 5000KiB/s
+            D: 0KiB/s
             HR: 3D@70%+12H
-...
+        hdfans_org:
+            domains:
+                - hdfans.org
+            tags:
+                - HDFans
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        kufirc_com:
+            domains:
+                - kufirc.com
+            tags:
+                - Kufirc
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        pt_btschool_club:
+            domains:
+                - pt.btschool.club
+            tags:
+                - Btschool
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        ptfans_cc:
+            domains:
+                - ptfans.cc
+            tags:
+                - PTFans
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        ptzone_xyz:
+            domains:
+                - ptzone.xyz
+            tags:
+                - PTZone
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_carpt_net:
+            domains:
+                - tracker.carpt.net
+            tags:
+                - CarPT
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_cyanbug_net:
+            domains:
+                - tracker.cyanbug.net
+            tags:
+                - Cyanbug
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_digitalcore_club:
+            domains:
+                - tracker.digitalcore.club
+                - trackerprxy.digitalcore.club
+            tags:
+                - Digitalcore
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_hdbao_cc:
+            domains:
+                - tracker.hdbao.cc
+            tags:
+                - HDBao
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_hdclone_top:
+            domains:
+                - tracker.hdclone.top
+            tags:
+                - HDClone
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_hdtime_org:
+            domains:
+                - tracker.hdtime.org
+            tags:
+                - HDTime
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_m_team_cc:
+            domains:
+                - tracker.m-team.cc
+            tags:
+                - M-team
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        tracker_novahd_top:
+            domains:
+                - tracker.novahd.top
+            tags:
+                - NovaHD
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
+        www_tangpt_top:
+            domains:
+                - www.tangpt.top
+            tags:
+                - TangPT
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ""
