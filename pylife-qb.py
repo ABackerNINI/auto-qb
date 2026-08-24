@@ -18,14 +18,22 @@ import yaml
 from qbittorrentapi import Client, TorrentDictionary
 
 DEFAULT_CONFIG_FILE = "config.yml"
+
 DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
 DEFAULT_CHECK_MISSING_FILES = True
+
 DEFAULT_ADD_HR_TAGS = False
 DEFAULT_HR_TAG_FORMAT = "!!HR${time}!!"
+
 DEFAULT_ADD_HR_CATEGORIES = False
 DEFAULT_HR_CATEGORY_FORMAT = "!!HR${time}!!"
 DEFAULT_OVERWRITE_CATEGORY_FOR_HR = False
+
+DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING = False
+DEFAULT_ADD_SKIP_CHECKING_TAGS = False
+DEFAULT_SKIP_CHECKING_TAG_FORMAT = "SKIP_CHECKING"
+
 UNLIMITED_SPEED = "0KiB/s"
 
 # ======================== 配置结构与解析 ========================
@@ -67,6 +75,10 @@ class Config:
     add_hr_categories: bool
     hr_category_format: str
     overwrite_category_for_hr: bool
+
+    skip_checking_for_cross_seeding: bool
+    add_skip_checking_tags: bool
+    skip_checking_tag_format: str
 
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
@@ -294,6 +306,18 @@ def load_config(config_path: str) -> Config:
         overwrite_category_for_hr=parse_bool(
             cfg.get("overwrite_category_for_hr", DEFAULT_OVERWRITE_CATEGORY_FOR_HR)
         ),
+        skip_checking_for_cross_seeding=parse_bool(
+            cfg.get(
+                "skip_checking_for_cross_seeding",
+                DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING,
+            )
+        ),
+        add_skip_checking_tags=parse_bool(
+            cfg.get("add_skip_checking_tags", DEFAULT_ADD_SKIP_CHECKING_TAGS)
+        ),
+        skip_checking_tag_format=cfg.get(
+            "skip_checking_tag_format", DEFAULT_SKIP_CHECKING_TAG_FORMAT
+        ),
         qbittorrent=qb_config,
         trackers=trackers,
     )
@@ -349,11 +373,15 @@ class PTManager:
         """获取所有种子并处理"""
         torrents = self.client.torrents_info()
         self.logger.info(f"Processing {len(torrents)} torrents")
+
+        # Print each torrent for debugging
+        # with open("torrents.txt", "w", encoding="utf-8") as f:
+        #     for tor in torrents:
+        #         print(tor, file=f)
+        #         print("", file=f)
+
         for tor in torrents:
             try:
-                # Print each torrent for debugging
-                # print(tor)
-                # print()
                 self._process_single_torrent(tor, dry_run)
             except Exception as e:
                 self.logger.error(f"Error processing torrent {tor.hash}: {e}")
@@ -365,25 +393,29 @@ class PTManager:
             if self._check_and_handle_missing_files(tor, dry_run):
                 return  # 已处理，跳过后续
 
-        # 2. 匹配 tracker 配置
+        # 2. 辅种跳检
+        if self.config.skip_checking_for_cross_seeding:
+            self._skip_checking_for_cross_seeding(tor, dry_run)
+
+        # 3. 匹配 tracker 配置
         tracker_conf = self._match_tracker(tor)
         if not tracker_conf:
             return  # 未匹配，不处理
 
-        # 3. 添加标签
+        # 4. 添加标签
         self._add_tags(tor, tracker_conf.tags, dry_run)
 
-        # 4. 删除标签
+        # 5. 删除标签
         self._remove_tags(tor, tracker_conf.remove_tags, dry_run)
 
-        # 5. 删除相似标签
+        # 6. 删除相似标签
         if self.config.remove_similar_tags:
             self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
 
-        # 6. 应用限速
+        # 7. 应用限速
         # self._apply_limits(tor, tracker_conf.upload_limit, tracker_conf.download_limit, dry_run)
 
-        # 7. 处理 HR 规则
+        # 8. 处理 HR 规则
         if tracker_conf.hr_rule and (
             self.config.add_hr_tags or self.config.add_hr_categories
         ):
@@ -604,6 +636,97 @@ class PTManager:
             self._add_tags(tor, ["MISSING"], dry_run)
             return True
         return False
+
+    def _skip_checking_for_cross_seeding(self, tor: TorrentDictionary, dry_run: bool):
+        """
+        辅种任务跳过检查并自动开始, 添加跳检标签.
+        下载量/完成量/进度为0 且 状态为暂停stop 的种子视为辅种任务.
+        """
+
+        if tor.downloaded > 0:  # 下载量必须为0
+            return False
+
+        if tor.completed != 0:  # 完成量必须为0
+            return False
+
+        if tor.progress != 0:  # 进度必须为0
+            return False
+
+        if not tor.state_enum.is_stopped:  # 必须是停止状态
+            return False
+
+        # 对文件进行简单检查: 确保所有文件都存在且大小一致
+        files = self.client.torrents_files(tor.hash)
+        save_path = tor.save_path
+        missing = False
+        for f in files:
+            # 组合完整路径, 添加长路径前缀
+            full_path = add_long_path_prefix_for_win(
+                os.path.normpath(os.path.join(save_path, f.name))
+            )
+
+            if not os.path.exists(full_path):  # 查看文件是否存在
+                # self.logger.warning(
+                #     f"File missing: '{full_path}' of torrent '{tor.name}'!"
+                # )
+                missing = True
+                break
+
+            if os.path.getsize(full_path) != f.size:  # 比较文件大小
+                # self.logger.warning(
+                #     f"File size mismatch: '{full_path}' of torrent '{tor.name}', expected {f.size}, got {os.path.getsize(full_path)}!"
+                # )
+                missing = True
+                break
+
+        if missing:
+            # self.logger.info(
+            #     f"Torrent '{tor.name}' is missing some files"
+            # )
+            return
+
+        self.logger.info(f"Skip checking for torrent '{tor.name}'")
+
+        # 获取种子的关键属性，以便重新添加时保留
+        save_path = tor.save_path
+        category = tor.category
+        tags = tor.tags
+        # 注意：此处未保留上传/下载限速等高级设置，如有需要可自行添加
+
+        # 重要：从 qBittorrent 中导出 .torrent 文件
+        # 这是为了保留 tracker 等信息
+        if not dry_run:
+            torrent_file_data = self.client.torrents_export(torrent_hash=tor.hash)
+        self.logger.info(f"  Exporting torrent")
+
+        # 删除原种子（注意：不要删除已下载的数据文件）
+        if not dry_run:
+            self.client.torrents_delete(torrent_hashes=tor.hash, delete_files=False)
+        self.logger.info(f"  Deleting torrent")
+
+        # --- 4. 使用“跳过校验”选项重新添加 ---
+        # is_skip_checking=True 即为跳过哈希校验的关键参数[reference:3][reference:4]
+        if not dry_run:
+            self.client.torrents_add(
+                torrent_files=torrent_file_data,  # 使用导出的 .torrent 文件数据
+                save_path=save_path,  # 恢复原保存路径
+                category=category,  # 恢复原分类
+                tags=tags,  # 恢复原标签
+                is_skip_checking=True,  # 核心：跳过校验！
+                is_paused=False,  # 添加后自动开始
+            )
+        self.logger.info(f"  Re-adding torrent")
+
+        # 开始刚添加的种子
+        if not dry_run:
+            self.client.torrents_start(torrent_hashes=tor.hash)
+        self.logger.info(f"  Starting torrent")
+
+        # 添加跳检标签
+        if self.config.add_skip_checking_tags:
+            self._add_tags(tor, [self.config.skip_checking_tag_format], dry_run)
+
+        return True
 
     # ---------- 导出YAML配置模板 ----------
 

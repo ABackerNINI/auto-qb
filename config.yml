@@ -11,6 +11,10 @@ config:
     hr_category_format: "!!HR${time}!!"
     overwrite_category_for_hr: false
 
+    skip_checking_for_cross_seeding: true
+    add_skip_checking_tags: true
+    skip_checking_tag_format: "SKIP_CHECKING"
+
     qbittorrent:
         host: 127.0.0.1
         port: 16585
