@@ -13,6 +13,7 @@ import argparse
 from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
+from pathlib import Path
 
 import yaml
 from qbittorrentapi import Client, TorrentDictionary
@@ -20,6 +21,7 @@ from qbittorrentapi import Client, TorrentDictionary
 DEFAULT_CONFIG_FILE = "config.yml"
 DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
+DEFAULT_CHECK_MISSING_FILES = True
 DEFAULT_ADD_HR_TAGS = False
 DEFAULT_HR_TAG_FORMAT = "!!HR${time}!!"
 DEFAULT_ADD_HR_CATEGORIES = False
@@ -59,12 +61,17 @@ class TrackerConfig:
 @dataclass
 class Config:
     interval: int
+
     remove_similar_tags: bool
+    check_missing_files: bool
+
     add_hr_tags: bool
     hr_tag_format: str
+
     add_hr_categories: bool
     hr_category_format: str
     overwrite_category_for_hr: bool
+
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
 
@@ -203,6 +210,31 @@ def gen_default_tag(domain: str):
     return default_tag
 
 
+def add_long_path_prefix_for_win(path: str) -> str:
+    """
+    为 Windows 文件路径添加长路径支持前缀, 解决路径过长或特殊字符问题
+    """
+    # 1. 将相对路径转为绝对路径 (Windows API 要求 \\?\ 后必须为绝对路径)
+    abs_path = os.path.abspath(path)
+
+    # 2. 统一替换正斜杠为反斜杠 (\\?\ 前缀强制要求使用反斜杠)
+    abs_path = abs_path.replace("/", "\\")
+
+    # 3. 如果已经有前缀，直接返回
+    if abs_path.startswith("\\\\?\\"):
+        return abs_path
+
+    # 4. 判断是否为 UNC (网络共享) 路径，例如 \\server\share\file
+    # 注意：UNC 路径必须以两个反斜杠开头
+    if abs_path.startswith("\\\\"):
+        # 去除开头的两个反斜杠，拼接为 \\?\UNC\server\share\file
+        # 例如：\\\\server\share -> abs_path[1:] 是 \server\share
+        return "\\\\?\\UNC" + abs_path[1:]
+    else:
+        # 普通本地盘符路径，例如 C:\folder\file
+        return "\\\\?\\" + abs_path
+
+
 def load_config(config_path: str) -> Config:
     with open(config_path, "r", encoding="utf-8") as f:
         data = yaml.load(f, Loader=yaml.BaseLoader)
@@ -238,6 +270,9 @@ def load_config(config_path: str) -> Config:
         interval=parse_time(interval_raw),
         remove_similar_tags=parse_bool(
             cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)
+        ),
+        check_missing_files=parse_bool(
+            cfg.get("check_missing_files", DEFAULT_CHECK_MISSING_FILES)
         ),
         add_hr_tags=parse_bool(cfg.get("add_hr_tags", DEFAULT_ADD_HR_TAGS)),
         hr_tag_format=cfg.get("hr_tag_format", DEFAULT_HR_TAG_FORMAT),
@@ -315,8 +350,9 @@ class PTManager:
     def _process_single_torrent(self, tor: TorrentDictionary, dry_run: bool):
         """处理单个种子"""
         # 1. 检查文件丢失（先做，若丢失则暂停并分类，跳过其他）
-        if self._check_and_handle_missing_files(tor, dry_run):
-            return  # 已处理，跳过后续
+        if self.config.check_missing_files:
+            if self._check_and_handle_missing_files(tor, dry_run):
+                return  # 已处理，跳过后续
 
         # 2. 匹配 tracker 配置
         tracker_conf = self._match_tracker(tor)
@@ -516,11 +552,11 @@ class PTManager:
         self, tor: TorrentDictionary, dry_run: bool
     ) -> bool:
         """
-        检查种子文件是否存在，如果已完成但文件缺失，则暂停并添加分类"丢失"
+        检查种子文件是否存在，如果已完成但文件缺失，则暂停并添加标签"MISSING"
         返回 True 表示已处理（已暂停），否则 False
         """
-        # 只处理已完成的种子
-        if tor.amount_left > 0:
+        # 只处理已完成且正在做种的种子
+        if tor.amount_left > 0 or not tor.state_enum.is_uploading:
             return False
 
         # 获取文件列表
@@ -528,23 +564,33 @@ class PTManager:
         save_path = tor.save_path
         missing = False
         for f in files:
-            # 组合完整路径
-            full_path = os.path.join(save_path, f.name)
-            if not os.path.exists(full_path):
+            # 组合完整路径, 添加长路径前缀
+            full_path = add_long_path_prefix_for_win(
+                os.path.normpath(os.path.join(save_path, f.name))
+            )
+
+            if not os.path.exists(full_path):  # 查看文件是否存在
+                self.logger.warning(
+                    f"File missing: '{full_path}' of torrent '{tor.name}'!"
+                )
+                missing = True
+                break
+
+            if os.path.getsize(full_path) != f.size:  # 比较文件大小
+                self.logger.warning(
+                    f"File size mismatch: '{full_path}' of torrent '{tor.name}', expected {f.size}, got {os.path.getsize(full_path)}!"
+                )
                 missing = True
                 break
 
         if missing:
             # 暂停种子
-            if tor.state != "pausedUP" and tor.state != "pausedDL":
-                if not dry_run:
-                    self.client.torrents_pause(tor.hash)
-                self.logger.info(f"Paused {tor.hash} due to missing files")
-            # 添加分类"丢失"
-            if tor.category != "丢失":
-                if not dry_run:
-                    self.client.torrents_set_category(tor.hash, category="丢失")
-                self.logger.info(f"Set category '丢失' for {tor.hash}")
+            if not dry_run:
+                self.client.torrents_stop(tor.hash)
+            self.logger.warning(f"Paused {tor.hash} due to missing files")
+
+            # 设置标签
+            self._add_tags(tor, ["MISSING"], dry_run)
             return True
         return False
 
@@ -613,6 +659,7 @@ class PTManager:
             "config": {
                 "interval": self.config._interval_raw,
                 "remove_similar_tags": self.config.remove_similar_tags,
+                "check_missing_files": self.config.check_missing_files,
                 "add_hr_tags": self.config.add_hr_tags,
                 "hr_tag_format": self.config.hr_tag_format,
                 "add_hr_categories": self.config.add_hr_categories,
