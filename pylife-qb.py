@@ -22,6 +22,9 @@ DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
 DEFAULT_ADD_HR_TAGS = False
 DEFAULT_HR_TAG_FORMAT = "!!HR${time}!!"
+DEFAULT_ADD_HR_CATEGORIES = False
+DEFAULT_HR_CATEGORY_FORMAT = "!!HR${time}!!"
+DEFAULT_OVERWRITE_CATEGORY_FOR_HR = False
 UNLIMITED_SPEED = "0KiB/s"
 
 # ======================== 配置结构与解析 ========================
@@ -59,10 +62,26 @@ class Config:
     remove_similar_tags: bool
     add_hr_tags: bool
     hr_tag_format: str
+    add_hr_categories: bool
+    hr_category_format: str
+    overwrite_category_for_hr: bool
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
 
     _interval_raw: str
+
+
+def parse_bool(value: str | bool) -> bool:
+    """将字符串转换为布尔值"""
+    if isinstance(value, bool):
+        return value
+
+    if value.lower() in ["true", "1"]:
+        return True
+    elif value.lower() in ["false", "0"]:
+        return False
+    else:
+        raise ValueError(f"Invalid boolean value: {value}")
 
 
 def parse_speed(speed_str: str) -> int:
@@ -217,9 +236,18 @@ def load_config(config_path: str) -> Config:
     return Config(
         _interval_raw=interval_raw,
         interval=parse_time(interval_raw),
-        remove_similar_tags=cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS),
-        add_hr_tags=cfg.get("add_hr_tags", DEFAULT_ADD_HR_TAGS),
+        remove_similar_tags=parse_bool(
+            cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)
+        ),
+        add_hr_tags=parse_bool(cfg.get("add_hr_tags", DEFAULT_ADD_HR_TAGS)),
         hr_tag_format=cfg.get("hr_tag_format", DEFAULT_HR_TAG_FORMAT),
+        add_hr_categories=parse_bool(
+            cfg.get("add_hr_categories", DEFAULT_ADD_HR_CATEGORIES)
+        ),
+        hr_category_format=cfg.get("hr_category_format", DEFAULT_HR_CATEGORY_FORMAT),
+        overwrite_category_for_hr=parse_bool(
+            cfg.get("overwrite_category_for_hr", DEFAULT_OVERWRITE_CATEGORY_FOR_HR)
+        ),
         qbittorrent=qb_config,
         trackers=trackers,
     )
@@ -309,8 +337,10 @@ class PTManager:
         # self._apply_limits(tor, tracker_conf.upload_limit, tracker_conf.download_limit, dry_run)
 
         # 7. 处理 HR 规则
-        if self.config.add_hr_tags and tracker_conf.hr_rule:
-            self._add_hr_tag(tor, tracker_conf.hr_rule, dry_run)
+        if tracker_conf.hr_rule and (
+            self.config.add_hr_tags or self.config.add_hr_categories
+        ):
+            self._add_hr_tag_or_category(tor, tracker_conf.hr_rule, dry_run)
 
     # ---------- 辅助方法 ----------
 
@@ -341,7 +371,7 @@ class PTManager:
         if new_tags:
             if not dry_run:
                 self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
-            self.logger.info(f"Added tags {new_tags} to {tor.name}")
+            self.logger.info(f"Added tags '{new_tags}' to '{tor.name}'")
 
     def _remove_tags(
         self, tor: TorrentDictionary, tags_to_remove: List[str], dry_run: bool
@@ -359,7 +389,7 @@ class PTManager:
                 self.client.torrents_remove_tags(
                     tags=tags_to_remove, torrent_hashes=tor.hash
                 )
-            self.logger.info(f"Removed tags {tags_to_remove} from {tor.name}")
+            self.logger.info(f"Removed tags '{tags_to_remove}' from '{tor.name}'")
 
     def _remove_similar_tags(
         self, tor: TorrentDictionary, tags: List[str], dry_run: bool
@@ -377,7 +407,7 @@ class PTManager:
             if tag.lower() in [t.lower() for t in tags] and tag not in tags:
                 if not dry_run:
                     self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
-                self.logger.info(f"Removed similar tag {tag} from {tor.name}")
+                self.logger.info(f"Removed similar tag '{tag}' from '{tor.name}'")
 
     def _apply_limits(
         self, tor: TorrentDictionary, up_limit: int, down_limit: int, dry_run: bool
@@ -386,19 +416,21 @@ class PTManager:
         if up_limit >= 0 and tor.upload_limit != up_limit:
             if not dry_run:
                 self.client.torrents_set_upload_limit(tor.hash, upload_limit=up_limit)
-            self.logger.info(f"Set upload limit {up_limit} for {tor.hash}")
+            self.logger.info(f"Set upload limit {up_limit} for '{tor.name}'")
         if down_limit >= 0 and tor.download_limit != down_limit:
             if not dry_run:
                 self.client.torrents_set_download_limit(
                     tor.hash, download_limit=down_limit
                 )
-            self.logger.info(f"Set download limit {down_limit} for {tor.hash}")
+            self.logger.info(f"Set download limit {down_limit} for '{tor.name}'")
 
-    def _add_hr_tag(self, tor: TorrentDictionary, rule_str: str, dry_run: bool):
-        """处理 HR 规则：添加 HR tag，检查是否满足 HR-DONE"""
+    def _add_hr_tag_or_category(
+        self, tor: TorrentDictionary, rule_str: str, dry_run: bool
+    ):
+        """添加HR标签或分类"""
         required_time, condition, extra_time = parse_hr_rule(rule_str)
 
-        # 检查条件（分享率或上传量）
+        # 检查下载条件, 主要为了排除辅种
         condition_met = False
 
         cond_type, cond_value = condition
@@ -412,23 +444,62 @@ class PTManager:
             return
 
         # 满足基础 HR 条件，添加 HR tag
-        # 从规则中提取时间部分用于 tag，如 "3D" -> "HR3D"
+        # 从规则中提取时间部分，如 "3D" -> "HR3D"
         time_part = re.match(r"^([\d.]+[SMHD])", rule_str)
         if not time_part:
-            raise ValueError(f"Invalid rule format: {rule_str}")
+            raise ValueError(f"Invalid rule format: '{rule_str}'")
 
-        hr_tag = self.config.hr_tag_format.replace("${time}", time_part.group(1))
-        self._add_tags(tor, [hr_tag], dry_run)
+        # 添加 HR tag
+        if self.config.add_hr_tags:
+            hr_tag = self.config.hr_tag_format.replace("${time}", time_part.group(1))
+            self._add_tags(tor, [hr_tag], dry_run)
 
-    #         # # 检查做种时间是否满足
-    #         seeding_time = tor.seeding_time  # 秒
-    #         # if seeding_time < required_time:
-    #         #     return  # 时间不足，不添加任何 HR tag
-    #
-    #         # 检查额外时间是否满足（+12H等）
-    #         if extra_time > 0 and seeding_time >= required_time + extra_time:
-    #             # 满足 HR-DONE 条件
-    #             self._mark_hr_done(tor)
+        # 添加 HR 分类
+        if self.config.add_hr_categories:
+            hr_category = self.config.hr_category_format.replace(
+                "${time}", time_part.group(1)
+            )
+            self._set_category(
+                tor, hr_category, self.config.overwrite_category_for_hr, dry_run
+            )
+
+    def _set_category(
+        self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool
+    ):
+        """设置种子的分类"""
+        old_category = tor.category.strip()
+
+        if old_category == category:  # 分类已存在
+            return
+
+        if not old_category or overwrite:  # 分类为空或者强制覆盖
+            self._create_category_if_not_exists(category, dry_run)
+
+            # 设置分类
+            if not dry_run:
+                self.client.torrents_set_category(
+                    category=category, torrent_hashes=tor.hash
+                )
+
+            # 打印日志
+            if old_category:
+                self.logger.info(
+                    f"Set category from '{old_category}' to '{category}' for '{tor.name}'"
+                )
+            else:
+                self.logger.info(f"Set category to '{category}' for '{tor.name}'")
+        else:  # 存在分类但不覆盖
+            self.logger.warning(
+                f"Skipping '{tor.name}' as it already has category '{old_category}'"
+            )
+
+    def _create_category_if_not_exists(self, category: str, dry_run: bool):
+        """如果分类不存在则创建分类"""
+        current_categories = self.client.torrents_categories()
+        if category not in current_categories:  # 分类不存在
+            if not dry_run:
+                self.client.torrents_create_category(name=category)
+            self.logger.info(f"Created category '{category}'")
 
     def _mark_hr_done(self, tor: TorrentDictionary, dry_run: bool):
         """标记种子为 HR-DONE 分类并强制汇报"""
@@ -477,12 +548,13 @@ class PTManager:
             return True
         return False
 
-    # ---------- 导出未配置的 Tracker 模板 ----------
+    # ---------- 导出YAML配置模板 ----------
 
-    def export_missing_trackers(self, output_path: str):
+    def export_yaml_template(self, output_path: str, dry_run: bool):
         """
-        导出所有种子中未在配置中定义的 tracker 域名，生成 YAML 配置模板。
+        生成 YAML 配置模板: 导出所有种子中未在配置中定义的 tracker 域名。
         """
+
         if not self.connect():
             self.logger.error("Cannot export: qBittorrent connection failed")
             return
@@ -531,7 +603,9 @@ class PTManager:
         #     return
 
         self.logger.info(f"Found {len(missing_domains)} missing tracker domains.")
-        self.logger.info(f"Missing tracker domains: {missing_domains}")
+
+        if missing_domains:
+            self.logger.info(f"Missing tracker domains: {missing_domains}")
 
         # 4. 构建新的配置结构
         # 保留原有的 interval 和 qbittorrent 设置
@@ -541,6 +615,9 @@ class PTManager:
                 "remove_similar_tags": self.config.remove_similar_tags,
                 "add_hr_tags": self.config.add_hr_tags,
                 "hr_tag_format": self.config.hr_tag_format,
+                "add_hr_categories": self.config.add_hr_categories,
+                "hr_category_format": self.config.hr_category_format,
+                "overwrite_category_for_hr": self.config.overwrite_category_for_hr,
                 "qbittorrent": {
                     "host": self.config.qbittorrent.host,
                     "port": self.config.qbittorrent.port,
@@ -589,16 +666,17 @@ class PTManager:
             }
 
         # 5. 写入 YAML 文件
-        with open(output_path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                export_config,
-                f,
-                allow_unicode=True,
-                sort_keys=False,
-                indent=4,
-                explicit_start=True,
-            )
-        self.logger.info(f"Exported missing tracker template to {output_path}")
+        if not dry_run:
+            with open(output_path, "w", encoding="utf-8") as f:
+                yaml.dump(
+                    export_config,
+                    f,
+                    allow_unicode=True,
+                    sort_keys=False,
+                    indent=4,
+                    explicit_start=True,
+                )
+        self.logger.info(f"Exported YAML template to {output_path}")
 
 
 # ======================== 主入口 ========================
@@ -613,19 +691,19 @@ def main():
         help="Path to configuration YAML file",
     )
     parser.add_argument(
-        "--export-missing",
+        "--export-yaml",
         "-e",
         metavar="OUTPUT",
-        help="Export missing tracker templates to OUTPUT file and exit",
+        help="Export YAML templates to OUTPUT file and exit",
     )
     parser.add_argument("--dry-run", "-n", action="store_true", help="Dry run")
     args = parser.parse_args()
 
     manager = PTManager(args.config)
 
-    if args.export_missing:
+    if args.export_yaml:
         # 导出模式
-        manager.export_missing_trackers(args.export_missing)
+        manager.export_yaml_template(args.export_yaml, args.dry_run)
         return
 
     # 正常运行模式

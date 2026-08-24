@@ -2,8 +2,13 @@
 config:
     interval: 60S
     remove_similar_tags: true
-    add_hr_tags: true
-    hr_tag_format: '!!HR${time}!!'
+
+    add_hr_tags: false
+    hr_tag_format: "!!HR${time}!!"
+
+    add_hr_categories: true
+    hr_category_format: "!!HR${time}!!"
+    overwrite_category_for_hr: false
 
     qbittorrent:
         host: 127.0.0.1
@@ -27,7 +32,7 @@ config:
                 - HDFans
             U: 0KiB/s
             D: 0KiB/s
-            HR: '3D@80%+12H'
+            HR: "3D@80%+12H"
         kufirc_com:
             domains:
                 - kufirc.com
@@ -43,7 +48,7 @@ config:
                 - BTSchool
             U: 0KiB/s
             D: 0KiB/s
-            HR: '20H@80%+12H'
+            HR: "20H@80%+12H"
         ptfans_cc:
             domains:
                 - ptfans.cc
@@ -51,7 +56,7 @@ config:
                 - PTFans
             U: 0KiB/s
             D: 0KiB/s
-            HR: '7D@80%+12H'
+            HR: "7D@80%+12H"
         ptzone_xyz:
             domains:
                 - ptzone.xyz
@@ -67,7 +72,7 @@ config:
                 - CarPT
             U: 0KiB/s
             D: 0KiB/s
-            HR: '1D@80%+12H'
+            HR: "1D@80%+12H"
         tracker_cyanbug_net:
             domains:
                 - tracker.cyanbug.net
@@ -84,7 +89,7 @@ config:
                 - DigitalCore
             U: 0KiB/s
             D: 0KiB/s
-            HR: '5D@80%+12H'
+            HR: "5D@80%+12H"
         tracker_hdbao_cc:
             domains:
                 - tracker.hdbao.cc
