@@ -13,7 +13,6 @@ import argparse
 from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
-from pathlib import Path
 
 import yaml
 from qbittorrentapi import Client, TorrentDictionary
@@ -89,6 +88,27 @@ def parse_bool(value: str | bool) -> bool:
         return False
     else:
         raise ValueError(f"Invalid boolean value: {value}")
+
+
+def convert_bool_in_dict(d: dict):
+    """递归地将字典中的字符串布尔值转换为bool类型"""
+    if isinstance(d, str):
+        try:
+            d = parse_bool(d)
+        except ValueError:
+            pass
+
+    if isinstance(d, dict):
+        for k, v in d.items():
+            if isinstance(v, str) and not v.isdecimal():
+                d[k] = convert_bool_in_dict(v)
+            elif isinstance(v, dict):
+                d[k] = convert_bool_in_dict(v)
+            elif isinstance(v, list):
+                d[k] = [convert_bool_in_dict(item) for item in v]
+                pass
+
+    return d
 
 
 def parse_speed(speed_str: str) -> int:
@@ -654,41 +674,14 @@ class PTManager:
             self.logger.info(f"Missing tracker domains: {missing_domains}")
 
         # 4. 构建新的配置结构
-        # 保留原有的 interval 和 qbittorrent 设置
-        export_config = {
-            "config": {
-                "interval": self.config._interval_raw,
-                "remove_similar_tags": self.config.remove_similar_tags,
-                "check_missing_files": self.config.check_missing_files,
-                "add_hr_tags": self.config.add_hr_tags,
-                "hr_tag_format": self.config.hr_tag_format,
-                "add_hr_categories": self.config.add_hr_categories,
-                "hr_category_format": self.config.hr_category_format,
-                "overwrite_category_for_hr": self.config.overwrite_category_for_hr,
-                "qbittorrent": {
-                    "host": self.config.qbittorrent.host,
-                    "port": self.config.qbittorrent.port,
-                    "username": self.config.qbittorrent.username,
-                    "password": self.config.qbittorrent.password,
-                },
-                "trackers": {},
-            }
-        }
+        export_config = None
 
-        # 先复制已有的 trackers
-        for name, tracker_conf in self.config.trackers.items():
-            u_raw = tracker_conf._upload_limit_raw
-            d_raw = tracker_conf._download_limit_raw
-            export_config["config"]["trackers"][name] = {
-                "domains": tracker_conf.domains,
-                "tags": tracker_conf.tags,
-                "remove_tags": tracker_conf.remove_tags,
-                "U": u_raw if u_raw else UNLIMITED_SPEED,
-                "D": d_raw if d_raw else UNLIMITED_SPEED,
-                "HR": tracker_conf.hr_rule or "",
-            }
-            if not tracker_conf.remove_tags:
-                del export_config["config"]["trackers"][name]["remove_tags"]
+        # 从配置文件中读取原始配置结构
+        with open(self.config_path, "r", encoding="utf-8") as f:
+            export_config = yaml.load(f, Loader=yaml.BaseLoader)
+
+        # 转换字符串布尔值
+        export_config = convert_bool_in_dict(export_config)
 
         # 添加缺失的 tracker 条目（每个域名一个条目）
         for domain in sorted(missing_domains):
