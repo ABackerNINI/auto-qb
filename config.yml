@@ -1,6 +1,7 @@
 ---
 config:
     interval: 60S
+    remove_similar_tags: true
     qbittorrent:
         host: 127.0.0.1
         port: 16585
@@ -35,7 +36,7 @@ config:
             domains:
                 - pt.btschool.club
             tags:
-                - Btschool
+                - BTSchool
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
@@ -67,7 +68,7 @@ config:
             domains:
                 - tracker.cyanbug.net
             tags:
-                - Cyanbug
+                - CyanBug
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
@@ -76,7 +77,7 @@ config:
                 - tracker.digitalcore.club
                 - trackerprxy.digitalcore.club
             tags:
-                - Digitalcore
+                - DigitalCore
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
@@ -108,7 +109,10 @@ config:
             domains:
                 - tracker.m-team.cc
             tags:
-                - M-team
+                - MTeam
+            remove_tags:
+                - M-Team
+                - M-Team - TP
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
