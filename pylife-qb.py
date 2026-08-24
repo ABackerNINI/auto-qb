@@ -18,7 +18,8 @@ import yaml
 from qbittorrentapi import Client, TorrentDictionary
 
 DEFAULT_CONFIG_FILE = "config.yml"
-
+DEFAULT_INTERVAL = "60s"
+UNLIMITED_SPEED = "0KiB/s"
 
 # ======================== 配置结构与解析 ========================
 
@@ -54,6 +55,8 @@ class Config:
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
 
+    _interval_raw: str
+
 
 def parse_speed(speed_str: str) -> int:
     """将速度字符串（如 '10MiB/s'）转换为字节/秒"""
@@ -77,14 +80,8 @@ def parse_time(time_str: str) -> int:
     """将时间字符串（如 '3D', '12H'）转换为秒"""
     if not time_str:
         return 0
-    units = {
-        "H": 3600,
-        "D": 86400,
-        "W": 604800,
-        "M": 2592000,  # 30天
-        "Y": 31536000,  # 365天
-    }
-    pattern = re.compile(r"^([\d.]+)\s*([HDWMY])$", re.IGNORECASE)
+    units = {"S": 1, "M": 60, "H": 3600, "D": 86400}
+    pattern = re.compile(r"^([\d.]+)\s*([SMHD])$", re.IGNORECASE)
     match = pattern.match(time_str.strip().upper())
     if not match:
         raise ValueError(f"Invalid time format: {time_str}")
@@ -139,21 +136,21 @@ def parse_hr_rule(rule_str: str) -> Tuple[int, Optional[Tuple[str, float]], int]
 
 def load_config(config_path: str) -> Config:
     with open(config_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+        data = yaml.load(f, Loader=yaml.BaseLoader)
 
     cfg = data["config"]
     qb = cfg["qbittorrent"]
     qb_config = QbittorrentConfig(
         host=qb["host"],
-        port=qb["port"],
+        port=int(qb["port"]),
         username=qb["username"],
         password=qb["password"],
     )
 
     trackers = {}
     for name, tdata in cfg["trackers"].items():
-        up = parse_speed(tdata.get("U", "0")) if "U" in tdata else None
-        down = parse_speed(tdata.get("D", "0")) if "D" in tdata else None
+        up = parse_speed(tdata.get("U", UNLIMITED_SPEED))
+        down = parse_speed(tdata.get("D", UNLIMITED_SPEED))
         trackers[name] = TrackerConfig(
             name=name,
             domains=tdata["domains"],
@@ -161,12 +158,16 @@ def load_config(config_path: str) -> Config:
             upload_limit=up,
             download_limit=down,
             hr_rule=tdata.get("HR"),
-            _upload_limit_raw=tdata.get("U", "") if "U" in tdata else None,
-            _download_limit_raw=tdata.get("D", "") if "D" in tdata else None,
+            _upload_limit_raw=tdata.get("U", UNLIMITED_SPEED),
+            _download_limit_raw=tdata.get("D", UNLIMITED_SPEED),
         )
 
+    interval_raw = cfg.get("interval", DEFAULT_INTERVAL)
     return Config(
-        interval=cfg.get("interval", 60), qbittorrent=qb_config, trackers=trackers
+        _interval_raw=interval_raw,
+        interval=parse_time(interval_raw),
+        qbittorrent=qb_config,
+        trackers=trackers,
     )
 
 
@@ -277,14 +278,12 @@ class PTManager:
             self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
             self.logger.info(f"Added tags {new_tags} to {tor.hash}")
 
-    def _apply_limits(
-        self, tor: TorrentDictionary, up_limit: Optional[int], down_limit: Optional[int]
-    ):
+    def _apply_limits(self, tor: TorrentDictionary, up_limit: int, down_limit: int):
         """设置种子的上传/下载限速"""
-        if up_limit is not None and tor.upload_limit != up_limit:
+        if up_limit >= 0 and tor.upload_limit != up_limit:
             self.client.torrents_set_upload_limit(tor.hash, upload_limit=up_limit)
             self.logger.info(f"Set upload limit {up_limit} for {tor.hash}")
-        if down_limit is not None and tor.download_limit != down_limit:
+        if down_limit >= 0 and tor.download_limit != down_limit:
             self.client.torrents_set_download_limit(tor.hash, download_limit=down_limit)
             self.logger.info(f"Set download limit {down_limit} for {tor.hash}")
 
@@ -314,7 +313,7 @@ class PTManager:
 
         # 满足基础 HR 条件，添加 HR tag
         # 从规则中提取时间部分用于 tag，如 "3D" -> "HR3D"
-        time_part = re.match(r"^([\d.]+[HDWMY])", rule_str)
+        time_part = re.match(r"^([\d.]+[SMHD])", rule_str)
         hr_tag = f"HR{time_part.group(1)}" if time_part else "HR"
         self._add_tags(tor, [hr_tag])
 
@@ -424,7 +423,7 @@ class PTManager:
         # 保留原有的 interval 和 qbittorrent 设置
         export_config = {
             "config": {
-                "interval": self.config.interval,
+                "interval": self.config._interval_raw,
                 "qbittorrent": {
                     "host": self.config.qbittorrent.host,
                     "port": self.config.qbittorrent.port,
@@ -437,13 +436,13 @@ class PTManager:
 
         # 先复制已有的 trackers
         for name, tracker_conf in self.config.trackers.items():
+            u_raw = tracker_conf._upload_limit_raw
+            d_raw = tracker_conf._download_limit_raw
             export_config["config"]["trackers"][name] = {
                 "domains": tracker_conf.domains,
                 "tags": [",".join(tracker_conf.tags)],
-                "U": tracker_conf._upload_limit_raw if tracker_conf._upload_limit_raw else "-1KiB/s",
-                "D": (
-                    tracker_conf._download_limit_raw if tracker_conf._download_limit_raw else "-1KiB/s"
-                ),
+                "U": u_raw if u_raw else UNLIMITED_SPEED,
+                "D": d_raw if d_raw else UNLIMITED_SPEED,
                 "HR": tracker_conf.hr_rule or "",
             }
 
@@ -464,8 +463,8 @@ class PTManager:
             export_config["config"]["trackers"][name] = {
                 "domains": [domain],
                 "tags": [default_name],  # 需用户自定义
-                "U": "-1KiB/s",  # 需用户自定义
-                "D": "-1KiB/s",  # 需用户自定义
+                "U": UNLIMITED_SPEED,  # 需用户自定义
+                "D": UNLIMITED_SPEED,  # 需用户自定义
                 "HR": "",  # 示例，需用户修改
             }
 
@@ -481,7 +480,10 @@ class PTManager:
 def main():
     parser = argparse.ArgumentParser(description="PT Seed Manager for qBittorrent")
     parser.add_argument(
-        "config", nargs='?', default=DEFAULT_CONFIG_FILE, help="Path to configuration YAML file"
+        "config",
+        nargs="?",
+        default=DEFAULT_CONFIG_FILE,
+        help="Path to configuration YAML file",
     )
     parser.add_argument(
         "--export-missing",
