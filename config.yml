@@ -2,6 +2,7 @@
 config:
     interval: 60S
     remove_similar_tags: true
+    check_missing_files: true
 
     add_hr_tags: false
     hr_tag_format: "!!HR${time}!!"
