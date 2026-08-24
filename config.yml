@@ -12,6 +12,7 @@ config:
     overwrite_category_for_hr: false
 
     skip_checking_for_cross_seeding: true
+    skip_checking_auto_start: true
     add_skip_checking_tags: true
     skip_checking_tag_format: "SKIP_CHECKING"
 

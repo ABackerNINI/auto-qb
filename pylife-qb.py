@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 import yaml
 from qbittorrentapi import Client, TorrentDictionary
 
+# TODO: use dict to store global config?
+
 DEFAULT_CONFIG_FILE = "config.yml"
 
 DEFAULT_INTERVAL = "60s"
@@ -31,6 +33,7 @@ DEFAULT_HR_CATEGORY_FORMAT = "!!HR${time}!!"
 DEFAULT_OVERWRITE_CATEGORY_FOR_HR = False
 
 DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING = False
+DEFAULT_SKIP_CHECKING_AUTO_START = False
 DEFAULT_ADD_SKIP_CHECKING_TAGS = False
 DEFAULT_SKIP_CHECKING_TAG_FORMAT = "SKIP_CHECKING"
 
@@ -77,6 +80,7 @@ class Config:
     overwrite_category_for_hr: bool
 
     skip_checking_for_cross_seeding: bool
+    skip_checking_auto_start: bool
     add_skip_checking_tags: bool
     skip_checking_tag_format: str
 
@@ -311,6 +315,9 @@ def load_config(config_path: str) -> Config:
                 "skip_checking_for_cross_seeding",
                 DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING,
             )
+        ),
+        skip_checking_auto_start=parse_bool(
+            cfg.get("skip_checking_auto_start", DEFAULT_SKIP_CHECKING_AUTO_START)
         ),
         add_skip_checking_tags=parse_bool(
             cfg.get("add_skip_checking_tags", DEFAULT_ADD_SKIP_CHECKING_TAGS)
@@ -718,9 +725,10 @@ class PTManager:
         self.logger.info(f"  Re-adding torrent")
 
         # 开始刚添加的种子
-        if not dry_run:
-            self.client.torrents_start(torrent_hashes=tor.hash)
-        self.logger.info(f"  Starting torrent")
+        if self.config.skip_checking_auto_start:
+            if not dry_run:
+                self.client.torrents_start(torrent_hashes=tor.hash)
+            self.logger.info(f"  Starting torrent")
 
         # 添加跳检标签
         if self.config.add_skip_checking_tags:
