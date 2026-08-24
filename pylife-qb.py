@@ -19,6 +19,7 @@ from qbittorrentapi import Client, TorrentDictionary
 
 DEFAULT_CONFIG_FILE = "config.yml"
 DEFAULT_INTERVAL = "60s"
+DEFAULT_REMOVE_SIMILAR_TAGS = False
 UNLIMITED_SPEED = "0KiB/s"
 
 # ======================== 配置结构与解析 ========================
@@ -41,6 +42,7 @@ class TrackerConfig:
     name: str
     domains: List[str]
     tags: List[str]
+    remove_tags: List[str]
     upload_limit: Optional[int]  # 字节/秒
     download_limit: Optional[int]  # 字节/秒
     hr_rule: Optional[str]  # HR规则字符串
@@ -52,6 +54,7 @@ class TrackerConfig:
 @dataclass
 class Config:
     interval: int
+    remove_similar_tags: bool
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
 
@@ -191,6 +194,7 @@ def load_config(config_path: str) -> Config:
             name=name,
             domains=tdata["domains"],
             tags=tdata.get("tags", []),
+            remove_tags=tdata.get("remove_tags", []),
             upload_limit=up,
             download_limit=down,
             hr_rule=tdata.get("HR"),
@@ -201,6 +205,7 @@ def load_config(config_path: str) -> Config:
     interval_raw = cfg.get("interval", DEFAULT_INTERVAL)
     return Config(
         _interval_raw=interval_raw,
+        remove_similar_tags=cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS),
         interval=parse_time(interval_raw),
         qbittorrent=qb_config,
         trackers=trackers,
@@ -280,10 +285,17 @@ class PTManager:
         # 3. 添加标签
         self._add_tags(tor, tracker_conf.tags)
 
-        # 4. 应用限速
+        # 4. 删除标签
+        self._remove_tags(tor, tracker_conf.remove_tags)
+
+        # 5. 删除相似标签
+        if self.config.remove_similar_tags:
+            self._remove_similar_tags(tor, tracker_conf.tags)
+
+        # 6. 应用限速
         # self._apply_limits(tor, tracker_conf.upload_limit, tracker_conf.download_limit)
 
-        # 5. 处理 HR 规则
+        # 7. 处理 HR 规则
         # if tracker_conf.hr_rule:
         #     self._handle_hr(tor, tracker_conf.hr_rule)
 
@@ -308,11 +320,44 @@ class PTManager:
         """为种子添加标签（若不存在）"""
         if not tags:
             return
-        current_tags = set(tor.tags.split(",")) if tor.tags else set()
+
+        current_tags = (
+            set(part.strip() for part in tor.tags.split(",")) if tor.tags else set()
+        )
         new_tags = [t for t in tags if t not in current_tags]
         if new_tags:
             self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
-            self.logger.info(f"Added tags {new_tags} to {tor.hash}")
+            self.logger.info(f"Added tags {new_tags} to {tor.name}")
+
+    def _remove_tags(self, tor: TorrentDictionary, tags_to_remove: List[str]):
+        """为种子删除标签"""
+        if not tags_to_remove:
+            return
+
+        current_tags = (
+            set(part.strip() for part in tor.tags.split(",")) if tor.tags else set()
+        )
+        tags_to_remove = set(tags_to_remove) & current_tags
+        if tags_to_remove:
+            self.client.torrents_remove_tags(
+                tags=tags_to_remove, torrent_hashes=tor.hash
+            )
+            self.logger.info(f"Removed tags {tags_to_remove} from {tor.name}")
+
+    def _remove_similar_tags(self, tor: TorrentDictionary, tags: List[str]):
+        """删除类似(单词相同大小写不同)的tag"""
+        if not tags:
+            return
+
+        current_tags = (
+            set(part.strip() for part in tor.tags.split(",")) if tor.tags else set()
+        )
+
+        # 删除单词相同但大小写不一致的标签
+        for tag in current_tags:
+            if tag.lower() in [t.lower() for t in tags] and tag not in tags:
+                self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
+                self.logger.info(f"Removed similar tag {tag} from {tor.name}")
 
     def _apply_limits(self, tor: TorrentDictionary, up_limit: int, down_limit: int):
         """设置种子的上传/下载限速"""
@@ -448,9 +493,9 @@ class PTManager:
             if not matched:
                 missing_domains.add(host)
 
-        if not missing_domains:
-            self.logger.info("No missing trackers found. Nothing to export.")
-            return
+        # if not missing_domains:
+        #     self.logger.info("No missing trackers found. Nothing to export.")
+        #     return
 
         self.logger.info(f"Found {len(missing_domains)} missing tracker domains.")
         self.logger.info(f"Missing tracker domains: {missing_domains}")
@@ -460,6 +505,7 @@ class PTManager:
         export_config = {
             "config": {
                 "interval": self.config._interval_raw,
+                "remove_similar_tags": self.config.remove_similar_tags,
                 "qbittorrent": {
                     "host": self.config.qbittorrent.host,
                     "port": self.config.qbittorrent.port,
@@ -476,11 +522,14 @@ class PTManager:
             d_raw = tracker_conf._download_limit_raw
             export_config["config"]["trackers"][name] = {
                 "domains": tracker_conf.domains,
-                "tags": [",".join(tracker_conf.tags)],
+                "tags": tracker_conf.tags,
+                "remove_tags": tracker_conf.remove_tags,
                 "U": u_raw if u_raw else UNLIMITED_SPEED,
                 "D": d_raw if d_raw else UNLIMITED_SPEED,
                 "HR": tracker_conf.hr_rule or "",
             }
+            if not tracker_conf.remove_tags:
+                del export_config["config"]["trackers"][name]["remove_tags"]
 
         # 添加缺失的 tracker 条目（每个域名一个条目）
         for domain in sorted(missing_domains):
