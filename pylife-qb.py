@@ -134,6 +134,42 @@ def parse_hr_rule(rule_str: str) -> Tuple[int, Optional[Tuple[str, float]], int]
     return required_time, condition, extra_time
 
 
+def capitalize_special_tag(text: str) -> str:
+    """
+    将字符串中的 "hd" 或 "pt"（不区分大小写）转为大写，
+    并将其后紧跟的一个字母（如果存在）也转为大写。
+    """
+
+    def repl(match):
+        prefix = match.group(1).upper()  # "HD" 或 "PT"
+        suffix = match.group(2)  # 紧跟的字母（可能为 None）
+        return prefix + (suffix.upper() if suffix else "")
+
+    # 匹配 "hd" 或 "pt"（忽略大小写），后面可跟一个字母（a-zA-Z）
+    pattern = r"(hd|pt)([a-zA-Z])?"
+    return re.sub(pattern, repl, text, flags=re.IGNORECASE)
+
+
+def gen_default_tag(domain: str):
+    """
+    给域名生成默认标签名称, 默认标签名称为倒数第二级域名, 如: www.example.com -> example.
+    首字母大写并大写"hd", "pt"等常见词
+    """
+    # 生成默认名称: 域名倒数第二级
+    default_tag = f"{domain.split('.')[-2]}"
+
+    if not default_tag:
+        return ""
+
+    # 首字母大写
+    default_tag = default_tag.capitalize()
+
+    # 将default_tag中的"hd", "pt"以及紧跟的字母替换成大写
+    default_tag = capitalize_special_tag(default_tag)
+
+    return default_tag
+
+
 def load_config(config_path: str) -> Config:
     with open(config_path, "r", encoding="utf-8") as f:
         data = yaml.load(f, Loader=yaml.BaseLoader)
@@ -458,11 +494,11 @@ class PTManager:
                 counter += 1
 
             # 生成默认名称: 域名倒数第二级
-            default_name = f"{domain.split('.')[-2]}"
+            default_tag = gen_default_tag(domain)
 
             export_config["config"]["trackers"][name] = {
                 "domains": [domain],
-                "tags": [default_name],  # 需用户自定义
+                "tags": [default_tag],  # 需用户自定义
                 "U": UNLIMITED_SPEED,  # 需用户自定义
                 "D": UNLIMITED_SPEED,  # 需用户自定义
                 "HR": "",  # 示例，需用户修改
@@ -470,7 +506,14 @@ class PTManager:
 
         # 5. 写入 YAML 文件
         with open(output_path, "w", encoding="utf-8") as f:
-            yaml.dump(export_config, f, allow_unicode=True, sort_keys=False, indent=2)
+            yaml.dump(
+                export_config,
+                f,
+                allow_unicode=True,
+                sort_keys=False,
+                indent=4,
+                explicit_start=True,
+            )
         self.logger.info(f"Exported missing tracker template to {output_path}")
 
 
