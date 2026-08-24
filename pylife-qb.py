@@ -2,18 +2,23 @@
 """
 PT Seed Manager for qBittorrent
 自动管理 PT 种子的工具，包括添加标签、限速、HR 标记、文件丢失检测等。
+支持导出未配置的 tracker 模板。
 """
 
 import os
 import time
 import re
 import logging
-from typing import Dict, List, Optional, Tuple, Any
+import argparse
+from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 import yaml
 from qbittorrentapi import Client, TorrentDictionary
+
+DEFAULT_CONFIG_FILE = "config.yml"
+
 
 # ======================== 配置结构与解析 ========================
 
@@ -38,6 +43,9 @@ class TrackerConfig:
     upload_limit: Optional[int]  # 字节/秒
     download_limit: Optional[int]  # 字节/秒
     hr_rule: Optional[str]  # HR规则字符串
+
+    _upload_limit_raw: Optional[str]
+    _download_limit_raw: Optional[str]
 
 
 @dataclass
@@ -153,6 +161,8 @@ def load_config(config_path: str) -> Config:
             upload_limit=up,
             download_limit=down,
             hr_rule=tdata.get("HR"),
+            _upload_limit_raw=tdata.get("U", "") if "U" in tdata else None,
+            _download_limit_raw=tdata.get("D", "") if "D" in tdata else None,
         )
 
     return Config(
@@ -165,6 +175,7 @@ def load_config(config_path: str) -> Config:
 
 class PTManager:
     def __init__(self, config_path: str):
+        self.config_path = config_path
         self.config = load_config(config_path)
         self.client = None
         self._setup_logging()
@@ -204,10 +215,6 @@ class PTManager:
             except Exception as e:
                 self.logger.error(f"Error in main loop: {e}")
             time.sleep(self.config.interval)
-
-    def _export_trackers_conf_template(self, torrents):
-        """导出所有tracker的配置模板"""
-        
 
     def _process_all_torrents(self):
         """获取所有种子并处理"""
@@ -357,18 +364,141 @@ class PTManager:
             return True
         return False
 
+    # ---------- 导出未配置的 Tracker 模板 ----------
+
+    def export_missing_trackers(self, output_path: str):
+        """
+        导出所有种子中未在配置中定义的 tracker 域名，生成 YAML 配置模板。
+        """
+        if not self.connect():
+            self.logger.error("Cannot export: qBittorrent connection failed")
+            return
+
+        # 1. 获取所有种子
+        torrents = self.client.torrents_info()
+        self.logger.info(f"Scanning {len(torrents)} torrents for tracker URLs")
+
+        # 2. 收集所有种子的 tracker 域名（去重）
+        all_domains: Set[str] = set()
+        for tor in torrents:
+            trackers_info = self.client.torrents_trackers(tor.hash)
+            for t in trackers_info:
+                url = t.get("url")
+                if not url:
+                    continue
+                try:
+                    parsed = urlparse(url)
+                    host = parsed.hostname
+                    if host:
+                        all_domains.add(host)
+                except Exception:
+                    continue
+
+        self.logger.info(f"Found {len(all_domains)} unique tracker domains")
+
+        # 3. 筛选出未配置的域名
+        configured_domains: Set[str] = set()
+        for tracker_conf in self.config.trackers.values():
+            for domain in tracker_conf.domains:
+                configured_domains.add(domain)
+
+        missing_domains: Set[str] = set()
+        for host in all_domains:
+            # 检查是否匹配已配置的任意 domain（沿用包含关系）
+            matched = False
+            for configured in configured_domains:
+                if configured in host or host in configured:
+                    matched = True
+                    break
+            if not matched:
+                missing_domains.add(host)
+
+        if not missing_domains:
+            self.logger.info("No missing trackers found. Nothing to export.")
+            return
+
+        self.logger.info(f"Found {len(missing_domains)} missing tracker domains.")
+        self.logger.info(f"Missing tracker domains: {missing_domains}")
+
+        # 4. 构建新的配置结构
+        # 保留原有的 interval 和 qbittorrent 设置
+        export_config = {
+            "config": {
+                "interval": self.config.interval,
+                "qbittorrent": {
+                    "host": self.config.qbittorrent.host,
+                    "port": self.config.qbittorrent.port,
+                    "username": self.config.qbittorrent.username,
+                    "password": self.config.qbittorrent.password,
+                },
+                "trackers": {},
+            }
+        }
+
+        # 先复制已有的 trackers
+        for name, tracker_conf in self.config.trackers.items():
+            export_config["config"]["trackers"][name] = {
+                "domains": tracker_conf.domains,
+                "tags": [",".join(tracker_conf.tags)],
+                "U": tracker_conf._upload_limit_raw if tracker_conf._upload_limit_raw else "-1KiB/s",
+                "D": (
+                    tracker_conf._download_limit_raw if tracker_conf._download_limit_raw else "-1KiB/s"
+                ),
+                "HR": tracker_conf.hr_rule or "",
+            }
+
+        # 添加缺失的 tracker 条目（每个域名一个条目）
+        for domain in sorted(missing_domains):
+            # 生成一个合法的名称：去除点号和横线，限制为字母数字下划线
+            name = re.sub(r"[^a-zA-Z0-9_]", "_", domain)
+            # 如果名称冲突，添加后缀
+            base_name = name
+            counter = 1
+            while name in export_config["config"]["trackers"]:
+                name = f"{base_name}_{counter}"
+                counter += 1
+
+            # 生成默认名称: 域名倒数第二级
+            default_name = f"{domain.split('.')[-2]}"
+
+            export_config["config"]["trackers"][name] = {
+                "domains": [domain],
+                "tags": [default_name],  # 需用户自定义
+                "U": "-1KiB/s",  # 需用户自定义
+                "D": "-1KiB/s",  # 需用户自定义
+                "HR": "",  # 示例，需用户修改
+            }
+
+        # 5. 写入 YAML 文件
+        with open(output_path, "w", encoding="utf-8") as f:
+            yaml.dump(export_config, f, allow_unicode=True, sort_keys=False, indent=2)
+        self.logger.info(f"Exported missing tracker template to {output_path}")
+
 
 # ======================== 主入口 ========================
 
 
 def main():
-    import sys
+    parser = argparse.ArgumentParser(description="PT Seed Manager for qBittorrent")
+    parser.add_argument(
+        "config", nargs='?', default=DEFAULT_CONFIG_FILE, help="Path to configuration YAML file"
+    )
+    parser.add_argument(
+        "--export-missing",
+        "-e",
+        metavar="OUTPUT",
+        help="Export missing tracker templates to OUTPUT file and exit",
+    )
+    args = parser.parse_args()
 
-    if len(sys.argv) != 2:
-        print("Usage: python pt_manager.py <config.yml>")
-        sys.exit(1)
-    config_file = sys.argv[1]
-    manager = PTManager(config_file)
+    manager = PTManager(args.config)
+
+    if args.export_missing:
+        # 导出模式
+        manager.export_missing_trackers(args.export_missing)
+        return
+
+    # 正常运行模式
     try:
         manager.run()
     except KeyboardInterrupt:
