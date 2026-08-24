@@ -1,6 +1,6 @@
 ---
 config:
-    interval: 60
+    interval: 60m
 
     qbittorrent:
         host: 127.0.0.1
@@ -11,9 +11,9 @@ config:
     trackers:
         HHan: # 憨憨
             domains:
-                - tracker.hhanclub.net
-            tags: [HHan]
+            - tracker.hhanclub.net
+            tags: 
+            - HHan
             U: 5000KiB/s
-            D: 10MiB/s
             HR: 3D@70%+12H
 ...
