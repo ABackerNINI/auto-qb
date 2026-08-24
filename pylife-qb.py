@@ -53,9 +53,6 @@ class TrackerConfig:
     download_limit: Optional[int]  # 字节/秒
     hr_rule: Optional[str]  # HR规则字符串
 
-    _upload_limit_raw: Optional[str]
-    _download_limit_raw: Optional[str]
-
 
 @dataclass
 class Config:
@@ -73,8 +70,6 @@ class Config:
 
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
-
-    _interval_raw: str
 
 
 def parse_bool(value: str | bool) -> bool:
@@ -280,14 +275,10 @@ def load_config(config_path: str) -> Config:
             upload_limit=up,
             download_limit=down,
             hr_rule=tdata.get("HR"),
-            _upload_limit_raw=tdata.get("U", UNLIMITED_SPEED),
-            _download_limit_raw=tdata.get("D", UNLIMITED_SPEED),
         )
 
-    interval_raw = cfg.get("interval", DEFAULT_INTERVAL)
     return Config(
-        _interval_raw=interval_raw,
-        interval=parse_time(interval_raw),
+        interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
         remove_similar_tags=parse_bool(
             cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)
         ),
