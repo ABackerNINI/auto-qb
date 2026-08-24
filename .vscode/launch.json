@@ -5,12 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python 调试程序: 包含参数的当前文件",
+            "name": "pylife-qb.py config.yml",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "pylife-qb.py",
             "console": "integratedTerminal",
             "args": "config.yml",
+            "justMyCode": false
+        },
+        {
+            "name": "pylife-qb.py config.yml -e test.yml",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "pylife-qb.py",
+            "console": "integratedTerminal",
+            "args": "-e test.yml",
             "justMyCode": false
         }
     ]
