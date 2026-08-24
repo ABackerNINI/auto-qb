@@ -1,0 +1,19 @@
+---
+config:
+    interval: 60
+
+    qbittorrent:
+        host: 127.0.0.1
+        port: 16585
+        username: abacker
+        password: 132435.
+
+    trackers:
+        HHan: # 憨憨
+            domains:
+                - tracker.hhanclub.net
+            tags: [HHan]
+            U: 5000KiB/s
+            D: 10MiB/s
+            HR: 3D@70%+12H
+...
