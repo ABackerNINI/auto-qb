@@ -2,11 +2,15 @@
 config:
     interval: 60S
     remove_similar_tags: true
+    add_hr_tags: true
+    hr_tag_format: '!!HR${time}!!'
+
     qbittorrent:
         host: 127.0.0.1
         port: 16585
         username: abacker
         password: "132435."
+
     trackers:
         HHan:
             domains:

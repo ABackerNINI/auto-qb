@@ -20,6 +20,8 @@ from qbittorrentapi import Client, TorrentDictionary
 DEFAULT_CONFIG_FILE = "config.yml"
 DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
+DEFAULT_ADD_HR_TAGS = False
+DEFAULT_HR_TAG_FORMAT = "!!HR${time}!!"
 UNLIMITED_SPEED = "0KiB/s"
 
 # ======================== 配置结构与解析 ========================
@@ -55,6 +57,8 @@ class TrackerConfig:
 class Config:
     interval: int
     remove_similar_tags: bool
+    add_hr_tags: bool
+    hr_tag_format: str
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
 
@@ -212,8 +216,10 @@ def load_config(config_path: str) -> Config:
     interval_raw = cfg.get("interval", DEFAULT_INTERVAL)
     return Config(
         _interval_raw=interval_raw,
-        remove_similar_tags=cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS),
         interval=parse_time(interval_raw),
+        remove_similar_tags=cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS),
+        add_hr_tags=cfg.get("add_hr_tags", DEFAULT_ADD_HR_TAGS),
+        hr_tag_format=cfg.get("hr_tag_format", DEFAULT_HR_TAG_FORMAT),
         qbittorrent=qb_config,
         trackers=trackers,
     )
@@ -252,7 +258,7 @@ class PTManager:
             self.logger.error(f"Failed to connect to qBittorrent: {e}")
             return False
 
-    def run(self):
+    def run(self, dry_run: bool):
         """主循环"""
         if not self.connect():
             return
@@ -260,12 +266,12 @@ class PTManager:
         self.logger.info(f"Starting PT manager with interval {self.config.interval}s")
         while True:
             try:
-                self._process_all_torrents()
+                self._process_all_torrents(dry_run)
             except Exception as e:
                 self.logger.error(f"Error in main loop: {e}")
             time.sleep(self.config.interval)
 
-    def _process_all_torrents(self):
+    def _process_all_torrents(self, dry_run: bool):
         """获取所有种子并处理"""
         torrents = self.client.torrents_info()
         self.logger.info(f"Processing {len(torrents)} torrents")
@@ -274,14 +280,14 @@ class PTManager:
                 # Print each torrent for debugging
                 # print(tor)
                 # print()
-                self._process_single_torrent(tor)
+                self._process_single_torrent(tor, dry_run)
             except Exception as e:
                 self.logger.error(f"Error processing torrent {tor.hash}: {e}")
 
-    def _process_single_torrent(self, tor: TorrentDictionary):
+    def _process_single_torrent(self, tor: TorrentDictionary, dry_run: bool):
         """处理单个种子"""
         # 1. 检查文件丢失（先做，若丢失则暂停并分类，跳过其他）
-        if self._check_and_handle_missing_files(tor):
+        if self._check_and_handle_missing_files(tor, dry_run):
             return  # 已处理，跳过后续
 
         # 2. 匹配 tracker 配置
@@ -290,21 +296,21 @@ class PTManager:
             return  # 未匹配，不处理
 
         # 3. 添加标签
-        self._add_tags(tor, tracker_conf.tags)
+        self._add_tags(tor, tracker_conf.tags, dry_run)
 
         # 4. 删除标签
-        self._remove_tags(tor, tracker_conf.remove_tags)
+        self._remove_tags(tor, tracker_conf.remove_tags, dry_run)
 
         # 5. 删除相似标签
         if self.config.remove_similar_tags:
-            self._remove_similar_tags(tor, tracker_conf.tags)
+            self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
 
         # 6. 应用限速
-        # self._apply_limits(tor, tracker_conf.upload_limit, tracker_conf.download_limit)
+        # self._apply_limits(tor, tracker_conf.upload_limit, tracker_conf.download_limit, dry_run)
 
         # 7. 处理 HR 规则
-        if tracker_conf.hr_rule:
-            self._add_hr_tag(tor, tracker_conf.hr_rule)
+        if self.config.add_hr_tags and tracker_conf.hr_rule:
+            self._add_hr_tag(tor, tracker_conf.hr_rule, dry_run)
 
     # ---------- 辅助方法 ----------
 
@@ -323,7 +329,7 @@ class PTManager:
                         return conf
         return None
 
-    def _add_tags(self, tor: TorrentDictionary, tags: List[str]):
+    def _add_tags(self, tor: TorrentDictionary, tags: List[str], dry_run: bool):
         """为种子添加标签（若不存在）"""
         if not tags:
             return
@@ -333,10 +339,13 @@ class PTManager:
         )
         new_tags = [t for t in tags if t not in current_tags]
         if new_tags:
-            self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
+            if not dry_run:
+                self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
             self.logger.info(f"Added tags {new_tags} to {tor.name}")
 
-    def _remove_tags(self, tor: TorrentDictionary, tags_to_remove: List[str]):
+    def _remove_tags(
+        self, tor: TorrentDictionary, tags_to_remove: List[str], dry_run: bool
+    ):
         """为种子删除标签"""
         if not tags_to_remove:
             return
@@ -346,12 +355,15 @@ class PTManager:
         )
         tags_to_remove = set(tags_to_remove) & current_tags
         if tags_to_remove:
-            self.client.torrents_remove_tags(
-                tags=tags_to_remove, torrent_hashes=tor.hash
-            )
+            if not dry_run:
+                self.client.torrents_remove_tags(
+                    tags=tags_to_remove, torrent_hashes=tor.hash
+                )
             self.logger.info(f"Removed tags {tags_to_remove} from {tor.name}")
 
-    def _remove_similar_tags(self, tor: TorrentDictionary, tags: List[str]):
+    def _remove_similar_tags(
+        self, tor: TorrentDictionary, tags: List[str], dry_run: bool
+    ):
         """删除类似(单词相同大小写不同)的tag"""
         if not tags:
             return
@@ -363,19 +375,26 @@ class PTManager:
         # 删除单词相同但大小写不一致的标签
         for tag in current_tags:
             if tag.lower() in [t.lower() for t in tags] and tag not in tags:
-                self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
+                if not dry_run:
+                    self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
                 self.logger.info(f"Removed similar tag {tag} from {tor.name}")
 
-    def _apply_limits(self, tor: TorrentDictionary, up_limit: int, down_limit: int):
+    def _apply_limits(
+        self, tor: TorrentDictionary, up_limit: int, down_limit: int, dry_run: bool
+    ):
         """设置种子的上传/下载限速"""
         if up_limit >= 0 and tor.upload_limit != up_limit:
-            self.client.torrents_set_upload_limit(tor.hash, upload_limit=up_limit)
+            if not dry_run:
+                self.client.torrents_set_upload_limit(tor.hash, upload_limit=up_limit)
             self.logger.info(f"Set upload limit {up_limit} for {tor.hash}")
         if down_limit >= 0 and tor.download_limit != down_limit:
-            self.client.torrents_set_download_limit(tor.hash, download_limit=down_limit)
+            if not dry_run:
+                self.client.torrents_set_download_limit(
+                    tor.hash, download_limit=down_limit
+                )
             self.logger.info(f"Set download limit {down_limit} for {tor.hash}")
 
-    def _add_hr_tag(self, tor: TorrentDictionary, rule_str: str):
+    def _add_hr_tag(self, tor: TorrentDictionary, rule_str: str, dry_run: bool):
         """处理 HR 规则：添加 HR tag，检查是否满足 HR-DONE"""
         required_time, condition, extra_time = parse_hr_rule(rule_str)
 
@@ -398,8 +417,8 @@ class PTManager:
         if not time_part:
             raise ValueError(f"Invalid rule format: {rule_str}")
 
-        hr_tag = f"!!HR{time_part.group(1)}!!"
-        self._add_tags(tor, [hr_tag])
+        hr_tag = self.config.hr_tag_format.replace("${time}", time_part.group(1))
+        self._add_tags(tor, [hr_tag], dry_run)
 
     #         # # 检查做种时间是否满足
     #         seeding_time = tor.seeding_time  # 秒
@@ -411,16 +430,20 @@ class PTManager:
     #             # 满足 HR-DONE 条件
     #             self._mark_hr_done(tor)
 
-    def _mark_hr_done(self, tor: TorrentDictionary):
+    def _mark_hr_done(self, tor: TorrentDictionary, dry_run: bool):
         """标记种子为 HR-DONE 分类并强制汇报"""
         if tor.category != "HR-DONE":
-            self.client.torrents_set_category(tor.hash, category="HR-DONE")
+            if not dry_run:
+                self.client.torrents_set_category(tor.hash, category="HR-DONE")
             self.logger.info(f"Marked {tor.hash} as HR-DONE")
         # 强制汇报
-        self.client.torrents_reannounce(tor.hash)
+        if not dry_run:
+            self.client.torrents_reannounce(tor.hash)
         self.logger.info(f"Reannounced {tor.hash}")
 
-    def _check_and_handle_missing_files(self, tor: TorrentDictionary) -> bool:
+    def _check_and_handle_missing_files(
+        self, tor: TorrentDictionary, dry_run: bool
+    ) -> bool:
         """
         检查种子文件是否存在，如果已完成但文件缺失，则暂停并添加分类"丢失"
         返回 True 表示已处理（已暂停），否则 False
@@ -443,11 +466,13 @@ class PTManager:
         if missing:
             # 暂停种子
             if tor.state != "pausedUP" and tor.state != "pausedDL":
-                self.client.torrents_pause(tor.hash)
+                if not dry_run:
+                    self.client.torrents_pause(tor.hash)
                 self.logger.info(f"Paused {tor.hash} due to missing files")
             # 添加分类"丢失"
             if tor.category != "丢失":
-                self.client.torrents_set_category(tor.hash, category="丢失")
+                if not dry_run:
+                    self.client.torrents_set_category(tor.hash, category="丢失")
                 self.logger.info(f"Set category '丢失' for {tor.hash}")
             return True
         return False
@@ -514,6 +539,8 @@ class PTManager:
             "config": {
                 "interval": self.config._interval_raw,
                 "remove_similar_tags": self.config.remove_similar_tags,
+                "add_hr_tags": self.config.add_hr_tags,
+                "hr_tag_format": self.config.hr_tag_format,
                 "qbittorrent": {
                     "host": self.config.qbittorrent.host,
                     "port": self.config.qbittorrent.port,
@@ -591,6 +618,7 @@ def main():
         metavar="OUTPUT",
         help="Export missing tracker templates to OUTPUT file and exit",
     )
+    parser.add_argument("--dry-run", "-n", action="store_true", help="Dry run")
     args = parser.parse_args()
 
     manager = PTManager(args.config)
@@ -602,7 +630,7 @@ def main():
 
     # 正常运行模式
     try:
-        manager.run()
+        manager.run(args.dry_run)
     except KeyboardInterrupt:
         logging.info("Shutting down...")
 
