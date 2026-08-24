@@ -14,6 +14,15 @@
             "justMyCode": false
         },
         {
+            "name": "pylife-qb.py config.yml --dry-run",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "pylife-qb.py",
+            "console": "integratedTerminal",
+            "args": "config.yml --dry-run",
+            "justMyCode": false
+        },
+        {
             "name": "pylife-qb.py config.yml -e test.yml",
             "type": "debugpy",
             "request": "launch",
