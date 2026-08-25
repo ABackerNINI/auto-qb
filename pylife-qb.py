@@ -17,6 +17,9 @@ from urllib.parse import urlparse
 import yaml
 from qbittorrentapi import Client, TorrentDictionary
 
+# TODO: 优化性能
+# TODO: 拆分成多文件
+
 # TODO: use dict to store global config?
 
 DEFAULT_CONFIG_FILE = "config.yml"
