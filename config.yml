@@ -22,6 +22,18 @@ config:
         username: abacker
         password: "132435."
 
+    add_tag_rules:
+        add_r_tag: # 为R盘的两个目录添加"R"标签
+            enabled: true
+            conditions:
+                - path:
+                    - "regex:^R:\\\\Download\\\\PTing\\\\"
+                    - "regex:^R:\\\\Download\\\\ing\\\\"
+            actions:
+                - add_tags:
+                    - "R" # 添加"R"标签
+            stop_following_rules_if: never
+
     trackers:
         HHan:
             domains:
@@ -31,6 +43,8 @@ config:
             U: 5000KiB/s
             D: 0KiB/s
             HR: 3D@70%+12H
+            rules:
+                - "@add_tag_rules"
         hdfans_org:
             domains:
                 - hdfans.org
@@ -39,6 +53,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: "3D@80%+12H"
+            rules:
+                - "@add_tag_rules"
         kufirc_com:
             domains:
                 - kufirc.com
@@ -47,6 +63,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         pt_btschool_club:
             domains:
                 - pt.btschool.club
@@ -55,6 +73,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: "20H@80%+12H"
+            rules:
+                - "@add_tag_rules"
         ptfans_cc:
             domains:
                 - ptfans.cc
@@ -63,6 +83,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: "7D@80%+12H"
+            rules:
+                - "@add_tag_rules"
         ptzone_xyz:
             domains:
                 - ptzone.xyz
@@ -71,6 +93,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         tracker_carpt_net:
             domains:
                 - tracker.carpt.net
@@ -79,6 +103,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: "1D@80%+12H"
+            rules:
+                - "@add_tag_rules"
         tracker_cyanbug_net:
             domains:
                 - tracker.cyanbug.net
@@ -87,6 +113,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         tracker_digitalcore_club:
             domains:
                 - tracker.digitalcore.club
@@ -96,6 +124,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: "5D@80%+12H"
+            rules:
+                - "@add_tag_rules"
         tracker_hdbao_cc:
             domains:
                 - tracker.hdbao.cc
@@ -104,6 +134,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         tracker_hdclone_top:
             domains:
                 - tracker.hdclone.top
@@ -112,6 +144,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         tracker_hdtime_org:
             domains:
                 - tracker.hdtime.org
@@ -120,6 +154,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         tracker_m_team_cc:
             domains:
                 - tracker.m-team.cc
@@ -131,6 +167,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         tracker_novahd_top:
             domains:
                 - tracker.novahd.top
@@ -139,6 +177,8 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"
         www_tangpt_top:
             domains:
                 - www.tangpt.top
@@ -147,3 +187,5 @@ config:
             U: 0KiB/s
             D: 0KiB/s
             HR: ""
+            rules:
+                - "@add_tag_rules"

@@ -110,6 +110,19 @@ class RuleContext:
     def matched_tracker_names(self) -> List[str]:
         return [c.name for c in self.matched_tracker_confs()]
 
+    def describe(self) -> str:
+        """多行种子信息摘要, 用于动作日志: 名称/站点/状态/hash"""
+        try:
+            sites = ", ".join(self.matched_tracker_names()) or "未匹配"
+        except Exception:
+            sites = "未知"
+        return (
+            f"种子: {self.torrent.name}\n"
+            f"站点: {sites}\n"
+            f"状态: {self.torrent.state}\n"
+            f"Hash: {self.torrent.hash}"
+        )
+
     def files(self) -> List[Any]:
         if self._files is None:
             self._files = self.client.torrents_files(self.torrent.hash)
@@ -194,13 +207,15 @@ class Rule:
             try:
                 result = action.execute(ctx)
             except Exception as e:
-                logger.warning(f"规则 {self.name}: 动作 {action.name} 异常: {e}")
+                logger.warning(f"{ctx.describe()}\n规则: {self.name} | 动作: {action.name} 异常\n结果: {e}")
                 result = ActionResult.fail(str(e))
             if result.is_failed:
-                logger.warning(f"规则 {self.name}: 动作 {action.name} 失败: {result.message}")
+                logger.warning(f"{ctx.describe()}\n规则: {self.name} | 动作: {action.name} 失败\n结果: {result.message}")
                 failed = True
                 if not action.ignore_error:
                     break
+            else:
+                logger.info(f"{ctx.describe()}\n规则: {self.name} | 动作: {action.name}\n结果: {result.message}")
 
         if self.actions and not ctx.dry_run:
             self.manager.record_execution(self.name, ctx.torrent.hash)

@@ -258,10 +258,20 @@ class ReannounceAction(BaseAction):
 class _SpeedLimitAction(BaseAction):
     """限速动作基类: 设置单种上传/下载限速"""
     api_method = ""  # torrents_set_upload_limit / torrents_set_download_limit
+    direction = ""  # 上传 / 下载
 
     def __init__(self, spec, ignore_error=False):
         super().__init__(spec, ignore_error)
         self.value = utils.parse_speed(str(spec))
+
+    def _fmt_speed(self) -> str:
+        """将字节/秒格式化为可读字符串"""
+        for unit, div in (
+            ("PiB/s", 1024**5), ("TiB/s", 1024**4), ("GiB/s", 1024**3), ("MiB/s", 1024**2), ("KiB/s", 1024)
+        ):
+            if self.value >= div:
+                return f"{self.value / div:.2f} {unit} ({self.value} B/s)"
+        return f"{self.value} B/s"
 
     def execute(self, ctx):
         if not ctx.dry_run:
@@ -269,7 +279,7 @@ class _SpeedLimitAction(BaseAction):
                 getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, upload_limit=self.value)
             else:
                 getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, download_limit=self.value)
-        return ActionResult.ok(f"限速 {self.value} B/s")
+        return ActionResult.ok(f"设置{self.direction}限速: {self._fmt_speed()}")
 
 
 @register_action
@@ -277,6 +287,7 @@ class UploadSpeedLimitAction(_SpeedLimitAction):
     """单种上传限速, 如 '1000KiB/s'"""
     name = "upload_speed_limit"
     api_method = "torrents_set_upload_limit"
+    direction = "上传"
 
 
 @register_action
@@ -284,3 +295,4 @@ class DownloadSpeedLimitAction(_SpeedLimitAction):
     """单种下载限速, 如 '1000KiB/s'"""
     name = "download_speed_limit"
     api_method = "torrents_set_download_limit"
+    direction = "下载"
