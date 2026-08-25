@@ -3,7 +3,9 @@ import sys
 import os
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 使测试可直接运行: python tests/test_rules.py
+# 将项目根下的 src/ 加入模块搜索路径
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 from auto_qb.rules import RuleManager, RuleContext, ActionResult  # noqa: E402
 
