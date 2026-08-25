@@ -4,7 +4,7 @@ import logging
 
 from .config import DEFAULT_CONFIG_FILE
 from .exporter import export_yaml_template
-from .manager import QbManager
+from .qbmanager import QbManager
 
 
 def main():

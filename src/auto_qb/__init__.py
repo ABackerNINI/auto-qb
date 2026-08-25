@@ -8,7 +8,7 @@
 - cli.py      命令行入口
 """
 from .config import Config, TrackerConfig, QbittorrentConfig, load_config
-from .manager import QbManager
+from .qbmanager import QbManager
 
 __version__ = "0.2.0"
 
