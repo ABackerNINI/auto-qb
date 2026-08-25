@@ -114,28 +114,6 @@ def parse_hr_rule(rule_str: str):
     return required_time, condition, extra_time
 
 
-def capitalize_special_tag(text: str) -> str:
-    """将字符串中的 "hd"/"pt"(不区分大小写)及其后紧跟的一个字母转为大写"""
-
-    def repl(match):
-        prefix = match.group(1).upper()
-        suffix = match.group(2)
-        return prefix + (suffix.upper() if suffix else "")
-
-    return re.sub(r"(hd|pt)([a-zA-Z])?", repl, text, flags=re.IGNORECASE)
-
-
-def gen_default_tag(domain: str) -> str:
-    """由域名生成默认标签: 倒数第二级域名, 首字母大写并大写hd/pt"""
-    parts = domain.split(".")
-    if len(parts) < 2:
-        return ""
-    default_tag = parts[-2]
-    if not default_tag or default_tag.isdigit():  # IP地址(如 1.2.3.4)不生成标签
-        return ""
-    return capitalize_special_tag(default_tag.capitalize())
-
-
 def add_long_path_prefix_for_win(path: str) -> str:
     """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC)"""
     abs_path = os.path.abspath(path).replace("/", "\\")

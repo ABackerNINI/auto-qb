@@ -5,7 +5,7 @@ import re
 import yaml
 
 from .config import UNLIMITED_SPEED
-from .utils import convert_bool_in_dict, extract_tracker_hostnames, gen_default_tag
+from .utils import convert_bool_in_dict, extract_tracker_hostnames
 
 logger = logging.getLogger("PTManager")
 
@@ -40,6 +40,28 @@ def find_missing_domains(all_domains: set, configured_domains: set) -> set:
         ):
             missing.add(host)
     return missing
+
+
+def capitalize_special_tag(text: str) -> str:
+    """将字符串中的 "hd"/"pt"(不区分大小写)及其后紧跟的一个字母转为大写"""
+
+    def repl(match):
+        prefix = match.group(1).upper()
+        suffix = match.group(2)
+        return prefix + (suffix.upper() if suffix else "")
+
+    return re.sub(r"(hd|pt)([a-zA-Z])?", repl, text, flags=re.IGNORECASE)
+
+
+def gen_default_tag(domain: str) -> str:
+    """由域名生成默认标签: 倒数第二级域名, 首字母大写并大写hd/pt"""
+    parts = domain.split(".")
+    if len(parts) < 2:
+        return ""
+    default_tag = parts[-2]
+    if not default_tag or default_tag.isdigit():  # IP地址(如 1.2.3.4)不生成标签
+        return ""
+    return capitalize_special_tag(default_tag.capitalize())
 
 
 def build_tracker_entry(domain: str) -> dict:

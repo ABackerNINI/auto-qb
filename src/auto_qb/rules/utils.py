@@ -6,7 +6,6 @@ from ..utils import (  # noqa: F401
     add_long_path_prefix_for_win,
     check_filelist,
     compare,
-    gen_default_tag,
     match_tracker_confs,
     parse_bool,
     parse_compare,
@@ -27,5 +26,4 @@ __all__ = [
     "add_long_path_prefix_for_win",
     "check_filelist",
     "match_tracker_confs",
-    "gen_default_tag",
 ]
