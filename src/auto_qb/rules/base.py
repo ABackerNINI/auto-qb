@@ -30,6 +30,10 @@ class ActionResult:
         return cls("skipped", message)
 
     @property
+    def is_ok(self) -> bool:
+        return self.status == "success"
+
+    @property
     def is_failed(self) -> bool:
         return self.status == "failed"
 
@@ -203,19 +207,18 @@ class Rule:
             return False, False
 
         failed = False
-        logger.info(f"规则: {self.name}")
         for action in self.actions:
             try:
                 result = action.execute(ctx)
             except Exception as e:
                 result = ActionResult.fail(f"异常: {e}")
             if result.is_failed:
-                logger.warning(f"  > 动作: {action.name} 失败 | 结果: {result.message}")
+                logger.warning(f"规则: {self.name} | 动作: {action.name} 失败 | 结果: {result.message}")
                 failed = True
                 if not action.ignore_error:
                     break
-            else:
-                logger.info(f"  > 动作: {action.name} 成功 | 结果: {result.message}")
+            elif result.is_ok:
+                logger.info(f"规则: {self.name} | 动作: {action.name} 成功 | 结果: {result.message}")
 
         if self.actions and not ctx.dry_run:
             self.manager.record_execution(self.name, ctx.torrent.hash)
@@ -228,7 +231,7 @@ class Rule:
         elif self.stop_if == "all-actions-succeed" and not failed:
             stop = True
 
-        return bool(self.actions), stop
+        return not result.is_skipped, stop
 
     def _dedup_allowed(self, ctx: RuleContext) -> bool:
         """execute_once/cooldown 去重判断"""
