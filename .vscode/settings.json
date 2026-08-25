@@ -36,5 +36,8 @@
         "tdata",
         "trackerprxy"
     ],
-    "python.useEnvironmentsExtension": true
+    "python.useEnvironmentsExtension": true,
+    "python.analysis.extraPaths": [
+        "src"
+    ]
 }
