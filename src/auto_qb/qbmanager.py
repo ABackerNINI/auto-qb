@@ -76,34 +76,42 @@ class QbManager:
             if self._check_and_handle_missing_files(tor, dry_run):
                 return  # 已处理，跳过后续
 
-        # 2. 规则框架: 内置步骤只在种子未匹配任何启用的规则时兜底执行
-        #    规则动作执行后内置步骤跳过, 避免冲突(如规则 start 了种子, 内置缺文件检查又 stop 它)
-        if self.rules.enabled_rules:
-            if self.rules.process_torrent(tor, dry_run):
-                return
+        handled = False
 
-        # 3. 辅种跳检
-        if self.config.skip_checking_for_cross_seeding:
-            self._skip_checking_for_cross_seeding(tor, dry_run)
+        # 2. 辅种跳检(暂不开启, 可通过自定义规则执行)
+        # if self.config.skip_checking_for_cross_seeding:
+        #     self._skip_checking_for_cross_seeding(tor, dry_run)
 
-        # 4. 匹配 tracker 配置
+        # 3. 匹配 tracker 配置
         tracker_conf = self._match_tracker(tor)
         if not tracker_conf:
+            self.logger.warning(f"未匹配 tracker 配置, 跳过处理: {self._torrent_desc(tor)}")
             return  # 未匹配，不处理
 
-        # 5. 添加标签
-        self._add_tags(tor, tracker_conf.tags, dry_run)
+        # 4. 添加标签
+        handled |= self._add_tags(tor, tracker_conf.tags, dry_run)
 
-        # 6. 删除标签
-        self._remove_tags(tor, tracker_conf.remove_tags, dry_run)
+        # 5. 删除标签
+        handled |= self._remove_tags(tor, tracker_conf.remove_tags, dry_run)
 
-        # 7. 删除相似标签
+        # 6. 删除相似标签
         if self.config.remove_similar_tags:
-            self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
+            handled |= self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
 
-        # 8. 处理 HR 规则
+        # 7. 处理HR规则
         if tracker_conf.hr_rule and (self.config.add_hr_tags or self.config.add_hr_categories):
-            self._add_hr_tag_or_category(tor, tracker_conf.hr_rule, dry_run)
+            handled |= self._add_hr_tag_or_category(tor, tracker_conf.hr_rule, dry_run)
+
+        # 8. 自定义规则
+        if self.rules.enabled_rules:
+            handled |= self.rules.process_torrent(tor, dry_run)
+
+        if handled:
+            self.logger.info(f"种子: {tor.name}")
+            self.logger.info(f"站点: {tracker_conf.name}")
+            self.logger.info(f"状态: {tor.state}")
+            self.logger.info(f"哈希: {tor.hash}")
+            self.logger.info(f"--------------------------------------------------------------------------")
 
     # ---------- 标签/分类辅助 ----------
 
@@ -115,47 +123,56 @@ class QbManager:
     def _add_tags(self, tor: TorrentDictionary, tags: List[str], dry_run: bool):
         """为种子添加标签（若不存在）"""
         if not tags:
-            return
+            return False
 
         current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
         new_tags = [t for t in tags if t not in current_tags]
         if new_tags:
             if not dry_run:
                 self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
-            self.logger.info(f"Added tags '{new_tags}' to {self._torrent_desc(tor)}")
+            self.logger.info(f"Added tags '{new_tags}'")
+            return True
+        return False
 
     def _remove_tags(self, tor: TorrentDictionary, tags_to_remove: List[str], dry_run: bool):
         """为种子删除标签"""
         if not tags_to_remove:
-            return
+            return False
 
         current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
         tags_to_remove = set(tags_to_remove) & current_tags
         if tags_to_remove:
             if not dry_run:
                 self.client.torrents_remove_tags(tags=tags_to_remove, torrent_hashes=tor.hash)
-            self.logger.info(f"Removed tags '{tags_to_remove}' from {self._torrent_desc(tor)}")
+            self.logger.info(f"Removed tags '{tags_to_remove}'")
+            return True
+        return False
 
     def _remove_similar_tags(self, tor: TorrentDictionary, tags: List[str], dry_run: bool):
         """删除类似(单词相同大小写不同)的tag"""
         if not tags:
-            return
+            return False
 
         current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
+
+        removed = False
 
         # 删除单词相同但大小写不一致的标签
         for tag in current_tags:
             if tag.lower() in [t.lower() for t in tags] and tag not in tags:
                 if not dry_run:
                     self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
-                self.logger.info(f"Removed similar tag '{tag}' from {self._torrent_desc(tor)}")
+                self.logger.info(f"Removed similar tag '{tag}'")
+                removed = True
+
+        return removed
 
     def _set_category(self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool):
         """设置种子的分类"""
         old_category = tor.category.strip()
 
         if old_category == category:  # 分类已存在
-            return
+            return False
 
         if not old_category or overwrite:  # 分类为空或者强制覆盖
             self._create_category_if_not_exists(category, dry_run)
@@ -166,11 +183,14 @@ class QbManager:
 
             # 打印日志
             if old_category:
-                self.logger.info(f"Set category from '{old_category}' to '{category}' for {self._torrent_desc(tor)}")
+                self.logger.info(f"Set category from '{old_category}' to '{category}'")
             else:
-                self.logger.info(f"Set category to '{category}' for {self._torrent_desc(tor)}")
+                self.logger.info(f"Set category to '{category}'")
+
+            return True
         else:  # 存在分类但不覆盖
-            self.logger.warning(f"Skipping {self._torrent_desc(tor)} as it already has category '{old_category}'")
+            self.logger.warning(f"Skipping as it already has category '{old_category}'")
+            return True
 
     def _create_category_if_not_exists(self, category: str, dry_run: bool):
         """如果分类不存在则创建分类"""
@@ -197,7 +217,7 @@ class QbManager:
             condition_met = tor.downloaded >= cond_value
 
         if not condition_met:
-            return
+            return False
 
         # 满足基础 HR 条件，添加 HR tag
         # 从规则中提取时间部分，如 "3D" -> "HR3D"
@@ -205,26 +225,30 @@ class QbManager:
         if not time_part:
             raise ValueError(f"Invalid rule format: '{rule_str}'")
 
+        added = False
+
         # 添加 HR tag
         if self.config.add_hr_tags:
             hr_tag = self.config.hr_tag_format.replace("${time}", time_part.group(1))
-            self._add_tags(tor, [hr_tag], dry_run)
+            added |= self._add_tags(tor, [hr_tag], dry_run)
 
         # 添加 HR 分类
         if self.config.add_hr_categories:
             hr_category = self.config.hr_category_format.replace("${time}", time_part.group(1))
-            self._set_category(tor, hr_category, self.config.overwrite_category_for_hr, dry_run)
+            added |= self._set_category(tor, hr_category, self.config.overwrite_category_for_hr, dry_run)
+
+        return added
 
     def _mark_hr_done(self, tor: TorrentDictionary, dry_run: bool):
         """标记种子为 HR-DONE 分类并强制汇报"""
         if tor.category != "HR-DONE":
             if not dry_run:
                 self.client.torrents_set_category(tor.hash, category="HR-DONE")
-            self.logger.info(f"Marked {self._torrent_desc(tor)} as HR-DONE")
+            self.logger.info(f"Marked torrent as HR-DONE")
         # 强制汇报
         if not dry_run:
             self.client.torrents_reannounce(tor.hash)
-        self.logger.info(f"Reannounced {self._torrent_desc(tor)}")
+        self.logger.info(f"Reannounced torrent")
 
     # ---------- 检查类 ----------
 
@@ -246,14 +270,13 @@ class QbManager:
             full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
 
             if not os.path.exists(full_path):  # 查看文件是否存在
-                self.logger.warning(f"File missing: '{full_path}' of torrent {self._torrent_desc(tor)}!")
+                self.logger.warning(f"File missing: '{full_path}'!")
                 missing = True
                 break
 
             if os.path.getsize(full_path) != f.size:  # 比较文件大小
                 self.logger.warning(
-                    f"File size mismatch: '{full_path}' of torrent {self._torrent_desc(tor)}, "
-                    f"expected {f.size}, got {os.path.getsize(full_path)}!"
+                    f"File size mismatch: '{full_path}', expected {f.size}, got {os.path.getsize(full_path)}!"
                 )
                 missing = True
                 break
@@ -262,7 +285,7 @@ class QbManager:
             # 暂停种子
             if not dry_run:
                 self.client.torrents_stop(tor.hash)
-            self.logger.warning(f"Paused {self._torrent_desc(tor)} due to missing files")
+            self.logger.warning(f"Paused torrent due to missing files")
 
             # 设置标签
             self._add_tags(tor, ["MISSING"], dry_run)
@@ -305,7 +328,7 @@ class QbManager:
         if missing:
             return
 
-        self.logger.info(f"Skip checking for torrent {self._torrent_desc(tor)}")
+        self.logger.info(f"Skip checking")
 
         # 获取种子的关键属性，以便重新添加时保留
         save_path = tor.save_path
@@ -317,12 +340,12 @@ class QbManager:
         # 这是为了保留 tracker 等信息
         if not dry_run:
             torrent_file_data = self.client.torrents_export(torrent_hash=tor.hash)
-        self.logger.info(f"  Exporting torrent ({self._torrent_desc(tor)})")
+        self.logger.info(f"  Exporting torrent")
 
         # 删除原种子（注意：不要删除已下载的数据文件）
         if not dry_run:
             self.client.torrents_delete(torrent_hashes=tor.hash, delete_files=False)
-        self.logger.info(f"  Deleting torrent ({self._torrent_desc(tor)})")
+        self.logger.info(f"  Deleting torrent")
 
         # 使用"跳过校验"选项重新添加
         # is_skip_checking=True 即为跳过哈希校验的关键参数
@@ -335,13 +358,13 @@ class QbManager:
                 is_skip_checking=True,  # 核心：跳过校验！
                 is_paused=False,  # 添加后自动开始
             )
-        self.logger.info(f"  Re-adding torrent ({self._torrent_desc(tor)})")
+        self.logger.info(f"  Re-adding torrent")
 
         # 开始刚添加的种子
         if self.config.skip_checking_auto_start:
             if not dry_run:
                 self.client.torrents_start(torrent_hashes=tor.hash)
-            self.logger.info(f"  Starting torrent ({self._torrent_desc(tor)})")
+            self.logger.info(f"  Starting torrent")
 
         # 添加跳检标签
         if self.config.add_skip_checking_tags:

@@ -203,26 +203,19 @@ class Rule:
             return False, False
 
         failed = False
-        action_lines = []
+        logger.info(f"规则: {self.name}")
         for action in self.actions:
             try:
                 result = action.execute(ctx)
             except Exception as e:
                 result = ActionResult.fail(f"异常: {e}")
             if result.is_failed:
-                action_lines.append(f"  > 动作: {action.name} 失败 | 结果: {result.message}")
+                logger.warning(f"  > 动作: {action.name} 失败 | 结果: {result.message}")
                 failed = True
                 if not action.ignore_error:
                     break
             else:
-                action_lines.append(f"  > 动作: {action.name} 成功 | 结果: {result.message}")
-
-        # 所有动作相关 log 合并为一条, 避免多条日志相互穿插
-        msg = "\n".join([f"规则: {self.name}", *action_lines, ctx.describe()])
-        if failed:
-            logger.warning(msg)
-        else:
-            logger.info(msg)
+                logger.info(f"  > 动作: {action.name} 成功 | 结果: {result.message}")
 
         if self.actions and not ctx.dry_run:
             self.manager.record_execution(self.name, ctx.torrent.hash)

@@ -1,4 +1,5 @@
+__pycache__/
 test.yml
 torrents.txt
 example-torrent-info.txt
-__pycache__/
+auto-qb-state.json
