@@ -17,12 +17,15 @@ from urllib.parse import urlparse
 import yaml
 from qbittorrentapi import Client, TorrentDictionary
 
+from rules import RuleManager
+
 # TODO: 优化性能
 # TODO: 拆分成多文件
 
 # TODO: use dict to store global config?
 
 DEFAULT_CONFIG_FILE = "config.yml"
+DEFAULT_STATE_FILE = "auto-qb-state.json"
 
 DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
@@ -66,11 +69,15 @@ class TrackerConfig:
     upload_limit: Optional[int]  # 字节/秒
     download_limit: Optional[int]  # 字节/秒
     hr_rule: Optional[str]  # HR规则字符串
+    rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
 
 
 @dataclass
 class Config:
     interval: int
+
+    state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
+    rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
 
     remove_similar_tags: bool
     check_missing_files: bool
@@ -282,6 +289,11 @@ def load_config(config_path: str) -> Config:
         password=qb["password"],
     )
 
+    # 规则集: config 段下所有以 "_rules" 结尾的键
+    rules_config = {
+        k: v for k, v in cfg.items() if k.endswith("_rules") and isinstance(v, dict)
+    }
+
     trackers = {}
     for name, tdata in cfg["trackers"].items():
         up = parse_speed(tdata.get("U", UNLIMITED_SPEED))
@@ -294,10 +306,13 @@ def load_config(config_path: str) -> Config:
             upload_limit=up,
             download_limit=down,
             hr_rule=tdata.get("HR"),
+            rules=tdata.get("rules", []) or [],
         )
 
     return Config(
         interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
+        state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
+        rules_config=rules_config,
         remove_similar_tags=parse_bool(
             cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)
         ),
@@ -342,6 +357,8 @@ class PTManager:
         self.config = load_config(config_path)
         self.client = None
         self._setup_logging()
+        # 规则框架: 统一管理规则插件(条件+动作), 配置来自 config 下 *_rules 段
+        self.rules = RuleManager(self.config, self.config.state_file)
         # 缓存已处理的哈希，避免重复操作（但为了简单，每次检查）
         # 也可用set记录已经添加过HR tag或done的hash，但考虑到需要持续检查，我们用状态判断
 
@@ -360,6 +377,7 @@ class PTManager:
                 password=self.config.qbittorrent.password,
             )
             self.client.auth_log_in()
+            self.rules.client = self.client
             self.logger.info("Connected to qBittorrent successfully")
             return True
         except Exception as e:
@@ -384,6 +402,9 @@ class PTManager:
         torrents = self.client.torrents_info()
         self.logger.info(f"Processing {len(torrents)} torrents")
 
+        # 规则框架: 每轮开始维护上传量快照(按自然日/周/月)
+        self.rules.begin_round(torrents)
+
         # Print each torrent for debugging
         # with open("torrents.txt", "w", encoding="utf-8") as f:
         #     for tor in torrents:
@@ -399,9 +420,16 @@ class PTManager:
     def _process_single_torrent(self, tor: TorrentDictionary, dry_run: bool):
         """处理单个种子"""
         # 1. 检查文件丢失（先做，若丢失则暂停并分类，跳过其他）
+        #    缺文件检查优先级最高: MISSING 的种子任何规则都不生效, 直到文件恢复
         if self.config.check_missing_files:
             if self._check_and_handle_missing_files(tor, dry_run):
                 return  # 已处理，跳过后续
+
+        # 1.5 规则框架: 内置步骤只在种子未匹配任何启用的规则时兜底执行
+        #     规则动作执行后内置步骤跳过, 避免冲突(如规则 start 了种子, 内置缺文件检查又 stop 它)
+        if self.rules.enabled_rules:
+            if self.rules.process_torrent(tor, dry_run):
+                return
 
         # 2. 辅种跳检
         if self.config.skip_checking_for_cross_seeding:
