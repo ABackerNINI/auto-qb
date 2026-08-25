@@ -117,10 +117,10 @@ class RuleContext:
         except Exception:
             sites = "未知"
         return (
-            f"    种子: {self.torrent.name}\n"
-            f"    站点: {sites}\n"
-            f"    状态: {self.torrent.state}\n"
-            f"    哈希: {self.torrent.hash}"
+            f"  - 种子: {self.torrent.name}\n"
+            f"  - 站点: {sites}\n"
+            f"  - 状态: {self.torrent.state}\n"
+            f"  - 哈希: {self.torrent.hash}"
         )
 
     def files(self) -> List[Any]:
@@ -203,19 +203,26 @@ class Rule:
             return False, False
 
         failed = False
+        action_lines = []
         for action in self.actions:
             try:
                 result = action.execute(ctx)
             except Exception as e:
-                logger.warning(f"规则: {self.name} | 动作: {action.name} 异常 | 结果: {e}\n{ctx.describe()}\n")
-                result = ActionResult.fail(str(e))
+                result = ActionResult.fail(f"异常: {e}")
             if result.is_failed:
-                logger.warning(f"规则: {self.name} | 动作: {action.name} 失败 | 结果: {result.message}\n{ctx.describe()}\n")
+                action_lines.append(f"  > 动作: {action.name} 失败 | 结果: {result.message}")
                 failed = True
                 if not action.ignore_error:
                     break
             else:
-                logger.info(f"规则: {self.name} | 动作: {action.name} | 结果: {result.message}\n{ctx.describe()}\n")
+                action_lines.append(f"  > 动作: {action.name} 成功 | 结果: {result.message}")
+
+        # 所有动作相关 log 合并为一条, 避免多条日志相互穿插
+        msg = "\n".join([f"规则: {self.name}", *action_lines, ctx.describe()])
+        if failed:
+            logger.warning(msg)
+        else:
+            logger.info(msg)
 
         if self.actions and not ctx.dry_run:
             self.manager.record_execution(self.name, ctx.torrent.hash)
