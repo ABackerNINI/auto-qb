@@ -5,7 +5,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from rules import RuleManager, RuleContext, ActionResult  # noqa: E402
+from auto_qb.rules import RuleManager, RuleContext, ActionResult  # noqa: E402
 
 
 # ---------- 模拟 qB 客户端 ----------
@@ -195,7 +195,7 @@ def test_dry_run():
 
 def test_state_mapping():
     """测试: 语义状态映射"""
-    from rules.conditions import _STATE_MAP
+    from auto_qb.rules.conditions import _STATE_MAP
     assert "checkingDL" in _STATE_MAP["checking"]
     assert "stalledUP" in _STATE_MAP["uploading"]
     assert "missingFiles" in _STATE_MAP["errored"]
@@ -228,7 +228,7 @@ def test_tracker_rules_ref():
 
 def test_parse_utils():
     """测试: 解析工具"""
-    from rules import utils
+    from auto_qb.rules import utils
     assert utils.parse_time("3D") == 3 * 86400
     assert utils.parse_fsize("10MiB") == 10 * 1024**2
     assert utils.parse_speed("1000KiB/s") == 1000 * 1024
@@ -241,7 +241,7 @@ def test_parse_utils():
 
 def test_compare():
     """测试: 比较解析"""
-    from rules import utils
+    from auto_qb.rules import utils
     op, val = utils.parse_compare(">=100MiB", utils.parse_fsize)
     assert op == ">=" and val == 100 * 1024**2
     assert utils.compare(">", 5, 3)

@@ -1,21 +1,47 @@
-"""rules 框架通用工具: 时间/大小/速度/HR解析, tracker匹配, 文件检查"""
+"""通用工具函数: 解析器 / 路径 / 文件检查 / tracker 匹配
+
+全部解析与检查函数集中于此, 供主程序(config/manager/exporter)与规则框架共用,
+避免各模块重复实现。
+"""
 import os
 import re
 from urllib.parse import urlparse
 
 
-def parse_bool(value):
+def parse_bool(value) -> bool:
+    """将字符串或布尔值转换为布尔值"""
     if isinstance(value, bool):
         return value
-    if value.lower() in ("true", "1", "yes", "on"):
+    s = str(value).strip().lower()
+    if s in ("true", "1", "yes", "on"):
         return True
-    if value.lower() in ("false", "0", "no", "off"):
+    if s in ("false", "0", "no", "off"):
         return False
     raise ValueError(f"无效布尔值: {value}")
 
 
+def convert_bool_in_dict(d):
+    """递归地将字典中的字符串布尔值转换为bool类型(纯数字字符串保持原样)"""
+    if isinstance(d, str):
+        try:
+            d = parse_bool(d)
+        except ValueError:
+            pass
+
+    if isinstance(d, dict):
+        for k, v in d.items():
+            if isinstance(v, str) and not v.isdecimal():
+                d[k] = convert_bool_in_dict(v)
+            elif isinstance(v, dict):
+                d[k] = convert_bool_in_dict(v)
+            elif isinstance(v, list):
+                d[k] = [convert_bool_in_dict(item) for item in v]
+
+    return d
+
+
 def parse_time(time_str: str) -> int:
-    """时间字符串(如 '3D', '12H') -> 秒"""
+    """时间字符串(如 '3D', '12H', '10M') -> 秒; 空串返回0"""
     if not time_str:
         return 0
     units = {"S": 1, "M": 60, "H": 3600, "D": 86400}
@@ -27,7 +53,7 @@ def parse_time(time_str: str) -> int:
 
 
 def parse_fsize(fsize_str: str) -> int:
-    """大小字符串(如 '10.5 GiB') -> 字节"""
+    """大小字符串(如 '10.5 GiB') -> 字节; 仅支持二进制单位: B, KiB, MiB, GiB, TiB, PiB"""
     units = {
         "B": 1,
         "KIB": 1024,
@@ -40,14 +66,13 @@ def parse_fsize(fsize_str: str) -> int:
     if not m:
         raise ValueError(f"无效大小格式: {fsize_str}")
     value, unit = m.groups()
-    unit = unit.upper()
     if unit not in units:
-        raise ValueError(f"无效大小单位: {fsize_str}")
+        raise ValueError(f"无效大小格式(需使用iB单位, 如 10MiB): {fsize_str}")
     return int(float(value) * units[unit])
 
 
 def parse_speed(speed_str: str) -> int:
-    """速度字符串(如 '10MiB/s') -> 字节/秒"""
+    """速度字符串(如 '10MiB/s', '1000KiB/s') -> 字节/秒; 空串返回0"""
     if not speed_str:
         return 0
     units = {"B/S": 1, "KIB/S": 1024, "MIB/S": 1024**2, "GIB/S": 1024**3}
@@ -55,12 +80,13 @@ def parse_speed(speed_str: str) -> int:
     if not m:
         raise ValueError(f"无效速度格式: {speed_str}")
     value, unit = m.groups()
-    return int(float(value) * units[unit.upper()])
+    return int(float(value) * units[unit])
 
 
 def parse_hr_rule(rule_str: str):
     """
-    解析HR规则: '3D@80%+12H' -> (required_seconds, ('dlratio'|'dlsize', value), extra_seconds)
+    解析HR规则字符串, 返回 (required_time_seconds, condition, extra_time_seconds)
+    condition: ('dlratio', ratio) 或 ('dlsize', bytes)
     示例: "3D@70%+12H" -> (3D秒数, ('dlratio', 0.7), 12H秒数)
          "20H@30%"    -> (20H秒数, ('dlratio', 0.3), 0)
          "20H@10MiB"  -> (20H秒数, ('dlsize', 字节), 0)
@@ -77,9 +103,9 @@ def parse_hr_rule(rule_str: str):
         time_part, cond_part = main.split("@", 1)
         required_time = parse_time(time_part.strip())
         cond_part = cond_part.strip()
-        if cond_part.endswith("%"):
+        if cond_part.endswith("%"):  # 百分比, 如 "70%"
             condition = ("dlratio", float(cond_part[:-1]) / 100.0)
-        else:
+        else:  # 下载量绝对值, 如 "10MiB"
             condition = ("dlsize", parse_fsize(cond_part))
     else:
         required_time = parse_time(main.strip())
@@ -88,8 +114,40 @@ def parse_hr_rule(rule_str: str):
     return required_time, condition, extra_time
 
 
+def capitalize_special_tag(text: str) -> str:
+    """将字符串中的 "hd"/"pt"(不区分大小写)及其后紧跟的一个字母转为大写"""
+
+    def repl(match):
+        prefix = match.group(1).upper()
+        suffix = match.group(2)
+        return prefix + (suffix.upper() if suffix else "")
+
+    return re.sub(r"(hd|pt)([a-zA-Z])?", repl, text, flags=re.IGNORECASE)
+
+
+def gen_default_tag(domain: str) -> str:
+    """由域名生成默认标签: 倒数第二级域名, 首字母大写并大写hd/pt"""
+    parts = domain.split(".")
+    if len(parts) < 2:
+        return ""
+    default_tag = parts[-2]
+    if not default_tag or default_tag.isdigit():  # IP地址(如 1.2.3.4)不生成标签
+        return ""
+    return capitalize_special_tag(default_tag.capitalize())
+
+
+def add_long_path_prefix_for_win(path: str) -> str:
+    """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC)"""
+    abs_path = os.path.abspath(path).replace("/", "\\")
+    if abs_path.startswith("\\\\?\\"):
+        return abs_path
+    if abs_path.startswith("\\\\"):
+        return "\\\\?\\UNC" + abs_path[1:]
+    return "\\\\?\\" + abs_path
+
+
 def parse_compare(spec: str, value_parser):
-    """解析比较表达式: '>=100MiB' -> ('>=', 字节); '<24H' -> ('<', 秒)"""
+    """解析比较表达式: '>=100MiB' -> ('>=', 字节); '<24H' -> ('<', 秒); 缺省为 '=='"""
     m = re.match(r"^\s*(>=|<=|>|<|==|=|!=)?\s*(.+?)\s*$", str(spec))
     if not m:
         raise ValueError(f"无效比较表达式: {spec}")
@@ -100,6 +158,7 @@ def parse_compare(spec: str, value_parser):
 
 
 def compare(op: str, left, right) -> bool:
+    """执行比较: op 为 >, <, >=, <=, !=, ==""" 
     if op == ">":
         return left > right
     if op == "<":
@@ -113,19 +172,8 @@ def compare(op: str, left, right) -> bool:
     return left == right
 
 
-def add_long_path_prefix_for_win(path: str) -> str:
-    """为 Windows 文件路径添加长路径支持前缀"""
-    abs_path = os.path.abspath(path)
-    abs_path = abs_path.replace("/", "\\")
-    if abs_path.startswith("\\\\?\\"):
-        return abs_path
-    if abs_path.startswith("\\\\"):
-        return "\\\\?\\UNC" + abs_path[1:]
-    return "\\\\?\\" + abs_path
-
-
 def check_filelist(client, torrent):
-    """检查文件是否存在且大小一致. 返回错误描述字符串, 全部通过返回 None"""
+    """检查种子文件是否存在且大小一致. 返回错误描述字符串, 全部通过返回 None"""
     try:
         files = client.torrents_files(torrent.hash)
     except Exception as e:
@@ -145,11 +193,24 @@ def check_filelist(client, torrent):
     return None
 
 
+def extract_tracker_hostnames(trackers_info: list) -> set:
+    """从 tracker 信息列表提取去重的 hostname 集合"""
+    hosts = set()
+    for t in trackers_info:
+        url = t.get("url")
+        if not url:
+            continue
+        try:
+            host = urlparse(url).hostname
+            if host:
+                hosts.add(host.lower())
+        except Exception:
+            continue
+    return hosts
+
+
 def match_tracker_confs(trackers: dict, urls: list):
-    """
-    精确匹配 tracker 域名(解析 hostname, 支持子域名), 返回匹配的 TrackerConfig 列表
-    一个种子可能匹配多个 tracker 配置
-    """
+    """按 hostname 精确匹配 tracker 配置(含子域名), 返回所有匹配的 TrackerConfig"""
     hosts = set()
     for url in urls:
         try:
