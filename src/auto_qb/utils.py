@@ -136,7 +136,7 @@ def parse_compare(spec: str, value_parser):
 
 
 def compare(op: str, left, right) -> bool:
-    """执行比较: op 为 >, <, >=, <=, !=, ==""" 
+    """执行比较: op 为 >, <, >=, <=, !=, =="""
     if op == ">":
         return left > right
     if op == "<":
@@ -158,9 +158,7 @@ def check_filelist(client, torrent):
         return f"获取文件列表失败: {e}"
     save_path = torrent.save_path
     for f in files:
-        full_path = add_long_path_prefix_for_win(
-            os.path.normpath(os.path.join(save_path, f.name))
-        )
+        full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
         if not os.path.exists(full_path):
             return f"文件缺失: {f.name}"
         try:

@@ -92,9 +92,7 @@ def load_config(config_path: str) -> Config:
     )
 
     # 规则集: config 段下所有以 "_rules" 结尾的键
-    rules_config = {
-        k: v for k, v in cfg.items() if k.endswith("_rules") and isinstance(v, dict)
-    }
+    rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules") and isinstance(v, dict)}
 
     trackers = {}
     for name, tdata in cfg["trackers"].items():
@@ -115,36 +113,22 @@ def load_config(config_path: str) -> Config:
         interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
         state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
         rules_config=rules_config,
-        remove_similar_tags=parse_bool(
-            cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)
-        ),
-        check_missing_files=parse_bool(
-            cfg.get("check_missing_files", DEFAULT_CHECK_MISSING_FILES)
-        ),
+        remove_similar_tags=parse_bool(cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)),
+        check_missing_files=parse_bool(cfg.get("check_missing_files", DEFAULT_CHECK_MISSING_FILES)),
         add_hr_tags=parse_bool(cfg.get("add_hr_tags", DEFAULT_ADD_HR_TAGS)),
         hr_tag_format=cfg.get("hr_tag_format", DEFAULT_HR_TAG_FORMAT),
-        add_hr_categories=parse_bool(
-            cfg.get("add_hr_categories", DEFAULT_ADD_HR_CATEGORIES)
-        ),
+        add_hr_categories=parse_bool(cfg.get("add_hr_categories", DEFAULT_ADD_HR_CATEGORIES)),
         hr_category_format=cfg.get("hr_category_format", DEFAULT_HR_CATEGORY_FORMAT),
-        overwrite_category_for_hr=parse_bool(
-            cfg.get("overwrite_category_for_hr", DEFAULT_OVERWRITE_CATEGORY_FOR_HR)
-        ),
+        overwrite_category_for_hr=parse_bool(cfg.get("overwrite_category_for_hr", DEFAULT_OVERWRITE_CATEGORY_FOR_HR)),
         skip_checking_for_cross_seeding=parse_bool(
             cfg.get(
                 "skip_checking_for_cross_seeding",
                 DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING,
             )
         ),
-        skip_checking_auto_start=parse_bool(
-            cfg.get("skip_checking_auto_start", DEFAULT_SKIP_CHECKING_AUTO_START)
-        ),
-        add_skip_checking_tags=parse_bool(
-            cfg.get("add_skip_checking_tags", DEFAULT_ADD_SKIP_CHECKING_TAGS)
-        ),
-        skip_checking_tag_format=cfg.get(
-            "skip_checking_tag_format", DEFAULT_SKIP_CHECKING_TAG_FORMAT
-        ),
+        skip_checking_auto_start=parse_bool(cfg.get("skip_checking_auto_start", DEFAULT_SKIP_CHECKING_AUTO_START)),
+        add_skip_checking_tags=parse_bool(cfg.get("add_skip_checking_tags", DEFAULT_ADD_SKIP_CHECKING_TAGS)),
+        skip_checking_tag_format=cfg.get("skip_checking_tag_format", DEFAULT_SKIP_CHECKING_TAG_FORMAT),
         qbittorrent=qb_config,
         trackers=trackers,
     )

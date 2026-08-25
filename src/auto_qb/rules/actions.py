@@ -9,9 +9,18 @@ from .registry import register_action
 
 # 用于 start/stop 动作的幂等判断
 _STARTED_STATES = {
-    "uploading", "stalledUP", "downloading", "forcedDL", "forcedUP",
-    "metaDL", "stalledDL", "queuedDL", "queuedUP",
-    "checkingDL", "checkingUP", "checkingResumeData",
+    "uploading",
+    "stalledUP",
+    "downloading",
+    "forcedDL",
+    "forcedUP",
+    "metaDL",
+    "stalledDL",
+    "queuedDL",
+    "queuedUP",
+    "checkingDL",
+    "checkingUP",
+    "checkingResumeData",
 }
 _STOPPED_STATES = {"pausedDL", "pausedUP", "stoppedDL", "stoppedUP"}
 
@@ -150,10 +159,8 @@ class CheckAction(BaseAction):
                 ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
             return ActionResult.ok("full-checking 校验")
         if self.mode == "skip-checking":
-            return ActionResult.fail(
-                "skip-checking 动作属于高风险(导出->删除->重加会清空本地统计且存在中断窗口), "
-                "框架初版暂未实现, 请使用 full-checking"
-            )
+            return ActionResult.fail("skip-checking 动作属于高风险(导出->删除->重加会清空本地统计且存在中断窗口), "
+                                     "框架初版暂未实现, 请使用 full-checking")
         return ActionResult.fail(f"未知校验模式: {self.mode}")
 
 
@@ -173,9 +180,7 @@ class BasicCheckAction(BaseAction):
                 return ActionResult.ok("文件列表检查通过")
             return ActionResult.fail(f"文件列表检查失败: {err}")
         if self.mode == "piecehashes":
-            return ActionResult.fail(
-                "piecehashes 基础检查尚未实现(需导出.torrent对比piece哈希), 请使用 filelist"
-            )
+            return ActionResult.fail("piecehashes 基础检查尚未实现(需导出.torrent对比piece哈希), 请使用 filelist")
         return ActionResult.fail(f"未知基础检查模式: {self.mode}")
 
 
@@ -195,7 +200,9 @@ class CustomBasicCheckProgramAction(BaseAction):
         try:
             r = subprocess.run(
                 [self.program, ctx.torrent.hash, ctx.torrent.save_path],
-                capture_output=True, text=True, timeout=600,
+                capture_output=True,
+                text=True,
+                timeout=600,
             )
             if r.returncode == 0:
                 return ActionResult.ok(f"外部检查通过: {r.stdout.strip()[:200]}")
@@ -259,13 +266,9 @@ class _SpeedLimitAction(BaseAction):
     def execute(self, ctx):
         if not ctx.dry_run:
             if "upload" in self.api_method:
-                getattr(ctx.client, self.api_method)(
-                    torrent_hashes=ctx.torrent.hash, upload_limit=self.value
-                )
+                getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, upload_limit=self.value)
             else:
-                getattr(ctx.client, self.api_method)(
-                    torrent_hashes=ctx.torrent.hash, download_limit=self.value
-                )
+                getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, download_limit=self.value)
         return ActionResult.ok(f"限速 {self.value} B/s")
 
 

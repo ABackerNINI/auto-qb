@@ -17,13 +17,10 @@ class RuleManager:
     - 维护 state_file: 规则执行历史 / 上传量快照 / always_check_first_one 记录
     - process_torrent 按配置顺序执行规则, 支持 stop_following_rules_if
     """
-
     def __init__(self, config, state_file: str = None):
         self.config = config
         self.client = None  # 由 PTManager 连接后赋值
-        self.state_file = (
-            state_file or getattr(config, "state_file", None) or DEFAULT_STATE_FILE
-        )
+        self.state_file = (state_file or getattr(config, "state_file", None) or DEFAULT_STATE_FILE)
         self.state = self._load_state()
 
         self.rules = []
@@ -35,9 +32,7 @@ class RuleManager:
                 self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self))
         self.enabled_rules = [r for r in self.rules if r.enabled]
         if self.rules:
-            logger.info(
-                f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条"
-            )
+            logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
 
     # ---------- 每轮生命周期 ----------
 

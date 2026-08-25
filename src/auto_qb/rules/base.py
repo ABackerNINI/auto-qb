@@ -13,7 +13,6 @@ logger = logging.getLogger("auto-qb.rules")
 
 class ActionResult:
     """动作执行结果: success / failed / skipped"""
-
     def __init__(self, status: str = "success", message: str = ""):
         self.status = status
         self.message = message
@@ -73,10 +72,10 @@ class BaseAction(ABC):
 class RuleContext:
     """一次规则处理上下文, 惰性缓存 tracker/文件等数据"""
 
-    manager: Any            # RuleManager
-    client: Any             # qbittorrent Client
-    config: Any             # Config
-    torrent: Any            # TorrentDictionary
+    manager: Any  # RuleManager
+    client: Any  # qbittorrent Client
+    config: Any  # Config
+    torrent: Any  # TorrentDictionary
     dry_run: bool
     rule_name: str = ""
     _tracker_urls: Optional[List[str]] = field(default=None)
@@ -99,19 +98,13 @@ class RuleContext:
 
     def tracker_urls(self) -> List[str]:
         if self._tracker_urls is None:
-            self._tracker_urls = [
-                t["url"]
-                for t in self.client.torrents_trackers(self.torrent.hash)
-                if t.get("url")
-            ]
+            self._tracker_urls = [t["url"] for t in self.client.torrents_trackers(self.torrent.hash) if t.get("url")]
         return self._tracker_urls
 
     def matched_tracker_confs(self) -> List[Any]:
         """匹配到的 TrackerConfig 列表(可能多个)"""
         if self._tracker_confs is None:
-            self._tracker_confs = utils.match_tracker_confs(
-                self.config.trackers, self.tracker_urls()
-            )
+            self._tracker_confs = utils.match_tracker_confs(self.config.trackers, self.tracker_urls())
         return self._tracker_confs
 
     def matched_tracker_names(self) -> List[str]:
@@ -145,7 +138,6 @@ class RuleContext:
 
 class Rule:
     """一条规则插件: 条件列表 + 动作列表 + 执行语义, 由 RuleManager 统一管理"""
-
     def __init__(self, name: str, spec: dict, manager: Any):
         self.name = name
         self.spec = spec
@@ -205,9 +197,7 @@ class Rule:
                 logger.warning(f"规则 {self.name}: 动作 {action.name} 异常: {e}")
                 result = ActionResult.fail(str(e))
             if result.is_failed:
-                logger.warning(
-                    f"规则 {self.name}: 动作 {action.name} 失败: {result.message}"
-                )
+                logger.warning(f"规则 {self.name}: 动作 {action.name} 失败: {result.message}")
                 failed = True
                 if not action.ignore_error:
                     break
@@ -239,9 +229,8 @@ class Rule:
             if self.execute_once == "daily" and rec.get("date") == now.date().isoformat():
                 return False
             if (
-                self.execute_once == "hourly"
-                and rec.get("date") == now.date().isoformat()
-                and rec.get("hour") == now.hour
+                self.execute_once == "hourly" and rec.get("date") == now.date().isoformat() and
+                rec.get("hour") == now.hour
             ):
                 return False
         return True

@@ -39,17 +39,13 @@ def find_missing_domains(all_domains: set, configured_domains: set) -> set:
     """筛选出未配置的域名(沿用包含关系匹配)"""
     missing = set()
     for host in all_domains:
-        if not any(
-            configured in host or host in configured
-            for configured in configured_domains
-        ):
+        if not any(configured in host or host in configured for configured in configured_domains):
             missing.add(host)
     return missing
 
 
 def capitalize_special_tag(text: str) -> str:
     """将字符串中的 "hd"/"pt"(不区分大小写)及其后紧跟的一个字母转为大写"""
-
     def repl(match):
         prefix = match.group(1).upper()
         suffix = match.group(2)

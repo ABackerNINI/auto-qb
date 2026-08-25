@@ -22,9 +22,7 @@ class PTManager:
         self.rules = RuleManager(self.config, self.config.state_file)
 
     def _setup_logging(self):
-        logging.basicConfig(
-            level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-        )
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
         self.logger = logging.getLogger("PTManager")
 
     def connect(self) -> bool:
@@ -104,9 +102,7 @@ class PTManager:
             self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
 
         # 8. 处理 HR 规则
-        if tracker_conf.hr_rule and (
-            self.config.add_hr_tags or self.config.add_hr_categories
-        ):
+        if tracker_conf.hr_rule and (self.config.add_hr_tags or self.config.add_hr_categories):
             self._add_hr_tag_or_category(tor, tracker_conf.hr_rule, dry_run)
 
     # ---------- 标签/分类辅助 ----------
@@ -116,43 +112,31 @@ class PTManager:
         if not tags:
             return
 
-        current_tags = (
-            set(part.strip() for part in tor.tags.split(",")) if tor.tags else set()
-        )
+        current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
         new_tags = [t for t in tags if t not in current_tags]
         if new_tags:
             if not dry_run:
                 self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
             self.logger.info(f"Added tags '{new_tags}' to '{tor.name}'")
 
-    def _remove_tags(
-        self, tor: TorrentDictionary, tags_to_remove: List[str], dry_run: bool
-    ):
+    def _remove_tags(self, tor: TorrentDictionary, tags_to_remove: List[str], dry_run: bool):
         """为种子删除标签"""
         if not tags_to_remove:
             return
 
-        current_tags = (
-            set(part.strip() for part in tor.tags.split(",")) if tor.tags else set()
-        )
+        current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
         tags_to_remove = set(tags_to_remove) & current_tags
         if tags_to_remove:
             if not dry_run:
-                self.client.torrents_remove_tags(
-                    tags=tags_to_remove, torrent_hashes=tor.hash
-                )
+                self.client.torrents_remove_tags(tags=tags_to_remove, torrent_hashes=tor.hash)
             self.logger.info(f"Removed tags '{tags_to_remove}' from '{tor.name}'")
 
-    def _remove_similar_tags(
-        self, tor: TorrentDictionary, tags: List[str], dry_run: bool
-    ):
+    def _remove_similar_tags(self, tor: TorrentDictionary, tags: List[str], dry_run: bool):
         """删除类似(单词相同大小写不同)的tag"""
         if not tags:
             return
 
-        current_tags = (
-            set(part.strip() for part in tor.tags.split(",")) if tor.tags else set()
-        )
+        current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
 
         # 删除单词相同但大小写不一致的标签
         for tag in current_tags:
@@ -161,9 +145,7 @@ class PTManager:
                     self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
                 self.logger.info(f"Removed similar tag '{tag}' from '{tor.name}'")
 
-    def _set_category(
-        self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool
-    ):
+    def _set_category(self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool):
         """设置种子的分类"""
         old_category = tor.category.strip()
 
@@ -175,21 +157,15 @@ class PTManager:
 
             # 设置分类
             if not dry_run:
-                self.client.torrents_set_category(
-                    category=category, torrent_hashes=tor.hash
-                )
+                self.client.torrents_set_category(category=category, torrent_hashes=tor.hash)
 
             # 打印日志
             if old_category:
-                self.logger.info(
-                    f"Set category from '{old_category}' to '{category}' for '{tor.name}'"
-                )
+                self.logger.info(f"Set category from '{old_category}' to '{category}' for '{tor.name}'")
             else:
                 self.logger.info(f"Set category to '{category}' for '{tor.name}'")
         else:  # 存在分类但不覆盖
-            self.logger.warning(
-                f"Skipping '{tor.name}' as it already has category '{old_category}'"
-            )
+            self.logger.warning(f"Skipping '{tor.name}' as it already has category '{old_category}'")
 
     def _create_category_if_not_exists(self, category: str, dry_run: bool):
         """如果分类不存在则创建分类"""
@@ -201,9 +177,7 @@ class PTManager:
 
     # ---------- HR ----------
 
-    def _add_hr_tag_or_category(
-        self, tor: TorrentDictionary, rule_str: str, dry_run: bool
-    ):
+    def _add_hr_tag_or_category(self, tor: TorrentDictionary, rule_str: str, dry_run: bool):
         """添加HR标签或分类"""
         required_time, condition, extra_time = parse_hr_rule(rule_str)
 
@@ -233,12 +207,8 @@ class PTManager:
 
         # 添加 HR 分类
         if self.config.add_hr_categories:
-            hr_category = self.config.hr_category_format.replace(
-                "${time}", time_part.group(1)
-            )
-            self._set_category(
-                tor, hr_category, self.config.overwrite_category_for_hr, dry_run
-            )
+            hr_category = self.config.hr_category_format.replace("${time}", time_part.group(1))
+            self._set_category(tor, hr_category, self.config.overwrite_category_for_hr, dry_run)
 
     def _mark_hr_done(self, tor: TorrentDictionary, dry_run: bool):
         """标记种子为 HR-DONE 分类并强制汇报"""
@@ -253,9 +223,7 @@ class PTManager:
 
     # ---------- 检查类 ----------
 
-    def _check_and_handle_missing_files(
-        self, tor: TorrentDictionary, dry_run: bool
-    ) -> bool:
+    def _check_and_handle_missing_files(self, tor: TorrentDictionary, dry_run: bool) -> bool:
         """
         检查种子文件是否存在，如果已完成但文件缺失，则暂停并添加标签"MISSING"
         返回 True 表示已处理（已暂停），否则 False
@@ -270,14 +238,10 @@ class PTManager:
         missing = False
         for f in files:
             # 组合完整路径, 添加长路径前缀
-            full_path = add_long_path_prefix_for_win(
-                os.path.normpath(os.path.join(save_path, f.name))
-            )
+            full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
 
             if not os.path.exists(full_path):  # 查看文件是否存在
-                self.logger.warning(
-                    f"File missing: '{full_path}' of torrent '{tor.name}'!"
-                )
+                self.logger.warning(f"File missing: '{full_path}' of torrent '{tor.name}'!")
                 missing = True
                 break
 
@@ -323,9 +287,7 @@ class PTManager:
         missing = False
         for f in files:
             # 组合完整路径, 添加长路径前缀
-            full_path = add_long_path_prefix_for_win(
-                os.path.normpath(os.path.join(save_path, f.name))
-            )
+            full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
 
             if not os.path.exists(full_path):  # 查看文件是否存在
                 missing = True
