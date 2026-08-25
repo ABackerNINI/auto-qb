@@ -1,4 +1,9 @@
-"""导出 YAML 配置模板: 找出未配置的 tracker 域名并追加到配置"""
+"""导出 YAML 配置模板: 找出未配置的 tracker 域名
+
+支持两种模式:
+- 追加模式(默认): 将缺失站点条目追加到现有配置后完整导出
+- 仅缺失模式(only_missing): 只导出未配置的站点, 生成最小骨架
+"""
 import logging
 import re
 
@@ -75,9 +80,19 @@ def build_tracker_entry(domain: str) -> dict:
     }
 
 
-def export_yaml_template(client, config, config_path: str, output_path: str, dry_run: bool):
+def export_yaml_template(
+    client,
+    config,
+    config_path: str,
+    output_path: str,
+    dry_run: bool,
+    only_missing: bool = False,
+):
     """
-    生成 YAML 配置模板: 导出所有种子中未在配置中定义的 tracker 域名。
+    生成 YAML 配置模板: 导出种子中未在配置里定义的 tracker 域名。
+
+    only_missing=True 时只导出未配置的站点(最小骨架, 不含已有配置, 便于直接复制);
+    否则将缺失条目追加到现有配置后完整导出。
     """
     # 1. 获取所有种子并收集 tracker 域名
     torrents = client.torrents_info()
@@ -91,10 +106,15 @@ def export_yaml_template(client, config, config_path: str, output_path: str, dry
     if missing_domains:
         logger.info(f"Missing tracker domains: {missing_domains}")
 
-    # 3. 读取原始配置结构并追加缺失条目
-    with open(config_path, "r", encoding="utf-8") as f:
-        export_config = yaml.load(f, Loader=yaml.BaseLoader)
-    export_config = convert_bool_in_dict(export_config)
+    # 3. 构建导出内容
+    if only_missing:
+        # 只导出未配置的站点: 生成最小配置骨架
+        export_config = {"config": {"trackers": {}}}
+    else:
+        # 读取原始配置结构并追加缺失条目
+        with open(config_path, "r", encoding="utf-8") as f:
+            export_config = yaml.load(f, Loader=yaml.BaseLoader)
+        export_config = convert_bool_in_dict(export_config)
 
     for domain in sorted(missing_domains):
         # 生成合法名称: 去除点号和横线, 限制为字母数字下划线

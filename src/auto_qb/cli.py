@@ -21,6 +21,11 @@ def main():
         metavar="OUTPUT",
         help="Export YAML templates to OUTPUT file and exit",
     )
+    parser.add_argument(
+        "--only-missing",
+        action="store_true",
+        help="只导出未配置的 tracker 站点(需配合 --export-yaml, 生成最小骨架)",
+    )
     parser.add_argument("--dry-run", "-n", action="store_true", help="Dry run")
     args = parser.parse_args()
 
@@ -37,6 +42,7 @@ def main():
             manager.config_path,
             args.export_yaml,
             args.dry_run,
+            only_missing=args.only_missing,
         )
         return
 
