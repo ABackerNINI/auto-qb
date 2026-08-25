@@ -19,7 +19,7 @@ class RuleManager:
     """
     def __init__(self, config, state_file: str = None):
         self.config = config
-        self.client = None  # 由 PTManager 连接后赋值
+        self.client = None  # 由 QbManager 连接后赋值
         self.state_file = (state_file or getattr(config, "state_file", None) or DEFAULT_STATE_FILE)
         self.state = self._load_state()
 

@@ -4,7 +4,7 @@ import logging
 
 from .config import DEFAULT_CONFIG_FILE
 from .exporter import export_yaml_template
-from .manager import PTManager
+from .manager import QbManager
 
 
 def main():
@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--dry-run", "-n", action="store_true", help="Dry run")
     args = parser.parse_args()
 
-    manager = PTManager(args.config)
+    manager = QbManager(args.config)
 
     if args.export_yaml:
         # 导出模式: 连接后由 exporter 模块完成导出

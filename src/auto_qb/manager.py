@@ -1,4 +1,4 @@
-"""PTManager: qBittorrent 主管理类(内置处理步骤 + 规则框架集成 + 主循环)"""
+"""QbManager: qBittorrent 主管理类(内置处理步骤 + 规则框架集成 + 主循环)"""
 import logging
 import os
 import re
@@ -12,7 +12,7 @@ from .rules import RuleManager
 from .utils import add_long_path_prefix_for_win, parse_hr_rule
 
 
-class PTManager:
+class QbManager:
     def __init__(self, config_path: str):
         self.config_path = config_path
         self.config: Config = load_config(config_path)
@@ -23,7 +23,7 @@ class PTManager:
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-        self.logger = logging.getLogger("PTManager")
+        self.logger = logging.getLogger("QbManager")
 
     def connect(self) -> bool:
         """连接 qBittorrent"""
@@ -46,7 +46,7 @@ class PTManager:
         if not self.connect():
             return
 
-        self.logger.info(f"Starting PT manager with interval {self.config.interval}s")
+        self.logger.info(f"Starting qB manager with interval {self.config.interval}s")
         while True:
             try:
                 self._process_all_torrents(dry_run)
