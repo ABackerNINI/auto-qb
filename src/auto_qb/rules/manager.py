@@ -5,7 +5,7 @@ import time
 from datetime import date, datetime
 
 from .base import Rule, RuleContext
-from .taskqueue import TaskQueue
+from ..taskqueue import TaskQueue
 
 logger = logging.getLogger("auto-qb.rules")
 

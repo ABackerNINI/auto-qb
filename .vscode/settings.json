@@ -8,6 +8,7 @@
         "digitalcore",
         "dlratio",
         "dlsize",
+        "dtime",
         "fakehdfans",
         "filelist",
         "fsize",
@@ -36,6 +37,8 @@
         "SHDWMY",
         "SMHD",
         "tangpt",
+        "taskq",
+        "taskqueue",
         "tdata",
         "trackerprxy"
     ],

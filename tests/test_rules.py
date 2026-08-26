@@ -375,7 +375,7 @@ def test_rule_interval():
 
 def test_task_queue_schedule():
     """测试: 快速队列 interval 调度(时间优先堆)"""
-    from auto_qb.rules.taskqueue import TaskQueue
+    from auto_qb.taskqueue import TaskQueue
     tq = TaskQueue()
     now = 1000.0
     tq.schedule_rule("example_rules.every_round", 0, now=now)  # 每轮
@@ -401,7 +401,7 @@ def test_task_queue_schedule():
 
 def test_async_check():
     """测试: check 动作异步提交校验(慢速队列), 主循环轮询完成 -> 自动开始 + 记录执行"""
-    from auto_qb.rules.taskqueue import TaskQueue
+    from auto_qb.taskqueue import TaskQueue
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
