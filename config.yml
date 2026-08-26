@@ -189,3 +189,13 @@ config:
             HR: ""
             rules:
                 - "@add_tag_rules"
+        ptsbao_club:
+            domains:
+            - ptsbao.club
+            tags:
+            - PTSBao
+            U: 0KiB/s
+            D: 0KiB/s
+            HR: ''
+            rules:
+                - "@add_tag_rules"
