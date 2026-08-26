@@ -257,7 +257,7 @@ class UploadSizeCondition(BaseCondition):
 
 
 class _UploadDeltaCondition(BaseCondition):
-    """周期上传增量条件基类: 基于 RuleManager 维护的快照, 取 max(0, 增量)"""
+    """周期上传增量条件基类: 基于 QbManager 维护的快照, 取 max(0, 增量)"""
     kind = ""  # daily / weekly / monthly
 
     def __init__(self, spec):

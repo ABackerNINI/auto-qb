@@ -9,7 +9,8 @@ from types import SimpleNamespace
 # 将项目根下的 src/ 加入模块搜索路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
-from auto_qb.rules import RuleManager, RuleContext, ActionResult  # noqa: E402
+from auto_qb.qbmanager import QbManager  # noqa: E402
+from auto_qb.rules import RuleContext, ActionResult  # noqa: E402
 
 
 # ---------- 模拟 qB 客户端 ----------
@@ -133,6 +134,11 @@ class FakeTracker:
 class FakeConfig:
     trackers = {"HHan": FakeTracker("HHan", "3D@70%+12H")}
     state_file = ""  # 由测试设置
+    interval = 60  # QbManager 主刷新任务 interval(测试不触发 refresh)
+    check_missing_files = False
+    remove_similar_tags = False
+    add_hr_tags = False
+    add_hr_categories = False
 
 
 def make_manager(state_file, tracker_rules=None):
@@ -188,7 +194,7 @@ def make_manager(state_file, tracker_rules=None):
             }
     }
     cfg.rules_config = config_dict
-    return RuleManager(cfg, state_file)
+    return QbManager("", config=cfg)
 
 
 def test_basic():
@@ -313,10 +319,12 @@ def test_compare():
 
 
 def test_rule_interval():
-    """测试: 规则 interval 调度(每条规则一个队列任务, 到期才执行, interval=0 归一化为每 tick)"""
+    """测试: 规则 interval 调度(每条规则一个种子级任务, 到期才执行, interval=0 归一化为每 tick)"""
+    from auto_qb.taskqueue import Task, TaskQueue
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
+        cfg.state_file = state_file
         cfg.rules_config = {
             "example_rules":
                 {
@@ -345,20 +353,27 @@ def test_rule_interval():
                         },
                 }
         }
-        mgr = RuleManager(cfg, state_file)
+        mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
+        client.torrents["HASH123"] = tor  # 种子级规则任务通过 _get_torrent 拉取
 
-        tq = mgr.task_queue
-        now = time.time()  # add_task 内部以真实时间作为 next_run 起点
+        # 模拟 _create_torrent_tasks: 为种子创建规则任务(独立队列, 排除 refresh 任务干扰)
+        tq = TaskQueue()
+        rules = mgr._rules_for_torrent(tor)
+        assert {r.name for r in rules} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}
+        now = time.time()  # 统一时间起点: add_task 与 due 使用同一 now
+        for r in rules:
+            tq.add_task(mgr._create_rule_task(r, tor.hash), now=now)
 
         # 第 1 轮: 所有规则任务初始立即到期, 均执行
         due = tq.due(now)
         assert {t.name for t in due} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}, \
             f"第 1 轮应全部到期: {[t.name for t in due]}"
-        handled = mgr.run_rules({t.name for t in due}, [tor], dry_run=False)
-        assert handled, "第 1 轮 stop_low_ratio 应执行"
+        for t in due:
+            keep = t.handler(t, False)
+            assert keep, f"任务不应消亡: {t.name}"
         assert ("stop", None) in client.calls, f"第 1 轮应 stop: {client.calls}"
         for t in due:
             tq.reschedule(t, now)
@@ -368,7 +383,8 @@ def test_rule_interval():
         due2 = tq.due(now + 1)
         assert [t.name
                 for t in due2] == ["example_rules.add_site_tag"], f"第 2 轮应只到期 add_site_tag: {[t.name for t in due2]}"
-        mgr.run_rules({t.name for t in due2}, [tor], dry_run=False)
+        for t in due2:
+            t.handler(t, False)
         assert ("stop", None) not in client.calls, f"interval 未到期不应再次 stop: {client.calls}"
         assert client.tags == {"HHan"}, f"add_site_tag 应仍执行: {client.tags}"
         for t in due2:
@@ -377,15 +393,16 @@ def test_rule_interval():
         # 60s 后: stop_low_ratio 到期再次执行
         client.calls.clear()
         due3 = tq.due(now + 60)
-        mgr.run_rules({t.name for t in due3}, [tor], dry_run=False)
+        for t in due3:
+            t.handler(t, False)
         assert ("stop", None) in client.calls, f"60s 后应再次 stop: {client.calls}"
 
-        # 兜底: 不调用 run_rules 直接 process_torrent, 视为全部规则执行
-        mgr3 = RuleManager(cfg, state_file)
+        # 兜底: 不创建任务直接 process_torrent, 视为全部规则执行(向后兼容)
+        mgr3 = QbManager("", config=cfg)
         client3 = FakeClient()
         mgr3.client = client3
         handled3 = mgr3.process_torrent(tor, dry_run=False)
-        assert handled3, "无 run_rules 时规则应全部执行(向后兼容)"
+        assert handled3, "无规则任务时规则应全部执行(向后兼容)"
         assert ("stop", None) in client3.calls, f"兜底路径应执行全部规则: {client3.calls}"
         print("[OK] test_rule_interval: 规则 interval 调度")
 
@@ -394,9 +411,9 @@ def test_task_queue_schedule():
     """测试: 快速队列 interval 调度(时间优先堆, 每个任务有内置 interval)"""
     from auto_qb.taskqueue import Task, TaskQueue
     tq = TaskQueue()
-    now = time.time()  # add_task 内部以真实时间作为 next_run 起点
-    tq.add_task(Task("rule", "every_tick", interval=0, next_run=now))  # interval<=0 归一化为 1s
-    tq.add_task(Task("rule", "interval60", interval=60, next_run=now))  # 60s 一次
+    now = time.time()  # 统一时间起点: add_task 与 due 使用同一 now
+    tq.add_task(Task("rule", "every_tick", interval=0), now=now)  # interval<=0 归一化为 1s
+    tq.add_task(Task("rule", "interval60", interval=60), now=now)  # 60s 一次
 
     # 到期弹出: 两个任务都立即到期
     due = tq.due(now)
@@ -412,7 +429,7 @@ def test_task_queue_schedule():
     assert [t.name for t in tq.due(now + 60)] == ["interval60"], "60s 时 interval60 到期"
 
     # remove_torrent: 按种子移除任务
-    tq.add_task(Task("torrent", "maintenance", torrent_hash="H1", interval=60))
+    tq.add_task(Task("torrent", "maintenance", torrent_hash="H1", interval=60), now=now)
     tq.remove_torrent("H1")
     assert tq.due(now + 61) == [], "remove_torrent 后任务应被移除"
 
@@ -445,7 +462,7 @@ def test_async_check():
                         },
                 }
         }
-        mgr = RuleManager(cfg, state_file)
+        mgr = QbManager("", config=cfg)
         # 同步模式: 发送回调立即执行, 测试无竞态
         mgr.task_queue = TaskQueue(executor_workers=0)
         client = FakeClient()
@@ -500,7 +517,7 @@ def test_skip_checking():
                         },
                 }
         }
-        mgr = RuleManager(cfg, state_file)
+        mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
         client.torrents["HASH123"] = {"state": "stalledUP"}
@@ -548,7 +565,7 @@ def test_skip_checking_guard():
                         },
                 }
         }
-        mgr = RuleManager(cfg, state_file)
+        mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
         client.torrents["HASH123"] = {"state": "stalledUP"}

@@ -76,7 +76,7 @@ class BaseAction(ABC):
 class RuleContext:
     """一次规则处理上下文, 惰性缓存 tracker/文件等数据"""
 
-    manager: Any  # RuleManager
+    manager: Any  # QbManager(规则调度/状态持久化/任务队列)
     client: Any  # qbittorrent Client
     config: Any  # Config
     torrent: Any  # TorrentDictionary
@@ -154,7 +154,7 @@ class RuleContext:
 
 
 class Rule:
-    """一条规则插件: 条件列表 + 动作列表 + 执行语义, 由 RuleManager 统一管理"""
+    """一条规则插件: 条件列表 + 动作列表 + 执行语义, 由 QbManager 统一加载与调度"""
     def __init__(self, name: str, spec: dict, manager: Any):
         self.name = name
         self.spec = spec

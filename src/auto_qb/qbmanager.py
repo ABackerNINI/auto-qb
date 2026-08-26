@@ -1,35 +1,48 @@
-"""QbManager: qBittorrent 主管理类(任务队列驱动 + 规则框架集成 + 主循环)"""
+"""QbManager: qBittorrent 主管理类
+
+任务队列统一协调: 种子刷新 / 规则 / 种子级内置功能 / 异步校验 全部是带内置 interval 的任务。
+检测到新增种子时, 自动为该种子创建所有符合条件的 rule 任务(tracker 引用规则或全部启用规则)。
+"""
+import json
 import logging
 import os
 import re
 import time
+from datetime import date, datetime
 from typing import List, Optional
 
 from qbittorrentapi import Client, TorrentDictionary
 
 from .config import Config, TrackerConfig, load_config
-from .rules import RuleManager
-from .taskqueue import Task
-from .utils import add_long_path_prefix_for_win, parse_hr_rule
+from .rules import Rule, RuleContext
+from .taskqueue import Task, TaskQueue
+from .utils import add_long_path_prefix_for_win, match_tracker_confs, parse_hr_rule
 
 # 主循环 tick 间隔(秒): 唯一的循环粒度, 每个任务有内置 interval 决定自身执行频率
 MAIN_TICK = 2.0
 
 
 class QbManager:
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, config: Config = None):
         self.config_path = config_path
-        self.config: Config = load_config(config_path)
+        self.config = config or load_config(config_path)
         self.client: Optional[Client] = None
         self._setup_logging()
-        # 规则框架: 统一管理规则插件(条件+动作), 配置来自 config 下 *_rules 段
-        self.rules = RuleManager(self.config, self.config.state_file)
+        # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
+        self.state_file = self.config.state_file
+        self.state = self._load_state()
+        # 规则加载(条件+动作插件, manager 即本对象: 提供执行历史/状态/任务队列)
+        self.rules: List[Rule] = []
+        self.enabled_rules: List[Rule] = []
+        self._load_rules()
+        # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验)
+        self.task_queue = TaskQueue()
         # 种子增删检测: 上一轮已知 hash 集合, None 表示首轮(首次刷新为全部现有种子创建任务)
         self._known_hashes: Optional[set] = None
-        # 最近一次种子快照: 规则任务执行时使用的种子列表
+        # 最近一次种子快照: 新增种子创建任务/规则条件(上传量基线)使用
         self._snapshot: list = []
         # 注册种子列表刷新任务(interval = config.interval, 首次立即执行)
-        self.rules.task_queue.add_task(
+        self.task_queue.add_task(
             Task("refresh", "refresh", interval=self.config.interval, handler=self._refresh_torrents)
         )
 
@@ -46,7 +59,6 @@ class QbManager:
                 password=self.config.qbittorrent.password,
             )
             self.client.auth_log_in()
-            self.rules.client = self.client
             self.logger.info("Connected to qBittorrent successfully")
             return True
         except Exception as e:
@@ -73,45 +85,42 @@ class QbManager:
         except KeyboardInterrupt:
             self.logger.info("Stopping...")
         finally:
-            self.rules.shutdown(wait=False)
+            self.task_queue.shutdown(wait=False)
 
     def _tick(self, dry_run: bool):
         """单次 tick: 1) 轮询慢速队列(异步校验) 2) 弹出快速队列到期任务并执行"""
         now = time.time()
 
         # 1. 慢速队列: 轮询异步校验结果(仅当有待处理任务时才查询客户端)
-        if self.rules.task_queue.pending_slow():
-            completed = self.rules.task_queue.poll_slow(self._is_check_done)
+        if self.task_queue.pending_slow():
+            completed = self.task_queue.poll_slow(self._is_check_done)
             for task in completed:
                 if task.send_error is not None:
                     self.logger.warning(f"异步校验任务异常({task.torrent_hash}): {task.send_error}")
 
         # 2. 快速队列: 弹出到期任务并执行
-        due = self.rules.task_queue.due(now)
+        due = self.task_queue.due(now)
         if due:
             self._execute_due(due, dry_run, now)
 
     def _execute_due(self, due: list, dry_run: bool, now: float):
-        """执行到期任务: 先种子刷新(更新快照) -> 规则任务聚合执行(一次快照遍历) -> 其他任务"""
-        # 1. 种子刷新任务先执行, 保证规则/内置任务使用最新快照
+        """执行到期任务: 先种子刷新(更新快照/增删检测), 其余任务(规则/种子级内置)逐个执行"""
+        # 1. 种子刷新任务先执行, 保证其他任务使用最新快照与种子增删状态
         for task in due:
             if task.kind == "refresh":
                 self._safe(task, dry_run)
-        # 2. 规则任务聚合: 所有到期规则一起跑(一次遍历种子快照, 维护上传量基线)
-        rule_names = {t.name for t in due if t.kind == "rule"}
-        if rule_names and self._snapshot:
-            self.rules.run_rules(rule_names, self._snapshot, dry_run)
-        # 3. 种子级内置功能任务(handler 返回 False 则任务消亡, 不重新入队)
+        # 2. 其余任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
         for task in due:
-            if task.kind not in ("refresh", "rule"):
-                keep = self._safe(task, dry_run)
-                if keep is False:
-                    continue
-                self.rules.task_queue.reschedule(task, now)
-        # 4. 刷新/规则任务按内置 interval 重新入队
+            if task.kind == "refresh":
+                continue
+            keep = self._safe(task, dry_run)
+            if keep is False:
+                continue
+            self.task_queue.reschedule(task, now)
+        # 3. 刷新任务按内置 interval 重新入队
         for task in due:
-            if task.kind in ("refresh", "rule"):
-                self.rules.task_queue.reschedule(task, now)
+            if task.kind == "refresh":
+                self.task_queue.reschedule(task, now)
 
     def _safe(self, task: Task, dry_run: bool) -> bool:
         """执行任务 handler, 捕获异常; 返回 handler 结果(默认 True 重新入队)"""
@@ -145,9 +154,10 @@ class QbManager:
         return infos[0] if infos else None
 
     def _refresh_torrents(self, task: Task, dry_run: bool) -> bool:
-        """种子列表刷新任务: 拉全量 -> 增删检测 -> 新种子创建内置任务, 删除种子移除任务, 更新快照"""
+        """种子列表刷新任务: 拉全量 -> 增删检测 -> 新种子创建内置+规则任务, 删除种子移除任务, 更新快照"""
         torrents = self.client.torrents_info()
         current_hashes = {t.hash for t in torrents}
+        self._snapshot = torrents
 
         if self._known_hashes is not None:
             added = current_hashes - self._known_hashes
@@ -156,20 +166,25 @@ class QbManager:
             added = current_hashes  # 首轮: 为所有现有种子创建任务
             removed = set()
         if added:
-            self.logger.info(f"检测到新增种子 {len(added)} 个, 创建内置任务")
+            self.logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
             for h in added:
                 self._create_torrent_tasks(h)
         if removed:
             self.logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
-                self.rules.task_queue.remove_torrent(h)
+                self.task_queue.remove_torrent(h)
 
         self._known_hashes = current_hashes
-        self._snapshot = torrents
+        # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
+        self.begin_round(torrents)
         return True
 
     def _create_torrent_tasks(self, torrent_hash: str):
-        """为新增种子创建内置功能任务(每个任务有内置 interval = config.interval, 加入即立即到期)"""
+        """为新增种子创建任务: 内置功能(missing_files/maintenance) + 所有符合条件的规则任务
+
+        每个任务有内置 interval(规则任务用规则自身 interval), 加入队列即立即到期(下一 tick 执行)。
+        """
+        tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
         tasks = []
         if self.config.check_missing_files:
             tasks.append(
@@ -190,7 +205,10 @@ class QbManager:
                 handler=self._handle_maintenance
             )
         )
-        self.rules.task_queue.add_tasks(tasks)
+        if tor is not None:
+            for rule in self._rules_for_torrent(tor):
+                tasks.append(self._create_rule_task(rule, torrent_hash))
+        self.task_queue.add_tasks(tasks)
 
     def _handle_missing_files(self, task: Task, dry_run: bool) -> bool:
         """种子级任务: 检查文件丢失(缺失则暂停并加 MISSING 标签); 种子已删返回 False 任务消亡"""
@@ -223,6 +241,178 @@ class QbManager:
             self._log_torrent_details(tor, tracker_conf)
             self.logger.info(f"--------------------------------------------------------------------------")
         return True
+
+    # ---------- 规则: 加载 / 状态持久化 ----------
+
+    def _load_rules(self):
+        """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即本对象"""
+        rules_config = getattr(self.config, "rules_config", {}) or {}
+        for group_name, group in rules_config.items():
+            if not isinstance(group, dict):
+                continue
+            for rule_name, spec in group.items():
+                self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self))
+        self.enabled_rules = [r for r in self.rules if r.enabled]
+        if self.rules:
+            self.logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
+
+    def _load_state(self) -> dict:
+        try:
+            with open(self.state_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        return {}
+
+    def save_state(self):
+        try:
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(self.state, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            self.logger.warning(f"保存状态文件失败: {e}")
+
+    def record_execution(self, rule_name: str, torrent_hash: str):
+        """记录规则执行历史(execute_once/cooldown 去重依据); 仅主循环线程调用, 线程安全"""
+        now = datetime.now()
+        history = self.state.setdefault("exec_history", {})
+        history[f"{rule_name}:{torrent_hash}"] = {
+            "ts": now.timestamp(),
+            "date": now.date().isoformat(),
+            "hour": now.hour,
+        }
+
+    def get_exec_record(self, rule_name: str, torrent_hash: str):
+        return self.state.get("exec_history", {}).get(f"{rule_name}:{torrent_hash}")
+
+    def begin_round(self, torrents):
+        """维护上传量快照(按自然日/周/月, 周期切换时重建基线) — 由 refresh 任务调用, 幂等"""
+        snaps = self.state.setdefault("upload_snapshots", {})
+        today = date.today()
+        buckets = {
+            "daily": today.isoformat(),
+            "weekly": f"{today.isocalendar().year}-W{today.isocalendar().week:02d}",
+            "monthly": today.strftime("%Y-%m"),
+        }
+        for kind, key in buckets.items():
+            bucket = snaps.setdefault(kind, {})
+            if bucket.get("key") != key:
+                bucket.clear()
+                bucket["key"] = key
+                bucket["baseline"] = {t.hash: t.uploaded for t in torrents}
+
+    def upload_delta(self, torrent, kind: str) -> int:
+        """周期上传增量: 当前 uploaded - 周期开始时快照, 下限 0(防种子重加/客户端重启归零)"""
+        bucket = self.state.get("upload_snapshots", {}).get(kind, {})
+        baseline = bucket.get("baseline", {})
+        base = baseline.get(torrent.hash, 0)
+        return max(0, torrent.uploaded - base)
+
+    # ---------- 规则: 种子级任务 ----------
+
+    def _rules_for_torrent(self, tor) -> list:
+        """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set); 无引用则全部启用规则"""
+        try:
+            urls = [t["url"] for t in self.client.torrents_trackers(tor.hash) if t.get("url")]
+        except Exception as e:
+            self.logger.debug(f"获取种子 tracker 失败({tor.hash}): {e}")
+            urls = []
+        confs = match_tracker_confs(self.config.trackers, urls)
+        refs = []
+        for conf in confs:
+            for ref in getattr(conf, "rules", []) or []:
+                ref = str(ref).strip()
+                if ref.startswith("@"):
+                    refs.append(ref[1:])
+        if refs:
+            rules = self._resolve_refs(refs)
+            if rules:
+                return rules
+        return list(self.enabled_rules)
+
+    def _create_rule_task(self, rule: Rule, torrent_hash: str) -> Task:
+        """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)"""
+        return Task(
+            "rule",
+            rule.name,
+            torrent_hash=torrent_hash,
+            interval=rule.interval,
+            handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
+        )
+
+    def _handle_rule(self, rule: Rule, task: Task, dry_run: bool) -> bool:
+        """种子级规则任务: 执行指定规则于该种子; 种子已删除返回 False 任务消亡"""
+        tor = self._get_torrent(task.torrent_hash)
+        if tor is None:
+            return False
+        ctx = RuleContext(self, self.client, self.config, tor, dry_run)
+        try:
+            handled, _stop = rule.process(ctx)
+        except Exception as e:
+            self.logger.warning(f"规则执行异常({rule.name} {tor.hash}): {e}")
+            return True
+        if handled and not dry_run:
+            self.save_state()
+        return True
+
+    # ---------- 规则: 便捷入口与 tracker 引用 ----------
+
+    def process_torrent(self, torrent, dry_run: bool) -> bool:
+        """直接处理单个种子(全部启用规则, 含 tracker rules 引用过滤)
+
+        任务队列驱动时请用种子级规则任务; 此入口用于向后兼容(测试/脚本直接调用)。
+        """
+        if not self.enabled_rules:
+            return False
+        ctx = RuleContext(self, self.client, self.config, torrent, dry_run)
+        refs, force_continue = self._tracker_rule_refs(ctx)
+        if refs:
+            rules = self._resolve_refs(refs)
+            if not rules:
+                return False
+        else:
+            rules = self.enabled_rules
+        handled = False
+        for rule in rules:
+            h, stop = rule.process(ctx)
+            if h:
+                handled = True
+            if stop and not force_continue:
+                break
+        if handled and not dry_run:
+            self.save_state()
+        return handled
+
+    def _tracker_rule_refs(self, ctx):
+        """收集种子匹配 tracker 的 rules 引用, 返回 (refs列表, ignore_next_rule_error标志)"""
+        refs, force_continue = [], False
+        for conf in ctx.matched_tracker_confs():
+            for ref in getattr(conf, "rules", []) or []:
+                ref = str(ref).strip()
+                if ref == "ignore_next_rule_error: true":
+                    force_continue = True
+                elif ref.startswith("@"):
+                    refs.append(ref[1:])
+        return refs, force_continue
+
+    def _resolve_refs(self, refs) -> list:
+        """解析 '@rule_set' / '@rule_set.rule_name' 引用为 Rule 列表(按名称去重)"""
+        result, seen = [], set()
+        for ref in refs:
+            if "." in ref:
+                group, name = ref.split(".", 1)
+                target = f"{group}.{name}"
+                for r in self.enabled_rules:
+                    if r.name == target and r.name not in seen:
+                        result.append(r)
+                        seen.add(r.name)
+            else:
+                for r in self.enabled_rules:
+                    if r.name.startswith(ref + ".") and r.name not in seen:
+                        result.append(r)
+                        seen.add(r.name)
+        return result
 
     def _log_torrent_details(self, tor: TorrentDictionary, tracker_conf: TrackerConfig | None) -> str:
         site = tracker_conf.name if tracker_conf else "未知"

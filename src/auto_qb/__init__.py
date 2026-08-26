@@ -2,9 +2,9 @@
 
 模块结构:
 - config.py   配置数据类与加载
-- manager.py  QbManager 主类(内置处理步骤 + 规则框架集成)
+- qbmanager.py QbManager 主类(任务队列协调: 种子刷新/规则/内置功能/异步校验)
 - exporter.py YAML 配置模板导出
-- rules/      规则框架(条件/动作插件 + RuleManager)
+- rules/      规则框架(条件/动作插件, 由 QbManager 统一加载与调度)
 - cli.py      命令行入口
 """
 from .config import Config, TrackerConfig, QbittorrentConfig, load_config
