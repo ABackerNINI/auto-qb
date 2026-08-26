@@ -77,6 +77,8 @@ class QbManager:
         #    缺文件检查优先级最高: MISSING 的种子任何规则都不生效, 直到文件恢复
         if self.config.check_missing_files:
             if self._check_and_handle_missing_files(tor, dry_run):
+                self._log_torrent_details(tor, tracker_conf)
+                self.logger.info(f"--------------------------------------------------------------------------")
                 return  # 已处理，跳过后续
 
         handled = False
@@ -298,8 +300,8 @@ class QbManager:
 
             # 设置标签
             self._add_tags(tor, ["MISSING"], dry_run)
-            return True
-        return False
+
+        return missing
 
     def _skip_checking_for_cross_seeding(self, tor: TorrentDictionary, dry_run: bool):
         """
