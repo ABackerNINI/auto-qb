@@ -10,6 +10,7 @@ DEFAULT_CONFIG_FILE = "config.yml"
 DEFAULT_STATE_FILE = "auto-qb-state.json"
 
 DEFAULT_INTERVAL = "60s"
+DEFAULT_TICK_INTERVAL = "2s"  # 主循环 tick 间隔: 慢速队列(异步校验)轮询粒度
 DEFAULT_REMOVE_SIMILAR_TAGS = False
 DEFAULT_CHECK_MISSING_FILES = True
 
@@ -55,6 +56,7 @@ class TrackerConfig:
 @dataclass
 class Config:
     interval: int
+    tick_interval: int  # 主循环 tick 间隔(慢速队列轮询粒度), 秒
 
     state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
     rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
@@ -111,6 +113,7 @@ def load_config(config_path: str) -> Config:
 
     return Config(
         interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
+        tick_interval=parse_time(cfg.get("tick_interval", DEFAULT_TICK_INTERVAL)),
         state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
         rules_config=rules_config,
         remove_similar_tags=parse_bool(cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS)),

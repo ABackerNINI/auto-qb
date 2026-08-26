@@ -160,6 +160,7 @@ class Rule:
         self.spec = spec
         self.manager = manager
         self.enabled = utils.parse_bool(spec.get("enabled", True))
+        self.interval = utils.parse_time(str(spec.get("interval", "0S")))  # 规则扫描间隔, 0 = 每轮
         self.execute_once = str(spec.get("execute_once", "never"))
         self.cooldown = utils.parse_time(str(spec.get("cooldown", "0S")))
         self.stop_if = str(spec.get("stop_following_rules_if", "conditions-met"))

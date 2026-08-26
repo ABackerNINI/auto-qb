@@ -1,11 +1,14 @@
 """内置动作插件: add_tags, remove_tags, add_category, remove_category, start, stop,
 check, basic_check, custom_basic_check_program_path, always_check_first_one,
 move_to, reannounce, upload_speed_limit, download_speed_limit"""
+import logging
 import re
 
 from . import utils
 from .base import ActionResult, BaseAction
 from .registry import register_action
+
+logger = logging.getLogger("auto-qb.rules")
 
 # 用于 start/stop 动作的幂等判断
 _STARTED_STATES = {
@@ -146,18 +149,57 @@ class StopAction(BaseAction):
 
 @register_action
 class CheckAction(BaseAction):
-    """校验: full-checking(安全) / skip-checking(高风险, 暂未实现)"""
+    """校验: full-checking(异步: 发送请求由工作线程执行, 主循环轮询校验完成, 可选完成后自动开始)
+    / skip-checking(高风险, 暂未实现)"""
     name = "check"
 
     def __init__(self, spec, ignore_error=False):
         super().__init__(spec, ignore_error)
-        self.mode = str(spec)
+        if isinstance(spec, dict):
+            self.mode = str(spec.get("mode", "full-checking"))
+            self.auto_start = utils.parse_bool(spec.get("auto_start", False))
+            self.poll_timeout = utils.parse_time(str(spec.get("poll_timeout", "0S")))
+        else:
+            self.mode = str(spec)
+            self.auto_start = False
+            self.poll_timeout = 0
 
     def execute(self, ctx):
         if self.mode == "full-checking":
-            if not ctx.dry_run:
-                ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
-            return ActionResult.ok("full-checking 校验")
+            if ctx.dry_run:
+                return ActionResult.ok("full-checking 校验(异步)")
+            tq = getattr(ctx.manager, "task_queue", None)
+            if tq is None:
+                # 无任务队列(旧用法/同步环境): 直接发送请求
+                if not ctx.dry_run:
+                    ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
+                return ActionResult.ok("full-checking 校验")
+            # 双队列: 发送请求交给异步工作线程, 主循环轮询校验完成
+            rule_name = ctx.rule_name
+            torrent_hash = ctx.torrent.hash
+            client = ctx.client
+            manager = ctx.manager
+            dry_run = ctx.dry_run
+            auto_start = self.auto_start
+
+            def send():
+                client.torrents_recheck(torrent_hashes=torrent_hash)
+
+            def done(task):
+                # 主循环线程执行: state_file 仅主循环写, 线程安全
+                if task.send_error is not None:
+                    logger.warning(f"规则: {rule_name} | 校验请求发送失败: {torrent_hash}: {task.send_error}")
+                    return
+                logger.info(f"规则: {rule_name} | 校验完成: {torrent_hash}")
+                if auto_start and not dry_run:
+                    client.torrents_start(torrent_hashes=torrent_hash)
+                    logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")
+                manager.record_execution(rule_name, torrent_hash)
+                manager.save_state()
+
+            if tq.submit_check(torrent_hash, send, done, timeout=self.poll_timeout):
+                return ActionResult.ok("full-checking 校验请求已提交, 等待完成")
+            return ActionResult.skip("该校验任务已在队列中")
         if self.mode == "skip-checking":
             return ActionResult.fail("skip-checking 动作属于高风险(导出->删除->重加会清空本地统计且存在中断窗口), "
                                      "框架初版暂未实现, 请使用 full-checking")

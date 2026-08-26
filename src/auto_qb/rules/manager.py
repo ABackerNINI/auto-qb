@@ -1,9 +1,11 @@
 """RuleManager: 统一管理所有规则插件, 维护状态持久化与上传量快照"""
 import json
 import logging
+import time
 from datetime import date, datetime
 
 from .base import Rule, RuleContext
+from .taskqueue import TaskQueue
 
 logger = logging.getLogger("auto-qb.rules")
 
@@ -34,12 +36,34 @@ class RuleManager:
         if self.rules:
             logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
 
+        # 双任务队列: 快速队列(规则 interval 调度) + 慢速队列(异步校验任务)
+        self.task_queue = TaskQueue()
+        for r in self.enabled_rules:
+            self.task_queue.schedule_rule(r.name, r.interval)
+        self._active_rules = None  # 本轮活跃规则列表, None 表示尚未 begin_round(兜底全量)
+        self._round_due = []  # 本轮到期弹出的规则任务, end_round 时按 interval 重新入队
+
+    # ---------- 规则调度(快速队列) ----------
+
+    def active_rules(self) -> list:
+        """本轮活跃规则; 未 begin_round 时兜底: 全部启用规则(向后兼容直接 process_torrent 的用法)"""
+        if self._active_rules is None:
+            return self.enabled_rules
+        return self._active_rules
+
     # ---------- 每轮生命周期 ----------
 
-    def begin_round(self, torrents):
-        """每轮处理前调用: 维护上传量快照(每日/每周/每月), 周期切换时重建基线"""
+    def begin_round(self, torrents, now: float = None):
+        """每轮处理前调用: 弹出到期规则任务(interval 调度)与维护上传量快照, 周期切换时重建基线"""
         if not self.enabled_rules:
             return
+        now = time.time() if now is None else now
+        # 快速队列: 弹出到期规则任务(interval<=0 的规则每轮恒活跃)
+        due = self.task_queue.due_rules(now)
+        self._round_due = due
+        due_names = {t.name for t in due}
+        self._active_rules = [r for r in self.enabled_rules if r.interval <= 0 or r.name in due_names]
+
         snaps = self.state.setdefault("upload_snapshots", {})
         today = date.today()
         buckets = {
@@ -53,6 +77,13 @@ class RuleManager:
                 bucket.clear()
                 bucket["key"] = key
                 bucket["baseline"] = {t.hash: t.uploaded for t in torrents}
+
+    def end_round(self, now: float = None):
+        """本轮结束: 将到期执行的规则任务按 interval 重新入队(interval<=0 已在队列中)"""
+        now = time.time() if now is None else now
+        for task in self._round_due:
+            self.task_queue.reschedule(task, now)
+        self._round_due = []
 
     def upload_delta(self, torrent, kind: str) -> int:
         """周期上传增量: 当前 uploaded - 周期开始时快照, 下限 0(防种子重加/客户端重启归零)"""
@@ -77,6 +108,13 @@ class RuleManager:
                 return False
         else:
             rules = self.enabled_rules
+
+        # 规则调度过滤: 只执行本轮到期的规则(interval 未到点的规则跳过本轮)
+        active = self.active_rules()
+        active_set = {r.name for r in active}
+        rules = [r for r in rules if r.name in active_set]
+        if not rules:
+            return False
 
         handled = False
         for rule in rules:
@@ -154,3 +192,10 @@ class RuleManager:
                 json.dump(self.state, f, ensure_ascii=False, indent=2)
         except OSError as e:
             logger.warning(f"保存状态文件失败: {e}")
+
+    def shutdown(self, wait: bool = True):
+        """退出时释放异步工作线程(仅发送请求的线程, 不写 state_file)"""
+        try:
+            self.task_queue.shutdown(wait=wait)
+        except Exception as e:
+            logger.debug(f"任务队列关闭异常: {e}")

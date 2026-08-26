@@ -102,29 +102,52 @@ def make_manager(state_file, tracker_rules=None):
     cfg.state_file = state_file
     cfg.trackers = {"HHan": FakeTracker("HHan", "3D@70%+12H", rules=tracker_rules)}
     config_dict = {
-        "example_rules": {
-            "add_site_tag": {
-                "enabled": True,
-                "execute_once": "never",
-                "conditions": [{"trackers": "HHan"}],
-                "actions": [{"add_tags": ["HHan", "seed-${hr-time}"]}],
-                "stop_following_rules_if": "never",
-            },
-            "hr_done": {
-                "enabled": True,
-                "execute_once": "daily",
-                "conditions": [{"state": "complete&uploading"}, {"hr": "satisfied"}],
-                "actions": [{"add_category": {"format": "HR-DONE", "overwrite": False}}],
-                "stop_following_rules_if": "conditions-met",
-            },
-            "stop_low_ratio": {
-                "enabled": True,
-                "execute_once": "once",
-                "conditions": [{"upload_ratio": "<0.5"}],
-                "actions": [{"stop": True}, {"add_tags": ["low-ratio"]}],
-                "stop_following_rules_if": "action-failed",
-            },
-        }
+        "example_rules":
+            {
+                "add_site_tag":
+                    {
+                        "enabled": True,
+                        "execute_once": "never",
+                        "conditions": [{
+                            "trackers": "HHan"
+                        }],
+                        "actions": [{
+                            "add_tags": ["HHan", "seed-${hr-time}"]
+                        }],
+                        "stop_following_rules_if": "never",
+                    },
+                "hr_done":
+                    {
+                        "enabled": True,
+                        "execute_once": "daily",
+                        "conditions": [{
+                            "state": "complete&uploading"
+                        }, {
+                            "hr": "satisfied"
+                        }],
+                        "actions": [{
+                            "add_category": {
+                                "format": "HR-DONE",
+                                "overwrite": False
+                            }
+                        }],
+                        "stop_following_rules_if": "conditions-met",
+                    },
+                "stop_low_ratio":
+                    {
+                        "enabled": True,
+                        "execute_once": "once",
+                        "conditions": [{
+                            "upload_ratio": "<0.5"
+                        }],
+                        "actions": [{
+                            "stop": True
+                        }, {
+                            "add_tags": ["low-ratio"]
+                        }],
+                        "stop_following_rules_if": "action-failed",
+                    },
+            }
     }
     cfg.rules_config = config_dict
     return RuleManager(cfg, state_file)
@@ -251,6 +274,150 @@ def test_compare():
     print("[OK] test_compare: 比较表达式")
 
 
+def test_rule_interval():
+    """测试: 规则 interval 调度(任务队列思想)—— 未到期的规则跳过本轮, interval=0 每轮执行"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.rules_config = {
+            "example_rules":
+                {
+                    "add_site_tag":
+                        {
+                            "enabled": True,
+                            "conditions": [{
+                                "trackers": "HHan"
+                            }],
+                            "actions": [{
+                                "add_tags": ["HHan"]
+                            }],
+                            "stop_following_rules_if": "never",
+                        },
+                    "stop_low_ratio":
+                        {
+                            "enabled": True,
+                            "interval": "60S",
+                            "conditions": [{
+                                "upload_ratio": "<0.5"
+                            }],
+                            "actions": [{
+                                "stop": True
+                            }],
+                            "stop_following_rules_if": "action-failed",
+                        },
+                }
+        }
+        mgr = RuleManager(cfg, state_file)
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
+
+        # 第 1 轮: 所有规则到期, 均应执行
+        mgr.begin_round([tor])
+        handled = mgr.process_torrent(tor, dry_run=False)
+        assert handled, "第 1 轮 stop_low_ratio 应执行"
+        assert ("stop", None) in client.calls, f"第 1 轮应 stop: {client.calls}"
+
+        # 第 2 轮(间隔 60S 内): stop_low_ratio 应被调度跳过, add_site_tag(interval=0) 仍执行
+        client.calls.clear()
+        mgr.begin_round([tor])
+        handled2 = mgr.process_torrent(tor, dry_run=False)
+        assert handled2, "第 2 轮 add_site_tag 应仍执行"
+        assert ("stop", None) not in client.calls, f"interval 未到期不应再次 stop: {client.calls}"
+        assert client.tags == {"HHan"}, f"add_site_tag 应仍执行: {client.tags}"
+
+        # 不调用 begin_round 直接 process_torrent(旧用法兜底): 每次调用视为新一轮, 规则全部执行
+        mgr3 = RuleManager(cfg, state_file)
+        client3 = FakeClient()
+        mgr3.client = client3
+        handled3 = mgr3.process_torrent(tor, dry_run=False)
+        assert handled3, "无 begin_round 时规则应全部执行(向后兼容)"
+        assert ("stop", None) in client3.calls, f"兜底路径应执行全部规则: {client3.calls}"
+        print("[OK] test_rule_interval: 规则 interval 调度")
+
+
+def test_task_queue_schedule():
+    """测试: 快速队列 interval 调度(时间优先堆)"""
+    from auto_qb.rules.taskqueue import TaskQueue
+    tq = TaskQueue()
+    now = 1000.0
+    tq.schedule_rule("example_rules.every_round", 0, now=now)  # 每轮
+    tq.schedule_rule("example_rules.interval60", 60, now=now)  # 60s 一次
+
+    # 到期弹出: interval=60 的任务 next_run 已到; interval=0 每轮任务留在队列
+    due = tq.due_rules(now)
+    assert [t.name for t in due] == ["example_rules.interval60"], f"due={[t.name for t in due]}"
+
+    # 未到期不应弹出
+    assert tq.due_rules(now + 59) == [], "未到期不应弹出"
+
+    # 执行完按 interval 重新入队, 到点再弹
+    tq.reschedule(due[0], now)
+    assert tq.due_rules(now + 59) == [], "重新入队后未到 60s 不应弹出"
+    assert [t.name for t in tq.due_rules(now + 60)] == ["example_rules.interval60"]
+
+    # 弹出后未 reschedule 不再出现; interval=0 的任务恒活跃不进时间堆(由调用方每轮执行)
+    assert tq.due_rules(now + 120) == [], "未 reschedule 的任务不应再次弹出"
+    tq.shutdown()
+    print("[OK] test_task_queue_schedule: 快速队列 interval 调度")
+
+
+def test_async_check():
+    """测试: check 动作异步提交校验(慢速队列), 主循环轮询完成 -> 自动开始 + 记录执行"""
+    from auto_qb.rules.taskqueue import TaskQueue
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.rules_config = {
+            "example_rules":
+                {
+                    "verify_then_start":
+                        {
+                            "enabled": True,
+                            "conditions": [{
+                                "tags": "需校验"
+                            }],
+                            "actions": [{
+                                "check": {
+                                    "mode": "full-checking",
+                                    "auto_start": True,
+                                }
+                            }],
+                            "stop_following_rules_if": "never",
+                        },
+                }
+        }
+        mgr = RuleManager(cfg, state_file)
+        # 同步模式: 发送回调立即执行, 测试无竞态
+        mgr.task_queue = TaskQueue(executor_workers=0)
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(tags="需校验", state="stalledUP")
+
+        # 1. 提交异步校验(仅发送 recheck 请求)
+        handled = mgr.process_torrent(tor, dry_run=False)
+        assert handled, "check 动作应处理种子"
+        assert ("recheck", None) in client.calls, f"应发送校验请求: {client.calls}"
+
+        # 2. 校验未完成: 任务留在慢速队列
+        completed = mgr.task_queue.poll_slow(lambda h: False)
+        assert completed == [], f"未完成不应出队: {completed}"
+        assert mgr.task_queue.pending_slow() == ["HASH123"], "未完成的任务应留在慢速队列"
+
+        # 3. 重复提交同一种子: 应被忽略
+        client.calls.clear()
+        mgr.process_torrent(tor, dry_run=False)
+        assert ("recheck", None) not in client.calls, f"重复校验应被忽略: {client.calls}"
+
+        # 4. 校验完成(退出 checking 状态): 自动开始 + 记录执行历史
+        completed = mgr.task_queue.poll_slow(lambda h: True)
+        assert len(completed) == 1, f"应完成 1 个任务: {completed}"
+        assert ("start", None) in client.calls, f"校验完成应自动开始: {client.calls}"
+        assert mgr.state.get("exec_history"), f"校验完成应记录执行历史: {mgr.state}"
+        assert mgr.task_queue.pending_slow() == [], "完成后应出队"
+        print("[OK] test_async_check: 异步校验提交+轮询完成")
+
+
 if __name__ == "__main__":
     test_parse_utils()
     test_compare()
@@ -260,4 +427,7 @@ if __name__ == "__main__":
     test_stop_if_action_failed()
     test_dry_run()
     test_tracker_rules_ref()
+    test_rule_interval()
+    test_task_queue_schedule()
+    test_async_check()
     print("\n全部自测通过!")

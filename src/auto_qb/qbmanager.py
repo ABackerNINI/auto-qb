@@ -20,6 +20,8 @@ class QbManager:
         self._setup_logging()
         # 规则框架: 统一管理规则插件(条件+动作), 配置来自 config 下 *_rules 段
         self.rules = RuleManager(self.config, self.config.state_file)
+        # 种子增删检测: 上一轮已知 hash 集合, None 表示首轮(无对比基线)
+        self._known_hashes: Optional[set] = None
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -42,27 +44,77 @@ class QbManager:
             return False
 
     def run(self, dry_run: bool):
-        """主循环"""
+        """主循环(双队列模型):
+        - 每 tick_interval 秒: 轮询慢速队列(异步校验完成情况), 并节流执行全量扫描
+        - 全量扫描按 config.interval 节流(拉取种子快照是较重操作, 不随 tick 高频执行)
+        """
         if not self.connect():
             return
 
-        self.logger.info(f"Starting qB manager with interval {self.config.interval}s")
+        tick = max(1, self.config.tick_interval)
+        self.logger.info(f"Starting qB manager: scan interval {self.config.interval}s, tick {tick}s")
         self.logger.info(f"==========================================================================")
-        while True:
+        self._last_scan = 0.0
+        try:
+            while True:
+                try:
+                    self._tick(dry_run)
+                except Exception as e:
+                    self.logger.error(f"Error in main loop: {e}")
+                time.sleep(tick)
+        except KeyboardInterrupt:
+            self.logger.info("Stopping...")
+        finally:
+            self.rules.shutdown(wait=False)
+
+    def _tick(self, dry_run: bool):
+        """单次 tick: 1) 轮询慢速队列(异步校验) 2) 到期则全量扫描(快速队列规则任务)"""
+        # 1. 慢速队列: 轮询异步校验结果(仅当有待处理任务时才查询客户端)
+        if self.rules.task_queue.pending_slow():
+            completed = self.rules.task_queue.poll_slow(self._is_check_done)
+            for task in completed:
+                if task.send_error is not None:
+                    self.logger.warning(f"异步校验任务异常({task.torrent_hash}): {task.send_error}")
+
+        # 2. 全量扫描(按 config.interval 节流): 拉快照 + 种子增删检测 + 内置步骤 + 快速队列规则任务
+        now = time.time()
+        if now - self._last_scan >= self.config.interval:
+            self._last_scan = now
             try:
                 self._process_all_torrents(dry_run)
-            except Exception as e:
-                self.logger.error(f"Error in main loop: {e}")
+            finally:
+                # 无论扫描是否异常, 本轮弹出的规则任务都要按 interval 重新入队
+                self.rules.end_round()
 
-            self.logger.info(f"==========================================================================")
-            time.sleep(self.config.interval)
+    def _is_check_done(self, torrent_hash: str) -> bool:
+        """慢速队列轮询回调: 查询种子当前状态, 退出校验(checking*)状态即视为完成"""
+        try:
+            infos = self.client.torrents_info(torrent_hashes=torrent_hash)
+        except Exception as e:
+            self.logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
+            return False
+        if not infos:
+            return True  # 种子已被删除, 视为完成
+        state = (infos[0].state or "").lower()
+        return not state.startswith("checking")
 
     def _process_all_torrents(self, dry_run: bool):
         """获取所有种子并处理"""
         torrents = self.client.torrents_info()
         self.logger.info(f"Processing {len(torrents)} torrents")
 
-        # 规则框架: 每轮开始维护上传量快照(按自然日/周/月)
+        # 种子增删检测: 对比上一轮 hash 集合, 记录新增/删除(任务队列思想的种子生命周期跟踪)
+        current_hashes = {t.hash for t in torrents}
+        if self._known_hashes is not None:
+            added = current_hashes - self._known_hashes
+            removed = self._known_hashes - current_hashes
+            if added:
+                self.logger.info(f"检测到新增种子 {len(added)} 个: {', '.join(sorted(added))[:300]}")
+            if removed:
+                self.logger.info(f"检测到删除种子 {len(removed)} 个")
+        self._known_hashes = current_hashes
+
+        # 规则框架: 每轮开始维护上传量快照(按自然日/周/月)与规则调度(interval)
         self.rules.begin_round(torrents)
 
         for tor in torrents:
@@ -73,6 +125,9 @@ class QbManager:
 
     def _process_single_torrent(self, tor: TorrentDictionary, dry_run: bool):
         """处理单个种子"""
+        # 匹配 tracker 配置(提前, 文件丢失分类日志也使用; 后续步骤共用)
+        tracker_conf = self._match_tracker(tor)
+
         # 1. 检查文件丢失（先做，若丢失则暂停并分类，跳过其他）
         #    缺文件检查优先级最高: MISSING 的种子任何规则都不生效, 直到文件恢复
         if self.config.check_missing_files:
@@ -87,8 +142,7 @@ class QbManager:
         # if self.config.skip_checking_for_cross_seeding:
         #     self._skip_checking_for_cross_seeding(tor, dry_run)
 
-        # 3. 匹配 tracker 配置
-        tracker_conf = self._match_tracker(tor)
+        # 3. 未匹配 tracker 则跳过
         if not tracker_conf:
             self.logger.warning(f"未匹配 tracker 配置, 跳过处理")
             self._log_torrent_details(tor, tracker_conf)
