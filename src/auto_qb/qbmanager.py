@@ -47,11 +47,14 @@ class QbManager:
             return
 
         self.logger.info(f"Starting qB manager with interval {self.config.interval}s")
+        self.logger.info(f"==========================================================================")
         while True:
             try:
                 self._process_all_torrents(dry_run)
             except Exception as e:
                 self.logger.error(f"Error in main loop: {e}")
+
+            self.logger.info(f"==========================================================================")
             time.sleep(self.config.interval)
 
     def _process_all_torrents(self, dry_run: bool):
@@ -85,7 +88,9 @@ class QbManager:
         # 3. 匹配 tracker 配置
         tracker_conf = self._match_tracker(tor)
         if not tracker_conf:
-            self.logger.warning(f"未匹配 tracker 配置, 跳过处理: {self._torrent_desc(tor)}")
+            self.logger.warning(f"未匹配 tracker 配置, 跳过处理")
+            self._log_torrent_details(tor, tracker_conf)
+            self.logger.info(f"--------------------------------------------------------------------------")
             return  # 未匹配，不处理
 
         # 4. 添加标签
@@ -107,11 +112,15 @@ class QbManager:
             handled |= self.rules.process_torrent(tor, dry_run)
 
         if handled:
-            self.logger.info(f"种子: {tor.name}")
-            self.logger.info(f"站点: {tracker_conf.name}")
-            self.logger.info(f"状态: {tor.state}")
-            self.logger.info(f"哈希: {tor.hash}")
+            self._log_torrent_details(tor, tracker_conf)
             self.logger.info(f"--------------------------------------------------------------------------")
+
+    def _log_torrent_details(self, tor: TorrentDictionary, tracker_conf: TrackerConfig | None) -> str:
+        site = tracker_conf.name if tracker_conf else "未知"
+        self.logger.info(f"种子: {tor.name}")
+        self.logger.info(f"站点: {site}")
+        self.logger.info(f"状态: {tor.state}")
+        self.logger.info(f"哈希: {tor.hash}")
 
     # ---------- 标签/分类辅助 ----------
 
