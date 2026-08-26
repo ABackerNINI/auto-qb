@@ -2,6 +2,7 @@
 import sys
 import os
 import tempfile
+import time
 from types import SimpleNamespace
 
 # 使测试可直接运行: python tests/test_rules.py
@@ -312,7 +313,7 @@ def test_compare():
 
 
 def test_rule_interval():
-    """测试: 规则 interval 调度(任务队列思想)—— 未到期的规则跳过本轮, interval=0 每轮执行"""
+    """测试: 规则 interval 调度(每条规则一个队列任务, 到期才执行, interval=0 归一化为每 tick)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
@@ -349,52 +350,72 @@ def test_rule_interval():
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
 
-        # 第 1 轮: 所有规则到期, 均应执行
-        mgr.begin_round([tor])
-        handled = mgr.process_torrent(tor, dry_run=False)
+        tq = mgr.task_queue
+        now = time.time()  # add_task 内部以真实时间作为 next_run 起点
+
+        # 第 1 轮: 所有规则任务初始立即到期, 均执行
+        due = tq.due(now)
+        assert {t.name for t in due} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}, \
+            f"第 1 轮应全部到期: {[t.name for t in due]}"
+        handled = mgr.run_rules({t.name for t in due}, [tor], dry_run=False)
         assert handled, "第 1 轮 stop_low_ratio 应执行"
         assert ("stop", None) in client.calls, f"第 1 轮应 stop: {client.calls}"
+        for t in due:
+            tq.reschedule(t, now)
 
-        # 第 2 轮(间隔 60S 内): stop_low_ratio 应被调度跳过, add_site_tag(interval=0) 仍执行
+        # 第 2 轮(1s 后): add_site_tag(interval 归一化 1s)到期, stop_low_ratio(60s)未到期
         client.calls.clear()
-        mgr.begin_round([tor])
-        handled2 = mgr.process_torrent(tor, dry_run=False)
-        assert handled2, "第 2 轮 add_site_tag 应仍执行"
+        due2 = tq.due(now + 1)
+        assert [t.name
+                for t in due2] == ["example_rules.add_site_tag"], f"第 2 轮应只到期 add_site_tag: {[t.name for t in due2]}"
+        mgr.run_rules({t.name for t in due2}, [tor], dry_run=False)
         assert ("stop", None) not in client.calls, f"interval 未到期不应再次 stop: {client.calls}"
         assert client.tags == {"HHan"}, f"add_site_tag 应仍执行: {client.tags}"
+        for t in due2:
+            tq.reschedule(t, now + 1)
 
-        # 不调用 begin_round 直接 process_torrent(旧用法兜底): 每次调用视为新一轮, 规则全部执行
+        # 60s 后: stop_low_ratio 到期再次执行
+        client.calls.clear()
+        due3 = tq.due(now + 60)
+        mgr.run_rules({t.name for t in due3}, [tor], dry_run=False)
+        assert ("stop", None) in client.calls, f"60s 后应再次 stop: {client.calls}"
+
+        # 兜底: 不调用 run_rules 直接 process_torrent, 视为全部规则执行
         mgr3 = RuleManager(cfg, state_file)
         client3 = FakeClient()
         mgr3.client = client3
         handled3 = mgr3.process_torrent(tor, dry_run=False)
-        assert handled3, "无 begin_round 时规则应全部执行(向后兼容)"
+        assert handled3, "无 run_rules 时规则应全部执行(向后兼容)"
         assert ("stop", None) in client3.calls, f"兜底路径应执行全部规则: {client3.calls}"
         print("[OK] test_rule_interval: 规则 interval 调度")
 
 
 def test_task_queue_schedule():
-    """测试: 快速队列 interval 调度(时间优先堆)"""
-    from auto_qb.taskqueue import TaskQueue
+    """测试: 快速队列 interval 调度(时间优先堆, 每个任务有内置 interval)"""
+    from auto_qb.taskqueue import Task, TaskQueue
     tq = TaskQueue()
-    now = 1000.0
-    tq.schedule_rule("example_rules.every_round", 0, now=now)  # 每轮
-    tq.schedule_rule("example_rules.interval60", 60, now=now)  # 60s 一次
+    now = time.time()  # add_task 内部以真实时间作为 next_run 起点
+    tq.add_task(Task("rule", "every_tick", interval=0, next_run=now))  # interval<=0 归一化为 1s
+    tq.add_task(Task("rule", "interval60", interval=60, next_run=now))  # 60s 一次
 
-    # 到期弹出: interval=60 的任务 next_run 已到; interval=0 每轮任务留在队列
-    due = tq.due_rules(now)
-    assert [t.name for t in due] == ["example_rules.interval60"], f"due={[t.name for t in due]}"
+    # 到期弹出: 两个任务都立即到期
+    due = tq.due(now)
+    assert {t.name for t in due} == {"every_tick", "interval60"}, f"due={[t.name for t in due]}"
+    assert [t for t in due if t.name == "every_tick"][0].interval == 1, "interval<=0 应归一化为 1"
 
-    # 未到期不应弹出
-    assert tq.due_rules(now + 59) == [], "未到期不应弹出"
+    # 执行完按内置 interval 重新入队
+    for t in due:
+        tq.reschedule(t, now)
+    # 59s 内: every_tick(1s)到期, interval60 未到期
+    assert [t.name for t in tq.due(now + 59)] == ["every_tick"], "59s 时只有 every_tick 到期"
+    # 60s 后: interval60 到期(未被重入队的 every_tick 不再出现)
+    assert [t.name for t in tq.due(now + 60)] == ["interval60"], "60s 时 interval60 到期"
 
-    # 执行完按 interval 重新入队, 到点再弹
-    tq.reschedule(due[0], now)
-    assert tq.due_rules(now + 59) == [], "重新入队后未到 60s 不应弹出"
-    assert [t.name for t in tq.due_rules(now + 60)] == ["example_rules.interval60"]
+    # remove_torrent: 按种子移除任务
+    tq.add_task(Task("torrent", "maintenance", torrent_hash="H1", interval=60))
+    tq.remove_torrent("H1")
+    assert tq.due(now + 61) == [], "remove_torrent 后任务应被移除"
 
-    # 弹出后未 reschedule 不再出现; interval=0 的任务恒活跃不进时间堆(由调用方每轮执行)
-    assert tq.due_rules(now + 120) == [], "未 reschedule 的任务不应再次弹出"
     tq.shutdown()
     print("[OK] test_task_queue_schedule: 快速队列 interval 调度")
 

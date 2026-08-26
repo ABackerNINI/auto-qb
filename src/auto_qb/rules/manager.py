@@ -1,11 +1,11 @@
 """RuleManager: 统一管理所有规则插件, 维护状态持久化与上传量快照"""
 import json
 import logging
-import time
 from datetime import date, datetime
 
 from .base import Rule, RuleContext
-from ..taskqueue import TaskQueue
+from ..taskqueue import Task, TaskQueue
+from typing import Optional
 
 logger = logging.getLogger("auto-qb.rules")
 
@@ -17,6 +17,7 @@ class RuleManager:
 
     - 从 config 的 `*_rules` 段加载规则集, 每条规则是一个 Rule 插件
     - 维护 state_file: 规则执行历史 / 上传量快照 / always_check_first_one 记录
+    - 每条启用规则对应一个 rule 任务(内置 interval), 由主循环到期弹出后 run_rules 执行
     - process_torrent 按配置顺序执行规则, 支持 stop_following_rules_if
     """
     def __init__(self, config, state_file: str = None):
@@ -36,34 +37,26 @@ class RuleManager:
         if self.rules:
             logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
 
-        # 双任务队列: 快速队列(规则 interval 调度) + 慢速队列(异步校验任务)
+        # 双任务队列: 快速队列(所有带 interval 的任务) + 慢速队列(异步校验任务)
         self.task_queue = TaskQueue()
-        for r in self.enabled_rules:
-            self.task_queue.schedule_rule(r.name, r.interval)
-        self._active_rules = None  # 本轮活跃规则列表, None 表示尚未 begin_round(兜底全量)
-        self._round_due = []  # 本轮到期弹出的规则任务, end_round 时按 interval 重新入队
+        for t in self.rule_tasks():
+            self.task_queue.add_task(t)
+        self._active_names: Optional[set] = None  # 本轮到期执行的规则名集合, None = 全部(兜底)
 
-    # ---------- 规则调度(快速队列) ----------
+    def rule_tasks(self) -> list:
+        """为每条启用规则创建 rule 任务(interval 为规则内置 interval, 0 = 每 tick 级别)"""
+        return [Task("rule", r.name, interval=r.interval) for r in self.enabled_rules]
+
+    # ---------- 规则执行 ----------
 
     def active_rules(self) -> list:
-        """本轮活跃规则; 未 begin_round 时兜底: 全部启用规则(向后兼容直接 process_torrent 的用法)"""
-        if self._active_rules is None:
+        """本轮活跃规则; 未调用 run_rules 时兜底: 全部启用规则(直接 process_torrent 的用法)"""
+        if self._active_names is None:
             return self.enabled_rules
-        return self._active_rules
+        return [r for r in self.enabled_rules if r.name in self._active_names]
 
-    # ---------- 每轮生命周期 ----------
-
-    def begin_round(self, torrents, now: float = None):
-        """每轮处理前调用: 弹出到期规则任务(interval 调度)与维护上传量快照, 周期切换时重建基线"""
-        if not self.enabled_rules:
-            return
-        now = time.time() if now is None else now
-        # 快速队列: 弹出到期规则任务(interval<=0 的规则每轮恒活跃)
-        due = self.task_queue.due_rules(now)
-        self._round_due = due
-        due_names = {t.name for t in due}
-        self._active_rules = [r for r in self.enabled_rules if r.interval <= 0 or r.name in due_names]
-
+    def begin_round(self, torrents):
+        """维护上传量快照(按自然日/周/月, 周期切换时重建基线) — 由 run_rules 调用, 幂等"""
         snaps = self.state.setdefault("upload_snapshots", {})
         today = date.today()
         buckets = {
@@ -78,12 +71,25 @@ class RuleManager:
                 bucket["key"] = key
                 bucket["baseline"] = {t.hash: t.uploaded for t in torrents}
 
-    def end_round(self, now: float = None):
-        """本轮结束: 将到期执行的规则任务按 interval 重新入队(interval<=0 已在队列中)"""
-        now = time.time() if now is None else now
-        for task in self._round_due:
-            self.task_queue.reschedule(task, now)
-        self._round_due = []
+    def run_rules(self, due_names, torrents, dry_run: bool) -> bool:
+        """主循环调用: 执行到期的规则任务
+
+        due_names: 本 tick 到期弹出的规则任务名集合; None/空 = 全部启用规则(兜底)
+        """
+        if not self.enabled_rules:
+            return False
+        self.begin_round(torrents)
+        self._active_names = set(due_names) if due_names else {r.name for r in self.enabled_rules}
+        handled = False
+        try:
+            for tor in torrents:
+                try:
+                    handled |= self.process_torrent(tor, dry_run)
+                except Exception as e:
+                    logger.warning(f"处理种子异常({tor.hash}): {e}")
+        finally:
+            self._active_names = None  # 本轮结束, 回到兜底状态
+        return handled
 
     def upload_delta(self, torrent, kind: str) -> int:
         """周期上传增量: 当前 uploaded - 周期开始时快照, 下限 0(防种子重加/客户端重启归零)"""

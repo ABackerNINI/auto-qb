@@ -1,4 +1,4 @@
-"""双任务队列模型: 快速队列(规则扫描任务, interval 调度) + 慢速队列(异步校验任务, 主循环轮询)
+"""双任务队列模型: 快速队列(时间优先堆, 所有带 interval 的任务) + 慢速队列(异步校验任务, 主循环轮询)
 
 线程安全设计(最大程度确保线程安全):
 - 主循环线程是唯一修改任务队列结构与 state_file 的线程
@@ -14,7 +14,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
-logger = logging.getLogger("auto-qb.rules")
+logger = logging.getLogger("auto-qb")
 
 # 任务状态
 PENDING = "pending"  # 快速队列排队中(等待到期)
@@ -22,9 +22,12 @@ RUNNING = "running"  # 已被主循环取出执行
 WAITING = "waiting"  # 慢速队列: 异步请求已发出, 等待客户端完成
 DONE = "done"  # 已完成
 
+# handler 返回 False = 任务不重新入队(自然消亡, 如种子已被删除)
+Handler = Callable[["Task", bool], bool]
+
 
 class Task:
-    """一个任务. kind: rule(规则扫描, 快速队列) / check(异步校验, 慢速队列)"""
+    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) / check(异步校验)"""
     __slots__ = (
         "uid",
         "kind",
@@ -36,6 +39,7 @@ class Task:
         "run_count",
         "created_at",
         "payload",
+        "handler",
         "result",
         "send_error",
         "sent",
@@ -50,18 +54,20 @@ class Task:
         next_run: float = 0.0,
         interval: float = 0.0,
         payload: Any = None,
-        timeout: float = 0.0
+        handler: Handler = None,
+        timeout: float = 0.0,
     ):
         self.uid = f"{kind}:{name}:{torrent_hash}:{time.monotonic_ns()}"
         self.kind = kind
         self.name = name
         self.torrent_hash = torrent_hash
         self.next_run = next_run  # epoch 秒, 到期才执行(快速队列)
-        self.interval = interval  # 规则执行间隔, 0 = 每轮
+        self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING
         self.run_count = 0
         self.created_at = time.time()
         self.payload = payload  # check 任务: done_cb(主循环线程调用)
+        self.handler = handler  # 主循环执行任务时调用: handler(task, dry_run) -> bool(False=不重入)
         self.result = None  # 异步发送回调的返回值
         self.send_error = None  # check 任务: 异步发送失败原因
         self.sent = False  # check 任务: 请求已确认发出(可开始轮询)
@@ -77,15 +83,15 @@ class Task:
 class TaskQueue:
     """双任务队列
 
-    - fast: 最小堆(时间优先), 存放规则扫描任务, 按 next_run 到期弹出
+    - fast: 最小堆(时间优先), 存放所有带 interval 的任务(种子刷新/规则/种子级内置功能),
+      按 next_run 到期弹出; 每个任务有内置 interval, 执行后由主循环按 interval 重新入队
     - slow: 以 torrent_hash 为键的字典, 存放异步校验任务, 由主循环 poll_slow 轮询完成
 
     executor_workers=0 时同步执行发送回调(测试/无异步场景), 其余用单线程线程池。
     """
     def __init__(self, executor_workers: int = 1):
         self._lock = threading.RLock()
-        self._fast: List[Task] = []  # heapq: 仅存 interval>0 的规则任务
-        self._always: Dict[str, Task] = {}  # interval<=0 的规则任务: 恒活跃, 不进时间堆
+        self._fast: List[Task] = []  # heapq: 所有按时间调度的任务
         self._slow: Dict[str, Task] = {}  # torrent_hash -> Task
         self._result_q: "queue.Queue[Task]" = queue.Queue()  # 异步线程 -> 主循环
         self._executor: Optional[ThreadPoolExecutor] = (
@@ -94,25 +100,27 @@ class TaskQueue:
         )
         self._shutdown = False
 
-    # ---------- 快速队列: 规则任务 ----------
+    # ---------- 快速队列: 通用任务 ----------
 
-    def schedule_rule(self, rule_name: str, interval: float, now: float = None):
-        """注册/更新规则任务: interval<=0 恒活跃(不进时间堆); 其余立即到期(下一轮参与扫描)"""
+    @staticmethod
+    def _norm_interval(interval: float) -> float:
+        """interval<=0 归一化为 1s(每 tick 级别): 每个任务都有内置 interval"""
+        return max(1.0, float(interval))
+
+    def add_task(self, task: Task, now: float = None):
+        """加入快速队列; 新任务立即到期(next_run=now, 下一 tick 执行)"""
         now = time.time() if now is None else now
+        task.interval = self._norm_interval(task.interval)
+        task.next_run = now
         with self._lock:
-            if interval <= 0:
-                self._always.setdefault(rule_name, Task("rule", rule_name, next_run=now, interval=0))
-                return
-            for t in self._fast:
-                if t.kind == "rule" and t.name == rule_name:
-                    t.next_run = now
-                    t.interval = interval
-                    heapq.heapify(self._fast)
-                    return
-            heapq.heappush(self._fast, Task("rule", rule_name, next_run=now, interval=interval))
+            heapq.heappush(self._fast, task)
 
-    def due_rules(self, now: float = None) -> List[Task]:
-        """弹出到期规则任务(仅 interval>0 的任务在堆中; interval<=0 的由调用方每轮恒执行)"""
+    def add_tasks(self, tasks: List[Task], now: float = None):
+        for t in tasks:
+            self.add_task(t, now)
+
+    def due(self, now: float = None) -> List[Task]:
+        """弹出所有到期任务(按 next_run 时间优先)"""
         now = time.time() if now is None else now
         due = []
         with self._lock:
@@ -123,13 +131,21 @@ class TaskQueue:
         return due
 
     def reschedule(self, task: Task, now: float = None):
-        """规则任务执行完毕: 按 interval 重新入队"""
+        """任务执行完毕: 按任务内置 interval 重新入队"""
         now = time.time() if now is None else now
         task.run_count += 1
         task.state = PENDING
         task.next_run = now + task.interval
         with self._lock:
             heapq.heappush(self._fast, task)
+
+    def remove_torrent(self, torrent_hash: str):
+        """种子被删除: 移除该种子在快速队列中的所有任务(慢速队列的校验任务由 poll 时自然完成)"""
+        with self._lock:
+            before = len(self._fast)
+            self._fast = [t for t in self._fast if t.torrent_hash != torrent_hash]
+            if len(self._fast) != before:
+                heapq.heapify(self._fast)
 
     # ---------- 慢速队列: 异步校验任务 ----------
 
