@@ -2,7 +2,10 @@
 check, basic_check, custom_basic_check_program_path, always_check_first_one,
 move_to, reannounce, upload_speed_limit, download_speed_limit"""
 import logging
+import os
 import re
+import time
+from datetime import date
 
 from . import utils
 from .base import ActionResult, BaseAction
@@ -201,9 +204,102 @@ class CheckAction(BaseAction):
                 return ActionResult.ok("full-checking 校验请求已提交, 等待完成")
             return ActionResult.skip("该校验任务已在队列中")
         if self.mode == "skip-checking":
-            return ActionResult.fail("skip-checking 动作属于高风险(导出->删除->重加会清空本地统计且存在中断窗口), "
-                                     "框架初版暂未实现, 请使用 full-checking")
+            return self._execute_skip_checking(ctx)
         return ActionResult.fail(f"未知校验模式: {self.mode}")
+
+    def _execute_skip_checking(self, ctx):
+        """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 重加跳过校验 -> 可选自动开始
+
+        风险控制:
+        - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行
+        - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once 兜底)
+        - 重加失败时 .torrent 落盘备份并记录元数据, 提示手动恢复
+        - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
+        """
+        if ctx.dry_run:
+            return ActionResult.ok("skip-checking 跳检(导出->删除->重加->开始) [dry-run]")
+
+        # 0. 同日去重(安全兜底, 与 execute_once 无关)
+        record = ctx.manager.get_exec_record(ctx.rule_name, ctx.torrent.hash)
+        if record and record.get("date") == date.today().isoformat():
+            return ActionResult.skip("今日已跳检, 跳过")
+
+        # 1. 强制前置检查: 文件全部存在且大小一致
+        err = utils.check_filelist(ctx.client, ctx.torrent)
+        if err is not None:
+            return ActionResult.fail(f"跳检前置检查未通过: {err}")
+
+        # 2. 导出 .torrent
+        try:
+            data = ctx.client.torrents_export(torrent_hashes=ctx.torrent.hash)
+        except Exception as e:
+            return ActionResult.fail(f"导出 .torrent 失败: {e}")
+        if not data:
+            return ActionResult.fail("导出 .torrent 为空")
+
+        # 3. 删除种子(保留文件)
+        try:
+            ctx.client.torrents_delete(torrent_hashes=ctx.torrent.hash, delete_files=False)
+        except Exception as e:
+            return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
+
+        # 4. 重加(跳过校验, 先暂停)
+        try:
+            ctx.client.torrents_add(
+                torrent_files=[data],
+                save_path=ctx.torrent.save_path,
+                category=ctx.torrent.category or None,
+                tags=ctx.torrent.tags or None,
+                is_skip_checking=True,
+                paused=True,
+            )
+        except Exception as e:
+            backup = self._backup_torrent(ctx, data)
+            return ActionResult.fail(f"重加种子失败: {e}; 种子已从客户端移除(文件保留), "
+                                     f".torrent 已备份: {backup}, 请手动重加")
+
+        # 5. 轮询确认新种子出现(跳检不进入 checking, 重加即出现)
+        appeared = False
+        for _ in range(3):
+            try:
+                if ctx.client.torrents_info(torrent_hashes=ctx.torrent.hash):
+                    appeared = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.3)
+        if not appeared:
+            return ActionResult.fail("重加后未确认到种子, 请检查客户端")
+
+        # 6. 自动开始
+        if self.auto_start:
+            try:
+                ctx.client.torrents_start(torrent_hashes=ctx.torrent.hash)
+            except Exception as e:
+                return ActionResult.fail(f"自动开始失败: {e}")
+            return ActionResult.ok("skip-checking 跳检完成并自动开始")
+        return ActionResult.ok("skip-checking 跳检完成")
+
+    def _backup_torrent(self, ctx, data: bytes) -> str:
+        """重加失败时把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径"""
+        backup_dir = os.path.join(os.path.dirname(ctx.manager.state_file) or ".", "skip-check-backup")
+        os.makedirs(backup_dir, exist_ok=True)
+        path = os.path.join(backup_dir, f"{ctx.torrent.hash}.torrent")
+        with open(path, "wb") as f:
+            f.write(data)
+        backup_meta = ctx.manager.state.setdefault("skip_check_backup", {})
+        backup_meta[ctx.torrent.hash] = {
+            "path": path,
+            "save_path": ctx.torrent.save_path,
+            "category": ctx.torrent.category,
+            "tags": ctx.torrent.tags,
+            "ts": time.time(),
+        }
+        try:
+            ctx.manager.save_state()
+        except Exception:
+            pass
+        return path
 
 
 @register_action

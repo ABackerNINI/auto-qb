@@ -2,6 +2,7 @@
 import sys
 import os
 import tempfile
+from types import SimpleNamespace
 
 # 使测试可直接运行: python tests/test_rules.py
 # 将项目根下的 src/ 加入模块搜索路径
@@ -16,12 +17,48 @@ class FakeClient:
         self.tags = set()
         self.category = ""
         self.calls = []
+        self.torrents = {}  # 模拟客户端中的种子: hash -> info dict
+        self.exported = b"TORRENT-DATA"  # torrents_export 返回值
+        self.add_error = None  # 模拟重加失败
+        self.files = []  # torrents_files 返回值(空 = 全部通过)
 
     def torrents_trackers(self, h):
         return [{"url": "https://tracker.hhanclub.net/announce.php"}]
 
     def torrents_files(self, h):
-        return []
+        return self.files
+
+    def torrents_info(self, torrent_hashes=None, **kw):
+        if not torrent_hashes:
+            return list(self.torrents.values())
+        if isinstance(torrent_hashes, (list, tuple)):
+            return [self.torrents[h] for h in torrent_hashes if h in self.torrents]
+        return [self.torrents[torrent_hashes]] if torrent_hashes in self.torrents else []
+
+    def torrents_export(self, torrent_hashes=None):
+        self.calls.append(("export", None))
+        return self.exported
+
+    def torrents_delete(self, torrent_hashes=None, delete_files=False):
+        self.calls.append(("delete", delete_files))
+        if not delete_files:
+            self.torrents.pop(torrent_hashes, None)
+
+    def torrents_add(
+        self,
+        torrent_files=None,
+        torrent_paths=None,
+        save_path=None,
+        category=None,
+        tags=None,
+        is_skip_checking=False,
+        paused=False,
+        **kw
+    ):
+        self.calls.append(("add", {"is_skip_checking": is_skip_checking, "paused": paused}))
+        if self.add_error:
+            raise self.add_error
+        self.torrents["HASH123"] = {"state": "pausedUP" if paused else "stalledUP"}
 
     def torrents_add_tags(self, tags=None, torrent_hashes=None):
         self.tags.update(tags)
@@ -418,6 +455,100 @@ def test_async_check():
         print("[OK] test_async_check: 异步校验提交+轮询完成")
 
 
+def test_skip_checking():
+    """测试: check 动作 skip-checking 跳检(前置检查->导出->删除->重加->自动开始 + 同日去重)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.rules_config = {
+            "example_rules":
+                {
+                    "skip_check_rule":
+                        {
+                            "enabled": True,
+                            "conditions": [{
+                                "tags": "需跳检"
+                            }],
+                            "actions": [{
+                                "check": {
+                                    "mode": "skip-checking",
+                                    "auto_start": True,
+                                }
+                            }],
+                            "stop_following_rules_if": "never",
+                        },
+                }
+        }
+        mgr = RuleManager(cfg, state_file)
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["HASH123"] = {"state": "stalledUP"}
+        tor = FakeTorrent(tags="需跳检", state="stalledUP")
+
+        # 1. 正常跳检流程: 导出->删除(保留文件)->重加(跳过校验,暂停)->自动开始
+        handled = mgr.process_torrent(tor, dry_run=False)
+        assert handled, f"跳检应处理种子: {client.calls}"
+        assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], \
+            f"跳检调用顺序: {client.calls}"
+        add_call = [c for c in client.calls if c[0] == "add"][0]
+        assert add_call[1]["is_skip_checking"] is True, f"重加应跳过校验: {add_call}"
+        assert add_call[1]["paused"] is True, f"重加应先暂停: {add_call}"
+        assert mgr.state.get("exec_history"), "跳检应记录执行历史"
+
+        # 2. 同日去重: 再次触发应跳过, 不重复删/加
+        client.calls.clear()
+        handled = mgr.process_torrent(tor, dry_run=False)
+        assert not handled, f"同日不应重复跳检: {client.calls}"
+        assert ("delete", False) not in client.calls, f"同日不应删除种子: {client.calls}"
+        print("[OK] test_skip_checking: skip-checking 跳检流程+去重")
+
+
+def test_skip_checking_guard():
+    """测试: 跳检安全保护(前置检查失败不删除; 重加失败落盘备份)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.rules_config = {
+            "example_rules":
+                {
+                    "skip_check_rule":
+                        {
+                            "enabled": True,
+                            "conditions": [{
+                                "tags": "需跳检"
+                            }],
+                            "actions": [{
+                                "check": {
+                                    "mode": "skip-checking",
+                                    "auto_start": True,
+                                }
+                            }],
+                            "stop_following_rules_if": "never",
+                        },
+                }
+        }
+        mgr = RuleManager(cfg, state_file)
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["HASH123"] = {"state": "stalledUP"}
+        tor = FakeTorrent(tags="需跳检")
+
+        # 1. 前置检查失败(文件缺失): 不执行导出/删除
+        client.files = [SimpleNamespace(name="missing.bin", size=100)]
+        mgr.process_torrent(tor, dry_run=False)
+        assert client.calls == [], f"前置检查失败不应有任何调用: {client.calls}"
+        assert client.torrents.get("HASH123"), "前置检查失败种子应保留"
+
+        # 2. 重加失败: .torrent 落盘备份 + 元数据记录
+        client.files = []
+        client.add_error = RuntimeError("simulated add failure")
+        handled = mgr.process_torrent(tor, dry_run=False)
+        backup = mgr.state.get("skip_check_backup", {}).get("HASH123")
+        assert backup, f"重加失败应记录备份元数据: {mgr.state}"
+        assert os.path.exists(backup["path"]), f"备份文件应存在: {backup}"
+        print("[OK] test_skip_checking_guard: 跳检安全保护")
+
+
 if __name__ == "__main__":
     test_parse_utils()
     test_compare()
@@ -430,4 +561,6 @@ if __name__ == "__main__":
     test_rule_interval()
     test_task_queue_schedule()
     test_async_check()
+    test_skip_checking()
+    test_skip_checking_guard()
     print("\n全部自测通过!")

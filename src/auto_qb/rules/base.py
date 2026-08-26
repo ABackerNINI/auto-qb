@@ -208,11 +208,14 @@ class Rule:
             return False, False
 
         failed = False
+        ok_action = False  # 至少一个动作成功才算"实际执行", 失败/跳过不记录执行历史(否则挡住当日重试)
         for action in self.actions:
             try:
                 result = action.execute(ctx)
             except Exception as e:
                 result = ActionResult.fail(f"异常: {e}")
+            if result.is_ok:
+                ok_action = True
             if result.is_failed:
                 logger.warning(f"规则: {self.name} | 动作: {action.name} 失败 | 结果: {result.message}")
                 failed = True
@@ -221,7 +224,7 @@ class Rule:
             elif result.is_ok:
                 logger.info(f"规则: {self.name} | 动作: {action.name} 成功 | 结果: {result.message}")
 
-        if self.actions and not ctx.dry_run:
+        if self.actions and not ctx.dry_run and ok_action:
             self.manager.record_execution(self.name, ctx.torrent.hash)
 
         stop = False
