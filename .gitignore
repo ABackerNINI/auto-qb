@@ -3,3 +3,6 @@ test.yml
 torrents.txt
 example-torrent-info.txt
 auto-qb-state.json
+
+# 测试跳检备份残留
+skip-check-backup/
