@@ -6,17 +6,17 @@ config:
 
     # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
     hr:
-        add_tag: '' # 满足HR触发条件的种子添加标签, 支持变量
-        add_category: '!!HR${required_seeding_time}!!' # 分类格式, 支持变量
+        add_tag: "" # 满足HR触发条件的种子添加标签, 支持变量
+        add_category: "!!HR${required_seeding_time}!!" # 分类格式, 支持变量
         overwrite_category: false
-        add_tag_for_satisfied: '' # 做种时间已满足HR要求时间+额外时间的种子添加标签
-        add_category_for_satisfied: '--HR${required_seeding_time}--'
+        add_tag_for_satisfied: "" # 做种时间已满足HR要求时间+额外时间的种子添加标签
+        add_category_for_satisfied: "--HR${required_seeding_time}--"
         overwrite_category_for_satisfied: false
 
-    skip_checking_for_cross_seeding: true
-    skip_checking_auto_start: true
-    add_skip_checking_tags: true
-    skip_checking_tag_format: "SKIP_CHECKING"
+    # skip_checking_for_cross_seeding: true
+    # skip_checking_auto_start: true
+    # add_skip_checking_tags: true
+    # skip_checking_tag_format: "SKIP_CHECKING"
 
     qbittorrent:
         host: 127.0.0.1
@@ -31,11 +31,11 @@ config:
             cooldown: 5M
             conditions:
                 - path:
-                    - "regex:^R:\\\\Download\\\\PTing\\\\"
-                    - "regex:^R:\\\\Download\\\\ing\\\\"
+                      - "regex:^R:\\\\Download\\\\PTing\\\\"
+                      - "regex:^R:\\\\Download\\\\ing\\\\"
             actions:
                 - add_tags:
-                    - "R" # 添加"R"标签
+                      - "R" # 添加"R"标签
             stop_following_rules_if: never
 
     trackers:
@@ -46,14 +46,11 @@ config:
                 - HHan
             U: 5000KiB/s
             D: 0KiB/s
-            remove_similar_tags: true # 站点覆盖全局 remove_similar_tags
-            hr: # 站点 HR 配置(required_* 为站点必填, 输出设置可覆盖全局 hr:)
+            hr:
                 required_seeding_time: 3D
-                required_share_ratio: 2.0 # 分享率要求, 0 或不填 = 不要求
                 extra_seeding_time: 12H
                 condition: 70%
-                add_category: '!!HR${required_seeding_time}!!' # 示例: 覆盖全局分类格式
-                overwrite_category: false
+                add_category: "??HR${required_seeding_time}??"
             rules:
                 - "@add_drive_letter_tag_rules"
         hdfans_org:
@@ -63,7 +60,11 @@ config:
                 - HDFans
             U: 0KiB/s
             D: 0KiB/s
-            HR: "3D@80%+12H" # 旧格式, 自动转换为新结构(输出设置取全局默认)
+            hr:
+                required_seeding_time: 3D
+                required_share_ratio: 1.1
+                extra_seeding_time: 12H
+                condition: 80%
             rules:
                 - "@add_drive_letter_tag_rules"
         kufirc_com:
@@ -73,7 +74,6 @@ config:
                 - Kufirc
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         pt_btschool_club:
@@ -83,7 +83,11 @@ config:
                 - BTSchool
             U: 0KiB/s
             D: 0KiB/s
-            HR: "20H@80%+12H"
+            hr:
+                required_seeding_time: 20H
+                required_share_ratio: 1.1
+                extra_seeding_time: 12H
+                condition: 80%
             rules:
                 - "@add_drive_letter_tag_rules"
         ptfans_cc:
@@ -93,7 +97,10 @@ config:
                 - PTFans
             U: 0KiB/s
             D: 0KiB/s
-            HR: "7D@80%+12H"
+            hr:
+                required_seeding_time: 7D
+                extra_seeding_time: 12H
+                condition: 80%
             rules:
                 - "@add_drive_letter_tag_rules"
         ptzone_xyz:
@@ -103,7 +110,6 @@ config:
                 - PTZone
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_carpt_net:
@@ -113,7 +119,10 @@ config:
                 - CarPT
             U: 0KiB/s
             D: 0KiB/s
-            HR: "1D@80%+12H"
+            hr:
+                required_seeding_time: 1D
+                extra_seeding_time: 12H
+                condition: 80%
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_cyanbug_net:
@@ -123,7 +132,6 @@ config:
                 - CyanBug
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_digitalcore_club:
@@ -134,7 +142,11 @@ config:
                 - DigitalCore
             U: 0KiB/s
             D: 0KiB/s
-            HR: "5D@80%+12H"
+            hr:
+                required_seeding_time: 5D
+                required_share_ratio: 1.1
+                extra_seeding_time: 12H
+                condition: 5%
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_hdbao_cc:
@@ -144,7 +156,6 @@ config:
                 - HDBao
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_hdclone_top:
@@ -154,7 +165,6 @@ config:
                 - HDClone
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_hdtime_org:
@@ -164,7 +174,6 @@ config:
                 - HDTime
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_m_team_cc:
@@ -177,7 +186,6 @@ config:
                 - M-Team - TP
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_novahd_top:
@@ -187,7 +195,6 @@ config:
                 - NovaHD
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         www_tangpt_top:
@@ -197,16 +204,20 @@ config:
                 - TangPT
             U: 0KiB/s
             D: 0KiB/s
-            HR: ""
             rules:
                 - "@add_drive_letter_tag_rules"
         ptsbao_club:
             domains:
-            - ptsbao.club
+                - ptsbao.club
             tags:
-            - PTSBao
+                - PTSBao
             U: 0KiB/s
             D: 0KiB/s
-            HR: ''
+            hr:
+                required_seeding_time: 1D
+                required_share_ratio: 1.2
+                extra_seeding_time: 12H
+                condition: 60%
+                add_category: "??HR${required_seeding_time}??"
             rules:
                 - "@add_drive_letter_tag_rules"
