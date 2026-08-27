@@ -92,19 +92,23 @@ class AddCategoryAction(BaseAction):
     def __init__(self, spec, ignore_error=False):
         super().__init__(spec, ignore_error)
         self.format = str(spec.get("format", ""))
-        self.overwrite_specified = "overwrite" in spec
         self.overwrite = utils.parse_bool(spec.get("overwrite", False))
 
     def execute(self, ctx):
         category = ctx.replace_vars(self.format)
-        old = (ctx.torrent.category or "").strip()
-        if old == category:
+        old_category = ctx.torrent.category or ""
+        if old_category == category:
             return ActionResult.skip("分类已设置")
+
         auto_categories = ctx.manager.state.setdefault("auto_categories", {})
-        previous_auto_category = auto_categories.get(ctx.torrent.hash)
-        can_update_previous = not self.overwrite_specified and old == previous_auto_category
-        if old and not self.overwrite and not can_update_previous:
-            return ActionResult.skip(f"已有分类 {old}, 不覆盖")
+
+        # 定义一个内部函数可以利用if短路
+        def can_update_previous():
+            previous_auto_category = auto_categories.get(ctx.torrent.hash)
+            return not self.overwrite and old_category == previous_auto_category
+
+        if old_category and not self.overwrite and not can_update_previous():
+            return ActionResult.skip(f"已有分类 {old_category}, 不覆盖")
         if not ctx.dry_run:
             try:
                 if category not in (ctx.client.torrents_categories() or {}):
@@ -112,7 +116,7 @@ class AddCategoryAction(BaseAction):
             except Exception:
                 pass
             ctx.client.torrents_set_category(category=category, torrent_hashes=ctx.torrent.hash)
-            if not self.overwrite_specified:
+            if not self.overwrite:
                 auto_categories[ctx.torrent.hash] = category
         return ActionResult.ok(f"设置分类 {category}")
 

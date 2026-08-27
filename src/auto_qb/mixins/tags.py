@@ -79,28 +79,27 @@ class TagsMixin:
 
         return removed
 
-    def _set_category(
-        self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool, overwrite_specified=None
-    ):
+    def _set_category(self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool):
         """设置种子的分类"""
-        old_category = tor.category.strip()
+        old_category = tor.category
 
         if old_category == category:  # 分类已存在
             return False
 
         auto_categories = self.state.setdefault("auto_categories", {})
-        previous_auto_category = auto_categories.get(tor.hash)
-        if overwrite_specified is None:
-            overwrite_specified = overwrite
-        can_update_previous = not overwrite_specified and old_category == previous_auto_category
 
-        if not old_category or overwrite or can_update_previous:  # 分类为空、强制覆盖或更新此前自动分类
+        # 定义一个内部函数可以利用if短路
+        def can_update_previous():
+            previous_auto_category = auto_categories.get(tor.hash)
+            return not overwrite and old_category == previous_auto_category
+
+        if not old_category or overwrite or can_update_previous():  # 分类为空、强制覆盖或更新此前自动分类
             self._create_category_if_not_exists(category, dry_run)
 
             # 设置分类
             if not dry_run:
                 self.client.torrents_set_category(category=category, torrent_hashes=tor.hash)
-                if not overwrite_specified:
+                if not overwrite:
                     auto_categories[tor.hash] = category
 
             # 打印日志
@@ -163,11 +162,10 @@ class TagsMixin:
                     self._fmt_hr(hr.add_category_for_satisfied, hr),
                     hr.overwrite_category_for_satisfied,
                     dry_run,
-                    hr.overwrite_category_for_satisfied_specified,
                 )
 
             return added
-        else: # 做种时长不够 且 分享率未达标: 添加 HR 标签/分类
+        else:  # 做种时长不够 且 分享率未达标: 添加 HR 标签/分类
             if hr.add_tag:
                 added |= self._add_tags(tor, [self._fmt_hr(hr.add_tag, hr)], dry_run)
             if hr.add_category:
@@ -176,7 +174,6 @@ class TagsMixin:
                     self._fmt_hr(hr.add_category, hr),
                     hr.overwrite_category,
                     dry_run,
-                    hr.overwrite_category_specified,
                 )
 
         return added
