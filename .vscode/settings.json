@@ -45,5 +45,9 @@
     "python.useEnvironmentsExtension": true,
     "python.analysis.extraPaths": [
         "src"
-    ]
+    ],
+    // 不显示__pycache__
+    "files.exclude": {
+        "**/__pycache__": true
+    },
 }
