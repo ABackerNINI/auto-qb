@@ -229,18 +229,33 @@ class TagsMixin:
             return True
         if not all_tags:
             return True
-        # 收集所有种子正在使用的标签
-        used = set()
-        for tor in self.client.torrents_info():
-            for t in (tor.tags or "").split(","):
-                t = t.strip()
-                if t:
-                    used.add(t)
-        orphan = all_tags - used
-        matched = [t for t in orphan if self._match_tag_pattern(t, patterns)]
+
+        # # 收集所有种子正在使用的标签
+        # used = set()
+        # for tor in self.client.torrents_info():
+        #     for t in (tor.tags or "").split(","):
+        #         t = t.strip()
+        #         if t:
+        #             used.add(t)
+        # orphan = all_tags - used
+        # matched = [t for t in orphan if self._match_tag_pattern(t, patterns)]
+        # if not matched:
+        #     return True
+        # if not dry_run:
+        #     self.client.torrents_delete_tags(tags=matched)
+        # self.logger.info(f"彻底删除无种子的标签: {matched}")
+
+        # 对满足筛选条件的标签查询种子数, 如果为0则删除
+        matched = []
+        for tag in all_tags:
+            if self._match_tag_pattern(tag, patterns):
+                if len(self.client.torrents.info(tag=tag)) == 0:
+                    matched.append(tag)
+
         if not matched:
             return True
         if not dry_run:
             self.client.torrents_delete_tags(tags=matched)
         self.logger.info(f"彻底删除无种子的标签: {matched}")
+
         return True
