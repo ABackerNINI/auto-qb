@@ -163,17 +163,6 @@ class TagsMixin:
 
         return added
 
-    def _mark_hr_done(self, tor: TorrentDictionary, dry_run: bool):
-        """标记种子为 HR-DONE 分类并强制汇报"""
-        if tor.category != "HR-DONE":
-            if not dry_run:
-                self.client.torrents_set_category(tor.hash, category="HR-DONE")
-            self.logger.info(f"Marked torrent as HR-DONE")
-        # 强制汇报
-        if not dry_run:
-            self.client.torrents_reannounce(tor.hash)
-        self.logger.info(f"Reannounced torrent")
-
     # ---------- 全局标签清理(全局任务) ----------
 
     @staticmethod
