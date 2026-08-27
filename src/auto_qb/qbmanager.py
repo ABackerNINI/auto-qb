@@ -43,10 +43,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         self._known_hashes: Optional[set] = None
         # 最近一次种子快照: 新增种子创建任务/规则条件(上传量基线)使用
         self._snapshot: list = []
-        # 注册种子列表刷新任务(interval = config.interval, 首次立即执行)
-        self.task_queue.add_task(
-            Task("refresh", "refresh", interval=self.config.interval, handler=self._refresh_torrents)
-        )
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -93,6 +89,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         """单次 tick: 1) 轮询慢速队列(异步校验) 2) 弹出快速队列到期任务并执行"""
         now = time.time()
 
+        self._refresh_torrents()
+
         # 1. 慢速队列: 轮询异步校验结果(仅当有待处理任务时才查询客户端)
         if self.task_queue.pending_slow():
             completed = self.task_queue.poll_slow(self._is_check_done)
@@ -106,23 +104,13 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
             self._execute_due(due, dry_run, now)
 
     def _execute_due(self, due: list, dry_run: bool, now: float):
-        """执行到期任务: 先种子刷新(更新快照/增删检测), 其余任务(规则/种子级内置)逐个执行"""
-        # 1. 种子刷新任务先执行, 保证其他任务使用最新快照与种子增删状态
+        """执行到期任务: 逐个执行任务(规则/种子级内置)"""
+        # 1. 任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
         for task in due:
-            if task.kind == "refresh":
-                self._safe(task, dry_run)
-        # 2. 其余任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
-        for task in due:
-            if task.kind == "refresh":
-                continue
             keep = self._safe(task, dry_run)
             if keep is False:
                 continue
             self.task_queue.reschedule(task, now)
-        # 3. 刷新任务按内置 interval 重新入队
-        for task in due:
-            if task.kind == "refresh":
-                self.task_queue.reschedule(task, now)
 
     def _safe(self, task: Task, dry_run: bool) -> bool:
         """执行任务 handler, 捕获异常; 返回 handler 结果(默认 True 重新入队)"""
@@ -155,8 +143,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
             return None
         return infos[0] if infos else None
 
-    def _refresh_torrents(self, task: Task, dry_run: bool) -> bool:
-        """种子列表刷新任务: 拉全量 -> 增删检测 -> 新种子创建内置+规则任务, 删除种子移除任务, 更新快照"""
+    def _refresh_torrents(self):
+        """种子列表刷新: 拉全量 -> 增删检测 -> 新种子创建内置+规则任务, 删除种子移除任务, 更新快照"""
         torrents = self.client.torrents_info()
         current_hashes = {t.hash for t in torrents}
         self._snapshot = torrents
@@ -179,7 +167,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         self._known_hashes = current_hashes
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
         self.begin_round(torrents)
-        return True
 
     def _create_torrent_tasks(self, torrent_hash: str):
         """为新增种子创建任务: 内置功能(missing_files/maintenance) + 所有符合条件的规则任务
@@ -191,7 +178,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         if self.config.check_missing_files:
             tasks.append(
                 Task(
-                    "torrent",
+                    "internal",
                     "missing_files",
                     torrent_hash=torrent_hash,
                     interval=self.config.interval,
@@ -200,7 +187,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
             )
         tasks.append(
             Task(
-                "torrent",
+                "internal",
                 "maintenance",
                 torrent_hash=torrent_hash,
                 interval=self.config.interval,

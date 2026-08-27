@@ -135,6 +135,7 @@ class TaskQueue:
         now = time.time() if now is None else now
         task.run_count += 1
         task.state = PENDING
+        # TODO: 支持cooldown+
         task.next_run = now + task.interval
         with self._lock:
             heapq.heappush(self._fast, task)

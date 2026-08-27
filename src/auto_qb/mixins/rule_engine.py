@@ -96,7 +96,7 @@ class RuleEngineMixin:
     # ---------- 规则: 种子级任务 ----------
 
     def _rules_for_torrent(self, tor) -> list:
-        """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set); 无引用则全部启用规则"""
+        """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)"""
         try:
             urls = [t["url"] for t in self.client.torrents_trackers(tor.hash) if t.get("url")]
         except Exception as e:
@@ -113,7 +113,7 @@ class RuleEngineMixin:
             rules = self._resolve_refs(refs)
             if rules:
                 return rules
-        return list(self.enabled_rules)
+        return []
 
     def _create_rule_task(self, rule: Rule, torrent_hash: str) -> Task:
         """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)"""
