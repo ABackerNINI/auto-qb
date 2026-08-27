@@ -11,7 +11,6 @@ from ..utils import (  # noqa: F401
     parse_compare,
     parse_fsize,
     parse_hr_condition,
-    parse_hr_rule,
     parse_speed,
     parse_time,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "parse_time",
     "parse_fsize",
     "parse_speed",
-    "parse_hr_rule",
     "parse_hr_condition",
     "parse_compare",
     "compare",

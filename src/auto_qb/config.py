@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 import yaml
 
-from .utils import parse_bool, parse_hr_condition, parse_hr_rule, parse_speed, parse_time
+from .utils import parse_bool, parse_hr_condition, parse_speed, parse_time
 
 DEFAULT_CONFIG_FILE = "config.yml"
 DEFAULT_STATE_FILE = "auto-qb-state.json"
@@ -106,31 +106,6 @@ def parse_hr_spec(spec: dict, global_hr: dict) -> HRRule:
     )
 
 
-def hr_from_old_string(rule_str: str, global_hr: dict) -> HRRule:
-    """旧格式 HR 字符串(如 "3D@70%+12H")兼容解析为 HRRule(输出设置取全局默认)"""
-    required_time, condition, extra_time = parse_hr_rule(rule_str)
-    raw = str(rule_str).strip().upper()
-    m = re.match(r"^([\d.]+[SMHD])", raw)
-    time_raw = m.group(1) if m else ""
-    return HRRule(
-        required_seeding_time=required_time,
-        required_seeding_time_raw=time_raw,
-        required_share_ratio=0.0,
-        extra_seeding_time=extra_time,
-        condition=condition,
-        add_tag=global_hr.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
-        add_category=global_hr.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),
-        overwrite_category=parse_bool(global_hr.get("overwrite_category", DEFAULT_HR_OUTPUT["overwrite_category"])),
-        add_tag_for_satisfied=global_hr.get("add_tag_for_satisfied", DEFAULT_HR_OUTPUT["add_tag_for_satisfied"]),
-        add_category_for_satisfied=global_hr.get(
-            "add_category_for_satisfied", DEFAULT_HR_OUTPUT["add_category_for_satisfied"]
-        ),
-        overwrite_category_for_satisfied=parse_bool(
-            global_hr.get("overwrite_category_for_satisfied", DEFAULT_HR_OUTPUT["overwrite_category_for_satisfied"])
-        ),
-    )
-
-
 @dataclass
 class TrackerConfig:
     name: str
@@ -181,31 +156,18 @@ def load_config(config_path: str) -> Config:
     # 规则集: config 段下所有以 "_rules" 结尾的键
     rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules") and isinstance(v, dict)}
 
-    # 全局 HR 默认输出设置(新格式 hr: 段; 兼容旧 add_hr_tags/add_hr_categories 字段)
     global_hr = cfg.get("hr")
-    if not isinstance(global_hr, dict):
-        global_hr = {}
-        if parse_bool(cfg.get("add_hr_tags", False)):
-            global_hr["add_tag"] = cfg.get("hr_tag_format", DEFAULT_HR_OUTPUT["add_tag"])
-        if parse_bool(cfg.get("add_hr_categories", False)):
-            global_hr["add_category"] = cfg.get("hr_category_format", DEFAULT_HR_OUTPUT["add_category"])
-            global_hr["overwrite_category"] = parse_bool(
-                cfg.get("overwrite_category_for_hr", DEFAULT_HR_OUTPUT["overwrite_category"])
-            )
-
     global_remove_similar = parse_bool(cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS))
 
     trackers = {}
     for name, tdata in cfg["trackers"].items():
         up = parse_speed(tdata.get("U", UNLIMITED_SPEED))
         down = parse_speed(tdata.get("D", UNLIMITED_SPEED))
-        # HR: 新格式 hr: 段优先; 旧格式 HR: 字符串兼容
+
         hr = None
         hr_spec = tdata.get("hr")
         if isinstance(hr_spec, dict):
             hr = parse_hr_spec(hr_spec, global_hr)
-        elif tdata.get("HR"):
-            hr = hr_from_old_string(tdata.get("HR"), global_hr)
         trackers[name] = TrackerConfig(
             name=name,
             domains=tdata["domains"],

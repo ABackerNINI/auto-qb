@@ -96,33 +96,6 @@ def parse_hr_condition(cond_str) -> tuple:
     return ("dlsize", parse_fsize(cond_str))  # 下载量绝对值, 如 "10MiB"
 
 
-def parse_hr_rule(rule_str: str):
-    """
-    解析HR规则字符串(旧格式, 兼容), 返回 (required_time_seconds, condition, extra_time_seconds)
-    condition: ('dlratio', ratio) 或 ('dlsize', bytes)
-    示例: "3D@70%+12H" -> (3D秒数, ('dlratio', 0.7), 12H秒数)
-         "20H@30%"    -> (20H秒数, ('dlratio', 0.3), 0)
-         "20H@10MiB"  -> (20H秒数, ('dlsize', 字节), 0)
-    """
-    rule_str = str(rule_str).strip()
-    extra_time = 0
-    if "+" in rule_str:
-        main, extra = rule_str.split("+", 1)
-        extra_time = parse_time(extra.strip())
-    else:
-        main = rule_str
-
-    if "@" in main:
-        time_part, cond_part = main.split("@", 1)
-        required_time = parse_time(time_part.strip())
-        condition = parse_hr_condition(cond_part)
-    else:
-        required_time = parse_time(main.strip())
-        condition = ("dlratio", 0.8)  # 默认80%触发
-
-    return required_time, condition, extra_time
-
-
 def add_long_path_prefix_for_win(path: str) -> str:
     """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC)"""
     abs_path = os.path.abspath(path).replace("/", "\\")

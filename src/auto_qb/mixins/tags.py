@@ -115,11 +115,8 @@ class TagsMixin:
 
     @staticmethod
     def _fmt_hr(template: str, hr: HRRule) -> str:
-        """HR 格式变量替换: ${required_seeding_time}(新) / ${time}(旧兼容)"""
-        return (
-            str(template).replace("${required_seeding_time}",
-                                  hr.required_seeding_time_raw).replace("${time}", hr.required_seeding_time_raw)
-        )
+        """HR 格式变量替换: ${required_seeding_time}"""
+        return (str(template).replace("${required_seeding_time}", hr.required_seeding_time_raw))
 
     def _add_hr_tag_or_category(self, tor: TorrentDictionary, tracker_conf: TrackerConfig, dry_run: bool):
         """添加HR标签或分类(基于站点合并后的 hr 设置)
