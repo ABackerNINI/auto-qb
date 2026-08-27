@@ -22,8 +22,8 @@ config:
     # remove_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
     #     - M-Team - TP
     #     - "regex:^BTSCHOOL"
-    # remove_tags_if_has_no_torrent: # 彻底删除无种子的标签格式(仅当没有任何种子使用时删除)
-    #     - "@site_tags" # 引用全部站点标签
+    # remove_tags_if_has_no_torrents: # 彻底删除无种子的标签格式(仅当没有任何种子使用时删除)
+    #     - "@tracker_tags" # 引用全部 tracker 配置的标签
     #     - "regex:^ORPHAN"
 
     qbittorrent:

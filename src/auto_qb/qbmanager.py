@@ -152,13 +152,13 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
                     handler=self._handle_remove_tags,
                 )
             )
-        if self.config.remove_tags_if_has_no_torrent:
+        if self.config.remove_tags_if_has_no_torrents:
             tasks.append(
                 Task(
                     "internal",
-                    "remove_tags_if_has_no_torrent",
+                    "remove_tags_if_has_no_torrents",
                     interval=self.config.interval,
-                    handler=self._handle_remove_tags_if_has_no_torrent,
+                    handler=self._handle_remove_tags_if_has_no_torrents,
                 )
             )
         if tasks:

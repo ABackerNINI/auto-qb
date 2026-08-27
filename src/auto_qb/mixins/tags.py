@@ -214,12 +214,12 @@ class TagsMixin:
         self.logger.info(f"彻底删除标签: {matched}")
         return True
 
-    def _handle_remove_tags_if_has_no_torrent(self, task, dry_run: bool) -> bool:
+    def _handle_remove_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
         """全局任务: 彻底删除无种子的标签(支持正则, regex: 前缀)
 
         仅当标签定义存在且没有任何种子使用(所有种子 tags 的并集之外)时才删除。
         """
-        patterns = self.config.remove_tags_if_has_no_torrent or []
+        patterns = self.config.remove_tags_if_has_no_torrents or []
         if not patterns:
             return True
         try:

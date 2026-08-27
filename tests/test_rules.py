@@ -156,7 +156,7 @@ class FakeConfig:
     remove_similar_tags = False
     hr = HRRule()  # 全局 HR 默认输出设置
     remove_tags = []  # 全局: 彻底删除的标签格式(支持正则)
-    remove_tags_if_has_no_torrent = []  # 全局: 彻底删除无种子的标签格式(支持正则)
+    remove_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
 
 
 def _hr_rule(**kw) -> HRRule:
@@ -788,7 +788,7 @@ def test_global_remove_tags_dry_run():
         print("[OK] test_global_remove_tags_dry_run: 全局删除标签 dry-run")
 
 
-def test_global_remove_tags_if_has_no_torrent():
+def test_global_remove_tags_if_has_no_torrents():
     """测试: 全局任务彻底删除无种子的标签(仅删无种子使用的, 有种子使用保留)"""
     from auto_qb.taskqueue import Task
 
@@ -796,8 +796,8 @@ def test_global_remove_tags_if_has_no_torrent():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        # 模拟 load_config 展开 @site_tags 后的结果: 站点标签 HHan
-        cfg.remove_tags_if_has_no_torrent = ["HHan", "regex:^ORPHAN"]
+        # 模拟 load_config 展开 @tracker_tags 后的结果: 站点标签 HHan
+        cfg.remove_tags_if_has_no_torrents = ["HHan", "regex:^ORPHAN"]
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
@@ -806,13 +806,17 @@ def test_global_remove_tags_if_has_no_torrent():
         tor = FakeTorrent(tags="KEEP")
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "remove_tags_if_has_no_torrent", interval=60,
-                    handler=mgr._handle_remove_tags_if_has_no_torrent)
-        mgr._handle_remove_tags_if_has_no_torrent(task, dry_run=False)
+        task = Task(
+            "internal",
+            "remove_tags_if_has_no_torrents",
+            interval=60,
+            handler=mgr._handle_remove_tags_if_has_no_torrents
+        )
+        mgr._handle_remove_tags_if_has_no_torrents(task, dry_run=False)
 
         assert ("delete_tags", {"HHan", "ORPHAN-1"}) in client.calls, f"应删除无种子标签: {client.calls}"
         assert client.tags == {"KEEP"}, f"有种子使用的标签应保留: {client.tags}"
-        print("[OK] test_global_remove_tags_if_has_no_torrent: 彻底删除无种子的标签")
+        print("[OK] test_global_remove_tags_if_has_no_torrents: 彻底删除无种子的标签")
 
 
 def test_global_remove_tags_no_pattern_match():
@@ -844,45 +848,58 @@ def test_global_remove_tags_queued():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.remove_tags = ["M-Team - TP"]
-        cfg.remove_tags_if_has_no_torrent = ["@site_tags"]
+        cfg.remove_tags_if_has_no_torrents = ["@tracker_tags"]
         mgr = QbManager("", config=cfg)
         # 队列应包含两个全局标签清理任务
         names = {t.name for t in mgr.task_queue._fast}
         assert "remove_tags" in names, f"缺少 remove_tags 任务: {names}"
-        assert "remove_tags_if_has_no_torrent" in names, f"缺少 remove_tags_if_has_no_torrent 任务: {names}"
+        assert "remove_tags_if_has_no_torrents" in names, f"缺少 remove_tags_if_has_no_torrents 任务: {names}"
         for t in mgr.task_queue._fast:
-            if t.name in ("remove_tags", "remove_tags_if_has_no_torrent"):
+            if t.name in ("remove_tags", "remove_tags_if_has_no_torrents"):
                 assert t.interval == cfg.interval, f"全局任务 interval 应为 {cfg.interval}: {t.interval}"
         print("[OK] test_global_remove_tags_queued: 全局清理任务入队")
 
 
-def test_config_site_tags_expand():
-    """测试: load_config 中 @site_tags 展开为所有 tracker tags 并集"""
+def test_config_tracker_tags_expand():
+    """测试: load_config 中 @tracker_tags 展开为所有 tracker tags 并集"""
     import yaml
 
     from auto_qb.config import load_config
     with tempfile.TemporaryDirectory() as td:
         cfg_path = os.path.join(td, "config.yml")
         with open(cfg_path, "w", encoding="utf-8") as f:
-            yaml.dump({
-                "config": {
-                    "qbittorrent": {
-                        "host": "127.0.0.1",
-                        "port": 16585,
-                        "username": "u",
-                        "password": "p",
-                    },
-                    "remove_tags_if_has_no_torrent": ["@site_tags", "regex:^ORPHAN"],
-                    "trackers": {
-                        "HHan": {"domains": ["tracker.hhanclub.net"], "tags": ["HHan"]},
-                        "Kufirc": {"domains": ["kufirc.com"], "tags": ["Kufirc"]},
-                    },
-                }
-            }, f, allow_unicode=True, default_flow_style=False)
+            yaml.dump(
+                {
+                    "config":
+                        {
+                            "qbittorrent": {
+                                "host": "127.0.0.1",
+                                "port": 16585,
+                                "username": "u",
+                                "password": "p",
+                            },
+                            "remove_tags_if_has_no_torrents": ["@tracker_tags", "regex:^ORPHAN"],
+                            "trackers":
+                                {
+                                    "HHan": {
+                                        "domains": ["tracker.hhanclub.net"],
+                                        "tags": ["HHan"]
+                                    },
+                                    "Kufirc": {
+                                        "domains": ["kufirc.com"],
+                                        "tags": ["Kufirc"]
+                                    },
+                                },
+                        }
+                },
+                f,
+                allow_unicode=True,
+                default_flow_style=False
+            )
         cfg = load_config(cfg_path)
-        assert set(cfg.remove_tags_if_has_no_torrent) == {"HHan", "Kufirc", "regex:^ORPHAN"}, \
-            f"@site_tags 展开错误: {cfg.remove_tags_if_has_no_torrent}"
-        print("[OK] test_config_site_tags_expand: @site_tags 展开")
+        assert set(cfg.remove_tags_if_has_no_torrents) == {"HHan", "Kufirc", "regex:^ORPHAN"}, \
+            f"@tracker_tags 展开错误: {cfg.remove_tags_if_has_no_torrents}"
+        print("[OK] test_config_tracker_tags_expand: @tracker_tags 展开")
 
 
 if __name__ == "__main__":
@@ -904,8 +921,8 @@ if __name__ == "__main__":
     test_skip_checking_guard()
     test_global_remove_tags()
     test_global_remove_tags_dry_run()
-    test_global_remove_tags_if_has_no_torrent()
+    test_global_remove_tags_if_has_no_torrents()
     test_global_remove_tags_no_pattern_match()
     test_global_remove_tags_queued()
-    test_config_site_tags_expand()
+    test_config_tracker_tags_expand()
     print("\n全部自测通过!")
