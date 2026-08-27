@@ -87,16 +87,16 @@ class RuleContext:
     _files: Optional[List] = field(default=None)
 
     @property
-    def hr_time(self) -> str:
-        """第一个匹配 tracker 的 HR 时间部分, 如 '3D', 用于 ${hr-time} 变量替换"""
+    def required_seeding_time(self) -> str:
+        """第一个匹配 tracker 的 HR 时间部分, 如 '3D', 用于 ${required_seeding_time} 变量替换"""
         for conf in self.matched_tracker_confs():
             if conf.hr:
                 return conf.hr.required_seeding_time_raw
         return ""
 
     def replace_vars(self, text: str) -> str:
-        """替换标签/分类格式中的变量, 当前支持 ${hr-time}"""
-        return str(text).replace("${hr-time}", self.hr_time)
+        """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}"""
+        return str(text).replace("${required_seeding_time}", self.required_seeding_time)
 
     def tracker_urls(self) -> List[str]:
         if self._tracker_urls is None:

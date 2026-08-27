@@ -71,7 +71,7 @@ class SizeCondition(BaseCondition):
 
 @register_condition
 class TagsCondition(BaseCondition):
-    """标签条件: 每组内逗号分隔为与, 组间为或, 支持 regex: 和 ${hr-time}"""
+    """标签条件: 每组内逗号分隔为与, 组间为或, 支持 regex: 和 ${required_seeding_time}"""
     name = "tags"
 
     def __init__(self, spec):

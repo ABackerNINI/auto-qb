@@ -33,7 +33,7 @@ _STOPPED_STATES = {"pausedDL", "pausedUP", "stoppedDL", "stoppedUP"}
 
 @register_action
 class AddTagsAction(BaseAction):
-    """添加标签, 支持 ${hr-time} 变量"""
+    """添加标签, 支持 ${required_seeding_time} 变量"""
     name = "add_tags"
 
     def __init__(self, spec, ignore_error=False):
@@ -53,7 +53,7 @@ class AddTagsAction(BaseAction):
 
 @register_action
 class RemoveTagsAction(BaseAction):
-    """删除标签, 支持 regex: 和 ${hr-time} 变量"""
+    """删除标签, 支持 regex: 和 ${required_seeding_time} 变量"""
     name = "remove_tags"
 
     def __init__(self, spec, ignore_error=False):
@@ -86,7 +86,7 @@ class RemoveTagsAction(BaseAction):
 
 @register_action
 class AddCategoryAction(BaseAction):
-    """添加分类, 支持 ${hr-time} 变量和 overwrite 覆盖"""
+    """添加分类, 支持 ${required_seeding_time} 变量和 overwrite 覆盖"""
     name = "add_category"
 
     def __init__(self, spec, ignore_error=False):

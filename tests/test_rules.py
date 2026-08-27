@@ -195,7 +195,7 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
                             "trackers": "HHan"
                         }],
                         "actions": [{
-                            "add_tags": ["HHan", "seed-${hr-time}"]
+                            "add_tags": ["HHan", "seed-${required_seeding_time}"]
                         }],
                         "stop_following_rules_if": "never",
                     },
@@ -248,7 +248,7 @@ def test_basic():
         assert handled, "add_site_tag 应处理种子"
         assert client.tags == {"HHan", "seed-3D"}, f"标签错误: {client.tags}"
         assert mgr.state.get("exec_history"), "应有执行历史"
-        print("[OK] test_basic: 标签规则+${hr-time}变量替换")
+        print("[OK] test_basic: 标签规则+${required_seeding_time}变量替换")
 
 
 def test_category_auto_update_from_state():
