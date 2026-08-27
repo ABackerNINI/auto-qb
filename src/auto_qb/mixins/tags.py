@@ -3,6 +3,7 @@
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config。
 """
 import logging
+import re
 from typing import Any, List
 
 from qbittorrentapi import TorrentDictionary
@@ -172,3 +173,74 @@ class TagsMixin:
         if not dry_run:
             self.client.torrents_reannounce(tor.hash)
         self.logger.info(f"Reannounced torrent")
+
+    # ---------- 全局标签清理(全局任务) ----------
+
+    @staticmethod
+    def _match_tag_pattern(tag: str, patterns: List[str]) -> bool:
+        """标签是否匹配任一格式: 精确匹配或 regex: 前缀正则(参考规则动作语义)"""
+        for pat in patterns or []:
+            pat = str(pat).strip()
+            if not pat:
+                continue
+            if pat.startswith("regex:"):
+                try:
+                    if re.search(pat[6:], tag):
+                        return True
+                except re.error:
+                    continue
+            elif pat == tag:
+                return True
+        return False
+
+    def _handle_remove_tags(self, task, dry_run: bool) -> bool:
+        """全局任务: 彻底删除匹配格式的标签(支持正则, regex: 前缀)
+
+        匹配所有现有标签定义(含无种子的), 调用 torrents_delete_tags 从所有种子移除并删除定义。
+        """
+        patterns = self.config.remove_tags or []
+        if not patterns:
+            return True
+        try:
+            all_tags = self.client.torrents_tags() or []
+        except Exception as e:
+            self.logger.error(f"获取标签列表失败: {e}")
+            return True
+        matched = [t for t in all_tags if self._match_tag_pattern(t, patterns)]
+        if not matched:
+            return True
+        if not dry_run:
+            self.client.torrents_delete_tags(tags=matched)
+        self.logger.info(f"彻底删除标签: {matched}")
+        return True
+
+    def _handle_remove_tags_if_has_no_torrent(self, task, dry_run: bool) -> bool:
+        """全局任务: 彻底删除无种子的标签(支持正则, regex: 前缀)
+
+        仅当标签定义存在且没有任何种子使用(所有种子 tags 的并集之外)时才删除。
+        """
+        patterns = self.config.remove_tags_if_has_no_torrent or []
+        if not patterns:
+            return True
+        try:
+            all_tags = set(self.client.torrents_tags() or [])
+        except Exception as e:
+            self.logger.error(f"获取标签列表失败: {e}")
+            return True
+        if not all_tags:
+            return True
+        # 收集所有种子正在使用的标签
+        used = set()
+        for tor in self.client.torrents_info():
+            for t in (tor.tags or "").split(","):
+                t = t.strip()
+                if t:
+                    used.add(t)
+        orphan = all_tags - used
+        matched = [t for t in orphan if self._match_tag_pattern(t, patterns)]
+        if not matched:
+            return True
+        if not dry_run:
+            self.client.torrents_delete_tags(tags=matched)
+        self.logger.info(f"彻底删除无种子的标签: {matched}")
+        return True

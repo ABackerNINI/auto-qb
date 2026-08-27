@@ -37,8 +37,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
         self._load_rules()
-        # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验)
+        # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理)
         self.task_queue = TaskQueue()
+        # 全局任务: 彻底删除标签 / 彻底删除无种子的标签(有配置才创建)
+        self._create_global_tasks()
         # 种子增删检测: 上一轮已知 hash 集合, None 表示首轮(首次刷新为全部现有种子创建任务)
         self._known_hashes: Optional[set] = None
         # 最近一次种子快照: 新增种子创建任务/规则条件(上传量基线)使用
@@ -132,6 +134,36 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
             return True  # 种子已被删除, 视为完成
         state = (infos[0].state or "").lower()
         return not state.startswith("checking")
+
+    # ---------- 全局任务 ----------
+
+    def _create_global_tasks(self):
+        """创建全局任务(非种子级): 彻底删除标签 / 彻底删除无种子的标签, 加入队列统一管理
+
+        对应配置为空时跳过; 任务使用主 interval 定期执行。
+        """
+        tasks = []
+        if self.config.remove_tags:
+            tasks.append(
+                Task(
+                    "internal",
+                    "remove_tags",
+                    interval=self.config.interval,
+                    handler=self._handle_remove_tags,
+                )
+            )
+        if self.config.remove_tags_if_has_no_torrent:
+            tasks.append(
+                Task(
+                    "internal",
+                    "remove_tags_if_has_no_torrent",
+                    interval=self.config.interval,
+                    handler=self._handle_remove_tags_if_has_no_torrent,
+                )
+            )
+        if tasks:
+            self.task_queue.add_tasks(tasks)
+            self.logger.info(f"创建全局标签清理任务 {len(tasks)} 个: {[t.name for t in tasks]}")
 
     # ---------- 种子级任务 ----------
 

@@ -136,6 +136,10 @@ class Config:
     add_skip_checking_tags: bool
     skip_checking_tag_format: str
 
+    # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
+    remove_tags: List[str]
+    remove_tags_if_has_no_torrent: List[str]
+
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
 
@@ -156,7 +160,7 @@ def load_config(config_path: str) -> Config:
     # 规则集: config 段下所有以 "_rules" 结尾的键
     rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules") and isinstance(v, dict)}
 
-    global_hr = cfg.get("hr")
+    global_hr = cfg.get("hr") or {}
     global_remove_similar = parse_bool(cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS))
 
     trackers = {}
@@ -179,6 +183,13 @@ def load_config(config_path: str) -> Config:
             rules=tdata.get("rules", []) or [],
             remove_similar_tags=parse_bool(tdata.get("remove_similar_tags", global_remove_similar)),
         )
+
+    # 全局标签清理格式: @site_tags 引用展开为所有 tracker 配置的 tags 并集
+    site_tags = sorted({t for tc in trackers.values() for t in tc.tags})
+    remove_tags = _expand_site_tags_refs(cfg.get("remove_tags", []) or [], site_tags)
+    remove_tags_if_has_no_torrent = _expand_site_tags_refs(
+        cfg.get("remove_tags_if_has_no_torrent", []) or [], site_tags
+    )
 
     return Config(
         interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
@@ -209,6 +220,25 @@ def load_config(config_path: str) -> Config:
         skip_checking_auto_start=parse_bool(cfg.get("skip_checking_auto_start", DEFAULT_SKIP_CHECKING_AUTO_START)),
         add_skip_checking_tags=parse_bool(cfg.get("add_skip_checking_tags", DEFAULT_ADD_SKIP_CHECKING_TAGS)),
         skip_checking_tag_format=cfg.get("skip_checking_tag_format", DEFAULT_SKIP_CHECKING_TAG_FORMAT),
+        remove_tags=remove_tags,
+        remove_tags_if_has_no_torrent=remove_tags_if_has_no_torrent,
         qbittorrent=qb_config,
         trackers=trackers,
     )
+
+
+def _expand_site_tags_refs(items: List[str], site_tags: List[str]) -> List[str]:
+    """展开 @site_tags 引用: 替换为所有 tracker 配置的 tags 并集(去重保序)"""
+    out: List[str] = []
+    seen = set()
+    for it in items or []:
+        it = str(it).strip()
+        if it == "@site_tags":
+            for tag in site_tags:
+                if tag not in seen:
+                    seen.add(tag)
+                    out.append(tag)
+        elif it and it not in seen:
+            seen.add(it)
+            out.append(it)
+    return out
