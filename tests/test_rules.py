@@ -323,9 +323,11 @@ def test_parse_utils():
     assert utils.parse_time("3D") == 3 * 86400
     assert utils.parse_fsize("10MiB") == 10 * 1024**2
     assert utils.parse_speed("1000KiB/s") == 1000 * 1024
-    rt, cond, extra = utils.parse_hr_rule("3D@70%+12H")
-    assert rt == 3 * 86400 and cond == ("dlratio", 0.7) and extra == 12 * 3600
-    assert utils.parse_hr_rule("20H@10MiB")[1] == ("dlsize", 10 * 1024**2)
+    # HR 触发条件解析
+    assert utils.parse_hr_condition("80%") == ("dlratio", 0.8)
+    assert utils.parse_hr_condition("70%") == ("dlratio", 0.7)
+    assert utils.parse_hr_condition("10MiB") == ("dlsize", 10 * 1024**2)
+    assert utils.parse_hr_condition("") == ("dlratio", 0.8)  # 缺省默认80%
     assert utils.parse_bool("true") is True
     print("[OK] test_parse_utils: 解析工具")
 
@@ -723,22 +725,6 @@ def test_hr_required_share_ratio():
         print("[OK] test_hr_required_share_ratio: 分享率达标判定")
 
 
-def test_hr_old_string_compat():
-    """测试: 旧 HR 字符串格式兼容解析(hr_from_old_string + 运行路径)"""
-    from auto_qb.config import hr_from_old_string
-    hr = hr_from_old_string("3D@70%+12H", {})
-    assert hr.required_seeding_time == 3 * 86400
-    assert hr.required_seeding_time_raw == "3D"
-    assert hr.extra_seeding_time == 12 * 3600
-    assert hr.condition == ("dlratio", 0.7)
-    assert hr.add_category == "!!HR${required_seeding_time}!!"  # 全局默认
-
-    # 无时间部分: required_seeding_time_raw 为空, 不崩溃
-    hr2 = hr_from_old_string("@70%", {})
-    assert hr2.required_seeding_time_raw == ""
-    print("[OK] test_hr_old_string_compat: 旧 HR 字符串兼容解析")
-
-
 if __name__ == "__main__":
     test_parse_utils()
     test_compare()
@@ -746,7 +732,6 @@ if __name__ == "__main__":
     test_basic()
     test_hr_satisfied()
     test_hr_required_share_ratio()
-    test_hr_old_string_compat()
     test_tracker_hr_overrides_global()
     test_tracker_remove_similar_tags_override()
     test_stop_if_action_failed()
