@@ -151,19 +151,7 @@ class TagsMixin:
 
         added = False
 
-        # 满足触发条件: 添加 HR 标签/分类
-        if hr.add_tag:
-            added |= self._add_tags(tor, [self._fmt_hr(hr.add_tag, hr)], dry_run)
-        if hr.add_category:
-            added |= self._set_category(
-                tor,
-                self._fmt_hr(hr.add_category, hr),
-                hr.overwrite_category,
-                dry_run,
-                hr.overwrite_category_specified,
-            )
-
-        # HR 满足: 做种时长满足 或 分享率达标, 添加 satisfied 标签/分类
+        # 做种时长满足 或 分享率达标, 添加 satisfied 标签/分类
         seeding_ok = tor.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
         ratio_ok = hr.required_share_ratio > 0 and (tor.ratio or 0) >= hr.required_share_ratio
         if seeding_ok or ratio_ok:
@@ -176,6 +164,19 @@ class TagsMixin:
                     hr.overwrite_category_for_satisfied,
                     dry_run,
                     hr.overwrite_category_for_satisfied_specified,
+                )
+
+            return added
+        else: # 做种时长不够 且 分享率未达标: 添加 HR 标签/分类
+            if hr.add_tag:
+                added |= self._add_tags(tor, [self._fmt_hr(hr.add_tag, hr)], dry_run)
+            if hr.add_category:
+                added |= self._set_category(
+                    tor,
+                    self._fmt_hr(hr.add_category, hr),
+                    hr.overwrite_category,
+                    dry_run,
+                    hr.overwrite_category_specified,
                 )
 
         return added
