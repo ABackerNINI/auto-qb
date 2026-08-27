@@ -72,7 +72,13 @@ def build_tracker_entry(domain: str) -> dict:
         "tags": [gen_default_tag(domain)],  # 需用户自定义
         "U": UNLIMITED_SPEED,  # 需用户自定义
         "D": UNLIMITED_SPEED,  # 需用户自定义
-        "HR": "",  # 示例，需用户修改
+        "hr":
+            {
+                "required_seeding_time": "3D",  # 示例，需用户修改
+                "required_share_ratio": 0,
+                "extra_seeding_time": "12H",
+                "condition": "80%",
+            },  # 示例，需用户修改; 输出设置(add_tag 等)可覆盖全局 hr:
     }
 
 

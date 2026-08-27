@@ -222,10 +222,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         handled = False
         handled |= self._add_tags(tor, tracker_conf.tags, dry_run)
         handled |= self._remove_tags(tor, tracker_conf.remove_tags, dry_run)
-        if self.config.remove_similar_tags:
+        if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
             handled |= self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
-        if tracker_conf.hr_rule and (self.config.add_hr_tags or self.config.add_hr_categories):
-            handled |= self._add_hr_tag_or_category(tor, tracker_conf.hr_rule, dry_run)
+        if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
+            handled |= self._add_hr_tag_or_category(tor, tracker_conf, dry_run)
         if handled:
             self._log_torrent_details(tor, tracker_conf)
             self.logger.info(f"--------------------------------------------------------------------------")

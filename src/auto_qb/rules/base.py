@@ -90,10 +90,8 @@ class RuleContext:
     def hr_time(self) -> str:
         """第一个匹配 tracker 的 HR 时间部分, 如 '3D', 用于 ${hr-time} 变量替换"""
         for conf in self.matched_tracker_confs():
-            if conf.hr_rule:
-                m = re.match(r"^([\d.]+[SMHD])", conf.hr_rule)
-                if m:
-                    return m.group(1)
+            if conf.hr:
+                return conf.hr.required_seeding_time_raw
         return ""
 
     def replace_vars(self, text: str) -> str:
@@ -133,24 +131,30 @@ class RuleContext:
         return self._files
 
     def check_hr_condition(self, conf) -> bool:
-        """是否满足 HR 触发条件(下载比例或下载量)"""
-        if not conf.hr_rule:
+        """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种"""
+        if not conf.hr:
             return False
-        _, condition, _ = utils.parse_hr_rule(conf.hr_rule)
-        cond_type, cond_value = condition
+        hr = conf.hr
+        cond_type, cond_value = hr.condition
         if cond_type == "dlratio":
             total = self.torrent.total_size or 1
-            return (self.torrent.downloaded / total) >= cond_value
-        if cond_type == "dlsize":
-            return self.torrent.downloaded >= cond_value
-        return False
+            if (self.torrent.downloaded / total) < cond_value:
+                return False
+        elif cond_type == "dlsize":
+            if self.torrent.downloaded < cond_value:
+                return False
+        return True
 
     def check_hr_satisfied(self, conf) -> bool:
-        """是否满足 HR 要求: 触发条件 + 做种时长 >= 要求时间 + 额外时间"""
-        if not conf.hr_rule:
+        """是否满足 HR 要求: 触发条件 + (做种时长 >= 要求时间 + 额外时间 或 分享率达标)"""
+        if not conf.hr:
             return False
-        required_time, _, extra_time = utils.parse_hr_rule(conf.hr_rule)
-        return self.torrent.seeding_time >= (required_time + extra_time)
+        hr = conf.hr
+        if not self.check_hr_condition(conf):
+            return False
+        seeding_ok = self.torrent.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
+        ratio_ok = hr.required_share_ratio > 0 and (self.torrent.ratio or 0) >= hr.required_share_ratio
+        return seeding_ok or ratio_ok
 
 
 class Rule:

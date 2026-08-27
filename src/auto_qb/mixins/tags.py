@@ -3,13 +3,11 @@
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config。
 """
 import logging
-import re
 from typing import Any, List
 
 from qbittorrentapi import TorrentDictionary
 
-from ..config import TrackerConfig
-from ..utils import parse_hr_rule
+from ..config import HRRule, TrackerConfig
 
 logger = logging.getLogger("auto-qb")
 
@@ -115,40 +113,55 @@ class TagsMixin:
 
     # ---------- HR ----------
 
-    def _add_hr_tag_or_category(self, tor: TorrentDictionary, rule_str: str, dry_run: bool):
-        """添加HR标签或分类"""
-        required_time, condition, extra_time = parse_hr_rule(rule_str)
+    @staticmethod
+    def _fmt_hr(template: str, hr: HRRule) -> str:
+        """HR 格式变量替换: ${required_seeding_time}(新) / ${time}(旧兼容)"""
+        return (
+            str(template).replace("${required_seeding_time}",
+                                  hr.required_seeding_time_raw).replace("${time}", hr.required_seeding_time_raw)
+        )
+
+    def _add_hr_tag_or_category(self, tor: TorrentDictionary, tracker_conf: TrackerConfig, dry_run: bool):
+        """添加HR标签或分类(基于站点合并后的 hr 设置)
+
+        - 满足触发条件(下载比例/下载量): 添加 add_tag / add_category
+        - HR 满足(做种时长 >= required_seeding_time + extra_seeding_time 或 分享率达标): 添加 add_tag_for_satisfied / add_category_for_satisfied
+        """
+        hr = tracker_conf.hr
+        if hr is None:
+            return False
 
         # 检查下载条件, 主要为了排除辅种
-        condition_met = False
-
-        cond_type, cond_value = condition
+        cond_type, cond_value = hr.condition
         if cond_type == "dlratio":
-            dlratio = tor.downloaded / tor.total_size
+            dlratio = tor.downloaded / tor.total_size if tor.total_size else 0
             condition_met = dlratio >= cond_value
-        elif cond_type == "dlsize":
+        else:  # dlsize
             condition_met = tor.downloaded >= cond_value
-
         if not condition_met:
             return False
 
-        # 满足基础 HR 条件，添加 HR tag
-        # 从规则中提取时间部分，如 "3D" -> "HR3D"
-        time_part = re.match(r"^([\d.]+[SMHD])", rule_str)
-        if not time_part:
-            raise ValueError(f"Invalid rule format: '{rule_str}'")
-
         added = False
 
-        # 添加 HR tag
-        if self.config.add_hr_tags:
-            hr_tag = self.config.hr_tag_format.replace("${time}", time_part.group(1))
-            added |= self._add_tags(tor, [hr_tag], dry_run)
+        # 满足触发条件: 添加 HR 标签/分类
+        if hr.add_tag:
+            added |= self._add_tags(tor, [self._fmt_hr(hr.add_tag, hr)], dry_run)
+        if hr.add_category:
+            added |= self._set_category(tor, self._fmt_hr(hr.add_category, hr), hr.overwrite_category, dry_run)
 
-        # 添加 HR 分类
-        if self.config.add_hr_categories:
-            hr_category = self.config.hr_category_format.replace("${time}", time_part.group(1))
-            added |= self._set_category(tor, hr_category, self.config.overwrite_category_for_hr, dry_run)
+        # HR 满足: 做种时长满足 或 分享率达标, 添加 satisfied 标签/分类
+        seeding_ok = tor.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
+        ratio_ok = hr.required_share_ratio > 0 and (tor.ratio or 0) >= hr.required_share_ratio
+        if seeding_ok or ratio_ok:
+            if hr.add_tag_for_satisfied:
+                added |= self._add_tags(tor, [self._fmt_hr(hr.add_tag_for_satisfied, hr)], dry_run)
+            if hr.add_category_for_satisfied:
+                added |= self._set_category(
+                    tor,
+                    self._fmt_hr(hr.add_category_for_satisfied, hr),
+                    hr.overwrite_category_for_satisfied,
+                    dry_run,
+                )
 
         return added
 

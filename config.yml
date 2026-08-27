@@ -4,12 +4,14 @@ config:
     remove_similar_tags: true
     check_missing_files: true
 
-    add_hr_tags: false
-    hr_tag_format: "!!HR${time}!!"
-
-    add_hr_categories: true
-    hr_category_format: "!!HR${time}!!"
-    overwrite_category_for_hr: false
+    # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
+    hr:
+        add_tag: '' # 满足HR触发条件的种子添加标签, 支持变量
+        add_category: '!!HR${required_seeding_time}!!' # 分类格式, 支持变量
+        overwrite_category: false
+        add_tag_for_satisfied: '' # 做种时间已满足HR要求时间+额外时间的种子添加标签
+        add_category_for_satisfied: '--HR${required_seeding_time}--'
+        overwrite_category_for_satisfied: false
 
     skip_checking_for_cross_seeding: true
     skip_checking_auto_start: true
@@ -44,7 +46,14 @@ config:
                 - HHan
             U: 5000KiB/s
             D: 0KiB/s
-            HR: 3D@70%+12H
+            remove_similar_tags: true # 站点覆盖全局 remove_similar_tags
+            hr: # 站点 HR 配置(required_* 为站点必填, 输出设置可覆盖全局 hr:)
+                required_seeding_time: 3D
+                required_share_ratio: 2.0 # 分享率要求, 0 或不填 = 不要求
+                extra_seeding_time: 12H
+                condition: 70%
+                add_category: '!!HR${required_seeding_time}!!' # 示例: 覆盖全局分类格式
+                overwrite_category: false
             rules:
                 - "@add_drive_letter_tag_rules"
         hdfans_org:
@@ -54,7 +63,7 @@ config:
                 - HDFans
             U: 0KiB/s
             D: 0KiB/s
-            HR: "3D@80%+12H"
+            HR: "3D@80%+12H" # 旧格式, 自动转换为新结构(输出设置取全局默认)
             rules:
                 - "@add_drive_letter_tag_rules"
         kufirc_com:

@@ -179,7 +179,7 @@ class HrCondition(BaseCondition):
         self.mode = str(spec)
 
     def match(self, ctx):
-        confs = [c for c in ctx.matched_tracker_confs() if c.hr_rule]
+        confs = [c for c in ctx.matched_tracker_confs() if c.hr]
         if not confs:
             return False
         if self.mode == "condition-not-met":

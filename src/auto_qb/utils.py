@@ -83,9 +83,22 @@ def parse_speed(speed_str: str) -> int:
     return int(float(value) * units[unit])
 
 
+def parse_hr_condition(cond_str) -> tuple:
+    """解析HR触发条件字符串 -> ('dlratio', ratio) 或 ('dlsize', bytes)
+
+    示例: "80%" -> ('dlratio', 0.8), "10MiB" -> ('dlsize', 字节); 缺省默认80%
+    """
+    cond_str = str(cond_str).strip()
+    if not cond_str:
+        return ("dlratio", 0.8)  # 默认80%触发
+    if cond_str.endswith("%"):  # 百分比, 如 "70%"
+        return ("dlratio", float(cond_str[:-1]) / 100.0)
+    return ("dlsize", parse_fsize(cond_str))  # 下载量绝对值, 如 "10MiB"
+
+
 def parse_hr_rule(rule_str: str):
     """
-    解析HR规则字符串, 返回 (required_time_seconds, condition, extra_time_seconds)
+    解析HR规则字符串(旧格式, 兼容), 返回 (required_time_seconds, condition, extra_time_seconds)
     condition: ('dlratio', ratio) 或 ('dlsize', bytes)
     示例: "3D@70%+12H" -> (3D秒数, ('dlratio', 0.7), 12H秒数)
          "20H@30%"    -> (20H秒数, ('dlratio', 0.3), 0)
@@ -102,11 +115,7 @@ def parse_hr_rule(rule_str: str):
     if "@" in main:
         time_part, cond_part = main.split("@", 1)
         required_time = parse_time(time_part.strip())
-        cond_part = cond_part.strip()
-        if cond_part.endswith("%"):  # 百分比, 如 "70%"
-            condition = ("dlratio", float(cond_part[:-1]) / 100.0)
-        else:  # 下载量绝对值, 如 "10MiB"
-            condition = ("dlsize", parse_fsize(cond_part))
+        condition = parse_hr_condition(cond_part)
     else:
         required_time = parse_time(main.strip())
         condition = ("dlratio", 0.8)  # 默认80%触发
