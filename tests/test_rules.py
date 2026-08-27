@@ -170,9 +170,11 @@ def _hr_rule(**kw) -> HRRule:
         add_tag="",
         add_category="!!HR${required_seeding_time}!!",
         overwrite_category=False,
+        overwrite_category_specified=False,
         add_tag_for_satisfied="",
         add_category_for_satisfied="--HR${required_seeding_time}--",
         overwrite_category_for_satisfied=False,
+        overwrite_category_for_satisfied_specified=False,
     )
     base.update(kw)
     return HRRule(**base)
@@ -247,6 +249,84 @@ def test_basic():
         assert client.tags == {"HHan", "seed-3D"}, f"标签错误: {client.tags}"
         assert mgr.state.get("exec_history"), "应有执行历史"
         print("[OK] test_basic: 标签规则+${hr-time}变量替换")
+
+
+def test_category_auto_update_from_state():
+    """测试: 未设置 overwrite 时可更新此前自动设置的分类, 手动分类不覆盖"""
+    from auto_qb.rules.actions import AddCategoryAction
+
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="")
+        ctx = RuleContext(mgr, client, mgr.config, tor, dry_run=False)
+
+        assert AddCategoryAction({"format": "AUTO-A"}).execute(ctx).is_ok
+        mgr.save_state()
+        assert mgr.state["auto_categories"] == {"HASH123": "AUTO-A"}
+
+        mgr2 = make_manager(state_file)
+        client2 = FakeClient()
+        mgr2.client = client2
+        tor.category = "AUTO-A"
+        ctx2 = RuleContext(mgr2, client2, mgr2.config, tor, dry_run=False)
+        assert AddCategoryAction({"format": "AUTO-B"}).execute(ctx2).is_ok
+        assert client2.category == "AUTO-B"
+        assert mgr2.state["auto_categories"]["HASH123"] == "AUTO-B"
+
+        tor.category = "MANUAL"
+        client2.calls.clear()
+        assert AddCategoryAction({"format": "AUTO-C"}).execute(ctx2).is_skipped
+        assert not any(call[0] == "set_category" for call in client2.calls)
+        print("[OK] test_category_auto_update_from_state: 自动分类可更新, 手动分类不覆盖")
+
+
+def test_category_explicit_overwrite_false():
+    """测试: 显式 overwrite: false 不启用自动分类更新例外"""
+    from auto_qb.rules.actions import AddCategoryAction
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="AUTO-A")
+        mgr.state["auto_categories"] = {"HASH123": "AUTO-A"}
+        ctx = RuleContext(mgr, client, mgr.config, tor, dry_run=False)
+        result = AddCategoryAction({"format": "AUTO-B", "overwrite": False}).execute(ctx)
+        assert result.is_skipped
+        assert client.calls == []
+        print("[OK] test_category_explicit_overwrite_false: 显式 false 保持原语义")
+
+
+def test_builtin_hr_category_auto_update_from_state():
+    """测试: 内置 HR 分类保存状态并可更新此前自动设置的分类"""
+    from auto_qb.taskqueue import Task
+
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(downloaded=100 * 1024**2, category="")
+        client.torrents["HASH123"] = tor
+        task = Task("internal", "maintenance", torrent_hash="HASH123", interval=60, handler=mgr._handle_maintenance)
+
+        assert mgr._handle_maintenance(task, dry_run=False)
+        mgr.save_state()
+        assert mgr.state["auto_categories"]["HASH123"] == "!!HR3D!!"
+
+        mgr2 = make_manager(state_file)
+        client2 = FakeClient()
+        mgr2.client = client2
+        tor.category = "!!HR3D!!"
+        client2.torrents["HASH123"] = tor
+        mgr2.config.trackers["HHan"].hr = _hr_rule(add_category="NEW-HR")
+        mgr2._handle_maintenance(task, dry_run=False)
+        assert client2.category == "NEW-HR"
+        assert mgr2.state["auto_categories"]["HASH123"] == "NEW-HR"
+        print("[OK] test_builtin_hr_category_auto_update_from_state: 内置 HR 分类可更新")
 
 
 def test_hr_satisfied():
@@ -907,6 +987,9 @@ if __name__ == "__main__":
     test_compare()
     test_state_mapping()
     test_basic()
+    test_category_auto_update_from_state()
+    test_category_explicit_overwrite_false()
+    test_builtin_hr_category_auto_update_from_state()
     test_hr_satisfied()
     test_hr_required_share_ratio()
     test_tracker_hr_overrides_global()

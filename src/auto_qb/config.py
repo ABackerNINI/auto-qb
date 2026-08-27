@@ -67,9 +67,11 @@ class HRRule:
     add_tag: str = ""
     add_category: str = ""
     overwrite_category: bool = False
+    overwrite_category_specified: Optional[bool] = None
     add_tag_for_satisfied: str = ""
     add_category_for_satisfied: str = ""
     overwrite_category_for_satisfied: bool = False
+    overwrite_category_for_satisfied_specified: Optional[bool] = None
 
 
 def parse_hr_spec(spec: dict, global_hr: dict) -> HRRule:
@@ -100,9 +102,13 @@ def parse_hr_spec(spec: dict, global_hr: dict) -> HRRule:
         add_tag=out("add_tag"),
         add_category=out("add_category"),
         overwrite_category=out_bool("overwrite_category"),
+        overwrite_category_specified=("overwrite_category" in spec or "overwrite_category" in global_hr),
         add_tag_for_satisfied=out("add_tag_for_satisfied"),
         add_category_for_satisfied=out("add_category_for_satisfied"),
         overwrite_category_for_satisfied=out_bool("overwrite_category_for_satisfied"),
+        overwrite_category_for_satisfied_specified=(
+            "overwrite_category_for_satisfied" in spec or "overwrite_category_for_satisfied" in global_hr
+        ),
     )
 
 
@@ -201,6 +207,7 @@ def load_config(config_path: str) -> Config:
             add_tag=global_hr.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
             add_category=global_hr.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),
             overwrite_category=parse_bool(global_hr.get("overwrite_category", DEFAULT_HR_OUTPUT["overwrite_category"])),
+            overwrite_category_specified="overwrite_category" in global_hr,
             add_tag_for_satisfied=global_hr.get("add_tag_for_satisfied", DEFAULT_HR_OUTPUT["add_tag_for_satisfied"]),
             add_category_for_satisfied=global_hr.get(
                 "add_category_for_satisfied", DEFAULT_HR_OUTPUT["add_category_for_satisfied"]
@@ -210,6 +217,7 @@ def load_config(config_path: str) -> Config:
                     "overwrite_category_for_satisfied", DEFAULT_HR_OUTPUT["overwrite_category_for_satisfied"]
                 )
             ),
+            overwrite_category_for_satisfied_specified="overwrite_category_for_satisfied" in global_hr,
         ),
         skip_checking_for_cross_seeding=parse_bool(
             cfg.get(

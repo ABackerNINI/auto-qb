@@ -92,6 +92,7 @@ class AddCategoryAction(BaseAction):
     def __init__(self, spec, ignore_error=False):
         super().__init__(spec, ignore_error)
         self.format = str(spec.get("format", ""))
+        self.overwrite_specified = "overwrite" in spec
         self.overwrite = utils.parse_bool(spec.get("overwrite", False))
 
     def execute(self, ctx):
@@ -99,7 +100,10 @@ class AddCategoryAction(BaseAction):
         old = (ctx.torrent.category or "").strip()
         if old == category:
             return ActionResult.skip("分类已设置")
-        if old and not self.overwrite:
+        auto_categories = ctx.manager.state.setdefault("auto_categories", {})
+        previous_auto_category = auto_categories.get(ctx.torrent.hash)
+        can_update_previous = not self.overwrite_specified and old == previous_auto_category
+        if old and not self.overwrite and not can_update_previous:
             return ActionResult.skip(f"已有分类 {old}, 不覆盖")
         if not ctx.dry_run:
             try:
@@ -108,6 +112,8 @@ class AddCategoryAction(BaseAction):
             except Exception:
                 pass
             ctx.client.torrents_set_category(category=category, torrent_hashes=ctx.torrent.hash)
+            if not self.overwrite_specified:
+                auto_categories[ctx.torrent.hash] = category
         return ActionResult.ok(f"设置分类 {category}")
 
 
@@ -198,7 +204,6 @@ class CheckAction(BaseAction):
                     client.torrents_start(torrent_hashes=torrent_hash)
                     logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")
                 manager.record_execution(rule_name, torrent_hash)
-                manager.save_state()
 
             if tq.submit_check(torrent_hash, send, done, timeout=self.poll_timeout):
                 return ActionResult.ok("full-checking 校验请求已提交, 等待完成")
@@ -295,10 +300,6 @@ class CheckAction(BaseAction):
             "tags": ctx.torrent.tags,
             "ts": time.time(),
         }
-        try:
-            ctx.manager.save_state()
-        except Exception:
-            pass
         return path
 
 

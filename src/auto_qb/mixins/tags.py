@@ -79,19 +79,29 @@ class TagsMixin:
 
         return removed
 
-    def _set_category(self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool):
+    def _set_category(
+        self, tor: TorrentDictionary, category: str, overwrite: bool, dry_run: bool, overwrite_specified=None
+    ):
         """设置种子的分类"""
         old_category = tor.category.strip()
 
         if old_category == category:  # 分类已存在
             return False
 
-        if not old_category or overwrite:  # 分类为空或者强制覆盖
+        auto_categories = self.state.setdefault("auto_categories", {})
+        previous_auto_category = auto_categories.get(tor.hash)
+        if overwrite_specified is None:
+            overwrite_specified = overwrite
+        can_update_previous = not overwrite_specified and old_category == previous_auto_category
+
+        if not old_category or overwrite or can_update_previous:  # 分类为空、强制覆盖或更新此前自动分类
             self._create_category_if_not_exists(category, dry_run)
 
             # 设置分类
             if not dry_run:
                 self.client.torrents_set_category(category=category, torrent_hashes=tor.hash)
+                if not overwrite_specified:
+                    auto_categories[tor.hash] = category
 
             # 打印日志
             if old_category:
@@ -145,7 +155,13 @@ class TagsMixin:
         if hr.add_tag:
             added |= self._add_tags(tor, [self._fmt_hr(hr.add_tag, hr)], dry_run)
         if hr.add_category:
-            added |= self._set_category(tor, self._fmt_hr(hr.add_category, hr), hr.overwrite_category, dry_run)
+            added |= self._set_category(
+                tor,
+                self._fmt_hr(hr.add_category, hr),
+                hr.overwrite_category,
+                dry_run,
+                hr.overwrite_category_specified,
+            )
 
         # HR 满足: 做种时长满足 或 分享率达标, 添加 satisfied 标签/分类
         seeding_ok = tor.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
@@ -159,6 +175,7 @@ class TagsMixin:
                     self._fmt_hr(hr.add_category_for_satisfied, hr),
                     hr.overwrite_category_for_satisfied,
                     dry_run,
+                    hr.overwrite_category_for_satisfied_specified,
                 )
 
         return added

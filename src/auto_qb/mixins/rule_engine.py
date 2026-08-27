@@ -136,8 +136,6 @@ class RuleEngineMixin:
         except Exception as e:
             self.logger.warning(f"规则执行异常({rule.name} {tor.hash}): {e}")
             return True
-        if handled and not dry_run:
-            self.save_state()
         return True
 
     # ---------- 规则: 便捷入口与 tracker 引用 ----------
@@ -164,8 +162,6 @@ class RuleEngineMixin:
                 handled = True
             if stop and not force_continue:
                 break
-        if handled and not dry_run:
-            self.save_state()
         return handled
 
     def _tracker_rule_refs(self, ctx):

@@ -86,6 +86,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
             self.logger.info("Stopping...")
         finally:
             self.task_queue.shutdown(wait=False)
+            if not dry_run:
+                self.save_state()
 
     def _tick(self, dry_run: bool):
         """单次 tick: 1) 轮询慢速队列(异步校验) 2) 弹出快速队列到期任务并执行"""
