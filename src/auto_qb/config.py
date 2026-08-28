@@ -129,7 +129,8 @@ class GroupingConfig:
     """种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组
 
     enabled: 启用分组检查(替代逐种子 check_missing_files, 同组共享一次磁盘扫描)
-    interval: 分组检查任务间隔(秒), 需拉全量文件列表, 建议较长
+    interval: 已废弃: 分组改为事件驱动(_refresh_torrents 检测到删除/状态变化立即处理),
+              不再创建周期轮询任务; 字段保留仅为配置兼容
     missing_tag: 文件丢失时整组添加的标签
     """
     enabled: bool
