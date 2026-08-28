@@ -837,8 +837,8 @@ def test_global_remove_tags():
         tor = FakeTorrent(tags="HHan,M-Team - TP,BTSCHOOL-OLD")
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_remove_tags)
-        mgr._handle_remove_tags(task, dry_run=False)
+        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_delete_tags)
+        mgr._handle_delete_tags(task, dry_run=False)
 
         # 精确匹配 M-Team - TP, 正则匹配 BTSCHOOL-OLD; KEEP/HHan 保留
         assert ("delete_tags", {"M-Team - TP", "BTSCHOOL-OLD"}) in client.calls, f"应彻底删除匹配标签: {client.calls}"
@@ -861,8 +861,8 @@ def test_global_remove_tags_dry_run():
         mgr.client = client
         client.tags = {"HHan", "M-Team - TP"}
 
-        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_remove_tags)
-        mgr._handle_remove_tags(task, dry_run=True)
+        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_delete_tags)
+        mgr._handle_delete_tags(task, dry_run=True)
         assert client.calls == [], f"dry-run 不应调用客户端: {client.calls}"
         assert client.tags == {"HHan", "M-Team - TP"}, "dry-run 不应改变标签"
         print("[OK] test_global_remove_tags_dry_run: 全局删除标签 dry-run")
@@ -890,9 +890,9 @@ def test_global_remove_tags_if_has_no_torrents():
             "internal",
             "remove_tags_if_has_no_torrents",
             interval=60,
-            handler=mgr._handle_remove_tags_if_has_no_torrents
+            handler=mgr._handle_delete_tags_if_has_no_torrents
         )
-        mgr._handle_remove_tags_if_has_no_torrents(task, dry_run=False)
+        mgr._handle_delete_tags_if_has_no_torrents(task, dry_run=False)
 
         assert ("delete_tags", {"HHan", "ORPHAN-1"}) in client.calls, f"应删除无种子标签: {client.calls}"
         assert client.tags == {"KEEP"}, f"有种子使用的标签应保留: {client.tags}"
@@ -915,8 +915,8 @@ def test_global_remove_tags_no_pattern_match():
         tor = FakeTorrent(tags="HHan")
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_remove_tags)
-        mgr._handle_remove_tags(task, dry_run=False)
+        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_delete_tags)
+        mgr._handle_delete_tags(task, dry_run=False)
         assert client.calls == [], f"无匹配不应调用客户端: {client.calls}"
         print("[OK] test_global_remove_tags_no_pattern_match: 无匹配无副作用")
 
@@ -977,8 +977,8 @@ def test_config_tracker_tags_expand():
                 default_flow_style=False
             )
         cfg = load_config(cfg_path)
-        assert set(cfg.remove_tags_if_has_no_torrents) == {"HHan", "Kufirc", "regex:^ORPHAN"}, \
-            f"@tracker_tags 展开错误: {cfg.remove_tags_if_has_no_torrents}"
+        assert set(cfg.delete_tags_if_has_no_torrents) == {"HHan", "Kufirc", "regex:^ORPHAN"}, \
+            f"@tracker_tags 展开错误: {cfg.delete_tags_if_has_no_torrents}"
         print("[OK] test_config_tracker_tags_expand: @tracker_tags 展开")
 
 

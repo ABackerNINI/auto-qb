@@ -145,22 +145,22 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         对应配置为空时跳过; 任务使用主 interval 定期执行。
         """
         tasks = []
-        if self.config.remove_tags:
+        if self.config.delete_tags:
             tasks.append(
                 Task(
                     "internal",
-                    "remove_tags",
+                    "delete_tags",
                     interval=self.config.interval,
-                    handler=self._handle_remove_tags,
+                    handler=self._handle_delete_tags,
                 )
             )
-        if self.config.remove_tags_if_has_no_torrents:
+        if self.config.delete_tags_if_has_no_torrents:
             tasks.append(
                 Task(
                     "internal",
-                    "remove_tags_if_has_no_torrents",
+                    "delete_tags_if_has_no_torrents",
                     interval=self.config.interval,
-                    handler=self._handle_remove_tags_if_has_no_torrents,
+                    handler=self._handle_delete_tags_if_has_no_torrents,
                 )
             )
         if tasks:

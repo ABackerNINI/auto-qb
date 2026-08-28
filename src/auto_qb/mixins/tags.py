@@ -4,11 +4,11 @@
 """
 import logging
 import re
-from typing import Any, List
+from typing import Any, List, Optional
 
-from qbittorrentapi import TorrentDictionary
+from qbittorrentapi import Client, TorrentDictionary
 
-from ..config import HRRule, TrackerConfig
+from ..config import HRRule, TrackerConfig, Config
 
 logger = logging.getLogger("auto-qb")
 
@@ -16,9 +16,9 @@ logger = logging.getLogger("auto-qb")
 class TagsMixin:
     """标签/分类/HR 辅助"""
 
-    client: Any
+    client: Optional[Client]
     logger: Any
-    config: Any
+    config: Config
 
     def _log_torrent_details(self, tor: TorrentDictionary, tracker_conf: TrackerConfig | None) -> str:
         site = tracker_conf.name if tracker_conf else "未知"
@@ -197,12 +197,12 @@ class TagsMixin:
                 return True
         return False
 
-    def _handle_remove_tags(self, task, dry_run: bool) -> bool:
+    def _handle_delete_tags(self, task, dry_run: bool) -> bool:
         """全局任务: 彻底删除匹配格式的标签(支持正则, regex: 前缀)
 
         匹配所有现有标签定义(含无种子的), 调用 torrents_delete_tags 从所有种子移除并删除定义。
         """
-        patterns = self.config.remove_tags or []
+        patterns = self.config.delete_tags or []
         if not patterns:
             return True
         try:
@@ -218,12 +218,12 @@ class TagsMixin:
         self.logger.info(f"彻底删除标签: {matched}")
         return True
 
-    def _handle_remove_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
+    def _handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
         """全局任务: 彻底删除无种子的标签(支持正则, regex: 前缀)
 
         仅当标签定义存在且没有任何种子使用(所有种子 tags 的并集之外)时才删除。
         """
-        patterns = self.config.remove_tags_if_has_no_torrents or []
+        patterns = self.config.delete_tags_if_has_no_torrents or []
         if not patterns:
             return True
         try:
