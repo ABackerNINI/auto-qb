@@ -3,12 +3,12 @@
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config。
 """
 import logging
-import re
 from typing import Any, List, Optional
 
 from qbittorrentapi import Client, TorrentDictionary
 
 from ..config import HRRule, TrackerConfig, Config
+from ..utils import match_tag_pattern
 
 logger = logging.getLogger("auto-qb")
 
@@ -46,17 +46,17 @@ class TagsMixin:
             return True
         return False
 
-    def _remove_tags(self, tor: TorrentDictionary, tags_to_remove: List[str], dry_run: bool):
+    def _remove_tags(self, tor: TorrentDictionary, tag_patterns_to_remove: List[str], dry_run: bool):
         """为种子删除标签"""
-        if not tags_to_remove:
+        if not tag_patterns_to_remove:
             return False
 
         current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
-        tags_to_remove = set(tags_to_remove) & current_tags
-        if tags_to_remove:
+        tag_patterns_to_remove = [tag for tag in current_tags if match_tag_pattern(tag, tag_patterns_to_remove)]
+        if tag_patterns_to_remove:
             if not dry_run:
-                self.client.torrents_remove_tags(tags=tags_to_remove, torrent_hashes=tor.hash)
-            self.logger.info(f"Removed tags '{tags_to_remove}'")
+                self.client.torrents_remove_tags(tags=tag_patterns_to_remove, torrent_hashes=tor.hash)
+            self.logger.info(f"Removed tags '{tag_patterns_to_remove}'")
             return True
         return False
 
@@ -180,34 +180,6 @@ class TagsMixin:
 
     # ---------- 全局标签清理(全局任务) ----------
 
-    @staticmethod
-    def _match_tag_pattern(tag: str, patterns: List[str]) -> bool:
-        """标签是否匹配任一格式: 精确匹配或 regex: 前缀正则(参考规则动作语义)"""
-        for pat in patterns or []:
-            pat = str(pat).strip()
-            if not pat:
-                continue
-
-            ignore_case = False
-            if pat.endswith(":ignore_case"):
-                ignore_case = True
-                pat = pat[:-12]
-
-            if pat.startswith("regex:"):
-                try:
-                    if re.search(pat[6:], tag, flags=re.IGNORECASE if ignore_case else 0):
-                        return True
-                except re.error:
-                    continue
-            elif ignore_case:
-                if pat.lower() == tag.lower():
-                    return True
-            else:
-                if pat == tag:
-                    return True
-
-        return False
-
     def _handle_delete_tags(self, task, dry_run: bool) -> bool:
         """全局任务: 彻底删除匹配格式的标签(支持正则, regex: 前缀)
 
@@ -221,7 +193,7 @@ class TagsMixin:
         except Exception as e:
             self.logger.error(f"获取标签列表失败: {e}")
             return True
-        matched = [t for t in all_tags if self._match_tag_pattern(t, patterns)]
+        matched = [t for t in all_tags if match_tag_pattern(t, patterns)]
         if not matched:
             return True
         if not dry_run:
@@ -253,7 +225,7 @@ class TagsMixin:
         #         if t:
         #             used.add(t)
         # orphan = all_tags - used
-        # matched = [t for t in orphan if self._match_tag_pattern(t, patterns)]
+        # matched = [t for t in orphan if match_tag_pattern(t, patterns)]
         # if not matched:
         #     return True
         # if not dry_run:
@@ -263,7 +235,7 @@ class TagsMixin:
         # 对满足筛选条件的标签查询种子数, 如果为0则删除
         matched = []
         for tag in all_tags:
-            if self._match_tag_pattern(tag, patterns):
+            if match_tag_pattern(tag, patterns):
                 if len(self.client.torrents.info(tag=tag)) == 0:
                     matched.append(tag)
 

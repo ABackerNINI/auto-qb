@@ -3,13 +3,14 @@ check, basic_check, custom_basic_check_program_path, always_check_first_one,
 move_to, reannounce, upload_speed_limit, download_speed_limit"""
 import logging
 import os
-import re
 import time
 from datetime import date
+from typing import List
 
 from . import utils
 from .base import ActionResult, BaseAction
 from .registry import register_action
+from ..utils import match_tag_pattern
 
 logger = logging.getLogger("auto-qb.rules")
 
@@ -61,27 +62,18 @@ class RemoveTagsAction(BaseAction):
         self.patterns = list(spec) if isinstance(spec, list) else [spec]
 
     def execute(self, ctx):
-        current = set(t.strip() for t in (ctx.torrent.tags or "").split(",") if t.strip())
-        removed = set()
-        for pat in self.patterns:
-            pat = ctx.replace_vars(pat)
-            if not pat:
-                continue
-            if pat.startswith("regex:"):
-                try:
-                    rx = re.compile(pat[6:])
-                except re.error:
-                    continue
-                for t in current:
-                    if rx.search(t):
-                        removed.add(t)
-            elif pat in current:
-                removed.add(pat)
-        if not removed:
+        current_tags = set(t.strip() for t in (ctx.torrent.tags or "").split(",") if t.strip())
+        expanded_patterns = self._expand_patterns(ctx)
+        to_remove = [t for t in current_tags if match_tag_pattern(t, expanded_patterns)]
+
+        if not to_remove:
             return ActionResult.skip("无匹配标签")
         if not ctx.dry_run:
-            ctx.client.torrents_remove_tags(tags=list(removed), torrent_hashes=ctx.torrent.hash)
-        return ActionResult.ok(f"删除标签 {removed}")
+            ctx.client.torrents_remove_tags(tags=list(to_remove), torrent_hashes=ctx.torrent.hash)
+        return ActionResult.ok(f"删除标签 {to_remove}")
+
+    def _expand_patterns(self, ctx) -> List[str]:
+        return [ctx.replace_vars(pat) for pat in self.patterns]
 
 
 @register_action

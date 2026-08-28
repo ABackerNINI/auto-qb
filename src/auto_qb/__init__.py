@@ -18,5 +18,6 @@ __all__ = [
     "QbittorrentConfig",
     "QbManager",
     "load_config",
+    "match_tag_pattern",
     "__version__",
 ]

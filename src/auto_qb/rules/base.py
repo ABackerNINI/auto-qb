@@ -86,6 +86,8 @@ class RuleContext:
     _tracker_confs: Optional[List] = field(default=None)
     _files: Optional[List] = field(default=None)
 
+    # TODO: 当一个torrent匹配到多个tracker时, warning, 跳过
+
     @property
     def required_seeding_time(self) -> str:
         """第一个匹配 tracker 的 HR 时间部分, 如 '3D', 用于 ${required_seeding_time} 变量替换"""

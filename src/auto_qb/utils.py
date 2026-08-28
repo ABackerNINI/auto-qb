@@ -6,6 +6,7 @@
 import os
 import re
 from urllib.parse import urlparse
+from typing import List
 
 
 def parse_bool(value) -> bool:
@@ -185,3 +186,26 @@ def match_tracker_confs(trackers: dict, urls: list):
                 result.append(conf)
                 break
     return result
+
+
+def match_tag_pattern(tag: str, patterns: List[str]) -> bool:
+    """标签是否匹配任一格式: 精确匹配或`regex:`前缀正则(参考规则动作语义), 支持`:ignore_case`后缀"""
+    for pat in patterns or []:
+        if not pat:
+            continue
+
+        # 处理:ignore_case后缀
+        ignore_case = False
+        if pat.endswith(":ignore_case"):
+            ignore_case = True
+            pat = pat[:-12]
+
+        if pat.startswith("regex:"):  # 正则匹配
+            try:
+                if re.search(pat[6:], tag, flags=re.IGNORECASE if ignore_case else 0):
+                    return True
+            except re.error:
+                continue
+        elif (ignore_case and pat.lower() == tag.lower()) or pat == tag:  # 精准匹配
+            return True
+    return False
