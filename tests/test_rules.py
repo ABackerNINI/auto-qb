@@ -1054,7 +1054,7 @@ def test_grouping_size_mismatch_pauses_group():
 
 
 def test_grouping_missing_files_pauses_group():
-    """测试: 文件丢失 -> 同组所有种子暂停 + MISSING 标签"""
+    """测试: 种子由上传转暂停 -> 触发缺文件检查, 文件丢失 -> 整组暂停 + MISSING"""
     from auto_qb.taskqueue import Task
 
     with tempfile.TemporaryDirectory() as td:
@@ -1076,18 +1076,23 @@ def test_grouping_missing_files_pauses_group():
         # 归组完全增量: 首轮刷新视为新增, 全部经 _assign_new_torrent 归组
         mgr._refresh_torrents()
 
-        # 首轮: 状态快照为空 -> 视为状态变化 -> 触发缺文件检查(文件不存在)
         task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
+        # 第一轮: 建立状态快照(上传中, 无触发条件, 不扫描)
+        mgr._handle_grouping(task, dry_run=False)
+        assert client.calls == [], f"上传状态不应触发检查: {client.calls}"
+
+        # H1 由上传(stalledUP)转为暂停(pausedUP) -> 触发缺文件扫描(文件不存在)
+        t1.state = "pausedUP"
         mgr._handle_grouping(task, dry_run=False)
 
         assert client.calls.count(("stop", None)) == 1, f"整组应暂停一次: {client.calls}"
         assert "MISSING" in client.tags, f"丢失应添加标签: {client.tags}"
-        assert mgr._group_state_snapshot.get("H1") == "stalledUP", f"状态快照应更新: {mgr._group_state_snapshot}"
-        print("[OK] test_grouping_missing_files_pauses_group: 缺文件整组暂停+MISSING")
+        assert mgr._group_state_snapshot.get("H1") == "pausedUP", f"状态快照应更新: {mgr._group_state_snapshot}"
+        print("[OK] test_grouping_missing_files_pauses_group: 上传转暂停触发缺文件整组暂停+MISSING")
 
 
 def test_grouping_state_change_triggers_check():
-    """测试: 同组中一个种子状态变化才触发检查; 状态不变不重复检查"""
+    """测试: 仅"上传转暂停"触发检查; 上传状态间变化/状态不变不触发"""
     from auto_qb.taskqueue import Task
 
     with tempfile.TemporaryDirectory() as td:
@@ -1111,22 +1116,65 @@ def test_grouping_state_change_triggers_check():
 
         task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
 
-        # 第一轮: 快照为空 -> 触发检查
+        # 第一轮: 建立状态快照(上传中, 不触发)
         mgr._handle_grouping(task, dry_run=False)
-        assert client.calls.count(("stop", None)) == 1, f"首轮应触发检查: {client.calls}"
+        assert client.calls == [], f"首轮不应触发: {client.calls}"
+
+        # 第二轮: H1 stalledUP -> uploading(仍是上传, 不触发)
+        t1.state = "uploading"
+        mgr._handle_grouping(task, dry_run=False)
+        assert client.calls == [], f"上传状态间变化不应触发: {client.calls}"
+
+        # 第三轮: H1 uploading -> pausedUP(上传转暂停, 触发)
+        t1.state = "pausedUP"
+        mgr._handle_grouping(task, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"上传转暂停应触发: {client.calls}"
         assert "MISSING" in client.tags
 
-        # 第二轮: 状态不变 -> 不触发检查(无新调用)
+        # 第四轮: 状态不变 -> 不重复触发
         client.calls.clear()
         mgr._handle_grouping(task, dry_run=False)
-        assert client.calls == [], f"状态不变不应触发检查: {client.calls}"
+        assert client.calls == [], f"状态不变不应重复触发: {client.calls}"
+        print("[OK] test_grouping_state_change_triggers_check: 仅上传转暂停触发检查")
 
-        # 第三轮: H1 状态变化 -> 再次触发
-        t1.state = "uploading"
-        client.calls.clear()
+
+def test_grouping_deleted_torrent_triggers_check():
+    """测试: 同组种子被删除 -> 标记待检查, 下一轮触发缺文件扫描"""
+    from auto_qb.taskqueue import Task
+
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+
+        task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
+        # 建立状态快照(上传中, 不触发)
         mgr._handle_grouping(task, dry_run=False)
-        assert client.calls.count(("stop", None)) == 1, f"状态变化应再次触发: {client.calls}"
-        print("[OK] test_grouping_state_change_triggers_check: 状态变化触发检查")
+        assert client.calls == []
+
+        # 删除 H2 -> 移出组并标记待检查; 下一轮分组检查触发扫描
+        del client.torrents["H2"]
+        mgr._refresh_torrents()
+        assert mgr._group_pending_check, f"删除种子应标记组待检查: {mgr._group_pending_check}"
+        key = next(iter(mgr._groups))
+        assert mgr._groups[key] == ["H1"], f"删除后组内成员: {mgr._groups}"
+
+        mgr._handle_grouping(task, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"种子删除应触发整组暂停: {client.calls}"
+        assert "MISSING" in client.tags, f"文件丢失应加标签: {client.tags}"
+        print("[OK] test_grouping_deleted_torrent_triggers_check: 组内种子删除触发缺文件扫描")
 
 
 def test_grouping_queued_when_enabled():
@@ -1274,7 +1322,7 @@ def test_grouping_no_full_files_scan():
         assert len(mgr._groups) == 1, f"首轮应完成归组: {mgr._groups}"
 
         task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
-        # 第一轮检查: 状态快照为空 -> 触发缺文件检查; 但不再拉取文件列表
+        # 第一轮检查: 上传状态无触发条件 -> 不扫描; 也不拉取文件列表
         mgr._handle_grouping(task, dry_run=False)
         # 第二轮检查: 状态不变 -> 不触发, 也不拉取文件列表
         client.calls.clear()
@@ -1313,6 +1361,7 @@ if __name__ == "__main__":
     test_grouping_size_mismatch_pauses_group()
     test_grouping_missing_files_pauses_group()
     test_grouping_state_change_triggers_check()
+    test_grouping_deleted_torrent_triggers_check()
     test_grouping_queued_when_enabled()
     test_grouping_replaces_per_torrent_missing_files()
     test_grouping_incremental_on_add()

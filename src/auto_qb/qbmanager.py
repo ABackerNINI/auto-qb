@@ -52,6 +52,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._groups: dict = {}
         # 组内缓存的文件大小映射: key -> {hash: {规范化相对路径: 大小}}(增量归组时拉取)
         self._group_sizes: dict = {}
+        # 待缺文件扫描的组: 组内种子被删除时标记, 下一轮分组检查触发扫描
+        self._group_pending_check: set = set()
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

@@ -11,8 +11,8 @@
 
 组内处理(每轮全局任务):
   1. 文件大小一致性: 组内种子的 {路径: 大小} 映射不一致 -> 警告 + 整组暂停(不添加标签)
-  2. 状态变化触发缺文件检查: 组内任一种子状态与上一轮快照不同 -> 触发一次磁盘扫描(同组共享)
-     文件丢失 -> 整组暂停 + 添加 MISSING 标签(需求: 同组所有种子全部触发丢失动作)
+  2. 缺文件磁盘扫描(需求): 触发条件为 同组中有种子被删除, 或同组中有种子由上传(做种)状态
+     变为暂停状态; 文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
 
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags/_snapshot,
 以及 qbmanager 初始化的 _groups/_group_sizes/_group_state_snapshot。
@@ -24,6 +24,11 @@ from typing import Any, Dict, List
 from ..utils import _path_normalize, add_long_path_prefix_for_win
 
 logger = logging.getLogger("auto-qb")
+
+# 上传(做种)状态: 由这些状态转为暂停状态时触发缺文件扫描
+_UPLOADING_STATES = frozenset({"uploading", "stalledup", "forcedup", "checkingup", "queuedup"})
+# 暂停状态(qB 新老版本命名)
+_PAUSED_STATES = frozenset({"pausedup", "stoppedup", "pauseddl", "stoppeddl"})
 
 
 class GroupingMixin:
@@ -53,8 +58,21 @@ class GroupingMixin:
         # 逐组检查(复用缓存的大小映射, 不逐种子拉文件列表)
         for key, members in list(self._groups.items()):
             tos = [by_hash[h] for h in members if h in by_hash]
-            if tos:
-                self._process_group(tos, self._group_sizes.get(key, {}), dry_run)
+            if not tos:
+                continue
+            sizes = self._group_sizes.get(key, {})
+            # 1. 文件大小一致性: 每次轮询检查(纯内存比较, 不依赖触发条件)
+            if self._size_mismatch(tos, sizes):
+                desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
+                self.logger.warning(f"辅种组文件大小不一致({len(tos)}个种子), 暂停整组: {desc}")
+                if not dry_run:
+                    self.client.torrents_stop(torrent_hashes=[t.hash for t in tos])
+                continue
+            # 2. 缺文件磁盘扫描触发(需求): 组内种子被删除(标记待检查) 或 种子由上传转暂停
+            if key not in self._group_pending_check and not any(self._uploading_to_paused(t) for t in tos):
+                continue
+            self._group_pending_check.discard(key)
+            self._check_missing_files(tos, sizes, dry_run)
 
         # 更新状态快照(仅保存本轮可见种子的状态; 新种子下次视为"状态变化"触发检查)
         self._group_state_snapshot = {t.hash: t.state for t in torrents}
@@ -89,7 +107,7 @@ class GroupingMixin:
         self._group_sizes.setdefault(key, {})[tor.hash] = file_map
 
     def _remove_from_groups(self, torrent_hash: str):
-        """种子被删除时从分组中移除"""
+        """种子被删除时从分组中移除, 并标记所在组待检查(剩余种子可能缺文件)"""
         for key, members in list(self._groups.items()):
             if torrent_hash in members:
                 members.remove(torrent_hash)
@@ -97,6 +115,10 @@ class GroupingMixin:
                 if not members:
                     del self._groups[key]
                     self._group_sizes.pop(key, None)
+                    self._group_pending_check.discard(key)
+                else:
+                    # 组内种子被删除 -> 触发缺文件扫描(剩余种子可能文件丢失)
+                    self._group_pending_check.add(key)
                 return
 
     def _sync_groups(self, by_hash: Dict[str, Any]):
@@ -110,6 +132,7 @@ class GroupingMixin:
                 tor = by_hash.get(h)
                 if tor is None:
                     self._group_sizes[key].pop(h, None)  # 已删种子(双保险, 正常由 _remove_from_groups 处理)
+                    self._group_pending_check.add(key)  # 组内种子被删除 -> 触发缺文件扫描
                     continue
                 if _path_normalize(tor.save_path) != key[0]:
                     old_map = self._group_sizes[key].pop(h, None)
@@ -122,26 +145,21 @@ class GroupingMixin:
                 if not members:
                     del self._groups[key]
                     self._group_sizes.pop(key, None)
+                    self._group_pending_check.discard(key)
 
-    def _process_group(self, members: list, sizes: Dict[str, Dict[str, int]], dry_run: bool):
-        """处理一组种子: 大小一致性检查 + 状态变化触发的缺文件联动
+    @staticmethod
+    def _size_mismatch(members: list, sizes: Dict[str, Dict[str, int]]) -> bool:
+        """组内文件大小一致性: 各种子 {路径: 大小} 映射不一致返回 True(每次轮询检查) """
+        size_sets = {tuple(sorted(fmap.items())) for fmap in (sizes.get(t.hash, {}) for t in members)}
+        return len(size_sets) > 1
 
+    def _check_missing_files(self, members: list, sizes: Dict[str, Dict[str, int]], dry_run: bool):
+        """缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
+
+        由 _handle_grouping 在满足触发条件(组内种子被删除 / 种子由上传转暂停)时调用。
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 每轮复用)
         """
-        # 1. 组内文件大小一致性: 各种子 {路径: 大小} 映射不一致 -> 警告 + 整组暂停
-        size_sets = {tuple(sorted(fmap.items())) for fmap in (sizes.get(t.hash, {}) for t in members)}
-        if len(size_sets) > 1:
-            desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in members)
-            self.logger.warning(f"辅种组文件大小不一致({len(members)}个种子), 暂停整组: {desc}")
-            if not dry_run:
-                self.client.torrents_stop(torrent_hashes=[t.hash for t in members])
-            return
-
-        # 2. 状态变化触发检查(需求): 组内任一种子状态与上一轮快照不同才触发磁盘扫描
-        if not any(t.state != self._group_state_snapshot.get(t.hash) for t in members):
-            return
-
-        # 3. 缺文件磁盘扫描(同组共享一次): 组内取一个已完成且正在做种的种子作为代表
+        # 组内取一个已完成且正在做种的种子作为代表
         rep = next((t for t in members if t.amount_left <= 0 and self._is_uploading(t)), None)
         if rep is None:
             return  # 组内无已完成做种种子(均在下载/暂停), 不检查
@@ -179,4 +197,19 @@ class GroupingMixin:
         enum = getattr(tor, "state_enum", None)
         if enum is not None:
             return bool(getattr(enum, "is_uploading", False))
-        return (tor.state or "").lower() in ("uploading", "stalledup", "forcedup", "checkingup")
+        return (tor.state or "").lower() in _UPLOADING_STATES
+
+    @staticmethod
+    def _is_paused(tor) -> bool:
+        """种子是否处于暂停状态: 优先用 state_enum, 回退到 state 字符串判断"""
+        enum = getattr(tor, "state_enum", None)
+        if enum is not None:
+            return bool(getattr(enum, "is_paused", False))
+        return (tor.state or "").lower() in _PAUSED_STATES
+
+    def _uploading_to_paused(self, tor) -> bool:
+        """种子由上传(做种)状态变为暂停状态 -> 触发缺文件扫描"""
+        prev = self._group_state_snapshot.get(tor.hash)
+        if prev is None:
+            return False
+        return prev.lower() in _UPLOADING_STATES and self._is_paused(tor)
