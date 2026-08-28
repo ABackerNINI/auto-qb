@@ -214,12 +214,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 self.task_queue.remove_torrent(h)
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
             if self.config.grouping.enabled:
-                self._on_group_removed(removed, by_hash, dry_run)
+                self._handle_removed_torrents(removed, by_hash, dry_run)
         if self.config.grouping.enabled:
             # 保存路径变化重归组(文件列表变化会走新增种子重新归组)
-            self._sync_groups(by_hash, dry_run)
+            self._handle_save_path_changes(by_hash, dry_run)
             # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)
-            self._check_group_state_transitions(by_hash, dry_run)
+            self._handle_state_transitions(by_hash, dry_run)
             # 更新状态快照(仅本轮可见种子; 新增种子本轮不视为状态变化)
             self._group_state_snapshot = {t.hash: t.state for t in torrents}
 

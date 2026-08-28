@@ -10,8 +10,9 @@
     * 新增种子 -> _assign_new_torrent 增量归组(程序启动首轮的现有种子同样逐个归组);
       归组时检查文件大小一致性(文件列表轻易不变, 仅新增时检查, 不每轮检查):
       组内 {路径: 大小} 映射不一致 -> 警告 + 整组暂停(不添加标签)
-    * 删除种子 -> _remove_from_groups 移出组; 组内仍有剩余种子 -> 立即触发缺文件磁盘扫描
-    * 组内种子由上传(做种)状态转为暂停状态 -> 立即触发缺文件磁盘扫描(不等下一轮)
+    * 删除种子 -> _handle_removed_torrents: 移出组; 组内仍有剩余种子 -> 立即触发缺文件磁盘扫描
+    * 种子由上传(做种)状态转为暂停状态 -> _handle_state_transitions 立即触发缺文件磁盘扫描(不等下一轮)
+    * 保存路径变化 -> _handle_save_path_changes 按新路径重归组
   - 缺文件磁盘扫描: 组内取一个已完成且做种的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
 
@@ -39,22 +40,24 @@ class GroupingMixin:
     logger: Any
     config: Any
 
-    def _on_group_removed(self, removed_hashes, by_hash: Dict[str, Any], dry_run: bool):
-        """删除事件处理: 种子移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失) """
+    def _handle_removed_torrents(self, removed_hashes, by_hash: Dict[str, Any], dry_run: bool):
+        """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失)"""
         affected = set()
         for h in removed_hashes:
-            affected |= self._remove_from_groups(h)
+            key = self._leave_group(h)
+            if key is not None:
+                affected.add(key)
         for key in affected:
             members = self._groups.get(key, [])
             tos = [by_hash[h] for h in members if h in by_hash]
             if tos:
                 self._check_missing_files(tos, self._group_sizes.get(key, {}), dry_run)
 
-    def _sync_groups(self, by_hash: Dict[str, Any], dry_run: bool):
-        """同步分组: 保存路径变化的种子按新路径重归组(成员索引 O(1) 定位, 遍历本轮种子)
+    def _handle_save_path_changes(self, by_hash: Dict[str, Any], dry_run: bool):
+        """保存路径变化处理: 种子 save_path 变化 -> 按新路径重归组(成员索引 O(1) 定位)
 
         文件列表变化(路径增删)在 qB 中需重加种子, 会走 _assign_new_torrent 重新归组, 这里不处理;
-        已删种子由删除事件(_on_group_removed)处理, 这里不重复清理。
+        已删种子由删除事件(_handle_removed_torrents)处理, 这里不重复清理。
         """
         for h, tor in by_hash.items():
             key = self._group_member_to_key.get(h)
@@ -64,8 +67,8 @@ class GroupingMixin:
             if old_map:
                 self._assign_to_group(tor, old_map, by_hash, dry_run)  # 新 save_path + 原文件列表重归组
 
-    def _check_group_state_transitions(self, by_hash: Dict[str, Any], dry_run: bool):
-        """状态变化检测: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
+    def _handle_state_transitions(self, by_hash: Dict[str, Any], dry_run: bool):
+        """状态变化处理: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
 
         遍历本轮种子先过滤暂停状态, 再对比上一轮 _group_state_snapshot(上一轮为上传即触发);
         状态快照由 _refresh_torrents 每轮更新, 状态变化在检测到的同一轮立即处理, 不等下一轮。
@@ -126,7 +129,7 @@ class GroupingMixin:
         """将种子移出所在分组(成员索引 O(1) 定位, 不做全量遍历); 组空则删除整组
 
         返回移除后组内仍有剩余成员的组 key(无则 None); 不触发缺文件扫描,
-        重归组(_assign_to_group)与删除(_remove_from_groups)共用, 是否扫描由调用方决定。
+        重归组(_assign_to_group)与删除(_handle_removed_torrents)共用, 是否扫描由调用方决定。
         """
         key = self._group_member_to_key.pop(torrent_hash, None)
         if key is None:
@@ -141,14 +144,6 @@ class GroupingMixin:
             return None
         return key
 
-    def _remove_from_groups(self, torrent_hash: str) -> set:
-        """种子被删除时从分组中移除; 返回组内仍有剩余成员的组 key(调用方据此触发缺文件扫描)"""
-        affected = set()
-        key = self._leave_group(torrent_hash)
-        if key is not None:
-            affected.add(key)
-        return affected
-
     @staticmethod
     def _size_mismatch(members: list, sizes: Dict[str, Dict[str, int]]) -> bool:
         """组内文件大小一致性: 各种子 {路径: 大小} 映射不一致返回 True(仅新增归组时检查) """
@@ -158,7 +153,7 @@ class GroupingMixin:
     def _check_missing_files(self, members: list, sizes: Dict[str, Dict[str, int]], dry_run: bool):
         """缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
 
-        由删除事件(_on_group_removed)或状态变化检测(_check_group_state_transitions)在
+        由删除事件(_handle_removed_torrents)或状态变化检测(_handle_state_transitions)在
         满足触发条件(组内种子被删除 / 种子由上传转暂停)时立即调用。
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 复用)
         """
