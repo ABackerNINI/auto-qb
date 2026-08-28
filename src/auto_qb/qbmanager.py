@@ -48,6 +48,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._snapshot: list = []
         # 分组状态快照: 组内种子状态变化检测(由 GroupingMixin 使用)
         self._group_state_snapshot: dict = {}
+        # 增量分组: key=(save_path, 排序文件路径元组) -> [hash...]; 新增种子时归组, 不再每轮全量重建
+        self._groups: dict = {}
+        # 组内缓存的文件大小映射: key -> {hash: {规范化相对路径: 大小}}(首次初始化/增量归组时拉取)
+        self._group_sizes: dict = {}
+        # 初始全量分组是否已完成(首次分组任务执行时置 True, 之后走增量归组)
+        self._groups_ready: bool = False
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -205,10 +211,15 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self.logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
             for h in added:
                 self._create_torrent_tasks(h)
+                # 增量归组: 分组初始化完成后, 新种子按文件列表自动归组(不再每轮全量遍历分组)
+                if self.config.grouping.enabled and self._groups_ready:
+                    self._assign_new_torrent(h)
         if removed:
             self.logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
                 self.task_queue.remove_torrent(h)
+                if self.config.grouping.enabled:
+                    self._remove_from_groups(h)
 
         self._known_hashes = current_hashes
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
@@ -221,17 +232,17 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         """
         tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
         tasks = []
-        # # 分组检查替代逐种子 missing_files 检查(分组任务为全局任务, 同组共享一次磁盘扫描)
-        # if self.config.check_missing_files and not self.config.grouping.enabled:
-        #     tasks.append(
-        #         Task(
-        #             "internal",
-        #             "missing_files",
-        #             torrent_hash=torrent_hash,
-        #             interval=self.config.interval,
-        #             handler=self._handle_missing_files
-        #         )
-        #     )
+        # 分组检查替代逐种子 missing_files 检查(分组任务为全局任务, 同组共享一次磁盘扫描)
+        if self.config.check_missing_files and not self.config.grouping.enabled:
+            tasks.append(
+                Task(
+                    "internal",
+                    "missing_files",
+                    torrent_hash=torrent_hash,
+                    interval=self.config.interval,
+                    handler=self._handle_missing_files
+                )
+            )
         tasks.append(
             Task(
                 "internal",

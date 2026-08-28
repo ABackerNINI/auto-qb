@@ -45,11 +45,13 @@ class FakeClient:
         self.add_error = None  # 模拟重加失败
         self.files = []  # torrents_files 返回值(空 = 全部通过)
         self.files_map = {}  # hash -> 文件列表(分组测试用: 按种子区分文件列表)
+        self.files_calls = 0  # torrents_files 调用计数(验证分组检查不再全量拉文件列表)
 
     def torrents_trackers(self, h):
         return [{"url": "https://tracker.hhanclub.net/announce.php"}]
 
     def torrents_files(self, h):
+        self.files_calls += 1
         # 优先按 hash 返回文件列表(分组测试用), 否则返回共享 files
         if h in self.files_map:
             return self.files_map[h]
@@ -182,7 +184,7 @@ class FakeConfig:
     hr = HRRule()  # 全局 HR 默认输出设置
     delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
-    grouping = GroupingConfig()  # 种子分组管理(默认关闭)
+    grouping = GroupingConfig(enabled=False, interval=300, missing_tag="MISSING")  # 种子分组管理(默认关闭)
 
 
 def _hr_rule(**kw) -> HRRule:
@@ -1124,7 +1126,7 @@ def test_grouping_queued_when_enabled():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.grouping = GroupingConfig(enabled=True, interval=300)
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
         mgr = QbManager("", config=cfg)
         names = {t.name for t in mgr.task_queue._fast}
         assert "grouping" in names, f"应创建分组任务: {names}"
@@ -1135,7 +1137,7 @@ def test_grouping_queued_when_enabled():
         # 未启用不创建
         cfg2 = FakeConfig()
         cfg2.state_file = state_file
-        cfg2.grouping = GroupingConfig(enabled=False)
+        cfg2.grouping = GroupingConfig(enabled=False, interval=300, missing_tag="MISSING")
         mgr2 = QbManager("", config=cfg2)
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "grouping" not in names2, f"未启用不应创建分组任务: {names2}"
@@ -1149,7 +1151,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.check_missing_files = True
-        cfg.grouping = GroupingConfig(enabled=True)
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
@@ -1164,7 +1166,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         cfg2 = FakeConfig()
         cfg2.state_file = state_file
         cfg2.check_missing_files = True
-        cfg2.grouping = GroupingConfig(enabled=False)
+        cfg2.grouping = GroupingConfig(enabled=False, interval=300, missing_tag="MISSING")
         mgr2 = QbManager("", config=cfg2)
         mgr2.client = FakeClient()
         mgr2._snapshot = [tor]
@@ -1172,6 +1174,106 @@ def test_grouping_replaces_per_torrent_missing_files():
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "missing_files" in names2, f"未启用分组应保留逐种子检查: {names2}"
         print("[OK] test_grouping_replaces_per_torrent_missing_files: 分组替代逐种子检查")
+
+
+def test_grouping_incremental_on_add():
+    """测试: 新增种子时自动归组(增量), 不再每轮全量重建分组"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+        mgr._groups_ready = True  # 模拟分组已初始化完成, 之后走增量归组
+
+        # 新增 H1 -> _refresh_torrents 检测 added 并自动归组
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+        assert len(mgr._groups) == 1, f"新种子应自动归组: {mgr._groups}"
+        key = next(iter(mgr._groups))
+        assert mgr._groups[key] == ["H1"], f"组内成员: {mgr._groups[key]}"
+        assert key == ("R:/Downloads", ("movie.mkv",)), f"分组键: {key}"
+
+        # 再新增 H2(同名同大小) -> 归入同一组
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H2"] = t2
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+        assert len(mgr._groups) == 1, f"H2 应归入同组: {mgr._groups}"
+        assert set(mgr._groups[key]) == {"H1", "H2"}, f"组内成员: {mgr._groups[key]}"
+        print("[OK] test_grouping_incremental_on_add: 新增种子自动归组")
+
+
+def test_grouping_removed_from_groups():
+    """测试: 种子删除时自动从分组移除(空组删除)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+        mgr._groups_ready = True
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+        key = next(iter(mgr._groups))
+        assert set(mgr._groups[key]) == {"H1", "H2"}
+
+        # 删除 H2 -> 组内只剩 H1
+        del client.torrents["H2"]
+        mgr._refresh_torrents()
+        assert mgr._groups[key] == ["H1"], f"删除后组内成员: {mgr._groups[key]}"
+        assert "H2" not in mgr._group_sizes[key], f"删除后应清掉文件大小映射: {mgr._group_sizes}"
+
+        # 删除 H1 -> 空组删除
+        del client.torrents["H1"]
+        mgr._refresh_torrents()
+        assert mgr._groups == {}, f"空组应删除: {mgr._groups}"
+        assert mgr._group_sizes == {}, f"空组大小映射应删除: {mgr._group_sizes}"
+        print("[OK] test_grouping_removed_from_groups: 删除种子移出分组")
+
+
+def test_grouping_no_full_files_scan():
+    """测试: 分组初始化后, 每轮检查不再全量拉取文件列表(增量维护分组)"""
+    from auto_qb.taskqueue import Task
+
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+
+        task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
+        # 首轮: 初始化分组(拉取文件列表)
+        mgr._handle_grouping(task, dry_run=False)
+        assert mgr._groups_ready is True, f"首轮应完成分组初始化: {mgr._groups_ready}"
+        assert client.files_calls >= 1, f"初始化应拉取文件列表: {client.files_calls}"
+
+        # 第二轮: 状态不变 -> 不触发检查, 且不再拉取任何文件列表
+        client.files_calls = 0
+        client.calls.clear()
+        mgr._handle_grouping(task, dry_run=False)
+        assert client.files_calls == 0, f"每轮检查不应再全量拉文件列表: {client.files_calls}"
+        assert client.calls == [], f"状态不变不应触发检查: {client.calls}"
+        print("[OK] test_grouping_no_full_files_scan: 分组检查复用缓存, 不再全量拉文件列表")
 
 
 if __name__ == "__main__":
@@ -1205,4 +1307,7 @@ if __name__ == "__main__":
     test_grouping_state_change_triggers_check()
     test_grouping_queued_when_enabled()
     test_grouping_replaces_per_torrent_missing_files()
+    test_grouping_incremental_on_add()
+    test_grouping_removed_from_groups()
+    test_grouping_no_full_files_scan()
     print("\n全部自测通过!")
