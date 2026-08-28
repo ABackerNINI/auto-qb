@@ -29,6 +29,11 @@ DEFAULT_SKIP_CHECKING_AUTO_START = False
 DEFAULT_ADD_SKIP_CHECKING_TAGS = False
 DEFAULT_SKIP_CHECKING_TAG_FORMAT = "SKIP_CHECKING"
 
+# 种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组, 统一检查
+DEFAULT_GROUPING_ENABLED = False
+DEFAULT_GROUPING_INTERVAL = "5M"  # 分组检查间隔(拉全量文件列表开销大, 默认降频)
+DEFAULT_GROUPING_MISSING_TAG = "MISSING"
+
 UNLIMITED_SPEED = "0KiB/s"
 
 
@@ -120,6 +125,19 @@ class TrackerConfig:
 
 
 @dataclass
+class GroupingConfig:
+    """种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组
+
+    enabled: 启用分组检查(替代逐种子 check_missing_files, 同组共享一次磁盘扫描)
+    interval: 分组检查任务间隔(秒), 需拉全量文件列表, 建议较长
+    missing_tag: 文件丢失时整组添加的标签
+    """
+    enabled: bool
+    interval: int
+    missing_tag: str
+
+
+@dataclass
 class Config:
     interval: int  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
 
@@ -139,6 +157,8 @@ class Config:
     # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
     delete_tags: List[str]
     delete_tags_if_has_no_torrents: List[str]
+
+    grouping: GroupingConfig  # 种子分组管理(辅种管理)
 
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
@@ -222,6 +242,12 @@ def load_config(config_path: str) -> Config:
         skip_checking_tag_format=cfg.get("skip_checking_tag_format", DEFAULT_SKIP_CHECKING_TAG_FORMAT),
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
+        grouping=GroupingConfig(
+            enabled=parse_bool(cfg.get("grouping", {}).get("enabled", DEFAULT_GROUPING_ENABLED)),
+            interval=parse_time(cfg.get("grouping", {}).get("interval", DEFAULT_GROUPING_INTERVAL)),
+            missing_tag=cfg.get("grouping", {}).get("missing_tag", DEFAULT_GROUPING_MISSING_TAG) or
+            DEFAULT_GROUPING_MISSING_TAG,
+        ),
         qbittorrent=qb_config,
         trackers=trackers,
     )

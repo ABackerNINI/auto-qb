@@ -7,6 +7,7 @@
 - mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务/process_torrent 兼容入口
 - mixins.tags         TagsMixin        标签/分类/HR 辅助
 - mixins.checking     CheckingMixin    文件检查/辅种跳检/异步校验轮询回调
+- mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - mixins.tracker      TrackerMixin     tracker 配置匹配
 """
 import logging
@@ -16,7 +17,7 @@ from typing import List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
 from .config import Config, load_config
-from .mixins import CheckingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
+from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
 from .rules import Rule
 from .taskqueue import Task, TaskQueue
 
@@ -24,7 +25,7 @@ from .taskqueue import Task, TaskQueue
 MAIN_TICK = 2.0
 
 
-class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
+class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin):
     def __init__(self, config_path: str, config: Config = None):
         self.config_path = config_path
         self.config = config or load_config(config_path)
@@ -37,14 +38,16 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
         self._load_rules()
-        # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理)
+        # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         self.task_queue = TaskQueue()
-        # 全局任务: 彻底删除标签 / 彻底删除无种子的标签(有配置才创建)
+        # 全局任务: 彻底删除标签 / 彻底删除无种子的标签 / 种子分组(有配置才创建)
         self._create_global_tasks()
         # 种子增删检测: 上一轮已知 hash 集合, None 表示首轮(首次刷新为全部现有种子创建任务)
         self._known_hashes: Optional[set] = None
         # 最近一次种子快照: 新增种子创建任务/规则条件(上传量基线)使用
         self._snapshot: list = []
+        # 分组状态快照: 组内种子状态变化检测(由 GroupingMixin 使用)
+        self._group_state_snapshot: dict = {}
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -140,9 +143,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
     # ---------- 全局任务 ----------
 
     def _create_global_tasks(self):
-        """创建全局任务(非种子级): 彻底删除标签 / 彻底删除无种子的标签, 加入队列统一管理
+        """创建全局任务(非种子级): 彻底删除标签 / 彻底删除无种子的标签 / 种子分组, 加入队列统一管理
 
-        对应配置为空时跳过; 任务使用主 interval 定期执行。
+        对应配置为空时跳过; 标签清理任务使用主 interval, 分组任务使用自身 interval。
         """
         tasks = []
         if self.config.delete_tags:
@@ -163,9 +166,18 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
                     handler=self._handle_delete_tags_if_has_no_torrents,
                 )
             )
+        if self.config.grouping.enabled:
+            tasks.append(
+                Task(
+                    "internal",
+                    "grouping",
+                    interval=self.config.grouping.interval,
+                    handler=self._handle_grouping,
+                )
+            )
         if tasks:
             self.task_queue.add_tasks(tasks)
-            self.logger.info(f"创建全局标签清理任务 {len(tasks)} 个: {[t.name for t in tasks]}")
+            self.logger.info(f"创建全局任务 {len(tasks)} 个: {[t.name for t in tasks]}")
 
     # ---------- 种子级任务 ----------
 
@@ -209,16 +221,17 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, TrackerMixin):
         """
         tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
         tasks = []
-        if self.config.check_missing_files:
-            tasks.append(
-                Task(
-                    "internal",
-                    "missing_files",
-                    torrent_hash=torrent_hash,
-                    interval=self.config.interval,
-                    handler=self._handle_missing_files
-                )
-            )
+        # # 分组检查替代逐种子 missing_files 检查(分组任务为全局任务, 同组共享一次磁盘扫描)
+        # if self.config.check_missing_files and not self.config.grouping.enabled:
+        #     tasks.append(
+        #         Task(
+        #             "internal",
+        #             "missing_files",
+        #             torrent_hash=torrent_hash,
+        #             interval=self.config.interval,
+        #             handler=self._handle_missing_files
+        #         )
+        #     )
         tasks.append(
             Task(
                 "internal",

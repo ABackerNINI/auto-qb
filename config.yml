@@ -2,7 +2,7 @@
 config:
     interval: 60S
     remove_similar_tags: true
-    check_missing_files: true
+    # check_missing_files: true
 
     # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
     hr:
@@ -17,6 +17,15 @@ config:
     # skip_checking_auto_start: true
     # add_skip_checking_tags: true
     # skip_checking_tag_format: "SKIP_CHECKING"
+
+    # 种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组, 统一检查
+    #  - 组内文件大小不一致 -> 警告 + 整组暂停
+    #  - 组内任一种子状态变化 -> 触发缺文件检查, 文件丢失 -> 整组暂停 + 添加标签
+    # 启用后替代逐种子 check_missing_files 检查(同组共享一次磁盘扫描)
+    grouping:
+        enabled: true # 启用种子分组管理
+        interval: 5M # 分组检查间隔(拉全量文件列表开销大, 建议较长)
+        missing_tag: MISSING # 文件丢失时整组添加的标签
 
     # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
     delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
