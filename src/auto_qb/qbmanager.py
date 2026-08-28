@@ -220,8 +220,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._handle_save_path_changes(by_hash, dry_run)
             # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)
             self._handle_state_transitions(by_hash, dry_run)
-            # 更新状态快照(仅本轮可见种子; 新增种子本轮不视为状态变化)
-            self._group_state_snapshot = {t.hash: t.state for t in torrents}
+            # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关;
+            # 新增种子本轮不视为状态变化)
+            self._group_state_snapshot = {t.hash: t.state_enum for t in torrents}
 
         self._known_hashes = current_hashes
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等

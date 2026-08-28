@@ -13,6 +13,11 @@ from auto_qb.config import GroupingConfig, HRRule  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import RuleContext, ActionResult  # noqa: E402
 
+try:
+    from qbittorrentapi import TorrentState  # noqa: E402
+except ImportError:  # 未安装 qbittorrentapi 时降级: state_enum 为 None
+    TorrentState = None
+
 
 # ---------- 模拟 qB 客户端 ----------
 class _FakeTorrents(dict):
@@ -160,6 +165,16 @@ class FakeTorrent:
         self.seeding_time = kw.get("seeding_time", 0)
         self.ratio = kw.get("ratio", 0.0)
         self.amount_left = kw.get("amount_left", 0)
+
+    @property
+    def state_enum(self):
+        """模拟真实客户端: 由 state 字符串动态构造 TorrentState(与 qB 版本无关的状态类别判定)"""
+        if TorrentState is None:
+            return None
+        try:
+            return TorrentState(self.state)
+        except ValueError:
+            return TorrentState.UNKNOWN
 
 
 # ---------- 模拟 TrackerConfig ----------

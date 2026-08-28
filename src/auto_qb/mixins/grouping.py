@@ -27,11 +27,6 @@ from ..utils import _path_normalize, add_long_path_prefix_for_win
 
 logger = logging.getLogger("auto-qb")
 
-# 上传(做种)状态: 由这些状态转为暂停状态时触发缺文件扫描
-_UPLOADING_STATES = frozenset({"uploading", "stalledup", "forcedup", "checkingup", "queuedup"})
-# 暂停状态(qB 新老版本命名)
-_PAUSED_STATES = frozenset({"pausedup", "stoppedup", "pauseddl", "stoppeddl"})
-
 
 class GroupingMixin:
     """种子分组管理(辅种管理): 分组 + 组内大小一致性 + 状态变化触发的缺文件联动"""
@@ -70,15 +65,17 @@ class GroupingMixin:
     def _handle_state_transitions(self, by_hash: Dict[str, Any], dry_run: bool):
         """状态变化处理: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
 
-        遍历本轮种子先过滤暂停状态, 再对比上一轮 _group_state_snapshot(上一轮为上传即触发);
-        状态快照由 _refresh_torrents 每轮更新, 状态变化在检测到的同一轮立即处理, 不等下一轮。
+        状态快照(_group_state_snapshot)存上一轮各种子的 state_enum 枚举对象,
+        与 qB 版本无关(老版 pausedUP / 新版 stoppedUP 归为同一 is_paused 类别):
+        遍历本轮种子先过滤暂停状态, 再对比上一轮快照为上传(做种)类别即触发;
+        状态变化在检测到的同一轮立即处理, 不等下一轮。
         """
         triggered = set()
         for h, tor in by_hash.items():
             if not self._is_paused(tor):
                 continue
-            prev = self._group_state_snapshot.get(h)
-            if prev and prev.lower() in _UPLOADING_STATES:
+            prev = self._group_state_snapshot.get(h)  # 上一轮 state_enum 枚举
+            if prev is not None and getattr(prev, "is_uploading", False):
                 key = self._group_member_to_key.get(h)
                 if key is not None:
                     triggered.add(key)
@@ -191,16 +188,12 @@ class GroupingMixin:
 
     @staticmethod
     def _is_uploading(tor) -> bool:
-        """种子是否处于做种(上传)状态: 优先用 state_enum, 回退到 state 字符串判断"""
+        """种子是否处于做种(上传)状态: 由 state_enum.is_uploading 判定(qB 版本无关, 不含暂停)"""
         enum = getattr(tor, "state_enum", None)
-        if enum is not None:
-            return bool(getattr(enum, "is_uploading", False))
-        return (tor.state or "").lower() in _UPLOADING_STATES
+        return bool(enum is not None and enum.is_uploading)
 
     @staticmethod
     def _is_paused(tor) -> bool:
-        """种子是否处于暂停状态: 优先用 state_enum, 回退到 state 字符串判断"""
+        """种子是否处于暂停状态: 由 state_enum.is_paused 判定(qB 版本无关, 覆盖老版 pausedUP/新版 stoppedUP)"""
         enum = getattr(tor, "state_enum", None)
-        if enum is not None:
-            return bool(getattr(enum, "is_paused", False))
-        return (tor.state or "").lower() in _PAUSED_STATES
+        return bool(enum is not None and enum.is_paused)
