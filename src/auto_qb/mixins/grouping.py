@@ -4,6 +4,8 @@
 以便把大小不一致的种子也归入同组做二次判定)。
 
 分组维护(增量, 事件驱动, 无周期轮询任务):
+  - 维护成员索引 _group_member_to_key(hash -> 组 key): 删除/状态变化/save_path 同步时
+    O(1) 定位种子所属组, 不做全量遍历; 与 _groups/_group_sizes 在归组/移组时同步更新
   - _refresh_torrents 每轮拉全量种子列表, 检测增删与状态变化并立即处理:
     * 新增种子 -> _assign_new_torrent 增量归组(程序启动首轮的现有种子同样逐个归组);
       归组时检查文件大小一致性(文件列表轻易不变, 仅新增时检查, 不每轮检查):
@@ -13,12 +15,12 @@
   - 缺文件磁盘扫描: 组内取一个已完成且做种的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
 
-由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags/_snapshot,
-以及 qbmanager 初始化的 _groups/_group_sizes/_group_state_snapshot。
+由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags,
+以及 qbmanager 初始化的 _groups/_group_sizes/_group_member_to_key/_group_state_snapshot。
 """
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from ..utils import _path_normalize, add_long_path_prefix_for_win
 
@@ -49,37 +51,43 @@ class GroupingMixin:
                 self._check_missing_files(tos, self._group_sizes.get(key, {}), dry_run)
 
     def _sync_groups(self, by_hash: Dict[str, Any], dry_run: bool):
-        """同步分组: 保存路径变化的种子按新路径重归组
+        """同步分组: 保存路径变化的种子按新路径重归组(成员索引 O(1) 定位, 遍历本轮种子)
 
         文件列表变化(路径增删)在 qB 中需重加种子, 会走 _assign_new_torrent 重新归组, 这里不处理;
         已删种子由删除事件(_on_group_removed)处理, 这里不重复清理。
         """
-        for key in list(self._groups.keys()):
-            for h in list(self._groups[key]):
-                tor = by_hash.get(h)
-                if tor is None:
-                    continue
-                if _path_normalize(tor.save_path) != key[0]:
-                    old_map = self._group_sizes.get(key, {}).pop(h, None)
-                    if old_map:
-                        self._assign_to_group(tor, old_map, dry_run)  # 新 save_path + 原文件列表重归组
+        for h, tor in by_hash.items():
+            key = self._group_member_to_key.get(h)
+            if key is None or _path_normalize(tor.save_path) == key[0]:
+                continue
+            old_map = self._group_sizes.get(key, {}).pop(h, None)
+            if old_map:
+                self._assign_to_group(tor, old_map, by_hash, dry_run)  # 新 save_path + 原文件列表重归组
 
     def _check_group_state_transitions(self, by_hash: Dict[str, Any], dry_run: bool):
-        """状态变化检测: 组内种子由上传(做种)转为暂停状态 -> 立即触发缺文件扫描(同组只扫一次)
+        """状态变化检测: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
 
-        用上一轮 _group_state_snapshot 对比: 上一轮为上传状态且本轮暂停 -> 触发;
-        状态快照由 _refresh_torrents 每轮更新, 因此状态变化在检测到的同一轮立即处理, 不等下一轮。
+        遍历本轮种子先过滤暂停状态, 再对比上一轮 _group_state_snapshot(上一轮为上传即触发);
+        状态快照由 _refresh_torrents 每轮更新, 状态变化在检测到的同一轮立即处理, 不等下一轮。
         """
-        for key, members in list(self._groups.items()):
-            tos = [by_hash[h] for h in members if h in by_hash]
-            if not tos:
+        triggered = set()
+        for h, tor in by_hash.items():
+            if not self._is_paused(tor):
                 continue
-            if any(self._uploading_to_paused(t) for t in tos):
+            prev = self._group_state_snapshot.get(h)
+            if prev and prev.lower() in _UPLOADING_STATES:
+                key = self._group_member_to_key.get(h)
+                if key is not None:
+                    triggered.add(key)
+        for key in triggered:
+            members = self._groups[key]
+            tos = [by_hash[h] for h in members if h in by_hash]
+            if tos:
                 self._check_missing_files(tos, self._group_sizes.get(key, {}), dry_run)
 
-    def _assign_new_torrent(self, torrent_hash: str, dry_run: bool = False):
-        """新增种子增量归组: 仅拉取该种子的文件列表并入组(每次一个种子, 不做全量遍历)"""
-        tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
+    def _assign_new_torrent(self, torrent_hash: str, by_hash: Dict[str, Any], dry_run: bool = False):
+        """新增种子增量归组: 仅拉取该种子的文件列表并入组(by_hash O(1) 定位, 不做全量遍历)"""
+        tor = by_hash.get(torrent_hash)
         if tor is None:
             return
         try:
@@ -87,33 +95,26 @@ class GroupingMixin:
         except Exception as e:
             self.logger.debug(f"分组归组获取文件列表失败({torrent_hash}): {e}")
             return
-        self._assign_to_group(tor, {_path_normalize(f.name): f.size for f in files}, dry_run)
+        self._assign_to_group(tor, {_path_normalize(f.name): f.size for f in files}, by_hash, dry_run)
 
-    def _assign_to_group(self, tor, file_map: Dict[str, int], dry_run: bool = False):
-        """将种子按文件列表归入分组(幂等): 先移出旧组再加入新组; 归组后检查文件大小一致性"""
+    def _assign_to_group(self, tor, file_map: Dict[str, int], by_hash: Dict[str, Any], dry_run: bool = False):
+        """将种子按文件列表归入分组(幂等): 先移出旧组再加入新组; 维护成员索引; 归组后检查大小一致性"""
         if not file_map:
             return
         key = (_path_normalize(tor.save_path), tuple(sorted(file_map.keys())))
-        # 移出旧组(幂等: 种子可能因 save_path 变化被重归组)
-        for other_key, members in list(self._groups.items()):
-            if tor.hash in members:
-                members.remove(tor.hash)
-                self._group_sizes[other_key].pop(tor.hash, None)
-                if not members:
-                    del self._groups[other_key]
-                    self._group_sizes.pop(other_key, None)
+        self._leave_group(tor.hash)  # 幂等: 移出旧组(可能因 save_path 变化被重归组), 不触发扫描
         self._groups.setdefault(key, []).append(tor.hash)
         self._group_sizes.setdefault(key, {})[tor.hash] = file_map
+        self._group_member_to_key[tor.hash] = key
         # 文件大小一致性: 仅新增/重归组时检查(文件列表轻易不变, 无需每轮检查)
-        self._check_size_consistency(key, dry_run)
+        self._check_size_consistency(key, by_hash, dry_run)
 
-    def _check_size_consistency(self, key, dry_run: bool):
+    def _check_size_consistency(self, key, by_hash: Dict[str, Any], dry_run: bool):
         """新增种子归组时检查组内文件大小一致性: 组内 {路径: 大小} 不一致 -> 警告 + 整组暂停(不加标签)"""
         members = self._groups[key]
         if len(members) <= 1:
             return
-        snap = {t.hash: t for t in self._snapshot}
-        tos = [snap[h] for h in members if h in snap]
+        tos = [by_hash[h] for h in members if h in by_hash]
         if not self._size_mismatch(tos, self._group_sizes[key]):
             return
         desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
@@ -121,19 +122,31 @@ class GroupingMixin:
         if not dry_run:
             self.client.torrents_stop(torrent_hashes=[t.hash for t in tos])
 
+    def _leave_group(self, torrent_hash: str):
+        """将种子移出所在分组(成员索引 O(1) 定位, 不做全量遍历); 组空则删除整组
+
+        返回移除后组内仍有剩余成员的组 key(无则 None); 不触发缺文件扫描,
+        重归组(_assign_to_group)与删除(_remove_from_groups)共用, 是否扫描由调用方决定。
+        """
+        key = self._group_member_to_key.pop(torrent_hash, None)
+        if key is None:
+            return None
+        members = self._groups.get(key, [])
+        if torrent_hash in members:
+            members.remove(torrent_hash)
+        self._group_sizes.get(key, {}).pop(torrent_hash, None)
+        if not members:
+            del self._groups[key]
+            self._group_sizes.pop(key, None)
+            return None
+        return key
+
     def _remove_from_groups(self, torrent_hash: str) -> set:
         """种子被删除时从分组中移除; 返回组内仍有剩余成员的组 key(调用方据此触发缺文件扫描)"""
         affected = set()
-        for key, members in list(self._groups.items()):
-            if torrent_hash in members:
-                members.remove(torrent_hash)
-                self._group_sizes[key].pop(torrent_hash, None)
-                if not members:
-                    del self._groups[key]
-                    self._group_sizes.pop(key, None)
-                else:
-                    affected.add(key)
-                break  # 一个种子只属于一个组(归组幂等保证)
+        key = self._leave_group(torrent_hash)
+        if key is not None:
+            affected.add(key)
         return affected
 
     @staticmethod
@@ -196,10 +209,3 @@ class GroupingMixin:
         if enum is not None:
             return bool(getattr(enum, "is_paused", False))
         return (tor.state or "").lower() in _PAUSED_STATES
-
-    def _uploading_to_paused(self, tor) -> bool:
-        """种子由上传(做种)状态变为暂停状态 -> 触发缺文件扫描"""
-        prev = self._group_state_snapshot.get(tor.hash)
-        if prev is None:
-            return False
-        return prev.lower() in _UPLOADING_STATES and self._is_paused(tor)

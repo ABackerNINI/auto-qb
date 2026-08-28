@@ -52,6 +52,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._groups: dict = {}
         # 组内缓存的文件大小映射: key -> {hash: {规范化相对路径: 大小}}(增量归组时拉取)
         self._group_sizes: dict = {}
+        # 分组成员索引: hash -> 组 key, 删除/状态变化/save_path 同步时 O(1) 定位所属组, 避免遍历分组
+        self._group_member_to_key: dict = {}
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -205,7 +207,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 self._create_torrent_tasks(h)
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
                 if self.config.grouping.enabled:
-                    self._assign_new_torrent(h, dry_run)
+                    self._assign_new_torrent(h, by_hash, dry_run)
         if removed:
             self.logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
