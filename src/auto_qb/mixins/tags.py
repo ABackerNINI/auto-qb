@@ -187,14 +187,25 @@ class TagsMixin:
             pat = str(pat).strip()
             if not pat:
                 continue
+
+            ignore_case = False
+            if pat.endswith(":ignore_case"):
+                ignore_case = True
+                pat = pat[:-12]
+
             if pat.startswith("regex:"):
                 try:
-                    if re.search(pat[6:], tag):
+                    if re.search(pat[6:], tag, flags=re.IGNORECASE if ignore_case else 0):
                         return True
                 except re.error:
                     continue
-            elif pat == tag:
-                return True
+            elif ignore_case:
+                if pat.lower() == tag.lower():
+                    return True
+            else:
+                if pat == tag:
+                    return True
+
         return False
 
     def _handle_delete_tags(self, task, dry_run: bool) -> bool:

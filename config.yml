@@ -20,10 +20,10 @@ config:
 
     # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
     delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
-        - M-Team - TP
+        - "M-Team - TP:ignore_case"
         - "regex:^BTSCHOOL"
     delete_tags_if_has_no_torrents: # 彻底删除无种子的标签格式(仅当没有任何种子使用时删除)
-        - "@tracker_tags" # 引用全部 tracker 配置的标签
+        - "@tracker_tags:ignore_case" # 引用全部 tracker 配置的标签
         - "regex:^ORPHAN"
 
     qbittorrent:

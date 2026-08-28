@@ -233,12 +233,19 @@ def _expand_tracker_tags_refs(items: List[str], tracker_tags: List[str]) -> List
     seen = set()
     for it in items or []:
         it = str(it).strip()
+
+        ignore_case = ""
+        if it.endswith(":ignore_case"):
+            ignore_case = ":ignore_case"
+            it = it[:-12]
+
         if it == "@tracker_tags":
             for tag in tracker_tags:
+                tag = tag + ignore_case
                 if tag not in seen:
                     seen.add(tag)
                     out.append(tag)
         elif it and it not in seen:
-            seen.add(it)
-            out.append(it)
+            seen.add(it + ignore_case)
+            out.append(it + ignore_case)
     return out
