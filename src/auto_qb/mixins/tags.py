@@ -8,7 +8,7 @@ from typing import Any, List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
 from ..config import HRRule, TrackerConfig, Config
-from ..utils import match_tag_pattern
+from .. import utils
 
 logger = logging.getLogger("auto-qb")
 
@@ -46,17 +46,23 @@ class TagsMixin:
             return True
         return False
 
-    def _remove_tags(self, tor: TorrentDictionary, tag_patterns_to_remove: List[str], dry_run: bool):
-        """为种子删除标签"""
-        if not tag_patterns_to_remove:
+    def _remove_tags(self, tor: TorrentDictionary, patterns: List[str], dry_run: bool):
+        """
+        为种子删除标签.
+        Args:
+            tor: 种子信息.
+            patterns: 要删除的标签格式.
+            dry_run: 测试运行.
+        """
+        if not patterns:
             return False
 
         current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
-        tag_patterns_to_remove = [tag for tag in current_tags if match_tag_pattern(tag, tag_patterns_to_remove)]
-        if tag_patterns_to_remove:
+        patterns = [tag for tag in current_tags if utils.match_tag_patterns(tag, patterns)]
+        if patterns:
             if not dry_run:
-                self.client.torrents_remove_tags(tags=tag_patterns_to_remove, torrent_hashes=tor.hash)
-            self.logger.info(f"Removed tags '{tag_patterns_to_remove}'")
+                self.client.torrents_remove_tags(tags=patterns, torrent_hashes=tor.hash)
+            self.logger.info(f"Removed tags '{patterns}'")
             return True
         return False
 
@@ -193,7 +199,7 @@ class TagsMixin:
         except Exception as e:
             self.logger.error(f"获取标签列表失败: {e}")
             return True
-        matched = [t for t in all_tags if match_tag_pattern(t, patterns)]
+        matched = [t for t in all_tags if utils.match_tag_patterns(t, patterns)]
         if not matched:
             return True
         if not dry_run:
@@ -235,7 +241,7 @@ class TagsMixin:
         # 对满足筛选条件的标签查询种子数, 如果为0则删除
         matched = []
         for tag in all_tags:
-            if match_tag_pattern(tag, patterns):
+            if utils.match_tag_patterns(tag, patterns):
                 if len(self.client.torrents.info(tag=tag)) == 0:
                     matched.append(tag)
 

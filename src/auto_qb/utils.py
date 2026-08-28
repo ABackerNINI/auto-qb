@@ -188,7 +188,7 @@ def match_tracker_confs(trackers: dict, urls: list):
     return result
 
 
-def match_tag_pattern(tag: str, patterns: List[str]) -> bool:
+def match_tag_patterns(tag: str, patterns: List[str]) -> bool:
     """标签是否匹配任一格式: 精确匹配或`regex:`前缀正则(参考规则动作语义), 支持`:ignore_case`后缀"""
     for pat in patterns or []:
         if not pat:
@@ -208,4 +208,62 @@ def match_tag_pattern(tag: str, patterns: List[str]) -> bool:
                 continue
         elif (ignore_case and pat.lower() == tag.lower()) or pat == tag:  # 精准匹配
             return True
+    return False
+
+
+def _path_normalize(p: str) -> str:
+    """
+    路径规范化：仅统一分隔符并压缩冗余斜杠。
+    重要：保留首尾斜杠不做删除，避免误匹配（如 'c:/windows/' 与 'c:/windowsg' 区分）。
+    """
+    if not p:
+        return p
+    # 1. 反斜杠转正斜杠
+    p = p.replace('\\', '/')
+    # 2. 压缩连续重复斜杠（如 "a//b" -> "a/b"），但保留根目录 "//" 或协议头 "file://" 等特殊场景（这里简单处理，仅压缩非边界处）
+    # 使用正则替换 2 个以上斜杠为 1 个
+    return re.sub(r'/{2,}', '/', p)
+
+
+def match_path_patterns(path: str, patterns: List[str]) -> bool:
+    """
+    路径匹配函数。
+
+    特性：
+    - 精确匹配（默认）：字符串严格相等（已规范化斜杠）。
+    - 正则匹配（前缀 'regex:'）：使用 re.search，支持子串匹配。
+    - 忽略大小写（后缀 ':ignore_case'）：对精确匹配和正则均生效。
+    """
+    # 统一输入路径的斜杠格式（保留尾部斜杠）
+    norm_path = _path_normalize(path)
+
+    for raw_pattern in patterns:
+        # ---------- 1. 解析后缀 :ignore_case ----------
+        ignore_case = False
+        pattern = raw_pattern
+        if pattern.endswith(':ignore_case'):
+            ignore_case = True
+            pattern = pattern[:-len(':ignore_case')]
+
+        # ---------- 2. 解析前缀 regex: ----------
+        is_regex = False
+        core = pattern
+        if pattern.startswith('regex:'):
+            is_regex = True
+            core = pattern[len('regex:'):]
+
+        # ---------- 3. 执行匹配 ----------
+        if is_regex:
+            flags = re.IGNORECASE if ignore_case else 0
+            try:
+                if re.search(core, norm_path, flags):
+                    return True
+            except re.error:
+                continue
+        else:
+            # 精确匹配：对模式也做同样的规范化（保留尾部斜杠）
+            match_core = _path_normalize(core)
+            if (ignore_case and norm_path.lower() == match_core.lower()) or norm_path == match_core:
+                return True
+
     return False

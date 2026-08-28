@@ -42,18 +42,9 @@ class PathCondition(BaseCondition):
 
     def match(self, ctx):
         candidates = [ctx.torrent.save_path, ctx.torrent.content_path]
-        for p in self.patterns:
-            p = str(p)
-            if p.startswith("regex:"):
-                try:
-                    rx = re.compile(p[6:])
-                except re.error:
-                    continue
-                if any(rx.search(c) for c in candidates if c):
-                    return True
-            else:
-                if any(c and c.startswith(p) for c in candidates):
-                    return True
+        for path in candidates:
+            if utils.match_path_patterns(path, self.patterns):
+                return True
         return False
 
 

@@ -39,8 +39,8 @@ config:
             cooldown: 5M
             conditions:
                 - path:
-                      - "regex:^R:\\\\Download\\\\PTing\\\\"
-                      - "regex:^R:\\\\Download\\\\ing\\\\"
+                      - "regex:^R:/Download/PTing/"
+                      - "regex:^R:/Download/ing/"
             actions:
                 - add_tags:
                       - "R" # 添加"R"标签

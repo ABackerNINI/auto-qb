@@ -10,7 +10,6 @@ from typing import List
 from .. import utils
 from .base import ActionResult, BaseAction
 from .registry import register_action
-from ..utils import match_tag_pattern
 
 logger = logging.getLogger("auto-qb.rules")
 
@@ -64,7 +63,7 @@ class RemoveTagsAction(BaseAction):
     def execute(self, ctx):
         current_tags = set(t.strip() for t in (ctx.torrent.tags or "").split(",") if t.strip())
         expanded_patterns = self._expand_patterns(ctx)
-        to_remove = [t for t in current_tags if match_tag_pattern(t, expanded_patterns)]
+        to_remove = [t for t in current_tags if utils.match_tag_patterns(t, expanded_patterns)]
 
         if not to_remove:
             return ActionResult.skip("无匹配标签")
