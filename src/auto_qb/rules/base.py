@@ -1,12 +1,12 @@
 """rules 框架基础: 动作结果, 条件/动作基类, 规则上下文, Rule 插件"""
 import logging
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, List, Optional
 
-from . import registry, utils
+from . import registry
+from .. import utils
 
 logger = logging.getLogger("auto-qb.rules")
 

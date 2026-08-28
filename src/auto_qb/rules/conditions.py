@@ -4,7 +4,7 @@ import re
 import shutil
 from datetime import datetime, time as dtime
 
-from . import utils
+from .. import utils
 from .base import BaseCondition
 from .registry import register_condition
 
