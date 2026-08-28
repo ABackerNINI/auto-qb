@@ -229,23 +229,14 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.begin_round(torrents)
 
     def _create_torrent_tasks(self, torrent_hash: str):
-        """为新增种子创建任务: 内置功能(missing_files/maintenance) + 所有符合条件的规则任务
+        """为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
 
+        缺文件检查统一由分组事件驱动承担(_refresh_torrents 检测到删除/状态变化/
+        保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
         每个任务有内置 interval(规则任务用规则自身 interval), 加入队列即立即到期(下一 tick 执行)。
         """
         tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
         tasks = []
-        # 分组检查替代逐种子 missing_files 检查(分组任务为全局任务, 同组共享一次磁盘扫描)
-        if self.config.check_missing_files and not self.config.grouping.enabled:
-            tasks.append(
-                Task(
-                    "internal",
-                    "missing_files",
-                    torrent_hash=torrent_hash,
-                    interval=self.config.interval,
-                    handler=self._handle_missing_files
-                )
-            )
         tasks.append(
             Task(
                 "internal",
@@ -259,15 +250,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             for rule in self._rules_for_torrent(tor):
                 tasks.append(self._create_rule_task(rule, torrent_hash))
         self.task_queue.add_tasks(tasks)
-
-    def _handle_missing_files(self, task: Task, dry_run: bool) -> bool:
-        """种子级任务: 检查文件丢失(缺失则暂停并加 MISSING 标签); 种子已删返回 False 任务消亡"""
-        tor = self._get_torrent(task.torrent_hash)
-        if tor is None:
-            return False
-        if self.config.check_missing_files:
-            self._check_and_handle_missing_files(tor, dry_run)
-        return True
 
     def _handle_maintenance(self, task: Task, dry_run: bool) -> bool:
         """种子级任务: tracker 匹配 + 添加/删除/相似标签 + HR 标签分类(原 _process_single_torrent 步骤 3-7)"""

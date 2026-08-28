@@ -1,4 +1,4 @@
-"""检查类 mixin: 文件丢失检查 / 辅种跳检 / 异步校验轮询回调
+"""检查类 mixin: 辅种跳检 / 异步校验轮询回调(缺文件检查由分组事件驱动承担)
 
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags。
 """
@@ -31,46 +31,6 @@ class CheckingMixin:
             return True  # 种子已被删除, 视为完成
         state = (infos[0].state or "").lower()
         return not state.startswith("checking")
-
-    def _check_and_handle_missing_files(self, tor: TorrentDictionary, dry_run: bool) -> bool:
-        """
-        检查种子文件是否存在，如果已完成但文件缺失，则暂停并添加标签"MISSING"
-        返回 True 表示已处理（已暂停），否则 False
-        """
-        # 只处理已完成且正在做种的种子
-        if tor.amount_left > 0 or not tor.state_enum.is_uploading:
-            return False
-
-        # 获取文件列表
-        files = self.client.torrents_files(tor.hash)
-        save_path = tor.save_path
-        missing = False
-        for f in files:
-            # 组合完整路径, 添加长路径前缀
-            full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
-
-            if not os.path.exists(full_path):  # 查看文件是否存在
-                self.logger.warning(f"File missing: '{full_path}'!")
-                missing = True
-                break
-
-            if os.path.getsize(full_path) != f.size:  # 比较文件大小
-                self.logger.warning(
-                    f"File size mismatch: '{full_path}', expected {f.size}, got {os.path.getsize(full_path)}!"
-                )
-                missing = True
-                break
-
-        if missing:
-            # 暂停种子
-            if not dry_run:
-                self.client.torrents_stop(tor.hash)
-            self.logger.warning(f"Paused torrent due to missing files")
-
-            # 设置标签
-            self._add_tags(tor, ["MISSING"], dry_run)
-
-        return missing
 
     def _skip_checking_for_cross_seeding(self, tor: TorrentDictionary, dry_run: bool):
         """

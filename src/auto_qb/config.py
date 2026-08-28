@@ -128,8 +128,8 @@ class TrackerConfig:
 class GroupingConfig:
     """种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组
 
-    enabled: 启用分组检查(替代逐种子 check_missing_files, 同组共享一次磁盘扫描)
-    interval: 已废弃: 分组改为事件驱动(_refresh_torrents 检测到删除/状态变化立即处理),
+    enabled: 启用分组检查(缺文件检查统一由分组事件驱动承担, 同组共享一次磁盘扫描)
+    interval: 已废弃: 分组改为事件驱动(_refresh_torrents 检测到删除/状态变化/保存路径变化立即处理),
               不再创建周期轮询任务; 字段保留仅为配置兼容
     missing_tag: 文件丢失时整组添加的标签
     """
@@ -146,7 +146,7 @@ class Config:
     rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
 
     remove_similar_tags: bool
-    check_missing_files: bool
+    check_missing_files: bool  # 已废弃: 缺文件检查统一由分组事件驱动承担, 字段保留仅为配置兼容
 
     hr: HRRule  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底; 规则字段为空)
 

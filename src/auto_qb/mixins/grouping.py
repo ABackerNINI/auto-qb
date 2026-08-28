@@ -12,7 +12,7 @@
       组内 {路径: 大小} 映射不一致 -> 警告 + 整组暂停(不添加标签)
     * 删除种子 -> _handle_removed_torrents: 移出组; 组内仍有剩余种子 -> 立即触发缺文件磁盘扫描
     * 种子由上传(做种)状态转为暂停状态 -> _handle_state_transitions 立即触发缺文件磁盘扫描(不等下一轮)
-    * 保存路径变化 -> _handle_save_path_changes 按新路径重归组
+    * 保存路径变化 -> _handle_save_path_changes 按新路径重归组; 原组剩余成员与新组已有成员均触发缺文件磁盘扫描
   - 缺文件磁盘扫描: 组内取一个已完成且做种的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
 
@@ -49,18 +49,33 @@ class GroupingMixin:
                 self._check_missing_files(tos, self._group_sizes.get(key, {}), dry_run)
 
     def _handle_save_path_changes(self, by_hash: Dict[str, Any], dry_run: bool):
-        """保存路径变化处理: 种子 save_path 变化 -> 按新路径重归组(成员索引 O(1) 定位)
+        """保存路径变化处理: 种子 save_path 变化 -> 移出原组按新路径重归组; 原组与新组触发缺文件扫描
 
+        触发扫描(事件驱动, 同组只扫一次, 循环后统一处理):
+          - 原组: 种子离开后组内仍有剩余成员 -> 立即扫描(文件可能随路径变化而丢失)
+          - 新组: 已有其它成员(非仅本种子) -> 归组后也扫描一次(新种子可能补齐或缺失文件)
         文件列表变化(路径增删)在 qB 中需重加种子, 会走 _assign_new_torrent 重新归组, 这里不处理;
         已删种子由删除事件(_handle_removed_torrents)处理, 这里不重复清理。
         """
+        triggered = set()
         for h, tor in by_hash.items():
             key = self._group_member_to_key.get(h)
             if key is None or _path_normalize(tor.save_path) == key[0]:
                 continue
-            old_map = self._group_sizes.get(key, {}).pop(h, None)
-            if old_map:
-                self._assign_to_group(tor, old_map, by_hash, dry_run)  # 新 save_path + 原文件列表重归组
+            old_map = self._group_sizes.get(key, {}).get(h)
+            if not old_map:
+                continue  # 无缓存文件映射, 无从重归组与扫描(维持原行为)
+            remain_key = self._leave_group(h)  # 移出原组(成员索引 O(1)); 组空则返回 None
+            if remain_key is not None:
+                triggered.add(remain_key)  # 原组: 剩余成员触发缺文件扫描
+            self._assign_to_group(tor, old_map, by_hash, dry_run)  # 新 save_path + 原文件列表重归组
+            new_key = self._group_member_to_key.get(h)
+            if new_key is not None and len(self._groups[new_key]) > 1:
+                triggered.add(new_key)  # 新组: 已有其它成员, 归组后触发一次扫描
+        for key in triggered:
+            members = [by_hash[m] for m in self._groups.get(key, []) if m in by_hash]
+            if members:
+                self._check_missing_files(members, self._group_sizes.get(key, {}), dry_run)
 
     def _handle_state_transitions(self, by_hash: Dict[str, Any], dry_run: bool):
         """状态变化处理: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
@@ -159,6 +174,7 @@ class GroupingMixin:
         if rep is None:
             return  # 组内无已完成做种种子(均在下载/暂停), 不检查
 
+        self.logger.info(f"正在检查种子组的文件丢失: 辅种数: {len(members)}, 名称: {rep.name}")
         missing = False
         for fname, fsize in sizes.get(rep.hash, {}).items():
             full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))

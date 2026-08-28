@@ -1190,7 +1190,7 @@ def test_grouping_no_global_task():
 
 
 def test_grouping_replaces_per_torrent_missing_files():
-    """测试: grouping 启用时替代逐种子 missing_files 任务"""
+    """测试: 逐种子 missing_files 任务已移除, 缺文件检查统一由分组事件驱动承担"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
@@ -1205,9 +1205,9 @@ def test_grouping_replaces_per_torrent_missing_files():
 
         mgr._create_torrent_tasks("H1")
         names = {t.name for t in mgr.task_queue._fast}
-        assert "missing_files" not in names, f"分组启用不应创建逐种子检查: {names}"
+        assert "missing_files" not in names, f"不应创建逐种子检查: {names}"
 
-        # 未启用分组: 保留逐种子检查
+        # 未启用分组同样不创建(逐种子检查已整体移除, 不再回退)
         cfg2 = FakeConfig()
         cfg2.state_file = state_file
         cfg2.check_missing_files = True
@@ -1217,7 +1217,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         mgr2._snapshot = [tor]
         mgr2._create_torrent_tasks("H1")
         names2 = {t.name for t in mgr2.task_queue._fast}
-        assert "missing_files" in names2, f"未启用分组应保留逐种子检查: {names2}"
+        assert "missing_files" not in names2, f"未启用分组也不应创建逐种子检查: {names2}"
         print("[OK] test_grouping_replaces_per_torrent_missing_files: 分组替代逐种子检查")
 
 
@@ -1287,6 +1287,73 @@ def test_grouping_removed_from_groups():
         print("[OK] test_grouping_removed_from_groups: 删除种子移出分组")
 
 
+def test_grouping_save_path_change_triggers_check():
+    """测试: 种子保存路径变化 -> 原组剩余成员触发缺文件扫描; 新组已有其它成员也触发扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        # 组 A: H1/H2(DownloadsA); 组 B: H3(DownloadsB)
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsA")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\DownloadsA")
+        t3 = FakeTorrent(hash="H3", name="T3", state="stalledUP", save_path=r"R:\DownloadsB")
+        for t in (t1, t2, t3):
+            client.torrents[t.hash] = t
+            client.files_map[t.hash] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+        assert client.calls == [], f"首轮归组不应触发扫描: {client.calls}"
+        key_a = ("R:/DownloadsA", ("movie.mkv", ))
+        key_b = ("R:/DownloadsB", ("movie.mkv", ))
+        assert set(mgr._groups[key_a]) == {"H1", "H2"}
+        assert set(mgr._groups[key_b]) == {"H3"}
+
+        # H1 保存路径改为 DownloadsB -> 原组 A 剩 H2 触发扫描; 新组 B 有 H1+H3 也触发扫描
+        t1.save_path = r"R:\DownloadsB"
+        mgr._refresh_torrents()
+
+        assert set(mgr._groups[key_a]) == {"H2"}, f"H1 应移出原组: {mgr._groups[key_a]}"
+        assert set(mgr._groups[key_b]) == {"H1", "H3"}, f"H1 应重归新组: {mgr._groups[key_b]}"
+        assert client.calls.count(("stop", None)) == 2, f"原组与新组各扫描一次并整组暂停: {client.calls}"
+        assert client.calls.count(("add_tags", ["MISSING"])) == 3, f"三个成员应分别加标签: {client.calls}"
+        print("[OK] test_grouping_save_path_change_triggers_check: 保存路径变化原组+新组触发扫描")
+
+
+def test_grouping_save_path_change_new_group_alone():
+    """测试: 保存路径变化但新组无其它成员 -> 仅原组触发扫描, 新组不扫"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.grouping = GroupingConfig(enabled=True, interval=300, missing_tag="MISSING")
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsA")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\DownloadsA")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+        assert client.calls == [], f"首轮归组不应触发扫描: {client.calls}"
+
+        # H1 移到空目录 DownloadsB(新组仅本种子) -> 仅原组 A(H2)触发扫描
+        t1.save_path = r"R:\DownloadsB"
+        mgr._refresh_torrents()
+
+        assert set(mgr._groups[("R:/DownloadsA", ("movie.mkv", ))]) == {"H2"}
+        assert mgr._groups[("R:/DownloadsB", ("movie.mkv", ))] == ["H1"]
+        assert client.calls.count(("stop", None)) == 1, f"仅原组扫描暂停一次: {client.calls}"
+        assert client.calls.count(("add_tags", ["MISSING"])) == 1, f"仅 H2 加标签: {client.calls}"
+        print("[OK] test_grouping_save_path_change_new_group_alone: 新组无其它成员不触发扫描")
+
+
 def test_grouping_no_full_files_scan():
     """测试: 归组仅拉一次文件列表(增量归组); 后续刷新状态不变不触发扫描, 不重复拉取"""
     with tempfile.TemporaryDirectory() as td:
@@ -1348,5 +1415,7 @@ if __name__ == "__main__":
     test_grouping_replaces_per_torrent_missing_files()
     test_grouping_incremental_on_add()
     test_grouping_removed_from_groups()
+    test_grouping_save_path_change_triggers_check()
+    test_grouping_save_path_change_new_group_alone()
     test_grouping_no_full_files_scan()
     print("\n全部自测通过!")
