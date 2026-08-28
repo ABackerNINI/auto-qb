@@ -15,12 +15,32 @@ from auto_qb.rules import RuleContext, ActionResult  # noqa: E402
 
 
 # ---------- 模拟 qB 客户端 ----------
+class _FakeTorrents(dict):
+    """模拟 qbittorrentapi 的 torrents 命名空间: dict 风格访问 + .info(tag=...) 过滤"""
+    def info(self, torrent_hashes=None, tag=None, **kw):
+        """按 hash 和/或 tag 过滤种子(与 torrents_info 同语义)"""
+        if torrent_hashes:
+            if isinstance(torrent_hashes, (list, tuple)):
+                hashes = set(torrent_hashes)
+                items = [self[h] for h in hashes if h in self]
+            else:
+                items = [self[torrent_hashes]] if torrent_hashes in self else []
+        else:
+            items = list(self.values())
+        if tag:
+            items = [
+                t for t in items
+                if tag in ((t.get("tags", "") if isinstance(t, dict) else getattr(t, "tags", "")) or "").split(",")
+            ]
+        return items
+
+
 class FakeClient:
     def __init__(self):
         self.tags = set()
         self.category = ""
         self.calls = []
-        self.torrents = {}  # 模拟客户端中的种子: hash -> info dict
+        self.torrents = _FakeTorrents()  # 模拟客户端中的种子: hash -> info dict
         self.exported = b"TORRENT-DATA"  # torrents_export 返回值
         self.add_error = None  # 模拟重加失败
         self.files = []  # torrents_files 返回值(空 = 全部通过)
@@ -32,11 +52,7 @@ class FakeClient:
         return self.files
 
     def torrents_info(self, torrent_hashes=None, **kw):
-        if not torrent_hashes:
-            return list(self.torrents.values())
-        if isinstance(torrent_hashes, (list, tuple)):
-            return [self.torrents[h] for h in torrent_hashes if h in self.torrents]
-        return [self.torrents[torrent_hashes]] if torrent_hashes in self.torrents else []
+        return self.torrents.info(torrent_hashes=torrent_hashes, **kw)
 
     def torrents_export(self, torrent_hashes=None):
         self.calls.append(("export", None))
@@ -79,9 +95,14 @@ class FakeClient:
         tags = set(tags or [])
         self.tags.difference_update(tags)
         for tor in self.torrents.values():
-            if tor.tags:
-                remain = [t.strip() for t in tor.tags.split(",") if t.strip() and t.strip() not in tags]
-                tor.tags = ",".join(remain)
+            cur = (tor.get("tags", "") if isinstance(tor, dict) else getattr(tor, "tags", "")) or ""
+            if cur:
+                remain = [t.strip() for t in cur.split(",") if t.strip() and t.strip() not in tags]
+                new = ",".join(remain)
+                if isinstance(tor, dict):
+                    tor["tags"] = new
+                else:
+                    tor.tags = new
         self.calls.append(("delete_tags", tags))
 
     def torrents_categories(self):
@@ -155,8 +176,8 @@ class FakeConfig:
     check_missing_files = False
     remove_similar_tags = False
     hr = HRRule()  # 全局 HR 默认输出设置
-    remove_tags = []  # 全局: 彻底删除的标签格式(支持正则)
-    remove_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
+    delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
+    delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
 
 
 def _hr_rule(**kw) -> HRRule:
@@ -170,11 +191,9 @@ def _hr_rule(**kw) -> HRRule:
         add_tag="",
         add_category="!!HR${required_seeding_time}!!",
         overwrite_category=False,
-        overwrite_category_specified=False,
         add_tag_for_satisfied="",
         add_category_for_satisfied="--HR${required_seeding_time}--",
         overwrite_category_for_satisfied=False,
-        overwrite_category_for_satisfied_specified=False,
     )
     base.update(kw)
     return HRRule(**base)
@@ -284,20 +303,30 @@ def test_category_auto_update_from_state():
 
 
 def test_category_explicit_overwrite_false():
-    """测试: 显式 overwrite: false 不启用自动分类更新例外"""
+    """测试: 显式 overwrite: false 与缺省行为一致(自动分类可更新, 手动分类不覆盖)"""
     from auto_qb.rules.actions import AddCategoryAction
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
+        # 当前分类 == 上次自动设置的分类: 显式 false 也应允许更新
         tor = FakeTorrent(category="AUTO-A")
         mgr.state["auto_categories"] = {"HASH123": "AUTO-A"}
         ctx = RuleContext(mgr, client, mgr.config, tor, dry_run=False)
         result = AddCategoryAction({"format": "AUTO-B", "overwrite": False}).execute(ctx)
-        assert result.is_skipped
-        assert client.calls == []
-        print("[OK] test_category_explicit_overwrite_false: 显式 false 保持原语义")
+        assert result.is_ok, f"当前分类==上次自动设置, 显式 false 也应可更新: {result}"
+        assert client.category == "AUTO-B", f"分类未更新: {client.category}"
+        assert mgr.state["auto_categories"]["HASH123"] == "AUTO-B"
+        # 手动分类: 不覆盖
+        tor.category = "MANUAL"
+        n_calls = len(client.calls)
+        ctx2 = RuleContext(mgr, client, mgr.config, tor, dry_run=False)
+        result2 = AddCategoryAction({"format": "AUTO-C", "overwrite": False}).execute(ctx2)
+        assert result2.is_skipped, f"手动分类不应被覆盖: {result2}"
+        assert not any(c[0] == "set_category" for c in client.calls[n_calls:]), \
+            f"不应新增 set_category: {client.calls[n_calls:]}"
+        print("[OK] test_category_explicit_overwrite_false: 显式 false 与缺省一致")
 
 
 def test_builtin_hr_category_auto_update_from_state():
@@ -414,7 +443,7 @@ def test_tracker_rules_ref():
 
 def test_parse_utils():
     """测试: 解析工具"""
-    from auto_qb.rules import utils
+    from auto_qb import utils
     assert utils.parse_time("3D") == 3 * 86400
     assert utils.parse_fsize("10MiB") == 10 * 1024**2
     assert utils.parse_speed("1000KiB/s") == 1000 * 1024
@@ -429,7 +458,7 @@ def test_parse_utils():
 
 def test_compare():
     """测试: 比较解析"""
-    from auto_qb.rules import utils
+    from auto_qb import utils
     op, val = utils.parse_compare(">=100MiB", utils.parse_fsize)
     assert op == ">=" and val == 100 * 1024**2
     assert utils.compare(">", 5, 3)
@@ -820,7 +849,7 @@ def test_hr_required_share_ratio():
         print("[OK] test_hr_required_share_ratio: 分享率达标判定")
 
 
-def test_global_remove_tags():
+def test_global_delete_tags():
     """测试: 全局任务彻底删除标签(精确 + 正则 regex: 前缀)"""
     from auto_qb.taskqueue import Task
 
@@ -828,7 +857,7 @@ def test_global_remove_tags():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.remove_tags = ["M-Team - TP", "regex:^BTSCHOOL"]
+        cfg.delete_tags = ["M-Team - TP", "regex:^BTSCHOOL"]
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
@@ -837,17 +866,17 @@ def test_global_remove_tags():
         tor = FakeTorrent(tags="HHan,M-Team - TP,BTSCHOOL-OLD")
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_delete_tags)
+        task = Task("internal", "delete_tags", interval=60, handler=mgr._handle_delete_tags)
         mgr._handle_delete_tags(task, dry_run=False)
 
         # 精确匹配 M-Team - TP, 正则匹配 BTSCHOOL-OLD; KEEP/HHan 保留
         assert ("delete_tags", {"M-Team - TP", "BTSCHOOL-OLD"}) in client.calls, f"应彻底删除匹配标签: {client.calls}"
         assert client.tags == {"HHan", "KEEP"}, f"标签定义剩余: {client.tags}"
         assert tor.tags == "HHan", f"种子标签应同步移除: {tor.tags}"
-        print("[OK] test_global_remove_tags: 全局彻底删除标签(精确+正则)")
+        print("[OK] test_global_delete_tags: 全局彻底删除标签(精确+正则)")
 
 
-def test_global_remove_tags_dry_run():
+def test_global_delete_tags_dry_run():
     """测试: 全局删除标签 dry-run 无副作用"""
     from auto_qb.taskqueue import Task
 
@@ -855,20 +884,20 @@ def test_global_remove_tags_dry_run():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.remove_tags = ["M-Team - TP"]
+        cfg.delete_tags = ["M-Team - TP"]
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
         client.tags = {"HHan", "M-Team - TP"}
 
-        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_delete_tags)
+        task = Task("internal", "delete_tags", interval=60, handler=mgr._handle_delete_tags)
         mgr._handle_delete_tags(task, dry_run=True)
         assert client.calls == [], f"dry-run 不应调用客户端: {client.calls}"
         assert client.tags == {"HHan", "M-Team - TP"}, "dry-run 不应改变标签"
-        print("[OK] test_global_remove_tags_dry_run: 全局删除标签 dry-run")
+        print("[OK] test_global_delete_tags_dry_run: 全局删除标签 dry-run")
 
 
-def test_global_remove_tags_if_has_no_torrents():
+def test_global_delete_tags_if_has_no_torrents():
     """测试: 全局任务彻底删除无种子的标签(仅删无种子使用的, 有种子使用保留)"""
     from auto_qb.taskqueue import Task
 
@@ -877,7 +906,7 @@ def test_global_remove_tags_if_has_no_torrents():
         cfg = FakeConfig()
         cfg.state_file = state_file
         # 模拟 load_config 展开 @tracker_tags 后的结果: 站点标签 HHan
-        cfg.remove_tags_if_has_no_torrents = ["HHan", "regex:^ORPHAN"]
+        cfg.delete_tags_if_has_no_torrents = ["HHan", "regex:^ORPHAN"]
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
@@ -888,7 +917,7 @@ def test_global_remove_tags_if_has_no_torrents():
 
         task = Task(
             "internal",
-            "remove_tags_if_has_no_torrents",
+            "delete_tags_if_has_no_torrents",
             interval=60,
             handler=mgr._handle_delete_tags_if_has_no_torrents
         )
@@ -896,10 +925,10 @@ def test_global_remove_tags_if_has_no_torrents():
 
         assert ("delete_tags", {"HHan", "ORPHAN-1"}) in client.calls, f"应删除无种子标签: {client.calls}"
         assert client.tags == {"KEEP"}, f"有种子使用的标签应保留: {client.tags}"
-        print("[OK] test_global_remove_tags_if_has_no_torrents: 彻底删除无种子的标签")
+        print("[OK] test_global_delete_tags_if_has_no_torrents: 彻底删除无种子的标签")
 
 
-def test_global_remove_tags_no_pattern_match():
+def test_global_delete_tags_no_pattern_match():
     """测试: 无匹配格式时不调用客户端"""
     from auto_qb.taskqueue import Task
 
@@ -907,7 +936,7 @@ def test_global_remove_tags_no_pattern_match():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.remove_tags = ["不存在的标签"]
+        cfg.delete_tags = ["不存在的标签"]
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
@@ -915,29 +944,29 @@ def test_global_remove_tags_no_pattern_match():
         tor = FakeTorrent(tags="HHan")
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "remove_tags", interval=60, handler=mgr._handle_delete_tags)
+        task = Task("internal", "delete_tags", interval=60, handler=mgr._handle_delete_tags)
         mgr._handle_delete_tags(task, dry_run=False)
         assert client.calls == [], f"无匹配不应调用客户端: {client.calls}"
-        print("[OK] test_global_remove_tags_no_pattern_match: 无匹配无副作用")
+        print("[OK] test_global_delete_tags_no_pattern_match: 无匹配无副作用")
 
 
-def test_global_remove_tags_queued():
+def test_global_delete_tags_queued():
     """测试: 配置非空时创建两个全局任务加入队列"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.remove_tags = ["M-Team - TP"]
-        cfg.remove_tags_if_has_no_torrents = ["@tracker_tags"]
+        cfg.delete_tags = ["M-Team - TP"]
+        cfg.delete_tags_if_has_no_torrents = ["@tracker_tags"]
         mgr = QbManager("", config=cfg)
         # 队列应包含两个全局标签清理任务
         names = {t.name for t in mgr.task_queue._fast}
-        assert "remove_tags" in names, f"缺少 remove_tags 任务: {names}"
-        assert "remove_tags_if_has_no_torrents" in names, f"缺少 remove_tags_if_has_no_torrents 任务: {names}"
+        assert "delete_tags" in names, f"缺少 delete_tags 任务: {names}"
+        assert "delete_tags_if_has_no_torrents" in names, f"缺少 delete_tags_if_has_no_torrents 任务: {names}"
         for t in mgr.task_queue._fast:
-            if t.name in ("remove_tags", "remove_tags_if_has_no_torrents"):
+            if t.name in ("delete_tags", "delete_tags_if_has_no_torrents"):
                 assert t.interval == cfg.interval, f"全局任务 interval 应为 {cfg.interval}: {t.interval}"
-        print("[OK] test_global_remove_tags_queued: 全局清理任务入队")
+        print("[OK] test_global_delete_tags_queued: 全局清理任务入队")
 
 
 def test_config_tracker_tags_expand():
@@ -958,7 +987,7 @@ def test_config_tracker_tags_expand():
                                 "username": "u",
                                 "password": "p",
                             },
-                            "remove_tags_if_has_no_torrents": ["@tracker_tags", "regex:^ORPHAN"],
+                            "delete_tags_if_has_no_torrents": ["@tracker_tags", "regex:^ORPHAN"],
                             "trackers":
                                 {
                                     "HHan": {
@@ -1002,10 +1031,10 @@ if __name__ == "__main__":
     test_async_check()
     test_skip_checking()
     test_skip_checking_guard()
-    test_global_remove_tags()
-    test_global_remove_tags_dry_run()
-    test_global_remove_tags_if_has_no_torrents()
-    test_global_remove_tags_no_pattern_match()
-    test_global_remove_tags_queued()
+    test_global_delete_tags()
+    test_global_delete_tags_dry_run()
+    test_global_delete_tags_if_has_no_torrents()
+    test_global_delete_tags_no_pattern_match()
+    test_global_delete_tags_queued()
     test_config_tracker_tags_expand()
     print("\n全部自测通过!")
