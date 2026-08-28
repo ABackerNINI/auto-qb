@@ -3,10 +3,9 @@
 分组键: (规范化 save_path, 排序后的文件相对路径元组) — 文件列表相同 = 路径集合相同(不含大小,
 以便把大小不一致的种子也归入同组做二次判定)。
 
-分组维护(增量, 不再每轮全量重建):
-  - 首次分组检查任务执行时全量初始化一次(逐种子拉文件列表)
-  - 之后由 _refresh_torrents 检测到新增种子时增量归组(_assign_new_torrent),
-    删除种子时从组中移除(_remove_from_groups)
+分组维护(增量, 无初始化全量分组):
+  - _refresh_torrents 检测到新增种子时增量归组(_assign_new_torrent), 程序启动首轮的
+    现有种子同样作为新增逐个归组; 删除种子时从组中移除(_remove_from_groups)
   - 每轮分组检查仅拉一次全量 torrents_info, 组内文件大小映射复用缓存的 _group_sizes,
     不再逐种子拉取文件列表(大库性能)
 
@@ -16,7 +15,7 @@
      文件丢失 -> 整组暂停 + 添加 MISSING 标签(需求: 同组所有种子全部触发丢失动作)
 
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags/_snapshot,
-以及 qbmanager 初始化的 _groups/_group_sizes/_groups_ready/_group_state_snapshot。
+以及 qbmanager 初始化的 _groups/_group_sizes/_group_state_snapshot。
 """
 import logging
 import os
@@ -38,25 +37,14 @@ class GroupingMixin:
         """全局任务: 分组检查(增量维护分组, 替代逐种子 missing_files 任务)
 
         每轮: 一次全量 torrents_info(取状态/保存路径) + 复用缓存的组内文件大小映射,
-        不再全量拉取文件列表; 分组由 _refresh_torrents 在增删种子时增量维护,
-        本任务仅在首次执行时全量初始化一次。
+        不再拉取任何文件列表; 分组由 _refresh_torrents 在增删种子时增量维护
+        (全部经 _assign_new_torrent 归组, 无初始化全量分组)。
         """
         try:
             torrents = self.client.torrents_info()
         except Exception as e:
             self.logger.error(f"分组检查获取种子列表失败: {e}")
             return True
-
-        # 首次执行: 全量初始化分组(一次性; 之后由 _refresh_torrents 增量维护)
-        if not self._groups_ready:
-            for tor in torrents:
-                try:
-                    files = self.client.torrents_files(tor.hash)
-                except Exception as e:
-                    self.logger.debug(f"分组初始化获取文件列表失败({tor.hash}): {e}")
-                    continue
-                self._assign_to_group(tor, {_path_normalize(f.name): f.size for f in files})
-            self._groups_ready = True
 
         # 同步分组: 清理已删种子, 处理保存路径变化(文件列表变化需重加种子, 罕见不处理)
         by_hash = {t.hash: t for t in torrents}

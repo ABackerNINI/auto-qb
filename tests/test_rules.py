@@ -1042,6 +1042,9 @@ def test_grouping_size_mismatch_pauses_group():
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         client.files_map["H2"] = [_fake_file("movie.mkv", 200)]  # 同名不同大小
 
+        # 归组完全增量: 首轮刷新视为新增, 全部经 _assign_new_torrent 归组
+        mgr._refresh_torrents()
+
         task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
         mgr._handle_grouping(task, dry_run=False)
 
@@ -1069,6 +1072,9 @@ def test_grouping_missing_files_pauses_group():
         client.torrents["H2"] = t2
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+
+        # 归组完全增量: 首轮刷新视为新增, 全部经 _assign_new_torrent 归组
+        mgr._refresh_torrents()
 
         # 首轮: 状态快照为空 -> 视为状态变化 -> 触发缺文件检查(文件不存在)
         task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
@@ -1099,6 +1105,9 @@ def test_grouping_state_change_triggers_check():
         client.torrents["H2"] = t2
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+
+        # 归组完全增量: 首轮刷新视为新增, 全部经 _assign_new_torrent 归组
+        mgr._refresh_torrents()
 
         task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
 
@@ -1186,9 +1195,8 @@ def test_grouping_incremental_on_add():
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
-        mgr._groups_ready = True  # 模拟分组已初始化完成, 之后走增量归组
 
-        # 新增 H1 -> _refresh_torrents 检测 added 并自动归组
+        # 新增 H1 -> _refresh_torrents 检测 added 并自动归组(全部增量归组, 无初始化)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         client.torrents["H1"] = t1
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
@@ -1196,7 +1204,7 @@ def test_grouping_incremental_on_add():
         assert len(mgr._groups) == 1, f"新种子应自动归组: {mgr._groups}"
         key = next(iter(mgr._groups))
         assert mgr._groups[key] == ["H1"], f"组内成员: {mgr._groups[key]}"
-        assert key == ("R:/Downloads", ("movie.mkv",)), f"分组键: {key}"
+        assert key == ("R:/Downloads", ("movie.mkv", )), f"分组键: {key}"
 
         # 再新增 H2(同名同大小) -> 归入同一组
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -1218,7 +1226,6 @@ def test_grouping_removed_from_groups():
         mgr = QbManager("", config=cfg)
         client = FakeClient()
         mgr.client = client
-        mgr._groups_ready = True
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -1245,7 +1252,7 @@ def test_grouping_removed_from_groups():
 
 
 def test_grouping_no_full_files_scan():
-    """测试: 分组初始化后, 每轮检查不再全量拉取文件列表(增量维护分组)"""
+    """测试: 分组检查不再全量拉取文件列表(归组增量, 每轮检查复用缓存)"""
     from auto_qb.taskqueue import Task
 
     with tempfile.TemporaryDirectory() as td:
@@ -1261,17 +1268,18 @@ def test_grouping_no_full_files_scan():
         client.torrents["H1"] = t1
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
 
-        task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
-        # 首轮: 初始化分组(拉取文件列表)
-        mgr._handle_grouping(task, dry_run=False)
-        assert mgr._groups_ready is True, f"首轮应完成分组初始化: {mgr._groups_ready}"
-        assert client.files_calls >= 1, f"初始化应拉取文件列表: {client.files_calls}"
+        # 归组(首轮视为新增, 增量归组): 仅在此处拉一次文件列表
+        mgr._refresh_torrents()
+        assert client.files_calls == 1, f"归组应只拉一次文件列表: {client.files_calls}"
+        assert len(mgr._groups) == 1, f"首轮应完成归组: {mgr._groups}"
 
-        # 第二轮: 状态不变 -> 不触发检查, 且不再拉取任何文件列表
-        client.files_calls = 0
+        task = Task("internal", "grouping", interval=300, handler=mgr._handle_grouping)
+        # 第一轮检查: 状态快照为空 -> 触发缺文件检查; 但不再拉取文件列表
+        mgr._handle_grouping(task, dry_run=False)
+        # 第二轮检查: 状态不变 -> 不触发, 也不拉取文件列表
         client.calls.clear()
         mgr._handle_grouping(task, dry_run=False)
-        assert client.files_calls == 0, f"每轮检查不应再全量拉文件列表: {client.files_calls}"
+        assert client.files_calls == 1, f"每轮检查不应再拉文件列表: {client.files_calls}"
         assert client.calls == [], f"状态不变不应触发检查: {client.calls}"
         print("[OK] test_grouping_no_full_files_scan: 分组检查复用缓存, 不再全量拉文件列表")
 

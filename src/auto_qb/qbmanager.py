@@ -50,10 +50,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._group_state_snapshot: dict = {}
         # 增量分组: key=(save_path, 排序文件路径元组) -> [hash...]; 新增种子时归组, 不再每轮全量重建
         self._groups: dict = {}
-        # 组内缓存的文件大小映射: key -> {hash: {规范化相对路径: 大小}}(首次初始化/增量归组时拉取)
+        # 组内缓存的文件大小映射: key -> {hash: {规范化相对路径: 大小}}(增量归组时拉取)
         self._group_sizes: dict = {}
-        # 初始全量分组是否已完成(首次分组任务执行时置 True, 之后走增量归组)
-        self._groups_ready: bool = False
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -211,8 +209,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self.logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
             for h in added:
                 self._create_torrent_tasks(h)
-                # 增量归组: 分组初始化完成后, 新种子按文件列表自动归组(不再每轮全量遍历分组)
-                if self.config.grouping.enabled and self._groups_ready:
+                # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 无初始化全量分组
+                if self.config.grouping.enabled:
                     self._assign_new_torrent(h)
         if removed:
             self.logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
