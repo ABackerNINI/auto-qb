@@ -51,7 +51,8 @@
         "taskq",
         "taskqueue",
         "tdata",
-        "trackerprxy"
+        "trackerprxy",
+        "windowsg"
     ],
     "python.useEnvironmentsExtension": true,
     "python.analysis.extraPaths": [
