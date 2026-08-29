@@ -5,8 +5,11 @@
 import json
 import logging
 from datetime import date, datetime
-from typing import Any, List
+from typing import Any, List, Optional
+from qbittorrentapi import Client
 
+from ..config import Config
+from ..taskqueue import TaskQueue
 from ..rules import Rule, RuleContext
 from ..taskqueue import Task
 from ..utils import match_tracker_confs
@@ -17,14 +20,14 @@ logger = logging.getLogger("auto-qb")
 class RuleEngineMixin:
     """规则引擎: 加载/状态持久化/种子级规则任务/向后兼容 process_torrent 入口"""
 
-    config: Any
-    client: Any
-    logger: Any
+    config: Config
+    client: Optional[Client]
+    logger: logging.Logger
     state_file: str
     state: dict
     rules: List[Rule]
     enabled_rules: List[Rule]
-    task_queue: Any
+    task_queue: TaskQueue
 
     # ---------- 规则: 加载 / 状态持久化 ----------
 

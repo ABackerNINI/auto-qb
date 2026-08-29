@@ -4,10 +4,10 @@
 """
 import logging
 import os
-from typing import Any
+from typing import Optional
+from qbittorrentapi import Client, TorrentDictionary
 
-from qbittorrentapi import TorrentDictionary
-
+from ..config import Config
 from ..utils import add_long_path_prefix_for_win
 
 logger = logging.getLogger("auto-qb")
@@ -16,9 +16,9 @@ logger = logging.getLogger("auto-qb")
 class CheckingMixin:
     """文件检查/辅种跳检/异步校验轮询"""
 
-    client: Any
-    logger: Any
-    config: Any
+    client: Optional[Client]
+    logger: logging.Logger
+    config: Config
 
     def _is_check_done(self, torrent_hash: str) -> bool:
         """慢速队列轮询回调: 查询种子当前状态, 退出校验(checking*)状态即视为完成"""

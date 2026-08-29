@@ -3,17 +3,16 @@
 由 QbManager 组合(mixin), 依赖实例属性: client/config。
 """
 from typing import Any, Optional
+from qbittorrentapi import Client, TorrentDictionary
 
-from qbittorrentapi import TorrentDictionary
-
-from ..config import TrackerConfig
+from ..config import TrackerConfig, Config
 
 
 class TrackerMixin:
     """tracker 配置匹配"""
 
-    client: Any
-    config: Any
+    client: Optional[Client]
+    config: Config
 
     def _match_tracker(self, tor: TorrentDictionary) -> Optional[TrackerConfig]:
         """

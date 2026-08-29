@@ -21,8 +21,10 @@
 """
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+from qbittorrentapi import Client
 
+from ..config import Config
 from ..utils import _path_normalize, add_long_path_prefix_for_win
 
 logger = logging.getLogger("auto-qb")
@@ -31,9 +33,9 @@ logger = logging.getLogger("auto-qb")
 class GroupingMixin:
     """种子分组管理(辅种管理): 分组 + 组内大小一致性 + 状态变化触发的缺文件联动"""
 
-    client: Any
-    logger: Any
-    config: Any
+    client: Optional[Client]
+    logger: logging.Logger
+    config: Config
 
     def _handle_removed_torrents(self, removed_hashes, by_hash: Dict[str, Any], dry_run: bool):
         """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失)"""

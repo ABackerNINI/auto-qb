@@ -3,8 +3,7 @@
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config。
 """
 import logging
-from typing import Any, List, Optional
-
+from typing import List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
 from ..config import HRRule, TrackerConfig, Config
@@ -17,7 +16,7 @@ class TagsMixin:
     """标签/分类/HR 辅助"""
 
     client: Optional[Client]
-    logger: Any
+    logger: logging.Logger
     config: Config
 
     def _log_torrent_details(self, tor: TorrentDictionary, tracker_conf: TrackerConfig | None) -> str:
