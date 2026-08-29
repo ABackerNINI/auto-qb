@@ -8,7 +8,7 @@ from datetime import date, datetime
 from typing import Any, List, Optional
 from qbittorrentapi import Client
 
-from ..config import Config
+from ..config import Config, TrackerConfig
 from ..taskqueue import TaskQueue
 from ..rules import Rule, RuleContext
 from ..taskqueue import Task
@@ -118,12 +118,13 @@ class RuleEngineMixin:
                 return rules
         return []
 
-    def _create_rule_task(self, rule: Rule, torrent_hash: str) -> Task:
+    def _create_rule_task(self, rule: Rule, torrent_hash: str, tracker_conf: TrackerConfig) -> Task:
         """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)"""
         return Task(
             "rule",
             rule.name,
             torrent_hash=torrent_hash,
+            tracker_conf=tracker_conf,
             interval=rule.interval,
             handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
         )

@@ -1,5 +1,4 @@
 """配置结构与加载: 默认常量 / 数据类 / load_config"""
-import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 

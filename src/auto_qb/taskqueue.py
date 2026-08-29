@@ -14,6 +14,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
+from .config import TrackerConfig
+
 logger = logging.getLogger("auto-qb")
 
 # 任务状态
@@ -33,6 +35,7 @@ class Task:
         "kind",
         "name",
         "torrent_hash",
+        "tracker_conf",
         "next_run",
         "interval",
         "state",
@@ -51,6 +54,7 @@ class Task:
         kind: str,
         name: str,
         torrent_hash: str = "",
+        tracker_conf: TrackerConfig = None,
         next_run: float = 0.0,
         interval: float = 0.0,
         payload: Any = None,
@@ -61,6 +65,7 @@ class Task:
         self.kind = kind
         self.name = name
         self.torrent_hash = torrent_hash
+        self.tracker_conf = tracker_conf
         self.next_run = next_run  # epoch 秒, 到期才执行(快速队列)
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING

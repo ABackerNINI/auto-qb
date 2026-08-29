@@ -20,6 +20,7 @@ from .config import Config, load_config
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
 from .rules import Rule
 from .taskqueue import Task, TaskQueue
+from . import utils
 
 # 主循环 tick 间隔(秒): 唯一的循环粒度, 每个任务有内置 interval 决定自身执行频率
 MAIN_TICK = 2.0
@@ -57,7 +58,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-        self.logger = logging.getLogger("QbManager") # TODO: 梳理全局的logger
+        self.logger = logging.getLogger("QbManager")  # TODO: 梳理全局的logger
 
     def connect(self) -> bool:
         """连接 qBittorrent"""
@@ -89,7 +90,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 try:
                     self._tick(dry_run)
                 except Exception as e:
-                    self.logger.error(f"Error in main loop: {e}")
+                    self.logger.error(f"Error in main loop: {e}", exc_info=True)
                 time.sleep(MAIN_TICK)
         except KeyboardInterrupt:
             self.logger.info("Stopping...")
@@ -235,32 +236,47 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
         每个任务有内置 interval(规则任务用规则自身 interval), 加入队列即立即到期(下一 tick 执行)。
         """
+
         tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
+        if not tor:
+            return
+
+        # 查找种子的tracker配置
+        tracker_conf = self._match_tracker(tor)
+        if not tracker_conf:
+            trackers_info = self.client.torrents_trackers(tor.hash)
+            all_domains = utils.extract_tracker_hostnames(trackers_info)
+            self.logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {tor.hash}")
+            return False  # 未匹配tracker配置, 直接跳过
+
         tasks = []
+
+        # 创建内置种子任务
         tasks.append(
             Task(
                 "internal",
                 "maintenance",
                 torrent_hash=torrent_hash,
+                tracker_conf=tracker_conf,
                 interval=self.config.interval,
                 handler=self._handle_maintenance
             )
         )
-        if tor is not None:
-            for rule in self._rules_for_torrent(tor):
-                tasks.append(self._create_rule_task(rule, torrent_hash))
+
+        # 创建种子规则任务
+        for rule in self._rules_for_torrent(tor):
+            tasks.append(self._create_rule_task(rule, torrent_hash, tracker_conf))
+
         self.task_queue.add_tasks(tasks)
 
     def _handle_maintenance(self, task: Task, dry_run: bool) -> bool:
-        """种子级任务: tracker 匹配 + 添加/删除/相似标签 + HR 标签分类(原 _process_single_torrent 步骤 3-7)"""
+        """内置种子级任务: tracker 匹配 + 添加/删除/相似标签 + HR 标签分类"""
         tor = self._get_torrent(task.torrent_hash)
         if tor is None:
             return False
 
-        tracker_conf = self._match_tracker(tor)
-        if not tracker_conf:
-            self.logger.debug(f"未匹配 tracker 配置, 跳过内置维护: {tor.hash}")
-            return True
+        tracker_conf = task.tracker_conf
+        assert tracker_conf is not None
 
         handled = False
         handled |= self._add_tags(tor, tracker_conf.tags, dry_run)
