@@ -57,7 +57,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-        self.logger = logging.getLogger("QbManager")
+        self.logger = logging.getLogger("QbManager") # TODO: 梳理全局的logger
 
     def connect(self) -> bool:
         """连接 qBittorrent"""

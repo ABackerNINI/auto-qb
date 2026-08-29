@@ -70,8 +70,8 @@ def build_tracker_entry(domain: str) -> dict:
     return {
         "domains": [domain],
         "tags": [gen_default_tag(domain)],  # 需用户自定义
-        "U": UNLIMITED_SPEED,  # 需用户自定义
-        "D": UNLIMITED_SPEED,  # 需用户自定义
+        "upload_speed_limit": UNLIMITED_SPEED,  # 需用户自定义
+        "download_speed_limit": UNLIMITED_SPEED,  # 需用户自定义
         "hr":
             {
                 "required_seeding_time": "3D",  # 示例，需用户修改

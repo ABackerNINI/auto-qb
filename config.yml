@@ -56,8 +56,8 @@ config:
                 - tracker.hhanclub.net
             tags:
                 - HHan
-            U: 5000KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 5000KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 3D
                 extra_seeding_time: 12H
@@ -70,8 +70,8 @@ config:
                 - hdfans.org
             tags:
                 - HDFans
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 3D
                 required_share_ratio: 1.1
@@ -84,8 +84,8 @@ config:
                 - kufirc.com
             tags:
                 - Kufirc
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         pt_btschool_club:
@@ -93,8 +93,8 @@ config:
                 - pt.btschool.club
             tags:
                 - BTSchool
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 20H
                 required_share_ratio: 1.1
@@ -107,8 +107,8 @@ config:
                 - ptfans.cc
             tags:
                 - PTFans
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 7D
                 extra_seeding_time: 12H
@@ -120,8 +120,8 @@ config:
                 - ptzone.xyz
             tags:
                 - PTZone
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_carpt_net:
@@ -129,8 +129,8 @@ config:
                 - tracker.carpt.net
             tags:
                 - CarPT
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 1D
                 extra_seeding_time: 12H
@@ -142,8 +142,8 @@ config:
                 - tracker.cyanbug.net
             tags:
                 - CyanBug
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_digitalcore_club:
@@ -152,8 +152,8 @@ config:
                 - trackerprxy.digitalcore.club
             tags:
                 - DigitalCore
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 5D
                 required_share_ratio: 1.1
@@ -166,8 +166,8 @@ config:
                 - tracker.hdbao.cc
             tags:
                 - HDBao
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_hdclone_top:
@@ -175,8 +175,8 @@ config:
                 - tracker.hdclone.top
             tags:
                 - HDClone
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_hdtime_org:
@@ -184,8 +184,8 @@ config:
                 - tracker.hdtime.org
             tags:
                 - HDTime
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_m_team_cc:
@@ -196,8 +196,8 @@ config:
             remove_tags:
                 - M-Team
                 - M-Team - TP
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         tracker_novahd_top:
@@ -205,8 +205,8 @@ config:
                 - tracker.novahd.top
             tags:
                 - NovaHD
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         www_tangpt_top:
@@ -214,8 +214,8 @@ config:
                 - www.tangpt.top
             tags:
                 - TangPT
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
         ptsbao_club:
@@ -223,8 +223,8 @@ config:
                 - ptsbao.club
             tags:
                 - PTSBao
-            U: 0KiB/s
-            D: 0KiB/s
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 1D
                 required_share_ratio: 1.2

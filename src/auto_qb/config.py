@@ -116,8 +116,8 @@ class TrackerConfig:
     domains: List[str]
     tags: List[str]
     remove_tags: List[str]
-    upload_limit: Optional[int]  # 字节/秒
-    download_limit: Optional[int]  # 字节/秒
+    upload_speed_limit: Optional[int]  # 字节/秒
+    download_speed_limit: Optional[int]  # 字节/秒
     hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
     rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
     remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
@@ -184,9 +184,6 @@ def load_config(config_path: str) -> Config:
 
     trackers = {}
     for name, tdata in cfg["trackers"].items():
-        up = parse_speed(tdata.get("U", UNLIMITED_SPEED))
-        down = parse_speed(tdata.get("D", UNLIMITED_SPEED))
-
         hr = None
         hr_spec = tdata.get("hr")
         if isinstance(hr_spec, dict):
@@ -196,8 +193,8 @@ def load_config(config_path: str) -> Config:
             domains=tdata["domains"],
             tags=tdata.get("tags", []),
             remove_tags=tdata.get("remove_tags", []),
-            upload_limit=up,
-            download_limit=down,
+            upload_speed_limit=parse_speed(tdata.get("upload_speed_limit", UNLIMITED_SPEED)),
+            download_speed_limit=parse_speed(tdata.get("download_speed_limit", UNLIMITED_SPEED)),
             hr=hr,
             rules=tdata.get("rules", []) or [],
             remove_similar_tags=parse_bool(tdata.get("remove_similar_tags", global_remove_similar)),
