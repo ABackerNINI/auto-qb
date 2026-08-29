@@ -5,6 +5,7 @@
 """
 import os
 import re
+import sys
 from urllib.parse import urlparse
 from typing import List
 
@@ -97,8 +98,31 @@ def parse_hr_condition(cond_str) -> tuple:
     return ("dlsize", parse_fsize(cond_str))  # 下载量绝对值, 如 "10MiB"
 
 
+def is_windows() -> bool:
+    """判断当前操作系统是否为 Windows"""
+    return sys.platform.startswith("win")
+
+
+def is_linux() -> bool:
+    """判断当前操作系统是否为 Linux"""
+    return sys.platform.startswith("linux")
+
+
+def is_mac() -> bool:
+    """判断当前操作系统是否为 MacOS"""
+    return sys.platform.startswith("darwin")
+
+
+def is_posix() -> bool:
+    """判断当前操作系统是否为 Unix 类系统(包含 Linux、macOS、BSD 等)"""
+    return sys.platform.startswith(('linux', 'darwin', 'freebsd', 'aix'))
+
+
 def add_long_path_prefix_for_win(path: str) -> str:
-    """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC)"""
+    """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC), 非Windows系统则返回原路径"""
+    if not is_windows():
+        return path
+
     abs_path = os.path.abspath(path).replace("/", "\\")
     if abs_path.startswith("\\\\?\\"):
         return abs_path
@@ -253,7 +277,7 @@ def match_path_patterns(path: str, patterns: List[str]) -> bool:
             core = pattern[len('regex:'):]
 
         # ---------- 3. 执行匹配 ----------
-        if is_regex:
+        if is_regex:  # 正则匹配不能对pattern进行_path_normalize
             flags = re.IGNORECASE if ignore_case else 0
             try:
                 if re.search(core, norm_path, flags):
