@@ -6,3 +6,6 @@ auto-qb-state.json
 
 # 测试跳检备份残留
 skip-check-backup/
+
+# copilot自定义指令
+.github/instructions/
