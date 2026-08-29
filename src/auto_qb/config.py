@@ -12,7 +12,6 @@ DEFAULT_STATE_FILE = "auto-qb-state.json"
 
 DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
-DEFAULT_CHECK_MISSING_FILES = True
 
 # 全局 HR 默认输出设置(站点 hr 段未设置时使用)
 DEFAULT_HR_OUTPUT = {
@@ -146,7 +145,6 @@ class Config:
     rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
 
     remove_similar_tags: bool
-    check_missing_files: bool  # 已废弃: 缺文件检查统一由分组事件驱动承担, 字段保留仅为配置兼容
 
     hr: HRRule  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底; 规则字段为空)
 
@@ -217,7 +215,6 @@ def load_config(config_path: str) -> Config:
         state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
-        check_missing_files=parse_bool(cfg.get("check_missing_files", DEFAULT_CHECK_MISSING_FILES)),
         hr=HRRule(
             add_tag=global_hr.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
             add_category=global_hr.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),

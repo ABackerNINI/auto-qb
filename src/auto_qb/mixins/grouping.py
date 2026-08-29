@@ -195,8 +195,8 @@ class GroupingMixin:
         if missing:
             # 文件丢失: 同组所有种子全部触发丢失动作(暂停 + MISSING 标签)
             tag = self.config.grouping.missing_tag
-            desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in members)
-            self.logger.warning(f"辅种组文件丢失, 暂停整组并添加标签 '{tag}': {desc}")
+            desc = ", ".join(f"[{t.hash[:8]}]" for t in members)
+            self.logger.warning(f"辅种组文件丢失, 暂停整组并添加标签 '{tag}', 受影响的种子哈希: {desc}")
             if not dry_run:
                 self.client.torrents_stop(torrent_hashes=[t.hash for t in members])
             for t in members:
