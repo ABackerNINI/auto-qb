@@ -351,9 +351,35 @@ _RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
 
 # 视频文件扩展名(小写): 只有视频文件参与集数解析, 截图(jpg)/字幕(ass/srt)/字体等一律跳过
 _VIDEO_EXTENSIONS = {
-    "mkv", "mp4", "avi", "mov", "m4v", "m4p", "wmv", "flv", "webm", "mpg", "mpeg",
-    "mpe", "m2v", "m2ts", "mts", "ts", "vob", "rm", "rmvb", "3gp", "3g2", "ogv",
-    "ogm", "asf", "divx", "mpv", "f4v", "mxf", "wtv",
+    "mkv",
+    "mp4",
+    "avi",
+    "mov",
+    "m4v",
+    "m4p",
+    "wmv",
+    "flv",
+    "webm",
+    "mpg",
+    "mpeg",
+    "mpe",
+    "m2v",
+    "m2ts",
+    "mts",
+    "ts",
+    "vob",
+    "rm",
+    "rmvb",
+    "3gp",
+    "3g2",
+    "ogv",
+    "ogm",
+    "asf",
+    "divx",
+    "mpv",
+    "f4v",
+    "mxf",
+    "wtv",
 }
 
 
@@ -379,6 +405,7 @@ def name_has_episode_marker(name: str) -> bool:
 def extract_episodes_from_files(files: list) -> List[int]:
     """从文件列表解析集数列表(去重排序)
 
+    - 只考虑文件名部分: 忽略文件夹路径(如 "Season 1/01.mkv" 中的 "Season 1")
     - 只考虑视频文件(mkv/mp4/avi 等): 截图(jpg/png)/字幕(ass/srt)/字体等非视频文件跳过
     - 每个文件最多贡献一个集数: 有明确标记(第5集/第05-08集/S01E05/EP05/E05)
       按优先级取第一个匹配的模式; 区间标记(第4-6集)视为一个文件打包多集内容, 展开为 4,5,6
@@ -392,6 +419,8 @@ def extract_episodes_from_files(files: list) -> List[int]:
         fname = getattr(f, "name", "") or ""
         if not fname:
             continue
+        # 只取文件名部分, 忽略文件夹路径(统一分隔符后取最后一段)
+        fname = fname.replace("\\", "/").rsplit("/", 1)[-1]
         # 只考虑视频文件: 非视频文件(截图/字幕/字体等)即使含集数标记也跳过
         ext = os.path.splitext(fname)[1].lower().lstrip(".")
         if ext not in _VIDEO_EXTENSIONS:

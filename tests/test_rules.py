@@ -1443,6 +1443,13 @@ def test_episode_tag_utils():
     assert extract_episodes_from_files(files) == [1, 2], "字幕/截图应被跳过"
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.S01E05.ass"]]
     assert extract_episodes_from_files(files) == [], "字幕文件即使含 E 标记也跳过"
+    # 只考虑文件名部分: 文件夹路径中的数字/集数标记不参与解析
+    files = [SimpleNamespace(name=n, size=1) for n in ["Season 1/01.mkv", "Season 1/02.mkv"]]
+    assert extract_episodes_from_files(files) == [1, 2], "文件夹名 Season 1 不应贡献集数"
+    files = [SimpleNamespace(name=n, size=1) for n in ["第1季\\01.mkv", "第1季\\02.mkv"]]
+    assert extract_episodes_from_files(files) == [1, 2], "文件夹名 第1季 不应贡献集数"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.S02/第1集.mkv"]]
+    assert extract_episodes_from_files(files) == [1], "文件夹 S02 不应参与, 取文件 第1集"
     # 扩展名中的数字不应被当作集数(如 "xx.mp4" 的 4)
     files = [SimpleNamespace(name=n, size=1) for n in ["xx.mp4"]]
     assert extract_episodes_from_files(files) == [], "扩展名数字(如 mp4 的 4)不应被提取"
