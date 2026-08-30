@@ -12,9 +12,9 @@ from ..config import Config, TrackerConfig
 from ..taskqueue import TaskQueue
 from ..rules import Rule, RuleContext
 from ..taskqueue import Task
-from ..utils import match_tracker_confs
+from .. import utils
 
-logger = logging.getLogger("auto-qb")
+logger = logging.getLogger(__name__)
 
 
 class RuleEngineMixin:
@@ -41,7 +41,7 @@ class RuleEngineMixin:
                 self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self))
         self.enabled_rules = [r for r in self.rules if r.enabled]
         if self.rules:
-            self.logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
+            logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
 
     def _load_state(self) -> dict:
         try:
@@ -58,7 +58,7 @@ class RuleEngineMixin:
             with open(self.state_file, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, ensure_ascii=False, indent=2)
         except OSError as e:
-            self.logger.warning(f"保存状态文件失败: {e}")
+            logger.warning(f"保存状态文件失败: {e}")
 
     def record_execution(self, rule_name: str, torrent_hash: str):
         """记录规则执行历史(execute_once/cooldown 去重依据); 仅主循环线程调用, 线程安全"""
@@ -103,9 +103,9 @@ class RuleEngineMixin:
         try:
             urls = [t["url"] for t in self.client.torrents_trackers(tor.hash) if t.get("url")]
         except Exception as e:
-            self.logger.debug(f"获取种子 tracker 失败({tor.hash}): {e}")
+            logger.debug(f"获取种子 tracker 失败({tor.hash}): {e}")
             urls = []
-        confs = match_tracker_confs(self.config.trackers, urls)
+        confs = utils.match_tracker_confs(self.config.trackers, urls)
         refs = []
         for conf in confs:
             for ref in getattr(conf, "rules", []) or []:
@@ -138,7 +138,7 @@ class RuleEngineMixin:
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
-            self.logger.warning(f"规则执行异常({rule.name} {tor.hash}): {e}")
+            logger.warning(f"规则执行异常({rule.name} {tor.hash}): {e}")
             return True
         return True
 

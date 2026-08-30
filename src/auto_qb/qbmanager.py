@@ -25,6 +25,8 @@ from . import utils
 # 主循环 tick 间隔(秒): 唯一的循环粒度, 每个任务有内置 interval 决定自身执行频率
 MAIN_TICK = 2.0
 
+logger = logging.getLogger(__name__)
+
 
 class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin):
     def __init__(self, config_path: str, config: Config = None):
@@ -58,7 +60,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-        self.logger = logging.getLogger("QbManager")  # TODO: 梳理全局的logger
 
     def connect(self) -> bool:
         """连接 qBittorrent"""
@@ -69,10 +70,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 password=self.config.qbittorrent.password,
             )
             self.client.auth_log_in()
-            self.logger.info("Connected to qBittorrent successfully")
+            logger.info("Connected to qBittorrent successfully")
             return True
         except Exception as e:
-            self.logger.error(f"Failed to connect to qBittorrent: {e}")
+            logger.error(f"Failed to connect to qBittorrent: {e}")
             return False
 
     def run(self, dry_run: bool):
@@ -83,17 +84,17 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if not self.connect():
             return
 
-        self.logger.info(f"Starting qB manager: main tick {MAIN_TICK}s, default task interval {self.config.interval}s")
-        self.logger.info(f"==========================================================================")
+        logger.info(f"Starting qB manager: main tick {MAIN_TICK}s, default task interval {self.config.interval}s")
+        logger.info(f"==========================================================================")
         try:
             while True:
                 try:
                     self._tick(dry_run)
                 except Exception as e:
-                    self.logger.error(f"Error in main loop: {e}", exc_info=True)
+                    logger.error(f"Error in main loop: {e}", exc_info=True)
                 time.sleep(MAIN_TICK)
         except KeyboardInterrupt:
-            self.logger.info("Stopping...")
+            logger.info("Stopping...")
         finally:
             self.task_queue.shutdown(wait=False)
             if not dry_run:
@@ -110,16 +111,17 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             completed = self.task_queue.poll_slow(self._is_check_done)
             for task in completed:
                 if task.send_error is not None:
-                    self.logger.warning(f"异步校验任务异常({task.torrent_hash}): {task.send_error}")
+                    logger.warning(f"异步校验任务异常({task.torrent_hash}): {task.send_error}")
 
         # 2. 快速队列: 弹出到期任务并执行
-        due = self.task_queue.due(now)
+        due = self.task_queue.due(now, max=20)
         if due:
             self._execute_due(due, dry_run, now)
 
     def _execute_due(self, due: list, dry_run: bool, now: float):
         """执行到期任务: 逐个执行任务(规则/种子级内置)"""
         # 1. 任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
+        logger.debug(f"执行到期任务: {len(due)}个")
         for task in due:
             keep = self._safe(task, dry_run)
             if keep is False:
@@ -132,7 +134,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             if task.handler:
                 return bool(task.handler(task, dry_run))
         except Exception as e:
-            self.logger.error(f"任务执行异常({task.kind}:{task.name} {task.torrent_hash}): {e}")
+            logger.error(f"任务执行异常({task.kind}:{task.name} {task.torrent_hash}): {e}")
         return True
 
     def _is_check_done(self, torrent_hash: str) -> bool:
@@ -140,7 +142,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         try:
             infos = self.client.torrents_info(torrent_hashes=torrent_hash)
         except Exception as e:
-            self.logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
+            logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
             return False
         if not infos:
             return True  # 种子已被删除, 视为完成
@@ -176,7 +178,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             )
         if tasks:
             self.task_queue.add_tasks(tasks)
-            self.logger.info(f"创建全局任务 {len(tasks)} 个: {[t.name for t in tasks]}")
+            logger.info(f"创建全局任务 {len(tasks)} 个: {[t.name for t in tasks]}")
 
     # ---------- 种子级任务 ----------
 
@@ -203,14 +205,14 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             added = current_hashes  # 首轮: 为所有现有种子创建任务
             removed = set()
         if added:
-            self.logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
+            logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
             for h in added:
                 self._create_torrent_tasks(h)
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
                 if self.config.grouping.enabled:
                     self._assign_new_torrent(h, by_hash, dry_run)
         if removed:
-            self.logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
+            logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
                 self.task_queue.remove_torrent(h)
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
@@ -246,7 +248,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if not tracker_conf:
             trackers_info = self.client.torrents_trackers(tor.hash)
             all_domains = utils.extract_tracker_hostnames(trackers_info)
-            self.logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {tor.hash}")
+            logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {tor.hash}")
             return False  # 未匹配tracker配置, 直接跳过
 
         tasks = []
@@ -270,7 +272,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.task_queue.add_tasks(tasks)
 
     def _handle_maintenance(self, task: Task, dry_run: bool) -> bool:
-        """内置种子级任务: tracker 匹配 + 添加/删除/相似标签 + HR 标签分类"""
+        """内置种子级任务: 添加/删除/相似标签 + HR 标签分类"""
         tor = self._get_torrent(task.torrent_hash)
         if tor is None:
             return False
@@ -287,5 +289,5 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             handled |= self._add_hr_tag_or_category(tor, tracker_conf, dry_run)
         if handled:
             self._log_torrent_details(tor, tracker_conf)
-            self.logger.info(f"--------------------------------------------------------------------------")
+            logger.info(f"--------------------------------------------------------------------------")
         return True

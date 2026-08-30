@@ -12,7 +12,7 @@ import yaml
 from .config import UNLIMITED_SPEED
 from .utils import convert_bool_in_dict, extract_tracker_hostnames
 
-logger = logging.getLogger("QbManager")
+logger = logging.getLogger(__name__)
 
 
 def collect_configured_domains(config) -> set:

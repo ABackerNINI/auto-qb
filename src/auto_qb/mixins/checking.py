@@ -10,7 +10,7 @@ from qbittorrentapi import Client, TorrentDictionary
 from ..config import Config
 from ..utils import add_long_path_prefix_for_win
 
-logger = logging.getLogger("auto-qb")
+logger = logging.getLogger(__name__)
 
 
 class CheckingMixin:
@@ -25,7 +25,7 @@ class CheckingMixin:
         try:
             infos = self.client.torrents_info(torrent_hashes=torrent_hash)
         except Exception as e:
-            self.logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
+            logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
             return False
         if not infos:
             return True  # 种子已被删除, 视为完成
@@ -68,7 +68,7 @@ class CheckingMixin:
         if missing:
             return
 
-        self.logger.info(f"Skip checking")
+        logger.info(f"Skip checking")
 
         # 获取种子的关键属性，以便重新添加时保留
         save_path = tor.save_path
@@ -80,12 +80,12 @@ class CheckingMixin:
         # 这是为了保留 tracker 等信息
         if not dry_run:
             torrent_file_data = self.client.torrents_export(torrent_hash=tor.hash)
-        self.logger.info(f"  Exporting torrent")
+        logger.info(f"  Exporting torrent")
 
         # 删除原种子（注意：不要删除已下载的数据文件）
         if not dry_run:
             self.client.torrents_delete(torrent_hashes=tor.hash, delete_files=False)
-        self.logger.info(f"  Deleting torrent")
+        logger.info(f"  Deleting torrent")
 
         # 使用"跳过校验"选项重新添加
         # is_skip_checking=True 即为跳过哈希校验的关键参数
@@ -98,13 +98,13 @@ class CheckingMixin:
                 is_skip_checking=True,  # 核心：跳过校验！
                 is_paused=False,  # 添加后自动开始
             )
-        self.logger.info(f"  Re-adding torrent")
+        logger.info(f"  Re-adding torrent")
 
         # 开始刚添加的种子
         if self.config.skip_checking_auto_start:
             if not dry_run:
                 self.client.torrents_start(torrent_hashes=tor.hash)
-            self.logger.info(f"  Starting torrent")
+            logger.info(f"  Starting torrent")
 
         # 添加跳检标签
         if self.config.add_skip_checking_tags:

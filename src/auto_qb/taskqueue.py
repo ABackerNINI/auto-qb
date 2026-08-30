@@ -11,12 +11,14 @@ import logging
 import queue
 import threading
 import time
+import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
 from .config import TrackerConfig
+from . import utils
 
-logger = logging.getLogger("auto-qb")
+logger = logging.getLogger(__name__)
 
 # 任务状态
 PENDING = "pending"  # 快速队列排队中(等待到期)
@@ -124,12 +126,12 @@ class TaskQueue:
         for t in tasks:
             self.add_task(t, now)
 
-    def due(self, now: float = None) -> List[Task]:
-        """弹出所有到期任务(按 next_run 时间优先)"""
+    def due(self, now: float = None, max: int = 0) -> List[Task]:
+        """弹出所有到期任务(按 next_run 时间优先), max设置弹出的最大数量"""
         now = time.time() if now is None else now
         due = []
         with self._lock:
-            while self._fast and self._fast[0].next_run <= now:
+            while (max <= 0 or len(due) < max) and self._fast and self._fast[0].next_run <= now:
                 task = heapq.heappop(self._fast)
                 task.state = RUNNING
                 due.append(task)
@@ -141,7 +143,8 @@ class TaskQueue:
         task.run_count += 1
         task.state = PENDING
         # TODO: 支持cooldown+
-        task.next_run = now + task.interval
+        # 加上一个[0-1)的随机数, 避免任务同时被执行 (在taskqueue.due中加了最大数量限制, 这里暂时注释掉)
+        task.next_run = now + task.interval  # + random.random()
         with self._lock:
             heapq.heappush(self._fast, task)
 

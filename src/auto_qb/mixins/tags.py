@@ -9,7 +9,7 @@ from qbittorrentapi import Client, TorrentDictionary
 from ..config import HRRule, TrackerConfig, Config
 from .. import utils
 
-logger = logging.getLogger("auto-qb")
+logger = logging.getLogger(__name__)
 
 
 class TagsMixin:
@@ -21,10 +21,10 @@ class TagsMixin:
 
     def _log_torrent_details(self, tor: TorrentDictionary, tracker_conf: TrackerConfig | None) -> str:
         site = tracker_conf.name if tracker_conf else "未知"
-        self.logger.info(f"种子: {tor.name}")
-        self.logger.info(f"站点: {site}")
-        self.logger.info(f"状态: {tor.state}")
-        self.logger.info(f"哈希: {tor.hash}")
+        logger.info(f"种子: {tor.name}")
+        logger.info(f"站点: {site}")
+        logger.info(f"状态: {tor.state}")
+        logger.info(f"哈希: {tor.hash}")
 
     @staticmethod
     def _torrent_desc(tor: TorrentDictionary) -> str:
@@ -41,7 +41,7 @@ class TagsMixin:
         if new_tags:
             if not dry_run:
                 self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
-            self.logger.info(f"Added tags '{new_tags}'")
+            logger.info(f"Added tags '{new_tags}'")
             return True
         return False
 
@@ -61,7 +61,7 @@ class TagsMixin:
         if patterns:
             if not dry_run:
                 self.client.torrents_remove_tags(tags=patterns, torrent_hashes=tor.hash)
-            self.logger.info(f"Removed tags '{patterns}'")
+            logger.info(f"Removed tags '{patterns}'")
             return True
         return False
 
@@ -79,7 +79,7 @@ class TagsMixin:
             if tag.lower() in [t.lower() for t in tags] and tag not in tags:
                 if not dry_run:
                     self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
-                self.logger.info(f"Removed similar tag '{tag}'")
+                logger.info(f"Removed similar tag '{tag}'")
                 removed = True
 
         return removed
@@ -109,13 +109,13 @@ class TagsMixin:
 
             # 打印日志
             if old_category:
-                self.logger.info(f"Set category from '{old_category}' to '{category}'")
+                logger.info(f"Set category from '{old_category}' to '{category}'")
             else:
-                self.logger.info(f"Set category to '{category}'")
+                logger.info(f"Set category to '{category}'")
 
             return True
         else:  # 存在分类但不覆盖
-            self.logger.warning(f"Skipping as it already has category '{old_category}'")
+            logger.warning(f"Skipping as it already has category '{old_category}'")
             return True
 
     def _create_category_if_not_exists(self, category: str, dry_run: bool):
@@ -124,7 +124,7 @@ class TagsMixin:
         if category not in current_categories:  # 分类不存在
             if not dry_run:
                 self.client.torrents_create_category(name=category)
-            self.logger.info(f"Created category '{category}'")
+            logger.info(f"Created category '{category}'")
 
     # ---------- HR ----------
 
@@ -196,14 +196,14 @@ class TagsMixin:
         try:
             all_tags = self.client.torrents_tags() or []
         except Exception as e:
-            self.logger.error(f"获取标签列表失败: {e}")
+            logger.error(f"获取标签列表失败: {e}")
             return True
         matched = [t for t in all_tags if utils.match_tag_patterns(t, patterns)]
         if not matched:
             return True
         if not dry_run:
             self.client.torrents_delete_tags(tags=matched)
-        self.logger.info(f"彻底删除标签: {matched}")
+        logger.info(f"彻底删除标签: {matched}")
         return True
 
     def _handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
@@ -217,7 +217,7 @@ class TagsMixin:
         try:
             all_tags = set(self.client.torrents_tags() or [])
         except Exception as e:
-            self.logger.error(f"获取标签列表失败: {e}")
+            logger.error(f"获取标签列表失败: {e}")
             return True
         if not all_tags:
             return True
@@ -233,6 +233,6 @@ class TagsMixin:
             return True
         if not dry_run:
             self.client.torrents_delete_tags(tags=matched)
-        self.logger.info(f"彻底删除无种子的标签: {matched}")
+        logger.info(f"彻底删除无种子的标签: {matched}")
 
         return True

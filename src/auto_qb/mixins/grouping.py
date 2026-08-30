@@ -25,9 +25,9 @@ from typing import Any, Dict, Optional
 from qbittorrentapi import Client
 
 from ..config import Config
-from ..utils import _path_normalize, add_long_path_prefix_for_win
+from .. import utils
 
-logger = logging.getLogger("auto-qb")
+logger = logging.getLogger(__name__)
 
 
 class GroupingMixin:
@@ -62,7 +62,7 @@ class GroupingMixin:
         triggered = set()
         for h, tor in by_hash.items():
             key = self._group_member_to_key.get(h)
-            if key is None or _path_normalize(tor.save_path) == key[0]:
+            if key is None or utils._path_normalize(tor.save_path) == key[0]:
                 continue
             old_map = self._group_sizes.get(key, {}).get(h)
             if not old_map:
@@ -110,15 +110,15 @@ class GroupingMixin:
         try:
             files = self.client.torrents_files(torrent_hash)
         except Exception as e:
-            self.logger.debug(f"分组归组获取文件列表失败({torrent_hash}): {e}")
+            logger.debug(f"分组归组获取文件列表失败({torrent_hash}): {e}")
             return
-        self._assign_to_group(tor, {_path_normalize(f.name): f.size for f in files}, by_hash, dry_run)
+        self._assign_to_group(tor, {utils._path_normalize(f.name): f.size for f in files}, by_hash, dry_run)
 
     def _assign_to_group(self, tor, file_map: Dict[str, int], by_hash: Dict[str, Any], dry_run: bool = False):
         """将种子按文件列表归入分组(幂等): 先移出旧组再加入新组; 维护成员索引; 归组后检查大小一致性"""
         if not file_map:
             return
-        key = (_path_normalize(tor.save_path), tuple(sorted(file_map.keys())))
+        key = (utils._path_normalize(tor.save_path), tuple(sorted(file_map.keys())))
         self._leave_group(tor.hash)  # 幂等: 移出旧组(可能因 save_path 变化被重归组), 不触发扫描
         self._groups.setdefault(key, []).append(tor.hash)
         self._group_sizes.setdefault(key, {})[tor.hash] = file_map
@@ -135,7 +135,7 @@ class GroupingMixin:
         if not self._size_mismatch(tos, self._group_sizes[key]):
             return
         desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
-        self.logger.warning(f"辅种组文件大小不一致({len(tos)}个种子), 暂停整组: {desc}")
+        logger.warning(f"辅种组文件大小不一致({len(tos)}个种子), 暂停整组: {desc}")
         if not dry_run:
             self.client.torrents_stop(torrent_hashes=[t.hash for t in tos])
 
@@ -176,21 +176,21 @@ class GroupingMixin:
         if rep is None:
             return  # 组内无已完成做种种子(均在下载/暂停), 不检查
 
-        self.logger.info(f"正在检查种子组的文件丢失: 辅种数: {len(members)}, 名称: {rep.name}")
+        logger.info(f"正在检查种子组的文件丢失: 辅种数: {len(members)}, 名称: {rep.name}")
         missing = False
         for fname, fsize in sizes.get(rep.hash, {}).items():
-            full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))
+            full_path = utils.add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))
             if not os.path.exists(full_path):
-                self.logger.warning(f"辅种组文件缺失: '{full_path}'")
+                logger.warning(f"辅种组文件缺失: '{full_path}'")
                 missing = True
                 break
             try:
                 if os.path.getsize(full_path) != fsize:
-                    self.logger.warning(f"辅种组文件大小不一致: '{full_path}', 期望 {fsize}")
+                    logger.warning(f"辅种组文件大小不一致: '{full_path}', 期望 {fsize}")
                     missing = True
                     break
             except OSError:
-                self.logger.warning(f"辅种组文件无法读取: '{full_path}'")
+                logger.warning(f"辅种组文件无法读取: '{full_path}'")
                 missing = True
                 break
 
@@ -198,7 +198,7 @@ class GroupingMixin:
             # 文件丢失: 同组所有种子全部触发丢失动作(暂停 + MISSING 标签)
             tag = self.config.grouping.missing_tag
             desc = ", ".join(f"[{t.hash[:8]}]" for t in members)
-            self.logger.warning(f"辅种组文件丢失, 暂停整组并添加标签 '{tag}', 受影响的种子哈希: {desc}")
+            logger.warning(f"辅种组文件丢失, 暂停整组并添加标签 '{tag}', 受影响的种子哈希: {desc}")
             if not dry_run:
                 self.client.torrents_stop(torrent_hashes=[t.hash for t in members])
             for t in members:

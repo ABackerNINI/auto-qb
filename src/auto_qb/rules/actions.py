@@ -11,7 +11,7 @@ from .. import utils
 from .base import ActionResult, BaseAction
 from .registry import register_action
 
-logger = logging.getLogger("auto-qb.rules")
+logger = logging.getLogger(__name__)
 
 # 用于 start/stop 动作的幂等判断
 _STARTED_STATES = {

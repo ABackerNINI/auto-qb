@@ -8,7 +8,7 @@ from typing import Any, List, Optional
 from . import registry
 from .. import utils
 
-logger = logging.getLogger("auto-qb.rules")
+logger = logging.getLogger(__name__)
 
 
 class ActionResult:
