@@ -349,6 +349,13 @@ _EPISODE_PATTERNS: List[tuple] = [
 _BARE_NUMBER_RE = re.compile(r"(?:^|[^A-Za-z0-9])(\d{1,4})(?:[^A-Za-z0-9]|$)")
 _RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
 
+# 视频文件扩展名(小写): 只有视频文件参与集数解析, 截图(jpg)/字幕(ass/srt)/字体等一律跳过
+_VIDEO_EXTENSIONS = {
+    "mkv", "mp4", "avi", "mov", "m4v", "m4p", "wmv", "flv", "webm", "mpg", "mpeg",
+    "mpe", "m2v", "m2ts", "mts", "ts", "vob", "rm", "rmvb", "3gp", "3g2", "ogv",
+    "ogm", "asf", "divx", "mpv", "f4v", "mxf", "wtv",
+}
+
 
 def _expand_episode_range(start: int, end: int) -> List[int]:
     """集数区间展开(第4-6集 -> [4,5,6]); 上限钳制到 9999"""
@@ -372,6 +379,7 @@ def name_has_episode_marker(name: str) -> bool:
 def extract_episodes_from_files(files: list) -> List[int]:
     """从文件列表解析集数列表(去重排序)
 
+    - 只考虑视频文件(mkv/mp4/avi 等): 截图(jpg/png)/字幕(ass/srt)/字体等非视频文件跳过
     - 每个文件最多贡献一个集数: 有明确标记(第5集/第05-08集/S01E05/EP05/E05)
       按优先级取第一个匹配的模式; 区间标记(第4-6集)视为一个文件打包多集内容, 展开为 4,5,6
     - 无标记时, 仅当文件名中恰好只有一个候选数字(排除分辨率/年份)才视为集数,
@@ -383,6 +391,10 @@ def extract_episodes_from_files(files: list) -> List[int]:
     for f in files:
         fname = getattr(f, "name", "") or ""
         if not fname:
+            continue
+        # 只考虑视频文件: 非视频文件(截图/字幕/字体等)即使含集数标记也跳过
+        ext = os.path.splitext(fname)[1].lower().lstrip(".")
+        if ext not in _VIDEO_EXTENSIONS:
             continue
         # 1. 明确集数标记: 按优先级取第一个匹配的模式(每个文件一组集数)
         nums = _match_episode_pattern(fname)

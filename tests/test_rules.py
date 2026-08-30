@@ -1436,6 +1436,13 @@ def test_episode_tag_utils():
     # 排除干扰: 分辨率/年份/无数字
     files = [SimpleNamespace(name=n, size=1) for n in ["Movie.2024.1080p.mkv", "sample.mkv"]]
     assert extract_episodes_from_files(files) == []
+    # 只考虑视频文件: 截图/字幕/字体等非视频文件即使含集数标记也跳过
+    files = [SimpleNamespace(name=n, size=1) for n in ["第1集.jpg", "第2集.png", "01.srt", "02.ass"]]
+    assert extract_episodes_from_files(files) == [], "非视频文件不应贡献集数"
+    files = [SimpleNamespace(name=n, size=1) for n in ["01.mkv", "02.mkv", "03.ass", "04.jpg"]]
+    assert extract_episodes_from_files(files) == [1, 2], "字幕/截图应被跳过"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.S01E05.ass"]]
+    assert extract_episodes_from_files(files) == [], "字幕文件即使含 E 标记也跳过"
     # 扩展名中的数字不应被当作集数(如 "xx.mp4" 的 4)
     files = [SimpleNamespace(name=n, size=1) for n in ["xx.mp4"]]
     assert extract_episodes_from_files(files) == [], "扩展名数字(如 mp4 的 4)不应被提取"
