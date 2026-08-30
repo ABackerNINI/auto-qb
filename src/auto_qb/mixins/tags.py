@@ -57,11 +57,11 @@ class TagsMixin:
             return False
 
         current_tags = (set(part.strip() for part in tor.tags.split(",")) if tor.tags else set())
-        patterns = [tag for tag in current_tags if utils.match_tag_patterns(tag, patterns)]
-        if patterns:
+        to_remove_tags = [tag for tag in current_tags if utils.match_tag_patterns(tag, patterns)]
+        if to_remove_tags:
             if not dry_run:
-                self.client.torrents_remove_tags(tags=patterns, torrent_hashes=tor.hash)
-            logger.info(f"Removed tags '{patterns}'")
+                self.client.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=tor.hash)
+            logger.info(f"Removed tags '{to_remove_tags}'")
             return True
         return False
 
