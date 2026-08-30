@@ -6,6 +6,8 @@
 import os
 import re
 import sys
+import time
+from functools import wraps
 from urllib.parse import urlparse
 from typing import List
 
@@ -291,3 +293,30 @@ def match_path_patterns(path: str, patterns: List[str]) -> bool:
                 return True
 
     return False
+
+
+def timer(unit='s', log_func=print):
+    """
+    参数：
+        unit: 时间单位，'s' 秒，'ms' 毫秒，'us' 微秒
+        log_func: 输出函数，默认 print，可替换为 logging.info 等
+        示例: @utils.timer(unit="ms", log_func=logger.debug)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            result = func(*args, **kwargs)
+            elapsed = time.perf_counter() - start
+
+            if unit == 'ms':
+                elapsed *= 1000
+            elif unit == 'us':
+                elapsed *= 1_000_000
+
+            log_func(f"{func.__name__} 耗时: {elapsed:.3f} {unit}")
+            return result
+
+        return wrapper
+
+    return decorator
