@@ -1436,6 +1436,13 @@ def test_episode_tag_utils():
     # 排除干扰: 分辨率/年份/无数字
     files = [SimpleNamespace(name=n, size=1) for n in ["Movie.2024.1080p.mkv", "sample.mkv"]]
     assert extract_episodes_from_files(files) == []
+    # 扩展名中的数字不应被当作集数(如 "xx.mp4" 的 4)
+    files = [SimpleNamespace(name=n, size=1) for n in ["xx.mp4"]]
+    assert extract_episodes_from_files(files) == [], "扩展名数字(如 mp4 的 4)不应被提取"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.01.mkv", "xx.mp4"]]
+    assert extract_episodes_from_files(files) == [1], "xx.mp4 不应贡献数字 4"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.05.1080p.mkv", "Show.05.mkv"]]
+    assert extract_episodes_from_files(files) == [5]
     # 模式优先级: 第x集/S01E05 > EP05 > E05(单文件多模式时取优先级最高者)
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.S01E05.EP03.E04.mkv"]]
     assert extract_episodes_from_files(files) == [5], "S01E05 应优先于 EP03/E04"

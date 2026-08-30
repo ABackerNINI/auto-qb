@@ -324,35 +324,29 @@ def timer(unit='s', log_func=print):
 
 # ---------- 集数解析(自动添加集数标签) ----------
 
-# 种子名称中已含集数标记的模式: S01E01 / EP05 / E05 / 第1集 / 第01-05集
-_NAME_EPISODE_RE = re.compile(
-    r"(?:[Ss]\d{1,4}[Ee]\d{1,4}|[Ee][Pp]?\d{1,4}|第\s*\d{1,4}\s*[-~至]\s*\d{1,4}\s*集|第\s*\d{1,4}\s*集)",
-    re.IGNORECASE,
-)
-
-# 文件名中提取集数的模式: 按优先级从高到低排列(第一个匹配者生效)
+# 文件名/种子名中提取集数的模式: 按优先级从高到低排列(第一个匹配者生效)
 #   第5集 / 第05-08集 / S01E05  >  EP05  >  E05
 # 每项: (正则, 提取函数(match -> List[int])), 提取函数返回该文件贡献的集数列表
 # 新增模式: 在合适优先级位置插入一项即可, 无需改提取逻辑
-_FILE_EPISODE_PATTERNS: List[tuple] = [
+_EPISODE_PATTERNS: List[tuple] = [
     # 第x集 / 第x-y集(区间展开为多集)
-    (re.compile(r"第\s*(\d{1,4})\s*(?:[-~至]\s*(\d{1,4}))?\s*集", re.IGNORECASE),
-     lambda m: _expand_episode_range(int(m.group(1)), int(m.group(2))) if m.group(2) else [int(m.group(1))]),
+    (
+        re.compile(r"第\s*(\d{1,4})\s*(?:[-~至]\s*(\d{1,4}))?\s*集",
+                   re.IGNORECASE), lambda m: _expand_episode_range(int(m.group(1)), int(m.group(2)))
+        if m.group(2) else [int(m.group(1))]
+    ),
     # S01E05
-    (re.compile(r"[Ss]\d{1,4}[Ee](\d{1,4})", re.IGNORECASE),
-     lambda m: [int(m.group(1))]),
+    (re.compile(r"[Ss]\d{1,4}[Ee](\d{1,4})", re.IGNORECASE), lambda m: [int(m.group(1))]),
     # EP05
-    (re.compile(r"[Ee][Pp](\d{1,4})", re.IGNORECASE),
-     lambda m: [int(m.group(1))]),
+    (re.compile(r"[Ee][Pp](\d{1,4})", re.IGNORECASE), lambda m: [int(m.group(1))]),
     # E05
-    (re.compile(r"[Ee](\d{1,4})", re.IGNORECASE),
-     lambda m: [int(m.group(1))]),
+    (re.compile(r"[Ee](\d{1,4})", re.IGNORECASE), lambda m: [int(m.group(1))]),
 ]
 
-
 # 文件名中独立数字模式(如 "01.mkv", "Show.Name.05"): 排除分辨率/年份等干扰
-# 要求数字前后是分隔符或边界, 且排除 分辨率(720/1080/2160...) 与 年份(19xx/20xx)
-_BARE_NUMBER_RE = re.compile(r"(?:^|[^\d])(\d{1,4})(?:$|[^\d])")
+# 要求数字两侧是分隔符或边界(不能与字母粘连, 防止扩展名数字如 "xx.mp4" 的 4 被误判),
+# 且排除 分辨率(720/1080/2160...) 与 年份(19xx/20xx)
+_BARE_NUMBER_RE = re.compile(r"(?:^|[^A-Za-z0-9])(\d{1,4})(?:[^A-Za-z0-9]|$)")
 _RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
 
 
@@ -363,7 +357,7 @@ def _expand_episode_range(start: int, end: int) -> List[int]:
 
 def _match_episode_pattern(fname: str) -> List[int]:
     """按优先级匹配文件名集数模式: 返回第一个匹配模式提取的集数列表(区间模式展开为多集); 无匹配返回 []"""
-    for regex, extractor in _FILE_EPISODE_PATTERNS:
+    for regex, extractor in _EPISODE_PATTERNS:
         m = regex.search(fname)
         if m:
             return extractor(m)
@@ -372,7 +366,7 @@ def _match_episode_pattern(fname: str) -> List[int]:
 
 def name_has_episode_marker(name: str) -> bool:
     """种子名称是否已含集数标记(S01E01/EP01/第1集等): 含则无需再从文件列表解析"""
-    return bool(name and _NAME_EPISODE_RE.search(name))
+    return bool(name and any(regex.search(name) for regex, _ in _EPISODE_PATTERNS))
 
 
 def extract_episodes_from_files(files: list) -> List[int]:
