@@ -7,7 +7,7 @@ from typing import List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
 from ..config import HRRule, TrackerConfig, Config
-from .. import utils
+from .. import episodes, utils
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +73,17 @@ class TagsMixin:
         如 01.mkv~05.mkv -> 添加 'E1-5'。解析不到集数(电影/合集等)则不加标签。
         """
         tor = by_hash.get(torrent_hash)
-        # if tor is None or utils.name_has_episode_marker(tor.name or ""):
+        # if tor is None or episodes.name_has_episode_marker(tor.name or ""):
         #     return  # 名称已含集数标记, 无需再解析
         try:
             files = self.client.torrents_files(torrent_hash)
         except Exception as e:
             logger.debug(f"集数标签获取文件列表失败({torrent_hash}): {e}")
             return
-        episodes = utils.extract_episodes_from_files(files)
-        if not episodes:
+        episodes_list = episodes.extract_episodes_from_files(files)
+        if not episodes_list:
             return  # 文件列表无集数(电影/合集), 不加标签
-        tag = utils.format_episode_tag(episodes)
+        tag = episodes.format_episode_tag(episodes_list)
         if not tag:
             return  # 集数非连续(存在缺集/误提取), 放弃添加
         self._add_tags(tor, [tag], dry_run)

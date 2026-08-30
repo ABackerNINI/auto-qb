@@ -1416,7 +1416,7 @@ def test_grouping_no_full_files_scan():
 
 def test_episode_tag_utils():
     """测试: 集数解析纯函数(名称标记判断/文件集数提取/区间合并) """
-    from auto_qb.utils import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
+    from auto_qb.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
 
     # 名称含集数标记判断
     assert name_has_episode_marker("Show.S01E01-E05.1080p")
