@@ -209,9 +209,9 @@ def _check_action(basic_check="filelist", with_seg=None, without_seg=None, custo
 def _grouped_mgr(state_file, hashes):
     """构造已归组 manager: _groups/_group_member_to_key/_snapshot 齐全"""
     mgr = make_manager(state_file)
-    mgr._groups[("KEY",)] = list(hashes)
+    mgr._groups[("KEY", )] = list(hashes)
     for h in hashes:
-        mgr._group_member_to_key[h] = ("KEY",)
+        mgr._group_member_to_key[h] = ("KEY", )
     mgr._snapshot = list(hashes.values())
     return mgr
 
@@ -279,6 +279,7 @@ def _skip_ctx(state_file, **client_patches):
 def test_skip_checking_export_error():
     """checking skip-checking: 导出 .torrent 失败 -> fail"""
     with tempfile.TemporaryDirectory() as td:
+
         def boom(h=None, **kw):
             raise RuntimeError("export failed")
 
@@ -301,6 +302,7 @@ def test_skip_checking_export_empty():
 def test_skip_checking_delete_error():
     """checking skip-checking: 删除种子失败 -> fail(种子未删除, 无损失)"""
     with tempfile.TemporaryDirectory() as td:
+
         def boom(h=None, **kw):
             raise RuntimeError("delete failed")
 
@@ -313,6 +315,7 @@ def test_skip_checking_delete_error():
 def test_skip_checking_not_appeared():
     """checking skip-checking: 重加后轮询未确认到种子 -> fail"""
     with tempfile.TemporaryDirectory() as td:
+
         def boom(h=None, **kw):
             raise RuntimeError("info failed")
 
@@ -326,6 +329,7 @@ def test_skip_checking_not_appeared():
 def test_skip_checking_auto_start_error():
     """checking skip-checking: 自动开始失败 -> fail"""
     with tempfile.TemporaryDirectory() as td:
+
         def boom(h=None, **kw):
             raise RuntimeError("start failed")
 
