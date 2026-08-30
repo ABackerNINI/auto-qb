@@ -9,3 +9,7 @@ skip-check-backup/
 
 # copilot自定义指令
 .github/instructions/
+
+# pytest-cov覆盖率文件
+.coverage
+htmlcov/
