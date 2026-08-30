@@ -1436,6 +1436,17 @@ def test_episode_tag_utils():
     # 排除干扰: 分辨率/年份/无数字
     files = [SimpleNamespace(name=n, size=1) for n in ["Movie.2024.1080p.mkv", "sample.mkv"]]
     assert extract_episodes_from_files(files) == []
+    # 模式优先级: 第x集/S01E05 > EP05 > E05(单文件多模式时取优先级最高者)
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.S01E05.EP03.E04.mkv"]]
+    assert extract_episodes_from_files(files) == [5], "S01E05 应优先于 EP03/E04"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.EP03.E04.mkv"]]
+    assert extract_episodes_from_files(files) == [3], "EP05 应优先于 E04"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.第3集.E05.mkv"]]
+    assert extract_episodes_from_files(files) == [3], "第x集 应优先于 E05"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.第3-5集.S01E02.mkv"]]
+    assert extract_episodes_from_files(files) == [3, 4, 5], "第x-y集 区间应优先展开"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.E05.mkv"]]
+    assert extract_episodes_from_files(files) == [5]
     # 单文件多个候选数字(日期时间截图) -> 无法确定唯一集数, 跳过该文件
     files = [SimpleNamespace(name=n, size=1) for n in ["2022.05.11_14.51.23.jpg", "01.mkv", "02.mkv"]]
     assert extract_episodes_from_files(files) == [1, 2], "日期截图不应贡献集数"
@@ -1445,10 +1456,10 @@ def test_episode_tag_utils():
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.Name.05.1080p.mkv"]]
     assert extract_episodes_from_files(files) == [5]
 
-    # 标签格式化: 必须连续, 非连续/空 -> 放弃
-    assert format_episode_tag([1, 2, 3, 4, 5]) == "E1-5"
+    # 标签格式化: 必须连续, 非连续/空 -> 放弃(z 前缀使标签排序靠后)
+    assert format_episode_tag([1, 2, 3, 4, 5]) == "zE1-5"
     assert format_episode_tag([1, 2, 3, 5]) == ""  # 缺集 -> 放弃
-    assert format_episode_tag([3]) == "E3"
+    assert format_episode_tag([3]) == "zE3"
     assert format_episode_tag([]) == ""
     print("[OK] test_episode_tag_utils: 集数解析纯函数")
 
@@ -1464,7 +1475,7 @@ def test_episode_tags_added_on_new_torrent():
         client = FakeClient()
         mgr.client = client
 
-        t1 = FakeTorrent(hash="H1", name="Show.S01E01", state="stalledUP")  # 名称已含集数 -> 跳过
+        t1 = FakeTorrent(hash="H1", name="Show.S01E01", state="stalledUP")  # 名称含集数标记(仍解析文件)
         t2 = FakeTorrent(hash="H2", name="Show.S02.BluRay", state="stalledUP")  # 名称无集数 -> 解析
         client.torrents["H1"] = t1
         client.torrents["H2"] = t2
@@ -1474,8 +1485,8 @@ def test_episode_tags_added_on_new_torrent():
         mgr._refresh_torrents()
 
         add_calls = [tags for name, tags in client.calls if name == "add_tags"]
-        assert ["E1-5"] in add_calls, f"H2 应添加 E1-5 标签: {client.calls}"
-        assert not any("E" in (t or "") for t in t1.tags), f"H1 名称含集数应跳过: {t1.tags}"
+        assert ["zE1-5"] in add_calls, f"H2 应添加 zE1-5 标签: {client.calls}"
+        assert ["zE1"] in add_calls, f"H1 名称含集数也应解析文件并添加 zE1: {client.calls}"
         print("[OK] test_episode_tags_added_on_new_torrent: 添加时自动打集数标签")
 
 
@@ -1497,7 +1508,7 @@ def test_episode_tags_not_on_existing_refresh():
         mgr._refresh_torrents()  # 添加: 拉一次文件列表
         assert client.files_calls == 1, f"添加时应拉一次文件列表: {client.files_calls}"
         add_calls = [tags for name, tags in client.calls if name == "add_tags"]
-        assert ["E1"] in add_calls, f"应添加 E1: {client.calls}"
+        assert ["zE1"] in add_calls, f"应添加 zE1: {client.calls}"
 
         mgr._refresh_torrents()  # 后续刷新: 无新增, 不应再拉文件列表
         assert client.files_calls == 1, f"后续刷新不应再拉文件列表: {client.files_calls}"
@@ -1548,7 +1559,7 @@ def test_episode_tags_ignore_date_screenshot():
         mgr._refresh_torrents()
 
         add_calls = [tags for name, tags in client.calls if name == "add_tags"]
-        assert ["E1-5"] in add_calls, f"截图应被忽略, 正常添加 E1-5: {client.calls}"
+        assert ["zE1-5"] in add_calls, f"截图应被忽略, 正常添加 zE1-5: {client.calls}"
         print("[OK] test_episode_tags_ignore_date_screenshot: 日期截图不干扰集数解析")
 
 

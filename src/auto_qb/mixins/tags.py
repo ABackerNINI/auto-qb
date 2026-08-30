@@ -73,8 +73,8 @@ class TagsMixin:
         如 01.mkv~05.mkv -> 添加 'E1-5'。解析不到集数(电影/合集等)则不加标签。
         """
         tor = by_hash.get(torrent_hash)
-        if tor is None or utils.name_has_episode_marker(tor.name or ""):
-            return  # 名称已含集数标记, 无需再解析
+        # if tor is None or utils.name_has_episode_marker(tor.name or ""):
+        #     return  # 名称已含集数标记, 无需再解析
         try:
             files = self.client.torrents_files(torrent_hash)
         except Exception as e:

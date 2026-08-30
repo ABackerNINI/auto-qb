@@ -330,16 +330,44 @@ _NAME_EPISODE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# 文件名中提取集数的模式: EP05 / E05 / 第5集 / 第05-08集 / S01E05
-_FILE_EPISODE_RE = re.compile(
-    r"(?:[Ee][Pp]?\s*(\d{1,4})|第\s*(\d{1,4})\s*(?:[-~至]\s*(\d{1,4}))?\s*集|[Ss]\d{1,4}[Ee](\d{1,4}))",
-    re.IGNORECASE,
-)
+# 文件名中提取集数的模式: 按优先级从高到低排列(第一个匹配者生效)
+#   第5集 / 第05-08集 / S01E05  >  EP05  >  E05
+# 每项: (正则, 提取函数(match -> List[int])), 提取函数返回该文件贡献的集数列表
+# 新增模式: 在合适优先级位置插入一项即可, 无需改提取逻辑
+_FILE_EPISODE_PATTERNS: List[tuple] = [
+    # 第x集 / 第x-y集(区间展开为多集)
+    (re.compile(r"第\s*(\d{1,4})\s*(?:[-~至]\s*(\d{1,4}))?\s*集", re.IGNORECASE),
+     lambda m: _expand_episode_range(int(m.group(1)), int(m.group(2))) if m.group(2) else [int(m.group(1))]),
+    # S01E05
+    (re.compile(r"[Ss]\d{1,4}[Ee](\d{1,4})", re.IGNORECASE),
+     lambda m: [int(m.group(1))]),
+    # EP05
+    (re.compile(r"[Ee][Pp](\d{1,4})", re.IGNORECASE),
+     lambda m: [int(m.group(1))]),
+    # E05
+    (re.compile(r"[Ee](\d{1,4})", re.IGNORECASE),
+     lambda m: [int(m.group(1))]),
+]
+
 
 # 文件名中独立数字模式(如 "01.mkv", "Show.Name.05"): 排除分辨率/年份等干扰
 # 要求数字前后是分隔符或边界, 且排除 分辨率(720/1080/2160...) 与 年份(19xx/20xx)
 _BARE_NUMBER_RE = re.compile(r"(?:^|[^\d])(\d{1,4})(?:$|[^\d])")
 _RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
+
+
+def _expand_episode_range(start: int, end: int) -> List[int]:
+    """集数区间展开(第4-6集 -> [4,5,6]); 上限钳制到 9999"""
+    return list(range(start, min(end, 9999) + 1))
+
+
+def _match_episode_pattern(fname: str) -> List[int]:
+    """按优先级匹配文件名集数模式: 返回第一个匹配模式提取的集数列表(区间模式展开为多集); 无匹配返回 []"""
+    for regex, extractor in _FILE_EPISODE_PATTERNS:
+        m = regex.search(fname)
+        if m:
+            return extractor(m)
+    return []
 
 
 def name_has_episode_marker(name: str) -> bool:
@@ -350,8 +378,8 @@ def name_has_episode_marker(name: str) -> bool:
 def extract_episodes_from_files(files: list) -> List[int]:
     """从文件列表解析集数列表(去重排序)
 
-    - 每个文件最多贡献一个集数: 有明确标记(EP05/E05/第5集/S01E05)取第一个标记;
-      区间标记(第4-6集)视为一个文件打包多集内容, 展开为 4,5,6
+    - 每个文件最多贡献一个集数: 有明确标记(第5集/第05-08集/S01E05/EP05/E05)
+      按优先级取第一个匹配的模式; 区间标记(第4-6集)视为一个文件打包多集内容, 展开为 4,5,6
     - 无标记时, 仅当文件名中恰好只有一个候选数字(排除分辨率/年份)才视为集数,
       如 "01.mkv" -> 1; 多个候选数字(如日期截图 "2022.05.11_14.51.23.jpg")
       无法确定唯一集数, 跳过该文件
@@ -362,17 +390,10 @@ def extract_episodes_from_files(files: list) -> List[int]:
         fname = getattr(f, "name", "") or ""
         if not fname:
             continue
-        # 1. 明确集数标记模式(每个文件取第一个标记)
-        m = _FILE_EPISODE_RE.search(fname)
-        if m:
-            # 区间形式: 第4-6集(组2=起点, 组3=终点) -> 展开为 4,5,6
-            if m.group(2) and m.group(3):
-                start, end = int(m.group(2)), int(m.group(3))
-                episodes.update(range(start, min(end, 9999) + 1))
-            else:
-                for g in m.groups():
-                    if g:
-                        episodes.add(int(g))
+        # 1. 明确集数标记: 按优先级取第一个匹配的模式(每个文件一组集数)
+        nums = _match_episode_pattern(fname)
+        if nums:
+            episodes.update(nums)
             continue
         # 2. 无标记: 仅当恰好一个候选数字(排除分辨率/年份)才提取
         candidates = []
