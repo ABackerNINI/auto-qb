@@ -84,6 +84,8 @@ class TagsMixin:
         if not episodes:
             return  # 文件列表无集数(电影/合集), 不加标签
         tag = utils.format_episode_tag(episodes)
+        if not tag:
+            return  # 集数非连续(存在缺集/误提取), 放弃添加
         self._add_tags(tor, [tag], dry_run)
         logger.info(f"Added episode tag '{tag}'")
 

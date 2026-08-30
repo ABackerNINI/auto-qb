@@ -348,14 +348,21 @@ def name_has_episode_marker(name: str) -> bool:
 
 
 def extract_episodes_from_files(files: list) -> List[int]:
-    """从文件列表解析集数列表(去重排序): 优先匹配 EP/E/第x集/SxxExx 模式,
-    其次匹配文件名中独立数字(排除分辨率/年份); 解析不到返回空列表"""
+    """从文件列表解析集数列表(去重排序)
+
+    - 每个文件最多贡献一个集数: 有明确标记(EP05/E05/第5集/S01E05)取第一个标记;
+      区间标记(第4-6集)视为一个文件打包多集内容, 展开为 4,5,6
+    - 无标记时, 仅当文件名中恰好只有一个候选数字(排除分辨率/年份)才视为集数,
+      如 "01.mkv" -> 1; 多个候选数字(如日期截图 "2022.05.11_14.51.23.jpg")
+      无法确定唯一集数, 跳过该文件
+    - 解析不到返回空列表
+    """
     episodes = set()
     for f in files:
         fname = getattr(f, "name", "") or ""
         if not fname:
             continue
-        # 1. 明确集数标记模式
+        # 1. 明确集数标记模式(每个文件取第一个标记)
         m = _FILE_EPISODE_RE.search(fname)
         if m:
             # 区间形式: 第4-6集(组2=起点, 组3=终点) -> 展开为 4,5,6
@@ -367,28 +374,27 @@ def extract_episodes_from_files(files: list) -> List[int]:
                     if g:
                         episodes.add(int(g))
             continue
-        # 2. 独立数字(排除分辨率/年份等干扰)
+        # 2. 无标记: 仅当恰好一个候选数字(排除分辨率/年份)才提取
+        candidates = []
         for m in _BARE_NUMBER_RE.finditer(fname):
             num = int(m.group(1))
             if num in _RESOLUTION_SET or (1900 <= num <= 2099):  # 分辨率/年份干扰
                 continue
             if 1 <= num <= 9999:
-                episodes.add(num)
+                candidates.append(num)
+        if len(candidates) == 1:
+            episodes.add(candidates[0])
+        # 多个候选数字(日期时间截图等) -> 无法确定唯一集数, 跳过该文件
     return sorted(episodes)
 
 
 def format_episode_tag(episodes: List[int]) -> str:
-    """集数列表 -> 标签: 合并连续区间, 如 [1,2,3,5] -> 'E1-3,E5'"""
+    """集数列表 -> 标签: 集数必须连续才添加, 如 [1,2,3,4,5] -> 'E1-5', [3] -> 'E3';
+    存在缺集(如 [1,2,3,5])或为空 -> 返回 ''(放弃添加)"""
     if not episodes:
         return ""
     nums = sorted(set(episodes))
-    parts = []
-    start = prev = nums[0]
-    for n in nums[1:]:
-        if n == prev + 1:
-            prev = n
-        else:
-            parts.append(f"E{start}-{prev}" if start != prev else f"E{start}")
-            start = prev = n
-    parts.append(f"E{start}-{prev}" if start != prev else f"E{start}")
-    return ",".join(parts)
+    for a, b in zip(nums, nums[1:]):
+        if b != a + 1:
+            return ""  # 缺集 -> 放弃添加
+    return f"E{nums[0]}" if len(nums) == 1 else f"E{nums[0]}-{nums[-1]}"

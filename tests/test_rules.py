@@ -1436,10 +1436,18 @@ def test_episode_tag_utils():
     # 排除干扰: 分辨率/年份/无数字
     files = [SimpleNamespace(name=n, size=1) for n in ["Movie.2024.1080p.mkv", "sample.mkv"]]
     assert extract_episodes_from_files(files) == []
+    # 单文件多个候选数字(日期时间截图) -> 无法确定唯一集数, 跳过该文件
+    files = [SimpleNamespace(name=n, size=1) for n in ["2022.05.11_14.51.23.jpg", "01.mkv", "02.mkv"]]
+    assert extract_episodes_from_files(files) == [1, 2], "日期截图不应贡献集数"
+    files = [SimpleNamespace(name=n, size=1) for n in ["2022.05.11_14.51.23.jpg"]]
+    assert extract_episodes_from_files(files) == []
+    # 无标记文件恰好一个候选数字(排除分辨率后) -> 提取
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.Name.05.1080p.mkv"]]
+    assert extract_episodes_from_files(files) == [5]
 
-    # 区间合并
+    # 标签格式化: 必须连续, 非连续/空 -> 放弃
     assert format_episode_tag([1, 2, 3, 4, 5]) == "E1-5"
-    assert format_episode_tag([1, 2, 3, 5]) == "E1-3,E5"
+    assert format_episode_tag([1, 2, 3, 5]) == ""  # 缺集 -> 放弃
     assert format_episode_tag([3]) == "E3"
     assert format_episode_tag([]) == ""
     print("[OK] test_episode_tag_utils: 集数解析纯函数")
@@ -1494,6 +1502,54 @@ def test_episode_tags_not_on_existing_refresh():
         mgr._refresh_torrents()  # 后续刷新: 无新增, 不应再拉文件列表
         assert client.files_calls == 1, f"后续刷新不应再拉文件列表: {client.files_calls}"
         print("[OK] test_episode_tags_not_on_existing_refresh: 仅添加时触发")
+
+
+def test_episode_tags_non_continuous_skipped():
+    """测试: 集数非连续(存在缺集/误提取)时放弃添加标签"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.add_episode_tags = True
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
+        client.torrents["H1"] = t1
+        # 缺第4集: 1,2,3,5 非连续 -> 整体放弃
+        client.files_map["H1"] = [_fake_file(f"{i:02d}.mkv", 100) for i in (1, 2, 3, 5)]
+
+        mgr._refresh_torrents()
+
+        assert not any(name == "add_tags" for name, _ in client.calls), \
+            f"非连续集数不应加标签: {client.calls}"
+        print("[OK] test_episode_tags_non_continuous_skipped: 非连续放弃添加")
+
+
+def test_episode_tags_ignore_date_screenshot():
+    """测试: 附带日期时间截图(2022.05.11_14.51.23.jpg)不干扰集数解析"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.add_episode_tags = True
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
+        client.torrents["H1"] = t1
+        client.files_map["H1"] = [
+            _fake_file("2022.05.11_14.51.23.jpg", 100),
+            *[_fake_file(f"{i:02d}.mkv", 100) for i in range(1, 6)],
+        ]
+
+        mgr._refresh_torrents()
+
+        add_calls = [tags for name, tags in client.calls if name == "add_tags"]
+        assert ["E1-5"] in add_calls, f"截图应被忽略, 正常添加 E1-5: {client.calls}"
+        print("[OK] test_episode_tags_ignore_date_screenshot: 日期截图不干扰集数解析")
 
 
 def test_episode_tags_disabled():
@@ -1558,5 +1614,7 @@ if __name__ == "__main__":
     test_episode_tag_utils()
     test_episode_tags_added_on_new_torrent()
     test_episode_tags_not_on_existing_refresh()
+    test_episode_tags_non_continuous_skipped()
+    test_episode_tags_ignore_date_screenshot()
     test_episode_tags_disabled()
     print("\n全部自测通过!")
