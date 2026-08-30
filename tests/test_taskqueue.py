@@ -11,6 +11,10 @@
 - test_task_state_transitions: 任务状态迁移
 - test_shutdown_blocks_submit: 关闭后拒绝提交
 - test_add_tasks: add_tasks 批量入队立即到期
+- test_submit_check_async_executor: 有 executor 时异步发送; shutdown 幂等
+- test_poll_slow_not_sent: 请求未确认发出(sent=False) -> 该轮跳过
+- test_poll_slow_is_done_error: is_done 抛异常 -> debug 记录不中断
+- test_poll_slow_done_cb_error: done_cb 抛异常 -> warning 记录, 任务仍出队
 """
 import time
 
@@ -163,4 +167,64 @@ def test_add_tasks():
     now = time.time()
     tq.add_tasks([Task("rule", "a", interval=0), Task("rule", "b", interval=60)], now=now)
     assert {t.name for t in tq.due(now)} == {"a", "b"}
+    tq.shutdown()
+
+
+def test_submit_check_async_executor():
+    """submit_check: 有 executor 时经异步线程发送; shutdown 带等待且幂等"""
+    tq = TaskQueue(executor_workers=1)
+    state = {"sent": 0}
+
+    def send():
+        state["sent"] += 1
+        return "ok"
+
+    assert tq.submit_check("H1", send) is True
+    # 等待异步线程回传 result_q
+    for _ in range(50):
+        if state["sent"]:
+            break
+        time.sleep(0.02)
+    assert state["sent"] == 1, "异步线程应执行 send_fn"
+    completed = tq.poll_slow(lambda h: True)
+    assert [t.torrent_hash for t in completed] == ["H1"]
+    tq.shutdown()  # 覆盖 executor.shutdown(wait=True)
+    tq.shutdown()  # 幂等: 第二次直接返回
+
+
+def test_poll_slow_not_sent():
+    """poll_slow: 请求未确认发出(sent=False) -> 该轮跳过不完成"""
+    tq = TaskQueue(executor_workers=0)
+    task = Task("check", "check", torrent_hash="H2")
+    task.state = WAITING
+    tq._slow["H2"] = task  # 手动注入: 无 result_q 回传, sent 保持 False
+    assert tq.poll_slow(lambda h: True) == [], "sent=False 应跳过"
+    assert tq.pending_slow() == ["H2"]
+    tq.shutdown()
+
+
+def test_poll_slow_is_done_error():
+    """poll_slow: is_done 抛异常 -> debug 记录, 不中断不完成"""
+    tq = TaskQueue(executor_workers=0)
+    tq.submit_check("H1", lambda: "ok")  # 同步模式: 立即 sent
+
+    def boom(h):
+        raise RuntimeError("boom")
+
+    assert tq.poll_slow(boom) == [], "is_done 异常应跳过该任务"
+    assert tq.pending_slow() == ["H1"]
+    tq.shutdown()
+
+
+def test_poll_slow_done_cb_error():
+    """poll_slow: done_cb 抛异常 -> warning 记录, 任务仍完成出队"""
+    tq = TaskQueue(executor_workers=0)
+
+    def bad_cb(task):
+        raise RuntimeError("cb boom")
+
+    tq.submit_check("H1", lambda: "ok", done_cb=bad_cb)
+    completed = tq.poll_slow(lambda h: True)
+    assert [t.torrent_hash for t in completed] == ["H1"], "done_cb 异常不影响出队"
+    assert tq.pending_slow() == []
     tq.shutdown()

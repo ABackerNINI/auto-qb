@@ -9,13 +9,25 @@
 - test_move_to: 移动保存路径动作
 - test_reannounce: 重新 announce 动作
 - test_speed_limit_actions: 限速动作(下载/上传/全局)
+- test_add_category_create_error: 创建分类失败被吞掉, set_category 仍执行
+- test_find_reference_piecehashes_cand_error: piecehashes 候选拉取异常 -> 忽略候选
+- test_find_reference_dedup: 候选与 verified_references 重合 -> 去重
+- test_run_custom_check_error: custom 程序执行异常 -> 视为非参考
+- test_skip_checking_export_error: 导出 .torrent 失败 -> fail
+- test_skip_checking_export_empty: 导出为空 -> fail
+- test_skip_checking_delete_error: 删除种子失败 -> fail(无损失)
+- test_skip_checking_not_appeared: 重加后轮询未确认 -> fail
+- test_skip_checking_auto_start_error: 自动开始失败 -> fail
+- test_speed_limit_fmt_bytes: 小值限速格式化为 B/s
 """
 import os
 import tempfile
+from unittest.mock import patch
 
 from auto_qb.rules.actions import (
     AddCategoryAction,
     AddTagsAction,
+    CheckAction,
     DownloadSpeedLimitAction,
     MoveToAction,
     ReannounceAction,
@@ -26,6 +38,10 @@ from auto_qb.rules.actions import (
     UploadSpeedLimitAction,
 )
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager
+
+
+def _seg(mode, auto_start=True):
+    return {"mode": mode, "auto_start": auto_start}
 
 
 def _setup(state_file=None):
@@ -160,3 +176,166 @@ def test_speed_limit_actions():
         r2 = DownloadSpeedLimitAction("2MiB/s").execute(ctx)
         assert r2.is_ok
         assert ("set_download_limit", 2 * 1024**2) in client.calls
+
+
+def test_add_category_create_error():
+    """分类动作: 创建分类失败被吞掉, set_category 仍执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(category="")
+        ctx = make_ctx(mgr, tor, client)
+
+        def boom():
+            raise RuntimeError("create failed")
+
+        client.torrents_create_category = boom
+        r = AddCategoryAction({"format": "NEW"}).execute(ctx)
+        assert r.is_ok
+        assert ("set_category", "NEW") in client.calls
+
+
+def _check_action(basic_check="filelist", with_seg=None, without_seg=None, custom_program=None):
+    spec = {
+        "basic_check": basic_check,
+        "with_reference": with_seg or _seg("full-checking"),
+        "without_reference": without_seg or _seg("full-checking"),
+    }
+    if custom_program:
+        spec["custom_basic_check_program_path"] = custom_program
+    return CheckAction(spec)
+
+
+def _grouped_mgr(state_file, hashes):
+    """构造已归组 manager: _groups/_group_member_to_key/_snapshot 齐全"""
+    mgr = make_manager(state_file)
+    mgr._groups[("KEY",)] = list(hashes)
+    for h in hashes:
+        mgr._group_member_to_key[h] = ("KEY",)
+    mgr._snapshot = list(hashes.values())
+    return mgr
+
+
+def test_find_reference_piecehashes_cand_error():
+    """checking: piecehashes 模式候选拉取异常 -> 忽略该候选, 不崩溃"""
+    with tempfile.TemporaryDirectory() as td:
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
+
+        class BoomClient(FakeClient):
+            def torrents_piece_hashes(self, torrent_hashes=None):
+                self.calls.append(("piece_hashes", torrent_hashes))
+                if torrent_hashes == "H2":
+                    raise RuntimeError("cand api error")
+                return [b"a", b"b"]
+
+        client = BoomClient()
+        ctx = make_ctx(mgr, t1, client)
+        action = _check_action(basic_check="piecehashes")
+        refs = action._find_reference(ctx, ["H1", "H2"])
+        assert refs == [], "候选拉取失败不应作为参考"
+
+
+def test_find_reference_dedup():
+    """checking: 候选与 verified_references 重合 -> 去重"""
+    with tempfile.TemporaryDirectory() as td:
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
+        mgr.verified_references = {"H2"}
+        client = FakeClient()
+        ctx = make_ctx(mgr, t1, client)
+        action = _check_action(basic_check="filelist")
+        refs = action._find_reference(ctx, ["H1", "H2"])
+        assert [t.hash for t in refs] == ["H2"], "verified 重合应去重"
+
+
+def test_run_custom_check_error():
+    """checking: custom 程序执行异常 -> 视为非参考, 不崩溃"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(tags="")
+        ctx = make_ctx(mgr, tor, client)
+        action = _check_action(basic_check="custom", custom_program="fake_prog")
+        with patch("subprocess.run", side_effect=OSError("no prog")):
+            assert action._run_custom_check(ctx, tor) is False
+
+
+def _skip_ctx(state_file, **client_patches):
+    """构造 skip-checking 执行环境: 未归组 + 单种子快照 + 自定义 client"""
+    mgr = make_manager(state_file)
+    tor = FakeTorrent(hash="HASH123", name="T1", state="stalledUP", tags="")
+    mgr._snapshot = [tor]
+    client = FakeClient()
+    client.torrents["HASH123"] = {"state": "pausedUP"}  # 重加后出现
+    for attr, fn in client_patches.items():
+        setattr(client, attr, fn)
+    ctx = make_ctx(mgr, tor, client)
+    return ctx, client
+
+
+def test_skip_checking_export_error():
+    """checking skip-checking: 导出 .torrent 失败 -> fail"""
+    with tempfile.TemporaryDirectory() as td:
+        def boom(h=None, **kw):
+            raise RuntimeError("export failed")
+
+        ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_export=boom)
+        action = _check_action(without_seg=_seg("skip-checking"))
+        r = action.execute(ctx)
+        assert r.is_failed and "导出" in r.message, f"应失败: {r}"
+
+
+def test_skip_checking_export_empty():
+    """checking skip-checking: 导出为空 -> fail"""
+    with tempfile.TemporaryDirectory() as td:
+        ctx, client = _skip_ctx(os.path.join(td, "state.json"))
+        client.exported = b""
+        action = _check_action(without_seg=_seg("skip-checking"))
+        r = action.execute(ctx)
+        assert r.is_failed and "为空" in r.message, f"应失败: {r}"
+
+
+def test_skip_checking_delete_error():
+    """checking skip-checking: 删除种子失败 -> fail(种子未删除, 无损失)"""
+    with tempfile.TemporaryDirectory() as td:
+        def boom(h=None, **kw):
+            raise RuntimeError("delete failed")
+
+        ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_delete=boom)
+        action = _check_action(without_seg=_seg("skip-checking"))
+        r = action.execute(ctx)
+        assert r.is_failed and "删除种子失败" in r.message, f"应失败: {r}"
+
+
+def test_skip_checking_not_appeared():
+    """checking skip-checking: 重加后轮询未确认到种子 -> fail"""
+    with tempfile.TemporaryDirectory() as td:
+        def boom(h=None, **kw):
+            raise RuntimeError("info failed")
+
+        ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_info=boom)
+        action = _check_action(without_seg=_seg("skip-checking"))
+        with patch("auto_qb.rules.actions.time.sleep"):
+            r = action.execute(ctx)
+        assert r.is_failed and "未确认到种子" in r.message, f"应失败: {r}"
+
+
+def test_skip_checking_auto_start_error():
+    """checking skip-checking: 自动开始失败 -> fail"""
+    with tempfile.TemporaryDirectory() as td:
+        def boom(h=None, **kw):
+            raise RuntimeError("start failed")
+
+        ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_start=boom)
+        action = _check_action(without_seg=_seg("skip-checking", auto_start=True))
+        r = action.execute(ctx)
+        assert r.is_failed and "自动开始失败" in r.message, f"应失败: {r}"
+
+
+def test_speed_limit_fmt_bytes():
+    """限速动作: 小值(<1KiB) 格式化为 B/s"""
+    assert UploadSpeedLimitAction("512B/s")._fmt_speed() == "512 B/s"
+    assert UploadSpeedLimitAction("2048B/s")._fmt_speed() == "2.00 KiB/s (2048 B/s)"

@@ -19,6 +19,13 @@
 - test_freespace_triggered: 磁盘剩余空间低于阈值 -> 触发
 - test_freespace_not_triggered: 空间充足 -> 不触发
 - test_freespace_os_error: disk_usage 抛 OSError -> 不触发
+- test_tags_condition_invalid_regex: 标签条件非法正则 -> 不匹配
+- test_tags_condition_regex_no_match: 标签条件正则无匹配 -> 不匹配
+- test_category_condition_invalid_regex: 分类条件非法正则 -> 跳过继续
+- test_trackers_condition_invalid_regex: tracker 条件非法正则 -> 跳过继续
+- test_date_time_day_of_week_mismatch: day_of_week 不匹配 -> 不触发
+- test_date_time_cross_midnight: 跨午夜 time 区间匹配/不匹配
+- test_date_time_out_of_range: 非跨午夜区间当前时刻不在 -> 不触发
 """
 import os
 import shutil
@@ -279,4 +286,95 @@ def test_freespace_os_error(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = _ctx(mgr, FakeTorrent())
-        assert FreespaceCondition({"path": r"Z:\\", "amount": "<100GiB"}).match(ctx) is False
+        assert FreespaceCondition({"path": r"R:\\", "amount": "<100GiB"}).match(ctx) is False
+
+
+def test_tags_condition_invalid_regex():
+    """标签条件: 非法正则 -> 整组不匹配(不抛异常)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(tags="HHan"))
+        assert TagsCondition("regex:[invalid").match(ctx) is False
+
+
+def test_tags_condition_regex_no_match():
+    """标签条件: 正则无匹配 -> 不触发"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(tags="HHan,seed-3D"))
+        assert TagsCondition("regex:^NO-").match(ctx) is False
+
+
+def test_category_condition_invalid_regex():
+    """分类条件: 非法正则 -> 跳过该模式继续"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(category="HR-DONE"))
+        assert CategoryCondition("regex:[invalid").match(ctx) is False
+        assert CategoryCondition(["regex:[invalid", "HR-DONE"]).match(ctx), "非法正则跳过, 其余模式仍可匹配"
+
+
+def test_trackers_condition_invalid_regex():
+    """tracker 条件: 非法正则 -> 跳过该模式继续"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(tags=""), FakeClient())
+        assert TrackersCondition("regex:[invalid").match(ctx) is False
+        assert TrackersCondition(["regex:[invalid", "HHan"]).match(ctx), "非法正则跳过, 其余模式仍可匹配"
+
+
+def test_date_time_day_of_week_mismatch():
+    """日期时间条件: day_of_week 不等于今天 -> 不触发"""
+    import datetime
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        today = datetime.date.today()
+        other = (today.isoweekday() % 7) + 1  # 1-7 中与今天不同的值
+        assert DateTimeCondition({"day_of_week": str(other)}).match(ctx) is False
+
+
+def test_date_time_cross_midnight(monkeypatch):
+    """日期时间条件: 跨午夜 time 区间(23:00-01:00)匹配与不匹配"""
+    import datetime as _dt
+    from auto_qb.rules import conditions as cond_mod
+
+    class FakeDatetime(_dt.datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 1, 1, 23, 30)
+
+    monkeypatch.setattr(cond_mod, "datetime", FakeDatetime)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert DateTimeCondition({"time": "23:00-01:00"}).match(ctx), "23:30 在跨午夜区间内"
+
+    class FakeDatetime2(_dt.datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 1, 1, 5, 0)
+
+    monkeypatch.setattr(cond_mod, "datetime", FakeDatetime2)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert DateTimeCondition({"time": "23:00-01:00"}).match(ctx) is False, "05:00 不在跨午夜区间内"
+
+
+def test_date_time_out_of_range(monkeypatch):
+    """日期时间条件: 非跨午夜 time 区间, 当前时刻不在区间内 -> 不触发"""
+    import datetime as _dt
+    from auto_qb.rules import conditions as cond_mod
+
+    class FakeDatetime(_dt.datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 1, 1, 14, 0)
+
+    monkeypatch.setattr(cond_mod, "datetime", FakeDatetime)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert DateTimeCondition({"time": "10:00-12:00"}).match(ctx) is False, \
+            "14:00 不在 10:00-12:00 内"

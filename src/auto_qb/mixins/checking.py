@@ -1,113 +1,18 @@
-"""检查类 mixin: 辅种跳检 / 异步校验轮询回调(缺文件检查由分组事件驱动承担)
+"""检查类 mixin: 辅种跳检功能已由规则动作(actions.py CheckAction)完全替代;
+此 mixin 保留为空类以维持 QbManager 组合结构(_is_check_done 由 QbManager 定义)。
 
-由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags。
+由 QbManager 组合(mixin), 依赖实例属性: client/logger/config。
 """
 import logging
-import os
 from typing import Optional
-from qbittorrentapi import Client, TorrentDictionary
+from qbittorrentapi import Client
 
 from ..config import Config
-from ..utils import add_long_path_prefix_for_win
-
-logger = logging.getLogger(__name__)
 
 
 class CheckingMixin:
-    """文件检查/辅种跳检/异步校验轮询"""
+    """文件检查/辅种跳检(已迁移至规则动作, 占位保留)"""
 
     client: Optional[Client]
     logger: logging.Logger
     config: Config
-
-    def _is_check_done(self, torrent_hash: str) -> bool:
-        """慢速队列轮询回调: 查询种子当前状态, 退出校验(checking*)状态即视为完成"""
-        try:
-            infos = self.client.torrents_info(torrent_hashes=torrent_hash)
-        except Exception as e:
-            logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
-            return False
-        if not infos:
-            return True  # 种子已被删除, 视为完成
-        state = (infos[0].state or "").lower()
-        return not state.startswith("checking")
-
-    def _skip_checking_for_cross_seeding(self, tor: TorrentDictionary, dry_run: bool):
-        """
-        辅种任务跳过检查并自动开始, 添加跳检标签.
-        下载量/完成量/进度为0 且 状态为暂停stop 的种子视为辅种任务.
-        """
-        if tor.downloaded > 0:  # 下载量必须为0
-            return False
-
-        if tor.completed != 0:  # 完成量必须为0
-            return False
-
-        if tor.progress != 0:  # 进度必须为0
-            return False
-
-        if not tor.state_enum.is_stopped:  # 必须是停止状态
-            return False
-
-        # 对文件进行简单检查: 确保所有文件都存在且大小一致
-        files = self.client.torrents_files(tor.hash)
-        save_path = tor.save_path
-        missing = False
-        for f in files:
-            # 组合完整路径, 添加长路径前缀
-            full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
-
-            if not os.path.exists(full_path):  # 查看文件是否存在
-                missing = True
-                break
-
-            if os.path.getsize(full_path) != f.size:  # 比较文件大小
-                missing = True
-                break
-
-        if missing:
-            return
-
-        logger.info(f"Skip checking")
-
-        # 获取种子的关键属性，以便重新添加时保留
-        save_path = tor.save_path
-        category = tor.category
-        tags = tor.tags
-        # 注意：此处未保留上传/下载限速等高级设置，如有需要可自行添加
-
-        # 重要：从 qBittorrent 中导出 .torrent 文件
-        # 这是为了保留 tracker 等信息
-        if not dry_run:
-            torrent_file_data = self.client.torrents_export(torrent_hash=tor.hash)
-        logger.info(f"  Exporting torrent")
-
-        # 删除原种子（注意：不要删除已下载的数据文件）
-        if not dry_run:
-            self.client.torrents_delete(torrent_hashes=tor.hash, delete_files=False)
-        logger.info(f"  Deleting torrent")
-
-        # 使用"跳过校验"选项重新添加
-        # is_skip_checking=True 即为跳过哈希校验的关键参数
-        if not dry_run:
-            self.client.torrents_add(
-                torrent_files=torrent_file_data,  # 使用导出的 .torrent 文件数据
-                save_path=save_path,  # 恢复原保存路径
-                category=category,  # 恢复原分类
-                tags=tags,  # 恢复原标签
-                is_skip_checking=True,  # 核心：跳过校验！
-                is_paused=False,  # 添加后自动开始
-            )
-        logger.info(f"  Re-adding torrent")
-
-        # 开始刚添加的种子
-        if self.config.skip_checking_auto_start:
-            if not dry_run:
-                self.client.torrents_start(torrent_hashes=tor.hash)
-            logger.info(f"  Starting torrent")
-
-        # 添加跳检标签
-        if self.config.add_skip_checking_tags:
-            self._add_tags(tor, [self.config.skip_checking_tag_format], dry_run)
-
-        return True

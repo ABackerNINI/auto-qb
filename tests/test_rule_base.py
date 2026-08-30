@@ -18,6 +18,17 @@
 - test_rule_hourly_dedup: hourly 同小时去重
 - test_rule_context_files_cached: files() 惰性缓存只拉一次
 - test_rule_context_tracker_urls_empty: 无 tracker -> 未匹配描述
+- test_base_condition_init: 基类 __init__ 保存 spec(子类继承)
+- test_rule_context_required_seeding_time_no_hr: 无 hr 配置 -> 空字符串
+- test_rule_context_describe_tracker_error: tracker 拉取异常 -> 站点显示未知
+- test_rule_context_hr_dlratio_not_met: 下载比例未达标 -> 触发/满足均 False
+- test_rule_context_hr_satisfied_by_ratio: 分享率达标 -> satisfied True
+- test_rule_process_action_exception: 动作异常 -> 容错为 fail 继续
+- test_rule_stop_if_conditions_not_met: 未匹配且 conditions-not-met -> 停链
+- test_rule_daily_dedup: execute_once=daily 同日已执行 -> 去重
+- test_rule_context_hr_no_conf: tracker 无 hr 配置 -> 触发/满足均 False
+- test_rule_context_hr_dlsize_not_met: dlsize 下载量未达标 -> 触发 False
+- test_rule_actions_skip_non_dict: actions 中非 dict 项 -> 跳过
 """
 import os
 import tempfile
@@ -330,6 +341,123 @@ def test_rule_context_files_cached():
         assert client.files_calls == 1, "files 应只拉取一次(缓存)"
 
 
+def test_base_condition_init():
+    """BaseCondition.__init__: 子类不定义 __init__ 时继承保存 spec"""
+    from auto_qb.rules.base import BaseCondition
+
+    class C(BaseCondition):
+        name = "c"
+
+        def match(self, ctx):
+            return True
+
+    c = C({"k": "v"})
+    assert c.spec == {"k": "v"}
+
+
+def test_rule_context_required_seeding_time_no_hr():
+    """required_seeding_time: 匹配 tracker 无 hr 配置 -> 空字符串"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"hr": None})
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
+        assert ctx.required_seeding_time == ""
+        assert ctx.replace_vars("seed-${required_seeding_time}") == "seed-", "空值替换为空串"
+
+
+def test_rule_context_describe_tracker_error():
+    """describe: tracker 拉取抛异常 -> 站点显示未知(不中断)"""
+    def boom(hash_):
+        raise RuntimeError("tracker api failed")
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        client.torrents_trackers = boom
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        assert "未知" in ctx.describe()
+
+
+def test_rule_context_hr_dlratio_not_met():
+    """check_hr_condition/check_hr_satisfied: 下载比例未达标 -> 均 False"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(tags="", downloaded=50 * 1024**2, total_size=100 * 1024**2, seeding_time=999 * 86400)
+        ctx = make_ctx(mgr, tor, client)
+        conf = ctx.matched_tracker_confs()[0]
+        assert ctx.check_hr_condition(conf) is False, "0.5 < 0.7 不满足触发条件"
+        assert ctx.check_hr_satisfied(conf) is False, "触发条件不满足则 satisfied 为 False"
+
+
+def test_rule_context_hr_satisfied_by_ratio():
+    """check_hr_satisfied: 分享率达标即可满足, 即使做种时长不足"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"hr": _hr_rule(required_share_ratio=1.0)})
+        client = FakeClient()
+        tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=0, ratio=2.0)
+        ctx = make_ctx(mgr, tor, client)
+        conf = ctx.matched_tracker_confs()[0]
+        assert ctx.check_hr_satisfied(conf), "分享率 2.0 >= 1.0 应算 satisfied"
+
+
+def test_rule_process_action_exception():
+    """process: 动作 execute 抛异常 -> 容错为 fail, 规则仍按条件匹配语义停链"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
+
+        class BoomAction:
+            name = "boom"
+
+            def __init__(self):
+                self.ignore_error = False
+
+            def execute(self, ctx):
+                raise RuntimeError("boom")
+
+        rule = Rule("g.test", {"actions": []}, mgr)
+        rule.actions = [BoomAction()]
+        handled, stop = rule.process(ctx)
+        assert handled, "动作异常容错为 fail, handled 仍为 True"
+        assert stop, "默认 stop_if=conditions-met: 条件匹配过即停链"
+
+
+def test_rule_stop_if_conditions_not_met():
+    """stop_following_rules_if=conditions-not-met: 未匹配时停链"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(tags="", size=1), FakeClient())
+        rule = Rule(
+            "g.test",
+            {
+                "conditions": [{
+                    "size": ">=1MiB"
+                }],
+                "actions": [{
+                    "add_tags": ["DONE"]
+                }],
+                "stop_following_rules_if": "conditions-not-met",
+            },
+            mgr,
+        )
+        handled, stop = rule.process(ctx)
+        assert not handled and stop, "未匹配且 stop_if=conditions-not-met -> (False, True)"
+
+
+def test_rule_daily_dedup():
+    """execute_once=daily: 同日已执行 -> 去重"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
+        rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "execute_once": "daily"}, mgr)
+        h1, _ = rule.process(ctx)
+        assert h1
+        h2, _ = rule.process(ctx)
+        assert not h2, "同日已执行 -> 去重"
+        assert client.calls.count(("add_tags", ["X"])) == 1
+
+
 def test_rule_context_tracker_urls_empty():
     """RuleContext: 无 tracker 时 matched_tracker_names 为空、describe 显示未匹配"""
     with tempfile.TemporaryDirectory() as td:
@@ -341,3 +469,38 @@ def test_rule_context_tracker_urls_empty():
         assert ctx.matched_tracker_confs() == []
         assert ctx.matched_tracker_names() == []
         assert "未匹配" in ctx.describe()
+
+
+def test_rule_context_hr_no_conf():
+    """check_hr_condition/check_hr_satisfied: tracker 无 hr 配置 -> 均 False"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"hr": None})
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        conf = ctx.matched_tracker_confs()[0]
+        assert conf.hr is None
+        assert ctx.check_hr_condition(conf) is False, "无 hr 配置不应满足触发"
+        assert ctx.check_hr_satisfied(conf) is False, "无 hr 配置不应满足要求"
+
+
+def test_rule_context_hr_dlsize_not_met():
+    """check_hr_condition: dlsize 条件下载量未达标 -> False"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(
+            os.path.join(td, "state.json"),
+            tracker_kw={"hr": _hr_rule(condition=("dlsize", 100 * 1024**2))},
+        )
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="", downloaded=50 * 1024**2, total_size=0), client)
+        conf = ctx.matched_tracker_confs()[0]
+        assert ctx.check_hr_condition(conf) is False, "下载量 50MiB < 100MiB 不应满足"
+        assert ctx.check_hr_satisfied(conf) is False
+
+
+def test_rule_actions_skip_non_dict():
+    """Rule 构造: actions 列表中的非 dict 项 -> 跳过不解析"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        rule = Rule("g.test", {"actions": ["not-a-dict", {"add_tags": ["X"]}]}, mgr)
+        assert len(rule.actions) == 1, "非 dict 动作项应被跳过"
+        assert isinstance(rule.actions[0], AddTagsAction)

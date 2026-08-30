@@ -20,10 +20,18 @@
 - test_leave_group_not_in_group: 不在组内返回 None
 - test_group_has_downloading: 组内存在下载中成员判定
 - test_group_reference_candidates: 返回做种成员作为参考候选
+- test_grouping_save_path_change_no_cache: 无缓存文件映射 -> 维持原行为不重归组
+- test_assign_new_torrent_missing: 哈希不在 by_hash -> 直接返回
+- test_assign_new_torrent_files_error: 文件列表拉取异常 -> 静默返回
+- test_assign_to_group_empty_map: 空文件映射 -> 不归组
+- test_check_missing_files_no_seeding_rep: 组内无已完成做种种子 -> 不检查
+- test_check_missing_files_size_mismatch: 文件存在但大小不符 -> 暂停 + MISSING
+- test_check_missing_files_getsize_error: 文件读取 OSError -> 暂停 + MISSING
 """
 import os
 import tempfile
 from types import SimpleNamespace
+from unittest import mock
 
 from auto_qb.config import GroupingConfig
 from auto_qb.qbmanager import QbManager
@@ -419,3 +427,109 @@ def test_group_reference_candidates():
     }
     cands = mgr._group_reference_candidates(["H1", "H2"], by_hash)
     assert [t.hash for t in cands] == ["H1"]
+
+
+def test_grouping_save_path_change_no_cache():
+    """_handle_save_path_changes: 无缓存文件映射 -> 跳过该种子(维持原行为)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsB")
+        mgr._group_member_to_key["H1"] = (r"R:\DownloadsA", ("movie.mkv", ))
+        mgr._group_sizes = {}  # 无缓存映射
+        mgr._handle_save_path_changes({"H1": t1}, dry_run=False)
+        # 无旧映射 -> 不重归组也不触发扫描
+        assert client.calls == []
+        assert "H1" not in mgr._groups
+
+
+def test_assign_new_torrent_missing():
+    """_assign_new_torrent: 哈希不在 by_hash -> 直接返回"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        mgr._assign_new_torrent("NOPE", {}, dry_run=False)
+        assert client.files_calls == 0, "tor 不存在不应拉文件列表"
+
+
+def test_assign_new_torrent_files_error():
+    """_assign_new_torrent: 文件列表拉取异常 -> 静默返回"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+
+        def boom(h):
+            raise RuntimeError("api down")
+
+        client.torrents_files = boom
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
+        mgr._assign_new_torrent("H1", {"H1": t1}, dry_run=False)
+        assert client.calls == []
+        assert "H1" not in mgr._group_member_to_key
+
+
+def test_assign_to_group_empty_map():
+    """_assign_to_group: 空文件映射 -> 不归组"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
+        mgr._assign_to_group(t1, {}, {"H1": t1}, dry_run=False)
+        assert mgr._groups == {}
+        assert client.calls == []
+
+
+def test_check_missing_files_no_seeding_rep():
+    """_check_missing_files: 组内无已完成做种种子 -> 不检查"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        members = [FakeTorrent(hash="H1", name="T1", state="pausedUP", amount_left=100)]
+        mgr._check_missing_files(members, {}, dry_run=False)
+        assert client.calls == [], "无做种代表不应扫描"
+
+
+def test_check_missing_files_size_mismatch():
+    """_check_missing_files: 文件存在但大小不符 -> 警告 + 整组暂停 + MISSING"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        real = os.path.join(td, "movie.mkv")
+        with open(real, "wb") as f:
+            f.write(b"x" * 10)
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 999}}  # 期望 999, 实际 10
+        mgr._check_missing_files([rep], sizes, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"大小不符应整组暂停: {client.calls}"
+        assert "MISSING" in client.tags
+
+
+def test_check_missing_files_getsize_error():
+    """_check_missing_files: 文件读取 OSError -> 警告 + 整组暂停 + MISSING"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        real = os.path.join(td, "movie.mkv")
+        with open(real, "wb") as f:
+            f.write(b"x" * 10)
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 10}}
+        with mock.patch("os.path.getsize", side_effect=OSError("denied")):
+            mgr._check_missing_files([rep], sizes, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"读取失败应整组暂停: {client.calls}"
+        assert "MISSING" in client.tags

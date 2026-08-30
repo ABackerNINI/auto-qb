@@ -30,6 +30,7 @@
 - test_checking_verified_reference_used: verified 参考种子被使用
 - test_checking_verified_references_not_persisted: verified 参考不持久化(仅内存)
 - test_checking_skip_guard_file_missing: 跳检前置文件检查失败
+- test_checking_skip_guard_file_size_mismatch: 跳检前置文件大小不符
 - test_checking_skip_guard_add_fail_backup: 重加标签失败回退
 - test_checking_skip_dedup_same_day: 同日跳检去重
 - test_checking_dry_run: dry-run 不发送请求
@@ -665,6 +666,24 @@ def test_checking_skip_guard_file_missing():
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled, "前置检查失败应返回失败结果(动作已执行)"
     assert client.calls == [], f"前置失败不应有任何调用: {client.calls}"
+
+
+def test_checking_skip_guard_file_size_mismatch():
+    """测试: 跳检前置 filelist 检查失败(文件存在但大小不符) -> 不执行导出/删除"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking")
+        mgr = make_mgr(cfg)
+        client = CheckingFakeClient()
+        mgr.client = client
+        real = os.path.join(td, "movie.mkv")
+        with open(real, "wb") as f:
+            f.write(b"x" * 10)
+        client.files = [SimpleNamespace(name="movie.mkv", size=999)]  # 期望 999, 实际 10
+        t = make_target()
+        t.save_path = td
+        handled = mgr.process_torrent(t, dry_run=False)
+        assert handled, "前置检查失败应返回失败结果(动作已执行)"
+        assert client.calls == [], f"大小不符不应有任何调用: {client.calls}"
 
 
 def test_checking_skip_guard_add_fail_backup():

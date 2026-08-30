@@ -81,6 +81,10 @@ def test_episode_tag_utils():
     # 无标记文件恰好一个候选数字(排除分辨率后) -> 提取
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.Name.05.1080p.mkv"]]
     assert extract_episodes_from_files(files) == [5]
+    # 文件名为空 -> 跳过, 不崩溃
+    files = [SimpleNamespace(name="", size=1), SimpleNamespace(name="01.mkv", size=1)]
+    assert extract_episodes_from_files(files) == [1], "空文件名应跳过"
+    assert extract_episodes_from_files([SimpleNamespace(name=None, size=1)]) == []
 
     # 标签格式化: 必须连续, 非连续/空 -> 放弃(z 前缀使标签排序靠后)
     assert format_episode_tag([1, 2, 3, 4, 5]) == "zE1-5"

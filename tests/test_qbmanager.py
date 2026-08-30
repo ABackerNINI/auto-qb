@@ -11,13 +11,20 @@
 - test_execute_due_reschedule: handler 成功 -> 任务 reschedule
 - test_execute_due_drop: handler 返回 False -> 不 reschedule
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
+- test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
+- test_tick_full_flow: 慢速队列轮询 + 快速队列到期执行全流程
+- test_create_torrent_tasks_tor_missing: 种子不在快照 -> 直接返回
+- test_create_torrent_tasks_no_tracker: 未匹配 tracker -> 拉取 + 警告 + False
+- test_create_torrent_tasks_with_rules: 匹配 tracker -> 创建 maintenance + 规则任务
+- test_handle_maintenance_tor_missing: 种子不存在 -> False(任务消亡)
+- test_tick_slow_send_error: 慢速任务发送失败 -> warning, 任务出队
 """
 import os
 import tempfile
 import time
 from unittest import mock
 
-from auto_qb.taskqueue import PENDING, Task
+from auto_qb.taskqueue import PENDING, Task, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager
 
 
@@ -127,3 +134,100 @@ def test_run_connect_failure():
         mgr.connect = mock.Mock(return_value=False)
         mgr.run(dry_run=False)  # 不应抛异常/不应调用 _tick
         mgr.connect.assert_called_once()
+
+
+def test_run_main_loop():
+    """run: 连接成功进入主循环; _tick 异常被捕获; KeyboardInterrupt 停止; finally 清理+保存"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=[RuntimeError("boom"), KeyboardInterrupt()])
+        with mock.patch("auto_qb.qbmanager.time.sleep"):
+            mgr.run(dry_run=False)
+        assert mgr._tick.call_count == 2, "异常应被捕获继续循环, KeyboardInterrupt 退出"
+        assert mgr.task_queue._shutdown is True, "finally 应 shutdown"
+        assert os.path.exists(state_file), "finally 应保存状态"
+
+
+def test_tick_full_flow():
+    """_tick: 慢速队列轮询(校验完成出队) + 快速队列到期任务执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["HASH123"] = FakeTorrent(hash="HASH123", state="pausedUP")
+        mgr.task_queue = TaskQueue(executor_workers=0)
+        mgr.task_queue.submit_check("HASH123", lambda: None, timeout=0)
+        due_task = Task("rule", "t", interval=0, handler=lambda t, d: True)
+        due_task.next_run = time.time() - 1
+        mgr.task_queue._fast.append(due_task)
+        mgr._refresh_torrents = mock.Mock()
+        mgr._tick(dry_run=False)
+        assert mgr.task_queue.pending_slow() == [], "校验完成应出队"
+        assert due_task.run_count == 1, "到期任务应执行"
+
+
+def test_create_torrent_tasks_tor_missing():
+    """_create_torrent_tasks: 种子不在快照 -> 直接返回, 不建任务"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr._snapshot = []
+        assert mgr._create_torrent_tasks("NOPE") is None
+        assert mgr.task_queue._fast == []
+
+
+def test_create_torrent_tasks_no_tracker():
+    """_create_torrent_tasks: 未匹配 tracker 配置 -> 拉取 trackers + 警告 + False"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents_trackers = lambda h: [{"url": "https://tracker.other.org/announce"}]
+        tor = FakeTorrent(hash="H1", tags="")
+        mgr._snapshot = [tor]
+        assert mgr._create_torrent_tasks("H1") is False, "未匹配应跳过"
+        assert mgr.task_queue._fast == [], "不应创建任何任务"
+
+
+def test_create_torrent_tasks_with_rules():
+    """_create_torrent_tasks: 匹配 tracker -> 创建 maintenance + 全部规则任务"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules.add_site_tag"])
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(hash="HASH123", tags="")
+        client.torrents["HASH123"] = tor
+        mgr._snapshot = [tor]
+        mgr._create_torrent_tasks("HASH123")
+        names = [t.name for t in mgr.task_queue._fast]
+        assert "maintenance" in names, f"应创建内置任务: {names}"
+        assert "example_rules.add_site_tag" in names, f"应创建规则任务: {names}"
+
+
+def test_handle_maintenance_tor_missing():
+    """_handle_maintenance: 种子不存在 -> False(任务消亡, 不重入队)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        task = Task("internal", "maintenance", torrent_hash="NOPE", tracker_conf=mock.Mock())
+        assert mgr._handle_maintenance(task, dry_run=False) is False
+
+
+def test_tick_slow_send_error():
+    """_tick: 慢速队列发送失败(send_error) -> 记录 warning, 任务仍出队"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr.task_queue = TaskQueue(executor_workers=0)
+
+        def send_boom():
+            raise RuntimeError("send failed")
+
+        mgr.task_queue.submit_check("HASH123", send_boom, timeout=0)
+        mgr._refresh_torrents = mock.Mock()
+        with mock.patch("auto_qb.qbmanager.logger.warning") as m_warn:
+            mgr._tick(dry_run=False)
+        assert m_warn.call_count >= 1, "应记录异步校验任务异常 warning"
+        assert mgr.task_queue.pending_slow() == [], "发送失败任务应出队"

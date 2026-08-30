@@ -7,6 +7,7 @@
 - test_parse_hr_spec_site_overrides_global: 站点 HR 覆盖全局
 - test_parse_hr_spec_condition: HR 规范条件解析
 - test_hr_rule_defaults: HRRule 默认值
+- test_config_tracker_tags_expand_ignore_case: @tracker_tags:ignore_case 展开附加后缀
 """
 import os
 import tempfile
@@ -69,6 +70,15 @@ def test_config_tracker_tags_expand():
         cfg = load_config(cfg_path)
         assert set(cfg.delete_tags_if_has_no_torrents) == {"HHan", "Kufirc", "regex:^ORPHAN"}, \
             f"@tracker_tags 展开错误: {cfg.delete_tags_if_has_no_torrents}"
+
+
+def test_config_tracker_tags_expand_ignore_case():
+    """@tracker_tags:ignore_case 引用展开时给每个 tag 附加 :ignore_case 后缀"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = _write_config(td, delete_tags=["@tracker_tags:ignore_case"])
+        cfg = load_config(cfg_path)
+        assert set(cfg.delete_tags) == {"HHan:ignore_case", "Kufirc:ignore_case"}, \
+            f"@tracker_tags:ignore_case 展开错误: {cfg.delete_tags}"
 
 
 def test_parse_hr_spec_missing_required():

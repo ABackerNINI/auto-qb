@@ -13,3 +13,4 @@ skip-check-backup/
 # pytest-cov覆盖率文件
 .coverage
 htmlcov/
+cov-report.txt

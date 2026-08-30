@@ -19,6 +19,22 @@
 - test_check_filelist_api_error: 文件列表 API 错误
 - test_timer: 计时器
 - test_os_platform_helpers: 平台判定(is_windows/is_linux/is_mac/is_posix)
+- test_parse_time_empty: 空串 -> 0
+- test_parse_time_invalid: 非法时间格式 -> ValueError
+- test_parse_fsize_invalid_format: 非法大小格式 -> ValueError
+- test_parse_fsize_invalid_unit: 非 iB 单位 -> ValueError
+- test_parse_speed_empty: 空串 -> 0
+- test_parse_speed_invalid: 非法速度格式 -> ValueError
+- test_add_long_path_prefix_non_windows: 非 Windows 原样返回
+- test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
+- test_add_long_path_prefix_already_prefixed: 已加前缀 -> 原样返回
+- test_parse_compare_invalid: 无效比较表达式 -> ValueError
+- test_check_filelist_oserror: 读取文件异常 -> 无法读取文件
+- test_extract_tracker_hostnames_invalid_url: url 解析异常 -> 跳过
+- test_match_tracker_confs_invalid_url: url 解析异常 -> 不匹配
+- test_match_tag_patterns_empty_pattern: 空模式跳过
+- test_path_normalize_empty: 空路径 -> 原样返回
+- test_timer_us: us 单位计时
 """
 import os
 import sys
@@ -233,3 +249,138 @@ def test_os_platform_helpers(monkeypatch):
     monkeypatch.setattr(sys, "platform", "freebsd")
     assert not utils.is_windows()
     assert utils.is_posix()  # BSD 属 Unix 类
+
+
+def test_parse_time_empty():
+    """parse_time 空串 -> 0"""
+    assert utils.parse_time("") == 0
+
+
+def test_parse_time_invalid():
+    """parse_time 非法格式 -> ValueError"""
+    try:
+        utils.parse_time("abc")
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass
+
+
+def test_parse_fsize_invalid_format():
+    """parse_fsize 非法格式 -> ValueError"""
+    try:
+        utils.parse_fsize("abc")
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass
+
+
+def test_parse_fsize_invalid_unit():
+    """parse_fsize 非 iB 单位(如 KB) -> ValueError"""
+    try:
+        utils.parse_fsize("10KB")
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass
+
+
+def test_parse_speed_empty():
+    """parse_speed 空串 -> 0"""
+    assert utils.parse_speed("") == 0
+
+
+def test_parse_speed_invalid():
+    """parse_speed 非法格式 -> ValueError"""
+    try:
+        utils.parse_speed("abc")
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass
+
+
+def test_add_long_path_prefix_non_windows(monkeypatch):
+    """非 Windows 系统 -> 原样返回路径"""
+    monkeypatch.setattr(sys, "platform", "linux")
+    p = r"R:\Downloads\Movie"
+    assert utils.add_long_path_prefix_for_win(p) == p
+
+
+def test_add_long_path_prefix_unc():
+    """UNC 路径 -> \\?\\UNC 前缀"""
+    p = r"\\server\share\file"
+    result = utils.add_long_path_prefix_for_win(p)
+    assert result == r"\\?\UNC\server\share\file"
+
+
+def test_add_long_path_prefix_already_prefixed():
+    """已加 \\?\\ 前缀 -> 原样返回"""
+    p = r"\\?\C:\x"
+    assert utils.add_long_path_prefix_for_win(p) == p
+
+
+def test_parse_compare_invalid():
+    """无效比较表达式 -> ValueError"""
+    try:
+        utils.parse_compare("   ", utils.parse_fsize)
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass
+
+
+def test_check_filelist_oserror(monkeypatch):
+    """读取文件大小抛 OSError -> 无法读取文件"""
+    with tempfile.TemporaryDirectory() as td:
+        fpath = os.path.join(td, "movie.mkv")
+        with open(fpath, "wb") as f:
+            f.write(b"x" * 100)
+
+        def boom(_p):
+            raise OSError("denied")
+
+        monkeypatch.setattr(os.path, "getsize", boom)
+        client = FakeClient()
+        tor = SimpleNamespace(hash="H1", save_path=td)
+        client.files = [SimpleNamespace(name="movie.mkv", size=100)]
+        result = utils.check_filelist(client, tor)
+        assert result is not None and "无法读取文件" in result
+
+
+def test_extract_tracker_hostnames_invalid_url(monkeypatch):
+    """url 解析异常 -> 跳过该条目"""
+    def boom(url):
+        raise ValueError("bad url")
+
+    monkeypatch.setattr("auto_qb.utils.urlparse", boom)
+    assert utils.extract_tracker_hostnames([{"url": "https://x.com/a"}]) == set()
+
+
+def test_match_tracker_confs_invalid_url(monkeypatch):
+    """url 解析异常 -> 不匹配任何配置"""
+    def boom(url):
+        raise ValueError("bad url")
+
+    monkeypatch.setattr("auto_qb.utils.urlparse", boom)
+    confs = {"HHan": SimpleNamespace(name="HHan", domains=["tracker.hhanclub.net"])}
+    assert utils.match_tracker_confs(confs, ["https://tracker.hhanclub.net/announce.php"]) == []
+
+
+def test_match_tag_patterns_empty_pattern():
+    """模式列表含空串 -> 跳过继续匹配后续模式"""
+    assert utils.match_tag_patterns("HHan", ["", "HHan"])
+
+
+def test_path_normalize_empty():
+    """空路径 -> 原样返回"""
+    assert utils._path_normalize("") == ""
+
+
+def test_timer_us():
+    """us 单位计时: 日志含 us 且返回原结果"""
+    logs = []
+
+    @utils.timer(unit="us", log_func=logs.append)
+    def foo():
+        return 7
+
+    assert foo() == 7
+    assert len(logs) == 1
+    assert "us" in logs[0]

@@ -332,9 +332,6 @@ class CheckAction(BaseAction):
         - 重加失败时 .torrent 落盘备份并记录元数据, 提示手动恢复
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
         """
-        if ctx.dry_run:
-            return ActionResult.ok("skip-checking 跳检(导出->删除->重加->开始) [dry-run]")
-
         # 0. 同日去重(安全兜底, 与 execute_once 无关)
         record = ctx.manager.get_exec_record(ctx.rule_name, ctx.torrent.hash)
         if record and record.get("date") == date.today().isoformat():

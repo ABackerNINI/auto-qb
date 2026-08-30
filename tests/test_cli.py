@@ -5,6 +5,7 @@
 - test_main_export_yaml: --export-yaml 导出配置
 - test_main_export_connect_failure: 导出时连接失败处理
 - test_main_default_config_path: 缺省配置路径解析
+- test_main_normal_mode_keyboard_interrupt: run 抛 KeyboardInterrupt -> 捕获退出不崩溃
 """
 import sys
 from unittest import mock
@@ -71,3 +72,15 @@ def test_main_default_config_path():
         from auto_qb.cli import main
         main()
     m_qb.assert_called_once_with(DEFAULT_CONFIG_FILE)
+
+
+def test_main_normal_mode_keyboard_interrupt():
+    """正常运行模式: run 抛 KeyboardInterrupt -> 捕获退出, 不崩溃"""
+    manager = mock.MagicMock()
+    manager.run.side_effect = KeyboardInterrupt()
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager) as m_qb:
+        from auto_qb.cli import main
+        main()  # 不应抛出 KeyboardInterrupt
+    m_qb.assert_called_once_with("config.yml")
+    manager.run.assert_called_once_with(False)
