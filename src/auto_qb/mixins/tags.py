@@ -87,7 +87,6 @@ class TagsMixin:
         if not tag:
             return  # 集数非连续(存在缺集/误提取), 放弃添加
         self._add_tags(tor, [tag], dry_run)
-        logger.info(f"Added episode tag '{tag}'")
 
     def _remove_similar_tags(self, tor: TorrentDictionary, tags: List[str], dry_run: bool):
         """删除类似(单词相同大小写不同)的tag"""

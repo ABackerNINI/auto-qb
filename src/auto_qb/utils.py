@@ -397,4 +397,4 @@ def format_episode_tag(episodes: List[int]) -> str:
     for a, b in zip(nums, nums[1:]):
         if b != a + 1:
             return ""  # 缺集 -> 放弃添加
-    return f"E{nums[0]}" if len(nums) == 1 else f"E{nums[0]}-{nums[-1]}"
+    return f"zE{nums[0]}" if len(nums) == 1 else f"zE{nums[0]}-{nums[-1]}"
