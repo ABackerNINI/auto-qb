@@ -1,6 +1,6 @@
 """内置动作插件: add_tags, remove_tags, add_category, remove_category, start, stop,
-check, basic_check, custom_basic_check_program_path, always_check_first_one,
-move_to, reannounce, upload_speed_limit, download_speed_limit"""
+checking(基础检查确定参考种子 + 有/无参考分段校验), move_to, reannounce,
+upload_speed_limit, download_speed_limit"""
 import logging
 import os
 import time
@@ -153,66 +153,182 @@ class StopAction(BaseAction):
 
 @register_action
 class CheckAction(BaseAction):
-    """校验: full-checking(异步: 发送请求由工作线程执行, 主循环轮询校验完成, 可选完成后自动开始)
-    / skip-checking(高风险, 暂未实现)"""
-    name = "check"
+    """校验动作(checking): 用 basic_check 确定参考种子, 按有/无参考分段执行
+
+    配置(仅 dict, fail-fast):
+      - basic_check(必填): filelist(已完成+上传中的同组种子, 宽松) | piecehashes(同前且 piece
+        hash 列表相同, 相对严格) | custom(运行 custom_basic_check_program_path 程序判定)
+      - custom_basic_check_program_path: basic_check=custom 时必填; 参数: <种子hash> <保存路径>
+      - with_reference / without_reference: 各含 mode(skip-checking|full-checking) + auto_start(默认 false)
+
+    决策链(想法2):
+      1. 组内有活跃下载种子(is_downloading) -> skip(整组未完成, 不进行任何校验, 包括跳检)
+      2. 按 basic_check 从同组"已完成+上传中"成员筛选参考种子, 并集内存 verified_references
+      3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
+      4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
+         -> 确认 -> auto_start(无参考时警告高风险)
+         full-checking: 异步提交 recheck(慢速队列), 完成回调 auto_start + 晋升 verified_references(仅内存)
+    """
+    name = "checking"
+    _VALID_BASIC = ("filelist", "piecehashes", "custom")
+    _VALID_MODES = ("skip-checking", "full-checking")
 
     def __init__(self, spec, ignore_error=False):
         super().__init__(spec, ignore_error)
-        if isinstance(spec, dict):
-            self.mode = str(spec.get("mode", "full-checking"))
-            self.auto_start = utils.parse_bool(spec.get("auto_start", False))
-            self.poll_timeout = utils.parse_time(str(spec.get("poll_timeout", "0S")))
-        else:
-            self.mode = str(spec)
-            self.auto_start = False
-            self.poll_timeout = 0
+        if not isinstance(spec, dict):
+            raise ValueError("checking 动作只接受 dict 配置, 旧字符串形式已移除, 请参考示例改写")
+        self._validate(spec)
+        self.basic_check = str(spec["basic_check"])
+        self.custom_program = str(spec.get("custom_basic_check_program_path") or "")
+        self.with_reference = self._parse_section(spec, "with_reference")
+        self.without_reference = self._parse_section(spec, "without_reference")
+
+    def _validate(self, spec: dict):
+        known = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
+        unknown = set(spec) - known
+        if unknown:
+            raise ValueError(
+                f"checking 动作未知配置键: {sorted(unknown)} "
+                f"(always_check_first_one/poll_timeout/顶层 mode 已移除, 校验模式请在 with_reference/without_reference 段内配置)"
+            )
+        if "basic_check" not in spec:
+            raise ValueError("checking 动作必须配置 basic_check")
+        if spec["basic_check"] not in self._VALID_BASIC:
+            raise ValueError(f"checking 动作 basic_check 取值非法: {spec['basic_check']}, 可选: {list(self._VALID_BASIC)}")
+        if spec["basic_check"] == "custom" and not str(spec.get("custom_basic_check_program_path") or "").strip():
+            raise ValueError("checking 动作 basic_check=custom 时必须配置 custom_basic_check_program_path")
+        for seg in ("with_reference", "without_reference"):
+            if seg not in spec:
+                raise ValueError(f"checking 动作必须配置 {seg} 段")
+            if not isinstance(spec[seg], dict):
+                raise ValueError(f"checking 动作 {seg} 段必须是 dict")
+            seg_mode = str(spec[seg].get("mode", ""))
+            if seg_mode not in self._VALID_MODES:
+                raise ValueError(f"checking 动作 {seg}.mode 取值非法: {seg_mode}, 可选: {list(self._VALID_MODES)}")
+
+    @staticmethod
+    def _parse_section(spec: dict, name: str) -> dict:
+        seg = spec[name]
+        return {
+            "mode": str(seg.get("mode")),
+            "auto_start": utils.parse_bool(seg.get("auto_start", False)),
+        }
 
     def execute(self, ctx):
-        if self.mode == "full-checking":
-            if ctx.dry_run:
-                return ActionResult.ok("full-checking 校验(异步)")
-            tq = getattr(ctx.manager, "task_queue", None)
-            if tq is None:
-                # 无任务队列(旧用法/同步环境): 直接发送请求
-                if not ctx.dry_run:
-                    ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
-                return ActionResult.ok("full-checking 校验")
-            # 双队列: 发送请求交给异步工作线程, 主循环轮询校验完成
-            rule_name = ctx.rule_name
-            torrent_hash = ctx.torrent.hash
-            client = ctx.client
-            manager = ctx.manager
-            dry_run = ctx.dry_run
-            auto_start = self.auto_start
+        if ctx.dry_run:
+            return ActionResult.ok("checking 校验(决策链: 组内下载判定+参考确定+分段执行) [dry-run]")
+        manager = ctx.manager
+        torrent_hash = ctx.torrent.hash
 
-            def send():
-                client.torrents_recheck(torrent_hashes=torrent_hash)
+        # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
+        members = manager._group_members(torrent_hash)
+        if manager._group_has_downloading(members):
+            return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")
 
-            def done(task):
-                # 主循环线程执行: state_file 仅主循环写, 线程安全
-                if task.send_error is not None:
-                    logger.warning(f"规则: {rule_name} | 校验请求发送失败: {torrent_hash}: {task.send_error}")
-                    return
-                logger.info(f"规则: {rule_name} | 校验完成: {torrent_hash}")
-                if auto_start and not dry_run:
-                    client.torrents_start(torrent_hashes=torrent_hash)
-                    logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")
-                manager.record_execution(rule_name, torrent_hash)
+        # 决策链 2: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
+        reference = self._find_reference(ctx, members)
 
-            if tq.submit_check(torrent_hash, send, done, timeout=self.poll_timeout):
-                return ActionResult.ok("full-checking 校验请求已提交, 等待完成")
-            return ActionResult.skip("该校验任务已在队列中")
-        if self.mode == "skip-checking":
-            return self._execute_skip_checking(ctx)
-        return ActionResult.fail(f"未知校验模式: {self.mode}")
+        # 决策链 3: 有参考 -> with_reference 段; 无参考 -> without_reference 段
+        segment = self.with_reference if reference else self.without_reference
+        if segment["mode"] == "full-checking":
+            return self._execute_full_checking(ctx, segment)
+        return self._execute_skip_checking(ctx, segment, bool(reference))
 
-    def _execute_skip_checking(self, ctx):
+    def _find_reference(self, ctx, members: list) -> list:
+        """按 basic_check 模式从组内已完成+上传中成员筛选参考种子, 并集内存 verified_references(排除自身)"""
+        candidates = [c for c in ctx.manager._group_reference_candidates(members) if c.hash != ctx.torrent.hash]
+        refs = []
+        if self.basic_check == "filelist":
+            refs = list(candidates)  # 分组已保证文件列表相同, 无需重复对比
+        elif self.basic_check == "piecehashes":
+            # 严格模式: 候选须与目标种子 piece hash 列表完全相同(torrents_piece_hashes API, 无需导出 .torrent)
+            try:
+                target = ctx.client.torrents_piece_hashes(ctx.torrent.hash)
+            except Exception as e:
+                logger.warning(f"获取 piece hashes 失败({ctx.torrent.hash}), 视为无参考: {e}")
+                target = None
+            if target is not None:
+                for cand in candidates:
+                    try:
+                        if ctx.client.torrents_piece_hashes(cand.hash) == target:
+                            refs.append(cand)
+                    except Exception as e:
+                        logger.warning(f"获取参考种子 piece hashes 失败({cand.hash}): {e}")
+        else:  # custom: 运行自定义程序判定候选
+            refs = [c for c in candidates if self._run_custom_check(ctx, c)]
+        # 内存 verified_references 并集: 历史 full-checking 通过的种子也可作参考(重启后重新积累)
+        by_hash = ctx.manager._group_by_hash()
+        own = ctx.torrent.hash
+        for h in getattr(ctx.manager, "verified_references", set()):
+            if h in members and h != own and h in by_hash:
+                refs.append(by_hash[h])
+        # 去重(按 hash), 过滤无效
+        seen, result = set(), []
+        for t in refs:
+            if t is None or t.hash in seen:
+                continue
+            seen.add(t.hash)
+            result.append(t)
+        return result
+
+    def _run_custom_check(self, ctx, candidate) -> bool:
+        """运行自定义 basic_check 程序判定候选是否为参考种子, 参数: <候选hash> <候选保存路径>"""
+        import subprocess
+        try:
+            r = subprocess.run(
+                [self.custom_program, candidate.hash, candidate.save_path],
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            if r.returncode == 0:
+                return True
+            logger.info(f"自定义 basic_check 判定非参考({candidate.hash}) rc={r.returncode}: {r.stderr.strip()[:200]}")
+            return False
+        except Exception as e:
+            logger.warning(f"自定义 basic_check 程序执行异常({candidate.hash}): {e}")
+            return False
+
+    def _execute_full_checking(self, ctx, segment: dict):
+        """full-checking: 异步提交 recheck(慢速队列), 完成回调 auto_start + 晋升 verified_references(仅内存)"""
+        tq = getattr(ctx.manager, "task_queue", None)
+        if tq is None:
+            # 无任务队列(旧用法/同步环境): 直接发送请求
+            ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
+            return ActionResult.ok("full-checking 校验")
+        rule_name = ctx.rule_name
+        torrent_hash = ctx.torrent.hash
+        client = ctx.client
+        manager = ctx.manager
+        auto_start = segment["auto_start"]
+
+        def send():
+            client.torrents_recheck(torrent_hashes=torrent_hash)
+
+        def done(task):
+            # 主循环线程执行: state_file 仅主循环写, 线程安全
+            if task.send_error is not None:
+                logger.warning(f"规则: {rule_name} | 校验请求发送失败: {torrent_hash}: {task.send_error}")
+                return
+            logger.info(f"规则: {rule_name} | 校验完成: {torrent_hash}")
+            # 晋升参考(仅内存, 不写 state_file): 校验通过说明文件与元数据一致, 可作同组参考
+            manager.verified_references.add(torrent_hash)
+            if auto_start:
+                client.torrents_start(torrent_hashes=torrent_hash)
+                logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")
+            manager.record_execution(rule_name, torrent_hash)
+
+        if tq.submit_check(torrent_hash, send, done, timeout=0):
+            return ActionResult.ok("full-checking 校验请求已提交, 等待完成")
+        return ActionResult.skip("该校验任务已在队列中")
+
+    def _execute_skip_checking(self, ctx, segment: dict, has_reference: bool):
         """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 重加跳过校验 -> 可选自动开始
 
         风险控制:
         - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行
         - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once 兜底)
+        - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
         - 重加失败时 .torrent 落盘备份并记录元数据, 提示手动恢复
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
         """
@@ -271,8 +387,11 @@ class CheckAction(BaseAction):
         if not appeared:
             return ActionResult.fail("重加后未确认到种子, 请检查客户端")
 
-        # 6. 自动开始
-        if self.auto_start:
+        # 6. 无参考高风险警告 + 自动开始
+        if not has_reference:
+            logger.warning(f"规则: {ctx.rule_name} | 无参考种子跳检(高风险): 仅做文件存在与大小对比, "
+                           f"内容错误时会传垃圾数据: {ctx.torrent.hash}")
+        if segment["auto_start"]:
             try:
                 ctx.client.torrents_start(torrent_hashes=ctx.torrent.hash)
             except Exception as e:
@@ -296,69 +415,6 @@ class CheckAction(BaseAction):
             "ts": time.time(),
         }
         return path
-
-
-@register_action
-class BasicCheckAction(BaseAction):
-    """基础检查: filelist(文件存在+大小) / piecehashes(暂未实现)"""
-    name = "basic_check"
-
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
-        self.mode = str(spec)
-
-    def execute(self, ctx):
-        if self.mode == "filelist":
-            err = utils.check_filelist(ctx.client, ctx.torrent)
-            if err is None:
-                return ActionResult.ok("文件列表检查通过")
-            return ActionResult.fail(f"文件列表检查失败: {err}")
-        if self.mode == "piecehashes":
-            return ActionResult.fail("piecehashes 基础检查尚未实现(需导出.torrent对比piece哈希), 请使用 filelist")
-        return ActionResult.fail(f"未知基础检查模式: {self.mode}")
-
-
-@register_action
-class CustomBasicCheckProgramAction(BaseAction):
-    """运行自定义 basic_check 外部程序, 参数: <种子hash> <保存路径>"""
-    name = "custom_basic_check_program_path"
-
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
-        self.program = str(spec)
-
-    def execute(self, ctx):
-        if ctx.dry_run:
-            return ActionResult.ok(f"dry-run, 不执行外部程序 {self.program}")
-        import subprocess
-        try:
-            r = subprocess.run(
-                [self.program, ctx.torrent.hash, ctx.torrent.save_path],
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            if r.returncode == 0:
-                return ActionResult.ok(f"外部检查通过: {r.stdout.strip()[:200]}")
-            return ActionResult.fail(f"外部检查失败 rc={r.returncode}: {r.stderr.strip()[:200]}")
-        except Exception as e:
-            return ActionResult.fail(f"外部检查异常: {e}")
-
-
-@register_action
-class AlwaysCheckFirstOneAction(BaseAction):
-    """对同一保存路径"最后校验时间最久"的种子强制校验(简化: 记录每路径最近校验的hash, 不重复)"""
-    name = "always_check_first_one"
-
-    def execute(self, ctx):
-        path = ctx.torrent.save_path
-        checked = ctx.manager.state.setdefault("checked_paths", {})
-        if checked.get(path) == ctx.torrent.hash:
-            return ActionResult.skip(f"路径 {path} 已校验过种子 {ctx.torrent.hash}")
-        checked[path] = ctx.torrent.hash
-        if not ctx.dry_run:
-            ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
-        return ActionResult.ok(f"路径 {path} 校验种子 {ctx.torrent.hash}")
 
 
 @register_action

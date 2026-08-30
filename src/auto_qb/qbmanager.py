@@ -57,6 +57,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._group_sizes: dict = {}
         # 分组成员索引: hash -> 组 key, 删除/状态变化/save_path 同步时 O(1) 定位所属组, 避免遍历分组
         self._group_member_to_key: dict = {}
+        # 内存参考种子集合(仅内存, 重启后重新积累): full-checking 校验通过的种子, 可作为同组参考
+        self.verified_references: set = set()
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -226,6 +228,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._handle_save_path_changes(by_hash, dry_run)
             # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)
             self._handle_state_transitions(by_hash, dry_run)
+            # 下载冲突检查(每轮): 同组多个同时下载/已完成与下载中并存 -> 警告+整组暂停
+            self._check_download_conflicts(by_hash, dry_run)
             # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关;
             # 新增种子本轮不视为状态变化)
             self._group_state_snapshot = {t.hash: t.state_enum for t in torrents}

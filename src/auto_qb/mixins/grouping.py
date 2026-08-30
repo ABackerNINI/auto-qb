@@ -13,11 +13,15 @@
     * 删除种子 -> _handle_removed_torrents: 移出组; 组内仍有剩余种子 -> 立即触发缺文件磁盘扫描
     * 种子由上传(做种)状态转为暂停状态 -> _handle_state_transitions 立即触发缺文件磁盘扫描(不等下一轮)
     * 保存路径变化 -> _handle_save_path_changes 按新路径重归组; 原组剩余成员与新组已有成员均触发缺文件磁盘扫描
+    * 下载冲突(每轮, 分组 enabled 时) -> _check_download_conflicts: 同组两个及以上种子同时下载,
+      或已完成与下载中并存 -> 警告 + 整组暂停(内存 set 去重, 冲突消除后清除)
   - 缺文件磁盘扫描: 组内取一个已完成且做种的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
+  - checking 动作辅助(供 rules/actions.py 调用): _group_members(成员 hash 列表)/
+    _group_has_downloading(组内活跃下载判定)/_group_reference_candidates(已完成+上传中参考候选)
 
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags,
-以及 qbmanager 初始化的 _groups/_group_sizes/_group_member_to_key/_group_state_snapshot。
+以及 qbmanager 初始化的 _groups/_group_sizes/_group_member_to_key/_group_state_snapshot/_snapshot。
 """
 import logging
 import os
@@ -215,3 +219,77 @@ class GroupingMixin:
         """种子是否处于暂停状态: 由 state_enum.is_paused 判定(qB 版本无关, 覆盖老版 pausedUP/新版 stoppedUP)"""
         enum = getattr(tor, "state_enum", None)
         return bool(enum is not None and enum.is_paused)
+
+    @staticmethod
+    def _is_downloading(tor) -> bool:
+        """种子是否处于活跃下载状态: 由 state_enum 判定, 排除暂停(pausedDL/stoppedDL 属未完成但非活跃下载)"""
+        enum = getattr(tor, "state_enum", None)
+        return bool(enum is not None and enum.is_downloading and not enum.is_paused)
+
+    # ---------- 下载冲突检查(每轮, 分组 enabled 时) ----------
+
+    def _check_download_conflicts(self, by_hash: Dict[str, Any], dry_run: bool):
+        """下载冲突检查: 同组两个及以上种子同时下载 / 已完成与下载中并存 -> 警告 + 整组暂停
+
+        设计(想法.md):
+          - 同组中两个及以上的种子同时下载 -> 暂停并发出警告
+          - 同组中有已完成的种子和正在下载的种子 -> 暂停并发出警告
+        去重: 内存 set 记录 (组key, 冲突类型), 冲突持续不重复暂停(暂停幂等), 冲突消除后清除;
+        触发: _refresh_torrents 每轮调用(分组 enabled 时), 状态快照在调用前已更新。
+        """
+        if not hasattr(self, "_download_conflict_warned"):
+            self._download_conflict_warned: set = set()
+        warned = self._download_conflict_warned
+        # 1. 扫描各组统计下载中/已完成成员
+        active = set()
+        for key, members in self._groups.items():
+            tos = [by_hash[h] for h in members if h in by_hash]
+            n_dl = sum(1 for t in tos if self._is_downloading(t))
+            n_done = sum(1 for t in tos if t.amount_left <= 0)
+            if n_dl >= 2:
+                active.add((key, "multi-dl"))
+            elif n_dl == 1 and n_done >= 1:
+                active.add((key, "mixed"))
+        # 2. 冲突消除: 清除去重记录(下次重现时再次警告+暂停)
+        for tag in list(warned):
+            if tag not in active:
+                warned.discard(tag)
+        # 3. 新冲突: 警告 + 整组暂停(dry-run 只报告, 不记录去重, 下次真实执行仍会暂停)
+        for key, kind in active:
+            if (key, kind) in warned:
+                continue
+            tos = [by_hash[h] for h in self._groups[key] if h in by_hash]
+            desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
+            if kind == "multi-dl":
+                logger.warning(f"辅种组存在多个种子同时下载({len(tos)}个), 暂停整组: {desc}")
+            else:
+                logger.warning(f"辅种组存在已完成与下载中种子并存, 暂停整组: {desc}")
+            if dry_run:
+                continue
+            warned.add((key, kind))
+            self.client.torrents_stop(torrent_hashes=[t.hash for t in tos])
+
+    # ---------- 校验动作(checking)辅助: 组上下文 ----------
+
+    def _group_members(self, torrent_hash: str) -> list:
+        """种子所属组全部成员 hash 列表; 未归组/分组未启用 -> [自身] 单种子(无参考)"""
+        key = self._group_member_to_key.get(torrent_hash)
+        if key is None:
+            return [torrent_hash]
+        return list(self._groups.get(key, [torrent_hash]))
+
+    def _group_by_hash(self) -> Dict[str, Any]:
+        """最近一轮种子快照的 hash -> 种子 映射(checking 动作用, 无需额外拉取)"""
+        return {t.hash: t for t in getattr(self, "_snapshot", []) or []}
+
+    def _group_has_downloading(self, members: list, by_hash: Dict[str, Any] = None) -> bool:
+        """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检)"""
+        if by_hash is None:
+            by_hash = self._group_by_hash()
+        return any(self._is_downloading(by_hash[h]) for h in members if h in by_hash)
+
+    def _group_reference_candidates(self, members: list, by_hash: Dict[str, Any] = None) -> list:
+        """组内已完成且正在上传(做种)的成员列表, 作为参考种子候选(想法2: filelist 参考定义)"""
+        if by_hash is None:
+            by_hash = self._group_by_hash()
+        return [by_hash[h] for h in members if h in by_hash and self._is_uploading(by_hash[h])]
