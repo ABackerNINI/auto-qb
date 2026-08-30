@@ -362,7 +362,14 @@ def test_builtin_hr_category_auto_update_from_state():
         mgr.client = client
         tor = FakeTorrent(downloaded=100 * 1024**2, category="")
         client.torrents["HASH123"] = tor
-        task = Task("internal", "maintenance", torrent_hash="HASH123", interval=60, handler=mgr._handle_maintenance)
+        task = Task(
+            "internal",
+            "maintenance",
+            torrent_hash="HASH123",
+            interval=60,
+            tracker_conf=mgr.config.trackers["HHan"],
+            handler=mgr._handle_maintenance
+        )
 
         assert mgr._handle_maintenance(task, dry_run=False)
         mgr.save_state()
@@ -374,7 +381,15 @@ def test_builtin_hr_category_auto_update_from_state():
         tor.category = "!!HR3D!!"
         client2.torrents["HASH123"] = tor
         mgr2.config.trackers["HHan"].hr = _hr_rule(add_category="NEW-HR")
-        mgr2._handle_maintenance(task, dry_run=False)
+        task2 = Task(
+            "internal",
+            "maintenance",
+            torrent_hash="HASH123",
+            interval=60,
+            tracker_conf=mgr2.config.trackers["HHan"],
+            handler=mgr2._handle_maintenance
+        )
+        mgr2._handle_maintenance(task2, dry_run=False)
         assert client2.category == "NEW-HR"
         assert mgr2.state["auto_categories"]["HASH123"] == "NEW-HR"
         print("[OK] test_builtin_hr_category_auto_update_from_state: 内置 HR 分类可更新")
@@ -536,7 +551,7 @@ def test_rule_interval():
         assert {r.name for r in rules} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}
         now = time.time()  # 统一时间起点: add_task 与 due 使用同一 now
         for r in rules:
-            tq.add_task(mgr._create_rule_task(r, tor.hash), now=now)
+            tq.add_task(mgr._create_rule_task(r, tor.hash, mgr.config.trackers["HHan"]), now=now)
 
         # 第 1 轮: 所有规则任务初始立即到期, 均执行
         due = tq.due(now)
@@ -783,7 +798,14 @@ def test_tracker_hr_overrides_global():
         tor = FakeTorrent(downloaded=100 * 1024**2, seeding_time=100, ratio=1.0)
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "maintenance", torrent_hash="HASH123", interval=60, handler=mgr._handle_maintenance)
+        task = Task(
+            "internal",
+            "maintenance",
+            torrent_hash="HASH123",
+            interval=60,
+            tracker_conf=cfg.trackers["HHan"],
+            handler=mgr._handle_maintenance
+        )
         mgr._handle_maintenance(task, dry_run=False)
 
         # 站点覆盖: 分类应为 SITE-HR!!(非全局 GLOBAL-HR)
@@ -825,7 +847,14 @@ def test_tracker_remove_similar_tags_override():
         tor = FakeTorrent(tags="hhan,other")
         client.torrents["HASH123"] = tor
 
-        task = Task("internal", "maintenance", torrent_hash="HASH123", interval=60, handler=mgr._handle_maintenance)
+        task = Task(
+            "internal",
+            "maintenance",
+            torrent_hash="HASH123",
+            interval=60,
+            tracker_conf=cfg.trackers["HHan"],
+            handler=mgr._handle_maintenance
+        )
         mgr._handle_maintenance(task, dry_run=False)
 
         # 全局关闭 + 站点开启 -> 应删除类似标签 hhan
