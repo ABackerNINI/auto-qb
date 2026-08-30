@@ -1,4 +1,13 @@
-"""集数标签测试(原 test_rules.py 迁移): 集数解析纯函数 + 添加时机 / 非连续放弃 / 截图干扰 / 开关"""
+"""test_episodes 测试计划: 集数标签
+
+## 测试计划(每个测试函数一条)
+- test_episode_tag_utils: 集数解析/格式化纯函数
+- test_episode_tags_added_on_new_torrent: 新增种子添加集数标签
+- test_episode_tags_not_on_existing_refresh: 已有种子刷新不加标签
+- test_episode_tags_non_continuous_skipped: 非连续集数放弃
+- test_episode_tags_ignore_date_screenshot: 日期型截图干扰忽略
+- test_episode_tags_disabled: 配置关闭时不加标签
+"""
 import os
 import tempfile
 from types import SimpleNamespace

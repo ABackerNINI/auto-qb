@@ -1,4 +1,10 @@
-"""mixins/tracker 模块测试: tracker 配置匹配"""
+"""test_tracker 测试计划: mixins/tracker tracker 配置匹配
+
+## 测试计划(每个测试函数一条)
+- test_match_tracker_domain: 域名匹配
+- test_match_tracker_no_match: 无匹配返回 None
+- test_match_tracker_multi_domain: 多域名配置匹配
+"""
 import os
 import tempfile
 

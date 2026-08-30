@@ -1,4 +1,25 @@
-"""mixins/tags 模块测试: 标签/分类/HR 辅助方法"""
+"""test_mixins_tags 测试计划: mixins/tags 标签/分类/HR 辅助方法
+
+## 测试计划(每个测试函数一条)
+- test_add_tags_direct: _add_tags 直接调用 client
+- test_remove_tags_direct: _remove_tags 直接调用 client
+- test_remove_similar_tags: 移除相似标签
+- test_create_category_if_not_exists: 分类不存在时创建
+- test_fmt_hr: ${required_seeding_time} 模板替换
+- test_torrent_desc: 种子描述生成
+- test_add_hr_tag_or_category_satisfied: HR 达标 -> 加达标标签/分类
+- test_handle_delete_tags: 处理彻底删除标签任务
+- test_handle_delete_tags_if_has_no_torrents: 处理无种子标签清理任务
+- test_set_category_empty: 空分类种子 -> 设置分类并记录 auto_categories
+- test_set_category_overwrite: overwrite=True 覆盖已有分类
+- test_set_category_no_overwrite: 已有非 auto 分类且不覆盖 -> 跳过
+- test_set_category_auto_update: auto_categories 内分类自动更新
+- test_set_category_same: 目标分类相同 -> 无操作
+- test_set_category_dry_run: dry-run 只返回不调用
+- test_add_hr_tag_or_category_not_met: HR 未触发 -> 无操作
+- test_add_hr_tag_or_category_not_satisfied: 触发但未达标 -> 加普通标签
+- test_log_torrent_details: 日志输出辅助(含 tracker_conf=None)
+"""
 import os
 import tempfile
 
@@ -124,3 +145,109 @@ def test_handle_delete_tags_if_has_no_torrents():
         # 无种子使用该标签 -> 删除
         mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False)
         assert ("delete_tags", {"orphan-1", "orphan-2"}) in client.calls
+
+
+def test_set_category_empty():
+    """_set_category: 空分类 -> 设置分类并记录 auto_categories"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="")
+        assert mgr._set_category(tor, "HR-DONE", overwrite=False, dry_run=False) is True
+        assert ("set_category", "HR-DONE") in client.calls
+        assert mgr.state["auto_categories"]["HASH123"] == "HR-DONE"
+
+
+def test_set_category_overwrite():
+    """_set_category: overwrite=True 强制覆盖已有分类, 不记录 auto"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="OLD")
+        assert mgr._set_category(tor, "NEW", overwrite=True, dry_run=False) is True
+        assert ("set_category", "NEW") in client.calls
+        assert "HASH123" not in mgr.state.get("auto_categories", {})
+
+
+def test_set_category_no_overwrite():
+    """_set_category: 已有非自动分类且不覆盖 -> 跳过(返回 True 但无调用)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="OLD")
+        assert mgr._set_category(tor, "NEW", overwrite=False, dry_run=False) is True
+        assert client.calls == []
+
+
+def test_set_category_auto_update():
+    """_set_category: 旧分类属 auto_categories 时可被更新(不覆盖)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr.state.setdefault("auto_categories", {})["HASH123"] = "OLD"
+        tor = FakeTorrent(category="OLD")
+        assert mgr._set_category(tor, "NEW", overwrite=False, dry_run=False) is True
+        assert ("set_category", "NEW") in client.calls
+        assert mgr.state["auto_categories"]["HASH123"] == "NEW"
+
+
+def test_set_category_same():
+    """_set_category: 分类相同 -> False 不调用"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="SAME")
+        assert mgr._set_category(tor, "SAME", overwrite=True, dry_run=False) is False
+        assert client.calls == []
+
+
+def test_set_category_dry_run():
+    """_set_category: dry_run 不调用客户端也不记录 auto"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="")
+        assert mgr._set_category(tor, "NEW", overwrite=False, dry_run=True) is True
+        assert client.calls == []
+        assert "HASH123" not in mgr.state.get("auto_categories", {})
+
+
+def test_add_hr_tag_or_category_not_met():
+    """_add_hr_tag_or_category: 触发条件未满足(排除辅种) -> 不添加"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]
+        conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
+        tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is False
+        assert client.calls == []
+
+
+def test_add_hr_tag_or_category_not_satisfied():
+    """_add_hr_tag_or_category: 触发满足但做种不足 -> 添加普通 HR 标签"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]
+        conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
+        tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is True
+        assert ("add_tags", ["HR"]) in client.calls
+
+
+def test_log_torrent_details():
+    """_log_torrent_details: 仅打日志, 返回 None 不抛异常(含无匹配站点)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        tor = FakeTorrent(name="Movie", state="stalledUP", hash="H1")
+        assert mgr._log_torrent_details(tor, mgr.config.trackers["HHan"]) is None
+        assert mgr._log_torrent_details(tor, None) is None

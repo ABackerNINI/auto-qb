@@ -1,4 +1,15 @@
-"""rules/actions 模块测试: 各动作插件的执行语义"""
+"""test_actions 测试计划: rules/actions 动作插件执行语义
+
+## 测试计划(每个测试函数一条)
+- test_add_tags: 添加标签动作: 直接调用 client.add_tags
+- test_remove_tags: 移除标签动作: 调用 client.remove_tags
+- test_add_category_overwrite_semantics: 加分类动作的 overwrite 覆盖语义
+- test_remove_category: 移除分类动作
+- test_start_stop_idempotent: 开始/停止动作幂等(重复执行不报错)
+- test_move_to: 移动保存路径动作
+- test_reannounce: 重新 announce 动作
+- test_speed_limit_actions: 限速动作(下载/上传/全局)
+"""
 import os
 import tempfile
 

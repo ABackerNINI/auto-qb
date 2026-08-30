@@ -1,13 +1,43 @@
-"""checking 动作详细自测(不连接真实 qB, 用模拟对象)
+"""test_checking 测试计划: checking 动作详细自测(不连接真实 qB, 用模拟对象)
 
-覆盖(37 个):
-  A. 配置 fail-fast(8): 字符串报错/缺 basic_check/非法 basic_check/缺段/非法 mode/未知键/custom 缺路径/默认值
-  B. 分组下载冲突(6): 多下载中/混合并存/去重/消除重现/单下载中不冲突/分组未启用不检查
-  C. 决策链(4): 组内下载跳过/暂停未完成不跳过/未归组无参考/暂停已完成不算参考
-  D. 参考确定+模式执行(10): filelist 参考跳检/无参考 full-checking 全流程/piecehashes 一致不一致/API 错误/
-     custom rc0 rc1/verified 参考使用/verified 不持久化
-  E. 跳检保护+异步细节(9): 前置检查失败/重加失败备份/同日去重/dry-run/pending 保留/重复提交忽略/
-     auto_start=false/send 失败/无任务队列直接 recheck
+## 测试计划(每个测试函数一条)
+- test_checking_config_string_rejected: 配置 fail-fast: basic_check 为字符串时报错
+- test_checking_config_missing_basic_check: 缺 basic_check 报错
+- test_checking_config_invalid_basic_check: 非法 basic_check 值报错
+- test_checking_config_missing_section: 缺 checking 配置段报错
+- test_checking_config_invalid_mode: 非法 mode 值报错
+- test_checking_config_unknown_keys: 未知配置键报错
+- test_checking_config_custom_without_program: custom 模式缺 program 报错
+- test_checking_config_defaults: 缺省配置项取默认值
+- test_download_conflict_multi_dl: 多成员下载中 -> 冲突, 不发起校验
+- test_download_conflict_mixed: 下载中与暂停混合 -> 冲突
+- test_download_conflict_no_repeat: 已发起的校验不重复提交
+- test_download_conflict_resolve_recur: 冲突消除后恢复校验(递归决策)
+- test_download_conflict_single_dl: 单下载中不冲突
+- test_download_conflict_grouping_disabled: 分组未启用不检查冲突
+- test_checking_group_downloading_skips: 组内有下载中成员 -> 跳过校验
+- test_checking_paused_incomplete_not_skip: 暂停未完成不能作为参考 -> 不跳过
+- test_checking_no_group_uses_without_reference: 未归组无参考 -> 直接校验
+- test_checking_paused_completed_not_reference: 暂停已完成不算参考种子
+- test_checking_filelist_reference_skip_checking: filelist 参考匹配 -> 跳检
+- test_checking_no_reference_full_checking: 无参考 -> 全量校验流程
+- test_checking_no_reference_skip_checking_warns: 无参考但 skip 配置 -> 警告跳过
+- test_checking_piecehashes_same: piecehashes 一致 -> 跳检
+- test_checking_piecehashes_diff: piecehashes 不一致 -> 全检
+- test_checking_piecehashes_api_error: piecehashes API 错误 -> 降级处理
+- test_checking_custom_rc0: custom 校验 rc0 -> 完成
+- test_checking_custom_rc1: custom 校验 rc1 -> 失败
+- test_checking_verified_reference_used: verified 参考种子被使用
+- test_checking_verified_references_not_persisted: verified 参考不持久化(仅内存)
+- test_checking_skip_guard_file_missing: 跳检前置文件检查失败
+- test_checking_skip_guard_add_fail_backup: 重加标签失败回退
+- test_checking_skip_dedup_same_day: 同日跳检去重
+- test_checking_dry_run: dry-run 不发送请求
+- test_checking_full_checking_pending: 全检任务 pending 保留
+- test_checking_full_checking_dup_ignore: 全检重复提交忽略
+- test_checking_full_checking_auto_start_false: auto_start=false 不自动开始
+- test_checking_full_checking_send_error: 发送失败处理
+- test_checking_no_task_queue_direct_recheck: 无任务队列时直接 recheck
 """
 import os
 import tempfile

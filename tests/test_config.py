@@ -1,4 +1,13 @@
-"""配置加载与 HR 规则解析测试(原 test_rules.py 迁移 + 补充)"""
+"""test_config 测试计划: 配置加载与 HR 规则解析
+
+## 测试计划(每个测试函数一条)
+- test_load_config_basic: 加载基础配置
+- test_config_tracker_tags_expand: tracker 标签展开(全局+站点)
+- test_parse_hr_spec_missing_required: HR 规范缺必填项报错
+- test_parse_hr_spec_site_overrides_global: 站点 HR 覆盖全局
+- test_parse_hr_spec_condition: HR 规范条件解析
+- test_hr_rule_defaults: HRRule 默认值
+"""
 import os
 import tempfile
 

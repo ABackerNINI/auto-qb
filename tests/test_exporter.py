@@ -1,4 +1,18 @@
-"""exporter 模块测试: 域名收集 / 缺失筛选 / 默认标签 / 模板导出"""
+"""test_exporter 测试计划: exporter 域名收集/缺失筛选/默认标签/模板导出
+
+## 测试计划(每个测试函数一条)
+- test_collect_configured_domains: 收集已配置域名
+- test_collect_all_tracker_hostnames: 收集全部 tracker hostname
+- test_collect_all_tracker_hostnames_skips_errors: 收集出错跳过
+- test_collect_all_tracker_hostnames_skip_empty_url: 空 URL 跳过
+- test_find_missing_domains: 找出缺失域名
+- test_capitalize_special_tag: 特殊标签大写化
+- test_gen_default_tag: 生成默认标签
+- test_build_tracker_entry: 构建 tracker 条目
+- test_export_yaml_template_append: 模板导出追加
+- test_export_yaml_template_only_missing_dry_run: 仅缺失 dry-run 导出
+- test_export_yaml_template_name_collision: 名称冲突处理
+"""
 import os
 import tempfile
 

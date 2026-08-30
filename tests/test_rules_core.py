@@ -1,4 +1,16 @@
-"""rules 框架核心逻辑测试(原 test_rules.py 迁移): 规则执行 / 分类语义 / 去重 / 状态映射 / tracker 引用 / interval 调度"""
+"""test_rules_core 测试计划: rules 框架核心逻辑
+
+## 测试计划(每个测试函数一条)
+- test_basic: 基本规则执行流程
+- test_category_auto_update_from_state: 分类按状态自动更新
+- test_category_explicit_overwrite_false: 显式不覆盖分类
+- test_hr_satisfied: HR 达标流程
+- test_stop_if_action_failed: 动作失败停止后续规则
+- test_dry_run: dry-run 不实际执行
+- test_state_mapping: 状态映射
+- test_tracker_rules_ref: tracker 规则引用
+- test_rule_interval: 规则 interval 调度
+"""
 import os
 import tempfile
 import time

@@ -1,4 +1,11 @@
-"""cli 模块测试: main 的参数解析与分支"""
+"""test_cli 测试计划: cli 模块 main 参数解析与分支
+
+## 测试计划(每个测试函数一条)
+- test_main_normal_mode: 正常模式: 无参数调用 main 进入运行分支
+- test_main_export_yaml: --export-yaml 导出配置
+- test_main_export_connect_failure: 导出时连接失败处理
+- test_main_default_config_path: 缺省配置路径解析
+"""
 import sys
 from unittest import mock
 

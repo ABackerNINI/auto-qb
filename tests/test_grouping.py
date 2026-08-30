@@ -1,4 +1,26 @@
-"""种子分组测试(原 test_rules.py 迁移): 增量归组 / 大小一致性 / 缺文件联动 / 保存路径变化"""
+"""test_grouping 测试计划: 种子分组
+
+## 测试计划(每个测试函数一条)
+- test_grouping_size_mismatch_pauses_group: 新增种子归组时文件大小不一致 -> 整组暂停
+- test_grouping_missing_files_pauses_group: 上传转暂停且文件丢失 -> 整组暂停 + MISSING
+- test_grouping_state_change_triggers_check: 仅上传转暂停触发缺文件检查
+- test_grouping_deleted_torrent_triggers_check: 种子删除触发组内联动
+- test_grouping_no_global_task: 无分组配置不创建全局任务
+- test_grouping_replaces_per_torrent_missing_files: 归组替代逐种子缺文件检查
+- test_grouping_incremental_on_add: 新增种子增量归组
+- test_grouping_removed_from_groups: 种子移出分组
+- test_grouping_save_path_change_triggers_check: save_path 变化触发检查
+- test_grouping_save_path_change_new_group_alone: save_path 变化单独成组
+- test_grouping_no_full_files_scan: 归组仅拉一次文件列表, 后续不重复扫描
+- test_grouping_state_helpers: _is_uploading/_is_paused/_is_downloading 状态判定
+- test_group_members_not_in_group: 未归组 -> 仅自身
+- test_group_members_in_group: 已归组 -> 全部成员
+- test_leave_group_removes: 移出成员返回剩余组 key
+- test_leave_group_empty_deletes: 组空删除返回 None
+- test_leave_group_not_in_group: 不在组内返回 None
+- test_group_has_downloading: 组内存在下载中成员判定
+- test_group_reference_candidates: 返回做种成员作为参考候选
+"""
 import os
 import tempfile
 from types import SimpleNamespace
@@ -317,3 +339,83 @@ def test_grouping_no_full_files_scan():
         mgr._refresh_torrents()
         assert client.files_calls == 1, f"后续刷新不应再拉文件列表: {client.files_calls}"
         assert client.calls == [], f"状态不变不应触发检查: {client.calls}"
+
+
+def test_grouping_state_helpers():
+    """_is_uploading/_is_paused/_is_downloading: 按 state_enum 判定(排除暂停的下载)"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    up = FakeTorrent(state="stalledUP")
+    paused = FakeTorrent(state="pausedUP")
+    dl = FakeTorrent(state="downloading")
+    stalled_dl = FakeTorrent(state="stalledDL")
+    paused_dl = FakeTorrent(state="pausedDL")
+    assert mgr._is_uploading(up) and not mgr._is_paused(up) and not mgr._is_downloading(up)
+    assert mgr._is_paused(paused) and not mgr._is_uploading(paused)
+    assert mgr._is_downloading(dl) and not mgr._is_paused(dl)
+    assert mgr._is_downloading(stalled_dl) and not mgr._is_paused(stalled_dl)
+    assert mgr._is_paused(paused_dl) and not mgr._is_downloading(paused_dl), "暂停的下载不算活跃下载"
+
+
+def test_group_members_not_in_group():
+    """_group_members: 未归组 -> [自身 hash] 单种子(无参考)"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    assert mgr._group_members("H1") == ["H1"]
+
+
+def test_group_members_in_group():
+    """_group_members: 已归组 -> 返回全部成员 hash"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr._group_member_to_key = {"H1": "g1", "H2": "g1"}
+    mgr._groups = {"g1": ["H1", "H2"]}
+    assert mgr._group_members("H1") == ["H1", "H2"]
+
+
+def test_leave_group_removes():
+    """_leave_group: 移出成员, 组内仍有剩余 -> 返回组 key"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr._group_member_to_key = {"H1": "g1", "H2": "g1"}
+    mgr._groups = {"g1": ["H1", "H2"]}
+    mgr._group_sizes = {"g1": {"H1": {}, "H2": {}}}
+    assert mgr._leave_group("H1") == "g1"
+    assert mgr._groups["g1"] == ["H2"]
+    assert "H1" not in mgr._group_member_to_key
+    assert "H1" not in mgr._group_sizes["g1"]
+
+
+def test_leave_group_empty_deletes():
+    """_leave_group: 组空 -> 删除整组返回 None"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr._group_member_to_key = {"H1": "g1"}
+    mgr._groups = {"g1": ["H1"]}
+    mgr._group_sizes = {"g1": {"H1": {}}}
+    assert mgr._leave_group("H1") is None
+    assert mgr._groups == {}
+    assert mgr._group_sizes == {}
+
+
+def test_leave_group_not_in_group():
+    """_leave_group: 种子不在任何组 -> None 且不抛异常"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    assert mgr._leave_group("NOPE") is None
+
+
+def test_group_has_downloading():
+    """_group_has_downloading: 组内存在活跃下载成员 -> True"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    by_hash = {
+        "H1": FakeTorrent(hash="H1", state="stalledDL"),
+        "H2": FakeTorrent(hash="H2", state="stalledUP"),
+    }
+    assert mgr._group_has_downloading(["H1", "H2"], by_hash) is True
+    assert mgr._group_has_downloading(["H2"], by_hash) is False
+
+
+def test_group_reference_candidates():
+    """_group_reference_candidates: 返回组内正在做种的成员(参考种子候选)"""
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    by_hash = {
+        "H1": FakeTorrent(hash="H1", state="stalledUP"),
+        "H2": FakeTorrent(hash="H2", state="pausedUP"),
+    }
+    cands = mgr._group_reference_candidates(["H1", "H2"], by_hash)
+    assert [t.hash for t in cands] == ["H1"]

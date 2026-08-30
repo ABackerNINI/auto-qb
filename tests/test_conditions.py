@@ -1,6 +1,31 @@
-"""rules/conditions 模块测试: 各条件插件的匹配语义"""
+"""test_conditions 测试计划: rules/conditions 条件插件匹配语义
+
+## 测试计划(每个测试函数一条)
+- test_state_map: TorrentState 映射辅助
+- test_in_range_and_parse_hm: 时间范围与 hh:mm 解析
+- test_path_condition: path 条件匹配
+- test_size_condition: size 条件匹配
+- test_tags_condition: tags 条件匹配
+- test_category_condition: category 条件匹配
+- test_trackers_condition: trackers 条件匹配
+- test_state_condition: state 条件匹配
+- test_hr_condition: HR 条件(做种时间/分享率/上传量)
+- test_date_time_condition: 日期时间条件
+- test_seedtime_condition: 做种时间条件
+- test_upload_ratio_condition: 上传分享率条件
+- test_upload_size_condition: 上传量条件
+- test_upload_delta_conditions: 上传增量条件(本轮-上轮)
+- test_freespace_no_path: FreespaceCondition 无 path 不触发; 空 amount 构造抛 ValueError
+- test_freespace_triggered: 磁盘剩余空间低于阈值 -> 触发
+- test_freespace_not_triggered: 空间充足 -> 不触发
+- test_freespace_os_error: disk_usage 抛 OSError -> 不触发
+"""
 import os
+import shutil
 import tempfile
+from types import SimpleNamespace
+
+import pytest
 
 from auto_qb.rules.conditions import (
     _in_range,
@@ -8,6 +33,7 @@ from auto_qb.rules.conditions import (
     _STATE_MAP,
     CategoryCondition,
     DateTimeCondition,
+    FreespaceCondition,
     HrCondition,
     PathCondition,
     SeedtimeCondition,
@@ -213,3 +239,44 @@ def test_upload_delta_conditions():
         assert UploadSizeThisWeekCondition(">1MiB").match(ctx)
         assert UploadSizeThisMonthCondition(">1MiB").match(ctx)
         assert UploadSizeTodayCondition(">10MiB").match(ctx) is False
+
+
+def test_freespace_no_path():
+    """磁盘空间条件: 未配置 path -> 不匹配; 空 amount -> 构造时抛 ValueError"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert FreespaceCondition({"path": "", "amount": "<100GiB"}).match(ctx) is False
+        assert FreespaceCondition({"amount": "<100GiB"}).match(ctx) is False
+        with pytest.raises(ValueError):
+            FreespaceCondition({})  # amount 为空 -> parse_compare 报错
+
+
+def test_freespace_triggered(monkeypatch):
+    """磁盘空间条件: 可用空间小于阈值 -> 触发"""
+    monkeypatch.setattr(shutil, "disk_usage", lambda p: SimpleNamespace(free=50 * 1024**3))
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert FreespaceCondition({"path": r"R:\\", "amount": "<100GiB"}).match(ctx)
+
+
+def test_freespace_not_triggered(monkeypatch):
+    """磁盘空间条件: 可用空间充足 -> 不触发"""
+    monkeypatch.setattr(shutil, "disk_usage", lambda p: SimpleNamespace(free=200 * 1024**3))
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert FreespaceCondition({"path": r"R:\\", "amount": "<100GiB"}).match(ctx) is False
+
+
+def test_freespace_os_error(monkeypatch):
+    """磁盘空间条件: disk_usage 抛 OSError -> 不匹配(不中断)"""
+    def boom(path):
+        raise OSError("no such drive")
+
+    monkeypatch.setattr(shutil, "disk_usage", boom)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        assert FreespaceCondition({"path": r"Z:\\", "amount": "<100GiB"}).match(ctx) is False

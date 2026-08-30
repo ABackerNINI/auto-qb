@@ -1,5 +1,27 @@
-"""utils 工具函数测试: 解析 / 比较 / 匹配 / 文件检查 / 计时"""
+"""test_utils 测试计划: utils 工具函数
+
+## 测试计划(每个测试函数一条)
+- test_parse_time: 时间字符串解析
+- test_parse_fsize: 文件大小解析
+- test_parse_speed: 速度解析
+- test_parse_hr_condition: HR 条件解析
+- test_parse_bool: 布尔解析
+- test_convert_bool_in_dict: 字典内布尔转换
+- test_compare: 比较操作符
+- test_add_long_path_prefix_for_win: Windows 长路径前缀
+- test_extract_tracker_hostnames: 提取 tracker hostname
+- test_match_tracker_confs: tracker 配置匹配
+- test_match_tag_patterns: 标签模式匹配
+- test_match_path_patterns: 路径模式匹配
+- test_check_filelist_all_ok: 文件列表全部一致
+- test_check_filelist_missing: 文件缺失
+- test_check_filelist_size_mismatch: 文件大小不一致
+- test_check_filelist_api_error: 文件列表 API 错误
+- test_timer: 计时器
+- test_os_platform_helpers: 平台判定(is_windows/is_linux/is_mac/is_posix)
+"""
 import os
+import sys
 import tempfile
 from types import SimpleNamespace
 
@@ -188,3 +210,26 @@ def test_timer():
     assert foo() == 42  # 返回原结果
     assert len(logs) == 1
     assert "foo 耗时" in logs[0] and "ms" in logs[0]
+
+
+def test_os_platform_helpers(monkeypatch):
+    """平台判断: is_windows/is_linux/is_mac/is_posix 随 sys.platform 变化"""
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert utils.is_windows()
+    assert not utils.is_linux()
+    assert not utils.is_mac()
+    assert not utils.is_posix()
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert utils.is_linux()
+    assert not utils.is_windows()
+    assert utils.is_posix()
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert utils.is_mac()
+    assert not utils.is_windows()
+    assert utils.is_posix()
+
+    monkeypatch.setattr(sys, "platform", "freebsd")
+    assert not utils.is_windows()
+    assert utils.is_posix()  # BSD 属 Unix 类

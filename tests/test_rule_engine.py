@@ -1,10 +1,27 @@
-"""mixins/rule_engine 模块测试: 规则加载 / 状态持久化 / 上传量快照 / 规则引用解析"""
+"""test_rule_engine 测试计划: mixins/rule_engine 规则加载/状态/引用
+
+## 测试计划(每个测试函数一条)
+- test_load_rules_from_config: 从配置加载规则
+- test_load_state_missing_or_broken: 状态文件缺失或损坏 -> 空状态
+- test_load_state_valid: 有效状态加载
+- test_save_state_error_swallowed: 保存状态错误被吞掉
+- test_record_and_get_exec_record: 执行记录写入与读取
+- test_begin_round_and_upload_delta: 本轮开始与上传增量
+- test_resolve_refs_exact_and_prefix: 引用精确与前缀解析
+- test_tracker_rule_refs: tracker 规则引用
+- test_process_torrent_with_refs: 带引用处理种子
+- test_handle_rule_missing_torrent: 种子不存在 -> 不执行规则
+- test_handle_rule_process_ok: _handle_rule 正常执行动作
+- test_handle_rule_process_error: 规则处理异常被捕获 -> True
+"""
 import json
 import os
 import tempfile
 from unittest import mock
 
-from helpers import FakeTorrent, make_manager
+from auto_qb.rules.base import Rule
+from auto_qb.taskqueue import Task
+from helpers import FakeClient, FakeTorrent, make_manager
 
 
 def test_load_rules_from_config():
@@ -128,3 +145,39 @@ def test_process_torrent_with_refs():
         # 只执行了 add_site_tag(加标签), 未执行 hr_done(设分类)
         assert ("add_tags", ["HHan", "seed-3D"]) in client.calls
         assert all(c[0] != "set_category" for c in client.calls)
+
+
+def test_handle_rule_missing_torrent():
+    """_handle_rule: 种子已删除(_get_torrent 返回 None) -> False 任务消亡"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr._get_torrent = lambda h: None
+        rule = mock.MagicMock()
+        task = Task("rule", "t", torrent_hash="H1", interval=0)
+        assert mgr._handle_rule(rule, task, dry_run=False) is False
+
+
+def test_handle_rule_process_ok():
+    """_handle_rule: 正常执行规则 -> True 任务保留"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["HASH123"] = FakeTorrent(tags="")
+        rule = Rule("t", {"actions": [{"add_tags": ["X"]}]}, mgr)
+        task = Task("rule", "t", torrent_hash="HASH123", interval=0)
+        assert mgr._handle_rule(rule, task, dry_run=False) is True
+        assert ("add_tags", ["X"]) in client.calls
+
+
+def test_handle_rule_process_error():
+    """_handle_rule: 规则执行抛异常 -> 捕获并返回 True"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["HASH123"] = FakeTorrent(tags="")
+        rule = mock.MagicMock()
+        rule.process.side_effect = RuntimeError("boom")
+        task = Task("rule", "t", torrent_hash="HASH123", interval=0)
+        assert mgr._handle_rule(rule, task, dry_run=False) is True

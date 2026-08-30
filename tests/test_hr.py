@@ -1,4 +1,11 @@
-"""HR 规则测试(原 test_rules.py 迁移): 内置 HR 分类 / 站点覆盖全局 / 分享率达标 / 相似标签覆盖"""
+"""test_hr 测试计划: HR 规则
+
+## 测试计划(每个测试函数一条)
+- test_builtin_hr_category_auto_update_from_state: 内置 HR 分类按状态自动更新
+- test_tracker_hr_overrides_global: 站点 HR 覆盖全局配置
+- test_hr_required_share_ratio: required_share_ratio 达标判定
+- test_tracker_remove_similar_tags_override: 站点 remove_similar_tags 覆盖全局
+"""
 import os
 import tempfile
 

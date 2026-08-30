@@ -1,4 +1,15 @@
-"""mixins/checking 模块测试: 校验完成判定 / 辅种跳检"""
+"""test_mixins_checking 测试计划: mixins/checking 校验完成判定与辅种跳检
+
+## 测试计划(每个测试函数一条)
+- test_is_check_done_exit_checking: checking 状态 -> 完成
+- test_is_check_done_deleted: 种子被删除 -> 完成
+- test_is_check_done_error: error 状态 -> 未完成
+- test_skip_checking_reject_non_zero: 非零退出码拒绝跳检
+- test_skip_checking_reject_not_stopped: 非停止状态拒绝跳检
+- test_skip_checking_missing_files: 缺文件拒绝跳检
+- test_skip_checking_success: 跳检成功
+- test_skip_checking_dry_run_no_calls: dry-run 不发送请求
+"""
 import os
 import tempfile
 from types import SimpleNamespace

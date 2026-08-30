@@ -1,4 +1,24 @@
-"""rules/base 模块测试: ActionResult / RuleContext / Rule 处理语义"""
+"""test_rule_base 测试计划: rules/base ActionResult/RuleContext/Rule
+
+## 测试计划(每个测试函数一条)
+- test_action_result_states: ActionResult 状态语义
+- test_rule_context_required_seeding_time: required_seeding_time 解析
+- test_rule_context_tracker_urls_and_confs: tracker URL 与配置解析
+- test_rule_context_describe: 上下文描述生成
+- test_rule_context_hr_checks: HR 达标判定(做种时间/分享率)
+- test_rule_basic_process: 规则基本执行流程(条件满足 -> 动作执行)
+- test_rule_condition_not_met: 条件未满足 -> 不执行动作
+- test_rule_execute_once_dedup: execute_once=once 去重
+- test_rule_ignore_next_action_error: 忽略下一个动作错误
+- test_rule_condition_exception: 条件异常 -> 不执行
+- test_rule_action_failed_stop: 动作失败且 stop 配置 -> 停止
+- test_rule_stop_if_never: stop_following_rules_if=never -> 不停止
+- test_rule_stop_if_all_actions_succeed: 全部动作成功 -> 停止
+- test_rule_cooldown_dedup: cooldown 冷却期内去重
+- test_rule_hourly_dedup: hourly 同小时去重
+- test_rule_context_files_cached: files() 惰性缓存只拉一次
+- test_rule_context_tracker_urls_empty: 无 tracker -> 未匹配描述
+"""
 import os
 import tempfile
 
@@ -93,8 +113,12 @@ def test_rule_basic_process():
         rule = Rule(
             "g.test",
             {
-                "conditions": [{"size": ">=1MiB"}],
-                "actions": [{"add_tags": ["DONE"]}],
+                "conditions": [{
+                    "size": ">=1MiB"
+                }],
+                "actions": [{
+                    "add_tags": ["DONE"]
+                }],
                 "stop_following_rules_if": "always",
             },
             mgr,
@@ -113,8 +137,12 @@ def test_rule_condition_not_met():
         rule = Rule(
             "g.test",
             {
-                "conditions": [{"size": ">=1MiB"}],
-                "actions": [{"add_tags": ["DONE"]}],
+                "conditions": [{
+                    "size": ">=1MiB"
+                }],
+                "actions": [{
+                    "add_tags": ["DONE"]
+                }],
                 "stop_following_rules_if": "conditions-met",
             },
             mgr,
@@ -149,7 +177,13 @@ def test_rule_ignore_next_action_error():
         ctx = make_ctx(mgr, FakeTorrent(tags="", category=""), client)
         rule = Rule(
             "g.test",
-            {"actions": [{"remove_category": ""}, {"ignore_next_action_error": "true"}, {"add_tags": ["AFTER"]}]},
+            {"actions": [{
+                "remove_category": ""
+            }, {
+                "ignore_next_action_error": "true"
+            }, {
+                "add_tags": ["AFTER"]
+            }]},
             mgr,
         )
         # remove_category 空分类 skip(非 fail); 验证 ignore 标志不影响 skip
@@ -183,10 +217,127 @@ def test_rule_action_failed_stop():
         rule = Rule(
             "g.test",
             {
-                "actions": [{"move_to": {"path": ""}}],  # 空 path -> fail
+                "actions": [{
+                    "move_to": {
+                        "path": ""
+                    }
+                }],  # 空 path -> fail
                 "stop_following_rules_if": "action-failed",
             },
             mgr,
         )
         handled, stop = rule.process(ctx)
         assert handled and stop, "动作失败仍算处理过, 且 stop=True"
+
+
+def test_rule_stop_if_never():
+    """stop_following_rules_if=never: 动作成功但不停链"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        rule = Rule(
+            "g.test",
+            {
+                "conditions": [{
+                    "size": ">=1MiB"
+                }],
+                "actions": [{
+                    "add_tags": ["DONE"]
+                }],
+                "stop_following_rules_if": "never",
+            },
+            mgr,
+        )
+        handled, stop = rule.process(ctx)
+        assert handled and not stop
+
+
+def test_rule_stop_if_all_actions_succeed():
+    """stop_following_rules_if=all-actions-succeed: 全成功停链, 有失败不停链"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        # 全部成功 -> stop
+        rule_ok = Rule(
+            "g.ok",
+            {
+                "actions": [{
+                    "add_tags": ["A"]
+                }],
+                "stop_following_rules_if": "all-actions-succeed"
+            },
+            mgr,
+        )
+        handled, stop = rule_ok.process(ctx)
+        assert handled and stop
+        # 有动作失败(空 path) -> 不停链
+        rule_fail = Rule(
+            "g.fail",
+            {
+                "actions": [{
+                    "move_to": {
+                        "path": ""
+                    }
+                }],
+                "stop_following_rules_if": "all-actions-succeed"
+            },
+            mgr,
+        )
+        handled, stop = rule_fail.process(ctx)
+        assert handled and not stop
+
+
+def test_rule_cooldown_dedup():
+    """cooldown: 冷却期内同一种子不重复执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
+        rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "cooldown": "1H"}, mgr)
+        h1, _ = rule.process(ctx)
+        assert h1
+        assert client.calls.count(("add_tags", ["X"])) == 1
+        # 冷却期内再次执行被去重
+        h2, _ = rule.process(ctx)
+        assert not h2
+        assert client.calls.count(("add_tags", ["X"])) == 1
+
+
+def test_rule_hourly_dedup():
+    """execute_once=hourly: 同小时同一种子不重复执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
+        rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "execute_once": "hourly"}, mgr)
+        h1, _ = rule.process(ctx)
+        assert h1
+        h2, _ = rule.process(ctx)
+        assert not h2
+        assert client.calls.count(("add_tags", ["X"])) == 1
+
+
+def test_rule_context_files_cached():
+    """RuleContext.files: 惰性缓存, 多次调用只拉取一次"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        assert ctx.files() == []
+        assert ctx.files() == []
+        assert client.files_calls == 1, "files 应只拉取一次(缓存)"
+
+
+def test_rule_context_tracker_urls_empty():
+    """RuleContext: 无 tracker 时 matched_tracker_names 为空、describe 显示未匹配"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        client.torrents_trackers = lambda h: []  # 无 tracker
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        assert ctx.tracker_urls() == []
+        assert ctx.matched_tracker_confs() == []
+        assert ctx.matched_tracker_names() == []
+        assert "未匹配" in ctx.describe()

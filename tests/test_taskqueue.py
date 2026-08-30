@@ -1,4 +1,17 @@
-"""任务队列测试(原 test_rules.py 迁移 + 补充): 时间调度 / 去重 / 慢速队列 / 移除"""
+"""test_taskqueue 测试计划: 双任务队列
+
+## 测试计划(每个测试函数一条)
+- test_task_queue_schedule: 按 next_run 时间调度到期任务
+- test_task_ordering: 堆排序按到期时间出队
+- test_task_repr: Task 字符串表示
+- test_submit_check_dedup: 校验任务去重
+- test_poll_slow_flow: 慢速队列正常流转(pending -> waiting -> done)
+- test_poll_slow_send_error: 慢速发送错误处理
+- test_poll_slow_timeout: 慢速超时处理
+- test_task_state_transitions: 任务状态迁移
+- test_shutdown_blocks_submit: 关闭后拒绝提交
+- test_add_tasks: add_tasks 批量入队立即到期
+"""
 import time
 
 from auto_qb.taskqueue import DONE, PENDING, RUNNING, WAITING, Task, TaskQueue
@@ -142,3 +155,12 @@ def test_shutdown_blocks_submit():
     tq = TaskQueue(executor_workers=0)
     tq.shutdown()
     assert tq.submit_check("H1", lambda: None) is False
+
+
+def test_add_tasks():
+    """add_tasks: 批量入队, 全部立即到期"""
+    tq = TaskQueue(executor_workers=0)
+    now = time.time()
+    tq.add_tasks([Task("rule", "a", interval=0), Task("rule", "b", interval=60)], now=now)
+    assert {t.name for t in tq.due(now)} == {"a", "b"}
+    tq.shutdown()

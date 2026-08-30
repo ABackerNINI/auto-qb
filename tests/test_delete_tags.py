@@ -1,4 +1,12 @@
-"""全局标签清理测试(原 test_rules.py 迁移): 彻底删除标签 / 无种子标签 / 队列化"""
+"""test_delete_tags 测试计划: 全局标签清理
+
+## 测试计划(每个测试函数一条)
+- test_global_delete_tags: 彻底删除标签(匹配正则的标签被删)
+- test_global_delete_tags_dry_run: dry-run 不实际删除
+- test_global_delete_tags_if_has_no_torrents: 仅删除无种子的标签
+- test_global_delete_tags_no_pattern_match: 无匹配模式时无操作
+- test_global_delete_tags_queued: 标签删除任务入队执行
+"""
 import os
 import tempfile
 

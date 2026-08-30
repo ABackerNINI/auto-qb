@@ -1,4 +1,13 @@
-"""rules/registry 模块测试: 条件/动作注册表与工厂"""
+"""test_registry 测试计划: rules/registry 注册表与工厂
+
+## 测试计划(每个测试函数一条)
+- test_create_condition_known: 已知条件工厂创建
+- test_create_condition_unknown: 未知条件抛错
+- test_create_action_known: 已知动作工厂创建
+- test_create_action_unknown: 未知动作抛错
+- test_register_condition_decorator: 条件注册装饰器
+- test_register_action_decorator: 动作注册装饰器
+"""
 import pytest
 
 from auto_qb.rules.registry import (
