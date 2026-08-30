@@ -211,6 +211,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
                 if self.config.grouping.enabled:
                     self._assign_new_torrent(h, by_hash, dry_run)
+                # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
+                if self.config.add_episode_tags:
+                    self._add_episode_tags(h, by_hash, dry_run)
         if removed:
             logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:

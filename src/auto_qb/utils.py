@@ -320,3 +320,75 @@ def timer(unit='s', log_func=print):
         return wrapper
 
     return decorator
+
+
+# ---------- 集数解析(自动添加集数标签) ----------
+
+# 种子名称中已含集数标记的模式: S01E01 / EP05 / E05 / 第1集 / 第01-05集
+_NAME_EPISODE_RE = re.compile(
+    r"(?:[Ss]\d{1,4}[Ee]\d{1,4}|[Ee][Pp]?\d{1,4}|第\s*\d{1,4}\s*[-~至]\s*\d{1,4}\s*集|第\s*\d{1,4}\s*集)",
+    re.IGNORECASE,
+)
+
+# 文件名中提取集数的模式: EP05 / E05 / 第5集 / 第05-08集 / S01E05
+_FILE_EPISODE_RE = re.compile(
+    r"(?:[Ee][Pp]?\s*(\d{1,4})|第\s*(\d{1,4})\s*(?:[-~至]\s*(\d{1,4}))?\s*集|[Ss]\d{1,4}[Ee](\d{1,4}))",
+    re.IGNORECASE,
+)
+
+# 文件名中独立数字模式(如 "01.mkv", "Show.Name.05"): 排除分辨率/年份等干扰
+# 要求数字前后是分隔符或边界, 且排除 分辨率(720/1080/2160...) 与 年份(19xx/20xx)
+_BARE_NUMBER_RE = re.compile(r"(?:^|[^\d])(\d{1,4})(?:$|[^\d])")
+_RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
+
+
+def name_has_episode_marker(name: str) -> bool:
+    """种子名称是否已含集数标记(S01E01/EP01/第1集等): 含则无需再从文件列表解析"""
+    return bool(name and _NAME_EPISODE_RE.search(name))
+
+
+def extract_episodes_from_files(files: list) -> List[int]:
+    """从文件列表解析集数列表(去重排序): 优先匹配 EP/E/第x集/SxxExx 模式,
+    其次匹配文件名中独立数字(排除分辨率/年份); 解析不到返回空列表"""
+    episodes = set()
+    for f in files:
+        fname = getattr(f, "name", "") or ""
+        if not fname:
+            continue
+        # 1. 明确集数标记模式
+        m = _FILE_EPISODE_RE.search(fname)
+        if m:
+            # 区间形式: 第4-6集(组2=起点, 组3=终点) -> 展开为 4,5,6
+            if m.group(2) and m.group(3):
+                start, end = int(m.group(2)), int(m.group(3))
+                episodes.update(range(start, min(end, 9999) + 1))
+            else:
+                for g in m.groups():
+                    if g:
+                        episodes.add(int(g))
+            continue
+        # 2. 独立数字(排除分辨率/年份等干扰)
+        for m in _BARE_NUMBER_RE.finditer(fname):
+            num = int(m.group(1))
+            if num in _RESOLUTION_SET or (1900 <= num <= 2099):  # 分辨率/年份干扰
+                continue
+            if 1 <= num <= 9999:
+                episodes.add(num)
+    return sorted(episodes)
+
+
+def format_episode_tag(episodes: List[int]) -> str:
+    """集数列表 -> 标签: 合并连续区间, 如 [1,2,3,5] -> 'E1-3,E5'"""
+    if not episodes:
+        return ""
+    nums = sorted(set(episodes))
+    parts = []
+    start = prev = nums[0]
+    for n in nums[1:]:
+        if n == prev + 1:
+            prev = n
+        else:
+            parts.append(f"E{start}-{prev}" if start != prev else f"E{start}")
+            start = prev = n
+    parts.append(f"E{start}-{prev}" if start != prev else f"E{start}")
+    return ",".join(parts)

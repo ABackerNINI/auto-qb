@@ -3,6 +3,10 @@ config:
     interval: 60S
     remove_similar_tags: true
 
+    # 自动添加集数标签: 种子添加时触发, 名称已含集数标记(S01E01/EP01/第1集等)则跳过;
+    # 否则从文件列表解析集数(如 01.mkv~05.mkv -> E1-5)添加标签
+    # add_episode_tags: true
+
     # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
     hr:
         add_tag: "" # 满足HR触发条件的种子添加标签, 支持变量

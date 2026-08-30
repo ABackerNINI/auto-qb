@@ -12,6 +12,9 @@ DEFAULT_STATE_FILE = "auto-qb-state.json"
 DEFAULT_INTERVAL = "60s"
 DEFAULT_REMOVE_SIMILAR_TAGS = False
 
+# 自动添加集数标签: 种子添加时, 若名称不含集数标记则从文件列表解析集数(如 01.mkv~05.mkv -> E1-5)打标签
+DEFAULT_ADD_EPISODE_TAGS = False
+
 # 全局 HR 默认输出设置(站点 hr 段未设置时使用)
 DEFAULT_HR_OUTPUT = {
     "add_tag": "",
@@ -144,6 +147,7 @@ class Config:
     rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
 
     remove_similar_tags: bool
+    add_episode_tags: bool  # 种子添加时自动添加集数标签(如 E1-5): 名称不含集数时从文件列表解析
 
     hr: HRRule  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底; 规则字段为空)
 
@@ -211,6 +215,7 @@ def load_config(config_path: str) -> Config:
         state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
+        add_episode_tags=parse_bool(cfg.get("add_episode_tags", DEFAULT_ADD_EPISODE_TAGS)),
         hr=HRRule(
             add_tag=global_hr.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
             add_category=global_hr.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),

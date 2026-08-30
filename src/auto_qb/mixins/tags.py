@@ -65,6 +65,28 @@ class TagsMixin:
             return True
         return False
 
+    def _add_episode_tags(self, torrent_hash: str, by_hash: dict, dry_run: bool):
+        """种子添加时自动添加集数标签(如 E1-5)
+
+        仅种子添加时触发(由 QbManager 在 added 循环调用), 非周期任务。
+        名称已含集数标记(S01E01/EP01/第1集等) -> 跳过; 否则拉一次文件列表解析集数,
+        如 01.mkv~05.mkv -> 添加 'E1-5'。解析不到集数(电影/合集等)则不加标签。
+        """
+        tor = by_hash.get(torrent_hash)
+        if tor is None or utils.name_has_episode_marker(tor.name or ""):
+            return  # 名称已含集数标记, 无需再解析
+        try:
+            files = self.client.torrents_files(torrent_hash)
+        except Exception as e:
+            logger.debug(f"集数标签获取文件列表失败({torrent_hash}): {e}")
+            return
+        episodes = utils.extract_episodes_from_files(files)
+        if not episodes:
+            return  # 文件列表无集数(电影/合集), 不加标签
+        tag = utils.format_episode_tag(episodes)
+        self._add_tags(tor, [tag], dry_run)
+        logger.info(f"Added episode tag '{tag}'")
+
     def _remove_similar_tags(self, tor: TorrentDictionary, tags: List[str], dry_run: bool):
         """删除类似(单词相同大小写不同)的tag"""
         if not tags:

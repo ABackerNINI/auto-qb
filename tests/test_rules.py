@@ -196,6 +196,7 @@ class FakeConfig:
     interval = 60  # QbManager 主刷新任务 interval(测试不触发 refresh)
     check_missing_files = False
     remove_similar_tags = False
+    add_episode_tags = False  # 自动添加集数标签(默认关闭)
     hr = HRRule()  # 全局 HR 默认输出设置
     delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
@@ -1410,6 +1411,113 @@ def test_grouping_no_full_files_scan():
         print("[OK] test_grouping_no_full_files_scan: 归组仅拉一次文件列表, 事件触发才扫描")
 
 
+# ---------- 集数标签 ----------
+
+
+def test_episode_tag_utils():
+    """测试: 集数解析纯函数(名称标记判断/文件集数提取/区间合并) """
+    from auto_qb.utils import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
+
+    # 名称含集数标记判断
+    assert name_has_episode_marker("Show.S01E01-E05.1080p")
+    assert name_has_episode_marker("Show.EP05")
+    assert name_has_episode_marker("Show.第3集")
+    assert name_has_episode_marker("Show.第01-05集")
+    assert not name_has_episode_marker("Show.BD.BOX.Vol.1")
+    assert not name_has_episode_marker("Movie.2024.1080p")
+
+    # 文件列表集数提取: EP/E/第x集/SxxExx + 独立数字, 排除分辨率/年份
+    files = [SimpleNamespace(name=n, size=1) for n in ["01.mkv", "02.mkv", "03.mkv", "04.mkv", "05.mkv"]]
+    assert extract_episodes_from_files(files) == [1, 2, 3, 4, 5]
+    files = [SimpleNamespace(name=n, size=1) for n in ["EP01.mkv", "EP02.mkv", "Show.S01E05.mkv"]]
+    assert extract_episodes_from_files(files) == [1, 2, 5]
+    files = [SimpleNamespace(name=n, size=1) for n in ["第3集.mkv", "第04-06集.mkv"]]
+    assert extract_episodes_from_files(files) == [3, 4, 5, 6]
+    # 排除干扰: 分辨率/年份/无数字
+    files = [SimpleNamespace(name=n, size=1) for n in ["Movie.2024.1080p.mkv", "sample.mkv"]]
+    assert extract_episodes_from_files(files) == []
+
+    # 区间合并
+    assert format_episode_tag([1, 2, 3, 4, 5]) == "E1-5"
+    assert format_episode_tag([1, 2, 3, 5]) == "E1-3,E5"
+    assert format_episode_tag([3]) == "E3"
+    assert format_episode_tag([]) == ""
+    print("[OK] test_episode_tag_utils: 集数解析纯函数")
+
+
+def test_episode_tags_added_on_new_torrent():
+    """测试: 种子添加时自动添加集数标签(名称无集数标记时从文件列表解析)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.add_episode_tags = True
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="Show.S01E01", state="stalledUP")  # 名称已含集数 -> 跳过
+        t2 = FakeTorrent(hash="H2", name="Show.S02.BluRay", state="stalledUP")  # 名称无集数 -> 解析
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("Show.S01E01.mkv", 100)]
+        client.files_map["H2"] = [_fake_file(f"{i:02d}.mkv", 100) for i in range(1, 6)]  # 01~05
+
+        mgr._refresh_torrents()
+
+        add_calls = [tags for name, tags in client.calls if name == "add_tags"]
+        assert ["E1-5"] in add_calls, f"H2 应添加 E1-5 标签: {client.calls}"
+        assert not any("E" in (t or "") for t in t1.tags), f"H1 名称含集数应跳过: {t1.tags}"
+        print("[OK] test_episode_tags_added_on_new_torrent: 添加时自动打集数标签")
+
+
+def test_episode_tags_not_on_existing_refresh():
+    """测试: 仅种子添加时触发, 后续刷新不重复拉取文件列表/不重复加标签"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.add_episode_tags = True
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
+        client.torrents["H1"] = t1
+        client.files_map["H1"] = [_fake_file("01.mkv", 100)]
+
+        mgr._refresh_torrents()  # 添加: 拉一次文件列表
+        assert client.files_calls == 1, f"添加时应拉一次文件列表: {client.files_calls}"
+        add_calls = [tags for name, tags in client.calls if name == "add_tags"]
+        assert ["E1"] in add_calls, f"应添加 E1: {client.calls}"
+
+        mgr._refresh_torrents()  # 后续刷新: 无新增, 不应再拉文件列表
+        assert client.files_calls == 1, f"后续刷新不应再拉文件列表: {client.files_calls}"
+        print("[OK] test_episode_tags_not_on_existing_refresh: 仅添加时触发")
+
+
+def test_episode_tags_disabled():
+    """测试: add_episode_tags 关闭时不拉取文件列表/不加标签"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.add_episode_tags = False  # 默认关闭
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
+        client.torrents["H1"] = t1
+        client.files_map["H1"] = [_fake_file("01.mkv", 100)]
+
+        mgr._refresh_torrents()
+
+        assert client.files_calls == 0, f"关闭时不应拉文件列表: {client.files_calls}"
+        assert not any(name == "add_tags" for name, _ in client.calls), f"不应加标签: {client.calls}"
+        print("[OK] test_episode_tags_disabled: 开关关闭不触发")
+
+
 if __name__ == "__main__":
     test_parse_utils()
     test_compare()
@@ -1447,4 +1555,8 @@ if __name__ == "__main__":
     test_grouping_save_path_change_triggers_check()
     test_grouping_save_path_change_new_group_alone()
     test_grouping_no_full_files_scan()
+    test_episode_tag_utils()
+    test_episode_tags_added_on_new_torrent()
+    test_episode_tags_not_on_existing_refresh()
+    test_episode_tags_disabled()
     print("\n全部自测通过!")
