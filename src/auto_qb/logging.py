@@ -25,7 +25,9 @@ def setup_logging(file: str, level: int, max_bytes: int, format: str):
     # 3. 如果指定了文件路径，添加 RotatingFileHandler
     if file.strip():
         # 创建文件夹如果不存在
-        os.makedirs(os.path.dirname(file), exist_ok=True)
+        dir_path = os.path.dirname(file)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
 
         # 轮转备份数量，可根据需要调整（这里默认 5 个）
         backup_count = 5
