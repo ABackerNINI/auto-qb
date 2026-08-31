@@ -17,6 +17,7 @@
 - refresh() 保留已存在记录对象(惰性缓存跨 tick 存活), 仅 in-place 更新快照字段;
   种子不在快照中但被查询时(如 process_torrent 外部传入对象)退化为直接拉取, 不做缓存。
 """
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -24,6 +25,10 @@ try:
     from qbittorrentapi import TorrentState
 except ImportError:  # 未安装 qbittorrentapi 时降级: state_enum 为 None
     TorrentState = None  # type: ignore[assignment]
+
+from . import utils
+
+logger = logging.getLogger(__name__)
 
 # 与 qbittorrentapi TorrentDictionary 一致的快照字段(refresh 时逐字段 in-place 更新)
 _SNAPSHOT_FIELDS = (
