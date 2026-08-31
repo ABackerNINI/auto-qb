@@ -1,0 +1,37 @@
+---
+config:
+    interval: 60S
+    remove_similar_tags: true
+
+    # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
+    hr:
+        add_tag: "" # 满足HR触发条件的种子添加标签, 支持变量
+        add_category: "!!HR${required_seeding_time}!!" # 分类格式, 支持变量
+        overwrite_category: false
+        add_tag_for_satisfied: "" # 做种时间已满足HR要求时间+额外时间的种子添加标签
+        add_category_for_satisfied: "--HR${required_seeding_time}--"
+        overwrite_category_for_satisfied: false
+
+    add_episode_tags: true
+
+    # 种子分组管理(辅种管理)
+    grouping:
+        enabled: true # 启用种子分组管理
+        missing_tag: MISSING # 文件丢失时整组添加的标签
+
+    # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
+    delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
+        - "M-Team - TP:ignore_case"
+        - "regex:^BTSCHOOL"
+    delete_tags_if_has_no_torrents: # 彻底删除无种子的标签格式(仅当没有任何种子使用时删除)
+        - "@tracker_tags:ignore_case" # 引用全部 tracker 配置的标签
+        - "regex:^zE.*"
+        - "regex:^ORPHAN"
+
+    qbittorrent:
+        host: 127.0.0.1
+        port: 16585
+        username: abacker
+        password: "132435."
+
+    trackers:
