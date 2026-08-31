@@ -4,16 +4,8 @@
 
 <table>
 <tr>
-<td>版本</td><td>0.2.0</td>
 <td>语言</td><td>Python 3.12+</td>
-</tr>
-<tr>
-<td>测试</td><td>308 passed</td>
-<td>覆盖率</td><td>99%(业务代码 100%)</td>
-</tr>
-<tr>
 <td>依赖</td><td>qbittorrent-api / PyYAML</td>
-<td>框架</td><td>规则引擎 + 双任务队列 + mixins</td>
 </tr>
 </table>
 
@@ -52,12 +44,12 @@
 - 缺文件检查事件驱动:组内种子被删除、或由上传转暂停、或保存路径变化时立即触发磁盘扫描(仅验证文件存在性与大小);文件丢失 → 整组暂停 + `MISSING` 标签
 - 组内多个种子同时下载、或已完成与下载中并存 → 警告 + 整组暂停
 
-### 自定义规则
+### 自定义规则 🚧
 
 - 触发时机 + 筛选条件 + 动作,动作顺序执行,支持去重与错误处理(详见[规则系统](#规则系统))
 - 条件 15 种、动作 11 种,全部可组合
 
-### 限速
+### 限速 🚧
 
 - 规则动作支持单种上传/下载限速(`upload_speed_limit` / `download_speed_limit`)
 - tracker 配置内置限速字段,预留自动限速(不覆盖用户手动修改,见[风险与约束](#风险与约束))
@@ -67,8 +59,8 @@
 - 主循环 2s tick,任务队列驱动,任务互不干扰,各自带内置 interval
 - 根据已有种子 tracker 导出 YAML 配置模板(`--export-yaml`,只追加不重写,保留注释)
 - 状态持久化到 `state_file`(规则执行历史/上传量快照/脚本限速记录),重启继续有效
-- 启动时 fail-fast 全量校验配置(未知键、非法格式、非法 HR 规则)
-- 单实例锁,防止 cron + 手动同时运行互相竞争
+- 启动时 fail-fast 全量校验配置(未知键、非法格式、非法 HR 规则) 🚧
+- 单实例锁,防止 cron + 手动同时运行互相竞争 🚧
 
 ## 快速开始
 
@@ -107,6 +99,8 @@ python -m auto_qb minimal.yml --export-yaml config.yml
 `--export-yaml` 会连接 qBittorrent,按已有种子的 tracker 生成配置模板(尽量保留已有配置不含注释);加 `--only-missing` 只导出未配置的 tracker,生成最小骨架,方便随时添加新的 tracker。
 
 ### 运行
+
+__python -m auto_qb [CONFIG] [--export-yaml, -e OUTPUT] [--only-missing] [--dry-run, -n]__
 
 ```bash
 python -m auto_qb                # 使用默认 config.yml
@@ -197,7 +191,7 @@ config:
                     - category
                 - trackers:                      # tracker 自定义名称(不同组之间为或)
                     - tracker1
-                - state:                         # 语义化状态
+                - state:                         # 语义化状态(不同组之间为或)
                     - complete&uploading         # 已完成且正在上传(& 连接)
                 - hr: condition-met              # condition-met/condition-not-met/satisfied
                 - date_time:
@@ -243,7 +237,7 @@ config:
             # 可选: conditions-met / conditions-not-met / action-failed /
             #       all-actions-succeed / always / never
 
-    # tracker 站点配置 (建议直接使用`--export-yaml missing.yml --only-missing`直接导出后修改)
+    # tracker 站点配置 (建议直接使用`python -m auto_qb --export-yaml missing.yml --only-missing`直接导出后修改)
     trackers:
         tracker1:              # 自定义 tracker 站点名称
             domains:           # 站点域名,可以有多个
@@ -335,14 +329,14 @@ config:
 
 规则条件里的 `state` 是语义化状态,由 qB 原始 state 字符串映射而来:
 
-| 语义状态      | 覆盖的 qB state                                               | 说明             |
-|---------------|---------------------------------------------------------------|------------------|
-| `checking`    | checking, checkingResumeData, checkingDL, checkingUP          | 正在校验         |
-| `downloading` | downloading, forcedDL, metaDL, forcedMetaDL                   | 正在下载         |
-| `complete`    | uploading, stalledUP, pausedUP, forcedUP, queuedUP, stoppedUP | 已完成下载       |
-| `uploading`   | uploading, forcedUP, stalledUP                                | 正在上传做种     |
-| `errored`     | missingFiles, error, unknown                                  | 出错(含文件丢失) |
-| `stopped`     | pausedDL, pausedUP, stoppedDL, stoppedUP                      | 已暂停/停止      |
+| 语义状态      | 覆盖的 qB state                                               | 说明         |
+|---------------|---------------------------------------------------------------|--------------|
+| `checking`    | checking, checkingResumeData, checkingDL, checkingUP          | 正在校验     |
+| `downloading` | downloading, forcedDL, metaDL, forcedMetaDL                   | 正在下载     |
+| `complete`    | uploading, stalledUP, pausedUP, forcedUP, queuedUP, stoppedUP | 已完成下载   |
+| `uploading`   | uploading, forcedUP, stalledUP                                | 正在上传做种 |
+| `errored`     | missingFiles, error, unknown                                  | 出错         |
+| `stopped`     | pausedDL, pausedUP, stoppedDL, stoppedUP                      | 已暂停/停止  |
 
 `complete&uploading` = `is_complete 且 is_uploading`,即"正在做种中"。
 
@@ -360,7 +354,7 @@ config:
 |--------------|-----------------------------------------------------------------------|
 | tracker 标签 | 自动给对应 tracker 的种子添加标签;多 tracker 种子取所有匹配标签的并集 |
 | 标签清理     | 自动删除不想要的标签、相似标签(单词相同大小写不同)、彻底删除标签        |
-| 集数标签     | 种子添加时解析文件列表添加 `E1-5` 等标签;名称已含集数标记则跳过       |
+| 集数标签     | 种子添加时解析文件列表添加 `E1-5` 等标签;~~名称已含集数标记则跳过~~       |
 | HR 标签/分类 | 触发时 `!!HR3D!!`,达标时 `--HR3D--`,格式与分类覆盖均可配置            |
 
 ### 种子分组
@@ -471,5 +465,7 @@ pytest --cov=src --cov-report=html tests/
 - 单轮耗时超过间隔时从轮末计时,不叠加;加最小睡眠下限
 
 ## 许可证
+
+LICENSE: [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 本项目仅供个人学习与使用。请遵守各 PT 站点规则,谨慎使用高风险功能(跳检、强制汇报等)。
