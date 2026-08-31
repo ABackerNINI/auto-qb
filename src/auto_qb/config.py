@@ -28,11 +28,6 @@ DEFAULT_HR_OUTPUT = {
     "overwrite_category_for_satisfied": False,
 }
 
-DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING = False
-DEFAULT_SKIP_CHECKING_AUTO_START = False
-DEFAULT_ADD_SKIP_CHECKING_TAGS = False
-DEFAULT_SKIP_CHECKING_TAG_FORMAT = "SKIP_CHECKING"
-
 # 种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组, 统一检查
 DEFAULT_GROUPING_ENABLED = False
 DEFAULT_GROUPING_INTERVAL = "5M"  # 分组检查间隔(拉全量文件列表开销大, 默认降频)
@@ -43,9 +38,9 @@ UNLIMITED_SPEED = "0KiB/s"
 
 @dataclass
 class LoggingConfig:
-    level: str = "INFO"
+    level: str | int = "INFO"
     file: str = ""
-    max_bytes: str = "10MiB"
+    max_bytes: str | int = "10MiB"
     format: str = "%(asctime)s [%(levelname)s] %(message)s"
 
 
@@ -89,7 +84,119 @@ class HRRule:
     overwrite_category_for_satisfied: bool = False
 
 
-def parse_hr_spec(spec: dict, global_hr: dict) -> HRRule:
+@dataclass
+class TrackerConfig:
+    name: str
+    domains: List[str]
+    tags: List[str]
+    remove_tags: List[str]
+    upload_speed_limit: Optional[int]  # 字节/秒
+    download_speed_limit: Optional[int]  # 字节/秒
+    hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
+    rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
+    remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
+
+
+@dataclass
+class GroupingConfig:
+    """种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组
+
+    enabled: 启用分组检查(缺文件检查统一由分组事件驱动承担, 同组共享一次磁盘扫描)
+    missing_tag: 文件丢失时整组添加的标签
+    """
+    enabled: bool = True
+    missing_tag: str = 'MISSING'
+
+
+@dataclass
+class Config:
+    main_tick: float
+    max_tasks_per_tick: int
+
+    interval: float  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
+
+    state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
+
+    logging: LoggingConfig
+
+    rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
+
+    remove_similar_tags: bool
+    add_episode_tags: bool  # 种子添加时自动添加集数标签(如 E1-5): 名称不含集数时从文件列表解析
+
+    hr: HRRule  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底; 规则字段为空)
+
+    # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
+    delete_tags: List[str]
+    delete_tags_if_has_no_torrents: List[str]
+
+    grouping: GroupingConfig  # 种子分组管理(辅种管理)
+
+    qbittorrent: QbittorrentConfig
+    trackers: Dict[str, TrackerConfig]
+
+
+def load_logging_config(spec: dict) -> LoggingConfig:
+    default = LoggingConfig()
+
+    level_str = spec.get('level', default.level)
+
+    level = getattr(logging, level_str.upper(), logging.INFO)
+    file = spec.get('file', default.file)
+    max_bytes = parse_fsize(spec.get('max_bytes', default.max_bytes))
+    format = spec.get('format', default.format)
+    return LoggingConfig(level=level, file=file, max_bytes=max_bytes, format=format)
+
+
+def load_qbittorrent_config(spec: dict) -> QbittorrentConfig:
+    return QbittorrentConfig(
+        host=spec.get('host', '127.0.0.1'),
+        port=spec.get('port', ),
+        username=spec.get('username', ''),
+        password=spec.get('password', ''),
+    )
+
+
+def load_grouping_config(spec: dict) -> GroupingConfig:
+    default = GroupingConfig()
+    return GroupingConfig(
+        enabled=parse_bool(spec.get("enabled", default.enabled)),
+        missing_tag=spec.get("missing_tag", default.missing_tag),
+    )
+
+
+def load_tracker_config(name: str, spec: dict, hr: HRRule, global_remove_similar: bool) -> TrackerConfig:
+    return TrackerConfig(
+        name=name,
+        domains=spec["domains"],
+        tags=spec.get("tags", []),
+        remove_tags=spec.get("remove_tags", []),
+        upload_speed_limit=parse_speed(spec.get("upload_speed_limit", UNLIMITED_SPEED)),
+        download_speed_limit=parse_speed(spec.get("download_speed_limit", UNLIMITED_SPEED)),
+        hr=hr,
+        rules=spec.get("rules", []) or [],
+        remove_similar_tags=parse_bool(spec.get("remove_similar_tags", global_remove_similar)),
+    )
+
+
+# TODO: optimize
+def load_global_hr(spec: dict) -> HRRule:
+    return HRRule(
+        add_tag=spec.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
+        add_category=spec.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),
+        overwrite_category=parse_bool(spec.get("overwrite_category", DEFAULT_HR_OUTPUT["overwrite_category"])),
+        add_tag_for_satisfied=spec.get("add_tag_for_satisfied", DEFAULT_HR_OUTPUT["add_tag_for_satisfied"]),
+        add_category_for_satisfied=spec.get(
+            "add_category_for_satisfied", DEFAULT_HR_OUTPUT["add_category_for_satisfied"]
+        ),
+        overwrite_category_for_satisfied=parse_bool(
+            spec.get("overwrite_category_for_satisfied", DEFAULT_HR_OUTPUT["overwrite_category_for_satisfied"])
+        ),
+    )
+
+
+# TODO: optimize
+def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
     """解析站点 hr 配置段, 与全局 hr 默认输出设置合并(站点字段优先, 全局兜底)
 
     站点段: required_seeding_time(必填) / required_share_ratio / extra_seeding_time /
@@ -123,90 +230,14 @@ def parse_hr_spec(spec: dict, global_hr: dict) -> HRRule:
     )
 
 
-@dataclass
-class TrackerConfig:
-    name: str
-    domains: List[str]
-    tags: List[str]
-    remove_tags: List[str]
-    upload_speed_limit: Optional[int]  # 字节/秒
-    download_speed_limit: Optional[int]  # 字节/秒
-    hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
-    rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
-    remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
-
-
-@dataclass
-class GroupingConfig:
-    """种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组
-
-    enabled: 启用分组检查(缺文件检查统一由分组事件驱动承担, 同组共享一次磁盘扫描)
-    interval: 已废弃: 分组改为事件驱动(_refresh_torrents 检测到删除/状态变化/保存路径变化立即处理),
-              不再创建周期轮询任务; 字段保留仅为配置兼容
-    missing_tag: 文件丢失时整组添加的标签
-    """
-    enabled: bool
-    interval: float
-    missing_tag: str
-
-
-@dataclass
-class Config:
-    main_tick: float
-    max_tasks_per_tick: int
-
-    interval: float  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
-
-    state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
-
-    logging: LoggingConfig
-
-    rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
-
-    remove_similar_tags: bool
-    add_episode_tags: bool  # 种子添加时自动添加集数标签(如 E1-5): 名称不含集数时从文件列表解析
-
-    hr: HRRule  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底; 规则字段为空)
-
-    skip_checking_for_cross_seeding: bool
-    skip_checking_auto_start: bool
-    add_skip_checking_tags: bool
-    skip_checking_tag_format: str
-
-    # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
-    delete_tags: List[str]
-    delete_tags_if_has_no_torrents: List[str]
-
-    grouping: GroupingConfig  # 种子分组管理(辅种管理)
-
-    qbittorrent: QbittorrentConfig
-    trackers: Dict[str, TrackerConfig]
-
-
-def load_logging_config(spec: dict) -> LoggingConfig:
-    default = LoggingConfig()
-
-    level_str = spec.get('level', default.level)
-
-    level = getattr(logging, level_str.upper(), logging.INFO)
-    file = spec.get('file', default.file)
-    max_bytes = parse_fsize(spec.get('max_bytes', default.max_bytes))
-    format = spec.get('format', default.format)
-    return LoggingConfig(level=level, file=file, max_bytes=max_bytes, format=format)
-
-
 def load_config(config_path: str) -> Config:
     with open(config_path, "r", encoding="utf-8") as f:
         data = yaml.load(f, Loader=yaml.BaseLoader)
 
-    cfg = data["config"]
-    qb = cfg["qbittorrent"]
-    qb_config = QbittorrentConfig(
-        host=qb["host"],
-        port=int(qb["port"]),
-        username=qb["username"],
-        password=qb["password"],
-    )
+    cfg = data.get("config", {})
+
+    # qbittorrent 配置
+    qb_config = load_qbittorrent_config(cfg.get("qbittorrent", {}))
 
     # 规则集: config 段下所有以 "_rules" 结尾的键
     rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules") and isinstance(v, dict)}
@@ -214,23 +245,12 @@ def load_config(config_path: str) -> Config:
     global_hr = cfg.get("hr") or {}
     global_remove_similar = parse_bool(cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS))
 
+    # Trackers 配置
     trackers = {}
     for name, tdata in cfg["trackers"].items():
-        hr = None
         hr_spec = tdata.get("hr")
-        if isinstance(hr_spec, dict):
-            hr = parse_hr_spec(hr_spec, global_hr)
-        trackers[name] = TrackerConfig(
-            name=name,
-            domains=tdata["domains"],
-            tags=tdata.get("tags", []),
-            remove_tags=tdata.get("remove_tags", []),
-            upload_speed_limit=parse_speed(tdata.get("upload_speed_limit", UNLIMITED_SPEED)),
-            download_speed_limit=parse_speed(tdata.get("download_speed_limit", UNLIMITED_SPEED)),
-            hr=hr,
-            rules=tdata.get("rules", []) or [],
-            remove_similar_tags=parse_bool(tdata.get("remove_similar_tags", global_remove_similar)),
-        )
+        hr = load_tracker_hr(hr_spec, global_hr) if isinstance(hr_spec, dict) else None
+        trackers[name] = load_tracker_config(name, tdata, hr, global_remove_similar)
 
     # 全局标签清理格式: @tracker_tags 引用展开为所有 tracker 配置的 tags 并集
     tracker_tags = sorted({t for tc in trackers.values() for t in tc.tags})
@@ -248,37 +268,10 @@ def load_config(config_path: str) -> Config:
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
         add_episode_tags=parse_bool(cfg.get("add_episode_tags", DEFAULT_ADD_EPISODE_TAGS)),
-        hr=HRRule(
-            add_tag=global_hr.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
-            add_category=global_hr.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),
-            overwrite_category=parse_bool(global_hr.get("overwrite_category", DEFAULT_HR_OUTPUT["overwrite_category"])),
-            add_tag_for_satisfied=global_hr.get("add_tag_for_satisfied", DEFAULT_HR_OUTPUT["add_tag_for_satisfied"]),
-            add_category_for_satisfied=global_hr.get(
-                "add_category_for_satisfied", DEFAULT_HR_OUTPUT["add_category_for_satisfied"]
-            ),
-            overwrite_category_for_satisfied=parse_bool(
-                global_hr.get(
-                    "overwrite_category_for_satisfied", DEFAULT_HR_OUTPUT["overwrite_category_for_satisfied"]
-                )
-            ),
-        ),
-        skip_checking_for_cross_seeding=parse_bool(
-            cfg.get(
-                "skip_checking_for_cross_seeding",
-                DEFAULT_SKIP_CHECKING_FOR_CROSS_SEEDING,
-            )
-        ),
-        skip_checking_auto_start=parse_bool(cfg.get("skip_checking_auto_start", DEFAULT_SKIP_CHECKING_AUTO_START)),
-        add_skip_checking_tags=parse_bool(cfg.get("add_skip_checking_tags", DEFAULT_ADD_SKIP_CHECKING_TAGS)),
-        skip_checking_tag_format=cfg.get("skip_checking_tag_format", DEFAULT_SKIP_CHECKING_TAG_FORMAT),
+        hr=load_global_hr(global_hr),
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
-        grouping=GroupingConfig(
-            enabled=parse_bool(cfg.get("grouping", {}).get("enabled", DEFAULT_GROUPING_ENABLED)),
-            interval=parse_time(cfg.get("grouping", {}).get("interval", DEFAULT_GROUPING_INTERVAL)),
-            missing_tag=cfg.get("grouping", {}).get("missing_tag", DEFAULT_GROUPING_MISSING_TAG) or
-            DEFAULT_GROUPING_MISSING_TAG,
-        ),
+        grouping=load_grouping_config(cfg.get("grouping", {})),
         qbittorrent=qb_config,
         trackers=trackers,
     )

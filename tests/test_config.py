@@ -14,7 +14,7 @@ import tempfile
 
 import yaml
 
-from auto_qb.config import HRRule, QbittorrentConfig, load_config, parse_hr_spec
+from auto_qb.config import HRRule, QbittorrentConfig, load_config, load_tracker_hr
 
 
 def _write_config(td, **extra_cfg):
@@ -110,7 +110,7 @@ def test_parse_hr_spec_site_overrides_global():
             "add_category": "SITE-HR!!",
             "overwrite_category": True,
         }
-        rule = parse_hr_spec(spec, global_hr)
+        rule = load_tracker_hr(spec, global_hr)
         assert rule.required_seeding_time == 3 * 86400
         assert rule.required_seeding_time_raw == "3D"
         assert rule.add_category == "SITE-HR!!"  # 站点覆盖
@@ -122,10 +122,10 @@ def test_parse_hr_spec_site_overrides_global():
 def test_parse_hr_spec_condition():
     """condition: 百分比 -> dlratio, 大小 -> dlsize"""
     with tempfile.TemporaryDirectory() as td:
-        rule = parse_hr_spec({"required_seeding_time": "12H", "condition": "10MiB"}, {})
+        rule = load_tracker_hr({"required_seeding_time": "12H", "condition": "10MiB"}, {})
         assert rule.condition == ("dlsize", 10 * 1024**2)
         assert rule.extra_seeding_time == 0
-        rule2 = parse_hr_spec({"required_seeding_time": "1D", "extra_seeding_time": "12H"}, {})
+        rule2 = load_tracker_hr({"required_seeding_time": "1D", "extra_seeding_time": "12H"}, {})
         assert rule2.extra_seeding_time == 12 * 3600
 
 
