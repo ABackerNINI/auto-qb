@@ -6,6 +6,9 @@ import yaml
 
 from .utils import parse_bool, parse_hr_condition, parse_speed, parse_time
 
+DEFAULT_MAIN_TICK = 2.0
+DEFAULT_MAX_TASKS_PER_TICK = 20
+
 DEFAULT_CONFIG_FILE = "config.yml"
 DEFAULT_STATE_FILE = "auto-qb-state.json"
 
@@ -135,13 +138,16 @@ class GroupingConfig:
     missing_tag: 文件丢失时整组添加的标签
     """
     enabled: bool
-    interval: int
+    interval: float
     missing_tag: str
 
 
 @dataclass
 class Config:
-    interval: int  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
+    main_tick: float
+    max_tasks_per_tick: int
+
+    interval: float  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
 
     state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
     rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
@@ -211,6 +217,8 @@ def load_config(config_path: str) -> Config:
     )
 
     return Config(
+        main_tick=parse_time(cfg.get("main_tick", DEFAULT_MAIN_TICK)),
+        max_tasks_per_tick=int(cfg.get("max_tasks_per_tick", DEFAULT_MAX_TASKS_PER_TICK)),
         interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
         state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
         rules_config=rules_config,

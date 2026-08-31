@@ -44,7 +44,7 @@ def convert_bool_in_dict(d):
     return d
 
 
-def parse_time(time_str: str) -> int:
+def parse_time(time_str: str) -> float:
     """时间字符串(如 '3D', '12H', '10M') -> 秒; 空串返回0"""
     if not time_str:
         return 0
@@ -53,7 +53,7 @@ def parse_time(time_str: str) -> int:
     if not m:
         raise ValueError(f"无效时间格式: {time_str}")
     value, unit = m.groups()
-    return int(float(value) * units[unit])
+    return float(value) * units[unit]
 
 
 def parse_fsize(fsize_str: str) -> int:

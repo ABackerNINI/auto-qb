@@ -22,9 +22,6 @@ from .rules import Rule
 from .taskqueue import Task, TaskQueue
 from . import utils
 
-# 主循环 tick 间隔(秒): 唯一的循环粒度, 每个任务有内置 interval 决定自身执行频率
-MAIN_TICK = 2.0
-
 logger = logging.getLogger(__name__)
 
 
@@ -86,7 +83,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if not self.connect():
             return
 
-        logger.info(f"Starting qB manager: main tick {MAIN_TICK}s, default task interval {self.config.interval}s")
+        main_tick = self.config.main_tick
+
+        logger.info(f"Starting qB manager: main tick {main_tick}s, default task interval {self.config.interval}s")
         logger.info(f"==========================================================================")
         try:
             while True:
@@ -94,7 +93,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     self._tick(dry_run)
                 except Exception as e:
                     logger.error(f"Error in main loop: {e}", exc_info=True)
-                time.sleep(MAIN_TICK)
+                time.sleep(main_tick)
         except KeyboardInterrupt:
             logger.info("Stopping...")
         finally:
@@ -116,7 +115,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     logger.warning(f"异步校验任务异常({task.torrent_hash}): {task.send_error}")
 
         # 2. 快速队列: 弹出到期任务并执行
-        due = self.task_queue.due(now, max=20)
+        due = self.task_queue.due(now, max=self.config.max_tasks_per_tick)
         if due:
             self._execute_due(due, dry_run, now)
 

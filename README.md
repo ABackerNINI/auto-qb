@@ -132,8 +132,9 @@ python -m auto_qb -n             # dry-run: 只打印将执行的动作,不实�
 ---
 config:
     main_tick: 2S          # 主循环时间间隔
-    interval: 60S          # 内置任务检查间隔(从上一轮处理结束开始计时,不叠加)
     max_tasks_per_tick: 20 # 每个循环最大执行任务数
+
+    interval: 60S          # 内置任务检查间隔(从上一轮处理结束开始计时,不叠加)
 
     state_file: "auto-qb-state.json" # 状态持久化文件,必须可写
     single_instance_lock: true       # 单实例锁
