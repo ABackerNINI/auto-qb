@@ -33,15 +33,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._setup_logging()
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file
-        self.state = self._load_state()
+        self.state = None
         # 规则加载(条件+动作插件, manager 即本对象: 提供执行历史/状态/任务队列)
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
-        self._load_rules()
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         self.task_queue = TaskQueue()
-        # 全局任务: 彻底删除标签 / 彻底删除无种子的标签 / 种子分组(有配置才创建)
-        self._create_global_tasks()
         # 种子增删检测: 上一轮已知 hash 集合, None 表示首轮(首次刷新为全部现有种子创建任务)
         self._known_hashes: Optional[set] = None
         # 最近一次种子快照: 新增种子创建任务/规则条件(上传量基线)使用
@@ -82,6 +79,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         """
         if not self.connect():
             return
+
+        self.state = self._load_state()
+        self._load_rules()
+        self._create_global_tasks()
 
         main_tick = self.config.main_tick
 
