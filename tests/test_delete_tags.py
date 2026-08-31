@@ -113,6 +113,7 @@ def test_global_delete_tags_queued():
         cfg.delete_tags = ["M-Team - TP"]
         cfg.delete_tags_if_has_no_torrents = ["@tracker_tags"]
         mgr = QbManager("", config=cfg)
+        mgr._create_global_tasks()  # run() 中才自动创建; 测试直接构造后手动创建
         # 队列应包含两个全局标签清理任务
         names = {t.name for t in mgr.task_queue._fast}
         assert "delete_tags" in names, f"缺少 delete_tags 任务: {names}"

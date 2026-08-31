@@ -119,6 +119,7 @@ def make_check_cfg(
 def make_mgr(cfg, with_tq=False):
     """构造 QbManager(可选同步模式任务队列)"""
     mgr = QbManager("", config=cfg)
+    mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     if with_tq:
         mgr.task_queue = TaskQueue(executor_workers=0)
     return mgr
@@ -649,6 +650,7 @@ def test_checking_verified_references_not_persisted():
         cfg = make_check_cfg(without_mode="full-checking", without_start=True)
         cfg.state_file = state_file
         mgr = QbManager("", config=cfg)
+        mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         mgr.task_queue = TaskQueue(executor_workers=0)
         client = CheckingFakeClient()
         mgr.client = client

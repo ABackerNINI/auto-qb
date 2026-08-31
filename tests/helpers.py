@@ -285,7 +285,9 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
             }
     }
     cfg.rules_config = config_dict
-    return QbManager("", config=cfg)
+    mgr = QbManager("", config=cfg)
+    mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+    return mgr
 
 
 def _fake_file(name, size):

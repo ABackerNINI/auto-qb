@@ -39,13 +39,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file
         self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
-        # 规则加载(条件+动作插件, manager 即本对象: 提供执行历史/状态/任务队列)
+        # 规则结构初始化(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
-        self._load_rules()
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         self.task_queue = TaskQueue()
-        self._create_global_tasks()
 
     @property
     def client(self) -> Optional[Client]:
@@ -86,6 +84,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             return
 
         self.state = self._load_state()
+        # 规则加载 + 全局任务创建仅运行模式需要(--export-yaml 等只导出模式在构造后直接退出, 跳过)
+        self._load_rules()
+        self._create_global_tasks()
 
         main_tick = self.config.main_tick
 

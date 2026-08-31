@@ -203,6 +203,7 @@ def test_rule_interval():
                 }
         }
         mgr = QbManager("", config=cfg)
+        mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
@@ -248,6 +249,7 @@ def test_rule_interval():
 
         # 兜底: 不创建任务直接 process_torrent, 视为全部规则执行(向后兼容)
         mgr3 = QbManager("", config=cfg)
+        mgr3._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         client3 = FakeClient()
         mgr3.client = client3
         handled3 = mgr3.process_torrent(tor, dry_run=False)
