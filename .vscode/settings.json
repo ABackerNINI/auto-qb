@@ -62,6 +62,7 @@
         "tdata",
         "testpaths",
         "trackerprxy",
+        "venv",
         "windowsg"
     ],
     "python.useEnvironmentsExtension": true,
