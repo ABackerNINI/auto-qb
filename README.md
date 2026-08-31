@@ -140,9 +140,10 @@ config:
     single_instance_lock: true       # 单实例锁
 
     log:
-        file: "auto-qb.log"  # 留空仅输出控制台
-        level: INFO
-        max_bytes: 10MiB
+        file: "auto-qb.log" # 日志文件路径, 留空仅输出控制台; 24/7运行建议落盘
+        level: INFO         # 日志等级
+        max_bytes: 10MiB    # 日志轮转大小
+        format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
 
     remove_similar_tags: true # 删除种子类似(单词相同大小写不同)的标签
     add_episode_tags: true    # 自动添加集数标签(仅种子添加时触发)

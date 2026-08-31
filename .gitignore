@@ -14,3 +14,6 @@ skip-check-backup/
 .coverage
 htmlcov/
 cov-report.txt
+
+# 程序运行日志
+logs/

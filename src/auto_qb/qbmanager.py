@@ -21,6 +21,7 @@ from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, Tr
 from .rules import Rule
 from .taskqueue import Task, TaskQueue
 from . import utils
+from .logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
     def __init__(self, config_path: str, config: Config = None):
         self.config_path = config_path
         self.config = config or load_config(config_path)
-        self.client: Optional[Client] = None
         self._setup_logging()
+        self.client: Optional[Client] = None
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file
         self.state = None
@@ -55,7 +56,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.verified_references: set = set()
 
     def _setup_logging(self):
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+        logging_conf = self.config.logging
+        setup_logging(logging_conf.file, logging_conf.level, logging_conf.max_bytes, logging_conf.format)
 
     def connect(self) -> bool:
         """连接 qBittorrent"""

@@ -6,6 +6,12 @@ config:
     interval: 60S # 内置任务检查间隔, 支持时间单位: S秒, M分, H时, D天
                   # 注意: 间隔从"上一轮处理结束"开始计时, 单轮耗时超过间隔时不叠加
 
+    log:
+        file: "auto-qb.log" # 日志文件路径, 留空仅输出控制台; 24/7运行建议落盘
+        level: INFO         # 日志等级
+        max_bytes: 10MiB    # 日志轮转大小
+        format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
+
     remove_similar_tags: true
 
     # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)

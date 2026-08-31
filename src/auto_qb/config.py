@@ -2,9 +2,9 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-import yaml
+import yaml, logging
 
-from .utils import parse_bool, parse_hr_condition, parse_speed, parse_time
+from .utils import parse_bool, parse_hr_condition, parse_speed, parse_time, parse_fsize
 
 DEFAULT_MAIN_TICK = 2.0
 DEFAULT_MAX_TASKS_PER_TICK = 20
@@ -39,6 +39,14 @@ DEFAULT_GROUPING_INTERVAL = "5M"  # 分组检查间隔(拉全量文件列表开�
 DEFAULT_GROUPING_MISSING_TAG = "MISSING"
 
 UNLIMITED_SPEED = "0KiB/s"
+
+
+@dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    file: str = ""
+    max_bytes: str = "10MiB"
+    format: str = "%(asctime)s [%(levelname)s] %(message)s"
 
 
 @dataclass
@@ -150,6 +158,9 @@ class Config:
     interval: float  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
 
     state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
+
+    logging: LoggingConfig
+
     rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
 
     remove_similar_tags: bool
@@ -170,6 +181,18 @@ class Config:
 
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
+
+
+def load_logging_config(spec: dict) -> LoggingConfig:
+    default = LoggingConfig()
+
+    level_str = spec.get('level', default.level)
+
+    level = getattr(logging, level_str.upper(), logging.INFO)
+    file = spec.get('file', default.file)
+    max_bytes = parse_fsize(spec.get('max_bytes', default.max_bytes))
+    format = spec.get('format', default.format)
+    return LoggingConfig(level=level, file=file, max_bytes=max_bytes, format=format)
 
 
 def load_config(config_path: str) -> Config:
@@ -221,6 +244,7 @@ def load_config(config_path: str) -> Config:
         max_tasks_per_tick=int(cfg.get("max_tasks_per_tick", DEFAULT_MAX_TASKS_PER_TICK)),
         interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
         state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
+        logging=load_logging_config(cfg.get("log", {})),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
         add_episode_tags=parse_bool(cfg.get("add_episode_tags", DEFAULT_ADD_EPISODE_TAGS)),
