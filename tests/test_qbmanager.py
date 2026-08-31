@@ -25,7 +25,7 @@ import time
 from unittest import mock
 
 from auto_qb.taskqueue import PENDING, Task, TaskQueue
-from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager
+from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
 
 def test_create_global_tasks():
@@ -46,15 +46,17 @@ def test_create_global_tasks():
 
 
 def test_get_torrent():
-    """_get_torrent: 存在返回种子 / 删除返回 None / 异常返回 None"""
+    """_get_torrent: 存在返回种子(store 快照) / 快照外返回 None / 删除后返回 None"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
         client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        assert mgr._get_torrent("H1") is None  # 未刷新快照 -> 无记录
+        seed_store(mgr)
         assert mgr._get_torrent("H1").hash == "H1"
         assert mgr._get_torrent("NOPE") is None
-        client.torrents_info = lambda **kw: (_ for _ in ()).throw(RuntimeError("boom"))
+        mgr.store.apply([])  # 种子删除 -> 快照移除
         assert mgr._get_torrent("H1") is None
 
 
@@ -186,7 +188,7 @@ def test_create_torrent_tasks_no_tracker():
         mgr.client = client
         client.torrents_trackers = lambda h: [{"url": "https://tracker.other.org/announce"}]
         tor = FakeTorrent(hash="H1", tags="")
-        mgr._snapshot = [tor]
+        seed_store(mgr, [tor])
         assert mgr._create_torrent_tasks("H1") is False, "未匹配应跳过"
         assert mgr.task_queue._fast == [], "不应创建任何任务"
 
@@ -199,7 +201,7 @@ def test_create_torrent_tasks_with_rules():
         mgr.client = client
         tor = FakeTorrent(hash="HASH123", tags="")
         client.torrents["HASH123"] = tor
-        mgr._snapshot = [tor]
+        seed_store(mgr)
         mgr._create_torrent_tasks("HASH123")
         names = [t.name for t in mgr.task_queue._fast]
         assert "maintenance" in names, f"应创建内置任务: {names}"

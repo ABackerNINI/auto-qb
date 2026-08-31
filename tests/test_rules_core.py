@@ -18,7 +18,7 @@ import time
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules import RuleContext
 from auto_qb.rules.actions import AddCategoryAction
-from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_manager
+from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
 
 
 def test_basic():
@@ -206,8 +206,8 @@ def test_rule_interval():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
-        client.torrents["HASH123"] = tor  # 种子级规则任务通过 _get_torrent 拉取
-
+        client.torrents["HASH123"] = tor  # 种子级规则任务通过 store 快照读取
+        seed_store(mgr)
         # 模拟 _create_torrent_tasks: 为种子创建规则任务(独立队列, 排除 refresh 任务干扰)
         tq = TaskQueue()
         rules = mgr._rules_for_torrent(tor)

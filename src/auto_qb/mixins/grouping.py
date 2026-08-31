@@ -4,8 +4,8 @@
 以便把大小不一致的种子也归入同组做二次判定)。
 
 分组维护(增量, 事件驱动, 无周期轮询任务):
-  - 维护成员索引 _group_member_to_key(hash -> 组 key): 删除/状态变化/save_path 同步时
-    O(1) 定位种子所属组, 不做全量遍历; 与 _groups/_group_sizes 在归组/移组时同步更新
+  - 维护成员索引 store.member_to_key(hash -> 组 key): 删除/状态变化/save_path 同步时
+    O(1) 定位种子所属组, 不做全量遍历; 与 store.groups/store.group_sizes 在归组/移组时同步更新
   - _refresh_torrents 每轮拉全量种子列表, 检测增删与状态变化并立即处理:
     * 新增种子 -> _assign_new_torrent 增量归组(程序启动首轮的现有种子同样逐个归组);
       归组时检查文件大小一致性(文件列表轻易不变, 仅新增时检查, 不每轮检查):
@@ -21,7 +21,7 @@
     _group_has_downloading(组内活跃下载判定)/_group_reference_candidates(已完成+上传中参考候选)
 
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags,
-以及 qbmanager 初始化的 _groups/_group_sizes/_group_member_to_key/_group_state_snapshot/_snapshot。
+以及 self.store(TorrentStore) 内聚的 _groups/_group_sizes/_member_to_key/state_snapshot/by_hash。
 """
 import logging
 import os
@@ -41,20 +41,20 @@ class GroupingMixin:
     logger: logging.Logger
     config: Config
 
-    def _handle_removed_torrents(self, removed_hashes, by_hash: Dict[str, Any], dry_run: bool):
-        """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失)"""
+    def _handle_removed_torrents(self, removed_hashes, dry_run: bool):
+        """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失) """
         affected = set()
         for h in removed_hashes:
             key = self._leave_group(h)
             if key is not None:
                 affected.add(key)
         for key in affected:
-            members = self._groups.get(key, [])
-            tos = [by_hash[h] for h in members if h in by_hash]
+            members = self.store.groups.get(key, [])
+            tos = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if tos:
-                self._check_missing_files(tos, self._group_sizes.get(key, {}), dry_run)
+                self._check_missing_files(tos, self.store.group_sizes.get(key, {}), dry_run)
 
-    def _handle_save_path_changes(self, by_hash: Dict[str, Any], dry_run: bool):
+    def _handle_save_path_changes(self, dry_run: bool):
         """保存路径变化处理: 种子 save_path 变化 -> 移出原组按新路径重归组; 原组与新组触发缺文件扫描
 
         触发扫描(事件驱动, 同组只扫一次, 循环后统一处理):
@@ -64,79 +64,79 @@ class GroupingMixin:
         已删种子由删除事件(_handle_removed_torrents)处理, 这里不重复清理。
         """
         triggered = set()
-        for h, tor in by_hash.items():
-            key = self._group_member_to_key.get(h)
+        for h, tor in self.store.by_hash.items():
+            key = self.store.member_to_key.get(h)
             if key is None or utils._path_normalize(tor.save_path) == key[0]:
                 continue
-            old_map = self._group_sizes.get(key, {}).get(h)
+            old_map = self.store.group_sizes.get(key, {}).get(h)
             if not old_map:
                 continue  # 无缓存文件映射, 无从重归组与扫描(维持原行为)
             remain_key = self._leave_group(h)  # 移出原组(成员索引 O(1)); 组空则返回 None
             if remain_key is not None:
                 triggered.add(remain_key)  # 原组: 剩余成员触发缺文件扫描
-            self._assign_to_group(tor, old_map, by_hash, dry_run)  # 新 save_path + 原文件列表重归组
-            new_key = self._group_member_to_key.get(h)
-            if new_key is not None and len(self._groups[new_key]) > 1:
+            self._assign_to_group(tor, old_map, dry_run)  # 新 save_path + 原文件列表重归组
+            new_key = self.store.member_to_key.get(h)
+            if new_key is not None and len(self.store.groups[new_key]) > 1:
                 triggered.add(new_key)  # 新组: 已有其它成员, 归组后触发一次扫描
         for key in triggered:
-            members = [by_hash[m] for m in self._groups.get(key, []) if m in by_hash]
+            members = [self.store.by_hash[m] for m in self.store.groups.get(key, []) if m in self.store.by_hash]
             if members:
-                self._check_missing_files(members, self._group_sizes.get(key, {}), dry_run)
+                self._check_missing_files(members, self.store.group_sizes.get(key, {}), dry_run)
 
-    def _handle_state_transitions(self, by_hash: Dict[str, Any], dry_run: bool):
+    def _handle_state_transitions(self, dry_run: bool):
         """状态变化处理: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
 
-        状态快照(_group_state_snapshot)存上一轮各种子的 state_enum 枚举对象,
+        状态快照(store.state_snapshot)存上一轮各种子的 state_enum 枚举对象,
         与 qB 版本无关(老版 pausedUP / 新版 stoppedUP 归为同一 is_paused 类别):
         遍历本轮种子先过滤暂停状态, 再对比上一轮快照为上传(做种)类别即触发;
         状态变化在检测到的同一轮立即处理, 不等下一轮。
         """
         triggered = set()
-        for h, tor in by_hash.items():
+        for h, tor in self.store.by_hash.items():
             if not self._is_paused(tor):
                 continue
-            prev = self._group_state_snapshot.get(h)  # 上一轮 state_enum 枚举
+            prev = self.store.state_snapshot.get(h)  # 上一轮 state_enum 枚举
             if prev is not None and getattr(prev, "is_uploading", False):
-                key = self._group_member_to_key.get(h)
+                key = self.store.member_to_key.get(h)
                 if key is not None:
                     triggered.add(key)
         for key in triggered:
-            members = self._groups[key]
-            tos = [by_hash[h] for h in members if h in by_hash]
+            members = self.store.groups[key]
+            tos = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if tos:
-                self._check_missing_files(tos, self._group_sizes.get(key, {}), dry_run)
+                self._check_missing_files(tos, self.store.group_sizes.get(key, {}), dry_run)
 
-    def _assign_new_torrent(self, torrent_hash: str, by_hash: Dict[str, Any], dry_run: bool = False):
-        """新增种子增量归组: 仅拉取该种子的文件列表并入组(by_hash O(1) 定位, 不做全量遍历)"""
-        tor = by_hash.get(torrent_hash)
+    def _assign_new_torrent(self, torrent_hash: str, dry_run: bool = False):
+        """新增种子增量归组: 仅拉取该种子的文件列表并入组(store O(1) 定位, 不做全量遍历) """
+        tor = self.store.get(torrent_hash)
         if tor is None:
             return
         try:
-            files = self.client.torrents_files(torrent_hash)
+            files = self.store.files(torrent_hash)
         except Exception as e:
             logger.debug(f"分组归组获取文件列表失败({torrent_hash}): {e}")
             return
-        self._assign_to_group(tor, {utils._path_normalize(f.name): f.size for f in files}, by_hash, dry_run)
+        self._assign_to_group(tor, {utils._path_normalize(f.name): f.size for f in files}, dry_run)
 
-    def _assign_to_group(self, tor, file_map: Dict[str, int], by_hash: Dict[str, Any], dry_run: bool = False):
+    def _assign_to_group(self, tor, file_map: Dict[str, int], dry_run: bool = False):
         """将种子按文件列表归入分组(幂等): 先移出旧组再加入新组; 维护成员索引; 归组后检查大小一致性"""
         if not file_map:
             return
         key = (utils._path_normalize(tor.save_path), tuple(sorted(file_map.keys())))
         self._leave_group(tor.hash)  # 幂等: 移出旧组(可能因 save_path 变化被重归组), 不触发扫描
-        self._groups.setdefault(key, []).append(tor.hash)
-        self._group_sizes.setdefault(key, {})[tor.hash] = file_map
-        self._group_member_to_key[tor.hash] = key
+        self.store.groups.setdefault(key, []).append(tor.hash)
+        self.store.group_sizes.setdefault(key, {})[tor.hash] = file_map
+        self.store.member_to_key[tor.hash] = key
         # 文件大小一致性: 仅新增/重归组时检查(文件列表轻易不变, 无需每轮检查)
-        self._check_size_consistency(key, by_hash, dry_run)
+        self._check_size_consistency(key, dry_run)
 
-    def _check_size_consistency(self, key, by_hash: Dict[str, Any], dry_run: bool):
-        """新增种子归组时检查组内文件大小一致性: 组内 {路径: 大小} 不一致 -> 警告 + 整组暂停(不加标签)"""
-        members = self._groups[key]
+    def _check_size_consistency(self, key, dry_run: bool):
+        """新增种子归组时检查组内文件大小一致性: 组内 {路径: 大小} 不一致 -> 警告 + 整组暂停(不加标签) """
+        members = self.store.groups[key]
         if len(members) <= 1:
             return
-        tos = [by_hash[h] for h in members if h in by_hash]
-        if not self._size_mismatch(tos, self._group_sizes[key]):
+        tos = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
+        if not self._size_mismatch(tos, self.store.group_sizes[key]):
             return
         desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
         logger.warning(f"辅种组文件大小不一致({len(tos)}个种子), 暂停整组: {desc}")
@@ -149,16 +149,16 @@ class GroupingMixin:
         返回移除后组内仍有剩余成员的组 key(无则 None); 不触发缺文件扫描,
         重归组(_assign_to_group)与删除(_handle_removed_torrents)共用, 是否扫描由调用方决定。
         """
-        key = self._group_member_to_key.pop(torrent_hash, None)
+        key = self.store.member_to_key.pop(torrent_hash, None)
         if key is None:
             return None
-        members = self._groups.get(key, [])
+        members = self.store.groups.get(key, [])
         if torrent_hash in members:
             members.remove(torrent_hash)
-        self._group_sizes.get(key, {}).pop(torrent_hash, None)
+        self.store.group_sizes.get(key, {}).pop(torrent_hash, None)
         if not members:
-            del self._groups[key]
-            self._group_sizes.pop(key, None)
+            del self.store.groups[key]
+            self.store.group_sizes.pop(key, None)
             return None
         return key
 
@@ -228,22 +228,21 @@ class GroupingMixin:
 
     # ---------- 下载冲突检查(每轮, 分组 enabled 时) ----------
 
-    def _check_download_conflicts(self, by_hash: Dict[str, Any], dry_run: bool):
+    def _check_download_conflicts(self, dry_run: bool):
         """下载冲突检查: 同组两个及以上种子同时下载 / 已完成与下载中并存 -> 警告 + 整组暂停
 
         设计(想法.md):
           - 同组中两个及以上的种子同时下载 -> 暂停并发出警告
           - 同组中有已完成的种子和正在下载的种子 -> 暂停并发出警告
-        去重: 内存 set 记录 (组key, 冲突类型), 冲突持续不重复暂停(暂停幂等), 冲突消除后清除;
-        触发: _refresh_torrents 每轮调用(分组 enabled 时), 状态快照在调用前已更新。
+        去重: store.download_conflict_warned 记录 (组key, 冲突类型), 冲突持续不重复暂停
+        (暂停幂等), 冲突消除后清除; 触发: _refresh_torrents 每轮调用(分组 enabled 时),
+        状态快照在调用前已更新。
         """
-        if not hasattr(self, "_download_conflict_warned"):
-            self._download_conflict_warned: set = set()
-        warned = self._download_conflict_warned
+        warned = self.store.download_conflict_warned
         # 1. 扫描各组统计下载中/已完成成员
         active = set()
-        for key, members in self._groups.items():
-            tos = [by_hash[h] for h in members if h in by_hash]
+        for key, members in self.store.groups.items():
+            tos = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             n_dl = sum(1 for t in tos if self._is_downloading(t))
             n_done = sum(1 for t in tos if t.amount_left <= 0)
             if n_dl >= 2:
@@ -258,7 +257,7 @@ class GroupingMixin:
         for key, kind in active:
             if (key, kind) in warned:
                 continue
-            tos = [by_hash[h] for h in self._groups[key] if h in by_hash]
+            tos = [self.store.by_hash[h] for h in self.store.groups[key] if h in self.store.by_hash]
             desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
             if kind == "multi-dl":
                 logger.warning(f"辅种组存在多个种子同时下载({len(tos)}个), 暂停整组: {desc}")
@@ -273,23 +272,18 @@ class GroupingMixin:
 
     def _group_members(self, torrent_hash: str) -> list:
         """种子所属组全部成员 hash 列表; 未归组/分组未启用 -> [自身] 单种子(无参考)"""
-        key = self._group_member_to_key.get(torrent_hash)
-        if key is None:
-            return [torrent_hash]
-        return list(self._groups.get(key, [torrent_hash]))
+        return self.store.group_members(torrent_hash)
 
     def _group_by_hash(self) -> Dict[str, Any]:
-        """最近一轮种子快照的 hash -> 种子 映射(checking 动作用, 无需额外拉取)"""
-        return {t.hash: t for t in getattr(self, "_snapshot", []) or []}
+        """最近一轮种子快照的 hash -> 种子 映射(checking 动作用, 无需额外拉取) """
+        return self.store.by_hash
 
-    def _group_has_downloading(self, members: list, by_hash: Dict[str, Any] = None) -> bool:
-        """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检)"""
-        if by_hash is None:
-            by_hash = self._group_by_hash()
+    def _group_has_downloading(self, members: list) -> bool:
+        """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检) """
+        by_hash = self.store.by_hash
         return any(self._is_downloading(by_hash[h]) for h in members if h in by_hash)
 
-    def _group_reference_candidates(self, members: list, by_hash: Dict[str, Any] = None) -> list:
-        """组内已完成且正在上传(做种)的成员列表, 作为参考种子候选(想法2: filelist 参考定义)"""
-        if by_hash is None:
-            by_hash = self._group_by_hash()
+    def _group_reference_candidates(self, members: list) -> list:
+        """组内已完成且正在上传(做种)的成员列表, 作为参考种子候选(想法2: filelist 参考定义) """
+        by_hash = self.store.by_hash
         return [by_hash[h] for h in members if h in by_hash and self._is_uploading(by_hash[h])]

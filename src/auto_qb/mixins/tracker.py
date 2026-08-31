@@ -1,17 +1,20 @@
 """tracker 匹配 mixin
 
-由 QbManager 组合(mixin), 依赖实例属性: client/config。
+由 QbManager 组合(mixin), 依赖实例属性: client/config/store。
 """
-from typing import Any, Optional
-from qbittorrentapi import Client, TorrentDictionary
+import logging
+from typing import Optional
+from qbittorrentapi import TorrentDictionary
 
 from ..config import TrackerConfig, Config
+from ..torrents import TorrentRecord
+
+logger = logging.getLogger(__name__)
 
 
 class TrackerMixin:
     """tracker 配置匹配"""
 
-    client: Optional[Client]
     config: Config
 
     def _match_tracker(self, tor: TorrentDictionary) -> Optional[TrackerConfig]:
@@ -19,8 +22,11 @@ class TrackerMixin:
         根据种子的 tracker URLs 匹配配置中的 tracker
         返回第一个匹配的 TrackerConfig，若无匹配则返回 None
         """
-        trackers_info = self.client.torrents_trackers(tor.hash)
-        tracker_urls = [t["url"] for t in trackers_info if t.get("url")]
+        try:
+            tracker_urls = self.store.tracker_urls(tor.hash)  # 惰性缓存, 不重复拉取
+        except Exception as e:
+            logger.debug(f"获取 tracker 列表失败({tor.hash}): {e}")
+            return None
 
         for conf in self.config.trackers.values():
             for domain in conf.domains:

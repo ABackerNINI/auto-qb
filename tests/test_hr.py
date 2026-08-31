@@ -11,7 +11,7 @@ import tempfile
 
 from auto_qb.qbmanager import QbManager
 from auto_qb.taskqueue import Task
-from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_manager
+from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
 
 
 def test_builtin_hr_category_auto_update_from_state():
@@ -23,6 +23,7 @@ def test_builtin_hr_category_auto_update_from_state():
         mgr.client = client
         tor = FakeTorrent(downloaded=100 * 1024**2, category="")
         client.torrents["HASH123"] = tor
+        seed_store(mgr)
         task = Task(
             "internal",
             "maintenance",
@@ -41,6 +42,7 @@ def test_builtin_hr_category_auto_update_from_state():
         mgr2.client = client2
         tor.category = "!!HR3D!!"
         client2.torrents["HASH123"] = tor
+        seed_store(mgr2)
         mgr2.config.trackers["HHan"].hr = _hr_rule(add_category="NEW-HR")
         task2 = Task(
             "internal",
@@ -76,6 +78,7 @@ def test_tracker_hr_overrides_global():
         # seeding_time 未达 required+extra: 只触发 add_category(站点覆盖), 不触发 satisfied 分类
         tor = FakeTorrent(downloaded=100 * 1024**2, seeding_time=100, ratio=1.0)
         client.torrents["HASH123"] = tor
+        seed_store(mgr)
 
         task = Task(
             "internal",
@@ -100,6 +103,7 @@ def test_tracker_hr_overrides_global():
         mgr2.client = client2
         tor2 = FakeTorrent(downloaded=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10, ratio=1.0)
         client2.torrents["HASH123"] = tor2
+        seed_store(mgr2)
         mgr2._handle_maintenance(task, dry_run=False)
         assert client2.category == "SITE-DONE!!", f"站点 satisfied 分类覆盖失败: {client2.category}"
 
@@ -157,6 +161,7 @@ def test_tracker_remove_similar_tags_override():
         # 已有类似标签 "hhan"(小写), 站点 tags 为 "HHan"
         tor = FakeTorrent(tags="hhan,other")
         client.torrents["HASH123"] = tor
+        seed_store(mgr)
 
         task = Task(
             "internal",

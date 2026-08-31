@@ -6,7 +6,7 @@ import yaml, logging
 
 from .utils import parse_bool, parse_hr_condition, parse_speed, parse_time, parse_fsize
 
-DEFAULT_MAIN_TICK = 2.0
+DEFAULT_MAIN_TICK = "2s"
 DEFAULT_MAX_TASKS_PER_TICK = 20
 
 DEFAULT_CONFIG_FILE = "config.yml"
@@ -151,7 +151,7 @@ def load_logging_config(spec: dict) -> LoggingConfig:
 def load_qbittorrent_config(spec: dict) -> QbittorrentConfig:
     return QbittorrentConfig(
         host=spec.get('host', '127.0.0.1'),
-        port=spec.get('port', ),
+        port=int(spec.get('port', 8080)),
         username=spec.get('username', ''),
         password=spec.get('password', ''),
     )

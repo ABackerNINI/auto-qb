@@ -1,6 +1,6 @@
 """标签/分类/HR 辅助 mixin
 
-由 QbManager 组合(mixin), 依赖实例属性: client/logger/config。
+由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/state/store。
 """
 import logging
 from typing import List, Optional
@@ -65,18 +65,18 @@ class TagsMixin:
             return True
         return False
 
-    def _add_episode_tags(self, torrent_hash: str, by_hash: dict, dry_run: bool):
+    def _add_episode_tags(self, torrent_hash: str, dry_run: bool):
         """种子添加时自动添加集数标签(如 E1-5)
 
         仅种子添加时触发(由 QbManager 在 added 循环调用), 非周期任务。
-        名称已含集数标记(S01E01/EP01/第1集等) -> 跳过; 否则拉一次文件列表解析集数,
+        名称已含集数标记(S01E01/EP01/第1集等) -> 跳过; 否则从文件列表解析集数(走 store 惰性缓存),
         如 01.mkv~05.mkv -> 添加 'E1-5'。解析不到集数(电影/合集等)则不加标签。
         """
-        tor = by_hash.get(torrent_hash)
-        # if tor is None or episodes.name_has_episode_marker(tor.name or ""):
-        #     return  # 名称已含集数标记, 无需再解析
+        tor = self.store.get(torrent_hash)
+        if tor is None:
+            return
         try:
-            files = self.client.torrents_files(torrent_hash)
+            files = self.store.files(torrent_hash)
         except Exception as e:
             logger.debug(f"集数标签获取文件列表失败({torrent_hash}): {e}")
             return
@@ -142,11 +142,12 @@ class TagsMixin:
             return True
 
     def _create_category_if_not_exists(self, category: str, dry_run: bool):
-        """如果分类不存在则创建分类"""
-        current_categories = self.client.torrents_categories()
+        """如果分类不存在则创建分类(全部分类走 store 惰性缓存, 创建后失效) """
+        current_categories = self.store.all_categories()
         if category not in current_categories:  # 分类不存在
             if not dry_run:
                 self.client.torrents_create_category(name=category)
+                self.store.invalidate_categories()
             logger.info(f"Created category '{category}'")
 
     # ---------- HR ----------
@@ -217,7 +218,7 @@ class TagsMixin:
         if not patterns:
             return True
         try:
-            all_tags = self.client.torrents_tags() or []
+            all_tags = self.store.all_tags()  # 惰性缓存
         except Exception as e:
             logger.error(f"获取标签列表失败: {e}")
             return True
@@ -226,6 +227,7 @@ class TagsMixin:
             return True
         if not dry_run:
             self.client.torrents_delete_tags(tags=matched)
+            self.store.invalidate_tags()
         logger.info(f"彻底删除标签: {matched}")
         return True
 
@@ -238,24 +240,22 @@ class TagsMixin:
         if not patterns:
             return True
         try:
-            all_tags = set(self.client.torrents_tags() or [])
+            all_tags = self.store.all_tags()  # 惰性缓存
         except Exception as e:
             logger.error(f"获取标签列表失败: {e}")
             return True
         if not all_tags:
             return True
 
-        # 对满足筛选条件的标签查询种子数, 如果为0则删除
-        matched = []
-        for tag in all_tags:
-            if utils.match_tag_patterns(tag, patterns):
-                if len(self.client.torrents.info(tag=tag)) == 0:
-                    matched.append(tag)
+        # 从快照聚合标签使用情况(替代 torrents.info(tag=) 逐个查询), 使用数为 0 则删除
+        used = self.store.tag_usage()
+        matched = [tag for tag in all_tags if utils.match_tag_patterns(tag, patterns) and used.get(tag, 0) == 0]
 
         if not matched:
             return True
         if not dry_run:
             self.client.torrents_delete_tags(tags=matched)
+            self.store.invalidate_tags()
         logger.info(f"彻底删除无种子的标签: {matched}")
 
         return True

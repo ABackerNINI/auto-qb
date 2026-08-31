@@ -102,8 +102,9 @@ class AddCategoryAction(BaseAction):
             return ActionResult.skip(f"已有分类 {old_category}, 不覆盖")
         if not ctx.dry_run:
             try:
-                if category not in (ctx.client.torrents_categories() or {}):
+                if category not in ctx.manager.store.all_categories():  # 走 store 惰性缓存
                     ctx.client.torrents_create_category(name=category)
+                    ctx.manager.store.invalidate_categories()
             except Exception:
                 pass
             ctx.client.torrents_set_category(category=category, torrent_hashes=ctx.torrent.hash)
@@ -259,7 +260,7 @@ class CheckAction(BaseAction):
         # 内存 verified_references 并集: 历史 full-checking 通过的种子也可作参考(重启后重新积累)
         by_hash = ctx.manager._group_by_hash()
         own = ctx.torrent.hash
-        for h in getattr(ctx.manager, "verified_references", set()):
+        for h in ctx.manager.store.verified_references:
             if h in members and h != own and h in by_hash:
                 refs.append(by_hash[h])
         # 去重(按 hash), 过滤无效
@@ -312,7 +313,7 @@ class CheckAction(BaseAction):
                 return
             logger.info(f"规则: {rule_name} | 校验完成: {torrent_hash}")
             # 晋升参考(仅内存, 不写 state_file): 校验通过说明文件与元数据一致, 可作同组参考
-            manager.verified_references.add(torrent_hash)
+            manager.store.verified_references.add(torrent_hash)
             if auto_start:
                 client.torrents_start(torrent_hashes=torrent_hash)
                 logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")

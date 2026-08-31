@@ -35,7 +35,7 @@ from unittest import mock
 
 from auto_qb.config import GroupingConfig
 from auto_qb.qbmanager import QbManager
-from helpers import FakeClient, FakeConfig, FakeTorrent
+from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
 
 
 def _fake_file(name, size):
@@ -45,7 +45,7 @@ def _fake_file(name, size):
 def _group_cfg(state_file, enabled=True):
     cfg = FakeConfig()
     cfg.state_file = state_file
-    cfg.grouping = GroupingConfig(enabled=enabled, interval=300, missing_tag="MISSING")
+    cfg.grouping = GroupingConfig(enabled=enabled, missing_tag="MISSING")
     return cfg
 
 
@@ -100,7 +100,7 @@ def test_grouping_missing_files_pauses_group():
 
         assert client.calls.count(("stop", None)) == 1, f"整组应暂停一次: {client.calls}"
         assert "MISSING" in client.tags, f"丢失应添加标签: {client.tags}"
-        assert mgr._group_state_snapshot.get("H1") == "pausedUP", f"状态快照应更新: {mgr._group_state_snapshot}"
+        assert mgr.store.state_snapshot.get("H1") == "pausedUP", f"状态快照应更新: {mgr.store.state_snapshot}"
 
 
 def test_grouping_state_change_triggers_check():
@@ -162,8 +162,8 @@ def test_grouping_deleted_torrent_triggers_check():
         del client.torrents["H2"]
         mgr._refresh_torrents()
 
-        key = next(iter(mgr._groups))
-        assert mgr._groups[key] == ["H1"], f"删除后组内成员: {mgr._groups}"
+        key = next(iter(mgr.store.groups))
+        assert mgr.store.groups[key] == ["H1"], f"删除后组内成员: {mgr.store.groups}"
         assert client.calls.count(("stop", None)) == 1, f"删除种子应立即触发整组暂停: {client.calls}"
         assert "MISSING" in client.tags, f"文件丢失应加标签: {client.tags}"
 
@@ -192,7 +192,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(hash="H1", name="T1")
-        mgr._snapshot = [tor]
+        seed_store(mgr, [tor])
 
         mgr._create_torrent_tasks("H1")
         names = {t.name for t in mgr.task_queue._fast}
@@ -203,7 +203,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         cfg2.check_missing_files = True
         mgr2 = QbManager("", config=cfg2)
         mgr2.client = FakeClient()
-        mgr2._snapshot = [tor]
+        seed_store(mgr2, [tor])
         mgr2._create_torrent_tasks("H1")
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "missing_files" not in names2, f"未启用分组也不应创建逐种子检查: {names2}"
@@ -222,9 +222,9 @@ def test_grouping_incremental_on_add():
         client.torrents["H1"] = t1
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()
-        assert len(mgr._groups) == 1, f"新种子应自动归组: {mgr._groups}"
-        key = next(iter(mgr._groups))
-        assert mgr._groups[key] == ["H1"], f"组内成员: {mgr._groups[key]}"
+        assert len(mgr.store.groups) == 1, f"新种子应自动归组: {mgr.store.groups}"
+        key = next(iter(mgr.store.groups))
+        assert mgr.store.groups[key] == ["H1"], f"组内成员: {mgr.store.groups[key]}"
         assert key == ("R:/Downloads", ("movie.mkv", )), f"分组键: {key}"
 
         # 再新增 H2(同名同大小) -> 归入同一组
@@ -232,8 +232,8 @@ def test_grouping_incremental_on_add():
         client.torrents["H2"] = t2
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()
-        assert len(mgr._groups) == 1, f"H2 应归入同组: {mgr._groups}"
-        assert set(mgr._groups[key]) == {"H1", "H2"}, f"组内成员: {mgr._groups[key]}"
+        assert len(mgr.store.groups) == 1, f"H2 应归入同组: {mgr.store.groups}"
+        assert set(mgr.store.groups[key]) == {"H1", "H2"}, f"组内成员: {mgr.store.groups[key]}"
 
 
 def test_grouping_removed_from_groups():
@@ -251,20 +251,20 @@ def test_grouping_removed_from_groups():
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()
-        key = next(iter(mgr._groups))
-        assert set(mgr._groups[key]) == {"H1", "H2"}
+        key = next(iter(mgr.store.groups))
+        assert set(mgr.store.groups[key]) == {"H1", "H2"}
 
         # 删除 H2 -> 组内只剩 H1
         del client.torrents["H2"]
         mgr._refresh_torrents()
-        assert mgr._groups[key] == ["H1"], f"删除后组内成员: {mgr._groups[key]}"
-        assert "H2" not in mgr._group_sizes[key], f"删除后应清掉文件大小映射: {mgr._group_sizes}"
+        assert mgr.store.groups[key] == ["H1"], f"删除后组内成员: {mgr.store.groups[key]}"
+        assert "H2" not in mgr.store.group_sizes[key], f"删除后应清掉文件大小映射: {mgr.store.group_sizes}"
 
         # 删除 H1 -> 空组删除
         del client.torrents["H1"]
         mgr._refresh_torrents()
-        assert mgr._groups == {}, f"空组应删除: {mgr._groups}"
-        assert mgr._group_sizes == {}, f"空组大小映射应删除: {mgr._group_sizes}"
+        assert mgr.store.groups == {}, f"空组应删除: {mgr.store.groups}"
+        assert mgr.store.group_sizes == {}, f"空组大小映射应删除: {mgr.store.group_sizes}"
 
 
 def test_grouping_save_path_change_triggers_check():
@@ -286,15 +286,15 @@ def test_grouping_save_path_change_triggers_check():
         assert client.calls == [], f"首轮归组不应触发扫描: {client.calls}"
         key_a = ("R:/DownloadsA", ("movie.mkv", ))
         key_b = ("R:/DownloadsB", ("movie.mkv", ))
-        assert set(mgr._groups[key_a]) == {"H1", "H2"}
-        assert set(mgr._groups[key_b]) == {"H3"}
+        assert set(mgr.store.groups[key_a]) == {"H1", "H2"}
+        assert set(mgr.store.groups[key_b]) == {"H3"}
 
         # H1 保存路径改为 DownloadsB -> 原组 A 剩 H2 触发扫描; 新组 B 有 H1+H3 也触发扫描
         t1.save_path = r"R:\DownloadsB"
         mgr._refresh_torrents()
 
-        assert set(mgr._groups[key_a]) == {"H2"}, f"H1 应移出原组: {mgr._groups[key_a]}"
-        assert set(mgr._groups[key_b]) == {"H1", "H3"}, f"H1 应重归新组: {mgr._groups[key_b]}"
+        assert set(mgr.store.groups[key_a]) == {"H2"}, f"H1 应移出原组: {mgr.store.groups[key_a]}"
+        assert set(mgr.store.groups[key_b]) == {"H1", "H3"}, f"H1 应重归新组: {mgr.store.groups[key_b]}"
         assert client.calls.count(("stop", None)) == 2, f"原组与新组各扫描一次并整组暂停: {client.calls}"
         assert client.calls.count(("add_tags", ["MISSING"])) == 3, f"三个成员应分别加标签: {client.calls}"
 
@@ -320,8 +320,8 @@ def test_grouping_save_path_change_new_group_alone():
         t1.save_path = r"R:\DownloadsB"
         mgr._refresh_torrents()
 
-        assert set(mgr._groups[("R:/DownloadsA", ("movie.mkv", ))]) == {"H2"}
-        assert mgr._groups[("R:/DownloadsB", ("movie.mkv", ))] == ["H1"]
+        assert set(mgr.store.groups[("R:/DownloadsA", ("movie.mkv", ))]) == {"H2"}
+        assert mgr.store.groups[("R:/DownloadsB", ("movie.mkv", ))] == ["H1"]
         assert client.calls.count(("stop", None)) == 1, f"仅原组扫描暂停一次: {client.calls}"
         assert client.calls.count(("add_tags", ["MISSING"])) == 1, f"仅 H2 加标签: {client.calls}"
 
@@ -341,7 +341,7 @@ def test_grouping_no_full_files_scan():
         # 归组(首轮视为新增, 增量归组): 仅在此处拉一次文件列表
         mgr._refresh_torrents()
         assert client.files_calls == 1, f"归组应只拉一次文件列表: {client.files_calls}"
-        assert len(mgr._groups) == 1, f"首轮应完成归组: {mgr._groups}"
+        assert len(mgr.store.groups) == 1, f"首轮应完成归组: {mgr.store.groups}"
 
         # 后续刷新: 状态不变 -> 不触发扫描, 也不拉取文件列表
         mgr._refresh_torrents()
@@ -373,32 +373,32 @@ def test_group_members_not_in_group():
 def test_group_members_in_group():
     """_group_members: 已归组 -> 返回全部成员 hash"""
     mgr = QbManager("", config=_group_cfg("state.json"))
-    mgr._group_member_to_key = {"H1": "g1", "H2": "g1"}
-    mgr._groups = {"g1": ["H1", "H2"]}
+    mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
+    mgr.store.groups = {"g1": ["H1", "H2"]}
     assert mgr._group_members("H1") == ["H1", "H2"]
 
 
 def test_leave_group_removes():
     """_leave_group: 移出成员, 组内仍有剩余 -> 返回组 key"""
     mgr = QbManager("", config=_group_cfg("state.json"))
-    mgr._group_member_to_key = {"H1": "g1", "H2": "g1"}
-    mgr._groups = {"g1": ["H1", "H2"]}
-    mgr._group_sizes = {"g1": {"H1": {}, "H2": {}}}
+    mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
+    mgr.store.groups = {"g1": ["H1", "H2"]}
+    mgr.store.group_sizes = {"g1": {"H1": {}, "H2": {}}}
     assert mgr._leave_group("H1") == "g1"
-    assert mgr._groups["g1"] == ["H2"]
-    assert "H1" not in mgr._group_member_to_key
-    assert "H1" not in mgr._group_sizes["g1"]
+    assert mgr.store.groups["g1"] == ["H2"]
+    assert "H1" not in mgr.store.member_to_key
+    assert "H1" not in mgr.store.group_sizes["g1"]
 
 
 def test_leave_group_empty_deletes():
     """_leave_group: 组空 -> 删除整组返回 None"""
     mgr = QbManager("", config=_group_cfg("state.json"))
-    mgr._group_member_to_key = {"H1": "g1"}
-    mgr._groups = {"g1": ["H1"]}
-    mgr._group_sizes = {"g1": {"H1": {}}}
+    mgr.store.member_to_key = {"H1": "g1"}
+    mgr.store.groups = {"g1": ["H1"]}
+    mgr.store.group_sizes = {"g1": {"H1": {}}}
     assert mgr._leave_group("H1") is None
-    assert mgr._groups == {}
-    assert mgr._group_sizes == {}
+    assert mgr.store.groups == {}
+    assert mgr.store.group_sizes == {}
 
 
 def test_leave_group_not_in_group():
@@ -408,24 +408,24 @@ def test_leave_group_not_in_group():
 
 
 def test_group_has_downloading():
-    """_group_has_downloading: 组内存在活跃下载成员 -> True"""
+    """_group_has_downloading: 组内存在活跃下载成员 -> True(成员状态读 store 快照)"""
     mgr = QbManager("", config=_group_cfg("state.json"))
-    by_hash = {
-        "H1": FakeTorrent(hash="H1", state="stalledDL"),
-        "H2": FakeTorrent(hash="H2", state="stalledUP"),
-    }
-    assert mgr._group_has_downloading(["H1", "H2"], by_hash) is True
-    assert mgr._group_has_downloading(["H2"], by_hash) is False
+    seed_store(mgr, [
+        FakeTorrent(hash="H1", state="stalledDL"),
+        FakeTorrent(hash="H2", state="stalledUP"),
+    ])
+    assert mgr._group_has_downloading(["H1", "H2"]) is True
+    assert mgr._group_has_downloading(["H2"]) is False
 
 
 def test_group_reference_candidates():
-    """_group_reference_candidates: 返回组内正在做种的成员(参考种子候选)"""
+    """_group_reference_candidates: 返回组内正在做种的成员(参考种子候选, 读 store 快照)"""
     mgr = QbManager("", config=_group_cfg("state.json"))
-    by_hash = {
-        "H1": FakeTorrent(hash="H1", state="stalledUP"),
-        "H2": FakeTorrent(hash="H2", state="pausedUP"),
-    }
-    cands = mgr._group_reference_candidates(["H1", "H2"], by_hash)
+    seed_store(mgr, [
+        FakeTorrent(hash="H1", state="stalledUP"),
+        FakeTorrent(hash="H2", state="pausedUP"),
+    ])
+    cands = mgr._group_reference_candidates(["H1", "H2"])
     assert [t.hash for t in cands] == ["H1"]
 
 
@@ -438,22 +438,23 @@ def test_grouping_save_path_change_no_cache():
         mgr.client = client
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsB")
-        mgr._group_member_to_key["H1"] = (r"R:\DownloadsA", ("movie.mkv", ))
-        mgr._group_sizes = {}  # 无缓存映射
-        mgr._handle_save_path_changes({"H1": t1}, dry_run=False)
+        seed_store(mgr, [t1])
+        mgr.store.member_to_key["H1"] = (r"R:\DownloadsA", ("movie.mkv", ))
+        mgr.store.group_sizes = {}  # 无缓存映射
+        mgr._handle_save_path_changes(dry_run=False)
         # 无旧映射 -> 不重归组也不触发扫描
         assert client.calls == []
-        assert "H1" not in mgr._groups
+        assert "H1" not in mgr.store.groups
 
 
 def test_assign_new_torrent_missing():
-    """_assign_new_torrent: 哈希不在 by_hash -> 直接返回"""
+    """_assign_new_torrent: 哈希不在 store 快照 -> 直接返回"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file))
         client = FakeClient()
         mgr.client = client
-        mgr._assign_new_torrent("NOPE", {}, dry_run=False)
+        mgr._assign_new_torrent("NOPE", dry_run=False)
         assert client.files_calls == 0, "tor 不存在不应拉文件列表"
 
 
@@ -470,9 +471,10 @@ def test_assign_new_torrent_files_error():
 
         client.torrents_files = boom
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
-        mgr._assign_new_torrent("H1", {"H1": t1}, dry_run=False)
+        seed_store(mgr, [t1])
+        mgr._assign_new_torrent("H1", dry_run=False)
         assert client.calls == []
-        assert "H1" not in mgr._group_member_to_key
+        assert "H1" not in mgr.store.member_to_key
 
 
 def test_assign_to_group_empty_map():
@@ -483,8 +485,8 @@ def test_assign_to_group_empty_map():
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
-        mgr._assign_to_group(t1, {}, {"H1": t1}, dry_run=False)
-        assert mgr._groups == {}
+        mgr._assign_to_group(t1, {}, dry_run=False)
+        assert mgr.store.groups == {}
         assert client.calls == []
 
 

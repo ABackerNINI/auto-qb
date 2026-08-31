@@ -38,7 +38,7 @@ import tempfile
 
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import AddTagsAction
-from helpers import FakeClient, FakeConfig, FakeTorrent, _hr_rule, make_ctx, make_manager
+from helpers import FakeClient, FakeConfig, FakeTorrent, _hr_rule, make_ctx, make_manager, seed_store
 
 
 def _mgr(state_file):
@@ -287,7 +287,8 @@ def test_add_episode_tags_files_error():
             raise RuntimeError("api down")
 
         client.torrents_files = boom
-        mgr._add_episode_tags("H1", {"H1": FakeTorrent()}, dry_run=False)
+        seed_store(mgr, [FakeTorrent(hash="H1", tags="")])
+        mgr._add_episode_tags("H1", dry_run=False)
         assert client.calls == []
 
 
@@ -297,8 +298,9 @@ def test_add_episode_tags_no_episodes():
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        tor = FakeTorrent(tags="")
-        mgr._add_episode_tags("H1", {"H1": tor}, dry_run=False)
+        tor = FakeTorrent(hash="H1", tags="")
+        seed_store(mgr, [tor])
+        mgr._add_episode_tags("H1", dry_run=False)
         assert client.calls == [], "无集数不应加标签"
 
 
@@ -434,6 +436,6 @@ def test_handle_delete_tags_if_has_no_torrents_no_match():
         client = FakeClient()
         mgr.client = client
         client.tags = {"orphan-1"}
-        client.torrents["H1"] = {"tags": "orphan-1"}
+        seed_store(mgr, [FakeTorrent(hash="H1", tags="orphan-1")])
         assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert client.calls == [], "有种子使用时不删除"

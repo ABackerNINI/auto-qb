@@ -32,7 +32,12 @@ class RuleEngineMixin:
     # ---------- 规则: 加载 / 状态持久化 ----------
 
     def _load_rules(self):
-        """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即本对象"""
+        """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即本对象
+
+        幂等: 重复调用先清空(init 与 run 都会调用)。
+        """
+        self.rules = []
+        self.enabled_rules = []
         rules_config = getattr(self.config, "rules_config", {}) or {}
         for group_name, group in rules_config.items():
             if not isinstance(group, dict):
@@ -101,7 +106,7 @@ class RuleEngineMixin:
     def _rules_for_torrent(self, tor) -> list:
         """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)"""
         try:
-            urls = [t["url"] for t in self.client.torrents_trackers(tor.hash) if t.get("url")]
+            urls = self.store.tracker_urls(tor.hash)  # 惰性缓存, 不重复拉取
         except Exception as e:
             logger.debug(f"获取种子 tracker 失败({tor.hash}): {e}")
             urls = []

@@ -102,7 +102,15 @@ class RuleContext:
 
     def tracker_urls(self) -> List[str]:
         if self._tracker_urls is None:
-            self._tracker_urls = [t["url"] for t in self.client.torrents_trackers(self.torrent.hash) if t.get("url")]
+            store = getattr(self.manager, "store", None)
+            if store is not None and store.client is not None and self.torrent.hash in store:
+                # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
+                self._tracker_urls = store.tracker_urls(self.torrent.hash)
+            else:
+                # 外部传入种子(process_torrent 兼容入口): 直接拉取
+                self._tracker_urls = [
+                    t["url"] for t in self.client.torrents_trackers(self.torrent.hash) if t.get("url")
+                ]
         return self._tracker_urls
 
     def matched_tracker_confs(self) -> List[Any]:
@@ -129,7 +137,13 @@ class RuleContext:
 
     def files(self) -> List[Any]:
         if self._files is None:
-            self._files = self.client.torrents_files(self.torrent.hash)
+            store = getattr(self.manager, "store", None)
+            if store is not None and store.client is not None and self.torrent.hash in store:
+                # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
+                self._files = store.files(self.torrent.hash)
+            else:
+                # 外部传入种子(process_torrent 兼容入口): 直接拉取
+                self._files = self.client.torrents_files(self.torrent.hash)
         return self._files
 
     def check_hr_condition(self, conf) -> bool:

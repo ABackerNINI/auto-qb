@@ -37,7 +37,7 @@ from auto_qb.rules.actions import (
     StopAction,
     UploadSpeedLimitAction,
 )
-from helpers import FakeClient, FakeTorrent, make_ctx, make_manager
+from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
 
 
 def _seg(mode, auto_start=True):
@@ -207,12 +207,12 @@ def _check_action(basic_check="filelist", with_seg=None, without_seg=None, custo
 
 
 def _grouped_mgr(state_file, hashes):
-    """构造已归组 manager: _groups/_group_member_to_key/_snapshot 齐全"""
+    """构造已归组 manager: store 分组结构 + 快照齐全"""
     mgr = make_manager(state_file)
-    mgr._groups[("KEY", )] = list(hashes)
+    mgr.store.groups[("KEY", )] = list(hashes)
     for h in hashes:
-        mgr._group_member_to_key[h] = ("KEY", )
-    mgr._snapshot = list(hashes.values())
+        mgr.store.member_to_key[h] = ("KEY", )
+    mgr.store.apply(list(hashes.values()))
     return mgr
 
 
@@ -243,7 +243,7 @@ def test_find_reference_dedup():
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
         mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
-        mgr.verified_references = {"H2"}
+        mgr.store.verified_references = {"H2"}
         client = FakeClient()
         ctx = make_ctx(mgr, t1, client)
         action = _check_action(basic_check="filelist")
@@ -267,7 +267,7 @@ def _skip_ctx(state_file, **client_patches):
     """构造 skip-checking 执行环境: 未归组 + 单种子快照 + 自定义 client"""
     mgr = make_manager(state_file)
     tor = FakeTorrent(hash="HASH123", name="T1", state="stalledUP", tags="")
-    mgr._snapshot = [tor]
+    seed_store(mgr, [tor])
     client = FakeClient()
     client.torrents["HASH123"] = {"state": "pausedUP"}  # 重加后出现
     for attr, fn in client_patches.items():

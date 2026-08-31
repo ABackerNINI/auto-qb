@@ -48,7 +48,7 @@ from unittest.mock import patch
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import CheckAction
 from auto_qb.taskqueue import TaskQueue
-from helpers import FakeClient, FakeConfig, FakeTorrent
+from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
 
 
 # ---------- 增强模拟客户端(piece hashes API / recheck 失败注入) ----------
@@ -125,10 +125,10 @@ def make_mgr(cfg, with_tq=False):
 
 
 def inject_group(mgr, *hashes, key=("KEY", )):
-    """把 hashes 注入同一组(绕过归组流程, 直接构造内部结构)"""
-    mgr._groups[key] = list(hashes)
+    """把 hashes 注入同一组(绕过归组流程, 直接构造 store 分组结构) """
+    mgr.store.groups[key] = list(hashes)
     for h in hashes:
-        mgr._group_member_to_key[h] = key
+        mgr.store.member_to_key[h] = key
 
 
 def make_target(state="stalledUP", hash="HASH123"):
@@ -290,14 +290,16 @@ def test_download_conflict_multi_dl():
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
+    seed_store(
+        mgr, [
+            FakeTorrent(hash="D1", name="D1", state="downloading"),
+            FakeTorrent(hash="D2", name="D2", state="downloading"),
+        ]
+    )
     inject_group(mgr, "D1", "D2")
-    by_hash = {
-        "D1": FakeTorrent(hash="D1", name="D1", state="downloading"),
-        "D2": FakeTorrent(hash="D2", name="D2", state="downloading"),
-    }
-    mgr._check_download_conflicts(by_hash, dry_run=True)
+    mgr._check_download_conflicts(dry_run=True)
     assert ("stop", None) not in client.calls, f"dry-run 不应暂停: {client.calls}"
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"整组应暂停一次: {client.calls}"
 
 
@@ -306,12 +308,14 @@ def test_download_conflict_mixed():
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
+    seed_store(
+        mgr, [
+            FakeTorrent(hash="U1", name="U1", state="stalledUP", amount_left=0),
+            FakeTorrent(hash="D1", name="D1", state="downloading"),
+        ]
+    )
     inject_group(mgr, "U1", "D1")
-    by_hash = {
-        "U1": FakeTorrent(hash="U1", name="U1", state="stalledUP", amount_left=0),
-        "D1": FakeTorrent(hash="D1", name="D1", state="downloading"),
-    }
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"混合并存应整组暂停: {client.calls}"
 
 
@@ -320,14 +324,16 @@ def test_download_conflict_no_repeat():
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
+    seed_store(
+        mgr, [
+            FakeTorrent(hash="D1", name="D1", state="downloading"),
+            FakeTorrent(hash="D2", name="D2", state="downloading"),
+        ]
+    )
     inject_group(mgr, "D1", "D2")
-    by_hash = {
-        "D1": FakeTorrent(hash="D1", name="D1", state="downloading"),
-        "D2": FakeTorrent(hash="D2", name="D2", state="downloading"),
-    }
-    mgr._check_download_conflicts(by_hash, dry_run=False)
-    mgr._check_download_conflicts(by_hash, dry_run=False)
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"冲突持续不应重复暂停: {client.calls}"
 
 
@@ -336,26 +342,27 @@ def test_download_conflict_resolve_recur():
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
+    d1 = FakeTorrent(hash="D1", name="D1", state="downloading")
+    d2 = FakeTorrent(hash="D2", name="D2", state="downloading")
+    seed_store(mgr, [d1, d2])
     inject_group(mgr, "D1", "D2")
-    by_hash = {
-        "D1": FakeTorrent(hash="D1", name="D1", state="downloading"),
-        "D2": FakeTorrent(hash="D2", name="D2", state="downloading"),
-    }
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1
 
     # 冲突消除(全组完成, 无下载中): 不再暂停, 去重记录清除
-    by_hash["D1"].state = "stalledUP"
-    by_hash["D1"].amount_left = 0
-    by_hash["D2"].state = "stalledUP"
-    by_hash["D2"].amount_left = 0
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    d1.state = "stalledUP"
+    d1.amount_left = 0
+    d2.state = "stalledUP"
+    d2.amount_left = 0
+    seed_store(mgr, [d1, d2])
+    mgr._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"冲突消除后不应暂停: {client.calls}"
 
     # 冲突重现(D2 重新下载): 再次暂停(记录已清除, 新冲突类型 mixed)
-    by_hash["D2"].state = "downloading"
-    by_hash["D2"].amount_left = 1
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    d2.state = "downloading"
+    d2.amount_left = 1
+    seed_store(mgr, [d1, d2])
+    mgr._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 2, f"冲突重现应再次暂停: {client.calls}"
 
 
@@ -364,13 +371,16 @@ def test_download_conflict_single_dl():
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
+    seed_store(
+        mgr,
+        [
+            FakeTorrent(hash="D1", name="D1", state="downloading", amount_left=1),  # 未完成
+            FakeTorrent(hash="U1", name="U1", state="stalledUP", amount_left=0),
+        ]
+    )
     inject_group(mgr, "D1", key=("K1", ))
     inject_group(mgr, "U1", key=("K2", ))
-    by_hash = {
-        "D1": FakeTorrent(hash="D1", name="D1", state="downloading", amount_left=1),  # 未完成
-        "U1": FakeTorrent(hash="U1", name="U1", state="stalledUP", amount_left=0),
-    }
-    mgr._check_download_conflicts(by_hash, dry_run=False)
+    mgr._check_download_conflicts(dry_run=False)
     assert ("stop", None) not in client.calls, f"单下载中不应暂停: {client.calls}"
 
 
@@ -387,7 +397,7 @@ def test_download_conflict_grouping_disabled():
         client.torrents["D2"] = t2
         mgr._refresh_torrents()
         assert ("stop", None) not in client.calls, f"分组未启用不应检查冲突: {client.calls}"
-        assert mgr._groups == {}, f"分组未启用不应有分组: {mgr._groups}"
+        assert mgr.store.groups == {}, f"分组未启用不应有分组: {mgr.store.groups}"
 
 
 # ============================================================
@@ -402,7 +412,7 @@ def test_checking_group_downloading_skips():
     t = make_target()
     d = FakeTorrent(hash="D1", name="D1", state="downloading")
     inject_group(mgr, "HASH123", "D1")
-    mgr._snapshot = [t, d]
+    seed_store(mgr, [t, d])
     handled = mgr.process_torrent(t, dry_run=False)
     assert not handled, "组内下载中应跳过"
     assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
@@ -417,7 +427,7 @@ def test_checking_paused_incomplete_not_skip():
     t = make_target()
     pd = FakeTorrent(hash="PD1", name="PD1", state="pausedDL")  # 暂停未完成
     inject_group(mgr, "HASH123", "PD1")
-    mgr._snapshot = [t, pd]
+    seed_store(mgr, [t, pd])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled, "暂停未完成不应跳过"
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
@@ -430,7 +440,7 @@ def test_checking_no_group_uses_without_reference():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    mgr._snapshot = [t]
+    seed_store(mgr, [t])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
@@ -445,7 +455,7 @@ def test_checking_paused_completed_not_reference():
     t = make_target()
     p = FakeTorrent(hash="P1", name="P1", state="pausedUP")  # 暂停已完成, 非上传
     inject_group(mgr, "HASH123", "P1")
-    mgr._snapshot = [t, p]
+    seed_store(mgr, [t, p])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
     assert ("recheck", None) in client.calls, f"无参考应走 without_reference: {client.calls}"
@@ -465,7 +475,7 @@ def test_checking_filelist_reference_skip_checking():
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled, f"有参考应处理: {client.calls}"
     assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"跳检调用顺序: {client.calls}"
@@ -501,7 +511,7 @@ def test_checking_no_reference_full_checking():
     assert len(completed) == 1, f"应完成 1 个任务: {completed}"
     assert ("start", None) in client.calls, f"校验完成应自动开始: {client.calls}"
     assert mgr.state.get("exec_history"), "校验完成应记录执行历史"
-    assert mgr.verified_references == {"HASH123"}, "校验通过应晋升为参考"
+    assert mgr.store.verified_references == {"HASH123"}, "校验通过应晋升为参考"
     assert mgr.task_queue.pending_slow() == [], "完成后应出队"
 
 
@@ -531,7 +541,7 @@ def test_checking_piecehashes_same():
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
     assert ("piece_hashes", "HASH123") in client.calls, f"应获取目标 piece hashes: {client.calls}"
@@ -550,7 +560,7 @@ def test_checking_piecehashes_diff():
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
@@ -567,7 +577,7 @@ def test_checking_piecehashes_api_error():
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled, "API 错误不应中断"
     assert ("recheck", None) in client.calls, f"应降级为 full-checking: {client.calls}"
@@ -585,7 +595,7 @@ def test_checking_custom_rc0():
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     with patch("subprocess.run") as mrun:
         mrun.return_value = SimpleNamespace(returncode=0, stdout="ok", stderr="")
         handled = mgr.process_torrent(t, dry_run=False)
@@ -606,7 +616,7 @@ def test_checking_custom_rc1():
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     with patch("subprocess.run") as mrun:
         mrun.return_value = SimpleNamespace(returncode=1, stdout="", stderr="bad")
         handled = mgr.process_torrent(t, dry_run=False)
@@ -622,11 +632,11 @@ def test_checking_verified_reference_used():
     client = CheckingFakeClient()
     mgr.client = client
     client.torrents["HASH123"] = {"state": "stalledUP"}
-    mgr.verified_references = {"R1"}  # 历史 full-checking 通过
+    mgr.store.verified_references = {"R1"}  # 历史 full-checking 通过
     t = make_target()
     r = FakeTorrent(hash="R1", name="R1", state="pausedUP")  # 非上传候选, 仅靠 verified
     inject_group(mgr, "HASH123", "R1")
-    mgr._snapshot = [t, r]
+    seed_store(mgr, [t, r])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
     assert ("export", "HASH123") in client.calls, f"verified 参考应走 with_reference 段: {client.calls}"
@@ -645,11 +655,11 @@ def test_checking_verified_references_not_persisted():
         t = make_target()
         mgr.process_torrent(t, dry_run=False)
         mgr.task_queue.poll_slow(lambda h: True)
-        assert mgr.verified_references == {"HASH123"}, "完成后应晋升"
+        assert mgr.store.verified_references == {"HASH123"}, "完成后应晋升"
         mgr.save_state()
 
         mgr2 = QbManager("", config=cfg)  # 重新加载同一 state 文件
-        assert mgr2.verified_references == set(), "verified 参考不应持久化"
+        assert mgr2.store.verified_references == set(), "verified 参考不应持久化"
 
 
 # ============================================================
@@ -772,7 +782,7 @@ def test_checking_full_checking_auto_start_false():
     mgr.task_queue.poll_slow(lambda h: True)
     assert ("start", None) not in client.calls, f"auto_start=false 不应自动开始: {client.calls}"
     assert mgr.state.get("exec_history"), "仍应记录执行历史"
-    assert mgr.verified_references == {"HASH123"}, "仍应晋升参考"
+    assert mgr.store.verified_references == {"HASH123"}, "仍应晋升参考"
 
 
 def test_checking_full_checking_send_error():
@@ -795,7 +805,7 @@ def test_checking_full_checking_send_error():
         ts_after = mgr.state["exec_history"][rec_key]["ts"]
         assert ts_before == ts_after, "发送失败不应由完成回调重新记录"
     assert ("start", None) not in client.calls, "发送失败不应自动开始"
-    assert mgr.verified_references == set(), "发送失败不应晋升参考"
+    assert mgr.store.verified_references == set(), "发送失败不应晋升参考"
 
 
 def test_checking_no_task_queue_direct_recheck():

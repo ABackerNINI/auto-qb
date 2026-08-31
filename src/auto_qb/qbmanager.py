@@ -20,6 +20,7 @@ from .config import Config, load_config
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
 from .rules import Rule
 from .taskqueue import Task, TaskQueue
+from .torrents import TorrentRecord, TorrentStore
 from . import utils
 from .logging import setup_logging
 
@@ -31,29 +32,31 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.config_path = config_path
         self.config = config or load_config(config_path)
         self._setup_logging()
-        self.client: Optional[Client] = None
+        # 种子信息数据层: 每 tick 全量快照 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
+        # 每 main_tick 刷新一次后, 本 tick 内所有读取操作都只通过 self.store 接口访问
+        self.store = TorrentStore()
+        self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file
-        self.state = None
+        self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
         # 规则加载(条件+动作插件, manager 即本对象: 提供执行历史/状态/任务队列)
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
+        self._load_rules()
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         self.task_queue = TaskQueue()
-        # 种子增删检测: 上一轮已知 hash 集合, None 表示首轮(首次刷新为全部现有种子创建任务)
-        self._known_hashes: Optional[set] = None
-        # 最近一次种子快照: 新增种子创建任务/规则条件(上传量基线)使用
-        self._snapshot: list = []
-        # 分组状态快照: 组内种子状态变化检测(上传转暂停触发缺文件扫描, 由 GroupingMixin 使用)
-        self._group_state_snapshot: dict = {}
-        # 增量分组: key=(save_path, 排序文件路径元组) -> [hash...]; 新增种子时归组, 事件驱动, 无周期轮询
-        self._groups: dict = {}
-        # 组内缓存的文件大小映射: key -> {hash: {规范化相对路径: 大小}}(增量归组时拉取)
-        self._group_sizes: dict = {}
-        # 分组成员索引: hash -> 组 key, 删除/状态变化/save_path 同步时 O(1) 定位所属组, 避免遍历分组
-        self._group_member_to_key: dict = {}
-        # 内存参考种子集合(仅内存, 重启后重新积累): full-checking 校验通过的种子, 可作为同组参考
-        self.verified_references: set = set()
+        self._create_global_tasks()
+
+    @property
+    def client(self) -> Optional[Client]:
+        """qBittorrent 客户端(与 store.client 同步绑定, 写操作仍走客户端 API) """
+        return self._client
+
+    @client.setter
+    def client(self, value: Optional[Client]):
+        self._client = value
+        if getattr(self, "store", None) is not None:
+            self.store.client = value
 
     def _setup_logging(self):
         logging_conf = self.config.logging
@@ -83,8 +86,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             return
 
         self.state = self._load_state()
-        self._load_rules()
-        self._create_global_tasks()
 
         main_tick = self.config.main_tick
 
@@ -142,15 +143,14 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         return True
 
     def _is_check_done(self, torrent_hash: str) -> bool:
-        """慢速队列轮询回调: 查询种子当前状态, 退出校验(checking*)状态即视为完成"""
-        try:
-            infos = self.client.torrents_info(torrent_hashes=torrent_hash)
-        except Exception as e:
-            logger.debug(f"查询校验状态失败({torrent_hash}): {e}")
-            return False
-        if not infos:
+        """慢速队列轮询回调: 从快照查询种子当前状态, 退出校验(checking*)状态即视为完成
+
+        不再拉取 API(校验完成最迟下一 tick 快照刷新后可见); 种子已删除/未知 -> 视为完成。
+        """
+        rec = self.store.get(torrent_hash)
+        if rec is None:
             return True  # 种子已被删除, 视为完成
-        state = (infos[0].state or "").lower()
+        state = (rec.state or "").lower()
         return not state.startswith("checking")
 
     # ---------- 全局任务 ----------
@@ -186,59 +186,48 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     # ---------- 种子级任务 ----------
 
-    def _get_torrent(self, torrent_hash: str) -> Optional[TorrentDictionary]:
-        """拉取单个种子信息; 种子已删除返回 None"""
-        try:
-            infos = self.client.torrents_info(torrent_hashes=torrent_hash)
-        except Exception:
-            return None
-        return infos[0] if infos else None
+    def _get_torrent(self, torrent_hash: str) -> Optional[TorrentRecord]:
+        """从快照查询单个种子(惰性缓存/分组字段随记录保留); 种子已删除返回 None"""
+        return self.store.get(torrent_hash)
 
     def _refresh_torrents(self, dry_run: bool = False):
-        """种子列表刷新: 拉全量 -> 增删检测 -> 新种子创建内置+规则任务并归组, 删除种子移除任务,
-        分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理, 更新状态快照"""
+        """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
+        删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
+        更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
         torrents = self.client.torrents_info()
-        current_hashes = {t.hash for t in torrents}
-        by_hash = {t.hash: t for t in torrents}
-        self._snapshot = torrents
+        added, removed = self.store.refresh(torrents)
+        by_hash = self.store.by_hash
 
-        if self._known_hashes is not None:
-            added = current_hashes - self._known_hashes
-            removed = self._known_hashes - current_hashes
-        else:
-            added = current_hashes  # 首轮: 为所有现有种子创建任务
-            removed = set()
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
             for h in added:
                 self._create_torrent_tasks(h)
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
                 if self.config.grouping.enabled:
-                    self._assign_new_torrent(h, by_hash, dry_run)
+                    self._assign_new_torrent(h, dry_run)
                 # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
                 if self.config.add_episode_tags:
-                    self._add_episode_tags(h, by_hash, dry_run)
+                    self._add_episode_tags(h, dry_run)
         if removed:
             logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
                 self.task_queue.remove_torrent(h)
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
             if self.config.grouping.enabled:
-                self._handle_removed_torrents(removed, by_hash, dry_run)
+                self._handle_removed_torrents(removed, dry_run)
         if self.config.grouping.enabled:
             # 保存路径变化重归组(文件列表变化会走新增种子重新归组)
-            self._handle_save_path_changes(by_hash, dry_run)
+            self._handle_save_path_changes(dry_run)
             # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)
-            self._handle_state_transitions(by_hash, dry_run)
+            self._handle_state_transitions(dry_run)
             # 下载冲突检查(每轮): 同组多个同时下载/已完成与下载中并存 -> 警告+整组暂停
-            self._check_download_conflicts(by_hash, dry_run)
+            self._check_download_conflicts(dry_run)
             # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关;
             # 新增种子本轮不视为状态变化)
-            self._group_state_snapshot = {t.hash: t.state_enum for t in torrents}
+            self.store.update_state_snapshot(torrents)
 
-        self._known_hashes = current_hashes
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
-        self.begin_round(torrents)
+        self.begin_round(list(self.store.by_hash.values()))
 
     def _create_torrent_tasks(self, torrent_hash: str):
         """为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
@@ -248,14 +237,14 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         每个任务有内置 interval(规则任务用规则自身 interval), 加入队列即立即到期(下一 tick 执行)。
         """
 
-        tor = next((t for t in self._snapshot if t.hash == torrent_hash), None)
+        tor = self.store.get(torrent_hash)
         if not tor:
             return
 
         # 查找种子的tracker配置
         tracker_conf = self._match_tracker(tor)
         if not tracker_conf:
-            trackers_info = self.client.torrents_trackers(tor.hash)
+            trackers_info = self.store.trackers_info(tor.hash)
             all_domains = utils.extract_tracker_hostnames(trackers_info)
             logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {tor.hash}")
             return False  # 未匹配tracker配置, 直接跳过

@@ -7,7 +7,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 
-from auto_qb.config import GroupingConfig, HRRule, QbittorrentConfig  # noqa: E402
+from auto_qb.config import GroupingConfig, HRRule, LoggingConfig, QbittorrentConfig  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
 
@@ -196,13 +196,19 @@ class FakeConfig:
     trackers = {"HHan": FakeTracker("HHan")}
     state_file = ""  # 由测试设置
     interval = 60  # QbManager 主刷新任务 interval(测试不触发 refresh)
+    main_tick = 1.0
+    max_tasks_per_tick = 20
+    logging = LoggingConfig(
+        level="WARNING", file="", max_bytes="10MiB", format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+    rules_config = {}  # 规则集原始配置(由 make_manager 设置)
     check_missing_files = False
     remove_similar_tags = False
     add_episode_tags = False  # 自动添加集数标签(默认关闭)
     hr = HRRule()  # 全局 HR 默认输出设置
     delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
-    grouping = GroupingConfig(enabled=False, interval=300, missing_tag="MISSING")  # 种子分组管理(默认关闭)
+    grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
 
 
 def _hr_rule(**kw) -> HRRule:
@@ -289,3 +295,10 @@ def _fake_file(name, size):
 def make_ctx(mgr, tor, client, dry_run=False):
     """构造 RuleContext(规则动作测试辅助)"""
     return RuleContext(mgr, client, mgr.config, tor, dry_run=dry_run)
+
+
+def seed_store(mgr, torrents=None):
+    """将种子灌入 mgr.store(数据层迁移: _get_torrent/_handle_maintenance/规则任务等读取只走 store)"""
+    if torrents is None:
+        torrents = list(mgr.client.torrents.values())
+    mgr.store.apply(torrents)

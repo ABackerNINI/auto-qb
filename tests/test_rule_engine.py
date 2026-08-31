@@ -27,7 +27,7 @@ from unittest import mock
 
 from auto_qb.rules.base import Rule
 from auto_qb.taskqueue import Task
-from helpers import FakeClient, FakeTorrent, make_manager
+from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
 
 def test_load_rules_from_config():
@@ -170,6 +170,7 @@ def test_handle_rule_process_ok():
         client = FakeClient()
         mgr.client = client
         client.torrents["HASH123"] = FakeTorrent(tags="")
+        seed_store(mgr)
         rule = Rule("t", {"actions": [{"add_tags": ["X"]}]}, mgr)
         task = Task("rule", "t", torrent_hash="HASH123", interval=0)
         assert mgr._handle_rule(rule, task, dry_run=False) is True
@@ -183,6 +184,7 @@ def test_handle_rule_process_error():
         client = FakeClient()
         mgr.client = client
         client.torrents["HASH123"] = FakeTorrent(tags="")
+        seed_store(mgr)
         rule = mock.MagicMock()
         rule.process.side_effect = RuntimeError("boom")
         task = Task("rule", "t", torrent_hash="HASH123", interval=0)
