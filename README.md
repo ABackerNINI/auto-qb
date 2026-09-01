@@ -183,85 +183,85 @@ config:
     example_rules: # 🚧
         rule1:
             enabled: true
-            trigger: interval                     # 触发时机: 固定时间间隔循环
-            interval: 60S                         # 执行间隔
-            execute_once: never                   # 去重: never/once/daily/hourly
-            cooldown: 0S                          # 距上次执行成功不足该时长则跳过
-            conditions:                           # 筛选条件必须全部满足
-                - path: /path/to/file             # 路径，支持正则
-                - size: ">=100MiB"                # 文件大小
-                - tags:                           # 标签(不同标签组之间为或)
+            trigger: interval                      # 触发时机: 固定时间间隔循环 🚧
+            interval: 60S                          # 执行间隔
+            execute_once: never                    # 去重: never/once/daily/hourly 🚧
+            cooldown: 0S                           # 距上次执行成功不足该时长则跳过 🚧
+            conditions:                            # 筛选条件必须全部满足
+                - path: /path/to/file              # 路径，支持正则
+                - size: ">=100MiB"                 # 文件大小 🚧
+                - tags:                            # 标签(不同标签组之间为或)
                     - tag1,tag2
-                - category:                       # 分类
+                - category:                        # 分类
                     - category
-                - trackers:                       # tracker 自定义名称(不同组之间为或)
+                - trackers:                        # tracker 自定义名称(不同组之间为或) 🚧
                     - tracker1
-                - state:                          # 语义化状态(不同组之间为或)
-                    - complete&uploading          # 已完成且正在上传(& 连接)
-                - hr: condition-met               # condition-met/condition-not-met/satisfied
-                - date_time:
+                - state:                           # 语义化状态(不同组之间为或) 🚧
+                    - complete&uploading           # 已完成且正在上传(& 连接)
+                - hr: condition-met                # condition-met/condition-not-met/satisfied 🚧
+                - date_time: # 🚧
                     day_of_month: 1-31
                     day_of_week: 1-7
                     time: 10:00-23:00
-                - seedtime: "<24H"                # 做种时长
-                - upload_ratio: ">1.5"            # 上传比率
-                - upload_size: ">10GiB"           # 总上传大小
-                - upload_size_today: ">10GiB"     # 今日上传大小(按自然日增量统计)
-                - upload_size_this_week: ">10GiB"
-                - upload_size_this_month: ">10GiB"
-                - freespace:                      # 剩余空间
+                - seedtime: "<24H"                 # 做种时长 🚧
+                - upload_ratio: ">1.5"             # 上传比率 🚧
+                - upload_size: ">10GiB"            # 总上传大小 🚧
+                - upload_size_today: ">10GiB"      # 今日上传大小 🚧
+                - upload_size_this_week: ">10GiB"  # 本周上传大小 🚧
+                - upload_size_this_month: ">10GiB" # 本月上传大小 🚧
+                - freespace:                       # 剩余空间 🚧
                     path: "R:/"
                     amount: "<100GiB"
-            actions:                              # 动作顺序执行，默认一个出错后续不执行
-                - checking:                       # ⚠️ 校验/跳检(见下方说明)
-                    basic_check: filelist         # filelist/piecehashes/custom
-                    with_reference:               # 有参考种子(已完成同组种子)
-                        mode: skip-checking       # skip-checking 跳检(风险可控)/full-checking 全量校验
-                        auto_start: true          # 校验成功后自动开始
-                    without_reference:            # 无参考种子
-                        mode: full-checking       # full-checking 安全；skip-checking 高风险
-                        auto_start: true          # 校验成功后自动开始
-                - start: true                     # 开始
-                - stop: true                      # 暂停
-                - ignore_next_action_error: true  # 忽略下一个动作的错误继续执行
-                - add_tags:                       # 添加标签，支持变量
+            actions:                               # 动作顺序执行，默认一个出错后续不执行
+                - checking:                        # ⚠️ 校验/跳检(见下方说明) 🚧
+                    basic_check: filelist          # filelist/piecehashes/custom
+                    with_reference:                # 有参考种子(已完成同组种子)
+                        mode: skip-checking        # skip-checking 跳检(风险可控)/full-checking 全量校验
+                        auto_start: true           # 校验成功后自动开始
+                    without_reference:             # 无参考种子
+                        mode: full-checking        # full-checking 安全；skip-checking 高风险
+                        auto_start: true           # 校验成功后自动开始
+                - start: true                      # 开始
+                - stop: true                       # 暂停
+                - ignore_next_action_error: true   # 忽略下一个动作的错误继续执行 🚧
+                - add_tags:                        # 添加标签，支持变量
                     - tag-format1
-                - remove_tags:                    # 删除标签，支持正则和变量
+                - remove_tags:                     # 删除标签，支持正则和变量
                     - tag-format3
-                - add_category:                   # 添加分类
+                - add_category:                    # 添加分类
                     format: category-format
-                    overwrite: true               # 强制覆盖已有分类
-                - remove_category: true           # 自动删除站点分类
-                - move_to:                        # ⚠️ 移动保存路径
+                    overwrite: true                # 强制覆盖已有分类
+                - remove_category: true            # 自动删除站点分类
+                - move_to:                         # ⚠️ 移动保存路径 🚧
                     path: /path/to/move/to
                     overwrite: true
-                - reannounce: true                # ⚠️ 强制汇报 tracker(有风险)
-                - upload_speed_limit: 1000KiB/s     # 上传速度，不覆盖单数值
-                - download_speed_limit: 1000KiB/s   # 上传速度，不覆盖单数值
-            stop_following_rules_if: conditions-met
+                - reannounce: true                 # ⚠️ 强制汇报 tracker(有风险) 🚧
+                - upload_speed_limit: 1000KiB/s    # 上传速度，不覆盖单数值
+                - download_speed_limit: 1000KiB/s  # 上传速度，不覆盖单数值
             # 可选: conditions-met / conditions-not-met / action-failed /
             #       all-actions-succeed / always / never
+            stop_following_rules_if: conditions-met 🚧
 
     # tracker 站点配置 (建议直接使用`python src/auto-qb.py --export-yaml missing.yml --only-missing`直接导出后修改)
     trackers:
-        tracker1:                           # 自定义 tracker 站点名称
-            domains:                        # 站点域名，可以有多个
+        tracker1:                                  # 自定义 tracker 站点名称
+            domains:                               # 站点域名，可以有多个
                 - domain1
                 - domain2
-            tags:                           # 自动添加站点标签
+            tags:                                  # 自动添加站点标签
                 - tag1
-            remove_tags:                    # 自动删除站点标签，支持正则
+            remove_tags:                           # 自动删除站点标签，支持正则
                 - tag3
-            upload_speed_limit: 1000KiB/s   # 单种上传限速，0 指无限制 🚧
-            download_speed_limit: 10MiB/s   # 单种下载限速，0 指无限制 🚧
-            hr:                             # HR 规则(可覆盖全局设置)
-                required_seeding_time: 3D   # 要求做种时间
-                required_share_ratio: 2.0   # 要求分享率
-                extra_seeding_time: 12H     # 额外做种时间防止意外
-                condition: 80%              # 触发 HR 的下载比例；也可用绝对值，如 10MiB
-            rules:                          # tracker 引用规则
-                - "@example_rules"          # 引用整个规则集
-                - "@example_rules.rule1"    # 引用具体规则
+            upload_speed_limit: 1000KiB/s          # 单种上传限速，0 指无限制
+            download_speed_limit: 10MiB/s          # 单种下载限速，0 指无限制
+            hr:                                    # HR 规则(可覆盖全局设置)
+                required_seeding_time: 3D          # 要求做种时间
+                required_share_ratio: 2.0          # 要求分享率
+                extra_seeding_time: 12H            # 额外做种时间防止意外
+                condition: 80%                     # 触发 HR 的下载比例；也可用绝对值，如 10MiB
+            rules:                                 # tracker 引用规则
+                - "@example_rules"                 # 引用整个规则集
+                - "@example_rules.rule1"           # 引用具体规则
 ```
 
 ### `checking` 动作说明
@@ -284,36 +284,36 @@ config:
 
 ### 筛选条件(15 种)
 
-| 条件                     | 说明                                                                                    |
-|--------------------------|-----------------------------------------------------------------------------------------|
-| `path`                   | 保存路径，支持正则，使用 `/` 分隔符                                                       |
-| `size`                   | 文件大小限制，支持比较符 `> < >= <=`                                                     |
-| `tags`                   | 标签，不同标签组之间为或关系，支持正则和 `${required_seeding_time}` 变量                  |
-| `category`               | 分类，支持正则和变量                                                                     |
-| `trackers`               | tracker 自定义名称，不同组之间为或关系，支持正则                                          |
-| `state`                  | 语义化状态(见状态映射表)，支持 `&` 连接多个状态                                          |
+| 条件                     | 说明                                                                                     |
+|--------------------------|------------------------------------------------------------------------------------------|
+| `path`                   | 保存路径，支持正则，使用 `/` 分隔符                                                        |
+| `size`                   | 文件大小限制，支持比较符 `> < >= <=`                                                      |
+| `tags`                   | 标签，不同标签组之间为或关系，支持正则和 `${required_seeding_time}` 变量                   |
+| `category`               | 分类，支持正则和变量                                                                      |
+| `trackers`               | tracker 自定义名称，不同组之间为或关系，支持正则                                           |
+| `state`                  | 语义化状态(见状态映射表)，支持 `&` 连接多个状态                                           |
 | `hr`                     | HR 筛选: `condition-met`(满足触发)/ `condition-not-met` / `satisfied`(满足要求+额外时长) |
 | `date_time`              | 日期时间: `day_of_month` / `day_of_week` / `time`                                        |
-| `seedtime`               | 做种时长                                                                                |
-| `upload_ratio`           | 上传比率                                                                                |
-| `upload_size`            | 总上传大小                                                                              |
+| `seedtime`               | 做种时长                                                                                 |
+| `upload_ratio`           | 上传比率                                                                                 |
+| `upload_size`            | 总上传大小                                                                               |
 | `upload_size_today`      | 今日上传大小: 基于 state_file 按自然日增量统计，同一天多次运行有效                        |
-| `upload_size_this_week`  | 本周上传大小                                                                            |
-| `upload_size_this_month` | 本月上传大小                                                                            |
-| `freespace`              | 指定路径剩余空间                                                                        |
+| `upload_size_this_week`  | 本周上传大小                                                                             |
+| `upload_size_this_month` | 本月上传大小                                                                             |
+| `freespace`              | 指定路径剩余空间                                                                         |
 
 ### 动作(11 种)
 
-| 动作                                          | 说明                                                                                                         |
-|-----------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| 动作                                          | 说明                                                                                                          |
+|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | `checking`                                    | 校验/跳检: 确定参考种子后执行 skip-checking (__<font color="red">有风险!</font>__) 或 full-checking(异步校验) |
-| `start` / `stop`                              | 开始 / 暂停种子                                                                                              |
-| `add_tags` / `remove_tags`                    | 添加 / 删除标签，支持正则和变量                                                                               |
-| `add_category` / `remove_category`            | 设置 / 清空分类，支持强制覆盖                                                                                 |
-| `move_to`                                     | 移动保存路径                                                                                                 |
-| `reannounce`                                  | 强制汇报 tracker(__<font color="red">有风险!</font>__)                                                       |
-| `upload_speed_limit` / `download_speed_limit` | 单种上传 / 下载限速                                                                                          |
-| `ignore_next_action_error`                    | 忽略下一个动作的错误继续执行(仅对下一个动作起效)                                                             |
+| `start` / `stop`                              | 开始 / 暂停种子                                                                                               |
+| `add_tags` / `remove_tags`                    | 添加 / 删除标签，支持正则和变量                                                                                |
+| `add_category` / `remove_category`            | 设置 / 清空分类，支持强制覆盖                                                                                  |
+| `move_to`                                     | 移动保存路径                                                                                                  |
+| `reannounce`                                  | 强制汇报 tracker(__<font color="red">有风险!</font>__)                                                        |
+| `upload_speed_limit` / `download_speed_limit` | 单种上传 / 下载限速                                                                                           |
+| `ignore_next_action_error`                    | 忽略下一个动作的错误继续执行(仅对下一个动作起效)                                                              |
 
 ### 去重与一次执行
 
