@@ -26,6 +26,7 @@
 - test_date_time_day_of_week_mismatch: day_of_week 不匹配 -> 不触发
 - test_date_time_cross_midnight: 跨午夜 time 区间匹配/不匹配
 - test_date_time_out_of_range: 非跨午夜区间当前时刻不在 -> 不触发
+- test_tags_condition_case_sensitive: 标签条件精确匹配区分大小写(:ignore_case 由 utils 层承担)
 """
 import os
 import shutil
@@ -121,6 +122,16 @@ def test_tags_condition():
         # 变量替换: ${required_seeding_time} -> 3D(来自 tracker hr)
         assert TagsCondition("seed-${required_seeding_time}").match(ctx)
         assert TagsCondition("other-${required_seeding_time}").match(ctx) is False
+
+
+def test_tags_condition_case_sensitive():
+    """标签条件精确匹配区分大小写(:ignore_case 由 utils.match_tag_patterns 承担, 条件插件不支持)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(tags="HHan"))
+        assert TagsCondition("HHan").match(ctx)
+        assert TagsCondition("hhan").match(ctx) is False, "精确匹配应区分大小写"
+        assert TagsCondition("HHAN").match(ctx) is False
 
 
 def test_category_condition():

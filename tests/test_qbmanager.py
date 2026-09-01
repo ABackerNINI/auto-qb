@@ -18,7 +18,12 @@
 - test_create_torrent_tasks_with_rules: 匹配 tracker -> 创建 maintenance + 规则任务
 - test_handle_maintenance_tor_missing: 种子不存在 -> False(任务消亡)
 - test_tick_slow_send_error: 慢速任务发送失败 -> warning, 任务出队
+- test_run_save_state_on_exit: run 退出后保存状态文件且为有效 JSON dict
+- test_run_dry_run_no_save: dry_run=True 退出后不写状态文件
+- test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
+- test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
 """
+import json
 import os
 import tempfile
 import time
@@ -233,3 +238,61 @@ def test_tick_slow_send_error():
             mgr._tick(dry_run=False)
         assert m_warn.call_count >= 1, "应记录异步校验任务异常 warning"
         assert mgr.task_queue.pending_slow() == [], "发送失败任务应出队"
+
+
+def test_run_save_state_on_exit():
+    """run: 非 dry_run 退出后保存状态文件, 且内容为有效 JSON dict"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=KeyboardInterrupt())
+        with mock.patch("auto_qb.qbmanager.time.sleep"):
+            mgr.run(dry_run=False)
+        with open(state_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert isinstance(data, dict), "状态文件应为 JSON dict"
+
+
+def test_run_dry_run_no_save():
+    """run: dry_run=True 退出后不写状态文件"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=KeyboardInterrupt())
+        with mock.patch("auto_qb.qbmanager.time.sleep"):
+            mgr.run(dry_run=True)
+        assert not os.path.exists(state_file), "dry_run 不应写状态文件"
+
+
+def test_tick_refresh_error_continues():
+    """run 主循环: _refresh_torrents 抛异常被捕获, 循环继续到下一 tick"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.connect = mock.Mock(return_value=True)
+        # 第一次抛普通异常(被内层 except Exception 捕获), 第二次抛 KeyboardInterrupt(退出循环)
+        mgr._refresh_torrents = mock.Mock(side_effect=[RuntimeError("refresh boom"), KeyboardInterrupt()])
+        with mock.patch("auto_qb.qbmanager.time.sleep"):
+            mgr.run(dry_run=False)
+        assert mgr._refresh_torrents.call_count == 2, "第一次异常应被捕获, 第二次 tick 继续执行"
+        assert mgr.task_queue._shutdown is True, "finally 应 shutdown"
+
+
+def test_execute_due_respects_max():
+    """_tick: 每 tick 最多执行 max_tasks_per_tick 个到期任务, 超额留在队列"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr.task_queue = TaskQueue(executor_workers=0)
+        mgr.config.max_tasks_per_tick = 2
+        for i in range(3):
+            t = Task("rule", f"t{i}", interval=60, handler=lambda t, d: True)
+            mgr.task_queue.add_task(t)  # next_run=now, 全部到期
+        mgr._refresh_torrents = mock.Mock()
+        mgr._tick(dry_run=False)
+        executed = [t.name for t in mgr.task_queue._fast if t.run_count == 1]
+        remaining = [t.name for t in mgr.task_queue._fast if t.run_count == 0]
+        assert len(executed) == 2, f"每 tick 最多执行 max_tasks_per_tick=2: {executed}"
+        assert len(remaining) == 1, f"超额任务应留在队列: {remaining}"

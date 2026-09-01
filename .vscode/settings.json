@@ -44,6 +44,7 @@
         "ptsbao",
         "ptzone",
         "pytest",
+        "pytestmark",
         "pythonpath",
         "pyyaml",
         "qbapi",

@@ -5,6 +5,13 @@
 - test_tracker_hr_overrides_global: 站点 HR 覆盖全局配置
 - test_hr_required_share_ratio: required_share_ratio 达标判定
 - test_tracker_remove_similar_tags_override: 站点 remove_similar_tags 覆盖全局
+- test_hr_dlratio_trigger: dlratio 条件达标才添加 HR 标签, 未达标排除(辅种保护)
+- test_hr_dlsize_trigger: dlsize 条件(下载量绝对值)达标才触发
+- test_hr_satisfied_seeding_time: 做种时长 >= required+extra -> satisfied 分类; 否则普通 HR 分类
+- test_hr_satisfied_share_ratio: 分享率达标(时长不足) -> satisfied 标签
+- test_hr_aux_seed_excluded: downloaded=0(dlratio=0) -> 不触发任何 HR 输出
+- test_hr_overwrite_category_semantics: _set_category 覆盖语义(跳过/覆盖/自动分类可更新)
+- test_hr_tracker_without_hr_skips: 站点无 hr 配置 -> 不应用 HR(即使全局有默认)
 """
 import os
 import tempfile
@@ -177,3 +184,178 @@ def test_tracker_remove_similar_tags_override():
         assert ("remove_tags", {"hhan"}) in client.calls or any(
             c[0] == "remove_tags" for c in client.calls
         ), f"站点 remove_similar_tags 未生效: {client.calls}"
+
+
+def test_hr_dlratio_trigger():
+    """HR 触发: dlratio 条件(下载比例 >= 阈值)达标才添加标签, 未达标排除(辅种保护)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        client = FakeClient()
+        mgr.client = client
+        mgr.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", add_category="")
+        conf = mgr.config.trackers["HHan"]
+
+        # 达标: downloaded/total = 0.7 >= 0.7 -> 添加 HR 标签
+        tor = FakeTorrent(downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False)
+        assert ("add_tags", ["!!HR3D!!"]) in client.calls, f"应添加 HR 标签: {client.calls}"
+
+        # 未达标: 0.5 < 0.7 -> 不触发(无任何调用)
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        mgr2.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", add_category="")
+        tor2 = FakeTorrent(downloaded=50 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        assert mgr2._add_hr_tag_or_category(tor2, mgr2.config.trackers["HHan"], dry_run=False) is False
+        assert client2.calls == [], f"未达标不应触发: {client2.calls}"
+
+
+def test_hr_dlsize_trigger():
+    """HR 触发: dlsize 条件(下载量绝对值 >= 阈值)达标才触发"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr.config.trackers["HHan"].hr = _hr_rule(
+            condition=("dlsize", 10 * 1024**2), add_tag="DLSIZE-HR", add_category=""
+        )
+        conf = mgr.config.trackers["HHan"]
+
+        tor = FakeTorrent(downloaded=10 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False)
+        assert ("add_tags", ["DLSIZE-HR"]) in client.calls, f"dlsize 达标应触发: {client.calls}"
+
+        # 下载量不足(即使比例高) -> 不触发
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        mgr2.config.trackers["HHan"].hr = _hr_rule(
+            condition=("dlsize", 10 * 1024**2), add_tag="DLSIZE-HR", add_category=""
+        )
+        tor2 = FakeTorrent(downloaded=9 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        assert mgr2._add_hr_tag_or_category(tor2, mgr2.config.trackers["HHan"], dry_run=False) is False
+        assert client2.calls == [], f"下载量不足不应触发: {client2.calls}"
+
+
+def test_hr_satisfied_seeding_time():
+    """HR satisfied: 做种时长 >= required+extra -> satisfied 分类; 否则普通 HR 分类"""
+    with tempfile.TemporaryDirectory() as td:
+        # satisfied: 时长 3D+12H+10s 达标
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]  # 默认: 分类 !!/--HR3D!!/--HR3D--
+        tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False)
+        assert client.category == "--HR3D--", f"时长达标应加 satisfied 分类: {client.category}"
+
+        # 时长不足 -> 普通 HR 分类
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        conf2 = mgr2.config.trackers["HHan"]
+        tor2 = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100)
+        assert mgr2._add_hr_tag_or_category(tor2, conf2, dry_run=False)
+        assert client2.category == "!!HR3D!!", f"时长不足应加普通 HR 分类: {client2.category}"
+
+
+def test_hr_satisfied_share_ratio():
+    """HR satisfied: 做种时长不足但分享率达标 -> satisfied 标签"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr.config.trackers["HHan"].hr = _hr_rule(
+            required_share_ratio=2.0,
+            add_tag="",
+            add_category="",
+            add_tag_for_satisfied="DONE",
+            add_category_for_satisfied=""
+        )
+        conf = mgr.config.trackers["HHan"]
+
+        # 时长不足但 ratio 2.5 >= 2.0 -> satisfied
+        tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=2.5)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False)
+        assert ("add_tags", ["DONE"]) in client.calls, f"分享率达标应加 satisfied 标签: {client.calls}"
+
+        # 分享率与时长均不达标 -> 无输出(输出字段为空)
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        mgr2.config.trackers["HHan"].hr = _hr_rule(
+            required_share_ratio=2.0,
+            add_tag="",
+            add_category="",
+            add_tag_for_satisfied="DONE",
+            add_category_for_satisfied=""
+        )
+        tor2 = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=1.0)
+        assert mgr2._add_hr_tag_or_category(tor2, mgr2.config.trackers["HHan"], dry_run=False) is False
+        assert client2.calls == [], f"均不达标不应有输出: {client2.calls}"
+
+
+def test_hr_aux_seed_excluded():
+    """HR 辅种排除: downloaded=0(total_size>0 时 dlratio=0) -> 不触发任何 HR 输出"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]  # 默认 hr: 3D@70%+12H
+        tor = FakeTorrent(downloaded=0, total_size=100 * 1024**2, seeding_time=0)
+        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is False
+        assert client.calls == [], f"辅种不应触发 HR: {client.calls}"
+
+        # total_size=0 时 dlratio 兜底为 0(除数保护), 同样排除
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        tor2 = FakeTorrent(downloaded=100, total_size=0, seeding_time=0)
+        assert mgr2._add_hr_tag_or_category(tor2, mgr2.config.trackers["HHan"], dry_run=False) is False
+        assert client2.calls == []
+
+
+def test_hr_overwrite_category_semantics():
+    """_set_category 覆盖语义: overwrite=false 跳过已有分类; =true 覆盖; 程序自动分类可更新"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(category="MANUAL")
+
+        # overwrite=False: 已有非自动分类 -> 跳过(已处理但无 API 调用)
+        assert mgr._set_category(tor, "HR-CAT", overwrite=False, dry_run=False)
+        assert client.calls == [], f"不应覆盖已有分类: {client.calls}"
+        assert tor.category == "MANUAL"
+
+        # overwrite=True: 强制覆盖
+        assert mgr._set_category(tor, "HR-CAT", overwrite=True, dry_run=False)
+        assert ("set_category", "HR-CAT") in client.calls, f"强制覆盖应设置分类: {client.calls}"
+        assert client.category == "HR-CAT"
+        assert "HR-CAT" not in mgr.state.get("auto_categories", {}), "强制覆盖不记录自动分类"
+
+        # 程序自动分类(auto_categories 记录) + overwrite=False -> 可更新
+        mgr.state.setdefault("auto_categories", {})[tor.hash] = "AUTO-OLD"
+        client.calls.clear()
+        tor.category = "AUTO-OLD"
+        assert mgr._set_category(tor, "AUTO-NEW", overwrite=False, dry_run=False)
+        assert ("set_category", "AUTO-NEW") in client.calls, f"自动分类应可更新: {client.calls}"
+        assert mgr.state["auto_categories"][tor.hash] == "AUTO-NEW"
+
+
+def test_hr_tracker_without_hr_skips():
+    """站点无 hr 配置 -> 不应用 HR(合并发生在配置加载期; 运行时 hr=None 直接跳过)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        cfg.hr = _hr_rule(add_category="GLOBAL-HR")  # 全局有 HR 默认
+        cfg.trackers = {"HHan": FakeTracker("HHan", hr=None)}  # 站点未配置 hr
+
+        mgr = QbManager("", config=cfg)
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10)
+        assert mgr._add_hr_tag_or_category(tor, cfg.trackers["HHan"], dry_run=False) is False
+        assert client.calls == [], f"站点无 hr 不应应用全局 HR: {client.calls}"

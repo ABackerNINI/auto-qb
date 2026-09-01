@@ -29,15 +29,26 @@
 - test_rule_context_hr_no_conf: tracker 无 hr 配置 -> 触发/满足均 False
 - test_rule_context_hr_dlsize_not_met: dlsize 下载量未达标 -> 触发 False
 - test_rule_actions_skip_non_dict: actions 中非 dict 项 -> 跳过
+- test_rule_multi_condition_and: 多条件 AND: 全部满足才执行, 任一不满足不执行
+- test_rule_state_group_combined: 状态组合条件(complete&uploading)规则层仅对同时满足执行
+- test_rule_action_chain_ignore_continue: 动作链: 失败无 ignore 中断; ignore=true 继续执行后续
 """
 import os
 import tempfile
 
 from auto_qb.config import TrackerConfig
-from auto_qb.rules.base import ActionResult, Rule, RuleContext
+from auto_qb.rules.base import ActionResult, BaseAction, Rule, RuleContext
 from auto_qb.rules.conditions import SizeCondition
 from auto_qb.rules.actions import AddTagsAction
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
+
+
+class _FailingAction(BaseAction):
+    """测试用: 总是失败的动作"""
+    name = "fail"
+
+    def execute(self, ctx):
+        return ActionResult.fail("boom")
 
 
 def test_action_result_states():
@@ -217,6 +228,94 @@ def test_rule_condition_exception():
         rule.conditions = [Boom()]
         handled, stop = rule.process(ctx)
         assert handled is False and stop is False
+
+
+def test_rule_multi_condition_and():
+    """多条件 AND: 全部条件满足才执行动作; 任一不满足不执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "g.multi",
+            {
+                "conditions": [{
+                    "size": ">=100MiB"
+                }, {
+                    "tags": "HHan"
+                }],
+                "actions": [{
+                    "add_tags": ["DONE"]
+                }],
+            },
+            mgr,
+        )
+        # 全部满足 -> 执行
+        ctx = make_ctx(mgr, FakeTorrent(tags="HHan", size=200 * 1024**2), client)
+        handled, _ = rule.process(ctx)
+        assert handled
+        assert ("add_tags", ["DONE"]) in client.calls, f"应执行动作: {client.calls}"
+        # tags 不满足 -> 不执行
+        ctx2 = make_ctx(mgr, FakeTorrent(tags="OTHER", size=200 * 1024**2), client)
+        h2, _ = rule.process(ctx2)
+        assert not h2
+        # size 不满足 -> 不执行
+        ctx3 = make_ctx(mgr, FakeTorrent(tags="HHan", size=50 * 1024**2), client)
+        h3, _ = rule.process(ctx3)
+        assert not h3
+        assert client.calls.count(("add_tags", ["DONE"])) == 1, "任一条件不满足不应执行动作"
+
+
+def test_rule_state_group_combined():
+    """状态组合条件(complete&uploading): 规则层仅对同时满足的状态执行动作"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "g.state",
+            {
+                "conditions": [{
+                    "state": "complete&uploading"
+                }],
+                "actions": [{
+                    "add_tags": ["DONE"]
+                }],
+            },
+            mgr,
+        )
+        # stalledUP: complete + uploading 均含 -> 执行
+        ctx = make_ctx(mgr, FakeTorrent(state="stalledUP"), client)
+        h1, _ = rule.process(ctx)
+        assert h1 and ("add_tags", ["DONE"]) in client.calls, f"stalledUP 应执行: {client.calls}"
+        # pausedUP: complete 含但 uploading 不含 -> 不执行
+        ctx2 = make_ctx(mgr, FakeTorrent(state="pausedUP"), client)
+        h2, _ = rule.process(ctx2)
+        assert not h2
+        # downloading: 均不含 -> 不执行
+        ctx3 = make_ctx(mgr, FakeTorrent(state="downloading"), client)
+        h3, _ = rule.process(ctx3)
+        assert not h3
+        assert client.calls.count(("add_tags", ["DONE"])) == 1, "非上传完成状态不应执行"
+
+
+def test_rule_action_chain_ignore_continue():
+    """动作链: 前动作失败且无 ignore -> 链中断; ignore_error=true -> 后续继续执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        rule = Rule("g.chain", {"actions": []}, mgr)
+
+        # 无 ignore: 失败中断, 后续动作不执行
+        rule.actions = [_FailingAction("x"), AddTagsAction(["AFTER"])]
+        handled, _ = rule.process(ctx)
+        assert handled, "失败动作本身算已处理"
+        assert ("add_tags", ["AFTER"]) not in client.calls, f"失败且不 ignore 应中断动作链: {client.calls}"
+
+        # ignore_error=true: 失败后继续, 后续动作执行
+        rule.actions = [_FailingAction("x", ignore_error=True), AddTagsAction(["AFTER"])]
+        h2, _ = rule.process(ctx)
+        assert h2
+        assert ("add_tags", ["AFTER"]) in client.calls, f"ignore 后应继续执行后续动作: {client.calls}"
 
 
 def test_rule_action_failed_stop():

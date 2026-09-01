@@ -18,6 +18,12 @@
 - test_grouping_download_conflict_multi_dl: 多下载冲突 -> 暂停 + 去重语义
 - test_grouping_download_conflict_mixed: 已完成与下载中并存 -> 暂停
 - test_grouping_download_conflict_dry_run: 冲突 dry-run 只报告不暂停不记录去重
+- test_download_conflict_meta_dl_mixed: metaDL(元数据下载)属活跃下载, 与已完成并存 -> mixed
+- test_download_conflict_checking_up_mixed: checkingUP(校验中 amount_left=0)+stalledDL -> mixed(qB 重启场景)
+- test_download_conflict_forced_queued_dl: forcedDL+queuedDL 双下载 -> multi-dl
+- test_download_conflict_paused_dl_pair: pausedDL+stoppedDL 停种不算活跃下载 -> 不冲突
+- test_download_conflict_resolve_by_complete: 混合冲突随下载完成(转做种)消除 -> 去重清除可再触发
+- test_download_conflict_two_groups_independent: 两组冲突独立处理, 去重 key 按组隔离
 - test_group_members_not_in_group: 未归组 -> 仅自身
 - test_group_members_in_group: 已归组 -> 全部成员
 - test_leave_group_removes: 移出成员返回剩余组 key
@@ -32,6 +38,11 @@
 - test_check_missing_files_no_seeding_rep: 组内无已完成做种种子 -> 不检查
 - test_check_missing_files_size_mismatch: 文件存在但大小不符 -> 暂停 + MISSING
 - test_check_missing_files_getsize_error: 文件读取 OSError -> 暂停 + MISSING
+- test_check_missing_files_checking_up_rep: checkingUP(做种校验中)也可作代表 -> 缺文件触发暂停
+- test_check_missing_files_first_done_rep: 多已完成成员取第一个作代表, 非代表大小差异不影响
+- test_check_missing_files_empty_sizes_map: 大小映射为空 -> 无文件可检查不误报
+- test_check_missing_files_member_has_tag: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)
+- test_check_missing_files_dry_run: 缺文件 dry-run -> 不暂停不加标签
 """
 import os
 import tempfile
@@ -476,6 +487,156 @@ def test_grouping_download_conflict_dry_run():
         assert client.calls.count(("stop", None)) == 1, f"真实执行应整组暂停: {client.calls}"
 
 
+def test_download_conflict_meta_dl_mixed():
+    """下载冲突: metaDL(元数据下载, amount_left=0)算活跃下载, 与已完成并存 -> mixed"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="metaDL", amount_left=0)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            mgr._check_download_conflicts(dry_run=False)
+        assert stop_mock.call_count == 1, f"metaDL 与已完成并存应整组暂停: {stop_mock.call_count}"
+        assert (key, "mixed") in mgr.store.download_conflict_warned
+
+
+def test_download_conflict_checking_up_mixed():
+    """下载冲突: checkingUP(校验中但已完成, amount_left=0) + stalledDL -> mixed(qB 重启场景)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="checkingUP", amount_left=0)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            mgr._check_download_conflicts(dry_run=False)
+        assert stop_mock.call_count == 1, f"校验中已完成成员与下载中并存应触发 mixed: {stop_mock.call_count}"
+        assert (key, "mixed") in mgr.store.download_conflict_warned
+
+
+def test_download_conflict_forced_queued_dl():
+    """下载冲突: forcedDL + queuedDL 两个活跃下载 -> multi-dl"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="forcedDL", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="queuedDL", amount_left=100)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            mgr._check_download_conflicts(dry_run=False)
+        assert stop_mock.call_count == 1, f"双下载应触发 multi-dl: {stop_mock.call_count}"
+        assert (key, "multi-dl") in mgr.store.download_conflict_warned
+
+
+def test_download_conflict_paused_dl_pair():
+    """下载冲突: pausedDL + stoppedDL 停种(暂停)不算活跃下载 -> 不冲突不暂停"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="pausedDL", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stoppedDL", amount_left=100)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        mgr._check_download_conflicts(dry_run=False)
+        assert client.calls == [], f"暂停的下载不应触发冲突暂停: {client.calls}"
+        assert mgr.store.download_conflict_warned == set()
+
+
+def test_download_conflict_resolve_by_complete():
+    """下载冲突: 混合冲突随下载完成(转做种)消除 -> 去重清除; 重现可再次触发"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            mgr._check_download_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1
+            assert (key, "mixed") in mgr.store.download_conflict_warned
+
+            # 下载完成: 状态转做种 + amount_left=0 -> 冲突消除, 去重记录清除
+            t1.state = "stalledUP"
+            t1.amount_left = 0
+            mgr._check_download_conflicts(dry_run=False)
+            assert mgr.store.download_conflict_warned == set(), "下载完成应清除去重记录"
+            assert stop_mock.call_count == 1
+
+            # 新种子又开始下载 -> 冲突重现, 再次暂停
+            t1.state = "downloading"
+            t1.amount_left = 100
+            mgr._check_download_conflicts(dry_run=False)
+            assert stop_mock.call_count == 2, f"冲突重现应再次暂停: {stop_mock.call_count}"
+            assert (key, "mixed") in mgr.store.download_conflict_warned
+
+
+def test_download_conflict_two_groups_independent():
+    """下载冲突: 两组同时冲突分别处理, 去重 key 按组独立; 一组消除不影响另一组"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
+        t3 = FakeTorrent(hash="H3", name="T3", state="stalledDL", amount_left=100)
+        t4 = FakeTorrent(hash="H4", name="T4", state="stalledUP", amount_left=0)
+        key_a = ("R:/Downloads/A", ("movie.mkv", ))
+        key_b = ("R:/Downloads/B", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2, "H3": t3, "H4": t4}
+        mgr.store.groups = {key_a: ["H1", "H2"], key_b: ["H3", "H4"]}
+        mgr.store.group_sizes = {key_a: {}, key_b: {}}
+        mgr.store.member_to_key = {"H1": key_a, "H2": key_a, "H3": key_b, "H4": key_b}
+
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            mgr._check_download_conflicts(dry_run=False)
+            assert stop_mock.call_count == 2, f"两组各暂停一次: {stop_mock.call_count}"
+            assert (key_a, "multi-dl") in mgr.store.download_conflict_warned
+            assert (key_b, "mixed") in mgr.store.download_conflict_warned
+
+            # 组A 冲突消除(H1 暂停) -> 仅组A 去重清除, 组B 保留且不重复暂停
+            t1.state = "pausedDL"
+            mgr._check_download_conflicts(dry_run=False)
+            assert (key_a, "multi-dl") not in mgr.store.download_conflict_warned
+            assert (key_b, "mixed") in mgr.store.download_conflict_warned
+            assert stop_mock.call_count == 2
+
+
 def test_grouping_state_helpers():
     """_is_uploading/_is_paused/_is_downloading: 按 state_enum 判定(排除暂停的下载)"""
     mgr = QbManager("", config=_group_cfg("state.json"))
@@ -662,3 +823,80 @@ def test_check_missing_files_getsize_error():
             mgr._check_missing_files([rep], sizes, dry_run=False)
         assert client.calls.count(("stop", None)) == 1, f"读取失败应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
+
+
+def test_check_missing_files_checking_up_rep():
+    """_check_missing_files: checkingUP(做种校验中, amount_left=0)也可作代表 -> 缺文件触发暂停"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        rep = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在 -> 触发(证明 checkingUP 被选为代表)
+        mgr._check_missing_files([rep], sizes, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"校验中做种缺文件也应暂停: {client.calls}"
+        assert "MISSING" in client.tags
+
+
+def test_check_missing_files_first_done_rep():
+    """_check_missing_files: 多已完成成员取第一个作代表, 非代表大小映射差异不影响扫描结果"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        real = os.path.join(td, "movie.mkv")
+        with open(real, "wb") as f:
+            f.write(b"x" * 10)
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td, amount_left=0)
+        # 代表 H1 大小正确; 非代表 H2 期望大小错误(仅扫代表, 不应触发)
+        sizes = {"H1": {"movie.mkv": 10}, "H2": {"movie.mkv": 999}}
+        mgr._check_missing_files([t1, t2], sizes, dry_run=False)
+        assert client.calls == [], f"非代表成员大小差异不应触发: {client.calls}"
+        # 代表 H1 大小错误 -> 触发
+        sizes2 = {"H1": {"movie.mkv": 999}, "H2": {"movie.mkv": 10}}
+        mgr._check_missing_files([t1, t2], sizes2, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"代表大小不符应整组暂停: {client.calls}"
+        assert "MISSING" in client.tags
+
+
+def test_check_missing_files_empty_sizes_map():
+    """_check_missing_files: 大小映射为空 -> 无文件可检查, 不误报"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        mgr._check_missing_files([rep], {}, dry_run=False)
+        assert client.calls == [], f"空大小映射不应触发扫描: {client.calls}"
+
+
+def test_check_missing_files_member_has_tag():
+    """_check_missing_files: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0, tags="MISSING")
+        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
+        mgr._check_missing_files([rep], sizes, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"缺文件仍应暂停: {client.calls}"
+        assert ("add_tags", ["MISSING"]) not in client.calls, "已有标签不应重复添加"
+
+
+def test_check_missing_files_dry_run():
+    """_check_missing_files dry-run: 不暂停也不加标签"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
+        mgr._check_missing_files([rep], sizes, dry_run=True)
+        assert client.calls == [], f"dry-run 不应暂停/加标签: {client.calls}"
+        assert "MISSING" not in client.tags
