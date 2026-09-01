@@ -224,7 +224,7 @@ class GroupingMixin:
     def _is_downloading(tor) -> bool:
         """种子是否处于活跃下载状态: 由 state_enum 判定, 排除暂停(pausedDL/stoppedDL 属未完成但非活跃下载)"""
         enum = getattr(tor, "state_enum", None)
-        return bool(enum is not None and enum.is_downloading and not enum.is_paused)
+        return bool(enum is not None and enum.is_downloading and not enum.is_checking and not enum.is_paused)
 
     # ---------- 下载冲突检查(每轮, 分组 enabled 时) ----------
 
