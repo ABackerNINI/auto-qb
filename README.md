@@ -1,6 +1,6 @@
-# auto_qb (🚧施工中)
+# auto-qb (🚧施工中)
 
-> PT Seed Manager for qBittorrent — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具
+> PT Seed Auto Manager for qBittorrent — 基于 [qbittorrent-api](https://pypi.org/project/qbittorrent-api/) 的 PT 种子自动化管理工具
 
 <table>
 <tr>
@@ -67,10 +67,10 @@
 - Python 3.12+
 - qBittorrent (Web UI 已开启， 已测试qb5.2.3， 其它版本待测试)
 
-### 安装
+### 安装运行依赖
 
 ```bash
-# 创建虚拟环境
+# 创建虚拟环境 (可跳过)
 python -m venv .venv
 # Windows
 .venv\Scripts\activate
@@ -83,6 +83,10 @@ pip install pyyaml qbittorrent-api
 # 开发依赖(可选)
 pip install pytest pytest-cov
 ```
+
+### 安装auto_qb
+
+下载源码解压即可
 
 ### 配置
 
