@@ -1,0 +1,56 @@
+---
+config:
+    interval: 10S
+    remove_similar_tags: false
+    hr:
+        add_tag: ""
+        add_category: "!!HR${required_seeding_time}!!"
+        overwrite_category: false
+        add_tag_for_satisfied: ""
+        add_category_for_satisfied: --HR${required_seeding_time}--
+        overwrite_category_for_satisfied: false
+    add_episode_tags: false
+    grouping:
+        enabled: true
+        missing_tag: MISSING
+    delete_tags:
+    delete_tags_if_has_no_torrents:
+    qbittorrent:
+        host: 127.0.0.1
+        port: "16585"
+        username: abacker
+        password: "132435."
+
+    stop_ptfans_rules:
+        rule:
+            enabled: true
+            trigger: interval
+            interval: 60S # 执行间隔
+            execute_once: never
+            cooldown: 0S # 冷却时间, 距上次执行成功不足该时长则跳过; 覆盖execute_once的粒度, 如 execute_once: never + cooldown: 10M
+            log_level: info
+
+            conditions: # 筛选条件必须全部满足时才生效
+                - trackers: # tracker的自定义名称, 不同tracker组之间为或的关系, 支持正则
+                      - ptfans_cc
+
+            actions: # 筛选条件满足后执行的动作, 动作顺序执行, 默认一个动作出错后续动作将不执行
+                - stop: true
+
+            stop_following_rules_if:
+                conditions-met # 可选: conditions-met, conditions-not-met, action-failed, all-actions-succeed, always, never
+                # 注意: action-failed依赖动作结果判定(skipped不算失败), 见"规则执行语义"章节
+    trackers:
+        ptfans_cc:
+            domains:
+                - ptfans.cc
+            tags:
+                - PTFans
+            upload_speed_limit: 1000KiB/s
+            download_speed_limit: 1000KiB/s
+            hr:
+                required_seeding_time: 7D
+                extra_seeding_time: 12H
+                condition: 80%
+            rules:
+                - "@stop_ptfans_rules.rule"
