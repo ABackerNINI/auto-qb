@@ -159,10 +159,10 @@ def compare(op: str, left, right) -> bool:
     return left == right
 
 
-def check_filelist(client, torrent):
-    """检查种子文件是否存在且大小一致. 返回错误描述字符串, 全部通过返回 None"""
+def check_filelist(api, torrent):
+    """检查种子文件是否存在且大小一致(api 为 QbApi 门面或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
     try:
-        files = client.torrents_files(torrent.hash)
+        files = api.torrents_files(torrent.hash)
     except Exception as e:
         return f"获取文件列表失败: {e}"
     save_path = torrent.save_path

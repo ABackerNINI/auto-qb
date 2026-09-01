@@ -141,7 +141,7 @@ class GroupingMixin:
         desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in tos)
         logger.warning(f"辅种组文件大小不一致({len(tos)}个种子), 暂停整组: {desc}")
         if not dry_run:
-            self.client.torrents_stop(torrent_hashes=[t.hash for t in tos])
+            self.api.torrents_stop(torrent_hashes=[t.hash for t in tos])
 
     def _leave_group(self, torrent_hash: str):
         """将种子移出所在分组(成员索引 O(1) 定位, 不做全量遍历); 组空则删除整组
@@ -204,7 +204,7 @@ class GroupingMixin:
             desc = ", ".join(f"[{t.hash[:8]}]" for t in members)
             logger.warning(f"辅种组文件丢失, 暂停整组并添加标签 '{tag}', 受影响的种子哈希: {desc}")
             if not dry_run:
-                self.client.torrents_stop(torrent_hashes=[t.hash for t in members])
+                self.api.torrents_stop(torrent_hashes=[t.hash for t in members])
             for t in members:
                 self._add_tags(t, [tag], dry_run)
 
@@ -266,7 +266,7 @@ class GroupingMixin:
             if dry_run:
                 continue
             warned.add((key, kind))
-            self.client.torrents_stop(torrent_hashes=[t.hash for t in tos])
+            self.api.torrents_stop(torrent_hashes=[t.hash for t in tos])
 
     # ---------- 校验动作(checking)辅助: 组上下文 ----------
 

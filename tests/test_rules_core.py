@@ -241,8 +241,14 @@ def test_rule_interval():
             tq.reschedule(t, now + 1)
 
         # 60s 后: stop_low_ratio 到期再次执行
+        # (第 1 轮 stop 后 store 快照同步为 pausedUP -> stop 幂等; 模拟用户重新开始种子,
+        #  客户端状态变化经 refresh 回传快照, stop 动作应再次生效)
+        tor.state = "uploading"
+        mgr.store.apply([tor])
         client.calls.clear()
         due3 = tq.due(now + 60)
+        assert "example_rules.stop_low_ratio" in [t.name for t in due3], \
+            f"stop_low_ratio 应到期: {[t.name for t in due3]}"
         for t in due3:
             t.handler(t, False)
         assert ("stop", None) in client.calls, f"60s 后应再次 stop: {client.calls}"

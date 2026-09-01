@@ -78,7 +78,7 @@ class RuleContext:
     """一次规则处理上下文, 惰性缓存 tracker/文件等数据"""
 
     manager: Any  # QbManager(规则调度/状态持久化/任务队列)
-    client: Any  # qbittorrent Client
+    client: Any  # qbittorrent Client(兼容入口: 外部传入种子时直接拉取)
     config: Any  # Config
     torrent: Any  # TorrentDictionary
     dry_run: bool
@@ -86,6 +86,14 @@ class RuleContext:
     _tracker_urls: Optional[List[str]] = field(default=None)
     _tracker_confs: Optional[List] = field(default=None)
     _files: Optional[List] = field(default=None)
+
+    @property
+    def api(self) -> Any:
+        """qB API 门面: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
+        api = getattr(self.manager, "api", None)
+        if api is not None and getattr(api, "client", None) is not None:
+            return api
+        return self.client
 
     # TODO: 当一个torrent匹配到多个tracker时, warning, 跳过
 
@@ -99,7 +107,11 @@ class RuleContext:
 
     @property
     def torrent_record(self) -> TorrentRecord:
-        return self.manager.store.get(self.torrent.hash)
+        """快照记录; store 无该种子(外部传入种子/测试直接调用)时从 torrent 构造"""
+        rec = self.manager.store.get(self.torrent.hash)
+        if rec is None:
+            rec = TorrentRecord.from_torrent(self.torrent)
+        return rec
 
     def replace_vars(self, text: str) -> str:
         """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}"""
@@ -113,9 +125,7 @@ class RuleContext:
                 self._tracker_urls = store.tracker_urls(self.torrent.hash)
             else:
                 # 外部传入种子(process_torrent 兼容入口): 直接拉取
-                self._tracker_urls = [
-                    t["url"] for t in self.client.torrents_trackers(self.torrent.hash) if t.get("url")
-                ]
+                self._tracker_urls = [t["url"] for t in self.api.torrents_trackers(self.torrent.hash) if t.get("url")]
         return self._tracker_urls
 
     def matched_tracker_confs(self) -> List[Any]:
@@ -148,7 +158,7 @@ class RuleContext:
                 self._files = store.files(self.torrent.hash)
             else:
                 # 外部传入种子(process_torrent 兼容入口): 直接拉取
-                self._files = self.client.torrents_files(self.torrent.hash)
+                self._files = self.api.torrents_files(self.torrent.hash)
         return self._files
 
     def check_hr_condition(self, conf) -> bool:

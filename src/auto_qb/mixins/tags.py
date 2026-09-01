@@ -7,6 +7,7 @@ from typing import List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
 from ..config import HRRule, TrackerConfig, Config
+from ..qbapi import QbApi
 from .. import episodes, utils
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ class TagsMixin:
     """标签/分类/HR 辅助"""
 
     client: Optional[Client]
+    api: Optional[QbApi]
     logger: logging.Logger
     config: Config
 
@@ -40,7 +42,7 @@ class TagsMixin:
         new_tags = [t for t in tags if t not in current_tags]
         if new_tags:
             if not dry_run:
-                self.client.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
+                self.api.torrents_add_tags(tags=new_tags, torrent_hashes=tor.hash)
             logger.info(f"Added tags '{new_tags}'")
             return True
         return False
@@ -60,7 +62,7 @@ class TagsMixin:
         to_remove_tags = [tag for tag in current_tags if utils.match_tag_patterns(tag, patterns)]
         if to_remove_tags:
             if not dry_run:
-                self.client.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=tor.hash)
+                self.api.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=tor.hash)
             logger.info(f"Removed tags '{to_remove_tags}'")
             return True
         return False
@@ -101,7 +103,7 @@ class TagsMixin:
         for tag in current_tags:
             if tag.lower() in [t.lower() for t in tags] and tag not in tags:
                 if not dry_run:
-                    self.client.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
+                    self.api.torrents_remove_tags(tags=tag, torrent_hashes=tor.hash)
                 logger.info(f"Removed similar tag '{tag}'")
                 removed = True
 
@@ -126,7 +128,7 @@ class TagsMixin:
 
             # 设置分类
             if not dry_run:
-                self.client.torrents_set_category(category=category, torrent_hashes=tor.hash)
+                self.api.torrents_set_category(category=category, torrent_hashes=tor.hash)
                 if not overwrite:
                     auto_categories[tor.hash] = category
 
@@ -146,8 +148,7 @@ class TagsMixin:
         current_categories = self.store.all_categories()
         if category not in current_categories:  # 分类不存在
             if not dry_run:
-                self.client.torrents_create_category(name=category)
-                self.store.invalidate_categories()
+                self.api.torrents_create_category(name=category)
             logger.info(f"Created category '{category}'")
 
     # ---------- HR ----------
@@ -226,8 +227,7 @@ class TagsMixin:
         if not matched:
             return True
         if not dry_run:
-            self.client.torrents_delete_tags(tags=matched)
-            self.store.invalidate_tags()
+            self.api.torrents_delete_tags(tags=matched)
         logger.info(f"彻底删除标签: {matched}")
         return True
 
@@ -254,8 +254,7 @@ class TagsMixin:
         if not matched:
             return True
         if not dry_run:
-            self.client.torrents_delete_tags(tags=matched)
-            self.store.invalidate_tags()
+            self.api.torrents_delete_tags(tags=matched)
         logger.info(f"彻底删除无种子的标签: {matched}")
 
         return True

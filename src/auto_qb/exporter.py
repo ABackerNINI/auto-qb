@@ -23,12 +23,12 @@ def collect_configured_domains(config) -> set:
     return configured
 
 
-def collect_all_tracker_hostnames(client) -> set:
-    """从所有种子中收集去重的 tracker hostname"""
+def collect_all_tracker_hostnames(api) -> set:
+    """从所有种子中收集去重的 tracker hostname(api 为 QbApi 门面或兼容客户端)"""
     all_domains = set()
-    for tor in client.torrents_info():
+    for tor in api.torrents_info():
         try:
-            trackers_info = client.torrents_trackers(tor.hash)
+            trackers_info = api.torrents_trackers(tor.hash)
         except Exception:
             continue
         all_domains |= extract_tracker_hostnames(trackers_info)
@@ -83,7 +83,7 @@ def build_tracker_entry(domain: str) -> dict:
 
 
 def export_yaml_template(
-    client,
+    api,
     config,
     config_path: str,
     output_path: str,
@@ -97,9 +97,9 @@ def export_yaml_template(
     否则将缺失条目追加到现有配置后完整导出。
     """
     # 1. 获取所有种子并收集 tracker 域名
-    torrents = client.torrents_info()
+    torrents = api.torrents_info()
     logger.info(f"Scanning {len(torrents)} torrents for tracker URLs")
-    all_domains = collect_all_tracker_hostnames(client)
+    all_domains = collect_all_tracker_hostnames(api)
     logger.info(f"Found {len(all_domains)} unique tracker domains")
 
     # 2. 筛选出未配置的域名

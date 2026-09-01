@@ -30,7 +30,7 @@ class AddTagsAction(BaseAction):
         if not new:
             return ActionResult.skip("标签已存在")
         if not ctx.dry_run:
-            ctx.client.torrents_add_tags(tags=new, torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_add_tags(tags=new, torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok(f"添加标签 {new}")
 
 
@@ -51,7 +51,7 @@ class RemoveTagsAction(BaseAction):
         if not to_remove:
             return ActionResult.skip("无匹配标签")
         if not ctx.dry_run:
-            ctx.client.torrents_remove_tags(tags=list(to_remove), torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_remove_tags(tags=list(to_remove), torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok(f"删除标签 {to_remove}")
 
     def _expand_patterns(self, ctx) -> List[str]:
@@ -86,11 +86,10 @@ class AddCategoryAction(BaseAction):
         if not ctx.dry_run:
             try:
                 if category not in ctx.manager.store.all_categories():  # 走 store 惰性缓存
-                    ctx.client.torrents_create_category(name=category)
-                    ctx.manager.store.invalidate_categories()
+                    ctx.api.torrents_create_category(name=category)
             except Exception:
                 pass
-            ctx.client.torrents_set_category(category=category, torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_set_category(category=category, torrent_hashes=ctx.torrent.hash)
             if not self.overwrite:
                 auto_categories[ctx.torrent.hash] = category
         return ActionResult.ok(f"设置分类 {category}")
@@ -105,7 +104,7 @@ class RemoveCategoryAction(BaseAction):
         if not (ctx.torrent.category or "").strip():
             return ActionResult.skip("分类为空")
         if not ctx.dry_run:
-            ctx.client.torrents_set_category(category="", torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_set_category(category="", torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok("清空分类")
 
 
@@ -118,7 +117,7 @@ class StartAction(BaseAction):
         if not ctx.torrent_record.is_paused:
             return ActionResult.skip("已开始")
         if not ctx.dry_run:
-            ctx.client.torrents_start(torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_start(torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok("开始")
 
 
@@ -131,7 +130,7 @@ class StopAction(BaseAction):
         if ctx.torrent_record.is_paused:
             return ActionResult.skip("已停止")
         if not ctx.dry_run:
-            ctx.client.torrents_stop(torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_stop(torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok("暂停")
 
 
@@ -227,14 +226,14 @@ class CheckAction(BaseAction):
         elif self.basic_check == "piecehashes":
             # 严格模式: 候选须与目标种子 piece hash 列表完全相同(torrents_piece_hashes API, 无需导出 .torrent)
             try:
-                target = ctx.client.torrents_piece_hashes(ctx.torrent.hash)
+                target = ctx.api.torrents_piece_hashes(ctx.torrent.hash)
             except Exception as e:
                 logger.warning(f"获取 piece hashes 失败({ctx.torrent.hash}), 视为无参考: {e}")
                 target = None
             if target is not None:
                 for cand in candidates:
                     try:
-                        if ctx.client.torrents_piece_hashes(cand.hash) == target:
+                        if ctx.api.torrents_piece_hashes(cand.hash) == target:
                             refs.append(cand)
                     except Exception as e:
                         logger.warning(f"获取参考种子 piece hashes 失败({cand.hash}): {e}")
@@ -278,16 +277,16 @@ class CheckAction(BaseAction):
         tq = getattr(ctx.manager, "task_queue", None)
         if tq is None:
             # 无任务队列(旧用法/同步环境): 直接发送请求
-            ctx.client.torrents_recheck(torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_recheck(torrent_hashes=ctx.torrent.hash)
             return ActionResult.ok("full-checking 校验")
         rule_name = ctx.rule_name
         torrent_hash = ctx.torrent.hash
-        client = ctx.client
+        api = ctx.api
         manager = ctx.manager
         auto_start = segment["auto_start"]
 
         def send():
-            client.torrents_recheck(torrent_hashes=torrent_hash)
+            api.torrents_recheck(torrent_hashes=torrent_hash)
 
         def done(task):
             # 主循环线程执行: state_file 仅主循环写, 线程安全
@@ -298,7 +297,7 @@ class CheckAction(BaseAction):
             # 晋升参考(仅内存, 不写 state_file): 校验通过说明文件与元数据一致, 可作同组参考
             manager.store.verified_references.add(torrent_hash)
             if auto_start:
-                client.torrents_start(torrent_hashes=torrent_hash)
+                api.torrents_start(torrent_hashes=torrent_hash)
                 logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")
             manager.record_execution(rule_name, torrent_hash)
 
@@ -322,13 +321,13 @@ class CheckAction(BaseAction):
             return ActionResult.skip("今日已跳检, 跳过")
 
         # 1. 强制前置检查: 文件全部存在且大小一致
-        err = utils.check_filelist(ctx.client, ctx.torrent)
+        err = utils.check_filelist(ctx.api, ctx.torrent)
         if err is not None:
             return ActionResult.fail(f"跳检前置检查未通过: {err}")
 
         # 2. 导出 .torrent
         try:
-            data = ctx.client.torrents_export(torrent_hashes=ctx.torrent.hash)
+            data = ctx.api.torrents_export(torrent_hashes=ctx.torrent.hash)
         except Exception as e:
             return ActionResult.fail(f"导出 .torrent 失败: {e}")
         if not data:
@@ -336,13 +335,13 @@ class CheckAction(BaseAction):
 
         # 3. 删除种子(保留文件)
         try:
-            ctx.client.torrents_delete(torrent_hashes=ctx.torrent.hash, delete_files=False)
+            ctx.api.torrents_delete(torrent_hashes=ctx.torrent.hash, delete_files=False)
         except Exception as e:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
 
         # 4. 重加(跳过校验, 先暂停)
         try:
-            ctx.client.torrents_add(
+            ctx.api.torrents_add(
                 torrent_files=[data],
                 save_path=ctx.torrent.save_path,
                 category=ctx.torrent.category or None,
@@ -359,7 +358,7 @@ class CheckAction(BaseAction):
         appeared = False
         for _ in range(3):
             try:
-                if ctx.client.torrents_info(torrent_hashes=ctx.torrent.hash):
+                if ctx.api.torrents_info(torrent_hashes=ctx.torrent.hash):
                     appeared = True
                     break
             except Exception:
@@ -374,7 +373,7 @@ class CheckAction(BaseAction):
                            f"内容错误时会传垃圾数据: {ctx.torrent.hash}")
         if segment["auto_start"]:
             try:
-                ctx.client.torrents_start(torrent_hashes=ctx.torrent.hash)
+                ctx.api.torrents_start(torrent_hashes=ctx.torrent.hash)
             except Exception as e:
                 return ActionResult.fail(f"自动开始失败: {e}")
             return ActionResult.ok("skip-checking 跳检完成并自动开始")
@@ -411,7 +410,7 @@ class MoveToAction(BaseAction):
         if not self.path:
             return ActionResult.fail("move_to.path 为空")
         if not ctx.dry_run:
-            ctx.client.torrents_set_location(torrent_hashes=ctx.torrent.hash, location=self.path)
+            ctx.api.torrents_set_location(torrent_hashes=ctx.torrent.hash, location=self.path)
         return ActionResult.ok(f"移动到 {self.path}")
 
 
@@ -423,7 +422,7 @@ class ReannounceAction(BaseAction):
     def execute(self, ctx):
         # TODO: 添加限制
         if not ctx.dry_run:
-            ctx.client.torrents_reannounce(torrent_hashes=ctx.torrent.hash)
+            ctx.api.torrents_reannounce(torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok("强制汇报tracker")
 
 
@@ -448,7 +447,7 @@ class _SpeedLimitAction(BaseAction):
                 return ActionResult.skip("用户已设置")
             if current_limit == self.value:
                 return ActionResult.skip("已设置")
-            getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, limit=self.value)
+            getattr(ctx.api, self.api_method)(torrent_hashes=ctx.torrent.hash, limit=self.value)
         return ActionResult.ok(f"设置{self.direction}限速: {utils.fmt_speed(self.value)}")
 
 

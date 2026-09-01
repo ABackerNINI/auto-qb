@@ -41,7 +41,7 @@ def test_main_export_yaml():
         main()
     m_exp.assert_called_once()
     args = m_exp.call_args[0]
-    assert args[0] is manager.client
+    assert args[0] is manager.api  # 业务代码统一走 QbApi 门面
     assert args[1] is manager.config
     assert args[2] == "config.yml"
     assert args[3] == "out.yml"

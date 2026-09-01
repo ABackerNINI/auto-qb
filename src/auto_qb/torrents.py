@@ -19,7 +19,7 @@
 """
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     from qbittorrentapi import TorrentState
@@ -324,3 +324,69 @@ class TorrentStore:
             for tag in rec.tags_set:
                 usage[tag] = usage.get(tag, 0) + 1
         return usage
+
+    # ---------- 写操作同步(供 QbApi 门面调用) ----------
+
+    def update_torrent_fields(
+        self,
+        torrent_hashes: Union[str, List[str]],
+        *,
+        tags_add: Optional[List[str]] = None,
+        tags_remove: Optional[List[str]] = None,
+        category: Optional[str] = None,
+        state: Optional[str] = None,
+        up_limit: Optional[int] = None,
+        dl_limit: Optional[int] = None,
+        save_path: Optional[str] = None,
+    ) -> None:
+        """写操作后同步快照字段(单 hash 或 hash 列表)
+
+        由 QbApi 门面调用: 调用客户端 API 后立即更新内存快照, 保证同 tick 内
+        后续读取(如 tag_usage / 分类判断 / 限速幂等)读到最新值; 下轮 refresh 校准。
+        tags_add/tags_remove 合并式更新并失效 _tags_set, state 变化失效 _state_enum。
+        """
+        hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
+        tags_changed = tags_add is not None or tags_remove is not None
+        state_changed = state is not None
+        for h in hashes:
+            rec = self.by_hash.get(h)
+            if rec is None:
+                continue
+            if tags_add is not None:
+                current = set(rec.tags_set)
+                current.update(tags_add)
+                rec.tags = ",".join(sorted(current))
+            if tags_remove is not None:
+                current = set(rec.tags_set)
+                current.difference_update(tags_remove)
+                rec.tags = ",".join(sorted(current))
+            if category is not None:
+                rec.category = category
+            if state is not None:
+                rec.state = state
+            if up_limit is not None:
+                rec.up_limit = up_limit
+            if dl_limit is not None:
+                rec.dl_limit = dl_limit
+            if save_path is not None:
+                rec.save_path = save_path
+            if tags_changed:
+                rec._tags_set = None
+            if state_changed:
+                rec._state_enum = None
+
+    def apply_tag_removal(self, tags: List[str]) -> None:
+        """torrents_delete_tags 后从所有记录移除已删除标签(定义删除 = 所有种子移除)"""
+        tags = set(tags or [])
+        if not tags:
+            return
+        for rec in self.by_hash.values():
+            cur = rec.tags_set
+            removed = cur & tags
+            if removed:
+                rec.tags = ",".join(sorted(cur - removed))
+                rec._tags_set = None
+
+    def remove_torrent(self, torrent_hash: str) -> None:
+        """种子删除后立即从快照移除(保留 _known_hashes, 下轮 refresh 产生 removed 事件驱动任务/分组清理)"""
+        self.by_hash.pop(torrent_hash, None)

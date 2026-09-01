@@ -37,7 +37,7 @@ def main():
             manager.logger.error("Cannot export: qBittorrent connection failed")
             return
         export_yaml_template(
-            manager.client,
+            manager.api,
             manager.config,
             manager.config_path,
             args.export_yaml,

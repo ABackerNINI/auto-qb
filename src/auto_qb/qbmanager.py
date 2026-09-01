@@ -18,6 +18,7 @@ from qbittorrentapi import Client
 
 from .config import Config, load_config
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
+from .qbapi import QbApi
 from .rules import Rule
 from .taskqueue import Task, TaskQueue
 from .torrents import TorrentRecord, TorrentStore
@@ -36,6 +37,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 每 main_tick 刷新一次后, 本 tick 内所有读取操作都只通过 self.store 接口访问
         self.store = TorrentStore()
         self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
+        # qB API 门面: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
+        self.api = QbApi(self._client, self.store)
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file
         self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
@@ -47,7 +50,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     @property
     def client(self) -> Optional[Client]:
-        """qBittorrent 客户端(与 store.client 同步绑定, 写操作仍走客户端 API) """
+        """qBittorrent 客户端(与 store.client/api 同步绑定, 业务代码请走 self.api) """
         return self._client
 
     @client.setter
@@ -55,6 +58,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._client = value
         if getattr(self, "store", None) is not None:
             self.store.client = value
+        if getattr(self, "api", None) is not None:
+            self.api.bind(value, self.store)
 
     def _setup_logging(self):
         logging_conf = self.config.logging
@@ -68,7 +73,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 username=self.config.qbittorrent.username,
                 password=self.config.qbittorrent.password,
             )
-            self.client.auth_log_in()
+            self.api.auth_log_in()
             logger.info("Connected to qBittorrent successfully")
             return True
         except Exception as e:
@@ -195,7 +200,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
-        torrents = self.client.torrents_info()
+        torrents = self.api.torrents_info()
         added, removed = self.store.refresh(torrents)
 
         if added:

@@ -46,6 +46,7 @@
         "pytest",
         "pythonpath",
         "pyyaml",
+        "qbapi",
         "qbittorrent",
         "qbittorrentapi",
         "qbmanager",

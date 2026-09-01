@@ -62,6 +62,6 @@ class TrackerMixin:
             return
 
         if not dry_run:
-            getattr(self.client, api_method)(torrent_hashes=torrent_record.hash, limit=value)
+            getattr(self.api, api_method)(torrent_hashes=torrent_record.hash, limit=value)
 
         logger.info(f"设置{direction}限速: {utils.fmt_speed(value)}")

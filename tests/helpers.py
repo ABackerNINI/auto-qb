@@ -69,8 +69,9 @@ class FakeClient:
 
     def torrents_delete(self, torrent_hashes=None, delete_files=False):
         self.calls.append(("delete", delete_files))
-        if not delete_files:
-            self.torrents.pop(torrent_hashes, None)
+        hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else (torrent_hashes or [])
+        for h in hashes:
+            self.torrents.pop(h, None)
 
     def torrents_add(
         self,
@@ -137,11 +138,11 @@ class FakeClient:
     def torrents_reannounce(self, torrent_hashes=None):
         self.calls.append(("reannounce", None))
 
-    def torrents_set_upload_limit(self, torrent_hashes=None, upload_limit=None):
-        self.calls.append(("set_upload_limit", upload_limit))
+    def torrents_set_upload_limit(self, torrent_hashes=None, limit=None):
+        self.calls.append(("set_upload_limit", limit))
 
-    def torrents_set_download_limit(self, torrent_hashes=None, download_limit=None):
-        self.calls.append(("set_download_limit", download_limit))
+    def torrents_set_download_limit(self, torrent_hashes=None, limit=None):
+        self.calls.append(("set_download_limit", limit))
 
     def torrents_set_location(self, torrent_hashes=None, location=None):
         self.calls.append(("set_location", location))
@@ -180,7 +181,9 @@ class FakeTorrent:
 
 # ---------- 模拟 TrackerConfig ----------
 class FakeTracker:
-    def __init__(self, name, hr=None, rules=None, remove_similar_tags=False):
+    def __init__(
+        self, name, hr=None, rules=None, remove_similar_tags=False, upload_speed_limit=0, download_speed_limit=0
+    ):
         self.name = name
         self.domains = ["tracker.hhanclub.net"]
         self.tags = ["HHan"]
@@ -188,6 +191,8 @@ class FakeTracker:
         self.hr = hr  # HRRule 或 None
         self.rules = rules or []
         self.remove_similar_tags = remove_similar_tags
+        self.upload_speed_limit = upload_speed_limit  # 字节/秒; 0 = 不限速(等价 UNLIMITED_SPEED)
+        self.download_speed_limit = download_speed_limit
 
 
 # ---------- 模拟 Config ----------
