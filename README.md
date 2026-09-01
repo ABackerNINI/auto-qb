@@ -95,19 +95,19 @@ pip install pytest pytest-cov
 2. 从现有种子导出模板:
 
 ```bash
-python -m auto_qb minimal.yml --export-yaml config.yml
+python src/auto-qb.py minimal.yml --export-yaml config.yml
 ```
 
 `--export-yaml` 会连接 qBittorrent，按已有种子的 tracker 生成配置模板(尽量保留已有配置不含注释)；加 `--only-missing` 只导出未配置的 tracker，生成最小骨架，方便随时添加新的 tracker。
 
 ### 运行
 
-__python -m auto_qb [CONFIG] [--export-yaml， -e OUTPUT] [--only-missing] [--dry-run， -n]__
+__python src/auto-qb.py [CONFIG] [--export-yaml， -e OUTPUT] [--only-missing] [--dry-run， -n]__
 
 ```bash
-python -m auto_qb                # 使用默认 config.yml
-python -m auto_qb my-config.yml  # 指定配置文件
-python -m auto_qb -n             # dry-run: 只打印将执行的动作，不实际调用客户端
+python src/auto-qb.py                # 使用默认 config.yml
+python src/auto-qb.py my-config.yml  # 指定配置文件
+python src/auto-qb.py -n             # dry-run: 只打印将执行的动作，不实际调用客户端
 ```
 
 ### 命令行参数
@@ -241,7 +241,7 @@ config:
             # 可选: conditions-met / conditions-not-met / action-failed /
             #       all-actions-succeed / always / never
 
-    # tracker 站点配置 (建议直接使用`python -m auto_qb --export-yaml missing.yml --only-missing`直接导出后修改)
+    # tracker 站点配置 (建议直接使用`python src/auto-qb.py --export-yaml missing.yml --only-missing`直接导出后修改)
     trackers:
         tracker1:                           # 自定义 tracker 站点名称
             domains:                        # 站点域名，可以有多个
