@@ -1,37 +1,31 @@
-"""双任务队列模型: 快速队列(时间优先堆, 所有带 interval 的任务) + 慢速队列(异步校验任务, 主循环轮询)
+"""单任务队列模型: 时间优先最小堆, 所有任务(含校验结果轮询)统一调度
 
-线程安全设计(最大程度确保线程安全):
-- 主循环线程是唯一修改任务队列结构与 state_file 的线程
-- 异步工作线程(ThreadPoolExecutor 单线程)仅执行"发送请求"类回调(send_fn, 如 torrents_recheck),
-  结果通过线程安全队列 result_q 回传主循环; 不触碰任务队列, 不写 state_file
-- 队列结构由 RLock 保护(防御性加锁, 实际只有主循环线程访问)
+线程模型:
+- 主循环线程是唯一修改任务队列与 state_file 的线程, 无需加锁
+- 校验结果轮询任务(check)由规则动作创建, 经 add_check_task 去重登记(_active_checks);
+  handler 按 interval 到期执行; 触发校验的规则任务经 defer 让位(不入队不消亡),
+  由轮询任务在完成后 resume(校验成功, 触发 resume_cb 完成处理)或 reschedule(失败)恢复
 """
 import heapq
 import logging
-import queue
-import threading
 import time
-import random
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Set
 
 from .config import TrackerConfig
-from . import utils
 
 logger = logging.getLogger(__name__)
 
 # 任务状态
-PENDING = "pending"  # 快速队列排队中(等待到期)
+PENDING = "pending"  # 排队中(等待到期)
 RUNNING = "running"  # 已被主循环取出执行
-WAITING = "waiting"  # 慢速队列: 异步请求已发出, 等待客户端完成
-DONE = "done"  # 已完成
+DEFERRED = "deferred"  # 让位: 不入队不消亡, 由外部决定恢复(resume)或重新调度(reschedule)
 
 # handler 返回 False = 任务不重新入队(自然消亡, 如种子已被删除)
 Handler = Callable[["Task", bool], bool]
 
 
 class Task:
-    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) / check(异步校验)"""
+    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) / check(校验结果轮询)"""
     __slots__ = (
         "uid",
         "kind",
@@ -41,14 +35,11 @@ class Task:
         "next_run",
         "interval",
         "state",
+        "resume_cb",
         "run_count",
         "created_at",
         "payload",
         "handler",
-        "result",
-        "send_error",
-        "sent",
-        "timeout",
     )
 
     def __init__(
@@ -61,24 +52,20 @@ class Task:
         interval: float = 0.0,
         payload: Any = None,
         handler: Handler = None,
-        timeout: float = 0.0,
     ):
         self.uid = f"{kind}:{name}:{torrent_hash}:{time.monotonic_ns()}"
         self.kind = kind
         self.name = name
         self.torrent_hash = torrent_hash
         self.tracker_conf = tracker_conf
-        self.next_run = next_run  # epoch 秒, 到期才执行(快速队列)
+        self.next_run = next_run  # epoch 秒, 到期才执行
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING
+        self.resume_cb = None  # 让位任务恢复时触发的完成处理(一次性, 由 defer/resume 使用)
         self.run_count = 0
         self.created_at = time.time()
-        self.payload = payload  # check 任务: done_cb(主循环线程调用)
+        self.payload = payload  # 可选: 任务附带数据(自定义)
         self.handler = handler  # 主循环执行任务时调用: handler(task, dry_run) -> bool(False=不重入)
-        self.result = None  # 异步发送回调的返回值
-        self.send_error = None  # check 任务: 异步发送失败原因
-        self.sent = False  # check 任务: 请求已确认发出(可开始轮询)
-        self.timeout = timeout  # check 任务: 轮询超时, 0 = 不限
 
     def __lt__(self, other):
         return self.next_run < other.next_run
@@ -88,24 +75,20 @@ class Task:
 
 
 class TaskQueue:
-    """双任务队列
+    """单任务队列(时间优先堆)
 
-    - fast: 最小堆(时间优先), 存放所有带 interval 的任务(种子刷新/规则/种子级内置功能),
-      按 next_run 到期弹出; 每个任务有内置 interval, 执行后由主循环按 interval 重新入队
-    - slow: 以 torrent_hash 为键的字典, 存放异步校验任务, 由主循环 poll_slow 轮询完成
-
-    executor_workers=0 时同步执行发送回调(测试/无异步场景), 其余用单线程线程池。
+    - 所有任务(种子刷新/规则/种子级内置/校验结果轮询)统一按 next_run 到期弹出执行;
+      每个任务有内置 interval, 执行后由主循环按 interval 重新入队
+    - 校验结果轮询任务(check)经 add_check_task 去重登记(_active_checks),
+      handler 返回 False 时由主循环调 task_died 释放在途标记
+    - 让位(resume 语义): 规则任务执行 full-checking 后经 defer 挂起(_deferred, 不入队不消亡),
+      由轮询任务在完成后 resume(校验成功, 触发 resume_cb 完成处理)或 reschedule(失败)恢复
+    - 无锁: 仅主循环线程修改队列结构
     """
-    def __init__(self, executor_workers: int = 1):
-        self._lock = threading.RLock()
+    def __init__(self):
         self._fast: List[Task] = []  # heapq: 所有按时间调度的任务
-        self._slow: Dict[str, Task] = {}  # torrent_hash -> Task
-        self._result_q: "queue.Queue[Task]" = queue.Queue()  # 异步线程 -> 主循环
-        self._executor: Optional[ThreadPoolExecutor] = (
-            ThreadPoolExecutor(max_workers=executor_workers, thread_name_prefix="taskq")
-            if executor_workers > 0 else None
-        )
-        self._shutdown = False
+        self._active_checks: Set[str] = set()  # 在途校验 hash 集合(去重)
+        self._deferred: Set[Task] = set()  # 让位任务: 不入队不消亡, 等待恢复
 
     # ---------- 快速队列: 通用任务 ----------
 
@@ -115,12 +98,11 @@ class TaskQueue:
         return max(1.0, float(interval))
 
     def add_task(self, task: Task, now: float = None):
-        """加入快速队列; 新任务立即到期(next_run=now, 下一 tick 执行)"""
+        """加入队列; 新任务立即到期(next_run=now, 下一 tick 执行)"""
         now = time.time() if now is None else now
         task.interval = self._norm_interval(task.interval)
         task.next_run = now
-        with self._lock:
-            heapq.heappush(self._fast, task)
+        heapq.heappush(self._fast, task)
 
     def add_tasks(self, tasks: List[Task], now: float = None):
         for t in tasks:
@@ -130,121 +112,79 @@ class TaskQueue:
         """弹出所有到期任务(按 next_run 时间优先), max设置弹出的最大数量"""
         now = time.time() if now is None else now
         due = []
-        with self._lock:
-            while (max <= 0 or len(due) < max) and self._fast and self._fast[0].next_run <= now:
-                task = heapq.heappop(self._fast)
-                task.state = RUNNING
-                due.append(task)
+        while (max <= 0 or len(due) < max) and self._fast and self._fast[0].next_run <= now:
+            task = heapq.heappop(self._fast)
+            task.state = RUNNING
+            due.append(task)
         return due
 
     def reschedule(self, task: Task, now: float = None):
-        """任务执行完毕: 按任务内置 interval 重新入队"""
+        """任务执行完毕且需继续: 按任务内置 interval 重新入队
+
+        resume 语义: 复用同一 Task 实例(uid/resume_cb/payload/handler/run_count 跨轮保留),
+        非从头重新执行。让位任务(经 defer 挂起)由 reschedule 恢复时自动移出让位集合。
+        """
         now = time.time() if now is None else now
+        self._deferred.discard(task)
         task.run_count += 1
         task.state = PENDING
-        # TODO: 支持cooldown+
-        # 加上一个[0-1)的随机数, 避免任务同时被执行 (在taskqueue.due中加了最大数量限制, 这里暂时注释掉)
-        task.next_run = now + task.interval  # + random.random()
-        with self._lock:
-            heapq.heappush(self._fast, task)
+        task.next_run = now + task.interval
+        heapq.heappush(self._fast, task)
 
     def remove_torrent(self, torrent_hash: str):
-        """种子被删除: 移除该种子在快速队列中的所有任务(慢速队列的校验任务由 poll 时自然完成)"""
-        with self._lock:
-            before = len(self._fast)
-            self._fast = [t for t in self._fast if t.torrent_hash != torrent_hash]
-            if len(self._fast) != before:
-                heapq.heapify(self._fast)
+        """种子被删除: 移除该种子在队列中的所有任务(含让位任务), 并释放在途校验标记"""
+        before = len(self._fast)
+        self._fast = [t for t in self._fast if t.torrent_hash != torrent_hash]
+        if len(self._fast) != before:
+            heapq.heapify(self._fast)
+        self._deferred = {t for t in self._deferred if t.torrent_hash != torrent_hash}
+        self._active_checks.discard(torrent_hash)
 
-    # ---------- 慢速队列: 异步校验任务 ----------
+    # ---------- 让位/恢复(resume 语义) ----------
 
-    def submit_check(
-        self,
-        torrent_hash: str,
-        send_fn: Callable[[], Any],
-        done_cb: Callable[["Task"], None] = None,
-        timeout: float = 0.0
-    ) -> bool:
-        """提交异步校验任务: 同一种子已有等待任务则忽略(返回 False)
+    def defer(self, task: Task):
+        """任务让位: 不入队不消亡(从调度中挂起), 由外部决定恢复(resume)或重新调度(reschedule)
 
-        send_fn 在异步工作线程执行(仅发送请求, 如 torrents_recheck), 完成经 result_q 回传;
-        done_cb 由主循环在轮询到校验完成时调用(主循环线程, 可安全写 state_file)。
+        典型场景: 规则任务执行 full-checking 后让位, 由校验结果轮询任务在完成后
+        调用 resume(校验成功)或 reschedule(失败/种子删除)恢复它。
         """
-        with self._lock:
-            if self._shutdown or torrent_hash in self._slow:
-                return False
-            task = Task("check", "check", torrent_hash=torrent_hash, payload=done_cb, timeout=timeout)
-            task.state = WAITING
-            self._slow[torrent_hash] = task
-        # 锁外提交: 异步线程不触碰队列结构
-        if self._executor is not None:
-            self._executor.submit(self._run_send, task, send_fn)
-        else:
-            self._run_send(task, send_fn)  # 同步模式(测试)
-        return True
+        task.state = DEFERRED
+        self._deferred.add(task)
 
-    def _run_send(self, task: Task, send_fn: Callable[[], Any]):
-        """异步工作线程: 仅执行发送请求回调; 不触碰队列/state_file, 结果经 result_q 回传"""
-        try:
-            task.result = send_fn()
-        except Exception as e:
-            task.send_error = e
-        self._result_q.put(task)
+    def resume(self, task: Task, now: float = None):
+        """恢复让位任务: 触发 resume_cb(一次性完成处理)后按任务内置 interval 重新入队
 
-    def poll_slow(self, is_done: Callable[[str], bool], now: float = None) -> List[Task]:
-        """主循环轮询慢速队列(每 tick 调用一次):
-        1. 消费 result_q 确认请求已发出(发送失败的任务立即完成)
-        2. 对已发出请求的任务调用 is_done(hash) 判断客户端是否完成(如退出 checking 状态)
-        3. 完成的(含超时)调用 done_cb 并从慢速队列移除
+        resume 语义: 让位任务此前由 defer() 挂起, 恢复时先执行其完成处理
+        (如校验通过后的晋升/自动开始/记录执行), 然后重新进入调度。
         """
         now = time.time() if now is None else now
-        completed = []
-        with self._lock:
-            # 1. 消费异步线程回传
-            while True:
-                try:
-                    task = self._result_q.get_nowait()
-                except queue.Empty:
-                    break
-                task.sent = True
-            # 2. 轮询等待中的任务
-            for task in list(self._slow.values()):
-                if task.send_error is not None:
-                    completed.append(task)
-                    continue
-                if not task.sent:
-                    continue  # 请求尚未确认发出, 下一轮再查
-                if task.timeout > 0 and now - task.created_at > task.timeout:
-                    task.send_error = TimeoutError(f"校验超时({task.timeout}s)")
-                    completed.append(task)
-                    continue
-                try:
-                    if is_done(task.torrent_hash):
-                        completed.append(task)
-                except Exception as e:
-                    logger.debug(f"轮询校验状态异常({task.torrent_hash}): {e}")
-            # 3. 完成的任务出队(回调在锁外执行, 避免死锁)
-            for task in completed:
-                self._slow.pop(task.torrent_hash, None)
-                task.state = DONE
-        for task in completed:
-            done_cb = task.payload
-            if done_cb:
-                try:
-                    done_cb(task)
-                except Exception as e:
-                    logger.warning(f"校验完成回调异常({task.torrent_hash}): {e}")
-        return completed
+        self._deferred.discard(task)
+        cb, task.resume_cb = task.resume_cb, None
+        try:
+            if cb:
+                cb()
+        except Exception as e:
+            logger.error(f"任务恢复回调异常({task.kind}:{task.name} {task.torrent_hash}): {e}")
+        task.run_count += 1
+        task.state = PENDING
+        task.next_run = now + task.interval
+        heapq.heappush(self._fast, task)
 
-    def pending_slow(self) -> List[str]:
-        """等待校验完成的种子 hash 列表"""
-        with self._lock:
-            return list(self._slow.keys())
+    # ---------- 校验结果轮询任务 ----------
 
-    def shutdown(self, wait: bool = True):
-        with self._lock:
-            if self._shutdown:
-                return
-            self._shutdown = True
-        if self._executor is not None:
-            self._executor.shutdown(wait=wait)
+    def add_check_task(self, task: Task, now: float = None) -> bool:
+        """登记校验结果轮询任务: 同一种子已有在途校验则忽略(返回 False)
+
+        任务立即入队(next_run=now), 首轮到期时由 handler 发送 recheck 请求;
+        handler 返回 False(完成/消亡)时由主循环调 task_died 释放在途标记。
+        """
+        if task.torrent_hash in self._active_checks:
+            return False
+        self._active_checks.add(task.torrent_hash)
+        self.add_task(task, now)
+        return True
+
+    def task_died(self, task: Task):
+        """任务消亡(handler 返回 False): 释放校验在途标记(如有) """
+        if task.kind == "check":
+            self._active_checks.discard(task.torrent_hash)

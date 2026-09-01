@@ -42,16 +42,20 @@
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
 - test_checking_full_checking_auto_start_false: auto_start=false 不自动开始
 - test_checking_full_checking_send_error: 发送失败处理
+- test_checking_full_checking_defer_resume: 任务队列驱动: 触发任务让位 -> 成功 resume 恢复
+- test_checking_full_checking_defer_fail_retry: 任务队列驱动: 校验未通过 -> 触发任务 reschedule 重试
 - test_checking_no_task_queue_direct_recheck: 无任务队列时直接 recheck
 """
 import os
 import tempfile
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import CheckAction
-from auto_qb.taskqueue import TaskQueue
+from auto_qb.rules.base import RuleContext
+from auto_qb.taskqueue import DEFERRED, PENDING, Task, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
 
 
@@ -121,12 +125,23 @@ def make_check_cfg(
 
 
 def make_mgr(cfg, with_tq=False):
-    """构造 QbManager(可选同步模式任务队列)"""
+    """构造 QbManager(可选任务队列)"""
     mgr = QbManager("", config=cfg)
     mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     if with_tq:
-        mgr.task_queue = TaskQueue(executor_workers=0)
+        mgr.task_queue = TaskQueue()
     return mgr
+
+
+def run_queue(mgr, now=None, dry_run=False):
+    """驱动快速队列一轮: 弹出所有到期任务并执行(校验轮询任务状态机推进)
+    now: 显式时间点(校验任务 interval=2s, 多轮推进需递增 now)
+    """
+    now = time.time() if now is None else now
+    due = mgr.task_queue.due(now)
+    if due:
+        mgr._execute_due(due, dry_run, now)
+    return due
 
 
 def inject_group(mgr, *hashes, key=("KEY", )):
@@ -435,6 +450,7 @@ def test_checking_paused_incomplete_not_skip():
     seed_store(mgr, [t, pd])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled, "暂停未完成不应跳过"
+    run_queue(mgr)  # 首轮: 发送 recheck
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
 
 
@@ -448,6 +464,7 @@ def test_checking_no_group_uses_without_reference():
     seed_store(mgr, [t])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
+    run_queue(mgr)  # 首轮: 发送 recheck
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
 
 
@@ -463,6 +480,7 @@ def test_checking_paused_completed_not_reference():
     seed_store(mgr, [t, p])
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled
+    run_queue(mgr)  # 首轮: 发送 recheck
     assert ("recheck", None) in client.calls, f"无参考应走 without_reference: {client.calls}"
     assert [c[0] for c in client.calls] == ["recheck"], f"不应走跳检: {client.calls}"
 
@@ -546,33 +564,35 @@ def test_checking_filelist_reference_skip_checking():
 
 
 def test_checking_no_reference_full_checking():
-    """测试: 无参考 -> without_reference full-checking 异步全流程(提交->pending->重复忽略->完成->start+记录+晋升)"""
+    """测试: 无参考 -> without_reference full-checking 完整流程(提交即发送->轮询续延->完成->start+记录+晋升) """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    t0 = time.time()
     handled = mgr.process_torrent(t, dry_run=False)
     assert handled, "应提交校验"
-    assert ("recheck", None) in client.calls, f"应发送校验请求: {client.calls}"
+    assert ("recheck", None) in client.calls, f"提交时即应同步发送 recheck: {client.calls}"
 
-    # 未完成: 任务留在慢速队列
-    completed = mgr.task_queue.poll_slow(lambda h: False)
-    assert completed == [], f"未完成不应出队: {completed}"
-    assert mgr.task_queue.pending_slow() == ["HASH123"], "未完成应留在慢速队列"
-
-    # 重复提交同一种子: 忽略
+    # 重复提交同一种子: 忽略(不再发送)
     client.calls.clear()
     mgr.process_torrent(t, dry_run=False)
     assert ("recheck", None) not in client.calls, f"重复校验应被忽略: {client.calls}"
 
-    # 完成: 自动开始 + 记录执行 + 晋升 verified_references(仅内存)
-    completed = mgr.task_queue.poll_slow(lambda h: True)
-    assert len(completed) == 1, f"应完成 1 个任务: {completed}"
+    # 模拟客户端进入校验状态 -> 续延(任务保留)
+    mgr.store.apply([make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 0.5)
+    assert ("start", None) not in client.calls, "校验中不应完成"
+    assert len(mgr.task_queue._fast) == 1, "校验中任务应续延保留"
+
+    # 模拟校验完成(退出 checking 状态) -> 自动开始 + 记录 + 晋升
+    mgr.store.apply([make_target(state="pausedUP", progress=1.0)])
+    run_queue(mgr, t0 + 2.5)
     assert ("start", None) in client.calls, f"校验完成应自动开始: {client.calls}"
     assert mgr.state.get("exec_history"), "校验完成应记录执行历史"
     assert mgr.store.verified_references == {"HASH123"}, "校验通过应晋升为参考"
-    assert mgr.task_queue.pending_slow() == [], "完成后应出队"
+    assert mgr.task_queue._fast == [], "完成后任务应消亡"
 
 
 def test_checking_no_reference_skip_checking_warns():
@@ -710,12 +730,16 @@ def test_checking_verified_references_not_persisted():
         cfg.state_file = state_file
         mgr = QbManager("", config=cfg)
         mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
-        mgr.task_queue = TaskQueue(executor_workers=0)
+        mgr.task_queue = TaskQueue()
         client = CheckingFakeClient()
         mgr.client = client
         t = make_target()
-        mgr.process_torrent(t, dry_run=False)
-        mgr.task_queue.poll_slow(lambda h: True)
+        t0 = time.time()
+        mgr.process_torrent(t, dry_run=False)  # 提交即发送 recheck
+        mgr.store.apply([make_target(state="checkingDL")])  # 校验中
+        run_queue(mgr, t0 + 0.5)
+        mgr.store.apply([make_target(state="pausedUP", progress=1.0)])  # 完成
+        run_queue(mgr, t0 + 2.5)
         assert mgr.store.verified_references == {"HASH123"}, "完成后应晋升"
         mgr.save_state()
 
@@ -807,66 +831,152 @@ def test_checking_dry_run():
 
 
 def test_checking_full_checking_pending():
-    """测试: 校验未完成 -> 任务保留在慢速队列(不丢失)"""
+    """测试: 校验未完成 -> 轮询任务续延保留(不丢失) """
     cfg = make_check_cfg(without_mode="full-checking")
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    t0 = time.time()
     mgr.process_torrent(t, dry_run=False)
-    completed = mgr.task_queue.poll_slow(lambda h: False)
-    assert completed == [], f"未完成不应出队: {completed}"
-    assert mgr.task_queue.pending_slow() == ["HASH123"], "任务应保留"
+    assert ("recheck", None) in client.calls, f"提交时即应发送 recheck: {client.calls}"
+    # 模拟校验中 -> 任务续延保留
+    mgr.store.apply([make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 0.5)
+    assert len(mgr.task_queue._fast) == 1, "任务应保留(续延)"
 
 
 def test_checking_full_checking_dup_ignore():
-    """测试: 同一种子重复提交校验 -> 忽略(仅一次 recheck)"""
+    """测试: 同一种子重复提交校验 -> 忽略(仅一次 recheck) """
     cfg = make_check_cfg(without_mode="full-checking")
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
     mgr.process_torrent(t, dry_run=False)
-    mgr.process_torrent(t, dry_run=False)  # 重复
+    mgr.process_torrent(t, dry_run=False)  # 重复 -> 忽略
     n_recheck = sum(1 for c in client.calls if c[0] == "recheck")
     assert n_recheck == 1, f"recheck 应只发送一次: {client.calls}"
 
 
 def test_checking_full_checking_auto_start_false():
-    """测试: auto_start=false -> 校验完成不自动开始, 仍记录执行 + 晋升参考"""
+    """测试: auto_start=false -> 校验完成不自动开始, 仍记录执行 + 晋升参考 """
     cfg = make_check_cfg(without_mode="full-checking", without_start=False)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    mgr.process_torrent(t, dry_run=False)
-    mgr.task_queue.poll_slow(lambda h: True)
+    t0 = time.time()
+    mgr.process_torrent(t, dry_run=False)  # 提交即发送
+    mgr.store.apply([make_target(state="checkingDL")])  # 校验中
+    run_queue(mgr, t0 + 0.5)
+    mgr.store.apply([make_target(state="pausedUP", progress=1.0)])  # 完成
+    run_queue(mgr, t0 + 2.5)
     assert ("start", None) not in client.calls, f"auto_start=false 不应自动开始: {client.calls}"
     assert mgr.state.get("exec_history"), "仍应记录执行历史"
     assert mgr.store.verified_references == {"HASH123"}, "仍应晋升参考"
 
 
 def test_checking_full_checking_send_error():
-    """测试: 校验请求发送失败 -> 警告, 不自动开始/不记录/不晋升"""
+    """测试: 校验请求发送失败 -> 动作失败(不晋升/不开始), 轮询任务自然消亡 """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
     client.recheck_error = RuntimeError("simulated recheck failure")
     t = make_target()
-    with patch("auto_qb.rules.actions.logger.warning") as mw:
+    t0 = time.time()
+    with patch("auto_qb.rules.base.logger.warning") as mw:
         handled = mgr.process_torrent(t, dry_run=False)
-        assert handled, "提交本身不应失败"
-        # 提交时 process 已记录一次(动作 ok); 记录 done 是否额外覆盖
-        rec_key = f"{mgr.enabled_rules[0].name}:{t.hash}"
-        ts_before = mgr.state["exec_history"][rec_key]["ts"]
-        completed = mgr.task_queue.poll_slow(lambda h: True)
-        assert len(completed) == 1, f"发送失败的任务应立即完成: {completed}"
-        assert any("校验请求发送失败" in str(c) for c in mw.call_args_list), f"应有失败警告: {mw.call_args_list}"
-        ts_after = mgr.state["exec_history"][rec_key]["ts"]
-        assert ts_before == ts_after, "发送失败不应由完成回调重新记录"
+        assert handled, "发送失败应返回失败结果(动作已执行)"
+        assert any("发送 recheck 失败" in str(c) for c in mw.call_args_list), \
+            f"应有失败警告: {mw.call_args_list}"
+        run_queue(mgr, t0 + 0.5)  # 轮询任务: 种子无快照 -> 消亡
     assert ("start", None) not in client.calls, "发送失败不应自动开始"
+    assert ("recheck", None) not in client.calls, f"发送失败不应产生 recheck 调用: {client.calls}"
     assert mgr.store.verified_references == set(), "发送失败不应晋升参考"
+    assert mgr.task_queue._fast == [], "发送失败任务应消亡"
+    assert mgr.task_queue._active_checks == set(), "消亡应释放校验标记"
+
+
+def test_checking_full_checking_defer_resume():
+    """任务队列驱动: 触发任务让位(defer) -> 校验成功 -> resume(完成处理 + 重新入队) """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    seed_store(mgr, [t])
+    t0 = time.time()
+    origin = Task("rule", "example_rules.check_rule", torrent_hash="HASH123", interval=60.0)
+    ctx = RuleContext(mgr, client, cfg, t, False, rule_name="example_rules.check_rule", task=origin)
+    action = CheckAction(
+        {
+            "basic_check": "filelist",
+            "with_reference": {
+                "mode": "skip-checking",
+                "auto_start": False
+            },
+            "without_reference": {
+                "mode": "full-checking",
+                "auto_start": False
+            },
+        }
+    )
+    result = action.execute(ctx)
+    assert result.is_ok, f"应提交成功: {result}"
+    assert ("recheck", None) in client.calls, "提交时即应同步发送 recheck"
+    assert origin.state == DEFERRED, "触发任务应让位"
+    assert origin in mgr.task_queue._deferred, "让位任务应挂起"
+    # 校验中 -> 轮询续延, 触发任务保持让位
+    mgr.store.apply([make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 0.5)
+    assert origin.state == DEFERRED, "校验中触发任务保持让位"
+    # 校验完成(progress=1.0) -> resume: 完成处理(晋升+记录) + 重新入队
+    mgr.store.apply([make_target(state="pausedUP", progress=1.0)])
+    run_queue(mgr, t0 + 2.5)
+    assert origin.state == PENDING, "成功后应 resume 重新入队"
+    assert origin not in mgr.task_queue._deferred, "恢复后应移出让位集合"
+    assert mgr.store.verified_references == {"HASH123"}, "成功应晋升参考"
+    assert mgr.state.get("exec_history"), "成功应记录执行历史"
+    # resume 后 origin 按 interval 重新调度
+    due = mgr.task_queue.due(t0 + 62.5)
+    assert origin in due, "resume 后应重新调度"
+
+
+def test_checking_full_checking_defer_fail_retry():
+    """任务队列驱动: 校验未通过(progress<1) -> 触发任务 reschedule 重新入队重试 """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    seed_store(mgr, [t])
+    t0 = time.time()
+    origin = Task("rule", "example_rules.check_rule", torrent_hash="HASH123", interval=60.0)
+    ctx = RuleContext(mgr, client, cfg, t, False, rule_name="example_rules.check_rule", task=origin)
+    action = CheckAction(
+        {
+            "basic_check": "filelist",
+            "with_reference": {
+                "mode": "skip-checking",
+                "auto_start": False
+            },
+            "without_reference": {
+                "mode": "full-checking",
+                "auto_start": False
+            },
+        }
+    )
+    action.execute(ctx)
+    assert origin.state == DEFERRED, "触发任务应让位"
+    # 校验完成但 progress<1(文件不完整) -> 失败 -> reschedule 重试
+    mgr.store.apply([make_target(state="pausedDL", progress=0.5)])
+    run_queue(mgr, t0 + 2.5)
+    assert origin.state == PENDING, "失败后应 reschedule 重新入队重试"
+    assert origin not in mgr.task_queue._deferred, "重试后应移出让位集合"
+    assert mgr.store.verified_references == set(), "失败不应晋升参考"
+    assert not mgr.state.get("exec_history"), "失败不应记录执行历史"
 
 
 def test_checking_no_task_queue_direct_recheck():

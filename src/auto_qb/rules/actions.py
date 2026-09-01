@@ -8,10 +8,14 @@ from datetime import date
 from typing import List
 
 from .. import utils
+from ..taskqueue import Task
 from .base import ActionResult, BaseAction
 from .registry import register_action
 
 logger = logging.getLogger(__name__)
+
+# full-checking 校验结果轮询间隔(秒): 与主循环 MAIN_TICK 对齐, 需求指定 2s
+CHECK_RESULT_INTERVAL = 2.0
 
 
 @register_action
@@ -152,7 +156,10 @@ class CheckAction(BaseAction):
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
       4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
          -> 确认 -> auto_start(无参考时警告高风险)
-         full-checking: 异步提交 recheck(慢速队列), 完成回调 auto_start + 晋升 verified_references(仅内存)
+         full-checking: 同步发送 recheck, 触发任务让位(defer), 创建校验结果轮询任务(快速队列,
+         interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功(progress>=1) -> 触发任务
+         resume(晋升 verified_references(仅内存) + auto_start + 记录执行); 失败/删除/异常 -> 触发任务
+         reschedule 重新入队重走决策链(再次校验)
     """
     name = "checking"
     _VALID_BASIC = ("filelist", "piecehashes", "custom")
@@ -284,37 +291,82 @@ class CheckAction(BaseAction):
             return False
 
     def _execute_full_checking(self, ctx, segment: dict):
-        """full-checking: 异步提交 recheck(慢速队列), 完成回调 auto_start + 晋升 verified_references(仅内存)"""
+        """full-checking: 同步发送 recheck 后创建校验结果轮询任务(快速队列, interval=CHECK_RESULT_INTERVAL)
+
+        触发流程:
+          1) 同步发送 torrents_recheck(API 同步返回, 校验后台异步), 失败则直接失败(不建任务)
+          2) 触发任务(origin)让位(defer: 不入队不消亡), 由轮询任务在完成后决定恢复方式
+          3) 轮询任务每 CHECK_RESULT_INTERVAL 秒检查 store 快照, 退出 checking* 即完成:
+             成功(progress>=1) -> origin.resume(触发完成处理: 晋升 verified_references +
+               auto_start + record_execution, 然后重新入队)
+             失败(progress<1)/种子删除/异常 -> origin.reschedule(重新入队重走决策链再次校验)
+        """
         tq = getattr(ctx.manager, "task_queue", None)
         if tq is None:
-            # 无任务队列(旧用法/同步环境): 直接发送请求
+            # 无任务队列(旧用法/同步环境): 直接发送请求, 不跟踪结果
             ctx.api.torrents_recheck(torrent_hashes=ctx.torrent.hash)
             return ActionResult.ok("full-checking 校验")
-        rule_name = ctx.rule_name
         torrent_hash = ctx.torrent.hash
+        origin = getattr(ctx, "task", None)  # 触发本次校验的规则任务(任务队列驱动); 外部入口为 None
+        rule_name = ctx.rule_name
         api = ctx.api
         manager = ctx.manager
         auto_start = segment["auto_start"]
 
-        def send():
-            api.torrents_recheck(torrent_hashes=torrent_hash)
-
-        def done(task):
-            # 主循环线程执行: state_file 仅主循环写, 线程安全
-            if task.send_error is not None:
-                logger.warning(f"规则: {rule_name} | 校验请求发送失败: {torrent_hash}: {task.send_error}")
-                return
-            logger.info(f"规则: {rule_name} | 校验完成: {torrent_hash}")
-            # 晋升参考(仅内存, 不写 state_file): 校验通过说明文件与元数据一致, 可作同组参考
+        def on_success():
+            """校验成功完成处理: 晋升参考(仅内存, 不写 state_file) + auto_start + 记录执行历史"""
             manager.store.verified_references.add(torrent_hash)
-            if auto_start:
+            if auto_start and not ctx.dry_run:
                 api.torrents_start(torrent_hashes=torrent_hash)
-                logger.info(f"规则: {rule_name} | 校验完成自动开始: {torrent_hash}")
+                logger.info(f"规则: {rule_name} | 校验成功自动开始: {torrent_hash}")
             manager.record_execution(rule_name, torrent_hash)
 
-        if tq.submit_check(torrent_hash, send, done, timeout=0):
-            return ActionResult.ok("full-checking 校验请求已提交, 等待完成")
-        return ActionResult.skip("该校验任务已在队列中")
+        def poll(task: Task, dry_run: bool) -> bool:
+            try:
+                if manager.store.get(torrent_hash) is None:
+                    # 种子已删除: 让位任务重新入队(下一轮规则执行时自然消亡)
+                    logger.warning(f"规则: {rule_name} | 校验轮询: 种子已删除: {torrent_hash}")
+                    if origin is not None:
+                        tq.reschedule(origin, time.time())
+                    return False
+                if not manager._is_check_done(torrent_hash):
+                    return True  # 仍在校验中, 下一轮轮询
+                rec = manager.store.get(torrent_hash)
+                if (rec.progress or 0.0) >= 1.0:
+                    logger.info(f"规则: {rule_name} | 校验成功: {torrent_hash}")
+                    if origin is not None:
+                        origin.resume_cb = on_success
+                        tq.resume(origin, time.time())
+                    else:
+                        on_success()  # 无触发任务(外部入口): 直接执行完成处理
+                else:
+                    logger.warning(f"规则: {rule_name} | 校验未通过(progress={rec.progress}): {torrent_hash}")
+                    if origin is not None:
+                        tq.reschedule(origin, time.time())
+                return False
+            except Exception as e:
+                logger.warning(f"规则: {rule_name} | 校验任务异常({torrent_hash}): {e}")
+                if origin is not None:
+                    tq.reschedule(origin, time.time())
+                return False
+
+        task = Task(
+            "check",
+            "check-checking-result",
+            torrent_hash=torrent_hash,
+            interval=CHECK_RESULT_INTERVAL,
+            handler=poll,
+        )
+        if not tq.add_check_task(task):
+            return ActionResult.skip("该校验任务已在队列中")
+        # 先登记成功再让位(顺序保证: 失败绝不 defer, 杜绝原任务永久让位)
+        if origin is not None:
+            tq.defer(origin)
+        try:
+            api.torrents_recheck(torrent_hashes=torrent_hash)
+        except Exception as e:
+            return ActionResult.fail(f"发送 recheck 失败: {e}")
+        return ActionResult.ok("full-checking 校验已提交, 等待完成")
 
     def _execute_skip_checking(self, ctx, segment: dict, has_reference: bool):
         """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 重加跳过校验 -> 可选自动开始

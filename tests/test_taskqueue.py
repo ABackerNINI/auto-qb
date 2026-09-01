@@ -1,29 +1,26 @@
-"""test_taskqueue 测试计划: 双任务队列
+"""test_taskqueue 测试计划: 单任务队列
 
 ## 测试计划(每个测试函数一条)
 - test_task_queue_schedule: 按 next_run 时间调度到期任务
 - test_task_ordering: 堆排序按到期时间出队
 - test_task_repr: Task 字符串表示
-- test_submit_check_dedup: 校验任务去重
-- test_poll_slow_flow: 慢速队列正常流转(pending -> waiting -> done)
-- test_poll_slow_send_error: 慢速发送错误处理
-- test_poll_slow_timeout: 慢速超时处理
-- test_task_state_transitions: 任务状态迁移
-- test_shutdown_blocks_submit: 关闭后拒绝提交
+- test_task_state_transitions: 任务状态迁移(pending -> running -> pending)
 - test_add_tasks: add_tasks 批量入队立即到期
-- test_submit_check_async_executor: 有 executor 时异步发送; shutdown 幂等
-- test_poll_slow_not_sent: 请求未确认发出(sent=False) -> 该轮跳过
-- test_poll_slow_is_done_error: is_done 抛异常 -> debug 记录不中断
-- test_poll_slow_done_cb_error: done_cb 抛异常 -> warning 记录, 任务仍出队
+- test_add_check_task_dedup: 校验轮询任务去重
+- test_defer_resume: 让位/恢复(resume)语义: defer 不入队 -> resume 同一实例重新入队
+- test_defer_resume_cb: resume 触发一次性完成处理(resume_cb)
+- test_task_died_releases_check: 任务消亡释放校验标记
+- test_remove_torrent_clears_active_check: 删除种子清理队列与校验标记
+- test_remove_torrent_clears_deferred: 删除种子清理让位任务
 """
 import time
 
-from auto_qb.taskqueue import DONE, PENDING, RUNNING, WAITING, Task, TaskQueue
+from auto_qb.taskqueue import DEFERRED, PENDING, RUNNING, Task, TaskQueue
 
 
 def test_task_queue_schedule():
-    """快速队列: 到期弹出 / interval<=0 归一化 / reschedule 按 interval 重入 / remove_torrent"""
-    tq = TaskQueue(executor_workers=0)
+    """队列: 到期弹出 / interval<=0 归一化 / reschedule 按 interval 重入 / remove_torrent"""
+    tq = TaskQueue()
     now = time.time()
     tq.add_task(Task("rule", "every_tick", interval=0), now=now)
     tq.add_task(Task("rule", "interval60", interval=60), now=now)
@@ -37,7 +34,6 @@ def test_task_queue_schedule():
     tq.add_task(Task("torrent", "maintenance", torrent_hash="H1", interval=60), now=now)
     tq.remove_torrent("H1")
     assert tq.due(now + 61) == [], "remove_torrent 后任务应被移除"
-    tq.shutdown()
 
 
 def test_task_ordering():
@@ -57,86 +53,9 @@ def test_task_repr():
     assert "running" in repr(t)
 
 
-def test_submit_check_dedup():
-    """submit_check: 同一种子已有等待任务则忽略(返回 False)"""
-    tq = TaskQueue(executor_workers=0)
-    sent = []
-
-    def send():
-        sent.append(1)
-        return "ok"
-
-    assert tq.submit_check("H1", send) is True
-    assert tq.submit_check("H1", send) is False, "同 hash 重复提交应被忽略"
-    assert len(sent) == 1, "重复提交不应再次发送"
-    tq.shutdown()
-
-
-def test_poll_slow_flow():
-    """poll_slow: 消费 result_q -> is_done 轮询 -> 完成出队并回调"""
-    tq = TaskQueue(executor_workers=0)
-    state = {"done": False}
-    done_calls = []
-
-    def send():
-        return "recheck-sent"
-
-    def is_done(h):
-        return state["done"]
-
-    def done_cb(task):
-        done_calls.append(task.torrent_hash)
-
-    tq.submit_check("H1", send, done_cb=done_cb)
-    # 第 1 轮: 异步结果未回传 -> 不完成
-    assert tq.poll_slow(is_done) == []
-    assert tq.pending_slow() == ["H1"]
-    # 第 2 轮: 请求已确认发出(sent), 但校验未完成
-    assert tq.poll_slow(is_done) == []
-    # 校验完成 -> 出队 + 回调
-    state["done"] = True
-    completed = tq.poll_slow(is_done)
-    assert [t.torrent_hash for t in completed] == ["H1"]
-    assert done_calls == ["H1"]
-    assert tq.pending_slow() == []
-    tq.shutdown()
-
-
-def test_poll_slow_send_error():
-    """发送失败: 任务立即完成并带 send_error"""
-    tq = TaskQueue(executor_workers=0)
-
-    def send():
-        raise RuntimeError("send failed")
-
-    tq.submit_check("H1", send)
-    # 同步模式: 发送即回传结果, 一轮内完成
-    completed = tq.poll_slow(lambda h: False)
-    assert [t.torrent_hash for t in completed] == ["H1"]
-    assert isinstance(completed[0].send_error, RuntimeError)
-    tq.shutdown()
-
-
-def test_poll_slow_timeout():
-    """校验超时: timeout 到期强制完成"""
-    tq = TaskQueue(executor_workers=0)
-    done_calls = []
-
-    def send():
-        return "ok"
-
-    tq.submit_check("H1", send, done_cb=lambda t: done_calls.append(t.torrent_hash), timeout=5)
-    tq.poll_slow(lambda h: False)  # sent
-    completed = tq.poll_slow(lambda h: False, now=time.time() + 10)  # 超时
-    assert [t.torrent_hash for t in completed] == ["H1"]
-    assert isinstance(completed[0].send_error, TimeoutError)
-    assert done_calls == ["H1"]
-    tq.shutdown()
-
-
 def test_task_state_transitions():
-    """任务状态流转: pending -> running(due) -> pending(reschedule) / waiting -> done(poll)"""
-    tq = TaskQueue(executor_workers=0)
+    """任务状态流转: pending -> running(due) -> pending(reschedule)"""
+    tq = TaskQueue()
     now = time.time()
     t = Task("rule", "x", interval=60)
     assert t.state == PENDING
@@ -145,86 +64,104 @@ def test_task_state_transitions():
     assert due[0].state == RUNNING
     tq.reschedule(due[0], now)
     assert due[0].state == PENDING
-    # 慢速队列状态
-    tq2 = TaskQueue(executor_workers=0)
-    tq2.submit_check("H1", lambda: None)
-    assert tq2._slow["H1"].state == WAITING
-    tq2.poll_slow(lambda h: True)
-    assert tq2._slow == {}  # 已完成出队
-    tq2.shutdown()
-
-
-def test_shutdown_blocks_submit():
-    """shutdown 后 submit_check 返回 False"""
-    tq = TaskQueue(executor_workers=0)
-    tq.shutdown()
-    assert tq.submit_check("H1", lambda: None) is False
 
 
 def test_add_tasks():
     """add_tasks: 批量入队, 全部立即到期"""
-    tq = TaskQueue(executor_workers=0)
+    tq = TaskQueue()
     now = time.time()
     tq.add_tasks([Task("rule", "a", interval=0), Task("rule", "b", interval=60)], now=now)
     assert {t.name for t in tq.due(now)} == {"a", "b"}
-    tq.shutdown()
 
 
-def test_submit_check_async_executor():
-    """submit_check: 有 executor 时经异步线程发送; shutdown 带等待且幂等"""
-    tq = TaskQueue(executor_workers=1)
-    state = {"sent": 0}
+def test_add_check_task_dedup():
+    """add_check_task: 同一种子已有在途校验则忽略(返回 False); 消亡后可再次提交"""
+    tq = TaskQueue()
+    now = time.time()
 
-    def send():
-        state["sent"] += 1
-        return "ok"
+    def poll(t, d):
+        return False
 
-    assert tq.submit_check("H1", send) is True
-    # 等待异步线程回传 result_q
-    for _ in range(50):
-        if state["sent"]:
-            break
-        time.sleep(0.02)
-    assert state["sent"] == 1, "异步线程应执行 send_fn"
-    completed = tq.poll_slow(lambda h: True)
-    assert [t.torrent_hash for t in completed] == ["H1"]
-    tq.shutdown()  # 覆盖 executor.shutdown(wait=True)
-    tq.shutdown()  # 幂等: 第二次直接返回
+    assert tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", handler=poll), now=now) is True
+    assert tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", handler=poll), now=now) is False, \
+        "同 hash 重复提交应被忽略"
+    assert len(tq._fast) == 1, "重复提交不应重复入队"
+    # 任务执行后消亡 -> 释放标记 -> 可再次提交
+    due = tq.due(now)
+    tq.task_died(due[0])
+    assert tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", handler=poll), now=now) is True, \
+        "消亡后应可再次提交"
 
 
-def test_poll_slow_not_sent():
-    """poll_slow: 请求未确认发出(sent=False) -> 该轮跳过不完成"""
-    tq = TaskQueue(executor_workers=0)
-    task = Task("check", "check", torrent_hash="H2")
-    task.state = WAITING
-    tq._slow["H2"] = task  # 手动注入: 无 result_q 回传, sent 保持 False
-    assert tq.poll_slow(lambda h: True) == [], "sent=False 应跳过"
-    assert tq.pending_slow() == ["H2"]
-    tq.shutdown()
+def test_defer_resume():
+    """resume 语义: defer 让位(不入队不消亡) -> resume 恢复(同一实例重新入队, 跨轮保留) """
+    tq = TaskQueue()
+    now = time.time()
+    t = Task("rule", "x", torrent_hash="H1", interval=2.0)
+    tq.add_task(t, now=now)
+    due = tq.due(now)
+    assert due[0] is t, "due 弹出的是同一实例"
+    tq.defer(t)
+    assert t.state == DEFERRED, "让位后状态应为 deferred"
+    assert t in tq._deferred, "让位任务应挂起到 _deferred"
+    assert tq.due(now + 100) == [], "让位任务不入队, 不应到期"
+    tq.resume(t, now)
+    assert t.state == PENDING, "恢复后应重新入队"
+    assert t not in tq._deferred, "恢复后应移出让位集合"
+    again = tq.due(now + 2.0)
+    assert again == [t], "恢复应复用同一实例"
+    assert again[0].run_count == 1, "run_count 应跨轮累加"
 
 
-def test_poll_slow_is_done_error():
-    """poll_slow: is_done 抛异常 -> debug 记录, 不中断不完成"""
-    tq = TaskQueue(executor_workers=0)
-    tq.submit_check("H1", lambda: "ok")  # 同步模式: 立即 sent
+def test_defer_resume_cb():
+    """resume: 触发 resume_cb(一次性完成处理, 清空不重复触发)"""
+    tq = TaskQueue()
+    now = time.time()
+    fired = []
+    t = Task("rule", "x", torrent_hash="H1", interval=2.0)
+    tq.add_task(t, now=now)
+    tq.defer(tq.due(now)[0])
+    t.resume_cb = lambda: fired.append(1)
+    tq.resume(t, now)
+    assert fired == [1], "resume 应触发 resume_cb"
+    # 再次让位+恢复: resume_cb 已清空, 不重复触发
+    tq.defer(tq.due(now + 2.0)[0])
+    tq.resume(t, now)
+    assert fired == [1], "resume_cb 一次性, 不应重复触发"
 
-    def boom(h):
-        raise RuntimeError("boom")
 
-    assert tq.poll_slow(boom) == [], "is_done 异常应跳过该任务"
-    assert tq.pending_slow() == ["H1"]
-    tq.shutdown()
+def test_task_died_releases_check():
+    """task_died: check 任务消亡释放在途标记; 非 check 任务无副作用"""
+    tq = TaskQueue()
+    now = time.time()
+    tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1"), now=now)
+    assert tq._active_checks == {"H1"}
+    due = tq.due(now)
+    tq.task_died(due[0])
+    assert tq._active_checks == set(), "check 任务消亡应释放标记"
+    tq.task_died(Task("rule", "x", torrent_hash="H9"))
+    assert tq._active_checks == set(), "非 check 任务不应有副作用"
 
 
-def test_poll_slow_done_cb_error():
-    """poll_slow: done_cb 抛异常 -> warning 记录, 任务仍完成出队"""
-    tq = TaskQueue(executor_workers=0)
+def test_remove_torrent_clears_active_check():
+    """remove_torrent: 删除种子移除队列任务并释放校验标记"""
+    tq = TaskQueue()
+    now = time.time()
+    tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", interval=60), now=now)
+    tq.add_task(Task("rule", "r", torrent_hash="H1", interval=60), now=now)
+    tq.remove_torrent("H1")
+    assert tq.due(now + 61) == [], "队列任务应全部移除"
+    assert tq._active_checks == set(), "校验标记应释放"
 
-    def bad_cb(task):
-        raise RuntimeError("cb boom")
 
-    tq.submit_check("H1", lambda: "ok", done_cb=bad_cb)
-    completed = tq.poll_slow(lambda h: True)
-    assert [t.torrent_hash for t in completed] == ["H1"], "done_cb 异常不影响出队"
-    assert tq.pending_slow() == []
-    tq.shutdown()
+def test_remove_torrent_clears_deferred():
+    """remove_torrent: 删除种子清理让位任务(防止泄漏) """
+    tq = TaskQueue()
+    now = time.time()
+    t = Task("rule", "x", torrent_hash="H1", interval=60)
+    tq.add_task(t, now=now)
+    tq.defer(tq.due(now)[0])
+    assert t in tq._deferred
+    tq.remove_torrent("H1")
+    assert tq._deferred == set(), "删除种子应清理让位任务"
+    assert tq.due(now + 61) == [], "不应有任务残留"

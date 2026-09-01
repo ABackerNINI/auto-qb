@@ -20,7 +20,7 @@ from .config import Config, load_config
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
 from .qbapi import QbApi
 from .rules import Rule
-from .taskqueue import Task, TaskQueue
+from .taskqueue import DEFERRED, Task, TaskQueue
 from .torrents import TorrentRecord, TorrentStore
 from . import utils
 from .logging import setup_logging
@@ -82,8 +82,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     def run(self, dry_run: bool):
         """主循环(任务队列驱动): 固定 MAIN_TICK 秒执行一次
-        - 轮询慢速队列(异步校验完成情况)
-        - 弹出快速队列到期任务并执行(种子刷新/规则/种子级内置功能, 各任务有内置 interval)
+        - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
         """
         if not self.connect():
             return
@@ -107,35 +106,30 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         except KeyboardInterrupt:
             logger.info("Stopping...")
         finally:
-            self.task_queue.shutdown(wait=False)
             if not dry_run:
                 self.save_state()
 
     def _tick(self, dry_run: bool):
-        """单次 tick: 1) 轮询慢速队列(异步校验) 2) 弹出快速队列到期任务并执行"""
+        """单次 tick: 1) 刷新快照 2) 弹出到期任务并执行"""
         now = time.time()
 
         self._refresh_torrents(dry_run)
 
-        # 1. 慢速队列: 轮询异步校验结果(仅当有待处理任务时才查询客户端)
-        if self.task_queue.pending_slow():
-            completed = self.task_queue.poll_slow(self._is_check_done)
-            for task in completed:
-                if task.send_error is not None:
-                    logger.warning(f"异步校验任务异常({task.torrent_hash}): {task.send_error}")
-
-        # 2. 快速队列: 弹出到期任务并执行
+        # 到期任务: 弹出并执行(校验结果轮询等有状态任务在 handler 内续延)
         due = self.task_queue.due(now, max=self.config.max_tasks_per_tick)
         if due:
             self._execute_due(due, dry_run, now)
 
     def _execute_due(self, due: list, dry_run: bool, now: float):
-        """执行到期任务: 逐个执行任务(规则/种子级内置)"""
+        """执行到期任务: 逐个执行任务(规则/种子级内置); handler 返回 False 表示任务消亡, 不重新入队"""
         # 1. 任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
         logger.debug(f"执行到期任务: {len(due)}个")
         for task in due:
             keep = self._safe(task, dry_run)
+            if task.state == DEFERRED:
+                continue  # 任务已让位(如 full-checking 校验期间), 由校验任务完成后恢复, 不重新入队
             if keep is False:
+                self.task_queue.task_died(task)  # 释放校验在途标记(如有)
                 continue
             self.task_queue.reschedule(task, now)
 
@@ -149,7 +143,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         return True
 
     def _is_check_done(self, torrent_hash: str) -> bool:
-        """慢速队列轮询回调: 从快照查询种子当前状态, 退出校验(checking*)状态即视为完成
+        """校验结果轮询判定: 从快照查询种子当前状态, 退出校验(checking*)状态即视为完成
 
         不再拉取 API(校验完成最迟下一 tick 快照刷新后可见); 种子已删除/未知 -> 视为完成。
         """

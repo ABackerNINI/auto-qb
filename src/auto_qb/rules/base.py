@@ -83,6 +83,7 @@ class RuleContext:
     torrent: Any  # TorrentDictionary
     dry_run: bool
     rule_name: str = ""
+    task: Any = None  # 触发本次规则执行的任务(任务队列驱动); process_torrent 外部入口为 None
     _tracker_urls: Optional[List[str]] = field(default=None)
     _tracker_confs: Optional[List] = field(default=None)
     _files: Optional[List] = field(default=None)

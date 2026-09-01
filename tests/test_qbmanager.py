@@ -10,14 +10,14 @@
 - test_safe_handler_exception: handler 抛异常被捕获 -> True
 - test_execute_due_reschedule: handler 成功 -> 任务 reschedule
 - test_execute_due_drop: handler 返回 False -> 不 reschedule
+- test_execute_due_deferred: handler 让位(defer) -> 不 reschedule 不消亡, 保持 DEFERRED
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
 - test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
-- test_tick_full_flow: 慢速队列轮询 + 快速队列到期执行全流程
+- test_tick_full_flow: 快速队列到期任务执行全流程(含 check 轮询任务首轮发送)
 - test_create_torrent_tasks_tor_missing: 种子不在快照 -> 直接返回
 - test_create_torrent_tasks_no_tracker: 未匹配 tracker -> 拉取 + 警告 + False
 - test_create_torrent_tasks_with_rules: 匹配 tracker -> 创建 maintenance + 规则任务
 - test_handle_maintenance_tor_missing: 种子不存在 -> False(任务消亡)
-- test_tick_slow_send_error: 慢速任务发送失败 -> warning, 任务出队
 - test_run_save_state_on_exit: run 退出后保存状态文件且为有效 JSON dict
 - test_run_dry_run_no_save: dry_run=True 退出后不写状态文件
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
@@ -29,7 +29,7 @@ import tempfile
 import time
 from unittest import mock
 
-from auto_qb.taskqueue import PENDING, Task, TaskQueue
+from auto_qb.taskqueue import DEFERRED, PENDING, Task, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
 
@@ -134,6 +134,19 @@ def test_execute_due_drop():
         assert task.run_count == 0, "消亡任务不应 reschedule"
 
 
+def test_execute_due_deferred():
+    """_execute_due: handler 让位(defer) -> 不 reschedule 不消亡, 状态保持 DEFERRED"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        task = Task("rule", "t", interval=60, handler=lambda t, d: mgr.task_queue.defer(t) or True)
+        now = time.time()
+        mgr._execute_due([task], dry_run=False, now=now)
+        assert task.state == DEFERRED, "让位任务状态应为 deferred"
+        assert task.run_count == 0, "让位任务不应 reschedule"
+        assert task not in mgr.task_queue._fast, "让位任务不应在队列中"
+        assert task in mgr.task_queue._deferred, "让位任务应挂起到 _deferred"
+
+
 def test_run_connect_failure():
     """run: 连接失败直接返回, 不进入主循环"""
     with tempfile.TemporaryDirectory() as td:
@@ -153,26 +166,35 @@ def test_run_main_loop():
         with mock.patch("auto_qb.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         assert mgr._tick.call_count == 2, "异常应被捕获继续循环, KeyboardInterrupt 退出"
-        assert mgr.task_queue._shutdown is True, "finally 应 shutdown"
         assert os.path.exists(state_file), "finally 应保存状态"
 
 
 def test_tick_full_flow():
-    """_tick: 慢速队列轮询(校验完成出队) + 快速队列到期任务执行"""
+    """_tick: 快速队列到期任务执行(含 check 轮询任务首轮执行 + 常规任务 reschedule)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
         client.torrents["HASH123"] = FakeTorrent(hash="HASH123", state="pausedUP")
-        mgr.task_queue = TaskQueue(executor_workers=0)
-        mgr.task_queue.submit_check("HASH123", lambda: None, timeout=0)
+        mgr.task_queue = TaskQueue()
+        # check 轮询任务: 首轮执行后消亡(handler 返回 False)
+        check_calls = []
+
+        def check_poll(t, d):
+            check_calls.append(1)
+            return False
+
+        mgr.task_queue.add_check_task(
+            Task("check", "check-checking-result", torrent_hash="HASH123", interval=2.0, handler=check_poll)
+        )
+        # 常规到期任务
         due_task = Task("rule", "t", interval=0, handler=lambda t, d: True)
         due_task.next_run = time.time() - 1
         mgr.task_queue._fast.append(due_task)
         mgr._refresh_torrents = mock.Mock()
         mgr._tick(dry_run=False)
-        assert mgr.task_queue.pending_slow() == [], "校验完成应出队"
-        assert due_task.run_count == 1, "到期任务应执行"
+        assert check_calls == [1], "check 任务应执行"
+        assert due_task.run_count == 1, "到期任务应执行并 reschedule"
 
 
 def test_create_torrent_tasks_tor_missing():
@@ -222,24 +244,6 @@ def test_handle_maintenance_tor_missing():
         assert mgr._handle_maintenance(task, dry_run=False) is False
 
 
-def test_tick_slow_send_error():
-    """_tick: 慢速队列发送失败(send_error) -> 记录 warning, 任务仍出队"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.client = FakeClient()
-        mgr.task_queue = TaskQueue(executor_workers=0)
-
-        def send_boom():
-            raise RuntimeError("send failed")
-
-        mgr.task_queue.submit_check("HASH123", send_boom, timeout=0)
-        mgr._refresh_torrents = mock.Mock()
-        with mock.patch("auto_qb.qbmanager.logger.warning") as m_warn:
-            mgr._tick(dry_run=False)
-        assert m_warn.call_count >= 1, "应记录异步校验任务异常 warning"
-        assert mgr.task_queue.pending_slow() == [], "发送失败任务应出队"
-
-
 def test_run_save_state_on_exit():
     """run: 非 dry_run 退出后保存状态文件, 且内容为有效 JSON dict"""
     with tempfile.TemporaryDirectory() as td:
@@ -277,7 +281,6 @@ def test_tick_refresh_error_continues():
         with mock.patch("auto_qb.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         assert mgr._refresh_torrents.call_count == 2, "第一次异常应被捕获, 第二次 tick 继续执行"
-        assert mgr.task_queue._shutdown is True, "finally 应 shutdown"
 
 
 def test_execute_due_respects_max():
@@ -285,7 +288,7 @@ def test_execute_due_respects_max():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        mgr.task_queue = TaskQueue(executor_workers=0)
+        mgr.task_queue = TaskQueue()
         mgr.config.max_tasks_per_tick = 2
         for i in range(3):
             t = Task("rule", f"t{i}", interval=60, handler=lambda t, d: True)

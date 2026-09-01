@@ -139,7 +139,7 @@ class RuleEngineMixin:
         tor = self._get_torrent(task.torrent_hash)
         if tor is None:
             return False
-        ctx = RuleContext(self, self.client, self.config, tor, dry_run)
+        ctx = RuleContext(self, self.client, self.config, tor, dry_run, task=task)
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
