@@ -118,15 +118,22 @@ def export_yaml_template(
             export_config = yaml.load(f, Loader=yaml.BaseLoader)
         export_config = convert_bool_in_dict(export_config)
 
+    # 当trackers字段为空时, yaml会将其解析为str导致解析错误
+    trackers_config = export_config.get("config", {}).get("trackers", {})
+    if not isinstance(trackers_config, dict):
+        trackers_config = {}
+
     for domain in sorted(missing_domains):
         # 生成合法名称: 去除点号和横线, 限制为字母数字下划线
         name = re.sub(r"[^a-zA-Z0-9_]", "_", domain)
         base_name = name
         counter = 1
-        while name in export_config["config"]["trackers"]:
+        while name in trackers_config:
             name = f"{base_name}_{counter}"
             counter += 1
-        export_config["config"]["trackers"][name] = build_tracker_entry(domain)
+        trackers_config[name] = build_tracker_entry(domain)
+
+    export_config["config"]["trackers"] = trackers_config
 
     # 4. 写入 YAML 文件
     if not dry_run:

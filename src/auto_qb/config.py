@@ -247,7 +247,13 @@ def load_config(config_path: str) -> Config:
 
     # Trackers 配置
     trackers = {}
-    for name, tdata in cfg["trackers"].items():
+
+    # 当trackers字段为空时, yaml会将其解析为str导致解析错误
+    trackers_config = cfg.get("trackers", {})
+    if not isinstance(trackers_config, dict):
+        trackers_config = {}
+
+    for name, tdata in trackers_config.items():
         hr_spec = tdata.get("hr")
         hr = load_tracker_hr(hr_spec, global_hr) if isinstance(hr_spec, dict) else None
         trackers[name] = load_tracker_config(name, tdata, hr, global_remove_similar)
