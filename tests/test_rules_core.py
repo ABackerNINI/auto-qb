@@ -7,7 +7,7 @@
 - test_hr_satisfied: HR 达标流程
 - test_stop_if_action_failed: 动作失败停止后续规则
 - test_dry_run: dry-run 不实际执行
-- test_state_mapping: 状态映射
+- test_state_mapping: 状态条件语义判定(基于枚举属性)
 - test_tracker_rules_ref: tracker 规则引用
 - test_rule_interval: 规则 interval 调度
 """
@@ -136,12 +136,18 @@ def test_dry_run():
 
 
 def test_state_mapping():
-    """语义状态映射"""
-    from auto_qb.rules.conditions import _STATE_MAP
-    assert "checkingDL" in _STATE_MAP["checking"]
-    assert "stalledUP" in _STATE_MAP["uploading"]
-    assert "missingFiles" in _STATE_MAP["errored"]
-    assert "stoppedDL" in _STATE_MAP["stopped"]
+    """状态条件语义: 直接用 TorrentState 枚举属性判定(pausedDL 算下载中, checkingUP 算做种中)"""
+    from auto_qb.rules.conditions import StateCondition
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        ctx = RuleContext(mgr, None, mgr.config, FakeTorrent(state="stalledUP"), dry_run=False)
+        assert StateCondition("complete&uploading").match(ctx)
+        ctx2 = RuleContext(mgr, None, mgr.config, FakeTorrent(state="pausedDL"), dry_run=False)
+        assert StateCondition("downloading").match(ctx2), "is_downloading 含暂停下载"
+        assert StateCondition("complete").match(ctx2) is False
+        ctx3 = RuleContext(mgr, None, mgr.config, FakeTorrent(state="checkingUP"), dry_run=False)
+        assert StateCondition("complete&uploading").match(ctx3), "is_complete 且 is_uploading 含 checkingUP"
 
 
 def test_tracker_rules_ref():

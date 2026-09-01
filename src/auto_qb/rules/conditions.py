@@ -8,16 +8,6 @@ from .. import utils
 from .base import BaseCondition
 from .registry import register_condition
 
-# 语义状态 -> qB 原始 state 集合(与想法.md "状态映射表" 一致)
-_STATE_MAP = {
-    "checking": {"checkingDL", "checkingUP", "checkingResumeData"},
-    "downloading": {"downloading", "forcedDL", "metaDL", "forcedMetaDL"},
-    "complete": {"uploading", "stalledUP", "pausedUP", "forcedUP", "queuedUP", "stoppedUP"},
-    "uploading": {"uploading", "forcedUP", "stalledUP"},
-    "errored": {"missingFiles", "error", "unknown"},
-    "stopped": {"pausedDL", "pausedUP", "stoppedDL", "stoppedUP"},
-}
-
 
 def _in_range(value: int, spec: str) -> bool:
     spec = str(spec).strip()
@@ -146,17 +136,36 @@ class TrackersCondition(BaseCondition):
 @register_condition
 class StateCondition(BaseCondition):
     """状态条件: 语义状态(checking/downloading/complete/uploading/errored/stopped),
-    每组内 & 连接为与, 组间为或"""
+    直接用 qB TorrentState 枚举属性判定(与 qB 官方语义一致), 每组内 & 连接为与, 组间为或"""
     name = "state"
+
+    # 语义状态 -> TorrentState 枚举判定属性(is_checking/is_downloading/is_complete/
+    # is_uploading/is_errored/is_stopped; pausedDL/stoppedDL 等暂停下载也算 downloading)
+    _ATTRS = {
+        "checking": "is_checking",
+        "downloading": "is_downloading",
+        "complete": "is_complete",
+        "uploading": "is_uploading",
+        "errored": "is_errored",
+        "stopped": "is_stopped",
+    }
 
     def __init__(self, spec):
         spec = spec if isinstance(spec, list) else [spec]
         self.groups = [str(g).split("&") for g in spec]
 
     def match(self, ctx):
-        state = ctx.torrent.state
+        enum = getattr(ctx.torrent, "state_enum", None)
+        if enum is None:
+            return False
         for group in self.groups:
-            if all(state in _STATE_MAP.get(s.strip(), set()) for s in group):
+            ok = True
+            for s in group:
+                attr = self._ATTRS.get(s.strip())
+                if attr is None or not getattr(enum, attr, False):
+                    ok = False
+                    break
+            if ok:
                 return True
         return False
 

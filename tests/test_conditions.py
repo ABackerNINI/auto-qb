@@ -1,7 +1,7 @@
 """test_conditions 测试计划: rules/conditions 条件插件匹配语义
 
 ## 测试计划(每个测试函数一条)
-- test_state_map: TorrentState 映射辅助
+- test_state_map: 语义状态判定(基于 TorrentState 枚举属性)
 - test_in_range_and_parse_hm: 时间范围与 hh:mm 解析
 - test_path_condition: path 条件匹配
 - test_size_condition: size 条件匹配
@@ -38,7 +38,6 @@ import pytest
 from auto_qb.rules.conditions import (
     _in_range,
     _parse_hm,
-    _STATE_MAP,
     CategoryCondition,
     DateTimeCondition,
     FreespaceCondition,
@@ -63,13 +62,21 @@ def _ctx(mgr, tor, client=None):
 
 
 def test_state_map():
-    """语义状态映射表"""
-    assert "checkingDL" in _STATE_MAP["checking"]
-    assert "stalledUP" in _STATE_MAP["uploading"]
-    assert "missingFiles" in _STATE_MAP["errored"]
-    assert "stoppedDL" in _STATE_MAP["stopped"]
-    assert "pausedUP" in _STATE_MAP["complete"]
-    assert "downloading" in _STATE_MAP["downloading"]
+    """语义状态判定: pausedDL 算下载中(is_downloading), checkingUP 校验中也算做种, errored 仅缺文件/出错"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        # pausedDL/stoppedDL: is_downloading 含暂停下载 -> downloading 匹配
+        ctx = _ctx(mgr, FakeTorrent(state="pausedDL"))
+        assert StateCondition("downloading").match(ctx)
+        assert StateCondition("stopped").match(ctx)
+        # checkingUP: is_complete 且 is_uploading -> complete&uploading 匹配
+        ctx2 = _ctx(mgr, FakeTorrent(state="checkingUP"))
+        assert StateCondition("complete&uploading").match(ctx2)
+        # errored 仅 missingFiles/error(is_errored 不含 unknown)
+        ctx3 = _ctx(mgr, FakeTorrent(state="unknown"))
+        assert StateCondition("errored").match(ctx3) is False
+        ctx4 = _ctx(mgr, FakeTorrent(state="missingFiles"))
+        assert StateCondition("errored").match(ctx4)
 
 
 def test_in_range_and_parse_hm():

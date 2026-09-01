@@ -332,18 +332,21 @@ config:
 
 ### 状态映射表
 
-规则条件里的 `state` 是语义化状态，由 qB 原始 state 字符串映射而来:
+规则条件里的 `state` 是语义化状态, 直接用 qB `TorrentState` 枚举属性判定(`is_checking` /
+`is_downloading` / `is_complete` / `is_uploading` / `is_errored` / `is_stopped`), 与 qB 官方语义一致:
 
-| 语义状态      | 覆盖的 qB state                                               | 说明         |
-|---------------|---------------------------------------------------------------|--------------|
-| `checking`    | checking， checkingResumeData， checkingDL， checkingUP          | 正在校验     |
-| `downloading` | downloading， forcedDL， metaDL， forcedMetaDL                   | 正在下载     |
-| `complete`    | uploading， stalledUP， pausedUP， forcedUP， queuedUP， stoppedUP | 已完成下载   |
-| `uploading`   | uploading， forcedUP， stalledUP                                | 正在上传做种 |
-| `errored`     | missingFiles， error， unknown                                  | 出错         |
-| `stopped`     | pausedDL， pausedUP， stoppedDL， stoppedUP                      | 已暂停/停止  |
+| 语义状态      | 判定依据         | 覆盖的 qB state                                                                                   | 说明                     |
+|---------------|------------------|---------------------------------------------------------------------------------------------------|--------------------------|
+| `checking`    | `is_checking`    | checkingDL， checkingUP， checkingResumeData                                                        | 正在校验                 |
+| `downloading` | `is_downloading` | downloading， forcedDL， metaDL， forcedMetaDL， checkingDL， queuedDL， stalledDL， pausedDL， stoppedDL | 下载中(含暂停/排队/校验) |
+| `complete`    | `is_complete`    | uploading， stalledUP， pausedUP， forcedUP， queuedUP， stoppedUP， checkingUP                         | 已完成下载               |
+| `uploading`   | `is_uploading`   | uploading， forcedUP， stalledUP， queuedUP， checkingUP                                              | 上传做种中               |
+| `errored`     | `is_errored`     | missingFiles， error                                                                               | 出错                     |
+| `stopped`     | `is_stopped`     | pausedDL， pausedUP， stoppedDL， stoppedUP                                                          | 已暂停/停止              |
 
-`complete&uploading` = `is_complete 且 is_uploading`，即"正在做种中"。
+`complete&uploading` = `is_complete 且 is_uploading`，即"正在做种中"(含 queuedUP/checkingUP)。
+注意 `downloading` 含 pausedDL/stoppedDL 等暂停下载状态；条件不支持 `!` 取反，需排除暂停下载时
+用 `stopped` 条件另行判断。
 
 ## 目录结构
 

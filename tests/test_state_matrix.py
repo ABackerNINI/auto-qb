@@ -11,7 +11,8 @@ TorrentState 全部状态做参数化矩阵测试, 锁定每个判定函数的�
 - test_is_uploading_matrix: 全部状态 × _is_uploading(checkingUP 校验中也算做种)
 - test_is_paused_matrix: 全部状态 × _is_paused(stoppedUP/stoppedDL 新版暂停)
 - test_group_has_downloading_state_matrix: 全部状态 × _group_has_downloading 组内判定
-- test_state_map_consistent_with_enum: _STATE_MAP 状态分组与枚举属性一致性
+- test_state_condition_matches_enum_matrix: StateCondition(语义) 判定 == 枚举属性(全状态 × 全语义)
+- test_state_condition_unknown_semantic: 未识别语义名 -> 恒不匹配
 """
 import os
 import tempfile
@@ -21,8 +22,8 @@ import pytest
 from auto_qb.config import GroupingConfig
 from auto_qb.mixins.grouping import GroupingMixin
 from auto_qb.qbmanager import QbManager
-from auto_qb.rules.conditions import _STATE_MAP
-from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
+from auto_qb.rules.conditions import StateCondition
+from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
 try:
     from qbittorrentapi import TorrentState
@@ -45,6 +46,17 @@ def _group_cfg(state_file):
 def _dl_expected(state):
     """_is_downloading 语义: is_downloading 且 非校验 且 非暂停(62dbc25)"""
     return state.is_downloading and not state.is_checking and not state.is_paused
+
+
+# 语义状态 -> TorrentState 枚举判定属性(StateCondition 接线依据)
+_SEMANTIC_ATTRS = {
+    "checking": "is_checking",
+    "downloading": "is_downloading",
+    "complete": "is_complete",
+    "uploading": "is_uploading",
+    "errored": "is_errored",
+    "stopped": "is_stopped",
+}
 
 
 def test_state_enum_has_exactly_22_members():
@@ -83,30 +95,20 @@ def test_group_has_downloading_state_matrix(state):
         assert mgr._group_has_downloading(["H1"]) is _dl_expected(state), f"state={state.value}"
 
 
-def test_state_map_consistent_with_enum():
-    """_STATE_MAP 状态分组与 TorrentState 枚举属性一致(锁定语义不漂移)"""
-    def enum_set(pred):
-        return {s for s in ALL_STATES if pred(s)}
+@pytest.mark.parametrize("semantic,attr", sorted(_SEMANTIC_ATTRS.items()))
+@pytest.mark.parametrize("state", ALL_STATES, ids=lambda s: s.value)
+def test_state_condition_matches_enum_matrix(state, semantic, attr):
+    """StateCondition(语义) 判定 == TorrentState 枚举属性(全状态 × 全语义, 锁定无手写映射漂移)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")))
+        ctx = make_ctx(mgr, FakeTorrent(state=state.value), FakeClient())
+        assert StateCondition(semantic).match(ctx) is getattr(state, attr), f"{semantic} × {state.value}"
 
-    def spec_set(names):
-        return {TorrentState(n) for n in names}
 
-    checking = spec_set(_STATE_MAP["checking"])
-    paused = spec_set(_STATE_MAP["stopped"])
-    downloading = spec_set(_STATE_MAP["downloading"])
-    complete = spec_set(_STATE_MAP["complete"])
-    uploading = spec_set(_STATE_MAP["uploading"])
-
-    # 语义恒等式: checking 分组 == is_checking; stopped 分组 == is_paused
-    assert checking == enum_set(lambda s: s.is_checking)
-    assert paused == enum_set(lambda s: s.is_paused)
-    # downloading 是 is_downloading 子集, 且与校验/暂停无交集(62dbc25 语义)
-    assert downloading <= enum_set(lambda s: s.is_downloading)
-    assert downloading & checking == set()
-    assert downloading & paused == set()
-    # complete/uploading 是 is_complete/is_uploading 子集
-    assert complete <= enum_set(lambda s: s.is_complete)
-    assert uploading <= enum_set(lambda s: s.is_uploading)
-    # errored 分组全部是合法状态
-    for name in _STATE_MAP["errored"]:
-        assert TorrentState(name) is not None
+def test_state_condition_unknown_semantic():
+    """StateCondition: 未识别语义名 -> 恒不匹配(防御配置笔误)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")))
+        ctx = make_ctx(mgr, FakeTorrent(state="stalledUP"), FakeClient())
+        assert StateCondition("bogus").match(ctx) is False
+        assert StateCondition("complete&bogus").match(ctx) is False
