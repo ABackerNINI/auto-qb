@@ -33,6 +33,16 @@
             "console": "integratedTerminal",
             "args": "-e test.yml",
             "justMyCode": false
+        },
+        {
+            "name": "auto-qb.py test_yamls/test_up_dl_limit.yml",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/auto-qb.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": " test_yamls/test_up_dl_limit.yml",
+            "justMyCode": false
         }
     ]
 }

@@ -438,6 +438,7 @@ class ReannounceAction(BaseAction):
     name = "reannounce"
 
     def execute(self, ctx):
+        # TODO: 添加限制
         if not ctx.dry_run:
             ctx.client.torrents_reannounce(torrent_hashes=ctx.torrent.hash)
         return ActionResult.ok("强制汇报tracker")
@@ -464,9 +465,16 @@ class _SpeedLimitAction(BaseAction):
     def execute(self, ctx):
         if not ctx.dry_run:
             if "upload" in self.api_method:
-                getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, upload_limit=self.value)
+                current_limit = ctx.manager.store.get(ctx.torrent.hash).up_limit
             else:
-                getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, download_limit=self.value)
+                current_limit = ctx.manager.store.get(ctx.torrent.hash).dl_limit
+
+            # 不覆盖单数值
+            if (current_limit / 1024) % 2 == 1:
+                return ActionResult.skip("用户已设置")
+            if current_limit == self.value:
+                return ActionResult.skip("已设置")
+            getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, limit=self.value)
         return ActionResult.ok(f"设置{self.direction}限速: {self._fmt_speed()}")
 
 

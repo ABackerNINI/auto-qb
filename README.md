@@ -235,8 +235,8 @@ config:
                     path: /path/to/move/to
                     overwrite: true
                 - reannounce: true                # ⚠️ 强制汇报 tracker(有风险)
-                - upload_speed_limit: 1000KiB/s   # 单种上传限速
-                - download_speed_limit: 1000KiB/s # 单种下载限速
+                - upload_speed_limit: 1000KiB/s     # 上传速度，不覆盖单数值
+                - download_speed_limit: 1000KiB/s   # 上传速度，不覆盖单数值
             stop_following_rules_if: conditions-met
             # 可选: conditions-met / conditions-not-met / action-failed /
             #       all-actions-succeed / always / never

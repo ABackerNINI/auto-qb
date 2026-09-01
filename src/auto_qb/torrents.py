@@ -48,6 +48,8 @@ _SNAPSHOT_FIELDS = (
     "amount_left",
     "completed",
     "progress",
+    "dl_limit",
+    "up_limit",
 )
 
 
@@ -75,6 +77,8 @@ class TorrentRecord:
     amount_left: int = 0
     completed: int = 0
     progress: float = 0.0
+    dl_limit: int = 0
+    up_limit: int = 0
 
     # 惰性缓存(不参与 update_from 复制)
     _tags_set: Optional[frozenset] = None
