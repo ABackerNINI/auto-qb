@@ -23,11 +23,6 @@ config:
         add_category_for_satisfied: "--HR${required_seeding_time}--"
         overwrite_category_for_satisfied: false
 
-    # skip_checking_for_cross_seeding: true
-    # skip_checking_auto_start: true
-    # add_skip_checking_tags: true
-    # skip_checking_tag_format: "SKIP_CHECKING"
-
     add_episode_tags: true
 
     # 种子分组管理(辅种管理)
