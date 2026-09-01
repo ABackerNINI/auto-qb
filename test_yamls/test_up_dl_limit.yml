@@ -1,6 +1,6 @@
 ---
 config:
-    interval: 10S
+    interval: 5S
     remove_similar_tags: false
     hr:
         add_tag: ""
@@ -21,7 +21,7 @@ config:
         username: abacker
         password: "132435."
 
-    stop_ptfans_rules:
+    set_limit_ptfans_rules:
         rule:
             enabled: true
             trigger: interval
@@ -54,4 +54,4 @@ config:
                 extra_seeding_time: 12H
                 condition: 80%
             rules:
-                - "@stop_ptfans_rules.rule"
+                - "@set_limit_ptfans_rules"
