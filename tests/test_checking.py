@@ -54,8 +54,7 @@ from unittest.mock import patch
 
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import CheckAction
-from auto_qb.rules.base import RuleContext
-from auto_qb.taskqueue import DEFERRED, PENDING, Task, TaskQueue
+from auto_qb.taskqueue import DEFERRED, PENDING, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
 
 
@@ -87,9 +86,11 @@ def make_check_cfg(
     with_start=True,
     without_mode="full-checking",
     without_start=True,
-    custom_program=None
+    custom_program=None,
+    extra_actions=None,
+    execute_once="never"
 ):
-    """构造 checking 规则配置(条件: 标签含"需校验")"""
+    """构造 checking 规则配置(条件: 标签含"需校验"); extra_actions 追加到动作序列(续跑测试用)"""
     cfg = FakeConfig()
     action = {
         "checking":
@@ -107,16 +108,18 @@ def make_check_cfg(
     }
     if custom_program:
         action["checking"]["custom_basic_check_program_path"] = custom_program
+    actions = [action] + (extra_actions or [])
     cfg.rules_config = {
         "example_rules":
             {
                 "check_rule":
                     {
                         "enabled": True,
+                        "execute_once": execute_once,
                         "conditions": [{
                             "tags": "需校验"
                         }],
-                        "actions": [action],
+                        "actions": actions,
                         "stop_following_rules_if": "never",
                     },
             }
@@ -151,8 +154,8 @@ def inject_group(mgr, *hashes, key=("KEY", )):
         mgr.store.member_to_key[h] = key
 
 
-def make_target(state="pausedDL", hash="HASH123", progress=0.0):
-    return FakeTorrent(hash=hash, name="T", tags="需校验", state=state, progress=progress)
+def make_target(state="pausedDL", hash="HASH123", progress=0.0, tags="需校验"):
+    return FakeTorrent(hash=hash, name="T", tags=tags, state=state, progress=progress)
 
 
 def _seg(mode, start=True):
@@ -900,7 +903,7 @@ def test_checking_full_checking_send_error():
 
 
 def test_checking_full_checking_defer_resume():
-    """任务队列驱动: 触发任务让位(defer) -> 校验成功 -> resume(完成处理 + 重新入队) """
+    """任务队列驱动: 触发任务让位(pending+断点) -> 校验成功 -> resume 续跑(记录执行历史) """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
@@ -908,44 +911,127 @@ def test_checking_full_checking_defer_resume():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    origin = Task("rule", "example_rules.check_rule", torrent_hash="HASH123", interval=60.0)
-    ctx = RuleContext(mgr, client, cfg, t, False, rule_name="example_rules.check_rule", task=origin)
-    action = CheckAction(
-        {
-            "basic_check": "filelist",
-            "with_reference": {
-                "mode": "skip-checking",
-                "auto_start": False
-            },
-            "without_reference": {
-                "mode": "full-checking",
-                "auto_start": False
-            },
-        }
-    )
-    result = action.execute(ctx)
-    assert result.is_ok, f"应提交成功: {result}"
-    assert ("recheck", None) in client.calls, "提交时即应同步发送 recheck"
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    # 首次执行: checking 提交 -> pending 中断 + 让位 + 记录断点
+    run_queue(mgr, t0)
     assert origin.state == DEFERRED, "触发任务应让位"
     assert origin in mgr.task_queue._deferred, "让位任务应挂起"
-    # 校验中 -> 轮询续延, 触发任务保持让位
+    assert origin.resume_index == 1, "应记录断点(下一个动作索引)"
+    assert ("recheck", None) in client.calls, "提交时即应同步发送 recheck"
+    # 校验中 -> 轮询续延, 触发任务保持让位, 断点保留
     mgr.store.apply([make_target(state="checkingDL")])
     run_queue(mgr, t0 + 0.5)
     assert origin.state == DEFERRED, "校验中触发任务保持让位"
-    # 校验完成(progress=1.0) -> resume: 完成处理(晋升+记录) + 重新入队
+    assert origin.resume_index == 1, "校验中断点保留"
+    # 校验完成(progress=1.0) -> resume: 完成处理(晋升) + 重新入队(断点保留)
     mgr.store.apply([make_target(state="pausedUP", progress=1.0)])
     run_queue(mgr, t0 + 2.5)
     assert origin.state == PENDING, "成功后应 resume 重新入队"
     assert origin not in mgr.task_queue._deferred, "恢复后应移出让位集合"
     assert mgr.store.verified_references == {"HASH123"}, "成功应晋升参考"
-    assert mgr.state.get("exec_history"), "成功应记录执行历史"
-    # resume 后 origin 按 interval 重新调度
-    due = mgr.task_queue.due(t0 + 62.5)
-    assert origin in due, "resume 后应重新调度"
+    assert origin.resume_index == 1, "resume 应保留断点(续跑语义)"
+    assert not mgr.state.get("exec_history"), "执行历史应由续跑完成时记录"
+    # 续跑: origin 到期 -> 跳过条件/去重 -> 从断点继续(单动作规则: 空循环) -> 记录执行
+    run_queue(mgr, t0 + 60.5)
+    assert mgr.state.get("exec_history"), "续跑完成应记录执行历史"
+    assert origin.resume_index is None, "断点应已消费清零"
+
+
+def test_checking_full_checking_resume_continues_actions():
+    """断点续跑: 规则 [checking, start] 校验成功 -> resume 后续跑执行剩余动作 start """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=False, extra_actions=[{"start": True}])
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    seed_store(mgr, [t])
+    t0 = time.time()
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    run_queue(mgr, t0)
+    assert origin.state == DEFERRED and origin.resume_index == 1, "checking pending 应中断并记录断点"
+    assert ("recheck", None) in client.calls, "应发送 recheck"
+    assert ("start", None) not in client.calls, "pending 中断, 后续动作未执行"
+    # 校验完成 -> resume
+    mgr.store.apply([make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 0.5)
+    mgr.store.apply([make_target(state="pausedUP", progress=1.0)])
+    run_queue(mgr, t0 + 2.5)
+    assert origin.state == PENDING and origin.resume_index == 1
+    assert mgr.store.verified_references == {"HASH123"}
+    assert not mgr.state.get("exec_history"), "续跑完成前不记录执行历史"
+    # 续跑: 执行断点后的 start(最新快照 pausedUP -> 暂停 -> 执行 start)
+    run_queue(mgr, t0 + 60.5)
+    assert ("start", None) in client.calls, f"续跑应执行后续动作 start: {client.calls}"
+    assert mgr.state.get("exec_history"), "续跑完成应记录执行历史"
+    assert origin.resume_index is None, "断点应已消费清零"
+
+
+def test_checking_full_checking_resume_skips_conditions():
+    """续跑跳过条件评估: 首次条件匹配 -> pending; 校验完成后条件不再匹配, 续跑仍执行后续动作 """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=False, extra_actions=[{"start": True}])
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    seed_store(mgr, [t])
+    t0 = time.time()
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    run_queue(mgr, t0)
+    assert origin.state == DEFERRED and origin.resume_index == 1
+    # 校验完成后条件不再匹配(标签已变), 但续跑应跳过条件评估仍执行 start
+    mgr.store.apply([make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 0.5)
+    mgr.store.apply([make_target(state="pausedUP", progress=1.0, tags="已处理")])
+    run_queue(mgr, t0 + 2.5)
+    assert origin.state == PENDING, "resume 不应受条件变化影响"
+    run_queue(mgr, t0 + 60.5)
+    assert ("start", None) in client.calls, f"续跑应跳过条件评估执行 start: {client.calls}"
+    assert mgr.state.get("exec_history"), "续跑完成应记录执行历史"
+
+
+def test_checking_full_checking_resume_skips_dedup():
+    """续跑跳过去重: execute_once=once 规则校验成功续跑不被 dedup 拦截(执行历史在续跑完成才记录) """
+    cfg = make_check_cfg(
+        without_mode="full-checking", without_start=False, extra_actions=[{
+            "start": True
+        }], execute_once="once"
+    )
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    seed_store(mgr, [t])
+    t0 = time.time()
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    run_queue(mgr, t0)
+    assert origin.state == DEFERRED and origin.resume_index == 1, "首次执行 dedup 通过 -> pending"
+    # 校验完成 -> resume
+    mgr.store.apply([make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 0.5)
+    mgr.store.apply([make_target(state="pausedUP", progress=1.0)])
+    run_queue(mgr, t0 + 2.5)
+    assert origin.state == PENDING and origin.resume_index == 1
+    # 续跑: 若重走决策链则 execute_once=once 拦截; 断点续跑应跳过 dedup 执行 start
+    run_queue(mgr, t0 + 60.5)
+    assert ("start", None) in client.calls, f"续跑应跳过去重执行 start: {client.calls}"
+    assert mgr.state.get("exec_history"), "续跑完成应记录执行历史"
+    assert origin.resume_index is None
 
 
 def test_checking_full_checking_defer_fail_retry():
-    """任务队列驱动: 校验未通过(progress<1) -> 触发任务 reschedule 重新入队重试 """
+    """任务队列驱动: 校验未通过(progress<1) -> 清断点 + reschedule 重新入队重试(重走决策链) """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
@@ -953,30 +1039,24 @@ def test_checking_full_checking_defer_fail_retry():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    origin = Task("rule", "example_rules.check_rule", torrent_hash="HASH123", interval=60.0)
-    ctx = RuleContext(mgr, client, cfg, t, False, rule_name="example_rules.check_rule", task=origin)
-    action = CheckAction(
-        {
-            "basic_check": "filelist",
-            "with_reference": {
-                "mode": "skip-checking",
-                "auto_start": False
-            },
-            "without_reference": {
-                "mode": "full-checking",
-                "auto_start": False
-            },
-        }
-    )
-    action.execute(ctx)
-    assert origin.state == DEFERRED, "触发任务应让位"
-    # 校验完成但 progress<1(文件不完整) -> 失败 -> reschedule 重试
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    run_queue(mgr, t0)
+    assert origin.state == DEFERRED and origin.resume_index == 1, "首次执行应让位并记录断点"
+    # 校验完成但 progress<1(文件不完整) -> 失败 -> 清断点 + reschedule
     mgr.store.apply([make_target(state="pausedDL", progress=0.5)])
     run_queue(mgr, t0 + 2.5)
     assert origin.state == PENDING, "失败后应 reschedule 重新入队重试"
     assert origin not in mgr.task_queue._deferred, "重试后应移出让位集合"
+    assert origin.resume_index is None, "失败应清断点(重走完整决策链)"
     assert mgr.store.verified_references == set(), "失败不应晋升参考"
     assert not mgr.state.get("exec_history"), "失败不应记录执行历史"
+    # 重走决策链: origin 到期 -> 重新 full-checking(再次让位 + 再发 recheck)
+    run_queue(mgr, t0 + 60.5)
+    assert origin.state == DEFERRED, "重走决策链应再次校验(再次让位)"
+    assert origin.resume_index == 1, "重新校验应再次记录断点"
 
 
 def test_checking_no_task_queue_direct_recheck():

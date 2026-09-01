@@ -156,10 +156,11 @@ class CheckAction(BaseAction):
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
       4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
          -> 确认 -> auto_start(无参考时警告高风险)
-         full-checking: 同步发送 recheck, 触发任务让位(defer), 创建校验结果轮询任务(快速队列,
-         interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功(progress>=1) -> 触发任务
-         resume(晋升 verified_references(仅内存) + auto_start + 记录执行); 失败/删除/异常 -> 触发任务
-         reschedule 重新入队重走决策链(再次校验)
+         full-checking: 同步发送 recheck, 触发任务让位(defer)并返回 pending(规则断点), 创建校验
+         结果轮询任务(快速队列, interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功
+         (progress>=1) -> 触发任务 resume(触发 resume_cb: 晋升 verified_references(仅内存) +
+         auto_start; resume_index 保留 -> 规则续跑执行后续动作, 由 Rule.process 统一记录执行);
+         失败/删除/异常 -> 清断点 + reschedule 重新入队重走决策链(再次校验)
     """
     name = "checking"
     _VALID_BASIC = ("filelist", "piecehashes", "custom")
@@ -295,11 +296,12 @@ class CheckAction(BaseAction):
 
         触发流程:
           1) 同步发送 torrents_recheck(API 同步返回, 校验后台异步), 失败则直接失败(不建任务)
-          2) 触发任务(origin)让位(defer: 不入队不消亡), 由轮询任务在完成后决定恢复方式
+          2) 触发任务(origin)让位(defer: 不入队不消亡), 动作返回 pending(规则断点), 由轮询任务
+             在完成后决定恢复方式
           3) 轮询任务每 CHECK_RESULT_INTERVAL 秒检查 store 快照, 退出 checking* 即完成:
-             成功(progress>=1) -> origin.resume(触发完成处理: 晋升 verified_references +
-               auto_start + record_execution, 然后重新入队)
-             失败(progress<1)/种子删除/异常 -> origin.reschedule(重新入队重走决策链再次校验)
+             成功(progress>=1) -> origin.resume(触发 resume_cb: 晋升 verified_references +
+               auto_start; resume_index 保留 -> 规则续跑执行后续动作, 执行历史由 Rule.process 统一记录)
+             失败(progress<1)/种子删除/异常 -> 清断点 + origin.reschedule(重走决策链再次校验)
         """
         tq = getattr(ctx.manager, "task_queue", None)
         if tq is None:
@@ -314,19 +316,21 @@ class CheckAction(BaseAction):
         auto_start = segment["auto_start"]
 
         def on_success():
-            """校验成功完成处理: 晋升参考(仅内存, 不写 state_file) + auto_start + 记录执行历史"""
+            """校验成功完成处理: 晋升参考(仅内存, 不写 state_file) + auto_start
+            执行历史由恢复后的规则任务(Rule.process 续跑)统一记录
+            """
             manager.store.verified_references.add(torrent_hash)
             if auto_start and not ctx.dry_run:
                 api.torrents_start(torrent_hashes=torrent_hash)
                 logger.info(f"规则: {rule_name} | 校验成功自动开始: {torrent_hash}")
-            manager.record_execution(rule_name, torrent_hash)
 
         def poll(task: Task, dry_run: bool) -> bool:
             try:
                 if manager.store.get(torrent_hash) is None:
-                    # 种子已删除: 让位任务重新入队(下一轮规则执行时自然消亡)
+                    # 种子已删除: 让位任务清断点重新入队(下一轮规则执行时自然消亡)
                     logger.warning(f"规则: {rule_name} | 校验轮询: 种子已删除: {torrent_hash}")
                     if origin is not None:
+                        origin.resume_index = None
                         tq.reschedule(origin, time.time())
                     return False
                 if not manager._is_check_done(torrent_hash):
@@ -336,17 +340,19 @@ class CheckAction(BaseAction):
                     logger.info(f"规则: {rule_name} | 校验成功: {torrent_hash}")
                     if origin is not None:
                         origin.resume_cb = on_success
-                        tq.resume(origin, time.time())
+                        tq.resume(origin, time.time())  # resume_index 保留 -> 规则续跑后续动作
                     else:
                         on_success()  # 无触发任务(外部入口): 直接执行完成处理
                 else:
                     logger.warning(f"规则: {rule_name} | 校验未通过(progress={rec.progress}): {torrent_hash}")
                     if origin is not None:
+                        origin.resume_index = None  # 失败: 清断点重走完整决策链(重新校验)
                         tq.reschedule(origin, time.time())
                 return False
             except Exception as e:
                 logger.warning(f"规则: {rule_name} | 校验任务异常({torrent_hash}): {e}")
                 if origin is not None:
+                    origin.resume_index = None
                     tq.reschedule(origin, time.time())
                 return False
 
@@ -366,6 +372,9 @@ class CheckAction(BaseAction):
             api.torrents_recheck(torrent_hashes=torrent_hash)
         except Exception as e:
             return ActionResult.fail(f"发送 recheck 失败: {e}")
+        if origin is not None:
+            # 任务队列驱动: 返回 pending, 规则记录断点中断, 由轮询任务 resume/reschedule 恢复
+            return ActionResult.pending("full-checking 校验已提交, 等待完成(规则断点续跑)")
         return ActionResult.ok("full-checking 校验已提交, 等待完成")
 
     def _execute_skip_checking(self, ctx, segment: dict, has_reference: bool):

@@ -36,6 +36,7 @@ class Task:
         "interval",
         "state",
         "resume_cb",
+        "resume_index",
         "run_count",
         "created_at",
         "payload",
@@ -62,6 +63,7 @@ class Task:
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING
         self.resume_cb = None  # 让位任务恢复时触发的完成处理(一次性, 由 defer/resume 使用)
+        self.resume_index = None  # 规则任务断点(下一个要执行的动作索引); resume(校验成功)保留 -> 续跑, reschedule(失败)前清空 -> 重走完整决策链
         self.run_count = 0
         self.created_at = time.time()
         self.payload = payload  # 可选: 任务附带数据(自定义)

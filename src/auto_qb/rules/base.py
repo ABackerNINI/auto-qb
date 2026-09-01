@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 class ActionResult:
-    """动作执行结果: success / failed / skipped"""
+    """动作执行结果: success / failed / skipped / pending
+
+    pending: 动作已提交等待异步完成(如 full-checking 校验), 规则执行中断待恢复;
+    仅任务队列驱动时有效(规则任务记录断点 resume_index), 外部入口视为成功继续。
+    """
     def __init__(self, status: str = "success", message: str = ""):
         self.status = status
         self.message = message
@@ -30,6 +34,10 @@ class ActionResult:
     def skip(cls, message: str = "") -> "ActionResult":
         return cls("skipped", message)
 
+    @classmethod
+    def pending(cls, message: str = "") -> "ActionResult":
+        return cls("pending", message)
+
     @property
     def is_ok(self) -> bool:
         return self.status == "success"
@@ -41,6 +49,10 @@ class ActionResult:
     @property
     def is_skipped(self) -> bool:
         return self.status == "skipped"
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == "pending"
 
     def __repr__(self) -> str:
         return f"ActionResult({self.status}, {self.message})"
@@ -228,28 +240,52 @@ class Rule:
         处理一个种子. 返回 (handled, stop)
         handled: 规则是否执行了动作
         stop:    是否停止后续规则(stop_following_rules_if)
+
+        断点续跑(resume 语义): 任务队列驱动的规则任务在动作返回 pending(如 full-checking
+        已提交校验)时记录 resume_index 并中断; 校验完成后任务被 resume 重新入队, 下次执行
+        检测到 resume_index -> 跳过条件评估与去重, 从断点动作继续执行后续动作。
         """
         ctx.rule_name = self.name
-        try:
-            matched = self.matches(ctx)
-        except Exception as e:
-            logger.warning(f"规则 {self.name}: 条件匹配异常: {e}")
-            return False, False
+        task = getattr(ctx, "task", None)
 
-        if not matched:
-            return False, self.stop_if == "conditions-not-met"
+        # 断点: 一次性读取并清零; 有断点 -> 续跑(跳过条件评估与去重)
+        resume_index = None
+        if task is not None and getattr(task, "resume_index", None) is not None:
+            resume_index = task.resume_index
+            task.resume_index = None
 
-        # 去重: execute_once / cooldown
-        if not self._dedup_allowed(ctx):
-            return False, False
+        if resume_index is None:
+            try:
+                matched = self.matches(ctx)
+            except Exception as e:
+                logger.warning(f"规则 {self.name}: 条件匹配异常: {e}")
+                return False, False
+            if not matched:
+                return False, self.stop_if == "conditions-not-met"
+            # 去重: execute_once / cooldown
+            if not self._dedup_allowed(ctx):
+                return False, False
 
         failed = False
-        ok_action = False  # 至少一个动作成功才算"实际执行", 失败/跳过不记录执行历史(否则挡住当日重试)
-        for action in self.actions:
+        # 断点前动作已成功(校验通过才续跑): ok_action 起点 True; 全新执行从 False 累计
+        ok_action = resume_index is not None
+        result = None
+        for i, action in enumerate(self.actions):
+            if resume_index is not None and i < resume_index:
+                continue  # 跳过断点前已执行的动作
             try:
                 result = action.execute(ctx)
             except Exception as e:
                 result = ActionResult.fail(f"异常: {e}")
+            if result.is_pending:
+                # 异步等待: 记录断点并中断本规则, 由外部 resume/reschedule 决定恢复
+                if task is not None:
+                    task.resume_index = i + 1
+                    logger.info(f"规则: {self.name} | 动作: {action.name} 等待异步完成: {result.message}")
+                    return True, True  # handled=True(动作已提交), stop=True(中断后续规则)
+                ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
+                logger.info(f"规则: {self.name} | 动作: {action.name} 成功 | 结果: {result.message}")
+                continue
             if result.is_ok:
                 ok_action = True
             if result.is_failed:
@@ -271,6 +307,8 @@ class Rule:
         elif self.stop_if == "all-actions-succeed" and not failed:
             stop = True
 
+        if result is None:
+            return ok_action, stop  # 空循环(续跑且断点后无动作): 断点前动作已成功
         return not result.is_skipped, stop
 
     def _dedup_allowed(self, ctx: RuleContext) -> bool:
