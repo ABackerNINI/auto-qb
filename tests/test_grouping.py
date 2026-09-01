@@ -13,6 +13,11 @@
 - test_grouping_save_path_change_new_group_alone: save_path 变化单独成组
 - test_grouping_no_full_files_scan: 归组仅拉一次文件列表, 后续不重复扫描
 - test_grouping_state_helpers: _is_uploading/_is_paused/_is_downloading 状态判定
+- test_is_downloading_excludes_checking: 强制校验(checking*)不算下载中(62dbc25 修复)
+- test_grouping_force_checking_not_conflict: 强制校验种子与下载中/已完成同组不触发冲突暂停
+- test_grouping_download_conflict_multi_dl: 多下载冲突 -> 暂停 + 去重语义
+- test_grouping_download_conflict_mixed: 已完成与下载中并存 -> 暂停
+- test_grouping_download_conflict_dry_run: 冲突 dry-run 只报告不暂停不记录去重
 - test_group_members_not_in_group: 未归组 -> 仅自身
 - test_group_members_in_group: 已归组 -> 全部成员
 - test_leave_group_removes: 移出成员返回剩余组 key
@@ -347,6 +352,128 @@ def test_grouping_no_full_files_scan():
         mgr._refresh_torrents()
         assert client.files_calls == 1, f"后续刷新不应再拉文件列表: {client.files_calls}"
         assert client.calls == [], f"状态不变不应触发检查: {client.calls}"
+
+
+def test_is_downloading_excludes_checking():
+    """_is_downloading: 强制校验(checkingDL/checkingUP/checkingResumeData)不算活跃下载(62dbc25 修复)
+
+    修复前 checkingDL(is_downloading=True, is_checking=True)被误判为下载中,
+    导致下载冲突检查误暂停整组。
+    """
+    mgr = QbManager("", config=_group_cfg("state.json"))
+    assert not mgr._is_downloading(FakeTorrent(state="checkingDL", amount_left=100)), "checkingDL 不应算下载中"
+    assert not mgr._is_downloading(FakeTorrent(state="checkingUP", amount_left=0)), "checkingUP 不应算下载中"
+    assert not mgr._is_downloading(FakeTorrent(state="checkingResumeData", amount_left=100)), \
+        "checkingResumeData 不应算下载中"
+    # 连带语义: 组内只有强制校验种子 -> 不算有活跃下载(不阻塞校验决策链)
+    seed_store(mgr, [FakeTorrent(hash="H1", state="checkingDL", amount_left=100)])
+    assert mgr._group_has_downloading(["H1"]) is False
+
+
+def test_grouping_force_checking_not_conflict():
+    """强制校验种子不再被当作下载中(62dbc25 回归): 与下载中/已完成成员同组不触发冲突暂停"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+
+        # 组 A: H1 强制校验(未完成) + H2 下载中 —— 修复前误判 multi-dl
+        # 组 B: H3 强制校验(未完成) + H4 已完成做种 —— 修复前误判 mixed
+        t1 = FakeTorrent(hash="H1", name="T1", state="checkingDL", save_path=r"R:\A", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="downloading", save_path=r"R:\A", amount_left=100)
+        t3 = FakeTorrent(hash="H3", name="T3", state="checkingDL", save_path=r"R:\B", amount_left=100)
+        t4 = FakeTorrent(hash="H4", name="T4", state="stalledUP", save_path=r"R:\B", amount_left=0)
+        for t in (t1, t2, t3, t4):
+            client.torrents[t.hash] = t
+            client.files_map[t.hash] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()
+
+        assert len(mgr.store.groups) == 2, f"应归为两组: {mgr.store.groups}"
+        assert client.calls == [], f"强制校验种子不应触发下载冲突暂停: {client.calls}"
+        assert mgr.store.download_conflict_warned == set()
+
+
+def test_grouping_download_conflict_multi_dl():
+    """下载冲突: 同组两个及以上种子同时下载 -> 警告+整组暂停; 去重: 冲突持续不重复, 消除后清除可再次触发"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会同步 store 把成员状态改为暂停,
+        # 污染 by_hash 快照(真实场景下轮 refresh 才校准), 干扰去重语义验证
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            mgr._check_download_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1, f"多下载应整组暂停: {stop_mock.call_count}"
+            assert (key, "multi-dl") in mgr.store.download_conflict_warned
+
+            # 冲突持续 -> 不重复暂停(去重)
+            mgr._check_download_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1, f"冲突持续不应重复暂停: {stop_mock.call_count}"
+
+            # 冲突消除(H1 转暂停) -> 去重记录清除
+            t1.state = "pausedDL"
+            mgr._check_download_conflicts(dry_run=False)
+            assert mgr.store.download_conflict_warned == set()
+
+            # 冲突重现 -> 再次警告+暂停
+            t1.state = "downloading"
+            mgr._check_download_conflicts(dry_run=False)
+            assert stop_mock.call_count == 2, f"冲突重现应再次暂停: {stop_mock.call_count}"
+            assert (key, "multi-dl") in mgr.store.download_conflict_warned
+
+
+def test_grouping_download_conflict_mixed():
+    """下载冲突: 同组已完成与下载中并存 -> 警告+整组暂停(真冲突不受修复影响)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        mgr._check_download_conflicts(dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"已完成与下载中并存应整组暂停: {client.calls}"
+        assert (key, "mixed") in mgr.store.download_conflict_warned
+
+
+def test_grouping_download_conflict_dry_run():
+    """下载冲突 dry-run: 只报告不暂停, 也不记录去重(下次真实执行仍会暂停)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        mgr._check_download_conflicts(dry_run=True)
+        assert client.calls == [], f"dry-run 不应暂停: {client.calls}"
+        assert mgr.store.download_conflict_warned == set(), "dry-run 不记录去重"
+
+        # 真实执行仍会警告+暂停
+        mgr._check_download_conflicts(dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"真实执行应整组暂停: {client.calls}"
 
 
 def test_grouping_state_helpers():
