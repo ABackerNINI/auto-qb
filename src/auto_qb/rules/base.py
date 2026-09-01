@@ -7,6 +7,7 @@ from typing import Any, List, Optional
 
 from . import registry
 from .. import utils
+from ..torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,10 @@ class RuleContext:
             if conf.hr:
                 return conf.hr.required_seeding_time_raw
         return ""
+
+    @property
+    def torrent_record(self) -> TorrentRecord:
+        return self.manager.store.get(self.torrent.hash)
 
     def replace_vars(self, text: str) -> str:
         """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}"""

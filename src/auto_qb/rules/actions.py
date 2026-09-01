@@ -13,23 +13,6 @@ from .registry import register_action
 
 logger = logging.getLogger(__name__)
 
-# 用于 start/stop 动作的幂等判断
-_STARTED_STATES = {
-    "uploading",
-    "stalledUP",
-    "downloading",
-    "forcedDL",
-    "forcedUP",
-    "metaDL",
-    "stalledDL",
-    "queuedDL",
-    "queuedUP",
-    "checkingDL",
-    "checkingUP",
-    "checkingResumeData",
-}
-_STOPPED_STATES = {"pausedDL", "pausedUP", "stoppedDL", "stoppedUP"}
-
 
 @register_action
 class AddTagsAction(BaseAction):
@@ -132,7 +115,7 @@ class StartAction(BaseAction):
     name = "start"
 
     def execute(self, ctx):
-        if ctx.torrent.state in _STARTED_STATES:
+        if not ctx.torrent_record.is_paused:
             return ActionResult.skip("已开始")
         if not ctx.dry_run:
             ctx.client.torrents_start(torrent_hashes=ctx.torrent.hash)
@@ -145,7 +128,7 @@ class StopAction(BaseAction):
     name = "stop"
 
     def execute(self, ctx):
-        if ctx.torrent.state in _STOPPED_STATES:
+        if ctx.torrent_record.is_paused:
             return ActionResult.skip("已停止")
         if not ctx.dry_run:
             ctx.client.torrents_stop(torrent_hashes=ctx.torrent.hash)
@@ -465,9 +448,9 @@ class _SpeedLimitAction(BaseAction):
     def execute(self, ctx):
         if not ctx.dry_run:
             if "upload" in self.api_method:
-                current_limit = ctx.manager.store.get(ctx.torrent.hash).up_limit
+                current_limit = ctx.torrent_record.up_limit
             else:
-                current_limit = ctx.manager.store.get(ctx.torrent.hash).dl_limit
+                current_limit = ctx.torrent_record.dl_limit
 
             # 不覆盖单数值
             if (current_limit / 1024) % 2 == 1:
