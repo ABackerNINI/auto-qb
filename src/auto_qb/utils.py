@@ -320,3 +320,11 @@ def timer(unit='s', log_func=print):
         return wrapper
 
     return decorator
+
+
+def fmt_speed(value: int) -> str:
+    """将字节/秒格式化为可读字符串"""
+    for unit, div in (("PiB/s", 1024**5), ("TiB/s", 1024**4), ("GiB/s", 1024**3), ("MiB/s", 1024**2), ("KiB/s", 1024)):
+        if value >= div:
+            return f"{value / div:.2f} {unit}"
+    return f"{value} B/s"

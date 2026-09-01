@@ -436,15 +436,6 @@ class _SpeedLimitAction(BaseAction):
         super().__init__(spec, ignore_error)
         self.value = utils.parse_speed(str(spec))
 
-    def _fmt_speed(self) -> str:
-        """将字节/秒格式化为可读字符串"""
-        for unit, div in (
-            ("PiB/s", 1024**5), ("TiB/s", 1024**4), ("GiB/s", 1024**3), ("MiB/s", 1024**2), ("KiB/s", 1024)
-        ):
-            if self.value >= div:
-                return f"{self.value / div:.2f} {unit} ({self.value} B/s)"
-        return f"{self.value} B/s"
-
     def execute(self, ctx):
         if not ctx.dry_run:
             if "upload" in self.api_method:
@@ -458,7 +449,7 @@ class _SpeedLimitAction(BaseAction):
             if current_limit == self.value:
                 return ActionResult.skip("已设置")
             getattr(ctx.client, self.api_method)(torrent_hashes=ctx.torrent.hash, limit=self.value)
-        return ActionResult.ok(f"设置{self.direction}限速: {self._fmt_speed()}")
+        return ActionResult.ok(f"设置{self.direction}限速: {utils.fmt_speed(self.value)}")
 
 
 @register_action

@@ -35,13 +35,13 @@
             "justMyCode": false
         },
         {
-            "name": "auto-qb.py test_yamls/test_up_dl_limit.yml",
+            "name": "auto-qb.py test_yamls/test_up_dl_limit_tracker.yml",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/auto-qb.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            "args": " test_yamls/test_up_dl_limit.yml",
+            "args": " test_yamls/test_up_dl_limit_tracker.yml",
             "justMyCode": false
         }
     ]

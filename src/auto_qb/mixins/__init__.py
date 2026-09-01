@@ -4,7 +4,7 @@
 - TagsMixin        标签/分类/HR 辅助
 - CheckingMixin    文件检查/辅种跳检/异步校验轮询回调
 - GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
-- TrackerMixin     tracker 配置匹配
+- TrackerMixin     tracker 配置匹配/tracker 级单种限速
 """
 from .checking import CheckingMixin
 from .grouping import GroupingMixin

@@ -14,7 +14,7 @@ import logging
 import time
 from typing import List, Optional
 
-from qbittorrentapi import Client, TorrentDictionary
+from qbittorrentapi import Client
 
 from .config import Config, load_config
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
@@ -209,6 +209,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
                 if self.config.add_episode_tags:
                     self._add_episode_tags(h, dry_run)
+
+                # TODO: 优化
+                # tracker单种限速
+                tracker_conf = self._match_tracker(h)
+                if tracker_conf:
+                    self._apply_speed_limit(self.store.get(h), tracker_conf, dry_run)
         if removed:
             logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
@@ -242,8 +248,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if not tor:
             return
 
+        # TODO: 优化
         # 查找种子的tracker配置
-        tracker_conf = self._match_tracker(tor)
+        tracker_conf = self._match_tracker(tor.hash)
         if not tracker_conf:
             trackers_info = self.store.trackers_info(tor.hash)
             all_domains = utils.extract_tracker_hostnames(trackers_info)

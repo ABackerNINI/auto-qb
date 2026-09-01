@@ -1,0 +1,36 @@
+---
+config:
+    interval: 5S
+    remove_similar_tags: false
+    hr:
+        add_tag: ""
+        add_category: "!!HR${required_seeding_time}!!"
+        overwrite_category: false
+        add_tag_for_satisfied: ""
+        add_category_for_satisfied: --HR${required_seeding_time}--
+        overwrite_category_for_satisfied: false
+    add_episode_tags: false
+    grouping:
+        enabled: true
+        missing_tag: MISSING
+    delete_tags:
+    delete_tags_if_has_no_torrents:
+    qbittorrent:
+        host: 127.0.0.1
+        port: "16585"
+        username: abacker
+        password: "132435."
+
+    trackers:
+        ptfans_cc:
+            domains:
+                - ptfans.cc
+            tags:
+                - PTFans
+            upload_speed_limit: 1500KiB/s
+            download_speed_limit: 1500KiB/s
+            hr:
+                required_seeding_time: 7D
+                extra_seeding_time: 12H
+                condition: 80%
+            rules:
