@@ -197,7 +197,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
         torrents = self.client.torrents_info()
         added, removed = self.store.refresh(torrents)
-        by_hash = self.store.by_hash
 
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
