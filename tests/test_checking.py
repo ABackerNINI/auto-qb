@@ -19,6 +19,10 @@
 - test_checking_paused_incomplete_not_skip: 暂停未完成不能作为参考 -> 不跳过
 - test_checking_no_group_uses_without_reference: 未归组无参考 -> 直接校验
 - test_checking_paused_completed_not_reference: 暂停已完成不算参考种子
+- test_checking_complete_skipped: 已完成做种中(progress=1) -> 跳过, 不校验
+- test_checking_paused_complete_skipped: 暂停已完成(pausedUP+progress=1) -> 跳过
+- test_checking_active_downloading_skipped: 活跃下载中(downloading+progress=0.5) -> 跳过
+- test_checking_complete_no_repeat: 完成种子反复触发不重复校验(bug 回归)
 - test_checking_filelist_reference_skip_checking: filelist 参考匹配 -> 跳检
 - test_checking_no_reference_full_checking: 无参考 -> 全量校验流程
 - test_checking_no_reference_skip_checking_warns: 无参考但 skip 配置 -> 警告跳过
@@ -132,8 +136,8 @@ def inject_group(mgr, *hashes, key=("KEY", )):
         mgr.store.member_to_key[h] = key
 
 
-def make_target(state="stalledUP", hash="HASH123"):
-    return FakeTorrent(hash=hash, name="T", tags="需校验", state=state)
+def make_target(state="pausedDL", hash="HASH123", progress=0.0):
+    return FakeTorrent(hash=hash, name="T", tags="需校验", state=state, progress=progress)
 
 
 def _seg(mode, start=True):
@@ -461,6 +465,61 @@ def test_checking_paused_completed_not_reference():
     assert handled
     assert ("recheck", None) in client.calls, f"无参考应走 without_reference: {client.calls}"
     assert [c[0] for c in client.calls] == ["recheck"], f"不应走跳检: {client.calls}"
+
+
+# ============================================================
+# C1. 只校验暂停中未完成(决策链 0, 4)
+# ============================================================
+def test_checking_complete_skipped():
+    """测试: 已完成做种中(stalledUP+progress=1) -> 跳过, 不进行任何校验(修复重复校验 bug)"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="stalledUP", progress=1.0)  # 已完成做种中
+    seed_store(mgr, [t])
+    handled = mgr.process_torrent(t, dry_run=False)
+    assert not handled, "已完成种子应跳过"
+    assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
+
+
+def test_checking_paused_complete_skipped():
+    """测试: 暂停已完成(pausedUP+progress=1) -> 跳过(暂停但已完成仍无需校验)"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="pausedUP", progress=1.0)
+    seed_store(mgr, [t])
+    handled = mgr.process_torrent(t, dry_run=False)
+    assert not handled, "暂停已完成种子应跳过"
+    assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
+
+
+def test_checking_active_downloading_skipped():
+    """测试: 活跃下载中(downloading+progress=0.5) -> 跳过(正在运行, 无需校验)"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="downloading", progress=0.5)
+    seed_store(mgr, [t])
+    handled = mgr.process_torrent(t, dry_run=False)
+    assert not handled, "活跃下载中种子应跳过"
+    assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
+
+
+def test_checking_complete_no_repeat():
+    """测试(bug 回归): 已完成种子反复触发 -> 不重复 recheck/跳检"""
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="pausedUP", progress=1.0)
+    seed_store(mgr, [t])
+    for _ in range(3):
+        mgr.process_torrent(t, dry_run=False)
+    assert client.calls == [], f"已完成种子不应有任何校验调用: {client.calls}"
 
 
 # ============================================================

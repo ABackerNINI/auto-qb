@@ -266,7 +266,7 @@ def test_run_custom_check_error():
 def _skip_ctx(state_file, **client_patches):
     """构造 skip-checking 执行环境: 未归组 + 单种子快照 + 自定义 client"""
     mgr = make_manager(state_file)
-    tor = FakeTorrent(hash="HASH123", name="T1", state="stalledUP", tags="")
+    tor = FakeTorrent(hash="HASH123", name="T1", state="pausedDL", tags="")  # 暂停未完成, 满足决策链 0
     seed_store(mgr, [tor])
     client = FakeClient()
     client.torrents["HASH123"] = {"state": "pausedUP"}  # 重加后出现

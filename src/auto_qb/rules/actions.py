@@ -145,6 +145,8 @@ class CheckAction(BaseAction):
       - with_reference / without_reference: 各含 mode(skip-checking|full-checking) + auto_start(默认 false)
 
     决策链(想法2):
+      0. 仅"暂停中未完成"种子(is_paused 且 progress<1, 如跨种添加后的 pausedDL)才校验,
+         已完成(progress=1)/活跃中(下载/做种中)种子一律跳过(避免已完成种子被反复校验)
       1. 组内有活跃下载种子(is_downloading) -> skip(整组未完成, 不进行任何校验, 包括跳检)
       2. 按 basic_check 从同组"已完成+上传中"成员筛选参考种子, 并集内存 verified_references
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
@@ -199,9 +201,16 @@ class CheckAction(BaseAction):
 
     def execute(self, ctx):
         if ctx.dry_run:
-            return ActionResult.ok("checking 校验(决策链: 组内下载判定+参考确定+分段执行) [dry-run]")
+            return ActionResult.ok("checking 校验(决策链: 状态判定+组内下载判定+参考确定+分段执行) [dry-run]")
         manager = ctx.manager
         torrent_hash = ctx.torrent.hash
+
+        # 决策链 0: 只校验"暂停中未完成"的种子(跨种添加后的典型状态), 其余状态一律跳过:
+        # - 已完成(progress>=1, 无论状态): 已通过哈希校验, 重复 recheck/跳检无意义
+        # - 活跃中(downloading/uploading 等非暂停): 正在运行, 无需校验
+        # 此闸门覆盖 full-checking/skip-checking 及有/无任务队列全部路径, 修复完成种子被反复校验的问题
+        if not (ctx.torrent_record.is_paused and (ctx.torrent.progress or 0.0) < 1.0):
+            return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
 
         # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
         members = manager._group_members(torrent_hash)
