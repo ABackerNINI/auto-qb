@@ -205,6 +205,8 @@ class CheckAction(BaseAction):
         manager = ctx.manager
         torrent_hash = ctx.torrent.hash
 
+        # TODO: 未完成且暂停的种子若 recheck 后仍未完成，下一轮会再次校验, 需处理
+
         # 决策链 0: 只校验"暂停中未完成"的种子(跨种添加后的典型状态), 其余状态一律跳过:
         # - 已完成(progress>=1, 无论状态): 已通过哈希校验, 重复 recheck/跳检无意义
         # - 活跃中(downloading/uploading 等非暂停): 正在运行, 无需校验
