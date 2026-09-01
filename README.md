@@ -199,7 +199,7 @@ config:
                 - state:                           # 语义化状态(不同组之间为或) 🚧
                     - complete&uploading           # 已完成且正在上传(& 连接)
                 - hr: condition-met                # condition-met/condition-not-met/satisfied 🚧
-                - date_time: # 🚧
+                - date_time:                       # 🚧
                     day_of_month: 1-31
                     day_of_week: 1-7
                     time: 10:00-23:00
