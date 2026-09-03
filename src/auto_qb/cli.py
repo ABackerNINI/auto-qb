@@ -63,7 +63,7 @@ def main():
 
     try:
         if args.export_yaml:
-            return 0 if export_yaml(manager, args.export_yaml) else 1
+            return 0 if export_yaml(manager, args) else 1
 
         if args.export_torrents_info:
             return 0 if export_torrents_info(manager, "torrents.txt") else 1

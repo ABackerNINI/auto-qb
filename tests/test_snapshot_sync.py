@@ -10,7 +10,7 @@ Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() �
 - delete_tags 同步所有记录并失效全局标签缓存
 - set_category / start / stop / 限速 / set_location / delete 同步 record 字段
 - create_category 失效全局分类缓存
-- RuleContext.api 在 manager 未绑定客户端时退化到 client(测试兼容)
+- RuleContext.api 恒为 manager.api(QbApi 门面); 未绑定客户端时 api.client 为 None
 """
 import os
 import tempfile
@@ -140,10 +140,10 @@ def test_start_stop_syncs_state():
         _make_client(mgr, t1)
         mgr.api.torrents_stop(torrent_hashes="H1")
         assert mgr.store.get("H1").state == "pausedUP"
-        assert mgr.store.get("H1").is_stopped
+        assert mgr.store.get("H1").state_enum.is_stopped
         mgr.api.torrents_start(torrent_hashes="H1")
         assert mgr.store.get("H1").state == "stalledUP"
-        assert not mgr.store.get("H1").is_stopped
+        assert not mgr.store.get("H1").state_enum.is_stopped
 
 
 def test_speed_limits_sync_record():
@@ -194,14 +194,16 @@ def test_read_ops_use_store():
         assert mgr.api.torrents_categories() == {}
 
 
-def test_ctx_api_fallback_without_manager_client():
-    """RuleContext.api: manager 未绑定客户端时退化到 client(外部种子/测试兼容)"""
+def test_ctx_api_not_fallback_without_manager_client():
+    """RuleContext.api: manager.api(QbApi) 恒存在(未绑定客户端时不退化到 client)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))  # 不设置 mgr.client
         client = FakeClient()
-        ctx = make_ctx(mgr, FakeTorrent(), client)
+        ctx = RuleContext(mgr, client, mgr.config, "HASH123", dry_run=False)
         assert isinstance(ctx, RuleContext)
-        assert ctx.api is client
+        assert ctx.api is mgr.api  # manager.api 优先, 不退化
+        assert ctx.api is not client
+        assert ctx.api.client is None  # api 存在但尚未绑定原始客户端
 
 
 def test_ctx_api_uses_manager_api_when_bound():

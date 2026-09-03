@@ -5,14 +5,17 @@ qB 状态具有"双重身份"(checkingDL 既是校验又是下载, checkingUP �
 TorrentState 全部状态做参数化矩阵测试, 锁定每个判定函数的精确语义, 防止
 "新增状态/修改枚举属性" 导致静默回归。
 
+2024-12 用户重构: GroupingMixin._is_downloading/_is_uploading/_is_paused 等
+手写语义判定已删除(不再有 tor 对象级静态判定), 状态判定全部直接使用
+TorrentState 枚举属性(state_enum.is_*); StateCondition spec 直接写枚举属性名
+(is_downloading / is_complete&is_uploading 等), 不再有 checking/downloading 等
+语义名 -> is_* 属性的映射层(用户注释已删 _ATTRS 映射)。
+
 ## 测试计划(每个测试函数一条)
 - test_state_enum_has_exactly_22_members: TorrentState 枚举成员数量锁定(qB 当前 22 个, 含 allocating)
-- test_is_downloading_matrix: 全部状态 × _is_downloading(锁定 62dbc25: 排除校验/暂停)
-- test_is_uploading_matrix: 全部状态 × _is_uploading(checkingUP 校验中也算做种)
-- test_is_paused_matrix: 全部状态 × _is_paused(stoppedUP/stoppedDL 新版暂停)
-- test_group_has_downloading_state_matrix: 全部状态 × _group_has_downloading 组内判定
-- test_state_condition_matches_enum_matrix: StateCondition(语义) 判定 == 枚举属性(全状态 × 全语义)
-- test_state_condition_unknown_semantic: 未识别语义名 -> 恒不匹配
+- test_state_condition_matches_enum_matrix: StateCondition(is_* 属性名 spec) 判定 == 枚举属性(全状态 × 全语义)
+- test_group_has_downloading_matrix: 全部状态 × _group_has_downloading 组内判定(活跃下载 = is_downloading 且非停止且非校验)
+- test_state_condition_unknown_semantic: 非法 spec(非枚举属性名) -> AttributeError(快速失败, 防配置笔误静默不匹配)
 """
 import os
 import tempfile
@@ -20,7 +23,6 @@ import tempfile
 import pytest
 
 from auto_qb.config import GroupingConfig
-from auto_qb.mixins.grouping import GroupingMixin
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.conditions import StateCondition
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
@@ -44,19 +46,20 @@ def _group_cfg(state_file):
 
 
 def _dl_expected(state):
-    """_is_downloading 语义: is_downloading 且 非校验 且 非暂停(62dbc25)"""
-    return state.is_downloading and not state.is_checking and not state.is_paused
+    """_group_has_downloading 语义: is_downloading 且 非停止(stoppedUP/stoppedDL/pausedUP/pausedDL)
+    且 非校验(checkingDL)(活跃下载, 排暂停/校验)"""
+    return state.is_downloading and not state.is_stopped and not state.is_checking
 
 
-# 语义状态 -> TorrentState 枚举判定属性(StateCondition 接线依据)
-_SEMANTIC_ATTRS = {
-    "checking": "is_checking",
-    "downloading": "is_downloading",
-    "complete": "is_complete",
-    "uploading": "is_uploading",
-    "errored": "is_errored",
-    "stopped": "is_stopped",
-}
+# StateCondition spec 直接使用的 TorrentState 枚举判定属性(无手写语义映射层)
+_ATTR_NAMES = (
+    "is_checking",
+    "is_downloading",
+    "is_complete",
+    "is_uploading",
+    "is_errored",
+    "is_stopped",
+)
 
 
 def test_state_enum_has_exactly_22_members():
@@ -65,29 +68,8 @@ def test_state_enum_has_exactly_22_members():
 
 
 @pytest.mark.parametrize("state", ALL_STATES, ids=lambda s: s.value)
-def test_is_downloading_matrix(state):
-    """_is_downloading: 全部状态判定 == is_downloading 且非 checking 且非 paused"""
-    tor = FakeTorrent(state=state.value)
-    assert GroupingMixin._is_downloading(tor) is _dl_expected(state), f"state={state.value}"
-
-
-@pytest.mark.parametrize("state", ALL_STATES, ids=lambda s: s.value)
-def test_is_uploading_matrix(state):
-    """_is_uploading: 全部状态判定 == is_uploading(checkingUP 校验中仍算做种)"""
-    tor = FakeTorrent(state=state.value)
-    assert GroupingMixin._is_uploading(tor) is state.is_uploading, f"state={state.value}"
-
-
-@pytest.mark.parametrize("state", ALL_STATES, ids=lambda s: s.value)
-def test_is_paused_matrix(state):
-    """_is_paused: 全部状态判定 == is_paused(pausedDL/stoppedDL 下载暂停也算暂停)"""
-    tor = FakeTorrent(state=state.value)
-    assert GroupingMixin._is_paused(tor) is state.is_paused, f"state={state.value}"
-
-
-@pytest.mark.parametrize("state", ALL_STATES, ids=lambda s: s.value)
-def test_group_has_downloading_state_matrix(state):
-    """_group_has_downloading: 单成员组是否含活跃下载 == _is_downloading(state)"""
+def test_group_has_downloading_matrix(state):
+    """_group_has_downloading: 单成员组是否含活跃下载 == is_downloading 且非停止且非校验"""
     with tempfile.TemporaryDirectory() as td:
         mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")))
         mgr.client = FakeClient()
@@ -95,20 +77,22 @@ def test_group_has_downloading_state_matrix(state):
         assert mgr._group_has_downloading(["H1"]) is _dl_expected(state), f"state={state.value}"
 
 
-@pytest.mark.parametrize("semantic,attr", sorted(_SEMANTIC_ATTRS.items()))
+@pytest.mark.parametrize("attr", _ATTR_NAMES)
 @pytest.mark.parametrize("state", ALL_STATES, ids=lambda s: s.value)
-def test_state_condition_matches_enum_matrix(state, semantic, attr):
-    """StateCondition(语义) 判定 == TorrentState 枚举属性(全状态 × 全语义, 锁定无手写映射漂移)"""
+def test_state_condition_matches_enum_matrix(state, attr):
+    """StateCondition(is_* 属性名 spec) 判定 == TorrentState 枚举属性(全状态 × 全属性, 锁定无手写映射漂移)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")))
         ctx = make_ctx(mgr, FakeTorrent(state=state.value), FakeClient())
-        assert StateCondition(semantic).match(ctx) is getattr(state, attr), f"{semantic} × {state.value}"
+        assert StateCondition(attr).match(ctx) is getattr(state, attr), f"{attr} × {state.value}"
 
 
 def test_state_condition_unknown_semantic():
-    """StateCondition: 未识别语义名 -> 恒不匹配(防御配置笔误)"""
+    """StateCondition: 非枚举属性名 spec -> AttributeError(配置错误快速失败, 而非静默不匹配)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")))
         ctx = make_ctx(mgr, FakeTorrent(state="stalledUP"), FakeClient())
-        assert StateCondition("bogus").match(ctx) is False
-        assert StateCondition("complete&bogus").match(ctx) is False
+        with pytest.raises(AttributeError):
+            StateCondition("bogus").match(ctx)
+        with pytest.raises(AttributeError):
+            StateCondition("is_complete&bogus").match(ctx)

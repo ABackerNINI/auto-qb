@@ -12,13 +12,12 @@
 - test_grouping_save_path_change_triggers_check: save_path 变化触发检查
 - test_grouping_save_path_change_new_group_alone: save_path 变化单独成组
 - test_grouping_no_full_files_scan: 归组仅拉一次文件列表, 后续不重复扫描
-- test_grouping_state_helpers: _is_uploading/_is_paused/_is_downloading 状态判定
 - test_is_downloading_excludes_checking: 强制校验(checking*)不算下载中(62dbc25 修复)
 - test_grouping_force_checking_not_conflict: 强制校验种子与下载中/已完成同组不触发冲突暂停
 - test_grouping_download_conflict_multi_dl: 多下载冲突 -> 暂停 + 去重语义
 - test_grouping_download_conflict_mixed: 已完成与下载中并存 -> 暂停
 - test_grouping_download_conflict_dry_run: 冲突 dry-run 只报告不暂停不记录去重
-- test_download_conflict_meta_dl_mixed: metaDL(元数据下载)属活跃下载, 与已完成并存 -> mixed
+- test_download_conflict_meta_dl_mixed: metaDL(元数据下载, amount_left>0)属活跃下载, 与已完成并存 -> mixed
 - test_download_conflict_checking_up_mixed: checkingUP(校验中 amount_left=0)+stalledDL -> mixed(qB 重启场景)
 - test_download_conflict_forced_queued_dl: forcedDL+queuedDL 双下载 -> multi-dl
 - test_download_conflict_paused_dl_pair: pausedDL+stoppedDL 停种不算活跃下载 -> 不冲突
@@ -32,13 +31,13 @@
 - test_group_has_downloading: 组内存在下载中成员判定
 - test_group_reference_candidates: 返回做种成员作为参考候选
 - test_grouping_save_path_change_no_cache: 无缓存文件映射 -> 维持原行为不重归组
-- test_assign_new_torrent_missing: 哈希不在 by_hash -> 直接返回
-- test_assign_new_torrent_files_error: 文件列表拉取异常 -> 静默返回
+- test_assign_new_torrent_missing: 哈希不在 by_hash -> AttributeError 上抛(调用方保证存在)
+- test_assign_new_torrent_files_error: 文件列表拉取异常 -> 异常上抛(由 run 主循环兜底)
 - test_assign_to_group_empty_map: 空文件映射 -> 不归组
 - test_check_missing_files_no_seeding_rep: 组内无已完成做种种子 -> 不检查
 - test_check_missing_files_size_mismatch: 文件存在但大小不符 -> 暂停 + MISSING
 - test_check_missing_files_getsize_error: 文件读取 OSError -> 暂停 + MISSING
-- test_check_missing_files_checking_up_rep: checkingUP(做种校验中)也可作代表 -> 缺文件触发暂停
+- test_check_missing_files_checking_up_not_rep: checkingUP(校验中)非有效代表(排除 is_checking) -> 不扫描
 - test_check_missing_files_first_done_rep: 多已完成成员取第一个作代表, 非代表大小差异不影响
 - test_check_missing_files_empty_sizes_map: 大小映射为空 -> 无文件可检查不误报
 - test_check_missing_files_member_has_tag: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)
@@ -48,6 +47,8 @@ import os
 import tempfile
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
 
 from auto_qb.config import GroupingConfig
 from auto_qb.qbmanager import QbManager
@@ -210,7 +211,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         tor = FakeTorrent(hash="H1", name="T1")
         seed_store(mgr, [tor])
 
-        mgr._create_torrent_tasks("H1")
+        mgr._create_torrent_tasks("H1", cfg.trackers["HHan"])
         names = {t.name for t in mgr.task_queue._fast}
         assert "missing_files" not in names, f"不应创建逐种子检查: {names}"
 
@@ -220,7 +221,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         mgr2 = QbManager("", config=cfg2)
         mgr2.client = FakeClient()
         seed_store(mgr2, [tor])
-        mgr2._create_torrent_tasks("H1")
+        mgr2._create_torrent_tasks("H1", cfg2.trackers["HHan"])
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "missing_files" not in names2, f"未启用分组也不应创建逐种子检查: {names2}"
 
@@ -366,19 +367,25 @@ def test_grouping_no_full_files_scan():
 
 
 def test_is_downloading_excludes_checking():
-    """_is_downloading: 强制校验(checkingDL/checkingUP/checkingResumeData)不算活跃下载(62dbc25 修复)
+    """活跃下载判定: 强制校验(checkingDL/checkingUP/checkingResumeData)不算活跃下载(62dbc25 修复)
 
     修复前 checkingDL(is_downloading=True, is_checking=True)被误判为下载中,
-    导致下载冲突检查误暂停整组。
+    导致下载冲突检查误暂停整组。现活跃下载判定由 _group_has_downloading 承担:
+    is_downloading and not is_stopped and not is_checking(读 store 快照)。
     """
     mgr = QbManager("", config=_group_cfg("state.json"))
-    assert not mgr._is_downloading(FakeTorrent(state="checkingDL", amount_left=100)), "checkingDL 不应算下载中"
-    assert not mgr._is_downloading(FakeTorrent(state="checkingUP", amount_left=0)), "checkingUP 不应算下载中"
-    assert not mgr._is_downloading(FakeTorrent(state="checkingResumeData", amount_left=100)), \
-        "checkingResumeData 不应算下载中"
-    # 连带语义: 组内只有强制校验种子 -> 不算有活跃下载(不阻塞校验决策链)
-    seed_store(mgr, [FakeTorrent(hash="H1", state="checkingDL", amount_left=100)])
-    assert mgr._group_has_downloading(["H1"]) is False
+    # checking* 状态 -> 不算组内活跃下载(不阻塞校验决策链)
+    seed_store(
+        mgr, [
+            FakeTorrent(hash="H1", state="checkingDL", amount_left=100),
+            FakeTorrent(hash="H2", state="checkingUP", amount_left=0),
+            FakeTorrent(hash="H3", state="checkingResumeData", amount_left=100),
+        ]
+    )
+    assert mgr._group_has_downloading(["H1"]) is False, "checkingDL 不应算下载中"
+    assert mgr._group_has_downloading(["H2"]) is False, "checkingUP 不应算下载中"
+    assert mgr._group_has_downloading(["H3"]) is False, "checkingResumeData 不应算下载中"
+    assert mgr._group_has_downloading(["H1", "H2", "H3"]) is False, "组内只有强制校验种子不应算活跃下载"
 
 
 def test_grouping_force_checking_not_conflict():
@@ -488,13 +495,13 @@ def test_grouping_download_conflict_dry_run():
 
 
 def test_download_conflict_meta_dl_mixed():
-    """下载冲突: metaDL(元数据下载, amount_left=0)算活跃下载, 与已完成并存 -> mixed"""
+    """下载冲突: metaDL(元数据下载, amount_left>0)算活跃下载, 与已完成并存 -> mixed"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file))
         client = FakeClient()
         mgr.client = client
-        t1 = FakeTorrent(hash="H1", name="T1", state="metaDL", amount_left=0)
+        t1 = FakeTorrent(hash="H1", name="T1", state="metaDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
         key = ("R:/Downloads", ("movie.mkv", ))
         mgr.store.by_hash = {"H1": t1, "H2": t2}
@@ -637,21 +644,6 @@ def test_download_conflict_two_groups_independent():
             assert stop_mock.call_count == 2
 
 
-def test_grouping_state_helpers():
-    """_is_uploading/_is_paused/_is_downloading: 按 state_enum 判定(排除暂停的下载)"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
-    up = FakeTorrent(state="stalledUP")
-    paused = FakeTorrent(state="pausedUP")
-    dl = FakeTorrent(state="downloading")
-    stalled_dl = FakeTorrent(state="stalledDL")
-    paused_dl = FakeTorrent(state="pausedDL")
-    assert mgr._is_uploading(up) and not mgr._is_paused(up) and not mgr._is_downloading(up)
-    assert mgr._is_paused(paused) and not mgr._is_uploading(paused)
-    assert mgr._is_downloading(dl) and not mgr._is_paused(dl)
-    assert mgr._is_downloading(stalled_dl) and not mgr._is_paused(stalled_dl)
-    assert mgr._is_paused(paused_dl) and not mgr._is_downloading(paused_dl), "暂停的下载不算活跃下载"
-
-
 def test_group_members_not_in_group():
     """_group_members: 未归组 -> [自身 hash] 单种子(无参考)"""
     mgr = QbManager("", config=_group_cfg("state.json"))
@@ -736,18 +728,19 @@ def test_grouping_save_path_change_no_cache():
 
 
 def test_assign_new_torrent_missing():
-    """_assign_new_torrent: 哈希不在 store 快照 -> 直接返回"""
+    """_assign_new_torrent: 哈希不在 store 快照 -> AttributeError 上抛(调用方保证传入存在的 hash)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file))
         client = FakeClient()
         mgr.client = client
-        mgr._assign_new_torrent("NOPE", dry_run=False)
+        with pytest.raises(AttributeError):
+            mgr._assign_new_torrent("NOPE", dry_run=False)
         assert client.files_calls == 0, "tor 不存在不应拉文件列表"
 
 
 def test_assign_new_torrent_files_error():
-    """_assign_new_torrent: 文件列表拉取异常 -> 静默返回"""
+    """_assign_new_torrent: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环兜底), 不归组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file))
@@ -760,7 +753,8 @@ def test_assign_new_torrent_files_error():
         client.torrents_files = boom
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
         seed_store(mgr, [t1])
-        mgr._assign_new_torrent("H1", dry_run=False)
+        with pytest.raises(RuntimeError, match="api down"):
+            mgr._assign_new_torrent("H1", dry_run=False)
         assert client.calls == []
         assert "H1" not in mgr.store.member_to_key
 
@@ -825,17 +819,26 @@ def test_check_missing_files_getsize_error():
         assert "MISSING" in client.tags
 
 
-def test_check_missing_files_checking_up_rep():
-    """_check_missing_files: checkingUP(做种校验中, amount_left=0)也可作代表 -> 缺文件触发暂停"""
+def test_check_missing_files_checking_up_not_rep():
+    """_check_missing_files: checkingUP(校验中, is_checking)不算有效代表 -> 不扫描;
+    对照 stalledUP(校验完成做种)作代表 -> 缺文件触发暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file))
         client = FakeClient()
         mgr.client = client
-        rep = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
-        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在 -> 触发(证明 checkingUP 被选为代表)
-        mgr._check_missing_files([rep], sizes, dry_run=False)
-        assert client.calls.count(("stop", None)) == 1, f"校验中做种缺文件也应暂停: {client.calls}"
+
+        # checkingUP: is_complete/is_uploading 但 is_checking -> 排除出有效代表, 不扫描
+        checking_up = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
+        mgr._check_missing_files([checking_up], sizes, dry_run=False)
+        assert client.calls == [], f"checkingUP 非有效代表不应触发扫描: {client.calls}"
+
+        # 对照: stalledUP 作代表 -> 缺文件暂停 + MISSING
+        stalled_up = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td, amount_left=0)
+        sizes2 = {"H2": {"movie.mkv": 100}}
+        mgr._check_missing_files([stalled_up], sizes2, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"stalledUP 作代表缺文件应暂停: {client.calls}"
         assert "MISSING" in client.tags
 
 

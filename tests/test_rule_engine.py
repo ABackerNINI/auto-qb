@@ -1,4 +1,8 @@
-"""test_rule_engine 测试计划: mixins/rule_engine 规则加载/状态/引用
+"""test_rule_engine 测试计划: mixins/rule_engine 规则加载/状态/引用/种子级任务
+
+架构说明(任务队列驱动): process_torrent/_tracker_rule_refs 兼容入口已删除,
+规则绑定由 _rules_for_torrent(tor) 承担(匹配 tracker 的 rules 引用解析), 执行
+经种子级规则任务(_create_rule_task + _handle_rule + 队列移除)驱动。
 
 ## 测试计划(每个测试函数一条)
 - test_load_rules_from_config: 从配置加载规则
@@ -8,22 +12,24 @@
 - test_record_and_get_exec_record: 执行记录写入与读取
 - test_begin_round_and_upload_delta: 本轮开始与上传增量
 - test_resolve_refs_exact_and_prefix: 引用精确与前缀解析
-- test_tracker_rule_refs: tracker 规则引用
-- test_process_torrent_with_refs: 带引用处理种子
-- test_handle_rule_missing_torrent: 种子不存在 -> 不执行规则
+- test_tracker_rule_refs: tracker rules 引用 -> _rules_for_torrent 精确绑定单规则
+- test_rule_task_executes_only_refs: 规则任务只执行被引用的规则(不再全量执行)
+- test_handle_rule_missing_torrent: 种子不存在 -> 任务被队列移除(remove_torrent 清理)
 - test_handle_rule_process_ok: _handle_rule 正常执行动作
 - test_handle_rule_process_error: 规则处理异常被捕获 -> True
 - test_load_rules_skips_non_dict_group: 非 dict 规则组 -> 跳过
-- test_rules_for_torrent_tracker_error: tracker 拉取异常 -> 无规则绑定
-- test_process_torrent_no_enabled_rules: 无启用规则 -> False
-- test_process_torrent_no_refs: 无 tracker 引用 -> 执行全部启用规则
-- test_process_torrent_unresolved_refs: 引用规则不存在 -> False
-- test_tracker_rule_refs_force_continue: ignore_next_rule_error 标志 -> force_continue
+- test_rules_for_torrent_tracker_error: tracker 拉取异常向上抛(不静默吞掉)
+- test_rule_task_no_enabled_rules: 无启用规则 -> 无绑定
+- test_rules_for_torrent_all_refs: 引用整个规则集 -> 绑定全部启用规则
+- test_rules_for_torrent_unresolved_refs: 引用规则不存在 -> 无绑定
+- test_rules_for_torrent_ignores_non_ref: tracker rules 非 @ 项(旧 ignore 标志)被忽略
 """
 import json
 import os
 import tempfile
 from unittest import mock
+
+import pytest
 
 from auto_qb.rules.base import Rule
 from auto_qb.taskqueue import Task
@@ -127,40 +133,52 @@ def test_resolve_refs_exact_and_prefix():
 
 
 def test_tracker_rule_refs():
-    """从匹配 tracker 收集 @ 引用与 ignore_next_rule_error 标志"""
+    """tracker rules 引用 -> 种子绑定规则: 精确 '@set.rule' -> 只绑定该规则"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules.add_site_tag"])
-        from auto_qb.rules.base import RuleContext
-        from helpers import FakeClient
-        ctx = RuleContext(mgr, FakeClient(), mgr.config, FakeTorrent(tags=""), False)
-        refs, force_continue = mgr._tracker_rule_refs(ctx)
-        assert refs == ["example_rules.add_site_tag"]
-        assert force_continue is False
+        client = FakeClient()
+        mgr.client = client
+        bound = mgr._rules_for_torrent(FakeTorrent(tags=""))
+        assert [r.name for r in bound] == ["example_rules.add_site_tag"]
 
 
-def test_process_torrent_with_refs():
-    """process_torrent: 匹配 tracker 引用时只执行引用规则"""
+def test_rule_task_executes_only_refs():
+    """种子级规则任务只执行 tracker 引用的规则(不再全量执行; 含 set_category 不会被触发)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules.add_site_tag"])
-        from helpers import FakeClient
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="")
-        handled = mgr.process_torrent(tor, dry_run=False)
-        assert handled is True
-        # 只执行了 add_site_tag(加标签), 未执行 hr_done(设分类)
+        seed_store(mgr, [tor])
+        tor.tracker_conf = mgr._match_tracker(tor)  # 等效 _refresh_torrents 对新增种子的处理
+        rules = mgr._rules_for_torrent(tor)
+        assert [r.name for r in rules] == ["example_rules.add_site_tag"], "只应绑定被引用的规则"
+        for rule in rules:
+            task = mgr._create_rule_task(rule, tor.hash, mgr.config.trackers["HHan"])
+            assert mgr._handle_rule(rule, task, dry_run=False) is True
+        # 只应执行 add_site_tag(加标签); 未引用的 hr_done(设分类)/stop_low_ratio 不执行
         assert ("add_tags", ["HHan", "seed-3D"]) in client.calls
-        assert all(c[0] != "set_category" for c in client.calls)
+        assert all(c[0] != "set_category" for c in client.calls), f"未引用规则不应执行: {client.calls}"
 
 
 def test_handle_rule_missing_torrent():
-    """_handle_rule: 种子已删除(_get_torrent 返回 None) -> False 任务消亡"""
+    """store 无该种子: _handle_rule 不崩溃(异常被吞返回 True); 任务清理由 remove_torrent 承担"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        mgr._get_torrent = lambda h: None
-        rule = mock.MagicMock()
+        client = FakeClient()
+        mgr.client = client
         task = Task("rule", "t", hash="H1", interval=0)
-        assert mgr._handle_rule(rule, task, dry_run=False) is False
+        # 真实规则: ctx.torrent=None -> 条件匹配异常被 Rule.process 吞掉 -> (False, False)
+        real = Rule("t", {"conditions": [{"state": "is_complete&is_uploading"}], "actions": []}, mgr)
+        assert mgr._handle_rule(real, task, dry_run=False) is True
+        assert client.calls == [], "种子不存在不应执行动作"
+        # 任务清理: 种子删除 -> remove_torrent 移除该种子全部任务(含规则任务)
+        tq = mgr.task_queue
+        tq.add_task(Task("rule", "r1", hash="H1"))
+        tq.add_task(Task("rule", "r2", hash="H1"))
+        tq.add_task(Task("rule", "r3", hash="H2"))
+        tq.remove_torrent("H1")
+        assert [t.hash for t in tq._fast] == ["H2"], "删除种子应移除其全部任务"
 
 
 def test_handle_rule_process_ok():
@@ -210,7 +228,7 @@ def test_load_rules_skips_non_dict_group():
 
 
 def test_rules_for_torrent_tracker_error():
-    """_rules_for_torrent: tracker 拉取异常 -> urls 为空 -> 无规则绑定"""
+    """_rules_for_torrent: tracker 拉取异常不做静默兜底(异常向上抛, 由 tick 层捕获)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -220,49 +238,53 @@ def test_rules_for_torrent_tracker_error():
             raise RuntimeError("api down")
 
         client.torrents_trackers = boom
+        with pytest.raises(RuntimeError):
+            mgr._rules_for_torrent(FakeTorrent(tags=""))
+
+
+def test_rule_task_no_enabled_rules():
+    """无启用规则: 引用解析空 -> 种子不绑定规则任务"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
+        client = FakeClient()
+        mgr.client = client
+        mgr.enabled_rules = []
         assert mgr._rules_for_torrent(FakeTorrent(tags="")) == []
 
 
-def test_process_torrent_no_enabled_rules():
-    """process_torrent: 无启用规则 -> 直接返回 False"""
+def test_rules_for_torrent_all_refs():
+    """tracker rules 引用整个规则集(@example_rules) -> 绑定全部启用规则; 无引用 -> 不绑定"""
     with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.client = FakeClient()
-        mgr.enabled_rules = []
-        assert mgr.process_torrent(FakeTorrent(tags=""), dry_run=False) is False
-
-
-def test_process_torrent_no_refs():
-    """process_torrent: 无 tracker 引用 -> 执行全部启用规则"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
         client = FakeClient()
         mgr.client = client
-        handled = mgr.process_torrent(FakeTorrent(tags=""), dry_run=False)
-        assert handled is True
-        assert ("add_tags", ["HHan", "seed-3D"]) in client.calls, "add_site_tag 应执行"
+        bound = mgr._rules_for_torrent(FakeTorrent(tags=""))
+        names = {r.name for r in bound}
+        assert names == {"example_rules.add_site_tag", "example_rules.hr_done", "example_rules.stop_low_ratio"}
+        # 无 tracker 引用: 种子不绑定任何规则(不再回退执行全部启用规则)
+        mgr2 = make_manager(os.path.join(td, "state.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        assert mgr2._rules_for_torrent(FakeTorrent(tags="")) == []
 
 
-def test_process_torrent_unresolved_refs():
-    """process_torrent: tracker 引用存在但规则解析为空 -> False"""
+def test_rules_for_torrent_unresolved_refs():
+    """tracker 引用存在但规则解析为空 -> 种子不绑定规则不执行任何动作"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@nonexistent.rule"])
         client = FakeClient()
         mgr.client = client
-        assert mgr.process_torrent(FakeTorrent(tags=""), dry_run=False) is False, \
-            "引用解析为空应返回 False"
-        assert client.calls == [], "不应执行任何动作"
+        assert mgr._rules_for_torrent(FakeTorrent(tags="")) == []
 
 
-def test_tracker_rule_refs_force_continue():
-    """_tracker_rule_refs: ignore_next_rule_error 标志识别"""
+def test_rules_for_torrent_ignores_non_ref():
+    """tracker rules 中非 @ 前缀项(旧 ignore_next_rule_error 标志)不被收集为规则引用"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(
             os.path.join(td, "state.json"),
             tracker_rules=["@example_rules.add_site_tag", "ignore_next_rule_error: true"],
         )
-        from auto_qb.rules.base import RuleContext
-        ctx = RuleContext(mgr, FakeClient(), mgr.config, FakeTorrent(tags=""), False)
-        refs, force_continue = mgr._tracker_rule_refs(ctx)
-        assert refs == ["example_rules.add_site_tag"]
-        assert force_continue is True
+        client = FakeClient()
+        mgr.client = client
+        bound = mgr._rules_for_torrent(FakeTorrent(tags=""))
+        assert [r.name for r in bound] == ["example_rules.add_site_tag"]

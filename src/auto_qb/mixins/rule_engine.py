@@ -103,13 +103,9 @@ class RuleEngineMixin:
 
     # ---------- 规则: 种子级任务 ----------
 
-    def _rules_for_torrent(self, hash: str) -> list:
+    def _rules_for_torrent(self, torrent: TorrentRecord) -> list:
         """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)"""
-        try:
-            urls = self.store.tracker_urls(hash)  # 惰性缓存, 不重复拉取
-        except Exception as e:
-            logger.debug(f"获取种子 tracker 失败({hash}): {e}")
-            urls = []
+        urls = torrent.tracker_urls(self.client)
         confs = utils.match_tracker_confs(self.config.trackers, urls)
         refs = []
         for conf in confs:

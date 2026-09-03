@@ -62,21 +62,22 @@ def _ctx(mgr, tor, client=None):
 
 
 def test_state_map():
-    """语义状态判定: pausedDL 算下载中(is_downloading), checkingUP 校验中也算做种, errored 仅缺文件/出错"""
+    """语义状态判定(StateCondition spec 直接用 TorrentState 枚举属性名 is_*):
+    pausedDL 算下载中(is_downloading), checkingUP 校验中也算做种, errored 仅缺文件/出错"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         # pausedDL/stoppedDL: is_downloading 含暂停下载 -> downloading 匹配
         ctx = _ctx(mgr, FakeTorrent(state="pausedDL"))
-        assert StateCondition("downloading").match(ctx)
-        assert StateCondition("stopped").match(ctx)
+        assert StateCondition("is_downloading").match(ctx)
+        assert StateCondition("is_stopped").match(ctx)
         # checkingUP: is_complete 且 is_uploading -> complete&uploading 匹配
         ctx2 = _ctx(mgr, FakeTorrent(state="checkingUP"))
-        assert StateCondition("complete&uploading").match(ctx2)
+        assert StateCondition("is_complete&is_uploading").match(ctx2)
         # errored 仅 missingFiles/error(is_errored 不含 unknown)
         ctx3 = _ctx(mgr, FakeTorrent(state="unknown"))
-        assert StateCondition("errored").match(ctx3) is False
+        assert StateCondition("is_errored").match(ctx3) is False
         ctx4 = _ctx(mgr, FakeTorrent(state="missingFiles"))
-        assert StateCondition("errored").match(ctx4)
+        assert StateCondition("is_errored").match(ctx4)
 
 
 def test_in_range_and_parse_hm():
@@ -165,14 +166,14 @@ def test_trackers_condition():
 
 
 def test_state_condition():
-    """状态条件: & 与/组间或/语义映射"""
+    """状态条件: & 与/组间或(spec 直接用 is_* 枚举属性名)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = _ctx(mgr, FakeTorrent(state="stalledUP"))
-        assert StateCondition("complete&uploading").match(ctx)
-        assert StateCondition("uploading").match(ctx)
-        assert StateCondition("downloading").match(ctx) is False
-        assert StateCondition(["downloading", "uploading"]).match(ctx), "组间为或"
+        assert StateCondition("is_complete&is_uploading").match(ctx)
+        assert StateCondition("is_uploading").match(ctx)
+        assert StateCondition("is_downloading").match(ctx) is False
+        assert StateCondition(["is_downloading", "is_uploading"]).match(ctx), "组间为或"
 
 
 def test_hr_condition():
@@ -199,9 +200,9 @@ def test_hr_condition():
         assert HrCondition("condition-not-met").match(ctx2)
         assert HrCondition("condition-met").match(ctx2) is False
 
-        # 无 hr 配置的 tracker: 均不匹配
+        # 无 hr 配置的 tracker: 均不匹配(用新 tor: 避免复用已带 hr tracker_conf 的 tor)
         mgr3 = make_manager(state_file, tracker_kw={"hr": None})
-        ctx3 = _ctx(mgr3, tor, client)
+        ctx3 = _ctx(mgr3, FakeTorrent(tags="", downloaded=70 * 1024**2, total_size=100 * 1024**2), client)
         assert HrCondition("condition-met").match(ctx3) is False
 
 

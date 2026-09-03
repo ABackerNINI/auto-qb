@@ -129,12 +129,22 @@ def test_hr_required_share_ratio():
             extra_seeding_time=12 * 3600,
             required_share_ratio=2.0,
         )
-        tor = FakeTorrent(tags="HHan", seeding_time=100, ratio=2.5)  # 时长不足但分享率达标
-        handled = mgr.process_torrent(tor, dry_run=False)
+        tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=2.5)  # 时长不足但分享率达标
+        client.torrents["HASH123"] = tor
+        seed_store(mgr)
+        task = Task(
+            "internal",
+            "maintenance",
+            hash="HASH123",
+            interval=60,
+            tracker_conf=mgr.config.trackers["HHan"],
+            handler=mgr._handle_maintenance
+        )
+        handled = mgr._handle_maintenance(task, dry_run=False)
         assert handled, "分享率达标应视为 HR satisfied"
-        assert client.category == "HR-DONE", f"分享率达标应加 HR-DONE: {client.category}"
+        assert client.category == "--HR3D--", f"分享率达标应加 satisfied 分类: {client.category}"
 
-        # 分享率也不达标: 不处理
+        # 分享率也不达标: 不 satisfied(仅普通 HR 分类)
         client2 = FakeClient()
         mgr2 = make_manager(state_file)
         mgr2.client = client2
@@ -144,10 +154,19 @@ def test_hr_required_share_ratio():
             extra_seeding_time=12 * 3600,
             required_share_ratio=2.0,
         )
-        tor2 = FakeTorrent(tags="HHan", seeding_time=100, ratio=1.0)
-        handled2 = mgr2.process_torrent(tor2, dry_run=False)
-        assert handled2 is False or "HR-DONE" not in client2.tags, \
-            f"时长与分享率均不达标不应 satisfied: {client2.calls}"
+        tor2 = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=1.0)
+        client2.torrents["HASH123"] = tor2
+        seed_store(mgr2)
+        task2 = Task(
+            "internal",
+            "maintenance",
+            hash="HASH123",
+            interval=60,
+            tracker_conf=mgr2.config.trackers["HHan"],
+            handler=mgr2._handle_maintenance
+        )
+        mgr2._handle_maintenance(task2, dry_run=False)
+        assert client2.category != "--HR3D--", "时长与分享率均不达标不应 satisfied"
 
 
 def test_tracker_remove_similar_tags_override():

@@ -349,7 +349,7 @@ class CheckAction(BaseAction):
                         origin.resume_index = None
                         tq.reschedule(origin, time.time())
                     return False
-                if not ctx.torrent.state_enum.is_checking:
+                if ctx.torrent.state_enum.is_checking:
                     return True  # 仍在校验中, 下一轮轮询
                 if ctx.torrent.progress >= 1.0:
                     logger.info(f"规则: {rule_name} | 校验成功: {hash}")

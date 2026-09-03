@@ -198,8 +198,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
                 # 如果没有匹配到tracker配置, 则打印警告日志并跳过该种子
                 if not tracker_conf:
-                    trackers_info = self.store.trackers_info(h)
-                    all_domains = utils.extract_tracker_hostnames(trackers_info)
+                    try:
+                        trackers_info = torrent.trackers_info(self.client)
+                        all_domains = utils.extract_tracker_hostnames(trackers_info)
+                    except Exception:
+                        all_domains = []
                     logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {h[:8]}")
                     continue  # 未匹配tracker配置, 直接跳过
 
@@ -267,7 +270,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         )
 
         # 创建种子规则任务
-        for rule in self._rules_for_torrent(torrent.hash):
+        for rule in self._rules_for_torrent(torrent):
             tasks.append(self._create_rule_task(rule, hash, tracker_conf))
 
         self.task_queue.add_tasks(tasks)
@@ -287,9 +290,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             handled |= self._remove_similar_tags(torrent, tracker_conf.tags, dry_run)
         if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
             handled |= self._add_hr_tag_or_category(torrent, tracker_conf, dry_run)
-        if handled:
-            self._log_torrent_details(torrent, tracker_conf)
-            logger.info(f"--------------------------------------------------------------------------")
+        # if handled:
+        #     self._log_torrent_details(torrent, tracker_conf)
+        #     logger.info(f"--------------------------------------------------------------------------")
         return True
 
     def export_torrents_info(self, path):

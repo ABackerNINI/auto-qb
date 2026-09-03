@@ -6,7 +6,7 @@
 - test_remove_similar_tags: 移除相似标签
 - test_create_category_if_not_exists: 分类不存在时创建
 - test_fmt_hr: ${required_seeding_time} 模板替换
-- test_torrent_desc: 种子描述生成
+- test_torrent_log_repr: 种子日志描述 log_repr(含 tracker_conf=None -> Unknown)
 - test_add_hr_tag_or_category_satisfied: HR 达标 -> 加达标标签/分类
 - test_handle_delete_tags: 处理彻底删除标签任务
 - test_handle_delete_tags_if_has_no_torrents: 处理无种子标签清理任务
@@ -18,9 +18,8 @@
 - test_set_category_dry_run: dry-run 只返回不调用
 - test_add_hr_tag_or_category_not_met: HR 未触发 -> 无操作
 - test_add_hr_tag_or_category_not_satisfied: 触发但未达标 -> 加普通标签
-- test_log_torrent_details: 日志输出辅助(含 tracker_conf=None)
 - test_add_tags_empty: 空标签列表 -> False
-- test_add_episode_tags_files_error: 文件列表拉取异常 -> 静默返回
+- test_add_episode_tags_files_error: 文件列表拉取异常 -> 异常上抛
 - test_add_episode_tags_no_episodes: 文件列表无集数 -> 不加标签
 - test_remove_similar_tags_empty: 空标签列表 -> False
 - test_add_hr_tag_or_category_no_hr: tracker 无 hr -> False
@@ -36,9 +35,11 @@
 import os
 import tempfile
 
+import pytest
+
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import AddTagsAction
-from helpers import FakeClient, FakeConfig, FakeTorrent, _hr_rule, make_ctx, make_manager, seed_store
+from helpers import FakeClient, FakeConfig, FakeTorrent, _hr_rule, make_manager, seed_store
 
 
 def _mgr(state_file):
@@ -86,7 +87,7 @@ def test_remove_similar_tags():
         # 保留精确匹配, 移除其它大小写变体
         removed = mgr._remove_similar_tags(tor, ["HHan"], dry_run=False)
         assert removed
-        assert ("remove_tags", "hhan") in client.calls
+        assert ("remove_tags", ["hhan"]) in client.calls
 
 
 def test_create_category_if_not_exists():
@@ -113,12 +114,10 @@ def test_fmt_hr():
         assert mgr._fmt_hr("no-placeholder", hr) == "no-placeholder"
 
 
-def test_torrent_desc():
-    """_torrent_desc: '名称 [hash]'"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = _mgr(os.path.join(td, "state.json"))
-        tor = FakeTorrent(name="Movie.2024", hash="ABC123")
-        assert mgr._torrent_desc(tor) == "Movie.2024 [ABC123]"
+def test_torrent_log_repr():
+    """log_repr: '名称' [站点] (hash前8); tracker_conf=None -> Unknown"""
+    tor = FakeTorrent(name="Movie.2024", hash="ABC123")
+    assert tor.log_repr == "'Movie.2024' [Unknown] (ABC123)"
 
 
 def test_add_hr_tag_or_category_satisfied():
@@ -128,8 +127,7 @@ def test_add_hr_tag_or_category_satisfied():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=4 * 86400)
-        ctx = make_ctx(mgr, tor, client)
-        conf = ctx.matched_tracker_confs()[0]
+        conf = mgr.config.trackers["HHan"]
         # seeding_time 4D >= 3D+12H, ratio 1.0: satisfied
         assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is True
         assert ("set_category", "--HR3D--") in client.calls
@@ -173,7 +171,7 @@ def test_set_category_empty():
 
 
 def test_set_category_overwrite():
-    """_set_category: overwrite=True 强制覆盖已有分类, 不记录 auto"""
+    """_set_category: overwrite=True 强制覆盖已有分类, 并记录 auto(后续可再自动更新)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -181,7 +179,7 @@ def test_set_category_overwrite():
         tor = FakeTorrent(category="OLD")
         assert mgr._set_category(tor, "NEW", overwrite=True, dry_run=False) is True
         assert ("set_category", "NEW") in client.calls
-        assert "HASH123" not in mgr.state.get("auto_categories", {})
+        assert mgr.state["auto_categories"]["HASH123"] == "NEW"
 
 
 def test_set_category_no_overwrite():
@@ -257,15 +255,6 @@ def test_add_hr_tag_or_category_not_satisfied():
         assert ("add_tags", ["HR"]) in client.calls
 
 
-def test_log_torrent_details():
-    """_log_torrent_details: 仅打日志, 返回 None 不抛异常(含无匹配站点)"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = _mgr(os.path.join(td, "state.json"))
-        tor = FakeTorrent(name="Movie", state="stalledUP", hash="H1")
-        assert mgr._log_torrent_details(tor, mgr.config.trackers["HHan"]) is None
-        assert mgr._log_torrent_details(tor, None) is None
-
-
 def test_add_tags_empty():
     """_add_tags: 空标签列表 -> False 不调用"""
     with tempfile.TemporaryDirectory() as td:
@@ -277,7 +266,7 @@ def test_add_tags_empty():
 
 
 def test_add_episode_tags_files_error():
-    """_add_episode_tags: 文件列表拉取异常 -> 静默返回"""
+    """_add_episode_tags: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环兜底)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -287,8 +276,10 @@ def test_add_episode_tags_files_error():
             raise RuntimeError("api down")
 
         client.torrents_files = boom
-        seed_store(mgr, [FakeTorrent(hash="H1", tags="")])
-        mgr._add_episode_tags("H1", dry_run=False)
+        tor = FakeTorrent(hash="H1", tags="")
+        seed_store(mgr, [tor])
+        with pytest.raises(RuntimeError, match="api down"):
+            mgr._add_episode_tags(tor, dry_run=False)
         assert client.calls == []
 
 
@@ -300,7 +291,7 @@ def test_add_episode_tags_no_episodes():
         mgr.client = client
         tor = FakeTorrent(hash="H1", tags="")
         seed_store(mgr, [tor])
-        mgr._add_episode_tags("H1", dry_run=False)
+        mgr._add_episode_tags(tor, dry_run=False)
         assert client.calls == [], "无集数不应加标签"
 
 

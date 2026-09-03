@@ -118,33 +118,30 @@ class RuleContext:
     @property
     def required_seeding_time(self) -> str:
         """第一个匹配 tracker 的 HR 时间部分, 如 '3D', 用于 ${required_seeding_time} 变量替换"""
-        for conf in self.matched_tracker_confs():
-            if conf.hr:
-                return conf.hr.required_seeding_time_raw
+        conf = self.torrent.tracker_conf
+        if conf and conf.hr:
+            return conf.hr.required_seeding_time_raw
         return ""
 
     @property
     def torrent(self) -> TorrentRecord:
-        """快照记录; store 无该种子(外部传入种子/测试直接调用)时从 torrent 构造"""
-        rec = self.manager.store.get(self.torrent.hash)
-        if rec is None:  # TODO: None代表种子已被前面的任务删除
-            rec = TorrentRecord.from_torrent(self.torrent)
-        return rec
+        return self.manager.store.get(self.hash)
 
     def replace_vars(self, text: str) -> str:
         """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}"""
         return str(text).replace("${required_seeding_time}", self.required_seeding_time)
 
-    def tracker_urls(self) -> List[str]:
-        if self._tracker_urls is None:
-            store = getattr(self.manager, "store", None)
-            if store is not None and store.client is not None and self.torrent.hash in store:
-                # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
-                self._tracker_urls = store.tracker_urls(self.torrent.hash)
-            else:
-                # 外部传入种子(process_torrent 兼容入口): 直接拉取
-                self._tracker_urls = [t["url"] for t in self.api.torrents_trackers(self.torrent.hash) if t.get("url")]
-        return self._tracker_urls
+    # TODO: 删除
+    # def tracker_urls(self) -> List[str]:
+    #     if self._tracker_urls is None:
+    #         store = getattr(self.manager, "store", None)
+    #         if store is not None and store.client is not None and self.torrent.hash in store:
+    #             # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
+    #             self._tracker_urls = store.tracker_urls(self.torrent.hash)
+    #         else:
+    #             # 外部传入种子(process_torrent 兼容入口): 直接拉取
+    #             self._tracker_urls = [t["url"] for t in self.api.torrents_trackers(self.torrent.hash) if t.get("url")]
+    #     return self._tracker_urls
 
     # TODO: 删除
     # def matched_tracker_confs(self) -> List[Any]:

@@ -15,7 +15,6 @@
 - test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
 - test_tick_full_flow: 快速队列到期任务执行全流程(含 check 轮询任务首轮发送)
 - test_create_torrent_tasks_tor_missing: 种子不在快照 -> 直接返回
-- test_create_torrent_tasks_no_tracker: 未匹配 tracker -> 拉取 + 警告 + False
 - test_create_torrent_tasks_with_rules: 匹配 tracker -> 创建 maintenance + 规则任务
 - test_handle_maintenance_tor_missing: 种子不存在 -> False(任务消亡)
 - test_run_save_state_on_exit: run 退出后保存状态文件且为有效 JSON dict
@@ -61,7 +60,7 @@ def test_get_torrent():
         seed_store(mgr)
         assert mgr._get_torrent("H1").hash == "H1"
         assert mgr._get_torrent("NOPE") is None
-        mgr.store.apply([])  # 种子删除 -> 快照移除
+        seed_store(mgr, [])  # 种子删除 -> 快照移除(refresh 语义 diff, 返回 removed=["H1"])
         assert mgr._get_torrent("H1") is None
 
 
@@ -202,22 +201,8 @@ def test_create_torrent_tasks_tor_missing():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        mgr._snapshot = []
-        assert mgr._create_torrent_tasks("NOPE") is None
+        assert mgr._create_torrent_tasks("NOPE", None) is None
         assert mgr.task_queue._fast == []
-
-
-def test_create_torrent_tasks_no_tracker():
-    """_create_torrent_tasks: 未匹配 tracker 配置 -> 拉取 trackers + 警告 + False"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        client = FakeClient()
-        mgr.client = client
-        client.torrents_trackers = lambda h: [{"url": "https://tracker.other.org/announce"}]
-        tor = FakeTorrent(hash="H1", tags="")
-        seed_store(mgr, [tor])
-        assert mgr._create_torrent_tasks("H1") is False, "未匹配应跳过"
-        assert mgr.task_queue._fast == [], "不应创建任何任务"
 
 
 def test_create_torrent_tasks_with_rules():
@@ -229,7 +214,7 @@ def test_create_torrent_tasks_with_rules():
         tor = FakeTorrent(hash="HASH123", tags="")
         client.torrents["HASH123"] = tor
         seed_store(mgr)
-        mgr._create_torrent_tasks("HASH123")
+        mgr._create_torrent_tasks("HASH123", mgr.config.trackers["HHan"])
         names = [t.name for t in mgr.task_queue._fast]
         assert "maintenance" in names, f"应创建内置任务: {names}"
         assert "example_rules.add_site_tag" in names, f"应创建规则任务: {names}"

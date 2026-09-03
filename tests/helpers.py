@@ -88,7 +88,15 @@ class FakeClient:
         self.calls.append(("add", {"is_skip_checking": is_skip_checking, "paused": paused or is_paused}))
         if self.add_error:
             raise self.add_error
-        self.torrents["HASH123"] = {"state": "pausedUP" if (paused or is_paused) else "stalledUP"}
+        # 新种子进入客户端(hash 固定 HASH123, 与 FakeTorrent 默认一致); 存对象而非 dict,
+        # 保证 store.refresh / trackers_info 等按 .hash/.state 属性访问不崩
+        self.torrents["HASH123"] = FakeTorrent(
+            hash="HASH123",
+            state="pausedUP" if (paused or is_paused) else "stalledUP",
+            save_path=save_path or r"R:\Downloads",
+            category=category or "",
+            tags=tags or "",
+        )
 
     def torrents_add_tags(self, tags=None, torrent_hashes=None):
         self.tags.update(tags)
@@ -148,8 +156,13 @@ class FakeClient:
         self.calls.append(("set_location", location))
 
 
-# ---------- 模拟种子 ----------
+# ---------- 模拟种子(TorrentDictionary 鸭子) ----------
 class FakeTorrent:
+    """模拟 qB TorrentDictionary 对象(变量命名: tor), 鸭子类型兼容 TorrentRecord/TorrentStore
+
+    快照字段与 TorrentRecord 一致(含 dl_limit/up_limit), 补派生属性与记录级惰性接口:
+      tags_set / log_repr / tracker_name + trackers_info(client)/tracker_urls(client)/files(client)。
+    """
     def __init__(self, **kw):
         self.hash = kw.get("hash", "HASH123")
         self.name = kw.get("name", "Test")
@@ -167,16 +180,104 @@ class FakeTorrent:
         self.amount_left = kw.get("amount_left", 0)
         self.completed = kw.get("completed", 0)
         self.progress = kw.get("progress", 0.0)
+        self.dl_limit = kw.get("dl_limit", 0)
+        self.up_limit = kw.get("up_limit", 0)
+        # TorrentDictionary 扩展字段(skip-checking 重加时逐项回传; 默认 None/False 即不传)
+        self.seq_dl = kw.get("seq_dl", False)
+        self.f_l_piece_prio = kw.get("f_l_piece_prio", False)
+        self.ratio_limit = kw.get("ratio_limit", None)
+        self.seeding_time_limit = kw.get("seeding_time_limit", None)
+        self.inactive_seeding_time_limit = kw.get("inactive_seeding_time_limit", None)
+        self.share_limit_action = kw.get("share_limit_action", None)
+        self.tracker_conf = kw.get("tracker_conf", None)
+        self.tor = self  # 原始 TorrentDictionary(自身), 提供 client 兼容访问
+        self._tags_set = None
+        self._state_enum = None
+        self._trackers_info = None
+        self._files = None
 
     @property
     def state_enum(self):
-        """模拟真实客户端: 由 state 字符串动态构造 TorrentState(与 qB 版本无关的状态类别判定)"""
+        """模拟真实客户端: 由 state 字符串动态构造 TorrentState(与 qB 版本无关的状态类别判定)
+
+        不缓存: 测试常直接改 .state 属性后重执行动作, 缓存会导致 state_enum 不同步。
+        """
         if TorrentState is None:
             return None
         try:
             return TorrentState(self.state)
         except ValueError:
             return TorrentState.UNKNOWN
+
+    @property
+    def tags_set(self) -> frozenset:
+        # 不缓存: 测试常直接改 .tags 属性后重执行动作
+        return frozenset(p.strip() for p in (self.tags or "").split(",") if p.strip())
+
+    @property
+    def tracker_name(self) -> str:
+        """返回 tracker 名称(从 tracker_conf 或 tracker_url 派生), 主要用于log"""
+        if self.tracker_conf is not None:
+            if self.tracker_conf.tags is not None and len(self.tracker_conf.tags) > 0:
+                return self.tracker_conf.tags[0]
+            return self.tracker_conf.name
+        return "Unknown"
+
+    @property
+    def log_repr(self) -> str:
+        return f"'{self.name}' [{self.tracker_name}] ({self.hash[:8]})"
+
+    # ---------- 记录级惰性接口(与 TorrentRecord 一致; client None -> RuntimeError) ----------
+
+    # 快照字段(与 TorrentRecord._SNAPSHOT_FIELDS 一致; update_from 时逐字段复制)
+    _SNAPSHOT_FIELDS = (
+        "name",
+        "save_path",
+        "content_path",
+        "size",
+        "total_size",
+        "tags",
+        "category",
+        "state",
+        "downloaded",
+        "uploaded",
+        "seeding_time",
+        "ratio",
+        "amount_left",
+        "completed",
+        "progress",
+        "dl_limit",
+        "up_limit",
+    )
+
+    def update_from(self, tor):
+        """用最新种子对象更新快照字段(惰性缓存保留, 文本派生缓存失效); 与 TorrentRecord.update_from 同语义"""
+        self.tor = tor
+        for f in self._SNAPSHOT_FIELDS:
+            v = getattr(tor, f, None)
+            if v is not None:
+                setattr(self, f, v)
+        self._tags_set = None
+        self._state_enum = None
+        self._trackers_info = None
+        self._files = None
+
+    def trackers_info(self, client):
+        if self._trackers_info is None:
+            if client is None:
+                raise RuntimeError("TorrentStore 未绑定 client")
+            self._trackers_info = list(client.torrents_trackers(self.hash) or [])
+        return self._trackers_info
+
+    def tracker_urls(self, client):
+        return [t.get("url") for t in self.trackers_info(client) if t.get("url")]
+
+    def files(self, client):
+        if self._files is None:
+            if client is None:
+                raise RuntimeError("TorrentStore 未绑定 client")
+            self._files = list(client.torrents_files(self.hash) or [])
+        return self._files
 
 
 # ---------- 模拟 TrackerConfig ----------
@@ -261,7 +362,7 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
                         "enabled": True,
                         "execute_once": "daily",
                         "conditions": [{
-                            "state": "complete&uploading"
+                            "state": "is_complete&is_uploading"
                         }, {
                             "hr": "satisfied"
                         }],
@@ -300,12 +401,56 @@ def _fake_file(name, size):
 
 
 def make_ctx(mgr, tor, client, dry_run=False):
-    """构造 RuleContext(规则动作测试辅助)"""
-    return RuleContext(mgr, client, mgr.config, tor, dry_run=dry_run)
+    """构造 RuleContext(规则动作测试辅助)
+
+    新架构: RuleContext 第 4 参为 hash 字符串; ctx.torrent = mgr.store.get(hash)(无 None 兜底)。
+    因此本函数保证: ①client 已绑定到 mgr(动作经 ctx.api 调 manager.api 门面) ②store 中已有该
+    tor 的记录, 且记录对象即 tor 本身(对象身份直写: 后续修改 tor 属性对 ctx.torrent 实时可见)
+    ③tracker_conf 已匹配(等效 _refresh_torrents 对新增种子的处理; ${required_seeding_time} 等依赖它)。
+    """
+    # ① client 绑定: 动作走 ctx.api -> manager.api(QbApi), 未绑 client 时自动绑定
+    if getattr(mgr, "_client", None) is None:
+        mgr.client = client
+    # ③ tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 _match_tracker 赋值)
+    if tor.tracker_conf is None:
+        try:
+            tor.tracker_conf = mgr._match_tracker(tor)
+        except Exception:
+            tor.tracker_conf = None
+    # ② 对象身份注入: by_hash[h] is tor(已存在则原地替换/更新)
+    existing = mgr.store.by_hash.get(tor.hash)
+    if existing is not tor:
+        if existing is not None and not isinstance(existing, FakeTorrent):
+            existing.update_from(tor)  # 真 TorrentRecord: 原地更新快照
+        mgr.store.by_hash[tor.hash] = tor  # 对象身份直写(供改 tor 属性后实时可见)
+        if mgr.store._known_hashes is not None:
+            mgr.store._known_hashes.add(tor.hash)
+    return RuleContext(mgr, client, mgr.config, tor.hash, dry_run=dry_run)
 
 
 def seed_store(mgr, torrents=None):
-    """将种子灌入 mgr.store(数据层迁移: _get_torrent/_handle_maintenance/规则任务等读取只走 store)"""
+    """将种子灌入 mgr.store(对象身份直写: 记录即传入对象, 后续修改实时可见)
+
+    语义与 store.refresh 一致(首轮全部视为新增, 后续 diff), 但保留对象身份而非复制字段;
+    返回值 (added, removed)。
+    """
     if torrents is None:
         torrents = list(mgr.client.torrents.values())
-    mgr.store.apply(torrents)
+    store = mgr.store
+    old_known = store._known_hashes
+    new_by_hash: dict = {}
+    for tor in torrents:
+        if tor is None or isinstance(tor, dict):
+            continue  # 无快照形状的对象(如测试手动注入的 dict)不参与
+        h = getattr(tor, "hash", None)
+        if not h:
+            continue
+        new_by_hash[h] = tor
+    if old_known is None:
+        added, removed = list(new_by_hash), []
+    else:
+        added = [h for h in new_by_hash if h not in old_known]
+        removed = [h for h in old_known if h not in new_by_hash]
+    store.by_hash = new_by_hash
+    store._known_hashes = set(new_by_hash)
+    return added, removed

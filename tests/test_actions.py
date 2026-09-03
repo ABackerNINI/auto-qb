@@ -40,8 +40,9 @@ from auto_qb.rules.actions import (
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
 
 
-def _seg(mode, auto_start=True):
-    return {"mode": mode, "auto_start": auto_start}
+def _seg(mode, auto_start=True, enabled=True):
+    """构造 with_reference/without_reference 段配置(新架构: 段需显式 enabled=True 才启用)"""
+    return {"enabled": enabled, "mode": mode, "auto_start": auto_start}
 
 
 def _setup(state_file=None):
@@ -133,6 +134,9 @@ def test_start_stop_idempotent():
         assert StartAction("").execute(ctx).is_ok
         assert ("start", None) in client.calls
         # stop: pausedUP 已停止 -> skip; stalledUP -> stop
+        # 注意: 上述 start 成功经 QbApi 同步后 state 已为 stalledUP(客户端语义),
+        # 验证幂等 skip 需把种子重置为暂停态再断言
+        tor.state = "pausedUP"
         assert StopAction("").execute(ctx).is_skipped
         tor.state = "stalledUP"
         assert StopAction("").execute(ctx).is_ok
@@ -207,12 +211,12 @@ def _check_action(basic_check="filelist", with_seg=None, without_seg=None, custo
 
 
 def _grouped_mgr(state_file, hashes):
-    """构造已归组 manager: store 分组结构 + 快照齐全"""
+    """构造已归组 manager: store 分组结构 + 快照齐全(store.apply 已删, 用 seed_store 灌快照)"""
     mgr = make_manager(state_file)
     mgr.store.groups[("KEY", )] = list(hashes)
     for h in hashes:
         mgr.store.member_to_key[h] = ("KEY", )
-    mgr.store.apply(list(hashes.values()))
+    seed_store(mgr, list(hashes.values()))
     return mgr
 
 
@@ -273,6 +277,21 @@ def _skip_ctx(state_file, **client_patches):
     for attr, fn in client_patches.items():
         setattr(client, attr, fn)
     ctx = make_ctx(mgr, tor, client)
+
+    # 跳检动作语义: 删除种子(保留文件)后按旧种子字段重加。真实 qB 中种子删除后立即以同 hash
+    # 重新出现; 测试包装 torrents_delete: 先真实调用(QbApi 同步移除快照的语义保留, 供
+    # test_skip_checking_delete_error 等校验), 成功后恢复快照记录, 模拟重加后种子重新出现,
+    # 使动作能读到重加参数(save_path/category/tags/limits, actions._execute_skip_checking 的
+    # delete 后 ctx.torrent 读取)。不改 src, 仅测试侧镜像"重加后同 tick 内快照可用"。
+    orig_delete = mgr.api.torrents_delete
+
+    def wrapped_delete(torrent_hashes=None, delete_files=False, **kw):
+        orig_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kw)
+        mgr.store.by_hash[ctx.hash] = tor
+        if mgr.store._known_hashes is not None:
+            mgr.store._known_hashes.add(ctx.hash)
+
+    mgr.api.torrents_delete = wrapped_delete
     return ctx, client
 
 

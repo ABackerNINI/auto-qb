@@ -198,7 +198,7 @@ config:
                 - trackers:                        # tracker 自定义名称(不同组之间为或) 🚧
                     - tracker1
                 - state:                           # 语义化状态(不同组之间为或) 🚧
-                    - is_complete&is_uploading           # 已完成且正在上传(& 连接)
+                    - is_complete&is_uploading     # 已完成且正在上传(& 连接)
                 - hr: condition-met                # condition-met/condition-not-met/satisfied 🚧
                 - date_time:                       # 🚧
                     day_of_month: 1-31
@@ -330,16 +330,16 @@ config:
 规则条件里的 `state` 是语义化状态，直接用 qB `TorrentState` 枚举属性判定(`is_checking` /
 `is_downloading` / `is_complete` / `is_uploading` / `is_errored` / `is_stopped`)，与 qB 官方语义一致:
 
-| 语义状态      | 判定依据         | 覆盖的 qB state                                                                                   | 说明                     |
-|---------------|------------------|---------------------------------------------------------------------------------------------------|--------------------------|
-| `checking`    | `is_checking`    | checkingDL， checkingUP， checkingResumeData                                                        | 正在校验                 |
-| `downloading` | `is_downloading` | downloading， forcedDL， metaDL， forcedMetaDL， checkingDL， queuedDL， stalledDL， pausedDL， stoppedDL | 下载中(含暂停/排队/校验) |
-| `complete`    | `is_complete`    | uploading， stalledUP， pausedUP， forcedUP， queuedUP， stoppedUP， checkingUP                         | 已完成下载               |
-| `uploading`   | `is_uploading`   | uploading， forcedUP， stalledUP， queuedUP， checkingUP                                              | 上传做种中               |
-| `errored`     | `is_errored`     | missingFiles， error                                                                               | 出错                     |
-| `stopped`     | `is_stopped`     | pausedDL， pausedUP， stoppedDL， stoppedUP                                                          | 已暂停/停止              |
+| 状态             | 覆盖的 qB state                                                                                   | 说明                     |
+|------------------|---------------------------------------------------------------------------------------------------|--------------------------|
+| `is_checking`    | checkingDL， checkingUP， checkingResumeData                                                        | 正在校验                 |
+| `is_downloading` | downloading， forcedDL， metaDL， forcedMetaDL， checkingDL， queuedDL， stalledDL， pausedDL， stoppedDL | 下载中(含暂停/排队/校验) |
+| `is_complete`    | uploading， stalledUP， pausedUP， forcedUP， queuedUP， stoppedUP， checkingUP                         | 已完成下载               |
+| `is_uploading`   | uploading， forcedUP， stalledUP， queuedUP， checkingUP                                              | 上传做种中               |
+| `is_errored`     | missingFiles， error                                                                               | 出错                     |
+| `is_stopped`     | pausedDL， pausedUP， stoppedDL， stoppedUP                                                          | 已暂停/停止              |
 
-`complete&uploading` = `is_complete 且 is_uploading`，即"正在做种中"(含 queuedUP/checkingUP)。
+`is_complete&is_uploading` = "正在做种中"(含 queuedUP/checkingUP)。
 注意 `downloading` 含 pausedDL/stoppedDL 等暂停下载状态；条件不支持 `!` 取反，需排除暂停下载时
 用 `stopped` 条件另行判断。
 
@@ -403,7 +403,7 @@ pip install pytest pytest-cov
 pytest tests -q
 
 # 运行测试并输出覆盖率
-pytest --cov=auto_qb --cov-report=term-missing tests -q
+pytest --cov=src --cov-report=term-missing tests -q
 
 # 生成 HTML 覆盖率报告
 pytest --cov=src --cov-report=html tests/

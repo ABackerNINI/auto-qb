@@ -125,13 +125,7 @@ class GroupingMixin:
     def _assign_new_torrent(self, hash: str, dry_run: bool = False):
         """新增种子增量归组: 仅拉取该种子的文件列表并入组(store O(1) 定位, 不做全量遍历) """
         torrent = self.store.get(hash)
-        if torrent is None:
-            return
-        try:
-            files = self.store.files(hash)
-        except Exception as e:
-            logger.debug(f"分组归组获取文件列表失败({hash}): {e}")
-            return
+        files = torrent.files(self.client)
         self._assign_to_group(torrent, {utils.path_normalize(f.name): f.size for f in files}, dry_run)
 
     def _assign_to_group(self, torrent: TorrentRecord, file_map: Dict[str, int], dry_run: bool = False):
@@ -255,7 +249,8 @@ class GroupingMixin:
         for key, members in self.store.groups.items():
             torrents = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             n_dl = sum(
-                1 for t in torrents if t.state_enum.is_downloading and not t.state_enum.is_stopped and t.amount_left > 0
+                1 for t in torrents if t.state_enum.is_downloading and not t.state_enum.is_stopped and
+                not t.state_enum.is_checking and t.amount_left > 0
             )
             n_done = sum(1 for t in torrents if t.state_enum.is_complete and t.amount_left <= 0)
             if n_dl >= 2:
@@ -291,15 +286,18 @@ class GroupingMixin:
         """最近一轮种子快照的 hash -> 种子 映射(checking 动作用, 无需额外拉取) """
         return self.store.by_hash
 
-    def _group_has_downloading(self, members: list[TorrentRecord]) -> bool:
+    def _group_has_downloading(self, members: list[str]) -> bool:
         """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检) """
         by_hash = self.store.by_hash
-        return any(
-            by_hash[h].state_enum.is_downloading and not by_hash[h].state_enum.is_stopped
-            for h in members if h in by_hash
-        )
+        for h in members:
+            if h not in by_hash:
+                continue
+            state_enum = by_hash[h].state_enum
+            if state_enum.is_downloading and not state_enum.is_stopped and not state_enum.is_checking:
+                return True
+        return False
 
-    def _group_reference_candidates(self, members: list[TorrentRecord]) -> list:
+    def _group_reference_candidates(self, members: list[str]) -> list:
         """组内已完成且正在上传(做种)的成员列表, 作为参考种子候选(想法2: filelist 参考定义) """
         by_hash = self.store.by_hash
         return [

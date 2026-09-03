@@ -120,7 +120,8 @@ class TrackersCondition(BaseCondition):
         self.patterns = spec if isinstance(spec, list) else [spec]
 
     def match(self, ctx: RuleContext):
-        names = ctx.matched_tracker_names()
+        conf = ctx.torrent.tracker_conf
+        names = [conf.name] if conf is not None else []
         for pat in self.patterns:
             pat = str(pat)
             if pat.startswith("regex:"):
@@ -141,17 +142,6 @@ class StateCondition(BaseCondition):
     """状态条件: 语义状态(checking/downloading/complete/uploading/errored/stopped),
     直接用 qB TorrentState 枚举属性判定(与 qB 官方语义一致), 每组内 & 连接为与, 组间为或"""
     name = "state"
-
-    # 语义状态 -> TorrentState 枚举判定属性(is_checking/is_downloading/is_complete/
-    # is_uploading/is_errored/is_stopped; pausedDL/stoppedDL 等暂停下载也算 downloading)
-    # _ATTRS = {
-    #     "checking": "is_checking",
-    #     "downloading": "is_downloading",
-    #     "complete": "is_complete",
-    #     "uploading": "is_uploading",
-    #     "errored": "is_errored",
-    #     "stopped": "is_stopped",
-    # }
 
     def __init__(self, spec):
         spec = spec if isinstance(spec, list) else [spec]
@@ -174,7 +164,7 @@ class HrCondition(BaseCondition):
 
     def match(self, ctx: RuleContext):
         conf = ctx.torrent.tracker_conf
-        if not conf.hr:
+        if not conf or not conf.hr:
             return False
         if self.mode == "condition-not-met":
             return not ctx.check_hr_condition(conf)

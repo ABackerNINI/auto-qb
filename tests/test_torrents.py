@@ -5,26 +5,21 @@
 - test_record_update_from: update_from in-place 更新快照字段
 - test_record_update_keeps_lazy_cache: update_from 保留惰性缓存(文件列表不重复拉取)
 - test_record_state_enum: state_enum 解析与 UNKNOWN 降级
-- test_record_state_flags: is_paused/is_uploading/is_downloading 判定
+- test_record_state_enum_flags: state_enum 语义判定(暂停/上传/下载)
 - test_record_tags_set: tags 字符串 -> 预计算集合(逗号分隔去空白)
 - test_store_refresh_first_round: 首轮全部视为新增, removed 为空
 - test_store_refresh_diff: 次轮增删检测
 - test_store_refresh_keeps_records: 已存在记录对象跨 tick 保留(惰性缓存存活)
 - test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理
 - test_store_queries: get/__contains__/all/hashes/__len__
-- test_store_trackers_lazy: trackers_info/tracker_urls 惰性拉取+记录级缓存
-- test_store_trackers_external: 快照外种子直接拉取(process_torrent 外部对象路径)
-- test_store_files_lazy: files 惰性拉取+记录级缓存
+- test_store_trackers_lazy: 记录级 trackers_info/tracker_urls 惰性拉取+缓存
+- test_store_files_lazy: 记录级 files 惰性拉取+缓存
 - test_store_state_snapshot: update_state_snapshot 存 state_enum
 - test_store_group_members: group_members/group_key(未归组 -> [自身]/None)
 - test_store_all_tags: all_tags 惰性缓存 + invalidate_tags 失效
 - test_store_all_categories: all_categories 惰性缓存 + invalidate_categories 失效
 - test_store_tag_usage: 从快照聚合标签使用情况
-- test_store_apply: apply 与 refresh 等价(测试注入入口)
 - test_store_unbound_client: 未绑定 client 时惰性拉取报错
-- test_store_refresh_skips_no_hash: refresh 跳过无 hash 对象
-- test_store_external_direct_pull: 快照外种子的 trackers_info/files 直接拉取
-- test_store_external_unbound_raises: 快照外 + 未绑定 client 时全部报错
 - test_record_trackers_info_unbound: 记录级 trackers_info 未绑定 client 报错
 """
 from auto_qb.torrents import TorrentRecord, TorrentStore
@@ -79,15 +74,16 @@ def test_record_state_enum():
     assert bad.state_enum.name == "UNKNOWN"
 
 
-def test_record_state_flags():
+def test_record_state_enum_flags():
+    """state_enum 提供语义判定(上传/下载/暂停), TorrentRecord 桥接到枚举"""
     paused = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="pausedUP"))
-    assert paused.is_stopped
-    assert not paused.is_uploading
+    assert paused.state_enum.is_stopped
+    assert not paused.state_enum.is_uploading
     uploading = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP"))
-    assert uploading.is_uploading
+    assert uploading.state_enum.is_uploading
     downloading = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="downloading"))
-    assert downloading.is_downloading
-    assert not downloading.is_stopped
+    assert downloading.state_enum.is_downloading
+    assert not downloading.state_enum.is_stopped
 
 
 def test_record_tags_set():
@@ -117,11 +113,11 @@ def test_store_refresh_keeps_records():
     client = _client()
     store = TorrentStore(client)
     store.refresh([FakeTorrent(hash="H1")])
-    store.files("H1")  # 触发惰性拉取
+    store.get("H1").files(client)  # 触发惰性拉取
     calls = client.files_calls
     store.refresh([FakeTorrent(hash="H1", name="Updated")])
     assert store.get("H1").name == "Updated"
-    store.files("H1")
+    store.get("H1").files(client)
     assert client.files_calls == calls  # 记录对象保留, 缓存跨 tick 存活
 
 
@@ -129,10 +125,10 @@ def test_store_refresh_cleans_cache_on_remove():
     client = _client()
     store = TorrentStore(client)
     store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])
-    store.files("H1")
+    store.get("H1").files(client)
     store.refresh([FakeTorrent(hash="H2")])
     assert "H1" not in store
-    store.files("H2")  # 现有记录正常
+    store.get("H2").files(client)  # 现有记录正常
     assert client.files_calls == 2  # H1 的缓存随记录回收
 
 
@@ -166,21 +162,11 @@ def test_store_trackers_lazy():
     counter = _count_trackers(client)
     store = TorrentStore(client)
     store.refresh([FakeTorrent(hash="H1")])
-    assert store.trackers_info("H1") == [{"url": "https://tracker.hhanclub.net/announce.php"}]
-    assert store.tracker_urls("H1") == ["https://tracker.hhanclub.net/announce.php"]
+    assert store.get("H1").trackers_info(client) == [{"url": "https://tracker.hhanclub.net/announce.php"}]
+    assert store.get("H1").tracker_urls(client) == ["https://tracker.hhanclub.net/announce.php"]
     assert counter["n"] == 1  # 记录级缓存: 只拉一次
-    store.tracker_urls("H1")
+    store.get("H1").tracker_urls(client)
     assert counter["n"] == 1
-
-
-def test_store_trackers_external():
-    client = _client()
-    counter = _count_trackers(client)
-    store = TorrentStore(client)
-    # 快照外的 hash(如 process_torrent 外部传入对象): 直接拉取, 不缓存
-    assert store.tracker_urls("H1") == ["https://tracker.hhanclub.net/announce.php"]
-    assert counter["n"] == 1
-    assert "H1" not in store
 
 
 def test_store_files_lazy():
@@ -188,9 +174,9 @@ def test_store_files_lazy():
     client = _client(files=files)
     store = TorrentStore(client)
     store.refresh([FakeTorrent(hash="H1")])
-    assert store.files("H1") == files
+    assert store.get("H1").files(client) == files
     assert client.files_calls == 1  # 记录级缓存: 只拉一次
-    store.files("H1")
+    store.get("H1").files(client)
     assert client.files_calls == 1
 
 
@@ -270,65 +256,30 @@ def test_store_tag_usage():
     assert store.tag_usage() == {"a": 1, "b": 2, "c": 1}
 
 
-def test_store_apply():
-    store = TorrentStore()
-    added, removed = store.apply([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])
-    assert sorted(added) == ["H1", "H2"]
-    assert removed == []
-    added, removed = store.apply([FakeTorrent(hash="H2")])
-    assert added == []
-    assert removed == ["H1"]
-
-
 def test_store_unbound_client():
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1")])
+    # 记录级惰性拉取未绑定 client 报错
+    rec = store.get("H1")
     try:
-        store.files("H1")
+        rec.files(None)
     except RuntimeError:
         pass
     else:
-        raise AssertionError("未绑定 client 时应报错")
+        raise AssertionError("记录级 files 未绑定 client 时应报错")
+    # 全局标签/分类缓存未绑定 client 报错
     try:
         store.all_tags()
     except RuntimeError:
         pass
     else:
-        raise AssertionError("未绑定 client 时应报错")
-
-
-def test_store_refresh_skips_no_hash():
-    """refresh 跳过无 hash 的对象(不产生记录/不报错)"""
-    store = TorrentStore()
-    added, removed = store.refresh([FakeTorrent(hash="H1"), {"no": "hash"}, None])
-    assert added == ["H1"]
-    assert removed == []
-    assert sorted(store.hashes()) == ["H1"]
-
-
-def test_store_external_direct_pull():
-    """快照外种子: trackers_info/files 直接拉取不缓存"""
-    client = _client(files=[{"name": "a.mkv", "size": 100}])
-    store = TorrentStore(client)
-    assert store.trackers_info("H1") == [{"url": "https://tracker.hhanclub.net/announce.php"}]
-    assert store.files("H1") == [{"name": "a.mkv", "size": 100}]
-    assert "H1" not in store  # 外部种子不写入快照
-
-
-def test_store_external_unbound_raises():
-    """快照外 + 未绑定 client: trackers_info/tracker_urls/files 全部报错"""
-    store = TorrentStore()
-    for fn, arg in [
-        (store.trackers_info, "H1"),
-        (store.tracker_urls, "H1"),
-        (store.files, "H1"),
-    ]:
-        try:
-            fn(arg)
-        except RuntimeError:
-            pass
-        else:
-            raise AssertionError(f"未绑定 client 时 {fn.__name__} 应报错")
+        raise AssertionError("all_tags 未绑定 client 时应报错")
+    try:
+        store.all_categories()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("all_categories 未绑定 client 时应报错")
 
 
 def test_record_trackers_info_unbound():

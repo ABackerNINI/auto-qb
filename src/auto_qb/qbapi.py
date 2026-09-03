@@ -160,14 +160,18 @@ class QbApi:
     def torrents_export(self, torrent_hash: str, **kwargs: Any):
         return self._client.torrents_export(torrent_hash, **kwargs)
 
-    def torrents_trackers(self, torrent_hash: str, **kwargs: Any):
-        if self.store is not None and torrent_hash in self.store:
-            return self.store.trackers_info(torrent_hash)
+    def torrents_trackers(self, torrent_hash, **kwargs):
+        if self.store is not None:
+            torrent = self.store.get(torrent_hash)
+            if torrent is not None:
+                return torrent.trackers_info(self._client)
         return self._client.torrents_trackers(torrent_hash, **kwargs)
 
-    def torrents_files(self, torrent_hash: str, **kwargs: Any):
-        if self.store is not None and torrent_hash in self.store:
-            return self.store.files(torrent_hash)
+    def torrents_files(self, torrent_hash, **kwargs):
+        if self.store is not None:
+            torrent = self.store.get(torrent_hash)
+            if torrent is not None:
+                return torrent.files(self._client)
         return self._client.torrents_files(torrent_hash, **kwargs)
 
     def torrents_tags(self, **kwargs: Any):

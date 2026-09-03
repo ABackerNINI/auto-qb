@@ -13,7 +13,7 @@
 - test_match_tracker_confs: tracker 配置匹配
 - test_match_tag_patterns: 标签模式匹配
 - test_match_path_patterns: 路径模式匹配
-- test_check_filelist_all_ok: 文件列表全部一致
+- test_check_filelist_all_ok: 文件列表全部一致(CheckingMixin.check_filelist)
 - test_check_filelist_missing: 文件缺失
 - test_check_filelist_size_mismatch: 文件大小不一致
 - test_check_filelist_api_error: 文件列表 API 错误
@@ -29,7 +29,7 @@
 - test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
 - test_add_long_path_prefix_already_prefixed: 已加前缀 -> 原样返回
 - test_parse_compare_invalid: 无效比较表达式 -> ValueError
-- test_check_filelist_oserror: 读取文件异常 -> 无法读取文件
+- test_check_filelist_oserror: 读取文件异常 -> 无法读取文件(CheckingMixin.check_filelist)
 - test_extract_tracker_hostnames_invalid_url: url 解析异常 -> 跳过
 - test_match_tracker_confs_invalid_url: url 解析异常 -> 不匹配
 - test_match_tag_patterns_empty_pattern: 空模式跳过
@@ -42,7 +42,8 @@ import tempfile
 from types import SimpleNamespace
 
 from auto_qb import utils
-from helpers import FakeClient
+from auto_qb.mixins.checking import CheckingMixin
+from helpers import FakeClient, FakeTorrent
 
 
 def test_parse_time():
@@ -170,24 +171,24 @@ def test_match_path_patterns():
 
 
 def test_check_filelist_all_ok():
-    """文件齐全且大小一致 -> None"""
+    """文件齐全且大小一致 -> None(CheckingMixin.check_filelist)"""
     with tempfile.TemporaryDirectory() as td:
         fpath = os.path.join(td, "movie.mkv")
         with open(fpath, "wb") as f:
             f.write(b"x" * 100)
         client = FakeClient()
-        tor = SimpleNamespace(hash="H1", save_path=td)
+        tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="movie.mkv", size=100)]
-        assert utils.check_filelist(client, tor) is None
+        assert CheckingMixin.check_filelist(client, tor) is None
 
 
 def test_check_filelist_missing():
     """文件不存在 -> 文件缺失"""
     with tempfile.TemporaryDirectory() as td:
         client = FakeClient()
-        tor = SimpleNamespace(hash="H1", save_path=td)
+        tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="not_exists.mkv", size=100)]
-        result = utils.check_filelist(client, tor)
+        result = CheckingMixin.check_filelist(client, tor)
         assert result is not None and "文件缺失" in result
 
 
@@ -198,9 +199,9 @@ def test_check_filelist_size_mismatch():
         with open(fpath, "wb") as f:
             f.write(b"x" * 100)
         client = FakeClient()
-        tor = SimpleNamespace(hash="H1", save_path=td)
+        tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="movie.mkv", size=200)]
-        result = utils.check_filelist(client, tor)
+        result = CheckingMixin.check_filelist(client, tor)
         assert result is not None and "文件大小不一致" in result
 
 
@@ -210,8 +211,8 @@ def test_check_filelist_api_error():
         def torrents_files(self, h):
             raise RuntimeError("boom")
 
-    tor = SimpleNamespace(hash="H1", save_path="")
-    result = utils.check_filelist(Boom(), tor)
+    tor = FakeTorrent(hash="H1", name="Movie", save_path="")
+    result = CheckingMixin.check_filelist(Boom(), tor)
     assert result is not None and "获取文件列表失败" in result
 
 
@@ -338,9 +339,9 @@ def test_check_filelist_oserror(monkeypatch):
 
         monkeypatch.setattr(os.path, "getsize", boom)
         client = FakeClient()
-        tor = SimpleNamespace(hash="H1", save_path=td)
+        tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="movie.mkv", size=100)]
-        result = utils.check_filelist(client, tor)
+        result = CheckingMixin.check_filelist(client, tor)
         assert result is not None and "无法读取文件" in result
 
 
