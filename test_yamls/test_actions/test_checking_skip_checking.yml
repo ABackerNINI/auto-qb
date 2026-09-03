@@ -1,0 +1,64 @@
+---
+config:
+    interval: 5S
+    remove_similar_tags: false
+    hr:
+        add_tag: ""
+        add_category: "!!HR${required_seeding_time}!!"
+        overwrite_category: false
+        add_tag_for_satisfied: ""
+        add_category_for_satisfied: --HR${required_seeding_time}--
+        overwrite_category_for_satisfied: false
+    add_episode_tags: false
+    grouping:
+        enabled: true
+        missing_tag: MISSING
+    delete_tags:
+    delete_tags_if_has_no_torrents:
+    qbittorrent:
+        host: 127.0.0.1
+        port: "16585"
+        username: abacker
+        password: "132435."
+
+    checking_hdfans_rules:
+        rule:
+            enabled: true
+            trigger: interval
+            interval: 10S # 执行间隔
+            execute_once: never
+            cooldown: 0S # 冷却时间, 距上次执行成功不足该时长则跳过; 覆盖execute_once的粒度, 如 execute_once: never + cooldown: 10M
+            log_level: info
+
+            conditions: # 筛选条件必须全部满足时才生效
+                - trackers: # tracker的自定义名称, 不同tracker组之间为或的关系, 支持正则
+                      - hdfans_org
+
+            actions: # 筛选条件满足后执行的动作, 动作顺序执行, 默认一个动作出错后续动作将不执行
+                - checking: # ⚠️ 校验/跳检(见下方说明) 🚧
+                      basic_check: filelist # filelist/piecehashes/custom
+                      with_reference: # 有参考种子(已完成同组种子)
+                          mode: skip-checking # skip-checking 跳检(风险可控)/full-checking 全量校验
+                          auto_start: true # 校验成功后自动开始
+                      without_reference: # 无参考种子
+                          mode: full-checking # full-checking 安全；skip-checking 高风险
+                          auto_start: true # 校验成功后自动开始
+
+            stop_following_rules_if:
+                conditions-met # 可选: conditions-met, conditions-not-met, action-failed, all-actions-succeed, always, never
+                # 注意: action-failed依赖动作结果判定(skipped不算失败), 见"规则执行语义"章节
+    trackers:
+        hdfans_org:
+            domains:
+                - hdfans.org
+            tags:
+                - HDFans
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
+            hr:
+                required_seeding_time: 3D
+                required_share_ratio: 1.1
+                extra_seeding_time: 12H
+                condition: 80%
+            rules:
+                - "@checking_hdfans_rules"
