@@ -159,7 +159,7 @@ def test_handle_rule_missing_torrent():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr._get_torrent = lambda h: None
         rule = mock.MagicMock()
-        task = Task("rule", "t", torrent_hash="H1", interval=0)
+        task = Task("rule", "t", hash="H1", interval=0)
         assert mgr._handle_rule(rule, task, dry_run=False) is False
 
 
@@ -172,7 +172,7 @@ def test_handle_rule_process_ok():
         client.torrents["HASH123"] = FakeTorrent(tags="")
         seed_store(mgr)
         rule = Rule("t", {"actions": [{"add_tags": ["X"]}]}, mgr)
-        task = Task("rule", "t", torrent_hash="HASH123", interval=0)
+        task = Task("rule", "t", hash="HASH123", interval=0)
         assert mgr._handle_rule(rule, task, dry_run=False) is True
         assert ("add_tags", ["X"]) in client.calls
 
@@ -187,7 +187,7 @@ def test_handle_rule_process_error():
         seed_store(mgr)
         rule = mock.MagicMock()
         rule.process.side_effect = RuntimeError("boom")
-        task = Task("rule", "t", torrent_hash="HASH123", interval=0)
+        task = Task("rule", "t", hash="HASH123", interval=0)
         assert mgr._handle_rule(rule, task, dry_run=False) is True
 
 

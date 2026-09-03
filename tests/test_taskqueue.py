@@ -31,7 +31,7 @@ def test_task_queue_schedule():
         tq.reschedule(t, now)
     assert [t.name for t in tq.due(now + 59)] == ["every_tick"], "59s 时只有 every_tick 到期"
     assert [t.name for t in tq.due(now + 60)] == ["interval60"], "60s 时 interval60 到期"
-    tq.add_task(Task("torrent", "maintenance", torrent_hash="H1", interval=60), now=now)
+    tq.add_task(Task("torrent", "maintenance", hash="H1", interval=60), now=now)
     tq.remove_torrent("H1")
     assert tq.due(now + 61) == [], "remove_torrent 后任务应被移除"
 
@@ -47,7 +47,7 @@ def test_task_ordering():
 
 
 def test_task_repr():
-    t = Task("rule", "add_site_tag", torrent_hash="H1")
+    t = Task("rule", "add_site_tag", hash="H1")
     assert repr(t) == "Task(rule, add_site_tag, H1, pending)"
     t.state = RUNNING
     assert "running" in repr(t)
@@ -82,14 +82,14 @@ def test_add_check_task_dedup():
     def poll(t, d):
         return False
 
-    assert tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", handler=poll), now=now) is True
-    assert tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", handler=poll), now=now) is False, \
+    assert tq.add_check_task(Task("check", "check-checking-result", hash="H1", handler=poll), now=now) is True
+    assert tq.add_check_task(Task("check", "check-checking-result", hash="H1", handler=poll), now=now) is False, \
         "同 hash 重复提交应被忽略"
     assert len(tq._fast) == 1, "重复提交不应重复入队"
     # 任务执行后消亡 -> 释放标记 -> 可再次提交
     due = tq.due(now)
     tq.task_died(due[0])
-    assert tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", handler=poll), now=now) is True, \
+    assert tq.add_check_task(Task("check", "check-checking-result", hash="H1", handler=poll), now=now) is True, \
         "消亡后应可再次提交"
 
 
@@ -97,7 +97,7 @@ def test_defer_resume():
     """resume 语义: defer 让位(不入队不消亡) -> resume 恢复(同一实例重新入队, 跨轮保留) """
     tq = TaskQueue()
     now = time.time()
-    t = Task("rule", "x", torrent_hash="H1", interval=2.0)
+    t = Task("rule", "x", hash="H1", interval=2.0)
     tq.add_task(t, now=now)
     due = tq.due(now)
     assert due[0] is t, "due 弹出的是同一实例"
@@ -118,7 +118,7 @@ def test_defer_resume_cb():
     tq = TaskQueue()
     now = time.time()
     fired = []
-    t = Task("rule", "x", torrent_hash="H1", interval=2.0)
+    t = Task("rule", "x", hash="H1", interval=2.0)
     tq.add_task(t, now=now)
     tq.defer(tq.due(now)[0])
     t.resume_cb = lambda: fired.append(1)
@@ -134,12 +134,12 @@ def test_task_died_releases_check():
     """task_died: check 任务消亡释放在途标记; 非 check 任务无副作用"""
     tq = TaskQueue()
     now = time.time()
-    tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1"), now=now)
+    tq.add_check_task(Task("check", "check-checking-result", hash="H1"), now=now)
     assert tq._active_checks == {"H1"}
     due = tq.due(now)
     tq.task_died(due[0])
     assert tq._active_checks == set(), "check 任务消亡应释放标记"
-    tq.task_died(Task("rule", "x", torrent_hash="H9"))
+    tq.task_died(Task("rule", "x", hash="H9"))
     assert tq._active_checks == set(), "非 check 任务不应有副作用"
 
 
@@ -147,8 +147,8 @@ def test_remove_torrent_clears_active_check():
     """remove_torrent: 删除种子移除队列任务并释放校验标记"""
     tq = TaskQueue()
     now = time.time()
-    tq.add_check_task(Task("check", "check-checking-result", torrent_hash="H1", interval=60), now=now)
-    tq.add_task(Task("rule", "r", torrent_hash="H1", interval=60), now=now)
+    tq.add_check_task(Task("check", "check-checking-result", hash="H1", interval=60), now=now)
+    tq.add_task(Task("rule", "r", hash="H1", interval=60), now=now)
     tq.remove_torrent("H1")
     assert tq.due(now + 61) == [], "队列任务应全部移除"
     assert tq._active_checks == set(), "校验标记应释放"
@@ -158,7 +158,7 @@ def test_remove_torrent_clears_deferred():
     """remove_torrent: 删除种子清理让位任务(防止泄漏) """
     tq = TaskQueue()
     now = time.time()
-    t = Task("rule", "x", torrent_hash="H1", interval=60)
+    t = Task("rule", "x", hash="H1", interval=60)
     tq.add_task(t, now=now)
     tq.defer(tq.due(now)[0])
     assert t in tq._deferred

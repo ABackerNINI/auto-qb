@@ -81,13 +81,13 @@ def test_record_state_enum():
 
 def test_record_state_flags():
     paused = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="pausedUP"))
-    assert paused.is_paused
+    assert paused.is_stopped
     assert not paused.is_uploading
     uploading = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP"))
     assert uploading.is_uploading
     downloading = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="downloading"))
     assert downloading.is_downloading
-    assert not downloading.is_paused
+    assert not downloading.is_stopped
 
 
 def test_record_tags_set():

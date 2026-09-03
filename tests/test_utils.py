@@ -370,7 +370,7 @@ def test_match_tag_patterns_empty_pattern():
 
 def test_path_normalize_empty():
     """空路径 -> 原样返回"""
-    assert utils._path_normalize("") == ""
+    assert utils.path_normalize("") == ""
 
 
 def test_timer_us():

@@ -30,7 +30,7 @@ class Task:
         "uid",
         "kind",
         "name",
-        "torrent_hash",
+        "hash",
         "tracker_conf",
         "next_run",
         "interval",
@@ -47,17 +47,17 @@ class Task:
         self,
         kind: str,
         name: str,
-        torrent_hash: str = "",
+        hash: str = "",
         tracker_conf: TrackerConfig = None,
         next_run: float = 0.0,
         interval: float = 0.0,
         payload: Any = None,
         handler: Handler = None,
     ):
-        self.uid = f"{kind}:{name}:{torrent_hash}:{time.monotonic_ns()}"
+        self.uid = f"{kind}:{name}:{hash}:{time.monotonic_ns()}"
         self.kind = kind
         self.name = name
-        self.torrent_hash = torrent_hash
+        self.hash = hash
         self.tracker_conf = tracker_conf
         self.next_run = next_run  # epoch 秒, 到期才执行
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
@@ -73,7 +73,7 @@ class Task:
         return self.next_run < other.next_run
 
     def __repr__(self) -> str:
-        return f"Task({self.kind}, {self.name}, {self.torrent_hash}, {self.state})"
+        return f"Task({self.kind}, {self.name}, {self.hash}, {self.state})"
 
 
 class TaskQueue:
@@ -133,14 +133,14 @@ class TaskQueue:
         task.next_run = now + task.interval
         heapq.heappush(self._fast, task)
 
-    def remove_torrent(self, torrent_hash: str):
+    def remove_torrent(self, hash: str):
         """种子被删除: 移除该种子在队列中的所有任务(含让位任务), 并释放在途校验标记"""
         before = len(self._fast)
-        self._fast = [t for t in self._fast if t.torrent_hash != torrent_hash]
+        self._fast = [t for t in self._fast if t.hash != hash]
         if len(self._fast) != before:
             heapq.heapify(self._fast)
-        self._deferred = {t for t in self._deferred if t.torrent_hash != torrent_hash}
-        self._active_checks.discard(torrent_hash)
+        self._deferred = {t for t in self._deferred if t.hash != hash}
+        self._active_checks.discard(hash)
 
     # ---------- 让位/恢复(resume 语义) ----------
 
@@ -166,7 +166,7 @@ class TaskQueue:
             if cb:
                 cb()
         except Exception as e:
-            logger.error(f"任务恢复回调异常({task.kind}:{task.name} {task.torrent_hash}): {e}")
+            logger.error(f"任务恢复回调异常({task.kind}:{task.name} {task.hash}): {e}")
         task.run_count += 1
         task.state = PENDING
         task.next_run = now + task.interval
@@ -180,13 +180,13 @@ class TaskQueue:
         任务立即入队(next_run=now), 首轮到期时由 handler 发送 recheck 请求;
         handler 返回 False(完成/消亡)时由主循环调 task_died 释放在途标记。
         """
-        if task.torrent_hash in self._active_checks:
+        if task.hash in self._active_checks:
             return False
-        self._active_checks.add(task.torrent_hash)
+        self._active_checks.add(task.hash)
         self.add_task(task, now)
         return True
 
     def task_died(self, task: Task):
         """任务消亡(handler 返回 False): 释放校验在途标记(如有) """
         if task.kind == "check":
-            self._active_checks.discard(task.torrent_hash)
+            self._active_checks.discard(task.hash)

@@ -198,7 +198,7 @@ config:
                 - trackers:                        # tracker 自定义名称(不同组之间为或) 🚧
                     - tracker1
                 - state:                           # 语义化状态(不同组之间为或) 🚧
-                    - complete&uploading           # 已完成且正在上传(& 连接)
+                    - is_complete&is_uploading           # 已完成且正在上传(& 连接)
                 - hr: condition-met                # condition-met/condition-not-met/satisfied 🚧
                 - date_time:                       # 🚧
                     day_of_month: 1-31

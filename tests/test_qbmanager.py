@@ -185,7 +185,7 @@ def test_tick_full_flow():
             return False
 
         mgr.task_queue.add_check_task(
-            Task("check", "check-checking-result", torrent_hash="HASH123", interval=2.0, handler=check_poll)
+            Task("check", "check-checking-result", hash="HASH123", interval=2.0, handler=check_poll)
         )
         # 常规到期任务
         due_task = Task("rule", "t", interval=0, handler=lambda t, d: True)
@@ -240,7 +240,7 @@ def test_handle_maintenance_tor_missing():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        task = Task("internal", "maintenance", torrent_hash="NOPE", tracker_conf=mock.Mock())
+        task = Task("internal", "maintenance", hash="NOPE", tracker_conf=mock.Mock())
         assert mgr._handle_maintenance(task, dry_run=False) is False
 
 

@@ -162,26 +162,6 @@ def compare(op: str, left, right) -> bool:
     return left == right
 
 
-def check_filelist(api, torrent):
-    """检查种子文件是否存在且大小一致(api 为 QbApi 门面或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
-    logger.debug(f"检查种子文件完整性: {torrent.name} ({torrent.hash[:8]})")
-    try:
-        files = api.torrents_files(torrent.hash)
-    except Exception as e:
-        return f"获取文件列表失败: {e}"
-    save_path = torrent.save_path
-    for f in files:
-        full_path = add_long_path_prefix_for_win(os.path.normpath(os.path.join(save_path, f.name)))
-        if not os.path.exists(full_path):
-            return f"文件缺失: {f.name}"
-        try:
-            if os.path.getsize(full_path) != f.size:
-                return f"文件大小不一致: {f.name}"
-        except OSError:
-            return f"无法读取文件: {f.name}"
-    return None
-
-
 def extract_tracker_hostnames(trackers_info: list) -> set:
     """从 tracker 信息列表提取去重的 hostname 集合"""
     hosts = set()
@@ -241,7 +221,7 @@ def match_tag_patterns(tag: str, patterns: List[str]) -> bool:
     return False
 
 
-def _path_normalize(p: str) -> str:
+def path_normalize(p: str) -> str:
     """
     路径规范化：仅统一分隔符并压缩冗余斜杠。
     重要：保留首尾斜杠不做删除，避免误匹配（如 'c:/windows/' 与 'c:/windowsg' 区分）。
@@ -265,7 +245,7 @@ def match_path_patterns(path: str, patterns: List[str]) -> bool:
     - 忽略大小写（后缀 ':ignore_case'）：对精确匹配和正则均生效。
     """
     # 统一输入路径的斜杠格式（保留尾部斜杠）
-    norm_path = _path_normalize(path)
+    norm_path = path_normalize(path)
 
     for raw_pattern in patterns:
         # ---------- 1. 解析后缀 :ignore_case ----------
@@ -292,7 +272,7 @@ def match_path_patterns(path: str, patterns: List[str]) -> bool:
                 continue
         else:
             # 精确匹配：对模式也做同样的规范化（保留尾部斜杠）
-            match_core = _path_normalize(core)
+            match_core = path_normalize(core)
             if (ignore_case and norm_path.lower() == match_core.lower()) or norm_path == match_core:
                 return True
 

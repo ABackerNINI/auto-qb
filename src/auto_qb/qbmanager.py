@@ -16,7 +16,7 @@ from typing import List, Optional
 
 from qbittorrentapi import Client
 
-from .config import Config, load_config
+from .config import Config, TrackerConfig, load_config
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
 from .qbapi import QbApi
 from .rules import Rule
@@ -68,10 +68,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
     def connect(self) -> bool:
         """连接 qBittorrent"""
         try:
+            qb = self.config.qbittorrent
             self.client = Client(
-                host=self.config.qbittorrent.base_url,
-                username=self.config.qbittorrent.username,
-                password=self.config.qbittorrent.password,
+                host=qb.base_url,
+                username=qb.username,
+                password=qb.password,
             )
             self.api.auth_log_in()
             logger.info("Connected to qBittorrent successfully")
@@ -139,19 +140,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             if task.handler:
                 return bool(task.handler(task, dry_run))
         except Exception as e:
-            logger.error(f"任务执行异常({task.kind}:{task.name} {task.torrent_hash}): {e}")
+            logger.error(f"任务执行异常({task.kind}:{task.name} {task.hash}): {e}")
         return True
-
-    def _is_check_done(self, torrent_hash: str) -> bool:
-        """校验结果轮询判定: 从快照查询种子当前状态, 退出校验(checking*)状态即视为完成
-
-        不再拉取 API(校验完成最迟下一 tick 快照刷新后可见); 种子已删除/未知 -> 视为完成。
-        """
-        rec = self.store.get(torrent_hash)
-        if rec is None:
-            return True  # 种子已被删除, 视为完成
-        state = (rec.state or "").lower()
-        return not state.startswith("checking")
 
     # ---------- 全局任务 ----------
 
@@ -186,33 +176,47 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     # ---------- 种子级任务 ----------
 
-    def _get_torrent(self, torrent_hash: str) -> Optional[TorrentRecord]:
+    # TODO: 删除
+    def _get_torrent(self, hash: str) -> Optional[TorrentRecord]:
         """从快照查询单个种子(惰性缓存/分组字段随记录保留); 种子已删除返回 None"""
-        return self.store.get(torrent_hash)
+        return self.store.get(hash)
 
     def _refresh_torrents(self, dry_run: bool = False):
         """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
-        torrents = self.api.torrents_info()
-        added, removed = self.store.refresh(torrents)
+        tors = self.api.torrents_info()
+        added, removed = self.store.refresh(tors)
 
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
             for h in added:
-                self._create_torrent_tasks(h)
+                torrent = self.store.get(h)
+
+                # 匹配tracker配置
+                tracker_conf = self._match_tracker(torrent)
+
+                # 如果没有匹配到tracker配置, 则打印警告日志并跳过该种子
+                if not tracker_conf:
+                    trackers_info = self.store.trackers_info(h)
+                    all_domains = utils.extract_tracker_hostnames(trackers_info)
+                    logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {h[:8]}")
+                    continue  # 未匹配tracker配置, 直接跳过
+
+                # TorrentRecord添加tracker配置引用, 方便后续任务使用
+                torrent.tracker_conf = tracker_conf
+
+                # tracker单种限速
+                self._apply_speed_limit(torrent, tracker_conf, dry_run)
+                # 创建种子级任务: 内置 maintenance + 所有符合条件的规则任务
+                self._create_torrent_tasks(h, tracker_conf)
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
                 if self.config.grouping.enabled:
                     self._assign_new_torrent(h, dry_run)
                 # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
                 if self.config.add_episode_tags:
-                    self._add_episode_tags(h, dry_run)
+                    self._add_episode_tags(torrent, dry_run)
 
-                # TODO: 优化
-                # tracker单种限速
-                tracker_conf = self._match_tracker(h)
-                if tracker_conf:
-                    self._apply_speed_limit(self.store.get(h), tracker_conf, dry_run)
         if removed:
             logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
             for h in removed:
@@ -220,6 +224,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
             if self.config.grouping.enabled:
                 self._handle_removed_torrents(removed, dry_run)
+
         if self.config.grouping.enabled:
             # 保存路径变化重归组(文件列表变化会走新增种子重新归组)
             self._handle_save_path_changes(dry_run)
@@ -229,31 +234,23 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._check_download_conflicts(dry_run)
             # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关;
             # 新增种子本轮不视为状态变化)
-            self.store.update_state_snapshot(torrents)
+            self.store.update_state_snapshot(tors)
 
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
         self.begin_round(list(self.store.by_hash.values()))
 
-    def _create_torrent_tasks(self, torrent_hash: str):
-        """为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
+    def _create_torrent_tasks(self, hash: str, tracker_conf: TrackerConfig):
+        """
+        为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
 
         缺文件检查统一由分组事件驱动承担(_refresh_torrents 检测到删除/状态变化/
         保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
         每个任务有内置 interval(规则任务用规则自身 interval), 加入队列即立即到期(下一 tick 执行)。
         """
 
-        tor = self.store.get(torrent_hash)
-        if not tor:
+        torrent = self.store.get(hash)
+        if not torrent:
             return
-
-        # TODO: 优化
-        # 查找种子的tracker配置
-        tracker_conf = self._match_tracker(tor.hash)
-        if not tracker_conf:
-            trackers_info = self.store.trackers_info(tor.hash)
-            all_domains = utils.extract_tracker_hostnames(trackers_info)
-            logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {tor.hash}")
-            return False  # 未匹配tracker配置, 直接跳过
 
         tasks = []
 
@@ -262,7 +259,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             Task(
                 "internal",
                 "maintenance",
-                torrent_hash=torrent_hash,
+                hash=hash,
                 tracker_conf=tracker_conf,
                 interval=self.config.interval,
                 handler=self._handle_maintenance
@@ -270,29 +267,28 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         )
 
         # 创建种子规则任务
-        for rule in self._rules_for_torrent(tor):
-            tasks.append(self._create_rule_task(rule, torrent_hash, tracker_conf))
+        for rule in self._rules_for_torrent(torrent.hash):
+            tasks.append(self._create_rule_task(rule, hash, tracker_conf))
 
         self.task_queue.add_tasks(tasks)
 
     def _handle_maintenance(self, task: Task, dry_run: bool) -> bool:
         """内置种子级任务: 添加/删除/相似标签 + HR 标签分类"""
-        tor = self._get_torrent(task.torrent_hash)
-        if tor is None:
+        torrent = self.store.get(task.hash)
+        if torrent is None:
             return False
 
         tracker_conf = task.tracker_conf
-        assert tracker_conf is not None
 
         handled = False
-        handled |= self._add_tags(tor, tracker_conf.tags, dry_run)
-        handled |= self._remove_tags(tor, tracker_conf.remove_tags, dry_run)
+        handled |= self._add_tags(torrent, tracker_conf.tags, dry_run)
+        handled |= self._remove_tags(torrent, tracker_conf.remove_tags, dry_run)
         if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
-            handled |= self._remove_similar_tags(tor, tracker_conf.tags, dry_run)
+            handled |= self._remove_similar_tags(torrent, tracker_conf.tags, dry_run)
         if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
-            handled |= self._add_hr_tag_or_category(tor, tracker_conf, dry_run)
+            handled |= self._add_hr_tag_or_category(torrent, tracker_conf, dry_run)
         if handled:
-            self._log_torrent_details(tor, tracker_conf)
+            self._log_torrent_details(torrent, tracker_conf)
             logger.info(f"--------------------------------------------------------------------------")
         return True
 

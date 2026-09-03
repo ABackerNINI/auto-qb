@@ -5,7 +5,7 @@ import shutil
 from datetime import datetime, time as dtime
 
 from .. import utils
-from .base import BaseCondition
+from .base import BaseCondition, RuleContext
 from .registry import register_condition
 
 
@@ -30,7 +30,7 @@ class PathCondition(BaseCondition):
     def __init__(self, spec):
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         candidates = [ctx.torrent.save_path, ctx.torrent.content_path]
         for path in candidates:
             if utils.match_path_patterns(path, self.patterns):
@@ -46,7 +46,7 @@ class SizeCondition(BaseCondition):
     def __init__(self, spec):
         self.op, self.value = utils.parse_compare(str(spec), utils.parse_fsize)
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         return utils.compare(self.op, ctx.torrent.size, self.value)
 
 
@@ -59,8 +59,8 @@ class TagsCondition(BaseCondition):
         spec = spec if isinstance(spec, list) else [spec]
         self.groups = [[p.strip() for p in g.split(",") if p.strip()] for g in spec]
 
-    def match(self, ctx):
-        current = set(t.strip() for t in (ctx.torrent.tags or "").split(",") if t.strip())
+    def match(self, ctx: RuleContext):
+        current = ctx.torrent.tags_set
         for group in self.groups:
             ok = True
             for pat in group:
@@ -76,6 +76,7 @@ class TagsCondition(BaseCondition):
                     if not any(rx.search(t) for t in current):
                         ok = False
                         break
+                # TODO: 支持:ignore_case
                 else:
                     if pat not in current:
                         ok = False
@@ -93,7 +94,7 @@ class CategoryCondition(BaseCondition):
     def __init__(self, spec):
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         category = (ctx.torrent.category or "").strip()
         for pat in self.patterns:
             pat = str(pat)
@@ -104,6 +105,7 @@ class CategoryCondition(BaseCondition):
                     continue
                 if rx.search(category):
                     return True
+            # TODO: 支持:ignore_case
             elif category == pat:
                 return True
         return False
@@ -117,7 +119,7 @@ class TrackersCondition(BaseCondition):
     def __init__(self, spec):
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         names = ctx.matched_tracker_names()
         for pat in self.patterns:
             pat = str(pat)
@@ -128,6 +130,7 @@ class TrackersCondition(BaseCondition):
                     continue
                 if any(rx.search(n) for n in names):
                     return True
+            # TODO: 支持:ignore_case
             elif pat in names:
                 return True
         return False
@@ -141,31 +144,22 @@ class StateCondition(BaseCondition):
 
     # 语义状态 -> TorrentState 枚举判定属性(is_checking/is_downloading/is_complete/
     # is_uploading/is_errored/is_stopped; pausedDL/stoppedDL 等暂停下载也算 downloading)
-    _ATTRS = {
-        "checking": "is_checking",
-        "downloading": "is_downloading",
-        "complete": "is_complete",
-        "uploading": "is_uploading",
-        "errored": "is_errored",
-        "stopped": "is_stopped",
-    }
+    # _ATTRS = {
+    #     "checking": "is_checking",
+    #     "downloading": "is_downloading",
+    #     "complete": "is_complete",
+    #     "uploading": "is_uploading",
+    #     "errored": "is_errored",
+    #     "stopped": "is_stopped",
+    # }
 
     def __init__(self, spec):
         spec = spec if isinstance(spec, list) else [spec]
         self.groups = [str(g).split("&") for g in spec]
 
-    def match(self, ctx):
-        enum = getattr(ctx.torrent, "state_enum", None)
-        if enum is None:
-            return False
+    def match(self, ctx: RuleContext):
         for group in self.groups:
-            ok = True
-            for s in group:
-                attr = self._ATTRS.get(s.strip())
-                if attr is None or not getattr(enum, attr, False):
-                    ok = False
-                    break
-            if ok:
+            if all(getattr(ctx.torrent.state_enum, s) for s in group):
                 return True
         return False
 
@@ -178,16 +172,16 @@ class HrCondition(BaseCondition):
     def __init__(self, spec):
         self.mode = str(spec)
 
-    def match(self, ctx):
-        confs = [c for c in ctx.matched_tracker_confs() if c.hr]
-        if not confs:
+    def match(self, ctx: RuleContext):
+        conf = ctx.torrent.tracker_conf
+        if not conf.hr:
             return False
         if self.mode == "condition-not-met":
-            return not any(ctx.check_hr_condition(c) for c in confs)
+            return not ctx.check_hr_condition(conf)
         if self.mode == "satisfied":
-            return any(ctx.check_hr_condition(c) and ctx.check_hr_satisfied(c) for c in confs)
+            return ctx.check_hr_condition(conf) and ctx.check_hr_satisfied(conf)
         # condition-met
-        return any(ctx.check_hr_condition(c) for c in confs)
+        return ctx.check_hr_condition(conf)
 
 
 @register_condition
@@ -200,7 +194,7 @@ class DateTimeCondition(BaseCondition):
         self.day_of_week = spec.get("day_of_week")
         self.time_range = spec.get("time")
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         now = datetime.now()
         if self.day_of_month and not _in_range(now.day, str(self.day_of_month)):
             return False
@@ -228,7 +222,7 @@ class SeedtimeCondition(BaseCondition):
     def __init__(self, spec):
         self.op, self.value = utils.parse_compare(str(spec), utils.parse_time)
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         return utils.compare(self.op, ctx.torrent.seeding_time, self.value)
 
 
@@ -240,7 +234,7 @@ class UploadRatioCondition(BaseCondition):
     def __init__(self, spec):
         self.op, self.value = utils.parse_compare(str(spec), float)
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         return utils.compare(self.op, ctx.torrent.ratio, self.value)
 
 
@@ -252,7 +246,7 @@ class UploadSizeCondition(BaseCondition):
     def __init__(self, spec):
         self.op, self.value = utils.parse_compare(str(spec), utils.parse_fsize)
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         return utils.compare(self.op, ctx.torrent.uploaded, self.value)
 
 
@@ -263,7 +257,7 @@ class _UploadDeltaCondition(BaseCondition):
     def __init__(self, spec):
         self.op, self.value = utils.parse_compare(str(spec), utils.parse_fsize)
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         delta = ctx.manager.upload_delta(ctx.torrent, self.kind)
         return utils.compare(self.op, delta, self.value)
 
@@ -298,7 +292,7 @@ class FreespaceCondition(BaseCondition):
         self.path = str(spec.get("path", ""))
         self.op, self.value = utils.parse_compare(str(spec.get("amount", "")), utils.parse_fsize)
 
-    def match(self, ctx):
+    def match(self, ctx: RuleContext):
         if not self.path:
             return False
         try:

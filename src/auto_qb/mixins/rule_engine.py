@@ -13,6 +13,7 @@ from ..taskqueue import TaskQueue
 from ..rules import Rule, RuleContext
 from ..taskqueue import Task
 from .. import utils
+from ..torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -64,20 +65,20 @@ class RuleEngineMixin:
         except OSError as e:
             logger.warning(f"保存状态文件失败: {e}")
 
-    def record_execution(self, rule_name: str, torrent_hash: str):
+    def record_execution(self, rule_name: str, hash: str):
         """记录规则执行历史(execute_once/cooldown 去重依据); 仅主循环线程调用, 线程安全"""
         now = datetime.now()
         history = self.state.setdefault("exec_history", {})
-        history[f"{rule_name}:{torrent_hash}"] = {
+        history[f"{rule_name}:{hash}"] = {
             "ts": now.timestamp(),
             "date": now.date().isoformat(),
             "hour": now.hour,
         }
 
-    def get_exec_record(self, rule_name: str, torrent_hash: str):
-        return self.state.get("exec_history", {}).get(f"{rule_name}:{torrent_hash}")
+    def get_exec_record(self, rule_name: str, hash: str):
+        return self.state.get("exec_history", {}).get(f"{rule_name}:{hash}")
 
-    def begin_round(self, torrents):
+    def begin_round(self, torrents: List[TorrentRecord]):
         """维护上传量快照(按自然日/周/月, 周期切换时重建基线) — 由 refresh 任务调用, 幂等"""
         snaps = self.state.setdefault("upload_snapshots", {})
         today = date.today()
@@ -93,7 +94,7 @@ class RuleEngineMixin:
                 bucket["key"] = key
                 bucket["baseline"] = {t.hash: t.uploaded for t in torrents}
 
-    def upload_delta(self, torrent, kind: str) -> int:
+    def upload_delta(self, torrent: TorrentRecord, kind: str) -> int:
         """周期上传增量: 当前 uploaded - 周期开始时快照, 下限 0(防种子重加/客户端重启归零)"""
         bucket = self.state.get("upload_snapshots", {}).get(kind, {})
         baseline = bucket.get("baseline", {})
@@ -102,12 +103,12 @@ class RuleEngineMixin:
 
     # ---------- 规则: 种子级任务 ----------
 
-    def _rules_for_torrent(self, tor) -> list:
+    def _rules_for_torrent(self, hash: str) -> list:
         """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)"""
         try:
-            urls = self.store.tracker_urls(tor.hash)  # 惰性缓存, 不重复拉取
+            urls = self.store.tracker_urls(hash)  # 惰性缓存, 不重复拉取
         except Exception as e:
-            logger.debug(f"获取种子 tracker 失败({tor.hash}): {e}")
+            logger.debug(f"获取种子 tracker 失败({hash}): {e}")
             urls = []
         confs = utils.match_tracker_confs(self.config.trackers, urls)
         refs = []
@@ -122,12 +123,12 @@ class RuleEngineMixin:
                 return rules
         return []
 
-    def _create_rule_task(self, rule: Rule, torrent_hash: str, tracker_conf: TrackerConfig) -> Task:
+    def _create_rule_task(self, rule: Rule, hash: str, tracker_conf: TrackerConfig) -> Task:
         """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)"""
         return Task(
             "rule",
             rule.name,
-            torrent_hash=torrent_hash,
+            hash=hash,
             tracker_conf=tracker_conf,
             interval=rule.interval,
             handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
@@ -135,56 +136,55 @@ class RuleEngineMixin:
 
     def _handle_rule(self, rule: Rule, task: Task, dry_run: bool) -> bool:
         """种子级规则任务: 执行指定规则于该种子; 种子已删除返回 False 任务消亡"""
-        tor = self._get_torrent(task.torrent_hash)
-        if tor is None:
-            return False
-        ctx = RuleContext(self, self.client, self.config, tor, dry_run, task=task)
+        ctx = RuleContext(self, self.client, self.config, task.hash, dry_run, task=task)
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
-            logger.warning(f"规则执行异常({rule.name} {tor.hash}): {e}")
+            logger.warning(f"规则执行异常({rule.name} {task.hash}): {e}")
             return True
         return True
 
     # ---------- 规则: 便捷入口与 tracker 引用 ----------
 
-    def process_torrent(self, torrent, dry_run: bool) -> bool:
-        """直接处理单个种子(全部启用规则, 含 tracker rules 引用过滤)
 
-        任务队列驱动时请用种子级规则任务; 此入口用于向后兼容(测试/脚本直接调用)。
-        """
-        if not self.enabled_rules:
-            return False
-        ctx = RuleContext(self, self.client, self.config, torrent, dry_run)
-        refs, force_continue = self._tracker_rule_refs(ctx)
-        if refs:
-            rules = self._resolve_refs(refs)
-            if not rules:
-                return False
-        else:
-            rules = self.enabled_rules
-        handled = False
-        for rule in rules:
-            h, stop = rule.process(ctx)
-            if h:
-                handled = True
-            if stop and not force_continue:
-                break
-        return handled
+# TODO: 删除
+#     def process_torrent(self, hash, dry_run: bool) -> bool:
+#         """直接处理单个种子(全部启用规则, 含 tracker rules 引用过滤)
+#
+#         任务队列驱动时请用种子级规则任务; 此入口用于向后兼容(测试/脚本直接调用)。
+#         """
+#         if not self.enabled_rules:
+#             return False
+#         ctx = RuleContext(self, self.client, self.config, hash, dry_run)
+#         refs, force_continue = self._tracker_rule_refs(ctx)
+#         if refs:
+#             rules = self._resolve_refs(refs)
+#             if not rules:
+#                 return False
+#         else:
+#             rules = self.enabled_rules
+#         handled = False
+#         for rule in rules:
+#             h, stop = rule.process(ctx)
+#             if h:
+#                 handled = True
+#             if stop and not force_continue:
+#                 break
+#         return handled
+#
+#     def _tracker_rule_refs(self, ctx: RuleContext) -> tuple[list[str], bool]:
+#         """收集种子匹配 tracker 的 rules 引用, 返回 (refs列表)"""
+#         refs, force_continue = [], False
+#         for conf in ctx.matched_tracker_confs():
+#             for ref in getattr(conf, "rules", []) or []:
+#                 ref = str(ref).strip()
+#                 if ref == "ignore_next_rule_error: true":
+#                     force_continue = True
+#                 elif ref.startswith("@"):
+#                     refs.append(ref[1:])
+#         return refs, force_continue
 
-    def _tracker_rule_refs(self, ctx):
-        """收集种子匹配 tracker 的 rules 引用, 返回 (refs列表, ignore_next_rule_error标志)"""
-        refs, force_continue = [], False
-        for conf in ctx.matched_tracker_confs():
-            for ref in getattr(conf, "rules", []) or []:
-                ref = str(ref).strip()
-                if ref == "ignore_next_rule_error: true":
-                    force_continue = True
-                elif ref.startswith("@"):
-                    refs.append(ref[1:])
-        return refs, force_continue
-
-    def _resolve_refs(self, refs) -> list:
+    def _resolve_refs(self, refs: list[str]) -> list:
         """解析 '@rule_set' / '@rule_set.rule_name' 引用为 Rule 列表(按名称去重)"""
         result, seen = [], set()
         for ref in refs:

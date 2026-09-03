@@ -140,10 +140,10 @@ def test_start_stop_syncs_state():
         _make_client(mgr, t1)
         mgr.api.torrents_stop(torrent_hashes="H1")
         assert mgr.store.get("H1").state == "pausedUP"
-        assert mgr.store.get("H1").is_paused
+        assert mgr.store.get("H1").is_stopped
         mgr.api.torrents_start(torrent_hashes="H1")
         assert mgr.store.get("H1").state == "stalledUP"
-        assert not mgr.store.get("H1").is_paused
+        assert not mgr.store.get("H1").is_stopped
 
 
 def test_speed_limits_sync_record():

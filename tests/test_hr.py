@@ -34,7 +34,7 @@ def test_builtin_hr_category_auto_update_from_state():
         task = Task(
             "internal",
             "maintenance",
-            torrent_hash="HASH123",
+            hash="HASH123",
             interval=60,
             tracker_conf=mgr.config.trackers["HHan"],
             handler=mgr._handle_maintenance
@@ -54,7 +54,7 @@ def test_builtin_hr_category_auto_update_from_state():
         task2 = Task(
             "internal",
             "maintenance",
-            torrent_hash="HASH123",
+            hash="HASH123",
             interval=60,
             tracker_conf=mgr2.config.trackers["HHan"],
             handler=mgr2._handle_maintenance
@@ -90,7 +90,7 @@ def test_tracker_hr_overrides_global():
         task = Task(
             "internal",
             "maintenance",
-            torrent_hash="HASH123",
+            hash="HASH123",
             interval=60,
             tracker_conf=cfg.trackers["HHan"],
             handler=mgr._handle_maintenance
@@ -173,7 +173,7 @@ def test_tracker_remove_similar_tags_override():
         task = Task(
             "internal",
             "maintenance",
-            torrent_hash="HASH123",
+            hash="HASH123",
             interval=60,
             tracker_conf=cfg.trackers["HHan"],
             handler=mgr._handle_maintenance

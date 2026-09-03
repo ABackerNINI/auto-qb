@@ -20,13 +20,10 @@
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
-try:
-    from qbittorrentapi import TorrentState
-except ImportError:  # 未安装 qbittorrentapi 时降级: state_enum 为 None
-    TorrentState = None  # type: ignore[assignment]
+from qbittorrentapi import TorrentState, TorrentDictionary
 
 from . import utils
+from .config import TrackerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +83,9 @@ class TorrentRecord:
     _trackers_info: Optional[List[dict]] = None
     _files: Optional[List[Any]] = None
 
+    tor: Optional[TorrentDictionary] = None
+    tracker_conf: Optional[TrackerConfig] = None
+
     @classmethod
     def from_torrent(cls, tor: Any) -> "TorrentRecord":
         """从原始种子对象(TorrentDictionary/FakeTorrent)构建新记录"""
@@ -95,6 +95,7 @@ class TorrentRecord:
 
     def update_from(self, tor: Any) -> None:
         """用最新种子对象更新快照字段(惰性缓存保留, 文本派生缓存失效)"""
+        self.tor = tor
         for f in _SNAPSHOT_FIELDS:
             if f == "hash":
                 continue  # hash 是主键, 不更新
@@ -103,6 +104,23 @@ class TorrentRecord:
                 setattr(self, f, v)
         self._tags_set = None
         self._state_enum = None
+
+    @property
+    def tracker_name(self) -> str:
+        """返回 tracker 名称(从 tracker_conf 或 tracker_url 派生), 主要用于log"""
+        if self.tracker_conf is not None:
+            if self.tracker_conf.tags is not None and len(self.tracker_conf.tags) > 0:
+                return self.tracker_conf.tags[0]
+            return self.tracker_conf.name
+        urls = self.tracker_urls(self.tor.client if self.tor else None)
+        if urls:
+            return utils.extract_tracker_name(urls[0])
+        return "Unknown"
+
+    @property
+    def log_repr(self) -> str:
+        """日志输出简化表示"""
+        return f"'{self.name}' [{self.tracker_name}] ({self.hash[:8]})"
 
     # ---------- 派生/预计算属性 ----------
 
@@ -116,7 +134,7 @@ class TorrentRecord:
         return s
 
     @property
-    def state_enum(self) -> Any:
+    def state_enum(self) -> TorrentState:
         """由 state 字符串构造的 TorrentState(与 qB 版本无关的状态类别判定)"""
         if self._state_enum is None and TorrentState is not None:
             try:
@@ -125,22 +143,8 @@ class TorrentRecord:
                 self._state_enum = TorrentState.UNKNOWN
         return self._state_enum
 
-    @property
-    def is_paused(self) -> bool:
-        enum = self.state_enum
-        return bool(enum is not None and enum.is_paused)
 
-    @property
-    def is_uploading(self) -> bool:
-        enum = self.state_enum
-        return bool(enum is not None and enum.is_uploading)
-
-    @property
-    def is_downloading(self) -> bool:
-        enum = self.state_enum
-        return bool(enum is not None and enum.is_downloading and not enum.is_paused)
-
-    # ---------- 惰性缓存(tracker/files) ----------
+# ---------- 惰性缓存(tracker/files) ----------
 
     def trackers_info(self, client: Any) -> List[dict]:
         """该种子 tracker 信息列表(惰性拉取+持久缓存; 异常向上传播, 由调用方决定处理)"""
@@ -194,17 +198,15 @@ class TorrentStore:
 
     # ---------- 快照 ----------
 
-    def refresh(self, torrents: Any) -> Tuple[List[str], List[str]]:
+    def refresh(self, tors: List[TorrentDictionary]) -> Tuple[List[str], List[str]]:
         """全量刷新快照: 返回 (added, removed) hash 列表
 
         首轮(_known_hashes is None)全部视为新增(与旧 _known_hashes 语义一致);
         已存在的记录对象原地更新, 惰性缓存跨 tick 存活。
         """
         new_by_hash: Dict[str, TorrentRecord] = {}
-        for t in torrents:
-            h = getattr(t, "hash", None)
-            if not h:
-                continue
+        for t in tors:
+            h = t.hash
             rec = self.by_hash.get(h)
             if rec is None:
                 rec = TorrentRecord.from_torrent(t)
@@ -223,15 +225,16 @@ class TorrentStore:
         self._known_hashes = set(new_by_hash)
         return added, removed
 
-    def apply(self, torrents: Any) -> Tuple[List[str], List[str]]:
-        """测试/外部注入入口: 与 refresh 等价(不依赖 client)"""
-        return self.refresh(torrents)
+    # TODO: 删除
+    # def apply(self, torrents: List[TorrentDictionary]) -> Tuple[List[str], List[str]]:
+    #     """测试/外部注入入口: 与 refresh 等价(不依赖 client)"""
+    #     return self.refresh(torrents)
 
-    def get(self, torrent_hash: str) -> Optional[TorrentRecord]:
-        return self.by_hash.get(torrent_hash)
+    def get(self, hash: str) -> Optional[TorrentRecord]:
+        return self.by_hash.get(hash)
 
-    def __contains__(self, torrent_hash: str) -> bool:
-        return torrent_hash in self.by_hash
+    def __contains__(self, hash: str) -> bool:
+        return hash in self.by_hash
 
     def __len__(self) -> int:
         return len(self.by_hash)
@@ -244,49 +247,52 @@ class TorrentStore:
 
     # ---------- 惰性缓存(tracker/files, 记录级) ----------
 
-    def trackers_info(self, torrent_hash: str) -> List[dict]:
-        """种子 tracker 信息列表(快照种子走记录缓存; 外部种子直接拉取)"""
-        rec = self.by_hash.get(torrent_hash)
-        if rec is None:
-            if self.client is None:
-                raise RuntimeError("TorrentStore 未绑定 client")
-            return list(self.client.torrents_trackers(torrent_hash) or [])
-        return rec.trackers_info(self.client)
+    # TODO: 与TorrentRecord的接口重合, 删除
 
-    def tracker_urls(self, torrent_hash: str) -> List[str]:
-        """种子 tracker URL 列表"""
-        rec = self.by_hash.get(torrent_hash)
-        if rec is None:
-            if self.client is None:
-                raise RuntimeError("TorrentStore 未绑定 client")
-            return [t.get("url") for t in (self.client.torrents_trackers(torrent_hash) or []) if t.get("url")]
-        return rec.tracker_urls(self.client)
 
-    def files(self, torrent_hash: str) -> List[Any]:
-        """种子文件列表(快照种子走记录缓存; 外部种子直接拉取)"""
-        rec = self.by_hash.get(torrent_hash)
-        if rec is None:
-            if self.client is None:
-                raise RuntimeError("TorrentStore 未绑定 client")
-            return list(self.client.torrents_files(torrent_hash) or [])
-        return rec.files(self.client)
+#     def trackers_info(self, torrent_hash: str) -> List[dict]:
+#         """种子 tracker 信息列表(快照种子走记录缓存; 外部种子直接拉取)"""
+#         rec = self.by_hash.get(torrent_hash)
+#         if rec is None:
+#             if self.client is None:
+#                 raise RuntimeError("TorrentStore 未绑定 client")
+#             return list(self.client.torrents_trackers(torrent_hash) or [])
+#         return rec.trackers_info(self.client)
+#
+#     def tracker_urls(self, torrent_hash: str) -> List[str]:
+#         """种子 tracker URL 列表"""
+#         rec = self.by_hash.get(torrent_hash)
+#         if rec is None:
+#             if self.client is None:
+#                 raise RuntimeError("TorrentStore 未绑定 client")
+#             return [t.get("url") for t in (self.client.torrents_trackers(torrent_hash) or []) if t.get("url")]
+#         return rec.tracker_urls(self.client)
+#
+#     def files(self, torrent_hash: str) -> List[Any]:
+#         """种子文件列表(快照种子走记录缓存; 外部种子直接拉取)"""
+#         rec = self.by_hash.get(torrent_hash)
+#         if rec is None:
+#             if self.client is None:
+#                 raise RuntimeError("TorrentStore 未绑定 client")
+#             return list(self.client.torrents_files(torrent_hash) or [])
+#         return rec.files(self.client)
 
-    def update_state_snapshot(self, torrents: Any) -> None:
+    def update_state_snapshot(self, tors: List[TorrentDictionary]) -> None:
         """本轮结束前更新状态快照(存 state_enum 枚举对象, 与 qB 版本无关)"""
-        self.state_snapshot = {t.hash: getattr(t, "state_enum", None) for t in torrents}
+        self.state_snapshot = {t.hash: getattr(t, "state_enum", None) for t in tors}
 
     # ---------- 分组查询接口 ----------
 
-    def group_members(self, torrent_hash: str) -> List[str]:
+    def group_members(self, hash: str) -> List[str]:
         """种子所属组全部成员 hash; 未归组 -> [自身] 单种子"""
-        key = self.member_to_key.get(torrent_hash)
+        key = self.member_to_key.get(hash)
         if key is None:
-            return [torrent_hash]
-        return list(self.groups.get(key, [torrent_hash]))
+            return [hash]
+        return list(self.groups.get(key, [hash]))
 
-    def group_key(self, torrent_hash: str) -> Optional[Any]:
+    def group_key(self, hash: str) -> Optional[Any]:
         """种子所属组 key; 未归组 -> None"""
-        return self.member_to_key.get(torrent_hash)
+        return self.member_to_key.get(hash)
 
     # ---------- 全局标签/分类缓存 ----------
 
@@ -349,44 +355,44 @@ class TorrentStore:
         tags_changed = tags_add is not None or tags_remove is not None
         state_changed = state is not None
         for h in hashes:
-            rec = self.by_hash.get(h)
-            if rec is None:
+            torrent = self.by_hash.get(h)
+            if torrent is None:
                 continue
             if tags_add is not None:
-                current = set(rec.tags_set)
+                current = set(torrent.tags_set)
                 current.update(tags_add)
-                rec.tags = ",".join(sorted(current))
+                torrent.tags = ",".join(sorted(current))
             if tags_remove is not None:
-                current = set(rec.tags_set)
+                current = set(torrent.tags_set)
                 current.difference_update(tags_remove)
-                rec.tags = ",".join(sorted(current))
+                torrent.tags = ",".join(sorted(current))
             if category is not None:
-                rec.category = category
+                torrent.category = category
             if state is not None:
-                rec.state = state
+                torrent.state = state
             if up_limit is not None:
-                rec.up_limit = up_limit
+                torrent.up_limit = up_limit
             if dl_limit is not None:
-                rec.dl_limit = dl_limit
+                torrent.dl_limit = dl_limit
             if save_path is not None:
-                rec.save_path = save_path
+                torrent.save_path = save_path
             if tags_changed:
-                rec._tags_set = None
+                torrent._tags_set = None
             if state_changed:
-                rec._state_enum = None
+                torrent._state_enum = None
 
     def apply_tag_removal(self, tags: List[str]) -> None:
         """torrents_delete_tags 后从所有记录移除已删除标签(定义删除 = 所有种子移除)"""
         tags = set(tags or [])
         if not tags:
             return
-        for rec in self.by_hash.values():
-            cur = rec.tags_set
+        for torrent in self.by_hash.values():
+            cur = torrent.tags_set
             removed = cur & tags
             if removed:
-                rec.tags = ",".join(sorted(cur - removed))
-                rec._tags_set = None
+                torrent.tags = ",".join(sorted(cur - removed))
+                torrent._tags_set = None
 
-    def remove_torrent(self, torrent_hash: str) -> None:
+    def remove_torrent(self, hash: str) -> None:
         """种子删除后立即从快照移除(保留 _known_hashes, 下轮 refresh 产生 removed 事件驱动任务/分组清理)"""
-        self.by_hash.pop(torrent_hash, None)
+        self.by_hash.pop(hash, None)

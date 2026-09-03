@@ -4,10 +4,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, List, Optional
+from qbittorrentapi import TorrentDictionary, Client
 
 from . import registry
 from .. import utils
 from ..torrents import TorrentRecord
+from ..config import Config
+# from ..qbmanager import QbManager
+from ..qbapi import QbApi
 
 logger = logging.getLogger(__name__)
 
@@ -90,21 +94,22 @@ class RuleContext:
     """一次规则处理上下文, 惰性缓存 tracker/文件等数据"""
 
     manager: Any  # QbManager(规则调度/状态持久化/任务队列)
-    client: Any  # qbittorrent Client(兼容入口: 外部传入种子时直接拉取)
-    config: Any  # Config
-    torrent: Any  # TorrentDictionary # TODO: 删除, 全部通过 torrent_record 获取??
+    client: Client  # qbittorrent Client(兼容入口: 外部传入种子时直接拉取)
+    config: Config
+    hash: str
     dry_run: bool
     rule_name: str = ""
     task: Any = None  # 触发本次规则执行的任务(任务队列驱动); process_torrent 外部入口为 None
+
     _tracker_urls: Optional[List[str]] = field(default=None)
     _tracker_confs: Optional[List] = field(default=None)
     _files: Optional[List] = field(default=None)
 
     @property
-    def api(self) -> Any:
+    def api(self) -> QbApi | Client:
         """qB API 门面: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
         api = getattr(self.manager, "api", None)
-        if api is not None and getattr(api, "client", None) is not None:
+        if api is not None:
             return api
         return self.client
 
@@ -119,10 +124,10 @@ class RuleContext:
         return ""
 
     @property
-    def torrent_record(self) -> TorrentRecord:
+    def torrent(self) -> TorrentRecord:
         """快照记录; store 无该种子(外部传入种子/测试直接调用)时从 torrent 构造"""
         rec = self.manager.store.get(self.torrent.hash)
-        if rec is None: # TODO: None代表种子已被前面的任务删除
+        if rec is None:  # TODO: None代表种子已被前面的任务删除
             rec = TorrentRecord.from_torrent(self.torrent)
         return rec
 
@@ -141,39 +146,42 @@ class RuleContext:
                 self._tracker_urls = [t["url"] for t in self.api.torrents_trackers(self.torrent.hash) if t.get("url")]
         return self._tracker_urls
 
-    def matched_tracker_confs(self) -> List[Any]:
-        """匹配到的 TrackerConfig 列表(可能多个)"""
-        if self._tracker_confs is None:
-            self._tracker_confs = utils.match_tracker_confs(self.config.trackers, self.tracker_urls())
-        return self._tracker_confs
+    # TODO: 删除
+    # def matched_tracker_confs(self) -> List[Any]:
+    #     """匹配到的 TrackerConfig 列表(可能多个)"""
+    #     if self._tracker_confs is None:
+    #         self._tracker_confs = utils.match_tracker_confs(self.config.trackers, self.tracker_urls())
+    #     return self._tracker_confs
+    # def matched_tracker_names(self) -> List[str]:
+    #     return [c.name for c in self.matched_tracker_confs()]
 
-    def matched_tracker_names(self) -> List[str]:
-        return [c.name for c in self.matched_tracker_confs()]
+    # TODO: 删除
+    # def describe(self) -> str:
+    #     """多行种子信息摘要, 用于动作日志: 名称/站点/状态/hash"""
+    #     try:
+    #         sites = ", ".join(self.matched_tracker_names()) or "未匹配"
+    #     except Exception:
+    #         sites = "未知"
+    #     return (
+    #         f"  - 种子: {self.torrent.name}\n"
+    #         f"  - 站点: {sites}\n"
+    #         f"  - 状态: {self.torrent.state}\n"
+    #         f"  - 哈希: {self.torrent.hash}"
+    #     )
 
-    def describe(self) -> str:
-        """多行种子信息摘要, 用于动作日志: 名称/站点/状态/hash"""
-        try:
-            sites = ", ".join(self.matched_tracker_names()) or "未匹配"
-        except Exception:
-            sites = "未知"
-        return (
-            f"  - 种子: {self.torrent.name}\n"
-            f"  - 站点: {sites}\n"
-            f"  - 状态: {self.torrent.state}\n"
-            f"  - 哈希: {self.torrent.hash}"
-        )
+    # TODO: 删除
+    #     def files(self) -> List[Any]:
+    #         if self._files is None:
+    #             store = getattr(self.manager, "store", None)
+    #             if store is not None and store.client is not None and self.torrent.hash in store:
+    #                 # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
+    #                 self._files = store.files(self.torrent.hash)
+    #             else:
+    #                 # 外部传入种子(process_torrent 兼容入口): 直接拉取
+    #                 self._files = self.api.torrents_files(self.torrent.hash)
+    #         return self._files
 
-    def files(self) -> List[Any]:
-        if self._files is None:
-            store = getattr(self.manager, "store", None)
-            if store is not None and store.client is not None and self.torrent.hash in store:
-                # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
-                self._files = store.files(self.torrent.hash)
-            else:
-                # 外部传入种子(process_torrent 兼容入口): 直接拉取
-                self._files = self.api.torrents_files(self.torrent.hash)
-        return self._files
-
+    # TODO: 移动到actions.py
     def check_hr_condition(self, conf) -> bool:
         """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种"""
         if not conf.hr:
@@ -189,6 +197,7 @@ class RuleContext:
                 return False
         return True
 
+    # TODO: 移动到actions.py
     def check_hr_satisfied(self, conf) -> bool:
         """是否满足 HR 要求: 触发条件 + (做种时长 >= 要求时间 + 额外时间 或 分享率达标)"""
         if not conf.hr:
