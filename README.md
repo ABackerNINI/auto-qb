@@ -213,7 +213,7 @@ config:
                     path: "R:/"
                     amount: "<100GiB"
             actions:                               # 动作顺序执行，默认一个出错后续不执行
-                - checking:                        # ⚠️ 校验/跳检(见下方说明) 🚧
+                - checking:                        # ⚠️ 校验/跳检(见下方[# `checking` 动作说明]) 🚧
                     basic_check: filelist          # filelist/piecehashes/custom
                     with_reference:                # 有参考种子(已完成同组种子)
                         mode: skip-checking        # skip-checking 跳检(风险可控)/full-checking 全量校验
@@ -263,15 +263,6 @@ config:
                 - "@example_rules"                 # 引用整个规则集
                 - "@example_rules.rule1"           # 引用具体规则
 ```
-
-### `checking` 动作说明
-
-- `basic_check` 用于确定参考种子: `filelist` 对比两个种子的文件列表和文件大小(宽松)；`piecehashes` 额外对比两个种子每个块的 hash，不读取实际文件(对直接转种的种子有效，重新制作且块大小不同的种子无效)；`custom` 自定义程序
-- **有参考种子**(组内有已完成、正在上传的同组种子): `full-checking` qb自带全量校验 __<font color="green">安全</font>__， `skip-checking` 跳检 __<font color="orange">风险相对可控</font>__
-- **无参考种子**: `full-checking` __<font color="green">安全</font>__；`skip-checking` 为 __<font color="red">高风险</font>__ (仅做基础文件存在与大小对比，不做哈希校验直接开始，文件内容错误时会传垃圾数据，被大部分PT站点严令禁止)!
-- 组内有种子正在下载 → 整组未完成，不进行任何校验(包括跳检)
-- **只校验暂停中未完成的种子**(`is_paused` 且 `progress < 1`，如跨种添加后的 `pausedDL`)；已完成(`progress=1`)或活跃中(下载/做种中)的种子直接跳过，避免已完成种子被反复校验
-- 校验通过后种子可成为同组种子的参考
 
 ## 规则系统
 
@@ -348,6 +339,15 @@ config:
 `complete&uploading` = `is_complete 且 is_uploading`，即"正在做种中"(含 queuedUP/checkingUP)。
 注意 `downloading` 含 pausedDL/stoppedDL 等暂停下载状态；条件不支持 `!` 取反，需排除暂停下载时
 用 `stopped` 条件另行判断。
+
+### `checking` 动作说明
+
+- `basic_check` 用于确定参考种子: `filelist` 对比两个种子的文件列表和文件大小(宽松)；`piecehashes` 额外对比两个种子每个块的 hash，不读取实际文件(对直接转种的种子有效，重新制作且块大小不同的种子无效)；`custom` 自定义程序
+- **有参考种子**(组内有已完成、正在上传的同组种子): `full-checking` qb自带全量校验 __<font color="green">安全</font>__， `skip-checking` 跳检 __<font color="orange">风险相对可控</font>__
+- **无参考种子**: `full-checking` __<font color="green">安全</font>__；`skip-checking` 为 __<font color="red">高风险</font>__ (仅做基础文件存在与大小对比，不做哈希校验直接开始，文件内容错误时会传垃圾数据，被大部分PT站点严令禁止)!
+- 组内有种子正在下载 → 整组未完成，不进行任何校验(包括跳检)
+- **只校验暂停中未完成的种子**(`is_paused` 且 `progress < 1`，如跨种添加后的 `pausedDL`)；已完成(`progress=1`)或活跃中(下载/做种中)的种子直接跳过，避免已完成种子被反复校验
+- 校验通过后种子可成为同组种子的参考
 
 ## 目录结构
 
