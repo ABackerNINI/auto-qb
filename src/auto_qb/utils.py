@@ -164,7 +164,7 @@ def compare(op: str, left, right) -> bool:
 
 def check_filelist(api, torrent):
     """检查种子文件是否存在且大小一致(api 为 QbApi 门面或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
-    logger.info(f"检查种子文件完整性: {torrent.name} ({torrent.hash[:8]})")
+    logger.debug(f"检查种子文件完整性: {torrent.name} ({torrent.hash[:8]})")
     try:
         files = api.torrents_files(torrent.hash)
     except Exception as e:
