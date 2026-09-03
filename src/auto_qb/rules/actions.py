@@ -222,15 +222,21 @@ class CheckAction(BaseAction):
         if not (ctx.torrent_record.is_paused and (ctx.torrent.progress or 0.0) < 1.0):
             return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
 
-        # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
+        # 决策链 1: 前置检查: 文件全部存在且大小一致
+        # 虽然同group文件已经确定存在且大小一致, 但为了安全, 再次检查
+        err = utils.check_filelist(ctx.api, ctx.torrent)
+        if err is not None:
+            return ActionResult.skip(f"全量校验前置检查未通过: {err}")
+
+        # 决策链 2: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
         members = manager._group_members(torrent_hash)
         if manager._group_has_downloading(members):
             return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")
 
-        # 决策链 2: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
+        # 决策链 3: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
         reference = self._find_reference(ctx, members)
 
-        # 决策链 3: 有参考 -> with_reference 段; 无参考 -> without_reference 段
+        # 决策链 4: 有参考 -> with_reference 段; 无参考 -> without_reference 段
         segment = self.with_reference if reference else self.without_reference
         if segment["mode"] == "full-checking":
             return self._execute_full_checking(ctx, segment)
@@ -392,14 +398,11 @@ class CheckAction(BaseAction):
         if record and record.get("date") == date.today().isoformat():
             return ActionResult.skip("今日已跳检, 跳过")
 
-        # 1. 强制前置检查: 文件全部存在且大小一致
-        err = utils.check_filelist(ctx.api, ctx.torrent)
-        if err is not None:
-            return ActionResult.fail(f"跳检前置检查未通过: {err}")
+        # 1. 强制前置检查: 文件全部存在且大小一致 (已在 execute() 中完成)
 
         # 2. 导出 .torrent
         try:
-            data = ctx.api.torrents_export(torrent_hashes=ctx.torrent.hash)
+            data = ctx.api.torrents_export(torrent_hash=ctx.torrent.hash)
         except Exception as e:
             return ActionResult.fail(f"导出 .torrent 失败: {e}")
         if not data:
