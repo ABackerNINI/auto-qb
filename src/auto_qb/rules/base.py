@@ -92,7 +92,7 @@ class RuleContext:
     manager: Any  # QbManager(规则调度/状态持久化/任务队列)
     client: Any  # qbittorrent Client(兼容入口: 外部传入种子时直接拉取)
     config: Any  # Config
-    torrent: Any  # TorrentDictionary
+    torrent: Any  # TorrentDictionary # TODO: 删除, 全部通过 torrent_record 获取??
     dry_run: bool
     rule_name: str = ""
     task: Any = None  # 触发本次规则执行的任务(任务队列驱动); process_torrent 外部入口为 None
@@ -122,7 +122,7 @@ class RuleContext:
     def torrent_record(self) -> TorrentRecord:
         """快照记录; store 无该种子(外部传入种子/测试直接调用)时从 torrent 构造"""
         rec = self.manager.store.get(self.torrent.hash)
-        if rec is None:
+        if rec is None: # TODO: None代表种子已被前面的任务删除
             rec = TorrentRecord.from_torrent(self.torrent)
         return rec
 
