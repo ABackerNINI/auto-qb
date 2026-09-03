@@ -216,9 +216,11 @@ config:
                 - checking:                        # ⚠️ 校验/跳检(见下方[# `checking` 动作说明]) 🚧
                     basic_check: filelist          # filelist/piecehashes/custom
                     with_reference:                # 有参考种子(已完成同组种子)
+                        enabled: true              # 启用
                         mode: skip-checking        # skip-checking 跳检(风险可控)/full-checking 全量校验
                         auto_start: true           # 校验成功后自动开始
                     without_reference:             # 无参考种子
+                        enabled: true              # 启用
                         mode: full-checking        # full-checking 安全；skip-checking 高风险
                         auto_start: true           # 校验成功后自动开始
                 - start: true                      # 开始
@@ -324,8 +326,8 @@ config:
 
 ### 状态映射表
 
-规则条件里的 `state` 是语义化状态, 直接用 qB `TorrentState` 枚举属性判定(`is_checking` /
-`is_downloading` / `is_complete` / `is_uploading` / `is_errored` / `is_stopped`), 与 qB 官方语义一致:
+规则条件里的 `state` 是语义化状态，直接用 qB `TorrentState` 枚举属性判定(`is_checking` /
+`is_downloading` / `is_complete` / `is_uploading` / `is_errored` / `is_stopped`)，与 qB 官方语义一致:
 
 | 语义状态      | 判定依据         | 覆盖的 qB state                                                                                   | 说明                     |
 |---------------|------------------|---------------------------------------------------------------------------------------------------|--------------------------|
@@ -347,6 +349,7 @@ config:
 - **无参考种子**: `full-checking` __<font color="green">安全</font>__；`skip-checking` 为 __<font color="red">高风险</font>__ (仅做基础文件存在与大小对比，不做哈希校验直接开始，文件内容错误时会传垃圾数据，被大部分PT站点严令禁止)!
 - 组内有种子正在下载 → 整组未完成，不进行任何校验(包括跳检)
 - **只校验暂停中未完成的种子**(`is_paused` 且 `progress < 1`，如跨种添加后的 `pausedDL`)；已完成(`progress=1`)或活跃中(下载/做种中)的种子直接跳过，避免已完成种子被反复校验
+- **跳检**: `skip-checking` 跳检是通过 "导出原种子 → 删除原种子 → 重新导入种子时选择跳过哈希校验" 的方法实现的，该方法可以保留种子的标签、分类、下载限速、上传限速、保存路径，但无法保留种子的下载量、上传量、做种时长、上传比率等统计数据，请务必谨慎使用!
 - 校验通过后种子可成为同组种子的参考
 
 ## 目录结构
@@ -360,7 +363,7 @@ src/auto_qb/
 ├── logging.py         # 日志配置
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
 ├── taskqueue.py       # 双任务队列: 快速队列(时间优先堆)+ 慢速队列(异步校验轮询)
-├── torrents.py        # 种子信息缓存, 避免频繁访问 qB API, 每main_tick刷新
+├── torrents.py        # 种子信息缓存，避免频繁访问 qB API，每main_tick刷新
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)
 ├── mixins/            # QbManager 组合 mixins
 │   ├── checking.py    # 校验完成判定/异步校验轮询回调

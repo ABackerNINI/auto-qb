@@ -192,7 +192,7 @@ class CheckAction(BaseAction):
             raise ValueError("checking 动作 basic_check=custom 时必须配置 custom_basic_check_program_path")
         for seg in ("with_reference", "without_reference"):
             if seg not in spec:
-                raise ValueError(f"checking 动作必须配置 {seg} 段")
+                continue
             if not isinstance(spec[seg], dict):
                 raise ValueError(f"checking 动作 {seg} 段必须是 dict")
             seg_mode = str(spec[seg].get("mode", ""))
@@ -201,8 +201,12 @@ class CheckAction(BaseAction):
 
     @staticmethod
     def _parse_section(spec: dict, name: str) -> dict:
+        if name not in spec:
+            return {"enabled": False, "mode": "", "auto_start": False}
+
         seg = spec[name]
         return {
+            "enabled": utils.parse_bool(seg.get("enabled", False)),
             "mode": str(seg.get("mode")),
             "auto_start": utils.parse_bool(seg.get("auto_start", False)),
         }
@@ -222,22 +226,27 @@ class CheckAction(BaseAction):
         if not (ctx.torrent_record.is_paused and (ctx.torrent.progress or 0.0) < 1.0):
             return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
 
-        # 决策链 1: 前置检查: 文件全部存在且大小一致
+        # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
+        members = manager._group_members(torrent_hash)
+        if manager._group_has_downloading(members):
+            return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")
+
+        # 决策链 2: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
+        reference = self._find_reference(ctx, members)
+
+        # 决策链 3: 有参考 -> with_reference 段; 无参考 -> without_reference 段
+        segment = self.with_reference if reference else self.without_reference
+
+        # 跳过未启用的检查
+        if segment["enabled"] is False:
+            return ActionResult.skip(f"checking 校验段 {segment} 未启用, 跳过")
+
+        # 决策链 4: 前置检查: 文件全部存在且大小一致
         # 虽然同group文件已经确定存在且大小一致, 但为了安全, 再次检查
         err = utils.check_filelist(ctx.api, ctx.torrent)
         if err is not None:
             return ActionResult.skip(f"全量校验前置检查未通过: {err}")
 
-        # 决策链 2: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
-        members = manager._group_members(torrent_hash)
-        if manager._group_has_downloading(members):
-            return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")
-
-        # 决策链 3: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
-        reference = self._find_reference(ctx, members)
-
-        # 决策链 4: 有参考 -> with_reference 段; 无参考 -> without_reference 段
-        segment = self.with_reference if reference else self.without_reference
         if segment["mode"] == "full-checking":
             return self._execute_full_checking(ctx, segment)
         return self._execute_skip_checking(ctx, segment, bool(reference))
@@ -421,8 +430,17 @@ class CheckAction(BaseAction):
                 save_path=ctx.torrent.save_path,
                 category=ctx.torrent.category or None,
                 tags=ctx.torrent.tags or None,
+                upload_limit=ctx.torrent.up_limit or None,
+                download_limit=ctx.torrent.dl_limit or None,
+                is_sequential_download=ctx.torrent.seq_dl or None,
+                is_first_last_piece_priority=ctx.torrent.f_l_piece_prio or None,
+                # content_layout??
+                ratio_limit=ctx.torrent.ratio_limit or None,
+                seeding_time_limit=ctx.torrent.seeding_time_limit or None,
+                inactive_seeding_time_limit=ctx.torrent.inactive_seeding_time_limit or None,
+                share_limit_action=ctx.torrent.share_limit_action or None,
                 is_skip_checking=True,
-                paused=True,
+                is_stopped=True,
             )
         except Exception as e:
             backup = self._backup_torrent(ctx, data)
