@@ -22,7 +22,6 @@ class RuleEngineMixin:
 
     config: Config
     client: Optional[Client]
-    logger: logging.Logger
     state_file: str
     state: dict
     rules: List[Rule]

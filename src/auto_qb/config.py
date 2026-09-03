@@ -105,6 +105,7 @@ class GroupingConfig:
     missing_tag: 文件丢失时整组添加的标签
     """
     enabled: bool = True
+    check_missing_files: bool = True  # 启用缺文件检查
     missing_tag: str = 'MISSING'
 
 
@@ -161,6 +162,7 @@ def load_grouping_config(spec: dict) -> GroupingConfig:
     default = GroupingConfig()
     return GroupingConfig(
         enabled=parse_bool(spec.get("enabled", default.enabled)),
+        check_missing_files=parse_bool(spec.get("check_missing_files", default.check_missing_files)),
         missing_tag=spec.get("missing_tag", default.missing_tag),
     )
 

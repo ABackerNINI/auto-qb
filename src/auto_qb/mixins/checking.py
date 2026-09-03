@@ -14,5 +14,4 @@ class CheckingMixin:
     """文件检查/辅种跳检(已迁移至规则动作, 占位保留)"""
 
     client: Optional[Client]
-    logger: logging.Logger
     config: Config

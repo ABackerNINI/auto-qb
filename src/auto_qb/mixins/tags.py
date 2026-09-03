@@ -18,7 +18,6 @@ class TagsMixin:
 
     client: Optional[Client]
     api: Optional[QbApi]
-    logger: logging.Logger
     config: Config
 
     def _log_torrent_details(self, tor: TorrentDictionary, tracker_conf: TrackerConfig | None) -> str:

@@ -30,6 +30,7 @@ from qbittorrentapi import Client, TorrentState
 
 from ..config import Config
 from .. import utils
+from ..torrents import TorrentStore
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,15 @@ class GroupingMixin:
     """种子分组管理(辅种管理): 分组 + 组内大小一致性 + 状态变化触发的缺文件联动"""
 
     client: Optional[Client]
-    logger: logging.Logger
+    store: TorrentStore
     config: Config
 
     def _handle_removed_torrents(self, removed_hashes, dry_run: bool):
         """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失) """
+        if not self.config.grouping.check_missing_files:
+            return  # 配置禁用缺文件检查
+
+        # 缺文件检查
         affected = set()
         for h in removed_hashes:
             key = self._leave_group(h)
@@ -78,6 +83,11 @@ class GroupingMixin:
             new_key = self.store.member_to_key.get(h)
             if new_key is not None and len(self.store.groups[new_key]) > 1:
                 triggered.add(new_key)  # 新组: 已有其它成员, 归组后触发一次扫描
+
+        if not self.config.grouping.check_missing_files:
+            return  # 配置禁用缺文件检查
+
+        # 缺文件检查
         for key in triggered:
             members = [self.store.by_hash[m] for m in self.store.groups.get(key, []) if m in self.store.by_hash]
             if members:
@@ -91,6 +101,10 @@ class GroupingMixin:
         遍历本轮种子先过滤暂停状态, 再对比上一轮快照为上传(做种)类别即触发;
         状态变化在检测到的同一轮立即处理, 不等下一轮。
         """
+        if not self.config.grouping.check_missing_files:
+            return  # 配置禁用缺文件检查
+
+        # 缺文件检查
         triggered = set()
         for h, tor in self.store.by_hash.items():
             if not self._is_paused(tor):
@@ -181,10 +195,13 @@ class GroupingMixin:
         """
         缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
 
-        由删除事件(_handle_removed_torrents)或状态变化检测(_handle_state_transitions)在
-        满足触发条件(组内种子被删除 / 种子由上传转暂停)时立即调用。
+        由删除事件(_handle_removed_torrents)或状态变化检测(_handle_state_transitions)或种子保存路径变化(_handle_save_path_changes)
+        在满足触发条件(组内 种子被删除 / 种子由上传转暂停 / 种子保存路径变化)时立即调用。
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 复用)
         """
+        if not self.config.grouping.check_missing_files:
+            return  # 配置禁用缺文件检查
+
         # 组内取一个已完成且正在做种的种子作为代表
         rep = next((t for t in members if self._valid_for_representative(t)), None)
         if rep is None:

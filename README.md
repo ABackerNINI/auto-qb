@@ -153,8 +153,9 @@ config:
 
     # 种子分组管理(辅种管理)
     grouping:
-        enabled: true        # 启用种子分组
-        missing_tag: MISSING # 文件丢失时整组添加的标签
+        enabled: true             # 启用种子分组
+        check_missing_files: true # 启用缺文件检查
+        missing_tag: MISSING      # 文件丢失时整组添加的标签
 
     # 全局自动彻底删除标签
     delete_tags:                     # 彻底删除的标签格式，支持正则
