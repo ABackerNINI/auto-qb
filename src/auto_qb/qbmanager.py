@@ -295,3 +295,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._log_torrent_details(tor, tracker_conf)
             logger.info(f"--------------------------------------------------------------------------")
         return True
+
+    def export_torrents_info(self, path):
+        """导出种子信息, 用于debug"""
+        torrents = self.client.torrents_info()
+        with open(path, "w") as f:
+            for tor in torrents:
+                f.write(f"{tor}\n\n")

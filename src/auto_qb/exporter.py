@@ -82,14 +82,7 @@ def build_tracker_entry(domain: str) -> dict:
     }
 
 
-def export_yaml_template(
-    api,
-    config,
-    config_path: str,
-    output_path: str,
-    dry_run: bool,
-    only_missing: bool = False,
-):
+def export_yaml_template(api, config, config_path: str, output_path: str, dry_run: bool, only_missing: bool = False):
     """
     生成 YAML 配置模板: 导出种子中未在配置里定义的 tracker 域名。
 
