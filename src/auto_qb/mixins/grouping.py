@@ -26,7 +26,7 @@
 import logging
 import os
 from typing import Any, Dict, Optional
-from qbittorrentapi import Client
+from qbittorrentapi import Client, TorrentState
 
 from ..config import Config
 from .. import utils
@@ -168,17 +168,27 @@ class GroupingMixin:
         size_sets = {tuple(sorted(fmap.items())) for fmap in (sizes.get(t.hash, {}) for t in members)}
         return len(size_sets) > 1
 
+    @staticmethod
+    def _valid_for_representative(tor) -> bool:
+        """候选项有效: 已完成且正在做种的种子可作为组内缺文件扫描的代表种"""
+        state_enum = tor.state_enum
+        return (
+            tor.amount_left <= 0 and state_enum.is_complete and state_enum.is_uploading and
+            not state_enum.is_checking and not state_enum.is_errored and not state_enum == TorrentState.MOVING
+        )
+
     def _check_missing_files(self, members: list, sizes: Dict[str, Dict[str, int]], dry_run: bool):
-        """缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
+        """
+        缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
 
         由删除事件(_handle_removed_torrents)或状态变化检测(_handle_state_transitions)在
         满足触发条件(组内种子被删除 / 种子由上传转暂停)时立即调用。
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 复用)
         """
         # 组内取一个已完成且正在做种的种子作为代表
-        rep = next((t for t in members if t.amount_left <= 0 and self._is_uploading(t)), None)
+        rep = next((t for t in members if self._valid_for_representative(t)), None)
         if rep is None:
-            return  # 组内无已完成做种种子(均在下载/暂停), 不检查
+            return  # 组内无已完成做种种子(均在下载/暂停/移动), 不检查
 
         logger.info(f"正在检查种子组的文件丢失: 辅种数: {len(members)}, 名称: {rep.name}")
         missing = False
