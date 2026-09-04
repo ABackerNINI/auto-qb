@@ -125,14 +125,13 @@ class SpeedCurveMixin:
         if apply_kwargs:
             self.api.set_global_speed_limits(**apply_kwargs)
             applied = ", ".join(
-                f"{'上传' if k == 'upload_kib' else '下载'}限速 {_fmt_global_limit(v)}" for k, v in apply_kwargs.items()
+                f"{'上传' if k == 'upload_kib' else '下载'}限速: {_fmt_global_limit(v)}" for k, v in apply_kwargs.items()
             )
             # 成功设置全局限速时, 按配置中各 period 曲线输出对应累计上传/下载(如 今日/七日/本月)
             stats = " ".join(
-                f"{_period_label(period)}累计上传/下载: 上传 {_fmt_bytes(up)}, 下载 {_fmt_bytes(down)}"
-                for period, up, down in period_stats
+                f"{_period_label(period)}: {_fmt_bytes(up)}/{_fmt_bytes(down)}" for period, up, down in period_stats
             )
-            logger.info(f"全局限速曲线: {stats}")
+            logger.info(f"累计上传/下载 {stats}")
             logger.info(f"设置全局限速曲线: {applied}")
 
         self._record_curve_state(today, upload_kib, download_kib, dry_run=False)
