@@ -101,7 +101,7 @@ global_speed_limit_curve:
 
 | 文件 | 性质 |
 |------|------|
-| `auto-qb-state.json` | ★ 生产状态 (gitignore)。实测结构: `upload_snapshots.{daily,weekly,monthly} = {key, baseline{hash: uploaded}}`; `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}` |
+| `auto-qb-state.json` | ★ 生产状态 (gitignore)。实测结构: `upload_snapshots.{daily,weekly,monthly} = {key, baseline{hash: uploaded}}`; `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}`; `reannounce_ts = {hash: 上次reannounce时间戳}`; `recheck_fails = {hash: {date, count}}`(当日连续校验失败); `skip_check_day = {hash: "YYYY-MM-DD"}`(跨规则同日跳检去重) |
 | `logs/auto-qb.log` | RotatingFileHandler, maxBytes 按 `log.max_bytes`, 5 备份 |
 | `skip-check-backup/` | 跳检重加失败时的 .torrent 备份 (state_file 同目录) |
 | `torrents.txt` | `--export-torrents_info` 的调试输出 |

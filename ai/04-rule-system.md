@@ -90,7 +90,7 @@ process(ctx) -> (handled: bool, stop: bool)
 | `stop` | `true` | 已 `is_stopped` → skip |
 | `checking` | 见下节 | 校验/跳检, 最复杂动作 |
 | `move_to` | `{path: "/new"}` | set_location; path 空 → fail |
-| `reannounce` | `true` | ⚠️ 无限制 (TODO: 添加限制), 应配 execute_once |
+| `reannounce` | `true` | ⚠️ 有风险: 运行时最小间隔 10M(同种子, state 键 `reannounce_ts`, 独立于规则去重兜底) + 暂停种子跳过 + 未配 execute_once/cooldown 时加载 WARNING; 高频 announce 会被封号 |
 | `upload_speed_limit` | `"1000KiB/s"` | 见下"限速保护" |
 | `download_speed_limit` | 同上 | 同上 |
 

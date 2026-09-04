@@ -8,8 +8,8 @@
 
 ## ⚠️ 高风险业务操作 (代码中已有防护, 改动时不得削弱)
 
-1. **跳检 (skip-checking)**: 删除种子→重加, 丢失统计 (下载量/上传量/做种时长/分享率); 内容错误会传垃圾数据 (PT 站严令禁止)。防护: 同日去重 / 强制 filelist 前置检查 / 无参考 warning / 重加失败落盘备份。跳检过程中种子会从 store 消失 (`remove_torrent`) — 该种子同 tick 内的后续动作必须容错 (历史 bug: commit e5ea9e7, 测试 test_checking.py 覆盖)。
-2. **reannounce 动作**: 目前**无任何频率限制** (TODO in code), 只能靠规则 execute_once 控制。
+1. **跳检 (skip-checking)**: 删除种子→重加, 丢失统计 (下载量/上传量/做种时长/分享率); 内容错误会传垃圾数据 (PT 站严令禁止)。防护 (2026-09-05 审计加固后): ①部分下载 (0<progress<1) 拒绝跳检 (预分配零块会被标记有效上传, fail 提示改 full-checking) ②同规则同日去重 + **跨规则**同日去重 (`skip_check_day`, 统计只丢一次) ③强制 filelist 前置检查 ④重加前轮询确认种子已从客户端消失 (qB 删除异步, ≤5s; 未消失放弃, 种子还在无损失) ⑤重加属性**直传** (0/负值有语义, 不得 `or None` 吞掉) + contentLayout 由 content_path/save_path/文件列表推断 (布局错位不自愈) ⑥无参考 warning ⑦重加失败 .torrent 落盘备份且**元数据立即落盘**。跳检过程中种子会从 store 消失 (`remove_torrent`) — 该种子同 tick 内的后续动作必须容错 (历史 bug: commit e5ea9e7, 测试 test_checking.py 覆盖)。
+2. **reannounce 动作**: 已加运行时保护 (2026-09-05): 同种子最小间隔 10M(state `reannounce_ts`) + 暂停种子跳过 + 加载期未配去重 WARNING —— 但高频汇报本质上仍是高风险操作, 规则应配 execute_once。
 3. **删除种子** (`torrents_delete`): 仅跳检流程使用, `delete_files=False` 固定。
 4. **全局限速覆盖**: 奇数 KiB 视为用户手动设置则跳过 — 三处实现 (tracker.py/actions.py/speed_curve.py) 逻辑必须保持一致。
 
@@ -46,7 +46,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - `qbmanager.py:190` `_get_torrent` 标记"TODO: 删除" — 新代码直接用 `self.store.get(hash)`。
 - `rules/base.py:134,150` HR 判定函数标记"移动到 actions.py" — RuleContext 上的 `check_hr_*` 与 TagsMixin `_add_hr_tag_or_category` 逻辑重复, 改 HR 语义要两处同步。
 - `conditions.py` tags/category/trackers 三个条件不支持 `:ignore_case` (utils 支持)。
-- `actions.py:220` "未完成且暂停的种子若 recheck 后仍未完成, 下一轮会再次校验" — 已知待处理。
+- ~~`actions.py:220` "recheck 后仍未完成防重复校验"~~ — 已处理 (2026-09-05): 连续失败 3 次当日冷却(`recheck_fails` state 键, 次日重置, 成功清零)。
 - `episodes.py:112` 集数标签格式不可自定义。
 - `config.py:357,373` HR 加载标记 TODO optimize。
 

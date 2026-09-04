@@ -17,7 +17,7 @@
 - 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi 门面写后同步
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
-- 测试: 598 passed, 分支覆盖 95%
+- 测试: 604 passed, 分支覆盖 95%
 
 ## 规划中 (🚧, 尚未实现)
 
@@ -43,10 +43,10 @@
 | rules/base.py:116 | 多 tracker 匹配时 warning+跳过 (2026-09-05: `_match_tracker_conf` 已改为命中多个时打 ERROR 日志并用第一个, 是否跳过仍待作者决定) |
 | rules/base.py:134,150 | HR 判定从 RuleContext 移到 actions.py |
 | rules/conditions.py:79,108,134 | 条件支持 `:ignore_case` |
-| rules/actions.py:220 | recheck 后仍未完成的种子防重复校验 |
+| ~~rules/actions.py:220~~ | recheck 失败冷却(已实现 2026-09-05: 连续失败3次当日冷却, recheck_fails) |
 | rules/actions.py:254 | `_find_reference` 优化为提前返回 |
 | rules/actions.py:292 | 重新设计 custom 校验流程 |
-| rules/actions.py:546 | reannounce 添加频率限制 |
+| ~~rules/actions.py:546~~ | reannounce 限频(已实现 2026-09-05: 运行时最小间隔10M + 加载告警) |
 | episodes.py:112 | 集数标签格式自定义 |
 
 ## 近期演进脉络 (git log 提炼, 有助于理解"为什么现在是这样")
