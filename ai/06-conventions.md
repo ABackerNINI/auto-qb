@@ -26,7 +26,22 @@
 - 全中文注释; docstring 常包含**设计动机/决策链/风险说明** (如 CheckAction 的 docstring 写完整决策链 0-4 步) — 这是本项目最重要的注释传统: 解释"为什么这样设计", 而非复述代码。
 - 模块级 docstring 声明职责与依赖 (mixin 文件头声明依赖宿主的实例属性)。
 - 关键不变量写在 docstring (如 "先登记成功再让位(顺序保证: 失败绝不 defer, 杜绝原任务永久让位)")。
-- 日志: 中文 + `{torrent.log_repr}` (格式 `'{name}' [{tracker_name}] ({hash前8位})`), f-string, 级别: DEBUG=每轮常规检查, INFO=动作/状态变化, WARNING=风险/异常回退, ERROR=任务异常 (带 `exc_info=True`)。
+## 日志规范 (2026-09-05 统一)
+
+**骨架: `[上下文] {主体} | 事件: 详情`** —— 上下文与事件之间 ` | `,详情不含种子标识 (上下文已含):
+
+| 类别 | 模板 | 使用处 |
+|------|------|--------|
+| 规则动作结果 | `规则[{name}] {log_repr} \| 动作[{action}] 成功/失败/等待异步/跳过: {详情}` | Rule.process 单通道输出 (动作不打自己的 INFO) |
+| 内置维护 | `维护 {log_repr} \| {事件}: {详情}` | TagsMixin/tracker 限速 (_add_tags 等) |
+| 任务调度 | `任务[{task.log_tag}] \| {事件}: {详情}` | qbmanager/taskqueue/rule_engine (log_tag = `kind:name[#hash8]`) |
+| 分组事件 | `辅种组({n}个) \| {事件}: {详情}` | GroupingMixin |
+| 系统级 | `{事件}: {详情}` (无前缀) | 启动/连接/曲线/导出/全局标签清理 |
+
+- **种子标识唯一入口** = `torrent.log_repr` (`'name' [站点] (hash8)`); 仅种子已从客户端消失时退化为 `hash[:8]`
+- **ActionResult.message = 纯详情** (不含动词与 log_repr, 例: `['HHan', 'seed-3D']`), 动作名由管线日志统一携带
+- **等级**: DEBUG=例行检查 + skipped 动作; INFO=动作成功/状态变化; WARNING=回退/风险/数据异常; ERROR=未预期异常 (`exc_info=True` 保留, 运行期 bug 需要堆栈; 配置错误走 ConfigError 无堆栈)
+- **全中文**; 默认 `log.format` 含 `%(name)s` (来源模块): `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 
 ## 格式化 (yapf, .style.yapf)
 

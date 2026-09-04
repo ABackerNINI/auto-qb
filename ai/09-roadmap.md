@@ -17,7 +17,7 @@
 - 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi 门面写后同步
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
-- 测试: 597 passed, 分支覆盖 95%
+- 测试: 598 passed, 分支覆盖 95%
 
 ## 规划中 (🚧, 尚未实现)
 
