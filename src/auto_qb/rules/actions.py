@@ -410,7 +410,14 @@ class CheckAction(BaseAction):
         - 重加失败时 .torrent 落盘备份并记录元数据, 提示手动恢复
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
         """
-        # 0. 同日去重(安全兜底, 与 execute_once 无关)
+        # 0. 部分下载禁止跳检: 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的
+        #    零块, is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据, PT 红线)。
+        #    仅 progress==0(全新辅种, 数据完整)可跳检; full-checking 对部分下载安全, 不设限。
+        progress = ctx.torrent.progress or 0.0
+        if 0.0 < progress < 1.0:
+            return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
+
+        # 0.5 同日去重(安全兜底, 与 execute_once 无关)
         record = ctx.manager.get_exec_record(ctx.rule_name, ctx.hash)
         if record and record.get("date") == date.today().isoformat():
             return ActionResult.skip("今日已跳检, 跳过")
@@ -541,13 +548,23 @@ class MoveToAction(BaseAction):
 
 @register_action
 class ReannounceAction(BaseAction):
-    """强制汇报 tracker(注意: 应配合 execute_once/daily 使用, 避免高频announce)"""
+    """强制汇报 tracker(高风险): 运行时最小间隔保护, 独立于规则 execute_once/cooldown 兜底
+
+    高频 announce 会被 tracker 判定异常封号, 因此动作自身强制限频, 不依赖用户配置去重。
+    """
     name = "reannounce"
+    MIN_INTERVAL = 600.0  # 同一种子两次 reannounce 的最小间隔(秒)
 
     def execute(self, ctx: RuleContext):
-        # TODO: 添加限制
+        if ctx.torrent.state_enum.is_stopped:
+            return ActionResult.skip("种子已暂停, 无需汇报")
+        history = ctx.manager.state.setdefault("reannounce_ts", {})
+        now = time.time()
+        if now - history.get(ctx.hash, 0) < self.MIN_INTERVAL:
+            return ActionResult.skip(f"距上次 reannounce 不足 {int(self.MIN_INTERVAL)}s")
         if not ctx.dry_run:
             ctx.api.torrents_reannounce(torrent_hashes=ctx.hash)
+            history[ctx.hash] = now
         return ActionResult.ok("强制汇报tracker")
 
 

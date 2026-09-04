@@ -37,6 +37,7 @@
 - test_checking_skip_guard_file_size_mismatch: 跳检前置文件大小不符
 - test_checking_skip_guard_add_fail_backup: 重加标签失败回退
 - test_checking_skip_dedup_same_day: 同日跳检去重
+- test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_dry_run: dry-run 不发送请求
 - test_checking_full_checking_pending: 全检任务 pending 保留
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
@@ -838,6 +839,19 @@ def test_checking_skip_guard_add_fail_backup():
         assert os.path.exists(backup["path"]), f"备份文件应存在: {backup}"
         assert ("export", "HASH123") in client.calls, "应先导出"
         assert ("delete", False) in client.calls, "应先删除种子"
+
+
+def test_checking_skip_partial_download_forbidden():
+    """测试: 部分下载(0<progress<1)禁止跳检 —— 预分配零块会被当作有效数据上传(垃圾数据)"""
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "pausedDL"}
+    t = make_target(progress=0.4)
+    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert handled, "拒检以 fail 返回(fail 视为已处理), 非 skip"
+    assert client.calls == [], f"不应发生导出/删除/重加: {client.calls}"
 
 
 def test_checking_skip_dedup_same_day():

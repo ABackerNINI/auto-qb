@@ -155,17 +155,31 @@ def test_move_to():
 
 
 def test_reannounce():
-    """强制汇报 tracker"""
+    """强制汇报 tracker: 最小间隔限频 + 暂停种子跳过 + dry-run 不调用不记录时间戳"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
-        ctx = make_ctx(mgr, FakeTorrent(), client)
+        tor = FakeTorrent()
+        ctx = make_ctx(mgr, tor, client)
         assert ReannounceAction("").execute(ctx).is_ok
         assert ("reannounce", None) in client.calls
-        # dry-run
-        ctx2 = make_ctx(mgr, FakeTorrent(), client, dry_run=True)
-        assert ReannounceAction("").execute(ctx2).is_ok
+        # 最小间隔内重复: 跳过(运行时限频, 独立于 execute_once)
+        assert ReannounceAction("").execute(ctx).is_skipped
         assert client.calls.count(("reannounce", None)) == 1
+        # 超过最小间隔: 再次执行
+        mgr.state["reannounce_ts"][tor.hash] -= ReannounceAction.MIN_INTERVAL + 1
+        assert ReannounceAction("").execute(ctx).is_ok
+        assert client.calls.count(("reannounce", None)) == 2
+        # 暂停种子: 跳过(无需汇报)
+        paused = FakeTorrent(hash="H2", state="pausedUP")
+        ctx2 = make_ctx(mgr, paused, client)
+        assert ReannounceAction("").execute(ctx2).is_skipped
+        assert client.calls.count(("reannounce", None)) == 2
+        # dry-run: 不调用、不记录时间戳
+        ctx3 = make_ctx(mgr, FakeTorrent(hash="H3"), client, dry_run=True)
+        assert ReannounceAction("").execute(ctx3).is_ok
+        assert client.calls.count(("reannounce", None)) == 2
+        assert "H3" not in mgr.state.get("reannounce_ts", {})
 
 
 def test_speed_limit_actions():
