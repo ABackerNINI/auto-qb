@@ -17,7 +17,7 @@
 | `cli.py` | ~85 | argparse 入口 | `--export-yaml/-e`, `--only-missing`, `--dry-run/-n`, `--export-torrents_info`; 导出模式不进主循环; **提前捕获 `ConfigError`**(stderr 输出 `配置错误: ...` 无堆栈, 退出码 1; 其它异常照常抛出); 入口 `sys.exit(main())` 使退出码生效 |
 | `config/` | 包 | 配置: 按职责分层(模型/校验/解析), `__init__.py` 重导出全部公共名称 —— 调用方 `from auto_qb.config import X` 不变 |
 | `config/errors.py` | 9 | `ConfigError`(配置错误统一异常, ValueError 子类: 文件读取/YAML 解析/校验失败/启动期规则 spec 错误) |
-| `config/models.py` | 173 | 常量 `DEFAULT_*`/`UNLIMITED_SPEED` + 全部数据类 `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint` (仅声明, 不含逻辑) |
+| `config/models.py` | ~175 | 数据类字段默认 = **唯一默认值来源**(解析后空间, `Config()` 即全默认实例); `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint` (仅声明, 不含逻辑); 仅 2 个非字段默认常量: `DEFAULT_CONFIG_FILE`(cli)/`UNLIMITED_SPEED`(exporter) |
 | `config/validation.py` | 459 | fail-fast 全量校验: `validate_config` 入口 + 各段校验器(`_validate_log/qbittorrent/global_hr/grouping/tag_lists/tracker_hr/trackers/rules/plugin_entry` + 曲线) + 通用助手(`_strip_none`/`_try*`/`_check_*`) + `KNOWN_*`/`RULE_*` 常量; 规则名称经 registry 延迟导入校验 |
 | `config/loaders.py` | 270 | 解析加载(先验证再解析, 假定配置正确零检查): `load_config` 入口 + `load_logging/qbittorrent/grouping/tracker/global_hr/tracker_hr/global_speed_limit_curve` + `_parse_curve_points` + `_expand_tracker_tags_refs` |
 | `qbmanager.py` | 314 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |

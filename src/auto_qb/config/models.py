@@ -1,51 +1,31 @@
-"""配置数据模型: 默认常量 + 全部数据类(仅声明, 不含校验/解析逻辑)"""
+"""配置数据模型: 数据类字段默认值 = 唯一默认值来源(解析后空间, 与字段类型注解一致)
+
+仅 errors.py 外的两个常量为非字段默认用途:
+- DEFAULT_CONFIG_FILE: CLI 配置文件参数缺省(cli.argparse)
+- UNLIMITED_SPEED: exporter 生成 YAML 模板的原始串占位(输出格式)
+"""
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-DEFAULT_MAIN_TICK = "2s"
-DEFAULT_MAX_TASKS_PER_TICK = 20
-
 DEFAULT_CONFIG_FILE = "config.yml"
-DEFAULT_STATE_FILE = "auto-qb-state.json"
-
-DEFAULT_INTERVAL = "60s"
-DEFAULT_REMOVE_SIMILAR_TAGS = False
-
-# 自动添加集数标签: 种子添加时, 若名称不含集数标记则从文件列表解析集数(如 01.mkv~05.mkv -> E1-5)打标签
-DEFAULT_ADD_EPISODE_TAGS = False
-
-# 全局 HR 默认输出设置(站点 hr 段未设置时使用)
-DEFAULT_HR_OUTPUT = {
-    "add_tag": "",
-    "add_category": "!!HR${required_seeding_time}!!",
-    "overwrite_category": False,
-    "add_tag_for_satisfied": "",
-    "add_category_for_satisfied": "--HR${required_seeding_time}--",
-    "overwrite_category_for_satisfied": False,
-}
-
-# 种子分组管理(辅种管理): 将指向相同文件列表的种子归为一组, 统一检查
-DEFAULT_GROUPING_ENABLED = False
-DEFAULT_GROUPING_INTERVAL = "5M"  # 分组检查间隔(拉全量文件列表开销大, 默认降频)
-DEFAULT_GROUPING_MISSING_TAG = "MISSING"
-
 UNLIMITED_SPEED = "0KiB/s"
 
 
 @dataclass
 class LoggingConfig:
-    level: str | int = "INFO"
+    level: str | int = logging.INFO  # 等级名或数值; YAML 原始缺省 "INFO"
     file: str = ""
-    max_bytes: str | int = "10MiB"
+    max_bytes: int = 10 * 1024**2  # 字节; YAML 原始缺省 "10MiB"
     format: str = "%(asctime)s [%(levelname)s] %(message)s"
 
 
 @dataclass
 class QbittorrentConfig:
-    host: str
-    port: int
-    username: str
-    password: str
+    host: str = "127.0.0.1"
+    port: int = 8080
+    username: str = ""
+    password: str = ""
 
     @property
     def base_url(self) -> str:
@@ -84,10 +64,10 @@ class HRRule:
 class TrackerConfig:
     name: str
     domains: List[str]
-    tags: List[str]
-    remove_tags: List[str]
-    upload_speed_limit: Optional[int]  # 字节/秒
-    download_speed_limit: Optional[int]  # 字节/秒
+    tags: List[str] = field(default_factory=list)
+    remove_tags: List[str] = field(default_factory=list)  # 删除标签格式(支持正则)
+    upload_speed_limit: int = 0  # 字节/秒, 0 = 不限速; YAML 原始缺省 "0KiB/s"
+    download_speed_limit: int = 0  # 字节/秒, 0 = 不限速
     hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
     rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
     remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
@@ -144,30 +124,32 @@ class GlobalSpeedLimitCurve:
 
 @dataclass
 class Config:
-    main_tick: float
-    max_tasks_per_tick: int
+    """配置聚合根: 全字段默认(= Config() 即全默认实例), 由 load_config 按 YAML 覆盖构造"""
 
-    interval: float  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
+    main_tick: float = 2.0  # 主循环间隔(秒); YAML 原始缺省 "2s"
+    max_tasks_per_tick: int = 20
 
-    state_file: str  # 状态持久化文件(规则执行历史/上传量快照)
+    interval: float = 60.0  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
 
-    logging: LoggingConfig
+    state_file: str = "auto-qb-state.json"  # 状态持久化文件(规则执行历史/上传量快照)
 
-    rules_config: dict  # 规则集原始配置: {规则集名: {规则名: spec}}, 来自 config 下 *_rules 段
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
-    remove_similar_tags: bool
-    add_episode_tags: bool  # 种子添加时自动添加集数标签(如 E1-5): 名称不含集数时从文件列表解析
+    rules_config: dict = field(default_factory=dict)  # 规则集原始配置: {规则集名: {规则名: spec}}
 
-    hr: HRRule  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底; 规则字段为空)
+    remove_similar_tags: bool = False
+    add_episode_tags: bool = False  # 种子添加时自动添加集数标签: 名称不含集数时从文件列表解析
+
+    hr: HRRule = field(default_factory=HRRule)  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底)
 
     # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
-    delete_tags: List[str]
-    delete_tags_if_has_no_torrents: List[str]
+    delete_tags: List[str] = field(default_factory=list)
+    delete_tags_if_has_no_torrents: List[str] = field(default_factory=list)
 
-    grouping: GroupingConfig  # 种子分组管理(辅种管理)
+    grouping: GroupingConfig = field(default_factory=GroupingConfig)  # 种子分组管理(辅种管理)
 
-    qbittorrent: QbittorrentConfig
-    trackers: Dict[str, TrackerConfig]
+    qbittorrent: QbittorrentConfig = field(default_factory=QbittorrentConfig)
+    trackers: Dict[str, TrackerConfig] = field(default_factory=dict)
 
     # 全局限速曲线(Traffic Monitor): 读取 dat 流量, 按多条 period 曲线聚合, 自动设置 qB 全局速度限制
     global_speed_limit_curve: Optional[GlobalSpeedLimitCurve] = None  # None = 未启用

@@ -22,17 +22,8 @@ from helpers import FakeClient, FakeTorrent, make_manager
 
 
 def _conf(name, domains):
-    return TrackerConfig(
-        name=name,
-        domains=domains,
-        tags=[],
-        remove_tags=[],
-        upload_speed_limit=None,
-        download_speed_limit=None,
-        hr=None,
-        rules=[],
-        remove_similar_tags=False,
-    )
+    # 其余字段使用 TrackerConfig 字段默认(tags=[] / 限速 0=不限速 / rules=[])
+    return TrackerConfig(name=name, domains=domains)
 
 
 def test_match_tracker_domain():

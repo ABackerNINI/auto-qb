@@ -23,6 +23,7 @@
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
 - test_validate_empty_file: 空文件/非字典根节点报错
 - test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
+- test_models_default_sources: 默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量)
 """
 import logging
 import os
@@ -31,7 +32,15 @@ import tempfile
 import pytest
 import yaml
 
-from auto_qb.config import ConfigError, HRRule, QbittorrentConfig, load_config, load_tracker_hr
+from auto_qb.config import (
+    Config,
+    ConfigError,
+    HRRule,
+    QbittorrentConfig,
+    TrackerConfig,
+    load_config,
+    load_tracker_hr,
+)
 
 
 def _write_config(td, **extra_cfg):
@@ -431,3 +440,18 @@ def test_config_error_wraps_io_and_yaml():
         with pytest.raises(ConfigError, match="YAML 解析失败"):
             load_config(_write_raw(td, "config: [unclosed"))
         assert issubclass(ConfigError, ValueError)  # 兼容既有 except ValueError 调用方
+
+
+def test_models_default_sources():
+    """默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量), loader 经 _get 引用"""
+    qb = QbittorrentConfig()
+    assert (qb.host, qb.port, qb.username, qb.password) == ("127.0.0.1", 8080, "", "")
+    t = TrackerConfig(name="x", domains=["a.com"])
+    assert t.tags == [] and t.remove_tags == [] and t.rules == []
+    assert t.upload_speed_limit == 0 and t.download_speed_limit == 0  # 0 = 不限速
+    assert t.remove_similar_tags is False and t.hr is None
+    c = Config()
+    assert c.main_tick == 2.0 and c.interval == 60.0
+    assert c.max_tasks_per_tick == 20 and c.state_file == "auto-qb-state.json"
+    assert c.remove_similar_tags is False and c.add_episode_tags is False
+    assert c.trackers == {} and c.global_speed_limit_curve is None

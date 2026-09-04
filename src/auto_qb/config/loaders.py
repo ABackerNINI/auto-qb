@@ -1,4 +1,8 @@
-"""配置解析加载: load_config 入口 + 各段 load_* 函数(仅转换, 合法性由 validation.validate_config 保证)"""
+"""配置解析加载: load_config 入口 + 各段 load_* 函数(仅转换, 合法性由 validation.validate_config 保证)
+
+取值统一走 _get: 键存在 → parse(原始串); 键缺失 → dataclass 字段默认(解析后空间, 不再 parse),
+默认值单一来源 = models 中的 dataclass 字段默认。
+"""
 import logging
 from typing import List, Optional
 
@@ -8,14 +12,6 @@ from .. import curves
 from ..utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .errors import ConfigError
 from .models import (
-    DEFAULT_ADD_EPISODE_TAGS,
-    DEFAULT_HR_OUTPUT,
-    DEFAULT_INTERVAL,
-    DEFAULT_MAIN_TICK,
-    DEFAULT_MAX_TASKS_PER_TICK,
-    DEFAULT_REMOVE_SIMILAR_TAGS,
-    DEFAULT_STATE_FILE,
-    UNLIMITED_SPEED,
     Config,
     CurvePoint,
     GlobalSpeedLimitCurve,
@@ -26,88 +22,102 @@ from .models import (
     QbittorrentConfig,
     TrackerConfig,
 )
-from .validation import validate_config, _strip_none
+from .validation import _strip_none, validate_config
+
+
+def _get(spec: dict, key: str, default, parse=None):
+    """段内键读取统一入口: 键存在 → parse(原始串); 键缺失 → 字段默认(解析后空间, 不再 parse)"""
+    if key not in spec:
+        return default
+    value = spec[key]
+    return parse(value) if parse else value
+
+
+def _parse_log_level(value: str) -> int:
+    """日志等级名 -> logging 数值等级(合法性由 validate_config 保证)"""
+    return getattr(logging, str(value).upper())
 
 
 def load_logging_config(spec: dict) -> LoggingConfig:
-    """加载日志配置(仅转换, 合法性由 validate_config 保证)"""
-    default = LoggingConfig()
+    d = LoggingConfig()
     return LoggingConfig(
-        level=getattr(logging, str(spec.get("level", default.level)).upper()),
-        file=spec.get("file", default.file),
-        max_bytes=parse_fsize(spec.get("max_bytes", default.max_bytes)),
-        format=spec.get("format", default.format),
+        level=_get(spec, "level", d.level, _parse_log_level),
+        file=_get(spec, "file", d.file),
+        max_bytes=_get(spec, "max_bytes", d.max_bytes, parse_fsize),
+        format=_get(spec, "format", d.format),
     )
 
 
 def load_qbittorrent_config(spec: dict) -> QbittorrentConfig:
+    d = QbittorrentConfig()
     return QbittorrentConfig(
-        host=spec.get('host', '127.0.0.1'),
-        port=int(spec.get('port', 8080)),
-        username=spec.get('username', ''),
-        password=spec.get('password', ''),
+        host=_get(spec, "host", d.host),
+        port=_get(spec, "port", d.port, int),
+        username=_get(spec, "username", d.username),
+        password=_get(spec, "password", d.password),
     )
 
 
 def load_grouping_config(spec: dict) -> GroupingConfig:
-    default = GroupingConfig()
+    d = GroupingConfig()
     return GroupingConfig(
-        enabled=parse_bool(spec.get("enabled", default.enabled)),
-        check_missing_files=parse_bool(spec.get("check_missing_files", default.check_missing_files)),
-        missing_tag=spec.get("missing_tag", default.missing_tag),
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        check_missing_files=_get(spec, "check_missing_files", d.check_missing_files, parse_bool),
+        missing_tag=_get(spec, "missing_tag", d.missing_tag),
     )
 
 
 def load_tracker_config(name: str, spec: dict, hr: HRRule, global_remove_similar: bool) -> TrackerConfig:
+    d = TrackerConfig(name=name, domains=spec["domains"])
     return TrackerConfig(
         name=name,
         domains=spec["domains"],
-        tags=spec.get("tags", []),
-        remove_tags=spec.get("remove_tags", []),
-        upload_speed_limit=parse_speed(spec.get("upload_speed_limit", UNLIMITED_SPEED)),
-        download_speed_limit=parse_speed(spec.get("download_speed_limit", UNLIMITED_SPEED)),
+        tags=_get(spec, "tags", d.tags),
+        remove_tags=_get(spec, "remove_tags", d.remove_tags),
+        upload_speed_limit=_get(spec, "upload_speed_limit", d.upload_speed_limit, parse_speed),
+        download_speed_limit=_get(spec, "download_speed_limit", d.download_speed_limit, parse_speed),
         hr=hr,
-        rules=spec.get("rules", []) or [],
-        remove_similar_tags=parse_bool(spec.get("remove_similar_tags", global_remove_similar)),
+        rules=_get(spec, "rules", d.rules),
+        # 站点未设置时回退全局值(运行参数, 非字段默认)
+        remove_similar_tags=_get(spec, "remove_similar_tags", global_remove_similar, parse_bool),
     )
 
 
 # TODO: optimize
 def load_global_hr(spec: dict) -> HRRule:
+    d = HRRule()
     return HRRule(
-        add_tag=spec.get("add_tag", DEFAULT_HR_OUTPUT["add_tag"]),
-        add_category=spec.get("add_category", DEFAULT_HR_OUTPUT["add_category"]),
-        overwrite_category=parse_bool(spec.get("overwrite_category", DEFAULT_HR_OUTPUT["overwrite_category"])),
-        add_tag_for_satisfied=spec.get("add_tag_for_satisfied", DEFAULT_HR_OUTPUT["add_tag_for_satisfied"]),
-        add_category_for_satisfied=spec.get(
-            "add_category_for_satisfied", DEFAULT_HR_OUTPUT["add_category_for_satisfied"]
-        ),
-        overwrite_category_for_satisfied=parse_bool(
-            spec.get("overwrite_category_for_satisfied", DEFAULT_HR_OUTPUT["overwrite_category_for_satisfied"])
+        add_tag=_get(spec, "add_tag", d.add_tag),
+        add_category=_get(spec, "add_category", d.add_category),
+        overwrite_category=_get(spec, "overwrite_category", d.overwrite_category, parse_bool),
+        add_tag_for_satisfied=_get(spec, "add_tag_for_satisfied", d.add_tag_for_satisfied),
+        add_category_for_satisfied=_get(spec, "add_category_for_satisfied", d.add_category_for_satisfied),
+        overwrite_category_for_satisfied=_get(
+            spec, "overwrite_category_for_satisfied", d.overwrite_category_for_satisfied, parse_bool
         ),
     )
 
 
 # TODO: optimize
 def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
-    """解析站点 hr 配置段, 与全局 hr 默认输出设置合并(站点字段优先, 全局兜底)
+    """解析站点 hr 配置段, 与全局 hr 默认输出设置合并(站点字段优先, 全局兜底, 字段默认兜底全局)
 
     站点段: required_seeding_time(必填) / required_share_ratio / extra_seeding_time /
             condition(80% 或 10MiB) + 可覆盖全局的输出字段; 合法性由 validate_config 保证。
     """
-    # 原始时间字符串用于变量替换: "3D" / "12H" / "1.5D"
-    raw = str(spec["required_seeding_time"]).strip().upper()
+    d = HRRule()
 
-    # 输出设置: 站点显式设置优先, 否则用全局默认
+    # 输出设置回退链: 站点 spec -> 全局 hr 段 -> HRRule 字段默认
     def out(key: str):
-        return spec.get(key, global_hr.get(key, DEFAULT_HR_OUTPUT.get(key, "")))
+        return spec.get(key, global_hr.get(key, getattr(d, key)))
 
     def out_bool(key: str):
-        return parse_bool(spec.get(key, global_hr.get(key, DEFAULT_HR_OUTPUT.get(key, False))))
+        return parse_bool(spec.get(key, global_hr.get(key, getattr(d, key))))
 
     return HRRule(
-        required_seeding_time=parse_time(raw),
-        required_seeding_time_raw=raw,
+        # 原始时间字符串用于变量替换: "3D" / "12H" / "1.5D"
+        required_seeding_time=parse_time(spec["required_seeding_time"]),
+        required_seeding_time_raw=str(spec["required_seeding_time"]).strip().upper(),
         required_share_ratio=float(spec.get("required_share_ratio", 0) or 0),
         extra_seeding_time=parse_time(str(spec.get("extra_seeding_time", "0S") or "0S")),
         condition=parse_hr_condition(spec.get("condition", "80%")),
@@ -206,41 +216,40 @@ def load_config(config_path: str) -> Config:
         raise ConfigError(f"配置校验失败({config_path}), 共 {len(errors)} 处:\n{detail}")
 
     cfg = data.get("config") or {}
-
-    # qbittorrent 配置
-    qb_config = load_qbittorrent_config(cfg.get("qbittorrent", {}))
+    d = Config()  # 全字段默认实例(默认值唯一来源: models 数据类字段)
 
     # 规则集: config 段下所有以 "_rules" 结尾的键
     rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules")}
 
-    global_hr = cfg.get("hr") or {}
-    global_remove_similar = parse_bool(cfg.get("remove_similar_tags", DEFAULT_REMOVE_SIMILAR_TAGS))
+    global_remove_similar = _get(cfg, "remove_similar_tags", d.remove_similar_tags, parse_bool)
 
-    # Trackers 配置(校验已保证 trackers/hr 为字典或未配置)
+    # Trackers 配置(校验已保证 trackers 为字典或未配置)
     trackers = {}
     for name, tdata in cfg.get("trackers", {}).items():
-        hr = load_tracker_hr(tdata["hr"], global_hr) if "hr" in tdata else None
+        hr = load_tracker_hr(tdata["hr"], cfg.get("hr") or {}) if "hr" in tdata else None
         trackers[name] = load_tracker_config(name, tdata, hr, global_remove_similar)
 
     # 全局标签清理格式: @tracker_tags 引用展开为所有 tracker 配置的 tags 并集
     tracker_tags = sorted({t for tc in trackers.values() for t in tc.tags})
-    delete_tags = _expand_tracker_tags_refs(cfg.get("delete_tags", []), tracker_tags)
-    delete_tags_if_has_no_torrents = _expand_tracker_tags_refs(cfg.get("delete_tags_if_has_no_torrents", []), tracker_tags)
+    delete_tags = _expand_tracker_tags_refs(_get(cfg, "delete_tags", d.delete_tags), tracker_tags)
+    delete_tags_if_has_no_torrents = _expand_tracker_tags_refs(
+        _get(cfg, "delete_tags_if_has_no_torrents", d.delete_tags_if_has_no_torrents), tracker_tags
+    )
 
     return Config(
-        main_tick=parse_time(cfg.get("main_tick", DEFAULT_MAIN_TICK)),
-        max_tasks_per_tick=int(cfg.get("max_tasks_per_tick", DEFAULT_MAX_TASKS_PER_TICK)),
-        interval=parse_time(cfg.get("interval", DEFAULT_INTERVAL)),
-        state_file=cfg.get("state_file", DEFAULT_STATE_FILE),
-        logging=load_logging_config(cfg.get("log", {})),
+        main_tick=_get(cfg, "main_tick", d.main_tick, parse_time),
+        max_tasks_per_tick=_get(cfg, "max_tasks_per_tick", d.max_tasks_per_tick, int),
+        interval=_get(cfg, "interval", d.interval, parse_time),
+        state_file=_get(cfg, "state_file", d.state_file),
+        logging=load_logging_config(_get(cfg, "log", {})),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
-        add_episode_tags=parse_bool(cfg.get("add_episode_tags", DEFAULT_ADD_EPISODE_TAGS)),
-        hr=load_global_hr(global_hr),
+        add_episode_tags=_get(cfg, "add_episode_tags", d.add_episode_tags, parse_bool),
+        hr=load_global_hr(_get(cfg, "hr", {})),
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
-        grouping=load_grouping_config(cfg.get("grouping", {})),
-        qbittorrent=qb_config,
+        grouping=load_grouping_config(_get(cfg, "grouping", {})),
+        qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
     )

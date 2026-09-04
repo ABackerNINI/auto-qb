@@ -27,6 +27,8 @@
 
 **留空语义**: `yaml.BaseLoader` 把 `key:` 留空解析为空串 `''`(不是 None); `_strip_none` 将 None/空串统一视为"未配置", 走默认值(默认值本为空串的键如 hr.add_tag 行为不变)。因此"有默认值的配置允许为空, 没有的必须有"。
 
+**默认值单一来源 (2026-09-05)**: 全部默认值只定义在 `models.py` 的 dataclass 字段上 (解析后空间, 与字段类型注解一致, `Config()` 即全默认实例)。`loaders.py` 统一用 `_get(spec, key, d.field, parse)` 取值: 键存在 → parse(原始串); 键缺失 → 字段默认(不再 parse)。models 顶部仅存 2 个**非字段默认**常量: `DEFAULT_CONFIG_FILE`(cli argparse 缺省) 与 `UNLIMITED_SPEED`(exporter 生成模板的原始串占位)。
+
 **先验证再解析**: 全部正确性检查集中在 `validate_config`(含 `_validate_global_speed_limit_curve`); 通过后各 `load_*` 函数仅做转换、不含任何检查。**config 之后的全部代码同样假定配置正确**: registry 工厂直接按名索引(未知名 = KeyError, 由校验兜底)、`config.global_speed_limit_curve`/`rules_config`/`tracker.rules` 等属性直接访问(无 getattr 兜底)、exporter 重读原始文件时复用 `_strip_none`。注意区分: 功能开关(`grouping.enabled`/`check_missing_files`/`hr` 等)是语义判断不是正确性检查, 正常保留; `rules/actions.py` 的 `CheckAction._validate` 在 Rule 构造时深度校验 checking 动作 spec(带规则名上下文), 属规则层校验。
 
 **CLI 错误输出**: `cli.main` 提前捕获 `ConfigError`(且仅此一种 —— 非配置类 ValueError/OSError 属程序 bug, 照常抛出保留堆栈), 仅向 stderr 输出 `配置错误: <信息>`(无堆栈/exec_info), 退出码 1; 入口(auto-qb.py / __main__.py)用 `sys.exit(main())` 使退出码生效。
