@@ -48,10 +48,11 @@ class TrackerMixin:
             current_limit = torrent.dl_limit
             direction = "下载"
 
+        if current_limit == value:
+            return
+
         # 不覆盖单数值
         if (current_limit / 1024) % 2 == 1:
-            return
-        if current_limit == value:
             return
 
         if not dry_run:
