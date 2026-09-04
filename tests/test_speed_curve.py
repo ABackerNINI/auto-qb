@@ -74,8 +74,8 @@ def _pc(period: str, up=None, down=None) -> PeriodCurve:
     return PeriodCurve(period=period, upload_points=up, download_points=down)
 
 
-def _gslc(bat_path, *period_curves) -> GlobalSpeedLimitCurve:
-    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=list(period_curves))
+def _gslc(bat_path, *period_curves, interval=None) -> GlobalSpeedLimitCurve:
+    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=list(period_curves), interval=interval)
 
 
 def _dat_text(rows) -> str:
@@ -132,6 +132,7 @@ def _load(tmp_path, gslc_spec):
 def _valid_spec() -> dict:
     """合法完整样例(与 想法.md 样式一致, 上/下载曲线各带 period)"""
     return {
+        "interval": "10M",
         "traffic_source": [{
             "traffic_monitor": {
                 "bat_path": r"D:\Programs\TrafficMonitor\history_traffic.dat"
@@ -193,6 +194,7 @@ def test_speed_curve_config_parses_sample(tmp_path):
     g = cfg.global_speed_limit_curve
     assert g is not None
     assert g.bat_path == r"D:\Programs\TrafficMonitor\history_traffic.dat"
+    assert g.interval == 600.0  # interval: 10M -> 600 秒
     assert len(g.curves) == 2
     day, week = g.curves
     assert day.period == "day"  # 1D -> day
@@ -216,6 +218,19 @@ def test_speed_curve_config_rejects_bad_section(tmp_path):
     spec["extra"] = 1
     with pytest.raises(ValueError):
         _load(tmp_path, spec)
+
+
+def test_speed_curve_config_interval_optional_and_validated(tmp_path):
+    """interval 缺省 -> None(回退主 interval); 非法/非正 -> ValueError"""
+    spec = copy.deepcopy(_valid_spec())
+    spec.pop("interval")
+    assert _load(tmp_path, spec).global_speed_limit_curve.interval is None
+
+    for bad in ("abc", "0S", "-5M", 0):
+        spec = copy.deepcopy(_valid_spec())
+        spec["interval"] = bad
+        with pytest.raises(ValueError):
+            _load(tmp_path, spec)
 
 
 def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
@@ -466,12 +481,23 @@ def test_merge_direction_and_bytes_to_kib():
 
 # ---------- 集成: 任务注册 / handler ----------
 def test_speed_curve_global_task_registered(tmp_path):
-    """配置存在 -> _create_global_tasks 创建 speed_limit_curve 任务"""
+    """配置存在 -> _create_global_tasks 创建 speed_limit_curve 任务(interval 缺省回退主 interval) """
     gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)))
     mgr, _ = _make_mgr(tmp_path, gslc)
     mgr._create_global_tasks()
     due = mgr.task_queue.due(max=100)
     assert [t.name for t in due] == ["speed_limit_curve"]
+    assert due[0].interval == mgr.config.interval  # FakeConfig.interval = 60
+
+
+def test_speed_curve_global_task_uses_own_interval(tmp_path):
+    """曲线配置 interval -> 任务使用专属间隔, 不跟随主 interval"""
+    gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)), interval=600)
+    mgr, _ = _make_mgr(tmp_path, gslc)
+    mgr._create_global_tasks()
+    due = mgr.task_queue.due(max=100)
+    assert [t.name for t in due] == ["speed_limit_curve"]
+    assert due[0].interval == 600
 
 
 def test_speed_curve_global_task_not_registered(tmp_path):

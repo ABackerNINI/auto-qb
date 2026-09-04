@@ -171,12 +171,13 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 )
             )
         # 全局限速曲线(Traffic Monitor): 读 dat -> 聚合 -> 查档 -> 写 qB 全局速度限制
-        if getattr(self.config, "global_speed_limit_curve", None) is not None:
+        gslc = getattr(self.config, "global_speed_limit_curve", None)
+        if gslc is not None:
             tasks.append(
                 Task(
                     "internal",
                     "speed_limit_curve",
-                    interval=self.config.interval,
+                    interval=getattr(gslc, "interval", None) or self.config.interval,
                     handler=self._handle_speed_limit_curve,
                 )
             )

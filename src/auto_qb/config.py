@@ -140,9 +140,11 @@ class GlobalSpeedLimitCurve:
 
     bat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
     curves: 多条 period 曲线(同方向多条命中时取最严限速, 见 curves.merge_direction)
+    interval: 曲线任务执行间隔(秒), 对应配置 interval: 10M; None = 未指定, 回退主 interval
     """
     bat_path: str
     curves: List[PeriodCurve]
+    interval: Optional[float] = None  # 秒; None = 使用 config.interval
 
 
 @dataclass
@@ -181,6 +183,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
 
     fail-fast: 结构/数值/键全部在加载时校验, 任何非法抛 ValueError。
     配置样式:
+        interval: 10M              # 曲线任务执行间隔(可选, 缺省用主 interval)
         traffic_source:
             - traffic_monitor:
                 bat_path: ".../history_traffic.dat"
@@ -197,9 +200,16 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
         return None
     if not isinstance(spec, dict):
         raise ValueError("global_speed_limit_curve 必须是字典")
-    unknown = set(spec) - {"traffic_source", "curves"}
+    unknown = set(spec) - {"traffic_source", "curves", "interval"}
     if unknown:
         raise ValueError(f"global_speed_limit_curve 未知键: {sorted(unknown)}")
+
+    # interval: 曲线任务执行间隔(可选; 缺省 None = 回退主 interval)
+    interval: Optional[float] = None
+    if spec.get("interval") is not None:
+        interval = parse_time(str(spec["interval"]))
+        if interval <= 0:
+            raise ValueError(f"global_speed_limit_curve.interval 必须为正时间: {spec['interval']}")
 
     # traffic_source: 数据源列表, 当前仅支持单个 traffic_monitor
     raw_sources = spec.get("traffic_source")
@@ -256,7 +266,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
             if "download_curve" in item else None
         )
         period_curves.append(PeriodCurve(period=period, upload_points=upload_points, download_points=download_points))
-    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=period_curves)
+    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=period_curves, interval=interval)
 
 
 def _parse_curve_points(raw_list, direction_key: str, where: str) -> List[CurvePoint]:
