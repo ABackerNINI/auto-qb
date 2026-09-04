@@ -460,7 +460,7 @@ config:
 ```
 src/auto_qb/
 ├── cli.py             # 命令行入口(argparse)
-├── config.py          # 配置数据类与加载(Config/TrackerConfig/HRRule)，fail-fast 校验
+├── config/            # 配置包: models(数据模型)/validation(全量校验)/loaders(解析加载)
 ├── curves.py          # 全局限速曲线纯逻辑: dat 解析/period 聚合/档位计算(无项目内依赖)
 ├── episodes.py        # 集数标签解析
 ├── exporter.py        # YAML 配置模板导出
