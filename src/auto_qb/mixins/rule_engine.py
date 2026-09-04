@@ -136,7 +136,7 @@ class RuleEngineMixin:
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
-            logger.warning(f"规则执行异常({rule.name} {task.hash}): {e}")
+            logger.warning(f"规则执行异常({rule.name} {task.hash}): {e}", exc_info=True)
             return True
         return True
 

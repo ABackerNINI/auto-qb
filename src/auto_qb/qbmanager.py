@@ -140,7 +140,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             if task.handler:
                 return bool(task.handler(task, dry_run))
         except Exception as e:
-            logger.error(f"任务执行异常({task.kind}:{task.name} {task.hash}): {e}")
+            logger.error(f"任务执行异常({task.kind}:{task.name} {task.hash}): {e}", exc_info=True)
         return True
 
     # ---------- 全局任务 ----------
