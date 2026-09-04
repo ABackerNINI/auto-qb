@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "addopts",
         "asctime",
         "cand",
         "carpt",
@@ -20,6 +21,7 @@
         "forcedup",
         "fsize",
         "fullcheck",
+        "gslc",
         "hdbao",
         "hdclone",
         "hdfans",
@@ -40,6 +42,7 @@
         "pauseddl",
         "pausedup",
         "piecehashes",
+        "prefs",
         "ptfans",
         "ptsbao",
         "ptzone",
