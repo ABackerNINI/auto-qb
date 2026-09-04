@@ -124,6 +124,7 @@ python src/auto-qb.py -n             # dry-run: 只打印将执行的动作，�
 
 ### 注意事项
 
+- 启动时 fail-fast 全量校验配置(未知键/必填项/格式/规则引用)，全部错误聚合一次性报告；显式留空的键视为未配置，使用默认值
 - 标签/分类/路径匹配支持正则(`regex:` 前缀)与忽略大小写(`:ignore_case` 后缀)
 - Windows 路径请使用 `/` 作为分隔符(`\` 在正则中用于转义)；路径匹配默认区分大小写
 - 下载速度单位: `B/s` 或 `[KMG]iB/s`；文件大小单位: `B` 或 `[KMGT]iB`，不区分大小写
@@ -190,8 +191,9 @@ config:
     # 全局限速曲线配置 (需配置数据来源)
     global_speed_limit_curve: # 见下方[#全局限速配置]
 
-    # 自定义规则集(名称以 "_rules" 结尾)
-    example_rules: # 见下方[#自定义规则配置示例] 🚧
+    # 自定义规则集(名称以 "_rules" 结尾): 完整示例见下方[#自定义规则配置示例]
+    # example_rules:
+    #     rule1: ...
 
     # tracker 站点配置 (建议直接使用`python src/auto-qb.py --export-yaml missing.yml --only-missing`直接导出后修改)
     trackers:
@@ -210,9 +212,9 @@ config:
                 required_share_ratio: 2.0          # 要求分享率
                 extra_seeding_time: 12H            # 额外做种时间防止意外
                 condition: 80%                     # 触发 HR 的下载比例；也可用绝对值，如 10MiB
-            rules:                                 # tracker 引用规则，见下方[#自定义规则配置示例]
-                - "@example_rules"                 # 引用整个规则集
-                - "@example_rules.rule1"           # 引用具体规则
+            # rules:                               # tracker 引用规则(定义见下方[#自定义规则配置示例])
+            #     - "@example_rules"               # 引用整个规则集
+            #     - "@example_rules.rule1"         # 引用具体规则
         tracker2:
             # ...
 ```
@@ -228,9 +230,10 @@ config:
             - traffic_monitor: # Traffic Monitor: 流量监控软件，可记录每天使用流量
                 bat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
             # 后续可能支持接入其它软件来源
-        curves:
-            - period: DAY # 周期，支持DAY，MONTH，ND(最近N天)
-                upload_curve: # 上传量达到指定值后，限制上传速度
+        curves: # 每条 period 曲线为 curve 单项映射; 重复 period 拒绝
+            - curve:
+                period: DAY # 周期，支持DAY(1D)，MONTH，ND(最近N天)
+                upload_curve: # 上传量达到指定值后，限制上传速度(阈值须严格递增)
                     - 10GiB:
                         upload_speed_limit: 6MiB/s
                     - 20GiB:
@@ -243,7 +246,7 @@ config:
                         upload_speed_limit: 1MiB/s
                     - 1000GiB:
                         upload_speed_limit: 0.5MiB/s
-                download_curve: # 下载量达到指定值后，限制下载速度
+                download_curve: # 下载量达到指定值后，限制下载速度(可省略，省略 = 不管理该方向)
                     - 30GiB:
                         download_speed_limit: 11MiB/s
                     - 50GiB:
@@ -254,9 +257,12 @@ config:
                         download_speed_limit: 2MiB/s
                     - 1000GiB:
                         download_speed_limit: 1MiB/s
-            - period: 7D
-            - period: MONTH
-            # ...
+            - curve: # 多条曲线同方向取最严限速(各 period 口径都需满足)
+                period: 7D
+                upload_curve:
+                    - 50GiB:
+                        upload_speed_limit: 4MiB/s
+            # ... 可继续添加 MONTH / ND 等周期的 curve
 ```
 
 #### 流量统计数据来源: Traffic Monitor
@@ -353,10 +359,11 @@ config:
                 - download_speed_limit: 1000KiB/s  # 上传速度，不覆盖单数值
             # 可选: conditions-met / conditions-not-met / action-failed /
             #       all-actions-succeed / always / never
-            stop_following_rules_if: conditions-met 🚧
+            stop_following_rules_if: conditions-met # 🚧
     trackers:
         tracker1:                                  # 自定义 tracker 站点名称
-            # ...
+            domains:                               # 站点域名，可以有多个
+                - domain1
             rules:                                 # tracker 引用规则
                 - "@example_rules"                 # 引用整个规则集
                 - "@example_rules.rule1"           # 引用具体规则
