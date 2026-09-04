@@ -142,32 +142,33 @@ def _valid_spec() -> dict:
         "curves":
             [
                 {
-                    "curve": {
-                        "period": "1D",
-                        "upload_curve":
-                            [
-                                {
-                                    "10GiB": {
-                                        "upload_speed_limit": "6MiB/s"
-                                    }
-                                },
-                                {
-                                    "20GiB": {
-                                        "upload_speed_limit": "5MiB/s"
-                                    }
-                                },
-                                {
-                                    "1000GiB": {
-                                        "upload_speed_limit": "0.5MiB/s"
-                                    }
-                                },
-                            ],
-                        "download_curve": [{
-                            "30GiB": {
-                                "download_speed_limit": "11MiB/s"
-                            }
-                        }],
-                    },
+                    "curve":
+                        {
+                            "period": "1D",
+                            "upload_curve":
+                                [
+                                    {
+                                        "10GiB": {
+                                            "upload_speed_limit": "6MiB/s"
+                                        }
+                                    },
+                                    {
+                                        "20GiB": {
+                                            "upload_speed_limit": "5MiB/s"
+                                        }
+                                    },
+                                    {
+                                        "1000GiB": {
+                                            "upload_speed_limit": "0.5MiB/s"
+                                        }
+                                    },
+                                ],
+                            "download_curve": [{
+                                "30GiB": {
+                                    "download_speed_limit": "11MiB/s"
+                                }
+                            }],
+                        },
                 },
                 {
                     "curve": {
