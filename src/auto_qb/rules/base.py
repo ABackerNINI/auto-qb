@@ -204,6 +204,9 @@ class Rule:
         已提交校验)时记录 resume_index 并中断; 校验完成后任务被 resume 重新入队, 下次执行
         检测到 resume_index -> 跳过条件评估与去重, 从断点动作继续执行后续动作。
         """
+        if ctx.torrent is None:
+            return False, False
+
         ctx.rule_name = self.name
         task = getattr(ctx, "task", None)
 
@@ -256,7 +259,7 @@ class Rule:
                 logger.info(f"规则: {self.name} | 动作: {action.name} 成功 | 结果: {result.message}")
 
         if self.actions and not ctx.dry_run and ok_action:
-            self.manager.record_execution(self.name, ctx.torrent.hash)
+            self.manager.record_execution(self.name, ctx.hash)
 
         stop = False
         if self.stop_if in ("conditions-met", "always"):
