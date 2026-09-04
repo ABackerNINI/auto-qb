@@ -74,7 +74,7 @@ def test_setup_logging_file_handler():
             assert file_handlers[0].backupCount == 5
             assert os.path.exists(log_file), "深层子目录应被 makedirs 自动创建"
             with open(log_file, encoding="utf-8") as f:
-                assert "Logging configured successfully" in f.read()
+                assert "日志初始化完成" in f.read()
         finally:
             _restore_root()
 

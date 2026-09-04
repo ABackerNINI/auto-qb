@@ -91,15 +91,15 @@ def export_yaml_template(api, config, config_path: str, output_path: str, dry_ru
     """
     # 1. 获取所有种子并收集 tracker 域名
     torrents = api.torrents_info()
-    logger.info(f"Scanning {len(torrents)} torrents for tracker URLs")
+    logger.info(f"扫描 {len(torrents)} 个种子的 tracker")
     all_domains = collect_all_tracker_hostnames(api)
-    logger.info(f"Found {len(all_domains)} unique tracker domains")
+    logger.info(f"发现 {len(all_domains)} 个去重 tracker 域名")
 
     # 2. 筛选出未配置的域名
     missing_domains = find_missing_domains(all_domains, collect_configured_domains(config))
-    logger.info(f"Found {len(missing_domains)} missing tracker domains.")
+    logger.info(f"发现 {len(missing_domains)} 个未配置域名")
     if missing_domains:
-        logger.info(f"Missing tracker domains: {missing_domains}")
+        logger.info(f"未配置域名: {missing_domains}")
 
     # 3. 构建导出内容
     if only_missing:
@@ -136,4 +136,4 @@ def export_yaml_template(api, config, config_path: str, output_path: str, dry_ru
                 indent=4,
                 explicit_start=True,
             )
-    logger.info(f"Exported YAML template to {output_path}")
+    logger.info(f"已导出 YAML 模板: {output_path}")

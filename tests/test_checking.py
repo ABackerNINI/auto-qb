@@ -647,7 +647,7 @@ def test_checking_no_reference_skip_checking_warns():
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
         assert handled
         assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"{client.calls}"
-        assert any("无参考种子跳检" in str(c) for c in mw.call_args_list), f"应有高风险警告: {mw.call_args_list}"
+        assert any("无参考跳检" in str(c) for c in mw.call_args_list), f"应有高风险警告: {mw.call_args_list}"
 
 
 def test_checking_piecehashes_same():

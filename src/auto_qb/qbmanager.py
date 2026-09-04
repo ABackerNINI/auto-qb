@@ -75,10 +75,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 password=qb.password,
             )
             self.api.auth_log_in()
-            logger.info("Connected to qBittorrent successfully")
+            logger.info("已连接 qBittorrent")
             return True
         except Exception as e:
-            logger.error(f"Failed to connect to qBittorrent: {e}")
+            logger.error(f"连接 qBittorrent 失败: {e}")
             return False
 
     def run(self, dry_run: bool):
@@ -95,17 +95,16 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
         main_tick = self.config.main_tick
 
-        logger.info(f"Starting qB manager: main tick {main_tick}s, default task interval {self.config.interval}s")
-        logger.info(f"==========================================================================")
+        logger.info(f"启动 qB 管理器: 主循环 {main_tick}s, 默认任务间隔 {self.config.interval}s")
         try:
             while True:
                 try:
                     self._tick(dry_run)
                 except Exception as e:
-                    logger.error(f"Error in main loop: {e}", exc_info=True)
+                    logger.error(f"主循环异常: {e}", exc_info=True)
                 time.sleep(main_tick)
         except KeyboardInterrupt:
-            logger.info("Stopping...")
+            logger.info("停止")
         finally:
             if not dry_run:
                 self.save_state()
@@ -124,7 +123,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
     def _execute_due(self, due: list, dry_run: bool, now: float):
         """执行到期任务: 逐个执行任务(规则/种子级内置); handler 返回 False 表示任务消亡, 不重新入队"""
         # 1. 任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
-        logger.debug(f"执行到期任务: {len(due)}个")
+        logger.debug(f"执行到期任务 {len(due)} 个")
         for task in due:
             keep = self._safe(task, dry_run)
             if task.state == DEFERRED:
@@ -140,7 +139,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             if task.handler:
                 return bool(task.handler(task, dry_run))
         except Exception as e:
-            logger.error(f"任务执行异常({task.kind}:{task.name} {task.hash}): {e}", exc_info=True)
+            logger.error(f"任务[{task.log_tag}] | 执行异常: {e}", exc_info=True)
         return True
 
     # ---------- 全局任务 ----------
@@ -183,7 +182,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             )
         if tasks:
             self.task_queue.add_tasks(tasks)
-            logger.info(f"创建全局任务 {len(tasks)} 个: {[t.name for t in tasks]}")
+            logger.info(f"创建全局任务 {len(tasks)} 个: {[t.log_tag for t in tasks]}")
 
     # ---------- 种子级任务 ----------
 
@@ -214,7 +213,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         all_domains = utils.extract_tracker_hostnames(trackers_info)
                     except Exception:
                         all_domains = []
-                    logger.warning(f"种子未匹配tracker配置: tracker: {", ".join(all_domains)}, 哈希: {h[:8]}")
+                    logger.warning(f"种子[{h[:8]}] | 未匹配 tracker 配置, 域名: {", ".join(all_domains)}")
                     continue  # 未匹配tracker配置, 直接跳过
 
                 # TorrentRecord添加tracker配置引用, 方便后续任务使用

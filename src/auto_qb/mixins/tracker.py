@@ -57,4 +57,4 @@ class TrackerMixin:
         if not dry_run:
             getattr(self.api, api_method)(torrent_hashes=torrent.hash, limit=value)
 
-        logger.info(f"设置{direction}限速: {utils.fmt_speed(value)}")
+        logger.info(f"维护 {torrent.log_repr} | 设置{direction}限速: {utils.fmt_speed(value)}")

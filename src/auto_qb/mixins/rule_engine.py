@@ -45,7 +45,7 @@ class RuleEngineMixin:
                 self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self))
         self.enabled_rules = [r for r in self.rules if r.enabled]
         if self.rules:
-            logger.info(f"rules 框架: 加载 {len(self.rules)} 条规则, 启用 {len(self.enabled_rules)} 条")
+            logger.info(f"加载规则 {len(self.rules)} 条(启用 {len(self.enabled_rules)} 条)")
 
     def _load_state(self) -> dict:
         try:
@@ -135,7 +135,7 @@ class RuleEngineMixin:
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
-            logger.warning(f"规则执行异常({rule.name} {task.hash}): {e}", exc_info=True)
+            logger.warning(f"任务[{task.log_tag}] | 规则执行异常: {e}", exc_info=True)
             return True
         return True
 

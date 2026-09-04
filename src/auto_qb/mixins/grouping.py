@@ -148,8 +148,8 @@ class GroupingMixin:
         torrents = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
         if not self._size_mismatch(torrents, self.store.group_sizes[key]):
             return
-        desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in torrents)
-        logger.warning(f"辅种组文件大小不一致({len(torrents)}个种子), 暂停整组: {desc}")
+        desc = ", ".join(t.log_repr for t in torrents)
+        logger.warning(f"辅种组({len(torrents)}个) | 文件大小不一致, 暂停整组: {desc}")
         if not dry_run:
             self.api.torrents_stop(torrent_hashes=[t.hash for t in torrents])
 
@@ -203,29 +203,29 @@ class GroupingMixin:
         if rep is None:
             return  # 组内无已完成做种种子(均在下载/暂停/移动), 不检查
 
-        logger.info(f"正在检查种子组的文件丢失: 辅种数: {len(members)}, 名称: {rep.name}")
+        logger.info(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
         missing = False
         for fname, fsize in sizes.get(rep.hash, {}).items():
             full_path = utils.add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))
             if not os.path.exists(full_path):
-                logger.warning(f"辅种组文件缺失: '{full_path}'")
+                logger.warning(f"辅种组 | 文件缺失: '{full_path}'")
                 missing = True
                 break
             try:
                 if os.path.getsize(full_path) != fsize:
-                    logger.warning(f"辅种组文件大小不一致: '{full_path}', 期望 {fsize}")
+                    logger.warning(f"辅种组 | 文件大小不一致: '{full_path}', 期望 {fsize}")
                     missing = True
                     break
             except OSError:
-                logger.warning(f"辅种组文件无法读取: '{full_path}'")
+                logger.warning(f"辅种组 | 文件无法读取: '{full_path}'")
                 missing = True
                 break
 
         if missing:
             # 文件丢失: 同组所有种子全部触发丢失动作(暂停 + MISSING 标签)
             tag = self.config.grouping.missing_tag
-            desc = ", ".join(f"[{t.hash[:8]}]" for t in members)
-            logger.warning(f"辅种组文件丢失, 暂停整组并添加标签 '{tag}', 受影响的种子哈希: {desc}")
+            desc = ", ".join(t.log_repr for t in members)
+            logger.warning(f"辅种组({len(members)}个) | 文件丢失, 暂停整组并添加标签 '{tag}': {desc}")
             if not dry_run:
                 self.api.torrents_stop(torrent_hashes=[t.hash for t in members])
             for t in members:
@@ -266,11 +266,11 @@ class GroupingMixin:
             if (key, kind) in warned:
                 continue
             torrents = [self.store.by_hash[h] for h in self.store.groups[key] if h in self.store.by_hash]
-            desc = ", ".join(f"{t.name}[{t.hash[:8]}]" for t in torrents)
+            desc = ", ".join(t.log_repr for t in torrents)
             if kind == "multi-dl":
-                logger.warning(f"辅种组存在多个种子同时下载({len(torrents)}个), 暂停整组: {desc}")
+                logger.warning(f"辅种组({len(torrents)}个) | 多个种子同时下载, 暂停整组: {desc}")
             else:
-                logger.warning(f"辅种组存在已完成与下载中种子并存, 暂停整组: {desc}")
+                logger.warning(f"辅种组({len(torrents)}个) | 已完成与下载中并存, 暂停整组: {desc}")
             if dry_run:
                 continue
             warned.add((key, kind))

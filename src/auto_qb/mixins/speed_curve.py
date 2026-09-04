@@ -73,14 +73,14 @@ class SpeedCurveMixin:
             with open(conf.bat_path, "r", encoding="utf-8", errors="ignore") as f:
                 text = f.read()
         except OSError as e:
-            logger.warning(f"读取流量数据失败({conf.bat_path}): {e}, 本轮不动")
+            logger.warning(f"限速曲线 | 读取流量数据失败({conf.bat_path}): {e}, 本轮不动")
             return True
         rows, bad = curves.parse_history_dat(text)
         if not rows:
-            logger.warning(f"流量数据无有效记录({conf.bat_path}), 本轮不动")
+            logger.warning(f"限速曲线 | 流量数据无有效记录({conf.bat_path}), 本轮不动")
             return True
         if bad:
-            logger.warning(f"流量数据 {bad} 行无法解析已跳过({conf.bat_path})")
+            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.bat_path})")
 
         # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速); 各 period 聚合值保留供统计日志
         today = date.today()
@@ -113,7 +113,7 @@ class SpeedCurveMixin:
                 continue  # 该方向无曲线, 不管理
             cur = current[cur_key]
             if cur > 0 and cur % 2 == 1:
-                logger.info(f"全局限速曲线: {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖")
+                logger.info(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖")
                 continue
             if cur == kib:
                 continue  # 幂等: 目标 == 当前(含均不限速), 不写
@@ -127,8 +127,8 @@ class SpeedCurveMixin:
             stats = " ".join(
                 f"{_period_label(period)}: {_fmt_bytes(up)}/{_fmt_bytes(down)}" for period, up, down in period_stats
             )
-            logger.info(f"累计上传/下载 {stats}")
-            logger.info(f"设置全局限速曲线: {applied}")
+            logger.info(f"限速曲线 | 累计上传/下载 {stats}")
+            logger.info(f"限速曲线 | 设置全局限速: {applied}")
 
         self._record_curve_state(today, upload_kib, download_kib, dry_run=False)
         return True

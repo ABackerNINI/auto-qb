@@ -72,6 +72,12 @@ class Task:
     def __lt__(self, other):
         return self.next_run < other.next_run
 
+    @property
+    def log_tag(self) -> str:
+        """统一任务日志标识: kind:name[#hash8]"""
+        h = f"#{self.hash[:8]}" if self.hash else ""
+        return f"{self.kind}:{self.name}{h}"
+
     def __repr__(self) -> str:
         return f"Task({self.kind}, {self.name}, {self.hash}, {self.state})"
 
@@ -166,7 +172,7 @@ class TaskQueue:
             if cb:
                 cb()
         except Exception as e:
-            logger.error(f"任务恢复回调异常({task.kind}:{task.name} {task.hash}): {e}")
+            logger.error(f"任务[{task.log_tag}] | 恢复回调异常: {e}")
         task.run_count += 1
         task.state = PENDING
         task.next_run = now + task.interval

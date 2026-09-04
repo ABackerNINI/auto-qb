@@ -37,4 +37,4 @@ def setup_logging(file: str, level: int, max_bytes: int, format: str):
         logger.addHandler(file_handler)
 
     # 可选：记录一条启动信息
-    logger.info("Logging configured successfully")
+    logger.info("日志初始化完成")

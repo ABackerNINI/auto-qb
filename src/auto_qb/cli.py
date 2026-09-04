@@ -11,7 +11,7 @@ from .qbmanager import QbManager
 def export_yaml(manager: QbManager, args):
     """导出模式: 连接后由 exporter 模块完成导出"""
     if not manager.connect():
-        manager.logger.error("Cannot export: qBittorrent connection failed")
+        logging.error("导出失败: 无法连接 qBittorrent")
         return False
     export_yaml_template(
         manager.api,
@@ -27,7 +27,7 @@ def export_yaml(manager: QbManager, args):
 def export_torrents_info(manager: QbManager, output_file: str):
     """导出种子信息到指定文件"""
     if not manager.connect():
-        manager.logger.error("Cannot export: qBittorrent connection failed")
+        logging.error("导出失败: 无法连接 qBittorrent")
         return False
     manager.export_torrents_info(output_file)
     return True

@@ -227,7 +227,7 @@ class Rule:
             try:
                 matched = self.matches(ctx)
             except Exception as e:
-                logger.warning(f"规则 {self.name}: 条件匹配异常: {e}")
+                logger.warning(f"规则[{self.name}] {ctx.torrent.log_repr} | 条件匹配异常: {e}")
                 return False, False
             if not matched:
                 return False, self.stop_if == "conditions-not-met"
@@ -235,6 +235,7 @@ class Rule:
             if not self._dedup_allowed(ctx):
                 return False, False
 
+        log_repr = ctx.torrent.log_repr
         failed = False
         # 断点前动作已成功(校验通过才续跑): ok_action 起点 True; 全新执行从 False 累计
         ok_action = resume_index is not None
@@ -250,20 +251,22 @@ class Rule:
                 # 异步等待: 记录断点并中断本规则, 由外部 resume/reschedule 决定恢复
                 if task is not None:
                     task.resume_index = i + 1
-                    logger.info(f"规则: {self.name} | 动作: {action.name} 等待异步完成: {result.message}")
+                    logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
                     return True, True  # handled=True(动作已提交), stop=True(中断后续规则)
                 ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
-                logger.info(f"规则: {self.name} | 动作: {action.name} 成功 | 结果: {result.message}")
+                logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
                 continue
             if result.is_ok:
                 ok_action = True
             if result.is_failed:
-                logger.warning(f"规则: {self.name} | 动作: {action.name} 失败 | 结果: {result.message}")
+                logger.warning(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
                 failed = True
                 if not action.ignore_error:
                     break
             elif result.is_ok:
-                logger.info(f"规则: {self.name} | 动作: {action.name} 成功 | 结果: {result.message}")
+                logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
+            elif result.is_skipped:
+                logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
 
         if self.actions and not ctx.dry_run and ok_action:
             self.manager.record_execution(self.name, ctx.hash)

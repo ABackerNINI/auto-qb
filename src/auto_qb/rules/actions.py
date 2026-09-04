@@ -34,10 +34,10 @@ class AddTagsAction(BaseAction):
         current = ctx.torrent.tags_set
         new = [t for t in tags if t and t not in current]
         if not new:
-            return ActionResult.skip(f"标签已存在 {ctx.torrent.log_repr}")
+            return ActionResult.skip(f"标签已存在: {tags}")
         if not ctx.dry_run:
             ctx.api.torrents_add_tags(tags=new, torrent_hashes=ctx.hash)
-        return ActionResult.ok(f"添加标签 {new} {ctx.torrent.log_repr}")
+        return ActionResult.ok(f"{new}")
 
 
 @register_action
@@ -58,7 +58,7 @@ class RemoveTagsAction(BaseAction):
             return ActionResult.skip("无匹配标签")
         if not ctx.dry_run:
             ctx.api.torrents_remove_tags(tags=list(to_remove), torrent_hashes=ctx.hash)
-        return ActionResult.ok(f"删除标签 {to_remove} {ctx.torrent.log_repr}")
+        return ActionResult.ok(f"{to_remove}")
 
     def _expand_patterns(self, ctx) -> List[str]:
         return [ctx.replace_vars(pat) for pat in self.patterns]
@@ -78,7 +78,7 @@ class AddCategoryAction(BaseAction):
         category = ctx.replace_vars(self.format)
         old_category = ctx.torrent.category or ""
         if old_category == category:
-            return ActionResult.skip(f"分类已设置 {ctx.torrent.log_repr}")
+            return ActionResult.skip("分类已设置")
 
         auto_categories = ctx.manager.state.setdefault("auto_categories", {})
 
@@ -88,7 +88,7 @@ class AddCategoryAction(BaseAction):
             return old_category == previous_auto_category
 
         if old_category and not self.overwrite and not can_update_previous():
-            return ActionResult.skip(f"已有分类 {old_category}, 不覆盖 {ctx.torrent.log_repr}")
+            return ActionResult.skip(f"已有分类 {old_category}, 不覆盖")
 
         if not ctx.dry_run:
             try:
@@ -98,7 +98,7 @@ class AddCategoryAction(BaseAction):
                 pass
             ctx.api.torrents_set_category(category=category, torrent_hashes=ctx.hash)
             auto_categories[ctx.hash] = category
-        return ActionResult.ok(f"设置分类 {category} {ctx.torrent.log_repr}")
+        return ActionResult.ok(category)
 
 
 @register_action
@@ -108,10 +108,10 @@ class RemoveCategoryAction(BaseAction):
 
     def execute(self, ctx: RuleContext):
         if not (ctx.torrent.category or "").strip():
-            return ActionResult.skip(f"分类为空 {ctx.torrent.log_repr}")
+            return ActionResult.skip("分类为空")
         if not ctx.dry_run:
             ctx.api.torrents_set_category(category="", torrent_hashes=ctx.hash)
-        return ActionResult.ok(f"清空分类 {ctx.torrent.log_repr}")
+        return ActionResult.ok("清空分类")
 
 
 @register_action
@@ -215,7 +215,7 @@ class CheckAction(BaseAction):
 
     def execute(self, ctx: RuleContext):
         if ctx.dry_run:
-            return ActionResult.ok("checking 校验(决策链: 状态判定+组内下载判定+参考确定+分段执行) [dry-run]")
+            return ActionResult.ok("校验决策链(状态判定+组内下载判定+参考确定+分段执行)")
         manager = ctx.manager
 
         # TODO: 未完成且暂停的种子若 recheck 后仍未完成，下一轮会再次校验, 需处理
@@ -240,7 +240,8 @@ class CheckAction(BaseAction):
 
         # 跳过未启用的检查
         if segment["enabled"] is False:
-            return ActionResult.skip(f"checking 校验段 {segment} 未启用, 跳过")
+            which = "有参考" if segment is self.with_reference else "无参考"
+            return ActionResult.skip(f"{which}校验段未启用")
 
         # 决策链 4: 前置检查: 文件全部存在且大小一致
         # 虽然同group文件已经确定存在且大小一致, 但为了安全, 再次检查
@@ -303,10 +304,10 @@ class CheckAction(BaseAction):
             )
             if r.returncode == 0:
                 return True
-            logger.info(f"自定义 basic_check 判定非参考({candidate.hash}) rc={r.returncode}: {r.stderr.strip()[:200]}")
+            logger.info(f"自定义校验判定非参考({candidate.hash[:8]}): rc={r.returncode} {r.stderr.strip()[:200]}")
             return False
         except Exception as e:
-            logger.warning(f"自定义 basic_check 程序执行异常({candidate.hash}): {e}")
+            logger.warning(f"自定义校验程序执行异常({candidate.hash[:8]}): {e}")
             return False
 
     def _execute_full_checking(self, ctx: RuleContext, segment: dict):
@@ -340,13 +341,13 @@ class CheckAction(BaseAction):
             manager.store.verified_references.add(hash)
             if auto_start and not ctx.dry_run:
                 api.torrents_start(torrent_hashes=hash)
-                logger.info(f"规则: {rule_name} | 校验成功自动开始: {hash}")
+                logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验成功自动开始")
 
         def poll(task: Task, dry_run: bool) -> bool:
             try:
                 if manager.store.get(hash) is None:
                     # 种子已删除: 让位任务清断点重新入队(下一轮规则执行时自然消亡)
-                    logger.warning(f"规则: {rule_name} | 校验轮询: 种子已删除: {hash}")
+                    logger.warning(f"规则[{rule_name}] {hash[:8]} | 校验轮询: 种子已删除")
                     if origin is not None:
                         origin.resume_index = None
                         tq.reschedule(origin, time.time())
@@ -354,20 +355,20 @@ class CheckAction(BaseAction):
                 if ctx.torrent.state_enum.is_checking:
                     return True  # 仍在校验中, 下一轮轮询
                 if ctx.torrent.progress >= 1.0:
-                    logger.info(f"规则: {rule_name} | 校验成功: {hash}")
+                    logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验成功")
                     if origin is not None:
                         origin.resume_cb = on_success
                         tq.resume(origin, time.time())  # resume_index 保留 -> 规则续跑后续动作
                     else:
                         on_success()  # 无触发任务(外部入口): 直接执行完成处理
                 else:
-                    logger.warning(f"规则: {rule_name} | 校验未通过(progress={ctx.torrent.progress}): {hash}")
+                    logger.warning(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验未通过(progress={ctx.torrent.progress})")
                     if origin is not None:
                         origin.resume_index = None  # 失败: 清断点重走完整决策链(重新校验)
                         tq.reschedule(origin, time.time())
                 return False
             except Exception as e:
-                logger.warning(f"规则: {rule_name} | 校验任务异常({hash}): {e}")
+                logger.warning(f"规则[{rule_name}] {hash[:8]} | 校验轮询异常: {e}")
                 if origin is not None:
                     origin.resume_index = None
                     tq.reschedule(origin, time.time())
@@ -391,8 +392,8 @@ class CheckAction(BaseAction):
             return ActionResult.fail(f"发送 recheck 失败: {e}")
         if origin is not None:
             # 任务队列驱动: 返回 pending, 规则记录断点中断, 由轮询任务 resume/reschedule 恢复
-            return ActionResult.pending("full-checking 校验已提交, 等待完成(规则断点续跑)")
-        return ActionResult.ok("full-checking 校验已提交, 等待完成")
+            return ActionResult.pending("full-checking 校验已提交")
+        return ActionResult.ok("full-checking 校验已提交")
 
     _ATTRS = [
         "seq_dl", "f_l_piece_prio", "ratio_limit", "seeding_time_limit", "inactive_seeding_time_limit",
@@ -430,7 +431,7 @@ class CheckAction(BaseAction):
 
         # 3. 删除种子(保留文件)
         try:
-            logger.info(f"规则: {ctx.rule_name} | 删除种子: {torrent.log_repr}")
+            logger.info(f"规则[{ctx.rule_name}] {torrent.log_repr} | 跳检删除种子(保留文件)")
             ctx.api.torrents_delete(torrent_hashes=ctx.hash, delete_files=False)
         except Exception as e:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
@@ -475,8 +476,8 @@ class CheckAction(BaseAction):
 
         # 6. 无参考高风险警告 + 自动开始
         if not has_reference:
-            logger.warning(f"规则: {ctx.rule_name} | 无参考种子跳检(高风险): 仅做文件存在与大小对比, "
-                           f"内容错误时会传垃圾数据: {ctx.hash}")
+            logger.warning(f"规则[{ctx.rule_name}] {ctx.torrent.log_repr} | 无参考跳检(高风险): "
+                           f"仅文件存在与大小对比, 内容错误会传垃圾数据")
         if segment["auto_start"]:
             try:
                 ctx.api.torrents_start(torrent_hashes=ctx.hash)

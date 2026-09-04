@@ -17,7 +17,7 @@ class LoggingConfig:
     level: str | int = logging.INFO  # 等级名或数值; YAML 原始缺省 "INFO"
     file: str = ""
     max_bytes: int = 10 * 1024**2  # 字节; YAML 原始缺省 "10MiB"
-    format: str = "%(asctime)s [%(levelname)s] %(message)s"
+    format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"  # %(name)s = 来源模块
 
 
 @dataclass

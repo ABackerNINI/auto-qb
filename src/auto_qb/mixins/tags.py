@@ -31,7 +31,7 @@ class TagsMixin:
         if new_tags:
             if not dry_run:
                 self.api.torrents_add_tags(tags=new_tags, torrent_hashes=torrent.hash)
-            logger.info(f"添加标签 '{new_tags}' {torrent.log_repr}")
+            logger.info(f"维护 {torrent.log_repr} | 添加标签: {new_tags}")
             return True
         return False
 
@@ -47,7 +47,7 @@ class TagsMixin:
         if to_remove_tags:
             if not dry_run:
                 self.api.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=torrent.hash)
-            logger.info(f"删除标签 '{to_remove_tags}'  {torrent.log_repr}")
+            logger.info(f"维护 {torrent.log_repr} | 删除标签: {to_remove_tags}")
             return True
         return False
 
@@ -78,7 +78,7 @@ class TagsMixin:
         if to_remove_tags:
             if not dry_run:
                 self.api.torrents_remove_tags(tags=to_remove_tags, torrent_hashes=torrent.hash)
-            logger.info(f"删除类似标签 '{to_remove_tags}' {torrent.log_repr}")
+            logger.info(f"维护 {torrent.log_repr} | 删除相似标签: {to_remove_tags}")
             return True
 
         return False
@@ -107,13 +107,13 @@ class TagsMixin:
 
             # 打印日志
             if old_category:
-                logger.info(f"Set category from '{old_category}' to '{category}'")
+                logger.info(f"维护 {torrent.log_repr} | 修改分类: '{old_category}' -> '{category}'")
             else:
-                logger.info(f"Set category to '{category}'")
+                logger.info(f"维护 {torrent.log_repr} | 设置分类: '{category}'")
 
             return True
         else:  # 存在分类但不覆盖
-            logger.warning(f"Skipping as it already has category '{old_category}'")
+            logger.warning(f"维护 {torrent.log_repr} | 跳过设置分类: 已有分类 '{old_category}' 且不覆盖")
             return True
 
     def _create_category_if_not_exists(self, category: str, dry_run: bool):
@@ -122,7 +122,7 @@ class TagsMixin:
         if category not in current_categories:  # 分类不存在
             if not dry_run:
                 self.api.torrents_create_category(name=category)
-            logger.info(f"Created category '{category}'")
+            logger.info(f"创建分类: '{category}'")
 
     # ---------- HR ----------
 
