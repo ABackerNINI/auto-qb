@@ -129,27 +129,41 @@ python src/auto-qb.py -n             # dry-run: 只打印将执行的动作，�
 - 下载速度单位: `B/s` 或 `[KMG]iB/s`；文件大小单位: `B` 或 `[KMGT]iB`，不区分大小写
 - 时间单位: `S` 秒、`M` 分、`H` 时、`D` 天，不区分大小写
 
-### 完整示例
+### 配置示例
 
 ```yaml
 ---
 config:
-    main_tick: 2S          # 主循环时间间隔
-    max_tasks_per_tick: 20 # 每个循环最大执行任务数
+    # qBittorrent 客户端
+    qbittorrent:
+        host: 127.0.0.1
+        port: 8080
+        username: <USERNAME>
+        password: <PASSWORD>
 
-    interval: 60S          # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
+    # 主循环时间间隔
+    main_tick: 2S
+    # 每个循环最大执行任务数
+    max_tasks_per_tick: 20
 
-    state_file: "auto-qb-state.json" # 状态持久化文件，必须可写
+    # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
+    interval: 60S
+
+    # 状态持久化文件，必须可写
+    state_file: "auto-qb-state.json"
     single_instance_lock: true       # 单实例锁 🚧
 
+    # 日志设置
     log:
         file: "logs/auto-qb.log" # 日志文件路径， 留空仅输出控制台； 24/7运行建议落盘
-        level: INFO         # 日志等级
-        max_bytes: 10MiB    # 日志轮转大小
+        level: INFO              # 日志等级
+        max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
 
-    remove_similar_tags: true # 删除种子类似(单词相同大小写不同)的标签
-    add_episode_tags: true    # 自动添加集数标签(仅种子添加时触发)
+    # 删除种子类似(单词相同大小写不同)的标签
+    remove_similar_tags: true
+    # 自动添加集数标签(仅种子添加时触发)
+    add_episode_tags: true
 
     # 种子分组管理(辅种管理)
     grouping:
@@ -173,13 +187,109 @@ config:
         add_category_for_satisfied: '--HR${required_seeding_time}--' # 做种时长满足要求时添加的分类格式
         overwrite_category_for_satisfied: false # 做种时长满足要求时是否覆盖分类
 
-    # qBittorrent 客户端
-    qbittorrent:
-        host: 127.0.0.1
-        port: 8080
-        username: <USERNAME>
-        password: <PASSWORD>
+    # 全局限速曲线配置 (需配置数据来源)
+    global_speed_limit_curve: # 见下方[#全局限速配置]
 
+    # 自定义规则集(名称以 "_rules" 结尾)
+    example_rules: # 见下方[#自定义规则配置示例] 🚧
+
+    # tracker 站点配置 (建议直接使用`python src/auto-qb.py --export-yaml missing.yml --only-missing`直接导出后修改)
+    trackers:
+        tracker1:                                  # 自定义 tracker 站点名称
+            domains:                               # 站点域名，可以有多个
+                - domain1
+                - domain2
+            tags:                                  # 自动添加站点标签
+                - tag1
+            remove_tags:                           # 自动删除站点标签，支持正则
+                - tag3
+            upload_speed_limit: 1000KiB/s          # 单种上传限速，0 指无限制
+            download_speed_limit: 10MiB/s          # 单种下载限速，0 指无限制
+            hr:                                    # HR 规则(可覆盖全局设置)
+                required_seeding_time: 3D          # 要求做种时间
+                required_share_ratio: 2.0          # 要求分享率
+                extra_seeding_time: 12H            # 额外做种时间防止意外
+                condition: 80%                     # 触发 HR 的下载比例；也可用绝对值，如 10MiB
+            rules:                                 # tracker 引用规则，见下方[#自定义规则配置示例]
+                - "@example_rules"                 # 引用整个规则集
+                - "@example_rules.rule1"           # 引用具体规则
+        tracker2:
+            # ...
+```
+
+### 全局限速曲线配置
+
+```yaml
+---
+config:
+    global_speed_limit_curve:
+        interval: 10M
+        traffic_source:
+            - traffic_monitor: # Traffic Monitor: 流量监控软件，可记录每天使用流量
+                bat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
+            # 后续可能支持接入其它软件来源
+        curves:
+            - period: DAY # 周期，支持DAY，MONTH，ND(最近N天)
+                upload_curve: # 上传量达到指定值后，限制上传速度
+                    - 10GiB:
+                        upload_speed_limit: 6MiB/s
+                    - 20GiB:
+                        upload_speed_limit: 5MiB/s
+                    - 30GiB:
+                        upload_speed_limit: 4MiB/s
+                    - 50GiB:
+                        upload_speed_limit: 2MiB/s
+                    - 100GiB:
+                        upload_speed_limit: 1MiB/s
+                    - 1000GiB:
+                        upload_speed_limit: 0.5MiB/s
+                download_curve: # 下载量达到指定值后，限制下载速度
+                    - 30GiB:
+                        download_speed_limit: 11MiB/s
+                    - 50GiB:
+                        download_speed_limit: 10MiB/s
+                    - 100GiB:
+                        download_speed_limit: 5MiB/s
+                    - 200GiB:
+                        download_speed_limit: 2MiB/s
+                    - 1000GiB:
+                        download_speed_limit: 1MiB/s
+            - period: 7D
+            - period: MONTH
+            # ...
+```
+
+#### 流量统计数据来源: Traffic Monitor
+
+> 后续可能支持其它流量统计数据源
+
+Traffic Monitor: 这是一个用于显示当前网速、CPU及内存利用率的桌面悬浮窗软件，并支持任务栏显示，支持更换皮肤。
+
+[Traffic Monitor: GITHUB](https://github.com/zhongyang219/TrafficMonitor)
+[Traffic Monitor: GITEE](https://gitee.com/zhongyang219/TrafficMonitor)
+
+需要使用Traffic Monitor统计上传/下载流量的功能，建议开启开机自启动。
+
+> Q: Traffic Monitor如何获得配置文件路径?
+> A: 常规设置 - 配置和数据文件 - 打开配置文件所在目录
+
+`history_traffic.dat`记录了每天上传下载流量历史
+
+样例
+
+```text
+lines: "30"
+2026/09/04 64033621/104743685
+2026/09/03 23295975/37857445
+2026/09/02 23243979/53483350
+...
+```
+
+### 自定义规则配置示例
+
+```yaml
+---
+config:
     # 自定义规则集(名称以 "_rules" 结尾)
     example_rules: # 🚧
         rule1:
@@ -244,24 +354,9 @@ config:
             # 可选: conditions-met / conditions-not-met / action-failed /
             #       all-actions-succeed / always / never
             stop_following_rules_if: conditions-met 🚧
-
-    # tracker 站点配置 (建议直接使用`python src/auto-qb.py --export-yaml missing.yml --only-missing`直接导出后修改)
     trackers:
         tracker1:                                  # 自定义 tracker 站点名称
-            domains:                               # 站点域名，可以有多个
-                - domain1
-                - domain2
-            tags:                                  # 自动添加站点标签
-                - tag1
-            remove_tags:                           # 自动删除站点标签，支持正则
-                - tag3
-            upload_speed_limit: 1000KiB/s          # 单种上传限速，0 指无限制
-            download_speed_limit: 10MiB/s          # 单种下载限速，0 指无限制
-            hr:                                    # HR 规则(可覆盖全局设置)
-                required_seeding_time: 3D          # 要求做种时间
-                required_share_ratio: 2.0          # 要求分享率
-                extra_seeding_time: 12H            # 额外做种时间防止意外
-                condition: 80%                     # 触发 HR 的下载比例；也可用绝对值，如 10MiB
+            # ...
             rules:                                 # tracker 引用规则
                 - "@example_rules"                 # 引用整个规则集
                 - "@example_rules.rule1"           # 引用具体规则
