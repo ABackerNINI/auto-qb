@@ -9,7 +9,7 @@
                     │    + GroupingMixin + TrackerMixin + SpeedCurveMixin │
                     ├──────────────────────────────────────────────────┤
   每tick全量拉取 →  │ TorrentStore (torrents.py)   ← 快照同步 ──  QbApi (qbapi.py) ──→ qbittorrent-api Client
-                    │  快照/惰性缓存/分组索引        (写后同步)      API门面
+                    │  快照/惰性缓存/分组索引        (写后同步)      APIFacade
                     ├──────────────────────────────────────────────────┤
                     │ TaskQueue (taskqueue.py)  单一时间优先堆          │
                     │  Task: refresh / internal / rule / check         │
@@ -104,7 +104,7 @@ _tick(dry_run):
 - `verified_references: Set[str]`: full-checking 通过的种子, **仅内存** (重启重新积累), 作为同组跳检参考。
 - `update_torrent_fields(...)`: 写后同步快照 (tags/category/state/限速/save_path), 保证同 tick 内后续读取一致。
 
-## QbApi 门面 (qbapi.py)
+## QbApi Facade (qbapi.py)
 
 所有对 qB 的调用统一走 `self.api` (不直接用 raw client):
 
@@ -112,7 +112,7 @@ _tick(dry_run):
 - **读方法**: 优先 store 惰性缓存 (trackers/files/tags/categories); `torrents_info` 透传。
 - **透传**: torrents_add / recheck / reannounce / piece_hashes / export / auth_log_in。
 - **全局限速 (qB 5.0+)**: `get_global_speed_limits`/`set_global_speed_limits` 走 `transfer_*` 端点 (bytes/s), 不用 `app/preferences` 旧键 (已失效)。内部 KiB/s ↔ bytes/s 换算。
-- dry_run 判定**不在门面内**, 由调用点负责。
+- dry_run 判定**不在Facade内**, 由调用点负责。
 
 ## 状态持久化 (RuleEngineMixin)
 

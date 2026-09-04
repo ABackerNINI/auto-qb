@@ -294,7 +294,7 @@ class TorrentStore:
                 usage[tag] = usage.get(tag, 0) + 1
         return usage
 
-    # ---------- 写操作同步(供 QbApi 门面调用) ----------
+    # ---------- 写操作同步(供 QbApi Facade调用) ----------
 
     def update_torrent_fields(
         self,
@@ -310,7 +310,7 @@ class TorrentStore:
     ) -> None:
         """写操作后同步快照字段(单 hash 或 hash 列表)
 
-        由 QbApi 门面调用: 调用客户端 API 后立即更新内存快照, 保证同 tick 内
+        由 QbApi Facade调用: 调用客户端 API 后立即更新内存快照, 保证同 tick 内
         后续读取(如 tag_usage / 分类判断 / 限速幂等)读到最新值; 下轮 refresh 校准。
         tags_add/tags_remove 合并式更新并失效 _tags_set, state 变化失效 _state_enum。
         """

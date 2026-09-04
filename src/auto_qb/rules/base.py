@@ -107,7 +107,7 @@ class RuleContext:
 
     @property
     def api(self) -> QbApi | Client:
-        """qB API 门面: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
+        """qB API Facade: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
         api = getattr(self.manager, "api", None)
         if api is not None:
             return api

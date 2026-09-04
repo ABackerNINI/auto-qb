@@ -1,6 +1,6 @@
-"""qBittorrent API 统一门面(QbApi)
+"""qBittorrent API 统一Facade(QbApi)
 
-所有业务代码对 qB 的调用统一经由此门面: 写操作调用客户端后同步更新
+所有业务代码对 qB 的调用统一经由此Facade: 写操作调用客户端后同步更新
 TorrentStore 快照字段与缓存(快照一致性, 修复同 tick 内读到过期数据, 如
 无种子标签清理读到旧使用数), 读操作尽量走 store 惰性缓存。方法名与
 qbittorrentapi 保持一致(duck-type 兼容, 调用写法与测试断言不变);
@@ -25,7 +25,7 @@ HashType = Union[str, List[str]]
 
 
 class QbApi:
-    """qB API 门面: 封装客户端调用 + store 快照同步"""
+    """qB API Facade: 封装客户端调用 + store 快照同步"""
     def __init__(self, client: Optional[Client] = None, store: Optional[TorrentStore] = None):
         self._client: Optional[Client] = client
         self.store: Optional[TorrentStore] = store

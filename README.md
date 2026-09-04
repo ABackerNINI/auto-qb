@@ -468,7 +468,7 @@ src/auto_qb/
 ├── exporter.py        # YAML 配置模板导出
 ├── logging.py         # 日志配置
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
-├── qbapi.py           # qB API 门面: 封装客户端调用 + 写操作后同步 store 快照
+├── qbapi.py           # qB API Facade: 封装客户端调用 + 写操作后同步 store 快照
 ├── taskqueue.py       # 单任务队列: 时间优先堆，所有任务(含校验结果轮询)统一调度
 ├── torrents.py        # 种子信息数据层: 全量快照+惰性缓存+分组索引，每main_tick刷新
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)
