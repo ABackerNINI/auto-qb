@@ -13,8 +13,6 @@ from ..torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)
 
-# TODO: 将tor替换为hash或torrent(torrent_record)
-
 
 class TagsMixin:
     """标签/分类/HR 辅助"""

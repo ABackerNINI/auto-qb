@@ -225,11 +225,6 @@ class TorrentStore:
         self._known_hashes = set(new_by_hash)
         return added, removed
 
-    # TODO: 删除
-    # def apply(self, torrents: List[TorrentDictionary]) -> Tuple[List[str], List[str]]:
-    #     """测试/外部注入入口: 与 refresh 等价(不依赖 client)"""
-    #     return self.refresh(torrents)
-
     def get(self, hash: str) -> Optional[TorrentRecord]:
         return self.by_hash.get(hash)
 
@@ -244,38 +239,6 @@ class TorrentStore:
 
     def hashes(self) -> List[str]:
         return list(self.by_hash)
-
-    # ---------- 惰性缓存(tracker/files, 记录级) ----------
-
-    # TODO: 与TorrentRecord的接口重合, 删除
-
-
-#     def trackers_info(self, torrent_hash: str) -> List[dict]:
-#         """种子 tracker 信息列表(快照种子走记录缓存; 外部种子直接拉取)"""
-#         rec = self.by_hash.get(torrent_hash)
-#         if rec is None:
-#             if self.client is None:
-#                 raise RuntimeError("TorrentStore 未绑定 client")
-#             return list(self.client.torrents_trackers(torrent_hash) or [])
-#         return rec.trackers_info(self.client)
-#
-#     def tracker_urls(self, torrent_hash: str) -> List[str]:
-#         """种子 tracker URL 列表"""
-#         rec = self.by_hash.get(torrent_hash)
-#         if rec is None:
-#             if self.client is None:
-#                 raise RuntimeError("TorrentStore 未绑定 client")
-#             return [t.get("url") for t in (self.client.torrents_trackers(torrent_hash) or []) if t.get("url")]
-#         return rec.tracker_urls(self.client)
-#
-#     def files(self, torrent_hash: str) -> List[Any]:
-#         """种子文件列表(快照种子走记录缓存; 外部种子直接拉取)"""
-#         rec = self.by_hash.get(torrent_hash)
-#         if rec is None:
-#             if self.client is None:
-#                 raise RuntimeError("TorrentStore 未绑定 client")
-#             return list(self.client.torrents_files(torrent_hash) or [])
-#         return rec.files(self.client)
 
     def update_state_snapshot(self, tors: List[TorrentDictionary]) -> None:
         """本轮结束前更新状态快照(存 state_enum 枚举对象, 与 qB 版本无关)"""

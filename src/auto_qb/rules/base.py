@@ -131,53 +131,6 @@ class RuleContext:
         """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}"""
         return str(text).replace("${required_seeding_time}", self.required_seeding_time)
 
-    # TODO: 删除
-    # def tracker_urls(self) -> List[str]:
-    #     if self._tracker_urls is None:
-    #         store = getattr(self.manager, "store", None)
-    #         if store is not None and store.client is not None and self.torrent.hash in store:
-    #             # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
-    #             self._tracker_urls = store.tracker_urls(self.torrent.hash)
-    #         else:
-    #             # 外部传入种子(process_torrent 兼容入口): 直接拉取
-    #             self._tracker_urls = [t["url"] for t in self.api.torrents_trackers(self.torrent.hash) if t.get("url")]
-    #     return self._tracker_urls
-
-    # TODO: 删除
-    # def matched_tracker_confs(self) -> List[Any]:
-    #     """匹配到的 TrackerConfig 列表(可能多个)"""
-    #     if self._tracker_confs is None:
-    #         self._tracker_confs = utils.match_tracker_confs(self.config.trackers, self.tracker_urls())
-    #     return self._tracker_confs
-    # def matched_tracker_names(self) -> List[str]:
-    #     return [c.name for c in self.matched_tracker_confs()]
-
-    # TODO: 删除
-    # def describe(self) -> str:
-    #     """多行种子信息摘要, 用于动作日志: 名称/站点/状态/hash"""
-    #     try:
-    #         sites = ", ".join(self.matched_tracker_names()) or "未匹配"
-    #     except Exception:
-    #         sites = "未知"
-    #     return (
-    #         f"  - 种子: {self.torrent.name}\n"
-    #         f"  - 站点: {sites}\n"
-    #         f"  - 状态: {self.torrent.state}\n"
-    #         f"  - 哈希: {self.torrent.hash}"
-    #     )
-
-    # TODO: 删除
-    #     def files(self) -> List[Any]:
-    #         if self._files is None:
-    #             store = getattr(self.manager, "store", None)
-    #             if store is not None and store.client is not None and self.torrent.hash in store:
-    #                 # 快照种子: 走 store 惰性缓存(每 tick 一次拉取, 不重复调 API)
-    #                 self._files = store.files(self.torrent.hash)
-    #             else:
-    #                 # 外部传入种子(process_torrent 兼容入口): 直接拉取
-    #                 self._files = self.api.torrents_files(self.torrent.hash)
-    #         return self._files
-
     # TODO: 移动到actions.py
     def check_hr_condition(self, conf) -> bool:
         """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种"""

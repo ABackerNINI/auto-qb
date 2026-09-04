@@ -34,35 +34,8 @@ _RESOLUTION_SET = {480, 576, 720, 1080, 2160, 4320}
 
 # 视频文件扩展名(小写): 只有视频文件参与集数解析, 截图(jpg)/字幕(ass/srt)/字体等一律跳过
 _VIDEO_EXTENSIONS = {
-    "mkv",
-    "mp4",
-    "avi",
-    "mov",
-    "m4v",
-    "m4p",
-    "wmv",
-    "flv",
-    "webm",
-    "mpg",
-    "mpeg",
-    "mpe",
-    "m2v",
-    "m2ts",
-    "mts",
-    "ts",
-    "vob",
-    "rm",
-    "rmvb",
-    "3gp",
-    "3g2",
-    "ogv",
-    "ogm",
-    "asf",
-    "divx",
-    "mpv",
-    "f4v",
-    "mxf",
-    "wtv",
+    "mkv", "mp4", "avi", "mov", "m4v", "m4p", "wmv", "flv", "webm", "mpg", "mpeg", "mpe", "m2v", "m2ts", "mts", "ts",
+    "vob", "rm", "rmvb", "3gp", "3g2", "ogv", "ogm", "asf", "divx", "mpv", "f4v", "mxf", "wtv"
 }
 
 

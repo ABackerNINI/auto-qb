@@ -140,45 +140,7 @@ class RuleEngineMixin:
             return True
         return True
 
-    # ---------- 规则: 便捷入口与 tracker 引用 ----------
-
-
-# TODO: 删除
-#     def process_torrent(self, hash, dry_run: bool) -> bool:
-#         """直接处理单个种子(全部启用规则, 含 tracker rules 引用过滤)
-#
-#         任务队列驱动时请用种子级规则任务; 此入口用于向后兼容(测试/脚本直接调用)。
-#         """
-#         if not self.enabled_rules:
-#             return False
-#         ctx = RuleContext(self, self.client, self.config, hash, dry_run)
-#         refs, force_continue = self._tracker_rule_refs(ctx)
-#         if refs:
-#             rules = self._resolve_refs(refs)
-#             if not rules:
-#                 return False
-#         else:
-#             rules = self.enabled_rules
-#         handled = False
-#         for rule in rules:
-#             h, stop = rule.process(ctx)
-#             if h:
-#                 handled = True
-#             if stop and not force_continue:
-#                 break
-#         return handled
-#
-#     def _tracker_rule_refs(self, ctx: RuleContext) -> tuple[list[str], bool]:
-#         """收集种子匹配 tracker 的 rules 引用, 返回 (refs列表)"""
-#         refs, force_continue = [], False
-#         for conf in ctx.matched_tracker_confs():
-#             for ref in getattr(conf, "rules", []) or []:
-#                 ref = str(ref).strip()
-#                 if ref == "ignore_next_rule_error: true":
-#                     force_continue = True
-#                 elif ref.startswith("@"):
-#                     refs.append(ref[1:])
-#         return refs, force_continue
+    # ---------- tracker 引用 ----------
 
     def _resolve_refs(self, refs: list[str]) -> list:
         """解析 '@rule_set' / '@rule_set.rule_name' 引用为 Rule 列表(按名称去重)"""
