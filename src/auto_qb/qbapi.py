@@ -212,10 +212,6 @@ class QbApi:
         仅传非 None 的方向; 调用方先比较当前值, 有变化才调用。
         """
         if upload_kib is not None:
-            self._client.transfer_set_upload_limit(
-                limit=0 if upload_kib <= 0 else int(upload_kib) * 1024
-            )
+            self._client.transfer_set_upload_limit(limit=0 if upload_kib <= 0 else int(upload_kib) * 1024)
         if download_kib is not None:
-            self._client.transfer_set_download_limit(
-                limit=0 if download_kib <= 0 else int(download_kib) * 1024
-            )
+            self._client.transfer_set_download_limit(limit=0 if download_kib <= 0 else int(download_kib) * 1024)
