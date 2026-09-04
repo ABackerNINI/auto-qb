@@ -15,13 +15,42 @@ global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按�
 """
 import logging
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..config import GlobalSpeedLimitCurve
 from .. import curves
 from ..taskqueue import Task
 
 logger = logging.getLogger(__name__)
+
+_CN_DIGITS = "零一二三四五六七八九"
+
+
+def _fmt_bytes(n: int) -> str:
+    """字节数 -> 可读字符串(如 60GiB / 1.5GiB)"""
+    for unit, div in (("TiB", 1024**4), ("GiB", 1024**3), ("MiB", 1024**2), ("KiB", 1024)):
+        if n >= div:
+            return f"{n / div:.2f}".rstrip("0").rstrip(".") + unit
+    return f"{n}B"
+
+
+def _cn_number(n: int) -> str:
+    """整数(0-99) -> 中文数字: 7->七, 30->三十"""
+    if n <= 9:
+        return _CN_DIGITS[n]
+    tens, ones = divmod(n, 10)
+    s = _CN_DIGITS[tens] + "十"
+    return s + (_CN_DIGITS[ones] if ones else "")
+
+
+def _period_label(period: str) -> str:
+    """归一化 period -> 日志中文标签: day->今日, month->本月, 7D->七日"""
+    if period == "day":
+        return "今日"
+    if period == "month":
+        return "本月"
+    n = int(period[:-1])  # "ND" -> N
+    return f"{_cn_number(n) if n < 100 else n}日"
 
 
 def _fmt_global_limit(kib: Optional[int]) -> str:
@@ -57,12 +86,14 @@ class SpeedCurveMixin:
         if bad:
             logger.warning(f"流量数据 {bad} 行无法解析已跳过({conf.bat_path})")
 
-        # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速)
+        # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速); 各 period 聚合值保留供统计日志
         today = date.today()
         up_speeds: List[int] = []
         down_speeds: List[int] = []
+        period_stats: List[Tuple[str, int, int]] = []  # (归一化 period, 上传字节, 下载字节)
         for pc in conf.curves:
             up_bytes, down_bytes = curves.aggregate(rows, pc.period, today)
+            period_stats.append((pc.period, up_bytes, down_bytes))
             if pc.upload_points:
                 up_speeds.append(curves.curve_speed(up_bytes, pc.upload_points))
             if pc.download_points:
@@ -70,10 +101,6 @@ class SpeedCurveMixin:
         # 3. 同方向合并(取最严)并转 qB 单位(KiB/s)
         upload_kib = curves.bytes_to_kib(curves.merge_direction(up_speeds)) if up_speeds else None
         download_kib = curves.bytes_to_kib(curves.merge_direction(down_speeds)) if down_speeds else None
-        logger.info(
-            f"全局限速曲线: 今日累计上传/下载换算后 -> 上传限速 {_fmt_global_limit(upload_kib)}, "
-            f"下载限速 {_fmt_global_limit(download_kib)}"
-        )
 
         if dry_run:
             self._record_curve_state(today, upload_kib, download_kib, dry_run=True)
@@ -100,6 +127,12 @@ class SpeedCurveMixin:
             applied = ", ".join(
                 f"{'上传' if k == 'upload_kib' else '下载'}限速 {_fmt_global_limit(v)}" for k, v in apply_kwargs.items()
             )
+            # 成功设置全局限速时, 按配置中各 period 曲线输出对应累计上传/下载(如 今日/七日/本月)
+            stats = " ".join(
+                f"{_period_label(period)}累计上传/下载: 上传 {_fmt_bytes(up)}, 下载 {_fmt_bytes(down)}"
+                for period, up, down in period_stats
+            )
+            logger.info(f"全局限速曲线: {stats}")
             logger.info(f"设置全局限速曲线: {applied}")
 
         self._record_curve_state(today, upload_kib, download_kib, dry_run=False)
