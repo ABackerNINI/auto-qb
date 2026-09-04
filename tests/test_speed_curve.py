@@ -50,7 +50,9 @@ class _FakeApp:
         self.prefs = {"upload_limit": -1, "download_limit": -1}
         self.calls = []
 
+    @property
     def preferences(self):
+        # 与 qbittorrent-api 2026.8.x 一致: preferences 是 property(非方法)
         return dict(self.prefs)
 
     def set_preferences(self, prefs):

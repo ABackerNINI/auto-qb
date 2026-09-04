@@ -190,8 +190,12 @@ class QbApi:
     # ---------- 全局速度限制(app preferences; 单位 KiB/s, qB 以 -1 表示不限速) ----------
 
     def get_global_speed_limits(self) -> dict:
-        """读取 qB 全局上传/下载速度限制(KiB/s); <=0 归一为 0(= 不限速) """
-        prefs = self._client.app.preferences()
+        """读取 qB 全局上传/下载速度限制(KiB/s); <=0 归一为 0(= 不限速)
+
+        注: qbittorrent-api 2026.8.x(qB 5.0+ API)中 client.app.preferences 是
+        property, 直接返回偏好字典; 旧版才是方法。当前按新版形态调用。
+        """
+        prefs = self._client.app.preferences
         return {
             "upload_limit": max(0, int(prefs.get("upload_limit") or 0)),
             "download_limit": max(0, int(prefs.get("download_limit") or 0)),
