@@ -80,12 +80,30 @@ class FakeClient:
         save_path=None,
         category=None,
         tags=None,
+        upload_limit=None,
+        download_limit=None,
         is_skip_checking=False,
         paused=False,
         is_paused=False,
+        contentLayout=None,
+        ratio_limit=None,
+        seeding_time_limit=None,
+        inactive_seeding_time_limit=None,
+        share_limit_action=None,
         **kw
     ):
-        self.calls.append(("add", {"is_skip_checking": is_skip_checking, "paused": paused or is_paused}))
+        self.calls.append((
+            "add",
+            {
+                "is_skip_checking": is_skip_checking,
+                "paused": paused or is_paused,
+                "upload_limit": upload_limit,
+                "download_limit": download_limit,
+                "contentLayout": contentLayout,
+                "ratio_limit": ratio_limit,
+                "seeding_time_limit": seeding_time_limit,
+            },
+        ))
         if self.add_error:
             raise self.add_error
         # 新种子进入客户端(hash 固定 HASH123, 与 FakeTorrent 默认一致); 存对象而非 dict,

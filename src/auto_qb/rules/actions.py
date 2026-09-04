@@ -6,7 +6,7 @@ import os
 import time
 from datetime import date
 from types import SimpleNamespace
-from typing import List
+from typing import List, Optional
 
 from .. import utils
 from ..config import ConfigError
@@ -18,6 +18,29 @@ logger = logging.getLogger(__name__)
 
 # full-checking 校验结果轮询间隔(秒): 与主循环 MAIN_TICK 对齐, 需求指定 2s
 CHECK_RESULT_INTERVAL = 2.0
+
+# 同一种子当日连续校验失败上限: 防止损坏文件导致 recheck 死循环(次日重置)
+RECHECK_FAIL_LIMIT = 3
+
+
+def _recheck_fail_count(manager, hash: str) -> int:
+    """同一种子当日连续校验失败次数(按自然日重置, 与 upload_size_today 口径一致)"""
+    rec = manager.state.get("recheck_fails", {}).get(hash)
+    if rec and rec.get("date") == date.today().isoformat():
+        return rec.get("count", 0)
+    return 0
+
+
+def _bump_recheck_fail(manager, hash: str) -> int:
+    """累加当日校验失败次数并返回当前次数"""
+    fails = manager.state.setdefault("recheck_fails", {})
+    rec = fails.setdefault(hash, {"date": "", "count": 0})
+    today = date.today().isoformat()
+    if rec.get("date") != today:
+        rec["date"] = today
+        rec["count"] = 0
+    rec["count"] += 1
+    return rec["count"]
 
 
 @register_action
@@ -322,6 +345,13 @@ class CheckAction(BaseAction):
                auto_start; resume_index 保留 -> 规则续跑执行后续动作, 执行历史由 Rule.process 统一记录)
              失败(progress<1)/种子删除/异常 -> 清断点 + origin.reschedule(重走决策链再次校验)
         """
+        manager = ctx.manager
+        hash = ctx.hash
+
+        # 失败冷却: 当日连续校验失败达上限后不再重试(防损坏文件导致 recheck 死循环), 次日重置
+        if _recheck_fail_count(manager, hash) >= RECHECK_FAIL_LIMIT:
+            return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
+
         tq = getattr(ctx.manager, "task_queue", None)
         if tq is None:
             # 无任务队列(旧用法/同步环境): 直接发送请求, 不跟踪结果
@@ -339,6 +369,7 @@ class CheckAction(BaseAction):
             执行历史由恢复后的规则任务(Rule.process 续跑)统一记录
             """
             manager.store.verified_references.add(hash)
+            manager.state.get("recheck_fails", {}).pop(hash, None)  # 校验通过: 清除失败冷却计数
             if auto_start and not ctx.dry_run:
                 api.torrents_start(torrent_hashes=hash)
                 logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验成功自动开始")
@@ -348,6 +379,7 @@ class CheckAction(BaseAction):
                 if manager.store.get(hash) is None:
                     # 种子已删除: 让位任务清断点重新入队(下一轮规则执行时自然消亡)
                     logger.warning(f"规则[{rule_name}] {hash[:8]} | 校验轮询: 种子已删除")
+                    manager.state.get("recheck_fails", {}).pop(hash, None)
                     if origin is not None:
                         origin.resume_index = None
                         tq.reschedule(origin, time.time())
@@ -362,7 +394,11 @@ class CheckAction(BaseAction):
                     else:
                         on_success()  # 无触发任务(外部入口): 直接执行完成处理
                 else:
-                    logger.warning(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验未通过(progress={ctx.torrent.progress})")
+                    fail_count = _bump_recheck_fail(manager, hash)
+                    logger.warning(
+                        f"规则[{rule_name}] {ctx.torrent.log_repr} | "
+                        f"校验未通过(第{fail_count}次, progress={ctx.torrent.progress})"
+                    )
                     if origin is not None:
                         origin.resume_index = None  # 失败: 清断点重走完整决策链(重新校验)
                         tq.reschedule(origin, time.time())
@@ -401,13 +437,15 @@ class CheckAction(BaseAction):
     ]
 
     def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
-        """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 重加跳过校验 -> 可选自动开始
+        """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 确认消失 -> 重加跳过校验 -> 可选自动开始
 
         风险控制:
+        - 部分下载(0<progress<1)禁止跳检: 预分配零块会被当作有效数据上传
         - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行
         - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once 兜底)
+        - 重加前轮询确认种子已从客户端消失(qB 删除异步, 未消失就重加会撞"种子已存在")
         - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
-        - 重加失败时 .torrent 落盘备份并记录元数据, 提示手动恢复
+        - 重加失败时 .torrent 落盘备份并记录元数据(立即落盘), 提示手动恢复
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
         """
         # 0. 部分下载禁止跳检: 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的
@@ -443,23 +481,37 @@ class CheckAction(BaseAction):
         except Exception as e:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
 
-        # 4. 重加(跳过校验, 先暂停)
+        # 3.5 轮询确认种子已从客户端消失(qB 删除为异步): 未消失就重加会撞"种子已存在"
+        gone = False
+        for _ in range(10):  # 最长 5s
+            try:
+                if not ctx.api.torrents_info(torrent_hashes=ctx.hash):
+                    gone = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
+        if not gone:
+            return ActionResult.fail("删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)")
+
+        # 4. 重加(跳过校验, 先暂停)。注意: 不用 `or None` —— ratio/seeding limit 的 0/负值
+        #    是有语义的(不限速/跟随全局), 吞掉会使重加后行为漂移到 qB 新种缺省
         try:
             ctx.api.torrents_add(
                 torrent_files=[data],
                 save_path=torrent.save_path,
                 category=torrent.category or None,
                 tags=torrent.tags or None,
-                upload_limit=torrent.up_limit or None,
-                download_limit=torrent.dl_limit or None,
+                upload_limit=torrent.up_limit,
+                download_limit=torrent.dl_limit,
                 # 以上属性直接使用缓存中的数据, 以下数据使用删除种子之前复制的数据
-                is_sequential_download=dup.seq_dl or None,
-                is_first_last_piece_priority=dup.f_l_piece_prio or None,
-                # content_layout??
-                ratio_limit=dup.ratio_limit or None,
-                seeding_time_limit=dup.seeding_time_limit or None,
-                inactive_seeding_time_limit=dup.inactive_seeding_time_limit or None,
-                share_limit_action=dup.share_limit_action or None,
+                is_sequential_download=dup.seq_dl,
+                is_first_last_piece_priority=dup.f_l_piece_prio,
+                contentLayout=self._infer_content_layout(ctx),
+                ratio_limit=dup.ratio_limit,
+                seeding_time_limit=dup.seeding_time_limit,
+                inactive_seeding_time_limit=dup.inactive_seeding_time_limit,
+                share_limit_action=dup.share_limit_action,
                 is_skip_checking=True,
                 is_stopped=True,
             )
@@ -493,8 +545,34 @@ class CheckAction(BaseAction):
             return ActionResult.ok("skip-checking 跳检完成并自动开始")
         return ActionResult.ok("skip-checking 跳检完成")
 
+    def _infer_content_layout(self, ctx: RuleContext) -> Optional[str]:
+        """推断原内容布局(qB 种子信息无直接字段): 重加后数据路径必须与现存文件一致,
+        跳检状态下布局错位不会自愈(直接 missingFiles/空传)。无法推断返回 None(用 qB 默认)。
+
+        - 文件路径均以 种子名/ 开头(.torrent 自带根目录): content==save -> NoSubfolder(原布局剥根),
+          content==save/种子名 -> Original
+        - 无根目录(含单文件): content==save -> Original; content==save/种子名 -> Original
+        """
+        torrent = ctx.torrent
+        save = utils.path_normalize(torrent.save_path)
+        content = utils.path_normalize(torrent.content_path or "")
+        if not content:
+            return None
+        name = utils.path_normalize(torrent.name)
+        files = torrent.files(ctx.client)  # store 惰性缓存
+        has_root = bool(files) and all(utils.path_normalize(f.name).startswith(f"{name}/") for f in files)
+        if content == save:
+            return "NoSubfolder" if has_root else "Original"
+        if content == f"{save}/{name}":
+            return "Original"
+        return None
+
     def _backup_torrent(self, ctx: RuleContext, data: bytes) -> str:
-        """重加失败时把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径"""
+        """重加失败时把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径
+
+        元数据立即落盘(非常规路径, 不适用"仅退出时落盘"的写放大规避): 备份后程序一旦
+        崩溃, 没有 state 里的元数据指引, 用户不知道 .torrent 备份的存在与原始保存路径。
+        """
         backup_dir = os.path.join(os.path.dirname(ctx.manager.state_file) or ".", "skip-check-backup")
         os.makedirs(backup_dir, exist_ok=True)
         path = os.path.join(backup_dir, f"{ctx.hash}.torrent")
@@ -508,6 +586,7 @@ class CheckAction(BaseAction):
             "tags": ctx.torrent.tags,
             "ts": time.time(),
         }
+        ctx.manager.save_state()
         return path
 
     @staticmethod

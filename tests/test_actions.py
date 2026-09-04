@@ -16,7 +16,9 @@
 - test_skip_checking_export_error: 导出 .torrent 失败 -> fail
 - test_skip_checking_export_empty: 导出为空 -> fail
 - test_skip_checking_delete_error: 删除种子失败 -> fail(无损失)
-- test_skip_checking_not_appeared: 重加后轮询未确认 -> fail
+- test_skip_checking_delete_not_confirmed: 删除后确认种子消失失败 -> 放弃跳检不重加
+- test_skip_checking_readd_preserves_values: 重加属性直传(0/负值有语义, 不得被 or None 吞掉)
+- test_skip_checking_content_layout_inferred: contentLayout 由 content_path/save_path/文件列表推断
 - test_skip_checking_auto_start_error: 自动开始失败 -> fail
 - test_speed_limit_fmt_bytes: 小值限速格式化为 B/s
 """
@@ -345,18 +347,68 @@ def test_skip_checking_delete_error():
         assert r.is_failed and "删除种子失败" in r.message, f"应失败: {r}"
 
 
-def test_skip_checking_not_appeared():
-    """checking skip-checking: 重加后轮询未确认到种子 -> fail"""
+def test_skip_checking_readd_preserves_values():
+    """checking skip-checking: 重加属性直传 —— 0 等有语义值(不限速/分享率限制)不得被 or None 吞成 qB 新种缺省"""
+    with tempfile.TemporaryDirectory() as td:
+        ctx, client = _skip_ctx(os.path.join(td, "state.json"))
+        tor = ctx.torrent
+        tor.up_limit = 0  # 0 = 不限速
+        tor.dl_limit = 2001 * 1024  # 非零控制组
+        tor.ratio_limit = 0  # qB 分享率限制(有语义)
+        tor.seeding_time_limit = 0
+        action = _check_action(without_seg=_seg("skip-checking"))
+        with patch("auto_qb.rules.actions.time.sleep"):
+            r = action.execute(ctx)
+        assert r.is_ok, f"{r}"
+        add = next(c for c in client.calls if c[0] == "add")
+        assert add[1]["upload_limit"] == 0, f"不限速 0 应直传: {add}"
+        assert add[1]["download_limit"] == 2001 * 1024, f"{add}"
+        assert add[1]["ratio_limit"] == 0 and add[1]["seeding_time_limit"] == 0, f"{add}"
+
+
+def test_skip_checking_content_layout_inferred():
+    """checking skip-checking: contentLayout 由 content_path/save_path/文件列表推断, 防止布局错位"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        action = _check_action(without_seg=_seg("skip-checking"))
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+
+        def case(save, content, files):
+            tor = FakeTorrent(save_path=save, content_path=content, name="T1", state="pausedDL")
+            client.files_map = {"HASH123": files}
+            seed_store(mgr, [tor])
+            ctx = make_ctx(mgr, tor, client)
+            return action._infer_content_layout(ctx)
+
+        def f(n):
+            return SimpleNamespace(name=n, size=1)
+
+        root_files = [f("T1/a.mkv"), f("T1/b.mkv")]
+        # 多文件带根目录: content==save/种子名 -> Original(保留根); content==save -> NoSubfolder(原布局剥根)
+        assert case(r"R:\Downloads", r"R:\Downloads\T1", root_files) == "Original"
+        assert case(r"R:\Downloads", r"R:\Downloads", root_files) == "NoSubfolder"
+        # 无根目录: content==save -> Original; 单文件 content==save/种子名 -> Original
+        assert case(r"R:\Downloads", r"R:\Downloads", [f("a.mkv"), f("b.mkv")]) == "Original"
+        assert case(r"R:\Downloads", r"R:\Downloads\T1", [f("T1.mkv")]) == "Original"
+        # 路径异常(无法推断): None(用 qB 默认)
+        assert case(r"R:\Downloads", r"R:\Elsewhere", root_files) is None
+
+
+def test_skip_checking_delete_not_confirmed():
+    """checking skip-checking: 删除后轮询确认失败(torrents_info 异常) -> 放弃跳检, 不重加"""
     with tempfile.TemporaryDirectory() as td:
 
         def boom(h=None, **kw):
             raise RuntimeError("info failed")
 
-        ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_info=boom)
+        ctx, client = _skip_ctx(os.path.join(td, "state.json"), torrents_info=boom)
         action = _check_action(without_seg=_seg("skip-checking"))
         with patch("auto_qb.rules.actions.time.sleep"):
             r = action.execute(ctx)
-        assert r.is_failed and "未确认到种子" in r.message, f"应失败: {r}"
+        assert r.is_failed and "仍在客户端" in r.message, f"应失败: {r}"
+        assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"
 
 
 def test_skip_checking_auto_start_error():

@@ -38,6 +38,7 @@
 - test_checking_skip_guard_add_fail_backup: 重加标签失败回退
 - test_checking_skip_dedup_same_day: 同日跳检去重
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
+- test_checking_recheck_fail_cooldown: 校验连续失败达上限 -> 当日不再重试(防 recheck 死循环)
 - test_checking_dry_run: dry-run 不发送请求
 - test_checking_full_checking_pending: 全检任务 pending 保留
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
@@ -57,7 +58,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from auto_qb.qbmanager import QbManager
-from auto_qb.rules.actions import CheckAction
+from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, _recheck_fail_count, CheckAction
 from auto_qb.taskqueue import DEFERRED, PENDING, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
@@ -634,6 +635,45 @@ def test_checking_no_reference_full_checking():
     assert mgr.state.get("exec_history"), "校验完成应记录执行历史"
     assert mgr.store.verified_references == {"HASH123"}, "校验通过应晋升为参考"
     assert mgr.task_queue._fast == [], "完成后任务应消亡"
+
+
+def test_checking_recheck_fail_cooldown():
+    """任务队列驱动: 校验连续失败达上限 -> 冷却当日不再重试(防损坏文件的 recheck 死循环), 次日重置"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    # progress 恒 0.5(<1): 每轮轮询都判失败(概括损坏文件); stoppedDL 满足闸门 0
+    t = make_target(state="stoppedDL", progress=0.5)
+    seed_store(mgr, [t])
+    t0 = time.time()
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+
+    # 第 1 次执行: 提交 recheck -> 让位; 轮询(+0.5)判失败(count=1) -> origin reschedule(+60s)
+    run_queue(mgr, t0)
+    run_queue(mgr, t0 + 0.5)
+    assert client.calls.count(("recheck", None)) == 1
+    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1
+
+    # 第 2 次: gate(1<3) -> 再提交; 轮询失败 count=2
+    run_queue(mgr, t0 + 61.0)
+    run_queue(mgr, t0 + 61.5)
+    assert client.calls.count(("recheck", None)) == 2
+    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 2
+
+    # 第 3 次: gate(2<3) -> 再提交; 轮询失败 count=3
+    run_queue(mgr, t0 + 121.5)
+    run_queue(mgr, t0 + 122.0)
+    assert client.calls.count(("recheck", None)) == 3
+    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 3
+
+    # 第 4 次执行: 冷却生效 -> skip, 不再提交(失败计数保留, 次日重置)
+    run_queue(mgr, t0 + 182.0)
+    assert client.calls.count(("recheck", None)) == 3, "冷却期内不应再提交"
+    assert _recheck_fail_count(mgr, "HASH123") == 3
 
 
 def test_checking_no_reference_skip_checking_warns():
