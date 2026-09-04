@@ -38,8 +38,7 @@ class RuleEngineMixin:
         """
         self.rules = []
         self.enabled_rules = []
-        rules_config = getattr(self.config, "rules_config", {}) or {}
-        for group_name, group in rules_config.items():
+        for group_name, group in self.config.rules_config.items():
             if not isinstance(group, dict):
                 continue
             for rule_name, spec in group.items():
@@ -109,7 +108,7 @@ class RuleEngineMixin:
         confs = utils.match_tracker_confs(self.config.trackers, urls)
         refs = []
         for conf in confs:
-            for ref in getattr(conf, "rules", []) or []:
+            for ref in conf.rules:
                 ref = str(ref).strip()
                 if ref.startswith("@"):
                     refs.append(ref[1:])

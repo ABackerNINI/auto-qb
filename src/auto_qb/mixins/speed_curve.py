@@ -17,7 +17,6 @@ import logging
 from datetime import date
 from typing import List, Optional, Tuple
 
-from ..config import GlobalSpeedLimitCurve
 from .. import curves
 from ..taskqueue import Task
 
@@ -62,14 +61,11 @@ def _fmt_global_limit(kib: Optional[int]) -> str:
 
 class SpeedCurveMixin:
     """全局限速曲线(全局任务): Traffic Monitor 数据 -> qB 全局速度限制"""
-    def _speed_curve_conf(self) -> Optional[GlobalSpeedLimitCurve]:
-        """曲线配置(测试用 FakeConfig 无该字段, getattr 兜底)"""
-        return getattr(self.config, "global_speed_limit_curve", None)
 
     def _handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
-        conf = self._speed_curve_conf()
-        if conf is None:
+        conf = self.config.global_speed_limit_curve
+        if conf is None:  # 未启用该功能
             return True
 
         # 1. 读取数据源

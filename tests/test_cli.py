@@ -8,9 +8,15 @@
 - test_main_normal_mode_keyboard_interrupt: run 抛 KeyboardInterrupt -> 捕获退出不崩溃
 - test_main_export_torrents_info_success: --export-torrents_info 连接成功 -> 导出并返回 0
 - test_main_export_torrents_info_connect_failure: --export-torrents_info 连接失败 -> 不导出返回 1
+- test_main_config_error_clean_exit: ConfigError 提前捕获, stderr 无堆栈, 返回 1
+- test_main_unrelated_value_error_not_swallowed: 非配置类 ValueError(程序 bug)不被误捕, 照常抛出
 """
 import sys
 from unittest import mock
+
+import pytest
+
+from auto_qb.config import ConfigError
 
 
 def _patch_argv(*args):
@@ -112,3 +118,27 @@ def test_main_export_torrents_info_connect_failure():
     assert ret == 1
     manager.export_torrents_info.assert_not_called()
     manager.run.assert_not_called()
+
+
+def test_main_config_error_clean_exit(capsys):
+    """ConfigError(文件读取/YAML 解析/校验失败统一载体): 提前捕获, stderr 无堆栈, 返回 1"""
+    err_msg = "配置校验失败(config.yml), 共 1 处:\n  [1] config: 未知键 ['x']"
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager", side_effect=ConfigError(err_msg)):
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 1
+    err = capsys.readouterr().err
+    assert "配置错误" in err and "配置校验失败" in err, err
+    assert "Traceback" not in err
+
+
+def test_main_unrelated_value_error_not_swallowed():
+    """非配置类 ValueError(程序 bug)不被误捕: 照常抛出保留堆栈, 不打印'配置错误'"""
+    manager = mock.MagicMock()
+    manager.run.side_effect = ValueError("runtime bug")
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager):
+        from auto_qb.cli import main
+        with pytest.raises(ValueError, match="runtime bug"):
+            main()

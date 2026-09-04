@@ -9,7 +9,7 @@ import re
 
 import yaml
 
-from .config import UNLIMITED_SPEED
+from .config import UNLIMITED_SPEED, _strip_none
 from .utils import convert_bool_in_dict, extract_tracker_hostnames
 
 logger = logging.getLogger(__name__)
@@ -106,15 +106,12 @@ def export_yaml_template(api, config, config_path: str, output_path: str, dry_ru
         # 只导出未配置的站点: 生成最小配置骨架
         export_config = {"config": {"trackers": {}}}
     else:
-        # 读取原始配置结构并追加缺失条目
+        # 读取原始配置结构并追加缺失条目(同一文件已经 load_config fail-fast 校验, 仅剔除留空段)
         with open(config_path, "r", encoding="utf-8") as f:
-            export_config = yaml.load(f, Loader=yaml.BaseLoader)
+            export_config = _strip_none(yaml.load(f, Loader=yaml.BaseLoader))
         export_config = convert_bool_in_dict(export_config)
 
-    # 当trackers字段为空时, yaml会将其解析为str导致解析错误
     trackers_config = export_config.get("config", {}).get("trackers", {})
-    if not isinstance(trackers_config, dict):
-        trackers_config = {}
 
     for domain in sorted(missing_domains):
         # 生成合法名称: 去除点号和横线, 限制为字母数字下划线

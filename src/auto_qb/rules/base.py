@@ -9,7 +9,7 @@ from qbittorrentapi import TorrentDictionary, Client
 from . import registry
 from .. import utils
 from ..torrents import TorrentRecord
-from ..config import Config
+from ..config import Config, ConfigError
 # from ..qbmanager import QbManager
 from ..qbapi import QbApi
 
@@ -173,21 +173,28 @@ class Rule:
         self.stop_if = str(spec.get("stop_following_rules_if", "conditions-met"))
 
         self.conditions = []
-        for cond_spec in spec.get("conditions", []):
-            if isinstance(cond_spec, dict):
+        for cond_spec in spec.get("conditions") or []:
+            if not isinstance(cond_spec, dict):
+                continue
+            try:
                 self.conditions.append(registry.create_condition(cond_spec))
+            except Exception as e:
+                raise ConfigError(f"规则 {self.name}: 条件 {cond_spec}: {e}") from e
 
         # 解析动作序列, 处理 ignore_next_action_error 标志
         self.actions = []
         ignore_next = False
-        for act_spec in spec.get("actions", []):
+        for act_spec in spec.get("actions") or []:
             if not isinstance(act_spec, dict):
                 continue
             if "ignore_next_action_error" in act_spec:
                 ignore_next = utils.parse_bool(act_spec["ignore_next_action_error"])
                 continue
             name, value = next(iter(act_spec.items()))
-            self.actions.append(registry.create_action(name, value, ignore_next))
+            try:
+                self.actions.append(registry.create_action(name, value, ignore_next))
+            except Exception as e:
+                raise ConfigError(f"规则 {self.name}: 动作 {name}: {e}") from e
             ignore_next = False
 
     def matches(self, ctx: RuleContext) -> bool:

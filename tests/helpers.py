@@ -315,6 +315,7 @@ class FakeConfig:
     delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
+    global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
 
 
 def _hr_rule(**kw) -> HRRule:

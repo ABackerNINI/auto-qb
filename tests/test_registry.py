@@ -2,9 +2,9 @@
 
 ## 测试计划(每个测试函数一条)
 - test_create_condition_known: 已知条件工厂创建
-- test_create_condition_unknown: 未知条件抛错
+- test_create_condition_unknown: 未知条件直接按名索引抛 KeyError(名称合法性由 config.validate_config 保证)
 - test_create_action_known: 已知动作工厂创建
-- test_create_action_unknown: 未知动作抛错
+- test_create_action_unknown: 未知动作直接按名索引抛 KeyError
 - test_register_condition_decorator: 条件注册装饰器
 - test_register_action_decorator: 动作注册装饰器
 """
@@ -27,8 +27,8 @@ def test_create_condition_known():
 
 
 def test_create_condition_unknown():
-    """未知条件类型抛 ValueError 并列出可用项"""
-    with pytest.raises(ValueError, match="未知条件"):
+    """未知条件直接索引注册表抛 KeyError(fail-fast 校验已保证名称合法, 工厂不再检查)"""
+    with pytest.raises(KeyError):
         create_condition({"nope": 1})
 
 
@@ -39,8 +39,8 @@ def test_create_action_known():
 
 
 def test_create_action_unknown():
-    """未知动作类型抛 ValueError 并列出可用项"""
-    with pytest.raises(ValueError, match="未知动作"):
+    """未知动作直接索引注册表抛 KeyError"""
+    with pytest.raises(KeyError):
         create_action("nope", None, ignore_error=False)
 
 

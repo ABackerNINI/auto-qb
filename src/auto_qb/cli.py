@@ -1,8 +1,9 @@
 """命令行入口"""
 import argparse
 import logging
+import sys
 
-from .config import DEFAULT_CONFIG_FILE
+from .config import DEFAULT_CONFIG_FILE, ConfigError
 from .exporter import export_yaml_template
 from .qbmanager import QbManager
 
@@ -59,9 +60,9 @@ def main():
     )
     args = parser.parse_args()
 
-    manager = QbManager(args.config)
-
     try:
+        manager = QbManager(args.config)
+
         if args.export_yaml:
             return 0 if export_yaml(manager, args) else 1
 
@@ -72,6 +73,12 @@ def main():
         manager.run(args.dry_run)
     except KeyboardInterrupt:
         logging.info("Shutting down...")
+    except ConfigError as e:
+        # 配置异常(文件读取/YAML 解析/校验失败/启动期规则 spec 错误, 统一由 config.ConfigError
+        # 承载)提前捕获: 仅输出错误信息到 stderr, 不打印堆栈(exec_info), 以退出码 1 结束;
+        # 其它类型异常属程序 bug, 照常抛出保留堆栈
+        print(f"配置错误: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
