@@ -380,7 +380,7 @@ def test_skip_checking_content_layout_inferred():
             client.files_map = {"HASH123": files}
             seed_store(mgr, [tor])
             ctx = make_ctx(mgr, tor, client)
-            return action._infer_content_layout(ctx)
+            return action._infer_content_layout(tor, client)
 
         def f(n):
             return SimpleNamespace(name=n, size=1)

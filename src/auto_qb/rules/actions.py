@@ -481,6 +481,10 @@ class CheckAction(BaseAction):
 
         dup = self._copy_tor_attrs(torrent.tor, self._ATTRS)
 
+        # 布局须在删除前推断: 删除后 store 记录已移除(ctx.torrent 为 None), 且推断依赖
+        # content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充)
+        content_layout = self._infer_content_layout(torrent, ctx.client)
+
         # 3. 删除种子(保留文件)
         try:
             logger.info(f"规则[{ctx.rule_name}] {torrent.log_repr} | 跳检删除种子(保留文件)")
@@ -514,7 +518,7 @@ class CheckAction(BaseAction):
                 # 以上属性直接使用缓存中的数据, 以下数据使用删除种子之前复制的数据
                 is_sequential_download=dup.seq_dl,
                 is_first_last_piece_priority=dup.f_l_piece_prio,
-                contentLayout=self._infer_content_layout(ctx),
+                contentLayout=content_layout,
                 ratio_limit=dup.ratio_limit,
                 seeding_time_limit=dup.seeding_time_limit,
                 inactive_seeding_time_limit=dup.inactive_seeding_time_limit,
@@ -523,7 +527,7 @@ class CheckAction(BaseAction):
                 is_stopped=True,
             )
         except Exception as e:
-            backup = self._backup_torrent(ctx, data)
+            backup = self._backup_torrent(ctx.manager, torrent, data)
             return ActionResult.fail(f"重加种子失败: {e}; 种子已从客户端移除(文件保留), "
                                      f".torrent 已备份: {backup}, 请手动重加")
 
@@ -543,9 +547,10 @@ class CheckAction(BaseAction):
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
         ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()
 
-        # 6. 无参考高风险警告 + 自动开始
+        # 6. 无参考高风险警告 + 自动开始(用删除前捕获的 torrent: 删除后 store 记录已移除,
+        #    真实流程中 ctx.torrent 为 None, 直到下一 tick 快照刷新)
         if not has_reference:
-            logger.warning(f"规则[{ctx.rule_name}] {ctx.torrent.log_repr} | 无参考跳检(高风险): "
+            logger.warning(f"规则[{ctx.rule_name}] {torrent.log_repr} | 无参考跳检(高风险): "
                            f"仅文件存在与大小对比, 内容错误会传垃圾数据")
         if segment["auto_start"]:
             try:
@@ -555,21 +560,23 @@ class CheckAction(BaseAction):
             return ActionResult.ok("skip-checking 跳检完成并自动开始")
         return ActionResult.ok("skip-checking 跳检完成")
 
-    def _infer_content_layout(self, ctx: RuleContext) -> Optional[str]:
+    def _infer_content_layout(self, torrent, client) -> Optional[str]:
         """推断原内容布局(qB 种子信息无直接字段): 重加后数据路径必须与现存文件一致,
         跳检状态下布局错位不会自愈(直接 missingFiles/空传)。无法推断返回 None(用 qB 默认)。
+
+        须在删除种子前调用(传入删除前捕获的记录): 删除后 store 记录已移除, 且文件列表
+        惰性缓存挂在记录上(空缓存时会向已删除的种子发请求)。
 
         - 文件路径均以 种子名/ 开头(.torrent 自带根目录): content==save -> NoSubfolder(原布局剥根),
           content==save/种子名 -> Original
         - 无根目录(含单文件): content==save -> Original; content==save/种子名 -> Original
         """
-        torrent = ctx.torrent
         save = utils.path_normalize(torrent.save_path)
         content = utils.path_normalize(torrent.content_path or "")
         if not content:
             return None
         name = utils.path_normalize(torrent.name)
-        files = torrent.files(ctx.client)  # store 惰性缓存
+        files = torrent.files(client)  # store 惰性缓存(filelist 前置检查已填充)
         has_root = bool(files) and all(utils.path_normalize(f.name).startswith(f"{name}/") for f in files)
         if content == save:
             return "NoSubfolder" if has_root else "Original"
@@ -577,26 +584,27 @@ class CheckAction(BaseAction):
             return "Original"
         return None
 
-    def _backup_torrent(self, ctx: RuleContext, data: bytes) -> str:
+    def _backup_torrent(self, manager, torrent, data: bytes) -> str:
         """重加失败时把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径
 
+        用删除前捕获的 torrent 记录(删除后 store 记录已移除, ctx.torrent 为 None)。
         元数据立即落盘(非常规路径, 不适用"仅退出时落盘"的写放大规避): 备份后程序一旦
         崩溃, 没有 state 里的元数据指引, 用户不知道 .torrent 备份的存在与原始保存路径。
         """
-        backup_dir = os.path.join(os.path.dirname(ctx.manager.state_file) or ".", "skip-check-backup")
+        backup_dir = os.path.join(os.path.dirname(manager.state_file) or ".", "skip-check-backup")
         os.makedirs(backup_dir, exist_ok=True)
-        path = os.path.join(backup_dir, f"{ctx.hash}.torrent")
+        path = os.path.join(backup_dir, f"{torrent.hash}.torrent")
         with open(path, "wb") as f:
             f.write(data)
-        backup_meta = ctx.manager.state.setdefault("skip_check_backup", {})
-        backup_meta[ctx.hash] = {
+        backup_meta = manager.state.setdefault("skip_check_backup", {})
+        backup_meta[torrent.hash] = {
             "path": path,
-            "save_path": ctx.torrent.save_path,
-            "category": ctx.torrent.category,
-            "tags": ctx.torrent.tags,
+            "save_path": torrent.save_path,
+            "category": torrent.category,
+            "tags": torrent.tags,
             "ts": time.time(),
         }
-        ctx.manager.save_state()
+        manager.save_state()
         return path
 
     @staticmethod
