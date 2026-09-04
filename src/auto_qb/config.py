@@ -188,13 +188,15 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
             - traffic_monitor:
                 bat_path: ".../history_traffic.dat"
         curves:
-            - period: 1D            # day/1D | month | ND(最近 N 天)
-              upload_curve:         # 阈值(parse_fsize) -> {upload_speed_limit: 速度}
-                  - 10GiB: {upload_speed_limit: 6MiB/s}
-              download_curve:       # 可省略(省略 = 不管理该方向)
-                  - 30GiB: {download_speed_limit: 11MiB/s}
-            - period: 7D
-              upload_curve: [...]
+            - curve:                # 每条 period 曲线为 curve 单项映射
+                period: 1D          # day/1D | month | ND(最近 N 天)
+                upload_curve:       # 阈值(parse_fsize) -> {upload_speed_limit: 速度}
+                    - 10GiB: {upload_speed_limit: 6MiB/s}
+                download_curve:     # 可省略(省略 = 不管理该方向)
+                    - 30GiB: {download_speed_limit: 11MiB/s}
+            - curve:
+                period: 7D
+                upload_curve: [...]
     """
     if spec is None:
         return None
@@ -244,26 +246,32 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     seen_periods = set()
     for i, item in enumerate(raw_curves):
         where = f"global_speed_limit_curve.curves[{i}]"
-        if not isinstance(item, dict):
-            raise ValueError(f"{where} 必须是字典")
-        unknown = set(item) - {"period", "upload_curve", "download_curve"}
+        if not isinstance(item, dict) or len(item) != 1:
+            raise ValueError(f"{where} 必须为单项映射: curve: {{period/upload_curve/download_curve}}")
+        (curve_key, curve_spec), = item.items()
+        if curve_key != "curve":
+            raise ValueError(f"{where} 仅支持键 curve, 实际: {curve_key}")
+        if not isinstance(curve_spec, dict):
+            raise ValueError(f"{where}.curve 必须是字典")
+        where = f"{where}.curve"
+        unknown = set(curve_spec) - {"period", "upload_curve", "download_curve"}
         if unknown:
             raise ValueError(f"{where} 未知键: {sorted(unknown)}")
-        if "period" not in item:
+        if "period" not in curve_spec:
             raise ValueError(f"{where} 缺少 period")
-        period = curves.normalize_period(item["period"])
+        period = curves.normalize_period(curve_spec["period"])
         if period in seen_periods:
-            raise ValueError(f"{where} 重复 period: {item['period']}")
+            raise ValueError(f"{where} 重复 period: {curve_spec['period']}")
         seen_periods.add(period)
-        if "upload_curve" not in item and "download_curve" not in item:
+        if "upload_curve" not in curve_spec and "download_curve" not in curve_spec:
             raise ValueError(f"{where} 需配置 upload_curve 和/或 download_curve")
         upload_points = (
-            _parse_curve_points(item["upload_curve"], "upload_speed_limit", f"{where}.upload_curve")
-            if "upload_curve" in item else None
+            _parse_curve_points(curve_spec["upload_curve"], "upload_speed_limit", f"{where}.upload_curve")
+            if "upload_curve" in curve_spec else None
         )
         download_points = (
-            _parse_curve_points(item["download_curve"], "download_speed_limit", f"{where}.download_curve")
-            if "download_curve" in item else None
+            _parse_curve_points(curve_spec["download_curve"], "download_speed_limit", f"{where}.download_curve")
+            if "download_curve" in curve_spec else None
         )
         period_curves.append(PeriodCurve(period=period, upload_points=upload_points, download_points=download_points))
     return GlobalSpeedLimitCurve(bat_path=bat_path, curves=period_curves, interval=interval)

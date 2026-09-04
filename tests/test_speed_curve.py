@@ -132,7 +132,8 @@ def _load(tmp_path, gslc_spec):
 def _valid_spec() -> dict:
     """合法完整样例(与 想法.md 样式一致, 上/下载曲线各带 period)"""
     return {
-        "interval": "10M",
+        "interval":
+            "10M",
         "traffic_source": [{
             "traffic_monitor": {
                 "bat_path": r"D:\Programs\TrafficMonitor\history_traffic.dat"
@@ -141,38 +142,42 @@ def _valid_spec() -> dict:
         "curves":
             [
                 {
-                    "period": "1D",
-                    "upload_curve":
-                        [
-                            {
-                                "10GiB": {
-                                    "upload_speed_limit": "6MiB/s"
-                                }
-                            },
-                            {
-                                "20GiB": {
-                                    "upload_speed_limit": "5MiB/s"
-                                }
-                            },
-                            {
-                                "1000GiB": {
-                                    "upload_speed_limit": "0.5MiB/s"
-                                }
-                            },
-                        ],
-                    "download_curve": [{
-                        "30GiB": {
-                            "download_speed_limit": "11MiB/s"
-                        }
-                    }],
+                    "curve": {
+                        "period": "1D",
+                        "upload_curve":
+                            [
+                                {
+                                    "10GiB": {
+                                        "upload_speed_limit": "6MiB/s"
+                                    }
+                                },
+                                {
+                                    "20GiB": {
+                                        "upload_speed_limit": "5MiB/s"
+                                    }
+                                },
+                                {
+                                    "1000GiB": {
+                                        "upload_speed_limit": "0.5MiB/s"
+                                    }
+                                },
+                            ],
+                        "download_curve": [{
+                            "30GiB": {
+                                "download_speed_limit": "11MiB/s"
+                            }
+                        }],
+                    },
                 },
                 {
-                    "period": "7D",
-                    "download_curve": [{
-                        "50GiB": {
-                            "download_speed_limit": "10MiB/s"
-                        }
-                    }]
+                    "curve": {
+                        "period": "7D",
+                        "download_curve": [{
+                            "50GiB": {
+                                "download_speed_limit": "10MiB/s"
+                            }
+                        }]
+                    },
                 },
             ],
     }
@@ -278,8 +283,11 @@ def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
 
 
 def test_speed_curve_config_rejects_bad_curves(tmp_path):
-    """curves 结构错误: 缺失/空/非字典/未知键/缺 period/非法 period/重复 period/双向全缺 -> ValueError"""
+    """curves 结构错误: 缺失/空/非单项映射/键名非 curve/curve 非字典/未知键/缺 period/非法或重复 period/双向全缺 -> ValueError"""
     base = copy.deepcopy(_valid_spec())
+
+    def item(inner):
+        return {"traffic_source": _valid_spec()["traffic_source"], "curves": [{"curve": inner}]}
 
     cases = []
     c = copy.deepcopy(base)
@@ -289,25 +297,37 @@ def test_speed_curve_config_rejects_bad_curves(tmp_path):
     c["curves"] = []
     cases.append(("curves 空", c))
     c = copy.deepcopy(base)
-    c["curves"] = [{"period": "1D", "extra": 1, "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
-    cases.append(("条目未知键", c))
+    c["curves"] = ["not-a-dict"]
+    cases.append(("条目非字典", c))
     c = copy.deepcopy(base)
-    c["curves"] = [{"upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    c["curves"] = [{"curve": {"period": "1D"}, "extra": 1}]
+    cases.append(("条目非单项映射", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"other": {"period": "1D"}}]
+    cases.append(("键名非 curve", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"curve": "not-a-dict"}]
+    cases.append(("curve 非字典", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [item({"period": "1D", "extra": 1, "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]})]
+    cases.append(("曲线内未知键", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [item({"upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]})]
     cases.append(("缺 period", c))
     c = copy.deepcopy(base)
-    c["curves"] = [{"period": "weekly", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    c["curves"] = [item({"period": "weekly", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]})]
     cases.append(("非法 period", c))
     c = copy.deepcopy(base)
-    c["curves"] = [{"period": "0D", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    c["curves"] = [item({"period": "0D", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]})]
     cases.append(("非法 period 0D", c))
     c = copy.deepcopy(base)
     c["curves"] = [  # 1D 与 day 归一化后重复
-        {"period": "1D", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]},
-        {"period": "day", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]},
+        item({"period": "1D", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}),
+        item({"period": "day", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}),
     ]
     cases.append(("重复 period", c))
     c = copy.deepcopy(base)
-    c["curves"] = [{"period": "1D"}]
+    c["curves"] = [item({"period": "1D"})]
     cases.append(("双向全缺", c))
     for name, spec in cases:
         with pytest.raises(ValueError):
@@ -319,9 +339,9 @@ def test_speed_curve_config_rejects_bad_points(tmp_path):
     up = [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]
 
     def curve(points=up, **kw):
-        item = {"period": "1D", "upload_curve": points}
-        item.update(kw)
-        return {"traffic_source": _valid_spec()["traffic_source"], "curves": [item]}
+        inner = {"period": "1D", "upload_curve": points}
+        inner.update(kw)
+        return {"traffic_source": _valid_spec()["traffic_source"], "curves": [{"curve": inner}]}
 
     cases = [
         curve(points=[]),  # 空档位表
