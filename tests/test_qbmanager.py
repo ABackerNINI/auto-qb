@@ -21,6 +21,11 @@
 - test_run_dry_run_no_save: dry_run=True 退出后不写状态文件
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
+- test_client_setter_without_store_or_api: store/api 未建时 client setter 仅设 _client
+- test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
+- test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
+- test_refresh_removed_grouping_disabled: 删除种子且分组关闭 -> 只移除任务不扫描
+- test_export_torrents_info: export_torrents_info 写种子信息到文件
 """
 import json
 import os
@@ -29,6 +34,7 @@ import time
 from unittest import mock
 
 from auto_qb.taskqueue import DEFERRED, PENDING, Task, TaskQueue
+from auto_qb.qbmanager import QbManager
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
 
@@ -284,3 +290,63 @@ def test_execute_due_respects_max():
         remaining = [t.name for t in mgr.task_queue._fast if t.run_count == 0]
         assert len(executed) == 2, f"每 tick 最多执行 max_tasks_per_tick=2: {executed}"
         assert len(remaining) == 1, f"超额任务应留在队列: {remaining}"
+
+
+def test_client_setter_without_store_or_api():
+    """store/api 尚未建立(跳过 __init__)时 client setter 只更新 _client 不崩"""
+    mgr = QbManager.__new__(QbManager)  # 绕过 __init__, store/api 属性不存在
+    client = FakeClient()
+    mgr.client = client
+    assert mgr._client is client
+
+
+def test_tick_no_due_task_empty_queue():
+    """任务队列为空: tick 刷新后无到期任务, 不执行任何任务"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()  # 无种子
+        mgr._tick(dry_run=True)
+        assert mgr.task_queue.due(time.time(), max=10) == []
+
+
+def test_refresh_added_no_tracker_match_skips():
+    """新增种子未匹配任何 tracker 配置: 警告并跳过, 不写限速/不建任务"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["U1"] = FakeTorrent(hash="U1", name="T1")
+        mgr.config.trackers = {}  # 无任何 tracker 配置
+        mgr._refresh_torrents()
+        assert client.calls == []
+        assert mgr.task_queue.due(time.time(), max=10) == []
+
+
+def test_refresh_removed_grouping_disabled():
+    """检测到删除种子且分组功能关闭: 移除任务但不触发组内缺文件扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        seed_store(mgr)  # 首轮快照已同步
+        del client.torrents["H1"]  # 种子被删除
+        mgr._refresh_torrents()
+        assert mgr.store.get("H1") is None
+        assert mgr.config.grouping.enabled is False  # 分组关闭: 跳过组内扫描
+
+
+def test_export_torrents_info():
+    """export_torrents_info: 全量种子逐条写入文件(debug 用)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+        out = os.path.join(td, "torrents.txt")
+        mgr.export_torrents_info(out)
+        text = open(out, encoding="utf-8").read()
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        assert len(lines) == 2, f"每个种子一行, 共 2 条: {lines}"
+        assert text.count("\n\n") == 2  # 每条种子后空行分隔

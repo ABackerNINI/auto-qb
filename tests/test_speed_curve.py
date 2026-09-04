@@ -4,15 +4,18 @@
 - test_speed_curve_config_disabled_by_default: 未配置 global_speed_limit_curve -> None(不启用)
 - test_speed_curve_config_parses_sample: 完整样例解析(period 归一化/阈值字节/速度字节)
 - test_speed_curve_config_rejects_bad_section: 顶层非 dict / 未知键
-- test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/多元素/未知来源/缺 bat_path
-- test_speed_curve_config_rejects_bad_curves: curves 缺失/空/缺 period/非法或重复 period/双向全缺
-- test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法
+- test_speed_curve_config_interval_optional_and_validated: interval 缺省回退主 interval / 非法值报错
+- test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/空/多元素/未知来源/元素非 dict/缺 traffic_monitor/内部未知键/缺 bat_path
+- test_speed_curve_config_rejects_bad_curves: curves 缺失/空/非单项映射/键名非 curve/curve 非 dict/未知键/缺 period/非法或重复 period/双向全缺
+- test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法/多阈值键
+- test_normalize_period_aliases: period 别名归一化(day/1D/month/ND) / 非法值 ValueError
 - test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
 - test_parse_history_dat_bad_lines: 脏行计数 / 非法日期 / 重复日期取最后
 - test_aggregate_periods: day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)
 - test_curve_speed_plan_b: 全程分档覆盖(首档覆盖低端, 边界, 末档延续)
 - test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None) / KiB 半值进位
 - test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
+- test_speed_curve_global_task_uses_own_interval: 曲线配置专属 interval
 - test_speed_curve_global_task_not_registered: 未配置 -> 不创建
 - test_speed_curve_applies_staged_upload_limit: 命中档位 -> transfer_set_upload_limit(bytes/s)
 - test_speed_curve_idempotent_second_run_no_write: 同档位重复执行不重复写
@@ -22,9 +25,15 @@
 - test_speed_curve_cross_day_rollback: 今天行缺失 -> 累计 0 -> 回落首档(自动放开)
 - test_speed_curve_dry_run_no_read_no_write: dry_run 不读当前不写 qB, 记录 state
 - test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
+- test_speed_curve_no_config_noop: 未配置曲线(conf None) -> handler 直接返回
+- test_speed_curve_dat_all_bad_lines_noop: dat 有文件但全坏行 -> 本轮不动
+- test_speed_curve_dat_bad_lines_still_applies: dat 部分坏行 -> 跳过坏行仍写 qB
+- test_speed_curve_success_logs_period_stats: 设置成功按各 period 输出累计上传/下载(今日/七日/本月/三十日)
+- test_speed_curve_format_helpers: 日志格式化辅助(_fmt_bytes/_cn_number/_period_label/_fmt_global_limit)
 - test_qbapi_global_speed_limit_normalization: qbapi KiB<->bytes/s 换算与读写
 """
 import copy
+import logging
 import os
 from datetime import date, timedelta
 
@@ -33,6 +42,7 @@ import yaml
 
 from auto_qb import curves
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
+from auto_qb.mixins.speed_curve import _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
 from auto_qb.taskqueue import Task
 from helpers import FakeClient, make_manager
 
@@ -293,6 +303,14 @@ def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
                 "bat_path": ""
             }
         }],  # 空 bat_path
+        ["not-a-dict"],  # 数据源元素非字典
+        [{}],  # 缺少 traffic_monitor 键
+        [{
+            "traffic_monitor": {
+                "bat_path": "a",
+                "extra": 1
+            }
+        }],  # traffic_monitor 内部未知键
     ]
     for src in bad_sources:
         spec = copy.deepcopy(_valid_spec())
@@ -306,7 +324,8 @@ def test_speed_curve_config_rejects_bad_curves(tmp_path):
     base = copy.deepcopy(_valid_spec())
 
     def item(inner):
-        return {"traffic_source": _valid_spec()["traffic_source"], "curves": [{"curve": inner}]}
+        """构造单个曲线条目: curves 列表元素必须是单项映射 {curve: {...}}"""
+        return {"curve": inner}
 
     cases = []
     c = copy.deepcopy(base)
@@ -416,6 +435,9 @@ def test_speed_curve_config_rejects_bad_points(tmp_path):
                 "upload_speed_limit": "5MiB/s"
             }
         }]),  # 多阈值键
+        curve(points=[{
+            "10GiB": {}
+        }]),  # 档位内缺方向键
     ]
     for spec in cases:
         with pytest.raises(ValueError):
@@ -423,6 +445,19 @@ def test_speed_curve_config_rejects_bad_points(tmp_path):
 
 
 # ---------- curves 纯函数 ----------
+def test_normalize_period_aliases():
+    """period 别名归一化: day/1D/D -> day; month -> month; ND -> ND; 非法 -> ValueError"""
+    assert curves.normalize_period("day") == "day"
+    assert curves.normalize_period("1D") == "day"
+    assert curves.normalize_period("DAY") == "day"
+    assert curves.normalize_period("month") == "month"
+    assert curves.normalize_period("7D") == "7D"
+    assert curves.normalize_period("30D") == "30D"
+    for bad in ("weekly", "0D", "3", "-1D", ""):
+        with pytest.raises(ValueError):
+            curves.normalize_period(bad)
+
+
 def test_parse_history_dat_rows():
     """头行忽略 / KB×1024 / 乱序 -> 按日期升序返回"""
     text = (
@@ -657,6 +692,107 @@ def test_speed_curve_dat_missing_noop(tmp_path):
 
     assert _run_curve(mgr) is True  # 任务保留
     assert client.transfer.calls == []
+
+
+def test_speed_curve_no_config_noop(tmp_path):
+    """未配置曲线(conf None) -> handler 直接返回, 不读文件不写 qB"""
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = _fake_client()
+    mgr.client = client
+
+    assert _run_curve(mgr) is True
+    assert client.transfer.calls == []
+
+
+def test_speed_curve_dat_all_bad_lines_noop(tmp_path):
+    """dat 有文件但无有效记录 -> warning 本轮不动, 既有全局限速保留"""
+    p = tmp_path / "garbage.dat"
+    p.write_text('garbage line\n2026/13/99 1/2\n', encoding="utf-8")
+    gslc = _gslc(str(p), _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 5120 * 1024  # 上一轮旧限速
+
+    assert _run_curve(mgr) is True
+    assert client.transfer.calls == []
+    assert client.transfer.limits["upload_limit"] == 5120 * 1024
+
+
+def test_speed_curve_dat_bad_lines_still_applies(tmp_path):
+    """dat 部分坏行 -> warning 跳过, 有效行仍参与计算并写 qB"""
+    today = date.today()
+    p = tmp_path / "mixed.dat"
+    p.write_text(f'lines: "30"\n{today:%Y/%m/%d} {15 * GIB // 1024}/0\nbroken\n', encoding="utf-8")
+    gslc = _gslc(str(p), _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr)
+    # 15GiB -> 5MiB/s; 坏行被跳过不影响有效行
+    assert client.transfer.calls == [("set_upload_limit", 5120 * 1024)]
+
+
+def test_speed_curve_success_logs_period_stats(tmp_path):
+    """设置成功时按配置各 period 输出累计上传/下载统计(今日/七日/本月/三十日)
+
+    注: QbManager 构造时 setup_logging 清空 root handlers(caplog 捕获失效),
+    故直接给模块 logger 挂 StringIO 捕获 handler。
+    """
+    import io
+
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
+    # day 双向; 7D 仅下载; month/30D 仅上传(覆盖单方向曲线分支与中文两位数标签)
+    gslc = _gslc(
+        dat,
+        _pc("day", up=_points([(10, 6)]), down=_points([(20, 11)])),
+        _pc("7D", down=_points([(20, 11)])),
+        _pc("month", up=_points([(50, 4)])),
+        _pc("30D", up=_points([(50, 4)])),
+    )
+    mgr, client = _make_mgr(tmp_path, gslc)
+    lg = logging.getLogger("auto_qb.mixins.speed_curve")
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setLevel(logging.INFO)
+    old_level = lg.level
+    lg.setLevel(logging.INFO)  # 模块 logger 无 handlers 时 effective level 取自 root(WARNING), 需显式提升
+    lg.addHandler(handler)
+    try:
+        assert _run_curve(mgr)
+    finally:
+        lg.removeHandler(handler)
+        lg.setLevel(old_level)
+    text = buf.getvalue()
+    # 上传最严: min(day 6MiB, month 4MiB, 30D 4MiB) = 4MiB/s; 下载: 11MiB/s
+    assert client.transfer.calls == [("set_upload_limit", 4 * MIB), ("set_download_limit", 11 * MIB)]
+    assert "累计上传/下载" in text
+    for label in ("今日", "七日", "本月", "三十日"):
+        assert label in text, f"统计日志缺少 {label}: {text}"
+    assert "上传限速: 4096KiB/s" in text
+    assert "下载限速: 11264KiB/s" in text
+
+
+def test_speed_curve_format_helpers():
+    """日志格式化辅助: 字节可读串 / 中文数字(含两位数) / period 中文标签 / 限速显示"""
+    assert _fmt_bytes(0) == "0B"
+    assert _fmt_bytes(1024) == "1KiB"
+    assert _fmt_bytes(int(1.5 * GIB)) == "1.5GiB"
+    assert _fmt_bytes(60 * GIB) == "60GiB"
+    assert _fmt_bytes(3 * 1024**4) == "3TiB"
+    assert _cn_number(0) == "零"
+    assert _cn_number(7) == "七"
+    assert _cn_number(9) == "九"
+    assert _cn_number(10) == "一十"  # 源码不省略十位一
+    assert _cn_number(12) == "一十二"
+    assert _cn_number(30) == "三十"
+    assert _cn_number(99) == "九十九"
+    assert _period_label("day") == "今日"
+    assert _period_label("month") == "本月"
+    assert _period_label("7D") == "七日"
+    assert _period_label("30D") == "三十日"
+    assert _period_label("120D") == "120日"
+    assert _fmt_global_limit(None) == "不限速"
+    assert _fmt_global_limit(0) == "不限速"
+    assert _fmt_global_limit(5120) == "5120KiB/s"
 
 
 def test_qbapi_global_speed_limit_normalization(tmp_path):

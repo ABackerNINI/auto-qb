@@ -8,6 +8,9 @@
 - test_parse_hr_spec_condition: HR 规范条件解析
 - test_hr_rule_defaults: HRRule 默认值
 - test_config_tracker_tags_expand_ignore_case: @tracker_tags:ignore_case 展开附加后缀
+- test_config_trackers_non_dict: trackers 字段非字典 -> 不崩且为空
+- test_config_tracker_tags_expand_no_tracker_tags: 无任何 tracker tags 时 @tracker_tags 展开为空
+- test_config_tracker_tags_expand_dedup: 重复 tag/@tracker_tags 引用去重保序
 """
 import os
 import tempfile
@@ -79,6 +82,34 @@ def test_config_tracker_tags_expand_ignore_case():
         cfg = load_config(cfg_path)
         assert set(cfg.delete_tags) == {"HHan:ignore_case", "Kufirc:ignore_case"}, \
             f"@tracker_tags:ignore_case 展开错误: {cfg.delete_tags}"
+
+
+def test_config_trackers_non_dict():
+    """trackers 字段为空/非字典(yaml 解析为 str): 兜底为空字典不崩"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = _write_config(td, trackers="not-a-dict")
+        cfg = load_config(cfg_path)
+        assert cfg.trackers == {}
+
+
+def test_config_tracker_tags_expand_no_tracker_tags():
+    """没有任何 tracker 配置 tags 时 @tracker_tags 展开为空列表"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = _write_config(td, trackers={"NoTag": {"domains": ["x.com"], "tags": []}})
+        cfg = load_config(cfg_path)
+        assert cfg.delete_tags_if_has_no_torrents == []
+
+
+def test_config_tracker_tags_expand_dedup():
+    """重复 tag 与重复 @tracker_tags 引用: 去重保序"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = _write_config(
+            td,
+            delete_tags=["@tracker_tags", "HHan", "@tracker_tags", "regex:^seed-"]
+        )
+        cfg = load_config(cfg_path)
+        assert cfg.delete_tags == ["HHan", "Kufirc", "regex:^seed-"], \
+            f"去重展开错误: {cfg.delete_tags}"
 
 
 def test_parse_hr_spec_missing_required():

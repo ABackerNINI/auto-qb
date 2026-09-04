@@ -6,6 +6,8 @@
 - test_main_export_connect_failure: 导出时连接失败处理
 - test_main_default_config_path: 缺省配置路径解析
 - test_main_normal_mode_keyboard_interrupt: run 抛 KeyboardInterrupt -> 捕获退出不崩溃
+- test_main_export_torrents_info_success: --export-torrents_info 连接成功 -> 导出并返回 0
+- test_main_export_torrents_info_connect_failure: --export-torrents_info 连接失败 -> 不导出返回 1
 """
 import sys
 from unittest import mock
@@ -84,3 +86,29 @@ def test_main_normal_mode_keyboard_interrupt():
         main()  # 不应抛出 KeyboardInterrupt
     m_qb.assert_called_once_with("config.yml")
     manager.run.assert_called_once_with(False)
+
+
+def test_main_export_torrents_info_success():
+    """--export-torrents_info 且连接成功: 导出 torrents.txt 并返回 0"""
+    manager = mock.MagicMock()
+    manager.connect.return_value = True
+    with _patch_argv("auto-qb", "config.yml", "--export-torrents_info"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager):
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 0
+    manager.export_torrents_info.assert_called_once_with("torrents.txt")
+    manager.run.assert_not_called()
+
+
+def test_main_export_torrents_info_connect_failure():
+    """--export-torrents_info 但连接失败: 不导出, 返回 1"""
+    manager = mock.MagicMock()
+    manager.connect.return_value = False
+    with _patch_argv("auto-qb", "config.yml", "--export-torrents_info"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager):
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 1
+    manager.export_torrents_info.assert_not_called()
+    manager.run.assert_not_called()

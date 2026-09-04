@@ -14,7 +14,9 @@ Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() �
 """
 import os
 import tempfile
+from unittest import mock
 
+from auto_qb.qbapi import QbApi
 from auto_qb.rules import RuleContext
 
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
@@ -214,3 +216,76 @@ def test_ctx_api_uses_manager_api_when_bound():
         client = _make_client(mgr, t1)
         ctx = make_ctx(mgr, FakeTorrent(), client)
         assert ctx.api is mgr.api
+
+
+def test_qbapi_write_ops_without_store():
+    """QbApi 不绑 store: 各写操作仅透传 client, 不同步快照也不崩"""
+    client = FakeClient()
+    api = QbApi(client, None)
+    api.torrents_add_tags(tags=["T"], torrent_hashes="H1")
+    api.torrents_remove_tags(tags=["T"], torrent_hashes="H1")
+    api.torrents_delete_tags(tags=["T"])
+    api.torrents_create_category(name="cat")
+    api.torrents_set_category(category="cat", torrent_hashes="H1")
+    api.torrents_start(torrent_hashes="H1")
+    api.torrents_stop(torrent_hashes="H1")
+    api.torrents_set_upload_limit(torrent_hashes="H1", limit=1024)
+    api.torrents_set_download_limit(torrent_hashes="H1", limit=2048)
+    api.torrents_set_location(torrent_hashes="H1", location="/dl")
+    api.torrents_delete(torrent_hashes="H1")
+    assert len(client.calls) == 11
+
+
+def test_qbapi_bind_without_store_keeps_store():
+    """bind 不带 store: 保留原 store(store 不替换); _to_list(None) -> []"""
+    client = FakeClient()
+    api = QbApi(client, None)
+    assert api._to_list(None) == []
+    assert api._to_list("H1") == ["H1"]
+    assert api._to_list(["H1", "H2"]) == ["H1", "H2"]
+    # bind(client) 未传 store: store 保持 None 不替换
+    api.bind(FakeClient())
+    assert api.store is None
+    assert api.client is not None
+
+
+def test_qbapi_passthrough_methods_delegate():
+    """无快照变化的透传方法: 原样委托给 client"""
+    client = mock.MagicMock()
+    api = QbApi(client, None)
+    api.torrents_add(torrent_files="f.torrent")
+    api.torrents_recheck(torrent_hashes="H1")
+    api.torrents_reannounce(torrent_hashes="H1")
+    api.torrents_info()
+    api.torrents_piece_hashes("H1")
+    api.torrents_export("H1")
+    api.auth_log_in(username="u", password="p")
+    client.torrents_add.assert_called_once_with(torrent_files="f.torrent")
+    client.torrents_recheck.assert_called_once_with(torrent_hashes="H1")
+    client.torrents_reannounce.assert_called_once_with(torrent_hashes="H1")
+    client.torrents_info.assert_called_once()
+    client.torrents_piece_hashes.assert_called_once_with("H1")
+    client.torrents_export.assert_called_once_with("H1")
+    client.auth_log_in.assert_called_once_with(username="u", password="p")
+
+
+def test_qbapi_read_ops_fallback_without_store_or_miss():
+    """读操作兜底: 无 store 直接查 client; store 有但快照缺该 hash 时 fallback client"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1")
+    client.tags = {"C"}
+    # 无 store: tags/categories/trackers/files 全部直连 client
+    api = QbApi(client, None)
+    assert api.torrents_tags() == list(client.tags)
+    assert api.torrents_categories() == {}
+    assert api.torrents_trackers("H1") == client.torrents_trackers("H1")
+    assert api.torrents_files("H1") == client.torrents_files("H1")
+    # 绑空 store 但快照无该 hash: trackers/files 回退 client
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        t2 = FakeTorrent(hash="H2")
+        _make_client(mgr, t2)  # 快照只有 H2
+        assert mgr.api.torrents_trackers("H1") == client.torrents_trackers("H1")
+        assert mgr.api.torrents_files("H1") == client.torrents_files("H1")
+        # 快照命中: files 走记录缓存(client 调用不涉及 files_map 时的返回)
+        assert mgr.api.torrents_files("H2") == t2.files(mgr.api.client)
