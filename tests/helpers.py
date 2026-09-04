@@ -411,10 +411,10 @@ def make_ctx(mgr, tor, client, dry_run=False):
     # ① client 绑定: 动作走 ctx.api -> manager.api(QbApi), 未绑 client 时自动绑定
     if getattr(mgr, "_client", None) is None:
         mgr.client = client
-    # ③ tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 _match_tracker 赋值)
+    # ③ tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 _match_tracker_conf 赋值)
     if tor.tracker_conf is None:
         try:
-            tor.tracker_conf = mgr._match_tracker(tor)
+            tor.tracker_conf = mgr._match_tracker_conf(tor)
         except Exception:
             tor.tracker_conf = None
     # ② 对象身份注入: by_hash[h] is tor(已存在则原地替换/更新)

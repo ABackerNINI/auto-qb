@@ -205,7 +205,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 torrent = self.store.get(h)
 
                 # 匹配tracker配置
-                tracker_conf = self._match_tracker(torrent)
+                tracker_conf = self._match_tracker_conf(torrent)
 
                 # 如果没有匹配到tracker配置, 则打印警告日志并跳过该种子
                 if not tracker_conf:

@@ -150,7 +150,7 @@ def test_rule_task_executes_only_refs():
         mgr.client = client
         tor = FakeTorrent(tags="")
         seed_store(mgr, [tor])
-        tor.tracker_conf = mgr._match_tracker(tor)  # 等效 _refresh_torrents 对新增种子的处理
+        tor.tracker_conf = mgr._match_tracker_conf(tor)  # 等效 _refresh_torrents 对新增种子的处理
         rules = mgr._rules_for_torrent(tor)
         assert [r.name for r in rules] == ["example_rules.add_site_tag"], "只应绑定被引用的规则"
         for rule in rules:
