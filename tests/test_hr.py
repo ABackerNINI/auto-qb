@@ -326,7 +326,7 @@ def test_hr_aux_seed_excluded():
         assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is False
         assert client.calls == [], f"辅种不应触发 HR: {client.calls}"
 
-        # total_size=0 时 dlratio 兜底为 0(除数保护), 同样排除
+        # total_size=0 时 dlratio fallback为 0(除数保护), 同样排除
         mgr2 = make_manager(os.path.join(td, "state2.json"))
         client2 = FakeClient()
         mgr2.client = client2

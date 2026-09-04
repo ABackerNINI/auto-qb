@@ -43,7 +43,7 @@ process(ctx) -> (handled: bool, stop: bool)
 - 非幂等动作 (校验/开始/强制汇报/限速) 必须配 `execute_once: once/daily/hourly` 或 `cooldown`。
 - `cooldown` 优先于 `execute_once` 粒度: 距上次执行成功不足 cooldown 则跳过。
 - 记录键: `state["exec_history"]["{rule_name}:{hash}"] = {ts, date, hour}`; `daily` 按自然日切换 (与 upload_size_today 口径一致), `hourly` = 同日同小时。
-- 另有**独立于规则去重的兜底**: `CheckAction` 跳检自带同日去重 (每规则每种子每天最多跳检一次)。
+- 另有**独立于规则去重的fallback**: `CheckAction` 跳检自带同日去重 (每规则每种子每天最多跳检一次)。
 
 ### ActionResult 四态
 
@@ -90,7 +90,7 @@ process(ctx) -> (handled: bool, stop: bool)
 | `stop` | `true` | 已 `is_stopped` → skip |
 | `checking` | 见下节 | 校验/跳检, 最复杂动作 |
 | `move_to` | `{path: "/new"}` | set_location; path 空 → fail |
-| `reannounce` | `true` | ⚠️ 有风险: 运行时最小间隔 10M(同种子, state 键 `reannounce_ts`, 独立于规则去重兜底) + 暂停种子跳过 + 未配 execute_once/cooldown 时加载 WARNING; 高频 announce 会被封号 |
+| `reannounce` | `true` | ⚠️ 有风险: 运行时最小间隔 10M(同种子, state 键 `reannounce_ts`, 独立于规则去重fallback) + 暂停种子跳过 + 未配 execute_once/cooldown 时加载 WARNING; 高频 announce 会被封号 |
 | `upload_speed_limit` | `"1000KiB/s"` | 见下"限速保护" |
 | `download_speed_limit` | 同上 | 同上 |
 

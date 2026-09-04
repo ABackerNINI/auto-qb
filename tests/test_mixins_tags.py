@@ -266,7 +266,7 @@ def test_add_tags_empty():
 
 
 def test_add_episode_tags_files_error():
-    """_add_episode_tags: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环兜底)"""
+    """_add_episode_tags: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环fallback)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()

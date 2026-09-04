@@ -796,7 +796,7 @@ def test_speed_curve_format_helpers():
 
 
 def test_qbapi_global_speed_limit_normalization(tmp_path):
-    """QbApi 门面: 全局限速走 qB 5.0 transfer 端点(bytes/s, 0=不限); 对外 KiB<->bytes/s 换算 """
+    """QbApi Facade: 全局限速走 qB 5.0 transfer 端点(bytes/s, 0=不限); 对外 KiB<->bytes/s 换算 """
     mgr, client = _make_mgr(tmp_path, _gslc("x.dat", _pc("day", up=_points(FULL_UPLOAD))))
     api = mgr.api
     assert api.get_global_speed_limits() == {"upload_limit": 0, "download_limit": 0}  # 0 归一 0

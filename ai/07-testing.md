@@ -31,7 +31,7 @@
 ### 构造函数 (最常用)
 
 - **`make_manager(state_file, tracker_rules=None, tracker_kw=None)`**: 建 FakeConfig + QbManager (不连客户端) + 注入 3 条示例规则集 `example_rules` (add_site_tag/hr_done/stop_low_ratio, 分别覆盖 never+变量/`satisfied`+daily/`once`+action-failed) + `_load_rules()` (run() 才自动加载, 测试须手动)。
-- **`make_ctx(mgr, tor, client, dry_run=False)`**: 构造 RuleContext。保证: ①client 绑定到 mgr (动作走 QbApi 门面) ②tracker_conf 已匹配 ③**对象身份直写** `store.by_hash[hash] is tor` — 后续改 `tor.xxx` 属性对 `ctx.torrent` 实时可见 (无需重建)。
+- **`make_ctx(mgr, tor, client, dry_run=False)`**: 构造 RuleContext。保证: ①client 绑定到 mgr (动作走 QbApi Facade) ②tracker_conf 已匹配 ③**对象身份直写** `store.by_hash[hash] is tor` — 后续改 `tor.xxx` 属性对 `ctx.torrent` 实时可见 (无需重建)。
 - **`seed_store(mgr, torrents=None)`**: 把种子灌入 store (对象身份保留, 语义同 refresh 的 diff), 返回 (added, removed)。
 - **`_hr_rule(**kw)`**: 默认 3D@70%+12H 的 HRRule。
 

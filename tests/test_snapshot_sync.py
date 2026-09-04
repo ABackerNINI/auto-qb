@@ -1,8 +1,8 @@
-"""快照一致性回归测试: QbApi 门面写操作后同步 TorrentStore 快照
+"""快照一致性回归测试: QbApi Facade写操作后同步 TorrentStore 快照
 
 Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() 判断标签使用数,
 但同 tick 内其它任务(标签/分类/限速/启停)写标签只调客户端 API 不同步快照, 读到旧使用数
-导致误删。方案: 新建 QbApi 门面统一封装所有 qB API 调用, 写操作后同步 store 快照字段
+导致误删。方案: 新建 QbApi Facade统一封装所有 qB API 调用, 写操作后同步 store 快照字段
 与全局缓存。
 
 验证点:
@@ -10,7 +10,7 @@ Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() �
 - delete_tags 同步所有记录并失效全局标签缓存
 - set_category / start / stop / 限速 / set_location / delete 同步 record 字段
 - create_category 失效全局分类缓存
-- RuleContext.api 恒为 manager.api(QbApi 门面); 未绑定客户端时 api.client 为 None
+- RuleContext.api 恒为 manager.api(QbApi Facade); 未绑定客户端时 api.client 为 None
 """
 import os
 import tempfile
@@ -40,7 +40,7 @@ def test_delete_tags_if_has_no_torrents_not_deleted_after_same_tick_add():
         client = _make_client(mgr, t1)
         client.tags = {"C", "D"}  # 全局标签定义
 
-        # 同 tick 内其它任务给种子添加标签 D(经门面, 快照已同步)
+        # 同 tick 内其它任务给种子添加标签 D(经Facade, 快照已同步)
         mgr.api.torrents_add_tags(tags=["D"], torrent_hashes="H1")
         assert "D" in mgr.store.get("H1").tags_set
         assert mgr.store.tag_usage().get("D") == 1
@@ -51,7 +51,7 @@ def test_delete_tags_if_has_no_torrents_not_deleted_after_same_tick_add():
         assert ("delete_tags", {"D"}) not in client.calls, f"D 被误删: {client.calls}"
 
         # 对照: 真正无种子的标签 X 应被删除
-        # (经门面给不存在的种子添加标签: 全局定义新增 X, 但快照无记录使用 -> 使用数为 0)
+        # (经Facade给不存在的种子添加标签: 全局定义新增 X, 但快照无记录使用 -> 使用数为 0)
         mgr.api.torrents_add_tags(tags=["X"], torrent_hashes="NONEXISTENT")
         assert "X" in mgr.store.all_tags()
         assert mgr.store.tag_usage().get("X", 0) == 0
@@ -209,7 +209,7 @@ def test_ctx_api_not_fallback_without_manager_client():
 
 
 def test_ctx_api_uses_manager_api_when_bound():
-    """RuleContext.api: manager 绑定客户端后优先返回 manager.api 门面"""
+    """RuleContext.api: manager 绑定客户端后优先返回 manager.api Facade"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         t1 = FakeTorrent(hash="H1", name="A", state="stalledUP")
@@ -270,7 +270,7 @@ def test_qbapi_passthrough_methods_delegate():
 
 
 def test_qbapi_read_ops_fallback_without_store_or_miss():
-    """读操作兜底: 无 store 直接查 client; store 有但快照缺该 hash 时 fallback client"""
+    """读操作fallback: 无 store 直接查 client; store 有但快照缺该 hash 时 fallback client"""
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1")
     client.tags = {"C"}

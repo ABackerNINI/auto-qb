@@ -140,7 +140,7 @@ class Config:
     remove_similar_tags: bool = False
     add_episode_tags: bool = False  # 种子添加时自动添加集数标签: 名称不含集数时从文件列表解析
 
-    hr: HRRule = field(default_factory=HRRule)  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底)
+    hr: HRRule = field(default_factory=HRRule)  # 全局 HR 默认输出设置(站点 hr 段未设置时fallback)
 
     # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
     delete_tags: List[str] = field(default_factory=list)

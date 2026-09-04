@@ -179,7 +179,7 @@ config:
     delete_tags_if_has_no_torrents:  # 无种子使用时才删除
         - "@tracker_tags:ignore_case" # 引用全部 tracker 配置的标签， 并忽略大小写
 
-    # 全局 HR 设置(站点 hr: 段未设置时兜底)
+    # 全局 HR 设置(站点 hr: 段未设置时fallback)
     hr:
         add_tag: '' # 满足 HR 触发条件时添加的标签格式，支持变量
         add_category: '!!HR${required_seeding_time}!!' # 满足 HR 触发条件时添加的分类格式，支持变量
@@ -189,7 +189,7 @@ config:
         overwrite_category_for_satisfied: false # 做种时长满足要求时是否覆盖分类
 
     # 全局限速曲线配置 (需配置数据来源)
-    global_speed_limit_curve: # 见下方[#全局限速配置]
+    # global_speed_limit_curve: # 见下方[#全局限速配置]
 
     # 自定义规则集(名称以 "_rules" 结尾): 完整示例见下方[#自定义规则配置示例]
     # example_rules:
@@ -419,7 +419,7 @@ config:
 - `execute_once` 可选: `never` / `once`(每种子只执行一次)/ `daily`(每种子每天最多一次)/ `hourly`(每种子每小时最多一次)
 - `cooldown` 覆盖 `execute_once` 的粒度，如 `execute_once: never` + `cooldown: 10M`
 - 执行历史记录在 `state_file`，键为 `规则名 + 种子 hash + 时间窗口(日/小时)`；`daily` 窗口按自然日切换，与 `upload_size_today` 统计口径一致
-- 跳检另有独立兜底: 跨规则同日去重(同一种子当日只跳检一次) + full-checking 连续失败 3 次当日冷却(防损坏文件 recheck 死循环, 次日重置) + reannounce 运行时最小间隔 10M(不依赖规则去重)
+- 跳检另有独立fallback: 跨规则同日去重(同一种子当日只跳检一次) + full-checking 连续失败 3 次当日冷却(防损坏文件 recheck 死循环, 次日重置) + reannounce 运行时最小间隔 10M(不依赖规则去重)
 
 ### 动作结果与错误处理
 
@@ -468,7 +468,7 @@ src/auto_qb/
 ├── exporter.py        # YAML 配置模板导出
 ├── logging.py         # 日志配置
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
-├── qbapi.py           # qB API 门面: 封装客户端调用 + 写操作后同步 store 快照
+├── qbapi.py           # qB API Facade: 封装客户端调用 + 写操作后同步 store 快照
 ├── taskqueue.py       # 单任务队列: 时间优先堆，所有任务(含校验结果轮询)统一调度
 ├── torrents.py        # 种子信息数据层: 全量快照+惰性缓存+分组索引，每main_tick刷新
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)

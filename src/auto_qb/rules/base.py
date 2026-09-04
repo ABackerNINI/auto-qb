@@ -107,7 +107,7 @@ class RuleContext:
 
     @property
     def api(self) -> QbApi | Client:
-        """qB API 门面: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
+        """qB API Facade: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
         api = getattr(self.manager, "api", None)
         if api is not None:
             return api
@@ -198,7 +198,7 @@ class Rule:
             ignore_next = False
 
         # 高风险动作静态提醒: reannounce 高频触发会被 tracker 封号, 未配去重时给出告警
-        # (动作内另有最小间隔运行时保护兜底)
+        # (动作内另有最小间隔运行时保护fallback)
         if any(a.name == "reannounce" for a in self.actions) and self.execute_once == "never" and self.cooldown <= 0:
             logger.warning(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
 

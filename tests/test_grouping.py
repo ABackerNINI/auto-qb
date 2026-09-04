@@ -32,7 +32,7 @@
 - test_group_reference_candidates: 返回做种成员作为参考候选
 - test_grouping_save_path_change_no_cache: 无缓存文件映射 -> 维持原行为不重归组
 - test_assign_new_torrent_missing: 哈希不在 by_hash -> AttributeError 上抛(调用方保证存在)
-- test_assign_new_torrent_files_error: 文件列表拉取异常 -> 异常上抛(由 run 主循环兜底)
+- test_assign_new_torrent_files_error: 文件列表拉取异常 -> 异常上抛(由 run 主循环fallback)
 - test_assign_to_group_empty_map: 空文件映射 -> 不归组
 - test_check_missing_files_no_seeding_rep: 组内无已完成做种种子 -> 不检查
 - test_check_missing_files_size_mismatch: 文件存在但大小不符 -> 暂停 + MISSING
@@ -740,7 +740,7 @@ def test_assign_new_torrent_missing():
 
 
 def test_assign_new_torrent_files_error():
-    """_assign_new_torrent: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环兜底), 不归组"""
+    """_assign_new_torrent: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环fallback), 不归组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file))

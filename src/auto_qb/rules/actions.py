@@ -442,7 +442,7 @@ class CheckAction(BaseAction):
         风险控制:
         - 部分下载(0<progress<1)禁止跳检: 预分配零块会被当作有效数据上传
         - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行
-        - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once 兜底)
+        - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once fallback)
         - 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日也只跳检一次(统计只丢一次)
         - 重加前轮询确认种子已从客户端消失(qB 删除异步, 未消失就重加会撞"种子已存在")
         - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
@@ -456,7 +456,7 @@ class CheckAction(BaseAction):
         if 0.0 < progress < 1.0:
             return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
 
-        # 0.5 同日去重(安全兜底, 与 execute_once 无关)
+        # 0.5 同日去重(安全fallback, 与 execute_once 无关)
         record = ctx.manager.get_exec_record(ctx.rule_name, ctx.hash)
         if record and record.get("date") == date.today().isoformat():
             return ActionResult.skip("今日已跳检, 跳过")
@@ -645,7 +645,7 @@ class MoveToAction(BaseAction):
 
 @register_action
 class ReannounceAction(BaseAction):
-    """强制汇报 tracker(高风险): 运行时最小间隔保护, 独立于规则 execute_once/cooldown 兜底
+    """强制汇报 tracker(高风险): 运行时最小间隔保护, 独立于规则 execute_once/cooldown fallback
 
     高频 announce 会被 tracker 判定异常封号, 因此动作自身强制限频, 不依赖用户配置去重。
     """
