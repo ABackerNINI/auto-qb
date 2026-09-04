@@ -8,6 +8,29 @@
 - **fail-fast**: 非法格式/未知键在加载时抛 ValueError, 程序不启动。给新配置键写解析时必须校验并给出可读错误 (参考 `load_global_speed_limit_curve` 的逐键 unknown-key 检查风格)。
 - 站点配置覆盖全局: `load_tracker_hr(spec, global_hr)` 站点字段优先全局兜底; `remove_similar_tags` 同理。合并发生在加载时, 运行期只用合并后的值。
 
+## fail-fast 全量校验 (2026-09-05 新增, config.validate_config)
+
+`load_config` 在解析前做全量校验, **聚合全部错误一次性抛 `ConfigError`**(ValueError 子类, 统一承载文件读取失败/YAML 解析失败/校验失败/启动期规则 spec 错误), 每条带配置路径, 形如:
+
+```
+配置校验失败(config.yml), 共 2 处:
+  [1] config.qbittorrent: 未知键 ['hos'], 可用键: ['host', 'password', 'port', 'username']
+  [2] config.trackers.T1: 缺少必填键 domains(站点域名列表)
+```
+
+校验范围:
+- **未知键**: 根节点(仅允许 config)/config 顶层/各段(log/qbittorrent/grouping/hr)/tracker 段/站点 hr 段/规则 spec 一律拒绝; `single_instance_lock` 为规划中预留键(接受但不生效)
+- **必填项**: tracker 的 `domains`(非空字符串列表)、站点 hr 的 `required_seeding_time`; 其余键有默认值
+- **值格式**: 复用 utils.parse_*(时间/大小/速度/布尔)与 parse_hr_condition; `main_tick` 须 >0; `port` 1-65535; 日志等级须合法; `regex:` 模式须可编译(delete_tags/tracker.remove_tags)
+- **规则集 spec**: 已知键/`execute_once`(never/once/daily/hourly)/`stop_following_rules_if` 六值/`trigger` 仅 interval/conditions-actions 须单键字典且名称已注册(经 registry 延迟导入, 避免循环依赖); 条件/动作 spec 值的深度校验在 Rule 构造时进行(报错带规则名上下文)
+- **tracker.rules 引用**: 必须 `@` 开头且引用的规则集/规则存在(否则运行时会静默不执行)
+
+**留空语义**: `yaml.BaseLoader` 把 `key:` 留空解析为空串 `''`(不是 None); `_strip_none` 将 None/空串统一视为"未配置", 走默认值(默认值本为空串的键如 hr.add_tag 行为不变)。因此"有默认值的配置允许为空, 没有的必须有"。
+
+**先验证再解析**: 全部正确性检查集中在 `validate_config`(含 `_validate_global_speed_limit_curve`); 通过后各 `load_*` 函数仅做转换、不含任何检查。**config 之后的全部代码同样假定配置正确**: registry 工厂直接按名索引(未知名 = KeyError, 由校验兜底)、`config.global_speed_limit_curve`/`rules_config`/`tracker.rules` 等属性直接访问(无 getattr 兜底)、exporter 重读原始文件时复用 `_strip_none`。注意区分: 功能开关(`grouping.enabled`/`check_missing_files`/`hr` 等)是语义判断不是正确性检查, 正常保留; `rules/actions.py` 的 `CheckAction._validate` 在 Rule 构造时深度校验 checking 动作 spec(带规则名上下文), 属规则层校验。
+
+**CLI 错误输出**: `cli.main` 提前捕获 `ConfigError`(且仅此一种 —— 非配置类 ValueError/OSError 属程序 bug, 照常抛出保留堆栈), 仅向 stderr 输出 `配置错误: <信息>`(无堆栈/exec_info), 退出码 1; 入口(auto-qb.py / __main__.py)用 `sys.exit(main())` 使退出码生效。
+
 ## 全部配置键 (顶层 `config:` 段)
 
 | 键 | 类型/默认 | 说明 |

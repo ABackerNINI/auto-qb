@@ -37,7 +37,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 **🚧 标注的语义 (作者澄清, 重要)**: 🚧 = "未实现 **或** 已实现但未严格测试(实盘验证)"。规则系统一节的 🚧 (trigger/execute_once/cooldown、size/trackers/state/hr/date_time/seedtime/upload_*/freespace 条件、checking/move_to/reannounce 动作、stop_following_rules_if) 属于后者 — 代码已有单测, 但作者认定未经严格验证, **必须保留, 勿因"已实现"而移除** (2026-09-05 曾误删, 已按作者要求恢复)。
 
-其余 🚧 属未实现: 单实例锁 / 启动 fail-fast 全量校验 (config 校验只覆盖部分: 曲线/checking 段严格, 其它宽松) / `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` 触发时机。
+其余 🚧 属未实现: 单实例锁 / `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` 触发时机。(fail-fast 全量配置校验已于 2026-09-05 实现 — config.validate_config 聚合校验, 见 05-config-reference; README 该条 🚧 保留 = 未严格测试语义)
 
 > 想法.md 是设计草稿, 不随实现同步; 改 README 时以代码为准, 但 🚧 标注的取舍听作者。
 

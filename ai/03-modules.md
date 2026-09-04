@@ -14,8 +14,8 @@
 
 | 文件 | 行数 | 职责 | 关键内容 |
 |------|------|------|----------|
-| `cli.py` | 78 | argparse 入口 | `--export-yaml/-e`, `--only-missing`, `--dry-run/-n`, `--export-torrents_info`; 导出模式不进主循环 |
-| `config.py` | 483 | 配置数据类与加载 | `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint`; `load_config()` fail-fast; 常量 `DEFAULT_*` (main_tick=2s, interval=60s, state_file=auto-qb-state.json) |
+| `cli.py` | ~85 | argparse 入口 | `--export-yaml/-e`, `--only-missing`, `--dry-run/-n`, `--export-torrents_info`; 导出模式不进主循环; **提前捕获 `ConfigError`**(stderr 输出 `配置错误: ...` 无堆栈, 退出码 1; 其它异常照常抛出); 入口 `sys.exit(main())` 使退出码生效 |
+| `config.py` | ~780 | 配置数据类与加载 + fail-fast 全量校验 | `ConfigError`(配置错误统一异常, ValueError 子类); `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint`; `validate_config()`(聚合校验未知键/必填项/格式/规则 spec/引用, 见 05), `_strip_none()`(留空走默认), `load_config()`(读取/YAML/校验错误统一抛 ConfigError); 常量 `DEFAULT_*`/`KNOWN_*_KEYS` |
 | `qbmanager.py` | 314 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
 | `taskqueue.py` | 192 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task |
 | `torrents.py` | 361 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存), `TorrentStore`(refresh/分组索引/全局缓存/写后同步) |
@@ -23,7 +23,7 @@
 | `utils.py` | 314 | 通用工具 | `parse_time/parse_fsize/parse_speed/parse_bool/parse_compare/compare/parse_hr_condition`; `match_tag_patterns`/`match_path_patterns`/`path_normalize`; `match_tracker_confs`(hostname 精确匹配); `add_long_path_prefix_for_win`; `extract_tracker_hostnames`; `fmt_speed`; `timer` 装饰器 |
 | `curves.py` | 122 | 限速曲线纯逻辑 | `parse_history_dat`(Traffic Monitor dat 解析), `aggregate`(day/month/Nd 聚合), `curve_speed`(全程分档覆盖), `merge_direction`(取最严), `normalize_period`, `bytes_to_kib`。无项目内依赖, 便于单测 |
 | `episodes.py` | 113 | 集数解析 | `_EPISODE_PATTERNS`(第x集 > S01E05 > EP05 > E05 优先级), `extract_episodes_from_files`(仅视频文件, 排除分辨率/年份), `format_episode_tag`(连续才加, 格式 `zE1-5`), `name_has_episode_marker` |
-| `exporter.py` | 142 | YAML 模板导出 | 收集全部 tracker 域名 → 找未配置的 → 生成条目 (默认标签=倒数第二级域名, `hd/pt` 后字母大写), `--only-missing` 最小骨架 |
+| `exporter.py` | ~140 | YAML 模板导出 | 收集全部 tracker 域名 → 找未配置的 → 生成条目 (默认标签=倒数第二级域名, `hd/pt` 后字母大写), `--only-missing` 最小骨架; 重读原始文件时复用 `_strip_none`(文件已被 load_config 校验) |
 | `logging.py` | 40 | 日志配置 | `setup_logging`: 控制台 + RotatingFileHandler(5 备份)。注意与 stdlib logging 同名, 包内相对导入 |
 
 ## mixins/ (QbManager 的职责拆分, 组合进宿主)
@@ -42,7 +42,7 @@
 
 | 文件 | 行数 | 职责 | 关键内容 |
 |------|------|------|----------|
-| `registry.py` | 33 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(未知名抛 ValueError=fail-fast) |
+| `registry.py` | 29 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
 | `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; `replace_vars` 支持 `${required_seeding_time}`; `check_hr_condition/check_hr_satisfied`), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
 | `conditions.py` | 292 | 15 种条件插件 | 详见 [04-rule-system.md](04-rule-system.md) |
 | `actions.py` | 590 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂 (~380 行) |

@@ -16,7 +16,8 @@
 - 任务队列: 单队列 + defer/resume + check 轮询去重 (12f3b46 重构完成)
 - 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi 门面写后同步
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
-- 测试: 582 passed, 分支覆盖 94%
+- fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
+- 测试: 597 passed, 分支覆盖 95%
 
 ## 规划中 (🚧, 尚未实现)
 
@@ -27,8 +28,7 @@
 - `hr` 条件/状态与 `RuleContext.check_hr_*` 的位置整理 (TODO: 移到 actions.py)
 
 ### 其它功能
-- 单实例锁 (`single_instance_lock` 配置已占位, 未实现)
-- 启动 fail-fast 全量校验配置 (目前仅曲线/checking/HR required 严格, 其它键宽松)
+- 单实例锁 (`single_instance_lock` 配置已占位, 校验接受该键但不生效)
 - 插件系统: 直接支持自定义 Python plugin
 - 根据流量接入更多数据源 (traffic_source 当前仅 traffic_monitor 单源, 代码已按列表预留)
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
