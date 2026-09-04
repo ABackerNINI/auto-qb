@@ -203,7 +203,7 @@ class GroupingMixin:
         if rep is None:
             return  # 组内无已完成做种种子(均在下载/暂停/移动), 不检查
 
-        logger.info(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
+        logger.debug(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
         missing = False
         for fname, fsize in sizes.get(rep.hash, {}).items():
             full_path = utils.add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))
@@ -224,12 +224,13 @@ class GroupingMixin:
         if missing:
             # 文件丢失: 同组所有种子全部触发丢失动作(暂停 + MISSING 标签)
             tag = self.config.grouping.missing_tag
-            desc = ", ".join(t.log_repr for t in members)
+            # 成员紧凑格式 hash8[站点]: 同名录种共享名称, 逐个 log_repr 会重复大段名称
+            desc = ", ".join(f"{t.hash[:8]}[{t.tracker_name}]" for t in members)
             logger.warning(f"辅种组({len(members)}个) | 文件丢失, 暂停整组并添加标签 '{tag}': {desc}")
             if not dry_run:
                 self.api.torrents_stop(torrent_hashes=[t.hash for t in members])
             for t in members:
-                self._add_tags(t, [tag], dry_run)
+                self._add_tags(t, [tag], dry_run, log_level=logging.DEBUG)
 
     # ---------- 下载冲突检查(每轮, 分组 enabled 时) ----------
 

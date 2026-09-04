@@ -21,8 +21,8 @@ class TagsMixin:
     api: Optional[QbApi]
     config: Config
 
-    def _add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool):
-        """为种子添加标签（若不存在）"""
+    def _add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool, log_level: int = logging.INFO):
+        """为种子添加标签（若不存在）; log_level 控制日志级别(如分组流程整组宣告后传 DEBUG 避免逐成员重复)"""
         if not tags:
             return False
 
@@ -31,7 +31,7 @@ class TagsMixin:
         if new_tags:
             if not dry_run:
                 self.api.torrents_add_tags(tags=new_tags, torrent_hashes=torrent.hash)
-            logger.info(f"维护 {torrent.log_repr} | 添加标签: {new_tags}")
+            logger.log(log_level, f"维护 {torrent.log_repr} | 添加标签: {new_tags}")
             return True
         return False
 
