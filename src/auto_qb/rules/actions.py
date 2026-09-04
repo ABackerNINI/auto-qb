@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from datetime import date
+from types import SimpleNamespace
 from typing import List
 
 from .. import utils
@@ -502,12 +503,20 @@ class CheckAction(BaseAction):
 
     @staticmethod
     def _copy_tor_attrs(tor, attrs: list[str]):
-        """拷贝种子属性"""
-        dup = {}
+        """拷贝种子属性(删除种子前保存, 重加时逐项恢复)
+
+        兼容两种数据源访问(统一走 getattr):
+        - 真实 qB: TorrentDictionary 为 AttrDict, getattr(tor, k) 按键取值, 键缺失抛 AttributeError
+        - 测试替身(FakeTorrent): 普通对象属性, 直接 getattr 读取
+        任一属性缺失 -> ValueError(上层转为动作失败: 不删除种子, 无损失)。
+        """
+        dup = SimpleNamespace()
         for k in attrs:
-            if k not in tor:
-                raise ValueError(f"torrent.{k} 属性不存在")
-            setattr(dup, k, tor[k])
+            try:
+                value = getattr(tor, k)
+            except AttributeError:
+                raise ValueError(f"torrent.{k} 属性不存在") from None
+            setattr(dup, k, value)
         return dup
 
 

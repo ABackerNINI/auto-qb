@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 import yaml, logging
 
 from .utils import parse_bool, parse_hr_condition, parse_speed, parse_time, parse_fsize
+from . import curves
 
 DEFAULT_MAIN_TICK = "2s"
 DEFAULT_MAX_TASKS_PER_TICK = 20
@@ -110,6 +111,41 @@ class GroupingConfig:
 
 
 @dataclass
+class CurvePoint:
+    """限速曲线档位点: 该 period 内累计流量(字节)低于 threshold_bytes 的区间按 speed_bytes_per_s 限制
+
+    全程分档覆盖语义: 每档速度用于"尚未达到本档阈值"的区间(首档覆盖低端, 末档延续),
+    由 curves.curve_speed 实现。speed = 0 表示该档不限速。
+    """
+    threshold_bytes: int
+    speed_bytes_per_s: int
+
+
+@dataclass
+class PeriodCurve:
+    """一条限速曲线: 一个累计口径(period)下的上传/下载限速档位表
+
+    period 已归一化: "day"(当天) / "month"(当月累计) / "Nd"(最近 N 天滚动累计)
+    upload_points: 上传档位表(按阈值升序); None = 该曲线不管理上传方向
+    download_points: 下载档位表(按阈值升序); None = 该曲线不管理下载方向
+    """
+    period: str
+    upload_points: Optional[List[CurvePoint]] = None
+    download_points: Optional[List[CurvePoint]] = None
+
+
+@dataclass
+class GlobalSpeedLimitCurve:
+    """全局限速曲线配置(Traffic Monitor 数据源)
+
+    bat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
+    curves: 多条 period 曲线(同方向多条命中时取最严限速, 见 curves.merge_direction)
+    """
+    bat_path: str
+    curves: List[PeriodCurve]
+
+
+@dataclass
 class Config:
     main_tick: float
     max_tasks_per_tick: int
@@ -135,6 +171,125 @@ class Config:
 
     qbittorrent: QbittorrentConfig
     trackers: Dict[str, TrackerConfig]
+
+    # 全局限速曲线(Traffic Monitor): 读取 dat 流量, 按多条 period 曲线聚合, 自动设置 qB 全局速度限制
+    global_speed_limit_curve: Optional[GlobalSpeedLimitCurve] = None  # None = 未启用
+
+
+def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
+    """解析 config.global_speed_limit_curve 段(spec 为 None/缺省 -> None, 不启用)
+
+    fail-fast: 结构/数值/键全部在加载时校验, 任何非法抛 ValueError。
+    配置样式:
+        traffic_source:
+            - traffic_monitor:
+                bat_path: ".../history_traffic.dat"
+        curves:
+            - period: 1D            # day/1D | month | ND(最近 N 天)
+              upload_curve:         # 阈值(parse_fsize) -> {upload_speed_limit: 速度}
+                  - 10GiB: {upload_speed_limit: 6MiB/s}
+              download_curve:       # 可省略(省略 = 不管理该方向)
+                  - 30GiB: {download_speed_limit: 11MiB/s}
+            - period: 7D
+              upload_curve: [...]
+    """
+    if spec is None:
+        return None
+    if not isinstance(spec, dict):
+        raise ValueError("global_speed_limit_curve 必须是字典")
+    unknown = set(spec) - {"traffic_source", "curves"}
+    if unknown:
+        raise ValueError(f"global_speed_limit_curve 未知键: {sorted(unknown)}")
+
+    # traffic_source: 数据源列表, 当前仅支持单个 traffic_monitor
+    raw_sources = spec.get("traffic_source")
+    if not isinstance(raw_sources, list) or not raw_sources:
+        raise ValueError("global_speed_limit_curve.traffic_source 必须是非空列表")
+    if len(raw_sources) != 1:
+        raise ValueError("global_speed_limit_curve.traffic_source 当前仅支持单个数据源")
+    source = raw_sources[0]
+    if not isinstance(source, dict):
+        raise ValueError("global_speed_limit_curve.traffic_source 元素必须是字典")
+    unknown = set(source) - {"traffic_monitor"}
+    if unknown:
+        raise ValueError(f"global_speed_limit_curve.traffic_source 不支持的来源: {sorted(unknown)}")
+    if "traffic_monitor" not in source:
+        raise ValueError("global_speed_limit_curve.traffic_source 仅支持 traffic_monitor 数据源")
+    tm = source["traffic_monitor"]
+    if not isinstance(tm, dict):
+        raise ValueError("traffic_monitor 配置必须是字典")
+    unknown = set(tm) - {"bat_path"}
+    if unknown:
+        raise ValueError(f"traffic_monitor 未知键: {sorted(unknown)}")
+    bat_path = str(tm.get("bat_path", "")).strip()
+    if not bat_path:
+        raise ValueError("traffic_monitor 缺少 bat_path")
+
+    # curves: 多条 period 曲线(重复 period 拒绝)
+    raw_curves = spec.get("curves")
+    if not isinstance(raw_curves, list) or not raw_curves:
+        raise ValueError("global_speed_limit_curve.curves 必须是非空列表")
+
+    period_curves: List[PeriodCurve] = []
+    seen_periods = set()
+    for i, item in enumerate(raw_curves):
+        where = f"global_speed_limit_curve.curves[{i}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{where} 必须是字典")
+        unknown = set(item) - {"period", "upload_curve", "download_curve"}
+        if unknown:
+            raise ValueError(f"{where} 未知键: {sorted(unknown)}")
+        if "period" not in item:
+            raise ValueError(f"{where} 缺少 period")
+        period = curves.normalize_period(item["period"])
+        if period in seen_periods:
+            raise ValueError(f"{where} 重复 period: {item['period']}")
+        seen_periods.add(period)
+        if "upload_curve" not in item and "download_curve" not in item:
+            raise ValueError(f"{where} 需配置 upload_curve 和/或 download_curve")
+        upload_points = (
+            _parse_curve_points(item["upload_curve"], "upload_speed_limit", f"{where}.upload_curve")
+            if "upload_curve" in item else None
+        )
+        download_points = (
+            _parse_curve_points(item["download_curve"], "download_speed_limit", f"{where}.download_curve")
+            if "download_curve" in item else None
+        )
+        period_curves.append(PeriodCurve(period=period, upload_points=upload_points, download_points=download_points))
+    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=period_curves)
+
+
+def _parse_curve_points(raw_list, direction_key: str, where: str) -> List[CurvePoint]:
+    """解析 upload_curve/download_curve 列表 -> 升序 CurvePoint 列表
+
+    每元素为单项映射: 阈值大小(parse_fsize) -> {<direction_key>: 速度(parse_speed)};
+    阈值必须 > 0 且严格递增; 速度 >= 0(0 = 该档不限速)。
+    """
+    if not isinstance(raw_list, list) or not raw_list:
+        raise ValueError(f"{where} 必须是非空列表")
+    points: List[CurvePoint] = []
+    prev_threshold = 0
+    for j, entry in enumerate(raw_list):
+        pos = f"{where}[{j}]"
+        if not isinstance(entry, dict) or len(entry) != 1:
+            raise ValueError(f"{pos} 必须为单项映射: 阈值: {{{direction_key}: 速度}}")
+        (threshold_str, speed_spec), = entry.items()
+        threshold = parse_fsize(str(threshold_str))
+        if threshold <= 0:
+            raise ValueError(f"{pos} 阈值必须大于 0: {threshold_str}")
+        if threshold <= prev_threshold:
+            raise ValueError(f"{pos} 阈值必须严格递增: {threshold_str}")
+        prev_threshold = threshold
+        if not isinstance(speed_spec, dict):
+            raise ValueError(f"{pos} 速度配置必须是字典")
+        unknown = set(speed_spec) - {direction_key}
+        if unknown:
+            raise ValueError(f"{pos} 未知键: {sorted(unknown)}")
+        if direction_key not in speed_spec:
+            raise ValueError(f"{pos} 缺少 {direction_key}")
+        speed = parse_speed(str(speed_spec[direction_key]))
+        points.append(CurvePoint(threshold_bytes=threshold, speed_bytes_per_s=speed))
+    return points
 
 
 def load_logging_config(spec: dict) -> LoggingConfig:
@@ -282,6 +437,7 @@ def load_config(config_path: str) -> Config:
         grouping=load_grouping_config(cfg.get("grouping", {})),
         qbittorrent=qb_config,
         trackers=trackers,
+        global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
     )
 
 

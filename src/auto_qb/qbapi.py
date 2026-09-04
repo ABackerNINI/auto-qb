@@ -186,3 +186,26 @@ class QbApi:
 
     def auth_log_in(self, **kwargs: Any):
         return self._client.auth_log_in(**kwargs)
+
+    # ---------- 全局速度限制(app preferences; 单位 KiB/s, qB 以 -1 表示不限速) ----------
+
+    def get_global_speed_limits(self) -> dict:
+        """读取 qB 全局上传/下载速度限制(KiB/s); <=0 归一为 0(= 不限速) """
+        prefs = self._client.app.preferences()
+        return {
+            "upload_limit": max(0, int(prefs.get("upload_limit") or 0)),
+            "download_limit": max(0, int(prefs.get("download_limit") or 0)),
+        }
+
+    def set_global_speed_limits(self, upload_kib: int = None, download_kib: int = None):
+        """设置 qB 全局上传/下载速度限制(KiB/s); 0 = 不限速(qB 实际存 -1, 在此换算)
+
+        仅传非 None 的方向; 调用方先比较当前值, 有变化才调用。
+        """
+        prefs = {}
+        if upload_kib is not None:
+            prefs["upload_limit"] = -1 if upload_kib <= 0 else int(upload_kib)
+        if download_kib is not None:
+            prefs["download_limit"] = -1 if download_kib <= 0 else int(download_kib)
+        if prefs:
+            self._client.app.set_preferences(prefs)

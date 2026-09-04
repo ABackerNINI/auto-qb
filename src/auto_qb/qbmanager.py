@@ -17,7 +17,7 @@ from typing import List, Optional
 from qbittorrentapi import Client
 
 from .config import Config, TrackerConfig, load_config
-from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, TagsMixin, TrackerMixin
+from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
 from .qbapi import QbApi
 from .rules import Rule
 from .taskqueue import DEFERRED, Task, TaskQueue
@@ -28,7 +28,7 @@ from .logging import setup_logging
 logger = logging.getLogger(__name__)
 
 
-class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin):
+class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
     def __init__(self, config_path: str, config: Config = None):
         self.config_path = config_path
         self.config = config or load_config(config_path)
@@ -168,6 +168,16 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     "delete_tags_if_has_no_torrents",
                     interval=self.config.interval,
                     handler=self._handle_delete_tags_if_has_no_torrents,
+                )
+            )
+        # 全局限速曲线(Traffic Monitor): 读 dat -> 聚合 -> 查档 -> 写 qB 全局速度限制
+        if getattr(self.config, "global_speed_limit_curve", None) is not None:
+            tasks.append(
+                Task(
+                    "internal",
+                    "speed_limit_curve",
+                    interval=self.config.interval,
+                    handler=self._handle_speed_limit_curve,
                 )
             )
         if tasks:

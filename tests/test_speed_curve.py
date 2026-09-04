@@ -1,0 +1,608 @@
+"""test_speed_curve 测试计划: 全局限速曲线(Traffic Monitor 接入 qB 全局速度限制)
+
+## 测试计划(每个测试函数一条)
+- test_speed_curve_config_disabled_by_default: 未配置 global_speed_limit_curve -> None(不启用)
+- test_speed_curve_config_parses_sample: 完整样例解析(period 归一化/阈值字节/速度字节)
+- test_speed_curve_config_rejects_bad_section: 顶层非 dict / 未知键
+- test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/多元素/未知来源/缺 bat_path
+- test_speed_curve_config_rejects_bad_curves: curves 缺失/空/缺 period/非法或重复 period/双向全缺
+- test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法
+- test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
+- test_parse_history_dat_bad_lines: 脏行计数 / 非法日期 / 重复日期取最后
+- test_aggregate_periods: day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)
+- test_curve_speed_plan_b: 全程分档覆盖(首档覆盖低端, 边界, 末档延续)
+- test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None) / KiB 半值进位
+- test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
+- test_speed_curve_global_task_not_registered: 未配置 -> 不创建
+- test_speed_curve_applies_staged_upload_limit: 命中档位 -> set_preferences(KiB)
+- test_speed_curve_idempotent_second_run_no_write: 同档位重复执行不重复写
+- test_speed_curve_manual_odd_kib_skips_direction: 当前正奇数 KiB(手动)不覆盖该方向
+- test_speed_curve_multi_period_takes_strictest: 同方向多条 period 曲线取最严(最小非零)
+- test_speed_curve_unlimited_target_writes_minus_one: 目标 0(该档不限速) -> qB 存 -1
+- test_speed_curve_cross_day_rollback: 今天行缺失 -> 累计 0 -> 回落首档(自动放开)
+- test_speed_curve_dry_run_no_read_no_write: dry_run 不读当前不写 qB, 记录 state
+- test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
+- test_qbapi_global_speed_limit_normalization: qbapi 0<->-1 换算与读写
+"""
+import copy
+import os
+from datetime import date, timedelta
+
+import pytest
+import yaml
+
+from auto_qb import curves
+from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
+from auto_qb.taskqueue import Task
+from helpers import FakeClient, make_manager
+
+GIB = 1024**3
+MIB = 1024**2
+
+# 用户样例档位表(阈值 GiB, 限速 MiB/s)
+FULL_UPLOAD = [(10, 6), (20, 5), (30, 4), (50, 2), (100, 1), (1000, 0.5)]
+FULL_DOWNLOAD = [(30, 11), (50, 10), (100, 5), (200, 2), (1000, 1)]
+
+
+# ---------- 模拟 qB app(全局偏好, qB 语义: 无限速 = -1) ----------
+class _FakeApp:
+    def __init__(self):
+        self.prefs = {"upload_limit": -1, "download_limit": -1}
+        self.calls = []
+
+    def preferences(self):
+        return dict(self.prefs)
+
+    def set_preferences(self, prefs):
+        self.calls.append(("set_preferences", dict(prefs)))
+        self.prefs.update(prefs)
+
+
+def _fake_client():
+    client = FakeClient()
+    client.app = _FakeApp()  # 动态附加(helpers.py 只读)
+    return client
+
+
+# ---------- 构造辅助 ----------
+def _points(pairs):
+    """[(阈值GiB, 限速MiB/s)] -> CurvePoint 列表(与 parse_fsize/parse_speed 换算一致)"""
+    return [CurvePoint(threshold_bytes=int(g * GIB), speed_bytes_per_s=int(v * MIB)) for g, v in pairs]
+
+
+def _pc(period: str, up=None, down=None) -> PeriodCurve:
+    return PeriodCurve(period=period, upload_points=up, download_points=down)
+
+
+def _gslc(bat_path, *period_curves) -> GlobalSpeedLimitCurve:
+    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=list(period_curves))
+
+
+def _dat_text(rows) -> str:
+    """rows: [(date, 上传字节, 下载字节)] -> dat 文件文本(单位 KB)"""
+    lines = ['lines: "30"']
+    for d, up_b, down_b in rows:
+        lines.append(f"{d:%Y/%m/%d} {up_b // 1024}/{down_b // 1024}")
+    return "\n".join(lines)
+
+
+def _write_dat(tmp_path, rows, name="history_traffic.dat") -> str:
+    p = tmp_path / name
+    p.write_text(_dat_text(rows), encoding="utf-8")
+    return str(p)
+
+
+def _run_curve(mgr, dry_run: bool = False) -> bool:
+    """直接执行全局限速曲线 handler(等价到期任务执行)"""
+    task = Task("internal", "speed_limit_curve", interval=60, handler=mgr._handle_speed_limit_curve)
+    return mgr._handle_speed_limit_curve(task, dry_run=dry_run)
+
+
+def _make_mgr(tmp_path, gslc, with_app: bool = True):
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.config.global_speed_limit_curve = gslc
+    client = _fake_client() if with_app else FakeClient()
+    mgr.client = client
+    return mgr, client
+
+
+# ---------- 配置解析 / fail-fast ----------
+def _cfg_dict(gslc_spec) -> dict:
+    return {
+        "config":
+            {
+                "qbittorrent": {
+                    "host": "127.0.0.1",
+                    "port": 8080,
+                    "username": "u",
+                    "password": "p"
+                },
+                "trackers": {},
+                "global_speed_limit_curve": gslc_spec,
+            }
+    }
+
+
+def _load(tmp_path, gslc_spec):
+    p = tmp_path / "config.yml"
+    p.write_text(yaml.dump(_cfg_dict(gslc_spec), allow_unicode=True), encoding="utf-8")
+    return load_config(str(p))
+
+
+def _valid_spec() -> dict:
+    """合法完整样例(与 想法.md 样式一致, 上/下载曲线各带 period)"""
+    return {
+        "traffic_source": [{
+            "traffic_monitor": {
+                "bat_path": r"D:\Programs\TrafficMonitor\history_traffic.dat"
+            }
+        }],
+        "curves":
+            [
+                {
+                    "period": "1D",
+                    "upload_curve":
+                        [
+                            {
+                                "10GiB": {
+                                    "upload_speed_limit": "6MiB/s"
+                                }
+                            },
+                            {
+                                "20GiB": {
+                                    "upload_speed_limit": "5MiB/s"
+                                }
+                            },
+                            {
+                                "1000GiB": {
+                                    "upload_speed_limit": "0.5MiB/s"
+                                }
+                            },
+                        ],
+                    "download_curve": [{
+                        "30GiB": {
+                            "download_speed_limit": "11MiB/s"
+                        }
+                    }],
+                },
+                {
+                    "period": "7D",
+                    "download_curve": [{
+                        "50GiB": {
+                            "download_speed_limit": "10MiB/s"
+                        }
+                    }]
+                },
+            ],
+    }
+
+
+def test_speed_curve_config_disabled_by_default(tmp_path):
+    """未配置 global_speed_limit_curve 段 -> Config.global_speed_limit_curve is None"""
+    p = tmp_path / "config.yml"
+    d = _cfg_dict(None)
+    d["config"].pop("global_speed_limit_curve")
+    p.write_text(yaml.dump(d, allow_unicode=True), encoding="utf-8")
+    cfg = load_config(str(p))
+    assert cfg.global_speed_limit_curve is None
+
+
+def test_speed_curve_config_parses_sample(tmp_path):
+    """完整样例解析: period 归一化 / 阈值与速度为字节 / 多曲线 / 单方向省略"""
+    cfg = _load(tmp_path, _valid_spec())
+    g = cfg.global_speed_limit_curve
+    assert g is not None
+    assert g.bat_path == r"D:\Programs\TrafficMonitor\history_traffic.dat"
+    assert len(g.curves) == 2
+    day, week = g.curves
+    assert day.period == "day"  # 1D -> day
+    assert week.period == "7D"
+    # upload: 10GiB -> 6MiB/s
+    assert day.upload_points[0].threshold_bytes == 10 * GIB
+    assert day.upload_points[0].speed_bytes_per_s == 6 * MIB
+    assert day.upload_points[2].speed_bytes_per_s == int(0.5 * MIB)  # 0.5MiB/s 支持
+    assert day.download_points[0].threshold_bytes == 30 * GIB
+    # 第二曲线只配 download_curve -> upload_points None(不管理上传)
+    assert week.upload_points is None
+    assert week.download_points[0].speed_bytes_per_s == 10 * MIB
+
+
+def test_speed_curve_config_rejects_bad_section(tmp_path):
+    """顶层非字典 / 未知键 -> ValueError"""
+    for bad in ("str", [], 123):
+        with pytest.raises(ValueError):
+            _load(tmp_path, bad)
+    spec = _valid_spec()
+    spec["extra"] = 1
+    with pytest.raises(ValueError):
+        _load(tmp_path, spec)
+
+
+def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
+    """数据源缺失/空/多元素/未知来源/缺 bat_path -> ValueError"""
+    bad_sources = [
+        None,  # 缺失
+        [],  # 空
+        [{
+            "traffic_monitor": {
+                "bat_path": "a"
+            }
+        }, {
+            "traffic_monitor": {
+                "bat_path": "b"
+            }
+        }],  # 多数据源
+        [{
+            "other_app": {
+                "path": "a"
+            }
+        }],  # 未知来源
+        [{
+            "traffic_monitor": {
+                "bat_path": "a"
+            },
+            "extra": 1
+        }],  # 来源额外键
+        [{
+            "traffic_monitor": "not-a-dict"
+        }],  # traffic_monitor 非字典
+        [{
+            "traffic_monitor": {}
+        }],  # 缺 bat_path
+        [{
+            "traffic_monitor": {
+                "bat_path": ""
+            }
+        }],  # 空 bat_path
+    ]
+    for src in bad_sources:
+        spec = copy.deepcopy(_valid_spec())
+        spec["traffic_source"] = src
+        with pytest.raises(ValueError):
+            _load(tmp_path, spec)
+
+
+def test_speed_curve_config_rejects_bad_curves(tmp_path):
+    """curves 结构错误: 缺失/空/非字典/未知键/缺 period/非法 period/重复 period/双向全缺 -> ValueError"""
+    base = copy.deepcopy(_valid_spec())
+
+    cases = []
+    c = copy.deepcopy(base)
+    c.pop("curves")
+    cases.append(("curves 缺失", c))
+    c = copy.deepcopy(base)
+    c["curves"] = []
+    cases.append(("curves 空", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"period": "1D", "extra": 1, "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    cases.append(("条目未知键", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    cases.append(("缺 period", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"period": "weekly", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    cases.append(("非法 period", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"period": "0D", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}]
+    cases.append(("非法 period 0D", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [  # 1D 与 day 归一化后重复
+        {"period": "1D", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]},
+        {"period": "day", "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]},
+    ]
+    cases.append(("重复 period", c))
+    c = copy.deepcopy(base)
+    c["curves"] = [{"period": "1D"}]
+    cases.append(("双向全缺", c))
+    for name, spec in cases:
+        with pytest.raises(ValueError):
+            _load(tmp_path, spec), name
+
+
+def test_speed_curve_config_rejects_bad_points(tmp_path):
+    """档位表错误: 空表/阈值<=0或非递增/缺方向键/未知键/速度非法/非单项 -> ValueError"""
+    up = [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]
+
+    def curve(points=up, **kw):
+        item = {"period": "1D", "upload_curve": points}
+        item.update(kw)
+        return {"traffic_source": _valid_spec()["traffic_source"], "curves": [item]}
+
+    cases = [
+        curve(points=[]),  # 空档位表
+        curve(points=[{
+            "0GiB": {
+                "upload_speed_limit": "6MiB/s"
+            }
+        }]),  # 阈值 0
+        curve(points=[{
+            "20GiB": {
+                "upload_speed_limit": "6MiB/s"
+            }
+        }, {
+            "10GiB": {
+                "upload_speed_limit": "5MiB/s"
+            }
+        }]),  # 非递增
+        curve(points=[{
+            "10GiB": {
+                "download_speed_limit": "6MiB/s"
+            }
+        }]),  # 方向键不符
+        curve(points=[{
+            "10GiB": {
+                "upload_speed_limit": "6MiB/s",
+                "extra": 1
+            }
+        }]),  # 未知键
+        curve(points=[{
+            "10GiB": {
+                "upload_speed_limit": "6MiB/s",
+                "download_speed_limit": "5MiB/s"
+            }
+        }]),  # 多方向键
+        curve(points=[{
+            "10GiB": "6MiB/s"
+        }]),  # 速度非字典
+        curve(points=[{
+            "10GiB": {
+                "upload_speed_limit": "6MiB/h"
+            }
+        }]),  # 非法速度格式
+        curve(points=[{
+            "10GiB": {
+                "upload_speed_limit": "-1MiB/s"
+            }
+        }]),  # 负速度
+        curve(points=[{
+            "10GiB": {
+                "upload_speed_limit": "6MiB/s"
+            },
+            "20GiB": {
+                "upload_speed_limit": "5MiB/s"
+            }
+        }]),  # 多阈值键
+    ]
+    for spec in cases:
+        with pytest.raises(ValueError):
+            _load(tmp_path, spec)
+
+
+# ---------- curves 纯函数 ----------
+def test_parse_history_dat_rows():
+    """头行忽略 / KB×1024 / 乱序 -> 按日期升序返回"""
+    text = (
+        'lines: "30"\n'
+        "2026/09/04 64033621/104743685\n"
+        "2026/09/02 23243979/53483350\n"
+        "2026/09/03 23295975/37857445\n"
+    )
+    rows, bad = curves.parse_history_dat(text)
+    assert bad == 0
+    assert [r[0].isoformat() for r in rows] == ["2026-09-02", "2026-09-03", "2026-09-04"]
+    # 64033621 KB * 1024
+    assert rows[-1][1] == 64033621 * 1024
+    assert rows[-1][2] == 104743685 * 1024
+    assert rows[0][1] == 23243979 * 1024
+
+
+def test_parse_history_dat_bad_lines():
+    """脏行计数 / 非法日期跳过 / 重复日期取最后 / 空行忽略"""
+    text = (
+        'lines: "30"\n'
+        "2026/09/04 100/200\n"
+        "garbage line\n"
+        "2026/13/40 1/2\n"  # 非法日期
+        "2026/09/04 300/400\n"  # 重复日期 -> 取最后
+        "   \n"
+    )
+    rows, bad = curves.parse_history_dat(text)
+    assert bad == 2
+    assert len(rows) == 1
+    assert rows[0] == (date(2026, 9, 4), 300 * 1024, 400 * 1024)
+
+
+def test_aggregate_periods():
+    """day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)"""
+    today = date(2026, 9, 4)
+    rows = [
+        (date(2026, 9, 4), 10 * GIB, 1 * GIB),  # 今天
+        (date(2026, 9, 3), 2 * GIB, 0),
+        (date(2026, 9, 2), 3 * GIB, 0),
+        (date(2026, 8, 30), 100 * GIB, 0),  # 上月底(7D 窗口外, month 窗口外)
+    ]
+    # day: 只取今天行
+    assert curves.aggregate(rows, "day", today) == (10 * GIB, 1 * GIB)
+    # day + 今天行缺失(如程序在跨天后首轮): 累计视为 0
+    assert curves.aggregate(rows, "day", date(2026, 9, 5)) == (0, 0)
+    # month: 当月(9月)所有行求和
+    assert curves.aggregate(rows, "month", today) == (15 * GIB, 1 * GIB)
+    # 3D: 最近 3 个自然日 [09-02, 09-04], 8-30 在窗口外
+    assert curves.aggregate(rows, "3D", today) == (15 * GIB, 1 * GIB)
+    # 2D: 最近 2 个自然日 [09-03, 09-04]
+    assert curves.aggregate(rows, "2D", today) == (12 * GIB, 1 * GIB)
+    # 空窗口 -> (0, 0)
+    assert curves.aggregate(rows, "1D", date(2026, 9, 10)) == (0, 0)
+
+
+def test_curve_speed_plan_b():
+    """全程分档覆盖: 首档覆盖低端 / 边界落在"达到阈值"档 / 末档延续"""
+    pts = _points(FULL_UPLOAD)
+
+    def kib(gib):
+        return curves.bytes_to_kib(curves.curve_speed(int(gib * GIB), pts))
+
+    # X < 10GiB -> 首档 6MiB/s(低于指定值也限速); X == 10GiB -> 达到阈值, 用下一档区间速度 5
+    assert kib(0) == 6 * 1024
+    assert kib(5) == 6 * 1024
+    assert kib(10) == 5 * 1024
+    assert kib(15) == 5 * 1024
+    assert kib(20) == 4 * 1024
+    assert kib(25) == 4 * 1024
+    assert kib(30) == 2 * 1024
+    assert kib(49) == 2 * 1024
+    assert kib(50) == 1 * 1024
+    assert kib(60) == 1 * 1024  # 60GiB -> 1MiB/s(用户确认)
+    assert kib(100) == 512  # 达到 100GiB -> 末档前区间 0.5MiB/s
+    assert kib(150) == 512
+    assert kib(2000) == 512  # 超末档 -> 末档延续
+    # 单点档位 + 0 档: 低于阈值不限速, 达到阈值后仍为末档 0(显式放开)
+    zero_pts = _points([(10, 0)])
+    assert curves.curve_speed(5 * GIB, zero_pts) == 0
+    assert curves.curve_speed(50 * GIB, zero_pts) == 0
+
+
+def test_merge_direction_and_bytes_to_kib():
+    """合并: 取最小非零(最严); 全 0 -> 0; 空 -> None; KiB 半值进位"""
+    assert curves.merge_direction([6 * MIB, 2 * MIB, 4 * MIB]) == 2 * MIB
+    assert curves.merge_direction([0, 0]) == 0
+    assert curves.merge_direction([]) is None
+    assert curves.merge_direction([0, 5 * MIB]) == 5 * MIB  # 0(不限速档)不拉低最严
+    assert curves.bytes_to_kib(0) == 0
+    assert curves.bytes_to_kib(6 * MIB) == 6144
+    assert curves.bytes_to_kib(int(0.5 * MIB)) == 512
+    assert curves.bytes_to_kib(int(0.25 * MIB)) == 256  # 半值进位
+
+
+# ---------- 集成: 任务注册 / handler ----------
+def test_speed_curve_global_task_registered(tmp_path):
+    """配置存在 -> _create_global_tasks 创建 speed_limit_curve 任务"""
+    gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, _ = _make_mgr(tmp_path, gslc)
+    mgr._create_global_tasks()
+    due = mgr.task_queue.due(max=100)
+    assert [t.name for t in due] == ["speed_limit_curve"]
+
+
+def test_speed_curve_global_task_not_registered(tmp_path):
+    """未配置曲线 -> 不创建任务(即使有 delete_tags 之外的全局任务也不含曲线任务)"""
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    mgr._create_global_tasks()
+    assert mgr.task_queue.due(max=100) == []
+
+
+def test_speed_curve_applies_staged_upload_limit(tmp_path):
+    """今天行流量命中档位 -> set_preferences 写入对应 KiB(只管理配置了的方向)"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))  # 只管理上传
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr)
+    # 15GiB -> 5MiB/s = 5120 KiB; 下载方向无曲线 -> 不写
+    assert client.app.calls == [("set_preferences", {"upload_limit": 5120})]
+    assert client.app.prefs["upload_limit"] == 5120
+    assert client.app.prefs["download_limit"] == -1  # 未管理下载
+    assert mgr.state["speed_limit_curve"][today.isoformat()] == {
+        "upload_kib": 5120,
+        "download_kib": None,
+        "dry_run": False
+    }
+
+
+def test_speed_curve_idempotent_second_run_no_write(tmp_path):
+    """目标 == 当前 -> 幂等, 重复执行不再调 set_preferences"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr)
+    assert _run_curve(mgr)
+    assert client.app.calls == [("set_preferences", {"upload_limit": 5120})]
+
+
+def test_speed_curve_manual_odd_kib_skips_direction(tmp_path):
+    """当前限速为正奇数 KiB(如 2001)视为手动 -> 该方向不覆盖, 另一方向照常写"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.app.prefs["upload_limit"] = 2001  # 用户手动设置(奇数 KiB)
+
+    assert _run_curve(mgr)
+    # 上传方向(目标 6MiB=6144)被跳过; 下载 X=5GiB -> 首档 11MiB=11264 正常写
+    assert client.app.calls == [("set_preferences", {"download_limit": 11264})]
+    assert client.app.prefs["upload_limit"] == 2001  # 未被覆盖
+    # 偶数手动值(如 2000)不触发保护: 上传正常覆盖
+    client.app.prefs["upload_limit"] = 2000
+    assert _run_curve(mgr)
+    assert client.app.prefs["upload_limit"] == 6144
+
+
+def test_speed_curve_multi_period_takes_strictest(tmp_path):
+    """同方向多条 period 曲线 -> 取最严(最小非零限速)"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    # 1D: X=15GiB >= 10GiB(单点末档) -> 6MiB/s; 7D: X=15GiB < 30GiB -> 2MiB/s(首档覆盖)
+    gslc = _gslc(dat, _pc("day", up=_points([(10, 6)])), _pc("7D", up=_points([(30, 2)])))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr)
+    assert client.app.calls == [("set_preferences", {"upload_limit": 2 * 1024})]  # min(6, 2) -> 2MiB/s
+
+
+def test_speed_curve_unlimited_target_writes_minus_one(tmp_path):
+    """档位限速为 0(该档不限速)且当前有限速 -> 写 qB 无限速(-1)"""
+    today = date.today()
+    # 今天行缺失(跨天), 但存在历史行使 dat 有效: 今天累计 0 < 10GiB -> 首档 0(不限速)
+    dat = _write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points([(10, 0)])))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.app.prefs["upload_limit"] = 5120  # 上一轮旧限速
+
+    assert _run_curve(mgr)
+    assert client.app.calls == [("set_preferences", {"upload_limit": -1})]
+
+
+def test_speed_curve_cross_day_rollback(tmp_path):
+    """今天行缺失 -> 累计 0 -> 自动放开回落到首档(昨天触发的低速档被放宽)"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.app.prefs["upload_limit"] = 512  # 昨天触发到 0.5MiB/s(200GiB >= 100GiB)
+
+    assert _run_curve(mgr)
+    # 今天累计视为 0 -> 首档 6MiB/s = 6144 KiB
+    assert client.app.calls == [("set_preferences", {"upload_limit": 6144})]
+
+
+def test_speed_curve_dry_run_no_read_no_write(tmp_path):
+    """dry_run: 不读当前、不写 qB, 仅记录 state(dry_run=True)"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr, dry_run=True)
+    assert client.app.calls == []  # 未读未写
+    assert client.app.prefs["upload_limit"] == -1
+    rec = mgr.state["speed_limit_curve"][today.isoformat()]
+    assert rec == {"upload_kib": 5120, "download_kib": None, "dry_run": True}
+
+
+def test_speed_curve_dat_missing_noop(tmp_path):
+    """dat 文件缺失 -> warning 本轮不动(任务存活), 不写 qB"""
+    gslc = _gslc(str(tmp_path / "not-exist.dat"), _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.app.prefs["upload_limit"] = 5120
+
+    assert _run_curve(mgr) is True  # 任务保留
+    assert client.app.calls == []
+
+
+def test_qbapi_global_speed_limit_normalization(tmp_path):
+    """QbApi 门面: 0 <-> -1(qB 无限速标记)换算, 读返回归一 0"""
+    mgr, client = _make_mgr(tmp_path, _gslc("x.dat", _pc("day", up=_points(FULL_UPLOAD))))
+    api = mgr.api
+    assert api.get_global_speed_limits() == {"upload_limit": 0, "download_limit": 0}  # -1 归一 0
+
+    api.set_global_speed_limits(upload_kib=512)  # 0.5MiB/s
+    api.set_global_speed_limits(upload_kib=0)  # 无限速
+    assert client.app.prefs["upload_limit"] == -1
+    assert api.get_global_speed_limits() == {"upload_limit": 0, "download_limit": 0}
+
+    api.set_global_speed_limits(upload_kib=6144, download_kib=2048)
+    assert api.get_global_speed_limits() == {"upload_limit": 6144, "download_limit": 2048}
