@@ -103,10 +103,7 @@ def test_config_tracker_tags_expand_no_tracker_tags():
 def test_config_tracker_tags_expand_dedup():
     """重复 tag 与重复 @tracker_tags 引用: 去重保序"""
     with tempfile.TemporaryDirectory() as td:
-        cfg_path = _write_config(
-            td,
-            delete_tags=["@tracker_tags", "HHan", "@tracker_tags", "regex:^seed-"]
-        )
+        cfg_path = _write_config(td, delete_tags=["@tracker_tags", "HHan", "@tracker_tags", "regex:^seed-"])
         cfg = load_config(cfg_path)
         assert cfg.delete_tags == ["HHan", "Kufirc", "regex:^seed-"], \
             f"去重展开错误: {cfg.delete_tags}"
