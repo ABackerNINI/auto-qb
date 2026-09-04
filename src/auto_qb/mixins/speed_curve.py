@@ -17,7 +17,7 @@ import logging
 from datetime import date
 from typing import List, Optional, Tuple
 
-from .. import curves
+from .. import curves, utils
 from ..taskqueue import Task
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ class SpeedCurveMixin:
             if kib is None:
                 continue  # 该方向无曲线, 不管理
             cur = current[cur_key]
-            if cur > 0 and cur % 2 == 1:
+            if utils.is_manual_speed_limit(cur * 1024):  # 奇数 KiB: 疑似用户手动设置
                 logger.info(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖")
                 continue
             if cur == kib:

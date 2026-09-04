@@ -39,6 +39,7 @@
 - test_checking_skip_dedup_same_day: 同日跳检去重
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_recheck_fail_cooldown: 校验连续失败达上限 -> 当日不再重试(防 recheck 死循环)
+- test_checking_skip_dedup_across_rules: 跨规则同日去重(同种子当日只跳检一次)
 - test_checking_dry_run: dry-run 不发送请求
 - test_checking_full_checking_pending: 全检任务 pending 保留
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
@@ -674,6 +675,29 @@ def test_checking_recheck_fail_cooldown():
     run_queue(mgr, t0 + 182.0)
     assert client.calls.count(("recheck", None)) == 3, "冷却期内不应再提交"
     assert _recheck_fail_count(mgr, "HASH123") == 3
+
+
+def test_checking_skip_dedup_across_rules():
+    """测试: 跨规则同日去重 —— 规则A跳检后, 规则B同日对同种子跳检被拒(统计只丢一次)"""
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "pausedUP"}
+    t = make_target()  # pausedDL: 不自动开始, 重加后仍暂停, 规则B才能走到跨规则去重
+    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert handled and mgr.state["skip_check_day"]["HASH123"], "规则A应完成跳检并记录"
+
+    # 模拟另一条规则B: 换规则名但同种子, 同日再跳检
+    rule_b = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    client.calls.clear()
+    ctx = make_ctx(mgr, t, client, dry_run=False)
+    from auto_qb.rules.actions import CheckAction
+    action = CheckAction({"basic_check": "filelist", "without_reference": {"enabled": True, "mode": "skip-checking"}})
+    ctx.rule_name = "example_rules.rule_b"
+    r = action.execute(ctx)
+    assert r.is_skipped and "跨规则去重" in r.message, f"规则B应被跨规则去重拒绝: {r}"
+    assert client.calls == [], "被拒后不应发生导出/删除/重加"
 
 
 def test_checking_no_reference_skip_checking_warns():

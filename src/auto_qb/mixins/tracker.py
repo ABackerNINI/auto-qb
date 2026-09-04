@@ -51,7 +51,7 @@ class TrackerMixin:
             return
 
         # 不覆盖单数值
-        if (current_limit / 1024) % 2 == 1:
+        if utils.is_manual_speed_limit(current_limit):
             return
 
         if not dry_run:

@@ -35,6 +35,7 @@
 - test_match_tag_patterns_empty_pattern: 空模式跳过
 - test_path_normalize_empty: 空路径 -> 原样返回
 - test_timer_us: us 单位计时
+- test_is_manual_speed_limit: 奇数KiB手动限速保护(0/偶数不命中)
 """
 import os
 import sys
@@ -385,3 +386,13 @@ def test_timer_us():
     assert foo() == 7
     assert len(logs) == 1
     assert "us" in logs[0]
+
+
+def test_is_manual_speed_limit():
+    """奇数 KiB/s 视为用户手动设置: 0/偶数不命中; 三处保护共用此实现"""
+    from auto_qb.utils import is_manual_speed_limit
+
+    assert is_manual_speed_limit(2001 * 1024) is True
+    assert is_manual_speed_limit(2000 * 1024) is False
+    assert is_manual_speed_limit(0) is False  # 不限速
+    assert is_manual_speed_limit(2048) is False  # 2KiB 偶数

@@ -306,6 +306,14 @@ def timer(unit='s', log_func=print):
     return decorator
 
 
+def is_manual_speed_limit(value_bytes: int) -> bool:
+    """奇数 KiB/s 视为用户手动设置(项目约定, 如 2001KiB/s): 自动限速不覆盖
+
+    三处共用(tracker 单种限速 / 规则限速动作 / 全局限速曲线), 语义必须保持一致。
+    """
+    return value_bytes > 0 and (value_bytes // 1024) % 2 == 1
+
+
 def fmt_speed(value: int) -> str:
     """将字节/秒格式化为可读字符串"""
     for unit, div in (("PiB/s", 1024**5), ("TiB/s", 1024**4), ("GiB/s", 1024**3), ("MiB/s", 1024**2), ("KiB/s", 1024)):

@@ -443,6 +443,7 @@ class CheckAction(BaseAction):
         - 部分下载(0<progress<1)禁止跳检: 预分配零块会被当作有效数据上传
         - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行
         - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once 兜底)
+        - 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日也只跳检一次(统计只丢一次)
         - 重加前轮询确认种子已从客户端消失(qB 删除异步, 未消失就重加会撞"种子已存在")
         - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
         - 重加失败时 .torrent 落盘备份并记录元数据(立即落盘), 提示手动恢复
@@ -459,6 +460,12 @@ class CheckAction(BaseAction):
         record = ctx.manager.get_exec_record(ctx.rule_name, ctx.hash)
         if record and record.get("date") == date.today().isoformat():
             return ActionResult.skip("今日已跳检, 跳过")
+
+        # 0.6 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日只跳检一次
+        #     (跳检必然清空本地统计, 重复跳检只会再丢一次而毫无收益)
+        skip_day = ctx.manager.state.setdefault("skip_check_day", {})
+        if skip_day.get(ctx.hash) == date.today().isoformat():
+            return ActionResult.skip("今日已跳检过该种子(跨规则去重)")
 
         torrent = ctx.torrent
 
@@ -532,6 +539,9 @@ class CheckAction(BaseAction):
             time.sleep(0.3)
         if not appeared:
             return ActionResult.fail("重加后未确认到种子, 请检查客户端")
+
+        # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
+        ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()
 
         # 6. 无参考高风险警告 + 自动开始
         if not has_reference:
@@ -664,7 +674,7 @@ class _SpeedLimitAction(BaseAction):
                 current_limit = ctx.torrent.dl_limit
 
             # 不覆盖单数值
-            if (current_limit / 1024) % 2 == 1:
+            if utils.is_manual_speed_limit(current_limit):
                 return ActionResult.skip("用户已设置")
             if current_limit == self.value:
                 return ActionResult.skip("已设置")
