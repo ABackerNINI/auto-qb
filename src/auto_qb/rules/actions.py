@@ -392,6 +392,11 @@ class CheckAction(BaseAction):
             return ActionResult.pending("full-checking 校验已提交, 等待完成(规则断点续跑)")
         return ActionResult.ok("full-checking 校验已提交, 等待完成")
 
+    _ATTRS = [
+        "seq_dl", "f_l_piece_prio", "ratio_limit", "seeding_time_limit", "inactive_seeding_time_limit",
+        "share_limit_action"
+    ]
+
     def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
         """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 重加跳过校验 -> 可选自动开始
 
@@ -407,6 +412,8 @@ class CheckAction(BaseAction):
         if record and record.get("date") == date.today().isoformat():
             return ActionResult.skip("今日已跳检, 跳过")
 
+        torrent = ctx.torrent
+
         # 1. 强制前置检查: 文件全部存在且大小一致 (已在 execute() 中完成)
 
         # 2. 导出 .torrent
@@ -417,30 +424,32 @@ class CheckAction(BaseAction):
         if not data:
             return ActionResult.fail("导出 .torrent 为空")
 
+        dup = self._copy_tor_attrs(torrent.tor, self._ATTRS)
+
         # 3. 删除种子(保留文件)
         try:
+            logger.info(f"规则: {ctx.rule_name} | 删除种子: {torrent.log_repr}")
             ctx.api.torrents_delete(torrent_hashes=ctx.hash, delete_files=False)
         except Exception as e:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
-
-        tor = ctx.torrent.tor
 
         # 4. 重加(跳过校验, 先暂停)
         try:
             ctx.api.torrents_add(
                 torrent_files=[data],
-                save_path=tor.save_path,
-                category=tor.category or None,
-                tags=tor.tags or None,
-                upload_limit=tor.up_limit or None,
-                download_limit=tor.dl_limit or None,
-                is_sequential_download=tor.seq_dl or None,
-                is_first_last_piece_priority=tor.f_l_piece_prio or None,
+                save_path=torrent.save_path,
+                category=torrent.category or None,
+                tags=torrent.tags or None,
+                upload_limit=torrent.up_limit or None,
+                download_limit=torrent.dl_limit or None,
+                # 以上属性直接使用缓存中的数据, 以下数据使用删除种子之前复制的数据
+                is_sequential_download=dup.seq_dl or None,
+                is_first_last_piece_priority=dup.f_l_piece_prio or None,
                 # content_layout??
-                ratio_limit=tor.ratio_limit or None,
-                seeding_time_limit=tor.seeding_time_limit or None,
-                inactive_seeding_time_limit=tor.inactive_seeding_time_limit or None,
-                share_limit_action=tor.share_limit_action or None,
+                ratio_limit=dup.ratio_limit or None,
+                seeding_time_limit=dup.seeding_time_limit or None,
+                inactive_seeding_time_limit=dup.inactive_seeding_time_limit or None,
+                share_limit_action=dup.share_limit_action or None,
                 is_skip_checking=True,
                 is_stopped=True,
             )
@@ -490,6 +499,16 @@ class CheckAction(BaseAction):
             "ts": time.time(),
         }
         return path
+
+    @staticmethod
+    def _copy_tor_attrs(tor, attrs: list[str]):
+        """拷贝种子属性"""
+        dup = {}
+        for k in attrs:
+            if k not in tor:
+                raise ValueError(f"torrent.{k} 属性不存在")
+            setattr(dup, k, tor[k])
+        return dup
 
 
 @register_action
