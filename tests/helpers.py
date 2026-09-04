@@ -422,8 +422,8 @@ def _fake_file(name, size):
 def make_ctx(mgr, tor, client, dry_run=False):
     """构造 RuleContext(规则动作测试辅助)
 
-    新架构: RuleContext 第 4 参为 hash 字符串; ctx.torrent = mgr.store.get(hash)(无 None fallback)。
-    因此本函数保证: ①client 已绑定到 mgr(动作经 ctx.api 调 manager.api Facade) ②store 中已有该
+    新架构: RuleContext 第 4 参为 hash 字符串; ctx.torrent = mgr.store.get(hash)(无 None 兜底)。
+    因此本函数保证: ①client 已绑定到 mgr(动作经 ctx.api 调 manager.api 门面) ②store 中已有该
     tor 的记录, 且记录对象即 tor 本身(对象身份直写: 后续修改 tor 属性对 ctx.torrent 实时可见)
     ③tracker_conf 已匹配(等效 _refresh_torrents 对新增种子的处理; ${required_seeding_time} 等依赖它)。
     """

@@ -228,7 +228,7 @@ def test_load_rules_skips_non_dict_group():
 
 
 def test_rules_for_torrent_tracker_error():
-    """_rules_for_torrent: tracker 拉取异常不做静默fallback(异常向上抛, 由 tick 层捕获)"""
+    """_rules_for_torrent: tracker 拉取异常不做静默兜底(异常向上抛, 由 tick 层捕获)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()

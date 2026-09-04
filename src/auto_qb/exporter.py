@@ -24,7 +24,7 @@ def collect_configured_domains(config) -> set:
 
 
 def collect_all_tracker_hostnames(api) -> set:
-    """从所有种子中收集去重的 tracker hostname(api 为 QbApi Facade或兼容客户端)"""
+    """从所有种子中收集去重的 tracker hostname(api 为 QbApi 门面或兼容客户端)"""
     all_domains = set()
     for tor in api.torrents_info():
         try:

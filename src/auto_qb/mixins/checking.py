@@ -14,7 +14,7 @@ class CheckingMixin:
     """文件检查; 辅种跳检(已迁移至规则动作, 占位保留)"""
     @staticmethod
     def check_filelist(api, torrent: TorrentRecord) -> str:
-        """检查种子文件是否存在且大小一致(api 为 QbApi Facade或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
+        """检查种子文件是否存在且大小一致(api 为 QbApi 门面或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
         logger.debug(f"{torrent.log_repr} | 检查文件完整性")
         try:
             files = api.torrents_files(torrent.hash)

@@ -100,7 +100,7 @@ def load_global_hr(spec: dict) -> HRRule:
 
 # TODO: optimize
 def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
-    """解析站点 hr 配置段, 与全局 hr 默认输出设置合并(站点字段优先, 全局fallback, 字段默认fallback全局)
+    """解析站点 hr 配置段, 与全局 hr 默认输出设置合并(站点字段优先, 全局兜底, 字段默认兜底全局)
 
     站点段: required_seeding_time(必填) / required_share_ratio / extra_seeding_time /
             condition(80% 或 10MiB) + 可覆盖全局的输出字段; 合法性由 validate_config 保证。

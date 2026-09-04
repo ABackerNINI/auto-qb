@@ -176,7 +176,7 @@ def test_parse_hr_spec_site_overrides_global():
         assert rule.required_seeding_time_raw == "3D"
         assert rule.add_category == "SITE-HR!!"  # 站点覆盖
         assert rule.overwrite_category is True
-        assert rule.add_category_for_satisfied == "--HR${required_seeding_time}--"  # 全局fallback
+        assert rule.add_category_for_satisfied == "--HR${required_seeding_time}--"  # 全局兜底
         assert rule.condition == ("dlratio", 0.8)  # 默认触发条件
 
 

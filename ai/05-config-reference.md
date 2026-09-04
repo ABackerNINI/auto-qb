@@ -6,7 +6,7 @@
   - `parse_bool` 接受 true/1/yes/on (大小写不敏感), 非法值抛 ValueError (fail-fast)。
   - exporter 导出时用 `convert_bool_in_dict` 把字符串布尔转回真布尔以保留可读性。
 - **fail-fast**: 非法格式/未知键在加载时抛 ValueError, 程序不启动。给新配置键写解析时必须校验并给出可读错误 (参考 `load_global_speed_limit_curve` 的逐键 unknown-key 检查风格)。
-- 站点配置覆盖全局: `load_tracker_hr(spec, global_hr)` 站点字段优先全局fallback; `remove_similar_tags` 同理。合并发生在加载时, 运行期只用合并后的值。
+- 站点配置覆盖全局: `load_tracker_hr(spec, global_hr)` 站点字段优先全局兜底; `remove_similar_tags` 同理。合并发生在加载时, 运行期只用合并后的值。
 
 ## fail-fast 全量校验 (2026-09-05 新增, config.validate_config)
 
@@ -29,7 +29,7 @@
 
 **默认值单一来源 (2026-09-05)**: 全部默认值只定义在 `models.py` 的 dataclass 字段上 (解析后空间, 与字段类型注解一致, `Config()` 即全默认实例)。`loaders.py` 统一用 `_get(spec, key, d.field, parse)` 取值: 键存在 → parse(原始串); 键缺失 → 字段默认(不再 parse)。models 顶部仅存 2 个**非字段默认**常量: `DEFAULT_CONFIG_FILE`(cli argparse 缺省) 与 `UNLIMITED_SPEED`(exporter 生成模板的原始串占位)。
 
-**先验证再解析**: 全部正确性检查集中在 `validate_config`(含 `_validate_global_speed_limit_curve`); 通过后各 `load_*` 函数仅做转换、不含任何检查。**config 之后的全部代码同样假定配置正确**: registry 工厂直接按名索引(未知名 = KeyError, 由校验fallback)、`config.global_speed_limit_curve`/`rules_config`/`tracker.rules` 等属性直接访问(无 getattr fallback)、exporter 重读原始文件时复用 `_strip_none`。注意区分: 功能开关(`grouping.enabled`/`check_missing_files`/`hr` 等)是语义判断不是正确性检查, 正常保留; `rules/actions.py` 的 `CheckAction._validate` 在 Rule 构造时深度校验 checking 动作 spec(带规则名上下文), 属规则层校验。
+**先验证再解析**: 全部正确性检查集中在 `validate_config`(含 `_validate_global_speed_limit_curve`); 通过后各 `load_*` 函数仅做转换、不含任何检查。**config 之后的全部代码同样假定配置正确**: registry 工厂直接按名索引(未知名 = KeyError, 由校验兜底)、`config.global_speed_limit_curve`/`rules_config`/`tracker.rules` 等属性直接访问(无 getattr 兜底)、exporter 重读原始文件时复用 `_strip_none`。注意区分: 功能开关(`grouping.enabled`/`check_missing_files`/`hr` 等)是语义判断不是正确性检查, 正常保留; `rules/actions.py` 的 `CheckAction._validate` 在 Rule 构造时深度校验 checking 动作 spec(带规则名上下文), 属规则层校验。
 
 **CLI 错误输出**: `cli.main` 提前捕获 `ConfigError`(且仅此一种 —— 非配置类 ValueError/OSError 属程序 bug, 照常抛出保留堆栈), 仅向 stderr 输出 `配置错误: <信息>`(无堆栈/exec_info), 退出码 1; 入口(auto-qb.py / __main__.py)用 `sys.exit(main())` 使退出码生效。
 

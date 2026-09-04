@@ -37,7 +37,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 每 main_tick 刷新一次后, 本 tick 内所有读取操作都只通过 self.store 接口访问
         self.store = TorrentStore()
         self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
-        # qB API Facade: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
+        # qB API 门面: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
         self.api = QbApi(self._client, self.store)
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file

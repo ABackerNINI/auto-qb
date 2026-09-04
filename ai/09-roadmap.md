@@ -14,7 +14,7 @@
 - tracker 单种限速 (奇数保护)
 - 全局限速曲线: Traffic Monitor 数据源, DAY/MONTH/ND 聚合, 全程分档覆盖, 取最严 (2026-09 最近的大功能, commit ee88bc8..20481f3)
 - 任务队列: 单队列 + defer/resume + check 轮询去重 (12f3b46 重构完成)
-- 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi Facade写后同步
+- 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi 门面写后同步
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - 测试: 604 passed, 分支覆盖 95%
