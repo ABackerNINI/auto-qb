@@ -27,7 +27,7 @@
 
 ## 功能全景 (均可用配置开关)
 
-1. **标签/分类管理** (内置 maintenance 任务): 按 tracker 加/删站点标签; 删除相似标签(大小写差异); 彻底删除标签 (`delete_tags`); 删除无种子使用的标签 (`delete_tags_if_has_no_torrents`); 自动集数标签 (种子添加时从文件列表解析, 如 `zE1-5`, 注意代码实际前缀是 `zE`)。
+1. **标签/分类管理** (内置 maintenance 任务): 按 tracker 加/删站点标签; 删除相似标签(大小写差异); 彻底删除标签 (`delete_tags`); 删除无种子使用的标签 (`delete_tags_if_has_no_torrents`); 自动集数标签 (种子添加时从文件列表解析, 如 `zE1-5`)。
 2. **HR 管理** (maintenance 任务内): 触发 HR → 加标签/分类; 做种满 required+extra 或分享率达标 → 加 satisfied 标签/分类。站点配置覆盖全局。
 3. **辅种分组** (事件驱动): 相同文件列表的种子归组; 大小不一致 → 警告+整组暂停; 缺文件 → 整组暂停+MISSING; 同组多种子同时下载/已完成与下载中并存 → 警告+整组暂停。
 4. **自定义规则引擎** 🚧: 触发时机(目前仅 interval) + 条件(15 种) + 动作(11 种), 支持去重/冷却/断点续跑/错误控制。
@@ -57,7 +57,7 @@ auto-qb/
 ├── minimal.yml             # 最小配置示例
 ├── auto-qb-state.json      # ★ 生产运行状态文件 (勿改勿提交, 已 gitignore)
 ├── 想法.md                 # 设计草稿/TODO (上游文档)
-├── README.md               # 用户文档 (部分滞后于代码, 见 08)
+├── README.md               # 用户文档 (2026-09-05 已与代码核对同步)
 ├── pytest.ini              # pythonpath=src, 默认带 --cov
 ├── .style.yapf             # facebook 风格, 列宽 120
 ├── .github/instructions/   # Copilot 指令: 性能优先设计 / 精确类型

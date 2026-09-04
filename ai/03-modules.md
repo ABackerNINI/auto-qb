@@ -35,7 +35,7 @@
 | `tags.py` | 228 | 标签/分类/HR/全局清理 | `_add_tags`/`_remove_tags`/`_remove_similar_tags`, `_add_episode_tags`, `_set_category`(auto_categories 覆盖逻辑), `_add_hr_tag_or_category`, `_handle_delete_tags`, `_handle_delete_tags_if_has_no_torrents`(用 store.tag_usage 聚合, 避免逐标签查询) |
 | `grouping.py` | 306 | 辅种分组 (事件驱动) | `_assign_new_torrent`/`_assign_to_group`/`_leave_group`(O(1) 成员索引), `_check_size_consistency`, `_handle_removed_torrents`/`_handle_state_transitions`/`_handle_save_path_changes`(→`_check_missing_files` 磁盘扫描), `_check_download_conflicts`(每轮), `_group_members`/`_group_has_downloading`/`_group_reference_candidates`(供 checking 动作) |
 | `checking.py` | 33 | 文件检查 | `check_filelist(api, torrent)`: 文件存在+大小一致, 返回错误串或 None。(辅种跳检已迁移到规则动作, 占位保留) |
-| `tracker.py` | 61 | tracker 匹配/单种限速 | `_match_tracker`(⚠️ 子串包含匹配), `_apply_speed_limit`/`_apply_single_speed_limit`(奇数保护) |
+| `tracker.py` | 61 | tracker 匹配/单种限速 | `_match_tracker_conf`(hostname 精确匹配, 复用 `utils.match_tracker_confs`, 与规则绑定同语义; 命中多个配置时打 ERROR 日志并用第一个), `_apply_speed_limit`/`_apply_single_speed_limit`(奇数保护) |
 | `speed_curve.py` | 146 | 全局限速曲线任务 | `_handle_speed_limit_curve`: 读 dat → 聚合 → 查档 → 取最严 → 奇数保护/幂等 → `api.set_global_speed_limits`; `_record_curve_state` |
 
 ## rules/ (插件框架)

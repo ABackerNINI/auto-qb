@@ -27,21 +27,19 @@
 - **`handled` 返回值**: `Rule.process` 返回 `not result.is_skipped` — 最后一个动作 skip 时 handled=False, 但**执行历史已记录** (只要前面动作成功过)。设计如此, 勿"修复"。
 - **上传增量下限 0**: `upload_delta = max(0, uploaded - baseline)` — 种子重加/客户端重启后 uploaded 归零不会产生负增量。
 - **缺文件扫描的代表种**: 只从"已完成+做种中"成员选, 无代表则整组不扫 — 不是漏检, 是有意保守。
-- **tracker 匹配是"第一个命中"**: `_match_tracker` 按配置遍历顺序返回第一个 `domain in url` 的配置; `match_tracker_confs` (规则绑定用) 返回**所有**匹配。两套实现并存 (见下"不一致"), 改动一处时考虑另一处。
+- **tracker 匹配是"第一个命中"且已统一为 hostname 精确匹配**: `_match_tracker_conf` 复用 `utils.match_tracker_confs` (精确/子域名匹配, 与规则绑定同语义), 取第一个匹配配置, **命中多个配置时打 ERROR 日志**(仍用第一个, 不跳过种子); 导出模板 `find_missing_domains` 仍用包含关系匹配 (有意宽松, 用于找未配置域名)。
 - **每个动作的 dry-run 返回 success** — dry-run 日志里看到的都是"成功", 别据此判断真实执行结果。
 - **`state_file` 仅退出时落盘**: 运行中 kill -9 会丢执行历史 → 去重可能重放, 已知取舍 (想法.md 明文)。
 
-## 📝 文档与代码的已知漂移 (以代码为准)
+## 📝 文档与代码的一致性 (2026-09-05 已同步)
 
-| 主题 | README.md 说 | 代码实际 |
-|------|-------------|----------|
-| 任务队列 | "双任务队列: 快速队列+慢速队列" (设计要点) | **单队列**: 所有任务(含校验轮询)统一进一个堆 (taskqueue.py docstring 明确) |
-| 集数标签格式 | `E1-5` | **`zE1-5`** (episodes.py `format_episode_tag` 带 `z` 前缀) |
-| 目录结构 | 列了 6 个 mixin | 实际 6 个 (README 目录结构图混列 checking.py 描述"跳检/异步轮询回调", 实际已迁至 rules/actions.py, checking.py 仅剩 check_filelist) |
-| 单实例锁 / fail-fast 全量校验 | 标注 🚧 规划中 | 确实未实现 (config 校验只覆盖部分: 曲线/checking 段严格, 其它宽松) |
-| 部分条件/动作状态 | 大量 🚧 标注 | 15 条件+11 动作**全部已实现** (🚧 标注滞后) |
+README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双队列→单队列)、集数标签格式 (`E1-5`→`zE1-5`)、mixins 组合列表补 SpeedCurveMixin、目录树补 qbapi/curves/speed_curve、checking.py 职责描述。
 
-> 修复文档时: 代码为准, 改 README 的同时不需要动想法.md (设计草稿)。
+**🚧 标注的语义 (作者澄清, 重要)**: 🚧 = "未实现 **或** 已实现但未严格测试(实盘验证)"。规则系统一节的 🚧 (trigger/execute_once/cooldown、size/trackers/state/hr/date_time/seedtime/upload_*/freespace 条件、checking/move_to/reannounce 动作、stop_following_rules_if) 属于后者 — 代码已有单测, 但作者认定未经严格验证, **必须保留, 勿因"已实现"而移除** (2026-09-05 曾误删, 已按作者要求恢复)。
+
+其余 🚧 属未实现: 单实例锁 / 启动 fail-fast 全量校验 (config 校验只覆盖部分: 曲线/checking 段严格, 其它宽松) / `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` 触发时机。
+
+> 想法.md 是设计草稿, 不随实现同步; 改 README 时以代码为准, 但 🚧 标注的取舍听作者。
 
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 

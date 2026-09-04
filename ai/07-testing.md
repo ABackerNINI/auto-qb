@@ -3,7 +3,7 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 580 passed ~1s, 分支覆盖率 94%
+# 项目 venv (.venv, Python 3.12), 基线: 582 passed ~1s, 分支覆盖率 94%
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
@@ -17,7 +17,7 @@
 
 1. **每个测试文件头部 docstring 维护 "## 测试计划" 清单** — 项目明文规定: 新增测试必须同步更新对应文件的清单 (README 也强调)。
 2. 文件名与被测模块对应 (`test_actions.py` ↔ `rules/actions.py`); 一个模块可以有多个文件 (如 test_rules_core/test_rule_base/test_rule_engine 拆分)。
-3. 测试粒度小而多 (580 个), 名字用中文/英文短语描述场景。
+3. 测试粒度小而多 (582 个), 名字用中文/英文短语描述场景。
 
 ## tests/helpers.py 基础设施 (写测试前必读)
 

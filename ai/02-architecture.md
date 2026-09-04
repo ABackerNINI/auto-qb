@@ -47,7 +47,7 @@ _tick(dry_run):
 
 1. `api.torrents_info()` 全量拉取 → `store.refresh(tors)` → 返回 `(added, removed)`; 已存在记录原地 `update_from`, 惰性缓存跨 tick 保留。
 2. **新增种子** 逐个处理:
-   - `_match_tracker(torrent)` 匹配 tracker 配置; 未匹配 → warning + **跳过该种子**(不创建任何任务)。
+   - `_match_tracker_conf(torrent)` 匹配 tracker 配置 (hostname 精确匹配, 命中多个配置时打 ERROR 日志并用第一个); 未匹配 → warning + **跳过该种子**(不创建任何任务)。
    - `torrent.tracker_conf = tracker_conf` (记录引用, 后续任务直接用)。
    - `_apply_speed_limit` tracker 单种限速 (尊重奇数保护)。
    - `_create_torrent_tasks`: 创建 `maintenance` 内置任务 + 该种子应绑定的每条规则一个任务。
@@ -60,7 +60,7 @@ _tick(dry_run):
 
 ## 任务队列 (taskqueue.py) — 单队列模型
 
-> 注意: README "设计要点"仍写"双任务队列", **代码已重构为单队列**: 所有任务(含校验结果轮询)统一进一个 `heapq` 最小堆 `_fast`, 按 `next_run` 到期弹出。见 08-pitfalls。
+> README "设计要点"已同步为单队列描述 (2026-09-05): 所有任务(含校验结果轮询)统一进一个 `heapq` 最小堆 `_fast`, 按 `next_run` 到期弹出。
 
 - **Task 字段**: `uid`(kind:name:hash:monotonic_ns), `kind`, `name`, `hash`, `tracker_conf`, `next_run`, `interval` (<=0 归一化为 1s), `state`, `resume_cb` (一次性完成处理), `resume_index` (规则断点), `run_count`, `payload`, `handler`。
 - **Task.kind**: `internal` (全局任务 + 种子级 maintenance), `rule` (种子级规则扫描), `check` (校验结果轮询)。文档中也用 `refresh` 指种子刷新 (它不是队列里的任务, 是每 tick 固定第一步)。

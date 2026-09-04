@@ -34,7 +34,7 @@
 
 | 键 | 必填 | 说明 |
 |----|------|------|
-| `domains` | ✅ | 域名列表。匹配逻辑见 pitfalls: `_match_tracker` 是**子串包含** (`domain in url`), `utils.match_tracker_confs` 是 hostname 精确/子域名匹配 |
+| `domains` | ✅ | 域名列表。匹配逻辑 (2026-09-05 起统一): `_match_tracker_conf` 复用 `utils.match_tracker_confs`, 按 hostname 精确匹配(含子域名), 取第一个命中配置; 命中多个配置时打 ERROR 日志 |
 | `tags` | | 站点标签 (maintenance 加) |
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |

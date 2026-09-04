@@ -2,7 +2,9 @@
 
 > 来源: `想法.md` (设计草稿, 权威) + `README.md` 功能状态标注 + 源码 TODO + git log (截至 2026-09-05, commit 51374bd)。回答"XX 做了吗/计划怎么做"以此为准。
 
-## 已实现 (✅, 有测试)
+## 已实现 (✅, 有单测覆盖)
+
+> 注意区分: 下表部分功能作者在 README 中标注 🚧 = "已实现但未严格测试(实盘验证)", 如规则引擎的条件/动作/checking/去重语义等 — 有单测但作者尚不认为经过严格验证; 此类 🚧 ≠ 未实现, 勿移除 (语义详见 08-pitfalls)。
 
 - 标签/分类管理: 站点标签加/删、相似标签清理、`delete_tags`/`delete_tags_if_has_no_torrents` 全局清理、集数标签
 - HR 管理: 触发标签/分类 + satisfied 标签/分类, 站点覆盖全局
@@ -14,7 +16,7 @@
 - 任务队列: 单队列 + defer/resume + check 轮询去重 (12f3b46 重构完成)
 - 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi 门面写后同步
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
-- 测试: 580 passed, 分支覆盖 94%
+- 测试: 582 passed, 分支覆盖 94%
 
 ## 规划中 (🚧, 尚未实现)
 
@@ -38,7 +40,7 @@
 | 位置 | 内容 |
 |------|------|
 | qbmanager.py:190 | 删除 `_get_torrent` 兼容方法 |
-| rules/base.py:116 | 多 tracker 匹配时 warning+跳过 |
+| rules/base.py:116 | 多 tracker 匹配时 warning+跳过 (2026-09-05: `_match_tracker_conf` 已改为命中多个时打 ERROR 日志并用第一个, 是否跳过仍待作者决定) |
 | rules/base.py:134,150 | HR 判定从 RuleContext 移到 actions.py |
 | rules/conditions.py:79,108,134 | 条件支持 `:ignore_case` |
 | rules/actions.py:220 | recheck 后仍未完成的种子防重复校验 |
