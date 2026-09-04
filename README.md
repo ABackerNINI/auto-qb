@@ -9,7 +9,7 @@
 </tr>
 </table>
 
-自动管理 qBittorrent 的 PT 种子: 标签/分类与 HR 管理、辅种分组与缺文件检查、自定义规则引擎(筛选条件 + 动作)、tracker 级限速与校验/跳检。所有功能均可配置，高风险动作默认关闭，只对显式允许的范围生效。
+自动管理 qBittorrent 的 PT 种子: 标签/分类与 HR 管理、辅种分组与缺文件检查、自定义规则引擎(筛选条件 + 动作)、tracker 级限速与校验/跳检、全局限速曲线。所有功能均可配置，高风险动作默认关闭，只对显式允许的范围生效。
 
 ## 目录
 
@@ -28,7 +28,7 @@
 
 - 按 tracker 自动添加/删除站点标签，自动清理相似(单词相同大小写不同)标签
 - 彻底删除标签(`delete_tags`)，仅在无种子使用时删除(`delete_tags_if_has_no_torrents`)
-- 自动添加集数标签(种子添加时触发): 从文件列表解析，如 `01.mkv~05.mkv` → `E1-5`
+- 自动添加集数标签(种子添加时触发): 从文件列表解析，如 `01.mkv~05.mkv` → `zE1-5`
 
 ### HR 管理
 
@@ -57,7 +57,7 @@
 
 - 主循环 2s tick，任务队列驱动，任务互不干扰，各自带内置 interval
 - 根据已有种子 tracker 导出 YAML 配置模板(`--export-yaml --only-missing`，只追加不重写)
-- 状态持久化到 `state_file`(规则执行历史/上传量快照/脚本限速记录)，重启继续有效
+- 状态持久化到 `state_file`(规则执行历史/上传量快照/自动分类记录/限速曲线状态/跳检备份元数据)，重启继续有效
 - 启动时 fail-fast 全量校验配置(未知键、非法格式、非法 HR 规则) 🚧
 - 单实例锁，防止 cron + 手动同时运行互相竞争 🚧
 
@@ -454,19 +454,22 @@ config:
 src/auto_qb/
 ├── cli.py             # 命令行入口(argparse)
 ├── config.py          # 配置数据类与加载(Config/TrackerConfig/HRRule)，fail-fast 校验
+├── curves.py          # 全局限速曲线纯逻辑: dat 解析/period 聚合/档位计算(无项目内依赖)
 ├── episodes.py        # 集数标签解析
 ├── exporter.py        # YAML 配置模板导出
 ├── logging.py         # 日志配置
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
-├── taskqueue.py       # 双任务队列: 快速队列(时间优先堆)+ 慢速队列(异步校验轮询)
-├── torrents.py        # 种子信息缓存，避免频繁访问 qB API，每main_tick刷新
+├── qbapi.py           # qB API 门面: 封装客户端调用 + 写操作后同步 store 快照
+├── taskqueue.py       # 单任务队列: 时间优先堆，所有任务(含校验结果轮询)统一调度
+├── torrents.py        # 种子信息数据层: 全量快照+惰性缓存+分组索引，每main_tick刷新
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)
 ├── mixins/            # QbManager 组合 mixins
-│   ├── checking.py    # 校验完成判定/异步校验轮询回调
+│   ├── checking.py    # 文件存在与大小检查(checking 动作前置检查)
 │   ├── grouping.py    # 种子分组管理(辅种管理)
 │   ├── rule_engine.py # 规则加载/状态持久化/种子级规则任务
+│   ├── speed_curve.py # 全局限速曲线: Traffic Monitor 流量 -> qB 全局限速
 │   ├── tags.py        # 标签/分类/HR 辅助
-│   └── tracker.py     # tracker 配置匹配(hostname 精确匹配)
+│   └── tracker.py     # tracker 配置匹配(hostname 精确匹配)/单种限速
 └── rules/             # 规则插件框架(装饰器注册)
     ├── actions.py     # 11 种动作插件
     ├── base.py        # Rule/BaseCondition/BaseAction/ActionResult
@@ -476,10 +479,10 @@ src/auto_qb/
 
 ### 设计要点
 
-- **双任务队列**: 所有功能都是带内置 interval 的任务。快速队列为时间优先堆；慢速队列承载异步校验——工作线程仅发送校验请求，结果通过线程安全队列回传主循环轮询，不触碰队列结构、不写 state_file
+- **单任务队列**: 所有功能都是带内置 interval 的任务，统一进时间优先堆(含校验结果轮询)。full-checking 发起后规则任务让位(defer)，轮询任务完成后 resume(校验成功，续跑后续动作)或 reschedule(失败，重走决策链)；主循环线程是唯一修改队列结构与 state_file 的线程，无需加锁
 - **插件框架**: 条件/动作通过 `@register_condition` / `@register_action` 装饰器注册，按名称创建实例，易于扩展
-- **mixins 组合**: `QbManager(RuleEngineMixin， TagsMixin， CheckingMixin， GroupingMixin， TrackerMixin)`，职责清晰
-- **状态持久化**: 规则执行历史、上传量快照、脚本限速记录统一存 `state_file`，程序退出时落盘；主循环线程是唯一修改队列结构与 state_file 的线程
+- **mixins 组合**: `QbManager(RuleEngineMixin， TagsMixin， CheckingMixin， GroupingMixin， TrackerMixin， SpeedCurveMixin)`，职责清晰
+- **状态持久化**: 规则执行历史、上传量快照、自动分类记录、限速曲线状态、跳检备份元数据统一存 `state_file`，程序退出时落盘
 
 ## 设计原则
 
