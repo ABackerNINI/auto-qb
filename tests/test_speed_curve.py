@@ -14,15 +14,15 @@
 - test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None) / KiB 半值进位
 - test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
 - test_speed_curve_global_task_not_registered: 未配置 -> 不创建
-- test_speed_curve_applies_staged_upload_limit: 命中档位 -> set_preferences(KiB)
+- test_speed_curve_applies_staged_upload_limit: 命中档位 -> transfer_set_upload_limit(bytes/s)
 - test_speed_curve_idempotent_second_run_no_write: 同档位重复执行不重复写
 - test_speed_curve_manual_odd_kib_skips_direction: 当前正奇数 KiB(手动)不覆盖该方向
 - test_speed_curve_multi_period_takes_strictest: 同方向多条 period 曲线取最严(最小非零)
-- test_speed_curve_unlimited_target_writes_minus_one: 目标 0(该档不限速) -> qB 存 -1
+- test_speed_curve_unlimited_target_writes_zero: 目标 0(该档不限速) -> transfer 写 0(不限)
 - test_speed_curve_cross_day_rollback: 今天行缺失 -> 累计 0 -> 回落首档(自动放开)
 - test_speed_curve_dry_run_no_read_no_write: dry_run 不读当前不写 qB, 记录 state
 - test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
-- test_qbapi_global_speed_limit_normalization: qbapi 0<->-1 换算与读写
+- test_qbapi_global_speed_limit_normalization: qbapi KiB<->bytes/s 换算与读写
 """
 import copy
 import os
@@ -44,25 +44,41 @@ FULL_UPLOAD = [(10, 6), (20, 5), (30, 4), (50, 2), (100, 1), (1000, 0.5)]
 FULL_DOWNLOAD = [(30, 11), (50, 10), (100, 5), (200, 2), (1000, 1)]
 
 
-# ---------- 模拟 qB app(全局偏好, qB 语义: 无限速 = -1) ----------
-class _FakeApp:
+# ---------- 模拟 qB 5.0 transfer 端点(全局速度限制; 单位 bytes/s, 0 = 不限速) ----------
+class _FakeTransfer:
+    """模拟 qbittorrent-api 的 transfer 命名空间(全局限速)
+
+    与真实 qB 5.0 Web API 一致: transfer_upload_limit()/transfer_download_limit()
+    返回当前限速(bytes/s, 0 = 不限速); transfer_set_upload_limit(limit) 等写入
+    bytes/s(旧版 app/preferences 的 upload_limit/-1 语义在 5.0 已失效)。
+    """
     def __init__(self):
-        self.prefs = {"upload_limit": -1, "download_limit": -1}
+        self.limits = {"upload_limit": 0, "download_limit": 0}  # bytes/s
         self.calls = []
 
-    @property
-    def preferences(self):
-        # 与 qbittorrent-api 2026.8.x 一致: preferences 是 property(非方法)
-        return dict(self.prefs)
+    def transfer_upload_limit(self):
+        return self.limits["upload_limit"]
 
-    def set_preferences(self, prefs):
-        self.calls.append(("set_preferences", dict(prefs)))
-        self.prefs.update(prefs)
+    def transfer_download_limit(self):
+        return self.limits["download_limit"]
+
+    def transfer_set_upload_limit(self, limit=None):
+        self.calls.append(("set_upload_limit", int(limit)))
+        self.limits["upload_limit"] = int(limit)
+
+    def transfer_set_download_limit(self, limit=None):
+        self.calls.append(("set_download_limit", int(limit)))
+        self.limits["download_limit"] = int(limit)
 
 
 def _fake_client():
     client = FakeClient()
-    client.app = _FakeApp()  # 动态附加(helpers.py 只读)
+    transfer = _FakeTransfer()
+    client.transfer = transfer  # 动态附加(helpers.py 只读); 与真实 client.transfer 同语义
+    client.transfer_upload_limit = transfer.transfer_upload_limit
+    client.transfer_download_limit = transfer.transfer_download_limit
+    client.transfer_set_upload_limit = transfer.transfer_set_upload_limit
+    client.transfer_set_download_limit = transfer.transfer_set_download_limit
     return client
 
 
@@ -532,17 +548,17 @@ def test_speed_curve_global_task_not_registered(tmp_path):
 
 
 def test_speed_curve_applies_staged_upload_limit(tmp_path):
-    """今天行流量命中档位 -> set_preferences 写入对应 KiB(只管理配置了的方向)"""
+    """今天行流量命中档位 -> transfer_set_upload_limit 写入对应 bytes/s(只管理配置了的方向) """
     today = date.today()
     dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))  # 只管理上传
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr)
-    # 15GiB -> 5MiB/s = 5120 KiB; 下载方向无曲线 -> 不写
-    assert client.app.calls == [("set_preferences", {"upload_limit": 5120})]
-    assert client.app.prefs["upload_limit"] == 5120
-    assert client.app.prefs["download_limit"] == -1  # 未管理下载
+    # 15GiB -> 5MiB/s = 5120 KiB/s -> transfer 写 bytes/s; 下载方向无曲线 -> 不写
+    assert client.transfer.calls == [("set_upload_limit", 5120 * 1024)]
+    assert client.transfer.limits["upload_limit"] == 5120 * 1024
+    assert client.transfer.limits["download_limit"] == 0  # 未管理下载(默认不限速)
     assert mgr.state["speed_limit_curve"][today.isoformat()] == {
         "upload_kib": 5120,
         "download_kib": None,
@@ -551,7 +567,7 @@ def test_speed_curve_applies_staged_upload_limit(tmp_path):
 
 
 def test_speed_curve_idempotent_second_run_no_write(tmp_path):
-    """目标 == 当前 -> 幂等, 重复执行不再调 set_preferences"""
+    """目标 == 当前 -> 幂等, 重复执行不再调 transfer_set_upload_limit"""
     today = date.today()
     dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
@@ -559,7 +575,7 @@ def test_speed_curve_idempotent_second_run_no_write(tmp_path):
 
     assert _run_curve(mgr)
     assert _run_curve(mgr)
-    assert client.app.calls == [("set_preferences", {"upload_limit": 5120})]
+    assert client.transfer.calls == [("set_upload_limit", 5120 * 1024)]
 
 
 def test_speed_curve_manual_odd_kib_skips_direction(tmp_path):
@@ -568,16 +584,16 @@ def test_speed_curve_manual_odd_kib_skips_direction(tmp_path):
     dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
-    client.app.prefs["upload_limit"] = 2001  # 用户手动设置(奇数 KiB)
+    client.transfer.limits["upload_limit"] = 2001 * 1024  # 用户手动 2001KiB/s(奇数)
 
     assert _run_curve(mgr)
-    # 上传方向(目标 6MiB=6144)被跳过; 下载 X=5GiB -> 首档 11MiB=11264 正常写
-    assert client.app.calls == [("set_preferences", {"download_limit": 11264})]
-    assert client.app.prefs["upload_limit"] == 2001  # 未被覆盖
+    # 上传方向(目标 6MiB=6144KiB)被跳过; 下载 X=5GiB -> 首档 11MiB=11264KiB 正常写
+    assert client.transfer.calls == [("set_download_limit", 11264 * 1024)]
+    assert client.transfer.limits["upload_limit"] == 2001 * 1024  # 未被覆盖
     # 偶数手动值(如 2000)不触发保护: 上传正常覆盖
-    client.app.prefs["upload_limit"] = 2000
+    client.transfer.limits["upload_limit"] = 2000 * 1024
     assert _run_curve(mgr)
-    assert client.app.prefs["upload_limit"] == 6144
+    assert client.transfer.limits["upload_limit"] == 6144 * 1024
 
 
 def test_speed_curve_multi_period_takes_strictest(tmp_path):
@@ -589,20 +605,21 @@ def test_speed_curve_multi_period_takes_strictest(tmp_path):
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr)
-    assert client.app.calls == [("set_preferences", {"upload_limit": 2 * 1024})]  # min(6, 2) -> 2MiB/s
+    # min(6, 2) -> 2MiB/s = 2048KiB/s -> bytes/s
+    assert client.transfer.calls == [("set_upload_limit", 2048 * 1024)]
 
 
-def test_speed_curve_unlimited_target_writes_minus_one(tmp_path):
-    """档位限速为 0(该档不限速)且当前有限速 -> 写 qB 无限速(-1)"""
+def test_speed_curve_unlimited_target_writes_zero(tmp_path):
+    """档位限速为 0(该档不限速)且当前有限速 -> transfer 写 0(bytes/s = 不限速) """
     today = date.today()
     # 今天行缺失(跨天), 但存在历史行使 dat 有效: 今天累计 0 < 10GiB -> 首档 0(不限速)
     dat = _write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points([(10, 0)])))
     mgr, client = _make_mgr(tmp_path, gslc)
-    client.app.prefs["upload_limit"] = 5120  # 上一轮旧限速
+    client.transfer.limits["upload_limit"] = 5120 * 1024  # 上一轮旧限速
 
     assert _run_curve(mgr)
-    assert client.app.calls == [("set_preferences", {"upload_limit": -1})]
+    assert client.transfer.calls == [("set_upload_limit", 0)]
 
 
 def test_speed_curve_cross_day_rollback(tmp_path):
@@ -611,11 +628,11 @@ def test_speed_curve_cross_day_rollback(tmp_path):
     dat = _write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
-    client.app.prefs["upload_limit"] = 512  # 昨天触发到 0.5MiB/s(200GiB >= 100GiB)
+    client.transfer.limits["upload_limit"] = 512 * 1024  # 昨天触发到 0.5MiB/s(200GiB >= 100GiB)
 
     assert _run_curve(mgr)
-    # 今天累计视为 0 -> 首档 6MiB/s = 6144 KiB
-    assert client.app.calls == [("set_preferences", {"upload_limit": 6144})]
+    # 今天累计视为 0 -> 首档 6MiB/s = 6144KiB/s -> bytes/s
+    assert client.transfer.calls == [("set_upload_limit", 6144 * 1024)]
 
 
 def test_speed_curve_dry_run_no_read_no_write(tmp_path):
@@ -626,8 +643,8 @@ def test_speed_curve_dry_run_no_read_no_write(tmp_path):
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr, dry_run=True)
-    assert client.app.calls == []  # 未读未写
-    assert client.app.prefs["upload_limit"] == -1
+    assert client.transfer.calls == []  # 未读未写
+    assert client.transfer.limits["upload_limit"] == 0
     rec = mgr.state["speed_limit_curve"][today.isoformat()]
     assert rec == {"upload_kib": 5120, "download_kib": None, "dry_run": True}
 
@@ -636,22 +653,25 @@ def test_speed_curve_dat_missing_noop(tmp_path):
     """dat 文件缺失 -> warning 本轮不动(任务存活), 不写 qB"""
     gslc = _gslc(str(tmp_path / "not-exist.dat"), _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
-    client.app.prefs["upload_limit"] = 5120
+    client.transfer.limits["upload_limit"] = 5120 * 1024
 
     assert _run_curve(mgr) is True  # 任务保留
-    assert client.app.calls == []
+    assert client.transfer.calls == []
 
 
 def test_qbapi_global_speed_limit_normalization(tmp_path):
-    """QbApi 门面: 0 <-> -1(qB 无限速标记)换算, 读返回归一 0"""
+    """QbApi 门面: 全局限速走 qB 5.0 transfer 端点(bytes/s, 0=不限); 对外 KiB<->bytes/s 换算 """
     mgr, client = _make_mgr(tmp_path, _gslc("x.dat", _pc("day", up=_points(FULL_UPLOAD))))
     api = mgr.api
-    assert api.get_global_speed_limits() == {"upload_limit": 0, "download_limit": 0}  # -1 归一 0
+    assert api.get_global_speed_limits() == {"upload_limit": 0, "download_limit": 0}  # 0 归一 0
 
-    api.set_global_speed_limits(upload_kib=512)  # 0.5MiB/s
-    api.set_global_speed_limits(upload_kib=0)  # 无限速
-    assert client.app.prefs["upload_limit"] == -1
+    api.set_global_speed_limits(upload_kib=512)  # 0.5MiB/s = 512KiB/s
+    assert client.transfer.limits["upload_limit"] == 512 * 1024  # bytes/s
+    api.set_global_speed_limits(upload_kib=0)  # 不限速 -> 0
+    assert client.transfer.limits["upload_limit"] == 0
     assert api.get_global_speed_limits() == {"upload_limit": 0, "download_limit": 0}
 
     api.set_global_speed_limits(upload_kib=6144, download_kib=2048)
+    assert client.transfer.limits["upload_limit"] == 6144 * 1024
+    assert client.transfer.limits["download_limit"] == 2048 * 1024
     assert api.get_global_speed_limits() == {"upload_limit": 6144, "download_limit": 2048}
