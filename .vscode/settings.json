@@ -72,6 +72,7 @@
         "taskqueue",
         "tdata",
         "testpaths",
+        "timespec",
         "trackerprxy",
         "venv",
         "windowsg"

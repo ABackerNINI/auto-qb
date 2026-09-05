@@ -79,7 +79,7 @@ def test_tracker_hr_overrides_global():
         )
         cfg.trackers = {"HHan": FakeTracker("HHan", hr=site_hr)}
 
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         # seeding_time 未达 required+extra: 只触发 add_category(站点覆盖), 不触发 satisfied 分类
@@ -106,7 +106,7 @@ def test_tracker_hr_overrides_global():
             overwrite_category_for_satisfied=True,
         )
         client2 = FakeClient()
-        mgr2 = QbManager("", config=cfg)
+        mgr2 = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         mgr2.client = client2
         tor2 = FakeTorrent(downloaded=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10, ratio=1.0)
         client2.torrents["HASH123"] = tor2
@@ -181,7 +181,7 @@ def test_tracker_remove_similar_tags_override():
                 FakeTracker("HHan", hr=None, remove_similar_tags=True)  # 站点开启
         }
 
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         # 已有类似标签 "hhan"(小写), 站点 tags 为 "HHan"
@@ -372,7 +372,7 @@ def test_hr_tracker_without_hr_skips():
         cfg.hr = _hr_rule(add_category="GLOBAL-HR")  # 全局有 HR 默认
         cfg.trackers = {"HHan": FakeTracker("HHan", hr=None)}  # 站点未配置 hr
 
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10)

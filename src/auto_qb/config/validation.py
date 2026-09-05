@@ -13,11 +13,11 @@ RULE_KNOWN_KEYS = {
 EXECUTE_ONCE_VALUES = ("never", "once", "daily", "hourly")
 STOP_IF_VALUES = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
-# config 顶层已知键; single_instance_lock 为规划中预留键(README 已文档化, 暂不生效)
+# config 顶层已知键
 KNOWN_CONFIG_KEYS = {
     "qbittorrent", "main_tick", "max_tasks_per_tick", "interval", "state_file", "log",
     "remove_similar_tags", "add_episode_tags", "hr", "delete_tags", "delete_tags_if_has_no_torrents",
-    "grouping", "trackers", "global_speed_limit_curve", "single_instance_lock",
+    "grouping", "trackers", "global_speed_limit_curve",
 }
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}

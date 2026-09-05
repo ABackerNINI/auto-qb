@@ -22,7 +22,7 @@ def test_global_delete_tags():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.delete_tags = ["M-Team - TP", "regex:^BTSCHOOL"]
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         # 客户端已有标签定义 + 种子使用中
@@ -46,7 +46,7 @@ def test_global_delete_tags_dry_run():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.delete_tags = ["M-Team - TP"]
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         client.tags = {"HHan", "M-Team - TP"}
@@ -65,7 +65,7 @@ def test_global_delete_tags_if_has_no_torrents():
         cfg.state_file = state_file
         # 模拟 load_config 展开 @tracker_tags 后的结果: 站点标签 HHan
         cfg.delete_tags_if_has_no_torrents = ["HHan", "regex:^ORPHAN"]
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         # HHan 无种子使用(孤儿), ORPHAN-1 无种子使用, KEEP 有种子使用
@@ -92,7 +92,7 @@ def test_global_delete_tags_no_pattern_match():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.delete_tags = ["不存在的标签"]
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         client.tags = {"HHan", "KEEP"}
@@ -112,7 +112,7 @@ def test_global_delete_tags_queued():
         cfg.state_file = state_file
         cfg.delete_tags = ["M-Team - TP"]
         cfg.delete_tags_if_has_no_torrents = ["@tracker_tags"]
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         mgr._create_global_tasks()  # run() 中才自动创建; 测试直接构造后手动创建
         # 队列应包含两个全局标签清理任务
         names = {t.name for t in mgr.task_queue._fast}

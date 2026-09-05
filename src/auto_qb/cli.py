@@ -61,7 +61,8 @@ def main():
     args = parser.parse_args()
 
     try:
-        manager = QbManager(args.config)
+        # 出口模式不持锁(只读, 可与正常实例并发); 正常 run 模式持锁
+        manager = QbManager(args.config, no_lock=bool(args.export_yaml or args.export_torrents_info))
 
         if args.export_yaml:
             return 0 if export_yaml(manager, args) else 1

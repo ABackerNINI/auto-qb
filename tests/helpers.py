@@ -410,7 +410,7 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
             }
     }
     cfg.rules_config = config_dict
-    mgr = QbManager("", config=cfg)
+    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
     mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     return mgr
 

@@ -235,7 +235,7 @@ def test_rule_interval():
                         },
                 }
         }
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         client = FakeClient()
         mgr.client = client

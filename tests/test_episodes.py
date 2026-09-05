@@ -100,7 +100,7 @@ def test_episode_tags_added_on_new_torrent():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.add_episode_tags = True
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -125,7 +125,7 @@ def test_episode_tags_not_on_existing_refresh():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.add_episode_tags = True
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -149,7 +149,7 @@ def test_episode_tags_non_continuous_skipped():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.add_episode_tags = True
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -170,7 +170,7 @@ def test_episode_tags_ignore_date_screenshot():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.add_episode_tags = True
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -194,7 +194,7 @@ def test_episode_tags_disabled():
         cfg = FakeConfig()
         cfg.state_file = state_file
         cfg.add_episode_tags = False  # 默认关闭
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 

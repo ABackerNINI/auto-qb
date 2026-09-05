@@ -32,7 +32,7 @@ def test_main_normal_mode():
             mock.patch("auto_qb.cli.export_yaml_template") as m_exp:
         from auto_qb.cli import main
         main()
-    m_qb.assert_called_once_with("config.yml")
+    m_qb.assert_called_once_with("config.yml", no_lock=False)
     manager.run.assert_called_once_with(True)
     m_exp.assert_not_called()
 
@@ -47,7 +47,7 @@ def test_main_export_yaml():
             mock.patch("auto_qb.cli.export_yaml_template") as m_exp:
         from auto_qb.cli import main
         main()
-    m_exp.assert_called_once()
+    m_exp.assert_called_once()  # 无 QbManager 断言, 已 mock
     args = m_exp.call_args[0]
     assert args[0] is manager.api  # 业务代码统一走 QbApi Facade
     assert args[1] is manager.config
@@ -79,7 +79,7 @@ def test_main_default_config_path():
             mock.patch("auto_qb.cli.QbManager", return_value=manager) as m_qb:
         from auto_qb.cli import main
         main()
-    m_qb.assert_called_once_with(DEFAULT_CONFIG_FILE)
+    m_qb.assert_called_once_with(DEFAULT_CONFIG_FILE, no_lock=False)
 
 
 def test_main_normal_mode_keyboard_interrupt():
@@ -90,7 +90,7 @@ def test_main_normal_mode_keyboard_interrupt():
             mock.patch("auto_qb.cli.QbManager", return_value=manager) as m_qb:
         from auto_qb.cli import main
         main()  # 不应抛出 KeyboardInterrupt
-    m_qb.assert_called_once_with("config.yml")
+    m_qb.assert_called_once_with("config.yml", no_lock=False)
     manager.run.assert_called_once_with(False)
 
 

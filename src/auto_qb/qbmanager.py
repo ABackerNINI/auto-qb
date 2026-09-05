@@ -17,6 +17,7 @@ from typing import List, Optional
 from qbittorrentapi import Client
 
 from .config import Config, TrackerConfig, load_config
+from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
 from .qbapi import QbApi
 from .rules import Rule
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
-    def __init__(self, config_path: str, config: Config = None):
+    def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
         self.config_path = config_path
         self.config = config or load_config(config_path)
         self._setup_logging()
@@ -47,6 +48,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.enabled_rules: List[Rule] = []
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         self.task_queue = TaskQueue()
+        # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
+        self._lock = None
+        if not no_lock:
+            self._lock = SingleInstanceLock(self.state_file)
+            self._lock.acquire()
 
     @property
     def client(self) -> Optional[Client]:
@@ -85,29 +91,31 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         """主循环(任务队列驱动): 固定 MAIN_TICK 秒执行一次
         - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
         """
-        if not self.connect():
-            return
-
-        self.state = self._load_state()
-        # 规则加载 + 全局任务创建仅运行模式需要(--export-yaml 等只导出模式在构造后直接退出, 跳过)
-        self._load_rules()
-        self._create_global_tasks()
-
-        main_tick = self.config.main_tick
-
-        logger.info(f"启动 qB 管理器: 主循环 {main_tick}s, 默认任务间隔 {self.config.interval}s")
+        logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
         try:
-            while True:
-                try:
-                    self._tick(dry_run)
-                except Exception as e:
-                    logger.error(f"主循环异常: {e}", exc_info=True)
-                time.sleep(main_tick)
-        except KeyboardInterrupt:
-            logger.info("停止")
+            if not self.connect():
+                return
+            self.state = self._load_state()
+            # 规则加载 + 全局任务创建仅运行模式需要(--export-yaml 等只导出模式在构造后直接退出, 跳过)
+            self._load_rules()
+            self._create_global_tasks()
+
+            main_tick = self.config.main_tick
+
+            try:
+                while True:
+                    try:
+                        self._tick(dry_run)
+                    except Exception as e:
+                        logger.error(f"主循环异常: {e}", exc_info=True)
+                    time.sleep(main_tick)
+            except KeyboardInterrupt:
+                logger.info("停止")
         finally:
             if not dry_run:
                 self.save_state()
+            if self._lock is not None:
+                self._lock.release()
 
     def _tick(self, dry_run: bool):
         """单次 tick: 1) 刷新快照 2) 弹出到期任务并执行"""

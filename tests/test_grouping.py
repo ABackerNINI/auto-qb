@@ -71,7 +71,7 @@ def test_grouping_size_mismatch_pauses_group():
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -96,7 +96,7 @@ def test_grouping_missing_files_pauses_group():
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -125,7 +125,7 @@ def test_grouping_state_change_triggers_check():
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -162,7 +162,7 @@ def test_grouping_deleted_torrent_triggers_check():
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -189,12 +189,12 @@ def test_grouping_no_global_task():
     """分组为事件驱动, 不再创建周期轮询全局任务"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         names = {t.name for t in mgr.task_queue._fast}
         assert "grouping" not in names, f"事件驱动不应创建分组周期任务: {names}"
 
         # 未启用也不创建
-        mgr2 = QbManager("", config=_group_cfg(state_file, enabled=False))
+        mgr2 = QbManager("", config=_group_cfg(state_file, enabled=False), no_lock=True)  # 测试不持锁
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "grouping" not in names2, f"未启用也不应创建分组任务: {names2}"
 
@@ -205,7 +205,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         state_file = os.path.join(td, "state.json")
         cfg = _group_cfg(state_file)
         cfg.check_missing_files = True
-        mgr = QbManager("", config=cfg)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(hash="H1", name="T1")
@@ -218,7 +218,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         # 未启用分组同样不创建(逐种子检查已整体移除, 不再回退)
         cfg2 = _group_cfg(state_file, enabled=False)
         cfg2.check_missing_files = True
-        mgr2 = QbManager("", config=cfg2)
+        mgr2 = QbManager("", config=cfg2, no_lock=True)  # 测试不持锁
         mgr2.client = FakeClient()
         seed_store(mgr2, [tor])
         mgr2._create_torrent_tasks("H1", cfg2.trackers["HHan"])
@@ -230,7 +230,7 @@ def test_grouping_incremental_on_add():
     """新增种子时自动归组(增量), 不再每轮全量重建分组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -257,7 +257,7 @@ def test_grouping_removed_from_groups():
     """种子删除时自动从分组移除(空组删除)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -288,7 +288,7 @@ def test_grouping_save_path_change_triggers_check():
     """种子保存路径变化 -> 原组剩余成员触发缺文件扫描; 新组已有其它成员也触发扫描"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -320,7 +320,7 @@ def test_grouping_save_path_change_new_group_alone():
     """保存路径变化但新组无其它成员 -> 仅原组触发扫描, 新组不扫"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -347,7 +347,7 @@ def test_grouping_no_full_files_scan():
     """归组仅拉一次文件列表(增量归组); 后续刷新状态不变不触发扫描, 不重复拉取"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -373,7 +373,7 @@ def test_is_downloading_excludes_checking():
     导致下载冲突检查误暂停整组。现活跃下载判定由 _group_has_downloading 承担:
     is_downloading and not is_stopped and not is_checking(读 store 快照)。
     """
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     # checking* 状态 -> 不算组内活跃下载(不阻塞校验决策链)
     seed_store(
         mgr, [
@@ -392,7 +392,7 @@ def test_grouping_force_checking_not_conflict():
     """强制校验种子不再被当作下载中(62dbc25 回归): 与下载中/已完成成员同组不触发冲突暂停"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -416,7 +416,7 @@ def test_grouping_download_conflict_multi_dl():
     """下载冲突: 同组两个及以上种子同时下载 -> 警告+整组暂停; 去重: 冲突持续不重复, 消除后清除可再次触发"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
@@ -454,7 +454,7 @@ def test_grouping_download_conflict_mixed():
     """下载冲突: 同组已完成与下载中并存 -> 警告+整组暂停(真冲突不受修复影响)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
@@ -474,7 +474,7 @@ def test_grouping_download_conflict_dry_run():
     """下载冲突 dry-run: 只报告不暂停, 也不记录去重(下次真实执行仍会暂停)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
@@ -498,7 +498,7 @@ def test_download_conflict_meta_dl_mixed():
     """下载冲突: metaDL(元数据下载, amount_left>0)算活跃下载, 与已完成并存 -> mixed"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="metaDL", amount_left=100)
@@ -519,7 +519,7 @@ def test_download_conflict_checking_up_mixed():
     """下载冲突: checkingUP(校验中但已完成, amount_left=0) + stalledDL -> mixed(qB 重启场景)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="checkingUP", amount_left=0)
@@ -540,7 +540,7 @@ def test_download_conflict_forced_queued_dl():
     """下载冲突: forcedDL + queuedDL 两个活跃下载 -> multi-dl"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="forcedDL", amount_left=100)
@@ -561,7 +561,7 @@ def test_download_conflict_paused_dl_pair():
     """下载冲突: pausedDL + stoppedDL 停种(暂停)不算活跃下载 -> 不冲突不暂停"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="pausedDL", amount_left=100)
@@ -581,7 +581,7 @@ def test_download_conflict_resolve_by_complete():
     """下载冲突: 混合冲突随下载完成(转做种)消除 -> 去重清除; 重现可再次触发"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
@@ -616,7 +616,7 @@ def test_download_conflict_two_groups_independent():
     """下载冲突: 两组同时冲突分别处理, 去重 key 按组独立; 一组消除不影响另一组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
@@ -646,13 +646,13 @@ def test_download_conflict_two_groups_independent():
 
 def test_group_members_not_in_group():
     """_group_members: 未归组 -> [自身 hash] 单种子(无参考)"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     assert mgr._group_members("H1") == ["H1"]
 
 
 def test_group_members_in_group():
     """_group_members: 已归组 -> 返回全部成员 hash"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
     mgr.store.groups = {"g1": ["H1", "H2"]}
     assert mgr._group_members("H1") == ["H1", "H2"]
@@ -660,7 +660,7 @@ def test_group_members_in_group():
 
 def test_leave_group_removes():
     """_leave_group: 移出成员, 组内仍有剩余 -> 返回组 key"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
     mgr.store.groups = {"g1": ["H1", "H2"]}
     mgr.store.group_sizes = {"g1": {"H1": {}, "H2": {}}}
@@ -672,7 +672,7 @@ def test_leave_group_removes():
 
 def test_leave_group_empty_deletes():
     """_leave_group: 组空 -> 删除整组返回 None"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     mgr.store.member_to_key = {"H1": "g1"}
     mgr.store.groups = {"g1": ["H1"]}
     mgr.store.group_sizes = {"g1": {"H1": {}}}
@@ -683,13 +683,13 @@ def test_leave_group_empty_deletes():
 
 def test_leave_group_not_in_group():
     """_leave_group: 种子不在任何组 -> None 且不抛异常"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     assert mgr._leave_group("NOPE") is None
 
 
 def test_group_has_downloading():
     """_group_has_downloading: 组内存在活跃下载成员 -> True(成员状态读 store 快照)"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     seed_store(mgr, [
         FakeTorrent(hash="H1", state="stalledDL"),
         FakeTorrent(hash="H2", state="stalledUP"),
@@ -700,7 +700,7 @@ def test_group_has_downloading():
 
 def test_group_reference_candidates():
     """_group_reference_candidates: 返回组内正在做种的成员(参考种子候选, 读 store 快照)"""
-    mgr = QbManager("", config=_group_cfg("state.json"))
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     seed_store(mgr, [
         FakeTorrent(hash="H1", state="stalledUP"),
         FakeTorrent(hash="H2", state="pausedUP"),
@@ -713,7 +713,7 @@ def test_grouping_save_path_change_no_cache():
     """_handle_save_path_changes: 无缓存文件映射 -> 跳过该种子(维持原行为)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -731,7 +731,7 @@ def test_assign_new_torrent_missing():
     """_assign_new_torrent: 哈希不在 store 快照 -> AttributeError 上抛(调用方保证传入存在的 hash)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         with pytest.raises(AttributeError):
@@ -743,7 +743,7 @@ def test_assign_new_torrent_files_error():
     """_assign_new_torrent: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环兜底), 不归组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -763,7 +763,7 @@ def test_assign_to_group_empty_map():
     """_assign_to_group: 空文件映射 -> 不归组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
@@ -776,7 +776,7 @@ def test_check_missing_files_no_seeding_rep():
     """_check_missing_files: 组内无已完成做种种子 -> 不检查"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         members = [FakeTorrent(hash="H1", name="T1", state="pausedUP", amount_left=100)]
@@ -788,7 +788,7 @@ def test_check_missing_files_size_mismatch():
     """_check_missing_files: 文件存在但大小不符 -> 警告 + 整组暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         real = os.path.join(td, "movie.mkv")
@@ -805,7 +805,7 @@ def test_check_missing_files_getsize_error():
     """_check_missing_files: 文件读取 OSError -> 警告 + 整组暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         real = os.path.join(td, "movie.mkv")
@@ -824,7 +824,7 @@ def test_check_missing_files_checking_up_not_rep():
     对照 stalledUP(校验完成做种)作代表 -> 缺文件触发暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
 
@@ -846,7 +846,7 @@ def test_check_missing_files_first_done_rep():
     """_check_missing_files: 多已完成成员取第一个作代表, 非代表大小映射差异不影响扫描结果"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         real = os.path.join(td, "movie.mkv")
@@ -869,7 +869,7 @@ def test_check_missing_files_empty_sizes_map():
     """_check_missing_files: 大小映射为空 -> 无文件可检查, 不误报"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
@@ -881,7 +881,7 @@ def test_check_missing_files_member_has_tag():
     """_check_missing_files: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0, tags="MISSING")
@@ -895,7 +895,7 @@ def test_check_missing_files_dry_run():
     """_check_missing_files dry-run: 不暂停也不加标签"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file))
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
