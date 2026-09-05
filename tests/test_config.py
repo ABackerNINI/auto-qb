@@ -41,6 +41,7 @@ from auto_qb.config import (
     load_config,
     load_tracker_hr,
 )
+from auto_qb.errors import AutoQbError
 
 
 def _write_config(td, **extra_cfg):
@@ -121,7 +122,7 @@ def test_validate_trackers_empty_and_non_dict():
         try:
             load_config(cfg_path)
             assert False, "trackers 非字典应报错"
-        except ValueError as e:
+        except ConfigError as e:
             assert "config.trackers: 必须是字典" in str(e)
 
 
@@ -155,7 +156,7 @@ def test_parse_hr_spec_missing_required():
         try:
             load_config(cfg_path)
             assert False, "缺少 required_seeding_time 应抛 ValueError"
-        except ValueError:
+        except ConfigError:
             pass
 
 
@@ -216,7 +217,7 @@ def _load_errors(td, text: str) -> str:
     try:
         load_config(_write_raw(td, text))
         return ""
-    except ValueError as e:
+    except ConfigError as e:
         return str(e)
 
 
@@ -439,7 +440,7 @@ def test_config_error_wraps_io_and_yaml():
             load_config(os.path.join(td, "no-such.yml"))
         with pytest.raises(ConfigError, match="YAML 解析失败"):
             load_config(_write_raw(td, "config: [unclosed"))
-        assert issubclass(ConfigError, ValueError)  # 兼容既有 except ValueError 调用方
+        assert issubclass(ConfigError, AutoQbError)  # 根异常(CLI 单点捕获)
 
 
 def test_models_default_sources():

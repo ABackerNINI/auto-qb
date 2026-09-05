@@ -13,6 +13,7 @@ import time
 import pytest
 
 from auto_qb.config import ConfigError
+from auto_qb.errors import AutoQbError
 from auto_qb.locking import SingleInstanceLock, SingleInstanceLockError
 from auto_qb.qbmanager import QbManager
 from helpers import FakeConfig
@@ -43,7 +44,7 @@ def test_lock_contention_raises_with_holder_info(tmp_path):
             lock2.acquire()
         msg = str(excinfo.value)
         # 错误为 ConfigError 子类, 走 CLI 单点捕获 (退出码 1)
-        assert isinstance(excinfo.value, ConfigError)
+        assert isinstance(excinfo.value, AutoQbError)
         assert "另一实例已持有锁" in msg
         # 含持有者信息
         assert "PID" in msg

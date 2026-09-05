@@ -14,13 +14,13 @@ from datetime import datetime
 
 from filelock import FileLock, Timeout
 
-from .config.errors import ConfigError
+from .errors import AutoQbError
 
 logger = logging.getLogger(__name__)
 
 
-class SingleInstanceLockError(ConfigError):
-    """锁竞争或锁文件错误, 走 ConfigError 通道 (CLI 退出码 1, stderr 无堆栈)"""
+class SingleInstanceLockError(AutoQbError):
+    """锁竞争或锁文件错误, 走 AutoQbError 通道 (CLI 退出码 1, stderr 无堆栈)"""
 
 
 class SingleInstanceLock:

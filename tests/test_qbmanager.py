@@ -24,6 +24,8 @@
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
 - test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
 - test_refresh_removed_grouping_disabled: 删除种子且分组关闭 -> 只移除任务不扫描
+- test_refresh_schema_validation_missing_raises: 首次拉到非空种子信息时校验字段, 缺失抛 QbCompatError
+- test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
 - test_export_torrents_info: export_torrents_info 写种子信息到文件
 """
 import json
@@ -33,7 +35,11 @@ import time
 from unittest import mock
 
 from auto_qb.taskqueue import DEFERRED, PENDING, Task, TaskQueue
+import pytest
+
+from auto_qb.errors import AutoQbError
 from auto_qb.qbmanager import QbManager
+from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
 
@@ -305,6 +311,37 @@ def test_refresh_added_no_tracker_match_skips():
         mgr._refresh_torrents()
         assert client.calls == []
         assert mgr.task_queue.due(time.time(), max=10) == []
+
+
+def test_refresh_schema_validation_missing_raises():
+    """首次拉到非空种子信息时校验必需字段: 缺失抛 QbCompatError(qB 版本漂移早暴露)"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        # 模拟 qB 版本不兼容: torrent info 缺少 ratio/seeding_time 等字段
+        client.torrents["H1"] = SimpleNamespace(hash="H1", name="T1", state="stalledUP")
+        with pytest.raises(QbCompatError) as excinfo:
+            mgr._refresh_torrents()
+        assert "缺少字段" in str(excinfo.value)
+
+
+def test_refresh_schema_validation_passes_once():
+    """全字段样本通过校验并置 flag; 后续 refresh 不再重复校验(qB 版本运行期不变)"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        mgr._refresh_torrents()  # 首次: 校验通过
+        assert mgr._schema_validated is True
+        # 第二轮: flag 已置, 即使出现缺字段对象也不再校验(防御性断言 flag 语义)
+        client.torrents["H1"] = SimpleNamespace(hash="H1", name="T1", state="stalledUP")
+        mgr._refresh_torrents()  # 不抛
 
 
 def test_refresh_removed_grouping_disabled():

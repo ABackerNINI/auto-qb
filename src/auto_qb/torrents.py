@@ -24,6 +24,7 @@ from qbittorrentapi import TorrentState, TorrentDictionary
 
 from . import utils
 from .config import TrackerConfig
+from .errors import AutoQbError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,29 @@ _SNAPSHOT_FIELDS = (
     "dl_limit",
     "up_limit",
 )
+
+# 跳检重加所需属性(qB torrent info 直接字段, 不经快照复制; 单一来源, CheckAction 引用)
+RE_ADD_FIELDS = (
+    "seq_dl",
+    "f_l_piece_prio",
+    "ratio_limit",
+    "seeding_time_limit",
+    "inactive_seeding_time_limit",
+    "share_limit_action",
+)
+
+# 版本兼容校验所需全字段(快照字段 + 重加字段): 快照字段缺失会静默零值(规则基于假数据决策),
+# 比崩溃更危险, 启动期一并校验
+REQUIRED_TORRENT_FIELDS = _SNAPSHOT_FIELDS + RE_ADD_FIELDS
+
+
+class QbCompatError(AutoQbError):
+    """qBittorrent torrent info 字段与预期不符(版本不兼容), 首次拉到种子信息时 fail-fast"""
+
+
+def missing_torrent_fields(tor) -> List[str]:
+    """返回 tor 上缺失的必需字段列表(空列表 = 版本兼容); AttrDict 缺键时 hasattr 为 False"""
+    return [f for f in REQUIRED_TORRENT_FIELDS if not hasattr(tor, f)]
 
 
 @dataclass(slots=True)

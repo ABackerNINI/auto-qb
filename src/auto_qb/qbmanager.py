@@ -17,12 +17,13 @@ from typing import List, Optional
 from qbittorrentapi import Client
 
 from .config import Config, TrackerConfig, load_config
+from .errors import AutoQbError
 from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
 from .qbapi import QbApi
 from .rules import Rule
 from .taskqueue import DEFERRED, Task, TaskQueue
-from .torrents import TorrentRecord, TorrentStore
+from .torrents import QbCompatError, TorrentRecord, TorrentStore, missing_torrent_fields
 from . import utils
 from .logging import setup_logging
 
@@ -48,6 +49,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.enabled_rules: List[Rule] = []
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         self.task_queue = TaskQueue()
+        # 版本兼容校验: 首次拉到非空种子信息时执行一次(qB 版本运行期不变)
+        self._schema_validated = False
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -106,6 +109,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 while True:
                     try:
                         self._tick(dry_run)
+                    except AutoQbError:
+                        raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     time.sleep(main_tick)
@@ -194,11 +199,31 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     # ---------- 种子级任务 ----------
 
+    def _validate_torrent_schema(self, tors) -> None:
+        """版本兼容 fail-fast: 首次拉到非空种子信息时校验必需字段(qB 版本漂移早暴露)。
+
+        样本取列表中首个非 dict 对象(真实 API 恒为 TorrentDictionary; 测试注入的 dict
+        不作样本); 通过后置 _schema_validated 不再重复校验(qB 版本运行期不变);
+        空 qB / 全 dict 时本轮跳过, 下次非空再验。缺失抛 QbCompatError -> CLI 干净退出。
+        """
+        if self._schema_validated:
+            return
+        sample = next((t for t in tors if not isinstance(t, dict)), None)
+        if sample is None:
+            return
+        missing = missing_torrent_fields(sample)
+        if missing:
+            raise QbCompatError(
+                f"qBittorrent torrent info 缺少字段: {missing}; 请检查 qBittorrent 版本兼容性"
+            )
+        self._schema_validated = True
+
     def _refresh_torrents(self, dry_run: bool = False):
         """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
         tors = self.api.torrents_info()
+        self._validate_torrent_schema(tors)
         added, removed = self.store.refresh(tors)
 
         if added:

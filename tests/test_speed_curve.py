@@ -42,6 +42,7 @@ import yaml
 
 from auto_qb import curves
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
+from auto_qb.config import ConfigError
 from auto_qb.mixins.speed_curve import _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
 from auto_qb.taskqueue import Task
 from helpers import FakeClient, make_manager
@@ -246,11 +247,11 @@ def test_speed_curve_config_parses_sample(tmp_path):
 def test_speed_curve_config_rejects_bad_section(tmp_path):
     """顶层非字典 / 未知键 -> ValueError"""
     for bad in ("str", [], 123):
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             _load(tmp_path, bad)
     spec = _valid_spec()
     spec["extra"] = 1
-    with pytest.raises(ValueError):
+    with pytest.raises(ConfigError):
         _load(tmp_path, spec)
 
 
@@ -263,7 +264,7 @@ def test_speed_curve_config_interval_optional_and_validated(tmp_path):
     for bad in ("abc", "0S", "-5M", 0):
         spec = copy.deepcopy(_valid_spec())
         spec["interval"] = bad
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             _load(tmp_path, spec)
 
 
@@ -315,7 +316,7 @@ def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
     for src in bad_sources:
         spec = copy.deepcopy(_valid_spec())
         spec["traffic_source"] = src
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             _load(tmp_path, spec)
 
 
@@ -368,7 +369,7 @@ def test_speed_curve_config_rejects_bad_curves(tmp_path):
     c["curves"] = [item({"period": "1D"})]
     cases.append(("双向全缺", c))
     for name, spec in cases:
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             _load(tmp_path, spec), name
 
 
@@ -440,7 +441,7 @@ def test_speed_curve_config_rejects_bad_points(tmp_path):
         }]),  # 档位内缺方向键
     ]
     for spec in cases:
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             _load(tmp_path, spec)
 
 
@@ -454,7 +455,7 @@ def test_normalize_period_aliases():
     assert curves.normalize_period("7D") == "7D"
     assert curves.normalize_period("30D") == "30D"
     for bad in ("weekly", "0D", "3", "-1D", ""):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError):  # utils 层原始 ValueError, 非配置校验错误
             curves.normalize_period(bad)
 
 

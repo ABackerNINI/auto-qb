@@ -448,11 +448,6 @@ class CheckAction(BaseAction):
             return ActionResult.pending("full-checking 校验已提交")
         return ActionResult.ok("full-checking 校验已提交")
 
-    _ATTRS = [
-        "seq_dl", "f_l_piece_prio", "ratio_limit", "seeding_time_limit", "inactive_seeding_time_limit",
-        "share_limit_action"
-    ]
-
     def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
         """辅种跳检(高风险): 导出 → 删除(保留文件) → 确认消失 → 重加(跳过校验) → 确认出现 → 恢复快照
 
@@ -483,12 +478,9 @@ class CheckAction(BaseAction):
         if not data:
             return ActionResult.fail("导出 .torrent 为空")
 
-        # 删除前校验重加所需的 6 属性存在(qB 版本差异可能缺字段): 缺失则 fail 不删除种子,
-        # 保证"删除前失败无损失"; 校验通过后直接引用原始对象(删除不会改变其内容)
-        for k in self._ATTRS:
-            if not hasattr(torrent.tor, k):
-                return ActionResult.fail(f"torrent.{k} 属性不存在, 无法跳检(不删除种子)")
-
+        # 重加所需的 6 属性存在性已由启动期 schema 校验保证(refresh 首次拉取时验证
+        # REQUIRED_TORRENT_FIELDS, 含 RE_ADD_FIELDS); 直接引用原始 TorrentDictionary
+        # (删除不会改变 Python 对象内容)
         tor = torrent.tor
 
         # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);

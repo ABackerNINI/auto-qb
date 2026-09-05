@@ -58,6 +58,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from auto_qb.config import ConfigError
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, _recheck_fail_count, CheckAction
 from auto_qb.taskqueue import DEFERRED, PENDING, TaskQueue
@@ -211,7 +212,7 @@ def test_checking_config_string_rejected():
         try:
             CheckAction(bad)
             assert False, f"字符串配置 {bad} 应报错"
-        except ValueError:
+        except ConfigError:
             pass
 
 
@@ -220,7 +221,7 @@ def test_checking_config_missing_basic_check():
     try:
         CheckAction({"with_reference": _seg("skip-checking"), "without_reference": _seg("full-checking")})
         assert False, "缺 basic_check 应报错"
-    except ValueError:
+    except ConfigError:
         pass
 
 
@@ -235,7 +236,7 @@ def test_checking_config_invalid_basic_check():
             }
         )
         assert False, "非法 basic_check 应报错"
-    except ValueError:
+    except ConfigError:
         pass
 
 
@@ -263,7 +264,7 @@ def test_checking_config_missing_section():
         try:
             CheckAction(spec)
             assert False, f"段非 dict 应报错: {spec}"
-        except ValueError:
+        except ConfigError:
             pass
 
 
@@ -285,7 +286,7 @@ def test_checking_config_invalid_mode():
         try:
             CheckAction(spec)
             assert False, f"非法 mode 应报错: {spec}"
-        except ValueError:
+        except ConfigError:
             pass
 
 
@@ -302,7 +303,7 @@ def test_checking_config_unknown_keys():
         try:
             CheckAction(spec)
             assert False, f"未知键 {key} 应报错"
-        except ValueError:
+        except ConfigError:
             pass
 
 
@@ -319,7 +320,7 @@ def test_checking_config_custom_without_program():
         try:
             CheckAction(spec)
             assert False, f"custom 缺路径应报错: {path!r}"
-        except ValueError:
+        except ConfigError:
             pass
 
 
