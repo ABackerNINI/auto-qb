@@ -7,6 +7,9 @@ qbittorrentapi 保持一致(duck-type 兼容, 调用写法与测试断言不变)
 dry_run 判定仍由调用点负责(facade 不感知); 属性 client 暴露原始客户端
 (仅供数据层内部惰性缓存与测试使用)。
 
+store 为必传参数(QbManager 恒持有数据层): "无 store 则透明透传"的可选
+形态已移除, 不为测试留专用通道。
+
 设计:
 - 写方法: 调用 raw client 后同步 store(tags/category/state/限速/save_path/删除)
 - 读方法: 快照内 hash 的 trackers/files 走 store 惰性缓存; 标签/分类列表走 store 缓存
@@ -26,20 +29,19 @@ HashType = Union[str, List[str]]
 
 class QbApi:
     """qB API Facade: 封装客户端调用 + store 快照同步"""
-    def __init__(self, client: Optional[Client] = None, store: Optional[TorrentStore] = None):
+    def __init__(self, client: Optional[Client], store: TorrentStore):
         self._client: Optional[Client] = client
-        self.store: Optional[TorrentStore] = store
+        self.store: TorrentStore = store
 
     @property
     def client(self) -> Optional[Client]:
         """原始 qbittorrentapi 客户端(数据层内部惰性缓存/测试使用)"""
         return self._client
 
-    def bind(self, client: Optional[Client], store: Optional[TorrentStore] = None) -> None:
+    def bind(self, client: Optional[Client], store: TorrentStore) -> None:
         """重新绑定客户端/数据层(QbManager.client setter 调用)"""
         self._client = client
-        if store is not None:
-            self.store = store
+        self.store = store
 
     @staticmethod
     def _to_list(value: Optional[Union[str, List[str]]]) -> List[str]:
@@ -57,9 +59,8 @@ class QbApi:
         **kwargs: Any,
     ):
         self._client.torrents_add_tags(tags=tags, torrent_hashes=torrent_hashes, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, tags_add=self._to_list(tags))
-            self.store.invalidate_tags()  # 新增标签定义可能未存在(全局标签列表缓存失效)
+        self.store.update_torrent_fields(torrent_hashes, tags_add=self._to_list(tags))
+        self.store.invalidate_tags()  # 新增标签定义可能未存在(全局标签列表缓存失效)
 
     def torrents_remove_tags(
         self,
@@ -68,19 +69,16 @@ class QbApi:
         **kwargs: Any,
     ):
         self._client.torrents_remove_tags(tags=tags, torrent_hashes=torrent_hashes, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, tags_remove=self._to_list(tags))
+        self.store.update_torrent_fields(torrent_hashes, tags_remove=self._to_list(tags))
 
     def torrents_delete_tags(self, tags: Optional[Union[str, List[str]]] = None, **kwargs: Any):
         self._client.torrents_delete_tags(tags=tags, **kwargs)
-        if self.store is not None:
-            self.store.apply_tag_removal(self._to_list(tags))
-            self.store.invalidate_tags()
+        self.store.apply_tag_removal(self._to_list(tags))
+        self.store.invalidate_tags()
 
     def torrents_create_category(self, name: Optional[str] = None, **kwargs: Any):
         self._client.torrents_create_category(name=name, **kwargs)
-        if self.store is not None:
-            self.store.invalidate_categories()
+        self.store.invalidate_categories()
 
     def torrents_set_category(
         self,
@@ -89,18 +87,15 @@ class QbApi:
         **kwargs: Any,
     ):
         self._client.torrents_set_category(category=category, torrent_hashes=torrent_hashes, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, category=category)
+        self.store.update_torrent_fields(torrent_hashes, category=category)
 
     def torrents_start(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_start(torrent_hashes=torrent_hashes, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, state="stalledUP")
+        self.store.update_torrent_fields(torrent_hashes, state="stalledUP")
 
     def torrents_stop(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_stop(torrent_hashes=torrent_hashes, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, state="pausedUP")
+        self.store.update_torrent_fields(torrent_hashes, state="pausedUP")
 
     def torrents_set_upload_limit(
         self,
@@ -109,8 +104,7 @@ class QbApi:
         **kwargs: Any,
     ):
         self._client.torrents_set_upload_limit(torrent_hashes=torrent_hashes, limit=limit, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, up_limit=limit)
+        self.store.update_torrent_fields(torrent_hashes, up_limit=limit)
 
     def torrents_set_download_limit(
         self,
@@ -119,8 +113,7 @@ class QbApi:
         **kwargs: Any,
     ):
         self._client.torrents_set_download_limit(torrent_hashes=torrent_hashes, limit=limit, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, dl_limit=limit)
+        self.store.update_torrent_fields(torrent_hashes, dl_limit=limit)
 
     def torrents_set_location(
         self,
@@ -129,14 +122,12 @@ class QbApi:
         **kwargs: Any,
     ):
         self._client.torrents_set_location(torrent_hashes=torrent_hashes, location=location, **kwargs)
-        if self.store is not None:
-            self.store.update_torrent_fields(torrent_hashes, save_path=location)
+        self.store.update_torrent_fields(torrent_hashes, save_path=location)
 
     def torrents_delete(self, torrent_hashes: Optional[HashType] = None, delete_files: bool = False, **kwargs: Any):
         self._client.torrents_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kwargs)
-        if self.store is not None:
-            for h in self._to_list(torrent_hashes):
-                self.store.remove_torrent(h)
+        for h in self._to_list(torrent_hashes):
+            self.store.remove_torrent(h)
 
     # ---------- 写操作: 无快照变化(下轮 refresh 校准) ----------
 
@@ -161,28 +152,24 @@ class QbApi:
         return self._client.torrents_export(torrent_hash, **kwargs)
 
     def torrents_trackers(self, torrent_hash, **kwargs):
-        if self.store is not None:
-            torrent = self.store.get(torrent_hash)
-            if torrent is not None:
-                return torrent.trackers_info(self._client)
+        torrent = self.store.get(torrent_hash)
+        if torrent is not None:
+            return torrent.trackers_info(self._client)
         return self._client.torrents_trackers(torrent_hash, **kwargs)
 
     def torrents_files(self, torrent_hash, **kwargs):
-        if self.store is not None:
-            torrent = self.store.get(torrent_hash)
-            if torrent is not None:
-                return torrent.files(self._client)
+        torrent = self.store.get(torrent_hash)
+        if torrent is not None:
+            return torrent.files(self._client)
         return self._client.torrents_files(torrent_hash, **kwargs)
 
-    def torrents_tags(self, **kwargs: Any):
-        if self.store is not None:
-            return list(self.store.all_tags())
-        return self._client.torrents_tags(**kwargs)
+    def torrents_tags(self) -> List[str]:
+        """全局标签列表(读 store 缓存, 写操作时已失效重建)"""
+        return list(self.store.all_tags())
 
-    def torrents_categories(self, **kwargs: Any):
-        if self.store is not None:
-            return dict(self.store.all_categories())
-        return self._client.torrents_categories(**kwargs)
+    def torrents_categories(self) -> dict:
+        """全部分类(读 store 缓存, 写操作时已失效重建)"""
+        return dict(self.store.all_categories())
 
     def auth_log_in(self, **kwargs: Any):
         return self._client.auth_log_in(**kwargs)
