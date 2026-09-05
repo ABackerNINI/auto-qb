@@ -35,9 +35,9 @@
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
 - 集数标签自定义格式 (`add_episode_tags` 段 `add_tag_single`/`add_tag_multi` 模板, 2026-09-05)
 
-## 已知 BUG (来自 想法.md, 待修复)
+## 已知 BUG (来自 想法.md)
 
-- **新加的种子无法触发 skip-checking** (2026-09-05 用户报告): 排查方向 —— 新种子入 store 后 tracker_conf/分组/闸门 0 (is_stopped+progress) 各环节是否就绪; skip-checking 的跨规则同日去重与 progress 闸门是否误拦
+- ~~新加的种子无法触发 skip-checking~~ (2026-09-06 已修复): 生产日志实锤 —— 跳检删除→重加同 hash 种子后, `store.remove_torrent` 保留 `_known_hashes` 导致重加种子**不进 added 列表**, 下轮 refresh 重建记录 `tracker_conf=None` 永久未匹配; `log_repr → tracker_name` 回退 `self.tor.client`(真实 TorrentDictionary 无此属性) AttributeError。修复: ①跳检重加成功后恢复删除前快照记录(tracker_conf/惰性缓存保留) ②tracker_name 无 conf 返回 "Unknown"(与 FakeTorrent 对齐, 不再回退 tor.client)
 - 复杂限速规则 (tracker+时段组合等)
 - 性能: 主循环拆分平滑占用、全面优化 (想法.md 标注)
 
