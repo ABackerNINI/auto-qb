@@ -11,6 +11,8 @@
 1. **跳检 (skip-checking)**: 删除种子→重加, 丢失统计 (下载量/上传量/做种时长/分享率); 内容错误会传垃圾数据 (PT 站严令禁止)。防护 (2026-09-05 审计加固后): ①部分下载 (0<progress<1) 拒绝跳检 (预分配零块会被标记有效上传, fail 提示改 full-checking) ②同规则同日去重 + **跨规则**同日去重 (`skip_check_day`, 统计只丢一次) ③强制 filelist 前置检查 ④重加前轮询确认种子已从客户端消失 (qB 删除异步, ≤5s; 未消失放弃, 种子还在无损失) ⑤重加属性**直传** (0/负值有语义, 不得 `or None` 吞掉) + contentLayout 由 content_path/save_path/文件列表推断 (布局错位不自愈) ⑥无参考 warning ⑦重加失败 .torrent 落盘备份且**元数据立即落盘**。跳检过程中种子会从 store 消失 (`remove_torrent`) — 该种子同 tick 内的后续动作必须容错 (历史 bug: commit e5ea9e7, 测试 test_checking.py 覆盖)。
 2. **reannounce 动作**: 已加运行时保护 (2026-09-05): 同种子最小间隔 10M(state `reannounce_ts`) + 暂停种子跳过 + 加载期未配去重 WARNING —— 但高频汇报本质上仍是高风险操作, 规则应配 execute_once。
 3. **qB 版本兼容**: `_refresh_torrents` 首次拉到种子信息时校验 `REQUIRED_TORRENT_FIELDS`(23 个, 含快照+跳检重加字段), 缺失抛 `QbCompatError(AutoQbError)` → CLI 干净退出 —— 快照字段缺失会**静默零值**(规则基于假数据决策), 比崩溃更危险 (qB 5.0 preferences 键漂移前科)。
+4. **`or 默认值` 掩盖数值字段** (2026-09-06 清理): `progress or 0.0`/`ratio or 0` 类写法把上游 bug 静默转为合法语义且方向可能朝危险侧 (progress=None → 视为全新辅种 → 放行跳检)。已清理: 闸门 0/_skip_gates/HR 判定 4 处。**保留的合法 `or`**: 空串/空容器归一化 (category/tags/API 边界) 与除零防护 (`total_size or 1`)。判别标准见 ai/06。
+5. **死防御清理** (2026-09-06): 同型问题扩展至 `is None`/`getattr` 默认 —— 已删: client setter 的 store/api 守卫、`_execute_full_checking` 的 task_queue None 退化分支、`getattr(task, "resume_index", None)`/`getattr(prev, "is_uploading", False)` 冗余默认、QbApi 的 `store=None` 可选形态与 15 处 `if self.store is not None` 守卫 (store 改必传, 见 06 可测试性原则)。**合法 None 保留**: 惰性缓存、运行时状态 (种子被删/外部入口)、功能开关。判别标准: 守卫的条件在正确上游流程下**不可能发生** → 删; 是真实可选语义 → 留。
 3. **删除种子** (`torrents_delete`): 仅跳检流程使用, `delete_files=False` 固定。
 4. **全局限速覆盖**: 奇数 KiB 视为用户手动设置则跳过 — 三处实现 (tracker.py/actions.py/speed_curve.py) 逻辑必须保持一致。
 

@@ -113,7 +113,8 @@ _tick(dry_run):
 所有对 qB 的调用统一走 `self.api` (不直接用 raw client):
 
 - **写方法**: 调 raw client 后同步 store 快照 + 失效相关缓存 (add_tags/remove_tags/delete_tags/create_category/set_category/start(→stalledUP)/stop(→pausedUP)/set_upload_limit/set_download_limit/set_location/delete)。
-- **读方法**: 优先 store 惰性缓存 (trackers/files/tags/categories); `torrents_info` 透传。
+- **读方法**: 优先 store 惰性缓存 (trackers/files/tags/categories); 快照缺 hash 时 trackers/files 回退 client; `torrents_info` 透传。
+- **store 必传**: `QbApi(client, store)` / `bind(client, store)` 中 store 为必传参数 (QbManager 恒持有数据层), 无"无 store 透传"形态 — 不为测试留专用通道 (见 06 可测试性原则)。
 - **透传**: torrents_add / recheck / reannounce / piece_hashes / export / auth_log_in。
 - **全局限速 (qB 5.0+)**: `get_global_speed_limits`/`set_global_speed_limits` 走 `transfer_*` 端点 (bytes/s), 不用 `app/preferences` 旧键 (已失效)。内部 KiB/s ↔ bytes/s 换算。
 - dry_run 判定**不在Facade内**, 由调用点负责。

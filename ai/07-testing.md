@@ -11,7 +11,7 @@
 
 - `pytest.ini`: `pythonpath = src` (无需安装包), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
 - 测试**全部使用 Fake, 不连真实 qBittorrent**, 可随时全量运行。
-- 覆盖率现状 (cov-report.txt): 总 94%; 低洼: `logging.py` 58% (文件 handler 分支), `cli.py` 76%, `qbapi.py` 85% (store 为 None 的分支); 近乎全绿: utils 99%, episodes 99%, conditions 98%, taskqueue 98%, rule_engine/grouping/tags 94-100%。补测试优先看 term-missing 输出。
+- 覆盖率现状 (cov-report.txt): 总 94%; 低洼: `logging.py` 58% (文件 handler 分支), `cli.py` 76%; 近乎全绿: qbapi 100%, utils 99%, episodes 99%, conditions 98%, taskqueue 98%, rule_engine/grouping/tags 94-100%。补测试优先看 term-missing 输出。
 
 ## 测试文件约定
 
