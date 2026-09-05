@@ -34,6 +34,10 @@
 - 根据流量接入更多数据源 (traffic_source 当前仅 traffic_monitor 单源, 代码已按列表预留)
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
 - 集数标签自定义格式 (`add_episode_tags` 段 `add_tag_single`/`add_tag_multi` 模板, 2026-09-05)
+
+## 已知 BUG (来自 想法.md, 待修复)
+
+- **新加的种子无法触发 skip-checking** (2026-09-05 用户报告): 排查方向 —— 新种子入 store 后 tracker_conf/分组/闸门 0 (is_stopped+progress) 各环节是否就绪; skip-checking 的跨规则同日去重与 progress 闸门是否误拦
 - 复杂限速规则 (tracker+时段组合等)
 - 性能: 主循环拆分平滑占用、全面优化 (想法.md 标注)
 
@@ -41,8 +45,8 @@
 | 位置 | 内容 |
 |------|------|
 | qbmanager.py:190 | 删除 `_get_torrent` 兼容方法 |
-| rules/base.py:116 | 多 tracker 匹配时 warning+跳过 (2026-09-05: `_match_tracker_conf` 已改为命中多个时打 ERROR 日志并用第一个, 是否跳过仍待作者决定) |
-| rules/base.py:134,150 | HR 判定从 RuleContext 移到 actions.py |
+| ~~rules/base.py:116~~ | 多 tracker 匹配 (已处理 2026-09-05: `_match_tracker_conf` 命中多个打 ERROR 用第一个; base.py:116 TODO 注释已随 HR 迁移删除) |
+| ~~rules/base.py:134,150~~ | HR 判定已迁移 (2026-09-05: check_hr_* 移至 TorrentRecord, replace_vars 移至 utils) |
 | rules/conditions.py:79,108,134 | 条件支持 `:ignore_case` |
 | ~~rules/actions.py:220~~ | recheck 失败冷却(已实现 2026-09-05: 连续失败3次当日冷却, recheck_fails) |
 | rules/actions.py:254 | `_find_reference` 优化为提前返回 |

@@ -156,4 +156,4 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 
 ## 变量替换
 
-`RuleContext.replace_vars(text)`: 当前仅 `${required_seeding_time}` → 匹配 tracker 的 `hr.required_seeding_time_raw` (如 `"3D"`; 无 HR 配置 → 空串)。用于 add_tags/remove_tags/add_category 的格式串与 HR 标签/分类格式。新增变量在 `RuleContext` 加属性 + 扩展 `replace_vars`。
+`utils.replace_vars(text, tracker_conf)` (2026-09 迁至 utils, 原在 RuleContext): 当前仅 `${required_seeding_time}` → tracker 的 `hr.required_seeding_time_raw` (如 `"3D"`; tracker_conf=None 或无 HR 配置 → 留原文不替换)。用于 add_tags/remove_tags/add_category 的格式串与 HR 标签/分类格式。新增变量在 `utils.replace_vars` 扩展。

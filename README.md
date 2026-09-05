@@ -238,7 +238,7 @@ config:
         curves: # 每条 period 曲线为 curve 单项映射; 重复 period 拒绝
             - curve:
                 period: DAY # 周期，支持DAY(1D)，MONTH，ND(最近N天)
-                upload_curve: # 上传量达到指定值后，限制上传速度(阈值须严格递增)
+                upload_curve: # 上传量达到指定值后，限制上传速度(阈值须严格递增), 可自行添加修改上传量与速度
                     - 10GiB:
                         upload_speed_limit: 6MiB/s
                     - 20GiB:

@@ -22,7 +22,7 @@
 | `config/loaders.py` | 270 | 解析加载(先验证再解析, 假定配置正确零检查): `load_config` 入口 + `load_logging/qbittorrent/grouping/tracker/global_hr/tracker_hr/global_speed_limit_curve` + `_parse_curve_points` + `_expand_tracker_tags_refs` |
 | `qbmanager.py` | 314 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
 | `taskqueue.py` | 192 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task |
-| `torrents.py` | 361 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存), `TorrentStore`(refresh/分组索引/全局缓存/写后同步) |
+| `torrents.py` | ~390 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存 + `check_hr_condition/check_hr_satisfied` HR 判定), `TorrentStore`(refresh/分组索引/全局缓存/写后同步) |
 | `qbapi.py` | 217 | qB API Facade | `QbApi`: 写后同步快照, 读走缓存, `get/set_global_speed_limits`(qB5.0 transfer 端点) |
 | `locking.py` | ~70 | 单实例锁 | `SingleInstanceLock`(基于第三方 `filelock` + 伴生 `<lock>.meta.json` 记录 PID/启动时间/配置路径); `SingleInstanceLockError(ConfigError)` 走 CLI 退出码 1; 仅正常 run 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 锁文件路径 `<state_file 去扩展名>.lock` (避免与 state 文件同目录同名冲突) |
 | `utils.py` | 314 | 通用工具 | `parse_time/parse_fsize/parse_speed/parse_bool/parse_compare/compare/parse_hr_condition`; `match_tag_patterns`/`match_path_patterns`/`path_normalize`; `match_tracker_confs`(hostname 精确匹配); `add_long_path_prefix_for_win`; `extract_tracker_hostnames`; `fmt_speed`; `timer` 装饰器 |
@@ -48,7 +48,7 @@
 | 文件 | 行数 | 职责 | 关键内容 |
 |------|------|------|----------|
 | `registry.py` | 29 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
-| `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; `replace_vars` 支持 `${required_seeding_time}`; `check_hr_condition/check_hr_satisfied`), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
+| `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
 | `conditions.py` | 292 | 15 种条件插件 | 详见 [04-rule-system.md](04-rule-system.md) |
 | `actions.py` | 590 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂 (~380 行) |
 
