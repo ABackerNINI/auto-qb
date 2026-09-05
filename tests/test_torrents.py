@@ -9,8 +9,12 @@
 - test_record_tags_set: tags 字符串 -> 预计算集合(逗号分隔去空白)
 - test_store_refresh_first_round: 首轮全部视为新增, removed 为空
 - test_store_refresh_diff: 次轮增删检测
+- test_record_check_hr_on_real_record: 真实 TorrentRecord.check_hr_* 直测(防鸭子影子掩盖)
 - test_store_refresh_keeps_records: 已存在记录对象跨 tick 保留(惰性缓存存活)
 - test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理
+- test_missing_torrent_fields: 缺失字段清单(全字段/缺字段/dict 形状)
+- test_record_check_hr_on_real_record: 真实 TorrentRecord.check_hr_* 直测(防鸭子影子掩盖)
+- test_store_restore_torrent: restore_torrent 恢复删除前记录(对象身份+幂等)
 - test_store_queries: get/__contains__/all/hashes/__len__
 - test_store_trackers_lazy: 记录级 trackers_info/tracker_urls 惰性拉取+缓存
 - test_store_files_lazy: 记录级 files 惰性拉取+缓存
@@ -99,6 +103,34 @@ def test_store_refresh_first_round():
     assert sorted(added) == ["H1", "H2"]
     assert removed == []
     assert sorted(store.hashes()) == ["H1", "H2"]
+
+
+def test_record_check_hr_on_real_record():
+    """真实 TorrentRecord.check_hr_* 直测: 回归 2026-09-06 BUG(迁入时误用 self.torrent,
+    被FakeTorrent鸭子影子掩盖, 真实记录上 AttributeError)"""
+    from auto_qb.config import HRRule, TrackerConfig
+
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stoppedDL"))
+    rec.tracker_conf = TrackerConfig(
+        name="X", domains=["d.com"], tags=[], remove_tags=[],
+        upload_speed_limit=0, download_speed_limit=0,
+        hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7)),
+    )
+    rec.downloaded = 70 * 1024**2
+    rec.total_size = 100 * 1024**2
+    # dlratio 0.7 >= 0.7: 触发; 做种 0 < 3D: 未满足
+    assert rec.check_hr_condition() is True
+    assert rec.check_hr_satisfied() is False
+    # 做种时长达标 -> satisfied
+    rec.seeding_time = 3 * 86400 + 12 * 3600
+    assert rec.check_hr_satisfied() is True
+    # dlsize 条件: downloaded 提至 100MiB >= 100MiB 触发
+    rec.downloaded = 100 * 1024**2
+    rec.tracker_conf.hr.condition = ("dlsize", 100 * 1024**2)
+    assert rec.check_hr_condition() is True
+    # 无 hr: False
+    rec.tracker_conf.hr = None
+    assert rec.check_hr_condition() is False
 
 
 def test_store_restore_torrent():

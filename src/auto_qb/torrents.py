@@ -195,17 +195,20 @@ class TorrentRecord:
 # ---------- 辅助方法 ----------
 
     def check_hr_condition(self) -> bool:
-        """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种"""
+        """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种
+
+        前置: tracker_conf 已在 _refresh_torrents 阶段匹配(无 None 防御, 早暴露调用路径错误)。
+        """
         if not self.tracker_conf.hr:
             return False
         hr = self.tracker_conf.hr
         cond_type, cond_value = hr.condition
         if cond_type == "dlratio":
-            total = self.torrent.total_size or 1
-            if (self.torrent.downloaded / total) < cond_value:
+            total = self.total_size or 1  # 除零防护(total_size=0 时 downloaded 亦为 0, 判定保守)
+            if (self.downloaded / total) < cond_value:
                 return False
         elif cond_type == "dlsize":
-            if self.torrent.downloaded < cond_value:
+            if self.downloaded < cond_value:
                 return False
         return True
 
@@ -216,8 +219,8 @@ class TorrentRecord:
         hr = self.tracker_conf.hr
         if not self.check_hr_condition():
             return False
-        seeding_ok = self.torrent.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
-        ratio_ok = hr.required_share_ratio > 0 and (self.torrent.ratio or 0) >= hr.required_share_ratio
+        seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
+        ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio
         return seeding_ok or ratio_ok
 
 
