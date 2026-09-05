@@ -28,7 +28,7 @@
 
 - 按 tracker 自动添加/删除站点标签，自动清理相似(单词相同大小写不同)标签
 - 彻底删除标签(`delete_tags`)，仅在无种子使用时删除(`delete_tags_if_has_no_torrents`)
-- 自动添加集数标签(种子添加时触发): 从文件列表解析，如 `01.mkv~05.mkv` → `zE1-5`
+- 种子添加时自动添加集数标签: 从文件列表解析，如 `01.mkv~05.mkv` → `E1-5`
 
 ### HR 管理
 
@@ -42,16 +42,17 @@
 - 缺文件检查: 组内种子被删除、或由上传转暂停、或保存路径变化时立即触发磁盘扫描(仅验证文件存在性与大小)；文件丢失 → 整组暂停 + `MISSING` 标签
 - 组内多个种子同时下载、或已完成与下载中并存 → 警告 + 整组暂停
 
+### 限速
+
+- tracker 配置内置限速字段，种子添加时自动触发限速
+- 规则动作支持单种上传/下载限速(`upload_speed_limit` / `download_speed_limit`)
+- 可自定义全局限速曲线, 根据每天上传下载总量设置总限速(详见[全局限速曲线配置](#全局限速曲线配置))
+- 限速不覆盖单数值，手动设置且不希望被覆盖的可以设置为单数比如: 2001 KiB/s
+
 ### 自定义规则 🚧
 
 - 触发时机 + 筛选条件 + 动作，动作顺序执行，支持去重与错误处理(详见[规则系统](#规则系统))
 - 条件 15 种、动作 11 种，全部可组合
-
-### 限速
-
-- 规则动作支持单种上传/下载限速(`upload_speed_limit` / `download_speed_limit`)
-- tracker 配置内置限速字段，种子添加时自动触发限速
-- 限速不覆盖单数值，手动设置且不希望被覆盖的可以设置为单数比如: 2001 KiB/s(局限: 全局限速曲线启用期间无法表达"手动不限速" —— 0 为偶数, 曲线会接管)
 
 ### 其他
 
@@ -162,12 +163,13 @@ config:
 
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
+
     # 自动添加集数标签(仅种子添加时触发; enabled=false 关闭, 模板含 ${episode_first}/${episode_last} 占位,
     # 单集/多集分别渲染, 多集仅在集数连续时生成, 不连续视为不可靠放弃添加)
     add_episode_tags:
         enabled: true
-        add_tag_single: "zE${episode_first}"
-        add_tag_multi: "zE${episode_first}-${episode_last}"
+        add_tag_single: "zE${episode_first}"                # 单集标签格式
+        add_tag_multi: "zE${episode_first}-${episode_last}" # 多集标签格式
 
     # 种子分组管理(辅种管理)
     grouping:
