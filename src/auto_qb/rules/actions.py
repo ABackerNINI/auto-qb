@@ -5,8 +5,8 @@ import logging
 import os
 import time
 from datetime import date
-from types import SimpleNamespace
 from typing import List, Optional
+from qbittorrentapi import TorrentDictionary
 
 from .. import utils
 from ..config import ConfigError
@@ -475,14 +475,22 @@ class CheckAction(BaseAction):
         if gate is not None:
             return gate
 
-        # ---- 阶段 2: 准备 (导出/属性拷贝/布局推断, 均须在删除前完成) ----
+        # ---- 阶段 2: 准备 (导出/校验属性/布局推断, 均须在删除前完成) ----
         try:
             data = ctx.api.torrents_export(torrent_hash=ctx.hash)
         except Exception as e:
             return ActionResult.fail(f"导出 .torrent 失败: {e}")
         if not data:
             return ActionResult.fail("导出 .torrent 为空")
-        dup = self._copy_tor_attrs(torrent.tor, self._ATTRS)
+
+        # 删除前校验重加所需的 6 属性存在(qB 版本差异可能缺字段): 缺失则 fail 不删除种子,
+        # 保证"删除前失败无损失"; 校验通过后直接引用原始对象(删除不会改变其内容)
+        for k in self._ATTRS:
+            if not hasattr(torrent.tor, k):
+                return ActionResult.fail(f"torrent.{k} 属性不存在, 无法跳检(不删除种子)")
+
+        tor = torrent.tor
+
         # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);
         # 删除后 store 记录已移除, 必须在此之前完成
         content_layout = self._infer_content_layout(torrent, ctx.client)
@@ -491,7 +499,7 @@ class CheckAction(BaseAction):
         failed = self._skip_delete(ctx, torrent)
         if failed is not None:
             return failed
-        failed = self._skip_readd(ctx, torrent, data, dup, content_layout)
+        failed = self._skip_readd(ctx, torrent, data, tor, content_layout)
         if failed is not None:
             return failed
 
@@ -546,7 +554,8 @@ class CheckAction(BaseAction):
         return None
 
     def _skip_readd(
-        self, ctx: RuleContext, torrent: TorrentRecord, data: bytes, dup: SimpleNamespace, content_layout: Optional[str]
+        self, ctx: RuleContext, torrent: TorrentRecord, data: bytes, tor: TorrentDictionary,
+        content_layout: Optional[str]
     ) -> Optional[ActionResult]:
         """跳检步骤: 以跳过校验方式重加(先暂停), 轮询确认出现, 恢复删除前快照记录。
 
@@ -565,13 +574,13 @@ class CheckAction(BaseAction):
                 tags=torrent.tags or None,
                 upload_limit=torrent.up_limit,
                 download_limit=torrent.dl_limit,
-                is_sequential_download=dup.seq_dl,
-                is_first_last_piece_priority=dup.f_l_piece_prio,
+                is_sequential_download=tor.seq_dl,
+                is_first_last_piece_priority=tor.f_l_piece_prio,
                 contentLayout=content_layout,
-                ratio_limit=dup.ratio_limit,
-                seeding_time_limit=dup.seeding_time_limit,
-                inactive_seeding_time_limit=dup.inactive_seeding_time_limit,
-                share_limit_action=dup.share_limit_action,
+                ratio_limit=tor.ratio_limit,
+                seeding_time_limit=tor.seeding_time_limit,
+                inactive_seeding_time_limit=tor.inactive_seeding_time_limit,
+                share_limit_action=tor.share_limit_action,
                 is_skip_checking=True,
                 is_stopped=True,
             )
@@ -633,24 +642,6 @@ class CheckAction(BaseAction):
         }
         manager.save_state()
         return path
-
-    @staticmethod
-    def _copy_tor_attrs(tor, attrs: list[str]):
-        """拷贝种子属性(删除种子前保存, 重加时逐项恢复)
-
-        兼容两种数据源访问(统一走 getattr):
-        - 真实 qB: TorrentDictionary 为 AttrDict, getattr(tor, k) 按键取值, 键缺失抛 AttributeError
-        - 测试替身(FakeTorrent): 普通对象属性, 直接 getattr 读取
-        任一属性缺失 -> ValueError(上层转为动作失败: 不删除种子, 无损失)。
-        """
-        dup = SimpleNamespace()
-        for k in attrs:
-            try:
-                value = getattr(tor, k)
-            except AttributeError:
-                raise ValueError(f"torrent.{k} 属性不存在") from None
-            setattr(dup, k, value)
-        return dup
 
 
 @register_action
