@@ -58,6 +58,10 @@ _tick(dry_run):
 5. `store.update_state_snapshot(tors)` 保存本轮状态快照 (存 `state_enum` 枚举对象, 跨 qB 版本)。
 6. `begin_round(...)` 维护上传量快照基线 (daily/weekly/monthly, 周期切换重建基线)。
 
+## 启动期版本兼容校验 (2026-09-06)
+
+`_refresh_torrents` 首次拉到非空种子信息时校验 `REQUIRED_TORRENT_FIELDS` (快照字段 + 跳检重加字段, 共 23 个), 缺失抛 `QbCompatError(AutoQbError)` → tick 循环 `except AutoQbError: raise` 穿透"主循环异常"捕获 → CLI stderr 干净退出。通过后置 `_schema_validated` 不再重复 (qB 版本运行期不变); 空 qB 时跳过 (无样本)。设计动机: 快照字段缺失会**静默零值** (规则基于假数据决策), 比崩溃更危险 —— qB 5.0 preferences 键漂移前科。
+
 ## 任务队列 (taskqueue.py) — 单队列模型
 
 > README "设计要点"已同步为单队列描述 (2026-09-05): 所有任务(含校验结果轮询)统一进一个 `heapq` 最小堆 `_fast`, 按 `next_run` 到期弹出。

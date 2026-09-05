@@ -22,8 +22,9 @@
 | `config/loaders.py` | 270 | 解析加载(先验证再解析, 假定配置正确零检查): `load_config` 入口 + `load_logging/qbittorrent/grouping/tracker/global_hr/tracker_hr/global_speed_limit_curve` + `_parse_curve_points` + `_expand_tracker_tags_refs` |
 | `qbmanager.py` | 314 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
 | `taskqueue.py` | 192 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task |
-| `torrents.py` | ~390 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存 + `check_hr_condition/check_hr_satisfied` HR 判定), `TorrentStore`(refresh/分组索引/全局缓存/写后同步 + `restore_torrent` 跳检重加快照恢复) |
+| `torrents.py` | ~390 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存 + `check_hr_condition/check_hr_satisfied` HR 判定), `TorrentStore`(refresh/分组索引/全局缓存/写后同步 + `restore_torrent` 跳检重加快照恢复); `QbCompatError`/`missing_torrent_fields`/`REQUIRED_TORRENT_FIELDS`/`RE_ADD_FIELDS` |
 | `qbapi.py` | 217 | qB API Facade | `QbApi`: 写后同步快照, 读走缓存, `get/set_global_speed_limits`(qB5.0 transfer 端点) |
+| `errors.py` (包级) | ~14 | `AutoQbError` 致命错误根: CLI 单点捕获(stderr 干净 + 退出码 1); 子类并列: `ConfigError`(config)/`SingleInstanceLockError`(locking)/`QbCompatError`(torrents) |
 | `locking.py` | ~70 | 单实例锁 | `SingleInstanceLock`(基于第三方 `filelock` + 伴生 `<lock>.meta.json` 记录 PID/启动时间/配置路径); `SingleInstanceLockError(ConfigError)` 走 CLI 退出码 1; 仅正常 run 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 锁文件路径 `<state_file 去扩展名>.lock` (避免与 state 文件同目录同名冲突) |
 | `utils.py` | 314 | 通用工具 | `parse_time/parse_fsize/parse_speed/parse_bool/parse_compare/compare/parse_hr_condition`; `match_tag_patterns`/`match_path_patterns`/`path_normalize`; `match_tracker_confs`(hostname 精确匹配); `add_long_path_prefix_for_win`; `extract_tracker_hostnames`; `fmt_speed`; `timer` 装饰器 |
 | `curves.py` | 122 | 限速曲线纯逻辑 | `parse_history_dat`(Traffic Monitor dat 解析), `aggregate`(day/month/Nd 聚合), `curve_speed`(全程分档覆盖), `merge_direction`(取最严), `normalize_period`, `bytes_to_kib`。无项目内依赖, 便于单测 |
