@@ -70,17 +70,17 @@ class SpeedCurveMixin:
 
         # 1. 读取数据源
         try:
-            with open(conf.bat_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(conf.dat_path, "r", encoding="utf-8", errors="ignore") as f:
                 text = f.read()
         except OSError as e:
-            logger.warning(f"限速曲线 | 读取流量数据失败({conf.bat_path}): {e}, 本轮不动")
+            logger.warning(f"限速曲线 | 读取流量数据失败({conf.dat_path}): {e}, 本轮不动")
             return True
         rows, bad = curves.parse_history_dat(text)
         if not rows:
-            logger.warning(f"限速曲线 | 流量数据无有效记录({conf.bat_path}), 本轮不动")
+            logger.warning(f"限速曲线 | 流量数据无有效记录({conf.dat_path}), 本轮不动")
             return True
         if bad:
-            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.bat_path})")
+            logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
 
         # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速); 各 period 聚合值保留供统计日志
         today = date.today()

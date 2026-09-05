@@ -5,7 +5,7 @@
 - test_speed_curve_config_parses_sample: 完整样例解析(period 归一化/阈值字节/速度字节)
 - test_speed_curve_config_rejects_bad_section: 顶层非 dict / 未知键
 - test_speed_curve_config_interval_optional_and_validated: interval 缺省回退主 interval / 非法值报错
-- test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/空/多元素/未知来源/元素非 dict/缺 traffic_monitor/内部未知键/缺 bat_path
+- test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/空/多元素/未知来源/元素非 dict/缺 traffic_monitor/内部未知键/缺 dat_path
 - test_speed_curve_config_rejects_bad_curves: curves 缺失/空/非单项映射/键名非 curve/curve 非 dict/未知键/缺 period/非法或重复 period/双向全缺
 - test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法/多阈值键
 - test_normalize_period_aliases: period 别名归一化(day/1D/month/ND) / 非法值 ValueError
@@ -102,8 +102,8 @@ def _pc(period: str, up=None, down=None) -> PeriodCurve:
     return PeriodCurve(period=period, upload_points=up, download_points=down)
 
 
-def _gslc(bat_path, *period_curves, interval=None) -> GlobalSpeedLimitCurve:
-    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=list(period_curves), interval=interval)
+def _gslc(dat_path, *period_curves, interval=None) -> GlobalSpeedLimitCurve:
+    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=list(period_curves), interval=interval)
 
 
 def _dat_text(rows) -> str:
@@ -164,7 +164,7 @@ def _valid_spec() -> dict:
             "10M",
         "traffic_source": [{
             "traffic_monitor": {
-                "bat_path": r"D:\Programs\TrafficMonitor\history_traffic.dat"
+                "dat_path": r"D:\Programs\TrafficMonitor\history_traffic.dat"
             }
         }],
         "curves":
@@ -227,7 +227,7 @@ def test_speed_curve_config_parses_sample(tmp_path):
     cfg = _load(tmp_path, _valid_spec())
     g = cfg.global_speed_limit_curve
     assert g is not None
-    assert g.bat_path == r"D:\Programs\TrafficMonitor\history_traffic.dat"
+    assert g.dat_path == r"D:\Programs\TrafficMonitor\history_traffic.dat"
     assert g.interval == 600.0  # interval: 10M -> 600 秒
     assert len(g.curves) == 2
     day, week = g.curves
@@ -268,17 +268,17 @@ def test_speed_curve_config_interval_optional_and_validated(tmp_path):
 
 
 def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
-    """数据源缺失/空/多元素/未知来源/缺 bat_path -> ValueError"""
+    """数据源缺失/空/多元素/未知来源/缺 dat_path -> ValueError"""
     bad_sources = [
         None,  # 缺失
         [],  # 空
         [{
             "traffic_monitor": {
-                "bat_path": "a"
+                "dat_path": "a"
             }
         }, {
             "traffic_monitor": {
-                "bat_path": "b"
+                "dat_path": "b"
             }
         }],  # 多数据源
         [{
@@ -288,7 +288,7 @@ def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
         }],  # 未知来源
         [{
             "traffic_monitor": {
-                "bat_path": "a"
+                "dat_path": "a"
             },
             "extra": 1
         }],  # 来源额外键
@@ -297,17 +297,17 @@ def test_speed_curve_config_rejects_bad_traffic_source(tmp_path):
         }],  # traffic_monitor 非字典
         [{
             "traffic_monitor": {}
-        }],  # 缺 bat_path
+        }],  # 缺 dat_path
         [{
             "traffic_monitor": {
-                "bat_path": ""
+                "dat_path": ""
             }
-        }],  # 空 bat_path
+        }],  # 空 dat_path
         ["not-a-dict"],  # 数据源元素非字典
         [{}],  # 缺少 traffic_monitor 键
         [{
             "traffic_monitor": {
-                "bat_path": "a",
+                "dat_path": "a",
                 "extra": 1
             }
         }],  # traffic_monitor 内部未知键

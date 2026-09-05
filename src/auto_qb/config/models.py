@@ -127,11 +127,11 @@ class PeriodCurve:
 class GlobalSpeedLimitCurve:
     """全局限速曲线配置(Traffic Monitor 数据源)
 
-    bat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
+    dat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
     curves: 多条 period 曲线(同方向多条命中时取最严限速, 见 curves.merge_direction)
     interval: 曲线任务执行间隔(秒), 对应配置 interval: 10M; None = 未指定, 回退主 interval
     """
-    bat_path: str
+    dat_path: str
     curves: List[PeriodCurve]
     interval: Optional[float] = None  # 秒; None = 使用 config.interval
 

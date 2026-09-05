@@ -152,7 +152,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
         interval: 10M              # 曲线任务执行间隔(可选, 缺省用主 interval)
         traffic_source:
             - traffic_monitor:
-                bat_path: ".../history_traffic.dat"
+                dat_path: ".../history_traffic.dat"
         curves:
             - curve:                # 每条 period 曲线为 curve 单项映射
                 period: 1D          # day/1D | month | ND(最近 N 天)
@@ -172,7 +172,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
 
     # 数据源: 校验已保证仅单个 traffic_monitor
     (source,) = spec["traffic_source"]
-    bat_path = str(source["traffic_monitor"]["bat_path"]).strip()
+    dat_path = str(source["traffic_monitor"]["dat_path"]).strip()
 
     period_curves: List[PeriodCurve] = []
     for item in spec["curves"]:
@@ -190,7 +190,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
                 ),
             )
         )
-    return GlobalSpeedLimitCurve(bat_path=bat_path, curves=period_curves, interval=interval)
+    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=period_curves, interval=interval)
 
 
 def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:

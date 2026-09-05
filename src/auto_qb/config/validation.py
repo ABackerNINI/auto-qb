@@ -339,17 +339,17 @@ def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:
     else:
         source = raw_sources[0]
         if not isinstance(source, dict) or set(source) != {"traffic_monitor"}:
-            errors.append(f"{where}.traffic_source: 仅支持单项映射 traffic_monitor: {{bat_path: ...}}")
+            errors.append(f"{where}.traffic_source: 仅支持单项映射 traffic_monitor: {{dat_path: ...}}")
         else:
             tm = source["traffic_monitor"]
             if not isinstance(tm, dict):
                 errors.append(f"{where}.traffic_monitor: 必须是字典")
             else:
-                unknown = set(tm) - {"bat_path"}
+                unknown = set(tm) - {"dat_path"}
                 if unknown:
                     errors.append(f"{where}.traffic_monitor: 未知键: {sorted(unknown)}")
-                if not str(tm.get("bat_path", "")).strip():
-                    errors.append(f"{where}.traffic_monitor: 缺少 bat_path")
+                if not str(tm.get("dat_path", "")).strip():
+                    errors.append(f"{where}.traffic_monitor: 缺少 dat_path")
 
     # curves: 多条 period 曲线(重复 period 拒绝)
     raw_curves = spec.get("curves")
