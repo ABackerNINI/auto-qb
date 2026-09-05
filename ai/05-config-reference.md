@@ -46,7 +46,7 @@
 | `state_file` | `"logs/auto-qb-state.json"` | 状态文件, 须在 logs/ 下可写 (2026-09-05 改: 状态与日志同目录, 便于集中清理) |
 | `log` | | `{file, level, max_bytes, format}`; file 空=仅控制台; RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
-| `add_episode_tags` | false | 种子添加时加集数标签 (仅添加时触发一次) |
+| `add_episode_tags` | `{enabled: false, add_tag_single: "zE${episode_first}", add_tag_multi: "zE${episode_first}-${episode_last}"}` | 种子添加时加集数标签; `enabled` 总开关; `add_tag_single`/`add_tag_multi` 模板, 含 `${episode_first}`/`${episode_last}` 占位, 多集仅在集数连续时生成 |
 | `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING"}` |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |

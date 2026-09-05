@@ -47,7 +47,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - `rules/base.py:134,150` HR 判定函数标记"移动到 actions.py" — RuleContext 上的 `check_hr_*` 与 TagsMixin `_add_hr_tag_or_category` 逻辑重复, 改 HR 语义要两处同步。
 - `conditions.py` tags/category/trackers 三个条件不支持 `:ignore_case` (utils 支持)。
 - ~~`actions.py:220` "recheck 后仍未完成防重复校验"~~ — 已处理 (2026-09-05): 连续失败 3 次当日冷却(`recheck_fails` state 键, 次日重置, 成功清零)。
-- `episodes.py:112` 集数标签格式不可自定义。
+- ~~`episodes.py:112` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。
 - `config.py:357,373` HR 加载标记 TODO optimize。
 
 ## ⚠️ 并发/状态机约束回顾 (违反即引入难以复现的 bug)

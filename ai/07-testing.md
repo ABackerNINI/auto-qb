@@ -26,7 +26,7 @@
 - **FakeClient**: 模拟 qbittorrentapi Client。记录所有调用到 `calls` 列表 (断言用, 如 `("add_tags", tags)`); `tags` set / `category` / `torrents` (dict: hash→FakeTorrent) 是可变状态; `torrents_delete_tags` 模拟真实行为 (同时从所有种子移除); `files_map` 按 hash 返回文件列表 (分组测试); `files_calls` 计数 (断言不再全量拉文件列表); `add_error` 模拟重加失败。
 - **FakeTorrent**: 鸭子类型兼容 `TorrentRecord`/`TorrentDictionary` (快照字段一致 + `tags_set`/`state_enum`/`tracker_name`/`log_repr` + `trackers_info(client)`/`files(client)` 惰性接口)。**`state_enum`/`tags_set` 是属性不缓存** — 测试常直接改 `.state`/`.tags` 后重跑动作。默认: hash="HASH123", state="stalledUP", save_path=r"R:\Downloads", size/downloaded=100MiB。
 - **FakeTracker**: name="HHan", domains=["tracker.hhanclub.net"], tags=["HHan"], hr/rules/limits 可注入。
-- **FakeConfig**: 类属性默认全关 (grouping.enabled=False, add_episode_tags=False 等); 测试按需覆盖实例属性。
+- **FakeConfig**: 类属性默认全关 (grouping.enabled=False, add_episode_tags=AddEpisodeTagsConfig() 等); 测试按需覆盖实例属性。
 
 ### 构造函数 (最常用)
 

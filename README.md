@@ -162,8 +162,12 @@ config:
 
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
-    # 自动添加集数标签(仅种子添加时触发)
-    add_episode_tags: true
+    # 自动添加集数标签(仅种子添加时触发; enabled=false 关闭, 模板含 ${episode_first}/${episode_last} 占位,
+    # 单集/多集分别渲染, 多集仅在集数连续时生成, 不连续视为不可靠放弃添加)
+    add_episode_tags:
+        enabled: true
+        add_tag_single: "zE${episode_first}"
+        add_tag_multi: "zE${episode_first}-${episode_last}"
 
     # 种子分组管理(辅种管理)
     grouping:

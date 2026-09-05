@@ -33,7 +33,7 @@
 - 插件系统: 直接支持自定义 Python plugin
 - 根据流量接入更多数据源 (traffic_source 当前仅 traffic_monitor 单源, 代码已按列表预留)
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
-- 集数标签自定义格式 (`zE` 前缀等)
+- 集数标签自定义格式 (`add_episode_tags` 段 `add_tag_single`/`add_tag_multi` 模板, 2026-09-05)
 - 复杂限速规则 (tracker+时段组合等)
 - 性能: 主循环拆分平滑占用、全面优化 (想法.md 标注)
 
@@ -48,7 +48,7 @@
 | rules/actions.py:254 | `_find_reference` 优化为提前返回 |
 | rules/actions.py:292 | 重新设计 custom 校验流程 |
 | ~~rules/actions.py:546~~ | reannounce 限频(已实现 2026-09-05: 运行时最小间隔10M + 加载告警) |
-| episodes.py:112 | 集数标签格式自定义 |
+| ~~episodes.py:112~~ | 集数标签格式自定义 (已实现 2026-09-05: add_episode_tags 段 add_tag_single/add_tag_multi 模板) |
 
 ## 近期演进脉络 (git log 提炼, 有助于理解"为什么现在是这样")
 

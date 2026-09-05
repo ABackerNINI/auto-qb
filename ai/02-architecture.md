@@ -52,7 +52,7 @@ _tick(dry_run):
    - `_apply_speed_limit` tracker 单种限速 (尊重奇数保护)。
    - `_create_torrent_tasks`: 创建 `maintenance` 内置任务 + 该种子应绑定的每条规则一个任务。
    - `_assign_new_torrent` (grouping.enabled): 按文件列表增量归组 + 大小一致性检查。
-   - `_add_episode_tags` (add_episode_tags): 集数标签。
+   - `_add_episode_tags` (add_episode_tags.enabled): 集数标签 (单/多集模板 + 连续性判定)。
 3. **删除种子**: `task_queue.remove_torrent(hash)` 移除该种子全部任务 (含让位任务/在途校验标记); grouping 启用时 `_handle_removed_torrents` → 组内缺文件扫描。
 4. **分组事件处理** (grouping.enabled): `_handle_save_path_changes` (重归组+两侧扫描)、`_handle_state_transitions` (上传转暂停 → 缺文件扫描, 用上一轮 `store.state_snapshot`)、`_check_download_conflicts` (每轮)。
 5. `store.update_state_snapshot(tors)` 保存本轮状态快照 (存 `state_enum` 枚举对象, 跨 qB 版本)。
