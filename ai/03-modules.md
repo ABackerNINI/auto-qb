@@ -24,6 +24,7 @@
 | `taskqueue.py` | 192 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task |
 | `torrents.py` | 361 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存), `TorrentStore`(refresh/分组索引/全局缓存/写后同步) |
 | `qbapi.py` | 217 | qB API Facade | `QbApi`: 写后同步快照, 读走缓存, `get/set_global_speed_limits`(qB5.0 transfer 端点) |
+| `locking.py` | ~70 | 单实例锁 | `SingleInstanceLock`(基于第三方 `filelock` + 伴生 `<lock>.meta.json` 记录 PID/启动时间/配置路径); `SingleInstanceLockError(ConfigError)` 走 CLI 退出码 1; 仅正常 run 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 锁文件路径 `<state_file 去扩展名>.lock` (避免与 state 文件同目录同名冲突) |
 | `utils.py` | 314 | 通用工具 | `parse_time/parse_fsize/parse_speed/parse_bool/parse_compare/compare/parse_hr_condition`; `match_tag_patterns`/`match_path_patterns`/`path_normalize`; `match_tracker_confs`(hostname 精确匹配); `add_long_path_prefix_for_win`; `extract_tracker_hostnames`; `fmt_speed`; `timer` 装饰器 |
 | `curves.py` | 122 | 限速曲线纯逻辑 | `parse_history_dat`(Traffic Monitor dat 解析), `aggregate`(day/month/Nd 聚合), `curve_speed`(全程分档覆盖), `merge_direction`(取最严), `normalize_period`, `bytes_to_kib`。无项目内依赖, 便于单测 |
 | `episodes.py` | 113 | 集数解析 | `_EPISODE_PATTERNS`(第x集 > S01E05 > EP05 > E05 优先级), `extract_episodes_from_files`(仅视频文件, 排除分辨率/年份), `format_episode_tag`(连续才加, 格式 `zE1-5`), `name_has_episode_marker` |
