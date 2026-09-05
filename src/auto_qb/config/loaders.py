@@ -12,6 +12,7 @@ from .. import curves
 from ..utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .errors import ConfigError
 from .models import (
+    AddEpisodeTagsConfig,
     Config,
     CurvePoint,
     GlobalSpeedLimitCurve,
@@ -31,6 +32,18 @@ def _get(spec: dict, key: str, default, parse=None):
         return default
     value = spec[key]
     return parse(value) if parse else value
+
+
+def _get_episode_tags(spec) -> "AddEpisodeTagsConfig":
+    """解析 config.add_episode_tags 段 -> AddEpisodeTagsConfig 实例(已校验, 这里仅转换)"""
+    d = AddEpisodeTagsConfig()
+    if not isinstance(spec, dict):
+        return d
+    return AddEpisodeTagsConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        add_tag_single=_get(spec, "add_tag_single", d.add_tag_single),
+        add_tag_multi=_get(spec, "add_tag_multi", d.add_tag_multi),
+    )
 
 
 def _parse_log_level(value: str) -> int:
@@ -244,7 +257,7 @@ def load_config(config_path: str) -> Config:
         logging=load_logging_config(_get(cfg, "log", {})),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
-        add_episode_tags=_get(cfg, "add_episode_tags", d.add_episode_tags, parse_bool),
+        add_episode_tags=_get_episode_tags(_get(cfg, "add_episode_tags", d.add_episode_tags)),
         hr=load_global_hr(_get(cfg, "hr", {})),
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,

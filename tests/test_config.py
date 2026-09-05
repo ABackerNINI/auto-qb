@@ -453,5 +453,7 @@ def test_models_default_sources():
     c = Config()
     assert c.main_tick == 2.0 and c.interval == 60.0
     assert c.max_tasks_per_tick == 20 and c.state_file == "logs/auto-qb-state.json"
-    assert c.remove_similar_tags is False and c.add_episode_tags is False
+    assert c.remove_similar_tags is False and c.add_episode_tags.enabled is False
+    assert c.add_episode_tags.add_tag_single == "zE${episode_first}"
+    assert c.add_episode_tags.add_tag_multi == "zE${episode_first}-${episode_last}"
     assert c.trackers == {} and c.global_speed_limit_curve is None

@@ -12,6 +12,7 @@ import os
 import tempfile
 from types import SimpleNamespace
 
+from auto_qb.config import AddEpisodeTagsConfig
 from auto_qb.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
 from auto_qb.qbmanager import QbManager
 from helpers import FakeClient, FakeConfig, FakeTorrent
@@ -87,10 +88,17 @@ def test_episode_tag_utils():
     assert extract_episodes_from_files([SimpleNamespace(name=None, size=1)]) == []
 
     # 标签格式化: 必须连续, 非连续/空 -> 放弃(z 前缀使标签排序靠后)
-    assert format_episode_tag([1, 2, 3, 4, 5]) == "zE1-5"
-    assert format_episode_tag([1, 2, 3, 5]) == ""  # 缺集 -> 放弃
-    assert format_episode_tag([3]) == "zE3"
-    assert format_episode_tag([]) == ""
+    DEFAULT_SINGLE = "zE${episode_first}"
+    DEFAULT_MULTI = "zE${episode_first}-${episode_last}"
+    assert format_episode_tag([1, 2, 3, 4, 5], DEFAULT_SINGLE, DEFAULT_MULTI) == "zE1-5"
+    assert format_episode_tag([1, 2, 3, 5], DEFAULT_SINGLE, DEFAULT_MULTI) == ""  # 缺集 -> 放弃
+    assert format_episode_tag([3], DEFAULT_SINGLE, DEFAULT_MULTI) == "zE3"
+    assert format_episode_tag([], DEFAULT_SINGLE, DEFAULT_MULTI) == ""
+    # 自定义模板
+    assert format_episode_tag([3], "E${episode_first}", "E${episode_first}-${episode_last}") == "E3"
+    assert format_episode_tag([1, 2, 3, 4, 5], "E${episode_first}", "E${episode_first}-${episode_last}") == "E1-5"
+    # [1, 5] 间隔 4 集 -> 不连续 -> 返回空
+    assert format_episode_tag([1, 5], "single", "multi") == ""
 
 
 def test_episode_tags_added_on_new_torrent():
@@ -99,7 +107,7 @@ def test_episode_tags_added_on_new_torrent():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.add_episode_tags = True
+        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
@@ -124,7 +132,7 @@ def test_episode_tags_not_on_existing_refresh():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.add_episode_tags = True
+        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
@@ -148,7 +156,7 @@ def test_episode_tags_non_continuous_skipped():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.add_episode_tags = True
+        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
@@ -169,7 +177,7 @@ def test_episode_tags_ignore_date_screenshot():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.add_episode_tags = True
+        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client
@@ -193,7 +201,7 @@ def test_episode_tags_disabled():
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        cfg.add_episode_tags = False  # 默认关闭
+        cfg.add_episode_tags = AddEpisodeTagsConfig()  # 默认 disabled
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
         mgr.client = client

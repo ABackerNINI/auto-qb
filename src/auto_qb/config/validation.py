@@ -95,6 +95,18 @@ def _check_regex_patterns(patterns: list, where: str, errors: List[str]) -> None
                 errors.append(f"{where}[{i}]: 非法正则: {e}")
 
 
+def _validate_add_episode_tags(spec, errors: List[str]) -> None:
+    """校验 config.add_episode_tags 段(布尔 enabled + 单集/多集模板字符串)"""
+    if not isinstance(spec, dict):
+        errors.append("config.add_episode_tags: 必须是字典")
+        return
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], "config.add_episode_tags.enabled", errors)
+    for key in ("add_tag_single", "add_tag_multi"):
+        if key in spec and (not isinstance(spec[key], str) or not spec[key].strip()):
+            errors.append(f"config.add_episode_tags.{key}: 必须是非空字符串")
+
+
 def _validate_log(spec, errors: List[str]) -> None:
     if spec is None:
         return
@@ -443,7 +455,7 @@ def validate_config(data) -> List[str]:
     if "remove_similar_tags" in cfg:
         _try(parse_bool, cfg["remove_similar_tags"], "config.remove_similar_tags", errors)
     if "add_episode_tags" in cfg:
-        _try(parse_bool, cfg["add_episode_tags"], "config.add_episode_tags", errors)
+        _validate_add_episode_tags(cfg["add_episode_tags"], errors)
 
     _validate_log(cfg.get("log"), errors)
     _validate_qbittorrent(cfg.get("qbittorrent"), errors)

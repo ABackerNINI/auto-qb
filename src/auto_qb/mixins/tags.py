@@ -52,16 +52,20 @@ class TagsMixin:
         return False
 
     def _add_episode_tags(self, torrent: TorrentRecord, dry_run: bool):
-        """种子添加时自动添加集数标签(如 E1-5)
+        """种子添加时自动添加集数标签(如 zE1-5)
 
         仅种子添加时触发(由 QbManager 在 added 循环调用), 非周期任务。
         名称已含集数标记(S01E01/EP01/第1集等) -> 跳过; 否则从文件列表解析集数(走 store 惰性缓存),
-        如 01.mkv~05.mkv -> 添加 'E1-5'。解析不到集数(电影/合集等)则不加标签。
+        如 01.mkv~05.mkv -> 添加自定义模板标签(单集用 add_tag_single, 多集用 add_tag_multi)。
+        解析不到集数(电影/合集等)或集数非连续则不加标签, 避免错标。
         """
+        cfg = self.config.add_episode_tags
+        if not cfg.enabled:
+            return
         episodes_list = episodes.extract_episodes_from_files(torrent.files(self.client))
         if not episodes_list:
             return  # 文件列表无集数(电影/合集), 不加标签
-        tag = episodes.format_episode_tag(episodes_list)
+        tag = episodes.format_episode_tag(episodes_list, cfg.add_tag_single, cfg.add_tag_multi)
         if not tag:
             return  # 集数非连续(存在缺集/误提取), 放弃添加
         self._add_tags(torrent, [tag], dry_run)

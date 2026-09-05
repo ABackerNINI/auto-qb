@@ -86,6 +86,20 @@ class GroupingConfig:
 
 
 @dataclass
+class AddEpisodeTagsConfig:
+    """种子添加时自动添加集数标签配置
+
+    enabled: 总开关 (False 时整段功能不生效)
+    add_tag_single: 单集模板, 含 ${episode_first} 占位 (此时 first=last), e.g. "zE${episode_first}"
+    add_tag_multi: 多集模板, 含 ${episode_first}/${episode_last} 占位, e.g. "zE${episode_first}-${episode_last}"
+    集数不连续视为解析不可靠, 不添加标签 (避免错标)
+    """
+    enabled: bool = False
+    add_tag_single: str = "zE${episode_first}"
+    add_tag_multi: str = "zE${episode_first}-${episode_last}"
+
+
+@dataclass
 class CurvePoint:
     """限速曲线档位点: 该 period 内累计流量(字节)低于 threshold_bytes 的区间按 speed_bytes_per_s 限制
 
@@ -138,7 +152,7 @@ class Config:
     rules_config: dict = field(default_factory=dict)  # 规则集原始配置: {规则集名: {规则名: spec}}
 
     remove_similar_tags: bool = False
-    add_episode_tags: bool = False  # 种子添加时自动添加集数标签: 名称不含集数时从文件列表解析
+    add_episode_tags: "AddEpisodeTagsConfig" = field(default_factory=AddEpisodeTagsConfig)  # 种子添加时自动添加集数标签(名称不含集数时从文件列表解析)
 
     hr: HRRule = field(default_factory=HRRule)  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底)
 

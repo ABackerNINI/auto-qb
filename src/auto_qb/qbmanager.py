@@ -235,7 +235,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 if self.config.grouping.enabled:
                     self._assign_new_torrent(h, dry_run)
                 # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
-                if self.config.add_episode_tags:
+                if self.config.add_episode_tags.enabled:
                     self._add_episode_tags(torrent, dry_run)
 
         if removed:

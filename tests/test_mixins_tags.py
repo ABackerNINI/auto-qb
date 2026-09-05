@@ -37,6 +37,7 @@ import tempfile
 
 import pytest
 
+from auto_qb.config import AddEpisodeTagsConfig
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import AddTagsAction
 from helpers import FakeClient, FakeConfig, FakeTorrent, _hr_rule, make_manager, seed_store
@@ -271,16 +272,17 @@ def test_add_episode_tags_files_error():
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
+        mgr.config.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
 
-        def boom(h):
-            raise RuntimeError("api down")
+    def boom(h):
+        raise RuntimeError("api down")
 
-        client.torrents_files = boom
-        tor = FakeTorrent(hash="H1", tags="")
-        seed_store(mgr, [tor])
-        with pytest.raises(RuntimeError, match="api down"):
-            mgr._add_episode_tags(tor, dry_run=False)
-        assert client.calls == []
+    client.torrents_files = boom
+    tor = FakeTorrent(hash="H1", tags="")
+    seed_store(mgr, [tor])
+    with pytest.raises(RuntimeError, match="api down"):
+        mgr._add_episode_tags(tor, dry_run=False)
+    assert client.calls == []
 
 
 def test_add_episode_tags_no_episodes():

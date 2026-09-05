@@ -100,14 +100,15 @@ def extract_episodes_from_files(files: list) -> List[int]:
     return sorted(episodes)
 
 
-def format_episode_tag(episodes: List[int]) -> str:
-    """集数列表 -> 标签: 集数必须连续才添加, 如 [1,2,3,4,5] -> 'E1-5', [3] -> 'E3';
-    存在缺集(如 [1,2,3,5])或为空 -> 返回 ''(放弃添加)"""
+def format_episode_tag(episodes: List[int], single_template: str, multi_template: str) -> str:
+    """集数列表 -> 标签: 集数必须连续才添加, 如 [1,2,3] -> single_template.format(1)='zE1',
+    [1,2,3,4,5] -> multi_template.format(1,5)='zE1-5'; 不连续(如 [1,2,4])或为空 -> 返回 ''(放弃添加)"""
     if not episodes:
         return ""
     nums = sorted(set(episodes))
     for a, b in zip(nums, nums[1:]):
         if b != a + 1:
             return ""  # 缺集 -> 放弃添加
-    # TODO: 支持自定义格式
-    return f"zE{nums[0]}" if len(nums) == 1 else f"zE{nums[0]}-{nums[-1]}"
+    if len(nums) == 1:
+        return single_template.replace("${episode_first}", str(nums[0])).replace("${episode_last}", str(nums[0]))
+    return multi_template.replace("${episode_first}", str(nums[0])).replace("${episode_last}", str(nums[-1]))

@@ -18,6 +18,7 @@ from .errors import ConfigError
 from .models import (
     DEFAULT_CONFIG_FILE,
     UNLIMITED_SPEED,
+    AddEpisodeTagsConfig,
     Config,
     CurvePoint,
     GlobalSpeedLimitCurve,

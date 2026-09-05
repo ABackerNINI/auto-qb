@@ -7,7 +7,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 
-from auto_qb.config import GroupingConfig, HRRule, LoggingConfig, QbittorrentConfig  # noqa: E402
+from auto_qb.config import AddEpisodeTagsConfig, GroupingConfig, HRRule, LoggingConfig, QbittorrentConfig  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
 
@@ -328,7 +328,7 @@ class FakeConfig:
     rules_config = {}  # 规则集原始配置(由 make_manager 设置)
     check_missing_files = False
     remove_similar_tags = False
-    add_episode_tags = False  # 自动添加集数标签(默认关闭)
+    add_episode_tags = AddEpisodeTagsConfig()  # 默认 disabled; 测试按需赋值 AddEpisodeTagsConfig(enabled=True, ...)
     hr = HRRule()  # 全局 HR 默认输出设置
     delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
