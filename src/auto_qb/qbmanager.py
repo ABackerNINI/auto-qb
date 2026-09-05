@@ -65,10 +65,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
     @client.setter
     def client(self, value: Optional[Client]):
         self._client = value
-        if getattr(self, "store", None) is not None:
-            self.store.client = value
-        if getattr(self, "api", None) is not None:
-            self.api.bind(value, self.store)
+        self.store.client = value
+        self.api.bind(value, self.store)
 
     def _setup_logging(self):
         logging_conf = self.config.logging

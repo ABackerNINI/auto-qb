@@ -50,7 +50,6 @@
 - test_checking_full_checking_resume_skips_conditions: 断点续跑跳过条件评估(条件变化不影响续跑)
 - test_checking_full_checking_resume_skips_dedup: 断点续跑跳过去重(execute_once=once 不拦截续跑)
 - test_checking_full_checking_defer_fail_retry: 任务队列驱动: 校验未通过 -> 触发任务 reschedule 重试
-- test_checking_no_task_queue_direct_recheck: 无任务队列时直接 recheck
 """
 import os
 import tempfile
@@ -1175,14 +1174,3 @@ def test_checking_full_checking_defer_fail_retry():
     assert origin.resume_index == 1, "重新校验应再次记录断点"
 
 
-def test_checking_no_task_queue_direct_recheck():
-    """测试: 无任务队列(旧用法) -> full-checking 直接发送 recheck 请求"""
-    cfg = make_check_cfg(without_mode="full-checking")
-    mgr = make_mgr(cfg)
-    mgr.task_queue = None  # 无任务队列
-    client = CheckingFakeClient()
-    mgr.client = client
-    t = make_target()
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
-    assert handled
-    assert ("recheck", None) in client.calls, f"无队列应直接发送: {client.calls}"

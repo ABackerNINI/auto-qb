@@ -264,7 +264,7 @@ class CheckAction(BaseAction):
         # - 已完成(progress>=1, 无论状态): 已通过哈希校验, 重复 recheck/跳检无意义
         # - 活跃中(downloading/uploading 等非暂停): 正在运行, 无需校验
         # 此闸门覆盖 full-checking/skip-checking 及有/无任务队列全部路径, 修复完成种子被反复校验的问题
-        if not (ctx.torrent.state_enum.is_stopped and (ctx.torrent.progress or 0.0) < 1.0):
+        if not (ctx.torrent.state_enum.is_stopped and ctx.torrent.progress < 1.0):
             return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
 
         # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
@@ -369,16 +369,10 @@ class CheckAction(BaseAction):
         if _recheck_fail_count(manager, hash) >= RECHECK_FAIL_LIMIT:
             return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
 
-        tq = getattr(ctx.manager, "task_queue", None)
-        if tq is None:
-            # 无任务队列(旧用法/同步环境): 直接发送请求, 不跟踪结果
-            ctx.api.torrents_recheck(torrent_hashes=ctx.hash)
-            return ActionResult.ok("full-checking 校验")
-        hash = ctx.hash
+        tq = ctx.manager.task_queue
         origin = getattr(ctx, "task", None)  # 触发本次校验的规则任务(任务队列驱动); 外部入口为 None
         rule_name = ctx.rule_name
         api = ctx.api
-        manager = ctx.manager
         auto_start = segment["auto_start"]
 
         def on_success():
@@ -517,7 +511,7 @@ class CheckAction(BaseAction):
         - 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日只跳检一次(跳检必然清空
           本地统计, 重复跳检只会再丢一次而毫无收益); 顺带清理非当日记录(防 state 无界增长)。
         """
-        progress = torrent.progress or 0.0
+        progress = torrent.progress
         if 0.0 < progress < 1.0:
             return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
 

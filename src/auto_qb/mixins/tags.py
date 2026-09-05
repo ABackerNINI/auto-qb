@@ -154,7 +154,7 @@ class TagsMixin:
 
         # 做种时长满足 或 分享率达标, 添加 satisfied 标签/分类
         seeding_ok = torrent.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
-        ratio_ok = hr.required_share_ratio > 0 and (torrent.ratio or 0) >= hr.required_share_ratio
+        ratio_ok = hr.required_share_ratio > 0 and torrent.ratio >= hr.required_share_ratio
         if seeding_ok or ratio_ok:
             if hr.add_tag_for_satisfied:
                 tag = utils.replace_vars(hr.add_tag_for_satisfied, tracker_conf)

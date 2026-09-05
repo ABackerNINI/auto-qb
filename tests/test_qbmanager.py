@@ -20,7 +20,6 @@
 - test_run_dry_run_no_save: dry_run=True 退出后不写状态文件
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
-- test_client_setter_without_store_or_api: store/api 未建时 client setter 仅设 _client
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
 - test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
 - test_refresh_removed_grouping_disabled: 删除种子且分组关闭 -> 只移除任务不扫描
@@ -283,12 +282,6 @@ def test_execute_due_respects_max():
         assert len(remaining) == 1, f"超额任务应留在队列: {remaining}"
 
 
-def test_client_setter_without_store_or_api():
-    """store/api 尚未建立(跳过 __init__)时 client setter 只更新 _client 不崩"""
-    mgr = QbManager.__new__(QbManager)  # 绕过 __init__, store/api 属性不存在
-    client = FakeClient()
-    mgr.client = client
-    assert mgr._client is client
 
 
 def test_tick_no_due_task_empty_queue():
