@@ -47,65 +47,67 @@ config:
         - "regex:^zE.*"
         - "regex:^ORPHAN"
 
+    # 全局限速曲线
     global_speed_limit_curve:
         interval: 10M
         traffic_source:
             - traffic_monitor: # Traffic Monitor: 流量监控软件, 可记录每天使用流量
-                bat_path: "D:/Programs/TrafficMonitor/history_traffic.dat"
+                  bat_path: "D:/Programs/TrafficMonitor/history_traffic.dat"
             # 后续可能支持接入其它软件来源
         curves:
             - curve:
-                period: DAY
-                upload_curve: # 上传量达到指定值后, 限制上传速度
-                    - 10GiB:
-                        upload_speed_limit: 6MiB/s
-                    - 20GiB:
-                        upload_speed_limit: 5MiB/s
-                    - 30GiB:
-                        upload_speed_limit: 4MiB/s
-                    - 50GiB:
-                        upload_speed_limit: 2MiB/s
-                    - 100GiB:
-                        upload_speed_limit: 1MiB/s
-                    - 1000GiB:
-                        upload_speed_limit: 0.5MiB/s
-                download_curve: # 下载量达到指定值后, 限制下载速度
-                    - 30GiB:
-                        download_speed_limit: 11MiB/s
-                    - 50GiB:
-                        download_speed_limit: 10MiB/s
-                    - 100GiB:
-                        download_speed_limit: 5MiB/s
-                    - 200GiB:
-                        download_speed_limit: 2MiB/s
-                    - 1000GiB:
-                        download_speed_limit: 1MiB/s
+                  period: DAY
+                  upload_curve: # 上传量达到指定值后, 限制上传速度
+                      - 10GiB:
+                            upload_speed_limit: 6MiB/s
+                      - 20GiB:
+                            upload_speed_limit: 5MiB/s
+                      - 30GiB:
+                            upload_speed_limit: 4MiB/s
+                      - 50GiB:
+                            upload_speed_limit: 2MiB/s
+                      - 100GiB:
+                            upload_speed_limit: 1MiB/s
+                      - 1000GiB:
+                            upload_speed_limit: 0.5MiB/s
+                  download_curve: # 下载量达到指定值后, 限制下载速度
+                      - 30GiB:
+                            download_speed_limit: 11MiB/s
+                      - 50GiB:
+                            download_speed_limit: 10MiB/s
+                      - 100GiB:
+                            download_speed_limit: 5MiB/s
+                      - 200GiB:
+                            download_speed_limit: 2MiB/s
+                      - 1000GiB:
+                            download_speed_limit: 1MiB/s
             - curve:
-                period: MONTH
-                upload_curve: # 上传量达到指定值后, 限制上传速度
-                    - 100GiB:
-                        upload_speed_limit: 6MiB/s
-                    - 200GiB:
-                        upload_speed_limit: 5MiB/s
-                    - 300GiB:
-                        upload_speed_limit: 4MiB/s
-                    - 500GiB:
-                        upload_speed_limit: 2MiB/s
-                    - 1000GiB:
-                        upload_speed_limit: 1MiB/s
-                    - 10000GiB:
-                        upload_speed_limit: 0.5MiB/s
-                download_curve: # 下载量达到指定值后, 限制下载速度
-                    - 600GiB:
-                        download_speed_limit: 11MiB/s
-                    - 1000GiB:
-                        download_speed_limit: 10MiB/s
-                    - 2000GiB:
-                        download_speed_limit: 5MiB/s
-                    - 3000GiB:
-                        download_speed_limit: 2MiB/s
-                    - 10000GiB:
-                        download_speed_limit: 1MiB/s
+                  period: MONTH
+                  upload_curve: # 上传量达到指定值后, 限制上传速度
+                      - 100GiB:
+                            upload_speed_limit: 6MiB/s
+                      - 200GiB:
+                            upload_speed_limit: 5MiB/s
+                      - 300GiB:
+                            upload_speed_limit: 4MiB/s
+                      - 500GiB:
+                            upload_speed_limit: 2MiB/s
+                      - 1000GiB:
+                            upload_speed_limit: 1MiB/s
+                      - 10000GiB:
+                            upload_speed_limit: 0.5MiB/s
+                  download_curve: # 下载量达到指定值后, 限制下载速度
+                      - 600GiB:
+                            download_speed_limit: 11MiB/s
+                      - 1000GiB:
+                            download_speed_limit: 10MiB/s
+                      - 2000GiB:
+                            download_speed_limit: 5MiB/s
+                      - 3000GiB:
+                            download_speed_limit: 2MiB/s
+                      - 10000GiB:
+                            download_speed_limit: 1MiB/s
+
     add_drive_letter_tag_rules:
         add_r_tag: # 为R盘的两个目录添加"R"标签
             enabled: true
