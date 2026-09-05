@@ -101,6 +101,19 @@ def test_store_refresh_first_round():
     assert sorted(store.hashes()) == ["H1", "H2"]
 
 
+def test_store_restore_torrent():
+    """restore_torrent: 记录放回 by_hash(对象身份保留) + _known_hashes 补录; 幂等"""
+    store = TorrentStore()
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1"))
+    store.remove_torrent("H1")  # 模拟跳检删除: by_hash 移除, _known_hashes 含 H1
+    store._known_hashes = {"H1"}
+    store.restore_torrent(rec)
+    assert store.get("H1") is rec, "记录对象身份应保留(tracker_conf/惰性缓存不丢)"
+    assert "H1" in store._known_hashes
+    store.restore_torrent(rec)  # 幂等: 重复调用无副作用
+    assert store.get("H1") is rec
+
+
 def test_store_refresh_diff():
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])

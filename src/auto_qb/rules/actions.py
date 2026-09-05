@@ -11,6 +11,7 @@ from typing import List, Optional
 from .. import utils
 from ..config import ConfigError
 from ..taskqueue import Task
+from ..torrents import TorrentRecord
 from .base import ActionResult, BaseAction, RuleContext
 from .registry import register_action
 
@@ -41,6 +42,21 @@ def _bump_recheck_fail(manager, hash: str) -> int:
         rec["count"] = 0
     rec["count"] += 1
     return rec["count"]
+
+
+def _poll_until(predicate, attempts: int, interval: float) -> bool:
+    """轮询直至 predicate 为真或次数耗尽(异常视为未满足); 返回是否满足
+
+    供跳检的删除/重加确认共用: qB 的删除与重加均为异步生效, 需短间隔轮询客户端状态。
+    """
+    for _ in range(attempts):
+        try:
+            if predicate():
+                return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
 
 
 @register_action
@@ -438,76 +454,109 @@ class CheckAction(BaseAction):
     ]
 
     def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
-        """辅种跳检(高风险): 导出 .torrent -> 删除种子(保留文件) -> 确认消失 -> 重加跳过校验 -> 可选自动开始
+        """辅种跳检(高风险): 导出 → 删除(保留文件) → 确认消失 → 重加(跳过校验) → 确认出现 → 恢复快照
 
+        四阶段: 前置闸门(无副作用) / 准备(删除前读取) / 执行(删除→恢复) / 收尾。
         风险控制:
         - 部分下载(0<progress<1)禁止跳检: 预分配零块会被当作有效数据上传
-        - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行
-        - 同日去重: 同规则对同种子每天最多跳检一次(防误配置反复删/加, 覆盖 execute_once 兜底)
         - 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日也只跳检一次(统计只丢一次)
-        - 重加前轮询确认种子已从客户端消失(qB 删除异步, 未消失就重加会撞"种子已存在")
+        - 强制前置 filelist 检查(文件全部存在且大小一致), 未通过不执行(execute() 中)
+        - 删除后轮询确认消失(qB 删除异步), 重加前未消失则放弃(种子仍在, 无损失)
+        - 重加属性直传(0/负值有语义) + contentLayout 推断(布局错位不自愈)
+        - 重加成功恢复删除前快照记录(tracker_conf/惰性缓存保留, 否则永久未匹配)
         - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
         - 重加失败时 .torrent 落盘备份并记录元数据(立即落盘), 提示手动恢复
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
         """
-        # 0. 部分下载禁止跳检: 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的
-        #    零块, is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据, PT 红线)。
-        #    仅 progress==0(全新辅种, 数据完整)可跳检; full-checking 对部分下载安全, 不设限。
-        progress = ctx.torrent.progress or 0.0
-        if 0.0 < progress < 1.0:
-            return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
-
-        # 0.5 同日去重(安全兜底, 与 execute_once 无关)
-        record = ctx.manager.get_exec_record(ctx.rule_name, ctx.hash)
-        if record and record.get("date") == date.today().isoformat():
-            return ActionResult.skip("今日已跳检, 跳过")
-
-        # 0.6 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日只跳检一次
-        #     (跳检必然清空本地统计, 重复跳检只会再丢一次而毫无收益)
-        skip_day = ctx.manager.state.setdefault("skip_check_day", {})
-        if skip_day.get(ctx.hash) == date.today().isoformat():
-            return ActionResult.skip("今日已跳检过该种子(跨规则去重)")
-
         torrent = ctx.torrent
 
-        # 1. 强制前置检查: 文件全部存在且大小一致 (已在 execute() 中完成)
+        # ---- 阶段 1: 前置闸门 (任一不过 → fail/skip 返回, 无副作用) ----
+        gate = self._skip_gates(ctx, torrent)
+        if gate is not None:
+            return gate
 
-        # 2. 导出 .torrent
+        # ---- 阶段 2: 准备 (导出/属性拷贝/布局推断, 均须在删除前完成) ----
         try:
             data = ctx.api.torrents_export(torrent_hash=ctx.hash)
         except Exception as e:
             return ActionResult.fail(f"导出 .torrent 失败: {e}")
         if not data:
             return ActionResult.fail("导出 .torrent 为空")
-
         dup = self._copy_tor_attrs(torrent.tor, self._ATTRS)
-
-        # 布局须在删除前推断: 删除后 store 记录已移除(ctx.torrent 为 None), 且推断依赖
-        # content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充)
+        # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);
+        # 删除后 store 记录已移除, 必须在此之前完成
         content_layout = self._infer_content_layout(torrent, ctx.client)
 
-        # 3. 删除种子(保留文件)
+        # ---- 阶段 3: 执行 (删除 → 确认消失 → 重加 → 确认出现 → 恢复快照) ----
+        failed = self._skip_delete(ctx, torrent)
+        if failed is not None:
+            return failed
+        failed = self._skip_readd(ctx, torrent, data, dup, content_layout)
+        if failed is not None:
+            return failed
+
+        # ---- 阶段 4: 收尾 ----
+        # 无参考高风险警告(用删除前捕获的 torrent: 真实流程中删除后 ctx.torrent 为 None)
+        if not has_reference:
+            logger.warning(f"规则[{ctx.rule_name}] {torrent.log_repr} | 无参考跳检(高风险): "
+                           f"仅文件存在与大小对比, 内容错误会传垃圾数据")
+        if segment["auto_start"]:
+            try:
+                ctx.api.torrents_start(torrent_hashes=ctx.hash)
+            except Exception as e:
+                return ActionResult.fail(f"自动开始失败: {e}")
+            return ActionResult.ok("skip-checking 跳检完成并自动开始")
+        return ActionResult.ok("skip-checking 跳检完成")
+
+    def _skip_gates(self, ctx: RuleContext, torrent: TorrentRecord) -> Optional[ActionResult]:
+        """跳检前置闸门: 部分下载禁止 + 跨规则同日去重。返回 None = 全部通过。
+
+        - 部分下载(0<progress<1)禁止: 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法
+          发现未下载的零块, is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。
+          仅 progress==0(全新辅种, 数据完整)可跳检; full-checking 对部分下载安全, 不设限。
+        - 跨规则同日去重: 多条规则都配 checking 时, 同一种子当日只跳检一次(跳检必然清空
+          本地统计, 重复跳检只会再丢一次而毫无收益); 顺带清理非当日记录(防 state 无界增长)。
+        """
+        progress = torrent.progress or 0.0
+        if 0.0 < progress < 1.0:
+            return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
+
+        today = date.today().isoformat()
+        skip_day = ctx.manager.state.setdefault("skip_check_day", {})
+        if skip_day.get(ctx.hash) == today:
+            return ActionResult.skip("今日已跳检过该种子(跨规则去重)")
+        for h in [h for h, d in skip_day.items() if d != today]:
+            del skip_day[h]
+        return None
+
+    def _skip_delete(self, ctx: RuleContext, torrent: TorrentRecord) -> Optional[ActionResult]:
+        """跳检步骤: 删除种子(保留文件)并轮询确认已从客户端消失(qB 删除为异步)。
+
+        返回 None = 已确认消失; ActionResult = 失败(种子未删除或消失未确认, 无损失,
+        放弃跳检避免重加撞"种子已存在")。
+        """
         try:
             logger.info(f"规则[{ctx.rule_name}] {torrent.log_repr} | 跳检删除种子(保留文件)")
             ctx.api.torrents_delete(torrent_hashes=ctx.hash, delete_files=False)
         except Exception as e:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
-
-        # 3.5 轮询确认种子已从客户端消失(qB 删除为异步): 未消失就重加会撞"种子已存在"
-        gone = False
-        for _ in range(10):  # 最长 5s
-            try:
-                if not ctx.api.torrents_info(torrent_hashes=ctx.hash):
-                    gone = True
-                    break
-            except Exception:
-                pass
-            time.sleep(0.5)
+        gone = _poll_until(lambda: not ctx.api.torrents_info(torrent_hashes=ctx.hash), attempts=10, interval=0.5)
         if not gone:
             return ActionResult.fail("删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)")
+        return None
 
-        # 4. 重加(跳过校验, 先暂停)。注意: 不用 `or None` —— ratio/seeding limit 的 0/负值
-        #    是有语义的(不限速/跟随全局), 吞掉会使重加后行为漂移到 qB 新种缺省
+    def _skip_readd(
+        self, ctx: RuleContext, torrent: TorrentRecord, data: bytes, dup: SimpleNamespace, content_layout: Optional[str]
+    ) -> Optional[ActionResult]:
+        """跳检步骤: 以跳过校验方式重加(先暂停), 轮询确认出现, 恢复删除前快照记录。
+
+        属性直传不用 `or None` —— ratio/seeding limit 的 0/负值是有语义的(不限速/跟随
+        全局), 吞掉会使重加后行为漂移到 qB 新种缺省。重加成功后 store.restore_torrent
+        恢复删除前记录(保留 tracker_conf/惰性缓存): remove_torrent 保留 _known_hashes,
+        重加的同 hash 种子不进下轮 added 列表, 不恢复则永久未匹配(生产 BUG 2026-09-06)。
+
+        返回 None = 成功; ActionResult = 失败(种子已从客户端移除, 已备份提示手动恢复)。
+        """
         try:
             ctx.api.torrents_add(
                 torrent_files=[data],
@@ -516,7 +565,6 @@ class CheckAction(BaseAction):
                 tags=torrent.tags or None,
                 upload_limit=torrent.up_limit,
                 download_limit=torrent.dl_limit,
-                # 以上属性直接使用缓存中的数据, 以下数据使用删除种子之前复制的数据
                 is_sequential_download=dup.seq_dl,
                 is_first_last_piece_priority=dup.f_l_piece_prio,
                 contentLayout=content_layout,
@@ -531,44 +579,13 @@ class CheckAction(BaseAction):
             backup = self._backup_torrent(ctx.manager, torrent, data)
             return ActionResult.fail(f"重加种子失败: {e}; 种子已从客户端移除(文件保留), "
                                      f".torrent 已备份: {backup}, 请手动重加")
-
-        # 5. 轮询确认新种子出现(跳检不进入 checking, 重加即出现)
-        appeared = False
-        for _ in range(3):
-            try:
-                if ctx.api.torrents_info(torrent_hashes=ctx.hash):
-                    appeared = True
-                    break
-            except Exception:
-                pass
-            time.sleep(0.3)
+        appeared = _poll_until(lambda: ctx.api.torrents_info(torrent_hashes=ctx.hash), attempts=3, interval=0.3)
         if not appeared:
             return ActionResult.fail("重加后未确认到种子, 请检查客户端")
-
-        # 重加成功: 恢复删除前捕获的快照记录(tracker_conf/惰性缓存保留)。否则下轮 refresh
-        # 重建记录时 tracker_conf=None(remove_torrent 保留了 _known_hashes, 重加的同 hash
-        # 种子不进 added 列表), 该种子将长期处于未匹配状态 —— 真实 BUG: log_repr 走
-        # tracker_name fallback 时 self.tor.client AttributeError。测试侧 process_rule/
-        # _skip_ctx 的 wrapped_delete 镜像的正是这一步。
-        ctx.manager.store.by_hash[ctx.hash] = torrent
-        if ctx.manager.store._known_hashes is not None:
-            ctx.manager.store._known_hashes.add(ctx.hash)
-
+        ctx.manager.store.restore_torrent(torrent)
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
         ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()
-
-        # 6. 无参考高风险警告 + 自动开始(用删除前捕获的 torrent: 删除后 store 记录已移除,
-        #    真实流程中 ctx.torrent 为 None, 直到下一 tick 快照刷新)
-        if not has_reference:
-            logger.warning(f"规则[{ctx.rule_name}] {torrent.log_repr} | 无参考跳检(高风险): "
-                           f"仅文件存在与大小对比, 内容错误会传垃圾数据")
-        if segment["auto_start"]:
-            try:
-                ctx.api.torrents_start(torrent_hashes=ctx.hash)
-            except Exception as e:
-                return ActionResult.fail(f"自动开始失败: {e}")
-            return ActionResult.ok("skip-checking 跳检完成并自动开始")
-        return ActionResult.ok("skip-checking 跳检完成")
+        return None
 
     def _infer_content_layout(self, torrent, client) -> Optional[str]:
         """推断原内容布局(qB 种子信息无直接字段): 重加后数据路径必须与现存文件一致,

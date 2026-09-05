@@ -389,3 +389,15 @@ class TorrentStore:
     def remove_torrent(self, hash: str) -> None:
         """种子删除后立即从快照移除(保留 _known_hashes, 下轮 refresh 产生 removed 事件驱动任务/分组清理)"""
         self.by_hash.pop(hash, None)
+
+    def restore_torrent(self, record: TorrentRecord) -> None:
+        """跳检重加后恢复删除前记录(tracker_conf/惰性缓存保留); 幂等
+
+        remove_torrent 移除 by_hash 但保留 _known_hashes(为真实删除的 removed 事件),
+        导致重加的同 hash 种子不进下轮 added 列表 -> 永久未匹配(生产 BUG 2026-09-06)。
+        此方法把删除前记录放回快照: 下轮 refresh 走 update_from 更新快照字段,
+        tracker_conf 与惰性缓存(trackers_info/files)均保留。
+        """
+        self.by_hash[record.hash] = record
+        if self._known_hashes is not None:
+            self._known_hashes.add(record.hash)
