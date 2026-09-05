@@ -233,7 +233,7 @@ config:
         interval: 10M
         traffic_source:
             - traffic_monitor: # Traffic Monitor: 流量监控软件，可记录每天使用流量
-                bat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
+                dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
             # 后续可能支持接入其它软件来源
         curves: # 每条 period 曲线为 curve 单项映射; 重复 period 拒绝
             - curve:

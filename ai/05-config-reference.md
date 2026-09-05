@@ -76,7 +76,7 @@ global_speed_limit_curve:
     interval: 10M                    # 可选, 缺省回退主 interval
     traffic_source:
         - traffic_monitor:
-            bat_path: ".../history_traffic.dat"   # 当前仅支持单一 traffic_monitor 源
+            dat_path: ".../history_traffic.dat"   # 当前仅支持单一 traffic_monitor 源
     curves:                          # 重复 period 拒绝; 每条为单项映射 curve:
         - curve:
             period: DAY              # DAY/1D/D | MONTH | ND (如 7D 滚动窗口)
