@@ -79,7 +79,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # 安装依赖
-pip install pyyaml qbittorrent-api
+pip install pyyaml qbittorrent-api filelock
 
 # 开发依赖(可选)
 pip install pytest pytest-cov
@@ -152,7 +152,6 @@ config:
 
     # 状态持久化文件，必须可写
     state_file: "auto-qb-state.json"
-    single_instance_lock: true       # 单实例锁 🚧
 
     # 日志设置
     log:
