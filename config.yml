@@ -30,7 +30,11 @@ config:
         add_category_for_satisfied: "--HR${required_seeding_time}--"
         overwrite_category_for_satisfied: false
 
-    add_episode_tags: true
+    # 添加集数标签
+    add_episode_tags:
+        enabled: true
+        add_tag_single: "zE${episode_first}"
+        add_tag_multi: "zE${episode_first}-${episode_last}"
 
     # 种子分组管理(辅种管理)
     grouping:
