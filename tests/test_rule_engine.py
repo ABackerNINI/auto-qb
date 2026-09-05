@@ -18,7 +18,7 @@
 - test_handle_rule_process_ok: _handle_rule 正常执行动作
 - test_handle_rule_process_error: 规则处理异常被捕获 -> True
 - test_load_rules_skips_non_dict_group: 非 dict 规则组 -> 跳过
-- test_rules_for_torrent_tracker_error: tracker 拉取异常向上抛(不静默吞掉)
+- test_rules_for_torrent_uninitialized_conf_raises: 上游未走 refresh (tracker_conf=None) 早暴露 AttributeError (不静默兜底)
 - test_rule_task_no_enabled_rules: 无启用规则 -> 无绑定
 - test_rules_for_torrent_all_refs: 引用整个规则集 -> 绑定全部启用规则
 - test_rules_for_torrent_unresolved_refs: 引用规则不存在 -> 无绑定
@@ -138,7 +138,9 @@ def test_tracker_rule_refs():
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules.add_site_tag"])
         client = FakeClient()
         mgr.client = client
-        bound = mgr._rules_for_torrent(FakeTorrent(tags=""))
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配结果
+        bound = mgr._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"]
 
 
@@ -187,7 +189,11 @@ def test_handle_rule_process_ok():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        client.torrents["HASH123"] = FakeTorrent(tags="")
+        # 显式给 FakeTorrent 配 conf: 模拟 _refresh_torrents 阶段的 tracker_conf 匹配结果
+        # (不依赖隐式 make_ctx, 让 setUp 显式)
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        client.torrents["HASH123"] = tor
         seed_store(mgr)
         rule = Rule("t", {"actions": [{"add_tags": ["X"]}]}, mgr)
         task = Task("rule", "t", hash="HASH123", interval=0)
@@ -227,18 +233,17 @@ def test_load_rules_skips_non_dict_group():
         assert [r.name for r in mgr.enabled_rules] == ["example_rules.only_rule"]
 
 
-def test_rules_for_torrent_tracker_error():
-    """_rules_for_torrent: tracker 拉取异常不做静默兜底(异常向上抛, 由 tick 层捕获)"""
+def test_rules_for_torrent_uninitialized_conf_raises():
+    """_rules_for_torrent: 上游未走 refresh (tracker_conf=None) 早暴露 AttributeError, 不静默兜底
+
+    哲学: 防御性 fallback 隐藏调用路径错误, 这里反之让 NoneType.rules 早崩溃
+    暴露"种子入 store 后未走 _match_tracker_conf"的设计错误。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-
-        def boom(h):
-            raise RuntimeError("api down")
-
-        client.torrents_trackers = boom
-        with pytest.raises(RuntimeError):
+        with pytest.raises(AttributeError):
             mgr._rules_for_torrent(FakeTorrent(tags=""))
 
 
@@ -249,7 +254,9 @@ def test_rule_task_no_enabled_rules():
         client = FakeClient()
         mgr.client = client
         mgr.enabled_rules = []
-        assert mgr._rules_for_torrent(FakeTorrent(tags="")) == []
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        assert mgr._rules_for_torrent(tor) == []
 
 
 def test_rules_for_torrent_all_refs():
@@ -258,14 +265,18 @@ def test_rules_for_torrent_all_refs():
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
         client = FakeClient()
         mgr.client = client
-        bound = mgr._rules_for_torrent(FakeTorrent(tags=""))
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        bound = mgr._rules_for_torrent(tor)
         names = {r.name for r in bound}
         assert names == {"example_rules.add_site_tag", "example_rules.hr_done", "example_rules.stop_low_ratio"}
         # 无 tracker 引用: 种子不绑定任何规则(不再回退执行全部启用规则)
-        mgr2 = make_manager(os.path.join(td, "state.json"))
+        mgr2 = make_manager(os.path.join(td, "state.json"))  # tracker_rules=None -> conf.rules=[]
         client2 = FakeClient()
         mgr2.client = client2
-        assert mgr2._rules_for_torrent(FakeTorrent(tags="")) == []
+        tor2 = FakeTorrent(tags="")
+        tor2.tracker_conf = mgr2.config.trackers["HHan"]
+        assert mgr2._rules_for_torrent(tor2) == []
 
 
 def test_rules_for_torrent_unresolved_refs():
@@ -274,7 +285,9 @@ def test_rules_for_torrent_unresolved_refs():
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@nonexistent.rule"])
         client = FakeClient()
         mgr.client = client
-        assert mgr._rules_for_torrent(FakeTorrent(tags="")) == []
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        assert mgr._rules_for_torrent(tor) == []
 
 
 def test_rules_for_torrent_ignores_non_ref():
@@ -286,5 +299,7 @@ def test_rules_for_torrent_ignores_non_ref():
         )
         client = FakeClient()
         mgr.client = client
-        bound = mgr._rules_for_torrent(FakeTorrent(tags=""))
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        bound = mgr._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"]

@@ -245,6 +245,32 @@ class FakeTorrent:
     def log_repr(self) -> str:
         return f"'{self.name}' [{self.tracker_name}] ({self.hash[:8]})"
 
+    # ---------- HR 条件(2026-09 迁到 TorrentRecord, FakeTorrent 鸭子兼容补) ----------
+
+    def check_hr_condition(self) -> bool:
+        if not self.tracker_conf.hr:
+            return False
+        hr = self.tracker_conf.hr
+        cond_type, cond_value = hr.condition
+        if cond_type == "dlratio":
+            total = self.total_size or 1
+            if (self.downloaded / total) < cond_value:
+                return False
+        elif cond_type == "dlsize":
+            if self.downloaded < cond_value:
+                return False
+        return True
+
+    def check_hr_satisfied(self) -> bool:
+        if not self.tracker_conf.hr:
+            return False
+        hr = self.tracker_conf.hr
+        if not self.check_hr_condition():
+            return False
+        seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
+        ratio_ok = hr.required_share_ratio > 0 and (self.ratio or 0) >= hr.required_share_ratio
+        return seeding_ok or ratio_ok
+
     # ---------- 记录级惰性接口(与 TorrentRecord 一致; client None -> RuntimeError) ----------
 
     # 快照字段(与 TorrentRecord._SNAPSHOT_FIELDS 一致; update_from 时逐字段复制)

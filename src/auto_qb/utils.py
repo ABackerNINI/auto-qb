@@ -320,3 +320,15 @@ def fmt_speed(value: int) -> str:
         if value >= div:
             return f"{value / div:.2f} {unit}"
     return f"{value} B/s"
+
+
+def replace_vars(text: str, tracker_conf) -> str:
+    """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}
+
+    注: required_seeding_time 是 _raw 字符串 (如 "3D"), 不是秒数 int
+    """
+    # TODO: 添加其它变量的支持
+    hr_conf = tracker_conf.hr if tracker_conf else None
+    if not hr_conf:
+        return str(text)  # 无 HR 配置(无 tracker_conf 或 hr=None)时, 占位无法解析, 留原文
+    return str(text).replace("${required_seeding_time}", hr_conf.required_seeding_time_raw)

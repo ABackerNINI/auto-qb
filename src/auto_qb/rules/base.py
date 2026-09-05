@@ -113,51 +113,9 @@ class RuleContext:
             return api
         return self.client
 
-    # TODO: 当一个torrent匹配到多个tracker时, warning, 跳过
-
     @property
-    def required_seeding_time(self) -> str:
-        """第一个匹配 tracker 的 HR 时间部分, 如 '3D', 用于 ${required_seeding_time} 变量替换"""
-        conf = self.torrent.tracker_conf
-        if conf and conf.hr:
-            return conf.hr.required_seeding_time_raw
-        return ""
-
-    @property
-    def torrent(self) -> TorrentRecord:
+    def torrent(self) -> TorrentRecord | None:
         return self.manager.store.get(self.hash)
-
-    def replace_vars(self, text: str) -> str:
-        """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}"""
-        return str(text).replace("${required_seeding_time}", self.required_seeding_time)
-
-    # TODO: 移动到actions.py
-    def check_hr_condition(self, conf) -> bool:
-        """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种"""
-        if not conf.hr:
-            return False
-        hr = conf.hr
-        cond_type, cond_value = hr.condition
-        if cond_type == "dlratio":
-            total = self.torrent.total_size or 1
-            if (self.torrent.downloaded / total) < cond_value:
-                return False
-        elif cond_type == "dlsize":
-            if self.torrent.downloaded < cond_value:
-                return False
-        return True
-
-    # TODO: 移动到actions.py
-    def check_hr_satisfied(self, conf) -> bool:
-        """是否满足 HR 要求: 触发条件 + (做种时长 >= 要求时间 + 额外时间 或 分享率达标)"""
-        if not conf.hr:
-            return False
-        hr = conf.hr
-        if not self.check_hr_condition(conf):
-            return False
-        seeding_ok = self.torrent.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
-        ratio_ok = hr.required_share_ratio > 0 and (self.torrent.ratio or 0) >= hr.required_share_ratio
-        return seeding_ok or ratio_ok
 
 
 class Rule:

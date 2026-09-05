@@ -2,7 +2,6 @@
 
 ## 测试计划(每个测试函数一条)
 - test_create_global_tasks: 按配置创建 delete_tags 等全局任务
-- test_get_torrent: _get_torrent 存在/删除/异常三种情形
 - test_connect_failure: 连接失败返回 False 且 client 为 None
 - test_connect_success: 连接成功返回 True 并登录
 - test_safe_no_handler: 无 handler 的任务 -> True
@@ -53,21 +52,6 @@ def test_create_global_tasks():
         names = [t.name for t in mgr.task_queue._fast]
         assert "delete_tags" in names
         assert "delete_tags_if_has_no_torrents" in names
-
-
-def test_get_torrent():
-    """_get_torrent: 存在返回种子(store 快照) / 快照外返回 None / 删除后返回 None"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        client = FakeClient()
-        mgr.client = client
-        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
-        assert mgr._get_torrent("H1") is None  # 未刷新快照 -> 无记录
-        seed_store(mgr)
-        assert mgr._get_torrent("H1").hash == "H1"
-        assert mgr._get_torrent("NOPE") is None
-        seed_store(mgr, [])  # 种子删除 -> 快照移除(refresh 语义 diff, 返回 removed=["H1"])
-        assert mgr._get_torrent("H1") is None
 
 
 def test_connect_failure():
@@ -218,6 +202,7 @@ def test_create_torrent_tasks_with_rules():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(hash="HASH123", tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         client.torrents["HASH123"] = tor
         seed_store(mgr)
         mgr._create_torrent_tasks("HASH123", mgr.config.trackers["HHan"])

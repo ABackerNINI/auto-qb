@@ -209,6 +209,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(hash="H1", name="T1")
+        tor.tracker_conf = cfg.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         seed_store(mgr, [tor])
 
         mgr._create_torrent_tasks("H1", cfg.trackers["HHan"])

@@ -1,6 +1,6 @@
 """规则引擎 mixin: 规则加载 / 状态持久化(执行历史+上传量快照) / 种子级规则任务 / process_torrent 兼容入口
 
-由 QbManager 组合(mixin), 依赖实例属性: config/rules/enabled_rules/logger/state_file/state/client/task_queue/_get_torrent。
+由 QbManager 组合(mixin), 依赖实例属性: config/rules/enabled_rules/logger/state_file/state/client/task_queue。
 """
 import json
 import logging
@@ -103,15 +103,12 @@ class RuleEngineMixin:
     # ---------- 规则: 种子级任务 ----------
 
     def _rules_for_torrent(self, torrent: TorrentRecord) -> list:
-        """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)"""
-        urls = torrent.tracker_urls(self.client)
-        confs = utils.match_tracker_confs(self.config.trackers, urls)
-        refs = []
-        for conf in confs:
-            for ref in conf.rules:
-                ref = str(ref).strip()
-                if ref.startswith("@"):
-                    refs.append(ref[1:])
+        """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)
+
+        torrent_conf 在 _refresh_torrents 阶段已匹配完成, 这里直接读取。
+        不做防御性 fallback: conf=None 表示上游未走 refresh, 早崩溃便于定位调用路径。
+        """
+        refs = [ref[1:].strip() for ref in torrent.tracker_conf.rules if str(ref).strip().startswith("@")]
         if refs:
             rules = self._resolve_refs(refs)
             if rules:

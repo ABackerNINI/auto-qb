@@ -36,6 +36,7 @@
 - test_path_normalize_empty: 空路径 -> 原样返回
 - test_timer_us: us 单位计时
 - test_is_manual_speed_limit: 奇数KiB手动限速保护(0/偶数不命中)
+- test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
 """
 import os
 import sys
@@ -396,3 +397,24 @@ def test_is_manual_speed_limit():
     assert is_manual_speed_limit(2000 * 1024) is False
     assert is_manual_speed_limit(0) is False  # 不限速
     assert is_manual_speed_limit(2048) is False  # 2KiB 偶数
+
+
+def test_replace_vars():
+    """replace_vars: ${required_seeding_time} -> tracker hr 原始值(_raw str); 无 hr 留原文"""
+    from auto_qb.utils import replace_vars
+    from helpers import _hr_rule
+
+    class _Conf:
+        pass
+
+    # 有 hr: 替换为 _raw 字符串(如 "3D"), 不是秒数 int
+    conf = _Conf()
+    conf.hr = _hr_rule()
+    assert replace_vars("seed-${required_seeding_time}", conf) == "seed-3D"
+    assert replace_vars("plain", conf) == "plain"
+    # hr=None: 占位无法解析, 留原文(不崩)
+    conf2 = _Conf()
+    conf2.hr = None
+    assert replace_vars("seed-${required_seeding_time}", conf2) == "seed-${required_seeding_time}"
+    # tracker_conf=None: 同上留原文
+    assert replace_vars("seed-${required_seeding_time}", None) == "seed-${required_seeding_time}"

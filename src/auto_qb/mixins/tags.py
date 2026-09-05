@@ -130,11 +130,6 @@ class TagsMixin:
 
     # ---------- HR ----------
 
-    @staticmethod
-    def _fmt_hr(template: str, hr: HRRule) -> str:
-        """HR 格式变量替换: ${required_seeding_time}"""
-        return (str(template).replace("${required_seeding_time}", hr.required_seeding_time_raw))
-
     def _add_hr_tag_or_category(self, torrent: TorrentRecord, tracker_conf: TrackerConfig, dry_run: bool):
         """添加HR标签或分类(基于站点合并后的 hr 设置)
 
@@ -162,22 +157,18 @@ class TagsMixin:
         ratio_ok = hr.required_share_ratio > 0 and (torrent.ratio or 0) >= hr.required_share_ratio
         if seeding_ok or ratio_ok:
             if hr.add_tag_for_satisfied:
-                added |= self._add_tags(torrent, [self._fmt_hr(hr.add_tag_for_satisfied, hr)], dry_run)
+                tag = utils.replace_vars(hr.add_tag_for_satisfied, tracker_conf)
+                added |= self._add_tags(torrent, [tag], dry_run)
             if hr.add_category_for_satisfied:
-                added |= self._set_category(
-                    torrent,
-                    self._fmt_hr(hr.add_category_for_satisfied, hr),
-                    hr.overwrite_category_for_satisfied,
-                    dry_run,
-                )
-
-            return added
+                category = utils.replace_vars(hr.add_category_for_satisfied, tracker_conf)
+                added |= self._set_category(torrent, category, hr.overwrite_category_for_satisfied, dry_run)
         else:  # 做种时长不够 且 分享率未达标: 添加 HR 标签/分类
             if hr.add_tag:
-                added |= self._add_tags(torrent, [self._fmt_hr(hr.add_tag, hr)], dry_run)
+                tag = utils.replace_vars(hr.add_tag, tracker_conf)
+                added |= self._add_tags(torrent, [tag], dry_run)
             if hr.add_category:
-                added |= self._set_category(torrent, self._fmt_hr(hr.add_category, hr), hr.overwrite_category, dry_run)
-
+                category = utils.replace_vars(hr.add_category, tracker_conf)
+                added |= self._set_category(torrent, category, hr.overwrite_category, dry_run)
         return added
 
     # ---------- 全局标签清理(全局任务) ----------

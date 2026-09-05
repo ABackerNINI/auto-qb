@@ -143,7 +143,6 @@ class TorrentRecord:
                 self._state_enum = TorrentState.UNKNOWN
         return self._state_enum
 
-
 # ---------- 惰性缓存(tracker/files) ----------
 
     def trackers_info(self, client: Any) -> List[dict]:
@@ -165,6 +164,35 @@ class TorrentRecord:
                 raise RuntimeError("TorrentStore 未绑定 client")
             self._files = list(client.torrents_files(self.hash) or [])
         return self._files
+
+
+# ---------- 辅助方法 ----------
+
+    def check_hr_condition(self) -> bool:
+        """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种"""
+        if not self.tracker_conf.hr:
+            return False
+        hr = self.tracker_conf.hr
+        cond_type, cond_value = hr.condition
+        if cond_type == "dlratio":
+            total = self.torrent.total_size or 1
+            if (self.torrent.downloaded / total) < cond_value:
+                return False
+        elif cond_type == "dlsize":
+            if self.torrent.downloaded < cond_value:
+                return False
+        return True
+
+    def check_hr_satisfied(self) -> bool:
+        """是否满足 HR 要求: 触发条件 + (做种时长 >= 要求时间 + 额外时间 或 分享率达标)"""
+        if not self.tracker_conf.hr:
+            return False
+        hr = self.tracker_conf.hr
+        if not self.check_hr_condition():
+            return False
+        seeding_ok = self.torrent.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
+        ratio_ok = hr.required_share_ratio > 0 and (self.torrent.ratio or 0) >= hr.required_share_ratio
+        return seeding_ok or ratio_ok
 
 
 class TorrentStore:

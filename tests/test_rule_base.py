@@ -40,6 +40,7 @@ from auto_qb.config import TrackerConfig
 from auto_qb.rules.base import ActionResult, BaseAction, Rule, RuleContext
 from auto_qb.rules.conditions import SizeCondition
 from auto_qb.rules.actions import AddTagsAction
+from auto_qb import utils
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
 
 
@@ -63,14 +64,13 @@ def test_action_result_states():
 
 
 def test_rule_context_required_seeding_time():
-    """RuleContext: required_seeding_time 取匹配 tracker 的 hr 原始值"""
+    """RuleContext.replace_vars 经 utils.replace_vars 委托: required_seeding_time 取匹配 tracker 的 hr 原始值"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
-        assert ctx.required_seeding_time == "3D"
-        # replace_vars 替换 ${required_seeding_time}
-        assert ctx.replace_vars("seed-${required_seeding_time}") == "seed-3D"
-        assert ctx.replace_vars("plain") == "plain"
+        # 旧 RuleContext.required_seeding_time property 已迁出, 直接用 utils.replace_vars 验证
+        assert utils.replace_vars("seed-${required_seeding_time}", ctx.torrent.tracker_conf) == "seed-3D"
+        assert utils.replace_vars("plain", ctx.torrent.tracker_conf) == "plain"
 
 
 def test_rule_context_tracker_urls_and_conf():
@@ -104,11 +104,11 @@ def test_rule_context_hr_checks():
         ctx = make_ctx(mgr, tor, client)
         conf = ctx.torrent.tracker_conf  # make_ctx 已匹配 tracker 并赋值
         # dlratio: 0.7 >= 0.7 满足
-        assert ctx.check_hr_condition(conf)
+        assert ctx.torrent.check_hr_condition()
         # satisfied: 需要做种 >= 3D+12H
-        assert not ctx.check_hr_satisfied(conf)
+        assert not ctx.torrent.check_hr_satisfied()
         tor.seeding_time = 3 * 86400 + 12 * 3600 + 5
-        assert ctx.check_hr_satisfied(conf)
+        assert ctx.torrent.check_hr_satisfied()
         # dlsize 条件
         hr = _hr_rule(condition=("dlsize", 100 * 1024**2))
         conf2 = TrackerConfig(
@@ -123,7 +123,10 @@ def test_rule_context_hr_checks():
             remove_similar_tags=False,
         )
         ctx2 = make_ctx(mgr, FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=0), client)
-        assert ctx2.check_hr_condition(conf2)
+        # dlsize 100MiB = 100*1024*1024 B, downloaded 100MiB 满足触发条件
+        assert ctx2.torrent.check_hr_condition()
+        # satisfied 还需 seeding_ok (seeding_time=0 不满足) 或 ratio_ok (default 0 不满足), 故 False
+        assert not ctx2.torrent.check_hr_satisfied()
 
 
 def test_rule_basic_process():
@@ -456,12 +459,12 @@ def test_base_condition_init():
 
 
 def test_rule_context_required_seeding_time_no_hr():
-    """required_seeding_time: 匹配 tracker 无 hr 配置 -> 空字符串"""
+    """required_seeding_time: 匹配 tracker 无 hr 配置 -> utils.replace_vars 留原文 (无 HR 不替换占位)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"hr": None})
         ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
-        assert ctx.required_seeding_time == ""
-        assert ctx.replace_vars("seed-${required_seeding_time}") == "seed-", "空值替换为空串"
+        assert utils.replace_vars("seed-${required_seeding_time}", ctx.torrent.tracker_conf) == "seed-${required_seeding_time}"
+        assert utils.replace_vars("plain", ctx.torrent.tracker_conf) == "plain"
 
 
 def test_rule_context_log_repr_tracker_error():
@@ -486,8 +489,8 @@ def test_rule_context_hr_dlratio_not_met():
         tor = FakeTorrent(tags="", downloaded=50 * 1024**2, total_size=100 * 1024**2, seeding_time=999 * 86400)
         ctx = make_ctx(mgr, tor, client)
         conf = ctx.torrent.tracker_conf
-        assert ctx.check_hr_condition(conf) is False, "0.5 < 0.7 不满足触发条件"
-        assert ctx.check_hr_satisfied(conf) is False, "触发条件不满足则 satisfied 为 False"
+        assert ctx.torrent.check_hr_condition() is False, "0.5 < 0.7 不满足触发条件"
+        assert ctx.torrent.check_hr_satisfied() is False, "触发条件不满足则 satisfied 为 False"
 
 
 def test_rule_context_hr_satisfied_by_ratio():
@@ -498,7 +501,7 @@ def test_rule_context_hr_satisfied_by_ratio():
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=0, ratio=2.0)
         ctx = make_ctx(mgr, tor, client)
         conf = ctx.torrent.tracker_conf
-        assert ctx.check_hr_satisfied(conf), "分享率 2.0 >= 1.0 应算 satisfied"
+        assert ctx.torrent.check_hr_satisfied(), "分享率 2.0 >= 1.0 应算 satisfied"
 
 
 def test_rule_process_action_exception():
@@ -568,7 +571,7 @@ def test_rule_context_tracker_urls_empty():
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
         assert ctx.torrent.tracker_urls(client) == []
         assert ctx.torrent.tracker_conf is None, "无匹配 tracker -> tracker_conf 应为 None"
-        assert ctx.required_seeding_time == ""
+        assert utils.replace_vars("seed-${required_seeding_time}", ctx.torrent.tracker_conf) == "seed-${required_seeding_time}"
         assert "Unknown" in ctx.torrent.log_repr
 
 
@@ -580,8 +583,8 @@ def test_rule_context_hr_no_conf():
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
         conf = ctx.torrent.tracker_conf
         assert conf.hr is None
-        assert ctx.check_hr_condition(conf) is False, "无 hr 配置不应满足触发"
-        assert ctx.check_hr_satisfied(conf) is False, "无 hr 配置不应满足要求"
+        assert ctx.torrent.check_hr_condition() is False, "无 hr 配置不应满足触发"
+        assert ctx.torrent.check_hr_satisfied() is False, "无 hr 配置不应满足要求"
 
 
 def test_rule_context_hr_dlsize_not_met():
@@ -594,8 +597,8 @@ def test_rule_context_hr_dlsize_not_met():
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags="", downloaded=50 * 1024**2, total_size=0), client)
         conf = ctx.torrent.tracker_conf
-        assert ctx.check_hr_condition(conf) is False, "下载量 50MiB < 100MiB 不应满足"
-        assert ctx.check_hr_satisfied(conf) is False
+        assert ctx.torrent.check_hr_condition() is False, "下载量 50MiB < 100MiB 不应满足"
+        assert ctx.torrent.check_hr_satisfied() is False
 
 
 def test_rule_actions_skip_non_dict():

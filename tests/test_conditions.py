@@ -9,7 +9,7 @@
 - test_category_condition: category 条件匹配
 - test_trackers_condition: trackers 条件匹配
 - test_state_condition: state 条件匹配
-- test_hr_condition: HR 条件(做种时间/分享率/上传量)
+- test_hr_condition: HR 条件(做种时间/分享率/上传量; 无hr站点 satisfied 默认满足)
 - test_date_time_condition: 日期时间条件
 - test_seedtime_condition: 做种时间条件
 - test_upload_ratio_condition: 上传分享率条件
@@ -200,10 +200,14 @@ def test_hr_condition():
         assert HrCondition("condition-not-met").match(ctx2)
         assert HrCondition("condition-met").match(ctx2) is False
 
-        # 无 hr 配置的 tracker: 均不匹配(用新 tor: 避免复用已带 hr tracker_conf 的 tor)
+        # 无 hr 配置的 tracker(用新 tor: 避免复用已带 hr tracker_conf 的 tor):
+        # 2026-09 行为变更 —— check_hr_condition 无 hr 恒 False, 因此:
+        #   condition-met=False / condition-not-met=True(未触发) / satisfied=True(无 HR 约束默认满足)
         mgr3 = make_manager(state_file, tracker_kw={"hr": None})
         ctx3 = _ctx(mgr3, FakeTorrent(tags="", downloaded=70 * 1024**2, total_size=100 * 1024**2), client)
         assert HrCondition("condition-met").match(ctx3) is False
+        assert HrCondition("condition-not-met").match(ctx3) is True
+        assert HrCondition("satisfied").match(ctx3) is True, "无 hr 站点 satisfied 默认满足"
 
 
 def test_date_time_condition():

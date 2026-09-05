@@ -64,7 +64,7 @@ class TagsCondition(BaseCondition):
         for group in self.groups:
             ok = True
             for pat in group:
-                pat = ctx.replace_vars(pat)
+                pat = utils.replace_vars(pat, ctx.torrent.tracker_conf)
                 if not pat:
                     continue
                 if pat.startswith("regex:"):
@@ -162,16 +162,17 @@ class HrCondition(BaseCondition):
     def __init__(self, spec):
         self.mode = str(spec)
 
+    # TODO: 重新梳理此功能
     def match(self, ctx: RuleContext):
-        conf = ctx.torrent.tracker_conf
-        if not conf or not conf.hr:
-            return False
+        torrent = ctx.torrent
+        conf = torrent.tracker_conf
         if self.mode == "condition-not-met":
-            return not ctx.check_hr_condition(conf)
+            return not torrent.check_hr_condition()
         if self.mode == "satisfied":
-            return ctx.check_hr_condition(conf) and ctx.check_hr_satisfied(conf)
+            # 没有HR的站点默认满足HR做种条件
+            return conf.hr is None or torrent.check_hr_condition() and torrent.check_hr_satisfied()
         # condition-met
-        return ctx.check_hr_condition(conf)
+        return torrent.check_hr_condition()
 
 
 @register_condition

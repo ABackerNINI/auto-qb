@@ -5,7 +5,6 @@
 - test_remove_tags_direct: _remove_tags 直接调用 client
 - test_remove_similar_tags: 移除相似标签
 - test_create_category_if_not_exists: 分类不存在时创建
-- test_fmt_hr: ${required_seeding_time} 模板替换
 - test_torrent_log_repr: 种子日志描述 log_repr(含 tracker_conf=None -> Unknown)
 - test_add_hr_tag_or_category_satisfied: HR 达标 -> 加达标标签/分类
 - test_handle_delete_tags: 处理彻底删除标签任务
@@ -104,15 +103,6 @@ def test_create_category_if_not_exists():
         client.calls.clear()
         mgr._create_category_if_not_exists("OTHER", dry_run=True)
         assert client.calls == []
-
-
-def test_fmt_hr():
-    """_fmt_hr: ${required_seeding_time} 替换为 hr 原始值"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = _mgr(os.path.join(td, "state.json"))
-        hr = _hr_rule()
-        assert mgr._fmt_hr("!!HR${required_seeding_time}!!", hr) == "!!HR3D!!"
-        assert mgr._fmt_hr("no-placeholder", hr) == "no-placeholder"
 
 
 def test_torrent_log_repr():

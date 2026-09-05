@@ -194,11 +194,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     # ---------- 种子级任务 ----------
 
-    # TODO: 删除
-    def _get_torrent(self, hash: str) -> Optional[TorrentRecord]:
-        """从快照查询单个种子(惰性缓存/分组字段随记录保留); 种子已删除返回 None"""
-        return self.store.get(hash)
-
     def _refresh_torrents(self, dry_run: bool = False):
         """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,

@@ -53,7 +53,8 @@ class AddTagsAction(BaseAction):
         self.tags = list(spec) if isinstance(spec, list) else [spec]
 
     def execute(self, ctx: RuleContext):
-        tags = [ctx.replace_vars(t) for t in self.tags if ctx.replace_vars(t)]
+        tracker_conf = ctx.torrent.tracker_conf
+        tags = [utils.replace_vars(t, tracker_conf) for t in self.tags]
         current = ctx.torrent.tags_set
         new = [t for t in tags if t and t not in current]
         if not new:
@@ -84,7 +85,7 @@ class RemoveTagsAction(BaseAction):
         return ActionResult.ok(f"{to_remove}")
 
     def _expand_patterns(self, ctx) -> List[str]:
-        return [ctx.replace_vars(pat) for pat in self.patterns]
+        return [utils.replace_vars(pat, ctx.torrent.tracker_conf) for pat in self.patterns]
 
 
 @register_action
@@ -98,7 +99,7 @@ class AddCategoryAction(BaseAction):
         self.overwrite = utils.parse_bool(spec.get("overwrite", False))
 
     def execute(self, ctx: RuleContext):
-        category = ctx.replace_vars(self.format)
+        category = utils.replace_vars(self.format, ctx.torrent.tracker_conf)
         old_category = ctx.torrent.category or ""
         if old_category == category:
             return ActionResult.skip("分类已设置")

@@ -33,6 +33,9 @@ def _run_rules(mgr, client, tor, dry_run=False):
     store 对象身份直写); 返回任一规则是否处理(handled)。stop 链由调用方决定,
     这里默认全部执行(任务队列中各规则任务是独立调度, 无跨规则 stop)。
     """
+    # make_ctx 副作用: 设 tor.tracker_conf (首次 _match_tracker_conf). 必须先于
+    # _rules_for_torrent, 否则 conf=None 直接抛 AttributeError (按项目哲学早暴露).
+    make_ctx(mgr, tor, client, dry_run=dry_run)
     handled = False
     for rule in mgr._rules_for_torrent(tor):
         ctx = make_ctx(mgr, tor, client, dry_run=dry_run)
@@ -183,11 +186,13 @@ def test_tracker_rules_ref():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="stoppedDL")
+        make_ctx(mgr, tor, client)  # 设 tor.tracker_conf 后, _rules_for_torrent 才能读
         bound = mgr._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"], \
             f"种子应只绑定被引用的规则: {[r.name for r in bound]}"
+        # 重置 tags 避免第二段执行后影响第一段断言
+        tor.tags = ""
         _run_rules(mgr, client, tor)
-        # 只应执行 add_site_tag(加标签), 不应执行 stop_low_ratio(stop + low-ratio 标签)
         assert client.tags == {"HHan", "seed-3D"}, f"仅应执行被引用的规则: {client.tags}"
         assert ("add_tags", ["low-ratio"]) not in client.calls, "未引用的规则不应执行"
 
@@ -195,6 +200,12 @@ def test_tracker_rules_ref():
         mgr2 = make_manager(state_file, tracker_rules=["@example_rules"])
         client2 = FakeClient()
         mgr2.client = client2
+        tor.tracker_conf = None  # 强制 mgr2 重新 _match (tracker_rules 不同的 cfg)
+        make_ctx(mgr2, tor, client2)
+        bound = mgr2._rules_for_torrent(tor)
+        assert [r.name for r in bound] == ["example_rules.add_site_tag", "example_rules.hr_done", "example_rules.stop_low_ratio"], \
+            f"引用整个规则集: {[r.name for r in bound]}"
+        tor.tags = ""
         _run_rules(mgr2, client2, tor)
         assert ("add_tags", ["low-ratio"]) in client2.calls, "引用整个规则集应包含 stop_low_ratio"
 
