@@ -545,6 +545,15 @@ class CheckAction(BaseAction):
         if not appeared:
             return ActionResult.fail("重加后未确认到种子, 请检查客户端")
 
+        # 重加成功: 恢复删除前捕获的快照记录(tracker_conf/惰性缓存保留)。否则下轮 refresh
+        # 重建记录时 tracker_conf=None(remove_torrent 保留了 _known_hashes, 重加的同 hash
+        # 种子不进 added 列表), 该种子将长期处于未匹配状态 —— 真实 BUG: log_repr 走
+        # tracker_name fallback 时 self.tor.client AttributeError。测试侧 process_rule/
+        # _skip_ctx 的 wrapped_delete 镜像的正是这一步。
+        ctx.manager.store.by_hash[ctx.hash] = torrent
+        if ctx.manager.store._known_hashes is not None:
+            ctx.manager.store._known_hashes.add(ctx.hash)
+
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
         ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()
 

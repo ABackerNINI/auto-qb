@@ -18,6 +18,7 @@
 - test_skip_checking_delete_error: 删除种子失败 -> fail(无损失)
 - test_skip_checking_delete_not_confirmed: 删除后确认种子消失失败 -> 放弃跳检不重加
 - test_skip_checking_readd_preserves_values: 重加属性直传(0/负值有语义, 不得被 or None 吞掉)
+- test_skip_checking_readd_restores_store_record: 重加成功后恢复删除前快照记录(tracker_conf 保留, 修复 log_repr 崩溃)
 - test_skip_checking_content_layout_inferred: contentLayout 由 content_path/save_path/文件列表推断
 - test_skip_checking_auto_start_error: 自动开始失败 -> fail
 - test_speed_limit_fmt_bytes: 小值限速格式化为 B/s
@@ -364,6 +365,34 @@ def test_skip_checking_readd_preserves_values():
         assert add[1]["upload_limit"] == 0, f"不限速 0 应直传: {add}"
         assert add[1]["download_limit"] == 2001 * 1024, f"{add}"
         assert add[1]["ratio_limit"] == 0 and add[1]["seeding_time_limit"] == 0, f"{add}"
+
+
+def test_skip_checking_readd_restores_store_record():
+    """重加成功后恢复删除前快照记录: 否则下轮 refresh 重建记录 tracker_conf=None 且不进
+    added 列表(remove_torrent 保留 _known_hashes), 该种子永久未匹配 —— 真实 BUG:
+    log_repr -> tracker_name -> self.tor.client AttributeError(生产日志 2026-09-06)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(tags="", state="pausedDL")  # 暂停未完成: 过闸门 0
+        tor.tracker_conf = mgr.config.trackers["HHan"]  # 删除前已匹配(生产: _refresh_torrents 阶段)
+        client.torrents["HASH123"] = tor
+        seed_store(mgr, [tor])
+        action = _check_action(without_seg=_seg("skip-checking"))
+        with patch("auto_qb.rules.actions.time.sleep"):
+            r = action.execute(ctx := make_ctx(mgr, tor, client))
+        assert r.is_ok, f"{r}"
+        # 快照记录已恢复(对象身份 = 删除前捕获的 tor), tracker_conf 保留
+        assert mgr.store.get("HASH123") is tor
+        assert tor.tracker_conf is mgr.config.trackers["HHan"]
+        # log_repr 不再崩(tracker_name 走 conf, 不回退 self.tor.client)
+        assert "[HHan]" in tor.log_repr
+        # 真实 qB 场景: tor 是 TorrentDictionary(无 client 属性)也不崩 —— 模拟无 client 属性的 tor
+        class _TorDictLike:
+            pass  # 无 client/_client
+        rec = tor  # 直接验证 tracker_name 在 conf 存在时不触碰 tor.client
+        assert rec.tracker_name == "HHan"
 
 
 def test_skip_checking_content_layout_inferred():

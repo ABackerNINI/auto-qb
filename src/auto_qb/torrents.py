@@ -107,14 +107,16 @@ class TorrentRecord:
 
     @property
     def tracker_name(self) -> str:
-        """返回 tracker 名称(从 tracker_conf 或 tracker_url 派生), 主要用于log"""
+        """返回 tracker 名称(从 tracker_conf 派生, 主要用于log)
+
+        tracker_conf=None 时返回 "Unknown": 不回退 self.tor.client 取 URL —— 真实
+        qbittorrentapi TorrentDictionary 无 client 属性(AttributeError), 且为日志
+        字符串发起 tracker 请求不值得。与 FakeTorrent.tracker_name 行为对齐。
+        """
         if self.tracker_conf is not None:
             if self.tracker_conf.tags is not None and len(self.tracker_conf.tags) > 0:
                 return self.tracker_conf.tags[0]
             return self.tracker_conf.name
-        urls = self.tracker_urls(self.tor.client if self.tor else None)
-        if urls:
-            return utils.extract_tracker_name(urls[0])
         return "Unknown"
 
     @property

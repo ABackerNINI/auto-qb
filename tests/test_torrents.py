@@ -291,3 +291,14 @@ def test_record_trackers_info_unbound():
         pass
     else:
         raise AssertionError("记录级 trackers_info 未绑定 client 时应报错")
+
+
+def test_record_tracker_name_unknown_without_conf():
+    """tracker_name: tracker_conf=None -> 'Unknown'(旧实现回退 tor.client, 真实
+    TorrentDictionary 无 client 属性导致生产 log_repr AttributeError)"""
+    from types import SimpleNamespace
+
+    rec = TorrentRecord.from_torrent(SimpleNamespace(hash="ABC123", name="T"))
+    assert rec.tracker_conf is None
+    assert rec.tracker_name == "Unknown"  # 不触碰 tor.client
+    assert rec.log_repr == "'T' [Unknown] (ABC123)"
