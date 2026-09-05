@@ -55,7 +55,7 @@ auto-qb/
 ├── tests/                  # 24 个测试文件 + helpers.py (见 07)
 ├── config.yml              # ★ 用户真实生产配置 (含真实站点域名/规则, 勿改勿提交, 已 gitignore)
 ├── minimal.yml             # 最小配置示例
-├── auto-qb-state.json      # ★ 生产运行状态文件 (勿改勿提交, 已 gitignore)
+├── logs/auto-qb-state.json # ★ 生产运行状态文件 (与日志同目录, 勿改勿提交, 已 gitignore)
 ├── 想法.md                 # 设计草稿/TODO (上游文档)
 ├── README.md               # 用户文档 (2026-09-05 已与代码核对同步)
 ├── pytest.ini              # pythonpath=src, 默认带 --cov

@@ -255,7 +255,7 @@ def test_validate_empty_sections_use_defaults():
         )
         cfg = load_config(_write_raw(td, text))
         assert cfg.main_tick == 2.0 and cfg.interval == 60  # 默认值
-        assert cfg.state_file == "auto-qb-state.json"  # 留空走默认
+        assert cfg.state_file == "logs/auto-qb-state.json"  # 留空走默认
         assert cfg.logging.level == logging.INFO
         assert cfg.trackers["T1"].hr.extra_seeding_time == 0
         assert cfg.trackers["T1"].hr.required_share_ratio == 0.0
@@ -452,6 +452,6 @@ def test_models_default_sources():
     assert t.remove_similar_tags is False and t.hr is None
     c = Config()
     assert c.main_tick == 2.0 and c.interval == 60.0
-    assert c.max_tasks_per_tick == 20 and c.state_file == "auto-qb-state.json"
+    assert c.max_tasks_per_tick == 20 and c.state_file == "logs/auto-qb-state.json"
     assert c.remove_similar_tags is False and c.add_episode_tags is False
     assert c.trackers == {} and c.global_speed_limit_curve is None

@@ -2,8 +2,11 @@ __pycache__/
 test.yml
 torrents.txt
 example-torrent-info.txt
-auto-qb-state.json
 test.py
+# 状态文件与单实例锁(2026-09-05: 默认移到 logs/)
+logs/auto-qb-state.json
+logs/auto-qb-state.lock
+logs/auto-qb-state.lock.meta.json
 
 # 测试跳检备份残留
 skip-check-backup/

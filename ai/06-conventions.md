@@ -83,6 +83,6 @@
 ## 其它工程约定
 
 - `pytest.ini` 的 addopts 自带 `--cov=src --cov-report=term-missing --cov-branch`: 直接 `pytest` 即带覆盖率。
-- `.gitignore` 覆盖: config 类 (test.yml/torrents.txt/auto-qb-state.json)、日志、覆盖率、`skip-check-backup/`、`.github/instructions/`。
+- `.gitignore` 覆盖: config 类 (test.yml/torrents.txt)、日志、覆盖率、`skip-check-backup/`、`.github/instructions/`; `logs/auto-qb-state.json` 及其锁文件 `*.lock`/`*.lock.meta.json` 也在 gitignore 内。
 - 包内 `logging.py` 与 stdlib 同名: 包内一律 `from .logging import setup_logging`, stdlib 用绝对 `import logging` (Python3 绝对导入默认, 无冲突, 但不要改成相对导入写法)。
 - Windows 兼容: 文件操作过 `utils.add_long_path_prefix_for_win` (支持 >260 字符路径); 路径正斜杠化。

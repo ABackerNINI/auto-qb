@@ -150,8 +150,8 @@ config:
     # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
     interval: 60S
 
-    # 状态持久化文件，必须可写
-    state_file: "auto-qb-state.json"
+    # 状态持久化文件，必须可写, 注意多实例运行时请使用不同路径!
+    state_file: "logs/auto-qb-state.json"
 
     # 日志设置
     log:

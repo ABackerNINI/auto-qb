@@ -37,9 +37,9 @@ class SingleInstanceLock:
 
     def __init__(self, state_file: str):
         # 锁文件路径: <state_file 去掉扩展名>.lock (与 state 文件同目录不同名, 不会冲突)
-        # 例: 'auto-qb-state.json' -> 'auto-qb-state.lock' / 'state.json' -> 'state.lock'
-        # 状态文件: 'auto-qb-state.json' (config.models 字段默认)
-        sf = state_file or "auto-qb-state.json"
+        # 例: 'logs/auto-qb-state.json' -> 'logs/auto-qb-state.lock' / 'state.json' -> 'state.lock'
+        # 状态文件: 'logs/auto-qb-state.json' (config.models 字段默认)
+        sf = state_file or "logs/auto-qb-state.json"
         base, dot, ext = sf.rpartition(".")
         self.lock_path = f"{base}.lock" if dot else f"{sf}.lock"
         self.meta_path = self.lock_path + ".meta.json"
