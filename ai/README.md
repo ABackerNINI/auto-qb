@@ -23,7 +23,7 @@
 - **项目**: `auto-qb` — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具 (标签/分类/HR 管理、辅种分组与缺文件检查、自定义规则引擎、tracker 级限速、全局限速曲线)。
 - **形态**: 单机长驻 Python 程序, 无包管理配置 (pip 装依赖即用), 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
 - **核心设计**: `QbManager` 由 6 个 mixin 组合; 所有工作 (种子刷新/规则/内置功能/校验轮询) 统一为带内置 interval 的任务, 进单一时间优先堆; `TorrentStore` 每 tick 全量快照 + 惰性缓存; `QbApi` Facade写后同步快照; 主循环单线程, 唯一修改队列与 state_file 的线程。
-- **测试**: `pytest` + `tests/helpers.py` 全 Fake (无需真实 qBittorrent)。当前基线: **608 passed, 覆盖率 95%**, 全量运行约 1 秒。
+- **测试**: `pytest` + `tests/helpers.py` 全 Fake (无需真实 qBittorrent)。当前基线: **610 passed, 覆盖率 95%**, 全量运行约 1 秒。
 - **文档**: `README.md` (用户视角) 与 `想法.md` (设计草稿) 是上游文档, 已于 2026-09-05 与代码核对同步; 本知识库是代码实况的核对版, 发现漂移时回写更新 (遗留差异见 [08-pitfalls.md](08-pitfalls.md))。
 
 ## 修改代码的黄金法则 (来自项目设计原则)

@@ -128,16 +128,28 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 
 **full-checking** (`_execute_full_checking`): 同步发 `torrents_recheck` → 规则任务 defer + 返回 pending → 创建 check 轮询任务 (interval=2s, add_check_task 去重) → 见 02-architecture 的完整时序。成功 resume: `verified_references.add` + auto_start + 规则续跑; 失败/删除/异常: 清断点 reschedule 重走决策链。无 task_queue (旧用法) 时退化为仅发请求不跟踪。
 
-**skip-checking** (`_execute_skip_checking`, 高风险):
-1. 同日去重 (`get_exec_record().date == today` → skip, 独立于规则 execute_once)。
-2. `torrents_export` 导出 .torrent (失败/为空 → fail, 无损失)。
-3. 拷贝 6 个属性 (`seq_dl/f_l_piece_prio/ratio_limit/seeding_time_limit/inactive_seeding_time_limit/share_limit_action`; 任一缺失 → ValueError → fail, 不删除种子)。
-4. `torrents_delete(delete_files=False)` 删除种子。
-5. `torrents_add(is_skip_checking=True, is_stopped=True)` 重加, 保留 save_path/category/tags/up_limit/dl_limit + 上述 6 属性; 失败 → .torrent 落盘 `skip-check-backup/` + 元数据记入 state → fail 提示手动恢复。
-6. 轮询确认新种子出现 (3 次 × 0.3s), 未出现 → fail。
-7. 无参考 → warning (高风险); `auto_start` → `torrents_start`。
+**skip-checking** (`_execute_skip_checking`, 高风险; 2026-09-06 重构为四阶段编排, 拆分为 `_skip_gates`/`_skip_delete`/`_skip_readd` 小函数 + `_poll_until` 轮询 helper + `store.restore_torrent` 快照恢复):
 
-**风险须知** (写文档/日志时要传达): 跳检保留标签/分类/限速/路径, 但**丢失下载量/上传量/做种时长/分享率**; 文件内容错误会上传垃圾数据。另注意: 删除种子 → `store.remove_torrent` 立即从快照移除, 该种子后续动作/任务需容错 (这正是 commit e5ea9e7 修的 bug, 测试 test_checking.py 有覆盖)。
+**阶段 1 前置闸门** (`_skip_gates`, 任一不过 → fail/skip 返回, 无副作用):
+- 部分下载禁止跳检 (0<progress<1 → fail 提示改 full-checking; 预分配零块会被标记有效上传)
+- 跨规则同日去重 (`skip_check_day[hash]==today` → skip; 多条规则都配 checking 时统计只丢一次; 顺带清理非当日记录防 state 无界增长)
+
+**阶段 2 准备** (记录仍在, 均须删除前完成):
+- `torrents_export` 导出 .torrent (失败/为空 → fail, 无损失)
+- 拷贝 6 个属性 (`seq_dl/f_l_piece_prio/ratio_limit/seeding_time_limit/inactive_seeding_time_limit/share_limit_action`; 任一缺失 → fail, 不删除种子)
+- `_infer_content_layout` 由 content_path/save_path/文件列表推断布局 (contentLayout 错位在跳检下不自愈)
+
+**阶段 3 执行**:
+- `torrents_delete(delete_files=False)` 删除种子 (失败 → fail, 无损失)
+- `_poll_until` 确认种子已从客户端消失 (10×0.5s); 未消失 → 放弃 (重加会撞"种子已存在", 种子仍在无损失)
+- `torrents_add(is_skip_checking=True, is_stopped=True)` 重加, 保留 save_path/category/tags/up_limit/dl_limit + 6 属性**直传** (0/负值有语义, 不得 `or None` 吞掉) + contentLayout; 失败 → .torrent 落盘 `skip-check-backup/` + 元数据**立即落盘** → fail 提示手动恢复
+- `_poll_until` 确认新种子出现 (3×0.3s), 未出现 → fail
+- **`store.restore_torrent(torrent)` 恢复删除前快照记录** (tracker_conf/惰性缓存保留): `remove_torrent` 保留 `_known_hashes`, 重加的同 hash 种子不进 added 列表, 不恢复则永久未匹配 (生产 BUG 2026-09-06 已修)
+- 记录 `skip_check_day[hash]=today` (跨规则同日去重写入)
+
+**阶段 4 收尾**: 无参考 → warning (高风险); `auto_start` → `torrents_start`。
+
+**风险须知** (写文档/日志时要传达): 跳检保留标签/分类/限速/路径, 但**丢失下载量/上传量/做种时长/分享率**; 文件内容错误会上传垃圾数据。另注意: 删除种子 → `store.remove_torrent` 立即从快照移除, 该种子后续动作/任务需容错 (这正是 commit e5ea9e7 修的 bug, 测试 test_checking.py 有覆盖)。 跳检重加成功后 `_execute_skip_checking` 会 `store.restore_torrent` 恢复删除前记录 (跳检流程内部); 其它路径下 `tracker_conf=None` 时 `tracker_name` 返回 "Unknown" (不回退 tor.client, 生产 TorrentDictionary 无此属性)。
 
 ## 状态映射表 (state 条件与 qB 枚举)
 
