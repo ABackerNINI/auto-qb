@@ -21,7 +21,7 @@
 | `config/validation.py` | 552 | fail-fast 全量校验: `validate_config` 入口 + 各段校验器(`_validate_log/qbittorrent/global_hr/grouping/tag_lists/tracker_hr/trackers/rules/plugin_entry` + 曲线) + 插件 spec 深度校验(`_validate_state_condition_spec`/`_validate_checking_action_spec`, 经 `_PLUGIN_SPEC_VALIDATORS` 分发) + 通用助手(`_strip_none`/`_try*`/`_check_*`) + `KNOWN_*`/`RULE_*` 常量; 规则名称经 registry 延迟导入校验 |
 | `config/loaders.py` | 270 | 解析加载(先验证再解析, 假定配置正确零检查): `load_config` 入口 + `load_logging/qbittorrent/grouping/tracker/global_hr/tracker_hr/global_speed_limit_curve` + `_parse_curve_points` + `_expand_tracker_tags_refs` |
 | `qbmanager.py` | 341 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
-| `taskqueue.py` | 192 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task |
+| `taskqueue.py` | 206 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task(登记 `_active_checks` 在途校验)/`active_check_hashes`(组内校验串行化依赖) |
 | `torrents.py` | ~390 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存 + `check_hr_condition/check_hr_satisfied` HR 判定), `TorrentStore`(refresh/分组索引/全局缓存/写后同步 + `restore_torrent` 跳检重加快照恢复); `QbCompatError`/`missing_torrent_fields`/`REQUIRED_TORRENT_FIELDS`/`RE_ADD_FIELDS` |
 | `qbapi.py` | 204 | qB API Facade | `QbApi`: store 必传, 写后同步快照, 读走缓存, `get/set_global_speed_limits`(qB5.0 transfer 端点) |
 | `errors.py` (包级) | ~14 | `AutoQbError` 致命错误根: CLI 单点捕获(stderr 干净 + 退出码 1); 子类并列: `ConfigError`(config)/`SingleInstanceLockError`(locking)/`QbCompatError`(torrents) |
@@ -51,7 +51,7 @@
 | `registry.py` | 29 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
 | `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
 | `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [04-rule-system.md](04-rule-system.md) |
-| `actions.py` | 682 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂, spec 正确性由 config 校验阶段保证 |
+| `actions.py` | 780 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂, spec 正确性由 config 校验阶段保证 |
 
 ## tests/ (24 文件 + helpers.py, 详见 07-testing.md)
 
