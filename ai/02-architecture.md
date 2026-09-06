@@ -34,14 +34,12 @@ run(dry_run):
 
 _tick(dry_run):
     _refresh_torrents(dry_run)      # ① 刷新快照 + 事件处理
-    due = task_queue.due(now, max=max_tasks_per_tick)   # ② 弹出到期任务(默认最多20个/tick)
-    _execute_due(due, dry_run, now) # ③ 逐个执行
+    task_queue.run_due(dry_run, now=now, max_tasks=max_tasks_per_tick)  # ② 弹出+执行+收尾(默认最多20个/tick)
 ```
 
-`_execute_due` 对每个任务调 `_safe(task)` → `task.handler(task, dry_run)`:
-- handler 返回 **False** → 任务消亡 (`task_queue.task_died` 释放在途校验标记), 不重新入队 (典型: 种子已删除)。
-- 返回 True/其它 → `task_queue.reschedule(task, now)`: 按 `task.interval` 重新入队 (`next_run = now + interval`)。
-- 任务处于 **DEFERRED** 状态 → 跳过 (已让位给校验轮询, 由轮询任务恢复)。
+`run_due` 内部: 先快照到期任务再逐个执行 (异常捕获内联; 执行中途重新入队的任务留到下一轮), 收尾:
+- handler 返回 **FINISHED** → 任务消亡, kind=="check" 释放在途校验标记 (典型: 种子已删除, 由 handler 的删除守卫判定)。
+- handler 返回 **REQUEUE** → 按 `task.interval` 重新入队 (`next_run = now + interval`), **默认重置断点** (下一轮从头执行; 断点续跑只经子任务 `add_task(origin, keep_progress=True)` 路径)。
 
 ### 每轮 `_refresh_torrents` 的数据流 (理解本项目的关键)
 
@@ -67,36 +65,37 @@ _tick(dry_run):
 
 > README "设计要点"已同步为单队列描述 (2026-09-05): 所有任务(含校验结果轮询)统一进一个 `heapq` 最小堆 `_fast`, 按 `next_run` 到期弹出。
 
-- **Task 字段**: `uid`(kind:name:hash:monotonic_ns), `kind`, `name`, `hash`, `tracker_conf`, `next_run`, `interval` (<=0 归一化为 1s), `state`, `resume_cb` (一次性完成处理), `resume_index` (规则断点), `run_count`, `payload`, `handler`。
-- **Task.kind**: `internal` (全局任务 + 种子级 maintenance), `rule` (种子级规则扫描), `check` (校验结果轮询)。文档中也用 `refresh` 指种子刷新 (它不是队列里的任务, 是每 tick 固定第一步)。
-- **Task.state**: `PENDING`(排队) / `RUNNING`(已弹出执行中) / `DEFERRED`(让位: 不入队不消亡, 等外部恢复)。
-- **队列 API**:
-  - `add_task/add_tasks`: 新任务立即到期 (next_run=now, 下一 tick 执行)。
-  - `due(now, max)`: 弹出所有到期任务。
-  - `reschedule(task)`: 执行完按 interval 重入队; 让位任务恢复时自动移出让位集合。
-  - `defer(task)`: 让位 — 从调度中挂起, 由外部决定 resume 或 reschedule。
-  - `resume(task)`: 恢复让位任务 — 先触发一次性 `resume_cb` (校验成功后的完成处理), 再按 interval 重入队; **保留 resume_index** → 规则续跑。
-  - `add_check_task(task)`: 校验轮询任务登记, 同种子已有在途校验则拒绝 (去重, `_active_checks`)。
-  - `remove_torrent(hash)`: 移除该种子所有任务 (堆重建 heapify) + 让位任务 + 在途校验标记。
-  - `task_died(task)`: handler 返回 False 时释放 check 任务的在途标记。
+- **Task 字段**: `uid`(kind:name:hash:monotonic_ns), `kind`, `name`, `hash`, `tracker_conf`, `next_run`, `interval` (<=0 归一化为 1s), `state`, `resume_index` (规则断点), `run_count`, `payload`, `handler`。
+- **Task.kind**: `internal` (全局任务 + 种子级 maintenance), `rule` (种子级规则扫描), `check` (校验结果轮询), `check-wait` (组内校验等待)。文档中也用 `refresh` 指种子刷新 (它不是队列里的任务, 是每 tick 固定第一步)。
+- **Task.state**: `PENDING`(排队) / `RUNNING`(已弹出执行中)。
+- **Task 断点**: `resume_index` 默认记住执行位置; `has_breakpoint` 属性查询; `reset()` 显式重置。
+- **handler 返回值**: `REQUEUE`(True, 按 interval 重入队) / `FINISHED`(False, 本轮不重入: 消亡并释放在途登记, 或由其子任务负责重新入队)。
 
 ### 线程模型 (重要约束)
 
-**主循环线程是唯一修改任务队列结构与 state_file 的线程, 全程无锁。** full-checking 等异步效果不是靠工作线程改队列, 而是: 主循环发 API 请求 (同步返回, 校验后台异步进行), 由队列中的 check 轮询任务每 2s 读 store 快照判断结果。任何新功能都必须维持这个假设。
+**主循环线程是唯一修改任务队列结构与 state_file 的线程, 全程无锁。** full-checking 等异步效果不是靠工作线程改队列, 而是: 主循环发 API 请求 (同步返回, 校验后台异步进行), 由队列中的 check 轮询子任务每 2s 读 store 快照判断结果。任何新功能都必须维持这个假设。
 
-## 异步校验 (full-checking) 全流程 — defer/resume 断点续跑机制
+## 任务队列模型 — 生命周期只有 add_task / run_due 两个动词
 
-发起方 `CheckAction._execute_full_checking` (rules/actions.py):
+- `add_task(task, now=None, keep_progress=False) -> bool`: 唯一入队口; kind=="check" 自动登记在途 (`_active_checks`), 重复登记丢弃返回 False。**默认重置断点** (下次从头执行); `keep_progress=True` 显式保存进度 (断点保留续跑), 仅供等待异步完成的子任务恢复 origin 使用。
+- `run_due(dry_run, now, max_tasks)`: 弹出到期任务执行 (异常捕获内联) 并收尾 —— handler 返回 True 按 interval 重入队; False 本轮不重入 (消亡并释放在途登记)。**先快照后执行**: 执行中途重新入队的任务留到下一轮, 避免同批重入误判。主循环 `_tick` 只做 refresh + `run_due` 一次调用, 不再持有 `_execute_due`/`_safe`。
+- **无 defer/resume 挂起态**: 推迟执行 = 规则任务 handler 返回 FINISHED 让出队列 (由 `Rule.process` 的 pending 断点驱动, `_handle_rule` 检测 `task.has_breakpoint` 返回 FINISHED), 由其创建的轮询子任务在完成后**按情况重新入队** origin —— 成功: `add_task(origin, keep_progress=True)` (断点续跑); 失败/等待结束/种子删除: `add_task(origin)` (默认重置重走完整决策链; 删除时由 origin 自己的删除守卫判死)。
+- **无 remove_torrent**: 已删种子的任务由 run_due 到期执行时 handler 的删除守卫自然消亡 (`_handle_rule`/`_handle_maintenance`/check 轮询首行均守卫 `store.get None`)。
 
-1. 前置检查全通过后, `tq.add_check_task(poll_task)` 登记轮询任务 (interval=2s)。
-2. **先** `tq.defer(origin)` (原规则任务让位), **再** `api.torrents_recheck(...)` (顺序保证: 发送失败绝不 defer, 杜绝原任务永久让位)。失败则返回 `ActionResult.fail`。
-3. 动作返回 `ActionResult.pending` → `Rule.process` 记录断点 `task.resume_index = i+1` 并中断规则 (handled=True, stop=True)。
+## 异步校验 (full-checking) 全流程 — 子任务重入队 + 断点续跑
 
-轮询方 `poll` (check 任务, 每 2s 读 store 快照):
+发起方 `CheckAction._execute_full_checking` (rules/actions/full_checking.py):
+
+1. 前置检查全通过后, `tq.add_task(poll_task)` 入队轮询子任务 (interval=2s; check kind 自动登记在途, 重复提交返回 False → skip)。
+2. `api.torrents_recheck(...)` 同步发送, 失败返回 `ActionResult.fail` (子任务已登记, 下轮消亡自愈)。
+3. 动作返回 `ActionResult.pending` → `Rule.process` 记录断点 `task.resume_index = i+1` 并中断规则 → `_handle_rule` 返回 False → 规则任务本轮不重入队。
+
+轮询方 `poll` (check 子任务, 每 2s 读 store 快照):
 
 - 仍 `is_checking` → 返回 True 继续轮询。
-- `progress >= 1` (成功) → `origin.resume_cb = on_success; tq.resume(origin)`: 触发完成处理 (`store.verified_references.add(hash)` + 可选 auto_start), 因 resume_index 保留, 规则从断点动作续跑后续动作。
-- `progress < 1` (失败) / 种子已删除 / 异常 → `origin.resume_index = None; tq.reschedule(origin)` → 规则任务重走完整决策链 (再次校验)。
+- `progress >= 1` (成功) → `on_success()` 自行触发 (`store.verified_references.add(hash)` + 可选 auto_start) → `tq.add_task(origin, keep_progress=True)` 重新入队: 断点保留, 规则从断点动作续跑后续动作。
+- `progress < 1` (失败) / 异常 → `origin.reset()` + `tq.add_task(origin)` → 规则任务重走完整决策链 (再次校验)。
+- 种子已删除 → 仅自身消亡 (释放在途登记), origin 不再重入 (规则任务自然终了)。
 
 ## 数据层 TorrentStore (torrents.py)
 

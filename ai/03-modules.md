@@ -20,8 +20,8 @@
 | `config/models.py` | ~175 | 数据类字段默认 = **唯一默认值来源**(解析后空间, `Config()` 即全默认实例); `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint` (仅声明, 不含逻辑); 仅 2 个非字段默认常量: `DEFAULT_CONFIG_FILE`(cli)/`UNLIMITED_SPEED`(exporter) |
 | `config/validation.py` | 552 | fail-fast 全量校验: `validate_config` 入口 + 各段校验器(`_validate_log/qbittorrent/global_hr/grouping/tag_lists/tracker_hr/trackers/rules/plugin_entry` + 曲线) + 插件 spec 深度校验(`_validate_state_condition_spec`/`_validate_checking_action_spec`, 经 `_PLUGIN_SPEC_VALIDATORS` 分发) + 通用助手(`_strip_none`/`_try*`/`_check_*`) + `KNOWN_*`/`RULE_*` 常量; 规则名称经 registry 延迟导入校验 |
 | `config/loaders.py` | 270 | 解析加载(先验证再解析, 假定配置正确零检查): `load_config` 入口 + `load_logging/qbittorrent/grouping/tracker/global_hr/tracker_hr/global_speed_limit_curve` + `_parse_curve_points` + `_expand_tracker_tags_refs` |
-| `qbmanager.py` | 341 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
-| `taskqueue.py` | 206 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task(登记 `_active_checks` 在途校验)/`active_check_hashes`(组内校验串行化依赖) |
+| `qbmanager.py` | 315 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`(refresh + `task_queue.run_due` 一次调用)/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
+| `taskqueue.py` | 189 | 单任务队列 | 生命周期只有 `add_task`(入队; check 自动登记 `_active_checks` 在途, 重复返回 False)/`run_due`(到期执行+收尾: True 重入队 / False 消亡释放) 两个动词; `Task.reset()` 显式重置断点; 无 defer/resume 挂起态 —— 推迟执行由子任务按情况重新入队; `active_check_hashes`(组内校验串行化依赖) |
 | `torrents.py` | ~390 | 种子数据层 | `TorrentRecord`(快照记录+惰性缓存 + `check_hr_condition/check_hr_satisfied` HR 判定), `TorrentStore`(refresh/分组索引/全局缓存/写后同步 + `restore_torrent` 跳检重加快照恢复); `QbCompatError`/`missing_torrent_fields`/`REQUIRED_TORRENT_FIELDS`/`RE_ADD_FIELDS` |
 | `qbapi.py` | 204 | qB API Facade | `QbApi`: store 必传, 写后同步快照, 读走缓存, `get/set_global_speed_limits`(qB5.0 transfer 端点) |
 | `errors.py` (包级) | ~14 | `AutoQbError` 致命错误根: CLI 单点捕获(stderr 干净 + 退出码 1); 子类并列: `ConfigError`(config)/`SingleInstanceLockError`(locking)/`QbCompatError`(torrents) |
@@ -49,7 +49,7 @@
 | 文件 | 行数 | 职责 | 关键内容 |
 |------|------|------|----------|
 | `registry.py` | 29 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
-| `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
+| `base.py` | 274 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
 | `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [04-rule-system.md](04-rule-system.md) |
 | `actions/` (包) | 871/6 文件 | 11 种动作插件 | `__init__`(34, 注册入口+公共名重导出, 兼容 `from auto_qb.rules.actions import X`), `basic`(130, 标签/分类/启停 ×6), `transfer`(86, move_to/reannounce/单种限速), `checking`(171, `CheckAction` 决策链+参考筛选, 组合 `FullCheckingMixin`+`SkipCheckingMixin`), `full_checking`(225, full-checking 执行+组内校验串行化闸门 1.5/1.6+失败计数), `skip_checking`(225, 跳检四阶段+`_poll_until`); spec 正确性由 config 校验阶段保证; 详见 [04-rule-system.md](04-rule-system.md) |
 

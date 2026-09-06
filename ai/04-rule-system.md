@@ -25,14 +25,14 @@
 process(ctx) -> (handled: bool, stop: bool)
 ```
 
-1. **断点续跑**: 若 `ctx.task.resume_index` 非空 → 读取并清零, **跳过条件评估与去重**, 直接从断点动作继续 (用于 full-checking pending 后的恢复)。
+1. **断点续跑**: 若 `ctx.task.has_breakpoint` (resume_index 非空) → 从断点动作继续, **跳过条件评估与去重** (用于 full-checking pending 后的恢复); 断点只在正常完成时消费清零, 异常路径由 taskqueue 收尾默认重置兜底 (下轮从头)。
 2. **条件评估**: `matches()` = 所有条件 AND; 条件抛异常 → warning + 视为不匹配 (`handled=False, stop=False`)。
 3. **去重**: `_dedup_allowed` (见下节) 不通过 → 不执行。
 4. **动作顺序执行**:
    - `ActionResult.ok` → `ok_action=True`, 记录日志继续。
    - `ActionResult.skip` → 不算失败, 继续 (如标签已存在)。
    - `ActionResult.fail` → `failed=True`; 若该动作未设 `ignore_error` → **break** 中断后续动作。
-   - `ActionResult.pending` → 任务队列驱动时: 记录 `task.resume_index = i+1`, 返回 `(True, True)` 中断 (校验轮询任务完成时 resume/reschedule); 无任务时视为成功继续。
+   - `ActionResult.pending` → 任务队列驱动时: 记录 `task.resume_index = i+1`, 返回 `(True, True)` 中断 (`_handle_rule` 检测断点返回 False 不重入; 校验轮询子任务完成后按情况重新入队); 无任务时视为成功继续。
 5. **执行历史**: `ok_action` 且非 dry_run 且有动作 → `manager.record_execution(name, hash)` (幂等去重依据)。注意: 只要有任一动作成功就记录, 包括后续动作失败的场合 (断点续跑时 ok_action 初始为 True)。
 6. **stop 计算** (`stop_following_rules_if`): `conditions-met`(默认, 匹配即停) / `always` → stop=True; `action-failed` 且 failed → True; `all-actions-succeed` 且 not failed → True; `conditions-not-met` → 不匹配时 stop=True; `never` → 永不停。
 7. 返回 `handled`: `not result.is_skipped` (最后一个动作非 skipped); 空循环(断点后无动作)时返回 `ok_action`。
@@ -122,13 +122,13 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 决策链 (execute):
 0. **只校验"暂停中未完成"种子**: `state_enum.is_stopped and progress < 1.0`; 已完成/活跃中一律 skip (防已完成种子被反复校验)。
 1. 组内有活跃下载种子 (`_group_has_downloading`: is_downloading 且非 stopped 非 checking) → skip (整组未完成, 任何校验都不做)。
-1.5 **组内校验串行** (`_wait_for_group_checking`): 组内其它成员 full-checking 在途 (`task_queue.active_check_hashes()` 或 store checking 态) → 让位等待 (pending+defer, 创建 check-wait 等待任务轮询, 清空后**清断点 reschedule** 重走完整决策链 — 不能 resume 续跑: pending 断点指向 checking 动作之后会跳过重判; 等待任务独立 kind="check-wait" 普通入队, 不占 `_active_checks` — 否则多个等待成员互相视为校验中而互等, 仅超时可解)。组内共享同一物理文件, 并行全量校验只有重复 I/O; 成功者晋升 verified_references 后等待者自然命中参考。
+1.5 **组内校验串行** (`_wait_for_group_checking`): 组内其它成员 full-checking 在途 (`task_queue.active_check_hashes()` 或 store checking 态) → 让位等待 (pending+defer, 创建 check-wait 等待任务轮询, 清空后 `origin.reset()` + 重新入队重走完整决策链; 等待任务独立 kind="check-wait" 普通入队, 不占 `_active_checks` — 否则多个等待成员互相视为校验中而互等, 仅超时可解)。组内共享同一物理文件, 并行全量校验只有重复 I/O; 成功者晋升 verified_references 后等待者自然命中参考。
 1.6 **失败推断** (`_skip_on_group_check_failed`): 组内其它成员当日校验失败 (`recheck_fails`) 且两者文件映射一致 (`store.group_sizes[key]` 相等 = 同一物理数据) → skip ("校验结果必然相同"); 映射不一致不推断。
 2. `_find_reference`: 按.basic_check 从组内参考候选 (`_group_reference_candidates`: is_complete 且非 checking — 暂停/停止做种的完成成员亦是有效参考, 参考用元数据 filelist/piece hashes 与暂停状态无关; 校验中 checkingUP 完整性存疑排除) 筛选 — `filelist`: 全部候选 (分组已保证文件列表相同); `piecehashes`: `torrents_piece_hashes` 与目标完全一致者; `custom`: 外部程序 rc=0 者。**再并入** `store.verified_references` 中同组成员 (历史 full-checking 通过者, 仅内存)。排除自身, 按 hash 去重。
 3. 有参考 → with_reference 段; 无参考 → without_reference 段; `enabled: false` → skip。
 4. **前置检查** (两模式都强制): `manager.check_filelist` — 磁盘文件全部存在且大小一致, 未通过 skip。
 
-**full-checking** (`_execute_full_checking`): 同步发 `torrents_recheck` → 规则任务 defer + 返回 pending → 创建 check 轮询任务 (interval=2s, add_check_task 去重登记 `_active_checks`, 决策链 1.5 依赖) → 见 02-architecture 的完整时序。成功 resume: `verified_references.add` + auto_start + 规则续跑; 失败/删除/异常: 清断点 reschedule 重走决策链。无 task_queue (旧用法) 时退化为仅发请求不跟踪。
+**full-checking** (`_execute_full_checking`): 同步发 `torrents_recheck` → 返回 pending (规则断点, 本轮不重入队) → 创建 check 轮询子任务 (interval=2s, add_task 自动登记 `_active_checks`, 决策链 1.5 依赖) → 见 02-architecture 的完整时序。成功: `on_success()` 自行触发 (`verified_references.add` + auto_start) + `add_task(origin, keep_progress=True)` 续跑; 失败/异常/种子删除: `add_task(origin)` 默认重置重走决策链 (删除时由 origin 的删除守卫判死)。无 task_queue (旧用法) 时退化为仅发请求不跟踪。
 
 **skip-checking** (`_execute_skip_checking`, 高风险; 2026-09-06 重构为四阶段编排, 拆分为 `_skip_gates`/`_skip_delete`/`_skip_readd` 小函数 + `_poll_until` 轮询 helper + `store.restore_torrent` 快照恢复):
 
