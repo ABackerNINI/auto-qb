@@ -9,7 +9,6 @@ from typing import List, Optional
 from qbittorrentapi import TorrentDictionary
 
 from .. import utils
-from ..config import ConfigError
 from ..taskqueue import Task
 from ..torrents import TorrentRecord
 from .base import ActionResult, BaseAction, RuleContext
@@ -205,41 +204,14 @@ class CheckAction(BaseAction):
          失败/删除/异常 -> 清断点 + reschedule 重新入队重走决策链(再次校验)
     """
     name = "checking"
-    _VALID_BASIC = ("filelist", "piecehashes", "custom")
-    _VALID_MODES = ("skip-checking", "full-checking")
 
     def __init__(self, spec, ignore_error=False):
         super().__init__(spec, ignore_error)
-        if not isinstance(spec, dict):
-            raise ConfigError("checking 动作只接受 dict 配置, 旧字符串形式已移除, 请参考示例改写")
-        self._validate(spec)
+        # spec 合法性(dict/已知键/basic_check/段结构/mode)由 config 校验阶段保证, 此处直接解析
         self.basic_check = str(spec["basic_check"])
         self.custom_program = str(spec.get("custom_basic_check_program_path") or "")
         self.with_reference = self._parse_section(spec, "with_reference")
         self.without_reference = self._parse_section(spec, "without_reference")
-
-    def _validate(self, spec: dict):
-        known = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
-        unknown = set(spec) - known
-        if unknown:
-            raise ConfigError(
-                f"checking 动作未知配置键: {sorted(unknown)} "
-                f"(always_check_first_one/poll_timeout/顶层 mode 已移除, 校验模式请在 with_reference/without_reference 段内配置)"
-            )
-        if "basic_check" not in spec:
-            raise ConfigError("checking 动作必须配置 basic_check")
-        if spec["basic_check"] not in self._VALID_BASIC:
-            raise ConfigError(f"checking 动作 basic_check 取值非法: {spec['basic_check']}, 可选: {list(self._VALID_BASIC)}")
-        if spec["basic_check"] == "custom" and not str(spec.get("custom_basic_check_program_path") or "").strip():
-            raise ConfigError("checking 动作 basic_check=custom 时必须配置 custom_basic_check_program_path")
-        for seg in ("with_reference", "without_reference"):
-            if seg not in spec:
-                continue
-            if not isinstance(spec[seg], dict):
-                raise ConfigError(f"checking 动作 {seg} 段必须是 dict")
-            seg_mode = str(spec[seg].get("mode", ""))
-            if seg_mode not in self._VALID_MODES:
-                raise ConfigError(f"checking 动作 {seg}.mode 取值非法: {seg_mode}, 可选: {list(self._VALID_MODES)}")
 
     @staticmethod
     def _parse_section(spec: dict, name: str) -> dict:

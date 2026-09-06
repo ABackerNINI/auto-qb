@@ -15,7 +15,7 @@ TorrentState 枚举属性(state_enum.is_*); StateCondition spec 直接写枚举�
 - test_state_enum_has_exactly_22_members: TorrentState 枚举成员数量锁定(qB 当前 22 个, 含 allocating)
 - test_state_condition_matches_enum_matrix: StateCondition(is_* 属性名 spec) 判定 == 枚举属性(全状态 × 全语义)
 - test_group_has_downloading_matrix: 全部状态 × _group_has_downloading 组内判定(活跃下载 = is_downloading 且非停止且非校验)
-- test_state_condition_unknown_semantic: 非法 spec(非枚举属性名) -> AttributeError(快速失败, 防配置笔误静默不匹配)
+- StateCondition 非法 spec 的 fail-fast 校验测试见 test_conditions.py(test_state_condition_invalid_attr_fails_fast)
 """
 import os
 import tempfile
@@ -85,14 +85,3 @@ def test_state_condition_matches_enum_matrix(state, attr):
         mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")), no_lock=True)  # 测试不持锁
         ctx = make_ctx(mgr, FakeTorrent(state=state.value), FakeClient())
         assert StateCondition(attr).match(ctx) is getattr(state, attr), f"{attr} × {state.value}"
-
-
-def test_state_condition_unknown_semantic():
-    """StateCondition: 非枚举属性名 spec -> AttributeError(配置错误快速失败, 而非静默不匹配)"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")), no_lock=True)  # 测试不持锁
-        ctx = make_ctx(mgr, FakeTorrent(state="stalledUP"), FakeClient())
-        with pytest.raises(AttributeError):
-            StateCondition("bogus").match(ctx)
-        with pytest.raises(AttributeError):
-            StateCondition("is_complete&bogus").match(ctx)

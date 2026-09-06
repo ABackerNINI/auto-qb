@@ -3,6 +3,8 @@ import logging
 import re
 from typing import List
 
+from qbittorrentapi import TorrentState
+
 from .. import curves
 from ..utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 
@@ -13,22 +15,48 @@ RULE_KNOWN_KEYS = {
 EXECUTE_ONCE_VALUES = ("never", "once", "daily", "hourly")
 STOP_IF_VALUES = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
+# checking 动作 spec 已知键与取值域
+CHECKING_ACTION_KNOWN_KEYS = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
+CHECKING_VALID_BASIC = ("filelist", "piecehashes", "custom")
+CHECKING_VALID_MODES = ("skip-checking", "full-checking")
+
 # config 顶层已知键
 KNOWN_CONFIG_KEYS = {
-    "qbittorrent", "main_tick", "max_tasks_per_tick", "interval", "state_file", "log",
-    "remove_similar_tags", "add_episode_tags", "hr", "delete_tags", "delete_tags_if_has_no_torrents",
-    "grouping", "trackers", "global_speed_limit_curve",
+    "qbittorrent",
+    "main_tick",
+    "max_tasks_per_tick",
+    "interval",
+    "state_file",
+    "log",
+    "remove_similar_tags",
+    "add_episode_tags",
+    "hr",
+    "delete_tags",
+    "delete_tags_if_has_no_torrents",
+    "grouping",
+    "trackers",
+    "global_speed_limit_curve",
 }
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag"}
 KNOWN_HR_KEYS = {
-    "add_tag", "add_category", "overwrite_category",
-    "add_tag_for_satisfied", "add_category_for_satisfied", "overwrite_category_for_satisfied",
+    "add_tag",
+    "add_category",
+    "overwrite_category",
+    "add_tag_for_satisfied",
+    "add_category_for_satisfied",
+    "overwrite_category_for_satisfied",
 }
 KNOWN_TRACKER_KEYS = {
-    "domains", "tags", "remove_tags", "upload_speed_limit", "download_speed_limit",
-    "hr", "rules", "remove_similar_tags",
+    "domains",
+    "tags",
+    "remove_tags",
+    "upload_speed_limit",
+    "download_speed_limit",
+    "hr",
+    "rules",
+    "remove_similar_tags",
 }
 KNOWN_TRACKER_HR_KEYS = {
     "required_seeding_time", "required_share_ratio", "extra_seeding_time", "condition", *KNOWN_HR_KEYS
@@ -248,7 +276,10 @@ def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
 def _validate_rules(rules_config: dict, errors: List[str]) -> None:
     """规则集 spec 校验: 键/取值域/conditions-actions 结构; 条件与动作名称经 registry 延迟导入校验
 
-    条件/动作 spec 值的深度校验(如 size 的比较表达式)在 Rule 构造时进行(带规则名上下文报错)。
+    已注册插件的 spec 深度校验也在此进行(_PLUGIN_SPEC_VALIDATORS, 如 state 的 is_* 属性、
+    checking 的段结构)—— 配置正确性检查全部集中在 config 校验阶段 fail-fast,
+    插件类(conditions/actions)假定配置正确, 不再自查; 尚未迁移的解析类错误
+    (如 size 比较表达式的 int 解析)仍由 Rule 构造时的自然异常暴露(同为启动期 fail-fast)。
     """
     from ..rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
 
@@ -295,8 +326,54 @@ def _validate_rules(rules_config: dict, errors: List[str]) -> None:
                         _validate_plugin_entry(a, f"{where}.actions[{i}]", registry.ACTIONS, "动作", errors)
 
 
+def _validate_state_condition_spec(value, where: str, errors: List[str]) -> None:
+    """state 条件 spec 深度校验: 每组仅接受 TorrentState 的 is_* 类别属性
+
+    裸枚举成员名(如 UPLOADING)在枚举实例上恒真值, 必须拒绝; 非法名若放行会在
+    运行时每轮抛 AttributeError 被规则引擎吞成 WARNING(掩盖配置笔误)。
+    """
+    values = value if isinstance(value, list) else [value]
+    for v in values:
+        for s in str(v).split("&"):
+            if not s.startswith("is_") or not hasattr(TorrentState, s):
+                errors.append(
+                    f"{where}: 非法状态属性 '{s}', "
+                    "可选: is_downloading/is_uploading/is_complete/is_checking/is_stopped/is_paused/is_errored"
+                )
+
+
+def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None:
+    """checking 动作 spec 深度校验: dict/已知键/basic_check/段结构/mode"""
+    if not isinstance(value, dict):
+        errors.append(f"{where}: checking 动作只接受 dict 配置, 旧字符串形式已移除, 请参考示例改写")
+        return
+    _check_unknown_keys(value, CHECKING_ACTION_KNOWN_KEYS, where, errors)
+    if "basic_check" not in value:
+        errors.append(f"{where}: 必须配置 basic_check")
+    elif value["basic_check"] not in CHECKING_VALID_BASIC:
+        errors.append(f"{where}: basic_check 取值非法: '{value['basic_check']}', 可选: {list(CHECKING_VALID_BASIC)}")
+    if value.get("basic_check") == "custom" and not str(value.get("custom_basic_check_program_path") or "").strip():
+        errors.append(f"{where}: basic_check=custom 时必须配置 custom_basic_check_program_path")
+    for seg in ("with_reference", "without_reference"):
+        if seg not in value:
+            continue
+        if not isinstance(value[seg], dict):
+            errors.append(f"{where}.{seg}: 必须是字典")
+        elif str(value[seg].get("mode", "")) not in CHECKING_VALID_MODES:
+            errors.append(f"{where}.{seg}.mode 取值非法: '{value[seg].get('mode', '')}', 可选: {list(CHECKING_VALID_MODES)}")
+
+
+# 插件 spec 深度校验分发(键为插件名): 配置正确性检查全部集中在 config 校验阶段,
+# 插件类(conditions/actions)假定配置正确, 不再自查
+_PLUGIN_SPEC_VALIDATORS = {
+    "state": _validate_state_condition_spec,
+    "checking": _validate_checking_action_spec,
+}
+
+
 def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: List[str]) -> None:
-    """conditions/actions 列表项校验: 单键字典 + 名称已注册(多键/空值会被静默丢弃, 必须报错)"""
+    """conditions/actions 列表项校验: 单键字典 + 名称已注册(多键/空值会被静默丢弃, 必须报错);
+    已注册名称再做 spec 深度校验(_PLUGIN_SPEC_VALIDATORS)"""
     if not isinstance(entry, dict):
         errors.append(f"{where}: 必须是字典")
         return
@@ -311,6 +388,10 @@ def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: Li
         _try(parse_bool, entry[name], f"{where}.{name}", errors)
     elif name not in known:
         errors.append(f"{where}: 未知{kind} '{name}', 可用: {sorted(known)}")
+    else:
+        deep = _PLUGIN_SPEC_VALIDATORS.get(name)
+        if deep:
+            deep(entry[name], f"{where}.{name}", errors)
 
 
 def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:

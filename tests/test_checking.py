@@ -1,13 +1,7 @@
 """test_checking 测试计划: checking 动作详细自测(不连接真实 qB, 用模拟对象)
 
 ## 测试计划(每个测试函数一条)
-- test_checking_config_string_rejected: 配置 fail-fast: basic_check 为字符串时报错
-- test_checking_config_missing_basic_check: 缺 basic_check 报错
-- test_checking_config_invalid_basic_check: 非法 basic_check 值报错
-- test_checking_config_missing_section: with/without 段缺省合法(默认不启用); 段存在但非 dict 报错
-- test_checking_config_invalid_mode: 非法 mode 值报错
-- test_checking_config_unknown_keys: 未知配置键报错
-- test_checking_config_custom_without_program: custom 模式缺 program 报错
+- test_checking_config_missing_section: with/without 段缺省合法(默认不启用)
 - test_checking_config_defaults: 缺省配置项取默认值
 - test_download_conflict_multi_dl: 多成员下载中 -> 冲突, 不发起校验
 - test_download_conflict_mixed: 下载中与暂停混合 -> 冲突
@@ -57,7 +51,6 @@ import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from auto_qb.config import ConfigError
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, _recheck_fail_count, CheckAction
 from auto_qb.taskqueue import DEFERRED, PENDING, TaskQueue
@@ -203,124 +196,16 @@ def _seg(mode, start=True):
 
 
 # ============================================================
-# A. 配置 fail-fast(8)
+# A. 配置解析(spec 正确性 fail-fast 在 config 校验阶段, 见 test_config.py)
 # ============================================================
-def test_checking_config_string_rejected():
-    """测试: checking 只接受 dict, 旧字符串形式直接报错(无需兼容)"""
-    for bad in ("skip-checking", "full-checking", "filelist"):
-        try:
-            CheckAction(bad)
-            assert False, f"字符串配置 {bad} 应报错"
-        except ConfigError:
-            pass
-
-
-def test_checking_config_missing_basic_check():
-    """测试: 缺 basic_check -> 报错"""
-    try:
-        CheckAction({"with_reference": _seg("skip-checking"), "without_reference": _seg("full-checking")})
-        assert False, "缺 basic_check 应报错"
-    except ConfigError:
-        pass
-
-
-def test_checking_config_invalid_basic_check():
-    """测试: basic_check 取值非法 -> 报错"""
-    try:
-        CheckAction(
-            {
-                "basic_check": "xxx",
-                "with_reference": _seg("skip-checking"),
-                "without_reference": _seg("full-checking")
-            }
-        )
-        assert False, "非法 basic_check 应报错"
-    except ConfigError:
-        pass
-
-
 def test_checking_config_missing_section():
-    """测试: with/without 段可缺省(该段默认不启用); 段存在但非 dict -> 报错"""
-    # 缺 with / 缺 without: 合法, 对应段默认 disabled
+    """测试: with/without 段可缺省(该段默认不启用), 显式段未写 enabled 默认不启用"""
     a = CheckAction({"basic_check": "filelist", "without_reference": _seg("full-checking")})
     assert a.with_reference == {"enabled": False, "mode": "", "auto_start": False}, "缺 with 段应默认不启用"
     b = CheckAction({"basic_check": "filelist", "with_reference": _seg("skip-checking")})
     assert b.without_reference == {"enabled": False, "mode": "", "auto_start": False}, "缺 without 段应默认不启用"
     assert a.without_reference["enabled"] is False, "显式段未写 enabled 默认不启用"
     assert b.with_reference["enabled"] is False, "显式段未写 enabled 默认不启用"
-    # 段存在但非 dict -> 报错
-    for spec in (
-        {
-            "basic_check": "filelist",
-            "with_reference": "skip-checking",
-            "without_reference": _seg("full-checking")
-        }, {
-            "basic_check": "filelist",
-            "with_reference": _seg("skip-checking"),
-            "without_reference": "full-checking"
-        }
-    ):
-        try:
-            CheckAction(spec)
-            assert False, f"段非 dict 应报错: {spec}"
-        except ConfigError:
-            pass
-
-
-def test_checking_config_invalid_mode():
-    """测试: with/without 段 mode 取值非法 -> 报错"""
-    cases = [
-        {
-            "basic_check": "filelist",
-            "with_reference": _seg("xxx"),
-            "without_reference": _seg("full-checking")
-        },
-        {
-            "basic_check": "filelist",
-            "with_reference": _seg("skip-checking"),
-            "without_reference": _seg("yyy")
-        },
-    ]
-    for spec in cases:
-        try:
-            CheckAction(spec)
-            assert False, f"非法 mode 应报错: {spec}"
-        except ConfigError:
-            pass
-
-
-def test_checking_config_unknown_keys():
-    """测试: 已移除的键(always_check_first_one/poll_timeout/顶层 mode)报错"""
-    base = {
-        "basic_check": "filelist",
-        "with_reference": _seg("skip-checking"),
-        "without_reference": _seg("full-checking")
-    }
-    for key, val in (("always_check_first_one", True), ("poll_timeout", "60S"), ("mode", "full-checking")):
-        spec = dict(base)
-        spec[key] = val
-        try:
-            CheckAction(spec)
-            assert False, f"未知键 {key} 应报错"
-        except ConfigError:
-            pass
-
-
-def test_checking_config_custom_without_program():
-    """测试: basic_check=custom 缺 custom_basic_check_program_path(含空白)-> 报错"""
-    for path in (None, "", "  "):
-        spec = {
-            "basic_check": "custom",
-            "with_reference": _seg("skip-checking"),
-            "without_reference": _seg("full-checking")
-        }
-        if path is not None:
-            spec["custom_basic_check_program_path"] = path
-        try:
-            CheckAction(spec)
-            assert False, f"custom 缺路径应报错: {path!r}"
-        except ConfigError:
-            pass
 
 
 def test_checking_config_defaults():

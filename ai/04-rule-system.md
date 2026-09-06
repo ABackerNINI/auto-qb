@@ -164,7 +164,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 | `is_errored` | missingFiles, error | 出错 |
 | `is_stopped` | pausedDL, pausedUP, stoppedDL, stoppedUP | 已暂停/停止 |
 
-注意: `is_downloading` **包含** pausedDL/stoppedDL; 条件不支持 `!` 取反; "正在做种" 用 `is_complete&is_uploading`。未识别 state 字符串 → `TorrentState.UNKNOWN` (所有属性 False)。
+注意: `is_downloading` **包含** pausedDL/stoppedDL; 条件不支持 `!` 取反; "正在做种" 用 `is_complete&is_uploading`。未识别 state 字符串 → `TorrentState.UNKNOWN` (所有属性 False)。属性名合法性由 **config 校验阶段**(`_validate_state_condition_spec`)检查: 仅接受 `is_*` 类别属性 (裸枚举成员名在实例上恒真值, 拒绝), 非法名在 load_config 即抛 `ConfigError`。配置校验全部集中在 config, 插件类不再自查 (06 模块职责约定)。
 
 ## 变量替换
 

@@ -19,6 +19,10 @@
 
 - **可以设计易测试的代码, 但不能为测试专门留通道** (2026-09-06): 依赖注入/必传参数等"易测试设计"必须由生产路径真实使用, 不得为测试保留生产不可达的可选形态。实例: QbApi 的 `store=None` 透明透传 —— 生产 QbManager 恒持有 store, 该形态只为让测试免建数据层而存在, 已移除 (store 改必传, 15 处 `if self.store is not None` 守卫删除, "无 store"系列测试删除, 测试改走生产同路径如 `make_manager` 的真实 store)。判别: 某分支/默认值在生产调用图中不可达、仅服务于测试绕过构建成本 → 删。
 
+## 模块职责约定 (用户明示)
+
+- **所有配置校验集中在 config 校验阶段 fail-fast, 插件类不再自查** (2026-09-06): conditions/actions 等插件假定配置正确 (`_validate_plugin_entry` 保证名称已注册 + `_PLUGIN_SPEC_VALIDATORS` 做 spec 深度校验), 构造函数只解析、不加正确性检查 (曾把 state 属性名校验写进 StateCondition, 违背该原则已迁移)。对应测试放 test_config.py (load_config 级), 不在插件测试里构造非法 spec。
+
 ## 命名规范 (想法.md 明文规定, 代码严格遵守)
 
 | 名字 | 含义 |

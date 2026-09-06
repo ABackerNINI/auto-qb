@@ -18,7 +18,7 @@
 | `config/` | 包 | 配置: 按职责分层(模型/校验/解析), `__init__.py` 重导出全部公共名称 —— 调用方 `from auto_qb.config import X` 不变 |
 | `config/errors.py` | 9 | `ConfigError`(配置错误统一异常, ValueError 子类: 文件读取/YAML 解析/校验失败/启动期规则 spec 错误) |
 | `config/models.py` | ~175 | 数据类字段默认 = **唯一默认值来源**(解析后空间, `Config()` 即全默认实例); `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint` (仅声明, 不含逻辑); 仅 2 个非字段默认常量: `DEFAULT_CONFIG_FILE`(cli)/`UNLIMITED_SPEED`(exporter) |
-| `config/validation.py` | 459 | fail-fast 全量校验: `validate_config` 入口 + 各段校验器(`_validate_log/qbittorrent/global_hr/grouping/tag_lists/tracker_hr/trackers/rules/plugin_entry` + 曲线) + 通用助手(`_strip_none`/`_try*`/`_check_*`) + `KNOWN_*`/`RULE_*` 常量; 规则名称经 registry 延迟导入校验 |
+| `config/validation.py` | 552 | fail-fast 全量校验: `validate_config` 入口 + 各段校验器(`_validate_log/qbittorrent/global_hr/grouping/tag_lists/tracker_hr/trackers/rules/plugin_entry` + 曲线) + 插件 spec 深度校验(`_validate_state_condition_spec`/`_validate_checking_action_spec`, 经 `_PLUGIN_SPEC_VALIDATORS` 分发) + 通用助手(`_strip_none`/`_try*`/`_check_*`) + `KNOWN_*`/`RULE_*` 常量; 规则名称经 registry 延迟导入校验 |
 | `config/loaders.py` | 270 | 解析加载(先验证再解析, 假定配置正确零检查): `load_config` 入口 + `load_logging/qbittorrent/grouping/tracker/global_hr/tracker_hr/global_speed_limit_curve` + `_parse_curve_points` + `_expand_tracker_tags_refs` |
 | `qbmanager.py` | 341 | 主协调者 | `QbManager`(6 mixin 组合): `run`/`_tick`/`_refresh_torrents`/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance` |
 | `taskqueue.py` | 192 | 单任务队列 | `Task`, `TaskQueue`; 状态常量 PENDING/RUNNING/DEFERRED; defer/resume/add_check_task |
@@ -50,8 +50,8 @@
 |------|------|------|----------|
 | `registry.py` | 29 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
 | `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
-| `conditions.py` | 292 | 15 种条件插件 | 详见 [04-rule-system.md](04-rule-system.md) |
-| `actions.py` | 590 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂 (~380 行) |
+| `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [04-rule-system.md](04-rule-system.md) |
+| `actions.py` | 682 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂, spec 正确性由 config 校验阶段保证 |
 
 ## tests/ (24 文件 + helpers.py, 详见 07-testing.md)
 

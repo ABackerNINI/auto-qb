@@ -139,8 +139,9 @@ class TrackersCondition(BaseCondition):
 
 @register_condition
 class StateCondition(BaseCondition):
-    """状态条件: 语义状态(checking/downloading/complete/uploading/errored/stopped),
-    直接用 qB TorrentState 枚举属性判定(与 qB 官方语义一致), 每组内 & 连接为与, 组间为或"""
+    """状态条件: qB TorrentState 枚举类别属性(is_downloading/is_uploading/is_complete/
+    is_checking/is_stopped/is_paused/is_errored), 与 qB 官方语义一致, 每组内 & 连接为与,
+    组间为或。spec 合法性由 config 校验阶段保证(仅 is_* 类别属性), 此处直接使用"""
     name = "state"
 
     def __init__(self, spec):

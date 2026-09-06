@@ -18,6 +18,8 @@
 - test_validate_required_missing: 缺 domains / 站点 hr 缺 required_seeding_time 报错
 - test_validate_bad_formats: 非法格式聚合(main_tick/port/log.level/限速/布尔)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
+- test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
+- test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键)
 - test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在
 - test_validate_regex_patterns: 非法 regex: 模式报错
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
@@ -297,7 +299,9 @@ def test_validate_required_missing():
     with tempfile.TemporaryDirectory() as td:
         err = _load_errors(td, "config:\n  trackers:\n    T1:\n      tags: [a]\n")
         assert "config.trackers.T1: 缺少必填键 domains" in err, err
-        err = _load_errors(td, "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n        condition: 80%\n")
+        err = _load_errors(
+            td, "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n        condition: 80%\n"
+        )
         assert "config.trackers.T1.hr: 缺少必填键 required_seeding_time" in err, err
 
 
@@ -361,6 +365,88 @@ def test_validate_rule_spec():
         assert "未知动作 'star'" in err, err
 
 
+def test_validate_state_condition_spec():
+    """state 条件 spec 深度校验: 非法 is_* 属性(拼写错)/裸枚举成员名(恒真值) -> 报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      conditions:\n"
+            "        - state: \"is_stopp\"\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "    rule2:\n"
+            "      conditions:\n"
+            "        - state: \"is_stopped&UPLOADING\"\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "    rule3:\n"
+            "      conditions:\n"
+            "        - state: \"is_stopped&is_complete\"\n"
+            "      actions:\n"
+            "        - stop: true\n"
+        )
+        err = _load_errors(td, text)
+        assert "非法状态属性 'is_stopp'" in err, err
+        assert "非法状态属性 'UPLOADING'" in err, err  # 裸枚举成员名在实例上恒真值, 拒绝
+        assert "rule3" not in err, err  # 合法 spec 不报错
+
+
+def test_validate_checking_action_spec():
+    """checking 动作 spec 深度校验: 非dict/缺basic_check/非法值/段非dict/非法mode/未知键/custom缺program -> 聚合报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      actions:\n"
+            "        - checking: \"skip-checking\"\n"
+            "    rule2:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            with_reference: {mode: skip-checking}\n"
+            "    rule3:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: xxx\n"
+            "    rule4:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: \"skip-checking\"\n"
+            "    rule5:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: xxx}\n"
+            "    rule6:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            poll_timeout: 60S\n"
+            "    rule7:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: custom\n"
+            "    rule8:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: skip-checking, auto_start: true}\n"
+            "            without_reference: {mode: full-checking}\n"
+        )
+        err = _load_errors(td, text)
+        assert "checking 动作只接受 dict 配置" in err, err
+        assert "必须配置 basic_check" in err, err
+        assert "basic_check 取值非法: 'xxx'" in err, err
+        assert "with_reference: 必须是字典" in err, err
+        assert "mode 取值非法: 'xxx'" in err, err
+        assert "未知键 ['poll_timeout']" in err, err
+        assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
+        assert "rule8" not in err, err  # 合法 spec 不报错
+
+
 def test_validate_rule_refs():
     """tracker.rules 引用: 必须 @ 开头且规则集/规则存在"""
     with tempfile.TemporaryDirectory() as td:
@@ -386,9 +472,8 @@ def test_validate_rule_refs():
         assert "引用的规则集不存在: @no_such_set" in err, err
         # 合法引用通过(移除两条非法引用)
         ok = (
-            text.replace("- example_rules", "- '@example_rules'")
-            .replace("        - '@example_rules.ruleX'\n", "")
-            .replace("        - '@no_such_set'\n", "")
+            text.replace("- example_rules", "- '@example_rules'").replace("        - '@example_rules.ruleX'\n",
+                                                                          "").replace("        - '@no_such_set'\n", "")
         )
         cfg = load_config(_write_raw(td, ok))
         assert cfg.trackers["T1"].rules == ["@example_rules"]
