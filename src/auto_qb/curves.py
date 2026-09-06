@@ -43,6 +43,8 @@ def normalize_period(value) -> str:
     raise ValueError(f"无效 period(支持: day/1D, month, ND 如 7D): {value}")
 
 
+# TODO: Traffic Monitor的history_traffic.dat目前是每天一行倒序排列, 可以只读取 N 行, 比如31+5行
+# TODO: 或者第一次读取N行, 剩下的只读取2行(除首行), 更新今天和昨天的数值就可以了
 def parse_history_dat(text: str, scale: int = KB) -> Tuple[List[HistoryRow], int]:
     """解析 history_traffic.dat 文本 -> (行记录列表按日期升序, 坏行数)
 
