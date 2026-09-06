@@ -122,7 +122,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 决策链 (execute):
 0. **只校验"暂停中未完成"种子**: `state_enum.is_stopped and progress < 1.0`; 已完成/活跃中一律 skip (防已完成种子被反复校验)。
 1. 组内有活跃下载种子 (`_group_has_downloading`: is_downloading 且非 stopped 非 checking) → skip (整组未完成, 任何校验都不做)。
-2. `_find_reference`: 按.basic_check 从组内参考候选 (`_group_reference_candidates`: is_uploading 且非 checking) 筛选 — `filelist`: 全部候选 (分组已保证文件列表相同); `piecehashes`: `torrents_piece_hashes` 与目标完全一致者; `custom`: 外部程序 rc=0 者。**再并入** `store.verified_references` 中同组成员 (历史 full-checking 通过者, 仅内存)。排除自身, 按 hash 去重。
+2. `_find_reference`: 按.basic_check 从组内参考候选 (`_group_reference_candidates`: is_complete 且非 checking — 暂停/停止做种的完成成员亦是有效参考, 参考用元数据 filelist/piece hashes 与暂停状态无关; 校验中 checkingUP 完整性存疑排除) 筛选 — `filelist`: 全部候选 (分组已保证文件列表相同); `piecehashes`: `torrents_piece_hashes` 与目标完全一致者; `custom`: 外部程序 rc=0 者。**再并入** `store.verified_references` 中同组成员 (历史 full-checking 通过者, 仅内存)。排除自身, 按 hash 去重。
 3. 有参考 → with_reference 段; 无参考 → without_reference 段; `enabled: false` → skip。
 4. **前置检查** (两模式都强制): `manager.check_filelist` — 磁盘文件全部存在且大小一致, 未通过 skip。
 
