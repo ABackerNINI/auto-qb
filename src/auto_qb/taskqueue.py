@@ -25,7 +25,7 @@ Handler = Callable[["Task", bool], bool]
 
 
 class Task:
-    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) / check(校验结果轮询)"""
+    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) / check(校验结果轮询) / check-wait(组内校验等待)"""
     __slots__ = (
         "uid",
         "kind",
@@ -196,3 +196,11 @@ class TaskQueue:
         """任务消亡(handler 返回 False): 释放校验在途标记(如有) """
         if task.kind == "check":
             self._active_checks.discard(task.hash)
+
+    def active_check_hashes(self) -> Set[str]:
+        """在途校验 hash 集合快照(已提交 full-checking 且轮询任务未结束, task_died 释放)
+
+        组内校验串行化闸门(rules/actions 决策链 1.5)使用: recheck 为透传不写快照,
+        同 tick 内后执行成员只能靠此登记感知其它成员的校验在途。
+        """
+        return set(self._active_checks)

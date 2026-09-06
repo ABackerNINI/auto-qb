@@ -22,6 +22,9 @@ CHECK_RESULT_INTERVAL = 2.0
 # 同一种子当日连续校验失败上限: 防止损坏文件导致 recheck 死循环(次日重置)
 RECHECK_FAIL_LIMIT = 3
 
+# 组内校验等待上限(秒): 防在途标记异常泄漏导致等待任务活锁(大种子全量校验可超 1h, 取宽松值)
+GROUP_CHECK_WAIT_LIMIT = 2 * 3600.0
+
 
 def _recheck_fail_count(manager, hash: str) -> int:
     """同一种子当日连续校验失败次数(按自然日重置, 与 upload_size_today 口径一致)"""
@@ -227,7 +230,7 @@ class CheckAction(BaseAction):
 
     def execute(self, ctx: RuleContext):
         if ctx.dry_run:
-            return ActionResult.ok("校验决策链(状态判定+组内下载判定+参考确定+分段执行)")
+            return ActionResult.ok("校验决策链(状态判定+组内下载判定+组内校验串行/失败推断+参考确定+分段执行)")
         manager = ctx.manager
 
         # TODO: 未完成且暂停的种子若 recheck 后仍未完成，下一轮会再次校验, 需处理
@@ -243,6 +246,17 @@ class CheckAction(BaseAction):
         members = manager._group_members(ctx.hash)
         if manager._group_has_downloading(members):
             return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")
+
+        # 决策链 1.5: 组内已有其它成员 full-checking 在途 -> 让位等待, 完成后重走决策链按结果分流
+        # (组内成员共享同一物理文件, 并行全量校验只有重复 I/O; 等待成功者晋升 verified_references)
+        wait = self._wait_for_group_checking(ctx, members)
+        if wait is not None:
+            return wait
+
+        # 决策链 1.6: 组内其它成员校验失败且文件映射一致(同一物理数据) -> 结果必然相同, 不再校验
+        inferred = self._skip_on_group_check_failed(ctx, members)
+        if inferred is not None:
+            return inferred
 
         # 决策链 2: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
         reference = self._find_reference(ctx, members)
@@ -333,6 +347,8 @@ class CheckAction(BaseAction):
              成功(progress>=1) -> origin.resume(触发 resume_cb: 晋升 verified_references +
                auto_start; resume_index 保留 -> 规则续跑执行后续动作, 执行历史由 Rule.process 统一记录)
              失败(progress<1)/种子删除/异常 -> 清断点 + origin.reschedule(重走决策链再次校验)
+          4) 提交经 add_check_task 登记在途(task_queue._active_checks, 决策链 1.5 组内串行化
+             依赖), 轮询任务消亡时由 task_died 释放
         """
         manager = ctx.manager
         hash = ctx.hash
@@ -413,6 +429,88 @@ class CheckAction(BaseAction):
             # 任务队列驱动: 返回 pending, 规则记录断点中断, 由轮询任务 resume/reschedule 恢复
             return ActionResult.pending("full-checking 校验已提交")
         return ActionResult.ok("full-checking 校验已提交")
+
+    def _wait_for_group_checking(self, ctx: RuleContext, members: list) -> Optional[ActionResult]:
+        """决策链 1.5: 组内已有其它成员 full-checking 在途 -> 让位等待(组内共享同一物理文件, 并行全量校验只有重复 I/O)
+
+        等待复用 full-checking 的 defer+轮询模式: 返回 pending(让位) + defer 触发任务, 等待任务
+        轮询组内其它成员的 checking 态与在途登记, 清空后**清断点 + reschedule** 触发任务重走
+        **完整决策链**(不能 resume 续跑: pending 断点指向 checking 动作之后, 会跳过重判) ——
+        此时成功者已晋升 verified_references(决策链 2 命中有参考分流), 失败者由决策链 1.6 拦截。
+        无任务驱动(外部入口)无法让位, 直接 skip; 超时强制恢复重判(防在途登记泄漏导致活锁)。
+        """
+        manager = ctx.manager
+        hash = ctx.hash
+        others = [h for h in members if h != hash]
+
+        def others_checking() -> bool:
+            inflight = manager.task_queue.active_check_hashes()
+            by_hash = manager.store.by_hash
+            return any(h in inflight or (h in by_hash and by_hash[h].state_enum.is_checking) for h in others)
+
+        if not others or not others_checking():
+            return None
+        origin = getattr(ctx, "task", None)  # 触发本次校验的规则任务(任务队列驱动); 外部入口为 None
+        if origin is None:
+            return ActionResult.skip("组内有种子校验进行中(无任务驱动, 不等待)")
+        tq = manager.task_queue
+        rule_name = ctx.rule_name
+        start = time.time()
+
+        def revive():
+            """恢复触发任务重走完整决策链(清断点, 与校验失败路径同语义)"""
+            origin.resume_index = None
+            tq.reschedule(origin, time.time())
+
+        def wait_poll(task: Task, dry_run: bool) -> bool:
+            try:
+                if manager.store.get(hash) is None:
+                    logger.warning(f"规则[{rule_name}] {hash[:8]} | 组内校验等待: 自身种子已删除")
+                    return False
+                if others_checking():
+                    if time.time() - start > GROUP_CHECK_WAIT_LIMIT:
+                        logger.warning(f"规则[{rule_name}] {hash[:8]} | 组内校验等待超时({GROUP_CHECK_WAIT_LIMIT:.0f}s), 强制恢复重判")
+                        revive()
+                        return False
+                    return True  # 仍在等待, 下一轮轮询
+                # 组内校验已清: 恢复触发任务重走决策链(成功者已晋升参考 / 失败者由决策链 1.6 拦截)
+                logger.info(f"规则[{rule_name}] {hash[:8]} | 组内校验已完成, 恢复决策")
+                revive()
+                return False
+            except Exception as e:
+                logger.warning(f"规则[{rule_name}] {hash[:8]} | 组内校验等待异常: {e}")
+                revive()
+                return False
+
+        # 等待任务用独立 kind + 普通入队(不经 add_check_task): 不占用 _active_checks 在途登记,
+        # 否则多个等待成员会经由登记互相视为"校验中"而互等(仅超时才能解开)
+        task = Task("check-wait", "check-group-wait", hash=hash, interval=CHECK_RESULT_INTERVAL, handler=wait_poll)
+        tq.add_task(task)
+        tq.defer(origin)
+        logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 组内有种子校验进行中, 让位等待")
+        return ActionResult.pending("等待同组种子校验完成")
+
+    def _skip_on_group_check_failed(self, ctx: RuleContext, members: list) -> Optional[ActionResult]:
+        """决策链 1.6: 组内其它成员校验失败且文件映射一致(共享同一物理数据) -> 校验结果必然相同, 直接跳过
+
+        失败计数当日有效(次日重置), 数据不随重试改变; 文件映射不一致(组内大小有差异,
+        校验的是不同数据)时不推断, 照常校验。
+        """
+        manager = ctx.manager
+        hash = ctx.hash
+        key = manager.store.member_to_key.get(hash)
+        if key is None:
+            return None
+        sizes = manager.store.group_sizes.get(key, {})
+        mine = sizes.get(hash)
+        if not mine:
+            return None
+        for h in members:
+            if h == hash or _recheck_fail_count(manager, h) <= 0:
+                continue
+            if sizes.get(h) == mine:
+                return ActionResult.skip(f"同组种子 {h[:8]} 校验失败且文件映射一致(同一物理数据), 不再校验")
+        return None
 
     def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
         """辅种跳检(高风险): 导出 → 删除(保留文件) → 确认消失 → 重加(跳过校验) → 确认出现 → 恢复快照

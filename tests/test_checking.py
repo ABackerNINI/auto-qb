@@ -44,10 +44,16 @@
 - test_checking_full_checking_resume_skips_conditions: 断点续跑跳过条件评估(条件变化不影响续跑)
 - test_checking_full_checking_resume_skips_dedup: 断点续跑跳过去重(execute_once=once 不拦截续跑)
 - test_checking_full_checking_defer_fail_retry: 任务队列驱动: 校验未通过 -> 触发任务 reschedule 重试
+- test_checking_group_full_checking_serialized: 组内校验串行(决策链 1.5): B 让位等待, A 成功晋升参考后 B 重走决策链走跳检
+- test_checking_group_skip_on_same_data_fail: 组内校验失败推断(决策链 1.6): 文件映射一致 -> B 不再校验
+- test_checking_group_no_infer_when_sizes_differ: 组内文件映射不一致 -> 不推断, B 照常校验
+- test_checking_group_wait_external_entry_skip: 组内校验中且无任务驱动 -> skip
+- test_checking_group_wait_timeout_force_resume: 等待超时强制恢复重判(防在途登记泄漏活锁)
 """
 import os
 import tempfile
 import time
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -1058,3 +1064,137 @@ def test_checking_full_checking_defer_fail_retry():
     run_queue(mgr, t0 + 60.5)
     assert origin.state == DEFERRED, "重走决策链应再次校验(再次让位)"
     assert origin.resume_index == 1, "重新校验应再次记录断点"
+
+
+# ============================================================
+# G. 组内校验串行化(决策链 1.5/1.6)
+# ============================================================
+def test_checking_group_full_checking_serialized():
+    """同组 full-checking 串行: A 提交后 B 让位等待(不提交 recheck); A 成功晋升参考 -> B 恢复走 with_reference 跳检"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA")
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    t0 = time.time()
+    ta = mgr._create_rule_task(rule, "HA", None)
+    tb = mgr._create_rule_task(rule, "HB", None)
+    ta.interval = 60.0
+    tb.interval = 60.0
+    # A 先执行: 提交 recheck(在途登记) + 让位; HA 进入校验态后 B 再执行
+    mgr.task_queue.add_task(ta, t0)
+    run_queue(mgr, t0)
+    seed_store(mgr, [make_target(hash="HA", state="checkingDL"), b])
+    mgr.task_queue.add_task(tb, t0 + 0.1)
+    run_queue(mgr, t0 + 0.1)
+    assert ("recheck", None) in client.calls, "A 应提交 recheck"
+    assert client.calls.count(("recheck", None)) == 1, f"B 不应提交 recheck: {client.calls}"
+    assert mgr.task_queue.active_check_hashes() == {"HA"}, "A 应登记在途(等待任务不占用登记)"
+    assert ta.state == DEFERRED and tb.state == DEFERRED, "A/B 均应让位"
+    assert tb.resume_index == 1, "B 应记录断点(pending)"
+    # HA 校验中: A 轮询续延, B 等待任务续等(间距放大避开真实时钟重排的边界)
+    run_queue(mgr, t0 + 10.0)
+    assert tb.state == DEFERRED, "HA 校验中 B 保持等待"
+    # HA 校验成功 -> 晋升参考; B 等待任务发现组内已清 -> resume B 重走决策链
+    seed_store(mgr, [make_target(hash="HA", state="pausedUP", progress=1.0), b])
+    run_queue(mgr, t0 + 20.0)
+    assert mgr.store.verified_references == {"HA"}, "成功应晋升参考"
+    assert mgr.task_queue.active_check_hashes() == set(), "轮询消亡应释放在途登记"
+    # B 的恢复重走发生在等待任务 resume 之后(下一批到期): 命中 verified 参考 -> with_reference 跳检
+    run_queue(mgr, t0 + 90.0)
+    assert mgr.task_queue.active_check_hashes() == set(), "等待任务不登记在途"
+    run_queue(mgr, t0 + 150.0)
+    names = [c[0] for c in client.calls]
+    assert names.count("recheck") == 1, f"B 恢复后不应再提交 recheck: {client.calls}"
+    assert "export" in names and "delete" in names, f"B 应走跳检流程: {client.calls}"
+    add_call = [c for c in client.calls if c[0] == "add"][0]
+    assert add_call[1]["is_skip_checking"] is True, "B 应以跳检方式重加"
+
+
+def test_checking_group_skip_on_same_data_fail():
+    """决策链 1.6: 同组 A 校验失败且文件映射一致(同一物理数据) -> B 直接 skip, 不提交 recheck"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA")
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
+    mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 100}
+    mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr._create_rule_task(rule, "HB", None)
+    mgr.task_queue.add_task(tb, time.time())
+    run_queue(mgr)
+    assert client.calls.count(("recheck", None)) == 0, f"同数据失败推断: B 不应提交 recheck: {client.calls}"
+    assert tb.state == PENDING and tb.resume_index is None, "B 应正常完成(非让位)"
+
+
+def test_checking_group_no_infer_when_sizes_differ():
+    """决策链 1.6 不推断: 组内文件映射不一致(校验的是不同数据) -> B 照常提交 full-checking"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA")
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
+    mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 200}  # 大小不一致
+    mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr._create_rule_task(rule, "HB", None)
+    mgr.task_queue.add_task(tb, time.time())
+    run_queue(mgr)
+    assert ("recheck", None) in client.calls, "映射不一致不应推断, B 照常校验"
+    assert mgr.task_queue.active_check_hashes() == {"HB"}, "B 提交后应登记在途"
+    assert tb.state == DEFERRED, "B 应让位等待校验结果"
+
+
+def test_checking_group_wait_external_entry_skip():
+    """决策链 1.5: 组内其它成员校验中且无任务驱动(外部入口) -> skip 不等待"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA", state="checkingDL")  # 组内其它成员校验中(store 快照可见)
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    handled, _stop = process_rule(mgr, client, b, dry_run=False)
+    assert not handled, "组内有校验进行时应跳过"
+    assert ("recheck", None) not in client.calls, "外部入口不等待也不提交"
+
+
+def test_checking_group_wait_timeout_force_resume():
+    """等待超时兜底: 超时强制恢复重走决策链(防在途登记泄漏活锁), 组内仍在校验则再次让位"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA", state="checkingDL")
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr._create_rule_task(rule, "HB", None)
+    tb.interval = 60.0
+    t0 = time.time()
+    mgr.task_queue.add_task(tb, t0)
+    run_queue(mgr, t0)
+    assert tb.state == DEFERRED, "B 应让位等待"
+    with patch("auto_qb.rules.actions.GROUP_CHECK_WAIT_LIMIT", 0.0):
+        seed_store(mgr, [a, b])  # HA 持续校验中
+        run_queue(mgr, t0 + 60.5)  # 等待任务超时 -> 强制 resume -> B 重走决策链 -> 仍在校验 -> 再次让位
+    assert tb.state == DEFERRED, "超时强制恢复后应重走决策链并再次让位"
+    assert tb.resume_index == 1, "再次让位应保留断点"
+    assert client.calls.count(("recheck", None)) == 0, f"B 全程不应提交 recheck: {client.calls}"
