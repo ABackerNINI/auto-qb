@@ -51,7 +51,7 @@
 | `registry.py` | 29 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
 | `base.py` | 294 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*), `Rule`(解析 enabled/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
 | `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [04-rule-system.md](04-rule-system.md) |
-| `actions.py` | 780 | 11 种动作插件 | 详见 [04-rule-system.md](04-rule-system.md); `CheckAction`(checking) 最复杂, spec 正确性由 config 校验阶段保证 |
+| `actions/` (包) | 871/6 文件 | 11 种动作插件 | `__init__`(34, 注册入口+公共名重导出, 兼容 `from auto_qb.rules.actions import X`), `basic`(130, 标签/分类/启停 ×6), `transfer`(86, move_to/reannounce/单种限速), `checking`(171, `CheckAction` 决策链+参考筛选, 组合 `FullCheckingMixin`+`SkipCheckingMixin`), `full_checking`(225, full-checking 执行+组内校验串行化闸门 1.5/1.6+失败计数), `skip_checking`(225, 跳检四阶段+`_poll_until`); spec 正确性由 config 校验阶段保证; 详见 [04-rule-system.md](04-rule-system.md) |
 
 ## tests/ (24 文件 + helpers.py, 详见 07-testing.md)
 
@@ -74,7 +74,7 @@ curves / episodes: 无项目内依赖 (纯逻辑, 独立可测)
 |------|------|
 | 新配置键 | `config.py` (dataclass + load 函数 + 校验); 如属 tracker 级加进 `load_tracker_config` |
 | 新规则条件 | `rules/conditions.py` 写类 + `@register_condition` (装饰即注册, import 已在 `rules/__init__.py`) |
-| 新规则动作 | `rules/actions.py` 写类 + `@register_action`; 需要新变量替换则扩展 `RuleContext.replace_vars` |
+| 新规则动作 | `rules/actions/` 对应职责模块写类 + `@register_action`, 并在 `actions/__init__.py` import(否则不注册); 需要新变量替换则扩展 `RuleContext.replace_vars` |
 | 新集数命名模式 | `episodes.py` `_EPISODE_PATTERNS` 列表按优先级插入 |
 | 新流量数据源 | `curves.py` 加解析 + `speed_curve.py`/`config.py` 扩展 traffic_source 校验 |
 | 新全局周期任务 | `qbmanager.py` `_create_global_tasks` 加 Task |

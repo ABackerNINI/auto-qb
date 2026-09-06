@@ -485,7 +485,7 @@ src/auto_qb/
 │   ├── tags.py        # 标签/分类/HR 辅助
 │   └── tracker.py     # tracker 配置匹配(hostname 精确匹配)/单种限速
 └── rules/             # 规则插件框架(装饰器注册)
-    ├── actions.py     # 11 种动作插件
+    ├── actions/       # 11 种动作插件(包): basic/transfer/checking/full_checking/skip_checking
     ├── base.py        # Rule/BaseCondition/BaseAction/ActionResult
     ├── conditions.py  # 15 种条件插件
     └── registry.py    # 条件/动作插件注册表
