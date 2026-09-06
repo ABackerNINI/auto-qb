@@ -18,7 +18,7 @@
   - 缺文件磁盘扫描: 组内取一个已完成且做种的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
   - checking 动作辅助(供 rules/actions.py 调用): _group_members(成员 hash 列表)/
-    _group_has_downloading(组内活跃下载判定)/_group_reference_candidates(已完成+上传中参考候选)
+    _group_has_downloading(组内活跃下载判定)/_group_reference_candidates(已完成且未校验参考候选)
 
 由 QbManager 组合(mixin), 依赖实例属性: client/logger/config/_add_tags,
 以及 self.store(TorrentStore) 内聚的 _groups/_group_sizes/_member_to_key/state_snapshot/by_hash。
@@ -299,9 +299,15 @@ class GroupingMixin:
         return False
 
     def _group_reference_candidates(self, members: list[str]) -> list:
-        """组内已完成且正在上传(做种)的成员列表, 作为参考种子候选(想法2: filelist 参考定义) """
+        """组内已完成且未在校验的成员列表, 作为参考种子候选(想法2: filelist 参考定义)
+
+        is_complete 而非 is_uploading: 暂停/停止做种的完成成员亦是有效参考
+        (参考用的是元数据 filelist/piece hashes, 与暂停状态无关), 否则整组
+        停种后无参考。排除 checking: 参考自身完整性正被重校验质疑, 不得作为
+        跳检依据。
+        """
         by_hash = self.store.by_hash
         return [
             by_hash[h] for h in members
-            if h in by_hash and by_hash[h].state_enum.is_uploading and not by_hash[h].state_enum.is_checking
+            if h in by_hash and by_hash[h].state_enum.is_complete and not by_hash[h].state_enum.is_checking
         ]

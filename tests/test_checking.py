@@ -18,7 +18,7 @@
 - test_checking_group_downloading_skips: 组内有下载中成员 -> 跳过校验
 - test_checking_paused_incomplete_not_skip: 暂停未完成不能作为参考 -> 不跳过
 - test_checking_no_group_uses_without_reference: 未归组无参考 -> 直接校验
-- test_checking_paused_completed_not_reference: 暂停已完成不算参考种子
+- test_checking_paused_completed_reference: 暂停已完成亦是参考种子(is_complete 判定)
 - test_checking_complete_skipped: 已完成做种中(progress=1) -> 跳过, 不校验
 - test_checking_paused_complete_skipped: 暂停已完成(pausedUP+progress=1) -> 跳过
 - test_checking_active_downloading_skipped: 活跃下载中(downloading+progress=0.5) -> 跳过
@@ -512,21 +512,22 @@ def test_checking_no_group_uses_without_reference():
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
 
 
-def test_checking_paused_completed_not_reference():
-    """测试: 暂停中的已完成(pausedUP)不算参考候选 -> 无参考 -> without_reference 段"""
-    cfg = make_check_cfg(with_mode="skip-checking", without_mode="full-checking", without_start=True)
-    mgr = make_mgr(cfg, with_tq=True)
+def test_checking_paused_completed_reference():
+    """测试: 暂停中的已完成(pausedUP)亦是参考候选(is_complete 判定, 参考用元数据与暂停无关) -> with_reference 段跳检"""
+    cfg = make_check_cfg(basic_check="filelist", with_mode="skip-checking", with_start=True)
+    mgr = make_mgr(cfg)
     client = CheckingFakeClient()
     mgr.client = client
+    client.torrents["HASH123"] = {"state": "stalledUP"}
     t = make_target()
-    p = FakeTorrent(hash="P1", name="P1", state="pausedUP")  # 暂停已完成, 非上传
+    p = FakeTorrent(hash="P1", name="P1", state="pausedUP")  # 暂停已完成: 有效参考
     inject_group(mgr, "HASH123", "P1")
     seed_store(mgr, [t, p])
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
-    assert handled
-    run_queue(mgr)  # 首轮: 发送 recheck
-    assert ("recheck", None) in client.calls, f"无参考应走 without_reference: {client.calls}"
-    assert [c[0] for c in client.calls] == ["recheck"], f"不应走跳检: {client.calls}"
+    assert handled, f"暂停完成参考应可用: {client.calls}"
+    assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"跳检调用顺序: {client.calls}"
+    add_call = [c for c in client.calls if c[0] == "add"][0]
+    assert add_call[1]["is_skip_checking"] is True, f"重加应跳过校验: {add_call}"
 
 
 # ============================================================
@@ -588,7 +589,7 @@ def test_checking_complete_no_repeat():
 # D. 参考确定 + 模式执行(10)
 # ============================================================
 def test_checking_filelist_reference_skip_checking():
-    """测试: filelist 基础检查确定同组已完成+上传中成员为参考 -> with_reference 段跳检全流程"""
+    """测试: filelist 基础检查确定同组已完成且未校验成员为参考 -> with_reference 段跳检全流程"""
     cfg = make_check_cfg(basic_check="filelist", with_mode="skip-checking", with_start=True)
     mgr = make_mgr(cfg)
     client = CheckingFakeClient()
@@ -1172,5 +1173,3 @@ def test_checking_full_checking_defer_fail_retry():
     run_queue(mgr, t0 + 60.5)
     assert origin.state == DEFERRED, "重走决策链应再次校验(再次让位)"
     assert origin.resume_index == 1, "重新校验应再次记录断点"
-
-

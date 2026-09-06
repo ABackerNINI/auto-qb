@@ -185,7 +185,7 @@ class CheckAction(BaseAction):
     """校验动作(checking): 用 basic_check 确定参考种子, 按有/无参考分段执行
 
     配置(仅 dict, fail-fast):
-      - basic_check(必填): filelist(已完成+上传中的同组种子, 宽松) | piecehashes(同前且 piece
+      - basic_check(必填): filelist(已完成且未校验的同组种子, 宽松) | piecehashes(同前且 piece
         hash 列表相同, 相对严格) | custom(运行 custom_basic_check_program_path 程序判定)
       - custom_basic_check_program_path: basic_check=custom 时必填; 参数: <种子hash> <保存路径>
       - with_reference / without_reference: 各含 mode(skip-checking|full-checking) + auto_start(默认 false)
@@ -194,7 +194,7 @@ class CheckAction(BaseAction):
       0. 仅"暂停中未完成"种子(is_paused 且 progress<1, 如跨种添加后的 pausedDL)才校验,
          已完成(progress=1)/活跃中(下载/做种中)种子一律跳过(避免已完成种子被反复校验)
       1. 组内有活跃下载种子(is_downloading) -> skip(整组未完成, 不进行任何校验, 包括跳检)
-      2. 按 basic_check 从同组"已完成+上传中"成员筛选参考种子, 并集内存 verified_references
+      2. 按 basic_check 从同组"已完成且未校验"成员筛选参考种子, 并集内存 verified_references
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
       4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
          -> 确认 -> auto_start(无参考时警告高风险)
@@ -295,7 +295,7 @@ class CheckAction(BaseAction):
 
     # TODO: 优化为has_reference() -> bool, 提前返回
     def _find_reference(self, ctx: RuleContext, members: list) -> list:
-        """按 basic_check 模式从组内已完成+上传中成员筛选参考种子, 并集内存 verified_references(排除自身)"""
+        """按 basic_check 模式从组内已完成且未校验成员筛选参考种子, 并集内存 verified_references(排除自身)"""
         candidates = [c for c in ctx.manager._group_reference_candidates(members) if c.hash != ctx.hash]
         refs = []
         if self.basic_check == "filelist":

@@ -700,14 +700,19 @@ def test_group_has_downloading():
 
 
 def test_group_reference_candidates():
-    """_group_reference_candidates: 返回组内正在做种的成员(参考种子候选, 读 store 快照)"""
+    """_group_reference_candidates: 组内已完成且未在校验的成员(参考种子候选, 读 store 快照)"""
     mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
-    seed_store(mgr, [
-        FakeTorrent(hash="H1", state="stalledUP"),
-        FakeTorrent(hash="H2", state="pausedUP"),
-    ])
-    cands = mgr._group_reference_candidates(["H1", "H2"])
-    assert [t.hash for t in cands] == ["H1"]
+    seed_store(
+        mgr,
+        [
+            FakeTorrent(hash="H1", state="stalledUP"),
+            FakeTorrent(hash="H2", state="pausedUP"),  # 已完成但停止做种: 亦是有效参考
+            FakeTorrent(hash="H3", state="checkingUP"),  # 校验中: 完整性存疑, 排除
+            FakeTorrent(hash="H4", state="downloading"),  # 未完成: 排除
+        ]
+    )
+    cands = mgr._group_reference_candidates(["H1", "H2", "H3", "H4"])
+    assert [t.hash for t in cands] == ["H1", "H2"]
 
 
 def test_grouping_save_path_change_no_cache():
