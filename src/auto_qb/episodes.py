@@ -86,16 +86,17 @@ def extract_episodes_from_files(files: list) -> List[int]:
         if nums:
             episodes.update(nums)
             continue
+        # bare number匹配可能会导致很多误判, 暂时禁用, 优化可能方向: 只允许尾部的bare number, 排除括号
         # 2. 无标记: 仅当恰好一个候选数字(排除分辨率/年份)才提取
-        candidates = []
-        for m in _BARE_NUMBER_RE.finditer(fname):
-            num = int(m.group(1))
-            if num in _RESOLUTION_SET or (1900 <= num <= 2099):  # 分辨率/年份干扰
-                continue
-            if 1 <= num <= 9999:
-                candidates.append(num)
-        if len(candidates) == 1:
-            episodes.add(candidates[0])
+        # candidates = []
+        # for m in _BARE_NUMBER_RE.finditer(fname):
+        #     num = int(m.group(1))
+        #     if num in _RESOLUTION_SET or (1900 <= num <= 2099):  # 分辨率/年份干扰
+        #         continue
+        #     if 1 <= num <= 9999:
+        #         candidates.append(num)
+        # if len(candidates) == 1:
+        #     episodes.add(candidates[0])
         # 多个候选数字(日期时间截图等) -> 无法确定唯一集数, 跳过该文件
     return sorted(episodes)
 
