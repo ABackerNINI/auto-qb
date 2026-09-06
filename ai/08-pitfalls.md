@@ -12,7 +12,8 @@
 2. **reannounce 动作**: 已加运行时保护 (2026-09-05): 同种子最小间隔 10M(state `reannounce_ts`) + 暂停种子跳过 + 加载期未配去重 WARNING —— 但高频汇报本质上仍是高风险操作, 规则应配 execute_once。
 3. **qB 版本兼容**: `_refresh_torrents` 首次拉到种子信息时校验 `REQUIRED_TORRENT_FIELDS`(23 个, 含快照+跳检重加字段), 缺失抛 `QbCompatError(AutoQbError)` → CLI 干净退出 —— 快照字段缺失会**静默零值**(规则基于假数据决策), 比崩溃更危险 (qB 5.0 preferences 键漂移前科)。
 4. **`or 默认值` 掩盖数值字段** (2026-09-06 清理): `progress or 0.0`/`ratio or 0` 类写法把上游 bug 静默转为合法语义且方向可能朝危险侧 (progress=None → 视为全新辅种 → 放行跳检)。已清理: 闸门 0/_skip_gates/HR 判定 4 处。**保留的合法 `or`**: 空串/空容器归一化 (category/tags/API 边界) 与除零防护 (`total_size or 1`)。判别标准见 ai/06。
-5. **死防御清理** (2026-09-06): 同型问题扩展至 `is None`/`getattr` 默认 —— 已删: client setter 的 store/api 守卫、`_execute_full_checking` 的 task_queue None 退化分支、`getattr(task, "resume_index", None)`/`getattr(prev, "is_uploading", False)` 冗余默认、QbApi 的 `store=None` 可选形态与 15 处 `if self.store is not None` 守卫 (store 改必传, 见 06 可测试性原则)。**合法 None 保留**: 惰性缓存、运行时状态 (种子被删/外部入口)、功能开关。判别标准: 守卫的条件在正确上游流程下**不可能发生** → 删; 是真实可选语义 → 留。
+5. **死防御清理** (2026-09-06): 同型问题扩展至 `is None`/`getattr` 默认 —— 已删: client setter 的 store/api 守卫、`_execute_full_checking` 的 task_queue None 退化分支、`getattr(task, "resume_index", None)`/`getattr(prev, "is_uploading", False)` 冗余默认(含 2026-09-06 二次复查补删的 grouping 上传转暂停判定)、`_valid_for_representative` 中恒真的 MOVING 显式排除(MOVING 本就不在 is_complete/is_uploading 集合)、QbApi 的 `store=None` 可选形态与 15 处 `if self.store is not None` 守卫 (store 改必传, 见 06 可测试性原则)。**合法 None 保留**: 惰性缓存、运行时状态 (种子被删/外部入口)、功能开关。判别标准: 守卫的条件在正确上游流程下**不可能发生** → 删; 是真实可选语义 → 留。
+6. **自有动作污染状态观测** (2026-09-06): 自家整组停种 (大小一致性/下载冲突) 经 QbApi 快照同步**当场改写 `by_hash` 的 state**, `_handle_state_transitions` 若在自有动作之后运行, 会把自家停种误判为外部"上传转暂停" → 多余的缺文件扫描 (曾靠代表种 is_uploading 过滤掩盖, 代表种放宽为 is_complete 后暴露)。修复: refresh 中状态转移观测移到新增归组等自有动作**之前** (轮次开始的干净观测点), 顺序约束见 ai/02。
 3. **删除种子** (`torrents_delete`): 仅跳检流程使用, `delete_files=False` 固定。
 4. **全局限速覆盖**: 奇数 KiB 视为用户手动设置则跳过 — 三处实现 (tracker.py/actions.py/speed_curve.py) 逻辑必须保持一致。
 

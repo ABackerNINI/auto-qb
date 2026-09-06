@@ -34,7 +34,7 @@
 - test_assign_new_torrent_missing: 哈希不在 by_hash -> AttributeError 上抛(调用方保证存在)
 - test_assign_new_torrent_files_error: 文件列表拉取异常 -> 异常上抛(由 run 主循环兜底)
 - test_assign_to_group_empty_map: 空文件映射 -> 不归组
-- test_check_missing_files_no_seeding_rep: 组内无已完成做种种子 -> 不检查
+- test_check_missing_files_no_seeding_rep: 组内无已完成未校验种子 -> 不检查(暂停完成成员亦是代表)
 - test_check_missing_files_size_mismatch: 文件存在但大小不符 -> 暂停 + MISSING
 - test_check_missing_files_getsize_error: 文件读取 OSError -> 暂停 + MISSING
 - test_check_missing_files_checking_up_not_rep: checkingUP(校验中)非有效代表(排除 is_checking) -> 不扫描
@@ -779,7 +779,7 @@ def test_assign_to_group_empty_map():
 
 
 def test_check_missing_files_no_seeding_rep():
-    """_check_missing_files: 组内无已完成做种种子 -> 不检查"""
+    """_check_missing_files: 组内无已完成未校验种子 -> 不检查; 暂停完成成员亦是有效代表"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
@@ -787,7 +787,12 @@ def test_check_missing_files_no_seeding_rep():
         mgr.client = client
         members = [FakeTorrent(hash="H1", name="T1", state="pausedUP", amount_left=100)]
         mgr._check_missing_files(members, {}, dry_run=False)
-        assert client.calls == [], "无做种代表不应扫描"
+        assert client.calls == [], "未完成成员不应作为代表扫描"
+        # 暂停已完成(amount_left=0): is_complete 判定下路径同样可扫, 缺文件触发暂停 + MISSING
+        paused_done = FakeTorrent(hash="H2", name="T2", state="pausedUP", save_path=td, amount_left=0)
+        mgr._check_missing_files([paused_done], {"H2": {"movie.mkv": 100}}, dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"暂停完成代表缺文件应暂停: {client.calls}"
+        assert "MISSING" in client.tags
 
 
 def test_check_missing_files_size_mismatch():
@@ -834,7 +839,7 @@ def test_check_missing_files_checking_up_not_rep():
         client = FakeClient()
         mgr.client = client
 
-        # checkingUP: is_complete/is_uploading 但 is_checking -> 排除出有效代表, 不扫描
+        # checkingUP: is_complete 但 is_checking -> 排除出有效代表, 不扫描
         checking_up = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
         mgr._check_missing_files([checking_up], sizes, dry_run=False)

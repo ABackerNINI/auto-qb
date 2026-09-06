@@ -211,9 +211,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             return
         missing = missing_torrent_fields(sample)
         if missing:
-            raise QbCompatError(
-                f"qBittorrent torrent info 缺少字段: {missing}; 请检查 qBittorrent 版本兼容性"
-            )
+            raise QbCompatError(f"qBittorrent torrent info 缺少字段: {missing}; 请检查 qBittorrent 版本兼容性")
         self._schema_validated = True
 
     def _refresh_torrents(self, dry_run: bool = False):
@@ -223,6 +221,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         tors = self.api.torrents_info()
         self._validate_torrent_schema(tors)
         added, removed = self.store.refresh(tors)
+
+        if self.config.grouping.enabled:
+            # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)。
+            # 必须在本轮任何自有动作之前观测: 新增归组的大小一致性停种经快照同步会当场改写
+            # by_hash 状态, 放在后面会把自家停种误判为外部"上传转暂停"
+            self._handle_state_transitions(dry_run)
 
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
@@ -267,8 +271,6 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if self.config.grouping.enabled:
             # 保存路径变化重归组(文件列表变化会走新增种子重新归组)
             self._handle_save_path_changes(dry_run)
-            # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)
-            self._handle_state_transitions(dry_run)
             # 下载冲突检查(每轮): 同组多个同时下载/已完成与下载中并存 -> 警告+整组暂停
             self._check_download_conflicts(dry_run)
             # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关;

@@ -15,7 +15,7 @@
     * 保存路径变化 -> _handle_save_path_changes 按新路径重归组; 原组剩余成员与新组已有成员均触发缺文件磁盘扫描
     * 下载冲突(每轮, 分组 enabled 时) -> _check_download_conflicts: 同组两个及以上种子同时下载,
       或已完成与下载中并存 -> 警告 + 整组暂停(内存 set 去重, 冲突消除后清除)
-  - 缺文件磁盘扫描: 组内取一个已完成且做种的种子作代表扫描磁盘(同组共享一次);
+  - 缺文件磁盘扫描: 组内取一个已完成且未在校验的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
   - checking 动作辅助(供 rules/actions.py 调用): _group_members(成员 hash 列表)/
     _group_has_downloading(组内活跃下载判定)/_group_reference_candidates(已完成且未校验参考候选)
@@ -26,7 +26,7 @@
 import logging
 import os
 from typing import Any, Dict, Optional
-from qbittorrentapi import Client, TorrentState
+from qbittorrentapi import Client
 
 from ..config import Config
 from .. import utils
@@ -112,7 +112,7 @@ class GroupingMixin:
             if not torrent.state_enum.is_complete or not torrent.state_enum.is_stopped:
                 continue
             prev = self.store.state_snapshot.get(h)  # 上一轮 state_enum 枚举
-            if prev is not None and getattr(prev, "is_uploading", False):
+            if prev is not None and prev.is_uploading:
                 key = self.store.member_to_key.get(h)
                 if key is not None:
                     triggered.add(key)
@@ -180,11 +180,16 @@ class GroupingMixin:
 
     @staticmethod
     def _valid_for_representative(torrent: TorrentRecord) -> bool:
-        """候选项有效: 已完成且正在做种的种子可作为组内缺文件扫描的代表种"""
+        """候选项有效: 已完成且未在校验的种子可作为组内缺文件扫描的代表种
+
+        代表种只决定扫描谁的保存路径, 暂停/停止做种的完成成员同样有效
+        (与 _group_reference_candidates 同理, 否则整组停种后永不扫描);
+        MOVING 不在 is_complete 集合内, 无需显式排除。
+        """
         state_enum = torrent.state_enum
         return (
-            torrent.amount_left <= 0 and state_enum.is_complete and state_enum.is_uploading and
-            not state_enum.is_checking and not state_enum.is_errored and not state_enum == TorrentState.MOVING
+            torrent.amount_left <= 0 and state_enum.is_complete and not state_enum.is_checking and
+            not state_enum.is_errored
         )
 
     def _check_missing_files(self, members: list[TorrentRecord], sizes: Dict[str, Dict[str, int]], dry_run: bool):
@@ -198,10 +203,10 @@ class GroupingMixin:
         if not self.config.grouping.check_missing_files:
             return  # 配置禁用缺文件检查
 
-        # 组内取一个已完成且正在做种的种子作为代表
+        # 组内取一个已完成且未在校验的种子作为代表
         rep = next((t for t in members if self._valid_for_representative(t)), None)
         if rep is None:
-            return  # 组内无已完成做种种子(均在下载/暂停/移动), 不检查
+            return  # 组内无已完成未校验种子(均在下载/校验/异常), 不检查
 
         logger.debug(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
         missing = False
