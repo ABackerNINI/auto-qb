@@ -56,6 +56,24 @@ def _setup(state_file=None):
         yield mgr, client, tor
 
 
+def test_actions_registry_complete():
+    """全部内置动作已注册(锁定名称清单): 防新增模块漏 import 到 actions/__init__ 致 config 校验拒绝合法动作名"""
+    from auto_qb.rules import registry
+    assert set(registry.ACTIONS) == {
+        "add_tags",
+        "remove_tags",
+        "add_category",
+        "remove_category",
+        "start",
+        "stop",
+        "checking",
+        "move_to",
+        "reannounce",
+        "upload_speed_limit",
+        "download_speed_limit",
+    }
+
+
 def test_add_tags():
     """添加标签: 新标签/已存在 skip/变量替换/dry-run"""
     with tempfile.TemporaryDirectory() as td:
@@ -358,7 +376,7 @@ def test_skip_checking_readd_preserves_values():
         tor.ratio_limit = 0  # qB 分享率限制(有语义)
         tor.seeding_time_limit = 0
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.rules.actions.time.sleep"):
+        with patch("auto_qb.rules.actions.skip_checking.time.sleep"):
             r = action.execute(ctx)
         assert r.is_ok, f"{r}"
         add = next(c for c in client.calls if c[0] == "add")
@@ -380,7 +398,7 @@ def test_skip_checking_readd_restores_store_record():
         client.torrents["HASH123"] = tor
         seed_store(mgr, [tor])
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.rules.actions.time.sleep"):
+        with patch("auto_qb.rules.actions.skip_checking.time.sleep"):
             r = action.execute(ctx := make_ctx(mgr, tor, client))
         assert r.is_ok, f"{r}"
         # 快照记录已恢复(对象身份 = 删除前捕获的 tor), tracker_conf 保留
@@ -388,9 +406,11 @@ def test_skip_checking_readd_restores_store_record():
         assert tor.tracker_conf is mgr.config.trackers["HHan"]
         # log_repr 不再崩(tracker_name 走 conf, 不回退 self.tor.client)
         assert "[HHan]" in tor.log_repr
+
         # 真实 qB 场景: tor 是 TorrentDictionary(无 client 属性)也不崩 —— 模拟无 client 属性的 tor
         class _TorDictLike:
             pass  # 无 client/_client
+
         rec = tor  # 直接验证 tracker_name 在 conf 存在时不触碰 tor.client
         assert rec.tracker_name == "HHan"
 
@@ -434,7 +454,7 @@ def test_skip_checking_delete_not_confirmed():
 
         ctx, client = _skip_ctx(os.path.join(td, "state.json"), torrents_info=boom)
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.rules.actions.time.sleep"):
+        with patch("auto_qb.rules.actions.skip_checking.time.sleep"):
             r = action.execute(ctx)
         assert r.is_failed and "仍在客户端" in r.message, f"应失败: {r}"
         assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"

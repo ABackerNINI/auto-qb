@@ -58,7 +58,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from auto_qb.qbmanager import QbManager
-from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, _recheck_fail_count, CheckAction
+from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
+from auto_qb.rules.actions.full_checking import _recheck_fail_count
 from auto_qb.taskqueue import DEFERRED, PENDING, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
@@ -600,7 +601,7 @@ def test_checking_no_reference_skip_checking_warns():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "stalledUP"}
     t = make_target()
-    with patch("auto_qb.rules.actions.logger.warning") as mw:
+    with patch("auto_qb.rules.actions.skip_checking.logger.warning") as mw:
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
         assert handled
         assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"{client.calls}"
@@ -1192,7 +1193,7 @@ def test_checking_group_wait_timeout_force_resume():
     mgr.task_queue.add_task(tb, t0)
     run_queue(mgr, t0)
     assert tb.state == DEFERRED, "B 应让位等待"
-    with patch("auto_qb.rules.actions.GROUP_CHECK_WAIT_LIMIT", 0.0):
+    with patch("auto_qb.rules.actions.full_checking.GROUP_CHECK_WAIT_LIMIT", 0.0):
         seed_store(mgr, [a, b])  # HA 持续校验中
         run_queue(mgr, t0 + 60.5)  # 等待任务超时 -> 强制 resume -> B 重走决策链 -> 仍在校验 -> 再次让位
     assert tb.state == DEFERRED, "超时强制恢复后应重走决策链并再次让位"
