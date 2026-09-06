@@ -130,6 +130,7 @@ class FullCheckingMixin:
             api.torrents_recheck(torrent_hashes=hash)
         except Exception as e:
             return ActionResult.fail(f"发送 recheck 失败: {e}")
+        logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | full-checking 校验已提交")
         # pending: 规则记录断点, 规则任务本轮不重入队 —— 恢复由轮询子任务负责
         return ActionResult.pending("full-checking 校验已提交")
 
@@ -178,7 +179,7 @@ class FullCheckingMixin:
                         return FINISHED
                     return REQUEUE  # 仍在等待, 下一轮轮询
                 # 组内校验已清: 恢复触发任务重走决策链(成功者已晋升参考 / 失败者由决策链 1.6 拦截)
-                logger.info(f"规则[{rule_name}] {hash[:8]} | 组内校验已完成, 恢复决策")
+                logger.debug(f"规则[{rule_name}] {hash[:8]} | 组内校验已完成, 恢复决策")
                 revive()
                 return FINISHED
             except Exception as e:
@@ -190,7 +191,7 @@ class FullCheckingMixin:
         # 否则多个等待成员会经由登记互相视为"校验中"而互等(仅超时才能解开)
         task = Task("check-wait", "check-group-wait", hash=hash, interval=CHECK_RESULT_INTERVAL, handler=wait_poll)
         tq.add_task(task)
-        logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 组内有种子校验进行中, 推迟等待")
+        logger.debug(f"规则[{rule_name}] {ctx.torrent.log_repr} | 组内有种子校验进行中, 推迟等待")
         return ActionResult.pending("等待同组种子校验完成")
 
     def _skip_on_group_check_failed(self, ctx: RuleContext, members: list) -> Optional[ActionResult]:

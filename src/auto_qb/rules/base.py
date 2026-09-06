@@ -215,7 +215,7 @@ class Rule:
                 # 异步等待: 记录断点并中断本规则, 由轮询子任务按结果重新入队恢复
                 if task is not None:
                     task.resume_index = i + 1
-                    logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
+                    logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
                     return True, True  # handled=True(动作已提交), stop=True(中断后续规则)
                 ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
                 executed = True
