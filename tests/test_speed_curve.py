@@ -560,9 +560,8 @@ def test_speed_curve_global_task_registered(tmp_path):
     gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)))
     mgr, _ = _make_mgr(tmp_path, gslc)
     mgr._create_global_tasks()
-    due = mgr.task_queue.due(max=100)
-    assert [t.name for t in due] == ["speed_limit_curve"]
-    assert due[0].interval == mgr.config.interval  # FakeConfig.interval = 60
+    assert [t.name for t in mgr.task_queue._fast] == ["speed_limit_curve"]
+    assert mgr.task_queue._fast[0].interval == mgr.config.interval  # FakeConfig.interval = 60
 
 
 def test_speed_curve_global_task_uses_own_interval(tmp_path):
@@ -570,9 +569,8 @@ def test_speed_curve_global_task_uses_own_interval(tmp_path):
     gslc = _gslc("whatever.dat", _pc("day", up=_points(FULL_UPLOAD)), interval=600)
     mgr, _ = _make_mgr(tmp_path, gslc)
     mgr._create_global_tasks()
-    due = mgr.task_queue.due(max=100)
-    assert [t.name for t in due] == ["speed_limit_curve"]
-    assert due[0].interval == 600
+    assert [t.name for t in mgr.task_queue._fast] == ["speed_limit_curve"]
+    assert mgr.task_queue._fast[0].interval == 600
 
 
 def test_speed_curve_global_task_not_registered(tmp_path):
@@ -580,7 +578,7 @@ def test_speed_curve_global_task_not_registered(tmp_path):
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
     mgr._create_global_tasks()
-    assert mgr.task_queue.due(max=100) == []
+    assert all(t.name != "speed_limit_curve" for t in mgr.task_queue._fast)
 
 
 def test_speed_curve_applies_staged_upload_limit(tmp_path):

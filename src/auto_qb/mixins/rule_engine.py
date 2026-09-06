@@ -9,9 +9,8 @@ from typing import Any, List, Optional
 from qbittorrentapi import Client
 
 from ..config import Config, TrackerConfig
-from ..taskqueue import TaskQueue
+from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ..rules import Rule, RuleContext
-from ..taskqueue import Task
 from .. import utils
 from ..torrents import TorrentRecord
 
@@ -127,14 +126,23 @@ class RuleEngineMixin:
         )
 
     def _handle_rule(self, rule: Rule, task: Task, dry_run: bool) -> bool:
-        """种子级规则任务: 执行指定规则于该种子; 种子已删除返回 False 任务消亡"""
+        """种子级规则任务: 执行指定规则于该种子。
+
+        - 种子已删除 -> False 任务消亡
+        - pending 中断(校验提交, 断点已记录) -> False 本轮不重入, 由校验轮询子任务
+          在完成后按情况重新入队(断点保留续跑 / reset 重走)
+        - 其余(含异常) -> True 周期重入队
+        """
+        if self.store.get(task.hash) is None:
+            return FINISHED
         ctx = RuleContext(self, self.client, self.config, task.hash, dry_run, task=task)
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
             logger.warning(f"任务[{task.log_tag}] | 规则执行异常: {e}", exc_info=True)
-            return True
-        return True
+            return REQUEUE
+        # 有未消费断点(pending 等待子任务恢复) -> 本轮不重入; 否则周期重入队
+        return FINISHED if task.has_breakpoint else REQUEUE
 
     # ---------- tracker 引用 ----------
 

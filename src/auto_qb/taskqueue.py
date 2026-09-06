@@ -2,9 +2,12 @@
 
 线程模型:
 - 主循环线程是唯一修改任务队列与 state_file 的线程, 无需加锁
-- 校验结果轮询任务(check)由规则动作创建, 经 add_check_task 去重登记(_active_checks);
-  handler 按 interval 到期执行; 触发校验的规则任务经 defer 让位(不入队不消亡),
-  由轮询任务在完成后 resume(校验成功, 触发 resume_cb 完成处理)或 reschedule(失败)恢复
+- 生命周期只有两个动词: add_task 入队 / run_due 到期执行+收尾
+  - handler 返回 REQUEUE -> 按 interval 重入队(周期任务)
+  - handler 返回 FINISHED -> 本轮不重入: 消亡(kind=="check" 释放在途登记), 或由其子任务
+    负责重新入队(推迟执行, 如 full-checking 校验期间规则任务让出队列)
+- 断点(resume_index)语义: add_task 默认重置任务(下次从头执行), 仅 keep_progress=True
+  显式保存进度(下次从断点续跑); 重走完整流程由子任务以默认 add_task 触发
 """
 import heapq
 import logging
@@ -18,14 +21,16 @@ logger = logging.getLogger(__name__)
 # 任务状态
 PENDING = "pending"  # 排队中(等待到期)
 RUNNING = "running"  # 已被主循环取出执行
-DEFERRED = "deferred"  # 让位: 不入队不消亡, 由外部决定恢复(resume)或重新调度(reschedule)
 
-# handler 返回 False = 任务不重新入队(自然消亡, 如种子已被删除)
+# handler 返回值语义(替代裸 True/False):
+REQUEUE = True  # 按 interval 重新入队(周期任务继续)
+FINISHED = False  # 本轮不重入: 任务消亡(kind=="check" 释放在途登记), 或由其子任务负责重新入队
 Handler = Callable[["Task", bool], bool]
 
 
 class Task:
-    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) / check(校验结果轮询) / check-wait(组内校验等待)"""
+    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) /
+    internal(全局内置) / check(校验结果轮询) / check-wait(组内校验等待)"""
     __slots__ = (
         "uid",
         "kind",
@@ -35,7 +40,6 @@ class Task:
         "next_run",
         "interval",
         "state",
-        "resume_cb",
         "resume_index",
         "run_count",
         "created_at",
@@ -62,15 +66,27 @@ class Task:
         self.next_run = next_run  # epoch 秒, 到期才执行
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING
-        self.resume_cb = None  # 让位任务恢复时触发的完成处理(一次性, 由 defer/resume 使用)
-        self.resume_index = None  # 规则任务断点(下一个要执行的动作索引); resume(校验成功)保留 -> 续跑, reschedule(失败)前清空 -> 重走完整决策链
+        self.resume_index = None  # 规则任务断点(下一个要执行的动作索引); 默认记住位置, 重新入队后继续
         self.run_count = 0
         self.created_at = time.time()
         self.payload = payload  # 可选: 任务附带数据(自定义)
-        self.handler = handler  # 主循环执行任务时调用: handler(task, dry_run) -> bool(False=不重入)
+        self.handler = handler  # 主循环执行任务时调用: handler(task, dry_run) -> REQUEUE/FINISHED
 
     def __lt__(self, other):
         return self.next_run < other.next_run
+
+    def reset(self):
+        """显式重置执行位置: 下次执行重走完整流程(规则任务=重走完整决策链)
+
+        与 process() 的自然消费(正常完成后清零)并列的清除入口;
+        add_task 默认重置, 仅 keep_progress=True 时保留断点。
+        """
+        self.resume_index = None
+
+    @property
+    def has_breakpoint(self) -> bool:
+        """是否存在未消费的断点(pending 异步等待中, 等待子任务重新入队恢复/续跑)"""
+        return self.resume_index is not None
 
     @property
     def log_tag(self) -> str:
@@ -83,124 +99,103 @@ class Task:
 
 
 class TaskQueue:
-    """单任务队列(时间优先堆)
+    """单任务队列(时间优先堆): 生命周期只有 入队(add_task) 与 到期执行收尾(run_due) 两个动词
 
     - 所有任务(种子刷新/规则/种子级内置/校验结果轮询)统一按 next_run 到期弹出执行;
-      每个任务有内置 interval, 执行后由主循环按 interval 重新入队
-    - 校验结果轮询任务(check)经 add_check_task 去重登记(_active_checks),
-      handler 返回 False 时由主循环调 task_died 释放在途标记
-    - 让位(resume 语义): 规则任务执行 full-checking 后经 defer 挂起(_deferred, 不入队不消亡),
-      由轮询任务在完成后 resume(校验成功, 触发 resume_cb 完成处理)或 reschedule(失败)恢复
+      handler 返回 REQUEUE 按 interval 重入队, 返回 FINISHED 消亡(kind=="check" 释放在途登记)
+    - 校验结果轮询任务(check)入队时自动登记在途(_active_checks), 重复登记丢弃并返回
+      False; 消亡时释放 —— 组内校验串行化闸门经 active_check_hashes() 感知
+    - 推迟执行不在队列挂起: 规则任务 handler 返回 FINISHED 让出队列, 由其子任务(轮询)
+      在完成后按情况重新入队(keep_progress=True 断点续跑 / 默认重置重走)
     - 无锁: 仅主循环线程修改队列结构
     """
     def __init__(self):
         self._fast: List[Task] = []  # heapq: 所有按时间调度的任务
         self._active_checks: Set[str] = set()  # 在途校验 hash 集合(去重)
-        self._deferred: Set[Task] = set()  # 让位任务: 不入队不消亡, 等待恢复
 
-    # ---------- 快速队列: 通用任务 ----------
+    # ---------- 入队 ----------
 
     @staticmethod
     def _norm_interval(interval: float) -> float:
         """interval<=0 归一化为 1s(每 tick 级别): 每个任务都有内置 interval"""
         return max(1.0, float(interval))
 
-    def add_task(self, task: Task, now: float = None):
-        """加入队列; 新任务立即到期(next_run=now, 下一 tick 执行)"""
+    def add_task(self, task: Task, now: float = None, keep_progress: bool = False) -> bool:
+        """入队; 新任务立即到期(next_run=now, 下一次 run_due 执行)。返回是否入队成功。
+
+        kind=="check" 自动登记在途(_active_checks): 同一种子已有在途校验时丢弃并返回
+        False(调用方据此 skip), 否则登记并入队返回 True。
+
+        断点语义: 默认重置任务(resume_index 清空, 下次从头执行); keep_progress=True 显式
+        保存任务进度(断点保留, 下次从断点续跑) —— 仅供等待异步完成的子任务恢复 origin 使用。
+        """
+        if not keep_progress:
+            task.resume_index = None
+        if task.kind == "check":
+            if task.hash in self._active_checks:
+                return False
+            self._active_checks.add(task.hash)
         now = time.time() if now is None else now
         task.interval = self._norm_interval(task.interval)
         task.next_run = now
+        task.state = PENDING
         heapq.heappush(self._fast, task)
+        return True
 
     def add_tasks(self, tasks: List[Task], now: float = None):
         for t in tasks:
             self.add_task(t, now)
 
-    def due(self, now: float = None, max: int = 0) -> List[Task]:
-        """弹出所有到期任务(按 next_run 时间优先), max设置弹出的最大数量"""
-        now = time.time() if now is None else now
-        due = []
-        while (max <= 0 or len(due) < max) and self._fast and self._fast[0].next_run <= now:
-            task = heapq.heappop(self._fast)
-            task.state = RUNNING
-            due.append(task)
-        return due
-
-    def reschedule(self, task: Task, now: float = None):
-        """任务执行完毕且需继续: 按任务内置 interval 重新入队
-
-        resume 语义: 复用同一 Task 实例(uid/resume_cb/payload/handler/run_count 跨轮保留),
-        非从头重新执行。让位任务(经 defer 挂起)由 reschedule 恢复时自动移出让位集合。
-        """
-        now = time.time() if now is None else now
-        self._deferred.discard(task)
-        task.run_count += 1
-        task.state = PENDING
-        task.next_run = now + task.interval
-        heapq.heappush(self._fast, task)
-
-    def remove_torrent(self, hash: str):
-        """种子被删除: 移除该种子在队列中的所有任务(含让位任务), 并释放在途校验标记"""
-        before = len(self._fast)
-        self._fast = [t for t in self._fast if t.hash != hash]
-        if len(self._fast) != before:
-            heapq.heapify(self._fast)
-        self._deferred = {t for t in self._deferred if t.hash != hash}
-        self._active_checks.discard(hash)
-
-    # ---------- 让位/恢复(resume 语义) ----------
-
-    def defer(self, task: Task):
-        """任务让位: 不入队不消亡(从调度中挂起), 由外部决定恢复(resume)或重新调度(reschedule)
-
-        典型场景: 规则任务执行 full-checking 后让位, 由校验结果轮询任务在完成后
-        调用 resume(校验成功)或 reschedule(失败/种子删除)恢复它。
-        """
-        task.state = DEFERRED
-        self._deferred.add(task)
-
-    def resume(self, task: Task, now: float = None):
-        """恢复让位任务: 触发 resume_cb(一次性完成处理)后按任务内置 interval 重新入队
-
-        resume 语义: 让位任务此前由 defer() 挂起, 恢复时先执行其完成处理
-        (如校验通过后的晋升/自动开始/记录执行), 然后重新进入调度。
-        """
-        now = time.time() if now is None else now
-        self._deferred.discard(task)
-        cb, task.resume_cb = task.resume_cb, None
-        try:
-            if cb:
-                cb()
-        except Exception as e:
-            logger.error(f"任务[{task.log_tag}] | 恢复回调异常: {e}")
-        task.run_count += 1
-        task.state = PENDING
-        task.next_run = now + task.interval
-        heapq.heappush(self._fast, task)
-
-    # ---------- 校验结果轮询任务 ----------
-
-    def add_check_task(self, task: Task, now: float = None) -> bool:
-        """登记校验结果轮询任务: 同一种子已有在途校验则忽略(返回 False)
-
-        任务立即入队(next_run=now), 首轮到期时由 handler 发送 recheck 请求;
-        handler 返回 False(完成/消亡)时由主循环调 task_died 释放在途标记。
-        """
-        if task.hash in self._active_checks:
-            return False
-        self._active_checks.add(task.hash)
-        self.add_task(task, now)
-        return True
-
-    def task_died(self, task: Task):
-        """任务消亡(handler 返回 False): 释放校验在途标记(如有) """
-        if task.kind == "check":
-            self._active_checks.discard(task.hash)
-
     def active_check_hashes(self) -> Set[str]:
-        """在途校验 hash 集合快照(已提交 full-checking 且轮询任务未结束, task_died 释放)
+        """在途校验 hash 集合快照(已提交 full-checking 且轮询任务未结束, 消亡时释放)
 
         组内校验串行化闸门(rules/actions 决策链 1.5)使用: recheck 为透传不写快照,
         同 tick 内后执行成员只能靠此登记感知其它成员的校验在途。
         """
         return set(self._active_checks)
+
+    # ---------- 到期执行 + 收尾 ----------
+
+    def run_due(self, dry_run: bool = False, now: float = None, max_tasks: int = 0) -> int:
+        """执行所有到期任务并收尾(主循环 tick 的队列唯一入口)。返回执行的任务数。
+
+        先快照到期任务再逐个执行: 执行中途新入队的任务(如轮询子任务重新入队的
+        规则任务)留到下一次 run_due, 避免同批重入导致未校验即误判失败。
+        收尾: handler 返回 REQUEUE -> 按 interval 重入队(默认重置断点); FINISHED ->
+        消亡(不入队, kind=="check" 释放在途登记)。
+        """
+        now = time.time() if now is None else now
+        due = self._pop_due(now, max_tasks)
+        for task in due:
+            task.state = RUNNING
+            if self._run_one(task, dry_run):
+                self._requeue(task, now)
+            elif task.kind == "check":
+                self._active_checks.discard(task.hash)  # 消亡: 释放在途登记
+        return len(due)
+
+    def _pop_due(self, now: float, max_tasks: int) -> List[Task]:
+        """弹出所有到期任务(按 next_run 时间优先), max_tasks 限制弹出数量"""
+        due = []
+        while (max_tasks <= 0 or len(due) < max_tasks) and self._fast and self._fast[0].next_run <= now:
+            task = heapq.heappop(self._fast)
+            task.state = RUNNING
+            due.append(task)
+        return due
+
+    def _run_one(self, task: Task, dry_run: bool) -> bool:
+        """执行任务 handler, 捕获异常; 返回 REQUEUE(周期继续)或 FINISHED(消亡/移交子任务)"""
+        try:
+            if task.handler:
+                return bool(task.handler(task, dry_run))
+        except Exception as e:
+            logger.error(f"任务[{task.log_tag}] | 执行异常: {e}", exc_info=True)
+        return REQUEUE
+
+    def _requeue(self, task: Task, now: float):
+        """周期任务收尾: 默认重置断点后按任务内置 interval 重新入队(下一轮从头执行)"""
+        task.resume_index = None
+        task.run_count += 1
+        task.state = PENDING
+        task.next_run = now + task.interval
+        heapq.heappush(self._fast, task)

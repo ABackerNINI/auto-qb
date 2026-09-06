@@ -167,26 +167,25 @@ class Rule:
     def process(self, ctx: RuleContext):
         """
         处理一个种子. 返回 (handled, stop)
-        handled: 规则是否执行了动作
+        handled: 规则是否执行了动作(任一非 skip 结果, 含失败)
         stop:    是否停止后续规则(stop_following_rules_if)
 
-        断点续跑(resume 语义): 任务队列驱动的规则任务在动作返回 pending(如 full-checking
-        已提交校验)时记录 resume_index 并中断; 校验完成后任务被 resume 重新入队, 下次执行
-        检测到 resume_index -> 跳过条件评估与去重, 从断点动作继续执行后续动作。
+        断点契约(与 taskqueue 的默认重置语义配合):
+        - 读:   进入时只读 task.resume_index 判定续跑(不清零)
+        - 写:   动作返回 pending 时记录断点并中断, 由校验轮询子任务按结果重新入队
+        - 清:   正常完成时清零; 异常路径不清零 —— 由 taskqueue 收尾默认重置兜底(下轮从头)
         """
         if ctx.torrent is None:
             return False, False
 
         ctx.rule_name = self.name
-        task = getattr(ctx, "task", None)
+        task = ctx.task
 
-        # 断点: 一次性读取并清零; 有断点 -> 续跑(跳过条件评估与去重)
-        resume_index = None
-        if task is not None and getattr(task, "resume_index", None) is not None:
-            resume_index = task.resume_index
-            task.resume_index = None
+        # 断点只读: 有断点 -> 续跑(跳过条件评估与去重)
+        resume_index = task.resume_index if task is not None else None
+        fresh = resume_index is None
 
-        if resume_index is None:
+        if fresh:
             try:
                 matched = self.matches(ctx)
             except Exception as e:
@@ -199,52 +198,60 @@ class Rule:
                 return False, False
 
         log_repr = ctx.torrent.log_repr
+        start = 0 if fresh else resume_index
+        # 断点前动作已成功(校验通过才续跑): 续跑轮 ok_action 起点 True; 全新执行从 False 累计
+        ok_action = not fresh
+        executed = False  # 本轮执行了非 skip 动作(ok/failed), 决定 handled
         failed = False
-        # 断点前动作已成功(校验通过才续跑): ok_action 起点 True; 全新执行从 False 累计
-        ok_action = resume_index is not None
         result = None
         for i, action in enumerate(self.actions):
-            if resume_index is not None and i < resume_index:
+            if i < start:
                 continue  # 跳过断点前已执行的动作
             try:
                 result = action.execute(ctx)
             except Exception as e:
                 result = ActionResult.fail(f"异常: {e}")
             if result.is_pending:
-                # 异步等待: 记录断点并中断本规则, 由外部 resume/reschedule 决定恢复
+                # 异步等待: 记录断点并中断本规则, 由轮询子任务按结果重新入队恢复
                 if task is not None:
                     task.resume_index = i + 1
                     logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
                     return True, True  # handled=True(动作已提交), stop=True(中断后续规则)
                 ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
+                executed = True
                 logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
                 continue
             if result.is_ok:
                 ok_action = True
-            if result.is_failed:
-                logger.warning(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
+                executed = True
+                logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
+            elif result.is_failed:
+                executed = True
                 failed = True
+                logger.warning(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
                 if not action.ignore_error:
                     break
-            elif result.is_ok:
-                logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
             elif result.is_skipped:
                 logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
+
+        # 正常完成(含续跑完成): 消费断点(异常路径不清, 由 taskqueue 收尾默认重置兜底)
+        if task is not None:
+            task.resume_index = None
 
         if self.actions and not ctx.dry_run and ok_action:
             self.manager.record_execution(self.name, ctx.hash)
 
-        stop = False
-        if self.stop_if in ("conditions-met", "always"):
-            stop = True
-        elif self.stop_if == "action-failed" and failed:
-            stop = True
-        elif self.stop_if == "all-actions-succeed" and not failed:
-            stop = True
+        return executed or ok_action, self._should_stop(failed)
 
-        if result is None:
-            return ok_action, stop  # 空循环(续跑且断点后无动作): 断点前动作已成功
-        return not result.is_skipped, stop
+    def _should_stop(self, failed: bool) -> bool:
+        """stop_following_rules_if 判定"""
+        if self.stop_if in ("conditions-met", "always"):
+            return True
+        if self.stop_if == "action-failed" and failed:
+            return True
+        if self.stop_if == "all-actions-succeed" and not failed:
+            return True
+        return False
 
     def _dedup_allowed(self, ctx: RuleContext) -> bool:
         """execute_once/cooldown 去重判断"""

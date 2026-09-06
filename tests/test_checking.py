@@ -43,7 +43,7 @@
 - test_checking_full_checking_resume_continues_actions: 断点续跑: 校验成功后执行断点后的剩余动作
 - test_checking_full_checking_resume_skips_conditions: 断点续跑跳过条件评估(条件变化不影响续跑)
 - test_checking_full_checking_resume_skips_dedup: 断点续跑跳过去重(execute_once=once 不拦截续跑)
-- test_checking_full_checking_defer_fail_retry: 任务队列驱动: 校验未通过 -> 触发任务 reschedule 重试
+- test_checking_full_checking_fail_retry: 任务队列驱动: 校验未通过 -> 子任务 reset+重新入队 origin 重试
 - test_checking_group_full_checking_serialized: 组内校验串行(决策链 1.5): B 让位等待, A 成功晋升参考后 B 重走决策链走跳检
 - test_checking_group_skip_on_same_data_fail: 组内校验失败推断(决策链 1.6): 文件映射一致 -> B 不再校验
 - test_checking_group_no_infer_when_sizes_differ: 组内文件映射不一致 -> 不推断, B 照常校验
@@ -60,7 +60,7 @@ from unittest.mock import patch
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import _recheck_fail_count
-from auto_qb.taskqueue import DEFERRED, PENDING, TaskQueue
+from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
 
@@ -145,14 +145,11 @@ def make_mgr(cfg, with_tq=False):
 
 
 def run_queue(mgr, now=None, dry_run=False):
-    """驱动快速队列一轮: 弹出所有到期任务并执行(校验轮询任务状态机推进)
+    """驱动快速队列一轮: 执行所有到期任务并收尾(校验轮询任务状态机推进)
     now: 显式时间点(校验任务 interval=2s, 多轮推进需递增 now)
     """
     now = time.time() if now is None else now
-    due = mgr.task_queue.due(now)
-    if due:
-        mgr._execute_due(due, dry_run, now)
-    return due
+    return mgr.task_queue.run_due(dry_run, now=now)
 
 
 def process_rule(mgr, client, tor, dry_run=False):
@@ -910,8 +907,8 @@ def test_checking_full_checking_send_error():
     assert mgr.task_queue._active_checks == set(), "消亡应释放校验标记"
 
 
-def test_checking_full_checking_defer_resume():
-    """任务队列驱动: 触发任务让位(pending+断点) -> 校验成功 -> resume 续跑(记录执行历史) """
+def test_checking_full_checking_pending_resume():
+    """任务队列驱动: 提交后 pending(断点, 不重入队) -> 校验成功 -> 子任务重新入队 origin 续跑(记录执行历史) """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
@@ -923,24 +920,22 @@ def test_checking_full_checking_defer_resume():
     origin = mgr._create_rule_task(rule, "HASH123", None)
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
-    # 首次执行: checking 提交 -> pending 中断 + 让位 + 记录断点
+    # 首次执行: checking 提交 -> pending 中断 + 记录断点 + 不重入队(由轮询子任务负责恢复)
     run_queue(mgr, t0)
-    assert origin.state == DEFERRED, "触发任务应让位"
-    assert origin in mgr.task_queue._deferred, "让位任务应挂起"
     assert origin.resume_index == 1, "应记录断点(下一个动作索引)"
+    assert origin not in mgr.task_queue._fast, "pending 后规则任务不重入队"
     assert ("recheck", None) in client.calls, "提交时即应同步发送 recheck"
-    # 校验中 -> 轮询续延, 触发任务保持让位, 断点保留
+    # 校验中 -> 轮询续延, 规则任务保持不在队列, 断点保留
     seed_store(mgr, [make_target(state="checkingDL")])
     run_queue(mgr, t0 + 0.5)
-    assert origin.state == DEFERRED, "校验中触发任务保持让位"
     assert origin.resume_index == 1, "校验中断点保留"
-    # 校验完成(progress=1.0) -> resume: 完成处理(晋升) + 重新入队(断点保留)
+    assert client.calls.count(("recheck", None)) == 1, "校验中不重复提交"
+    # 校验完成(progress=1.0) -> 子任务 on_success + 重新入队 origin(断点保留)
     seed_store(mgr, [make_target(state="pausedUP", progress=1.0)])
     run_queue(mgr, t0 + 2.5)
-    assert origin.state == PENDING, "成功后应 resume 重新入队"
-    assert origin not in mgr.task_queue._deferred, "恢复后应移出让位集合"
+    assert origin.state == PENDING, "成功后应由子任务重新入队"
     assert mgr.store.verified_references == {"HASH123"}, "成功应晋升参考"
-    assert origin.resume_index == 1, "resume 应保留断点(续跑语义)"
+    assert origin.resume_index == 1, "重新入队应保留断点(续跑语义)"
     assert not mgr.state.get("exec_history"), "执行历史应由续跑完成时记录"
     # 续跑: origin 到期 -> 跳过条件/去重 -> 从断点继续(单动作规则: 空循环) -> 记录执行
     run_queue(mgr, t0 + 60.5)
@@ -962,7 +957,7 @@ def test_checking_full_checking_resume_continues_actions():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
-    assert origin.state == DEFERRED and origin.resume_index == 1, "checking pending 应中断并记录断点"
+    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "checking pending 应中断并记录断点(不重入队)"
     assert ("recheck", None) in client.calls, "应发送 recheck"
     assert ("start", None) not in client.calls, "pending 中断, 后续动作未执行"
     # 校验完成 -> resume
@@ -994,7 +989,7 @@ def test_checking_full_checking_resume_skips_conditions():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
-    assert origin.state == DEFERRED and origin.resume_index == 1
+    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast
     # 校验完成后条件不再匹配(标签已变), 但续跑应跳过条件评估仍执行 start
     seed_store(mgr, [make_target(state="checkingDL")])
     run_queue(mgr, t0 + 0.5)
@@ -1024,7 +1019,7 @@ def test_checking_full_checking_resume_skips_dedup():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
-    assert origin.state == DEFERRED and origin.resume_index == 1, "首次执行 dedup 通过 -> pending"
+    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "首次执行 dedup 通过 -> pending"
     # 校验完成 -> resume
     seed_store(mgr, [make_target(state="checkingDL")])
     run_queue(mgr, t0 + 0.5)
@@ -1038,8 +1033,8 @@ def test_checking_full_checking_resume_skips_dedup():
     assert origin.resume_index is None
 
 
-def test_checking_full_checking_defer_fail_retry():
-    """任务队列驱动: 校验未通过(progress<1) -> 清断点 + reschedule 重新入队重试(重走决策链) """
+def test_checking_full_checking_fail_retry():
+    """任务队列驱动: 校验未通过(progress<1) -> 子任务 origin.reset() + 重新入队(重走决策链) """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
@@ -1052,19 +1047,17 @@ def test_checking_full_checking_defer_fail_retry():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
-    assert origin.state == DEFERRED and origin.resume_index == 1, "首次执行应让位并记录断点"
-    # 校验完成但 progress<1(文件不完整) -> 失败 -> 清断点 + reschedule
+    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "首次执行应记录断点且不重入队"
+    # 校验完成但 progress<1(文件不完整) -> 失败 -> 子任务 reset + 重新入队
     seed_store(mgr, [make_target(state="pausedDL", progress=0.5)])
     run_queue(mgr, t0 + 2.5)
-    assert origin.state == PENDING, "失败后应 reschedule 重新入队重试"
-    assert origin not in mgr.task_queue._deferred, "重试后应移出让位集合"
-    assert origin.resume_index is None, "失败应清断点(重走完整决策链)"
+    assert origin.state == PENDING, "失败后应由子任务重新入队重试"
+    assert origin.resume_index is None, "失败应重置断点(重走完整决策链)"
     assert mgr.store.verified_references == set(), "失败不应晋升参考"
     assert not mgr.state.get("exec_history"), "失败不应记录执行历史"
-    # 重走决策链: origin 到期 -> 重新 full-checking(再次让位 + 再发 recheck)
+    # 重走决策链: origin 到期 -> 重新 full-checking(再次 pending + 再发 recheck)
     run_queue(mgr, t0 + 60.5)
-    assert origin.state == DEFERRED, "重走决策链应再次校验(再次让位)"
-    assert origin.resume_index == 1, "重新校验应再次记录断点"
+    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "重走决策链应再次校验(再次记录断点)"
 
 
 # ============================================================
@@ -1095,11 +1088,11 @@ def test_checking_group_full_checking_serialized():
     assert ("recheck", None) in client.calls, "A 应提交 recheck"
     assert client.calls.count(("recheck", None)) == 1, f"B 不应提交 recheck: {client.calls}"
     assert mgr.task_queue.active_check_hashes() == {"HA"}, "A 应登记在途(等待任务不占用登记)"
-    assert ta.state == DEFERRED and tb.state == DEFERRED, "A/B 均应让位"
-    assert tb.resume_index == 1, "B 应记录断点(pending)"
+    assert ta.resume_index == 1 and tb.resume_index == 1, "A/B 均应记录断点"
+    assert ta not in mgr.task_queue._fast and tb not in mgr.task_queue._fast, "A/B 均不重入队(等待恢复)"
     # HA 校验中: A 轮询续延, B 等待任务续等(间距放大避开真实时钟重排的边界)
     run_queue(mgr, t0 + 10.0)
-    assert tb.state == DEFERRED, "HA 校验中 B 保持等待"
+    assert tb.resume_index == 1, "HA 校验中 B 保持推迟"
     # HA 校验成功 -> 晋升参考; B 等待任务发现组内已清 -> resume B 重走决策链
     seed_store(mgr, [make_target(hash="HA", state="pausedUP", progress=1.0), b])
     run_queue(mgr, t0 + 20.0)
@@ -1135,7 +1128,7 @@ def test_checking_group_skip_on_same_data_fail():
     mgr.task_queue.add_task(tb, time.time())
     run_queue(mgr)
     assert client.calls.count(("recheck", None)) == 0, f"同数据失败推断: B 不应提交 recheck: {client.calls}"
-    assert tb.state == PENDING and tb.resume_index is None, "B 应正常完成(非让位)"
+    assert tb.state == PENDING and tb.resume_index is None, "B 应正常完成(周期重入队)"
 
 
 def test_checking_group_no_infer_when_sizes_differ():
@@ -1158,7 +1151,7 @@ def test_checking_group_no_infer_when_sizes_differ():
     run_queue(mgr)
     assert ("recheck", None) in client.calls, "映射不一致不应推断, B 照常校验"
     assert mgr.task_queue.active_check_hashes() == {"HB"}, "B 提交后应登记在途"
-    assert tb.state == DEFERRED, "B 应让位等待校验结果"
+    assert tb.resume_index == 1 and tb not in mgr.task_queue._fast, "B 提交后推迟, 由轮询子任务恢复"
 
 
 def test_checking_group_wait_external_entry_skip():
@@ -1192,10 +1185,10 @@ def test_checking_group_wait_timeout_force_resume():
     t0 = time.time()
     mgr.task_queue.add_task(tb, t0)
     run_queue(mgr, t0)
-    assert tb.state == DEFERRED, "B 应让位等待"
+    assert tb.resume_index == 1 and tb not in mgr.task_queue._fast, "B 应推迟等待"
     with patch("auto_qb.rules.actions.full_checking.GROUP_CHECK_WAIT_LIMIT", 0.0):
         seed_store(mgr, [a, b])  # HA 持续校验中
         run_queue(mgr, t0 + 60.5)  # 等待任务超时 -> 强制 resume -> B 重走决策链 -> 仍在校验 -> 再次让位
-    assert tb.state == DEFERRED, "超时强制恢复后应重走决策链并再次让位"
-    assert tb.resume_index == 1, "再次让位应保留断点"
+    assert tb.resume_index == 1 and tb not in mgr.task_queue._fast, "超时强制恢复后应重走决策链并再次推迟"
+    assert tb.resume_index == 1, "再次推迟应记录断点"
     assert client.calls.count(("recheck", None)) == 0, f"B 全程不应提交 recheck: {client.calls}"

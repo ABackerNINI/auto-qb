@@ -14,7 +14,7 @@
 - test_resolve_refs_exact_and_prefix: 引用精确与前缀解析
 - test_tracker_rule_refs: tracker rules 引用 -> _rules_for_torrent 精确绑定单规则
 - test_rule_task_executes_only_refs: 规则任务只执行被引用的规则(不再全量执行)
-- test_handle_rule_missing_torrent: 种子不存在 -> 任务被队列移除(remove_torrent 清理)
+- test_handle_rule_missing_torrent: 种子不存在 -> 返回 False 任务消亡(清理由 run_due 自然承担)
 - test_handle_rule_process_ok: _handle_rule 正常执行动作
 - test_handle_rule_process_error: 规则处理异常被捕获 -> True
 - test_load_rules_skips_non_dict_group: 非 dict 规则组 -> 跳过
@@ -32,7 +32,7 @@ from unittest import mock
 import pytest
 
 from auto_qb.rules.base import Rule
-from auto_qb.taskqueue import Task
+from auto_qb.taskqueue import FINISHED, REQUEUE, Task
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
 
@@ -164,23 +164,25 @@ def test_rule_task_executes_only_refs():
 
 
 def test_handle_rule_missing_torrent():
-    """store 无该种子: _handle_rule 不崩溃(异常被吞返回 True); 任务清理由 remove_torrent 承担"""
+    """store 无该种子: _handle_rule 返回 False 任务消亡(清理由 run_due 自然承担, 不崩溃)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
         task = Task("rule", "t", hash="H1", interval=0)
-        # 真实规则: ctx.torrent=None -> 条件匹配异常被 Rule.process 吞掉 -> (False, False)
         real = Rule("t", {"conditions": [{"state": "is_complete&is_uploading"}], "actions": []}, mgr)
-        assert mgr._handle_rule(real, task, dry_run=False) is True
+        assert mgr._handle_rule(real, task, dry_run=False) is False
         assert client.calls == [], "种子不存在不应执行动作"
-        # 任务清理: 种子删除 -> remove_torrent 移除该种子全部任务(含规则任务)
+        # 任务清理: 种子删除后任务由 run_due 到期执行时自然消亡(handler 返回 False), 不再显式移除
         tq = mgr.task_queue
-        tq.add_task(Task("rule", "r1", hash="H1"))
-        tq.add_task(Task("rule", "r2", hash="H1"))
-        tq.add_task(Task("rule", "r3", hash="H2"))
-        tq.remove_torrent("H1")
-        assert [t.hash for t in tq._fast] == ["H2"], "删除种子应移除其全部任务"
+        r1 = Task("rule", "r1", hash="H1", interval=60, handler=lambda t, d: FINISHED)
+        r2 = Task("rule", "r2", hash="H1", interval=60, handler=lambda t, d: FINISHED)
+        r3 = Task("rule", "r3", hash="H2", interval=60, handler=lambda t, d: REQUEUE)
+        tq.add_task(r1, now=1000.0)
+        tq.add_task(r2, now=1000.0)
+        tq.add_task(r3, now=1000.0)
+        assert tq.run_due(False, now=1000.0) == 3, "删除种子的任务到期执行一轮"
+        assert [t.hash for t in tq._fast] == ["H2"], "H1 任务应自然消亡, H2 保留"
 
 
 def test_handle_rule_process_ok():

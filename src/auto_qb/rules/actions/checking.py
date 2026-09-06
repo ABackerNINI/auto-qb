@@ -34,11 +34,11 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
       4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
          -> 确认 -> auto_start(无参考时警告高风险)
-         full-checking: 同步发送 recheck, 触发任务让位(defer)并返回 pending(规则断点), 创建校验
-         结果轮询任务(快速队列, interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功
-         (progress>=1) -> 触发任务 resume(触发 resume_cb: 晋升 verified_references(仅内存) +
-         auto_start; resume_index 保留 -> 规则续跑执行后续动作, 由 Rule.process 统一记录执行);
-         失败/删除/异常 -> 清断点 + reschedule 重新入队重走决策链(再次校验)
+         full-checking: 同步发送 recheck, 返回 pending(规则断点, 本轮不重入队), 创建校验
+         结果轮询子任务(快速队列, interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功
+         (progress>=1) -> on_success()(晋升 verified_references(仅内存) + auto_start) + 重新
+         入队 origin(resume_index 保留 -> 规则续跑执行后续动作, 由 Rule.process 统一记录执行);
+         失败/异常 -> origin.reset() + 重新入队(重走决策链); 种子删除 -> 仅子任务消亡(规则任务终了)
     """
     name = "checking"
 

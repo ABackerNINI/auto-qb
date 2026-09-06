@@ -18,7 +18,7 @@ from datetime import date
 from typing import List, Optional, Tuple
 
 from .. import curves, utils
-from ..taskqueue import Task
+from ..taskqueue import REQUEUE, Task
 
 logger = logging.getLogger(__name__)
 
@@ -61,12 +61,11 @@ def _fmt_global_limit(kib: Optional[int]) -> str:
 
 class SpeedCurveMixin:
     """全局限速曲线(全局任务): Traffic Monitor 数据 -> qB 全局速度限制"""
-
     def _handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
         conf = self.config.global_speed_limit_curve
         if conf is None:  # 未启用该功能
-            return True
+            return REQUEUE
 
         # 1. 读取数据源
         try:
@@ -74,11 +73,11 @@ class SpeedCurveMixin:
                 text = f.read()
         except OSError as e:
             logger.warning(f"限速曲线 | 读取流量数据失败({conf.dat_path}): {e}, 本轮不动")
-            return True
+            return REQUEUE
         rows, bad = curves.parse_history_dat(text)
         if not rows:
             logger.warning(f"限速曲线 | 流量数据无有效记录({conf.dat_path}), 本轮不动")
-            return True
+            return REQUEUE
         if bad:
             logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
 
@@ -100,7 +99,7 @@ class SpeedCurveMixin:
 
         if dry_run:
             self._record_curve_state(today, upload_kib, download_kib, dry_run=True)
-            return True
+            return REQUEUE
 
         # 4. 读当前全局限速 -> 手动保护/幂等 -> 有变化才写
         current = self.api.get_global_speed_limits()
@@ -131,7 +130,7 @@ class SpeedCurveMixin:
             logger.info(f"限速曲线 | 设置全局限速: {applied}")
 
         self._record_curve_state(today, upload_kib, download_kib, dry_run=False)
-        return True
+        return REQUEUE
 
     def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
         """记录当日曲线计算结果到 state(供调试; 落盘由程序退出时统一 save_state)"""

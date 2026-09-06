@@ -264,36 +264,19 @@ def test_rule_interval():
             tq.add_task(mgr._create_rule_task(r, tor.hash, mgr.config.trackers["HHan"]), now=now)
 
         # 第 1 轮: 所有规则任务初始立即到期, 均执行
-        due = tq.due(now)
-        assert {t.name for t in due} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}, \
-            f"第 1 轮应全部到期: {[t.name for t in due]}"
-        for t in due:
-            keep = t.handler(t, False)
-            assert keep, f"任务不应消亡: {t.name}"
+        assert tq.run_due(False, now=now) == 2, "第 1 轮应全部到期"
         assert ("stop", None) in client.calls, f"第 1 轮应 stop: {client.calls}"
-        for t in due:
-            tq.reschedule(t, now)
 
         # 第 2 轮(1s 后): add_site_tag(interval 归一化 1s)到期, stop_low_ratio(60s)未到期
         client.calls.clear()
-        due2 = tq.due(now + 1)
-        assert [t.name
-                for t in due2] == ["example_rules.add_site_tag"], f"第 2 轮应只到期 add_site_tag: {[t.name for t in due2]}"
-        for t in due2:
-            t.handler(t, False)
+        assert tq.run_due(False, now=now + 1) == 1, "第 2 轮应只到期 add_site_tag"
         assert ("stop", None) not in client.calls, f"interval 未到期不应再次 stop: {client.calls}"
         assert client.tags == {"HHan"}, f"add_site_tag 应仍执行: {client.tags}"
-        for t in due2:
-            tq.reschedule(t, now + 1)
 
         # 60s 后: stop_low_ratio 到期再次执行
         # (第 1 轮 stop 后 store 快照同步为 pausedUP -> stop 幂等; 模拟用户重新开始种子,
         #  直接改种子对象状态即同步快照(store 内为同一对象身份))
         tor.state = "uploading"
         client.calls.clear()
-        due3 = tq.due(now + 60)
-        assert "example_rules.stop_low_ratio" in [t.name for t in due3], \
-            f"stop_low_ratio 应到期: {[t.name for t in due3]}"
-        for t in due3:
-            t.handler(t, False)
+        assert tq.run_due(False, now=now + 60) >= 1, "stop_low_ratio 应到期"
         assert ("stop", None) in client.calls, f"60s 后应再次 stop: {client.calls}"

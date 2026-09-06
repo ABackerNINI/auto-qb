@@ -4,12 +4,8 @@
 - test_create_global_tasks: 按配置创建 delete_tags 等全局任务
 - test_connect_failure: 连接失败返回 False 且 client 为 None
 - test_connect_success: 连接成功返回 True 并登录
-- test_safe_no_handler: 无 handler 的任务 -> True
-- test_safe_handler_ok: handler 返回 False -> 任务消亡
-- test_safe_handler_exception: handler 抛异常被捕获 -> True
-- test_execute_due_reschedule: handler 成功 -> 任务 reschedule
-- test_execute_due_drop: handler 返回 False -> 不 reschedule
-- test_execute_due_deferred: handler 让位(defer) -> 不 reschedule 不消亡, 保持 DEFERRED
+- test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
+- test_run_due_dies: handler 返回 False -> 不重入(消亡)
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
 - test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
 - test_tick_full_flow: 快速队列到期任务执行全流程(含 check 轮询任务首轮发送)
@@ -33,7 +29,7 @@ import tempfile
 import time
 from unittest import mock
 
-from auto_qb.taskqueue import DEFERRED, PENDING, Task, TaskQueue
+from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 import pytest
 
 from auto_qb.errors import AutoQbError
@@ -79,66 +75,27 @@ def test_connect_success():
         assert mgr.client is fake
 
 
-def test_safe_no_handler():
-    """_safe: 无 handler -> True"""
+def test_run_due_requeues():
+    """run_due: handler 返回 True -> 收尾按 interval 重入队(run_count+1, 回 PENDING)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        task = Task("rule", "t", interval=0)
-        assert mgr._safe(task, dry_run=False) is True
-
-
-def test_safe_handler_ok():
-    """_safe: handler 返回 False -> False(任务消亡)"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        task = Task("rule", "t", interval=0, handler=lambda t, d: False)
-        assert mgr._safe(task, dry_run=False) is False
-
-
-def test_safe_handler_exception():
-    """_safe: handler 抛异常 -> 捕获并返回 True"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-
-        def boom(t, d):
-            raise RuntimeError("boom")
-
-        task = Task("rule", "t", interval=0, handler=boom)
-        assert mgr._safe(task, dry_run=False) is True
-
-
-def test_execute_due_reschedule():
-    """_execute_due: handler 返回 True -> 任务 reschedule(run_count+1, 回 PENDING)"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        task = Task("rule", "t", interval=60, handler=lambda t, d: True)
+        task = Task("rule", "t", interval=60, handler=lambda t, d: REQUEUE)
         now = time.time()
-        mgr._execute_due([task], dry_run=False, now=now)
+        mgr.task_queue.add_task(task, now=now)
+        assert mgr.task_queue.run_due(dry_run=False, now=now) == 1
         assert task.run_count == 1
         assert task.state == PENDING
 
 
-def test_execute_due_drop():
-    """_execute_due: handler 返回 False -> 不 reschedule(任务消亡)"""
+def test_run_due_dies():
+    """run_due: handler 返回 False -> 不重入(任务消亡)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        task = Task("rule", "t", interval=60, handler=lambda t, d: False)
+        task = Task("rule", "t", interval=60, handler=lambda t, d: FINISHED)
         now = time.time()
-        mgr._execute_due([task], dry_run=False, now=now)
-        assert task.run_count == 0, "消亡任务不应 reschedule"
-
-
-def test_execute_due_deferred():
-    """_execute_due: handler 让位(defer) -> 不 reschedule 不消亡, 状态保持 DEFERRED"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        task = Task("rule", "t", interval=60, handler=lambda t, d: mgr.task_queue.defer(t) or True)
-        now = time.time()
-        mgr._execute_due([task], dry_run=False, now=now)
-        assert task.state == DEFERRED, "让位任务状态应为 deferred"
-        assert task.run_count == 0, "让位任务不应 reschedule"
-        assert task not in mgr.task_queue._fast, "让位任务不应在队列中"
-        assert task in mgr.task_queue._deferred, "让位任务应挂起到 _deferred"
+        mgr.task_queue.add_task(task, now=now)
+        assert mgr.task_queue.run_due(dry_run=False, now=now) == 1
+        assert task.run_count == 0, "消亡任务不应重入队"
 
 
 def test_run_connect_failure():
@@ -176,13 +133,13 @@ def test_tick_full_flow():
 
         def check_poll(t, d):
             check_calls.append(1)
-            return False
+            return FINISHED
 
-        mgr.task_queue.add_check_task(
+        mgr.task_queue.add_task(
             Task("check", "check-checking-result", hash="HASH123", interval=2.0, handler=check_poll)
         )
         # 常规到期任务
-        due_task = Task("rule", "t", interval=0, handler=lambda t, d: True)
+        due_task = Task("rule", "t", interval=0, handler=lambda t, d: REQUEUE)
         due_task.next_run = time.time() - 1
         mgr.task_queue._fast.append(due_task)
         mgr._refresh_torrents = mock.Mock()
@@ -272,7 +229,7 @@ def test_execute_due_respects_max():
         mgr.task_queue = TaskQueue()
         mgr.config.max_tasks_per_tick = 2
         for i in range(3):
-            t = Task("rule", f"t{i}", interval=60, handler=lambda t, d: True)
+            t = Task("rule", f"t{i}", interval=60, handler=lambda t, d: REQUEUE)
             mgr.task_queue.add_task(t)  # next_run=now, 全部到期
         mgr._refresh_torrents = mock.Mock()
         mgr._tick(dry_run=False)
@@ -282,15 +239,13 @@ def test_execute_due_respects_max():
         assert len(remaining) == 1, f"超额任务应留在队列: {remaining}"
 
 
-
-
 def test_tick_no_due_task_empty_queue():
     """任务队列为空: tick 刷新后无到期任务, 不执行任何任务"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()  # 无种子
         mgr._tick(dry_run=True)
-        assert mgr.task_queue.due(time.time(), max=10) == []
+        assert mgr.task_queue.run_due(time.time(), max_tasks=10) == 0
 
 
 def test_refresh_added_no_tracker_match_skips():
@@ -303,7 +258,7 @@ def test_refresh_added_no_tracker_match_skips():
         mgr.config.trackers = {}  # 无任何 tracker 配置
         mgr._refresh_torrents()
         assert client.calls == []
-        assert mgr.task_queue.due(time.time(), max=10) == []
+        assert mgr.task_queue.run_due(time.time(), max_tasks=10) == 0
 
 
 def test_refresh_schema_validation_missing_raises():

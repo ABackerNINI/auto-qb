@@ -1,39 +1,37 @@
-"""test_taskqueue 测试计划: 单任务队列
+"""test_taskqueue 测试计划: 单任务队列(生命周期只有 add_task/run_due 两个动词)
 
 ## 测试计划(每个测试函数一条)
-- test_task_queue_schedule: 按 next_run 时间调度到期任务
+- test_task_queue_schedule: 到期执行/interval<=0 归一化/按 interval 重入队
 - test_task_ordering: 堆排序按到期时间出队
 - test_task_repr: Task 字符串表示
-- test_task_state_transitions: 任务状态迁移(pending -> running -> pending)
-- test_add_tasks: add_tasks 批量入队立即到期
-- test_add_check_task_dedup: 校验轮询任务去重
-- test_defer_resume: 让位/恢复(resume)语义: defer 不入队 -> resume 同一实例重新入队
-- test_defer_resume_cb: resume 触发一次性完成处理(resume_cb)
-- test_task_died_releases_check: 任务消亡释放校验标记
-- test_remove_torrent_clears_active_check: 删除种子清理队列与校验标记
-- test_remove_torrent_clears_deferred: 删除种子清理让位任务
+- test_task_state_transitions: 状态迁移(pending -> running -> pending)
+- test_add_tasks: 批量入队立即到期
+- test_add_check_dedup: check 任务自动登记在途, 重复提交返回 False, 消亡后可再提交
+- test_run_due_requeues_on_true: handler True -> 按 interval 重入队(run_count 累加)
+- test_run_due_dies_on_false: handler False -> 消亡不重入, check 在途登记释放
+- test_run_due_exception_caught: handler 异常被捕获, 视为 REQUEUE 重入队
+- test_add_task_resets_by_default: add_task 默认重置断点(下次从头执行)
+- test_add_task_keep_progress: keep_progress=True 显式保存进度(断点保留续跑)
+- test_run_due_requeue_resets: 周期收尾重入队默认重置(不携带上一轮断点)
+- test_reset_clears_breakpoint: Task.reset() 显式重置执行位置
+- test_deleted_torrent_tasks_die_naturally: 已删种子任务到期自然消亡并释放在途登记
 """
 import time
 
-from auto_qb.taskqueue import DEFERRED, PENDING, RUNNING, Task, TaskQueue
+from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, RUNNING, Task, TaskQueue
 
 
 def test_task_queue_schedule():
-    """队列: 到期弹出 / interval<=0 归一化 / reschedule 按 interval 重入 / remove_torrent"""
+    """run_due: 到期执行 / interval<=0 归一化 / 按 interval 重入队"""
     tq = TaskQueue()
     now = time.time()
     tq.add_task(Task("rule", "every_tick", interval=0), now=now)
     tq.add_task(Task("rule", "interval60", interval=60), now=now)
-    due = tq.due(now)
-    assert {t.name for t in due} == {"every_tick", "interval60"}, f"due={[t.name for t in due]}"
-    assert [t for t in due if t.name == "every_tick"][0].interval == 1, "interval<=0 应归一化为 1"
-    for t in due:
-        tq.reschedule(t, now)
-    assert [t.name for t in tq.due(now + 59)] == ["every_tick"], "59s 时只有 every_tick 到期"
-    assert [t.name for t in tq.due(now + 60)] == ["interval60"], "60s 时 interval60 到期"
-    tq.add_task(Task("torrent", "maintenance", hash="H1", interval=60), now=now)
-    tq.remove_torrent("H1")
-    assert tq.due(now + 61) == [], "remove_torrent 后任务应被移除"
+    assert tq.run_due(now=now) == 2, "两个任务立即到期"
+    every = [t for t in tq._fast if t.name == "every_tick"][0]
+    assert every.interval == 1, "interval<=0 应归一化为 1"
+    assert tq.run_due(now=now + 59) == 1, "59s 时只有 every_tick 到期"
+    assert tq.run_due(now=now + 60) == 2, "60s 时两者都到期"
 
 
 def test_task_ordering():
@@ -54,114 +52,137 @@ def test_task_repr():
 
 
 def test_task_state_transitions():
-    """任务状态流转: pending -> running(due) -> pending(reschedule)"""
+    """状态流转: pending -> running(run_due 执行中) -> pending(收尾重入队)"""
     tq = TaskQueue()
     now = time.time()
     t = Task("rule", "x", interval=60)
     assert t.state == PENDING
     tq.add_task(t, now=now)
-    due = tq.due(now)
-    assert due[0].state == RUNNING
-    tq.reschedule(due[0], now)
-    assert due[0].state == PENDING
+    seen = []
+    t.handler = lambda task, d: seen.append(task.state) or REQUEUE
+    tq.run_due(now=now)
+    assert seen == [RUNNING], "执行时状态应为 running"
+    assert t.state == PENDING, "收尾重入队后回 pending"
 
 
 def test_add_tasks():
-    """add_tasks: 批量入队, 全部立即到期"""
+    """add_tasks: 批量入队, 全部立即到期执行"""
     tq = TaskQueue()
     now = time.time()
-    tq.add_tasks([Task("rule", "a", interval=0), Task("rule", "b", interval=60)], now=now)
-    assert {t.name for t in tq.due(now)} == {"a", "b"}
+    ran = []
+    tq.add_tasks(
+        [
+            Task("rule", "a", interval=0, handler=lambda t, d: ran.append("a") or REQUEUE),
+            Task("rule", "b", interval=60, handler=lambda t, d: ran.append("b") or REQUEUE),
+        ],
+        now=now,
+    )
+    assert tq.run_due(now=now) == 2
+    assert ran == ["a", "b"]
 
 
-def test_add_check_task_dedup():
-    """add_check_task: 同一种子已有在途校验则忽略(返回 False); 消亡后可再次提交"""
+def test_add_check_dedup():
+    """add_task: check 任务自动登记在途, 同种子重复提交返回 False; 消亡后可再次提交"""
     tq = TaskQueue()
     now = time.time()
-
-    def poll(t, d):
-        return False
-
-    assert tq.add_check_task(Task("check", "check-checking-result", hash="H1", handler=poll), now=now) is True
-    assert tq.add_check_task(Task("check", "check-checking-result", hash="H1", handler=poll), now=now) is False, \
-        "同 hash 重复提交应被忽略"
-    assert len(tq._fast) == 1, "重复提交不应重复入队"
-    # 任务执行后消亡 -> 释放标记 -> 可再次提交
-    due = tq.due(now)
-    tq.task_died(due[0])
-    assert tq.add_check_task(Task("check", "check-checking-result", hash="H1", handler=poll), now=now) is True, \
+    assert tq.add_task(Task("check", "c", hash="H1", handler=lambda t, d: FINISHED), now=now) is True
+    assert tq.add_task(Task("check", "c", hash="H1", handler=lambda t, d: FINISHED), now=now) is False, \
+        "同 hash 重复提交应被丢弃"
+    assert tq.active_check_hashes() == {"H1"}
+    assert tq.run_due(now=now) == 1, "仅首次提交的任务在队列中"
+    assert tq.active_check_hashes() == set(), "handler False 消亡应释放在途登记"
+    assert tq.add_task(Task("check", "c", hash="H1", handler=lambda t, d: FINISHED), now=now) is True, \
         "消亡后应可再次提交"
 
 
-def test_defer_resume():
-    """resume 语义: defer 让位(不入队不消亡) -> resume 恢复(同一实例重新入队, 跨轮保留) """
+def test_run_due_requeues_on_true():
+    """handler True -> 按 interval 重入队, run_count 累加"""
     tq = TaskQueue()
     now = time.time()
-    t = Task("rule", "x", hash="H1", interval=2.0)
+    runs = []
+    t = Task("rule", "x", hash="H1", interval=60, handler=lambda task, d: runs.append(1) or REQUEUE)
     tq.add_task(t, now=now)
-    due = tq.due(now)
-    assert due[0] is t, "due 弹出的是同一实例"
-    tq.defer(t)
-    assert t.state == DEFERRED, "让位后状态应为 deferred"
-    assert t in tq._deferred, "让位任务应挂起到 _deferred"
-    assert tq.due(now + 100) == [], "让位任务不入队, 不应到期"
-    tq.resume(t, now)
-    assert t.state == PENDING, "恢复后应重新入队"
-    assert t not in tq._deferred, "恢复后应移出让位集合"
-    again = tq.due(now + 2.0)
-    assert again == [t], "恢复应复用同一实例"
-    assert again[0].run_count == 1, "run_count 应跨轮累加"
+    assert tq.run_due(now=now) == 1 and runs == [1]
+    assert t.run_count == 1, "重入队应累加 run_count"
+    assert tq.run_due(now=now + 59) == 0, "未到期不执行"
+    assert tq.run_due(now=now + 60) == 1, "interval 到期再执行"
+    assert t.run_count == 2
 
 
-def test_defer_resume_cb():
-    """resume: 触发 resume_cb(一次性完成处理, 清空不重复触发)"""
+def test_run_due_dies_on_false():
+    """handler False -> 消亡不重入; check 在途登记释放; 非 check 任务消亡无副作用"""
     tq = TaskQueue()
     now = time.time()
-    fired = []
-    t = Task("rule", "x", hash="H1", interval=2.0)
+    t = Task("check", "c", hash="H1", interval=60, handler=lambda task, d: FINISHED)
     tq.add_task(t, now=now)
-    tq.defer(tq.due(now)[0])
-    t.resume_cb = lambda: fired.append(1)
-    tq.resume(t, now)
-    assert fired == [1], "resume 应触发 resume_cb"
-    # 再次让位+恢复: resume_cb 已清空, 不重复触发
-    tq.defer(tq.due(now + 2.0)[0])
-    tq.resume(t, now)
-    assert fired == [1], "resume_cb 一次性, 不应重复触发"
+    assert tq.active_check_hashes() == {"H1"}
+    assert tq.run_due(now=now) == 1
+    assert tq.active_check_hashes() == set(), "消亡应释放在途登记"
+    assert tq.run_due(now=now + 60) == 0, "消亡任务不应重入"
+    tq.add_task(Task("rule", "r", hash="H9", interval=60, handler=lambda task, d: FINISHED), now=now)
+    assert tq.run_due(now=now) == 1
+    assert tq.active_check_hashes() == set(), "非 check 任务消亡不应有副作用"
 
 
-def test_task_died_releases_check():
-    """task_died: check 任务消亡释放在途标记; 非 check 任务无副作用"""
+def test_run_due_exception_caught():
+    """handler 异常被捕获并视为 True 重入队(主循环不中断)"""
     tq = TaskQueue()
     now = time.time()
-    tq.add_check_task(Task("check", "check-checking-result", hash="H1"), now=now)
-    assert tq._active_checks == {"H1"}
-    due = tq.due(now)
-    tq.task_died(due[0])
-    assert tq._active_checks == set(), "check 任务消亡应释放标记"
-    tq.task_died(Task("rule", "x", hash="H9"))
-    assert tq._active_checks == set(), "非 check 任务不应有副作用"
+
+    def boom(task, d):
+        raise RuntimeError("boom")
+
+    t = Task("rule", "x", interval=60, handler=boom)
+    tq.add_task(t, now=now)
+    assert tq.run_due(now=now) == 1
+    assert t.run_count == 1, "异常任务应照常重入队"
 
 
-def test_remove_torrent_clears_active_check():
-    """remove_torrent: 删除种子移除队列任务并释放校验标记"""
-    tq = TaskQueue()
-    now = time.time()
-    tq.add_check_task(Task("check", "check-checking-result", hash="H1", interval=60), now=now)
-    tq.add_task(Task("rule", "r", hash="H1", interval=60), now=now)
-    tq.remove_torrent("H1")
-    assert tq.due(now + 61) == [], "队列任务应全部移除"
-    assert tq._active_checks == set(), "校验标记应释放"
-
-
-def test_remove_torrent_clears_deferred():
-    """remove_torrent: 删除种子清理让位任务(防止泄漏) """
+def test_add_task_resets_by_default():
+    """add_task 默认重置任务: 断点清空, 下次从头执行"""
     tq = TaskQueue()
     now = time.time()
     t = Task("rule", "x", hash="H1", interval=60)
+    t.resume_index = 3
     tq.add_task(t, now=now)
-    tq.defer(tq.due(now)[0])
-    assert t in tq._deferred
-    tq.remove_torrent("H1")
-    assert tq._deferred == set(), "删除种子应清理让位任务"
-    assert tq.due(now + 61) == [], "不应有任务残留"
+    assert t.resume_index is None, "默认入队应重置断点"
+
+
+def test_add_task_keep_progress():
+    """add_task(keep_progress=True): 显式保存进度, 断点保留续跑"""
+    tq = TaskQueue()
+    now = time.time()
+    t = Task("rule", "x", hash="H1", interval=60)
+    t.resume_index = 1
+    tq.add_task(t, now=now, keep_progress=True)
+    assert t.resume_index == 1, "显式保存进度应保留断点"
+
+
+def test_run_due_requeue_resets():
+    """run_due 周期收尾重入队默认重置: 下一轮从头执行(不携带上一轮断点)"""
+    tq = TaskQueue()
+    now = time.time()
+    t = Task("rule", "x", hash="H1", interval=60)
+    t.resume_index = 1
+    tq.add_task(t, now=now, keep_progress=True)
+    tq.run_due(now=now)
+    assert t.resume_index is None, "周期收尾重入队应默认重置"
+
+
+def test_reset_clears_breakpoint():
+    """Task.reset(): 显式重置执行位置, 下次执行重走完整流程"""
+    t = Task("rule", "x", hash="H1")
+    t.resume_index = 3
+    t.reset()
+    assert t.resume_index is None, "reset 应清除断点"
+
+
+def test_deleted_torrent_tasks_die_naturally():
+    """已删种子任务到期自然消亡(handler 检测种子缺失返回 False)并释放在途登记 —— 替代 remove_torrent"""
+    tq = TaskQueue()
+    now = time.time()
+    tq.add_task(Task("check", "c", hash="H1", interval=60, handler=lambda t, d: FINISHED), now=now)
+    tq.add_task(Task("rule", "r", hash="H1", interval=60, handler=lambda t, d: FINISHED), now=now)
+    assert tq.run_due(now=now) == 2
+    assert tq.active_check_hashes() == set()
+    assert tq.run_due(now=now + 60) == 0, "消亡后不应有残留"

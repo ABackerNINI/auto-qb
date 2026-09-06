@@ -10,6 +10,7 @@ from ..config import HRRule, TrackerConfig, Config
 from ..qbapi import QbApi
 from .. import episodes, utils
 from ..torrents import TorrentRecord
+from ..taskqueue import FINISHED, REQUEUE
 
 logger = logging.getLogger(__name__)
 
@@ -180,19 +181,19 @@ class TagsMixin:
         """
         patterns = self.config.delete_tags or []
         if not patterns:
-            return True
+            return REQUEUE
         try:
             all_tags = self.store.all_tags()  # 惰性缓存
         except Exception as e:
             logger.error(f"获取标签列表失败: {e}")
-            return True
+            return REQUEUE
         matched = [t for t in all_tags if utils.match_tag_patterns(t, patterns)]
         if not matched:
-            return True
+            return REQUEUE
         if not dry_run:
             self.api.torrents_delete_tags(tags=matched)
         logger.info(f"彻底删除标签: {matched}")
-        return True
+        return REQUEUE
 
     def _handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
         """全局任务: 彻底删除无种子的标签(支持正则, regex: 前缀)
@@ -201,23 +202,23 @@ class TagsMixin:
         """
         patterns = self.config.delete_tags_if_has_no_torrents or []
         if not patterns:
-            return True
+            return REQUEUE
         try:
             all_tags = self.store.all_tags()  # 惰性缓存
         except Exception as e:
             logger.error(f"获取标签列表失败: {e}")
-            return True
+            return REQUEUE
         if not all_tags:
-            return True
+            return REQUEUE
 
         # 从快照聚合标签使用情况(替代 torrents.info(tag=) 逐个查询), 使用数为 0 则删除
         used = self.store.tag_usage()
         matched = [tag for tag in all_tags if utils.match_tag_patterns(tag, patterns) and used.get(tag, 0) == 0]
 
         if not matched:
-            return True
+            return REQUEUE
         if not dry_run:
             self.api.torrents_delete_tags(tags=matched)
         logger.info(f"彻底删除无种子的标签: {matched}")
 
-        return True
+        return REQUEUE

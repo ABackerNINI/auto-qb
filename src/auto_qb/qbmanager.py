@@ -22,7 +22,7 @@ from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
 from .qbapi import QbApi
 from .rules import Rule
-from .taskqueue import DEFERRED, Task, TaskQueue
+from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from .torrents import QbCompatError, TorrentRecord, TorrentStore, missing_torrent_fields
 from . import utils
 from .logging import setup_logging
@@ -121,37 +121,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 self._lock.release()
 
     def _tick(self, dry_run: bool):
-        """单次 tick: 1) 刷新快照 2) 弹出到期任务并执行"""
+        """单次 tick: 1) 刷新快照 2) 执行到期任务(执行与收尾统一由 TaskQueue.run_due 管理)"""
         now = time.time()
 
         self._refresh_torrents(dry_run)
 
-        # 到期任务: 弹出并执行(校验结果轮询等有状态任务在 handler 内续延)
-        due = self.task_queue.due(now, max=self.config.max_tasks_per_tick)
-        if due:
-            self._execute_due(due, dry_run, now)
-
-    def _execute_due(self, due: list, dry_run: bool, now: float):
-        """执行到期任务: 逐个执行任务(规则/种子级内置); handler 返回 False 表示任务消亡, 不重新入队"""
-        # 1. 任务逐个执行; handler 返回 False 表示任务消亡(如种子已删除), 不重新入队
-        logger.debug(f"执行到期任务 {len(due)} 个")
-        for task in due:
-            keep = self._safe(task, dry_run)
-            if task.state == DEFERRED:
-                continue  # 任务已让位(如 full-checking 校验期间), 由校验任务完成后恢复, 不重新入队
-            if keep is False:
-                self.task_queue.task_died(task)  # 释放校验在途标记(如有)
-                continue
-            self.task_queue.reschedule(task, now)
-
-    def _safe(self, task: Task, dry_run: bool) -> bool:
-        """执行任务 handler, 捕获异常; 返回 handler 结果(默认 True 重新入队)"""
-        try:
-            if task.handler:
-                return bool(task.handler(task, dry_run))
-        except Exception as e:
-            logger.error(f"任务[{task.log_tag}] | 执行异常: {e}", exc_info=True)
-        return True
+        self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
     # ---------- 全局任务 ----------
 
@@ -261,9 +236,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     self._add_episode_tags(torrent, dry_run)
 
         if removed:
-            logger.info(f"检测到删除种子 {len(removed)} 个, 移除对应任务")
-            for h in removed:
-                self.task_queue.remove_torrent(h)
+            # 已删种子的任务不显式清理: 由 run_due 到期执行时 handler 检测种子缺失自然消亡
+            logger.info(f"检测到删除种子 {len(removed)} 个")
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
             if self.config.grouping.enabled:
                 self._handle_removed_torrents(removed, dry_run)
@@ -317,7 +291,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         """内置种子级任务: 添加/删除/相似标签 + HR 标签分类"""
         torrent = self.store.get(task.hash)
         if torrent is None:
-            return False
+            return FINISHED
 
         tracker_conf = task.tracker_conf
 
@@ -331,7 +305,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # if handled:
         #     self._log_torrent_details(torrent, tracker_conf)
         #     logger.info(f"--------------------------------------------------------------------------")
-        return True
+        return REQUEUE
 
     def export_torrents_info(self, path):
         """导出种子信息, 用于debug"""
