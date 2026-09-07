@@ -35,7 +35,7 @@ def setup_logging(file: str, level: int, max_bytes: int, format: str):
         # 轮转备份数量，可根据需要调整（这里默认 5 个）
         backup_count = 5
         file_handler = RotatingFileHandler(file, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
