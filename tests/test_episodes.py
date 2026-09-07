@@ -32,8 +32,8 @@ def test_episode_tag_utils():
     assert not name_has_episode_marker("Show.BD.BOX.Vol.1")
     assert not name_has_episode_marker("Movie.2024.1080p")
 
-    # 文件列表集数提取: EP/E/第x集/SxxExx + 独立数字, 排除分辨率/年份
-    files = [SimpleNamespace(name=n, size=1) for n in ["01.mkv", "02.mkv", "03.mkv", "04.mkv", "05.mkv"]]
+    # 文件列表集数提取: EP/E/第x集/SxxExx(bare number 暂禁用, 仅明确标记生效)
+    files = [SimpleNamespace(name=n, size=1) for n in ["EP01.mkv", "EP02.mkv", "EP03.mkv", "EP04.mkv", "EP05.mkv"]]
     assert extract_episodes_from_files(files) == [1, 2, 3, 4, 5]
     files = [SimpleNamespace(name=n, size=1) for n in ["EP01.mkv", "EP02.mkv", "Show.S01E05.mkv"]]
     assert extract_episodes_from_files(files) == [1, 2, 5]
@@ -43,25 +43,25 @@ def test_episode_tag_utils():
     files = [SimpleNamespace(name=n, size=1) for n in ["Movie.2024.1080p.mkv", "sample.mkv"]]
     assert extract_episodes_from_files(files) == []
     # 只考虑视频文件: 截图/字幕/字体等非视频文件即使含集数标记也跳过
-    files = [SimpleNamespace(name=n, size=1) for n in ["第1集.jpg", "第2集.png", "01.srt", "02.ass"]]
+    files = [SimpleNamespace(name=n, size=1) for n in ["第1集.jpg", "第2集.png", "EP01.srt", "EP02.ass"]]
     assert extract_episodes_from_files(files) == [], "非视频文件不应贡献集数"
-    files = [SimpleNamespace(name=n, size=1) for n in ["01.mkv", "02.mkv", "03.ass", "04.jpg"]]
+    files = [SimpleNamespace(name=n, size=1) for n in ["EP01.mkv", "EP02.mkv", "EP03.ass", "EP04.jpg"]]
     assert extract_episodes_from_files(files) == [1, 2], "字幕/截图应被跳过"
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.S01E05.ass"]]
     assert extract_episodes_from_files(files) == [], "字幕文件即使含 E 标记也跳过"
     # 只考虑文件名部分: 文件夹路径中的数字/集数标记不参与解析
-    files = [SimpleNamespace(name=n, size=1) for n in ["Season 1/01.mkv", "Season 1/02.mkv"]]
+    files = [SimpleNamespace(name=n, size=1) for n in ["Season 1/EP01.mkv", "Season 1/EP02.mkv"]]
     assert extract_episodes_from_files(files) == [1, 2], "文件夹名 Season 1 不应贡献集数"
-    files = [SimpleNamespace(name=n, size=1) for n in ["第1季\\01.mkv", "第1季\\02.mkv"]]
+    files = [SimpleNamespace(name=n, size=1) for n in ["第1季\\EP01.mkv", "第1季\\EP02.mkv"]]
     assert extract_episodes_from_files(files) == [1, 2], "文件夹名 第1季 不应贡献集数"
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.S02/第1集.mkv"]]
     assert extract_episodes_from_files(files) == [1], "文件夹 S02 不应参与, 取文件 第1集"
-    # 扩展名中的数字不应被当作集数(如 "xx.mp4" 的 4)
+    # 无集数标记的视频文件 -> 不提取(bare number 禁用)
     files = [SimpleNamespace(name=n, size=1) for n in ["xx.mp4"]]
-    assert extract_episodes_from_files(files) == [], "扩展名数字(如 mp4 的 4)不应被提取"
+    assert extract_episodes_from_files(files) == [], "无标记文件不应提取"
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.01.mkv", "xx.mp4"]]
-    assert extract_episodes_from_files(files) == [1], "xx.mp4 不应贡献数字 4"
-    files = [SimpleNamespace(name=n, size=1) for n in ["Show.05.1080p.mkv", "Show.05.mkv"]]
+    assert extract_episodes_from_files(files) == [], "无标记文件不应提取(bare number 禁用)"
+    files = [SimpleNamespace(name=n, size=1) for n in ["Show.E05.1080p.mkv", "Show.E05.mkv"]]
     assert extract_episodes_from_files(files) == [5]
     # 模式优先级: 第x集/S01E05 > EP05 > E05(单文件多模式时取优先级最高者)
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.S01E05.EP03.E04.mkv"]]
@@ -74,16 +74,16 @@ def test_episode_tag_utils():
     assert extract_episodes_from_files(files) == [3, 4, 5], "第x-y集 区间应优先展开"
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.E05.mkv"]]
     assert extract_episodes_from_files(files) == [5]
-    # 单文件多个候选数字(日期时间截图) -> 无法确定唯一集数, 跳过该文件
-    files = [SimpleNamespace(name=n, size=1) for n in ["2022.05.11_14.51.23.jpg", "01.mkv", "02.mkv"]]
+    # 非视频文件含日期数字 -> 不贡献集数
+    files = [SimpleNamespace(name=n, size=1) for n in ["2022.05.11_14.51.23.jpg", "EP01.mkv", "EP02.mkv"]]
     assert extract_episodes_from_files(files) == [1, 2], "日期截图不应贡献集数"
     files = [SimpleNamespace(name=n, size=1) for n in ["2022.05.11_14.51.23.jpg"]]
     assert extract_episodes_from_files(files) == []
-    # 无标记文件恰好一个候选数字(排除分辨率后) -> 提取
+    # 无标记文件不提取(bare number 禁用)
     files = [SimpleNamespace(name=n, size=1) for n in ["Show.Name.05.1080p.mkv"]]
-    assert extract_episodes_from_files(files) == [5]
+    assert extract_episodes_from_files(files) == [], "无标记文件不提取(bare number 禁用)"
     # 文件名为空 -> 跳过, 不崩溃
-    files = [SimpleNamespace(name="", size=1), SimpleNamespace(name="01.mkv", size=1)]
+    files = [SimpleNamespace(name="", size=1), SimpleNamespace(name="EP01.mkv", size=1)]
     assert extract_episodes_from_files(files) == [1], "空文件名应跳过"
     assert extract_episodes_from_files([SimpleNamespace(name=None, size=1)]) == []
 
@@ -117,7 +117,7 @@ def test_episode_tags_added_on_new_torrent():
         client.torrents["H1"] = t1
         client.torrents["H2"] = t2
         client.files_map["H1"] = [_fake_file("Show.S01E01.mkv", 100)]
-        client.files_map["H2"] = [_fake_file(f"{i:02d}.mkv", 100) for i in range(1, 6)]  # 01~05
+        client.files_map["H2"] = [_fake_file(f"EP{i:02d}.mkv", 100) for i in range(1, 6)]  # EP01~05
 
         mgr._refresh_torrents()
 
@@ -139,7 +139,7 @@ def test_episode_tags_not_on_existing_refresh():
 
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1
-        client.files_map["H1"] = [_fake_file("01.mkv", 100)]
+        client.files_map["H1"] = [_fake_file("EP01.mkv", 100)]
 
         mgr._refresh_torrents()  # 添加: 拉一次文件列表
         assert client.files_calls == 1, f"添加时应拉一次文件列表: {client.files_calls}"
@@ -164,11 +164,12 @@ def test_episode_tags_non_continuous_skipped():
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1
         # 缺第4集: 1,2,3,5 非连续 -> 整体放弃
-        client.files_map["H1"] = [_fake_file(f"{i:02d}.mkv", 100) for i in (1, 2, 3, 5)]
+        client.files_map["H1"] = [_fake_file(f"EP{i:02d}.mkv", 100) for i in (1, 2, 3, 5)]
 
         mgr._refresh_torrents()
 
-        assert not any(name == "add_tags" for name, _ in client.calls), f"非连续集数不应加标签: {client.calls}"
+        episode_calls = [tags for name, tags in client.calls if name == "add_tags" and any(t.startswith("zE") for t in tags)]
+        assert not episode_calls, f"非连续集数不应加标签: {client.calls}"
 
 
 def test_episode_tags_ignore_date_screenshot():
@@ -186,7 +187,7 @@ def test_episode_tags_ignore_date_screenshot():
         client.torrents["H1"] = t1
         client.files_map["H1"] = [
             _fake_file("2022.05.11_14.51.23.jpg", 100),
-            *[_fake_file(f"{i:02d}.mkv", 100) for i in range(1, 6)],
+            *[_fake_file(f"EP{i:02d}.mkv", 100) for i in range(1, 6)],
         ]
 
         mgr._refresh_torrents()
@@ -208,9 +209,10 @@ def test_episode_tags_disabled():
 
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1
-        client.files_map["H1"] = [_fake_file("01.mkv", 100)]
+        client.files_map["H1"] = [_fake_file("EP01.mkv", 100)]
 
         mgr._refresh_torrents()
 
         assert client.files_calls == 0, f"关闭时不应拉文件列表: {client.files_calls}"
-        assert not any(name == "add_tags" for name, _ in client.calls), f"不应加标签: {client.calls}"
+        episode_calls = [tags for name, tags in client.calls if name == "add_tags" and any(t.startswith("zE") for t in tags)]
+        assert not episode_calls, f"不应加集数标签: {client.calls}"

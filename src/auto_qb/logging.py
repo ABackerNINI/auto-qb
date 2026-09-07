@@ -4,10 +4,10 @@ import sys, os
 
 
 def setup_logging(file: str, level: int, max_bytes: int, format: str):
-    """设置日志: 控制台跟随配置等级; 文件恒为 DEBUG(本项目调试信息全量落盘)。
+    """设置日志: 控制台与文件均跟随配置等级。
 
     - root 跟随 level(默认 INFO): 拦截第三方库的 DEBUG(urllib3 等)
-    - auto_qb logger 放开 DEBUG: 本项目调试信息可穿透到 handler(文件收录)
+    - auto_qb logger 放开 DEBUG: 本项目调试信息可穿透到 handler(level=DEBUG 时收录)
     - qbittorrentapi 封顶 INFO: 排除其请求/响应 DEBUG 噪音(自身 INFO 仍入文件)
     """
     logging.basicConfig(level=level, format=format)

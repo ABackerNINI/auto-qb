@@ -59,6 +59,11 @@ def _fake_file(name, size):
     return SimpleNamespace(name=name, size=size)
 
 
+def _non_tag_calls(client):
+    """排除 maintenance 的 add_tags 噪音(tracker 标签), 只看分组相关动作"""
+    return [c for c in client.calls if c[0] != "add_tags"]
+
+
 def _group_cfg(state_file, enabled=True):
     cfg = FakeConfig()
     cfg.state_file = state_file
@@ -79,7 +84,7 @@ def test_grouping_size_mismatch_pauses_group():
         client.torrents["H1"] = t1
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()  # 归组完全增量: 首轮刷新视为新增, 经 _assign_new_torrent 归组
-        assert client.calls == [], f"单成员归组不应触发动作: {client.calls}"
+        assert _non_tag_calls(client) == [], f"单成员归组不应触发动作: {client.calls}"
 
         # H2 同名文件但大小不同 -> 加入同一组, 归组时立即检查大小一致性 -> 暂停整组
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -109,7 +114,7 @@ def test_grouping_missing_files_pauses_group():
 
         # 首轮: 归组 + 建立状态快照(上传中, 无触发条件, 不扫描)
         mgr._refresh_torrents()
-        assert client.calls == [], f"上传状态不应触发检查: {client.calls}"
+        assert _non_tag_calls(client) == [], f"上传状态不应触发检查: {client.calls}"
 
         # H1 由上传(stalledUP)转为暂停(pausedUP) -> 同一轮立即触发缺文件扫描(文件不存在)
         t1.state = "pausedUP"
@@ -138,12 +143,12 @@ def test_grouping_state_change_triggers_check():
 
         # 首轮: 归组 + 建立状态快照(上传中, 不触发)
         mgr._refresh_torrents()
-        assert client.calls == [], f"首轮不应触发: {client.calls}"
+        assert _non_tag_calls(client) == [], f"首轮不应触发: {client.calls}"
 
         # H1 stalledUP -> uploading(仍是上传, 不触发)
         t1.state = "uploading"
         mgr._refresh_torrents()
-        assert client.calls == [], f"上传状态间变化不应触发: {client.calls}"
+        assert _non_tag_calls(client) == [], f"上传状态间变化不应触发: {client.calls}"
 
         # H1 uploading -> pausedUP(上传转暂停, 立即触发)
         t1.state = "pausedUP"
@@ -154,7 +159,7 @@ def test_grouping_state_change_triggers_check():
         # 状态不变 -> 不重复触发
         client.calls.clear()
         mgr._refresh_torrents()
-        assert client.calls == [], f"状态不变不应重复触发: {client.calls}"
+        assert _non_tag_calls(client) == [], f"状态不变不应重复触发: {client.calls}"
 
 
 def test_grouping_deleted_torrent_triggers_check():
@@ -173,7 +178,7 @@ def test_grouping_deleted_torrent_triggers_check():
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()  # 归组
-        assert client.calls == [], f"上传状态不应触发检查: {client.calls}"
+        assert _non_tag_calls(client) == [], f"上传状态不应触发检查: {client.calls}"
 
         # 删除 H2 -> 移出组; 组内剩 H1, 同一轮立即触发缺文件扫描(文件不存在)
         del client.torrents["H2"]
@@ -301,7 +306,7 @@ def test_grouping_save_path_change_triggers_check():
             client.torrents[t.hash] = t
             client.files_map[t.hash] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()
-        assert client.calls == [], f"首轮归组不应触发扫描: {client.calls}"
+        assert _non_tag_calls(client) == [], f"首轮归组不应触发扫描: {client.calls}"
         key_a = ("R:/DownloadsA", ("movie.mkv", ))
         key_b = ("R:/DownloadsB", ("movie.mkv", ))
         assert set(mgr.store.groups[key_a]) == {"H1", "H2"}
@@ -332,7 +337,7 @@ def test_grouping_save_path_change_new_group_alone():
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
         mgr._refresh_torrents()
-        assert client.calls == [], f"首轮归组不应触发扫描: {client.calls}"
+        assert _non_tag_calls(client) == [], f"首轮归组不应触发扫描: {client.calls}"
 
         # H1 移到空目录 DownloadsB(新组仅本种子) -> 仅原组 A(H2)触发扫描
         t1.save_path = r"R:\DownloadsB"
@@ -364,7 +369,7 @@ def test_grouping_no_full_files_scan():
         # 后续刷新: 状态不变 -> 不触发扫描, 也不拉取文件列表
         mgr._refresh_torrents()
         assert client.files_calls == 1, f"后续刷新不应再拉文件列表: {client.files_calls}"
-        assert client.calls == [], f"状态不变不应触发检查: {client.calls}"
+        assert _non_tag_calls(client) == [], f"状态不变不应触发检查: {client.calls}"
 
 
 def test_is_downloading_excludes_checking():
@@ -409,7 +414,7 @@ def test_grouping_force_checking_not_conflict():
         mgr._refresh_torrents()
 
         assert len(mgr.store.groups) == 2, f"应归为两组: {mgr.store.groups}"
-        assert client.calls == [], f"强制校验种子不应触发下载冲突暂停: {client.calls}"
+        assert _non_tag_calls(client) == [], f"强制校验种子不应触发下载冲突暂停: {client.calls}"
         assert mgr.store.download_conflict_warned == set()
 
 

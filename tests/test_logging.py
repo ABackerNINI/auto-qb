@@ -5,7 +5,7 @@
 - test_setup_logging_file_handler: file 给定 -> 自动 makedirs 子目录 + RotatingFileHandler, 启动日志写入文件
 - test_setup_logging_file_no_dir: file 无目录部分 -> 跳过 makedirs 直接建文件
 - test_setup_logging_level_and_format: root level 与 format 按参数生效
-- test_setup_logging_file_always_debug: 文件 handler 恒 DEBUG, auto_qb 放开/qbittorrentapi 封顶 INFO
+- test_setup_logging_file_always_debug: 文件 handler 跟随 level, auto_qb 放开/qbittorrentapi 封顶 INFO
 
 注意: setup_logging 操作 root logger(清空并重建 handlers), 每个测试尾部必须恢复
 root level(WARNING)并清空 handlers, 避免污染同批其它测试的日志行为。
@@ -114,7 +114,7 @@ def test_setup_logging_file_no_dir():
 
 
 def test_setup_logging_file_always_debug():
-    """配置 level=INFO 时文件 handler 恒 DEBUG(本项目 DEBUG 全量入文件);
+    """配置 level=INFO 时文件 handler 跟随 level(auto_qb 放开 DEBUG 穿透);
     auto_qb 放开 DEBUG, qbittorrentapi 封顶 INFO(排除请求/响应噪音)"""
     with tempfile.TemporaryDirectory() as td:
         log_file = os.path.join(td, "app.log")
@@ -124,13 +124,16 @@ def test_setup_logging_file_always_debug():
             root = logging.getLogger()
             assert root.level == logging.INFO, "root 跟随配置(拦截第三方 DEBUG)"
             file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
-            assert file_handlers and file_handlers[0].level == logging.DEBUG, "文件恒 DEBUG"
+            assert file_handlers and file_handlers[0].level == logging.INFO, "文件 handler 跟随 level"
             assert logging.getLogger("auto_qb").level == logging.DEBUG
             assert logging.getLogger("qbittorrentapi").level == logging.INFO, "qbt DEBUG 噪音排除"
-            # 行为验证: auto_qb DEBUG 记录穿透到文件(root INFO 不拦截)
+            # 行为验证: auto_qb DEBUG 被文件 handler 过滤(level=INFO), 不写入
             logging.getLogger("auto_qb.test").debug("debug-probe")
+            logging.getLogger("auto_qb.test").info("info-probe")
             with open(log_file, encoding="utf-8") as f:
-                assert "debug-probe" in f.read(), "auto_qb DEBUG 应写入文件"
+                content = f.read()
+                assert "info-probe" in content, "auto_qb INFO 应写入文件"
+                assert "debug-probe" not in content, "auto_qb DEBUG 不应写入文件(level=INFO)"
         finally:
             # setup_logging 修改了两个子 logger 的 level, 测试尾部一并恢复(继承 root)
             logging.getLogger("auto_qb").setLevel(logging.NOTSET)
