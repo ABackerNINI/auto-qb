@@ -224,6 +224,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 # TorrentRecord添加tracker配置引用, 方便后续任务使用
                 torrent.tracker_conf = tracker_conf
 
+                # 立即运行一次内置任务
+                self._handle_maintenance(torrent, dry_run)
                 # tracker单种限速
                 self._apply_speed_limit(torrent, tracker_conf, dry_run)
                 # 创建种子级任务: 内置 maintenance + 所有符合条件的规则任务
@@ -260,40 +262,42 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
         缺文件检查统一由分组事件驱动承担(_refresh_torrents 检测到删除/状态变化/
         保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
-        每个任务有内置 interval(规则任务用规则自身 interval), 加入队列即立即到期(下一 tick 执行)。
+        每个任务有内置 interval(规则任务用规则自身 interval), 规则任务加入队列即立即到期(下一 tick 执行)。
+        内置种子任务加入队列后下一个interval到期。
         """
 
         torrent = self.store.get(hash)
         if not torrent:
             return
 
-        tasks = []
-
         # 创建内置种子任务
-        tasks.append(
+        self.task_queue.add_task(
             Task(
                 "internal",
                 "maintenance",
                 hash=hash,
                 tracker_conf=tracker_conf,
                 interval=self.config.interval,
-                handler=self._handle_maintenance
-            )
+                handler=self._handle_maintenance_task_interface
+            ),
+            time.time() + self.config.interval
         )
 
         # 创建种子规则任务
+        tasks = []
         for rule in self._rules_for_torrent(torrent):
             tasks.append(self._create_rule_task(rule, hash, tracker_conf))
-
         self.task_queue.add_tasks(tasks)
 
-    def _handle_maintenance(self, task: Task, dry_run: bool) -> bool:
+    def _handle_maintenance_task_interface(self, task: Task, dry_run: bool) -> bool:
+        return self._handle_maintenance(self.store.get(task.hash), dry_run)
+
+    def _handle_maintenance(self, torrent: TorrentRecord, dry_run: bool) -> bool:
         """内置种子级任务: 添加/删除/相似标签 + HR 标签分类"""
-        torrent = self.store.get(task.hash)
         if torrent is None:
             return FINISHED
 
-        tracker_conf = task.tracker_conf
+        tracker_conf = torrent.tracker_conf
 
         handled = False
         handled |= self._add_tags(torrent, tracker_conf.tags, dry_run)
