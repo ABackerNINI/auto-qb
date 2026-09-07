@@ -8,7 +8,7 @@ from datetime import date, datetime
 from typing import Any, List, Optional
 from qbittorrentapi import Client
 
-from ..config import Config, TrackerConfig
+from ..config import Config
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ..rules import Rule, RuleContext
 from .. import utils
@@ -114,13 +114,13 @@ class RuleEngineMixin:
                 return rules
         return []
 
-    def _create_rule_task(self, rule: Rule, hash: str, tracker_conf: TrackerConfig) -> Task:
+    def _create_rule_task(self, rule: Rule, hash: str) -> Task:
         """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)"""
         return Task(
             "rule",
             rule.name,
             hash=hash,
-            tracker_conf=tracker_conf,
+            store=self.store,
             interval=rule.interval,
             handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
         )
@@ -133,7 +133,7 @@ class RuleEngineMixin:
           在完成后按情况重新入队(断点保留续跑 / reset 重走)
         - 其余(含异常) -> True 周期重入队
         """
-        if self.store.get(task.hash) is None:
+        if task.torrent is None:
             return FINISHED
         ctx = RuleContext(self, self.client, self.config, task.hash, dry_run, task=task)
         try:

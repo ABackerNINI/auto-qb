@@ -12,9 +12,10 @@
 import heapq
 import logging
 import time
-from typing import Any, Callable, List, Set
+from typing import TYPE_CHECKING, Any, Callable, List, Set
 
-from .config import TrackerConfig
+if TYPE_CHECKING:
+    from ..torrents import TorrentStore
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class Task:
         "kind",
         "name",
         "hash",
-        "tracker_conf",
+        "_store",
         "next_run",
         "interval",
         "state",
@@ -52,7 +53,7 @@ class Task:
         kind: str,
         name: str,
         hash: str = "",
-        tracker_conf: TrackerConfig = None,
+        store: "TorrentStore | None" = None,
         next_run: float = 0.0,
         interval: float = 0.0,
         payload: Any = None,
@@ -62,7 +63,7 @@ class Task:
         self.kind = kind
         self.name = name
         self.hash = hash
-        self.tracker_conf = tracker_conf
+        self._store = store
         self.next_run = next_run  # epoch 秒, 到期才执行
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING
@@ -93,6 +94,11 @@ class Task:
         """统一任务日志标识: kind:name[#hash8]"""
         h = f"#{self.hash[:8]}" if self.hash else ""
         return f"{self.kind}:{self.name}{h}"
+
+    @property
+    def torrent(self):
+        """从 store 查找种子(始终最新; 种子已删除返回 None)"""
+        return self._store.get(self.hash) if self._store else None
 
     def __repr__(self) -> str:
         return f"Task({self.kind}, {self.name}, {self.hash}, {self.state})"

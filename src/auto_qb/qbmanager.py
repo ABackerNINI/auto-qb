@@ -16,7 +16,7 @@ from typing import List, Optional
 
 from qbittorrentapi import Client
 
-from .config import Config, TrackerConfig, load_config
+from .config import Config, load_config
 from .errors import AutoQbError
 from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
@@ -229,7 +229,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 # tracker单种限速
                 self._apply_speed_limit(torrent, tracker_conf, dry_run)
                 # 创建种子级任务: 内置 maintenance + 所有符合条件的规则任务
-                self._create_torrent_tasks(h, tracker_conf)
+                self._create_torrent_tasks(h)
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
                 if self.config.grouping.enabled:
                     self._assign_new_torrent(h, dry_run)
@@ -256,7 +256,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
         self.begin_round(list(self.store.by_hash.values()))
 
-    def _create_torrent_tasks(self, hash: str, tracker_conf: TrackerConfig):
+    def _create_torrent_tasks(self, hash: str):
         """
         为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
 
@@ -276,7 +276,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 "internal",
                 "maintenance",
                 hash=hash,
-                tracker_conf=tracker_conf,
+                store=self.store,
                 interval=self.config.interval,
                 handler=self._handle_maintenance_task_interface
             ),
@@ -286,11 +286,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 创建种子规则任务
         tasks = []
         for rule in self._rules_for_torrent(torrent):
-            tasks.append(self._create_rule_task(rule, hash, tracker_conf))
+            tasks.append(self._create_rule_task(rule, hash))
         self.task_queue.add_tasks(tasks)
 
     def _handle_maintenance_task_interface(self, task: Task, dry_run: bool) -> bool:
-        return self._handle_maintenance(self.store.get(task.hash), dry_run)
+        return self._handle_maintenance(task.torrent, dry_run)
 
     def _handle_maintenance(self, torrent: TorrentRecord, dry_run: bool) -> bool:
         """内置种子级任务: 添加/删除/相似标签 + HR 标签分类"""

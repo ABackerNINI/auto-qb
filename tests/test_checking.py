@@ -539,7 +539,7 @@ def test_checking_recheck_fail_cooldown():
     seed_store(mgr, [t])
     t0 = time.time()
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin = mgr._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
 
@@ -917,7 +917,7 @@ def test_checking_full_checking_pending_resume():
     seed_store(mgr, [t])
     t0 = time.time()
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin = mgr._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     # 首次执行: checking 提交 -> pending 中断 + 记录断点 + 不重入队(由轮询子任务负责恢复)
@@ -953,7 +953,7 @@ def test_checking_full_checking_resume_continues_actions():
     seed_store(mgr, [t])
     t0 = time.time()
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin = mgr._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -985,7 +985,7 @@ def test_checking_full_checking_resume_skips_conditions():
     seed_store(mgr, [t])
     t0 = time.time()
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin = mgr._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1015,7 +1015,7 @@ def test_checking_full_checking_resume_skips_dedup():
     seed_store(mgr, [t])
     t0 = time.time()
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin = mgr._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1043,7 +1043,7 @@ def test_checking_full_checking_fail_retry():
     seed_store(mgr, [t])
     t0 = time.time()
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123", None)
+    origin = mgr._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1075,8 +1075,8 @@ def test_checking_group_full_checking_serialized():
     inject_group(mgr, "HA", "HB")
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
     t0 = time.time()
-    ta = mgr._create_rule_task(rule, "HA", None)
-    tb = mgr._create_rule_task(rule, "HB", None)
+    ta = mgr._create_rule_task(rule, "HA")
+    tb = mgr._create_rule_task(rule, "HB")
     ta.interval = 60.0
     tb.interval = 60.0
     # A 先执行: 提交 recheck(在途登记) + 让位; HA 进入校验态后 B 再执行
@@ -1124,7 +1124,7 @@ def test_checking_group_skip_on_same_data_fail():
     mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 100}
     mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB", None)
+    tb = mgr._create_rule_task(rule, "HB")
     mgr.task_queue.add_task(tb, time.time())
     run_queue(mgr)
     assert client.calls.count(("recheck", None)) == 0, f"同数据失败推断: B 不应提交 recheck: {client.calls}"
@@ -1146,7 +1146,7 @@ def test_checking_group_no_infer_when_sizes_differ():
     mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 200}  # 大小不一致
     mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB", None)
+    tb = mgr._create_rule_task(rule, "HB")
     mgr.task_queue.add_task(tb, time.time())
     run_queue(mgr)
     assert ("recheck", None) in client.calls, "映射不一致不应推断, B 照常校验"
@@ -1180,7 +1180,7 @@ def test_checking_group_wait_timeout_force_resume():
     seed_store(mgr, [a, b])
     inject_group(mgr, "HA", "HB")
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB", None)
+    tb = mgr._create_rule_task(rule, "HB")
     tb.interval = 60.0
     t0 = time.time()
     mgr.task_queue.add_task(tb, t0)

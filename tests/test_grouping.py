@@ -212,7 +212,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         tor.tracker_conf = cfg.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         seed_store(mgr, [tor])
 
-        mgr._create_torrent_tasks("H1", cfg.trackers["HHan"])
+        mgr._create_torrent_tasks("H1")
         names = {t.name for t in mgr.task_queue._fast}
         assert "missing_files" not in names, f"不应创建逐种子检查: {names}"
 
@@ -222,7 +222,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         mgr2 = QbManager("", config=cfg2, no_lock=True)  # 测试不持锁
         mgr2.client = FakeClient()
         seed_store(mgr2, [tor])
-        mgr2._create_torrent_tasks("H1", cfg2.trackers["HHan"])
+        mgr2._create_torrent_tasks("H1")
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "missing_files" not in names2, f"未启用分组也不应创建逐种子检查: {names2}"
 

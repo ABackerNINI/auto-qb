@@ -261,7 +261,7 @@ def test_rule_interval():
         assert {r.name for r in rules} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}
         now = time.time()  # 统一时间起点: add_task 与 due 使用同一 now
         for r in rules:
-            tq.add_task(mgr._create_rule_task(r, tor.hash, mgr.config.trackers["HHan"]), now=now)
+            tq.add_task(mgr._create_rule_task(r, tor.hash), now=now)
 
         # 第 1 轮: 所有规则任务初始立即到期, 均执行
         assert tq.run_due(False, now=now) == 2, "第 1 轮应全部到期"

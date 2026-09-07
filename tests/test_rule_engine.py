@@ -156,7 +156,7 @@ def test_rule_task_executes_only_refs():
         rules = mgr._rules_for_torrent(tor)
         assert [r.name for r in rules] == ["example_rules.add_site_tag"], "只应绑定被引用的规则"
         for rule in rules:
-            task = mgr._create_rule_task(rule, tor.hash, mgr.config.trackers["HHan"])
+            task = mgr._create_rule_task(rule, tor.hash)
             assert mgr._handle_rule(rule, task, dry_run=False) is True
         # 只应执行 add_site_tag(加标签); 未引用的 hr_done(设分类)/stop_low_ratio 不执行
         assert ("add_tags", ["HHan", "seed-3D"]) in client.calls
@@ -169,7 +169,7 @@ def test_handle_rule_missing_torrent():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        task = Task("rule", "t", hash="H1", interval=0)
+        task = Task("rule", "t", hash="H1", store=mgr.store, interval=0)
         real = Rule("t", {"conditions": [{"state": "is_complete&is_uploading"}], "actions": []}, mgr)
         assert mgr._handle_rule(real, task, dry_run=False) is False
         assert client.calls == [], "种子不存在不应执行动作"
@@ -198,7 +198,7 @@ def test_handle_rule_process_ok():
         client.torrents["HASH123"] = tor
         seed_store(mgr)
         rule = Rule("t", {"actions": [{"add_tags": ["X"]}]}, mgr)
-        task = Task("rule", "t", hash="HASH123", interval=0)
+        task = Task("rule", "t", hash="HASH123", store=mgr.store, interval=0)
         assert mgr._handle_rule(rule, task, dry_run=False) is True
         assert ("add_tags", ["X"]) in client.calls
 
@@ -213,7 +213,7 @@ def test_handle_rule_process_error():
         seed_store(mgr)
         rule = mock.MagicMock()
         rule.process.side_effect = RuntimeError("boom")
-        task = Task("rule", "t", hash="HASH123", interval=0)
+        task = Task("rule", "t", hash="HASH123", store=mgr.store, interval=0)
         assert mgr._handle_rule(rule, task, dry_run=False) is True
 
 

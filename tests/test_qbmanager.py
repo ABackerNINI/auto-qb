@@ -153,7 +153,7 @@ def test_create_torrent_tasks_tor_missing():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        assert mgr._create_torrent_tasks("NOPE", None) is None
+        assert mgr._create_torrent_tasks("NOPE") is None
         assert mgr.task_queue._fast == []
 
 
@@ -167,19 +167,19 @@ def test_create_torrent_tasks_with_rules():
         tor.tracker_conf = mgr.config.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         client.torrents["HASH123"] = tor
         seed_store(mgr)
-        mgr._create_torrent_tasks("HASH123", mgr.config.trackers["HHan"])
+        mgr._create_torrent_tasks("HASH123")
         names = [t.name for t in mgr.task_queue._fast]
         assert "maintenance" in names, f"应创建内置任务: {names}"
         assert "example_rules.add_site_tag" in names, f"应创建规则任务: {names}"
 
 
 def test_handle_maintenance_tor_missing():
-    """_handle_maintenance: 种子不存在 -> False(任务消亡, 不重入队)"""
+    """_handle_maintenance_task_interface: 种子不存在 -> False(任务消亡, 不重入队)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        task = Task("internal", "maintenance", hash="NOPE", tracker_conf=mock.Mock())
-        assert mgr._handle_maintenance(task, dry_run=False) is False
+        task = Task("internal", "maintenance", hash="NOPE", store=mgr.store)
+        assert mgr._handle_maintenance_task_interface(task, dry_run=False) is False
 
 
 def test_run_save_state_on_exit():

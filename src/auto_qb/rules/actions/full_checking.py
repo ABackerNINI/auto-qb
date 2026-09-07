@@ -121,6 +121,7 @@ class FullCheckingMixin:
             "check",
             "check-checking-result",
             hash=hash,
+            store=manager.store,
             interval=CHECK_RESULT_INTERVAL,
             handler=poll,
         )
@@ -189,7 +190,14 @@ class FullCheckingMixin:
 
         # 等待任务用独立 kind(check-wait): 不占用 _active_checks 在途登记,
         # 否则多个等待成员会经由登记互相视为"校验中"而互等(仅超时才能解开)
-        task = Task("check-wait", "check-group-wait", hash=hash, interval=CHECK_RESULT_INTERVAL, handler=wait_poll)
+        task = Task(
+            "check-wait",
+            "check-group-wait",
+            hash=hash,
+            store=manager.store,
+            interval=CHECK_RESULT_INTERVAL,
+            handler=wait_poll
+        )
         tq.add_task(task)
         logger.debug(f"规则[{rule_name}] {ctx.torrent.log_repr} | 组内有种子校验进行中, 推迟等待")
         return ActionResult.pending("等待同组种子校验完成")

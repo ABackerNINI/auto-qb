@@ -17,7 +17,6 @@ import os
 import tempfile
 
 from auto_qb.qbmanager import QbManager
-from auto_qb.taskqueue import Task
 from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
 
 
@@ -31,16 +30,9 @@ def test_builtin_hr_category_auto_update_from_state():
         tor = FakeTorrent(downloaded=100 * 1024**2, category="")
         client.torrents["HASH123"] = tor
         seed_store(mgr)
-        task = Task(
-            "internal",
-            "maintenance",
-            hash="HASH123",
-            interval=60,
-            tracker_conf=mgr.config.trackers["HHan"],
-            handler=mgr._handle_maintenance
-        )
+        tor.tracker_conf = mgr.config.trackers["HHan"]
 
-        assert mgr._handle_maintenance(task, dry_run=False)
+        assert mgr._handle_maintenance(tor, dry_run=False)
         mgr.save_state()
         assert mgr.state["auto_categories"]["HASH123"] == "!!HR3D!!"
 
@@ -50,16 +42,9 @@ def test_builtin_hr_category_auto_update_from_state():
         tor.category = "!!HR3D!!"
         client2.torrents["HASH123"] = tor
         seed_store(mgr2)
+        tor.tracker_conf = mgr2.config.trackers["HHan"]
         mgr2.config.trackers["HHan"].hr = _hr_rule(add_category="NEW-HR")
-        task2 = Task(
-            "internal",
-            "maintenance",
-            hash="HASH123",
-            interval=60,
-            tracker_conf=mgr2.config.trackers["HHan"],
-            handler=mgr2._handle_maintenance
-        )
-        mgr2._handle_maintenance(task2, dry_run=False)
+        mgr2._handle_maintenance(tor, dry_run=False)
         assert client2.category == "NEW-HR"
         assert mgr2.state["auto_categories"]["HASH123"] == "NEW-HR"
 
@@ -86,16 +71,9 @@ def test_tracker_hr_overrides_global():
         tor = FakeTorrent(downloaded=100 * 1024**2, seeding_time=100, ratio=1.0)
         client.torrents["HASH123"] = tor
         seed_store(mgr)
+        tor.tracker_conf = cfg.trackers["HHan"]
 
-        task = Task(
-            "internal",
-            "maintenance",
-            hash="HASH123",
-            interval=60,
-            tracker_conf=cfg.trackers["HHan"],
-            handler=mgr._handle_maintenance
-        )
-        mgr._handle_maintenance(task, dry_run=False)
+        mgr._handle_maintenance(tor, dry_run=False)
 
         # 站点覆盖: 分类应为 SITE-HR!!(非全局 GLOBAL-HR)
         assert client.category == "SITE-HR!!", f"站点分类覆盖失败: {client.category}"
@@ -111,7 +89,8 @@ def test_tracker_hr_overrides_global():
         tor2 = FakeTorrent(downloaded=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10, ratio=1.0)
         client2.torrents["HASH123"] = tor2
         seed_store(mgr2)
-        mgr2._handle_maintenance(task, dry_run=False)
+        tor2.tracker_conf = cfg.trackers["HHan"]
+        mgr2._handle_maintenance(tor2, dry_run=False)
         assert client2.category == "SITE-DONE!!", f"站点 satisfied 分类覆盖失败: {client2.category}"
 
 
@@ -132,15 +111,8 @@ def test_hr_required_share_ratio():
         tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=2.5)  # 时长不足但分享率达标
         client.torrents["HASH123"] = tor
         seed_store(mgr)
-        task = Task(
-            "internal",
-            "maintenance",
-            hash="HASH123",
-            interval=60,
-            tracker_conf=mgr.config.trackers["HHan"],
-            handler=mgr._handle_maintenance
-        )
-        handled = mgr._handle_maintenance(task, dry_run=False)
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        handled = mgr._handle_maintenance(tor, dry_run=False)
         assert handled, "分享率达标应视为 HR satisfied"
         assert client.category == "--HR3D--", f"分享率达标应加 satisfied 分类: {client.category}"
 
@@ -157,15 +129,8 @@ def test_hr_required_share_ratio():
         tor2 = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=1.0)
         client2.torrents["HASH123"] = tor2
         seed_store(mgr2)
-        task2 = Task(
-            "internal",
-            "maintenance",
-            hash="HASH123",
-            interval=60,
-            tracker_conf=mgr2.config.trackers["HHan"],
-            handler=mgr2._handle_maintenance
-        )
-        mgr2._handle_maintenance(task2, dry_run=False)
+        tor2.tracker_conf = mgr2.config.trackers["HHan"]
+        mgr2._handle_maintenance(tor2, dry_run=False)
         assert client2.category != "--HR3D--", "时长与分享率均不达标不应 satisfied"
 
 
@@ -188,16 +153,9 @@ def test_tracker_remove_similar_tags_override():
         tor = FakeTorrent(tags="hhan,other")
         client.torrents["HASH123"] = tor
         seed_store(mgr)
+        tor.tracker_conf = cfg.trackers["HHan"]
 
-        task = Task(
-            "internal",
-            "maintenance",
-            hash="HASH123",
-            interval=60,
-            tracker_conf=cfg.trackers["HHan"],
-            handler=mgr._handle_maintenance
-        )
-        mgr._handle_maintenance(task, dry_run=False)
+        mgr._handle_maintenance(tor, dry_run=False)
 
         # 全局关闭 + 站点开启 -> 应删除类似标签 hhan
         assert ("remove_tags", {"hhan"}) in client.calls or any(
