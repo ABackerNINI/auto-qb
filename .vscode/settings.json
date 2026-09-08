@@ -16,6 +16,7 @@
         "divx",
         "dlratio",
         "dlsize",
+        "dmhy",
         "dtime",
         "fakehdfans",
         "fakehhanclub",
@@ -77,6 +78,7 @@
         "testpaths",
         "timespec",
         "trackerprxy",
+        "UBWEB",
         "venv",
         "windowsg"
     ],
@@ -87,5 +89,60 @@
     // 不显示__pycache__
     "files.exclude": {
         "**/__pycache__": true
+    },
+    "python.languageServer": "Default",
+    "editor.tokenColorCustomizations": {
+        "[Visual Studio Dark]": {
+            "textMateRules": [
+                {
+                    "scope": "keyword.operator.register.named.mips",
+                    "settings": {
+                        "foreground": "#569cd6"
+                    }
+                },
+                {
+                    "scope": "keyword.operator.register.numbered.mips",
+                    "settings": {
+                        "foreground": "#569cd6"
+                    }
+                }
+            ]
+        },
+        "[Visual Studio Light]": {
+            "textMateRules": [
+                {
+                    "scope": "keyword.operator.register.named.mips",
+                    "settings": {
+                        "foreground": "#0000ff"
+                    }
+                },
+                {
+                    "scope": "keyword.operator.register.numbered.mips",
+                    "settings": {
+                        "foreground": "#0000ff"
+                    }
+                }
+            ]
+        },
+        "textMateRules": [
+            {
+                "scope": "googletest.failed",
+                "settings": {
+                    "foreground": "#f00"
+                }
+            },
+            {
+                "scope": "googletest.passed",
+                "settings": {
+                    "foreground": "#0f0"
+                }
+            },
+            {
+                "scope": "googletest.run",
+                "settings": {
+                    "foreground": "#0f0"
+                }
+            }
+        ]
     },
 }
