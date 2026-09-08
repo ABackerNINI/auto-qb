@@ -144,6 +144,62 @@ config:
                           enabled: false # 禁用
                           mode: full-checking
                           auto_start: true
+        r_rule_lt_10G: # R盘: 小于10GiB的种子全部全量校验, 校验成功后自动开始
+            enabled: true
+            interval: 5M
+            cooldown: 5M
+            conditions:
+                - size: "<=10GiB"
+                - path:
+                      - "regex:^R:/"
+            actions:
+                - checking:
+                      basic_check: filelist
+                      with_reference:
+                          enabled: true
+                          mode: full-checking
+                          auto_start: true
+                      without_reference:
+                          enabled: true
+                          mode: full-checking
+                          auto_start: true
+        r_rule_gt_10G: # R盘: 大于10GiB的有参考的种子跳检, 无参考的种子全量校验, 校验成功后自动开始
+            enabled: true
+            interval: 5M
+            cooldown: 5M
+            conditions:
+                - size: ">10GiB"
+                - path:
+                      - "regex:^R:/"
+            actions:
+                - checking:
+                      basic_check: filelist
+                      with_reference:
+                          enabled: true
+                          mode: skip-checking
+                          auto_start: true
+                      without_reference:
+                          enabled: true
+                          mode: full-checking
+                          auto_start: true
+
+    hhan_checking_rules:
+        i_rule: # I盘: 有参考文件的种子全量校验, 无参考文件的种子不校验, 校验成功后自动开始
+            enabled: true
+            interval: 30M
+            cooldown: 5M
+            conditions:
+            actions:
+                - checking:
+                      basic_check: filelist
+                      with_reference:
+                          enabled: true
+                          mode: full-checking
+                          auto_start: true
+                      without_reference:
+                          enabled: false # 禁用
+                          mode: full-checking
+                          auto_start: true
         r_rule: # R盘: 全部全量校验, 校验成功后自动开始
             enabled: true
             interval: 5M
@@ -178,7 +234,7 @@ config:
                 add_category: "??HR${required_seeding_time}??"
             rules:
                 - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules.r_rule" # HHan不跳检
+                - "@hhan_checking_rules" # HHan不跳检
         hdfans_org:
             domains:
                 - hdfans.org
