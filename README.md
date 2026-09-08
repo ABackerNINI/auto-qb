@@ -164,8 +164,8 @@ config:
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
 
-    # 自动添加集数标签(仅种子添加时触发; enabled=false 关闭, 模板含 ${episode_first}/${episode_last} 占位,
-    # 单集/多集分别渲染, 多集仅在集数连续时生成, 不连续视为不可靠放弃添加)
+    # 自动添加集数标签, 仅种子添加时触发; 模板含 ${episode_first}/${episode_last} 占位,
+    # 单集/多集分别配置, 多集仅在集数连续时生成, 不连续视为不可靠放弃添加
     add_episode_tags:
         enabled: true
         add_tag_single: "zE${episode_first}"                # 单集标签格式
@@ -311,7 +311,7 @@ config:
             cooldown: 0S                           # 距上次执行成功不足该时长则跳过 🚧
             conditions:                            # 筛选条件必须全部满足
                 - path: /path/to/file              # 路径，支持正则
-                - size: ">=100MiB"                 # 文件大小 🚧
+                - size: ">=100MiB"                 # 文件大小
                 - tags:                            # 标签(不同标签组之间为或)
                     - tag1,tag2
                 - category:                        # 分类
