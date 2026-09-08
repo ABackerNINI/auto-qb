@@ -225,7 +225,7 @@ config:
                 - tracker.hhanclub.net
             tags:
                 - HHan
-            upload_speed_limit: 5000KiB/s
+            upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 3D
@@ -240,7 +240,7 @@ config:
                 - hdfans.org
             tags:
                 - HDFans
-            upload_speed_limit: 0KiB/s
+            upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 3D
@@ -280,7 +280,7 @@ config:
                 - ptfans.cc
             tags:
                 - PTFans
-            upload_speed_limit: 0KiB/s
+            upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 7D
@@ -397,7 +397,7 @@ config:
                 - www.tangpt.top
             tags:
                 - TangPT
-            upload_speed_limit: 0KiB/s
+            upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             rules:
                 - "@add_drive_letter_tag_rules"
@@ -460,7 +460,7 @@ config:
                 - pt.521.best
             tags:
                 - 凤凰PT
-            upload_speed_limit: 1000KiB/s
+            upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             hr:
                 required_seeding_time: 2D
