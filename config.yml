@@ -445,11 +445,25 @@ config:
                 - Bilibili
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
-            hr:
-                required_seeding_time: 3D
-                required_share_ratio: 0
-                extra_seeding_time: 12H
-                condition: 80%
             rules:
                 - "@add_drive_letter_tag_rules"
                 - "@skip_checking_rules"
+        daydream_dmhy_best:
+            domains:
+                - daydream.dmhy.best
+            tags:
+                - U2
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
+        pt_521_best:
+            domains:
+                - pt.521.best
+            tags:
+                - 凤凰PT
+            upload_speed_limit: 1000KiB/s
+            download_speed_limit: 0KiB/s
+            hr:
+                required_seeding_time: 2D
+                required_share_ratio: 0
+                extra_seeding_time: 6H
+                condition: 80%
