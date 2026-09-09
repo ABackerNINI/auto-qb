@@ -6,50 +6,55 @@ config:
         username: abacker
         password: "132435."
 
-    main_tick: 2S # 主循环时间间隔
-    max_tasks_per_tick: 60 # 每个循环最大执行任务数
+    # 运行时数据主目录: 状态/单实例锁/日志/跳检备份默认均存其下; 默认 auto-qb-data, 多实例请用不同路径
+    data_dir: "auto-qb-data"
 
-    # 内置任务检查间隔, 支持时间单位: S秒, M分, H时, D天
-    # 注意: 间隔从"上一轮处理结束"开始计时, 单轮耗时超过间隔时不叠加
+    # 主循环时间间隔
+    main_tick: 2S
+    # 每个循环最大执行任务数
+    max_tasks_per_tick: 20
+
+    # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
     interval: 60S
 
+    # 日志设置
     log:
-        file: "logs/auto-qb.log" # 日志文件路径, 留空仅输出控制台; 24/7运行建议落盘
-        level: INFO # 日志等级
-        max_bytes: 10MiB # 日志轮转大小
+        file: ""                 # 日志文件路径，默认 <data_dir>/logs/auto-qb.log
+        level: INFO              # 日志等级
+        max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(levelname)s - %(message)s" # 日志格式
 
+    # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
 
-    # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
-    hr:
-        add_tag: "" # 满足HR触发条件的种子添加标签, 支持变量
-        add_category: "!!HR${required_seeding_time}!!" # 分类格式, 支持变量
-        overwrite_category: false
-        add_tag_for_satisfied: "" # 做种时间已满足HR要求时间+额外时间的种子添加标签
-        add_category_for_satisfied: "--HR${required_seeding_time}--"
-        overwrite_category_for_satisfied: false
-
-    # 添加集数标签
+    # 自动添加集数标签，仅种子添加时触发; 模板含 ${episode_first}/${episode_last} 占位,
+    # 单集/多集分别配置，多集仅在集数连续时生成，不连续视为不可靠放弃添加
     add_episode_tags:
         enabled: true
-        add_tag_single: "zE${episode_first}"
-        add_tag_multi: "zE${episode_first}-${episode_last}"
+        add_tag_single: "zE${episode_first}"                # 单集标签格式
+        add_tag_multi: "zE${episode_first}-${episode_last}" # 多集标签格式
 
     # 种子分组管理(辅种管理)
     grouping:
-        enabled: true # 启用种子分组管理
+        enabled: true             # 启用种子分组
         check_missing_files: true # 启用缺文件检查
-        missing_tag: MISSING # 文件丢失时整组添加的标签
+        missing_tag: MISSING      # 文件丢失时整组添加的标签
 
-    # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
-    delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
+    # 全局自动彻底删除标签
+    delete_tags:                        # 彻底删除的标签格式，支持正则
         - "M-Team - TP:ignore_case"
-        - "regex:^BTSCHOOL"
-    delete_tags_if_has_no_torrents: # 彻底删除无种子的标签格式(仅当没有任何种子使用时删除)
-        - "@tracker_tags:ignore_case" # 引用全部 tracker 配置的标签
-        - "regex:^zE.*"
-        - "regex:^ORPHAN"
+        - "regex:^BTSCHOOL$"
+    delete_tags_if_has_no_torrents:     # 无种子使用时才删除
+        - "@tracker_tags:ignore_case"   # 引用全部 tracker 配置的标签， 并忽略大小写
+
+    # 全局 HR 设置(站点 hr: 段未设置时兜底)
+    hr:
+        add_tag: ''                                                     # 满足 HR 触发条件时添加的标签格式，支持变量
+        add_category: '!!HR${required_seeding_time}!!'                  # 满足 HR 触发条件时添加的分类格式，支持变量
+        overwrite_category: false                                       # HR 触发条件时是否覆盖分类 (qb中一个种子只能有一个分类)
+        add_tag_for_satisfied: ''                                       # 做种时长满足要求时添加的标签格式  
+        add_category_for_satisfied: '--HR${required_seeding_time}--'    # 做种时长满足要求时添加的分类格式
+        overwrite_category_for_satisfied: false                         # 做种时长满足要求时是否覆盖分类
 
     # 全局限速曲线
     global_speed_limit_curve:

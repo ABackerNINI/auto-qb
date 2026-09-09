@@ -183,20 +183,20 @@ config:
         missing_tag: MISSING      # 文件丢失时整组添加的标签
 
     # 全局自动彻底删除标签
-    delete_tags:                     # 彻底删除的标签格式，支持正则
+    delete_tags:                        # 彻底删除的标签格式，支持正则
         - "M-Team - TP:ignore_case"
         - "regex:^BTSCHOOL$"
-    delete_tags_if_has_no_torrents:  # 无种子使用时才删除
-        - "@tracker_tags:ignore_case" # 引用全部 tracker 配置的标签， 并忽略大小写
+    delete_tags_if_has_no_torrents:     # 无种子使用时才删除
+        - "@tracker_tags:ignore_case"   # 引用全部 tracker 配置的标签， 并忽略大小写
 
     # 全局 HR 设置(站点 hr: 段未设置时兜底)
     hr:
-        add_tag: '' # 满足 HR 触发条件时添加的标签格式，支持变量
-        add_category: '!!HR${required_seeding_time}!!' # 满足 HR 触发条件时添加的分类格式，支持变量
-        overwrite_category: false # HR 触发条件时是否覆盖分类 (qb中一个种子只能有一个分类)
-        add_tag_for_satisfied: '' # 做种时长满足要求时添加的标签格式
-        add_category_for_satisfied: '--HR${required_seeding_time}--' # 做种时长满足要求时添加的分类格式
-        overwrite_category_for_satisfied: false # 做种时长满足要求时是否覆盖分类
+        add_tag: ''                                                     # 满足 HR 触发条件时添加的标签格式，支持变量
+        add_category: '!!HR${required_seeding_time}!!'                  # 满足 HR 触发条件时添加的分类格式，支持变量
+        overwrite_category: false                                       # HR 触发条件时是否覆盖分类 (qb中一个种子只能有一个分类)
+        add_tag_for_satisfied: ''                                       # 做种时长满足要求时添加的标签格式  
+        add_category_for_satisfied: '--HR${required_seeding_time}--'    # 做种时长满足要求时添加的分类格式
+        overwrite_category_for_satisfied: false                         # 做种时长满足要求时是否覆盖分类
 
     # 全局限速曲线配置 (需配置数据来源)
     global_speed_limit_curve: # 见下方[#全局限速配置]
