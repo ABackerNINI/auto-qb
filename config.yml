@@ -70,10 +70,14 @@ config:
                       - 10GiB:
                             upload_speed_limit: 6MiB/s
                       - 20GiB:
-                            upload_speed_limit: 5MiB/s
+                            upload_speed_limit: 5.5MiB/s
                       - 30GiB:
+                            upload_speed_limit: 5MiB/s
+                      - 40GiB:
                             upload_speed_limit: 4MiB/s
                       - 50GiB:
+                            upload_speed_limit: 3MiB/s
+                      - 70GiB:
                             upload_speed_limit: 2MiB/s
                       - 100GiB:
                             upload_speed_limit: 1MiB/s
@@ -460,6 +464,9 @@ config:
                 - U2
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
+            rules:
+                - "@add_drive_letter_tag_rules"
+                - "@skip_checking_rules"
         pt_521_best:
             domains:
                 - pt.521.best
@@ -472,3 +479,6 @@ config:
                 required_share_ratio: 0
                 extra_seeding_time: 6H
                 condition: 80%
+            rules:
+                - "@add_drive_letter_tag_rules"
+                - "@skip_checking_rules"
