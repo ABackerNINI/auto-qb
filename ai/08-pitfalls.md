@@ -19,6 +19,7 @@
 
 ## ⚠️ 平台/API 兼容陷阱
 
+- **锁文件残留随平台不同** (2026-09-10): `locking.py` 的 `release()` 只无条件删除伴生 `meta.json`, 锁文件 `state.lock` 的删除交给 `filelock` 底层 — Windows(msvcrt) 释放时删, POSIX(flock) **不删**(flock 标准语义, 删锁文件反而不安全)。因此 Linux CI 上 `release()` 后锁文件残留是正常行为, 测试按 `os.name == "nt"` 分平台断言, 不是代码 bug。
 - **qB 5.0+ 全局限速**: 必须走 `transfer_upload_limit`/`transfer_set_upload_limit` 端点 (bytes/s, 0=不限)。旧 `app.preferences` 的 `upload_limit/download_limit` 键**已静默失效** (历史 bug, commit f402eaf)。qbittorrent-api 新版 `app.preferences` 是 property 不是方法 (commit be0911b)。
 - **qB 状态枚举**: 用 `qbittorrentapi.TorrentState` 枚举属性 (`is_stopped` 等) 判定, 不要比较 state 字符串 (pausedUP vs stoppedUP 跨版本差异)。
 - **Windows 长路径**: 磁盘文件检查过 `add_long_path_prefix_for_win` (`\\?\` 前缀), 新文件访问要走同一工具。

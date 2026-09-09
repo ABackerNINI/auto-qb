@@ -1,7 +1,7 @@
 """test_locking 测试计划: 单实例锁 (基于 filelock + 伴生 meta)
 
 ## 测试计划 (每个测试函数一条)
-- test_lock_acquire_release_basic: 锁文件创建/释放, 伴生 meta 产生/消失
+- test_lock_acquire_release_basic: 锁文件创建/释放, 伴生 meta 产生/消失 (锁文件删除随平台: Windows 删, POSIX 残留)
 - test_lock_contention_raises_with_holder_info: 第二次获取抛 SingleInstanceLockError, 消息含 PID/时间/路径
 - test_lock_skipped_when_no_lock_flag: QbManager no_lock=True 不创建锁文件 (导出模式)
 - test_lock_file_path_derives_from_state_file: state_file 去掉扩展名, 锁文件为 `<base>.lock`
@@ -20,15 +20,23 @@ from helpers import FakeConfig
 
 
 def test_lock_acquire_release_basic(tmp_path):
-    """锁文件创建/释放, 伴生 meta 产生/消失"""
+    """锁文件创建/释放, 伴生 meta 产生/消失
+
+    注: filelock 底层行为随平台不同 — Windows(msvcrt) 释放时删除锁文件,
+    POSIX(flock) 不删除锁文件(这是 flock 的标准语义, 删除锁文件反而不安全)。
+    因此仅伴生 meta 无条件删除; 锁文件残留与否按平台断言。
+    """
     state_file = str(tmp_path / "state.json")
     lock = SingleInstanceLock(state_file)
     lock.acquire()
     assert os.path.exists(lock.lock_path), "acquire 后锁文件应存在"
     assert os.path.exists(lock.meta_path), "acquire 后伴生 meta 应存在"
     lock.release()
-    assert not os.path.exists(lock.lock_path), "release 后锁文件应消失"
+    # 伴生 meta 无条件删除 (本程序负责清理)
     assert not os.path.exists(lock.meta_path), "release 后伴生 meta 应消失"
+    # 锁文件: Windows(msvcrt) 由 filelock 释放时删除, POSIX(flock) 残留是正常行为
+    if os.name == "nt":
+        assert not os.path.exists(lock.lock_path), "release 后锁文件应消失"
 
 
 def test_lock_contention_raises_with_holder_info(tmp_path):

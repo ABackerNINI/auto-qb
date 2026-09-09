@@ -109,7 +109,9 @@ def test_compare():
     assert utils.compare("!=", 5, 3)
 
 
-def test_add_long_path_prefix_for_win():
+def test_add_long_path_prefix_for_win(monkeypatch):
+    """Windows 平台: 超长/短路径均加 \\\\?\\ 前缀 (monkeypatch 模拟 win32, 与 CI Linux 平台无关)"""
+    monkeypatch.setattr(sys, "platform", "win32")
     long_path = r"C:\a" + "\\" + "x" * 300
     prefixed = utils.add_long_path_prefix_for_win(long_path)
     assert prefixed.startswith("\\\\?\\"), f"超长路径应加前缀: {prefixed}"
@@ -307,15 +309,17 @@ def test_add_long_path_prefix_non_windows(monkeypatch):
     assert utils.add_long_path_prefix_for_win(p) == p
 
 
-def test_add_long_path_prefix_unc():
-    """UNC 路径 -> \\?\\UNC 前缀"""
+def test_add_long_path_prefix_unc(monkeypatch):
+    """Windows 平台: UNC 路径 -> \\?\\UNC 前缀 (monkeypatch 模拟 win32)"""
+    monkeypatch.setattr(sys, "platform", "win32")
     p = r"\\server\share\file"
     result = utils.add_long_path_prefix_for_win(p)
     assert result == r"\\?\UNC\server\share\file"
 
 
-def test_add_long_path_prefix_already_prefixed():
-    """已加 \\?\\ 前缀 -> 原样返回"""
+def test_add_long_path_prefix_already_prefixed(monkeypatch):
+    """Windows 平台: 已加 \\?\\ 前缀 -> 原样返回 (monkeypatch 模拟 win32)"""
+    monkeypatch.setattr(sys, "platform", "win32")
     p = r"\\?\C:\x"
     assert utils.add_long_path_prefix_for_win(p) == p
 
