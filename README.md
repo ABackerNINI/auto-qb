@@ -5,11 +5,13 @@
 <table>
 <tr>
 <td>语言</td><td>Python 3.12+</td>
-<td>依赖</td><td>qbittorrent-api / PyYAML</td>
+<td>依赖</td><td>qbittorrent-api / PyYAML / filelock</td>
 </tr>
 </table>
 
 自动管理 qBittorrent 的 PT 种子: 标签/分类与 HR 管理、辅种分组与缺文件检查、自定义规则引擎(筛选条件 + 动作)、tracker 级限速与校验/跳检、全局限速曲线。所有功能均可配置，高风险动作默认关闭，只对显式允许的范围生效。
+
+注: 🚧标志代表功能已实现但未经大规模实机测试，请谨慎使用。
 
 ## 目录
 
@@ -38,15 +40,15 @@
 
 ### 辅种管理(种子分组)
 
-- 将指向相同文件列表的种子自动归为一组，组内文件大小一致性检查(不一致 → 警告 + 整组暂停)
+- 将指向相同文件列表的种子(辅种)自动归为一组，组内文件大小一致性检查(不一致 → 警告 + 整组暂停)
 - 缺文件检查: 组内种子被删除、或由上传转暂停、或保存路径变化时立即触发磁盘扫描(仅验证文件存在性与大小)；文件丢失 → 整组暂停 + `MISSING` 标签
-- 组内多个种子同时下载、或已完成与下载中并存 → 警告 + 整组暂停
+- 组内多个种子同时下载、或已完成与下载中并存 → 警告 + 整组暂停 🚧
 
 ### 限速
 
 - tracker 配置内置限速字段，种子添加时自动触发限速
 - 规则动作支持单种上传/下载限速(`upload_speed_limit` / `download_speed_limit`)
-- 可自定义全局限速曲线, 根据每天上传下载总量设置总限速(详见[全局限速曲线配置](#全局限速曲线配置))
+- 可自定义全局限速曲线，根据每天上传下载总量设置总限速(详见[全局限速曲线配置](#全局限速曲线配置))
 - 限速不覆盖单数值，手动设置且不希望被覆盖的可以设置为单数比如: 2001 KiB/s
 
 ### 自定义规则 🚧
@@ -97,10 +99,13 @@ pip install pytest pytest-cov
 2. 从现有种子导出模板:
 
 ```bash
+# 注意此命令会覆盖config.yml配置
 python src/auto-qb.py minimal.yml --export-yaml config.yml
 ```
 
 `--export-yaml` 会连接 qBittorrent，按已有种子的 tracker 生成配置模板(尽量保留已有配置不含注释)；加 `--only-missing` 只导出未配置的 tracker，生成最小骨架，方便随时添加新的 tracker。
+
+注意即使加了 `--only-missing` 命令，也会覆盖config.yml配置。
 
 ### 运行
 
@@ -151,7 +156,7 @@ config:
     # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
     interval: 60S
 
-    # 状态持久化文件，必须可写, 注意多实例运行时请使用不同路径!
+    # 状态持久化文件，必须可写，注意多实例运行时请使用不同路径!
     state_file: "logs/auto-qb-state.json"
 
     # 日志设置
@@ -164,8 +169,8 @@ config:
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
 
-    # 自动添加集数标签, 仅种子添加时触发; 模板含 ${episode_first}/${episode_last} 占位,
-    # 单集/多集分别配置, 多集仅在集数连续时生成, 不连续视为不可靠放弃添加
+    # 自动添加集数标签，仅种子添加时触发; 模板含 ${episode_first}/${episode_last} 占位,
+    # 单集/多集分别配置，多集仅在集数连续时生成，不连续视为不可靠放弃添加
     add_episode_tags:
         enabled: true
         add_tag_single: "zE${episode_first}"                # 单集标签格式
@@ -238,7 +243,7 @@ config:
         curves: # 每条 period 曲线为 curve 单项映射; 重复 period 拒绝
             - curve:
                 period: DAY # 周期，支持DAY(1D)，MONTH，ND(最近N天)
-                upload_curve: # 上传量达到指定值后，限制上传速度(阈值须严格递增), 可自行添加修改上传量与速度
+                upload_curve: # 上传量达到指定值后，限制上传速度(阈值须严格递增)，可自行添加修改上传量与速度
                     - 10GiB:
                         upload_speed_limit: 6MiB/s
                     - 20GiB:
@@ -424,7 +429,7 @@ config:
 - `execute_once` 可选: `never` / `once`(每种子只执行一次)/ `daily`(每种子每天最多一次)/ `hourly`(每种子每小时最多一次)
 - `cooldown` 覆盖 `execute_once` 的粒度，如 `execute_once: never` + `cooldown: 10M`
 - 执行历史记录在 `state_file`，键为 `规则名 + 种子 hash + 时间窗口(日/小时)`；`daily` 窗口按自然日切换，与 `upload_size_today` 统计口径一致
-- 跳检另有独立兜底: 跨规则同日去重(同一种子当日只跳检一次) + full-checking 连续失败 3 次当日冷却(防损坏文件 recheck 死循环, 次日重置) + reannounce 运行时最小间隔 10M(不依赖规则去重)
+- 跳检另有独立兜底: 跨规则同日去重(同一种子当日只跳检一次) + full-checking 连续失败 3 次当日冷却(防损坏文件 recheck 死循环，次日重置) + reannounce 运行时最小间隔 10M(不依赖规则去重)
 
 ### 动作结果与错误处理
 
