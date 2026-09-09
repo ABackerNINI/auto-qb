@@ -55,5 +55,5 @@ def test_xxx(tmp_path):
 ### 注意
 
 - `FakeTorrent.tracker_conf` 默认 None — 需要变量替换 (`${required_seeding_time}`)/HR 判定的测试要传 tracker_conf (含 hr) 或依赖 make_ctx 自动匹配 (FakeTracker 带 hr)。
-- `FakeConfig.check_missing_files = False` 但 `GroupingConfig` 实际字段是 `check_missing_files` — 分组测试记得开 `mgr.config.grouping.enabled = True` (+ check_missing_files)。
+- `FakeConfig` 的类属性 `check_missing_files = False` 是历史遗留 (真实配置在 grouping 段: `config.grouping.check_missing_files`, 默认 True) — 分组测试记得开 `mgr.config.grouping.enabled = True`; 缺文件扫描由 `grouping.check_missing_files` 控制, 测试时按需在 `mgr.config.grouping` 上设置。
 - helpers 在未安装 qbittorrentapi 时降级 (`TorrentState=None`), 但项目 venv 已装, 一般无需考虑。

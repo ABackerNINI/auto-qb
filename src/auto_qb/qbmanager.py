@@ -4,11 +4,12 @@
 检测到新增种子时, 自动为该种子创建所有符合条件的 rule 任务(tracker 引用规则或全部启用规则)。
 
 职责拆分(mixins 包, 各模块组合进本类):
-- mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务/process_torrent 兼容入口
+- mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务
 - mixins.tags         TagsMixin        标签/分类/HR 辅助
-- mixins.checking     CheckingMixin    文件检查/辅种跳检/异步校验轮询回调
+- mixins.checking     CheckingMixin    文件存在性/大小一致性检查(checking 动作前置检查复用)
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
-- mixins.tracker      TrackerMixin     tracker 配置匹配
+- mixins.tracker      TrackerMixin     tracker 配置匹配/单种限速
+- mixins.speed_curve  SpeedCurveMixin  全局限速曲线(Traffic Monitor 流量聚合 -> qB 全局限速)
 """
 import logging
 import os

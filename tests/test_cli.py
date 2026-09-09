@@ -9,7 +9,9 @@
 - test_main_export_torrents_info_success: --export-torrents_info 连接成功 -> 导出并返回 0
 - test_main_export_torrents_info_connect_failure: --export-torrents_info 连接失败 -> 不导出返回 1
 - test_main_config_error_clean_exit: ConfigError 提前捕获, stderr 无堆栈, 返回 1
-- test_main_unrelated_value_error_not_swallowed: 非配置类 ValueError(程序 bug)不被误捕, 照常抛出
+- test_main_lock_error_clean_exit: SingleInstanceLockError(构造期锁竞争)干净退出返回 1, 无堆栈无"配置错误"前缀
+- test_main_qb_compat_error_clean_exit: QbCompatError(run 期 qB 版本不兼容)穿透 run 后干净退出返回 1, 无堆栈
+- test_main_unrelated_value_error_not_swallowed: 非 AutoQbError 的 ValueError(程序 bug)不被误捕, 照常抛出
 """
 import sys
 from unittest import mock
@@ -133,8 +135,39 @@ def test_main_config_error_clean_exit(capsys):
     assert "Traceback" not in err
 
 
+def test_main_lock_error_clean_exit(capsys):
+    """SingleInstanceLockError(构造期锁竞争, AutoQbError 但非 ConfigError): 干净退出返回 1, 无堆栈不加配置前缀"""
+    from auto_qb.locking import SingleInstanceLockError
+    err_msg = "另一实例已持有锁 auto-qb-data/state.lock (PID 123); auto-qb 仅允许同一配置一个运行实例"
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError(err_msg)):
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 1
+    err = capsys.readouterr().err
+    assert "另一实例已持有锁" in err
+    assert "配置错误" not in err  # 非配置类致命错误不加"配置错误"前缀
+    assert "Traceback" not in err
+
+
+def test_main_qb_compat_error_clean_exit(capsys):
+    """QbCompatError(run 期 qB 字段不兼容, AutoQbError 但非 ConfigError): 穿透 run 后干净退出返回 1, 无堆栈"""
+    from auto_qb.torrents import QbCompatError
+    manager = mock.MagicMock()
+    manager.run.side_effect = QbCompatError("qBittorrent torrent info 缺少字段: ['foo']; 请检查版本兼容性")
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager):
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 1
+    err = capsys.readouterr().err
+    assert "缺少字段" in err
+    assert "配置错误" not in err
+    assert "Traceback" not in err
+
+
 def test_main_unrelated_value_error_not_swallowed():
-    """非配置类 ValueError(程序 bug)不被误捕: 照常抛出保留堆栈, 不打印'配置错误'"""
+    """非 AutoQbError 的 ValueError(程序 bug)不被误捕: 照常抛出保留堆栈, 不打印'配置错误'"""
     manager = mock.MagicMock()
     manager.run.side_effect = ValueError("runtime bug")
     with _patch_argv("auto-qb", "config.yml"), \

@@ -49,11 +49,13 @@ class FullCheckingMixin:
     """full-checking 执行与组内校验串行化: 由 CheckAction 组合, 依赖 self 的
     basic_check/with_reference/without_reference(checking.py 解析)"""
     def _execute_full_checking(self, ctx: RuleContext, segment: dict):
-        """full-checking: 同步发送 recheck 后创建校验结果轮询子任务(快速队列, interval=CHECK_RESULT_INTERVAL)
+        """full-checking: 先登记校验结果轮询子任务(快速队列, interval=CHECK_RESULT_INTERVAL), 再同步发送 recheck
 
         触发流程:
-          1) 同步发送 torrents_recheck(API 同步返回, 校验后台异步), 失败则直接失败(不建任务)
-          2) 动作返回 pending(规则断点), 规则任务本轮不重入队(_handle_rule 检测断点) ——
+          1) 先 add_task 登记轮询子任务(在途去重: 已在途则 skip, 不重复发 recheck),
+             再同步发送 torrents_recheck(API 同步返回, 校验后台异步); 发送失败返回 fail
+             (不返回 pending, 规则不留断点; 已登记的子任务下轮见非 checking 态走失败分支自然消亡)
+          2) 发送成功动作返回 pending(规则断点), 规则任务本轮不重入队(_handle_rule 检测断点) ——
              origin 的恢复完全由轮询子任务负责: 队列对"暂停/恢复"无感知
           3) 轮询子任务每 CHECK_RESULT_INTERVAL 秒检查 store 快照, 退出 checking* 即完成:
              成功(progress>=1) -> on_success()(晋升 verified_references + auto_start) +

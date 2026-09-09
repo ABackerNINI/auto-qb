@@ -38,7 +38,7 @@
 
 ```bash
 # 测试 (项目 venv: .venv, Python 3.12)
-.venv/Scripts/python.exe -m pytest tests -q            # 全量 580 项, ~1s
+.venv/Scripts/python.exe -m pytest tests -q            # 全量 621 项, ~2s
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest --cov=src --cov-report=term-missing tests -q
 

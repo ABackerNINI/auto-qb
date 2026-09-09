@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class RuleEngineMixin:
-    """规则引擎: 加载/状态持久化/种子级规则任务/向后兼容 process_torrent 入口"""
+    """规则引擎: 规则加载/状态持久化/种子级规则任务"""
 
     config: Config
     client: Optional[Client]

@@ -4,6 +4,7 @@ import logging
 import sys
 
 from .config import DEFAULT_CONFIG_FILE, ConfigError
+from .errors import AutoQbError
 from .exporter import export_yaml_template
 from .qbmanager import QbManager
 
@@ -74,11 +75,14 @@ def main():
         manager.run(args.dry_run)
     except KeyboardInterrupt:
         logging.info("Shutting down...")
-    except ConfigError as e:
-        # 配置异常(文件读取/YAML 解析/校验失败/启动期规则 spec 错误, 统一由 config.ConfigError
-        # 承载)提前捕获: 仅输出错误信息到 stderr, 不打印堆栈(exec_info), 以退出码 1 结束;
-        # 其它类型异常属程序 bug, 照常抛出保留堆栈
-        print(f"配置错误: {e}", file=sys.stderr)
+    except AutoQbError as e:
+        # 致命错误(AutoQbError 体系)统一干净退出: 仅输出消息到 stderr, 不打印堆栈, 退出码 1
+        # - ConfigError(配置读取/YAML 解析/校验失败): 加"配置错误"前缀
+        # - SingleInstanceLockError(锁竞争, 构造期)/QbCompatError(qB 字段不兼容, 运行期)等:
+        #   消息自身已含完整上下文, 直接输出
+        # 非 AutoQbError 异常属程序 bug, 照常抛出保留堆栈
+        prefix = "配置错误: " if isinstance(e, ConfigError) else ""
+        print(f"{prefix}{e}", file=sys.stderr)
         return 1
 
 

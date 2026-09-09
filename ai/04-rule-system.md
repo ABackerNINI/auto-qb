@@ -1,6 +1,6 @@
 # 04 规则系统详解
 
-> 代码: `rules/base.py` (Rule/RuleContext/ActionResult), `rules/conditions.py`, `rules/actions.py`, `rules/registry.py`; 调度: `mixins/rule_engine.py`; 配置加载: `config.py` (`rules_config`)。
+> 代码: `rules/base.py` (Rule/RuleContext/ActionResult), `rules/conditions.py`, `rules/actions/` (动作包: basic/transfer/checking/full_checking/skip_checking), `rules/registry.py`; 调度: `mixins/rule_engine.py`; 配置加载/校验: `config/loaders.py` + `config/validation.py` (`rules_config`)。
 
 ## 规则的定义与绑定
 
@@ -102,7 +102,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 ```
 用户约定: 手动设置且不希望被覆盖时限速用奇数 KiB/s (如 2001KiB/s)。全局限速曲线同样尊重奇数 (cur > 0 and cur % 2 == 1 → 跳过该方向)。
 
-## `checking` 动作 (actions.py CheckAction, 决策链)
+## `checking` 动作 (rules/actions/checking.py 的 CheckAction, 决策链; full_checking.py/skip_checking.py 以 Mixin 组合进 CheckAction)
 
 配置 (dict, fail-fast 校验, 未知键报错):
 ```yaml
@@ -123,13 +123,13 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 决策链 (execute):
 0. **只校验"暂停中未完成"种子**: `state_enum.is_stopped and progress < 1.0`; 已完成/活跃中一律 skip (防已完成种子被反复校验)。
 1. 组内有活跃下载种子 (`_group_has_downloading`: is_downloading 且非 stopped 非 checking) → skip (整组未完成, 任何校验都不做)。
-1.5 **组内校验串行** (`_wait_for_group_checking`): 组内其它成员 full-checking 在途 (`task_queue.active_check_hashes()` 或 store checking 态) → 让位等待 (pending+defer, 创建 check-wait 等待任务轮询, 清空后 `origin.reset()` + 重新入队重走完整决策链; 等待任务独立 kind="check-wait" 普通入队, 不占 `_active_checks` — 否则多个等待成员互相视为校验中而互等, 仅超时可解)。组内共享同一物理文件, 并行全量校验只有重复 I/O; 成功者晋升 verified_references 后等待者自然命中参考。
+1.5 **组内校验串行** (`_wait_for_group_checking`): 组内其它成员 full-checking 在途 (`task_queue.active_check_hashes()` 或 store checking 态) → 让位等待 (返回 pending 规则断点让出, 创建 check-wait 等待任务轮询, 清空后 `add_task(origin)` 默认重置重走完整决策链; 等待任务独立 kind="check-wait" 普通入队, 不占 `_active_checks` — 否则多个等待成员互相视为校验中而互等, 仅超时可解)。组内共享同一物理文件, 并行全量校验只有重复 I/O; 成功者晋升 verified_references 后等待者自然命中参考。
 1.6 **失败推断** (`_skip_on_group_check_failed`): 组内其它成员当日校验失败 (`recheck_fails`) 且两者文件映射一致 (`store.group_sizes[key]` 相等 = 同一物理数据) → skip ("校验结果必然相同"); 映射不一致不推断。
 2. `_find_reference`: 按.basic_check 从组内参考候选 (`_group_reference_candidates`: is_complete 且非 checking — 暂停/停止做种的完成成员亦是有效参考, 参考用元数据 filelist/piece hashes 与暂停状态无关; 校验中 checkingUP 完整性存疑排除) 筛选 — `filelist`: 全部候选 (分组已保证文件列表相同); `piecehashes`: `torrents_piece_hashes` 与目标完全一致者; `custom`: 外部程序 rc=0 者。**再并入** `store.verified_references` 中同组成员 (历史 full-checking 通过者, 仅内存)。排除自身, 按 hash 去重。**带 `skip_checking_tag` 标签的种子(跳检成功, 未经哈希校验)一律排除** — 候选筛选与去重出口两处统一过滤 (`_is_tagged`), 防止"未验证"经参考链传播; 标签名运行时经 ctx 读全局 `config.skip_checking_tag` (`CheckAction._skip_tag`, 全局统一不按规则覆盖, spec 配同名键被校验拒绝; 默认值唯一来源在 config models, 动作类不硬编码常量)。
 3. 有参考 → with_reference 段; 无参考 → without_reference 段; `enabled: false` → skip。
 4. **前置检查** (两模式都强制): `manager.check_filelist` — 磁盘文件全部存在且大小一致, 未通过 skip。
 
-**full-checking** (`_execute_full_checking`): 同步发 `torrents_recheck` → 返回 pending (规则断点, 本轮不重入队) → 创建 check 轮询子任务 (interval=2s, add_task 自动登记 `_active_checks`, 决策链 1.5 依赖) → 见 02-architecture 的完整时序。成功: `on_success()` 自行触发 (`verified_references.add` + auto_start) + `add_task(origin, keep_progress=True)` 续跑; 失败/异常/种子删除: `add_task(origin)` 默认重置重走决策链 (删除时由 origin 的删除守卫判死)。无 task_queue (旧用法) 时退化为仅发请求不跟踪。
+**full-checking** (`_execute_full_checking`): 先 `add_task` 登记 check 轮询子任务 (interval=2s, 自动登记 `_active_checks`, 决策链 1.5 依赖; 重复提交返回 False → skip), 再同步发 `torrents_recheck` (发送失败返回 fail, 子任务下轮轮询自愈) → 返回 pending (规则断点, 本轮不重入队) → 见 02-architecture 的完整时序。成功: `on_success()` 自行触发 (`verified_references.add` + auto_start) + `add_task(origin, keep_progress=True)` 续跑; 失败/异常/种子删除: `add_task(origin)` 默认重置重走决策链 (删除时由 origin 的删除守卫判死)。外部入口 (ctx 无 task) 不创建 origin, 轮询子任务仍工作但无规则可恢复。
 
 **skip-checking** (`_execute_skip_checking`, 高风险; 2026-09-06 重构为四阶段编排, 拆分为 `_skip_gates`/`_skip_delete`/`_skip_readd` 小函数 + `_poll_until` 轮询 helper + `store.restore_torrent` 快照恢复):
 

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CheckingMixin:
-    """文件检查; 辅种跳检(已迁移至规则动作, 占位保留)"""
+    """文件存在+大小一致性检查(checking 动作决策链与缺文件扫描复用本方法)"""
     @staticmethod
     def check_filelist(api, torrent: TorrentRecord) -> str:
         """检查种子文件是否存在且大小一致(api 为 QbApi Facade或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""

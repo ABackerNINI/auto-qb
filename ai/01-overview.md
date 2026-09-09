@@ -50,11 +50,11 @@ python -m auto_qb  # 等价入口
 
 ```
 auto-qb/
-├── src/auto-qb.py          # 兼容入口 (8行, 转发到 auto_qb.cli.main)
-├── src/auto_qb/            # 主包 (~4700 行, 模块地图见 03)
-├── tests/                  # 24 个测试文件 + helpers.py (见 07)
-├── config.yml              # ★ 用户真实生产配置 (含真实站点域名/规则, 勿改勿提交, 已 gitignore)
-├── minimal.yml             # 最小配置示例
+├── src/auto-qb.py          # 兼容入口 (10行, 转发到 auto_qb.cli.main)
+├── src/auto_qb/            # 主包 (~5800 行, 模块地图见 03)
+├── tests/                  # 25 个测试文件 + helpers.py (见 07)
+├── config.yml              # ★ 用户真实生产配置 (含真实站点域名/规则, 勿改勿提交; 受 git 跟踪且未 gitignore, 仅靠约定保护)
+├── minimal.yml             # 最小配置示例 (受 git 跟踪)
 ├── auto-qb-data/           # 运行时数据目录 (state.json 状态 / state.lock 单实例锁 / logs/auto-qb.log 日志 / skip-check-backup/ 跳检备份; 勿改勿提交, 整目录 gitignore)
 ├── 想法.md                 # 设计草稿/TODO (上游文档)
 ├── README.md               # 用户文档 (2026-09-05 已与代码核对同步)

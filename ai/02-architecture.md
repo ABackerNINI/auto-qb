@@ -12,7 +12,7 @@
                     │  快照/惰性缓存/分组索引        (写后同步)      APIFacade
                     ├──────────────────────────────────────────────────┤
                     │ TaskQueue (taskqueue.py)  单一时间优先堆          │
-                    │  Task: refresh / internal / rule / check         │
+                    │  Task: internal / rule / check / check-wait      │
                     ├──────────────────────────────────────────────────┤
                     │ rules/ : Rule + 15条件插件 + 11动作插件 (registry) │
                     └──────────────────────────────────────────────────┘
@@ -94,8 +94,8 @@ _tick(dry_run):
 
 - 仍 `is_checking` → 返回 True 继续轮询。
 - `progress >= 1` (成功) → `on_success()` 自行触发 (`store.verified_references.add(hash)` + 可选 auto_start) → `tq.add_task(origin, keep_progress=True)` 重新入队: 断点保留, 规则从断点动作续跑后续动作。
-- `progress < 1` (失败) / 异常 → `origin.reset()` + `tq.add_task(origin)` → 规则任务重走完整决策链 (再次校验)。
-- 种子已删除 → 仅自身消亡 (释放在途登记), origin 不再重入 (规则任务自然终了)。
+- `progress < 1` (失败) / 异常 → `tq.add_task(origin)` (默认重置断点) → 规则任务重走完整决策链 (再次校验; 当日连续失败达 RECHECK_FAIL_LIMIT 后冷却, 次日重置)。
+- 种子已删除 → `tq.add_task(origin)` (默认重置) 后自身消亡 (释放在途登记); origin 重入后由自己的删除守卫判死 (check-wait 等待任务的删除分支同此模式)。
 
 ## 数据层 TorrentStore (torrents.py)
 

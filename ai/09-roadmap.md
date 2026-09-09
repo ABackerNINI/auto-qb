@@ -1,6 +1,6 @@
 # 09 路线图与项目状态
 
-> 来源: `想法.md` (设计草稿, 权威) + `README.md` 功能状态标注 + 源码 TODO + git log (截至 2026-09-05, commit 51374bd)。回答"XX 做了吗/计划怎么做"以此为准。
+> 来源: `想法.md` (设计草稿, 权威) + `README.md` 功能状态标注 + 源码 TODO + git log (截至 2026-09-09, commit 884702d)。回答"XX 做了吗/计划怎么做"以此为准。
 
 ## 已实现 (✅, 有单测覆盖)
 
@@ -13,27 +13,25 @@
 - checking 动作: filelist/piecehashes/custom 三种参考判定 + full-checking (异步轮询) + skip-checking (导出→删除→重加, 同日去重+备份)
 - tracker 单种限速 (奇数保护)
 - 全局限速曲线: Traffic Monitor 数据源, DAY/MONTH/ND 聚合, 全程分档覆盖, 取最严 (2026-09 最近的大功能, commit ee88bc8..20481f3)
-- 任务队列: 单队列 + defer/resume + check 轮询去重 (12f3b46 重构完成)
+- 任务队列: 单 heapq 队列 + `add_task(keep_progress=...)` 断点语义 + check 轮询在途去重 (12f3b46 重构完成)
 - 数据层: TorrentStore 快照+惰性缓存+分组索引; QbApi Facade写后同步
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
-- 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 走 `ConfigError` 通道 (CLI 退出码 1); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
-- 测试: 612 passed, 分支覆盖 95%
+- 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 失败抛 `SingleInstanceLockError(AutoQbError)`, CLI 单点捕获 AutoQbError 体系干净退出 (退出码 1, stderr 无堆栈); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
+- 测试: 621 passed, 分支覆盖 94% (2026-09-09)
 
 ## 规划中 (🚧, 尚未实现)
 
 ### 规则系统
-- 触发时机: `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` (想法.md; 架构上需要把"新种子检测"泛化为事件源, 任务队列已具备让位/恢复基础)
+- 触发时机: `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` (想法.md; 架构上需要把"新种子检测"泛化为事件源, 任务队列已具备 pending 让出 + `add_task` 恢复基础)
 - 条件取反 (`!` / 非 logic)、tags/category/trackers 条件的 `:ignore_case` 支持
 - tracker 分组 (规则按组筛选)
-- `hr` 条件/状态与 `RuleContext.check_hr_*` 的位置整理 (TODO: 移到 actions.py)
+- HR 判定单点化收尾: `check_hr_condition`/`check_hr_satisfied` 已在 `TorrentRecord` (torrents.py), hr 条件已复用; 但 `mixins/tags.py` `_add_hr_tag_or_category` 仍内联重复 HR 判定 (详见 08-pitfalls TODO 段)
 
 ### 其它功能
-- 单实例锁 (`single_instance_lock` 配置已占位, 校验接受该键但不生效)
 - 插件系统: 直接支持自定义 Python plugin
 - 根据流量接入更多数据源 (traffic_source 当前仅 traffic_monitor 单源, 代码已按列表预留)
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
-- 集数标签自定义格式 (`add_episode_tags` 段 `add_tag_single`/`add_tag_multi` 模板, 2026-09-05)
 
 ## 已知 BUG (来自 想法.md)
 
@@ -41,22 +39,25 @@
 - 复杂限速规则 (tracker+时段组合等)
 - 性能: 主循环拆分平滑占用、全面优化 (想法.md 标注)
 
-### 代码内待办 (TODO 清单, 2026-09-05)
+### 代码内待办 (TODO 清单, 2026-09-09 核对; 位置用函数/方法名锚定, 行号易漂移)
 | 位置 | 内容 |
 |------|------|
-| qbmanager.py:190 | 删除 `_get_torrent` 兼容方法 |
-| ~~rules/base.py:116~~ | 多 tracker 匹配 (已处理 2026-09-05: `_match_tracker_conf` 命中多个打 ERROR 用第一个; base.py:116 TODO 注释已随 HR 迁移删除) |
-| ~~rules/base.py:134,150~~ | HR 判定已迁移 (2026-09-05: check_hr_* 移至 TorrentRecord, replace_vars 移至 utils) |
-| rules/conditions.py:79,108,134 | 条件支持 `:ignore_case` |
-| ~~rules/actions.py:220~~ | recheck 失败冷却(已实现 2026-09-05: 连续失败3次当日冷却, recheck_fails) |
-| rules/actions.py:254 | `_find_reference` 优化为提前返回 |
-| rules/actions.py:292 | 重新设计 custom 校验流程 |
-| ~~rules/actions.py:546~~ | reannounce 限频(已实现 2026-09-05: 运行时最小间隔10M + 加载告警) |
-| ~~episodes.py:112~~ | 集数标签格式自定义 (已实现 2026-09-05: add_episode_tags 段 add_tag_single/add_tag_multi 模板) |
+| ~~qbmanager.py `_get_torrent`~~ | 兼容方法已删除, 统一用 `store.get(hash)` |
+| ~~rules/base.py 多 tracker 匹配~~ | 已处理 2026-09-05: `_match_tracker_conf` 命中多个打 ERROR 用第一个 |
+| ~~rules/base.py HR 判定迁移~~ | 已迁移 2026-09-05: check_hr_* 移至 TorrentRecord, replace_vars 移至 utils |
+| rules/conditions.py (tags/category/trackers 三处 `# TODO: 支持:ignore_case`) | 条件支持 `:ignore_case` |
+| ~~recheck 失败冷却~~ | 已实现 2026-09-05: 连续失败3次当日冷却, recheck_fails |
+| rules/actions/checking.py `CheckAction.execute` 闸门 0 上方 | 未完成且暂停的种子 recheck 后仍未完成, 下一轮会再次校验 (3 次失败冷却兜底, TODO 未销) |
+| rules/actions/checking.py `_find_reference` 上方 | 优化为 `has_reference() -> bool` 提前返回 |
+| rules/actions/checking.py 分段执行处 | 重新设计自定义 (custom) 校验流程 |
+| mixins/tags.py `_add_hr_tag_or_category` | HR 条件/satisfied 判定内联重复, 未复用 `TorrentRecord.check_hr_*` |
+| config/loaders.py `load_global_hr` / `load_tracker_hr` | 函数上方 `# TODO: optimize` |
+| ~~reannounce 限频~~ | 已实现 2026-09-05: 运行时最小间隔10M + 加载告警 |
+| ~~episodes.py 集数标签格式~~ | 已实现 2026-09-05: add_episode_tags 段 add_tag_single/add_tag_multi 模板 |
 
 ## 近期演进脉络 (git log 提炼, 有助于理解"为什么现在是这样")
 
-1. 任务队列驱动重构 (12f3b46, 528 passed) — 双队列合并为单队列, defer/resume 语义建立
+1. 任务队列驱动重构 (12f3b46, 528 passed) — 双队列合并为单 heapq 队列, `add_task` 断点语义 (keep_progress 续跑/默认重置) 建立
 2. 全局限速曲线落地 (ee88bc8 → 20481f3) — SpeedCurveMixin + curves 纯逻辑模块 + qB5.0 transfer 端点适配 (f402eaf)
 3. 跳检稳健性 (5ab17c5, e5ea9e7) — 修复删除种子后访问属性/后续任务报错
 4. 覆盖率补齐 (6f60a5a) — config/qbapi/qbmanager/logging/cli/tracker/speed_curve 缺口
@@ -65,5 +66,4 @@
 
 - **新触发时机** (`on_torrent_added`): `_refresh_torrents` 的 added 循环已经是事件点; Rule 需要支持非周期任务 (一次性触发后消亡或转为 interval)。复用 `_create_torrent_tasks` 的 tracker 匹配 + `_dedup_allowed`。
 - **状态变化触发**: `store.state_snapshot` 已保存上一轮枚举状态, `_handle_state_transitions` 是现成的"状态转移检测"参考实现 (grouping 内部用)。
-- **fail-fast 全量校验**: 参照 `load_global_speed_limit_curve` / `CheckAction._validate` 的 unknown-key + 取值域校验风格, 逐段补齐 (规则 spec 校验可放 `Rule.__init__`)。
 - **新流量源**: `curves.py` 保持无项目内依赖; 数据源解析独立成函数返回 `List[HistoryRow]` 即可复用 aggregate/curve_speed 全链路。
