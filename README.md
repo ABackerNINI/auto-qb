@@ -5,7 +5,7 @@
 **基于 qBittorrent WebUI API 的 PT 种子自动化管理工具**
 
 [![Python](https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/license-Apache%202.0-green)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Status](https://img.shields.io/badge/status-alpha%20%F0%9F%9A%A7-orange)]() [![Tests](https://img.shields.io/badge/tests-612%20passed-success)]()
+[![Status](https://img.shields.io/badge/status-alpha%20%F0%9F%9A%A7-orange)]() [![CI](https://img.shields.io/github/actions/workflow/status/ABackerNINI/auto-qb/ci.yml?branch=develop&label=CI)](https://github.com/ABackerNINI/auto-qb/actions/workflows/ci.yml)
 
 标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检
 

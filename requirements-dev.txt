@@ -1,0 +1,8 @@
+# 运行依赖
+pyyaml
+qbittorrent-api
+filelock
+
+# 开发/测试依赖
+pytest
+pytest-cov
