@@ -26,6 +26,7 @@ KNOWN_CONFIG_KEYS = {
     "main_tick",
     "max_tasks_per_tick",
     "interval",
+    "data_dir",
     "state_file",
     "log",
     "remove_similar_tags",

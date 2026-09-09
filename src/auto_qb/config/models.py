@@ -145,7 +145,9 @@ class Config:
 
     interval: float = 60.0  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
 
-    state_file: str = "auto-qb-data/state.json"  # 状态持久化文件(规则执行历史/上传量快照); 与锁/日志/跳检备份同在数据目录
+    data_dir: str = "auto-qb-data"  # 运行时数据主目录: state/锁/日志/跳检备份默认均派生其下(显式配 state_file/log.file 优先)
+
+    state_file: str = "auto-qb-data/state.json"  # 状态持久化文件(规则执行历史/上传量快照); 未显式配置时由 data_dir 派生为 <data_dir>/state.json
 
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 

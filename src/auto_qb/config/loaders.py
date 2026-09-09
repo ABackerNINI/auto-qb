@@ -26,6 +26,12 @@ from .models import (
 from .validation import _strip_none, validate_config
 
 
+def _under(data_dir: str, *parts: str) -> str:
+    """把 parts 拼到数据主目录下(正斜杠风格, 去掉 data_dir 尾部斜杠; 配置空间路径统一用 /)"""
+    base = str(data_dir).rstrip("/\\")
+    return "/".join([base, *parts])
+
+
 def _get(spec: dict, key: str, default, parse=None):
     """段内键读取统一入口: 键存在 → parse(原始串); 键缺失 → 字段默认(解析后空间, 不再 parse)"""
     if key not in spec:
@@ -51,11 +57,12 @@ def _parse_log_level(value: str) -> int:
     return getattr(logging, str(value).upper())
 
 
-def load_logging_config(spec: dict) -> LoggingConfig:
+def load_logging_config(spec: dict, default_file: str = "") -> LoggingConfig:
     d = LoggingConfig()
     return LoggingConfig(
         level=_get(spec, "level", d.level, _parse_log_level),
-        file=_get(spec, "file", d.file),
+        # file 未配置(留空/空串, 均被 _strip_none 视为未配置) -> default_file 默认落盘; 仅代码层直接传 file="" 才是仅控制台
+        file=_get(spec, "file", default_file),
         max_bytes=_get(spec, "max_bytes", d.max_bytes, parse_fsize),
         format=_get(spec, "format", d.format),
     )
@@ -249,12 +256,18 @@ def load_config(config_path: str) -> Config:
         _get(cfg, "delete_tags_if_has_no_torrents", d.delete_tags_if_has_no_torrents), tracker_tags
     )
 
+    # 运行时数据主目录: 显式 state_file/log.file 优先; 未配置则派生到 data_dir 下
+    data_dir = _get(cfg, "data_dir", d.data_dir)
+    default_state_file = _under(data_dir, "state.json")
+    default_log_file = _under(data_dir, "logs", "auto-qb.log")
+
     return Config(
         main_tick=_get(cfg, "main_tick", d.main_tick, parse_time),
         max_tasks_per_tick=_get(cfg, "max_tasks_per_tick", d.max_tasks_per_tick, int),
         interval=_get(cfg, "interval", d.interval, parse_time),
-        state_file=_get(cfg, "state_file", d.state_file),
-        logging=load_logging_config(_get(cfg, "log", {})),
+        data_dir=data_dir,
+        state_file=_get(cfg, "state_file", default_state_file),
+        logging=load_logging_config(_get(cfg, "log", {}), default_file=default_log_file),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
         add_episode_tags=_get_episode_tags(_get(cfg, "add_episode_tags", d.add_episode_tags)),

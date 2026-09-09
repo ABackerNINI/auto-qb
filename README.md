@@ -148,6 +148,9 @@ config:
         username: <USERNAME>
         password: <PASSWORD>
 
+    # 运行时数据主目录: 状态/单实例锁/日志/跳检备份默认均存其下; 默认 auto-qb-data, 多实例请用不同路径
+    data_dir: "auto-qb-data"
+
     # 主循环时间间隔
     main_tick: 2S
     # 每个循环最大执行任务数
@@ -156,12 +159,9 @@ config:
     # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
     interval: 60S
 
-    # 状态持久化文件，必须可写，注意多实例运行时请使用不同路径!
-    state_file: "auto-qb-data/state.json"
-
     # 日志设置
     log:
-        file: "auto-qb-data/logs/auto-qb.log" # 日志文件路径， 留空仅输出控制台； 24/7运行建议落盘
+        file: ""                 # 日志文件路径，默认 <data_dir>/logs/auto-qb.log
         level: INFO              # 日志等级
         max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式

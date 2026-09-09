@@ -43,8 +43,9 @@
 | `main_tick` | `"2s"` | 主循环间隔 |
 | `max_tasks_per_tick` | 20 | 每 tick 最多弹出的任务数 |
 | `interval` | `"60s"` | 默认任务间隔 (maintenance/全局任务), 从上一轮结束起算 |
-| `state_file` | `"auto-qb-data/state.json"` | 状态文件, 数据目录 auto-qb-data/ 下可写 (状态/锁/跳检备份在数据目录根部, 日志在其 logs/ 子目录, 均集中于 auto-qb-data/ 便于清理) |
-| `log` | | `{file, level, max_bytes, format}`; file 空=仅控制台; RotatingFileHandler 5 备份 |
+| `data_dir` | `"auto-qb-data"` | 运行时数据主目录; state/锁/日志/跳检备份默认均派生其下 (显式配 `state_file`/`log.file` 优先; 留空走默认) |
+| `state_file` | `<data_dir>/state.json` | 状态文件; 未显式配置时由 data_dir 派生 (显式配置优先), 须可写 |
+| `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
 | `add_episode_tags` | `{enabled: false, add_tag_single: "zE${episode_first}", add_tag_multi: "zE${episode_first}-${episode_last}"}` | 种子添加时加集数标签; `enabled` 总开关; `add_tag_single`/`add_tag_multi` 模板, 含 `${episode_first}`/`${episode_last}` 占位, 多集仅在集数连续时生成 |
 | `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING"}` |
@@ -105,7 +106,7 @@ global_speed_limit_curve:
 |------|------|
 | `auto-qb-data/state.json` | ★ 生产状态 (gitignore, 位于数据目录 auto-qb-data/)。实测结构: `upload_snapshots.{daily,weekly,monthly} = {key, baseline{hash: uploaded}}`; `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}`; `reannounce_ts = {hash: 上次reannounce时间戳}`; `recheck_fails = {hash: {date, count}}`(当日连续校验失败); `skip_check_day = {hash: "YYYY-MM-DD"}`(跨规则同日跳检去重) |
 | `auto-qb-data/state.lock` / `state.lock.meta.json` | 单实例锁及伴生 meta (由 state_file 派生: 去扩展名 + `.lock`, meta 再加 `.meta.json`) |
-| `auto-qb-data/logs/auto-qb.log` | RotatingFileHandler, maxBytes 按 `log.max_bytes`, 5 备份 (路径由 `log.file` 配置, 默认空=仅控制台; 日志独立子目录 logs/, setup_logging 自动建目录) |
+| `auto-qb-data/logs/auto-qb.log` | RotatingFileHandler, maxBytes 按 `log.max_bytes`, 5 备份 (log.file 未配置时默认落盘此路径, 显式配 `log.file` 优先; setup_logging 自动建 logs/ 子目录) |
 | `auto-qb-data/skip-check-backup/` | 跳检重加失败时的 .torrent 备份 (由 dirname(state_file) 派生, 与状态同目录) |
 | `torrents.txt` | `--export-torrents_info` 的调试输出 |
 

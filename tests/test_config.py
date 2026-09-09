@@ -13,6 +13,7 @@
 - test_config_tracker_tags_expand_dedup: 重复 tag/@tracker_tags 引用去重保序
 - test_validate_minimal_ok: 仅必填项的最小配置通过校验
 - test_validate_empty_sections_use_defaults: 显式留空的段/键视为未配置(走默认值)
+- test_data_dir_derives_runtime_paths: data_dir 主目录派生 state_file/log.file; 显式优先; log.file 留空/空串=默认落盘
 - test_validate_unknown_keys_aggregated: 各段未知键聚合一次性报告(含路径)
 - test_validate_root_unknown_key: 顶层未知键报错
 - test_validate_required_missing: 缺 domains / 站点 hr 缺 required_seeding_time 报错
@@ -258,10 +259,60 @@ def test_validate_empty_sections_use_defaults():
         )
         cfg = load_config(_write_raw(td, text))
         assert cfg.main_tick == 2.0 and cfg.interval == 60  # 默认值
-        assert cfg.state_file == "auto-qb-data/state.json"  # 留空走默认
+        assert cfg.data_dir == "auto-qb-data"  # 数据主目录默认
+        assert cfg.state_file == "auto-qb-data/state.json"  # 留空走默认(由 data_dir 派生)
+        assert cfg.logging.file == "auto-qb-data/logs/auto-qb.log"  # log 留空 -> 默认落盘到主目录
         assert cfg.logging.level == logging.INFO
         assert cfg.trackers["T1"].hr.extra_seeding_time == 0
         assert cfg.trackers["T1"].hr.required_share_ratio == 0.0
+
+
+def test_data_dir_derives_runtime_paths():
+    """data_dir 数据主目录派生 state_file/log.file; 显式配置优先; log.file 空串=仅控制台"""
+    with tempfile.TemporaryDirectory() as td:
+        # 1. 自定义 data_dir(含尾部斜杠归一化), 未配 state_file/log.file -> 派生到主目录下
+        text = (
+            "config:\n"
+            "  data_dir: mydata/\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains:\n"
+            "        - a.com\n"
+        )
+        cfg = load_config(_write_raw(td, text))
+        assert cfg.data_dir == "mydata/"
+        assert cfg.state_file == "mydata/state.json"
+        assert cfg.logging.file == "mydata/logs/auto-qb.log"  # 未配 log.file -> 默认落盘到主目录
+
+        # 2. 显式 state_file/log.file 优先于 data_dir 派生
+        text2 = (
+            "config:\n"
+            "  data_dir: mydata\n"
+            "  state_file: custom/state.json\n"
+            "  log:\n"
+            "    file: custom/run.log\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains:\n"
+            "        - a.com\n"
+        )
+        cfg2 = load_config(_write_raw(td, text2))
+        assert cfg2.state_file == "custom/state.json"
+        assert cfg2.logging.file == "custom/run.log"
+
+        # 3. log.file 显式空串/留空 -> 配置体系统一视为"未配置", 走默认落盘(无法用空串表达仅控制台)
+        text3 = (
+            "config:\n"
+            "  data_dir: mydata\n"
+            "  log:\n"
+            "    file: \"\"\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains:\n"
+            "        - a.com\n"
+        )
+        cfg3 = load_config(_write_raw(td, text3))
+        assert cfg3.logging.file == "mydata/logs/auto-qb.log"  # 空串=未配置=默认落盘
 
 
 def test_validate_unknown_keys_aggregated():
