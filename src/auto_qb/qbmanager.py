@@ -11,6 +11,7 @@
 - mixins.tracker      TrackerMixin     tracker 配置匹配
 """
 import logging
+import os
 import time
 from typing import List, Optional
 
@@ -43,6 +44,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.api = QbApi(self._client, self.store)
         # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
         self.state_file = self.config.state_file
+        # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)
+        os.makedirs(os.path.dirname(self.state_file) or ".", exist_ok=True)
         self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
         # 规则结构初始化(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
         self.rules: List[Rule] = []

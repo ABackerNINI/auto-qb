@@ -72,9 +72,9 @@ def test_lock_skipped_when_no_lock_flag(tmp_path):
 def test_lock_file_path_derives_from_state_file(tmp_path):
     """state_file 去掉扩展名, 锁文件为 `<base>.lock` (避免与 state 文件同名冲突)"""
     # .json -> .lock
-    lock1 = SingleInstanceLock(str(tmp_path / "auto-qb-state.json"))
-    assert lock1.lock_path.endswith("auto-qb-state.lock")
-    assert lock1.lock_path != str(tmp_path / "auto-qb-state.json.lock")
+    lock1 = SingleInstanceLock(str(tmp_path / "state.json"))
+    assert lock1.lock_path.endswith("state.lock")
+    assert lock1.lock_path != str(tmp_path / "state.json.lock")
     # 无扩展名也加 .lock
     lock2 = SingleInstanceLock(str(tmp_path / "state"))
     assert lock2.lock_path.endswith("state.lock")

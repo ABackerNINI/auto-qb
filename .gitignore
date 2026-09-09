@@ -3,12 +3,10 @@ test.yml
 torrents.txt
 example-torrent-info.txt
 test.py
-# 状态文件与单实例锁(2026-09-05: 默认移到 logs/)
-logs/auto-qb-state.json
-logs/auto-qb-state.lock
-logs/auto-qb-state.lock.meta.json
+# 运行时数据目录(2026-09-09: 状态/单实例锁/日志/跳检备份集中到 auto-qb-data/)
+auto-qb-data/
 
-# 测试跳检备份残留
+# 测试跳检备份残留(state_file 配在仓库根时的兜底)
 skip-check-backup/
 
 # copilot自定义指令
@@ -19,5 +17,5 @@ skip-check-backup/
 htmlcov/
 cov-report.txt
 
-# 程序运行日志
+# 程序运行日志(旧默认目录; 现默认已迁 auto-qb-data/, 此条兜底历史 config.yml 的 log.file)
 logs/

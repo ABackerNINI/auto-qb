@@ -157,11 +157,11 @@ config:
     interval: 60S
 
     # 状态持久化文件，必须可写，注意多实例运行时请使用不同路径!
-    state_file: "logs/auto-qb-state.json"
+    state_file: "auto-qb-data/state.json"
 
     # 日志设置
     log:
-        file: "logs/auto-qb.log" # 日志文件路径， 留空仅输出控制台； 24/7运行建议落盘
+        file: "auto-qb-data/logs/auto-qb.log" # 日志文件路径， 留空仅输出控制台； 24/7运行建议落盘
         level: INFO              # 日志等级
         max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式

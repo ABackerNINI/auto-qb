@@ -3,7 +3,7 @@
 ## 🔴 生产文件, 禁止改动/提交
 
 - **`config.yml`**: 用户真实生产配置 — 含真实 PT 站点域名、tracker 规则、qB 凭据引用。不是示例! 改示例用 `minimal.yml`/`test_yamls/`。
-- **`logs/auto-qb-state.json`** (2026-09-05 改放 logs/): 运行中程序的状态文件, 程序退出时覆写。改它毫无意义且可能破坏运行。锁文件 `<state_file 去扩展名>.lock` 与伴生 `.meta.json` 也在同目录。
+- **`auto-qb-data/state.json`** (2026-09-09 改: 运行时文件集中到 auto-qb-data/ 数据目录): 运行中程序的状态文件, 程序退出时覆写。改它毫无意义且可能破坏运行。锁文件 `<state_file 去扩展名>.lock` (`auto-qb-data/state.lock`) 与伴生 `.meta.json` 也在同目录; 日志在 `auto-qb-data/logs/auto-qb.log`, 跳检备份在 `auto-qb-data/skip-check-backup/`, 均落在此数据目录下。
 - 两者均已 gitignore, 但在工作区可见 — 不要"顺手"格式化/重排它们。
 
 ## ⚠️ 高风险业务操作 (代码中已有防护, 改动时不得削弱)
