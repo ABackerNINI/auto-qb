@@ -109,6 +109,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 - checking:
     basic_check: filelist            # filelist | piecehashes | custom (必填)
     custom_basic_check_program_path: prog.exe   # basic_check=custom 时必填; 参数: <hash> <保存路径>, rc=0 即为参考
+    # skip_checking_tag 不在 checking spec 配置(全局统一, 校验层列为 spec 未知键): 跳检成功后打的标签, 带此标签者不作参考, 标签名 = 全局 config.skip_checking_tag
     with_reference:                  # 有参考种子段 (enabled/mode/auto_start)
         enabled: true
         mode: skip-checking          # skip-checking | full-checking
@@ -124,7 +125,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 1. 组内有活跃下载种子 (`_group_has_downloading`: is_downloading 且非 stopped 非 checking) → skip (整组未完成, 任何校验都不做)。
 1.5 **组内校验串行** (`_wait_for_group_checking`): 组内其它成员 full-checking 在途 (`task_queue.active_check_hashes()` 或 store checking 态) → 让位等待 (pending+defer, 创建 check-wait 等待任务轮询, 清空后 `origin.reset()` + 重新入队重走完整决策链; 等待任务独立 kind="check-wait" 普通入队, 不占 `_active_checks` — 否则多个等待成员互相视为校验中而互等, 仅超时可解)。组内共享同一物理文件, 并行全量校验只有重复 I/O; 成功者晋升 verified_references 后等待者自然命中参考。
 1.6 **失败推断** (`_skip_on_group_check_failed`): 组内其它成员当日校验失败 (`recheck_fails`) 且两者文件映射一致 (`store.group_sizes[key]` 相等 = 同一物理数据) → skip ("校验结果必然相同"); 映射不一致不推断。
-2. `_find_reference`: 按.basic_check 从组内参考候选 (`_group_reference_candidates`: is_complete 且非 checking — 暂停/停止做种的完成成员亦是有效参考, 参考用元数据 filelist/piece hashes 与暂停状态无关; 校验中 checkingUP 完整性存疑排除) 筛选 — `filelist`: 全部候选 (分组已保证文件列表相同); `piecehashes`: `torrents_piece_hashes` 与目标完全一致者; `custom`: 外部程序 rc=0 者。**再并入** `store.verified_references` 中同组成员 (历史 full-checking 通过者, 仅内存)。排除自身, 按 hash 去重。
+2. `_find_reference`: 按.basic_check 从组内参考候选 (`_group_reference_candidates`: is_complete 且非 checking — 暂停/停止做种的完成成员亦是有效参考, 参考用元数据 filelist/piece hashes 与暂停状态无关; 校验中 checkingUP 完整性存疑排除) 筛选 — `filelist`: 全部候选 (分组已保证文件列表相同); `piecehashes`: `torrents_piece_hashes` 与目标完全一致者; `custom`: 外部程序 rc=0 者。**再并入** `store.verified_references` 中同组成员 (历史 full-checking 通过者, 仅内存)。排除自身, 按 hash 去重。**带 `skip_checking_tag` 标签的种子(跳检成功, 未经哈希校验)一律排除** — 候选筛选与去重出口两处统一过滤 (`_is_tagged`), 防止"未验证"经参考链传播; 标签名运行时经 ctx 读全局 `config.skip_checking_tag` (`CheckAction._skip_tag`, 全局统一不按规则覆盖, spec 配同名键被校验拒绝; 默认值唯一来源在 config models, 动作类不硬编码常量)。
 3. 有参考 → with_reference 段; 无参考 → without_reference 段; `enabled: false` → skip。
 4. **前置检查** (两模式都强制): `manager.check_filelist` — 磁盘文件全部存在且大小一致, 未通过 skip。
 
@@ -149,7 +150,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 - **`store.restore_torrent(torrent)` 恢复删除前快照记录** (tracker_conf/惰性缓存保留): `remove_torrent` 保留 `_known_hashes`, 重加的同 hash 种子不进 added 列表, 不恢复则永久未匹配 (生产 BUG 2026-09-06 已修)
 - 记录 `skip_check_day[hash]=today` (跨规则同日去重写入)
 
-**阶段 4 收尾**: 无参考 → warning (高风险); `auto_start` → `torrents_start`。
+**阶段 4 收尾**: 无参考 → warning (高风险); **跳检成功打标签** (标签名运行时经 ctx 读全局 `config.skip_checking_tag` (`_skip_tag`), 默认 zSkipChecked, 全局统一不按规则覆盖; `tag not in torrent.tags_set` 时经 Facade `torrents_add_tags` 打标并同步 store; 打标失败 try/except 仅 warning, 不影响跳检成功结论; 标签为空则跳过打标); `auto_start` → `torrents_start`。标签持久化在种子上 (跨重启), 后续 `_find_reference` 据此排除跳检种子作参考。
 
 **风险须知** (写文档/日志时要传达): 跳检保留标签/分类/限速/路径, 但**丢失下载量/上传量/做种时长/分享率**; 文件内容错误会上传垃圾数据。另注意: 删除种子 → `store.remove_torrent` 立即从快照移除, 该种子后续动作/任务需容错 (这正是 commit e5ea9e7 修的 bug, 测试 test_checking.py 有覆盖)。 跳检重加成功后 `_execute_skip_checking` 会 `store.restore_torrent` 恢复删除前记录 (跳检流程内部); 其它路径下 `tracker_conf=None` 时 `tracker_name` 返回 "Unknown" (不回退 tor.client, 生产 TorrentDictionary 无此属性)。
 

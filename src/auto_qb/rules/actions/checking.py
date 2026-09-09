@@ -24,6 +24,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
       - custom_basic_check_program_path: basic_check=custom 时必填; 参数: <种子hash> <保存路径>
       - with_reference / without_reference: 各含 mode(skip-checking|full-checking) + auto_start(默认 false)
 
+    跳检标签名不在 spec 配置(全局统一, 校验层已列为 spec 未知键): 运行时经 ctx 读全局
+    config.skip_checking_tag(默认 zSkipChecked, 默认值唯一来源在 config models)。
+
     决策链(想法2):
       0. 仅"暂停中未完成"种子(is_paused 且 progress<1, 如跨种添加后的 pausedDL)才校验,
          已完成(progress=1)/活跃中(下载/做种中)种子一律跳过(避免已完成种子被反复校验)
@@ -49,6 +52,10 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         self.custom_program = str(spec.get("custom_basic_check_program_path") or "")
         self.with_reference = self._parse_section(spec, "with_reference")
         self.without_reference = self._parse_section(spec, "without_reference")
+
+    def _skip_tag(self, ctx) -> str:
+        """跳检成功标签名: 直接读全局 config.skip_checking_tag(全局统一, 不按规则覆盖)"""
+        return ctx.manager.config.skip_checking_tag
 
     @staticmethod
     def _parse_section(spec: dict, name: str) -> dict:
@@ -115,8 +122,22 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
 
     # TODO: 优化为has_reference() -> bool, 提前返回
     def _find_reference(self, ctx: RuleContext, members: list) -> list:
-        """按 basic_check 模式从组内已完成且未校验成员筛选参考种子, 并集内存 verified_references(排除自身)"""
-        candidates = [c for c in ctx.manager._group_reference_candidates(members) if c.hash != ctx.hash]
+        """按 basic_check 模式从组内已完成且未校验成员筛选参考种子, 并集内存 verified_references(排除自身)
+
+        带 skip_checking_tag 标签的种子(跳检成功, 未经哈希校验)一律排除: 其数据可信度仅来自
+        文件存在与大小一致, 不能作为其它种子跳检/校验的参考, 防止"未验证"经参考链传播。
+        标签名运行时经 ctx 读全局 config.skip_checking_tag(见 _skip_tag)。
+        """
+        tag = self._skip_tag(ctx)
+
+        def _is_tagged(t) -> bool:
+            return bool(tag) and tag in t.tags_set
+
+        # 候选即排除带标种子(避免 piecehashes 模式对其发无意义的 API 请求)
+        candidates = [
+            c for c in ctx.manager._group_reference_candidates(members)
+            if c.hash != ctx.hash and not _is_tagged(c)
+        ]
         refs = []
         if self.basic_check == "filelist":
             refs = list(candidates)  # 分组已保证文件列表相同, 无需重复对比
@@ -142,10 +163,10 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         for h in ctx.manager.store.verified_references:
             if h in members and h != own and h in by_hash:
                 refs.append(by_hash[h])
-        # 去重(按 hash), 过滤无效
+        # 去重(按 hash), 过滤无效与带跳检标签的种子(verified_references 并集在此统一排除)
         seen, result = set(), []
         for t in refs:
-            if t is None or t.hash in seen:
+            if t is None or t.hash in seen or _is_tagged(t):
                 continue
             seen.add(t.hash)
             result.append(t)

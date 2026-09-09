@@ -356,6 +356,7 @@ class FakeConfig:
     remove_similar_tags = False
     add_episode_tags = AddEpisodeTagsConfig()  # 默认 disabled; 测试按需赋值 AddEpisodeTagsConfig(enabled=True, ...)
     hr = HRRule()  # 全局 HR 默认输出设置
+    skip_checking_tag = "zSkipChecked"  # 跳检成功标签默认名(与 Config 默认一致; 测试按需赋值, ""=禁用)
     delete_tags = []  # 全局: 彻底删除的标签格式(支持正则)
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)

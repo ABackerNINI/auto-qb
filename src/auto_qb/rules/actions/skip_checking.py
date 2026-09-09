@@ -51,6 +51,9 @@ class SkipCheckingMixin:
         - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
         - 重加失败时 .torrent 落盘备份并记录元数据(立即落盘), 提示手动恢复
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
+        - 跳检成功后打 skip_checking_tag 标签(标签名 = 全局 config.skip_checking_tag,
+          默认 zSkipChecked, 运行时经 ctx 读取, 不按规则覆盖): 标记未经
+          哈希校验, 查找参考种子时排除带该标签者(防止"未验证"经参考链传播); 打标失败不影响跳检结果
         """
         torrent = ctx.torrent
 
@@ -89,6 +92,17 @@ class SkipCheckingMixin:
         if not has_reference:
             logger.warning(f"规则[{ctx.rule_name}] {torrent.log_repr} | 无参考跳检(高风险): "
                            f"仅文件存在与大小对比, 内容错误会传垃圾数据")
+        # 跳检成功打标(skip_checking_tag): 标记该种子未经哈希校验, 后续查找参考种子时排除;
+        # 标签名直接读全局 config.skip_checking_tag(默认 zSkipChecked, 不按规则覆盖);
+        # 打标失败不影响跳检结果(跳检本身已完成), 仅记 warning
+        skip_tag = self._skip_tag(ctx)
+        if skip_tag and skip_tag not in torrent.tags_set:
+            try:
+                ctx.api.torrents_add_tags(tags=[skip_tag], torrent_hashes=ctx.hash)
+                logger.info(f"规则[{ctx.rule_name}] {torrent.log_repr} | "
+                            f"跳检完成, 已打标签 {skip_tag}(该种子不作参考种子)")
+            except Exception as e:
+                logger.warning(f"规则[{ctx.rule_name}] {torrent.log_repr} | 跳检打标签失败(不影响跳检结果): {e}")
         if segment["auto_start"]:
             try:
                 ctx.api.torrents_start(torrent_hashes=ctx.hash)

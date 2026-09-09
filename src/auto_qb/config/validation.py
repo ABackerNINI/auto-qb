@@ -15,7 +15,7 @@ RULE_KNOWN_KEYS = {
 EXECUTE_ONCE_VALUES = ("never", "once", "daily", "hourly")
 STOP_IF_VALUES = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
-# checking 动作 spec 已知键与取值域
+# checking 动作 spec 已知键与取值域(skip_checking_tag 为全局配置, 不按规则覆盖, 故列为未知键)
 CHECKING_ACTION_KNOWN_KEYS = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
 CHECKING_VALID_BASIC = ("filelist", "piecehashes", "custom")
 CHECKING_VALID_MODES = ("skip-checking", "full-checking")
@@ -32,6 +32,7 @@ KNOWN_CONFIG_KEYS = {
     "remove_similar_tags",
     "add_episode_tags",
     "hr",
+    "skip_checking_tag",
     "delete_tags",
     "delete_tags_if_has_no_torrents",
     "grouping",

@@ -52,6 +52,7 @@
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
 | `hr` | | 全局 HR 输出设置 (add_tag/add_category/overwrite_category/add_tag_for_satisfied/add_category_for_satisfied/overwrite_category_for_satisfied); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
+| `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
 | `trackers` | {} | 站点配置, 见下 |
 | `<任意>_rules` | {} | 规则集 (键名以 `_rules` 结尾), 见 04 |

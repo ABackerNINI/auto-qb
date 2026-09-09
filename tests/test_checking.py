@@ -57,6 +57,7 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from auto_qb.config import Config
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import _recheck_fail_count
@@ -96,7 +97,10 @@ def make_check_cfg(
     extra_actions=None,
     execute_once="never"
 ):
-    """构造 checking 规则配置(条件: 标签含"需校验"); extra_actions 追加到动作序列(续跑测试用)"""
+    """构造 checking 规则配置(条件: 标签含"需校验"); extra_actions 追加到动作序列(续跑测试用)
+
+    跳检标签名全局统一(config.skip_checking_tag), spec 不配置该键。
+    """
     cfg = FakeConfig()
     action = {
         "checking":
@@ -414,7 +418,7 @@ def test_checking_paused_completed_reference():
     seed_store(mgr, [t, p])
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, f"暂停完成参考应可用: {client.calls}"
-    assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"跳检调用顺序: {client.calls}"
+    assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"跳检调用顺序: {client.calls}"
     add_call = [c for c in client.calls if c[0] == "add"][0]
     assert add_call[1]["is_skip_checking"] is True, f"重加应跳过校验: {add_call}"
 
@@ -490,7 +494,7 @@ def test_checking_filelist_reference_skip_checking():
     seed_store(mgr, [t, r])
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, f"有参考应处理: {client.calls}"
-    assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"跳检调用顺序: {client.calls}"
+    assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"跳检调用顺序: {client.calls}"
     add_call = [c for c in client.calls if c[0] == "add"][0]
     assert add_call[1]["is_skip_checking"] is True, f"重加应跳过校验: {add_call}"
     assert mgr.state.get("exec_history"), "跳检应记录执行历史"
@@ -601,7 +605,7 @@ def test_checking_no_reference_skip_checking_warns():
     with patch("auto_qb.rules.actions.skip_checking.logger.warning") as mw:
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
         assert handled
-        assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"], f"{client.calls}"
+        assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"{client.calls}"
         assert any("无参考跳检" in str(c) for c in mw.call_args_list), f"应有高风险警告: {mw.call_args_list}"
 
 
@@ -621,8 +625,8 @@ def test_checking_piecehashes_same():
     assert handled
     assert ("piece_hashes", "HASH123") in client.calls, f"应获取目标 piece hashes: {client.calls}"
     assert ("piece_hashes", "R1") in client.calls, f"应获取候选 piece hashes: {client.calls}"
-    assert [c[0] for c in client.calls] == ["piece_hashes", "piece_hashes", "export", "delete", "add"], \
-        f"有参考应走 with_reference 跳检(无 start): {client.calls}"
+    assert [c[0] for c in client.calls] == ["piece_hashes", "piece_hashes", "export", "delete", "add", "add_tags"], \
+        f"有参考应走 with_reference 跳检(无 start, 跳检后打标): {client.calls}"
 
 
 def test_checking_piecehashes_diff():
@@ -723,9 +727,7 @@ def test_checking_verified_references_not_persisted():
         state_file = os.path.join(td, "state.json")
         cfg = make_check_cfg(without_mode="full-checking", without_start=True)
         cfg.state_file = state_file
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-        mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
-        mgr.task_queue = TaskQueue()
+        mgr = make_mgr(cfg, with_tq=True)
         client = CheckingFakeClient()
         mgr.client = client
         t = make_target()
@@ -818,12 +820,125 @@ def test_checking_skip_dedup_same_day():
     t = make_target()
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled
-    assert [c[0] for c in client.calls] == ["export", "delete", "add", "start"]
+    assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"]
 
     client.calls.clear()
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "同日不应重复跳检"
     assert ("delete", False) not in client.calls, f"同日不应删除种子: {client.calls}"
+
+
+# ============================================================
+# C4. 跳检打标与参考排除(skip_checking_tag)
+# ============================================================
+def test_skip_check_tag_uses_global_config():
+    """测试: 跳检标签名运行时读全局 config.skip_checking_tag(自定义全局名生效)"""
+    cfg = make_check_cfg(basic_check="filelist", with_mode="skip-checking", with_start=True)
+    cfg.skip_checking_tag = "zGlobalTag"  # 全局自定义标签名
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "stalledUP"}
+    t = make_target()
+    r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
+    inject_group(mgr, "HASH123", "R1")
+    seed_store(mgr, [t, r])
+    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    assert handled
+    assert ("add_tags", ["zGlobalTag"]) in client.calls, f"应使用全局 config 标签名: {client.calls}"
+
+
+def test_skip_check_success_applies_tag():
+    """测试: 跳检成功后给种子打 zSkipChecked 标签(Facade 同步 store, 记录 tags_set 含该标签)"""
+    cfg = make_check_cfg(basic_check="filelist", with_mode="skip-checking", with_start=True)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "stalledUP"}
+    t = make_target()
+    r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
+    inject_group(mgr, "HASH123", "R1")
+    seed_store(mgr, [t, r])
+    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    assert handled
+    assert ("add_tags", ["zSkipChecked"]) in client.calls, f"跳检成功应打默认标签: {client.calls}"
+    assert "zSkipChecked" in mgr.store.get("HASH123").tags_set, "Facade 应把标签同步到 store 记录"
+
+
+def test_skip_check_tag_empty_disables():
+    """测试: 全局标签名为空串(代码层直构) -> 跳检成功也不打标、不排除"""
+    cfg = make_check_cfg(basic_check="filelist", with_mode="skip-checking", with_start=True)
+    cfg.skip_checking_tag = ""  # 空标签名: 按值判空, 不打标(生产 YAML 无法配置空值, 仅代码层可达)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "stalledUP"}
+    t = make_target()
+    r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
+    inject_group(mgr, "HASH123", "R1")
+    seed_store(mgr, [t, r])
+    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    assert handled
+    assert not any(c[0] == "add_tags" for c in client.calls), f"禁用打标时不应调用 add_tags: {client.calls}"
+
+
+def test_skip_check_tag_failure_doesnt_fail_skip():
+    """测试: 打标签异常不影响跳检成功结论(仅记 warning, 跳检本身已完成)"""
+    cfg = make_check_cfg(basic_check="filelist", with_mode="skip-checking", with_start=False)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+
+    def _raise(*a, **k):
+        raise RuntimeError("simulated add_tags failure")
+
+    client.torrents_add_tags = _raise  # 打标始终失败
+    client.torrents["HASH123"] = {"state": "stalledUP"}
+    t = make_target()
+    r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
+    inject_group(mgr, "HASH123", "R1")
+    seed_store(mgr, [t, r])
+    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    assert handled, "打标失败不应使跳检失败"
+    names = [c[0] for c in client.calls]
+    assert "export" in names and "delete" in names and "add" in names, f"跳检四阶段应已完成: {client.calls}"
+
+
+def test_skip_check_tagged_member_excluded_as_reference():
+    """测试: 组内带跳检标签的已完成成员不作参考(未经哈希校验) -> 改走 without_reference 段"""
+    cfg = make_check_cfg(
+        basic_check="filelist", with_mode="skip-checking", without_mode="full-checking", without_start=False
+    )
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")  # 已完成但带跳检标签
+    inject_group(mgr, "HASH123", "R1")
+    seed_store(mgr, [t, r])
+    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    assert handled, "无可用参考应走 without_reference 段"
+    assert not any(c[0] == "export" for c in client.calls), f"带标成员不可作参考, 不应跳检: {client.calls}"
+    assert ("recheck", None) in client.calls, f"应走 without_reference full-checking: {client.calls}"
+
+
+def test_skip_check_tagged_verified_reference_excluded():
+    """测试: 带跳检标签的成员即便在内存 verified_references 中也被排除(并集出口统一过滤)"""
+    cfg = make_check_cfg(
+        basic_check="filelist", with_mode="skip-checking", without_mode="full-checking", without_start=False
+    )
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")
+    inject_group(mgr, "HASH123", "R1")
+    seed_store(mgr, [t, r])
+    mgr.store.verified_references.add("R1")  # 即便历史 full-checking 晋升过, 带标仍排除
+    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    assert handled
+    assert not any(c[0] == "export" for c in client.calls), f"带标 verified 参考应排除, 不应跳检: {client.calls}"
+    assert ("recheck", None) in client.calls, f"应走 without_reference full-checking: {client.calls}"
 
 
 def test_checking_dry_run():
@@ -1188,7 +1303,7 @@ def test_checking_group_wait_timeout_force_resume():
     assert tb.resume_index == 1 and tb not in mgr.task_queue._fast, "B 应推迟等待"
     with patch("auto_qb.rules.actions.full_checking.GROUP_CHECK_WAIT_LIMIT", 0.0):
         seed_store(mgr, [a, b])  # HA 持续校验中
-        run_queue(mgr, t0 + 60.5)  # 等待任务超时 -> 强制 resume -> B 重走决策链 -> 仍在校验 -> 再次让位
+        run_queue(mgr, t0 + 60.5)  # 等待任务超时 -> 强制 resume(origin 重新入队; run_due 快照语义下当批不执行)
+        run_queue(mgr, t0 + 60.5)  # 下一批到期: B 重走决策链 -> 仍在校验 -> 再次让位
     assert tb.resume_index == 1 and tb not in mgr.task_queue._fast, "超时强制恢复后应重走决策链并再次推迟"
-    assert tb.resume_index == 1, "再次推迟应记录断点"
     assert client.calls.count(("recheck", None)) == 0, f"B 全程不应提交 recheck: {client.calls}"

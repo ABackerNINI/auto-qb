@@ -244,6 +244,7 @@ def test_validate_empty_sections_use_defaults():
             "  log:\n"
             "  grouping:\n"
             "  hr:\n"
+            "  skip_checking_tag:\n"
             "  delete_tags:\n"
             "  qbittorrent:\n"
             "  trackers:\n"
@@ -260,11 +261,30 @@ def test_validate_empty_sections_use_defaults():
         cfg = load_config(_write_raw(td, text))
         assert cfg.main_tick == 2.0 and cfg.interval == 60  # 默认值
         assert cfg.data_dir == "auto-qb-data"  # 数据主目录默认
+        assert cfg.skip_checking_tag == "zSkipChecked"  # 跳检标签默认名(留空被 _strip_none 视为未配置)
         assert cfg.state_file == "auto-qb-data/state.json"  # 留空走默认(由 data_dir 派生)
         assert cfg.logging.file == "auto-qb-data/logs/auto-qb.log"  # log 留空 -> 默认落盘到主目录
         assert cfg.logging.level == logging.INFO
         assert cfg.trackers["T1"].hr.extra_seeding_time == 0
         assert cfg.trackers["T1"].hr.required_share_ratio == 0.0
+
+
+def test_skip_checking_tag_global_default_and_override():
+    """顶层 config.skip_checking_tag: 缺省走 models 默认 zSkipChecked; 显式配置覆盖默认名
+
+    与 log.file 同约定: YAML 留空/空串被 _strip_none 视为未配置(见 test_validate_empty_sections_use_defaults)。
+    checking 动作不配置该键(全局统一, spec 配同名键报未知键), 动作运行时经 ctx 直接读取全局值。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        base = "  trackers:\n    T1:\n      domains:\n        - a.com\n"
+
+        # 1. 未配置 -> models dataclass 默认值(默认值唯一来源, 动作类不再硬编码)
+        cfg = load_config(_write_raw(td, "config:\n" + base))
+        assert cfg.skip_checking_tag == "zSkipChecked"
+
+        # 2. 显式配置 -> 覆盖默认名(全局统一, 动作运行时读取)
+        cfg2 = load_config(_write_raw(td, "config:\n  skip_checking_tag: zGlobalTag\n" + base))
+        assert cfg2.skip_checking_tag == "zGlobalTag"
 
 
 def test_data_dir_derives_runtime_paths():
@@ -486,6 +506,11 @@ def test_validate_checking_action_spec():
             "            basic_check: filelist\n"
             "            with_reference: {mode: skip-checking, auto_start: true}\n"
             "            without_reference: {mode: full-checking}\n"
+            "    rule9:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            skip_checking_tag: zSkipChecked\n"
         )
         err = _load_errors(td, text)
         assert "checking 动作只接受 dict 配置" in err, err
@@ -495,6 +520,8 @@ def test_validate_checking_action_spec():
         assert "mode 取值非法: 'xxx'" in err, err
         assert "未知键 ['poll_timeout']" in err, err
         assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
+        # skip_checking_tag 为全局配置, spec 配同名键报未知键
+        assert "未知键 ['skip_checking_tag']" in err, err
         assert "rule8" not in err, err  # 合法 spec 不报错
 
 

@@ -261,6 +261,9 @@ def load_config(config_path: str) -> Config:
     default_state_file = _under(data_dir, "state.json")
     default_log_file = _under(data_dir, "logs", "auto-qb.log")
 
+    # 跳检标签全局名(动作运行时经 ctx 直接读取, 不注入动作 spec, 亦不可按规则覆盖)
+    skip_checking_tag = str(_get(cfg, "skip_checking_tag", d.skip_checking_tag) or "").strip()
+
     return Config(
         main_tick=_get(cfg, "main_tick", d.main_tick, parse_time),
         max_tasks_per_tick=_get(cfg, "max_tasks_per_tick", d.max_tasks_per_tick, int),
@@ -272,6 +275,7 @@ def load_config(config_path: str) -> Config:
         remove_similar_tags=global_remove_similar,
         add_episode_tags=_get_episode_tags(_get(cfg, "add_episode_tags", d.add_episode_tags)),
         hr=load_global_hr(_get(cfg, "hr", {})),
+        skip_checking_tag=skip_checking_tag,
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
         grouping=load_grouping_config(_get(cfg, "grouping", {})),

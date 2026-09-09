@@ -158,6 +158,11 @@ class Config:
 
     hr: HRRule = field(default_factory=HRRule)  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底)
 
+    # 跳检(skip-checking)成功后给种子打的标签全局名: 带此标签的种子未经哈希校验, 查找参考种子时
+    # 一律排除(防"未验证"经辅种参考链传播)。全局统一, 不按规则覆盖(checking 动作 spec 配同名键
+    # 会被校验拒绝), 动作运行时经 ctx 直接读取本值。
+    skip_checking_tag: str = "zSkipChecked"
+
     # 全局标签清理: 彻底删除的标签格式 / 彻底删除无种子的标签格式(均支持正则, regex: 前缀)
     delete_tags: List[str] = field(default_factory=list)
     delete_tags_if_has_no_torrents: List[str] = field(default_factory=list)
