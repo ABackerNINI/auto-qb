@@ -124,15 +124,27 @@ def is_posix() -> bool:
 
 
 def add_long_path_prefix_for_win(path: str) -> str:
-    """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC), 非Windows系统则返回原路径"""
+    """为 Windows 文件路径添加长路径支持前缀(\\\\?\\ 或 UNC), 非Windows系统则返回原路径
+
+    已绝对的 Windows 路径(已有 \\\\?\\ 前缀 / UNC \\\\ / 盘符 X:\\)直接加前缀,
+    不经 os.path.abspath — 后者在 Linux CI 上(monkeypatch 模拟 win32 时)会用 Linux 语义
+    把 Windows 路径当相对路径并拼上 cwd, 导致测试失败。仅对真正相对的路径才走 abspath。
+    """
     if not is_windows():
         return path
 
-    abs_path = os.path.abspath(path).replace("/", "\\")
-    if abs_path.startswith("\\\\?\\"):
-        return abs_path
-    if abs_path.startswith("\\\\"):
-        return "\\\\?\\UNC" + abs_path[1:]
+    norm = path.replace("/", "\\")
+    # 已有 \\?\ 前缀 -> 原样返回
+    if norm.startswith("\\\\?\\"):
+        return norm
+    # UNC 路径 (\\server\share\...) -> \\?\UNC\server\share\...
+    if norm.startswith("\\\\"):
+        return "\\\\?\\UNC" + norm[1:]
+    # 盘符路径 (C:\...) -> 已绝对, 直接加前缀
+    if re.match(r"^[A-Za-z]:[\\/]", norm):
+        return "\\\\?\\" + norm
+    # 相对路径 -> 先转绝对路径再加前缀
+    abs_path = os.path.abspath(norm).replace("/", "\\")
     return "\\\\?\\" + abs_path
 
 
