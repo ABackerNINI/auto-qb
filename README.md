@@ -145,6 +145,7 @@ python src/auto-qb.py my-config.yml
 - 标签 / 分类 / 路径匹配支持正则（`regex:` 前缀）与忽略大小写（`:ignore_case` 后缀）
 - Windows 路径请用 `/` 作分隔符（`\` 在正则中是转义符）；路径匹配默认区分大小写
 - 速度单位：`B/s` 或 `[KMG]iB/s`；文件大小单位：`B` 或 `[KMGT]iB`；时间单位：`S` 秒 / `M` 分 / `H` 时 / `D` 天（均不区分大小写）
+- 以横杠"-"开头的配置可以同时有多个
 - **运行时数据目录** `data_dir`（默认 `auto-qb-data/`）：状态文件、单实例锁、日志、跳检备份默认都存放在其下，多实例运行请为每个实例指定不同目录
 
 ### 配置示例
@@ -202,7 +203,7 @@ config:
         - "regex:^zE.*$"                # 删除所有集数标签
         - "MISSING"                     # 删除缺失文件标签
 
-    # 全局 HR 设置(站点 hr: 段未设置时兜底)
+    # 全局 HR 设置(可在 tracker 中单独配置 hr 覆盖全局设置)
     hr:
         add_tag: ''                                                     # 满足 HR 触发条件时添加的标签格式，支持变量: ${required_seeding_time} - 要求做种时长
         add_category: '!!HR${required_seeding_time}!!'                  # 满足 HR 触发条件时添加的分类格式，支持变量
@@ -230,8 +231,10 @@ config:
                 - domain2
             tags:                                  # 自动添加站点标签
                 - tag1
+                - tag2
             remove_tags:                           # 自动删除站点标签，支持正则
                 - tag3
+                - tag4
             upload_speed_limit: 1000KiB/s          # 单种上传限速，0 指无限制
             download_speed_limit: 10MiB/s          # 单种下载限速，0 指无限制
             hr:                                    # HR 规则(可覆盖全局设置)
@@ -470,7 +473,7 @@ config:
 | 参考种子              | 模式            | 风险等级                                     | 说明                                                                                |
 |-----------------------|-----------------|----------------------------------------------|-------------------------------------------------------------------------------------|
 | 有(with_reference)    | `full-checking` | __<font color="green">安全</font>__          | qB 全量哈希校验，且同组已有完整种子佐证数据                                          |
-| 有(with_reference)    | `skip-checking` | __<font color="orange">风险相对可控</font>__ | 文件内容有同组完整种子参照，跳过哈希但数据可信                                       |
+| 有(with_reference)    | `skip-checking` | __<font color="orange">风险相对可控</font>__ | 文件内容有同组完整种子参照，跳过哈希但数据相对可信                                   |
 | 无(without_reference) | `full-checking` | __<font color="green">安全</font>__          | qB 全量哈希校验，本身不依赖参考种子                                                  |
 | 无(without_reference) | `skip-checking` | __<font color="red">高风险</font>__          | 仅文件存在与大小对比、无任何哈希校验，内容错误即上传垃圾数据，被大部分 PT 站点严令禁止 |
 
