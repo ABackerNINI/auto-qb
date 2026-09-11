@@ -16,7 +16,7 @@ import os
 import time
 from typing import List, Optional
 
-from qbittorrentapi import Client
+from qbittorrentapi import APIConnectionError, Client
 
 from .config import Config, load_config
 from .errors import AutoQbError
@@ -55,6 +55,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.task_queue = TaskQueue()
         # 版本兼容校验: 首次拉到非空种子信息时执行一次(qB 版本运行期不变)
         self._schema_validated = False
+        # 连接状态(节流重复连接错误日志): None=未知/首次, True=已连接, False=已断开
+        # 仅状态转换时记录, 断开期间静默(qB 宕机时不刷屏)
+        self._last_conn_ok: Optional[bool] = None
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -86,10 +89,20 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 password=qb.password,
             )
             self.api.auth_log_in()
-            logger.info("已连接 qBittorrent")
+            # 连接恢复(此前断开)或首次连接: 记录一次"已连接"状态
+            if self._last_conn_ok is False:
+                logger.info("已重新连接 qBittorrent")
+            self._last_conn_ok = True
             return True
+        except APIConnectionError as e:
+            # 仅状态转换时记录一次失败(首次失败或从连接态转入); 断开期间静默不刷屏
+            if self._last_conn_ok is not False:
+                logger.error(f"连接 qBittorrent 失败: {e}")
+                self._last_conn_ok = False
+            return False
         except Exception as e:
             logger.error(f"连接 qBittorrent 失败: {e}")
+            self._last_conn_ok = False
             return False
 
     def run(self, dry_run: bool):
@@ -113,6 +126,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         self._tick(dry_run)
                     except AutoQbError:
                         raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑
+                    except APIConnectionError as e:
+                        # 连接失败节流: 仅状态转换时记录一次, 断开期间静默(qB 宕机时不刷屏)
+                        if self._last_conn_ok is not False:
+                            logger.error(f"连接 qBittorrent 失败: {e}")
+                            self._last_conn_ok = False
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     time.sleep(main_tick)

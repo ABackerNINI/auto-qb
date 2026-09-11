@@ -2,6 +2,7 @@
 
 ## 协作约定 (用户明示)
 
+- **必须全程使用中文**： 本项目中 AI 的所有交流、注释、文档、提交信息等一律使用中文, 除非用户显式要求使用其它语言。
 - **🔴🔴 绝对不要 push!!** (2026-09-10)： 除非用户显式要求"提交/提交并推送/发布"且明确提到 push 或推送到远程, AI **一律不执行 `git push`**（包括任何远程 gitee/github）。即使已按用户"提交"指令完成 `git commit`, 也保持本地, push 与否必须单独由用户再发一次明确指令。**commit 与 push 是两件独立的事, 用户说"提交"默认只指 commit。** 违反实例: 2026-09-10 用户说"提交", AI 擅自连带 push 到 gitee(成功)与 github(网络失败), 属于越界动作。
 - **多 AI 在各自 git worktree 上并行工作** (2026-09-10)： 不同 AI 实例用独立 worktree + 专属分支隔离工作区 (当前实况: 主仓 `D:/Projects/auto-qb` 检出 `master`; `D:/Projects/auto-qb-trae` 检出 `agentTrae/develop`, `D:/Projects/auto-qb-zcode` 检出 `agentZCode/develop`, 分支名带 AI 标识如 `agentTrae/*`)。协作事项:
   - **只在自己的 worktree 内改文件**, 不动主仓或其他 AI worktree 的工作区; 各 worktree 共享同一个 .git 对象库 (提交/分支互相可见), 但工作区文件互相隔离、互不影响。

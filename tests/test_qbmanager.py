@@ -32,6 +32,8 @@ from unittest import mock
 from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 import pytest
 
+from qbittorrentapi import APIConnectionError
+
 from auto_qb.errors import AutoQbError
 from auto_qb.qbmanager import QbManager
 from auto_qb.torrents import QbCompatError
@@ -219,6 +221,42 @@ def test_tick_refresh_error_continues():
         with mock.patch("auto_qb.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         assert mgr._refresh_torrents.call_count == 2, "第一次异常应被捕获, 第二次 tick 继续执行"
+
+
+def test_connect_throttle_repeated_failures():
+    """连接失败节流: 主循环内 _tick 多次抛 APIConnectionError 只记录一次错误, 断开期间静默不刷屏"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.connect = mock.Mock(return_value=True)
+        # 第一次失败记录, 第二次失败静默, 第三次抛 KeyboardInterrupt 退出循环
+        mgr._refresh_torrents = mock.Mock(
+            side_effect=[APIConnectionError("conn down"), APIConnectionError("conn down"), KeyboardInterrupt()]
+        )
+        with mock.patch("auto_qb.qbmanager.logger") as mock_logger:
+            with mock.patch("auto_qb.qbmanager.time.sleep"):
+                mgr.run(dry_run=False)
+        errors = [c for c in mock_logger.error.call_args_list]
+        assert len(errors) == 1, f"连接失败应只记录一条(节流), 实际 {len(errors)}: {errors}"
+        assert "连接 qBittorrent 失败" in errors[0][0][0], f"应记录连接失败: {errors[0]}"
+        assert mgr._last_conn_ok is False, "连接失败后状态应为断开"
+        # 确认 _tick 确实被调用了 3 次(第一次记录错误, 第二次静默, 第三次退出)
+        assert mgr._refresh_torrents.call_count == 3
+
+
+def test_connect_recovery_logged():
+    """连接恢复: 断开后重新连接成功记录'已重新连接'"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr._last_conn_ok = False  # 模拟此前断开
+        fake = mock.Mock()
+        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
+            with mock.patch("auto_qb.qbmanager.logger") as mock_logger:
+                assert mgr.connect() is True
+        assert mgr._last_conn_ok is True, "重连成功后状态应为已连接"
+        infos = [c for c in mock_logger.info.call_args_list]
+        assert any("已重新连接" in c[0][0] for c in infos), f"应记录重新连接日志: {infos}"
 
 
 def test_execute_due_respects_max():
