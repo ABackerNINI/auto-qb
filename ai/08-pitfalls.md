@@ -31,7 +31,8 @@
 - **interval 归一化**: `Task.interval <= 0` → 1s (每 tick 级别); 规则 interval 为 0 表示每轮执行。
 - **`handled` 返回值**: `Rule.process` 返回 `not result.is_skipped` — 最后一个动作 skip 时 handled=False, 但**执行历史已记录** (只要前面动作成功过)。设计如此, 勿"修复"。
 - **上传增量下限 0**: `upload_delta = max(0, uploaded - baseline)` — 种子重加/客户端重启后 uploaded 归零不会产生负增量。
-- **缺文件扫描/参考种子的代表种**: 只从 `is_complete 且非 checking/errored` 成员选 (`_valid_for_representative`: 暂停/停止做种的完成成员也算, 校验中完整性存疑才排除) — 不是漏检, 是有意保守。
+- **缺文件扫描/参考种子的代表种已分化** (2026-09-12): 缺文件扫描代表种 (`_valid_for_representative`) 从 `is_complete 且非 checking/errored` 放宽为 **`is_complete or is_errored 且非 checking`** — 代表种只提供 save_path(组内共享)与缓存文件映射, errored(missingFiles)成员两者有效且恰是缺文件第一现场, 排除它会导致全组同轮 errored 时无法扫描; 参考种子候选 (`_group_reference_candidates`, 供跳检参考) 仍只从 `is_complete 且非 checking` 选, 两者别混。
+- **MISSING 组豁免 mixed 冲突是有意设计** (2026-09-12): `_check_download_conflicts` 的 n_done 不计带 `missing_tag` 标签的完成成员 — 缺文件组被标记后用户重新下载是合法补救, 不应被"已完成与下载中并存"拦停; multi-dl(两个同时下载写同一物理文件)不豁免。健康组(成员无 MISSING 标签)行为不变。另: 重校验发现文件缺失(stalledUP→missingFiles)现与"上传转暂停"同为缺文件扫描触发路径, 修复了"校验发现缺失不触发、组继续假健康做种、用户重下又被 mixed 拦"的链式问题; MISSING 标签无自动清除逻辑, 文件补齐后需手动摘标签。
 - **tracker 匹配是"第一个命中"且已统一为 hostname 精确匹配**: `_match_tracker_conf` 复用 `utils.match_tracker_confs` (精确/子域名匹配, 与规则绑定同语义), 取第一个匹配配置, **命中多个配置时打 ERROR 日志**(仍用第一个, 不跳过种子); 导出模板 `find_missing_domains` 仍用包含关系匹配 (有意宽松, 用于找未配置域名)。
 - **`RuleContext.torrent` 的 snapshot 回退是合法语义, 非死防御**: `ctx.torrent` 实时 `store.get(hash)` 优先, 种子已从客户端删除 (`on_torrent_deleted`, store 已移除) 时回退 `RuleContext.snapshot` 删除前快照副本。这是真实可选语义 (种子被删的合法现场), 与 死防御清理 (点5) 中"条件在正确上游流程下不可能发生 → 删"的判别不冲突。供 `print_torrent_details` 只读留档用; 需活种子的动作在 config 白名单阶段已被 `on_torrent_deleted` 拒绝。
 - **每个动作的 dry-run 返回 success** — dry-run 日志里看到的都是"成功", 别据此判断真实执行结果。
