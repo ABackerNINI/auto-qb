@@ -36,6 +36,7 @@
 - **`RuleContext.torrent` 的 snapshot 回退是合法语义, 非死防御**: `ctx.torrent` 实时 `store.get(hash)` 优先, 种子已从客户端删除 (`on_torrent_deleted`, store 已移除) 时回退 `RuleContext.snapshot` 删除前快照副本。这是真实可选语义 (种子被删的合法现场), 与 死防御清理 (点5) 中"条件在正确上游流程下不可能发生 → 删"的判别不冲突。供 `print_torrent_details` 只读留档用; 需活种子的动作在 config 白名单阶段已被 `on_torrent_deleted` 拒绝。
 - **每个动作的 dry-run 返回 success** — dry-run 日志里看到的都是"成功", 别据此判断真实执行结果。
 - **`state_file` 仅退出时落盘**: 运行中 kill -9 会丢执行历史 → 去重可能重放, 已知取舍 (想法.md 明文)。
+- **qB 断连期间错误日志静默**: tick 内 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 (2026-09-12) — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败不打日志。是有意节流 (防 qB 宕机刷屏), 不是丢日志; 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。
 
 ## 📝 文档与代码的一致性 (2026-09-05 已同步)
 
@@ -50,7 +51,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。
-- HR 判定单点化(原 `rules/base.py` "移动到 actions.py" TODO): `check_hr_condition`/`check_hr_satisfied` 已迁到 `TorrentRecord` (torrents.py), hr 条件 (conditions.py) 已复用; 但 `mixins/tags.py` 的 `_add_hr_tag_or_category` 仍**内联重复** HR 条件/satisfied 判定 (dlratio/dlsize、做种时长/分享率) — 改 HR 判定语义仍要两处同步。**2026-09-12 语义变更**: 触发条件增加"完全下载即触发"边界 (`is_fully_downloaded`: `progress>=1.0` 或 `amount_left==0` 且 `total_size>0`) — 小于触发量/比例的种子下载完成也视为触发(修复想法.md 已知问题), 生产 `torrents.py` 与测试 `helpers.py` 两处已同步实现(注意 FakeTorrent `amount_left` 默认按 `total_size-downloaded` 推导, 显式传值优先)。
+- ~~HR 判定单点化(原 `rules/base.py` "移动到 actions.py" TODO)~~ — 已完成 (2026-09-12, commit d987015): `check_hr_condition`/`check_hr_satisfied` 单点判定在 `TorrentRecord` (torrents.py), hr 条件 (conditions.py) 与 `mixins/tags.py` 的 `_add_hr_tag_or_category` 均已委托复用 (移除 tracker_conf 参数), 改 HR 判定语义只动 torrents.py 一处。**2026-09-12 语义变更**: 触发条件增加"完全下载即触发"边界 (`is_fully_downloaded`: `progress>=1.0` 或 `amount_left==0` 且 `total_size>0`) — 小于触发量/比例的种子下载完成也视为触发(修复想法.md 已知问题), 生产 `torrents.py` 与测试 `helpers.py` 两处已同步实现(注意 FakeTorrent `amount_left` 默认按 `total_size-downloaded` 推导, 显式传值优先)。
 - `rules/conditions.py` tags/category/trackers 三个条件不支持 `:ignore_case` (代码内 `# TODO: 支持:ignore_case`, utils 已支持)。
 - ~~`actions/checking.py` "recheck 后仍未完成防重复校验"~~ — 已处理 (2026-09-05): 连续失败 3 次当日冷却(`recheck_fails` state 键, 次日重置, 成功清零); 但 `CheckAction.execute` 闸门 0 上方仍留一条 TODO: "未完成且暂停的种子 recheck 后仍未完成, 下一轮会再次校验"(冷却兜底, 未彻底处理)。
 - ~~`episodes.py` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。

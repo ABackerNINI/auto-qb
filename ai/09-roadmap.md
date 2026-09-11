@@ -1,6 +1,6 @@
 # 09 路线图与项目状态
 
-> 来源: `想法.md` (设计草稿, 权威) + `README.md` 功能状态标注 + 源码 TODO + git log (截至 2026-09-09, commit 884702d)。回答"XX 做了吗/计划怎么做"以此为准。
+> 来源: `想法.md` (设计草稿, 权威) + `README.md` 功能状态标注 + 源码 TODO + git log (截至 2026-09-12, commit d987015)。回答"XX 做了吗/计划怎么做"以此为准。
 
 ## 已实现 (✅, 有单测覆盖)
 
@@ -9,7 +9,7 @@
 - 标签/分类管理: 站点标签加/删、相似标签清理、`delete_tags`/`delete_tags_if_has_no_torrents` 全局清理、集数标签
 - HR 管理: 触发标签/分类 + satisfied 标签/分类, 站点覆盖全局
 - 辅种分组: 增量归组、大小一致性、缺文件事件驱动扫描 (删除/上传转暂停/路径变化)、下载冲突检查
-- 规则引擎: interval 触发 + 15 条件 + 12 动作 + execute_once/cooldown 去重 + 断点续跑 + stop_following_rules_if; trigger 解析 (interval/on_* 四值) + on_torrent_deleted 动作白名单 (`print_torrent_details` 2026-09-12 落地, 见下规划)
+- 规则引擎: interval 触发 + 15 条件 + 12 动作 + execute_once/cooldown 去重 + 断点续跑 + stop_following_rules_if; 事件触发 (interval/on_* 四值 trigger + 事件分派引擎 + rule-event 断点续跑 + on_torrent_deleted 动作白名单 `print_torrent_details`, 2026-09-12 落地, 设计细节见下"事件触发(规则)规划")
 - checking 动作: filelist/piecehashes/custom 三种参考判定 + full-checking (异步轮询) + skip-checking (导出→删除→重加, 同日去重+备份)
 - tracker 单种限速 (奇数保护)
 - 全局限速曲线: Traffic Monitor 数据源, DAY/MONTH/ND 聚合, 全程分档覆盖, 取最严 (2026-09 最近的大功能, commit ee88bc8..20481f3)
@@ -18,17 +18,16 @@
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 失败抛 `SingleInstanceLockError(AutoQbError)`, CLI 单点捕获 AutoQbError 体系干净退出 (退出码 1, stderr 无堆栈); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
-- 测试: 634 passed, 分支覆盖 94% (2026-09-12)
+- 测试: 637 passed, 分支覆盖 94% (2026-09-12)
 
 ## 规划中 (🚧, 尚未实现)
 
 ### 规则系统
-- 触发时机: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed` (设计已定, 见下"事件触发(规则)规划"); 部分落地 (trigger 解析/白名单/print_torrent_details 动作已实现), 事件分派引擎 (`_dispatch_events`/`_apply_event_rule`/`_handle_event_rule`) 与测试尚未实现。**注**: 设计已把 `on_torrent_state_changed` 收敛为 `on_torrent_state_enum_changed` (与 `TorrentState` 枚举命名对齐)。
+- ~~触发时机: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed`~~ — 已实现 (2026-09-12, 落地现状见下"事件触发(规则)规划": 事件分派引擎/断点续跑/测试全部完成)。**注**: 设计已把 `on_torrent_state_changed` 收敛为 `on_torrent_state_enum_changed` (与 `TorrentState` 枚举命名对齐)。
 - 条件取反 (`!` / 非 logic)、tags/category/trackers 条件的 `:ignore_case` 支持
 - tracker 分组 (规则按组筛选)
-- HR 判定单点化收尾: `check_hr_condition`/`check_hr_satisfied` 已在 `TorrentRecord` (torrents.py), hr 条件已复用; 但 `mixins/tags.py` `_add_hr_tag_or_category` 仍内联重复 HR 判定 (详见 08-pitfalls TODO 段)
 
-#### 事件触发(规则)规划 (2026-09-12 设计定论, 待实现)
+#### 事件触发(规则)规划 (2026-09-12 设计定论, 已实现)
 
 **核心原则** — 区分"触发(瞬时)"与"结果(异步/状态式)"两种调度, 事件两者都要支持:
 
@@ -59,8 +58,6 @@
 **触发点接线** (`qbmanager._refresh_torrents`): 在 `store.refresh` 之后、自有动作之前、`update_state_snapshot` 之前的分派点同步执行各事件规则 (即时), 遇 checking 内部建 rule-event origin → pending → 轮询子任务走队列 → 结果恢复续跑。
 
 **性能与副作用**: 事件分派同步执行拉长单 tick (数千种子大库 + 大量事件时, 与 grouping 缺文件扫描同模式, 已被接受); `max_tasks_per_tick` 只约束队列里的轮询/恢复任务, 不约束事件即时分派。
-- tracker 分组 (规则按组筛选)
-- HR 判定单点化收尾: `check_hr_condition`/`check_hr_satisfied` 已在 `TorrentRecord` (torrents.py), hr 条件已复用; 但 `mixins/tags.py` `_add_hr_tag_or_category` 仍内联重复 HR 判定 (详见 08-pitfalls TODO 段)
 
 ### 其它功能
 - 插件系统: 直接支持自定义 Python plugin
@@ -84,7 +81,7 @@
 | rules/actions/checking.py `CheckAction.execute` 闸门 0 上方 | 未完成且暂停的种子 recheck 后仍未完成, 下一轮会再次校验 (3 次失败冷却兜底, TODO 未销) |
 | rules/actions/checking.py `_find_reference` 上方 | 优化为 `has_reference() -> bool` 提前返回 |
 | rules/actions/checking.py 分段执行处 | 重新设计自定义 (custom) 校验流程 |
-| mixins/tags.py `_add_hr_tag_or_category` | HR 条件/satisfied 判定内联重复, 未复用 `TorrentRecord.check_hr_*` |
+| ~~mixins/tags.py `_add_hr_tag_or_category`~~ | 已完成 2026-09-12 (commit d987015): HR 条件/satisfied 判定改委托 `TorrentRecord.check_hr_condition/check_hr_satisfied` 单点判定 |
 | config/loaders.py `load_global_hr` / `load_tracker_hr` | 函数上方 `# TODO: optimize` |
 | ~~reannounce 限频~~ | 已实现 2026-09-05: 运行时最小间隔10M + 加载告警 |
 | ~~episodes.py 集数标签格式~~ | 已实现 2026-09-05: add_episode_tags 段 add_tag_single/add_tag_multi 模板 |
