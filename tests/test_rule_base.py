@@ -123,6 +123,8 @@ def test_rule_context_hr_checks():
             remove_similar_tags=False,
         )
         ctx2 = make_ctx(mgr, FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=0), client)
+        # 显式用 dlsize 条件(否则 total_size=0 走 dlratio 会被"总大小为0的辅种兜底"排除)
+        ctx2.torrent.tracker_conf.hr = hr
         # dlsize 100MiB = 100*1024*1024 B, downloaded 100MiB 满足触发条件
         assert ctx2.torrent.check_hr_condition()
         # satisfied 还需 seeding_ok (seeding_time=0 不满足) 或 ratio_ok (default 0 不满足), 故 False

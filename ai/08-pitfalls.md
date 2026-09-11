@@ -50,7 +50,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。
-- HR 判定单点化(原 `rules/base.py` "移动到 actions.py" TODO): `check_hr_condition`/`check_hr_satisfied` 已迁到 `TorrentRecord` (torrents.py), hr 条件 (conditions.py) 已复用; 但 `mixins/tags.py` 的 `_add_hr_tag_or_category` 仍**内联重复** HR 条件/satisfied 判定 (dlratio/dlsize、做种时长/分享率) — 改 HR 判定语义仍要两处同步。
+- HR 判定单点化(原 `rules/base.py` "移动到 actions.py" TODO): `check_hr_condition`/`check_hr_satisfied` 已迁到 `TorrentRecord` (torrents.py), hr 条件 (conditions.py) 已复用; 但 `mixins/tags.py` 的 `_add_hr_tag_or_category` 仍**内联重复** HR 条件/satisfied 判定 (dlratio/dlsize、做种时长/分享率) — 改 HR 判定语义仍要两处同步。**2026-09-12 语义变更**: 触发条件增加"完全下载即触发"边界 (`is_fully_downloaded`: `progress>=1.0` 或 `amount_left==0` 且 `total_size>0`) — 小于触发量/比例的种子下载完成也视为触发(修复想法.md 已知问题), 生产 `torrents.py` 与测试 `helpers.py` 两处已同步实现(注意 FakeTorrent `amount_left` 默认按 `total_size-downloaded` 推导, 显式传值优先)。
 - `rules/conditions.py` tags/category/trackers 三个条件不支持 `:ignore_case` (代码内 `# TODO: 支持:ignore_case`, utils 已支持)。
 - ~~`actions/checking.py` "recheck 后仍未完成防重复校验"~~ — 已处理 (2026-09-05): 连续失败 3 次当日冷却(`recheck_fails` state 键, 次日重置, 成功清零); 但 `CheckAction.execute` 闸门 0 上方仍留一条 TODO: "未完成且暂停的种子 recheck 后仍未完成, 下一轮会再次校验"(冷却兜底, 未彻底处理)。
 - ~~`episodes.py` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。

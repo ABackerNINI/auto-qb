@@ -6,7 +6,7 @@ import logging
 from typing import List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
-from ..config import HRRule, TrackerConfig, Config
+from ..config import HRRule, Config
 from ..qbapi import QbApi
 from .. import episodes, utils
 from ..torrents import TorrentRecord
@@ -131,44 +131,37 @@ class TagsMixin:
 
     # ---------- HR ----------
 
-    def _add_hr_tag_or_category(self, torrent: TorrentRecord, tracker_conf: TrackerConfig, dry_run: bool):
+    def _add_hr_tag_or_category(self, torrent: TorrentRecord, dry_run: bool):
         """添加HR标签或分类(基于站点合并后的 hr 设置)
 
-        - 满足触发条件(下载比例/下载量): 添加 add_tag / add_category
+        - 满足触发条件(下载比例/下载量, 含完全下载的小种子): 添加 add_tag / add_category
         - HR 满足(做种时长 >= required_seeding_time + extra_seeding_time 或 分享率达标): 添加 add_tag_for_satisfied / add_category_for_satisfied
+        HR 条件/达标判定统一委托 TorrentRecord.check_hr_condition/check_hr_satisfied(单点语义)。
         """
-        hr = tracker_conf.hr
+        hr = torrent.tracker_conf.hr
         if hr is None:
             return False
 
-        # 检查下载条件, 主要为了排除辅种
-        cond_type, cond_value = hr.condition
-        if cond_type == "dlratio":
-            dlratio = torrent.downloaded / torrent.total_size if torrent.total_size else 0
-            condition_met = dlratio >= cond_value
-        else:  # dlsize
-            condition_met = torrent.downloaded >= cond_value
-        if not condition_met:
+        # 检查下载条件, 主要为了排除辅种(未达触发量但已完全下载的小种子同样触发)
+        if not torrent.check_hr_condition():
             return False
 
         added = False
 
         # 做种时长满足 或 分享率达标, 添加 satisfied 标签/分类
-        seeding_ok = torrent.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
-        ratio_ok = hr.required_share_ratio > 0 and torrent.ratio >= hr.required_share_ratio
-        if seeding_ok or ratio_ok:
+        if torrent.check_hr_satisfied():
             if hr.add_tag_for_satisfied:
-                tag = utils.replace_vars(hr.add_tag_for_satisfied, tracker_conf)
+                tag = utils.replace_vars(hr.add_tag_for_satisfied, torrent.tracker_conf)
                 added |= self._add_tags(torrent, [tag], dry_run)
             if hr.add_category_for_satisfied:
-                category = utils.replace_vars(hr.add_category_for_satisfied, tracker_conf)
+                category = utils.replace_vars(hr.add_category_for_satisfied, torrent.tracker_conf)
                 added |= self._set_category(torrent, category, hr.overwrite_category_for_satisfied, dry_run)
         else:  # 做种时长不够 且 分享率未达标: 添加 HR 标签/分类
             if hr.add_tag:
-                tag = utils.replace_vars(hr.add_tag, tracker_conf)
+                tag = utils.replace_vars(hr.add_tag, torrent.tracker_conf)
                 added |= self._add_tags(torrent, [tag], dry_run)
             if hr.add_category:
-                category = utils.replace_vars(hr.add_category, tracker_conf)
+                category = utils.replace_vars(hr.add_category, torrent.tracker_conf)
                 added |= self._set_category(torrent, category, hr.overwrite_category, dry_run)
         return added
 

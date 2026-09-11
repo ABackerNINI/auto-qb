@@ -120,7 +120,8 @@ def test_add_hr_tag_or_category_satisfied():
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=4 * 86400)
         conf = mgr.config.trackers["HHan"]
         # seeding_time 4D >= 3D+12H, ratio 1.0: satisfied
-        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is True
+        tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("set_category", "--HR3D--") in client.calls
 
 
@@ -229,7 +230,8 @@ def test_add_hr_tag_or_category_not_met():
         conf = mgr.config.trackers["HHan"]
         conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
         tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2)
-        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is False
+        tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
         assert client.calls == []
 
 
@@ -242,7 +244,8 @@ def test_add_hr_tag_or_category_not_satisfied():
         conf = mgr.config.trackers["HHan"]
         conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
-        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is True
+        tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HR"]) in client.calls
 
 
@@ -305,7 +308,7 @@ def test_add_hr_tag_or_category_no_hr():
         mgr.client = client
         conf = mgr.config.trackers["HHan"]
         conf.hr = None
-        assert mgr._add_hr_tag_or_category(FakeTorrent(tags=""), conf, dry_run=False) is False
+        assert mgr._add_hr_tag_or_category(FakeTorrent(tags="", tracker_conf=conf), dry_run=False) is False
         assert client.calls == []
 
 
@@ -323,7 +326,8 @@ def test_add_hr_tag_or_category_dlsize():
             add_category_for_satisfied="",
         )
         tor = FakeTorrent(tags="", downloaded=60 * 1024**2, seeding_time=0)
-        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is True
+        tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HR"]) in client.calls
 
 
@@ -341,7 +345,8 @@ def test_add_hr_tag_or_category_satisfied_tag():
             add_category_for_satisfied="",
         )
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=4 * 86400)
-        assert mgr._add_hr_tag_or_category(tor, conf, dry_run=False) is True
+        tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["SATISFIED"]) in client.calls
 
 

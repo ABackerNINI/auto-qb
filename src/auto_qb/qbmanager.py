@@ -341,7 +341,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
             handled |= self._remove_similar_tags(torrent, tracker_conf.tags, dry_run)
         if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
-            handled |= self._add_hr_tag_or_category(torrent, tracker_conf, dry_run)
+            handled |= self._add_hr_tag_or_category(torrent, dry_run)
         # if handled:
         #     self._log_torrent_details(torrent, tracker_conf)
         #     logger.info(f"--------------------------------------------------------------------------")

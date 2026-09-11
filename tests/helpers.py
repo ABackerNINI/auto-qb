@@ -195,7 +195,8 @@ class FakeTorrent:
         self.uploaded = kw.get("uploaded", 0)
         self.seeding_time = kw.get("seeding_time", 0)
         self.ratio = kw.get("ratio", 0.0)
-        self.amount_left = kw.get("amount_left", 0)
+        # 未显式给 amount_left 时按下载状态推导(与真实 qB 一致: 未下完剩余字节 > 0), 供 HR 完成判定
+        self.amount_left = kw.get("amount_left", max(0, self.total_size - self.downloaded))
         self.completed = kw.get("completed", 0)
         self.progress = kw.get("progress", 0.0)
         self.dl_limit = kw.get("dl_limit", 0)
@@ -247,19 +248,26 @@ class FakeTorrent:
 
     # ---------- HR 条件(2026-09 迁到 TorrentRecord, FakeTorrent 鸭子兼容补) ----------
 
+    def is_fully_downloaded(self) -> bool:
+        if self.total_size <= 0:
+            return False
+        return self.progress >= 1.0 or self.amount_left == 0
+
     def check_hr_condition(self) -> bool:
         if not self.tracker_conf.hr:
             return False
         hr = self.tracker_conf.hr
         cond_type, cond_value = hr.condition
         if cond_type == "dlratio":
-            total = self.total_size or 1
-            if (self.downloaded / total) < cond_value:
+            if self.total_size == 0:  # 无实际数据量, 辅种排除兜底, 不视为触发
                 return False
+            if (self.downloaded / self.total_size) >= cond_value:
+                return True
         elif cond_type == "dlsize":
-            if self.downloaded < cond_value:
-                return False
-        return True
+            if self.downloaded >= cond_value:
+                return True
+        # 未达触发量但已完全下载的种子同样视为触发(小种子边界)
+        return self.is_fully_downloaded()
 
     def check_hr_satisfied(self) -> bool:
         if not self.tracker_conf.hr:
