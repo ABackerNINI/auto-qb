@@ -42,6 +42,13 @@
 - test_check_missing_files_empty_sizes_map: 大小映射为空 -> 无文件可检查不误报
 - test_check_missing_files_member_has_tag: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)
 - test_check_missing_files_dry_run: 缺文件 dry-run -> 不暂停不加标签
+- test_grouping_errored_transition_pauses_group: 重校验发现缺失(进入 errored)-> 同轮整组暂停 + MISSING; 持续 errored 不重复触发
+- test_grouping_errored_via_checking_transition: 经 checkingUP/checkingResumeData 中间态 -> 校验拍不触发, missingFiles 拍触发
+- test_grouping_errored_files_intact_no_action: errored 转换但磁盘文件齐全 -> 无动作(保守)
+- test_grouping_errored_whole_group_representative: 全组同时 errored -> errored 成员作代表仍能扫描暂停 + MISSING
+- test_grouping_errored_check_disabled: check_missing_files=False -> errored 转换不触发
+- test_download_conflict_missing_done_excluded: mixed 冲突排除带 MISSING 标签的完成成员(重下补救); 无标签照旧触发
+- test_download_conflict_multi_dl_with_missing_tag: multi-dl 不受 MISSING 标签豁免仍拦截
 """
 import os
 import tempfile
@@ -919,3 +926,195 @@ def test_check_missing_files_dry_run():
         mgr._check_missing_files([rep], sizes, dry_run=True)
         assert client.calls == [], f"dry-run 不应暂停/加标签: {client.calls}"
         assert "MISSING" not in client.tags
+
+
+def test_grouping_errored_transition_pauses_group():
+    """重校验发现文件缺失(stalledUP -> missingFiles)-> 同轮触发缺文件扫描, 整组暂停 + MISSING;
+    持续 errored 不重复触发"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = _group_cfg(state_file)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+
+        # 首轮: 归组 + 建立状态快照(上传中, 无触发条件, 不扫描)
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"上传状态不应触发检查: {client.calls}"
+
+        # H1 强制重校验发现文件缺失 -> missingFiles(errored) -> 同轮触发缺文件扫描(文件不存在)
+        t1.state = "missingFiles"
+        mgr._refresh_torrents()
+
+        assert client.calls.count(("stop", None)) == 1, f"errored 转换应触发整组暂停: {client.calls}"
+        assert "MISSING" in client.tags, f"丢失应添加标签: {client.tags}"
+
+        # 持续 errored(状态不变) -> 不重复触发
+        client.calls.clear()
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"持续 errored 不应重复触发: {client.calls}"
+
+
+def test_grouping_errored_via_checking_transition():
+    """errored 触发不依赖中间状态名: stalledUP -> checkingUP/checkingResumeData(校验中, 不触发)
+    -> missingFiles(下一拍触发)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = _group_cfg(state_file)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()  # 首轮归组
+        assert _non_tag_calls(client) == [], f"首轮不应触发: {client.calls}"
+
+        # 两个成员分别经 checkingUP / checkingResumeData(恢复时自动重校验)进入校验 -> 不触发
+        t1.state = "checkingUP"
+        t2.state = "checkingResumeData"
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"校验中状态不应触发: {client.calls}"
+
+        # 校验完成发现文件缺失 -> missingFiles -> 触发(同组去重, 扫描一次)
+        t1.state = "missingFiles"
+        t2.state = "missingFiles"
+        mgr._refresh_torrents()
+        assert client.calls.count(("stop", None)) == 1, f"校验发现缺失应触发整组暂停: {client.calls}"
+        assert "MISSING" in client.tags, f"丢失应添加标签: {client.tags}"
+
+
+def test_grouping_errored_files_intact_no_action():
+    """errored 转换但磁盘文件齐全(非缺文件的 error)-> 扫描确认后无任何动作(保守)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = _group_cfg(state_file)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+
+        # 真实文件存在且大小一致
+        real_file = os.path.join(td, "movie.mkv")
+        with open(real_file, "wb") as f:
+            f.write(b"x" * 100)
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td)
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()  # 首轮归组
+
+        # H1 进入 errored(如 tracker 报错等非缺文件原因) -> 扫描文件齐全 -> 无动作
+        t1.state = "missingFiles"
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"文件齐全不应暂停/加标签: {client.calls}"
+        assert "MISSING" not in client.tags
+
+
+def test_grouping_errored_whole_group_representative():
+    """全组同时进入 errored(如同轮重校验全部成员)-> errored 成员可作代表种, 仍能扫描暂停 + MISSING"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = _group_cfg(state_file)
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()  # 首轮归组
+
+        # 全组同轮 missingFiles -> 无健康成员, errored 成员作代表 -> 扫描缺文件 -> 暂停 + MISSING
+        t1.state = "missingFiles"
+        t2.state = "missingFiles"
+        mgr._refresh_torrents()
+        assert client.calls.count(("stop", None)) == 1, f"全组 errored 仍应扫描并暂停: {client.calls}"
+        assert "MISSING" in client.tags, f"丢失应添加标签: {client.tags}"
+
+
+def test_grouping_errored_check_disabled():
+    """grouping.check_missing_files=False -> errored 转换不触发缺文件扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        cfg = _group_cfg(state_file)
+        cfg.grouping.check_missing_files = False
+        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t1
+        client.torrents["H2"] = t2
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()  # 首轮归组
+
+        t1.state = "missingFiles"
+        mgr._refresh_torrents()
+        assert _non_tag_calls(client) == [], f"缺文件检查禁用不应触发: {client.calls}"
+        assert "MISSING" not in client.tags
+
+
+def test_download_conflict_missing_done_excluded():
+    """mixed 冲突排除带 MISSING 标签的已完成成员: MISSING 组重新下载是合法补救, 不拦停;
+    对照: 完成成员无 MISSING 标签(健康组)-> 照旧触发 mixed 暂停"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0, tags="MISSING")
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        mgr._check_download_conflicts(dry_run=False)
+        assert client.calls == [], f"MISSING 组的重新下载不应被 mixed 冲突拦截: {client.calls}"
+        assert (key, "mixed") not in mgr.store.download_conflict_warned
+
+        # 对照: 完成成员无 MISSING 标签(健康组)-> 照旧触发
+        t2.tags = ""
+        mgr._check_download_conflicts(dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"健康完成成员与下载中并存应照旧暂停: {client.calls}"
+        assert (key, "mixed") in mgr.store.download_conflict_warned
+
+
+def test_download_conflict_multi_dl_with_missing_tag():
+    """multi-dl 不受 MISSING 标签豁免: 同组两个活跃下载写同一物理文件, 与缺文件无关, 仍拦截"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
+        t2 = FakeTorrent(hash="H2", name="T2", state="forcedDL", amount_left=100, tags="MISSING")
+        key = ("R:/Downloads", ("movie.mkv", ))
+        mgr.store.by_hash = {"H1": t1, "H2": t2}
+        mgr.store.groups = {key: ["H1", "H2"]}
+        mgr.store.group_sizes = {key: {}}
+        mgr.store.member_to_key = {"H1": key, "H2": key}
+
+        mgr._check_download_conflicts(dry_run=False)
+        assert client.calls.count(("stop", None)) == 1, f"MISSING 组内 multi-dl 仍应拦截: {client.calls}"
+        assert (key, "multi-dl") in mgr.store.download_conflict_warned

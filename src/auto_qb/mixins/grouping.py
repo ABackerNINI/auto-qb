@@ -11,11 +11,13 @@
       归组时检查文件大小一致性(文件列表轻易不变, 仅新增时检查, 不每轮检查):
       组内 {路径: 大小} 映射不一致 -> 警告 + 整组暂停(不添加标签)
     * 删除种子 -> _handle_removed_torrents: 移出组; 组内仍有剩余种子 -> 立即触发缺文件磁盘扫描
-    * 种子由上传(做种)状态转为暂停状态 -> _handle_state_transitions 立即触发缺文件磁盘扫描(不等下一轮)
+    * 种子由上传(做种)状态转为暂停状态 / 进入 errored(missingFiles/error, 重校验或恢复时发现
+      文件缺失) -> _handle_state_transitions 立即触发缺文件磁盘扫描(不等下一轮)
     * 保存路径变化 -> _handle_save_path_changes 按新路径重归组; 原组剩余成员与新组已有成员均触发缺文件磁盘扫描
     * 下载冲突(每轮, 分组 enabled 时) -> _check_download_conflicts: 同组两个及以上种子同时下载,
-      或已完成与下载中并存 -> 警告 + 整组暂停(内存 set 去重, 冲突消除后清除)
-  - 缺文件磁盘扫描: 组内取一个已完成且未在校验的种子作代表扫描磁盘(同组共享一次);
+      或已完成与下载中并存 -> 警告 + 整组暂停(内存 set 去重, 冲突消除后清除;
+      带 MISSING 标签的已完成成员不算"已完成"——已知缺文件组允许重新下载补救, multi-dl 仍拦截)
+  - 缺文件磁盘扫描: 组内取一个已完成或 errored 且未在校验的种子作代表扫描磁盘(同组共享一次);
     文件丢失 -> 整组暂停 + 添加 MISSING 标签(同组所有种子全部触发丢失动作)
   - checking 动作辅助(供 rules/actions.py 调用): _group_members(成员 hash 列表)/
     _group_has_downloading(组内活跃下载判定)/_group_reference_candidates(已完成且未校验参考候选)
@@ -95,12 +97,16 @@ class GroupingMixin:
 
     def _handle_state_transitions(self, dry_run: bool):
         """
-        状态变化处理: 种子由上传(做种)转为暂停状态 -> 所属组立即触发缺文件扫描(同组只扫一次)
+        状态变化处理: 组内种子发生缺文件关联的状态转移 -> 所属组立即触发缺文件扫描(同组只扫一次)
 
-        状态快照(store.state_snapshot)存上一轮各种子的 state_enum 枚举对象,
-        与 qB 版本无关(老版 pausedUP / 新版 stoppedUP 归为同一 is_paused 类别):
-        遍历本轮种子先过滤暂停状态, 再对比上一轮快照为上传(做种)类别即触发;
-        状态变化在检测到的同一轮立即处理, 不等下一轮。
+        两条触发路径(状态快照 store.state_snapshot 存上一轮 state_enum 枚举对象, 与 qB 版本无关):
+          1. 上传(做种)转为暂停完成: 做种中文件可能被外部删除, 转暂停后不再主动读盘, 需扫描确认
+          2. 进入 errored(missingFiles/error): 重校验/恢复发现文件缺失是缺文件的第一现场,
+             同组共享物理文件须整体确认(修复: 原仅检测"上传转暂停", 校验发现缺失不触发任何扫描,
+             组继续"健康"做种, 用户重新下载又被 mixed 冲突拦截)
+        状态变化在检测到的同一轮立即处理, 不等下一轮; 持续 errored 不重复触发(仅转换拍触发);
+        触发点用 errored 布尔属性而非枚举具体状态名, 不依赖 checkingUP/checkingResumeData
+        等中间状态的映射细节。
         """
         if not self.config.grouping.check_missing_files:
             return  # 配置禁用缺文件检查
@@ -108,14 +114,17 @@ class GroupingMixin:
         # 缺文件检查
         triggered = set()
         for h, torrent in self.store.by_hash.items():
-            # 跳过未完成或非暂停种子
-            if not torrent.state_enum.is_complete or not torrent.state_enum.is_stopped:
-                continue
             prev = self.store.state_snapshot.get(h)  # 上一轮 state_enum 枚举
-            if prev is not None and prev.is_uploading:
-                key = self.store.member_to_key.get(h)
-                if key is not None:
-                    triggered.add(key)
+            if prev is None:
+                continue  # 首轮无上一轮快照, 不视为状态变化(与上传转暂停路径一致)
+            cur = torrent.state_enum
+            if not (
+                (cur.is_complete and cur.is_stopped and prev.is_uploading) or (cur.is_errored and not prev.is_errored)
+            ):
+                continue
+            key = self.store.member_to_key.get(h)
+            if key is not None:
+                triggered.add(key)
         for key in triggered:
             members = self.store.groups[key]
             torrent = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
@@ -180,24 +189,23 @@ class GroupingMixin:
 
     @staticmethod
     def _valid_for_representative(torrent: TorrentRecord) -> bool:
-        """候选项有效: 已完成且未在校验的种子可作为组内缺文件扫描的代表种
+        """候选项有效: 已完成或 errored 且未在校验的种子可作为组内缺文件扫描的代表种
 
-        代表种只决定扫描谁的保存路径, 暂停/停止做种的完成成员同样有效
-        (与 _group_reference_candidates 同理, 否则整组停种后永不扫描);
-        MOVING 不在 is_complete 集合内, 无需显式排除。
+        代表种只决定扫描谁的保存路径(组内共享)与复用缓存的文件映射, 不要求种子健康:
+        missingFiles/errored 成员的 save_path 与缓存映射同样有效, 且恰是缺文件事件第一现场
+        ——排除它会导致全组同时 errored(如同轮重校验多个成员)时无代表可扫
+        (2026-09-12 放宽, 原为仅 is_complete); checkingUP 校验中完整性存疑仍排除;
+        MOVING 不在 is_complete/is_errored 集合内, 无需显式排除。
         """
         state_enum = torrent.state_enum
-        return (
-            torrent.amount_left <= 0 and state_enum.is_complete and not state_enum.is_checking and
-            not state_enum.is_errored
-        )
+        return (state_enum.is_complete or state_enum.is_errored) and not state_enum.is_checking
 
     def _check_missing_files(self, members: list[TorrentRecord], sizes: Dict[str, Dict[str, int]], dry_run: bool):
         """
         缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
 
         由删除事件(_handle_removed_torrents)或状态变化检测(_handle_state_transitions)或种子保存路径变化(_handle_save_path_changes)
-        在满足触发条件(组内 种子被删除 / 种子由上传转暂停 / 种子保存路径变化)时立即调用。
+        在满足触发条件(组内 种子被删除 / 种子由上传转暂停 / 种子进入 errored(校验发现文件缺失) / 种子保存路径变化)时立即调用。
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 复用)
         """
         if not self.config.grouping.check_missing_files:
@@ -245,11 +253,15 @@ class GroupingMixin:
         设计(想法.md):
           - 同组中两个及以上的种子同时下载 -> 暂停并发出警告
           - 同组中有已完成的种子和正在下载的种子 -> 暂停并发出警告
+        带 MISSING 标签的已完成成员不计入"已完成": MISSING 组是已知缺文件、等待用户处理的状态,
+        用户恢复/重加种子重新下载是合法补救, 不应被 mixed 冲突拦停(健康完成成员不受影响,
+        仍正常触发); multi-dl(两个同时下载写同一物理文件)与缺文件无关, 继续拦截。
         去重: store.download_conflict_warned 记录 (组key, 冲突类型), 冲突持续不重复暂停
         (暂停幂等), 冲突消除后清除; 触发: _refresh_torrents 每轮调用(分组 enabled 时),
         状态快照在调用前已更新。
         """
         warned = self.store.download_conflict_warned
+        missing_tag = self.config.grouping.missing_tag
         # 1. 扫描各组统计下载中/已完成成员
         active = set()
         for key, members in self.store.groups.items():
@@ -258,7 +270,9 @@ class GroupingMixin:
                 1 for t in torrents if t.state_enum.is_downloading and not t.state_enum.is_stopped and
                 not t.state_enum.is_checking and t.amount_left > 0
             )
-            n_done = sum(1 for t in torrents if t.state_enum.is_complete and t.amount_left <= 0)
+            n_done = sum(
+                1 for t in torrents if t.state_enum.is_complete and t.amount_left <= 0 and missing_tag not in t.tags_set
+            )
             if n_dl >= 2:
                 active.add((key, "multi-dl"))
             elif n_dl == 1 and n_done >= 1:
