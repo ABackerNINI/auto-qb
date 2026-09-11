@@ -64,9 +64,9 @@ process(ctx) -> (handled: bool, stop: bool)
 |------|-----------|----------|
 | `path` | `/path` 或列表 | 匹配 save_path **或** content_path; `match_path_patterns`: 精确(规范化斜杠后全等)/`regex:` 前缀(re.search)/`:ignore_case` 后缀 |
 | `size` | `">=100MiB"` | parse_compare + parse_fsize; 比较种子 size |
-| `tags` | `["tag1,tag2", "tag3"]` | 列表=组间**或**; 组内逗号分隔=**与**; 支持 `regex:` 与 `${required_seeding_time}`; ⚠️ 暂不支持 `:ignore_case` (TODO) |
-| `category` | `["cat", "regex:^HR"]` | 或关系; 精确=全等, regex=search; ⚠️ 暂不支持 ignore_case |
-| `trackers` | `["tracker1"]` | 匹配 tracker_conf.name (配置名, 非域名); 或关系; ⚠️ 暂不支持 ignore_case |
+| `tags` | `["tag1,tag2", "tag3"]` | 列表=组间**或**; 组内逗号分隔=**与**; 支持 `regex:`、`:ignore_case` 与 `${required_seeding_time}` (统一走 utils.match_value) |
+| `category` | `["cat", "regex:^HR"]` | 或关系; 精确=全等, regex=search; 支持 `:ignore_case` |
+| `trackers` | `["tracker1"]` | 匹配 tracker_conf.name (配置名, 非域名); 或关系; 支持 `:ignore_case` |
 | `state` | `["is_complete&is_uploading"]` | 组内 `&` 连接为与, 组间或; 直接取 `state_enum` 枚举属性 (is_checking/is_downloading/is_complete/is_uploading/is_errored/is_stopped) |
 | `hr` | `"condition-met"` | `condition-met`(满足触发条件; **完全下载即触发**边界 — 未达触发量/比例的种子 `is_fully_downloaded` (`progress>=1.0` 或 `amount_left==0`, `total_size<=0` 除外) 也视为触发, 2026-09-12) / `condition-not-met` / `satisfied`(触发+做种时长或分享率达标); 依赖 tracker_conf.hr, 无 HR 配置一律 False |
 | `date_time` | `{day_of_month: 1-31, day_of_week: 1-7, time: "10:00-23:00"}` | 全部可省略(省略=不检查); 区间 `a-b` 或单值; time 支持跨午夜; day_of_week 用 isoweekday (1=周一) |

@@ -21,7 +21,7 @@
 校验范围:
 - **未知键**: 根节点(仅允许 config)/config 顶层/各段(log/qbittorrent/grouping/hr)/tracker 段/站点 hr 段/规则 spec 一律拒绝; `single_instance_lock` 为规划中预留键(接受但不生效)
 - **必填项**: tracker 的 `domains`(非空字符串列表)、站点 hr 的 `required_seeding_time`; 其余键有默认值
-- **值格式**: 复用 utils.parse_*(时间/大小/速度/布尔)与 parse_hr_condition; `main_tick` 须 >0; `port` 1-65535; 日志等级须合法; `regex:` 模式须可编译(delete_tags/tracker.remove_tags)
+- **值格式**: 复用 utils.parse_*(时间/大小/速度/布尔)与 parse_hr_condition; `main_tick` 须 >0; `port` 1-65535; 日志等级须合法; `regex:` 模式须可编译(delete_tags/tracker.remove_tags/tags/category/trackers 条件/remove_tags 动作, 经 `_PLUGIN_SPEC_VALIDATORS` 分发)
 - **规则集 spec**: 已知键/`execute_once`(never/once/daily/hourly)/`stop_following_rules_if` 六值/`trigger` 四值(interval/on_torrent_added/on_torrent_deleted/on_torrent_state_enum_changed, 取值非法即抛)/conditions-actions 须单键字典且名称已注册(经 registry 延迟导入, 避免循环依赖); **触发时机×动作兼容白名单** (`_validate_trigger_action_compat`): `on_torrent_deleted` 仅允许 `print_torrent_details`(删除后种子无活现场, 需活种子的动作直接拒绝, 见 04), 其余 trigger 不设限; 条件/动作 spec 值的深度校验在 Rule 构造时进行(报错带规则名上下文)
 - **tracker.rules 引用**: 必须 `@` 开头且引用的规则集/规则存在(否则运行时会静默不执行)
 
@@ -96,7 +96,7 @@ global_speed_limit_curve:
 ## 变量与匹配语法速查
 
 - `regex:` 前缀 = 正则 (match_tag/match_path 用 re.search; conditions 的 tags/category/trackers 也用 search)
-- `:ignore_case` 后缀 = 忽略大小写 (utils 的 tag/path 匹配支持; conditions 内部暂不支持)
+- `:ignore_case` 后缀 = 忽略大小写 (全项目统一支持: utils 的 tag/path 匹配与 conditions 的 tags/category/trackers/path 条件均生效; 语法解析唯一入口 utils.MatchPattern)
 - `${required_seeding_time}` 变量 (标签/分类格式)
 - `@tracker_tags` (delete_tags 中) = 展开为所有 tracker tags 并集
 - Windows 路径用 `/` (`\` 是正则转义); 程序内部 `path_normalize` 统一为 `/`, 保留首尾斜杠

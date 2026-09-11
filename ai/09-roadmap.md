@@ -18,13 +18,13 @@
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 失败抛 `SingleInstanceLockError(AutoQbError)`, CLI 单点捕获 AutoQbError 体系干净退出 (退出码 1, stderr 无堆栈); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
-- 测试: 644 passed, 分支覆盖 94% (2026-09-12)
+- 测试: 650 passed, 分支覆盖 94% (2026-09-12)
 
 ## 规划中 (🚧, 尚未实现)
 
 ### 规则系统
 - ~~触发时机: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed`~~ — 已实现 (2026-09-12, 落地现状见下"事件触发(规则)规划": 事件分派引擎/断点续跑/测试全部完成)。**注**: 设计已把 `on_torrent_state_changed` 收敛为 `on_torrent_state_enum_changed` (与 `TorrentState` 枚举命名对齐)。
-- 条件取反 (`!` / 非 logic)、tags/category/trackers 条件的 `:ignore_case` 支持
+- 条件取反 (`!` / 非 logic) — `:ignore_case` 支持已完成 (2026-09-12, 见 08 TODO 段)
 - tracker 分组 (规则按组筛选)
 
 #### 事件触发(规则)规划 (2026-09-12 设计定论, 已实现)
@@ -76,7 +76,7 @@
 | ~~qbmanager.py `_get_torrent`~~ | 兼容方法已删除, 统一用 `store.get(hash)` |
 | ~~rules/base.py 多 tracker 匹配~~ | 已处理 2026-09-05: `_match_tracker_conf` 命中多个打 ERROR 用第一个 |
 | ~~rules/base.py HR 判定迁移~~ | 已迁移 2026-09-05: check_hr_* 移至 TorrentRecord, replace_vars 移至 utils |
-| rules/conditions.py (tags/category/trackers 三处 `# TODO: 支持:ignore_case`) | 条件支持 `:ignore_case` |
+| ~~rules/conditions.py (tags/category/trackers 三处 `# TODO: 支持:ignore_case`)~~ | 已完成 2026-09-12: 三条件改走 `utils.match_value` 统一匹配, `:ignore_case` 全支持; config 阶段补 regex 可编译校验 |
 | ~~recheck 失败冷却~~ | 已实现 2026-09-05: 连续失败3次当日冷却, recheck_fails |
 | rules/actions/checking.py `CheckAction.execute` 闸门 0 上方 | 未完成且暂停的种子 recheck 后仍未完成, 下一轮会再次校验 (3 次失败冷却兜底, TODO 未销) |
 | rules/actions/checking.py `_find_reference` 上方 | 优化为 `has_reference() -> bool` 提前返回 |

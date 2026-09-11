@@ -53,7 +53,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。
 - ~~HR 判定单点化(原 `rules/base.py` "移动到 actions.py" TODO)~~ — 已完成 (2026-09-12, commit d987015): `check_hr_condition`/`check_hr_satisfied` 单点判定在 `TorrentRecord` (torrents.py), hr 条件 (conditions.py) 与 `mixins/tags.py` 的 `_add_hr_tag_or_category` 均已委托复用 (移除 tracker_conf 参数), 改 HR 判定语义只动 torrents.py 一处。**2026-09-12 语义变更**: 触发条件增加"完全下载即触发"边界 (`is_fully_downloaded`: `progress>=1.0` 或 `amount_left==0` 且 `total_size>0`) — 小于触发量/比例的种子下载完成也视为触发(修复想法.md 已知问题), 生产 `torrents.py` 与测试 `helpers.py` 两处已同步实现(注意 FakeTorrent `amount_left` 默认按 `total_size-downloaded` 推导, 显式传值优先)。
-- `rules/conditions.py` tags/category/trackers 三个条件不支持 `:ignore_case` (代码内 `# TODO: 支持:ignore_case`, utils 已支持)。
+- ~~`rules/conditions.py` tags/category/trackers 三个条件不支持 `:ignore_case`~~ — 已完成 (2026-09-12): 三条件统一改走 `utils.match_value`(语法解析唯一入口 `utils.MatchPattern`), `:ignore_case` 对精确与 regex: 均生效; 同时 config 阶段对这些条件与 remove_tags 动作补 `regex:` 可编译 fail-fast 校验, 运行时的静默跳过仅为兜底。
 - ~~`actions/checking.py` "recheck 后仍未完成防重复校验"~~ — 已处理 (2026-09-05): 连续失败 3 次当日冷却(`recheck_fails` state 键, 次日重置, 成功清零); 但 `CheckAction.execute` 闸门 0 上方仍留一条 TODO: "未完成且暂停的种子 recheck 后仍未完成, 下一轮会再次校验"(冷却兜底, 未彻底处理)。
 - ~~`episodes.py` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。
 - `config/loaders.py` `load_global_hr`/`load_tracker_hr` 上方仍留 `# TODO: optimize`。
