@@ -114,8 +114,15 @@ class RuleEngineMixin:
                 return rules
         return []
 
-    def _create_rule_task(self, rule: Rule, hash: str) -> Task:
-        """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)"""
+    def _create_rule_task(self, rule: Rule, hash: str) -> Optional[Task]:
+        """为种子创建单条规则任务(interval = 规则内置 interval, 到期执行该规则于该种子)
+
+        仅 interval trigger 规则创建周期任务; on_* 事件规则不建周期任务(返回 None, 由
+        _create_torrent_tasks 过滤), 改由事件分派(_dispatch_events)按需以一次性 rule-event
+        任务即时处理。调用方(add_tasks)不得收到 None —— 入队会 AttributeError。
+        """
+        if rule.trigger != "interval":
+            return None
         return Task(
             "rule",
             rule.name,
@@ -143,6 +150,116 @@ class RuleEngineMixin:
             return REQUEUE
         # 有未消费断点(pending 等待子任务恢复) -> 本轮不重入; 否则周期重入队
         return FINISHED if task.has_breakpoint else REQUEUE
+
+    # ---------- 事件触发规则(trigger=on_*) ----------
+
+    def _rules_by_trigger(self, trigger: str) -> list:
+        """按触发时机过滤启用的规则(事件分派按 trigger 分流)"""
+        return [r for r in self.enabled_rules if r.trigger == trigger]
+
+    def _dispatch_events(self, added: list, removed: list, dry_run: bool, removed_snapshots=None, tors=None) -> list:
+        """事件分派总入口: 同步执行各事件规则(即时, 不排队).
+
+        各事件规则按种子的 tracker 引用(rules: @规则集)绑定, 与 interval 规则同语义 ——
+        `_torrent_event_rules` 取"该种子引用规则 ∩ 指定触发器"的交集。
+
+        - on_torrent_added: 新增种子匹配 tracker 配置(复用 _match_tracker_conf, 与主循环
+          added 循环同语义)后触发; 未匹配的种子由主循环 added 循环负责告警。
+        - on_torrent_deleted: 种子已从 store 移除, 用删除前快照副本作 ctx.torrent,
+          只读动作(print_torrent_details)仍可打印留档。
+        - on_torrent_state_enum_changed: 对比上一轮 state_snapshot 与当前状态枚举, 变化的
+          种子触发(新增种子无上一轮记录, 不视为状态变化)。
+
+        规则执行经 _apply_event_rule 建 rule-event 一次性 Task 作 ctx.task: 遇 checking 返回
+        pending 时, 该 Task 作 origin 由轮询子任务 add_task(origin, keep_progress=True) 重新
+        入队, 下 tick _handle_event_rule 断点续跑后 FINISHED 消亡(不自我周期循环)。
+        事件即时分派不进入 _fast 队列, 不计入 max_tasks_per_tick。
+        返回: 触发过事件的 hash 列表(测试断言用)。
+        """
+        triggered: list = []
+
+        # on_torrent_deleted: 删除后种子无活现场, 快照副本作 ctx.torrent
+        if self._rules_by_trigger("on_torrent_deleted") and removed:
+            for h in removed:
+                snap = (removed_snapshots or {}).get(h)
+                if snap is None or snap.tracker_conf is None:
+                    continue  # 无 tracker 配置, 无规则可绑定
+                for rule in self._torrent_event_rules(snap, "on_torrent_deleted"):
+                    self._apply_event_rule(rule, h, dry_run=dry_run, snapshot=snap)
+                    triggered.append(h)
+
+        # on_torrent_state_enum_changed: 上一轮快照对比当前状态枚举
+        if self._rules_by_trigger("on_torrent_state_enum_changed") and tors is not None:
+            prev = self.store.state_snapshot
+            for t in tors:
+                h = t.hash
+                if h in prev and prev[h] != t.state_enum:
+                    tor = self.store.get(h)
+                    if tor is None or tor.tracker_conf is None:
+                        continue
+                    for rule in self._torrent_event_rules(tor, "on_torrent_state_enum_changed"):
+                        self._apply_event_rule(rule, h, dry_run=dry_run)
+                        triggered.append(h)
+
+        # on_torrent_added: 匹配 tracker 配置并触发(命中者由主循环做后续自有动作)
+        if self._rules_by_trigger("on_torrent_added") and added:
+            for h in added:
+                tor = self.store.get(h)
+                if tor is None:
+                    continue
+                if tor.tracker_conf is None:
+                    tor.tracker_conf = self._match_tracker_conf(tor)
+                if tor.tracker_conf is None:
+                    continue  # 未匹配 tracker: 主循环 added 循环负责告警
+                for rule in self._torrent_event_rules(tor, "on_torrent_added"):
+                    self._apply_event_rule(rule, h, dry_run=dry_run)
+                    triggered.append(h)
+
+        return triggered
+
+    def _torrent_event_rules(self, tor, trigger: str) -> list:
+        """该种子指定 trigger 的事件规则: 经 tracker 引用绑定的规则 ∩ 指定触发器(与 interval 同语义)"""
+        return [r for r in self._rules_for_torrent(tor) if r.trigger == trigger]
+
+    def _apply_event_rule(self, rule: Rule, hash: str, dry_run: bool = False, snapshot=None) -> Task:
+        """为事件规则建 rule-event 一次性 Task 作 ctx.task, 同步执行 process(即时).
+
+        rule-event 任务不进入 _fast 队列: 事件即时分派不排队。process 返回 pending 时该
+        Task 记录断点(resume_index)并作 origin, 由轮询子任务 add_task(origin, keep_progress=True)
+        重新入队, 下 tick _handle_event_rule 续跑。正常完成(无 pending)则 Task 不被入队, 自然消亡。
+        返回该 rule-event Task(供测试断言其断点状态)。
+        """
+        task = Task(
+            "rule-event",
+            rule.name,
+            hash=hash,
+            store=self.store,
+            interval=rule.interval,
+            handler=lambda t, d, r=rule, s=snapshot: self._handle_event_rule(r, t, s, d),
+        )
+        ctx = RuleContext(self, self.client, self.config, hash, dry_run, task=task, snapshot=snapshot)
+        try:
+            rule.process(ctx)
+        except Exception as e:
+            logger.warning(f"事件规则[{rule.name}] {hash[:8]} | 执行异常: {e}", exc_info=True)
+        return task
+
+    def _handle_event_rule(self, rule: Rule, task: Task, snapshot, dry_run: bool) -> bool:
+        """事件规则 rule-event 任务的断点续跑 handler(恒返回 FINISHED, 不自我周期循环).
+
+        种子已删除 -> 直接消亡(删除守卫); 否则重建 ctx(断点由轮询子任务
+        add_task(keep_progress=True) 保留)续跑后续动作。续跑后再遇 pending(如连续多个
+        checking)由新的轮询子任务重新入队, 本 handler 恒 FINISHED —— rule-event 任务不按
+        interval 周期重入, 事件语义保持"一次性但可恢复"。
+        """
+        if task.torrent is None:
+            return FINISHED
+        ctx = RuleContext(self, self.client, self.config, task.hash, dry_run, task=task, snapshot=snapshot)
+        try:
+            rule.process(ctx)
+        except Exception as e:
+            logger.warning(f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常: {e}", exc_info=True)
+        return FINISHED
 
     # ---------- tracker 引用 ----------
 

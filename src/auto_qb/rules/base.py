@@ -100,6 +100,7 @@ class RuleContext:
     dry_run: bool
     rule_name: str = ""
     task: Any = None  # 触发本次规则执行的任务(任务队列驱动); process_torrent 外部入口为 None
+    snapshot: Any = None  # on_torrent_deleted 删除前快照副本(TorrentRecord); 种子已从 store 移除时供 ctx.torrent 读取
 
     _tracker_urls: Optional[List[str]] = field(default=None)
     _tracker_confs: Optional[List] = field(default=None)
@@ -115,7 +116,10 @@ class RuleContext:
 
     @property
     def torrent(self) -> TorrentRecord | None:
-        return self.manager.store.get(self.hash)
+        """规则处理的种子记录: 实时 store 优先; 种子已从客户端移除(storage 已删, on_torrent_deleted)
+        时回退到删除前快照副本(snapshot), 供只读动作(print_torrent_details)留档"""
+        rec = self.manager.store.get(self.hash)
+        return rec if rec is not None else self.snapshot
 
 
 class Rule:
@@ -125,6 +129,9 @@ class Rule:
         self.spec = spec
         self.manager = manager
         self.enabled = utils.parse_bool(spec.get("enabled", True))
+        # 触发时机: interval(默认, 周期轮询) / on_torrent_added / on_torrent_deleted /
+        # on_torrent_state_enum_changed(事件触发, 一次性分派)。取值合法性由 config 校验保证, 此处不自查。
+        self.trigger = str(spec.get("trigger", "interval"))
         self.interval = utils.parse_time(str(spec.get("interval", "0S")))  # 规则扫描间隔, 0 = 每轮
         self.execute_once = str(spec.get("execute_once", "never"))
         self.cooldown = utils.parse_time(str(spec.get("cooldown", "0S")))

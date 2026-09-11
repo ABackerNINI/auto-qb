@@ -30,7 +30,8 @@ Handler = Callable[["Task", bool], bool]
 
 
 class Task:
-    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / torrent(种子级内置功能) /
+    """一个任务. kind: refresh(种子列表刷新) / rule(规则扫描) / rule-event(事件触发规则的一次性任务,
+    作 origin 被轮询子任务 add_task 重新入队续跑, 恒 FINISHED 不自我周期循环) / torrent(种子级内置功能) /
     internal(全局内置) / check(校验结果轮询) / check-wait(组内校验等待)"""
     __slots__ = (
         "uid",

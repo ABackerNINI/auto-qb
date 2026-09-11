@@ -14,10 +14,12 @@
 
 | 触发 | 状态 | 说明 |
 |------|------|------|
-| `interval` | ✅ 已实现 | 规则任务按自身 interval 循环; `spec["interval"]` 解析为秒 |
-| `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` | 🚧 规划中 | 尚未实现 (见 09-roadmap) |
+| `interval` | ✅ 已实现 | 默认; 规则任务按自身 interval 循环; `spec["interval"]` 解析为秒 |
+| `on_torrent_added` | ✅ 已实现 | 事件触发 (一次性, 非周期); 新增种子匹配 tracker 后即时分派, 遇 checking 断点续跑 |
+| `on_torrent_state_enum_changed` | ✅ 已实现 | 事件触发; 对比上一轮 `state_snapshot` 与当前状态枚举, 变化的种子触发 (名字与 `TorrentState` 枚举对齐) |
+| `on_torrent_deleted` | ✅ 已实现 | 事件触发; 种子删除后无活现场, 仅 `print_torrent_details` 只读留档动作可用 (白名单拒绝需活种子的动作) |
 
-注: `trigger` 键目前实际未从 spec 读取 (默认行为即 interval 循环), 规划中的键不要在代码中假设存在。
+`Rule.trigger` 从 `spec.get("trigger", "interval")` 解析 (base.py), 取值合法性由 config 校验保证 (见 05)。事件 trigger 的规则**不建周期任务** (`_create_rule_task` 返回 None): 由 `_refresh_torrents` 分派点即时执行 (同步), 遇 checking 时内部建 rule-event origin → 轮询子任务 → 断点续跑 (设计细节见 09-roadmap 事件触发规划)。
 
 ## Rule.process() 执行语义 (base.py, 核心函数)
 
@@ -78,7 +80,7 @@ process(ctx) -> (handled: bool, stop: bool)
 
 比较表达式统一: `> < >= <= == = !=` 前缀, 缺省 `==`; 值解析失败在构造时抛 (fail-fast)。
 
-## 11 种动作 (actions.py, 全部 `execute(ctx) -> ActionResult`)
+## 12 种动作 (actions.py, 全部 `execute(ctx) -> ActionResult`)
 
 | 动作 | spec 示例 | 要点 |
 |------|-----------|------|
@@ -93,6 +95,7 @@ process(ctx) -> (handled: bool, stop: bool)
 | `reannounce` | `true` | ⚠️ 有风险: 运行时最小间隔 10M(同种子, state 键 `reannounce_ts`, 独立于规则去重兜底) + 暂停种子跳过 + 未配 execute_once/cooldown 时加载 WARNING; 高频 announce 会被封号 |
 | `upload_speed_limit` | `"1000KiB/s"` | 见下"限速保护" |
 | `download_speed_limit` | 同上 | 同上 |
+| `print_torrent_details` | `true` | **只读留档动作** (2026-09-12): 读取 `ctx.torrent` 快照字段 + tracker 派生信息, logger.info 输出单行详情; 纯读取无副作用, dry-run 照常打印, 恒 success。种子已删除时 `ctx.torrent` 回退删除前快照副本 (snapshot), 仍可打印 — 是 `on_torrent_deleted` 白名单里唯一允许的动作 |
 
 ### 限速的"单数值保护" (tracker.py 与 actions.py 同逻辑)
 
@@ -129,7 +132,7 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 3. 有参考 → with_reference 段; 无参考 → without_reference 段; `enabled: false` → skip。
 4. **前置检查** (两模式都强制): `manager.check_filelist` — 磁盘文件全部存在且大小一致, 未通过 skip。
 
-**full-checking** (`_execute_full_checking`): 先 `add_task` 登记 check 轮询子任务 (interval=2s, 自动登记 `_active_checks`, 决策链 1.5 依赖; 重复提交返回 False → skip), 再同步发 `torrents_recheck` (发送失败返回 fail, 子任务下轮轮询自愈) → 返回 pending (规则断点, 本轮不重入队) → 见 02-architecture 的完整时序。成功: `on_success()` 自行触发 (`verified_references.add` + auto_start) + `add_task(origin, keep_progress=True)` 续跑; 失败/异常/种子删除: `add_task(origin)` 默认重置重走决策链 (删除时由 origin 的删除守卫判死)。外部入口 (ctx 无 task) 不创建 origin, 轮询子任务仍工作但无规则可恢复。
+**full-checking** (`_execute_full_checking`): 先 `add_task` 登记 check 轮询子任务 (interval=2s, 自动登记 `_active_checks`, 决策链 1.5 依赖; 重复提交返回 False → skip), 再同步发 `torrents_recheck` (发送失败返回 fail, 子任务下轮轮询自愈) → 返回 pending (规则断点, 本轮不重入队) → 见 02-architecture 的完整时序。成功: `on_success()` 自行触发 (`verified_references.add` + auto_start) + `add_task(origin, keep_progress=True)` 续跑; 失败/异常/种子删除: `add_task(origin)` 默认重置重走决策链 (删除时由 origin 的删除守卫判死)。外部入口 (ctx 无 task) 不创建 origin, 轮询子任务仍工作但无规则可恢复。**事件规则 (trigger=on_*)** 的 origin 是 `_apply_event_rule` 传入的 rule-event 一次性任务 (非 None), 校验成功后由 `add_task(origin, keep_progress=True)` 重新入队, 下 tick `_handle_event_rule` 从断点续跑事件后续动作 — 事件触发的 checking 由此获得完整断点续跑语义, 与 interval 规则完全一致。
 
 **skip-checking** (`_execute_skip_checking`, 高风险; 2026-09-06 重构为四阶段编排, 拆分为 `_skip_gates`/`_skip_delete`/`_skip_readd` 小函数 + `_poll_until` 轮询 helper + `store.restore_torrent` 快照恢复):
 

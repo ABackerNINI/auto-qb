@@ -11,7 +11,15 @@
 新增动作模块后必须在此 import, 否则插件不会注册(config 校验会拒绝合法动作名);
 test_actions.py::test_actions_registry_complete 锁定全部动作名清单。
 """
-from .basic import AddCategoryAction, AddTagsAction, RemoveCategoryAction, RemoveTagsAction, StartAction, StopAction
+from .basic import (
+    AddCategoryAction,
+    AddTagsAction,
+    PrintTorrentDetailsAction,
+    RemoveCategoryAction,
+    RemoveTagsAction,
+    StartAction,
+    StopAction,
+)
 from .checking import CheckAction
 from .full_checking import CHECK_RESULT_INTERVAL, GROUP_CHECK_WAIT_LIMIT, RECHECK_FAIL_LIMIT
 from .transfer import DownloadSpeedLimitAction, MoveToAction, ReannounceAction, UploadSpeedLimitAction
@@ -24,6 +32,7 @@ __all__ = [
     "DownloadSpeedLimitAction",
     "GROUP_CHECK_WAIT_LIMIT",
     "MoveToAction",
+    "PrintTorrentDetailsAction",
     "RECHECK_FAIL_LIMIT",
     "ReannounceAction",
     "RemoveCategoryAction",

@@ -14,6 +14,12 @@ RULE_KNOWN_KEYS = {
 }
 EXECUTE_ONCE_VALUES = ("never", "once", "daily", "hourly")
 STOP_IF_VALUES = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
+# 触发时机: interval 周期轮询 / on_torrent_added / on_torrent_deleted / on_torrent_state_enum_changed 事件触发
+TRIGGER_VALUES = ("interval", "on_torrent_added", "on_torrent_deleted", "on_torrent_state_enum_changed")
+# on_torrent_deleted 允许的动作白名单: 删除后种子无活现场, 现存动作几乎都对已删种子无意义,
+# 仅允许"不依赖活现场"的只读/记录类动作(如 print_torrent_details)。未来通知/记录类动作加入此集合。
+# 空集合 = 禁止任何动作(on_torrent_deleted 仅作语义占位)。其它触发时机不设白名单(全部动作可用)。
+DELETED_TRIGGER_ALLOWED_ACTIONS = {"print_torrent_details"}
 
 # checking 动作 spec 已知键与取值域(skip_checking_tag 为全局配置, 不按规则覆盖, 故列为未知键)
 CHECKING_ACTION_KNOWN_KEYS = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
@@ -310,8 +316,8 @@ def _validate_rules(rules_config: dict, errors: List[str]) -> None:
                     f"{where}: stop_following_rules_if 取值非法: '{spec['stop_following_rules_if']}', "
                     f"可选: {'/'.join(STOP_IF_VALUES)}"
                 )
-            if "trigger" in spec and spec["trigger"] != "interval":
-                errors.append(f"{where}: trigger 取值非法: '{spec['trigger']}', 当前仅支持: interval")
+            if "trigger" in spec and spec["trigger"] not in TRIGGER_VALUES:
+                errors.append(f"{where}: trigger 取值非法: '{spec['trigger']}', 可选: {'/'.join(TRIGGER_VALUES)}")
             conds = spec.get("conditions")
             if conds is not None:
                 if not isinstance(conds, list):
@@ -326,6 +332,8 @@ def _validate_rules(rules_config: dict, errors: List[str]) -> None:
                 else:
                     for i, a in enumerate(acts):
                         _validate_plugin_entry(a, f"{where}.actions[{i}]", registry.ACTIONS, "动作", errors)
+            # 触发时机 × 动作兼容白名单: 某触发器下不适用动作在 config 阶段直接拒绝(见 04 规则系统)
+            _validate_trigger_action_compat(spec, where, errors)
 
 
 def _validate_state_condition_spec(value, where: str, errors: List[str]) -> None:
@@ -394,6 +402,32 @@ def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: Li
         deep = _PLUGIN_SPEC_VALIDATORS.get(name)
         if deep:
             deep(entry[name], f"{where}.{name}", errors)
+
+
+def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -> None:
+    """触发时机 × 动作兼容白名单(决策见 04 规则系统触发时机表)
+
+    on_torrent_deleted: 种子删除后 store 已无该种子, ctx.torrent 为删除前快照副本,
+    无"活种子"现场 —— 需操作活种子的动作(启停/校验/限速/移动/汇报都无意义,
+    仅"只读打印/未来通知类"适用)。非白名单动作在 config 阶段直接拒绝。
+    其它 trigger(interval/on_torrent_added/on_torrent_state_enum_changed): 现场完整, 不设限。
+    """
+    trigger = str(spec.get("trigger", "interval"))
+    if trigger != "on_torrent_deleted":
+        return
+    allowed = DELETED_TRIGGER_ALLOWED_ACTIONS
+    acts = spec.get("actions") or []
+    for i, entry in enumerate(acts):
+        if not isinstance(entry, dict) or len(entry) != 1:
+            continue  # 结构错误由 _validate_plugin_entry 报, 这里不重复
+        name = next(iter(entry))
+        if name == "ignore_next_action_error":
+            continue  # 伪动作不参与白名单
+        if name not in allowed:
+            errors.append(
+                f"{where}.actions[{i}]: 动作 '{name}' 不适用于 trigger 'on_torrent_deleted'"
+                f"(删除后种子无活现场), 允许: {sorted(allowed)}"
+            )
 
 
 def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:

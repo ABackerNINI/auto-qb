@@ -334,6 +334,18 @@ def fmt_speed(value: int) -> str:
     return f"{value} B/s"
 
 
+def fmt_size(value) -> str:
+    """将字节数格式化为可读大小字符串(无 /s 后缀, 与 fmt_speed 区分)"""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return "-"
+    for unit, div in (("PiB", 1024**5), ("TiB", 1024**4), ("GiB", 1024**3), ("MiB", 1024**2), ("KiB", 1024)):
+        if value >= div:
+            return f"{value / div:.2f} {unit}"
+    return f"{value} B"
+
+
 def replace_vars(text: str, tracker_conf) -> str:
     """替换标签/分类格式中的变量, 当前支持 ${required_seeding_time}
 

@@ -71,6 +71,7 @@ def test_actions_registry_complete():
         "reannounce",
         "upload_speed_limit",
         "download_speed_limit",
+        "print_torrent_details",
     }
 
 

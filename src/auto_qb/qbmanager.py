@@ -199,7 +199,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
         tors = self.api.torrents_info()
         self._validate_torrent_schema(tors)
+        prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
         added, removed = self.store.refresh(tors)
+        # 删除种子的删除前快照: 种子已从 store 移除后, ctx.torrent 回退此副本供只读动作留档
+        removed_snapshots = {h: prev_records[h] for h in removed if h in prev_records}
 
         if self.config.grouping.enabled:
             # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)。
@@ -207,27 +210,35 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             # by_hash 状态, 放在后面会把自家停种误判为外部"上传转暂停"
             self._handle_state_transitions(dry_run)
 
+        # 事件分派(on_torrent_deleted / on_torrent_state_enum_changed): 在自有动作之前、
+        # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发)
+        self._dispatch_events([], removed, dry_run, removed_snapshots=removed_snapshots, tors=tors)
+
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
+            # 先为所有新增种子匹配 tracker 配置(事件分派与后续自有动作都需要)
+            matched_added = []
             for h in added:
                 torrent = self.store.get(h)
-
-                # 匹配tracker配置
-                tracker_conf = self._match_tracker_conf(torrent)
-
-                # 如果没有匹配到tracker配置, 则打印警告日志并跳过该种子
-                if not tracker_conf:
+                if torrent is None:
+                    continue
+                if torrent.tracker_conf is None:
+                    torrent.tracker_conf = self._match_tracker_conf(torrent)
+                if not torrent.tracker_conf:
                     try:
                         trackers_info = torrent.trackers_info(self.client)
                         all_domains = utils.extract_tracker_hostnames(trackers_info)
                     except Exception:
                         all_domains = []
-                    logger.warning(f"种子[{h[:8]}] | 未匹配 tracker 配置, 域名: {", ".join(all_domains)}")
+                    logger.warning(f"种子[{h[:8]}] | 未匹配 tracker 配置, 域名: {', '.join(all_domains)}")
                     continue  # 未匹配tracker配置, 直接跳过
-
-                # TorrentRecord添加tracker配置引用, 方便后续任务使用
-                torrent.tracker_conf = tracker_conf
-
+                matched_added.append(h)
+            # 事件分派(on_torrent_added): 新增种子已匹配 tracker 配置, 同步触发事件规则
+            self._dispatch_events(matched_added, [], dry_run, removed_snapshots=None, tors=None)
+            # 自有动作: 内置任务/限速/创建任务/归组/集数标签
+            for h in matched_added:
+                torrent = self.store.get(h)
+                tracker_conf = torrent.tracker_conf
                 # 立即运行一次内置任务
                 self._handle_maintenance(torrent, dry_run)
                 # tracker单种限速
@@ -253,9 +264,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._handle_save_path_changes(dry_run)
             # 下载冲突检查(每轮): 同组多个同时下载/已完成与下载中并存 -> 警告+整组暂停
             self._check_download_conflicts(dry_run)
-            # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关;
-            # 新增种子本轮不视为状态变化)
-            self.store.update_state_snapshot(tors)
+
+        # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关; 新增种子本轮不视为状态变化)
+        # 事件分派(on_torrent_state_enum_changed)依赖此上一轮快照对比, 故不局限于 grouping 启用时
+        self.store.update_state_snapshot(tors)
 
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
         self.begin_round(list(self.store.by_hash.values()))
@@ -287,10 +299,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             time.time() + self.config.interval
         )
 
-        # 创建种子规则任务
+        # 创建种子规则任务(仅 interval 规则建周期任务; on_* 事件规则不建, 由事件分派即时处理)
         tasks = []
         for rule in self._rules_for_torrent(torrent):
-            tasks.append(self._create_rule_task(rule, hash))
+            task = self._create_rule_task(rule, hash)
+            if task is not None:
+                tasks.append(task)
         self.task_queue.add_tasks(tasks)
 
     def _handle_maintenance_task_interface(self, task: Task, dry_run: bool) -> bool:

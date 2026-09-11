@@ -1,4 +1,4 @@
-"""基础种子操作动作: add_tags, remove_tags, add_category, remove_category, start, stop"""
+"""基础种子操作动作: add_tags, remove_tags, add_category, remove_category, start, stop, print_torrent_details"""
 import logging
 from typing import List
 
@@ -128,3 +128,39 @@ class StopAction(BaseAction):
         if not ctx.dry_run:
             ctx.api.torrents_stop(torrent_hashes=ctx.hash)
         return ActionResult.ok("暂停")
+
+
+@register_action
+class PrintTorrentDetailsAction(BaseAction):
+    """打印种子详细信息到日志(只读, 不对种子做任何操作)
+
+    读取 ctx.torrent 快照字段与 tracker_conf 派生信息, logger.info 输出单行详情。
+    关键特性: 不依赖"活种子"现场 —— 纯读取快照字段, 种子已从客户端删除(如
+    on_torrent_deleted 触发, ctx.torrent 为删除前快照副本)时同样可打印。
+    dry-run 下照常打印(只读动作无副作用, 打印即其价值)。无条件返回 success。
+    """
+    name = "print_torrent_details"
+
+    def execute(self, ctx: RuleContext):
+        tor = ctx.torrent
+        if tor is None:
+            return ActionResult.fail("种子不存在, 无法打印详情")
+        # 打印快照字段(缺失字段以 '-' 占位, 避免日志因字段缺失而崩溃)
+        fields = {
+            "名称": tor.name or "-",
+            "状态": tor.state or "-",
+            "保存路径": tor.save_path or "-",
+            "内容路径": tor.content_path or "-",
+            "大小": utils.fmt_size(tor.size),
+            "进度": f"{tor.progress * 100:.1f}%" if tor.progress is not None else "-",
+            "上传": utils.fmt_size(tor.uploaded),
+            "下载": utils.fmt_size(tor.downloaded),
+            "分享率": f"{tor.ratio:.2f}" if tor.ratio is not None else "-",
+            "做种时长": f"{int(tor.seeding_time)}s" if tor.seeding_time is not None else "-",
+            "标签": tor.tags or "-",
+            "分类": tor.category or "-",
+            "tracker": tor.tracker_name,
+        }
+        detail = " | ".join(f"{k}={v}" for k, v in fields.items())
+        logger.info(f"规则[{ctx.rule_name}] {tor.log_repr} | 打印种子详情: {detail}")
+        return ActionResult.ok("打印种子详情")

@@ -9,7 +9,7 @@
 - 标签/分类管理: 站点标签加/删、相似标签清理、`delete_tags`/`delete_tags_if_has_no_torrents` 全局清理、集数标签
 - HR 管理: 触发标签/分类 + satisfied 标签/分类, 站点覆盖全局
 - 辅种分组: 增量归组、大小一致性、缺文件事件驱动扫描 (删除/上传转暂停/路径变化)、下载冲突检查
-- 规则引擎: interval 触发 + 15 条件 + 11 动作 + execute_once/cooldown 去重 + 断点续跑 + stop_following_rules_if
+- 规则引擎: interval 触发 + 15 条件 + 12 动作 + execute_once/cooldown 去重 + 断点续跑 + stop_following_rules_if; trigger 解析 (interval/on_* 四值) + on_torrent_deleted 动作白名单 (`print_torrent_details` 2026-09-12 落地, 见下规划)
 - checking 动作: filelist/piecehashes/custom 三种参考判定 + full-checking (异步轮询) + skip-checking (导出→删除→重加, 同日去重+备份)
 - tracker 单种限速 (奇数保护)
 - 全局限速曲线: Traffic Monitor 数据源, DAY/MONTH/ND 聚合, 全程分档覆盖, 取最严 (2026-09 最近的大功能, commit ee88bc8..20481f3)
@@ -18,13 +18,47 @@
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 失败抛 `SingleInstanceLockError(AutoQbError)`, CLI 单点捕获 AutoQbError 体系干净退出 (退出码 1, stderr 无堆栈); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
-- 测试: 621 passed, 分支覆盖 94% (2026-09-09)
+- 测试: 634 passed, 分支覆盖 94% (2026-09-12)
 
 ## 规划中 (🚧, 尚未实现)
 
 ### 规则系统
-- 触发时机: `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` (想法.md; 架构上需要把"新种子检测"泛化为事件源, 任务队列已具备 pending 让出 + `add_task` 恢复基础)
+- 触发时机: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed` (设计已定, 见下"事件触发(规则)规划"); 部分落地 (trigger 解析/白名单/print_torrent_details 动作已实现), 事件分派引擎 (`_dispatch_events`/`_apply_event_rule`/`_handle_event_rule`) 与测试尚未实现。**注**: 设计已把 `on_torrent_state_changed` 收敛为 `on_torrent_state_enum_changed` (与 `TorrentState` 枚举命名对齐)。
 - 条件取反 (`!` / 非 logic)、tags/category/trackers 条件的 `:ignore_case` 支持
+- tracker 分组 (规则按组筛选)
+- HR 判定单点化收尾: `check_hr_condition`/`check_hr_satisfied` 已在 `TorrentRecord` (torrents.py), hr 条件已复用; 但 `mixins/tags.py` `_add_hr_tag_or_category` 仍内联重复 HR 判定 (详见 08-pitfalls TODO 段)
+
+#### 事件触发(规则)规划 (2026-09-12 设计定论, 待实现)
+
+**核心原则** — 区分"触发(瞬时)"与"结果(异步/状态式)"两种调度, 事件两者都要支持:
+
+| 环节 | 触发方式 | 依据 |
+|------|---------|------|
+| 事件检测 + 事件规则动作入口 | 同步即时 (当拍快照, 不排队) | 事件是对瞬时状态转移的反应, 延后失真 |
+| checking 动作的提交判断 (execute 决策链) | 同步即时 (随事件入口执行) | 判断"该不该校验"读瞬时状态 |
+| checking 动作的结果轮询/组内等待 | 走队列 (现状 check / check-wait) | 轮询异步终态, 延后无害 |
+| 校验成功后事件规则断点续跑 | 走队列 (`add_task(origin, keep_progress=True)`) | 复用现有 origin 恢复机制 |
+
+**为事件造"可恢复 origin" (关键机制)**: 事件触发时 `_apply_event_rule` 传入真正的 `Task` 对象 (kind="rule-event", 一次性任务) 作 `ctx.task`, 而非 None。这样 `_execute_full_checking` 的 `origin = ctx.task` 就是该 rule-event 任务: 校验成功 → `on_success()` + `tq.add_task(origin, keep_progress=True)` → 断点保留 → 下 tick `_handle_event_rule` 从断点续跑事件后续动作; 失败/删除 → `add_task(origin)` 默认重置重走完整决策链 (删除由事件 handler 的删除守卫判死)。
+
+**rule-event 任务的可恢复但一次性双重性质**: 它从不被 `run_due` 主动弹出 (事件分派时**不 add_task**, 避免被当周期任务弹掉/占 max_tasks 计数); 只在两条路径出现 — (A) 事件分派即时执行: `_apply_event_rule` 拿到 process 返回后持有 Task 对象作 origin, 不接 `_fast`; (B) 断点续跑: 轮询子任务 `add_task(origin, keep_progress=True)` 把它入 `_fast`, 下 tick `_handle_event_rule` 执行并从断点续跑后**返回 FINISHED 消亡** (恒不自我周期循环, 除非再遇 pending)。
+
+**落地现状** (2026-09-12): 全部实现 — `Rule.trigger` 解析、`RuleContext.snapshot` 快照回退 + `torrent` 属性、`TRIGGER_VALUES` 四值、`_validate_trigger_action_compat` 白名单 (`DELETED_TRIGGER_ALLOWED_ACTIONS = {"print_torrent_details"}`)、`print_torrent_details` 动作、事件分派引擎 (`_dispatch_events`/`_apply_event_rule`/`_handle_event_rule`/`_rules_by_trigger`/`_torrent_event_rules`)、`_refresh_torrents` 分派点接线 + 删除前快照捕获 (`removed_snapshots`)、`taskqueue` rule-event kind 语义、`tests/test_trigger_events.py` (13 个测试, 覆盖四触发器/checking 断点续跑三态/混用/白名单/dry_run)。
+
+**⚠️ 已修复的潜在缺陷 (2026-09-12)**: `_create_rule_task` 对非 interval 规则返回 `None`, 原 `_create_torrent_tasks` 直接 `tasks.append(...)` 并 `add_tasks` → 遇到 `trigger: on_*` 规则时 `add_task(None)` 会在 `None.resume_index` 处 AttributeError 崩溃。已修复: `_create_torrent_tasks` 过滤 None 条目后再入队。
+
+**触发时机 × 动作白名单** (`_validate_trigger_action_compat`, config 阶段 fail-fast):
+
+| trigger | 允许动作 | 特别说明 |
+|---------|----------|---------|
+| `interval` | 全部 12 | 现状 |
+| `on_torrent_added` | 全部 12 含 checking | 事件入口 + origin 续跑 |
+| `on_torrent_state_enum_changed` | 全部 12 含 checking | 事件入口 + origin 续跑 |
+| `on_torrent_deleted` | **仅 `print_torrent_details`** | 删除后 store 无该种子, `ctx.torrent` 回退删除前快照副本; 需活种子的动作 (启停/校验/限速/移动/汇报) 都无意义 → 拒绝; 只读留档动作适用。**此即"唯一待确认"的答案**: 因新增 `print_torrent_details`, 原空集白名单放宽为只读动作集 |
+
+**触发点接线** (`qbmanager._refresh_torrents`): 在 `store.refresh` 之后、自有动作之前、`update_state_snapshot` 之前的分派点同步执行各事件规则 (即时), 遇 checking 内部建 rule-event origin → pending → 轮询子任务走队列 → 结果恢复续跑。
+
+**性能与副作用**: 事件分派同步执行拉长单 tick (数千种子大库 + 大量事件时, 与 grouping 缺文件扫描同模式, 已被接受); `max_tasks_per_tick` 只约束队列里的轮询/恢复任务, 不约束事件即时分派。
 - tracker 分组 (规则按组筛选)
 - HR 判定单点化收尾: `check_hr_condition`/`check_hr_satisfied` 已在 `TorrentRecord` (torrents.py), hr 条件已复用; 但 `mixins/tags.py` `_add_hr_tag_or_category` 仍内联重复 HR 判定 (详见 08-pitfalls TODO 段)
 
@@ -64,6 +98,7 @@
 
 ## 给 AI 的实现建议 (基于现有架构的延伸方向)
 
-- **新触发时机** (`on_torrent_added`): `_refresh_torrents` 的 added 循环已经是事件点; Rule 需要支持非周期任务 (一次性触发后消亡或转为 interval)。复用 `_create_torrent_tasks` 的 tracker 匹配 + `_dedup_allowed`。
-- **状态变化触发**: `store.state_snapshot` 已保存上一轮枚举状态, `_handle_state_transitions` 是现成的"状态转移检测"参考实现 (grouping 内部用)。
+- **新触发时机** (`on_torrent_added`): `_refresh_torrents` 的 added 循环已经是事件点; 按 09 事件触发规划, `_dispatch_events` 同步分派 added 事件规则 (不建周期任务), 复用 `_apply_event_rule` + rule-event origin 机制。
+- **状态变化触发** (`on_torrent_state_enum_changed`): `store.state_snapshot` 已保存上一轮枚举状态, `_handle_state_transitions` 是现成的"状态转移检测"参考实现 (grouping 内部用); 事件分派用它对比上轮/本轮状态枚举筛选触发。
+- **删除触发** (`on_torrent_deleted`): 用 `store.refresh` 返回的 removed 及其删除前快照副本触发; 白名单只允许 `print_torrent_details` 只读留档。
 - **新流量源**: `curves.py` 保持无项目内依赖; 数据源解析独立成函数返回 `List[HistoryRow]` 即可复用 aggregate/curve_speed 全链路。

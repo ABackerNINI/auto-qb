@@ -33,6 +33,7 @@
 - **上传增量下限 0**: `upload_delta = max(0, uploaded - baseline)` — 种子重加/客户端重启后 uploaded 归零不会产生负增量。
 - **缺文件扫描/参考种子的代表种**: 只从 `is_complete 且非 checking/errored` 成员选 (`_valid_for_representative`: 暂停/停止做种的完成成员也算, 校验中完整性存疑才排除) — 不是漏检, 是有意保守。
 - **tracker 匹配是"第一个命中"且已统一为 hostname 精确匹配**: `_match_tracker_conf` 复用 `utils.match_tracker_confs` (精确/子域名匹配, 与规则绑定同语义), 取第一个匹配配置, **命中多个配置时打 ERROR 日志**(仍用第一个, 不跳过种子); 导出模板 `find_missing_domains` 仍用包含关系匹配 (有意宽松, 用于找未配置域名)。
+- **`RuleContext.torrent` 的 snapshot 回退是合法语义, 非死防御**: `ctx.torrent` 实时 `store.get(hash)` 优先, 种子已从客户端删除 (`on_torrent_deleted`, store 已移除) 时回退 `RuleContext.snapshot` 删除前快照副本。这是真实可选语义 (种子被删的合法现场), 与 死防御清理 (点5) 中"条件在正确上游流程下不可能发生 → 删"的判别不冲突。供 `print_torrent_details` 只读留档用; 需活种子的动作在 config 白名单阶段已被 `on_torrent_deleted` 拒绝。
 - **每个动作的 dry-run 返回 success** — dry-run 日志里看到的都是"成功", 别据此判断真实执行结果。
 - **`state_file` 仅退出时落盘**: 运行中 kill -9 会丢执行历史 → 去重可能重放, 已知取舍 (想法.md 明文)。
 
@@ -42,7 +43,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 **🚧 标注的语义 (作者澄清, 重要)**: 🚧 = "未实现 **或** 已实现但未严格测试(实盘验证)"。规则系统一节的 🚧 (trigger/execute_once/cooldown、size/trackers/state/hr/date_time/seedtime/upload_*/freespace 条件、checking/move_to/reannounce 动作、stop_following_rules_if) 属于后者 — 代码已有单测, 但作者认定未经严格验证, **必须保留, 勿因"已实现"而移除** (2026-09-05 曾误删, 已按作者要求恢复)。
 
-其余 🚧 属未实现: `on_torrent_state_changed` / `on_torrent_added` / `on_torrent_deleted` 三个事件触发时机 (README 功能矩阵同样标 🚧 规划中)。单实例锁 (`locking.py`) 与 fail-fast 全量配置校验 (`config.validate_config` 聚合校验, 见 05-config-reference) 均已于 2026-09-05 实现, README 中列为正式特性 (无 🚧 标注)。
+其余 🚧 属未实现: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed` 三个事件触发时机 (README 功能矩阵同样标 🚧 规划中)。**2026-09-12 全部落地** (trigger 解析/白名单/`print_torrent_details` 动作/事件分派引擎/测试), 已从 🚧 转正式特性。单实例锁 (`locking.py`) 与 fail-fast 全量配置校验 (`config.validate_config` 聚合校验, 见 05-config-reference) 均已于 2026-09-05 实现, README 中列为正式特性 (无 🚧 标注)。
 
 > 想法.md 是设计草稿, 不随实现同步; 改 README 时以代码为准, 但 🚧 标注的取舍听作者。
 
@@ -60,5 +61,5 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 1. 主循环线程是唯一修改队列/state_file/store 分组索引的线程 — 不要在校验回调、信号处理器、新线程里改这些。
 2. 校验登记与 recheck 的顺序 (`actions/full_checking.py`): **先 `add_task(轮询子任务)` 登记在途(已在途则 skip), 再发 `torrents_recheck`** — 发送失败返回 `fail`(不返回 pending, 规则任务不留断点); 成功才返回 pending(规则断点, origin 的恢复完全由轮询子任务负责, 队列对"暂停/恢复"无感知)。
 3. 断点续跑语义 (taskqueue.py `add_task`): `keep_progress=True` 保留 `resume_index`(校验成功后续跑后续动作), 默认(重置)清空 `resume_index` 重走完整决策链 — 二者不可混用。
-4. 种子删除**没有**队列级清理入口: 轮询/等待子任务靠 handler 首行 `store.get(hash) is None` 删除守卫判死(FINISHED 前 `add_task(origin)` 默认重置, origin 由 `_handle_rule` 的删除守卫判死); store 侧清理走 `TorrentStore.remove_torrent`(快照/分组索引)。任何在途任务都必须自带删除守卫。
+4. 种子删除**没有**队列级清理入口: 轮询/等待子任务靠 handler 首行 `store.get(hash) is None` 删除守卫判死(FINISHED 前 `add_task(origin)` 默认重置, origin 由 `_handle_rule`/`_handle_event_rule` 的删除守卫判死); store 侧清理走 `TorrentStore.remove_torrent`(快照/分组索引)。任何在途任务都必须自带删除守卫。**事件规则的 rule-event 任务**作 origin 被轮询子任务重新入队续跑后, 下 tick `_handle_event_rule` 首行同样用 `store.get(hash) is None` 判死 (删除时 FINISHED 消亡); 但 `print_torrent_details` 只读动作经 `ctx.torrent` 回退删除前快照副本 (`RuleContext.snapshot`) 仍可打印留档, 其余需活种子的动作则在 config 白名单阶段已被拒绝。
 5. QbApi 写方法必须同步 store (`update_torrent_fields`/`invalidate_*`), 否则同 tick 读旧值 (test_snapshot_sync.py 防回归)。

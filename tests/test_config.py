@@ -291,14 +291,12 @@ def test_data_dir_derives_runtime_paths():
     """data_dir 数据主目录派生 state_file/log.file; 显式配置优先; log.file 空串=仅控制台"""
     with tempfile.TemporaryDirectory() as td:
         # 1. 自定义 data_dir(含尾部斜杠归一化), 未配 state_file/log.file -> 派生到主目录下
-        text = (
-            "config:\n"
-            "  data_dir: mydata/\n"
-            "  trackers:\n"
-            "    T1:\n"
-            "      domains:\n"
-            "        - a.com\n"
-        )
+        text = ("config:\n"
+                "  data_dir: mydata/\n"
+                "  trackers:\n"
+                "    T1:\n"
+                "      domains:\n"
+                "        - a.com\n")
         cfg = load_config(_write_raw(td, text))
         assert cfg.data_dir == "mydata/"
         assert cfg.state_file == "mydata/state.json"
@@ -415,7 +413,7 @@ def test_validate_rule_spec():
             "      unknow: 1\n"
             "      execute_once: someday\n"
             "      stop_following_rules_if: sometimes\n"
-            "      trigger: on_torrent_added\n"
+            "      trigger: on_torrent_frob\n"
             "      cooldown: 5X\n"
             "      conditions:\n"
             "        - sizee: \">=1MiB\"\n"
@@ -429,7 +427,7 @@ def test_validate_rule_spec():
         assert "config.example_rules.rule1: 未知键 ['unknow']" in err, err
         assert "execute_once 取值非法: 'someday'" in err, err
         assert "stop_following_rules_if 取值非法: 'sometimes'" in err, err
-        assert "trigger 取值非法: 'on_torrent_added'" in err, err
+        assert "trigger 取值非法: 'on_torrent_frob'" in err, err
         assert "config.example_rules.rule1.cooldown: 无效时间格式" in err, err
         assert "未知条件 'sizee'" in err, err
         assert "必须是单键字典" in err, err

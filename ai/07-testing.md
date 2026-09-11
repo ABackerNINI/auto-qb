@@ -3,7 +3,7 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 610 条 (606 passed; test_episodes 4 条待随 8ebd089 bare-number 停用同步更新), 分支覆盖率 95%
+# 项目 venv (.venv, Python 3.12), 基线: 634 条 (2026-09-12), 分支覆盖率 94%
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
