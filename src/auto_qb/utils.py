@@ -9,6 +9,7 @@ import sys
 import time
 import logging
 from dataclasses import dataclass
+from datetime import time as dtime
 from functools import wraps
 from urllib.parse import urlparse
 from typing import List
@@ -18,6 +19,29 @@ logger = logging.getLogger(__name__)
 # 匹配语法常量(用户配置的统一匹配语法, 解析唯一入口见 MatchPattern)
 REGEX_PREFIX = "regex:"
 IGNORE_CASE_SUFFIX = ":ignore_case"
+
+
+def parse_hm(text: str) -> "tuple[int, int]":
+    """解析 "HH:MM" -> (时, 分); 非法格式或越界(须 00:00-23:59)抛 ValueError
+    (date_time 条件与通知免打扰时段共用, 越界提早暴露防运行时静默失配)"""
+    try:
+        h, m = str(text).strip().split(":")
+        hour, minute = int(h), int(m)
+    except ValueError as e:
+        raise ValueError(f"非法 HH:MM 格式: {text}") from e
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"时间越界(须 00:00-23:59): {text}")
+    return hour, minute
+
+
+def time_in_range(now: dtime, spec: str) -> bool:
+    """当前时刻是否在 "HH:MM-HH:MM" 区间内(支持跨午夜, 如 "23:00-08:00"; date_time 条件与通知共用)"""
+    start_s, end_s = str(spec).split("-", 1)
+    t_start = dtime(*parse_hm(start_s))
+    t_end = dtime(*parse_hm(end_s))
+    if t_start <= t_end:
+        return t_start <= now <= t_end
+    return now >= t_start or now <= t_end  # 跨午夜: 不在 start-24:00 即在 00:00-end
 
 
 def parse_bool(value) -> bool:

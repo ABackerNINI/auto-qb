@@ -6,6 +6,7 @@ import sys
 from .config import DEFAULT_CONFIG_FILE, ConfigError
 from .errors import AutoQbError
 from .exporter import export_yaml_template
+from .notify import notify_fatal
 from .qbmanager import QbManager
 
 
@@ -61,6 +62,7 @@ def main():
     )
     args = parser.parse_args()
 
+    manager = None
     try:
         # 出口模式不持锁(只读, 可与正常实例并发); 正常 run 模式持锁
         manager = QbManager(args.config, no_lock=bool(args.export_yaml or args.export_torrents_info))
@@ -83,6 +85,9 @@ def main():
         # 非 AutoQbError 异常属程序 bug, 照常抛出保留堆栈
         prefix = "配置错误: " if isinstance(e, ConfigError) else ""
         print(f"{prefix}{e}", file=sys.stderr)
+        # 运行期致命错误(如 QbCompatError)时 manager 已构造且通知启用 -> 补发一条退出通知;
+        # 启动失败(配置错误/锁竞争)场景 manager 为 None(无配置可读), 不发; 任何失败不影响退出码
+        notify_fatal(f"{prefix}{e}", manager.config.notify if manager is not None else None)
         return 1
 
 

@@ -24,6 +24,8 @@
 - test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在
 - test_validate_regex_patterns: 非法 regex: 模式报错
 - test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
+- test_validate_notify: notify 段校验(未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels)
+- test_load_notify_config: notify 段解析(默认 platform 渠道/min_level 归一/dedup_window 时间解析)
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
 - test_validate_empty_file: 空文件/非字典根节点报错
 - test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
@@ -596,6 +598,52 @@ def test_validate_condition_and_remove_tags_regex():
         assert "config.my_rules.r1.conditions[1].category[0]: 非法正则" in err, err
         assert "config.my_rules.r1.conditions[2].trackers[0]: 非法正则" in err, err
         assert "config.my_rules.r1.actions[0].remove_tags[0]: 非法正则" in err, err
+
+
+def test_validate_notify():
+    """notify 段校验: 未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels 聚合报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  notify:\n"
+            "    unknown_key: 1\n"
+            "    min_level: DEBUG\n"
+            "    quiet_hours: '25:00-99:99'\n"
+            "    max_per_hour: 0\n"
+            "    dedup_window: abc\n"
+            "    channels:\n"
+            "      - dingtalk: {}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.notify: 未知键 ['unknown_key']" in err, err
+        assert "config.notify.min_level: 须为 INFO/WARNING/ERROR 之一: 'DEBUG'" in err, err
+        assert "config.notify.quiet_hours('25:00-99:99')" in err, err
+        assert "config.notify.max_per_hour: 必须为正整数" in err, err
+        assert "config.notify.dedup_window" in err, err
+        assert "config.notify.channels[0]: 未知渠道 'dingtalk'" in err, err
+
+
+def test_load_notify_config():
+    """notify 段解析: 默认 platform 渠道/min_level 大小写归一/dedup_window 时间解析/quiet_hours 透传"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(
+            _write_config(
+                td,
+                notify={
+                    "enabled": "true",
+                    "min_level": "error",
+                    "quiet_hours": "23:00-08:00",
+                    "max_per_hour": "5",
+                    "dedup_window": "1M",
+                },
+            )
+        )
+        assert cfg.notify.enabled is True
+        assert cfg.notify.min_level == "ERROR"
+        assert cfg.notify.quiet_hours == "23:00-08:00"
+        assert cfg.notify.max_per_hour == 5
+        assert cfg.notify.dedup_window == 60.0
+        assert cfg.notify.channels == ["platform"]  # 未显式配置 -> 默认启用平台渠道
 
 
 def test_validate_gslc():

@@ -100,6 +100,27 @@ class AddEpisodeTagsConfig:
 
 
 @dataclass
+class NotifyConfig:
+    """主动通知配置: 程序 ERROR/WARNING 日志经平台原生通知推送(notify 模块, 零第三方依赖)
+
+    enabled: 总开关 (False 时不挂载日志 handler, 保守默认)
+    min_level: 通知最低日志级别 (INFO/WARNING/ERROR, 大小写不敏感)
+    quiet_hours: 免打扰时段 "HH:MM-HH:MM" (支持跨午夜, 如 "23:00-08:00"); 空 = 不启用;
+      时段内跳过发送(含 ERROR, 仅 DEBUG 记录) —— 全屏/演示场景由 OS 专注助手管理,
+      本项面向睡眠时段
+    max_per_hour: 每小时通知上限, 超出丢弃(防通知风暴; 内存态, 重启重置)
+    dedup_window: 相同 (来源 logger, 级别, 消息前 80 字符) 的去重窗口(秒), 0 = 不去重
+    channels: 渠道列表, v1 仅支持单一 platform 渠道(平台原生, 按运行平台自动分派); 默认即 platform
+    """
+    enabled: bool = False
+    min_level: str = "WARNING"
+    quiet_hours: str = ""
+    max_per_hour: int = 20
+    dedup_window: float = 600.0  # 秒; YAML 原始缺省 "10M"
+    channels: List[str] = field(default_factory=lambda: ["platform"])  # v1 仅平台原生单渠道
+
+
+@dataclass
 class CurvePoint:
     """限速曲线档位点: 该 period 内累计流量(字节)低于 threshold_bytes 的区间按 speed_bytes_per_s 限制
 
@@ -154,7 +175,9 @@ class Config:
     rules_config: dict = field(default_factory=dict)  # 规则集原始配置: {规则集名: {规则名: spec}}
 
     remove_similar_tags: bool = False
-    add_episode_tags: "AddEpisodeTagsConfig" = field(default_factory=AddEpisodeTagsConfig)  # 种子添加时自动添加集数标签(名称不含集数时从文件列表解析)
+    add_episode_tags: "AddEpisodeTagsConfig" = field(
+        default_factory=AddEpisodeTagsConfig
+    )  # 种子添加时自动添加集数标签(名称不含集数时从文件列表解析)
 
     hr: HRRule = field(default_factory=HRRule)  # 全局 HR 默认输出设置(站点 hr 段未设置时兜底)
 
@@ -168,6 +191,8 @@ class Config:
     delete_tags_if_has_no_torrents: List[str] = field(default_factory=list)
 
     grouping: GroupingConfig = field(default_factory=GroupingConfig)  # 种子分组管理(辅种管理)
+
+    notify: NotifyConfig = field(default_factory=NotifyConfig)  # 主动通知: ERROR/WARNING 日志 -> 平台原生通知
 
     qbittorrent: QbittorrentConfig = field(default_factory=QbittorrentConfig)
     trackers: Dict[str, TrackerConfig] = field(default_factory=dict)

@@ -6,7 +6,7 @@ from typing import List
 from qbittorrentapi import TorrentState
 
 from .. import curves
-from ..utils import MatchPattern, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
+from ..utils import MatchPattern, parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed, parse_time
 
 # 规则 spec 已知键(trigger 仅支持 interval, 其余触发时机规划中)
 RULE_KNOWN_KEYS = {
@@ -42,12 +42,17 @@ KNOWN_CONFIG_KEYS = {
     "delete_tags",
     "delete_tags_if_has_no_torrents",
     "grouping",
+    "notify",
     "trackers",
     "global_speed_limit_curve",
 }
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag"}
+KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
+# notify.channels 已知渠道(v1 仅平台原生单渠道; 多渠道按 traffic_source 同模式演进)
+NOTIFY_CHANNELS = {"platform"}
+NOTIFY_LEVELS = ("INFO", "WARNING", "ERROR")
 KNOWN_HR_KEYS = {
     "add_tag",
     "add_category",
@@ -558,6 +563,51 @@ def _validate_curve_points(raw_list, where: str, direction_key: str, errors: Lis
             _try(parse_speed, str(speed_spec[direction_key]), pos, errors)
 
 
+def _validate_notify(spec, errors: List[str]) -> None:
+    """校验 config.notify 段(主动通知); 未配置(None)合法, 走默认值"""
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.notify: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_NOTIFY_KEYS, "config.notify", errors)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], "config.notify.enabled", errors)
+    if "min_level" in spec:
+        if str(spec["min_level"]).strip().upper() not in NOTIFY_LEVELS:
+            errors.append(f"config.notify.min_level: 须为 {'/'.join(NOTIFY_LEVELS)} 之一: '{spec['min_level']}'")
+    if "quiet_hours" in spec:
+        v = str(spec["quiet_hours"] or "").strip()
+        if v and "-" in v:
+            start_s, _, end_s = v.partition("-")
+            for part in (start_s, end_s):
+                _try(parse_hm, part, f"config.notify.quiet_hours('{v}')", errors)
+        elif v:
+            errors.append(f"config.notify.quiet_hours: 须为 \"HH:MM-HH:MM\" 格式(支持跨午夜): '{v}'")
+    if "max_per_hour" in spec:
+        try:
+            n = int(spec["max_per_hour"])
+        except (TypeError, ValueError):
+            errors.append(f"config.notify.max_per_hour: 必须为整数: {spec['max_per_hour']}")
+        else:
+            if n <= 0:
+                errors.append("config.notify.max_per_hour: 必须为正整数")
+    if "dedup_window" in spec:
+        _try_time(spec["dedup_window"], "config.notify.dedup_window", errors)
+    if "channels" in spec:
+        ch = spec["channels"]
+        if not isinstance(ch, list) or not ch:
+            errors.append("config.notify.channels: 必须是非空列表")
+        else:
+            for i, item in enumerate(ch):
+                if not isinstance(item, dict) or len(item) != 1:
+                    errors.append(f"config.notify.channels[{i}]: 必须是单键映射(如 - platform: {{}})")
+                    continue
+                name = next(iter(item))
+                if name not in NOTIFY_CHANNELS:
+                    errors.append(f"config.notify.channels[{i}]: 未知渠道 '{name}', 可用: {sorted(NOTIFY_CHANNELS)}")
+
+
 def validate_config(data) -> List[str]:
     """全量校验配置(结构/未知键/必填项/值格式), 返回错误列表(空 = 通过)
 
@@ -598,6 +648,7 @@ def validate_config(data) -> List[str]:
     _validate_qbittorrent(cfg.get("qbittorrent"), errors)
     _validate_global_hr(cfg.get("hr"), errors)
     _validate_grouping(cfg.get("grouping"), errors)
+    _validate_notify(cfg.get("notify"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
     _validate_rules(rules_config, errors)

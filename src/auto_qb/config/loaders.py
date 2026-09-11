@@ -19,6 +19,7 @@ from .models import (
     GroupingConfig,
     HRRule,
     LoggingConfig,
+    NotifyConfig,
     PeriodCurve,
     QbittorrentConfig,
     TrackerConfig,
@@ -84,6 +85,23 @@ def load_grouping_config(spec: dict) -> GroupingConfig:
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
         check_missing_files=_get(spec, "check_missing_files", d.check_missing_files, parse_bool),
         missing_tag=_get(spec, "missing_tag", d.missing_tag),
+    )
+
+
+def load_notify_config(spec: dict) -> NotifyConfig:
+    """解析 notify 段: channels 显式配置时提取渠道名(v1 仅 platform, 单键映射已由 validate_config 保证); 缺省默认启用平台渠道"""
+    d = NotifyConfig()
+    channels = d.channels
+    raw_channels = spec.get("channels")
+    if raw_channels:  # 显式非空列表(先验证再解析: 结构与渠道名合法性已由校验层保证)
+        channels = [next(iter(item)) for item in raw_channels]
+    return NotifyConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        min_level=_get(spec, "min_level", d.min_level, lambda v: str(v).strip().upper()),
+        quiet_hours=_get(spec, "quiet_hours", d.quiet_hours),
+        max_per_hour=_get(spec, "max_per_hour", d.max_per_hour, int),
+        dedup_window=_get(spec, "dedup_window", d.dedup_window, parse_time),
+        channels=channels,
     )
 
 
@@ -279,6 +297,7 @@ def load_config(config_path: str) -> Config:
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
         grouping=load_grouping_config(_get(cfg, "grouping", {})),
+        notify=load_notify_config(_get(cfg, "notify", {})),
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),

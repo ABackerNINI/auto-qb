@@ -22,6 +22,7 @@ from .config import Config, load_config
 from .errors import AutoQbError
 from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
+from .notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
@@ -58,6 +59,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 连接状态(节流重复连接错误日志): None=未知/首次, True=已连接, False=已断开
         # 仅状态转换时记录, 断开期间静默(qB 宕机时不刷屏)
         self._last_conn_ok: Optional[bool] = None
+        # 主动通知 handler(run() 启用时挂载; dry-run/export 模式不挂载)
+        self._notify_handler: Optional[NotifyHandler] = None
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -110,6 +113,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
         """
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
+        # 主动通知: 启用后全项目 WARNING/ERROR 日志推送平台原生通知(notify.py);
+        # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
+        if not dry_run:
+            self._notify_handler = setup_notify(self.config.notify)
         try:
             if not self.connect():
                 return

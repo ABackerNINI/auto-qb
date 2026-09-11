@@ -1,7 +1,7 @@
 """内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
 upload_ratio, upload_size, upload_size_today/this_week/this_month, freespace"""
 import shutil
-from datetime import datetime, time as dtime
+from datetime import datetime
 
 from .. import utils
 from .base import BaseCondition, RuleContext
@@ -14,11 +14,6 @@ def _in_range(value: int, spec: str) -> bool:
         a, b = spec.split("-", 1)
         return int(a) <= value <= int(b)
     return value == int(spec)
-
-
-def _parse_hm(text: str):
-    h, m = str(text).strip().split(":")
-    return int(h), int(m)
 
 
 @register_condition
@@ -158,16 +153,8 @@ class DateTimeCondition(BaseCondition):
         if self.day_of_week and not _in_range(now.isoweekday(), str(self.day_of_week)):
             return False
         if self.time_range:
-            start_s, end_s = str(self.time_range).split("-", 1)
-            t_min = dtime(*_parse_hm(start_s))
-            t_max = dtime(*_parse_hm(end_s))
-            t_now = now.time()
-            if t_min <= t_max:
-                if not (t_min <= t_now <= t_max):
-                    return False
-            else:  # 跨午夜
-                if not (t_now >= t_min or t_now <= t_max):
-                    return False
+            if not utils.time_in_range(now.time(), self.time_range):
+                return False
         return True
 
 

@@ -38,9 +38,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from auto_qb import utils
 from auto_qb.rules.conditions import (
     _in_range,
-    _parse_hm,
     CategoryCondition,
     DateTimeCondition,
     FreespaceCondition,
@@ -84,13 +84,13 @@ def test_state_map():
 
 
 def test_in_range_and_parse_hm():
-    """_in_range / _parse_hm 纯函数"""
+    """_in_range / utils.parse_hm 纯函数(parse_hm 已提取至 utils 供通知免打扰时段共用)"""
     assert _in_range(5, "3-8")
     assert not _in_range(2, "3-8")
     assert _in_range(5, "5")
     assert not _in_range(4, "5")
-    assert _parse_hm("23:59") == (23, 59)
-    assert _parse_hm("00:00") == (0, 0)
+    assert utils.parse_hm("23:59") == (23, 59)
+    assert utils.parse_hm("00:00") == (0, 0)
 
 
 def test_path_condition():

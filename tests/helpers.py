@@ -7,7 +7,14 @@ import tempfile
 import time
 from types import SimpleNamespace
 
-from auto_qb.config import AddEpisodeTagsConfig, GroupingConfig, HRRule, LoggingConfig, QbittorrentConfig  # noqa: E402
+from auto_qb.config import (
+    AddEpisodeTagsConfig,
+    GroupingConfig,
+    HRRule,
+    LoggingConfig,
+    NotifyConfig,
+    QbittorrentConfig,
+)  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
 
@@ -92,18 +99,20 @@ class FakeClient:
         share_limit_action=None,
         **kw
     ):
-        self.calls.append((
-            "add",
-            {
-                "is_skip_checking": is_skip_checking,
-                "paused": paused or is_paused,
-                "upload_limit": upload_limit,
-                "download_limit": download_limit,
-                "contentLayout": contentLayout,
-                "ratio_limit": ratio_limit,
-                "seeding_time_limit": seeding_time_limit,
-            },
-        ))
+        self.calls.append(
+            (
+                "add",
+                {
+                    "is_skip_checking": is_skip_checking,
+                    "paused": paused or is_paused,
+                    "upload_limit": upload_limit,
+                    "download_limit": download_limit,
+                    "contentLayout": contentLayout,
+                    "ratio_limit": ratio_limit,
+                    "seeding_time_limit": seeding_time_limit,
+                },
+            )
+        )
         if self.add_error:
             raise self.add_error
         # 新种子进入客户端(hash 固定 HASH123, 与 FakeTorrent 默认一致); 存对象而非 dict,
@@ -369,6 +378,7 @@ class FakeConfig:
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
     global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
+    notify = NotifyConfig()  # 主动通知(默认 disabled; 通知测试直接构造 NotifyConfig(enabled=True, ...))
 
 
 def _hr_rule(**kw) -> HRRule:
