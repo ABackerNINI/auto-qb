@@ -8,11 +8,16 @@ import re
 import sys
 import time
 import logging
+from dataclasses import dataclass
 from functools import wraps
 from urllib.parse import urlparse
 from typing import List
 
 logger = logging.getLogger(__name__)
+
+# 匹配语法常量(用户配置的统一匹配语法, 解析唯一入口见 MatchPattern)
+REGEX_PREFIX = "regex:"
+IGNORE_CASE_SUFFIX = ":ignore_case"
 
 
 def parse_bool(value) -> bool:
@@ -210,27 +215,75 @@ def match_tracker_confs(trackers: dict, urls: list):
     return result
 
 
-def match_tag_patterns(tag: str, patterns: List[str]) -> bool:
-    """标签是否匹配任一格式: 精确匹配或`regex:`前缀正则(参考规则动作语义), 支持`:ignore_case`后缀"""
-    for pat in patterns or []:
-        if not pat:
+@dataclass(frozen=True)
+class MatchPattern:
+    """单个匹配模式: 'regex:' 前缀(正则, re.search 子串匹配)与 ':ignore_case' 后缀的语法解析唯一入口
+
+    解析顺序: 先剥 ':ignore_case' 后缀, 再识别 'regex:' 前缀
+    (如 'regex:foo:ignore_case' => 正则 foo + 忽略大小写)。
+    全项目所有该语法的解析(标签/分类/tracker/路径匹配、@tracker_tags 展开去重、
+    config 正则校验)均经由本类, 不再各自手工剥离。
+    """
+
+    raw: str  # 原始模式串(含前缀与后缀)
+    is_regex: bool  # 是否 'regex:' 前缀正则
+    ignore_case: bool  # 是否 ':ignore_case' 后缀
+    core: str  # 剥离前缀+后缀后的匹配主体
+
+    @classmethod
+    def parse(cls, raw: str) -> "MatchPattern":
+        raw = str(raw)
+        ignore_case = raw.endswith(IGNORE_CASE_SUFFIX)
+        body = raw[:-len(IGNORE_CASE_SUFFIX)] if ignore_case else raw
+        is_regex = body.startswith(REGEX_PREFIX)
+        core = body[len(REGEX_PREFIX):] if is_regex else body
+        return cls(raw=raw, is_regex=is_regex, ignore_case=ignore_case, core=core)
+
+    @property
+    def body(self) -> str:
+        """保留 regex: 前缀、仅剥 :ignore_case 后缀的主体(@tracker_tags 展开去重用)"""
+        return (REGEX_PREFIX if self.is_regex else "") + self.core
+
+    @property
+    def suffix(self) -> str:
+        """:ignore_case 后缀(展开引用时回拼用), 未配置为空串"""
+        return IGNORE_CASE_SUFFIX if self.ignore_case else ""
+
+    def compile(self):
+        """编译正则主体(flags 与运行时一致); 合法性由 config 校验阶段保证, 非法模式抛 re.error"""
+        return re.compile(self.core, re.IGNORECASE if self.ignore_case else 0)
+
+
+def match_value(value: str, patterns: List[str], normalize=None) -> bool:
+    """候选值是否匹配任一模式 —— 标签/分类/tracker/路径匹配的唯一实现(语法见 MatchPattern)
+
+    - 精确匹配: 字符串全等, 默认大小写敏感(':ignore_case' 后缀时两侧 lower 比较)
+    - 'regex:' 前缀: re.search 子串匹配(':ignore_case' 对正则同样生效)
+    - normalize: 匹配前对候选值与精确模式主体施加的规范化(如 path_normalize 统一斜杠);
+      正则模式只对候选值规范化, 模式主体保持原样
+    - 非法正则静默跳过(视为不匹配): 正常流程已在 config 校验阶段保证可编译
+    """
+    target = normalize(value) if normalize else value
+    for raw in patterns or []:
+        if not raw:
             continue
-
-        # 处理:ignore_case后缀
-        ignore_case = False
-        if pat.endswith(":ignore_case"):
-            ignore_case = True
-            pat = pat[:-12]
-
-        if pat.startswith("regex:"):  # 正则匹配
+        pat = MatchPattern.parse(raw)
+        if pat.is_regex:
             try:
-                if re.search(pat[6:], tag, flags=re.IGNORECASE if ignore_case else 0):
+                if re.search(pat.core, target, flags=re.IGNORECASE if pat.ignore_case else 0):
                     return True
             except re.error:
                 continue
-        elif (ignore_case and pat.lower() == tag.lower()) or pat == tag:  # 精准匹配
-            return True
+        else:
+            core = normalize(pat.core) if normalize else pat.core
+            if (pat.ignore_case and target.lower() == core.lower()) or target == core:
+                return True
     return False
+
+
+def match_tag_patterns(tag: str, patterns: List[str]) -> bool:
+    """标签是否匹配任一格式: 精确匹配或 regex: 前缀正则, 支持 :ignore_case 后缀(见 match_value)"""
+    return match_value(tag, patterns)
 
 
 def path_normalize(p: str) -> str:
@@ -248,47 +301,10 @@ def path_normalize(p: str) -> str:
 
 
 def match_path_patterns(path: str, patterns: List[str]) -> bool:
-    """
-    路径匹配函数。
-
-    特性：
-    - 精确匹配（默认）：字符串严格相等（已规范化斜杠）。
-    - 正则匹配（前缀 'regex:'）：使用 re.search，支持子串匹配。
-    - 忽略大小写（后缀 ':ignore_case'）：对精确匹配和正则均生效。
-    """
-    # 统一输入路径的斜杠格式（保留尾部斜杠）
-    norm_path = path_normalize(path)
-
-    for raw_pattern in patterns:
-        # ---------- 1. 解析后缀 :ignore_case ----------
-        ignore_case = False
-        pattern = raw_pattern
-        if pattern.endswith(':ignore_case'):
-            ignore_case = True
-            pattern = pattern[:-len(':ignore_case')]
-
-        # ---------- 2. 解析前缀 regex: ----------
-        is_regex = False
-        core = pattern
-        if pattern.startswith('regex:'):
-            is_regex = True
-            core = pattern[len('regex:'):]
-
-        # ---------- 3. 执行匹配 ----------
-        if is_regex:  # 正则匹配不能对pattern进行_path_normalize
-            flags = re.IGNORECASE if ignore_case else 0
-            try:
-                if re.search(core, norm_path, flags):
-                    return True
-            except re.error:
-                continue
-        else:
-            # 精确匹配：对模式也做同样的规范化（保留尾部斜杠）
-            match_core = path_normalize(core)
-            if (ignore_case and norm_path.lower() == match_core.lower()) or norm_path == match_core:
-                return True
-
-    return False
+    """路径是否匹配任一格式(语法见 match_value): 精确匹配对两侧做 path_normalize
+    统一斜杠(保留首尾斜杠, 防止 'c:/windows/' 与 'c:/windowsg' 误等), 正则模式
+    只对候选路径规范化、模式主体保持原样(不能对正则做路径规范化)"""
+    return match_value(path, patterns, normalize=path_normalize)
 
 
 def timer(unit='s', log_func=print):

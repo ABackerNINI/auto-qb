@@ -23,6 +23,7 @@
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键)
 - test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在
 - test_validate_regex_patterns: 非法 regex: 模式报错
+- test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
 - test_validate_empty_file: 空文件/非字典根节点报错
 - test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
@@ -571,6 +572,30 @@ def test_validate_regex_patterns():
         err = _load_errors(td, text)
         assert "config.delete_tags[0]: 非法正则" in err, err
         assert "config.trackers.T1.remove_tags[0]: 非法正则" in err, err
+
+
+def test_validate_condition_and_remove_tags_regex():
+    """tags/category/trackers 条件与 remove_tags 动作的非法 regex: 模式在 config 阶段 fail-fast"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  my_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - tags: ['regex:[x']\n"
+            "        - category: 'regex:[y'\n"
+            "        - trackers: 'regex:[z'\n"
+            "      actions:\n"
+            "        - remove_tags: ['regex:[w']\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.my_rules.r1.conditions[0].tags[0]: 非法正则" in err, err
+        assert "config.my_rules.r1.conditions[1].category[0]: 非法正则" in err, err
+        assert "config.my_rules.r1.conditions[2].trackers[0]: 非法正则" in err, err
+        assert "config.my_rules.r1.actions[0].remove_tags[0]: 非法正则" in err, err
 
 
 def test_validate_gslc():

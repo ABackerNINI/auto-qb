@@ -9,7 +9,7 @@ from typing import List, Optional
 import yaml
 
 from .. import curves
-from ..utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
+from ..utils import MatchPattern, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .errors import ConfigError
 from .models import (
     AddEpisodeTagsConfig,
@@ -178,7 +178,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     interval: Optional[float] = parse_time(str(spec["interval"])) if "interval" in spec else None
 
     # 数据源: 校验已保证仅单个 traffic_monitor
-    (source,) = spec["traffic_source"]
+    (source, ) = spec["traffic_source"]
     dat_path = str(source["traffic_monitor"]["dat_path"]).strip()
 
     period_curves: List[PeriodCurve] = []
@@ -286,24 +286,22 @@ def load_config(config_path: str) -> Config:
 
 
 def _expand_tracker_tags_refs(items: List[str], tracker_tags: List[str]) -> List[str]:
-    """展开 @tracker_tags 引用: 替换为所有 tracker 配置的 tags 并集(去重保序)"""
+    """展开 @tracker_tags 引用: 替换为所有 tracker 配置的 tags 并集(去重保序)
+
+    模式语法(regex:/:ignore_case)解析统一走 utils.MatchPattern; 引用判定与查重用
+    仅剥后缀的 body(保留 regex: 前缀, 与既有行为一致), 输出与去重键用含后缀的原始串。
+    """
     out: List[str] = []
     seen = set()
     for it in items or []:
-        it = str(it).strip()
-
-        ignore_case = ""
-        if it.endswith(":ignore_case"):
-            ignore_case = ":ignore_case"
-            it = it[:-12]
-
-        if it == "@tracker_tags":
+        pat = MatchPattern.parse(str(it).strip())
+        if pat.body == "@tracker_tags":
             for tag in tracker_tags:
-                tag = tag + ignore_case
-                if tag not in seen:
-                    seen.add(tag)
-                    out.append(tag)
-        elif it and it not in seen:
-            seen.add(it + ignore_case)
-            out.append(it + ignore_case)
+                entry = tag + pat.suffix
+                if entry not in seen:
+                    seen.add(entry)
+                    out.append(entry)
+        elif pat.body and pat.body not in seen:
+            seen.add(pat.raw)
+            out.append(pat.raw)
     return out

@@ -6,7 +6,7 @@ from typing import List
 from qbittorrentapi import TorrentState
 
 from .. import curves
-from ..utils import parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
+from ..utils import MatchPattern, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 
 # 规则 spec 已知键(trigger 仅支持 interval, 其余触发时机规划中)
 RULE_KNOWN_KEYS = {
@@ -122,11 +122,12 @@ def _check_str_list(value, where: str, errors: List[str]) -> bool:
 
 
 def _check_regex_patterns(patterns: list, where: str, errors: List[str]) -> None:
-    """regex: 前缀模式须可编译(否则运行时会静默跳过匹配, 错误被掩盖)"""
+    """regex: 前缀模式须可编译(经 MatchPattern 解析出主体与 ignore_case 标志后编译, 与运行时一致;
+    否则运行时会静默跳过匹配, 错误被掩盖)"""
     for i, pat in enumerate(patterns):
         if isinstance(pat, str) and pat.startswith("regex:"):
             try:
-                re.compile(pat[6:])
+                MatchPattern.parse(pat).compile()
             except re.error as e:
                 errors.append(f"{where}[{i}]: 非法正则: {e}")
 
@@ -373,11 +374,30 @@ def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None
             errors.append(f"{where}.{seg}.mode 取值非法: '{value[seg].get('mode', '')}', 可选: {list(CHECKING_VALID_MODES)}")
 
 
+def _validate_tags_condition_spec(value, where: str, errors: List[str]) -> None:
+    """tags 条件 spec 正则校验: 列表(组间或)的每组成员内逗号分隔模式, regex: 主体须可编译
+    (非字符串等类型错误由 Rule 构造时的自然异常暴露, 此处仅查正则, 与 _check_regex_patterns 同风格)"""
+    groups = value if isinstance(value, list) else [value]
+    for g in groups:
+        if isinstance(g, str):
+            _check_regex_patterns([p.strip() for p in g.split(",")], where, errors)
+
+
+def _validate_pattern_list_spec(value, where: str, errors: List[str]) -> None:
+    """category/trackers 条件与 remove_tags 动作 spec 正则校验: 列表或单值, 每项 regex: 主体须可编译"""
+    items = value if isinstance(value, list) else [value]
+    _check_regex_patterns(items, where, errors)
+
+
 # 插件 spec 深度校验分发(键为插件名): 配置正确性检查全部集中在 config 校验阶段,
 # 插件类(conditions/actions)假定配置正确, 不再自查
 _PLUGIN_SPEC_VALIDATORS = {
     "state": _validate_state_condition_spec,
     "checking": _validate_checking_action_spec,
+    "tags": _validate_tags_condition_spec,
+    "category": _validate_pattern_list_spec,
+    "trackers": _validate_pattern_list_spec,
+    "remove_tags": _validate_pattern_list_spec,
 }
 
 

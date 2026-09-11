@@ -1,6 +1,5 @@
 """内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
 upload_ratio, upload_size, upload_size_today/this_week/this_month, freespace"""
-import re
 import shutil
 from datetime import datetime, time as dtime
 
@@ -52,7 +51,7 @@ class SizeCondition(BaseCondition):
 
 @register_condition
 class TagsCondition(BaseCondition):
-    """标签条件: 每组内逗号分隔为与, 组间为或, 支持 regex: 和 ${required_seeding_time}"""
+    """标签条件: 每组内逗号分隔为与, 组间为或, 支持 regex:/:ignore_case 和 ${required_seeding_time}"""
     name = "tags"
 
     def __init__(self, spec):
@@ -67,20 +66,10 @@ class TagsCondition(BaseCondition):
                 pat = utils.replace_vars(pat, ctx.torrent.tracker_conf)
                 if not pat:
                     continue
-                if pat.startswith("regex:"):
-                    try:
-                        rx = re.compile(pat[6:])
-                    except re.error:
-                        ok = False
-                        break
-                    if not any(rx.search(t) for t in current):
-                        ok = False
-                        break
-                # TODO: 支持:ignore_case
-                else:
-                    if pat not in current:
-                        ok = False
-                        break
+                # 单模式包列表复用 utils.match_value(语法解析/regex:/:ignore_case 唯一实现)
+                if not any(utils.match_value(t, [pat]) for t in current):
+                    ok = False
+                    break
             if ok:
                 return True
         return False
@@ -88,7 +77,7 @@ class TagsCondition(BaseCondition):
 
 @register_condition
 class CategoryCondition(BaseCondition):
-    """分类条件: 列表为或关系, 支持 regex:"""
+    """分类条件: 列表为或关系, 支持 regex:/:ignore_case"""
     name = "category"
 
     def __init__(self, spec):
@@ -96,24 +85,12 @@ class CategoryCondition(BaseCondition):
 
     def match(self, ctx: RuleContext):
         category = (ctx.torrent.category or "").strip()
-        for pat in self.patterns:
-            pat = str(pat)
-            if pat.startswith("regex:"):
-                try:
-                    rx = re.compile(pat[6:])
-                except re.error:
-                    continue
-                if rx.search(category):
-                    return True
-            # TODO: 支持:ignore_case
-            elif category == pat:
-                return True
-        return False
+        return any(utils.match_value(category, [str(pat)]) for pat in self.patterns)
 
 
 @register_condition
 class TrackersCondition(BaseCondition):
-    """tracker 条件: 匹配 tracker 配置名, 列表为或关系, 支持 regex:"""
+    """tracker 条件: 匹配 tracker 配置名, 列表为或关系, 支持 regex:/:ignore_case"""
     name = "trackers"
 
     def __init__(self, spec):
@@ -122,19 +99,7 @@ class TrackersCondition(BaseCondition):
     def match(self, ctx: RuleContext):
         conf = ctx.torrent.tracker_conf
         names = [conf.name] if conf is not None else []
-        for pat in self.patterns:
-            pat = str(pat)
-            if pat.startswith("regex:"):
-                try:
-                    rx = re.compile(pat[6:])
-                except re.error:
-                    continue
-                if any(rx.search(n) for n in names):
-                    return True
-            # TODO: 支持:ignore_case
-            elif pat in names:
-                return True
-        return False
+        return any(any(utils.match_value(n, [str(pat)]) for n in names) for pat in self.patterns)
 
 
 @register_condition

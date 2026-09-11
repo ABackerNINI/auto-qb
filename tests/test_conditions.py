@@ -26,7 +26,10 @@
 - test_date_time_day_of_week_mismatch: day_of_week 不匹配 -> 不触发
 - test_date_time_cross_midnight: 跨午夜 time 区间匹配/不匹配
 - test_date_time_out_of_range: 非跨午夜区间当前时刻不在 -> 不触发
-- test_tags_condition_case_sensitive: 标签条件精确匹配区分大小写(:ignore_case 由 utils 层承担)
+- test_tags_condition_case_sensitive: 标签条件精确匹配默认区分大小写, :ignore_case 后缀显式开启
+- test_tags_condition_ignore_case: tags 条件 :ignore_case(精确+regex 两型)
+- test_category_condition_ignore_case: category 条件 :ignore_case(精确+regex 两型)
+- test_trackers_condition_ignore_case: trackers 条件 :ignore_case(精确+regex 两型)
 """
 import os
 import shutil
@@ -133,13 +136,45 @@ def test_tags_condition():
 
 
 def test_tags_condition_case_sensitive():
-    """标签条件精确匹配区分大小写(:ignore_case 由 utils.match_tag_patterns 承担, 条件插件不支持)"""
+    """标签条件精确匹配默认区分大小写, :ignore_case 后缀显式开启(见 test_tags_condition_ignore_case)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = _ctx(mgr, FakeTorrent(tags="HHan"))
         assert TagsCondition("HHan").match(ctx)
         assert TagsCondition("hhan").match(ctx) is False, "精确匹配应区分大小写"
         assert TagsCondition("HHAN").match(ctx) is False
+
+
+def test_tags_condition_ignore_case():
+    """标签条件 :ignore_case 后缀: 精确与 regex: 均生效(2026-09-12 统一走 utils.match_value)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(tags="HHan"))
+        assert TagsCondition("hhan:ignore_case").match(ctx)
+        assert TagsCondition("HHAN:ignore_case").match(ctx)
+        assert TagsCondition("regex:^hh:ignore_case").match(ctx)
+        assert TagsCondition("regex:^xyz:ignore_case").match(ctx) is False, "ignore_case 下正则仍须真实匹配"
+
+
+def test_category_condition_ignore_case():
+    """分类条件 :ignore_case 后缀: 精确与 regex: 均生效"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(category="HR-DONE"))
+        assert CategoryCondition("hr-done:ignore_case").match(ctx)
+        assert CategoryCondition("regex:^hr-:ignore_case").match(ctx)
+        assert CategoryCondition("OTHER:ignore_case").match(ctx) is False
+
+
+def test_trackers_condition_ignore_case():
+    """tracker 条件 :ignore_case 后缀: 精确与 regex: 均生效"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = _ctx(mgr, FakeTorrent(tags=""), client)
+        assert TrackersCondition("hhan:ignore_case").match(ctx)
+        assert TrackersCondition("regex:^hh:ignore_case").match(ctx)
+        assert TrackersCondition("kufirc:ignore_case").match(ctx) is False
 
 
 def test_category_condition():

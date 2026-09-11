@@ -13,6 +13,8 @@
 - test_match_tracker_confs: tracker 配置匹配
 - test_match_tag_patterns: 标签模式匹配
 - test_match_path_patterns: 路径模式匹配
+- test_match_pattern_parse: MatchPattern.parse 统一语法解析(regex: 前缀/:ignore_case 后缀/body/suffix)
+- test_match_value_normalize: match_value 核心(normalize 规范化语义, 空模式跳过)
 - test_check_filelist_all_ok: 文件列表全部一致(CheckingMixin.check_filelist)
 - test_check_filelist_missing: 文件缺失
 - test_check_filelist_size_mismatch: 文件大小不一致
@@ -172,6 +174,30 @@ def test_match_path_patterns():
     assert utils.match_path_patterns("R:/Downloads/Movie", ["regex:movie:ignore_case"])
     assert not utils.match_path_patterns("R:/Downloads/Movie", ["R:/Windows"])
     assert not utils.match_path_patterns("R:/Windows", ["regex:[invalid"])
+
+
+def test_match_pattern_parse():
+    """MatchPattern.parse: 'regex:' 前缀与 ':ignore_case' 后缀的统一解析(先剥后缀再识别前缀)"""
+    p = utils.MatchPattern.parse("regex:foo:ignore_case")
+    assert (p.raw, p.is_regex, p.ignore_case, p.core) == ("regex:foo:ignore_case", True, True, "foo")
+    assert p.body == "regex:foo" and p.suffix == ":ignore_case"
+    assert utils.MatchPattern.parse("tagA").body == "tagA"
+    assert not utils.MatchPattern.parse("tagA").is_regex
+    assert not utils.MatchPattern.parse("tagA").ignore_case
+    p2 = utils.MatchPattern.parse("regex:^tag")
+    assert (p2.is_regex, p2.ignore_case, p2.core, p2.suffix) == (True, False, "^tag", "")
+    p3 = utils.MatchPattern.parse("tagA:ignore_case")
+    assert (p3.is_regex, p3.ignore_case, p3.core, p3.body) == (False, True, "tagA", "tagA")
+
+
+def test_match_value_normalize():
+    """match_value: normalize 参数对候选值与精确模式主体生效, 正则主体不规范化(路径匹配语义)"""
+    norm = utils.path_normalize
+    assert utils.match_value(r"R:\Downloads\Movie", ["R:/Downloads/Movie"], normalize=norm)
+    assert utils.match_value("R:/Downloads/Movie", [r"R:\Downloads\Movie"], normalize=norm)
+    assert utils.match_value("R:/Downloads/Movie", ["regex:Downloads"], normalize=norm)
+    assert utils.match_value("R:/Downloads/Movie", ["^R:"], normalize=norm) is False  # 非前缀正则不误用
+    assert utils.match_value("", [""]) is False  # 空模式跳过(不与空值误等)
 
 
 def test_check_filelist_all_ok():
