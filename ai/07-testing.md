@@ -3,7 +3,7 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 650 条 (2026-09-12), 分支覆盖率 94%
+# 项目 venv (.venv, Python 3.12), 基线: 668 条 (2026-09-12), 分支覆盖率 94%
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
@@ -17,7 +17,7 @@
 
 1. **每个测试文件头部 docstring 维护 "## 测试计划" 清单** — 项目明文规定: 新增测试必须同步更新对应文件的清单 (README 也强调)。
 2. 文件名与被测模块对应 (`test_actions.py` ↔ `rules/actions.py`); 一个模块可以有多个文件 (如 test_rules_core/test_rule_base/test_rule_engine 拆分)。
-3. 测试粒度小而多 (650 个), 名字用中文/英文短语描述场景。
+3. 测试粒度小而多 (668 个), 名字用中文/英文短语描述场景。
 4. **平台相关测试必须以 `monkeypatch` 固定平台** — GitHub Actions 跑在 Linux, 而本项目以 Windows 为运行环境。纯 Windows 行为 (如长路径 `\\?\` 前缀) 的测试若直接断言, 在 Linux CI 上必失败 (2026-09-10 实测 3 例): `test_utils.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用 `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。规则: 测试主体行为的是"平台逻辑"而非"当前真实平台", 一律显式 monkeypatch, 不要依赖运行环境。
 
 ## tests/helpers.py 基础设施 (写测试前必读)

@@ -32,8 +32,9 @@
 3. **辅种分组** (事件驱动): 相同文件列表的种子归组; 大小不一致 → 警告+整组暂停; 缺文件 (种子删除/上传转暂停/校验发现缺失/路径变化事件触发磁盘扫描) → 整组暂停+MISSING; 同组多种子同时下载/已完成与下载中并存 (MISSING 组豁免 mixed, 允许重新下载补救) → 警告+整组暂停。
 4. **自定义规则引擎** 🚧: 触发时机(目前仅 interval) + 条件(15 种) + 动作(11 种), 支持去重/冷却/断点续跑/错误控制。
 5. **限速**: tracker 配置单种限速(种子添加时); 规则动作单种限速; 全局限速曲线 (读 Traffic Monitor 流量历史, 按日/月/N天聚合, 阶梯限速写 qB 全局)。
-6. **导出**: `--export-yaml` 从现有种子 tracker 生成配置模板 (尽量保留原配置含注释), `--only-missing` 只导出未配置站点。
-7. **状态持久化**: 规则执行历史/上传量快照/自动分类记录/曲线状态/跳检备份元数据 → `state_file` (JSON), 仅退出时落盘。
+6. **主动通知**: WARNING 及以上日志推送平台原生通知(Windows toast/Linux/macOS, 零依赖); 可配级别/免打扰时段/节流
+7. **导出**: `--export-yaml` 从现有种子 tracker 生成配置模板 (尽量保留原配置含注释), `--only-missing` 只导出未配置站点。
+8. **状态持久化**: 规则执行历史/上传量快照/自动分类记录/曲线状态/跳检备份元数据 → `state_file` (JSON), 仅退出时落盘。
 
 ## 运行模式与入口
 
@@ -52,7 +53,7 @@ python -m auto_qb  # 等价入口
 auto-qb/
 ├── src/auto-qb.py          # 兼容入口 (10行, 转发到 auto_qb.cli.main)
 ├── src/auto_qb/            # 主包 (~5800 行, 模块地图见 03)
-├── tests/                  # 26 个测试文件 + helpers.py (见 07)
+├── tests/                  # 27 个测试文件 + helpers.py (见 07)
 ├── config.yml              # ★ 用户真实生产配置 (含真实站点域名/规则, 勿改勿提交; 受 git 跟踪且未 gitignore, 仅靠约定保护)
 ├── minimal.yml             # 最小配置示例 (受 git 跟踪)
 ├── auto-qb-data/           # 运行时数据目录 (state.json 状态 / state.lock 单实例锁 / logs/auto-qb.log 日志 / skip-check-backup/ 跳检备份; 勿改勿提交, 整目录 gitignore)

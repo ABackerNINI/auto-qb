@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/license-Apache%202.0-green)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Status](https://img.shields.io/badge/status-alpha%20%F0%9F%9A%A7-orange)]() [![CI](https://img.shields.io/github/actions/workflow/status/ABackerNINI/auto-qb/ci.yml?branch=develop&label=CI)](https://github.com/ABackerNINI/auto-qb/actions/workflows/ci.yml)
 
-标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检
+标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检 · 主动通知
 
 </div>
 
@@ -73,6 +73,7 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 - 状态持久化到数据目录（规则历史 / 上传量快照 / 自动分类 / 限速状态 / 跳检备份元数据），重启续跑
 - 启动时 **fail-fast** 全量校验配置（未知键、非法格式、非法 HR 规则一次性聚合报错）
 - 单实例锁，防止同一配置多开互相竞争
+- **主动通知**：程序出错 / 危险情况（缺文件、下载冲突、跳检失败等）时推送**平台原生通知**（Windows 原生 toast / Linux / macOS，零第三方依赖）；免打扰时段 + 频率节流防打扰，全屏等繁忙场景由系统专注助手自动静默
 - 从已有种子的 tracker 一键导出 YAML 配置模板
 
 ## 快速开始
@@ -193,6 +194,14 @@ config:
         enabled: true             # 启用种子分组
         check_missing_files: true # 启用缺文件检查
         missing_tag: MISSING      # 文件丢失时整组添加的标签
+
+    # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
+    notify:
+        enabled: true             # 启用主动通知
+        min_level: WARNING        # 通知最低日志级别: INFO / WARNING / ERROR
+        quiet_hours: "23:00-08:00" # 免打扰时段(支持跨午夜)，时段内跳过发送；留空不启用
+        max_per_hour: 20          # 每小时通知上限，超出丢弃(防风暴)
+        dedup_window: 10M         # 相同通知的去重窗口，0 表示不去重
 
     # 全局自动彻底删除标签
     delete_tags:                        # 彻底删除的标签格式，支持正则
