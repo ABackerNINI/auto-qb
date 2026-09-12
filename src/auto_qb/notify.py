@@ -31,15 +31,20 @@ logger = logging.getLogger(__name__)
 
 # 防自环: 本模块(含子 logger)产生的日志不再进入通知
 NOTIFY_LOGGER_PREFIX = "auto_qb.notify"
-# Windows toast 来源应用标识(AUMID): 开始菜单 Programs 目录下同名 .lnk 快捷方式会获得
-# 与文件名(去扩展名)相同的隐式 AppUserModelID, 注册后 toast 来源显示为 "AutoQB"
-WINDOWS_TOAST_APPID = "AutoQB"
+# Windows toast 来源应用标识(AUMID), 经注册表 HKCU\Software\Classes\AppUserModelId
+# 注册 DisplayName/IconUri(通知平台标准机制)。
+# ⚠️ 历史教训: 曾用开始菜单 .lnk(隐式 AUMID=文件名)注册, 但 lnk 的 TargetPath 指向
+# python.exe 时, explorer 解析任务栏按钮的应用身份取"目标应用"而非 IconLocation ->
+# 名字/图标全部回退 "Python 3.12 (64-bit)"/python 图标; 改注册表键后无任何 python 关联。
+WINDOWS_TOAST_APPID = "AutoQB.UI"
 # AUMID 注册失败的回退来源(PowerShell 自带标识, 无需注册即可用, 显示为 "Windows PowerShell")
 WINDOWS_TOAST_APPID_FALLBACK = "Microsoft.Windows.PowerShell"
 # toast 正文字符上限(WinRT toast 单文本节点约 250 字符可见, 截断防溢出)
 MAX_BODY_LEN = 280
-# AUMID 快捷方式图标(orbit): toast 与资源管理器显示该图标而非 python 图标
+# AUMID 注册表图标(orbit): 通知来源显示该图标而非 python 图标
 ICON_ICO = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+# 历史 .lnk 快捷方式(隐式 AUMID 机制, 已弃用): 注册时清理, 防开始菜单残留僵尸条目
+LEGACY_SHORTCUTS = ("AutoQB.UI.lnk", "AutoQB.lnk")
 
 
 class NotifyThrottle:
@@ -78,13 +83,11 @@ class PlatformChannel:
 
     TIMEOUT_S = 10.0
 
-    def __init__(self, platform: str = None, launch_arguments: str = ""):
+    def __init__(self, platform: str = None):
         # platform 运行时求值(默认参数在导入时绑定 sys.platform, 会固化到模块导入场景)
         self.platform = platform if platform is not None else sys.platform
-        # toast 点击激活命令的参数(Windows: 写入 AUMID 快捷方式 Arguments, 点击通知即以此重启应用)
-        self._launch_arguments = launch_arguments
         if self.platform.startswith("win32"):
-            self._appid = self._ensure_windows_appid()
+            self._appid = self._ensure_appid_registered()
             self._build = self._build_windows
         elif self.platform.startswith("linux"):
             self._build = self._build_linux
@@ -93,57 +96,43 @@ class PlatformChannel:
         else:
             raise ValueError(f"不支持的平台原生通知: {self.platform}")
 
-    # ---------- Windows AUMID 注册(toast 来源显示名) ----------
+    # ---------- Windows AUMID 注册(通知来源显示名/图标) ----------
 
     @staticmethod
-    def _windows_shortcut_path() -> str:
-        """当前用户的 AUMID 快捷方式路径(%APPDATA% 开始菜单 Programs 目录); 无 APPDATA 返回空串"""
+    def _legacy_shortcut_paths() -> List[str]:
+        """历史 .lnk 快捷方式路径(隐式 AUMID 机制, 已弃用, 启动时清理)"""
         appdata = os.environ.get("APPDATA", "")
         if not appdata:
-            return ""
-        return os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs", f"{WINDOWS_TOAST_APPID}.lnk")
+            return []
+        programs = os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs")
+        return [os.path.join(programs, name) for name in LEGACY_SHORTCUTS]
 
-    def _ensure_windows_appid(self) -> str:
-        """注册 AUMID 快捷方式并返回来源应用标识
+    def _ensure_appid_registered(self) -> str:
+        """注册 AUMID(注册表 HKCU\\Software\\Classes\\AppUserModelId)并返回来源应用标识
 
-        每次启动幂等重写快捷方式(CreateShortcut 覆盖写): Arguments 需与当前配置路径保持一致,
-        否则 toast 点击会以过期参数启动。注册失败回退 PowerShell AUMID 并 DEBUG 记录 ——
-        来源名/点击激活退化, 通知功能本身不受影响。构造期同步执行(每进程一次, 数百毫秒)。
+        注册表键提供通知来源的 DisplayName/IconUri(通知平台标准机制), 无任何 python 关联。
+        幂等覆盖写; 失败回退 PowerShell AUMID 并 DEBUG 记录 —— 来源显示退化, 通知功能不受影响。
+        构造期同步执行(每进程一次, 毫秒级)。
         """
-        shortcut = self._windows_shortcut_path()
-        if not shortcut:
-            return WINDOWS_TOAST_APPID_FALLBACK  # 无 APPDATA(异常环境): 直接回退
         try:
-            self._register_windows_appid(shortcut)
+            self._register_appid_registry()
             return WINDOWS_TOAST_APPID
-        except (OSError, subprocess.SubprocessError) as e:
+        except OSError as e:
             logger.debug("通知 AUMID 注册失败, 回退 PowerShell 来源: %s", e)
             return WINDOWS_TOAST_APPID_FALLBACK
 
-    def _register_windows_appid(self, shortcut: str) -> None:
-        """经 PowerShell(WScript.Shell COM)创建 AUMID 快捷方式: 指向当前解释器,
-        Arguments = launch_arguments(toast 点击激活即以该参数重启应用, 经单实例锁唤起已有窗口)"""
-        def ps_quote(s: str) -> str:
-            return s.replace("'", "''")  # PowerShell 单引号字面量转义
+    @staticmethod
+    def _register_appid_registry() -> None:
+        """写 AUMID 注册表键 + 清理历史 .lnk(仅 Windows 调用)"""
+        import winreg
 
-        script = (
-            "$ws = New-Object -ComObject WScript.Shell; "
-            f"$lnk = $ws.CreateShortcut('{ps_quote(shortcut)}'); "
-            f"$lnk.TargetPath = '{ps_quote(sys.executable)}'; "
-            f"$lnk.Arguments = '{ps_quote(self._launch_arguments)}'; "
-            f"$lnk.IconLocation = '{ps_quote(ICON_ICO)},0'; "
-            "$lnk.Save()"
-        )
-        encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-            capture_output=True,
-            timeout=self.TIMEOUT_S,
-        )
-        if result.returncode != 0:
-            raise OSError(f"快捷方式创建失败: {result.stderr.decode('utf-8', 'ignore')[:200]}")
-        if not os.path.exists(shortcut):
-            raise OSError("快捷方式未生成")
+        key_path = f"Software\\Classes\\AppUserModelId\\{WINDOWS_TOAST_APPID}"
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "auto-qb")
+            winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, ICON_ICO)
+        for legacy in PlatformChannel._legacy_shortcut_paths():
+            if os.path.exists(legacy):
+                os.remove(legacy)
 
     def send(self, title: str, body: str, urgent: bool = False) -> bool:
         """发送一条通知; 返回是否成功"""
@@ -266,20 +255,17 @@ class NotifyHandler(logging.Handler):
         super().close()
 
 
-def setup_notify(config: Optional[NotifyConfig],
-                 force: bool = False,
-                 launch_arguments: str = "") -> Optional[NotifyHandler]:
+def setup_notify(config: Optional[NotifyConfig], force: bool = False) -> Optional[NotifyHandler]:
     """按配置构造并挂载通知 handler 到 "auto_qb" logger; 未启用且未强挂返回 None
 
     force=True: 配置未启用时也会挂载(UI 通知开关热开启, 会话级, 重启后回到配置状态)。
-    launch_arguments: Windows toast 点击激活的启动参数(经 AUMID 快捷方式 Arguments)。
     平台不支持时抛 AutoQbError(启动期 fail-fast, CLI 干净退出 / UI 弹窗提示);
     dry-run 下不调用本函数(调用点判定, 与全项目 dry_run 约定一致)。
     """
     if not config or (not config.enabled and not force):
         return None
     try:
-        channel = PlatformChannel(launch_arguments=launch_arguments)
+        channel = PlatformChannel()
     except ValueError as e:
         from .errors import AutoQbError
         raise AutoQbError(f"主动通知启用失败: {e}") from e

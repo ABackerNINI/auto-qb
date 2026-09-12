@@ -29,7 +29,7 @@ from tkinter import messagebox
 
 from . import autostart, utils
 from .errors import AutoQbError
-from .notify import setup_notify
+from .notify import WINDOWS_TOAST_APPID, setup_notify
 from .qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,43 @@ def send_show(port_file: str, timeout: float = 2.0) -> bool:
         return False
 
 
+def _set_windows_appid() -> None:
+    """设置进程显式 AppUserModelID(须在首个窗口创建前调用)
+
+    Win10/11 任务栏按钮在有显式 AUMID 时才取窗口图标(与 iconbitmap 配合),
+    否则恒显示 python.exe 默认图标。AUMID 与 toast 来源(notify.WINDOWS_TOAST_APPID,
+    对应开始菜单 AutoQB.UI.lnk, 图标 = orbit)同一身份。
+    """
+    try:
+        import ctypes
+
+        set_aumid = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
+        set_aumid.argtypes = [ctypes.c_wchar_p]
+        set_aumid.restype = ctypes.c_long
+        hr = set_aumid(WINDOWS_TOAST_APPID)
+        if hr != 0:
+            logger.warning("AppUserModelID 设置失败: HRESULT=%s", hr)
+            return
+        # 读回校验: 设置结果以系统实际持有的 AUMID 为准(explorer 任务栏图标按它解析)
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetApplicationUserModelId.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.c_wchar_p,
+        ]
+        length = ctypes.c_uint(0)
+        current = ctypes.windll.kernel32.GetCurrentProcess()
+        if kernel32.GetApplicationUserModelId(current, ctypes.byref(length), None) == 122:  # ERROR_INSUFFICIENT_BUFFER
+            buf = ctypes.create_unicode_buffer(length.value)
+            if kernel32.GetApplicationUserModelId(current, ctypes.byref(length), buf) == 0:
+                if buf.value == WINDOWS_TOAST_APPID:
+                    logger.debug("AppUserModelID 已生效: %s", buf.value)
+                else:
+                    logger.warning("AppUserModelID 读回不一致: %s", buf.value)
+    except Exception:
+        logger.debug("AppUserModelID 设置失败", exc_info=True)
+
+
 class TrayUi:
     """托盘应用编排: 窗口/托盘/manager 线程/事件轮询"""
     def __init__(self, manager: QbManager, dry_run: bool = False):
@@ -162,13 +199,16 @@ class TrayUi:
         self.root.geometry("780x560")
         self.root.minsize(700, 500)
         self._icon_tk = tk.PhotoImage(file=ICON_PNG)  # 引用须保留, 否则被 GC
-        # CustomTkinter 会在启动约 200ms 后用自带图标覆盖窗口图标(iconphoto 会被顶掉):
-        # Windows 走 CTk 的 iconbitmap 自定义通道(标记 custom, 不被覆盖, 需 .ico);
-        # 其它平台 iconphoto(PhotoImage 不支持 ico)
+        # Windows 走 CTk 的 iconbitmap(BMP 帧 .ico, 含 16~256 多尺寸)—— 诊断对照实测
+        # CTk 窗口上此方式标题栏/任务栏/alt-tab 均正确; 其它平台 iconphoto(PhotoImage 不支持 ico)
         if sys.platform.startswith("win32"):
+            # 仅 iconbitmap(BMP 帧 ico, 含 16~256 多尺寸): 与诊断对照 C 完全一致 ——
+            # 实测 CTk 窗口上此方式标题栏/任务栏/alt-tab 均为 orbit; 此前叠加的
+            # iconphoto/WM_SETICON(32px 单尺寸) 反而在高 DPI 下破坏任务栏图标(回退 python)
             self.root.iconbitmap(ICON_ICO)
-            # CTk 默认图标应用点在启动约 200ms, 晚于该点再设一次兜底(防时序竞争被顶掉)
-            self.root.after(300, lambda: self.root.iconbitmap(ICON_ICO))
+            # 手动标记 CTk 自定义标志, 阻断其 200ms 默认图标覆盖; 晚于该点再重设一次 iconbitmap 兜底
+            self.root._iconbitmap_method_called = True
+            self.root.after(450, lambda: self.root.iconbitmap(ICON_ICO))
         else:
             self.root.iconphoto(False, self._icon_tk)
         self.root.protocol("WM_DELETE_WINDOW", self._hide_window)
@@ -408,11 +448,7 @@ class TrayUi:
         if handler is None:
             # 配置未启用通知: 会话内动态挂载(重启后回到配置状态); 平台不支持则弹窗提示, 开关由勾选态回弹
             try:
-                self.manager._notify_handler = setup_notify(
-                    self.manager.config.notify,
-                    force=True,
-                    launch_arguments=utils.tray_launch_arguments(self.manager.config_path)
-                )
+                self.manager._notify_handler = setup_notify(self.manager.config.notify, force=True)
             except AutoQbError as e:
                 messagebox.showwarning("auto-qb", str(e), parent=self.root)
                 return

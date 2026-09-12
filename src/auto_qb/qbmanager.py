@@ -127,9 +127,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 主动通知: 启用后全项目 WARNING/ERROR 日志推送平台原生通知(notify.py);
         # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
         if not dry_run:
-            self._notify_handler = setup_notify(
-                self.config.notify, launch_arguments=utils.tray_launch_arguments(self.config_path)
-            )
+            self._notify_handler = setup_notify(self.config.notify)
         try:
             main_tick = self.config.main_tick
             while not self.connect():

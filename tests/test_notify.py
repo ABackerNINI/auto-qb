@@ -10,7 +10,6 @@
 - test_notify_handler_throttle_drops: 同键重复与超限的记录不派发
 - test_notify_channel_windows_command: Windows 命令构造(powershell -EncodedCommand, toast XML 经双层 base64, AUMID 注册跳过)
 - test_notify_windows_appid_ensure: AUMID 幂等注册(已存在复用/无 APPDATA/注册失败回退 PowerShell 来源)
-- test_notify_register_windows_appid_command: AUMID 注册命令(快捷方式指向当前解释器/非零退出报错)
 - test_notify_channel_linux_darwin_commands: Linux notify-send / macOS osascript 命令构造
 - test_notify_channel_unsupported_platform: 不支持平台构造抛 ValueError
 - test_notify_channel_send_failure: 命令失败返回 False 且不外抛
@@ -199,7 +198,7 @@ def test_notify_handler_throttle_drops():
 def test_notify_channel_windows_command(monkeypatch):
     """Windows: powershell -EncodedCommand 结构; 脚本内 toast XML 双层 base64 可还原且含标题正文;
     AUMID 注册过程被跳过(避免测试真实写快捷方式)"""
-    monkeypatch.setattr(PlatformChannel, "_ensure_windows_appid", lambda self: notify_mod.WINDOWS_TOAST_APPID)
+    monkeypatch.setattr(PlatformChannel, "_ensure_appid_registered", lambda self: notify_mod.WINDOWS_TOAST_APPID)
     channel = PlatformChannel("win32")
     cmd = channel._build("auto-qb ERROR", '文件<丢失> & "引号"', False)
     assert cmd[0] == "powershell"
@@ -213,53 +212,20 @@ def test_notify_channel_windows_command(monkeypatch):
 
 
 def test_notify_windows_appid_ensure(monkeypatch):
-    """AUMID 每次启动幂等重注册(Arguments 须与当前配置同步); 无 APPDATA / 注册失败回退 PowerShell 来源"""
-    # 注册成功 -> 自定义 AUMID
+    """AUMID 注册表注册(注册表键 + legacy lnk 清理); 注册失败回退 PowerShell 来源, 不外抛"""
+    monkeypatch.setattr(notify_mod.os, "remove", lambda p: None)  # 屏蔽 legacy lnk 真删(测试不得动开始菜单)
+    removed = []
     monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: True)
-    monkeypatch.setattr(PlatformChannel, "_register_windows_appid", lambda self, shortcut: None)
+    monkeypatch.setattr(PlatformChannel, "_register_appid_registry", lambda shortcut: removed.append(shortcut))
     assert PlatformChannel("win32")._appid == notify_mod.WINDOWS_TOAST_APPID
-
-    # 无 APPDATA(异常环境) -> 回退
-    monkeypatch.setenv("APPDATA", "")
-    assert PlatformChannel("win32")._appid == notify_mod.WINDOWS_TOAST_APPID_FALLBACK
+    assert len(removed) == 1, "注册时应执行一次"
 
     # 注册失败(权限等) -> 回退, 不外抛
-    monkeypatch.setenv("APPDATA", r"C:\fake-appdata")
-
-    def boom(self, shortcut):
+    def boom(shortcut):
         raise OSError("无权限")
 
-    monkeypatch.setattr(PlatformChannel, "_register_windows_appid", boom)
+    monkeypatch.setattr(PlatformChannel, "_register_appid_registry", boom)
     assert PlatformChannel("win32")._appid == notify_mod.WINDOWS_TOAST_APPID_FALLBACK
-
-
-def test_notify_register_windows_appid_command(monkeypatch):
-    """AUMID 注册命令: 快捷方式指向当前解释器并写入 launch_arguments(toast 点击激活参数); 非零退出报 OSError"""
-    captured = {}
-
-    def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return _FakeCompleted(returncode=0)
-
-    monkeypatch.setattr(notify_mod.subprocess, "run", fake_run)
-    monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: True)  # 注册后已落盘
-    channel = PlatformChannel.__new__(PlatformChannel)  # 跳过 __init__, 单测注册方法
-    channel._launch_arguments = '"D:/my cfg/config.yml" --tray'
-    channel._register_windows_appid(r"C:\fake\AutoQB.lnk")
-    script = base64.b64decode(captured["cmd"][-1]).decode("utf-16-le")
-    assert "CreateShortcut('C:\\fake\\AutoQB.lnk')" in script
-    assert f"$lnk.TargetPath = '{sys.executable}'" in script
-    assert '$lnk.Arguments = \'"D:/my cfg/config.yml" --tray\'' in script, "toast 点击激活参数应写入快捷方式"
-
-    monkeypatch.setattr(notify_mod.subprocess, "run", lambda *a, **k: _FakeCompleted(returncode=1))
-    with pytest.raises(OSError):
-        channel._register_windows_appid(r"C:\fake\AutoQB.lnk")
-
-
-class _FakeCompleted:
-    def __init__(self, returncode):
-        self.returncode = returncode
-        self.stderr = b""
 
 
 def test_notify_channel_linux_darwin_commands():
@@ -278,6 +244,12 @@ def test_notify_channel_unsupported_platform():
     """不支持的平台构造时抛 ValueError(启动期 fail-fast)"""
     with pytest.raises(ValueError):
         PlatformChannel("sunos")
+
+
+class _FakeCompleted:
+    def __init__(self, returncode):
+        self.returncode = returncode
+        self.stderr = b""
 
 
 def test_notify_channel_send_failure(monkeypatch):
@@ -303,7 +275,7 @@ def test_setup_notify_disabled():
 def test_setup_notify_attaches_and_unsupported(monkeypatch):
     """启用时挂载到 auto_qb logger(测试后清理); 不支持平台抛 AutoQbError;
     AUMID 注册被跳过(测试不得在真机开始菜单产生真实快捷方式副作用)"""
-    monkeypatch.setattr(PlatformChannel, "_ensure_windows_appid", lambda self: notify_mod.WINDOWS_TOAST_APPID)
+    monkeypatch.setattr(PlatformChannel, "_ensure_appid_registered", lambda self: notify_mod.WINDOWS_TOAST_APPID)
     handler = setup_notify(NotifyConfig(enabled=True, min_level="ERROR", max_per_hour=5, dedup_window=0))
     try:
         assert isinstance(handler, NotifyHandler)
@@ -321,7 +293,8 @@ def test_setup_notify_attaches_and_unsupported(monkeypatch):
 
 def test_setup_notify_force_hot_attach(monkeypatch):
     """通知热开启: 配置未启用时不带 force 返回 None, 带 force=True 挂载(UI 开关热开启, 会话级)"""
-    monkeypatch.setattr(PlatformChannel, "_ensure_windows_appid", lambda self: notify_mod.WINDOWS_TOAST_APPID)
+    monkeypatch.setattr(PlatformChannel, "_ensure_appid_registered", lambda self: notify_mod.WINDOWS_TOAST_APPID)
+    monkeypatch.setattr(PlatformChannel, "_register_appid_registry", lambda shortcut: None)  # 防真写开始菜单
     disabled_cfg = NotifyConfig(enabled=False, min_level="WARNING", max_per_hour=5, dedup_window=0)
     assert setup_notify(disabled_cfg) is None
     handler = setup_notify(disabled_cfg, force=True)

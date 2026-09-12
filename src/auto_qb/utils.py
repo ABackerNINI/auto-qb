@@ -407,8 +407,3 @@ def open_path(path: str) -> None:
         subprocess.run(["open", path], check=False)
     else:
         subprocess.run(["xdg-open", path], check=False)
-
-
-def tray_launch_arguments(config_path: str) -> str:
-    """toast 点击激活的启动参数: 以托盘模式带配置重启应用, 经单实例锁唤起已有实例窗口"""
-    return f'"{os.path.abspath(config_path)}" --tray'
