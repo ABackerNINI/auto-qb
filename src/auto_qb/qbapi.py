@@ -140,6 +140,12 @@ class QbApi:
     def torrents_reannounce(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         return self._client.torrents_reannounce(torrent_hashes=torrent_hashes, **kwargs)
 
+    def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+        self._client.torrents_pause(torrent_hashes=torrent_hashes, **kwargs)
+
+    def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+        self._client.torrents_resume(torrent_hashes=torrent_hashes, **kwargs)
+
     # ---------- 读操作: 优先 store 惰性缓存 ----------
 
     def torrents_info(self, *args: Any, **kwargs: Any):

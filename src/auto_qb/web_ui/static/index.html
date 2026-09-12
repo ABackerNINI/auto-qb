@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>auto-qb · 辅种管理</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app" v-cloak>
+    <!-- 密钥输入(未授权时) -->
+    <div v-if="authRequired && !token" class="login-mask">
+      <div class="login-card">
+        <div class="brand">auto-qb</div>
+        <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
+        <input v-model="tokenInput" type="password" placeholder="访问密钥" @keyup.enter="saveToken">
+        <button @click="saveToken">进入</button>
+        <p v-if="authError" class="error">{{ authError }}</p>
+      </div>
+    </div>
+
+    <template v-else>
+      <!-- 顶栏 -->
+      <header class="topbar">
+        <div class="brand">auto-qb <span class="ver">v{{ status.version || '' }}</span></div>
+        <nav>
+          <button :class="{active: page==='groups'}" @click="page='groups'">辅种管理</button>
+          <button :class="{active: page==='settings'}" @click="openSettings">设置</button>
+        </nav>
+        <div class="spacer"></div>
+        <span class="badge" :class="statusBadge.kind">{{ statusBadge.text }}</span>
+      </header>
+
+      <!-- 辅种分组页 -->
+      <main v-if="page==='groups'" class="content">
+        <div class="summary-bar">
+          <span>分组 {{ groups.length }}</span>
+          <span>种子 {{ totalTorrents }}</span>
+          <span>↓ {{ fmtSpeed(totalDl) }}</span>
+          <span>↑ {{ fmtSpeed(totalUl) }}</span>
+          <span class="muted">每 {{ pollSec }}s 自动刷新</span>
+        </div>
+
+        <div class="group-table">
+          <div v-for="g in groups" :key="g.key"
+               class="group-row" :class="{expanded: expandedKey===g.key}"
+               @click="toggleExpand(g.key)"
+               @contextmenu.prevent="openMenu($event, g)">
+            <div class="g-name" :title="g.name">{{ g.name }}</div>
+            <div class="g-stat">↓ {{ fmtSpeed(g.dlspeed) }}</div>
+            <div class="g-stat">↑ {{ fmtSpeed(g.upspeed) }}</div>
+            <div class="g-stat">总上传 {{ fmtSize(g.uploaded) }}</div>
+            <div class="g-stat">{{ fmtSize(g.size) }}</div>
+            <div class="g-sites">
+              <span v-for="m in g.members" :key="m.hash"
+                    class="site-chip" :class="m.kind" :title="m.site + ' · ' + kindText(m.kind)">
+                {{ m.site }}
+              </span>
+            </div>
+            <div class="g-count">{{ g.count }} 站</div>
+          </div>
+
+          <!-- 展开明细 -->
+          <div v-if="expandedGroup" class="detail">
+            <div v-for="m in expandedGroup.members" :key="m.hash" class="member-row" :class="m.kind">
+              <span class="m-site">{{ m.site }}</span>
+              <span class="m-state">{{ kindText(m.kind) }}</span>
+              <span>↓ {{ fmtSpeed(m.dlspeed) }}</span>
+              <span>↑ {{ fmtSpeed(m.upspeed) }}</span>
+              <span>总上传 {{ fmtSize(m.uploaded) }}</span>
+              <span>{{ fmtSize(m.size) }}</span>
+              <span>{{ (m.progress * 100).toFixed(1) }}%</span>
+              <span>做种 {{ fmtDuration(m.seeding_time) }}</span>
+              <span class="m-hash">{{ m.hash.slice(0, 8) }}</span>
+            </div>
+          </div>
+
+          <div v-if="!groups.length" class="empty">暂无辅种分组</div>
+        </div>
+
+        <!-- 右键菜单 -->
+        <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}">
+          <div class="ctx-item" @click="act('pause')">暂停整组</div>
+          <div class="ctx-item" @click="act('resume')">开始整组</div>
+          <div class="ctx-item" @click="act('reannounce')">强制汇报</div>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item danger" @click="delWithFiles(false)">删除(保留文件)</div>
+          <div class="ctx-item danger" @click="delWithFiles(true)">删除(含文件)</div>
+        </div>
+      </main>
+
+      <!-- 设置页 -->
+      <main v-if="page==='settings'" class="content settings">
+        <p class="muted">
+          直接编辑 config.yml 全文(含注释)。保存后自动校验、备份为 config.yml.bak 并热重载生效;
+          state_file/data_dir 变更需重启进程(保存时自动保留旧值)。
+        </p>
+        <textarea v-model="settingsText" spellcheck="false" class="yaml-editor"></textarea>
+        <div class="settings-actions">
+          <button class="primary" @click="saveSettings" :disabled="saving">{{ saving ? '保存中…' : '保存并热重载' }}</button>
+          <button @click="reloadSettings">放弃修改, 重新载入</button>
+          <span v-if="saveMsg" :class="saveOk ? 'ok' : 'error'">{{ saveMsg }}</span>
+        </div>
+      </main>
+    </template>
+  </div>
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

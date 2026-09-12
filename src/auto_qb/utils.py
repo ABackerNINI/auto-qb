@@ -3,6 +3,8 @@
 全部解析与检查函数集中于此, 供主程序(config/manager/exporter)与规则框架共用,
 避免各模块重复实现。
 """
+import base64
+import json
 import os
 import re
 import subprocess
@@ -407,3 +409,14 @@ def open_path(path: str) -> None:
         subprocess.run(["open", path], check=False)
     else:
         subprocess.run(["xdg-open", path], check=False)
+
+
+def encode_group_key(key: tuple) -> str:
+    """分组 key(tuple) -> URL 安全字符串(base64url(JSON 数组)), WEB UI 分组路由标识"""
+    return base64.urlsafe_b64encode(json.dumps(list(key), ensure_ascii=False).encode("utf-8")).decode("ascii")
+
+
+def decode_group_key(text: str) -> tuple:
+    """encode_group_key 的逆变换; 内层文件列表保持 tuple(与 store.groups 的 key 结构一致)"""
+    arr = json.loads(base64.urlsafe_b64decode(text.encode("ascii")))
+    return (arr[0], tuple(arr[1]))

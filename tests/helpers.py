@@ -14,6 +14,7 @@ from auto_qb.config import (
     LoggingConfig,
     NotifyConfig,
     QbittorrentConfig,
+    WebConfig,
 )  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
@@ -202,6 +203,8 @@ class FakeTorrent:
         self.state = kw.get("state", "stalledUP")
         self.downloaded = kw.get("downloaded", 100 * 1024**2)
         self.uploaded = kw.get("uploaded", 0)
+        self.dlspeed = kw.get("dlspeed", 0)
+        self.upspeed = kw.get("upspeed", 0)
         self.seeding_time = kw.get("seeding_time", 0)
         self.ratio = kw.get("ratio", 0.0)
         # 未显式给 amount_left 时按下载状态推导(与真实 qB 一致: 未下完剩余字节 > 0), 供 HR 完成判定
@@ -373,7 +376,8 @@ class FakeConfig:
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
     global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
-    notify = NotifyConfig()  # 主动通知(默认 disabled; 通知测试直接构造 NotifyConfig(enabled=True, ...))
+    notify = NotifyConfig()  # 主动通知(默认 disabled)
+    web = WebConfig()  # WEB UI(默认 disabled)
 
 
 def _hr_rule(**kw) -> HRRule:

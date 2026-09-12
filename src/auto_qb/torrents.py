@@ -41,6 +41,8 @@ _SNAPSHOT_FIELDS = (
     "state",
     "downloaded",
     "uploaded",
+    "dlspeed",
+    "upspeed",
     "seeding_time",
     "ratio",
     "amount_left",
@@ -93,6 +95,8 @@ class TorrentRecord:
     state: str = ""
     downloaded: int = 0
     uploaded: int = 0
+    dlspeed: int = 0
+    upspeed: int = 0
     seeding_time: int = 0
     ratio: float = 0.0
     amount_left: int = 0
@@ -356,6 +360,19 @@ class TorrentStore:
         return usage
 
     # ---------- 写操作同步(供 QbApi Facade调用) ----------
+
+    def reset_runtime(self) -> None:
+        """热重载配置后的运行态重置: 清分组索引/缓存/状态快照/校验记录;
+        种子记录保留(tracker_conf 置空, 由下一轮全量 refresh 重匹配)"""
+        self.groups.clear()
+        self.group_sizes.clear()
+        self.member_to_key.clear()
+        self.state_snapshot.clear()
+        self.verified_references.clear()
+        self.invalidate_tags()
+        self.invalidate_categories()
+        for rec in self.by_hash.values():
+            rec.tracker_conf = None
 
     def update_torrent_fields(
         self,

@@ -5,6 +5,10 @@ filelock
 pystray
 pillow
 customtkinter
+fastapi
+uvicorn
+ruamel.yaml
+httpx
 
 # 开发/测试依赖
 pytest

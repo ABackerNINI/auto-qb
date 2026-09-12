@@ -13,6 +13,7 @@
 """
 import logging
 import os
+import queue
 import time
 from typing import List, Optional
 
@@ -61,6 +62,15 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._last_conn_ok: Optional[bool] = None
         # 主动通知 handler(run() 启用时挂载; dry-run/export 模式不挂载)
         self._notify_handler: Optional[NotifyHandler] = None
+        # WEB UI: 控制命令队列(Web 线程投递, 主循环消费执行——写操作只在主循环线程)
+        self.web_commands: "queue.Queue" = queue.Queue()
+        # WEB UI: 分组视图快照(主循环每 tick 重建并原子替换, Web 线程只读)
+        self._group_view: List[dict] = []
+        # WEB UI: 访问密钥/服务器句柄(run() 启用时确定)
+        self._web_token: str = ""
+        self._web_handle = None
+        # 热重载后首轮抑制事件分派(全量重建的 added 重放保护)
+        self._suppress_events = False
         # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
         self._pause_event = None
         # 缺文件扫描轮内去重: 移动种子等场景同一轮会命中多个触发源(状态转移+路径变化),
@@ -126,6 +136,12 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
         # 主动通知: 启用后全项目 WARNING/ERROR 日志推送平台原生通知(notify.py);
         # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
+        # WEB UI: 启用后伴随启动(浏览器访问, 辅种管理/设置); 密钥随机生成并持久化
+        if not dry_run and self.config.web.enabled:
+            from .web import ensure_web_token, start_web_server
+
+            self._web_token = ensure_web_token(self)
+            self._web_handle = start_web_server(self)
         if not dry_run:
             self._notify_handler = setup_notify(self.config.notify)
         try:
@@ -143,6 +159,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     if stop_event is not None and stop_event.is_set():
                         logger.info("收到停止信号, 退出主循环")
                         break
+                    # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作
+                    self._drain_web_commands()
                     if pause_event is not None and pause_event.is_set():
                         # 已暂停: 完全旁观; wait 保持对停止信号的即时响应
                         if stop_event is not None and stop_event.wait(main_tick):
@@ -159,10 +177,13 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     except AutoQbError:
                         raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑
                     except APIConnectionError as e:
-                        # 连接失败节流: 仅状态转换时记录一次, 断开期间静默(qB 宕机时不刷屏)
+                        # 连接失败节流: 仅状态转换时记录一次, 断开期间静默(qB 宕机时不刷屏);
+                        # 断开期间自动重建连接(qB 重启/网络恢复后下一 tick 自动接上)
                         if self._last_conn_ok is not False:
                             logger.error(f"连接 qBittorrent 失败: {e}")
                             self._last_conn_ok = False
+                        self.client = None
+                        self.connect()
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     if stop_event is not None and stop_event.wait(main_tick):
@@ -171,6 +192,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             except KeyboardInterrupt:
                 logger.info("停止")
         finally:
+            if self._web_handle is not None:
+                self._web_handle.stop()
             if not dry_run:
                 self.save_state()
             if self._lock is not None:
@@ -184,6 +207,161 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             "paused": self._pause_event is not None and self._pause_event.is_set(),
         }
 
+    def _drain_web_commands(self):
+        """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)"""
+        try:
+            while True:
+                cmd, payload = self.web_commands.get_nowait()
+                try:
+                    {
+                        "pause_group": self._cmd_pause_group,
+                        "resume_group": self._cmd_resume_group,
+                        "reannounce_group": self._cmd_reannounce_group,
+                        "delete_group": self._cmd_delete_group,
+                        "reload_config": self._cmd_reload_config,
+                    }[cmd](**payload)
+                except KeyError as e:
+                    logger.warning(f"WEB UI 未知命令: {e}")
+                except Exception as e:
+                    logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
+        except queue.Empty:
+            pass
+
+    @staticmethod
+    def _state_kind(rec: TorrentRecord) -> str:
+        """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰"""
+        e = rec.state_enum
+        if e.is_errored:
+            return "error"
+        if e.is_checking:
+            return "checking"
+        if e.is_downloading:
+            return "downloading"
+        if e.is_uploading:
+            return "seeding"
+        if e.is_stopped:
+            return "paused"
+        return "other"
+
+    def _build_group_view(self) -> List[dict]:
+        """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
+        from . import utils as _utils
+
+        view = []
+        for key, members in self.store.groups.items():
+            recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
+            if not recs:
+                continue
+            members_view = [
+                {
+                    "hash": r.hash,
+                    "site": r.tracker_name,
+                    "state": r.state,
+                    "kind": self._state_kind(r),
+                    "dlspeed": r.dlspeed,
+                    "upspeed": r.upspeed,
+                    "uploaded": r.uploaded,
+                    "size": r.size,
+                    "progress": round(r.progress, 4),
+                    "seeding_time": r.seeding_time,
+                    "ratio": round(r.ratio, 3),
+                }
+                for r in recs
+            ]
+            view.append(
+                {
+                    "key": _utils.encode_group_key(key),
+                    "name": recs[0].name,
+                    "count": len(recs),
+                    "dlspeed": sum(m["dlspeed"] for m in members_view),
+                    "upspeed": sum(m["upspeed"] for m in members_view),
+                    "uploaded": sum(m["uploaded"] for m in members_view),
+                    "size": sum(m["size"] for m in members_view),
+                    "members": members_view,
+                }
+            )
+        return view
+
+    def _group_hashes(self, key: tuple) -> List[str]:
+        return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]
+
+    def _cmd_pause_group(self, key: tuple):
+        hashes = self._group_hashes(key)
+        if hashes:
+            self.api.torrents_pause(torrent_hashes=hashes)
+            logger.info(f"WEB UI | 暂停整组({len(hashes)}个种子)")
+
+    def _cmd_resume_group(self, key: tuple):
+        hashes = self._group_hashes(key)
+        if hashes:
+            self.api.torrents_resume(torrent_hashes=hashes)
+            logger.info(f"WEB UI | 开始整组({len(hashes)}个种子)")
+
+    def _cmd_reannounce_group(self, key: tuple):
+        hashes = self._group_hashes(key)
+        if hashes:
+            self.api.torrents_reannounce(torrent_hashes=hashes)
+            logger.warning(f"WEB UI | 强制汇报整组({len(hashes)}个种子)")
+
+    def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
+        hashes = self._group_hashes(key)
+        if hashes:
+            self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
+            logger.warning(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
+
+    def _cmd_reload_config(self, config: Config):
+        self.apply_new_config(config)
+
+    def apply_new_config(self, config: Config) -> dict:
+        """应用新配置(热重载, 主循环线程经命令队列调用): 按变更影响分级执行
+
+        - L0 即时生效(仅替换 Config 对象): main_tick/max_tasks_per_tick/remove_similar_tags/
+          skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
+          limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
+        - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器重启
+        - L2 结构重建: 重建任务队列与规则 + 全部记录重匹配 tracker(保留 store 记录/分组/执行历史)
+        - R(state_file/data_dir 变更): 拒绝热应用, 返回 restart_required 提示重启进程
+        """
+        from .config.impact import diff_config_impacts
+
+        changes = diff_config_impacts(self.config, config)
+        restart_required = [c.path for c in changes if c.level == "R"]
+        if restart_required:
+            logger.warning(f"以下配置需重启进程才能生效: {restart_required}")
+        levels = sorted({c.level for c in changes if c.level != "R"})
+        # L0: 替换配置对象(动态读取项即刻生效)
+        self.config = config
+        if "L1" in levels:
+            self._setup_logging()
+            if self._notify_handler is not None:
+                logging.getLogger("auto_qb").removeHandler(self._notify_handler)
+                self._notify_handler = None
+            self._notify_handler = setup_notify(config.notify, force=True)
+            self.client = None
+            self._last_conn_ok = None
+            self.connect()
+            if self._web_handle is not None:
+                self._web_handle.stop()
+                from .web import start_web_server
+
+                self._web_handle = start_web_server(self)
+        if "L2" in levels:
+            logger.warning("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
+            self.task_queue = TaskQueue()
+            self.store.reset_runtime()
+            self.state = self._load_state()
+            self._load_rules()
+            self._create_global_tasks()
+            self._suppress_events = True
+            self.client = None
+            self._last_conn_ok = None
+            self.connect()
+        logger.warning(
+            f"配置热重载完成: 级别 {levels or ['L0']}, 变更 {len(changes)} 项"
+            + (f", 需重启进程: {restart_required}" if restart_required else "")
+        )
+        return {"applied": True, "levels": levels, "changes": len(changes), "restart_required": restart_required}
+
     def _tick(self, dry_run: bool):
         """单次 tick: 1) 刷新快照 2) 执行到期任务(执行与收尾统一由 TaskQueue.run_due 管理)"""
         now = time.time()
@@ -191,6 +369,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._refresh_torrents(dry_run)
 
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
+
+        if self.config.grouping.enabled:
+            # WEB UI: 分组视图快照(主循环每 tick 重建, Web 线程只读引用)
+            self._group_view = self._build_group_view()
 
     # ---------- 全局任务 ----------
 
@@ -272,8 +454,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._handle_state_transitions(dry_run)
 
         # 事件分派(on_torrent_deleted / on_torrent_state_enum_changed): 在自有动作之前、
-        # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发)
-        self._dispatch_events([], removed, dry_run, removed_snapshots=removed_snapshots, tors=tors)
+        # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发);
+        # 热重载后首轮抑制(全量重建的 added 重放保护), 一轮后恢复
+        if not self._suppress_events:
+            self._dispatch_events([], removed, dry_run, removed_snapshots=removed_snapshots, tors=tors)
 
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
@@ -295,7 +479,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     continue  # 未匹配tracker配置, 直接跳过
                 matched_added.append(h)
             # 事件分派(on_torrent_added): 新增种子已匹配 tracker 配置, 同步触发事件规则
-            self._dispatch_events(matched_added, [], dry_run, removed_snapshots=None, tors=None)
+            if not self._suppress_events:
+                self._dispatch_events(matched_added, [], dry_run, removed_snapshots=None, tors=None)
             # 自有动作: 内置任务/限速/创建任务/归组/集数标签
             for h in matched_added:
                 torrent = self.store.get(h)
@@ -332,6 +517,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
         self.begin_round(list(self.store.by_hash.values()))
+        self._suppress_events = False  # 事件抑制仅覆盖热重载后的首轮全量重建
 
     def _create_torrent_tasks(self, hash: str):
         """

@@ -20,6 +20,7 @@ from .models import (
     HRRule,
     LoggingConfig,
     NotifyConfig,
+    WebConfig,
     PeriodCurve,
     QbittorrentConfig,
     TrackerConfig,
@@ -85,6 +86,17 @@ def load_grouping_config(spec: dict) -> GroupingConfig:
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
         check_missing_files=_get(spec, "check_missing_files", d.check_missing_files, parse_bool),
         missing_tag=_get(spec, "missing_tag", d.missing_tag),
+    )
+
+
+def load_web_config(spec: dict) -> WebConfig:
+    """解析 web 段(仅转换, 合法性由 validate_config 保证)"""
+    d = WebConfig()
+    return WebConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        host=_get(spec, "host", d.host),
+        port=_get(spec, "port", d.port, int),
+        token=_get(spec, "token", d.token),
     )
 
 
@@ -298,6 +310,7 @@ def load_config(config_path: str) -> Config:
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
         grouping=load_grouping_config(_get(cfg, "grouping", {})),
         notify=load_notify_config(_get(cfg, "notify", {})),
+        web=load_web_config(_get(cfg, "web", {})),
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),

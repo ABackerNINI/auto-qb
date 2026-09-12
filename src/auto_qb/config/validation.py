@@ -43,12 +43,14 @@ KNOWN_CONFIG_KEYS = {
     "delete_tags_if_has_no_torrents",
     "grouping",
     "notify",
+    "web",
     "trackers",
     "global_speed_limit_curve",
 }
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag"}
+KNOWN_WEB_KEYS = {"enabled", "host", "port", "token"}
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 # notify.channels 已知渠道(v1 仅平台原生单渠道; 多渠道按 traffic_source 同模式演进)
 NOTIFY_CHANNELS = {"platform"}
@@ -563,6 +565,31 @@ def _validate_curve_points(raw_list, where: str, direction_key: str, errors: Lis
             _try(parse_speed, str(speed_spec[direction_key]), pos, errors)
 
 
+def _validate_web(spec, errors: List[str]) -> None:
+    """校验 config.web 段(仅本机默认; token 留空 = 随机生成)"""
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.web: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_WEB_KEYS, "config.web", errors)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], "config.web.enabled", errors)
+    if "host" in spec:
+        if not isinstance(spec["host"], str) or not spec["host"].strip():
+            errors.append("config.web.host: 必须是非空字符串")
+    if "port" in spec:
+        try:
+            port = int(spec["port"])
+        except (TypeError, ValueError):
+            errors.append(f"config.web.port: 必须是整数: {spec['port']}")
+        else:
+            if not 1 <= port <= 65535:
+                errors.append(f"config.web.port: 超出范围 1-65535: {port}")
+    if "token" in spec and not isinstance(spec["token"], str):
+        errors.append("config.web.token: 必须是字符串")
+
+
 def _validate_notify(spec, errors: List[str]) -> None:
     """校验 config.notify 段(主动通知); 未配置(None)合法, 走默认值"""
     if spec is None:
@@ -649,6 +676,7 @@ def validate_config(data) -> List[str]:
     _validate_global_hr(cfg.get("hr"), errors)
     _validate_grouping(cfg.get("grouping"), errors)
     _validate_notify(cfg.get("notify"), errors)
+    _validate_web(cfg.get("web"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
     _validate_rules(rules_config, errors)

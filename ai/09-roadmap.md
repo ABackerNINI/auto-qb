@@ -24,6 +24,8 @@
 
 ## 规划中 (🚧, 尚未实现)
 
+(以下 WEB UI 核心已于 2026-09-13 实现, 见 ai/01/03; 剩余: WebSocket 推送/规则集可视化编辑/多用户)
+
 ### 规则系统
 - ~~触发时机: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed`~~ — 已实现 (2026-09-12, 落地现状见下"事件触发(规则)规划": 事件分派引擎/断点续跑/测试全部完成)。**注**: 设计已把 `on_torrent_state_changed` 收敛为 `on_torrent_state_enum_changed` (与 `TorrentState` 枚举命名对齐)。
 - 条件取反 (`!` / 非 logic) — `:ignore_case` 支持已完成 (2026-09-12, 见 08 TODO 段)

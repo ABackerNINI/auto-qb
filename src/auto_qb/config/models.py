@@ -100,6 +100,22 @@ class AddEpisodeTagsConfig:
 
 
 @dataclass
+class WebConfig:
+    """WEB UI(辅种管理)配置
+
+    enabled: 总开关(False 时不启动 Web 服务器, 保守默认)
+    host: 监听地址 —— 默认仅本机; ⚠️ 显式改为 0.0.0.0 会将可删除种子的管理接口暴露到网络,
+    建议配合反向代理与鉴权使用
+    port: 监听端口
+    token: 访问密钥(Bearer 鉴权); 留空 = 首次启动随机生成并持久化到 data_dir/web.token
+    """
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8080
+    token: str = ""
+
+
+@dataclass
 class NotifyConfig:
     """主动通知配置: 程序 ERROR/WARNING 日志经平台原生通知推送(notify 模块, 零第三方依赖)
 
@@ -191,6 +207,8 @@ class Config:
     delete_tags_if_has_no_torrents: List[str] = field(default_factory=list)
 
     grouping: GroupingConfig = field(default_factory=GroupingConfig)  # 种子分组管理(辅种管理)
+
+    web: WebConfig = field(default_factory=WebConfig)  # WEB UI(辅种管理)
 
     notify: NotifyConfig = field(default_factory=NotifyConfig)  # 主动通知: ERROR/WARNING 日志 -> 平台原生通知
 
