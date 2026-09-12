@@ -181,6 +181,14 @@ config:
         max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
 
+    # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
+    notify:
+        enabled: true              # 启用主动通知
+        min_level: WARNING         # 通知最低日志级别: INFO / WARNING / ERROR
+        quiet_hours: "23:00-08:00" # 免打扰时段(支持跨午夜)，时段内跳过发送；留空不启用
+        max_per_hour: 20           # 每小时通知上限，超出丢弃(防风暴)
+        dedup_window: 10M          # 相同通知的去重窗口，0 表示不去重
+
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
 
@@ -196,14 +204,6 @@ config:
         enabled: true             # 启用种子分组
         check_missing_files: true # 启用缺文件检查
         missing_tag: MISSING      # 文件丢失时整组添加的标签
-
-    # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
-    notify:
-        enabled: true             # 启用主动通知
-        min_level: WARNING        # 通知最低日志级别: INFO / WARNING / ERROR
-        quiet_hours: "23:00-08:00" # 免打扰时段(支持跨午夜)，时段内跳过发送；留空不启用
-        max_per_hour: 20          # 每小时通知上限，超出丢弃(防风暴)
-        dedup_window: 10M         # 相同通知的去重窗口，0 表示不去重
 
     # 全局自动彻底删除标签
     delete_tags:                        # 彻底删除的标签格式，支持正则

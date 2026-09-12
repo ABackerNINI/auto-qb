@@ -30,6 +30,7 @@ from tkinter import messagebox
 from . import autostart, utils
 from .errors import AutoQbError
 from .notify import setup_notify
+from .qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,10 @@ class UiLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord):
         try:
-            line = f"[{record.levelname}] {record.getMessage()}"
-            with self._lock:
-                self._pending.append(line)
+            if record.levelno != logging.DEBUG:
+                line = f"[{record.levelname}] {record.getMessage()}"
+                with self._lock:
+                    self._pending.append(line)
         except Exception:
             pass
 
@@ -132,7 +134,7 @@ def send_show(port_file: str, timeout: float = 2.0) -> bool:
 
 class TrayUi:
     """托盘应用编排: 窗口/托盘/manager 线程/事件轮询"""
-    def __init__(self, manager: "QbManager", dry_run: bool = False):
+    def __init__(self, manager: QbManager, dry_run: bool = False):
         self.manager = manager
         self.dry_run = dry_run
         self.events: "queue.Queue" = queue.Queue()

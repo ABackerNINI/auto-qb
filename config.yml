@@ -24,6 +24,14 @@ config:
         max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(levelname)s - %(message)s" # 日志格式
 
+    # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
+    notify:
+        enabled: true              # 启用主动通知
+        min_level: WARNING         # 通知最低日志级别: INFO / WARNING / ERROR
+        quiet_hours: "" # 免打扰时段(支持跨午夜)，时段内跳过发送；留空不启用
+        max_per_hour: 20           # 每小时通知上限，超出丢弃(防风暴)
+        dedup_window: 10M          # 相同通知的去重窗口，0 表示不去重
+
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
 
@@ -125,7 +133,7 @@ config:
     add_drive_letter_tag_rules:
         add_r_tag: # 为R盘的两个目录添加"R"标签
             enabled: true
-            interval: 5S
+            trigger: on_torrent_added
             cooldown: 5M
             conditions:
                 - path:

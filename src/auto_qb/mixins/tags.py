@@ -118,7 +118,7 @@ class TagsMixin:
 
             return True
         else:  # 存在分类但不覆盖
-            logger.warning(f"维护 {torrent.log_repr} | 跳过设置分类: 已有分类 '{old_category}' 且不覆盖")
+            logger.debug(f"维护 {torrent.log_repr} | 跳过设置分类: 已有分类 '{old_category}' 且不覆盖")
             return True
 
     def _create_category_if_not_exists(self, category: str, dry_run: bool):
