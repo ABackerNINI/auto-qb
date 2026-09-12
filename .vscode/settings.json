@@ -1,13 +1,16 @@
 {
     "cSpell.words": [
         "addopts",
+        "applescript",
         "asctime",
+        "AUMID",
         "cand",
         "capsys",
         "carpt",
         "checkingup",
         "conds",
         "confs",
+        "Consolas",
         "cooldown",
         "crabpt",
         "cwhere",
@@ -51,6 +54,9 @@
         "muxuege",
         "notbool",
         "novahd",
+        "osascript",
+        "padx",
+        "pady",
         "pauseddl",
         "pausedup",
         "piecehashes",
@@ -58,6 +64,7 @@
         "ptfans",
         "ptsbao",
         "ptzone",
+        "pystray",
         "pytest",
         "pytestmark",
         "pythonpath",
@@ -85,7 +92,9 @@
         "trackerprxy",
         "UBWEB",
         "venv",
-        "windowsg"
+        "webui",
+        "windowsg",
+        "winotify"
     ],
     "python.useEnvironmentsExtension": true,
     "python.analysis.extraPaths": [
