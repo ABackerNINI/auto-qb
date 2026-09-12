@@ -133,7 +133,7 @@ config:
     add_drive_letter_tag_rules:
         add_r_tag: # 为R盘的两个目录添加"R"标签
             enabled: true
-            interval: 5S
+            trigger: on_torrent_added
             cooldown: 5M
             conditions:
                 - path:
