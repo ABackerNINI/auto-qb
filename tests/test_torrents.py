@@ -384,3 +384,26 @@ def test_record_hr_boundaries():
     rec3 = TorrentRecord.from_torrent(FakeTorrent(hash="E3", state="stalledUP"))
     rec3.tracker_conf = conf_nohr
     assert rec3.check_hr_condition() is False
+
+
+def test_record_tracker_name_and_hr_fallback():
+    """tracker_name 取配置名; check_hr_satisfied 无 hr/条件未达 -> False"""
+    from auto_qb.config import HRRule, TrackerConfig
+
+    conf = TrackerConfig(
+        name="配置名X", domains=["d.com"], tags=[], remove_tags=[],
+        upload_speed_limit=0, download_speed_limit=0,
+        hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7)),
+    )
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="T1", state="stalledUP", total_size=100 * 1024**2, downloaded=10 * 1024**2))
+    rec.tracker_conf = conf
+    assert rec.tracker_name == "配置名X"
+    # 比例 0.1 < 0.7: 条件未达 -> satisfied False(L235 分支)
+    assert rec.check_hr_satisfied() is False
+    # 无 hr 配置: condition/satisfied 均 False(L232 分支)
+    conf_nohr = TrackerConfig(
+        name="Y", domains=["d.com"], tags=[], remove_tags=[], upload_speed_limit=0, download_speed_limit=0
+    )
+    rec.tracker_conf = conf_nohr
+    assert rec.check_hr_condition() is False
+    assert rec.check_hr_satisfied() is False

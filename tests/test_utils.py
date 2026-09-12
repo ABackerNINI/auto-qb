@@ -456,3 +456,15 @@ def test_parse_bool_invalid():
     """非法布尔值 -> ValueError(问题提早暴露)"""
     with pytest.raises(ValueError):
         utils.parse_bool("not-a-bool")
+
+
+def test_parse_hm_invalid_format():
+    """非法 HH:MM 格式 -> ValueError(带原文)"""
+    with pytest.raises(ValueError, match="非法 HH:MM"):
+        utils.parse_hm("abc")
+
+
+def test_fmt_size_invalid():
+    """fmt_size: 非数字输入返回 '-'"""
+    assert utils.fmt_size("not-a-number") == "-"
+    assert utils.fmt_size(None) == "-"

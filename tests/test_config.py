@@ -706,7 +706,8 @@ def test_validate_section_type_errors():
             "  grouping: not-dict\n"
             "  hr: 456\n"
             "  add_episode_tags: not-dict\n"
-            "  delete_tags: [\"\", 5]\n"
+            "  delete_tags: ["
+            ", 5]\n"
             "  trackers:\n"
             "    T1:\n"
             "      domains: [a.com]\n"
@@ -844,3 +845,141 @@ def test_validate_hr_value_errors():
         assert "config.trackers.T1.hr.required_share_ratio(须为数字)" in err, err
         assert "config.trackers.T1.hr.condition(如 80% 或 10MiB)" in err, err
         assert "config.trackers.T1.hr.overwrite_category" in err, err
+
+
+def test_validate_value_errors_extended():
+    """值错误扩展: add_episode_tags 模板/端口非整数/hr 未知键与布尔/trackers 标量与字段/规则集结构/触发白名单
+
+    注意: 空串值会被 _strip_none 过滤(走默认), 因此"必须非空"类断言用纯空格串触发。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  add_episode_tags:\n"
+            "    enabled: not-bool\n"
+            "    add_tag_single: \" \"\n"
+            "  qbittorrent:\n"
+            "    host: h\n"
+            "    port: not-int\n"
+            "  hr:\n"
+            "    unknown_key: 1\n"
+            "    overwrite_category: not-bool\n"
+            "  trackers: 123\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions: not-a-list\n"
+            "      actions: not-a-list\n"
+            "      trigger: bad-trigger\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.add_episode_tags.enabled" in err, err
+        assert "config.add_episode_tags.add_tag_single: 必须是非空字符串" in err, err
+        assert "config.qbittorrent.port: 必须是整数" in err, err
+        assert "config.hr: 未知键" in err, err
+        assert "config.hr.overwrite_category" in err, err
+        assert "config.trackers: 必须是字典" in err, err
+        assert "config.example_rules.r1.conditions: 必须是列表" in err, err
+        assert "config.example_rules.r1.actions: 必须是列表" in err, err
+        assert "config.example_rules.r1: trigger 取值非法" in err, err
+
+
+def test_validate_tracker_field_errors():
+    """trackers 字段错误: domains 空列表/remove_similar_tags 非布尔/hr 非字典"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: []\n"
+            "      remove_similar_tags: not-bool\n"
+            "      hr: not-dict\n"
+            "    T2: not-dict\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.trackers.T1.domains: 必须是非空字符串列表" in err, err
+        assert "config.trackers.T2: 必须是字典" in err, err
+        assert "config.trackers.T1.remove_similar_tags" in err, err
+        assert "config.trackers.T1.hr: 必须是字典" in err, err
+
+
+def test_validate_plugin_entry_and_notify_edges():
+    """插件项空值/ignore_next 非布尔/notify 非字典"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  my_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - tags:\n"
+            "      actions:\n"
+            "        - {}\n"
+            "        - ignore_next_action_error: not-bool\n"
+            "        - reannounce: true\n"
+            "  notify: not-dict\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+        )
+        err = _load_errors(td, text)
+        assert "值不能为空" in err, err
+        assert "config.my_rules.r1.actions[1].ignore_next_action_error" in err, err
+        assert "config.notify: 必须是字典" in err, err
+
+
+def test_validate_trackers_and_rules_structure():
+    """trackers 非字典/规则集非字典/规则 spec 非字典/conditions-actions 非列表"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers: 123\n"
+            "  example_rules: 456\n"
+            "  more_rules:\n"
+            "    r1: not-dict\n"
+            "    r2:\n"
+            "      conditions: not-a-list\n"
+            "      actions: not-a-list\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.trackers: 必须是字典" in err, err
+        assert "config.example_rules: 必须是字典(规则名 -> 规则spec)" in err, err
+        assert "config.more_rules.r1: 必须是字典" in err, err
+        assert "config.more_rules.r2.conditions: 必须是列表" in err, err
+        assert "config.more_rules.r2.actions: 必须是列表" in err, err
+
+
+def test_validate_notify_and_root_edges():
+    """notify 字段边界(quiet_hours 无-/max_per_hour 非整数/channels 结构)/根节点 config 非字典/gslc 阈值非法"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  notify:\n"
+            "    quiet_hours: 2300\n"
+            "    max_per_hour: []\n"
+            "    channels: not-a-list\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: x.dat\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: DAY\n"
+            "          upload_curve:\n"
+            "            - abc: {upload_speed_limit: 1MiB/s}\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.notify.quiet_hours: 须为" in err, err
+        assert "config.notify.max_per_hour: 必须为整数" in err, err
+        assert "config.notify.channels: 必须是非空列表" in err, err
+        assert "config: 必须是字典" not in err, err
+        assert "abc" in err, err
+
+
+def test_validate_root_config_not_dict():
+    """根节点 config 非字典 -> 必须是字典"""
+    with tempfile.TemporaryDirectory() as td:
+        text = "config: 123\n"
+        err = _load_errors(td, text)
+        assert "config: 必须是字典" in err, err

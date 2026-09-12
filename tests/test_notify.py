@@ -319,3 +319,55 @@ def test_notify_fatal_skips_when_disabled(monkeypatch):
     monkeypatch.setattr(notify_mod, "PlatformChannel", fake_channel)
     notify_fatal("致命: qB 字段不兼容", NotifyConfig(enabled=True))
     assert sent == [("auto-qb 已停止", "致命: qB 字段不兼容", True)]
+
+
+def test_notify_emit_exception_swallowed():
+    """emit 内部异常(如 getMessage 抛错)不外抛(handleError 兜底)"""
+    handler = NotifyHandler(
+        NotifyConfig(enabled=True, min_level="WARNING", max_per_hour=100, dedup_window=0),
+        PlatformChannel("linux"),
+    )
+    try:
+        bad = logging.LogRecord("auto_qb.test", logging.WARNING, "p", 1, "msg", None, None)
+        bad.getMessage = lambda: (_ for _ in ()).throw(RuntimeError("格式化炸了"))
+        handler.emit(bad)  # 不应抛出
+        handler.close()
+    except Exception as e:
+        pytest.fail(f"emit 异常外泄: {e}")
+
+
+def test_notify_close_twice_safe():
+    """close 幂等(重复调用/队列已空均不炸)"""
+    handler = NotifyHandler(
+        NotifyConfig(enabled=True, min_level="WARNING", max_per_hour=100, dedup_window=0),
+        PlatformChannel("linux"),
+    )
+    handler.close()
+    handler.close()
+
+
+def test_notify_fatal_channel_error_swallowed(monkeypatch):
+    """notify_fatal 渠道构造异常 -> 静默(不外抛)"""
+    def boom():
+        raise OSError("无 APPDATA")
+
+    monkeypatch.setattr(notify_mod, "PlatformChannel", boom)
+    notify_fatal("消息", NotifyConfig(enabled=True))
+
+
+def test_notify_legacy_shortcut_cleanup():
+    """legacy lnk 清理: 存在的旧快捷方式被删除(文件操作经 monkeypatch, 不动真实开始菜单)"""
+    removed = []
+    monkey_removed = []
+    monkeypatch = None  # 占位(实际用闭包 monkeypatch 不便, 直接改函数引用)
+    orig_exists = notify_mod.os.path.exists
+    orig_remove = notify_mod.os.remove
+    notify_mod.os.path.exists = lambda p: "AutoQB.lnk" in str(p) or "AutoQB.UI.lnk" in str(p)
+    notify_mod.os.remove = lambda p: removed.append(p)
+    try:
+        channel = PlatformChannel("win32")
+    finally:
+        notify_mod.os.path.exists = orig_exists
+        notify_mod.os.remove = orig_remove
+    assert any("AutoQB.lnk" in p for p in removed), removed
+    assert channel._appid == notify_mod.WINDOWS_TOAST_APPID
