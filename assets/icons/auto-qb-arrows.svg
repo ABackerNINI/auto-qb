@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 上下行箭头: 下载(白)与上传(绿)高低错落, 最直白的种子传输意象 -->
+  <rect width="512" height="512" rx="108" fill="#2E6FE0"/>
+  <path d="M 174 176 L 218 176 L 218 292 L 268 292 L 196 392 L 124 292 L 174 292 Z" fill="#FFFFFF"/>
+  <path d="M 294 336 L 294 220 L 244 220 L 316 124 L 388 220 L 338 220 L 338 336 Z" fill="#34C759"/>
+</svg>

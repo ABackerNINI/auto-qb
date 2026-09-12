@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 09 亮底反转: 浅蓝灰底 + 深蓝字 + 绿色字尾, 适配浅色主题桌面 -->
+  <rect width="512" height="512" rx="108" fill="#E9EFF8"/>
+  <circle cx="166" cy="254" r="64" fill="none" stroke="#16294A" stroke-width="40"/>
+  <path d="M 211 299 L 250 374" stroke="#34C759" stroke-width="40" stroke-linecap="round"/>
+  <path d="M 282 138 L 282 338" stroke="#16294A" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="346" cy="254" r="64" fill="none" stroke="#16294A" stroke-width="40"/>
+</svg>

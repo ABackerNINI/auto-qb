@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 做种发芽: PT 语境"做种"的直译双关, 双叶新芽 + 地面线。绿底白形, 亲和度高 -->
+  <rect width="512" height="512" rx="108" fill="#23A55A"/>
+  <path d="M 256 400 L 256 268" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" fill="none"/>
+  <path d="M 244 300 C 176 300 132 260 128 196 C 196 198 240 240 244 300 Z" fill="#FFFFFF"/>
+  <path d="M 268 268 C 336 268 380 228 384 164 C 316 166 272 208 268 268 Z" fill="#FFFFFF"/>
+  <path d="M 168 400 L 344 400" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+</svg>

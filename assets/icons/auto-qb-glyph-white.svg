@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 任务栏/托盘透明底 glyph(白色, 适配深色任务栏): 取主方案的循环箭头 + 种子 -->
+  <path d="M 256 106 A 150 150 0 1 1 106 256" fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+  <polygon points="106,198 62,278 150,278" fill="#FFFFFF"/>
+  <path d="M 256 168 C 296 216 320 252 320 300 A 64 64 0 0 1 192 300 C 192 252 216 216 256 168 Z" fill="#FFFFFF"/>
+</svg>

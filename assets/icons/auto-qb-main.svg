@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 主推方案: 自动循环箭头 + 种子(水滴)。蓝色底象征 qBittorrent 生态, 绿色种子点出"做种", 循环箭头点出"自动" -->
+  <rect width="512" height="512" rx="108" fill="#2E6FE0"/>
+  <path d="M 256 106 A 150 150 0 1 1 106 256" fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+  <polygon points="106,198 62,278 150,278" fill="#FFFFFF"/>
+  <path d="M 256 168 C 296 216 320 252 320 300 A 64 64 0 0 1 192 300 C 192 252 216 216 256 168 Z" fill="#34C759"/>
+</svg>

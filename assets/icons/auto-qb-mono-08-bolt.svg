@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 08 闪电: b 的碗孔内嵌绿色闪电, 速度/自动化能量 -->
+  <rect width="512" height="512" rx="108" fill="#16294A"/>
+  <circle cx="166" cy="254" r="64" fill="none" stroke="#FFFFFF" stroke-width="40"/>
+  <path d="M 211 299 L 250 374" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <path d="M 282 138 L 282 338" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="346" cy="254" r="64" fill="none" stroke="#FFFFFF" stroke-width="40"/>
+  <path d="M 354 224 L 328 260 L 343 260 L 338 288 L 366 248 L 350 248 Z" fill="#34C759"/>
+</svg>

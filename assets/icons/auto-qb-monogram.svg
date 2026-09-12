@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- qb 字标: 纯几何描边构成 q 与 b(无字体依赖, 跨平台渲染一致)。深蓝底白形, 品牌感最强 -->
+  <rect width="512" height="512" rx="108" fill="#16294A"/>
+  <circle cx="178" cy="272" r="66" fill="none" stroke="#FFFFFF" stroke-width="40"/>
+  <path d="M 216 314 L 254 388" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <path d="M 292 160 L 292 352" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="354" cy="280" r="62" fill="none" stroke="#FFFFFF" stroke-width="40"/>
+</svg>

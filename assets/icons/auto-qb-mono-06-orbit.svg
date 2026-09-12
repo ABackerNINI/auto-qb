@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 06 轨道: qb 外围一圈 330° 细轨道弧 + 绿色种子点, 表现"自动运行中" -->
+  <rect width="512" height="512" rx="108" fill="#16294A"/>
+  <path d="M 461 256 A 210 210 0 1 1 438 151" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
+  <circle cx="438" cy="151" r="20" fill="#34C759"/>
+  <circle cx="166" cy="254" r="64" fill="none" stroke="#FFFFFF" stroke-width="40"/>
+  <path d="M 211 299 L 250 374" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <path d="M 282 138 L 282 338" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="346" cy="254" r="64" fill="none" stroke="#FFFFFF" stroke-width="40"/>
+</svg>
