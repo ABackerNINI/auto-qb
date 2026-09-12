@@ -14,6 +14,7 @@
 - test_autostart_linux_desktop: XDG autostart desktop 文件写入/注销(平台 patch)
 - test_autostart_macos_plist: macOS LaunchAgents plist 写入/注销(平台 patch)
 - test_log_dir_resolves_and_creates: 日志目录解析(相对路径绝对化/file 为空兜底 state_file 目录/确保存在)
+- test_run_connection_restored_updates_state: 断开后 tick 成功即恢复 _last_conn_ok(否则 UI 永远显示断开)
 """
 import logging
 import os
@@ -97,6 +98,22 @@ def test_run_managed_connect_retry(tmp_path):
     mgr.connect = fake_connect
     mgr.run(dry_run=False, stop_event=stop)
     assert len(calls) == 3, "应重试至连接成功"
+
+
+def test_run_connection_restored_updates_state(tmp_path):
+    """断开后 tick 成功即恢复 _last_conn_ok 为 True(connect() 仅启动时调用一次, 恢复只能在此翻转)"""
+    mgr = _make_ready_manager(tmp_path)
+    mgr._last_conn_ok = False  # 模拟曾断开
+    mgr.config.main_tick = 0.02
+    stop = threading.Event()
+
+    def stopper():
+        time.sleep(0.15)
+        stop.set()
+
+    threading.Thread(target=stopper, daemon=True).start()
+    mgr.run(dry_run=True, stop_event=stop)
+    assert mgr._last_conn_ok is True, "tick 成功后应恢复已连接状态"
 
 
 def test_run_pause_event_skips_ticks(tmp_path):

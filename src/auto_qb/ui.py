@@ -167,6 +167,8 @@ class TrayUi:
         # 其它平台 iconphoto(PhotoImage 不支持 ico)
         if sys.platform.startswith("win32"):
             self.root.iconbitmap(ICON_ICO)
+            # CTk 默认图标应用点在启动约 200ms, 晚于该点再设一次兜底(防时序竞争被顶掉)
+            self.root.after(300, lambda: self.root.iconbitmap(ICON_ICO))
         else:
             self.root.iconphoto(False, self._icon_tk)
         self.root.protocol("WM_DELETE_WINDOW", self._hide_window)
@@ -349,6 +351,14 @@ class TrayUi:
             badge, color = "运行中", COLOR_OK
         self.badge.configure(text=badge, text_color=color)
         self.pause_btn.configure(text="恢复自动管理" if snap["paused"] else "暂停自动管理")
+        # 通知开关同步: handler 由 manager 线程的 run() 挂载, 晚于窗口构建(配置已启用时
+        # Switch 初始为未选中, 此处按 handler 实际状态补正; 用户切换时两边即时一致)
+        handler = self.manager._notify_handler
+        if handler is not None and bool(self.notify_switch.get()) != handler.enabled:
+            if handler.enabled:
+                self.notify_switch.select()
+            else:
+                self.notify_switch.deselect()
         title = f"auto-qb ({badge})"
         if self._icon is not None and title != self._icon_title:
             self._icon.title = title  # 托盘悬浮提示跟随状态

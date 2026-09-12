@@ -63,6 +63,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._notify_handler: Optional[NotifyHandler] = None
         # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
         self._pause_event = None
+        # 缺文件扫描轮内去重: 移动种子等场景同一轮会命中多个触发源(状态转移+路径变化),
+        # 同组 key 同轮只扫一次(_refresh_torrents 每轮开始清空)
+        self._missing_scanned_keys: set = set()
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -150,6 +153,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         continue
                     try:
                         self._tick(dry_run)
+                        # 连接恢复检测: tick 成功即 API 可达(connect() 仅启动时调用一次,
+                        # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
+                        if self._last_conn_ok is False:
+                            self._last_conn_ok = True
+                            logger.info("已重新连接 qBittorrent")
                     except AutoQbError:
                         raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑
                     except APIConnectionError as e:
@@ -251,6 +259,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
+        self._missing_scanned_keys.clear()  # 缺文件扫描去重按轮重置
         tors = self.api.torrents_info()
         self._validate_torrent_schema(tors)
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)

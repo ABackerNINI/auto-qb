@@ -38,6 +38,8 @@ WINDOWS_TOAST_APPID = "AutoQB"
 WINDOWS_TOAST_APPID_FALLBACK = "Microsoft.Windows.PowerShell"
 # toast 正文字符上限(WinRT toast 单文本节点约 250 字符可见, 截断防溢出)
 MAX_BODY_LEN = 280
+# AUMID 快捷方式图标(orbit): toast 与资源管理器显示该图标而非 python 图标
+ICON_ICO = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
 
 
 class NotifyThrottle:
@@ -129,7 +131,7 @@ class PlatformChannel:
             f"$lnk = $ws.CreateShortcut('{ps_quote(shortcut)}'); "
             f"$lnk.TargetPath = '{ps_quote(sys.executable)}'; "
             f"$lnk.Arguments = '{ps_quote(self._launch_arguments)}'; "
-            f"$lnk.IconLocation = '{ps_quote(sys.executable)},0'; "
+            f"$lnk.IconLocation = '{ps_quote(ICON_ICO)},0'; "
             "$lnk.Save()"
         )
         encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")

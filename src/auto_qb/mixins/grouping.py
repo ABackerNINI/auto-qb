@@ -59,7 +59,7 @@ class GroupingMixin:
             members = self.store.groups.get(key, [])
             torrents = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if torrents:
-                self._check_missing_files(torrents, self.store.group_sizes.get(key, {}), dry_run)
+                self._check_missing_files(torrents, self.store.group_sizes.get(key, {}), dry_run, key)
 
     def _handle_save_path_changes(self, dry_run: bool):
         """保存路径变化处理: 种子 save_path 变化 -> 移出原组按新路径重归组; 原组与新组触发缺文件扫描
@@ -93,7 +93,7 @@ class GroupingMixin:
         for key in triggered:
             members = [self.store.by_hash[m] for m in self.store.groups.get(key, []) if m in self.store.by_hash]
             if members:
-                self._check_missing_files(members, self.store.group_sizes.get(key, {}), dry_run)
+                self._check_missing_files(members, self.store.group_sizes.get(key, {}), dry_run, key)
 
     def _handle_state_transitions(self, dry_run: bool):
         """
@@ -129,7 +129,7 @@ class GroupingMixin:
             members = self.store.groups[key]
             torrent = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if torrent:
-                self._check_missing_files(torrent, self.store.group_sizes.get(key, {}), dry_run)
+                self._check_missing_files(torrent, self.store.group_sizes.get(key, {}), dry_run, key)
 
     def _assign_new_torrent(self, hash: str, dry_run: bool = False):
         """新增种子增量归组: 仅拉取该种子的文件列表并入组(store O(1) 定位, 不做全量遍历) """
@@ -200,13 +200,17 @@ class GroupingMixin:
         state_enum = torrent.state_enum
         return (state_enum.is_complete or state_enum.is_errored) and not state_enum.is_checking
 
-    def _check_missing_files(self, members: list[TorrentRecord], sizes: Dict[str, Dict[str, int]], dry_run: bool):
+    def _check_missing_files(
+        self, members: list[TorrentRecord], sizes: Dict[str, Dict[str, int]], dry_run: bool, key: str
+    ):
         """
         缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
 
         由删除事件(_handle_removed_torrents)或状态变化检测(_handle_state_transitions)或种子保存路径变化(_handle_save_path_changes)
         在满足触发条件(组内 种子被删除 / 种子由上传转暂停 / 种子进入 errored(校验发现文件缺失) / 种子保存路径变化)时立即调用。
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 复用)
+        key: 组 key, 用于轮内去重 —— 移动种子等场景同一轮会同时命中多个触发源(如状态转移+路径变化),
+        同组同轮只扫一次(跨轮不抑制, 各轮事件仍各自检测)
         """
         if not self.config.grouping.check_missing_files:
             return  # 配置禁用缺文件检查
@@ -215,6 +219,10 @@ class GroupingMixin:
         rep = next((t for t in members if self._valid_for_representative(t)), None)
         if rep is None:
             return  # 组内无已完成未校验种子(均在下载/校验/异常), 不检查
+        # 去重登记在代表确认之后: 无代表的调用未发生扫描, 不占轮内去重名额
+        if key in self._missing_scanned_keys:
+            return  # 同轮已扫描(多触发源命中同组)
+        self._missing_scanned_keys.add(key)
 
         logger.debug(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
         missing = False

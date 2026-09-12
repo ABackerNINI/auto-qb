@@ -49,6 +49,7 @@
 - test_grouping_errored_check_disabled: check_missing_files=False -> errored 转换不触发
 - test_download_conflict_missing_done_excluded: mixed 冲突排除带 MISSING 标签的完成成员(重下补救); 无标签照旧触发
 - test_download_conflict_multi_dl_with_missing_tag: multi-dl 不受 MISSING 标签豁免仍拦截
+- test_missing_scan_dedup_within_round: 同组同轮多触发源只扫一次(轮内去重), 跨轮清空后可再扫
 """
 import os
 import tempfile
@@ -798,11 +799,12 @@ def test_check_missing_files_no_seeding_rep():
         client = FakeClient()
         mgr.client = client
         members = [FakeTorrent(hash="H1", name="T1", state="pausedUP", amount_left=100)]
-        mgr._check_missing_files(members, {}, dry_run=False)
+        mgr._check_missing_files(members, {}, dry_run=False, key="K")
         assert client.calls == [], "未完成成员不应作为代表扫描"
         # 暂停已完成(amount_left=0): is_complete 判定下路径同样可扫, 缺文件触发暂停 + MISSING
+        # (独立 key: 同 key 第二次调用会被轮内去重跳过, 此处单测的是参数变体而非多触发源)
         paused_done = FakeTorrent(hash="H2", name="T2", state="pausedUP", save_path=td, amount_left=0)
-        mgr._check_missing_files([paused_done], {"H2": {"movie.mkv": 100}}, dry_run=False)
+        mgr._check_missing_files([paused_done], {"H2": {"movie.mkv": 100}}, dry_run=False, key="K2")
         assert client.calls.count(("stop", None)) == 1, f"暂停完成代表缺文件应暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -819,7 +821,7 @@ def test_check_missing_files_size_mismatch():
             f.write(b"x" * 10)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 999}}  # 期望 999, 实际 10
-        mgr._check_missing_files([rep], sizes, dry_run=False)
+        mgr._check_missing_files([rep], sizes, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"大小不符应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -837,7 +839,7 @@ def test_check_missing_files_getsize_error():
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 10}}
         with mock.patch("os.path.getsize", side_effect=OSError("denied")):
-            mgr._check_missing_files([rep], sizes, dry_run=False)
+            mgr._check_missing_files([rep], sizes, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"读取失败应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -854,13 +856,13 @@ def test_check_missing_files_checking_up_not_rep():
         # checkingUP: is_complete 但 is_checking -> 排除出有效代表, 不扫描
         checking_up = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
-        mgr._check_missing_files([checking_up], sizes, dry_run=False)
+        mgr._check_missing_files([checking_up], sizes, dry_run=False, key="K")
         assert client.calls == [], f"checkingUP 非有效代表不应触发扫描: {client.calls}"
 
         # 对照: stalledUP 作代表 -> 缺文件暂停 + MISSING
         stalled_up = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td, amount_left=0)
         sizes2 = {"H2": {"movie.mkv": 100}}
-        mgr._check_missing_files([stalled_up], sizes2, dry_run=False)
+        mgr._check_missing_files([stalled_up], sizes2, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"stalledUP 作代表缺文件应暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -879,11 +881,11 @@ def test_check_missing_files_first_done_rep():
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td, amount_left=0)
         # 代表 H1 大小正确; 非代表 H2 期望大小错误(仅扫代表, 不应触发)
         sizes = {"H1": {"movie.mkv": 10}, "H2": {"movie.mkv": 999}}
-        mgr._check_missing_files([t1, t2], sizes, dry_run=False)
+        mgr._check_missing_files([t1, t2], sizes, dry_run=False, key="K")
         assert client.calls == [], f"非代表成员大小差异不应触发: {client.calls}"
-        # 代表 H1 大小错误 -> 触发
+        # 代表 H1 大小错误 -> 触发(独立 key: 避开同轮去重, 单测参数变体)
         sizes2 = {"H1": {"movie.mkv": 999}, "H2": {"movie.mkv": 10}}
-        mgr._check_missing_files([t1, t2], sizes2, dry_run=False)
+        mgr._check_missing_files([t1, t2], sizes2, dry_run=False, key="K2")
         assert client.calls.count(("stop", None)) == 1, f"代表大小不符应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -896,7 +898,7 @@ def test_check_missing_files_empty_sizes_map():
         client = FakeClient()
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
-        mgr._check_missing_files([rep], {}, dry_run=False)
+        mgr._check_missing_files([rep], {}, dry_run=False, key="K")
         assert client.calls == [], f"空大小映射不应触发扫描: {client.calls}"
 
 
@@ -909,7 +911,7 @@ def test_check_missing_files_member_has_tag():
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0, tags="MISSING")
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
-        mgr._check_missing_files([rep], sizes, dry_run=False)
+        mgr._check_missing_files([rep], sizes, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"缺文件仍应暂停: {client.calls}"
         assert ("add_tags", ["MISSING"]) not in client.calls, "已有标签不应重复添加"
 
@@ -923,7 +925,7 @@ def test_check_missing_files_dry_run():
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
-        mgr._check_missing_files([rep], sizes, dry_run=True)
+        mgr._check_missing_files([rep], sizes, dry_run=True, key="K")
         assert client.calls == [], f"dry-run 不应暂停/加标签: {client.calls}"
         assert "MISSING" not in client.tags
 
@@ -1118,3 +1120,25 @@ def test_download_conflict_multi_dl_with_missing_tag():
         mgr._check_download_conflicts(dry_run=False)
         assert client.calls.count(("stop", None)) == 1, f"MISSING 组内 multi-dl 仍应拦截: {client.calls}"
         assert (key, "multi-dl") in mgr.store.download_conflict_warned
+
+
+def test_missing_scan_dedup_within_round():
+    """缺文件扫描轮内去重: 同组 key 同轮多触发源(如状态转移+路径变化)只扫一次; 轮重置后可再扫"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
+        key = ("R:/Downloads", ("movie.mkv", ))
+
+        mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
+        mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
+        assert client.calls.count(("stop", None)) == 1, f"同轮重复触发应只扫一次: {client.calls}"
+
+        # 新的一轮(去重集合清空, 语义同 _refresh_torrents 每轮开头) -> 可再次扫描
+        mgr._missing_scanned_keys.clear()
+        client.calls.clear()
+        mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
+        assert client.calls.count(("stop", None)) == 1, "跨轮应重新扫描"
