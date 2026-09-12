@@ -39,8 +39,10 @@
 - test_timer_us: us 单位计时
 - test_is_manual_speed_limit: 奇数KiB手动限速保护(0/偶数不命中)
 - test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
+- test_parse_bool_invalid: 非法布尔值 -> ValueError
 """
 import os
+import pytest
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -448,3 +450,9 @@ def test_replace_vars():
     assert replace_vars("seed-${required_seeding_time}", conf2) == "seed-${required_seeding_time}"
     # tracker_conf=None: 同上留原文
     assert replace_vars("seed-${required_seeding_time}", None) == "seed-${required_seeding_time}"
+
+
+def test_parse_bool_invalid():
+    """非法布尔值 -> ValueError(问题提早暴露)"""
+    with pytest.raises(ValueError):
+        utils.parse_bool("not-a-bool")

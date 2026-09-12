@@ -15,6 +15,7 @@
 - test_autostart_macos_plist: macOS LaunchAgents plist 写入/注销(平台 patch)
 - test_log_dir_resolves_and_creates: 日志目录解析(相对路径绝对化/file 为空兜底 state_file 目录/确保存在)
 - test_run_connection_restored_updates_state: 断开后 tick 成功即恢复 _last_conn_ok(否则 UI 永远显示断开)
+- test_run_autoqb_error_propagates: AutoQbError 致命错误穿透主循环
 """
 import logging
 import os
@@ -241,3 +242,18 @@ def test_autostart_macos_plist(monkeypatch, tmp_path):
     assert autostart.is_enabled("cfg.yml")
     autostart.disable()
     assert not autostart.is_enabled("cfg.yml")
+
+
+def test_run_autoqb_error_propagates(tmp_path):
+    """AutoQbError 致命错误穿透主循环(不落入"主循环异常"继续跑)"""
+    from auto_qb.errors import AutoQbError
+
+    mgr = _make_ready_manager(tmp_path)
+    mgr.config.main_tick = 0.02
+
+    def boom(dry_run):
+        raise AutoQbError("qB 字段不兼容")
+
+    mgr._tick = boom
+    with pytest.raises(AutoQbError):
+        mgr.run(dry_run=True)

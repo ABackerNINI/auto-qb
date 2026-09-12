@@ -25,6 +25,7 @@
 - test_store_tag_usage: 从快照聚合标签使用情况
 - test_store_unbound_client: 未绑定 client 时惰性拉取报错
 - test_record_trackers_info_unbound: 记录级 trackers_info 未绑定 client 报错
+- test_record_hr_boundaries: HR 判定边界(total_size=0 兜底/小种子完全下载即触发/无 hr 恒 False)
 """
 from auto_qb.torrents import TorrentRecord, TorrentStore
 
@@ -112,8 +113,12 @@ def test_record_check_hr_on_real_record():
 
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stoppedDL"))
     rec.tracker_conf = TrackerConfig(
-        name="X", domains=["d.com"], tags=[], remove_tags=[],
-        upload_speed_limit=0, download_speed_limit=0,
+        name="X",
+        domains=["d.com"],
+        tags=[],
+        remove_tags=[],
+        upload_speed_limit=0,
+        download_speed_limit=0,
         hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7)),
     )
     rec.downloaded = 70 * 1024**2
@@ -347,3 +352,35 @@ def test_record_tracker_name_unknown_without_conf():
     assert rec.tracker_conf is None
     assert rec.tracker_name == "Unknown"  # 不触碰 tor.client
     assert rec.log_repr == "'T' [Unknown] (ABC123)"
+
+
+def test_record_hr_boundaries():
+    """HR 判定边界: total_size=0 空种子不触发(辅种兜底); 小种子完全下载即触发(未达触发量); 无 hr 配置恒 False"""
+    from auto_qb.config import HRRule, TrackerConfig
+
+    conf = TrackerConfig(
+        name="X",
+        domains=["d.com"],
+        tags=[],
+        remove_tags=[],
+        upload_speed_limit=0,
+        download_speed_limit=0,
+        hr=HRRule(required_seeding_time=3 * 86400, condition=("dlsize", 100 * 1024**2)),
+    )
+    # total_size=0 空种子: 辅种排除兜底, 不触发
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="E1", state="stalledUP", total_size=0, downloaded=0))
+    rec.tracker_conf = conf
+    assert rec.check_hr_condition() is False
+    # 小种子(10MiB)完全下载: 未达 100MiB 触发量, 但完全下载即视为触发
+    rec2 = TorrentRecord.from_torrent(
+        FakeTorrent(hash="E2", state="stalledUP", total_size=10 * 1024**2, downloaded=10 * 1024**2)
+    )
+    rec2.tracker_conf = conf
+    assert rec2.check_hr_condition() is True
+    # 无 hr 配置 -> 恒 False
+    conf_nohr = TrackerConfig(
+        name="Y", domains=["d.com"], tags=[], remove_tags=[], upload_speed_limit=0, download_speed_limit=0
+    )
+    rec3 = TorrentRecord.from_torrent(FakeTorrent(hash="E3", state="stalledUP"))
+    rec3.tracker_conf = conf_nohr
+    assert rec3.check_hr_condition() is False

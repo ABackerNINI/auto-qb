@@ -32,6 +32,7 @@
 - test_rule_multi_condition_and: 多条件 AND: 全部满足才执行, 任一不满足不执行
 - test_rule_state_group_combined: 状态组合条件(is_complete&is_uploading)规则层仅对同时满足执行
 - test_rule_action_chain_ignore_continue: 动作链: 失败无 ignore 中断; ignore=true 继续执行后续
+- test_reannounce_without_dedup_warns: reannounce 未配去重 -> 构造期 WARNING; 配置后无告警
 """
 import os
 import tempfile
@@ -465,7 +466,9 @@ def test_rule_context_required_seeding_time_no_hr():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"hr": None})
         ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
-        assert utils.replace_vars("seed-${required_seeding_time}", ctx.torrent.tracker_conf) == "seed-${required_seeding_time}"
+        assert utils.replace_vars(
+            "seed-${required_seeding_time}", ctx.torrent.tracker_conf
+        ) == "seed-${required_seeding_time}"
         assert utils.replace_vars("plain", ctx.torrent.tracker_conf) == "plain"
 
 
@@ -573,7 +576,9 @@ def test_rule_context_tracker_urls_empty():
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
         assert ctx.torrent.tracker_urls(client) == []
         assert ctx.torrent.tracker_conf is None, "无匹配 tracker -> tracker_conf 应为 None"
-        assert utils.replace_vars("seed-${required_seeding_time}", ctx.torrent.tracker_conf) == "seed-${required_seeding_time}"
+        assert utils.replace_vars(
+            "seed-${required_seeding_time}", ctx.torrent.tracker_conf
+        ) == "seed-${required_seeding_time}"
         assert "Unknown" in ctx.torrent.log_repr
 
 
@@ -610,3 +615,35 @@ def test_rule_actions_skip_non_dict():
         rule = Rule("g.test", {"actions": ["not-a-dict", {"add_tags": ["X"]}]}, mgr)
         assert len(rule.actions) == 1, "非 dict 动作项应被跳过"
         assert isinstance(rule.actions[0], AddTagsAction)
+
+
+def test_reannounce_without_dedup_warns():
+    """含 reannounce 动作但未配置 execute_once/cooldown -> 构造期 WARNING(封号风险提示); 配置后无告警
+
+    不用 caplog: make_manager 的 setup_logging 会 clear root handlers(caplog 的捕获 handler 一并被清)。
+    """
+    import logging
+    import os
+    import tempfile
+
+    from auto_qb.rules.base import Rule
+
+    records = []
+
+    class Grab(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    grab = Grab()
+    grab.setLevel(logging.WARNING)
+    base_logger = logging.getLogger("auto_qb.rules.base")
+    base_logger.addHandler(grab)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            mgr = make_manager(os.path.join(td, "state.json"))
+            Rule("g.reann", {"actions": [{"reannounce": True}]}, mgr)
+            Rule("g.reann2", {"actions": [{"reannounce": True}], "execute_once": "once"}, mgr)
+    finally:
+        base_logger.removeHandler(grab)
+    assert any("封号风险" in m and "g.reann" in m for m in records), records
+    assert not any("g.reann2" in m for m in records), "已配置去重不应告警"

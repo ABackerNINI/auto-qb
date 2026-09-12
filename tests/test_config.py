@@ -30,6 +30,8 @@
 - test_validate_empty_file: 空文件/非字典根节点报错
 - test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
 - test_models_default_sources: 默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量)
+- test_validate_section_type_errors: 各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags 坏项)
+- test_validate_hr_value_errors: 站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔)
 """
 import logging
 import os
@@ -692,3 +694,153 @@ def test_models_default_sources():
     assert c.add_episode_tags.add_tag_single == "zE${episode_first}"
     assert c.add_episode_tags.add_tag_multi == "zE${episode_first}-${episode_last}"
     assert c.trackers == {} and c.global_speed_limit_curve is None
+
+
+def test_validate_section_type_errors():
+    """各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags/坏项)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  log: [not-a-dict]\n"
+            "  qbittorrent: 123\n"
+            "  grouping: not-dict\n"
+            "  hr: 456\n"
+            "  add_episode_tags: not-dict\n"
+            "  delete_tags: [\"\", 5]\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      tags: not-a-list\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.log: 必须是字典" in err, err
+        assert "config.qbittorrent: 必须是字典" in err, err
+        assert "config.grouping: 必须是字典" in err, err
+        assert "config.hr: 必须是字典" in err, err
+        assert "config.add_episode_tags: 必须是字典" in err, err
+        assert "config.delete_tags: 第 [0] 项必须是非空字符串" in err, err
+        assert "config.trackers.T1.tags: 必须是列表" in err, err
+
+
+def test_validate_hr_value_errors():
+    """站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔非法)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  grouping:\n"
+            "    enabled: not-bool\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        extra_seeding_time: abc\n"
+            "        required_share_ratio: not-number\n"
+            "        condition: bad-cond\n"
+            "        overwrite_category: not-bool\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.grouping.enabled" in err, err
+        assert "config.trackers.T1.hr.extra_seeding_time" in err, err
+        assert "config.trackers.T1.hr.required_share_ratio(须为数字)" in err, err
+        assert "config.trackers.T1.hr.condition(如 80% 或 10MiB)" in err, err
+        assert "config.trackers.T1.hr.overwrite_category" in err, err
+
+
+def test_validate_gslc():
+    """global_speed_limit_curve 由原生校验器 _validate_global_speed_limit_curve 聚合错误"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: WEEK\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.global_speed_limit_curve.traffic_source: 必须是非空列表" in err, err
+
+
+def test_validate_empty_file():
+    """空文件/非字典根节点 -> 明确报错"""
+    with tempfile.TemporaryDirectory() as td:
+        assert "配置文件为空或根节点不是字典" in _load_errors(td, "")
+        assert "配置文件为空或根节点不是字典" in _load_errors(td, "- a\n- b\n")
+
+
+def test_config_error_wraps_io_and_yaml():
+    """文件读取/YAML 解析异常统一包装为 ConfigError(ValueError 子类, 供 CLI 单点捕获)"""
+    with tempfile.TemporaryDirectory() as td:
+        with pytest.raises(ConfigError, match="配置文件读取失败"):
+            load_config(os.path.join(td, "no-such.yml"))
+        with pytest.raises(ConfigError, match="YAML 解析失败"):
+            load_config(_write_raw(td, "config: [unclosed"))
+        assert issubclass(ConfigError, AutoQbError)  # 根异常(CLI 单点捕获)
+
+
+def test_models_default_sources():
+    """默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量), loader 经 _get 引用"""
+    qb = QbittorrentConfig()
+    assert (qb.host, qb.port, qb.username, qb.password) == ("127.0.0.1", 8080, "", "")
+    t = TrackerConfig(name="x", domains=["a.com"])
+    assert t.tags == [] and t.remove_tags == [] and t.rules == []
+    assert t.upload_speed_limit == 0 and t.download_speed_limit == 0  # 0 = 不限速
+    assert t.remove_similar_tags is False and t.hr is None
+    c = Config()
+    assert c.main_tick == 2.0 and c.interval == 60.0
+    assert c.max_tasks_per_tick == 20 and c.state_file == "auto-qb-data/state.json"
+    assert c.remove_similar_tags is False and c.add_episode_tags.enabled is False
+    assert c.add_episode_tags.add_tag_single == "zE${episode_first}"
+    assert c.add_episode_tags.add_tag_multi == "zE${episode_first}-${episode_last}"
+    assert c.trackers == {} and c.global_speed_limit_curve is None
+
+
+def test_validate_section_type_errors():
+    """各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags/坏项)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  log: [not-a-dict]\n"
+            "  qbittorrent: 123\n"
+            "  grouping: not-dict\n"
+            "  hr: 456\n"
+            "  add_episode_tags: not-dict\n"
+            "  delete_tags: [\" \", 5]\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      tags: not-a-list\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.log: 必须是字典" in err, err
+        assert "config.qbittorrent: 必须是字典" in err, err
+        assert "config.grouping: 必须是字典" in err, err
+        assert "config.hr: 必须是字典" in err, err
+        assert "config.add_episode_tags: 必须是字典" in err, err
+        assert "config.delete_tags: 第 [0] 项必须是非空字符串" in err, err
+        assert "config.trackers.T1.tags: 必须是列表" in err, err
+
+
+def test_validate_hr_value_errors():
+    """站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔非法)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  grouping:\n"
+            "    enabled: not-bool\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        extra_seeding_time: abc\n"
+            "        required_share_ratio: not-number\n"
+            "        condition: bad-cond\n"
+            "        overwrite_category: not-bool\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.grouping.enabled" in err, err
+        assert "config.trackers.T1.hr.extra_seeding_time" in err, err
+        assert "config.trackers.T1.hr.required_share_ratio(须为数字)" in err, err
+        assert "config.trackers.T1.hr.condition(如 80% 或 10MiB)" in err, err
+        assert "config.trackers.T1.hr.overwrite_category" in err, err
