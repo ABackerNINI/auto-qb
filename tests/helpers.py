@@ -257,11 +257,6 @@ class FakeTorrent:
 
     # ---------- HR 条件(2026-09 迁到 TorrentRecord, FakeTorrent 鸭子兼容补) ----------
 
-    def is_fully_downloaded(self) -> bool:
-        if self.total_size <= 0:
-            return False
-        return self.progress >= 1.0 or self.amount_left == 0
-
     def check_hr_condition(self) -> bool:
         if not self.tracker_conf.hr:
             return False
@@ -275,8 +270,8 @@ class FakeTorrent:
         elif cond_type == "dlsize":
             if self.downloaded >= cond_value:
                 return True
-        # 未达触发量但已完全下载的种子同样视为触发(小种子边界)
-        return self.is_fully_downloaded()
+        # 未达触发量但已完整下载完(下载量 >= 种子大小)的种子同样视为触发(小种子边界)
+        return self.total_size > 0 and self.downloaded >= self.total_size
 
     def check_hr_satisfied(self) -> bool:
         if not self.tracker_conf.hr:

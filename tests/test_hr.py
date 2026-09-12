@@ -243,7 +243,8 @@ def test_hr_dlsize_small_completed_triggers():
         mgr2.config.trackers["HHan"].hr = _hr_rule(
             condition=("dlsize", 10 * 1024**2), add_tag="DLSIZE-HR", add_category=""
         )
-        tor2 = FakeTorrent(downloaded=5 * 1024**2, total_size=5 * 1024**2, amount_left=2 * 1024**2, seeding_time=0)
+        # 未完成的小种子(downloaded < total_size, 即未把种子完整下载完)仍排除
+        tor2 = FakeTorrent(downloaded=2 * 1024**2, total_size=5 * 1024**2, amount_left=3 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
         assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
         assert client2.calls == [], f"未完成的小种子不应触发: {client2.calls}"

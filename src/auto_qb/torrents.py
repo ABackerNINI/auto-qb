@@ -194,22 +194,13 @@ class TorrentRecord:
 
 # ---------- 辅助方法 ----------
 
-    def is_fully_downloaded(self) -> bool:
-        """是否已完全下载(下载完成): qB 下载进度达 1.0 或剩余字节为 0
-
-        HR 触发条件的边界语义: 当种子小于触发量时, 完全下载即视为触发
-        (否则小种子永远不会触发, 见想法.md 已知问题), 与下载量/比例阈值解耦。
-        total_size<=0 的异常/空种子不视为已下载(辅种排除兜底)。
-        """
-        if self.total_size <= 0:
-            return False
-        return self.progress >= 1.0 or self.amount_left == 0
-
     def check_hr_condition(self) -> bool:
         """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种
 
         前置: tracker_conf 已在 _refresh_torrents 阶段匹配(无 None 防御, 早暴露调用路径错误)。
-        未达触发量但已完全下载的种子同样视为触发(小种子边界)。
+        兜底边界: 未达触发量的种子, 把种子完整下载完(下载量 >= 种子大小)也视为触发——
+        否则触发量大于种子体积的小种子永远不会触发(想法.md 已知问题)。
+        downloaded=0 的纯辅种(添加时数据已完整, 对本站无下载消耗)与部分下载(如 1B)不触发。
         """
         if not self.tracker_conf.hr:
             return False
@@ -223,8 +214,7 @@ class TorrentRecord:
         elif cond_type == "dlsize":
             if self.downloaded >= cond_value:
                 return True
-        # 小于触发量的种子: 下载完成即视为触发
-        return self.is_fully_downloaded()
+        return self.total_size > 0 and self.downloaded >= self.total_size
 
     def check_hr_satisfied(self) -> bool:
         """是否满足 HR 要求: 触发条件 + (做种时长 >= 要求时间 + 额外时间 或 分享率达标)"""

@@ -355,7 +355,7 @@ def test_record_tracker_name_unknown_without_conf():
 
 
 def test_record_hr_boundaries():
-    """HR 判定边界: total_size=0 空种子不触发(辅种兜底); 小种子完全下载即触发(未达触发量); 无 hr 配置恒 False"""
+    """HR 判定边界: 兜底触发 = 下载量达到种子完整大小; downloaded=0 纯辅种/下载 1B/total_size=0/无 hr 均不触发"""
     from auto_qb.config import HRRule, TrackerConfig
 
     conf = TrackerConfig(
@@ -371,12 +371,24 @@ def test_record_hr_boundaries():
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="E1", state="stalledUP", total_size=0, downloaded=0))
     rec.tracker_conf = conf
     assert rec.check_hr_condition() is False
-    # 小种子(10MiB)完全下载: 未达 100MiB 触发量, 但完全下载即视为触发
+    # 小种子(10MiB, 触发量 100MiB 永不可达)完整下载完: downloaded == total_size -> 触发
     rec2 = TorrentRecord.from_torrent(
         FakeTorrent(hash="E2", state="stalledUP", total_size=10 * 1024**2, downloaded=10 * 1024**2)
     )
     rec2.tracker_conf = conf
     assert rec2.check_hr_condition() is True
+    # downloaded=0 的纯辅种种子(添加时数据已完整, progress=1.0): 不欠 HR 债, 不触发
+    rec_seed = TorrentRecord.from_torrent(
+        FakeTorrent(hash="E2b", state="stalledUP", total_size=100 * 1024**2, downloaded=0, progress=1.0)
+    )
+    rec_seed.tracker_conf = conf
+    assert rec_seed.check_hr_condition() is False, "纯辅种种子不应触发 HR"
+    # 仅下载 1B: 远未"完整下载完", 不触发
+    rec_1b = TorrentRecord.from_torrent(
+        FakeTorrent(hash="E2c", state="stalledUP", total_size=10 * 1024**2, downloaded=1, progress=1.0)
+    )
+    rec_1b.tracker_conf = conf
+    assert rec_1b.check_hr_condition() is False, "下载 1B 不应触发 HR"
     # 无 hr 配置 -> 恒 False
     conf_nohr = TrackerConfig(
         name="Y", domains=["d.com"], tags=[], remove_tags=[], upload_speed_limit=0, download_speed_limit=0
@@ -391,11 +403,17 @@ def test_record_tracker_name_and_hr_fallback():
     from auto_qb.config import HRRule, TrackerConfig
 
     conf = TrackerConfig(
-        name="配置名X", domains=["d.com"], tags=[], remove_tags=[],
-        upload_speed_limit=0, download_speed_limit=0,
+        name="配置名X",
+        domains=["d.com"],
+        tags=[],
+        remove_tags=[],
+        upload_speed_limit=0,
+        download_speed_limit=0,
         hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7)),
     )
-    rec = TorrentRecord.from_torrent(FakeTorrent(hash="T1", state="stalledUP", total_size=100 * 1024**2, downloaded=10 * 1024**2))
+    rec = TorrentRecord.from_torrent(
+        FakeTorrent(hash="T1", state="stalledUP", total_size=100 * 1024**2, downloaded=10 * 1024**2)
+    )
     rec.tracker_conf = conf
     assert rec.tracker_name == "配置名X"
     # 比例 0.1 < 0.7: 条件未达 -> satisfied False(L235 分支)
