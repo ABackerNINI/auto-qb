@@ -76,9 +76,11 @@ class PlatformChannel:
 
     TIMEOUT_S = 10.0
 
-    def __init__(self, platform: str = None):
+    def __init__(self, platform: str = None, launch_arguments: str = ""):
         # platform 运行时求值(默认参数在导入时绑定 sys.platform, 会固化到模块导入场景)
         self.platform = platform if platform is not None else sys.platform
+        # toast 点击激活命令的参数(Windows: 写入 AUMID 快捷方式 Arguments, 点击通知即以此重启应用)
+        self._launch_arguments = launch_arguments
         if self.platform.startswith("win32"):
             self._appid = self._ensure_windows_appid()
             self._build = self._build_windows
@@ -100,17 +102,15 @@ class PlatformChannel:
         return os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs", f"{WINDOWS_TOAST_APPID}.lnk")
 
     def _ensure_windows_appid(self) -> str:
-        """确保存在提供自定义 AUMID 的开始菜单快捷方式, 返回可用的来源应用标识
+        """注册 AUMID 快捷方式并返回来源应用标识
 
-        幂等: 快捷方式已存在直接复用(仅一次 os.path.exists 探测); 注册失败(权限/异常)
-        回退 PowerShell AUMID 并 DEBUG 记录 —— 来源名退化, 通知功能本身不受影响。
-        构造期同步执行(每进程一次, 数百毫秒), send 均在后台线程使用现成 _appid。
+        每次启动幂等重写快捷方式(CreateShortcut 覆盖写): Arguments 需与当前配置路径保持一致,
+        否则 toast 点击会以过期参数启动。注册失败回退 PowerShell AUMID 并 DEBUG 记录 ——
+        来源名/点击激活退化, 通知功能本身不受影响。构造期同步执行(每进程一次, 数百毫秒)。
         """
         shortcut = self._windows_shortcut_path()
         if not shortcut:
             return WINDOWS_TOAST_APPID_FALLBACK  # 无 APPDATA(异常环境): 直接回退
-        if os.path.exists(shortcut):
-            return WINDOWS_TOAST_APPID
         try:
             self._register_windows_appid(shortcut)
             return WINDOWS_TOAST_APPID
@@ -119,7 +119,8 @@ class PlatformChannel:
             return WINDOWS_TOAST_APPID_FALLBACK
 
     def _register_windows_appid(self, shortcut: str) -> None:
-        """经 PowerShell(WScript.Shell COM)创建 AUMID 快捷方式, 指向当前 Python 解释器"""
+        """经 PowerShell(WScript.Shell COM)创建 AUMID 快捷方式: 指向当前解释器,
+        Arguments = launch_arguments(toast 点击激活即以该参数重启应用, 经单实例锁唤起已有窗口)"""
         def ps_quote(s: str) -> str:
             return s.replace("'", "''")  # PowerShell 单引号字面量转义
 
@@ -127,6 +128,7 @@ class PlatformChannel:
             "$ws = New-Object -ComObject WScript.Shell; "
             f"$lnk = $ws.CreateShortcut('{ps_quote(shortcut)}'); "
             f"$lnk.TargetPath = '{ps_quote(sys.executable)}'; "
+            f"$lnk.Arguments = '{ps_quote(self._launch_arguments)}'; "
             f"$lnk.IconLocation = '{ps_quote(sys.executable)},0'; "
             "$lnk.Save()"
         )
@@ -262,16 +264,20 @@ class NotifyHandler(logging.Handler):
         super().close()
 
 
-def setup_notify(config: Optional[NotifyConfig]) -> Optional[NotifyHandler]:
-    """按配置构造并挂载通知 handler 到 "auto_qb" logger; 未启用返回 None
+def setup_notify(config: Optional[NotifyConfig],
+                 force: bool = False,
+                 launch_arguments: str = "") -> Optional[NotifyHandler]:
+    """按配置构造并挂载通知 handler 到 "auto_qb" logger; 未启用且未强挂返回 None
 
-    平台不支持时抛 AutoQbError(启动期 fail-fast, CLI 干净退出);
+    force=True: 配置未启用时也会挂载(UI 通知开关热开启, 会话级, 重启后回到配置状态)。
+    launch_arguments: Windows toast 点击激活的启动参数(经 AUMID 快捷方式 Arguments)。
+    平台不支持时抛 AutoQbError(启动期 fail-fast, CLI 干净退出 / UI 弹窗提示);
     dry-run 下不调用本函数(调用点判定, 与全项目 dry_run 约定一致)。
     """
-    if not config or not config.enabled:
+    if not config or (not config.enabled and not force):
         return None
     try:
-        channel = PlatformChannel()
+        channel = PlatformChannel(launch_arguments=launch_arguments)
     except ValueError as e:
         from .errors import AutoQbError
         raise AutoQbError(f"主动通知启用失败: {e}") from e

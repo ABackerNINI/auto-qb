@@ -13,8 +13,10 @@
 - test_autostart_windows_registry: Windows 注册表注册/注销(真注册表, 专属键名, 测试后清理)
 - test_autostart_linux_desktop: XDG autostart desktop 文件写入/注销(平台 patch)
 - test_autostart_macos_plist: macOS LaunchAgents plist 写入/注销(平台 patch)
+- test_log_dir_resolves_and_creates: 日志目录解析(相对路径绝对化/file 为空兜底 state_file 目录/确保存在)
 """
 import logging
+import os
 import sys
 import threading
 import time
@@ -24,8 +26,30 @@ import pytest
 from auto_qb import autostart, notify as notify_mod
 from auto_qb.config import NotifyConfig
 from auto_qb.notify import NotifyHandler, PlatformChannel
-from auto_qb.ui import ShowIpcServer, UiLogHandler, send_show
+from auto_qb.ui import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+
+def test_log_dir_resolves_and_creates(tmp_path):
+    """_log_dir: 相对路径绝对化并确保目录存在; logging.file 为空兜底 state_file 目录(data_dir)
+
+    注意用新 LoggingConfig 实例替换(FakeConfig.logging 是类属性共享实例, 直接改 file 会污染后续测试)。
+    """
+    from auto_qb.config import LoggingConfig
+
+    mgr = make_manager(str(tmp_path / "data" / "state.json"))
+    mgr.client = FakeClient()
+
+    mgr.config.logging = LoggingConfig(level="WARNING", file="", max_bytes=10 * 1024**2)
+    log_dir = TrayUi._log_dir(mgr)
+    expected = os.path.dirname(os.path.abspath(str(tmp_path / "data" / "state.json")))
+    assert os.path.isdir(log_dir) and os.path.samefile(log_dir, expected)
+
+    mgr.config.logging = LoggingConfig(
+        level="WARNING", file=str(tmp_path / "logs" / "auto-qb.log"), max_bytes=10 * 1024**2
+    )
+    log_dir = TrayUi._log_dir(mgr)
+    assert os.path.isdir(log_dir) and log_dir.endswith("logs")
 
 
 def _make_ready_manager(tmp_path):

@@ -29,10 +29,12 @@ from tkinter import messagebox
 
 from . import autostart, utils
 from .errors import AutoQbError
+from .notify import setup_notify
 
 logger = logging.getLogger(__name__)
 
 ICON_PNG = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+ICON_ICO = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
 UI_PORT_FILE_NAME = "ui.port"
 POLL_MS = 100
 LOG_VIEW_LINES = 200
@@ -158,7 +160,13 @@ class TrayUi:
         self.root.geometry("780x560")
         self.root.minsize(700, 500)
         self._icon_tk = tk.PhotoImage(file=ICON_PNG)  # 引用须保留, 否则被 GC
-        self.root.iconphoto(False, self._icon_tk)
+        # CustomTkinter 会在启动约 200ms 后用自带图标覆盖窗口图标(iconphoto 会被顶掉):
+        # Windows 走 CTk 的 iconbitmap 自定义通道(标记 custom, 不被覆盖, 需 .ico);
+        # 其它平台 iconphoto(PhotoImage 不支持 ico)
+        if sys.platform.startswith("win32"):
+            self.root.iconbitmap(ICON_ICO)
+        else:
+            self.root.iconphoto(False, self._icon_tk)
         self.root.protocol("WM_DELETE_WINDOW", self._hide_window)
 
         from . import __version__
@@ -191,10 +199,12 @@ class TrayUi:
         self.pause_btn.grid(row=0, column=0, padx=(0, 20))
         self.notify_switch = ctk.CTkSwitch(controls, text="通知", command=self._toggle_notify)
         self.notify_switch.grid(row=0, column=1, padx=(0, 20))
+        if self._notify_on():
+            self.notify_switch.select()
         self.autostart_switch = ctk.CTkSwitch(controls, text="开机自启", command=self._toggle_autostart)
         self.autostart_switch.grid(row=0, column=2)
-        if self.manager._notify_handler is None:
-            self.notify_switch.configure(state="disabled")
+        if autostart.is_enabled(self.manager.config_path):
+            self.autostart_switch.select()
 
         # 日志区
         self.log_box = ctk.CTkTextbox(self.root, font=ctk.CTkFont(family="Consolas", size=11), wrap="none")
@@ -218,8 +228,23 @@ class TrayUi:
             width=140,
             fg_color="transparent",
             border_width=1,
-            command=lambda: utils.open_path(os.path.dirname(self.manager.config.logging.file))
+            command=self._open_logs,
         ).pack(side="left", padx=10)
+
+    @staticmethod
+    def _log_dir(manager) -> str:
+        """日志目录绝对路径(打开前确保存在)
+
+        logging.file 可能是相对路径(相对进程 cwd)或为空(仅控制台, 理论不出现)——
+        空值兜底 state_file 目录(data_dir); 相对路径以当前 cwd 绝对化后确保目录存在,
+        避免 os.startfile 对不存在目录抛 FileNotFoundError。
+        """
+        log_dir = os.path.dirname(os.path.abspath(manager.config.logging.file or manager.state_file))
+        os.makedirs(log_dir, exist_ok=True)
+        return log_dir
+
+    def _open_logs(self):
+        utils.open_path(self._log_dir(self.manager))
 
     @staticmethod
     def _card(parent, column: int, title: str):
@@ -280,10 +305,14 @@ class TrayUi:
                     "toggle_notify": self._toggle_notify,
                     "toggle_autostart": self._toggle_autostart,
                     "open_webui": lambda: webbrowser.open(self.manager.config.qbittorrent.base_url),
-                    "open_logs": lambda: utils.open_path(os.path.dirname(self.manager.config.logging.file)),
+                    "open_logs": self._open_logs,
                 }.get(kind)
                 if handler is not None:
-                    handler()
+                    try:
+                        handler()
+                    except Exception:
+                        # 单个事件失败不杀死 after 轮询链(否则 UI 从此停止刷新)
+                        logger.exception("托盘事件处理失败: %s", kind)
         except queue.Empty:
             pass
         self._drain_logs()
@@ -364,9 +393,26 @@ class TrayUi:
 
     def _toggle_notify(self):
         handler = self.manager._notify_handler
-        if handler is not None:
-            handler.enabled = not handler.enabled
-            logger.info("主动通知已%s", "开启" if handler.enabled else "关闭")
+        if handler is None:
+            # 配置未启用通知: 会话内动态挂载(重启后回到配置状态); 平台不支持则弹窗提示, 开关由勾选态回弹
+            try:
+                self.manager._notify_handler = setup_notify(
+                    self.manager.config.notify,
+                    force=True,
+                    launch_arguments=utils.tray_launch_arguments(self.manager.config_path)
+                )
+            except AutoQbError as e:
+                messagebox.showwarning("auto-qb", str(e), parent=self.root)
+                return
+            self.notify_switch.select()
+            logger.info("主动通知已开启(会话级, 重启后回到配置状态)")
+            return
+        handler.enabled = not handler.enabled
+        if handler.enabled:
+            self.notify_switch.select()
+        else:
+            self.notify_switch.deselect()
+        logger.info("主动通知已%s", "开启" if handler.enabled else "关闭")
 
     def _toggle_autostart(self):
         try:

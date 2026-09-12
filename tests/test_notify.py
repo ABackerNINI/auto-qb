@@ -16,6 +16,7 @@
 - test_notify_channel_send_failure: 命令失败返回 False 且不外抛
 - test_setup_notify_disabled: 未启用返回 None 且不挂载 handler
 - test_setup_notify_attaches_and_unsupported: 启用挂载到 auto_qb logger; 不支持平台抛 AutoQbError
+- test_setup_notify_force_hot_attach: 配置未启用时 force=True 热挂载(UI 开关), 不带 force 返回 None
 - test_notify_fatal_skips_when_disabled: notify_fatal 在无配置/未启用时不发送
 """
 import base64
@@ -212,13 +213,13 @@ def test_notify_channel_windows_command(monkeypatch):
 
 
 def test_notify_windows_appid_ensure(monkeypatch):
-    """AUMID 幂等注册: 快捷方式已存在直接复用; 无 APPDATA / 注册失败回退 PowerShell 来源"""
-    # 已存在 -> 直接复用, 不触发注册
+    """AUMID 每次启动幂等重注册(Arguments 须与当前配置同步); 无 APPDATA / 注册失败回退 PowerShell 来源"""
+    # 注册成功 -> 自定义 AUMID
     monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: True)
+    monkeypatch.setattr(PlatformChannel, "_register_windows_appid", lambda self, shortcut: None)
     assert PlatformChannel("win32")._appid == notify_mod.WINDOWS_TOAST_APPID
 
     # 无 APPDATA(异常环境) -> 回退
-    monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: False)
     monkeypatch.setenv("APPDATA", "")
     assert PlatformChannel("win32")._appid == notify_mod.WINDOWS_TOAST_APPID_FALLBACK
 
@@ -233,7 +234,7 @@ def test_notify_windows_appid_ensure(monkeypatch):
 
 
 def test_notify_register_windows_appid_command(monkeypatch):
-    """AUMID 注册命令: WScript.Shell 快捷方式指向当前解释器; 非零退出报 OSError"""
+    """AUMID 注册命令: 快捷方式指向当前解释器并写入 launch_arguments(toast 点击激活参数); 非零退出报 OSError"""
     captured = {}
 
     def fake_run(cmd, **kwargs):
@@ -243,10 +244,12 @@ def test_notify_register_windows_appid_command(monkeypatch):
     monkeypatch.setattr(notify_mod.subprocess, "run", fake_run)
     monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: True)  # 注册后已落盘
     channel = PlatformChannel.__new__(PlatformChannel)  # 跳过 __init__, 单测注册方法
+    channel._launch_arguments = '"D:/my cfg/config.yml" --tray'
     channel._register_windows_appid(r"C:\fake\AutoQB.lnk")
     script = base64.b64decode(captured["cmd"][-1]).decode("utf-16-le")
     assert "CreateShortcut('C:\\fake\\AutoQB.lnk')" in script
     assert f"$lnk.TargetPath = '{sys.executable}'" in script
+    assert '$lnk.Arguments = \'"D:/my cfg/config.yml" --tray\'' in script, "toast 点击激活参数应写入快捷方式"
 
     monkeypatch.setattr(notify_mod.subprocess, "run", lambda *a, **k: _FakeCompleted(returncode=1))
     with pytest.raises(OSError):
@@ -314,6 +317,20 @@ def test_setup_notify_attaches_and_unsupported(monkeypatch):
     monkeypatch.setattr(sys, "platform", "sunos")
     with pytest.raises(AutoQbError):
         setup_notify(NotifyConfig(enabled=True))
+
+
+def test_setup_notify_force_hot_attach(monkeypatch):
+    """通知热开启: 配置未启用时不带 force 返回 None, 带 force=True 挂载(UI 开关热开启, 会话级)"""
+    monkeypatch.setattr(PlatformChannel, "_ensure_windows_appid", lambda self: notify_mod.WINDOWS_TOAST_APPID)
+    disabled_cfg = NotifyConfig(enabled=False, min_level="WARNING", max_per_hour=5, dedup_window=0)
+    assert setup_notify(disabled_cfg) is None
+    handler = setup_notify(disabled_cfg, force=True)
+    try:
+        assert isinstance(handler, NotifyHandler)
+        assert handler in logging.getLogger("auto_qb").handlers
+    finally:
+        logging.getLogger("auto_qb").removeHandler(handler)
+        handler.close()
 
 
 def test_notify_fatal_skips_when_disabled(monkeypatch):
