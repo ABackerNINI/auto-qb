@@ -5,6 +5,7 @@
 """
 import os
 import re
+import subprocess
 import sys
 import time
 import logging
@@ -396,3 +397,13 @@ def replace_vars(text: str, tracker_conf) -> str:
     if not hr_conf:
         return str(text)  # 无 HR 配置(无 tracker_conf 或 hr=None)时, 占位无法解析, 留原文
     return str(text).replace("${required_seeding_time}", hr_conf.required_seeding_time_raw)
+
+
+def open_path(path: str) -> None:
+    """用系统默认方式打开文件/目录(跨平台: Windows 资源管理器 / macOS open / Linux xdg-open)"""
+    if sys.platform.startswith("win32"):
+        os.startfile(path)  # noqa: S606  仅 Windows 存在
+    elif sys.platform.startswith("darwin"):
+        subprocess.run(["open", path], check=False)
+    else:
+        subprocess.run(["xdg-open", path], check=False)

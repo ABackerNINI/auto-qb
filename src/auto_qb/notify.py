@@ -215,6 +215,7 @@ class NotifyHandler(logging.Handler):
     def __init__(self, config: NotifyConfig, channel: PlatformChannel, now: Callable[[], datetime] = None):
         super().__init__(level=getattr(logging, config.min_level, logging.WARNING))
         self.channel = channel
+        self.enabled = True  # 运行时热开关(UI Switch/托盘勾选共用; bool 赋值原子, 无需锁)
         self.throttle = NotifyThrottle(config.max_per_hour, config.dedup_window)
         self.quiet_hours = (config.quiet_hours or "").strip() or None
         self._now = now if now is not None else datetime.now
@@ -225,6 +226,8 @@ class NotifyHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord):
         try:
+            if not self.enabled:
+                return
             if record.name and record.name.startswith(NOTIFY_LOGGER_PREFIX):
                 return  # 防自环
             message = record.getMessage()

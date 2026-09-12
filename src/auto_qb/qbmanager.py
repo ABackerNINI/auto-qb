@@ -61,6 +61,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._last_conn_ok: Optional[bool] = None
         # 主动通知 handler(run() 启用时挂载; dry-run/export 模式不挂载)
         self._notify_handler: Optional[NotifyHandler] = None
+        # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
+        self._pause_event = None
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -108,27 +110,42 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._last_conn_ok = False
             return False
 
-    def run(self, dry_run: bool):
-        """主循环(任务队列驱动): 固定 MAIN_TICK 秒执行一次
+    def run(self, dry_run: bool = False, stop_event=None, pause_event=None):
+        """主循环(任务队列驱动): 固定 main_tick 秒执行一次
         - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
+        - stop_event: 置位后循环退出并落盘(UI/托盘托管模式必传; 默认 None 行为与历史一致)
+        - pause_event: 置位期间完全旁观(不刷新/不执行任务, qB 自身行为不受影响),
+          恢复后的首次 refresh 以增量 diff 补上暂停期间的状态变化
+        - 托管模式(非 None)首连失败不退出, 按 main_tick 重试直至成功或收到停止 —— 托盘应用保持常驻;
+          非托管模式首连失败直接返回(历史行为)
         """
+        self._pause_event = pause_event
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
         # 主动通知: 启用后全项目 WARNING/ERROR 日志推送平台原生通知(notify.py);
         # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
         if not dry_run:
             self._notify_handler = setup_notify(self.config.notify)
         try:
-            if not self.connect():
-                return
+            main_tick = self.config.main_tick
+            while not self.connect():
+                if stop_event is None or stop_event.wait(main_tick):
+                    return
             self.state = self._load_state()
             # 规则加载 + 全局任务创建仅运行模式需要(--export-yaml 等只导出模式在构造后直接退出, 跳过)
             self._load_rules()
             self._create_global_tasks()
 
-            main_tick = self.config.main_tick
-
             try:
                 while True:
+                    if stop_event is not None and stop_event.is_set():
+                        logger.info("收到停止信号, 退出主循环")
+                        break
+                    if pause_event is not None and pause_event.is_set():
+                        # 已暂停: 完全旁观; wait 保持对停止信号的即时响应
+                        if stop_event is not None and stop_event.wait(main_tick):
+                            logger.info("收到停止信号, 退出主循环")
+                            break
+                        continue
                     try:
                         self._tick(dry_run)
                     except AutoQbError:
@@ -140,7 +157,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                             self._last_conn_ok = False
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
-                    time.sleep(main_tick)
+                    if stop_event is not None and stop_event.wait(main_tick):
+                        logger.info("收到停止信号, 退出主循环")
+                        break
             except KeyboardInterrupt:
                 logger.info("停止")
         finally:
@@ -148,6 +167,14 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 self.save_state()
             if self._lock is not None:
                 self._lock.release()
+
+    def status_snapshot(self) -> dict:
+        """运行状态只读快照(UI 线程轮询用): 全部为基本类型, 不暴露内部可变对象"""
+        return {
+            "torrents": len(self.store.by_hash),
+            "connected": self._last_conn_ok,  # None=连接中/未知, True=已连接, False=已断开
+            "paused": self._pause_event is not None and self._pause_event.is_set(),
+        }
 
     def _tick(self, dry_run: bool):
         """单次 tick: 1) 刷新快照 2) 执行到期任务(执行与收尾统一由 TaskQueue.run_due 管理)"""
