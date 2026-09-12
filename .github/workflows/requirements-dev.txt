@@ -2,6 +2,9 @@
 pyyaml
 qbittorrent-api
 filelock
+pystray
+pillow
+customtkinter
 
 # 开发/测试依赖
 pytest

@@ -21,12 +21,6 @@ import time
 import webbrowser
 from collections import deque
 
-import customtkinter as ctk
-import pystray
-import tkinter as tk
-from PIL import Image
-from tkinter import messagebox
-
 from . import autostart, utils
 from .errors import AutoQbError
 from .notify import WINDOWS_TOAST_APPID, setup_notify
@@ -192,13 +186,25 @@ class TrayUi:
     # ---------- 窗口 ----------
 
     def _build_window(self):
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
-        self.root = ctk.CTk()
+        # GUI 栈延迟导入: 本模块的 IPC/日志设施在无 GUI 的 CI/Linux 可导入可测,
+        # 仅托盘模式实例化 TrayUi 时才加载 customtkinter/pystray/PIL
+        import customtkinter as ctk
+        import pystray
+        import tkinter as tk
+        from PIL import Image
+        from tkinter import messagebox
+
+        self._ctk = ctk
+        self._tk = tk
+        self._pystray = pystray
+        self._pil_image = Image
+        self._ctk.set_appearance_mode("dark")
+        self._ctk.set_default_color_theme("blue")
+        self.root = self._ctk.CTk()
         self.root.title("auto-qb")
         self.root.geometry("780x560")
         self.root.minsize(700, 500)
-        self._icon_tk = tk.PhotoImage(file=ICON_PNG)  # 引用须保留, 否则被 GC
+        self._icon_tk = self._tk.PhotoImage(file=ICON_PNG)  # 引用须保留, 否则被 GC
         # Windows 走 CTk 的 iconbitmap(BMP 帧 .ico, 含 16~256 多尺寸)—— 诊断对照实测
         # CTk 窗口上此方式标题栏/任务栏/alt-tab 均正确; 其它平台 iconphoto(PhotoImage 不支持 ico)
         if sys.platform.startswith("win32"):
@@ -219,16 +225,18 @@ class TrayUi:
         self.root.grid_rowconfigure(3, weight=1)
 
         # 顶部: 名称 + 状态徽章
-        header = ctk.CTkFrame(self.root, fg_color="transparent")
+        header = self._ctk.CTkFrame(self.root, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 8))
         header.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(header, text="auto-qb", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0)
-        self.badge = ctk.CTkLabel(header, text="", font=ctk.CTkFont(size=14, weight="bold"), text_color=COLOR_OK)
+        self._ctk.CTkLabel(header, text="auto-qb", font=self._ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0)
+        self.badge = self._ctk.CTkLabel(
+            header, text="", font=self._ctk.CTkFont(size=14, weight="bold"), text_color=COLOR_OK
+        )
         self.badge.grid(row=0, column=1, sticky="e")
-        ctk.CTkLabel(header, text=f"v{__version__}", text_color="gray60").grid(row=0, column=2, padx=(12, 0))
+        self._ctk.CTkLabel(header, text=f"v{__version__}", text_color="gray60").grid(row=0, column=2, padx=(12, 0))
 
         # 状态卡片: 受管种子 / 运行时长 / qB 连接
-        cards = ctk.CTkFrame(self.root, fg_color="transparent")
+        cards = self._ctk.CTkFrame(self.root, fg_color="transparent")
         cards.grid(row=1, column=0, sticky="ew", padx=20, pady=4)
         for i in range(3):
             cards.grid_columnconfigure(i, weight=1)
@@ -237,28 +245,28 @@ class TrayUi:
         self.card_conn = self._card(cards, 2, "qB 连接")
 
         # 控制区: 暂停/恢复 + 通知开关 + 开机自启
-        controls = ctk.CTkFrame(self.root, fg_color="transparent")
+        controls = self._ctk.CTkFrame(self.root, fg_color="transparent")
         controls.grid(row=2, column=0, sticky="ew", padx=20, pady=8)
-        self.pause_btn = ctk.CTkButton(controls, text="暂停自动管理", width=160, command=self._toggle_pause)
+        self.pause_btn = self._ctk.CTkButton(controls, text="暂停自动管理", width=160, command=self._toggle_pause)
         self.pause_btn.grid(row=0, column=0, padx=(0, 20))
-        self.notify_switch = ctk.CTkSwitch(controls, text="通知", command=self._toggle_notify)
+        self.notify_switch = self._ctk.CTkSwitch(controls, text="通知", command=self._toggle_notify)
         self.notify_switch.grid(row=0, column=1, padx=(0, 20))
         if self._notify_on():
             self.notify_switch.select()
-        self.autostart_switch = ctk.CTkSwitch(controls, text="开机自启", command=self._toggle_autostart)
+        self.autostart_switch = self._ctk.CTkSwitch(controls, text="开机自启", command=self._toggle_autostart)
         self.autostart_switch.grid(row=0, column=2)
         if autostart.is_enabled(self.manager.config_path):
             self.autostart_switch.select()
 
         # 日志区
-        self.log_box = ctk.CTkTextbox(self.root, font=ctk.CTkFont(family="Consolas", size=11), wrap="none")
+        self.log_box = self._ctk.CTkTextbox(self.root, font=self._ctk.CTkFont(family="Consolas", size=11), wrap="none")
         self.log_box.grid(row=3, column=0, sticky="nsew", padx=20, pady=8)
         self.log_box.configure(state="disabled")
 
         # 底部: 常用链接
-        footer = ctk.CTkFrame(self.root, fg_color="transparent")
+        footer = self._ctk.CTkFrame(self.root, fg_color="transparent")
         footer.grid(row=4, column=0, sticky="ew", padx=20, pady=(0, 14))
-        ctk.CTkButton(
+        self._ctk.CTkButton(
             footer,
             text="打开 qBittorrent WebUI",
             width=180,
@@ -266,7 +274,7 @@ class TrayUi:
             border_width=1,
             command=lambda: webbrowser.open(self.manager.config.qbittorrent.base_url)
         ).pack(side="left")
-        ctk.CTkButton(
+        self._ctk.CTkButton(
             footer,
             text="打开日志目录",
             width=140,
@@ -290,45 +298,46 @@ class TrayUi:
     def _open_logs(self):
         utils.open_path(self._log_dir(self.manager))
 
-    @staticmethod
-    def _card(parent, column: int, title: str):
-        card = ctk.CTkFrame(parent, fg_color=COLOR_BG_CARD, corner_radius=10)
+    def _card(self, parent, column: int, title: str):
+        card = self._ctk.CTkFrame(parent, fg_color=COLOR_BG_CARD, corner_radius=10)
         card.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
-        ctk.CTkLabel(card, text=title, text_color="gray60",
-                     font=ctk.CTkFont(size=12)).pack(anchor="w", padx=16, pady=(10, 0))
-        value = ctk.CTkLabel(card, text="-", font=ctk.CTkFont(size=24, weight="bold"))
+        self._ctk.CTkLabel(card, text=title, text_color="gray60",
+                           font=self._ctk.CTkFont(size=12)).pack(anchor="w", padx=16, pady=(10, 0))
+        value = self._ctk.CTkLabel(card, text="-", font=self._ctk.CTkFont(size=24, weight="bold"))
         value.pack(anchor="w", padx=16, pady=(0, 10))
         return value
 
     # ---------- 托盘 ----------
 
     def _build_tray(self):
-        self._icon = pystray.Icon(
+        self._icon = self._pystray.Icon(
             "auto-qb",
-            Image.open(ICON_PNG),
+            self._pil_image.open(ICON_PNG),
             "auto-qb",
-            menu=pystray.Menu(
-                pystray.MenuItem("显示 / 隐藏窗口", default=True, action=lambda: self.events.put(("toggle_window", None))),
-                pystray.Menu.SEPARATOR,
+            menu=self._pystray.Menu(
+                self._pystray.MenuItem(
+                    "显示 / 隐藏窗口", default=True, action=lambda: self.events.put(("toggle_window", None))
+                ),
+                self._pystray.Menu.SEPARATOR,
                 # pystray 的 checked 回调以菜单项为参数调用(lambda 须收 1 参, 否则托盘线程崩溃)
-                pystray.MenuItem(
+                self._pystray.MenuItem(
                     "暂停自动管理", checked=lambda item: self._paused, action=lambda: self.events.put(("toggle_pause", None))
                 ),
-                pystray.MenuItem(
+                self._pystray.MenuItem(
                     "通知",
                     checked=lambda item: self._notify_on(),
                     action=lambda: self.events.put(("toggle_notify", None))
                 ),
-                pystray.MenuItem(
+                self._pystray.MenuItem(
                     "开机自启",
                     checked=lambda item: autostart.is_enabled(self.manager.config_path),
                     action=lambda: self.events.put(("toggle_autostart", None))
                 ),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("打开 qBittorrent WebUI", action=lambda: self.events.put(("open_webui", None))),
-                pystray.MenuItem("打开日志目录", action=lambda: self.events.put(("open_logs", None))),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("退出", action=lambda: self.events.put(("quit", None))),
+                self._pystray.Menu.SEPARATOR,
+                self._pystray.MenuItem("打开 qBittorrent WebUI", action=lambda: self.events.put(("open_webui", None))),
+                self._pystray.MenuItem("打开日志目录", action=lambda: self.events.put(("open_logs", None))),
+                self._pystray.Menu.SEPARATOR,
+                self._pystray.MenuItem("退出", action=lambda: self.events.put(("quit", None))),
             ),
         )
         self._icon.run_detached()
@@ -450,6 +459,8 @@ class TrayUi:
             try:
                 self.manager._notify_handler = setup_notify(self.manager.config.notify, force=True)
             except AutoQbError as e:
+                from tkinter import messagebox
+
                 messagebox.showwarning("auto-qb", str(e), parent=self.root)
                 return
             self.notify_switch.select()
@@ -471,6 +482,8 @@ class TrayUi:
                 autostart.enable(self.manager.config_path)
                 logger.info("开机自启已开启")
         except AutoQbError as e:
+            from tkinter import messagebox
+
             messagebox.showwarning("auto-qb", str(e), parent=self.root)
 
     # ---------- 编排 ----------
