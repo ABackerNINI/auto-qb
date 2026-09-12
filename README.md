@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/license-Apache%202.0-green)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Status](https://img.shields.io/badge/status-alpha%20%F0%9F%9A%A7-orange)]() [![CI](https://img.shields.io/github/actions/workflow/status/ABackerNINI/auto-qb/ci.yml?branch=develop&label=CI)](https://github.com/ABackerNINI/auto-qb/actions/workflows/ci.yml)
 
-标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检 · 主动通知
+标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检 · 主动通知 · 托盘常驻
 
 </div>
 
@@ -74,6 +74,7 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 - 启动时 **fail-fast** 全量校验配置（未知键、非法格式、非法 HR 规则一次性聚合报错）
 - 单实例锁，防止同一配置多开互相竞争
 - **主动通知**：程序出错 / 危险情况（缺文件、下载冲突、跳检失败等）时推送**平台原生通知**（Windows 原生 toast / Linux / macOS，零第三方依赖）；免打扰时段 + 频率节流防打扰，全屏等繁忙场景由系统专注助手自动静默
+- **托盘常驻**（`--tray`）：系统托盘图标运行，深色状态窗口（种子数 / 运行时长 / 最近日志）；运行时**暂停 / 恢复自动管理**、**通知热切换**、**开机自启**开关；重复启动自动唤起已运行实例的窗口；跨平台（Windows / Linux / macOS）
 - 从已有种子的 tracker 一键导出 YAML 配置模板
 
 ## 快速开始
@@ -137,6 +138,7 @@ python src/auto-qb.py my-config.yml
 | `--export-yaml`, `-e OUTPUT` | 导出 YAML 配置模板到 OUTPUT 后退出（不进入主循环）       |
 | `--only-missing`             | 仅导出未配置的 tracker 站点（配合 `--export-yaml` 使用） |
 | `--dry-run`, `-n`            | 试运行：打印将执行的动作，不实际调用客户端               |
+| `--tray`                     | 托盘常驻模式：系统托盘图标 + 状态窗口；再次启动唤起已有实例窗口 |
 
 ## 配置说明
 

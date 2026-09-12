@@ -14,7 +14,7 @@
 
 | 文件 | 行数 | 职责 | 关键内容 |
 |------|------|------|----------|
-| `cli.py` | 90 | argparse 入口 | `--export-yaml/-e`, `--only-missing`, `--dry-run/-n`, `--export-torrents_info`; 导出模式不进主循环; **单点捕获 `AutoQbError` 体系**(ConfigError 输出 `配置错误: ...` 前缀, 锁/qB 兼容等其它 AutoQbError 直接输出消息; 均无堆栈, 退出码 1; 非 AutoQbError 异常照常抛出); 运行期致命错误退出前 best-effort 补发通知 (`notify_fatal`, manager 已构造且 notify.enabled 时); 入口 `sys.exit(main())` 使退出码生效 |
+| `cli.py` | 90 | argparse 入口 | `--export-yaml/-e`, `--only-missing`, `--dry-run/-n`, `--export-torrents_info`; 导出模式不进主循环; **单点捕获 `AutoQbError` 体系**(ConfigError 输出 `配置错误: ...` 前缀, 锁/qB 兼容等其它 AutoQbError 直接输出消息; 均无堆栈, 退出码 1; 非 AutoQbError 异常照常抛出); 运行期致命错误退出前 best-effort 补发通知 (`notify_fatal`); `--tray` 托盘模式入口(与导出模式互斥; 双开唤起失败回退常规锁错误); 入口 `sys.exit(main())` 使退出码生效 |
 | `config/` | 包 | 配置: 按职责分层(模型/校验/解析), `__init__.py` 重导出全部公共名称 —— 调用方 `from auto_qb.config import X` 不变 |
 | `config/errors.py` | 11 | `ConfigError`(配置错误统一异常, **AutoQbError 子类**: 文件读取/YAML 解析/校验失败/启动期规则 spec 错误) |
 | `config/models.py` | 176 | 数据类字段默认 = **唯一默认值来源**(解析后空间, `Config()` 即全默认实例); `Config`/`TrackerConfig`/`HRRule`/`GroupingConfig`/`AddEpisodeTagsConfig`/`LoggingConfig`/`QbittorrentConfig`/`GlobalSpeedLimitCurve`/`PeriodCurve`/`CurvePoint` (仅声明, 不含逻辑); 仅 2 个非字段默认常量: `DEFAULT_CONFIG_FILE`(cli)/`UNLIMITED_SPEED`(exporter) |
@@ -28,6 +28,8 @@
 | `locking.py` | 112 | 单实例锁 | `SingleInstanceLock`(基于第三方 `filelock` + 伴生 `<lock>.meta.json` 记录 PID/启动时间/配置路径); `SingleInstanceLockError(AutoQbError)` 走 CLI 退出码 1; 仅正常 run 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 锁文件路径 `<state_file 去扩展名>.lock` (避免与 state 文件同目录同名冲突) |
 | `utils.py` | 334 | 通用工具 | `parse_time/parse_fsize/parse_speed/parse_bool/parse_compare/compare/parse_hr_condition`; `MatchPattern.parse`(regex:/:ignore_case 语法解析唯一入口)+ `match_value`(单值多模式匹配核心); `match_tag_patterns`/`match_path_patterns` 为薄包装; `path_normalize`; `match_tracker_confs`(hostname 精确匹配); `add_long_path_prefix_for_win`; `extract_tracker_hostnames`; `fmt_speed`; `replace_vars`(规则变量替换); `timer` 装饰器 |
 | `notify.py` | ~250 | 主动通知(零第三方依赖) | `PlatformChannel`(win32=PowerShell 调 WinRT toast / linux=notify-send / darwin=osascript, 文本经 base64/转义无注入), `NotifyThrottle`(每小时上限+同键去重窗, 内存态), `NotifyHandler`(挂 `auto_qb` logger, min_level/quiet_hours/节流过滤, 防自环, emit 异常不外抛), `setup_notify`(未启用返回 None, 平台不支持抛 AutoQbError), `notify_fatal`(CLI 致命退出补发); Windows toast 来源显示 "AutoQB" —— 首次运行幂等注册开始菜单 AUMID 快捷方式(失败回退 PowerShell 来源) |
+| `ui.py` | ~400 | 托盘常驻 UI(--tray) | `UiLogHandler`(日志环形缓冲 drain), `ShowIpcServer`/`send_show`(单实例唤起, 端口写 state_file 同目录 ui.port), `TrayUi`(CustomTkinter 深色窗口: 状态卡片/暂停恢复/通知热切换/开机自启/日志视图; pystray 托盘 6 项菜单; 100ms 事件轮询, 跨线程仅 queue+Event+只读快照), `run_tray`(入口; GUI 栈仅 tray 分支加载) |
+| `autostart.py` | ~90 | 开机自启(零依赖) | 三平台: Windows HKCU Run 注册表 / Linux XDG autostart desktop / macOS LaunchAgents plist; `is_enabled`/`enable`/`disable`; 启动命令 = 解释器 + 配置绝对路径 + --tray; 失败抛 AutoQbError(UI 提示) |
 | `curves.py` | 124 | 限速曲线纯逻辑 | `parse_history_dat`(Traffic Monitor dat 解析), `aggregate`(day/month/Nd 聚合), `curve_speed`(全程分档覆盖), `merge_direction`(取最严), `normalize_period`, `bytes_to_kib`。无项目内依赖, 便于单测 |
 | `episodes.py` | 115 | 集数解析 | `_EPISODE_PATTERNS`(第x集 > S01E05 > EP05 > E05 优先级), `extract_episodes_from_files`(仅视频文件, 排除分辨率/年份), `format_episode_tag`(连续才加, 格式 `zE1-5`), `name_has_episode_marker` |
 | `exporter.py` | 139 | YAML 模板导出 | 收集全部 tracker 域名 → 找未配置的 → 生成条目 (默认标签=倒数第二级域名, `hd/pt` 后字母大写), `--only-missing` 最小骨架; 重读原始文件时复用 `_strip_none`(文件已被 load_config 校验) |
@@ -54,9 +56,9 @@
 | `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [04-rule-system.md](04-rule-system.md) |
 | `actions/` (包) | 906/6 文件 | 12 种动作插件 | `__init__`(34, 注册入口+公共名重导出, 兼容 `from auto_qb.rules.actions import X`), `basic`(130, 标签/分类/启停/打印详情 ×7), `transfer`(86, move_to/reannounce/单种限速), `checking`(192, `CheckAction` 决策链+参考筛选, 组合 `FullCheckingMixin`+`SkipCheckingMixin`), `full_checking`(225, full-checking 执行+组内校验串行化闸门 1.5/1.6+失败计数), `skip_checking`(239, 跳检四阶段+`_poll_until`); spec 正确性由 config 校验阶段保证; 详见 [04-rule-system.md](04-rule-system.md) |
 
-## tests/ (27 文件 + helpers.py, 详见 07-testing.md)
+## tests/ (28 文件 + helpers.py, 详见 07-testing.md)
 
-按模块一一对应命名: `test_config.py`, `test_qbmanager.py`, `test_taskqueue.py`, `test_torrents.py`, `test_actions.py`, `test_conditions.py`, `test_checking.py`(54 个测试函数, 最大), `test_grouping.py`(41), `test_rule_base.py`, `test_rule_engine.py`, `test_rules_core.py`, `test_registry.py`, `test_mixins_tags.py`, `test_hr.py`, `test_delete_tags.py`, `test_tracker.py`, `test_speed_curve.py`, `test_snapshot_sync.py`(QbApi 快照同步), `test_state_matrix.py`(状态映射), `test_episodes.py`, `test_exporter.py`, `test_cli.py`, `test_locking.py`(单实例锁), `test_logging.py`, `test_utils.py`, `test_notify.py`(主动通知); `helpers.py` 提供全 Fake 基础设施; `test_trigger_events.py` (事件触发规则, 2026-09-12 已落地)。
+按模块一一对应命名: `test_config.py`, `test_qbmanager.py`, `test_taskqueue.py`, `test_torrents.py`, `test_actions.py`, `test_conditions.py`, `test_checking.py`(54 个测试函数, 最大), `test_grouping.py`(41), `test_rule_base.py`, `test_rule_engine.py`, `test_rules_core.py`, `test_registry.py`, `test_mixins_tags.py`, `test_hr.py`, `test_delete_tags.py`, `test_tracker.py`, `test_speed_curve.py`, `test_snapshot_sync.py`(QbApi 快照同步), `test_state_matrix.py`(状态映射), `test_episodes.py`, `test_exporter.py`, `test_cli.py`, `test_locking.py`(单实例锁), `test_logging.py`, `test_utils.py`, `test_notify.py`(主动通知), `test_ui.py`(托盘 UI 支撑设施); `helpers.py` 提供全 Fake 基础设施; `test_trigger_events.py` (事件触发规则, 2026-09-12 已落地)。
 
 ## 依赖方向 (单向, 无环)
 

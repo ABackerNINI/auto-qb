@@ -39,21 +39,22 @@
 ## 运行模式与入口
 
 ```
-python src/auto-qb.py [CONFIG] [--export-yaml OUTPUT] [--only-missing] [--dry-run/-n] [--export-torrents_info]
+python src/auto-qb.py [CONFIG] [--export-yaml OUTPUT] [--only-missing] [--dry-run/-n] [--tray] [--export-torrents_info]
 python -m auto_qb  # 等价入口
 ```
 
 - 正常运行: 连接 qB → 加载规则 → 创建全局任务 → 无限 tick 循环; Ctrl-C 退出时 `save_state()`。
 - `--export-yaml`: 连接 qB → exporter 生成模板 → 退出 (不进主循环, 也不加载规则)。
 - `--dry-run`: 所有写操作点调用前判断 `dry_run`, 只打日志不碰客户端。
+- `--tray`: 托盘常驻模式 —— 系统托盘图标(orbit)+ 状态窗口; 主循环移入后台线程, UI 线程轮询只读快照; 运行时暂停/恢复自动管理(pause_event 完全旁观)、通知热切换、开机自启; 双开唤起已运行实例窗口(单实例锁 + localhost IPC ui.port); 托管模式首连失败重试常驻。
 
 ## 顶层目录
 
 ```
 auto-qb/
 ├── src/auto-qb.py          # 兼容入口 (10行, 转发到 auto_qb.cli.main)
-├── src/auto_qb/            # 主包 (~5800 行, 模块地图见 03)
-├── tests/                  # 27 个测试文件 + helpers.py (见 07)
+├── src/auto_qb/            # 主包 (~6300 行, 模块地图见 03)
+├── tests/                  # 28 个测试文件 + helpers.py (见 07)
 ├── config.yml              # ★ 用户真实生产配置 (含真实站点域名/规则, 勿改勿提交; 受 git 跟踪且未 gitignore, 仅靠约定保护)
 ├── minimal.yml             # 最小配置示例 (受 git 跟踪)
 ├── auto-qb-data/           # 运行时数据目录 (state.json 状态 / state.lock 单实例锁 / logs/auto-qb.log 日志 / skip-check-backup/ 跳检备份; 勿改勿提交, 整目录 gitignore)
