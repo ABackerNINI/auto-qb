@@ -33,7 +33,7 @@
 | `curves.py` | 124 | 限速曲线纯逻辑 | `parse_history_dat`(Traffic Monitor dat 解析), `aggregate`(day/month/Nd 聚合), `curve_speed`(全程分档覆盖), `merge_direction`(取最严), `normalize_period`, `bytes_to_kib`。无项目内依赖, 便于单测 |
 | `episodes.py` | 115 | 集数解析 | `_EPISODE_PATTERNS`(第x集 > S01E05 > EP05 > E05 优先级), `extract_episodes_from_files`(仅视频文件, 排除分辨率/年份), `format_episode_tag`(连续才加, 格式 `zE1-5`), `name_has_episode_marker` |
 | `exporter.py` | 139 | YAML 模板导出 | 收集全部 tracker 域名 → 找未配置的 → 生成条目 (默认标签=倒数第二级域名, `hd/pt` 后字母大写), `--only-missing` 最小骨架; 重读原始文件时复用 `_strip_none`(文件已被 load_config 校验) |
-| `logging.py` | 47 | 日志配置 | `setup_logging`: 控制台 + RotatingFileHandler(5 备份), **两者均跟随配置 level**; root 跟随配置拦第三方 DEBUG, `auto_qb` logger 放开 DEBUG, `qbittorrentapi` 封顶 INFO(排除请求噪音)。注意与 stdlib logging 同名, 包内相对导入 |
+| `logging.py` | 47 | 日志配置 | `setup_logging`: 控制台 + RotatingFileHandler(5 备份), **两者均跟随配置 level**; root 跟随配置拦第三方 DEBUG, `auto_qb` logger 放开 DEBUG, `qbittorrentapi` 封顶 INFO(排除请求噪音), `urllib3` 封顶 ERROR(排除断连期间连接重试的 Retry WARNING 刷屏)。注意与 stdlib logging 同名, 包内相对导入 |
 
 ## mixins/ (QbManager 的职责拆分, 组合进宿主)
 

@@ -39,9 +39,11 @@ def setup_logging(file: str, level: int, max_bytes: int, format: str):
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
-    # 4. 作用域调整: 本项目 DEBUG 放开; qbittorrentapi 封顶 INFO(排除请求/响应 DEBUG 噪音)
+    # 4. 作用域调整: 本项目 DEBUG 放开; qbittorrentapi 封顶 INFO(排除请求/响应 DEBUG 噪音);
+    #    urllib3 封顶 ERROR(排除断连期间连接重试的 Retry WARNING 刷屏, 程序自身日志已有节流摘要)
     logging.getLogger("auto_qb").setLevel(logging.DEBUG)
     logging.getLogger("qbittorrentapi").setLevel(logging.INFO)
+    logging.getLogger("urllib3").setLevel(logging.ERROR)
 
     # 可选：记录一条启动信息
     logger.info("日志初始化完成")

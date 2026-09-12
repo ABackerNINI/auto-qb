@@ -55,6 +55,9 @@ def test_setup_logging_console_only():
         assert len(root.handlers) == 1
         assert isinstance(root.handlers[0], logging.StreamHandler)
         assert root.level == logging.INFO
+        # 第三方 logger 作用域: qbittorrentapi 封顶 INFO; urllib3 封顶 ERROR(排除断连 Retry 刷屏)
+        assert logging.getLogger("qbittorrentapi").level == logging.INFO
+        assert logging.getLogger("urllib3").level == logging.ERROR
     finally:
         _restore_root()
 
