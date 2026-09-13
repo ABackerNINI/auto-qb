@@ -355,6 +355,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     "upspeed": r.upspeed,
                     "uploaded": r.uploaded,
                     "size": r.size,
+                    # 组级"共同标签/分类"与保存路径筛选器的数据来源(交集/共同值由前端计算,
+                    # 后端只透出原始值, 避免每次重建做 O(成员数) 以上的集合运算)
+                    "save_path": r.save_path,
+                    "tags": sorted(r.tags_set),
+                    "category": r.category,
                     "progress": round(r.progress, 4),
                     # 取整到分钟(与 torrents.view_field_value 的重建判定同一步长): 该字段每秒递增,
                     # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
@@ -370,7 +375,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     "dlspeed": sum(m["dlspeed"] for m in members_view),
                     "upspeed": sum(m["upspeed"] for m in members_view),
                     "uploaded": sum(m["uploaded"] for m in members_view),
-                    "size": sum(m["size"] for m in members_view),
+                    # size = **单种子**大小(同组文件列表相同, 取代表成员); total_size = 全组求和。
+                    # 两者不等即说明组内大小不一致(前端据此提示风险), 而非显示重复信息
+                    "size": members_view[0]["size"],
+                    "total_size": sum(m["size"] for m in members_view),
                     "members": members_view,
                 }
             )
@@ -454,7 +462,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         返回 {"results": [..], "building": bool}——building 为 True 表示文件索引已过期/缺失,
         已投递构建命令, 前端应稍后重查以获取完整文件匹配结果。
         结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/dlspeed/upspeed/
-        uploaded/size/progress/seeding_time/ratio/by, 供前端完整展示命中种子信息。
+        uploaded/size/progress/seeding_time/ratio/save_path/tags/category/by, 供前端完整展示命中种子信息。
         """
         def _view(rec, by):
             return {
@@ -466,6 +474,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 "upspeed": rec.upspeed,
                 "uploaded": rec.uploaded,
                 "size": rec.size,
+                "save_path": rec.save_path,
+                "tags": sorted(rec.tags_set),
+                "category": rec.category,
                 "progress": round(rec.progress, 4),
                 "seeding_time": rec.seeding_time,
                 "ratio": round(rec.ratio, 3),

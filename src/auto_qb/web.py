@@ -234,6 +234,20 @@ def create_app(manager) -> FastAPI:
     static_dir = os.path.join(os.path.dirname(__file__), "web_ui", "static")
     if os.path.isdir(static_dir):
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+
+        @app.middleware("http")
+        async def _static_no_cache(request, call_next):
+            """静态资源禁用启发式缓存(不加 Cache-Control 时浏览器会自行缓存数小时)
+
+            症状: 升级程序后仍加载旧 app.js/style.css, 界面“改了但没变”。
+            用 no-cache(仍允许存储, 但每次必须带 ETag 重新校验): 未变更走 304, 变更为新内容。
+            仅作用于非 /api 响应, 不影响接口语义。
+            """
+            response = await call_next(request)
+            if not request.url.path.startswith("/api"):
+                response.headers["Cache-Control"] = "no-cache"
+            return response
+
     return app
 
 

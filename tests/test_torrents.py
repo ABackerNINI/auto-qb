@@ -479,14 +479,16 @@ def test_store_view_changed_consume():
 
 
 def test_store_update_fields_marks_view_changed():
-    """state/save_path 写操作置脏; 标签/限速不影响视图展示, 不置脏"""
+    """state/save_path/tags/category 写操作置脏(均为视图展示字段); 限速不置脏"""
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1", state="stalledUP")])
     store.consume_view_changed()
-    store.update_torrent_fields("H1", tags_add=["x"])
-    assert store.consume_view_changed() is False
     store.update_torrent_fields("H1", up_limit=1024)
     assert store.consume_view_changed() is False
+    store.update_torrent_fields("H1", tags_add=["x"])
+    assert store.consume_view_changed() is True  # 组级共同标签列
+    store.update_torrent_fields("H1", category="cs")
+    assert store.consume_view_changed() is True  # 组级共同分类列
     store.update_torrent_fields("H1", state="pausedUP")
     assert store.consume_view_changed() is True
     store.update_torrent_fields("H1", save_path=r"R:\Other")

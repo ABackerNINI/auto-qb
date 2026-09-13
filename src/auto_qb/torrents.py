@@ -83,6 +83,9 @@ _VIEW_FIELDS = frozenset(
         "progress",
         "seeding_time",
         "ratio",
+        # 标签/分类在组级以"成员共同值"展示(前端求交集), 变更须让视图重建
+        "tags",
+        "category",
     )
 )
 
@@ -650,8 +653,9 @@ class TorrentStore:
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
         tags_changed = tags_add is not None or tags_remove is not None
         state_changed = state is not None
-        # state/save_path 属视图展示字段: 写操作后视图需重建(tags/category/限速不影响展示)
-        if state_changed or save_path is not None:
+        # state/save_path/tags/category 均为视图展示字段(组级共同标签/分类列): 写操作后视图需重建;
+        # 限速(up_limit/dl_limit)不参与视图, 不置脏
+        if state_changed or save_path is not None or tags_changed or category is not None:
             self.view_changed = True
         for h in hashes:
             torrent = self.by_hash.get(h)
@@ -696,6 +700,7 @@ class TorrentStore:
             if removed:
                 torrent.tags = ",".join(sorted(cur - removed))
                 torrent._tags_set = None
+                self.view_changed = True  # 组级共同标签列随标签定义删除而变化
                 key = self.member_to_key.get(torrent.hash)
                 if key is not None:
                     self.dirty_groups.add(key)

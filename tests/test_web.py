@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_api_requires_token: 无/错密钥访问 /api/* -> 401
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
+- test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
@@ -12,7 +13,7 @@
 - test_config_tree_requires_config_root: 缺少 config 根段 -> 400
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
-- test_build_group_view: 分组视图组装(组名/合计/成员站点)
+- test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
 - test_build_search_index_incremental_and_evict: 增量维护(不重拉已建条目/补拉新增/淘汰已删)
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
@@ -235,6 +236,21 @@ def test_api_status_and_groups(web_env):
     assert [m["site"] for m in g["members"]] == ["HHan", "M-Team"]
 
 
+def test_static_assets_disable_heuristic_cache(web_env):
+    """静态资源带 no-cache: 不加 Cache-Control 时浏览器会启发式缓存数小时
+
+    症状: 升级程序后仍加载旧 app.js/style.css("改了但没变"), 本次开发中实际撞到。
+    no-cache 仍允许存储, 但每次必须带 ETag 重新校验(未变走 304); /api 响应不受影响。
+    """
+    mgr, client = web_env
+    for path in ("/", "/app.js", "/style.css", "/config_editor.js"):
+        resp = client.get(path)
+        assert resp.status_code == 200, f"{path} 应可访问"
+        assert resp.headers.get("cache-control") == "no-cache", f"{path} 应带 no-cache"
+    api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
+    assert api.headers.get("cache-control") != "no-cache", "/api 响应不应被静态策略影响"
+
+
 def test_api_group_commands_enqueue(web_env):
     """pause/resume/reannounce 命令入队: key 解码回原 tuple, 主循环侧执行"""
     mgr, client = web_env
@@ -371,7 +387,10 @@ def test_build_group_view(tmp_path):
         uploaded=2048,
         size=512**2,
         progress=1.0,
-        seeding_time=3641  # 非整分钟: 视图输出应按分钟向下取整
+        seeding_time=3641,  # 非整分钟: 视图输出应按分钟向下取整
+        save_path=r"R:/s",
+        tags="b, a",  # 逗号分隔字符串 -> 视图输出排序后的标签列表
+        category="anime",
     )
     t2 = FakeTorrent(
         hash="HB",
@@ -381,7 +400,10 @@ def test_build_group_view(tmp_path):
         uploaded=2048,
         size=512**2,
         progress=1.0,
-        seeding_time=3600
+        seeding_time=3600,
+        save_path=r"R:/s",
+        tags="b, a",
+        category="anime",
     )
     from helpers import seed_store
 
@@ -396,9 +418,15 @@ def test_build_group_view(tmp_path):
     g = view[0]
     assert g["key"] == encode_group_key(key)
     assert g["name"] == "Show" and g["count"] == 2
-    assert g["upspeed"] == 2048 and g["uploaded"] == 4096 and g["size"] == 2 * 512**2
+    assert g["upspeed"] == 2048 and g["uploaded"] == 4096
+    # size = 单种子大小(代表成员), total_size = 全组求和(两者相等时前端不提示大小不一致)
+    assert g["size"] == 512**2 and g["total_size"] == 2 * 512**2
     assert [m["site"] for m in g["members"]] == ["Unknown", "Unknown"]
     assert g["members"][0]["kind"] == "seeding"
+    # 成员视图透出 save_path/tags/category 供前端算组级共同值(后端不做集合运算)
+    assert [m["save_path"] for m in g["members"]] == [r"R:/s", r"R:/s"]
+    assert [m["tags"] for m in g["members"]] == [["a", "b"], ["a", "b"]]
+    assert [m["category"] for m in g["members"]] == ["anime", "anime"]
     # seeding_time 展示值按分钟取整(与 store 重建判定同一步长, 防视图内容与脏标记脱钩)
     assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
 
