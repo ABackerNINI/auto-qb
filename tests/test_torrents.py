@@ -26,8 +26,15 @@
 - test_store_unbound_client: 未绑定 client 时惰性拉取报错
 - test_record_trackers_info_unbound: 记录级 trackers_info 未绑定 client 报错
 - test_record_hr_boundaries: HR 判定边界(total_size=0 兜底/小种子完全下载即触发/无 hr 恒 False)
+- test_store_view_changed_only_for_view_fields: 仅视图字段/成员变化置脏, 其它字段不置脏
+- test_store_view_changed_consume: consume_view_changed 读取即复位
+- test_store_update_fields_marks_view_changed: state/save_path 写操作置脏, 标签不置脏
+- test_record_update_from_returns_changed: update_from 返回视图字段变化标记
+- test_view_field_value_quantizes_seeding_time: 视图量化: seeding_time 按分钟取整, 其余原样
+- test_store_seeding_time_quantized_no_repaint: 做种时长秒级递增不每轮置脏, 跨分钟才置脏
+- test_record_seeding_time_quantized_update_from: update_from 双通道(Mapping/对象)的分钟量化
 """
-from auto_qb.torrents import TorrentRecord, TorrentStore
+from auto_qb.torrents import TorrentRecord, TorrentStore, view_field_value
 
 from helpers import FakeClient, FakeTorrent
 
@@ -425,3 +432,120 @@ def test_record_tracker_name_and_hr_fallback():
     rec.tracker_conf = conf_nohr
     assert rec.check_hr_condition() is False
     assert rec.check_hr_satisfied() is False
+
+
+# ---------- Web 分组视图惰性重建: 视图变化标记 ----------
+
+
+def test_store_view_changed_only_for_view_fields():
+    """仅视图相关字段变化置脏; 非视图字段(如 downloaded)变化不置脏"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0, downloaded=0)])
+    assert store.consume_view_changed() is True  # 首轮(新增)
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0, downloaded=0)])
+    assert store.consume_view_changed() is False  # 完全无变化
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0, downloaded=123)])
+    assert store.consume_view_changed() is False  # downloaded 不在视图中
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=9, downloaded=123)])
+    assert store.consume_view_changed() is True  # upspeed 在视图中
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="pausedUP", upspeed=9, downloaded=123)])
+    assert store.consume_view_changed() is True  # state 在视图中
+    store.refresh(
+        [FakeTorrent(hash="H1", name="T1", state="pausedUP", upspeed=9, downloaded=123, save_path=r"R:\Elsewhere")]
+    )
+    assert store.consume_view_changed() is True  # save_path 决定分组键
+
+
+def test_store_view_changed_on_membership():
+    """成员增删置脏(视图的组与成员集合随之变化)"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])
+    store.consume_view_changed()
+    store.refresh([FakeTorrent(hash="H1")])  # 删除 H2
+    assert store.consume_view_changed() is True
+    store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H3")])  # 新增 H3
+    assert store.consume_view_changed() is True
+
+
+def test_store_view_changed_consume():
+    """consume_view_changed: 读取即复位(主循环每 tick 消费一次)"""
+    store = TorrentStore()
+    assert store.view_changed is True  # 初值(视图尚未建立)
+    assert store.consume_view_changed() is True
+    assert store.view_changed is False
+    assert store.consume_view_changed() is False
+
+
+def test_store_update_fields_marks_view_changed():
+    """state/save_path 写操作置脏; 标签/限速不影响视图展示, 不置脏"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP")])
+    store.consume_view_changed()
+    store.update_torrent_fields("H1", tags_add=["x"])
+    assert store.consume_view_changed() is False
+    store.update_torrent_fields("H1", up_limit=1024)
+    assert store.consume_view_changed() is False
+    store.update_torrent_fields("H1", state="pausedUP")
+    assert store.consume_view_changed() is True
+    store.update_torrent_fields("H1", save_path=r"R:\Other")
+    assert store.consume_view_changed() is True
+
+
+def test_store_reset_runtime_marks_view_changed():
+    """热重载 L2 reset_runtime: 分组索引清空 -> 视图必须重建"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1")])
+    store.consume_view_changed()
+    store.reset_runtime()
+    assert store.consume_view_changed() is True
+
+
+def test_record_update_from_returns_changed():
+    """TorrentRecord.update_from 返回视图字段变化标记"""
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP", upspeed=0))
+    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", upspeed=0)) is False
+    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", upspeed=7)) is True
+    # 非视图字段变化: 不报告(downloaded 不在 _VIEW_FIELDS)
+    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", upspeed=7, downloaded=999)) is False
+
+
+def test_view_field_value_quantizes_seeding_time():
+    """视图字段量化: seeding_time 按分钟取整(向下); 未配置步长的字段原样返回
+
+    前端本就只展示到分钟, 故秒级精度对 UI 无信息量 —— 量化后做种中的种子库不再每轮重建视图。
+    """
+    assert view_field_value("seeding_time", 0) == 0
+    assert view_field_value("seeding_time", 59) == 0
+    assert view_field_value("seeding_time", 60) == 60
+    assert view_field_value("seeding_time", 119) == 60
+    assert view_field_value("seeding_time", 3600) == 3600
+    # 未配置步长: 精确返回(速度/上传量等实时字段必须逐字节/逐 Bps 变化)
+    assert view_field_value("upspeed", 123) == 123
+    assert view_field_value("uploaded", 4096) == 4096
+    assert view_field_value("name", "x") == "x"
+
+
+def test_store_seeding_time_quantized_no_repaint():
+    """做种时长秒级递增不每轮置脏(量化到分钟), 跨分钟边界才置脏 —— 惰性重建对做种库真正生效"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP", seeding_time=36_000)])
+    assert store.consume_view_changed() is True  # 首轮(新增)
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP", seeding_time=36_030)])
+    assert store.consume_view_changed() is False, "同分钟内递增不应触发重建"
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP", seeding_time=36_059)])
+    assert store.consume_view_changed() is False
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP", seeding_time=36_060)])
+    assert store.consume_view_changed() is True, "跨分钟边界应触发重建"
+
+
+def test_record_seeding_time_quantized_update_from():
+    """update_from 的分钟量化在两种通道(Mapping dict / 普通对象)下一致"""
+    # 对象通道(测试替身)
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP", seeding_time=600))
+    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", seeding_time=659)) is False
+    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", seeding_time=660)) is True
+    # Mapping 通道(真机 TorrentDictionary 走这条快路径)
+    rec2 = TorrentRecord(hash="H2")
+    assert rec2.update_from({"hash": "H2", "state": "stalledUP", "seeding_time": 600}) is True  # 首次设置
+    assert rec2.update_from({"hash": "H2", "state": "stalledUP", "seeding_time": 640}) is False
+    assert rec2.update_from({"hash": "H2", "state": "stalledUP", "seeding_time": 660}) is True

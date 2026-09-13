@@ -79,8 +79,12 @@ def create_app(manager) -> FastAPI:
         }
 
     @app.get("/api/state")
-    def api_state():
-        """合并端点: status + groups 一次返回(前端单请求轮询, 请求数减半)"""
+    def api_state(rid: int = -1):
+        """合并端点: status + groups 一次返回(前端单请求轮询, 请求数减半)
+
+        rid 为前端已持有的分组视图版本: 版本一致时只回 status(体积极小), groups 不回传,
+        前端据此跳过整表替换与重渲染; rid 缺省/不匹配时回传全量分组数据。
+        """
         manager.touch_web_client()
         snap = manager.status_snapshot()
         return {
@@ -91,7 +95,7 @@ def create_app(manager) -> FastAPI:
                     "torrents": snap["torrents"],
                     "groups": len(manager._group_view),
                 },
-            "groups": manager.ensure_group_view(),
+            **manager.ensure_group_state(rid),
         }
 
     @app.get("/api/groups")

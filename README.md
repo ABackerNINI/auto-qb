@@ -13,7 +13,7 @@
 
 ---
 
-auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，通过 qBittorrent WebUI API 自动帮你打理 PT 种子：
+auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，通过 qBittorrent WebUI API 自动帮你打理 PT 种子（与 qB 的通信走 `/api/v2/sync/maindata` **增量同步**，只获取发生变化的种子与字段，几乎不增加 qB 负载）：
 
 - **省心保种** — 自动打站点标签、跟踪 HR（Hit & Run）触发与达标状态，做种时长满足要求后自动标记
 - **辅种安全** — 把指向相同文件的种子自动归组，缺文件 / 大小不一致 / 下载冲突时**整组暂停**，防止误传垃圾数据被站点封号
@@ -540,7 +540,7 @@ config:
 - **单任务队列**：所有功能都是带内置 interval 的任务，统一进时间优先堆（含校验结果轮询）。
 - **插件框架**：条件 / 动作通过 `@register_condition` / `@register_action` 装饰器注册、按名称实例化，易于扩展
 - **mixin 组合**：`QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin)`，职责清晰
-- **数据层**：`TorrentStore` 每 tick 全量快照 + 惰性缓存；`QbApi` Facade 封装客户端调用并在写操作后同步快照
+- **数据层**：`TorrentSync` 走 qB `/api/v2/sync/maindata` 的 rid 增量同步（只取变化种子的变化字段）→ `TorrentStore` 合并入快照 + 惰性缓存；`QbApi` Facade 封装客户端调用并在写操作后同步快照
 
 ```
 src/auto_qb/
@@ -554,7 +554,7 @@ src/auto_qb/
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
 ├── qbapi.py           # qB API Facade: 封装客户端调用 + 写后同步 store 快照
 ├── taskqueue.py       # 单任务队列: 时间优先堆，所有任务统一调度
-├── torrents.py        # 种子信息数据层: 全量快照+惰性缓存+分组索引
+├── torrents.py        # 种子数据层: rid 增量同步(sync/maindata 合并)+快照+惰性缓存+分组索引
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)
 ├── mixins/            # QbManager 组合 mixins
 │   ├── checking.py    # 文件存在与大小检查(checking 动作前置)

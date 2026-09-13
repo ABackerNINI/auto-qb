@@ -151,6 +151,13 @@ class QbApi:
     def torrents_info(self, *args: Any, **kwargs: Any):
         return self._client.torrents_info(*args, **kwargs)
 
+    def sync_maindata(self, rid: int = 0, **kwargs: Any):
+        """增量同步端点 /api/v2/sync/maindata: rid=0 取全量快照, 否则只回自该 rid 起的变化
+
+        透传(无快照副作用): 快照更新由 TorrentSync 合并 + store.refresh 完成。
+        """
+        return self._client.sync_maindata(rid=rid, **kwargs)
+
     def torrents_piece_hashes(self, torrent_hash: str, **kwargs: Any):
         return self._client.torrents_piece_hashes(torrent_hash, **kwargs)
 

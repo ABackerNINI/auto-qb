@@ -1,4 +1,4 @@
-/* auto-qb WEB UI 前端(Vue 3 CDN, 无构建链): 轮询快照 + 命令投递 + 列宽记忆 */
+/* auto-qb WEB UI 前端(Vue 3 CDN, 无构建链): rid 增量轮询 + 命令投递 + 列宽记忆 */
 /* global Vue, localStorage, confirm, alert */  // 声明浏览器全局, 消除编辑器 no-undef 红线
 const { createApp } = Vue;
 
@@ -53,7 +53,9 @@ createApp({
       saveOk: false,
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
-      pollTimer: null,
+      pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
+      lastRid: null,       // 已持有的分组视图版本(服务端 rid); null = 尚未取到(强制全量)
+      idlePolls: 0,        // 连续无更新轮数(无变化退避: 2s→5s→10s; 有更新立即归零)
       searchQuery: "",       // 搜索关键字
       searchHits: new Set(),  // 命中种子 hash 集合(名称/文件匹配)
       searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示
@@ -63,6 +65,10 @@ createApp({
     };
   },
   computed: {
+    pollLabel() {
+      // 顶栏展示当前轮询间隔(自适应: 无变化/服务不可达时放慢)
+      return Math.round(this.currentPollMs() / 1000);
+    },
     statusBadge() {
       if (this.status.paused) return { text: "已暂停", kind: "warn" };
       if (this.status.connected === false) return { text: "qB 断开", kind: "error" };
@@ -118,6 +124,11 @@ createApp({
   },
   async mounted() {
     window.addEventListener("click", () => (this.menu.visible = false));
+    // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.stopPolling();
+      else this.refresh();
+    });
     if (!this.token) return;
     await this.bootstrap();
   },
@@ -145,6 +156,8 @@ createApp({
     async bootstrap() {
       try {
         this.authError = "";
+        this.lastRid = null;  // 重新鉴权/换密钥: 强制全量取一次分组视图
+        this.idlePolls = 0;
         await this.refreshOnce();
         this.authRequired = false;
         localStorage.setItem("autoqb_token", this.token);
@@ -158,34 +171,61 @@ createApp({
       this.bootstrap();
     },
     startPolling() {
-      if (this.pollTimer) clearInterval(this.pollTimer);
-      this.pollTimer = setInterval(() => this.refresh(), this.currentPollMs());
+      this.stopPolling();
       this.refresh();
     },
+    stopPolling() {
+      if (this.pollTimer) clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    },
+    scheduleNext() {
+      // 用 setTimeout 链式续排(而非 setInterval): 保证上一轮请求结束后再计时, 不堆叠请求
+      this.stopPolling();
+      if (document.hidden || !this.token) return;
+      this.pollTimer = setTimeout(() => this.refresh(), this.currentPollMs());
+    },
     currentPollMs() {
-      // 失败退避: 连续失败翻倍至上限 15s; 成功恢复 2s(减少服务不可达时的空转)
-      return Math.min(15000, this.pollSec * 1000 * 2 ** this.pollFails);
+      // 失败退避: 连续失败翻倍至上限 15s(减少服务不可达时的空转)
+      if (this.pollFails) return Math.min(15000, this.pollSec * 1000 * 2 ** this.pollFails);
+      // 无变化退避: 连续多轮无更新逐步放慢(2s→5s→10s); 一旦有更新立即回到 2s
+      if (this.idlePolls >= 6) return 10000;
+      if (this.idlePolls >= 2) return 5000;
+      return this.pollSec * 1000;
     },
     async refresh() {
       try {
-        const state = await this.api("/api/state");
+        // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传 groups(响应体趋近于零)
+        const query = this.lastRid === null ? "" : `?rid=${this.lastRid}`;
+        const state = await this.api("/api/state" + query);
         this.status = state.status;
-        this.groups = state.groups;
+        if (state.updated !== false) {
+          // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
+          this.groups = state.groups || [];
+          if (typeof state.rid === "number") this.lastRid = state.rid;
+          this.idlePolls = 0;
+        } else {
+          this.idlePolls += 1;
+        }
         this.serviceDown = false;
         this.pollFails = 0;
       } catch (e) {
         // 服务不可达(程序退出/网络失败): 置 serviceDown 显示横幅; 轮询继续, 服务恢复后自动消失。
-        // 401(密钥无效)不算服务不可达——已由登录框提示。
-        if (!e.auth) {
-          this.serviceDown = true;
-          this.pollFails = Math.min(4, this.pollFails + 1);
+        // 401(密钥无效): 停止轮询并回到密钥输入界面(防无谓空转)。
+        if (e.auth) {
+          this.stopPolling();
+          return;
         }
+        this.serviceDown = true;
+        this.pollFails = Math.min(4, this.pollFails + 1);
       }
+      this.scheduleNext();
     },
     async refreshOnce() {
       const state = await this.api("/api/state");
       this.status = state.status;
-      this.groups = state.groups;
+      this.groups = state.groups || [];
+      if (typeof state.rid === "number") this.lastRid = state.rid;
+      this.idlePolls = 0;
       this.serviceDown = false;
     },
     async openSettings() {
@@ -278,8 +318,9 @@ createApp({
       return v + " B";
     },
     fmtDuration(sec) {
+      // 做种时长: 后端已按分钟取整(torrents._VIEW_QUANTUM), 故不展示秒位
       sec = Math.floor(sec || 0);
-      if (sec < 3600) return `${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, "0")}秒`;
+      if (sec < 3600) return `${Math.floor(sec / 60)}分钟`;
       if (sec < 86400) return `${Math.floor(sec / 3600)}时${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}分`;
       return `${Math.floor(sec / 86400)}天${String(Math.floor((sec % 86400) / 3600)).padStart(2, "0")}时`;
     },

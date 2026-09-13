@@ -18,6 +18,7 @@ from auto_qb.config import (
 )  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
+from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, _VIEW_FIELDS, view_field_value  # noqa: E402
 
 try:
     from qbittorrentapi import TorrentState  # noqa: E402
@@ -46,6 +47,18 @@ class _FakeTorrents(dict):
         return items
 
 
+def _torrent_fields(tor) -> dict:
+    """把种子对象/映射归一为 qB JSON 风格字段 dict(仅含实际存在的必需字段)
+
+    对齐真实响应: qB 字段恒存在(值可为 None/0); 测试夹具可能只给部分字段
+    (如 SimpleNamespace(hash, name, state)), 此时缺失字段不入 dict —— 与
+    torrents/info 的 JSON 语义一致, 也让版本兼容校验能照常报缺失。
+    """
+    if isinstance(tor, dict):
+        return {f: tor.get(f) for f in REQUIRED_TORRENT_FIELDS if f in tor}
+    return {f: getattr(tor, f) for f in REQUIRED_TORRENT_FIELDS if hasattr(tor, f)}
+
+
 class FakeClient:
     def __init__(self):
         self.tags = set()
@@ -57,6 +70,9 @@ class FakeClient:
         self.files = []  # torrents_files 返回值(空 = 全部通过)
         self.files_map = {}  # hash -> 文件列表(分组测试用: 按种子区分文件列表)
         self.files_calls = 0  # torrents_files 调用计数(验证分组检查不再全量拉文件列表)
+        self.sync_calls = 0  # sync_maindata 调用计数(验证增量同步路径)
+        self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
+        self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
 
     def torrents_trackers(self, h):
         return [{"url": "https://tracker.hhanclub.net/announce.php"}]
@@ -70,6 +86,38 @@ class FakeClient:
 
     def torrents_info(self, torrent_hashes=None, **kw):
         return self.torrents.info(torrent_hashes=torrent_hashes, **kw)
+
+    def sync_maindata(self, rid=0, **kw):
+        """模拟 /api/v2/sync/maindata(与 qB synccontroller.cpp 同语义)
+
+        rid 与上次响应一致 -> 只含**变化种子**的**变化字段**(未变化种子不出现);
+        删除的种子单列 torrents_removed; 基线缺失的新种子回全量字段;
+        rid 为 0 或不匹配 -> full_update=true 且含全部种子全量字段。
+        不写入 calls(避免影响既有调用序列断言), 用 sync_calls 计数。
+        """
+        self.sync_calls += 1
+        cur = {h: _torrent_fields(t) for h, t in self.torrents.items()}
+        if rid != 0 and rid == self._sync_rid:
+            torrents = {}
+            for h, fields in cur.items():
+                prev = self._sync_snapshot.get(h)
+                if prev is None:
+                    torrents[h] = fields  # 新种子: 基线缺失 -> 全量字段
+                    continue
+                diff = {k: v for k, v in fields.items() if prev.get(k) != v}
+                if diff:
+                    torrents[h] = diff
+            removed = [h for h in self._sync_snapshot if h not in cur]
+            resp = {"rid": self._sync_rid + 1, "full_update": False}
+            if torrents:
+                resp["torrents"] = torrents
+            if removed:
+                resp["torrents_removed"] = removed
+        else:
+            resp = {"rid": self._sync_rid + 1, "full_update": True, "torrents": cur}
+        self._sync_rid += 1
+        self._sync_snapshot = cur
+        return resp
 
     def torrents_export(self, torrent_hashes=None, torrent_hash=None, **kw):
         self.calls.append(("export", torrent_hash if torrent_hash is not None else torrent_hashes))
@@ -317,16 +365,23 @@ class FakeTorrent:
     )
 
     def update_from(self, tor):
-        """用最新种子对象更新快照字段(惰性缓存保留, 文本派生缓存失效); 与 TorrentRecord.update_from 同语义"""
+        """用最新种子对象更新快照字段(惰性缓存保留, 文本派生缓存失效); 与 TorrentRecord.update_from 同语义
+
+        返回是否有视图相关字段(_VIEW_FIELDS, 按 _VIEW_QUANTUM 量化后比较)变化。
+        """
         self.tor = tor
+        changed = False
         for f in self._SNAPSHOT_FIELDS:
             v = getattr(tor, f, None)
             if v is not None:
+                if f in _VIEW_FIELDS and view_field_value(f, getattr(self, f, None)) != view_field_value(f, v):
+                    changed = True
                 setattr(self, f, v)
         self._tags_set = None
         self._state_enum = None
         self._trackers_info = None
         self._files = None
+        return changed
 
     def trackers_info(self, client):
         if self._trackers_info is None:

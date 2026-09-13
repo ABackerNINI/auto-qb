@@ -27,7 +27,14 @@ from .notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
-from .torrents import QbCompatError, TorrentRecord, TorrentStore, missing_torrent_fields
+from .torrents import (
+    QbCompatError,
+    TorrentRecord,
+    TorrentStore,
+    TorrentSync,
+    missing_torrent_fields,
+    view_field_value,
+)
 from . import utils
 from .logging import setup_logging
 
@@ -42,9 +49,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.config_path = config_path
         self.config = config or load_config(config_path)
         self._setup_logging()
-        # 种子信息数据层: 每 tick 全量快照 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
-        # 每 main_tick 刷新一次后, 本 tick 内所有读取操作都只通过 self.store 接口访问
+        # 种子信息数据层: 增量同步快照 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
+        # 每 main_tick 只拉变化部分(sync/maindata)后, 本 tick 内所有读取操作都只通过 self.store 接口访问
         self.store = TorrentStore()
+        # 与 qB 的增量同步层(rid 语义): 本地基线视图 + 字段合并, 见 torrents.TorrentSync
+        self._sync = TorrentSync()
         self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
         # qB API Facade: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
         self.api = QbApi(self._client, self.store)
@@ -69,6 +78,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.web_commands: "queue.Queue" = queue.Queue()
         # WEB UI: 分组视图快照(主循环每 tick 重建并原子替换, Web 线程只读)
         self._group_view: List[dict] = []
+        # WEB UI: 分组视图版本号(等价 qB 的 rid): 每次重建自增, Web 端按版本跳过整表替换。
+        # 以进程启动时间播种: 进程重启后版本号不会回落到旧客户端已持有的值(否则前端会误判
+        # "无更新"而一直展示重启前的旧列表)。
+        self._group_view_ver: int = int(time.time())
         # WEB UI 惰性组装: _group_view_dirty 标记快照是否过期; _web_last_seen 记录最近一次 Web 请求时间。
         # 主循环仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)才重建快照, 否则跳过以降低 CPU。
         self._group_view_dirty: bool = True
@@ -104,6 +117,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._client = value
         self.store.client = value
         self.api.bind(value, self.store)
+        # 重连/换客户端 -> 旧 rid 失效: 重置同步基线, 下轮强制全量重建
+        self._sync.reset()
 
     def _setup_logging(self):
         logging_conf = self.config.logging
@@ -285,7 +300,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     "uploaded": r.uploaded,
                     "size": r.size,
                     "progress": round(r.progress, 4),
-                    "seeding_time": r.seeding_time,
+                    # 取整到分钟(与 torrents.view_field_value 的重建判定同一步长): 该字段每秒递增,
+                    # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
+                    "seeding_time": view_field_value("seeding_time", r.seeding_time),
                     "ratio": round(r.ratio, 3),
                 } for r in recs
             ]
@@ -305,11 +322,27 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
-        与主循环惰性组装配合: 主循环只在 Web 活跃且脏时重建, 这里兜底保证每次请求都拿到最新。"""
+        与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。"""
         if self._group_view_dirty:
             self._group_view = self._build_group_view()
+            self._group_view_ver += 1
             self._group_view_dirty = False
         return self._group_view
+
+    def ensure_group_state(self, rid: Optional[int]) -> dict:
+        """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
+
+        rid 与服务端视图版本一致时**不回传 groups**(响应体趋近于零); 不一致时回传
+        全量分组数据并带上新版本号。status 体积极小(4 个标量), 无关版本恒回传,
+        以保证连接状态/暂停状态/种子数变化能即时反映。
+        """
+        self.ensure_group_view()
+        ver = self._group_view_ver
+        updated = rid != ver
+        state: dict = {"rid": ver, "updated": updated}
+        if updated:
+            state["groups"] = self._group_view
+        return state
 
     def _build_search_index(self) -> None:
         """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名]}), 单次限流拉取。
@@ -523,11 +556,17 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
+        # 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方分组视图惰性重建判定
+        view_changed = self.store.consume_view_changed()
         if self.config.grouping.enabled:
             # WEB UI: 分组视图快照——惰性组装。仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)
-            # 且快照已过期(_group_view_dirty)时才重建, 否则主循环不空转; 关闭网页后 CPU 回落。
+            # 且视图内容确有变化(视图字段/成员变化, 或显式置脏)时才重建, 否则主循环不空转;
+            # 关闭网页后 CPU 回落。
+            if view_changed:
+                self._group_view_dirty = True
             if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
                 self._group_view = self._build_group_view()
+                self._group_view_ver += 1
                 self._group_view_dirty = False
 
         # WEB UI: 搜索索引限流构建——同样仅 Web 活跃时推进(每 tick 一批, 直至不再脏);
@@ -579,17 +618,18 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     # ---------- 种子级任务 ----------
 
-    def _validate_torrent_schema(self, tors) -> None:
-        """版本兼容 fail-fast: 首次拉到非空种子信息时校验必需字段(qB 版本漂移早暴露)。
+    def _validate_torrent_schema(self, sample) -> None:
+        """版本兼容 fail-fast: 首次拿到全量种子信息时校验必需字段(qB 版本漂移早暴露)。
 
-        样本取列表中首个非 dict 对象(真实 API 恒为 TorrentDictionary; 测试注入的 dict
-        不作样本); 通过后置 _schema_validated 不再重复校验(qB 版本运行期不变);
-        空 qB / 全 dict 时本轮跳过, 下次非空再验。缺失抛 QbCompatError -> CLI 干净退出。
+        样本由 TorrentSync 在全量轮提供(need_validate 为真): sync 路径为合并视图
+        (全量响应含全部必需字段), 降级路径为首个非 dict 真实种子对象(测试注入的
+        plain dict 不作样本)。仅在真正有样本时校验; 增量轮的响应只含变化字段,
+        校验会误报 —— 由调用方按 need_validate 闸门。
+        通过后置 _schema_validated 不再重复校验(qB 版本运行期不变);
+        空 qB 时样本为 None, 本轮跳过, 下次有种子再验。
+        缺失抛 QbCompatError -> CLI 干净退出。
         """
-        if self._schema_validated:
-            return
-        sample = next((t for t in tors if not isinstance(t, dict)), None)
-        if sample is None:
+        if self._schema_validated or sample is None:
             return
         missing = missing_torrent_fields(sample)
         if missing:
@@ -597,16 +637,18 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._schema_validated = True
 
     def _refresh_torrents(self, dry_run: bool = False):
-        """种子列表刷新: 拉全量 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
+        """种子列表刷新: 增量同步 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
         更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
         self._missing_scanned_keys.clear()  # 缺文件扫描去重按轮重置
-        tors = self.api.torrents_info()
-        self._validate_torrent_schema(tors)
+        # 增量同步(/sync/maindata): 只取自上次 rid 起的变化, 未变化种子不出现在响应中;
+        # 本地基线(TorrentSync._views)合并后即"当前全量种子集", 与旧全量拉取语义等价
+        tors = self._sync.fetch(self.api)
+        if self._sync.need_validate:
+            self._validate_torrent_schema(self._sync.validate_sample)
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
         added, removed = self.store.refresh(tors)
-        # 种子增删/状态可能变化: 置分组视图过期, 供 _tick 惰性重建(仅 Web 活跃时)
-        self._group_view_dirty = True
+        # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:
             self._search_index_dirty = True

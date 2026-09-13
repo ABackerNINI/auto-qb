@@ -34,7 +34,7 @@
             <span>种子 {{ totalTorrents }}</span>
             <span>下载 {{ fmtSpeed(totalDl) }}</span>
             <span>上传 {{ fmtSpeed(totalUl) }}</span>
-            <span class="muted">每 {{ pollSec }}s 刷新</span>
+            <span class="muted">每 {{ pollLabel }}s 刷新</span>
           </div>
           <div class="top-search">
             <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"

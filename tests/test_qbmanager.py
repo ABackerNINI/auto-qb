@@ -231,7 +231,9 @@ def test_connect_throttle_repeated_failures():
         mgr.connect = mock.Mock(return_value=True)
         # 第一次失败记录, 第二次失败静默, 第三次抛 KeyboardInterrupt 退出循环
         mgr._refresh_torrents = mock.Mock(
-            side_effect=[APIConnectionError("conn down"), APIConnectionError("conn down"), KeyboardInterrupt()]
+            side_effect=[APIConnectionError("conn down"),
+                         APIConnectionError("conn down"),
+                         KeyboardInterrupt()]
         )
         with mock.patch("auto_qb.qbmanager.logger") as mock_logger:
             with mock.patch("auto_qb.qbmanager.time.sleep"):
@@ -358,3 +360,41 @@ def test_export_torrents_info():
         lines = [ln for ln in text.splitlines() if ln.strip()]
         assert len(lines) == 2, f"每个种子一行, 共 2 条: {lines}"
         assert text.count("\n\n") == 2  # 每条种子后空行分隔
+
+
+def test_tick_rebuilds_group_view_only_when_changed():
+    """分组视图惰性重建: 仅视图变化且 Web 活跃时重建(无变化/网页关闭时不空转)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr.config.grouping.enabled = True
+        mgr.touch_web_client()  # Web 活跃
+        with mock.patch.object(mgr, "_refresh_torrents"), \
+             mock.patch.object(mgr, "_build_group_view", return_value=[]) as spy:
+            mgr.store.view_changed = True
+            mgr._tick(dry_run=False)
+            assert spy.call_count == 1  # 视图变化 -> 重建
+            mgr._tick(dry_run=False)
+            assert spy.call_count == 1  # 标记已消费且无新变化 -> 不重建
+            mgr.store.view_changed = True
+            mgr._tick(dry_run=False)
+            assert spy.call_count == 2  # 再次变化 -> 重建
+            mgr.store.view_changed = True
+            mgr._web_last_seen = 0.0  # Web 不活跃(超过 TTL)
+            mgr._tick(dry_run=False)
+            assert spy.call_count == 2  # 不重建
+            assert mgr._group_view_dirty is True  # 脏标记保留, 待 Web 恢复后重建
+
+
+def test_tick_skips_group_view_when_grouping_disabled():
+    """分组未启用: 不组装分组视图(即使视图标记为脏)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr.config.grouping.enabled = False
+        mgr.touch_web_client()
+        with mock.patch.object(mgr, "_refresh_torrents"), \
+             mock.patch.object(mgr, "_build_group_view", return_value=[]) as spy:
+            mgr.store.view_changed = True
+            mgr._tick(dry_run=False)
+            assert spy.call_count == 0

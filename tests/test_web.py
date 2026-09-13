@@ -24,6 +24,9 @@
 - test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
 - test_ensure_group_view_rebuilds_when_dirty: 分组视图脏时重建(Web 请求侧兜底)/干净时复用引用
+- test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
+- test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
+- test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
 """
@@ -145,10 +148,21 @@ def _make_web_manager(tmp_path, config_text):
         store=SimpleNamespace(groups=groups),
         _web_last_seen=0.0,
         _group_view_dirty=False,
+        _group_view_ver=0,
     )
-    # 性能修复后 API 调用的两个替身方法: touch_web_client(心跳) / ensure_group_view(懒视图)
+    # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
+    # ensure_group_state(带 rid 的增量状态)
     mgr.touch_web_client = lambda: setattr(mgr, "_web_last_seen", __import__("time").time())
     mgr.ensure_group_view = lambda: mgr._group_view
+
+    def _ensure_group_state(rid):
+        updated = rid != mgr._group_view_ver
+        state = {"rid": mgr._group_view_ver, "updated": updated}
+        if updated:
+            state["groups"] = mgr._group_view
+        return state
+
+    mgr.ensure_group_state = _ensure_group_state
     return mgr
 
 
@@ -271,7 +285,7 @@ def test_build_group_view(tmp_path):
         uploaded=2048,
         size=512**2,
         progress=1.0,
-        seeding_time=3600
+        seeding_time=3641  # 非整分钟: 视图输出应按分钟向下取整
     )
     t2 = FakeTorrent(
         hash="HB",
@@ -299,6 +313,8 @@ def test_build_group_view(tmp_path):
     assert g["upspeed"] == 2048 and g["uploaded"] == 4096 and g["size"] == 2 * 512**2
     assert [m["site"] for m in g["members"]] == ["Unknown", "Unknown"]
     assert g["members"][0]["kind"] == "seeding"
+    # seeding_time 展示值按分钟取整(与 store 重建判定同一步长, 防视图内容与脏标记脱钩)
+    assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
 
 
 def test_build_search_index_files():
@@ -623,6 +639,56 @@ def test_ensure_group_view_rebuilds_when_dirty():
         assert len(view) == 1 and view[0]["count"] == 2, f"脏时应重建分组视图: {view}"
         assert mgr._group_view_dirty is False
         assert mgr.ensure_group_view() is view, "干净时直接返回当前引用(不重建)"
+
+
+def test_ensure_group_state_versioning():
+    """ensure_group_state: 重建分组视图时版本号自增; rid 一致时不回传 groups(体积极小)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr._group_view = []
+        mgr._group_view_dirty = True
+        start_ver = mgr._group_view_ver
+        state = mgr.ensure_group_state(rid=None)  # 首次: 版本不匹配 -> 全量
+        assert state["updated"] is True
+        assert state["rid"] == start_ver + 1, "重建后版本号应自增"
+        assert len(state["groups"]) == 1
+        # 同版本再次请求: 不回传 groups
+        again = mgr.ensure_group_state(rid=state["rid"])
+        assert again["updated"] is False
+        assert again["rid"] == state["rid"]
+        assert "groups" not in again
+        # 视图变化后版本自增, 旧 rid 失效 -> 重新回传
+        mgr._group_view_dirty = True
+        bumped = mgr.ensure_group_state(rid=state["rid"])
+        assert bumped["updated"] is True
+        assert bumped["rid"] == state["rid"] + 1
+        assert "groups" in bumped
+
+
+def test_group_view_ver_seeded_from_start_time():
+    """版本号以进程启动时间播种: 重启后不会回落到旧客户端已持有的值(否则前端会一直展示旧列表)"""
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        assert mgr._group_view_ver > 1_600_000_000, "应为时间戳量级, 而非 0/1 小整数"
+
+
+def test_api_state_rid_gate(web_env):
+    """/api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    full = client.get("/api/state", headers=auth).json()
+    assert full["updated"] is True and len(full["groups"]) == 1
+    assert full["status"]["torrents"] == 2, "status 与版本无关, 恒回传"
+    # 同版本: 只回 status
+    same = client.get(f"/api/state?rid={full['rid']}", headers=auth).json()
+    assert same["updated"] is False
+    assert "groups" not in same
+    assert same["status"]["torrents"] == 2
+    # 不匹配的 rid: 回传全量
+    other = client.get(f"/api/state?rid={full['rid'] + 99}", headers=auth).json()
+    assert other["updated"] is True and len(other["groups"]) == 1
 
 
 @pytest.mark.parametrize(
