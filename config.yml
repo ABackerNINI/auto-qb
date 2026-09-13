@@ -1,4 +1,3 @@
----
 config:
     qbittorrent:
         host: 127.0.0.1
@@ -56,11 +55,11 @@ config:
 
     # 全局自动彻底删除标签
     delete_tags:                        # 彻底删除的标签格式，支持正则
-        - "M-Team - TP:ignore_case"
-        - "regex:^BTSCHOOL$"
+      - "M-Team - TP:ignore_case"
+      - "regex:^BTSCHOOL$"
     delete_tags_if_has_no_torrents:     # 无种子使用时才删除
-        - "@tracker_tags:ignore_case"   # 引用全部 tracker 配置的标签， 并忽略大小写
-        - "regex:^zE.*$"                # 删除所有集数标签
+      - "@tracker_tags:ignore_case"     # 引用全部 tracker 配置的标签， 并忽略大小写
+      - "regex:^zE.*$"                  # 删除所有集数标签
 
     # 全局 HR 设置(站点 hr: 段未设置时兜底)
     hr:
@@ -75,66 +74,66 @@ config:
     global_speed_limit_curve:
         interval: 10M
         traffic_source:
-            - traffic_monitor: # Traffic Monitor: 流量监控软件, 可记录每天使用流量
-                  dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat"
+          - traffic_monitor:   # Traffic Monitor: 流量监控软件, 可记录每天使用流量
+                dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat"
             # 后续可能支持接入其它软件来源
         curves:
-            - curve:
-                  period: DAY
-                  upload_curve: # 上传量达到指定值后, 限制上传速度
-                      - 10GiB:
-                            upload_speed_limit: 6MiB/s
-                      - 20GiB:
-                            upload_speed_limit: 5.5MiB/s
-                      - 30GiB:
-                            upload_speed_limit: 5MiB/s
-                      - 40GiB:
-                            upload_speed_limit: 4MiB/s
-                      - 50GiB:
-                            upload_speed_limit: 3MiB/s
-                      - 70GiB:
-                            upload_speed_limit: 2MiB/s
-                      - 100GiB:
-                            upload_speed_limit: 1MiB/s
-                      - 1000GiB:
-                            upload_speed_limit: 0.5MiB/s
-                  download_curve: # 下载量达到指定值后, 限制下载速度
-                      - 30GiB:
-                            download_speed_limit: 11MiB/s
-                      - 50GiB:
-                            download_speed_limit: 10MiB/s
-                      - 100GiB:
-                            download_speed_limit: 5MiB/s
-                      - 200GiB:
-                            download_speed_limit: 2MiB/s
-                      - 1000GiB:
-                            download_speed_limit: 1MiB/s
-            - curve:
-                  period: MONTH
-                  upload_curve: # 上传量达到指定值后, 限制上传速度
-                      - 100GiB:
-                            upload_speed_limit: 6MiB/s
-                      - 200GiB:
-                            upload_speed_limit: 5MiB/s
-                      - 300GiB:
-                            upload_speed_limit: 4MiB/s
-                      - 500GiB:
-                            upload_speed_limit: 2MiB/s
-                      - 1000GiB:
-                            upload_speed_limit: 1MiB/s
-                      - 10000GiB:
-                            upload_speed_limit: 0.5MiB/s
-                  download_curve: # 下载量达到指定值后, 限制下载速度
-                      - 600GiB:
-                            download_speed_limit: 11MiB/s
-                      - 1000GiB:
-                            download_speed_limit: 10MiB/s
-                      - 2000GiB:
-                            download_speed_limit: 5MiB/s
-                      - 3000GiB:
-                            download_speed_limit: 2MiB/s
-                      - 10000GiB:
-                            download_speed_limit: 1MiB/s
+          - curve:
+                period: DAY
+                upload_curve:   # 上传量达到指定值后, 限制上传速度
+                  - 10GiB:
+                        upload_speed_limit: 6MiB/s
+                  - 20GiB:
+                        upload_speed_limit: 5.5MiB/s
+                  - 30GiB:
+                        upload_speed_limit: 5MiB/s
+                  - 40GiB:
+                        upload_speed_limit: 4MiB/s
+                  - 50GiB:
+                        upload_speed_limit: 3MiB/s
+                  - 70GiB:
+                        upload_speed_limit: 2MiB/s
+                  - 100GiB:
+                        upload_speed_limit: 1MiB/s
+                  - 1000GiB:
+                        upload_speed_limit: 0.5MiB/s
+                download_curve:   # 下载量达到指定值后, 限制下载速度
+                  - 30GiB:
+                        download_speed_limit: 11MiB/s
+                  - 50GiB:
+                        download_speed_limit: 10MiB/s
+                  - 100GiB:
+                        download_speed_limit: 5MiB/s
+                  - 200GiB:
+                        download_speed_limit: 2MiB/s
+                  - 1000GiB:
+                        download_speed_limit: 1MiB/s
+          - curve:
+                period: MONTH
+                upload_curve:   # 上传量达到指定值后, 限制上传速度
+                  - 100GiB:
+                        upload_speed_limit: 6MiB/s
+                  - 200GiB:
+                        upload_speed_limit: 5MiB/s
+                  - 300GiB:
+                        upload_speed_limit: 4MiB/s
+                  - 500GiB:
+                        upload_speed_limit: 2MiB/s
+                  - 1000GiB:
+                        upload_speed_limit: 1MiB/s
+                  - 10000GiB:
+                        upload_speed_limit: 0.5MiB/s
+                download_curve:   # 下载量达到指定值后, 限制下载速度
+                  - 600GiB:
+                        download_speed_limit: 11MiB/s
+                  - 1000GiB:
+                        download_speed_limit: 10MiB/s
+                  - 2000GiB:
+                        download_speed_limit: 5MiB/s
+                  - 3000GiB:
+                        download_speed_limit: 2MiB/s
+                  - 10000GiB:
+                        download_speed_limit: 1MiB/s
 
     add_drive_letter_tag_rules:
         add_r_tag: # 为R盘的两个目录添加"R"标签
@@ -142,12 +141,12 @@ config:
             trigger: on_torrent_added
             cooldown: 5M
             conditions:
-                - path:
-                      - "regex:^R:/Download/PTing/"
-                      - "regex:^R:/Download/ing/"
+              - path:
+                  - "regex:^R:/Download/PTing/"
+                  - "regex:^R:/Download/ing/"
             actions:
-                - add_tags:
-                      - "R" # 添加"R"标签
+              - add_tags:
+                  - "R"     # 添加"R"标签
 
     skip_checking_rules:
         i_rule: # I盘: 有参考文件的种子跳检, 无参考文件的种子不校验, 校验成功后自动开始
@@ -155,81 +154,81 @@ config:
             interval: 30M
             cooldown: 5M
             conditions:
-                - path:
-                      - "regex:^I:/"
+              - path:
+                  - "regex:^I:/"
             actions:
-                - checking:
-                      basic_check: filelist
-                      with_reference:
-                          enabled: true
-                          mode: skip-checking
-                          auto_start: true
-                      without_reference:
-                          enabled: false # 禁用
-                          mode: full-checking
-                          auto_start: true
+              - checking:
+                    basic_check: filelist
+                    with_reference:
+                        enabled: true
+                        mode: skip-checking
+                        auto_start: true
+                    without_reference:
+                        enabled: false   # 禁用
+                        mode: full-checking
+                        auto_start: true
         r_rule: # R盘: 种子全量校验, 校验成功后自动开始
             enabled: true
             interval: 5M
             cooldown: 5M
             conditions:
-                - size: ">10GiB"
-                - path:
-                      - "regex:^R:/"
+              - size: ">10GiB"
+              - path:
+                  - "regex:^R:/"
             actions:
-                - checking:
-                      basic_check: filelist
-                      with_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
-                      without_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
+              - checking:
+                    basic_check: filelist
+                    with_reference:
+                        enabled: true
+                        mode: full-checking
+                        auto_start: true
+                    without_reference:
+                        enabled: true
+                        mode: full-checking
+                        auto_start: true
 
     hhan_checking_rules:
         i_rule: # I盘: 有参考文件的种子全量校验, 无参考文件的种子不校验, 校验成功后自动开始
             enabled: true
             interval: 30M
             cooldown: 5M
-            conditions:
+            conditions: ''
             actions:
-                - checking:
-                      basic_check: filelist
-                      with_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
-                      without_reference:
-                          enabled: false # 禁用
-                          mode: full-checking
-                          auto_start: true
+              - checking:
+                    basic_check: filelist
+                    with_reference:
+                        enabled: true
+                        mode: full-checking
+                        auto_start: true
+                    without_reference:
+                        enabled: false   # 禁用
+                        mode: full-checking
+                        auto_start: true
         r_rule: # R盘: 全部全量校验, 校验成功后自动开始
             enabled: true
             interval: 5M
             cooldown: 5M
             conditions:
-                - path:
-                      - "regex:^R:/"
+              - path:
+                  - "regex:^R:/"
             actions:
-                - checking:
-                      basic_check: filelist
-                      with_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
-                      without_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
+              - checking:
+                    basic_check: filelist
+                    with_reference:
+                        enabled: true
+                        mode: full-checking
+                        auto_start: true
+                    without_reference:
+                        enabled: true
+                        mode: full-checking
+                        auto_start: true
 
     trackers:
         HHan:
             domains:
-                - tracker.hhanclub.net
+              - tracker.hhanclub.net
             tags:
-                - HHan
+              - HHan
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -238,13 +237,13 @@ config:
                 condition: 70%
                 add_category: "??HR${required_seeding_time}??"
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@hhan_checking_rules" # HHan不跳检
+              - "@add_drive_letter_tag_rules"
+              - "@hhan_checking_rules"   # HHan不跳检
         hdfans_org:
             domains:
-                - hdfans.org
+              - hdfans.org
             tags:
-                - HDFans
+              - HDFans
             upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -253,38 +252,23 @@ config:
                 extra_seeding_time: 12H
                 condition: 80%
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         kufirc_com:
             domains:
-                - kufirc.com
+              - kufirc.com
             tags:
-                - Kufirc
+              - Kufirc
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
-        pt_btschool_club:
-            domains:
-                - pt.btschool.club
-            tags:
-                - BTSchool
-            upload_speed_limit: 0KiB/s
-            download_speed_limit: 0KiB/s
-            hr:
-                required_seeding_time: 20H
-                required_share_ratio: 1.1
-                extra_seeding_time: 12H
-                condition: 80%
-            rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         ptfans_cc:
             domains:
-                - ptfans.cc
+              - ptfans.cc
             tags:
-                - PTFans
+              - PTFans
             upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -292,23 +276,23 @@ config:
                 extra_seeding_time: 12H
                 condition: 80%
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         ptzone_xyz:
             domains:
-                - ptzone.xyz
+              - ptzone.xyz
             tags:
-                - PTZone
+              - PTZone
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_carpt_net:
             domains:
-                - tracker.carpt.net
+              - tracker.carpt.net
             tags:
-                - CarPT
+              - CarPT
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -316,24 +300,24 @@ config:
                 extra_seeding_time: 12H
                 condition: 80%
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_cyanbug_net:
             domains:
-                - tracker.cyanbug.net
+              - tracker.cyanbug.net
             tags:
-                - CyanBug
+              - CyanBug
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_digitalcore_club:
             domains:
-                - tracker.digitalcore.club
-                - trackerprxy.digitalcore.club
+              - tracker.digitalcore.club
+              - trackerprxy.digitalcore.club
             tags:
-                - DigitalCore
+              - DigitalCore
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -342,76 +326,76 @@ config:
                 extra_seeding_time: 12H
                 condition: 5%
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_hdbao_cc:
             domains:
-                - tracker.hdbao.cc
+              - tracker.hdbao.cc
             tags:
-                - HDBao
+              - HDBao
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_hdclone_top:
             domains:
-                - tracker.hdclone.top
+              - tracker.hdclone.top
             tags:
-                - HDClone
+              - HDClone
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_hdtime_org:
             domains:
-                - tracker.hdtime.org
+              - tracker.hdtime.org
             tags:
-                - HDTime
+              - HDTime
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_m_team_cc:
             domains:
-                - tracker.m-team.cc
+              - tracker.m-team.cc
             tags:
-                - MTeam
+              - MTeam
             remove_tags:
-                - M-Team
-                - M-Team - TP
+              - M-Team
+              - M-Team - TP
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         tracker_novahd_top:
             domains:
-                - tracker.novahd.top
+              - tracker.novahd.top
             tags:
-                - NovaHD
+              - NovaHD
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         www_tangpt_top:
             domains:
-                - www.tangpt.top
+              - www.tangpt.top
             tags:
-                - TangPT
+              - TangPT
             upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         ptsbao_club:
             domains:
-                - ptsbao.club
+              - ptsbao.club
             tags:
-                - PTSBao
+              - PTSBao
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -421,53 +405,53 @@ config:
                 condition: 60%
                 add_category: "??HR${required_seeding_time}??"
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         crabpt_vip:
             domains:
-                - crabpt.vip
+              - crabpt.vip
             tags:
-                - CrabPT
+              - CrabPT
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         pt_muxuege_org:
             domains:
-                - pt.muxuege.org
+              - pt.muxuege.org
             tags:
-                - MuXueGe
+              - MuXueGe
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         bilibili_download:
             domains:
-                - bilibili.download
+              - bilibili.download
             tags:
-                - Bilibili
+              - Bilibili
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         daydream_dmhy_best:
             domains:
-                - daydream.dmhy.best
+              - daydream.dmhy.best
             tags:
-                - U2
+              - U2
             upload_speed_limit: 0KiB/s
             download_speed_limit: 0KiB/s
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
         pt_521_best:
             domains:
-                - pt.521.best
+              - pt.521.best
             tags:
-                - 凤凰PT
+              - 凤凰PT
             upload_speed_limit: 1MiB/s
             download_speed_limit: 0KiB/s
             hr:
@@ -476,5 +460,20 @@ config:
                 extra_seeding_time: 6H
                 condition: 80%
             rules:
-                - "@add_drive_letter_tag_rules"
-                - "@skip_checking_rules"
+              - "@add_drive_letter_tag_rules"
+              - "@skip_checking_rules"
+        BTSchool:
+            domains:
+              - pt.btschool.club
+            tags:
+              - BTSchool
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
+            hr:
+                required_seeding_time: 20H
+                required_share_ratio: 1.1
+                extra_seeding_time: 12H
+                condition: 80%
+            rules:
+              - '@add_drive_letter_tag_rules'
+              - '@skip_checking_rules'
