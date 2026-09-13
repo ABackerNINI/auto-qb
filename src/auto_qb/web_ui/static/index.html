@@ -14,8 +14,8 @@
       <form class="login-card" @submit.prevent="saveToken">
         <div class="brand">auto-qb</div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
-        <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password">
-        <button type="submit">进入</button>
+        <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password" required>
+        <button type="submit" :disabled="!tokenInput.trim()">进入</button>
         <p v-if="authError" class="error">{{ authError }}</p>
       </form>
     </div>

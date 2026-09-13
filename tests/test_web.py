@@ -31,6 +31,7 @@
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
 """
 import json
+import logging
 import os
 import tempfile
 from unittest import mock
@@ -182,11 +183,36 @@ def web_env(tmp_path):
     return mgr, client
 
 
-def test_api_requires_token(web_env):
-    """无/错密钥访问 /api/* -> 401"""
+def test_api_requires_token(web_env, caplog):
+    """无/畸形/错密钥访问 /api/* -> 401
+
+    缺省/畸形凭证(无头、裸 Bearer、错 scheme)静默 401 不记 WARNING(历史误报: 前端空 token
+    发出 "Bearer " 被 HTTP 层裁成裸 "Bearer", 每次空提交都刷 WARNING 并触发系统通知);
+    仅"携带了但错误"的密钥记恰好一条 WARNING, 且文本不含任何密钥片段。
+    """
     mgr, client = web_env
-    assert client.get("/api/status").status_code == 401
+    web_logger = "auto_qb.web"
+    malformed = (
+        None,  # 完全无头
+        "Bearer",  # 有 scheme 无 token(等价于前端空 token 经 OWS 裁剪后的值)
+        "Bearer ",  # scheme 后仅空白(未经 OWS 裁剪的原始形态)
+        "Token xyz",  # 错 scheme
+    )
+    caplog.set_level(logging.WARNING, logger=web_logger)
+    for header in malformed:
+        caplog.clear()
+        kwargs = {} if header is None else {"headers": {"Authorization": header}}
+        assert client.get("/api/status", **kwargs).status_code == 401
+        assert not [r for r in caplog.records if r.name == web_logger and r.levelno >= logging.WARNING], (
+            f"畸形凭证 {header!r} 不应记 WARNING")
+    # 携带了但错误的密钥: 401 + 恰好一条不含密钥内容的 WARNING
+    caplog.clear()
     assert client.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    warns = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.WARNING]
+    assert len(warns) == 1
+    assert mgr._web_token not in warns[0].getMessage()
+    assert mgr._web_token[:8] not in warns[0].getMessage()
+    # 正确密钥放行
     assert client.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200
 
 

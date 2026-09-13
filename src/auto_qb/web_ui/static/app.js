@@ -127,13 +127,20 @@ createApp({
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
-      else this.refresh();
+      else if (this.token) this.refresh();  // 登出态切回标签不发空 Bearer(由登录成功后自行启动轮询)
     });
     if (!this.token) return;
     await this.bootstrap();
   },
   methods: {
     async api(path, options = {}) {
+      if (!this.token) {
+        // 无密钥不出网: 否则会发出 "Bearer " 空头(被 HTTP 层裁剪成裸 "Bearer"),
+        // 后端白记一次 401。调用方按 401 同路径处理(回密钥输入界面/静默)。
+        const noAuth = new Error("unauthorized");
+        noAuth.auth = true;
+        throw noAuth;
+      }
       const resp = await fetch(path, {
         ...options,
         headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json", ...(options.headers || {}) },
@@ -143,6 +150,7 @@ createApp({
         this.authRequired = true;
         this.token = "";
         localStorage.removeItem("autoqb_token");
+        if (this.searchTimer) clearTimeout(this.searchTimer);  // 登出后停掉搜索防抖/重试, 防空头竞态
         const err = new Error("unauthorized");
         err.auth = true;
         throw err;
@@ -167,7 +175,9 @@ createApp({
       }
     },
     saveToken() {
-      this.token = this.tokenInput.trim();
+      const token = this.tokenInput.trim();
+      if (!token) return;  // 空提交拦截: 不置空当前 token, 更不发出空 Bearer 请求
+      this.token = token;
       this.bootstrap();
     },
     startPolling() {

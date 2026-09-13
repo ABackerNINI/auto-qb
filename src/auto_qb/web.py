@@ -47,13 +47,18 @@ def ensure_web_token(manager) -> str:
 def create_app(manager) -> FastAPI:
     """构建 WEB 应用: 只读快照 + 命令投递 + 设置读写, 全部 /api/* 经 Bearer 密钥鉴权"""
     def require_token(authorization: str = Header(default="")) -> None:
-        expected = f"Bearer {manager._web_token}"
-        if authorization != expected:
-            # 诊断日志(临时): 收到与期望不一致时打印前缀与长度, 定位密钥不匹配来源
-            logger.warning(
-                f"WEB 鉴权失败: 收到 {authorization[:16]!r}(len={len(authorization)}), "
-                f"期望 'Bearer {manager._web_token[:8]}…'(len={len(expected)})"
-            )
+        # 缺省/畸形凭证(无头、scheme 错误、空 token)静默 401: 属客户端常态(登录框空提交、
+        # 轮询竞态、端口探测), 记 WARNING 会经 notify 推送扰民(历史上前端空 token 请求被
+        # HTTP 头 OWS 裁剪成裸 "Bearer", 曾持续误报); 仅"携带了但错误"的密钥记一条不含密钥
+        # 内容的 WARNING, 保留真实错密钥/探测信号。比较走 compare_digest 防时序侧信道。
+        scheme = "Bearer "
+        if not authorization.startswith(scheme):
+            raise HTTPException(status_code=401, detail="invalid token")
+        token = authorization[len(scheme):].strip()
+        if not token:
+            raise HTTPException(status_code=401, detail="invalid token")
+        if not secrets.compare_digest(token, manager._web_token):
+            logger.warning("WEB 鉴权失败: 密钥不匹配")
             raise HTTPException(status_code=401, detail="invalid token")
 
     app = FastAPI(
