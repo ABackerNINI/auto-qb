@@ -50,6 +50,8 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); fon
 .h-cell.sortable:hover { color: var(--fg); }
 .h-cell .arrow { font-size: 10px; }
 .h-cell .resizer { position: absolute; right: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
+.h-cell .resizer::after { content: ""; position: absolute; left: 4px; top: 15%; width: 2px; height: 70%; background: transparent; }
+.h-cell:hover .resizer::after { background: var(--accent); }  /* hover 列头时显示可拖拽提示线 */
 .detail { background: rgba(10,20,40,.5); border: 1px solid var(--border); border-radius: 10px; margin: 2px 0 6px; padding: 4px 14px; overflow-x: auto; }
 .detail-head { display: grid; gap: 10px; padding: 6px 4px; color: var(--fg-muted); font-size: 12px; border-bottom: 1px solid var(--border); }
 .detail-summary { display: grid; gap: 10px; padding: 6px 4px; font-weight: 600; border-bottom: 1px dashed var(--border); }

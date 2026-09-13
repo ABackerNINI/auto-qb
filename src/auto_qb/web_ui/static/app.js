@@ -1,4 +1,5 @@
 /* auto-qb WEB UI 前端(Vue 3 CDN, 无构建链): 轮询快照 + 命令投递 + 列宽记忆 */
+/* global Vue, localStorage, confirm, alert */  // 声明浏览器全局, 消除编辑器 no-undef 红线
 const { createApp } = Vue;
 
 const GROUP_DEFAULT_COLS = [
@@ -42,6 +43,7 @@ createApp({
         { key: "sites", sortable: false },
         { key: "count", sortable: true },
       ],
+      detailColumns: ["站点", "状态", "下载", "上传", "总上传", "种子大小", "进度", "做种时长", "Hash"],
       colWidths: loadColWidths(),  // {group: [..px..], detail: [..px..]}, localStorage 记忆
       resizing: null,              // {page, idx, startX, startVal}
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
@@ -276,16 +278,23 @@ createApp({
       }
     },
     gridStyle(page) {
-      const cols = this.colWidths[page];
-      const template = cols && cols.length ? cols.join(" ") : null;
-      return { gridTemplateColumns: template || (page === "group" ? GROUP_DEFAULT_COLS.join(" ") : DETAIL_DEFAULT_COLS.join(" ")) };
+      const defaults = page === "group" ? GROUP_DEFAULT_COLS : DETAIL_DEFAULT_COLS;
+      const cols = (this.colWidths[page] || []).filter((v) => /^\d+px$/.test(v));
+      // 记忆列数与默认列数不一致(结构变更)时回退默认, 防非法模板破坏布局
+      const template = cols.length === defaults.length ? cols.join(" ") : null;
+      return { gridTemplateColumns: template || defaults.join(" ") };
     },
     startResize(event, page, idx) {
-      // 列宽拖拽: 从渲染值固化为 px, 拖动更新并写入 localStorage(记忆)
-      const tableEl = event.target.closest(".group-table") || event.target.closest(".detail");
-      const rendered = (getComputedStyle(tableEl).gridTemplateColumns || "").split(" ").map((v) => parseFloat(v));
+      // 列宽拖拽: 从列头行(真正的 grid 容器)读取渲染列宽固化为 px, 拖动更新并写入 localStorage(记忆)
+      const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
+      if (!headEl) return;
+      const rendered = (getComputedStyle(headEl).gridTemplateColumns || "")
+        .split(" ")
+        .map((v) => parseFloat(v))
+        .filter((v) => !isNaN(v) && v > 0);
+      if (!rendered.length || idx >= rendered.length) return;
       const startX = event.clientX;
-      const cols = this.colWidths[page] && this.colWidths[page].length
+      const cols = this.colWidths[page] && this.colWidths[page].length === rendered.length
         ? [...this.colWidths[page]]
         : rendered.map((v) => `${Math.round(v)}px`);
       const startVal = parseFloat(cols[idx]) || rendered[idx] || 100;

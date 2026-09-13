@@ -87,15 +87,10 @@
             <!-- 展开明细: 紧跟本组行显示(列头 + 合计行 + 各分站点行) -->
             <div v-if="expandedKey===g.key" class="detail">
               <div class="detail-head" :style="gridStyle('detail')">
-                <div class="h-cell">站点</div>
-                <div class="h-cell">状态</div>
-                <div class="h-cell">下载</div>
-                <div class="h-cell">上传</div>
-                <div class="h-cell">总上传</div>
-                <div class="h-cell">种子大小</div>
-                <div class="h-cell">进度</div>
-                <div class="h-cell">做种时长</div>
-                <div class="h-cell">Hash</div>
+                <div v-for="(col, i) in detailColumns" :key="col" class="h-cell">
+                  <span>{{ col }}</span>
+                  <span class="resizer" @mousedown.stop.prevent="startResize($event, 'detail', i)"></span>
+                </div>
               </div>
               <div class="detail-summary" :style="gridStyle('detail')">
                 <div>合计</div>
