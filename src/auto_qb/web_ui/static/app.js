@@ -61,6 +61,14 @@ const app = createApp({
       searchBuilding: false,  // 文件索引构建中(增量限流可能多轮, 需稍后重查)
       searchError: "",        // 搜索请求失败提示(不再静默)
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
+      kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
+      toasts: [],             // 站内提示条(替代 alert)
+      modal: {                // 站内确认/输入框(替代 confirm/prompt); 结构见 _modalInit
+        visible: false, title: "", body: "", okText: "", cancelText: "",
+        danger: false, input: false, value: "", placeholder: "",
+      },
+      _toastSeq: 0,           // 提示条自增 id
+      _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
     };
   },
   computed: {
@@ -85,12 +93,15 @@ const app = createApp({
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
     // 以单种子虚拟行兜底展示(虚拟行无组级操作, 右键退化为该种子的单种子菜单)。
+    // 状态筛选(kindFilter)与之叠加: 先按成员状态筛组(组内任一成员为该状态即保留), 再做搜索匹配。
     filteredGroups() {
       const q = (this.searchQuery || "").trim();
-      if (!q) return this.sortedGroups;
+      let base = this.sortedGroups;
+      if (this.kindFilter) base = base.filter((g) => g.members.some((m) => m.kind === this.kindFilter));
+      if (!q) return base;
       const hits = this.searchHits;
       const kept = [];
-      for (const g of this.sortedGroups) {
+      for (const g of base) {
         let hit = false;
         const members = g.members.map((m) => {
           const isHit = hits.has(m.hash);
@@ -100,6 +111,7 @@ const app = createApp({
         if (hit) kept.push({ ...g, members: members, virtual: false });
       }
       for (const r of this.searchUncovered) {
+        if (this.kindFilter && r.kind !== this.kindFilter) continue;
         kept.push({
           key: "u-" + r.hash, name: r.name, count: 1, virtual: true,
           dlspeed: r.dlspeed, upspeed: r.upspeed, uploaded: r.uploaded, size: r.size,
@@ -120,9 +132,32 @@ const app = createApp({
     totalUl() {
       return this.groups.reduce((n, g) => n + g.upspeed, 0);
     },
+    /* 状态分布(纯前端聚合 members[].kind): 供顶栏下方堆叠条与可点击图例使用 */
+    distSegments() {
+      const order = ["seeding", "downloading", "checking", "paused", "error", "other"];
+      const count = {};
+      for (const g of this.groups) for (const m of g.members) count[m.kind] = (count[m.kind] || 0) + 1;
+      const total = order.reduce((n, k) => n + (count[k] || 0), 0);
+      if (!total) return [];
+      return order.filter((k) => count[k]).map((k) => ({
+        kind: k, count: count[k], pct: (count[k] / total) * 100, text: this.kindText(k),
+      }));
+    },
+    distTotal() {
+      return this.distSegments.reduce((n, s) => n + s.count, 0);
+    },
+    distTitle() {
+      return this.distSegments.map((s) => `${s.text} ${s.count}`).join(" · ");
+    },
   },
   async mounted() {
     window.addEventListener("click", () => (this.menu.visible = false));
+    // Esc: 优先关闭确认框, 其次右键菜单(两者都是临时浮层)
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (this.modal.visible) this.resolveModal(false);
+      else if (this.menu.visible) this.menu.visible = false;
+    });
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
@@ -179,6 +214,10 @@ const app = createApp({
       this.pollFails = 0;
       this.serviceDown = false;
       this.expandedKey = null;
+      this.kindFilter = "";
+      this.toasts = [];
+      this.modal = this._modalInit();
+      this._modalResolve = null;
       this.cfgReset();  // 配置树同样是受保护内容, 一并清除(编辑器状态复位)
       this.page = "groups";
       this.searchQuery = "";
@@ -187,6 +226,77 @@ const app = createApp({
         this.authError = message;
         this.authErrorKind = "auth";
       }
+    },
+    /* ---------------------------------------------------------- 站内提示条(toast) */
+    toast(text, kind = "info", ms = 4000) {
+      const id = ++this._toastSeq;
+      this.toasts.push({ id, text, kind });
+      setTimeout(() => this._dropToast(id), ms);
+    },
+    _dropToast(id) {
+      this.toasts = this.toasts.filter((t) => t.id !== id);
+    },
+    /* ------------------------------------------- 站内确认/输入框(替代 confirm/prompt) */
+    _modalInit() {
+      return {
+        visible: false, title: "", body: "", okText: "", cancelText: "",
+        danger: false, input: false, value: "", placeholder: "",
+      };
+    },
+    confirmDialog(title, body, opts = {}) {
+      // 返回 Promise<boolean>; 取消/遮罩/Esc 均结算为 false(不做任何写操作)
+      return this._openModal({
+        title, body, input: false,
+        okText: opts.okText || "确认", cancelText: opts.cancelText || "取消", danger: !!opts.danger,
+      });
+    },
+    promptDialog(title, value, opts = {}) {
+      // 返回 Promise<string|null>; 取消返回 null(与原生 prompt 语义一致)
+      return this._openModal({
+        title, body: opts.body || "", input: true, value: value || "", placeholder: opts.placeholder || "",
+        okText: opts.okText || "确定", cancelText: opts.cancelText || "取消", danger: !!opts.danger,
+      });
+    },
+    _openModal(cfg) {
+      if (this.modal.visible) this.resolveModal(false);  // 单例: 上一个悬空 Promise 先结算为取消
+      return new Promise((resolve) => {
+        this._modalResolve = resolve;
+        this.modal = { ...this._modalInit(), ...cfg, visible: true };
+        this.$nextTick(() => {
+          if (this.modal.input && this.$refs.modalInput) {
+            this.$refs.modalInput.focus();
+            this.$refs.modalInput.select();
+          }
+        });
+      });
+    },
+    resolveModal(ok) {
+      if (!this.modal.visible) return;
+      const { input, value } = this.modal;
+      const resolve = this._modalResolve;
+      this._modalResolve = null;
+      this.modal = this._modalInit();
+      if (resolve) resolve(ok ? (input ? value : true) : (input ? null : false));
+    },
+    /* ------------------------------------------- 状态筛选与搜索清除 */
+    toggleKindFilter(kind) {
+      this.kindFilter = this.kindFilter === kind ? "" : kind;
+      this.expandedKey = null;  // 筛选后组集合变化, 复位展开态
+    },
+    clearKindFilter() {
+      this.kindFilter = "";
+    },
+    clearSearch() {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+      this.searchQuery = "";
+      this.resetSearch();
+    },
+    /* 右键菜单定位: 视口边界吸附(菜单尺寸取常量估算, 避免先渲染再测量造成的抖动) */
+    _menuPos(event, w = 214, h = 222) {
+      const x = Math.min(event.clientX, Math.max(8, window.innerWidth - w - 8));
+      const y = Math.min(event.clientY, Math.max(8, window.innerHeight - h - 8));
+      return { x: Math.max(8, x), y: Math.max(8, y) };
     },
     async bootstrap(candidate) {
       if (this.authPending) return;  // 防重复提交(验证中按钮已禁用, 双保险)
@@ -383,34 +493,47 @@ const app = createApp({
         this.openMemberMenu(event, group.members[0]);
         return;
       }
-      this.menu = { visible: true, x: event.clientX, y: event.clientY, key: group.key, hash: null };
+      this.menu = { visible: true, ...this._menuPos(event), key: group.key, hash: null };
       this.expandedKey = group.key;
     },
     openMemberMenu(event, member) {
       event.preventDefault();
       event.stopPropagation();
-      this.menu = { visible: true, x: event.clientX, y: event.clientY, key: null, hash: member.hash };
+      this.menu = { visible: true, ...this._menuPos(event), key: null, hash: member.hash };
+    },
+    // 命令 => 中文动作名(用于投递成功/失败的提示文案)
+    _actionText(action) {
+      return { pause: "暂停", resume: "开始", reannounce: "强制汇报", delete: "删除" }[action] || action;
     },
     async act(action) {
       this.menu.visible = false;
       if (!this.menu.key) return;
       try {
         await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
+        this.toast(`已投递: ${this._actionText(action)}整组`, "ok", 2500);
       } catch (e) {
-        alert("命令发送失败: " + e.message);
+        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
     async delWithFiles(deleteFiles) {
       this.menu.visible = false;
       if (!this.menu.key) return;
-      if (!confirm(deleteFiles ? "确认删除整组并删除磁盘文件?此操作不可恢复!" : "确认删除整组(保留文件)?")) return;
+      const ok = await this.confirmDialog(
+        deleteFiles ? "删除整组(含磁盘文件)" : "删除整组",
+        deleteFiles
+          ? "将删除整组种子及其磁盘文件, 此操作不可恢复。"
+          : "将删除整组种子, 保留磁盘文件。",
+        { okText: deleteFiles ? "删除并移除文件" : "删除", danger: true }
+      );
+      if (!ok) return;
       try {
         await this.api(`/api/groups/${this.menu.key}/delete`, {
           method: "POST",
           body: JSON.stringify({ delete_files: deleteFiles }),
         });
+        this.toast(`已投递: 删除整组${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
-        alert("删除命令发送失败: " + e.message);
+        if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
     },
     async actTorrent(action) {
@@ -418,21 +541,30 @@ const app = createApp({
       if (!this.menu.hash) return;
       try {
         await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
+        this.toast(`已投递: ${this._actionText(action)}该种子`, "ok", 2500);
       } catch (e) {
-        alert("命令发送失败: " + e.message);
+        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
     async delTorrent(deleteFiles) {
       this.menu.visible = false;
       if (!this.menu.hash) return;
-      if (!confirm(deleteFiles ? "确认删除该种子并删除磁盘文件?此操作不可恢复!" : "确认删除该种子(保留文件)?")) return;
+      const ok = await this.confirmDialog(
+        deleteFiles ? "删除该种子(含磁盘文件)" : "删除该种子",
+        deleteFiles
+          ? "将删除该种子及其磁盘文件, 此操作不可恢复。"
+          : "将删除该种子, 保留磁盘文件。",
+        { okText: deleteFiles ? "删除并移除文件" : "删除", danger: true }
+      );
+      if (!ok) return;
       try {
         await this.api(`/api/torrents/${this.menu.hash}/delete`, {
           method: "POST",
           body: JSON.stringify({ delete_files: deleteFiles }),
         });
+        this.toast(`已投递: 删除该种子${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
-        alert("删除命令发送失败: " + e.message);
+        if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
     },
     gridStyle(page) {

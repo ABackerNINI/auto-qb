@@ -8,11 +8,30 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <!-- 图标 sprite: use 引用, 无外部图标库依赖(继承 .ico 的 stroke/fill) -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+    <symbol id="i-caret" viewBox="0 0 16 16"><path d="M6.5 3.8 11 8l-4.5 4.2"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.8 3.6v8.8M10.2 3.6v8.8"/></symbol>
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M5.2 3.3 12.4 8l-7.2 4.7z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.55-3.6"/><path d="M13.3 2.8v2.7h-2.7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3.4 5h9.2M6.4 5V3.5h3.2V5M5 5l.6 8h4.8L11 5"/></symbol>
+    <symbol id="i-trash-x" viewBox="0 0 16 16"><path d="M3.4 5h9.2M6.4 5V3.5h3.2V5M5 5l.6 8h4.8L11 5M11.6 10.6l3 3M14.6 10.6l-3 3"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 16 16"><path d="M2.8 9.6 5 4.2h6l2.2 5.4v2.2H2.8z"/><path d="M2.8 9.6h3l.7 1.4h3l.7-1.4h3"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 3.1 14.2 13.2H1.8z"/><path d="M8 6.6v3.1M8 11.4v.7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.6 8.4 6.6 11.4 12.6 4.8"/></symbol>
+    <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M8 7.4v3.4M8 5.3v.7"/></symbol>
+  </svg>
+
   <div id="app" v-cloak>
     <!-- 密钥输入(未授权时): 遮罩仅由 authRequired 把守, 验证通过前主界面 DOM 不渲染(防错误密钥闪现) -->
     <div v-if="authRequired" class="login-mask">
       <form class="login-card" @submit.prevent="saveToken">
-        <div class="brand">auto-qb</div>
+        <div class="brand">
+          <span class="brand-mark"><svg class="ico" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></span>
+          <span>auto-qb</span>
+        </div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
         <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password" required>
         <button type="submit" :disabled="!tokenInput.trim() || authPending">{{ authPending ? '验证中…' : '进入' }}</button>
@@ -30,33 +49,64 @@
         </div>
         <!-- 顶栏 -->
         <header class="topbar">
-          <div class="brand">auto-qb <span class="ver">v{{ status.version || '' }}</span></div>
-          <div class="summary-bar">
-            <span>分组 {{ groups.length }}</span>
-            <span>种子 {{ totalTorrents }}</span>
-            <span>下载 {{ fmtSpeed(totalDl) }}</span>
-            <span>上传 {{ fmtSpeed(totalUl) }}</span>
-            <span class="muted">每 {{ pollLabel }}s 刷新</span>
+          <div class="brand">
+            <span class="brand-mark"><svg class="ico" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></span>
+            <span>auto-qb</span>
+            <span class="ver">v{{ status.version || '—' }}</span>
           </div>
+          <nav class="tabs">
+            <button :class="{ active: page === 'groups' }" @click="page = 'groups'">辅种管理</button>
+            <button :class="{ active: page === 'settings' }" @click="openSettings">设置</button>
+          </nav>
           <div class="top-search">
-            <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
-                   placeholder="搜索种子名或文件名…" autocomplete="off" />
+            <div class="search-box">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
+              <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
+                     placeholder="搜索种子名或文件名…" autocomplete="off" />
+              <button v-if="searchQuery" class="search-clear" title="清除搜索" @click="clearSearch">
+                <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+              </button>
+            </div>
             <span v-if="searchBuilding" class="muted">构建索引…</span>
             <span v-if="searchError" class="error">{{ searchError }}</span>
           </div>
-          <nav>
-            <button :class="{active: page==='groups'}" @click="page='groups'">辅种管理</button>
-            <button :class="{active: page==='settings'}" @click="openSettings">设置</button>
-          </nav>
           <div class="spacer"></div>
-          <span class="badge" :class="statusBadge.kind">{{ statusBadge.text }}</span>
+          <div class="stat-pills">
+            <span class="stat-pill">分组 <b>{{ groups.length }}</b></span>
+            <span class="stat-pill">种子 <b>{{ totalTorrents }}</b></span>
+            <span class="stat-pill">下载 <b>{{ fmtSpeed(totalDl) }}</b></span>
+            <span class="stat-pill">上传 <b>{{ fmtSpeed(totalUl) }}</b></span>
+            <span class="stat-pill">每 {{ pollLabel }}s</span>
+          </div>
+          <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
+            <i class="dot"></i>{{ statusBadge.text }}
+          </span>
         </header>
+        <!-- 状态分布条: 由已加载的 groups 前端聚合(点击 chip 按状态筛选, 仅辅种页) -->
+        <div v-if="page === 'groups' && distTotal" class="status-strip">
+          <div class="dist-bar" :title="distTitle">
+            <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
+          </div>
+          <div class="dist-legend">
+            <button v-for="s in distSegments" :key="s.kind" class="dist-chip"
+                    :class="['k-' + s.kind, { active: kindFilter === s.kind }]"
+                    :title="'仅显示' + s.text + '的辅种组'" @click="toggleKindFilter(s.kind)">
+              <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
+            </button>
+            <button v-if="kindFilter" class="dist-chip" @click="clearKindFilter()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- 辅种分组页 -->
       <main v-if="page==='groups'" class="content">
         <p v-if="searchQuery.trim()" class="muted" style="text-align:center">
           搜索"{{ searchQuery.trim() }}": 命中 {{ filteredGroups.length }} 个辅种组(仅命中成员高亮)
+        </p>
+        <p v-else-if="kindFilter" class="muted" style="text-align:center">
+          已按状态筛选"{{ kindText(kindFilter) }}": {{ filteredGroups.length }} 个辅种组
         </p>
         <div class="group-table" ref="groupTable">
           <!-- 列头(点击排序, 右缘拖拽调宽) -->
@@ -80,7 +130,10 @@
                  :style="gridStyle('group')"
                  @click="toggleExpand(g.key)"
                  @contextmenu.prevent="openMenu($event, g)">
-              <div class="g-name" :title="g.name">{{ g.name }}</div>
+              <div class="g-name" :title="g.name">
+              <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+              <span>{{ g.name }}</span>
+            </div>
               <div class="g-stat">↓ {{ fmtSpeed(g.dlspeed) }}</div>
               <div class="g-stat">↑ {{ fmtSpeed(g.upspeed) }}</div>
               <div class="g-stat">{{ fmtSize(g.uploaded) }}</div>
@@ -117,13 +170,16 @@
                    class="member-row" :class="[m.kind, { 'search-hit': m.hit }]"
                    :style="gridStyle('detail')"
                    @contextmenu.prevent="openMemberMenu($event, m)">
-                <span class="m-site">{{ m.site }}</span>
-                <span class="m-state">{{ kindText(m.kind) }}</span>
+                <span class="m-site"><i class="dot"></i>{{ m.site }}</span>
+                <span class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
                 <span>{{ fmtSpeed(m.dlspeed) }}</span>
                 <span>{{ fmtSpeed(m.upspeed) }}</span>
                 <span>{{ fmtSize(m.uploaded) }}</span>
                 <span>{{ fmtSize(m.size) }}</span>
-                <span>{{ (m.progress * 100).toFixed(1) }}%</span>
+                <span class="m-progress">
+                  <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
+                  <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+                </span>
                 <span>{{ fmtDuration(m.seeding_time) }}</span>
                 <span class="m-hash">{{ m.hash.slice(0, 8) }}</span>
               </div>
@@ -131,7 +187,11 @@
           </template>
 
           <div v-if="!filteredGroups.length" class="empty">
-            {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配种子') : '暂无辅种分组' }}
+            <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
+            <span>
+              {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配种子')
+                 : (kindFilter ? '当前筛选下没有辅种组' : '暂无辅种分组') }}
+            </span>
           </div>
           <p v-if="searchQuery.trim() && searchBuilding && filteredGroups.length"
              class="muted" style="text-align:center">
@@ -139,23 +199,43 @@
           </p>
         </div>
 
-        <!-- 右键菜单(组/单种子共用) -->
-        <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}">
+        <!-- 右键菜单(组/单种子共用; 坐标已做视口边界吸附, 由 JS 计算) -->
+        <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
           <template v-if="menu.hash">
-            <div class="ctx-item" @click="actTorrent('pause')">暂停该种子</div>
-            <div class="ctx-item" @click="actTorrent('resume')">开始该种子</div>
-            <div class="ctx-item" @click="actTorrent('reannounce')">强制汇报</div>
+            <div class="ctx-item" @click="actTorrent('pause')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停该种子
+            </div>
+            <div class="ctx-item" @click="actTorrent('resume')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始该种子
+            </div>
+            <div class="ctx-item" @click="actTorrent('reannounce')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
             <div class="ctx-sep"></div>
-            <div class="ctx-item danger" @click="delTorrent(false)">删除(保留文件)</div>
-            <div class="ctx-item danger" @click="delTorrent(true)">删除(含文件)</div>
+            <div class="ctx-item danger" @click="delTorrent(false)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除(保留文件)
+            </div>
+            <div class="ctx-item danger" @click="delTorrent(true)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash-x"></use></svg>删除(含文件)
+            </div>
           </template>
           <template v-else>
-            <div class="ctx-item" @click="act('pause')">暂停整组</div>
-            <div class="ctx-item" @click="act('resume')">开始整组</div>
-            <div class="ctx-item" @click="act('reannounce')">强制汇报</div>
+            <div class="ctx-item" @click="act('pause')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停整组
+            </div>
+            <div class="ctx-item" @click="act('resume')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始整组
+            </div>
+            <div class="ctx-item" @click="act('reannounce')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
             <div class="ctx-sep"></div>
-            <div class="ctx-item danger" @click="delWithFiles(false)">删除(保留文件)</div>
-            <div class="ctx-item danger" @click="delWithFiles(true)">删除(含文件)</div>
+            <div class="ctx-item danger" @click="delWithFiles(false)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除整组(保留文件)
+            </div>
+            <div class="ctx-item danger" @click="delWithFiles(true)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash-x"></use></svg>删除整组(含文件)
+            </div>
           </template>
         </div>
       </main>
@@ -401,6 +481,36 @@
         </template>
       </main>
     </template>
+
+    <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
+    <div class="toast-wrap">
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.kind">
+        <svg class="ico ico-sm" viewBox="0 0 16 16">
+          <use :href="t.kind === 'ok' ? '#i-check' : (t.kind === 'error' ? '#i-warn' : '#i-info')"></use>
+        </svg>
+        <span>{{ t.text }}</span>
+      </div>
+    </div>
+
+    <div v-if="modal.visible" class="modal-mask" @click.self="resolveModal(false)">
+      <div class="modal" :class="{ danger: modal.danger }" role="dialog" aria-modal="true">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16">
+            <use :href="modal.danger ? '#i-warn' : '#i-info'"></use>
+          </svg>
+          <span>{{ modal.title }}</span>
+        </div>
+        <p class="modal-body">{{ modal.body }}</p>
+        <input v-if="modal.input" ref="modalInput" v-model="modal.value" class="modal-input"
+               :placeholder="modal.placeholder" @keyup.enter="resolveModal(true)">
+        <div class="modal-actions">
+          <button class="ce-btn ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
+          <button class="ce-btn" :class="modal.danger ? 'danger' : 'primary'" @click="resolveModal(true)">
+            {{ modal.okText }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 字段渲染组件模板(单一模板适配全部字段类型; 组件定义见 config_editor.js) -->

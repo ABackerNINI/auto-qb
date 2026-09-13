@@ -123,7 +123,12 @@ window.CONFIG_EDITOR = {
       }
     },
     async cfgDiscard() {
-      if (this.cfgDirty && !confirm("放弃未保存的修改?")) return;
+      if (this.cfgDirty) {
+        const ok = await this.confirmDialog("放弃未保存的修改", "当前编辑内容将丢失, 配置保持磁盘原样。", {
+          okText: "放弃修改", danger: true,
+        });
+        if (!ok) return;
+      }
       await this.cfgLoad();
       this.cfg.notice = "";
       this.cfg.previewOpen = false;
@@ -334,8 +339,8 @@ window.CONFIG_EDITOR = {
       this.cfg.newTrackerName = "";
       this.cfg.notice = "";
     },
-    cfgTrackerRename(oldName) {
-      const newName = prompt("重命名站点配置", oldName);
+    async cfgTrackerRename(oldName) {
+      const newName = await this.promptDialog("重命名站点配置", oldName, { okText: "重命名" });
       if (newName === null) return;
       const name = newName.trim();
       if (!name || name === oldName) return;
@@ -350,8 +355,13 @@ window.CONFIG_EDITOR = {
       this.cfgSetPath([...this.cfgConfigPath(), "trackers"], rebuilt);
       if (this.cfg.trackerKey === oldName) this.cfg.trackerKey = name;
     },
-    cfgTrackerRemove(name) {
-      if (!confirm(`删除站点 ${name} 的配置?(不影响 qB 中的种子)`)) return;
+    async cfgTrackerRemove(name) {
+      const ok = await this.confirmDialog(
+        `删除站点 ${name} 的配置`,
+        "仅从配置文件中移除该站点段(不影响 qB 中的种子), 保存后生效。",
+        { okText: "删除", danger: true }
+      );
+      if (!ok) return;
       const trackers = { ...(this.cfgConfig().trackers || {}) };
       delete trackers[name];
       if (Object.keys(trackers).length) this.cfgSetPath([...this.cfgConfigPath(), "trackers"], trackers);
@@ -396,8 +406,11 @@ window.CONFIG_EDITOR = {
       this.cfg.ruleGroupKey = name;
       this.cfg.newRuleGroupName = "";
     },
-    cfgRuleRemoveGroup(name) {
-      if (!confirm(`删除规则集 ${name} 及其全部规则?`)) return;
+    async cfgRuleRemoveGroup(name) {
+      const ok = await this.confirmDialog(`删除规则集 ${name}`, "该规则集下的全部规则将一并移除。", {
+        okText: "删除规则集", danger: true,
+      });
+      if (!ok) return;
       this.cfgDelPath([...this.cfgConfigPath(), name]);
       const names = this.cfgRuleGroupNames().filter((n) => n !== name);
       this.cfg.ruleGroupKey = names.length ? names[0] : null;
@@ -419,12 +432,15 @@ window.CONFIG_EDITOR = {
       this.cfgSetPath([...this.cfgConfigPath(), groupKey, name], { conditions: [], actions: [] });
       this.cfg.newRuleName = "";
     },
-    cfgRuleRemove(groupKey, ruleName) {
-      if (!confirm(`删除规则 ${ruleName}?`)) return;
+    async cfgRuleRemove(groupKey, ruleName) {
+      const ok = await this.confirmDialog(`删除规则 ${ruleName}`, "该规则的条件与动作配置将一并移除。", {
+        okText: "删除规则", danger: true,
+      });
+      if (!ok) return;
       this.cfgDelPath([...this.cfgConfigPath(), groupKey, ruleName]);
     },
-    cfgRuleRename(groupKey, ruleName) {
-      const input = prompt("重命名规则", ruleName);
+    async cfgRuleRename(groupKey, ruleName) {
+      const input = await this.promptDialog("重命名规则", ruleName, { okText: "重命名" });
       if (input === null) return;
       const name = input.trim();
       if (!name || name === ruleName) return;
@@ -453,8 +469,11 @@ window.CONFIG_EDITOR = {
     cfgCurveEnable() {
       this.cfgSetPath(this.cfgCurvePath(), { traffic_source: [{ traffic_monitor: { dat_path: "" } }], curves: [] });
     },
-    cfgCurveDisable() {
-      if (!confirm("关闭全局限速曲线?(当前曲线配置将从文件中移除)")) return;
+    async cfgCurveDisable() {
+      const ok = await this.confirmDialog("关闭全局限速曲线", "当前曲线配置将从配置文件中移除。", {
+        okText: "关闭并移除", danger: true,
+      });
+      if (!ok) return;
       this.cfgDelPath(this.cfgCurvePath());
     },
     cfgCurve() {
