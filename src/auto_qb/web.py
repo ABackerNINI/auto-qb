@@ -249,7 +249,7 @@ def start_web_server(manager) -> SimpleNamespace:
 
     threading.Thread(target=server.run, name="auto-qb-web", daemon=True).start()
     logger.warning(
-        f"WEB UI 已启动: http://{manager.config.web.host}:{manager.config.web.port}"
+        f"WEB UI 已启动: http://{manager.config.web.host}:{manager.config.web.port} "
         f"(密钥见 {os.path.join(os.path.dirname(manager.state_file) or '.', 'web.token')})"
     )
     return SimpleNamespace(stop=lambda: setattr(server, "should_exit", True))
