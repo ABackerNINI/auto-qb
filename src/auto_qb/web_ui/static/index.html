@@ -9,13 +9,15 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <!-- 密钥输入(未授权时); form 包裹: 消除 Chrome "Password field is not contained in a form" 警告并支持密码管理器 -->
-    <div v-if="authRequired && !token" class="login-mask">
+    <!-- 密钥输入(未授权时): 遮罩仅由 authRequired 把守, 验证通过前主界面 DOM 不渲染(防错误密钥闪现) -->
+    <div v-if="authRequired" class="login-mask">
       <form class="login-card" @submit.prevent="saveToken">
         <div class="brand">auto-qb</div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
         <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password" required>
-        <button type="submit" :disabled="!tokenInput.trim()">进入</button>
+        <button type="submit" :disabled="!tokenInput.trim() || authPending">{{ authPending ? '验证中…' : '进入' }}</button>
+        <button v-if="authErrorKind === 'unavailable'" type="button" class="secondary"
+                @click="retryAuth" :disabled="authPending">重试连接</button>
         <p v-if="authError" class="error">{{ authError }}</p>
       </form>
     </div>

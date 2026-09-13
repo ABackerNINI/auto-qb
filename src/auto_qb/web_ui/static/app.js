@@ -23,10 +23,13 @@ function loadColWidths() {
 createApp({
   data() {
     return {
-      token: localStorage.getItem("autoqb_token") || "",
+      token: "",  // 已验证通过的密钥(唯一可信身份); 仅 bootstrap 验证成功后提交
+      pendingToken: "",  // 验证中的候选密钥(不参与渲染门控/请求头); 服务不可达时供"重试连接"复用
       tokenInput: "",
-      authRequired: true,
+      authRequired: true,  // 遮罩唯一开关: 仅在密钥验证成功后置 false —— 与 token 赋值解耦, 防错误密钥瞬间主界面闪现
+      authPending: false,  // 密钥验证中: 禁用提交、按钮显示"验证中…", 防重复提交
       authError: "",
+      authErrorKind: "",   // "auth" = 密钥被拒(401); "unavailable" = 服务不可达(保留候选密钥供重试)
       page: "groups",
       groups: [],
       status: {},
@@ -129,28 +132,29 @@ createApp({
       if (document.hidden) this.stopPolling();
       else if (this.token) this.refresh();  // 登出态切回标签不发空 Bearer(由登录成功后自行启动轮询)
     });
-    if (!this.token) return;
-    await this.bootstrap();
+    // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除
+    const savedToken = localStorage.getItem("autoqb_token");
+    if (savedToken) this.bootstrap(savedToken);
   },
   methods: {
     async api(path, options = {}) {
       if (!this.token) {
         // 无密钥不出网: 否则会发出 "Bearer " 空头(被 HTTP 层裁剪成裸 "Bearer"),
         // 后端白记一次 401。调用方按 401 同路径处理(回密钥输入界面/静默)。
+        this._logout();
         const noAuth = new Error("unauthorized");
         noAuth.auth = true;
         throw noAuth;
       }
+      return this._request(path, options, this.token);
+    },
+    async _request(path, options, token) {
       const resp = await fetch(path, {
         ...options,
-        headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json", ...(options.headers || {}) },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) },
       });
       if (resp.status === 401) {
-        // 401 = 密钥无效/轮换: 清除本地旧密钥, 强制回到密钥输入界面(防"连接中"死锁)
-        this.authRequired = true;
-        this.token = "";
-        localStorage.removeItem("autoqb_token");
-        if (this.searchTimer) clearTimeout(this.searchTimer);  // 登出后停掉搜索防抖/重试, 防空头竞态
+        this._logout("密钥无效或已更换");
         const err = new Error("unauthorized");
         err.auth = true;
         throw err;
@@ -161,24 +165,73 @@ createApp({
       }
       return resp.json();
     },
-    async bootstrap() {
+    _logout(message = "") {
+      // 鉴权失败唯一收口: 遮罩、凭证、定时器与所有已加载的受保护数据一并清空——
+      // 防错误密钥提交瞬间主界面(含上一会话残留的分组/设置)闪现, 也避免数据滞留内存视图
+      this.authRequired = true;
+      this.authPending = false;
+      this.pendingToken = "";
+      this.token = "";
+      localStorage.removeItem("autoqb_token");
+      this.stopPolling();
+      if (this.searchTimer) clearTimeout(this.searchTimer);  // 登出后停掉搜索防抖/重试, 防空头竞态
+      this.searchTimer = null;
+      this.groups = [];
+      this.status = {};
+      this.lastRid = null;
+      this.idlePolls = 0;
+      this.pollFails = 0;
+      this.serviceDown = false;
+      this.expandedKey = null;
+      this.settingsText = "";  // config.yml 原文同样是受保护内容, 一并清除
+      this.page = "groups";
+      this.searchQuery = "";
+      this.resetSearch();
+      if (message) {
+        this.authError = message;
+        this.authErrorKind = "auth";
+      }
+    },
+    async bootstrap(candidate) {
+      if (this.authPending) return;  // 防重复提交(验证中按钮已禁用, 双保险)
+      this.authPending = true;
+      this.authError = "";
+      this.authErrorKind = "";
+      this.pendingToken = candidate;
+      this.lastRid = null;  // 重新鉴权/换密钥: 强制全量取一次分组视图
+      this.idlePolls = 0;
       try {
-        this.authError = "";
-        this.lastRid = null;  // 重新鉴权/换密钥: 强制全量取一次分组视图
-        this.idlePolls = 0;
-        await this.refreshOnce();
-        this.authRequired = false;
-        localStorage.setItem("autoqb_token", this.token);
+        // 用候选密钥直接验证: 成功前 this.token 不提交、authRequired 不解除, 主界面 DOM 绝不渲染
+        const state = await this._request("/api/state", {}, candidate);
+        this.status = state.status;
+        this.groups = state.groups || [];
+        if (typeof state.rid === "number") this.lastRid = state.rid;
+        this.serviceDown = false;
+        this.token = candidate;  // 验证通过才提交为当前身份
+        this.authRequired = false;  // 唯一放行点
+        localStorage.setItem("autoqb_token", candidate);
+        this.pendingToken = "";
+        this.tokenInput = "";
         this.startPolling();
-      } catch {
-        this.authError = "密钥无效或服务不可用";
+      } catch (e) {
+        if (!e.auth) {
+          // 服务不可达 ≠ 密钥错误: 不否定候选密钥(本地存储亦保留), 给出重试入口, 防误清凭证
+          this.authError = "服务不可用, 请确认 auto-qb 程序正在运行";
+          this.authErrorKind = "unavailable";
+        }
+        // e.auth(401/无凭证): _request 已走 _logout() 完成遮罩/数据/文案收口
+      } finally {
+        this.authPending = false;
       }
     },
     saveToken() {
-      const token = this.tokenInput.trim();
-      if (!token) return;  // 空提交拦截: 不置空当前 token, 更不发出空 Bearer 请求
-      this.token = token;
-      this.bootstrap();
+      const candidate = this.tokenInput.trim();
+      if (!candidate || this.authPending) return;  // 空提交/验证中拦截: 不触发任何请求与界面切换
+      this.bootstrap(candidate);
+    },
+    retryAuth() {
+      // 仅"服务不可达"分支保留候选密钥; 401 已清空, 重试按钮不渲染
+      if (this.pendingToken && !this.authPending) this.bootstrap(this.pendingToken);
     },
     startPolling() {
       this.stopPolling();
@@ -229,14 +282,6 @@ createApp({
         this.pollFails = Math.min(4, this.pollFails + 1);
       }
       this.scheduleNext();
-    },
-    async refreshOnce() {
-      const state = await this.api("/api/state");
-      this.status = state.status;
-      this.groups = state.groups || [];
-      if (typeof state.rid === "number") this.lastRid = state.rid;
-      this.idlePolls = 0;
-      this.serviceDown = false;
     },
     async openSettings() {
       this.page = "settings";

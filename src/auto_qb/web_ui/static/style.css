@@ -22,6 +22,8 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); fon
 .login-card .brand { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
 .login-card input { width: 100%; margin: 12px 0; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
 .login-card button { width: 100%; padding: 9px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 14px; cursor: pointer; }
+.login-card button:disabled { opacity: .55; cursor: default; }
+.login-card button.secondary { margin-top: 8px; background: transparent; color: var(--fg-muted); border: 1px solid var(--border); }
 
 .sticky-head { position: sticky; top: 0; z-index: 30; }
 .service-banner { background: rgba(224,82,82,.16); color: var(--error); border-bottom: 1px solid var(--error); padding: 8px 20px; font-weight: 600; text-align: center; }
