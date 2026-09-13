@@ -148,6 +148,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # WEB UI: 访问密钥/服务器句柄(run() 启用时确定)
         self._web_token: str = ""
         self._web_handle = None
+        # WEB UI: 限速/流量只读快照(限速曲线任务每次执行后**整体替换**, Web 线程只读)。
+        # 含今日/多周期累计流量与"命中(曲线目标)/实际(qB 当前)"限速对照, 供顶栏 pill 显示。
+        # 未启用曲线功能时保持 state="disabled"(前端据此不渲染流量/限速 pill)。
+        self._traffic_view: dict = {"state": "disabled", "periods": [], "limit": {}}
         # 热重载后首轮抑制事件分派(全量重建的 added 重放保护)
         self._suppress_events = False
         # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
@@ -338,25 +342,48 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         return "other"
 
     @staticmethod
-    def _hr_view_tags(rec: TorrentRecord) -> dict:
-        """该成员的 HR 标签展示信息(供前端把 HR 标签分别着成"未达标/已达标"两色)
+    def _hr_view_fields(rec: TorrentRecord) -> dict:
+        """该成员的 HR 展示字段(标签文本 + 要求/达成布尔), 供前端渲染 H&R 栏与对照列
 
-        - hr_tag:      已触发 HR 条件但尚未达标时应有的标签(如 !!HR3D!!); 空 = 不适用
-        - hr_tag_done: 已达标时应有的标签(如 --HR3D--); 空 = 不适用
+        - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
+        - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
+        - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
+        - hr_req_ratio: 要求分享率(0 = 不要求)
 
-        判定委托 TorrentRecord.check_hr_condition/check_hr_satisfied, 与维护流程(打 HR 标签)
-        完全同一语义, 不另造判定; 标签文本经 utils.replace_vars 解析 ${required_seeding_time}
-        变量, 与真正写入 qB 的标签逐字一致 —— 前端只要文本相等就能着色。
+        判定委托 TorrentRecord.check_hr_condition/check_hr_satisfied, 标签文本经
+        utils.replace_vars 解析 ${required_seeding_time}, 与维护流程(打 HR 标签)完全同源 ——
+        前端只做展示比较, 不得在 JS 里重算模板或阈值(否则自定义标签格式/阈值会立即失效)。
+        未配置 HR 站点返回全空值(前端据此整列显示"—"), 不做 None 防御(早暴露配置匹配错误)。
         """
         from . import utils as _utils
 
         conf = rec.tracker_conf
         hr = conf.hr if conf is not None else None
-        if hr is None or not rec.check_hr_condition():
-            return {"hr_tag": "", "hr_tag_done": ""}
-        if rec.check_hr_satisfied():
-            return {"hr_tag": "", "hr_tag_done": _utils.replace_vars(hr.add_tag_for_satisfied, conf)}
-        return {"hr_tag": _utils.replace_vars(hr.add_tag, conf), "hr_tag_done": ""}
+        if hr is None:
+            return {
+                "hr_tag": "",
+                "hr_tag_done": "",
+                "hr_triggered": False,
+                "hr_satisfied": False,
+                "hr_req_time": 0,
+                "hr_req_ratio": 0.0,
+            }
+        triggered = rec.check_hr_condition()
+        satisfied = triggered and rec.check_hr_satisfied()
+        fields = {
+            "hr_tag": "",
+            "hr_tag_done": "",
+            "hr_triggered": triggered,
+            "hr_satisfied": satisfied,
+            "hr_req_time": hr.required_seeding_time + hr.extra_seeding_time,
+            "hr_req_ratio": hr.required_share_ratio,
+        }
+        if triggered:
+            if satisfied:
+                fields["hr_tag_done"] = _utils.replace_vars(hr.add_tag_for_satisfied, conf)
+            else:
+                fields["hr_tag"] = _utils.replace_vars(hr.add_tag, conf)
+        return fields
 
     def _build_group_view(self) -> List[dict]:
         """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
@@ -387,8 +414,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
                     "seeding_time": view_field_value("seeding_time", r.seeding_time),
                     "ratio": round(r.ratio, 3),
-                    # HR 标签语义色(已触发未达标 / 已达标): 判定与打标签流程同源, 见 _hr_view_tags
-                    **self._hr_view_tags(r),
+                    # 添加时间(unix 秒): 组级默认排序取组内最大值(见下方组级 added_on)
+                    "added_on": r.added_on,
+                    # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
+                    **self._hr_view_fields(r),
                 } for r in recs
             ]
             view.append(
@@ -403,6 +432,13 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     # 两者不等即说明组内大小不一致(前端据此提示风险), 而非显示重复信息
                     "size": members_view[0]["size"],
                     "total_size": sum(m["size"] for m in members_view),
+                    # 组级默认排序键 = 组内**最近添加**时间(前端 sortKey=added_on 降序);
+                    # 用 max 而非 min: "刚补进来的那个辅种"才是用户最关心的新条目
+                    "added_on": max(m["added_on"] for m in members_view),
+                    # HR 栏: 分子 = 已触发但未达标(需关注), 分母 = 已触发 HR 的成员数;
+                    # 在**后端**算好计数, 前端只负责显示(与 ai/08 的"派生值后端算"约定一致)
+                    "hr_triggered": sum(1 for m in members_view if m["hr_triggered"]),
+                    "hr_pending": sum(1 for m in members_view if m["hr_triggered"] and not m["hr_satisfied"]),
                     "members": members_view,
                 }
             )
@@ -504,6 +540,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 "progress": round(rec.progress, 4),
                 "seeding_time": rec.seeding_time,
                 "ratio": round(rec.ratio, 3),
+                "added_on": rec.added_on,
+                # 未归组命中种子以单种子虚拟行展示, 同样需要 HR 列所需字段
+                **self._hr_view_fields(rec),
                 "by": by,
             }
 
@@ -608,7 +647,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         levels = sorted({c.level for c in changes if c.level != "R"})
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
-        # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_tags),
+        # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_fields),
         # 配置变了视图内容就可能变 —— 与 store 视图字段变化无关, 需显式置脏
         self._group_view_dirty = True
         if "L1" in levels:

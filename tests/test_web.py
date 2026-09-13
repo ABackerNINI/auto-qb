@@ -156,6 +156,12 @@ def _make_web_manager(tmp_path, config_text):
         _web_last_seen=0.0,
         _group_view_dirty=False,
         _group_view_ver=0,
+        # 限速/流量只读快照(真实 manager 由 SpeedCurveMixin 整体替换; 此处为未启用态)
+        _traffic_view={
+            "state": "disabled",
+            "periods": [],
+            "limit": {}
+        },
     )
     # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
     # ensure_group_state(带 rid 的增量状态)
@@ -478,6 +484,84 @@ def test_build_group_view_hr_tags(tmp_path):
     assert members["Done.Show"]["hr_tag_done"] == "--HR3D--"
     # 未触发 HR 条件时两字段都为空 -> 前端保持普通标签配色
     assert members["NoHR.Show"]["hr_tag"] == "" and members["NoHR.Show"]["hr_tag_done"] == ""
+    # 新增展示字段(前端 H&R 栏 / 做种时长与分享率对照列的数据源): 触发与达成布尔 + 要求阈值
+    assert members["Pending.Show"]["hr_triggered"] is True
+    assert members["Pending.Show"]["hr_satisfied"] is False
+    assert members["Pending.Show"]["hr_req_time"] == 3 * 86400 + 12 * 3600
+    assert members["Pending.Show"]["hr_req_ratio"] == 0.0
+    assert members["Done.Show"]["hr_triggered"] is True and members["Done.Show"]["hr_satisfied"] is True
+    assert members["NoHR.Show"]["hr_triggered"] is False
+
+
+def test_build_group_view_hr_counts(tmp_path):
+    """组级 H&R 计数: 分母 = 已触发 HR 的成员数, 分子 = 其中未达标的成员数(前端 H&R 栏)"""
+    from helpers import FakeClient, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
+
+    hr = _hr_rule(required_share_ratio=2.0)
+    conf = FakeTracker("HHan", hr=hr)
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+
+    def tor(h, seeding_time, ratio):
+        return FakeTorrent(
+            hash=h,
+            name="Show",
+            state="stalledUP",
+            size=512**2,
+            total_size=512**2,
+            downloaded=512**2,
+            amount_left=0,
+            progress=1.0,
+            seeding_time=seeding_time,
+            ratio=ratio,
+            save_path=r"R:/s",
+            tracker_conf=conf,
+        )
+
+    seed_store(
+        mgr,
+        [
+            tor("HA", 100, 0.5),  # 已触发但未达标(时长与分享率都不够)
+            tor("HB", 100, 3.0),  # 已触发且分享率达标
+            tor("HC", 4 * 86400, 0.1),  # 已触发且时长达标
+        ]
+    )
+    key = ("R:/s", ("a.mkv", ))
+    mgr.store.groups[key] = ["HA", "HB", "HC"]
+    for h in ("HA", "HB", "HC"):
+        mgr.store.member_to_key[h] = key
+
+    g = mgr._build_group_view()[0]
+    assert g["hr_triggered"] == 3
+    assert g["hr_pending"] == 1
+
+
+def test_build_group_view_added_on_is_latest_member(tmp_path):
+    """组级 added_on = 组内**最近添加**成员的时间(前端默认按此降序排序)
+
+    用 max 而非 min: "刚补进来的那个辅种"才是用户最关心的新条目。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    t1 = FakeTorrent(hash="HA", name="Show", added_on=1000, save_path=r"R:/s")
+    t2 = FakeTorrent(hash="HB", name="Show", added_on=3000, save_path=r"R:/s")
+    t3 = FakeTorrent(hash="HC", name="Other", added_on=2000, save_path=r"R:/o")
+    seed_store(mgr, [t1, t2, t3])
+    key = ("R:/s", ("a.mkv", "b.mkv"))
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+    key2 = ("R:/o", ("c.mkv", ))
+    mgr.store.groups[key2] = ["HC"]
+    mgr.store.member_to_key["HC"] = key2
+
+    groups = {g["name"]: g for g in mgr._build_group_view()}
+    assert groups["Show"]["added_on"] == 3000  # max(1000, 3000)
+    assert groups["Other"]["added_on"] == 2000
+    # 成员级也透出 added_on(排序/展示共用的原始值)
+    assert sorted(m["added_on"] for m in groups["Show"]["members"]) == [1000, 3000]
 
 
 def test_build_search_index_files():

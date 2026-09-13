@@ -92,6 +92,7 @@ def create_app(manager) -> FastAPI:
             "torrents": snap["torrents"],
             "groups": len(manager._group_view),
             "version": _app_version(),
+            "traffic": manager._traffic_view,
         }
 
     @app.get("/api/state")
@@ -111,6 +112,9 @@ def create_app(manager) -> FastAPI:
                     "torrents": snap["torrents"],
                     "groups": len(manager._group_view),
                     "version": _app_version(),
+                    # 限速/流量快照: 恒回传(不受 rid 门控) —— 数据源是限速曲线任务而非分组视图,
+                    # 若参与版本门控会与 groups 的脏语义耦合, 反而可能长时间不刷新
+                    "traffic": manager._traffic_view,
                 },
             **manager.ensure_group_state(rid),
         }

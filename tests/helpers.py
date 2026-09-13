@@ -437,6 +437,8 @@ class FakeTorrent:
         self.progress = kw.get("progress", 0.0)
         self.dl_limit = kw.get("dl_limit", 0)
         self.up_limit = kw.get("up_limit", 0)
+        # 添加时间(unix 秒): Web 分组视图默认排序依据; 默认取固定值保证测试确定性
+        self.added_on = kw.get("added_on", 1700000000)
         # TorrentDictionary 扩展字段(skip-checking 重加时逐项回传; 默认 None/False 即不传)
         self.seq_dl = kw.get("seq_dl", False)
         self.f_l_piece_prio = kw.get("f_l_piece_prio", False)
@@ -531,6 +533,7 @@ class FakeTorrent:
         "progress",
         "dl_limit",
         "up_limit",
+        "added_on",
     )
 
     def apply_delta(self, patch):

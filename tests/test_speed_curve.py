@@ -810,3 +810,84 @@ def test_qbapi_global_speed_limit_normalization(tmp_path):
     assert client.transfer.limits["upload_limit"] == 6144 * 1024
     assert client.transfer.limits["download_limit"] == 2048 * 1024
     assert api.get_global_speed_limits() == {"upload_limit": 6144, "download_limit": 2048}
+
+
+# ---------- 限速/流量只读快照(_traffic_view; Web 顶栏 pill 的数据源) ----------
+def test_traffic_view_disabled_without_config(tmp_path):
+    """未启用曲线 -> state=disabled(前端据此不渲染流量/限速 pill)"""
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.config.global_speed_limit_curve = None
+    assert mgr._traffic_view["state"] == "disabled"
+
+    assert _run_curve(mgr) is True
+    assert mgr._traffic_view["state"] == "disabled"
+
+
+def test_traffic_view_ok_reports_periods_and_limits(tmp_path):
+    """正常路径: 快照含各周期累计流量(字节) + 命中/实际限速(KiB/s), 写入后两者一致"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr)
+    tv = mgr._traffic_view
+    assert tv["state"] == "ok"
+    assert tv["date"] == today.isoformat()
+    assert tv["periods"] == [{"period": "day", "label": "今日", "up": 15 * GIB, "down": 5 * GIB}]
+    # 命中: 15GiB -> 5MiB/s = 5120KiB/s; 5GiB -> 11MiB/s = 11264KiB/s
+    assert tv["limit"]["target"] == {"up": 5120, "down": 11264}
+    # 写入成功后回读 -> 实际 == 目标(前端此时只显示一个值)
+    assert tv["limit"]["actual"] == {"up": 5120, "down": 11264}
+    assert tv["limit"]["reasons"] == []
+
+
+def test_traffic_view_manual_reason_on_odd_kib(tmp_path):
+    """手动保护(奇数 KiB)写入 reasons(含方向与中文原因) -> 前端标锁图标并显示"命中/实际"两值"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 2001 * 1024  # 用户手动 2001KiB/s(奇数)
+
+    assert _run_curve(mgr)
+    tv = mgr._traffic_view
+    assert tv["limit"]["target"]["up"] == 6144  # 5GiB -> 首档 6MiB/s
+    assert tv["limit"]["actual"]["up"] == 2001  # 未被覆盖, 仍是手动值 -> 前端显示两者不一致
+    assert [r["code"] for r in tv["limit"]["reasons"]] == ["manual"]
+    assert tv["limit"]["reasons"][0]["dir"] == "up"
+
+
+def test_traffic_view_dry_run_has_target_without_actual(tmp_path):
+    """dry_run: 只有命中目标, 不读不写 qB -> actual 为 None"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr, dry_run=True)
+    tv = mgr._traffic_view
+    assert tv["state"] == "dry_run"
+    assert tv["limit"]["target"] == {"up": 5120, "down": None}
+    assert tv["limit"]["actual"] == {"up": None, "down": None}
+    assert client.transfer.calls == []  # 确实未读未写
+
+
+def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
+    """数据源缺失/无有效行 -> state=stale + 原因码(前端提示数据不可用, 且不展示流量)"""
+    gslc = _gslc(str(tmp_path / "not-exist.dat"), _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    assert _run_curve(mgr) is True
+    tv = mgr._traffic_view
+    assert tv["state"] == "stale"
+    assert tv["periods"] == []
+    assert tv["limit"]["reasons"][0]["code"] == "dat_missing"
+
+    # 文件存在但无有效记录: 同样 stale, 原因码不同
+    bad = tmp_path / "bad.dat"
+    bad.write_text('lines: "2"\nnot-a-date\n', encoding="utf-8")
+    mgr.config.global_speed_limit_curve = _gslc(str(bad), _pc("day", up=_points(FULL_UPLOAD)))
+    assert _run_curve(mgr) is True
+    assert mgr._traffic_view["state"] == "stale"
+    assert mgr._traffic_view["limit"]["reasons"][0]["code"] == "dat_empty"

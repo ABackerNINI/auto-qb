@@ -14,6 +14,7 @@ global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按�
 - dry_run: 只计算并输出日志, 不读当前、不写 qB
 """
 import logging
+import time
 from datetime import date
 from typing import List, Optional, Tuple
 
@@ -65,6 +66,7 @@ class SpeedCurveMixin:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
         conf = self.config.global_speed_limit_curve
         if conf is None:  # 未启用该功能
+            self._publish_traffic("disabled")
             return REQUEUE
 
         # 1. 读取数据源
@@ -73,10 +75,12 @@ class SpeedCurveMixin:
                 text = f.read()
         except OSError as e:
             logger.warning(f"限速曲线 | 读取流量数据失败({conf.dat_path}): {e}, 本轮不动")
+            self._publish_traffic("stale", reasons=[{"dir": "", "code": "dat_missing", "text": f"流量数据读取失败: {e}"}])
             return REQUEUE
         rows, bad = curves.parse_history_dat(text)
         if not rows:
             logger.warning(f"限速曲线 | 流量数据无有效记录({conf.dat_path}), 本轮不动")
+            self._publish_traffic("stale", reasons=[{"dir": "", "code": "dat_empty", "text": "流量数据无有效记录"}])
             return REQUEUE
         if bad:
             logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
@@ -96,23 +100,42 @@ class SpeedCurveMixin:
         # 3. 同方向合并(取最严)并转 qB 单位(KiB/s)
         upload_kib = curves.bytes_to_kib(curves.merge_direction(up_speeds)) if up_speeds else None
         download_kib = curves.bytes_to_kib(curves.merge_direction(down_speeds)) if down_speeds else None
+        # 各周期累计流量(Web 顶栏展示“今日上传/下载”的数据源)
+        periods = [
+            {
+                "period": period,
+                "label": _period_label(period),
+                "up": up,
+                "down": down
+            } for period, up, down in period_stats
+        ]
+        target = {"up": upload_kib, "down": download_kib}
 
         if dry_run:
             self._record_curve_state(today, upload_kib, download_kib, dry_run=True)
+            self._publish_traffic("dry_run", periods=periods, target=target)
             return REQUEUE
 
         # 4. 读当前全局限速 -> 手动保护/幂等 -> 有变化才写
         current = self.api.get_global_speed_limits()
         apply_kwargs = {}
-        for label, cur_key, kib in (
-            ("上传", "upload_limit", upload_kib),
-            ("下载", "download_limit", download_kib),
+        reasons: List[dict] = []
+        for label, cur_key, dir_key, kib in (
+            ("上传", "upload_limit", "up", upload_kib),
+            ("下载", "download_limit", "down", download_kib),
         ):
             if kib is None:
                 continue  # 该方向无曲线, 不管理
             cur = current[cur_key]
             if utils.is_manual_speed_limit(cur * 1024):  # 奇数 KiB: 疑似用户手动设置
                 logger.info(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖")
+                reasons.append(
+                    {
+                        "dir": dir_key,
+                        "code": "manual",
+                        "text": f"{label}限速 {cur}KiB/s 为奇数(疑似手动设置), 本轮不覆盖",
+                    }
+                )
                 continue
             if cur == kib:
                 continue  # 幂等: 目标 == 当前(含均不限速), 不写
@@ -129,7 +152,27 @@ class SpeedCurveMixin:
             logger.info(f"限速曲线 | 累计上传/下载 {stats}")
             logger.info(f"限速曲线 | 设置全局限速: {applied}")
 
+        # 回读实际生效值(展示用): 写成功后 qB 侧应等于目标; 回读失败不影响已写入的限速,
+        # 仅把 actual 退化为写前读数并附原因(展示层降级, 不掩盖写操作结果)
+        actual = dict(current)
+        if apply_kwargs:
+            try:
+                actual = self.api.get_global_speed_limits()
+            except Exception as e:
+                logger.warning(f"限速曲线 | 回读全局限速失败: {e}")
+                reasons.append({"dir": "", "code": "read_failed", "text": f"回读实际限速失败: {e}"})
+
         self._record_curve_state(today, upload_kib, download_kib, dry_run=False)
+        self._publish_traffic(
+            "ok",
+            periods=periods,
+            target=target,
+            actual={
+                "up": actual["upload_limit"],
+                "down": actual["download_limit"]
+            },
+            reasons=reasons,
+        )
         return REQUEUE
 
     def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
@@ -138,4 +181,42 @@ class SpeedCurveMixin:
             "upload_kib": upload_kib,
             "download_kib": download_kib,
             "dry_run": dry_run,
+        }
+
+    def _publish_traffic(
+        self,
+        state: str,
+        periods: Optional[List[dict]] = None,
+        target: Optional[dict] = None,
+        actual: Optional[dict] = None,
+        reasons: Optional[List[dict]] = None,
+    ) -> None:
+        """发布限速/流量只读快照(Web UI 顶栏 pill 的数据来源)
+
+        由主循环线程**整体替换** `self._traffic_view`(Web 线程只读该引用, 不原地修改) ——
+        无锁即可保证 Web 侧读到自洽的一份数据。state 语义(前端的渲染分支依据):
+        - disabled: 未启用限速曲线 -> 不渲染流量/限速 pill
+        - ok:       本轮正常读取并(必要时)写入限速, actual 为回读值
+        - dry_run:  试运行: 只有目标限速, actual 为 None(不读不写 qB)
+        - stale:    数据源缺失/无有效行, 本轮不动限速(仅提示数据不可用, periods 为空)
+
+        单位: periods 为**字节**; target/actual 为 **KiB/s**(0 = 不限速, None = 该方向不管理)。
+        """
+        self._traffic_view = {
+            "ts": time.time(),
+            "date": date.today().isoformat(),
+            "state": state,
+            "periods": periods or [],
+            "limit":
+                {
+                    "target": target or {
+                        "up": None,
+                        "down": None
+                    },
+                    "actual": actual or {
+                        "up": None,
+                        "down": None
+                    },
+                    "reasons": reasons or [],
+                },
         }

@@ -57,6 +57,8 @@ _SNAPSHOT_FIELDS = (
     "progress",
     "dl_limit",
     "up_limit",
+    # 添加时间(unix 秒): Web 分组视图的默认排序依据(组级取组内最大值), 快照保留供规则条件使用
+    "added_on",
 )
 
 # 跳检重加所需属性(qB torrent info 直接字段, 不经快照复制; 单一来源, CheckAction 引用)
@@ -86,6 +88,8 @@ _VIEW_FIELDS = frozenset(
         # 标签/分类在组级以"成员共同值"展示(前端求交集), 变更须让视图重建
         "tags",
         "category",
+        # 添加时间: 组级默认排序键(几乎不变, 加入仅为了"新添加种子"时能即时反映)
+        "added_on",
     )
 )
 
@@ -176,6 +180,7 @@ class TorrentRecord:
     progress: float = 0.0
     dl_limit: int = 0
     up_limit: int = 0
+    added_on: int = 0
 
     # 惰性缓存(不参与 apply_delta 复制)
     _tags_set: Optional[frozenset] = None
