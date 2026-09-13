@@ -9,84 +9,143 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <!-- 密钥输入(未授权时) -->
+    <!-- 密钥输入(未授权时); form 包裹: 消除 Chrome "Password field is not contained in a form" 警告并支持密码管理器 -->
     <div v-if="authRequired && !token" class="login-mask">
-      <div class="login-card">
+      <form class="login-card" @submit.prevent="saveToken">
         <div class="brand">auto-qb</div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
-        <input v-model="tokenInput" type="password" placeholder="访问密钥" @keyup.enter="saveToken">
-        <button @click="saveToken">进入</button>
+        <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password">
+        <button type="submit">进入</button>
         <p v-if="authError" class="error">{{ authError }}</p>
-      </div>
+      </form>
     </div>
 
     <template v-else>
-      <!-- 顶栏 -->
-      <header class="topbar">
-        <div class="brand">auto-qb <span class="ver">v{{ status.version || '' }}</span></div>
-        <nav>
-          <button :class="{active: page==='groups'}" @click="page='groups'">辅种管理</button>
-          <button :class="{active: page==='settings'}" @click="openSettings">设置</button>
-        </nav>
-        <div class="spacer"></div>
-        <span class="badge" :class="statusBadge.kind">{{ statusBadge.text }}</span>
-      </header>
+      <div class="sticky-head">
+        <!-- 服务不可达横幅(程序退出/网络失败) -->
+        <div v-if="serviceDown" class="service-banner">
+          ⚠ 无法连接 auto-qb 服务 —— 程序可能已退出或正在重启, 请确认程序运行后页面将自动恢复
+        </div>
+        <!-- 顶栏 -->
+        <header class="topbar">
+          <div class="brand">auto-qb <span class="ver">v{{ status.version || '' }}</span></div>
+          <nav>
+            <button :class="{active: page==='groups'}" @click="page='groups'">辅种管理</button>
+            <button :class="{active: page==='settings'}" @click="openSettings">设置</button>
+          </nav>
+          <div class="spacer"></div>
+          <span class="badge" :class="statusBadge.kind">{{ statusBadge.text }}</span>
+        </header>
+      </div>
 
       <!-- 辅种分组页 -->
       <main v-if="page==='groups'" class="content">
         <div class="summary-bar">
           <span>分组 {{ groups.length }}</span>
           <span>种子 {{ totalTorrents }}</span>
-          <span>↓ {{ fmtSpeed(totalDl) }}</span>
-          <span>↑ {{ fmtSpeed(totalUl) }}</span>
+          <span>下载 {{ fmtSpeed(totalDl) }}</span>
+          <span>上传 {{ fmtSpeed(totalUl) }}</span>
           <span class="muted">每 {{ pollSec }}s 自动刷新</span>
         </div>
 
-        <div class="group-table">
-          <div v-for="g in groups" :key="g.key"
-               class="group-row" :class="{expanded: expandedKey===g.key}"
-               @click="toggleExpand(g.key)"
-               @contextmenu.prevent="openMenu($event, g)">
-            <div class="g-name" :title="g.name">{{ g.name }}</div>
-            <div class="g-stat">↓ {{ fmtSpeed(g.dlspeed) }}</div>
-            <div class="g-stat">↑ {{ fmtSpeed(g.upspeed) }}</div>
-            <div class="g-stat">总上传 {{ fmtSize(g.uploaded) }}</div>
-            <div class="g-stat">{{ fmtSize(g.size) }}</div>
-            <div class="g-sites">
-              <span v-for="m in g.members" :key="m.hash"
-                    class="site-chip" :class="m.kind" :title="m.site + ' · ' + kindText(m.kind)">
-                {{ m.site }}
-              </span>
-            </div>
-            <div class="g-count">{{ g.count }} 站</div>
-          </div>
-
-          <!-- 展开明细 -->
-          <div v-if="expandedGroup" class="detail">
-            <div v-for="m in expandedGroup.members" :key="m.hash" class="member-row" :class="m.kind">
-              <span class="m-site">{{ m.site }}</span>
-              <span class="m-state">{{ kindText(m.kind) }}</span>
-              <span>↓ {{ fmtSpeed(m.dlspeed) }}</span>
-              <span>↑ {{ fmtSpeed(m.upspeed) }}</span>
-              <span>总上传 {{ fmtSize(m.uploaded) }}</span>
-              <span>{{ fmtSize(m.size) }}</span>
-              <span>{{ (m.progress * 100).toFixed(1) }}%</span>
-              <span>做种 {{ fmtDuration(m.seeding_time) }}</span>
-              <span class="m-hash">{{ m.hash.slice(0, 8) }}</span>
+        <div class="group-table" ref="groupTable">
+          <!-- 列头(点击排序, 右缘拖拽调宽) -->
+          <div class="group-head" :style="gridStyle('group')">
+            <div v-for="(col, i) in groupColumns" :key="col.key" class="h-cell"
+                 :class="{sortable: col.sortable}" @click="col.sortable && setSort(col.key)">
+              <span v-if="col.key==='name'">名称</span>
+              <span v-else-if="col.key==='dlspeed'">下载</span>
+              <span v-else-if="col.key==='upspeed'">上传</span>
+              <span v-else-if="col.key==='uploaded'">总上传</span>
+              <span v-else-if="col.key==='size'">总大小</span>
+              <span v-else-if="col.key==='count'">站数</span>
+              <span v-else-if="col.key==='sites'">站点</span>
+              <span v-if="col.sortable" class="arrow">{{ sortArrow(col.key) }}</span>
+              <span class="resizer" @mousedown.stop.prevent="startResize($event, 'group', i)"></span>
             </div>
           </div>
 
-          <div v-if="!groups.length" class="empty">暂无辅种分组</div>
+          <template v-for="g in sortedGroups" :key="g.key">
+            <div class="group-row" :class="{expanded: expandedKey===g.key}"
+                 :style="gridStyle('group')"
+                 @click="toggleExpand(g.key)"
+                 @contextmenu.prevent="openMenu($event, g)">
+              <div class="g-name" :title="g.name">{{ g.name }}</div>
+              <div class="g-stat">↓ {{ fmtSpeed(g.dlspeed) }}</div>
+              <div class="g-stat">↑ {{ fmtSpeed(g.upspeed) }}</div>
+              <div class="g-stat">{{ fmtSize(g.uploaded) }}</div>
+              <div class="g-stat">{{ fmtSize(g.size) }}</div>
+              <div class="g-sites">
+                <span v-for="m in g.members" :key="m.hash"
+                      class="site-chip" :class="m.kind" :title="m.site + ' · ' + kindText(m.kind)">
+                  {{ m.site }}
+                </span>
+              </div>
+              <div class="g-count">{{ g.count }} 站</div>
+            </div>
+
+            <!-- 展开明细: 紧跟本组行显示(列头 + 合计行 + 各分站点行) -->
+            <div v-if="expandedKey===g.key" class="detail">
+              <div class="detail-head" :style="gridStyle('detail')">
+                <div class="h-cell">站点</div>
+                <div class="h-cell">状态</div>
+                <div class="h-cell">下载</div>
+                <div class="h-cell">上传</div>
+                <div class="h-cell">总上传</div>
+                <div class="h-cell">种子大小</div>
+                <div class="h-cell">进度</div>
+                <div class="h-cell">做种时长</div>
+                <div class="h-cell">Hash</div>
+              </div>
+              <div class="detail-summary" :style="gridStyle('detail')">
+                <div>合计</div>
+                <div></div>
+                <div>{{ fmtSpeed(sumDl(g)) }}</div>
+                <div>{{ fmtSpeed(sumUl(g)) }}</div>
+                <div>{{ fmtSize(sumField(g.members, "uploaded")) }}</div>
+                <div>{{ fmtSize(sumField(g.members, "size")) }}</div>
+                <div></div>
+                <div></div>
+                <div></div>
+              </div>
+              <div v-for="m in g.members" :key="m.hash"
+                   class="member-row" :class="m.kind"
+                   :style="gridStyle('detail')"
+                   @contextmenu.prevent="openMemberMenu($event, m)">
+                <span class="m-site">{{ m.site }}</span>
+                <span class="m-state">{{ kindText(m.kind) }}</span>
+                <span>{{ fmtSpeed(m.dlspeed) }}</span>
+                <span>{{ fmtSpeed(m.upspeed) }}</span>
+                <span>{{ fmtSize(m.uploaded) }}</span>
+                <span>{{ fmtSize(m.size) }}</span>
+                <span>{{ (m.progress * 100).toFixed(1) }}%</span>
+                <span>{{ fmtDuration(m.seeding_time) }}</span>
+                <span class="m-hash">{{ m.hash.slice(0, 8) }}</span>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="!sortedGroups.length" class="empty">暂无辅种分组</div>
         </div>
 
-        <!-- 右键菜单 -->
+        <!-- 右键菜单(组/单种子共用) -->
         <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}">
-          <div class="ctx-item" @click="act('pause')">暂停整组</div>
-          <div class="ctx-item" @click="act('resume')">开始整组</div>
-          <div class="ctx-item" @click="act('reannounce')">强制汇报</div>
-          <div class="ctx-sep"></div>
-          <div class="ctx-item danger" @click="delWithFiles(false)">删除(保留文件)</div>
-          <div class="ctx-item danger" @click="delWithFiles(true)">删除(含文件)</div>
+          <template v-if="menu.hash">
+            <div class="ctx-item" @click="actTorrent('pause')">暂停该种子</div>
+            <div class="ctx-item" @click="actTorrent('resume')">开始该种子</div>
+            <div class="ctx-item" @click="actTorrent('reannounce')">强制汇报</div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="delTorrent(false)">删除(保留文件)</div>
+            <div class="ctx-item danger" @click="delTorrent(true)">删除(含文件)</div>
+          </template>
+          <template v-else>
+            <div class="ctx-item" @click="act('pause')">暂停整组</div>
+            <div class="ctx-item" @click="act('resume')">开始整组</div>
+            <div class="ctx-item" @click="act('reannounce')">强制汇报</div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="delWithFiles(false)">删除(保留文件)</div>
+            <div class="ctx-item danger" @click="delWithFiles(true)">删除(含文件)</div>
+          </template>
         </div>
       </main>
 

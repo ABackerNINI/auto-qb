@@ -1,5 +1,23 @@
-/* auto-qb WEB UI 前端(Vue 3 CDN, 无构建链): 轮询快照 + 命令投递 */
-const { createApp, ref, computed, onMounted } = Vue;
+/* auto-qb WEB UI 前端(Vue 3 CDN, 无构建链): 轮询快照 + 命令投递 + 列宽记忆 */
+const { createApp } = Vue;
+
+const GROUP_DEFAULT_COLS = [
+  "minmax(180px, 2fr)", "minmax(90px, 1fr)", "minmax(90px, 1fr)", "minmax(90px, 1fr)",
+  "minmax(90px, 1fr)", "minmax(200px, 2fr)", "52px",
+];
+const DETAIL_DEFAULT_COLS = [
+  "110px", "70px", "minmax(90px, 1fr)", "minmax(90px, 1fr)", "minmax(90px, 1fr)",
+  "minmax(90px, 1fr)", "minmax(80px, 1fr)", "minmax(100px, 1fr)", "80px",
+];
+const COLS_STORE_KEY = "autoqb_colwidths_v1";
+
+function loadColWidths() {
+  try {
+    return JSON.parse(localStorage.getItem(COLS_STORE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
 
 createApp({
   data() {
@@ -13,11 +31,25 @@ createApp({
       status: {},
       pollSec: 2,
       expandedKey: null,
-      menu: { visible: false, x: 0, y: 0, key: null },
+      sortKey: "uploaded",
+      sortDir: -1,
+      groupColumns: [
+        { key: "name", sortable: true },
+        { key: "dlspeed", sortable: true },
+        { key: "upspeed", sortable: true },
+        { key: "uploaded", sortable: true },
+        { key: "size", sortable: true },
+        { key: "sites", sortable: false },
+        { key: "count", sortable: true },
+      ],
+      colWidths: loadColWidths(),  // {group: [..px..], detail: [..px..]}, localStorage 记忆
+      resizing: null,              // {page, idx, startX, startVal}
+      menu: { visible: false, x: 0, y: 0, key: null, hash: null },
       settingsText: "",
       saving: false,
       saveMsg: "",
       saveOk: false,
+      serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollTimer: null,
     };
   },
@@ -27,6 +59,14 @@ createApp({
       if (this.status.connected === false) return { text: "qB 断开", kind: "error" };
       if (this.status.connected === true) return { text: "运行中", kind: "ok" };
       return { text: "连接中…", kind: "warn" };
+    },
+    sortedGroups() {
+      const key = this.sortKey, dir = this.sortDir;
+      return [...this.groups].sort((a, b) => {
+        const va = a[key], vb = b[key];
+        if (typeof va === "string") return dir * va.localeCompare(vb || "");
+        return dir * ((va || 0) - (vb || 0));
+      });
     },
     expandedGroup() {
       return this.groups.find((g) => g.key === this.expandedKey) || null;
@@ -42,10 +82,8 @@ createApp({
     },
   },
   async mounted() {
-    if (!this.token) {
-      this.authRequired = true;
-      return;
-    }
+    window.addEventListener("click", () => (this.menu.visible = false));
+    if (!this.token) return;
     await this.bootstrap();
   },
   methods: {
@@ -55,8 +93,13 @@ createApp({
         headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json", ...(options.headers || {}) },
       });
       if (resp.status === 401) {
+        // 401 = 密钥无效/轮换: 清除本地旧密钥, 强制回到密钥输入界面(防"连接中"死锁)
         this.authRequired = true;
-        throw new Error("unauthorized");
+        this.token = "";
+        localStorage.removeItem("autoqb_token");
+        const err = new Error("unauthorized");
+        err.auth = true;
+        throw err;
       }
       if (!resp.ok) {
         const detail = await resp.json().catch(() => ({}));
@@ -71,7 +114,7 @@ createApp({
         this.authRequired = false;
         localStorage.setItem("autoqb_token", this.token);
         this.startPolling();
-      } catch (e) {
+      } catch {
         this.authError = "密钥无效或服务不可用";
       }
     },
@@ -84,30 +127,27 @@ createApp({
       this.pollTimer = setInterval(() => this.refresh(), this.pollSec * 1000);
       this.refresh();
     },
-    async refreshOnce() {
-      const [status, groups] = await Promise.all([this.api("/api/status"), this.api("/api/groups")]);
-      this.status = status;
-      this.groups = groups.groups;
-    },
     async refresh() {
       try {
         const [status, groups] = await Promise.all([this.api("/api/status"), this.api("/api/groups")]);
         this.status = status;
         this.groups = groups.groups;
+        this.serviceDown = false;
       } catch (e) {
-        /* 网络抖动: 下一轮重试 */
+        // 服务不可达(程序退出/网络失败): 置 serviceDown 显示横幅; 轮询继续, 服务恢复后自动消失。
+        // 401(密钥无效)不算服务不可达——已由登录框提示。
+        if (!e.auth) this.serviceDown = true;
       }
+    },
+    async refreshOnce() {
+      const [status, groups] = await Promise.all([this.api("/api/status"), this.api("/api/groups")]);
+      this.status = status;
+      this.groups = groups.groups;
+      this.serviceDown = false;
     },
     async openSettings() {
       this.page = "settings";
-      try {
-        const data = await this.api("/api/config/raw");
-        this.settingsText = data.content;
-        this.saveMsg = "";
-      } catch (e) {
-        this.saveMsg = "载入配置失败: " + e.message;
-        this.saveOk = false;
-      }
+      await this.reloadSettings();
     },
     async saveSettings() {
       this.saving = true;
@@ -140,6 +180,7 @@ createApp({
       return v + " B/s";
     },
     fmtSize(v) {
+      if (v === null || v === undefined) return "-";
       if (!v) return "0 B";
       for (const [unit, div] of [["PiB", 2 ** 50], ["TiB", 2 ** 40], ["GiB", 2 ** 30], ["MiB", 2 ** 20], ["KiB", 2 ** 10]]) {
         if (v >= div) return (v / div).toFixed(2) + " " + unit;
@@ -155,14 +196,40 @@ createApp({
     kindText(kind) {
       return { seeding: "做种", downloading: "下载", checking: "校验中", paused: "已暂停", error: "错误", other: "其他" }[kind] || kind;
     },
+    sumField(members, key) {
+      return members.reduce((n, m) => n + (m[key] || 0), 0);
+    },
+    sumDl(g) {
+      return this.sumField(g.members, "dlspeed");
+    },
+    sumUl(g) {
+      return this.sumField(g.members, "upspeed");
+    },
+    setSort(key) {
+      if (this.sortKey === key) {
+        this.sortDir = -this.sortDir;
+      } else {
+        this.sortKey = key;
+        this.sortDir = -1;
+      }
+    },
+    sortArrow(key) {
+      if (this.sortKey !== key) return "";
+      return this.sortDir === 1 ? "▲" : "▼";
+    },
     toggleExpand(key) {
       this.expandedKey = this.expandedKey === key ? null : key;
       this.menu.visible = false;
     },
     openMenu(event, group) {
       event.preventDefault();
-      this.menu = { visible: true, x: event.clientX, y: event.clientY, key: group.key };
+      this.menu = { visible: true, x: event.clientX, y: event.clientY, key: group.key, hash: null };
       this.expandedKey = group.key;
+    },
+    openMemberMenu(event, member) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.menu = { visible: true, x: event.clientX, y: event.clientY, key: null, hash: member.hash };
     },
     async act(action) {
       this.menu.visible = false;
@@ -170,7 +237,7 @@ createApp({
       try {
         await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
       } catch (e) {
-        this.saveMsg = "命令发送失败: " + e.message;
+        alert("命令发送失败: " + e.message);
       }
     },
     async delWithFiles(deleteFiles) {
@@ -186,11 +253,55 @@ createApp({
         alert("删除命令发送失败: " + e.message);
       }
     },
+    async actTorrent(action) {
+      this.menu.visible = false;
+      if (!this.menu.hash) return;
+      try {
+        await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
+      } catch (e) {
+        alert("命令发送失败: " + e.message);
+      }
+    },
+    async delTorrent(deleteFiles) {
+      this.menu.visible = false;
+      if (!this.menu.hash) return;
+      if (!confirm(deleteFiles ? "确认删除该种子并删除磁盘文件?此操作不可恢复!" : "确认删除该种子(保留文件)?")) return;
+      try {
+        await this.api(`/api/torrents/${this.menu.hash}/delete`, {
+          method: "POST",
+          body: JSON.stringify({ delete_files: deleteFiles }),
+        });
+      } catch (e) {
+        alert("删除命令发送失败: " + e.message);
+      }
+    },
+    gridStyle(page) {
+      const cols = this.colWidths[page];
+      const template = cols && cols.length ? cols.join(" ") : null;
+      return { gridTemplateColumns: template || (page === "group" ? GROUP_DEFAULT_COLS.join(" ") : DETAIL_DEFAULT_COLS.join(" ")) };
+    },
+    startResize(event, page, idx) {
+      // 列宽拖拽: 从渲染值固化为 px, 拖动更新并写入 localStorage(记忆)
+      const tableEl = event.target.closest(".group-table") || event.target.closest(".detail");
+      const rendered = (getComputedStyle(tableEl).gridTemplateColumns || "").split(" ").map((v) => parseFloat(v));
+      const startX = event.clientX;
+      const cols = this.colWidths[page] && this.colWidths[page].length
+        ? [...this.colWidths[page]]
+        : rendered.map((v) => `${Math.round(v)}px`);
+      const startVal = parseFloat(cols[idx]) || rendered[idx] || 100;
+      this.resizing = { page, idx, startX, startVal };
+      const move = (e) => {
+        const width = Math.max(60, Math.round(this.resizing.startVal + e.clientX - this.resizing.startX));
+        cols[this.resizing.idx] = `${width}px`;
+        this.colWidths = { ...this.colWidths, [page]: [...cols] };
+      };
+      const up = () => {
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+        localStorage.setItem(COLS_STORE_KEY, JSON.stringify(this.colWidths));
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    },
   },
 }).mount("#app");
-
-// 全局点击关闭右键菜单
-document.addEventListener("click", () => {
-  const menus = document.querySelectorAll(".ctx-menu");
-  menus.forEach((m) => (m.style.display = "none"));
-});
