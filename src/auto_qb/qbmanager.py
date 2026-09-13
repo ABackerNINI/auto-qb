@@ -34,6 +34,7 @@ from .logging import setup_logging
 logger = logging.getLogger(__name__)
 
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
+SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
 
 
 class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
@@ -72,6 +73,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 主循环仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)才重建快照, 否则跳过以降低 CPU。
         self._group_view_dirty: bool = True
         self._web_last_seen: float = 0.0
+        # WEB UI 搜索索引(hash -> {name, files[文件名]}): 主循环按需构建并原子替换, Web 线程只读。
+        # 种子名匹配直接读 store.by_hash(即时无 API); 文件列表匹配依赖此索引(文件 API 只在主循环线程)。
+        # 索引仅在种子集变化(added/removed)时置脏, 避免每 tick 重复构建; 记录 _files 缓存跨 tick 复用。
+        self._search_index: Optional[dict] = None
+        self._search_index_dirty: bool = True
         # WEB UI: 访问密钥/服务器句柄(run() 启用时确定)
         self._web_token: str = ""
         self._web_handle = None
@@ -230,6 +236,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         "reannounce_torrent": self._cmd_reannounce_torrent,
                         "delete_torrent": self._cmd_delete_torrent,
                         "reload_config": self._cmd_reload_config,
+                        "build_search_index": self._cmd_build_search_index,
                     }[cmd](**payload)
                 except KeyError as e:
                     logger.warning(f"WEB UI 未知命令: {e}")
@@ -280,8 +287,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     "progress": round(r.progress, 4),
                     "seeding_time": r.seeding_time,
                     "ratio": round(r.ratio, 3),
-                }
-                for r in recs
+                } for r in recs
             ]
             view.append(
                 {
@@ -304,6 +310,104 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._group_view = self._build_group_view()
             self._group_view_dirty = False
         return self._group_view
+
+    def _build_search_index(self) -> None:
+        """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名]}), 单次限流拉取。
+
+        **原子交换契约**: 每轮在**新字典**上重组(消失的种子不进新字典即淘汰), 完成后整体替换
+        `_search_index` 引用 —— 绝不就地增删旧字典, 否则 Web 线程正在迭代时会抛
+        "dictionary changed size during iteration"。已建条目只刷新名称(值替换不改结构, 并发只读安全),
+        新种子拉取文件列表(rec.files 惰性拉取 + 记录 _files 跨 tick 缓存, 只在主循环线程), 单条失败
+        跳过(记空文件列表)不阻塞整体。
+        限流: 单次最多拉取 SEARCH_INDEX_BUILD_BUDGET 条, 未拉完保持 _search_index_dirty=True,
+        由后续调用(下一 tick 推进 / 前端据 building 重查投递)续建 —— 避免首轮 N 次 API 长时间阻塞主循环。
+        """
+        if self.client is None:
+            # qB 断开中: 无文件 API 可用, 保持脏待连接恢复后重建(不能把空文件列表当成"已建完")
+            self._search_index_dirty = True
+            return
+        prev = self._search_index if self._search_index is not None else {}
+        idx: dict = {}
+        budget = SEARCH_INDEX_BUILD_BUDGET
+        for h, rec in self.store.by_hash.items():
+            entry = prev.get(h)
+            if entry is not None:
+                entry["name"] = rec.name
+            elif budget > 0:
+                budget -= 1
+                try:
+                    files = [f.name for f in rec.files(self.client)]
+                except Exception:
+                    files = []
+                entry = {"name": rec.name, "files": files}
+            else:
+                # 预算用尽: 剩余种子本轮不进新字典(下次调用续建), 保持脏
+                self._search_index = idx
+                self._search_index_dirty = True
+                return
+            idx[h] = entry
+        self._search_index = idx
+        self._search_index_dirty = False
+
+    def _cmd_build_search_index(self):
+        """WEB UI 命令: 构建搜索索引(Web 线程检测到索引脏后投递, 主循环线程执行)。
+
+        限流构建可能需多轮: 仅在全部拉取完成(不再脏)时记录完成日志, 避免分批刷屏。
+        """
+        self._build_search_index()
+        if not self._search_index_dirty:
+            logger.info(f"WEB UI | 搜索索引已构建: {len(self._search_index)} 个种子")
+
+    def search_torrents(self, q: str) -> dict:
+        """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
+
+        种子名匹配即时遍历 store.by_hash(无 qB API); 文件列表匹配依赖 _search_index 缓存。
+        返回 {"results": [..], "building": bool}——building 为 True 表示文件索引已过期/缺失,
+        已投递构建命令, 前端应稍后重查以获取完整文件匹配结果。
+        结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/dlspeed/upspeed/
+        uploaded/size/progress/seeding_time/ratio/by, 供前端完整展示命中种子信息。
+        """
+        def _view(rec, by):
+            return {
+                "hash": rec.hash,
+                "name": rec.name,
+                "site": rec.tracker_name,
+                "kind": self._state_kind(rec),
+                "dlspeed": rec.dlspeed,
+                "upspeed": rec.upspeed,
+                "uploaded": rec.uploaded,
+                "size": rec.size,
+                "progress": round(rec.progress, 4),
+                "seeding_time": rec.seeding_time,
+                "ratio": round(rec.ratio, 3),
+                "by": by,
+            }
+
+        q = (q or "").strip().lower()
+        if not q:
+            return {"results": [], "building": False}
+        results = []
+        seen = set()
+        # 种子名匹配(即时)
+        for h, rec in self.store.by_hash.items():
+            if q in rec.name.lower():
+                seen.add(h)
+                results.append(_view(rec, "name"))
+        # 文件列表匹配(依赖缓存索引)
+        idx = self._search_index
+        if idx is not None:
+            for h, entry in idx.items():
+                if h in seen:
+                    continue
+                if any(q in fn.lower() for fn in entry["files"]):
+                    rec = self.store.by_hash.get(h)
+                    if rec is None:
+                        continue
+                    results.append(_view(rec, "file"))
+        building = self._search_index_dirty
+        if building:
+            self.web_commands.put(("build_search_index", {}))
+        return {"results": results, "building": building}
 
     def touch_web_client(self) -> None:
         """WEB 请求心跳: 刷新 _web_last_seen, 让主循环在 Web 活跃窗口内持续重建分组视图。"""
@@ -406,8 +510,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._last_conn_ok = None
             self.connect()
         logger.warning(
-            f"配置热重载完成: 级别 {levels or ['L0']}, 变更 {len(changes)} 项"
-            + (f", 需重启进程: {restart_required}" if restart_required else "")
+            f"配置热重载完成: 级别 {levels or ['L0']}, 变更 {len(changes)} 项" +
+            (f", 需重启进程: {restart_required}" if restart_required else "")
         )
         return {"applied": True, "levels": levels, "changes": len(changes), "restart_required": restart_required}
 
@@ -425,6 +529,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
                 self._group_view = self._build_group_view()
                 self._group_view_dirty = False
+
+        # WEB UI: 搜索索引限流构建——同样仅 Web 活跃时推进(每 tick 一批, 直至不再脏);
+        # 关闭网页后停止推进, 避免无谓的文件 API 调用
+        if self._search_index_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
+            self._build_search_index()
 
     # ---------- 全局任务 ----------
 
@@ -498,6 +607,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         added, removed = self.store.refresh(tors)
         # 种子增删/状态可能变化: 置分组视图过期, 供 _tick 惰性重建(仅 Web 活跃时)
         self._group_view_dirty = True
+        # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
+        if added or removed:
+            self._search_index_dirty = True
         # 删除种子的删除前快照: 种子已从 store 移除后, ctx.torrent 回退此副本供只读动作留档
         removed_snapshots = {h: prev_records[h] for h in removed if h in prev_records}
 

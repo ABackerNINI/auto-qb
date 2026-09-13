@@ -20,7 +20,7 @@
 - YAML 导出 (`--export-yaml`, `--only-missing`), qB 5.0 API 适配
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 失败抛 `SingleInstanceLockError(AutoQbError)`, CLI 单点捕获 AutoQbError 体系干净退出 (退出码 1, stderr 无堆栈); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
-- 测试: 706 passed + 1 skipped, 分支覆盖 90.2%(ui.py GUI 本体真机冒烟; 2026-09-13)
+- 测试: 722 passed + 1 skipped, 分支覆盖 87%(ui.py GUI 本体真机冒烟; 2026-09-13)
 
 ## 规划中 (🚧, 尚未实现)
 

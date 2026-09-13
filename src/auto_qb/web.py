@@ -84,12 +84,13 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         snap = manager.status_snapshot()
         return {
-            "status": {
-                "connected": snap["connected"],
-                "paused": snap["paused"],
-                "torrents": snap["torrents"],
-                "groups": len(manager._group_view),
-            },
+            "status":
+                {
+                    "connected": snap["connected"],
+                    "paused": snap["paused"],
+                    "torrents": snap["torrents"],
+                    "groups": len(manager._group_view),
+                },
             "groups": manager.ensure_group_view(),
         }
 
@@ -97,6 +98,12 @@ def create_app(manager) -> FastAPI:
     def api_groups():
         manager.touch_web_client()
         return {"groups": manager.ensure_group_view()}
+
+    @app.get("/api/search")
+    def api_search(q: str = ""):
+        """按种子名/文件列表搜索种子(主循环构建的缓存索引, Web 线程只读; 索引脏时投递构建命令)"""
+        manager.touch_web_client()
+        return manager.search_torrents(q)
 
     @app.post("/api/groups/{key}/pause")
     def api_pause(key: str):

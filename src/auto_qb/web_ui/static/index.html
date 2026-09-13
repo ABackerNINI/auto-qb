@@ -36,6 +36,12 @@
             <span>上传 {{ fmtSpeed(totalUl) }}</span>
             <span class="muted">每 {{ pollSec }}s 刷新</span>
           </div>
+          <div class="top-search">
+            <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
+                   placeholder="搜索种子名或文件名…" autocomplete="off" />
+            <span v-if="searchBuilding" class="muted">构建索引…</span>
+            <span v-if="searchError" class="error">{{ searchError }}</span>
+          </div>
           <nav>
             <button :class="{active: page==='groups'}" @click="page='groups'">辅种管理</button>
             <button :class="{active: page==='settings'}" @click="openSettings">设置</button>
@@ -47,6 +53,9 @@
 
       <!-- 辅种分组页 -->
       <main v-if="page==='groups'" class="content">
+        <p v-if="searchQuery.trim()" class="muted" style="text-align:center">
+          搜索"{{ searchQuery.trim() }}": 命中 {{ filteredGroups.length }} 个辅种组(仅命中成员高亮)
+        </p>
         <div class="group-table" ref="groupTable">
           <!-- 列头(点击排序, 右缘拖拽调宽) -->
           <div class="group-head" :style="gridStyle('group')">
@@ -64,7 +73,7 @@
             </div>
           </div>
 
-          <template v-for="g in sortedGroups" :key="g.key">
+          <template v-for="g in filteredGroups" :key="g.key">
             <div class="group-row" :class="{expanded: expandedKey===g.key}"
                  :style="gridStyle('group')"
                  @click="toggleExpand(g.key)"
@@ -76,7 +85,7 @@
               <div class="g-stat">{{ fmtSize(g.size) }}</div>
               <div class="g-sites">
                 <span v-for="m in g.members" :key="m.hash"
-                      class="site-chip" :class="m.kind" :title="m.site + ' · ' + kindText(m.kind)">
+                      class="site-chip" :class="[m.kind, { 'search-hit': m.hit }]" :title="m.site + ' · ' + kindText(m.kind)">
                   {{ m.site }}
                 </span>
               </div>
@@ -103,7 +112,7 @@
                 <div></div>
               </div>
               <div v-for="m in g.members" :key="m.hash"
-                   class="member-row" :class="m.kind"
+                   class="member-row" :class="[m.kind, { 'search-hit': m.hit }]"
                    :style="gridStyle('detail')"
                    @contextmenu.prevent="openMemberMenu($event, m)">
                 <span class="m-site">{{ m.site }}</span>
@@ -119,7 +128,13 @@
             </div>
           </template>
 
-          <div v-if="!sortedGroups.length" class="empty">暂无辅种分组</div>
+          <div v-if="!filteredGroups.length" class="empty">
+            {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配种子') : '暂无辅种分组' }}
+          </div>
+          <p v-if="searchQuery.trim() && searchBuilding && filteredGroups.length"
+             class="muted" style="text-align:center">
+            正在构建文件索引, 文件匹配结果稍后自动补齐…
+          </p>
         </div>
 
         <!-- 右键菜单(组/单种子共用) -->

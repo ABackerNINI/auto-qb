@@ -3,7 +3,7 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 714 passed + 1 skipped (2026-09-13), 分支覆盖率 90.2%(connect 节流测试因真实网络调用耗时暂时 skip)(ui.py 窗口/托盘本体不单测, 真机冒烟验证)
+# 项目 venv (.venv, Python 3.12), 基线: 722 passed + 1 skipped (2026-09-13), 分支覆盖率 87%(connect 节流测试因真实网络调用耗时暂时 skip)(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟)
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
@@ -11,13 +11,13 @@
 
 - `pytest.ini`: `pythonpath = src` (无需安装包), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
 - 测试**全部使用 Fake, 不连真实 qBittorrent**, 可随时全量运行。
-- 覆盖率现状 (cov-report.txt): 总 94%; 低洼: `logging.py` 58% (文件 handler 分支), `cli.py` 76%; 近乎全绿: qbapi 100%, utils 99%, episodes 99%, conditions 98%, taskqueue 98%, rule_engine/grouping/tags 94-100%。补测试优先看 term-missing 输出。
+- 覆盖率现状 (2026-09-13 实测, 全量): 总 87%; 低洼: `ui.py` 27%(GUI 本体真机冒烟不单测)、`qbmanager.py` 75%(run 主循环/Web 命令分支)、`web.py` 76%(WEB UI 路由分支); 近乎全绿: `registry.py`/`taskqueue.py` 100%, `logging.py` 100%, conditions 99%, utils 96%, cli 95%, torrents 91%。补测试优先看 term-missing 输出。
 
 ## 测试文件约定
 
 1. **每个测试文件头部 docstring 维护 "## 测试计划" 清单** — 项目明文规定: 新增测试必须同步更新对应文件的清单 (README 也强调)。
 2. 文件名与被测模块对应 (`test_actions.py` ↔ `rules/actions.py`); 一个模块可以有多个文件 (如 test_rules_core/test_rule_base/test_rule_engine 拆分)。
-3. 测试粒度小而多 (714 个), 名字用中文/英文短语描述场景。
+3. 测试粒度小而多 (722 个), 名字用中文/英文短语描述场景。
 4. **平台相关测试必须以 `monkeypatch` 固定平台** — GitHub Actions 跑在 Linux, 而本项目以 Windows 为运行环境。纯 Windows 行为 (如长路径 `\\?\` 前缀) 的测试若直接断言, 在 Linux CI 上必失败 (2026-09-10 实测 3 例): `test_utils.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用 `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。规则: 测试主体行为的是"平台逻辑"而非"当前真实平台", 一律显式 monkeypatch, 不要依赖运行环境。
 
 ## tests/helpers.py 基础设施 (写测试前必读)

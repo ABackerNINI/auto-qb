@@ -91,3 +91,10 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); fon
 .settings-actions button:disabled { opacity: .5; cursor: default; }
 
 button.primary { background: var(--accent); }
+
+/** 顶栏搜索框 **/
+.top-search { display: flex; align-items: center; gap: 8px; margin-left: 14px; }
+.top-search input { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); width: 220px; }
+
+/* 搜索命中高亮 */
+.search-hit { outline: 1px solid var(--accent); background: rgba(255,255,255,.04); }

@@ -78,6 +78,13 @@ _tick(dry_run):
 
 **主循环所在线程是唯一修改任务队列结构与 state_file 的线程, 全程无锁。** 控制台模式下即主线程; `--tray` 模式下主循环整体移入后台线程(主线程为 UI), 约束语义不变。 full-checking 等异步效果不是靠工作线程改队列, 而是: 主循环发 API 请求 (同步返回, 校验后台异步进行), 由队列中的 check 轮询子任务每 2s 读 store 快照判断结果。任何新功能都必须维持这个假设。
 
+### WEB UI 线程模型 (web.py, 2026-09-13)
+
+- **Web 线程(uvicorn 独立线程)只做两件事**: 读 `manager` 暴露的只读快照(`_group_view`/`status_snapshot`)与向 `manager.web_commands` 投递命令 —— 暂停/开始/汇报/删除/热重载等写操作全由主循环 `_drain_web_commands` 消费执行(单一写线程约束不变); Web 线程不得触碰 store/队列/state_file。
+- **惰性组装 + 活跃窗口**: `_group_view`(分组视图)与 `_search_index`(搜索索引)均只在主循环构建, 且仅当 `_web_last_seen` 距今 < `WEB_VIEW_TTL`(10s) 时推进 —— 关闭网页后主循环不空转。`ensure_group_view()` 作 Web 请求侧兜底(脏则即时重建)。
+- **搜索索引 `_search_index` (hash -> {name, files})**: 种子名匹配即时扫 `store.by_hash`(无 API 开销), 文件列表匹配依赖索引(文件 API 只在主循环线程, 种子记录 `_files` 缓存跨 tick 复用)。索引按 hash **增量**维护: 已建条目只刷新名称(不重拉文件), 新种子补拉, 已删种子淘汰; 单次限流 `SEARCH_INDEX_BUILD_BUDGET`(500)条, 未拉完保持 `_search_index_dirty=True` 由下一 tick 续建, 前端据 `building` 每 1s 自动重查。
+- **搜索结果是辅种组的筛选**: 前端用命中 hash 集合过滤 `sortedGroups`(组行沿用真实组 key, 组级操作可用); 未归组命中种子以虚拟行兜底 —— 组级路由 key 必须能过 `decode_group_key`, 虚拟 key 会让解码失败 500, 详见 [08-pitfalls.md](08-pitfalls.md)。
+
 ## 任务队列模型 — 生命周期只有 add_task / run_due 两个动词
 
 - `add_task(task, now=None, keep_progress=False) -> bool`: 唯一入队口; kind=="check" 自动登记在途 (`_active_checks`), 重复登记丢弃返回 False。**默认重置断点** (下次从头执行); `keep_progress=True` 显式保存进度 (断点保留续跑), 仅供等待异步完成的子任务恢复 origin 使用。

@@ -54,6 +54,12 @@ createApp({
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,
+      searchQuery: "",       // 搜索关键字
+      searchHits: new Set(),  // 命中种子 hash 集合(名称/文件匹配)
+      searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示
+      searchBuilding: false,  // 文件索引构建中(增量限流可能多轮, 需稍后重查)
+      searchError: "",        // 搜索请求失败提示(不再静默)
+      searchTimer: null,      // 防抖 + 索引构建自动重查定时器
     };
   },
   computed: {
@@ -70,6 +76,32 @@ createApp({
         if (typeof va === "string") return dir * va.localeCompare(vb || "");
         return dir * ((va || 0) - (vb || 0));
       });
+    },
+    // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
+    // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
+    // 以单种子虚拟行兜底展示(虚拟行无组级操作, 右键退化为该种子的单种子菜单)。
+    filteredGroups() {
+      const q = (this.searchQuery || "").trim();
+      if (!q) return this.sortedGroups;
+      const hits = this.searchHits;
+      const kept = [];
+      for (const g of this.sortedGroups) {
+        let hit = false;
+        const members = g.members.map((m) => {
+          const isHit = hits.has(m.hash);
+          if (isHit) hit = true;
+          return { ...m, hit: isHit };
+        });
+        if (hit) kept.push({ ...g, members: members, virtual: false });
+      }
+      for (const r of this.searchUncovered) {
+        kept.push({
+          key: "u-" + r.hash, name: r.name, count: 1, virtual: true,
+          dlspeed: r.dlspeed, upspeed: r.upspeed, uploaded: r.uploaded, size: r.size,
+          members: [{ ...r, hit: true }],
+        });
+      }
+      return kept;
     },
     expandedGroup() {
       return this.groups.find((g) => g.key === this.expandedKey) || null;
@@ -183,6 +215,53 @@ createApp({
       this.settingsText = data.content;
       this.saveMsg = "";
     },
+    onSearchInput(event) {
+      // 输入防抖: 停止输入 400ms 后触发搜索; 清空则立即恢复辅种管理视图(不等防抖)
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      if (!(event.target.value || "").trim()) {
+        this.resetSearch();
+        return;
+      }
+      this.searchTimer = setTimeout(() => this.doSearch(), 400);
+    },
+    resetSearch() {
+      // 清空搜索结果并复位展开态: 搜索结果与普通分组结构不同(含虚拟行), 展开状态不跨视图残留
+      this.searchHits = new Set();
+      this.searchUncovered = [];
+      this.searchBuilding = false;
+      this.searchError = "";
+      this.expandedKey = null;
+    },
+    async doSearch() {
+      const q = (this.searchQuery || "").trim();
+      if (!q) {
+        this.resetSearch();
+        return;
+      }
+      try {
+        const data = await this.api(`/api/search?q=${encodeURIComponent(q)}`);
+        const results = data.results || [];
+        this.searchHits = new Set(results.map((r) => r.hash));
+        // 实际归组的种子由分组筛选展示; 未归组的命中(分组未启用/文件列表不可读)单独兜底
+        const grouped = new Set();
+        for (const g of this.groups) for (const m of g.members) grouped.add(m.hash);
+        this.searchUncovered = results.filter((r) => !grouped.has(r.hash));
+        this.searchBuilding = !!data.building;
+        this.searchError = "";
+        if (this.searchBuilding) {
+          // 文件索引构建中(增量限流可能需多轮): 1s 后自动重查, 直至 building 消除
+          if (this.searchTimer) clearTimeout(this.searchTimer);
+          this.searchTimer = setTimeout(() => this.doSearch(), 1000);
+        }
+      } catch (e) {
+        // 不再静默(否则与"无匹配结果"无法区分): 401 由 api() 回登录框, 其余在搜索框旁提示
+        if (!e.auth) {
+          const msg = e.message || "搜索失败";
+          this.resetSearch();
+          this.searchError = msg;
+        }
+      }
+    },
     fmtSpeed(v) {
       if (!v) return "0 B/s";
       for (const [unit, div] of [["GiB/s", 1073741824], ["MiB/s", 1048576], ["KiB/s", 1024]]) {
@@ -234,6 +313,11 @@ createApp({
     },
     openMenu(event, group) {
       event.preventDefault();
+      if (group.virtual) {
+        // 虚拟行(未归组命中种子): 无真实组 key(组级路由会解析失败), 退化为该种子的单种子菜单
+        this.openMemberMenu(event, group.members[0]);
+        return;
+      }
       this.menu = { visible: true, x: event.clientX, y: event.clientY, key: group.key, hash: null };
       this.expandedKey = group.key;
     },
