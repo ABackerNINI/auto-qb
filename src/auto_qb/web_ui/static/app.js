@@ -21,6 +21,8 @@ const GROUP_COLUMNS = [
   { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
   { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)" },
+  // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 qbmanager._build_group_view)
+  { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true },
   { key: "count", label: "站数", tpl: "56px", sortable: true },
 ];
 const DETAIL_COLUMNS = [
@@ -33,16 +35,24 @@ const DETAIL_COLUMNS = [
   { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)" },
   { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)" },
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)" },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(96px, 1fr)" },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)" },
+  // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值)
+  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)" },
   { key: "hash", label: "Hash", tpl: "80px" },
 ];
 const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 /* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}}
- * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更), 结构不同必须升版本
+ * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列),
+ * 结构或默认列集变更必须升版本(否则旧缓存里的 px 覆盖会与新列集错配)
  */
-const COLS_STORE_KEY = "autoqb_cols_v3";
+const COLS_STORE_KEY = "autoqb_cols_v4";
+
+/* 默认排序: 辅种组按组内**最近添加**时间降序(新补进来的种子最需要被看到);
+ * 其它列点击 3 次回到这里(见 setSort 的三态语义)
+ */
+const DEFAULT_SORT = { key: "added_on", dir: -1 };
 
 const emptyColState = () => ({ widths: {}, hidden: {}, manual: {} });
 
@@ -106,8 +116,9 @@ const app = createApp({
       status: {},
       pollSec: 2,
       expandedKey: null,
-      sortKey: "uploaded",
-      sortDir: -1,
+      // 排序: 默认 = 组内最近添加时间降序(见 DEFAULT_SORT); 点击列头按 降序->升序->恢复默认 三态循环
+      sortKey: DEFAULT_SORT.key,
+      sortDir: DEFAULT_SORT.dir,
       groupColumns: GROUP_COLUMNS,
       detailColumns: DETAIL_COLUMNS,
       // 列状态(定义见文件顶部列模型; 列宽按**列 key** 记忆, 隐藏列由列选择器管理)
@@ -128,12 +139,13 @@ const app = createApp({
       searchError: "",        // 搜索请求失败提示(不再静默)
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
-      pathFilter: "",         // 保存路径筛选(组的 save_path; 空 = 不筛选)
-      // 多选筛选(组内任一成员命中任一选中值即保留该组; 同组内多选为"或")
+      // 多选筛选(组内任一成员命中任一选中值即保留该组; 同一筛选器内多选为"或")
+      // pathFilter 与其它筛选器同形(数组多选) —— 四个筛选器共用一份 filterDefs 与渲染模板
+      pathFilter: [],
       tagFilter: [],
       categoryFilter: [],
       siteFilter: [],
-      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site"
+      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "path"
       toasts: [],             // 站内提示条(替代 alert)
       modal: {                // 站内确认/输入框(替代 confirm/prompt); 结构见 _modalInit
         visible: false, title: "", body: "", okText: "", cancelText: "",
@@ -158,8 +170,12 @@ const app = createApp({
       const key = this.sortKey, dir = this.sortDir;
       return [...this.decoratedGroups].sort((a, b) => {
         const va = a[key], vb = b[key];
-        if (typeof va === "string") return dir * va.localeCompare(vb || "");
-        return dir * ((va || 0) - (vb || 0));
+        let r;
+        if (typeof va === "string") r = (va || "").localeCompare(vb || "");
+        else r = (va || 0) - (vb || 0);
+        // 同值时按名称稳定排序(avoid_on 同秒添加的组不会因排序抖动而互换位置)
+        if (r === 0 && key !== "name") r = (a.name || "").localeCompare(b.name || "");
+        return dir * r;
       });
     },
     /* 组级派生展示数据(依赖 groups, 仅在分组数据变化时算一次; 渲染多帧不重算):
@@ -186,22 +202,25 @@ const app = createApp({
         };
       });
     },
-    /* 保存路径筛选选项(按组数排序) —— 后续如需标签/分类筛选器, 照此追加 computed 即可 */
+    /* 保存路径筛选选项(按组数排序) —— 与标签/分类/站点同形, 供统一的 filterDefs 直接取用 */
     pathOptions() {
       const counts = new Map();
       for (const g of this.decoratedGroups) counts.set(g.save_path, (counts.get(g.save_path) || 0) + 1);
       return [...counts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
     },
     filtersActive() {
-      return !!(this.kindFilter || this.pathFilter || this.tagFilter.length || this.categoryFilter.length ||
+      return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length || this.categoryFilter.length ||
         this.siteFilter.length || (this.searchQuery || "").trim());
     },
-    /* 标签/分类/站点三个多选筛选器的定义(模板只遍历这一份, 不再手写三块相同结构) */
+    /* 四个筛选器的定义(模板只遍历这一份, 不再手写四块相同结构)
+     * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径 = 组数
+     */
     filterDefs() {
       return [
         { kind: "tag", label: "标签", icon: "i-tag", options: this.tagOptions, selected: this.tagFilter, field: "tagFilter" },
         { kind: "category", label: "分类", icon: "i-folder", options: this.categoryOptions, selected: this.categoryFilter, field: "categoryFilter" },
         { kind: "site", label: "站点", icon: "i-globe", options: this.siteOptions, selected: this.siteFilter, field: "siteFilter" },
+        { kind: "path", label: "路径", icon: "i-folder-open", options: this.pathOptions, selected: this.pathFilter, field: "pathFilter" },
       ];
     },
     tagOptions() {
@@ -228,8 +247,10 @@ const app = createApp({
       const q = (this.searchQuery || "").trim();
       let base = this.sortedGroups;
       if (this.kindFilter) base = base.filter((g) => g.members.some((m) => m.kind === this.kindFilter));
-      if (this.pathFilter) base = base.filter((g) => g.save_path === this.pathFilter);
       // 多选筛选: 同一筛选器内为"或"(任一命中), 不同筛选器之间为"且"
+      if (this.pathFilter.length) {
+        base = base.filter((g) => this.pathFilter.includes(g.save_path));
+      }
       if (this.tagFilter.length) {
         base = base.filter((g) => g.members.some((m) => (m.tags || []).some((t) => this.tagFilter.includes(t))));
       }
@@ -253,7 +274,7 @@ const app = createApp({
       }
       for (const r of this.searchUncovered) {
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
-        if (this.pathFilter && (r.save_path || "") !== this.pathFilter) continue;
+        if (this.pathFilter.length && !this.pathFilter.includes(r.save_path || "")) continue;
         if (this.tagFilter.length && !(r.tags || []).some((t) => this.tagFilter.includes(t))) continue;
         if (this.categoryFilter.length && !this.categoryFilter.includes(r.category || "")) continue;
         if (this.siteFilter.length && !this.siteFilter.includes(r.site)) continue;
@@ -261,6 +282,10 @@ const app = createApp({
           key: "u-" + r.hash, name: r.name, count: 1, virtual: true,
           dlspeed: r.dlspeed, upspeed: r.upspeed, uploaded: r.uploaded, size: r.size,
           total_size: r.size, save_path: r.save_path || "",
+          // 未归组种子同样携带排序与 HR 字段, 保证搜索视图内排序/列显示与真实组一致
+          added_on: r.added_on || 0,
+          hr_triggered: r.hr_triggered ? 1 : 0,
+          hr_pending: r.hr_triggered && !r.hr_satisfied ? 1 : 0,
           status: { primary: r.kind, text: this.kindText(r.kind) },
           commonTags: { list: r.tags || [], diff: false },
           commonCategory: { value: r.category || "", diff: false },
@@ -298,6 +323,53 @@ const app = createApp({
     },
     distTitle() {
       return this.distSegments.map((s) => `${s.text} ${s.count}`).join(" · ");
+    },
+    /* ---------------- 限速/流量快照(后端 SpeedCurveMixin 发布, 随 status 恒回传) ----------------
+     * state: disabled(未启用限速曲线) / ok / dry_run / stale(数据源不可用)
+     * periods[].up|down 为**字节**; limit.target|actual 为 **KiB/s**(0 = 不限速, null = 该方向不管理)
+     */
+    traffic() {
+      return this.status.traffic || { state: "disabled", periods: [], limit: {} };
+    },
+    trafficOn() {
+      return this.traffic.state !== "disabled";
+    },
+    todayTraffic() {
+      return (this.traffic.periods || []).find((p) => p.period === "day") || null;
+    },
+    /* 限速对照行: 每个受管方向一行(该方向无曲线则不显示该行);
+     * mismatch = 实际值已知且与命中目标不同 -> 前端据此"显示两个 + 原因"
+     * tip 在**这里**算好(按方向取原因), 避免每个 pill 都展示全部方向的原因
+     */
+    limitRows() {
+      const lim = this.traffic.limit || {};
+      const target = lim.target || {}, actual = lim.actual || {}, reasons = lim.reasons || [];
+      // 无方向特定原因时的默认说明(按快照状态区分: 试运行/数据不可用/正常)。
+      // 必须在此内联为局部量 —— 本区段是 computed, 任何"看似方法的辅助函数"都会变成属性,
+      // 在 computed 内以 this.xxx() 调用会抛 TypeError 导致整块渲染失败(2026-09-14 实测)。
+      const fallback = this.traffic.state === "dry_run"
+        ? "试运行(dry_run): 只显示命中限速, 不读取/不写入 qB"
+        : this.traffic.state === "stale"
+          ? "流量数据暂不可用, 限速沿用上一轮生效值"
+          : "命中 = 曲线目标值, 实际 = qB 当前生效值";
+      const rows = [];
+      for (const [dir, label] of [["up", "上传"], ["down", "下载"]]) {
+        const tg = target[dir];
+        if (tg === null || tg === undefined) continue;
+        const ac = actual[dir];
+        const reason = reasons.find((r) => r.dir === dir) || null;
+        const known = ac !== null && ac !== undefined;
+        rows.push({
+          dir,
+          label,
+          target: tg,
+          actual: ac,
+          mismatch: known && ac !== tg,
+          reason,
+          tip: reason ? reason.text : fallback,
+        });
+      }
+      return rows;
     },
     /* 可见列(列选择器只改 colHidden; 顺序始终取自列定义) —— 表头/行/grid 模板共用 */
     visibleGroupCols() {
@@ -396,7 +468,7 @@ const app = createApp({
       this.serviceDown = false;
       this.expandedKey = null;
       this.kindFilter = "";
-      this.pathFilter = "";
+      this.pathFilter = [];
       this.tagFilter = [];
       this.categoryFilter = [];
       this.siteFilter = [];
@@ -516,13 +588,13 @@ const app = createApp({
       this.kindFilter = this.kindFilter === kind ? "" : kind;
       this.expandedKey = null;  // 筛选后组集合变化, 复位展开态
     },
-    setPathFilter(value) {
-      this.pathFilter = value || "";
-      this.expandedKey = null;
+    /* 筛选弹层互斥展开(同一时刻只开一个: 避免多个浮层叠在一起) */
+    toggleFilterMenu(kind) {
+      this.filterMenu = this.filterMenu === kind ? "" : kind;
     },
     clearFilters() {
       this.kindFilter = "";
-      this.pathFilter = "";
+      this.pathFilter = [];
       this.tagFilter = [];
       this.categoryFilter = [];
       this.siteFilter = [];
@@ -757,13 +829,56 @@ const app = createApp({
       if (member.hr_tag_done && tag === member.hr_tag_done) return "hr-done";
       return "";
     },
+    /* ---------------- HR 展示辅助(布尔/阈值均由后端算好, 前端只做比较与着色) ----------------
+     * hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
+     * hr_req_time: 要求做种时长(秒); hr_req_ratio: 要求分享率(0 = 不要求)
+     * 绝不在前端重算模板或阈值(自定义标签格式与要求值会立即失效), 见 ai/08-pitfalls。
+     */
+    hrTimeReached(m) {
+      return m.hr_req_time > 0 && m.seeding_time >= m.hr_req_time;
+    },
+    hrRatioReached(m) {
+      return m.hr_req_ratio > 0 && (m.ratio || 0) >= m.hr_req_ratio;
+    },
+    /* 对照列配色: **按列各自的要求**判定 —— 未配要求的列(如只要求时长不要求分享率)必须
+     * 保持中性色, 否则会给一个"本来就没要求的数值"染上警示色, 反而是误读。
+     */
+    hrTimeClass(m) {
+      if (!m.hr_triggered || !(m.hr_req_time > 0)) return "";
+      return this.hrTimeReached(m) ? "reached" : "pending";
+    },
+    hrRatioClass(m) {
+      if (!m.hr_triggered || !(m.hr_req_ratio > 0)) return "";
+      return this.hrRatioReached(m) ? "reached" : "pending";
+    },
+    hrGroupClass(g) {
+      if (!g.hr_triggered) return "";
+      return g.hr_pending ? "pending" : "done";
+    },
+    hrGroupTitle(g) {
+      if (!g.hr_triggered) return "该组没有成员触发 HR 条件";
+      if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时长/分享率要求`;
+      return `已触发 HR ${g.hr_triggered} 个, 其中 ${g.hr_pending} 个尚未满足做种时长/分享率要求`;
+    },
+    /* 限速显示: 后端单位 KiB/s(0 = 不限速, null = 该方向不管理) */
+    fmtLimit(kib) {
+      if (kib === null || kib === undefined) return "—";
+      if (!kib) return "不限速";
+      return this.fmtSpeed(kib * 1024);
+    },
     setSort(key) {
-      if (this.sortKey === key) {
-        this.sortDir = -this.sortDir;
-      } else {
+      // 三态(想法.md): 首次点击按该列降序 -> 再点升序 -> 第三次恢复默认排序(最近添加时间降序)
+      if (this.sortKey !== key) {
         this.sortKey = key;
         this.sortDir = -1;
+        return;
       }
+      if (this.sortDir === -1) {
+        this.sortDir = 1;
+        return;
+      }
+      this.sortKey = DEFAULT_SORT.key;
+      this.sortDir = DEFAULT_SORT.dir;
     },
     sortArrow(key) {
       if (this.sortKey !== key) return "";

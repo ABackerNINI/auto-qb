@@ -63,6 +63,17 @@
     <symbol id="i-drag" viewBox="0 0 16 16"><circle cx="6.1" cy="4.6" r=".95" fill="currentColor" stroke="none"/><circle cx="9.9" cy="4.6" r=".95" fill="currentColor" stroke="none"/><circle cx="6.1" cy="8" r=".95" fill="currentColor" stroke="none"/><circle cx="9.9" cy="8" r=".95" fill="currentColor" stroke="none"/><circle cx="6.1" cy="11.4" r=".95" fill="currentColor" stroke="none"/><circle cx="9.9" cy="11.4" r=".95" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-arrow-up" viewBox="0 0 16 16"><path d="M8 12.6V3.6M4.4 7.2 8 3.6l3.6 3.6"/></symbol>
     <symbol id="i-arrow-down" viewBox="0 0 16 16"><path d="M8 3.4v9M4.4 8.8 8 12.4l3.6-3.6"/></symbol>
+    <!-- HR/限速/流量类图标(2026-09-14 打磨新增): 沿用 16×16 + stroke 1.7 约定,
+         颜色一律由 CSS 令牌提供(不在此写死), 见 style.css 的 .ico-* 语义色映射 -->
+    <symbol id="i-hr" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.6V8l2.4 1.5"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3"/></symbol>
+    <symbol id="i-percent" viewBox="0 0 16 16"><path d="M12.4 3.6 3.6 12.4"/><circle cx="4.7" cy="4.7" r="1.6"/><circle cx="11.3" cy="11.3" r="1.6"/></symbol>
+    <symbol id="i-hourglass" viewBox="0 0 16 16"><path d="M4.3 2.5h7.4M4.3 13.5h7.4"/><path d="M5.2 2.5v2.3L8 8l-2.8 3.2v2.3M10.8 2.5v2.3L8 8l2.8 3.2v2.3"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 16 16"><rect x="2.6" y="3.7" width="10.8" height="9.5" rx="1.6"/><path d="M2.6 6.7h10.8M5.7 2.4v2.5M10.3 2.4v2.5"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 16 16"><circle cx="8" cy="9" r="4.9"/><path d="M8 6.3V9l1.9 1.3M6.3 1.7h3.4M8 1.7v2.2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.7" y="7.2" width="8.6" height="6.1" rx="1.6"/><path d="M5.7 7.2V5.5a2.3 2.3 0 0 1 4.6 0v1.7"/></symbol>
+    <symbol id="i-ellipsis" viewBox="0 0 16 16"><circle cx="3.7" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="12.3" cy="8" r="1.15" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-chevron-up" viewBox="0 0 16 16"><path d="M4.3 9.7 8 6l3.7 3.7"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.2 9.3 6.4 13.5 7.7 9.3 9 8 13.2 6.7 9 2.5 7.7 6.7 6.4z"/></symbol>
   </svg>
 
   <div id="app" v-cloak>
@@ -112,25 +123,82 @@
                 <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
               </button>
             </div>
-            <span v-if="searchBuilding" class="muted">构建索引…</span>
+            <span v-if="searchBuilding" class="muted"><svg class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg> 构建索引…</span>
             <span v-if="searchError" class="error">{{ searchError }}</span>
+          </div>
+          <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口;
+               选项**不显示勾选框**, 点击整行切换(与筛选器下拉统一风格) -->
+          <div v-if="page === 'groups'" class="col-picker">
+            <button class="table-tool" :class="{ active: colMenuOpen }" title="显示/隐藏列 · 列宽"
+                    @click.stop="colMenuOpen = !colMenuOpen">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
+              列
+              <span v-if="hiddenCount" class="tool-badge">{{ hiddenCount }}</span>
+            </button>
+            <div v-if="colMenuOpen" class="col-menu" @click.stop>
+              <div class="col-menu-title">分组表</div>
+              <div v-for="c in groupColumns" :key="c.key" class="col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('group', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('group', c.key)"
+                   @click="!c.locked && toggleColumn('group', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('group', c.key)">
+                <span class="col-mark"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check"></use></svg></span>
+                <span>{{ c.label }}</span>
+              </div>
+              <div class="col-menu-title">明细表</div>
+              <div v-for="c in detailColumns" :key="c.key" class="col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('detail', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('detail', c.key)"
+                   @click="!c.locked && toggleColumn('detail', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('detail', c.key)">
+                <span class="col-mark"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check"></use></svg></span>
+                <span>{{ c.label }}</span>
+              </div>
+              <div class="col-menu-actions">
+                <button class="ce-btn ghost small" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail')">
+                  恢复默认列宽
+                </button>
+                <button class="ce-btn ghost small" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail')">
+                  适应窗口宽度
+                </button>
+              </div>
+            </div>
           </div>
           <div class="spacer"></div>
           <!-- 统计槽: 图标与名称紧跟数值(定宽槽会把标题与数值拉远); 速度类给温和最小宽防抖动 -->
           <div class="stat-pills">
             <span class="stat-pill" title="辅种组总数">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组 <b>{{ groups.length }}</b>
+              <svg class="ico ico-sm ico-group" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组 <b>{{ groups.length }}</b>
             </span>
             <span class="stat-pill" title="种子总数">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hdd"></use></svg>种子 <b>{{ totalTorrents }}</b>
+              <svg class="ico ico-sm ico-store" viewBox="0 0 16 16"><use href="#i-hdd"></use></svg>种子 <b>{{ totalTorrents }}</b>
             </span>
-            <span class="stat-pill wide" title="全部组下载速度合计">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-download"></use></svg>下载 <b>{{ fmtSpeed(totalDl) }}</b>
+            <span class="stat-pill wide pill-speed" title="全部组下载速度合计">
+              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>下载 <b>{{ fmtSpeed(totalDl) }}</b>
             </span>
-            <span class="stat-pill wide" title="全部组上传速度合计">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>上传 <b>{{ fmtSpeed(totalUl) }}</b>
+            <span class="stat-pill wide pill-speed" title="全部组上传速度合计">
+              <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>上传 <b>{{ fmtSpeed(totalUl) }}</b>
             </span>
-            <span class="stat-pill" title="当前刷新间隔(无变化/服务不可达时自动放慢)">
+            <!-- 今日累计上传/下载(数据源: Traffic Monitor; 未启用限速曲线时不渲染) -->
+            <span v-if="trafficOn && todayTraffic" class="stat-pill wide pill-today"
+                  :title="'今日累计上传/下载(数据源 Traffic Monitor' + (traffic.date ? ', ' + traffic.date : '') + ')'">
+              <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
+              <b>{{ fmtSize(todayTraffic.up) }}</b>
+              <span class="sep">/</span>
+              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
+              <b>{{ fmtSize(todayTraffic.down) }}</b>
+            </span>
+            <!-- 限速对照: 一致只显示命中值; 不一致显示"命中 / 实际"并把原因放进悬停提示 -->
+            <span v-for="r in limitRows" :key="r.dir" class="stat-pill wide pill-limit"
+                  :class="{ mismatch: r.mismatch, manual: r.reason && r.reason.code === 'manual' }"
+                  :title="r.tip">
+              <svg v-if="r.reason && r.reason.code === 'manual'" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-lock"></use></svg>
+              <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+              {{ r.label }}
+              <b>{{ fmtLimit(r.target) }}</b>
+              <template v-if="r.mismatch"> / {{ fmtLimit(r.actual) }}</template>
+            </span>
+            <span class="stat-pill pill-refresh" title="当前刷新间隔(无变化/服务不可达时自动放慢)">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-clock"></use></svg>刷新 <b>{{ pollLabel }}s</b>
             </span>
           </div>
@@ -157,19 +225,20 @@
             <template v-if="tagFilter.length">标签“{{ tagFilter.join('/') }}” </template>
             <template v-if="categoryFilter.length">分类“{{ categoryFilter.join('/') }}” </template>
             <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
-            <template v-if="pathFilter">路径“{{ pathFilter }}” </template>
+            <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
             → <b>{{ filteredGroups.length }}</b> 个辅种组<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
             <template v-if="searchBuilding"> · 索引构建中…</template>
           </span>
           <div class="strip-tools">
-            <!-- 多选筛选器(标签/分类/站点): 定义见 app.js filterDefs; 同一筛选器内为"或" -->
+            <!-- 筛选器下拉(标签/分类/站点/路径): 定义见 app.js filterDefs, 四个共用一份模板;
+                 点击整行即选中/取消(不显示勾选框), 计数徽标绝对定位 -> 选中数不改变按钮宽度 -->
             <div v-for="f in filterDefs" :key="f.kind" class="filter-pop">
               <button class="filter-btn" :class="{ active: f.selected.length }"
-                      :title="'按' + f.label + '筛选辅种组'"
-                      @click.stop="filterMenu = filterMenu === f.kind ? '' : f.kind">
+                      :title="'按' + f.label + '筛选辅种组(可多选)'"
+                      @click.stop="toggleFilterMenu(f.kind)">
                 <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="'#' + f.icon"></use></svg>
                 {{ f.label }}
-                <span v-if="f.selected.length" class="tool-badge">{{ f.selected.length }}</span>
+                <span v-if="f.selected.length" class="filter-count">{{ f.selected.length }}</span>
                 <svg class="ico ico-sm filter-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
               </button>
               <div v-if="filterMenu === f.kind" class="pop-menu" @click.stop>
@@ -177,25 +246,22 @@
                   <span>{{ f.label }}</span>
                   <button v-if="f.selected.length" class="pop-clear" @click="clearFilter(f.field)">清除</button>
                 </div>
-                <label v-for="o in f.options" :key="o.value" class="pop-item">
-                  <input type="checkbox" :checked="isFilterOn(f.field, o.value)"
-                         @change="toggleFilterValue(f.field, o.value)">
+                <div v-for="o in f.options" :key="o.value" class="pop-item"
+                     :class="{ on: isFilterOn(f.field, o.value) }"
+                     role="button" tabindex="0" :aria-pressed="isFilterOn(f.field, o.value)"
+                     @click="toggleFilterValue(f.field, o.value)"
+                     @keyup.enter="toggleFilterValue(f.field, o.value)"
+                     @keyup.space.prevent="toggleFilterValue(f.field, o.value)">
                   <span class="pop-value">{{ o.value || '(空)' }}</span>
                   <span class="pop-count">{{ o.count }}</span>
-                </label>
+                </div>
                 <p v-if="!f.options.length" class="pop-empty">暂无数据</p>
               </div>
             </div>
-            <label class="strip-select" title="按保存路径筛选辅种组">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-              <select :value="pathFilter" @change="setPathFilter($event.target.value)">
-                <option value="">全部保存路径</option>
-                <option v-for="p in pathOptions" :key="p.value" :value="p.value">
-                  {{ p.value || '(未设置保存路径)' }} · {{ p.count }}
-                </option>
-              </select>
-            </label>
-            <button v-if="filtersActive" class="dist-chip clear" @click="clearFilters()">
+            <!-- 清除筛选: **常驻占位**(无筛选时 visibility:hidden) —— 若用 v-if 会出现/消失,
+                 会把同一行的筛选器整组左右推动, 与用户"需要固定位置"的诉求相違 -->
+            <button class="dist-chip clear" :class="{ 'is-off': !filtersActive }"
+                    :disabled="!filtersActive" @click="clearFilters()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
             </button>
           </div>
@@ -204,41 +270,6 @@
 
       <!-- 辅种分组页 -->
       <main v-if="page==='groups'" class="content">
-
-        <!-- 表格工具条: 列选择器(显示/隐藏列 + 列宽重置/适应窗口) -->
-        <div class="table-tools">
-          <div class="table-tools-spacer"></div>
-          <div class="col-picker">
-            <button class="table-tool" :class="{ active: colMenuOpen }" title="显示/隐藏列 · 列宽"
-                    @click.stop="colMenuOpen = !colMenuOpen">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
-              列
-              <span v-if="hiddenCount" class="tool-badge">{{ hiddenCount }}</span>
-            </button>
-            <div v-if="colMenuOpen" class="col-menu" @click.stop>
-              <div class="col-menu-title">分组表</div>
-              <label v-for="c in groupColumns" :key="c.key" class="col-menu-item" :class="{ locked: c.locked }">
-                <input type="checkbox" :checked="colVisible('group', c.key)" :disabled="c.locked"
-                       @change="toggleColumn('group', c.key)">
-                <span>{{ c.label }}</span>
-              </label>
-              <div class="col-menu-title">明细表</div>
-              <label v-for="c in detailColumns" :key="c.key" class="col-menu-item" :class="{ locked: c.locked }">
-                <input type="checkbox" :checked="colVisible('detail', c.key)" :disabled="c.locked"
-                       @change="toggleColumn('detail', c.key)">
-                <span>{{ c.label }}</span>
-              </label>
-              <div class="col-menu-actions">
-                <button class="ce-btn ghost small" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail')">
-                  恢复默认列宽
-                </button>
-                <button class="ce-btn ghost small" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail')">
-                  适应窗口宽度
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div class="group-table" ref="groupTable">
           <!-- 列头(点击排序, 右缘拖拽调宽, 双击按内容自适应) -->
@@ -294,6 +325,18 @@
                     {{ m.site }}
                   </span>
                 </div>
+                <!-- H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(全部达标显示绿色对勾) -->
+                <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(g)" :title="hrGroupTitle(g)">
+                  <span v-if="!g.hr_triggered" class="zero">—</span>
+                  <template v-else-if="!g.hr_pending">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
+                    <span>已达标</span>
+                  </template>
+                  <template v-else>
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
+                    <span class="hr-num">{{ g.hr_pending }}/{{ g.hr_triggered }}</span>
+                  </template>
+                </div>
                 <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
               </template>
             </div>
@@ -332,7 +375,14 @@
                     <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                     <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                   </span>
-                  <span v-else-if="col.key === 'seeding_time'">{{ fmtDuration(m.seeding_time) }}</span>
+                  <span v-else-if="col.key === 'seeding_time'" class="m-pair" :class="hrTimeClass(m)">
+                    {{ fmtDuration(m.seeding_time) }}
+                    <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                  </span>
+                  <span v-else-if="col.key === 'ratio'" class="m-pair" :class="hrRatioClass(m)">
+                    {{ (m.ratio || 0).toFixed(2) }}
+                    <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+                  </span>
                   <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                 </template>
               </div>
