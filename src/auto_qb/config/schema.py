@@ -51,8 +51,16 @@ KINDS = frozenset(
         "curve",
         "trackers",
         "rules",
+        "rules_ref",
     }
 )
+
+# 数值 + 单位下拉的适用 kind(前端 UNIT_OPTIONS 表与之对应): 这些 kind 的输入框
+# 渲染为 "数值框 + 单位下拉", 不再让用户手写 "30M"/"10MiB" 这类复合串
+UNIT_KINDS = frozenset({"time", "size", "speed"})
+TIME_UNITS = ("S", "M", "H", "D")
+SIZE_UNITS = ("B", "KiB", "MiB", "GiB", "TiB")
+SPEED_UNITS = ("B/s", "KiB/s", "MiB/s", "GiB/s")
 
 # 插件 spec 形态(Plugin.spec_kind), 前端据此选择控件
 SPEC_KINDS = frozenset({"str", "bool", "list", "object", "enum", "speed"})
@@ -73,6 +81,10 @@ class Field:
     fields:     kind == "object" 时的子字段
     optional:   object 字段是否可整段省略(前端以开关控制该键存在性, 子字段随之显示/隐藏)
     ui_only:    UI 专段入口(不对应真实配置键, 如规则集 "rules" 对应动态的 *_rules 键)
+    unit_default: kind 属 UNIT_KINDS 时的**首选单位**(未配置/无法解析该值时下拉框的初值)。
+                  留空则前端回退到该 kind 的第一个单位; 常见值可由默认值后缀直接读出
+                  (如 default="3D" -> D), 只有需要偏离默认值后缀时才显式声明
+                  (如 extra_seeding_time 的 default 为 0S, 但用户习惯从 H 开始填)。
     """
     key: str
     label: str
@@ -92,6 +104,7 @@ class Field:
     grey_if: Tuple[str, str] = ()
     group_of: str = ""
     risk: str = ""
+    unit_default: str = ""
 
 
 @dataclass(frozen=True)
@@ -144,13 +157,19 @@ DELETED_ALLOWED_ACTIONS = ("print_torrent_details", )
 # ---------------------------------------------------------------- HR 输出字段(全局/站点共用)
 
 HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
-    Field("add_tag", "触发后添加标签", "str", default="", help="未达标种子在触发后添加的标签; 支持 ${required_seeding_time} 变量"),
+    Field(
+        "add_tag",
+        "触发后添加标签",
+        "str",
+        default="",
+        help="已触发 HR(下载量/比例达条件)但尚未满足做种时长/分享率时自动添加的标签; 支持 ${required_seeding_time} 变量; 留空 = 不添加"
+    ),
     Field(
         "add_category",
         "触发后设置分类",
         "str",
         default="",
-        help="未达标种子在触发后设置的分类; 支持 ${required_seeding_time} 变量; 留空 = 不设置分类",
+        help="同上, 但设置的是分类(一个种子只能有一个分类); 留空 = 不设置",
     ),
     Field(
         "overwrite_category",
@@ -165,14 +184,14 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "达标后添加标签",
         "str",
         default="",
-        help="做种时长满足要求 + 额外时间后添加的标签; 留空 = 不添加",
+        help="做种时长已达要求 + 额外时间(或分享率达标)后添加的标签; 用于标记“HR 已完成”; 可自行删除, 本程序不会再添加",
     ),
     Field(
         "add_category_for_satisfied",
         "达标后设置分类",
         "str",
         default="",
-        help="达标分支设置的分类; 留空 = 不设置分类",
+        help="达标分支设置的分类; 留空 = 不设置",
     ),
     Field(
         "overwrite_category_for_satisfied",
@@ -188,11 +207,25 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
 
 TRACKER_HR_FIELDS: Tuple[Field, ...] = (
     Field(
-        "required_seeding_time", "要求做种时长", "time", default="3D", required=True, help="如 3D / 12H / 1.5D; 达到该时长才算满足 HR"
+        "required_seeding_time",
+        "要求做种时长",
+        "time",
+        default="3D",
+        required=True,
+        help="站点要求的做种时长(如 3D = 3 天 / 12H / 1.5D); 达到该时长才算满足 HR"
     ),
-    Field("required_share_ratio", "要求分享率", "float", default="0", help="上传/下载 达到该值也算满足 HR; 0 = 不要求"),
-    Field("extra_seeding_time", "额外做种时间", "time", default="0S", help="要求时长 + 额外时长 视为达标(可留缓冲)"),
-    Field("condition", "HR 触发条件", "ratio", default="80%", help="下载比例或下载量达到该值即视为需要 HR 管理, 如 80% / 10MiB"),
+    Field("required_share_ratio", "要求分享率", "float", default="0", help="上传量/下载量 达到该值也算满足 HR(与做种时长二选一); 0 = 不要求"),
+    Field(
+        "extra_seeding_time",
+        "额外做种时间",
+        "time",
+        default="0H",
+        unit_default="H",
+        help="缓冲量: 要求时长 + 额外时长 才判定达标(避免刚好卡在边界时被站点判定未达标)"
+    ),
+    Field(
+        "condition", "HR 触发条件", "ratio", default="80%", help="下载比例(如 80%)或下载量(如 10MiB)达到该值即视为需要 HR 管理; 注意辅种(无下载量)不触发"
+    ),
 ) + HR_OUTPUT_FIELDS
 
 TRACKER_FIELDS: Tuple[Field, ...] = (
@@ -202,15 +235,15 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "str_list",
         default=[],
         required=True,
-        help="按 hostname 精确匹配(含子域名); 必填; 每行一个",
+        help="按 hostname 精确匹配(含子域名), 例: hhanclub.net; 必填; 每行一个",
     ),
-    Field("tags", "站点标签", "str_list", default=[], help="种子匹配到该站点时自动添加的标签; 第一个标签用作日志中的站点名"),
+    Field("tags", "站点标签", "str_list", default=[], help="该站点的种子自动添加这些标签; 第一个标签同时用作日志/界面里的站点名"),
     Field(
         "remove_tags",
         "删除标签格式",
         "pattern_list",
         default=[],
-        help="支持 regex: 前缀与 :ignore_case 后缀; 可用于清理种子自带的标签",
+        help="支持 regex: 前缀与 :ignore_case 后缀(可组合), 例: regex:^BTS / 'M-Team:ignore_case'",
         risk="匹配到的标签会从该站点的种子中删除",
     ),
     Field(
@@ -218,11 +251,25 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "单种上传限速",
         "speed",
         default="0KiB/s",
-        help="0 = 不限速; 奇数 KiB/s 视为用户手动设置, 本程序不覆盖",
+        help="种子添加时写入 qB 的单种限速; 0 = 不限速; 奇数值(如 2001KiB/s)视为手动设置, 本程序不覆盖",
     ),
-    Field("download_speed_limit", "单种下载限速", "speed", default="0KiB/s", help="0 = 不限速"),
-    Field("hr", "HR 规则", "object", default=None, optional=True, help="未配置 = 该站点不做 HR 管理", fields=TRACKER_HR_FIELDS),
-    Field("rules", "引用的规则", "str_list", default=[], help="格式 @规则集 或 @规则集.规则名; 留空 = 该站点执行全部启用的规则"),
+    Field("download_speed_limit", "单种下载限速", "speed", default="0KiB/s", help="同上, 作用于下载; 0 = 不限速"),
+    Field(
+        "hr",
+        "HR 规则",
+        "object",
+        default=None,
+        optional=True,
+        help="未配置该段 = 该站点不做 HR 管理(不打 HR 标签/分类)",
+        fields=TRACKER_HR_FIELDS
+    ),
+    Field(
+        "rules",
+        "引用的规则",
+        "rules_ref",
+        default=[],
+        help="填写 @规则集 或 @规则集.规则名(可从右侧下拉选, 也可直接粘贴); 留空 = 该站点不执行任何规则——不会回退为\"执行全部启用规则\""
+    ),
     Field(
         "remove_similar_tags",
         "删除类似标签",
@@ -242,24 +289,29 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "enum",
         default="interval",
         options=TRIGGERS,
-        help="interval = 按扫描间隔周期执行; 其余为事件触发(种子新增/删除/状态变化时一次性执行)",
+        help="interval = 按扫描间隔周期检查; 其余为事件触发(种子新增/删除/状态变化时立即检查一次)",
     ),
-    Field("interval", "扫描间隔", "time", default="0S", unit="S/M/H/D", help="0 = 每轮(受主循环间隔约束); 从上一轮结束起算"),
+    Field(
+        "interval",
+        "扫描间隔",
+        "time",
+        default="0S",
+        help="仅 interval 触发时生效; 0 = 每轮都检查(受主循环间隔约束, 实际仍为 2s 级); 从上一轮结束起算, 不叠加"
+    ),
     Field(
         "execute_once",
         "执行一次",
         "enum",
         default="never",
         options=EXECUTE_ONCE,
-        help="窗口内最多成功执行一次(去重), 适合校验/开始/汇报等非幂等动作",
+        help="窗口内最多成功执行一次(去重存于 state_file); 适合校验/开始/汇报等非幂等动作; 失败不计入"
     ),
     Field(
         "cooldown",
         "冷却时间",
         "time",
         default="0S",
-        unit="S/M/H/D",
-        help="距上次成功不足该时间则跳过; 优先于 执行一次",
+        help="距上次成功不足该时间则跳过(优先于“执行一次”); 0 = 不冷却",
     ),
     Field(
         "stop_following_rules_if",
@@ -477,7 +529,6 @@ GROUPS: Tuple[Group, ...] = (
                 "主循环间隔",
                 "time",
                 default="2S",
-                unit="S/M/H/D",
                 required=True,
                 help="必须为正时间, 防止忙循环; 决定状态变化与数据刷新频率",
             ),
@@ -494,7 +545,6 @@ GROUPS: Tuple[Group, ...] = (
                 "内置任务间隔",
                 "time",
                 default="60S",
-                unit="S/M/H/D",
                 help="维护/全局清理/曲线等内置任务的周期; 从上一轮结束起算, 不叠加",
             ),
             Field(
@@ -528,7 +578,14 @@ GROUPS: Tuple[Group, ...] = (
                         help="低于该等级的日志不输出; 达到 通知.最低通知级别 的日志会推送通知"
                     ),
                     Field("file", "日志文件", "path", default="", help="留空 = <data_dir>/logs/auto-qb.log"),
-                    Field("max_bytes", "轮转大小", "size", default="10MiB", help="单个日志文件上限, 超过则轮转; 保留 5 个备份"),
+                    Field(
+                        "max_bytes",
+                        "轮转大小",
+                        "size",
+                        default="10MiB",
+                        unit_default="MiB",
+                        help="单个日志文件上限, 超过则轮转; 保留 5 个备份"
+                    ),
                     Field(
                         "format",
                         "日志格式",
@@ -610,7 +667,6 @@ GROUPS: Tuple[Group, ...] = (
                         "去重窗口",
                         "time",
                         default="10M",
-                        unit="S/M/H/D",
                         grey_if=("enabled", "true"),
                         help="窗口内相同内容的通知只推一次; 0 = 不去重",
                     ),

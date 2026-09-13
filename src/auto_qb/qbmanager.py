@@ -1,7 +1,8 @@
 """QbManager: qBittorrent 主管理类
 
 任务队列统一协调: 种子刷新 / 规则 / 种子级内置功能 / 异步校验 全部是带内置 interval 的任务。
-检测到新增种子时, 自动为该种子创建所有符合条件的 rule 任务(tracker 引用规则或全部启用规则)。
+检测到新增种子时, 自动为该种子创建所有符合条件的 rule 任务(仅 tracker 显式引用的规则; 站点未配置
+rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执行全部启用规则")。
 
 职责拆分(mixins 包, 各模块组合进本类):
 - mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务
@@ -336,6 +337,27 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             return "seeding"
         return "other"
 
+    @staticmethod
+    def _hr_view_tags(rec: TorrentRecord) -> dict:
+        """该成员的 HR 标签展示信息(供前端把 HR 标签分别着成"未达标/已达标"两色)
+
+        - hr_tag:      已触发 HR 条件但尚未达标时应有的标签(如 !!HR3D!!); 空 = 不适用
+        - hr_tag_done: 已达标时应有的标签(如 --HR3D--); 空 = 不适用
+
+        判定委托 TorrentRecord.check_hr_condition/check_hr_satisfied, 与维护流程(打 HR 标签)
+        完全同一语义, 不另造判定; 标签文本经 utils.replace_vars 解析 ${required_seeding_time}
+        变量, 与真正写入 qB 的标签逐字一致 —— 前端只要文本相等就能着色。
+        """
+        from . import utils as _utils
+
+        conf = rec.tracker_conf
+        hr = conf.hr if conf is not None else None
+        if hr is None or not rec.check_hr_condition():
+            return {"hr_tag": "", "hr_tag_done": ""}
+        if rec.check_hr_satisfied():
+            return {"hr_tag": "", "hr_tag_done": _utils.replace_vars(hr.add_tag_for_satisfied, conf)}
+        return {"hr_tag": _utils.replace_vars(hr.add_tag, conf), "hr_tag_done": ""}
+
     def _build_group_view(self) -> List[dict]:
         """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
         from . import utils as _utils
@@ -365,6 +387,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
                     "seeding_time": view_field_value("seeding_time", r.seeding_time),
                     "ratio": round(r.ratio, 3),
+                    # HR 标签语义色(已触发未达标 / 已达标): 判定与打标签流程同源, 见 _hr_view_tags
+                    **self._hr_view_tags(r),
                 } for r in recs
             ]
             view.append(
@@ -584,6 +608,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         levels = sorted({c.level for c in changes if c.level != "R"})
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
+        # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_tags),
+        # 配置变了视图内容就可能变 —— 与 store 视图字段变化无关, 需显式置脏
+        self._group_view_dirty = True
         if "L1" in levels:
             self._setup_logging()
             if self._notify_handler is not None:

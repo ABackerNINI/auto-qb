@@ -10,9 +10,13 @@
 - test_field_kinds_are_declared: 所有 Field.kind 在 KINDS 中
 - test_plugin_kinds_are_declared: 所有 Plugin.spec_kind/item_kind 在约定集合中, 且形态自洽
 - test_enum_fields_have_options / test_object_fields_have_children: enum 有选项, object 有子字段
+- test_unit_default_only_on_unit_kinds: unit_default 仅用于 UNIT_KINDS 且在合法单位表内
+- test_unit_kind_defaults_are_parseable: UNIT_KINDS 字段的 default 可拆为 数值+单位(单位合法)
 - test_deleted_trigger_whitelist_matches_validation: 删除触发白名单与 validation 一致
 - test_schema_payload_is_complete: schema_payload 含全部前端所需分区
 """
+import re
+
 import pytest
 
 from auto_qb.config import schema
@@ -162,6 +166,34 @@ def test_optional_only_on_object_fields():
         if f.optional:
             assert f.kind == "object", f"{f.key}: optional 仅适用于 object 字段"
             assert not f.required, f"{f.key}: optional 与 required 互斥"
+
+
+def test_unit_default_only_on_unit_kinds():
+    """unit_default(数值 + 单位下拉的首选单位)只允许用于 UNIT_KINDS, 且必须是合法单位
+
+    否则前端会渲染一个永远取不到的默认单位(下拉框里没有该选项), 表现为"单位总是跳到第一个"。
+    """
+    units = {"time": schema.TIME_UNITS, "size": schema.SIZE_UNITS, "speed": schema.SPEED_UNITS}
+    for f in _all_fields():
+        if not f.unit_default:
+            continue
+        assert f.kind in schema.UNIT_KINDS, f"{f.key}: unit_default 仅适用于 {sorted(schema.UNIT_KINDS)}"
+        assert f.unit_default in units[f.kind], f"{f.key}: unit_default {f.unit_default} 不在 {units[f.kind]} 中"
+
+
+def test_unit_kind_defaults_are_parseable():
+    """UNIT_KINDS 字段的 default(若非空)必须能被"数值 + 单位"正则拆开, 且单位在选项表内
+
+    前端按该值预填下拉框; 若 default 写成 "30" 这类缺单位的串, 单位会退化为回退值,
+    用户看到的首选单位与实际配置不一致。
+    """
+    units = {"time": schema.TIME_UNITS, "size": schema.SIZE_UNITS, "speed": schema.SPEED_UNITS}
+    for f in _all_fields():
+        if f.kind not in schema.UNIT_KINDS or not isinstance(f.default, str) or not f.default:
+            continue
+        m = re.match(r"^([\d.]*)\s*([A-Za-z/]*)$", f.default)
+        assert m and m.group(1) and m.group(2), f"{f.key}: default {f.default!r} 无法拆为 数值+单位"
+        assert m.group(2) in units[f.kind], f"{f.key}: default 单位 {m.group(2)} 不在 {units[f.kind]} 中"
 
 
 def test_checking_action_spec_keys_match_validation():

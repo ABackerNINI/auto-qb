@@ -431,6 +431,55 @@ def test_build_group_view(tmp_path):
     assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
 
 
+def test_build_group_view_hr_tags(tmp_path):
+    """分组视图透出 HR 标签展示值: 已触发未达标 -> hr_tag, 已达标 -> hr_tag_done
+
+    判定与打标签流程同源(torrents.check_hr_condition/check_hr_satisfied), 标签文本经
+    utils.replace_vars 展开 ${required_seeding_time} —— 前端只按文本相等着色, 故两者必须逐字一致。
+    """
+    from helpers import FakeClient, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
+
+    hr = _hr_rule(add_tag="!!HR${required_seeding_time}!!", add_tag_for_satisfied="--HR${required_seeding_time}--")
+    conf = FakeTracker("HHan", hr=hr)
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+
+    def tor(h, name, seeding_time, downloaded=512**2):
+        return FakeTorrent(
+            hash=h,
+            name=name,
+            state="stalledUP",
+            size=512**2,
+            total_size=512**2,
+            downloaded=downloaded,
+            amount_left=0,
+            progress=1.0,
+            seeding_time=seeding_time,
+            save_path=r"R:/s",
+            tracker_conf=conf
+        )
+
+    seed_store(
+        mgr,
+        [
+            tor("HA", "Pending.Show", 3600),  # 1 小时: 已触发 HR 但未达标(3D + 12H)
+            tor("HB", "Done.Show", 4 * 86400),  # 4 天: 已达标
+            tor("HC", "NoHR.Show", 4 * 86400, downloaded=0),  # 纯辅种(无下载量): 不触发 HR
+        ]
+    )
+    for h, key in (("HA", ("R:/p", ("a.mkv", ))), ("HB", ("R:/d", ("b.mkv", ))), ("HC", ("R:/n", ("c.mkv", )))):
+        mgr.store.groups[key] = [h]
+        mgr.store.member_to_key[h] = key
+
+    members = {g["name"]: g["members"][0] for g in mgr._build_group_view()}
+    assert members["Pending.Show"]["hr_tag"] == "!!HR3D!!"
+    assert members["Pending.Show"]["hr_tag_done"] == ""
+    assert members["Done.Show"]["hr_tag"] == ""
+    assert members["Done.Show"]["hr_tag_done"] == "--HR3D--"
+    # 未触发 HR 条件时两字段都为空 -> 前端保持普通标签配色
+    assert members["NoHR.Show"]["hr_tag"] == "" and members["NoHR.Show"]["hr_tag_done"] == ""
+
+
 def test_build_search_index_files():
     """_build_search_index: 主循环构建索引(hash -> name+files), 单条文件拉取失败跳过该种子"""
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store
