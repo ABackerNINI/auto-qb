@@ -3,15 +3,15 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 796 passed + 1 skipped (2026-09-13), 分支覆盖率 90%(connect 节流测试因真实网络调用耗时暂时 skip)(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟)
+# 项目 venv (.venv, Python 3.12), 基线: 808 passed, 0 skipped (2026-09-14), 分支覆盖率 90%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent)
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
 ```
 
 - `pytest.ini`: `pythonpath = src` (无需安装包), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
-- 测试**全部使用 Fake, 不连真实 qBittorrent**, 可随时全量运行。
-- 覆盖率现状 (2026-09-13 实测, 全量): 总 90%; 低洼: `ui.py` 27%(GUI 本体真机冒烟不单测)、`web.py` 76%(WEB UI 路由分支)、`qbmanager.py` 92%(剩余缺口集中在 `run()` 主循环与 connect 重试等真实网络路径); 近乎全绿: `config/impact.py` 100%(2026-09-13 补 `test_impact.py`), `registry.py`/`taskqueue.py`/`logging.py` 100%, conditions 99%, utils 96%, cli 95%, torrents 93%。补测试优先看 term-missing 输出。
+- 测试**基本全部使用 Fake, 不连真实 qBittorrent**(随时可全量运行)。唯一例外是 `test_local_qb_service.py` + `test_ui.py::test_connect_failure_throttles_logging`: 它们用 `helpers.FakeQbServer`(标准库 `http.server` 监听回环随机端口)承载**真实** `qbittorrent-api`/requests 栈, 因为"trust_env 是否真的生效"“库重建 Session 是否弄丢我们的设置”这类行为在进程内替身上根本无法暴露(历史教训)。
+- 覆盖率现状 (2026-09-14 实测, 全量): 总 90%; 低洼: `ui.py` 27%(GUI 本体真机冒烟不单测)、`web.py` 78%(WEB UI 路由分支)、`qbmanager.py` 94%(剩余缺口集中在 connect 异常分支与网络断开路径); 近乎全绿: `config/impact.py` 100%, `registry.py`/`taskqueue.py`/`logging.py` 100%, `qbapi.py`/`speed_curve.py`/`tracker.py` 100%, conditions 99%, torrents 97%, utils 96%, cli 95%。补测试优先看 term-missing 输出。
 
 ## 测试文件约定
 
@@ -31,6 +31,15 @@
 - **FakeTorrent**: 鸭子类型兼容 `TorrentRecord`/`TorrentDictionary` (快照字段一致 + `tags_set`/`state_enum`/`tracker_name`/`log_repr` + `trackers_info(client)`/`files(client)` 惰性接口)。**`state_enum`/`tags_set` 是属性不缓存** — 测试常直接改 `.state`/`.tags` 后重跑动作。默认: hash="HASH123", state="stalledUP", save_path=r"R:\Downloads", size/downloaded=100MiB。
 - **FakeTracker**: name="HHan", domains=["tracker.hhanclub.net"], tags=["HHan"], hr/rules/limits 可注入。
 - **FakeConfig**: 类属性默认全关 (grouping.enabled=False, add_episode_tags=AddEpisodeTagsConfig() 等); 测试按需覆盖实例属性。
+
+### 本地假 qB 服务 (FakeQbServer, 2026-09-14 新增)
+
+- **`FakeQbServer(client=None, abort=False)`**: 标准库 `ThreadingHTTPServer`(线程) + 随机回环端口, `with` 进入/退出保证回收; 数据来源是内部 `FakeClient`(单一口径), 服务端只做 HTTP 适配。
+- 用途: 让测试用**真实** `qbittorrent-api` Client 走完整 HTTP 往返 —— 专门覆盖替身永远暴露不了的行为(session/trust_env/库内部重建 Session/rid 增量语义)。典型: `test_local_qb_service.py`(6 测)与 `test_ui.py::test_connect_failure_throttles_logging`。
+- 端点: POST `auth/login`; HEAD 任意路径(库会先探测协议); GET `app/webapiVersion|app/version`; **路由分派不按方法区分读端点**(库对 `info`/`files`/`trackers`/`maindata` 用 POST, 对 `tags`/`categories`/`transfer` 用 GET), 参数合并 body 与 query; 未列出的 GET -> 404 JSON, 未列出的 POST -> `"Ok."`。
+- **`abort=True`**: 收到任何请求即断开(不写响应) —— 确定地制造 `APIConnectionError`(实测回环约 0.7s/次), 用于连接失败节流类测试; 不要用"指向死端口"代替(部分环境是超时等待, 库内超时重试曾使该测试耗时 74s 而被 skip)。
+- 辅助: `srv.port`(接配置)、`srv.client`(预置种子/断言写调用)、`srv.hits(endpoint)`(端点命中次数, 可断言"每 tick 只拉一次 sync"或"节流生效")、`srv.requests` 台账。
+- 限制: 写端点只回 `"Ok."` 不改 FakeClient 状态(不做忠实状态机); 需要状态流转的测试请继续用进程内 `FakeClient` 替身。
 
 ### 构造函数 (最常用)
 

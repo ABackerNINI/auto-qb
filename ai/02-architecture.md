@@ -25,18 +25,20 @@
 ## 主循环 (qbmanager.py)
 
 ```python
-run(dry_run):
-    connect()                       # Client + auth_log_in
+run(dry_run, stop_event=None, pause_event=None):
+    connect()                       # _new_client(本地地址 -> LocalQbClient) + auth_log_in
     _load_state(); _load_rules(); _create_global_tasks()
     while True:
         _tick(dry_run)              # 异常捕获后继续
-        time.sleep(main_tick)       # 默认 2s
+        _throttle(stop_event, main_tick)   # 托管: Event.wait(即时响应停止); 非托管: time.sleep
     finally: save_state()           # 仅退出时落盘
 
 _tick(dry_run):
     _refresh_torrents(dry_run)      # ① 刷新快照 + 事件处理
     task_queue.run_due(dry_run, now=now, max_tasks=max_tasks_per_tick)  # ② 弹出+执行+收尾(默认最多20个/tick)
 ```
+
+**节流 (`_throttle`, 2026-09-14 修复)**: 非托管模式(CLI 默认, `stop_event=None`)走 `time.sleep(main_tick)`; 托管模式(`--tray` 传入 `stop_event`)走 `Event.wait(main_tick)` 以保持停止信号即时响应。**主循环的节流绝不能依赖 `stop_event` 是否存在** —— 曾写成 `if stop_event is not None and stop_event.wait(main_tick)`, 在非托管模式被 `and` 短路导致**完全不阻塞**, 主循环空转(实测约 2800 tick/s, 为 main_tick=2s 设计值的约 5500 倍), 详见 [08-pitfalls.md](08-pitfalls.md)。注意首连失败重试循环(`while not self.connect()`)的语义**不同**: 非托管模式首连失败直接返回(不重试), 不可改成 `_throttle`。
 
 连接恢复检测: `_tick` 成功(即 API 可达)后若 `_last_conn_ok is False` 则置 True 并记一次"已重新连接"——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。连接异常节流 (2026-09-12): 运行期 tick 内的 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败静默 (防 qB 宕机刷屏); 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。启动首连失败 → `connect()` 返回 False → `run` 直接结束。
 
@@ -84,7 +86,7 @@ _tick(dry_run):
 
 `dirty_groups` 跨轮累积(`_apply` 不清空), 由 `_check_download_conflicts` 取出并复位 —— 故轮次外的写操作(Web 命令/任务队列)登记不会丢。`rounds_applied` 为 0(直接驱动该方法的白盒测试/外部调用, 无变化集)时退回全量扫描。
 
-**P2 附带优化**: 本地 qB 地址(`127.0.0.1`/`localhost`)连接时关闭 requests Session 的 `trust_env`, 避免每请求的 `get_environ_proxies`/`get_netrc_auth`(环境代理与 `~/.netrc` 解析)开销; 远程地址保留原行为(`_disable_env_lookup_for_local`)。
+**本地 qB 跳过 env/netrc 解析** (2026-09-14 修复为真正生效): `_new_client()` 对本地地址(`127.0.0.1`/`localhost`/`::1`, 取 `base_url` 解析后的 hostname 判定)构造 `LocalQbClient`(Client 子类, 覆盖 `_session` property 强制 `trust_env=False`), 省掉每请求的 `get_environ_proxies`/`get_netrc_auth`(环境代理与 `~/.netrc` 解析; 实测单请求 0.276ms -> 0.043ms); 远程地址用原生 `Client`(企业代理/`~/.netrc` 可能真实需要)。旧实现 `client._session.trust_env = False` **从未生效**(库在首次请求/登录重建时丢弃 Session), 详见 [08-pitfalls.md](08-pitfalls.md)。
 
 ## 启动期版本兼容校验 (2026-09-06, 2026-09-13 调整)
 

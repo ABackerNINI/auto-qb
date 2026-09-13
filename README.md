@@ -21,7 +21,7 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 - **智能限速** — tracker 级单种限速 + 规则动作限速 + 读取流量统计的全局限速曲线，到量自动降速
 - **安全第一** — 高风险动作（跳检、强制汇报、移动）默认关闭；提供 `--dry-run` 试运行；启动时全量校验配置
 
-> 🚧 **施工中**：项目功能已实现并带有完整测试（621 个用例），但尚未经过大规模实机验证。标记 🚧 的功能尤其请先用 `--dry-run` 观察，谨慎在生产环境使用。
+> 🚧 **施工中**：项目功能已实现并带有完整测试（808 个用例），但尚未经过大规模实机验证。标记 🚧 的功能尤其请先用 `--dry-run` 观察，谨慎在生产环境使用。
 
 ## 目录
 
@@ -586,8 +586,8 @@ pytest --cov=src --cov-report=term-missing tests -q
 pytest --cov=src --cov-report=html tests/
 ```
 
-- 测试基础设施见 `tests/helpers.py`（`FakeClient` / `FakeTorrent` / `FakeConfig`，无需真实 qBittorrent）
-- 当前共 612 个测试用例
+- 测试基础设施见 `tests/helpers.py`（`FakeClient` / `FakeTorrent` / `FakeConfig`，无需真实 qBittorrent；另有 `FakeQbServer` 本地假 HTTP 服务，供真实 `qbittorrent-api` / requests 栈的集成测试）
+- 当前共 808 个测试用例
 
 ## 免责声明与许可证
 
