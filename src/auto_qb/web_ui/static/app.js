@@ -2,59 +2,94 @@
 /* global Vue, localStorage, confirm, alert */  // 声明浏览器全局, 消除编辑器 no-undef 红线
 const { createApp } = Vue;
 
-/* 列模板: 弹性列用 minmax(...)+fr, 固定列用 px —— 列顺序必须与模板/表头/单元格三者一致
- * (长度不一致时 gridTemplateColumns 与内容会错位)
- */
-const GROUP_DEFAULT_COLS = [
-  "minmax(210px, 2.4fr)",  // 名称(前挂组状态徽标)
-  "minmax(88px, 1fr)",  // 下载
-  "minmax(88px, 1fr)",  // 上传
-  "minmax(96px, 1fr)",  // 总上传
-  "minmax(92px, 1fr)",  // 大小(单种子)
-  "minmax(100px, 1fr)",  // 总大小(全组求和)
-  "minmax(130px, 1.4fr)",  // 标签(成员共同标签)
-  "minmax(100px, 1.1fr)",  // 分类(成员共同分类)
-  "minmax(170px, 1.6fr)",  // 站点
-  "56px",  // 站数
-];
-const DETAIL_DEFAULT_COLS = [
-  "110px", "76px", "minmax(92px, 1fr)", "minmax(92px, 1fr)", "minmax(92px, 1fr)",
-  "minmax(92px, 1fr)", "minmax(140px, 1.3fr)", "minmax(110px, 1.1fr)",
-  "minmax(84px, 1fr)", "minmax(96px, 1fr)", "80px",
-];
-const MIN_COL_PX = 56;  // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
-const COLS_STORE_KEY = "autoqb_colwidths_v2";
-
-/* 列宽记忆 = **稀疏覆盖** {page: {列索引: "120px"}}
+/* ---------------- 列表列模型(分组表 / 明细表) ----------------
  *
- * 只冻结被拖动过的列, 其余列继续用默认模板的 minmax(...)+fr 弹性分配 —— 这样调某列
- * 宽度后其它列会自动重分配(旧版存整表 px 数组, 一旦拖过任何一列所有列都被冻结,
- * 窗口变化/内容变化都不再自适应)。
+ * **单一来源**: 列头 / 行单元格 / grid 模板 / 列选择器 全部由这一份数组派生 —— 顺序天然一致。
+ * (旧实现把"顺序"分散在表头、行内单元格与模板三处, 加列/改序极易错位, 且列宽按**索引**记忆,
+ *  一旦支持隐藏列索引就会漂移。)
+ *
+ * locked: 不可隐藏(承载展开 caret / 组状态徽标 / 站点名, 隐藏后行就失去身份)
+ * tpl:    默认列宽模板(minmax(最小px, 权重fr) 或 固定 px), 用于首次渲染与"恢复默认"
  */
-function loadColWidths() {
+const GROUP_COLUMNS = [
+  { key: "name", label: "名称", tpl: "minmax(210px, 2.4fr)", sortable: true, locked: true },
+  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
+  { key: "total_size", label: "总大小", tpl: "minmax(100px, 1fr)", sortable: true },
+  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
+  { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
+  { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)" },
+  { key: "count", label: "站数", tpl: "56px", sortable: true },
+];
+const DETAIL_COLUMNS = [
+  { key: "site", label: "站点", tpl: "110px", locked: true },
+  { key: "state", label: "状态", tpl: "76px" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)" },
+  { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)" },
+  { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)" },
+  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)" },
+  { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)" },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(96px, 1fr)" },
+  { key: "hash", label: "Hash", tpl: "80px" },
+];
+const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS };
+const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
+const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
+/* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}}
+ * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更), 结构不同必须升版本
+ */
+const COLS_STORE_KEY = "autoqb_cols_v3";
+
+const emptyColState = () => ({ widths: {}, hidden: {}, manual: {} });
+
+function columnKeys(page) {
+  return TABLE_COLUMNS[page].map((c) => c.key);
+}
+
+function columnDef(page, key) {
+  return TABLE_COLUMNS[page].find((c) => c.key === key) || null;
+}
+
+/* 模板里的最小宽度(minmax 首参 或 固定 px) —— 新显示的列/自适应失败时用它兜底 */
+function templateMinPx(tpl) {
+  const m = String(tpl).match(/^minmax\((\d+(?:\.\d+)?)px/) || String(tpl).match(/^(\d+(?:\.\d+)?)px$/);
+  return m ? Math.round(parseFloat(m[1])) : MIN_COL_PX;
+}
+
+function loadColState() {
   try {
     const raw = JSON.parse(localStorage.getItem(COLS_STORE_KEY));
-    if (!raw || typeof raw !== "object") return {};
-    const out = {};
+    if (!raw || typeof raw !== "object") return emptyColState();
+    const out = emptyColState();
     for (const page of ["group", "detail"]) {
-      const ov = raw[page];
-      if (!ov || typeof ov !== "object") continue;
-      const clean = {};
-      for (const [idx, val] of Object.entries(ov)) {
-        if (/^\d+px$/.test(val)) clean[idx] = val;
+      const keys = columnKeys(page);
+      const w = (raw.widths || {})[page];
+      if (w && typeof w === "object") {
+        const clean = {};
+        for (const [k, v] of Object.entries(w)) {
+          if (keys.includes(k) && /^\d+px$/.test(v)) clean[k] = v;
+        }
+        if (Object.keys(clean).length) out.widths[page] = clean;
       }
-      if (Object.keys(clean).length) out[page] = clean;
+      const h = (raw.hidden || {})[page];
+      if (Array.isArray(h)) {
+        // locked 列即使被写进存储也忽略(列定义变更后可能残留)
+        out.hidden[page] = h.filter((k) => keys.includes(k) && !(columnDef(page, k) || {}).locked);
+      }
+      out.manual[page] = !!(raw.manual || {})[page];
     }
     return out;
   } catch {
-    return {};
+    return emptyColState();
   }
 }
 
-function colTemplate(defaults, overrides) {
-  const ov = overrides || {};
-  return defaults.map((d, i) => (ov[i] === undefined ? d : ov[i])).join(" ");
-}
+const initialColState = loadColState();  // 模块级只读一次(data() 的初值来源)
+
 
 const app = createApp({
   data() {
@@ -73,21 +108,13 @@ const app = createApp({
       expandedKey: null,
       sortKey: "uploaded",
       sortDir: -1,
-      groupColumns: [
-        { key: "name", sortable: true },
-        { key: "dlspeed", sortable: true },
-        { key: "upspeed", sortable: true },
-        { key: "uploaded", sortable: true },
-        { key: "size", sortable: true },
-        { key: "total_size", sortable: true },
-        { key: "tags", sortable: false },
-        { key: "category", sortable: false },
-        { key: "sites", sortable: false },
-        { key: "count", sortable: true },
-      ],
-      detailColumns: ["站点", "状态", "下载", "上传", "总上传", "大小", "标签", "分类", "进度", "做种时长", "Hash"],
-      colWidths: loadColWidths(),  // {group: {idx: "120px"}}, 仅存被拖动列的稀疏覆盖
-      resizing: null,              // {page, idx, startX, startVal}(仅用于调试观察)
+      groupColumns: GROUP_COLUMNS,
+      detailColumns: DETAIL_COLUMNS,
+      // 列状态(定义见文件顶部列模型; 列宽按**列 key** 记忆, 隐藏列由列选择器管理)
+      colWidths: initialColState.widths,  // {page: {列key: "120px"}}
+      colHidden: initialColState.hidden,  // {page: [列key]}
+      colManual: initialColState.manual,  // {page: bool}: 是否手动调过列宽(调过则不再随窗口自适应)
+      colMenuOpen: false,                 // 列选择器弹层开关
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
@@ -102,6 +129,11 @@ const app = createApp({
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
       pathFilter: "",         // 保存路径筛选(组的 save_path; 空 = 不筛选)
+      // 多选筛选(组内任一成员命中任一选中值即保留该组; 同组内多选为"或")
+      tagFilter: [],
+      categoryFilter: [],
+      siteFilter: [],
+      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site"
       toasts: [],             // 站内提示条(替代 alert)
       modal: {                // 站内确认/输入框(替代 confirm/prompt); 结构见 _modalInit
         visible: false, title: "", body: "", okText: "", cancelText: "",
@@ -161,14 +193,32 @@ const app = createApp({
       return [...counts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
     },
     filtersActive() {
-      return !!(this.kindFilter || this.pathFilter || (this.searchQuery || "").trim());
+      return !!(this.kindFilter || this.pathFilter || this.tagFilter.length || this.categoryFilter.length ||
+        this.siteFilter.length || (this.searchQuery || "").trim());
     },
-    /* 列模板: computed 缓存(列宽拖动才变), 行渲染只取同一引用, 不再每行拼字符串 */
+    /* 标签/分类/站点三个多选筛选器的定义(模板只遍历这一份, 不再手写三块相同结构) */
+    filterDefs() {
+      return [
+        { kind: "tag", label: "标签", icon: "i-tag", options: this.tagOptions, selected: this.tagFilter, field: "tagFilter" },
+        { kind: "category", label: "分类", icon: "i-folder", options: this.categoryOptions, selected: this.categoryFilter, field: "categoryFilter" },
+        { kind: "site", label: "站点", icon: "i-globe", options: this.siteOptions, selected: this.siteFilter, field: "siteFilter" },
+      ];
+    },
+    tagOptions() {
+      return this._memberValueOptions((m) => m.tags || []);
+    },
+    categoryOptions() {
+      return this._memberValueOptions((m) => (m.category ? [m.category] : []));
+    },
+    siteOptions() {
+      return this._memberValueOptions((m) => (m.site ? [m.site] : []));
+    },
+    /* 列模板: computed 缓存(列宽/列显隐变化才变), 行渲染只取同一引用, 不再每行拼字符串 */
     groupGrid() {
-      return { gridTemplateColumns: colTemplate(GROUP_DEFAULT_COLS, this.colWidths.group) };
+      return { gridTemplateColumns: this._gridTemplate("group") };
     },
     detailGrid() {
-      return { gridTemplateColumns: colTemplate(DETAIL_DEFAULT_COLS, this.colWidths.detail) };
+      return { gridTemplateColumns: this._gridTemplate("detail") };
     },
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
@@ -179,6 +229,16 @@ const app = createApp({
       let base = this.sortedGroups;
       if (this.kindFilter) base = base.filter((g) => g.members.some((m) => m.kind === this.kindFilter));
       if (this.pathFilter) base = base.filter((g) => g.save_path === this.pathFilter);
+      // 多选筛选: 同一筛选器内为"或"(任一命中), 不同筛选器之间为"且"
+      if (this.tagFilter.length) {
+        base = base.filter((g) => g.members.some((m) => (m.tags || []).some((t) => this.tagFilter.includes(t))));
+      }
+      if (this.categoryFilter.length) {
+        base = base.filter((g) => g.members.some((m) => this.categoryFilter.includes(m.category || "")));
+      }
+      if (this.siteFilter.length) {
+        base = base.filter((g) => g.members.some((m) => this.siteFilter.includes(m.site)));
+      }
       if (!q) return base;
       const hits = this.searchHits;
       const kept = [];
@@ -194,6 +254,9 @@ const app = createApp({
       for (const r of this.searchUncovered) {
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
         if (this.pathFilter && (r.save_path || "") !== this.pathFilter) continue;
+        if (this.tagFilter.length && !(r.tags || []).some((t) => this.tagFilter.includes(t))) continue;
+        if (this.categoryFilter.length && !this.categoryFilter.includes(r.category || "")) continue;
+        if (this.siteFilter.length && !this.siteFilter.includes(r.site)) continue;
         kept.push({
           key: "u-" + r.hash, name: r.name, count: 1, virtual: true,
           dlspeed: r.dlspeed, upspeed: r.upspeed, uploaded: r.uploaded, size: r.size,
@@ -236,15 +299,40 @@ const app = createApp({
     distTitle() {
       return this.distSegments.map((s) => `${s.text} ${s.count}`).join(" · ");
     },
+    /* 可见列(列选择器只改 colHidden; 顺序始终取自列定义) —— 表头/行/grid 模板共用 */
+    visibleGroupCols() {
+      return this._visibleCols("group");
+    },
+    visibleDetailCols() {
+      return this._visibleCols("detail");
+    },
+    hiddenCount() {
+      return (this.colHidden.group || []).length + (this.colHidden.detail || []).length;
+    },
   },
   async mounted() {
-    window.addEventListener("click", () => (this.menu.visible = false));
-    // Esc: 优先关闭确认框, 其次右键菜单(两者都是临时浮层)
+    // 点击页面空白处: 关闭右键菜单与列选择器(两者都是临时浮层)
+    window.addEventListener("click", () => {
+      this.menu.visible = false;
+      this.colMenuOpen = false;
+      this.filterMenu = "";
+    });
+    // Esc: 优先关闭确认框, 其次右键菜单/列选择器(都是临时浮层)
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
       else if (this.menu.visible) this.menu.visible = false;
+      else if (this.colMenuOpen) this.colMenuOpen = false;
+      else if (this.filterMenu) this.filterMenu = "";
     });
+    // 列宽: 未手动调过时"实体化"为当前渲染 px(见 materializeColumns); 窗口变化后重新实体化,
+    // 保持"填满容器 + 自适应"的观感; 手动调过则冻结(拖一列不再影响其它列)
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => this.materializeColumns(), 120);
+    });
+    this.$nextTick(() => this.materializeColumns());
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
@@ -253,6 +341,12 @@ const app = createApp({
     // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除
     const savedToken = localStorage.getItem("autoqb_token");
     if (savedToken) this.bootstrap(savedToken);
+  },
+  watch: {
+    // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)
+    page() {
+      this.$nextTick(() => this.materializeColumns());
+    },
   },
   methods: {
     async api(path, options = {}) {
@@ -303,6 +397,11 @@ const app = createApp({
       this.expandedKey = null;
       this.kindFilter = "";
       this.pathFilter = "";
+      this.tagFilter = [];
+      this.categoryFilter = [];
+      this.siteFilter = [];
+      this.filterMenu = "";
+      this.colMenuOpen = false;
       this.toasts = [];
       this.modal = this._modalInit();
       this._modalResolve = null;
@@ -329,12 +428,24 @@ const app = createApp({
       return {
         visible: false, title: "", body: "", okText: "", cancelText: "",
         danger: false, input: false, value: "", placeholder: "",
+        checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
       };
     },
     confirmDialog(title, body, opts = {}) {
       // 返回 Promise<boolean>; 取消/遮罩/Esc 均结算为 false(不做任何写操作)
       return this._openModal({
         title, body, input: false,
+        okText: opts.okText || "确认", cancelText: opts.cancelText || "取消", danger: !!opts.danger,
+      });
+    },
+    /* 带"额外选项勾选框"的确认框: 返回 Promise<{checked:boolean}|null>(取消 = null)
+     *
+     * 与 confirmDialog 的**布尔契约分开**, 互不影响 —— 删除类操作需要"一个确认动作 + 一个可选附加项"
+     * (是否连带磁盘文件), 拆成两个菜单项(保留文件/含文件)反而需要用户先判断自己点的是哪个。
+     */
+    confirmWithOption(title, body, opts = {}) {
+      return this._openModal({
+        title, body, checkbox: opts.checkbox || "", checked: !!opts.checked,
         okText: opts.okText || "确认", cancelText: opts.cancelText || "取消", danger: !!opts.danger,
       });
     },
@@ -360,25 +471,62 @@ const app = createApp({
     },
     resolveModal(ok) {
       if (!this.modal.visible) return;
-      const { input, value } = this.modal;
+      const { input, value, checkbox, checked } = this.modal;
       const resolve = this._modalResolve;
       this._modalResolve = null;
       this.modal = this._modalInit();
-      if (resolve) resolve(ok ? (input ? value : true) : (input ? null : false));
+      if (!resolve) return;
+      if (ok) resolve(input ? value : checkbox ? { checked } : true);
+      else resolve(input || checkbox ? null : false);
     },
-    /* ------------------------------------------- 筛选(状态/保存路径)与搜索清除 */
+    /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
+    /* 成员值 -> 选项(带计数, 按出现组数降序): 标签/分类/站点三个筛选器共用
+     * 计数口径 = "包含该值的组数"(与保存路径筛选一致), 而非成员总数 —— 筛选针对的是组。
+     */
+    _memberValueOptions(pick) {
+      const counts = new Map();
+      for (const g of this.groups) {
+        const seen = new Set();
+        for (const m of g.members) {
+          for (const v of pick(m)) {
+            if (!seen.has(v)) {
+              seen.add(v);
+              counts.set(v, (counts.get(v) || 0) + 1);
+            }
+          }
+        }
+      }
+      return [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+    },
+    toggleFilterValue(field, value) {
+      const cur = this[field] || [];
+      this[field] = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+      this.expandedKey = null;  // 筛选后组集合变化, 复位展开态
+    },
+    isFilterOn(field, value) {
+      return (this[field] || []).includes(value);
+    },
+    clearFilter(field) {
+      this[field] = [];
+      this.expandedKey = null;
+    },
     toggleKindFilter(kind) {
       this.kindFilter = this.kindFilter === kind ? "" : kind;
       this.expandedKey = null;  // 筛选后组集合变化, 复位展开态
     },
     setPathFilter(value) {
-      // 保存路径筛选(后续如新增标签/分类筛选器, 在此并列添加)
       this.pathFilter = value || "";
       this.expandedKey = null;
     },
     clearFilters() {
       this.kindFilter = "";
       this.pathFilter = "";
+      this.tagFilter = [];
+      this.categoryFilter = [];
+      this.siteFilter = [];
+      this.filterMenu = "";
       this.expandedKey = null;
     },
     clearSearch() {
@@ -586,9 +734,9 @@ const app = createApp({
       return { seeding: "做种", downloading: "下载", checking: "校验中", paused: "已暂停", error: "错误", other: "其他" }[kind] || kind;
     },
     kindIcon(kind) {
-      // 状态图标(与 sprite symbol 一一对应): 校验中用 i-check(校验完成勾)
+      // 状态图标(与 sprite symbol 一一对应): 校验中用 i-pulse(配合 CSS 呼吸动画, 语义=进行中)
       return {
-        seeding: "#i-upload", downloading: "#i-download", checking: "#i-check",
+        seeding: "#i-upload", downloading: "#i-download", checking: "#i-pulse",
         paused: "#i-pause", error: "#i-warn", other: "#i-info",
       }[kind] || "#i-info";
     },
@@ -596,14 +744,18 @@ const app = createApp({
       // 标签 chip 最多显示 n 个(其余折叠为 +N), 保持行高与列宽稳定
       return (list || []).slice(0, n);
     },
-    sumField(members, key) {
-      return members.reduce((n, m) => n + (m[key] || 0), 0);
-    },
-    sumDl(g) {
-      return this.sumField(g.members, "dlspeed");
-    },
-    sumUl(g) {
-      return this.sumField(g.members, "upspeed");
+    /* HR 标签分类色(与后端 qbmanager._hr_view_tags 对应)
+     *
+     * pending = 已触发 HR 条件但尚未满足做种时长/分享率(需关注, 用最鲜亮的颜色);
+     * done    = 已满足(可以放宽, 用另一组镇静的颜色)。判定依据是后端解析后的标签文本
+     * (已展开 ${required_seeding_time} 变量), 因此与真正写入 qB 的标签逐字相等。
+     * 组级列展示的是"共同标签"——若某标签全组共有, 则组内 HR 状态必然一致, 故用代表成员即可。
+     */
+    tagClass(tag, member) {
+      if (!member) return "";
+      if (member.hr_tag && tag === member.hr_tag) return "hr-pending";
+      if (member.hr_tag_done && tag === member.hr_tag_done) return "hr-done";
+      return "";
     },
     setSort(key) {
       if (this.sortKey === key) {
@@ -617,7 +769,9 @@ const app = createApp({
       if (this.sortKey !== key) return "";
       return this.sortDir === 1 ? "▲" : "▼";
     },
-    toggleExpand(key) {
+    toggleExpand(key, event) {
+      // 仅左键触发展开: 右键菜单不应连带展开明细(旧实现在 openMenu 里主动展开, 已移除)
+      if (event && event.button !== 0) return;
       this.expandedKey = this.expandedKey === key ? null : key;
       this.menu.visible = false;
     },
@@ -628,8 +782,8 @@ const app = createApp({
         this.openMemberMenu(event, group.members[0]);
         return;
       }
+      // 仅弹菜单, **不展开明细**(用户需要看明细时自己左键点行)
       this.menu = { visible: true, ...this._menuPos(event), key: group.key, hash: null };
-      this.expandedKey = group.key;
     },
     openMemberMenu(event, member) {
       event.preventDefault();
@@ -650,23 +804,25 @@ const app = createApp({
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
-    async delWithFiles(deleteFiles) {
+    /* 删除整组: **单一菜单项** + 确认框里勾选"是否连带磁盘文件"(默认不删文件)
+     * 而非"保留文件/含文件"两个菜单项 —— 后者需要用户先判断自己点的是哪个, 风险更高。
+     */
+    async delGroup() {
       this.menu.visible = false;
-      if (!this.menu.key) return;
-      const ok = await this.confirmDialog(
-        deleteFiles ? "删除整组(含磁盘文件)" : "删除整组",
-        deleteFiles
-          ? "将删除整组种子及其磁盘文件, 此操作不可恢复。"
-          : "将删除整组种子, 保留磁盘文件。",
-        { okText: deleteFiles ? "删除并移除文件" : "删除", danger: true }
+      const key = this.menu.key;
+      if (!key) return;
+      const res = await this.confirmWithOption(
+        "删除整组",
+        "将删除该组全部种子(保留磁盘文件)。如需连同磁盘文件一起删除, 请勾选下方选项。",
+        { okText: "删除", danger: true, checkbox: "同时删除磁盘文件(不可恢复)", checked: false }
       );
-      if (!ok) return;
+      if (!res) return;
       try {
-        await this.api(`/api/groups/${this.menu.key}/delete`, {
+        await this.api(`/api/groups/${key}/delete`, {
           method: "POST",
-          body: JSON.stringify({ delete_files: deleteFiles }),
+          body: JSON.stringify({ delete_files: res.checked }),
         });
-        this.toast(`已投递: 删除整组${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
+        this.toast(`已投递: 删除整组${res.checked ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
@@ -681,23 +837,23 @@ const app = createApp({
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
-    async delTorrent(deleteFiles) {
+    /* 删除单个种子: 同 delGroup, 一个菜单项 + 确认框内勾选是否连带磁盘文件 */
+    async delTorrent() {
       this.menu.visible = false;
-      if (!this.menu.hash) return;
-      const ok = await this.confirmDialog(
-        deleteFiles ? "删除该种子(含磁盘文件)" : "删除该种子",
-        deleteFiles
-          ? "将删除该种子及其磁盘文件, 此操作不可恢复。"
-          : "将删除该种子, 保留磁盘文件。",
-        { okText: deleteFiles ? "删除并移除文件" : "删除", danger: true }
+      const hash = this.menu.hash;
+      if (!hash) return;
+      const res = await this.confirmWithOption(
+        "删除该种子",
+        "将删除该种子(保留磁盘文件)。如需连同磁盘文件一起删除, 请勾选下方选项。",
+        { okText: "删除", danger: true, checkbox: "同时删除磁盘文件(不可恢复)", checked: false }
       );
-      if (!ok) return;
+      if (!res) return;
       try {
-        await this.api(`/api/torrents/${this.menu.hash}/delete`, {
+        await this.api(`/api/torrents/${hash}/delete`, {
           method: "POST",
-          body: JSON.stringify({ delete_files: deleteFiles }),
+          body: JSON.stringify({ delete_files: res.checked }),
         });
-        this.toast(`已投递: 删除该种子${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
+        this.toast(`已投递: 删除该种子${res.checked ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
@@ -706,46 +862,149 @@ const app = createApp({
       // 列模板由 computed 缓存(见 groupGrid/detailGrid): 行渲染只取同一引用, 不每行拼字符串
       return page === "group" ? this.groupGrid : this.detailGrid;
     },
-    startResize(event, page, idx) {
-      // 列宽拖拽: 从列头行(真正的 grid 容器)读取渲染列宽作为起始值, 拖动期间只写**被拖列**的 px
-      // 覆盖, 其余列保留默认模板的 minmax(...)+fr 弹性 —— 因此调某列后其它列会自动重分配。
-      const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
-      if (!headEl) return;
+
+    /* ------------------------------------------------ 列状态(宽/隐/自适应) */
+
+    _visibleCols(page) {
+      const hidden = this.colHidden[page] || [];
+      return TABLE_COLUMNS[page].filter((c) => !hidden.includes(c.key));
+    },
+    /* 列模板: 有 px 覆盖用覆盖值, 否则用默认模板(仅首次渲染会出现这种混合态) */
+    _gridTemplate(page) {
+      const w = this.colWidths[page] || {};
+      return this._visibleCols(page).map((c) => w[c.key] || c.tpl).join(" ");
+    },
+    /* 从列头行(真正的 grid 容器)读取**当前渲染**的列宽 px; 列数不符(渲染未完成)返回 null */
+    _renderedWidths(headEl, page) {
       const rendered = (getComputedStyle(headEl).gridTemplateColumns || "")
         .split(" ")
         .map((v) => parseFloat(v))
         .filter((v) => !isNaN(v) && v > 0);
-      if (!rendered.length || idx >= rendered.length) return;
+      const vis = this._visibleCols(page);
+      if (rendered.length !== vis.length) return null;
+      const out = {};
+      vis.forEach((c, i) => {
+        out[c.key] = Math.round(rendered[i]) + "px";
+      });
+      return out;
+    },
+    _headEl(page) {
+      const ref = this.$refs[page === "group" ? "groupHead" : "detailHead"];
+      return Array.isArray(ref) ? ref[0] : ref || null;
+    },
+    /* 把默认模板"实体化"为 px:
+     * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)
+     * - 手动调过   -> 跳过(冻结, 拖一列不再动其它列)
+     */
+    materializeColumns() {
+      for (const page of ["group", "detail"]) {
+        if (this.colManual[page]) continue;
+        const headEl = this._headEl(page);
+        if (!headEl) continue;
+        const widths = this._renderedWidths(headEl, page);
+        if (widths) this.colWidths = { ...this.colWidths, [page]: widths };
+      }
+    },
+    saveColState() {
+      localStorage.setItem(
+        COLS_STORE_KEY,
+        JSON.stringify({ widths: this.colWidths, hidden: this.colHidden, manual: this.colManual })
+      );
+    },
+    colVisible(page, key) {
+      return !(this.colHidden[page] || []).includes(key);
+    },
+    toggleColumn(page, key) {
+      const col = columnDef(page, key);
+      if (!col || col.locked) return;  // locked 列不可隐藏(模板中不渲染其勾选框, 这里是双保险)
+      const cur = this.colHidden[page] || [];
+      const hidden = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+      this.colHidden = { ...this.colHidden, [page]: hidden };
+      // 已手动调过: 新显示的列需要一个 px 宽度才能维持"只改一列"的策略
+      if (this.colManual[page] && !hidden.includes(key)) {
+        const widths = { ...(this.colWidths[page] || {}) };
+        if (!widths[key]) {
+          widths[key] = templateMinPx(col.tpl) + "px";
+          this.colWidths = { ...this.colWidths, [page]: widths };
+        }
+      }
+      this.saveColState();
+      this.$nextTick(() => this.materializeColumns());
+    },
+    resetAllColumnWidths(page) {
+      // 恢复默认列宽: 清空 px 覆盖与手动标记 -> 回到默认弹性模板并重新实体化
+      const widths = { ...(this.colWidths[page] || {}) };
+      for (const c of TABLE_COLUMNS[page]) delete widths[c.key];
+      this.colWidths = { ...this.colWidths, [page]: widths };
+      this.colManual = { ...this.colManual, [page]: false };
+      this.saveColState();
+      this.$nextTick(() => this.materializeColumns());
+    },
+    fitColumnsToWindow(page) {
+      // 适应窗口宽度: 先回到默认弹性模板(它会重新填满容器), 下一帧固化 —— 等价按比例缩放填满
+      this.colWidths = { ...this.colWidths, [page]: {} };
+      this.colManual = { ...this.colManual, [page]: false };
+      this.$nextTick(() => {
+        this.materializeColumns();
+        this.colManual = { ...this.colManual, [page]: true };
+        this.saveColState();
+      });
+    },
+
+    /* 列宽拖拽: 拖某列**只改该列**
+     *
+     * 关键在于起始时把**全部可见列**固化为当前渲染 px —— 它们原本可能是 minmax/fr 弹性值,
+     * 不固化的话被拖列会把余量从邻居那儿抢走(表现为"调一列, 其它列跟着变")。
+     * 按住 Shift 拖拽 = 与相邻列互相挤占(总宽不变), 对应主流表格的 shift-resize。
+     */
+    startResize(event, page, key) {
+      const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
+      if (!headEl) return;
+      const widths = this._renderedWidths(headEl, page);
+      if (!widths) return;
+      const vis = this._visibleCols(page);
+      const idx = vis.findIndex((c) => c.key === key);
+      if (idx < 0) return;
       const startX = event.clientX;
-      const startVal = rendered[idx];
-      this.resizing = { page, idx, startX, startVal };
+      const startVal = parseFloat(widths[key]);
+      const neighbor = event.shiftKey ? vis[idx + 1] : null;
+      const startNeighbor = neighbor ? parseFloat(widths[neighbor.key]) : 0;
       const move = (e) => {
-        const width = Math.max(MIN_COL_PX, Math.round(startVal + e.clientX - startX));
-        this.colWidths = { ...this.colWidths, [page]: { ...(this.colWidths[page] || {}), [idx]: `${width}px` } };
+        const w = Math.max(MIN_COL_PX, Math.round(startVal + e.clientX - startX));
+        const next = { ...widths, [key]: `${w}px` };
+        if (neighbor) {
+          next[neighbor.key] = `${Math.max(MIN_COL_PX, Math.round(startNeighbor - (w - startVal)))}px`;
+        }
+        this.colWidths = { ...this.colWidths, [page]: next };
       };
       const up = () => {
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
-        this.resizing = null;
-        localStorage.setItem(COLS_STORE_KEY, JSON.stringify(this.colWidths));
+        this.colManual = { ...this.colManual, [page]: true };  // 手动调过 -> 不再随窗口自适应
+        this.saveColState();
       };
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
     },
-    resetColumn(page, idx) {
-      // 双击列分隔线: 清除该列的 px 覆盖, 恢复默认弹性宽度
-      const overrides = { ...(this.colWidths[page] || {}) };
-      if (!(idx in overrides)) return;
-      delete overrides[idx];
-      this.colWidths = { ...this.colWidths, [page]: overrides };
-      localStorage.setItem(COLS_STORE_KEY, JSON.stringify(this.colWidths));
-    },
-    colLabel(key) {
-      return {
-        name: "名称", dlspeed: "下载", upspeed: "上传", uploaded: "总上传",
-        size: "大小", total_size: "总大小", tags: "标签", category: "分类",
-        sites: "站点", count: "站数",
-      }[key] || key;
+    /* 双击分隔线 = 按内容自适应宽度(表头 + 当前已渲染行), 夹在 [最小宽, MAX_FIT_PX] */
+    autoFitColumn(event, page, key) {
+      const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
+      if (!headEl) return;
+      const vis = this._visibleCols(page);
+      const idx = vis.findIndex((c) => c.key === key);
+      if (idx < 0) return;
+      const container = headEl.parentElement;
+      const rowSel = page === "group" ? ".group-row" : ".member-row";
+      let max = headEl.children[idx] ? headEl.children[idx].scrollWidth : MIN_COL_PX;
+      for (const row of container.querySelectorAll(rowSel)) {
+        const cell = row.children[idx];
+        if (cell) max = Math.max(max, cell.scrollWidth);
+      }
+      const width = Math.min(MAX_FIT_PX, Math.max(MIN_COL_PX, Math.ceil(max) + 18));
+      const widths = this._renderedWidths(headEl, page) || {};
+      this.colWidths = { ...this.colWidths, [page]: { ...widths, [key]: `${width}px` } };
+      this.colManual = { ...this.colManual, [page]: true };
+      this.saveColState();
     },
   },
 });

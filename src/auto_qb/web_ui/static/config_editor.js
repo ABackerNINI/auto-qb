@@ -7,6 +7,20 @@
  * - 脏检测用 JSON 快照对比; 保存成功后重新拉取树(后端会把 R 级字段回退为旧值)
  * - 字段渲染采用"扁平化"列表(嵌套 object 展开为带缩进的多行), 模板只需一套分支
  */
+/* 数值 + 单位下拉的单位表(与后端 schema.UNIT_KINDS 对应)
+ *
+ * 只按 **kind** 决定可用单位, 不把单位表写进 schema: 这样插件 spec(spec_kind=speed)
+ * 与配置字段共用同一套控件, 无需给 Plugin 也加一份单位字段。
+ * UNIT_FALLBACK 仅在"当前值无法解析出单位"时使用(如字段为空); 一般情况下直接沿用
+ * 当前值里已有的单位(如 30M -> M), 不打扰用户。
+ */
+const UNIT_OPTIONS = {
+  time: ["S", "M", "H", "D"],
+  size: ["B", "KiB", "MiB", "GiB", "TiB"],
+  speed: ["B/s", "KiB/s", "MiB/s", "GiB/s"],
+};
+const UNIT_FALLBACK = { time: "S", size: "MiB", speed: "KiB/s" };
+
 window.CONFIG_EDITOR = {
   data() {
     return {
@@ -31,7 +45,9 @@ window.CONFIG_EDITOR = {
         newRuleName: "",
         addOpen: "",  // 当前展开的"新增"表单: "" | tracker | ruleGroup | rule(同时只允许一个)
         collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
+        openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
         picker: { open: false, groupKey: "", ruleName: "", list: "" },  // 条件/动作选择面板(单例)
+        chartHover: null,  // 限速曲线鼠标取值: { chartKey, x, y, tLabel, sLabel } | null
       },
     };
   },
@@ -93,6 +109,49 @@ window.CONFIG_EDITOR = {
     },
   },
   methods: {
+    /* ---------------------------------------------------------- 数值 + 单位
+     *
+     * 配置里的时间/大小/速度均是"数字 + 单位"的复合串(30M / 10MiB / 6MiB/s),
+     * 界面上拆成"数值框 + 单位下拉"。写回仍是**单个字符串**(与磁盘同构的 YAML 树不变),
+     * 合法性仍由后端 load_config 夹紧 —— 前端只负责拆/拼显示。
+     */
+    cfgHasUnit(kind) {
+      return !!UNIT_OPTIONS[kind];
+    },
+    cfgUnitOptions(kind) {
+      return UNIT_OPTIONS[kind] || [];
+    },
+    /* 拆: "1.5D" -> {num:"1.5", unit:"D"}; 空/不可解析时 unit 取 unit_default 或 kind 回退值 */
+    cfgUnitParts(kind, text, unitDefault) {
+      const opts = this.cfgUnitOptions(kind);
+      const m = String(text === undefined || text === null ? "" : text).trim().match(/^([\d.]*)\s*([A-Za-z/]*)$/);
+      const num = m ? m[1] : "";
+      let unit = m ? m[2] : "";
+      if (!opts.includes(unit)) unit = unitDefault || UNIT_FALLBACK[kind] || opts[0] || "";
+      return { num: num, unit: unit };
+    },
+    /* 拼: 数值为空则写空串(= 未配置, 走默认), 避免产生 "MiB" 这种无数字值 */
+    cfgSetUnit(path, num, unit) {
+      const n = String(num === undefined || num === null ? "" : num).trim();
+      this.cfgSetPath(path, n ? n + (unit || "") : "");
+    },
+
+    /* ---------------------------------------------------------- 规则引用(站点 rules)
+     *
+     * 既要"下拉可选"(避免手写错规则集名), 也要"可直接粘贴修改"(故输入框始终可编辑,
+     * 下拉仅作为追加一条引用的快捷入口)。
+     */
+    ceRefOptions() {
+      const out = [];
+      for (const [gname, group] of Object.entries(this.cfgRuleGroups())) {
+        const names = Object.keys(group || {});
+        const items = [{ value: `@${gname}`, label: `全部规则(${names.length} 条)` }];
+        for (const rn of names) items.push({ value: `@${gname}.${rn}`, label: rn });
+        out.push({ group: gname, items: items });
+      }
+      return out;
+    },
+
     /* ---------------------------------------------------------- 加载与保存 */
 
     cfgConfig() {
@@ -169,6 +228,8 @@ window.CONFIG_EDITOR = {
       this.cfg.ruleGroupKey = null;
       this.cfg.addOpen = "";
       this.cfg.collapsedRules = {};
+      this.cfg.openSections = {};
+      this.cfg.chartHover = null;
       this.cfgPickerClose();
     },
     async openSettings() {
@@ -285,19 +346,29 @@ window.CONFIG_EDITOR = {
     },
     /* 把字段(含嵌套 object)展开为扁平渲染项
      *
-     * 项类型: group(object 段标题) / field(叶子字段) / toggle(可选 object 段的启用开关) /
+     * 项类型: group(object 段标题) / section(可选段: 默认折叠的整体容器) / field(叶子字段) /
      *        subcard(由 group_of 归入父字段的"相关设置"子卡)
-     * 可选段(default 为 null)以开关控制该键的存在性, 其子字段标记 depends 以便"未启用时隐藏";
-     * allowGrouping=false 用于子卡内部: 那些字段已归属父字段, 不能再参与一次分组判定
-     * (否则它们会被再次收进 children, roots 为空 => 子卡渲染成空)。
+     *
+     * 两种从属项的呈现方式(2026-09-14 调整):
+     *   · **布尔**型从属项(如 add_category 的"覆盖已有分类")→ 父字段的**内联开关**
+     *     (挂到父项的 `inline` 上, 由 ce-field 渲染在标签右侧)。它本身只有一个开关,
+     *     单独占一张子卡比父字段还显眼, 与"这是父字段的一个附加选项"的语义不符。
+     *   · 其余(对象/字符串等)仍走 group_of **子卡**(缩进小卡)。
+     *
+     * 可选段(optional object, 如站点 hr / checking 的分支)渲染为**默认折叠的 section**:
+     * 设置页字段很多, "展开"应是用户主动选择的结果; 折叠态仍显示"已配置/未配置"开关与摘要。
+     * allowGrouping=false 用于子卡/section 内部: 那些字段已归属上层, 不能再参与一次分组判定
+     * (否则它们会被再次收进 children, roots 为空 => 容器渲染成空壳且不报错)。
      */
     cfgFlatten(fields, basePath, depth, ownerPath, allowGrouping = true) {
       const children = new Map();
+      const inlineChildren = new Map();
       const roots = [];
       for (const f of fields) {
         if (allowGrouping && f.group_of) {
-          if (!children.has(f.group_of)) children.set(f.group_of, []);
-          children.get(f.group_of).push(f);
+          const bucket = f.kind === "bool" ? inlineChildren : children;
+          if (!bucket.has(f.group_of)) bucket.set(f.group_of, []);
+          bucket.get(f.group_of).push(f);
         } else {
           roots.push(f);
         }
@@ -307,16 +378,23 @@ window.CONFIG_EDITOR = {
       for (const f of roots) {
         const path = [...basePath, f.key];
         if (f.kind === "object") {
-          if (f.optional) items.push({ type: "toggle", field: f, path: path, depth: depth });
-          else items.push({ type: "group", field: f, path: path, depth: depth, label: f.label, help: f.help });
-          const subs = this.cfgFlatten(f.fields, path, depth + 1, basePath);
-          for (const s of subs) {
-            if (f.optional) s.depends = path;
-            items.push(s);
+          if (f.optional) {
+            // 可选段: 缩进一级 + 边框成块(缩进用来表达"这是上一字段的展开内容")
+            const subs = this.cfgFlatten(f.fields, path, depth + 1, basePath);
+            items.push({ type: "section", field: f, path: path, depth: depth, items: subs });
+          } else {
+            // 普通 object 段: 子字段**不额外缩进** —— 段标题行已经界定了范围,
+            // 再缩进会让同一页里两组输入框的左缘错开 16px(用户反馈的"输入框未对齐")
+            items.push({ type: "group", field: f, path: path, depth: depth, label: f.label, help: f.help });
+            for (const s of this.cfgFlatten(f.fields, path, depth, basePath)) items.push(s);
           }
           continue;
         }
-        items.push({ type: "field", field: f, path: path, depth: depth, owner: ownerPath || basePath });
+        const inline = (inlineChildren.get(f.key) || []).map((cf) => ({
+          field: cf,
+          path: [...basePath, cf.key],
+        }));
+        items.push({ type: "field", field: f, path: path, depth: depth, owner: ownerPath || basePath, inline: inline });
         const kids = children.get(f.key);
         if (kids && kids.length) {
           // 相关设置子卡: 父字段之下缩进一级, 归属关系一目了然
@@ -351,6 +429,25 @@ window.CONFIG_EDITOR = {
       const fallback = parent ? this.cfgScalar(parent.default) : "";
       return this.cfgText([...item.path.slice(0, -1), key], fallback) !== expect;
     },
+    /* 可选段展开/折叠(默认折叠) */
+    cfgSectionOpen(path) {
+      return !!this.cfg.openSections[this.cfgPathKey(path)];
+    },
+    cfgSectionToggle(path) {
+      const key = this.cfgPathKey(path);
+      const next = { ...this.cfg.openSections };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      this.cfg.openSections = next;
+    },
+    cfgPathKey(path) {
+      return Array.isArray(path) ? path.join(".") : String(path);
+    },
+    /* 内联开关(父字段的布尔从属项, 如"覆盖已有分类"): 路径由调用方给出 */
+    cfgInlineBool(path, fallback) {
+      return this.cfgBool(path, fallback);
+    },
+
     /* 可选段开关: 开启时按 schema 构造初始值(必填子字段先填好, 让新段可直接通过校验) */
     cfgToggleSection(path, field, on) {
       if (!on) {
@@ -572,7 +669,7 @@ window.CONFIG_EDITOR = {
     cfgCurveItems() {
       const base = this.cfgCurvePath();
       return [
-        { type: "field", field: { key: "interval", label: "执行间隔", kind: "time", unit: "S/M/H/D", help: "留空 = 回退主 interval", default: "" }, path: [...base, "interval"], depth: 0 },
+        { type: "field", field: { key: "interval", label: "执行间隔", kind: "time", help: "留空 = 回退主 interval", default: "" }, path: [...base, "interval"], depth: 0 },
         { type: "field", field: { key: "dat_path", label: "Traffic Monitor 数据文件", kind: "path", placeholder: ".../history_traffic.dat", default: "" }, path: [...base, "traffic_source", 0, "traffic_monitor", "dat_path"], depth: 0 },
       ];
     },
@@ -666,7 +763,17 @@ window.CONFIG_EDITOR = {
     cfgCurveChartOf(i, direction) {
       return this.cfgCurveCharts[`${i}:${direction}`] || null;
     },
+    /* 阶梯折线数据(纯展示)
+     *
+     * 语义与 curves.curve_speed 一致: 阈值是区间**上限**, 末档之后一直沿用末档速度。
+     * 输出包含: 曲线 path、面积 path、X/Y 轴刻度(4 段)、悬停标记点几何 —— 全部由前端算,
+     * 图尺寸足够大可读(PAD 留出轴标签空间)。合法性/解析失败仍只提示不阻断(后端把关)。
+     */
     _curveChart(i, direction) {
+      return this._buildCurveChart(i, direction);
+    },
+    /* 可复用(图表 + 悬停共用同一几何), 故单独成型 */
+    _buildCurveChart(i, direction) {
       const raw = this.cfgCurvePoints(i, direction);
       const points = [];
       for (let j = 0; j < raw.length; j++) {
@@ -677,13 +784,16 @@ window.CONFIG_EDITOR = {
       }
       if (!points.length) return null;
       points.sort((a, b) => a.t - b.t);
-      const W = 320, H = 96, PAD = 6, AXIS = 14;
+
+      // 几何: 左侧留 Y 轴标签, 底部留 X 轴标签; 图体明显放大(旧版 320×96 太小)
+      const W = 560, H = 210, PAD_L = 58, PAD_R = 14, PAD_T = 12, PAD_B = 30;
       const maxT = points[points.length - 1].t;
-      const maxS = Math.max(...points.map((p) => p.s), 1);
       const tail = maxT * 0.08;  // 末档向右延伸一段, 表示"此后一直沿用末档"
       const spanT = maxT + tail;
-      const x = (t) => PAD + (W - PAD * 2) * (t / spanT);
-      const y = (s) => H - AXIS - (H - AXIS - PAD) * (s / maxS);
+      const maxS = Math.max(...points.map((p) => p.s), 1);
+      const x = (t) => PAD_L + (W - PAD_L - PAD_R) * (t / spanT);
+      const y = (s) => H - PAD_B - (H - PAD_B - PAD_T) * (s / maxS);
+
       let line = `M ${x(0).toFixed(1)} ${y(points[0].s).toFixed(1)}`;
       for (let k = 1; k < points.length; k++) {
         line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k - 1].s).toFixed(1)}`;
@@ -691,14 +801,72 @@ window.CONFIG_EDITOR = {
       }
       const lastS = points[points.length - 1].s;
       line += ` L ${x(spanT).toFixed(1)} ${y(lastS).toFixed(1)}`;
-      const area = `${line} L ${x(spanT).toFixed(1)} ${H - AXIS} L ${x(0).toFixed(1)} ${H - AXIS} Z`;
+      const area = `${line} L ${x(spanT).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+
+      // 刻度: X 取 5 个等距累计流量, Y 取 5 个等距限速(含 0 与最大值)
+      const xTicks = [];
+      for (let k = 0; k <= 4; k++) {
+        const t = (spanT * k) / 4;
+        xTicks.push({ pos: x(t), label: this._fmtBytes(t) });
+      }
+      const yTicks = [];
+      for (let k = 0; k <= 4; k++) {
+        const s = (maxS * k) / 4;
+        yTicks.push({ pos: y(s), label: this._fmtSpeed(s) });
+      }
       return {
         viewBox: `0 0 ${W} ${H}`,
+        w: W,
+        h: H,
+        padL: PAD_L,
+        padR: PAD_R,
+        padT: PAD_T,
+        padB: PAD_B,
         line: line,
         area: area,
+        xTicks: xTicks,
+        yTicks: yTicks,
+        baseY: y(0),
+        // 悬停换算所需的数据域
+        spanT: spanT,
+        maxS: maxS,
+        points: points,
         maxLabel: this._fmtBytes(spanT),
         note: `${points.length} 档 · 最严 ${this._fmtSpeed(maxS)}`,
       };
+    },
+    /* 鼠标在图上移动: 把像素位置换算回 (累计流量, 限速) 并高亮该档(阶梯: 找所属区间) */
+    cfgChartHover(event, i, direction) {
+      const chart = this.cfgCurveChartOf(i, direction);
+      if (!chart) return;
+      const svg = event.currentTarget.querySelector("svg");
+      const rect = svg.getBoundingClientRect();
+      const px = ((event.clientX - rect.left) / rect.width) * chart.w;
+      const py = ((event.clientY - rect.top) / rect.height) * chart.h;
+      const usableW = chart.w - chart.padL - chart.padR;
+      const t = Math.max(0, Math.min(1, (px - chart.padL) / usableW)) * chart.spanT;
+      // 阶梯语义: 该累计流量落入哪一档(阈值为区间上限) -> 用该档的限速
+      let idx = chart.points.findIndex((p) => t < p.t);
+      if (idx < 0) idx = chart.points.length - 1;
+      const speed = chart.points[idx].s;
+      this.cfg.chartHover = {
+        key: `${i}:${direction}`,
+        x: chart.padL + usableW * (t / chart.spanT),
+        y: chart.h - chart.padB - (chart.h - chart.padB - chart.padT) * (speed / chart.maxS),
+        tLabel: this._fmtBytes(t),
+        sLabel: this._fmtSpeed(speed),
+        index: idx + 1,
+        // tooltip 位置(用百分比定位在容器内)
+        leftPct: ((chart.padL + usableW * (t / chart.spanT)) / chart.w) * 100,
+        topPct: ((chart.h - chart.padB - (chart.h - chart.padB - chart.padT) * (speed / chart.maxS)) / chart.h) * 100,
+      };
+    },
+    cfgChartLeave() {
+      this.cfg.chartHover = null;
+    },
+    cfgChartHovered(i, direction) {
+      const h = this.cfg.chartHover;
+      return !!h && h.key === `${i}:${direction}`;
     },
     /* 单位倍数: KiB/MiB/GiB... 为 1024 进制, KB/MB/GB... 为 1000 进制; 仅 B 或空 = 1 */
     _sizeMultiplier(unit) {
@@ -764,7 +932,17 @@ window.CE_FIELD_COMPONENT = {
       return !!this.item.bare;
     },
     isText() {
-      return !["bool", "enum", "str_list", "pattern_list", "keyed_list"].includes(this.f.kind);
+      return !["bool", "enum", "str_list", "pattern_list", "keyed_list", "rules_ref"].includes(this.f.kind);
+    },
+    /* 数值 + 单位下拉: 时间/大小/速度三类 kind 共用同一控件 */
+    hasUnit() {
+      return this.ce.cfgHasUnit(this.f.kind);
+    },
+    unitOptions() {
+      return this.ce.cfgUnitOptions(this.f.kind);
+    },
+    unitParts() {
+      return this.ce.cfgUnitParts(this.f.kind, this.textValue(), this.f.unit_default);
     },
     visible() {
       if (this.item.depends && !this.ce.cfgExists(this.item.depends)) return false;
@@ -777,6 +955,18 @@ window.CE_FIELD_COMPONENT = {
     greyed() {
       return this.item.type === "field" && this.ce.cfgGreyed(this.item);
     },
+    /* 可选段(默认折叠): 折叠态仍显示开关与摘要 */
+    sectionOpen() {
+      return this.ce.cfgSectionOpen(this.path);
+    },
+    sectionSummary() {
+      // 折叠时给一行摘要(已配置时列出已填字段数, 未配置时说明该段作用)
+      if (!this.ce.cfgExists(this.path)) return this.f.help || "未配置";
+      const kids = this.ce.cfgFlatten(this.f.fields || [], this.path, 1, this.path, false);
+      const filled = kids.filter((k) => k.type === "field" && this.ce.cfgExists(k.path)).length;
+      const total = kids.filter((k) => k.type === "field").length;
+      return `已配置 ${filled}/${total} 项`;
+    },
   },
   methods: {
     textValue() {
@@ -788,8 +978,18 @@ window.CE_FIELD_COMPONENT = {
     sectionExists() {
       return this.ce.cfgExists(this.path);
     },
+    sectionExists() {
+      return this.ce.cfgExists(this.path);
+    },
     toggleSection(on) {
       this.ce.cfgToggleSection(this.path, this.f, on);
+    },
+    /* 内联开关(父字段的布尔从属项): 路径由 cfgFlatten 预先算好 */
+    inlineValue(entry) {
+      return this.ce.cfgBool(entry.path, entry.field.default);
+    },
+    setInline(entry, checked) {
+      this.ce.cfgSetBool(entry.path, checked);
     },
     isDefault() {
       return this.ce.cfgIsDefault(this.item);
@@ -811,6 +1011,19 @@ window.CE_FIELD_COMPONENT = {
     },
     listRemove(i) {
       this.ce.cfgItemRemove(this.path, i);
+    },
+    /* 数值 + 单位: 只改其中一半时保留另一半的当前值(避免"改单位把数字清空") */
+    setUnitNum(value) {
+      this.ce.cfgSetUnit(this.path, value, this.unitParts().unit);
+    },
+    setUnitName(unit) {
+      this.ce.cfgSetUnit(this.path, this.unitParts().num, unit);
+    },
+    /* 规则引用: 从下拉选一条 => 追加一条引用, 并把下拉复位回占位项 */
+    refPick(event) {
+      const value = event.target.value;
+      if (value) this.ce.cfgItemAdd(this.path, value);
+      event.target.value = "";
     },
     checkedKey(name) {
       const v = this.ce.cfgRaw(this.path);
