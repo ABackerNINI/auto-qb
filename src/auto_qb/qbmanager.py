@@ -149,6 +149,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             while not self.connect():
                 if stop_event is None or stop_event.wait(main_tick):
                     return
+                logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
             self.state = self._load_state()
             # 规则加载 + 全局任务创建仅运行模式需要(--export-yaml 等只导出模式在构造后直接退出, 跳过)
             self._load_rules()
@@ -218,6 +219,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         "resume_group": self._cmd_resume_group,
                         "reannounce_group": self._cmd_reannounce_group,
                         "delete_group": self._cmd_delete_group,
+                        "pause_torrent": self._cmd_pause_torrent,
+                        "resume_torrent": self._cmd_resume_torrent,
+                        "reannounce_torrent": self._cmd_reannounce_torrent,
+                        "delete_torrent": self._cmd_delete_torrent,
                         "reload_config": self._cmd_reload_config,
                     }[cmd](**payload)
                 except KeyError as e:
@@ -229,18 +234,22 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     @staticmethod
     def _state_kind(rec: TorrentRecord) -> str:
-        """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰"""
+        """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰
+
+        注意 is_stopped 须先于 is_downloading/is_uploading 判定: 暂停的种子
+        (stoppedDL/stoppedUP)同时命中下载/做种类别, 暂停态优先展示。
+        """
         e = rec.state_enum
         if e.is_errored:
             return "error"
         if e.is_checking:
             return "checking"
+        if e.is_stopped:
+            return "paused"
         if e.is_downloading:
             return "downloading"
         if e.is_uploading:
             return "seeding"
-        if e.is_stopped:
-            return "paused"
         return "other"
 
     def _build_group_view(self) -> List[dict]:
@@ -308,6 +317,28 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if hashes:
             self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
             logger.warning(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
+
+    # ---------- 单种子命令(WEB 明细行右键) ----------
+
+    def _cmd_pause_torrent(self, hash: str):
+        if self.store.get(hash) is not None:
+            self.api.torrents_pause(torrent_hashes=[hash])
+            logger.info(f"WEB UI | 暂停种子 {hash[:8]}")
+
+    def _cmd_resume_torrent(self, hash: str):
+        if self.store.get(hash) is not None:
+            self.api.torrents_resume(torrent_hashes=[hash])
+            logger.info(f"WEB UI | 开始种子 {hash[:8]}")
+
+    def _cmd_reannounce_torrent(self, hash: str):
+        if self.store.get(hash) is not None:
+            self.api.torrents_reannounce(torrent_hashes=[hash])
+            logger.warning(f"WEB UI | 强制汇报种子 {hash[:8]}")
+
+    def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
+        if self.store.get(hash) is not None:
+            self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
+            logger.warning(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)

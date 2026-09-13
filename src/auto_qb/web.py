@@ -46,10 +46,14 @@ def ensure_web_token(manager) -> str:
 
 def create_app(manager) -> FastAPI:
     """构建 WEB 应用: 只读快照 + 命令投递 + 设置读写, 全部 /api/* 经 Bearer 密钥鉴权"""
-
     def require_token(authorization: str = Header(default="")) -> None:
         expected = f"Bearer {manager._web_token}"
         if authorization != expected:
+            # 诊断日志(临时): 收到与期望不一致时打印前缀与长度, 定位密钥不匹配来源
+            logger.warning(
+                f"WEB 鉴权失败: 收到 {authorization[:16]!r}(len={len(authorization)}), "
+                f"期望 'Bearer {manager._web_token[:8]}…'(len={len(expected)})"
+            )
             raise HTTPException(status_code=401, detail="invalid token")
 
     app = FastAPI(
@@ -96,6 +100,27 @@ def create_app(manager) -> FastAPI:
     def api_delete(key: str, body: dict = None):
         delete_files = bool((body or {}).get("delete_files", False))
         _enqueue("delete_group", {"key": decode_group_key(key), "delete_files": delete_files})
+        return {"queued": True, "delete_files": delete_files}
+
+    @app.post("/api/torrents/{hash}/pause")
+    def api_t_pause(hash: str):
+        _enqueue("pause_torrent", {"hash": hash})
+        return {"queued": True}
+
+    @app.post("/api/torrents/{hash}/resume")
+    def api_t_resume(hash: str):
+        _enqueue("resume_torrent", {"hash": hash})
+        return {"queued": True}
+
+    @app.post("/api/torrents/{hash}/reannounce")
+    def api_t_reannounce(hash: str):
+        _enqueue("reannounce_torrent", {"hash": hash})
+        return {"queued": True}
+
+    @app.post("/api/torrents/{hash}/delete")
+    def api_t_delete(hash: str, body: dict = None):
+        delete_files = bool((body or {}).get("delete_files", False))
+        _enqueue("delete_torrent", {"hash": hash, "delete_files": delete_files})
         return {"queued": True, "delete_files": delete_files}
 
     @app.get("/api/config/raw")
