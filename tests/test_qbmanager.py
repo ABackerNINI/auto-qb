@@ -4,6 +4,9 @@
 - test_create_global_tasks: 按配置创建 delete_tags 等全局任务
 - test_connect_failure: 连接失败返回 False 且 client 为 None
 - test_connect_success: 连接成功返回 True 并登录
+- test_connect_disables_trust_env_for_local_host: 本地地址关闭 requests trust_env(跳过环境/netrc 解析)
+- test_connect_keeps_trust_env_for_remote_host: 远程地址保留 trust_env 默认
+- test_connect_tolerates_session_api_change: 库 Session 结构变化时静默跳过(不影响连接)
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
@@ -75,6 +78,45 @@ def test_connect_success():
             assert mgr.connect() is True
         fake.auth_log_in.assert_called_once()
         assert mgr.client is fake
+
+
+def test_connect_disables_trust_env_for_local_host():
+    """本地地址连接(默认 127.0.0.1): 关闭 requests Session 的 trust_env(跳过环境代理/netrc 解析)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        assert mgr.config.qbittorrent.host == "127.0.0.1"  # 默认本地
+        fake = mock.Mock()
+        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
+            assert mgr.connect() is True
+        assert fake._session.trust_env is False
+
+
+def test_connect_keeps_trust_env_for_remote_host():
+    """远程地址连接: 保留 requests 默认 trust_env(可能有企业代理/netrc 需求)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.qbittorrent.host = "qb.example.com"
+        fake = mock.Mock()
+        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
+            assert mgr.connect() is True
+        assert fake._session.trust_env is not False  # 未被改写(Mock 默认属性)
+
+
+def test_connect_tolerates_session_api_change():
+    """库内部 Session 结构变化(无 _session / 属性只读) 时静默跳过, 不影响连接"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+
+        class _NoSession:
+            def auth_log_in(self):
+                return None
+
+            @property
+            def _session(self):
+                raise AttributeError("no _session in this version")
+
+        with mock.patch("auto_qb.qbmanager.Client", return_value=_NoSession()):
+            assert mgr.connect() is True
 
 
 def test_run_due_requeues():

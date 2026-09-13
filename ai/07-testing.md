@@ -3,7 +3,7 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 788 passed + 1 skipped (2026-09-13), 分支覆盖率 90%(connect 节流测试因真实网络调用耗时暂时 skip)(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟)
+# 项目 venv (.venv, Python 3.12), 基线: 796 passed + 1 skipped (2026-09-13), 分支覆盖率 90%(connect 节流测试因真实网络调用耗时暂时 skip)(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟)
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
@@ -20,7 +20,7 @@
 3. 测试粒度小而多 (756 个), 名字用中文/英文短语描述场景。
 4. **平台相关测试必须以 `monkeypatch` 固定平台** — GitHub Actions 跑在 Linux, 而本项目以 Windows 为运行环境。纯 Windows 行为 (如长路径 `\\?\` 前缀) 的测试若直接断言, 在 Linux CI 上必失败 (2026-09-10 实测 3 例): `test_utils.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用 `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。规则: 测试主体行为的是"平台逻辑"而非"当前真实平台", 一律显式 monkeypatch, 不要依赖运行环境。
 5. **`test_web.py` 不只测 FastAPI 路由**: 除鉴权/API/命令入队/设置读写/`?rid=` 视图版本门控外, 还覆盖 WEB 功能的 manager 侧 —— 搜索索引构建与搜索、`_drain_web_commands` 各命令执行(含未知命令/异常的容错)、`ensure_group_view`/`ensure_group_state` 脏重建与版本自增、`_state_kind` 状态分类、`apply_new_config` 分级应用(用 `monkeypatch` 把 `auto_qb.config.impact.diff_config_impacts` 换成受控 changes, 专注分级分支; `setup_notify`/`connect`/`_setup_logging` 同时隔离)。找 WEB 功能的测试先看这个文件。
-5.5 **`test_sync.py` 专测增量同步层**: `SyncTorrent` 的 Mapping/属性双通道与 `state_enum`、`TorrentSync` 的 rid 合并语义(只收变化字段/新种子全量/`torrents_removed`/`full_update` 重建基线)、降级路径(无 sync 端点 → `torrents_info` + 告警仅一次)、未知异常 rid 归零上抛、以及 QbManager 接线(增量轮不做 schema 校验、状态快照/状态变化仍可观测)。改 `torrents.py` 的同步层或 `_refresh_torrents` 时必须同步此文件。
+5.5 **`test_sync.py` 专测增量同步层**: `TorrentRecord.apply_delta`(只遍历 patch 字段/变化字段集/量化/双通道源/`_raw` 兜底/`state_enum` 缓存)、`TorrentStore.apply_sync`(首轮全量/增量只改变化记录/无变化零成本/增删/全量剪除/待报删除/降级/异常/`reset_sync`)、以及 QbManager 接线(增量轮不做 schema 校验、变化集与冲突脏组)。改 `torrents.py` 的同步层或 `_refresh_torrents` 时必须同步此文件。
 6. **`test_impact.py` 直接测分级表而非被测端**: 用真实 `Config()`(字段默认即全默认实例) 构造新旧配置做 diff, 分级表外字段用 `SimpleNamespace` 替身(验证“未列出默认 L2”); 含 `_diff_flat`/`_diff_trackers`/`max_level`/`restart_required_paths` 直测。**改分级表或新增配置项时必须同步此文件**(新增配置项未补表 -> 默认 L2, 分级错误会让热重载静默不生效或误要求重启)。
 
 ## tests/helpers.py 基础设施 (写测试前必读)

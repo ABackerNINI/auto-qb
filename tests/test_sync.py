@@ -1,41 +1,52 @@
-"""增量同步层(SyncTorrent / TorrentSync)测试
+"""增量同步层测试(qB /api/v2/sync/maindata rid 语义 + TorrentRecord.apply_delta)
 
 背景: 主循环原先每 tick 全量拉 torrents/info, 导致 qB 端反复序列化全部种子(CPU 上涨)。
 改为走 /api/v2/sync/maindata 的 rid 增量: 只含**变化种子**的**变化字段**, 未变化种子
 完全不出现在响应中, 删除种子单列 torrents_removed。
 
-对应实现:
-  src/auto_qb/torrents.py  SyncTorrent(字段视图) / TorrentSync(rid 合并)
+实现(单一数据所有者, 无中间投影视图):
+  src/auto_qb/torrents.py  TorrentRecord(快照 slot + _raw 兜底) / TorrentStore.apply_sync
   src/auto_qb/qbapi.py     QbApi.sync_maindata 透传
   src/auto_qb/qbmanager.py _refresh_torrents / _validate_torrent_schema
 
 测试清单:
-- test_sync_torrent_duck_typing: Mapping + 属性访问 + 缺失 AttributeError + state_enum
-- test_sync_torrent_merge_object_source: 普通对象源按必需字段收集(测试替身兼容)
-- test_sync_full_update_builds_all_fields: rid=0 -> full_update, 视图字段齐全, need_validate
-- test_sync_delta_merges_only_changed: 增量轮只合并变化字段, 未变化字段取基线
-- test_sync_delta_new_torrent_full_fields: 增量轮新种子回全量字段
-- test_sync_delta_removed: torrents_removed 移除视图
-- test_sync_full_update_rebuilds_baseline: rid 失效 -> 全量重建(旧基线整体丢弃)
-- test_sync_reset: reset 清基线并强制下轮全量
-- test_sync_fallback_when_endpoint_unavailable: 无 sync 端点 -> 降级 torrents_info + 告警一次
-- test_sync_unknown_error_resets_rid_and_raises: 未知异常上抛且 rid 归零
+- test_apply_delta_only_touches_patch_fields: 增量只处理 patch 内字段, 未提及字段保持
+- test_apply_delta_returns_changed_fields: 返回变化字段名集合(非视图字段/视图字段/非快照字段)
+- test_apply_delta_quantizes_view_field: seeding_time 秒级递增不计入变化(量化)
+- test_apply_delta_object_source: 非 Mapping 源(测试替身)按必需字段收集
+- test_apply_delta_non_snapshot_fields_to_raw: RE_ADD_FIELDS 存 _raw + 属性/hasattr 兜底
+- test_record_missing_attribute_raises: 未提供字段抛 AttributeError(不静默 None)
+- test_record_state_enum_cached_and_invalidated: state_enum 有缓存, state 变化后失效
+- test_store_apply_sync_full_update_first_round: 首轮全量 -> added 全部 + need_validate + 样本
+- test_validate_sample_includes_hash_for_sync_response: sync 值内不含 hash -> 样本需补齐(真机 bug 回归)
+- test_store_apply_sync_delta_only_changed: 增量轮只应用变化记录(其余对象身份保留)
+- test_store_apply_sync_no_change_is_noop: 无变化轮零成本(不重建 by_hash)
+- test_store_apply_sync_delta_add_and_remove: 增量新增/删除
+- test_store_apply_sync_full_prunes_context_missing: rid 失效全量 -> 未出现者视为删除
+- test_store_remove_then_restore_pending: remove_torrent 登记待报删除 / restore_torrent 撤销
+- test_store_apply_sync_fallback_when_endpoint_unavailable: 无 sync 端点 -> 降级 + 告警一次
+- test_store_apply_sync_unknown_error_resets_rid: 未知异常 rid 归零后上抛
+- test_store_reset_sync: 清同步态并强制下轮全量
+- test_store_update_state_snapshot_from_by_hash: 状态快照由 by_hash 派生(缓存枚举)
 - test_manager_refresh_uses_incremental_sync: 主循环走 sync 且 store 正确
 - test_manager_refresh_validate_gate: 仅全量轮做版本兼容校验
-- test_manager_state_snapshot_from_sync_view: SyncTorrent 视图提供 state_enum
+- test_manager_delta_state_change_detected: 状态变化可被 store 观测(state_changed/快照)
+- test_manager_no_change_round_is_cheap: 无变化轮变化集为空
+- test_manager_conflict_recheck_incremental: 冲突检查只重算脏组(登记->消费复位)
 - test_manager_refresh_fallback_client: 旧版 qB 替身(无 sync 端点)整轮可用
 """
 import logging
 import os
 import tempfile
 from io import StringIO
+from types import SimpleNamespace
 
 import pytest
 
 from qbittorrentapi import TorrentState
 
 from auto_qb.qbapi import QbApi
-from auto_qb.torrents import SyncTorrent, TorrentStore, TorrentSync, missing_torrent_fields
+from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentRecord, TorrentStore, missing_torrent_fields
 
 from helpers import FakeClient, FakeTorrent, make_manager
 
@@ -46,174 +57,266 @@ class _NoSyncClient(FakeClient):
         raise AttributeError("'Client' object has no attribute 'sync_maindata'")
 
 
-def _api(client: FakeClient) -> QbApi:
-    return QbApi(client, TorrentStore())
+def _api(client: FakeClient, store: TorrentStore = None) -> QbApi:
+    """构造与给定 store 绑定的 Facade(默认新建 store)"""
+    return QbApi(client, store if store is not None else TorrentStore())
 
 
-# ---------- SyncTorrent: 字段视图鸭子类型 ----------
+def _full_fields(hash: str, **over) -> dict:
+    """合成 qB 全量响应里的单条种子字段(全部必需字段)"""
+    d = {f: 0 for f in REQUIRED_TORRENT_FIELDS}
+    d.update(
+        {
+            "hash": hash,
+            "name": "T",
+            "save_path": r"R:\D",
+            "state": "stalledUP",
+            "tags": "",
+            "category": "",
+            "content_path": r"R:\D\T",
+        }
+    )
+    d.update(over)
+    return d
 
 
-def test_sync_torrent_duck_typing():
-    """SyncTorrent 同时满足 Mapping 与属性访问; 缺失字段抛 AttributeError(对齐 AttrDict)"""
-    view = SyncTorrent({"hash": "H1", "state": "stalledUP", "size": 10})
-    # Mapping: 供 TorrentRecord.update_from 走 dict 级 item 访问
-    assert view["state"] == "stalledUP"
-    assert view.get("size") == 10
-    assert view.get("nope") is None
-    assert "state" in view
-    assert len(view) == 3
-    assert sorted(view) == ["hash", "size", "state"]
-    # 属性访问: 供 store/规则/跳检等既有代码
-    assert view.hash == "H1"
-    assert view.size == 10
-    assert "stalledUP" == view.state
-    # state_enum 派生(与 TorrentRecord/TorrentDictionary 同语义)
-    assert view.state_enum is TorrentState("stalledUP")
-    assert view.state_enum.is_uploading
-    # 缺失属性: 与 AttrDict 一致抛 AttributeError(不是 None, 便于 fail-fast)
+# ---------- TorrentRecord.apply_delta ----------
+
+
+def test_apply_delta_only_touches_patch_fields():
+    """增量: 只处理 patch 中的字段, 未提及字段原样保留(成本 ∝ patch 字段数)"""
+    rec = TorrentRecord(hash="H1", name="Old", upspeed=1, seeding_time=100)
+    changed = rec.apply_delta({"upspeed": 7})
+
+    assert rec.upspeed == 7
+    assert rec.name == "Old" and rec.seeding_time == 100  # 未提及 -> 不动
+    assert changed == {"upspeed"}
+
+
+def test_apply_delta_returns_changed_fields():
+    """返回变化字段名集合: 非视图字段值不同即计入, 相同值不计入"""
+    rec = TorrentRecord(hash="H1", state="stalledUP", downloaded=0, category="")
+    assert rec.apply_delta({"state": "stalledUP", "downloaded": 0}) == frozenset()  # 值相同
+    assert rec.apply_delta({"downloaded": 5, "category": "X"}) == {"downloaded", "category"}
+    rec2 = TorrentRecord(hash="H2")
+    # None 视为"未提供"(与历史 update_from 一致), hash 是主键
+    assert rec2.apply_delta({"hash": "H2", "name": None, "upspeed": 3}) == {"upspeed"}
+    # 非快照字段(RE_ADD_FIELDS)不计入变化集(不影响视图与冲突判定)
+    assert rec2.apply_delta({"ratio_limit": 1.5}) == frozenset()
+    assert rec2.ratio_limit == 1.5
+
+
+def test_apply_delta_quantizes_view_field():
+    """seeding_time 秒级递增不计入变化(按分钟量化), 跨分钟边界才计入"""
+    rec = TorrentRecord(hash="H1", seeding_time=3600)
+    assert rec.apply_delta({"seeding_time": 3619}) == frozenset()
+    assert rec.seeding_time == 3619  # 值仍写入, 仅"变化集"不含它(避免视图每轮重建)
+    assert rec.apply_delta({"seeding_time": 3660}) == {"seeding_time"}
+
+
+def test_apply_delta_object_source():
+    """非 Mapping 源(测试替身): 按 REQUIRED_TORRENT_FIELDS 收集属性"""
+    rec = TorrentRecord(hash="H9")
+    changed = rec.apply_delta(FakeTorrent(hash="H9", name="N9", state="pausedUP", upspeed=42))
+
+    assert rec.name == "N9" and rec.upspeed == 42
+    assert rec.state_enum is TorrentState("pausedUP")
+    assert {"name", "upspeed", "state"} <= changed
+    # FakeTorrent 的可选字段默认 None -> 视为"未提供"(与历史 update_from 一致), 不入 _raw
+    assert missing_torrent_fields(rec) == [
+        "ratio_limit", "seeding_time_limit", "inactive_seeding_time_limit", "share_limit_action"
+    ]
+
+
+def test_apply_delta_non_snapshot_fields_to_raw():
+    """快照字段走 slot; 非快照必需字段(RE_ADD_FIELDS)存 _raw, 属性访问经 __getattr__ 兜底"""
+    rec = TorrentRecord(hash="H1")
+    rec.apply_delta(_full_fields("H1", seq_dl=True, ratio_limit=1.5, share_limit_action="Remove"))
+
+    assert rec.seq_dl is True and rec.ratio_limit == 1.5
+    assert rec.share_limit_action == "Remove"
+    assert rec._raw["seq_dl"] is True
+    assert missing_torrent_fields(rec) == []  # hasattr 对 _raw 兜底字段成立
+
+
+def test_record_missing_attribute_raises():
+    """未提供的非快照字段抛 AttributeError(不静默 None) —— 版本兼容校验依赖此语义"""
+    rec = TorrentRecord(hash="H1")
     with pytest.raises(AttributeError):
-        view.no_such_field
-    # 非 dict 子类: 版本兼容校验的样本选择(跳过测试 plain dict)不受影响
-    assert not isinstance(view, dict)
+        rec.ratio_limit
+    assert "ratio_limit" in missing_torrent_fields(rec)
 
 
-def test_sync_torrent_state_enum_unknown_fallback():
-    """非法 state 字符串 -> TorrentState.UNKNOWN(与 TorrentRecord 兜底一致)"""
-    view = SyncTorrent({"hash": "H1", "state": "not-a-state"})
-    assert view.state_enum is TorrentState.UNKNOWN
+def test_record_state_enum_cached_and_invalidated():
+    """state_enum 有缓存(每轮多次读取零构造); state 变化后失效重算"""
+    rec = TorrentRecord(hash="H1", state="stalledUP")
+    first = rec.state_enum
+    assert rec.state_enum is first  # 缓存命中
+    rec.apply_delta({"state": "pausedUP"})
+    assert rec.state_enum is TorrentState("pausedUP")
+    assert rec.state_enum.is_stopped
 
 
-def test_sync_torrent_state_enum_missing_state():
-    """state 字段缺失(理论不可能, 防御) -> 走兜底而非 KeyError"""
-    view = SyncTorrent({"hash": "H1"})
-    assert view.state_enum is TorrentState.UNKNOWN
+# ---------- TorrentStore.apply_sync(rid 增量) ----------
 
 
-def test_sync_torrent_merge_object_source():
-    """对象源(非 Mapping, 测试替身)按必需字段收集属性: 非 None 字段入视图, 并补 hash
-
-    与 TorrentRecord.update_from 的非 Mapping 通道一致: None 值不入快照(视为"未提供"),
-    故这类视图不是字段齐全的样本 —— 降级路径的校验样本取原始对象(见下)。
-    """
-    view = SyncTorrent({})
-    view.merge(FakeTorrent(hash="H9", name="N9", state="pausedUP"), hash="H9")
-    assert view.hash == "H9"
-    assert view.name == "N9"
-    assert view.state_enum is TorrentState("pausedUP")
-    assert view.up_limit == 0  # 0 是有语义的值(不限速), 会入视图
-    assert view.total_size > 0
-    assert "ratio_limit" not in view  # None 值不入视图(与 update_from 一致)
-
-
-# ---------- TorrentSync: rid 增量合并 ----------
-
-
-def test_sync_full_update_builds_all_fields():
-    """首轮 rid=0 -> full_update: 视图字段齐全, need_validate 为真, 样本为视图"""
+def test_store_apply_sync_full_update_first_round():
+    """首轮 rid=0 -> full_update: added 为全部, need_validate 真, 样本为原始字段映射"""
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP")
-    sync = TorrentSync()
-    views = sync.fetch(_api(client))
+    store = TorrentStore(client)
 
-    assert len(views) == 1
-    assert views[0].hash == "H1"
-    assert missing_torrent_fields(views[0]) == []  # 全量响应字段齐全
-    assert sync.rid == 1
-    assert sync.need_validate is True
-    assert sync.validate_sample is views[0]
-    assert sync.using_fallback is False
+    added, removed = store.apply_sync(_api(client, store))
+
+    assert added == ["H1"] and removed == []
+    assert store.rid == 1
+    assert store.need_validate is True
+    assert store.using_fallback is False
+    assert isinstance(store.validate_sample, dict)  # qB 原始字段映射
+    assert missing_torrent_fields(store.validate_sample) == []  # 全量响应字段齐全
 
 
-def test_sync_delta_merges_only_changed():
-    """增量轮只合并变化字段, 未变化字段保留基线值(不再全量解析)"""
+def test_validate_sample_includes_hash_for_sync_response():
+    """回归(真机 2026-09-13): qB sync 响应的 hash 是 torrents 字典**键**, 值内不含 hash
+
+    校验样本需把键补回样本的 `hash` 字段, 否则 `missing_torrent_fields` 会报缺 'hash'
+    → `_validate_torrent_schema` 抛 QbCompatError 导致程序启动即退出。
+    这里用"值内确实没有 hash"的客户端替身(与真机一致)直接断言样本完整。
+    """
     client = FakeClient()
-    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0)
-    sync = TorrentSync()
-    api = _api(client)
-    sync.fetch(api)
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP")
+    store = TorrentStore(client)
 
-    client.torrents["H1"].upspeed = 123  # 只改一个字段
-    views = sync.fetch(api)
+    store.apply_sync(_api(client, store))
 
-    assert sync.need_validate is False  # 增量轮: 不做 schema 校验
-    assert sync.validate_sample is None
-    assert len(views) == 1
-    assert views[0].upspeed == 123  # 变化字段已更新
-    assert views[0].name == "T1"  # 未变化字段来自基线
-    assert views[0].size == client.torrents["H1"].size
+    assert "hash" not in client.sync_maindata(rid=0)["torrents"]["H1"]  # 替身值内确实无 hash(真机形状)
+    assert store.validate_sample["hash"] == "H1"  # 已补齐
+    assert missing_torrent_fields(store.validate_sample) == []
+    assert "hash" not in store.by_hash["H1"]._raw  # 补齐不影响实际字段(不入 _raw)
+    assert store.by_hash["H1"].hash == "H1"
 
 
-def test_sync_delta_new_torrent_full_fields():
-    """增量轮新增种子: 基线缺失 -> 响应含全量字段, 视图字段齐全"""
+def test_store_apply_sync_delta_only_changed():
+    """增量轮只应用变化记录: 未变化记录对象身份保留, delta_fields 只有变化种子"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", upspeed=0)
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2", upspeed=0)
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+    rec1, rec2 = store.get("H1"), store.get("H2")
+
+    client.torrents["H1"].upspeed = 7
+    added, removed = store.apply_sync(api)
+
+    assert (added, removed) == ([], [])
+    assert store.get("H1") is rec1 and store.get("H2") is rec2  # 对象跨轮保留(惰性缓存存活)
+    assert store.get("H1").upspeed == 7
+    assert store.get("H2").name == "T2"  # 未变化字段来自基线
+    assert set(store.delta_fields) == {"H1"}
+    assert store.need_validate is False
+
+
+def test_store_apply_sync_no_change_is_noop():
+    """无变化轮零成本: 不重建 by_hash, 变化集为空(静止种子库每 tick 近乎免费)"""
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
-    sync = TorrentSync()
-    api = _api(client)
-    sync.fetch(api)
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+    by_hash_before = store.by_hash
+
+    added, removed = store.apply_sync(api)
+
+    assert (added, removed) == ([], [])
+    assert store.by_hash is by_hash_before  # 未重建/未拷贝
+    assert store.delta_fields == {} and store.state_changed == []
+
+
+def test_store_apply_sync_delta_add_and_remove():
+    """增量轮新增(基线缺失 -> 全量字段)与删除(torrents_removed)"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
 
     client.torrents["H2"] = FakeTorrent(hash="H2", name="T2", state="downloading")
-    views = sync.fetch(api)
+    added, removed = store.apply_sync(api)
+    assert added == ["H2"] and removed == []
+    assert store.get("H2").name == "T2"
 
-    by_hash = {v.hash: v for v in views}
-    assert set(by_hash) == {"H1", "H2"}
-    assert by_hash["H2"].name == "T2"
-    assert missing_torrent_fields(by_hash["H2"]) == []
+    del client.torrents["H1"]
+    added, removed = store.apply_sync(api)
+    assert added == [] and removed == ["H1"]
+    assert store.get("H1") is None and store.get("H2") is not None
 
 
-def test_sync_delta_removed():
-    """torrents_removed: 删除的种子从视图中移除"""
+def test_store_apply_sync_full_prunes_context_missing():
+    """rid 失效 -> full_update: 响应未出现的旧种子视为删除(幽灵条目不残留)"""
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
-    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
-    sync = TorrentSync()
-    api = _api(client)
-    assert len(sync.fetch(api)) == 2
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+    store.by_hash["GHOST"] = TorrentRecord(hash="GHOST")  # 模拟本地与服务端失同步
 
-    del client.torrents["H2"]
-    views = sync.fetch(api)
-    assert [v.hash for v in views] == ["H1"]
-    assert sync.need_validate is False
+    store.rid = 999  # 与服务端 rid 不匹配 -> full_update
+    added, removed = store.apply_sync(api)
+
+    assert store.need_validate is True
+    assert "GHOST" in removed and store.get("GHOST") is None
+    assert set(store.by_hash) == {"H1"}
+    assert added == []
 
 
-def test_sync_full_update_rebuilds_baseline():
-    """rid 失效 -> full_update: 旧基线整体丢弃(幽灵条目不会残留)"""
+def test_store_remove_then_restore_pending():
+    """remove_torrent 登记待报删除(供分组清理/事件); restore_torrent 撤销登记(跳检重加)"""
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
-    sync = TorrentSync()
-    api = _api(client)
-    sync.fetch(api)
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
 
-    sync._views["GHOST"] = SyncTorrent({"hash": "GHOST"})  # 模拟基线与服务端失同步
-    sync.rid = 999  # 与服务端 rid 不匹配 -> full_update
-    views = sync.fetch(api)
+    rec = store.get("H1")
+    store.remove_torrent("H1")
+    assert store.get("H1") is None
+    added, removed = store.apply_sync(api)  # qB 已无该种子 -> 双路去重后只报一次
+    assert removed == ["H1"] and added == []
 
-    assert sync.need_validate is True
-    assert [v.hash for v in views] == ["H1"]
-
-
-def test_sync_empty_qb():
-    """空 qB: 全量轮无样本(不做校验), 视图为空; 增量轮仍返回空"""
-    client = FakeClient()
-    sync = TorrentSync()
-    api = _api(client)
-    assert sync.fetch(api) == []
-    assert sync.need_validate is True
-    assert sync.validate_sample is None
-    assert sync.fetch(api) == []
+    store.restore_torrent(rec)  # 跳检重加: 撤销待报登记
+    added, removed = store.apply_sync(api)
+    assert added == [] and removed == []
 
 
-def test_sync_reset():
-    """reset: 清基线/样本并强制下轮全量(重连/热重载后旧 rid 失效)"""
+def test_store_reset_sync():
+    """reset_sync: 清同步态与变化集(重连/热重载后旧 rid 失效)"""
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
-    sync = TorrentSync()
-    sync.fetch(_api(client))
+    store = TorrentStore(client)
+    store.apply_sync(_api(client, store))
+    assert store.rid != 0
 
-    sync.reset()
-    assert sync.rid == 0
-    assert sync.need_validate is True
-    assert sync.validate_sample is None
-    assert sync._views == {}
+    store.reset_sync()
+    assert store.rid == 0
+    assert store.need_validate is True
+    assert store.validate_sample is None
+    assert store.delta_fields == {} and store.state_changed == [] and store.dirty_groups == set()
+
+
+def test_store_update_state_snapshot_from_by_hash():
+    """状态快照由 by_hash 派生(缓存枚举); 自有动作同步过的状态同样计入"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", state="stalledUP")
+    store = TorrentStore(client)
+    store.apply_sync(_api(client, store))
+
+    store.update_state_snapshot()
+    assert store.state_snapshot["H1"].is_uploading
+
+    store.update_torrent_fields("H1", state="pausedUP")  # 模拟自有动作停种
+    store.update_state_snapshot()
+    assert store.state_snapshot["H1"].is_stopped
 
 
 # ---------- 降级与异常 ----------
@@ -233,39 +336,38 @@ def _capture_logger(name: str):
     )
 
 
-def test_sync_fallback_when_endpoint_unavailable():
+def test_store_apply_sync_fallback_when_endpoint_unavailable():
     """sync 端点不可用(旧版 qB) -> 降级全量 torrents_info, 告警仅一次"""
     client = _NoSyncClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
-    sync = TorrentSync()
-    api = _api(client)
+    store = TorrentStore(client)
 
     stream, restore = _capture_logger("auto_qb.torrents")
     try:
-        views = sync.fetch(api)
-        assert [v.hash for v in views] == ["H1"]  # 降级后数据仍正确
-        assert sync.using_fallback is True
-        assert sync.need_validate is True
-        # 降级路径样本保持旧语义: 首个非 dict 的原始种子对象(测试注入的 dict 不作样本)
-        assert sync.validate_sample is client.torrents["H1"]
-        assert sync.rid == 0  # 降级路径保持 rid 归零
-        sync.fetch(api)  # 第二次降级不再重复告警
+        added, removed = store.apply_sync(_api(client, store))
+        assert added == ["H1"] and removed == []
+        assert store.using_fallback is True
+        assert store.need_validate is True
+        assert store.rid == 0  # 降级路径保持 rid 归零
+        # 样本保持旧语义: 首个非 dict 的原始种子对象(测试注入的 plain dict 不作样本)
+        assert store.validate_sample is client.torrents["H1"]
+        store.apply_sync(_api(client, store))  # 第二次降级不再重复告警
         assert stream.getvalue().count("降级") == 1
     finally:
         restore()
 
 
-def test_sync_unknown_error_resets_rid_and_raises():
+def test_store_apply_sync_unknown_error_resets_rid():
     """非"端点缺失"异常(网络等) -> rid 归零后原样上抛(由调用方兜底)"""
     class _BoomClient(FakeClient):
         def sync_maindata(self, rid=0, **kw):
             raise RuntimeError("network down")
 
-    sync = TorrentSync()
-    sync.rid = 42
+    store = TorrentStore()
+    store.rid = 42
     with pytest.raises(RuntimeError):
-        sync.fetch(_api(_BoomClient()))
-    assert sync.rid == 0  # 下轮强制全量
+        store.apply_sync(_api(_BoomClient(), store))
+    assert store.rid == 0  # 下轮强制全量
 
 
 # ---------- QbManager 接线 ----------
@@ -282,14 +384,11 @@ def test_manager_refresh_uses_incremental_sync():
         mgr._refresh_torrents()
         assert client.sync_calls == 1
         rec = mgr.store.get("H1")
-        assert rec is not None
-        assert rec.name == "T1"
+        assert rec is not None and rec.name == "T1"
 
-        # 第二轮: 全量未变化 -> 增量响应无 torrents, 视图仍保留该种子
         mgr._refresh_torrents()
         assert client.sync_calls == 2
-        assert mgr.store.get("H1") is not None
-        assert mgr.store.get("H1").name == "T1"
+        assert mgr.store.get("H1") is rec  # 记录对象跨轮保留
 
 
 def test_manager_refresh_validate_gate():
@@ -301,33 +400,35 @@ def test_manager_refresh_validate_gate():
         client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
 
         mgr._refresh_torrents()
-        assert mgr._sync.need_validate is True  # 首轮全量
+        assert mgr.store.need_validate is True  # 首轮全量
         assert mgr._schema_validated is True
 
         mgr._refresh_torrents()
-        assert mgr._sync.need_validate is False  # 增量轮不校验
-
-
-def test_manager_state_snapshot_from_sync_view():
-    """store.update_state_snapshot 对 SyncTorrent 视图取到 state_enum(状态变化检测依赖)"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        client = FakeClient()
-        mgr.client = client
-        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP")
-
-        mgr._refresh_torrents()
-        snap = mgr.store.state_snapshot["H1"]
-        assert snap is not None
-        assert snap.is_uploading
-
-        client.torrents["H1"].state = "pausedUP"
-        mgr._refresh_torrents()
-        assert mgr.store.state_snapshot["H1"].is_stopped
+        assert mgr.store.need_validate is False  # 增量轮不校验
 
 
 def test_manager_delta_state_change_detected():
-    """增量轮的状态变化能被 store 观测到(规则/分组事件依赖)"""
+    """增量轮的状态变化可被 store 观测(state_changed 快照 + 状态快照更新)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP")
+        mgr._refresh_torrents()
+        assert mgr.store.state_snapshot["H1"].is_uploading
+
+        client.torrents["H1"].state = "pausedUP"  # 只改 state
+        mgr._refresh_torrents()
+
+        rec = mgr.store.get("H1")
+        assert rec is not None and rec.state == "pausedUP"
+        assert rec.state_enum.is_stopped
+        assert [h for h, _ in mgr.store.state_changed] == ["H1"]  # 供分组/事件分派按变化集筛选
+        assert mgr.store.state_snapshot["H1"].is_stopped
+
+
+def test_manager_no_change_round_is_cheap():
+    """无变化轮: 变化集为空(下游按变化集驱动的扫描全部早退)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -335,12 +436,29 @@ def test_manager_delta_state_change_detected():
         client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP")
         mgr._refresh_torrents()
 
-        client.torrents["H1"].state = "pausedUP"  # 只改 state
         mgr._refresh_torrents()
-        rec = mgr.store.get("H1")
-        assert rec is not None
-        assert rec.state == "pausedUP"
-        assert rec.state_enum.is_stopped
+        assert mgr.store.delta_fields == {}
+        assert mgr.store.state_changed == []
+
+
+def test_manager_conflict_recheck_incremental():
+    """冲突检查只重算脏组: 无变化轮不登记(不扫描), 相关变化轮登记并在检查时消费复位"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.grouping.enabled = True
+        client = FakeClient()
+        mgr.client = client
+        client.files_map["H1"] = [SimpleNamespace(name="a.mkv", size=100)]
+        client.torrents["H1"] = FakeTorrent(hash="H1", state="stalledUP", save_path=r"R:\D")
+        mgr._refresh_torrents()
+        assert mgr.store.member_to_key["H1"] is not None  # 已归组
+
+        mgr._refresh_torrents()  # 无变化轮: _check_download_conflicts 早退并清空
+        assert mgr.store.dirty_groups == set()
+
+        client.torrents["H1"].state = "downloading"  # 冲突相关字段变化
+        mgr._refresh_torrents()
+        assert mgr.store.dirty_groups == set()  # 已在检查时取出并复位
 
 
 def test_manager_refresh_fallback_client():
@@ -352,6 +470,6 @@ def test_manager_refresh_fallback_client():
         client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP")
 
         mgr._refresh_torrents()
-        assert mgr._sync.using_fallback is True
+        assert mgr.store.using_fallback is True
         assert mgr.store.get("H1") is not None
         assert mgr._schema_validated is True

@@ -1,8 +1,9 @@
 """种子信息数据层(TorrentStore)
 
 设计目标(优先级: 速度 > 可读性 > 内存):
-- 每 main_tick 通过 qbittorrentapi 全量拉取一次种子信息写入 TorrentStore, 之后本 tick 内
-  所有读取操作(规则条件/动作/分组/标签/轮询回调)都只访问本数据层, 不再重复调用
+- 每 main_tick 经 qB `/api/v2/sync/maindata` **增量同步**一次(只含变化种子的变化字段,
+  未变化种子完全不出现在响应中), 之后本 tick 内所有读取操作(规则条件/动作/分组/标签/
+  轮询回调)都只访问本数据层, 不再重复调用
   torrents_info / torrents_trackers / torrents_files / torrents_tags / torrents_categories。
 - 惰性缓存: tracker/files 首次访问才拉取并在记录上持久缓存, 种子删除时随记录一起回收;
   全局标签/分类列表缓存, 写操作后失效。
@@ -12,15 +13,17 @@
   本 tick 内的写操作下一 tick 快照刷新后可见。
 
 说明:
-- TorrentRecord 字段名与 qbittorrentapi TorrentDictionary 一致, 鸭子类型兼容(可直接传给
-  需要种子对象的代码)。
-- refresh() 保留已存在记录对象(惰性缓存跨 tick 存活), 仅 in-place 更新快照字段;
-  种子不在快照中但被查询时(如 process_torrent 外部传入对象)退化为直接拉取, 不做缓存。
+- TorrentRecord 是种子数据的**唯一所有者**(无需中间投影视图): 快照字段走 slots(C 级属性
+  访问的热路径), 非快照必需字段(RE_ADD_FIELDS)存 `_raw` 并由属性访问兜底; 字段名与
+  qbittorrentapi TorrentDictionary 一致, 鸭子类型兼容(可直接传给需要种子对象的代码)。
+- apply_delta() 只处理 patch 中的字段(增量轮成本 ∝ 变化字段数), 记录对象跨 tick 保留
+  (惰性缓存存活), 种子删除时记录被回收, 缓存自然清理。
+- 种子不在快照中但被查询时(如 process_torrent 外部传入对象)退化为直接拉取, 不做缓存。
 """
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 from qbittorrentapi import NotFound404Error, TorrentState, TorrentDictionary
 
 from . import utils
@@ -106,13 +109,36 @@ def view_field_value(field: str, value: Any) -> Any:
 # 比崩溃更危险, 启动期一并校验
 REQUIRED_TORRENT_FIELDS = _SNAPSHOT_FIELDS + RE_ADD_FIELDS
 
+# 热路径成员判定集合(apply_delta 每字段至少一次查询, frozenset 为 C 级哈希查找)
+_SNAPSHOT_FIELD_SET = frozenset(_SNAPSHOT_FIELDS)
+_VIEW_FIELD_SET = frozenset(_VIEW_FIELDS)
+
+# qB 不支持 sync/maindata(旧版本 / 测试替身缺方法)时的降级信号; 其它异常(网络等)照常上抛
+_SYNC_UNAVAILABLE = (AttributeError, NotFound404Error)
+
+
+def view_dirty(changed: Iterable[str]) -> bool:
+    """变化字段集是否触及 Web 分组视图的展示字段(_VIEW_FIELDS)
+
+    apply_delta 返回的变化集已按 `view_field_value` 量化过滤(seeding_time 秒级递增不算变化),
+    故这里只需集合交集判定。
+    """
+    return not _VIEW_FIELD_SET.isdisjoint(changed)
+
 
 class QbCompatError(AutoQbError):
     """qBittorrent torrent info 字段与预期不符(版本不兼容), 首次拉到种子信息时 fail-fast"""
 
 
 def missing_torrent_fields(tor) -> List[str]:
-    """返回 tor 上缺失的必需字段列表(空列表 = 版本兼容); AttrDict 缺键时 hasattr 为 False"""
+    """返回 tor 上缺失的必需字段列表(空列表 = 版本兼容)
+
+    支持两类来源: **字段映射**(qB sync 原始 JSON / 测试注入的 dict -> 按键判定)
+    与**属性对象**(TorrentDictionary / FakeTorrent / TorrentRecord -> 按 hasattr 判定)。
+    AttrDict 缺键时 hasattr 为 False(不回退 __getattr__), 故两类语义一致。
+    """
+    if isinstance(tor, Mapping):
+        return [f for f in REQUIRED_TORRENT_FIELDS if f not in tor]
     return [f for f in REQUIRED_TORRENT_FIELDS if not hasattr(tor, f)]
 
 
@@ -120,8 +146,11 @@ def missing_torrent_fields(tor) -> List[str]:
 class TorrentRecord:
     """种子快照记录: 字段名与 TorrentDictionary 一致, 鸭子类型兼容
 
-    惰性缓存槽(_tags_set/_state_enum/_trackers_info/_files)跨 tick 存活:
-    update_from() 只更新快照字段, 缓存随记录对象保留; 种子删除时记录被回收, 缓存自然清理。
+    种子数据的**唯一所有者**(无需中间投影视图):
+    - 快照字段 = slots(C 级属性访问, 热路径), hash 为主键;
+    - 非快照必需字段(RE_ADD_FIELDS, 跳检重加用) = `_raw` dict, 属性访问经 __getattr__ 兜底;
+    - 惰性缓存槽(_tags_set/_state_enum/_trackers_info/_files)跨 tick 存活:
+      apply_delta() 只更新变化的字段, 缓存随记录对象保留; 种子删除时记录被回收, 缓存自然清理。
     """
 
     hash: str
@@ -145,58 +174,83 @@ class TorrentRecord:
     dl_limit: int = 0
     up_limit: int = 0
 
-    # 惰性缓存(不参与 update_from 复制)
+    # 惰性缓存(不参与 apply_delta 复制)
     _tags_set: Optional[frozenset] = None
     _state_enum: Any = None
     _trackers_info: Optional[List[dict]] = None
     _files: Optional[List[Any]] = None
+    # 非快照必需字段(RE_ADD_FIELDS, 跳检重加用): 仅存于此, 属性访问兜底
+    _raw: Optional[Dict[str, Any]] = None
 
-    tor: Optional[TorrentDictionary] = None
     tracker_conf: Optional[TrackerConfig] = None
 
+    def __getattr__(self, name: str) -> Any:
+        """非快照字段(如跳检所需的 seq_dl/ratio_limit)兜底读取 `_raw`
+
+        仅在常规属性查找失败时调用(slots 未声明的名字); 缺失仍抛 AttributeError ——
+        与 qbittorrentapi AttrDict/TorrentDictionary 语义一致, 故 hasattr 版本校验照常工作。
+        用 object.__getattribute__ 读槽, 避免 `_raw` 未初始化时无限递归。
+        """
+        try:
+            raw = object.__getattribute__(self, "_raw")
+        except AttributeError:
+            raw = None
+        if raw is not None:
+            try:
+                return raw[name]
+            except KeyError:
+                pass
+        raise AttributeError(name)
+
     @classmethod
-    def from_torrent(cls, tor: Any) -> "TorrentRecord":
-        """从原始种子对象(TorrentDictionary/FakeTorrent)构建新记录"""
-        rec = cls(hash=getattr(tor, "hash", ""))
-        rec.update_from(tor)
+    def from_torrent(cls, tor: Any, hash: Optional[str] = None) -> "TorrentRecord":
+        """从原始种子对象/字段映射构建新记录(hash 可显式给出: 增量响应以字典键为主键)"""
+        rec = cls(hash=hash if hash is not None else getattr(tor, "hash", ""))
+        rec.apply_delta(tor)
         return rec
 
-    def update_from(self, tor: Any) -> bool:
-        """用最新种子对象更新快照字段(惰性缓存保留, 文本派生缓存失效)
+    def apply_delta(self, patch: Any) -> FrozenSet[str]:
+        """用 patch 中的字段更新快照, 返回本轮**变化字段名集合**(空 = 无变化)
 
-        返回: 是否有**视图相关字段**变化(_VIEW_FIELDS, 按 _VIEW_QUANTUM 量化后比较)
-        —— Web 分组视图惰性重建用。判定与 Web 展示字段保持一致, 不引入额外遍历
-        (复用本方法已有的逐字段循环)。
+        增量成本 ∝ patch 字段数: patch 为 Mapping(qB sync 响应/测试 dict/真机
+        TorrentDictionary)时只遍历其键 —— 故未变化的种子/字段零开销; 为普通对象
+        (测试替身 FakeTorrent 等)时按 REQUIRED_TORRENT_FIELDS 收集属性。
 
-        性能: 真机 qbittorrentapi TorrentDictionary 是 Mapping, 其字段以映射条目存储,
-        用 .get() 走 C 级 item 访问, 比 getattr 触发 AttrDict.__getattr__→_build 的属性派发
-        快 ~13×(py-spy 实测 __getattr__ 占 17% CPU)。快照字段全为标量, _build 对其是 no-op,
-        故 .get() 与 getattr 返回值一致。测试替身 FakeTorrent 等普通对象非 Mapping, 回退属性访问。
+        快照字段写入 slot; 非快照字段(RE_ADD_FIELDS)写入 `_raw`(不计入变化集)。
+        视图字段中配了 `_VIEW_QUANTUM` 步长的按量化值比较(seeding_time 秒级递增不算变化),
+        故返回值可直接用 `view_dirty()` 判定是否需要重建 Web 分组视图。
+
+        性能: 真机 TorrentDictionary 是 Mapping, 字段以映射条目存储, 故走 .items()
+        (C 级迭代) 而不逐个 getattr(AttrDict.__getattr__→_build 属性派发慢 ~13×)。
         """
-        self.tor = tor
-        changed = False
-        if isinstance(tor, Mapping):
-            get = tor.get
-            for f in _SNAPSHOT_FIELDS:
-                if f == "hash":
-                    continue  # hash 是主键, 不更新
-                v = get(f)
-                if v is not None:
-                    if f in _VIEW_FIELDS and view_field_value(f, getattr(self, f)) != view_field_value(f, v):
-                        changed = True
-                    setattr(self, f, v)
+        changed: Set[str] = set()
+        if isinstance(patch, Mapping):
+            items = patch.items()
         else:  # TODO: 移除下方的测试专用通道
-            for f in _SNAPSHOT_FIELDS:
-                if f == "hash":
-                    continue  # hash 是主键, 不更新
-                v = getattr(tor, f, None)
-                if v is not None:
-                    if f in _VIEW_FIELDS and view_field_value(f, getattr(self, f)) != view_field_value(f, v):
-                        changed = True
-                    setattr(self, f, v)
-        self._tags_set = None
-        self._state_enum = None
-        return changed
+            items = ((f, getattr(patch, f, None)) for f in REQUIRED_TORRENT_FIELDS)
+        raw = self._raw
+        for f, v in items:
+            if v is None or f == "hash":
+                continue  # hash 是主键; None 视为"未提供"(与历史 update_from 一致)
+            if f not in _SNAPSHOT_FIELD_SET:
+                # 非快照字段(RE_ADD_FIELDS 等): 存 _raw 供属性访问兜底, 不参与视图脏判定
+                if raw is None:
+                    raw = self._raw = {}
+                raw[f] = v
+                continue
+            cur = getattr(self, f)
+            if cur == v:
+                continue
+            setattr(self, f, v)
+            if f == "state":
+                self._state_enum = None
+            elif f == "tags":
+                self._tags_set = None
+            if f not in _VIEW_FIELD_SET:
+                changed.add(f)  # 非视图字段: 值已不同即计入
+            elif f not in _VIEW_QUANTUM or view_field_value(f, cur) != view_field_value(f, v):
+                changed.add(f)  # 视图字段: 量化后确实变化才算
+        return frozenset(changed)
 
     @property
     def tracker_name(self) -> str:
@@ -298,22 +352,44 @@ class TorrentRecord:
 
 
 class TorrentStore:
-    """种子信息数据层: 主索引 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
+    """种子信息数据层: 主索引 + 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
 
+    增量同步态(qB /api/v2/sync/maindata rid 语义, 见 apply_sync):
+      - rid: 上次响应 ID(0 = 下轮需全量); need_validate: 本轮是否全量(校验闸门);
+      - using_fallback: 已降级全量(旧版 qB, 告警去重); validate_sample: 全量轮校验样本。
     分组相关结构(供 GroupingMixin 直接读写, 保持增量语义):
       - groups:        key=(save_path, 排序文件路径元组) -> [hash...]
       - group_sizes:   key -> {hash: {规范化相对路径: 大小}}
       - member_to_key: hash -> 组 key(O(1) 定位)
       - state_snapshot: hash -> 上一轮 state_enum(上传转暂停检测)
       - download_conflict_warned: (组key, 冲突类型) 去重集合
+    本轮变化集(供主循环把 O(N) 扫描降为 O(变化数)):
+      - delta_fields:  {hash: 变化字段名集合} 本轮发生变化的种子
+      - state_changed: [(hash, fetch 时 state_enum)] state 字段变化的种子
+      - dirty_groups:  需重算下载冲突的组 key(字段变化/成员增删/归组变化时登记)
     参考种子集合(仅内存): verified_references
     全局缓存: all_tags() / all_categories()(写操作后 invalidate)
     """
     def __init__(self, client: Any = None):
         self.client: Any = client
-        # 主索引: hash -> TorrentRecord(每 tick 重建引用, 记录对象跨 tick 保留)
+        # 主索引: hash -> TorrentRecord(每轮原子替换引用, 记录对象跨 tick 保留)
         self.by_hash: Dict[str, TorrentRecord] = {}
-        self._known_hashes: Optional[Set[str]] = None
+        # 本程序自身发起删除、待下轮上报的 hash(remove_torrent 登记 / restore_torrent 撤销)
+        self._pending_removed: Set[str] = set()
+        # 增量同步态
+        self.rid: int = 0
+        self.need_validate: bool = True
+        self.using_fallback: bool = False
+        self.validate_sample: Optional[Any] = None
+        # 本轮变化集
+        self.delta_fields: Dict[str, FrozenSet[str]] = {}
+        self.state_changed: List[Tuple[str, Any]] = []
+        # 需重算下载冲突的组 key: 变化字段/成员增删/归组/自有停种打标时登记,
+        # 由 GroupingMixin._check_download_conflicts 取出并复位(跨轮累积, 不随 _apply 清空)
+        self.dirty_groups: Set[Any] = set()
+        # 轮次基线: >0 表示快照由主循环轮次驱动(变化集可用), 冲突检查走增量;
+        # 直接驱动(_apply 未跑过, 如白盒测试)时为 0, 冲突检查退回全量扫描以保证正确
+        self.rounds_applied: int = 0
         # 分组结构
         self.groups: Dict[Any, List[str]] = {}
         self.group_sizes: Dict[Any, Dict[str, Dict[str, int]]] = {}
@@ -329,38 +405,134 @@ class TorrentStore:
         # 主循环每 tick 消费(consume_view_changed), 无变化则不重建(惰性真正生效)
         self.view_changed: bool = True
 
-    # ---------- 快照 ----------
+    # ---------- 快照(增量同步) ----------
+
+    def apply_sync(self, api: "QbApi") -> Tuple[List[str], List[str]]:
+        """主循环入口: 从 qB 增量同步一轮并应用, 返回 (added, removed)
+
+        /api/v2/sync/maindata 语义(见 src/webui/api/synccontroller.cpp):
+          - full_update=true(首轮 / rid 失效) -> 响应含**全部种子全量字段**;
+          - rid 一致 -> 只含**变化种子**的**变化字段**(未变化种子不出现),
+            删除的种子列在 torrents_removed。
+        端点不可用(旧版 qB / 测试替身缺方法)时降级为全量 torrents_info(一次性告警);
+        其它异常 rid 归零后原样上抛(由调用方兜底, 不掩盖断连/鉴权问题)。
+        """
+        try:
+            md = api.sync_maindata(rid=self.rid)
+        except _SYNC_UNAVAILABLE as e:
+            if not self.using_fallback:
+                logger.warning(f"qB 不支持 sync/maindata, 降级为全量 torrents_info: {e}")
+                self.using_fallback = True
+            self.rid = 0
+            self.need_validate = True
+            tors = api.torrents_info()
+            # 样本保持旧时序语义: 首个非 dict 的真实种子对象(测试注入的 plain dict 不作样本)
+            self.validate_sample = next((t for t in tors if not isinstance(t, dict)), None)
+            return self.refresh(tors)
+        except Exception:
+            self.rid = 0  # 未知异常: 下轮强制全量
+            raise
+        self.using_fallback = False
+        self.rid = int(md.get("rid", 0) or 0)
+        full = bool(md.get("full_update"))
+        self.need_validate = full
+        patches = md.get("torrents") or {}
+        # 校验样本: 仅全量轮提供。注意 qB sync 响应的 **hash 是 torrents 字典的键**, 值内不含
+        # hash(与 torrents/info 的数组元素不同) -> 校验前需补齐, 否则必报缺 'hash' 字段
+        if full and patches:
+            h0, p0 = next(iter(patches.items()))
+            self.validate_sample = {**p0, "hash": h0} if isinstance(p0, Mapping) else p0
+        else:
+            self.validate_sample = None
+        return self._apply(patches, list(md.get("torrents_removed") or []), full=full)
 
     def refresh(self, tors: List[TorrentDictionary]) -> Tuple[List[str], List[str]]:
-        """全量刷新快照: 返回 (added, removed) hash 列表
+        """全量刷新入口(测试/降级路径): 以给定种子列表为全集, 返回 (added, removed)
 
-        首轮(_known_hashes is None)全部视为新增(与旧 _known_hashes 语义一致);
-        已存在的记录对象原地更新, 惰性缓存跨 tick 存活。
-        同时累计 view_changed(视图字段/成员变化), 供 Web 分组视图惰性重建。
+        已存在记录对象原地更新(惰性缓存跨 tick 存活), 首轮全部视为新增。
         """
-        new_by_hash: Dict[str, TorrentRecord] = {}
-        view_changed = False
+        patches: Dict[str, Any] = {}
         for t in tors:
-            h = t.hash
-            rec = self.by_hash.get(h)
+            h = t.get("hash") if isinstance(t, Mapping) else getattr(t, "hash", None)
+            if h:
+                patches[h] = t
+        return self._apply(patches, [], full=True)
+
+    def reset_sync(self) -> None:
+        """重置增量同步态(重连 / 热重载后旧 rid 失效, 下轮强制全量重建)"""
+        self.rid = 0
+        self.need_validate = True
+        self.using_fallback = False
+        self.validate_sample = None
+        self.delta_fields = {}
+        self.state_changed = []
+        self.dirty_groups = set()
+
+    # 影响下载冲突判定的字段(分组 n_dl/n_done 的判定依据)
+    _CONFLICT_FIELDS = frozenset(("state", "amount_left", "tags"))
+
+    def _apply(self, patches: Dict[str, Any], removed: List[str], *, full: bool) -> Tuple[List[str], List[str]]:
+        """核心: 把 patches 应用到快照(原子替换 by_hash, Web 线程只读安全), 返回 (added, removed)
+
+        full=True: patches 为全集, 未出现者视为删除;
+        full=False(增量): patches 只含变化种子, 其余记录原样保留, 删除以 removed(torrents_removed)为准。
+        本轮无任何变化且无待报删除时提前返回 —— 静止种子库的每 tick 成本趋近于 0。
+        """
+        pending = self._pending_removed
+        self.rounds_applied += 1
+        # 增量轮无变化且无待报删除 -> 零成本早退; 全量轮即使 patches 为空也必须走完(需检测删除)
+        if not full and not patches and not removed and not pending:
+            self.delta_fields = {}
+            self.state_changed = []
+            return [], []
+        prev = self.by_hash
+        by_hash = {} if full else dict(prev)  # 全量重建 / 增量: C 级浅拷贝, 未变化记录原样保留
+        added: List[str] = []
+        changes = list(removed)
+        view_changed = False
+        delta_fields: Dict[str, FrozenSet[str]] = {}
+        state_changed: List[Tuple[str, Any]] = []
+        member_to_key = self.member_to_key
+        for h, src in patches.items():
+            rec = prev.get(h)
             if rec is None:
-                rec = TorrentRecord.from_torrent(t)
-            elif bool(rec.update_from(t)):
-                view_changed = True
-            new_by_hash[h] = rec
-
-        if self._known_hashes is None:
-            added = list(new_by_hash)
-            removed: List[str] = []
+                rec = TorrentRecord.from_torrent(src, hash=h)
+                added.append(h)
+            else:
+                changed = rec.apply_delta(src)
+                if changed:
+                    delta_fields[h] = changed
+                    if not _VIEW_FIELD_SET.isdisjoint(changed):
+                        view_changed = True
+                    if "state" in changed:
+                        state_changed.append((h, rec.state_enum))
+                    if not self._CONFLICT_FIELDS.isdisjoint(changed):
+                        key = member_to_key.get(h)
+                        if key is not None:
+                            self.dirty_groups.add(key)
+            by_hash[h] = rec
+        if full:
+            # 全量: by_hash 由本轮响应重建, 旧快照中未出现者即已删除
+            changes.extend(h for h in prev if h not in patches)
         else:
-            added = [h for h in new_by_hash if h not in self._known_hashes]
-            removed = [h for h in self._known_hashes if h not in new_by_hash]
-
-        self.by_hash = new_by_hash
-        self._known_hashes = set(new_by_hash)
-        if view_changed or added or removed:
+            for h in changes:
+                by_hash.pop(h, None)
+        # 本程序自身发起的删除(remove_torrent): qB 增量响应不一定会再列出, 由待报集合补齐
+        changes.extend(h for h in pending if h not in by_hash)
+        pending.clear()
+        if changes:
+            changes = list(dict.fromkeys(changes))
+        # 被删除成员的原组需重算冲突(member_to_key 在下游取消归组前仍可定位)
+        for h in changes:
+            key = member_to_key.get(h)
+            if key is not None:
+                self.dirty_groups.add(key)
+        self.by_hash = by_hash
+        self.delta_fields = delta_fields
+        self.state_changed = state_changed
+        if view_changed or added or changes:
             self.view_changed = True
-        return added, removed
+        return added, changes
 
     def consume_view_changed(self) -> bool:
         """读取并复位"分组视图需重建"标记(主循环每 tick 消费一次)"""
@@ -383,9 +555,13 @@ class TorrentStore:
     def hashes(self) -> List[str]:
         return list(self.by_hash)
 
-    def update_state_snapshot(self, tors: List[TorrentDictionary]) -> None:
-        """本轮结束前更新状态快照(存 state_enum 枚举对象, 与 qB 版本无关)"""
-        self.state_snapshot = {t.hash: getattr(t, "state_enum", None) for t in tors}
+    def update_state_snapshot(self) -> None:
+        """本轮结束前更新状态快照(hash -> state_enum)
+
+        直接取本轮 by_hash 的状态(record.state_enum 有缓存, 与 qB 版本无关): 自有动作
+        经 QbApi 同步过的状态同样计入, 故下轮不会被误判为外部状态变化。
+        """
+        self.state_snapshot = {h: r.state_enum for h, r in self.by_hash.items()}
 
     # ---------- 分组查询接口 ----------
 
@@ -481,6 +657,11 @@ class TorrentStore:
             torrent = self.by_hash.get(h)
             if torrent is None:
                 continue
+            if state_changed or tags_changed:
+                # 自有停种/打标会改变组内冲突判定, 登记组级脏标记(下轮 qB 增量不会重报同样值)
+                key = self.member_to_key.get(h)
+                if key is not None:
+                    self.dirty_groups.add(key)
             if tags_add is not None:
                 current = set(torrent.tags_set)
                 current.update(tags_add)
@@ -515,173 +696,20 @@ class TorrentStore:
             if removed:
                 torrent.tags = ",".join(sorted(cur - removed))
                 torrent._tags_set = None
+                key = self.member_to_key.get(torrent.hash)
+                if key is not None:
+                    self.dirty_groups.add(key)
 
     def remove_torrent(self, hash: str) -> None:
-        """种子删除后立即从快照移除(保留 _known_hashes, 下轮 refresh 产生 removed 事件驱动任务/分组清理)"""
-        self.by_hash.pop(hash, None)
+        """种子删除后立即从快照移除, 并登记待报 removed(供下轮 added/removed 语义)"""
+        if self.by_hash.pop(hash, None) is not None:
+            self._pending_removed.add(hash)
 
     def restore_torrent(self, record: TorrentRecord) -> None:
         """跳检重加后恢复删除前记录(tracker_conf/惰性缓存保留); 幂等
 
-        remove_torrent 移除 by_hash 但保留 _known_hashes(为真实删除的 removed 事件),
-        导致重加的同 hash 种子不进下轮 added 列表 -> 永久未匹配(生产 BUG 2026-09-06)。
-        此方法把删除前记录放回快照: 下轮 refresh 走 update_from 更新快照字段,
-        tracker_conf 与惰性缓存(trackers_info/files)均保留。
+        remove_torrent 会登记待报 removed; 此处撤销登记 —— 否则重加的同 hash 种子下轮
+        被误判为"已删除"(多余的组内缺文件扫描与 on_torrent_deleted 事件)。
         """
         self.by_hash[record.hash] = record
-        if self._known_hashes is not None:
-            self._known_hashes.add(record.hash)
-
-
-# ---------- 增量同步层(qB /api/v2/sync/maindata, rid 语义) ----------
-
-# qB 不支持该端点(旧版本/测试替身缺方法)时的降级信号; 其它异常(网络等)照常上抛
-_SYNC_UNAVAILABLE = (AttributeError, NotFound404Error)
-
-
-class SyncTorrent(Mapping):
-    """qB 增量同步合并后的种子字段视图(鸭子类型兼容 TorrentDictionary)
-
-    与 TorrentRecord 的分工: TorrentRecord 是业务快照(含 tracker_conf/惰性缓存),
-    本类只是"qB 原始字段"的轻量视图, 供 store.refresh 读取。
-
-    - Mapping 协议: 支持 .get()/in/迭代, 使 TorrentRecord.update_from 走 dict 级
-      item 访问快路径(实机约快 13×), 不需要额外的 dict 拷贝
-    - 属性访问: __getattr__ 直接取字段, 缺失抛 AttributeError —— 对齐 AttrDict/
-      TorrentDictionary 语义, 故 store/规则/跳检等按属性读取的既有代码零改动
-    - state_enum: 由 state 字符串构造(TorrentState 为 str 枚举, 成员单例)
-    - 非 dict 子类: 版本兼容校验的样本选择(跳过测试注入的 plain dict)不受影响
-
-    _fields 为 TorrentSync 持有的**可变 baseline dict**, 增量轮就地更新。
-    """
-    __slots__ = ("_fields", )
-
-    def __init__(self, fields: Dict[str, Any]) -> None:
-        self._fields = fields
-
-    # ---------- Mapping 协议 ----------
-
-    def __getitem__(self, key: str) -> Any:
-        return self._fields[key]
-
-    def __iter__(self):
-        return iter(self._fields)
-
-    def __len__(self) -> int:
-        return len(self._fields)
-
-    # ---------- 属性访问(对齐 TorrentDictionary/AttrDict) ----------
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            fields = object.__getattribute__(self, "_fields")
-        except AttributeError:
-            raise AttributeError(name) from None
-        try:
-            return fields[name]
-        except KeyError:
-            raise AttributeError(name) from None
-
-    @property
-    def state_enum(self) -> Optional[TorrentState]:
-        """由 state 字符串构造的状态枚举(与 TorrentRecord.state_enum 同语义)"""
-        if TorrentState is None:
-            return None
-        try:
-            return TorrentState(self._fields.get("state", ""))
-        except ValueError:
-            return TorrentState.UNKNOWN
-
-    def merge(self, patch: Any, *, hash: str) -> None:
-        """把增量字段合并进本视图(baseline 合并后始终为全量字段)
-
-        patch 为 Mapping(qB 正式响应/测试 dict)时逐键合并; 为普通对象(测试替身
-        FakeTorrent 等)时按必需字段收集属性 —— 与 TorrentRecord.update_from 的
-        Mapping/对象双通道一致。hash 缺失时用响应键补上(主键不可缺)。
-        """
-        if isinstance(patch, Mapping):
-            self._fields.update(patch)
-        else:
-            for f in REQUIRED_TORRENT_FIELDS:
-                v = getattr(patch, f, None)
-                if v is not None:
-                    self._fields[f] = v
-        self._fields.setdefault("hash", hash)
-
-
-class TorrentSync:
-    """主循环 ↔ qB 增量同步层: 用 rid 只取变化部分, 替代每 tick 全量 torrents_info
-
-    qB 的 /sync/maindata 语义(见 src/webui/api/synccontroller.cpp):
-      - rid 与上次不一致 -> full_update=true, 响应含全部种子全量字段;
-      - rid 一致 -> 只含**变化种子**的**变化字段**, 未变化种子完全不出现在响应中;
-      - 删除的种子列在 torrents_removed(哈希列表)。
-    故本地 baseline 视图集合即"当前全量种子集", 与旧的全量拉取语义等价。
-
-    full_update 是自愈信号: rid 失效(漏 tick/服务端重启/rid 循环错位)时 qB 自动回全量,
-    本地视图整体重建。端点不可用(旧版 qB / 测试替身)时降级为全量 torrents_info。
-    """
-    def __init__(self) -> None:
-        self.rid: int = 0
-        self.need_validate: bool = True  # 本轮为全量(需做版本兼容字段校验)
-        self.using_fallback: bool = False  # 已降级全量(告警去重)
-        self.validate_sample: Optional[Any] = None  # 全量轮的校验样本(空 qB -> None)
-        self._views: Dict[str, SyncTorrent] = {}
-
-    def reset(self) -> None:
-        """重置 rid 与本地视图(重连/热重载后旧 rid 失效, 下轮强制全量重建)"""
-        self.rid = 0
-        self.need_validate = True
-        self.using_fallback = False
-        self.validate_sample = None
-        self._views = {}
-
-    def fetch(self, api: "QbApi") -> List[SyncTorrent]:
-        """拉取一轮种子视图: 增量合并(首次/失效时全量重建), 返回全部种子视图列表"""
-        try:
-            md = api.sync_maindata(rid=self.rid)
-        except _SYNC_UNAVAILABLE as e:
-            if not self.using_fallback:
-                logger.warning(f"qB 不支持 sync/maindata, 降级为全量 torrents_info: {e}")
-                self.using_fallback = True
-            return self._rebuild(api.torrents_info())
-        except Exception:
-            self.rid = 0  # 未知异常: 下轮强制全量, 异常照常上抛(由调用方兜底处理)
-            raise
-        self.using_fallback = False
-        self.rid = int(md.get("rid", 0) or 0)
-        self.need_validate = bool(md.get("full_update"))
-        if self.need_validate:
-            self._views = {}  # 全量轮: 丢弃旧基线, 由本轮响应重建
-        for h, patch in (md.get("torrents") or {}).items():
-            view = self._views.get(h)
-            if view is None:
-                view = SyncTorrent({})
-                self._views[h] = view
-            view.merge(patch, hash=h)
-        for h in md.get("torrents_removed") or []:
-            self._views.pop(h, None)
-        # 校验样本: 仅全量轮提供(sync 路径样本恒为合并视图 —— 全量响应含全部必需字段;
-        # 增量轮只含变化字段, 不能作样本, 置 None)
-        self.validate_sample = next(iter(self._views.values()), None) if self.need_validate else None
-        return list(self._views.values())
-
-    def _rebuild(self, tors: List[Any]) -> List[SyncTorrent]:
-        """用全量种子列表重建视图(降级路径: 旧版 qB / 测试替身无 sync 端点)
-
-        校验样本仍按旧语义取首个非 dict 对象(真实 API 恒为 TorrentDictionary;
-        测试注入的 plain dict 不作样本), 避免测试夹具触发误报。
-        """
-        views: Dict[str, SyncTorrent] = {}
-        for t in tors:
-            h = t.get("hash") if isinstance(t, Mapping) else getattr(t, "hash", None)
-            if not h:
-                continue
-            view = SyncTorrent({})
-            view.merge(t, hash=h)
-            views[h] = view
-        self.rid = 0
-        self.need_validate = True
-        self.validate_sample = next((t for t in tors if not isinstance(t, dict)), None)
-        self._views = views
-        return list(views.values())
+        self._pending_removed.discard(record.hash)

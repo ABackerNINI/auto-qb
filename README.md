@@ -540,7 +540,7 @@ config:
 - **单任务队列**：所有功能都是带内置 interval 的任务，统一进时间优先堆（含校验结果轮询）。
 - **插件框架**：条件 / 动作通过 `@register_condition` / `@register_action` 装饰器注册、按名称实例化，易于扩展
 - **mixin 组合**：`QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin)`，职责清晰
-- **数据层**：`TorrentSync` 走 qB `/api/v2/sync/maindata` 的 rid 增量同步（只取变化种子的变化字段）→ `TorrentStore` 合并入快照 + 惰性缓存；`QbApi` Facade 封装客户端调用并在写操作后同步快照
+- **数据层**：`TorrentStore.apply_sync` 走 qB `/api/v2/sync/maindata` 的 rid 增量同步（只对变化的种子调 `apply_delta`，未变化种子零开销）；本地 qB 连接额外关闭 requests 的环境代理/netrc 解析
 
 ```
 src/auto_qb/
@@ -554,7 +554,7 @@ src/auto_qb/
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
 ├── qbapi.py           # qB API Facade: 封装客户端调用 + 写后同步 store 快照
 ├── taskqueue.py       # 单任务队列: 时间优先堆，所有任务统一调度
-├── torrents.py        # 种子数据层: rid 增量同步(sync/maindata 合并)+快照+惰性缓存+分组索引
+├── torrents.py        # 种子数据层: rid 增量同步(apply_sync/apply_delta)+快照+惰性缓存+分组索引
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)
 ├── mixins/            # QbManager 组合 mixins
 │   ├── checking.py    # 文件存在与大小检查(checking 动作前置)

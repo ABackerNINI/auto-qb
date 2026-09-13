@@ -31,7 +31,6 @@ from .torrents import (
     QbCompatError,
     TorrentRecord,
     TorrentStore,
-    TorrentSync,
     missing_torrent_fields,
     view_field_value,
 )
@@ -42,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
 SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
+# 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
+_LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1", "[::1]"))
 
 
 class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
@@ -49,11 +50,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.config_path = config_path
         self.config = config or load_config(config_path)
         self._setup_logging()
-        # 种子信息数据层: 增量同步快照 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
+        # 种子信息数据层: 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
         # 每 main_tick 只拉变化部分(sync/maindata)后, 本 tick 内所有读取操作都只通过 self.store 接口访问
         self.store = TorrentStore()
-        # 与 qB 的增量同步层(rid 语义): 本地基线视图 + 字段合并, 见 torrents.TorrentSync
-        self._sync = TorrentSync()
         self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
         # qB API Facade: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
         self.api = QbApi(self._client, self.store)
@@ -118,7 +117,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.store.client = value
         self.api.bind(value, self.store)
         # 重连/换客户端 -> 旧 rid 失效: 重置同步基线, 下轮强制全量重建
-        self._sync.reset()
+        self.store.reset_sync()
 
     def _setup_logging(self):
         logging_conf = self.config.logging
@@ -133,6 +132,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 username=qb.username,
                 password=qb.password,
             )
+            self._disable_env_lookup_for_local(self.client)
             self.api.auth_log_in()
             # 连接恢复(此前断开)或首次连接: 记录一次"已连接"状态
             if self._last_conn_ok is False:
@@ -149,6 +149,23 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             logger.error(f"连接 qBittorrent 失败: {e}")
             self._last_conn_ok = False
             return False
+
+    def _disable_env_lookup_for_local(self, client: Client) -> None:
+        """本地 qB 连接: 关闭 requests Session 的 trust_env(跳过每请求的环境解析)
+
+        背景: requests 每次请求都会调用 get_environ_proxies / get_netrc_auth 解析环境代理
+        与 ~/.netrc(实测占单次请求固定开销的相当一部分), 对 127.0.0.1/localhost 连接毫无
+        意义。仅对本地地址关闭 —— 远程/域名连接保留原行为(可能有企业代理/netrc 需求)。
+
+        库内部属性名变化时静默跳过(仅影响性能); Session 被库内部重置(重试/重连)后该设置
+        会回到默认, 但每次 connect() 都会重新应用。
+        """
+        if self.config.qbittorrent.host not in _LOCAL_HOSTS:
+            return
+        try:
+            client._session.trust_env = False
+        except Exception as e:  # pragma: no cover - 库内部结构变化时的兜底
+            logger.debug(f"关闭 requests trust_env 失败(仅影响性能): {e}")
 
     def run(self, dry_run: bool = False, stop_event=None, pause_event=None):
         """主循环(任务队列驱动): 固定 main_tick 秒执行一次
@@ -621,8 +638,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
     def _validate_torrent_schema(self, sample) -> None:
         """版本兼容 fail-fast: 首次拿到全量种子信息时校验必需字段(qB 版本漂移早暴露)。
 
-        样本由 TorrentSync 在全量轮提供(need_validate 为真): sync 路径为合并视图
-        (全量响应含全部必需字段), 降级路径为首个非 dict 真实种子对象(测试注入的
+        样本由 TorrentStore 在全量轮提供(`need_validate` 为真): sync 路径为 qB 原始字段
+        映射(全量响应含全部必需字段), 降级路径为首个非 dict 真实种子对象(测试注入的
         plain dict 不作样本)。仅在真正有样本时校验; 增量轮的响应只含变化字段,
         校验会误报 —— 由调用方按 need_validate 闸门。
         通过后置 _schema_validated 不再重复校验(qB 版本运行期不变);
@@ -637,17 +654,19 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._schema_validated = True
 
     def _refresh_torrents(self, dry_run: bool = False):
-        """种子列表刷新: 增量同步 -> store.refresh 增删检测 -> 新种子创建内置+规则任务并归组,
+        """种子列表刷新: 增量同步 -> 增删检测 -> 新种子创建内置+规则任务并归组,
         删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
-        更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。"""
+        更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。
+
+        增量同步(/sync/maindata)只取自上轮 rid 起的变化(未变化种子不出现在响应中),
+        故 store 只更新变化的记录; 本轮变化集(state_changed/path_changed)供分组与
+        事件分派把 O(N) 全量扫描降为 O(变化数)。
+        """
         self._missing_scanned_keys.clear()  # 缺文件扫描去重按轮重置
-        # 增量同步(/sync/maindata): 只取自上次 rid 起的变化, 未变化种子不出现在响应中;
-        # 本地基线(TorrentSync._views)合并后即"当前全量种子集", 与旧全量拉取语义等价
-        tors = self._sync.fetch(self.api)
-        if self._sync.need_validate:
-            self._validate_torrent_schema(self._sync.validate_sample)
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
-        added, removed = self.store.refresh(tors)
+        added, removed = self.store.apply_sync(self.api)
+        if self.store.need_validate:
+            self._validate_torrent_schema(self.store.validate_sample)
         # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:
@@ -665,7 +684,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发);
         # 热重载后首轮抑制(全量重建的 added 重放保护), 一轮后恢复
         if not self._suppress_events:
-            self._dispatch_events([], removed, dry_run, removed_snapshots=removed_snapshots, tors=tors)
+            self._dispatch_events([], removed, dry_run, removed_snapshots=removed_snapshots, state_changed=True)
 
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
@@ -688,7 +707,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 matched_added.append(h)
             # 事件分派(on_torrent_added): 新增种子已匹配 tracker 配置, 同步触发事件规则
             if not self._suppress_events:
-                self._dispatch_events(matched_added, [], dry_run, removed_snapshots=None, tors=None)
+                self._dispatch_events(matched_added, [], dry_run, removed_snapshots=None)
             # 自有动作: 内置任务/限速/创建任务/归组/集数标签
             for h in matched_added:
                 torrent = self.store.get(h)
@@ -719,9 +738,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             # 下载冲突检查(每轮): 同组多个同时下载/已完成与下载中并存 -> 警告+整组暂停
             self._check_download_conflicts(dry_run)
 
-        # 更新状态快照(仅本轮可见种子; 存 state_enum 枚举对象, 与 qB 版本无关; 新增种子本轮不视为状态变化)
+        # 更新状态快照(本轮 by_hash 的状态; 新增种子本轮不视为状态变化)
         # 事件分派(on_torrent_state_enum_changed)依赖此上一轮快照对比, 故不局限于 grouping 启用时
-        self.store.update_state_snapshot(tors)
+        self.store.update_state_snapshot()
 
         # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
         self.begin_round(list(self.store.by_hash.values()))

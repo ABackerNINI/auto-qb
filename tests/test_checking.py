@@ -177,9 +177,7 @@ def process_rule(mgr, client, tor, dry_run=False):
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
         for h in hashes:
             if h in prev and store.by_hash.get(h) is not prev[h]:
-                store.by_hash[h] = prev[h]  # 重加后同 tick 快照恢复(对象身份直写)
-                if store._known_hashes is not None:
-                    store._known_hashes.add(h)
+                store.restore_torrent(prev[h])  # 重加后同 tick 快照恢复(并撤销待报删除)
 
     mgr.api.torrents_delete = wrapped_delete
     try:

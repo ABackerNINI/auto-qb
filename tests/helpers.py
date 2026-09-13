@@ -5,6 +5,7 @@
 import os
 import tempfile
 import time
+from collections.abc import Mapping
 from types import SimpleNamespace
 
 from auto_qb.config import (
@@ -18,7 +19,7 @@ from auto_qb.config import (
 )  # noqa: E402
 from auto_qb.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
-from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, _VIEW_FIELDS, view_field_value  # noqa: E402
+from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, _VIEW_FIELDS, _VIEW_QUANTUM, view_field_value  # noqa: E402
 
 try:
     from qbittorrentapi import TorrentState  # noqa: E402
@@ -48,15 +49,16 @@ class _FakeTorrents(dict):
 
 
 def _torrent_fields(tor) -> dict:
-    """把种子对象/映射归一为 qB JSON 风格字段 dict(仅含实际存在的必需字段)
+    """把种子对象/映射归一为 qB sync 响应中 `torrents[hash]` 的**值**字段
 
-    对齐真实响应: qB 字段恒存在(值可为 None/0); 测试夹具可能只给部分字段
-    (如 SimpleNamespace(hash, name, state)), 此时缺失字段不入 dict —— 与
-    torrents/info 的 JSON 语义一致, 也让版本兼容校验能照常报缺失。
+    对齐真机: qB sync 响应的 hash 是 `torrents` 字典的**键**, 值内**不含** hash(与
+    `torrents/info` 数组元素不同)。测试若在值里塞 hash, 会掩盖"校验样本需补 hash"这类
+    真机 bug(2026-09-13 实际踩过)。缺失字段不入 dict —— 与 JSON 语义一致, 也让版本
+    兼容校验能照常报缺失。
     """
     if isinstance(tor, dict):
-        return {f: tor.get(f) for f in REQUIRED_TORRENT_FIELDS if f in tor}
-    return {f: getattr(tor, f) for f in REQUIRED_TORRENT_FIELDS if hasattr(tor, f)}
+        return {f: tor.get(f) for f in REQUIRED_TORRENT_FIELDS if f in tor and f != "hash"}
+    return {f: getattr(tor, f) for f in REQUIRED_TORRENT_FIELDS if hasattr(tor, f) and f != "hash"}
 
 
 class FakeClient:
@@ -364,24 +366,33 @@ class FakeTorrent:
         "up_limit",
     )
 
-    def update_from(self, tor):
-        """用最新种子对象更新快照字段(惰性缓存保留, 文本派生缓存失效); 与 TorrentRecord.update_from 同语义
+    def apply_delta(self, patch):
+        """用 patch 更新快照字段, 返回变化字段名集合; 与 TorrentRecord.apply_delta 同语义
 
-        返回是否有视图相关字段(_VIEW_FIELDS, 按 _VIEW_QUANTUM 量化后比较)变化。
+        Mapping 源(qB sync 响应/测试 dict)只遍历其键; 普通对象源按 REQUIRED_TORRENT_FIELDS
+        收集属性。FakeTorrent 无 `_raw`(非快照字段本就是真实属性), 故仅处理快照字段。
         """
-        self.tor = tor
-        changed = False
-        for f in self._SNAPSHOT_FIELDS:
-            v = getattr(tor, f, None)
-            if v is not None:
-                if f in _VIEW_FIELDS and view_field_value(f, getattr(self, f, None)) != view_field_value(f, v):
-                    changed = True
-                setattr(self, f, v)
+        changed = set()
+        if isinstance(patch, Mapping):
+            items = patch.items()
+        else:
+            items = ((f, getattr(patch, f, None)) for f in REQUIRED_TORRENT_FIELDS)
+        for f, v in items:
+            if v is None or f not in self._SNAPSHOT_FIELDS:
+                continue
+            cur = getattr(self, f, None)
+            if cur == v:
+                continue
+            setattr(self, f, v)
+            if f not in _VIEW_FIELDS:
+                changed.add(f)
+            elif f not in _VIEW_QUANTUM or view_field_value(f, cur) != view_field_value(f, v):
+                changed.add(f)
         self._tags_set = None
         self._state_enum = None
         self._trackers_info = None
         self._files = None
-        return changed
+        return frozenset(changed)
 
     def trackers_info(self, client):
         if self._trackers_info is None:
@@ -546,23 +557,21 @@ def make_ctx(mgr, tor, client, dry_run=False):
     existing = mgr.store.by_hash.get(tor.hash)
     if existing is not tor:
         if existing is not None and not isinstance(existing, FakeTorrent):
-            existing.update_from(tor)  # 真 TorrentRecord: 原地更新快照
+            existing.apply_delta(tor)  # 真 TorrentRecord: 应用字段变化
         mgr.store.by_hash[tor.hash] = tor  # 对象身份直写(供改 tor 属性后实时可见)
-        if mgr.store._known_hashes is not None:
-            mgr.store._known_hashes.add(tor.hash)
     return RuleContext(mgr, client, mgr.config, tor.hash, dry_run=dry_run)
 
 
 def seed_store(mgr, torrents=None):
     """将种子灌入 mgr.store(对象身份直写: 记录即传入对象, 后续修改实时可见)
 
-    语义与 store.refresh 一致(首轮全部视为新增, 后续 diff), 但保留对象身份而非复制字段;
-    返回值 (added, removed)。
+    与 store.refresh 语义一致(首轮全部视为新增, 后续 diff), 但保留对象身份而非复制字段;
+    返回 (added, removed)。
     """
     if torrents is None:
         torrents = list(mgr.client.torrents.values())
     store = mgr.store
-    old_known = store._known_hashes
+    old_hashes = set(store.by_hash)
     new_by_hash: dict = {}
     for tor in torrents:
         if tor is None or isinstance(tor, dict):
@@ -571,11 +580,7 @@ def seed_store(mgr, torrents=None):
         if not h:
             continue
         new_by_hash[h] = tor
-    if old_known is None:
-        added, removed = list(new_by_hash), []
-    else:
-        added = [h for h in new_by_hash if h not in old_known]
-        removed = [h for h in old_known if h not in new_by_hash]
+    added = [h for h in new_by_hash if h not in old_hashes]
+    removed = [h for h in old_hashes if h not in new_by_hash]
     store.by_hash = new_by_hash
-    store._known_hashes = set(new_by_hash)
     return added, removed

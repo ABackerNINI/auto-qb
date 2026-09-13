@@ -2,8 +2,8 @@
 
 ## 测试计划(每个测试函数一条)
 - test_record_from_torrent: TorrentRecord.from_torrent 逐字段复制(TorrentDictionary 兼容)
-- test_record_update_from: update_from in-place 更新快照字段
-- test_record_update_keeps_lazy_cache: update_from 保留惰性缓存(文件列表不重复拉取)
+- test_record_update_from: apply_delta 更新快照字段(hash 不变)
+- test_record_update_keeps_lazy_cache: apply_delta 保留惰性缓存(文件列表不重复拉取)
 - test_record_state_enum: state_enum 解析与 UNKNOWN 降级
 - test_record_state_enum_flags: state_enum 语义判定(暂停/上传/下载)
 - test_record_tags_set: tags 字符串 -> 预计算集合(逗号分隔去空白)
@@ -18,7 +18,7 @@
 - test_store_queries: get/__contains__/all/hashes/__len__
 - test_store_trackers_lazy: 记录级 trackers_info/tracker_urls 惰性拉取+缓存
 - test_store_files_lazy: 记录级 files 惰性拉取+缓存
-- test_store_state_snapshot: update_state_snapshot 存 state_enum
+- test_store_state_snapshot: update_state_snapshot 由 by_hash 派生 state_enum
 - test_store_group_members: group_members/group_key(未归组 -> [自身]/None)
 - test_store_all_tags: all_tags 惰性缓存 + invalidate_tags 失效
 - test_store_all_categories: all_categories 惰性缓存 + invalidate_categories 失效
@@ -60,11 +60,12 @@ def test_record_from_torrent():
 
 def test_record_update_from():
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", name="Old", state="stalledUP"))
-    rec.update_from(FakeTorrent(hash="H1", name="New", state="pausedUP", category="HR-DONE"))
+    changed = rec.apply_delta(FakeTorrent(hash="H1", name="New", state="pausedUP", category="HR-DONE"))
     assert rec.name == "New"
     assert rec.state == "pausedUP"
     assert rec.category == "HR-DONE"
     assert rec.hash == "H1"  # hash 是主键, 不更新
+    assert {"name", "state", "category"} <= changed
 
 
 def test_record_update_keeps_lazy_cache():
@@ -72,7 +73,7 @@ def test_record_update_keeps_lazy_cache():
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1"))
     _ = rec.files(client)
     calls = client.files_calls
-    rec.update_from(FakeTorrent(hash="H1", name="Updated"))
+    rec.apply_delta(FakeTorrent(hash="H1", name="Updated"))
     assert rec.files(client) == client.files
     assert client.files_calls == calls  # 缓存保留, 不重复拉取
 
@@ -146,16 +147,18 @@ def test_record_check_hr_on_real_record():
 
 
 def test_store_restore_torrent():
-    """restore_torrent: 记录放回 by_hash(对象身份保留) + _known_hashes 补录; 幂等"""
+    """restore_torrent: 记录放回 by_hash(对象身份保留) + 撤销待报删除; 幂等"""
     store = TorrentStore()
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1"))
-    store.remove_torrent("H1")  # 模拟跳检删除: by_hash 移除, _known_hashes 含 H1
-    store._known_hashes = {"H1"}
+    store.by_hash["H1"] = rec
+    store.remove_torrent("H1")  # 模拟跳检删除: by_hash 移除, 待报删除登记
+    assert store._pending_removed == {"H1"}
     store.restore_torrent(rec)
     assert store.get("H1") is rec, "记录对象身份应保留(tracker_conf/惰性缓存不丢)"
-    assert "H1" in store._known_hashes
+    assert store._pending_removed == set(), "重加后不应再被误报为已删除"
     store.restore_torrent(rec)  # 幂等: 重复调用无副作用
     assert store.get("H1") is rec
+    assert store._pending_removed == set()
 
 
 def test_store_refresh_diff():
@@ -239,10 +242,9 @@ def test_store_files_lazy():
 
 def test_store_state_snapshot():
     store = TorrentStore()
-    t1 = FakeTorrent(hash="H1", state="stalledUP")
-    t2 = FakeTorrent(hash="H2", state="pausedUP")
-    store.update_state_snapshot([t1, t2])
-    assert store.state_snapshot["H1"] is t1.state_enum
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP"), FakeTorrent(hash="H2", state="pausedUP")])
+    store.update_state_snapshot()
+    assert store.state_snapshot["H1"].is_uploading
     assert store.state_snapshot["H2"] == "pausedUP"  # TorrentState 是 str 子类枚举
 
 
@@ -501,12 +503,14 @@ def test_store_reset_runtime_marks_view_changed():
 
 
 def test_record_update_from_returns_changed():
-    """TorrentRecord.update_from 返回视图字段变化标记"""
+    """TorrentRecord.apply_delta 返回变化字段名集合(空集 = 无变化)"""
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP", upspeed=0))
-    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", upspeed=0)) is False
-    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", upspeed=7)) is True
-    # 非视图字段变化: 不报告(downloaded 不在 _VIEW_FIELDS)
-    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", upspeed=7, downloaded=999)) is False
+    assert rec.apply_delta(FakeTorrent(hash="H1", state="stalledUP", upspeed=0)) == frozenset()
+    assert rec.apply_delta(FakeTorrent(hash="H1", state="stalledUP", upspeed=7)) == {"upspeed"}
+    # 非视图字段变化: 同样计入变化集(downloaded 不在 _VIEW_FIELDS, 但仍是真变化)
+    # 注: FakeTorrent 的 amount_left 由 total_size-downloaded 推导, 改 downloaded 会同时带动它
+    assert rec.apply_delta(FakeTorrent(hash="H1", state="stalledUP", upspeed=7,
+                                       downloaded=999)) == {"downloaded", "amount_left"}
 
 
 def test_view_field_value_quantizes_seeding_time():
@@ -539,13 +543,13 @@ def test_store_seeding_time_quantized_no_repaint():
 
 
 def test_record_seeding_time_quantized_update_from():
-    """update_from 的分钟量化在两种通道(Mapping dict / 普通对象)下一致"""
+    """apply_delta 的分钟量化在两种通道(Mapping dict / 普通对象)下一致"""
     # 对象通道(测试替身)
     rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP", seeding_time=600))
-    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", seeding_time=659)) is False
-    assert rec.update_from(FakeTorrent(hash="H1", state="stalledUP", seeding_time=660)) is True
-    # Mapping 通道(真机 TorrentDictionary 走这条快路径)
+    assert rec.apply_delta(FakeTorrent(hash="H1", state="stalledUP", seeding_time=659)) == frozenset()
+    assert rec.apply_delta(FakeTorrent(hash="H1", state="stalledUP", seeding_time=660)) == {"seeding_time"}
+    # Mapping 通道(真机 TorrentDictionary / sync 响应走这条快路径)
     rec2 = TorrentRecord(hash="H2")
-    assert rec2.update_from({"hash": "H2", "state": "stalledUP", "seeding_time": 600}) is True  # 首次设置
-    assert rec2.update_from({"hash": "H2", "state": "stalledUP", "seeding_time": 640}) is False
-    assert rec2.update_from({"hash": "H2", "state": "stalledUP", "seeding_time": 660}) is True
+    assert rec2.apply_delta({"hash": "H2", "state": "stalledUP", "seeding_time": 600}) == {"state", "seeding_time"}
+    assert rec2.apply_delta({"hash": "H2", "state": "stalledUP", "seeding_time": 640}) == frozenset()
+    assert rec2.apply_delta({"hash": "H2", "state": "stalledUP", "seeding_time": 660}) == {"seeding_time"}

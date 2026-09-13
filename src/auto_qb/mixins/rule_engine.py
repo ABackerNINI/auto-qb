@@ -157,7 +157,9 @@ class RuleEngineMixin:
         """按触发时机过滤启用的规则(事件分派按 trigger 分流)"""
         return [r for r in self.enabled_rules if r.trigger == trigger]
 
-    def _dispatch_events(self, added: list, removed: list, dry_run: bool, removed_snapshots=None, tors=None) -> list:
+    def _dispatch_events(
+        self, added: list, removed: list, dry_run: bool, removed_snapshots=None, state_changed: bool = False
+    ) -> list:
         """事件分派总入口: 同步执行各事件规则(即时, 不排队).
 
         各事件规则按种子的 tracker 引用(rules: @规则集)绑定, 与 interval 规则同语义 ——
@@ -167,8 +169,10 @@ class RuleEngineMixin:
           added 循环同语义)后触发; 未匹配的种子由主循环 added 循环负责告警。
         - on_torrent_deleted: 种子已从 store 移除, 用删除前快照副本作 ctx.torrent,
           只读动作(print_torrent_details)仍可打印留档。
-        - on_torrent_state_enum_changed: 对比上一轮 state_snapshot 与当前状态枚举, 变化的
-          种子触发(新增种子无上一轮记录, 不视为状态变化)。
+        - on_torrent_state_enum_changed: 用 store.state_changed(增量应用时按 **fetch 时状态**
+          收集的 (hash, 新枚举))对比上一轮 state_snapshot, 变化的种子触发(新增种子无上一轮
+          记录, 不视为状态变化)。state_changed 为 False 时完全跳过 —— 故本方法可在同轮
+          多处调用而只有一次负责状态变化分派。
 
         规则执行经 _apply_event_rule 建 rule-event 一次性 Task 作 ctx.task: 遇 checking 返回
         pending 时, 该 Task 作 origin 由轮询子任务 add_task(origin, keep_progress=True) 重新
@@ -188,18 +192,18 @@ class RuleEngineMixin:
                     self._apply_event_rule(rule, h, dry_run=dry_run, snapshot=snap)
                     triggered.append(h)
 
-        # on_torrent_state_enum_changed: 上一轮快照对比当前状态枚举
-        if self._rules_by_trigger("on_torrent_state_enum_changed") and tors is not None:
+        # on_torrent_state_enum_changed: 本轮 state 字段变化的种子(增量应用时收集, O(变化数))
+        if state_changed and self._rules_by_trigger("on_torrent_state_enum_changed"):
             prev = self.store.state_snapshot
-            for t in tors:
-                h = t.hash
-                if h in prev and prev[h] != t.state_enum:
-                    tor = self.store.get(h)
-                    if tor is None or tor.tracker_conf is None:
-                        continue
-                    for rule in self._torrent_event_rules(tor, "on_torrent_state_enum_changed"):
-                        self._apply_event_rule(rule, h, dry_run=dry_run)
-                        triggered.append(h)
+            for h, cur in self.store.state_changed:
+                if h not in prev or prev[h] == cur:
+                    continue
+                tor = self.store.get(h)
+                if tor is None or tor.tracker_conf is None:
+                    continue
+                for rule in self._torrent_event_rules(tor, "on_torrent_state_enum_changed"):
+                    self._apply_event_rule(rule, h, dry_run=dry_run)
+                    triggered.append(h)
 
         # on_torrent_added: 匹配 tracker 配置并触发(命中者由主循环做后续自有动作)
         if self._rules_by_trigger("on_torrent_added") and added:

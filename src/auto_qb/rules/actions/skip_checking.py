@@ -10,8 +10,6 @@ import time
 from datetime import date
 from typing import Optional
 
-from qbittorrentapi import TorrentDictionary
-
 from ... import utils
 from ...torrents import TorrentRecord
 from ..base import ActionResult, RuleContext
@@ -70,10 +68,9 @@ class SkipCheckingMixin:
         if not data:
             return ActionResult.fail("导出 .torrent 为空")
 
-        # 重加所需的 6 属性存在性已由启动期 schema 校验保证(refresh 首次拉取时验证
-        # REQUIRED_TORRENT_FIELDS, 含 RE_ADD_FIELDS); 直接引用原始 TorrentDictionary
-        # (删除不会改变 Python 对象内容)
-        tor = torrent.tor
+        # 重加所需的 6 属性(RE_ADD_FIELDS)存在性已由启动期 schema 校验保证(refresh 首次
+        # 拉取时验证 REQUIRED_TORRENT_FIELDS); 记录对象删除后仍持有这些字段(_raw),
+        # 故直接读 torrent 属性即可(无需中间投影对象)
 
         # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);
         # 删除后 store 记录已移除, 必须在此之前完成
@@ -83,7 +80,7 @@ class SkipCheckingMixin:
         failed = self._skip_delete(ctx, torrent)
         if failed is not None:
             return failed
-        failed = self._skip_readd(ctx, torrent, data, tor, content_layout)
+        failed = self._skip_readd(ctx, torrent, data, content_layout)
         if failed is not None:
             return failed
 
@@ -148,16 +145,14 @@ class SkipCheckingMixin:
             return ActionResult.fail("删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)")
         return None
 
-    def _skip_readd(
-        self, ctx: RuleContext, torrent: TorrentRecord, data: bytes, tor: TorrentDictionary,
-        content_layout: Optional[str]
-    ) -> Optional[ActionResult]:
+    def _skip_readd(self, ctx: RuleContext, torrent: TorrentRecord, data: bytes,
+                    content_layout: Optional[str]) -> Optional[ActionResult]:
         """跳检步骤: 以跳过校验方式重加(先暂停), 轮询确认出现, 恢复删除前快照记录。
 
         属性直传不用 `or None` —— ratio/seeding limit 的 0/负值是有语义的(不限速/跟随
         全局), 吞掉会使重加后行为漂移到 qB 新种缺省。重加成功后 store.restore_torrent
-        恢复删除前记录(保留 tracker_conf/惰性缓存): remove_torrent 保留 _known_hashes,
-        重加的同 hash 种子不进下轮 added 列表, 不恢复则永久未匹配(生产 BUG 2026-09-06)。
+        恢复删除前记录(保留 tracker_conf/惰性缓存): remove_torrent 会登记待报 removed,
+        不恢复则重加的同 hash 种子下轮被误判为已删除(生产 BUG 2026-09-06)。
 
         返回 None = 成功; ActionResult = 失败(种子已从客户端移除, 已备份提示手动恢复)。
         """
@@ -169,13 +164,13 @@ class SkipCheckingMixin:
                 tags=torrent.tags or None,
                 upload_limit=torrent.up_limit,
                 download_limit=torrent.dl_limit,
-                is_sequential_download=tor.seq_dl,
-                is_first_last_piece_priority=tor.f_l_piece_prio,
+                is_sequential_download=torrent.seq_dl,
+                is_first_last_piece_priority=torrent.f_l_piece_prio,
                 contentLayout=content_layout,
-                ratio_limit=tor.ratio_limit,
-                seeding_time_limit=tor.seeding_time_limit,
-                inactive_seeding_time_limit=tor.inactive_seeding_time_limit,
-                share_limit_action=tor.share_limit_action,
+                ratio_limit=torrent.ratio_limit,
+                seeding_time_limit=torrent.seeding_time_limit,
+                inactive_seeding_time_limit=torrent.inactive_seeding_time_limit,
+                share_limit_action=torrent.share_limit_action,
                 is_skip_checking=True,
                 is_stopped=True,
             )

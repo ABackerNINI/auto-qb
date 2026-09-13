@@ -323,9 +323,7 @@ def _skip_ctx(state_file, **client_patches):
 
     def wrapped_delete(torrent_hashes=None, delete_files=False, **kw):
         orig_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kw)
-        mgr.store.by_hash[ctx.hash] = tor
-        if mgr.store._known_hashes is not None:
-            mgr.store._known_hashes.add(ctx.hash)
+        mgr.store.restore_torrent(tor)  # 重加后同 tick 快照恢复(并撤销待报删除)
 
     mgr.api.torrents_delete = wrapped_delete
     return ctx, client

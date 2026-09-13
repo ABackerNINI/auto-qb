@@ -71,7 +71,12 @@ class GroupingMixin:
         已删种子由删除事件(_handle_removed_torrents)处理, 这里不重复清理。
         """
         triggered = set()
-        for h, torrent in self.store.by_hash.items():
+        for h, fields in self.store.delta_fields.items():
+            if "save_path" not in fields:
+                continue  # 仅保存路径变化的种子可能需重归组(增量)
+            torrent = self.store.by_hash.get(h)
+            if torrent is None:
+                continue
             key = self.store.member_to_key.get(h)
             if key is None or utils.path_normalize(torrent.save_path) == key[0]:
                 continue
@@ -111,18 +116,19 @@ class GroupingMixin:
         if not self.config.grouping.check_missing_files:
             return  # 配置禁用缺文件检查
 
-        # 缺文件检查
+        # 缺文件检查: 只有本轮 state 字段变化的种子才可能命中(增量应用时收集)
         triggered = set()
-        for h, torrent in self.store.by_hash.items():
-            prev = self.store.state_snapshot.get(h)  # 上一轮 state_enum 枚举
+        state_snapshot = self.store.state_snapshot
+        member_to_key = self.store.member_to_key
+        for h, cur in self.store.state_changed:
+            prev = state_snapshot.get(h)  # 上一轮 state_enum 枚举
             if prev is None:
                 continue  # 首轮无上一轮快照, 不视为状态变化(与上传转暂停路径一致)
-            cur = torrent.state_enum
             if not (
                 (cur.is_complete and cur.is_stopped and prev.is_uploading) or (cur.is_errored and not prev.is_errored)
             ):
                 continue
-            key = self.store.member_to_key.get(h)
+            key = member_to_key.get(h)
             if key is not None:
                 triggered.add(key)
         for key in triggered:
@@ -146,6 +152,7 @@ class GroupingMixin:
         self.store.groups.setdefault(key, []).append(torrent.hash)
         self.store.group_sizes.setdefault(key, {})[torrent.hash] = file_map
         self.store.member_to_key[torrent.hash] = key
+        self.store.dirty_groups.add(key)  # 成员变化 -> 该组冲突集合需重算
         # 文件大小一致性: 仅新增/重归组时检查(文件列表轻易不变, 无需每轮检查)
         self._check_size_consistency(key, dry_run)
 
@@ -171,6 +178,7 @@ class GroupingMixin:
         key = self.store.member_to_key.pop(hash, None)
         if key is None:
             return None
+        self.store.dirty_groups.add(key)  # 成员变化 -> 该组冲突集合需重算(含组已被解散的情形)
         members = self.store.groups.get(key, [])
         if hash in members:
             members.remove(hash)
@@ -265,35 +273,55 @@ class GroupingMixin:
         用户恢复/重加种子重新下载是合法补救, 不应被 mixed 冲突拦停(健康完成成员不受影响,
         仍正常触发); multi-dl(两个同时下载写同一物理文件)与缺文件无关, 继续拦截。
         去重: store.download_conflict_warned 记录 (组key, 冲突类型), 冲突持续不重复暂停
-        (暂停幂等), 冲突消除后清除; 触发: _refresh_torrents 每轮调用(分组 enabled 时),
-        状态快照在调用前已更新。
+        (暂停幂等), 冲突消除后清除。
+
+        **增量**: 轮次基线已建立(store.rounds_applied > 0)时只重算 `store.dirty_groups` 中的组
+        (判定依据字段 state/amount_left/tags 变化、成员增删、归组变化、自有停种/打标时登记),
+        其余组的冲突集合与上轮一致 —— 静止种子库零成本; 去重记录的清理同样只针对被重算的组。
+        基线未建立(直接驱动该方法的白盒测试/外部调用无变化集)时退回全量扫描。
         """
-        warned = self.store.download_conflict_warned
+        store = self.store
+        dirty = store.dirty_groups
+        incremental = store.rounds_applied > 0
+        if incremental and not dirty:
+            return  # 本轮无冲突相关变化: 冲突集合与上轮一致
+        store.dirty_groups = set()  # 取出本轮登记并复位(_apply 不清空, 跨轮累积)
+        warned = store.download_conflict_warned
         missing_tag = self.config.grouping.missing_tag
-        # 1. 扫描各组统计下载中/已完成成员
+        groups = store.groups
+        by_hash = store.by_hash
+        keys = dirty if incremental else groups.keys()
+        key_set = dirty if incremental else set(groups)
+        # 1. 重算脏组(或全量)的下载中/已完成成员数
         active = set()
-        for key, members in self.store.groups.items():
-            torrents = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
-            n_dl = sum(
-                1 for t in torrents if t.state_enum.is_downloading and not t.state_enum.is_stopped and
-                not t.state_enum.is_checking and t.amount_left > 0
-            )
-            n_done = sum(
-                1 for t in torrents if t.state_enum.is_complete and t.amount_left <= 0 and missing_tag not in t.tags_set
-            )
+        for key in keys:
+            members = groups.get(key)
+            if not members:
+                continue  # 组已解散
+            n_dl = 0
+            n_done = 0
+            for h in members:
+                t = by_hash.get(h)
+                if t is None:
+                    continue
+                e = t.state_enum
+                if e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left > 0:
+                    n_dl += 1
+                if e.is_complete and t.amount_left <= 0 and missing_tag not in t.tags_set:
+                    n_done += 1
             if n_dl >= 2:
                 active.add((key, "multi-dl"))
             elif n_dl == 1 and n_done >= 1:
                 active.add((key, "mixed"))
-        # 2. 冲突消除: 清除去重记录(下次重现时再次警告+暂停)
+        # 2. 冲突消除: 清除被重算组的过期去重记录(下次重现时再次警告+暂停)
         for tag in list(warned):
-            if tag not in active:
+            if tag[0] in key_set and tag not in active:
                 warned.discard(tag)
         # 3. 新冲突: 警告 + 整组暂停(dry-run 只报告, 不记录去重, 下次真实执行仍会暂停)
         for key, kind in active:
             if (key, kind) in warned:
                 continue
-            torrents = [self.store.by_hash[h] for h in self.store.groups[key] if h in self.store.by_hash]
+            torrents = [by_hash[h] for h in groups[key] if h in by_hash]
             desc = ", ".join(t.log_repr for t in torrents)
             if kind == "multi-dl":
                 logger.warning(f"辅种组({len(torrents)}个) | 多个种子同时下载, 暂停整组: {desc}")

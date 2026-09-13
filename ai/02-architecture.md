@@ -10,7 +10,7 @@
                     ├──────────────────────────────────────────────────┤
   每tick增量同步 →│ TorrentStore (torrents.py)   ← 快照同步 ──  QbApi (qbapi.py) ──→ qbittorrent-api Client
                     │  快照/惰性缓存/分组索引        (写后同步)      APIFacade
-                    │  ↑ TorrentSync / SyncTorrent (sync/maindata rid 增量)
+                    │  ↑ apply_sync (sync/maindata rid 增量)
                     ├──────────────────────────────────────────────────┤
                     │ TaskQueue (taskqueue.py)  单一时间优先堆          │
                     │  Task: internal / rule / check / check-wait      │
@@ -46,9 +46,9 @@ _tick(dry_run):
 
 ### 每轮 `_refresh_torrents` 的数据流 (理解本项目的关键)
 
-1. `TorrentSync.fetch(api)` → qB `/api/v2/sync/maindata?rid=` **增量**拉取 (只含变化种子的变化字段) → 本地基线合并 → `store.refresh(tors)` → 返回 `(added, removed)`; 已存在记录原地 `update_from`, 惰性缓存跨 tick 保留。细节见下节「增量同步层」。
+1. `store.apply_sync(api)` → qB `/api/v2/sync/maindata?rid=` **增量**拉取(只含变化种子的变化字段) → 直接应用到快照 → 返回 `(added, removed)`; 已存在记录只更新 patch 中出现的字段(`TorrentRecord.apply_delta`), 惰性缓存跨 tick 保留。细节见下节「增量同步」。
 2. **状态转移观测** (grouping.enabled, 先于一切自有动作): `_handle_state_transitions` (上传转暂停 / 进入 errored(重校验发现文件缺失) → 缺文件扫描, 用上一轮 `store.state_snapshot`)。**顺序约束**: 自有停种 (大小一致性/冲突整组暂停) 经 QbApi 快照同步会**当场改写 `by_hash` 状态**, 此观测若放在自有动作之后会把自家停种误判为外部"上传转暂停"。
-2.5 **事件分派** (on_* trigger 规则, 同步即时): `_dispatch_events` — 在 `store.refresh` 之后、自有动作之前、`update_state_snapshot` 之前的分派点执行各事件规则 (added 事件用本轮 added 列表, deleted 事件用 `store.refresh` 返回的 removed 及其删除前快照副本, state 变化事件用上一轮 `state_snapshot` 对比本轮)。事件规则**不建周期任务**, 由 `_apply_event_rule` 同步建 rule-event 一次性 Task 作 `ctx.task` 并 `rule.process`; 遇 checking 返回 pending 时, 该 rule-event 任务作 origin 由轮询子任务 `add_task` 重新入队, 下 tick `_handle_event_rule` 断点续跑后 FINISHED 消亡。`max_tasks_per_tick` 不约束此即时分派 (设计详见 09-roadmap 事件触发规划)。
+2.5 **事件分派** (on_* trigger 规则, 同步即时): `_dispatch_events` — 在 `apply_sync` 之后、自有动作之前、`update_state_snapshot` 之前的分派点执行各事件规则 (added 事件用本轮 added 列表, deleted 事件用 `apply_sync` 返回的 removed 及其删除前快照副本, state 变化事件用上一轮 `state_snapshot` 对比本轮 `store.state_changed` 变化集)。事件规则**不建周期任务**, 由 `_apply_event_rule` 同步建 rule-event 一次性 Task 作 `ctx.task` 并 `rule.process`; 遇 checking 返回 pending 时, 该 rule-event 任务作 origin 由轮询子任务 `add_task` 重新入队, 下 tick `_handle_event_rule` 断点续跑后 FINISHED 消亡。`max_tasks_per_tick` 不约束此即时分派 (设计详见 09-roadmap 事件触发规划)。
 3. **新增种子** 逐个处理:
    - `_match_tracker_conf(torrent)` 匹配 tracker 配置 (hostname 精确匹配, 命中多个配置时打 ERROR 日志并用第一个); 未匹配 → warning + **跳过该种子**(不创建任何任务)。
    - `torrent.tracker_conf = tracker_conf` (记录引用, 后续任务直接用)。
@@ -56,24 +56,41 @@ _tick(dry_run):
    - `_create_torrent_tasks`: 创建 `maintenance` 内置任务 + 该种子应绑定的每条规则一个任务。
    - `_assign_new_torrent` (grouping.enabled): 按文件列表增量归组 + 大小一致性检查。
    - `_add_episode_tags` (add_episode_tags.enabled): 集数标签 (单/多集模板 + 连续性判定)。
-4. **删除种子**: `store.refresh` 返回的 removed 里, 删除前先保留各种子快照副本 (供 `on_torrent_deleted` 规则经 `ctx.torrent`/`snapshot` 读取); `task_queue.remove_torrent(hash)` 移除该种子全部任务 (含让位任务/在途校验标记); grouping 启用时 `_handle_removed_torrents` → 组内缺文件扫描; `_dispatch_events` 的 deleted 分支随后触发 `on_torrent_deleted` 规则。
+4. **删除种子**: `apply_sync` 返回的 removed 里, 删除前先保留各种子快照副本 (供 `on_torrent_deleted` 规则经 `ctx.torrent`/`snapshot` 读取); `task_queue.remove_torrent(hash)` 移除该种子全部任务 (含让位任务/在途校验标记); grouping 启用时 `_handle_removed_torrents` → 组内缺文件扫描; `_dispatch_events` 的 deleted 分支随后触发 `on_torrent_deleted` 规则。
 5. **分组事件处理** (grouping.enabled): `_handle_save_path_changes` (重归组+两侧扫描)、`_check_download_conflicts` (每轮)。
-6. `store.update_state_snapshot(tors)` 保存本轮状态快照 (存 `state_enum` 枚举对象, 跨 qB 版本)。
+6. `store.update_state_snapshot()` 保存本轮状态快照 (由 `by_hash` 派生 `state_enum` 枚举对象, 跨 qB 版本; 自有动作经 QbApi 同步过的状态同样计入)。
 7. `begin_round(...)` 维护上传量快照基线 (daily/weekly/monthly, 周期切换重建基线)。
 
-## 增量同步层 TorrentSync / SyncTorrent (torrents.py, 2026-09-13)
+## 增量同步 (torrents.py, 2026-09-13)
 
 **动机**: 原先每 tick 全量 `torrents/info`, qB 端必须反复序列化**全部**种子 (~45 字段 × N), 种子库大时 qB CPU 明显上涨。改走 qB 自带 WebUI 同款的 `/api/v2/sync/maindata`:
 
 - **qB 端语义** (`src/webui/api/synccontroller.cpp`): rid 与上次一致时只回**变化种子的变化字段** (`processMap` 逐字段 diff), **未变化种子完全不出现在响应中**; 删除的种子列在 `torrents_removed`; 新增种子(基线缺失)回全量字段; rid 不匹配/为 0 时 `full_update=true` 回全量。**自愈性**: 漏 tick/rid 错位/qB 重启都只会退化成一次全量, 不会丢数据。
 - **字段齐平**: sync 与 `torrents/info` 共用同一 C++ 序列化器 `serialize/serialize_torrent.{h,cpp}` (sync 仅额外移除 `"id"` 键) —— 故 `REQUIRED_TORRENT_FIELDS` 全部字段(含 `share_limit_action`/`inactive_seeding_time_limit`)在 sync 响应中同样存在。
-- **`TorrentSync`**: 持 `rid` + `_views`(hash -> `SyncTorrent`); `fetch(api)` 全量轮重建视图/增量轮逐字段就地合并; `need_validate` 标记本轮是否全量(供版本校验); `validate_sample` 提供校验样本; `reset()` 在重连/热重载时清基线强制下轮全量; 未知异常 rid 归零后原样上抛(由主循环兜底)。
-- **`SyncTorrent(Mapping)`**: 包装一个可变 baseline dict 的字段视图。实现 Mapping 协议(供 `TorrentRecord.update_from` 走 dict 级 item 访问快路径) + `__getattr__` 属性访问(缺失抛 `AttributeError`, 对齐 `AttrDict`/`TorrentDictionary`) + `state_enum` 派生。**故意不是 dict 子类**: 使版本兼容校验的样本选择(跳过测试注入的 plain dict)保持原语义。正因如此, `store.refresh`/`update_state_snapshot`/`_dispatch_events`/`_copy_tor_attrs` 等既有代码**零改动**。
+- **`TorrentStore.apply_sync(api)`**: 拉取一轮并应用; `rid`/`need_validate`/`using_fallback`/`validate_sample` 等同步态内聚于 store(无独立同步对象); `reset_sync()` 在重连/热重载时清基线强制下轮全量; 未知异常 rid 归零后原样上抛(由主循环兜底)。
+- **`_apply(patches, removed, full)`**: 增量时只对 `patches` 中的记录调 `TorrentRecord.apply_delta`(其余记录原样保留 —— 对象身份跨轮不变, 惰性缓存存活); 全量时以响应为全集重建(未出现者视为删除)。**无变化轮提前返回, 不重建 `by_hash`**。
+- **单调基数据归属**: 快照字段存 `TorrentRecord` 的 slots(C 级属性访问); 非快照必需字段(`RE_ADD_FIELDS`, 跳检重加用)存 `_raw` dict, 属性访问经 `__getattr__` 兜底(缺失抛 `AttributeError`, 与 `AttrDict` 语义一致, 故 `hasattr` 版本校验照常工作)。
 - **降级**: 端点不可用(旧版 qB / 测试替身缺 `sync_maindata`) → 捕获 `AttributeError`/`NotFound404Error` → 回退全量 `torrents_info()`(一次性 WARNING 去重), 语义与改造前一致。
+
+### 本轮变化集 O(变化数) 驱动下游
+
+`store` 在应用时顺手收集变化集, 使下游 O(N) 扫描可以按变化数进行(2026-09-13 性能修复):
+
+| 字段 | 含义 | 消费方 |
+|------|------|--------|
+| `delta_fields` | `{hash: 变化字段名集合}` | `_handle_save_path_changes`(只看 save_path 变化) |
+| `state_changed` | `[(hash, fetch 时 state_enum)]` | `_handle_state_transitions`、`_dispatch_events` 状态变化分支 |
+| `dirty_groups` | 需重算下载冲突的组 key | `_check_download_conflicts`(登记于字段变化/成员增删/归组/自有停种打标) |
+
+`dirty_groups` 跨轮累积(`_apply` 不清空), 由 `_check_download_conflicts` 取出并复位 —— 故轮次外的写操作(Web 命令/任务队列)登记不会丢。`rounds_applied` 为 0(直接驱动该方法的白盒测试/外部调用, 无变化集)时退回全量扫描。
+
+**P2 附带优化**: 本地 qB 地址(`127.0.0.1`/`localhost`)连接时关闭 requests Session 的 `trust_env`, 避免每请求的 `get_environ_proxies`/`get_netrc_auth`(环境代理与 `~/.netrc` 解析)开销; 远程地址保留原行为(`_disable_env_lookup_for_local`)。
 
 ## 启动期版本兼容校验 (2026-09-06, 2026-09-13 调整)
 
-`_refresh_torrents` 在**全量轮**(`TorrentSync.need_validate`: 首轮/rid 失效/降级)对 `TorrentSync.validate_sample` 校验 `REQUIRED_TORRENT_FIELDS` (快照字段 + 跳检重加字段, 共 23 个), 缺失抛 `QbCompatError(AutoQbError)` → tick 循环 `except AutoQbError: raise` 穿透"主循环异常"捕获 → CLI stderr 干净退出。**增量轮不校验** (响应只含变化字段, 校验必误报), 由 `need_validate` 闸门控制。通过后置 `_schema_validated` 不再重复 (qB 版本运行期不变); 空 qB 时样本为 `None` → 跳过。设计动机: 快照字段缺失会**静默零值** (规则基于假数据决策), 比崩溃更危险 —— qB 5.0 preferences 键漂移前科。
+`_refresh_torrents` 在**全量轮**(`store.need_validate`: 首轮/rid 失效/降级)对 `store.validate_sample` 校验 `REQUIRED_TORRENT_FIELDS` (快照字段 + 跳检重加字段, 共 27 个), 缺失抛 `QbCompatError(AutoQbError)` → tick 循环 `except AutoQbError: raise` 穿透"主循环异常"捕获 → CLI stderr 干净退出。
+
+样本为 **qB 响应原始字段映射**: sync 路径取全量响应首个 patch dict 并**补回 `hash`**(值是 `torrents[hash]`, hash 只在键上 —— 不补会误报缺字段导致启动退出); 降级路径取首个非 dict 的真实种子对象 —— 测试注入的 plain dict 不作样本。`missing_torrent_fields` 因此支持两类来源: 映射按键判定(`f not in tor`)、对象按 `hasattr` 判定。**增量轮不校验** (响应只含变化字段, 校验必误报), 由 `need_validate` 闸门控制。通过后置 `_schema_validated` 不再重复 (qB 版本运行期不变); 空 qB 时样本为 `None` → 跳过。设计动机: 快照字段缺失会**静默零值** (规则基于假数据决策), 比崩溃更危险 —— qB 5.0 preferences 键漂移前科。
 
 ## 任务队列 (taskqueue.py) — 单队列模型
 
@@ -123,12 +140,14 @@ _tick(dry_run):
 
 设计目标优先级: **速度 > 可读性 > 内存**。
 
-- `TorrentRecord` (dataclass, slots): 快照字段名与 qB `TorrentDictionary` 完全一致 (鸭子兼容), 外加惰性缓存槽 `_tags_set`/`_state_enum`/`_trackers_info`/`_files`, 以及 `tor` (原始对象引用) 与 `tracker_conf` (匹配结果引用)。派生属性: `tags_set`(frozenset), `state_enum`(TorrentState 枚举, 按类别判定与 qB 版本无关), `log_repr`, `tracker_name`。
-- `refresh(tors)`: 全量刷新 (tors 为 `TorrentSync` 提供的字段视图), 记录对象跨 tick 保留 (缓存存活), 返回 `(added, removed)`; 首轮全部视为新增。同时累计 `view_changed`(仅 `_VIEW_FIELDS` 即 Web 视图展示字段/成员变化时置真), 供 `consume_view_changed()` 精确驱动分组视图惰性重建。
-- **视图展示字段 `_VIEW_FIELDS`**: name/save_path/state/dlspeed/upspeed/uploaded/size/progress/seeding_time/ratio (与 `_build_group_view` 取值集合一致); 其余快照字段(如 downloaded/dl_limit)变化**不**置脏。`update_from(tor)` 返回是否有视图字段变化。
+- `TorrentRecord` (dataclass, slots): 种子数据的**唯一所有者**(无中间投影视图)。快照字段名与 qB `TorrentDictionary` 完全一致 (鸭子兼容), 外加惰性缓存槽 `_tags_set`/`_state_enum`/`_trackers_info`/`_files`、非快照字段容器 `_raw`、以及 `tracker_conf` (匹配结果引用)。派生属性: `tags_set`(frozenset), `state_enum`(TorrentState 枚举, **有缓存**, 按类别判定与 qB 版本无关), `log_repr`, `tracker_name`。`__getattr__` 从 `_raw` 兜底读非快照字段(如跳检所需 `seq_dl`/`ratio_limit`)。
+- `apply_delta(patch) -> frozenset[str]`: **只遍历 patch 中的字段**(增量轮成本 ∝ 变化字段数: Mapping 源走 `.items()`, 真机 `TorrentDictionary` 因此走 C 级迭代); 快照字段写入 slot, 非快照字段写入 `_raw`; 返回**变化字段名集合**(视图字段按 `_VIEW_QUANTUM` 量化后比较)。`from_torrent(tor, hash=)` 为构造入口。
+- `apply_sync(api)`: 主循环入口(增量); `refresh(tors)`: 全量入口(测试/降级路径); 二者共用 `_apply`。
+- **视图展示字段 `_VIEW_FIELDS`**: name/save_path/state/dlspeed/upspeed/uploaded/size/progress/seeding_time/ratio (与 `_build_group_view` 取值集合一致); 其余快照字段(如 downloaded/dl_limit)变化**不**置脏 `view_changed`(但仍计入 `delta_fields`)。`view_dirty(changed)` 判定变化集是否触及视图。
 - **字段量化 `_VIEW_QUANTUM` + `view_field_value(field, value)`**: 该表内的字段按步长向下取整后再比较与展示 —— 目前仅 `seeding_time: 60`(秒级递增但前端只展示到分钟, 不量化会让做种中的种子每轮置脏, 惰性重建对绝大多数种子失效)。**重建判定与 `_build_group_view` 展示值共用同一函数**, 保证"视图内容"与"脏标记依据"不脱钩; 新增需量化的字段只需加进该表。
 - **惰性缓存**: `trackers_info`/`files` 首次访问才拉 API 并持久缓存 (种子删除时随记录回收); 全局 `all_tags()`/`all_categories()` 缓存 + `invalidate_*()` (由 QbApi 写操作触发失效)。
 - **分组索引** (GroupingMixin 直接读写): `groups[key]`/`group_sizes[key]`/`member_to_key[hash]`(O(1) 定位)/`state_snapshot`/`download_conflict_warned`。分组键 = `(path_normalize(save_path), 排序后的文件相对路径元组)`。
+- **删除/恢复**: `remove_torrent(h)` 立即从 `by_hash` 摘除并登记 `_pending_removed`(下轮 added/removed 上报); `restore_torrent(rec)` 撤销登记并放回记录(跳检重加, 保留 tracker_conf/惰性缓存)。
 - `verified_references: Set[str]`: full-checking 通过的种子, **仅内存** (重启重新积累), 作为同组跳检参考。注意: 带跳检标签 (标签名是全局配置 `config.skip_checking_tag`, 默认 zSkipChecked, 全局统一不按规则覆盖, 动作运行时经 ctx 读取; 跳检成功后打在种子上、跨重启) 的种子即便在此集合中, 也会被 `_find_reference` 排除 —— 跳检未经哈希校验, 不可作参考。
 - `update_torrent_fields(...)`: 写后同步快照 (tags/category/state/限速/save_path), 保证同 tick 内后续读取一致。
 
@@ -137,7 +156,7 @@ _tick(dry_run):
 所有对 qB 的调用统一走 `self.api` (不直接用 raw client):
 
 - **写方法**: 调 raw client 后同步 store 快照 + 失效相关缓存 (add_tags/remove_tags/delete_tags/create_category/set_category/start(→stalledUP)/stop(→pausedUP)/set_upload_limit/set_download_limit/set_location/delete)。
-- **读方法**: 优先 store 惰性缓存 (trackers/files/tags/categories); 快照缺 hash 时 trackers/files 回退 client; `torrents_info` 透传; `sync_maindata(rid)` 增量同步透传 (快照更新由 `TorrentSync` 合并 + `store.refresh` 完成)。
+- **读方法**: 优先 store 惰性缓存 (trackers/files/tags/categories); 快照缺 hash 时 trackers/files 回退 client; `torrents_info` 透传; `sync_maindata(rid)` 增量同步透传 (应用由 `store.apply_sync` 完成)。
 - **store 必传**: `QbApi(client, store)` / `bind(client, store)` 中 store 为必传参数 (QbManager 恒持有数据层), 无"无 store 透传"形态 — 不为测试留专用通道 (见 06 可测试性原则)。
 - **透传**: torrents_add / recheck / reannounce / piece_hashes / export / auth_log_in。
 - **全局限速 (qB 5.0+)**: `get_global_speed_limits`/`set_global_speed_limits` 走 `transfer_*` 端点 (bytes/s), 不用 `app/preferences` 旧键 (已失效)。内部 KiB/s ↔ bytes/s 换算。
