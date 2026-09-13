@@ -388,7 +388,7 @@ class FakeQbServer:
                 if route == "torrents/categories":
                     return self._json(server.client.torrents_categories())
                 if route == "torrents/files":
-                    return self._json(server.client.torrents_files(params.get("hash")))
+                    return self._json([_file_to_dict(f) for f in server.client.torrents_files(params.get("hash"))])
                 if route == "torrents/trackers":
                     return self._json(server.client.torrents_trackers(params.get("hash")))
                 if route == "transfer/uploadLimit":
@@ -701,6 +701,18 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
 
 def _fake_file(name, size):
     return SimpleNamespace(name=name, size=size)
+
+
+def _file_to_dict(f) -> dict:
+    """文件条目 -> JSON 可序列化 dict
+
+    真机 /torrents/files 返回对象数组(JSON), 而本地替身 _fake_file 是 SimpleNamespace:
+    json.dumps 遇到它会抛 TypeError -> HTTP 连接被无响应关闭(客户端报 RemoteDisconnected)。
+    FakeQbServer 对外必须是真机语义, 故出口统一转 dict。
+    """
+    if isinstance(f, Mapping):
+        return dict(f)
+    return dict(vars(f))
 
 
 def make_ctx(mgr, tor, client, dry_run=False):

@@ -11,6 +11,7 @@
 - test_local_request_skips_env_and_netrc_lookup: 本地客户端请求不解析环境代理/~/.netrc
 - test_plain_client_still_resolves_env_and_netrc: 对照组: 原生 Client 同流程确实会解析(证明上一测试有区分力)
 - test_connect_and_refresh_over_real_http: 端到端: connect + 一次 _refresh_torrents 真实拉取 sync 填充 store
+- test_fake_server_files_endpoint_serializes_objects: 假服务 torrents/files 必须回 JSON 可序列化数组(真机语义)
 - test_main_loop_throttled_by_main_tick: 节流回归守卫: 非托管模式主循环 tick 频率受 main_tick 约束
 """
 import os
@@ -104,6 +105,25 @@ def test_connect_and_refresh_over_real_http(tmp_path):
         assert list(mgr.store.by_hash) == ["a" * 40]
         assert mgr.store.get("a" * 40).state == "uploading"
         assert srv.hits("sync/maindata") == 1, "一次 tick 只应拉一次 sync/maindata"
+
+
+def test_fake_server_files_endpoint_serializes_objects(tmp_path):
+    """假服务 torrents/files 必须返回真机语义(JSON 对象数组)
+
+    回归背景(2026-09-14 实测): 替身文件项是 SimpleNamespace, 直接 json.dumps 抛 TypeError ->
+    http.server 无响应关闭连接 -> 客户端报 APIConnectionError。分组(_assign_new_torrent)
+    以真实 HTTP 拉文件列表, 会被这个替身缺陷整体打断(表现为"辅种分组永远为空"),
+    因此这里用真实 Client 走一次完整往返守住它。
+    """
+    from helpers import _fake_file
+
+    with FakeQbServer() as srv:
+        srv.client.files_map["a" * 40] = [_fake_file("Show.S01E01.mkv", 1024)]
+        client = _new_client(_cfg(srv))
+        client.auth_log_in()
+        files = client.torrents_files("a" * 40)
+        assert len(files) == 1
+        assert files[0]["name"] == "Show.S01E01.mkv" and files[0]["size"] == 1024
 
 
 def test_main_loop_throttled_by_main_tick(tmp_path):
