@@ -125,6 +125,8 @@ _tick(dry_run):
 - **注释与格式策略**: 已存在键的注释保留(`_sync_mapping` 递归同步 CommentedMap); **值未变化的键跳过赋值**, 从而保留磁盘原标量形态(否则 ruamel 会把无引号的 `16585`/`true` 重写为 `'16585'`/`'true'`); 新增/修改的标量走 `_plain_scalar`(数字/布尔样式写成原生标量, BaseLoader 下语义等价); **列表整体替换(项级注释不保留)**。
 - **schema.py 的地位**: 纯声明的 UI 元数据(分组/字段/控件类型/单位/枚举/帮助/必填/可选段/插件 spec 表), **不承载正确性规则**(合法性唯一入口仍是 `validate_config`); 键集合与插件表由 `tests/test_config_schema.py` 守卫 —— 新增配置键或插件忘登记会直接测试失败。
 - **前端结构**: `config_editor.js`(分组导航/加载保存/预览/路径读写/列表与开关/站点与曲线专段) + `config_rules.js`(规则集与 15 条件/12 动作的 spec 编辑) 作为 Vue 全局 mixin 注入 `app.js` 的根实例; 字段渲染抽为 `ce-field` 组件(`<script type="text/x-template">`, 经 `provide/inject` 复用根的 `cfg*` 方法) —— 嵌套 object 在 `cfgFlatten` 阶段扁平化为带缩进的渲染项, 因此组件**无需递归**。
+- **UI 元数据扩展(2026-09-14 视觉打磨)**: `Field.icon`/`Group.icon`(侧栏与标题图标, sprite symbol id)、`Field.risk`(高风险项: 标签处盾牌徽标 + 控件下方醒目风险行)、`Field.grey_if=(同段键, 期望值)`(所属功能未启用时**灰显但仍可编辑**; 期望值按“配置值 else schema 默认值”判定, 故未显式配置的 `enabled: false` 也能正确判灰)、`Field.group_of=<父字段键>`(相关设置**子卡**: 前端在父字段之后渲染一张缩进小卡容纳该键, YAML 形状不变)。`Group.icon` 在侧栏与页头同时生效。
+- **规则卡与添加交互(2026-09-14)**: 规则卡头固定(折叠仍可见名称/摘要/启用开关), 条件/动作按序号强调执行顺序且各自带说明; 新增条件/动作用**平铺选择面板**(`.ce-picker`, 每项带 help, 高风险项标 risk)替代裸下拉; "新增站点/规则集/规则"用虚线按钮**就地展开**输入框(自动聚焦, Enter 确认 / Esc 取消); 限速曲线每条一张卡: 周期 + 上/下行分区(阶梯图预览 + 档位表), 图表由**前端**解析 `10GiB`/`6MiB/s` 的展示值绘制(解析失败只告警不阻断, 合法性仍归后端)。
 
 ## 任务队列模型 — 生命周期只有 add_task / run_due 两个动词
 
@@ -155,7 +157,7 @@ _tick(dry_run):
 - `TorrentRecord` (dataclass, slots): 种子数据的**唯一所有者**(无中间投影视图)。快照字段名与 qB `TorrentDictionary` 完全一致 (鸭子兼容), 外加惰性缓存槽 `_tags_set`/`_state_enum`/`_trackers_info`/`_files`、非快照字段容器 `_raw`、以及 `tracker_conf` (匹配结果引用)。派生属性: `tags_set`(frozenset), `state_enum`(TorrentState 枚举, **有缓存**, 按类别判定与 qB 版本无关), `log_repr`, `tracker_name`。`__getattr__` 从 `_raw` 兜底读非快照字段(如跳检所需 `seq_dl`/`ratio_limit`)。
 - `apply_delta(patch) -> frozenset[str]`: **只遍历 patch 中的字段**(增量轮成本 ∝ 变化字段数: Mapping 源走 `.items()`, 真机 `TorrentDictionary` 因此走 C 级迭代); 快照字段写入 slot, 非快照字段写入 `_raw`; 返回**变化字段名集合**(视图字段按 `_VIEW_QUANTUM` 量化后比较)。`from_torrent(tor, hash=)` 为构造入口。
 - `apply_sync(api)`: 主循环入口(增量); `refresh(tors)`: 全量入口(测试/降级路径); 二者共用 `_apply`。
-- **视图展示字段 `_VIEW_FIELDS`**: name/save_path/state/dlspeed/upspeed/uploaded/size/progress/seeding_time/ratio (与 `_build_group_view` 取值集合一致); 其余快照字段(如 downloaded/dl_limit)变化**不**置脏 `view_changed`(但仍计入 `delta_fields`)。`view_dirty(changed)` 判定变化集是否触及视图。
+- **视图展示字段 `_VIEW_FIELDS`**: name/save_path/state/dlspeed/upspeed/uploaded/size/progress/seeding_time/ratio/tags/category (与 `_build_group_view` 取值集合一致); 其余快照字段(如 downloaded/dl_limit)变化**不**置脏 `view_changed`(但仍计入 `delta_fields`)。`view_dirty(changed)` 判定变化集是否触及视图。**`tags`/`category` 自 2026-09-14 起计入**(组级“共同标签/共同分类”列的数据源): 随之 `update_torrent_fields` 的 tags/category 分支与 `apply_tag_removal` 均需置 `view_changed`(旧实现明确注释“不影响展示”, 改视图字段时容易漏掉这类写侧置脏)。
 - **字段量化 `_VIEW_QUANTUM` + `view_field_value(field, value)`**: 该表内的字段按步长向下取整后再比较与展示 —— 目前仅 `seeding_time: 60`(秒级递增但前端只展示到分钟, 不量化会让做种中的种子每轮置脏, 惰性重建对绝大多数种子失效)。**重建判定与 `_build_group_view` 展示值共用同一函数**, 保证"视图内容"与"脏标记依据"不脱钩; 新增需量化的字段只需加进该表。
 - **惰性缓存**: `trackers_info`/`files` 首次访问才拉 API 并持久缓存 (种子删除时随记录回收); 全局 `all_tags()`/`all_categories()` 缓存 + `invalidate_*()` (由 QbApi 写操作触发失效)。
 - **分组索引** (GroupingMixin 直接读写): `groups[key]`/`group_sizes[key]`/`member_to_key[hash]`(O(1) 定位)/`state_snapshot`/`download_conflict_warned`。分组键 = `(path_normalize(save_path), 排序后的文件相对路径元组)`。
