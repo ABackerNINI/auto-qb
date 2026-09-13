@@ -24,6 +24,12 @@ config:
         max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(levelname)s - %(message)s" # 日志格式
 
+    # Web UI
+    web:
+        enabled: true        # 默认关闭(保守默认)
+        host: "127.0.0.1"
+        port: 38080
+
     # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
     notify:
         enabled: true              # 启用主动通知
