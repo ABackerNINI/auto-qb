@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 from qbittorrentapi import APIConnectionError, Client
 
-from .config import Config, QbittorrentConfig, load_config
+from .config import Config, QbittorrentConfig, WebConfig, load_config
 from .errors import AutoQbError
 from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
@@ -224,9 +224,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
         # WEB UI: 启用后伴随启动(浏览器访问, 辅种管理/设置); 密钥随机生成并持久化
         if not dry_run and self.config.web.enabled:
-            from .web import ensure_web_token, start_web_server
+            from .web import start_web_server
 
-            self._web_token = ensure_web_token(self)
+            # 密钥由 start_web_server 内部确定(显式配置或随机生成持久化到 data_dir/web.token)
             self._web_handle = start_web_server(self)
         if not dry_run:
             self._notify_handler = setup_notify(self.config.notify)
@@ -634,7 +634,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         - L0 即时生效(仅替换 Config 对象): main_tick/max_tasks_per_tick/remove_similar_tags/
           skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
           limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
-        - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器重启
+        - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器
+          **仅在"监听身份"(enabled/host/port)变化时重启**(次序: 停旧并等其线程退出 -> 启新, 见 _apply_web_config)
         - L2 结构重建: 重建任务队列与规则 + 全部记录重匹配 tracker(保留 store 记录/分组/执行历史)
         - R(state_file/data_dir 变更): 拒绝热应用, 返回 restart_required 提示重启进程
         """
@@ -645,6 +646,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         if restart_required:
             logger.warning(f"以下配置需重启进程才能生效: {restart_required}")
         levels = sorted({c.level for c in changes if c.level != "R"})
+        # L1 分支需对比新旧 web 段(替换后旧对象不可达)
+        old_web = self.config.web
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
         # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_fields),
@@ -659,11 +662,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self.client = None
             self._last_conn_ok = None
             self.connect()
-            if self._web_handle is not None:
-                self._web_handle.stop()
-                from .web import start_web_server
-
-                self._web_handle = start_web_server(self)
+            self._apply_web_config(old_web)
         if "L2" in levels:
             logger.warning("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
             self.task_queue = TaskQueue()
@@ -680,6 +679,31 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             (f", 需重启进程: {restart_required}" if restart_required else "")
         )
         return {"applied": True, "levels": levels, "changes": len(changes), "restart_required": restart_required}
+
+    def _apply_web_config(self, old_web: WebConfig) -> None:
+        """WEB 服务器热应用: 仅"监听身份"(enabled/host/port)变化才重启
+
+        - 监听身份未变: 只同步密钥(鉴权每请求实时读 self._web_token, 无需重启 —— 否则改个
+          日志级别也会把 web 服务器拆了重建, 白白放大竞态窗口)
+        - 变化时: 按目标态启停; 重启必须"先停旧服务并等其线程退出"再启新服务
+          (uvicorn 的 should_exit 是异步生效的, 直接重启会与新服务竞抢端口 -> WinError 10048)
+        """
+        from .web import ensure_web_token, start_web_server, stop_web_server
+
+        enabled = bool(self.config.web.enabled)
+        want = (enabled, self.config.web.host, self.config.web.port)
+        have = (bool(old_web.enabled), old_web.host, old_web.port)
+        if want == have:
+            if self._web_handle is not None:
+                self._web_token = ensure_web_token(self)
+            return
+        if self._web_handle is not None:
+            stop_web_server(self._web_handle)
+            self._web_handle = None
+        if enabled:
+            self._web_handle = start_web_server(self)
+        else:
+            logger.warning("WEB UI 已停止(web.enabled=false)")
 
     def _tick(self, dry_run: bool):
         """单次 tick: 1) 刷新快照 2) 执行到期任务(执行与收尾统一由 TaskQueue.run_due 管理)"""

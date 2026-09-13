@@ -34,11 +34,16 @@
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
+- test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
+- test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
+- test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
+- test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
 """
 import json
 import logging
 import os
 import tempfile
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -48,6 +53,20 @@ from auto_qb.utils import decode_group_key, encode_group_key
 from auto_qb.web import create_app
 
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
+
+
+def _web_stub(enabled=True, host="127.0.0.1", port=8080, token="t"):
+    """WEB 段替身(仅 _apply_web_config 关心的字段)"""
+    return SimpleNamespace(enabled=enabled, host=host, port=port, token=token)
+
+
+def _free_port() -> int:
+    """取一个本机空闲端口(先绑 0 再释放; 用于真实起停 WEB 服务器的测试)"""
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def _make_web_manager(tmp_path, config_text):
@@ -992,18 +1011,30 @@ def test_apply_new_config_levels(monkeypatch):
         assert mgr.config is new_cfg
         assert mgr.task_queue is queue_before, "L0 不应重建任务队列"
 
-        # ② L1: 重挂日志/通知 + 重连 + web 服务器重启
+        # ② L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
         mgr._notify_handler = std_logging.NullHandler()
+        mgr.config = SimpleNamespace(web=_web_stub(port=38080))  # 旧配置(复现真实新旧对比)
+        new_cfg.web = _web_stub(port=38081)  # 仅端口变化 -> 需重启
         old_handle = mock.MagicMock()
         mgr._web_handle = old_handle
-        start_web = mock.MagicMock()
-        monkeypatch.setattr("auto_qb.web.start_web_server", start_web)
-        res = _apply([ConfigChange("logging", "L1", {}, {})])
+        calls = []
+
+        def _fake_stop(handle, timeout=0.0):
+            calls.append(("stop", handle))
+            return True
+
+        def _fake_start(m):
+            calls.append(("start", m))
+            return "新句柄"
+
+        monkeypatch.setattr("auto_qb.web.stop_web_server", _fake_stop)
+        monkeypatch.setattr("auto_qb.web.start_web_server", _fake_start)
+        res = _apply([ConfigChange("web.port", "L1", 38080, 38081)])
         assert res["levels"] == ["L1"]
         mgr._setup_logging.assert_called_once()
         mgr.connect.assert_called_once()
-        old_handle.stop.assert_called_once()
-        assert mgr._web_handle is start_web.return_value, "web 句柄应换为新服务句柄"
+        assert calls == [("stop", old_handle), ("start", mgr)], "必须先停旧服务(并等其线程退出)再启新服务"
+        assert mgr._web_handle == "新句柄", "web 句柄应换为新服务句柄"
 
         # ③ L2: 重建任务队列/规则 + 抑制下一轮事件分派
         queue_before = mgr.task_queue
@@ -1018,3 +1049,108 @@ def test_apply_new_config_levels(monkeypatch):
         res = _apply([ConfigChange("state_file", "R", "a", "b")])
         assert res["restart_required"] == ["state_file"]
         assert res["levels"] == []
+
+
+def test_stop_web_server_releases_port_for_restart(tmp_path):
+    """回归守阵(2026-09-14): 热重载重启 WEB 服务器必须先等旧服务线程退出
+
+    只 stop()(置 should_exit)就立刻启新服务时, 旧服务尚未关闭监听套接字 ——
+    新服务 bind 报 `[Errno 10048] 通常每个套接字地址只允许使用一次`, 保存配置后 WEB UI 失联。
+    本测试用真实 uvicorn 复现该时序: 停止后同端口必须能再次监听。
+    """
+    from auto_qb.web import start_web_server, stop_web_server
+
+    cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
+    port = _free_port()
+    mgr1 = _make_web_manager(tmp_path, cfg_text)
+    mgr1.config.web.port = port
+    h1 = start_web_server(mgr1)
+    try:
+        assert h1.started, "旧服务应监听成功"
+        assert stop_web_server(h1), "stop_web_server 应等到服务线程退出"
+        assert not h1.thread.is_alive(), "服务线程应已退出(监听套接字已释放)"
+
+        mgr2 = _make_web_manager(tmp_path, cfg_text)
+        mgr2.config.web.port = port
+        h2 = start_web_server(mgr2)
+        try:
+            assert h2.started, "旧服务退出后同端口应能重新监听(原 bug: Errno 10048)"
+        finally:
+            stop_web_server(h2)
+    finally:
+        if h1.thread.is_alive():  # 断言失败时清理, 不掩盖原异常
+            stop_web_server(h1)
+
+
+def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):
+    """监听身份(enabled/host/port)未变 -> 不重启服务器, 仅刷新密钥(鉴权每请求实时读取)
+
+    否则改个日志级别之类的 L1 变更也会把 WEB 服务器拆了重建, 白白放大端口竞态窗口。
+    """
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        # 真实调用点: self.config 已是新配置; 参数是旧 web 段(仅用于对比监听身份)
+        mgr.config.web = _web_stub(port=8080, token="新密钥")
+        old_handle = mock.MagicMock()
+        mgr._web_handle = old_handle
+        monkeypatch.setattr("auto_qb.web.start_web_server", mock.MagicMock())
+        monkeypatch.setattr("auto_qb.web.stop_web_server", mock.MagicMock())
+
+        mgr._apply_web_config(_web_stub(port=8080, token="旧密钥"))
+
+        from auto_qb.web import start_web_server, stop_web_server
+
+        start_web_server.assert_not_called()
+        stop_web_server.assert_not_called()
+        assert mgr._web_handle is old_handle, "监听身份未变时不应重启"
+        assert mgr._web_token == "新密钥", "密钥变更应即时刷新(无需重启)"
+
+
+def test_start_web_server_reports_failure_when_port_taken(tmp_path, caplog):
+    """端口被占用: 句柄未就绪且记 ERROR —— 不再静默失败、不再假报"已启动"
+
+    uvicorn 启动失败走 sys.exit(3), 而 SystemExit 在非主线程被 threading 静默吞掉,
+    历史上只留一行 uvicorn 自己的 ERROR(无时间戳), 日志上看不出 WEB UI 已经死了。
+    """
+    import socket
+
+    from auto_qb.web import start_web_server, stop_web_server
+
+    cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
+    with socket.socket() as holder:  # 占住端口(不 listen 也可; bind 后即不可再绑)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        mgr = _make_web_manager(tmp_path, cfg_text)
+        mgr.config.web.port = holder.getsockname()[1]
+        with caplog.at_level(logging.ERROR, logger="auto_qb.web"):
+            handle = start_web_server(mgr)
+        assert handle.started is False, "端口被占用时不应报告就绪"
+        assert any("WEB UI 启动失败" in r.message for r in caplog.records), "失败必须记 ERROR"
+        stop_web_server(handle)
+
+
+def test_apply_web_config_toggle_enabled(monkeypatch):
+    """web.enabled 热开关: 关 -> 开(启动服务器); 开 -> 关(停止并清空句柄)"""
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        started = mock.MagicMock(return_value="新句柄")
+        stopped = mock.MagicMock()
+        monkeypatch.setattr("auto_qb.web.start_web_server", started)
+        monkeypatch.setattr("auto_qb.web.stop_web_server", stopped)
+
+        # 关 -> 开(旧句柄为 None, 原先该场景完全不生效)
+        mgr.config.web = _web_stub(enabled=True, port=8080)
+        mgr._web_handle = None
+        mgr._apply_web_config(_web_stub(enabled=False, port=8080))
+        started.assert_called_once()
+        assert mgr._web_handle == "新句柄"
+
+        # 开 -> 关: 停止并清空句柄
+        mgr.config.web = _web_stub(enabled=False, port=8080)
+        mgr._apply_web_config(_web_stub(enabled=True, port=8080))
+        stopped.assert_called_once()
+        assert mgr._web_handle is None
