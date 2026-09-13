@@ -22,6 +22,26 @@
     <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 3.1 14.2 13.2H1.8z"/><path d="M8 6.6v3.1M8 11.4v.7"/></symbol>
     <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.6 8.4 6.6 11.4 12.6 4.8"/></symbol>
     <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M8 7.4v3.4M8 5.3v.7"/></symbol>
+    <!-- 品牌: orbit 轨道(330° 轨道弧 + 绿色种子点 + 中心圆), 与 favicon / assets/icons 设计一致 -->
+    <symbol id="i-orbit" viewBox="0 0 16 16"><path d="M4.9 3.6A5.4 5.4 0 1 0 11.1 3.6" fill="none"/><circle cx="11.1" cy="3.6" r="1.7" fill="var(--green)" stroke="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
+    <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.4v7.8M4.9 7.1 8 10.2l3.1-3.1M3.2 12.9h9.6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.8V3M4.9 6.1 8 3l3.1 3.1M3.2 12.9h9.6"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 16 16"><path d="M3 7.8V3.2h4.6L13 8.6 8.6 13z"/><path d="M5.6 5.7v.01"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2.4 12.7V4.1h3.9l1.3 1.7h6v6.9z"/><path d="M2.4 7.6h11.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.4v9.2M3.4 8h9.2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 16 16"><path d="M3 5.4h10M3 10.6h10"/><circle cx="6.2" cy="5.4" r="1.6"/><circle cx="10.2" cy="10.6" r="1.6"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M2.8 12.1a5.6 5.6 0 1 1 10.4 0"/><path d="M8 8.7 11.4 6"/><circle cx="8" cy="9.4" r="1.2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 2.2v1.7M8 12.1v1.7M2.2 8h1.7M12.1 8h1.7M3.9 3.9l1.2 1.2M10.9 10.9 12.1 12.1M12.1 3.9l-1.2 1.2M5.1 10.9 3.9 12.1"/></symbol>
+    <symbol id="i-list" viewBox="0 0 16 16"><path d="M3 4.4h10M3 8h10M3 11.6h6.2"/></symbol>
+    <symbol id="i-cards" viewBox="0 0 16 16"><path d="M8 2.6 13.6 5.6 8 8.6 2.4 5.6z"/><path d="M2.4 8.6 8 11.6l5.6-3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16"><path d="M6.2 12.8h3.6"/><path d="M8 3a3.1 3.1 0 0 0-3.1 3.1v2.7L3.9 11h8.2l-1-2.2V6.1A3.1 3.1 0 0 0 8 3z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2.4 12.8 4.3v3.9c0 3-2.1 5.2-4.8 6.1-2.7-.9-4.8-3.1-4.8-6.1V4.3z"/><path d="M8 6.1v2.7M8 10.6v.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.7V8l2.3 1.6"/></symbol>
+    <symbol id="i-hdd" viewBox="0 0 16 16"><path d="M2.8 9.3h10.4v3.2H2.8z"/><path d="M5 9.3 5.6 4h4.8l.6 5.3"/><path d="M11.1 11.1v.01M9 11.1v.01"/></symbol>
+    <symbol id="i-link" viewBox="0 0 16 16"><path d="M6.5 9.5 9.5 6.5"/><path d="M6.9 4.7l.8-.8a2.3 2.3 0 0 1 3.3 3.3l-.8.8M9.1 11.3l-.8.8a2.3 2.3 0 0 1-3.3-3.3l.8-.8"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.9 2.3 4.3 9.1h3L6.1 13.7 11.6 7h-3z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 16 16"><path d="M2.6 4h10.8v6.9H2.6z"/><path d="M6.4 13.2h3.2M8 10.9v2.3"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M2.6 8h10.8"/><path d="M8 2.4c1.5 1.6 2.3 3.5 2.3 5.6S9.5 12 8 13.6C6.5 12 5.7 10.1 5.7 8S6.5 4 8 2.4z"/></symbol>
   </svg>
 
   <div id="app" v-cloak>
@@ -29,7 +49,7 @@
     <div v-if="authRequired" class="login-mask">
       <form class="login-card" @submit.prevent="saveToken">
         <div class="brand">
-          <span class="brand-mark"><svg class="ico" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></span>
+          <span class="brand-mark"><svg class="ico" viewBox="0 0 16 16"><use href="#i-orbit"></use></svg></span>
           <span>auto-qb</span>
         </div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
@@ -50,15 +70,19 @@
         <!-- 顶栏 -->
         <header class="topbar">
           <div class="brand">
-            <span class="brand-mark"><svg class="ico" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg></span>
+            <span class="brand-mark"><svg class="ico" viewBox="0 0 16 16"><use href="#i-orbit"></use></svg></span>
             <span>auto-qb</span>
             <span class="ver">v{{ status.version || '—' }}</span>
           </div>
           <nav class="tabs">
-            <button :class="{ active: page === 'groups' }" @click="page = 'groups'">辅种管理</button>
-            <button :class="{ active: page === 'settings' }" @click="openSettings">设置</button>
+            <button :class="{ active: page === 'groups' }" @click="page = 'groups'">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>辅种管理
+            </button>
+            <button :class="{ active: page === 'settings' }" @click="openSettings">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
+            </button>
           </nav>
-          <div class="top-search">
+          <div v-if="page === 'groups'" class="top-search">
             <div class="search-box">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
               <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
@@ -71,18 +95,29 @@
             <span v-if="searchError" class="error">{{ searchError }}</span>
           </div>
           <div class="spacer"></div>
+          <!-- 统计槽: 每个 pill 等宽且值右对齐 -> 速度持续变化时位置不跳动 -->
           <div class="stat-pills">
-            <span class="stat-pill">分组 <b>{{ groups.length }}</b></span>
-            <span class="stat-pill">种子 <b>{{ totalTorrents }}</b></span>
-            <span class="stat-pill">下载 <b>{{ fmtSpeed(totalDl) }}</b></span>
-            <span class="stat-pill">上传 <b>{{ fmtSpeed(totalUl) }}</b></span>
-            <span class="stat-pill">每 {{ pollLabel }}s</span>
+            <span class="stat-pill" title="辅种组总数">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组 <b>{{ groups.length }}</b>
+            </span>
+            <span class="stat-pill" title="种子总数">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hdd"></use></svg>种子 <b>{{ totalTorrents }}</b>
+            </span>
+            <span class="stat-pill" title="全部组下载速度合计">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-download"></use></svg>下载 <b>{{ fmtSpeed(totalDl) }}</b>
+            </span>
+            <span class="stat-pill" title="全部组上传速度合计">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>上传 <b>{{ fmtSpeed(totalUl) }}</b>
+            </span>
+            <span class="stat-pill" title="当前刷新间隔(无变化/服务不可达时自动放慢)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-clock"></use></svg>刷新 <b>{{ pollLabel }}s</b>
+            </span>
           </div>
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
             <i class="dot"></i>{{ statusBadge.text }}
           </span>
         </header>
-        <!-- 状态分布条: 由已加载的 groups 前端聚合(点击 chip 按状态筛选, 仅辅种页) -->
+        <!-- 状态分布条 + 筛选器(仅辅种页): 分布由已加载的 groups 前端聚合, 点击 chip 按状态筛选 -->
         <div v-if="page === 'groups' && distTotal" class="status-strip">
           <div class="dist-bar" :title="distTitle">
             <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
@@ -93,7 +128,26 @@
                     :title="'仅显示' + s.text + '的辅种组'" @click="toggleKindFilter(s.kind)">
               <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
             </button>
-            <button v-if="kindFilter" class="dist-chip" @click="clearKindFilter()">
+          </div>
+          <!-- 当前筛选/搜索说明: 紧跟状态图例之后(无筛选时不占据任何空间) -->
+          <span v-if="filtersActive" class="strip-note">
+            <template v-if="searchQuery.trim()">搜索“{{ searchQuery.trim() }}” </template>
+            <template v-if="kindFilter">状态“{{ kindText(kindFilter) }}” </template>
+            <template v-if="pathFilter">路径“{{ pathFilter }}” </template>
+            → <b>{{ filteredGroups.length }}</b> 个辅种组<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
+            <template v-if="searchBuilding"> · 索引构建中…</template>
+          </span>
+          <div class="strip-tools">
+            <label class="strip-select" title="按保存路径筛选辅种组">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
+              <select :value="pathFilter" @change="setPathFilter($event.target.value)">
+                <option value="">全部保存路径</option>
+                <option v-for="p in pathOptions" :key="p.value" :value="p.value">
+                  {{ p.value || '(未设置保存路径)' }} · {{ p.count }}
+                </option>
+              </select>
+            </label>
+            <button v-if="filtersActive" class="dist-chip clear" @click="clearFilters()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
             </button>
           </div>
@@ -102,49 +156,60 @@
 
       <!-- 辅种分组页 -->
       <main v-if="page==='groups'" class="content">
-        <p v-if="searchQuery.trim()" class="muted" style="text-align:center">
-          搜索"{{ searchQuery.trim() }}": 命中 {{ filteredGroups.length }} 个辅种组(仅命中成员高亮)
-        </p>
-        <p v-else-if="kindFilter" class="muted" style="text-align:center">
-          已按状态筛选"{{ kindText(kindFilter) }}": {{ filteredGroups.length }} 个辅种组
-        </p>
+
         <div class="group-table" ref="groupTable">
-          <!-- 列头(点击排序, 右缘拖拽调宽) -->
+          <!-- 列头(点击排序, 右缘拖拽调宽, 双击恢复默认宽度) -->
           <div class="group-head" :style="gridStyle('group')">
             <div v-for="(col, i) in groupColumns" :key="col.key" class="h-cell"
                  :class="{sortable: col.sortable}" @click="col.sortable && setSort(col.key)">
-              <span v-if="col.key==='name'">名称</span>
-              <span v-else-if="col.key==='dlspeed'">下载</span>
-              <span v-else-if="col.key==='upspeed'">上传</span>
-              <span v-else-if="col.key==='uploaded'">总上传</span>
-              <span v-else-if="col.key==='size'">总大小</span>
-              <span v-else-if="col.key==='count'">站数</span>
-              <span v-else-if="col.key==='sites'">站点</span>
+              <span>{{ colLabel(col.key) }}</span>
               <span v-if="col.sortable" class="arrow">{{ sortArrow(col.key) }}</span>
-              <span class="resizer" @mousedown.stop.prevent="startResize($event, 'group', i)"></span>
+              <span class="resizer" title="拖拽调宽 · 双击恢复默认"
+                    @mousedown.stop.prevent="startResize($event, 'group', i)"
+                    @dblclick.stop.prevent="resetColumn('group', i)"></span>
             </div>
           </div>
 
           <template v-for="g in filteredGroups" :key="g.key">
-            <div class="group-row" :class="{expanded: expandedKey===g.key}"
+            <!-- 左侧色条 = 组状态(错误>校验>下载>做种>暂停), 与 ::before 的 s-* 类一一对应 -->
+            <div class="group-row" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit }]"
                  :style="gridStyle('group')"
                  @click="toggleExpand(g.key)"
                  @contextmenu.prevent="openMenu($event, g)">
               <div class="g-name" :title="g.name">
-              <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-              <span>{{ g.name }}</span>
-            </div>
-              <div class="g-stat">↓ {{ fmtSpeed(g.dlspeed) }}</div>
-              <div class="g-stat">↑ {{ fmtSpeed(g.upspeed) }}</div>
-              <div class="g-stat">{{ fmtSize(g.uploaded) }}</div>
-              <div class="g-stat">{{ fmtSize(g.size) }}</div>
+                <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+                <span class="g-status" :class="'k-' + g.status.primary" :title="'组内状态: ' + g.status.text">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(g.status.primary)"></use></svg>
+                </span>
+                <span class="g-name-text">{{ g.name }}</span>
+              </div>
+              <div class="g-stat" :class="{ zero: !g.dlspeed }">{{ fmtSpeedOrDash(g.dlspeed) }}</div>
+              <div class="g-stat" :class="{ zero: !g.upspeed }">{{ fmtSpeedOrDash(g.upspeed) }}</div>
+              <div class="g-stat" :class="{ zero: !g.uploaded }">{{ fmtSizeOrDash(g.uploaded) }}</div>
+              <div class="g-stat" :class="{ zero: !g.size }">
+                {{ fmtSizeOrDash(g.size) }}
+                <span v-if="g.sizeMismatch" class="risk-mark"
+                      title="组内成员种子大小不一致 —— 辅种可能指向不同文件, 需人工确认">⚠</span>
+              </div>
+              <div class="g-stat" :class="{ zero: !g.total_size }">{{ fmtSizeOrDash(g.total_size) }}</div>
+              <div class="g-tags" :title="g.commonTags.list.join(', ')">
+                <span v-for="t in g.commonTags.list.slice(0, 3)" :key="t" class="tag-chip">{{ t }}</span>
+                <span v-if="g.commonTags.list.length > 3" class="tag-more">+{{ g.commonTags.list.length - 3 }}</span>
+                <span v-if="!g.commonTags.list.length" class="zero">—</span>
+                <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
+              </div>
+              <div class="g-cat">
+                <span v-if="g.commonCategory.value" class="cat-chip">{{ g.commonCategory.value }}</span>
+                <span v-else-if="g.commonCategory.diff" class="diff-mark" title="组内分类不一致">多分类</span>
+                <span v-else class="zero">—</span>
+              </div>
               <div class="g-sites">
                 <span v-for="m in g.members" :key="m.hash"
                       class="site-chip" :class="[m.kind, { 'search-hit': m.hit }]" :title="m.site + ' · ' + kindText(m.kind)">
                   {{ m.site }}
                 </span>
               </div>
-              <div class="g-count">{{ g.count }} 站</div>
+              <div class="g-count">{{ g.count }}</div>
             </div>
 
             <!-- 展开明细: 紧跟本组行显示(列头 + 合计行 + 各分站点行) -->
@@ -152,16 +217,20 @@
               <div class="detail-head" :style="gridStyle('detail')">
                 <div v-for="(col, i) in detailColumns" :key="col" class="h-cell">
                   <span>{{ col }}</span>
-                  <span class="resizer" @mousedown.stop.prevent="startResize($event, 'detail', i)"></span>
+                  <span class="resizer" title="拖拽调宽 · 双击恢复默认"
+                        @mousedown.stop.prevent="startResize($event, 'detail', i)"
+                        @dblclick.stop.prevent="resetColumn('detail', i)"></span>
                 </div>
               </div>
               <div class="detail-summary" :style="gridStyle('detail')">
-                <div>合计</div>
+                <div>合计 {{ g.count }} 站</div>
                 <div></div>
-                <div>{{ fmtSpeed(sumDl(g)) }}</div>
-                <div>{{ fmtSpeed(sumUl(g)) }}</div>
-                <div>{{ fmtSize(sumField(g.members, "uploaded")) }}</div>
-                <div>{{ fmtSize(sumField(g.members, "size")) }}</div>
+                <div>{{ fmtSpeedOrDash(sumDl(g)) }}</div>
+                <div>{{ fmtSpeedOrDash(sumUl(g)) }}</div>
+                <div>{{ fmtSizeOrDash(sumField(g.members, "uploaded")) }}</div>
+                <div :title="'全部成员大小合计'">{{ fmtSizeOrDash(sumField(g.members, "size")) }}</div>
+                <div></div>
+                <div></div>
                 <div></div>
                 <div></div>
                 <div></div>
@@ -172,16 +241,25 @@
                    @contextmenu.prevent="openMemberMenu($event, m)">
                 <span class="m-site"><i class="dot"></i>{{ m.site }}</span>
                 <span class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
-                <span>{{ fmtSpeed(m.dlspeed) }}</span>
-                <span>{{ fmtSpeed(m.upspeed) }}</span>
-                <span>{{ fmtSize(m.uploaded) }}</span>
-                <span>{{ fmtSize(m.size) }}</span>
+                <span :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
+                <span :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
+                <span :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
+                <span :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
+                <span class="m-tags" :title="(m.tags || []).join(', ')">
+                  <span v-for="t in tagSlice(m.tags, 2)" :key="t" class="tag-chip">{{ t }}</span>
+                  <span v-if="(m.tags || []).length > 2" class="tag-more">+{{ m.tags.length - 2 }}</span>
+                  <span v-if="!(m.tags || []).length" class="zero">—</span>
+                </span>
+                <span class="m-cat" :title="m.category">
+                  <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
+                  <span v-else class="zero">—</span>
+                </span>
                 <span class="m-progress">
                   <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                   <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                 </span>
                 <span>{{ fmtDuration(m.seeding_time) }}</span>
-                <span class="m-hash">{{ m.hash.slice(0, 8) }}</span>
+                <span class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
               </div>
             </div>
           </template>
@@ -190,11 +268,10 @@
             <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
             <span>
               {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配种子')
-                 : (kindFilter ? '当前筛选下没有辅种组' : '暂无辅种分组') }}
+                 : (filtersActive ? '当前筛选下没有辅种组' : '暂无辅种分组') }}
             </span>
           </div>
-          <p v-if="searchQuery.trim() && searchBuilding && filteredGroups.length"
-             class="muted" style="text-align:center">
+          <p v-if="searchQuery.trim() && searchBuilding && filteredGroups.length" class="muted center">
             正在构建文件索引, 文件匹配结果稍后自动补齐…
           </p>
         </div>
@@ -250,17 +327,22 @@
         <template v-else>
           <div class="ce-grid">
             <aside class="ce-side">
+              <div class="ce-side-title">配置分组</div>
               <button v-for="g in cfgGroups" :key="g.key" class="ce-side-item"
                       :class="{ active: cfg.activeGroup === g.key }" @click="cfg.activeGroup = g.key">
-                <span>{{ g.label }}</span>
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="'#' + g.icon"></use></svg>
+                <span class="ce-side-label">{{ g.label }}</span>
                 <span v-if="g.badge" class="ce-side-badge">{{ g.badge }}</span>
               </button>
             </aside>
 
             <section class="ce-main">
               <header class="ce-head">
-                <div>
-                  <h2>{{ cfgActive.label }}</h2>
+                <div class="ce-head-text">
+                  <h2>
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="'#' + (cfgActive.icon || 'i-settings')"></use></svg>
+                    {{ cfgActive.label }}
+                  </h2>
                   <p v-if="cfgActive.help" class="ce-sub">{{ cfgActive.help }}</p>
                 </div>
                 <span v-if="cfgDirty" class="ce-dirty">未保存</span>
@@ -271,70 +353,116 @@
               <!-- 站点专段: 左列表 + 右详情 -->
               <div v-if="cfg.activeGroup === 'trackers'" class="ce-master-detail">
                 <div class="ce-master">
+                  <div class="ce-master-title">站点配置</div>
                   <button v-for="name in cfgTrackerNames()" :key="name" class="ce-master-item"
                           :class="{ active: cfg.trackerKey === name }" @click="cfg.trackerKey = name">{{ name }}</button>
-                  <div class="ce-add-row">
-                    <input v-model="cfg.newTrackerName" class="ce-input" placeholder="新站点配置名"
-                           @keyup.enter="cfgTrackerAdd()">
-                    <button class="ce-btn" @click="cfgTrackerAdd()">添加</button>
+                  <button class="ce-add-btn" :class="{ open: cfg.addOpen === 'tracker' }" @click="cfgAddStart('tracker')">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>新增站点配置
+                  </button>
+                  <div v-if="cfg.addOpen === 'tracker'" class="ce-add-form">
+                    <input ref="addInput" v-model="cfg.newTrackerName" class="ce-input" placeholder="站点配置名(如 HHan)"
+                           @keyup.enter="cfgTrackerAdd()" @keyup.esc="cfgAddCancel()">
+                    <div class="ce-add-form-actions">
+                      <button class="ce-btn small" @click="cfgAddCancel()">取消</button>
+                      <button class="ce-btn small primary" @click="cfgTrackerAdd()">添加</button>
+                    </div>
                   </div>
                 </div>
                 <div v-if="cfg.trackerKey" class="ce-detail">
-                  <div class="ce-detail-bar">
-                    <strong>{{ cfg.trackerKey }}</strong>
-                    <span class="ce-spacer"></span>
-                    <button class="ce-btn ghost" @click="cfgTrackerRename(cfg.trackerKey)">重命名</button>
-                    <button class="ce-btn danger" @click="cfgTrackerRemove(cfg.trackerKey)">删除</button>
-                  </div>
-                  <div class="ce-fields">
-                    <ce-field v-for="item in cfgTrackerItems()" :key="item.path.join('.')" :item="item"></ce-field>
+                  <div class="ce-card">
+                    <div class="ce-detail-bar">
+                      <strong class="ce-detail-title">{{ cfg.trackerKey }}</strong>
+                      <span class="ce-spacer"></span>
+                      <button class="ce-btn ghost" @click="cfgTrackerRename(cfg.trackerKey)">重命名</button>
+                      <button class="ce-btn danger" @click="cfgTrackerRemove(cfg.trackerKey)">删除</button>
+                    </div>
+                    <div class="ce-fields">
+                      <ce-field v-for="item in cfgTrackerItems()" :key="item.path.join('.')" :item="item"></ce-field>
+                    </div>
                   </div>
                 </div>
                 <div v-else class="ce-placeholder">暂无站点配置, 请在左侧新增</div>
               </div>
 
-              <!-- 规则集专段: 规则集 + 规则 + 条件/动作 -->
+              <!-- 规则集专段: 规则集列表 + 规则卡(条件/动作) -->
               <div v-else-if="cfg.activeGroup === 'rules'" class="ce-master-detail">
                 <div class="ce-master">
+                  <div class="ce-master-title">规则集</div>
                   <button v-for="name in cfgRuleGroupNames()" :key="name" class="ce-master-item"
                           :class="{ active: cfg.ruleGroupKey === name }" @click="cfg.ruleGroupKey = name">{{ name }}</button>
-                  <div class="ce-add-row">
-                    <input v-model="cfg.newRuleGroupName" class="ce-input" placeholder="规则集名(自动补 _rules)"
-                           @keyup.enter="cfgRuleAddGroup()">
-                    <button class="ce-btn" @click="cfgRuleAddGroup()">添加</button>
+                  <button class="ce-add-btn" :class="{ open: cfg.addOpen === 'ruleGroup' }" @click="cfgAddStart('ruleGroup')">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>新增规则集
+                  </button>
+                  <div v-if="cfg.addOpen === 'ruleGroup'" class="ce-add-form">
+                    <input ref="addInput" v-model="cfg.newRuleGroupName" class="ce-input" placeholder="规则集名(自动补 _rules)"
+                           @keyup.enter="cfgRuleAddGroup()" @keyup.esc="cfgAddCancel()">
+                    <div class="ce-add-form-actions">
+                      <button class="ce-btn small" @click="cfgAddCancel()">取消</button>
+                      <button class="ce-btn small primary" @click="cfgRuleAddGroup()">添加</button>
+                    </div>
                   </div>
                 </div>
                 <div v-if="cfg.ruleGroupKey" class="ce-detail">
-                  <div class="ce-detail-bar">
-                    <strong>{{ cfg.ruleGroupKey }}</strong>
-                    <span class="ce-spacer"></span>
-                    <button class="ce-btn danger" @click="cfgRuleRemoveGroup(cfg.ruleGroupKey)">删除规则集</button>
+                  <div class="ce-card">
+                    <div class="ce-detail-bar">
+                      <strong class="ce-detail-title">{{ cfg.ruleGroupKey }}</strong>
+                      <span class="ce-spacer"></span>
+                      <button class="ce-btn danger" @click="cfgRuleRemoveGroup(cfg.ruleGroupKey)">删除规则集</button>
+                    </div>
+                    <p class="ce-help">规则按列表顺序执行; 每条规则内「条件全部满足」才执行「动作」(按顺序)。</p>
                   </div>
 
-                  <div v-for="rn in cfgRuleNames(cfg.ruleGroupKey)" :key="rn" class="ce-rule-card">
-                    <div class="ce-detail-bar">
-                      <strong>{{ rn }}</strong>
+                  <div v-for="rn in cfgRuleNames(cfg.ruleGroupKey)" :key="rn" class="ce-rule-card"
+                       :class="{ collapsed: cfgRuleCollapsed(cfg.ruleGroupKey, rn) }">
+                    <div class="ce-rule-head">
+                      <button class="ce-icon flat" :title="cfgRuleCollapsed(cfg.ruleGroupKey, rn) ? '展开' : '收起'"
+                              @click="cfgRuleToggle(cfg.ruleGroupKey, rn)">
+                        <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+                      </button>
+                      <strong class="ce-rule-name">{{ rn }}</strong>
+                      <span class="ce-rule-meta">{{ cfgRuleSummary(cfg.ruleGroupKey, rn) }}</span>
                       <span class="ce-spacer"></span>
-                      <button class="ce-btn ghost" @click="cfgRuleRename(cfg.ruleGroupKey, rn)">重命名</button>
-                      <button class="ce-btn danger" @click="cfgRuleRemove(cfg.ruleGroupKey, rn)">删除</button>
+                      <label class="ce-switch" title="启用/停用该规则">
+                        <input type="checkbox" :checked="cfgRuleEnabled(cfg.ruleGroupKey, rn)"
+                               @change="cfgRuleSetEnabled(cfg.ruleGroupKey, rn, $event.target.checked)">
+                        <span class="ce-slider"></span>
+                      </label>
+                      <button class="ce-icon" title="重命名" @click="cfgRuleRename(cfg.ruleGroupKey, rn)">
+                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
+                      </button>
+                      <button class="ce-icon danger" title="删除规则" @click="cfgRuleRemove(cfg.ruleGroupKey, rn)">
+                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                      </button>
                     </div>
-                    <p v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="ce-warn">⚠️ {{ cfgRuleRisk(cfg.ruleGroupKey, rn) }}</p>
+                    <p v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="ce-risk-line">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
+                      <span>{{ cfgRuleRisk(cfg.ruleGroupKey, rn) }}</span>
+                    </p>
 
-                    <div class="ce-fields">
-                      <ce-field v-for="item in cfgRuleItems(cfg.ruleGroupKey, rn)" :key="item.path.join('.')" :item="item"></ce-field>
-                    </div>
+                    <div v-show="!cfgRuleCollapsed(cfg.ruleGroupKey, rn)" class="ce-rule-body">
+                      <div class="ce-fields">
+                        <ce-field v-for="item in cfgRuleItems(cfg.ruleGroupKey, rn)" :key="item.path.join('.')" :item="item"></ce-field>
+                      </div>
 
                     <div class="ce-plugins">
                       <div class="ce-plugins-head">
-                        <span>条件(全部满足才执行动作)</span>
-                        <select class="ce-input ce-inline-select" :value="''"
-                                @change="cfgPluginAdd(cfg.ruleGroupKey, rn, 'conditions', $event.target.value); $event.target.value = ''">
-                          <option value="">+ 添加条件…</option>
-                          <option v-for="p in cfgConditionOptions()" :key="p.name" :value="p.name">{{ p.label }}</option>
-                        </select>
+                        <span class="ce-plugins-title">条件<em class="ce-hint">全部满足才执行动作</em></span>
+                        <button class="ce-add-btn inline" :class="{ open: cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'conditions') }"
+                                @click="cfgPickerOpen(cfg.ruleGroupKey, rn, 'conditions')">
+                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加条件
+                        </button>
+                      </div>
+                      <!-- 选项面板: 列出全部可用条件及其说明(替代不透明的下拉框) -->
+                      <div v-if="cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'conditions')" class="ce-picker">
+                        <button v-for="p in cfgConditionOptions()" :key="p.name" class="ce-picker-item"
+                                @click="cfgPluginAdd(cfg.ruleGroupKey, rn, 'conditions', p.name); cfgPickerClose()">
+                          <span class="ce-picker-name">{{ p.label }}</span>
+                          <span v-if="p.help" class="ce-picker-help">{{ p.help }}</span>
+                        </button>
                       </div>
                       <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'conditions')" :key="i" class="ce-plugin-card">
                         <div class="ce-plugin-bar">
+                          <span class="ce-ord">{{ i + 1 }}</span>
                           <select class="ce-input ce-inline-select" :value="cfgPluginName(entry)"
                                   @change="cfgPluginReplace(cfg.ruleGroupKey, rn, 'conditions', i, $event.target.value)">
                             <option v-for="p in cfgConditionOptions()" :key="p.name" :value="p.name">{{ p.label }}</option>
@@ -342,7 +470,9 @@
                           <span class="ce-spacer"></span>
                           <button class="ce-icon" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, -1)">↑</button>
                           <button class="ce-icon" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, 1)">↓</button>
-                          <button class="ce-icon" title="删除" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">✕</button>
+                          <button class="ce-icon danger" title="删除该条件" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">
+                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                          </button>
                         </div>
                         <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).help" class="ce-help">{{ cfgPluginMeta(entry).help }}</p>
                         <div class="ce-fields">
@@ -350,20 +480,32 @@
                                     :key="item.path.join('.')" :item="item"></ce-field>
                         </div>
                       </div>
-                      <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'conditions').length" class="ce-help">
+                      <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'conditions').length" class="ce-empty-hint">
                         未配置条件 = 对所有匹配该规则的种子执行动作
                       </p>
                     </div>
 
                     <div class="ce-plugins">
                       <div class="ce-plugins-head">
-                        <span>动作(按顺序执行)</span>
-                        <select class="ce-input ce-inline-select" :value="''"
-                                @change="cfgPluginAdd(cfg.ruleGroupKey, rn, 'actions', $event.target.value); $event.target.value = ''">
-                          <option value="">+ 添加动作…</option>
-                          <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
-                        </select>
+                        <span class="ce-plugins-title">动作<em class="ce-hint">按序号顺序执行</em></span>
                         <button class="ce-btn ghost small" @click="cfgIgnoreNextAdd(cfg.ruleGroupKey, rn)">+ 忽略下个动作错误</button>
+                        <button class="ce-add-btn inline" :class="{ open: cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'actions') }"
+                                @click="cfgPickerOpen(cfg.ruleGroupKey, rn, 'actions')">
+                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加动作
+                        </button>
+                      </div>
+                      <div v-if="cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'actions')" class="ce-picker">
+                        <button v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" class="ce-picker-item"
+                                :class="{ danger: !!p.risk }"
+                                @click="cfgPluginAdd(cfg.ruleGroupKey, rn, 'actions', p.name); cfgPickerClose()">
+                          <span class="ce-picker-name">
+                            {{ p.label }}
+                            <span v-if="p.risk" class="ce-risk" title="该动作存在风险">
+                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
+                            </span>
+                          </span>
+                          <span v-if="p.help" class="ce-picker-help">{{ p.help }}</span>
+                        </button>
                       </div>
                       <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'actions')" :key="i" class="ce-plugin-card">
                         <div v-if="isIgnoreNext(entry)" class="ce-plugin-bar">
@@ -374,90 +516,157 @@
                             <option value="true">启用</option>
                             <option value="false">停用</option>
                           </select>
-                          <button class="ce-icon" title="删除" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
+                          <button class="ce-icon danger" title="删除" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">
+                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                          </button>
                         </div>
                         <template v-else>
                           <div class="ce-plugin-bar">
+                            <span class="ce-ord">{{ i + 1 }}</span>
                             <select class="ce-input ce-inline-select" :value="cfgPluginName(entry)"
                                     @change="cfgPluginReplace(cfg.ruleGroupKey, rn, 'actions', i, $event.target.value)">
                               <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
                             </select>
+                            <span v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-risk" title="该动作存在风险">
+                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
+                            </span>
                             <span class="ce-spacer"></span>
                             <button class="ce-icon" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
                             <button class="ce-icon" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
-                            <button class="ce-icon" title="删除" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
+                            <button class="ce-icon danger" title="删除该动作" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">
+                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                            </button>
                           </div>
                           <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).help" class="ce-help">{{ cfgPluginMeta(entry).help }}</p>
+                          <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-risk-line">
+                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
+                            <span>{{ cfgPluginMeta(entry).risk }}</span>
+                          </p>
                           <div class="ce-fields">
                             <ce-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
                                       :key="item.path.join('.')" :item="item"></ce-field>
                           </div>
                         </template>
                       </div>
-                      <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'actions').length" class="ce-help">
+                      <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'actions').length" class="ce-empty-hint">
                         未配置动作 = 规则只做条件判断, 不会执行任何操作
                       </p>
                     </div>
+                    </div>
                   </div>
 
-                  <div class="ce-add-row">
-                    <input v-model="cfg.newRuleName" class="ce-input" placeholder="新规则名"
-                           @keyup.enter="cfgRuleAdd(cfg.ruleGroupKey)">
-                    <button class="ce-btn" @click="cfgRuleAdd(cfg.ruleGroupKey)">添加规则</button>
+                  <button class="ce-add-btn" :class="{ open: cfg.addOpen === 'rule' }" @click="cfgAddStart('rule')">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>新增规则
+                  </button>
+                  <div v-if="cfg.addOpen === 'rule'" class="ce-add-form">
+                    <input ref="addInput" v-model="cfg.newRuleName" class="ce-input" placeholder="规则名(如 auto-skip-checking)"
+                           @keyup.enter="cfgRuleAdd(cfg.ruleGroupKey)" @keyup.esc="cfgAddCancel()">
+                    <div class="ce-add-form-actions">
+                      <button class="ce-btn small" @click="cfgAddCancel()">取消</button>
+                      <button class="ce-btn small primary" @click="cfgRuleAdd(cfg.ruleGroupKey)">添加</button>
+                    </div>
                   </div>
                 </div>
                 <div v-else class="ce-placeholder">暂无规则集, 请在左侧新增</div>
               </div>
 
-              <!-- 限速曲线专段 -->
+              <!-- 限速曲线专段: 每条曲线一张卡(周期 + 阶梯折线预览 + 档位表) -->
               <div v-else-if="cfg.activeGroup === 'speed'" class="ce-curve">
-                <div v-if="!cfgCurveEnabled()" class="ce-curve-off">
-                  <p class="ce-help">未启用。启用后按累计流量自动设置 qB 全局限速(0 = 该档不限速)。</p>
-                  <button class="ce-btn" @click="cfgCurveEnable()">启用限速曲线</button>
+                <div v-if="!cfgCurveEnabled()" class="ce-card ce-curve-off">
+                  <p class="ce-help">
+                    未启用。启用后读取 Traffic Monitor 数据, 按累计流量自动分档设置 qB 全局限速(0 = 该档不限速)。
+                  </p>
+                  <button class="ce-btn primary" @click="cfgCurveEnable()">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>启用限速曲线
+                  </button>
                 </div>
                 <template v-else>
-                  <div class="ce-fields">
-                    <ce-field v-for="item in cfgCurveItems()" :key="item.path.join('.')" :item="item"></ce-field>
-                  </div>
-                  <div class="ce-plugins">
-                    <div class="ce-plugins-head">
-                      <span>曲线(多条同时命中时取最严限速)</span>
-                      <button class="ce-btn ghost small" @click="cfgCurveAddPeriod()">+ 添加曲线</button>
+                  <div class="ce-card">
+                    <div class="ce-detail-bar">
+                      <strong class="ce-detail-title">曲线设置</strong>
+                      <span class="ce-spacer"></span>
+                      <span class="ce-hint">多条曲线同时命中时取最严限速</span>
+                      <button class="ce-btn ghost small" @click="cfgCurveAddPeriod()">
+                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加曲线
+                      </button>
                     </div>
-                    <div v-for="(c, i) in cfgCurveList()" :key="i" class="ce-plugin-card">
-                      <div class="ce-plugin-bar">
-                        <input class="ce-input ce-inline-input" :value="cfgCurvePeriod(i).period || ''"
-                               placeholder="DAY / MONTH / 7D"
-                               @input="cfgSetPath(cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
+                    <div class="ce-fields">
+                      <ce-field v-for="item in cfgCurveItems()" :key="item.path.join('.')" :item="item"></ce-field>
+                    </div>
+                  </div>
+
+                  <div v-for="(c, i) in cfgCurveList()" :key="i" class="ce-card ce-curve-card">
+                    <div class="ce-detail-bar">
+                      <span class="ce-curve-badge">{{ i + 1 }}</span>
+                      <input class="ce-input ce-inline-input" :value="cfgCurvePeriod(i).period || ''"
+                             placeholder="DAY / MONTH / 7D"
+                             @input="cfgSetPath(cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
+                      <span class="ce-hint">{{ cfgCurvePeriodHint(i) }}</span>
+                      <span class="ce-spacer"></span>
+                      <button class="ce-icon danger" title="删除该曲线" @click="cfgCurveRemovePeriod(i)">
+                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                      </button>
+                    </div>
+
+                    <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir" class="ce-curve-dir"
+                         :class="dir === 'upload_curve' ? 'd-up' : 'd-down'">
+                      <div class="ce-curve-dir-head">
+                        <svg class="ico ico-sm" viewBox="0 0 16 16">
+                          <use :href="dir === 'upload_curve' ? '#i-upload' : '#i-download'"></use>
+                        </svg>
+                        <span>{{ dir === 'upload_curve' ? '上传档位' : '下载档位' }}</span>
+                        <span class="ce-hint">
+                          {{ cfgCurvePoints(i, dir).length ? cfgCurvePoints(i, dir).length + ' 档' : '未配置 = 不管理该方向' }}
+                        </span>
                         <span class="ce-spacer"></span>
-                        <button class="ce-icon" title="删除该曲线" @click="cfgCurveRemovePeriod(i)">✕</button>
+                        <button class="ce-btn ghost small" @click="cfgCurvePointAdd(i, dir)">+ 添加档位</button>
                       </div>
-                      <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir" class="ce-curve-dir">
-                        <div class="ce-curve-dir-head">
-                          <span>{{ dir === 'upload_curve' ? '上传档位' : '下载档位' }}</span>
-                          <button class="ce-btn ghost small" @click="cfgCurvePointAdd(i, dir)">+ 添加档位</button>
+
+                      <!-- 阶梯折线预览: 横轴累计流量, 纵轴限速(阈值为区间上限, 末档持续到无穷) -->
+                      <div v-if="cfgCurveChartOf(i, dir)" class="ce-chart">
+                        <svg class="ce-chart-svg" :viewBox="cfgCurveChartOf(i, dir).viewBox" preserveAspectRatio="none">
+                          <path class="ce-chart-area" :d="cfgCurveChartOf(i, dir).area"></path>
+                          <path class="ce-chart-line" :d="cfgCurveChartOf(i, dir).line"></path>
+                        </svg>
+                        <div class="ce-chart-axis">
+                          <span>0</span>
+                          <span>{{ cfgCurveChartOf(i, dir).maxLabel }}</span>
                         </div>
-                        <p v-if="!cfgCurvePoints(i, dir).length" class="ce-help">未配置 = 不管理该方向</p>
+                        <p class="ce-chart-note">{{ cfgCurveChartOf(i, dir).note }}</p>
+                      </div>
+                      <p v-if="cfgCurveInvalid(i, dir)" class="ce-risk-line">
+                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
+                        <span>{{ cfgCurveInvalid(i, dir) }} 个档位无法解析(需形如 10GiB / 6MiB/s), 保存时后端会拒绝</span>
+                      </p>
+
+                      <div v-if="cfgCurvePoints(i, dir).length" class="ce-curve-points">
+                        <div class="ce-curve-point-head">
+                          <span>累计流量低于</span><span>限速</span><span></span>
+                        </div>
                         <div v-for="(p, j) in cfgCurvePoints(i, dir)" :key="j" class="ce-curve-point">
-                          <span class="ce-help">累计低于</span>
-                          <input class="ce-input ce-inline-input" :value="cfgCurveThreshold(i, dir, j)" placeholder="10GiB"
+                          <input class="ce-input" :value="cfgCurveThreshold(i, dir, j)" placeholder="10GiB"
                                  @input="cfgCurvePointSet(i, dir, j, $event.target.value)">
-                          <span class="ce-help">时限速</span>
-                          <input class="ce-input ce-inline-input" :value="cfgCurveSpeed(i, dir, j)" placeholder="6MiB/s"
+                          <input class="ce-input" :value="cfgCurveSpeed(i, dir, j)" placeholder="6MiB/s"
                                  @input="cfgCurvePointSet(i, dir, j, undefined, $event.target.value)">
-                          <button class="ce-icon" title="删除该档位" @click="cfgCurvePointRemove(i, dir, j)">✕</button>
+                          <button class="ce-icon danger" title="删除该档位" @click="cfgCurvePointRemove(i, dir, j)">
+                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                          </button>
                         </div>
                       </div>
                     </div>
-                    <p v-if="!cfgCurveList().length" class="ce-help">未配置曲线 = 不进行任何限速</p>
                   </div>
-                  <button class="ce-btn danger" @click="cfgCurveDisable()">关闭并移除曲线配置</button>
+
+                  <div class="ce-card">
+                    <button class="ce-btn danger" @click="cfgCurveDisable()">关闭并移除曲线配置</button>
+                  </div>
                 </template>
               </div>
 
-              <!-- 普通字段分组 -->
-              <div v-else class="ce-fields">
-                <ce-field v-for="item in cfgActive.items" :key="item.path.join('.')" :item="item"></ce-field>
+              <!-- 普通字段分组(卡片化) -->
+              <div v-else class="ce-card">
+                <div class="ce-fields">
+                  <ce-field v-for="item in cfgActive.items" :key="item.path.join('.')" :item="item"></ce-field>
+                </div>
               </div>
 
               <!-- 只读 YAML 预览(与即将写入磁盘的内容同源) -->
@@ -522,6 +731,17 @@
         <span v-if="item.help" class="ce-inline-help">{{ item.help }}</span>
       </div>
 
+      <!-- 相关设置子卡(schema group_of 归入父字段之下): 只放与父字段强相关的少量选项 -->
+      <div v-else-if="item.type === 'subcard'" class="ce-subcard" :style="indent">
+        <div class="ce-subcard-head">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+          <span>{{ item.label }}</span>
+        </div>
+        <div class="ce-subcard-body">
+          <ce-field v-for="sub in item.items" :key="sub.path.join('.')" :item="sub"></ce-field>
+        </div>
+      </div>
+
       <!-- 可选段开关(如站点 HR 规则): 控制该键是否写入配置 -->
       <div v-else-if="item.type === 'toggle'" class="ce-field ce-field-block" :style="indent">
         <label class="ce-label">{{ f.label }}</label>
@@ -535,11 +755,14 @@
         </div>
       </div>
 
-      <!-- 叶子字段 -->
-      <div v-else class="ce-field" :class="{ 'ce-field-block': isList || isBare }" :style="indent">
+      <!-- 叶子字段: 未启用(grey_if 不满足)时灰显但仍可编辑 -->
+      <div v-else class="ce-field" :class="{ 'ce-field-block': isList || isBare, 'ce-inactive': greyed }" :style="indent">
         <label v-if="!isBare" class="ce-label">
           {{ f.label }}<span v-if="f.required" class="ce-req" title="必填">*</span>
           <span v-if="isDefault()" class="ce-tag" title="当前未显式配置, 此处显示默认值">默认</span>
+          <span v-if="f.risk" class="ce-risk" title="该项存在风险, 详见下方说明">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
+          </span>
         </label>
         <div class="ce-ctl">
           <label v-if="f.kind === 'bool'" class="ce-switch">
@@ -548,7 +771,7 @@
             <span class="ce-switch-text">{{ boolValue() ? '启用' : '关闭' }}</span>
           </label>
 
-          <select v-else-if="f.kind === 'enum'" class="ce-input" :value="textValue()" @change="set($event.target.value)">
+          <select v-else-if="f.kind === 'enum'" class="ce-input ce-select" :value="textValue()" @change="set($event.target.value)">
             <option v-if="!f.required" value="">(未配置)</option>
             <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
           </select>
@@ -575,6 +798,10 @@
           </template>
 
           <p v-if="f.help" class="ce-help">{{ f.help }}</p>
+          <!-- 风险提示: 醒目标识(盾牌 + 橙红文字), 需明显区别于普通说明 -->
+          <p v-if="f.risk" class="ce-risk-line">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg><span>{{ f.risk }}</span>
+          </p>
         </div>
       </div>
     </div>

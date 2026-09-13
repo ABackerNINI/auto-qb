@@ -29,6 +29,9 @@ window.CONFIG_EDITOR = {
         ruleGroupKey: null,  // 规则集编辑器当前选中规则集
         newRuleGroupName: "",
         newRuleName: "",
+        addOpen: "",  // 当前展开的"新增"表单: "" | tracker | ruleGroup | rule(同时只允许一个)
+        collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
+        picker: { open: false, groupKey: "", ruleName: "", list: "" },  // 条件/动作选择面板(单例)
       },
     };
   },
@@ -37,7 +40,7 @@ window.CONFIG_EDITOR = {
     return { ce: this };
   },
   computed: {
-    /* 左导航: 分组 + 条目数徽标 */
+    /* 左导航: 分组 + 图标 + 条目数徽标 */
     cfgGroups() {
       const schema = this.cfg.schema;
       if (!schema || !this.cfg.tree) return [];
@@ -45,16 +48,19 @@ window.CONFIG_EDITOR = {
       return schema.groups.map((g) => {
         const badge = g.key === "trackers" ? Object.keys(conf.trackers || {}).length :
           g.key === "rules" ? Object.keys(this.cfgRuleGroups()).length : 0;
-        return { key: g.key, label: g.label, help: g.help, badge: badge };
+        return { key: g.key, label: g.label, help: g.help, badge: badge, icon: g.icon || "i-settings" };
       });
     },
     /* 当前分组的渲染项(嵌套字段已扁平化) */
     cfgActive() {
       const schema = this.cfg.schema;
-      if (!schema) return { key: "", label: "", help: "", items: [] };
+      if (!schema) return { key: "", label: "", help: "", icon: "", items: [] };
       const g = schema.groups.find((x) => x.key === this.cfg.activeGroup) || schema.groups[0];
-      if (!g) return { key: "", label: "", help: "", items: [] };
-      return { key: g.key, label: g.label, help: g.help, items: this.cfgFlatten(g.fields, ["config"], 0) };
+      if (!g) return { key: "", label: "", help: "", icon: "", items: [] };
+      return {
+        key: g.key, label: g.label, help: g.help, icon: g.icon || "i-settings",
+        items: this.cfgFlatten(g.fields, ["config"], 0),
+      };
     },
     cfgDirty() {
       if (!this.cfg.tree) return false;
@@ -68,6 +74,22 @@ window.CONFIG_EDITOR = {
       for (const p of schema.plugins.condition) idx[p.name] = p;
       for (const p of schema.plugins.action) idx[p.name] = p;
       return idx;
+    },
+    /* 限速曲线的阶梯图数据: key 为 "<曲线序号>:<方向>"
+     *
+     * 作计算属性而非方法: 模板中每张图要引用 line/area/note/axis 多处, 计算属性只算一次;
+     * 纯展示数据(解析失败的点直接跳过), 合法性仍由后端 load_config 夹紧。
+     */
+    cfgCurveCharts() {
+      const out = {};
+      const list = this.cfgCurveList();
+      for (let i = 0; i < list.length; i++) {
+        for (const dir of ["upload_curve", "download_curve"]) {
+          const chart = this._curveChart(i, dir);
+          if (chart) out[`${i}:${dir}`] = chart;
+        }
+      }
+      return out;
     },
   },
   methods: {
@@ -145,6 +167,9 @@ window.CONFIG_EDITOR = {
       this.cfg.previewError = "";
       this.cfg.trackerKey = null;
       this.cfg.ruleGroupKey = null;
+      this.cfg.addOpen = "";
+      this.cfg.collapsedRules = {};
+      this.cfgPickerClose();
     },
     async openSettings() {
       this.page = "settings";
@@ -260,12 +285,26 @@ window.CONFIG_EDITOR = {
     },
     /* 把字段(含嵌套 object)展开为扁平渲染项
      *
-     * 项类型: group(object 段标题) / field(叶子字段) / toggle(可选 object 段的启用开关)
-     * 可选段(default 为 null)以开关控制该键的存在性, 其子字段标记 depends 以便"未启用时隐藏"
+     * 项类型: group(object 段标题) / field(叶子字段) / toggle(可选 object 段的启用开关) /
+     *        subcard(由 group_of 归入父字段的"相关设置"子卡)
+     * 可选段(default 为 null)以开关控制该键的存在性, 其子字段标记 depends 以便"未启用时隐藏";
+     * allowGrouping=false 用于子卡内部: 那些字段已归属父字段, 不能再参与一次分组判定
+     * (否则它们会被再次收进 children, roots 为空 => 子卡渲染成空)。
      */
-    cfgFlatten(fields, basePath, depth, ownerPath) {
-      const items = [];
+    cfgFlatten(fields, basePath, depth, ownerPath, allowGrouping = true) {
+      const children = new Map();
+      const roots = [];
       for (const f of fields) {
+        if (allowGrouping && f.group_of) {
+          if (!children.has(f.group_of)) children.set(f.group_of, []);
+          children.get(f.group_of).push(f);
+        } else {
+          roots.push(f);
+        }
+      }
+      const byKey = new Map(fields.map((f) => [f.key, f]));
+      const items = [];
+      for (const f of roots) {
         const path = [...basePath, f.key];
         if (f.kind === "object") {
           if (f.optional) items.push({ type: "toggle", field: f, path: path, depth: depth });
@@ -275,11 +314,42 @@ window.CONFIG_EDITOR = {
             if (f.optional) s.depends = path;
             items.push(s);
           }
-        } else {
-          items.push({ type: "field", field: f, path: path, depth: depth, owner: ownerPath || basePath });
+          continue;
+        }
+        items.push({ type: "field", field: f, path: path, depth: depth, owner: ownerPath || basePath });
+        const kids = children.get(f.key);
+        if (kids && kids.length) {
+          // 相关设置子卡: 父字段之下缩进一级, 归属关系一目了然
+          const sub = this.cfgFlatten(kids, basePath, depth + 1, ownerPath || basePath, false);
+          items.push({
+            type: "subcard",
+            path: path,
+            depth: depth + 1,
+            label: `${f.label} · 相关设置`,
+            ownerField: f,
+            owner: ownerPath || basePath,
+            items: this._attachGrey(sub, byKey),
+          });
         }
       }
+      return this._attachGrey(items, byKey);
+    },
+    /* 把同段字段表附到带 grey_if 的项上: 灰显判定需要父字段的 schema 默认值作 fallback */
+    _attachGrey(items, byKey) {
+      for (const it of items) {
+        const f = it.field;
+        if (f && f.grey_if && f.grey_if.length) it.greyBy = byKey.get(f.grey_if[0]) || null;
+      }
       return items;
+    },
+    /* 字段是否处于"所属功能未启用"状态(grey_if 不满足): 灰显但仍可编辑 */
+    cfgGreyed(item) {
+      const g = item.field && item.field.grey_if;
+      if (!g || !g.length) return false;
+      const [key, expect] = g;
+      const parent = item.greyBy;
+      const fallback = parent ? this.cfgScalar(parent.default) : "";
+      return this.cfgText([...item.path.slice(0, -1), key], fallback) !== expect;
     },
     /* 可选段开关: 开启时按 schema 构造初始值(必填子字段先填好, 让新段可直接通过校验) */
     cfgToggleSection(path, field, on) {
@@ -338,6 +408,7 @@ window.CONFIG_EDITOR = {
       this.cfg.trackerKey = name;
       this.cfg.newTrackerName = "";
       this.cfg.notice = "";
+      this.cfgAddCancel();
     },
     async cfgTrackerRename(oldName) {
       const newName = await this.promptDialog("重命名站点配置", oldName, { okText: "重命名" });
@@ -372,6 +443,23 @@ window.CONFIG_EDITOR = {
     cfgConfigPath() {
       return ["config"];
     },
+    /* ---------------------------------------------------------- "新增"按钮: 就地展开输入框 */
+
+    cfgAddStart(kind) {
+      this.cfg.addOpen = this.cfg.addOpen === kind ? "" : kind;
+      this.cfg.newTrackerName = "";
+      this.cfg.newRuleGroupName = "";
+      this.cfg.newRuleName = "";
+      if (this.cfg.addOpen) {
+        this.$nextTick(() => {
+          const el = this.$refs.addInput;
+          if (el) el.focus();
+        });
+      }
+    },
+    cfgAddCancel() {
+      this.cfg.addOpen = "";
+    },
     /* 当前站点的渲染项(站点字段 + hr 子段) */
     cfgTrackerItems() {
       const name = this.cfg.trackerKey;
@@ -405,6 +493,7 @@ window.CONFIG_EDITOR = {
       this.cfgSetPath([...this.cfgConfigPath(), name], {});
       this.cfg.ruleGroupKey = name;
       this.cfg.newRuleGroupName = "";
+      this.cfgAddCancel();
     },
     async cfgRuleRemoveGroup(name) {
       const ok = await this.confirmDialog(`删除规则集 ${name}`, "该规则集下的全部规则将一并移除。", {
@@ -431,6 +520,7 @@ window.CONFIG_EDITOR = {
       // 新规则仅给 conditions/actions 两个空列表, 其余键留空由后端走默认值(保持 YAML 简洁)
       this.cfgSetPath([...this.cfgConfigPath(), groupKey, name], { conditions: [], actions: [] });
       this.cfg.newRuleName = "";
+      this.cfgAddCancel();
     },
     async cfgRuleRemove(groupKey, ruleName) {
       const ok = await this.confirmDialog(`删除规则 ${ruleName}`, "该规则的条件与动作配置将一并移除。", {
@@ -550,6 +640,99 @@ window.CONFIG_EDITOR = {
       list[j] = { [t]: { [this.cfgCurveDirectionKey(direction)]: s } };
       this.cfgSetPath(this.cfgCurvePointsPath(i, direction), list);
     },
+
+    /* ---------------------------------------------------------- 曲线图表(SVG 阶梯折线预览)
+     *
+     * 纯展示: 前端只用它画图, 解析失败不阻断保存(合法性唯一入口仍是后端 load_config)。
+     * 语义与 curves.curve_speed 一致 —— 阈值是区间**上限**, 末档之后一直沿用末档速度。
+     */
+
+    cfgCurvePeriodHint(i) {
+      const p = (this.cfgCurvePeriod(i).period || "").trim();
+      if (!p) return "未填写周期(DAY / MONTH / 7D)";
+      const known = { DAY: "按当天累计流量", MONTH: "按本月累计流量" };
+      return known[p.toUpperCase()] || `按最近 ${p} 的累计流量`;
+    },
+    cfgCurveInvalid(i, direction) {
+      // 无法解析的档位数(阈值需形如 10GiB, 限速需形如 6MiB/s)
+      let bad = 0;
+      const points = this.cfgCurvePoints(i, direction);
+      for (let j = 0; j < points.length; j++) {
+        if (this._parseSizeValue(this.cfgCurveThreshold(i, direction, j)) === null ||
+          this._parseSpeedValue(this.cfgCurveSpeed(i, direction, j)) === null) bad++;
+      }
+      return bad;
+    },
+    cfgCurveChartOf(i, direction) {
+      return this.cfgCurveCharts[`${i}:${direction}`] || null;
+    },
+    _curveChart(i, direction) {
+      const raw = this.cfgCurvePoints(i, direction);
+      const points = [];
+      for (let j = 0; j < raw.length; j++) {
+        const t = this._parseSizeValue(this.cfgCurveThreshold(i, direction, j));
+        const s = this._parseSpeedValue(this.cfgCurveSpeed(i, direction, j));
+        if (t === null || s === null || t <= 0) continue;
+        points.push({ t, s });
+      }
+      if (!points.length) return null;
+      points.sort((a, b) => a.t - b.t);
+      const W = 320, H = 96, PAD = 6, AXIS = 14;
+      const maxT = points[points.length - 1].t;
+      const maxS = Math.max(...points.map((p) => p.s), 1);
+      const tail = maxT * 0.08;  // 末档向右延伸一段, 表示"此后一直沿用末档"
+      const spanT = maxT + tail;
+      const x = (t) => PAD + (W - PAD * 2) * (t / spanT);
+      const y = (s) => H - AXIS - (H - AXIS - PAD) * (s / maxS);
+      let line = `M ${x(0).toFixed(1)} ${y(points[0].s).toFixed(1)}`;
+      for (let k = 1; k < points.length; k++) {
+        line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k - 1].s).toFixed(1)}`;
+        line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k].s).toFixed(1)}`;
+      }
+      const lastS = points[points.length - 1].s;
+      line += ` L ${x(spanT).toFixed(1)} ${y(lastS).toFixed(1)}`;
+      const area = `${line} L ${x(spanT).toFixed(1)} ${H - AXIS} L ${x(0).toFixed(1)} ${H - AXIS} Z`;
+      return {
+        viewBox: `0 0 ${W} ${H}`,
+        line: line,
+        area: area,
+        maxLabel: this._fmtBytes(spanT),
+        note: `${points.length} 档 · 最严 ${this._fmtSpeed(maxS)}`,
+      };
+    },
+    /* 单位倍数: KiB/MiB/GiB... 为 1024 进制, KB/MB/GB... 为 1000 进制; 仅 B 或空 = 1 */
+    _sizeMultiplier(unit) {
+      const u = String(unit || "").trim();
+      if (!u || /^b$/i.test(u)) return 1;
+      const idx = "KMGTP".indexOf(u[0].toUpperCase());
+      if (idx < 0) return null;
+      return (/(i)/i.test(u) ? 1024 : 1000) ** (idx + 1);
+    },
+    _parseSizeValue(text) {
+      const m = String(text === undefined || text === null ? "" : text).trim().match(/^([\d.]+)\s*([A-Za-z]*)$/);
+      if (!m) return null;
+      const mult = this._sizeMultiplier(m[2]);
+      if (mult === null) return null;
+      const v = parseFloat(m[1]);
+      return isNaN(v) ? null : v * mult;
+    },
+    _parseSpeedValue(text) {
+      const t = String(text === undefined || text === null ? "" : text).trim();
+      if (!t) return null;
+      return this._parseSizeValue(t.replace(/\s*\/\s*s\s*$/i, ""));
+    },
+    _fmtBytes(v) {
+      for (const [u, div] of [["TiB", 2 ** 40], ["GiB", 2 ** 30], ["MiB", 2 ** 20], ["KiB", 2 ** 10]]) {
+        if (v >= div) return (v / div).toFixed(1) + " " + u;
+      }
+      return Math.round(v) + " B";
+    },
+    _fmtSpeed(v) {
+      for (const [u, div] of [["GiB/s", 2 ** 30], ["MiB/s", 2 ** 20], ["KiB/s", 2 ** 10]]) {
+        if (v >= div) return (v / div).toFixed(1) + " " + u;
+      }
+      return Math.round(v) + " B/s";
+    },
   },
 };
 
@@ -585,8 +768,14 @@ window.CE_FIELD_COMPONENT = {
     },
     visible() {
       if (this.item.depends && !this.ce.cfgExists(this.item.depends)) return false;
+      // 子卡随父字段的可见性一起显隐
+      if (this.item.type === "subcard") return this.ce.cfgVisible(this.item.ownerField, this.item.owner);
       if (this.item.type !== "field") return true;
       return this.ce.cfgVisible(this.f, this.item.owner);
+    },
+    /* 所属功能未启用(grey_if 不满足)时灰显, 但仍可编辑(不阻断, 只提示) */
+    greyed() {
+      return this.item.type === "field" && this.ce.cfgGreyed(this.item);
     },
   },
   methods: {

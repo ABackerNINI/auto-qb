@@ -89,6 +89,9 @@ class Field:
     fields: Tuple["Field", ...] = ()
     optional: bool = False
     ui_only: bool = False
+    grey_if: Tuple[str, str] = ()
+    group_of: str = ""
+    risk: str = ""
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,7 @@ class Group:
     label: str
     help: str = ""
     fields: Tuple[Field, ...] = ()
+    icon: str = ""  # sprite symbol id(如 i-settings); 空 = 前端用默认图标
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,7 @@ class Plugin:
     options: Tuple[str, ...] = ()
     placeholder: str = ""
     fields: Tuple[Field, ...] = ()
+    risk: str = ""  # 非空 = 高风险插件(前端在卡片头显示醒目警示)
 
 
 # ---------------------------------------------------------------- 通用选项
@@ -139,43 +144,131 @@ DELETED_ALLOWED_ACTIONS = ("print_torrent_details", )
 # ---------------------------------------------------------------- HR 输出字段(全局/站点共用)
 
 HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
-    Field("add_tag", "触发后添加标签", "str", default="", help="支持 ${required_seeding_time} 变量"),
-    Field("add_category", "触发后设置分类", "str", default="", help="支持 ${required_seeding_time} 变量"),
-    Field("overwrite_category", "覆盖已有分类", "bool", default="false", help="关闭时仅覆盖本程序上次自动设置的分类"),
-    Field("add_tag_for_satisfied", "达标后添加标签", "str", default="", help="做种时长满足要求+额外时间后添加"),
-    Field("add_category_for_satisfied", "达标后设置分类", "str", default="", help="同上, 分类形式"),
-    Field("overwrite_category_for_satisfied", "达标后覆盖分类", "bool", default="false", help="达标分支是否覆盖已有分类"),
+    Field("add_tag", "触发后添加标签", "str", default="", help="未达标种子在触发后添加的标签; 支持 ${required_seeding_time} 变量"),
+    Field(
+        "add_category",
+        "触发后设置分类",
+        "str",
+        default="",
+        help="未达标种子在触发后设置的分类; 支持 ${required_seeding_time} 变量; 留空 = 不设置分类",
+    ),
+    Field(
+        "overwrite_category",
+        "覆盖已有分类",
+        "bool",
+        default="false",
+        group_of="add_category",
+        risk="开启后会覆盖人工设置的分类; 关闭时仅覆盖本程序上次自动设置的分类",
+    ),
+    Field(
+        "add_tag_for_satisfied",
+        "达标后添加标签",
+        "str",
+        default="",
+        help="做种时长满足要求 + 额外时间后添加的标签; 留空 = 不添加",
+    ),
+    Field(
+        "add_category_for_satisfied",
+        "达标后设置分类",
+        "str",
+        default="",
+        help="达标分支设置的分类; 留空 = 不设置分类",
+    ),
+    Field(
+        "overwrite_category_for_satisfied",
+        "达标后覆盖分类",
+        "bool",
+        default="false",
+        group_of="add_category_for_satisfied",
+        risk="开启后会覆盖人工设置的分类",
+    ),
 )
 
 # ---------------------------------------------------------------- 站点段字段
 
 TRACKER_HR_FIELDS: Tuple[Field, ...] = (
-    Field("required_seeding_time", "要求做种时长", "time", default="3D", required=True, help="如 3D / 12H / 1.5D"),
-    Field("required_share_ratio", "要求分享率", "float", default="0", help="0 = 不要求"),
-    Field("extra_seeding_time", "额外做种时间", "time", default="0S", help="满足 要求+额外 视为达标"),
-    Field("condition", "HR 触发条件", "ratio", default="80%", help="如 80% 或 10MiB"),
+    Field(
+        "required_seeding_time", "要求做种时长", "time", default="3D", required=True, help="如 3D / 12H / 1.5D; 达到该时长才算满足 HR"
+    ),
+    Field("required_share_ratio", "要求分享率", "float", default="0", help="上传/下载 达到该值也算满足 HR; 0 = 不要求"),
+    Field("extra_seeding_time", "额外做种时间", "time", default="0S", help="要求时长 + 额外时长 视为达标(可留缓冲)"),
+    Field("condition", "HR 触发条件", "ratio", default="80%", help="下载比例或下载量达到该值即视为需要 HR 管理, 如 80% / 10MiB"),
 ) + HR_OUTPUT_FIELDS
 
 TRACKER_FIELDS: Tuple[Field, ...] = (
-    Field("domains", "站点域名", "str_list", default=[], required=True, help="按 hostname 精确匹配(含子域名); 必填"),
-    Field("tags", "站点标签", "str_list", default=[], help="种子匹配该站点时由维护任务添加"),
-    Field("remove_tags", "删除标签格式", "pattern_list", default=[], help="支持 regex: 前缀与 :ignore_case 后缀"),
-    Field("upload_speed_limit", "单种上传限速", "speed", default="0KiB/s", help="0 = 不限速; 奇数 KiB/s 视为用户手动设置, 不覆盖"),
+    Field(
+        "domains",
+        "站点域名",
+        "str_list",
+        default=[],
+        required=True,
+        help="按 hostname 精确匹配(含子域名); 必填; 每行一个",
+    ),
+    Field("tags", "站点标签", "str_list", default=[], help="种子匹配到该站点时自动添加的标签; 第一个标签用作日志中的站点名"),
+    Field(
+        "remove_tags",
+        "删除标签格式",
+        "pattern_list",
+        default=[],
+        help="支持 regex: 前缀与 :ignore_case 后缀; 可用于清理种子自带的标签",
+        risk="匹配到的标签会从该站点的种子中删除",
+    ),
+    Field(
+        "upload_speed_limit",
+        "单种上传限速",
+        "speed",
+        default="0KiB/s",
+        help="0 = 不限速; 奇数 KiB/s 视为用户手动设置, 本程序不覆盖",
+    ),
     Field("download_speed_limit", "单种下载限速", "speed", default="0KiB/s", help="0 = 不限速"),
     Field("hr", "HR 规则", "object", default=None, optional=True, help="未配置 = 该站点不做 HR 管理", fields=TRACKER_HR_FIELDS),
-    Field("rules", "引用的规则", "str_list", default=[], help="格式 @规则集 或 @规则集.规则名"),
-    Field("remove_similar_tags", "删除类似标签", "bool", default="false", help="未配置时回退全局值"),
+    Field("rules", "引用的规则", "str_list", default=[], help="格式 @规则集 或 @规则集.规则名; 留空 = 该站点执行全部启用的规则"),
+    Field(
+        "remove_similar_tags",
+        "删除类似标签",
+        "bool",
+        default="false",
+        help="未配置时回退全局 自动化.删除类似标签 的值; 删除仅大小写不同的同名标签",
+    ),
 )
 
 # ---------------------------------------------------------------- 规则集字段
 
 RULE_FIELDS: Tuple[Field, ...] = (
-    Field("enabled", "启用", "bool", default="true"),
-    Field("trigger", "触发时机", "enum", default="interval", options=TRIGGERS, help="interval 周期轮询; 其余为事件触发(一次性, 不建周期任务)"),
-    Field("interval", "扫描间隔", "time", default="0S", unit="S/M/H/D", help="0 = 每轮"),
-    Field("execute_once", "执行一次", "enum", default="never", options=EXECUTE_ONCE, help="非幂等动作(校验/开始/汇报/限速)建议配置"),
-    Field("cooldown", "冷却时间", "time", default="0S", unit="S/M/H/D", help="距上次成功不足该时间则跳过; 优先于 execute_once"),
-    Field("stop_following_rules_if", "停止后续规则", "enum", default="conditions-met", options=STOP_IF),
+    Field("enabled", "启用", "bool", default="true", help="关闭后该规则不参与任何匹配与执行"),
+    Field(
+        "trigger",
+        "触发时机",
+        "enum",
+        default="interval",
+        options=TRIGGERS,
+        help="interval = 按扫描间隔周期执行; 其余为事件触发(种子新增/删除/状态变化时一次性执行)",
+    ),
+    Field("interval", "扫描间隔", "time", default="0S", unit="S/M/H/D", help="0 = 每轮(受主循环间隔约束); 从上一轮结束起算"),
+    Field(
+        "execute_once",
+        "执行一次",
+        "enum",
+        default="never",
+        options=EXECUTE_ONCE,
+        help="窗口内最多成功执行一次(去重), 适合校验/开始/汇报等非幂等动作",
+    ),
+    Field(
+        "cooldown",
+        "冷却时间",
+        "time",
+        default="0S",
+        unit="S/M/H/D",
+        help="距上次成功不足该时间则跳过; 优先于 执行一次",
+    ),
+    Field(
+        "stop_following_rules_if",
+        "停止后续规则",
+        "enum",
+        default="conditions-met",
+        options=STOP_IF,
+        help="本规则条件满足后是否继续执行后续规则(优先级由规则列表顺序决定)",
+    ),
 )
 
 # ---------------------------------------------------------------- 条件插件(15)
@@ -283,7 +376,8 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "list",
         "支持 regex:/:ignore_case 与变量替换",
         item_kind="pattern",
-        placeholder="regex:^tag"
+        placeholder="regex:^tag",
+        risk="匹配到的标签会从种子删除",
     ),
     Plugin(
         "add_category",
@@ -292,8 +386,15 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "object",
         "已设置/已有分类且不允许覆盖时跳过",
         fields=(
-            Field("format", "分类名称", "str", default="", required=True, help="支持 ${required_seeding_time}"),
-            Field("overwrite", "覆盖已有分类", "bool", default="false", help="关闭时仅覆盖本程序上次自动设置的分类"),
+            Field("format", "分类名称", "str", default="", required=True, help="支持 ${required_seeding_time} 变量"),
+            Field(
+                "overwrite",
+                "覆盖已有分类",
+                "bool",
+                default="false",
+                group_of="format",
+                risk="开启后会覆盖人工设置的分类; 关闭时仅覆盖本程序上次自动设置的分类",
+            ),
         )
     ),
     Plugin("remove_category", "清空分类", "action", "bool", "分类为空时跳过"),
@@ -305,7 +406,8 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "校验/跳检",
         "action",
         "object",
-        "用参考种子判定后跳检或强制校验(高风险, 需配合去重配置)",
+        "用参考种子判定后跳检或强制校验",
+        risk="跳检会删除种子并重新添加(期间停止做种), 请务必配置去重/冷却避免反复执行",
         fields=(
             Field(
                 "basic_check",
@@ -314,7 +416,7 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 default="filelist",
                 required=True,
                 options=CHECKING_BASIC,
-                help="filelist 文件列表 / piecehashes 分片哈希 / custom 自定义程序"
+                help="filelist 比对文件列表 / piecehashes 比对分片哈希 / custom 调用自定义程序"
             ),
             Field(
                 "custom_basic_check_program_path",
@@ -322,7 +424,8 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 "path",
                 default="",
                 show_if=("basic_check", "custom"),
-                help="参数: <种子hash> <保存路径>, 返回码 0 即为参考"
+                risk="会以 <种子hash> <保存路径> 为参数执行该程序",
+                placeholder="C:/tools/check.bat",
             ),
             Field("with_reference", "有参考种子", "object", default=None, optional=True, fields=CHECKING_SECTION_FIELDS),
             Field(
@@ -331,7 +434,7 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 "object",
                 default=None,
                 optional=True,
-                help="跳检为高风险动作",
+                help="无参考种子时的处理方式(通常为跳检)",
                 fields=CHECKING_SECTION_FIELDS
             ),
         )
@@ -341,10 +444,10 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "移动种子",
         "action",
         "object",
-        "调用 qB set_location",
+        "调用 qB set_location(不移动磁盘文件, 仅改 qB 记录路径)",
         fields=(Field("path", "目标路径", "path", default="", required=True, placeholder="R:/seeds"), )
     ),
-    Plugin("reannounce", "强制汇报", "action", "bool", "⚠️ 高风险: 动作内置 10 分钟最小间隔, 未配去重时启动告警"),
+    Plugin("reannounce", "强制汇报", "action", "bool", "动作内置 10 分钟最小间隔, 未配去重时启动告警", risk="频繁汇报会被站点判定为异常流量"),
     Plugin("upload_speed_limit", "上传限速", "action", "speed", "0 = 不限速; 奇数 KiB/s 视为用户手动设置, 不覆盖", placeholder="1000KiB/s"),
     Plugin("download_speed_limit", "下载限速", "action", "speed", "0 = 不限速", placeholder="1000KiB/s"),
 )
@@ -361,20 +464,50 @@ GROUPS: Tuple[Group, ...] = (
                 "qbittorrent",
                 "qBittorrent",
                 "object",
-                help="主程序连接的客户端",
+                help="主程序连接的客户端(需开启 WebUI)",
                 fields=(
-                    Field("host", "主机", "str", default="127.0.0.1", required=True),
-                    Field("port", "端口", "int", default="8080", required=True, min=1, max=65535),
-                    Field("username", "用户名", "str", default=""),
-                    Field("password", "密码", "password", default=""),
+                    Field("host", "主机", "str", default="127.0.0.1", required=True, placeholder="127.0.0.1"),
+                    Field("port", "端口", "int", default="8080", required=True, min=1, max=65535, help="qB WebUI 监听端口"),
+                    Field("username", "用户名", "str", default="", help="qB WebUI 登录用户名"),
+                    Field("password", "密码", "password", default="", help="qB WebUI 登录密码"),
                 )
             ),
-            Field("main_tick", "主循环间隔", "time", default="2S", unit="S/M/H/D", required=True, help="必须为正时间, 防止忙循环"),
-            Field("max_tasks_per_tick", "每轮最大任务数", "int", default="20", min=1),
-            Field("interval", "内置任务间隔", "time", default="60S", unit="S/M/H/D", help="从上一轮结束起算, 不叠加"),
-            Field("data_dir", "运行时数据目录", "path", default="auto-qb-data", help="⚠️ 修改需重启进程; 状态/锁/日志/跳检备份默认派生其下"),
-            Field("state_file", "状态文件", "path", default="", help="⚠️ 修改需重启进程; 留空 = <data_dir>/state.json"),
-        )
+            Field(
+                "main_tick",
+                "主循环间隔",
+                "time",
+                default="2S",
+                unit="S/M/H/D",
+                required=True,
+                help="必须为正时间, 防止忙循环; 决定状态变化与数据刷新频率",
+            ),
+            Field(
+                "max_tasks_per_tick",
+                "每轮最大任务数",
+                "int",
+                default="20",
+                min=1,
+                help="单轮最多执行多少个到期任务; 过大可能使单轮阻塞过久",
+            ),
+            Field(
+                "interval",
+                "内置任务间隔",
+                "time",
+                default="60S",
+                unit="S/M/H/D",
+                help="维护/全局清理/曲线等内置任务的周期; 从上一轮结束起算, 不叠加",
+            ),
+            Field(
+                "data_dir",
+                "运行时数据目录",
+                "path",
+                default="auto-qb-data",
+                help="状态/锁/日志/跳检备份默认派生其下",
+                risk="修改后需重启进程才生效",
+            ),
+            Field("state_file", "状态文件", "path", default="", help="留空 = <data_dir>/state.json", risk="修改后需重启进程才生效"),
+        ),
+        icon="i-settings",
     ),
     Group(
         "logging",
@@ -386,13 +519,27 @@ GROUPS: Tuple[Group, ...] = (
                 "日志设置",
                 "object",
                 fields=(
-                    Field("level", "日志等级", "enum", default="INFO", options=LOG_LEVELS),
+                    Field(
+                        "level",
+                        "日志等级",
+                        "enum",
+                        default="INFO",
+                        options=LOG_LEVELS,
+                        help="低于该等级的日志不输出; 达到 通知.最低通知级别 的日志会推送通知"
+                    ),
                     Field("file", "日志文件", "path", default="", help="留空 = <data_dir>/logs/auto-qb.log"),
-                    Field("max_bytes", "轮转大小", "size", default="10MiB", help="保留 5 个备份"),
-                    Field("format", "日志格式", "str", default="%(asctime)s [%(levelname)s] %(name)s: %(message)s"),
+                    Field("max_bytes", "轮转大小", "size", default="10MiB", help="单个日志文件上限, 超过则轮转; 保留 5 个备份"),
+                    Field(
+                        "format",
+                        "日志格式",
+                        "str",
+                        default="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                        help="Python logging 格式串, 可含 %(name)s(来源模块)",
+                    ),
                 )
             ),
-        )
+        ),
+        icon="i-list",
     ),
     Group(
         "web",
@@ -404,13 +551,21 @@ GROUPS: Tuple[Group, ...] = (
                 "WEB UI",
                 "object",
                 fields=(
-                    Field("enabled", "启用", "bool", default="false"),
-                    Field("host", "监听地址", "str", default="127.0.0.1", help="⚠️ 改为 0.0.0.0 会把可删除种子的管理接口暴露到网络"),
-                    Field("port", "监听端口", "int", default="8080", min=1, max=65535),
+                    Field("enabled", "启用", "bool", default="false", help="启用后可在浏览器打开 主机:端口 管理辅种与配置"),
+                    Field(
+                        "host",
+                        "监听地址",
+                        "str",
+                        default="127.0.0.1",
+                        help="推荐保持 127.0.0.1(仅本机可访问)",
+                        risk="改为 0.0.0.0 会把可暂停/删除种子的管理接口暴露到局域网",
+                    ),
+                    Field("port", "监听端口", "int", default="8080", min=1, max=65535, help="避免与 qB WebUI 端口冲突"),
                     Field("token", "访问密钥", "password", default="", help="留空 = 首次启动随机生成并持久化到 data_dir/web.token"),
                 )
             ),
-        )
+        ),
+        icon="i-monitor",
     ),
     Group(
         "notify",
@@ -422,50 +577,124 @@ GROUPS: Tuple[Group, ...] = (
                 "主动通知",
                 "object",
                 fields=(
-                    Field("enabled", "启用", "bool", default="false"),
-                    Field("min_level", "最低通知级别", "enum", default="WARNING", options=NOTIFY_LEVELS),
-                    Field("quiet_hours", "免打扰时段", "str", default="", placeholder="23:00-08:00", help="支持跨午夜; 留空不启用"),
-                    Field("max_per_hour", "每小时上限", "int", default="20", min=1, help="超出丢弃, 防通知风暴"),
-                    Field("dedup_window", "去重窗口", "time", default="10M", unit="S/M/H/D", help="0 = 不去重"),
+                    Field("enabled", "启用", "bool", default="false", help="开启后无需额外配置, 日志即通知内容"),
+                    Field(
+                        "min_level",
+                        "最低通知级别",
+                        "enum",
+                        default="WARNING",
+                        options=NOTIFY_LEVELS,
+                        grey_if=("enabled", "true"),
+                        help="达到该等级的日志才会推送",
+                    ),
+                    Field(
+                        "quiet_hours",
+                        "免打扰时段",
+                        "str",
+                        default="",
+                        placeholder="23:00-08:00",
+                        grey_if=("enabled", "true"),
+                        help="支持跨午夜; 留空不启用"
+                    ),
+                    Field(
+                        "max_per_hour",
+                        "每小时上限",
+                        "int",
+                        default="20",
+                        min=1,
+                        grey_if=("enabled", "true"),
+                        help="超出丢弃, 防通知风暴"
+                    ),
+                    Field(
+                        "dedup_window",
+                        "去重窗口",
+                        "time",
+                        default="10M",
+                        unit="S/M/H/D",
+                        grey_if=("enabled", "true"),
+                        help="窗口内相同内容的通知只推一次; 0 = 不去重",
+                    ),
                     Field(
                         "channels",
                         "通知渠道",
                         "keyed_list",
                         default=["platform"],
                         options=NOTIFY_CHANNELS,
+                        grey_if=("enabled", "true"),
                         help="当前仅支持平台原生通知"
                     ),
                 )
             ),
-        )
+        ),
+        icon="i-bell",
     ),
     Group(
         "maintenance",
         "自动化",
         "标签/分类/HR/辅种分组管理",
         fields=(
-            Field("remove_similar_tags", "删除类似标签", "bool", default="false", help="全局默认, 站点可覆盖; 删除大小写不同的同名标签"),
-            Field("skip_checking_tag", "跳检标签名", "str", default="zSkipChecked", help="带此标签的种子未经哈希校验, 查找参考种子时一律排除"),
+            Field(
+                "remove_similar_tags",
+                "删除类似标签",
+                "bool",
+                default="false",
+                help="全局默认, 站点可覆盖; 删除仅大小写不同的同名标签(如 HHan 与 hhan)"
+            ),
+            Field(
+                "skip_checking_tag",
+                "跳检标签名",
+                "str",
+                default="zSkipChecked",
+                help="带此标签的种子未经哈希校验, 查找参考种子时一律排除; 留空 = 禁用",
+            ),
             Field(
                 "grouping",
                 "辅种分组",
                 "object",
-                help="相同文件列表的种子归为一组统一检查",
+                help="把文件列表相同的种子归为一组, 统一检查缺文件并避免重复下载",
                 fields=(
-                    Field("enabled", "启用分组", "bool", default="true"),
-                    Field("check_missing_files", "启用缺文件检查", "bool", default="true"),
-                    Field("missing_tag", "缺文件标签", "str", default="MISSING"),
+                    Field("enabled", "启用分组", "bool", default="true", help="开启后替代单种子的缺文件检查"),
+                    Field(
+                        "check_missing_files",
+                        "启用缺文件检查",
+                        "bool",
+                        default="true",
+                        grey_if=("enabled", "true"),
+                        help="扫描代表种子的磁盘文件, 缺失则暂停整组并打标签",
+                    ),
+                    Field(
+                        "missing_tag",
+                        "缺文件标签",
+                        "str",
+                        default="MISSING",
+                        grey_if=("enabled", "true"),
+                        help="发现缺文件时给组内每个种子添加的标签",
+                    ),
                 )
             ),
             Field(
                 "add_episode_tags",
                 "集数标签",
                 "object",
-                help="仅在种子新增时触发; 多集不连续则不添加",
+                help="仅在种子新增时触发; 集数不连续时不做任何处理",
                 fields=(
-                    Field("enabled", "启用", "bool", default="false"),
-                    Field("add_tag_single", "单集模板", "str", default="zE${episode_first}"),
-                    Field("add_tag_multi", "多集模板", "str", default="zE${episode_first}-${episode_last}"),
+                    Field("enabled", "启用", "bool", default="false", help="开启后按文件名中的集数自动打标签"),
+                    Field(
+                        "add_tag_single",
+                        "单集模板",
+                        "str",
+                        default="zE${episode_first}",
+                        grey_if=("enabled", "true"),
+                        help="${episode_first} = 集数; 例: zE01"
+                    ),
+                    Field(
+                        "add_tag_multi",
+                        "多集模板",
+                        "str",
+                        default="zE${episode_first}-${episode_last}",
+                        grey_if=("enabled", "true"),
+                        help="${episode_first}/${episode_last} = 首/末集; 例: zE01-12"
+                    ),
                 )
             ),
             Field(
@@ -473,11 +702,19 @@ GROUPS: Tuple[Group, ...] = (
                 "彻底删除标签",
                 "pattern_list",
                 default=[],
-                help="匹配的标签对所有种子彻底删除; 支持 regex:/:ignore_case 与 @tracker_tags 引用"
+                help="匹配的标签从所有种子与全局标签表中删除; 支持 regex:/:ignore_case 与 @tracker_tags 引用",
+                risk="标签定义一并删除, 相关自动化(如 HR 标记)会随之失效",
             ),
-            Field("delete_tags_if_has_no_torrents", "删除无种子标签", "pattern_list", default=[], help="仅当没有任何种子使用该标签时删除"),
+            Field(
+                "delete_tags_if_has_no_torrents",
+                "删除无种子标签",
+                "pattern_list",
+                default=[],
+                help="仅当没有任何种子使用该标签时才删除(清理残留标签定义)"
+            ),
             Field("hr", "HR 全局默认", "object", help="站点 hr 段未设置输出字段时回退此处", fields=HR_OUTPUT_FIELDS),
-        )
+        ),
+        icon="i-cards",
     ),
     Group(
         "speed",
@@ -489,15 +726,17 @@ GROUPS: Tuple[Group, ...] = (
                 "全局限速曲线",
                 "curve",
                 default=None,
-                help="读取 Traffic Monitor 数据, 按 day/month/Nd 累计聚合分档限速"
+                help="读取 Traffic Monitor 数据, 按 day/month/Nd 累计流量分档限速(0 = 该档不限速)"
             ),
-        )
+        ),
+        icon="i-gauge",
     ),
     Group(
         "trackers",
         "站点",
         "站点匹配、标签、限速与 HR",
-        fields=(Field("trackers", "站点列表", "trackers", default={}, help="按域名匹配; 未配置的站点不做任何管理"), )
+        fields=(Field("trackers", "站点列表", "trackers", default={}, help="按域名匹配; 未配置的站点不做任何管理"), ),
+        icon="i-globe",
     ),
     Group(
         "rules",
@@ -506,7 +745,8 @@ GROUPS: Tuple[Group, ...] = (
         fields=(
             # UI 专段: 真实配置键是动态的 "<名称>_rules"(规则集名由用户自定), 故标记 ui_only
             Field("rules", "规则集", "rules", default={}, ui_only=True, help="config 段下所有以 _rules 结尾的键"),
-        )
+        ),
+        icon="i-bolt",
     ),
 )
 

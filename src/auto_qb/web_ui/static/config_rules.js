@@ -182,6 +182,46 @@ window.CONFIG_RULES = {
       if (!this.cfg.schema) return [];
       return this.cfgFlatten(this.cfg.schema.rule_fields, this.cfgRulePath(groupKey, ruleName), 0);
     },
+
+    /* ---------------------------------------------------------- 规则卡交互(折叠/启用/摘要) */
+
+    cfgRuleKey(groupKey, ruleName) {
+      return `${groupKey}::${ruleName}`;
+    },
+    cfgRuleCollapsed(groupKey, ruleName) {
+      return !!this.cfg.collapsedRules[this.cfgRuleKey(groupKey, ruleName)];
+    },
+    cfgRuleToggle(groupKey, ruleName) {
+      const k = this.cfgRuleKey(groupKey, ruleName);
+      this.cfg.collapsedRules = { ...this.cfg.collapsedRules, [k]: !this.cfg.collapsedRules[k] };
+    },
+    cfgRuleEnabled(groupKey, ruleName) {
+      return this.cfgBool([...this.cfgRulePath(groupKey, ruleName), "enabled"], "true");
+    },
+    cfgRuleSetEnabled(groupKey, ruleName, on) {
+      this.cfgSetBool([...this.cfgRulePath(groupKey, ruleName), "enabled"], on);
+    },
+    /* 卡头摘要(折叠时也能看出规则规模) */
+    cfgRuleSummary(groupKey, ruleName) {
+      const conds = this.cfgPluginList(groupKey, ruleName, "conditions").length;
+      const acts = this.cfgPluginList(groupKey, ruleName, "actions").length;
+      return `${this.cfgRuleTrigger(groupKey, ruleName)} · 条件 ${conds} · 动作 ${acts}`;
+    },
+
+    /* ---------------------------------------------------------- 条件/动作选择面板(单例) */
+
+    cfgPickerIsOpen(groupKey, ruleName, listName) {
+      const p = this.cfg.picker;
+      return !!p.open && p.groupKey === groupKey && p.ruleName === ruleName && p.list === listName;
+    },
+    cfgPickerOpen(groupKey, ruleName, listName) {
+      this.cfg.picker = this.cfgPickerIsOpen(groupKey, ruleName, listName) ?
+        { open: false, groupKey: "", ruleName: "", list: "" } :
+        { open: true, groupKey: groupKey, ruleName: ruleName, list: listName };
+    },
+    cfgPickerClose() {
+      this.cfg.picker = { open: false, groupKey: "", ruleName: "", list: "" };
+    },
     cfgRuleTrigger(groupKey, ruleName) {
       return this.cfgText([...this.cfgRulePath(groupKey, ruleName), "trigger"], "interval");
     },
@@ -195,16 +235,20 @@ window.CONFIG_RULES = {
     cfgConditionOptions() {
       return this.cfg.schema ? this.cfg.schema.plugins.condition : [];
     },
-    /* 高风险动作提示(与后端 Rule 构造时告警同一判据) */
+    /* 高风险提示汇总: 高风险动作清单 + 去重缺失(汇报/校验类反复执行有风险) */
     cfgRuleRisk(groupKey, ruleName) {
       const path = this.cfgRulePath(groupKey, ruleName);
-      const actions = this.cfgPluginList(groupKey, ruleName, "actions");
-      const hasReannounce = actions.some((e) => this.cfgPluginName(e) === "reannounce");
-      if (!hasReannounce) return "";
+      const names = this.cfgPluginList(groupKey, ruleName, "actions").map((e) => this.cfgPluginName(e));
+      const risky = names.filter((n) => this.cfgPluginIndex[n] && this.cfgPluginIndex[n].risk);
       const once = this.cfgText([...path, "execute_once"], "never");
       const cooldown = this.cfgText([...path, "cooldown"], "0S");
       const noDedup = once === "never" && (cooldown === "0S" || cooldown === "0" || cooldown === "");
-      return noDedup ? "含强制汇报动作但未配置去重(execute_once/cooldown), 高频触发有封号风险" : "";
+      const notes = [];
+      if (risky.length) notes.push(`含高风险动作: ${risky.join(", ")}`);
+      if (noDedup && (risky.includes("reannounce") || risky.includes("checking"))) {
+        notes.push("未配置去重(执行一次/冷却), 高频触发有风险");
+      }
+      return notes.join("; ");
     },
   },
 };
