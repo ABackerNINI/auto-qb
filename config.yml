@@ -168,26 +168,7 @@ config:
                           enabled: false # 禁用
                           mode: full-checking
                           auto_start: true
-        r_rule_lt_10G: # R盘: 小于10GiB的种子全部全量校验, 校验成功后自动开始
-            enabled: true
-            interval: 5M
-            cooldown: 5M
-            conditions:
-                - size: "<=10GiB"
-                - path:
-                      - "regex:^R:/"
-            actions:
-                - checking:
-                      basic_check: filelist
-                      with_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
-                      without_reference:
-                          enabled: true
-                          mode: full-checking
-                          auto_start: true
-        r_rule_gt_10G: # R盘: 大于10GiB的有参考的种子跳检, 无参考的种子全量校验, 校验成功后自动开始
+        r_rule: # R盘: 种子全量校验, 校验成功后自动开始
             enabled: true
             interval: 5M
             cooldown: 5M
@@ -200,7 +181,7 @@ config:
                       basic_check: filelist
                       with_reference:
                           enabled: true
-                          mode: skip-checking
+                          mode: full-checking
                           auto_start: true
                       without_reference:
                           enabled: true
