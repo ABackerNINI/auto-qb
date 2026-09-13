@@ -19,3 +19,6 @@ cov-report.txt
 
 # 程序运行日志(旧默认目录; 现默认已迁 auto-qb-data/, 此条兜底历史 config.yml 的 log.file)
 logs/
+
+# ZCode相关文件
+.zcode/
