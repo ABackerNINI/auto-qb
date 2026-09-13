@@ -14,12 +14,14 @@
 import logging
 import os
 import queue
+import threading
 import time
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from qbittorrentapi import APIConnectionError, Client
 
-from .config import Config, load_config
+from .config import Config, QbittorrentConfig, load_config
 from .errors import AutoQbError
 from .locking import SingleInstanceLock
 from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
@@ -42,7 +44,59 @@ logger = logging.getLogger(__name__)
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
 SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
 # 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
-_LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1", "[::1]"))
+_LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
+
+
+def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
+    """主循环节流: 阻塞 main_tick 秒, 返回 True 表示收到停止信号
+
+    托管模式(tray/UI 传入 stop_event)走 Event.wait, 保持对停止信号的即时响应;
+    非托管模式(CLI 默认无 stop_event)走 time.sleep —— **必须真实睡眠**。
+
+    ❗回归背景(2026-09-14): 主循环曾写成 `if stop_event is not None and stop_event.wait(main_tick)`,
+    非托管模式下被 `and` 短路 -> 完全不阻塞 -> 空转。由 begin_round + update_state_snapshot 的
+    每 tick 固定成本反推约 2800 tick/s, 是 main_tick=2s 设计值的约 5500 倍: CPU 打满, 且把
+    sync/maindata 请求量同步放大 5500 倍(连带 requests 每次请求的 netrc/代理/注册表解析一并放大)。
+    任何"简化 stop_event 判断"的改动都必须保持本函数语义(非托管 -> time.sleep)。
+    """
+    if stop_event is None:
+        time.sleep(main_tick)
+        return False
+    return stop_event.wait(main_tick)
+
+
+def _is_local_qb(qb: QbittorrentConfig) -> bool:
+    """qB 地址是否指向本机(取 base_url 解析后的 hostname, 兼容带端口/带协议写法)"""
+    return urlparse(qb.base_url).hostname in _LOCAL_HOSTS
+
+
+class LocalQbClient(Client):
+    """本地 qB 客户端: 每个(重)建的 requests Session 都强制关闭 trust_env
+
+    背景: 打开 trust_env 时 requests 每次请求都要解析环境代理(get_environ_proxies ->
+    proxy_bypass_registry 读注册表)与 ~/.netrc(get_netrc_auth 走 expanduser + os.path.exists),
+    对 127.0.0.1/localhost 连接毫无意义(实测单请求 0.276ms -> 0.043ms)。
+
+    ❗为什么不"连上后给 client._session.trust_env 赋 False": 库的 `Request._session` 是**只读
+    property**(qbittorrentapi/request.py), 且库在 `build_base_url()`(首次请求)与
+    `_initialize_context()`(登录过期/qB 重启)中都会调用 `_trigger_session_initialization()`
+    **丢弃当前 Session 并在下次访问时重建** —— 旧实现赋的值在第一次真实请求时即被清除
+    (静默失效, 从未生效过; 实测: 赋值后触发重建 -> trust_env 回到 True 且对象已换)。
+    此处改为覆盖 property, 在返回前强制关闭, 因此对任何时刻新建的 Session 都生效。
+
+    仅本地地址使用本子类, 远程/域名连接保留 requests 默认行为(企业代理/~/.netrc 可能真实需要)。
+    """
+    @property
+    def _session(self):
+        session = super()._session
+        session.trust_env = False
+        return session
+
+
+def _new_client(qb: QbittorrentConfig) -> Client:
+    """按配置构造 qB 客户端(本地地址用关闭 trust_env 的 LocalQbClient)"""
+    cls = LocalQbClient if _is_local_qb(qb) else Client
+    return cls(host=qb.base_url, username=qb.username, password=qb.password)
 
 
 class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
@@ -124,15 +178,9 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         setup_logging(logging_conf.file, logging_conf.level, logging_conf.max_bytes, logging_conf.format)
 
     def connect(self) -> bool:
-        """连接 qBittorrent"""
+        """连接 qBittorrent(本地地址经 _new_client 使用关闭 trust_env 的 LocalQbClient)"""
         try:
-            qb = self.config.qbittorrent
-            self.client = Client(
-                host=qb.base_url,
-                username=qb.username,
-                password=qb.password,
-            )
-            self._disable_env_lookup_for_local(self.client)
+            self.client = _new_client(self.config.qbittorrent)
             self.api.auth_log_in()
             # 连接恢复(此前断开)或首次连接: 记录一次"已连接"状态
             if self._last_conn_ok is False:
@@ -150,27 +198,16 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._last_conn_ok = False
             return False
 
-    def _disable_env_lookup_for_local(self, client: Client) -> None:
-        """本地 qB 连接: 关闭 requests Session 的 trust_env(跳过每请求的环境解析)
-
-        背景: requests 每次请求都会调用 get_environ_proxies / get_netrc_auth 解析环境代理
-        与 ~/.netrc(实测占单次请求固定开销的相当一部分), 对 127.0.0.1/localhost 连接毫无
-        意义。仅对本地地址关闭 —— 远程/域名连接保留原行为(可能有企业代理/netrc 需求)。
-
-        库内部属性名变化时静默跳过(仅影响性能); Session 被库内部重置(重试/重连)后该设置
-        会回到默认, 但每次 connect() 都会重新应用。
-        """
-        if self.config.qbittorrent.host not in _LOCAL_HOSTS:
-            return
-        try:
-            client._session.trust_env = False
-        except Exception as e:  # pragma: no cover - 库内部结构变化时的兜底
-            logger.debug(f"关闭 requests trust_env 失败(仅影响性能): {e}")
-
-    def run(self, dry_run: bool = False, stop_event=None, pause_event=None):
-        """主循环(任务队列驱动): 固定 main_tick 秒执行一次
+    def run(
+        self,
+        dry_run: bool = False,
+        stop_event: Optional[threading.Event] = None,
+        pause_event: Optional[threading.Event] = None,
+    ):
+        """主循环(任务队列驱动): 每轮执行后经 _throttle 阻塞 main_tick 秒
         - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
-        - stop_event: 置位后循环退出并落盘(UI/托盘托管模式必传; 默认 None 行为与历史一致)
+        - stop_event: 置位后循环退出并落盘(UI/托盘托管模式必传; 传 None 时非托管,
+          节流退化为 time.sleep —— 见 _throttle 的回归说明)
         - pause_event: 置位期间完全旁观(不刷新/不执行任务, qB 自身行为不受影响),
           恢复后的首次 refresh 以增量 diff 补上暂停期间的状态变化
         - 托管模式(非 None)首连失败不退出, 按 main_tick 重试直至成功或收到停止 —— 托盘应用保持常驻;
@@ -190,6 +227,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self._notify_handler = setup_notify(self.config.notify)
         try:
             main_tick = self.config.main_tick
+            # 首连失败: 托管模式按 main_tick 重试直至成功/停止; 非托管模式直接返回(历史行为,
+            # 与主循环节流的 _throttle 语义不同 —— 此处不可替换为 _throttle)
             while not self.connect():
                 if stop_event is None or stop_event.wait(main_tick):
                     return
@@ -207,8 +246,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作
                     self._drain_web_commands()
                     if pause_event is not None and pause_event.is_set():
-                        # 已暂停: 完全旁观; wait 保持对停止信号的即时响应
-                        if stop_event is not None and stop_event.wait(main_tick):
+                        # 已暂停: 完全旁观; 节流保持对停止信号的即时响应
+                        if _throttle(stop_event, main_tick):
                             logger.info("收到停止信号, 退出主循环")
                             break
                         continue
@@ -231,7 +270,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         self.connect()
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
-                    if stop_event is not None and stop_event.wait(main_tick):
+                    if _throttle(stop_event, main_tick):
                         logger.info("收到停止信号, 退出主循环")
                         break
             except KeyboardInterrupt:

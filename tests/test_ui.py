@@ -16,6 +16,7 @@
 - test_log_dir_resolves_and_creates: 日志目录解析(相对路径绝对化/file 为空兜底 state_file 目录/确保存在)
 - test_run_connection_restored_updates_state: 断开后 tick 成功即恢复 _last_conn_ok(否则 UI 永远显示断开)
 - test_run_autoqb_error_propagates: AutoQbError 致命错误穿透主循环
+- test_connect_failure_throttles_logging: connect 失败节流: 首次 ERROR, 断开期间重试静默
 """
 import logging
 import os
@@ -28,9 +29,10 @@ import pytest
 from auto_qb import autostart, notify as notify_mod
 from auto_qb.config import NotifyConfig
 from auto_qb.notify import NotifyHandler, PlatformChannel
+from auto_qb.qbmanager import QbManager
 from auto_qb.ui import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from auto_qb.config import QbittorrentConfig
-from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
+from helpers import FakeClient, FakeConfig, FakeQbServer, FakeTorrent, make_manager, seed_store
 
 
 def test_log_dir_resolves_and_creates(tmp_path):
@@ -261,39 +263,33 @@ def test_run_autoqb_error_propagates(tmp_path):
 
 
 def test_connect_failure_throttles_logging(tmp_path):
-    """【暂时禁用】connect 的 APIConnectionError 节流: 首次 ERROR, 断开期间静默(重试不再刷日志)
+    """connect 的 APIConnectionError 节流: 首次失败记 ERROR, 断开期间重试静默(不刷屏)
 
-    禁用原因: 走真实网络栈(QbManager.connect 构造真实 Client, qbittorrent-api 内部
-    重试/超时使单次连接耗时数秒), 拖慢全量测试约 1 分钟。将来改为注入假 Client 后
-    再启用(节流逻辑本身已由实现保证, 见 qbmanager._last_conn_ok)。
+    用假服务 abort 模式(收到请求即断开)确定地产生连接错误: 比指向"死端口"快得多
+    (后者在部分环境是超时等待, 库内超时重试曾拖慢全量测试约 1 分钟而被暂时 skip)。
     """
-    pytest.skip("暂时禁用: 真实网络调用耗时过长, 待改为注入假 Client 后启用")
-    import logging
+    with FakeQbServer(abort=True) as srv:
+        cfg = FakeConfig()
+        cfg.state_file = str(tmp_path / "state.json")
+        cfg.qbittorrent = QbittorrentConfig(host="127.0.0.1", port=srv.port, username="u", password="p")
+        mgr = QbManager("", config=cfg, no_lock=True)
 
-    from auto_qb.config import QbittorrentConfig
-    from auto_qb.qbmanager import QbManager
+        records = []
 
-    cfg = FakeConfig()
-    cfg.state_file = str(tmp_path / "state.json")
-    cfg.qbittorrent = QbittorrentConfig(host="127.0.0.1", port=1, username="u", password="p")
-    mgr = QbManager("", config=cfg, no_lock=True)
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
 
-    records = []
-
-    class Grab(logging.Handler):
-        def emit(self, record):
-            records.append(record.getMessage())
-
-    grab = Grab()
-    grab.setLevel(logging.ERROR)
-    qbm_logger = logging.getLogger("auto_qb.qbmanager")
-    qbm_logger.addHandler(grab)
-    try:
-        assert mgr.connect() is False
-        first = len(records)
-        assert first >= 1, "首次失败应记 ERROR"
-        mgr.connect()
-        mgr.connect()
-        assert len(records) == first, "断开期间重试不应重复 ERROR(节流)"
-    finally:
-        qbm_logger.removeHandler(grab)
+        grab = Grab()
+        grab.setLevel(logging.ERROR)
+        qbm_logger = logging.getLogger("auto_qb.qbmanager")
+        qbm_logger.addHandler(grab)
+        try:
+            assert mgr.connect() is False
+            first = len(records)
+            assert first >= 1, "首次连接失败应记 ERROR"
+            mgr.connect()
+            mgr.connect()
+            assert len(records) == first, "断开期间重试不应重复 ERROR(节流)"
+        finally:
+            qbm_logger.removeHandler(grab)

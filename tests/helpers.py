@@ -1,12 +1,16 @@
-"""测试公共组件: 模拟 qB 客户端 / 种子 / 配置 + 构造辅助
+"""测试公共组件: 模拟 qB 客户端 / 种子 / 配置 + 构造辅助 + 本地假 qB 服务
 
 由 pytest.ini 的 pythonpath=src 处理 src 导入, 无需 sys.path 处理。
 """
+import json
 import os
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
 from auto_qb.config import (
     AddEpisodeTagsConfig,
@@ -239,6 +243,169 @@ class FakeClient:
 
     def torrents_set_location(self, torrent_hashes=None, location=None):
         self.calls.append(("set_location", location))
+
+
+# ---------- 本地假 qBittorrent Web API 服务 ----------
+class FakeQbServer:
+    """本地假 qBittorrent Web API 服务(标准库 http.server, 后台线程)
+
+    用途: 让测试用**真实** qbittorrentapi Client + 真实 requests/urllib3 栈走完整 HTTP 往返,
+    覆盖单元替身(FakeClient)无法暴露的行为 —— 例如 requests Session 的 trust_env 是否真的生效、
+    库在首次请求时重建 Session 会不会丢掉我们的设置、sync/maindata 的 rid 增量语义能否被真机栈
+    完整驱动。
+
+    数据来源复用 `FakeClient`(单一口径): 服务端只做 HTTP 适配, 不重复实现业务语义。
+    监听 127.0.0.1 的随机空闲端口, 用 with 语句保证线程与 socket 回收。
+
+        with FakeQbServer() as srv:
+            cfg.qbittorrent = QbittorrentConfig(host="127.0.0.1", port=srv.port)
+            ...
+            srv.hits("sync/maindata")   # 端点命中次数(可断言请求量/节流效果)
+
+    已实现端点(未列出的 GET -> 404 JSON, 未列出的 POST -> "Ok."):
+      POST auth/login;  HEAD 任意路径;  GET app/webapiVersion|app/version;
+      GET sync/maindata(rid 增量);  GET torrents/info|tags|categories|files|trackers;
+      GET transfer/uploadLimit|downloadLimit;  POST transfer/setUploadLimit|setDownloadLimit
+
+    abort=True: 收到任何请求即断开(不写响应) —— 模拟 qB 中途断开, 用于确定地产生
+      `APIConnectionError`(实测回环下约 0.7s; 比指向"死端口"快得多, 后者在部分环境
+      是超时等待, 库内超时重试会拖垮测试)。
+    """
+    WEB_API_VERSION = "2.11.4"  # >= 库内全部 version_introduced 门槛, 避免假服务触发"端点未实现"
+    QBIT_VERSION = "5.0.3"
+    _PREFIX = "/api/v2/"
+
+    def __init__(self, client=None, abort: bool = False):
+        self.client = client or FakeClient()
+        self.abort = abort  # 见类 docstring: 收到请求即断开(制造 APIConnectionError)
+        self.requests = []  # 请求台账 [(method, path, ts)]
+        self.upload_limit = 0  # transfer/uploadLimit 读数(bytes/s)
+        self.download_limit = 0
+        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._make_handler())
+        self.host, self.port = self._httpd.server_address
+
+    # ---------- 生命周期 ----------
+    def start(self):
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        self._httpd.shutdown()
+        self._httpd.server_close()
+        self._thread.join(timeout=5)
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, *exc):
+        self.stop()
+
+    # ---------- 请求台账 ----------
+    def hits(self, endpoint: str) -> int:
+        """路径包含 endpoint 的命中次数(断言请求量/节流效果用)"""
+        return sum(1 for _, path, _ in self.requests if endpoint in path)
+
+    def torrents_info(self) -> list:
+        """种子信息数组(与真机 torrents/info 一致: 每元素含 hash 字段)"""
+        return [{"hash": h, **_torrent_fields(t)} for h, t in self.client.torrents.items()]
+
+    def _make_handler(self):
+        server = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *args):  # 静默: 默认会往 stderr 打请求日志(测试输出噪声)
+                pass
+
+            def _send(self, body: str, content_type: str, status: int = 200) -> None:
+                payload = body.encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def _json(self, obj, status: int = 200) -> None:
+                self._send(json.dumps(obj), "application/json", status)
+
+            def _route_and_query(self):
+                """记台账并返回 (去除 /api/v2/ 前缀的端点, 查询参数)"""
+                u = urlparse(self.path)
+                route = u.path[len(server._PREFIX):].rstrip("/") if u.path.startswith(server._PREFIX) else u.path
+                server.requests.append((self.command, self.path, time.time()))
+                return route, parse_qs(u.query)
+
+            def _body(self) -> dict:
+                """读尽请求体(keep-alive 必须): 库以 form-encoded 发送, 兼容 JSON"""
+                length = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                if not raw:
+                    return {}
+                if raw.lstrip().startswith("{"):
+                    return json.loads(raw)
+                return {k: v[0] for k, v in parse_qs(raw).items()}
+
+            def do_HEAD(self):
+                # 库的 build_base_url() 先 HEAD 探测 http/https; 真机 qB 同样支持 HEAD
+                self._route_and_query()
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def do_GET(self):
+                self._dispatch("GET")
+
+            def do_POST(self):
+                self._dispatch("POST")
+
+            def _dispatch(self, method: str):
+                """按路由分派(**不按方法区分**读端点: 库对 info/files/trackers/maindata 用 POST,
+                对 tags/categories/transfer 用 GET, 真机 qB 两者都接受)
+
+                参数来源合并 body(form)与 query: POST 端点(如 maindata 的 rid、files 的 hash)
+                把参数放在请求体, GET 端点放在 query。
+                """
+                if server.abort:
+                    self._body()  # 读尽请求体后直接断开(不写响应) -> 客户端报连接错误
+                    self.close_connection = True
+                    return
+                route, query = self._route_and_query()
+                params = {**self._body(), **{k: v[0] for k, v in query.items()}}
+                if route == "auth/login":
+                    return self._send("Ok.", "text/plain")
+                if route == "app/webapiVersion":
+                    return self._send(server.WEB_API_VERSION, "text/plain")
+                if route == "app/version":
+                    return self._send(server.QBIT_VERSION, "text/plain")
+                if route == "sync/maindata":
+                    return self._json(server.client.sync_maindata(rid=int(params.get("rid") or 0)))
+                if route == "torrents/info":
+                    return self._json(server.torrents_info())
+                if route == "torrents/tags":
+                    return self._json(server.client.torrents_tags())
+                if route == "torrents/categories":
+                    return self._json(server.client.torrents_categories())
+                if route == "torrents/files":
+                    return self._json(server.client.torrents_files(params.get("hash")))
+                if route == "torrents/trackers":
+                    return self._json(server.client.torrents_trackers(params.get("hash")))
+                if route == "transfer/uploadLimit":
+                    return self._send(str(server.upload_limit), "text/plain")
+                if route == "transfer/downloadLimit":
+                    return self._send(str(server.download_limit), "text/plain")
+                if route == "transfer/setUploadLimit":
+                    server.upload_limit = int(params.get("limit") or 0)
+                    return self._send("Ok.", "text/plain")
+                if route == "transfer/setDownloadLimit":
+                    server.download_limit = int(params.get("limit") or 0)
+                    return self._send("Ok.", "text/plain")
+                if method == "POST":
+                    return self._send("Ok.", "text/plain")  # 其余写操作统一 "Ok."(与 qB 多数端点一致)
+                return self._json({"error": f"unknown endpoint: {self.path}"}, status=404)
+
+        return _Handler
 
 
 # ---------- 模拟种子(TorrentDictionary 鸭子) ----------

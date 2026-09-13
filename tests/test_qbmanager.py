@@ -3,10 +3,14 @@
 ## 测试计划(每个测试函数一条)
 - test_create_global_tasks: 按配置创建 delete_tags 等全局任务
 - test_connect_failure: 连接失败返回 False 且 client 为 None
-- test_connect_success: 连接成功返回 True 并登录
-- test_connect_disables_trust_env_for_local_host: 本地地址关闭 requests trust_env(跳过环境/netrc 解析)
-- test_connect_keeps_trust_env_for_remote_host: 远程地址保留 trust_env 默认
-- test_connect_tolerates_session_api_change: 库 Session 结构变化时静默跳过(不影响连接)
+- test_connect_success: 连接成功返回 True 并登录(客户端经 _new_client 构造)
+- test_new_client_local_disables_trust_env: 本地地址用 LocalQbClient, Session(含重建)trust_env 恒为 False
+- test_new_client_local_host_variants: localhost/IPv6 本机写法同样判定为本地
+- test_new_client_remote_keeps_default_trust_env: 远程地址用原生 Client 且保留 trust_env 默认
+- test_throttle_sleeps_without_stop_event: 非托管模式节流真实睡眠且返回 False
+- test_throttle_waits_stop_event: 托管模式节流走 Event.wait 并回传停止信号
+- test_run_loop_throttles_without_stop_event: 非托管模式主循环每轮 sleep(main_tick)(回归守卫)
+- test_run_loop_managed_never_sleeps: 传 stop_event 时不 sleep(托盘模式停止信号即时响应)
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
@@ -35,10 +39,11 @@ from unittest import mock
 from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 import pytest
 
-from qbittorrentapi import APIConnectionError
+from qbittorrentapi import APIConnectionError, Client
 
+from auto_qb.config import QbittorrentConfig
 from auto_qb.errors import AutoQbError
-from auto_qb.qbmanager import QbManager
+from auto_qb.qbmanager import LocalQbClient, QbManager, _new_client, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
@@ -64,59 +69,100 @@ def test_connect_failure():
     """连接失败返回 False 且 client 保持 None"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        with mock.patch("auto_qb.qbmanager.Client", side_effect=Exception("conn refused")):
+        with mock.patch("auto_qb.qbmanager._new_client", side_effect=Exception("conn refused")):
             assert mgr.connect() is False
         assert mgr.client is None
 
 
 def test_connect_success():
-    """连接成功返回 True 并登录"""
+    """连接成功返回 True 并登录(客户端经 _new_client 构造: 本地地址由它选 LocalQbClient)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         fake = mock.Mock()
-        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
+        with mock.patch("auto_qb.qbmanager._new_client", return_value=fake) as new_client:
             assert mgr.connect() is True
+        new_client.assert_called_once_with(mgr.config.qbittorrent)
         fake.auth_log_in.assert_called_once()
         assert mgr.client is fake
 
 
-def test_connect_disables_trust_env_for_local_host():
-    """本地地址连接(默认 127.0.0.1): 关闭 requests Session 的 trust_env(跳过环境代理/netrc 解析)"""
+def test_new_client_local_disables_trust_env():
+    """本地地址: LocalQbClient 使 trust_env 在**每次(重)建 Session** 后都为 False
+
+    旧实现(连上后给 client._session.trust_env 赋 False)会在库重建 Session 时静默失效 ——
+    此处用 _trigger_session_initialization() 显式复现该重建(库在 build_base_url()/
+    _initialize_context() 中就是这样丢弃旧 Session 的)。
+    """
+    cfg = QbittorrentConfig(host="127.0.0.1", port=1, username="u", password="p")
+    client = _new_client(cfg)
+    assert type(client) is LocalQbClient
+    first = client._session
+    assert first.trust_env is False
+    client._trigger_session_initialization()
+    second = client._session
+    assert second is not first, "库应已重建 Session(证明控制点在 property 上而非一次性赋值)"
+    assert second.trust_env is False
+
+
+def test_new_client_local_host_variants():
+    """localhost / IPv6 本机写法同样判定为本地(取 base_url 的 hostname, 容忍带端口/带协议)"""
+    for host in ("localhost", "[::1]", "127.0.0.1"):
+        client = _new_client(QbittorrentConfig(host=host, port=8080))
+        assert type(client) is LocalQbClient, host
+
+
+def test_new_client_remote_keeps_default_trust_env():
+    """远程地址: 用原生 Client 且 trust_env 保持 requests 默认(企业代理/netrc 可能真实需要)"""
+    client = _new_client(QbittorrentConfig(host="qb.example.com", port=8080))
+    assert type(client) is Client
+    assert client._session.trust_env is True
+
+
+def test_throttle_sleeps_without_stop_event():
+    """非托管模式(stop_event=None): 真实阻塞 main_tick 秒且返回 False(不当作停止信号)"""
+    with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
+        assert _throttle(None, 2.0) is False
+    fake_sleep.assert_called_once_with(2.0)
+
+
+def test_throttle_waits_stop_event():
+    """托管模式: 走 Event.wait(保持对停止信号的即时响应), 原样回传其停止信号"""
+    ev = mock.Mock()
+    ev.wait.return_value = True
+    assert _throttle(ev, 3.0) is True
+    ev.wait.assert_called_once_with(3.0)
+
+
+def test_run_loop_throttles_without_stop_event():
+    """回归守卫: 非托管模式下主循环每轮必须 sleep(main_tick), 不得空转
+
+    曾因 `if stop_event is not None and stop_event.wait(main_tick)` 的短路使非托管模式
+    完全不阻塞 -> 满速空转(py-spy 实证约 2800 tick/s), CPU 打满且 sync/maindata 请求量放大数千倍。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        assert mgr.config.qbittorrent.host == "127.0.0.1"  # 默认本地
-        fake = mock.Mock()
-        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
-            assert mgr.connect() is True
-        assert fake._session.trust_env is False
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
+        with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
+            mgr.run(dry_run=False)
+        assert mgr._tick.call_count == 2
+        assert fake_sleep.call_args_list == [mock.call(mgr.config.main_tick)
+                                            ], (f"每轮 tick 后都要 sleep(main_tick), 实际 {fake_sleep.call_args_list}")
 
 
-def test_connect_keeps_trust_env_for_remote_host():
-    """远程地址连接: 保留 requests 默认 trust_env(可能有企业代理/netrc 需求)"""
+def test_run_loop_managed_never_sleeps():
+    """托管模式(传 stop_event): 节流走 Event.wait, 不调用 time.sleep(托盘停止信号即时响应)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.config.qbittorrent.host = "qb.example.com"
-        fake = mock.Mock()
-        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
-            assert mgr.connect() is True
-        assert fake._session.trust_env is not False  # 未被改写(Mock 默认属性)
-
-
-def test_connect_tolerates_session_api_change():
-    """库内部 Session 结构变化(无 _session / 属性只读) 时静默跳过, 不影响连接"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-
-        class _NoSession:
-            def auth_log_in(self):
-                return None
-
-            @property
-            def _session(self):
-                raise AttributeError("no _session in this version")
-
-        with mock.patch("auto_qb.qbmanager.Client", return_value=_NoSession()):
-            assert mgr.connect() is True
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
+        stop_event = mock.Mock()
+        stop_event.is_set.return_value = False
+        stop_event.wait.return_value = False
+        with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
+            mgr.run(dry_run=True, stop_event=stop_event)
+        fake_sleep.assert_not_called()
+        stop_event.wait.assert_called_with(mgr.config.main_tick)
 
 
 def test_run_due_requeues():
