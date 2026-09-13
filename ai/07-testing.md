@@ -3,7 +3,7 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 808 passed, 0 skipped (2026-09-14), 分支覆盖率 90%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent)
+# 项目 venv (.venv, Python 3.12), 基线: 849 passed, 0 skipped (2026-09-14), 分支覆盖率 91%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent)
 .venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
@@ -11,7 +11,9 @@
 
 - `pytest.ini`: `pythonpath = src` (无需安装包), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
 - 测试**基本全部使用 Fake, 不连真实 qBittorrent**(随时可全量运行)。唯一例外是 `test_local_qb_service.py` + `test_ui.py::test_connect_failure_throttles_logging`: 它们用 `helpers.FakeQbServer`(标准库 `http.server` 监听回环随机端口)承载**真实** `qbittorrent-api`/requests 栈, 因为"trust_env 是否真的生效"“库重建 Session 是否弄丢我们的设置”这类行为在进程内替身上根本无法暴露(历史教训)。
-- 覆盖率现状 (2026-09-14 实测, 全量): 总 90%; 低洼: `ui.py` 27%(GUI 本体真机冒烟不单测)、`web.py` 78%(WEB UI 路由分支)、`qbmanager.py` 94%(剩余缺口集中在 connect 异常分支与网络断开路径); 近乎全绿: `config/impact.py` 100%, `registry.py`/`taskqueue.py`/`logging.py` 100%, `qbapi.py`/`speed_curve.py`/`tracker.py` 100%, conditions 99%, torrents 97%, utils 96%, cli 95%。补测试优先看 term-missing 输出。
+- 覆盖率现状 (2026-09-14 实测, 全量): 总 91%; 低洼: `ui.py` 27%(GUI 本体真机冒烟不单测)、`web.py` 75%(WEB UI 路由分支); 近乎全绿: `config/impact.py`/`config/schema.py`/`logging.py`/`registry.py`/`taskqueue.py`/`qbapi.py`/`speed_curve.py`/`tracker.py` 100%, `config/writer.py` 91%(剩余为 R 级回退的嵌套路径与异常分支), `qbmanager.py` 95%, conditions 99%, torrents 97%, utils 96%。补测试优先看 term-missing 输出。
+
+> **图形化配置编辑器测试**: `test_config_schema.py`(UI 元数据与配置键/插件的**一致性守卫**, 20 项: 顶层键 vs `KNOWN_CONFIG_KEYS`、各段子键 vs `KNOWN_*_KEYS`、插件表 vs `registry`、kind/optional/enum 形态自检) 与 `test_config_writer.py`(结构化写回: 读取语义/校验拒绝不碰磁盘/注释与标量风格保留/增删键/R 级回退/预览不落盘/有损数字串不被规范化)。**新增配置键或插件时必须同步 schema.py**, 否则守卫测试直接失败。
 
 ## 测试文件约定
 

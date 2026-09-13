@@ -116,6 +116,16 @@ _tick(dry_run):
 - **搜索索引 `_search_index` (hash -> {name, files})**: 种子名匹配即时扫 `store.by_hash`(无 API 开销), 文件列表匹配依赖索引(文件 API 只在主循环线程, 种子记录 `_files` 缓存跨 tick 复用)。索引按 hash **增量**维护: 已建条目只刷新名称(不重拉文件), 新种子补拉, 已删种子淘汰; 单次限流 `SEARCH_INDEX_BUILD_BUDGET`(500)条, 未拉完保持 `_search_index_dirty=True` 由下一 tick 续建, 前端据 `building` 每 1s 自动重查。
 - **搜索结果是辅种组的筛选**: 前端用命中 hash 集合过滤 `sortedGroups`(组行沿用真实组 key, 组级操作可用); 未归组命中种子以虚拟行兜底 —— 组级路由 key 必须能过 `decode_group_key`, 虚拟 key 会让解码失败 500, 详见 [08-pitfalls.md](08-pitfalls.md)。
 
+### WEB UI 图形化配置编辑 (web.py + config/schema.py + config/writer.py, 2026-09-14)
+
+- **模式**: 设置页不再直接编辑 YAML 全文 —— 每个配置项经图形控件增删改; 只读 YAML 预览(展示"即将写入"的文本)供核对。
+- **数据模型**: 前端持有与磁盘**同构的 YAML 树**(标量全为字符串, 与 `yaml.BaseLoader` 语义一致) → 编辑即就地增删改, 无格式往返转换、零语义漂移; 脏检测用 JSON 快照对比。
+- **端点**: `GET /api/config/schema`(UI 元数据 + `impact` 的热重载级别表合并)、`GET /api/config`(树)、`PUT /api/config`(保存)、`POST /api/config/preview`(只读预览)。旧的 `GET/PUT /api/config/raw` 已移除。
+- **保存管线 (config/writer.py)**: 结构自检(必须有 `config` 根段) → 落临时文件跑 `load_config`(与启动同一校验路径, 失败 400 且不碰磁盘) → `diff_config_impacts` 判定变更 → **R 级字段回退为磁盘旧值** → 备份 `.bak` → ruamel round-trip 写盘 → 投递 `reload_config` 命令(仍由主循环线程应用)。
+- **注释与格式策略**: 已存在键的注释保留(`_sync_mapping` 递归同步 CommentedMap); **值未变化的键跳过赋值**, 从而保留磁盘原标量形态(否则 ruamel 会把无引号的 `16585`/`true` 重写为 `'16585'`/`'true'`); 新增/修改的标量走 `_plain_scalar`(数字/布尔样式写成原生标量, BaseLoader 下语义等价); **列表整体替换(项级注释不保留)**。
+- **schema.py 的地位**: 纯声明的 UI 元数据(分组/字段/控件类型/单位/枚举/帮助/必填/可选段/插件 spec 表), **不承载正确性规则**(合法性唯一入口仍是 `validate_config`); 键集合与插件表由 `tests/test_config_schema.py` 守卫 —— 新增配置键或插件忘登记会直接测试失败。
+- **前端结构**: `config_editor.js`(分组导航/加载保存/预览/路径读写/列表与开关/站点与曲线专段) + `config_rules.js`(规则集与 15 条件/12 动作的 spec 编辑) 作为 Vue 全局 mixin 注入 `app.js` 的根实例; 字段渲染抽为 `ce-field` 组件(`<script type="text/x-template">`, 经 `provide/inject` 复用根的 `cfg*` 方法) —— 嵌套 object 在 `cfgFlatten` 阶段扁平化为带缩进的渲染项, 因此组件**无需递归**。
+
 ## 任务队列模型 — 生命周期只有 add_task / run_due 两个动词
 
 - `add_task(task, now=None, keep_progress=False) -> bool`: 唯一入队口; kind=="check" 自动登记在途 (`_active_checks`), 重复登记丢弃返回 False。**默认重置断点** (下次从头执行); `keep_progress=True` 显式保存进度 (断点保留续跑), 仅供等待异步完成的子任务恢复 origin 使用。

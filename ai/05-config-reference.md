@@ -8,6 +8,20 @@
 - **fail-fast**: 非法格式/未知键在加载时抛 ValueError, 程序不启动。给新配置键写解析时必须校验并给出可读错误 (参考 `load_global_speed_limit_curve` 的逐键 unknown-key 检查风格)。
 - 站点配置覆盖全局: `load_tracker_hr(spec, global_hr)` 站点字段优先全局兜底; `remove_similar_tags` 同理。合并发生在加载时, 运行期只用合并后的值。
 
+## 配置写回(图形化编辑器, 2026-09-14, config/writer.py)
+
+WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
+
+1. 前端提交与磁盘**同构的 YAML 树**(标量全为字符串, 与 `BaseLoader` 语义一致), 就地增删改;
+2. `write_tree` 把树落临时文件跑 `load_config` —— **与程序启动完全同一校验路径**, 失败 400 且不碰磁盘;
+3. `diff_config_impacts` 判定变更(热重载级别唯一来源仍是 `impact.py`);
+4. **R 级字段(state_file/data_dir)回退为磁盘旧值**(进程身份不可热切换, 与旧行为一致), 并在响应中回报 `restart_required`;
+5. 备份为 `config.yml.bak` → **ruamel round-trip 写盘** → 投递 `reload_config` 命令(仍由主循环线程应用)。
+
+**注释与格式取舍**: 已存在键的注释保留; **值未变化的键跳过赋值**以保留原标量形态(否则 ruamel 会把无引号的 `16585`/`true` 重写为 `'16585'`/`'true'`); 新增/修改的标量走 `_plain_scalar`(数字/布尔写成原生标量, BaseLoader 下语义等价); **列表整体替换, 项级注释不保留**。
+
+**UI 元数据(新增配置键时必看)**: `config/schema.py` 是图形化表单的唯一描述来源, 新增配置键必须同步登记 `GROUPS`(或对应段), 新增条件/动作插件必须同步登记 `CONDITION_PLUGINS`/`ACTION_PLUGINS` —— 否则 `tests/test_config_schema.py` 的守卫测试直接失败(键集合 vs `KNOWN_*_KEYS`, 插件表 vs `registry`)。
+
 ## fail-fast 全量校验 (2026-09-05 新增, config.validate_config)
 
 `load_config` 在解析前做全量校验, **聚合全部错误一次性抛 `ConfigError`**(ValueError 子类, 统一承载文件读取失败/YAML 解析失败/校验失败/启动期规则 spec 错误), 每条带配置路径, 形如:
@@ -48,7 +62,7 @@
 | `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
 | `add_episode_tags` | `{enabled: false, add_tag_single: "zE${episode_first}", add_tag_multi: "zE${episode_first}-${episode_last}"}` | 种子添加时加集数标签; `enabled` 总开关; `add_tag_single`/`add_tag_multi` 模板, 含 `${episode_first}`/`${episode_last}` 占位, 多集仅在集数连续时生成 |
-| `web` | 默认关闭 | `{enabled: bool, host: "127.0.0.1", port: 8080, token: ""}`; WEB UI(辅种管理): 分组视图/组控制/设置编辑; token 留空 = 首启随机生成持久化到 data_dir/web.token; host 默认仅本机(对外暴露需自行评估安全) |
+| `web` | 默认关闭 | `{enabled: bool, host: "127.0.0.1", port: 8080, token: ""}`; WEB UI(辅种管理): 分组视图/组控制/**图形化配置编辑(每项可增删改 + 只读 YAML 预览)**; token 留空 = 首启随机生成持久化到 data_dir/web.token; host 默认仅本机(对外暴露需自行评估安全) |
 | `notify` | 默认关闭 | `{enabled: bool, min_level: "WARNING", quiet_hours: "", max_per_hour: 20, dedup_window: "10M", channels: [platform]}`; 主动通知(WARNING 及以上日志 -> 平台原生通知, 零依赖); quiet_hours "HH:MM-HH:MM" 支持跨午夜, 时段内跳过发送(含 ERROR); channels v1 仅 platform(缺省即启用); 节流为内存态不进 state_file |
 | `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING"}` |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
