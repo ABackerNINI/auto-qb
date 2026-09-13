@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>auto-qb · 辅种管理</title>
-  <link rel="icon" href="data:," />
+  <link rel="icon" type="image/png" href="/icon.png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -29,6 +29,13 @@
         <!-- 顶栏 -->
         <header class="topbar">
           <div class="brand">auto-qb <span class="ver">v{{ status.version || '' }}</span></div>
+          <div class="summary-bar">
+            <span>分组 {{ groups.length }}</span>
+            <span>种子 {{ totalTorrents }}</span>
+            <span>下载 {{ fmtSpeed(totalDl) }}</span>
+            <span>上传 {{ fmtSpeed(totalUl) }}</span>
+            <span class="muted">每 {{ pollSec }}s 刷新</span>
+          </div>
           <nav>
             <button :class="{active: page==='groups'}" @click="page='groups'">辅种管理</button>
             <button :class="{active: page==='settings'}" @click="openSettings">设置</button>
@@ -40,14 +47,6 @@
 
       <!-- 辅种分组页 -->
       <main v-if="page==='groups'" class="content">
-        <div class="summary-bar">
-          <span>分组 {{ groups.length }}</span>
-          <span>种子 {{ totalTorrents }}</span>
-          <span>下载 {{ fmtSpeed(totalDl) }}</span>
-          <span>上传 {{ fmtSpeed(totalUl) }}</span>
-          <span class="muted">每 {{ pollSec }}s 自动刷新</span>
-        </div>
-
         <div class="group-table" ref="groupTable">
           <!-- 列头(点击排序, 右缘拖拽调宽) -->
           <div class="group-head" :style="gridStyle('group')">

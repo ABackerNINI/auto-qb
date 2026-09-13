@@ -69,6 +69,7 @@ def create_app(manager) -> FastAPI:
 
     @app.get("/api/status")
     def api_status():
+        manager.touch_web_client()
         snap = manager.status_snapshot()
         return {
             "connected": snap["connected"],
@@ -77,9 +78,25 @@ def create_app(manager) -> FastAPI:
             "groups": len(manager._group_view),
         }
 
+    @app.get("/api/state")
+    def api_state():
+        """合并端点: status + groups 一次返回(前端单请求轮询, 请求数减半)"""
+        manager.touch_web_client()
+        snap = manager.status_snapshot()
+        return {
+            "status": {
+                "connected": snap["connected"],
+                "paused": snap["paused"],
+                "torrents": snap["torrents"],
+                "groups": len(manager._group_view),
+            },
+            "groups": manager.ensure_group_view(),
+        }
+
     @app.get("/api/groups")
     def api_groups():
-        return {"groups": manager._group_view}
+        manager.touch_web_client()
+        return {"groups": manager.ensure_group_view()}
 
     @app.post("/api/groups/{key}/pause")
     def api_pause(key: str):

@@ -6,6 +6,7 @@
 import base64
 import json
 import os
+from functools import lru_cache
 import re
 import subprocess
 import sys
@@ -411,8 +412,13 @@ def open_path(path: str) -> None:
         subprocess.run(["xdg-open", path], check=False)
 
 
+@lru_cache(maxsize=4096)
 def encode_group_key(key: tuple) -> str:
-    """分组 key(tuple) -> URL 安全字符串(base64url(JSON 数组)), WEB UI 分组路由标识"""
+    """分组 key(tuple) -> URL 安全字符串(base64url(JSON 数组)), WEB UI 分组路由标识
+
+    lru_cache: key 可哈希且编码恒定(同 key 恒同串), 分组 key 含完整文件列表,
+    未缓存时每 tick 每组重复 json.dumps+base64 数十 KB(py-spy 实测占 ~30% CPU)。
+    """
     return base64.urlsafe_b64encode(json.dumps(list(key), ensure_ascii=False).encode("utf-8")).decode("ascii")
 
 

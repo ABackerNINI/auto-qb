@@ -38,7 +38,8 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); fon
 .badge.warn { background: rgba(224,164,34,.15); color: var(--warn); }
 
 .content { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
-.summary-bar { display: flex; gap: 22px; color: var(--fg-muted); margin-bottom: 12px; }
+.summary-bar { display: flex; gap: 22px; color: var(--fg-muted); }
+.topbar .summary-bar { gap: 16px; margin: 0 20px; font-size: 13px; white-space: nowrap; }
 .muted { color: var(--fg-muted); }
 .error { color: var(--error); }
 .ok { color: var(--green); }

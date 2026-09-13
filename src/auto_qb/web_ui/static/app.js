@@ -52,6 +52,7 @@ createApp({
       saveMsg: "",
       saveOk: false,
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
+      pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,
     };
   },
@@ -126,25 +127,33 @@ createApp({
     },
     startPolling() {
       if (this.pollTimer) clearInterval(this.pollTimer);
-      this.pollTimer = setInterval(() => this.refresh(), this.pollSec * 1000);
+      this.pollTimer = setInterval(() => this.refresh(), this.currentPollMs());
       this.refresh();
+    },
+    currentPollMs() {
+      // 失败退避: 连续失败翻倍至上限 15s; 成功恢复 2s(减少服务不可达时的空转)
+      return Math.min(15000, this.pollSec * 1000 * 2 ** this.pollFails);
     },
     async refresh() {
       try {
-        const [status, groups] = await Promise.all([this.api("/api/status"), this.api("/api/groups")]);
-        this.status = status;
-        this.groups = groups.groups;
+        const state = await this.api("/api/state");
+        this.status = state.status;
+        this.groups = state.groups;
         this.serviceDown = false;
+        this.pollFails = 0;
       } catch (e) {
         // 服务不可达(程序退出/网络失败): 置 serviceDown 显示横幅; 轮询继续, 服务恢复后自动消失。
         // 401(密钥无效)不算服务不可达——已由登录框提示。
-        if (!e.auth) this.serviceDown = true;
+        if (!e.auth) {
+          this.serviceDown = true;
+          this.pollFails = Math.min(4, this.pollFails + 1);
+        }
       }
     },
     async refreshOnce() {
-      const [status, groups] = await Promise.all([this.api("/api/status"), this.api("/api/groups")]);
-      this.status = status;
-      this.groups = groups.groups;
+      const state = await this.api("/api/state");
+      this.status = state.status;
+      this.groups = state.groups;
       this.serviceDown = false;
     },
     async openSettings() {

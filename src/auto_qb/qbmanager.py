@@ -33,6 +33,8 @@ from .logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
+WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
+
 
 class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
     def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
@@ -66,6 +68,10 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.web_commands: "queue.Queue" = queue.Queue()
         # WEB UI: 分组视图快照(主循环每 tick 重建并原子替换, Web 线程只读)
         self._group_view: List[dict] = []
+        # WEB UI 惰性组装: _group_view_dirty 标记快照是否过期; _web_last_seen 记录最近一次 Web 请求时间。
+        # 主循环仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)才重建快照, 否则跳过以降低 CPU。
+        self._group_view_dirty: bool = True
+        self._web_last_seen: float = 0.0
         # WEB UI: 访问密钥/服务器句柄(run() 启用时确定)
         self._web_token: str = ""
         self._web_handle = None
@@ -291,6 +297,18 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             )
         return view
 
+    def ensure_group_view(self) -> List[dict]:
+        """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
+        与主循环惰性组装配合: 主循环只在 Web 活跃且脏时重建, 这里兜底保证每次请求都拿到最新。"""
+        if self._group_view_dirty:
+            self._group_view = self._build_group_view()
+            self._group_view_dirty = False
+        return self._group_view
+
+    def touch_web_client(self) -> None:
+        """WEB 请求心跳: 刷新 _web_last_seen, 让主循环在 Web 活跃窗口内持续重建分组视图。"""
+        self._web_last_seen = time.time()
+
     def _group_hashes(self, key: tuple) -> List[str]:
         return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]
 
@@ -402,8 +420,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
         if self.config.grouping.enabled:
-            # WEB UI: 分组视图快照(主循环每 tick 重建, Web 线程只读引用)
-            self._group_view = self._build_group_view()
+            # WEB UI: 分组视图快照——惰性组装。仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)
+            # 且快照已过期(_group_view_dirty)时才重建, 否则主循环不空转; 关闭网页后 CPU 回落。
+            if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
+                self._group_view = self._build_group_view()
+                self._group_view_dirty = False
 
     # ---------- 全局任务 ----------
 
@@ -475,6 +496,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._validate_torrent_schema(tors)
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
         added, removed = self.store.refresh(tors)
+        # 种子增删/状态可能变化: 置分组视图过期, 供 _tick 惰性重建(仅 Web 活跃时)
+        self._group_view_dirty = True
         # 删除种子的删除前快照: 种子已从 store 移除后, ctx.torrent 回退此副本供只读动作留档
         removed_snapshots = {h: prev_records[h] for h in removed if h in prev_records}
 

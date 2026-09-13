@@ -124,7 +124,12 @@ def _make_web_manager(tmp_path, config_text):
         config=config,
         config_path=config_file,
         store=SimpleNamespace(groups=groups),
+        _web_last_seen=0.0,
+        _group_view_dirty=False,
     )
+    # 性能修复后 API 调用的两个替身方法: touch_web_client(心跳) / ensure_group_view(懒视图)
+    mgr.touch_web_client = lambda: setattr(mgr, "_web_last_seen", __import__("time").time())
+    mgr.ensure_group_view = lambda: mgr._group_view
     return mgr
 
 
