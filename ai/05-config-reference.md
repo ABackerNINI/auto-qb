@@ -22,6 +22,10 @@ WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
 
 **UI 元数据(新增配置键时必看)**: `config/schema.py` 是图形化表单的唯一描述来源, 新增配置键必须同步登记 `GROUPS`(或对应段), 新增条件/动作插件必须同步登记 `CONDITION_PLUGINS`/`ACTION_PLUGINS` —— 否则 `tests/test_config_schema.py` 的守卫测试直接失败(键集合 vs `KNOWN_*_KEYS`, 插件表 vs `registry`)。
 
+**单位控件的元数据约定 (2026-09-14)**: `Field.kind` 属 `schema.UNIT_KINDS`(`time`/`size`/`speed`)时, 前端把值渲染为**数值框 + 单位下拉**(选项表 `schema.TIME_UNITS`/`SIZE_UNITS`/`SPEED_UNITS`, 由前端 `UNIT_OPTIONS` 镜像 —— 只按 kind 决定单位, 故插件 spec(`spec_kind="speed"`)与配置字段共用同一控件)。`Field.unit_default` 仅在“未配置/无法解析”时作为下拉框初值(如 `extra_seeding_time` 习惯从 `H` 开始), 留空则回退该 kind 的首个单位。**写回仍是单个字符串**(与磁盘同构的 YAML 树不变), 合法性仍由 `validate_config` 把关; 新增 UNIT_KINDS 字段时 `default` 须写成完整的“数值+单位”形式(守测 `test_unit_kind_defaults_are_parseable`)。
+
+**规则引用控件 (2026-09-14)**: 站点 `rules` 字段的 `kind` 为 `rules_ref` —— 前端渲染“可自由输入 + 下拉快捷追加”(下拉选项从配置树的 `*_rules` 动态生成), 因站点若手写错规则集名, 校验只在保存时报错, 不如直接给选择器。
+**帮助文本是纯文本, 不要写 Markdown 标记 (2026-09-14)**: `Field.help`/`Field.risk`/`Plugin.help` 由前端当作**纯文本**插入 DOM(不经 Markdown 渲染), 因此 `**粗体**` 会原样显示成星号 —— 需要强调时用措辞与标点, 不要用 Markdown 语法。
 ## fail-fast 全量校验 (2026-09-05 新增, config.validate_config)
 
 `load_config` 在解析前做全量校验, **聚合全部错误一次性抛 `ConfigError`**(ValueError 子类, 统一承载文件读取失败/YAML 解析失败/校验失败/启动期规则 spec 错误), 每条带配置路径, 形如:
@@ -83,8 +87,8 @@ WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
 | `tags` | | 站点标签 (maintenance 加) |
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
-| `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0S"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 |
-| `rules` | | `["@规则集", "@规则集.规则"]` |
+| `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 |
+| `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `remove_similar_tags` | | 覆盖全局 |
 
 ## global_speed_limit_curve 段
