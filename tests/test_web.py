@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_api_requires_token: 无/错密钥访问 /api/* -> 401
-- test_api_status_and_groups: 状态与分组快照读取(经注入的 manager)
+- test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
@@ -42,6 +42,7 @@ from unittest import mock
 
 import pytest
 
+from auto_qb import __version__
 from auto_qb.utils import decode_group_key, encode_group_key
 from auto_qb.web import create_app
 
@@ -221,11 +222,12 @@ def test_api_requires_token(web_env, caplog):
 
 
 def test_api_status_and_groups(web_env):
-    """状态与分组快照读取: 徽章数据/组名/站点明细齐全"""
+    """状态与分组快照读取: 徽章数据/组名/站点明细齐全; status 携带版本号(顶栏展示)"""
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     status = client.get("/api/status", headers=auth).json()
     assert status["connected"] is True and status["torrents"] == 2
+    assert status["version"] == __version__, "status 应透出包版本号"
     data = client.get("/api/groups", headers=auth).json()
     assert len(data["groups"]) == 1
     g = data["groups"][0]
@@ -765,6 +767,7 @@ def test_api_state_rid_gate(web_env):
     full = client.get("/api/state", headers=auth).json()
     assert full["updated"] is True and len(full["groups"]) == 1
     assert full["status"]["torrents"] == 2, "status 与版本无关, 恒回传"
+    assert full["status"]["version"] == __version__, "status 携带版本号(与 rid 门控无关)"
     # 同版本: 只回 status
     same = client.get(f"/api/state?rid={full['rid']}", headers=auth).json()
     assert same["updated"] is False

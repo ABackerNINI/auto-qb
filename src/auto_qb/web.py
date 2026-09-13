@@ -25,6 +25,16 @@ logger = logging.getLogger(__name__)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_ui", "static")
 
 
+def _app_version() -> str:
+    """包版本号(供前端顶栏展示)。
+
+    必须函数内延迟导入: `auto_qb/__init__.py` 先 `from .qbmanager import QbManager` 再赋值
+    `__version__`, 模块顶层导入版本号会在包初始化未完成时抛 ImportError。
+    """
+    from . import __version__
+    return __version__
+
+
 def ensure_web_token(manager) -> str:
     """确定 WEB 访问密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/web.token(0600)"""
     if manager.config.web.token:
@@ -81,6 +91,7 @@ def create_app(manager) -> FastAPI:
             "paused": snap["paused"],
             "torrents": snap["torrents"],
             "groups": len(manager._group_view),
+            "version": _app_version(),
         }
 
     @app.get("/api/state")
@@ -99,6 +110,7 @@ def create_app(manager) -> FastAPI:
                     "paused": snap["paused"],
                     "torrents": snap["torrents"],
                     "groups": len(manager._group_view),
+                    "version": _app_version(),
                 },
             **manager.ensure_group_state(rid),
         }
