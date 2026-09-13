@@ -63,6 +63,10 @@
 - **`state_file` 仅退出时落盘**: 运行中 kill -9 会丢执行历史 → 去重可能重放, 已知取舍 (想法.md 明文)。
 - **qB 断连期间错误日志静默**: tick 内 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 (2026-09-12) — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败不打日志。是有意节流 (防 qB 宕机刷屏), 不是丢日志; 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。
 
+- **WEB UI 前端类名/DOM 与 JS 行为耦合** (2026-09-14 视觉重做后确认): 改样式可以随便改, 但以下结构**不得改名/增删**: ①`.group-head`/`.detail-head` 是列宽拖拽的锚点(`startResize` 从中读渲染列宽), 且**列数与 `GROUP_DEFAULT_COLS`/`DETAIL_DEFAULT_COLS` 必须一致** —— 不一致时 `gridStyle` 会静默回退默认模板(记忆列宽失效), 真改列数须同时升 `COLS_STORE_KEY` 版本; ②`.search-hit`/`.ctx-menu`/`.detail-*` 为逻辑挂钩; ③成员行的"进度"单元格改成"细进度条 + 数字"仍是**同一列**(第 7 列), 故列宽记忆不受影响。样式层已令牌化(单一 `:root`), 调色/圆角/阴影改令牌即可, 不要在各组件里散写色值。
+- **前端交互原语是单例, 且迁移到 Promise 后必须 await** (2026-09-14): `toast()`(替代 alert)与 `confirmDialog()`/`promptDialog()`(替代 confirm/prompt, 返回 Promise)在根组件 mixin 上; 模态为**单例**(重复打开会先把上一个结算为"取消", 防 Promise 悬空)。踩点: 迁移 `confirm` 的方法必须改 `async` 并 `await`, 否则**弹窗还没确认代码就继续往下跑**(等价于"永远确认", 删除类操作会直接执行); 取消/遮罩/Esc 一律结算 false/null 且**不发出任何请求**。`_logout()` 必须一并清空 `toasts`/`modal`(与 groups/settings 同属受保护数据, 防错误密钥窗口期残留)。
+- **图标一律走 index.html 的 sprite**(`<svg class="icon-sprite">` + `<use href="#i-*">`): 无外部图标库/网络依赖(离线 localhost 环境), 新增图标只在 sprite 里加一个 `<symbol>`; `.ico` 靠 `stroke: currentColor` 继承语义色, 需实心图标(如播放三角)时在该 symbol 内显式 `fill="currentColor" stroke="none"`。
+
 ## 📝 文档与代码的一致性 (2026-09-05 已同步)
 
 README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双队列→单队列)、集数标签格式 (`E1-5`→`zE1-5`)、mixins 组合列表补 SpeedCurveMixin、目录树补 qbapi/curves/speed_curve、checking.py 职责描述。
