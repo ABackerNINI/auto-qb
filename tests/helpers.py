@@ -168,6 +168,13 @@ class FakeClient:
     def torrents_stop(self, torrent_hashes=None):
         self.calls.append(("stop", None))
 
+    def torrents_pause(self, torrent_hashes=None):
+        # 与 start/stop 记 None 不同: 记 hash 列表(Web 命令测试需断言"整组/单种"作用范围)
+        self.calls.append(("pause", torrent_hashes))
+
+    def torrents_resume(self, torrent_hashes=None):
+        self.calls.append(("resume", torrent_hashes))
+
     def torrents_recheck(self, torrent_hashes=None):
         self.calls.append(("recheck", None))
 

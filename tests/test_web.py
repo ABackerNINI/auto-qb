@@ -17,6 +17,15 @@
 - test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
+- test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
+- test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
+- test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
+- test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
+- test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
+- test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
+- test_ensure_group_view_rebuilds_when_dirty: 分组视图脏时重建(Web 请求侧兜底)/干净时复用引用
+- test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
+- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
 """
 import json
 import os
@@ -495,3 +504,203 @@ def test_api_search_endpoint(web_env):
     assert r2["results"] == [] and r2["building"] is False
     # 鉴权: 无密钥 401
     assert client.get("/api/search", params={"q": "movie"}).status_code == 401
+
+
+# ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------
+
+
+def _make_grouped_manager(td):
+    """构造两个同文件列表的种子并归组(供 Web 命令执行测试); 返回 (mgr, client, key)"""
+    from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
+
+    mgr = make_manager(os.path.join(td, "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    files = [_fake_file("movie.mkv", 100)]
+    client.files_map["HA"] = files
+    client.files_map["HB"] = files
+    seed_store(
+        mgr, [
+            FakeTorrent(hash="HA", name="Show", save_path=r"R:\Downloads"),
+            FakeTorrent(hash="HB", name="Show", save_path=r"R:\Downloads"),
+        ]
+    )
+    mgr._assign_new_torrent("HA")
+    mgr._assign_new_torrent("HB")
+    return mgr, client, mgr.store.member_to_key["HA"]
+
+
+def test_drain_web_commands_group_actions():
+    """_drain_web_commands: 组级暂停/开始/汇报/删除命令在主循环侧执行, 作用于整组 hash"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web_commands.put(("pause_group", {"key": key}))
+        mgr.web_commands.put(("resume_group", {"key": key}))
+        mgr.web_commands.put(("reannounce_group", {"key": key}))
+        mgr._drain_web_commands()
+        # reannounce 走 FakeClient 旧约定(记 None; test_actions 多处断言依赖), pause/resume 记 hash 列表
+        assert client.calls == [("pause", ["HA", "HB"]), ("resume", ["HA", "HB"]), ("reannounce", None)], client.calls
+        # 删除整组: delete_files 透传, 成员从快照移除
+        mgr.web_commands.put(("delete_group", {"key": key, "delete_files": True}))
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("delete", True), f"delete_group: {client.calls}"
+        assert mgr.store.by_hash == {}, "删除整组后成员应已从快照移除"
+
+
+def test_drain_web_commands_torrent_actions():
+    """_drain_web_commands: 单种子命令只作用于该 hash; 种子不在快照 -> 跳过(删除守阵)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        for cmd in ("pause_torrent", "resume_torrent", "reannounce_torrent"):
+            mgr.web_commands.put((cmd, {"hash": "HA"}))
+        mgr._drain_web_commands()
+        assert [c[0] for c in client.calls] == ["pause", "resume", "reannounce"], client.calls
+        assert client.calls[0][1] == ["HA"] and client.calls[1][1] == ["HA"], "单种子命令只作用于该 hash"
+        # 删除守阵: 种子已不在快照 -> 不调 API
+        before = list(client.calls)
+        mgr.web_commands.put(("pause_torrent", {"hash": "GONE"}))
+        mgr.web_commands.put(("delete_torrent", {"hash": "GONE", "delete_files": True}))
+        mgr._drain_web_commands()
+        assert client.calls == before, "种子不在快照应跳过(删除守阵)"
+
+
+def test_drain_web_commands_unknown_and_error_continues():
+    """_drain_web_commands: 未知命令(KeyError)与执行异常只记日志, 不中断后续命令消费"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web_commands.put(("no_such_command", {}))  # KeyError 分支
+        mgr.web_commands.put(("build_search_index", {"bogus": 1}))  # 参数错误 -> TypeError 分支
+        mgr.web_commands.put(("pause_group", {"key": key}))  # 后续命令仍应执行
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("pause", ["HA", "HB"]), f"异常命令不应中断消费: {client.calls}"
+        assert mgr.web_commands.empty()
+
+
+def test_drain_web_commands_empty_queue():
+    """_drain_web_commands: 队列为空时直接返回(queue.Empty 分支), 无任何 API 调用"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr._drain_web_commands()
+        assert client.calls == []
+
+
+def test_cmd_group_actions_skip_missing_group():
+    """组级命令: 组 key 不存在或成员已不在快照 -> 空 hashes, 不调 qB API"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        gone = ("R:/gone", ("x.mkv", ))
+        mgr.store.groups[gone] = ["NOT_IN_STORE"]  # 成员不在快照 -> _group_hashes 过滤为空
+        assert mgr._group_hashes(gone) == []
+        for cmd in ("pause_group", "resume_group", "reannounce_group", "delete_group"):
+            mgr.web_commands.put((cmd, {"key": gone}))
+        mgr.web_commands.put(("pause_group", {"key": ("R:/nonexistent", ("y.mkv", ))}))  # 组 key 不存在
+        mgr._drain_web_commands()
+        assert client.calls == [], f"空组不应调用 qB API: {client.calls}"
+
+
+def test_cmd_reload_config_delegates():
+    """_cmd_reload_config: 委托 apply_new_config(热重载分级应用逻辑本身由 config 影响分析测试覆盖)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        applied = []
+        mgr.apply_new_config = lambda cfg: applied.append(cfg) or {"applied": True}
+        new_cfg = object()
+        mgr.web_commands.put(("reload_config", {"config": new_cfg}))
+        mgr._drain_web_commands()
+        assert applied == [new_cfg], "reload_config 命令应把新配置交给 apply_new_config"
+
+
+# ---------- Web 视图与配置热重载 ----------
+
+
+def test_ensure_group_view_rebuilds_when_dirty():
+    """ensure_group_view: 脏时立即重建(Web 请求侧兜底), 干净时直接返回当前引用(不重建)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr._group_view = []
+        mgr._group_view_dirty = True
+        view = mgr.ensure_group_view()
+        assert len(view) == 1 and view[0]["count"] == 2, f"脏时应重建分组视图: {view}"
+        assert mgr._group_view_dirty is False
+        assert mgr.ensure_group_view() is view, "干净时直接返回当前引用(不重建)"
+
+
+@pytest.mark.parametrize(
+    "state, kind",
+    [
+        ("error", "error"),
+        ("missingFiles", "error"),
+        ("checkingUP", "checking"),
+        ("pausedUP", "paused"),  # 暂停态优先于做种(stoppedUP 同时命中 is_uploading)
+        ("stoppedDL", "paused"),
+        ("downloading", "downloading"),
+        ("stalledUP", "seeding"),
+        ("uploading", "seeding"),
+        ("moving", "other"),
+    ]
+)
+def test_state_kind_maps_states(state, kind):
+    """_state_kind: 状态语义分类(前端着色) —— 暂停态优先于下载/做种, errored/checking 最前"""
+    from auto_qb.qbmanager import QbManager
+    from helpers import FakeTorrent
+
+    assert QbManager._state_kind(FakeTorrent(hash="H", name="t", state=state)) == kind
+
+
+def test_apply_new_config_levels(monkeypatch):
+    """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 重挂日志/通知+重连+web 重启;
+    L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用"""
+    import logging as std_logging
+
+    from auto_qb import qbmanager as qbm
+    from auto_qb.config.impact import ConfigChange
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        new_cfg = mock.MagicMock(name="new_config")
+        # 副作用隔离: 日志重挂/通知/重连/规则加载均替身(本测试只验证分级分支)
+        mgr._setup_logging = mock.MagicMock()
+        mgr._load_rules = mock.MagicMock()
+        mgr._create_global_tasks = mock.MagicMock()
+        mgr.connect = mock.MagicMock(return_value=True)
+        monkeypatch.setattr(qbm, "setup_notify", mock.MagicMock(return_value=std_logging.NullHandler()))
+
+        def _apply(changes):
+            # diff 结果受控(变更判定本身由 config/impact 单测覆盖)
+            monkeypatch.setattr("auto_qb.config.impact.diff_config_impacts", lambda old, new: changes)
+            return mgr.apply_new_config(new_cfg)
+
+        # ① L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
+        queue_before = mgr.task_queue
+        res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
+        assert res == {"applied": True, "levels": ["L0"], "changes": 1, "restart_required": []}, res
+        assert mgr.config is new_cfg
+        assert mgr.task_queue is queue_before, "L0 不应重建任务队列"
+
+        # ② L1: 重挂日志/通知 + 重连 + web 服务器重启
+        mgr._notify_handler = std_logging.NullHandler()
+        old_handle = mock.MagicMock()
+        mgr._web_handle = old_handle
+        start_web = mock.MagicMock()
+        monkeypatch.setattr("auto_qb.web.start_web_server", start_web)
+        res = _apply([ConfigChange("logging", "L1", {}, {})])
+        assert res["levels"] == ["L1"]
+        mgr._setup_logging.assert_called_once()
+        mgr.connect.assert_called_once()
+        old_handle.stop.assert_called_once()
+        assert mgr._web_handle is start_web.return_value, "web 句柄应换为新服务句柄"
+
+        # ③ L2: 重建任务队列/规则 + 抑制下一轮事件分派
+        queue_before = mgr.task_queue
+        res = _apply([ConfigChange("interval", "L2", 1, 2)])
+        assert res["levels"] == ["L2"]
+        assert mgr.task_queue is not queue_before, "L2 应重建任务队列"
+        assert mgr._suppress_events is True
+        mgr._load_rules.assert_called_once()
+        mgr._create_global_tasks.assert_called_once()
+
+        # ④ R: 仅提示重启, 不计入应用级别
+        res = _apply([ConfigChange("state_file", "R", "a", "b")])
+        assert res["restart_required"] == ["state_file"]
+        assert res["levels"] == []
