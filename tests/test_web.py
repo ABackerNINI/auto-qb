@@ -5,8 +5,12 @@
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
-- test_config_raw_roundtrip: 配置原文读取/保存写回文件并投递热重载命令
-- test_config_raw_invalid_rejected: 非法配置文本 -> 400 且不写回
+- test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
+- test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
+- test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
+- test_config_tree_restart_field_fallback: R 级字段(data_dir)提交后被回退为磁盘旧值
+- test_config_tree_requires_config_root: 缺少 config 根段 -> 400
+- test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点)
 - test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
@@ -203,8 +207,8 @@ def test_api_requires_token(web_env, caplog):
         caplog.clear()
         kwargs = {} if header is None else {"headers": {"Authorization": header}}
         assert client.get("/api/status", **kwargs).status_code == 401
-        assert not [r for r in caplog.records if r.name == web_logger and r.levelno >= logging.WARNING], (
-            f"畸形凭证 {header!r} 不应记 WARNING")
+        assert not [r for r in caplog.records if r.name == web_logger and r.levelno >= logging.WARNING
+                   ], (f"畸形凭证 {header!r} 不应记 WARNING")
     # 携带了但错误的密钥: 401 + 恰好一条不含密钥内容的 WARNING
     caplog.clear()
     assert client.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 401
@@ -252,42 +256,96 @@ def test_api_delete_with_files_flag(web_env):
     assert cmd == "delete_group" and payload["delete_files"] is True
 
 
-def test_config_raw_roundtrip(web_env):
-    """配置原文读取/合法新文本保存: 写回 config 文件 + 热重载命令入队"""
+def test_config_schema_endpoint(web_env):
+    """图形化配置元数据端点: 分组/站点字段/规则字段/插件表/热重载级别齐全"""
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
-    original = client.get("/api/config/raw", headers=auth).json()["content"]
-    assert "qbittorrent" in original
+    data = client.get("/api/config/schema", headers=auth).json()
+    assert [g["key"] for g in data["groups"]] == [
+        "basic", "logging", "web", "notify", "maintenance", "speed", "trackers", "rules"
+    ]
+    assert {p["name"] for p in data["plugins"]["condition"]} >= {"size", "tags", "state", "freespace"}
+    assert {p["name"] for p in data["plugins"]["action"]} >= {"add_tags", "checking", "reannounce"}
+    # 热重载级别与 impact 同源(R 级字段前端需标"需重启")
+    assert data["levels"]["sections"]["data_dir"] == "R"
+    assert data["levels"]["sections"]["main_tick"] == "L0"
+    assert data["levels"]["tracker_fields"]["domains"] == "L2"
 
-    new_text = (
-        "config:\n"
-        "  qbittorrent:\n"
-        "    host: h\n"
-        "    port: 1\n"
-        "    username: u\n"
-        "    password: p\n"
-        "  main_tick: 5s\n"
-        "  trackers:\n"
-        "    T1:\n"
-        "      domains: [a.com]\n"
-    )
-    resp = client.put("/api/config/raw", headers=auth, json={"content": new_text})
+
+def test_config_tree_roundtrip(web_env):
+    """配置树读取与保存: 树为 YAML 同构(标量字符串), 写回文件 + 热重载命令入队"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    data = client.get("/api/config", headers=auth).json()
+    tree = data["tree"]
+    assert tree["config"]["qbittorrent"]["host"] == "h", "树应为 YAML 同构的字符串标量"
+
+    tree["config"]["main_tick"] = "5s"
+    resp = client.put("/api/config", headers=auth, json={"tree": tree})
     assert resp.status_code == 200, resp.text
     assert resp.json()["applied"] is True
+    assert "main_tick" in [c["path"] for c in resp.json()["changes"]]
     with open(mgr.config_path, encoding="utf-8") as f:
-        assert "main_tick: 5s" in f.read(), "新配置应写回 config 文件"
+        assert "5s" in f.read(), "新配置应写回 config 文件"
     cmd, payload = mgr.web_commands.get_nowait()
     assert cmd == "reload_config" and payload["config"].main_tick == 5.0
 
 
-def test_config_raw_invalid_rejected(web_env):
-    """非法配置文本 -> 400, config 文件不被覆盖"""
+def test_config_tree_invalid_rejected(web_env):
+    """非法配置树 -> 400, config 文件不被覆盖"""
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    tree = client.get("/api/config", headers=auth).json()["tree"]
+    tree["config"]["main_tick"] = "abc"
     before = open(mgr.config_path, encoding="utf-8").read()
-    resp = client.put("/api/config/raw", headers=auth, json={"content": "config:\n  main_tick: abc\n"})
+    resp = client.put("/api/config", headers=auth, json={"tree": tree})
     assert resp.status_code == 400
+    assert "main_tick" in resp.json()["detail"]
     assert open(mgr.config_path, encoding="utf-8").read() == before
+    assert mgr.web_commands.empty(), "校验失败不应投递热重载"
+
+
+def test_config_tree_requires_config_root(web_env):
+    """缺少 config 根段 -> 400(防止误删整段被当作"全默认"静默接受)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    resp = client.put("/api/config", headers=auth, json={"tree": {"qbittorrent": {}}})
+    assert resp.status_code == 400
+    assert "config" in resp.json()["detail"]
+
+
+def test_config_tree_restart_field_fallback(web_env):
+    """R 级字段提交后回退为磁盘旧值(进程身份不可热切换), 并回报 restart_required"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    with open(mgr.config_path, "w", encoding="utf-8") as f:
+        f.write("config:\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
+
+    tree = client.get("/api/config", headers=auth).json()["tree"]
+    tree["config"]["data_dir"] = "new-dir"
+    resp = client.put("/api/config", headers=auth, json={"tree": tree})
+    assert resp.status_code == 200, resp.text
+    # data_dir 变更会连带派生 state_file(<data_dir>/state.json), 两者同为 R 级
+    assert "data_dir" in resp.json()["restart_required"]
+    text = open(mgr.config_path, encoding="utf-8").read()
+    assert "old-dir" in text, "R 级字段应保留旧值"
+    assert "new-dir" not in text, "R 级字段的新值不得写入磁盘"
+
+
+def test_config_tree_preserves_comments(web_env):
+    """round-trip 写盘保留已有键注释(列表项注释为已记录的取舍)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    with open(mgr.config_path, "w", encoding="utf-8") as f:
+        f.write("config:\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+
+    tree = client.get("/api/config", headers=auth).json()["tree"]
+    tree["config"]["main_tick"] = "3s"
+    resp = client.put("/api/config", headers=auth, json={"tree": tree})
+    assert resp.status_code == 200, resp.text
+    text = open(mgr.config_path, encoding="utf-8").read()
+    assert "# 保留我" in text, "已有键的注释应在 round-trip 写盘后保留"
+    assert "3s" in text
 
 
 def test_group_key_codec_roundtrip():

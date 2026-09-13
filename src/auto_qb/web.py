@@ -156,80 +156,67 @@ def create_app(manager) -> FastAPI:
         _enqueue("delete_torrent", {"hash": hash, "delete_files": delete_files})
         return {"queued": True, "delete_files": delete_files}
 
-    @app.get("/api/config/raw")
-    def api_config_raw():
-        """当前 config.yml 原文(含注释), 供 UI 编辑"""
-        with open(manager.config_path, "r", encoding="utf-8") as f:
-            return {"content": f.read()}
+    @app.get("/api/config/schema")
+    def api_config_schema():
+        """配置表单元数据(分组/字段/控件/帮助) + 热重载级别(唯一来源: config.impact)"""
+        from .config import schema as config_schema
+        from .config.impact import SECTION_LEVELS, TRACKER_FIELD_LEVELS
 
-    @app.put("/api/config/raw")
-    def api_config_raw_put(body: dict):
-        """保存设置: 新文本经完整校验(与启动同路径)后写回并投递热重载
+        payload = config_schema.schema_payload()
+        # 级别表由 impact 单一维护(与热重载实际分级同源), API 层只做合并
+        payload["levels"] = {"sections": SECTION_LEVELS, "tracker_fields": TRACKER_FIELD_LEVELS}
+        return payload
 
-        R 级字段(state_file/data_dir)变更不参与热重载(保留旧值), 其余立即生效。
+    @app.get("/api/config")
+    def api_config_get():
+        """当前配置树(YAML 同构, 标量为字符串) + 写盘路径"""
+        from .config.writer import read_tree
+
+        return {"tree": read_tree(manager.config_path), "path": manager.config_path}
+
+    @app.put("/api/config")
+    def api_config_put(body: dict):
+        """保存图形化配置: 结构校验(与启动同路径) -> R 级字段回退 -> round-trip 写盘 -> 投递热重载
+
+        校验失败不触碰磁盘; R 级字段(state_file/data_dir)保留旧值, 其余立即生效。
         """
-        import tempfile
+        from .config.errors import ConfigError
+        from .config.loaders import load_config
+        from .config.writer import write_tree
 
-        from .config import load_config
-        from .config.impact import diff_config_impacts
-
-        content = (body or {}).get("content")
-        if not isinstance(content, str) or not content.strip():
-            raise HTTPException(status_code=400, detail="content 不能为空")
-        tmp_path = None
+        tree = (body or {}).get("tree")
+        if not isinstance(tree, dict):
+            raise HTTPException(status_code=400, detail="tree 必须是对象")
         try:
-            with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yml", delete=False) as f:
-                f.write(content)
-                tmp_path = f.name
-            new_config = load_config(tmp_path)
-        except Exception as e:
+            result = write_tree(manager.config_path, tree, manager.config)
+        except (ConfigError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e))
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
 
-        old_config = manager.config
-        changes = diff_config_impacts(old_config, new_config)
-        restart_required = [c.path for c in changes if c.level == "R"]
-        if restart_required:
-            # R 级字段(state_file/data_dir)保留旧值, 其余字段照常应用
-            for c in changes:
-                if c.level != "R":
-                    continue
-            new_config = _reject_restart_fields(old_config, new_config, changes)
-
-        # 备份当前配置后写回(ruamel round-trip 保留新文本自身格式)
-        config_path = manager.config_path
-        if os.path.exists(config_path):
-            backup = config_path + ".bak"
-            with open(config_path, "r", encoding="utf-8") as src, open(backup, "w", encoding="utf-8") as dst:
-                dst.write(src.read())
-        with open(config_path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-        # 投递热重载(主循环线程应用; R 级字段已被替换为旧值)
-        _enqueue("reload_config", {"config": load_config(config_path)})
+        # 投递热重载(主循环线程应用; R 级字段已在树中回退为旧值)
+        _enqueue("reload_config", {"config": load_config(manager.config_path)})
         return {
             "applied": True,
-            "changes": len(changes),
-            "restart_required": restart_required,
+            "changes": [{
+                "path": c.path,
+                "level": c.level
+            } for c in result.changes],
+            "restart_required": result.restart_required,
         }
 
-    def _reject_restart_fields(old_config, new_config, changes):
-        """R 级字段回退为旧值(进程身份不可热切换), 其余字段保留新值"""
-        r_paths = {c.path for c in changes if c.level == "R"}
-        for c in changes:
-            if c.level != "R":
-                continue
-            parts = c.path.split(".")
-            if len(parts) == 1:
-                setattr(new_config, parts[0], getattr(old_config, parts[0]))
-            elif len(parts) == 2:
-                seg = getattr(new_config, parts[0])
-                if seg is not None and hasattr(seg, parts[1]):
-                    setattr(seg, parts[1], getattr(getattr(old_config, parts[0]), parts[1], None))
-        logger.warning(f"以下字段需重启进程才能生效, 本次保存保留旧值: {sorted(r_paths)}")
-        return new_config
+    @app.post("/api/config/preview")
+    def api_config_preview(body: dict):
+        """只读预览: 返回"即将写入"的 YAML 文本(不落盘、不投递热重载), 校验口径与保存一致"""
+        from .config.errors import ConfigError
+        from .config.writer import preview_tree
+
+        tree = (body or {}).get("tree")
+        if not isinstance(tree, dict):
+            raise HTTPException(status_code=400, detail="tree 必须是对象")
+        try:
+            text = preview_tree(manager.config_path, tree, manager.config)
+        except (ConfigError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"yaml": text}
 
     # 静态前端(阶段 B 挂载: web_ui/static; index.html 兜底)
     static_dir = os.path.join(os.path.dirname(__file__), "web_ui", "static")

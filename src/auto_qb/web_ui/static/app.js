@@ -20,7 +20,7 @@ function loadColWidths() {
   }
 }
 
-createApp({
+const app = createApp({
   data() {
     return {
       token: "",  // 已验证通过的密钥(唯一可信身份); 仅 bootstrap 验证成功后提交
@@ -50,10 +50,6 @@ createApp({
       colWidths: loadColWidths(),  // {group: [..px..], detail: [..px..]}, localStorage 记忆
       resizing: null,              // {page, idx, startX, startVal}
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
-      settingsText: "",
-      saving: false,
-      saveMsg: "",
-      saveOk: false,
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
@@ -183,7 +179,7 @@ createApp({
       this.pollFails = 0;
       this.serviceDown = false;
       this.expandedKey = null;
-      this.settingsText = "";  // config.yml 原文同样是受保护内容, 一并清除
+      this.cfgReset();  // 配置树同样是受保护内容, 一并清除(编辑器状态复位)
       this.page = "groups";
       this.searchQuery = "";
       this.resetSearch();
@@ -282,33 +278,6 @@ createApp({
         this.pollFails = Math.min(4, this.pollFails + 1);
       }
       this.scheduleNext();
-    },
-    async openSettings() {
-      this.page = "settings";
-      await this.reloadSettings();
-    },
-    async saveSettings() {
-      this.saving = true;
-      this.saveMsg = "";
-      try {
-        const result = await this.api("/api/config/raw", {
-          method: "PUT",
-          body: JSON.stringify({ content: this.settingsText }),
-        });
-        this.saveOk = true;
-        this.saveMsg = `已保存并热重载(变更 ${result.changes} 项)`
-          + (result.restart_required.length ? `;需重启进程: ${result.restart_required.join(", ")}` : "");
-      } catch (e) {
-        this.saveOk = false;
-        this.saveMsg = "保存失败: " + e.message;
-      } finally {
-        this.saving = false;
-      }
-    },
-    async reloadSettings() {
-      const data = await this.api("/api/config/raw");
-      this.settingsText = data.content;
-      this.saveMsg = "";
     },
     onSearchInput(event) {
       // 输入防抖: 停止输入 400ms 后触发搜索; 清空则立即恢复辅种管理视图(不等防抖)
@@ -502,4 +471,10 @@ createApp({
       document.addEventListener("mouseup", up);
     },
   },
-}).mount("#app");
+});
+
+// 图形化配置编辑器以全局 mixin 注入(设置页控件/状态/接口全在其中)
+app.mixin(window.CONFIG_EDITOR);
+app.mixin(window.CONFIG_RULES);
+app.component("ce-field", window.CE_FIELD_COMPONENT);
+app.mount("#app");
