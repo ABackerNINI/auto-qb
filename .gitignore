@@ -22,3 +22,6 @@ logs/
 
 # ZCode相关文件
 .zcode/
+
+# Trae相关文件
+.trae/
