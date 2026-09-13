@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/license-Apache%202.0-green)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Status](https://img.shields.io/badge/status-alpha%20%F0%9F%9A%A7-orange)]() [![CI](https://img.shields.io/github/actions/workflow/status/ABackerNINI/auto-qb/ci.yml?branch=develop&label=CI)](https://github.com/ABackerNINI/auto-qb/actions/workflows/ci.yml)
 
-标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检 · 主动通知 · 托盘常驻
+标签 / 分类 / HR 管理 · 辅种分组与缺文件保护 · 自定义规则引擎 · 多级限速 · 校验 / 跳检 · Web UI · 桌面通知 · 托盘常驻
 
 </div>
 
@@ -17,17 +17,21 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 
 - **省心保种** — 自动打站点标签、跟踪 HR（Hit & Run）触发与达标状态，做种时长满足要求后自动标记
 - **辅种安全** — 把指向相同文件的种子自动归组，缺文件 / 大小不一致 / 下载冲突时**整组暂停**，防止误传垃圾数据被站点封号
-- **灵活自动化** — 15 种筛选条件 × 11 种动作自由组合成规则，触发时机、去重冷却、错误处理一应俱全
+- **灵活自动化** — 15 种筛选条件 × 12 种动作自由组合成规则，周期 / 事件触发、去重冷却、错误处理一应俱全
 - **智能限速** — tracker 级单种限速 + 规则动作限速 + 读取流量统计的全局限速曲线，到量自动降速
+- **可视可控** — 内置 Web UI（默认关闭）：辅种分组视图、种子搜索、右键控制 + 全部配置图形化增删改（校验、备份、热重载）；另支持 `--tray` 托盘常驻与平台原生桌面通知
 - **安全第一** — 高风险动作（跳检、强制汇报、移动）默认关闭；提供 `--dry-run` 试运行；启动时全量校验配置
 
-> 🚧 **施工中**：项目功能已实现并带有完整测试（808 个用例），但尚未经过大规模实机验证。标记 🚧 的功能尤其请先用 `--dry-run` 观察，谨慎在生产环境使用。
+> 🚧 **施工中**：项目功能已实现并带有完整测试（849 个用例），但尚未经过大规模实机验证。标记 🚧 的功能尤其请先用 `--dry-run` 观察，谨慎在生产环境使用。
 
 ## 目录
 
 - [功能特性](#功能特性)
 - [快速开始](#快速开始)
 - [命令行参数](#命令行参数)
+- [托盘模式](#托盘模式)
+- [桌面通知](#桌面通知)
+- [Web UI](#web-ui)
 - [配置说明](#配置说明)
 - [全局限速曲线](#全局限速曲线)
 - [规则系统](#规则系统)
@@ -62,10 +66,16 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 - **全局限速曲线**：根据每天 / 每N天 / 每月的上传下载总量自动调整总限速（见 [全局限速曲线](#全局限速曲线)）
 - 限速不覆盖奇数 KiB/s 值——手动设置且不希望被覆盖的限速可设为单数（如 `2001 KiB/s`）
 
+### 🌐 Web UI（默认关闭）
+
+- **辅种管理页**：辅种分组表格（组内速度 / 总上传 / 总大小 / 站点徽章，列头排序、拖拽调宽、展开各站点成员明细）+ 按种子名 / 文件名搜索；组级与单种子级右键操作（暂停 / 开始、强制汇报、删除）
+- **图形化设置页**：全部配置表单化增删改——基础设置、站点、规则集（15 种条件 / 12 种动作的选择、排序与参数编辑）、全局限速曲线等；只读 YAML 预览，保存走启动同路径校验 + `.bak` 备份 + 热重载（需重启项自动回退并提示）
+- **安全默认**：默认仅监听 `127.0.0.1`，Bearer 密钥鉴权（未配置则首启随机生成 `web.token`）；Vue3 前端本地托管，无第三方构建链（见 [Web UI](#web-ui)）
+
 ### 🧩 自定义规则引擎 🚧
 
 - 触发时机 + 筛选条件 + 动作，动作顺序执行，支持去重、冷却与错误处理（见 [规则系统](#规则系统)）
-- **15 种条件 × 11 种动作**，全部可自由组合
+- **15 种条件 × 12 种动作**，全部可自由组合；除固定间隔外还支持种子添加 / 状态变化 / 删除事件触发
 
 ### 🛡️ 运行时保障
 
@@ -73,8 +83,8 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 - 状态持久化到数据目录（规则历史 / 上传量快照 / 自动分类 / 限速状态 / 跳检备份元数据），重启续跑
 - 启动时 **fail-fast** 全量校验配置（未知键、非法格式、非法 HR 规则一次性聚合报错）
 - 单实例锁，防止同一配置多开互相竞争
-- **主动通知**：程序出错 / 危险情况（缺文件、下载冲突、跳检失败等）时推送**平台原生通知**（Windows 原生 toast / Linux / macOS，零第三方依赖）；免打扰时段 + 频率节流防打扰，全屏等繁忙场景由系统专注助手自动静默
-- **托盘常驻**（`--tray`）：系统托盘图标运行，深色状态窗口（种子数 / 运行时长 / 最近日志）；运行时**暂停 / 恢复自动管理**、**通知热切换**、**开机自启**开关；重复启动自动唤起已运行实例的窗口；跨平台（Windows / Linux / macOS）
+- **主动通知**（见 [桌面通知](#桌面通知)）：程序出错 / 危险情况（缺文件、下载冲突、跳检失败等）时推送**平台原生通知**（Windows 原生 toast / Linux / macOS，零第三方依赖）；免打扰时段 + 频率节流防打扰，全屏等繁忙场景由系统专注助手自动静默
+- **托盘常驻**（`--tray`，见 [托盘模式](#托盘模式)）：系统托盘图标运行，深色状态窗口（种子数 / 运行时长 / 最近日志）；运行时**暂停 / 恢复自动管理**、**通知热切换**、**开机自启**开关；重复启动自动唤起已运行实例的窗口；跨平台（Windows / Linux / macOS）
 - 从已有种子的 tracker 一键导出 YAML 配置模板
 
 ## 快速开始
@@ -95,8 +105,14 @@ python -m venv .venv
 # Linux / macOS
 source .venv/bin/activate
 
-# 安装运行依赖
+# 核心运行依赖(命令行模式)
 pip install pyyaml qbittorrent-api filelock
+
+# 可选: 托盘模式(--tray)依赖
+pip install pystray pillow customtkinter
+
+# 可选: Web UI(web.enabled)依赖; ruamel.yaml 用于图形化配置写回(保留注释与标量风格)
+pip install fastapi uvicorn ruamel.yaml
 ```
 
 ### 2. 配置
@@ -128,6 +144,9 @@ python src/auto-qb.py
 
 # 指定配置文件
 python src/auto-qb.py my-config.yml
+
+# 托盘常驻模式(状态窗口 + 系统托盘, 详见[托盘模式](#托盘模式))
+python src/auto-qb.py --tray
 ```
 
 ## 命令行参数
@@ -139,6 +158,62 @@ python src/auto-qb.py my-config.yml
 | `--only-missing`             | 仅导出未配置的 tracker 站点（配合 `--export-yaml` 使用） |
 | `--dry-run`, `-n`            | 试运行：打印将执行的动作，不实际调用客户端               |
 | `--tray`                     | 托盘常驻模式：系统托盘图标 + 状态窗口；再次启动唤起已有实例窗口 |
+
+## 托盘模式
+
+不想留终端窗口时，可用 `--tray` 让程序以系统托盘图标常驻（主循环在后台线程运行，仍是任务队列与状态文件的唯一修改者）：
+
+```bash
+python src/auto-qb.py --tray             # 默认 config.yml, 也可在前面指定配置文件
+python src/auto-qb.py --tray --dry-run   # 托盘模式同样支持试运行
+```
+
+- **深色状态窗口**：受管种子数、运行时长、qB 连接状态与最近日志；点关闭按钮只是隐藏到托盘，程序继续后台运行
+- **托盘菜单 / 窗口控件**：暂停 / 恢复自动管理（暂停期间跳过所有自动操作，恢复后增量补齐）、通知开关热切换、开机自启开关、打开 qBittorrent WebUI、打开日志目录、退出
+- **单实例唤起**：重复执行 `--tray` 不会双开——第二实例经本地 IPC（`<data_dir>/ui.port`）唤起已运行实例的窗口后静默退出；单实例锁仍然生效
+- **开机自启**：以「当前 Python 解释器 + 配置文件绝对路径 + `--tray`」注册当前用户的开机启动项（Windows: HKCU `Run` 注册表键；Linux: XDG autostart；macOS: LaunchAgents），不需要时在菜单中关闭即可
+- 无桌面环境（SSH / 服务会话）下托盘模式会干净报错退出，不影响命令行模式；托盘依赖为可选安装（见 [安装](#1-安装)）
+
+## 桌面通知
+
+配置 `notify.enabled: true` 后，运行中的 WARNING / ERROR 日志（缺文件、下载冲突、跳检失败等）会推送**平台原生通知**，零第三方依赖：
+
+- **Windows 10/11**：PowerShell 调用 WinRT 原生 toast，首次运行幂等注册 `AutoQB.UI` 通知来源（显示程序名与图标，失败回退 PowerShell 来源）
+- **Linux**：`notify-send`（需桌面环境自带 libnotify）；**macOS**：`osascript` 显示通知
+- **防打扰**：`quiet_hours` 免打扰时段（支持跨午夜）、`max_per_hour` 每小时条数上限、`dedup_window` 相同通知去重窗口；节流为内存态、重启重置
+- 全屏游戏 / 演示等繁忙场景由系统专注助手 / 勿扰模式自动静默
+- 托盘模式下可用菜单中的「通知」项运行时热切换；配置未启用时会话级开启，重启后回到配置状态；程序致命退出前会 best-effort 补发一条通知
+- `--dry-run` 试运行不挂载通知
+
+## Web UI
+
+在配置中开启后，程序正常运行（含 `--tray`）时会在独立线程启动内置 Web 服务，浏览器打开即可用；`--dry-run` 试运行不启动。
+
+```yaml
+config:
+    web:
+        enabled: true          # 总开关, 默认关闭(保守默认)
+        host: "127.0.0.1"      # 监听地址, 默认仅本机
+        port: 8080             # 监听端口
+        token: ""              # Bearer 访问密钥; 留空 = 首次启动随机生成
+```
+
+**访问与鉴权**：浏览器访问 `http://127.0.0.1:8080`（端口以配置为准），在登录页输入访问密钥。密钥取 `web.token`；留空时首次启动随机生成 64 位十六进制密钥并持久化到 `<data_dir>/web.token`（仅当前用户可读写），启动日志中也会打印一次。所有 `/api/*` 请求经 Bearer 鉴权（恒定时间比较），密钥错误返回 401。
+
+> ⚠️ **安全提示**：默认只监听 `127.0.0.1`。改为 `0.0.0.0` 等对外地址会把**可删除种子、可改配置**的管理接口暴露到网络，请务必配合防火墙 / 反向代理 / 额外鉴权使用。
+
+**辅种管理页**：
+
+- 辅种分组表格：组内下载 / 上传速度、总上传、总大小、站点徽章；点击列头排序、拖拽调整列宽，展开查看各站点成员明细（进度、做种时长、hash）
+- 按种子名 / 文件名搜索：任一成员命中即保留整组并高亮命中成员；搜索索引由主循环按需增量构建
+- 组级与单种子级右键操作：暂停 / 开始、强制汇报、删除（保留文件 / 连同文件删除）
+
+**设置页（图形化配置编辑）**：
+
+- 全部配置分组表单化增删改：基础设置、qB 连接、日志、通知、站点（左列表 + 右详情）、规则集（规则 + 15 种条件 / 12 种动作的选择、排序与参数编辑）、全局限速曲线等
+- 保存前可展开**只读 YAML 预览**（与最终写盘内容同源，不落盘）
+- 「保存并热重载」管线：结构校验（与启动同路径，校验不通过不碰磁盘）→ 变更分级（运行时可调项即时生效；`data_dir` / `state_file` 等需重启项自动回退为旧值并提示重启）→ 自动备份 `.bak` → round-trip 写盘（保留原有注释与标量风格）→ 投递主循环热重载
+- **线程模型**：Web 线程只读取主循环每 tick 原子替换的只读快照，写操作（控制种子 / 保存配置）一律投递命令队列、由主循环线程消费执行
 
 ## 配置说明
 
@@ -180,6 +255,13 @@ config:
         level: INFO              # 日志等级
         max_bytes: 10MiB         # 日志轮转大小
         format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
+
+    # Web UI: 辅种管理 + 图形化配置编辑(详见 [#Web UI], 默认关闭)
+    web:
+        enabled: false           # 启用后随主程序启动(--dry-run 不启动)
+        host: "127.0.0.1"        # 监听地址, 默认仅本机; 改 0.0.0.0 会暴露管理接口
+        port: 8080               # 监听端口
+        token: ""                # Bearer 密钥; 留空首启随机生成 -> <data_dir>/web.token
 
     # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
     notify:
@@ -326,8 +408,8 @@ config:
     example_rules: # 🚧
         rule1:
             enabled: true
-            trigger: interval                      # 触发时机: 固定时间间隔循环 🚧
-            interval: 60S                          # 执行间隔
+            trigger: interval                      # 触发时机: interval / on_torrent_added / on_torrent_state_enum_changed / on_torrent_deleted
+            interval: 60S                          # 执行间隔(interval 触发时使用)
             execute_once: never                    # 去重: never/once/daily/hourly 🚧
             cooldown: 0S                           # 距上次执行成功不足该时长则跳过 🚧
             conditions:                            # 筛选条件必须全部满足
@@ -368,6 +450,7 @@ config:
                         auto_start: true           # 校验成功后自动开始
                 - start: true                      # 开始
                 - stop: true                       # 暂停
+                - print_torrent_details: true      # 打印种子详情到日志(只读留档; on_torrent_deleted 唯一允许动作)
                 - ignore_next_action_error: true   # 忽略下一个动作的错误继续执行 🚧
                 - add_tags:                        # 添加标签，支持变量
                     - tag-format1
@@ -397,11 +480,12 @@ config:
 
 ### 触发时机
 
-| 触发时机                                  | 状态      | 说明                   |
-|-------------------------------------------|-----------|------------------------|
-| `interval`                                | ✅ 已实现  | 固定时间间隔循环一次   |
-| `on_torrent_state_changed`                | 🚧 规划中 | 种子状态发生变化时触发 |
-| `on_torrent_added` / `on_torrent_deleted` | 🚧 规划中 | 种子添加 / 删除时触发  |
+| 触发时机                         | 状态      | 说明                                                                 |
+|----------------------------------|-----------|----------------------------------------------------------------------|
+| `interval`                       | ✅ 已实现  | 固定时间间隔循环一次                                                 |
+| `on_torrent_added`               | ✅ 已实现  | 新种子添加时事件触发；checking 等异步动作经 rule-event 断点续跑       |
+| `on_torrent_state_enum_changed`  | ✅ 已实现  | 种子 qB 状态枚举发生变化时事件触发                                   |
+| `on_torrent_deleted`             | ✅ 已实现  | 种子删除时触发（现场为删除前快照）；仅允许 `print_torrent_details`    |
 
 ### 筛选条件（15 种）
 
@@ -423,12 +507,13 @@ config:
 | `upload_size_this_month` | 本月上传大小                                                                              |
 | `freespace`              | 指定路径剩余空间                                                                          |
 
-### 动作（11 种）
+### 动作（12 种）
 
 | 动作                                          | 说明                                                                                       |
 |-----------------------------------------------|--------------------------------------------------------------------------------------------|
 | `checking`                                    | 校验 / 跳检：skip-checking (⚠️ __<font color="red">有风险!</font>__) 或 full-checking（安全） |
 | `start` / `stop`                              | 开始 / 暂停种子                                                                            |
+| `print_torrent_details`                       | 打印种子详情到日志（只读留档，不操作种子；`on_torrent_deleted` 触发下唯一允许的动作）        |
 | `add_tags` / `remove_tags`                    | 添加 / 删除标签，支持正则和变量                                                             |
 | `add_category` / `remove_category`            | 设置 / 清空分类，支持强制覆盖                                                               |
 | `move_to`                                     | 移动保存路径                                                                               |
@@ -541,30 +626,37 @@ config:
 - **插件框架**：条件 / 动作通过 `@register_condition` / `@register_action` 装饰器注册、按名称实例化，易于扩展
 - **mixin 组合**：`QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin)`，职责清晰
 - **数据层**：`TorrentStore.apply_sync` 走 qB `/api/v2/sync/maindata` 的 rid 增量同步（只对变化的种子调 `apply_delta`，未变化种子零开销）；本地 qB 连接额外关闭 requests 的环境代理/netrc 解析
+- **Web 线程模型**：uvicorn 在独立线程运行，请求只读取主循环每 tick 原子替换的只读快照、向命令队列投递控制命令；写操作（控制种子 / 保存配置 / 热重载）只在主循环线程执行，单一写者约束不破
 
 ```
 src/auto_qb/
+├── autostart.py       # 开机自启: Win 注册表/Linux XDG/macOS LaunchAgents(零第三方依赖)
 ├── cli.py             # 命令行入口(argparse)
 ├── config/            # 配置包: models(数据模型)/validation(全量校验)/loaders(解析加载)
+│                      #         schema(Web 表单元数据)/writer(图形化写回)/impact(热重载分级)
 ├── curves.py          # 全局限速曲线纯逻辑: dat 解析/period 聚合/档位计算
 ├── episodes.py        # 集数标签解析
 ├── exporter.py        # YAML 配置模板导出
 ├── locking.py         # 单实例锁(filelock)
 ├── logging.py         # 日志配置
+├── notify.py          # 桌面通知: Win toast/Linux notify-send/macOS osascript(零第三方依赖)
 ├── qbmanager.py       # QbManager 主类: 主循环 2s tick，协调任务队列/规则/内置功能
 ├── qbapi.py           # qB API Facade: 封装客户端调用 + 写后同步 store 快照
 ├── taskqueue.py       # 单任务队列: 时间优先堆，所有任务统一调度
 ├── torrents.py        # 种子数据层: rid 增量同步(apply_sync/apply_delta)+快照+惰性缓存+分组索引
+├── ui.py              # 托盘常驻 UI: CustomTkinter 窗口 + pystray 托盘 + 单实例唤起 IPC
 ├── utils.py           # 通用工具(速度/时间/大小解析，标签/路径匹配)
+├── web.py             # Web UI 后端: FastAPI/uvicorn 独立线程, Bearer 鉴权, 只读快照+命令投递
+├── web_ui/static/     # Web UI 前端: Vue3 本地托管(无构建链), 辅种管理页 + 图形化设置页
 ├── mixins/            # QbManager 组合 mixins
 │   ├── checking.py    # 文件存在与大小检查(checking 动作前置)
 │   ├── grouping.py    # 种子分组管理(辅种管理)
-│   ├── rule_engine.py # 规则加载/状态持久化/种子级规则任务
+│   ├── rule_engine.py # 规则加载/状态持久化/种子级规则任务/事件分派
 │   ├── speed_curve.py # 全局限速曲线: Traffic Monitor 流量 -> qB 全局限速
 │   ├── tags.py        # 标签/分类/HR 辅助
 │   └── tracker.py     # tracker 配置匹配(hostname 精确匹配)/单种限速
 └── rules/             # 规则插件框架(装饰器注册)
-    ├── actions/       # 11 种动作插件: basic/transfer/checking/full_checking/skip_checking
+    ├── actions/       # 12 种动作插件: basic/transfer/checking/full_checking/skip_checking
     ├── base.py        # Rule/BaseCondition/BaseAction/ActionResult
     ├── conditions.py  # 15 种条件插件
     └── registry.py    # 条件/动作插件注册表
@@ -573,8 +665,8 @@ src/auto_qb/
 ## 开发测试
 
 ```bash
-# 安装开发依赖
-pip install pytest pytest-cov
+# 安装开发依赖(含全部运行依赖: Web/托盘/GUI 测试均会用到)
+pip install -r .github/workflows/requirements-dev.txt
 
 # 运行全部测试(无需真实 qBittorrent，全部 Fake)
 pytest tests -q
@@ -587,7 +679,7 @@ pytest --cov=src --cov-report=html tests/
 ```
 
 - 测试基础设施见 `tests/helpers.py`（`FakeClient` / `FakeTorrent` / `FakeConfig`，无需真实 qBittorrent；另有 `FakeQbServer` 本地假 HTTP 服务，供真实 `qbittorrent-api` / requests 栈的集成测试）
-- 当前共 808 个测试用例
+- 当前共 849 个测试用例（`test_web.py` 覆盖 Web API / 配置读写与预览 / 搜索 / 命令执行 / 热重载；`test_ui.py` 覆盖托盘 IPC 与日志缓冲等非 GUI 设施；`test_notify.py` 覆盖节流与各平台通知构造）
 
 ## 免责声明与许可证
 
