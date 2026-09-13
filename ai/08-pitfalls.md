@@ -38,6 +38,9 @@
 - **WEB UI 搜索结果是真实辅种组的筛选, 不是另建虚拟分组** (2026-09-13): 前端用后端返回的命中 hash 集合过滤 `sortedGroups` —— 任一组员命中即保留**整组**(组行沿用真实组 key → 组级操作可用), 仅命中成员 `search-hit` 高亮。**未归组**的命中种子(分组未启用/文件列表不可读)以单种子虚拟行(前端 key `u-<hash>`)兜底展示, **虚拟行不是真实组 key**, 前端右键必须退化为单种子菜单 —— 否则 `/api/groups/u-xxx/action` 走 `decode_group_key` 解析失败直接 500。**初版 bug 教训(必修)**: 搜索结果容器曾被写成 `v-if="!searchQuery"`(误以为搜索时该隐藏), 结果输入关键字后整个结果区连同"无匹配种子"提示一起被隐藏, 表现为"搜索无结果/明显词无匹配"但后端逻辑完全正常 —— 搜索结果必须渲染在**始终存在**的容器内。判别法: 搜索类 bug 先分清"后端无匹配"还是"前端未渲染"(后者看容器 `v-if` 与空态提示是否也被藏)。
 - **搜索索引的脏标记与构建语义** (2026-09-13): `_search_index_dirty` 仅在种子集变化(added/removed)时置脏, **不在每 tick 重建**; 构建单次限流 `SEARCH_INDEX_BUILD_BUDGET` 条, 因此 `building=True` 可能跨多轮, 前端据 `building` 每 1s 自动重查直至消除。qB 断开(`self.client is None`)时必须中止构建**并保持脏** —— 不得把空文件列表当成“已建完”, 否则文件搜索会长期空结果直到下次种子增删(该分支已单测覆盖)。
 - **每个动作的 dry-run 返回 success** — dry-run 日志里看到的都是"成功", 别据此判断真实执行结果。
+- **配置热重载分级的两处"看着像 bug"的现状** (2026-09-13, 补 `test_impact.py` 时发现, 未改动):
+  1. `impact.py` 注释说 L0 段"字段级 diff, 仅变更字段计入", 但 `_diff_flat` 的分支条件是**两侧值都是纯 dict** —— 真实 `Config` 的 L0 段(`grouping`/`add_episode_tags`)是 dataclass 实例, 故实际产出**整段单条 L0** 变更(path 只到段名)。级别判定仍正确(热重载行为没问题), 差异仅在变更条目粒度与"变更 N 项"日志计数。已有测试固化该现状。
+  2. `max_level` / `restart_required_paths` 是模块公共工具但**当前无生产调用**(`web.py` 与 `qbmanager.py` 各自内联 `[c.path for c in changes if c.level == "R"]`)。属清理候选, 未擅自删除(测试已覆盖其契约)。
 - **`state_file` 仅退出时落盘**: 运行中 kill -9 会丢执行历史 → 去重可能重放, 已知取舍 (想法.md 明文)。
 - **qB 断连期间错误日志静默**: tick 内 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 (2026-09-12) — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败不打日志。是有意节流 (防 qB 宕机刷屏), 不是丢日志; 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。
 
