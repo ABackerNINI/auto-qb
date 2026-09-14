@@ -1,6 +1,6 @@
-# 05 配置参考与运行时文件
+# Config Reference — 配置参考与运行时文件
 
-> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见本库 [README.md](README.md)); 文内带日期条目为增量更新, 最新易变状态见 [activeContext.md](activeContext.md)。
 
 ## 配置加载机制 (config.py `load_config`)
 
@@ -113,7 +113,7 @@ global_speed_limit_curve:
 
 ## 规则集段 (`*_rules`)
 
-见 [04-rule-system.md](04-rule-system.md)。规则级键: `enabled`/`interval`/`trigger`/`execute_once`/`cooldown`/`conditions`/`actions`/`stop_following_rules_if`。`trigger` 默认 `interval` (周期轮询), 事件 trigger 见 04 触发时机表与 09 规划。
+见 [rule-system.md](rule-system.md)。规则级键: `enabled`/`interval`/`trigger`/`execute_once`/`cooldown`/`conditions`/`actions`/`stop_following_rules_if`。`trigger` 默认 `interval` (周期轮询), 事件 trigger 见 04 触发时机表与 09 规划。
 
 ## 变量与匹配语法速查
 

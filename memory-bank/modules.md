@@ -1,6 +1,6 @@
-# 03 模块地图
+# Modules — 模块地图
 
-> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见本库 [README.md](README.md)); 文内带日期条目为增量更新, 最新易变状态见 [activeContext.md](activeContext.md)。
 
 > 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/` (除注明)。
 
@@ -47,7 +47,7 @@
 | 文件 | 行数 | 职责 | 关键方法 |
 |------|------|------|----------|
 | `__init__.py` | 24 | 导出 6 个 mixin | |
-| `rule_engine.py` | 161 | 规则加载/状态持久化/规则任务 | `_load_rules`(从 `*_rules` 段构造 Rule, 命名 `{组名}.{规则名}`), `_load_state`/`save_state`, `record_execution`, `begin_round`/`upload_delta`, `_rules_for_torrent`(@refs), `_create_rule_task`(仅 interval 规则建周期任务, on_* 返回 None), `_handle_rule`(周期规则 handler), `_resolve_refs`; **事件分派**: `_dispatch_events`/`_apply_event_rule`(建 rule-event origin + process)/`_handle_event_rule`(断点续跑 handler, 恒 FINISHED)/`_rules_by_trigger`/`_torrent_event_rules`(分流 + tracker 引用交集) — 见 09-roadmap |
+| `rule_engine.py` | 161 | 规则加载/状态持久化/规则任务 | `_load_rules`(从 `*_rules` 段构造 Rule, 命名 `{组名}.{规则名}`), `_load_state`/`save_state`, `record_execution`, `begin_round`/`upload_delta`, `_rules_for_torrent`(@refs), `_create_rule_task`(仅 interval 规则建周期任务, on_* 返回 None), `_handle_rule`(周期规则 handler), `_resolve_refs`; **事件分派**: `_dispatch_events`/`_apply_event_rule`(建 rule-event origin + process)/`_handle_event_rule`(断点续跑 handler, 恒 FINISHED)/`_rules_by_trigger`/`_torrent_event_rules`(分流 + tracker 引用交集) — 见 progress.md |
 | `tags.py` | 228 | 标签/分类/HR/全局清理 | `_add_tags`/`_remove_tags`/`_remove_similar_tags`, `_add_episode_tags`, `_set_category`(auto_categories 覆盖逻辑), `_add_hr_tag_or_category`, `_handle_delete_tags`, `_handle_delete_tags_if_has_no_torrents`(用 store.tag_usage 聚合, 避免逐标签查询) |
 | `grouping.py` | ~330 | 辅种分组 (事件驱动, 增量扫描) | `_assign_new_torrent`/`_assign_to_group`/`_leave_group`(O(1) 成员索引; 均登记 `store.dirty_groups`), `_check_size_consistency`, `_handle_removed_torrents`/`_handle_state_transitions`(遍历 `store.state_changed` 变化集, 非全量)/`_handle_save_path_changes`(只看 `delta_fields` 中 save_path 变化者), `_check_download_conflicts`(**增量**: 只重算 `dirty_groups`; 轮次基线未建立时退回全量), `_group_members`/`_group_has_downloading`/`_group_reference_candidates` |
 | `checking.py` | 33 | 文件检查 | `check_filelist(api, torrent)`: 文件存在+大小一致, 返回错误串或 None。(辅种跳检已迁移到规则动作, 占位保留) |
@@ -60,10 +60,10 @@
 |------|------|------|----------|
 | `registry.py` | 30 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
 | `base.py` | 274 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*; `snapshot` 删除前快照副本, `torrent` 属性实时 store 优先、删除后回退 snapshot), `Rule`(解析 enabled/trigger/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
-| `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [04-rule-system.md](04-rule-system.md) |
-| `actions/` (包) | 906/6 文件 | 12 种动作插件 | `__init__`(34, 注册入口+公共名重导出, 兼容 `from auto_qb.rules.actions import X`), `basic`(130, 标签/分类/启停/打印详情 ×7), `transfer`(86, move_to/reannounce/单种限速), `checking`(192, `CheckAction` 决策链+参考筛选, 组合 `FullCheckingMixin`+`SkipCheckingMixin`), `full_checking`(225, full-checking 执行+组内校验串行化闸门 1.5/1.6+失败计数), `skip_checking`(239, 跳检四阶段+`_poll_until`); spec 正确性由 config 校验阶段保证; 详见 [04-rule-system.md](04-rule-system.md) |
+| `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [rule-system.md](rule-system.md) |
+| `actions/` (包) | 906/6 文件 | 12 种动作插件 | `__init__`(34, 注册入口+公共名重导出, 兼容 `from auto_qb.rules.actions import X`), `basic`(130, 标签/分类/启停/打印详情 ×7), `transfer`(86, move_to/reannounce/单种限速), `checking`(192, `CheckAction` 决策链+参考筛选, 组合 `FullCheckingMixin`+`SkipCheckingMixin`), `full_checking`(225, full-checking 执行+组内校验串行化闸门 1.5/1.6+失败计数), `skip_checking`(239, 跳检四阶段+`_poll_until`); spec 正确性由 config 校验阶段保证; 详见 [rule-system.md](rule-system.md) |
 
-## tests/ (33 文件 + helpers.py, 详见 07-testing.md)
+## tests/ (33 文件 + helpers.py, 详见 testing.md)
 
 按模块一一对应命名: `test_config.py`, `test_impact.py`(配置变更影响分级), `test_config_schema.py`(**图形化配置 UI 元数据一致性守卫**: 键集合 vs `KNOWN_*_KEYS` / 插件表 vs registry / kind 与 optional 形态), `test_config_writer.py`(配置写回: 读取语义/校验拒绝不碰磁盘/注释与标量风格保留/增删键/R 级回退/预览不落盘), `test_qbmanager.py`, `test_taskqueue.py`, `test_torrents.py`, `test_sync.py`(**增量同步层**: rid 合并语义/字段视图/降级与异常), `test_actions.py`, `test_conditions.py`, `test_checking.py`(54 个测试函数, 最大), `test_grouping.py`(41), `test_rule_base.py`, `test_rule_engine.py`, `test_rules_core.py`, `test_registry.py`, `test_mixins_tags.py`, `test_hr.py`, `test_delete_tags.py`, `test_tracker.py`, `test_speed_curve.py`, `test_snapshot_sync.py`(QbApi 快照同步), `test_state_matrix.py`(状态映射), `test_episodes.py`, `test_exporter.py`, `test_cli.py`, `test_locking.py`(单实例锁), `test_logging.py`, `test_utils.py`, `test_notify.py`(主动通知), `test_ui.py`(托盘 UI 支撑设施), `test_web.py`(WEB API + 配置 schema/树读写/预览 + 搜索/命令执行/热重载/视图版本门控); `helpers.py` 提供全 Fake 基础设施(`FakeClient.sync_maindata` 忠实模拟 qB rid 增量语义); `test_trigger_events.py` (事件触发规则, 2026-09-12 已落地)。
 

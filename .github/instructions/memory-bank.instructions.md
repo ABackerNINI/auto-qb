@@ -1,9 +1,7 @@
 ---
 description: 'Memory Bank pattern: persistent project documentation under a memory-bank/ folder so the AI can resume context across sessions.'
-applyTo: 'ai/**'
+applyTo: 'memory-bank/**'
 ---
-
-> **本地适配 (auto-qb 工作区)**: 本工作区的 memory bank 根是 `ai/` (编号主题制), 不建 `memory-bank/` 目录。文件映射: 01/02/03 ≈ systemPatterns, 05/07 ≈ techContext, 09-roadmap ≈ progress, **10-active-context ≈ activeContext**; tasks/ 任务档案制已裁剪, 会话级进展记入 10-active-context, 完成项沉淀进 09-roadmap。下文的维护纪律 (先读后做、重大变更后更新、"update memory bank" 全量复审) 照常适用, 对象均为 `ai/`。
 
 > **Opt-in pattern.** This instruction creates and maintains a `memory-bank/` folder in the workspace root. Enable it only when you want persistent project documentation across AI sessions; otherwise the auxiliary files will accumulate in repos that don't need them.
 

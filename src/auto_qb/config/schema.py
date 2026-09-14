@@ -5,7 +5,7 @@
 - 描述 trackers 站点段与站点 hr 段字段
 - 描述规则级字段与全部条件/动作插件的 spec 结构
 
-设计约束(与 ai/06 一致):
+设计约束(与 memory-bank/conventions.md 一致):
 1. **不承载正确性规则**: 合法性唯一入口仍是 config.validate_config(本模块只做输入提示与控件选择),
    前端提交的仍是 YAML 形状树, 由 load_config 走与启动完全相同的校验路径。
 2. **键集合必须与 validation.KNOWN_*_KEYS 完全一致** —— 由 tests/test_config_schema.py 守卫,

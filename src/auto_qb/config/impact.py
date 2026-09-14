@@ -1,6 +1,6 @@
 """配置变更影响分析: 递归 diff 新旧配置并判定每项变更的热重载级别
 
-级别模型(热重载分层应用, 见 ai/03 与计划):
+级别模型(热重载分层应用, 见 memory-bank/modules.md 与计划):
 - L0 即时生效: 运行时每轮/每次执行时动态读取, 替换 Config 对象字段即生效
   (main_tick/max_tasks_per_tick/remove_similar_tags/skip_checking_tag/grouping.*/add_episode_tags.*/)
 - L1 轻量应用: 需毫秒级副动作(logging 重挂/通知 handler 重挂/qbittorrent 重连/web 重启)

@@ -1,4 +1,4 @@
-# 08 陷阱、风险点与文档漂移 (改代码前必读)
+# Pitfalls — 陷阱、风险点与文档漂移 (改代码前必读)
 
 > **如何读本文件**: "判别标准/规则"类条目是**常青约束**, 始终遵守; 带日期的条目是**历史事故记录** — 结论已沉淀为规则与测试 (括注的测试名为证), 叙事用于理解"为什么"。压缩本文件时只压叙事, 不删规则与判别标准。
 
@@ -13,9 +13,9 @@
 1. **跳检 (skip-checking)**: 删除种子→重加, 丢失统计 (下载量/上传量/做种时长/分享率); 内容错误会传垃圾数据 (PT 站严令禁止)。防护 (2026-09-05 审计加固后): ①部分下载 (0<progress<1) 拒绝跳检 (预分配零块会被标记有效上传, fail 提示改 full-checking) ②同规则同日去重 + **跨规则**同日去重 (`skip_check_day`, 统计只丢一次) ③强制 filelist 前置检查 ④重加前轮询确认种子已从客户端消失 (qB 删除异步, ≤5s; 未消失放弃, 种子还在无损失) ⑤重加属性**直传** (0/负值有语义, 不得 `or None` 吞掉) + contentLayout 由 content_path/save_path/文件列表推断 (布局错位不自愈) ⑥无参考 warning ⑦重加失败 .torrent 落盘备份且**元数据立即落盘**。跳检过程中种子会从 store 消失 (`remove_torrent`) — 该种子同 tick 内的后续动作必须容错 (历史 bug: commit e5ea9e7, 测试 test_checking.py 覆盖)。
 2. **reannounce 动作**: 已加运行时保护 (2026-09-05): 同种子最小间隔 10M(state `reannounce_ts`) + 暂停种子跳过 + 加载期未配去重 WARNING —— 但高频汇报本质上仍是高风险操作, 规则应配 execute_once。
 3. **qB 版本兼容**: `_refresh_torrents` 首次拉到种子信息时校验 `REQUIRED_TORRENT_FIELDS`(24 个 = 快照 18 + 跳检重加 6, 见 torrents.py `_SNAPSHOT_FIELDS`/`RE_ADD_FIELDS`), 缺失抛 `QbCompatError(AutoQbError)` → CLI 干净退出 —— 快照字段缺失会**静默零值**(规则基于假数据决策), 比崩溃更危险 (qB 5.0 preferences 键漂移前科)。
-4. **`or 默认值` 掩盖数值字段** (2026-09-06 清理): `progress or 0.0`/`ratio or 0` 类写法把上游 bug 静默转为合法语义且方向可能朝危险侧 (progress=None → 视为全新辅种 → 放行跳检)。已清理: 闸门 0/_skip_gates/HR 判定 4 处。**保留的合法 `or`**: 空串/空容器归一化 (category/tags/API 边界) 与除零防护 (`total_size or 1`)。判别标准见 ai/06。
+4. **`or 默认值` 掩盖数值字段** (2026-09-06 清理): `progress or 0.0`/`ratio or 0` 类写法把上游 bug 静默转为合法语义且方向可能朝危险侧 (progress=None → 视为全新辅种 → 放行跳检)。已清理: 闸门 0/_skip_gates/HR 判定 4 处。**保留的合法 `or`**: 空串/空容器归一化 (category/tags/API 边界) 与除零防护 (`total_size or 1`)。判别标准见 conventions.md。
 5. **死防御清理** (2026-09-06): 同型问题扩展至 `is None`/`getattr` 默认 —— 已删: client setter 的 store/api 守卫、`_execute_full_checking` 的 task_queue None 退化分支、`getattr(task, "resume_index", None)`/`getattr(prev, "is_uploading", False)` 冗余默认(含 2026-09-06 二次复查补删的 grouping 上传转暂停判定)、`_valid_for_representative` 中恒真的 MOVING 显式排除(MOVING 本就不在 is_complete/is_uploading 集合)、QbApi 的 `store=None` 可选形态与 15 处 `if self.store is not None` 守卫 (store 改必传, 见 06 可测试性原则)。**合法 None 保留**: 惰性缓存、运行时状态 (种子被删/外部入口)、功能开关。判别标准: 守卫的条件在正确上游流程下**不可能发生** → 删; 是真实可选语义 → 留。
-6. **自有动作污染状态观测** (2026-09-06): 自家整组停种 (大小一致性/下载冲突) 经 QbApi 快照同步**当场改写 `by_hash` 的 state**, `_handle_state_transitions` 若在自有动作之后运行, 会把自家停种误判为外部"上传转暂停" → 多余的缺文件扫描 (曾靠代表种 is_uploading 过滤掩盖, 代表种放宽为 is_complete 后暴露)。修复: refresh 中状态转移观测移到新增归组等自有动作**之前** (轮次开始的干净观测点), 顺序约束见 ai/02。
+6. **自有动作污染状态观测** (2026-09-06): 自家整组停种 (大小一致性/下载冲突) 经 QbApi 快照同步**当场改写 `by_hash` 的 state**, `_handle_state_transitions` 若在自有动作之后运行, 会把自家停种误判为外部"上传转暂停" → 多余的缺文件扫描 (曾靠代表种 is_uploading 过滤掩盖, 代表种放宽为 is_complete 后暴露)。修复: refresh 中状态转移观测移到新增归组等自有动作**之前** (轮次开始的干净观测点), 顺序约束见 systemPatterns.md。
 7. **删除种子** (`QbApi.torrents_delete`, qbapi.py): 仅跳检流程使用, `delete_files=False` 固定。
 8. **限速不覆盖手动值**: 奇数 KiB 视为用户手动设置则跳过 — 判定统一走 `utils.is_manual_speed_limit`, 三个调用点 (`mixins/tracker.py` 单种限速 / `rules/actions/transfer.py` 限速动作 / `mixins/speed_curve.py` 全局曲线) 逻辑必须保持一致。
 
@@ -84,7 +84,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 **🚧 标注的语义 (作者澄清, 重要)**: 🚧 = "未实现 **或** 已实现但未严格测试(实盘验证)"。规则系统一节的 🚧 (trigger/execute_once/cooldown、size/trackers/state/hr/date_time/seedtime/upload_*/freespace 条件、checking/move_to/reannounce 动作、stop_following_rules_if) 属于后者 — 代码已有单测, 但作者认定未经严格验证, **必须保留, 勿因"已实现"而移除** (2026-09-05 曾误删, 已按作者要求恢复)。
 
-其余 🚧 属未实现: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed` 三个事件触发时机 (README 功能矩阵同样标 🚧 规划中)。**2026-09-12 全部落地** (trigger 解析/白名单/`print_torrent_details` 动作/事件分派引擎/测试), 已从 🚧 转正式特性。单实例锁 (`locking.py`) 与 fail-fast 全量配置校验 (`config.validate_config` 聚合校验, 见 05-config-reference) 均已于 2026-09-05 实现, README 中列为正式特性 (无 🚧 标注)。
+其余 🚧 属未实现: `on_torrent_added` / `on_torrent_deleted` / `on_torrent_state_enum_changed` 三个事件触发时机 (README 功能矩阵同样标 🚧 规划中)。**2026-09-12 全部落地** (trigger 解析/白名单/`print_torrent_details` 动作/事件分派引擎/测试), 已从 🚧 转正式特性。单实例锁 (`locking.py`) 与 fail-fast 全量配置校验 (`config.validate_config` 聚合校验, 见 config-reference.md) 均已于 2026-09-05 实现, README 中列为正式特性 (无 🚧 标注)。
 
 > 想法.md 是设计草稿, 不随实现同步; 改 README 时以代码为准, 但 🚧 标注的取舍听作者。
 
@@ -97,7 +97,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **图标 sprite 的 viewBox 可以彼此不同**: 新增图标一律画在 `0 0 16 16`; 例外是"齿轮"(`#i-settings`, 用 `0 0 24 24` 的常见齿轮轮廓 + `stroke-width="1.9"` 补偿缩放变细)。使用处仍写 `viewBox="0 0 16 16"` —— `use` 引用 `symbol` 时按 symbol 自身的 viewBox 映射进 use 视口, 无需改动使用处。
 - **Vue 模板里 computed 是属性, 不能当函数调用** (2026-09-14 实际踩到, 页面整块空掉): 新增 `hasUnit`/`unitParts`/`unitOptions` 三个 computed 后, 模板误写成 `v-else-if="hasUnit()"` / `unitParts().num` —— 生产版 Vue 下该分支抛 `hasUnit is not a function`, 导致每个 `ce-field` 渲染为空, **设置页字段全部消失(仅剩分组标题), 但侧栏与控制台无醒目提示**, 极易误判为"配置没加载"。规则: computed 在模板中用**属性访问**(无括号, 也不必写 `.value`); 只有 `methods` 才可 `xxx()` 调用(如 `ce.ceRefOptions()`)。新增模板表达式后当面打开页面确认字段在渲染, 不要仅靠测试通过。
 - **computed 区段里不能放"看似方法的辅助函数"** (2026-09-14 同类重现, 后果更重): 把 `_limitDefaultTip()` 写在 computed 块内(跟在另一个 computed 后面), 它在 computed 里被 `this._limitDefaultTip()` 调用时抛 `is not a function` —— 因为 Vue 把它当**属性**而非方法。这次报错发生在顶栏 pill 的渲染中, 结果是**整个顶栏(含统计/限速/今日流量)渲染失败**, 表格也不刷新。判别法: 写完一个 `xxx()` 先看它在 `methods` 还是 `computed` 里 —— 只要在 computed 里, 就不能写成 `this.xxx()`, 也不能在模板里加括号调用。需多处复用的小计算直接在 computed 内**内联为局部常量**最安全。
-- **前端表达式错误只有浏览器能发现, 单测与后端用例都盖不住** (2026-09-14 两次实测): 上述两个 bug 都是 `pytest` 全绿(866 passed)而页面崩掉的形态 —— 后端字段/接口均正确, 错在模板/JS。**改任何前端渲染逻辑后必须做一次浏览器冒烟**(假 qB + 临时配置, 见 ai/07), 并在页面里主动触发对应的渲染分支(例: pill 只在 `limitRows` 非空时才渲染 —— 未启用限速曲线时看不到该分支, 必须先启用再验)。
+- **前端表达式错误只有浏览器能发现, 单测与后端用例都盖不住** (2026-09-14 两次实测): 上述两个 bug 都是 `pytest` 全绿(866 passed)而页面崩掉的形态 —— 后端字段/接口均正确, 错在模板/JS。**改任何前端渲染逻辑后必须做一次浏览器冒烟**(假 qB + 临时配置, 见 testing.md), 并在页面里主动触发对应的渲染分支(例: pill 只在 `limitRows` 非空时才渲染 —— 未启用限速曲线时看不到该分支, 必须先启用再验)。
 - **改 `config/schema.py` 后必须重启进程才看得到变化** (2026-09-14): schema 是**模块级常量**(`GROUPS`/`TRACKER_FIELDS` 在 import 时构建), `/api/config/schema` 只是把它序列化出去 —— 运行中的实例仍持有旧对象。症状: 前端刷新后字段属性(如新的 `kind`/help 文本)不生效, 看起来像前端问题。同样适用于 `UNIT_OPTIONS` 之外的其它模块级表。
 - **静态写的 `viewBox` 会被模板编译器小写成 `viewbox`, 浏览器直接忽略** (2026-09-14 实际踩到, 图表内容溢出容器): 写成 `:viewBox="ch.viewBox"` 时, Vue 的**静态**属性名被小写化, DOM 里出现 `viewbox` —— SVG 属性**大小写敏感**, 浏览器不认 → 坐标系不缩放, 内容按用户单位 1:1 绘制并溢出。修法: 用**动态绑定对象** `v-bind="{ viewBox: ch.viewBox }"`(运行时 key 保留大小写)。判别: 内联 SVG 里元素位置“明显跑到容器外”/标签被截断时, 先查 `svg.attributes` 里 viewBox 的**大小写**。
 - **内联 SVG 只有 `width:100%; height:auto` 时高度会退化成 150px** (2026-09-14): 没有固有尺寸的替换元素在 `height:auto` 下取默认高度, 于是 `aspect-ratio` 缺失时图表被压扁(与 viewBox 无关)。修法: CSS 显式 `aspect-ratio: <viewBox 宽高比>`。本次同时踩了上面两条, 两个都修才正常。

@@ -1,13 +1,13 @@
 # AGENTS.md
 
 > 所有 AI 编码代理的统一入口 (Copilot / Codex / Cursor / Gemini CLI / Claude Code / ZCode / Trae 通用)。
-> 完整知识库在 `ai/` — 本文件只放路由与硬约束; 不要凭印象回答项目问题, 按路由深入后再动代码。
+> 完整知识库在 `memory-bank/` (Memory Bank 模式) — 本文件只放路由与硬约束; 不要凭印象回答项目问题, 按路由深入后再动代码。
 
 ## 会话协议
 
-- **开始**: 读 [ai/10-active-context.md](ai/10-active-context.md) (当前焦点) + [ai/README.md](ai/README.md) 路由表, 按任务选择深入文档。
-- **收尾**: 更新 `ai/10-active-context.md`; 代码事实变更时回写 `ai/` 对应文档与根 `README.md`。
-- **冲突裁决**: 代码 > `ai/` > 根 `README.md` > `想法.md`。发现文档漂移时以代码为准并回写文档。
+- **开始**: 读 [memory-bank/activeContext.md](memory-bank/activeContext.md) (当前焦点) + [memory-bank/README.md](memory-bank/README.md) 路由表, 按任务选择深入文档。
+- **收尾**: 更新 `memory-bank/activeContext.md`; 代码事实变更时回写 `memory-bank/` 对应文档与根 `README.md`; 跨会话的大任务在 `memory-bank/tasks/` 立档。
+- **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`。发现文档漂移时以代码为准并回写文档。
 
 ## 黄金法则 (来自设计原则, 违反即破坏设计)
 
@@ -26,32 +26,35 @@
 
 ```bash
 # Windows 本地用 .venv; Linux CI 直接 python (pytest.ini 的 pythonpath=src 免安装)
-.venv/Scripts/python.exe -m pytest tests -q            # 全量测试 (pytest.ini 已带分支覆盖率; 基线数字单点见 ai/07-testing.md 顶部)
+.venv/Scripts/python.exe -m pytest tests -q            # 全量测试 (pytest.ini 已带分支覆盖率; 基线数字单点见 memory-bank/testing.md 顶部)
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest tests -q --no-cov   # 快速迭代 (跳过覆盖率报表)
 python src/auto-qb.py config.yml --dry-run             # 运行 (需真实 qBittorrent; 一律先 --dry-run 观察)
 yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf: facebook 风格, 列宽 120)
 ```
 
-- 测试命令 2026-09-14 @ ec0704a 实测通过; 命令与 `ai/07-testing.md` 同源维护。
+- 测试命令 2026-09-14 @ ec0704a 实测通过; 命令与 `memory-bank/testing.md` 同源维护。
 - 新增测试必须同步该测试文件头部 docstring 的 "## 测试计划" 清单 (项目明文规定)。
 
 ## 知识库路由 (先查这里再动代码)
 
 | 任务 | 读 |
 |---|---|
-| **会话开始/收尾** (现在做什么/做到哪) | [ai/10-active-context.md](ai/10-active-context.md) |
-| 项目是什么 | [ai/01-overview.md](ai/01-overview.md) |
-| 主循环/任务队列/数据层/异步校验 | [ai/02-architecture.md](ai/02-architecture.md) |
-| 找功能位置 / 加新模块 | [ai/03-modules.md](ai/03-modules.md) |
-| 规则/条件/动作 | [ai/04-rule-system.md](ai/04-rule-system.md) |
-| 配置解析 / 新配置键 | [ai/05-config-reference.md](ai/05-config-reference.md) |
-| 命名/风格/约定 | [ai/06-conventions.md](ai/06-conventions.md) |
-| 写/跑测试 | [ai/07-testing.md](ai/07-testing.md) |
-| 改代码前必读 (风险点/陷阱) | [ai/08-pitfalls.md](ai/08-pitfalls.md) |
-| XX 做了吗 / 计划怎么做 | [ai/09-roadmap.md](ai/09-roadmap.md) |
+| **会话开始/收尾** (现在做什么/做到哪) | [memory-bank/activeContext.md](memory-bank/activeContext.md) |
+| 项目目标与范围 (纲领) | [memory-bank/projectbrief.md](memory-bank/projectbrief.md) |
+| 项目是什么 / 领域知识 | [memory-bank/productContext.md](memory-bank/productContext.md) |
+| 主循环/任务队列/数据层/异步校验 | [memory-bank/systemPatterns.md](memory-bank/systemPatterns.md) |
+| 找功能位置 / 加新模块 | [memory-bank/modules.md](memory-bank/modules.md) |
+| 规则/条件/动作 | [memory-bank/rule-system.md](memory-bank/rule-system.md) |
+| 配置解析 / 新配置键 | [memory-bank/config-reference.md](memory-bank/config-reference.md) |
+| 命名/风格/约定 | [memory-bank/conventions.md](memory-bank/conventions.md) |
+| 技术栈/开发环境/约束 | [memory-bank/techContext.md](memory-bank/techContext.md) |
+| 写/跑测试 | [memory-bank/testing.md](memory-bank/testing.md) |
+| 改代码前必读 (风险点/陷阱) | [memory-bank/pitfalls.md](memory-bank/pitfalls.md) |
+| XX 做了吗 / 计划怎么做 | [memory-bank/progress.md](memory-bank/progress.md) |
+| 跨会话任务档案 | [memory-bank/tasks/_index.md](memory-bank/tasks/_index.md) |
 
 ## 提交 / PR
 
 - 日常开发在 `develop` 分支; 提交信息为中文一句话概述 (参照 `git log` 风格)。
-- 提交前: 全量测试通过; 用户可见行为变更需同步 `README.md` 与 `ai/` 知识库。
+- 提交前: 全量测试通过; 用户可见行为变更需同步 `README.md` 与 `memory-bank/`。

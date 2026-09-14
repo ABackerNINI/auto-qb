@@ -436,7 +436,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                     # 用 max 而非 min: "刚补进来的那个辅种"才是用户最关心的新条目
                     "added_on": max(m["added_on"] for m in members_view),
                     # HR 栏: 分子 = 已触发但未达标(需关注), 分母 = 已触发 HR 的成员数;
-                    # 在**后端**算好计数, 前端只负责显示(与 ai/08 的"派生值后端算"约定一致)
+                    # 在**后端**算好计数, 前端只负责显示(与 memory-bank/pitfalls.md 的"派生值后端算"约定一致)
                     "hr_triggered": sum(1 for m in members_view if m["hr_triggered"]),
                     "hr_pending": sum(1 for m in members_view if m["hr_triggered"] and not m["hr_satisfied"]),
                     "members": members_view,

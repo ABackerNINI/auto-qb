@@ -1,6 +1,6 @@
-# 02 架构与运行时
+# System Patterns — 架构与运行时
 
-> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见本库 [README.md](README.md)); 文内带日期条目为增量更新, 最新易变状态见 [activeContext.md](activeContext.md)。
 
 ## 组件总览
 
@@ -40,7 +40,7 @@ _tick(dry_run):
     task_queue.run_due(dry_run, now=now, max_tasks=max_tasks_per_tick)  # ② 弹出+执行+收尾(默认最多20个/tick)
 ```
 
-**节流 (`_throttle`, 2026-09-14 修复)**: 非托管模式(CLI 默认, `stop_event=None`)走 `time.sleep(main_tick)`; 托管模式(`--tray` 传入 `stop_event`)走 `Event.wait(main_tick)` 以保持停止信号即时响应。**主循环的节流绝不能依赖 `stop_event` 是否存在** —— 曾写成 `if stop_event is not None and stop_event.wait(main_tick)`, 在非托管模式被 `and` 短路导致**完全不阻塞**, 主循环空转(实测约 2800 tick/s, 为 main_tick=2s 设计值的约 5500 倍), 详见 [08-pitfalls.md](08-pitfalls.md)。注意首连失败重试循环(`while not self.connect()`)的语义**不同**: 非托管模式首连失败直接返回(不重试), 不可改成 `_throttle`。
+**节流 (`_throttle`, 2026-09-14 修复)**: 非托管模式(CLI 默认, `stop_event=None`)走 `time.sleep(main_tick)`; 托管模式(`--tray` 传入 `stop_event`)走 `Event.wait(main_tick)` 以保持停止信号即时响应。**主循环的节流绝不能依赖 `stop_event` 是否存在** —— 曾写成 `if stop_event is not None and stop_event.wait(main_tick)`, 在非托管模式被 `and` 短路导致**完全不阻塞**, 主循环空转(实测约 2800 tick/s, 为 main_tick=2s 设计值的约 5500 倍), 详见 [pitfalls.md](pitfalls.md)。注意首连失败重试循环(`while not self.connect()`)的语义**不同**: 非托管模式首连失败直接返回(不重试), 不可改成 `_throttle`。
 
 连接恢复检测: `_tick` 成功(即 API 可达)后若 `_last_conn_ok is False` 则置 True 并记一次"已重新连接"——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。连接异常节流 (2026-09-12): 运行期 tick 内的 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败静默 (防 qB 宕机刷屏); 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。启动首连失败 → `connect()` 返回 False → `run` 直接结束。
 
@@ -52,7 +52,7 @@ _tick(dry_run):
 
 1. `store.apply_sync(api)` → qB `/api/v2/sync/maindata?rid=` **增量**拉取(只含变化种子的变化字段) → 直接应用到快照 → 返回 `(added, removed)`; 已存在记录只更新 patch 中出现的字段(`TorrentRecord.apply_delta`), 惰性缓存跨 tick 保留。细节见下节「增量同步」。
 2. **状态转移观测** (grouping.enabled, 先于一切自有动作): `_handle_state_transitions` (上传转暂停 / 进入 errored(重校验发现文件缺失) → 缺文件扫描, 用上一轮 `store.state_snapshot`)。**顺序约束**: 自有停种 (大小一致性/冲突整组暂停) 经 QbApi 快照同步会**当场改写 `by_hash` 状态**, 此观测若放在自有动作之后会把自家停种误判为外部"上传转暂停"。
-2.5 **事件分派** (on_* trigger 规则, 同步即时): `_dispatch_events` — 在 `apply_sync` 之后、自有动作之前、`update_state_snapshot` 之前的分派点执行各事件规则 (added 事件用本轮 added 列表, deleted 事件用 `apply_sync` 返回的 removed 及其删除前快照副本, state 变化事件用上一轮 `state_snapshot` 对比本轮 `store.state_changed` 变化集)。事件规则**不建周期任务**, 由 `_apply_event_rule` 同步建 rule-event 一次性 Task 作 `ctx.task` 并 `rule.process`; 遇 checking 返回 pending 时, 该 rule-event 任务作 origin 由轮询子任务 `add_task` 重新入队, 下 tick `_handle_event_rule` 断点续跑后 FINISHED 消亡。`max_tasks_per_tick` 不约束此即时分派 (设计详见 09-roadmap 事件触发规划)。
+2.5 **事件分派** (on_* trigger 规则, 同步即时): `_dispatch_events` — 在 `apply_sync` 之后、自有动作之前、`update_state_snapshot` 之前的分派点执行各事件规则 (added 事件用本轮 added 列表, deleted 事件用 `apply_sync` 返回的 removed 及其删除前快照副本, state 变化事件用上一轮 `state_snapshot` 对比本轮 `store.state_changed` 变化集)。事件规则**不建周期任务**, 由 `_apply_event_rule` 同步建 rule-event 一次性 Task 作 `ctx.task` 并 `rule.process`; 遇 checking 返回 pending 时, 该 rule-event 任务作 origin 由轮询子任务 `add_task` 重新入队, 下 tick `_handle_event_rule` 断点续跑后 FINISHED 消亡。`max_tasks_per_tick` 不约束此即时分派 (设计详见 progress.md 事件触发规划)。
 3. **新增种子** 逐个处理:
    - `_match_tracker_conf(torrent)` 匹配 tracker 配置 (hostname 精确匹配, 命中多个配置时打 ERROR 日志并用第一个); 未匹配 → warning + **跳过该种子**(不创建任何任务)。
    - `torrent.tracker_conf = tracker_conf` (记录引用, 后续任务直接用)。
@@ -88,7 +88,7 @@ _tick(dry_run):
 
 `dirty_groups` 跨轮累积(`_apply` 不清空), 由 `_check_download_conflicts` 取出并复位 —— 故轮次外的写操作(Web 命令/任务队列)登记不会丢。`rounds_applied` 为 0(直接驱动该方法的白盒测试/外部调用, 无变化集)时退回全量扫描。
 
-**本地 qB 跳过 env/netrc 解析** (2026-09-14 修复为真正生效): `_new_client()` 对本地地址(`127.0.0.1`/`localhost`/`::1`, 取 `base_url` 解析后的 hostname 判定)构造 `LocalQbClient`(Client 子类, 覆盖 `_session` property 强制 `trust_env=False`), 省掉每请求的 `get_environ_proxies`/`get_netrc_auth`(环境代理与 `~/.netrc` 解析; 实测单请求 0.276ms -> 0.043ms); 远程地址用原生 `Client`(企业代理/`~/.netrc` 可能真实需要)。旧实现 `client._session.trust_env = False` **从未生效**(库在首次请求/登录重建时丢弃 Session), 详见 [08-pitfalls.md](08-pitfalls.md)。
+**本地 qB 跳过 env/netrc 解析** (2026-09-14 修复为真正生效): `_new_client()` 对本地地址(`127.0.0.1`/`localhost`/`::1`, 取 `base_url` 解析后的 hostname 判定)构造 `LocalQbClient`(Client 子类, 覆盖 `_session` property 强制 `trust_env=False`), 省掉每请求的 `get_environ_proxies`/`get_netrc_auth`(环境代理与 `~/.netrc` 解析; 实测单请求 0.276ms -> 0.043ms); 远程地址用原生 `Client`(企业代理/`~/.netrc` 可能真实需要)。旧实现 `client._session.trust_env = False` **从未生效**(库在首次请求/登录重建时丢弃 Session), 详见 [pitfalls.md](pitfalls.md)。
 
 ## 启动期版本兼容校验 (2026-09-06, 2026-09-13 调整)
 
@@ -113,11 +113,11 @@ _tick(dry_run):
 ### WEB UI 线程模型 (web.py, 2026-09-13)
 
 - **Web 线程(uvicorn 独立线程)只做两件事**: 读 `manager` 暴露的只读快照(`_group_view`/`status_snapshot`)与向 `manager.web_commands` 投递命令 —— 暂停/开始/汇报/删除/热重载等写操作全由主循环 `_drain_web_commands` 消费执行(单一写线程约束不变); Web 线程不得触碰 store/队列/state_file。
-- **热重载重启 WEB 服务 (2026-09-14, `_apply_web_config`)**: `web` 段虽是 L1, 但**只在"监听身份"(`enabled`/`host`/`port`)真变化时才重启** —— 密钥(`web.token`)鉴权每请求实时读 `manager._web_token`, 原实现只靠“顺带重启”生效, 导致改个日志级别也会把服务器拆了重建。重启次序**必须是 `stop_web_server(handle)`(置 `should_exit` **并 join 等线程退出**) -> 启新服务**: uvicorn 的 `should_exit` 只被其主循环每 0.1s 读一次, 之后才 `server.close()` 释放监听套接字, 不等就启新服务会撞 `Errno 10048` 且旧句柄指向已死 server(后续热重载行为不确定), 详见 [08-pitfalls.md](08-pitfalls.md)。
+- **热重载重启 WEB 服务 (2026-09-14, `_apply_web_config`)**: `web` 段虽是 L1, 但**只在"监听身份"(`enabled`/`host`/`port`)真变化时才重启** —— 密钥(`web.token`)鉴权每请求实时读 `manager._web_token`, 原实现只靠“顺带重启”生效, 导致改个日志级别也会把服务器拆了重建。重启次序**必须是 `stop_web_server(handle)`(置 `should_exit` **并 join 等线程退出**) -> 启新服务**: uvicorn 的 `should_exit` 只被其主循环每 0.1s 读一次, 之后才 `server.close()` 释放监听套接字, 不等就启新服务会撞 `Errno 10048` 且旧句柄指向已死 server(后续热重载行为不确定), 详见 [pitfalls.md](pitfalls.md)。
 - **惰性组装 + 活跃窗口**: `_group_view`(分组视图)与 `_search_index`(搜索索引)均只在主循环构建, 且仅当 `_web_last_seen` 距今 < `WEB_VIEW_TTL`(10s) 时推进 —— 关闭网页后主循环不空转。**精确置脏**: `_tick` 消费 `store.consume_view_changed()`, 仅视图字段/成员**真有变化**时才重建 (不再每 tick 无条件置脏 —— 静止种子库不再每 2s 重建)。`ensure_group_view()` 作 Web 请求侧兜底(脏则即时重建)。
 - **视图版本门控 (等价 qB 的 rid)**: `_group_view_ver` 每次重建自增; `ensure_group_state(rid)` 在 rid 与服务端版本一致时**不回传 groups**(响应体趋近于零), 仅回 status(标量 + `traffic` 快照, 与版本无关恒回传)。`/api/state?rid=` 暴露该语义, 前端据此跳过整表替换与重渲染。前端另配: 页面隐藏(`document.hidden`)停轮询、恢复即刷; `setTimeout` 链式续排(不堆叠请求); 连续无更新退避 2s→5s→10s(有更新立刻回落)。
 - **搜索索引 `_search_index` (hash -> {name, files})**: 种子名匹配即时扫 `store.by_hash`(无 API 开销), 文件列表匹配依赖索引(文件 API 只在主循环线程, 种子记录 `_files` 缓存跨 tick 复用)。索引按 hash **增量**维护: 已建条目只刷新名称(不重拉文件), 新种子补拉, 已删种子淘汰; 单次限流 `SEARCH_INDEX_BUILD_BUDGET`(500)条, 未拉完保持 `_search_index_dirty=True` 由下一 tick 续建, 前端据 `building` 每 1s 自动重查。
-- **搜索结果是辅种组的筛选**: 前端用命中 hash 集合过滤 `sortedGroups`(组行沿用真实组 key, 组级操作可用); 未归组命中种子以虚拟行兜底 —— 组级路由 key 必须能过 `decode_group_key`, 虚拟 key 会让解码失败 500, 详见 [08-pitfalls.md](08-pitfalls.md)。
+- **搜索结果是辅种组的筛选**: 前端用命中 hash 集合过滤 `sortedGroups`(组行沿用真实组 key, 组级操作可用); 未归组命中种子以虚拟行兜底 —— 组级路由 key 必须能过 `decode_group_key`, 虚拟 key 会让解码失败 500, 详见 [pitfalls.md](pitfalls.md)。
 - **前端筛选/列/右键(2026-09-14 打磨, 纯前端无后端参与)**: ①**列模型** `GROUP_COLUMNS`/`DETAIL_COLUMNS` 是列头/单元格/grid 模板/列选择器的单一来源, 列宽按**列 key** 存 `autoqb_cols_v4`(`widths/hidden/manual`; v3→v4 是因为新增了 "H&R"/"分享率"两列, 列集变更必须升版本否则旧缓存 px 会与新列集错配); 拖某列**只改该列**(起始时先固化全部可见列为 px), 双击分隔线按内容自适应, Shift+拖与相邻列互挤; 未手动调过时随窗口重新实体化(填满容器)。列选择器位于**搜索框右侧**(想法.md 要求), 选项改为“无勾选框 + 整行点击切换”并与筛选弹层统一样式(左对齐 + 固定宽 300px, 不再随按钮宽度漂移)。②**筛选器**: 状态 chip(点选) + **路径/标签/分类/站点四个多选弹层**(统一由 `filterDefs` 一份定义驱动, 选项与计数由前端从 `groups[].members` 聚合, 计数口径 = 包含该值的**组数**); 同一筛选器内为"或", 不同筛选器间为"且"。**位置固定**靠三件事: 按钮定宽(`min-width` + `justify-content:center`)、计数徽标 `position:absolute`(不参与布局)、"清除筛选"按钮常驻占位(`visibility:hidden` 而非 `v-if`)。③**排序**: 默认 `added_on` 降序(组内**最近添加**时间, 组级取成员 max); 列头点击为**三态**循环 —— 降序 → 升序 → 恢复默认(`DEFAULT_SORT`); 同值时按名称排序保证稳定。④**右键菜单**: 只弹菜单**不展开明细**(展开仅靠左键点行); 顺序为正操作(开始)在前、破坏性(删除)在最后, 图标按语义着色; 删除只有**一个**菜单项, "是否连带磁盘文件"由确认框内的勾选框决定(`confirmWithOption()` 返回 `{checked}` 或 null, 与 `confirmDialog()` 的布尔契约互不影响)。
 - **视图含“由配置派生的展示值”(2026-09-14)**: 成员视图除原始快照值外, 还透出 HR 展示字段(由 `qbmanager._hr_view_fields` 统一计算):
   - `hr_tag`/`hr_tag_done`: 已触发 HR 未达标 / 已达标时应有的**标签文本**(供前端把 HR 标签分别着成鲜亮/镇静两色) —— 经 `utils.replace_vars` 展开(`${required_seeding_time}`), 与真正写入 qB 的标签逐字相等(前端只需文本匹配)。

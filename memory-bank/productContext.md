@@ -1,6 +1,6 @@
-# 01 项目概览与领域知识
+# Product Context — 项目概览与领域知识
 
-> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见本库 [README.md](README.md)); 文内带日期条目为增量更新, 最新易变状态见 [activeContext.md](activeContext.md)。
 
 ## 项目定位
 
@@ -25,7 +25,7 @@
 - **跳检 (skip-checking)**: 跳过哈希校验直接做种。本项目实现方式: 导出 .torrent → 删除种子(保留文件) → 重新导入并 `is_skip_checking=True`。**有风险**: 保留标签/分类/限速/路径, 但丢失下载量/上传量/做种时长等统计; 文件内容错误会上传垃圾数据, 被多数 PT 站严令禁止。
 - **reannounce (强制汇报)**: 立即向 tracker 汇报, 高频使用有封号风险。
 - **单数值限速保护**: 用户手动设置的限速习惯性写成"奇数 KiB/s" (如 2001 KiB/s), 程序检测到当前限速为奇数 KiB 时跳过不覆盖。这是全项目的约定魔法。
-- **做种状态词汇**: stalledUP (做种中), pausedUP/stoppedUP (已完成暂停), stalledDL (下载停滞) 等, 完整映射见 [04-rule-system.md](04-rule-system.md) 状态映射表。
+- **做种状态词汇**: stalledUP (做种中), pausedUP/stoppedUP (已完成暂停), stalledDL (下载停滞) 等, 完整映射见 [rule-system.md](rule-system.md) 状态映射表。
 
 ## 功能全景 (均可用配置开关)
 
