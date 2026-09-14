@@ -25,3 +25,6 @@ logs/
 
 # Awesome-Copilot 列表文件
 awesome-copilot-llms.txt
+
+# APM dependencies
+apm_modules/
