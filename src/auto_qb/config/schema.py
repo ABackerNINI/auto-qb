@@ -105,6 +105,7 @@ class Field:
     group_of: str = ""
     risk: str = ""
     unit_default: str = ""
+    open: bool = False  # object 段缺省展开态(True = 不折叠, 如 日志/WEB UI/通知 这类短段)
 
 
 @dataclass(frozen=True)
@@ -568,6 +569,7 @@ GROUPS: Tuple[Group, ...] = (
                 "log",
                 "日志设置",
                 "object",
+                open=True,  # 短段不折叠(用户要求: 日志/WEB UI/通知平铺)
                 fields=(
                     Field(
                         "level",
@@ -607,6 +609,7 @@ GROUPS: Tuple[Group, ...] = (
                 "web",
                 "WEB UI",
                 "object",
+                open=True,  # 短段不折叠
                 fields=(
                     Field("enabled", "启用", "bool", default="false", help="启用后可在浏览器打开 主机:端口 管理辅种与配置"),
                     Field(
@@ -633,6 +636,7 @@ GROUPS: Tuple[Group, ...] = (
                 "notify",
                 "主动通知",
                 "object",
+                open=True,  # 短段不折叠
                 fields=(
                     Field("enabled", "启用", "bool", default="false", help="开启后无需额外配置, 日志即通知内容"),
                     Field(

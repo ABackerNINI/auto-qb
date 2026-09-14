@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
 SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
+
+# 强制汇报的 tracker 确认窗口: reannounce 后 qB 立即重发 announce, 私站响应通常 1~10s;
+# 留足慢站点余量取 30s(主循环 main_tick=2s -> 约 15 轮确认机会), 超时仍未确认即判失败。
+REANNOUNCE_CONFIRM_TIMEOUT = 30.0
 # 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
 
@@ -130,6 +134,13 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._notify_handler: Optional[NotifyHandler] = None
         # WEB UI: 控制命令队列(Web 线程投递, 主循环消费执行——写操作只在主循环线程)
         self.web_commands: "queue.Queue" = queue.Queue()
+        # WEB UI: 命令执行结果回执(cmd_id -> {status, error, ts})。主循环线程唯一写者,
+        # Web 线程经 /api/cmd/{id} 只读。多数命令执行完立即写; reannounce 的回执由
+        # tracker 确认跟踪器(_reannounce_pending)在后续 tick 写入。
+        self._web_results: dict = {}
+        # WEB UI: 强制汇报确认跟踪(cmd_id -> {deadline, items: {hash: {done, ok, err, baseline}}})。
+        # 每 tick 检查一次: 读 torrents/trackers 判定 "status 变 working / next_announce 被重置"。
+        self._reannounce_pending: dict = {}
         # WEB UI: 分组视图快照(主循环每 tick 重建并原子替换, Web 线程只读)
         self._group_view: List[dict] = []
         # WEB UI: 分组视图版本号(等价 qB 的 rid): 每次重建自增, Web 端按版本跳过整表替换。
@@ -250,6 +261,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                         break
                     # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作
                     self._drain_web_commands()
+                    self._check_reannounce_pending()
                     if pause_event is not None and pause_event.is_set():
                         # 已暂停: 完全旁观; 节流保持对停止信号的即时响应
                         if _throttle(stop_event, main_tick):
@@ -297,29 +309,140 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         }
 
     def _drain_web_commands(self):
-        """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)"""
+        """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)
+
+        命令带 cmd_id: 执行完立即写回执(_web_results), 供前端 /api/cmd/{id} 轮询执行结果。
+        reannounce 例外: handler 只发指令并登记确认跟踪(_reannounce_pending), 回执由
+        _check_reannounce_pending 在 tracker 确认后写入 —— "已发送"不等于"汇报成功"。
+        """
+        handlers = {
+            "pause_group": self._cmd_pause_group,
+            "resume_group": self._cmd_resume_group,
+            "reannounce_group": self._cmd_reannounce_group,
+            "delete_group": self._cmd_delete_group,
+            "pause_torrent": self._cmd_pause_torrent,
+            "resume_torrent": self._cmd_resume_torrent,
+            "reannounce_torrent": self._cmd_reannounce_torrent,
+            "delete_torrent": self._cmd_delete_torrent,
+            "reload_config": self._cmd_reload_config,
+            "build_search_index": self._cmd_build_search_index,
+        }
         try:
             while True:
                 cmd, payload = self.web_commands.get_nowait()
+                cmd_id = str(payload.get("cmd_id") or "")
+                args = {k: v for k, v in payload.items() if k != "cmd_id"}
                 try:
-                    {
-                        "pause_group": self._cmd_pause_group,
-                        "resume_group": self._cmd_resume_group,
-                        "reannounce_group": self._cmd_reannounce_group,
-                        "delete_group": self._cmd_delete_group,
-                        "pause_torrent": self._cmd_pause_torrent,
-                        "resume_torrent": self._cmd_resume_torrent,
-                        "reannounce_torrent": self._cmd_reannounce_torrent,
-                        "delete_torrent": self._cmd_delete_torrent,
-                        "reload_config": self._cmd_reload_config,
-                        "build_search_index": self._cmd_build_search_index,
-                    }[cmd](**payload)
+                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent"):
+                        # handler 只发指令并登记确认跟踪; 回执由 _check_reannounce_pending 在
+                        # tracker 确认后写入 —— "已发送"不等于"汇报成功", 故此处不写 ok
+                        handlers[cmd](cmd_id=cmd_id, **args)
+                    else:
+                        handlers[cmd](**args)
+                        if cmd_id:
+                            self._set_web_result(cmd_id, "ok")
                 except KeyError as e:
                     logger.warning(f"WEB UI 未知命令: {e}")
+                    if cmd_id:
+                        self._set_web_result(cmd_id, "error", f"未知命令: {e}")
                 except Exception as e:
                     logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
+                    if cmd_id:
+                        self._set_web_result(cmd_id, "error", str(e))
         except queue.Empty:
             pass
+
+    def _set_web_result(self, cmd_id: str, status: str, error: str = "") -> None:
+        """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长"""
+        now = time.time()
+        if len(self._web_results) > 64:
+            self._web_results = {k: v for k, v in self._web_results.items() if now - v.get("ts", 0) < 120}
+        self._web_results[cmd_id] = {"status": status, "error": error, "ts": now}
+
+    def _trackers_baseline(self, hashes: List[str]) -> dict:
+        """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}
+
+        排除 DHT/PeX/LSD 虚拟 tracker(url 以 **/[DHT]/[PeX]/[LSD] 开头, 它们不走 announce)。
+        qB 断连等读取失败时异常上抛, 由命令分发层写 error 回执。
+        """
+        baseline = {}
+        for h in hashes:
+            trackers = self.client.torrents_trackers(h) or []
+            real = {}
+            for t in trackers:
+                url = str(t.get("url") or "")
+                if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
+                    continue
+                real[url] = (t.get("status"), t.get("next_announce"))
+            baseline[h] = real
+        return baseline
+
+    @staticmethod
+    def _confirm_reannounce_result(trackers: list, baseline: dict) -> Optional[bool]:
+        """判定单个种子汇报确认结果: True=已确认成功 / False=已确认失败 / None=仍在进行
+
+        逐 tracker 检查, 任一命中即结论:
+        - status == 3 (updating)                    -> qB 正在汇报, 视为成功
+        - next_announce 比基线提前(>60 单位, 秒/毫秒通用) -> next_announce 被重置, 视为成功
+        - status 从非 working 变为 2 (working)      -> 视为成功
+        - status == 4 (not working) 且带错误消息    -> tracker 拒绝, 视为失败
+        """
+        for t in trackers:
+            url = str(t.get("url") or "")
+            if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
+                continue
+            b_status, b_na = baseline.get(url, (None, None))
+            status = t.get("status")
+            na = t.get("next_announce")
+            if status == 3:
+                return True
+            if na is not None and b_na is not None and na < b_na - 60:
+                return True
+            if status == 2 and b_status is not None and b_status != 2:
+                return True
+            if status == 4 and (t.get("msg") or ""):
+                return False
+        return None
+
+    def _check_reannounce_pending(self):
+        """每 tick 检查在途的强制汇报确认; 某 cmd_id 全部种子出结论后聚合写回执"""
+        if not self._reannounce_pending:
+            return
+        now = time.time()
+        finished = []
+        for cmd_id, entry in self._reannounce_pending.items():
+            for h, it in entry["items"].items():
+                if it["done"]:
+                    continue
+                if now >= entry["deadline"]:
+                    it["done"], it["ok"] = True, False
+                    it["err"] = f"汇报确认超时({REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未确认到 tracker 响应)"
+                    continue
+                if self.client is None:
+                    continue  # qB 断连: 等恢复继续确认, 或按超时判失败
+                try:
+                    trackers = self.client.torrents_trackers(h) or []
+                    r = self._confirm_reannounce_result(trackers, it["baseline"])
+                except Exception as e:
+                    it["done"], it["ok"], it["err"] = True, False, f"读取 tracker 状态失败: {e}"
+                    continue
+                if r is True:
+                    it["done"], it["ok"] = True, True
+                elif r is False:
+                    it["done"], it["ok"], it["err"] = True, False, "tracker 未接受汇报(not working)"
+            if all(it["done"] for it in entry["items"].values()):
+                finished.append(cmd_id)
+        for cmd_id in finished:
+            entry = self._reannounce_pending.pop(cmd_id)
+            items = list(entry["items"].values())
+            fails = [it for it in items if not it["ok"]]
+            if not fails:
+                self._set_web_result(cmd_id, "ok")
+                logger.info(f"WEB UI | 强制汇报确认成功({len(items)}个种子)")
+            else:
+                msg = f"{len(fails)}/{len(items)} 个种子汇报确认失败: " + "; ".join(it["err"] for it in fails[:3])
+                self._set_web_result(cmd_id, "error", msg)
+                logger.warning(f"WEB UI | {msg}")
 
     @staticmethod
     def _state_kind(rec: TorrentRecord) -> str:
@@ -397,6 +520,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             members_view = [
                 {
                     "hash": r.hash,
+                    "name": r.name,
                     "site": r.tracker_name,
                     "state": r.state,
                     "kind": self._state_kind(r),
@@ -591,11 +715,14 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self.api.torrents_resume(torrent_hashes=hashes)
             logger.info(f"WEB UI | 开始整组({len(hashes)}个种子)")
 
-    def _cmd_reannounce_group(self, key: tuple):
+    def _cmd_reannounce_group(self, key: tuple, cmd_id: str = ""):
         hashes = self._group_hashes(key)
         if hashes:
             self.api.torrents_reannounce(torrent_hashes=hashes)
-            logger.warning(f"WEB UI | 强制汇报整组({len(hashes)}个种子)")
+            # 发送仅是"已下发指令"; 成功回执由 tracker 确认跟踪器在后续 tick 写入
+            baseline = self._trackers_baseline(hashes)
+            self._register_reannounce_pending(cmd_id, hashes, baseline)
+            logger.warning(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
 
     def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
         hashes = self._group_hashes(key)
@@ -615,10 +742,33 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             self.api.torrents_resume(torrent_hashes=[hash])
             logger.info(f"WEB UI | 开始种子 {hash[:8]}")
 
-    def _cmd_reannounce_torrent(self, hash: str):
-        if self.store.get(hash) is not None:
-            self.api.torrents_reannounce(torrent_hashes=[hash])
-            logger.warning(f"WEB UI | 强制汇报种子 {hash[:8]}")
+    def _cmd_reannounce_torrent(self, hash: str, cmd_id: str = ""):
+        if self.store.get(hash) is None:
+            # 种子已不存在: 无法汇报, 直接给失败回执(删除流程据此不删除)
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "种子不存在或已被删除")
+            return
+        self.api.torrents_reannounce(torrent_hashes=[hash])
+        baseline = self._trackers_baseline([hash])
+        self._register_reannounce_pending(cmd_id, [hash], baseline)
+        logger.warning(f"WEB UI | 强制汇报种子 {hash[:8]}, 等待 tracker 确认")
+
+    def _register_reannounce_pending(self, cmd_id: str, hashes: List[str], baseline: dict) -> None:
+        """登记汇报确认跟踪: 全部种子出结论(成功/失败/超时)后聚合写该 cmd_id 的回执"""
+        if not cmd_id:
+            return  # 无回执需求的调用(直接构造 manager 的场景): 只发指令不跟踪
+        self._reannounce_pending[cmd_id] = {
+            "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
+            "items": {
+                h: {
+                    "done": False,
+                    "ok": False,
+                    "err": "",
+                    "baseline": baseline[h]
+                }
+                for h in hashes
+            },
+        }
 
     def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
         if self.store.get(hash) is not None:

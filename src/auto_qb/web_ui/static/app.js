@@ -159,6 +159,20 @@ const app = createApp({
       _toastSeq: 0,           // 提示条自增 id
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
       _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位)
+      // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
+      selGroups: [],          // 选中组 key
+      selMembers: [],         // 选中成员 hash
+      selAnchorGroup: null,   // 分组表 Shift 锚点(组 key; shift 后不更新, 便于多次扩展同一范围)
+      selAnchorMember: null,  // 明细表 Shift 锚点(成员 hash)
+      // 历史流量弹层(今日流量面板入口; 数据源 /api/traffic/history, 按日原始行)
+      historyOpen: false,
+      historyGran: "day",     // day | month | year
+      historyData: [],
+      historyLoading: false,
+      historyError: "",
+      histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)
+      // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面
+      bootstrapping: false,
     };
   },
   computed: {
@@ -384,6 +398,88 @@ const app = createApp({
     visibleDetailCols() {
       return this._visibleCols("detail");
     },
+    /* 多选总数(组 + 独立成员), 供批量浮条显隐 */
+    selectedCount() {
+      return this.selGroups.length + this.selMembers.length;
+    },
+    /* ---------------- 历史流量(弹层): 按日原始行 -> 天(最近30)/月(近12)/年(全部)聚合 ---------------- */
+    historyBuckets() {
+      const rows = this.historyData || [];
+      if (this.historyGran === "month") {
+        const m = new Map();
+        for (const r of rows) {
+          const k = r.date.slice(0, 7);
+          const cur = m.get(k) || { up: 0, down: 0 };
+          cur.up += r.up;
+          cur.down += r.down;
+          m.set(k, cur);
+        }
+        return [...m.entries()].slice(-12).map(([k, v]) => ({ label: k.slice(2), tip: k, up: v.up, down: v.down }));
+      }
+      if (this.historyGran === "year") {
+        const y = new Map();
+        for (const r of rows) {
+          const k = r.date.slice(0, 4);
+          const cur = y.get(k) || { up: 0, down: 0 };
+          cur.up += r.up;
+          cur.down += r.down;
+          y.set(k, cur);
+        }
+        return [...y.entries()].map(([k, v]) => ({ label: k, tip: `${k} 年`, up: v.up, down: v.down }));
+      }
+      return rows.slice(-30).map((r) => ({ label: r.date.slice(5), tip: r.date, up: r.up, down: r.down }));
+    },
+    historyMax() {
+      return Math.max(1, ...this.historyBuckets.map((b) => Math.max(b.up, b.down)));
+    },
+    historySummary() {
+      const rows = this.historyBuckets;
+      const up = rows.reduce((s, b) => s + b.up, 0);
+      const down = rows.reduce((s, b) => s + b.down, 0);
+      const peak = rows.reduce((m, b) => Math.max(m, b.up + b.down), 0);
+      const avg = rows.length ? (up + down) / rows.length : 0;
+      return { up, down, peak, avg };
+    },
+    /* 柱状图几何(常量 + 桶数派生): 无参 computed, 模板以属性访问(不加括号) */
+    histGeom() {
+      const n = Math.max(1, this.historyBuckets.length);
+      const w = 640, h = 240, padL = 56, padR = 8, padT = 10, padB = 22;
+      const chartH = h - padT - padB;
+      const bw = (w - padL - padR) / n;
+      const barW = Math.max(2, Math.min(12, (bw - 5) / 2));
+      return { w, h, padL, padR, padT, padB, chartH, n, bw, barW };
+    },
+    histViewBox() {
+      return `0 0 ${this.histGeom.w} ${this.histGeom.h}`;
+    },
+    histTicks() {
+      // Y 轴 5 档网格线(含 0 与最大值), 标签用与柱色无冲突的暗色
+      const g = this.histGeom;
+      const out = [];
+      for (let k = 0; k <= 4; k++) {
+        out.push({ y: g.padT + g.chartH * (1 - k / 4), label: k === 0 ? "0" : this.fmtSize((this.historyMax * k) / 4) });
+      }
+      return out;
+    },
+    histXTicks() {
+      // X 轴标签均匀采样(最多 8 个, 防止柱多时文字重叠)
+      const g = this.histGeom;
+      const n = this.historyBuckets.length;
+      const step = Math.max(1, Math.ceil(n / 8));
+      const out = [];
+      for (let i = 0; i < n; i += step) {
+        out.push({ x: g.padL + i * g.bw + g.bw / 2, label: this.historyBuckets[i].label });
+      }
+      return out;
+    },
+    histHover() {
+      if (this.histHoverIdx < 0 || this.histHoverIdx >= this.historyBuckets.length) return null;
+      const g = this.histGeom;
+      return {
+        bucket: this.historyBuckets[this.histHoverIdx],
+        leftPct: ((g.padL + this.histHoverIdx * g.bw + g.bw / 2) / g.w) * 100,
+      };
+    },
   },
   async mounted() {
     // 点击页面空白处: 关闭右键菜单与列选择器(两者都是临时浮层)
@@ -392,10 +488,11 @@ const app = createApp({
       this.colMenuOpen = false;
       this.filterMenu = "";
     });
-    // Esc: 优先关闭确认框, 其次右键菜单/列选择器(都是临时浮层)
+    // Esc: 优先关闭确认框, 其次历史弹层/右键菜单/列选择器(都是临时浮层)
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
+      else if (this.historyOpen) this.historyOpen = false;
       else if (this.menu.visible) this.menu.visible = false;
       else if (this.colMenuOpen) this.colMenuOpen = false;
       else if (this.filterMenu) this.filterMenu = "";
@@ -419,9 +516,13 @@ const app = createApp({
       if (document.hidden) this.stopPolling();
       else if (this.token) this.refresh();  // 登出态切回标签不发空 Bearer(由登录成功后自行启动轮询)
     });
-    // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除
+    // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除。
+    // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
     const savedToken = localStorage.getItem("autoqb_token");
-    if (savedToken) this.bootstrap(savedToken);
+    if (savedToken) {
+      this.bootstrapping = true;
+      this.bootstrap(savedToken);
+    }
   },
   watch: {
     // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)
@@ -470,6 +571,7 @@ const app = createApp({
       // 防错误密钥提交瞬间主界面(含上一会话残留的分组/设置)闪现, 也避免数据滞留内存视图
       this.authRequired = true;
       this.authPending = false;
+      this.bootstrapping = false;
       this.pendingToken = "";
       this.token = "";
       localStorage.removeItem("autoqb_token");
@@ -493,6 +595,9 @@ const app = createApp({
       this.toasts = [];
       this.modal = this._modalInit();
       this._modalResolve = null;
+      this.clearSelection();
+      this.historyOpen = false;
+      this.histHoverIdx = -1;
       this.cfgReset();  // 配置树同样是受保护内容, 一并清除(编辑器状态复位)
       this.page = "groups";
       this.searchQuery = "";
@@ -517,6 +622,9 @@ const app = createApp({
         visible: false, title: "", body: "", okText: "", cancelText: "",
         danger: false, input: false, value: "", placeholder: "",
         checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
+        checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制汇报 + 删除文件并存)
+        details: null,  // 目标信息区 [{icon,label,value}](删除确认框显示待删种子信息)
+        icon: "",       // 标题图标覆盖(如删除用 i-trash-x); 缺省按 danger 取 warn/info
       };
     },
     confirmDialog(title, body, opts = {}) {
@@ -559,13 +667,21 @@ const app = createApp({
     },
     resolveModal(ok) {
       if (!this.modal.visible) return;
-      const { input, value, checkbox, checked } = this.modal;
+      const { input, value, checkbox, checked, checks } = this.modal;
       const resolve = this._modalResolve;
       this._modalResolve = null;
       this.modal = this._modalInit();
       if (!resolve) return;
-      if (ok) resolve(input ? value : checkbox ? { checked } : true);
-      else resolve(input || checkbox ? null : false);
+      const hasChecks = !!(checkbox || (checks && checks.length));
+      if (ok) {
+        if (input) resolve(value);
+        else if (hasChecks) {
+          // 勾选类确认返回 {checked, checks:{key:bool}}(向后兼容单 checkbox 的 checked 字段)
+          const map = {};
+          for (const c of checks || []) map[c.key] = c.checked;
+          resolve({ checked, checks: map });
+        } else resolve(true);
+      } else resolve(input || hasChecks ? null : false);
     },
     /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
     /* 成员值 -> 选项(带计数, 按出现组数降序): 标签/分类/站点三个筛选器共用
@@ -671,6 +787,7 @@ const app = createApp({
         // e.auth(401/无凭证): _request 已走 _logout() 完成遮罩/数据/文案收口
       } finally {
         this.authPending = false;
+        this.bootstrapping = false;  // 验证结束(成功进主界面/失败回表单), 卸载加载态
       }
     },
     saveToken() {
@@ -715,6 +832,14 @@ const app = createApp({
           this.groups = state.groups || [];
           if (typeof state.rid === "number") this.lastRid = state.rid;
           this.idlePolls = 0;
+          // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
+          // 虚拟行 key(u-<hash>)不做存在性校验(搜索视图由 filteredGroups 重建)
+          if (this.selectedCount) {
+            const keys = new Set(this.groups.map((g) => g.key));
+            const hashes = new Set(this.groups.flatMap((g) => g.members.map((m) => m.hash)));
+            this.selGroups = this.selGroups.filter((k) => keys.has(k) || k.startsWith("u-"));
+            this.selMembers = this.selMembers.filter((h) => hashes.has(h));
+          }
         } else {
           this.idlePolls += 1;
         }
@@ -835,16 +960,9 @@ const app = createApp({
     mTags(m) {
       return this._filterSiteTags(m.tags, [m]);
     },
-    /* 站点专属配色索引: 站点名确定性哈希 -> 0..7(对应样式 .sc-0..7), 同一站点永远同色。
-     * 2026-09-14 第五轮: 改用 djb2(((h<<5)+h+c)|0, 起始 5381)。
-     * 原算法 ((h<<5)-h+c)|0 起始 0 在 BTSchool 与 MuXueGe 上碰撞(都落 2 -> 黄);
-     * djb2 已验证两者分离(BTSchool→3, MuXueGe→5), 不再加绝对值兜底(直接 &0x7 桶) */
-    siteHue(site) {
-      const s = String(site || "");
-      let h = 5381;
-      for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) | 0;
-      return (h & 0x7FFFFFFF) % 8;
-    },
+    /* 站点配色已改回状态色(2026-09-15, 字体与背景都表示种子状态): 原 siteHue djb2 函数与 .sc-0..7 一起删除, 站点身份由 chip 文字表达 */
+    /* 站点专属配色已移除(2026-09-15 用户要求回退): 字体与背景都用状态色, 原 siteHue djb2
+     * 哈希机制与 .sc-0..7 一起删除, 站点身份由 chip 文字表达(见 memory-bank/pitfalls.md 回写) */
     _commonCategory(members) {
       const vals = members.map((m) => m.category || "");
       if (!vals.length) return { value: "", diff: false };
@@ -966,35 +1084,257 @@ const app = createApp({
     _actionText(action) {
       return { pause: "暂停", resume: "开始", reannounce: "强制汇报", delete: "删除" }[action] || action;
     },
+    /* ---------------- 命令回执(轮询 /api/cmd/{id}): 主循环执行完/确认完才出结果 ----------------
+     * pause/resume 等命令几乎即时; reannounce 的回执由后端 tracker 确认跟踪器在
+     * "status 变 working / next_announce 被重置"或超时后写入(窗口 30s, 前端多留余量)。
+     */
+    async waitCmd(cmdId, timeoutMs = 40000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          const r = await this.api(`/api/cmd/${cmdId}`);
+          if (r.status === "ok") return { ok: true };
+          if (r.status === "error") return { ok: false, error: r.error || "执行失败" };
+        } catch (e) {
+          if (e.auth) throw e;  // 401 由统一收口处理(回登录)
+          // 网络抖动: 继续轮询(服务恢复后回执仍可取到)
+        }
+      }
+      return { ok: false, error: `执行等待超时(${Math.round(timeoutMs / 1000)}s), 结果以程序日志为准` };
+    },
     async act(action) {
       this.menu.visible = false;
       if (!this.menu.key) return;
+      const label = this._actionText(action);
       try {
-        await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
-        this.toast(`已投递: ${this._actionText(action)}整组`, "ok", 2500);
+        const resp = await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
+        if (action === "reannounce") {
+          this.toast("强制汇报已发送, 等待 tracker 确认…", "info", 4000);
+          const r = await this.waitCmd(resp.cmd_id);
+          if (r.ok) this.toast("强制汇报成功(tracker 已确认)", "ok", 4000);
+          else this.toast(`强制汇报失败: ${r.error}`, "error", 8000);
+        } else {
+          const r = await this.waitCmd(resp.cmd_id);
+          if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
+          else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
+        }
       } catch (e) {
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
-    /* 删除整组: **单一菜单项** + 确认框里勾选"是否连带磁盘文件"(默认不删文件)
-     * 而非"保留文件/含文件"两个菜单项 —— 后者需要用户先判断自己点的是哪个, 风险更高。
-     */
+    /* ---------------- 多选与批量操作(Ctrl/⌘ 选中, Shift 范围; 普通点击行为不变) ---------------- */
+    isGroupSelected(g) {
+      return this.selGroups.includes(g.key);
+    },
+    onGroupClick(g, event) {
+      this.menu.visible = false;
+      if (event.ctrlKey || event.metaKey) {
+        this.toggleGroupSel(g);
+        return;
+      }
+      if (event.shiftKey) {
+        this.shiftGroupSel(g);
+        return;
+      }
+      this.toggleExpand(g.key, event);  // 普通点击保持"展开明细"原行为(不清除已有选择, 清除走浮条)
+    },
+    toggleGroupSel(g) {
+      this.selGroups = this.selGroups.includes(g.key)
+        ? this.selGroups.filter((k) => k !== g.key)
+        : [...this.selGroups, g.key];
+      this.selAnchorGroup = g.key;
+    },
+    shiftGroupSel(g) {
+      // 从锚点到当前行整段加入选择(锚点不更新: 多次 Shift 可从同一起点扩展)
+      const list = this.filteredGroups.map((x) => x.key);
+      const anchor = list.includes(this.selAnchorGroup) ? this.selAnchorGroup : list[0];
+      const from = list.indexOf(anchor);
+      const to = list.indexOf(g.key);
+      if (from < 0 || to < 0) return;
+      const [a, b] = from <= to ? [from, to] : [to, from];
+      this.selGroups = [...new Set([...this.selGroups, ...list.slice(a, b + 1)])];
+    },
+    onMemberClick(m, event) {
+      if (event.ctrlKey || event.metaKey) {
+        this.toggleMemberSel(m);
+        return;
+      }
+      if (event.shiftKey) {
+        this.shiftMemberSel(m);
+        return;
+      }
+      this.toggleMemberSel(m);  // 明细行普通点击 = 选中(原先无点击行为)
+    },
+    toggleMemberSel(m) {
+      this.selMembers = this.selMembers.includes(m.hash)
+        ? this.selMembers.filter((h) => h !== m.hash)
+        : [...this.selMembers, m.hash];
+      this.selAnchorMember = m.hash;
+    },
+    shiftMemberSel(m) {
+      // 当前展开明细的成员内连续选择(跨组范围由分组表的多选承担)
+      const g = this.filteredGroups.find((x) => x.key === this.expandedKey);
+      if (!g) return;
+      const list = g.members.map((x) => x.hash);
+      const anchor = list.includes(this.selAnchorMember) ? this.selAnchorMember : list[0];
+      const from = list.indexOf(anchor);
+      const to = list.indexOf(m.hash);
+      if (from < 0 || to < 0) return;
+      const [a, b] = from <= to ? [from, to] : [to, from];
+      this.selMembers = [...new Set([...this.selMembers, ...list.slice(a, b + 1)])];
+    },
+    clearSelection() {
+      this.selGroups = [];
+      this.selMembers = [];
+      this.selAnchorGroup = null;
+      this.selAnchorMember = null;
+    },
+    _findGroup(key) {
+      return this.groups.find((g) => g.key === key) || this.filteredGroups.find((g) => g.key === key) || null;
+    },
+    /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过 */
+    _bulkTargets() {
+      const groupKeys = [];
+      const memberHashes = [...this.selMembers];
+      for (const k of this.selGroups) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        if (g.virtual) memberHashes.push(g.members[0].hash);
+        else groupKeys.push(k);
+      }
+      return { groupKeys, memberHashes };
+    },
+    /* 批量动作: 并行投递 + 逐个等回执, 汇总成败(reannounce 的回执含 tracker 确认) */
+    async bulkAct(action) {
+      const { groupKeys, memberHashes } = this._bulkTargets();
+      const label = this._actionText(action);
+      const jobs = [
+        ...groupKeys.map((k) => `/api/groups/${k}/${action}`),
+        ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
+      ];
+      if (!jobs.length) return;
+      const results = await Promise.allSettled(
+        jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+      );
+      const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
+      if (!fails.length) {
+        this.toast(`已执行: ${label}(${jobs.length} 个目标)`, "ok", 2500);
+        return;
+      }
+      const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
+      this.toast(
+        `${label}: 成功 ${jobs.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
+        fails.length === jobs.length ? "error" : "info",
+        8000
+      );
+    },
+    async bulkDelete() {
+      const { groupKeys, memberHashes } = this._bulkTargets();
+      if (!groupKeys.length && !memberHashes.length) return;
+      const groupTorrents = groupKeys.reduce((acc, k) => acc + (this._findGroup(k)?.count || 1), 0);
+      const total = groupTorrents + memberHashes.length;
+      const res = await this._confirmDelete({
+        title: "批量删除",
+        body: `将删除选中目标内的全部种子, 共约 ${total} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
+        details: [
+          { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个组 · ${memberHashes.length} 个独立种子` },
+          { icon: "#i-hdd", label: "规模", value: `共约 ${total} 个种子` },
+        ],
+      });
+      if (!res) return;
+      const deleteFiles = res.checks.delete_files;
+      if (res.checks.reannounce) {
+        const jobs = [
+          ...groupKeys.map((k) => `/api/groups/${k}/reannounce`),
+          ...memberHashes.map((h) => `/api/torrents/${h}/reannounce`),
+        ];
+        this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "info", 4000);
+        const results = await Promise.allSettled(
+          jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+        );
+        const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
+        if (fails.length) {
+          this.toast(`${fails.length}/${jobs.length} 个目标汇报确认失败, 已保留未删除`, "error", 8000);
+          return;
+        }
+        this.toast("汇报确认成功, 开始删除…", "ok", 2500);
+      }
+      const body = JSON.stringify({ delete_files: deleteFiles });
+      const delJobs = [
+        ...groupKeys.map((k) => `/api/groups/${k}/delete`),
+        ...memberHashes.map((h) => `/api/torrents/${h}/delete`),
+      ];
+      const results = await Promise.allSettled(delJobs.map((p) => this.api(p, { method: "POST", body })));
+      const fails = results.filter((r) => r.status === "rejected");
+      if (fails.length) this.toast(`删除投递部分失败(${fails.length}/${delJobs.length})`, "error", 8000);
+      else this.toast(`已投递: 批量删除 ${delJobs.length} 个目标${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
+      this.clearSelection();
+    },
+    /* ---------------- 删除确认框: 目标信息 + 强制汇报(默认勾选)/删除文件两选项 ---------------- */
+    _confirmDelete(opts) {
+      return this._openModal({
+        title: opts.title,
+        body: opts.body,
+        details: opts.details || null,
+        checks: [
+          { key: "reannounce", label: "删除前先强制汇报(等待 tracker 确认, 失败则不删除)", checked: true },
+          { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
+        ],
+        okText: "删除",
+        cancelText: "取消",
+        danger: true,
+        icon: "#i-trash-x",
+      });
+    },
+    /* 删除前的汇报编排: 发送汇报命令并等待回执(tracker 确认/超时), 失败提醒且不删除 */
+    async _reannounceBeforeDelete(apiPath, label) {
+      try {
+        const resp = await this.api(apiPath, { method: "POST" });
+        this.toast(`正在向 tracker 汇报${label}, 等待确认…`, "info", 4000);
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          this.toast(`汇报确认成功, 开始删除${label}`, "ok", 2500);
+          return true;
+        }
+        this.toast(`${label}汇报确认失败: ${r.error} —— 已保留未删除`, "error", 8000);
+        return false;
+      } catch (e) {
+        if (!e.auth) this.toast(`汇报失败: ${e.message} —— 已保留未删除`, "error", 8000);
+        return false;
+      }
+    },
+    /* 删除整组: 单一菜单项 + 确认框显示目标信息(组名/成员/站点/路径/总大小)与两个选项 */
     async delGroup() {
       this.menu.visible = false;
       const key = this.menu.key;
       if (!key) return;
-      const res = await this.confirmWithOption(
-        "删除整组",
-        "将删除该组全部种子(保留磁盘文件)。如需连同磁盘文件一起删除, 请勾选下方选项。",
-        { okText: "删除", danger: true, checkbox: "同时删除磁盘文件(不可恢复)", checked: false }
-      );
+      const g = this._findGroup(key);
+      if (!g) return;
+      const sites = [...new Set(g.members.map((m) => m.site))].join(", ");
+      const res = await this._confirmDelete({
+        title: "删除整组",
+        body: `将删除"${g.name}"的组成员种子。`,
+        details: [
+          { icon: "#i-cards", label: "组名", value: g.name },
+          { icon: "#i-layers", label: "成员", value: `${g.count} 个种子` },
+          { icon: "#i-globe", label: "站点", value: sites || "—" },
+          { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—" },
+          { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
+        ],
+      });
       if (!res) return;
+      const deleteFiles = res.checks.delete_files;
+      if (res.checks.reannounce) {
+        const ok = await this._reannounceBeforeDelete(`/api/groups/${key}/reannounce`, `"${g.name}"`);
+        if (!ok) return;  // 汇报失败: 已提醒且不删除
+      }
       try {
         await this.api(`/api/groups/${key}/delete`, {
           method: "POST",
-          body: JSON.stringify({ delete_files: res.checked }),
+          body: JSON.stringify({ delete_files: deleteFiles }),
         });
-        this.toast(`已投递: 删除整组${res.checked ? "(含文件)" : ""}`, "ok", 2500);
+        this.toast(`已投递: 删除整组${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
@@ -1002,33 +1342,96 @@ const app = createApp({
     async actTorrent(action) {
       this.menu.visible = false;
       if (!this.menu.hash) return;
+      const label = this._actionText(action);
       try {
-        await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
-        this.toast(`已投递: ${this._actionText(action)}该种子`, "ok", 2500);
+        const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
+        if (action === "reannounce") {
+          this.toast("强制汇报已发送, 等待 tracker 确认…", "info", 4000);
+          const r = await this.waitCmd(resp.cmd_id);
+          if (r.ok) this.toast("强制汇报成功(tracker 已确认)", "ok", 4000);
+          else this.toast(`强制汇报失败: ${r.error}`, "error", 8000);
+        } else {
+          const r = await this.waitCmd(resp.cmd_id);
+          if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
+          else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
+        }
       } catch (e) {
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
-    /* 删除单个种子: 同 delGroup, 一个菜单项 + 确认框内勾选是否连带磁盘文件 */
+    /* 删除单个种子: 确认框显示种子名/站点/状态/路径/大小 + 两个选项 */
     async delTorrent() {
       this.menu.visible = false;
       const hash = this.menu.hash;
       if (!hash) return;
-      const res = await this.confirmWithOption(
-        "删除该种子",
-        "将删除该种子(保留磁盘文件)。如需连同磁盘文件一起删除, 请勾选下方选项。",
-        { okText: "删除", danger: true, checkbox: "同时删除磁盘文件(不可恢复)", checked: false }
-      );
+      let m = null;
+      for (const g of this.filteredGroups) {
+        const hit = (g.members || []).find((x) => x.hash === hash);
+        if (hit) {
+          m = hit;
+          break;
+        }
+      }
+      if (!m) return;
+      const res = await this._confirmDelete({
+        title: "删除该种子",
+        body: "将删除该种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。",
+        details: [
+          { icon: "#i-tag", label: "种子名", value: m.name || m.hash.slice(0, 12) },
+          { icon: "#i-globe", label: "站点", value: m.site || "—" },
+          { icon: "#i-pulse", label: "状态", value: this.kindText(m.kind) },
+          { icon: "#i-folder-open", label: "保存路径", value: m.save_path || "—" },
+          { icon: "#i-hdd", label: "大小", value: this.fmtSize(m.size) },
+        ],
+      });
       if (!res) return;
+      const deleteFiles = res.checks.delete_files;
+      if (res.checks.reannounce) {
+        const ok = await this._reannounceBeforeDelete(`/api/torrents/${hash}/reannounce`, "该种子");
+        if (!ok) return;
+      }
       try {
         await this.api(`/api/torrents/${hash}/delete`, {
           method: "POST",
-          body: JSON.stringify({ delete_files: res.checked }),
+          body: JSON.stringify({ delete_files: deleteFiles }),
         });
-        this.toast(`已投递: 删除该种子${res.checked ? "(含文件)" : ""}`, "ok", 2500);
+        this.toast(`已投递: 删除该种子${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
+    },
+    /* ---------------- 历史流量弹层(今日流量面板入口; 天/月/年切换 + 悬停取值) ---------------- */
+    async openHistory() {
+      this.historyOpen = true;
+      await this.loadHistory();
+    },
+    async loadHistory() {
+      this.historyLoading = true;
+      this.historyError = "";
+      try {
+        const data = await this.api("/api/traffic/history");
+        this.historyData = data.history || [];
+      } catch (e) {
+        if (!e.auth) this.historyError = e.message || "加载失败";
+      } finally {
+        this.historyLoading = false;
+      }
+    },
+    /* 柱形几何(带参渲染辅助必须放 methods —— pitfalls: 模板里 computed 不能加括号调用) */
+    histBarX(i) {
+      const g = this.histGeom;
+      const inner = g.barW * 2 + 1;
+      return g.padL + i * g.bw + Math.max(0, (g.bw - inner) / 2);
+    },
+    histBarW() {
+      return this.histGeom.barW;
+    },
+    histBarY(v) {
+      const g = this.histGeom;
+      return g.padT + g.chartH * (1 - Math.min(1, v / this.historyMax));
+    },
+    histBarH(v) {
+      return this.histGeom.chartH * Math.min(1, v / this.historyMax);
     },
     gridStyle(page) {
       // 列模板由 computed 缓存(见 groupGrid/detailGrid): 行渲染只取同一引用, 不每行拼字符串

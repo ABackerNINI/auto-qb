@@ -75,12 +75,15 @@ class FakeClient:
         self.add_error = None  # 模拟重加失败
         self.files = []  # torrents_files 返回值(空 = 全部通过)
         self.files_map = {}  # hash -> 文件列表(分组测试用: 按种子区分文件列表)
+        self.trackers_map = {}  # hash -> trackers 列表(强制覆盖; 强制汇报确认测试用)
         self.files_calls = 0  # torrents_files 调用计数(验证分组检查不再全量拉文件列表)
         self.sync_calls = 0  # sync_maindata 调用计数(验证增量同步路径)
         self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
         self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
 
     def torrents_trackers(self, h):
+        if h in self.trackers_map:
+            return self.trackers_map[h]
         return [{"url": "https://tracker.hhanclub.net/announce.php"}]
 
     def torrents_files(self, h):

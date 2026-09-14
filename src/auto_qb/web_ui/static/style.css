@@ -354,8 +354,10 @@ button { font-family: inherit; }
 .h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
 /* 逐列表头对齐类(模板统一挂 `hc-<列key>`, 与行单元格的 `g-*`/`m-*` 同一列 key):
  * "站数"列数值右对齐而表头左对齐 -> 视觉错位, 这里按列单独右对齐表头。
- * 2026-09-14 第五轮: H&R / 站数列改居中(用户要求"H&R/站数栏居中显示") */
+/* 2026-09-14 第五轮: H&R / 站数列改居中(用户要求"H&R/站数栏居中显示")
+ * 2026-09-15: 数值列(下载/上传/总上传/大小/总大小)右对齐(用户要求), 0 值"—"居中 */
 .hc-count, .hc-hr { text-align: center; }
+.hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size { text-align: right; }
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
 .h-cell .arrow { font-size: 10px; color: var(--accent); }
@@ -384,7 +386,10 @@ button { font-family: inherit; }
 .g-status.k-seeding { background: var(--green-soft); }
 .g-status.k-downloading, .g-status.k-checking { background: var(--blue-soft); }
 .g-status.k-error { background: var(--error-soft); }
+/* 数值列右对齐; 0 值"—"在右对齐列中居中(留白锚点, 列对齐不受影响) */
 .g-stat, .member-row span { white-space: nowrap; }
+.g-stat, .m-stat { text-align: right; }
+.g-stat.zero, .m-stat.zero { text-align: center; }
 /* 0 值只留极淡占位符(满屏 "0 B/s" 是噪声), 但仍占位保持列对齐 */
 .zero { color: var(--fg-dim); opacity: .35; }
 .risk-mark { color: var(--warn); cursor: help; }
@@ -392,24 +397,14 @@ button { font-family: inherit; }
 .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
   background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
   transition: background var(--dur) var(--ease); }
-/* 站点专属配色(sc-0..7, app.js siteHue djb2 按站点名确定性哈希): 只染**文字**,
- * 同一站点永远同色, 快速识别"同站"; 底色交给下面 .seeding/.downloading/... 状态色,
- * 一眼分辨种子状态 —— 文字保持站点专属色(用户反馈"无法一眼分辨状态"的根因是底色随站)。 */
-.site-chip.sc-0 { color: var(--violet); }
-.site-chip.sc-1 { color: var(--teal); }
-.site-chip.sc-2 { color: var(--warn); }
-.site-chip.sc-3 { color: var(--pink); }
-.site-chip.sc-4 { color: var(--cyan); }
-.site-chip.sc-5 { color: var(--green); }
-.site-chip.sc-6 { color: var(--indigo); }
-.site-chip.sc-7 { color: var(--blue); }
-/* 状态色染底色(后缀点已移除): 文字色仍是站点专属, 底色一眼可辨状态;
- * 声明顺序: sc-* 在前, .seeding/... 在后, 保证底色覆盖 sc-* 默认 surface-2 */
-.site-chip.seeding { background: var(--green-soft); }
-.site-chip.downloading, .site-chip.checking { background: var(--blue-soft); }
-.site-chip.paused { background: var(--surface-2); }
-.site-chip.error { background: var(--error-soft); }
-.site-chip.stalled, .site-chip.stalled-dl, .site-chip.stalled-up { background: var(--warn-soft); }
+/* 状态色同时染底色与文字(2026-09-15 回退: 字体与背景都表示种子状态, 移除站点 hash 专属色。
+ * 站点身份由 chip 文字本身表达; 明细行 m-site/m-state 的圆点前缀不受影响。
+ * 原 .sc-0..7 站点专属文字色与 .stalled* 死规则已移除 —— m.kind 只有六种语义值,
+ * stalled 系列从不出现在 chip 上; 见 memory-bank/pitfalls.md 回写条目) */
+.site-chip.seeding { background: var(--green-soft); color: var(--green); }
+.site-chip.downloading, .site-chip.checking { background: var(--blue-soft); color: var(--blue); }
+.site-chip.paused { background: var(--surface-2); color: var(--fg-muted); }
+.site-chip.error { background: var(--error-soft); color: var(--error); }
 /* 标签/分类列: chip 制, 超长/超量折叠(完整值在 title) */
 .g-tags, .m-tags { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .g-cat, .m-cat { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
@@ -543,7 +538,7 @@ button { font-family: inherit; }
 /* 左侧章节导航(卡片化, 激活项用左侧色条 + 柔和高亮; 每项带图标) */
 .ce-side { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 3px; padding: 6px;
   border-radius: var(--radius-lg); background: var(--surface-1); border: 1px solid var(--border-soft); }
-.ce-side-title, .ce-master-title { display: flex; align-items: center; gap: 6px; padding: 6px 10px 8px;
+.ce-master-title { display: flex; align-items: center; gap: 6px; padding: 6px 10px 8px;
   font-size: 11.5px; font-weight: 600; letter-spacing: .06em; color: var(--fg-dim); text-transform: uppercase; }
 .ce-master-title .ce-spacer { flex: 1; }
 /* 列表右上角的"新增"按钮: 绿色 (增) 与删除的红色形成语义对照 */
@@ -1129,3 +1124,104 @@ select option { background: var(--bg-elev); color: var(--fg); }
   .status-strip { align-items: flex-start; }
   .strip-tools { margin-left: 0; }
 }
+
+/* ============ 2026-09-15 WEB UI 优化新增(多选/批量/历史流量/确认框扩展/登录加载态) ============ */
+
+/* 图标语义色(新增): 历史流量入口与批量选择 */
+.ico-history { color: var(--today-up); }
+.ico-select { color: var(--indigo); }
+
+/* 登录"验证中"加载态(本地密钥 bootstrap 期间显示, 修复刷新时闪现输入密钥界面) */
+.login-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 32px 28px; }
+.login-loading .ico { width: 26px; height: 26px; color: var(--accent); }
+.login-loading p { margin: 0; }
+
+/* 左栏卡片标题的弹性占位 + 历史流量入口按钮(hover 提亮, 呼应 rail 图标语义色) */
+.rail-spacer { flex: 1; }
+.rail-btn { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim);
+  cursor: pointer; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.rail-btn:hover { background: var(--surface-2); color: var(--today-up); }
+
+/* 多选选中态(组行/成员行): accent 左条 + 柔和底, 与 expanded/search-hit 共存 */
+.group-row.selected { background: var(--accent-soft); border-color: var(--accent-line); }
+.group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.member-row.selected { background: var(--accent-soft); }
+/* 选中行光标语义: 修饰键可切换选择 */
+.group-row, .member-row { cursor: pointer; }
+
+/* 批量操作浮条(选中集合非空时滑入; 不占位, 无选中时完全不渲染) */
+.bulk-bar { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 7px 12px;
+  border: 1px solid var(--accent-line); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card);
+  box-shadow: var(--shadow-1); animation: drop-in .16s var(--ease-out); }
+.bulk-bar .bulk-count { font-size: 12.5px; color: var(--fg-muted); }
+.bulk-bar .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
+.bulk-sep { width: 1px; height: 16px; background: var(--border); }
+.bulk-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
+  font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.bulk-btn:hover { background: var(--surface-2); color: var(--fg); }
+.bulk-btn .ico-play { color: var(--green); }
+.bulk-btn .ico-pause { color: var(--warn); }
+.bulk-btn .ico-sync { color: var(--blue); }
+.bulk-btn.danger { color: var(--error); border-color: rgba(248, 113, 113, .35); }
+.bulk-btn.danger:hover { background: var(--error-soft); }
+.bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
+/* 浮条出入场(transition name="bulk"): 滑入 + 淡入 */
+.bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+.bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
+
+/* 确认框目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标) */
+.modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
+  padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: var(--surface-1); }
+.modal-detail-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; }
+.modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
+.modal-detail-row .d-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg-soft); font-weight: 500; }
+/* 多选项与单选 checkbox 同视觉(删除前强制汇报 / 同时删除磁盘文件) */
+.modal-checks .modal-check + .modal-check { margin-top: -12px; }
+
+/* 历史流量弹层 */
+.hist-modal { width: 680px; max-width: 100%; }
+.hist-modal .modal-title { margin-bottom: 12px; }
+.hist-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--border); }
+.hist-tabs button { padding: 3px 12px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--fg-muted); font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.hist-tabs button:hover { color: var(--fg); }
+.hist-tabs button.active { background: var(--accent-soft); color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+.hist-loading, .hist-empty { padding: 44px 0; text-align: center; color: var(--fg-dim); font-size: 13px; }
+/* 柱状图: 上传 teal / 下载 indigo(与今日流量卡 --today-up/--today-down 同源), 悬停柱提亮其余淡化 */
+.hist-chart { position: relative; }
+.hist-svg { display: block; width: 100%; height: auto; aspect-ratio: 640 / 240; }
+.hist-grid line { stroke: var(--hairline); }
+.hist-axis text { fill: var(--fg-dim); font-size: 10px; font-family: ui-monospace, Consolas, monospace; }
+.hist-hit { fill: transparent; }
+.hist-bar.up { fill: var(--today-up); opacity: .9; transition: opacity var(--dur-fast) var(--ease); }
+.hist-bar.down { fill: var(--today-down); opacity: .72; transition: opacity var(--dur-fast) var(--ease); }
+.hist-bar.dim { opacity: .3; }
+.hist-tip { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--bg-elev); box-shadow: var(--shadow-2); font-size: 11.5px; color: var(--fg-muted);
+  pointer-events: none; white-space: nowrap; z-index: 2; }
+.hist-tip.flip { transform: translateX(-100%); }
+.hist-tip b { color: var(--fg); font-size: 12px; }
+.hist-tip .h-up { color: var(--today-up); }
+.hist-tip .h-down { color: var(--today-down); }
+.hist-legend { display: flex; align-items: center; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--fg-muted); }
+.hist-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.hist-legend .sw.up { background: var(--today-up); }
+.hist-legend .sw.down { background: var(--today-down); }
+.hist-hint { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
+.hist-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--fg-dim); }
+.hist-summary b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hist-summary .h-up { color: var(--today-up); }
+.hist-summary .h-down { color: var(--today-down); }

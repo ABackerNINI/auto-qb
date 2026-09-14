@@ -93,8 +93,13 @@ def create_app(manager) -> FastAPI:
         dependencies=[Depends(require_token)],
     )
 
-    def _enqueue(cmd: str, payload: dict) -> None:
-        manager.web_commands.put((cmd, payload))
+    def _enqueue(cmd: str, payload: dict) -> dict:
+        """投递控制命令并生成回执 ID: 前端据 cmd_id 轮询 /api/cmd/{id} 获取执行结果"""
+        cmd_id = secrets.token_hex(8)
+        body = dict(payload or {})
+        body["cmd_id"] = cmd_id
+        manager.web_commands.put((cmd, body))
+        return {"queued": True, "cmd_id": cmd_id}
 
     @app.get("/api/status")
     def api_status():
@@ -146,45 +151,63 @@ def create_app(manager) -> FastAPI:
 
     @app.post("/api/groups/{key}/pause")
     def api_pause(key: str):
-        _enqueue("pause_group", {"key": decode_group_key(key)})
-        return {"queued": True}
+        return _enqueue("pause_group", {"key": decode_group_key(key)})
 
     @app.post("/api/groups/{key}/resume")
     def api_resume(key: str):
-        _enqueue("resume_group", {"key": decode_group_key(key)})
-        return {"queued": True}
+        return _enqueue("resume_group", {"key": decode_group_key(key)})
 
     @app.post("/api/groups/{key}/reannounce")
     def api_reannounce(key: str):
-        _enqueue("reannounce_group", {"key": decode_group_key(key)})
-        return {"queued": True}
+        return _enqueue("reannounce_group", {"key": decode_group_key(key)})
 
     @app.post("/api/groups/{key}/delete")
     def api_delete(key: str, body: dict = None):
         delete_files = bool((body or {}).get("delete_files", False))
-        _enqueue("delete_group", {"key": decode_group_key(key), "delete_files": delete_files})
-        return {"queued": True, "delete_files": delete_files}
+        result = _enqueue("delete_group", {"key": decode_group_key(key), "delete_files": delete_files})
+        result["delete_files"] = delete_files
+        return result
 
     @app.post("/api/torrents/{hash}/pause")
     def api_t_pause(hash: str):
-        _enqueue("pause_torrent", {"hash": hash})
-        return {"queued": True}
+        return _enqueue("pause_torrent", {"hash": hash})
 
     @app.post("/api/torrents/{hash}/resume")
     def api_t_resume(hash: str):
-        _enqueue("resume_torrent", {"hash": hash})
-        return {"queued": True}
+        return _enqueue("resume_torrent", {"hash": hash})
 
     @app.post("/api/torrents/{hash}/reannounce")
     def api_t_reannounce(hash: str):
-        _enqueue("reannounce_torrent", {"hash": hash})
-        return {"queued": True}
+        return _enqueue("reannounce_torrent", {"hash": hash})
 
     @app.post("/api/torrents/{hash}/delete")
     def api_t_delete(hash: str, body: dict = None):
         delete_files = bool((body or {}).get("delete_files", False))
-        _enqueue("delete_torrent", {"hash": hash, "delete_files": delete_files})
-        return {"queued": True, "delete_files": delete_files}
+        result = _enqueue("delete_torrent", {"hash": hash, "delete_files": delete_files})
+        result["delete_files"] = delete_files
+        return result
+
+    @app.get("/api/cmd/{cmd_id}")
+    def api_cmd_result(cmd_id: str):
+        """命令执行结果查询(前端投递后轮询): pending = 主循环尚未执行完或仍在确认中
+
+        reannounce 的回执由主循环的 tracker 确认跟踪器在确认成功/失败/超时后写入,
+        其余命令执行完立即写入。结果只由主循环线程写, 此处只读。
+        """
+        manager.touch_web_client()
+        result = manager._web_results.get(cmd_id)
+        return dict(result) if result else {"status": "pending"}
+
+    @app.get("/api/traffic/history")
+    def api_traffic_history():
+        """历史流量按日行(dat 原始数据, 升序): 供前端历史流量柱状图按天/月/年聚合
+
+        数据源是限速曲线任务每轮发布的只读快照(_traffic_view["history"]), Web 线程只读;
+        未启用限速曲线或数据源不可用时 history 为空数组, state 供前端判断展示分支。
+        """
+        manager.touch_web_client()
+        view = manager._traffic_view
+        return {"state": view.get("state"), "history": view.get("history") or []}
 
     @app.get("/api/config/schema")
     def api_config_schema():

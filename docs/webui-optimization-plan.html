@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auto-qb · WEB UI 优化计划</title>
+<style>
+  :root {
+    --bg: #0d1522;
+    --fg: #e6edf7;
+    --muted: #94a8c5;
+    --dim: #64789a;
+    --hair: rgba(255,255,255,.09);
+    --hair-soft: rgba(255,255,255,.05);
+    --accent: #3b82f6;
+    --accent-dim: rgba(59,130,246,.14);
+    --green: #34d399;
+    --teal: #2dd4bf;
+    --indigo: #818cf8;
+    --warn: #fbbf24;
+    --error: #f87171;
+    --mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 28px 96px; }
+
+  /* 封面 */
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--hair); }
+  .cover .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; color: var(--accent); text-transform: uppercase; }
+  .cover h1 { margin: 14px 0 10px; font-size: 40px; line-height: 1.15; font-weight: 650; letter-spacing: .01em; }
+  .cover .lede { max-width: 62ch; color: var(--muted); font-size: 15.5px; margin: 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 26px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 500; }
+
+  /* 目录 */
+  .toc { padding: 26px 0 8px; border-bottom: 1px solid var(--hair); }
+  .toc-title { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; margin-bottom: 12px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 36px; }
+  .toc a { display: flex; gap: 10px; padding: 5px 0; color: var(--muted); text-decoration: none; font-size: 13.5px; border-bottom: 1px solid transparent; transition: color .15s; }
+  .toc a:hover { color: var(--fg); }
+  .toc .no { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+
+  /* 章节 */
+  section { padding-top: 54px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 22px; }
+  .sec-head .no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .sec-head h2 { margin: 0; font-size: 22px; font-weight: 620; letter-spacing: .01em; }
+  h3 { font-size: 15.5px; font-weight: 620; margin: 34px 0 12px; }
+  h3 .h-no { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-right: 8px; }
+  p { margin: 10px 0; color: var(--fg); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,.05); border: 1px solid var(--hair-soft); padding: 1px 5px; border-radius: 3px; color: #bcd3f5; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0 8px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase;
+       padding: 8px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; color: var(--muted); }
+  td:first-child { color: var(--fg); }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .t-id { font-family: var(--mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
+  .t-file { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+
+  /* 状态徽标 */
+  .st { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; padding: 1px 7px; border: 1px solid var(--hair); border-radius: 3px; white-space: nowrap; }
+  .st.s { color: var(--green); border-color: rgba(52,211,153,.35); }
+  .st.m { color: var(--warn); border-color: rgba(251,191,36,.35); }
+  .st.l { color: var(--indigo); border-color: rgba(129,140,248,.4); }
+  .st.x { color: var(--error); border-color: rgba(248,113,113,.4); }
+
+  /* 现状事实列表 */
+  .facts { margin: 14px 0; padding: 0; list-style: none; }
+  .facts li { display: flex; gap: 14px; padding: 12px 2px; border-bottom: 1px solid var(--hair-soft); }
+  .facts .f-no { font-family: var(--mono); font-size: 12px; color: var(--accent); flex: 0 0 30px; padding-top: 2px; }
+  .facts .f-body b { display: block; font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .facts .f-body span { font-size: 13px; color: var(--muted); }
+  .facts .f-loc { display: block; margin-top: 5px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+
+  /* 阶段时间线 */
+  .phase { display: flex; gap: 18px; padding: 20px 0; border-bottom: 1px solid var(--hair-soft); }
+  .ph-rail { flex: 0 0 118px; }
+  .ph-id { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .ph-size { display: block; margin-top: 6px; }
+  .ph-body { flex: 1; min-width: 0; }
+  .ph-body h4 { margin: 0 0 6px; font-size: 15px; font-weight: 620; }
+  .ph-body p { margin: 6px 0; font-size: 13.5px; color: var(--muted); }
+  .ph-files { margin-top: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.8; }
+  .ph-ver { margin-top: 8px; font-size: 12.5px; color: var(--teal); }
+
+  /* 决策点卡 */
+  .decide { border: 1px solid var(--hair); padding: 18px 20px; margin: 14px 0; }
+  .decide h4 { margin: 0 0 6px; font-size: 14.5px; font-weight: 620; }
+  .decide .d-no { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 8px; }
+  .decide p { font-size: 13.5px; color: var(--muted); margin: 6px 0; }
+  .rec { color: var(--green); font-weight: 600; }
+  .opt { color: var(--dim); }
+
+  /* 红线 */
+  .guard { border-left: 2px solid var(--warn); background: rgba(251,191,36,.05); padding: 14px 18px; margin: 16px 0; }
+  .guard p { margin: 4px 0; font-size: 13.5px; color: var(--muted); }
+  .guard b { color: var(--fg); }
+
+  /* SVG 图示容器 */
+  figure { margin: 22px 0; padding: 0; }
+  figcaption { font-size: 12px; color: var(--dim); margin-top: 8px; font-family: var(--mono); }
+  .fig-frame { border: 1px solid var(--hair); padding: 18px; }
+
+  /* 柱状示意 */
+  .bars { display: flex; align-items: flex-end; gap: 10px; height: 120px; padding: 0 4px; }
+  .bgrp { display: flex; align-items: flex-end; gap: 3px; flex: 1; height: 100%; }
+  .bgrp i { display: block; width: 7px; border-radius: 2px 2px 0 0; }
+  .bgrp .u { background: var(--teal); opacity: .9; }
+  .bgrp .d { background: var(--indigo); opacity: .75; }
+  .legend { display: flex; gap: 18px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+  /* 尾注 */
+  .colophon { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--hair); font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  a { color: var(--accent); }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; color: var(--muted); font-size: 13.5px; }
+  li b { color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ 封面 ============ -->
+  <header class="cover">
+    <div class="kicker">auto-qb · 实施计划 · 不改代码</div>
+    <h1>WEB UI 优化计划</h1>
+    <p class="lede">覆盖本次提出的 14 项需求：辅种管理交互与配色回退、删除确认框重构、命令执行结果回执、表格多选与批量操作、历史流量柱状图、设置页信息密度调整，以及登录态刷新体验。全部改动限定在 WEB UI 前端与 web.py / qbmanager.py 命令层，不触碰规则引擎与任务队列语义。</p>
+    <div class="meta">
+      <span>基线 <b>develop @ f18b4e7</b></span>
+      <span>日期 <b>2026-09-15</b></span>
+      <span>范围 <b>web_ui/static/ + web.py + qbmanager.py + schema.py</b></span>
+      <span>状态 <b>待确认 4 个决策点后动工</b></span>
+    </div>
+  </header>
+
+  <!-- ============ 目录 ============ -->
+  <nav class="toc">
+    <div class="toc-title">目录</div>
+    <ol>
+      <li><a href="#s1"><span class="no">01</span>现状摸底结论</a></li>
+      <li><a href="#s2"><span class="no">02</span>需求 × 方案总表</a></li>
+      <li><a href="#s3"><span class="no">03</span>分阶段实施</a></li>
+      <li><a href="#s4"><span class="no">04</span>关键设计细节</a></li>
+      <li><a href="#s5"><span class="no">05</span>待确认决策点</a></li>
+      <li><a href="#s6"><span class="no">06</span>风险与红线</a></li>
+      <li><a href="#s7"><span class="no">07</span>验证与验收</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 01 现状 ============ -->
+  <section id="s1">
+    <div class="sec-head"><span class="no">01</span><h2>现状摸底结论</h2></div>
+    <p class="small">逐文件核实了前端三份主文件（index.html / app.js / style.css / config_editor.js / config_rules.js）与后端 web.py、qbmanager.py、schema.py、curves.py、speed_curve.py 的相关代码，影响方案的事实如下：</p>
+    <ul class="facts">
+      <li>
+        <span class="f-no">F1</span>
+        <div class="f-body">
+          <b>站点配色已是"底色=状态、文字=站点哈希"</b>
+          <span>`.sc-0..7` 文字色（app.js `siteHue()` djb2 哈希）+ `.site-chip.&lt;kind&gt;` 状态底色。回退只需删哈希类并给状态类补 `color`，明细行圆点前缀不受影响。</span>
+          <span class="f-loc">index.html 站点 chip :class · app.js siteHue() · style.css .sc-*</span>
+        </div>
+      </li>
+      <li>
+        <span class="f-no">F2</span>
+        <div class="f-body">
+          <b>命令队列是 fire-and-forget，无结果回执</b>
+          <span>`/api/groups/{key}/reannounce` 等仅入队即返回 `queued:true`，主循环 `_drain_web_commands` 执行后结果只进日志 —— "强制汇报显示是否成功"需要先补一条回执链路。</span>
+          <span class="f-loc">web.py `_enqueue` · qbmanager.py `_drain_web_commands` / `_cmd_reannounce_*`</span>
+        </div>
+      </li>
+      <li>
+        <span class="f-no">F3</span>
+        <div class="f-body">
+          <b>历史流量数据现成，只差透出</b>
+          <span>Traffic Monitor 的 dat 文件天然是"每天一行 上传KB/下载KB"，`curves.parse_history_dat` 已解析为按日升序的 (日期, 上传, 下载) 列表。天/月/年视图 = 原始行 / 按月求和 / 按年求和，主循环限速任务每轮已解析该文件，顺带发布即可，无需新任务。</span>
+          <span class="f-loc">curves.py `parse_history_dat` · mixins/speed_curve.py `_publish_traffic`</span>
+        </div>
+      </li>
+      <li>
+        <span class="f-no">F4</span>
+        <div class="f-body">
+          <b>成员视图没有 name 字段</b>
+          <span>`_build_group_view` 的 members_view 含 hash/site/save_path/size 等 16 字段但不含种子名 —— 删除确认框要显示"种子名"需在成员视图补 `name`（`name` 已在 `_VIEW_FIELDS` 置脏集合内，无额外置脏工作）。</span>
+          <span class="f-loc">qbmanager.py `_build_group_view` · torrents.py `_VIEW_FIELDS`</span>
+        </div>
+      </li>
+      <li>
+        <span class="f-no">F5</span>
+        <div class="f-body">
+          <b>折叠语义与登录闪现的根因明确</b>
+          <span>日志/WEB UI/通知三个分组是"单 object 字段分组"，走 `cfgFlatten` 的 group 类型默认折叠；规则卡折叠态存于 `collapsedRules`，缺省=展开。登录遮罩初始 `authRequired:true`，本地密钥 bootstrap 验证期间呈现的就是密钥表单 —— 闪现来自"验证中"与"输入"共用同一张卡。</span>
+          <span class="f-loc">config/schema.py GROUPS · config_editor.js cfgFlatten/cfgRuleCollapsed · app.js bootstrap()</span>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ============ 02 需求映射 ============ -->
+  <section id="s2">
+    <div class="sec-head"><span class="no">02</span><h2>需求 × 方案总表</h2></div>
+    <table>
+      <thead><tr><th style="width:36px">#</th><th style="width:270px">需求</th><th>方案</th><th style="width:210px">主要改动点</th><th style="width:56px">规模</th></tr></thead>
+      <tbody>
+        <tr><td class="t-id">R01</td><td>站点配色改回状态色（字体+背景），去除站点 hash 配色</td><td>删 `siteHue()`/`.sc-0..7`；`.site-chip.&lt;kind&gt;` 每条补语义 `color` + 背景；顺手清理 chip 上不可能出现的 `.stalled*` 死规则</td><td class="t-file">index.html · app.js · style.css</td><td><span class="st s">S</span></td></tr>
+        <tr><td class="t-id">R02</td><td>今日流量面板加历史流量入口，点开柱状图（天/月/年），图标支持鼠标互动</td><td>主循环把 dat 按日行发布进 `_traffic_view.history`；新端点随 status 透出；今日流量卡标题行加 `i-history` 图标按钮（hover 提亮+tooltip），点击开弹层：纯 SVG 双系列柱状图 + 天/月/年切换 + 悬停取值 + 汇总行</td><td class="t-file">speed_curve.py · web.py(透出) · index.html · app.js · style.css</td><td><span class="st l">L</span></td></tr>
+        <tr><td class="t-id">R03</td><td>分组表/明细表多选，支持 Shift 连续选择</td><td>Ctrl/⌘+点击切换选中、Shift+点击锚点范围选择、普通点击行为不变（组行=展开）；明细行点击即选中；选中集合在增量刷新时按 key 交集保留；批量操作浮条 + 右键批量菜单</td><td class="t-file">app.js · index.html · style.css</td><td><span class="st l">L</span></td></tr>
+        <tr><td class="t-id">R04</td><td>下载/上传/总上传/大小/总大小右对齐，0 值"—"居中</td><td>分组表 `.g-stat` 右对齐 + 表头 `hc-*` 同步；明细行数字格补 `m-stat` 类；`.zero` 覆盖为居中；H&R/站数列维持居中不动</td><td class="t-file">index.html(明细类名) · style.css</td><td><span class="st s">S</span></td></tr>
+        <tr><td class="t-id">R05</td><td>强制汇报显示是否成功，合理超时</td><td>命令回执机制：POST 返回 cmd_id，主循环执行后写 `_web_results`，前端轮询 `GET /api/cmd/{id}`（500ms，上限 15s）；右键"强制汇报"从"已投递"改为"汇报成功/失败"终态提示</td><td class="t-file">qbmanager.py · web.py · app.js</td><td><span class="st m">M</span></td></tr>
+        <tr><td class="t-id">R06</td><td>删除确认框：默认勾选"删除前强制汇报"，成功才删、失败提醒不删</td><td>modal 支持 "checks 多选项"；删除流程改为前端编排：汇报(等回执,≤15s) → 成功才 POST delete → 失败 toast 并保留种子</td><td class="t-file">app.js(_modalInit/delGroup/delTorrent) · index.html · style.css</td><td><span class="st m">M</span></td></tr>
+        <tr><td class="t-id">R07</td><td>删除确认框显示待删种子信息（名称/站点/保存路径等）</td><td>modal 支持 "details 结构化信息区"（图标+行式键值）；成员视图补 `name` 字段；组删除显示组名/成员数/站点/路径/总大小，单种子显示名称/站点/状态/路径/大小</td><td class="t-file">qbmanager.py(+name) · app.js · index.html · style.css</td><td><span class="st m">M</span></td></tr>
+        <tr><td class="t-id">R08</td><td>删除确认框添加图标</td><td>danger 确认框标题图标改用 `i-trash-x`（已有 symbol），信息区行首配站点/路径/大小语义图标</td><td class="t-file">index.html · style.css</td><td><span class="st s">S</span></td></tr>
+        <tr><td class="t-id">R09</td><td>移除设置页"配置分组"标题</td><td>删除 `.ce-side-title` 节点，左导航直接从分组列表开始</td><td class="t-file">index.html · style.css(清理)</td><td><span class="st s">S</span></td></tr>
+        <tr><td class="t-id">R10</td><td>移除日志/WEB UI/通知的折叠</td><td>schema `Field` 增加 `open` 声明位（缺省 false=折叠，UI 元数据单一来源原则），log/web/notify 三个 object 字段声明 `open=True`；前端 group 折叠态变三态（未操作=跟随声明，操作过=用户覆盖）</td><td class="t-file">schema.py · config_editor.js</td><td><span class="st m">M</span></td></tr>
+        <tr><td class="t-id">R11</td><td>规则集单个规则默认折叠</td><td>`collapsedRules`（缺省展开）反转为 `openRules`（缺省折叠），卡头摘要行已有（触发器·条件数·动作数），折叠态信息足够；重置/登出状态同步改名</td><td class="t-file">config_rules.js · config_editor.js(cfgReset)</td><td><span class="st s">S</span></td></tr>
+        <tr><td class="t-id">R12</td><td>刷新时闪现输入密钥界面</td><td>本地密钥 bootstrap 期间遮罩显示"验证中"加载态（logo+spinner），不再渲染密钥表单；401 时才回落到表单态；`authRequired` 单一门控语义不变，主界面 DOM 仍不提前创建</td><td class="t-file">app.js · index.html · style.css</td><td><span class="st s">S</span></td></tr>
+        <tr><td class="t-id">R13</td><td>整体更好看：简约现代、更多图标、更多配色、简单动效</td><td>不推翻既有 5 轮打磨成果（设计令牌/图标 sprite/微动效区已成型），以"精修+新组件"落地：sprite 增补 i-history/i-select-all；新功能全量使用令牌化语义色；hover/选中/浮层动效统一走现有 `--ease-spring`/`--dur-*` 节奏；逐项细节见 §04.7</td><td class="t-file">style.css · index.html(sprite)</td><td><span class="st m">M</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 03 阶段 ============ -->
+  <section id="s3">
+    <div class="sec-head"><span class="no">03</span><h2>分阶段实施</h2></div>
+    <p class="small">按"视觉基础 → 低风险修复 → 后端回执 → 确认框 → 多选 → 历史图"排序：先落地不被阻塞的确定项，再逐个攻坚交互型需求。每个阶段结束跑全量 pytest + 浏览器冒烟（前端表达式错误只有浏览器能发现）。</p>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">阶段 A</span><span class="ph-size st s">S · 0.5 天</span></div>
+      <div class="ph-body">
+        <h4>视觉基础：sprite 增补 + 令牌精修</h4>
+        <p>新增 `i-history`（历史流量入口）、`i-select-all`（批量全选）两个 symbol（0 0 16 16，stroke 1.7，颜色由 CSS 令牌提供）；对既有令牌做一轮精修核对：语义色 soft 底的 hover 深一档、hairline 一致性、focus-visible 统一。新组件（弹层/浮条/确认框）全部引用令牌。</p>
+        <div class="ph-files">index.html(sprite) · style.css</div>
+        <div class="ph-ver">✓ 验证：浏览器核对新增图标渲染与语义色；pytest 不涉及</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">阶段 B</span><span class="ph-size st s">S · 0.5 天</span></div>
+      <div class="ph-body">
+        <h4>低风险修复批（R01 / R04 / R09 / R11 / R12）</h4>
+        <p>站点配色回退、数值列右对齐与零值居中、"配置分组"标题移除、规则卡默认折叠、登录验证态改造。五项互不依赖，均为局部改动，先行合入。</p>
+        <div class="ph-files">index.html · app.js · style.css · config_rules.js · config_editor.js</div>
+        <div class="ph-ver">✓ 验证：冒烟清单 §07；重点核对 zero 居中不破坏列对齐、`.sc-*` 删除后无样式残留</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">阶段 C</span><span class="ph-size st m">M · 1 天</span></div>
+      <div class="ph-body">
+        <h4>命令回执机制 + 强制汇报结果显示（R05）</h4>
+        <p>后端：`_drain_web_commands` 执行后把结果写入 `_web_results[cmd_id]`（ok/error/error 文本/时间戳，过期清理）；全部命令端点生成并返回 cmd_id；新增 `GET /api/cmd/{cmd_id}`。前端：`act/actTorrent` 改为"投递→轮询回执→终态 toast"，等待上限 15s。命令队列单线程写语义不变（结果 map 仅由主循环线程写、Web 线程只读）。</p>
+        <div class="ph-files">qbmanager.py · web.py · app.js · tests/test_web.py + test_qbmanager.py</div>
+        <div class="ph-ver">✓ 验证：单测覆盖回执写入/查询/失败路径；冒烟：右键强制汇报 2~3s 内出现"汇报成功"</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">阶段 D</span><span class="ph-size st m">M · 1 天</span></div>
+      <div class="ph-body">
+        <h4>删除确认框重构（R06 / R07 / R08）</h4>
+        <p>modal 通用化扩展：`checks`（多选项数组）+ `details`（键值信息区）；成员视图补 `name`；删除流程前端编排"汇报→等回执→成功才删"，任一失败 toast 提醒且不删除。批量删除（阶段 E）复用同一确认框。</p>
+        <div class="ph-files">app.js · index.html · style.css · qbmanager.py(+name)</div>
+        <div class="ph-ver">✓ 验证：单测加成员 name 透出断言；冒烟三条路径：勾选+成功删除 / 勾选+汇报失败不删 / 不勾选直删</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">阶段 E</span><span class="ph-size st l">L · 1.5 天</span></div>
+      <div class="ph-body">
+        <h4>表格多选 + Shift 范围选择 + 批量操作（R03）</h4>
+        <p>选择状态与修饰键交互（§04.3）；批量操作浮条（表格上方常驻位，选中数、开始/暂停/强制汇报/删除/清除）；右键菜单在选中集合上升级为批量语义；增量刷新按 key 交集保留选中；批量删除走阶段 D 确认框、逐个"汇报→删除"带进度提示、失败即停并报告剩余。批量命令前端循环投递现有单粒度 API（组/种子命令幂等，命令队列天然合并，无后端改动）。</p>
+        <div class="ph-files">app.js · index.html · style.css</div>
+        <div class="ph-ver">✓ 验证：冒烟 Shift 跨行范围、Ctrl 加减选、刷新后选中保留、批量删除中途失败停止</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">阶段 F</span><span class="ph-size st l">L · 1.5 天</span></div>
+      <div class="ph-body">
+        <h4>历史流量柱状图（R02）</h4>
+        <p>后端：限速任务每轮解析 dat 后把按日行发布进 `_traffic_view.history`（升序全量，随 status 恒回传；stale/disabled 时为空）。前端：今日流量卡标题行 `i-history` 图标按钮（hover 提亮 + tooltip"历史流量"），点击开弹层卡：天（最近 30 天）/月（近 12 月）/年（全部年）切换，双系列并列柱（上传 teal / 下载 indigo，与今日流量卡同色），悬停取值 tooltip（日期/上传/下载/合计），底部汇总（合计/峰值/日均）。</p>
+        <div class="ph-files">speed_curve.py · app.js · index.html · style.css · tests/test_speed_curve.py 或 test_web.py</div>
+        <div class="ph-ver">✓ 验证：单测 history 透出与 stale 分支；冒烟三视图切换、悬停取值、未启用限速曲线时入口不渲染</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-rail"><span class="ph-id">收尾</span><span class="ph-size st s">S · 0.5 天</span></div>
+      <div class="ph-body">
+        <h4>文档回写 + 全量回归</h4>
+        <p>用户可见行为变更同步 README.md 与 memory-bank（activeContext / pitfalls 第五轮站点配色条目反转回写 / modules.md 的 web.py API 清单）；清理本轮改样式后失效的死规则（grep 类名）；全量 pytest。</p>
+        <div class="ph-files">README.md · memory-bank/*</div>
+        <div class="ph-ver">✓ 验证：pytest 全量基线通过</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 设计细节 ============ -->
+  <section id="s4">
+    <div class="sec-head"><span class="no">04</span><h2>关键设计细节</h2></div>
+
+    <h3><span class="h-no">4.1</span>数值列对齐与零值居中（R04）</h3>
+    <p>分组表五个数值格共用 `.g-stat`：加 `text-align:right`，表头按既有 `hc-&lt;列key&gt;` 机制补五条右对齐规则；`.g-stat.zero { text-align:center }` 让"—"居中（em dash 居中在右对齐列里形成干净的留白锚点，也是常见表格做法）。明细表数字格目前无统一类名，模板补挂 `m-stat`（只加 class，不动 grid 结构与列数）。size 单元格内的 `risk-mark ⚠` 跟随数字右对齐。<b>不动</b>：H&R/站数列的居中（上一轮明确要求）、`.group-head/.detail-head` 拖拽锚点。</p>
+
+    <h3><span class="h-no">4.2</span>站点配色回退（R01）</h3>
+    <p>目标态：`.site-chip.seeding { background: var(--green-soft); color: var(--green); }`——字体与背景同时承载状态，同一站点的不同状态一眼可分，站点身份由 chip 文字本身表达。删除项：`siteHue()` 方法与注释、`.sc-0..7` 八条规则、模板里的 `sc-` 类拼接；`.stalled/.stalled-dl/.stalled-up` 三条 chip 规则是死代码（`m.kind` 只有 6 种语义值，不可能出现），一并清理并回写 pitfalls。明细行 `m-site/m-state` 的圆点前缀与本需求无关，保留。</p>
+
+    <h3><span class="h-no">4.3</span>多选交互设计（R03）</h3>
+    <table>
+      <thead><tr><th style="width:190px">操作</th><th>分组表</th><th>明细表</th></tr></thead>
+      <tbody>
+        <tr><td>普通点击</td><td>展开/收起明细（现状不变）</td><td>切换该成员选中</td></tr>
+        <tr><td>Ctrl / ⌘ + 点击</td><td>切换该组选中</td><td>切换该成员选中</td></tr>
+        <tr><td>Shift + 点击</td><td>从锚点组到当前组整段选中</td><td>当前展开明细内从锚点成员到当前成员整段选中</td></tr>
+        <tr><td>右键</td><td colspan="2">有选中集合时弹批量菜单；无选中时保持现状（组菜单/单种子菜单）</td></tr>
+      </tbody>
+    </table>
+    <p class="small">选中集合 = `selGroups`(组 key) + `selMembers`(成员 hash)，增量刷新（groups 整表替换）后按 key/hash 交集保留，避免轮询清空选择。批量操作浮条挂表格上方（sticky 不随横向滚动），含：已选计数、"开始 / 暂停 / 强制汇报 / 删除…"四个动作、清除选择。组与成员混合选中时：组动作作用于组、成员动作作用于成员，删除合并为一份清单进确认框。搜索虚拟行只支持成员级操作（无真实组 key，右键已退化为单种子菜单——沿用该约束）。</p>
+
+    <h3><span class="h-no">4.4</span>命令回执时序（R05）</h3>
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 840 190" width="100%" style="display:block">
+          <g font-family="ui-monospace,Consolas,monospace" font-size="12" fill="#94a8c5">
+            <text x="30" y="24" fill="#e6edf7">浏览器</text>
+            <text x="360" y="24" fill="#e6edf7">web.py (uvicorn 线程)</text>
+            <text x="650" y="24" fill="#e6edf7">主循环线程</text>
+            <line x1="80" y1="34" x2="80" y2="168" stroke="rgba(255,255,255,.09)"/>
+            <line x1="440" y1="34" x2="440" y2="168" stroke="rgba(255,255,255,.09)"/>
+            <line x1="740" y1="34" x2="740" y2="168" stroke="rgba(255,255,255,.09)"/>
+            <!-- msgs -->
+            <g stroke="#3b82f6" fill="none" stroke-width="1.4">
+              <line x1="84" y1="56" x2="436" y2="56"/><path d="M430 52l8 4-8 4"/>
+              <line x1="444" y1="84" x2="736" y2="84" stroke-dasharray="4 3"/><path d="M730 80l8 4-8 4"/>
+              <line x1="736" y1="118" x2="444" y2="118" stroke="#34d399"/><path d="M450 114l-8 4 8 4" stroke="#34d399"/>
+              <line x1="436" y1="146" x2="84" y2="146" stroke="#34d399"/><path d="M90 142l-8 4 8 4" stroke="#34d399"/>
+            </g>
+            <text x="120" y="50">POST /api/torrents/{h}/reannounce → { queued, cmd_id }</text>
+            <text x="480" y="78">入队 (cmd_id, payload)</text>
+            <text x="500" y="112" fill="#34d399">执行后写 _web_results[cmd_id] = ok</text>
+            <text x="140" y="140" fill="#34d399">GET /api/cmd/{cmd_id} 轮询(500ms, ≤15s) → ok/error</text>
+            <text x="84" y="184" fill="#64789a">超时未回执 → "执行等待超时(命令队列繁忙?)"；error → 显示失败原因</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>图 1 · 命令回执链路 —— 保持"写操作只在主循环线程"约束，Web 线程只读结果快照</figcaption>
+    </figure>
+    <p class="small">"成功"判定深度：qB `torrents_reannounce` 调用无异常即记成功（announce 请求已交给 qB 发出）。不在第一版做"tracker 已响应"级确认——需要轮询 `torrents/trackers` 比对 `next_announce` 重置，且部分私站 tracker 状态字段不可靠，收益低复杂度高；若未来需要可在 `_cmd_reannounce_*` 内扩展，回执结构不变。超时上限 15s：主循环 tick 2s + 命令执行毫秒级，15s 已覆盖数个积压 tick；UI 等待期间按钮/菜单显示"汇报中…"。</p>
+
+    <h3><span class="h-no">4.5</span>删除确认框（R06/R07/R08）</h3>
+    <p>modal 结构扩展两块通用能力（保持单例与 Promise 契约、取消/遮罩/Esc 结算不变）：</p>
+    <ul>
+      <li><b>checks 多选项</b>：替代现有单 `checkbox` 字段（删除文件选项 + 强制汇报选项并存，各自独立勾选）；"删除前强制汇报"默认勾选。</li>
+      <li><b>details 信息区</b>：图标 + 键值行。整组 = 组名 / 成员数 / 站点列表 / 保存路径 / 总大小；单种子 = 种子名 / 站点 / 当前状态 / 保存路径 / 大小。标题图标 danger 态改 `i-trash-x`。</li>
+    </ul>
+    <p class="small">执行编排（勾选汇报时）：逐目标 `reannounce → 轮询回执`，全部成功才逐目标 delete；任一汇报失败 → toast 明确"X 个种子汇报失败，已保留未删除"，不继续删除。批量场景同链路，浮条/modal 上显示进度（第 n/N 个）。不勾选 → 走现有直删流程。</p>
+
+    <h3><span class="h-no">4.6</span>历史流量图（R02）</h3>
+    <figure>
+      <div class="fig-frame">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <span style="font-size:13px;font-weight:600">历史流量</span>
+          <span style="display:flex;gap:6px">
+            <span style="font-family:var(--mono);font-size:11px;padding:2px 10px;border:1px solid rgba(59,130,246,.5);color:#60a5fa;border-radius:3px">天</span>
+            <span style="font-family:var(--mono);font-size:11px;padding:2px 10px;border:1px solid var(--hair);color:#64789a;border-radius:3px">月</span>
+            <span style="font-family:var(--mono);font-size:11px;padding:2px 10px;border:1px solid var(--hair);color:#64789a;border-radius:3px">年</span>
+          </span>
+        </div>
+        <div class="bars">
+          <div class="bgrp"><i class="u" style="height:18%"></i><i class="d" style="height:26%"></i></div>
+          <div class="bgrp"><i class="u" style="height:32%"></i><i class="d" style="height:44%"></i></div>
+          <div class="bgrp"><i class="u" style="height:12%"></i><i class="d" style="height:20%"></i></div>
+          <div class="bgrp"><i class="u" style="height:55%"></i><i class="d" style="height:70%"></i></div>
+          <div class="bgrp"><i class="u" style="height:40%"></i><i class="d" style="height:34%"></i></div>
+          <div class="bgrp"><i class="u" style="height:24%"></i><i class="d" style="height:52%"></i></div>
+          <div class="bgrp"><i class="u" style="height:66%"></i><i class="d" style="height:88%"></i></div>
+          <div class="bgrp"><i class="u" style="height:30%"></i><i class="d" style="height:22%"></i></div>
+          <div class="bgrp"><i class="u" style="height:44%"></i><i class="d" style="height:58%"></i></div>
+          <div class="bgrp"><i class="u" style="height:20%"></i><i class="d" style="height:30%"></i></div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--teal)"></i>上传</span>
+          <span><i style="background:var(--indigo)"></i>下载</span>
+          <span style="margin-left:auto;color:var(--dim)">悬停柱体显示 日期 · 上传 · 下载 · 合计</span>
+        </div>
+      </div>
+      <figcaption>图 2 · 历史流量弹层示意（天视图，最近 30 天每日双系列柱）——配色沿用今日流量卡 today-up/today-down 令牌</figcaption>
+    </figure>
+    <p class="small">实现与限速曲线预览图同一路数（纯内联 SVG、`v-bind` 动态 viewBox、显式 aspect-ratio），无新依赖。数据窗口：天=最近 30 天、月=最近 12 个月、年=dat 覆盖的全部年份；月/年视图聚合 = 按 `date.year/month` 分组求和。入口仅在"今日流量"卡渲染时出现（未启用限速曲线则既无 dat 也无卡，语义一致）。stale（数据源暂时不可读）时入口置灰并提示沿用上次数据。</p>
+
+    <h3><span class="h-no">4.7</span>整体视觉精修清单（R13）</h3>
+    <table>
+      <thead><tr><th style="width:150px">维度</th><th>动作</th></tr></thead>
+      <tbody>
+        <tr><td>图标</td><td>sprite 新增 i-history / i-select-all；新功能图标按既有 `.ico-*` 语义色模式挂色；删除确认框信息区行首图标（i-tag/i-folder/i-hdd）复用现有 symbol</td></tr>
+        <tr><td>配色</td><td>不推翻主题：新组件全部走令牌（历史图 teal/indigo、选中态 accent-soft+accent 左条、批量浮条 warn 语义只用于破坏性动作）；全局核对 soft 底 hover 深一档的层次、focus ring 一致性</td></tr>
+        <tr><td>动效</td><td>只用既有节奏令牌（--dur-fast/--dur/--dur-slow + --ease-spring/--ease-out）：选中行高亮过渡、批量浮条滑入(drop-in)、确认框信息区展开、历史弹层 modal-in、登录验证态 spinner（复用 .spin）。全局 prefers-reduced-motion 降级已存在，自动覆盖新动效</td></tr>
+        <tr><td>质感</td><td>登录"验证中"卡、删除确认框 details、历史弹层三块新视觉，与既有 rail-card/modal 同一语言：1px hairline + 渐进高光渐变 + inset hairline，不引入新的视觉范式</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 05 决策点 ============ -->
+  <section id="s5">
+    <div class="sec-head"><span class="no">05</span><h2>待确认决策点</h2></div>
+    <p class="small">以下 4 项按推荐项默认执行，回复确认或改选即可：</p>
+
+    <div class="decide">
+      <h4><span class="d-no">D1</span>多选交互：修饰键方案（不加列）</h4>
+      <p><span class="rec">推荐</span> Ctrl/⌘ 选中 + Shift 范围，普通点击行为不变。 <span class="opt">备选</span>：行首 checkbox 列——更易发现但要动列模型（列宽存储升 v4→v5、全列宽重置），且占用一列宽度；修饰键方案零列成本，代价是"可多选"需靠浮条提示发现。选 checkbox 列的话多选触发也可以做成"浮条上的'进入多选模式'"折中。</p>
+    </div>
+
+    <div class="decide">
+      <h4><span class="d-no">D2</span>"汇报成功"的判定深度</h4>
+      <p><span class="rec">推荐</span> qB API 调用成功即成功（语义="已向 qB 下发重报指令"），超时 15s。 <span class="opt">备选</span>：轮询 `torrents/trackers` 确认 tracker 状态变 working / next_announce 被重置——更接近"汇报真的被 tracker 接受"，但部分私站字段不可靠、实现与测试复杂度显著上升。建议第一版取前者，回执结构预留升级空间。</p>
+    </div>
+
+    <div class="decide">
+      <h4><span class="d-no">D3</span>历史流量入口图标</h4>
+      <p><span class="rec">推荐</span> 新增 `i-history`（时钟 + 逆时针回溯箭头）——"今日流量"卡标题已用柱状图图标 `i-chart`，入口再用柱状图会语义重复；时钟回溯直接表达"看历史"。 <span class="opt">备选</span>：复用 `i-chart`（不加图标但语义撞车）。</p>
+    </div>
+
+    <div class="decide">
+      <h4><span class="d-no">D4</span>站点专属色机制整体移除的确认</h4>
+      <p>按需求回退后，第五轮引入的 djb2 站点专属文字色（含为修 BTSchool/MuXueGe 碰撞而做的算法）将整体删除，<b>站点不再有任何专属色</b>，识别完全交给 chip 文字与状态色。确认无误即执行（pitfalls 对应条目将反转回写）。</p>
+    </div>
+  </section>
+
+  <!-- ============ 06 红线 ============ -->
+  <section id="s6">
+    <div class="sec-head"><span class="no">06</span><h2>风险与红线（不动清单）</h2></div>
+    <div class="guard">
+      <p><b>config.yml / auto-qb-data/</b> 生产文件与运行时目录，本轮完全不触碰。</p>
+      <p><b>列模型与拖拽锚点</b>：不加列（D1 推荐项下），`COLS_STORE_KEY` 维持 v4；`.group-head/.detail-head` 锚点结构、grid 列数一致性约束不动。</p>
+      <p><b>鉴权安全语义</b>：`authRequired` 仍是遮罩唯一门控且仅验证成功放行，主界面 DOM 不提前创建；bootstrapping 只是遮罩内渲染态，不构成放行路径。</p>
+      <p><b>单一写线程</b>：命令执行、结果 map 写入只在主循环线程；Web 线程维持"读快照 + 投递"。</p>
+      <p><b>语义色纪律</b>：对比色留给 HR 未达标与错误信号；新增组件不与状态徽标/HR chip 争视觉权重（同一语义不双重表达）。</p>
+      <p><b>前端表达式风险</b>：computed/methods 分界（模板里 computed 不加括号、带参辅助一律 method）——两次实锤翻车点，阶段 B/D/F 模板改动逐条自查 + 冒烟。</p>
+      <p><b>跳检/删除流程</b>：不触碰规则引擎的跳检四阶段与删除守卫；本计划只改 WEB 触发的删除编排（qB `torrents_delete` 调用点不变）。</p>
+    </div>
+  </section>
+
+  <!-- ============ 07 验证 ============ -->
+  <section id="s7">
+    <div class="sec-head"><span class="no">07</span><h2>验证与验收</h2></div>
+    <h3><span class="h-no">7.1</span>自动化</h3>
+    <ul>
+      <li>全量 <code>.venv/Scripts/python.exe -m pytest tests -q</code> 每阶段收尾跑一次，基线数字对齐 testing.md。</li>
+      <li>新增单测：回执写入/查询/失败路径（test_web.py + test_qbmanager.py）；成员视图 name 透出；`_traffic_view.history` 透出与 stale/disabled 分支；schema `Field.open` 序列化（守卫测试不因新字段误报）。</li>
+    </ul>
+    <h3><span class="h-no">7.2</span>浏览器冒烟清单（假 qB + 临时配置）</h3>
+    <table>
+      <thead><tr><th style="width:120px">区域</th><th>检查点</th></tr></thead>
+      <tbody>
+        <tr><td>表格对齐</td><td>五个数值列右对齐、表头同向；0 值"—"居中；H&R/站数仍居中；横向滚动无错位</td></tr>
+        <tr><td>站点配色</td><td>chip 字色与底色同状态；不同站点同状态同色；`.sc-*` 无残留（getComputedStyle 核对）</td></tr>
+        <tr><td>多选</td><td>Ctrl 加减选、Shift 范围、刷新后保留、批量浮条计数正确、批量删除中途失败即停</td></tr>
+        <tr><td>删除确认框</td><td>信息区完整（名称/站点/路径/大小）；勾选汇报成功后删除；汇报失败提醒且种子保留；不勾选直删</td></tr>
+        <tr><td>强制汇报</td><td>右键汇报 2~3s 内出现"汇报成功"终态；队列繁忙时 15s 超时提示</td></tr>
+        <tr><td>历史流量</td><td>三视图切换、悬停取值、合计/峰值正确；未启用限速曲线时入口不渲染</td></tr>
+        <tr><td>设置页</td><td>无"配置分组"标题；日志/WEB UI/通知平铺；其它分组仍默认折叠；规则卡默认折叠且摘要/风险行可见</td></tr>
+        <tr><td>登录态</td><td>带本地密钥刷新全程只见"验证中"加载态无密钥表单闪现；错误密钥回落表单；服务不可达显示重试</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="colophon">auto-qb · WEB UI 优化计划 · 2026-09-15 · 基于 develop @ f18b4e7 源码逐文件摸底 · 待 D1–D4 确认后动工</div>
+</div>
+</body>
+</html>

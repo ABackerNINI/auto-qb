@@ -47,6 +47,7 @@ window.CONFIG_EDITOR = {
         newRuleName: "",
         addOpen: "",  // 当前展开的"新增"表单: "" | tracker | ruleGroup | rule(同时只允许一个)
         collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
+        openRules: {},  // 规则卡展开态 { "<规则集>::<规则名>": true }; 缺省 = 折叠(规则默认只看摘要)
         openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
         openGroups: {},  // 普通 object 段(group)展开态 { "<路径 join>": true }; 缺省 = 折叠(同 section)
         openLists: {},  // pattern_list 字段 list 区展开态 { "<路径 join>": true }; 缺省 = 折叠
@@ -239,8 +240,10 @@ window.CONFIG_EDITOR = {
       this.cfg.trackerKey = null;
       this.cfg.ruleGroupKey = null;
       this.cfg.addOpen = "";
-      this.cfg.collapsedRules = {};
-      this.cfg.openSections = {};
+      this.cfg.openRules = {};
+      this.cfg.openGroups = {};
+      this.cfg.openLists = {};
+      this.cfg.openCurves = {};
       this.cfg.chartHover = null;
       this.cfgPickerClose();
     },
@@ -464,9 +467,12 @@ window.CONFIG_EDITOR = {
     cfgPathKey(path) {
       return Array.isArray(path) ? path.join(".") : String(path);
     },
-    /* 普通 object 段(group)展开/折叠: 缺省 = 折叠(同 section), 与"展开是主动选择"原则一致 */
-    cfgGroupOpen(path) {
-      return !!this.cfg.openGroups[this.cfgPathKey(path)];
+    /* 普通 object 段(group)展开/折叠: 三态 —— 用户点过以本地图为准; 未点过跟随 schema 声明
+     * (Field.open, 如 日志/WEB UI/通知 短段声明平铺不折叠), 两者都未定则缺省折叠 */
+    cfgGroupOpen(path, field) {
+      const key = this.cfgPathKey(path);
+      if (key in this.cfg.openGroups) return !!this.cfg.openGroups[key];
+      return !!(field && field.open);
     },
     cfgGroupToggle(path) {
       const key = this.cfgPathKey(path);
@@ -1052,9 +1058,9 @@ window.CE_FIELD_COMPONENT = {
       const total = kids.filter((k) => k.type === "field").length;
       return `已配置 ${filled}/${total} 项`;
     },
-    /* 普通 object 段(group): 缺省折叠, 折叠态显示标题 + 摘要(已配置数/总数) */
+    /* 普通 object 段(group): 展开态三态解析(见 ce.cfgGroupOpen), 折叠态显示标题 + 摘要 */
     groupOpen() {
-      return this.ce.cfgGroupOpen(this.path);
+      return this.ce.cfgGroupOpen(this.path, this.f);
     },
     groupSummary() {
       return this.ce.cfgGroupSummary(this.item);

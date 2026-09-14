@@ -84,6 +84,9 @@ class SpeedCurveMixin:
             return REQUEUE
         if bad:
             logger.warning(f"限速曲线 | 流量数据 {bad} 行无法解析已跳过({conf.dat_path})")
+        # 历史流量按日行(dat 原始数据, 升序): Web UI 历史流量图的数据源, 随快照发布,
+        # Web 端经 /api/traffic/history 请求时读取(不进轮询响应, 避免每轮回传几百行)
+        history = [{"date": d.isoformat(), "up": up, "down": down} for d, up, down in rows]
 
         # 2. 逐曲线聚合 + 查档(累计字节 -> 该方向档位限速); 各 period 聚合值保留供统计日志
         today = date.today()
@@ -113,7 +116,7 @@ class SpeedCurveMixin:
 
         if dry_run:
             self._record_curve_state(today, upload_kib, download_kib, dry_run=True)
-            self._publish_traffic("dry_run", periods=periods, target=target)
+            self._publish_traffic("dry_run", periods=periods, target=target, history=history)
             return REQUEUE
 
         # 4. 读当前全局限速 -> 手动保护/幂等 -> 有变化才写
@@ -172,6 +175,7 @@ class SpeedCurveMixin:
                 "down": actual["download_limit"]
             },
             reasons=reasons,
+            history=history,
         )
         return REQUEUE
 
@@ -190,6 +194,7 @@ class SpeedCurveMixin:
         target: Optional[dict] = None,
         actual: Optional[dict] = None,
         reasons: Optional[List[dict]] = None,
+        history: Optional[List[dict]] = None,
     ) -> None:
         """发布限速/流量只读快照(Web UI 顶栏 pill 的数据来源)
 
@@ -200,13 +205,15 @@ class SpeedCurveMixin:
         - dry_run:  试运行: 只有目标限速, actual 为 None(不读不写 qB)
         - stale:    数据源缺失/无有效行, 本轮不动限速(仅提示数据不可用, periods 为空)
 
-        单位: periods 为**字节**; target/actual 为 **KiB/s**(0 = 不限速, None = 该方向不管理)。
+        单位: periods 为**字节**; target/actual 为 **KiB/s**(0 = 不限速, None = 该方向不管理);
+        history 为按日升序的原始行(仅 ok/dry_run 发布), Web 端经 /api/traffic/history 读取。
         """
         self._traffic_view = {
             "ts": time.time(),
             "date": date.today().isoformat(),
             "state": state,
             "periods": periods or [],
+            "history": history or [],
             "limit":
                 {
                     "target": target or {

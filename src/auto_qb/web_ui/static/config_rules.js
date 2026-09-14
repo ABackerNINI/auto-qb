@@ -188,12 +188,13 @@ window.CONFIG_RULES = {
     cfgRuleKey(groupKey, ruleName) {
       return `${groupKey}::${ruleName}`;
     },
+    /* 规则卡缺省折叠(用户要求): 只显示摘要行(触发器 · 条件数 · 动作数)与风险提示, 展开是主动选择 */
     cfgRuleCollapsed(groupKey, ruleName) {
-      return !!this.cfg.collapsedRules[this.cfgRuleKey(groupKey, ruleName)];
+      return !this.cfg.openRules[this.cfgRuleKey(groupKey, ruleName)];
     },
     cfgRuleToggle(groupKey, ruleName) {
       const k = this.cfgRuleKey(groupKey, ruleName);
-      this.cfg.collapsedRules = { ...this.cfg.collapsedRules, [k]: !this.cfg.collapsedRules[k] };
+      this.cfg.openRules = { ...this.cfg.openRules, [k]: !this.cfg.openRules[k] };
     },
     cfgRuleEnabled(groupKey, ruleName) {
       return this.cfgBool([...this.cfgRulePath(groupKey, ruleName), "enabled"], "true");

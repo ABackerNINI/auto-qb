@@ -74,12 +74,24 @@
     <symbol id="i-ellipsis" viewBox="0 0 16 16"><circle cx="3.7" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="12.3" cy="8" r="1.15" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-chevron-up" viewBox="0 0 16 16"><path d="M4.3 9.7 8 6l3.7 3.7"/></symbol>
     <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.2 9.3 6.4 13.5 7.7 9.3 9 8 13.2 6.7 9 2.5 7.7 6.7 6.4z"/></symbol>
+    <!-- 历史/多选图标(2026-09-15 优化新增): 历史流量入口(时钟+回溯箭头, 与今日流量的柱状图 i-chart 语义区分)与批量全选 -->
+    <symbol id="i-history" viewBox="0 0 16 16"><path d="M2.9 8a5.1 5.1 0 1 0 1.5-3.6"/><path d="M2.6 2.7v2.9h2.9"/><path d="M8 5.2V8l2 1.4"/></symbol>
+    <symbol id="i-select-all" viewBox="0 0 16 16"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2"/><path d="M5.5 8.2 7.3 10l3.4-3.9"/></symbol>
   </svg>
 
   <div id="app" v-cloak>
-    <!-- 密钥输入(未授权时): 遮罩仅由 authRequired 把守, 验证通过前主界面 DOM 不渲染(防错误密钥闪现) -->
+    <!-- 密钥输入(未授权时): 遮罩仅由 authRequired 把守, 验证通过前主界面 DOM 不渲染(防错误密钥闪现)。
+         本地已有密钥时验证过程显示"验证中"加载态而非输入表单(修复刷新时闪现输入密钥界面) -->
     <div v-if="authRequired" class="login-mask">
-      <form class="login-card" @submit.prevent="saveToken">
+      <div v-if="bootstrapping" class="login-card login-loading">
+        <div class="brand">
+          <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+          <span>auto-qb</span>
+        </div>
+        <svg class="ico spin" viewBox="0 0 16 16"><use href="#i-orbit"></use></svg>
+        <p class="muted">正在验证本地密钥…</p>
+      </div>
+      <form v-else class="login-card" @submit.prevent="saveToken">
         <div class="brand">
           <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
           <span>auto-qb</span>
@@ -263,11 +275,16 @@
             </div>
           </div>
 
-          <!-- 今日累计上传/下载(数据源: Traffic Monitor; 未启用限速曲线时不渲染) -->
+          <!-- 今日累计上传/下载(数据源: Traffic Monitor; 未启用限速曲线时不渲染)。
+               标题右侧历史流量入口: 点击打开按日历史柱状图(天/月/年视图) -->
           <div v-if="trafficOn && todayTraffic" class="rail-card"
                :title="'今日累计流量(数据源 Traffic Monitor' + (traffic.date ? ', ' + traffic.date : '') + ')'">
             <div class="rail-title">
               <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>今日流量
+              <span class="rail-spacer"></span>
+              <button class="rail-btn" title="查看历史流量(天/月/年)" @click.stop="openHistory">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
+              </button>
             </div>
             <div class="rail-stat">
               <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
@@ -297,6 +314,30 @@
 
         <main class="content">
 
+        <!-- 批量操作浮条: 有选中集合时出现(Ctrl/⌘+点击选中, Shift+点击范围选择); 无选中时不占位 -->
+        <transition name="bulk">
+          <div v-if="selectedCount" class="bulk-bar">
+            <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
+            <span class="bulk-count">已选 <b>{{ selGroups.length }}</b> 组 · <b>{{ selMembers.length }}</b> 个种子</span>
+            <span class="bulk-sep"></span>
+            <button class="bulk-btn" @click="bulkAct('resume')">
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
+            </button>
+            <button class="bulk-btn" @click="bulkAct('pause')">
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停
+            </button>
+            <button class="bulk-btn" @click="bulkAct('reannounce')">
+              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </button>
+            <button class="bulk-btn danger" @click="bulkDelete()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除…
+            </button>
+            <button class="bulk-btn ghost" @click="clearSelection()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除
+            </button>
+          </div>
+        </transition>
+
         <!-- 列头吸顶(脱离 .group-table 的双轴滚动容器, 直接挂到 .content 下做纵向 sticky):
              spec 规定 overflow-x:auto + overflow-y:visible -> overflow-y:auto, sticky 上下文会变
              成 .group-table 自身(它不纵向滚动)失效; 把 .group-head 移出表容器 + JS 同步横向
@@ -315,9 +356,9 @@
 
           <template v-for="g in filteredGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
-            <div class="group-row" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit }]"
+            <div class="group-row" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: isGroupSelected(g) }]"
                  :style="gridStyle('group')"
-                 @click="toggleExpand(g.key, $event)"
+                 @click="onGroupClick(g, $event)"
                  @contextmenu.prevent="openMenu($event, g)">
               <template v-for="col in visibleGroupCols" :key="col.key">
                 <div v-if="col.key === 'name'" class="g-name" :title="g.name">
@@ -350,7 +391,7 @@
                 </div>
                 <div v-else-if="col.key === 'sites'" class="g-sites">
                   <span v-for="m in g.members" :key="m.hash"
-                        class="site-chip" :class="['sc-' + siteHue(m.site), m.kind, { 'search-hit': m.hit }]"
+                        class="site-chip" :class="[m.kind, { 'search-hit': m.hit }]"
                         :title="m.site + ' · ' + kindText(m.kind)">
                     {{ m.site }}
                   </span>
@@ -379,16 +420,17 @@
                 </div>
               </div>
               <div v-for="m in g.members" :key="m.hash"
-                   class="member-row" :class="[m.kind, { 'search-hit': m.hit }]"
+                   class="member-row" :class="[m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
                    :style="gridStyle('detail')"
+                   @click="onMemberClick(m, $event)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
                 <template v-for="col in visibleDetailCols" :key="col.key">
                   <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
                   <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
-                  <span v-else-if="col.key === 'dlspeed'" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
-                  <span v-else-if="col.key === 'upspeed'" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
-                  <span v-else-if="col.key === 'uploaded'" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
-                  <span v-else-if="col.key === 'size'" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
+                  <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
+                  <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
+                  <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
+                  <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
                   <span v-else-if="col.key === 'tags'" class="m-tags" :title="mTags(m).join(', ')">
                     <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
                     <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
@@ -477,7 +519,6 @@
         <template v-else>
           <div class="ce-grid">
             <aside class="ce-side">
-              <div class="ce-side-title">配置分组</div>
               <button v-for="g in cfgGroups" :key="g.key" class="ce-side-item"
                       :class="{ active: cfg.activeGroup === g.key }" @click="cfg.activeGroup = g.key">
                 <svg class="ico ico-sm" :class="'icog-' + g.key" viewBox="0 0 16 16"><use :href="'#' + g.icon"></use></svg>
@@ -935,16 +976,29 @@
       <div class="modal" :class="{ danger: modal.danger }" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16">
-            <use :href="modal.danger ? '#i-warn' : '#i-info'"></use>
+            <use :href="modal.icon || (modal.danger ? '#i-warn' : '#i-info')"></use>
           </svg>
           <span>{{ modal.title }}</span>
         </div>
         <p class="modal-body">{{ modal.body }}</p>
+        <!-- 待操作目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标) -->
+        <div v-if="modal.details" class="modal-details">
+          <div v-for="d in modal.details" :key="d.label" class="modal-detail-row">
+            <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
+            <span class="d-label">{{ d.label }}</span>
+            <span class="d-value" :title="d.value">{{ d.value }}</span>
+          </div>
+        </div>
         <input v-if="modal.input" ref="modalInput" v-model="modal.value" class="modal-input"
                :placeholder="modal.placeholder" @keyup.enter="resolveModal(true)">
         <label v-if="modal.checkbox" class="modal-check">
           <input type="checkbox" v-model="modal.checked">
           <span>{{ modal.checkbox }}</span>
+        </label>
+        <!-- 多选项(删除确认框: 强制汇报 + 删除文件两项并存) -->
+        <label v-for="c in modal.checks" :key="c.key" class="modal-check">
+          <input type="checkbox" v-model="c.checked">
+          <span>{{ c.label }}</span>
         </label>
         <div class="modal-actions">
           <button class="ce-btn ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
@@ -952,6 +1006,77 @@
             {{ modal.okText }}
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合柱状图(SVG, 悬停取值) -->
+    <div v-if="historyOpen" class="modal-mask" @click.self="historyOpen = false">
+      <div class="modal hist-modal" role="dialog" aria-modal="true">
+        <div class="modal-title">
+          <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
+          <span>历史流量</span>
+          <span class="ce-spacer"></span>
+          <div class="hist-tabs">
+            <button v-for="g in ['day', 'month', 'year']" :key="g" :class="{ active: historyGran === g }"
+                    @click="historyGran = g">{{ { day: '天', month: '月', year: '年' }[g] }}</button>
+          </div>
+          <button class="ce-icon flat" title="关闭" @click="historyOpen = false">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div v-if="historyLoading" class="hist-loading">加载中…</div>
+        <p v-else-if="historyError" class="error">{{ historyError }}</p>
+        <p v-else-if="!historyBuckets.length" class="hist-empty">暂无流量数据(数据源 history_traffic.dat 为空或不可用)</p>
+        <template v-else>
+          <!-- 柱状图: 每桶双系列并列柱(上传 teal / 下载 indigo, 与今日流量卡同色);
+               viewBox 用 v-bind 动态绑定(静态写法会被模板编译器小写成 viewbox 被浏览器忽略) -->
+          <div class="hist-chart">
+            <svg class="hist-svg" v-bind="{ viewBox: histViewBox }">
+              <g class="hist-grid">
+                <line v-for="(t, k) in histTicks" :key="'g' + k" :x1="histGeom.padL" :x2="histGeom.w - histGeom.padR"
+                      :y1="t.y" :y2="t.y"></line>
+              </g>
+              <g class="hist-axis">
+                <text v-for="(t, k) in histTicks" :key="'l' + k" :x="histGeom.padL - 7" :y="t.y + 3.5"
+                      text-anchor="end">{{ t.label }}</text>
+              </g>
+              <g v-for="(b, i) in historyBuckets" :key="'b' + i"
+                 @mouseenter="histHoverIdx = i" @mouseleave="histHoverIdx = -1">
+                <rect class="hist-hit" :x="histBarX(i)" :y="histGeom.padT" :width="histBarW()"
+                      :height="histGeom.chartH"></rect>
+                <rect class="hist-bar up" :class="{ dim: histHoverIdx >= 0 && histHoverIdx !== i }"
+                      :x="histBarX(i)" :y="histBarY(b.up)" :width="histGeom.barW" :height="histBarH(b.up)" rx="1.5"></rect>
+                <rect class="hist-bar down" :class="{ dim: histHoverIdx >= 0 && histHoverIdx !== i }"
+                      :x="histBarX(i) + histGeom.barW + 1" :y="histBarY(b.down)" :width="histGeom.barW"
+                      :height="histBarH(b.down)" rx="1.5"></rect>
+              </g>
+              <g class="hist-axis">
+                <text v-for="(b, i) in histXTicks" :key="'x' + i" :x="b.x" :y="histGeom.h - 6"
+                      text-anchor="middle">{{ b.label }}</text>
+              </g>
+            </svg>
+            <div v-if="histHover" class="hist-tip" :class="{ flip: histHover.leftPct > 62 }"
+                 :style="{ left: histHover.leftPct + '%', top: '0' }">
+              <b>{{ histHover.bucket.tip }}</b>
+              <span class="h-up">上传 {{ fmtSize(histHover.bucket.up) }}</span>
+              <span class="h-down">下载 {{ fmtSize(histHover.bucket.down) }}</span>
+              <span>合计 {{ fmtSize(histHover.bucket.up + histHover.bucket.down) }}</span>
+            </div>
+          </div>
+          <div class="hist-legend">
+            <span><i class="sw up"></i>上传</span>
+            <span><i class="sw down"></i>下载</span>
+            <span class="hist-hint">悬停柱体查看详情</span>
+          </div>
+          <div class="hist-summary">
+            <span>窗口 <b>{{ historyBuckets.length }}{{ { day: '天', month: '月', year: '年' }[historyGran] }}</b></span>
+            <span>合计 <b>{{ fmtSize(historySummary.up + historySummary.down) }}</b></span>
+            <span>上传 <b class="h-up">{{ fmtSize(historySummary.up) }}</b></span>
+            <span>下载 <b class="h-down">{{ fmtSize(historySummary.down) }}</b></span>
+            <span>峰值 <b>{{ fmtSize(historySummary.peak) }}</b></span>
+            <span>均值 <b>{{ fmtSize(historySummary.avg) }}</b></span>
+          </div>
+        </template>
       </div>
     </div>
   </div>

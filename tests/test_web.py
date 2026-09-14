@@ -6,6 +6,8 @@
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
+- test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
+- test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
 - test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
@@ -26,6 +28,9 @@
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
 - test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
+- test_reannounce_confirm_success_and_timeout: 汇报确认跟踪 next_announce 重置 -> ok 回执; 超时 -> error 回执
+- test_reannounce_confirm_group_aggregate: 组汇报按种子逐个确认, 部分失败聚合 error 带计数
+- test_confirm_reannounce_result_matrix: 判定矩阵(updating/next_announce 重置/变 working=成功; not working+msg=失败; 其余 None)
 - test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
 - test_ensure_group_view_rebuilds_when_dirty: 分组视图脏时重建(Web 请求侧兜底)/干净时复用引用
@@ -179,8 +184,11 @@ def _make_web_manager(tmp_path, config_text):
         _traffic_view={
             "state": "disabled",
             "periods": [],
+            "history": [],
             "limit": {}
         },
+        # 命令执行结果回执(真实 manager 由主循环写; 端点测试直接预置)
+        _web_results={},
     )
     # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
     # ensure_group_state(带 rid 的增量状态)
@@ -297,6 +305,37 @@ def test_api_delete_with_files_flag(web_env):
     client.post(f"/api/groups/{enc}/delete", headers=auth, json={"delete_files": True})
     cmd, payload = mgr.web_commands.get_nowait()
     assert cmd == "delete_group" and payload["delete_files"] is True
+
+
+def test_api_cmd_result_endpoint(web_env):
+    """命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    resp = client.post("/api/torrents/HA/reannounce", headers=auth)
+    assert resp.status_code == 200
+    cmd_id = resp.json()["cmd_id"]
+    assert cmd_id, "投递响应应携带 cmd_id"
+    assert client.get(f"/api/cmd/{cmd_id}", headers=auth).json() == {"status": "pending"}
+    mgr._web_results[cmd_id] = {"status": "ok", "error": "", "ts": 123.0}
+    assert client.get(f"/api/cmd/{cmd_id}", headers=auth).json() == {"status": "ok", "error": "", "ts": 123.0}
+    # 其余命令端点同样携带 cmd_id(delete 返回体保留 delete_files 标志)
+    enc = encode_group_key(KEY)
+    assert client.post(f"/api/groups/{enc}/pause", headers=auth).json()["cmd_id"]
+    delete_resp = client.post(f"/api/groups/{enc}/delete", headers=auth, json={"delete_files": True}).json()
+    assert delete_resp["cmd_id"] and delete_resp["delete_files"] is True
+
+
+def test_api_traffic_history_endpoint(web_env):
+    """/api/traffic/history: 透出限速曲线任务发布的按日 history; 未启用时返回空数组"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.get("/api/traffic/history", headers=auth).json() == {"state": "disabled", "history": []}
+    mgr._traffic_view = {
+        "state": "ok",
+        "history": [{"date": "2026-09-14", "up": 1024, "down": 2048}],
+    }
+    data = client.get("/api/traffic/history", headers=auth).json()
+    assert data["state"] == "ok" and data["history"][0]["date"] == "2026-09-14"
 
 
 def test_config_schema_endpoint(web_env):
@@ -864,6 +903,75 @@ def test_drain_web_commands_empty_queue():
         mgr, client, key = _make_grouped_manager(td)
         mgr._drain_web_commands()
         assert client.calls == []
+
+
+def test_reannounce_confirm_success_and_timeout():
+    """强制汇报确认跟踪: next_announce 重置 -> ok 回执; 超时 -> error 回执(删除流程据此不删)"""
+    import time as _time
+
+    def _tracker(status, na, msg=""):
+        return {"url": "https://tracker.hhanclub.net/announce.php", "status": status, "next_announce": na, "msg": msg}
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        client.trackers_map = {"HA": [_tracker(1, 10_000)]}
+        # 确认前不写回执(登记 pending), tracker 无变化时继续等待
+        mgr.web_commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd1"}))
+        mgr._drain_web_commands()
+        assert "cmd1" in mgr._reannounce_pending and "cmd1" not in mgr._web_results
+        mgr._check_reannounce_pending()
+        assert "cmd1" not in mgr._web_results, "tracker 无变化应继续等待"
+        client.trackers_map["HA"][0]["next_announce"] = 9_000  # next_announce 被重置(提前)
+        mgr._check_reannounce_pending()
+        assert mgr._web_results["cmd1"]["status"] == "ok"
+        assert mgr._reannounce_pending == {}, "全部确认后跟踪应移除"
+        # 超时: deadline 已过仍未确认 -> error 回执
+        mgr.web_commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd2"}))
+        mgr._drain_web_commands()
+        mgr._reannounce_pending["cmd2"]["deadline"] = _time.time() - 1
+        mgr._check_reannounce_pending()
+        assert mgr._web_results["cmd2"]["status"] == "error"
+        assert "超时" in mgr._web_results["cmd2"]["error"]
+
+
+def test_reannounce_confirm_group_aggregate():
+    """组强制汇报: 按种子逐个确认, 部分失败 -> 聚合 error 回执带失败计数"""
+
+    def _tracker(status, na, msg=""):
+        return {"url": "https://tracker.hhanclub.net/announce.php", "status": status, "next_announce": na, "msg": msg}
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        client.trackers_map = {
+            "HA": [_tracker(3, 10_000)],  # updating = 正在汇报 -> 成功
+            "HB": [_tracker(4, 10_000, "rejected")],  # not working + 错误消息 -> 失败
+        }
+        mgr.web_commands.put(("reannounce_group", {"key": key, "cmd_id": "cmd3"}))
+        mgr._drain_web_commands()
+        assert "cmd3" not in mgr._web_results
+        mgr._check_reannounce_pending()
+        result = mgr._web_results["cmd3"]
+        assert result["status"] == "error" and "1/2" in result["error"]
+
+
+def test_confirm_reannounce_result_matrix():
+    """_confirm_reannounce_result 判定矩阵: updating/重置/变 working=成功; not working+msg=失败; 其余 None"""
+    from auto_qb.qbmanager import QbManager
+
+    base = {"u": (1, 10_000)}
+
+    def _trackers(status, na, msg="", url="u"):
+        return [{"url": url, "status": status, "next_announce": na, "msg": msg}]
+
+    f = QbManager._confirm_reannounce_result
+    assert f(_trackers(3, 10_000), base) is True, "updating = qB 正在汇报"
+    assert f(_trackers(1, 9_000), base) is True, "next_announce 被重置(提前)"
+    assert f(_trackers(2, 10_000), base) is True, "从非 working 变 working"
+    assert f(_trackers(4, 10_000, "rejected"), base) is False, "not working + 错误消息 = tracker 拒绝"
+    assert f(_trackers(1, 10_000), base) is None, "无变化继续等待"
+    assert f(_trackers(4, 10_000, ""), base) is None, "not working 但无 msg 不武断判失败"
+    # DHT 等虚拟 tracker 不参与判定(仅虚拟 tracker 时无结论)
+    assert f([{"url": "** [DHT]", "status": 2, "next_announce": 9_000, "msg": ""}], base) is None
 
 
 def test_cmd_group_actions_skip_missing_group():

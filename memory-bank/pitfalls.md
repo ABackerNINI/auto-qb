@@ -139,8 +139,17 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **同组多段循环色(`.ceg-0..5`)只染**色条**不染文字**: 6 种 token(`blue/violet/teal/pink/indigo/cyan`)轮转给 `.ce-group` 的左侧 3px 色条; 文字色保持 `--fg` 高对比(色条只做识别, 不损可读性) —— 与"对比色留给 HR/错误"既定原则一致。可选段(section)用紫、相关设置子卡(subcard)用青、普通段(group)用 6 色轮转, 三种段一眼可辨。
 - **表头吸顶需把 `.group-head` 移出 `.group-table`**: spec 规定 `overflow-x:auto + overflow-y:visible -> overflow-y:auto`,使 `.group-table` 成为双轴滚动容器;`.group-head` 的 sticky 上下文变成 `.group-table`(它自身不纵向滚动)→ 失效。修法: DOM 把 `.group-head` 移到 `.content` 下做兄弟元素 + `position:sticky; top: var(--head-h, 100px);`,横向滚动靠 JS `syncGroupHeadScroll` 用 `transform: translateX` 跟随(不用 `scrollLeft` 避免反向触发自身 scroll 回环, 不带 transition 跟手不滞后)。`detail-head` 仍在 `.detail` 内(用户主动展开, 不需吸顶)。
 - **站点配色方案重做(底色=状态色, 文字色=站点专属)**: 用户反馈"底色随站导致无法一眼分辨状态"。修法: `.sc-0..7` 只设 `color`(文字色, 站点专属), 不设 `background`; `.site-chip.seeding`/`.downloading`/`.error`/... 设 `background`(状态色), 声明顺序在 `.sc-*` 之后保证底色覆盖。移除站点 chip 后缀 `<i class="dot">`(底色已表状态, 圆点冗余); 明细行的 `m-site`/`m-state` 圆点是**前缀**而非后缀, 保留不动。
-- **`siteHue` 算法换 djb2 修复 BTSchool/MuXueGe 碰撞**: 原算法 `((h<<5)-h+c)|0` 起始 0 在两站都落桶 2(黄)。改 djb2 `h=5381; h=((h<<5)+h+c)|0`,验证 BTSchool→3、MuXueGe→5 已分离。所有站点色位会重洗(用户接受)。注意 `<<` 返回 32 位有符号, JS 用 `(h & 0x7FFFFFFF) % 8` 取非负桶。
+- **站点配色方案重做(底色=状态色, 文字色=站点专属)** —— ⚠️ **已被 2026-09-15 反转**: 用户最终要求改回"字体与背景都用状态色", `siteHue()`/djb2/`.sc-0..7`/`.stalled*` 死规则已全部删除, 现状 = `.site-chip.<kind>` 同时设语义 `color`+`background`, 站点身份由 chip 文字表达。此条目保留作历史脉络; 明细行 `m-site`/`m-state` 圆点前缀保留不动。加同特异性规则时仍需留意文件尾 `.site-chip.search-hit` 的声明顺序覆盖。
 - **H&R/站数列居中**: `.hc-count`/`.hc-hr` 表头 + `.g-count`/`.g-hr` 单元格改 `text-align:center` / `justify-content:center`(grid cell 内 inline-flex 元素不靠 text-align, 必须给 flex 加 `justify-content`)。`detail-head` 同列不动(用户只要求分组表)。
+
+### 视觉/交互打磨补充 (2026-09-15 第六轮: 回执确认 / 多选 / 历史流量 / 删除确认框)
+
+- **强制汇报的"成功"回执是 tracker 确认而非 API 返回**: WEB 汇报命令(`_cmd_reannounce_*`)只发指令并登记 `_reannounce_pending`, 回执由 `_check_reannounce_pending` 每 tick 确认(读 `torrents/trackers`): status==3(updating) / next_announce 比 baseline 提前>60 / status 从非 2 变 2 = 成功; status==4 且带 msg = 失败; 超时 `REANNOUNCE_CONFIRM_TIMEOUT=30s` 判失败。**判定的前提是替身 trackers 数据带 status/next_announce 字段**(FakeClient 默认只返回 url → 永远无结论 → 测试需配 `trackers_map`); DHT/PeX/LSD 虚拟 tracker(`**` 开头)已排除。FakeQbServer 写端点只回 "Ok." 不改替身状态 → 端到端冒烟需外部动态改 `trackers_map`(冒烟钩子线程)。
+- **命令回执机制**: 所有 WEB 命令端点入队时生成 `cmd_id`, 主循环执行完写 `_web_results[cmd_id]`(reannounce 例外: 由确认跟踪器在确认/超时后写); Web 线程经 `GET /api/cmd/{id}` 只读。`_drain_web_commands` 把 `cmd_id` 从 args 剔除后才分发 handler(否则 handler 收到未知参数 TypeError); reannounce handler 特殊传参 `cmd_id=`。无 cmd_id 的旧调用路径(直接 put 队列)完全兼容。
+- **删除编排在前端而非后端**: "删除前强制汇报"由前端串行编排(汇报→等回执→成功才投递删除), 后端不做复合命令 —— 失败保留种子的语义由前端保证, 后端 `torrents_delete` 调用点不变。modal 通用化扩展了 `checks`(多选项)/`details`(信息区)/`icon`(标题图标覆盖), `resolveModal` 对 checks 返回 `{checked, checks:{key:bool}}`(向后兼容单 checkbox 的 checked)。
+- **多选保留策略**: 增量刷新(groups 整表替换)后按 key/hash 交集保留选中; 虚拟行 key(`u-<hash>`)不做存在性校验(搜索视图重建); 批量目标拆解时已消失的 key 跳过 —— 否则 `/api/groups/u-xxx` 解析失败 500。
+- **成员视图补 `name` 字段**(2026-09-15): `_build_group_view` 的 members_view 原本没有种子名, 删除确认框需要它。`name` 已在 `_VIEW_FIELDS` 置脏集合内, 无需额外置脏; 但新增**展示字段**时仍要按判别法确认置脏源头。
+- **前端冒烟的具体做法已验证**: FakeQbServer(假 qB) + 真实 QbManager(临时 config/data_dir, web.enabled)后台进程 + Edge headless(`--remote-debugging-port`) + Node CDP 脚本(Runtime.evaluate 逐项断言 + captureScreenshot)。踩点: ①programmatic `btn.click()` 不触发 form submit, 要 `form.dispatchEvent(new Event("submit"))`; ②headless profile 持久 localStorage → 第二次启动直接进主界面(登录表单不出现, 属正确行为); ③断言即时色值可能取到 transition 中间值, 用语义断言(非默认灰/无 sc- 类)更稳; ④破坏性操作后的 UI 更新有轮询延迟(≈2s), 断言要轮询等待而非固定延时; ⑤PowerShell 管道读写 UTF-8 脚本会把中文写坏(GBK 转码), 批量改文件用 Python 或专用工具。
 
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
