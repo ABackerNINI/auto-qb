@@ -121,6 +121,14 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **`.ico-*` 语义色可能被更具体的选择器吃掉**: `.search-box > .ico { color: var(--fg-dim) }`(0,2,0)会盖住 `.ico-find`(0,1,0) —— 加图标色类后要逐个用 `getComputedStyle` 核对实际色值, 必要时直接改那条更具体规则的 color。
 - **删除顶栏统计槽时, 指向它的媒体查询与 CSS 会静默变成死代码**: `.stat-pills`/`.stat-pill`/`.pill-today`/`.pill-speed`/`.pill-refresh` 的规则与三个 `@media` 块(1320/1180/1000)在统计槽迁到左栏后全部失效。收尾务必 `grep` 一遍类名, 否则下一轮改样式会被这些"看着还在生效"的规则误导(本轮还清出 `.table-tools` 与 `.col-mark` 两条同类残留)。
 
+### 视觉/交互打磨补充 (2026-09-14 第四轮: 弹层视口翻转 / 站点专属色 / 标签展示口径)
+
+- **弹层"左对齐 + 固定宽度"在靠右锚点上会伸出视口并拖出横向滚动条**: 筛选弹层(最右的"路径")与列选择器都是 `left:0` 定位, 锚点靠右时菜单整体超宽。修法: 打开弹层的**同一同步调用栈**里测 `anchor.getBoundingClientRect().left + 菜单宽 > innerWidth - 8`, 超出则加 `flip-x`(`left:auto; right:0`)。注意 `ev.currentTarget` **只在 handler 同步代码内有效**(Vue 事件处理结束后被置 null), 必须当场取值; `toggleFilterMenu(kind, $event)` 要在模板里显式传 `$event`。
+- **站点 chip 换"专属配色"时, 状态信息要搬走而不是删掉**: `sc-0..7`(按站点名确定性哈希)取代了原本染在 chip 本体上的状态色, 若只删旧规则, 错误红就从分组行消失。修法: 状态色移到 chip 内的圆点(`.site-chip.seeding .dot` 等, 圆点元素原本在 CSS 里定义但模板没渲染, 顺手补上)。另注意文件尾的 `.site-chip.search-hit` 覆盖(搜索命中色)靠**声明顺序**赢过 `.sc-*` 同特异性规则, 新增同特异性规则时留意相对位置。
+- **"展示口径"与"筛选口径"要分离**: 与站点名一致的标签(忽略大小写)只在**展示层**过滤(`_commonTags` 组级交集后过滤 / `mTags` 明细行过滤 / 搜索虚拟行同口径), 标签筛选下拉(`tagOptions`)仍列出全部标签 —— 若筛选也滤掉, 用户将无法按站点名标签筛选。组级 `diff`(± 标记)仍按**原始**标签集合比较, 不受展示过滤影响。
+- **入场动效(`page-in`)给带 sticky 子元素的容器加时不要用 fill-mode**: `.layout` 含 `position:sticky` 的 `.rail`, `animation` 结束后不保留 transform(无 `forwards`), sticky 不受影响; 若加 `fill-mode: forwards` 会让 transform 常驻(创建层叠上下文, 影响内部 fixed/浮层定位)。页面切换靠 `v-if` 重建元素触发动画, 不需要 JS 配合。
+- **明细行模板里调方法(`mTags(m)`)每帧都会重算**: Vue 模板表达式不走缓存, 同一行调了 4 次(`title`/列表/计数/空判断)。标签数组很小可接受; 若未来对大数组做同样的事, 应改为 computed 预计算或装饰成员对象, 不要在方法里做重活。
+
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。

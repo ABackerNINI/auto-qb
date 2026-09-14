@@ -148,6 +148,8 @@ const app = createApp({
       categoryFilter: [],
       siteFilter: [],
       filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "path"
+      popFlip: false,         // 筛选弹层视口翻转(锚点靠右时改为右对齐, 避免伸出屏幕)
+      colFlip: false,         // 列选择器弹层视口翻转(同上)
       toasts: [],             // 站内提示条(替代 alert)
       modal: {                // 站内确认/输入框(替代 confirm/prompt); 结构见 _modalInit
         visible: false, title: "", body: "", okText: "", cancelText: "",
@@ -290,7 +292,7 @@ const app = createApp({
           hr_triggered: r.hr_triggered ? 1 : 0,
           hr_pending: r.hr_triggered && !r.hr_satisfied ? 1 : 0,
           status: { primary: r.kind, text: this.kindText(r.kind) },
-          commonTags: { list: r.tags || [], diff: false },
+          commonTags: { list: this.mTags(r), diff: false },
           commonCategory: { value: r.category || "", diff: false },
           sizeMismatch: false,
           members: [{ ...r, hit: true }],
@@ -601,9 +603,21 @@ const app = createApp({
       this.kindFilter = this.kindFilter === kind ? "" : kind;
       this.expandedKey = null;  // 筛选后组集合变化, 复位展开态
     },
-    /* 筛选弹层互斥展开(同一时刻只开一个: 避免多个浮层叠在一起) */
-    toggleFilterMenu(kind) {
-      this.filterMenu = this.filterMenu === kind ? "" : kind;
+    /* 筛选弹层互斥展开(同一时刻只开一个: 避免多个浮层叠在一起);
+     * 打开时测量锚点位置: 靠右(左对齐会伸出视口)则翻转成右对齐 —— 消除横向滚动条 */
+    toggleFilterMenu(kind, ev) {
+      if (this.filterMenu === kind) { this.filterMenu = ""; return; }
+      this.filterMenu = kind;
+      this.popFlip = this._menuOverflowsRight(ev && ev.currentTarget, 260);
+    },
+    toggleColMenu(ev) {
+      this.colMenuOpen = !this.colMenuOpen;
+      if (this.colMenuOpen) this.colFlip = this._menuOverflowsRight(ev && ev.currentTarget, 300);
+    },
+    /* 锚点左缘 + 弹层宽度是否超出视口(留 8px 边距); ev.currentTarget 在同步代码内有效 */
+    _menuOverflowsRight(anchor, menuW) {
+      if (!anchor || !anchor.getBoundingClientRect) return false;
+      return anchor.getBoundingClientRect().left + menuW > window.innerWidth - 8;
     },
     clearFilters() {
       this.kindFilter = "";
@@ -804,10 +818,28 @@ const app = createApp({
       const first = sets[0];
       let common = [...first];
       for (const s of sets.slice(1)) common = common.filter((t) => s.has(t));
+      // 与站点名一致的标签(忽略大小写, 多为辅种工具自动打的"站点身份"标签)不展示: 站点列已有同名值, 纯冗余
+      common = this._filterSiteTags(common, members);
       common.sort();
       // ± = 成员标签集合不完全相同(组级只显示共同标签, 差异提示避免误读为"全组一致")
       const diff = sets.some((s) => s.size !== first.size || [...s].some((t) => !first.has(t)));
       return { list: common, diff };
+    },
+    /* 过滤与成员站点名一致(忽略大小写)的标签 —— 组级共同标签与明细行共用 */
+    _filterSiteTags(tags, members) {
+      const names = new Set((members || []).map((m) => (m.site || "").toLowerCase()).filter(Boolean));
+      return (tags || []).filter((t) => !names.has(t.toLowerCase()));
+    },
+    /* 明细行标签: 先滤掉与站点名一致的标签再展示(折叠计数/悬浮 title 口径一致) */
+    mTags(m) {
+      return this._filterSiteTags(m.tags, [m]);
+    },
+    /* 站点专属配色索引: 站点名确定性哈希 -> 0..7(对应样式 .sc-0..7), 同一站点永远同色 */
+    siteHue(site) {
+      const s = String(site || "");
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+      return Math.abs(h) % 8;
     },
     _commonCategory(members) {
       const vals = members.map((m) => m.category || "");

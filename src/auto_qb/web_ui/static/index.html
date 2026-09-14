@@ -131,11 +131,11 @@
                结构复用筛选器弹层的 .pop-item -> 两处弹层观感完全一致 -->
           <div v-if="page === 'groups'" class="col-picker">
             <button class="table-tool" :class="{ active: colMenuOpen }" title="显示/隐藏列 · 列宽"
-                    @click.stop="colMenuOpen = !colMenuOpen">
+                    @click.stop="toggleColMenu($event)">
               <svg class="ico ico-sm ico-cols" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
               列
             </button>
-            <div v-if="colMenuOpen" class="col-menu" @click.stop>
+            <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip }" @click.stop>
               <div class="col-menu-title">分组表</div>
               <div v-for="c in groupColumns" :key="c.key" class="pop-item col-menu-item"
                    :class="{ locked: c.locked, on: colVisible('group', c.key) }"
@@ -201,13 +201,13 @@
             <div v-for="f in filterDefs" :key="f.kind" class="filter-pop">
               <button class="filter-btn" :class="{ active: f.selected.length }"
                       :title="'按' + f.label + '筛选辅种组(可多选)'"
-                      @click.stop="toggleFilterMenu(f.kind)">
+                      @click.stop="toggleFilterMenu(f.kind, $event)">
                 <svg class="ico ico-sm" :class="'ico-f-' + f.kind" viewBox="0 0 16 16"><use :href="'#' + f.icon"></use></svg>
                 {{ f.label }}
                 <span v-if="f.selected.length" class="filter-count">{{ f.selected.length }}</span>
                 <svg class="ico ico-sm filter-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
               </button>
-              <div v-if="filterMenu === f.kind" class="pop-menu" @click.stop>
+              <div v-if="filterMenu === f.kind" class="pop-menu" :class="{ 'flip-x': popFlip }" @click.stop>
                 <div class="pop-head">
                   <span>{{ f.label }}</span>
                   <button v-if="f.selected.length" class="pop-clear" @click="clearFilter(f.field)">清除</button>
@@ -347,17 +347,16 @@
                 </div>
                 <div v-else-if="col.key === 'sites'" class="g-sites">
                   <span v-for="m in g.members" :key="m.hash"
-                        class="site-chip" :class="[m.kind, { 'search-hit': m.hit }]" :title="m.site + ' · ' + kindText(m.kind)">
+                        class="site-chip" :class="['sc-' + siteHue(m.site), m.kind, { 'search-hit': m.hit }]"
+                        :title="m.site + ' · ' + kindText(m.kind)">
                     {{ m.site }}
+                    <i class="dot"></i>
                   </span>
                 </div>
-                <!-- H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(全部达标显示绿色对勾) -->
+                <!-- H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
                 <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(g)" :title="hrGroupTitle(g)">
                   <span v-if="!g.hr_triggered" class="zero">—</span>
-                  <template v-else-if="!g.hr_pending">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
-                    <span>已达标</span>
-                  </template>
+                  <svg v-else-if="!g.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
                   <template v-else>
                     <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
                     <span class="hr-num">{{ g.hr_pending }}/{{ g.hr_triggered }}</span>
@@ -388,10 +387,10 @@
                   <span v-else-if="col.key === 'upspeed'" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
                   <span v-else-if="col.key === 'uploaded'" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
                   <span v-else-if="col.key === 'size'" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
-                  <span v-else-if="col.key === 'tags'" class="m-tags" :title="(m.tags || []).join(', ')">
-                    <span v-for="t in tagSlice(m.tags, 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
-                    <span v-if="(m.tags || []).length > 2" class="tag-more">+{{ m.tags.length - 2 }}</span>
-                    <span v-if="!(m.tags || []).length" class="zero">—</span>
+                  <span v-else-if="col.key === 'tags'" class="m-tags" :title="mTags(m).join(', ')">
+                    <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
+                    <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
+                    <span v-if="!mTags(m).length" class="zero">—</span>
                   </span>
                   <span v-else-if="col.key === 'category'" class="m-cat" :title="m.category">
                     <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
@@ -479,7 +478,7 @@
               <div class="ce-side-title">配置分组</div>
               <button v-for="g in cfgGroups" :key="g.key" class="ce-side-item"
                       :class="{ active: cfg.activeGroup === g.key }" @click="cfg.activeGroup = g.key">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="'#' + g.icon"></use></svg>
+                <svg class="ico ico-sm" :class="'icog-' + g.key" viewBox="0 0 16 16"><use :href="'#' + g.icon"></use></svg>
                 <span class="ce-side-label">{{ g.label }}</span>
                 <span v-if="g.badge" class="ce-side-badge">{{ g.badge }}</span>
               </button>
@@ -489,7 +488,7 @@
               <header class="ce-head">
                 <div class="ce-head-text">
                   <h2>
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="'#' + (cfgActive.icon || 'i-settings')"></use></svg>
+                    <svg class="ico ico-sm" :class="'icog-' + cfgActive.key" viewBox="0 0 16 16"><use :href="'#' + (cfgActive.icon || 'i-settings')"></use></svg>
                     {{ cfgActive.label }}
                   </h2>
                   <p v-if="cfgActive.help" class="ce-sub">{{ cfgActive.help }}</p>
@@ -515,6 +514,7 @@
               <div v-if="cfg.activeGroup === 'trackers'" class="ce-master-detail">
                 <div class="ce-master">
                   <div class="ce-master-title">
+                    <svg class="ico ico-sm icog-trackers" viewBox="0 0 16 16"><use href="#i-globe"></use></svg>
                     站点配置
                     <button class="ce-icon flat" title="新增站点配置"
                             :class="{ open: cfg.addOpen === 'tracker' }" @click="cfgAddStart('tracker')">
@@ -556,6 +556,7 @@
               <div v-else-if="cfg.activeGroup === 'rules'" class="ce-master-detail">
                 <div class="ce-master">
                   <div class="ce-master-title">
+                    <svg class="ico ico-sm icog-rules" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
                     规则集
                     <button class="ce-icon flat" title="新增规则集"
                             :class="{ open: cfg.addOpen === 'ruleGroup' }" @click="cfgAddStart('ruleGroup')">
