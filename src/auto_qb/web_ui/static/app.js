@@ -45,6 +45,7 @@ const DETAIL_COLUMNS = [
 const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
+const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
 /* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}}
  * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列),
  * 结构或默认列集变更必须升版本(否则旧缓存里的 px 覆盖会与新列集错配)
@@ -834,12 +835,15 @@ const app = createApp({
     mTags(m) {
       return this._filterSiteTags(m.tags, [m]);
     },
-    /* 站点专属配色索引: 站点名确定性哈希 -> 0..7(对应样式 .sc-0..7), 同一站点永远同色 */
+    /* 站点专属配色索引: 站点名确定性哈希 -> 0..7(对应样式 .sc-0..7), 同一站点永远同色。
+     * 2026-09-14 第五轮: 改用 djb2(((h<<5)+h+c)|0, 起始 5381)。
+     * 原算法 ((h<<5)-h+c)|0 起始 0 在 BTSchool 与 MuXueGe 上碰撞(都落 2 -> 黄);
+     * djb2 已验证两者分离(BTSchool→3, MuXueGe→5), 不再加绝对值兜底(直接 &0x7 桶) */
     siteHue(site) {
       const s = String(site || "");
-      let h = 0;
-      for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-      return Math.abs(h) % 8;
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) | 0;
+      return (h & 0x7FFFFFFF) % 8;
     },
     _commonCategory(members) {
       const vals = members.map((m) => m.category || "");
@@ -928,6 +932,14 @@ const app = createApp({
     sortArrow(key) {
       if (this.sortKey !== key) return "";
       return this.sortDir === 1 ? "▲" : "▼";
+    },
+    /* 分组表横向滚动时同步表头位移(表头已脱离 .group-table 容器做纵向 sticky,
+       横向滚动靠 JS 桥接避免列头与列体错位)。用 transform 而非 scrollLeft,
+       避免反向触发自身 scroll 事件形成回环; 不带 transition 跟手不滞后 */
+    syncGroupHeadScroll(ev) {
+      const head = this.$refs.groupHead;
+      if (!head) return;
+      head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
     },
     toggleExpand(key, event) {
       // 仅左键触发展开: 右键菜单不应连带展开明细(旧实现在 openMenu 里主动展开, 已移除)
@@ -1127,6 +1139,11 @@ const app = createApp({
      * 关键在于起始时把**全部可见列**固化为当前渲染 px —— 它们原本可能是 minmax/fr 弹性值,
      * 不固化的话被拖列会把余量从邻居那儿抢走(表现为"调一列, 其它列跟着变")。
      * 按住 Shift 拖拽 = 与相邻列互相挤占(总宽不变), 对应主流表格的 shift-resize。
+     *
+     * 拖拽抑制误触排序: resizer 与 .h-cell 共父级, mouseup 后浏览器仍派发 click 冒泡到
+     * .h-cell 触发 setSort(用户感知为"调列宽顺手把排序变了")。这里累计位移超过阈值时,
+     * 在 capture 阶段拦截下一次 click(stopPropagation+preventDefault), 拦完即注销。
+     * 未拖动(纯点击 resizer)不拦截, 保持原行为。
      */
     startResize(event, page, key) {
       const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
@@ -1140,7 +1157,9 @@ const app = createApp({
       const startVal = parseFloat(widths[key]);
       const neighbor = event.shiftKey ? vis[idx + 1] : null;
       const startNeighbor = neighbor ? parseFloat(widths[neighbor.key]) : 0;
+      let dragged = false;  // 位移超过 RESIZE_DRAG_THRESHOLD 即置真, up 时用于决定是否拦 click
       const move = (e) => {
+        if (!dragged && Math.abs(e.clientX - startX) > RESIZE_DRAG_THRESHOLD) dragged = true;
         const w = Math.max(MIN_COL_PX, Math.round(startVal + e.clientX - startX));
         const next = { ...widths, [key]: `${w}px` };
         if (neighbor) {
@@ -1153,6 +1172,14 @@ const app = createApp({
         document.removeEventListener("mouseup", up);
         this.colManual = { ...this.colManual, [page]: true };  // 手动调过 -> 不再随窗口自适应
         this.saveColState();
+        if (!dragged) return;  // 未拖动 = 纯点击 resizer, 不拦 click(保持原行为)
+        // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort —— capture 阶段拦掉即停
+        const swallow = (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          document.removeEventListener("click", swallow, true);
+        };
+        document.addEventListener("click", swallow, true);
       };
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);

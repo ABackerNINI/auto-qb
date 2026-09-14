@@ -297,18 +297,21 @@
 
         <main class="content">
 
-        <div class="group-table" ref="groupTable">
-          <!-- 列头(点击排序, 右缘拖拽调宽, 双击按内容自适应) -->
-          <div class="group-head" ref="groupHead" :style="gridStyle('group')">
-            <div v-for="col in visibleGroupCols" :key="col.key" class="h-cell"
-                 :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
-              <span>{{ col.label }}</span>
-              <span v-if="col.sortable" class="arrow">{{ sortArrow(col.key) }}</span>
-              <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
-                    @mousedown.stop.prevent="startResize($event, 'group', col.key)"
-                    @dblclick.stop.prevent="autoFitColumn($event, 'group', col.key)"></span>
-            </div>
+        <!-- 列头吸顶(脱离 .group-table 的双轴滚动容器, 直接挂到 .content 下做纵向 sticky):
+             spec 规定 overflow-x:auto + overflow-y:visible -> overflow-y:auto, sticky 上下文会变
+             成 .group-table 自身(它不纵向滚动)失效; 把 .group-head 移出表容器 + JS 同步横向
+             滚动, 上下滚时常驻、左右滚不错位 -->
+        <div class="group-head sticky-head" ref="groupHead" :style="gridStyle('group')">
+          <div v-for="col in visibleGroupCols" :key="col.key" class="h-cell"
+               :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
+            <span>{{ col.label }}</span>
+            <span v-if="col.sortable" class="arrow">{{ sortArrow(col.key) }}</span>
+            <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
+                  @mousedown.stop.prevent="startResize($event, 'group', col.key)"
+                  @dblclick.stop.prevent="autoFitColumn($event, 'group', col.key)"></span>
           </div>
+        </div>
+        <div class="group-table" ref="groupTable" @scroll="syncGroupHeadScroll">
 
           <template v-for="g in filteredGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
@@ -350,7 +353,6 @@
                         class="site-chip" :class="['sc-' + siteHue(m.site), m.kind, { 'search-hit': m.hit }]"
                         :title="m.site + ' · ' + kindText(m.kind)">
                     {{ m.site }}
-                    <i class="dot"></i>
                   </span>
                 </div>
                 <!-- H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
@@ -782,19 +784,27 @@
                     </div>
                   </div>
 
-                  <div v-for="(c, i) in cfgCurveList()" :key="i" class="ce-card ce-curve-card">
+                  <div v-for="(c, i) in cfgCurveList()" :key="i" class="ce-card ce-curve-card"
+                       :class="{ collapsed: !cfgCurveOpen(i) }">
                     <div class="ce-detail-bar">
+                      <button class="ce-icon flat" :title="cfgCurveOpen(i) ? '收起' : '展开'" @click="cfgCurveToggle(i)">
+                        <svg class="ico ico-sm caret" :class="{ open: cfgCurveOpen(i) }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+                      </button>
                       <span class="ce-curve-badge">{{ i + 1 }}</span>
                       <input class="ce-input ce-inline-input" :value="cfgCurvePeriod(i).period || ''"
                              placeholder="DAY / MONTH / 7D"
                              @input="cfgSetPath(cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
                       <span class="ce-hint">{{ cfgCurvePeriodHint(i) }}</span>
+                      <span class="ce-hint" v-if="!cfgCurveOpen(i)">
+                        · 上传 {{ cfgCurvePoints(i, 'upload_curve').length }} 档 · 下载 {{ cfgCurvePoints(i, 'download_curve').length }} 档
+                      </span>
                       <span class="ce-spacer"></span>
                       <button class="ce-icon danger" title="删除该曲线" @click="cfgCurveRemovePeriod(i)">
                         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
                       </button>
                     </div>
 
+                    <div v-show="cfgCurveOpen(i)" class="ce-curve-body">
                     <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir" class="ce-curve-dir"
                          :class="dir === 'upload_curve' ? 'd-up' : 'd-down'">
                       <div class="ce-curve-dir-head">
@@ -876,6 +886,7 @@
                         </div>
                       </div>
                     </div>
+                    </div>
                   </div>
 
                   <div class="ce-card">
@@ -948,10 +959,19 @@
   <!-- 字段渲染组件模板(单一模板适配全部字段类型; 组件定义见 config_editor.js) -->
   <script type="text/x-template" id="tpl-ce-field">
     <div v-if="visible" class="ce-item">
-      <!-- object 段标题 -->
-      <div v-if="item.type === 'group'" class="ce-group-head" :style="indent">
-        <span>{{ item.label }}</span>
-        <span v-if="item.help" class="ce-inline-help">{{ item.help }}</span>
+      <!-- object 段标题(默认折叠, 同 section): 标题 + 摘要 + 折叠箭头; 子项以 item.items 嵌套,
+           v-show 控制显隐 —— 设置页字段多, 默认折叠让用户先看概览再决定展开哪段 -->
+      <div v-if="item.type === 'group'" class="ce-group" :class="'ceg-' + (item.colorIndex || 0)" :style="indent">
+        <div class="ce-group-head" @click="toggleGroup()" role="button" tabindex="0"
+             @keyup.enter="toggleGroup()" :title="groupOpen ? '点击收起' : '点击展开'">
+          <svg class="ico ico-sm caret" :class="{ open: groupOpen }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+          <span class="ce-group-title">{{ item.label }}</span>
+          <span class="ce-group-sum">{{ groupSummary }}</span>
+          <span v-if="item.help" class="ce-inline-help">{{ item.help }}</span>
+        </div>
+        <div v-show="groupOpen" class="ce-group-body">
+          <ce-field v-for="sub in item.items" :key="sub.path.join('.')" :item="sub"></ce-field>
+        </div>
       </div>
 
       <!-- 相关设置子卡(schema group_of 归入父字段之下): 只放与父字段强相关的少量选项 -->
@@ -1016,16 +1036,26 @@
             <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
           </select>
 
-              <div v-else-if="isList" class="ce-list">
-            <div v-for="(it, i) in list()" :key="i" class="ce-list-row">
-              <input class="ce-input" :value="it" :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
-              <button class="ce-icon danger" title="删除该项" @click="listRemove(i)">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+              <div v-else-if="isList" class="ce-list" :class="{ 'is-pattern': f.kind === 'pattern_list' }">
+            <!-- pattern_list(如彻底删除标签/删除无种子标签): list 区默认折叠, 折叠态显示已配置条数;
+                 str_list 不折叠(通常较短且与父字段紧耦合, 折叠反损可读性) -->
+            <div v-if="f.kind === 'pattern_list'" class="ce-list-head" role="button" tabindex="0"
+                 @click="toggleList()" @keyup.enter="toggleList()"
+                 :title="listOpen ? '点击收起' : '点击展开'">
+              <svg class="ico ico-sm caret" :class="{ open: listOpen }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+              <span class="ce-list-sum">{{ listSummary }}</span>
+            </div>
+            <div v-show="f.kind !== 'pattern_list' || listOpen" class="ce-list-body">
+              <div v-for="(it, i) in list()" :key="i" class="ce-list-row">
+                <input class="ce-input" :value="it" :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
+                <button class="ce-icon danger" title="删除该项" @click="listRemove(i)">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+                </button>
+              </div>
+              <button class="ce-btn ghost small" @click="listAdd()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加
               </button>
             </div>
-            <button class="ce-btn ghost small" @click="listAdd()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加
-            </button>
           </div>
           <!-- 规则引用: 输入框(可直接粘贴修改) + 下拉快捷追加(避免手写错规则集名) -->
           <div v-else-if="f.kind === 'rules_ref'" class="ce-list">
@@ -1057,13 +1087,14 @@
             </label>
           </div>
 
-          <!-- 数值 + 单位下拉: 时间/大小/速度统一拆为两半, 免去手写 30M / 10MiB / 6MiB/s -->
+          <!-- 数值 + 单位下拉: 时间/大小/速度统一拆为两半, 免去手写 30M / 10MiB / 6MiB/s;
+               时间单位下拉显示中文(秒/分/时/天), value 仍是 S/M/H/D 与后端解析一致 -->
           <div v-else-if="hasUnit" class="ce-unit-group">
             <input class="ce-input ce-num" type="text" :value="unitParts.num" :placeholder="f.placeholder || ''"
                    @input="setUnitNum($event.target.value)">
             <select class="ce-input ce-select ce-unit-select" :value="unitParts.unit"
                     @change="setUnitName($event.target.value)">
-              <option v-for="u in unitOptions" :key="u" :value="u">{{ u }}</option>
+              <option v-for="u in unitOptions" :key="u" :value="u">{{ unitLabel(u) }}</option>
             </select>
           </div>
 

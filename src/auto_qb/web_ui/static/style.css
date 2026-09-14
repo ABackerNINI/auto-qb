@@ -338,16 +338,24 @@ button { font-family: inherit; }
  * 背景没有同步调整"。列少/无溢出时 min-width:100% 保证仍铺满容器。
  * 明细区一并如此: 让明细与外层共用**同一条**横向滚动, 不再各滚各的(否则两边位置会错开)。
  */
-.group-head, .group-row, .detail, .detail-head, .member-row {
+.group-row, .detail, .detail-head, .member-row {
   width: fit-content;
   min-width: 100%;
 }
+/* 表头: 脱离 .group-table 容器, 直接挂到 .content 做纵向 sticky(overflow-x:auto 容器内
+ * sticky 会被 spec 规则转成 auto 上下文, 失效)。横向位移由 app.js syncGroupHeadScroll 写
+ * transform 跟随 .group-table 滚动, 不用 transition 跟手; 吸顶时给阴影/底边线浮起感。 */
 .group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim); font-size: 11.5px;
-  font-weight: 600; letter-spacing: .04em; }
+  font-weight: 600; letter-spacing: .04em; width: fit-content; min-width: 100%;
+  position: sticky; top: var(--head-h, 100px); z-index: 5;
+  background: var(--bg-card); border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-1); will-change: transform; }
+.group-head.sticky-head { border-radius: 0; }
 .h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
 /* 逐列表头对齐类(模板统一挂 `hc-<列key>`, 与行单元格的 `g-*`/`m-*` 同一列 key):
- * "站数"列数值右对齐而表头左对齐 -> 视觉错位, 这里按列单独右对齐表头。 */
-.hc-count { text-align: right; }
+ * "站数"列数值右对齐而表头左对齐 -> 视觉错位, 这里按列单独右对齐表头。
+ * 2026-09-14 第五轮: H&R / 站数列改居中(用户要求"H&R/站数栏居中显示") */
+.hc-count, .hc-hr { text-align: center; }
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
 .h-cell .arrow { font-size: 10px; color: var(--accent); }
@@ -382,22 +390,26 @@ button { font-family: inherit; }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
-  background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
-/* 站点专属配色(sc-0..7, app.js siteHue 按站点名确定性哈希): 同一站点永远同色, 快速识别"同站";
- * 状态不再染 chip 本体(状态看组状态徐标/明细行), 只由圆点承担 —— 错误红仍一眼可见 */
-.site-chip.sc-0 { background: var(--violet-soft); color: var(--violet); }
-.site-chip.sc-1 { background: var(--teal-soft); color: var(--teal); }
-.site-chip.sc-2 { background: var(--warn-soft); color: var(--warn); }
-.site-chip.sc-3 { background: var(--pink-soft); color: var(--pink); }
-.site-chip.sc-4 { background: var(--cyan-soft); color: var(--cyan); }
-.site-chip.sc-5 { background: var(--green-soft); color: var(--green); }
-.site-chip.sc-6 { background: var(--indigo-soft); color: var(--indigo); }
-.site-chip.sc-7 { background: var(--blue-soft); color: var(--blue); }
-.site-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.site-chip.seeding .dot { background: var(--green); }
-.site-chip.downloading .dot, .site-chip.checking .dot { background: var(--blue); }
-.site-chip.paused .dot { background: var(--fg-dim); }
-.site-chip.error .dot { background: var(--error); }
+  background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
+  transition: background var(--dur) var(--ease); }
+/* 站点专属配色(sc-0..7, app.js siteHue djb2 按站点名确定性哈希): 只染**文字**,
+ * 同一站点永远同色, 快速识别"同站"; 底色交给下面 .seeding/.downloading/... 状态色,
+ * 一眼分辨种子状态 —— 文字保持站点专属色(用户反馈"无法一眼分辨状态"的根因是底色随站)。 */
+.site-chip.sc-0 { color: var(--violet); }
+.site-chip.sc-1 { color: var(--teal); }
+.site-chip.sc-2 { color: var(--warn); }
+.site-chip.sc-3 { color: var(--pink); }
+.site-chip.sc-4 { color: var(--cyan); }
+.site-chip.sc-5 { color: var(--green); }
+.site-chip.sc-6 { color: var(--indigo); }
+.site-chip.sc-7 { color: var(--blue); }
+/* 状态色染底色(后缀点已移除): 文字色仍是站点专属, 底色一眼可辨状态;
+ * 声明顺序: sc-* 在前, .seeding/... 在后, 保证底色覆盖 sc-* 默认 surface-2 */
+.site-chip.seeding { background: var(--green-soft); }
+.site-chip.downloading, .site-chip.checking { background: var(--blue-soft); }
+.site-chip.paused { background: var(--surface-2); }
+.site-chip.error { background: var(--error-soft); }
+.site-chip.stalled, .site-chip.stalled-dl, .site-chip.stalled-up { background: var(--warn-soft); }
 /* 标签/分类列: chip 制, 超长/超量折叠(完整值在 title) */
 .g-tags, .m-tags { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .g-cat, .m-cat { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
@@ -422,7 +434,7 @@ button { font-family: inherit; }
  */
 .diff-mark { flex: 0 0 auto; padding: 0 5px; border-radius: 999px; background: var(--surface-2);
   color: var(--fg-dim); font-size: 11px; white-space: nowrap; }
-.g-count { text-align: right; color: var(--fg-dim); font-size: 12.5px; }
+.g-count { text-align: center; color: var(--fg-dim); font-size: 12.5px; }
 
 /* 展开明细 */
 .detail { margin: -2px 0 6px; padding: 4px 14px 8px; overflow-x: auto;
@@ -594,12 +606,51 @@ button { font-family: inherit; }
 
 /* 字段区(行底基本透明, hover 才浮出表面 —— 减少大量字段堆叠时的视觉噪声) */
 .ce-fields { display: flex; flex-direction: column; gap: 2px; }
-.ce-group-head { display: flex; align-items: baseline; gap: 10px; margin: 12px 0 2px; padding: 0 12px 6px;
-  border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--fg); }
+/* 普通 object 段(group): 默认折叠的整体容器(同 section 思路)。
+ * 折叠态 = 标题行 + 摘要; 展开才显示子字段 —— 设置页字段很多, 让"展开"成为用户主动选择。
+ * 同组多段循环色(.ceg-0..5)给标题左侧 3px 色条, 一眼分辨"是哪种类型的配置段";
+ * 文字色保持 --fg 高对比(色条只做识别, 不损可读性) —— 与 ai/08"对比色留给 HR/错误"原则一致。 */
+.ce-group { margin: 10px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
+  background: var(--surface-1); border-left: 3px solid var(--accent);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.ce-group:hover { border-color: var(--border); box-shadow: var(--shadow-1); }
+.ce-group.ceg-0 { border-left-color: var(--blue); }
+.ce-group.ceg-1 { border-left-color: var(--violet); }
+.ce-group.ceg-2 { border-left-color: var(--teal); }
+.ce-group.ceg-3 { border-left-color: var(--pink); }
+.ce-group.ceg-4 { border-left-color: var(--indigo); }
+.ce-group.ceg-5 { border-left-color: var(--cyan); }
+.ce-group-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer;
+  user-select: none; transition: background var(--dur) var(--ease); }
+.ce-group-head:hover { background: var(--surface-2); }
+.ce-group-head .caret { color: var(--accent); opacity: .55; transform: rotate(0deg);
+  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
+.ce-group-head:hover .caret { opacity: 1; }
+.ce-group-head .caret.open { transform: rotate(90deg); }
+.ce-group-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.ce-group-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+/* 折叠/展开动效: max-height 过渡, 起始/结束 overflow:hidden(避免撑高时溢出);
+   动画时长 180ms + ease-out, "手感"级, 不抢注意力(全局 prefers-reduced-motion 已降级) */
+.ce-group-body { overflow: hidden; padding: 2px 12px 8px; }
+.ce-group-body[style*="display: none"] { padding: 0; }
 .ce-inline-help { font-weight: 400; font-size: 12px; color: var(--fg-dim); }
 .ce-hint { font-style: normal; font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
 .ce-empty-hint { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: var(--radius-sm);
   background: var(--surface-1); color: var(--fg-dim); font-size: 12.5px; }
+
+/* pattern_list 折叠头(delete_tags/delete_tags_if_has_no_torrents 自动命中):
+   同 group/section 的"折叠 = 主动展开"原则; str_list 不折叠(无 .is-pattern class, head 不渲染) */
+.ce-list.is-pattern { padding: 6px 8px; border-radius: var(--radius); background: var(--surface-1);
+  border: 1px solid var(--border-soft); border-left: 3px solid var(--pink); }
+.ce-list.is-pattern .ce-list-head { display: flex; align-items: center; gap: 6px; cursor: pointer;
+  user-select: none; padding: 2px 4px; transition: background var(--dur) var(--ease); }
+.ce-list.is-pattern .ce-list-head:hover { background: var(--surface-2); }
+.ce-list.is-pattern .ce-list-head .caret { color: var(--pink); opacity: .65;
+  transform: rotate(0deg); transition: transform var(--dur) var(--ease-spring); }
+.ce-list.is-pattern .ce-list-head .caret.open { transform: rotate(90deg); }
+.ce-list-sum { font-size: 11.5px; color: var(--fg-dim); }
+.ce-list-body { padding-top: 4px; }
 
 /* 字段行: 标签列**定宽**(不再 minmax 浮动) -> 全表输入框左缘严格对齐 */
 .ce-field { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: start;
@@ -627,24 +678,27 @@ button { font-family: inherit; }
   border: 1px solid rgba(248, 113, 113, .3); color: #fca5a5; font-size: 12px; line-height: 1.5; }
 .ce-risk-line .ico { flex: 0 0 auto; margin-top: 1px; color: var(--error); }
 
-/* 相关设置子卡(group_of): 缩进 + 左侧强调线, 表明从属于上一字段 */
-.ce-subcard { margin: 2px 0 6px; padding: 6px 10px 8px; border-radius: var(--radius);
-  background: var(--bg-sunken); border: 1px solid var(--border-soft); border-left: 2px solid var(--accent); }
+/* 相关设置子卡(group_of): 缩进 + 左侧强调线, 表明从属于上一字段。
+ * 头部色用 teal(青)与 group 的多色 / section 的紫拉开层级 —— 三种段一眼可辨 */
+.ce-subcard { margin: 4px 0 10px; padding: 6px 10px 8px; border-radius: var(--radius);
+  background: var(--bg-sunken); border: 1px solid var(--border-soft); border-left: 2px solid var(--teal); }
 .ce-subcard-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 4px;
   font-size: 12px; color: var(--fg-muted); }
-.ce-subcard-head .ico { color: var(--accent); transform: rotate(90deg); }
+.ce-subcard-head .ico { color: var(--teal); transform: rotate(90deg); }
 .ce-subcard .ce-field { grid-template-columns: 160px minmax(0, 1fr); padding: 6px 8px; }
 .ce-subcard .ce-field .ce-help { margin-top: -2px; }
 
 /* 可选段(站点 HR / checking 分支等): 默认折叠的整体容器
  * 折叠态 = 一行(折叠箭头 + 开关 + 段名 + 摘要), 展开才显示内部字段 ——
  * 设置页字段很多, 让"展开"成为用户主动选择, 页面高度才能可控。
- */
-.ce-section { margin: 6px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
-  background: var(--surface-1); transition: border-color var(--dur) var(--ease), opacity var(--dur) var(--ease); }
-.ce-section:hover { border-color: var(--border); }
+ * 配色用 violet(紫)与 group 的多色 / subcard 的青区分开 —— 三种段一眼可辨。 */
+.ce-section { margin: 10px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
+  background: var(--surface-1); border-left: 3px solid var(--violet);
+  transition: border-color var(--dur) var(--ease), opacity var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease); }
+.ce-section:hover { border-color: var(--border); box-shadow: var(--shadow-1); }
 .ce-section-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
-.ce-section-head .caret { color: var(--accent); opacity: .55; transform: rotate(0deg);
+.ce-section-head .caret { color: var(--violet); opacity: .55; transform: rotate(0deg);
   transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
 .ce-section:hover .ce-section-head .caret { opacity: 1; }
 .ce-section-title { font-size: 13px; font-weight: 600; color: var(--fg); }
@@ -803,6 +857,13 @@ button { font-family: inherit; }
 .ce-curve-off { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
 .ce-curve-off .ce-help { flex: 1 1 320px; }
 .ce-curve-card { gap: 10px; }
+/* 折叠态: 隐藏 ce-curve-body(主区只留 header + 档位数摘要); 展开 = 完整折线 + 档位表 */
+.ce-curve-card.collapsed { background: var(--bg-sunken); }
+.ce-curve-card .caret { color: var(--accent); opacity: .65; transform: rotate(0deg);
+  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
+.ce-curve-card .caret.open { transform: rotate(90deg); }
+.ce-curve-card .ce-icon.flat { padding: 2px; border-radius: var(--radius-sm); }
+.ce-curve-card .ce-icon.flat:hover { background: var(--surface-2); }
 .ce-curve-badge { flex: 0 0 auto; display: inline-grid; place-items: center; width: 22px; height: 22px;
   border-radius: 7px; background: var(--accent-soft); color: var(--accent-hi); font-size: 12px; font-weight: 600; }
 .ce-curve-dir { display: flex; flex-direction: column; gap: 8px; padding: 10px;
@@ -923,8 +984,9 @@ button.primary { background: var(--accent); }
 .pill-limit.manual .lbl, .pill-limit.manual .val { color: var(--accent-hi); }
 .pill-limit.manual .ico { color: var(--accent-hi); }
 
-/* HR 栏: 未达标进度用暖色, 已全部达标用绿色 check */
-.g-hr { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+/* HR 栏: 未达标进度用暖色, 已全部达标用绿色 check;
+   第五轮: 改 inline-flex -> flex + justify-content:center, 让 HR 数值在列内居中(用户要求) */
+.g-hr { display: flex; align-items: center; justify-content: center; gap: 5px; font-variant-numeric: tabular-nums; }
 .g-hr .hr-num { font-weight: 600; }
 .g-hr.pending { color: var(--hr-pending); }
 .g-hr.done { color: var(--green); }

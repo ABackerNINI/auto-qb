@@ -20,6 +20,8 @@ const UNIT_OPTIONS = {
   speed: ["B/s", "KiB/s", "MiB/s", "GiB/s"],
 };
 const UNIT_FALLBACK = { time: "S", size: "MiB", speed: "KiB/s" };
+/* 时间单位下拉的中文显示文案(仅改显示, value 仍是 S/M/H/D 与后端解析一致) */
+const UNIT_LABELS = { time: { S: "秒", M: "分", H: "时", D: "天" } };
 
 window.CONFIG_EDITOR = {
   data() {
@@ -46,6 +48,9 @@ window.CONFIG_EDITOR = {
         addOpen: "",  // 当前展开的"新增"表单: "" | tracker | ruleGroup | rule(同时只允许一个)
         collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
         openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
+        openGroups: {},  // 普通 object 段(group)展开态 { "<路径 join>": true }; 缺省 = 折叠(同 section)
+        openLists: {},  // pattern_list 字段 list 区展开态 { "<路径 join>": true }; 缺省 = 折叠
+        openCurves: {},  // 限速曲线卡展开态 { "<曲线序号>": true }; 缺省 = 折叠
         picker: { open: false, groupKey: "", ruleName: "", list: "" },  // 条件/动作选择面板(单例)
         chartHover: null,  // 限速曲线鼠标取值: { chartKey, x, y, tLabel, sLabel } | null
       },
@@ -120,6 +125,13 @@ window.CONFIG_EDITOR = {
     },
     cfgUnitOptions(kind) {
       return UNIT_OPTIONS[kind] || [];
+    },
+    /* 时间单位下拉显示中文(仅 time 类), size/speed 原样返回 —— value 不变, 配置无漂移。
+     * 强制 String(unit): 若上游传入非字符串(对象/Proxy), 模板插值时 String(obj) 会抛
+     * "Cannot convert object to primitive value"; 这里主动归一避免下游连锁报错。 */
+    cfgUnitLabel(kind, unit) {
+      const u = String(unit);
+      return (UNIT_LABELS[kind] && UNIT_LABELS[kind][u]) || u;
     },
     /* 拆: "1.5D" -> {num:"1.5", unit:"D"}; 空/不可解析时 unit 取 unit_default 或 kind 回退值 */
     cfgUnitParts(kind, text, unitDefault) {
@@ -346,8 +358,8 @@ window.CONFIG_EDITOR = {
     },
     /* 把字段(含嵌套 object)展开为扁平渲染项
      *
-     * 项类型: group(object 段标题) / section(可选段: 默认折叠的整体容器) / field(叶子字段) /
-     *        subcard(由 group_of 归入父字段的"相关设置"子卡)
+     * 项类型: group(object 段标题, **默认折叠**) / section(可选段: 默认折叠的整体容器) /
+     *        field(叶子字段) / subcard(由 group_of 归入父字段的"相关设置"子卡)
      *
      * 两种从属项的呈现方式(2026-09-14 调整):
      *   · **布尔**型从属项(如 add_category 的"覆盖已有分类")→ 父字段的**内联开关**
@@ -355,9 +367,13 @@ window.CONFIG_EDITOR = {
      *     单独占一张子卡比父字段还显眼, 与"这是父字段的一个附加选项"的语义不符。
      *   · 其余(对象/字符串等)仍走 group_of **子卡**(缩进小卡)。
      *
-     * 可选段(optional object, 如站点 hr / checking 的分支)渲染为**默认折叠的 section**:
-     * 设置页字段很多, "展开"应是用户主动选择的结果; 折叠态仍显示"已配置/未配置"开关与摘要。
-     * allowGrouping=false 用于子卡/section 内部: 那些字段已归属上层, 不能再参与一次分组判定
+     * 折叠策略(2026-09-14 第五轮):
+     *   · 可选段(optional object) → section(已默认折叠, 保留开关与摘要)
+     *   · 普通 object 段 → group(默认折叠, 仅显示标题 + 摘要, 点击展开才看到子字段)
+     *   · pattern_list 字段(delete_tags 等) → 自身默认折叠 list 区
+     *   · 设置页字段很多, "展开"应是用户主动选择; 折叠态仍可见标题与摘要(已配置数)
+     *   · 子项以 item.items 嵌套, 渲染层用 v-show 控制 —— 与 section 同构
+     * allowGrouping=false 用于子卡/section/group 内部: 那些字段已归属上层, 不能再参与一次分组判定
      * (否则它们会被再次收进 children, roots 为空 => 容器渲染成空壳且不报错)。
      */
     cfgFlatten(fields, basePath, depth, ownerPath, allowGrouping = true) {
@@ -375,6 +391,8 @@ window.CONFIG_EDITOR = {
       }
       const byKey = new Map(fields.map((f) => [f.key, f]));
       const items = [];
+      // colorIndex 在同一组内顺序循环 0..5, 给 group 段标题配 6 色色条
+      let colorIndex = 0;
       for (const f of roots) {
         const path = [...basePath, f.key];
         if (f.kind === "object") {
@@ -383,10 +401,13 @@ window.CONFIG_EDITOR = {
             const subs = this.cfgFlatten(f.fields, path, depth + 1, basePath);
             items.push({ type: "section", field: f, path: path, depth: depth, items: subs });
           } else {
-            // 普通 object 段: 子字段**不额外缩进** —— 段标题行已经界定了范围,
-            // 再缩进会让同一页里两组输入框的左缘错开 16px(用户反馈的"输入框未对齐")
-            items.push({ type: "group", field: f, path: path, depth: depth, label: f.label, help: f.help });
-            for (const s of this.cfgFlatten(f.fields, path, depth, basePath)) items.push(s);
+            // 普通 object 段: **默认折叠**, 仅渲染标题与摘要; 子项以 item.items 嵌套,
+            // v-show 控制显隐 —— 设置页字段太多, 默认折叠让用户先看概览再决定展开哪段
+            const subs = this.cfgFlatten(f.fields, path, depth + 1, basePath);
+            items.push({
+              type: "group", field: f, path: path, depth: depth, label: f.label, help: f.help,
+              items: subs, colorIndex: colorIndex++ % 6,
+            });
           }
           continue;
         }
@@ -442,6 +463,61 @@ window.CONFIG_EDITOR = {
     },
     cfgPathKey(path) {
       return Array.isArray(path) ? path.join(".") : String(path);
+    },
+    /* 普通 object 段(group)展开/折叠: 缺省 = 折叠(同 section), 与"展开是主动选择"原则一致 */
+    cfgGroupOpen(path) {
+      return !!this.cfg.openGroups[this.cfgPathKey(path)];
+    },
+    cfgGroupToggle(path) {
+      const key = this.cfgPathKey(path);
+      const next = { ...this.cfg.openGroups };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      this.cfg.openGroups = next;
+    },
+    /* group 段折叠摘要: 已配置子字段数/总叶子数(折叠时也能看出规模) */
+    cfgGroupSummary(item) {
+      if (!item || !item.items) return "未配置";
+      const kids = this._collectLeaves(item.items);
+      const total = kids.length;
+      if (!total) return item.help ? "无子项" : "未配置";
+      const filled = kids.filter((k) => k.type === "field" && this.cfgExists(k.path)).length;
+      return `已配置 ${filled}/${total} 项`;
+    },
+    /* 收集 item.items 树里全部叶子(group/section 嵌套也展开), 供摘要计数 */
+    _collectLeaves(items, acc = []) {
+      for (const it of items || []) {
+        if (it.type === "group" || it.type === "section") {
+          if (it.items) this._collectLeaves(it.items, acc);
+        } else if (it.type === "field" || it.type === "subcard") {
+          acc.push(it);
+          if (it.items) this._collectLeaves(it.items, acc);
+        } else {
+          acc.push(it);
+        }
+      }
+      return acc;
+    },
+    /* pattern_list 字段 list 区展开/折叠: 缺省 = 折叠(delete_tags / delete_tags_if_has_no_torrents 自动命中) */
+    cfgListOpen(path) {
+      return !!this.cfg.openLists[this.cfgPathKey(path)];
+    },
+    cfgListToggle(path) {
+      const key = this.cfgPathKey(path);
+      const next = { ...this.cfg.openLists };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      this.cfg.openLists = next;
+    },
+    /* 限速曲线卡展开/折叠: 缺省 = 折叠(主区只看周期与档位数, 详情展开才看折线/档位表) */
+    cfgCurveOpen(i) {
+      return !!this.cfg.openCurves[i];
+    },
+    cfgCurveToggle(i) {
+      const next = { ...this.cfg.openCurves };
+      if (next[i]) delete next[i];
+      else next[i] = true;
+      this.cfg.openCurves = next;
     },
     /* 内联开关(父字段的布尔从属项, 如"覆盖已有分类"): 路径由调用方给出 */
     cfgInlineBool(path, fallback) {
@@ -914,6 +990,15 @@ window.CE_FIELD_COMPONENT = {
   template: "#tpl-ce-field",
   props: { item: { type: Object, required: true } },
   inject: ["ce"],
+  /* 全局 mixin(app.mixin(CONFIG_EDITOR))给**每个**组件都挂了 provide(){ce:this},
+   * 于是嵌套 ce-field 的 inject 会被中间层 ce-field 截获 —— 拿到的是该 ce-field 实例,
+   * 它的 cfg 是 data() 新建的本地副本(嵌套字段只显默认值、编辑不进根树)。
+   * 这里把自己**注入到的 ce 原样再 provide 下去**: 顶层 ce-field 注入的是根实例,
+   * 任意深度的嵌套 ce-field 沿链拿到的都是同一个根(Vue 选项初始化 inject 先于 provide,
+   * 此时 this.ce 已就绪)。group/section/subcard 三层嵌套都依赖此行为。 */
+  provide() {
+    return { ce: this.ce };
+  },
   computed: {
     f() {
       return this.item.field;
@@ -967,6 +1052,21 @@ window.CE_FIELD_COMPONENT = {
       const total = kids.filter((k) => k.type === "field").length;
       return `已配置 ${filled}/${total} 项`;
     },
+    /* 普通 object 段(group): 缺省折叠, 折叠态显示标题 + 摘要(已配置数/总数) */
+    groupOpen() {
+      return this.ce.cfgGroupOpen(this.path);
+    },
+    groupSummary() {
+      return this.ce.cfgGroupSummary(this.item);
+    },
+    /* pattern_list 字段: list 区缺省折叠, 折叠态显示已配置条数 */
+    listOpen() {
+      return this.ce.cfgListOpen(this.path);
+    },
+    listSummary() {
+      const n = (this.list() || []).length;
+      return n ? `${n} 项` : "未配置";
+    },
   },
   methods: {
     textValue() {
@@ -983,6 +1083,17 @@ window.CE_FIELD_COMPONENT = {
     },
     toggleSection(on) {
       this.ce.cfgToggleSection(this.path, this.f, on);
+    },
+    toggleGroup() {
+      this.ce.cfgGroupToggle(this.path);
+    },
+    toggleList() {
+      this.ce.cfgListToggle(this.path);
+    },
+    /* 单位显示文案(模板 v-for 内带参数调用, 必须是 method 不能是 computed —
+       Vue computed getter 收到的参数是组件代理而非遍历项): time -> 秒/分/时/天, 其余原样 */
+    unitLabel(u) {
+      return this.ce.cfgUnitLabel(this.f.kind, u);
     },
     /* 内联开关(父字段的布尔从属项): 路径由 cfgFlatten 预先算好 */
     inlineValue(entry) {

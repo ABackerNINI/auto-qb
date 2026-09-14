@@ -129,6 +129,17 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **入场动效(`page-in`)给带 sticky 子元素的容器加时不要用 fill-mode**: `.layout` 含 `position:sticky` 的 `.rail`, `animation` 结束后不保留 transform(无 `forwards`), sticky 不受影响; 若加 `fill-mode: forwards` 会让 transform 常驻(创建层叠上下文, 影响内部 fixed/浮层定位)。页面切换靠 `v-if` 重建元素触发动画, 不需要 JS 配合。
 - **明细行模板里调方法(`mTags(m)`)每帧都会重算**: Vue 模板表达式不走缓存, 同一行调了 4 次(`title`/列表/计数/空判断)。标签数组很小可接受; 若未来对大数组做同样的事, 应改为 computed 预计算或装饰成员对象, 不要在方法里做重活。
 
+### 视觉/交互打磨补充 (2026-09-14 第五轮: 列宽误触排序 / 时间单位中文化 / 关联配置折叠 / 表头吸顶 / 站点配色重做)
+
+- **拖列宽时浏览器仍会派发 click 到 `.h-cell` 触发 `setSort`** (用户反馈"调列宽顺手把排序也变了"): resizer 与 `.h-cell` 共父级, `mouseup` 后浏览器仍会把按下→移动→释放序列合成 `click` 冒泡到 `.h-cell`。修法在 `startResize` 的 `move` 里累计位移(`RESIZE_DRAG_THRESHOLD=3px`), `up` 时若 `dragged=true` 在 `document` 注册**一次性 capture 阶段** `click` 拦截器(`stopPropagation+preventDefault`), 拦完即注销 —— 不影响纯点击 resizer 的原行为。`detail-head` 共用同一方法, 顺手修复。
+- **时间单位下拉只改显示, value 不变**: 用户要求时间下拉显"秒/分/时/天" 但后端解析仍按 `S/M/H/D`(配置值不能漂移)。修法: `UNIT_LABELS = { time: {S:'秒', M:'分', H:'时', D:'天'} }`, ce-field 的 **method** `unitLabel(u)`, 模板 `{{ unitLabel(u) }}` 显示而 `:value="u"` 仍是原始单位。size/speed 不映射(用户只要求时间)。❗ **带参的 `unitLabel(u)` 必须放 `methods` 不能放 `computed`**: 模板在 `v-for="u in unitOptions"` 里调 `unitLabel(u)`,Vue 3 computed getter 被框架以"组件代理"为参数绑定/调用,收到的 `u` 是 Proxy 而非遍历项,`String(proxy)` 抛 "Cannot convert object to primitive value"(本轮冒烟实测);computed 只用于无参响应式派生,带参渲染辅助一律 method。
+- **`type='group'`(普通 object 段)由"扁平兄弟序列"改为"嵌套子项 + v-show"**: 设置页字段太多, 默认折叠让用户先看概览再决定展开哪段。`cfgFlatten` 把子字段塞进 `item.items` 而不再 push 到外层兄弟序列, 渲染层用 `v-show` 控制 —— 与 `type='section'` 同构。`pattern_list` 字段(delete_tags 等)同样默认折叠 list 区, 用 `.is-pattern` class 与 `str_list` 区分; 限速曲线卡(`ce-curve-card`)也默认折叠。所有折叠态复用 `caret` SVG + `--ease-spring` 旋转过渡, 不引入新 sprite。❗ 模板里 `groupOpen`/`listOpen` 这类**无参 computed 不能加 `()`**(`groupOpen()` 会对布尔值再求函数调用,抛 "groupOpen is not a function",与现有 `sectionOpen` 用法保持一致);带参辅助(如 `unitLabel(u)`、`sectionExists()`)才走 methods。
+- **同组多段循环色(`.ceg-0..5`)只染**色条**不染文字**: 6 种 token(`blue/violet/teal/pink/indigo/cyan`)轮转给 `.ce-group` 的左侧 3px 色条; 文字色保持 `--fg` 高对比(色条只做识别, 不损可读性) —— 与"对比色留给 HR/错误"既定原则一致。可选段(section)用紫、相关设置子卡(subcard)用青、普通段(group)用 6 色轮转, 三种段一眼可辨。
+- **表头吸顶需把 `.group-head` 移出 `.group-table`**: spec 规定 `overflow-x:auto + overflow-y:visible -> overflow-y:auto`,使 `.group-table` 成为双轴滚动容器;`.group-head` 的 sticky 上下文变成 `.group-table`(它自身不纵向滚动)→ 失效。修法: DOM 把 `.group-head` 移到 `.content` 下做兄弟元素 + `position:sticky; top: var(--head-h, 100px);`,横向滚动靠 JS `syncGroupHeadScroll` 用 `transform: translateX` 跟随(不用 `scrollLeft` 避免反向触发自身 scroll 回环, 不带 transition 跟手不滞后)。`detail-head` 仍在 `.detail` 内(用户主动展开, 不需吸顶)。
+- **站点配色方案重做(底色=状态色, 文字色=站点专属)**: 用户反馈"底色随站导致无法一眼分辨状态"。修法: `.sc-0..7` 只设 `color`(文字色, 站点专属), 不设 `background`; `.site-chip.seeding`/`.downloading`/`.error`/... 设 `background`(状态色), 声明顺序在 `.sc-*` 之后保证底色覆盖。移除站点 chip 后缀 `<i class="dot">`(底色已表状态, 圆点冗余); 明细行的 `m-site`/`m-state` 圆点是**前缀**而非后缀, 保留不动。
+- **`siteHue` 算法换 djb2 修复 BTSchool/MuXueGe 碰撞**: 原算法 `((h<<5)-h+c)|0` 起始 0 在两站都落桶 2(黄)。改 djb2 `h=5381; h=((h<<5)+h+c)|0`,验证 BTSchool→3、MuXueGe→5 已分离。所有站点色位会重洗(用户接受)。注意 `<<` 返回 32 位有符号, JS 用 `(h & 0x7FFFFFFF) % 8` 取非负桶。
+- **H&R/站数列居中**: `.hc-count`/`.hc-hr` 表头 + `.g-count`/`.g-hr` 单元格改 `text-align:center` / `justify-content:center`(grid cell 内 inline-flex 元素不靠 text-align, 必须给 flex 加 `justify-content`)。`detail-head` 同列不动(用户只要求分组表)。
+
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。
