@@ -16,7 +16,7 @@ WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
 2. `write_tree` 把树落临时文件跑 `load_config` —— **与程序启动完全同一校验路径**, 失败 400 且不碰磁盘;
 3. `diff_config_impacts` 判定变更(热重载级别唯一来源仍是 `impact.py`);
 4. **R 级字段(state_file/data_dir)回退为磁盘旧值**(进程身份不可热切换, 与旧行为一致), 并在响应中回报 `restart_required`;
-5. 备份为 `config.yml.bak` → **ruamel round-trip 写盘** → 投递 `reload_config` 命令(仍由主循环线程应用)。
+5. 备份为 `<data_dir>/<配置文件名>.bak`(备份路径由 `web.py` 传入 `write_tree`, **不再**在项目根目录生成 `config.yml.bak`; 目录不存在时自动创建) → **ruamel round-trip 写盘** → 投递 `reload_config` 命令(仍由主循环线程应用)。
 
 **注释与格式取舍**: 已存在键的注释保留; **值未变化的键跳过赋值**以保留原标量形态(否则 ruamel 会把无引号的 `16585`/`true` 重写为 `'16585'`/`'true'`); 新增/修改的标量走 `_plain_scalar`(数字/布尔写成原生标量, BaseLoader 下语义等价); **列表整体替换, 项级注释不保留**。
 
@@ -129,6 +129,7 @@ global_speed_limit_curve:
 | `auto-qb-data/state.lock` / `state.lock.meta.json` | 单实例锁及伴生 meta (由 state_file 派生: 去扩展名 + `.lock`, meta 再加 `.meta.json`) |
 | `auto-qb-data/logs/auto-qb.log` | RotatingFileHandler, maxBytes 按 `log.max_bytes`, 5 备份 (log.file 未配置时默认落盘此路径, 显式配 `log.file` 优先; setup_logging 自动建 logs/ 子目录) |
 | `auto-qb-data/skip-check-backup/` | 跳检重加失败时的 .torrent 备份 (由 dirname(state_file) 派生, 与状态同目录) |
+| `auto-qb-data/config.yml.bak` | 配置保存前的自动备份(路径由 `web.py` 传入 `write_tree`, 落在 data_dir 下, **不再**在项目根目录生成; 父目录不存在时自动创建) |
 | `torrents.txt` | `--export-torrents_info` 的调试输出 |
 
 ## 测试配置样例
