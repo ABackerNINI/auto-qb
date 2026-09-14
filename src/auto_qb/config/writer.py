@@ -6,6 +6,8 @@
 - **R 级字段(state_file/data_dir)不可热切换**: 树中对应值回退为磁盘旧值(旧行为不变),
   其余级别字段照常写入并热重载
 - **ruamel round-trip 写盘**: 已存在键的注释保留; 列表项与新增键无注释(设计取舍, 见计划)
+- **备份路径由调用方指定**(`write_tree(..., backup_path)`): 生产落 `<data_dir>/<配置名>.bak`,
+  不在项目根目录产生 `config.yml.bak`
 
 前端持有的树与磁盘 YAML 同构(标量全为字符串, 由 yaml.BaseLoader 语义决定), 因此
 `read_tree` 读出的树可直接编辑后原样提交, 无需任何格式往返转换。
@@ -49,14 +51,16 @@ def read_tree(config_path: str) -> Dict[str, Any]:
     return data
 
 
-def write_tree(config_path: str, tree: Dict[str, Any], old_config) -> WriteResult:
+def write_tree(config_path: str, tree: Dict[str, Any], old_config, backup_path: str) -> WriteResult:
     """校验并写回配置树
 
     流程: 结构自检 -> 临时文件校验(load_config) -> R 级字段回退旧值 -> 备份 -> round-trip 写盘。
+    `backup_path` 由调用方给出 —— 生产为 `<data_dir>/<配置文件名>.bak`(见 web.py), 备份集中到
+    运行时数据目录, 不在项目根目录散落 `config.yml.bak`; 备份目录不存在时自动创建。
     校验失败抛 `ConfigError`(由调用方转 400 且不触碰磁盘); 结构非法抛 `ValueError`。
     """
     changes, restart_required = _prepare(config_path, tree, old_config)
-    _backup(config_path)
+    _backup(config_path, backup_path)
     _dump_roundtrip(config_path, tree)
     return WriteResult(changes=changes, restart_required=restart_required)
 
@@ -143,11 +147,14 @@ def _delete_path(tree: dict, parts: List[str]) -> None:
         node.pop(parts[-1], None)
 
 
-def _backup(config_path: str) -> None:
-    """写盘前备份为 <config>.bak(与旧行为一致)"""
+def _backup(config_path: str, backup_path: str) -> None:
+    """写盘前把当前配置备份到 backup_path(调用方指定的绝对/相对路径; 父目录按需创建)"""
     if not os.path.exists(config_path):
         return
-    with open(config_path, "r", encoding="utf-8") as src, open(config_path + ".bak", "w", encoding="utf-8") as dst:
+    parent = os.path.dirname(backup_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(config_path, "r", encoding="utf-8") as src, open(backup_path, "w", encoding="utf-8") as dst:
         dst.write(src.read())
 
 

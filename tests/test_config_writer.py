@@ -13,10 +13,13 @@
 - test_write_tree_restart_field_removed_when_absent_on_disk: 磁盘未配置的 R 级字段提交后被删除(走默认值)
 - test_write_tree_updates_derived_state_file: 改 data_dir 时派生的 state_file 一并回退
 - test_write_tree_writes_float_and_negative_scalars_plain: 浮点字符串按原生标量写出
-- test_write_tree_backup_created: 写盘前生成 .bak 备份
+- test_write_tree_backup_created: 写盘前生成 `data/config.yml.bak` 备份(父目录按需创建)
 - test_preview_tree_does_not_touch_disk: 预览不落盘, 且内容与写盘结果一致(除注释形态)
 - test_preview_tree_invalid_raises: 预览同样做校验
+- test_preview_tree_does_not_create_backup: 预览不产生任何备份文件
 """
+import os
+
 import pytest
 
 from auto_qb.config.errors import ConfigError
@@ -35,6 +38,11 @@ def _make(tmp_path, text: str) -> str:
 def _text(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+def _bak(tmp_path) -> str:
+    """测试用备份路径: 与生产同形落在独立 data 目录下(`<data_dir>/<配置名>.bak`)"""
+    return str(tmp_path / "data" / "config.yml.bak")
 
 
 # ---------------------------------------------------------------- 读取
@@ -69,7 +77,7 @@ def test_write_tree_requires_config_root(tmp_path):
     """缺少 config 根段(如误删整段)直接拒绝, 不当成"全默认"静默接受"""
     path = _make(tmp_path, BASE)
     with pytest.raises(ValueError):
-        write_tree(path, {"qbittorrent": {}}, load_config(path))
+        write_tree(path, {"qbittorrent": {}}, load_config(path), _bak(tmp_path))
 
 
 def test_write_tree_invalid_rejected_without_touching_disk(tmp_path):
@@ -79,9 +87,9 @@ def test_write_tree_invalid_rejected_without_touching_disk(tmp_path):
     tree = read_tree(path)
     tree["config"]["main_tick"] = "abc"
     with pytest.raises(ConfigError):
-        write_tree(path, tree, load_config(path))
+        write_tree(path, tree, load_config(path), _bak(tmp_path))
     assert _text(path) == before
-    assert not (tmp_path / "config.yml.bak").exists()
+    assert not (tmp_path / "data").exists(), "校验失败时连备份目录都不应创建"
 
 
 # ---------------------------------------------------------------- 写盘
@@ -103,7 +111,7 @@ def test_write_tree_preserves_comments_and_plain_scalars(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["main_tick"] = "3s"
-    write_tree(path, tree, old)
+    write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
     assert "# 连接设置" in text, "已有键注释必须保留"
@@ -119,7 +127,7 @@ def test_write_tree_updates_existing_scalar(tmp_path):
     tree = read_tree(path)
     tree["config"]["main_tick"] = "5S"
     tree["config"]["web"]["enabled"] = "true"
-    write_tree(path, tree, old)
+    write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
     assert "5S" in text
@@ -135,7 +143,7 @@ def test_write_tree_adds_and_removes_keys(tmp_path):
     tree = read_tree(path)
     tree["config"]["interval"] = "90S"
     del tree["config"]["max_tasks_per_tick"]
-    write_tree(path, tree, old)
+    write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
     assert "90S" in text and "interval" in text
@@ -151,7 +159,7 @@ def test_write_tree_removes_empty_list(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["delete_tags"] = []
-    write_tree(path, tree, old)
+    write_tree(path, tree, old, _bak(tmp_path))
     text = _text(path)
     assert '"A"' not in text and "- A" not in text
     assert load_config(path).delete_tags == []
@@ -166,7 +174,7 @@ def test_write_tree_restart_field_fallback(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["data_dir"] = "ui-dir"
-    result = write_tree(path, tree, old)
+    result = write_tree(path, tree, old, _bak(tmp_path))
 
     assert "data_dir" in result.restart_required
     text = _text(path)
@@ -180,7 +188,7 @@ def test_write_tree_updates_derived_state_file(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["data_dir"] = "ui-dir"
-    result = write_tree(path, tree, old)
+    result = write_tree(path, tree, old, _bak(tmp_path))
     assert set(result.restart_required) <= {"data_dir", "state_file"}
     # 磁盘上既没有 data_dir 新值, 也没有派生出的 state_file 新值
     assert "ui-dir" not in _text(path)
@@ -192,7 +200,7 @@ def test_write_tree_restart_field_removed_when_absent_on_disk(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["data_dir"] = "ui-dir"
-    result = write_tree(path, tree, old)
+    result = write_tree(path, tree, old, _bak(tmp_path))
 
     assert "data_dir" in result.restart_required
     assert "data_dir" not in _text(path), "磁盘未配置的 R 级字段不得被写入"
@@ -213,7 +221,7 @@ def test_write_tree_writes_float_and_negative_scalars_plain(tmp_path):
             }
         }
     }
-    write_tree(path, tree, old)
+    write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
     assert "required_share_ratio: 1.5" in text
@@ -235,7 +243,7 @@ def test_write_tree_keeps_lossy_numeric_strings_quoted(tmp_path):
             }
         }
     }
-    write_tree(path, tree, old)
+    write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
     assert "1.10" in text, "1.10 不得被写成 1.1"
@@ -244,14 +252,35 @@ def test_write_tree_keeps_lossy_numeric_strings_quoted(tmp_path):
 
 
 def test_write_tree_backup_created(tmp_path):
-    """写盘前生成 <config>.bak 备份(内容为写盘前文本)"""
+    """写盘前生成 `<data_dir>/<配置名>.bak` 备份(内容为写盘前文本; 父目录不存在时按需创建)
+
+    备份落 data 目录是用户要求: 不再在项目根目录散落 config.yml.bak。
+    """
     path = _make(tmp_path, BASE)
     before = _text(path)
     old = load_config(path)
     tree = read_tree(path)
     tree["config"]["main_tick"] = "7s"
-    write_tree(path, tree, old)
-    assert (tmp_path / "config.yml.bak").read_text(encoding="utf-8") == before
+    backup = _bak(tmp_path)
+    assert not os.path.isdir(os.path.dirname(backup)), "前置: 备份目录本不存在"
+
+    write_tree(path, tree, old, backup)
+
+    assert os.path.isdir(os.path.dirname(backup)), "应自动创建备份目录"
+    with open(backup, "r", encoding="utf-8") as f:
+        assert f.read() == before
+    assert not (tmp_path / "config.yml.bak").exists(), "项目目录不得再产生 .bak"
+
+
+def test_preview_tree_does_not_create_backup(tmp_path):
+    """预览不产生任何备份文件(备份只属于真实写盘路径)"""
+    path = _make(tmp_path, BASE)
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["main_tick"] = "8s"
+    preview_tree(path, tree, old)
+    assert not os.path.exists(_bak(tmp_path))
+    assert not (tmp_path / "config.yml.bak").exists()
 
 
 # ---------------------------------------------------------------- 预览

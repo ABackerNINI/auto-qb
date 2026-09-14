@@ -40,6 +40,15 @@ def _app_version() -> str:
     return __version__
 
 
+def _config_backup_path(manager) -> str:
+    """配置保存前的备份路径: `<data_dir>/<配置文件名>.bak`
+
+    备份集中到运行时数据目录(与 state/log/web.token 同处), 不在项目根目录产生 config.yml.bak。
+    data_dir 为相对路径时以 cwd 为基准 —— 与 state_file 的派生口径一致(见 config/loaders._under)。
+    """
+    return os.path.join(manager.config.data_dir, os.path.basename(manager.config_path) + ".bak")
+
+
 def ensure_web_token(manager) -> str:
     """确定 WEB 访问密钥: 显式配置优先; 否则随机生成并持久化到 data_dir/web.token(0600)"""
     if manager.config.web.token:
@@ -209,7 +218,7 @@ def create_app(manager) -> FastAPI:
         if not isinstance(tree, dict):
             raise HTTPException(status_code=400, detail="tree 必须是对象")
         try:
-            result = write_tree(manager.config_path, tree, manager.config)
+            result = write_tree(manager.config_path, tree, manager.config, _config_backup_path(manager))
         except (ConfigError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e))
 
