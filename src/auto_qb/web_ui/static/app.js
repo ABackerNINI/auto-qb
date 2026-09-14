@@ -18,8 +18,9 @@ const GROUP_COLUMNS = [
   { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
   { key: "total_size", label: "总大小", tpl: "minmax(100px, 1fr)", sortable: true },
-  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
+  // 分类在标签之前(用户要求分组表/明细表口径一致); 列宽按**列 key**记忆 -> 换序不丢宽度
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
+  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
   { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)" },
   // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 qbmanager._build_group_view)
   { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true },
@@ -32,8 +33,9 @@ const DETAIL_COLUMNS = [
   { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)" },
   { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)" },
-  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)" },
+  // 与分组表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)" },
+  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)" },
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)" },
   { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)" },
   // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值)
@@ -153,6 +155,7 @@ const app = createApp({
       },
       _toastSeq: 0,           // 提示条自增 id
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
+      _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位)
     };
   },
   computed: {
@@ -378,9 +381,6 @@ const app = createApp({
     visibleDetailCols() {
       return this._visibleCols("detail");
     },
-    hiddenCount() {
-      return (this.colHidden.group || []).length + (this.colHidden.detail || []).length;
-    },
   },
   async mounted() {
     // 点击页面空白处: 关闭右键菜单与列选择器(两者都是临时浮层)
@@ -402,9 +402,15 @@ const app = createApp({
     let resizeTimer = null;
     window.addEventListener("resize", () => {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => this.materializeColumns(), 120);
+      resizeTimer = setTimeout(() => {
+        this._syncHeadHeight();
+        this.materializeColumns();
+      }, 120);
     });
-    this.$nextTick(() => this.materializeColumns());
+    this.$nextTick(() => {
+      this._syncHeadHeight();
+      this.materializeColumns();
+    });
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
@@ -417,8 +423,15 @@ const app = createApp({
   watch: {
     // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)
     page() {
-      this.$nextTick(() => this.materializeColumns());
+      this.$nextTick(() => {
+        this._syncHeadHeight();
+        this.materializeColumns();
+      });
     },
+  },
+  updated() {
+    // 顶栏高度会随"状态分布条是否渲染/窄屏折行"变化 -> 每帧后同步(值未变时内部直接返回)
+    this._syncHeadHeight();
   },
   methods: {
     async api(path, options = {}) {
@@ -1006,6 +1019,17 @@ const app = createApp({
     _headEl(page) {
       const ref = this.$refs[page === "group" ? "groupHead" : "detailHead"];
       return Array.isArray(ref) ? ref[0] : ref || null;
+    },
+    /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 辅种页左栏 .rail 的吸顶偏移与最大可用
+     * 高度都依赖它。**不写死数值** —— 高度会随媒体查询、状态条是否渲染、窄屏折行而变化;
+     * 值未变时直接返回, 避免每帧都写一次 CSS 变量(updated 会频繁触发)。
+     */
+    _syncHeadHeight() {
+      const el = document.querySelector(".sticky-head");
+      const h = el ? Math.round(el.getBoundingClientRect().height) : 0;
+      if (h === this._headH) return;
+      this._headH = h;
+      document.documentElement.style.setProperty("--head-h", h + "px");
     },
     /* 把默认模板"实体化"为 px:
      * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)

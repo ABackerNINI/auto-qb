@@ -49,6 +49,13 @@
   --pink-soft: rgba(244, 114, 182, .16);
   --teal: #2dd4bf;
   --teal-soft: rgba(45, 212, 191, .16);
+  /* 分级补充色(与上面同族但层次更细): 给"分类/列/搜索/路径"等图标与徐章提供
+   * 可区分的第 4~6 个色位 —— 避免所有图标都落在同一组蓝绿色上而互相混淆 */
+  --indigo: #818cf8;
+  --indigo-soft: rgba(129, 140, 248, .16);
+  --cyan: #22d3ee;
+  --cyan-soft: rgba(34, 211, 238, .16);
+  --lime: #a3e635;
 
   /* HR 标记: pending = 已触发但未达标(最醒目), done = 已达标(镇静的冷暖对照色) */
   --hr-pending: #ff8a3d;
@@ -68,10 +75,10 @@
 
   /* 衍生语义色(HR 栏 / 限速对照 / 今日流量): 与状态色同族但语义独立, 避免"紫色=限速"这类误读 */
   --hr-hit: #ff8a3d;
-  --limit-hit: #a78bfa;
-  --limit-actual: #38bdf8;
-  --today-up: #2dd4bf;
-  --today-down: #818cf8;
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
 
   /* 表面工程: 玻璃底色(顶栏/吸底条) / 品牌渐变 / 焦点辉光 / 极淡分隔线 */
   --glass: rgba(20, 36, 63, .88);
@@ -111,7 +118,7 @@ button { font-family: inherit; }
 *::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
 
 /* 数值列等宽对齐(避免刷新时数字跳动) */
-.g-stat, .m-progress .val, .stat-pill b, .m-hash, .g-count { font-variant-numeric: tabular-nums; }
+.g-stat, .m-progress .val, .rail-stat .val, .m-hash, .g-count { font-variant-numeric: tabular-nums; }
 
 /* 内联图标(sprite symbol 复用, 无外部图标库依赖) */
 .ico { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor;
@@ -130,6 +137,17 @@ button { font-family: inherit; }
 .ico-hr-pending { color: var(--hr-pending); }
 .ico-hr-done { color: var(--hr-done); }
 .ico-refresh { color: var(--blue); }
+/* 导航与工具类图标(2026-09-14 补齐): 此前这些图标一律继承暗淡的 --fg-dim, 观感上"没有颜色" */
+.ico-seed { color: var(--green); }         /* 辅种管理页签 */
+.ico-config { color: var(--violet); }      /* 设置页签 */
+.ico-find { color: var(--cyan); }          /* 搜索 */
+.ico-cols { color: var(--indigo); }        /* 列选择器 */
+.ico-clear { color: var(--fg-muted); }     /* 清除/关闭 */
+/* 筛选器图标: 与各自筛选项的 chip 色系对应(tag 紫 / 分类靖蓝 / 站点青色 / 路径琥珀) */
+.ico-f-tag { color: var(--violet); }
+.ico-f-category { color: var(--indigo); }
+.ico-f-site { color: var(--teal); }
+.ico-f-path { color: var(--warn); }
 /* 旋转(索引构建中/刷新): 唯一持续的旋转动画, 只在明确的"进行中"语义下使用 */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .9s linear infinite; }
@@ -169,7 +187,11 @@ button { font-family: inherit; }
 /* 服务不可达横幅: 用**不透明**实色底(半透明底在滚动内容上会透出文字, 可读性差) */
 .service-banner { padding: 9px 20px; text-align: center; font-weight: 600; font-size: 13px;
   color: #fecaca; background: #6b1f22; border-bottom: 1px solid #a33a3f; }
-.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+/* z-index 说明: 顶栏内的列选择器弹层必须能盖住下方的同级吸顶条(.status-strip)。两个吸顶条
+ * 各自带 backdrop-filter -> **各自建立层叠上下文**, 弹层的 z-index 无法跨越父级; 因此必须在
+ * "吸顶兄弟层"里把顶栏排到状态条之后(两者都必须 position+z-index, 只加之一无效)。
+ */
+.topbar { position: relative; z-index: 31; display: flex; align-items: center; gap: 16px; padding: 10px 18px;
   background: rgba(20, 36, 63, .88); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
 .topbar .brand { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: .2px; }
 .topbar .ver { padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--fg-dim);
@@ -181,18 +203,6 @@ button { font-family: inherit; }
 .tabs button:hover { color: var(--fg); }
 .tabs button.active { background: var(--accent); color: #fff; box-shadow: var(--shadow-1); }
 .spacer { flex: 1; }
-/* 统计槽: 图标+名称紧跟数值(不要宽定宽槽 —— 那会把"分组"与"69"拉得很远);
- * 数值变化引起的位置抖动由每 pill 仅数值区 tabular-nums + 最小宽度兜底
- */
-.stat-pills { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.stat-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px;
-  border-radius: 999px; background: var(--surface-1); border: 1px solid var(--border-soft);
-  font-size: 11.5px; color: var(--fg-dim); }
-.stat-pill .ico { color: var(--fg-dim); opacity: .75; }
-.stat-pill b { margin-left: 3px; color: var(--fg); font-size: 12.5px; font-weight: 600;
-  text-align: right; }
-/* 速度类数值长度会持续变化: 给它们一个温和的最小平宽(仅够容纳 x.xx MiB/s) */
-.stat-pill.wide b { min-width: 66px; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px;
   font-size: 12px; font-weight: 600; }
 .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -203,7 +213,8 @@ button { font-family: inherit; }
 @keyframes dot-pulse { 50% { opacity: .25; } }
 
 /* 状态分布条: 前端按 members[].kind 聚合(纯展示 + 点击筛选, 无后端参与) */
-.status-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 7px 18px;
+.status-strip { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 10px 12px; padding: 7px 18px;
   background: rgba(16, 31, 56, .72); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
 .dist-bar { display: flex; flex: 0 1 240px; height: 6px; border-radius: 999px; overflow: hidden; background: var(--surface-2); }
 .dist-bar > span { height: 100%; background: currentColor; transition: width .35s var(--ease); }
@@ -263,16 +274,36 @@ button { font-family: inherit; }
 .k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--fg-dim); }
 .k-error, .k-error .swatch { color: var(--error); }
 
-.content { padding: 16px 18px 28px; max-width: 1440px; margin: 0 auto; }
+/* ---------------- 辅种页布局: 左栏信息栏 + 右侧内容 ---------------- */
+/* 信息栏“固定位置”的实现: grid 两列 + 自身 position:sticky(不随页面滚动)。
+ * 吸顶偏移与可用高度用 --head-h(顶栏+状态条的实际高度, 由 app.js 写入 :root) ——
+ * **不写死数值**: 顶栏高度会随媒体查询/状态条是否渲染而变化。
+ */
+.layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 16px; align-items: start;
+  max-width: 1664px; margin: 0 auto; padding: 16px 18px 28px; }
+/* 内容区自身不再限宽/加内边距(已由 .layout 承担); min-width:0 让内部表格能横向滚动而不撑破 grid */
+.content { min-width: 0; }
+.rail { position: sticky; top: calc(var(--head-h, 100px) + 12px); display: flex; flex-direction: column;
+  gap: 10px; max-height: calc(100vh - var(--head-h, 100px) - 24px); overflow-y: auto; }
+.rail-card { display: flex; flex-direction: column; gap: 7px; padding: 11px 12px;
+  border-radius: var(--radius-lg); border: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 58%), var(--bg-card);
+  box-shadow: inset 0 1px 0 var(--hairline), var(--shadow-1); }
+.rail-title { display: flex; align-items: center; gap: 6px; padding-bottom: 3px; font-size: 11px;
+  font-weight: 600; letter-spacing: .05em; color: var(--fg-dim); }
+.rail-title .ico { color: var(--accent); opacity: .9; }
+.rail-stat { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rail-stat .ico { flex: 0 0 auto; }
+.rail-stat .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg-muted); font-size: 12px; }
+.rail-stat .val { flex: 0 0 auto; color: var(--fg); font-weight: 600; font-size: 12.5px;
+  font-variant-numeric: tabular-nums; }
 .muted { color: var(--fg-muted); }
 .error { color: var(--error); }
 .ok { color: var(--green); }
 .center { text-align: center; }
 
 /* ---------------- 辅种分组表 ---------------- */
-/* 表格工具条(列选择器): 常驻但极轻量 —— 只有图标按钮, 不与表格争视觉 */
-.table-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.table-tools-spacer { flex: 1; }
 .col-picker { position: relative; }
 .table-tool { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
@@ -280,31 +311,36 @@ button { font-family: inherit; }
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .table-tool:hover { background: var(--surface-2); color: var(--fg); }
 .table-tool.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hi); }
-.tool-badge { padding: 0 5px; border-radius: 999px; background: var(--accent); color: #fff;
-  font-size: 10.5px; font-weight: 600; }
-/* 列选择器弹层内容(浮层外框与 .pop-menu 共用, 见上方筛选器区) */
-.col-menu-title { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .05em;
+/* 列选择器弹层内容: 与筛选器弹层**同构** —— 选项行复用 .pop-item(整行可点 / 无勾选框 /
+ * 左侧色条 + 亮字表达选中), 此处只补"表名分隔标题"与锁定列标记, 不再自造一套选中视觉。 */
+.col-menu-title { padding: 8px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .05em;
   color: var(--fg-dim); }
-.col-menu-item { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: var(--radius-sm);
-  font-size: 12.5px; color: var(--fg-soft); cursor: pointer; }
-.col-menu-item:hover { background: var(--surface-2); color: var(--fg); }
+.col-menu-title:not(:first-child) { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .col-menu-item.locked { color: var(--fg-dim); cursor: default; }
 .col-menu-item.locked:hover { background: transparent; }
-/* 勾选标记(替代可见 checkbox): 选中才亮起背景与对勾 */
-.col-menu-item .col-mark { flex: 0 0 auto; width: 15px; height: 15px; display: inline-grid; place-items: center;
-  border-radius: 4px; border: 1px solid var(--border-strong); color: transparent;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.col-menu-item .col-mark .ico { width: 11px; height: 11px; stroke-width: 2.2; }
-.col-menu-item.on .col-mark { background: var(--accent); border-color: var(--accent); color: #fff; }
-.col-menu-item.locked .col-mark { border-style: dashed; opacity: .6; }
-.col-menu-item.locked.on .col-mark { background: var(--fg-dim); border-color: var(--fg-dim); }
+/* 锁定列(不可隐藏)标识 + 选中对勾(颜色表达, 无描边) */
+.col-lock { flex: 0 0 auto; padding: 0 6px; border-radius: 999px; background: var(--surface-2);
+  color: var(--fg-dim); font-size: 10px; }
+.col-tick { flex: 0 0 auto; color: var(--accent-hi); stroke-width: 2.2; }
 .col-menu-actions { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px;
   border-top: 1px solid var(--border-soft); }
 /* 横向滚动常开: 列宽拖拽让用户可把某列拉宽, 溢出时表格内滚动而不是撑破页面布局 */
 .group-table { display: flex; flex-direction: column; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+/* 行/列头**必须跟随内容宽度**(fit-content + 至少占满容器): 盒宽若只有容器宽(默认 stretch),
+ * 横向滚动到右侧那一段就没有行底色, 露出页面背景 —— 即用户反馈的"调整列宽出现横向滚动条时
+ * 背景没有同步调整"。列少/无溢出时 min-width:100% 保证仍铺满容器。
+ * 明细区一并如此: 让明细与外层共用**同一条**横向滚动, 不再各滚各的(否则两边位置会错开)。
+ */
+.group-head, .group-row, .detail, .detail-head, .member-row {
+  width: fit-content;
+  min-width: 100%;
+}
 .group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim); font-size: 11.5px;
   font-weight: 600; letter-spacing: .04em; }
 .h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+/* 逐列表头对齐类(模板统一挂 `hc-<列key>`, 与行单元格的 `g-*`/`m-*` 同一列 key):
+ * "站数"列数值右对齐而表头左对齐 -> 视觉错位, 这里按列单独右对齐表头。 */
+.hc-count { text-align: right; }
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
 .h-cell .arrow { font-size: 10px; color: var(--accent); }
@@ -472,23 +508,29 @@ button { font-family: inherit; }
 .ce-grid { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 18px; align-items: start; }
 .ce-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px;
   text-align: center; color: var(--fg-dim); padding: 56px 20px; }
+/* 加载态: 柔和呼吸(比静态文本更有"进行中"的感知); 仅加载分支挂 .loading, 不影响空态文案 */
+@keyframes loading-glow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+.ce-placeholder.loading { animation: loading-glow 1.8s ease-in-out infinite; }
 
 /* 左侧章节导航(卡片化, 激活项用左侧色条 + 柔和高亮; 每项带图标) */
 .ce-side { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 3px; padding: 6px;
   border-radius: var(--radius-lg); background: var(--surface-1); border: 1px solid var(--border-soft); }
 .ce-side-title, .ce-master-title { padding: 6px 10px 8px; font-size: 11.5px; font-weight: 600;
   letter-spacing: .06em; color: var(--fg-dim); text-transform: uppercase; }
+/* 列表右上角的"新增"按钮: 绿色 (增) 与删除的红色形成语义对照 */
+.ce-master-title .ce-icon, .ce-master-title .ce-icon:hover { color: var(--green); }
 .ce-side-item { display: flex; align-items: center; gap: 9px; text-align: left;
   background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--fg-muted);
   padding: 9px 12px; font-size: 13px; cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ce-side-item .ico { color: var(--fg-dim); }
+/* 分区图标: 统一品牌色 + 低透明度(有色但不喧闹), hover/激活时逐级提亮 */
+.ce-side-item .ico { color: var(--accent); opacity: .5; transition: opacity var(--dur) var(--ease); }
 .ce-side-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ce-side-item:hover { background: var(--surface-2); color: var(--fg); }
-.ce-side-item:hover .ico { color: var(--fg-muted); }
+.ce-side-item:hover .ico { opacity: .85; }
 .ce-side-item.active { background: var(--accent-soft); color: #fff; font-weight: 600;
   box-shadow: inset 2px 0 0 var(--accent); }
-.ce-side-item.active .ico { color: var(--accent-hi); }
+.ce-side-item.active .ico { color: var(--accent-hi); opacity: 1; }
 .ce-side-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px;
   background: var(--surface-2); color: var(--fg-muted); }
 .ce-side-item.active .ce-side-badge { background: rgba(59, 130, 246, .25); color: var(--accent-hi); }
@@ -576,8 +618,9 @@ button { font-family: inherit; }
   background: var(--surface-1); transition: border-color var(--dur) var(--ease), opacity var(--dur) var(--ease); }
 .ce-section:hover { border-color: var(--border); }
 .ce-section-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
-.ce-section-head .caret { color: var(--fg-dim); transition: transform var(--dur) var(--ease-spring);
-  transform: rotate(0deg); }
+.ce-section-head .caret { color: var(--accent); opacity: .55; transform: rotate(0deg);
+  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
+.ce-section:hover .ce-section-head .caret { opacity: 1; }
 .ce-section-title { font-size: 13px; font-weight: 600; color: var(--fg); }
 .ce-section-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
@@ -633,9 +676,9 @@ button { font-family: inherit; }
 .ce-list-row .ce-input { flex: 1 1 auto; max-width: 460px; }
 .ce-icon { flex: 0 0 auto; width: 28px; height: 28px; display: inline-grid; place-items: center;
   border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: transparent; color: var(--fg-dim); cursor: pointer; font-size: 13px; line-height: 1;
+  background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 13px; line-height: 1;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease); }
-.ce-icon:hover { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
+.ce-icon:hover { background: var(--surface-2); color: var(--accent-hi); border-color: var(--border-strong); }
 .ce-icon.danger:hover { background: var(--error-soft); color: var(--error); border-color: rgba(248, 113, 113, .5); }
 .ce-icon.flat { border-color: transparent; background: transparent; }
 .ce-icon.flat:hover { background: var(--surface-2); border-color: transparent; }
@@ -668,6 +711,8 @@ button { font-family: inherit; }
   background: transparent; color: var(--fg-muted); font-size: 12.5px; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .ce-add-btn:hover { border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
+.ce-add-btn .ico { color: var(--green); opacity: .85; }
+.ce-add-btn:hover .ico, .ce-add-btn.open .ico { opacity: 1; }
 .ce-add-btn.open { border-style: solid; border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
 .ce-add-btn.inline { width: auto; padding: 4px 10px; font-size: 12px; }
 .ce-add-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
@@ -800,7 +845,8 @@ button.primary { background: var(--accent); }
 /* ---------------- 顶栏搜索框(pill + 前置图标 + 清除钮) ---------------- */
 .top-search { display: flex; align-items: center; gap: 8px; }
 .search-box { position: relative; display: flex; align-items: center; }
-.search-box > .ico { position: absolute; left: 11px; color: var(--fg-dim); pointer-events: none; }
+/* 搜索框前置图标: 用青色而非通用灰, 与"可输入"的语义对应 */
+.search-box > .ico { position: absolute; left: 11px; color: var(--cyan); pointer-events: none; opacity: .85; }
 .top-search input { width: 240px; padding: 7px 32px 7px 33px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--bg-sunken); color: var(--fg); font-size: 13px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), width var(--dur) var(--ease); }
@@ -827,11 +873,11 @@ button.primary { background: var(--accent); }
 .ce-side-item:active, .ce-master-item:active, .ce-picker-item:active { transform: scale(.975); }
 .ce-icon:active, .ctx-item:active { transform: scale(.96); }
 /* hover 抬升: 仅限卡片类元素(行本身已有 translateY(-1px), 不重复) */
-.stat-pill, .badge, .tag-chip, .site-chip, .cat-chip, .col-menu-item, .pop-item {
+.badge, .tag-chip, .site-chip, .cat-chip, .pop-item, .rail-card {
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
     border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.stat-pill:hover { border-color: var(--border-strong); }
+.rail-card:hover { border-color: var(--border-strong); }
 /* 排序箭头: 出现/切换时轻微淡入 + 下移, 避免换列时"跳一下" */
 .h-cell .arrow { display: inline-block; animation: arrow-in .14s var(--ease-out); }
 @keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
@@ -843,15 +889,14 @@ button.primary { background: var(--accent); }
 .tabs button.active { background: var(--grad-brand); box-shadow: var(--glow-accent); }
 /* 吸顶/吸底表面统一用玻璃令牌(此前顶栏硬写 rgba) */
 .topbar { background: var(--glass); }
-/* 表格工具条已移入顶栏(见 .top-search), 此处保留类名以兼容旧缓存页面, 不再占位 */
-.table-tools:empty { display: none; }
 
-/* 限速对照(命中 / 实际): 一致时单值低调, 不一致时高亮 + 呼吸提示需关注 */
-.pill-limit.mismatch { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
-.pill-limit.mismatch .ico { color: var(--warn); opacity: .9; }
-.pill-limit.mismatch .dot { animation: dot-pulse 1.6s ease-in-out infinite; }
-.pill-limit.manual { border-color: var(--accent-line); color: var(--accent-hi); }
-.pill-limit.manual .ico { color: var(--accent-hi); opacity: .9; }
+/* 限速对照(命中 / 实际): 一致时常规文字; 不一致 = 暖色加粗(需关注); 手动设置 = 品牌色 + 锁图标 */
+.pill-limit .ico { opacity: .9; }
+.pill-limit.mismatch .lbl, .pill-limit.mismatch .val { color: var(--warn); }
+.pill-limit.mismatch .val { font-weight: 700; }
+.pill-limit.mismatch .ico { color: var(--warn); }
+.pill-limit.manual .lbl, .pill-limit.manual .val { color: var(--accent-hi); }
+.pill-limit.manual .ico { color: var(--accent-hi); }
 
 /* HR 栏: 未达标进度用暖色, 已全部达标用绿色 check */
 .g-hr { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
@@ -859,28 +904,33 @@ button.primary { background: var(--accent); }
 .g-hr.pending { color: var(--hr-pending); }
 .g-hr.done { color: var(--green); }
 .g-hr .ico { opacity: .85; }
-/* 分享率/做种时长: 与 HR 要求对照(未达 = 暖色提醒, 已达 = 绿色) */
+/* 做种时长 / 分享率: 两列各给一个专属色系(与其它纯数值列区分, 也互相区分);
+ * 当存在 HR 要求时, "未达标 = 暖色 / 已达标 = 绿色" 覆盖专属色(语义优先于装饰色)。
+ */
 .m-pair { display: inline-flex; align-items: baseline; gap: 3px; font-variant-numeric: tabular-nums; }
 .m-pair .req { color: var(--fg-dim); font-size: 11.5px; }
+.m-pair.m-dur { color: var(--teal); }
+.m-pair.m-dur .req { color: var(--teal); opacity: .7; }
+.m-pair.m-ratio { color: var(--violet); }
+.m-pair.m-ratio .req { color: var(--violet); opacity: .7; }
+/* HR 要求对照(覆盖上面的专属色): 未达 = 暖色提醒, 已达 = 绿色 */
 .m-pair.pending { color: var(--hr-pending); }
-.m-pair.pending .req { color: var(--hr-pending); opacity: .75; }
+.m-pair.pending .req { color: var(--hr-pending); opacity: .8; }
 .m-pair.reached { color: var(--green); }
-.m-pair.reached .req { color: var(--green); opacity: .7; }
-/* 今日流量 pill: 用专属色区分上传/下载方向(与顶栏速度 pill 的语义色一致) */
-.pill-today .ico-up { color: var(--today-up); }
-.pill-today .ico-down { color: var(--today-down); }
-/* 两个数值贴合内容(不套用速度 pill 的最小宽, 否则一个 pill 被撑成两倍宽) */
-.pill-today b { min-width: 0; margin: 0 1px; }
-.pill-today .sep { color: var(--fg-dim); opacity: .5; margin: 0 1px; }
-/* 弹层内的多选行(新交互): 整行可点、无可见勾选框、选中用左侧色条 + 淡底 + 亮字 */
-.pop-item.on { background: var(--accent-soft); color: var(--fg); }
-.pop-item.on::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
-  border-radius: 999px; background: var(--accent); }
+.m-pair.reached .req { color: var(--green); opacity: .75; }
+/* 弹层内的多选行(新交互): 整行可点、无可见勾选框、选中用左侧色条 + 淡底 + 亮字。
+ * 焦点必须用 `:focus-visible` 而非 `:focus-within` —— 行本身带 tabindex, 鼠标点击也会聚焦它,
+ * `:focus-within` 会在点击选中的那一刻画出整圈 outline(用户反馈的"点击选中时的边框");
+ * `:focus-visible` 只在键盘操作时命中, 键盘可达性与可见焦点都保留。
+ */
 .pop-item { position: relative; padding-left: 12px; }
-.pop-item.sr-only-input { /* 保留键盘可达性: 勾选框视觉隐藏但仍在 tab 序列内 */ }
+.pop-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.pop-item.on::before { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
+  border-radius: 999px; background: var(--accent); }
+.pop-item.on .pop-count { color: var(--accent-hi); font-weight: 600; }
 .sr-check { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.pop-item:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* 固定宽度的筛选按钮: 计数徽标绝对定位 -> 选中数变化不再改变按钮宽度与后续元素位置 */
 .filter-btn { position: relative; min-width: 92px; justify-content: center; }
 .filter-btn .filter-count { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
@@ -891,23 +941,22 @@ button.primary { background: var(--accent); }
 .filter-btn.active .filter-caret { transform: rotate(180deg); }
 .pill-limit .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 
-/* ============ 顶栏响应式收敛(2026-09-14) ============
- * 顶栏信息密度高(pill 多), 窄屏按"状态优先"**逐级**隐藏: 先缩搜索框 -> 再隐藏刷新间隔
- * -> 再隐藏速度合计与今日流量 -> 最后(900px 以下)整槽让位给折行布局。
- * 保留到最后的是限速对照 —— 它是"程序正在干预 qB"的唯一信号, 也是用户最需要确认的。
- * (旧实现是 1180px 以下直接 `display: none` 整个 .stat-pills, 顶栏信息一下子全没了)
+/* ============ 响应式收敛(2026-09-14 顶栏统计槽迁至左栏后重写) ============
+ * 统计数值全部迁到左栏(.rail)后, 顶栏只剩品牌/页签/搜索/列/状态徐标 —— 不再需要"逐级隐藏 pill"。
+ * 新策略: 窄屏只**收窄**信息栏(不隐藏任何数值), 900px 以下把信息栏折到内容上方横排,
+ * 全部数值始终可见(旧版整槽隐藏会把信息一下子全吞掉, 见 ai/08)。
  */
 @media (max-width: 1320px) {
   .top-search input { width: 168px; }
   .top-search input:focus { width: 208px; }
-  .stat-pill.wide b { min-width: 54px; }
 }
-@media (max-width: 1180px) {
-  .pill-refresh { display: none; }
-  .stat-pill.wide b { min-width: 46px; }
+@media (max-width: 1200px) {
+  .layout { grid-template-columns: 184px minmax(0, 1fr); gap: 12px; }
 }
-@media (max-width: 1000px) {
-  .pill-speed, .pill-today { display: none; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 12px 12px 24px; }
+  .rail { position: static; max-height: none; flex-direction: row; flex-wrap: wrap; }
+  .rail-card { flex: 1 1 208px; }
 }
 
 /* ============ 设置页下拉外观统一(2026-09-14, **仅外观**) ============
@@ -960,7 +1009,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
 @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
 /* chip / pill: 统一的悬浮反馈(含轻微上浮, 让"可交互"更明确) */
-.tag-chip, .cat-chip, .site-chip, .tag-more, .diff-mark, .stat-pill, .topbar .ver {
+.tag-chip, .cat-chip, .site-chip, .tag-more, .diff-mark, .rail-stat, .topbar .ver {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease-out); }
@@ -981,16 +1030,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .detail, .ctx-menu, .toast, .modal, .ce-picker { animation-timing-function: var(--ease-out); }
 
 /* ---------------- 响应式(窄屏: 折行 + 单列, 表格横向滚动) ---------------- */
-@media (max-width: 1180px) {
-  .top-search input { width: 190px; }
-  .top-search input:focus { width: 230px; }
-}
 @media (max-width: 900px) {
-  /* 900px 以下顶栏换行, 统计槽整体让位(避免把 brand/tabs 挤掉) */
-  .stat-pills { display: none; }
+  /* 900px 以下顶栏换行(统计信息已在左栏, 顶栏不再有需要让位的统计槽) */
   .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
   .topbar .spacer { display: none; }
-  .content, .ce-page { padding: 12px 12px 24px; }
+  .ce-page { padding: 12px 12px 24px; }
   .status-strip { padding: 7px 12px; overflow-x: auto; }
   .dist-bar { flex-basis: 120px; }
   /* 设置页: 侧栏与主从列表转横排, 主区占满宽度 */
