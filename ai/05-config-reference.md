@@ -1,5 +1,7 @@
 # 05 配置参考与运行时文件
 
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+
 ## 配置加载机制 (config.py `load_config`)
 
 - YAML 用 **`yaml.BaseLoader`** 加载 → **所有标量都是字符串** (包括数字/布尔), 随后经 `utils.parse_*` 转换 (`parse_time`/`parse_fsize`/`parse_speed`/`parse_bool`/`int()`)。因此:

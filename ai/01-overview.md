@@ -1,5 +1,7 @@
 # 01 项目概览与领域知识
 
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+
 ## 项目定位
 
 **auto-qb** (v0.2.0, 🚧施工中) — 基于 [qbittorrent-api](https://pypi.org/project/qbittorrent-api/) 的 PT 种子自动化管理工具。长驻运行, 每 2 秒一个 tick, **与 qB 通信走 `/api/v2/sync/maindata` 的 rid 增量同步**(只收变化种子的变化字段, 不再每 2s 全量拉取 —— 大幅降低 qB 端序列化开销), 自动管理种子: 打标签/分类、HR 合规、辅种(跨种)分组与缺文件保护、自定义规则引擎、tracker 级与全局限速。

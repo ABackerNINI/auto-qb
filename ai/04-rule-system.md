@@ -1,5 +1,7 @@
 # 04 规则系统详解
 
+> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见 README); 文内带日期条目为增量更新, 最新易变状态见 [10-active-context.md](10-active-context.md)。
+
 > 代码: `rules/base.py` (Rule/RuleContext/ActionResult), `rules/conditions.py`, `rules/actions/` (动作包: basic/transfer/checking/full_checking/skip_checking), `rules/registry.py`; 调度: `mixins/rule_engine.py`; 配置加载/校验: `config/loaders.py` + `config/validation.py` (`rules_config`)。
 
 ## 规则的定义与绑定

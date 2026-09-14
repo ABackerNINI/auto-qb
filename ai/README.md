@@ -3,11 +3,14 @@
 > 面向 AI 助手的项目知识库。目标: 让 AI 在不重读全部源码的前提下, 快速建立对项目的准确心智模型, 并安全地修改代码。
 >
 > 所有内容均基于 2026-09-05 的 `develop` 分支源码逐文件核实 (commit `51374bd` 后: 同步 README 文档漂移 + tracker 匹配统一为精准匹配)。若代码与本文冲突, 以代码为准并回写更新本文。
+>
+> 2026-09-14 知识库改造: 新增根级 [AGENTS.md](../AGENTS.md) 统一跨 agent 入口与 [10-active-context.md](10-active-context.md) 易变层; 测试基线数字单点维护于 [07-testing.md](07-testing.md), 其它文档一律引用不手抄。
 
 ## 按任务选择文档
 
 | 你要做的事 | 先读 |
 |-----------|------|
+| **会话开始/收尾** (现在做什么/做到哪) | [10-active-context.md](10-active-context.md) |
 | 第一次接触本项目 / 问"这是什么" | [01-overview.md](01-overview.md) |
 | 理解主循环/任务队列/数据层/异步校验 | [02-architecture.md](02-architecture.md) |
 | 找某个功能在哪个文件 / 加新模块 | [03-modules.md](03-modules.md) |
@@ -23,7 +26,7 @@
 - **项目**: `auto-qb` — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具 (标签/分类/HR 管理、辅种分组与缺文件检查、自定义规则引擎、tracker 级限速、全局限速曲线)。
 - **形态**: 单机长驻 Python 程序, 无包管理配置 (pip 装依赖即用), 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
 - **核心设计**: `QbManager` 由 6 个 mixin 组合; 所有工作 (种子刷新/规则/内置功能/校验轮询) 统一为带内置 interval 的任务, 进单一时间优先堆; `TorrentStore.apply_sync` 走 qB `/api/v2/sync/maindata` rid 增量同步(只对变化种子调 `apply_delta`), `TorrentRecord` 是种子数据的唯一所有者(快照 slot + `_raw` 兜底); `QbApi` Facade写后同步快照; 主循环单线程, 唯一修改队列与 state_file 的线程。
-- **测试**: `pytest` + `tests/helpers.py` 全 Fake (无需真实 qBittorrent; 另有 `FakeQbServer` 本地假 HTTP 服务, 供真实 `qbittorrent-api`/requests 栈的集成测试)。当前基线: **866 passed, 0 skipped, 覆盖率 91%**(ui.py GUI 本体真机冒烟; WEB UI 端到端 = 后端单测 + 临时 Fake 服务浏览器冒烟), 全量运行约 12 秒(含覆盖率报表)。
+- **测试**: `pytest` + `tests/helpers.py` 全 Fake (无需真实 qBittorrent; 另有 `FakeQbServer` 本地假 HTTP 服务, 供真实 `qbittorrent-api`/requests 栈的集成测试)。基线数字 (passed/skipped/覆盖率) 单点维护于 [07-testing.md](07-testing.md) 顶部, 勿在他处手抄; 全量运行约 12 秒(含覆盖率报表)。
 - **文档**: `README.md` (用户视角) 与 `想法.md` (设计草稿) 是上游文档, 已于 2026-09-05 与代码核对同步; 本知识库是代码实况的核对版, 发现漂移时回写更新 (遗留差异见 [08-pitfalls.md](08-pitfalls.md))。
 
 ## 修改代码的黄金法则 (来自项目设计原则)
@@ -38,7 +41,7 @@
 
 ```bash
 # 测试 (项目 venv: .venv, Python 3.12)
-.venv/Scripts/python.exe -m pytest tests -q            # 全量 756 项 + 1 skip, ~7s
+.venv/Scripts/python.exe -m pytest tests -q            # 全量 (基线数字见 07-testing.md 顶部)
 .venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
 .venv/Scripts/python.exe -m pytest --cov=src --cov-report=term-missing tests -q
 

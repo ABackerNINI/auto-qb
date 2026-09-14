@@ -9,9 +9,6 @@ auto-qb-data/
 # 测试跳检备份残留(state_file 配在仓库根时的兜底)
 skip-check-backup/
 
-# copilot自定义指令
-.github/instructions/
-
 # pytest-cov覆盖率文件
 .coverage
 htmlcov/
@@ -25,3 +22,6 @@ logs/
 
 # Trae相关文件
 .trae/
+
+# Awesome-Copilot 列表文件
+awesome-copilot-llms.txt
