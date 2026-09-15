@@ -137,6 +137,12 @@
             <button :class="{ active: page === 'settings' }" @click="openSettings">
               <svg class="ico ico-sm ico-config" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
             </button>
+            <button :class="{ active: statsOpen }" @click="openStats" title="qB 会话/累计流量 · DHT · 连接状态">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
+            </button>
+            <button :class="{ active: page === 'logs' }" @click="openLogs" title="auto-qb 运行日志(手动刷新)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>日志
+            </button>
           </nav>
           <!-- 视图开关(R1A 种子页): 分组表 / 种子页; 追剧视图暂未落地 prism(后续段落), 此处不提供入口;
                localStorage 与 atlas 共源, 若残留 viewMode='shows' 则种子页容器以 v-if="!== 'groups'" 兑底渲染 -->
@@ -352,10 +358,15 @@
             </div>
           </div>
 
-          <!-- 限速对照: 一致只显示命中值; 不一致显示"命中 / 实际"并把原因放进悬停提示 -->
-          <div v-if="limitRows.length" class="rail-card">
+          <!-- 限速对照 + 临时覆盖(FE-2C D2): 卡体在无曲线命中(limitRows 空)时也渲染:
+               覆盖控件与托管状态不限曲线启停 —— 以 speedMode 已加载为准 -->
+          <div v-if="limitRows.length || speedMode.loaded" class="rail-card">
             <div class="rail-title">
               <svg class="ico ico-sm ico-limit" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速对照
+              <span class="rail-spacer"></span>
+              <button class="rail-btn" title="刷新托管状态" @click.stop="loadSpeedMode(true)">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+              </button>
             </div>
             <div v-for="r in limitRows" :key="r.dir" class="rail-stat pill-limit"
                  :class="{ mismatch: r.mismatch, manual: r.reason && r.reason.code === 'manual' }"
@@ -364,6 +375,33 @@
               <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
               <span class="lbl">{{ r.label }}</span>
               <span class="val">{{ fmtLimit(r.target) }}<template v-if="r.mismatch"> / {{ fmtLimit(r.actual) }}</template></span>
+            </div>
+            <!-- 托管状态一行: 曲线托管中(目标值) / 未托管(qB 当前值); 数据源 /api/speed/mode -->
+            <div v-if="speedMode.loaded" class="rail-stat" :title="speedModeLine">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
+              <span class="lbl">托管</span>
+              <span class="val">{{ speedModeLine }}</span>
+            </div>
+            <div v-else-if="speedMode.error" class="rail-stat" :title="speedMode.error">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+              <span class="lbl">托管</span><span class="val">状态未知</span>
+            </div>
+            <!-- 临时覆盖表单: 两方向都必填(后端语义: 两方向都设置, 0=不限); 曲线启用时为临时覆盖, 下一档位恢复 -->
+            <div class="rail-speed-ov">
+              <div class="rail-speed-inputs">
+                <input v-model="speedOverride.up" class="rail-speed-input" type="number" min="0" inputmode="numeric"
+                       placeholder="上行 KiB/s" aria-label="上行限速 KiB/s(0 为不限)">
+                <input v-model="speedOverride.down" class="rail-speed-input" type="number" min="0" inputmode="numeric"
+                       placeholder="下行 KiB/s" aria-label="下行限速 KiB/s(0 为不限)">
+              </div>
+              <button class="rail-speed-btn" :disabled="!speedOvReady || speedOverride.busy"
+                      title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedOverride">
+                <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+                <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
+                {{ speedOverride.busy ? '提交中…' : '临时覆盖' }}
+              </button>
+              <p v-if="speedMode.curveEnabled" class="rail-speed-hint">曲线启用中: 覆盖为临时, 下一档位切换时恢复</p>
+              <p v-else class="rail-speed-hint">两方向都需填写 · 0 = 不限速</p>
             </div>
           </div>
         </aside>
@@ -1187,6 +1225,50 @@
           </footer>
         </template>
       </main>
+
+      <!-- 日志页(FE-2C): auto-qb 自身日志 tail; 等级/行数变更与刷新均手动触发(无自动轮询) -->
+      <main v-if="page==='logs'" class="logs-page">
+        <header class="logs-head">
+          <div class="logs-head-text">
+            <h2><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>运行日志</h2>
+            <p v-if="logs.file" class="ce-sub" :title="logs.file">{{ logs.file }}</p>
+            <p v-else class="ce-sub">日志文件未配置(config.logging.file)</p>
+          </div>
+          <div class="logs-actions">
+            <label class="logs-ctl">等级
+              <select v-model="logs.level" @change="loadLogs()">
+                <option value="">全部</option>
+                <option value="INFO">INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+              </select>
+            </label>
+            <label class="logs-ctl">行数
+              <select v-model.number="logs.num" @change="loadLogs()">
+                <option :value="200">200</option>
+                <option :value="300">300</option>
+                <option :value="500">500</option>
+                <option :value="1000">1000</option>
+                <option :value="2000">2000</option>
+              </select>
+            </label>
+            <button class="ce-btn ghost small" :disabled="logs.loading" @click="loadLogs()">
+              <svg class="ico ico-sm" :class="{ spin: logs.loading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
+            </button>
+          </div>
+        </header>
+        <div class="logs-body">
+          <div v-if="logs.loading && !logs.loaded" class="ce-placeholder loading">正在加载日志…</div>
+          <div v-else-if="logs.error" class="ce-placeholder">
+            <p class="error">{{ logs.error }}</p>
+            <button class="ce-btn" @click="loadLogs()">重试</button>
+          </div>
+          <div v-else-if="!logs.lines.length" class="ce-placeholder">
+            {{ logs.file ? '日志文件暂无内容' : '日志文件未配置, 无法读取日志' }}
+          </div>
+          <pre v-else class="logs-pre">{{ logs.lines.join('\n') }}</pre>
+        </div>
+      </main>
     </template>
 
     <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
@@ -1362,6 +1444,60 @@
         </aside>
       </div>
     </transition>
+    <!-- 统计面板(FE-2C): /api/stats server_state 直取(缺失显示 —); server 为 null 时空态; 与 atlas 同构 -->
+    <div v-if="statsOpen" class="modal-mask" @click.self="closeStats">
+      <div class="modal add-dialog stats-dialog" role="dialog" aria-modal="true" aria-label="qBittorrent 统计">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          <span>qBittorrent 统计</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeStats">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div v-if="statsLoading" class="ce-placeholder loading">正在加载统计…</div>
+          <div v-else-if="statsError" class="ce-placeholder">
+            <p class="error">{{ statsError }}</p>
+            <button class="ce-btn" @click="loadStats()">重试</button>
+          </div>
+          <div v-else-if="!statsServer" class="ce-placeholder">暂无统计(qB 未同步)</div>
+          <div v-else class="stats-grid">
+            <div class="stats-row">
+              <span class="lbl">会话下载</span>
+              <span class="val">{{ statVal(statsServer.dl_info_data, fmtSize) }}<template v-if="statsServer.dl_info_speed"> · 当前 {{ fmtSpeed(statsServer.dl_info_speed) }}</template></span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">会话上传</span>
+              <span class="val">{{ statVal(statsServer.up_info_data, fmtSize) }}<template v-if="statsServer.up_info_speed"> · 当前 {{ fmtSpeed(statsServer.up_info_speed) }}</template></span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">累计下载</span><span class="val">{{ statVal(statsServer.alltime_dl, fmtSize) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">累计上传</span><span class="val">{{ statVal(statsServer.alltime_ul, fmtSize) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">平均速度</span><span class="val">{{ statVal(statsServer.average_down_speed || statsServer.average_up_speed || null, fmtSpeed) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">DHT 节点</span><span class="val">{{ statVal(statsServer.dht_nodes) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">连接状态</span><span class="val">{{ connText(statsServer.connection_status) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">空闲空间</span><span class="val">{{ statVal(statsServer.free_space_on_disk, fmtSize) }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="ce-btn ghost" :disabled="statsLoading" @click="loadStats()">
+            <svg class="ico ico-sm" :class="{ spin: statsLoading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
+          </button>
+          <button class="ce-btn primary" @click="closeStats">关闭</button>
+        </div>
+      </div>
+    </div>
     <!-- 添加种子对话框(R1B): 与 atlas 同构 —— 来源三选一可混合(.torrent 多选 / magnet+URL 文本域) + 保存路径/分类/标签 + qB 添加选项;
          底部 D4 接管预览(静态说明 + 已有组前缀计数), skip_checking 勾选时顶部出警告条 -->
     <div v-if="addOpen" class="modal-mask add-dialog-mask" @click.self="closeAddTorrent()">

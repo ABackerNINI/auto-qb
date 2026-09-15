@@ -288,6 +288,21 @@ const app = createApp({
       addSequential: false,   // 顺序下载
       addFirstLast: false,    // 首末块优先
       addTmm: false,          // 自动种子管理(TMM)
+      // 统计面板(FE-2C): /api/stats → {server: qB server_state | null}; 打开时取一次, 卡内可手动刷新
+      statsOpen: false,
+      statsLoading: false,
+      statsError: "",
+      statsServer: null,
+      // 日志页(FE-2C): /api/log 只读 tail; 无自动轮询(等级/行数变更与刷新按钮均手动触发)
+      logs: {
+        loading: false, error: "", loaded: false,
+        lines: [], file: "",
+        level: "",            // ""=全部 | INFO | WARNING | ERROR(后端按 [LEVEL 标记过滤)
+        num: 300,             // tail 行数(后端钳制 10..2000)
+      },
+      // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
+      speedMode: { loaded: false, curveEnabled: false, target: null, current: null, error: "" },
+      speedOverride: { up: "", down: "", busy: false },  // 两方向都必填数字(后端语义: 两方向都设置, 0=不限)
     };
   },
   computed: {
@@ -558,6 +573,23 @@ const app = createApp({
       }
       return rows;
     },
+    /* 限速托管状态一行文案(FE-2C D2): 曲线托管中显示目标值; 未托管显示 qB 当前生效值 */
+    speedModeLine() {
+      const sm = this.speedMode;
+      if (!sm.loaded) return "";
+      if (sm.curveEnabled) {
+        const t = sm.target || {};
+        return `曲线托管中 · 目标 上${this.fmtLimit(t.upload_kib)} / 下${this.fmtLimit(t.download_kib)}`;
+      }
+      const c = sm.current || {};
+      if (c.upload_limit === undefined && c.download_limit === undefined) return "未托管 · qB 限速未知";
+      return `未托管 · qB 当前 上${this.fmtLimit(c.upload_limit)} / 下${this.fmtLimit(c.download_limit)}`;
+    },
+    /* 覆盖表单可提交: 两方向都已有数字(空串/非数字不放行 —— 后端两方向都设置, 漏传会被当 0=不限) */
+    speedOvReady() {
+      const o = this.speedOverride;
+      return o.up !== "" && o.down !== "" && Number.isFinite(Number(o.up)) && Number.isFinite(Number(o.down));
+    },
     /* 可见列(列选择器只改 colHidden; 顺序始终取自列定义) —— 表头/行/grid 模板共用 */
     visibleGroupCols() {
       return this._visibleCols("group");
@@ -798,6 +830,7 @@ const app = createApp({
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
       else if (this.addOpen) this.closeAddTorrent();  // 添加种子对话框: 确认框优先, 其后于其它浮层
+      else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;
@@ -925,6 +958,12 @@ const app = createApp({
       this.clearSelection();
       this.historyOpen = false;
       this.histHoverIdx = -1;
+      this.statsOpen = false;
+      this.statsServer = null;
+      this.statsError = "";
+      this.logs = { loading: false, error: "", loaded: false, lines: [], file: "", level: "", num: 300 };
+      this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: "" };
+      this.speedOverride = { up: "", down: "", busy: false };
       this.cfgReset();  // 配置树同样是受保护内容, 一并清除(编辑器状态复位)
       this.page = "groups";
       this.searchQuery = "";
@@ -1157,6 +1196,7 @@ const app = createApp({
     },
     startPolling() {
       this.stopPolling();
+      this.loadSpeedMode();  // 限速托管状态(非轮询: 登录/重连时取一次, 卡内可手动刷新)
       this.refresh();
     },
     stopPolling() {
@@ -2676,6 +2716,105 @@ const app = createApp({
         this.toast(`已投递: 删除该种子${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
+      }
+    },
+    /* ---------------- 统计面板(FE-2C): /api/stats 全局状态(server_state 直取, 缺失显示 —) ----------------
+     * 打开时取一次, 卡内"刷新"按钮重取; 不随主循环轮询(统计是低频信息)。
+     * server 为 null(qB 未同步/降级全量不可用)时空态文案; 请求失败给重试。
+     */
+    async openStats() {
+      this.statsOpen = true;
+      await this.loadStats();
+    },
+    closeStats() {
+      this.statsOpen = false;
+    },
+    async loadStats() {
+      this.statsLoading = true;
+      this.statsError = "";
+      try {
+        const r = await this.api("/api/stats");
+        this.statsServer = r.server || null;
+      } catch (e) {
+        if (!e.auth) this.statsError = e.message || "加载失败";
+        this.statsServer = null;
+      } finally {
+        this.statsLoading = false;
+      }
+    },
+    /* 统计值兜底: 字段缺失(null/undefined)显示 —; 0 是合法值(如 DHT 0 节点)原样展示 */
+    statVal(v, fmt) {
+      if (v === null || v === undefined || v === "") return "—";
+      return fmt ? fmt(v) : String(v);
+    },
+    /* qB connection_status 文案(原值兜底; 缺失显示 —) */
+    connText(v) {
+      if (v === null || v === undefined || v === "") return "—";
+      return { connected: "已连接", firewalled: "已连接(防火墙限制)", disconnected: "未连接" }[v] || String(v);
+    },
+    /* ---------------- 日志页(FE-2C): /api/log 只读 tail(等级过滤 + 行数选择 + 手动刷新, 不轮询) ---------------- */
+    async openLogs() {
+      this.page = "logs";  // 顶层页切换(与设置页同型): 表格区卸载, watch(page) 已处理列宽重实体化
+      if (!this.logs.loaded) await this.loadLogs();
+    },
+    async loadLogs() {
+      this.logs.loading = true;
+      this.logs.error = "";
+      try {
+        const q = new URLSearchParams({ lines: String(this.logs.num || 300) });
+        if (this.logs.level) q.set("level", this.logs.level);
+        const r = await this.api(`/api/log?${q.toString()}`);
+        this.logs.lines = r.lines || [];
+        this.logs.file = r.file || "";
+        this.logs.loaded = true;
+      } catch (e) {
+        if (!e.auth) this.logs.error = e.message || "日志加载失败";
+      } finally {
+        this.logs.loading = false;
+      }
+    },
+    /* ---------------- 限速托管状态与临时覆盖(FE-2C D2) ----------------
+     * /api/speed/mode 只读快照; /api/speed/override 两方向都必填(0=不限),
+     * 曲线启用时覆盖是临时的(下一档位切换即恢复), 停用时为常态设置。
+     */
+    async loadSpeedMode(force = false) {
+      if (this.speedMode.loaded && !force) return;
+      try {
+        const r = await this.api("/api/speed/mode");
+        this.speedMode = {
+          loaded: true,
+          curveEnabled: !!r.curve_enabled,
+          target: r.curve_target || null,
+          current: r.current || null,
+          error: "",
+        };
+      } catch (e) {
+        if (!e.auth) this.speedMode.error = e.message || "状态获取失败";
+      }
+    },
+    async submitSpeedOverride() {
+      if (!this.speedOvReady || this.speedOverride.busy) return;
+      const up = Math.max(0, Math.round(Number(this.speedOverride.up)));
+      const down = Math.max(0, Math.round(Number(this.speedOverride.down)));
+      const text = `上 ${this.fmtLimit(up)} / 下 ${this.fmtLimit(down)}`;
+      this.speedOverride.busy = true;
+      try {
+        const resp = await this.api("/api/speed/override", {
+          method: "POST",
+          body: JSON.stringify({ upload_kib: up, download_kib: down }),
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          this.toast(`已临时覆盖全局限速: ${text}`, "ok", 3000);
+          this.speedOverride = { up: "", down: "", busy: false };
+          await this.loadSpeedMode(true);  // 覆盖后刷新托管状态(qB 当前值已变)
+        } else {
+          this.toast(`限速覆盖失败: ${r.error}`, "error", 8000);
+        }
+      } catch (e) {
+        if (!e.auth) this.toast("限速覆盖发送失败: " + e.message, "error");
+      } finally {
+        this.speedOverride.busy = false;
       }
     },
     /* ---------------- 历史流量弹层(今日流量面板入口; 天/月/年切换 + 悬停取值) ---------------- */

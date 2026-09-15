@@ -500,3 +500,16 @@ select option { background: var(--bg-elev); color: var(--fg); }
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .prio-btn:hover { border-color: var(--accent); color: var(--accent); }
 .prio-btn.skipped { color: var(--fg-dim); }
+
+
+/* ================= 统计面板对话框(FE-2C) —— 复用 .modal/.add-dialog 视觉语言(仅引用 tokens) =================
+ * server_state 字段直取, 缺失显示 —; 键值行斑马纹, 右值用 mono 数据字体。
+ */
+.modal.stats-dialog { width: 460px; }
+.stats-grid { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.stats-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 7px 9px; border-radius: var(--radius-sm); }
+.stats-row:nth-child(odd) { background: var(--bg-row); }
+.stats-row .lbl { flex: 0 0 auto; color: var(--fg-dim); font-size: 12px; }
+.stats-row .val { color: var(--fg); font-weight: 600; font-size: 12.5px; text-align: right;
+  font-family: var(--font-mono); overflow-wrap: anywhere; }
