@@ -11,11 +11,15 @@
 
 测试清单:
 - test_apply_delta_only_touches_patch_fields: 增量只处理 patch 内字段, 未提及字段保持
-- test_apply_delta_returns_changed_fields: 返回变化字段名集合(非视图字段/视图字段/非快照字段)
+- test_apply_delta_returns_changed_fields: 返回变化字段名集合(非视图字段/视图字段/升格字段)
 - test_apply_delta_quantizes_view_field: seeding_time 秒级递增不计入变化(量化)
 - test_apply_delta_object_source: 非 Mapping 源(测试替身)按必需字段收集
-- test_apply_delta_non_snapshot_fields_to_raw: RE_ADD_FIELDS 存 _raw + 属性/hasattr 兜底
-- test_record_missing_attribute_raises: 未提供字段抛 AttributeError(不静默 None)
+- test_apply_delta_promoted_readd_fields_to_slots: 升格字段写 slot, _raw 保持空
+- test_apply_delta_unknown_fields_to_raw: 未声明字段(qB 新版本)落 _raw, 属性兜底(前向兼容)
+- test_record_required_fields_always_present: 必需字段全为 slot 恒存在; 未知属性仍抛 AttributeError
+- test_apply_delta_extension_fields: 扩展字段(可选快照字段)更新生效并计入变化集
+- test_record_defaults_are_qb_sentinels: 未提供字段保持 qB 哨兵默认值(老版本兼容)
+- test_record_to_dict_merges_raw: to_dict 快照全字段 + _raw 合并
 - test_record_state_enum_cached_and_invalidated: state_enum 有缓存, state 变化后失效
 - test_store_apply_sync_full_update_first_round: 首轮全量 -> added 全部 + need_validate + 样本
 - test_validate_sample_includes_hash_for_sync_response: sync 值内不含 hash -> 样本需补齐(真机 bug 回归)
@@ -101,8 +105,8 @@ def test_apply_delta_returns_changed_fields():
     rec2 = TorrentRecord(hash="H2")
     # None 视为"未提供"(与历史 update_from 一致), hash 是主键
     assert rec2.apply_delta({"hash": "H2", "name": None, "upspeed": 3}) == {"upspeed"}
-    # 非快照字段(RE_ADD_FIELDS)不计入变化集(不影响视图与冲突判定)
-    assert rec2.apply_delta({"ratio_limit": 1.5}) == frozenset()
+    # 升格字段(原 RE_ADD_FIELDS)现在是快照 slot: 变化计入变化集(非视图字段, 不影响视图)
+    assert rec2.apply_delta({"ratio_limit": 1.5}) == {"ratio_limit"}
     assert rec2.ratio_limit == 1.5
 
 
@@ -123,28 +127,74 @@ def test_apply_delta_object_source():
     assert rec.state_enum is TorrentState("pausedUP")
     assert {"name", "upspeed", "state"} <= changed
     # FakeTorrent 的可选字段默认 None -> 视为"未提供"(与历史 update_from 一致), 不入 _raw
-    assert missing_torrent_fields(rec) == [
-        "ratio_limit", "seeding_time_limit", "inactive_seeding_time_limit", "share_limit_action"
-    ]
+    # 升格后必需字段全部为 slot(带默认值), 鸭子对象恒通过版本校验
+    assert missing_torrent_fields(rec) == []
 
 
-def test_apply_delta_non_snapshot_fields_to_raw():
-    """快照字段走 slot; 非快照必需字段(RE_ADD_FIELDS)存 _raw, 属性访问经 __getattr__ 兜底"""
+def test_apply_delta_promoted_readd_fields_to_slots():
+    """升格字段(原 RE_ADD_FIELDS)写 slot 而非 _raw; 无未知字段时 _raw 保持未初始化"""
     rec = TorrentRecord(hash="H1")
     rec.apply_delta(_full_fields("H1", seq_dl=True, ratio_limit=1.5, share_limit_action="Remove"))
 
     assert rec.seq_dl is True and rec.ratio_limit == 1.5
     assert rec.share_limit_action == "Remove"
-    assert rec._raw["seq_dl"] is True
-    assert missing_torrent_fields(rec) == []  # hasattr 对 _raw 兜底字段成立
+    assert rec._raw is None  # 升格后必需字段不落 _raw
+    assert missing_torrent_fields(rec) == []
 
 
-def test_record_missing_attribute_raises():
-    """未提供的非快照字段抛 AttributeError(不静默 None) —— 版本兼容校验依赖此语义"""
+def test_apply_delta_unknown_fields_to_raw():
+    """未声明字段(qB 新版本前向兼容)落 _raw, 属性/hasattr 兜底 —— 数据不丢"""
     rec = TorrentRecord(hash="H1")
+    rec.apply_delta({"hash": "H1", "some_future_field": 42, "another": "x"})
+
+    assert rec._raw == {"some_future_field": 42, "another": "x"}
+    assert rec.some_future_field == 42 and rec.another == "x"
+    assert "some_future_field" not in missing_torrent_fields(rec)  # 不影响必需字段校验
+
+
+def test_record_required_fields_always_present():
+    """必需字段(快照+重加)全部为 slot: 恒存在(升格后不再 AttributeError), 版本校验恒通过;
+    真正未知的属性仍抛 AttributeError(与 qB AttrDict 语义一致)"""
+    rec = TorrentRecord(hash="H1")
+    assert rec.ratio_limit == -2.0  # qB 哨兵: -2 = 使用全局默认
+    assert rec.share_limit_action == "Default"
+    assert missing_torrent_fields(rec) == []
     with pytest.raises(AttributeError):
-        rec.ratio_limit
-    assert "ratio_limit" in missing_torrent_fields(rec)
+        _ = rec.not_a_real_field
+
+
+def test_apply_delta_extension_fields():
+    """扩展字段(可选快照字段)增量更新生效, 变化计入变化集(非视图字段); None 仍视为未提供"""
+    rec = TorrentRecord(hash="H1")
+    changed = rec.apply_delta({"hash": "H1", "eta": 120, "num_seeds": 3, "magnet_uri": "magnet:?xt=urn:btih:X"})
+
+    assert rec.eta == 120 and rec.num_seeds == 3 and rec.magnet_uri == "magnet:?xt=urn:btih:X"
+    assert changed == {"eta", "num_seeds", "magnet_uri"}
+    assert rec.apply_delta({"eta": None}) == frozenset()  # None = 未提供
+    assert rec.eta == 120
+
+
+def test_record_defaults_are_qb_sentinels():
+    """未提供扩展字段时保持 qB 哨兵默认值(老版本 qB / 端点差异不炸)"""
+    rec = TorrentRecord(hash="H1")
+    assert rec.eta == 8640000  # 无 ETA
+    assert rec.completion_on == -1 and rec.seen_complete == -1 and rec.last_activity == -1
+    assert rec.max_ratio == -1.0 and rec.max_seeding_time == -1 and rec.max_inactive_seeding_time == -1
+    assert rec.magnet_uri == "" and rec.private is False and rec.popularity == 0.0
+    assert rec.tracker == "" and rec.trackers_count == 0 and rec.priority == 0
+
+
+def test_record_to_dict_merges_raw():
+    """to_dict: 快照全字段(含扩展) + _raw 未知字段合并; 惰性缓存槽/tracker_conf 不出现"""
+    rec = TorrentRecord(hash="H1")
+    rec.apply_delta(_full_fields("H1", eta=60, num_leechs=2, popularity=0.5))
+    rec.apply_delta({"hash": "H1", "some_future_field": 1})
+
+    d = rec.to_dict()
+    assert d["hash"] == "H1" and d["eta"] == 60 and d["num_leechs"] == 2 and d["popularity"] == 0.5
+    assert d["some_future_field"] == 1
+    assert "_tags_set" not in d and "_raw" not in d and "tracker_conf" not in d
+    assert set(REQUIRED_TORRENT_FIELDS) <= set(d)
 
 
 def test_record_state_enum_cached_and_invalidated():
@@ -192,7 +242,7 @@ def test_validate_sample_includes_hash_for_sync_response():
     assert "hash" not in client.sync_maindata(rid=0)["torrents"]["H1"]  # 替身值内确实无 hash(真机形状)
     assert store.validate_sample["hash"] == "H1"  # 已补齐
     assert missing_torrent_fields(store.validate_sample) == []
-    assert "hash" not in store.by_hash["H1"]._raw  # 补齐不影响实际字段(不入 _raw)
+    assert not store.by_hash["H1"]._raw  # 补齐不影响实际字段; 升格后 _raw 仅存未知字段(此处为空/未初始化)
     assert store.by_hash["H1"].hash == "H1"
 
 

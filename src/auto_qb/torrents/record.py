@@ -6,7 +6,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Set
 from qbittorrentapi import TorrentState
 
 from ..config import TrackerConfig
-from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELD_SET
+from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
 
 
@@ -15,8 +15,10 @@ class TorrentRecord:
     """种子快照记录: 字段名与 TorrentDictionary 一致, 鸭子类型兼容
 
     种子数据的**唯一所有者**(无需中间投影视图):
-    - 快照字段 = slots(C 级属性访问, 热路径), hash 为主键;
-    - 非快照必需字段(RE_ADD_FIELDS, 跳检重加用) = `_raw` dict, 属性访问经 __getattr__ 兜底;
+    - 快照字段 = slots(C 级属性访问, 热路径), hash 为主键; 字段表单一来源 = compat._SNAPSHOT_FIELDS
+      (2026-09-15 全量扩容: 缓存 qB 种子对象的全部数据字段, 为 WebUI 后续功能供数);
+    - 可选扩展字段缺失时保持 qB 哨兵默认值(-1 = 从未/未设, -2 = 使用全局默认, eta 8640000 = 无 ETA);
+    - 未声明字段(qB 新版本前向兼容) = `_raw` dict, 属性访问经 __getattr__ 兜底;
     - 惰性缓存槽(_tags_set/_state_enum/_trackers_info/_files)跨 tick 存活:
       apply_delta() 只更新变化的字段, 缓存随记录对象保留; 种子删除时记录被回收, 缓存自然清理。
     """
@@ -43,18 +45,75 @@ class TorrentRecord:
     up_limit: int = 0
     added_on: int = 0
 
+    # ---- 限制策略(原 RE_ADD_FIELDS, 自 _raw 升格; -2 = 使用全局默认, -1 = 无限制) ----
+    seq_dl: bool = False
+    f_l_piece_prio: bool = False
+    ratio_limit: float = -2.0
+    seeding_time_limit: int = -2
+    inactive_seeding_time_limit: int = -2
+    share_limit_action: str = "Default"
+    # ---- 传输/会话 ----
+    downloaded_session: int = 0
+    uploaded_session: int = 0
+    eta: int = 8640000  # qB 哨兵: 8640000 = 无 ETA
+    time_active: int = 0
+    last_activity: int = -1  # -1 = 从未传输
+    availability: float = 0.0
+    # ---- tracker/peer 概要 ----
+    num_seeds: int = 0
+    num_leechs: int = 0
+    num_complete: int = 0
+    num_incomplete: int = 0
+    tracker: str = ""
+    trackers_count: int = 0
+    connections_count: int = 0
+    connections_limit: int = 0
+    reannounce_in: int = 0  # 与 reannounce 并存: 不同 qB 版本二选一出现
+    reannounce: int = 0
+    # ---- 分享/做种限制(-1 = 未设) ----
+    max_ratio: float = -1.0
+    max_seeding_time: int = -1
+    max_inactive_seeding_time: int = -1
+    # ---- 元数据 ----
+    magnet_uri: str = ""
+    infohash_v1: str = ""
+    infohash_v2: str = ""
+    private: bool = False
+    comment: str = ""
+    created_by: str = ""
+    creation_date: int = 0
+    has_metadata: bool = False
+    piece_size: int = 0
+    pieces_have: int = 0
+    pieces_num: int = 0
+    # ---- 行为/路径 ----
+    auto_tmm: bool = False
+    download_path: str = ""
+    root_path: str = ""
+    force_start: bool = False
+    super_seeding: bool = False
+    priority: int = 0
+    completion_on: int = -1  # -1 = 未完成
+    seen_complete: int = -1  # -1 = 从未见到完整副本
+    total_wasted: int = 0
+    popularity: float = 0.0
+    # ---- tracker 状态概要 ----
+    has_tracker_error: bool = False
+    has_tracker_warning: bool = False
+    has_other_announce_error: bool = False
+
     # 惰性缓存(不参与 apply_delta 复制)
     _tags_set: Optional[frozenset] = None
     _state_enum: Any = None
     _trackers_info: Optional[List[dict]] = None
     _files: Optional[List[Any]] = None
-    # 非快照必需字段(RE_ADD_FIELDS, 跳检重加用): 仅存于此, 属性访问兜底
+    # 未声明字段(qB 新版本前向兼容): 仅存于此, 属性访问兜底
     _raw: Optional[Dict[str, Any]] = None
 
     tracker_conf: Optional[TrackerConfig] = None
 
     def __getattr__(self, name: str) -> Any:
-        """非快照字段(如跳检所需的 seq_dl/ratio_limit)兜底读取 `_raw`
+        """未声明字段(qB 新版本新增)兜底读取 `_raw`(前向兼容, 数据不丢)
 
         仅在常规属性查找失败时调用(slots 未声明的名字); 缺失仍抛 AttributeError ——
         与 qbittorrentapi AttrDict/TorrentDictionary 语义一致, 故 hasattr 版本校验照常工作。
@@ -85,7 +144,7 @@ class TorrentRecord:
         TorrentDictionary)时只遍历其键 —— 故未变化的种子/字段零开销; 为普通对象
         (测试替身 FakeTorrent 等)时按 REQUIRED_TORRENT_FIELDS 收集属性。
 
-        快照字段写入 slot; 非快照字段(RE_ADD_FIELDS)写入 `_raw`(不计入变化集)。
+        快照字段写入 slot; 未声明字段(qB 新版本前向兼容)写入 `_raw`(不计入变化集)。
         视图字段中配了 `_VIEW_QUANTUM` 步长的按量化值比较(seeding_time 秒级递增不算变化),
         故返回值可直接用 `view_dirty()` 判定是否需要重建 Web 分组视图。
 
@@ -102,7 +161,7 @@ class TorrentRecord:
             if v is None or f == "hash":
                 continue  # hash 是主键; None 视为"未提供"(与历史 update_from 一致)
             if f not in _SNAPSHOT_FIELD_SET:
-                # 非快照字段(RE_ADD_FIELDS 等): 存 _raw 供属性访问兜底, 不参与视图脏判定
+                # 未声明字段(qB 新版本前向兼容): 存 _raw 供属性访问兜底, 不参与视图脏判定
                 if raw is None:
                     raw = self._raw = {}
                 raw[f] = v
@@ -160,6 +219,18 @@ class TorrentRecord:
             except ValueError:
                 self._state_enum = TorrentState.UNKNOWN
         return self._state_enum
+
+    def to_dict(self) -> Dict[str, Any]:
+        """全字段导出: 快照 slots(顺序同 _SNAPSHOT_FIELDS) + _raw 前向兼容字段合并
+
+        未来 WebUI 详情接口的取数入口; 惰性缓存槽(_tags_set/_state_enum/_trackers_info/_files)
+        与 tracker_conf 不进导出。字段值原样透传(qB 哨兵 -1/-2/8640000 不解读, 展示层自行翻译)。
+        """
+        out = {f: getattr(self, f) for f in _SNAPSHOT_FIELDS}
+        raw = self._raw
+        if raw:
+            out.update(raw)
+        return out
 
 # ---------- 惰性缓存(tracker/files) ----------
 
