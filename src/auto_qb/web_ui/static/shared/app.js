@@ -213,6 +213,12 @@ const app = createApp({
       unrecognizedOpen: false,  // 未识别折叠区展开态(追剧视图)
       groupColumns: GROUP_COLUMNS,
       detailColumns: DETAIL_COLUMNS,
+      // 种子详情抽屉(R1B): 各 tab 数据与加载态; _drawerTimer 轮询句柄挂实例(非响应式)
+      drawer: {
+        open: false, hash: "", tab: "general", loading: false, error: "",
+        detail: null, trackers: [], files: [], peers: { peers: [] },
+        trackersLoading: false, filesLoading: false, peersLoading: false,
+      },
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态(定义见文件顶部列模型; 列宽按**列 key** 记忆, 隐藏列由列选择器管理)
@@ -754,6 +760,7 @@ const app = createApp({
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
+      else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;
       else if (this.menu.visible) this.menu.visible = false;
       else if (this.colMenuOpen) this.colMenuOpen = false;
@@ -1961,6 +1968,253 @@ const app = createApp({
       }
       const label = field === "name" ? "种子名" : field === "hash" ? "信息哈希" : "magnet 链接";
       this._copyText(value, label);
+    },
+    /* ---------------- 种子详情抽屉(R1B: WEB UI 替代 qB 界面的详情面板) ----------------
+     * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
+     * trackers/peers 在对应 tab 激活期间 3s 轮询(页面隐藏时暂停), 关闭抽屉即停 —— 不进主循环 tick;
+     * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。 */
+    async openTorrentDrawer(hash) {
+      this.menu.visible = false;
+      this._stopDrawerPoll();
+      this.drawer = {
+        open: true, hash, tab: "general", loading: true, error: "",
+        detail: null, trackers: [], files: [], peers: { peers: [] },
+        trackersLoading: false, filesLoading: false, peersLoading: false,
+      };
+      await this._fetchDrawerDetail();
+    },
+    closeDrawer() {
+      this.drawer.open = false;
+      this._stopDrawerPoll();
+    },
+    _stopDrawerPoll() {
+      if (this._drawerTimer) {
+        clearInterval(this._drawerTimer);
+        this._drawerTimer = null;
+      }
+    },
+    _startDrawerPoll() {
+      this._stopDrawerPoll();
+      this._drawerTimer = setInterval(() => {
+        if (!this.drawer.open || document.hidden) return;
+        if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
+        else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
+      }, 3000);
+    },
+    async _fetchDrawerDetail() {
+      this.drawer.loading = true;
+      this.drawer.error = "";
+      try {
+        const r = await this.api(`/api/torrents/${this.drawer.hash}`);
+        this.drawer.detail = (r && r.torrent) || null;
+        if (!this.drawer.detail) this.drawer.error = "种子不存在或已被删除";
+      } catch (e) {
+        if (!e.auth) this.drawer.error = e.message || "详情获取失败";
+      } finally {
+        this.drawer.loading = false;
+      }
+    },
+    async _fetchDrawerTrackers(silent = false) {
+      if (!silent) this.drawer.trackersLoading = true;
+      try {
+        const r = await this.api(`/api/torrents/${this.drawer.hash}/trackers`);
+        this.drawer.trackers = Array.isArray(r) ? r : [];
+      } catch (e) {
+        if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
+      } finally {
+        this.drawer.trackersLoading = false;
+      }
+    },
+    async _fetchDrawerFiles(silent = false) {
+      if (!silent) this.drawer.filesLoading = true;
+      try {
+        const r = await this.api(`/api/torrents/${this.drawer.hash}/files`);
+        this.drawer.files = Array.isArray(r) ? r : [];
+      } catch (e) {
+        if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
+      } finally {
+        this.drawer.filesLoading = false;
+      }
+    },
+    async _fetchDrawerPeers(silent = false) {
+      if (!silent) this.drawer.peersLoading = true;
+      try {
+        const r = await this.api(`/api/torrents/${this.drawer.hash}/peers`);
+        this.drawer.peers = r || { peers: [] };
+      } catch (e) {
+        if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
+      } finally {
+        this.drawer.peersLoading = false;
+      }
+    },
+    /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次 */
+    drawerTab(tab) {
+      if (this.drawer.tab === tab) return;
+      this.drawer.tab = tab;
+      this._stopDrawerPoll();
+      if (tab === "general") this._fetchDrawerDetail();
+      else if (tab === "trackers") {
+        this._fetchDrawerTrackers();
+        this._startDrawerPoll();
+      } else if (tab === "peers") {
+        this._fetchDrawerPeers();
+        this._startDrawerPoll();
+      } else if (tab === "content") this._fetchDrawerFiles();
+    },
+    /* 抽屉头部动作: 复用 actTorrent(它读 menu.hash 并自带回执/toast) */
+    drawerAct(action) {
+      this.menu.hash = this.drawer.hash;
+      this.actTorrent(action);
+    },
+    /* 抽屉删除: 复用 delTorrent(确认框流程一致); 删除成功(成员消失)后自动收起抽屉 */
+    drawerDel() {
+      this.menu.hash = this.drawer.hash;
+      this._drawerDeletePending = true;
+      Promise.resolve(this.delTorrent()).then(() => {
+        if (this._drawerDeletePending && !this.memberByHash.get(this.drawer.hash)) this.closeDrawer();
+        this._drawerDeletePending = false;
+      });
+    },
+    /* General tab 分组行(预格式化): qB 哨兵在此统一翻译 —— -1=从未/未设, 8640000=无 ETA */
+    drawerGeneralSections() {
+      const d = this.drawer.detail;
+      if (!d) return [];
+      const dur = (v, dash) => (v === null || v === undefined || v < 0) ? (dash || "未设") : this.fmtDuration(v);
+      const ts = (v) => this.fmtTs(v);
+      const size = (v) => this.fmtSizeOrDash(v);
+      const yn = (v) => (v ? "是" : "否");
+      const lim = (v) => (v === null || v === undefined || v < 0) ? "未设" : (v === 0 ? "不限" : this.fmtDuration(v));
+      return [
+        {
+          title: "传输",
+          rows: [
+            { label: "下载速度", text: this.fmtSpeedOrDash(d.dlspeed) },
+            { label: "上传速度", text: this.fmtSpeedOrDash(d.upspeed) },
+            { label: "进度", text: `${((d.progress || 0) * 100).toFixed(1)}%` },
+            { label: "ETA", text: this.fmtEta(d.eta) },
+            { label: "已下载", text: size(d.downloaded) },
+            { label: "已上传", text: size(d.uploaded) },
+            { label: "本次会话下载", text: size(d.downloaded_session) },
+            { label: "本次会话上传", text: size(d.uploaded_session) },
+            { label: "剩余量", text: size(d.amount_left) },
+            { label: "大小", text: size(d.size) },
+            { label: "总大小", text: size(d.total_size) },
+            { label: "可用性", text: (d.availability ?? 0).toFixed(2) },
+            { label: "浪费", text: size(d.total_wasted) },
+            { label: "活跃时间", text: dur(d.time_active, "—") },
+            { label: "做种时间", text: dur(d.seeding_time, "—") },
+            { label: "最近活动", text: ts(d.last_activity) },
+          ],
+        },
+        {
+          title: "分享与做种",
+          rows: [
+            { label: "分享率", text: (d.ratio ?? 0).toFixed(3) },
+            { label: "分享率限制", text: (d.max_ratio ?? -1) < 0 ? "未设" : d.max_ratio.toFixed(2) },
+            { label: "做种时长限制", text: lim(d.max_seeding_time) },
+            { label: "不活跃做种限制", text: lim(d.max_inactive_seeding_time) },
+            { label: "限制动作", text: d.share_limit_action || "—" },
+            { label: "完成于", text: ts(d.completion_on) },
+            { label: "见到完整副本", text: ts(d.seen_complete) },
+          ],
+        },
+        {
+          title: "Peer 与 Tracker",
+          rows: [
+            { label: "做种", text: String(d.num_seeds ?? 0) },
+            { label: "用户(下载)", text: String(d.num_leechs ?? 0) },
+            { label: "完整/下载中", text: `${d.num_complete ?? 0} / ${d.num_incomplete ?? 0}` },
+            { label: "tracker 数", text: String(d.trackers_count ?? 0) },
+            { label: "连接数", text: `${d.connections_count ?? 0} / ${d.connections_limit ?? 0}` },
+            { label: "下次汇报", text: dur(d.reannounce_in || d.reannounce, "—") },
+            { label: "tracker 错误", text: yn(d.has_tracker_error) },
+            { label: "tracker 警告", text: yn(d.has_tracker_warning) },
+          ],
+        },
+        {
+          title: "元数据",
+          rows: [
+            { label: "信息哈希 v1", text: d.infohash_v1 || "—", mono: true },
+            { label: "信息哈希 v2", text: d.infohash_v2 || "—", mono: true },
+            { label: "私有", text: yn(d.private) },
+            { label: "创建于", text: ts(d.creation_date) },
+            { label: "创建工具", text: d.created_by || "—" },
+            { label: "分块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "—" },
+            { label: "已含元数据", text: yn(d.has_metadata) },
+            { label: "备注", text: d.comment || "—" },
+          ],
+        },
+        {
+          title: "行为与路径",
+          rows: [
+            { label: "保存路径", text: d.save_path || "—" },
+            { label: "内容路径", text: d.content_path || "—" },
+            { label: "下载路径", text: d.download_path || "—" },
+            { label: "根路径", text: d.root_path || "—" },
+            { label: "自动种子管理", text: yn(d.auto_tmm) },
+            { label: "强制开始", text: yn(d.force_start) },
+            { label: "超级做种", text: yn(d.super_seeding) },
+            { label: "顺序下载", text: yn(d.seq_dl) },
+            { label: "首末块优先", text: yn(d.f_l_piece_prio) },
+            { label: "添加于", text: ts(d.added_on) },
+          ],
+        },
+      ];
+    },
+    /* Content tab: qB files[].name 为 '/' 分隔相对路径 -> 构树后扁平化(缩进渲染);
+     * 目录行聚合大小; 文件行展示 进度/优先级(0=跳过 1=普通 4|6=高 7=最高), 只读(编辑属后续轮次) */
+    drawerFileRows() {
+      const files = this.drawer.files || [];
+      const root = { dirs: new Map(), files: [], size: 0 };
+      for (const f of files) {
+        const parts = String(f.name || "").split("/").filter(Boolean);
+        let node = root;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (!node.dirs.has(parts[i])) node.dirs.set(parts[i], { dirs: new Map(), files: [], size: 0 });
+          node = node.dirs.get(parts[i]);
+          node.size += f.size || 0;
+        }
+        node.files.push(f);
+      }
+      const prio = (p) => ({ 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" }[p] ?? "普通");
+      const rows = [];
+      const walk = (node, name, depth) => {
+        if (name !== null) rows.push({ depth, dir: true, name, text: this.fmtSize(node.size) });
+        for (const [dn, d] of node.dirs) walk(d, dn, name === null ? 0 : depth + 1);
+        for (const f of node.files) {
+          rows.push({
+            depth: name === null ? 0 : depth + 1, dir: false,
+            name: String(f.name || "").split("/").pop(),
+            text: this.fmtSize(f.size), progress: Math.round((f.progress || 0) * 100),
+            prio: prio(f.priority), skipped: f.priority === 0,
+          });
+        }
+      };
+      walk(root, null, -1);
+      return rows;
+    },
+    /* Peers tab: qB 响应 peers 可能为 dict(以 ip:port 为键)或数组 —— 双形态归一 */
+    drawerPeerRows() {
+      const p = this.drawer.peers || {};
+      const list = Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
+      return list.map((x) => ({
+        addr: `${x.ip || "?"}${x.port ? ":" + x.port : ""}`,
+        client: x.client || "—",
+        flags: x.flags || "—",
+        progress: Math.round((x.progress || 0) * 100),
+        dlspeed: this.fmtSpeedOrDash(x.dlspeed || 0),
+        upspeed: this.fmtSpeedOrDash(x.upspeed || 0),
+        downloaded: this.fmtSizeOrDash(x.downloaded || 0),
+        uploaded: this.fmtSizeOrDash(x.uploaded || 0),
+        relevance: `${Math.round((x.relevance || 0) * 100)}%`,
+      }));
+    },
+    drawerTrackerStatus(s) {
+      return { 0: "未启用", 1: "未连接", 2: "正常", 3: "更新中", 4: "未连接" }[s] ?? "—";
+    },
+    drawerTrackerVirtual(url) {
+      const u = String(url || "");
+      return u.startsWith("**") || ["[DHT]", "[PeX]", "[LSD]"].some((p) => u.startsWith(p));
     },
     /* 删除单个种子: 确认框显示种子名/站点/状态/路径/大小 + 两个选项 */
     async delTorrent() {

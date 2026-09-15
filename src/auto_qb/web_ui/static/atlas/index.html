@@ -597,6 +597,7 @@
                  :class="['s-' + m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
                  :style="gridStyle('torrent')"
                  @click="onTorrentClick(m, $event)"
+                 @dblclick="openTorrentDrawer(m.hash)"
                  @contextmenu.prevent="openMemberMenu($event, m)">
               <template v-for="col in visibleTorrentCols" :key="col.key">
                 <div v-if="col.key === 'name'" class="g-name" :title="m.name">
@@ -880,6 +881,10 @@
             </div>
             <div class="ctx-sep"></div>
             <!-- 复制(R1A): clipboard API + execCommand 降级, toast 反馈(见 app.js copyTorrentInfo) -->
+            <div class="ctx-item" @click="openTorrentDrawer(menu.hash)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
+            </div>
+            <div class="ctx-sep"></div>
             <div class="ctx-item" @click="copyTorrentInfo('name')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
             </div>
@@ -1378,6 +1383,136 @@
     </div>
 
     <transition name="pop">
+    <!-- 种子详情抽屉(R1B): WEB UI 替代 qB 界面的详情面板(常规/Tracker/用户/内容)。
+         Esc/遮罩点击关闭; trackers/peers 在对应 tab 激活期间 3s 轮询, 关闭即停(见 app.js _startDrawerPoll) -->
+    <transition name="drawer">
+      <div v-if="drawer.open" class="drawer-mask" @click.self="closeDrawer()">
+        <aside class="drawer" role="dialog" aria-label="种子详情">
+          <header class="drawer-head">
+            <div class="drawer-title">
+              <span class="g-status" :class="'k-' + ((memberByHash.get(drawer.hash) || {}).kind || 'other')"
+                    :title="kindText((memberByHash.get(drawer.hash) || {}).kind || 'other')">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon((memberByHash.get(drawer.hash) || {}).kind || 'other')"></use></svg>
+              </span>
+              <strong :title="drawer.detail ? drawer.detail.name : drawer.hash">{{ drawer.detail ? drawer.detail.name : drawer.hash }}</strong>
+            </div>
+            <div class="drawer-actions">
+              <button class="ce-btn ghost small" @click="drawerAct('pause')">暂停</button>
+              <button class="ce-btn ghost small" @click="drawerAct('resume')">开始</button>
+              <button class="ce-btn ghost small" @click="drawerAct('reannounce')">强制汇报</button>
+              <button class="ce-btn ghost small danger" @click="drawerDel()">删除</button>
+              <button class="ce-btn ghost small" title="关闭(Esc)" @click="closeDrawer()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+              </button>
+            </div>
+          </header>
+          <nav class="drawer-tabs" role="tablist">
+            <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
+            <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
+            <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
+            <button :class="{ active: drawer.tab === 'content' }" @click="drawerTab('content')">内容</button>
+          </nav>
+          <div class="drawer-body">
+            <div v-if="drawer.loading && !drawer.detail" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
+              <span>正在加载详情…</span>
+            </div>
+            <div v-else-if="drawer.error" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+              <span>{{ drawer.error }}</span>
+            </div>
+            <!-- 常规: HR 块 + 分组字段(预格式化见 drawerGeneralSections) + 全部字段折叠区 -->
+            <template v-else-if="drawer.tab === 'general' && drawer.detail">
+              <div v-if="drawer.detail.hr_triggered" class="drawer-hr" :class="drawer.detail.hr_satisfied ? 'done' : 'pending'">
+                <b>{{ drawer.detail.hr_satisfied ? "H&R 已达标" : "H&R 未达标" }}</b>
+                <span v-if="drawer.detail.hr_tag">{{ drawer.detail.hr_tag }}</span>
+                <span v-if="drawer.detail.hr_tag_done">{{ drawer.detail.hr_tag_done }}</span>
+                <span>要求做种 {{ fmtDuration(drawer.detail.hr_req_time) }}</span>
+                <span v-if="drawer.detail.hr_req_ratio > 0">要求分享率 {{ drawer.detail.hr_req_ratio.toFixed(2) }}</span>
+              </div>
+              <section v-for="sec in drawerGeneralSections()" :key="sec.title" class="drawer-sec">
+                <h4>{{ sec.title }}</h4>
+                <div class="drawer-rows">
+                  <template v-for="r in sec.rows" :key="r.label">
+                    <span class="k">{{ r.label }}</span>
+                    <span class="v" :class="{ mono: r.mono }" :title="String(r.text)">{{ r.text }}</span>
+                  </template>
+                </div>
+              </section>
+              <details class="drawer-raw">
+                <summary>全部字段(原始键值, 与 qB API 字段名一致)</summary>
+                <div class="drawer-rows">
+                  <template v-for="(v, k) in drawer.detail" :key="k">
+                    <span class="k">{{ k }}</span>
+                    <span class="v mono">{{ typeof v === "object" ? JSON.stringify(v) : v }}</span>
+                  </template>
+                </div>
+              </details>
+            </template>
+            <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示 -->
+            <template v-else-if="drawer.tab === 'trackers'">
+              <div v-if="drawer.trackersLoading && !drawer.trackers.length" class="empty"><span>正在加载…</span></div>
+              <table v-else-if="drawer.trackers.length" class="drawer-table">
+                <thead>
+                  <tr><th>URL</th><th>状态</th><th>做种</th><th>用户</th><th>消息</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
+                    <td class="wrap" :title="t.url">{{ t.url }}</td>
+                    <td>{{ drawerTrackerStatus(t.status) }}</td>
+                    <td>{{ t.num_seeds ?? "—" }}</td>
+                    <td>{{ t.num_leeches ?? "—" }}</td>
+                    <td class="wrap">{{ t.msg || "—" }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty"><span>暂无 tracker</span></div>
+            </template>
+            <!-- 用户: qB peers 响应 dict/array 双形态归一(drawerPeerRows) -->
+            <template v-else-if="drawer.tab === 'peers'">
+              <div v-if="drawer.peersLoading && !drawerPeerRows().length" class="empty"><span>正在加载…</span></div>
+              <table v-else-if="drawerPeerRows().length" class="drawer-table">
+                <thead>
+                  <tr><th>地址</th><th>客户端</th><th>标记</th><th>进度</th><th>下行</th><th>上行</th><th>已下载</th><th>已上传</th><th>关联度</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(p, i) in drawerPeerRows()" :key="i">
+                    <td class="mono-cell">{{ p.addr }}</td>
+                    <td class="wrap">{{ p.client }}</td>
+                    <td>{{ p.flags }}</td>
+                    <td>{{ p.progress }}%</td>
+                    <td>{{ p.dlspeed }}</td>
+                    <td>{{ p.upspeed }}</td>
+                    <td>{{ p.downloaded }}</td>
+                    <td>{{ p.uploaded }}</td>
+                    <td>{{ p.relevance }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty"><span>暂无已连接用户</span></div>
+            </template>
+            <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级只读; 优先级编辑属后续轮次) -->
+            <template v-else-if="drawer.tab === 'content'">
+              <div v-if="drawer.filesLoading && !drawer.files.length" class="empty"><span>正在加载…</span></div>
+              <table v-else-if="drawerFileRows().length" class="drawer-table">
+                <thead>
+                  <tr><th>文件</th><th>大小</th><th>进度</th><th>优先级</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(r, i) in drawerFileRows()" :key="i" :class="{ skipped: r.skipped }">
+                    <td class="wrap"><span class="dir-name" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span></td>
+                    <td>{{ r.text }}</td>
+                    <td>{{ r.dir ? "—" : r.progress + "%" }}</td>
+                    <td>{{ r.dir ? "—" : r.prio }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty"><span>无文件列表</span></div>
+            </template>
+          </div>
+        </aside>
+      </div>
+    </transition>
     <div v-if="modal.visible" class="modal-mask" @click.self="resolveModal(false)">
       <div class="modal" :class="{ danger: modal.danger, wide: modal.wide }" role="dialog" aria-modal="true">
         <div class="modal-title">
