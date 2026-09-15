@@ -303,6 +303,16 @@ const app = createApp({
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
       speedMode: { loaded: false, curveEnabled: false, target: null, current: null, error: "" },
       speedOverride: { up: "", down: "", busy: false },  // 两方向都必填数字(后端语义: 两方向都设置, 0=不限)
+      // 分类/标签管理对话框(FE-2C2): GET /api/categories|tags 拉列表 + 新建行; 行级改路径/删除走既有确认/输入原语
+      mgrOpen: "",           // "" | "category" | "tag"(同一时刻只开一个)
+      mgrLoading: false,
+      mgrError: "",
+      mgrCategories: [],     // [{name, save_path}](GET /api/categories 的 map 展平)
+      mgrTags: [],           // [名字...](GET /api/tags 原样)
+      mgrNewCatName: "",     // 新建分类行: 名称
+      mgrNewCatPath: "",     // 新建分类行: 保存路径(可空)
+      mgrNewTags: "",        // 新建标签行: 逗号分隔可批量
+      mgrBusy: false,        // 写操作回执等待中(防重复提交 + 关闭窗口误触)
     };
   },
   computed: {
@@ -831,6 +841,7 @@ const app = createApp({
       if (this.modal.visible) this.resolveModal(false);
       else if (this.addOpen) this.closeAddTorrent();  // 添加种子对话框: 确认框优先, 其后于其它浮层
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
+      else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;
@@ -961,6 +972,8 @@ const app = createApp({
       this.statsOpen = false;
       this.statsServer = null;
       this.statsError = "";
+      this.mgrOpen = "";
+      this.mgrBusy = false;
       this.logs = { loading: false, error: "", loaded: false, lines: [], file: "", level: "", num: 300 };
       this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: "" };
       this.speedOverride = { up: "", down: "", busy: false };
@@ -2751,6 +2764,129 @@ const app = createApp({
     connText(v) {
       if (v === null || v === undefined || v === "") return "—";
       return { connected: "已连接", firewalled: "已连接(防火墙限制)", disconnected: "未连接" }[v] || String(v);
+    },
+    /* ---------------- 分类/标签管理对话框(FE-2C2): qB 分类/标签的增删改 ----------------
+     * 列表数据源 GET /api/categories|tags; 写操作走 POST /api/categories(/edit|/remove) 与 /api/tags(/remove)。
+     * CRUD 成功后重拉列表刷新对话框; 对话框关闭后主列表随下一轮 rid 轮询自然更新(不强刷)。
+     */
+    openMgr(kind) {
+      this.filterMenu = "";  // 从筛选弹层进入: 先收起弹层再开对话框
+      this.mgrOpen = kind;
+      this.mgrCategories = [];
+      this.mgrTags = [];
+      this.mgrNewCatName = "";
+      this.mgrNewCatPath = "";
+      this.mgrNewTags = "";
+      this.mgrError = "";
+      this.loadMgr();
+    },
+    closeMgr() {
+      if (this.mgrBusy) return;  // 写操作回执等待期不允许误关
+      this.mgrOpen = "";
+    },
+    async loadMgr() {
+      this.mgrLoading = true;
+      this.mgrError = "";
+      try {
+        if (this.mgrOpen === "category") {
+          // qB categories: {名字: {save_path, ...}} → 行数组(名字字典序)
+          const r = await this.api("/api/categories");
+          const cats = r.categories || {};
+          this.mgrCategories = Object.keys(cats)
+            .map((name) => ({ name, save_path: (cats[name] && cats[name].save_path) || "" }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        } else {
+          const r = await this.api("/api/tags");
+          this.mgrTags = (r.tags || []).slice().sort((a, b) => a.localeCompare(b));
+        }
+      } catch (e) {
+        if (!e.auth) this.mgrError = e.message || "加载失败";
+      } finally {
+        this.mgrLoading = false;
+      }
+    },
+    async submitMgrCategory() {
+      const name = this.mgrNewCatName.trim();
+      if (!name) { this.toast("分类名称不能为空", "warn"); return; }
+      this.mgrBusy = true;
+      try {
+        const payload = { name };
+        const savePath = this.mgrNewCatPath.trim();
+        if (savePath) payload.save_path = savePath;  // 可空: 留空 = 仅建分类不带路径
+        await this.api("/api/categories", { method: "POST", body: JSON.stringify(payload) });
+        this.toast(`已创建分类: ${name}`, "ok", 2500);
+        this.mgrNewCatName = "";
+        this.mgrNewCatPath = "";
+        await this.loadMgr();
+      } catch (e) {
+        if (!e.auth) this.toast(`创建分类失败: ${e.message}`, "error", 8000);
+      } finally {
+        this.mgrBusy = false;
+      }
+    },
+    async submitMgrTags() {
+      // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
+      const tags = this.mgrNewTags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+      if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
+      this.mgrBusy = true;
+      try {
+        await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags }) });
+        this.toast(`已创建 ${tags.length} 个标签`, "ok", 2500);
+        this.mgrNewTags = "";
+        await this.loadMgr();
+      } catch (e) {
+        if (!e.auth) this.toast(`创建标签失败: ${e.message}`, "error", 8000);
+      } finally {
+        this.mgrBusy = false;
+      }
+    },
+    async mgrEditCatPath(name) {
+      const cur = (this.mgrCategories.find((c) => c.name === name) || {}).save_path || "";
+      const p = await this.promptDialog("修改分类保存路径", cur, {
+        body: `分类: ${name}`, placeholder: "如 D:\\Torrents\\TV", okText: "保存",
+      });
+      if (p === null) return;  // 取消/遮罩/Esc 均不写
+      const savePath = p.trim();
+      if (!savePath) { this.toast("保存路径不能为空", "warn"); return; }
+      if (savePath === cur) { this.toast("未作修改", "ok", 2000); return; }
+      this.mgrBusy = true;
+      try {
+        await this.api("/api/categories/edit", { method: "POST", body: JSON.stringify({ name, save_path: savePath }) });
+        this.toast(`已更新分类路径: ${name}`, "ok", 2500);
+        await this.loadMgr();
+      } catch (e) {
+        if (!e.auth) this.toast(`修改分类路径失败: ${e.message}`, "error", 8000);
+      } finally {
+        this.mgrBusy = false;
+      }
+    },
+    async mgrDeleteCategory(name) {
+      const ok = await this.confirmDialog("删除分类", `将删除分类「${name}」(不删除种子与文件)`, { okText: "删除", danger: true });
+      if (!ok) return;
+      this.mgrBusy = true;
+      try {
+        await this.api("/api/categories/remove", { method: "POST", body: JSON.stringify({ names: [name] }) });
+        this.toast(`已删除分类: ${name}`, "ok", 2500);
+        await this.loadMgr();
+      } catch (e) {
+        if (!e.auth) this.toast(`删除分类失败: ${e.message}`, "error", 8000);
+      } finally {
+        this.mgrBusy = false;
+      }
+    },
+    async mgrDeleteTag(tag) {
+      const ok = await this.confirmDialog("删除标签", `将删除标签「${tag}」(自动规则可能重新打上)`, { okText: "删除", danger: true });
+      if (!ok) return;
+      this.mgrBusy = true;
+      try {
+        await this.api("/api/tags/remove", { method: "POST", body: JSON.stringify({ tags: [tag] }) });
+        this.toast(`已删除标签: ${tag}`, "ok", 2500);
+        await this.loadMgr();
+      } catch (e) {
+        if (!e.auth) this.toast(`删除标签失败: ${e.message}`, "error", 8000);
+      } finally {
+        this.mgrBusy = false;
+      }
     },
     /* ---------------- 日志页(FE-2C): /api/log 只读 tail(等级过滤 + 行数选择 + 手动刷新, 不轮询) ---------------- */
     async openLogs() {
