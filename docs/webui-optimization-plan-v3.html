@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB UI 优化计划 · 第八轮 (旧 UI) — 诊断定案 · 吸顶贴合 · 确认框补全 · 视图扩展</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .13);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 42px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 56em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; margin-top: 46px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.4 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .04em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  section.sec { margin: 0 0 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  p { margin: 0 0 12px; max-width: 62em; color: var(--fg); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 1.4em; max-width: 62em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: var(--dim); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--fg); }
+  td .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  td.no, td.c { font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  td.ok { color: var(--accent); }
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .05em;
+    padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); }
+  .tag.hot { color: var(--accent); border-color: rgba(91, 200, 236, .4); }
+  .tag.warn { color: #e8b45a; border-color: rgba(232, 180, 90, .4); }
+
+  .note { border-left: 2px solid rgba(91, 200, 236, .45); padding: 10px 14px; margin: 14px 0 18px;
+    background: var(--panel); color: var(--muted); font-size: 13.5px; max-width: 62em; }
+  .note b { color: var(--fg); }
+  .note + ul { margin-top: -6px; }
+
+  .ev { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+  .bad { color: #e8a0a0; }
+  .good { color: #9fd8ae; }
+
+  .stage { border: 1px solid var(--line); background: var(--panel); padding: 14px 18px; margin: 0 0 14px; }
+  .stage h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .stage h4 .s-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  .stage p { margin: 0 0 4px; font-size: 13.5px; color: var(--muted); max-width: none; }
+  .stage .items { margin: 6px 0 0; font: 12.5px/1.7 var(--mono); color: var(--dim); }
+
+  pre { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
+    overflow-x: auto; font: 12.5px/1.7 var(--mono); color: #cfe0ee; margin: 12px 0 18px; }
+  pre b { color: var(--accent); font-weight: 600; }
+  pre .cm { color: var(--dim); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
+    font: 12px/1.6 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">auto-qb · web ui · round 8 · 旧 UI(不涉及 newui)</div>
+  <h1>WEB UI 优化计划<br>诊断定案 · 吸顶贴合 · 确认框补全 · 视图扩展</h1>
+  <p class="lede">
+    本轮只出计划不改代码。与既往轮次不同: 上轮反馈的三个"修改未成功"项, 本轮先在
+    FakeQbServer + Edge headless CDP 运行环境里逐项实测, 拿到计算样式与几何数据后再定方案 ——
+    其中两项根因与表象完全不同(见 §01), 若不先诊断, 第三轮还会"改了等于没改"。
+  </p>
+  <div class="meta">
+    <span>分支 <b>agentAutoClaw/develop</b>(基线 <b>2ed0890</b>; 工作区残留 newui 未跟踪副本与 index.html +1 行入口均不碰, 新 UI 在 feature/webui-redesign 并行分支)</span>
+    <span>范围 <b>旧 UI 前端 + 少量后端(R08)</b></span>
+    <span>日期 <b>2026-09-15</b></span>
+  </div>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s00"><span class="t-no">00</span>摘要</a>
+      <a href="#s01"><span class="t-no">01</span>诊断定案(实测)</a>
+      <a href="#s02"><span class="t-no">02</span>需求 × 方案总表</a>
+      <a href="#s03"><span class="t-no">03</span>分阶段实施</a>
+      <a href="#s04"><span class="t-no">04</span>关键设计细节</a>
+      <a href="#s05"><span class="t-no">05</span>待确认决策点</a>
+      <a href="#s06"><span class="t-no">06</span>风险与红线</a>
+      <a href="#s07"><span class="t-no">07</span>验证与验收</a>
+    </nav>
+
+    <main>
+      <!-- ===================== 00 摘要 ===================== -->
+      <section class="sec" id="s00">
+        <div class="sec-head"><span class="no">00</span><h2>摘要</h2></div>
+        <p>
+          需求分三组: <b>① 上轮遗留修复</b>(吸顶贴合 / 空值居中 / 删除确认框 / 筛选器右对齐),
+          <b>② 新功能</b>(信息栏左↔顶双模式 / H&R 筛选 / 单种子视图),
+          <b>③ 视觉刷新</b>(简约现代 / 图标 / 配色 / 动效)。
+        </p>
+        <p>
+          运行时诊断结论: <span class="ev">R01 吸顶缝隙</span>、<span class="ev">R02 筛选器空位</span>、
+          <span class="ev">R03 路径显示"—"</span> 三个"未成功"都有明确根因且全部可修(其中 R03 是取数 bug,
+          上轮数据根本没取到); <b>R06 空值"—"在当前代码里实测已经居中</b>(字形左右留白 37/37px),
+          用户反馈与代码事实不符, 本轮按"复现 → 强化 → 断言固化"处理而不是盲改。
+        </p>
+        <p>
+          实施顺序: 阶段 A 修复包 → 阶段 B 筛选与单种子视图 → 阶段 C 信息栏双模式 → 阶段 D 视觉刷新 →
+          阶段 E 验证回写。后端仅在 R08 增加 <code>singles</code> 透出(约 30 行, 与分组视图同快照、同版本门控),
+          其余全部前端。
+        </p>
+      </section>
+
+      <!-- ===================== 01 诊断 ===================== -->
+      <section class="sec" id="s01">
+        <div class="sec-head"><span class="no">01</span><h2>诊断定案(FakeQbServer + Edge headless CDP 实测)</h2></div>
+        <p class="small">
+          环境: <code>smoke_server.py</code>(假 qB + 真实 QbManager, 端口 18099) + Edge headless CDP,
+          脚本 <code>.openclaw/tmp/diag_ui.mjs</code>, 输出 <code>.openclaw/tmp/diag-out/report.json</code>。
+          以下数值均为本次实测, 非推测。
+        </p>
+        <table>
+          <tr><th>现象(用户反馈)</th><th>实测</th><th>根因</th><th>修法方向</th></tr>
+          <tr>
+            <td>R01 批量条与表头下滑时没贴近</td>
+            <td class="ev">gap = 10px<br>--bulk-h = 52px(条高 42 + margin 10)</td>
+            <td><code>_syncBulkHeight()</code> 把 <code>margin-bottom: 10px</code> 计入
+              <code>--bulk-h</code>, 表头吸顶偏移 <code>head-h + bulk-h</code> 因此多让出 10px</td>
+            <td>--bulk-h 只算条高; 吸顶后两根条齐平堆叠, 观感上再补一条共享分隔线</td>
+          </tr>
+          <tr>
+            <td>R02 路径筛选器右边有空位</td>
+            <td class="ev">toolsRight = 1582(已贴右缘)<br>最后按钮右缘 = 1489<br>差距 93px, 隐形 chip 宽 85px</td>
+            <td>"清除筛选"chip 未激活时 <code>visibility: hidden</code> <b>仍占位</b>(当年为防按钮组左右推动而设) —— 空位正是这个隐形占位</td>
+            <td>改为常驻可见 + 未激活降透明度(disabled 视觉)。宽度不变 → 位置依旧稳定, 幽灵空位消失</td>
+          </tr>
+          <tr>
+            <td>R03 删除确认框看不到保存路径</td>
+            <td class="ev">确认框里有"保存路径"行<br>但值 = <span class="bad">"—"</span>(数据里明明是 R:\Movies)</td>
+            <td><code>_findGroup()</code> 先查 <code>this.groups</code>(后端原始组字典 <b>没有</b> save_path 字段
+              —— 它是前端 <code>decoratedGroups</code> 的派生字段) → <code>delGroup</code> 拿到 undefined 兜底成 "—"</td>
+            <td><code>_findGroup</code> 改为优先查 <code>decoratedGroups</code>(同 key, 字段是超集); 单种子删除路径取成员字段本就正常</td>
+          </tr>
+          <tr>
+            <td>R04 批量删除确认框没有种子信息</td>
+            <td class="ev">details 仅 [目标, 规模]<br>memberRows = 0</td>
+            <td><code>bulkDelete()</code> 上轮只配了概要信息, 未传 <code>members</code>/路径 —— 用户"已选 0 组 · 6 个种子"删的正是这个框</td>
+            <td>批量删除确认框补成员明细(站点 + 名称 + 保存路径)与总大小, 复用 <code>.modal-members</code> 滚动区</td>
+          </tr>
+          <tr>
+            <td>R06 空值"—"未居中</td>
+            <td class="ev">textAlign = center<br>字形左留白 37px = 右留白 37px<br><span class="good">已居中</span></td>
+            <td>第六轮规则 <code>.g-stat.zero, .m-stat.zero { text-align: center }</code> 在当前代码中<b>生效</b>。用户感知与代码事实不符 —— 可能是缓存窗口期的旧观察 / 明细表观感 / 垂直方向观感</td>
+            <td>不盲改: 实施时先按用户真实数据复现; 顺手把"—"改为独立块级元素(水平垂直双稳), 冒烟加居中断言固化</td>
+          </tr>
+        </table>
+        <div class="note">
+          <b>方法论沉淀</b>: "改了但没生效"类反馈, 第一反应不应是再改一次样式, 而是先量运行时事实 ——
+          本轮 5 项里 3 项根因与表象无关(R02 是占位策略、R03 是取数 bug、R04 是漏配), 盲改样式永远修不到。
+        </div>
+      </section>
+
+      <!-- ===================== 02 需求总表 ===================== -->
+      <section class="sec" id="s02">
+        <div class="sec-head"><span class="no">02</span><h2>需求 × 方案总表</h2></div>
+        <table>
+          <tr><th>#</th><th>需求</th><th>方案</th><th>落点</th><th>改动面</th></tr>
+          <tr>
+            <td class="no">R01</td>
+            <td>批量条与表头吸顶自然贴近</td>
+            <td>--bulk-h 剔除 margin; 吸顶堆叠齐平 + 共享底边线</td>
+            <td>app.js <code>_syncBulkHeight</code> / style.css <code>.bulk-bar</code></td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R02</td>
+            <td>筛选器右对齐消除右侧空位</td>
+            <td>清除筛选 chip 常驻可见 + 未激活降透明(宽度不变)</td>
+            <td>style.css <code>.dist-chip.clear.is-off</code></td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R03</td>
+            <td>删除确认框显示保存路径</td>
+            <td>_findGroup 优先查 decoratedGroups(修复取数)</td>
+            <td>app.js <code>_findGroup</code> / <code>delGroup</code></td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R04</td>
+            <td>批量删除确认框显示待删种子信息</td>
+            <td>members 明细扩为 站点+名称+保存路径, 附总大小; 单条/整组/批量三入口口径统一</td>
+            <td>app.js <code>bulkDelete</code> / index.html modal-members</td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R05</td>
+            <td>删除确认框再次调大</td>
+            <td>.modal.wide 560 → 720px; 成员区 max-height 180 → 260px; 路径整行折行可复制</td>
+            <td>style.css <code>.modal.wide</code> / <code>.modal-members</code></td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R06</td>
+            <td>空值"—"居中(复核)</td>
+            <td>真实数据复现 → dash 改独立块级元素双稳居中 → 冒烟断言固化</td>
+            <td>index.html 单元格模板 / style.css / 冒烟脚本</td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R07</td>
+            <td>H&R 筛选器(达标/未达标)</td>
+            <td>filterDefs 新增 hr 筛选; 口径: 未达标 = hr_pending&gt;0, 达标 = hr_triggered&gt;0 且 hr_pending=0; 无 HR 组不匹配任何选项; 选项带组数计数</td>
+            <td>app.js filterDefs / filteredGroups / index.html(模板已通用, 零改动)</td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R08</td>
+            <td>单种子视图</td>
+            <td>视图开关(分组/单种子, 持久化); 平铺 filteredGroups 成员 + 后端 <code>singles</code> 补未归组种子; 新列模型 TORRENT_COLUMNS(name 锁定); 排序/多选/右键/批量全复用成员机制</td>
+            <td>app.js / index.html / style.css + qbmanager <code>ensure_group_state</code>、web.py 透出</td>
+            <td class="c">前端 + 后端<br>(约 30 行)</td>
+          </tr>
+          <tr>
+            <td class="no">R09</td>
+            <td>信息栏 左栏 ↔ 顶栏 双模式</td>
+            <td>railMode = side|top 持久化; top 模式渲染并入 sticky-head 的紧凑双排条(第一排=下载/上传速度, 第二排=其余缩小信息); 布局切单列</td>
+            <td>index.html sticky-head / app.js / style.css</td>
+            <td class="c">前端</td>
+          </tr>
+          <tr>
+            <td class="no">R10</td>
+            <td>视觉刷新: 简约现代 / 图标 / 配色 / 动效</td>
+            <td>令牌级刷新(更中性的深底 + 更细分隔线 + 阴影降级); sprite 补 2-3 个图标; 动效只做手感级(视图切换过渡/模式切换/浮层节奏), 不做行入场与数字滚动</td>
+            <td>style.css :root / index.html sprite / 局部组件</td>
+            <td class="c">前端</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- ===================== 03 阶段 ===================== -->
+      <section class="sec" id="s03">
+        <div class="sec-head"><span class="no">03</span><h2>分阶段实施</h2></div>
+        <div class="stage">
+          <h4><span class="s-no">A</span>修复包(R01–R06) — 纯前端, 先还账</h4>
+          <p>五个点全部小改动: 两处 CSS 策略修正 + 一处取数 bug + 一个确认框补明细 + 一处复核强化。每项独立可验, 修完立即跑冒烟。</p>
+          <div class="items">R01 吸顶贴合 · R02 幽灵占位 · R03 路径取数 · R04 批量明细 · R05 加宽 · R06 dash 复核</div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">B</span>筛选与视图(R07 + R08)</h4>
+          <p>H&R 筛选是 filterDefs 的第五个同构筛选器(模板零改动); 单种子视图是本轮最大项 —— 新列模型 + 视图开关 + 后端 singles 透出。先做 R07 再做 R08(共用对 HR 字段的理解)。</p>
+          <div class="items">R07 hrFilter · R08 TORRENT_COLUMNS + singles + 视图切换</div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">C</span>信息栏双模式(R09)</h4>
+          <p>依赖 A 的 --head-h 联动机制无回归。top 模式条并入 sticky-head 后, 表头/批量条/左栏吸附偏移全部自动跟随(--head-h 由 _syncHeadHeight 实测, 不写死)。</p>
+          <div class="items">railMode 状态 + top 条模板 + 布局切换 + 持久化</div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">D</span>视觉刷新(R10)</h4>
+          <p>放最后: 避免视觉改动干扰功能验证。只动令牌与局部组件, 不动 JS↔DOM 契约; 刷新前后各截一组图供对比。</p>
+          <div class="items">配色令牌 · sprite 图标 · 动效补充</div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">E</span>验证与回写</h4>
+          <p>pytest 全量(后端 singles 带单测) + Edge headless CDP 冒烟扩展(见 §07) + README / memory-bank 回写。沿用本轮已有诊断脚本作冒烟底座。</p>
+          <div class="items">pytest 871+ · CDP 冒烟(新增 10 项断言) · 文档回写</div>
+        </div>
+      </section>
+
+      <!-- ===================== 04 细节 ===================== -->
+      <section class="sec" id="s04">
+        <div class="sec-head"><span class="no">04</span><h2>关键设计细节</h2></div>
+
+        <h3><span class="h-no">4.1</span>吸顶贴合(R01)</h3>
+        <p>现状数学: 批量条吸顶上缘 = <code>--head-h</code>, 表头吸顶上缘 = <code>--head-h + --bulk-h</code>,
+          而 <code>--bulk-h = 条高 + 10(margin)</code> → 恒定 10px 缝。修正:</p>
+        <pre><span class="cm">// app.js _syncBulkHeight: 不再把 margin 计入偏移</span>
+const h = el ? Math.round(el.getBoundingClientRect().height) : 0;  <span class="cm">// 去掉 + 10</span>
+<span class="cm">/* style.css 配套: 批量条吸顶时与表头齐平, 底部圆角去掉并以 1px 分隔线衔接,
+   两根条读起来是一组连续的吸顶块 */</span>
+.bulk-bar { margin-bottom: 10px; }            <span class="cm">/* 未吸顶时保留与表格的间距 */</span>
+.bulk-bar { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.group-head { border-top: 0; }                <span class="cm">/* 贴合处不叠双线 */</span></pre>
+        <p class="small">未吸顶时批量条在文档流里与表头相隔 10px(现状不变); 吸顶后两条零缝堆叠 —— "自然靠近"即此。
+          断言: 滚动后 <code>groupHeadTop - bulkBarBottom === 0</code>。</p>
+
+        <h3><span class="h-no">4.2</span>筛选条占位(R02)</h3>
+        <p>"清除筛选"占位的原始诉求(出现/消失不推动整行按钮)必须保留, 所以不能退回 <code>v-if</code>。
+          方案: chip 常驻渲染, 未激活时 <code>opacity: .32 + cursor: default</code>(已有 <code>:disabled</code>),
+          删除 <code>visibility: hidden</code>。宽度不变 → 整行位置依旧稳定; 右缘从"隐形 chip 右缘"变成"可见 chip 右缘", 空位消失。</p>
+
+        <h3><span class="h-no">4.3</span>删除确认框(R03/R04/R05)</h3>
+        <ul>
+          <li><b>取数修复</b>: <code>_findGroup</code> 改为 <code>decoratedGroups.find(...) || groups.find(...)</code> —— decorated 是原始组的字段超集(key 相同), 对 <code>delGroup</code>/<code>bulkDelete</code> 无副作用, 仅补齐 save_path。</li>
+          <li><b>三入口口径统一</b>: 单种子 / 整组 / 批量删除确认框统一为「目标信息 details + 待删成员明细(站点 · 名称 · 保存路径) + 汇报/删文件两选项」。批量删除把选中组展开到成员级(组多时明细区滚动, 头部显示"N 个组 · M 个独立种子 · 共 X")。</li>
+          <li><b>尺寸</b>: wide 560 → 720px(路径 R:\... 长度通常 30-60 字符, 720px 下整行放得住); 明细区 max-height 180 → 260px; 值区已可选中复制(保留)。</li>
+          <li><b>成员行布局</b>: 一行 = 站点(定宽) + 名称(flex) + 路径(muted, anywhere 折行); 路径与名称同组时路径仅显示一次的优化不做 —— 保持逐行自证, 避免隐式推断。</li>
+        </ul>
+
+        <h3><span class="h-no">4.4</span>H&R 筛选(R07)</h3>
+        <p>与现有四个筛选器完全同构(filterDefs 第五项), 模板无需新分支:</p>
+        <pre><span class="cm">// 口径(与组级 H&R 列/hrGroupTitle 完全一致, 后端算好的计数字段, 前端只比较):</span>
+未达标 = g.hr_pending &gt; 0                      <span class="cm">// 有成员触发 HR 且未满足</span>
+达标   = g.hr_triggered &gt; 0 &amp;&amp; g.hr_pending === 0  <span class="cm">// 触发过且全部满足</span>
+无 HR  = 两者皆否 —— 不匹配任何选项(筛掉)</span>
+<span class="cm">// 选项: [{value:"达标", count: 达标组数}, {value:"未达标", count: 未达标组数}]</span>
+<span class="cm">// 状态: hrFilter: [] —— 与 tagFilter 等同形, clearFilters/_logout 复位同步补一行</span>
+<span class="cm">// 虚拟行(搜索未归组): r.hr_triggered / r.hr_satisfied 同口径换算(filteredGroups 已有先例)</span></pre>
+        <p class="small">图标用现有 sprite <code>#i-hr</code>, 语义色 <code>.ico-f-hr → var(--hr-pending)</code>;
+          strip-note 文案追加 HR 分支; HR 列排序已存在, 筛选与排序互不干扰。</p>
+
+        <h3><span class="h-no">4.5</span>单种子视图(R08)</h3>
+        <p><b>数据</b>: 已归组种子 = filteredGroups 成员平铺(全部筛选/搜索口径天然继承); 未归组种子后端补齐 ——
+          <code>ensure_group_state</code> 增加 <code>singles</code> 数组, 形状与成员视图完全一致(name/site/save_path/HR 字段都在),
+          由 <code>_build_group_view</code> 同一快照重建, 走同一版本门控(rid)。
+          <span class="ev">可行性已核实</span>: store.<code>view_changed</code> 对任意种子的 _VIEW_FIELDS 变化与组成员变化都置真,
+          singles 不会读到陈旧状态。</p>
+        <pre><span class="cm"># qbmanager.py(新增, 供 ensure_group_state 调用)</span>
+def _build_singles_view(self) -&gt; List[dict]:
+    grouped = {h for members in self.store.groups.values() for h in members}
+    return [ self._member_view(r) for r in self.store.by_hash.values()
+             if r.hash not in grouped ]        <span class="cm"># 成员视图字段构建函数从 _build_group_view 提取复用</span></pre>
+        <p><b>前端</b>:</p>
+        <ul>
+          <li>列模型新增 <code>TORRENT_COLUMNS</code>: name(锁定) + site/state/速度×2/总上传/大小/分类/标签/进度/做种时长/分享率/save_path(可选)/hash —— 与 DETAIL_COLUMNS 大部分同 key, 列宽记忆按 key 走新 page 名 <code>"torrent"</code>。</li>
+          <li>视图开关: 状态条左端或列选择器旁的分段控件(图标 i-cards / i-list, sprite 已有), 持久化 <code>autoqb.ui.view</code>。</li>
+          <li>交互复用: 行点击=选中(member 语义), Ctrl/Shift 范围选择(shiftMemberSel 需视图感知: 单种子视图下在平铺列表取范围), 右键=单种子菜单, 批量条对 hash 直接生效 —— <b>全部现有机制, 无新命令</b>。</li>
+          <li>排序: 独立 <code>sortedTorrents</code>(默认 added_on 降序, 三态循环同现规则)。</li>
+          <li>空态/加载: 复用 .empty; singles 与 groups 同请求到达, 无新轮询。</li>
+        </ul>
+
+        <h3><span class="h-no">4.6</span>信息栏双模式(R09)</h3>
+        <ul>
+          <li><b>状态</b>: <code>railMode: "side" | "top"</code>, localStorage <code>autoqb.ui.rail</code>; 切换按钮在顶栏(列选择器旁, 新图标 i-panel), title 动态。</li>
+          <li><b>top 模式</b>: 紧凑条渲染在第一个 <code>.sticky-head</code> 内(状态条之后) —— 与顶栏/状态条构成一体的玻璃吸顶块, <code>--head-h</code> 由 <code>_syncHeadHeight</code> 实测自动长高, 表头/批量条/左栏偏移<b>零额外代码</b>联动。同时 <code>.layout</code> 切单列、原 <code>.rail</code> 不渲染。</li>
+          <li><b>两排布局(防拥挤)</b>: 第一排 = 下载速度 + 上传速度(重点信息, 15px 加粗 + tabular-nums + 语义色图标); 第二排 = 辅种分组 · 种子总数 · 刷新间隔 · 今日流量(上/下, 保留历史入口按钮) · 限速对照(保留 mismatch warn 色与手动锁图标), 11.5px muted 胶囊, 条件渲染与左栏卡片一致(未启用限速曲线则不出现)。</li>
+          <li><b>响应式</b>: 900px 以下 top 模式第二排允许换行(与状态条同策略)。</li>
+        </ul>
+
+        <h3><span class="h-no">4.7</span>视觉刷新(R10)</h3>
+        <ul>
+          <li><b>配色(令牌级)</b>: 底色系从高饱和藏蓝转向更中性的冷灰蓝(降低大面积底色的色彩倾向, 前景层级不动); 分隔线统一降为 hairline 档; 阴影降档(shadow-2/3 减淡); 语义色(HR 橙/达标青/状态六色)保留 —— 它们是功能色。全部走 <code>:root</code> 单点, 不散写。</li>
+          <li><b>图标</b>: sprite 单点追加: i-panel(信息栏模式切换)、单种子视图复用 i-list/i-cards、H&R 筛选复用 i-hr; 顺带把线宽/端点统一复核一遍(16×16 + stroke 1.7 约定不变)。</li>
+          <li><b>动效(手感级)</b>: ①视图/信息栏模式切换 200ms 淡入位移(复用 page-in); ②筛选弹层/列选择器已统一节奏, 补齐弹层关闭淡出; ③批量条出入场已有; ④首屏骨架不做 —— 轮询 2s 场景下收益低。红线: 不做行入场动画与数字滚动(<b>pitfalls 明文: 2s 整表重渲染会反复播放</b>); 全局 prefers-reduced-motion 降级已有。</li>
+        </ul>
+      </section>
+
+      <!-- ===================== 05 决策点 ===================== -->
+      <section class="sec" id="s05">
+        <div class="sec-head"><span class="no">05</span><h2>待确认决策点</h2></div>
+        <table>
+          <tr><th>#</th><th>决策</th><th>选项</th><th>推荐</th></tr>
+          <tr>
+            <td class="no">D1</td>
+            <td>单种子视图是否覆盖未归组种子</td>
+            <td class="c" style="white-space:normal">A. 纯前端平铺已归组种子(零后端, 分组未启用时视图为空)<br>B. 后端补 singles(约 30 行, 全量覆盖)</td>
+            <td class="ok">B —— "单种子视图"应是完整的种子清单; 后端改动与分组视图同快照同门控, 风险可控且带单测</td>
+          </tr>
+          <tr>
+            <td class="no">D2</td>
+            <td>top 模式信息条位置</td>
+            <td class="c" style="white-space:normal">A. 塞进顶栏一行内(顶栏已有搜索/列/徽章, 拥挤)<br>B. 顶栏下方并入吸顶块的双排紧凑条</td>
+            <td class="ok">B —— 视觉上属于"导航栏区域", 空间够放两排; --head-h 自动联动</td>
+          </tr>
+          <tr>
+            <td class="no">D3</td>
+            <td>视觉刷新幅度</td>
+            <td class="c" style="white-space:normal">A. 仅令牌微调(稳, 布局不动)<br>B. 令牌 + 局部组件版式重排(状态条/顶栏层级重排)</td>
+            <td class="ok">A 为基线, 顶栏与状态条允许 B 级微调(间距/密度/字重), 结构与契约不动</td>
+          </tr>
+          <tr>
+            <td class="no">D4</td>
+            <td>清除筛选 chip 形态</td>
+            <td class="c" style="white-space:normal">A. 常驻可见 + 未激活降透明(推荐)<br>B. 保持隐形占位, 仅把占位宽度压到最小</td>
+            <td class="ok">A —— 同宽常驻, 位置稳定且无幽灵空位</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- ===================== 06 红线 ===================== -->
+      <section class="sec" id="s06">
+        <div class="sec-head"><span class="no">06</span><h2>风险与红线(不动清单)</h2></div>
+        <ul>
+          <li><b>生产文件</b>: <code>config.yml</code>、<code>auto-qb-data/</code> 不碰(AGENTS.md 红线)。</li>
+          <li><b>newui 不碰</b>: 本轮仅旧 UI; 重设计决策里的"旧 UI 视觉冻结"被用户本轮显式要求(旧 UI 也要视觉刷新)取代 —— 冻结仅限 newui 相关文件, 工作区已有的 newui/ 副本与 index.html 入口链接保持原样不提交不删除。</li>
+          <li><b>JS↔DOM 契约</b>(style.css 头注 + pitfalls): <code>.group-head</code>/.detail-head(列宽拖拽锚点)、gridStyle 列数同源、<code>.search-hit</code>、<code>.ctx-menu</code>、<code>.sticky-head + --head-h</code>、tpl-ce-field、sprite <code>#i-*</code> 单点、toast/确认框单例 —— 全部保留, 新功能以<b>新增类/新增 page</b> 方式接入, 不改既有挂钩。</li>
+          <li><b>列宽存储</b>: 单种子视图新增 page 名 <code>"torrent"</code> 属向后兼容扩展(loadColState 对缺失 page 返回空), <b>不需要升 COLS_STORE_KEY 版本</b>; 若后续重排 group/detail 列集则必须升版本(v4 → v5)。</li>
+          <li><b>后端</b>: 只在 qbmanager/web.py 加 singles 透出, 不碰命令队列/单一写线程假设; ensure_group_state 的 rid 门控语义不变(singles 与 groups 同版本返回, 前端 <code>updated !== false</code> 分支一并替换)。</li>
+          <li><b>动效红线</b>: 不做行入场/数字滚动(pitfalls 第六轮条目); 全部动效尊重 prefers-reduced-motion。</li>
+          <li><b>HR 口径</b>: 达标/未达标只消费后端算好的 hr_triggered/hr_pending, 前端不重算模板/阈值(pitfalls: HR 判定前后端各写一遍 = 自定义标签立即失效)。</li>
+        </ul>
+      </section>
+
+      <!-- ===================== 07 验证 ===================== -->
+      <section class="sec" id="s07">
+        <div class="sec-head"><span class="no">07</span><h2>验证与验收</h2></div>
+        <h3><span class="h-no">7.1</span>自动化</h3>
+        <ul>
+          <li>pytest 全量基线(871 passed)不回退; R08 新增单测: 未归组种子出现在 singles / 归组后从 singles 消失 / rid 未变时不回传(singles 随 groups 同门控)。</li>
+        </ul>
+        <h3><span class="h-no">7.2</span>浏览器冒烟(FakeQbServer + Edge headless CDP, 复用本轮诊断脚本扩展)</h3>
+        <table>
+          <tr><th>断言</th><th>判定</th></tr>
+          <tr><td>R01 吸顶贴合</td><td class="c">选中→滚动到底: groupHeadTop − bulkBarBottom === 0</td></tr>
+          <tr><td>R02 筛选器右缘</td><td class="c">清除chip visibility=visible; 路径按钮右缘到 strip-tools 右缘距离 ≈ chip宽+gap(无 85px 幽灵位)</td></tr>
+          <tr><td>R03 整组删除路径</td><td class="c">确认框"保存路径"行值 === 成员真实 save_path(非 "—")</td></tr>
+          <tr><td>R04 批量删除明细</td><td class="c">确认框 memberRows = 选中种子数, 每行含非空路径</td></tr>
+          <tr><td>R05 确认框宽度</td><td class="c">.modal.wide 实测 ≥ 720px</td></tr>
+          <tr><td>R06 dash 居中</td><td class="c">zero 单元格字形 gapL ≈ gapR(±2px)</td></tr>
+          <tr><td>R07 H&R 筛选</td><td class="c">点"未达标"→ 组数变为 pending&gt;0 的组数; 点"达标"→ 触发且全满足的组数; 无 HR 组在两态下均被滤除</td></tr>
+          <tr><td>R08 单种子视图</td><td class="c">切换后行数 = 归组成员数 + singles 数; 排序/多选/右键单种子菜单可用; 批量删除对选中 hash 生效</td></tr>
+          <tr><td>R09 信息栏双模式</td><td class="c">切换 top → sticky-head 内出现双排条(--head-h 增大, 表头偏移联动); 刷新后模式保持; side 恢复正常</td></tr>
+          <tr><td>R10 视觉</td><td class="c">对比截图前后各一组; 断言关键令牌值已更新</td></tr>
+        </table>
+        <h3><span class="h-no">7.3</span>手动验收</h3>
+        <ul>
+          <li>用户真实配置 <code>--dry-run</code> 起服务, 重点看: 批量条贴合观感 / 筛选条右缘 / 三种删除确认框 / H&R 筛选与实际 HR 标签的一致性 / 单种子视图完整性(与 qB WebUI 对数) / 顶栏模式拥挤度。</li>
+          <li>R06 若在用户真实数据下仍复现"不居中": 取用户侧截图与计算样式, 按证据修(当前实测不支持"规则未生效"假设)。</li>
+        </ul>
+      </section>
+
+      <footer>
+        auto-qb · WEB UI 第八轮优化计划(旧 UI) · 仅计划未改代码 · 2026-09-15 ·
+        诊断证据: .openclaw/tmp/diag-out/report.json · 前序: webui-optimization-plan(-v2).html / webui-redesign-plan.html
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>

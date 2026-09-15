@@ -143,6 +143,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         self._reannounce_pending: dict = {}
         # WEB UI: 分组视图快照(主循环每 tick 重建并原子替换, Web 线程只读)
         self._group_view: List[dict] = []
+        # 单种子视图数据(未归组种子, 与分组视图同一脏窗口同快照重建, 见 ensure_group_view)
+        self._singles_view: List[dict] = []
         # WEB UI: 分组视图版本号(等价 qB 的 rid): 每次重建自增, Web 端按版本跳过整表替换。
         # 以进程启动时间播种: 进程重启后版本号不会回落到旧客户端已持有的值(否则前端会误判
         # "无更新"而一直展示重启前的旧列表)。
@@ -508,6 +510,43 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
                 fields["hr_tag"] = _utils.replace_vars(hr.add_tag, conf)
         return fields
 
+    def _member_view(self, r) -> dict:
+        """单成员展示视图(分组视图 members 与 singles 未归组种子共用同一字段构建)"""
+        return {
+            "hash": r.hash,
+            "name": r.name,
+            "site": r.tracker_name,
+            "state": r.state,
+            "kind": self._state_kind(r),
+            "dlspeed": r.dlspeed,
+            "upspeed": r.upspeed,
+            "uploaded": r.uploaded,
+            "size": r.size,
+            # 组级"共同标签/分类"与保存路径筛选器的数据来源(交集/共同值由前端计算,
+            # 后端只透出原始值, 避免每次重建做 O(成员数) 以上的集合运算)
+            "save_path": r.save_path,
+            "tags": sorted(r.tags_set),
+            "category": r.category,
+            "progress": round(r.progress, 4),
+            # 取整到分钟(与 torrents.view_field_value 的重建判定同一步长): 该字段每秒递增,
+            # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
+            "seeding_time": view_field_value("seeding_time", r.seeding_time),
+            "ratio": round(r.ratio, 3),
+            # 添加时间(unix 秒): 组级默认排序取组内最大值(见下方组级 added_on)
+            "added_on": r.added_on,
+            # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
+            **self._hr_view_fields(r),
+        }
+
+    def _build_singles_view(self) -> List[dict]:
+        """未归组种子的单种子视图数据(分组未启用/文件列表不可读的种子不在任何组里,
+        只能从这里进入单种子视图; 搜索兜底路径不含全量)。与分组视图在同一脏窗口重建,
+        store.view_changed 对任意种子的视图字段变化置真, 故不会读到陈旧状态。"""
+        grouped: set = set()
+        for members in self.store.groups.values():
+            grouped.update(members)
+        return [self._member_view(r) for h, r in self.store.by_hash.items() if h not in grouped]
+
     def _build_group_view(self) -> List[dict]:
         """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
         from . import utils as _utils
@@ -517,33 +556,7 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if not recs:
                 continue
-            members_view = [
-                {
-                    "hash": r.hash,
-                    "name": r.name,
-                    "site": r.tracker_name,
-                    "state": r.state,
-                    "kind": self._state_kind(r),
-                    "dlspeed": r.dlspeed,
-                    "upspeed": r.upspeed,
-                    "uploaded": r.uploaded,
-                    "size": r.size,
-                    # 组级"共同标签/分类"与保存路径筛选器的数据来源(交集/共同值由前端计算,
-                    # 后端只透出原始值, 避免每次重建做 O(成员数) 以上的集合运算)
-                    "save_path": r.save_path,
-                    "tags": sorted(r.tags_set),
-                    "category": r.category,
-                    "progress": round(r.progress, 4),
-                    # 取整到分钟(与 torrents.view_field_value 的重建判定同一步长): 该字段每秒递增,
-                    # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
-                    "seeding_time": view_field_value("seeding_time", r.seeding_time),
-                    "ratio": round(r.ratio, 3),
-                    # 添加时间(unix 秒): 组级默认排序取组内最大值(见下方组级 added_on)
-                    "added_on": r.added_on,
-                    # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
-                    **self._hr_view_fields(r),
-                } for r in recs
-            ]
+            members_view = [self._member_view(r) for r in recs]
             view.append(
                 {
                     "key": _utils.encode_group_key(key),
@@ -570,9 +583,11 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
 
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
-        与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。"""
+        与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
+        singles(未归组种子)与分组视图在同一脏窗口同快照重建 —— 保证两组数据互相一致。"""
         if self._group_view_dirty:
             self._group_view = self._build_group_view()
+            self._singles_view = self._build_singles_view()
             self._group_view_ver += 1
             self._group_view_dirty = False
         return self._group_view
@@ -590,6 +605,8 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
         state: dict = {"rid": ver, "updated": updated}
         if updated:
             state["groups"] = self._group_view
+            # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
+            state["singles"] = self._singles_view
         return state
 
     def _build_search_index(self) -> None:

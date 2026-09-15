@@ -42,13 +42,34 @@ const DETAIL_COLUMNS = [
   { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)" },
   { key: "hash", label: "Hash", tpl: "80px" },
 ];
-const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS };
+/* 单种子视图列模型(R08): name 锁定; 其余与成员视图字段一一对应(save_path 可选列)。
+ * 列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后兼容扩展,
+ * 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
+const TORRENT_COLUMNS = [
+  { key: "name", label: "种子名", tpl: "minmax(220px, 2.6fr)", sortable: true, locked: true },
+  { key: "site", label: "站点", tpl: "110px", sortable: true },
+  { key: "state", label: "状态", tpl: "76px" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
+  // 与分组表/明细表同序: 分类在标签之前
+  { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
+  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", sortable: true },
+  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true },
+  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)" },
+  { key: "hash", label: "Hash", tpl: "80px" },
+];
+const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
 /* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}}
- * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列),
- * 结构或默认列集变更必须升版本(否则旧缓存里的 px 覆盖会与新列集错配)
+ * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列);
+ * 新增独立 page(torrent)不升版本: loadColState 对缺失 page 返回空, 旧缓存不受影响,
+ * 结构或默认列集变更才必须升版本(否则旧缓存里的 px 覆盖会与新列集错配)
  */
 const COLS_STORE_KEY = "autoqb_cols_v4";
 
@@ -78,7 +99,7 @@ function loadColState() {
     const raw = JSON.parse(localStorage.getItem(COLS_STORE_KEY));
     if (!raw || typeof raw !== "object") return emptyColState();
     const out = emptyColState();
-    for (const page of ["group", "detail"]) {
+    for (const page of ["group", "detail", "torrent"]) {
       const keys = columnKeys(page);
       const w = (raw.widths || {})[page];
       if (w && typeof w === "object") {
@@ -103,6 +124,23 @@ function loadColState() {
 
 const initialColState = loadColState();  // 模块级只读一次(data() 的初值来源)
 
+/* 视图/信息栏模式初值(持久化用户偏好; 异常时回退默认) */
+function initialViewMode() {
+  try {
+    return localStorage.getItem("autoqb.ui.view") === "torrents" ? "torrents" : "groups";
+  } catch {
+    return "groups";
+  }
+}
+
+function initialRailMode() {
+  try {
+    return localStorage.getItem("autoqb.ui.rail") === "top" ? "top" : "side";
+  } catch {
+    return "side";
+  }
+}
+
 
 const app = createApp({
   data() {
@@ -116,14 +154,23 @@ const app = createApp({
       authErrorKind: "",   // "auth" = 密钥被拒(401); "unavailable" = 服务不可达(保留候选密钥供重试)
       page: "groups",
       groups: [],
+      singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供单种子视图/总数)
+      // 辅种页视图: groups(分组表) | torrents(单种子平铺); 列模型/列宽/排序独立, 筛选与搜索共用
+      viewMode: initialViewMode(),
+      // 信息栏模式: side(左栏悬浮卡) | top(并入顶栏吸顶区的紧凑双排条); 见 toggleRailMode
+      railMode: initialRailMode(),
       status: {},
       pollSec: 2,
       expandedKey: null,
       // 排序: 默认 = 组内最近添加时间降序(见 DEFAULT_SORT); 点击列头按 降序->升序->恢复默认 三态循环
       sortKey: DEFAULT_SORT.key,
       sortDir: DEFAULT_SORT.dir,
+      // 单种子视图独立排序键(与分组表互不干扰, 同三态语义)
+      torrentSortKey: DEFAULT_SORT.key,
+      torrentSortDir: DEFAULT_SORT.dir,
       groupColumns: GROUP_COLUMNS,
       detailColumns: DETAIL_COLUMNS,
+      torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       // 列状态(定义见文件顶部列模型; 列宽按**列 key** 记忆, 隐藏列由列选择器管理)
       colWidths: initialColState.widths,  // {page: {列key: "120px"}}
       colHidden: initialColState.hidden,  // {page: [列key]}
@@ -148,7 +195,8 @@ const app = createApp({
       tagFilter: [],
       categoryFilter: [],
       siteFilter: [],
-      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "path"
+      hrFilter: [],          // H&R 筛选(达标/未达标; 与其它多选筛选器同形, 口径见 _hrBucket)
+      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "hr" | "path"
       popFlip: false,         // 筛选弹层视口翻转(锚点靠右时改为右对齐, 避免伸出屏幕)
       colFlip: false,         // 列选择器弹层视口翻转(同上)
       toasts: [],             // 站内提示条(替代 alert)
@@ -231,7 +279,7 @@ const app = createApp({
     },
     filtersActive() {
       return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length || this.categoryFilter.length ||
-        this.siteFilter.length || (this.searchQuery || "").trim());
+        this.siteFilter.length || this.hrFilter.length || (this.searchQuery || "").trim());
     },
     /* 四个筛选器的定义(模板只遍历这一份, 不再手写四块相同结构)
      * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径 = 组数
@@ -241,8 +289,22 @@ const app = createApp({
         { kind: "tag", label: "标签", icon: "i-tag", options: this.tagOptions, selected: this.tagFilter, field: "tagFilter" },
         { kind: "category", label: "分类", icon: "i-folder", options: this.categoryOptions, selected: this.categoryFilter, field: "categoryFilter" },
         { kind: "site", label: "站点", icon: "i-globe", options: this.siteOptions, selected: this.siteFilter, field: "siteFilter" },
+        // H&R 筛选(R07): 固定两档, 计数口径 = 组数(与其它筛选器一致); 分组/单种子两视图共用同一份筛选状态
+        { kind: "hr", label: "H&R", icon: "i-hr", options: this.hrOptions, selected: this.hrFilter, field: "hrFilter" },
         { kind: "path", label: "路径", icon: "i-folder-open", options: this.pathOptions, selected: this.pathFilter, field: "pathFilter" },
       ];
+    },
+    /* H&R 两档计数(只消费后端算好的组级计数, 前端不重算模板/阈值, 见 pitfalls):
+     * 达标 = 触发过 HR 且已全部满足; 未达标 = 仍有成员未满足; 无 HR 组不匹配任何档 */
+    hrOptions() {
+      let done = 0;
+      let pending = 0;
+      for (const g of this.decoratedGroups) {
+        if (!g.hr_triggered) continue;
+        if (g.hr_pending > 0) pending += 1;
+        else done += 1;
+      }
+      return [{ value: "达标", count: done }, { value: "未达标", count: pending }];
     },
     tagOptions() {
       return this._memberValueOptions((m) => m.tags || []);
@@ -260,6 +322,9 @@ const app = createApp({
     detailGrid() {
       return { gridTemplateColumns: this._gridTemplate("detail") };
     },
+    torrentGrid() {
+      return { gridTemplateColumns: this._gridTemplate("torrent") };
+    },
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
     // 以单种子虚拟行兜底展示(虚拟行无组级操作, 右键退化为该种子的单种子菜单)。
@@ -268,7 +333,10 @@ const app = createApp({
       const q = (this.searchQuery || "").trim();
       let base = this.sortedGroups;
       if (this.kindFilter) base = base.filter((g) => g.members.some((m) => m.kind === this.kindFilter));
-      // 多选筛选: 同一筛选器内为"或"(任一命中), 不同筛选器之间为"且"
+      // 多选筛选: 同一筛选器内为"或"(任一命中), 不同筛选器之间为"且"; H&R 见 _hrBucket 口径
+      if (this.hrFilter.length) {
+        base = base.filter((g) => this.hrFilter.includes(this._hrBucket(g)));
+      }
       if (this.pathFilter.length) {
         base = base.filter((g) => this.pathFilter.includes(g.save_path));
       }
@@ -295,6 +363,7 @@ const app = createApp({
       }
       for (const r of this.searchUncovered) {
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
+        if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(r))) continue;
         if (this.pathFilter.length && !this.pathFilter.includes(r.save_path || "")) continue;
         if (this.tagFilter.length && !(r.tags || []).some((t) => this.tagFilter.includes(t))) continue;
         if (this.categoryFilter.length && !this.categoryFilter.includes(r.category || "")) continue;
@@ -316,11 +385,42 @@ const app = createApp({
       }
       return kept;
     },
+    /* 单种子视图(R08): 全部种子平铺(已归组成员 + 未归组 singles), 每个种子独立过同一套
+     * 筛选/搜索(与分组视图的"组内任一命中保留整组"语义不同: 这里逐种子判定), 排序独立 */
+    filteredTorrents() {
+      const q = (this.searchQuery || "").trim();
+      const hits = this.searchHits;
+      const out = [];
+      const push = (m, hit) => {
+        if (this.kindFilter && m.kind !== this.kindFilter) return;
+        if (this.pathFilter.length && !this.pathFilter.includes(m.save_path || "")) return;
+        if (this.tagFilter.length && !(m.tags || []).some((t) => this.tagFilter.includes(t))) return;
+        if (this.categoryFilter.length && !this.categoryFilter.includes(m.category || "")) return;
+        if (this.siteFilter.length && !this.siteFilter.includes(m.site)) return;
+        if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(m))) return;
+        if (q && !hit) return;
+        out.push({ ...m, hit: q ? hit : false });
+      };
+      for (const g of this.groups) for (const m of g.members) push(m, hits.has(m.hash));
+      for (const r of this.singles) push(r, hits.has(r.hash));
+      const key = this.torrentSortKey;
+      const dir = this.torrentSortDir;
+      out.sort((a, b) => {
+        const va = a[key];
+        const vb = b[key];
+        let r;
+        if (typeof va === "string") r = (va || "").localeCompare(vb || "");
+        else r = (va || 0) - (vb || 0);
+        if (r === 0 && key !== "name") r = (a.name || "").localeCompare(b.name || "");
+        return dir * r;
+      });
+      return out;
+    },
     expandedGroup() {
       return this.groups.find((g) => g.key === this.expandedKey) || null;
     },
     totalTorrents() {
-      return this.groups.reduce((n, g) => n + g.count, 0);
+      return this.groups.reduce((n, g) => n + g.count, 0) + this.singles.length;
     },
     totalDl() {
       return this.groups.reduce((n, g) => n + g.dlspeed, 0);
@@ -398,6 +498,9 @@ const app = createApp({
     },
     visibleDetailCols() {
       return this._visibleCols("detail");
+    },
+    visibleTorrentCols() {
+      return this._visibleCols("torrent");
     },
     /* 多选总数(组 + 独立成员), 供批量浮条显隐 */
     selectedCount() {
@@ -621,6 +724,8 @@ const app = createApp({
       this.tagFilter = [];
       this.categoryFilter = [];
       this.siteFilter = [];
+      this.hrFilter = [];
+      this.singles = [];
       this.filterMenu = "";
       this.colMenuOpen = false;
       this.toasts = [];
@@ -787,6 +892,7 @@ const app = createApp({
       this.tagFilter = [];
       this.categoryFilter = [];
       this.siteFilter = [];
+      this.hrFilter = [];
       this.filterMenu = "";
       this.expandedKey = null;
     },
@@ -815,6 +921,7 @@ const app = createApp({
         const state = await this._request("/api/state", {}, candidate);
         this.status = state.status;
         this.groups = state.groups || [];
+        this.singles = state.singles || [];
         if (typeof state.rid === "number") this.lastRid = state.rid;
         this.serviceDown = false;
         this.token = candidate;  // 验证通过才提交为当前身份
@@ -875,6 +982,7 @@ const app = createApp({
         if (state.updated !== false) {
           // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
           this.groups = state.groups || [];
+          this.singles = state.singles || [];  // 未归组种子与 groups 同门控回传(R08)
           if (typeof state.rid === "number") this.lastRid = state.rid;
           this.idlePolls = 0;
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
@@ -882,6 +990,7 @@ const app = createApp({
           if (this.selectedCount) {
             const keys = new Set(this.groups.map((g) => g.key));
             const hashes = new Set(this.groups.flatMap((g) => g.members.map((m) => m.hash)));
+            for (const r of this.singles) hashes.add(r.hash);
             this.selGroups = this.selGroups.filter((k) => keys.has(k) || k.startsWith("u-"));
             this.selMembers = this.selMembers.filter((h) => hashes.has(h));
           }
@@ -1067,6 +1176,16 @@ const app = createApp({
       if (!g.hr_triggered) return "";
       return g.hr_pending ? "pending" : "done";
     },
+    /* H&R 筛选档位(R07): 组级消费组级计数、成员级消费布尔, 标签一致;
+     * 只比较后端算好的字段, 前端不重算模板/阈值(pitfalls: HR 判定前后端各写一遍 = 自定义标签立即失效) */
+    _hrBucket(g) {
+      if (!g.hr_triggered) return "";
+      return g.hr_pending > 0 ? "未达标" : "达标";
+    },
+    _hrBucketMember(m) {
+      if (!m.hr_triggered) return "";
+      return m.hr_satisfied ? "达标" : "未达标";
+    },
     hrGroupTitle(g) {
       if (!g.hr_triggered) return "该组没有成员触发 HR 条件";
       if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时长/分享率要求`;
@@ -1079,18 +1198,21 @@ const app = createApp({
       return this.fmtSpeed(kib * 1024);
     },
     setSort(key) {
-      // 三态(想法.md): 首次点击按该列降序 -> 再点升序 -> 第三次恢复默认排序(最近添加时间降序)
-      if (this.sortKey !== key) {
-        this.sortKey = key;
-        this.sortDir = -1;
+      // 三态(想法.md): 首次点击按该列降序 -> 再点升序 -> 第三次恢复默认排序(最近添加时间降序);
+      // 单种子视图操作独立排序键, 两视图互不干扰
+      const gk = this.viewMode === "torrents" ? "torrentSortKey" : "sortKey";
+      const gd = this.viewMode === "torrents" ? "torrentSortDir" : "sortDir";
+      if (this[gk] !== key) {
+        this[gk] = key;
+        this[gd] = -1;
         return;
       }
-      if (this.sortDir === -1) {
-        this.sortDir = 1;
+      if (this[gd] === -1) {
+        this[gd] = 1;
         return;
       }
-      this.sortKey = DEFAULT_SORT.key;
-      this.sortDir = DEFAULT_SORT.dir;
+      this[gk] = DEFAULT_SORT.key;
+      this[gd] = DEFAULT_SORT.dir;
     },
     /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
     /* 分组表横向滚动时同步表头位移(表头已脱离 .group-table 容器做纵向 sticky,
@@ -1233,6 +1355,55 @@ const app = createApp({
       const [a, b] = from <= to ? [from, to] : [to, from];
       this.selMembers = [...new Set([...this.selMembers, ...list.slice(a, b + 1)])];
     },
+    /* ---------------- 单种子视图交互(R08)与信息栏模式(R09) ---------------- */
+    setViewMode(mode) {
+      if (this.viewMode === mode) return;
+      this.viewMode = mode;
+      try { localStorage.setItem("autoqb.ui.view", mode); } catch { /* 持久化失败不影响功能 */ }
+      this.expandedKey = null;  // 展开态属于分组视图, 切换不跨视图残留
+      this.$nextTick(() => {
+        this._syncHeadHeight();
+        this.materializeColumns();
+      });
+    },
+    toggleRailMode() {
+      this.railMode = this.railMode === "side" ? "top" : "side";
+      try { localStorage.setItem("autoqb.ui.rail", this.railMode); } catch { /* 持久化失败不影响功能 */ }
+      // top 模式信息条并入 sticky-head -> --head-h 随之变高: 立即同步, 表头/批量条/左栏偏移自动跟随
+      this.$nextTick(() => {
+        this._syncHeadHeight();
+        this.materializeColumns();
+      });
+    },
+    /* 单种子表横向滚动 -> 表头位移同步(与分组表同款 transform 桥接, 避免双向 scroll 回环) */
+    syncTorrentHeadScroll(ev) {
+      const head = this.$refs.torrentHead;
+      if (!head) return;
+      head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
+    },
+    /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围 / 普通点击选中) */
+    onTorrentClick(m, event) {
+      this.menu.visible = false;
+      if (event.ctrlKey || event.metaKey) {
+        this.toggleMemberSel(m);
+        return;
+      }
+      if (event.shiftKey) {
+        this.shiftTorrentSel(m);
+        return;
+      }
+      this.toggleMemberSel(m);
+    },
+    shiftTorrentSel(m) {
+      // 平铺列表内的连续范围选择(锚点不更新, 可从同一起点多次扩展)
+      const list = this.filteredTorrents.map((x) => x.hash);
+      const anchor = list.includes(this.selAnchorMember) ? this.selAnchorMember : list[0];
+      const from = list.indexOf(anchor);
+      const to = list.indexOf(m.hash);
+      if (from < 0 || to < 0) return;
+      const [a, b] = from <= to ? [from, to] : [to, from];
+      this.selMembers = [...new Set([...this.selMembers, ...list.slice(a, b + 1)])];
+    },
     clearSelection() {
       this.selGroups = [];
       this.selMembers = [];
@@ -1240,7 +1411,9 @@ const app = createApp({
       this.selAnchorMember = null;
     },
     _findGroup(key) {
-      return this.groups.find((g) => g.key === key) || this.filteredGroups.find((g) => g.key === key) || null;
+      // **必须先查 decoratedGroups**(groups 的前端派生超集, 同 key): 原始组字典没有 save_path
+      // 等派生字段 —— 曾致删除确认框的保存路径恒为"—"(R03)。filteredGroups 兼容虚拟行(u-<hash>)
+      return this.decoratedGroups.find((g) => g.key === key) || this.filteredGroups.find((g) => g.key === key) || null;
     },
     /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过 */
     _bulkTargets() {
@@ -1288,15 +1461,35 @@ const app = createApp({
     async bulkDelete() {
       const { groupKeys, memberHashes } = this._bulkTargets();
       if (!groupKeys.length && !memberHashes.length) return;
-      const groupTorrents = groupKeys.reduce((acc, k) => acc + (this._findGroup(k)?.count || 1), 0);
-      const total = groupTorrents + memberHashes.length;
+      // 待删明细(R04): 组展开到成员级(站点/名称/保存路径), 独立种子直取 —— 确认框逐行自证,
+      // 三入口(单种子/整组/批量)口径统一; _findGroup 已修复为优先查 decoratedGroups(含 save_path)
+      const byHash = new Map();
+      for (const g of this.decoratedGroups) for (const m of g.members) byHash.set(m.hash, m);
+      for (const g of this.filteredGroups) if (g.virtual) byHash.set(g.members[0].hash, g.members[0]);
+      for (const r of this.singles) if (!byHash.has(r.hash)) byHash.set(r.hash, r);
+      const members = [];
+      let totalSize = 0;
+      const pushMember = (m) => {
+        if (!m || members.some((x) => x.hash === m.hash)) return;
+        members.push(m);
+        totalSize += m.size || 0;
+      };
+      for (const k of groupKeys) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        if (g.virtual) pushMember(g.members[0]);
+        else for (const m of g.members || []) pushMember(m);
+      }
+      for (const h of memberHashes) pushMember(byHash.get(h));
+      const total = members.length;
       const res = await this._confirmDelete({
         title: "批量删除",
-        body: `将删除选中目标内的全部种子, 共约 ${total} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
+        body: `将删除选中目标内的全部种子, 共 ${total} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
         details: [
           { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个组 · ${memberHashes.length} 个独立种子` },
-          { icon: "#i-hdd", label: "规模", value: `共约 ${total} 个种子` },
+          { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${total} 个种子` },
         ],
+        members: members.map((m) => ({ site: m.site || "—", name: m.name || m.hash.slice(0, 12), path: m.save_path || "—" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -1385,8 +1578,8 @@ const app = createApp({
           { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—" },
           { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
         ],
-        // 成员明细(用户要求确认框里能看到"正在删除哪些种子"): 站点 + 种子名逐行列出
-        members: g.members.map((m) => ({ site: m.site, name: m.name })),
+        // 成员明细(用户要求确认框里能看到"正在删除哪些种子"): 站点 + 种子名 + 保存路径逐行列出
+        members: g.members.map((m) => ({ site: m.site, name: m.name, path: m.save_path || "—" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -1437,6 +1630,7 @@ const app = createApp({
           break;
         }
       }
+      if (!m) m = this.singles.find((x) => x.hash === hash) || null;  // 单种子视图里的未归组种子
       if (!m) return;
       const res = await this._confirmDelete({
         title: "删除该种子",
@@ -1503,8 +1697,8 @@ const app = createApp({
       return `${this.histPaths[key]} L ${pts[pts.length - 1].x.toFixed(1)} ${base} L ${pts[0].x.toFixed(1)} ${base} Z`;
     },
     gridStyle(page) {
-      // 列模板由 computed 缓存(见 groupGrid/detailGrid): 行渲染只取同一引用, 不每行拼字符串
-      return page === "group" ? this.groupGrid : this.detailGrid;
+      // 列模板由 computed 缓存(见 *_Grid): 行渲染只取同一引用, 不每行拼字符串
+      return { group: this.groupGrid, detail: this.detailGrid, torrent: this.torrentGrid }[page];
     },
 
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
@@ -1533,7 +1727,7 @@ const app = createApp({
       return out;
     },
     _headEl(page) {
-      const ref = this.$refs[page === "group" ? "groupHead" : "detailHead"];
+      const ref = this.$refs[{ group: "groupHead", detail: "detailHead", torrent: "torrentHead" }[page]];
       return Array.isArray(ref) ? ref[0] : ref || null;
     },
     /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 辅种页左栏 .rail 的吸顶偏移与最大可用
@@ -1551,7 +1745,9 @@ const app = createApp({
      * 下移(两吸顶条不重叠), 无选中/切页时归 0 —— 与 --head-h 同款"值未变直接返回"模式 */
     _syncBulkHeight() {
       const el = document.querySelector(".bulk-bar");
-      const h = el ? Math.round(el.getBoundingClientRect().height) + 10 : 0;  // 10 = .bulk-bar margin-bottom
+      // 只量条高, **不把 margin-bottom 计入**(R01): --bulk-h 语义 = 吸顶条自身的占位高度,
+      // 表头吸顶偏移 head-h + bulk-h 才能与批量条底缘齐平; 把流内间距算进去曾造成恒定 10px 缝隙
+      const h = el ? Math.round(el.getBoundingClientRect().height) : 0;
       if (h === this._bulkH) return;
       this._bulkH = h;
       document.documentElement.style.setProperty("--bulk-h", h + "px");
@@ -1561,7 +1757,7 @@ const app = createApp({
      * - 手动调过   -> 跳过(冻结, 拖一列不再动其它列)
      */
     materializeColumns() {
-      for (const page of ["group", "detail"]) {
+      for (const page of ["group", "detail", "torrent"]) {
         if (this.colManual[page]) continue;
         const headEl = this._headEl(page);
         if (!headEl) continue;
@@ -1673,7 +1869,7 @@ const app = createApp({
       const idx = vis.findIndex((c) => c.key === key);
       if (idx < 0) return;
       const container = headEl.parentElement;
-      const rowSel = page === "group" ? ".group-row" : ".member-row";
+      const rowSel = page === "detail" ? ".member-row" : ".group-row";
       let max = headEl.children[idx] ? headEl.children[idx].scrollWidth : MIN_COL_PX;
       for (const row of container.querySelectorAll(rowSel)) {
         const cell = row.children[idx];

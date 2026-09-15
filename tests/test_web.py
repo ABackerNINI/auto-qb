@@ -200,6 +200,7 @@ def _make_web_manager(tmp_path, config_text):
         state = {"rid": mgr._group_view_ver, "updated": updated}
         if updated:
             state["groups"] = mgr._group_view
+            state["singles"] = []  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
         return state
 
     mgr.ensure_group_state = _ensure_group_state
@@ -1026,17 +1027,37 @@ def test_ensure_group_state_versioning():
         assert state["updated"] is True
         assert state["rid"] == start_ver + 1, "重建后版本号应自增"
         assert len(state["groups"]) == 1
+        assert state["singles"] == [], "未归组种子为空时 singles 应为空列表(键必须存在, 前端按同门控替换)"
         # 同版本再次请求: 不回传 groups
         again = mgr.ensure_group_state(rid=state["rid"])
         assert again["updated"] is False
         assert again["rid"] == state["rid"]
-        assert "groups" not in again
+        assert "groups" not in again and "singles" not in again
         # 视图变化后版本自增, 旧 rid 失效 -> 重新回传
         mgr._group_view_dirty = True
         bumped = mgr.ensure_group_state(rid=state["rid"])
         assert bumped["updated"] is True
         assert bumped["rid"] == state["rid"] + 1
-        assert "groups" in bumped
+        assert "groups" in bumped and "singles" in bumped
+
+
+def test_build_singles_view_ungrouped_only():
+    """_build_singles_view: 只含未归组种子且字段与 members 同形(save_path/name/HR 齐全);
+    singles 随 ensure_group_state 与 groups 同门控回传/同版本不回传"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        from helpers import FakeTorrent, seed_store
+
+        seed_store(mgr, [FakeTorrent(hash="HZ", name="Lone", save_path=r"R:\Elsewhere")])
+        mgr._group_view_dirty = True
+        state = mgr.ensure_group_state(rid=None)
+        assert [s["hash"] for s in state["singles"]] == ["HZ"], f"singles 应只含未归组种子: {state['singles']}"
+        assert state["singles"][0]["save_path"] == r"R:\Elsewhere"
+        assert "hr_triggered" in state["singles"][0] and "name" in state["singles"][0]
+        grouped_hashes = {m["hash"] for g in state["groups"] for m in g["members"]}
+        assert not (grouped_hashes & {s["hash"] for s in state["singles"]}), "已归组种子不得出现在 singles"
+        again = mgr.ensure_group_state(rid=state["rid"])
+        assert "singles" not in again and "groups" not in again
 
 
 def test_group_view_ver_seeded_from_start_time():
