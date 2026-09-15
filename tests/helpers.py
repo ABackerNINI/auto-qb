@@ -81,6 +81,8 @@ class FakeClient:
         self.server_state = None  # 非空时随 sync 响应回传(模拟 qB 每轮都带 server_state)
         self.peers_map = {}  # hash -> peers 响应(torrents_peers 替身; 未命中回空列表)
         self.peers_calls = 0  # torrents_peers 调用计数
+        self.transfer_upload_limit_value = 0  # transfer/uploadLimit 读数(bytes/s)
+        self.transfer_download_limit_value = 0
         self.recheck_hashes_calls = []  # torrents_recheck 作用范围(hash 列表; calls 保持旧约定只记 None)
         self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
         self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
@@ -141,6 +143,30 @@ class FakeClient:
             return self.peers_map[h]
         return {"peers": [], "rid": 0}
 
+    def torrents_edit_category(self, name=None, save_path=None, **kw):
+        self.calls.append(("edit_category", name, save_path))
+
+    def torrents_remove_categories(self, categories=None, **kw):
+        self.calls.append(("remove_categories", list(categories or [])))
+
+    def torrents_create_tags(self, tags=None, **kw):
+        self.tags.update(tags or [])
+        self.calls.append(("create_tags", list(tags or [])))
+
+    def transfer_upload_limit(self, **kw):
+        return self.transfer_upload_limit_value
+
+    def transfer_download_limit(self, **kw):
+        return self.transfer_download_limit_value
+
+    def transfer_set_upload_limit(self, limit=None, **kw):
+        self.transfer_upload_limit_value = int(limit or 0)
+        self.calls.append(("transfer_set_upload_limit", self.transfer_upload_limit_value))
+
+    def transfer_set_download_limit(self, limit=None, **kw):
+        self.transfer_download_limit_value = int(limit or 0)
+        self.calls.append(("transfer_set_download_limit", self.transfer_download_limit_value))
+
     def torrents_export(self, torrent_hashes=None, torrent_hash=None, **kw):
         self.calls.append(("export", torrent_hash if torrent_hash is not None else torrent_hashes))
         return self.exported
@@ -181,6 +207,12 @@ class FakeClient:
                     "contentLayout": contentLayout,
                     "ratio_limit": ratio_limit,
                     "seeding_time_limit": seeding_time_limit,
+                    "save_path": save_path,
+                    "category": category,
+                    "tags": tags,
+                    "use_auto_torrent_management": kw.get("use_auto_torrent_management"),
+                    "is_sequential_download": kw.get("is_sequential_download"),
+                    "is_first_last_piece_priority": kw.get("is_first_last_piece_priority"),
                 },
             )
         )
@@ -195,6 +227,7 @@ class FakeClient:
             category=category or "",
             tags=tags or "",
         )
+        return "Ok."  # 与真机语义一致: qB /torrents/add 返回 "Ok."/"Fails."(web 添加回执依赖此判定)
 
     def torrents_add_tags(self, tags=None, torrent_hashes=None):
         self.tags.update(tags)
@@ -225,8 +258,12 @@ class FakeClient:
     def torrents_categories(self):
         return {}
 
-    def torrents_create_category(self, name=None):
-        self.calls.append(("create_category", name))
+    def torrents_create_category(self, name=None, save_path=None, **kw):
+        # 兼容旧断言: 未传 save_path 时保持二元素 calls 形状
+        if save_path:
+            self.calls.append(("create_category", name, save_path))
+        else:
+            self.calls.append(("create_category", name))
 
     def torrents_set_category(self, category=None, torrent_hashes=None):
         self.category = category
