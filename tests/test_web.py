@@ -3,7 +3,8 @@
 ## 测试计划(每个测试函数一条)
 - test_api_requires_token: 无/错密钥访问 /api/* -> 401
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
-- test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端
+- test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
+- test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
@@ -273,16 +274,39 @@ def test_api_status_and_groups(web_env):
 def test_static_assets_disable_heuristic_cache(web_env):
     """静态资源带 no-cache: 不加 Cache-Control 时浏览器会启发式缓存数小时
 
-    症状: 升级程序后仍加载旧 app.js/style.css("改了但没变"), 本次开发中实际撞到。
+    症状: 升级程序后仍加载旧前端("改了但没变"), 开发中实际撞到。
     no-cache 仍允许存储, 但每次必须带 ETag 重新校验(未变走 304); /api 响应不受影响。
+    路径随 UI 目录化更新: atlas=星图(旧) / prism=棱镜(新) / shared=公共逻辑层。
     """
     mgr, client = web_env
-    for path in ("/", "/app.js", "/style.css", "/config_editor.js"):
+    for path in (
+        "/atlas/", "/atlas/style.css", "/prism/", "/shared/app.js", "/shared/config_editor.js",
+        "/shared/vendor/vue.global.prod.js"
+    ):
         resp = client.get(path)
         assert resp.status_code == 200, f"{path} 应可访问"
         assert resp.headers.get("cache-control") == "no-cache", f"{path} 应带 no-cache"
     api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
     assert api.headers.get("cache-control") != "no-cache", "/api 响应不应被静态策略影响"
+
+
+def test_ui_root_and_legacy_newui_redirect(web_env):
+    """根路径与旧 /newui/* 重定向: / -> 307 /atlas/; /newui/* -> 307 /prism/*
+
+    UI 目录化后 StaticFiles 根下无 index.html, 根路径由显式路由兜底进默认 UI(星图);
+    /newui 兼容路由保住升级前书签(子路径原样映射到 /prism/*)。
+    """
+    _, client = web_env
+    root = client.get("/", follow_redirects=False)
+    assert root.status_code == 307, "根路径应 307 重定向"
+    assert root.headers["location"] == "/atlas/"
+    for old, new in (
+        ("/newui", "/prism/"), ("/newui/", "/prism/"), ("/newui/css/tokens.css", "/prism/css/tokens.css"),
+        ("/newui/js/theme.js", "/prism/js/theme.js")
+    ):
+        resp = client.get(old, follow_redirects=False)
+        assert resp.status_code == 307, f"{old} 应 307 重定向"
+        assert resp.headers["location"] == new, f"{old} 应映射到 {new}"
 
 
 def test_api_group_commands_enqueue(web_env):
