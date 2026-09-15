@@ -2747,6 +2747,11 @@ const app = createApp({
       if (v === null || v === undefined || v === "") return "—";
       return fmt ? fmt(v) : String(v);
     },
+    /* qB connection_status 文案(原值兜底; 缺失显示 —) */
+    connText(v) {
+      if (v === null || v === undefined || v === "") return "—";
+      return { connected: "已连接", firewalled: "已连接(防火墙限制)", disconnected: "未连接" }[v] || String(v);
+    },
     /* ---------------- 日志页(FE-2C): /api/log 只读 tail(等级过滤 + 行数选择 + 手动刷新, 不轮询) ---------------- */
     async openLogs() {
       this.page = "logs";  // 顶层页切换(与设置页同型): 表格区卸载, watch(page) 已处理列宽重实体化
