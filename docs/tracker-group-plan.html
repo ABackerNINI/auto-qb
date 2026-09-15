@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracker 分组与规则筛选 · auto-qb 实施计划</title>
+<style>
+  :root {
+    --bg: #fafbfc;
+    --ink: #1a222b;
+    --dim: #5b6b7a;
+    --faint: #8a97a5;
+    --hair: #dfe5ea;
+    --hair-soft: #eaeff3;
+    --accent: #0d6e7e;
+    --accent-ink: #0a5a67;
+    --code-bg: #f2f5f7;
+    --mark: #f4f8f9;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .sheet {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 40px 80px;
+    display: grid;
+    grid-template-columns: 208px 1fr;
+    gap: 56px;
+  }
+  /* ---------- TOC ---------- */
+  nav.toc {
+    position: sticky;
+    top: 48px;
+    align-self: start;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  nav.toc .toc-label {
+    font-family: var(--display);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    color: var(--faint);
+    margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block;
+    color: var(--dim);
+    text-decoration: none;
+    padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hair);
+  }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  /* ---------- Cover ---------- */
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker {
+    font-family: var(--display);
+    font-size: 11.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: 44px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 14px;
+  }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
+    padding: 10px 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--dim);
+  }
+  .meta-row span { padding-right: 28px; }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+  /* ---------- Sections ---------- */
+  main { grid-column: 2; min-width: 0; }
+  section { margin-top: 64px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 1px solid var(--hair);
+    padding-bottom: 12px;
+    margin-bottom: 22px;
+  }
+  .sec-no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  h2 { font-family: var(--display); font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  h3 {
+    font-family: var(--display);
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 28px 0 10px;
+  }
+  h3 .d { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); margin-right: 8px; }
+  p { max-width: 68ch; margin-bottom: 12px; }
+  p.wide { max-width: none; }
+  ul.tight { max-width: 68ch; margin: 0 0 14px 18px; }
+  ul.tight li { margin-bottom: 6px; }
+  ul.tight li::marker { color: var(--faint); }
+  .muted { color: var(--dim); }
+  .note {
+    border: 1px solid var(--hair);
+    border-left: 2px solid var(--accent);
+    background: var(--mark);
+    padding: 12px 16px;
+    max-width: 68ch;
+    font-size: 13.5px;
+    color: var(--dim);
+    margin: 16px 0;
+  }
+  .note b { color: var(--ink); }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 1px 5px; border: 1px solid var(--hair-soft); }
+  pre.code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    background: var(--code-bg);
+    border: 1px solid var(--hair);
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 14px 0 20px;
+    color: var(--ink);
+  }
+  pre.code .c { color: var(--faint); }
+  pre.code .k { color: var(--accent-ink); font-weight: 600; }
+  /* ---------- Tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 14px 0 20px;
+  }
+  th {
+    font-family: var(--display);
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--dim);
+    border-bottom: 1px solid var(--ink);
+    padding: 8px 12px 8px 0;
+  }
+  td {
+    border-bottom: 1px solid var(--hair);
+    padding: 9px 12px 9px 0;
+    vertical-align: top;
+  }
+  td:first-child, th:first-child { padding-left: 0; }
+  tr:last-child td { border-bottom: 1px solid var(--hair); }
+  td code { white-space: nowrap; }
+  .tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    border: 1px solid var(--hair);
+    padding: 1px 7px;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .tag.rec { border-color: var(--accent); color: var(--accent-ink); }
+  /* ---------- Timeline ---------- */
+  .steps { margin: 18px 0 8px; }
+  .step {
+    display: grid;
+    grid-template-columns: 34px 168px 1fr;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--hair-soft);
+  }
+  .step:last-child { border-bottom: none; }
+  .step .n { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); padding-top: 1px; }
+  .step .t { font-family: var(--display); font-weight: 600; font-size: 13.5px; }
+  .step .d { color: var(--dim); font-size: 13px; }
+  /* ---------- Confirm list ---------- */
+  .confirm { border: 1px solid var(--hair); padding: 20px 24px; margin-top: 20px; max-width: 68ch; }
+  .confirm ol { margin-left: 18px; }
+  .confirm li { margin-bottom: 10px; font-size: 14px; }
+  .confirm li b { font-family: var(--display); }
+  footer.colophon {
+    grid-column: 2;
+    margin-top: 72px;
+    border-top: 1px solid var(--hair);
+    padding-top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  @media (max-width: 900px) {
+    .sheet { grid-template-columns: 1fr; padding: 32px 20px 60px; gap: 0; }
+    nav.toc { display: none; }
+    header.cover, main, footer.colophon { grid-column: 1; }
+    h1 { font-size: 32px; }
+    .step { grid-template-columns: 30px 1fr; }
+    .step .d { grid-column: 2; }
+  }
+  @media print {
+    nav.toc { display: none; }
+    .sheet { grid-template-columns: 1fr; padding: 0; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 实施计划 · 阶段 1 已实施 (2026-09-15)</div>
+    <h1>Tracker 分组与规则筛选</h1>
+    <p class="lede">站点配置新增 <code>groups</code> 字段, 规则条件新增 <code>tracker_group</code> 匹配 —— 覆盖名词边界、方案对比、文件级实施拆解、校验与测试清单、文档回写清单。</p>
+    <div class="meta-row">
+      <span>日期 <b>2026-09-15</b></span>
+      <span>分支 <b>develop</b></span>
+      <span>状态 <b>阶段 1 已实施 + pytest 884 全绿 + 真机 dry-run 冒烟通过</b></span>
+      <span>来源 <b>想法.md「支持给 tracker 分组」</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s01"><span class="no">01</span>需求与边界</a>
+    <a href="#s02"><span class="no">02</span>配置形态</a>
+    <a href="#s03"><span class="no">03</span>设计决策</a>
+    <a href="#s04"><span class="no">04</span>实施拆解</a>
+    <a href="#s05"><span class="no">05</span>校验与 fail-fast</a>
+    <a href="#s06"><span class="no">06</span>测试计划</a>
+    <a href="#s07"><span class="no">07</span>文档回写</a>
+    <a href="#s08"><span class="no">08</span>风险与核实点</a>
+    <a href="#s09"><span class="no">--</span>确认点</a>
+    <div class="toc-foot">全文基于 develop<br>2026-09-15 源码摸底</div>
+  </nav>
+
+  <main>
+
+    <!-- ============ 01 ============ -->
+    <section id="s01">
+      <div class="sec-head"><span class="sec-no">01</span><h2>需求与边界</h2></div>
+      <p>需求原文 (<code>想法.md</code> 待办): <span class="muted">「支持给 tracker 分组, 规则筛选器可以按分组过滤」</span>。拆开是两件事: 站点配置能声明分组; 规则条件能按分组匹配种子。</p>
+      <h3>名词澄清 —— 两种"分组"</h3>
+      <p class="wide">本任务的分组是<strong>站点层</strong>概念: 给 tracker 配置归类, 纯配置维度, 不写种子、不加标签。与 <code>grouping</code> 段的「辅种种子分组」(相同文件列表的种子归组, 种子层) 完全无关。这也正是它和站点 <code>tags</code> 的区别 —— tags 会写入 qB 种子, 分组只活在配置里, 供规则筛选与后续视图使用。</p>
+      <h3>本期不做</h3>
+      <ul class="tight">
+        <li>条件取反 (<code>!</code>) —— 独立待办, 将来统一解决; <code>tracker_group</code> 只做正匹配</li>
+        <li>辅种管理页按组筛选 —— 列为阶段 3 可选项, 待确认 (D4)</li>
+        <li>分组到种子的任何写操作 —— 分组不落种子</li>
+        <li>exporter 模板 —— 导出的是未配置站点骨架, 无分组概念</li>
+      </ul>
+    </section>
+
+    <!-- ============ 02 ============ -->
+    <section id="s02">
+      <div class="sec-head"><span class="sec-no">02</span><h2>配置形态 (推荐方案 B)</h2></div>
+      <p>推荐在站点段直接声明分组 (D1 详见 03 节)。形态如下:</p>
+<pre class="code"><span class="c"># config.trackers 每个站点新增可选键 groups (字符串列表)</span>
+<span class="k">trackers</span>:
+  HDSky:
+    domains: [hdsky.et]
+    <span class="k">groups</span>: [国内, 影视]
+  MTeam:
+    domains: [kp.m-team.cc]
+    <span class="k">groups</span>: [国内]
+  BTN:
+    domains: [broadcasthe.net]
+    <span class="k">groups</span>: [国外, 影视]
+
+<span class="c"># 规则条件: 种子的 tracker 所属组 任一命中 即匹配</span>
+<span class="k">example_rules.by_group</span>:
+  conditions:
+    <span class="k">tracker_group</span>: [国内]        <span class="c"># 或关系; 同 trackers/category, 支持 regex: 与 :ignore_case</span>
+    state: [is_complete]
+  actions:
+    add_tags: [done]</pre>
+      <h3>语义要点</h3>
+      <ul class="tight">
+        <li><code>groups</code> 缺省 = 未分组, 不匹配 <code>tracker_group</code> 条件, 其余一切行为不变 (完全向后兼容)</li>
+        <li>一个站点可属多个组; 组名是自由文本 (建议 2-6 字), 不需要预先定义</li>
+        <li>分组是<strong>声明</strong>不是引用 —— 没有"组定义段", 因此不存在引用悬空类错误</li>
+        <li>条件与站点名无关: 改站点配置名不影响分组; 换站点域名也不影响</li>
+      </ul>
+    </section>
+
+    <!-- ============ 03 ============ -->
+    <section id="s03">
+      <div class="sec-head"><span class="sec-no">03</span><h2>设计决策</h2></div>
+
+      <h3><span class="d">D1</span>组定义放哪 —— 站点字段 (推荐) vs 顶层组段</h3>
+      <table>
+        <thead>
+          <tr><th style="width:26%">维度</th><th>方案 B · 站点字段 <code>groups</code> <span class="tag rec">推荐</span></th><th>方案 A · 顶层段 <code>tracker_groups</code></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>形态</td>
+            <td>每个站点自带 <code>groups: [国内]</code></td>
+            <td><code>tracker_groups: {国内: [HDSky]}</code>, 组名 → 站点名列表</td>
+          </tr>
+          <tr>
+            <td>错误面</td>
+            <td>组名即声明, <strong>不存在引用悬空</strong>; 条件里组名拼错不可静态校验 (与 tags/trackers 条件一致)</td>
+            <td>组内站点名引用可 fail-fast 校验 (唯一硬优势); 条件里组名拼错同样不可校验</td>
+          </tr>
+          <tr>
+            <td>Web UI 成本</td>
+            <td><code>TRACKER_FIELDS</code> 加一个 <code>str_list</code> 字段, 现有站点编辑器<strong>自动渲染, 前端零改动</strong></td>
+            <td>需新做「动态字典 → 站点多选」编辑器 (index.html + config_editor.js + style.css)</td>
+          </tr>
+          <tr>
+            <td>后端负载</td>
+            <td>集中在既有扩展点: <code>load_tracker_config</code> 一行 <code>_get</code>、<code>KNOWN_TRACKER_KEYS</code> +1、schema Field +1</td>
+            <td>新顶层段: 根级键 +1、独立校验函数、加载回填、schema 专段登记</td>
+          </tr>
+          <tr>
+            <td>组一览</td>
+            <td>YAML 层无集中视图; 阶段 2 可做反向聚合 (按组列出站点)</td>
+            <td>YAML 层天然集中一览</td>
+          </tr>
+          <tr>
+            <td>站点改名</td>
+            <td>组随站点走, 无需同步</td>
+            <td>需同步改组段 (有校验兜底)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>推荐 <strong>B</strong>。决定性理由: A 的校验优势面对的是 B 根本不存在的错误面; 而两方案共同的盲区 (条件里组名拼错) 都查不出来。B 的改动面、UI 成本、语义直给性全面占优, 且阶段 1 即端到端可用。</p>
+
+      <h3><span class="d">D2</span>条件命名 —— <code>tracker_group</code></h3>
+      <p>推荐 <code>tracker_group</code> (单数): 与 <code>category</code> 同为「属性匹配」风格, spec 列表为或关系; 站点字段名 <code>groups</code>, 条件名 <code>tracker_group</code>, 在规则 YAML 里读作「tracker 分组 ∈ […]」。备选 <code>tracker_groups</code> (与 <code>trackers</code> 复数对仗), 语义无差, 二选一即可。</p>
+
+      <h3><span class="d">D3</span>匹配语义边界</h3>
+      <ul class="tight">
+        <li>正匹配 only, 无「不属于某组」语法 —— 取反归入条件取反待办统一解决</li>
+        <li>组名匹配走 <code>utils.match_value</code>, 与全项目一致, <code>regex:</code> / <code>:ignore_case</code> 免费获得</li>
+        <li>种子无 <code>tracker_conf</code> (未匹配任何站点配置) → 条件恒 False, 与 <code>trackers</code> 条件同构</li>
+        <li>条件内多个组名为或关系; 组内成员无「与」需求 (站点可属多组已覆盖)</li>
+      </ul>
+
+      <h3><span class="d">D4</span>交付分期</h3>
+      <p>阶段 1 后端端到端 (YAML 直改即可用, 设置页借 str_list 自动渲染也能编辑保存); 阶段 2 设置页增强 (可选); 阶段 3 辅种管理页按组筛选 (可选, 待确认)。</p>
+    </section>
+
+    <!-- ============ 04 ============ -->
+    <section id="s04">
+      <div class="sec-head"><span class="sec-no">04</span><h2>实施拆解</h2></div>
+      <div class="steps">
+        <div class="step"><span class="n">S0</span><span class="t">核实热重载语义</span><span class="d">读 <code>impact.py</code> 与 <code>TorrentRecord.tracker_conf</code> 重绑定机制, 定 <code>groups</code> 列 L0 还是 L2 (详见 08 节)</span></div>
+        <div class="step"><span class="n">S1</span><span class="t">config 层</span><span class="d"><code>models.py</code> 加字段 → <code>sections.py</code> 校验 → <code>loaders.py</code> 解析 → <code>impact.py</code> 登记级别</span></div>
+        <div class="step"><span class="n">S2</span><span class="t">条件 + schema</span><span class="d"><code>conditions.py</code> 新条件 → <code>validation/rules.py</code> spec 校验 → <code>schema/rules.py</code> 与 <code>schema/trackers.py</code> 登记 (守卫测试自动核对)</span></div>
+        <div class="step"><span class="n">S3</span><span class="t">测试</span><span class="d">test_config / test_conditions 新用例, 全量 pytest 回归</span></div>
+        <div class="step"><span class="n">S4</span><span class="t">真机冒烟</span><span class="d"><code>--dry-run</code> 观察: 配置加载 / 规则加载 / 条件匹配日志 / Web 设置页编辑保存 round-trip</span></div>
+        <div class="step"><span class="n">S5</span><span class="t">文档回写</span><span class="d">memory-bank 三篇 + docs/configuration.md + 想法.md 勾选 (07 节清单)</span></div>
+      </div>
+
+      <h3>阶段 1 · 文件级清单 (后端核心)</h3>
+      <table>
+        <thead><tr><th style="width:34%">文件</th><th>改动</th></tr></thead>
+        <tbody>
+          <tr><td><code>config/models.py</code></td><td><code>TrackerConfig</code> 加 <code>groups: List[str] = field(default_factory=list)</code>, 注释说明为规则匹配来源</td></tr>
+          <tr><td><code>config/validation/sections.py</code></td><td><code>KNOWN_TRACKER_KEYS</code> 加 <code>"groups"</code>; <code>_validate_trackers</code> 补校验: 若配置须为列表, 每项非空字符串</td></tr>
+          <tr><td><code>config/loaders.py</code></td><td><code>load_tracker_config</code> 加 <code>groups=_get(spec, "groups", d.groups)</code> (BaseLoader 全字符串, 逐项 str 直接过)</td></tr>
+          <tr><td><code>config/impact.py</code></td><td><code>TRACKER_FIELD_LEVELS</code> 加 <code>"groups"</code> (级别依 S0 核实结果, 默认 L0 与 tags 同类)</td></tr>
+          <tr><td><code>rules/conditions.py</code></td><td>新增 <code>TrackerGroupCondition</code> (<code>@register_condition</code>, name=<code>tracker_group</code>), 镜像 <code>TrackersCondition</code>, 匹配 <code>conf.groups</code></td></tr>
+          <tr><td><code>config/validation/rules.py</code></td><td><code>_PLUGIN_SPEC_VALIDATORS["tracker_group"] = _validate_pattern_list_spec</code> (regex 可编译性)</td></tr>
+          <tr><td><code>config/schema/rules.py</code></td><td><code>CONDITION_PLUGINS</code> 加 <code>Plugin("tracker_group", "站点分组", "condition", "list", item_kind="pattern")</code></td></tr>
+          <tr><td><code>config/schema/trackers.py</code></td><td><code>TRACKER_FIELDS</code> 加 <code>Field("groups", "站点分组", "str_list", default=[])</code> + 帮助文本 (与 tags 的区别写清)</td></tr>
+          <tr><td><code>tests/test_config_schema.py</code></td><td>守卫自动生效, 无需手改; 若断言插件计数需同步 15→16</td></tr>
+        </tbody>
+      </table>
+
+      <h3>阶段 2 · 设置页增强 (可选)</h3>
+      <p><code>groups</code> 字段升级为「可自由输入 + 下拉快捷追加」(<code>rules_ref</code> 风格): 组名候选 = 全部站点 groups 并集, 前端可算; 站点侧栏可挂组 badge。阶段 3 (可选, 待确认): 辅种管理页筛选器加分组维度 —— 后端 <code>mixins/web_view.py</code> payload 透出 <code>tracker_conf.groups</code>, 前端 <code>app.js</code> filterDefs 加一项。</p>
+    </section>
+
+    <!-- ============ 05 ============ -->
+    <section id="s05">
+      <div class="sec-head"><span class="sec-no">05</span><h2>校验与 fail-fast</h2></div>
+      <p class="wide">全部进 <code>validate_config</code> 聚合报错, 每条带配置路径, 风格与既有站点段校验一致:</p>
+      <ul class="tight">
+        <li><code>groups</code> 若配置: 必须为列表 —— <code>config.trackers.X.groups: 必须是列表</code></li>
+        <li>每项须非空字符串 (BaseLoader 下 <code>key:</code> 留空得空串, 视为手滑, 报错)</li>
+        <li>组名不做存在性/唯一性校验 —— 自由声明语义, 组名没有单一来源</li>
+        <li>条件 spec: <code>tracker_group</code> 经 <code>_validate_pattern_list_spec</code>, <code>regex:</code> 主体须可编译</li>
+        <li>schema 登记 Field + Plugin 后, <code>test_config_schema.py</code> 守卫自动核对键集合与插件表 (漏登记直接红)</li>
+      </ul>
+      <div class="note"><b>注意:</b> 黄金法则「新配置键必须加入 validate_config 并同步 config/schema.py」—— 本任务两个面 (站点字段 + 条件插件) 都有对应守卫, 守卫测试是最后防线。</div>
+    </section>
+
+    <!-- ============ 06 ============ -->
+    <section id="s06">
+      <div class="sec-head"><span class="sec-no">06</span><h2>测试计划</h2></div>
+      <table>
+        <thead><tr><th style="width:32%">测试文件</th><th>用例</th></tr></thead>
+        <tbody>
+          <tr><td><code>tests/test_config.py</code></td><td>groups 合法解析并回填 TrackerConfig; 非列表报错; 列表含空串报错; 未配置默认空列表</td></tr>
+          <tr><td><code>tests/test_conditions.py</code></td><td>单组命中; 多组或关系; 组名不命中; <code>tracker_conf=None</code> 恒 False; <code>regex:</code> 模式; <code>:ignore_case</code>; 站点 groups 为空不匹配</td></tr>
+          <tr><td><code>tests/test_config_schema.py</code></td><td>守卫自动: 站点字段集合 +1; 条件插件表与 registry 一致 (15→16)</td></tr>
+          <tr><td>真机 dry-run</td><td>配置加载无告警; 规则加载; tracker_group 条件命中日志; 设置页编辑保存 round-trip</td></tr>
+        </tbody>
+      </table>
+      <p>按项目规定, 新增测试同步各测试文件头部 docstring 的「测试计划」清单。</p>
+    </section>
+
+    <!-- ============ 07 ============ -->
+    <section id="s07">
+      <div class="sec-head"><span class="sec-no">07</span><h2>文档回写</h2></div>
+      <table>
+        <thead><tr><th style="width:38%">文件</th><th>更新点</th></tr></thead>
+        <tbody>
+          <tr><td><code>memory-bank/config-reference.md</code></td><td>trackers 站点段表加 <code>groups</code> 行; 配置键总表联动</td></tr>
+          <tr><td><code>memory-bank/rule-system.md</code></td><td>条件表 15 → 16 种, 补 <code>tracker_group</code> 行 (含语义要点)</td></tr>
+          <tr><td><code>docs/configuration.md</code></td><td>站点段 + 规则系统条件表同步</td></tr>
+          <tr><td><code>想法.md</code></td><td>勾选 <code>[x] 支持给tracker分组…</code></td></tr>
+          <tr><td><code>README.md</code></td><td>实施时核实是否提及条件数量/规则摘要, 漂移则顺手修</td></tr>
+          <tr><td><code>memory-bank/progress.md</code> + <code>activeContext.md</code></td><td>完成记录 + 会话收尾</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 08 ============ -->
+    <section id="s08">
+      <div class="sec-head"><span class="sec-no">08</span><h2>风险与核实点</h2></div>
+      <ul class="tight">
+        <li><strong>热重载级别 (首要核实, S0)</strong> —— <code>TRACKER_FIELD_LEVELS</code> 里 <code>groups</code> 列 L0 (与 tags 同, 运行时动态读) 还是 L2 (绑定固化), 取决于 <code>TorrentRecord.tracker_conf</code> 在热重载后的重绑定机制。拿不准列 L2: 保守正确, 代价仅是改组后重建任务队列 + 全量重匹配 tracker, 可接受。</li>
+        <li><strong>双"分组"心智</strong> —— 站点分组 (本任务) vs 辅种种子分组 (<code>grouping</code> 段)。文档与 UI 文案统一用「站点分组」字样, 帮助文本里点名区别。</li>
+        <li><strong>组名拼错静默失效</strong> —— 条件里组名拼错不可静态校验 (与 tags/trackers 条件一致的盲区); 靠阶段 2 下拉候选缓解, 帮助文本提示。</li>
+        <li><strong>BaseLoader 字符串语义</strong> —— groups 列表项全为字符串, 与既有 str_list 处理一致, 无数字/布尔歧义; 空串校验挡手滑。</li>
+      </ul>
+    </section>
+
+    <!-- ============ 确认点 ============ -->
+    <section id="s09">
+      <div class="sec-head"><span class="sec-no">--</span><h2>决策记录 · 已拍板 (2026-09-15)</h2></div>
+      <div class="confirm">
+        <ol>
+          <li><b>D1 组定义位置</b> —— <span class="tag rec">确认方案 B</span> 站点 <code>groups</code> 字段 (已实施)。</li>
+          <li><b>D2 条件名</b> —— <span class="tag rec">确认</span> <code>tracker_group</code> (已实施)。</li>
+          <li><b>D4 阶段 2/3</b> —— 属前端, 后续: 设置页 groups 下拉快捷追加 (rules_ref 风格) + 辅种管理页按组筛选 (web_view payload 透出 conf.groups + app.js filterDefs)。</li>
+        </ol>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="colophon">
+    <span>auto-qb 实施计划 · tracker-group-plan</span>
+    <span>冷峻技术方向 · 与 backend-file-split / webui-*-plan 同族</span>
+    <span>2026-09-15</span>
+  </footer>
+
+</div>
+</body>
+</html>

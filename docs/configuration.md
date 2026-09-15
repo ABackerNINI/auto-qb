@@ -123,6 +123,8 @@ config:
             remove_tags:                           # 自动删除站点标签，支持正则
                 - tag3
                 - tag4
+            groups:                                # 站点分组(可多个，供规则 tracker_group 条件按分组筛选；配置层概念，不写种子)
+                - 国内
             upload_speed_limit: 1000KiB/s          # 单种上传限速，0 指无限制
             download_speed_limit: 10MiB/s          # 单种下载限速，0 指无限制
             hr:                                    # HR 规则(可覆盖全局设置)
@@ -197,7 +199,7 @@ lines: "30"
 
 ## 规则系统
 
-规则集名称以 `_rules` 结尾，挂在 `config` 段下；tracker 通过 `rules` 引用（`@规则集` 引用整组，`@规则集.规则名` 引用单条）。规则同样可在 Web UI 设置页以卡片 + 选择面板方式编辑（15 种条件 / 12 种动作的选择、排序与参数）。
+规则集名称以 `_rules` 结尾，挂在 `config` 段下；tracker 通过 `rules` 引用（`@规则集` 引用整组，`@规则集.规则名` 引用单条）。规则同样可在 Web UI 设置页以卡片 + 选择面板方式编辑（16 种条件 / 12 种动作的选择、排序与参数）。
 
 ```yaml
 ---
@@ -284,7 +286,7 @@ config:
 | `on_torrent_state_enum_changed`  | ✅ 已实现  | 种子 qB 状态枚举发生变化时事件触发                                   |
 | `on_torrent_deleted`             | ✅ 已实现  | 种子删除时触发（现场为删除前快照）；仅允许 `print_torrent_details`    |
 
-### 筛选条件（15 种）
+### 筛选条件（16 种）
 
 | 条件                     | 说明                                                                                      |
 |--------------------------|-------------------------------------------------------------------------------------------|
@@ -293,6 +295,7 @@ config:
 | `tags`                   | 标签，不同标签组之间为或关系，支持正则和 `${required_seeding_time}` 变量                    |
 | `category`               | 分类，支持正则和变量                                                                       |
 | `trackers`               | tracker 自定义名称，不同组之间为或关系，支持正则                                            |
+| `tracker_group`          | 站点分组：匹配站点 `groups` 字段声明的分组（配置层概念，不写种子），不同组之间为或关系，支持正则 |
 | `state`                  | 语义化状态（见[状态映射表](#状态映射表)），支持 `&` 连接多个状态                             |
 | `hr`                     | HR 筛选：`condition-met`（满足触发）/ `condition-not-met` / `satisfied`（满足要求 + 额外时长） |
 | `date_time`              | 日期时间：`day_of_month` / `day_of_week` / `time`                                          |

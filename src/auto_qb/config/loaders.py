@@ -128,6 +128,7 @@ def load_tracker_config(name: str, spec: dict, hr: HRRule, global_remove_similar
         download_speed_limit=_get(spec, "download_speed_limit", d.download_speed_limit, parse_speed),
         hr=hr,
         rules=_get(spec, "rules", d.rules),
+        groups=_get(spec, "groups", d.groups),
         # 站点未设置时回退全局值(运行参数, 非字段默认)
         remove_similar_tags=_get(spec, "remove_similar_tags", global_remove_similar, parse_bool),
     )

@@ -60,7 +60,7 @@ process(ctx) -> (handled: bool, stop: bool)
 
 `ignore_next_action_error: true` 是伪动作: Rule 构造时解析, 给**下一个**动作设 `ignore_error=True`, 失败不 break 继续执行。
 
-## 15 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
+## 16 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
 
 | 条件 | spec 示例 | 语义要点 |
 |------|-----------|----------|
@@ -69,6 +69,7 @@ process(ctx) -> (handled: bool, stop: bool)
 | `tags` | `["tag1,tag2", "tag3"]` | 列表=组间**或**; 组内逗号分隔=**与**; 支持 `regex:`、`:ignore_case` 与 `${required_seeding_time}` (统一走 utils.match_value) |
 | `category` | `["cat", "regex:^HR"]` | 或关系; 精确=全等, regex=search; 支持 `:ignore_case` |
 | `trackers` | `["tracker1"]` | 匹配 tracker_conf.name (配置名, 非域名); 或关系; 支持 `:ignore_case` |
+| `tracker_group` | `["国内"]` | 匹配站点 `groups` 字段声明的分组 (站点配置层声明, 不写种子, 与 grouping 辅种种子分组无关); 或关系; 支持 `regex:`/`:ignore_case`; 无 tracker_conf 一律 False (2026-09-15) |
 | `state` | `["is_complete&is_uploading"]` | 组内 `&` 连接为与, 组间或; 直接取 `state_enum` 枚举属性 (is_checking/is_downloading/is_complete/is_uploading/is_errored/is_stopped) |
 | `hr` | `"condition-met"` | `condition-met`(满足触发条件; **完全下载即触发**边界 — 未达触发量/比例的种子 `is_fully_downloaded` (`progress>=1.0` 或 `amount_left==0`, `total_size<=0` 除外) 也视为触发, 2026-09-12) / `condition-not-met` / `satisfied`(触发+做种时长或分享率达标); 依赖 tracker_conf.hr, 无 HR 配置一律 False |
 | `date_time` | `{day_of_month: 1-31, day_of_week: 1-7, time: "10:00-23:00"}` | 全部可省略(省略=不检查); 区间 `a-b` 或单值; time 支持跨午夜; day_of_week 用 isoweekday (1=周一) |

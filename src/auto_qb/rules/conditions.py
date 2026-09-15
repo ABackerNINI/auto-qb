@@ -98,6 +98,24 @@ class TrackersCondition(BaseCondition):
 
 
 @register_condition
+class TrackerGroupCondition(BaseCondition):
+    """站点分组条件: 匹配站点 groups 字段声明的分组, 列表为或关系, 支持 regex:/:ignore_case
+
+    分组是站点配置层的声明(不写种子), 与 grouping 段的辅种种子分组无关;
+    无 tracker_conf(未匹配站点)的种子恒不匹配, 与 trackers 条件同语义。
+    """
+    name = "tracker_group"
+
+    def __init__(self, spec):
+        self.patterns = spec if isinstance(spec, list) else [spec]
+
+    def match(self, ctx: RuleContext):
+        conf = ctx.torrent.tracker_conf
+        groups = conf.groups if conf is not None else []
+        return any(any(utils.match_value(g, [str(pat)]) for g in groups) for pat in self.patterns)
+
+
+@register_condition
 class StateCondition(BaseCondition):
     """状态条件: qB TorrentState 枚举类别属性(is_downloading/is_uploading/is_complete/
     is_checking/is_stopped/is_paused/is_errored), 与 qB 官方语义一致, 每组内 & 连接为与,

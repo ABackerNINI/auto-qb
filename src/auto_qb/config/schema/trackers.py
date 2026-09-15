@@ -91,6 +91,13 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         risk="匹配到的标签会从该站点的种子中删除",
     ),
     Field(
+        "groups",
+        "站点分组",
+        "str_list",
+        default=[],
+        help="站点的分组归属(可多个, 供规则 tracker_group 条件筛选); 配置层概念, 不写种子、不加标签 —— 与 grouping 段的辅种种子分组无关; 组名自由填写, 无需预定义",
+    ),
+    Field(
         "upload_speed_limit",
         "单种上传限速",
         "speed",

@@ -70,6 +70,7 @@ class TrackerConfig:
     download_speed_limit: int = 0  # 字节/秒, 0 = 不限速
     hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
     rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
+    groups: List[str] = field(default_factory=list)  # 站点分组(配置层声明, 不写种子); tracker_group 条件的匹配来源
     remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
 
 

@@ -30,6 +30,8 @@
 - test_tags_condition_ignore_case: tags 条件 :ignore_case(精确+regex 两型)
 - test_category_condition_ignore_case: category 条件 :ignore_case(精确+regex 两型)
 - test_trackers_condition_ignore_case: trackers 条件 :ignore_case(精确+regex 两型)
+- test_tracker_group_condition: tracker_group 条件匹配(命中/列表或/regex/未分组站点不命中/未匹配站点恒不命中)
+- test_tracker_group_condition_ignore_case: tracker_group 条件 :ignore_case(精确+regex 两型)
 """
 import os
 import shutil
@@ -50,6 +52,7 @@ from auto_qb.rules.conditions import (
     SizeCondition,
     StateCondition,
     TagsCondition,
+    TrackerGroupCondition,
     TrackersCondition,
     UploadRatioCondition,
     UploadSizeCondition,
@@ -175,6 +178,39 @@ def test_trackers_condition_ignore_case():
         assert TrackersCondition("hhan:ignore_case").match(ctx)
         assert TrackersCondition("regex:^hh:ignore_case").match(ctx)
         assert TrackersCondition("kufirc:ignore_case").match(ctx) is False
+
+
+def test_tracker_group_condition():
+    """站点分组条件: groups 命中/列表或/regex; 未分组站点不命中; 未匹配站点(tracker_conf=None)恒不命中"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"groups": ["国内", "Movies"]})
+        client = FakeClient()
+        ctx = _ctx(mgr, FakeTorrent(tags=""), client)
+        assert TrackerGroupCondition("国内").match(ctx)
+        assert TrackerGroupCondition(["国外", "Movies"]).match(ctx), "列表为或关系"
+        assert TrackerGroupCondition("regex:^国").match(ctx)
+        assert TrackerGroupCondition("国外").match(ctx) is False
+        # 未分组站点(站点已匹配但 groups 为空)不命中
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        ctx2 = _ctx(mgr2, FakeTorrent(tags=""), FakeClient())
+        assert TrackerGroupCondition("国内").match(ctx2) is False
+        # 未匹配任何站点配置的种子: tracker_conf=None 恒不命中(与 trackers 条件同语义)
+        tor = FakeTorrent(tags="")
+        tor._trackers_info = [{"url": "https://tracker.unknown.example.org/announce"}]
+        ctx3 = _ctx(mgr2, tor, FakeClient())
+        assert tor.tracker_conf is None
+        assert TrackerGroupCondition("国内").match(ctx3) is False
+
+
+def test_tracker_group_condition_ignore_case():
+    """站点分组条件 :ignore_case 后缀: 精确与 regex: 均生效"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"groups": ["Movies"]})
+        client = FakeClient()
+        ctx = _ctx(mgr, FakeTorrent(tags=""), client)
+        assert TrackerGroupCondition("movies:ignore_case").match(ctx)
+        assert TrackerGroupCondition("regex:^mov:ignore_case").match(ctx)
+        assert TrackerGroupCondition("BOOKS:ignore_case").match(ctx) is False
 
 
 def test_category_condition():
