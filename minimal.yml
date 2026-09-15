@@ -40,5 +40,6 @@ config:
         host: "127.0.0.1"   # 监听地址, 默认仅本机; 改 0.0.0.0 会暴露管理接口
         port: 8080          # 本程序 Web UI 端口(注意与 qB WebUI 端口区分)
         token: ""           # 访问密钥; 留空首次启动随机生成 -> <data_dir>/web.token
+        skip_local_verify: false  # 本机(127.0.0.1)访问跳过密钥鉴权直接进入; 对外暴露仍强制
 
     trackers:

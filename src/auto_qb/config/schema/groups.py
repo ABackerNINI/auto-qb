@@ -118,6 +118,14 @@ GROUPS: Tuple[Group, ...] = (
                     ),
                     Field("port", "监听端口", "int", default="8080", min=1, max=65535, help="避免与 qB WebUI 端口冲突"),
                     Field("token", "访问密钥", "password", default="", help="留空 = 首次启动随机生成并持久化到 data_dir/web.token"),
+                    Field(
+                        "skip_local_verify",
+                        "跳过本地验证",
+                        "bool",
+                        default="false",
+                        help="开启后本机(127.0.0.1)访问直接进入, 无需输入访问密钥",
+                        risk="仅对本机连接生效, 对外暴露(host 非本机)仍强制鉴权; 开启弱化本机安全边界",
+                    ),
                 )
             ),
         ),

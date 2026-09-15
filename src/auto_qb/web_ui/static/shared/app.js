@@ -759,11 +759,21 @@ const app = createApp({
     });
     // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除。
     // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
+    // 跳过本地验证: 先读公开只读标志, 本机免鉴权则直接进入, 不弹登录表单
     const savedToken = localStorage.getItem("autoqb_token");
-    if (savedToken) {
-      this.bootstrapping = true;
-      this.bootstrap(savedToken);
-    }
+    fetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
+      if (pub && pub.web && pub.web.skip_local_verify) {
+        this.authRequired = false;  // 唯一放行点(与 bootstrap 成功后语义一致)
+        this.token = savedToken || "";
+        this.lastRid = null;
+        this.startPolling();
+        return;
+      }
+      if (savedToken) {
+        this.bootstrapping = true;
+        this.bootstrap(savedToken);
+      }
+    });
   },
   watch: {
     // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)

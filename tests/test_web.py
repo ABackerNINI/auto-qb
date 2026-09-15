@@ -2,6 +2,9 @@
 
 ## 测试计划(每个测试函数一条)
 - test_api_requires_token: 无/错密钥访问 /api/* -> 401
+- test_config_public_endpoint_no_auth: 公开端点 /api/config/public 免 token 只读本机免鉴权标志(不含机密)
+- test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行, 对外/远端仍强制鉴权
+- test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
@@ -83,7 +86,7 @@ def _make_web_manager(tmp_path, config_text):
     config_file = os.path.join(tmp_path, "config.yml")
     with open(config_file, "w", encoding="utf-8") as f:
         f.write(config_text)
-    web_cfg = SimpleNamespace(enabled=True, host="127.0.0.1", port=8080, token="")
+    web_cfg = SimpleNamespace(enabled=True, host="127.0.0.1", port=8080, token="", skip_local_verify=False)
     config = SimpleNamespace(
         web=web_cfg,
         trackers={
@@ -255,6 +258,61 @@ def test_api_requires_token(web_env, caplog):
     assert mgr._web_token[:8] not in warns[0].getMessage()
     # 正确密钥放行
     assert client.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200
+
+
+def test_config_public_endpoint_no_auth(web_env):
+    """公开只读端点 /api/config/public: 免 token 可读, 只暴露本机免鉴权标志(不含任何机密)"""
+    mgr, client = web_env
+    # 默认关闭: 公开端点仍可无密钥访问, 且暴露值为 false
+    resp = client.get("/api/config/public")
+    assert resp.status_code == 200
+    assert resp.json() == {"web": {"skip_local_verify": False}}
+    # 不泄露访问密钥
+    assert str(mgr._web_token) not in resp.text
+
+
+def test_skip_local_verify_loopback_bypass(web_env, caplog):
+    """web.skip_local_verify=true 时: 本机(loopback)连接免密钥放行, 直接进入
+
+    默认 false(保守): 本机连接仍强制鉴权; 开启后仅 loopback 放行 —— 对外/远端连接
+    (request.client.host 非 127.0.0.1/::1)即使带对密钥以外的任何请求也须密钥(仍强制)。
+    """
+    from fastapi.testclient import TestClient
+
+    from auto_qb.web import create_app
+
+    mgr = web_env[0]
+    # 用独立 loopback 客户端 + 开启开关
+    mgr.config.web.skip_local_verify = True
+    app = create_app(mgr)
+    loopback = TestClient(app, client=("127.0.0.1", 50000))
+    remote = TestClient(app, client=("192.168.1.50", 50000))
+
+    # 本机: 无密钥/错密钥均放行(直接进入)
+    assert loopback.get("/api/status").status_code == 200
+    assert loopback.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 200
+    # 本机免密钥放行记一条 WARNING(透明可追溯)
+    caplog.set_level(logging.WARNING, logger="auto_qb.web")
+    caplog.clear()
+    loopback.get("/api/status")
+    warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
+    assert warns and "skip_local_verify" in warns[-1].getMessage()
+    # 对外/远端连接: 仍强制鉴权(错密钥 401, 对密钥 200)
+    assert remote.get("/api/status").status_code == 401
+    assert remote.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200
+
+
+def test_skip_local_verify_default_off(web_env):
+    """默认关闭(保守): 本机连接也不免鉴权, 无密钥仍 401"""
+    from fastapi.testclient import TestClient
+
+    from auto_qb.web import create_app
+
+    mgr = web_env[0]
+    assert mgr.config.web.skip_local_verify is False  # 默认 false
+    app = create_app(mgr)
+    loopback = TestClient(app, client=("127.0.0.1", 50000))
+    assert loopback.get("/api/status").status_code == 401
 
 
 def test_api_status_and_groups(web_env):
