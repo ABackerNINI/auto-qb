@@ -195,3 +195,9 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 3. 断点续跑语义 (taskqueue.py `add_task`): `keep_progress=True` 保留 `resume_index`(校验成功后续跑后续动作), 默认(重置)清空 `resume_index` 重走完整决策链 — 二者不可混用。
 4. 种子删除**没有**队列级清理入口: 轮询/等待子任务靠 handler 首行 `store.get(hash) is None` 删除守卫判死(FINISHED 前 `add_task(origin)` 默认重置, origin 由 `_handle_rule`/`_handle_event_rule` 的删除守卫判死); store 侧清理走 `TorrentStore.remove_torrent`(快照/分组索引)。任何在途任务都必须自带删除守卫。**事件规则的 rule-event 任务**作 origin 被轮询子任务重新入队续跑后, 下 tick `_handle_event_rule` 首行同样用 `store.get(hash) is None` 判死 (删除时 FINISHED 消亡); 但 `print_torrent_details` 只读动作经 `ctx.torrent` 回退删除前快照副本 (`RuleContext.snapshot`) 仍可打印留档, 其余需活种子的动作则在 config 白名单阶段已被拒绝。
 5. QbApi 写方法必须同步 store (`update_torrent_fields`/`invalidate_*`), 否则同 tick 读旧值 (test_snapshot_sync.py 防回归)。
+
+### venv 半截残留让 uvicorn "auto" 误选 httptools + venv 删除的进程占用坑 (2026-09-15 实测)
+
+- **症状与根因**: WEB UI 每个连接抛 `AttributeError: module 'httptools' has no attribute 'HttpRequestParser'`。venv 里的 httptools 残留是**半截包**(目录在但 `__init__.py` 丢失、dist-info 只剩 licenses/, 疑似杀软误杀或安装/清理中断), Python 把它当**命名空间包**导入成功 → uvicorn `http="auto"` 探测到"httptools 可导入"就选它, 每个连接建协议时炸。判别法: `import httptools` 成功但 `httptools.__file__ is None` 且 dir 为空 = 命名空间残留; `pip show` 报 "invalid metadata entry 'name'" = dist-info 损坏。
+- **修法是删不是补装**: 项目锁文件不含 httptools(pyproject 的 uvicorn 不带 [standard], 锁定态就是 h11 协议), 补装锁外包反而偏离 uv.lock; 直接删除残留目录即可。web.py 若将来想用 httptools, 应走 pyproject 显式加依赖再锁版本。
+- **删 venv 的进程占用坑**: VS Code 的 ms-python isort 等格式化辅助进程会用 venv 的 python.exe 起子进程, 且被杀后**自动重生** —— 删除前按 `ExecutablePath -like '*<venv路径>*'` 过滤 Win32_Process 杀掉, 然后**同一条命令内**立刻删(分两步会被重生的进程抢锁); 删除中途失败会留下"只剩 Scripts\python.exe"的残壳, 需补删。
