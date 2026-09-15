@@ -33,10 +33,88 @@
 - test_view_field_value_quantizes_seeding_time: 视图量化: seeding_time 按分钟取整, 其余原样
 - test_store_seeding_time_quantized_no_repaint: 做种时长秒级递增不每轮置脏, 跨分钟才置脏
 - test_record_seeding_time_quantized_update_from: update_from 双通道(Mapping/对象)的分钟量化
+- test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
+- test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
+- test_store_extension_fields_do_not_dirty_view: 视图纪律(缓存≠展示): 仅扩展字段变化不置脏
 """
-from auto_qb.torrents import TorrentRecord, TorrentStore, view_field_value
+from dataclasses import MISSING, fields as dc_fields
+
+from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentRecord, TorrentStore, view_field_value
+from auto_qb.torrents.compat import _SNAPSHOT_FIELDS
 
 from helpers import FakeClient, FakeTorrent
+
+
+# 真机 TorrentDictionary 字段样例(qB 5.x, 2026-09-15 字段表定稿依据; 见 docs/record-full-fields-plan.html)
+# 全部字段必须能进入 TorrentRecord 快照(声明字段进 slot, 未声明的落 _raw —— 两者都不允许丢弃)
+_EXAMPLE_TORRENT_INFO = {
+    "added_on": 1786920863,
+    "amount_left": 5196343118,
+    "auto_tmm": False,
+    "availability": 0,
+    "category": "",
+    "comment": "https://kufirc.com/torrents.php?id=240006",
+    "completed": 0,
+    "completion_on": -1,
+    "connections_count": 0,
+    "connections_limit": 30,
+    "content_path": "G:\\临时\\[OnlyFans] Marly (mementomarly) Siterip",
+    "created_by": "uTorrent/2210",
+    "creation_date": 1665579740,
+    "dl_limit": 0,
+    "dlspeed": 0,
+    "download_path": "",
+    "downloaded": 0,
+    "downloaded_session": 0,
+    "eta": 8640000,
+    "f_l_piece_prio": False,
+    "force_start": False,
+    "has_metadata": True,
+    "hash": "047b3fad9834f0f2c00f9d4a9189068431e4a191",
+    "inactive_seeding_time_limit": -2,
+    "infohash_v1": "047b3fad9834f0f2c00f9d4a9189068431e4a191",
+    "infohash_v2": "",
+    "last_activity": 1786920863,
+    "magnet_uri": "magnet:?xt=urn:btih:047b3fad9834f0f2c00f9d4a9189068431e4a191",
+    "max_inactive_seeding_time": -1,
+    "max_ratio": -1,
+    "max_seeding_time": -1,
+    "name": "[OnlyFans] Marly (mementomarly) Siterip",
+    "num_complete": 0,
+    "num_incomplete": 0,
+    "num_leechs": 0,
+    "num_seeds": 0,
+    "piece_size": 4194304,
+    "pieces_have": 0,
+    "pieces_num": 1239,
+    "popularity": 0,
+    "priority": 3,
+    "private": True,
+    "progress": 0,
+    "ratio": 0,
+    "ratio_limit": -2,
+    "root_path": "G:\\临时\\[OnlyFans] Marly (mementomarly) Siterip",
+    "save_path": "G:\\临时",
+    "seeding_time": 0,
+    "seeding_time_limit": -2,
+    "seen_complete": -1,
+    "seq_dl": False,
+    "share_limit_action": "Default",
+    "size": 5196343118,
+    "state": "stoppedDL",
+    "super_seeding": False,
+    "tags": "Kufirc",
+    "time_active": 23098,
+    "total_size": 5196343118,
+    "total_wasted": 0,
+    "tracker": "http://kufirc.com:7456/announce",
+    "trackers_count": 1,
+    "up_limit": 0,
+    "uploaded": 0,
+    "uploaded_session": 0,
+    "upspeed": 0,
+    "reannounce_in": 0,
+}
 
 
 def _client(files=None):
@@ -555,3 +633,50 @@ def test_record_seeding_time_quantized_update_from():
     assert rec2.apply_delta({"hash": "H2", "state": "stalledUP", "seeding_time": 600}) == {"state", "seeding_time"}
     assert rec2.apply_delta({"hash": "H2", "state": "stalledUP", "seeding_time": 640}) == frozenset()
     assert rec2.apply_delta({"hash": "H2", "state": "stalledUP", "seeding_time": 660}) == {"seeding_time"}
+
+
+def test_snapshot_fields_match_record_slots():
+    """守卫: _SNAPSHOT_FIELDS ↔ TorrentRecord 声明字段一一对应(防漏声明/拼写错位);
+    REQUIRED ⊆ SNAPSHOT; 除主键 hash 外全部字段带默认值"""
+    lazy_slots = {"_tags_set", "_state_enum", "_trackers_info", "_files", "_raw", "tracker_conf"}
+    declared = {f.name for f in dc_fields(TorrentRecord)}
+    snapshot = set(_SNAPSHOT_FIELDS)
+
+    assert snapshot <= declared - lazy_slots, "字段表有未声明的 slot(或拼错)"
+    assert declared - lazy_slots - snapshot == set(), "有声明了但不在字段表的 slot(字段表漏登记)"
+    assert set(REQUIRED_TORRENT_FIELDS) <= snapshot
+    no_default = [f.name for f in dc_fields(TorrentRecord) if f.default is MISSING and f.default_factory is MISSING]
+    assert no_default == ["hash"]
+
+
+def test_record_from_real_example_payload():
+    """真机字段样例全量入库: 每个响应字段都进快照(声明字段), 不再丢弃; 哨兵值原样透传"""
+    rec = TorrentRecord.from_torrent(_EXAMPLE_TORRENT_INFO, hash=_EXAMPLE_TORRENT_INFO["hash"])
+
+    assert rec.hash == "047b3fad9834f0f2c00f9d4a9189068431e4a191"
+    assert rec.eta == 8640000 and rec.completion_on == -1 and rec.seen_complete == -1  # 哨兵原样
+    assert rec.private is True and rec.priority == 3 and rec.has_metadata is True
+    assert rec.magnet_uri.startswith("magnet:?")
+    assert rec.trackers_count == 1 and rec.connections_limit == 30 and rec.time_active == 23098
+    assert rec.popularity == 0 and rec.reannounce_in == 0 and rec.total_wasted == 0
+    assert rec.comment == "https://kufirc.com/torrents.php?id=240006"
+    assert rec.ratio_limit == -2 and rec.seeding_time_limit == -2  # 升格字段来自样例而非默认
+    assert rec._raw is None  # 样例字段全部已声明, 无未知字段落 _raw
+
+    d = rec.to_dict()
+    assert set(_EXAMPLE_TORRENT_INFO) <= set(d)  # 样例字段全量导出无丢失(记录现声明字段更多)
+
+
+def test_store_extension_fields_do_not_dirty_view():
+    """视图纪律(缓存≠展示): 仅扩展字段变化不置脏 view_changed ——
+    未来某字段进 Web 视图时必须显式加入 _VIEW_FIELDS(高频字段还需配 _VIEW_QUANTUM)"""
+    store = TorrentStore()
+    store.refresh([dict(_EXAMPLE_TORRENT_INFO, hash="H1")])
+    store.consume_view_changed()  # 首轮(新增)置脏
+
+    store.refresh([{"hash": "H1", "eta": 100, "num_seeds": 5, "popularity": 1.5}])
+    assert store.consume_view_changed() is False, "扩展字段变化不得触发视图重建"
+
+    # 视图字段照常置脏(同一轮混合变化时)
+    store.refresh([{"hash": "H1", "eta": 200, "state": "pausedUP"}])
+    assert store.consume_view_changed() is True

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TorrentRecord 全字段缓存 · 实施计划</title>
+<style>
+  :root {
+    --bg: #0f1114;
+    --bg-raise: #14171b;
+    --fg: #d8dbdf;
+    --fg-strong: #f0f2f4;
+    --fg-dim: #8b929c;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #62b6c7;
+    --accent-dim: rgba(98,182,199,.14);
+    --mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.62;
+  }
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 56px;
+  }
+  /* ---------- TOC ---------- */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    padding: 64px 0 40px;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  nav.toc .toc-kicker {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block;
+    color: var(--fg-dim);
+    text-decoration: none;
+    font-size: 12.5px;
+    padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hairline);
+    transition: color .15s, border-color .15s;
+  }
+  nav.toc a:hover { color: var(--fg-strong); border-left-color: var(--hairline-strong); }
+  nav.toc a.on { color: var(--accent); border-left-color: var(--accent); }
+  /* ---------- cover ---------- */
+  header.cover {
+    padding: 88px 0 40px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 8px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 46px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.12;
+    color: var(--fg-strong);
+    max-width: 20em;
+  }
+  .lede {
+    margin-top: 22px;
+    font-size: 16.5px;
+    line-height: 1.65;
+    color: var(--fg);
+    max-width: 46em;
+  }
+  .meta-row {
+    margin-top: 34px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-dim);
+  }
+  .meta-row b { color: var(--fg); font-weight: 500; }
+  /* ---------- sections ---------- */
+  main { padding-bottom: 40px; min-width: 0; }
+  section { padding: 52px 0 8px; }
+  .folio {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .folio .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: .06em;
+  }
+  h2 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    color: var(--fg-strong);
+  }
+  section + section { border-top: 1px solid var(--hairline); }
+  p { max-width: 46em; margin-bottom: 14px; }
+  p code, li code, td code, th code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--bg-raise);
+    border: 1px solid var(--hairline);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--fg-strong);
+  }
+  /* ---------- tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 18px 0 24px;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    font-weight: 550;
+    font-size: 11px;
+    font-family: var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: top;
+  }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  td .sub { display: block; color: var(--fg-dim); font-size: 12px; margin-top: 2px; }
+  /* ---------- decision blocks ---------- */
+  .decision {
+    border: 1px solid var(--hairline);
+    padding: 22px 26px;
+    margin: 0 0 18px;
+    background: var(--bg-raise);
+  }
+  .decision .d-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+  .decision .d-id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: .08em;
+  }
+  .decision h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--fg-strong);
+  }
+  .decision p { font-size: 13.5px; margin-bottom: 8px; }
+  .decision .reject {
+    color: var(--fg-dim);
+    font-size: 12.5px;
+    border-top: 1px dashed var(--hairline);
+    padding-top: 10px;
+    margin-top: 12px;
+  }
+  .decision .reject b { color: var(--fg); font-weight: 550; }
+  /* ---------- flow ---------- */
+  .flow {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--fg);
+    border: 1px solid var(--hairline);
+    background: var(--bg-raise);
+    padding: 20px 24px;
+    margin: 18px 0 24px;
+    line-height: 2.0;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .flow .arrow { color: var(--accent); }
+  .flow .dim { color: var(--fg-dim); }
+  /* ---------- batch steps ---------- */
+  .step {
+    display: grid;
+    grid-template-columns: 44px minmax(0,1fr);
+    gap: 18px;
+    padding: 22px 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .step:first-of-type { border-top: none; }
+  .step .s-num {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--accent);
+    text-align: right;
+  }
+  .step h3 {
+    font-size: 15.5px;
+    font-weight: 600;
+    color: var(--fg-strong);
+    margin-bottom: 8px;
+  }
+  .step h3 .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--hairline-strong);
+    padding: 1px 7px;
+    margin-left: 10px;
+    vertical-align: 2px;
+  }
+  .step ul { margin: 0 0 10px 0; padding-left: 18px; }
+  .step li { font-size: 13.5px; margin-bottom: 5px; }
+  .step .accept {
+    font-size: 12.5px;
+    color: var(--fg-dim);
+  }
+  .step .accept b { color: var(--fg); font-weight: 550; }
+  /* ---------- test list ---------- */
+  .tlist { counter-reset: t; }
+  .trow {
+    display: grid;
+    grid-template-columns: 64px minmax(0,1fr);
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 13.5px;
+  }
+  .trow .t-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    padding-top: 2px;
+  }
+  /* ---------- misc ---------- */
+  .note {
+    border-left: 2px solid var(--hairline-strong);
+    padding: 4px 0 4px 18px;
+    color: var(--fg-dim);
+    font-size: 13px;
+    margin: 18px 0;
+    max-width: 46em;
+  }
+  .note b { color: var(--fg); font-weight: 550; }
+  footer.colophon {
+    border-top: 1px solid var(--hairline);
+    margin-top: 40px;
+    padding: 28px 0 64px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-dim);
+    letter-spacing: .04em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { display: none; }
+    h1 { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <div class="toc-kicker">CONTENTS</div>
+  <a href="#s0">0 · 背景与现状</a>
+  <a href="#s1">1 · 目标与非目标</a>
+  <a href="#s2">2 · 设计决策 D1-D5</a>
+  <a href="#s3">3 · 字段清单预排</a>
+  <a href="#s4">4 · 实施批次</a>
+  <a href="#s5">5 · 兼容面与风险</a>
+  <a href="#s6">6 · 测试计划</a>
+  <a href="#s7">7 · 边界与后续触发</a>
+</nav>
+
+<main>
+
+<header class="cover">
+  <div class="kicker">auto-qb · 数据层实施计划 · torrents 包</div>
+  <h1>TorrentRecord 全字段缓存</h1>
+  <p class="lede">把 qB 种子对象的全部数据字段一次性纳入 <code>TorrentRecord</code> 快照,数据层成为唯一事实源;后续 WebUI 功能(详情面板、会话流量、限制管理、资源概览、磁链复制...)只做展示接入,不再逐个回头改 compat / record / store 三层。</p>
+  <div class="meta-row">
+    <span>日期 <b>2026-09-15</b></span>
+    <span>分支 <b>backend/develop</b></span>
+    <span>范围 <b>src/auto_qb/torrents/</b></span>
+    <span>状态 <b>已实施 · 2026-09-15</b></span>
+  </div>
+</header>
+
+<section id="s0">
+  <div class="folio"><span class="num">00</span><h2>背景与现状</h2></div>
+  <p>种子数据链路:主循环每 tick 走 <code>sync/maindata</code> 增量同步,<code>TorrentStore._apply</code> 把变化字段灌进 <code>TorrentRecord.apply_delta</code>,分组、规则、Web 视图全部只读这份数据层。这条链路的字段面目前是收窄的:</p>
+  <div class="flow">
+    qB /api/v2/sync/maindata <span class="arrow">→</span> TorrentStore.apply_sync / _apply<br>
+    <span class="arrow">→</span> TorrentRecord.apply_delta(21 个快照 slot + _raw 兜底)<br>
+    <span class="arrow">→</span> GroupingMixin 分组索引 · 规则引擎 · WebviewMixin._build_group_view(仅 13 个 _VIEW_FIELDS)
+  </div>
+  <table>
+    <tr><th>层级</th><th>内容</th><th class="mono">位置</th></tr>
+    <tr><td>快照 slots</td><td>21 个字段(hash/name/state/downloaded/ratio/added_on...),apply_delta 逐字段比较,变化集驱动视图置脏</td><td class="mono">compat.py · record.py</td></tr>
+    <tr><td>_raw 兜底</td><td>6 个跳检重加字段(seq_dl / ratio_limit / share_limit_action...),仅属性访问兜底,不计变化集</td><td class="mono">record.py __getattr__</td></tr>
+    <tr><td>惰性缓存</td><td>tags_set / state_enum / trackers_info / files,跨 tick 存活</td><td class="mono">record.py</td></tr>
+    <tr><td>Web 透出</td><td>13 个 _VIEW_FIELDS 派生值 + HR 展示字段,量化步长防每 tick 重建</td><td class="mono">view.py · web_view.py</td></tr>
+  </table>
+  <p><b>缺口</b>:qB 实际返回的字段有 50 个上下(会话流量、ETA、peer/tracker 概要、限制策略、磁链、infohash、队列优先级...),其余在 <code>apply_delta</code> 处直接丢弃。未来每个 WebUI 功能都要回头改 compat → record → store 三层,还要各自证明不影响视图置脏语义 -- 这是不必要的重复成本,一次补齐更划算。</p>
+</section>
+
+<section id="s1">
+  <div class="folio"><span class="num">01</span><h2>目标与非目标</h2></div>
+  <p><b>目标</b>:快照字段从 21 个扩展到 qB 种子对象的<b>全量数据字段</b>(预排 52 个,批次 0 定稿);新字段全部可选、带默认值;视图重建成本与现状完全一致;规则引擎 / HR 判定 / 分组行为零变化。</p>
+  <p><b>非目标</b>(本轮不做):不改 web.py 与前端;不把任何新字段加入 _VIEW_FIELDS;peers / properties 端点(per-torrent 高频动态数据)不入快照,未来详情功能按 _files / _trackers_info 的惰性缓存模式另行处理;不动 tracker_conf 匹配与 HR 判定逻辑。</p>
+</section>
+
+<section id="s2">
+  <div class="folio"><span class="num">02</span><h2>设计决策 D1-D5</h2></div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D1</span><h3>承载方式:slots 全量声明,_raw 降级为前向兼容兜底</h3></div>
+    <p>所有已知字段声明为 dataclass slots:类型化、C 级属性访问(热路径)、IDE 可见、守卫测试可查。qB 新版本引入的未知字段照旧落 <code>_raw</code>(apply_delta 现有分支),升级 qB / qbittorrent-api 时数据不丢,字段表可增量补声明。</p>
+    <p class="reject"><b>否决</b>:全部塞 _raw 动态承载 -- __getattr__ 兜底是 Python 级派发,热路径慢约一个数量级,且失去类型与文档价值;slots 声明成本是一次性的。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D2</span><h3>RE_ADD_FIELDS 六字段升格进快照</h3></div>
+    <p>seq_dl / f_l_piece_prio / ratio_limit / seeding_time_limit / inactive_seeding_time_limit / share_limit_action 本就是 torrent info 字段,当年为省内存放 _raw;WebUI 未来要展示限制策略,一并升格为 slots。<code>skip_checking.py</code> 的属性访问不受影响,<code>RE_ADD_FIELDS</code> 常量保留(CheckAction 引用与启动校验语义不变)。</p>
+    <p class="reject"><b>附带的行为面变化(可接受)</b>:升格后这六个字段的变化会计入 changed 集(原先完全静默)--规则引擎不消费它们,最坏情况是一次多余的增量扫描,且语义上更正确。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D3</span><h3>版本兼容:新字段全部可选,REQUIRED 校验面不变</h3></div>
+    <p>启动期 fail-fast 校验只针对"缺失即假数据决策"的危险字段,维持现有 27 个(21 快照 + 6 重加)不变。新字段缺失时保持 slot 默认值,不报错 -- trackers_count 等是 qB 5.x 才有,4.x 用户升级 auto-qb 不能炸。apply_delta 的 <code>v is None → skip</code> 语义天然兼容"端点未返回该字段"。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D4</span><h3>视图纪律:缓存 ≠ 展示,新字段默认不进 _VIEW_FIELDS</h3></div>
+    <p>本轮分组视图重建成本<b>零变化</b>:静止种子库每 tick 近零成本的现状保持。未来某功能真正展示某字段时,才把该字段加入 _VIEW_FIELDS(高频字段如 eta / num_leechs / availability 需配 _VIEW_QUANTUM 或走 WebSocket 推送,届时是该功能自己的设计题)。加一条测试把这条纪律锁死。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-head"><span class="d-id">D5</span><h3>哨兵值原样透传,数据层不做语义解读</h3></div>
+    <p>completion_on / last_activity 的 <code>-1</code>(从未发生)、eta 的 <code>8640000</code>(无限)等哨兵在数据层原样存取,展示层自行翻译。数据层只保证两件事:存的原样、取的即时。</p>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="folio"><span class="num">03</span><h2>字段清单预排(批次 0 定稿)</h2></div>
+  <p>下表按用途分组预排,<b>类型 / 默认值 / qB 最低版本以批次 0 真机定稿为准</b>。默认值原则:数值 0、浮点 0.0、布尔 False、字符串空、时间戳 -1("从未"哨兵,D5)。</p>
+  <div class="note"><b>定稿更新(实施前)</b>:批次 0 以用户提供的真机 TorrentDictionary 字段样例定稿(跳过真机抓取);实施后真机冒烟又发现样例未含的 4 个字段(reannounce / has_tracker_error / has_tracker_warning / has_other_announce_error),已一并补入 -- 最终快照 <b>70</b> 个字段(必需 21 + 重加升格 6 + 可选扩展 43),真机响应 68 字段全部声明,_raw 无残留。</div>
+  <table>
+    <tr><th>分组</th><th class="mono">字段</th><th>预排默认</th><th>未来 WebUI 用途</th></tr>
+    <tr><td rowspan="3">传输 / 会话</td>
+      <td class="mono">downloaded_session, uploaded_session</td><td class="mono">0</td><td>会话流量统计、 speed 曲线对照</td></tr>
+    <tr><td class="mono">eta, time_active</td><td class="mono">0</td><td>预计剩余时间、累计活跃时长</td></tr>
+    <tr><td class="mono">last_activity, availability</td><td class="mono">-1 / 0.0</td><td>最后传输时间、资源分布可用度</td></tr>
+    <tr><td rowspan="2">tracker / peer 概要</td>
+      <td class="mono">num_seeds, num_leechs</td><td class="mono">0</td><td>连接的做种 / 下载者数</td></tr>
+    <tr><td class="mono">num_complete, num_incomplete, tracker, trackers_count<span class="sub">trackers_count 为 qB 5.x 字段</span></td><td class="mono">0 / ""</td><td>swarm 健康度、首个可用 tracker</td></tr>
+    <tr><td>限制 / 策略</td>
+      <td class="mono">max_ratio, max_seeding_time, max_inactive_seeding_time<span class="sub">max_inactive 为 qB 5.x 字段</span></td><td class="mono">-1</td><td>分享率 / 做种时长限制展示</td></tr>
+    <tr><td>元数据</td>
+      <td class="mono">magnet_uri, infohash_v1, infohash_v2, private</td><td class="mono">"" / False</td><td>复制磁链、infohash 展示、私种标记</td></tr>
+    <tr><td rowspan="2">行为 / 路径</td>
+      <td class="mono">auto_tmm, force_start, super_seeding, priority</td><td class="mono">False / 0</td><td>自动管理、强制开始、超级做种、队列优先级</td></tr>
+    <tr><td class="mono">download_path, completion_on</td><td class="mono">"" / -1</td><td>未完成下载路径、完成时间</td></tr>
+    <tr><td>升格(自 _raw)</td>
+      <td class="mono">seq_dl, f_l_piece_prio, ratio_limit, seeding_time_limit, inactive_seeding_time_limit, share_limit_action</td><td class="mono">False / -1 / ""</td><td>跳检重加(现状)+ 限制策略展示</td></tr>
+  </table>
+  <div class="note"><b>定稿方法(已执行)</b>:以用户提供的真机 TorrentDictionary 字段样例(qB 5.x)为定稿源;真机只读冒烟(sync rid=0,119 种子)交叉验证字段并集,补入样例未含的 4 个字段后全量覆盖。</div>
+</section>
+
+<section id="s4">
+  <div class="folio"><span class="num">04</span><h2>实施批次</h2></div>
+
+  <div class="step">
+    <div class="s-num">B0</div>
+    <div>
+      <h3>字段清单定稿<span class="tag">只读 · 不改代码</span></h3>
+      <ul>
+        <li>真机抓取 sync + torrents/info 字段并集(方法见第 3 节 note)。</li>
+        <li>产出定稿字段表:每字段 = 名称 / 类型 / 默认值 / qB 最低版本 / 哨兵 / 用途 / 是否纳入。</li>
+        <li>用户过目定稿后才动代码。</li>
+      </ul>
+      <p class="accept"><b>验收</b>:定稿表评审通过,预排表与真机差异清零。</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="s-num">B1</div>
+    <div>
+      <h3>数据层扩容<span class="tag">核心批次</span></h3>
+      <ul>
+        <li><code>compat.py</code>:_SNAPSHOT_FIELDS 扩展为分组注释的全量字段表;拆出 _REQUIRED_SNAPSHOT_FIELDS(现 21 个)保持 REQUIRED_TORRENT_FIELDS 校验面不变;RE_ADD_FIELDS 并入快照但常量保留。</li>
+        <li><code>record.py</code>:新增 slots 与默认值(新增字段排在 added_on 之后、惰性缓存槽之前,构造全走关键字参数,无位置参数风险);docstring 更新;新增 <code>to_dict()</code>(slots + _raw 合并,惰性缓存不进)供未来详情接口。</li>
+        <li><code>apply_delta</code>:零逻辑改动(Mapping 路径自动覆盖新字段;升格字段自动从 _raw 分支切到 slot 分支)。<code>store.py</code> 无改动。</li>
+        <li>新增测试 T1-T6(见第 6 节)。</li>
+      </ul>
+      <p class="accept"><b>验收</b>:pytest 全量绿;--dry-run 真机冒烟(109 种子:首轮全量耗时无感知劣化、增量轮行为不变、Web 视图正常)。</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="s-num">B2</div>
+    <div>
+      <h3>透出口径与文档收口</h3>
+      <ul>
+        <li>_member_view / search / singles 视图零改动(D4 纪律)。</li>
+        <li>store 层 detail 视图构建器暂不做 -- 等第一个消费功能与接口形状一起设计,to_dict() 已就位。</li>
+        <li>memory-bank 回写:modules.md(字段表摘要)、systemPatterns.md(D1-D5)、testing.md(新测试)、progress.md、activeContext.md;view.py 注释补 D4 纪律;README 不动(无用户可见变化)。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="s-num">B3</div>
+    <div>
+      <h3>消费接入<span class="tag">随功能触发 · 不在本轮</span></h3>
+      <ul>
+        <li>第一个用新字段的 WebUI 功能立项时:字段按需进 _VIEW_FIELDS(配 quantum)或走详情接口 / WebSocket 通道。</li>
+        <li>peers / properties 端点数据按 _files / _trackers_info 同款惰性缓存模式接入。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="folio"><span class="num">05</span><h2>兼容面与风险</h2></div>
+  <table>
+    <tr><th>项</th><th>评估</th><th>缓解 / 依据</th></tr>
+    <tr><td>内存</td><td>低</td><td>每种子 +31 slot(指针级)+ 少量字符串(magnet_uri 约 300B 为最大头);万级种子约数 MB。</td></tr>
+    <tr><td>首轮全量成本</td><td>低</td><td>apply_delta 每种子多 ~31 次 C 级比较,万级种子毫秒级;增量轮只处理 patch 出现的字段,零影响。</td></tr>
+    <tr><td>老版本 qB 字段缺失</td><td>低</td><td>新字段全可选 + 默认值;REQUIRED 校验面不变(D3)。</td></tr>
+    <tr><td>视图误置脏</td><td>中(仅当纪律被破)</td><td>D4 + T3 测试锁死:新字段变化不得触发 view_changed。</td></tr>
+    <tr><td>测试替身漂移</td><td>低</td><td>FakeTorrent 对象通道只按 REQUIRED_TORRENT_FIELDS 收集属性,新字段不提供即 None 跳过,行为不变。</td></tr>
+    <tr><td>哨兵语义误读</td><td>低</td><td>D5:-1 / 8640000 原样透传,解读权在展示层。</td></tr>
+    <tr><td>升格字段行为面</td><td>低</td><td>六个字段变化计入 changed 集 -- 规则引擎不消费,最坏一次多余增量扫描(D2,语义更正确)。</td></tr>
+  </table>
+</section>
+
+<section id="s6">
+  <div class="folio"><span class="num">06</span><h2>测试计划</h2></div>
+  <p>落位 <code>tests/test_sync.py</code>(record / delta 层)与 <code>tests/test_torrents.py</code>(字段契约);测试文件头部"测试计划"清单同步维护。</p>
+  <div class="tlist">
+    <div class="trow"><span class="t-id">T1</span><span>新字段增量更新生效:patch 携带 eta / num_seeds → slot 更新且计入 changed 集。</span></div>
+    <div class="trow"><span class="t-id">T2</span><span>新字段缺失兼容:无该字段的 patch / 对象 → 保持默认值,零异常(4.x 场景)。</span></div>
+    <div class="trow"><span class="t-id">T3</span><span>视图纪律:仅新字段变化 → store.view_changed 保持 False(D4 锁死)。</span></div>
+    <div class="trow"><span class="t-id">T4</span><span>升格验证:apply_delta 后六字段写 slot 而非 _raw;skip_checking 重加回归(现有 test_checking 全绿兜底)。</span></div>
+    <div class="trow"><span class="t-id">T5</span><span>守卫测试:REQUIRED ⊆ SNAPSHOT;_SNAPSHOT_FIELDS ↔ dataclass slots 字段一一对应(防漏声明 / 拼写错位)。</span></div>
+    <div class="trow"><span class="t-id">T6</span><span>to_dict():快照全字段 + _raw 合并,惰性缓存槽不出现。</span></div>
+  </div>
+  <p style="margin-top:14px">回归面：全量 pytest（实施结果：878 passed + 1 个环境性失败 test_autostart_windows_registry —— 已用 git stash 验证在 HEAD 基线上同样失败，非本次引入）+ 真机只读冒烟（119 种子全字段入库，_raw 无残留）。分组视图 / 规则引擎 / HR 判定消费的字段全部在旧集合内，零行为变化。</p>
+</section>
+
+<section id="s7">
+  <div class="folio"><span class="num">07</span><h2>边界与后续触发点</h2></div>
+  <p>本轮动到的文件收敛在 <code>src/auto_qb/torrents/compat.py</code>、<code>record.py</code> 与两个测试文件;store.py / web_view.py / 前端零改动。</p>
+  <table>
+    <tr><th>触发点</th><th>届时动作</th></tr>
+    <tr><td>WebUI 详情面板立项</td><td>store 层 detail 视图 + to_dict 透出;properties / peers 惰性缓存接入。</td></tr>
+    <tr><td>列表列要展示新字段(如 ETA / 做种数)</td><td>字段进 _VIEW_FIELDS + 配 quantum,或评估 WebSocket 推送通道(想法.md 既有候选)。</td></tr>
+    <tr><td>会话流量统计</td><td>downloaded_session / uploaded_session 进视图或历史流量图。</td></tr>
+    <tr><td>qB 新版本新增字段</td><td>未知字段自动落 _raw(数据不丢);需要展示时补 slots 声明 + 守卫测试。</td></tr>
+  </table>
+</section>
+
+<footer class="colophon">
+  <span>auto-qb · torrent-record full-field caching plan</span>
+  <span>src/auto_qb/torrents/ · 2026-09-15</span>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

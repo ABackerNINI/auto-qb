@@ -21,7 +21,8 @@
 
 说明:
 - TorrentRecord 是种子数据的**唯一所有者**(无需中间投影视图): 快照字段走 slots(C 级属性
-  访问的热路径), 非快照必需字段(RE_ADD_FIELDS)存 `_raw` 并由属性访问兜底; 字段名与
+  访问的热路径; 2026-09-15 起全量缓存 qB 种子对象的全部数据字段, 见 compat._SNAPSHOT_FIELDS),
+  未声明字段(qB 新版本)存 `_raw` 并由属性访问兜底; 字段名与
   qbittorrentapi TorrentDictionary 一致, 鸭子类型兼容(可直接传给需要种子对象的代码)。
 - apply_delta() 只处理 patch 中的字段(增量轮成本 ∝ 变化字段数), 记录对象跨 tick 保留
   (惰性缓存存活), 种子删除时记录被回收, 缓存自然清理。
