@@ -227,6 +227,9 @@ const app = createApp({
       colManual: initialColState.manual,  // {page: bool}: 是否手动调过列宽(调过则不再随窗口自适应)
       colMenuOpen: false,                 // 列选择器弹层开关
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
+      // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
+      filePrio: { visible: false, x: 0, y: 0, index: -1 },
+      drawerSelPath: "",    // 内容页签选中行(文件/目录完整相对路径); 顶部"重命名…"的作用对象
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
@@ -788,12 +791,14 @@ const app = createApp({
       this.menu.visible = false;
       this.colMenuOpen = false;
       this.filterMenu = "";
+      this.filePrio.visible = false;
     });
     // Esc: 优先关闭确认框, 其次历史弹层/右键菜单/列选择器(都是临时浮层)
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
       else if (this.addOpen) this.closeAddTorrent();  // 添加种子对话框: 确认框优先, 其后于其它浮层
+      else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;
       else if (this.menu.visible) this.menu.visible = false;
@@ -959,6 +964,7 @@ const app = createApp({
         checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制汇报 + 删除文件并存)
         details: null,  // 目标信息区 [{icon,label,value}](删除确认框显示待删种子信息)
         members: null,  // 成员明细 [{site,name}](删除整组: 逐个列出待删种子, 滚动区)
+        fields: null,   // 多字段输入 [{key,label,value,placeholder}](编辑类对话框: 限速/分享率/移动/重命名)
         wide: false,    // 加宽形态(删除确认框: 容纳完整种子名/路径与成员明细)
         icon: "",       // 标题图标覆盖(如删除用 i-trash-x); 缺省按 danger 取 warn/info
       };
@@ -994,30 +1000,40 @@ const app = createApp({
         this._modalResolve = resolve;
         this.modal = { ...this._modalInit(), ...cfg, visible: true };
         this.$nextTick(() => {
-          if (this.modal.input && this.$refs.modalInput) {
-            this.$refs.modalInput.focus();
-            this.$refs.modalInput.select();
+          // 多字段形态聚焦第一个输入框(fields), 单输入形态聚焦 modalInput
+          const el = (this.modal.fields && this.$refs.modalFields)
+            ? this.$refs.modalFields.querySelector("input")
+            : this.$refs.modalInput;
+          if (el) {
+            el.focus();
+            el.select();
           }
         });
       });
     },
     resolveModal(ok) {
       if (!this.modal.visible) return;
-      const { input, value, checkbox, checked, checks } = this.modal;
+      const { input, value, checkbox, checked, checks, fields } = this.modal;
       const resolve = this._modalResolve;
       this._modalResolve = null;
       this.modal = this._modalInit();
       if (!resolve) return;
       const hasChecks = !!(checkbox || (checks && checks.length));
+      const hasFields = !!(fields && fields.length);
       if (ok) {
         if (input) resolve(value);
-        else if (hasChecks) {
+        else if (hasFields) {
+          // 多字段编辑对话框: 返回 {key: value}(字符串, 调用方自行解析数字/判空)
+          const vals = {};
+          for (const f of fields) vals[f.key] = String(f.value ?? "").trim();
+          resolve(vals);
+        } else if (hasChecks) {
           // 勾选类确认返回 {checked, checks:{key:bool}}(向后兼容单 checkbox 的 checked 字段)
           const map = {};
           for (const c of checks || []) map[c.key] = c.checked;
           resolve({ checked, checks: map });
         } else resolve(true);
-      } else resolve(input || hasChecks ? null : false);
+      } else resolve(input || hasChecks || hasFields ? null : false);
     },
     /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
     /* 成员值 -> 选项(带计数, 按出现组数降序): 标签/分类/站点三个筛选器共用
@@ -2105,6 +2121,249 @@ const app = createApp({
       this.menu.hash = this.drawer.hash;
       this.torrentCmd(action, body, okText);
     },
+    /* ---------------- 种子编辑对话框(D 轮): 限速/分享率限制/移动/重命名 ----------------
+     * 统一形态: 多字段 .modal(modal.fields) + 回执 toast; 预填当前值, 空输入 = 不修改。
+     * hash 约定: 菜单调用不传参取 menu.hash, 抽屉调用显式传 drawer.hash(与 drawerCmd 同约定)。 */
+    _editTargetHash(h) {
+      const hash = h || this.menu.hash;
+      this.menu.visible = false;
+      return hash || "";
+    },
+    /* 编辑类对话框取当前值: 抽屉已开且同一 hash 直接用 drawer.detail, 否则现拉一次详情 */
+    async _editDetail(hash) {
+      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail) return this.drawer.detail;
+      try {
+        const r = await this.api(`/api/torrents/${hash}`);
+        return (r && r.torrent) || null;
+      } catch (e) {
+        if (!e.auth) this.toast("当前值获取失败: " + e.message, "error");
+        return null;
+      }
+    },
+    /* 编辑类命令统一投递: api + waitCmd 回执 + toast 三态; 成功后按动作刷新抽屉对应页签数据 */
+    async _editPost(hash, action, body, okText) {
+      try {
+        const resp = await this.api(`/api/torrents/${hash}/${action}`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          this.toast(`已执行: ${okText}`, "ok", 2500);
+          if (this.drawer.open && this.drawer.hash === hash) {
+            this._fetchDrawerDetail();
+            if (action.startsWith("trackers/")) this._fetchDrawerTrackers(true);
+            else if (action === "files/priority" || action === "rename-fs") this._fetchDrawerFiles(true);
+          }
+          return true;
+        }
+        this.toast(`${okText}失败: ${r.error}`, "error", 8000);
+      } catch (e) {
+        if (!e.auth) this.toast(`${okText}命令发送失败: ` + e.message, "error");
+      }
+      return false;
+    },
+    /* 限速…: 上传/下载两输入(KiB/s; 空=不改, 0=不限) → POST limits(×1024 转 bytes, 0 原样传) */
+    async editLimits(h = "") {
+      const hash = this._editTargetHash(h);
+      if (!hash) return;
+      const d = await this._editDetail(hash);
+      const kiB = (bytes) => (bytes > 0 ? String(Math.round(bytes / 1024)) : "");  // 不限/未设(≤0)留空
+      const res = await this._openModal({
+        title: "限速",
+        body: "设置该种子的上传/下载速度上限(KiB/s)。留空 = 保持不变, 填 0 = 不限速。",
+        fields: [
+          { key: "up", label: "上传上限(KiB/s)", value: d ? kiB(d.up_limit) : "", placeholder: "留空不修改, 0 = 不限" },
+          { key: "dl", label: "下载上限(KiB/s)", value: d ? kiB(d.dl_limit) : "", placeholder: "留空不修改, 0 = 不限" },
+        ],
+        okText: "应用", cancelText: "取消",
+      });
+      if (!res) return;
+      const body = {};
+      for (const [k, key] of [["up", "up_limit"], ["dl", "dl_limit"]]) {
+        if (res[k] === "") continue;  // 空 = 不修改
+        const n = Number(res[k]);
+        if (!Number.isFinite(n) || n < 0) {
+          this.toast("限速需为非负数字(KiB/s)", "warn");
+          return;
+        }
+        body[key] = Math.round(n * 1024);  // KiB/s → bytes/s; 0 原样传(后端语义 = 不限)
+      }
+      if (!Object.keys(body).length) {
+        this.toast("未作修改", "ok", 2000);
+        return;
+      }
+      await this._editPost(hash, "limits", body, "限速已更新");
+    },
+    /* 分享率限制…: 分享率/做种时长(h)/不活跃做种时长(h) → POST share-limits(-1 = 恢复全局默认) */
+    async editShareLimits(h = "") {
+      const hash = this._editTargetHash(h);
+      if (!hash) return;
+      const d = await this._editDetail(hash);
+      const hrs = (sec) => (sec > 0 ? String(Math.round((sec / 3600) * 100) / 100) : "");  // -1/0(未设)留空
+      const res = await this._openModal({
+        title: "分享率限制",
+        body: "达到任一限制后该种子将停止做种。留空 = 保持不变, 填 -1 = 恢复全局默认。",
+        fields: [
+          { key: "ratio", label: "分享率上限", value: d && d.max_ratio >= 0 ? String(d.max_ratio) : "", placeholder: "留空不修改, -1 = 全局" },
+          { key: "time", label: "做种时长上限(小时)", value: d ? hrs(d.max_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
+          { key: "inactive", label: "不活跃做种上限(小时)", value: d ? hrs(d.max_inactive_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
+        ],
+        okText: "应用", cancelText: "取消",
+      });
+      if (!res) return;
+      const body = {};
+      if (res.ratio !== "") {
+        const n = Number(res.ratio);
+        if (!Number.isFinite(n) || (n < 0 && n !== -1)) {
+          this.toast("分享率需为非负数字(或 -1)", "warn");
+          return;
+        }
+        body.ratio_limit = n;
+      }
+      for (const [k, key] of [["time", "seeding_time_limit"], ["inactive", "inactive_seeding_time_limit"]]) {
+        if (res[k] === "") continue;  // 空 = 不修改
+        const n = Number(res[k]);
+        if (!Number.isFinite(n) || (n < 0 && n !== -1)) {
+          this.toast("时长需为非负小时数(或 -1)", "warn");
+          return;
+        }
+        body[key] = n === -1 ? -1 : Math.round(n * 3600);  // 小时 → 秒; -1 原样(未设/全局)
+      }
+      if (!Object.keys(body).length) {
+        this.toast("未作修改", "ok", 2000);
+        return;
+      }
+      await this._editPost(hash, "share-limits", body, "分享率限制已更新");
+    },
+    /* 移动…: 新保存路径输入(确认文案注明离开辅种组) → POST location */
+    async editMove(h = "") {
+      const hash = this._editTargetHash(h);
+      if (!hash) return;
+      const d = await this._editDetail(hash);
+      const res = await this._openModal({
+        title: "移动种子",
+        body: "将种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。",
+        fields: [{ key: "location", label: "新保存路径", value: d ? d.save_path || "" : "", placeholder: "D:\\downloads\\target" }],
+        okText: "移动", cancelText: "取消",
+      });
+      if (!res) return;
+      if (!res.location) {
+        this.toast("路径不能为空", "warn");
+        return;
+      }
+      await this._editPost(hash, "location", { location: res.location }, "已移动");
+    },
+    /* 重命名…: 种子显示名(不改磁盘文件名) → POST rename */
+    async editRename(h = "") {
+      const hash = this._editTargetHash(h);
+      if (!hash) return;
+      const d = await this._editDetail(hash);
+      const res = await this._openModal({
+        title: "重命名种子",
+        body: "修改种子显示名(不影响磁盘上的文件/目录名)。",
+        fields: [{ key: "name", label: "新名称", value: d ? d.name || "" : "", placeholder: "新种子名" }],
+        okText: "重命名", cancelText: "取消",
+      });
+      if (!res) return;
+      if (!res.name) {
+        this.toast("名称不能为空", "warn");
+        return;
+      }
+      await this._editPost(hash, "rename", { name: res.name }, "已重命名");
+    },
+    /* ---------------- 抽屉 Tracker 页签编辑(D 轮): 添加/编辑/删除 ---------------- */
+    async trackerAdd() {
+      const hash = this.drawer.hash;
+      if (!hash) return;
+      const raw = await this.promptDialog("添加 Tracker", "", {
+        placeholder: "announce URL(多条用换行/逗号分隔)", okText: "添加",
+      });
+      if (raw === null) return;
+      const urls = raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+      if (!urls.length) {
+        this.toast("请输入至少一条 tracker URL", "warn");
+        return;
+      }
+      await this._editPost(hash, "trackers/add", { urls }, urls.length > 1 ? `已添加 ${urls.length} 条 tracker` : "tracker 已添加");
+    },
+    async trackerEdit(url) {
+      const hash = this.drawer.hash;
+      if (!hash) return;
+      const nu = await this.promptDialog("编辑 Tracker", url, { placeholder: "新的 announce URL", okText: "保存" });
+      if (nu === null) return;
+      const newUrl = String(nu || "").trim();
+      if (!newUrl) {
+        this.toast("URL 不能为空", "warn");
+        return;
+      }
+      if (newUrl === url) {
+        this.toast("未作修改", "ok", 2000);
+        return;
+      }
+      await this._editPost(hash, "trackers/edit", { orig_url: url, new_url: newUrl }, "tracker 已更新");
+    },
+    async trackerRemove(url) {
+      const hash = this.drawer.hash;
+      if (!hash) return;
+      const ok = await this.confirmDialog("删除 Tracker", `将删除该 tracker: ${url}`, { okText: "删除", danger: true });
+      if (!ok) return;
+      await this._editPost(hash, "trackers/remove", { url }, "tracker 已删除");
+    },
+    /* ---------------- 抽屉内容页签编辑(D 轮): 行选中/优先级/文件重命名 ---------------- */
+    /* 行点击选中(文件/目录均可): 再点同一行取消 —— 顶部"重命名…"的作用对象 */
+    fileRowSelect(r) {
+      this.drawerSelPath = this.drawerSelPath === r.path ? "" : r.path;
+    },
+    /* 文件优先级小菜单: 锚定单元格下方, 视口吸附(@click.stop 防止开菜单的点击立即被窗口关闭) */
+    openFilePrio(ev, index) {
+      const rect = ev.currentTarget.getBoundingClientRect();
+      const w = 150, h = 176;
+      this.filePrio = {
+        visible: true, index,
+        x: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)),
+        y: Math.min(rect.bottom + 4, Math.max(8, window.innerHeight - h - 8)),
+      };
+    },
+    /* 优先级 4 档(0=跳过 1=普通 6=高 7=最高) → POST files/priority(单文件) */
+    async setFilePriority(p) {
+      this.filePrio.visible = false;
+      const index = this.filePrio.index;
+      const hash = this.drawer.hash;
+      if (!hash || index < 0) return;
+      const label = { 0: "跳过", 1: "普通", 6: "高", 7: "最高" }[p] || String(p);
+      await this._editPost(hash, "files/priority", { indices: [index], priority: p }, `优先级已设为「${label}」`);
+    },
+    /* 文件/目录重命名(选中行; 单文件种子免选): POST rename-fs, new_path = 原目录前缀 + 新名 */
+    async renameFileRow() {
+      const hash = this.drawer.hash;
+      if (!hash) return;
+      const rows = this.drawerFileRows();
+      let row = rows.find((r) => r.path === this.drawerSelPath);
+      if (!row && rows.length === 1) row = rows[0];  // 单文件种子: 免选中直接改
+      if (!row) {
+        this.toast("请先点击选中要重命名的文件或目录", "warn");
+        return;
+      }
+      const res = await this.promptDialog(row.dir ? "重命名目录" : "重命名文件", row.name, {
+        body: `当前路径: ${row.path}`,
+        okText: "重命名",
+      });
+      if (res === null) return;
+      const nn = String(res || "").trim();
+      if (!nn) {
+        this.toast("名称不能为空", "warn");
+        return;
+      }
+      if (nn === row.name) {
+        this.toast("未作修改", "ok", 2000);
+        return;
+      }
+      const parent = row.path.includes("/") ? row.path.slice(0, row.path.lastIndexOf("/") + 1) : "";
+      await this._editPost(hash, "rename-fs", {
+        old_path: row.path, new_path: parent + nn, is_folder: !!row.dir,
+      }, row.dir ? "目录已重命名" : "文件已重命名");
+    },
     copyTorrentInfo(field) {
       this.menu.visible = false;
       const m = this.memberByHash.get(this.menu.hash);
@@ -2135,6 +2394,8 @@ const app = createApp({
     },
     closeDrawer() {
       this.drawer.open = false;
+      this.filePrio.visible = false;
+      this.drawerSelPath = "";
       this._stopDrawerPoll();
     },
     _stopDrawerPoll() {
@@ -2201,6 +2462,7 @@ const app = createApp({
     drawerTab(tab) {
       if (this.drawer.tab === tab) return;
       this.drawer.tab = tab;
+      this.filePrio.visible = false;  // 换页签时收起文件优先级小菜单(内容页签专属)
       this._stopDrawerPoll();
       if (tab === "general") this._fetchDrawerDetail();
       else if (tab === "trackers") {
@@ -2312,29 +2574,36 @@ const app = createApp({
       ];
     },
     /* Content tab: qB files[].name 为 '/' 分隔相对路径 -> 构树后扁平化(缩进渲染);
-     * 目录行聚合大小; 文件行展示 进度/优先级(0=跳过 1=普通 4|6=高 7=最高), 只读(编辑属后续轮次) */
+     * 目录行聚合大小; 文件行展示 进度/优先级(0=跳过 1=普通 4|6=高 7=最高), 优先级可点改(小菜单);
+     * 每行带 index(种子内原始下标, files/priority 用)与 path(完整相对路径, 选中/rename-fs 用) */
     drawerFileRows() {
       const files = this.drawer.files || [];
-      const root = { dirs: new Map(), files: [], size: 0 };
-      for (const f of files) {
+      const root = { dirs: new Map(), files: [], size: 0, path: "" };
+      for (let fi = 0; fi < files.length; fi++) {
+        const f = files[fi];
         const parts = String(f.name || "").split("/").filter(Boolean);
         let node = root;
         for (let i = 0; i < parts.length - 1; i++) {
-          if (!node.dirs.has(parts[i])) node.dirs.set(parts[i], { dirs: new Map(), files: [], size: 0 });
+          if (!node.dirs.has(parts[i])) {
+            node.dirs.set(parts[i], { dirs: new Map(), files: [], size: 0, path: node.path ? node.path + "/" + parts[i] : parts[i] });
+          }
           node = node.dirs.get(parts[i]);
           node.size += f.size || 0;
         }
-        node.files.push(f);
+        node.files.push({ ...f, index: fi });
       }
       const prio = (p) => ({ 0: "跳过", 1: "普通", 4: "高", 6: "高", 7: "最高" }[p] ?? "普通");
       const rows = [];
       const walk = (node, name, depth) => {
-        if (name !== null) rows.push({ depth, dir: true, name, text: this.fmtSize(node.size) });
+        if (name !== null) rows.push({ depth, dir: true, name, path: node.path, text: this.fmtSize(node.size) });
         for (const [dn, d] of node.dirs) walk(d, dn, name === null ? 0 : depth + 1);
         for (const f of node.files) {
+          const last = String(f.name || "").split("/").pop();
           rows.push({
             depth: name === null ? 0 : depth + 1, dir: false,
-            name: String(f.name || "").split("/").pop(),
+            name: last,
+            path: node.path ? node.path + "/" + last : last,
+            index: f.index,
             text: this.fmtSize(f.size), progress: Math.round((f.progress || 0) * 100),
             prio: prio(f.priority), skipped: f.priority === 0,
           });
