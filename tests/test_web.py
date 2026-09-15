@@ -54,6 +54,7 @@
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503)
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
+- test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
@@ -2080,6 +2081,20 @@ def test_api_export_endpoint(web_env):
     assert client.get("/api/torrents/NOPE/export", headers=auth).status_code == 404
     mgr.client = None
     assert client.get("/api/torrents/HA/export", headers=auth).status_code == 503
+
+
+def test_api_category_tag_list_endpoints(web_env):
+    """GET /api/categories 与 /api/tags 列表端点: 透出 store 缓存(管理对话框数据源)"""
+    mgr, client = web_env
+    mgr.api = SimpleNamespace(
+        torrents_categories=lambda: {"mv": {
+            "save_path": "R:/mv"
+        }},
+        torrents_tags=lambda: ["4K", "HDR"],
+    )
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.get("/api/categories", headers=auth).json() == {"categories": {"mv": {"save_path": "R:/mv"}}}
+    assert client.get("/api/tags", headers=auth).json() == {"tags": ["4K", "HDR"]}
 
 
 def test_api_log_endpoint(web_env):

@@ -379,6 +379,18 @@ def create_app(manager) -> FastAPI:
 
     # ---- 管理端点(R2B: 分类/标签/限速覆盖/添加种子/导出/日志) ----
 
+    @app.get("/api/categories")
+    def api_categories_list():
+        """全部分类(name -> {save_path,...}, 读 store 缓存; 首次访问可能触发一次 qB 拉取)"""
+        manager.touch_web_client()
+        return {"categories": manager.api.torrents_categories()}
+
+    @app.get("/api/tags")
+    def api_tags_list():
+        """全部标签(读 store 缓存)"""
+        manager.touch_web_client()
+        return {"tags": manager.api.torrents_tags()}
+
     @app.post("/api/categories")
     def api_category_create(body: dict = None):
         b = body or {}
