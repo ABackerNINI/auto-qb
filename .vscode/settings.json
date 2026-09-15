@@ -59,6 +59,7 @@
         "KMGTP",
         "kufirc",
         "levelname",
+        "libnotify",
         "llms",
         "maindata",
         "mubaidr",
@@ -76,6 +77,7 @@
         "ptfans",
         "ptsbao",
         "ptzone",
+        "pyproject",
         "pystray",
         "pytest",
         "pytestmark",
@@ -111,6 +113,7 @@
         "venv",
         "webui",
         "windowsg",
+        "winget",
         "winotify",
         "WRONLY"
     ],
