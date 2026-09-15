@@ -8,7 +8,9 @@
                     ┌──────────────────────────────────────────────────┐
                     │ QbManager (qbmanager.py)                         │
                     │  = RuleEngineMixin + TagsMixin + CheckingMixin   │
-                    │    + GroupingMixin + TrackerMixin + SpeedCurveMixin │
+                    │    + GroupingMixin + TrackerMixin + SpeedCurveMixin
+                    │    + WebviewMixin + WebCommandsMixin (2026-09-15 拆分)
+                    │    客户端构造在 qbclient.py(_new_client/LocalQbClient) │
                     ├──────────────────────────────────────────────────┤
   每tick增量同步 →│ TorrentStore (torrents.py)   ← 快照同步 ──  QbApi (qbapi.py) ──→ qbittorrent-api Client
                     │  快照/惰性缓存/分组索引        (写后同步)      APIFacade
@@ -22,7 +24,7 @@
                     state(state_file JSON) ← 仅退出时落盘
 ```
 
-**组合关系**: `QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin)` — mixin 依赖宿主实例属性 (`config`/`store`/`api`/`state`/`task_queue`/`client`), 各 mixin 文件头部 docstring 声明了所依赖的属性, 新 mixin 照此模式写。
+**组合关系**: `QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin, WebviewMixin, WebCommandsMixin)`(2026-09-15 由 6 mixin 扩至 8, 同日拆分出 qbclient.py) — mixin 依赖宿主实例属性 (`config`/`store`/`api`/`state`/`task_queue`/`client`), 各 mixin 文件头部 docstring 声明了所依赖的属性, 新 mixin 照此模式写。`__init__` 是唯一组合根: 全部实例状态(web_commands/_web_results/_group_view/_search_index 等)留在核心 `__init__`, mixin 是纯方法簇。
 
 ## 主循环 (qbmanager.py)
 

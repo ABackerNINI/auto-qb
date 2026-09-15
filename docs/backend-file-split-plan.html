@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>后端大文件拆分计划 — qbmanager 瘦身 · schema/torrents/validation 转包 · 只列计划不改代码</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .13);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 42px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 56em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; margin-top: 46px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.4 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .04em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  section.sec { margin: 0 0 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  p { margin: 0 0 12px; max-width: 62em; color: var(--fg); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 1.4em; max-width: 62em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: var(--dim); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--fg); }
+  td .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  td.no, td.c { font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  td.ok { color: var(--accent); }
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .05em;
+    padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); }
+  .tag.hot { color: var(--accent); border-color: rgba(91, 200, 236, .4); }
+  .tag.warn { color: #e8b45a; border-color: rgba(232, 180, 90, .4); }
+  .tag.dim2 { color: var(--dim); }
+
+  .note { border-left: 2px solid rgba(91, 200, 236, .45); padding: 10px 14px; margin: 14px 0 18px;
+    background: var(--panel); color: var(--muted); font-size: 13.5px; max-width: 62em; }
+  .note b { color: var(--fg); }
+  .note + ul { margin-top: -6px; }
+
+  pre { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
+    overflow-x: auto; font: 12.5px/1.7 var(--mono); color: #cfe0ee; margin: 12px 0 18px; }
+  pre b { color: var(--accent); font-weight: 600; }
+  pre .cm { color: var(--dim); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
+    font: 12px/1.6 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">auto-qb · refactor · backend file split</div>
+  <h1>后端大文件拆分计划<br>qbmanager 瘦身 · schema / torrents / validation 转包</h1>
+  <p class="lede">
+    本轮只列计划不改代码。对 <code>src/</code> 全部 44 个 .py 做 AST 结构剖析(类/函数行分布 + 模块级常量 +
+    跨文件导入面), 按"体积大 × 职责是否混杂"双维度筛选: 真正需要动手的是 1 个主文件(qbmanager)加 3 个
+    大而单一的数据/声明文件; 另有 4 个文件判定为观察项不动。拆分全程纯移动代码, 行为与签名零变化。
+  </p>
+  <div class="meta">
+    <span>分支 <b>develop 工作区</b>(行数为 2026-09-15 实测物理行, 含空行注释)</span>
+    <span>范围 <b>仅 src/ 后端; 不碰 config.yml 与 auto-qb-data/</b></span>
+    <span>基线 <b>pytest 871 passed</b>(testing.md 单点)</span>
+    <span>日期 <b>2026-09-15</b></span>
+  </div>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s00"><span class="t-no">00</span>摘要与判定</a>
+      <a href="#s01"><span class="t-no">01</span>现状盘点</a>
+      <a href="#s02"><span class="t-no">02</span>拆分原则(硬约束)</a>
+      <a href="#s03"><span class="t-no">03</span>批次一: qbmanager</a>
+      <a href="#s04"><span class="t-no">04</span>批次二: config/schema</a>
+      <a href="#s05"><span class="t-no">05</span>批次三: torrents + validation</a>
+      <a href="#s06"><span class="t-no">06</span>不拆清单与理由</a>
+      <a href="#s07"><span class="t-no">07</span>执行纪律 · 验证 · 回写</a>
+    </nav>
+
+    <main>
+      <!-- ============ 00 ============ -->
+      <section class="sec" id="s00">
+        <div class="sec-head"><span class="no">00</span><h2>摘要与判定</h2></div>
+        <p>
+          用户诉求是"体积较大、<b>职责不清</b>"的文件。按此过滤, 44 个文件里同时满足两条的只有一个:
+          <code>qbmanager.py</code>(1118 行) —— 它把<b>核心循环、Web 视图组装、Web 命令消费、汇报确认跟踪、
+          qB 客户端构造</b>五簇职责堆在一个类里, 是历代 WEB UI 轮次(第五~七轮)持续往里加方法的结果,
+          基线 2026-09-05 时约 800 行, 现已涨到 1118 行。其余三个大文件(schema 855 / torrents 725 /
+          validation 687)属于<b>大而职责单一</b>: 拆它们不是为了救架构, 是为了导航与并行修改的冲突面。
+        </p>
+        <table>
+          <tr><th>文件</th><th>实测行</th><th>职责判定</th><th>动作</th></tr>
+          <tr><td class="no">qbmanager.py</td><td class="no">1118</td>
+              <td>体积最大 + 五簇职责混杂(引擎/视图/命令/确认/客户端), 增长最快(+300 行/10 天)</td>
+              <td><span class="tag hot">批次一 P0</span></td></tr>
+          <tr><td class="no">config/schema.py</td><td class="no">855</td>
+              <td>单一职责(纯声明 UI 元数据), 但数据表占 ~600 行, 单表 GROUPS 就 302 行</td>
+              <td><span class="tag hot">批次二 P1</span></td></tr>
+          <tr><td class="no">torrents.py</td><td class="no">725</td>
+              <td>两大类边界清晰(TorrentRecord 207L / TorrentStore 364L), 同文件尚可但已到拆包阈值</td>
+              <td><span class="tag">批次三 P2</span></td></tr>
+          <tr><td class="no">config/validation.py</td><td class="no">687</td>
+              <td>单一职责(fail-fast 校验), 函数粒度已好, 纯粹是平铺太长</td>
+              <td><span class="tag">批次三 P2</span></td></tr>
+          <tr><td class="no">ui.py</td><td class="no">522</td>
+              <td>单一职责(托盘 UI); GUI 懒加载契约使拆包有额外回归面</td>
+              <td><span class="tag dim2">观察不动</span></td></tr>
+          <tr><td class="no">utils.py</td><td class="no">428</td>
+              <td>杂但单元小(最大函数 36L), 全项目高扇入, 拆包改动面大于收益</td>
+              <td><span class="tag dim2">观察不动</span></td></tr>
+          <tr><td class="no">web.py</td><td class="no">389</td>
+              <td>create_app 222L 单函数含全部端点; 待批次一落地后复评</td>
+              <td><span class="tag dim2">观察不动</span></td></tr>
+          <tr><td class="no">mixins/grouping.py</td><td class="no">368</td>
+              <td>单 mixin 内聚(分组事件驱动全链路在一个生命周期里)</td>
+              <td><span class="tag dim2">不拆</span></td></tr>
+        </table>
+        <div class="note">
+          <b>一句话结论:</b> 批次一(qbmanager mixin 化)解决"职责不清", 批次二/三(转包 + re-export)解决
+          "大而难导航"; 三批各自独立提交、独立验证, 可以在任何一批后停下而不留半成品。
+        </div>
+      </section>
+
+      <!-- ============ 01 ============ -->
+      <section class="sec" id="s01">
+        <div class="sec-head"><span class="no">01</span><h2>现状盘点</h2></div>
+        <h3><span class="h-no">1.1</span>qbmanager.py 的五簇职责(AST 实测行号)</h3>
+        <table>
+          <tr><th>职责簇</th><th>成员(行号区间)</th><th>方法行</th></tr>
+          <tr><td>A · qB 客户端构造</td>
+              <td class="no">_throttle(55) · _is_local_qb(73) · LocalQbClient(78) · _new_client(101)</td>
+              <td class="no">~44</td></tr>
+          <tr><td>B · Web 视图组装</td>
+              <td class="no">status_snapshot(303) · _state_kind(448) · _hr_view_fields(468) · _build_group_view(511)
+                  · ensure_group_view(571) · ensure_group_state(580) · _build_search_index(595) · search_torrents(642)
+                  · touch_web_client(699) · _group_hashes(703)</td>
+              <td class="no">~239</td></tr>
+          <tr><td>C · Web 命令消费 + 汇报确认</td>
+              <td class="no">_drain_web_commands(311) · _set_web_result(355) · _trackers_baseline(362)
+                  · _confirm_reannounce_result(381) · _check_reannounce_pending(407) · _register_reannounce_pending(756)
+                  · _cmd_*(706–779, 共 10 个)</td>
+              <td class="no">~201</td></tr>
+          <tr><td>D · 配置热重载</td>
+              <td class="no">apply_new_config(781) · _apply_web_config(833)</td>
+              <td class="no">~75</td></tr>
+          <tr><td>E · 核心引擎(留守)</td>
+              <td class="no">__init__(108, 组合根+全部状态) · client(180/185) · connect(196) · run(217) · _tick(858)
+                  · _create_global_tasks(886) · _validate_torrent_schema(928) · _refresh_torrents(946)
+                  · _create_torrent_tasks(1039) · _handle_maintenance(1077) · export_torrents_info(1096)</td>
+              <td class="no">~450</td></tr>
+        </table>
+        <p class="small">
+          B、C 两簇全是第六~七轮 WEB UI 功能(分组视图/搜索索引/命令回执/汇报确认)堆进来的 —— 它们与"引擎"
+          的唯一关系是共享宿主属性, 本身是自洽的两块业务, 正好落进本项目现成的 mixin 模式。
+        </p>
+        <h3><span class="h-no">1.2</span>config/schema.py 的构成</h3>
+        <p>
+          类声明仅 ~70 行(Field/Group/Plugin), 访问函数 ~42 行, 其余 ~600 行全是数据表:
+          <code>GROUPS</code>(302L, 左导航 8 分组的完整字段树)、<code>ACTION_PLUGINS</code>(92L)、
+          <code>CONDITION_PLUGINS</code>(70L)、<code>HR_OUTPUT_FIELDS</code>(46L)、<code>TRACKER_FIELDS</code>(50L)、
+          <code>RULE_FIELDS</code>(41L)等。键集合由 <code>tests/test_config_schema.py</code> 守卫 —— 这意味着
+          任何搬运错误(漏键/重键)会直接测试红, 拆分安全性极高。
+        </p>
+        <h3><span class="h-no">1.3</span>torrents.py 与 validation.py</h3>
+        <p>
+          torrents.py: <code>TorrentRecord</code>(153–359, 唯一数据所有者)与 <code>TorrentStore</code>(362–725,
+          增量同步态+分组索引+写后同步)各占一段, 模块级另有视图字段表与版本兼容工具。职责内部清晰,
+          是"单文件转包"的教科书场景。
+        </p>
+        <p>
+          validation.py: 入口 <code>validate_config</code>(638) + 16 个分段校验器 + 通用助手 + KNOWN_* 键表,
+          函数粒度无需再切, 只需按"通用助手 / 各段校验 / 规则 spec / 曲线"分文件平铺。
+        </p>
+        <h3><span class="h-no">1.4</span>导入兼容面(实测)</h3>
+        <table>
+          <tr><th>被拆文件</th><th>外部引用方</th><th>兼容策略</th></tr>
+          <tr><td class="no">qbmanager</td>
+              <td>全项目 <code>from auto_qb.qbmanager import QbManager</code>; tests 另引
+                  <code>LocalQbClient/_new_client/_throttle</code>(test_qbmanager / test_local_qb_service)</td>
+              <td>QbManager 类留在原地零影响; 客户端构造簇搬家后同步改 2 个测试文件的 import</td></tr>
+          <tr><td class="no">config.schema</td>
+              <td>web.py <code>from .config import schema as config_schema</code>; test_config_schema.py 同路径导入</td>
+              <td>转包后 <code>__init__.py</code> 重导出全部公共名, 引用方零改动</td></tr>
+          <tr><td class="no">torrents</td>
+              <td>qbapi / qbmanager / 6 个 mixin / rules / tests/helpers(含 <code>_VIEW_FIELDS/_VIEW_QUANTUM</code> 私有名)</td>
+              <td>转包后 __init__ 重导出(含私有名与 <code>view_field_value</code>), 引用方零改动</td></tr>
+          <tr><td class="no">config.validation</td>
+              <td>config/__init__(<code>validate_config</code>) · loaders(<code>_strip_none</code>) ·
+                  exporter(经 config 包转手) · test_config_schema/test_config/test_speed_curve</td>
+              <td>转包后 __init__ 重导出 <code>validate_config</code> + KNOWN_* + <code>_strip_none</code></td></tr>
+        </table>
+        <p class="small">
+          web.py 对 manager 的全部访问走鸭子类型(<code>manager._group_view / ensure_group_view /
+          search_torrents / web_commands / _web_results ...</code>), 方法搬进 mixin 后 web.py 一行都不用改。
+        </p>
+      </section>
+
+      <!-- ============ 02 ============ -->
+      <section class="sec" id="s02">
+        <div class="sec-head"><span class="no">02</span><h2>拆分原则(硬约束)</h2></div>
+        <ul>
+          <li><b>纯移动, 零行为变化。</b>不改任何函数签名、日志文案、返回值语义; 拆分是搬家不是重写。
+              回归守卫 = 现有 871 个测试 + <code>--dry-run</code> 冒烟, 不新增测试(没有新行为可测)。</li>
+          <li><b>mixin 契约照旧。</b>新 mixin 文件头部 docstring 必须声明所依赖的宿主属性
+              (config/store/api/task_queue/client/state/...), 与现有 6 个 mixin 同模式。</li>
+          <li><b>__init__ 是唯一组合根。</b>全部实例状态(web_commands/_web_results/_reannounce_pending/
+              _group_view/_singles_view/_search_index/_traffic_view/_suppress_events...)留在 core
+              <code>__init__</code>; 新 mixin 是纯方法簇, 不携带状态初始化。</li>
+          <li><b>单一写线程不动。</b>mixin 化不引入线程、不改队列写入者; 命令仍由主循环线程经
+              _drain_web_commands 消费, Web 线程仍只读快照+投递。</li>
+          <li><b>模块转包必带 re-export。</b>torrents / config.schema / config.validation 转包后,
+              <code>__init__.py</code> 重导出全部既有公共名<b>与被 tests 引用的私有名</b>
+              (_VIEW_FIELDS/_VIEW_QUANTUM/_strip_none), 保证调用方与测试零改动。</li>
+          <li><b>依赖方向不新增环。</b>新 mixin 依赖 ⊆ {config, torrents, utils, qbapi, taskqueue};
+              qbclient.py 仅依赖 qbittorrentapi + stdlib; 遵守 rules/base.py "不 import qbmanager"的防环模式。</li>
+          <li><b>每批独立提交。</b>中文一句话提交信息; 任何一批之后停下, 仓库都是完整可发布状态。</li>
+        </ul>
+      </section>
+
+      <!-- ============ 03 ============ -->
+      <section class="sec" id="s03">
+        <div class="sec-head"><span class="no">03</span><h2>批次一(P0): qbmanager.py 1118 → ~620 + 3 个新模块</h2></div>
+        <p>
+          三个移动簇 + 一个留守核。全部走"新建文件 → 剪切方法 → import 调整", 不改一行逻辑。
+        </p>
+        <table>
+          <tr><th>去向(新文件)</th><th>搬入内容</th><th>约行</th></tr>
+          <tr>
+            <td class="no">mixins/web_view.py<br><span class="sub">WebviewMixin — 分组视图/搜索/状态快照组装</span></td>
+            <td><code>_state_kind</code> · <code>_hr_view_fields</code> · <code>_build_group_view</code> ·
+                <code>ensure_group_view</code> · <code>ensure_group_state</code> · <code>_build_search_index</code> ·
+                <code>search_torrents</code> · <code>touch_web_client</code> · <code>_group_hashes</code>;
+                模块常量 <code>WEB_VIEW_TTL</code> · <code>SEARCH_INDEX_BUILD_BUDGET</code> 随迁</td>
+            <td class="no">~275</td></tr>
+          <tr>
+            <td class="no">mixins/web_commands.py<br><span class="sub">WebCommandsMixin — 命令分发/回执/汇报确认</span></td>
+            <td><code>_drain_web_commands</code>(含 handlers 分发表) · <code>_set_web_result</code> ·
+                <code>_trackers_baseline</code> · <code>_confirm_reannounce_result</code> ·
+                <code>_check_reannounce_pending</code> · <code>_register_reannounce_pending</code> ·
+                全部 10 个 <code>_cmd_*</code>(含 build_search_index / reload_config);
+                常量 <code>REANNOUNCE_CONFIRM_TIMEOUT</code> 随迁</td>
+            <td class="no">~230</td></tr>
+          <tr>
+            <td class="no">qbclient.py<br><span class="sub">qB 客户端构造(LocalQbClient 会话策略)</span></td>
+            <td><code>_LOCAL_HOSTS</code> · <code>_is_local_qb</code> · <code>LocalQbClient</code> ·
+                <code>_new_client</code>(本地地址关 trust_env 语义原样)</td>
+            <td class="no">~60</td></tr>
+          <tr>
+            <td class="no">qbmanager.py(留守)<br><span class="sub">引擎: 连接/主循环/刷新/任务创建/热重载</span></td>
+            <td><code>__init__</code>(组合根) · <code>client</code> property · <code>_setup_logging</code> ·
+                <code>connect</code> · <code>run</code> · <code>_throttle</code> · <code>_tick</code> ·
+                <code>_refresh_torrents</code> · <code>_create_global_tasks</code> ·
+                <code>_create_torrent_tasks</code> · <code>_validate_torrent_schema</code> ·
+                <code>_handle_maintenance*</code> · <code>export_torrents_info</code> ·
+                <code>apply_new_config</code> / <code>_apply_web_config</code> · <code>status_snapshot</code></td>
+            <td class="no">~620</td></tr>
+        </table>
+        <h3><span class="h-no">3.1</span>边界裁量说明</h3>
+        <ul>
+          <li><b>status_snapshot 留守</b>: 它同时服务 Web(/api/status)与托盘 UI 轮询, 不是 Web 专属,
+              放 core 更诚实。</li>
+          <li><b>_cmd_build_search_index 归命令簇</b>: 虽然业务上是搜索, 但它是 handlers 分发表的一员,
+              与分发逻辑放一起可读性最好; <code>_build_search_index</code> 本体仍在视图簇。</li>
+          <li><b>apply_new_config 留守</b>: 配置生命周期(L0/L2 重建 + R 级重启)是引擎职责; 若拆后 core 仍
+              >650 行, 备选项是再抽 <code>mixins/config_reload.py</code>(~75L), 本批先不动。</li>
+          <li><b>组合签名变更为 8 mixin</b>:
+              <code>QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin,
+              SpeedCurveMixin, WebviewMixin, WebCommandsMixin)</code>; 新方法名与现有全部不冲突, 追加在尾部即可。</li>
+          <li><b>测试 import 面改动(仅 2 文件)</b>: test_qbmanager.py 与 test_local_qb_service.py 的
+              <code>LocalQbClient / _new_client</code> 改从 <code>auto_qb.qbclient</code> 导入;
+              <code>_throttle</code> 留守不动。其余测试零改动。</li>
+        </ul>
+        <h3><span class="h-no">3.2</span>验证</h3>
+        <ul>
+          <li><code>pytest tests -q</code> 全量 871 passed 持平;</li>
+          <li><code>python src/auto-qb.py config.yml --dry-run</code> 冒烟: 连接/刷新/任务/热重载路径;</li>
+          <li>Web 手检一轮: 分组视图轮询与 rid 门控、命令回执(toast)、强制汇报确认、搜索索引、设置保存 ——
+              本批恰好覆盖全部 Web 相关后端。</li>
+        </ul>
+      </section>
+
+      <!-- ============ 04 ============ -->
+      <section class="sec" id="s04">
+        <div class="sec-head"><span class="no">04</span><h2>批次二(P1): config/schema.py 855 → 5 文件包</h2></div>
+        <p>
+          模块转包 <code>config/schema/</code>, 按声明域分文件; <code>__init__.py</code> 承载访问函数与全量重导出。
+          纯声明无逻辑, 是三批中风险最低的一批。
+        </p>
+        <table>
+          <tr><th>新文件</th><th>内容</th><th>约行</th></tr>
+          <tr><td class="no">schema/fields.py</td>
+              <td><code>Field</code> / <code>Group</code> / <code>Plugin</code> 类 +
+                  <code>KINDS</code> / <code>UNIT_KINDS</code> / <code>TIME_UNITS</code> / <code>SIZE_UNITS</code> /
+                  <code>SPEED_UNITS</code> / <code>SPEC_KINDS</code> / <code>ITEM_KINDS</code> +
+                  选项常量(LOG_LEVELS…DELETED_ALLOWED_ACTIONS)</td>
+              <td class="no">~175</td></tr>
+          <tr><td class="no">schema/trackers.py</td>
+              <td><code>HR_OUTPUT_FIELDS</code> · <code>TRACKER_HR_FIELDS</code> · <code>TRACKER_FIELDS</code></td>
+              <td class="no">~130</td></tr>
+          <tr><td class="no">schema/rules.py</td>
+              <td><code>RULE_FIELDS</code> · <code>CONDITION_PLUGINS</code> · <code>CHECKING_SECTION_FIELDS</code> ·
+                  <code>ACTION_PLUGINS</code></td>
+              <td class="no">~225</td></tr>
+          <tr><td class="no">schema/groups.py</td>
+              <td><code>GROUPS</code>(302L 单表独占一文件 —— 它是导航痛感的最大来源)</td>
+              <td class="no">~315</td></tr>
+          <tr><td class="no">schema/__init__.py</td>
+              <td><code>config_fields</code> / <code>real_config_fields</code> / <code>plugin_table</code> /
+                  <code>plugins_by_kind</code> / <code>schema_payload</code> + 全量重导出</td>
+              <td class="no">~65</td></tr>
+        </table>
+        <div class="note">
+          <b>兼容面:</b> web.py 的 <code>from .config import schema as config_schema</code> 与守卫测试的
+          <code>from auto_qb.config import schema</code> 在模块转包后语义不变; 键集合守卫
+          (test_config_schema)自动兜住任何搬运失误。验证 = pytest 全量 + 设置页手检(分组导航/字段/插件表渲染)。
+        </div>
+      </section>
+
+      <!-- ============ 05 ============ -->
+      <section class="sec" id="s05">
+        <div class="sec-head"><span class="no">05</span><h2>批次三(P2, 可选): torrents.py 与 validation.py 转包</h2></div>
+        <p>两个文件都是"大而单一", 转包纯粹为了导航与降低并行修改冲突面; 可与批次二对调顺序, 也可延后。</p>
+        <h3><span class="h-no">5.1</span>torrents.py 725 → 5 文件包</h3>
+        <table>
+          <tr><th>新文件</th><th>内容</th><th>约行</th></tr>
+          <tr><td class="no">torrents/record.py</td>
+              <td><code>TorrentRecord</code>(21 快照 slot + _raw + apply_delta + HR 判定 + 惰性缓存属性)</td>
+              <td class="no">~240</td></tr>
+          <tr><td class="no">torrents/store.py</td>
+              <td><code>TorrentStore</code>(apply_sync/refresh/_apply 增量同步态 + 分组索引 + 写后同步 +
+                  remove/restore)</td>
+              <td class="no">~400</td></tr>
+          <tr><td class="no">torrents/view.py</td>
+              <td><code>_VIEW_FIELDS</code> · <code>_VIEW_QUANTUM</code> · <code>view_field_value</code> ·
+                  <code>view_dirty</code>(视图量化/置脏单一事实源)</td>
+              <td class="no">~50</td></tr>
+          <tr><td class="no">torrents/compat.py</td>
+              <td><code>QbCompatError</code> · <code>missing_torrent_fields</code> ·
+                  <code>REQUIRED_TORRENT_FIELDS</code> · <code>RE_ADD_FIELDS</code></td>
+              <td class="no">~45</td></tr>
+          <tr><td class="no">torrents/__init__.py</td>
+              <td>重导出全部公共名与 tests/helpers 引用的私有名</td>
+              <td class="no">~35</td></tr>
+        </table>
+        <h3><span class="h-no">5.2</span>config/validation.py 687 → 5 文件包</h3>
+        <table>
+          <tr><th>新文件</th><th>内容</th><th>约行</th></tr>
+          <tr><td class="no">validation/core.py</td>
+              <td><code>validate_config</code> 入口 + <code>_strip_none</code> / <code>_check_unknown_keys</code> /
+                  <code>_try</code> / <code>_try_time</code> / <code>_check_str_list</code> / <code>_check_regex_patterns</code></td>
+              <td class="no">~140</td></tr>
+          <tr><td class="no">validation/sections.py</td>
+              <td><code>_validate_log/qbittorrent/global_hr/grouping/tag_lists/add_episode_tags/tracker_hr/trackers/web/notify</code>
+                  + 相关 KNOWN_* 键表</td>
+              <td class="no">~300</td></tr>
+          <tr><td class="no">validation/rules.py</td>
+              <td><code>_validate_rules</code> / <code>_check_rule_refs</code> + 4 个 spec 校验器 +
+                  <code>_PLUGIN_SPEC_VALIDATORS</code> / <code>_validate_plugin_entry</code> /
+                  <code>_validate_trigger_action_compat</code></td>
+              <td class="no">~210</td></tr>
+          <tr><td class="no">validation/curves.py</td>
+              <td><code>_validate_global_speed_limit_curve</code> · <code>_validate_curve_points</code></td>
+              <td class="no">~110</td></tr>
+          <tr><td class="no">validation/__init__.py</td>
+              <td>重导出 <code>validate_config</code> + KNOWN_* + <code>_strip_none</code></td>
+              <td class="no">~40</td></tr>
+        </table>
+        <div class="note">
+          <b>兼容面:</b> <code>from auto_qb.config.validation import (...)</code>(守卫测试)与
+          <code>from .validation import _strip_none</code>(loaders) 经 __init__ 重导出后零改动;
+          exporter 经 config 包转手的 <code>_strip_none</code> 同样不受影响。
+          验证 = pytest 全量(test_config / test_config_schema / test_speed_curve 是主哨兵)。
+        </div>
+      </section>
+
+      <!-- ============ 06 ============ -->
+      <section class="sec" id="s06">
+        <div class="sec-head"><span class="no">06</span><h2>不拆清单与理由</h2></div>
+        <table>
+          <tr><th>文件</th><th>行</th><th>不拆理由(或条件)</th></tr>
+          <tr><td class="no">ui.py</td><td class="no">522</td>
+              <td>职责单一(托盘 UI), TrayUi 窗口本体内聚; 且"GUI 栈仅 tray 分支加载"的懒加载契约使转包有
+                  额外回归面。若将来继续长, 拆法已想好: ui/ 包 = log_handler + ipc(_set_windows_appid/
+                  ShowIpcServer/send_show) + window(TrayUi), 收益是导航 —— 非必需。</td></tr>
+          <tr><td class="no">utils.py</td><td class="no">428</td>
+              <td>主题杂(解析/匹配/路径/格式化/变量替换/timer)但单元小、扇入极高; 拆包会让全部模块的
+                  import 面翻动, 收益/代价比不划算。触发条件: 单簇(如 matching)再膨胀时先拆那一簇。</td></tr>
+          <tr><td class="no">web.py</td><td class="no">389</td>
+              <td>create_app 222L 含全部端点定义, 语义上"一个 app 一个函数"尚可读; 批次一落地后复评,
+              若继续增长先把路由注册抽为 create_api_routes(app, manager)。</td></tr>
+          <tr><td class="no">mixins/grouping.py</td><td class="no">368</td>
+              <td>单 mixin 单生命周期(归组/离组/路径变化/状态转移/缺文件/冲突)互相咬合, 再切只会把
+                  一个内聚状态机撕成两半。</td></tr>
+          <tr><td class="no">loaders.py / notify.py / rule_engine.py / base.py 等</td>
+              <td class="no">339↓</td>
+              <td>&lt;350 行且职责单一, 未达拆分阈值。</td></tr>
+        </table>
+      </section>
+
+      <!-- ============ 07 ============ -->
+      <section class="sec" id="s07">
+        <div class="sec-head"><span class="no">07</span><h2>执行纪律 · 验证 · 回写</h2></div>
+        <h3><span class="h-no">7.1</span>每批固定流程</h3>
+        <pre>
+git mv / 新建目标文件 → 剪切方法与常量 → import 调整(re-export 兜底)
+→ <b>.venv/Scripts/python.exe -m pytest tests -q</b>        <span class="cm"># 871 passed 必须持平</span>
+→ <b>yapf -i src/auto_qb/**/*.py</b>                       <span class="cm"># facebook 风格, 列宽 120</span>
+→ <b>python src/auto-qb.py config.yml --dry-run</b>         <span class="cm"># 真实 qB 冒烟(批次一加 Web 手检)</span>
+→ git commit(中文一句话概述, 每批独立落盘)</pre>
+        <h3><span class="h-no">7.2</span>风险与对策</h3>
+        <table>
+          <tr><th>风险</th><th>对策</th></tr>
+          <tr><td>循环导入</td>
+              <td>新模块依赖方向不变(mixins→{config, torrents, utils, qbapi, taskqueue}); qbclient.py 仅依赖
+                  qbittorrentapi + stdlib; 拆后跑一遍 <code>python -c "import auto_qb"</code> 即刻暴露。</td></tr>
+          <tr><td>漏迁模块级常量</td>
+              <td>WEB_VIEW_TTL / SEARCH_INDEX_BUILD_BUDGET / REANNOUNCE_CONFIRM_TIMEOUT / _LOCAL_HOSTS
+                  随簇走; 提交前 grep 旧文件名复查引用。</td></tr>
+          <tr><td>MRO / 方法名冲突</td>
+              <td>新 mixin 方法名(_cmd_* / _build_* / _hr_view_fields / ensure_*)与现有 6 mixin 全量不重名;
+                  AST 清单已核对。</td></tr>
+          <tr><td>私有名兼容缺口</td>
+              <td>tests/helpers.py 引用 torrents 的 _VIEW_FIELDS/_VIEW_QUANTUM; exporter 引用 _strip_none ——
+                  两处都必须进 __init__ 重导出清单(已在批次二/三表中标注)。</td></tr>
+          <tr><td>行为漂移</td>
+              <td>纯移动纪律: 不改签名/文案/语义; 871 测试 + dry-run + Web 手检三道闸。</td></tr>
+        </table>
+        <h3><span class="h-no">7.3</span>memory-bank 回写清单(收尾时)</h3>
+        <ul>
+          <li><code>modules.md</code>: qbmanager 行数与职责表重写(8 mixin 结构)、新增 web_view/web_commands/
+              qbclient 三行; schema/torrents/validation 条目改为包结构;</li>
+          <li><code>systemPatterns.md</code>: 组件总览图 mixin 6→8; WEB UI 线程模型段落补方法归属一句;</li>
+          <li><code>activeContext.md</code>: 批次进度与收尾纪要; 跨会话时在 <code>tasks/_index.md</code> 立档;</li>
+          <li>README.md 不动(无用户可见行为变化); config.yml 与 auto-qb-data/ 红线不碰。</li>
+        </ul>
+      </section>
+
+      <footer>
+        auto-qb · 后端大文件拆分计划 · 2026-09-15 · 行数为 AST 实测物理行(splitlines), 方法行号区间见 §01/§03 ·
+        仅计划, 未改任何代码
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>
