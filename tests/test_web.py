@@ -1085,6 +1085,81 @@ def test_build_singles_view_ungrouped_only():
         assert not (grouped_hashes & {s["hash"] for s in state["singles"]}), "已归组种子不得出现在 singles"
         again = mgr.ensure_group_state(rid=state["rid"])
         assert "singles" not in again and "groups" not in again
+        assert "shows" not in again, "追剧视图与 groups 同版本门控: 版本一致不回传"
+
+
+def test_build_shows_view_aggregation():
+    """_build_shows_view: 全量种子按剧→季→集聚合(不依赖辅种分组);
+    同集多版本归并成同一集行(多站点不分开); 缺集提示; 日期型归 None 季桶;
+    未识别种子进未识别桶; shows 随 ensure_group_state 同门控回传"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        from helpers import FakeTorrent, seed_store
+
+        seed_store(
+            mgr, [
+                FakeTorrent(hash="HA", name="Show.Name.S01E05.1080p.WEB-DL", save_path=r"R:\Downloads"),
+                FakeTorrent(hash="HB", name="Show Name S01E05 720p HDTV", save_path=r"R:\Downloads2"),
+                FakeTorrent(hash="HC", name="Show.Name.S01E07.1080p", save_path=r"R:\Downloads3"),
+                FakeTorrent(hash="HD", name="Another.Show.S01E01.1080p", save_path=r"R:\Downloads4"),
+                FakeTorrent(hash="HE", name="Some.Movie.2023.1080p.BluRay.x265", save_path=r"R:\Movies"),
+                FakeTorrent(hash="HF", name="Show.Name.2026.09.15.1080p.WEB.h264", save_path=r"R:\TV"),
+            ]
+        )
+        view = mgr._build_shows_view()
+        names = {s["key"]: s for s in view["list"]}
+        assert set(names) == {"show name", "another show"}, f"同剧异写应归并为一部剧: {list(names)}"
+        assert view["unrecognized"] == ["HE"], f"无标记种子进未识别桶: {view['unrecognized']}"
+        show = names["show name"]
+        assert show["name"] == "Show Name", "展示名取频次最高的原始剧名(点分隔符美化为空格)"
+        seasons = {s["season"]: s for s in show["seasons"]}
+        assert set(seasons) == {1, None}, "日期型归 None 季桶, 编号季独立"
+        eps = {tuple(e["key"]): e for e in seasons[1]["episodes"]}
+        assert set(eps) == {("ep", 5), ("ep", 7)}, f"同集多版本归并为一行: {list(eps)}"
+        assert eps[("ep", 5)]["count"] == 2, "S01E05 两份种子(不同编码)应归并进同一集行"
+        assert eps[("ep", 5)]["members"] == ["HA", "HB"]
+        assert seasons[1]["gaps"] == [6], f"E5/E7 已有, E6 缺: {seasons[1]['gaps']}"
+        dates = seasons[None]["episodes"]
+        assert dates[0]["key"] == ["date", "2026-09-15"], f"日期型集键: {dates}"
+        # 同门控回传: 首次全量带 shows, 同版本不回传
+        mgr._group_view = []
+        mgr._group_view_dirty = True
+        state = mgr.ensure_group_state(rid=None)
+        assert "shows" in state and state["shows"]["list"] == view["list"]
+        assert "unrecognized" in state["shows"]
+        again = mgr.ensure_group_state(rid=state["rid"])
+        assert "shows" not in again
+
+
+def test_shows_view_files_fallback_hook():
+    """文件兑底接线: 季包/无标记种子在索引未覆盖时标记 _shows_pending 并投递构建命令;
+    索引推进(文件就位)后置脏触发重建, 季包集数范围从文件列表展开"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        from helpers import FakeTorrent, _fake_file, seed_store
+
+        client.files_map["HP"] = [
+            _fake_file("Show.S01E01.mkv", 10),
+            _fake_file("Show.S01E02.mkv", 10),
+            _fake_file("Show.S01E03.mkv", 10),
+        ]
+        seed_store(mgr, [FakeTorrent(hash="HP", name="Show.Name.S01.Complete.1080p", save_path=r"R:\Downloads")])
+        view = mgr._build_shows_view()
+        assert mgr._shows_pending is True, "季包种子索引未覆盖: 应标记待解析"
+        assert ("build_search_index", {}) in list(mgr.web_commands.queue), "应投递索引构建命令"
+        node = view["list"][0]["seasons"][0]["episodes"][0]
+        assert node["key"] == ["pack"], f"索引未建成前整季包无范围: {node['key']}"
+        # 消费构建命令(真实链路: 主循环 _drain -> _build_search_index), 文件就位 -> 清 pending + 置脏
+        mgr._drain_web_commands()
+        assert mgr._shows_pending is False
+        assert mgr._group_view_dirty is True, "索引推进是文件兑底唯一信号, 应触发追剧视图重建"
+        mgr._group_view_dirty = True
+        view = mgr._build_shows_view()
+        node = view["list"][0]["seasons"][0]["episodes"][0]
+        assert node["key"] == ["range", 1, 3], f"季包从文件列表展开集数范围: {node['key']}"
+        # 索引已覆盖全部种子: 不再重复投递
+        assert ("build_search_index", {}) not in list(mgr.web_commands.queue)
+        assert mgr._shows_pending is False
 
 
 def test_group_view_ver_seeded_from_start_time():

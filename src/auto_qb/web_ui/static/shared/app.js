@@ -62,7 +62,23 @@ const TORRENT_COLUMNS = [
   { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)" },
   { key: "hash", label: "Hash", tpl: "80px" },
 ];
-const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS };
+/* 追剧视图列模型: 剧行(剧名) / 季子标题 / 集行共用同一套列; 集行是展示主体(聚合层后端算好,
+ * 明细成员经 memberByHash 索引取, 不随 shows 重复回传)。列宽按列 key 记忆在独立 page "show" 下
+ * (同 R08 torrent page 先例: 新增 page 向后兼容, 不升 COLS_STORE_KEY 版本) */
+const SHOW_COLUMNS = [
+  { key: "name", label: "剧名 / 集", tpl: "minmax(220px, 2.4fr)", sortable: true, locked: true },
+  { key: "state", label: "状态", tpl: "76px" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
+  { key: "versions", label: "版本", tpl: "64px", sortable: true },
+  { key: "sites", label: "站点", tpl: "minmax(150px, 1.4fr)" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
+  { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "latest", label: "最近动静", tpl: "minmax(110px, 1fr)", sortable: true },
+];
+const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
@@ -99,7 +115,7 @@ function loadColState() {
     const raw = JSON.parse(localStorage.getItem(COLS_STORE_KEY));
     if (!raw || typeof raw !== "object") return emptyColState();
     const out = emptyColState();
-    for (const page of ["group", "detail", "torrent"]) {
+    for (const page of ["group", "detail", "torrent", "show"]) {
       const keys = columnKeys(page);
       const w = (raw.widths || {})[page];
       if (w && typeof w === "object") {
@@ -127,7 +143,8 @@ const initialColState = loadColState();  // 模块级只读一次(data() 的初�
 /* 视图/信息栏模式初值(持久化用户偏好; 异常时回退默认) */
 function initialViewMode() {
   try {
-    return localStorage.getItem("autoqb.ui.view") === "torrents" ? "torrents" : "groups";
+    const saved = localStorage.getItem("autoqb.ui.view");
+    return saved === "torrents" || saved === "shows" ? saved : "groups";
   } catch {
     return "groups";
   }
@@ -155,7 +172,8 @@ const app = createApp({
       page: "groups",
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供单种子视图/总数)
-      // 辅种页视图: groups(分组表) | torrents(单种子平铺); 列模型/列宽/排序独立, 筛选与搜索共用
+      shows: { list: [], unrecognized: [] },  // 追剧视图(剧→季→集聚合, 与 groups 同门控回传)
+      // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
       // 信息栏模式: side(左栏悬浮卡) | top(并入顶栏吸顶区的紧凑双排条); 见 toggleRailMode
       railMode: initialRailMode(),
@@ -168,9 +186,16 @@ const app = createApp({
       // 单种子视图独立排序键(与分组表互不干扰, 同三态语义)
       torrentSortKey: DEFAULT_SORT.key,
       torrentSortDir: DEFAULT_SORT.dir,
+      // 追剧视图: 默认按最近动静降序(后端同序); 剧展开列表与集明细展开键(Vue 内存态)
+      showSortKey: "latest",
+      showSortDir: -1,
+      expandedShows: [],
+      expandedShowEp: null,
+      unrecognizedOpen: false,  // 未识别折叠区展开态(追剧视图)
       groupColumns: GROUP_COLUMNS,
       detailColumns: DETAIL_COLUMNS,
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
+      showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态(定义见文件顶部列模型; 列宽按**列 key** 记忆, 隐藏列由列选择器管理)
       colWidths: initialColState.widths,  // {page: {列key: "120px"}}
       colHidden: initialColState.hidden,  // {page: [列key]}
@@ -325,6 +350,9 @@ const app = createApp({
     torrentGrid() {
       return { gridTemplateColumns: this._gridTemplate("torrent") };
     },
+    showGrid() {
+      return { gridTemplateColumns: this._gridTemplate("show") };
+    },
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
     // 以单种子虚拟行兜底展示(虚拟行无组级操作, 右键退化为该种子的单种子菜单)。
@@ -392,12 +420,7 @@ const app = createApp({
       const hits = this.searchHits;
       const out = [];
       const push = (m, hit) => {
-        if (this.kindFilter && m.kind !== this.kindFilter) return;
-        if (this.pathFilter.length && !this.pathFilter.includes(m.save_path || "")) return;
-        if (this.tagFilter.length && !(m.tags || []).some((t) => this.tagFilter.includes(t))) return;
-        if (this.categoryFilter.length && !this.categoryFilter.includes(m.category || "")) return;
-        if (this.siteFilter.length && !this.siteFilter.includes(m.site)) return;
-        if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(m))) return;
+        if (!this._memberPass(m)) return;
         if (q && !hit) return;
         out.push({ ...m, hit: q ? hit : false });
       };
@@ -501,6 +524,92 @@ const app = createApp({
     },
     visibleTorrentCols() {
       return this._visibleCols("torrent");
+    },
+    visibleShowCols() {
+      return this._visibleCols("show");
+    },
+    /* 成员索引: groups ∪ singles = 全量种子(shows 明细只带 hash, 从这里取完整成员视图,
+     * 避免响应体重复成员数据; 同 bulkDelete 的 byHash 合并先例) */
+    memberByHash() {
+      const map = new Map();
+      for (const g of this.groups) for (const m of g.members) map.set(m.hash, m);
+      for (const r of this.singles) if (!map.has(r.hash)) map.set(r.hash, r);
+      return map;
+    },
+    /* 追剧视图(R10): 后端已按剧→季→集聚合并算好聚合层; 前端只做 筛选/搜索(任一成员命中
+     * 保留整集) + 剧级搜索命中(剧名含关键字保留全剧) + 排序。showHit 与 epHit 分开:
+     * 剧名命中高亮整剧行, 集命中高亮集行(与分组视图“组内任一命中保留整组”同语义) */
+    decoratedShows() {
+      const q = (this.searchQuery || "").trim().toLowerCase();
+      const hits = this.searchHits;
+      const out = [];
+      for (const s of this.shows.list) {
+        let showHit = !!(q && (s.name || "").toLowerCase().includes(q));
+        let keptEps = 0;
+        let keptMembers = 0;
+        const seasons = [];
+        for (const sn of s.seasons) {
+          const eps = [];
+          for (const e of sn.episodes) {
+            const members = e.members
+              .map((h) => {
+                const m = this.memberByHash.get(h);
+                return m ? { ...m, hit: hits.has(h) } : null;
+              })
+              .filter(Boolean);
+            if (!members.length) continue;
+            if (!members.some((m) => this._memberPass(m))) continue;
+            const epHit = members.some((m) => m.hit);
+            if (q && !showHit && !epHit) continue;
+            keptEps += 1;
+            keptMembers += members.length;
+            eps.push({ ...e, members, hit: epHit, epKeyStr: e.key.join("-") });
+          }
+          if (eps.length) seasons.push({ ...sn, episodes: eps });
+        }
+        if (showHit || seasons.length) {
+          if (showHit) keptEps = s.episode_count;
+          out.push({ ...s, seasons, hit: showHit, keptEps, keptMembers });
+        }
+      }
+      const key = this.showSortKey;
+      const dir = this.showSortDir;
+      out.sort((a, b) => {
+        let r;
+        if (key === "name") r = dir * (a.name || "").localeCompare(b.name || "");
+        else if (key === "episode_count") r = dir * (a.episode_count - b.episode_count);
+        else r = dir * ((a.latest || 0) - (b.latest || 0));
+        // 平局兜底按名升序且不随方向翻转(否则降序时同 latest 的剧会倒序排, 难以预期)
+        if (r === 0) r = (a.name || "").localeCompare(b.name || "");
+        return r;
+      });
+      return out;
+    },
+    /* 未识别折叠区: hash → 成员解析, 过同一套筛选/搜索, 按种子名排序 */
+    unrecognizedTorrents() {
+      const q = (this.searchQuery || "").trim().toLowerCase();
+      const hits = this.searchHits;
+      const out = [];
+      for (const h of this.shows.unrecognized) {
+        const m = this.memberByHash.get(h);
+        if (!m) continue;
+        if (!this._memberPass(m)) continue;
+        const hit = hits.has(h);
+        if (q && !hit) continue;
+        out.push({ ...m, hit: q ? hit : false });
+      }
+      out.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      return out;
+    },
+    /* 追剧视图统计(状态条计数): 剧/集/成员三层 */
+    showStats() {
+      let eps = 0;
+      let members = 0;
+      for (const s of this.decoratedShows) {
+        eps += s.keptEps;
+        members += s.keptMembers;
+      }
+      return { shows: this.decoratedShows.length, eps, members, unrecognized: this.unrecognizedTorrents.length };
     },
     /* 多选总数(组 + 独立成员), 供批量浮条显隐 */
     selectedCount() {
@@ -726,6 +835,9 @@ const app = createApp({
       this.siteFilter = [];
       this.hrFilter = [];
       this.singles = [];
+      this.shows = { list: [], unrecognized: [] };
+      this.expandedShows = [];
+      this.expandedShowEp = null;
       this.filterMenu = "";
       this.colMenuOpen = false;
       this.toasts = [];
@@ -922,6 +1034,7 @@ const app = createApp({
         this.status = state.status;
         this.groups = state.groups || [];
         this.singles = state.singles || [];
+        this.shows = state.shows || { list: [], unrecognized: [] };
         if (typeof state.rid === "number") this.lastRid = state.rid;
         this.serviceDown = false;
         this.token = candidate;  // 验证通过才提交为当前身份
@@ -983,6 +1096,7 @@ const app = createApp({
           // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
           this.groups = state.groups || [];
           this.singles = state.singles || [];  // 未归组种子与 groups 同门控回传(R08)
+          this.shows = state.shows || { list: [], unrecognized: [] };  // 追剧视图同门控回传(R10)
           if (typeof state.rid === "number") this.lastRid = state.rid;
           this.idlePolls = 0;
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
@@ -1079,6 +1193,14 @@ const app = createApp({
     },
     fmtSizeOrDash(v) {
       return v ? this.fmtSize(v) : "—";
+    },
+    /* 时间点显示(追剧视图“最近动静”列): 今年省年份, 往年只到日 */
+    fmtTime(ts) {
+      if (!ts) return "—";
+      const d = new Date(ts * 1000);
+      const p = (n) => String(n).padStart(2, "0");
+      if (d.getFullYear() !== new Date().getFullYear()) return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
     },
     fmtDuration(sec) {
       // 做种时长: 后端已按分钟取整(torrents._VIEW_QUANTUM), 故不展示秒位
@@ -1178,6 +1300,17 @@ const app = createApp({
     },
     /* H&R 筛选档位(R07): 组级消费组级计数、成员级消费布尔, 标签一致;
      * 只比较后端算好的字段, 前端不重算模板/阈值(pitfalls: HR 判定前后端各写一遍 = 自定义标签立即失效) */
+    /* 成员级筛选谓词: 单种子平铺/追剧集行/未识别桶共用同一套条件
+     * (状态/路径/标签/分类/站点/H&R; 多选筛选器内为或, 筛选器之间为且) */
+    _memberPass(m) {
+      if (this.kindFilter && m.kind !== this.kindFilter) return false;
+      if (this.pathFilter.length && !this.pathFilter.includes(m.save_path || "")) return false;
+      if (this.tagFilter.length && !(m.tags || []).some((t) => this.tagFilter.includes(t))) return false;
+      if (this.categoryFilter.length && !this.categoryFilter.includes(m.category || "")) return false;
+      if (this.siteFilter.length && !this.siteFilter.includes(m.site)) return false;
+      if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(m))) return false;
+      return true;
+    },
     _hrBucket(g) {
       if (!g.hr_triggered) return "";
       return g.hr_pending > 0 ? "未达标" : "达标";
@@ -1199,9 +1332,9 @@ const app = createApp({
     },
     setSort(key) {
       // 三态(想法.md): 首次点击按该列降序 -> 再点升序 -> 第三次恢复默认排序(最近添加时间降序);
-      // 单种子视图操作独立排序键, 两视图互不干扰
-      const gk = this.viewMode === "torrents" ? "torrentSortKey" : "sortKey";
-      const gd = this.viewMode === "torrents" ? "torrentSortDir" : "sortDir";
+      // 单种子/追剧视图操作独立排序键, 各视图互不干扰
+      const gk = this.viewMode === "torrents" ? "torrentSortKey" : this.viewMode === "shows" ? "showSortKey" : "sortKey";
+      const gd = this.viewMode === "torrents" ? "torrentSortDir" : this.viewMode === "shows" ? "showSortDir" : "sortDir";
       if (this[gk] !== key) {
         this[gk] = key;
         this[gd] = -1;
@@ -1211,7 +1344,9 @@ const app = createApp({
         this[gd] = 1;
         return;
       }
-      this[gk] = DEFAULT_SORT.key;
+      // 追剧视图默认排序 = 最近动静降序(后端同序); 其余视图 = 最近添加降序
+      const defKey = this.viewMode === "shows" ? "latest" : DEFAULT_SORT.key;
+      this[gk] = defKey;
       this[gd] = DEFAULT_SORT.dir;
     },
     /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
@@ -1361,10 +1496,120 @@ const app = createApp({
       this.viewMode = mode;
       try { localStorage.setItem("autoqb.ui.view", mode); } catch { /* 持久化失败不影响功能 */ }
       this.expandedKey = null;  // 展开态属于分组视图, 切换不跨视图残留
+      this.expandedShows = [];  // 追剧视图展开态同理不跨视图残留
+      this.expandedShowEp = null;
       this.$nextTick(() => {
         this._syncHeadHeight();
         this.materializeColumns();
       });
+    },
+    /* ---------------- 追剧视图(R10): 剧/集展开与整集操作 ---------------- */
+    syncShowHeadScroll(ev) {
+      const head = this.$refs.showHead;
+      if (!head) return;
+      head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
+    },
+    toggleShow(key) {
+      const i = this.expandedShows.indexOf(key);
+      if (i >= 0) this.expandedShows.splice(i, 1);
+      else this.expandedShows.push(key);
+    },
+    isShowExpanded(key) {
+      return this.expandedShows.includes(key);
+    },
+    showEpRowId(showKey, season, epKeyStr) {
+      return `${showKey}|${season === null || season === undefined ? "~" : season}|${epKeyStr}`;
+    },
+    toggleShowEp(showKey, season, epKeyStr) {
+      const id = this.showEpRowId(showKey, season, epKeyStr);
+      this.expandedShowEp = this.expandedShowEp === id ? null : id;
+      this.menu.visible = false;
+    },
+    /* 集键 -> 展示文本(与后端 tvshows.ParsedRelease.episode_key 三形态对应) */
+    epLabel(key) {
+      if (!key || !key.length) return "—";
+      if (key[0] === "ep") return "E" + String(key[1]).padStart(2, "0");
+      if (key[0] === "range") return `E${String(key[1]).padStart(2, "0")}-E${String(key[2]).padStart(2, "0")}`;
+      if (key[0] === "date") return key[1];
+      return "整季包";
+    },
+    seasonLabel(season) {
+      return season === null || season === undefined ? "日播 / 特别篇" : `第 ${season} 季`;
+    },
+    /* 整集右键菜单: 目标 = 该集全部成员(多版本), 操作走单种子命令(与批量同语义) */
+    openShowEpMenu(event, show, ep) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.menu = {
+        visible: true,
+        ...this._menuPos(event),
+        key: null,
+        hash: null,
+        episode: { hashes: ep.members.slice(), label: `${show.name} ${this.epLabel(ep.key)}` },
+      };
+    },
+    async actEpisode(action) {
+      this.menu.visible = false;
+      const hashes = (this.menu.episode || {}).hashes || [];
+      if (!hashes.length) return;
+      const label = this._actionText(action);
+      const isRe = action === "reannounce";
+      const tid = isRe
+        ? this.toast(`强制汇报等待中…(${hashes.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
+        : null;
+      const results = await Promise.allSettled(
+        hashes.map((h) => this.api(`/api/torrents/${h}/${action}`, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+      );
+      const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
+      if (!fails.length) {
+        const okMsg = isRe ? `强制汇报成功(tracker 已确认, ${hashes.length} 个目标)` : `已执行: ${label}整集(${hashes.length} 个种子)`;
+        if (isRe) this._finishToast(tid, "ok", okMsg, 3000);
+        else this.toast(okMsg, "ok", 2500);
+        return;
+      }
+      const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
+      const msg = `${label}: 成功 ${hashes.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`;
+      if (isRe) this._finishToast(tid, "timeout", msg, 6000);
+      else this.toast(msg, fails.length === hashes.length ? "error" : "info", 8000);
+    },
+    /* 删除整集(全部版本): 确认框成员明细 = 该集全部种子, 与批量删除同口径 */
+    async delEpisode() {
+      this.menu.visible = false;
+      const ep = this.menu.episode;
+      if (!ep || !ep.hashes.length) return;
+      const members = ep.hashes.map((h) => this.memberByHash.get(h)).filter(Boolean);
+      if (!members.length) return;
+      const totalSize = members.reduce((n, m) => n + (m.size || 0), 0);
+      const res = await this._confirmDelete({
+        title: "删除整集",
+        body: `将删除"${ep.label}"的全部 ${members.length} 个种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
+        details: [
+          { icon: "#i-cards", label: "目标", value: ep.label },
+          { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${members.length} 个种子` },
+        ],
+        members: members.map((m) => ({ site: m.site || "—", name: m.name || m.hash.slice(0, 12), path: m.save_path || "—" })),
+      });
+      if (!res) return;
+      const deleteFiles = res.checks.delete_files;
+      if (res.checks.reannounce) {
+        const tid = this.toast(`正在向 tracker 汇报 ${ep.hashes.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
+        const results = await Promise.allSettled(
+          ep.hashes.map((h) => this.api(`/api/torrents/${h}/reannounce`, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+        );
+        const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
+        if (fails.length) {
+          this._finishToast(tid, "timeout", `${fails.length}/${ep.hashes.length} 个目标汇报确认失败, 已保留未删除`, 6000);
+          return;
+        }
+        this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
+      }
+      const body = JSON.stringify({ delete_files: deleteFiles });
+      const results = await Promise.allSettled(
+        ep.hashes.map((h) => this.api(`/api/torrents/${h}/delete`, { method: "POST", body }))
+      );
+      const fails = results.filter((r) => r.status === "rejected");
+      if (fails.length) this.toast(`删除投递部分失败(${fails.length}/${ep.hashes.length})`, "error", 8000);
+      else this.toast(`已投递: 删除整集 ${ep.hashes.length} 个种子${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
     },
     toggleRailMode() {
       this.railMode = this.railMode === "side" ? "top" : "side";
@@ -1698,7 +1943,7 @@ const app = createApp({
     },
     gridStyle(page) {
       // 列模板由 computed 缓存(见 *_Grid): 行渲染只取同一引用, 不每行拼字符串
-      return { group: this.groupGrid, detail: this.detailGrid, torrent: this.torrentGrid }[page];
+      return { group: this.groupGrid, detail: this.detailGrid, torrent: this.torrentGrid, show: this.showGrid }[page];
     },
 
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
@@ -1727,7 +1972,7 @@ const app = createApp({
       return out;
     },
     _headEl(page) {
-      const ref = this.$refs[{ group: "groupHead", detail: "detailHead", torrent: "torrentHead" }[page]];
+      const ref = this.$refs[{ group: "groupHead", detail: "detailHead", torrent: "torrentHead", show: "showHead" }[page]];
       return Array.isArray(ref) ? ref[0] : ref || null;
     },
     /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 辅种页左栏 .rail 的吸顶偏移与最大可用
@@ -1757,7 +2002,7 @@ const app = createApp({
      * - 手动调过   -> 跳过(冻结, 拖一列不再动其它列)
      */
     materializeColumns() {
-      for (const page of ["group", "detail", "torrent"]) {
+      for (const page of ["group", "detail", "torrent", "show"]) {
         if (this.colManual[page]) continue;
         const headEl = this._headEl(page);
         if (!headEl) continue;

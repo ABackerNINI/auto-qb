@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>追剧视图 · 方案计划 — auto-qb WEB UI</title>
+<style>
+  :root {
+    --bg: #fafbfc;
+    --ink: #1a2530;
+    --ink-dim: #5a6a78;
+    --ink-faint: #8a99a6;
+    --line: #d9e0e6;
+    --line-soft: #e6ecf1;
+    --accent: #2d5f8a;
+    --accent-ink: #24496a;
+    --surface: #f2f5f7;
+    --mono: "Cascadia Code", Consolas, "Courier New", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 0 32px 96px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 2px;
+    padding: 0.08em 0.35em;
+    white-space: nowrap;
+  }
+  /* ---------- 封面 ---------- */
+  header.cover { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 52px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+    margin: 18px 0 14px;
+  }
+  .lede {
+    font-size: 19px;
+    color: var(--ink-dim);
+    max-width: 62ch;
+  }
+  .meta-row {
+    display: flex;
+    gap: 40px;
+    margin-top: 34px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .meta-row b { display: block; color: var(--ink-dim); font-weight: 500; letter-spacing: 0.04em; }
+  /* ---------- 布局: 左 TOC + 主栏 ---------- */
+  .layout { display: grid; grid-template-columns: 240px 1fr; gap: 56px; margin-top: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 13.5px; }
+  nav.toc .toc-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-dim); padding: 5px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  nav.toc a .no { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 10px; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  main { min-width: 0; }
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 88px; }
+  .folio {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 10px;
+  }
+  h2 {
+    font-size: 30px; font-weight: 600; letter-spacing: -0.01em;
+    line-height: 1.15; margin-bottom: 8px;
+  }
+  h3 { font-size: 19px; font-weight: 600; margin: 40px 0 12px; }
+  h4 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; }
+  p { max-width: 74ch; margin-bottom: 14px; }
+  p.small-note { font-size: 13.5px; color: var(--ink-dim); }
+  ul.tight { margin: 0 0 16px 20px; max-width: 74ch; }
+  ul.tight li { margin-bottom: 7px; }
+  ol.tight { margin: 0 0 16px 22px; max-width: 74ch; }
+  ol.tight li { margin-bottom: 7px; }
+  section.rule-top { border-top: 1px solid var(--line); padding-top: 44px; }
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 22px; font-size: 14px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 12.5px;
+    letter-spacing: 0.04em; color: var(--ink-dim);
+    border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0;
+    white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--line-soft); padding: 9px 12px 9px 0; vertical-align: top; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  .rec { color: var(--accent-ink); font-weight: 600; }
+  /* ---------- 分隔与标注 ---------- */
+  hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0; }
+  .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    border: 1px solid var(--line); padding: 1px 7px; color: var(--ink-dim);
+    white-space: nowrap;
+  }
+  .tag.rec { border-color: var(--accent); color: var(--accent-ink); }
+  /* ---------- 图示容器 ---------- */
+  figure { margin: 26px 0 30px; border: 1px solid var(--line); padding: 26px 20px 18px; background: var(--bg); }
+  figcaption {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+    letter-spacing: 0.08em; margin-top: 14px; text-align: center;
+  }
+  /* ---------- 步骤 ---------- */
+  .phase { display: grid; grid-template-columns: 92px 1fr; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line-soft); }
+  .phase .p-no { font-family: var(--mono); font-size: 15px; color: var(--accent-ink); padding-top: 2px; }
+  .phase .p-title { font-weight: 600; margin-bottom: 4px; }
+  .phase .p-body { font-size: 14.5px; color: var(--ink-dim); max-width: 70ch; }
+  .phase .p-body code { white-space: normal; }
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); letter-spacing: 0.06em;
+  }
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; }
+    h1 { font-size: 38px; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">auto-qb · web ui 功能计划</div>
+  <h1>追剧视图</h1>
+  <p class="lede">按"同一部剧"聚合全部种子:剧 → 季 →集三层组织,同集多版本(多站点辅种、不同编码)合并为一行,组内按季、集排序 —— 介于"辅种分组"与"单种子平铺"之间的第三种视角。</p>
+  <div class="meta-row">
+    <div><b>日期</b>2026-09-15</div>
+    <div><b>状态</b>计划稿 · 未实施</div>
+    <div><b>分支</b>frontend/develop</div>
+    <div><b>范围</b>后端视图 + atlas 前端</div>
+  </div>
+</header>
+
+<div class="layout">
+
+<nav class="toc">
+  <div class="toc-title">目录</div>
+  <a href="#s01"><span class="no">01</span>需求拆解</a>
+  <a href="#s02"><span class="no">02</span>现状盘点</a>
+  <a href="#s03"><span class="no">03</span>同剧判定:调研与头脑风暴</a>
+  <a href="#s04"><span class="no">04</span>数据模型与聚合设计</a>
+  <a href="#s05"><span class="no">05</span>后端设计</a>
+  <a href="#s06"><span class="no">06</span>前端设计(atlas)</a>
+  <a href="#s07"><span class="no">07</span>待拍板决策点</a>
+  <a href="#s08"><span class="no">08</span>测试计划</a>
+  <a href="#s09"><span class="no">09</span>实施阶段</a>
+  <a href="#s10"><span class="no">10</span>风险与限制</a>
+</nav>
+
+<main>
+
+<!-- ============ 01 ============ -->
+<section id="s01">
+  <div class="folio">01 · Scope</div>
+  <h2>需求拆解</h2>
+  <p>把需求逐条翻译成技术口径,后面的章节都围绕这四行展开:</p>
+  <table>
+    <tr><th style="width:34%">需求原话</th><th>技术口径</th></tr>
+    <tr>
+      <td>按同一部剧组织分组(如何判定同一部剧需要调研和头脑风暴)</td>
+      <td>聚合键 = 规范化剧名;判定规则见 <a href="#s03">03</a> —— 这是本功能唯一有真正难度的点</td>
+    </tr>
+    <tr>
+      <td>分组中按第几季第几集排序</td>
+      <td>剧内二级结构:季升序 → 集升序;集键支持三种形态:整数集数 / 日期(综艺日播) / 整季范围</td>
+    </tr>
+    <tr>
+      <td>多站点辅种不分开显示,类似辅种视图</td>
+      <td>展示行 = 集:同一集的多份种子(同一辅种组的各站点副本、不同编码的独立种子)聚合为一行,行内以站点徽章区分;辅种组内成员文件列表相同,天然解析出同剧同季同集,自动归并,无需显式关联</td>
+    </tr>
+    <tr>
+      <td>先计划</td>
+      <td>本文档即产出:不改任何代码,输出方案、调研结论与待拍板决策点</td>
+    </tr>
+  </table>
+  <h3>术语</h3>
+  <ul class="tight">
+    <li><b>辅种组</b>:现有 <code>grouping</code> 的分组,键 = (规范化 save_path, 排序文件路径元组),即"文件列表相同的种子集合"。</li>
+    <li><b>版本</b>:本文档定义的中间层 —— 同一集的一份内容实体 = 一个辅种组,或一个未归组的独立种子。</li>
+    <li><b>集行</b>:追剧视图的展示行 = 同一 (剧, 季, 集) 下全部版本的聚合。</li>
+  </ul>
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="s02" class="rule-top">
+  <div class="folio">02 · Inventory</div>
+  <h2>现状盘点(代码事实)</h2>
+  <p>追剧视图不是从零造,现有设施已经把地基打好了八成。逐条核实过:</p>
+  <table>
+    <tr><th style="width:30%">事实</th><th style="width:26%">位置</th><th>对追剧视图的意义</th></tr>
+    <tr>
+      <td>辅种分组键 = (规范化 save_path, 文件路径元组)</td>
+      <td class="mono">mixins/grouping.py · _assign_to_group</td>
+      <td>同组 = 同文件列表 = 同一份内容。追剧视图直接以 hash 为最小成员,辅种归并免费获得</td>
+    </tr>
+    <tr>
+      <td>Web 视图 groups/singles + rid 版本门控</td>
+      <td class="mono">mixins/web_view.py · ensure_group_view / ensure_group_state</td>
+      <td>shows 视图挂进同一脏窗口与同一版本号,前端轮询/门控机制原样复用</td>
+    </tr>
+    <tr>
+      <td>视图脏字段 <code>_VIEW_FIELDS</code> 含 name/save_path/state 等 13 字段</td>
+      <td class="mono">torrents/view.py</td>
+      <td>种子名变化自动触发重建 —— 追剧视图的重建依据与现有视图完全同源,零新增置脏逻辑</td>
+    </tr>
+    <tr>
+      <td>集数模式表 <code>_EPISODE_PATTERNS</code>:第x集 &gt; S01E05 &gt; EP05 &gt; E05</td>
+      <td class="mono">episodes.py</td>
+      <td>已有集数维度解析,但<b>没有季数、没有剧名提取</b>;模式表"插入即扩展"的设计可直接继承</td>
+    </tr>
+    <tr>
+      <td><code>name_has_episode_marker</code> / <code>extract_episodes_from_files</code>(仅视频文件)</td>
+      <td class="mono">episodes.py</td>
+      <td>"名称无标记 → 从文件列表解析"这条兜底路径的现成基础</td>
+    </tr>
+    <tr>
+      <td>搜索索引 hash → {name, files} 增量缓存,单次限流 500</td>
+      <td class="mono">web_view.py · _build_search_index</td>
+      <td>文件列表兜底的数据源,零新增 qB API 调用</td>
+    </tr>
+    <tr>
+      <td>视图开关 groups | torrents 两态 + TORRENT_COLUMNS 第三列模型先例(R08)</td>
+      <td class="mono">shared/app.js · atlas/index.html:132</td>
+      <td>第三态 shows 有完整先例可循;新增列模型 page 不需升级 COLS_STORE_KEY 版本</td>
+    </tr>
+    <tr>
+      <td>TorrentRecord 全字段缓存(70 字段)</td>
+      <td class="mono">torrents/record.py</td>
+      <td>成员数据充足,视图构建只在内存读快照</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ============ 03 ============ -->
+<section id="s03" class="rule-top">
+  <div class="folio">03 · Brainstorm</div>
+  <h2>同剧判定:调研与头脑风暴</h2>
+  <p>这是整个功能的核心难题。Sonarr 这类媒体管理器的思路是"解析发布名 → 与库内已登记剧集(TVDB 数据)匹配",它有一个权威答案可对;而 auto-qb 面对的是<b>没有任何外部真值</b>的种子集合 —— 问题本质是<b>无监督聚类</b>:只靠种子自身携带的信息,把"同一部剧"聚到一起。所以重点不是找一个标准答案,而是设计一套<b>可解释、可纠偏</b>的启发式规则。</p>
+
+  <h3>3.1 可用信息源</h3>
+  <table>
+    <tr><th style="width:18%">信息源</th><th style="width:14%">质量</th><th style="width:16%">成本</th><th>判定</th></tr>
+    <tr>
+      <td>种子名 <code>name</code></td><td>高(信息密度最大,噪声也大)</td><td>零(全种子必有)</td>
+      <td><span class="rec">主信号</span> —— 发布名天然携带 剧/季/集/制作参数,业界(scene/P2P)命名惯例成熟</td>
+    </tr>
+    <tr>
+      <td>文件列表 <code>files</code></td><td>高(文件名与 Season 目录结构可靠)</td><td>中(依赖搜索索引缓存,首建有延迟)</td>
+      <td><span class="rec">兜底信号</span> —— 名称无标记时(季包/合集)从文件名与目录提取</td>
+    </tr>
+    <tr>
+      <td>保存路径 <code>save_path</code></td><td>不稳定(媒体库惯例组织时极准,手动管理时无结构)</td><td>零</td>
+      <td>辅助信号 —— 不进聚合键,可用于"疑似同剧"提示(后续迭代)</td>
+    </tr>
+    <tr>
+      <td>分类/标签</td><td>不可依赖(用户可能没设;auto-qb 的 zE 集数标签只有集数)</td><td>零</td>
+      <td>不作为主信号;P2 可考虑从标签读取集数</td>
+    </tr>
+    <tr>
+      <td>外部数据库(TMDB/TVDB)</td><td>权威(规范 ID,可解跨语言剧名/绝对编号/同名剧)</td><td>高(网络 + 密钥 + 限流)</td>
+      <td>P2 opt-in,首版不做</td>
+    </tr>
+  </table>
+
+  <h3>3.2 命名田野:要覆盖的格式家族</h3>
+  <p>PT/scene 生态的发布名是一套事实标准的方言体系。解析器必须先见过这些长相才谈得上规则:</p>
+  <table>
+    <tr><th style="width:16%">家族</th><th style="width:46%">样例</th><th>解析要点</th></tr>
+    <tr><td>西方 scene/P2P</td><td class="mono">Show.Name.S01E05.2160p.WEB-DL.DDP5.1.HDR.x265-GROUP</td><td>标记前段 = 剧名;S/E 明确;尾部噪音 token 剥离</td></tr>
+    <tr><td>季包</td><td class="mono">Show.Name.S01.Complete.1080p.BluRay / …Complete.Season.1</td><td>有 S 无 E → 整季节点,集范围由文件列表兜底</td></tr>
+    <tr><td>多集包</td><td class="mono">Show.Name.S01E01-E05</td><td>区间展开或范围行(见 3.5 决策)</td></tr>
+    <tr><td>中文命名</td><td class="mono">【剧名】第1-5集 4K 中字 / 剧名 第一季全集 / 剧名.S01E05.国语中字</td><td>第x集 / 第x季 模式;书名号、全角字符清洗</td></tr>
+    <tr><td>动画字幕组</td><td class="mono">[SubGroup] Show Name - 05 [1080p] / [SubGroup][Show Name][05][v2]</td><td>破折号/中括号内的 bare number;绝对编号(无季标记)</td></tr>
+    <tr><td>日播/综艺</td><td class="mono">Show.Name.2026.09.15.1080p.WEB.h264</td><td>日期即"集键",排序按日期</td></tr>
+    <tr><td>变体与身份差分</td><td class="mono">Show Name (US) / (2019) / Re:Zero / Shōgun / Show Name 2</td><td>年份、国家、续作数字是<b>剧的身份差分,归一化时保留</b>(见 3.4)</td></tr>
+  </table>
+
+  <h3>3.3 候选方案对比</h3>
+  <table>
+    <tr><th style="width:8%">方案</th><th style="width:26%">思路</th><th style="width:22%">优点</th><th style="width:24%">缺点</th><th>结论</th></tr>
+    <tr>
+      <td class="mono">A</td><td>手写名称解析器(正则模式表 + 剧名归一化)</td>
+      <td>零依赖;全种子覆盖;规则可解释、可测试、可持续调优;与 episodes.py 同族</td>
+      <td>边缘格式长尾需要持续养规则;绝对编号跨季等硬限制</td>
+      <td class="rec">主方案(推荐)</td>
+    </tr>
+    <tr>
+      <td class="mono">B</td><td>引入 guessit(4.4.0,活跃维护,2026-07 仍在发版)</td>
+      <td>现成的专业解析,英文生态覆盖广</td>
+      <td>+3 依赖(rebulk / babelfish / python-dateutil);行为黑盒难微调;中文 PT 命名并非其强项;本项目依赖策略是 == 锁死</td>
+      <td>备选 —— 不引入;若后续边缘格式失控再评估</td>
+    </tr>
+    <tr>
+      <td class="mono">C</td><td>文件列表解析(复用 extract_episodes_from_files + Season 目录)</td>
+      <td>文件名/目录结构比发布名规整</td>
+      <td>依赖索引缓存(首建延迟);文件 API 不可用时失效;单独使用覆盖不全</td>
+      <td class="rec">兜底层(与 A 组合)</td>
+    </tr>
+    <tr>
+      <td class="mono">D</td><td>save_path / category 参与聚合键</td>
+      <td>用户按媒体库惯例组织时近乎免费命中</td>
+      <td>组织方式因人而异,进键会在辅种场景(路径是分组键一部分)产生歧义</td>
+      <td>只做校验/提示,不进键</td>
+    </tr>
+    <tr>
+      <td class="mono">E</td><td>TMDB 匹配出规范剧 ID</td>
+      <td>终极解:跨语言剧名、绝对编号跨季、同名重制全部可解</td>
+      <td>网络依赖 + 密钥配置 + 限流;违背"本地优先"默认假设</td>
+      <td>P2 opt-in</td>
+    </tr>
+    <tr>
+      <td class="mono">F</td><td>人工纠偏(合并/拆分,持久化)</td>
+      <td>唯一能兜住所有误判的手段</td>
+      <td>需要状态持久化设计(state_file 单写线程约束)+ UI 投入</td>
+      <td>P2 —— 第一版先验证自动聚类质量</td>
+    </tr>
+  </table>
+
+  <h3>3.4 推荐方案:分层解析管线</h3>
+  <p><b>A 为主 + C 兜底</b>,每个种子解析出 <code>(剧键, 季, 集键)</code> 三元组;解析不出完整三元组的进"未识别"桶:</p>
+
+  <figure>
+    <svg viewBox="0 0 1040 200" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+      <defs>
+        <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7" fill="none" stroke="#8a99a6" stroke-width="1.2"/>
+        </marker>
+      </defs>
+      <g stroke="#2d5f8a" fill="#f2f5f7" stroke-width="1">
+        <rect x="10" y="70" width="150" height="52"/>
+        <rect x="200" y="10" width="200" height="52"/>
+        <rect x="440" y="10" width="180" height="52"/>
+        <rect x="660" y="10" width="190" height="52"/>
+        <rect x="200" y="130" width="200" height="52"/>
+        <rect x="440" y="130" width="180" height="52"/>
+      </g>
+      <g fill="#1a2530" font-size="13">
+        <text x="85" y="92" text-anchor="middle">种子名 name</text>
+        <text x="85" y="110" text-anchor="middle" fill="#5a6a78" font-size="11">唯一的全量信息源</text>
+        <text x="300" y="32" text-anchor="middle">① 切剧集标记</text>
+        <text x="300" y="50" text-anchor="middle" fill="#5a6a78" font-size="11">S01E05 / 第x集 / 日期 / bare num</text>
+        <text x="530" y="32" text-anchor="middle">② 剧名候选 =标记前段</text>
+        <text x="530" y="50" text-anchor="middle" fill="#5a6a78" font-size="11">括号式命名走专用分支</text>
+        <text x="755" y="32" text-anchor="middle">③ 剧名 → 键</text>
+        <text x="755" y="50" text-anchor="middle" fill="#5a6a78" font-size="11">归一化 + 保留身份差分</text>
+        <text x="300" y="152" text-anchor="middle">④ 无标记 → 文件列表兜底</text>
+        <text x="300" y="170" text-anchor="middle" fill="#5a6a78" font-size="11">搜索索引缓存 · Season 目录/文件名</text>
+        <text x="530" y="152" text-anchor="middle">⑤ 季缺省 = 1</text>
+        <text x="530" y="170" text-anchor="middle" fill="#5a6a78" font-size="11">区间展开为多集 / 整季范围</text>
+      </g>
+      <g stroke="#8a99a6" stroke-width="1" fill="none">
+        <line x1="160" y1="96" x2="196" y2="46" marker-end="url(#arr)"/>
+        <line x1="400" y1="36" x2="436" y2="36" marker-end="url(#arr)"/>
+        <line x1="620" y1="36" x2="656" y2="36" marker-end="url(#arr)"/>
+        <line x1="300" y1="62" x2="300" y2="126" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+        <line x1="400" y1="156" x2="436" y2="156" marker-end="url(#arr)"/>
+        <line x1="620" y1="156" x2="700" y2="66" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      </g>
+      <g font-size="12" fill="#24496a">
+        <text x="900" y="26">→ (剧键, 季, 集键)</text>
+        <text x="900" y="46" fill="#8a99a6">完整 → 进追剧视图</text>
+        <text x="900" y="64" fill="#8a99a6">不完整 → 未识别桶</text>
+      </g>
+    </svg>
+    <figcaption>解析管线:①-③ 主路径(名称),④-⑤ 兜底(文件列表),全部纯逻辑、可单测</figcaption>
+  </figure>
+
+  <h4>剧名归一化规则(草案)</h4>
+  <ol class="tight">
+    <li><b>结构清洗</b>:分隔符 <code>. _ -</code> → 空格;全角 → 半角;折叠连续空白;去书名号/引号/首尾标点;lowercase。</li>
+    <li><b>噪音 token 剥离</b>:分辨率(2160p/4k/1080p…)、来源(WEB-DL/BluRay/BDRip/HDTV…)、编码(x264/x265/HEVC/AV1…)、音频(DDP5.1/AAC/FLAC…)、发布组尾段(<code>-GROUP</code>)、字幕说明(中字/简繁/内嵌)。词表集中在一个常量里,便于增补。</li>
+    <li><b>身份差分保留</b>(<span class="rec">关键取舍</span>):年份 <code>(2019)</code>、国家 <code>(US)</code>、续作数字 <code>Show Name 2</code> <b>不清洗、参与聚合键</b>。宁可偶尔把同一部剧拆成两行等人工纠偏,也不能把《 ipAddress 之战 1994》和重制版合并 —— 误合并比误拆分难发现得多。</li>
+    <li><b>季标记识别</b>只认显式形式:<code>S01 / S1 / Season 1 / 第一季 / 第1季 / 2nd Season</code>;纯数字尾缀保守保留在剧名里(可能本身就是剧名的一部分)。</li>
+    <li><b>简繁转换不做</b>(依赖转换表过重,PT 场景同剧通常同简繁;列为开放问题)。</li>
+  </ol>
+
+  <h3>3.5 关键边界决策</h3>
+  <table>
+    <tr><th style="width:26%">边界</th><th style="width:30%">推荐</th><th>理由与替代</th></tr>
+    <tr><td>动画绝对编号(<code>Show - 05</code> 无季)</td><td class="rec">归 S01,文档写明跨季限制</td><td>追剧场景"全部在 S01"最直观;绝对编号 → 真实季映射无名称真值可依,属 TMDB(P2)要解的问题。替代:独立"剧场版/特别篇"桶 —— 增加心智负担,不做</td></tr>
+    <tr><td>季包(S01 整包)</td><td class="rec">不展开:该季下挂一行"整季范围行"(E01–E25,文件解析出范围)</td><td>展开成 25 行每行都引用同一个 hash,重复且误导;范围行一眼看出"这是一整包"。替代:展开 —— 行数膨胀,不做</td></tr>
+    <tr><td>日播/综艺(日期命名)</td><td class="rec">日期型集键,排序按日期</td><td>综艺是追剧高频场景,丢进未识别会显得"这视图不好使";集键设计成 (类型, 值) 二元组即可统一排序</td></tr>
+    <tr><td>完全无标记(电影等)</td><td class="rec">进"未识别"折叠区,参与搜索</td><td>隐藏会让用户"找不到自己的种子";折叠区不影响追剧主视图。替代:直接隐藏 —— 否</td></tr>
+    <tr><td>同辅种组解析结果冲突(理论不该发生)</td><td class="rec">多数结果为准,记 warning 日志</td><td>组内文件列表相同 → 解析必然一致;不一致说明解析器有 bug,暴露而不是掩盖</td></tr>
+  </table>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="s04" class="rule-top">
+  <div class="folio">04 · Data Model</div>
+  <h2>数据模型与聚合设计</h2>
+
+  <figure>
+    <svg viewBox="0 0 1040 240" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+      <g stroke="#2d5f8a" fill="#f2f5f7" stroke-width="1">
+        <rect x="20" y="20" width="220" height="76"/>
+        <rect x="320" y="12" width="240" height="44"/>
+        <rect x="320" y="64" width="240" height="44"/>
+        <rect x="640" y="4" width="380" height="40"/>
+        <rect x="640" y="52" width="380" height="40"/>
+        <rect x="640" y="100" width="380" height="40"/>
+        <rect x="20" y="150" width="980" height="70" stroke-dasharray="5 4"/>
+      </g>
+      <g fill="#1a2530" font-size="13">
+        <text x="130" y="48" text-anchor="middle">SHOW 剧</text>
+        <text x="130" y="68" text-anchor="middle" fill="#5a6a78" font-size="11">key=规范化剧名 · name=最高频原名</text>
+        <text x="130" y="84" text-anchor="middle" fill="#5a6a78" font-size="11">latest=剧内最新 added_on</text>
+        <text x="440" y="38" text-anchor="middle">SEASON 季(1, 2, …)</text>
+        <text x="440" y="90" text-anchor="middle">SEASON 季(缺省=1)</text>
+        <text x="830" y="28" text-anchor="middle">EPISODE 集 — S01E01 [HD站点A · PT站点B · HD站点C]</text>
+        <text x="830" y="76" text-anchor="middle">EPISODE 集 — S01E02(版本 2 · 缺集提示锚点)</text>
+        <text x="830" y="124" text-anchor="middle">EPISODE 集 — S01E01–E25 整季范围行</text>
+      </g>
+      <g stroke="#8a99a6" stroke-width="1" fill="none">
+        <line x1="240" y1="58" x2="316" y2="34" marker-end="url(#arr2)"/>
+        <line x1="560" y1="34" x2="636" y2="24" marker-end="url(#arr2)"/>
+        <line x1="560" y1="34" x2="636" y2="72" marker-end="url(#arr2)"/>
+        <line x1="560" y1="86" x2="636" y2="120" marker-end="url(#arr2)"/>
+      </g>
+      <defs>
+        <marker id="arr2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7" fill="none" stroke="#8a99a6" stroke-width="1.2"/>
+        </marker>
+      </defs>
+      <g fill="#1a2530" font-size="12.5">
+        <text x="40" y="176">集行 = 聚合层(后端算好,前端只渲染):</text>
+        <text x="40" y="198" fill="#5a6a78">count/版本数 · dlspeed/upspeed/uploaded 求和 · 代表 size + 版本徽章 · kind 优先级聚合 · HR 计数 · sites 去重列表 · members=[hash,…]</text>
+        <text x="40" y="214" fill="#8a99a6">members 只放 hash 引用 —— 明细字段前端从 groups/singles 的 byHash 索引取,响应体不重复成员数据</text>
+      </g>
+    </svg>
+    <figcaption>聚合层级:SHOW → SEASON → EPISODE → (hash 引用)。集行内并列全部版本,即"多站点辅种不分开显示"</figcaption>
+  </figure>
+
+  <h3>排序规则</h3>
+  <ul class="tight">
+    <li><b>剧</b>:默认按剧内最新 <code>added_on</code> 降序(最近有动静的剧在前,与现有分组视图"新补的辅种最先看到"的哲学一致);列头可切剧名排序(locale 排序)。</li>
+    <li><b>季</b>:升序。</li>
+    <li><b>集</b>:集键统一为 (类型, 值) —— 整数集数按数值升序,日期按日期,范围行按起点;同集多版本不排序(并列)。</li>
+  </ul>
+
+  <h3>缺集提示(gap)</h3>
+  <p>对整数型集数做连续性检查:<code>[E01, E02, E04]</code> → 季头徽章提示 <code>缺 E03</code>。这是"追剧"语义的灵魂之一(一眼看出还差哪集才齐),实现只是一次遍历,建议第一版就带 —— 但仅做<b>季头徽章</b>级展示,不插虚位 DOM 行,控制渲染复杂度。</p>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="s05" class="rule-top">
+  <div class="folio">05 · Backend</div>
+  <h2>后端设计</h2>
+  <h3>新模块 <code>tvshows.py</code>(纯逻辑)</h3>
+  <ul class="tight">
+    <li>位置 <code>src/auto_qb/tvshows.py</code>,与 <code>episodes.py</code> 同族(领域逻辑独立模块,零/轻项目内依赖,便于单测)。</li>
+    <li>导出:<code>parse_release(name) → ParsedRelease</code>(剧名原文/规范化剧名/季/集键/置信分类)、<code>normalize_title(s)</code>、<code>episodes_from_files(files)</code>、噪音词表与模式表常量。</li>
+    <li>集数模式表继承 episodes.py 的"插入即扩展"设计;新增季标记与日期模式。</li>
+  </ul>
+  <h3>视图组装 <code>mixins/web_view.py</code></h3>
+  <ul class="tight">
+    <li><code>_build_shows_view() → List[dict]</code>:数据源是<b>全量 <code>store.by_hash</code></b>,不依赖辅种分组是否启用 —— 追剧语义是"这部剧我有哪些集",未归组种子同样要进视图(这与 singles 视图互补:singles 是"未归组",shows 是"全部种子换一种组织方式")。</li>
+    <li>挂在现有脏窗口:<code>ensure_group_view</code> 同一 <code>_group_view_dirty</code> 触发、同一 <code>_group_view_ver</code> 版本号下三视图一起重建;<code>ensure_group_state</code> 回传 <code>state["shows"]</code>(与 groups/singles 同 rid 门控,版本一致时不回传)。</li>
+    <li><b>响应体积控制</b>:shows 节点不带成员明细字段,只带 <code>members=[hash,…]</code> + 聚合字段;前端用 hash 从现有 groups/singles 数据建立 byHash 索引取明细(R08 已有完全相同的合并先例,<code>app.js:1469</code>)。</li>
+    <li>性能:每次重建 O(N) 正则解析,千级种子为毫秒级;per-hash 解析缓存(以 name 为键)预留不实现,实测后再说 —— 与 <code>SEARCH_INDEX_BUILD_BUDGET</code> 的"先简单"精神一致。</li>
+  </ul>
+  <h3>文件兜底的接线点(唯一需要动重建逻辑的地方)</h3>
+  <p>现有重建由 <code>_VIEW_FIELDS</code> 字段变化驱动,而"搜索索引建成一批"不会触发任何字段变化。因此:</p>
+  <ul class="tight">
+    <li>shows 视图存在"名称无标记待兜底"种子且索引 dirty 时,复用现有 <code>build_search_index</code> 命令(幂等,已有限流)。</li>
+    <li><code>_build_search_index</code> 每轮完成时,若存在待兜底种子 → 置 <code>_group_view_dirty = True</code>,下一轮视图重建自动归位。改动约两行,配合测试锁死。</li>
+  </ul>
+  <h3>不碰的东西</h3>
+  <ul class="tight">
+    <li><b>零新配置键</b> —— 视图切换是纯前端行为,不动 models/loaders/validation/schema(与 R08 单种子视图同策略)。</li>
+    <li><b>web.py 零新端点</b> —— state 承载回传;控制命令完全复用现有 pause/resume/reannounce/delete。</li>
+    <li><b>qB API 零新增调用</b> —— 文件列表走搜索索引缓存。</li>
+  </ul>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="s06" class="rule-top">
+  <div class="folio">06 · Frontend</div>
+  <h2>前端设计(atlas)</h2>
+  <h3>视图开关第三态</h3>
+  <ul class="tight">
+    <li><code>viewMode: groups | torrents | shows</code>;顶栏开关加第三枚按钮"追剧"(<code>atlas/index.html:132</code> 处插入)。</li>
+    <li>localStorage <code>autoqb.ui.view</code> 兼容:缺省仍是 groups;新值 "shows" 进白名单。</li>
+  </ul>
+  <h3>渲染结构</h3>
+  <ul class="tight">
+    <li>剧行(默认折叠):展开箭头 / 剧名 / 季数·集数 / 聚合状态 / 最新动静时间。</li>
+    <li>展开后:季子标题条(含缺集徽章)→ 集行平铺;集行 = 集号(含范围行样式)/ 聚合状态 / 进度 / 大小 / 版本数·站点徽章 / 速度 / HR。</li>
+    <li>底部"未识别"折叠区,命名过野的种子在此,按名称排序,参与搜索。</li>
+  </ul>
+  <h3>列模型与交互</h3>
+  <ul class="tight">
+    <li><code>SHOW_COLUMNS</code> 进 <code>TABLE_COLUMNS</code> 新 page "show" —— 列宽按列 key 记忆,存储结构向后兼容(R08 torrent page 同款先例)。</li>
+    <li><b>集行右键 = 整集操作</b>:对该集全部成员执行现有命令(暂停/恢复/汇报/删除),复用 R08 的批量目标拆解语义(<code>_resolveTargets</code> 拆 hash);剧行初版只读。</li>
+    <li><b>点开集行</b> → 复用现有成员明细表(DETAIL_COLUMNS),明细数据从 byHash 索引取。</li>
+    <li><b>筛选/搜索全复用</b>:集行 members 与分组成员同构,kindFilter/tag/category/site/hr/路径六套筛选"任一成员命中保留整集"语义不变;搜索命中(剧名/种子名/文件名)保留对应剧集并高亮。</li>
+    <li>统计条改为"N 部剧 · M 集";状态分布条聚合逻辑复用。</li>
+  </ul>
+  <h3>prism(棱镜)</h3>
+  <p>本计划<b>不触碰 prism 文件</b>(与 R08 同红线),移植作为后续独立任务 —— 共享逻辑层的解析成果(后端 shows 数据)届时直接可复用,prism 侧只差模板与样式。</p>
+</section>
+
+<!-- ============ 07 ============ -->
+<section id="s07" class="rule-top">
+  <div class="folio">07 · Decisions</div>
+  <h2>待拍板决策点</h2>
+  <p>以下各项均已给出推荐值,回复"按推荐来"即可全部落定:</p>
+  <table>
+    <tr><th style="width:5%">#</th><th style="width:24%">决策</th><th style="width:34%">推荐</th><th>影响</th></tr>
+    <tr><td class="mono">1</td><td>落地 UI 范围</td><td class="rec">atlas 先行,prism 不碰</td><td>与 R08 红线一致;prism 移植进 P2</td></tr>
+    <tr><td class="mono">2</td><td>解析器实现</td><td class="rec">手写(tvshows.py),不引 guessit</td><td>零依赖;规则可解释可持续养;guessit(+3 依赖)留作失控备选</td></tr>
+    <tr><td class="mono">3</td><td>动画绝对编号</td><td class="rec">全部归 S01,文档写明限制</td><td>跨季映射留给 P2 的 TMDB</td></tr>
+    <tr><td class="mono">4</td><td>季包展示</td><td class="rec">整季范围单行(E01–E25)</td><td>不展开,避免 N 行重复引用同一 hash</td></tr>
+    <tr><td class="mono">5</td><td>日播/综艺日期命名</td><td class="rec">日期型集键,按日期排序</td><td>集键 (类型, 值) 二元组统一排序</td></tr>
+    <tr><td class="mono">6</td><td>缺集(gap)提示</td><td class="rec">第一版就做,季头徽章级</td><td>实现成本低,是"追剧"语义的核心价值</td></tr>
+    <tr><td class="mono">7</td><td>未识别桶</td><td class="rec">显示(底部折叠区,参与搜索)</td><td>避免"种子找不到了"的困惑</td></tr>
+    <tr><td class="mono">8</td><td>人工纠偏(合并/拆分)</td><td class="rec">本期不做,P2 再立项</td><td>第一版先用真实库验证自动聚类质量,再决定纠偏交互的形态</td></tr>
+  </table>
+</section>
+
+<!-- ============ 08 ============ -->
+<section id="s08" class="rule-top">
+  <div class="folio">08 · Testing</div>
+  <h2>测试计划</h2>
+  <table>
+    <tr><th style="width:28%">测试面</th><th>内容</th></tr>
+    <tr><td><code>tests/test_tvshows.py</code>(新)</td><td>解析矩阵(3.2 全家族样例 + 边界:空名/纯数字/超长名);归一化等价类(同剧异写合并、异剧身份差分保留);区间展开;日期键;噪音词表误伤用例(剧名本身含 x264 之类词的极端情况)</td></tr>
+    <tr><td><code>test_web.py</code> 扩展</td><td>_build_shows_view 聚合正确性(跨站点归并/范围行/日期行/未识别桶);state.shows 的 rid 门控回传;文件兜底触发与重建钩子</td></tr>
+    <tr><td><code>helpers.py</code></td><td>FakeClient 种子样例补充剧集命名谱系(与解析矩阵同源)</td></tr>
+    <tr><td>前端冒烟</td><td>smoke 系列追加 shows 断言:开关三态切换/剧展开/集聚合行/整集右键操作/筛选联动</td></tr>
+  </table>
+  <p class="small-note">纪律:新测试文件同步头部 "## 测试计划" 清单(项目明文规定);基线数字单点见 memory-bank/testing.md,不在此手抄。</p>
+</section>
+
+<!-- ============ 09 ============ -->
+<section id="s09" class="rule-top">
+  <div class="folio">09 · Phases</div>
+  <h2>实施阶段</h2>
+  <div class="phase">
+    <div class="p-no">M1</div>
+    <div>
+      <div class="p-title">tvshows.py 解析模块 + 单测</div>
+      <div class="p-body">纯逻辑先行,零 UI 影响,可独立验证合入。含 3.4 管线全部五步、归一化规则、词表与模式表。</div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="p-no">M2</div>
+    <div>
+      <div class="p-title">后端视图接线 + test_web 扩展</div>
+      <div class="p-body"><code>_build_shows_view</code> / <code>state["shows"]</code> 同版本门控 / 文件兜底触发与重建钩子。前端未动之前 shows 数据对现有 UI 无感。</div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="p-no">M3</div>
+    <div>
+      <div class="p-title">atlas 前端 + 冒烟</div>
+      <div class="p-body">视图开关三态 / 剧-季-集渲染 / SHOW_COLUMNS / 集行右键与明细 / 筛选搜索复用 / 未识别折叠区 / gap 徽章(按决策点推荐值默认带上)。smoke 系列扩充。</div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="p-no">P2</div>
+    <div>
+      <div class="p-title">远期(独立立项)</div>
+      <div class="p-body">人工合并/拆分纠偏(需设计 state 持久化,遵守单一写线程法则)· TMDB opt-in 匹配 · prism 移植 · 从现有 zE 集数标签读取集数 · save_path 疑似同剧提示。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="s10" class="rule-top">
+  <div class="folio">10 · Risks</div>
+  <h2>风险与限制</h2>
+  <table>
+    <tr><th style="width:26%">风险</th><th>缓解</th></tr>
+    <tr><td>误合并(不同剧同名/重名重制)</td><td>聚合键保留年份/国家/续作数字差分;误拆可见、误合并隐蔽,规则取向"宁可拆";P2 人工纠偏兜底</td></tr>
+    <tr><td>漏合并(同剧异写:缩写/别名/中英混)</td><td>规则表可持续增补;线上样本驱动迭代;M1 单测矩阵即规则资产</td></tr>
+    <tr><td>动画绝对编号跨季错归</td><td>明确写为限制,文档注明;TMDB(P2)是正解</td></tr>
+    <tr><td>响应体积增长</td><td>shows 不带成员明细只带 hash 引用,增量≈轻量聚合层;若实测仍大,可退为"shows 仅在开关打开时请求"</td></tr>
+    <tr><td>文件兜底首建延迟(索引限流 500/轮)</td><td>未解析种子暂挂未识别桶并显示"解析中"语义;索引建成后自动归位,无需用户干预</td></tr>
+    <tr><td>兼容性</td><td>零新配置键、零迁移、COLS 存储向后兼容、web.py 零新端点;前端 localStorage 旧值不受影响</td></tr>
+  </table>
+</section>
+
+<footer>webui-shows-view-plan · 计划稿 v1 · auto-qb frontend/develop · 2026-09-15</footer>
+
+</main>
+</div>
+</div>
+</body>
+</html>
