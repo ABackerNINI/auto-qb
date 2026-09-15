@@ -124,6 +124,12 @@ class QbManager(
         self._group_view: List[dict] = []
         # 单种子视图数据(未归组种子, 与分组视图同一脏窗口同快照重建, 见 ensure_group_view)
         self._singles_view: List[dict] = []
+        # 追剧视图数据(全量种子按 剧→季→集 聚合, 与分组视图同一脏窗口同快照重建):
+        # {"list": [剧…], "unrecognized": [hash…]}, members 只放 hash(明细由前端从成员索引取)
+        self._shows_view: dict = {"list": [], "unrecognized": []}
+        # 追剧视图文件兑底待解析标记: 名称无标记的种子需等搜索索引提供文件列表,
+        # 索引推进后置 _group_view_dirty 触发重建归位(见 _build_search_index / _build_shows_view)
+        self._shows_pending: bool = False
         # WEB UI: 分组视图版本号(等价 qB 的 rid): 每次重建自增, Web 端按版本跳过整表替换。
         # 以进程启动时间播种: 进程重启后版本号不会回落到旧客户端已持有的值(否则前端会误判
         # "无更新"而一直展示重启前的旧列表)。

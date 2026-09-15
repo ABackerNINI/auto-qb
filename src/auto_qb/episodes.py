@@ -59,7 +59,22 @@ def name_has_episode_marker(name: str) -> bool:
 
 
 def extract_episodes_from_files(files: list) -> List[int]:
-    """从文件列表解析集数列表(去重排序)
+    """从文件列表解析集数列表(去重排序); 与 extract_episodes_from_names 同一实现,
+    接受任意带 .name 属性的文件对象(qB 文件字典包装)"""
+    return _episodes_from_names([getattr(f, "name", "") or "" for f in files])
+
+
+def extract_episodes_from_names(names: list) -> List[int]:
+    """从文件名(含相对路径)列表解析集数列表(去重排序)
+
+    供 tvshows.parse_files(追剧视图文件列表兜底)与 extract_episodes_from_files 共用;
+    解析规则见 _episodes_from_names。
+    """
+    return _episodes_from_names(list(names))
+
+
+def _episodes_from_names(names: list) -> List[int]:
+    """集数解析主体
 
     - 只考虑文件名部分: 忽略文件夹路径(如 "Season 1/01.mkv" 中的 "Season 1")
     - 只考虑视频文件(mkv/mp4/avi 等): 截图(jpg/png)/字幕(ass/srt)/字体等非视频文件跳过
@@ -71,8 +86,7 @@ def extract_episodes_from_files(files: list) -> List[int]:
     - 解析不到返回空列表
     """
     episodes = set()
-    for f in files:
-        fname = getattr(f, "name", "") or ""
+    for fname in names:
         if not fname:
             continue
         # 只取文件名部分, 忽略文件夹路径(统一分隔符后取最后一段)

@@ -1,4 +1,4 @@
-"""WebviewMixin: WEB UI 视图组装(分组视图/单种子视图/搜索索引/状态回传)
+"""WebviewMixin: WEB UI 视图组装(分组视图/单种子视图/追剧视图/搜索索引/状态回传)
 
 从 qbmanager.py 拆出(2026-09-15 大文件拆分批次一): 视图组装只读 store 快照与宿主状态,
 与核心循环解耦; 组合进 QbManager 后经 self 访问宿主属性。
@@ -7,19 +7,33 @@
 - self.store                种子数据层 TorrentStore(分组索引/by_hash/视图脏标记)
 - self.client               qB 原始客户端(搜索索引拉取文件列表用)
 - self.web_commands         WEB 控制命令队列(搜索 building 时投递构建命令)
-- self._group_view / self._singles_view / self._group_view_ver
-- self._group_view_dirty / self._web_last_seen
+- self._group_view / self._singles_view / self._shows_view / self._group_view_ver
+- self._group_view_dirty / self._shows_pending / self._web_last_seen
 - self._search_index / self._search_index_dirty
 """
 import logging
 import time
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ..torrents import TorrentRecord, view_field_value
 
 logger = logging.getLogger(__name__)
 
 SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
+
+# 集节点聚合状态优先级: 错误 > 下载 > 校验 > 暂停 > 做种 > 其它(前端按 state 着色)
+_SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "paused": 3, "seeding": 4, "other": 5}
+
+
+def _ep_sort_key(nkey: tuple):
+    """集节点排序键: 整季包(覆盖全季)最先, 其余按集号起点/终点; 日期桶内按日期字符串"""
+    if nkey[0] == "pack":
+        return (0, 0, "")
+    if nkey[0] == "ep":
+        return (0, nkey[1], "")
+    if nkey[0] == "range":
+        return (0, nkey[1], "")
+    return (1, 0, nkey[1])  # date
 
 
 class WebviewMixin:
@@ -158,13 +172,192 @@ class WebviewMixin:
             grouped.update(members)
         return [self._member_view(r) for h, r in self.store.by_hash.items() if h not in grouped]
 
+    # ---------- 追剧视图(shows): 全量种子按 剧→季→集 聚合 ----------
+
+    @staticmethod
+    def _missing_in_range(covered: set) -> List[int]:
+        """已覆盖集号集合内的缺口(缺集提示): [E1,E2,E4] -> [3]"""
+        if not covered:
+            return []
+        lo, hi = min(covered), max(covered)
+        return sorted(set(range(lo, hi + 1)) - covered)
+
+    def _agg_show_node(self, node: dict, rec) -> None:
+        """把一个成员累加进集节点(聚合规则):
+
+        - 速度/上传量/HR 计数求和; 站点去重(保持出现序); added_on 取最新
+        - 代表大小 = 最完整版本(进度最高, 并列取更大): 用户关心"这一集拿到的版本多大"
+        - 集进度 = 最差版本(全部版本完成才算这一集完成)
+        - 状态逐个记录, 出口处按优先级归并为节点状态
+        """
+        kind = self._state_kind(rec)
+        hr = self._hr_view_fields(rec)
+        node["members"].append(rec.hash)
+        node["kinds"].append(kind)
+        node["dlspeed"] += rec.dlspeed
+        node["upspeed"] += rec.upspeed
+        node["uploaded"] += rec.uploaded
+        if rec.progress > node["size_progress"] or (rec.progress == node["size_progress"] and rec.size > node["size"]):
+            node["size_progress"] = rec.progress
+            node["size"] = rec.size
+        node["progress"] = min(node["progress"], rec.progress)
+        if hr["hr_triggered"]:
+            node["hr_triggered"] += 1
+            if not hr["hr_satisfied"]:
+                node["hr_pending"] += 1
+        if rec.tracker_name and rec.tracker_name not in node["sites"]:
+            node["sites"].append(rec.tracker_name)
+        node["added_on"] = max(node["added_on"], rec.added_on)
+
+    def _build_shows_view(self) -> dict:
+        """追剧视图: 全量种子按 (剧键, 季, 集键) 三层聚合(与分组视图同一脏窗口同快照重建)
+
+        数据源是 store.by_hash **全量**(不依赖辅种分组是否启用): 追剧语义是
+        "这部剧我有哪些集", 未归组种子同样进视图。同一辅种组内成员文件列表相同,
+        解析结果必然同剧同季同集 —— 多站点辅种天然归并进同一集行, 无需显式关联;
+        不同编码的独立种子也落在同一集行(集 = 展示单位, 成员 = 版本)。
+
+        聚合层在后端算好(pitfalls 约定: 派生值后端算), members 只放 hash ——
+        明细字段由前端从 groups/singles 的成员索引取(groups ∪ singles = 全量,
+        避免响应体重复成员数据)。
+
+        文件列表兑底: 季包/名称无标记的种子从搜索索引缓存解析集数
+        (tvshows.refine_with_files); 索引尚未覆盖的种子暂按名称解析结果展示,
+        标记 _shows_pending 并投递构建命令 —— 索引推进后由 _build_search_index
+        置脏触发重建归位(种子名无标记不会自动置脏, 这是唯一需要动重建时序的点)。
+
+        返回 {"list": [剧…], "unrecognized": [hash…]}:
+          剧: {key, name, latest, member_count, episode_count, seasons: [季…]}
+          季: {season(编号或 None=日播/日期型), gaps(缺集列表), episodes: [集…]}
+          集: {key: ["ep",n]|["range",a,b]|["pack"]|["date",iso], count, state,
+               速度/上传/size(代表版本)/progress(最差版本)/HR 计数/sites/members(hash)/added_on}
+        """
+        from .. import tvshows
+
+        index = self._search_index or {}
+        shows: Dict[str, dict] = {}
+        unrecognized: List[str] = []
+        pending: List[str] = []
+        for h, rec in self.store.by_hash.items():
+            parsed = tvshows.parse_release(rec.name)
+            files = (index.get(h) or {}).get("files")
+            if parsed.kind in (tvshows.KIND_SEASON_PACK, tvshows.KIND_UNKNOWN) and parsed.key:
+                if files:
+                    parsed = tvshows.refine_with_files(parsed, files)
+                else:
+                    pending.append(h)  # 可被文件兑底但索引未覆盖: 待索引建成后归位
+            if parsed.kind == tvshows.KIND_UNKNOWN or not parsed.key:
+                unrecognized.append(h)
+                continue
+            show = shows.get(parsed.key)
+            if show is None:
+                show = shows[parsed.key] = {"titles": {}, "seasons": {}}
+            if parsed.title:
+                titles = show["titles"]
+                titles[parsed.title] = titles.get(parsed.title, 0) + 1
+            # 日期型集键不挂编号季(综艺/日播无季概念): 归 None 季桶, 前端渲染为"日播/特别篇"
+            skey = parsed.season if parsed.kind != tvshows.KIND_DATE else None
+            nodes = show["seasons"].setdefault(skey, {})
+            node = nodes.get(parsed.episode_key)
+            if node is None:
+                node = nodes[parsed.episode_key] = {
+                    "members": [],
+                    "kinds": [],
+                    "sites": [],
+                    "dlspeed": 0,
+                    "upspeed": 0,
+                    "uploaded": 0,
+                    "size": 0,
+                    "size_progress": -1.0,
+                    "progress": 1.0,
+                    "hr_triggered": 0,
+                    "hr_pending": 0,
+                    "added_on": 0,
+                }
+            self._agg_show_node(node, rec)
+
+        out = []
+        for key, show in shows.items():
+            titles = show["titles"]
+            # 展示名 = 出现频次最高的原始剧名(并列取更长/字典序, 保证确定性)
+            name = max(titles.items(), key=lambda kv: (kv[1], len(kv[0]), kv[0]))[0] if titles else key
+            seasons_out = []
+            latest = 0
+            member_total = 0
+            ep_total = 0
+            # 编号季升序在前, None 季桶(日期型)殿后
+            for skey in sorted(show["seasons"], key=lambda s: (s is None, s if s is not None else 0)):
+                nodes = show["seasons"][skey]
+                eps_out = []
+                covered = set()
+                has_pack = False
+                for nkey in sorted(nodes, key=_ep_sort_key):
+                    node = nodes[nkey]
+                    eps_out.append(
+                        {
+                            "key": list(nkey),
+                            "count": len(node["members"]),
+                            "state": min(node["kinds"], key=lambda k: _SHOW_STATE_RANK.get(k, 9)),
+                            "dlspeed": node["dlspeed"],
+                            "upspeed": node["upspeed"],
+                            "uploaded": node["uploaded"],
+                            "size": node["size"],
+                            "progress": round(node["progress"], 4),
+                            "hr_triggered": node["hr_triggered"],
+                            "hr_pending": node["hr_pending"],
+                            "sites": sorted(node["sites"]),
+                            "members": sorted(node["members"]),
+                            "added_on": node["added_on"],
+                        }
+                    )
+                    member_total += len(node["members"])
+                    ep_total += 1
+                    latest = max(latest, node["added_on"])
+                    if nkey[0] == "ep":
+                        covered.add(nkey[1])
+                    elif nkey[0] == "range":
+                        covered.update(range(nkey[1], nkey[2] + 1))
+                    elif nkey[0] == "pack":
+                        has_pack = True  # 整包覆盖全季: 不提示缺集
+                seasons_out.append(
+                    {
+                        "season": skey,
+                        "gaps": [] if has_pack else self._missing_in_range(covered),
+                        "episodes": eps_out,
+                    }
+                )
+            out.append(
+                {
+                    "key": key,
+                    "name": name,
+                    "latest": latest,
+                    "member_count": member_total,
+                    "episode_count": ep_total,
+                    "seasons": seasons_out,
+                }
+            )
+        # 默认排序: 剧内最近有动静的剧在前(与分组视图"新补的辅种最先看到"同哲学)
+        out.sort(key=lambda s: (-s["latest"], s["name"]))
+
+        # 文件兑底接线: 待解析种子且索引未覆盖 -> 标记 pending 并投递构建命令(幂等,
+        # 拉取限流由索引侧 SEARCH_INDEX_BUILD_BUDGET 控制; 索引已覆盖但无文件的不再投递)
+        pending = [h for h in pending if h not in index]
+        if pending:
+            self._shows_pending = True
+            if self._search_index_dirty or self._search_index is None:
+                self.web_commands.put(("build_search_index", {}))
+        else:
+            self._shows_pending = False
+        return {"list": out, "unrecognized": sorted(unrecognized)}
+
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
         与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
-        singles(未归组种子)与分组视图在同一脏窗口同快照重建 —— 保证两组数据互相一致。"""
+        singles(未归组种子)、shows(追剧视图)与分组视图在同一脏窗口同快照重建 —— 保证三组数据互相一致。"""
         if self._group_view_dirty:
             self._group_view = self._build_group_view()
             self._singles_view = self._build_singles_view()
+            self._shows_view = self._build_shows_view()
             self._group_view_ver += 1
             self._group_view_dirty = False
         return self._group_view
@@ -184,6 +377,8 @@ class WebviewMixin:
             state["groups"] = self._group_view
             # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
             state["singles"] = self._singles_view
+            # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
+            state["shows"] = self._shows_view
         return state
 
     def _build_search_index(self) -> None:
@@ -204,12 +399,14 @@ class WebviewMixin:
         prev = self._search_index if self._search_index is not None else {}
         idx: dict = {}
         budget = SEARCH_INDEX_BUILD_BUDGET
+        added = 0  # 本轮新增条目数(追剧视图文件兑底的重建触发依据)
         for h, rec in self.store.by_hash.items():
             entry = prev.get(h)
             if entry is not None:
                 entry["name"] = rec.name
             elif budget > 0:
                 budget -= 1
+                added += 1
                 try:
                     files = [f.name for f in rec.files(self.client)]
                 except Exception:
@@ -219,10 +416,21 @@ class WebviewMixin:
                 # 预算用尽: 剩余种子本轮不进新字典(下次调用续建), 保持脏
                 self._search_index = idx
                 self._search_index_dirty = True
+                self._trigger_shows_rebuild_if_pending(added)
                 return
             idx[h] = entry
         self._search_index = idx
         self._search_index_dirty = False
+        self._trigger_shows_rebuild_if_pending(added)
+
+    def _trigger_shows_rebuild_if_pending(self, added: int) -> None:
+        """追剧视图文件兑底触发: 种子名无标记不会进 _VIEW_FIELDS 置脏 —— 索引推进
+        (新增条目)是文件列表就位的唯一信号, 此处置脏让下一轮重建用文件列表归位。
+        本方法只在主循环线程调用(与 _group_view_dirty 的既有跨线程语义一致: 竞争
+        最坏结果是多重建一次, 无正确性风险)。"""
+        if added and self._shows_pending:
+            self._shows_pending = False
+            self._group_view_dirty = True
 
     def search_torrents(self, q: str) -> dict:
         """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
