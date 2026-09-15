@@ -1,0 +1,77 @@
+/* auto-qb 新版 WEB UI · 主题: 极地晨霜 (默认亮色)
+ * 来源: theme-factory "Arctic Frost" 改调 —— 冰蓝底 + 钢青 accent。
+ * 亮色语言整体重写: 语义色压暗保对比度, 阴影减淡, 表面用冷灰 hairline。
+ * accent #3d6aa3 对卡片底对比度 ≈ 4.6:1(小字可用)。
+ */
+:root[data-theme="frost"] {
+  color-scheme: light;
+
+  --bg: #f2f6fb;
+  --bg-card: #fdfeff;
+  --bg-row: #f7fafd;
+  --bg-hover: #e9f1f9;
+  --bg-sunken: rgba(219, 231, 244, .55);
+  --bg-elev: #ffffff;
+  --glass: rgba(250, 252, 255, .94);
+
+  --fg: #1b2a3a;
+  --fg-muted: #52708c;
+  --fg-dim: #6f88a0;
+  --fg-soft: #3a5470;
+
+  --accent: #3d6aa3;
+  --accent-hi: #4f80bd;
+  --accent-soft: rgba(61, 106, 163, .1);
+  --accent-line: rgba(61, 106, 163, .35);
+  --ring: rgba(79, 128, 189, .4);
+
+  --green: #178a5c;
+  --green-soft: rgba(23, 138, 92, .12);
+  --green-line: rgba(23, 138, 92, .38);
+  --blue: #1a76ad;
+  --blue-soft: rgba(26, 118, 173, .12);
+  --blue-line: rgba(26, 118, 173, .38);
+  --warn: #a86f08;
+  --warn-soft: rgba(168, 111, 8, .12);
+  --warn-line: rgba(168, 111, 8, .4);
+  --error: #bc4438;
+  --error-soft: rgba(188, 68, 56, .12);
+  --error-line: rgba(188, 68, 56, .4);
+
+  --violet: #7153cf;
+  --violet-soft: rgba(113, 83, 207, .12);
+  --pink: #bb4a8b;
+  --pink-soft: rgba(187, 74, 139, .12);
+  --teal: #0f8f81;
+  --teal-soft: rgba(15, 143, 129, .12);
+  --indigo: #5061d6;
+  --indigo-soft: rgba(80, 97, 214, .12);
+  --cyan: #177f9e;
+  --cyan-soft: rgba(23, 127, 158, .12);
+  --lime: #648a0a;
+
+  --hr-pending: #c56a1a;
+  --hr-pending-soft: rgba(197, 106, 26, .14);
+  --hr-pending-line: rgba(197, 106, 26, .4);
+  --hr-done: #0e8574;
+  --hr-done-soft: rgba(14, 133, 116, .12);
+  --hr-done-line: rgba(14, 133, 116, .35);
+  --hr-hit: #c56a1a;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #d3e0ee;
+  --border-strong: #b3c9de;
+  --border-soft: rgba(27, 42, 58, .08);
+  --surface-1: rgba(27, 42, 58, .035);
+  --surface-2: rgba(27, 42, 58, .06);
+  --hairline: rgba(27, 42, 58, .07);
+
+  /* 亮色主题阴影减淡(结构令牌的主题级覆盖) */
+  --shadow-1: 0 1px 2px rgba(27, 42, 58, .08);
+  --shadow-2: 0 6px 18px rgba(27, 42, 58, .1);
+  --shadow-3: 0 14px 40px rgba(27, 42, 58, .14);
+}

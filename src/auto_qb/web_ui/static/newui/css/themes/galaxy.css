@@ -1,0 +1,71 @@
+/* auto-qb 新版 WEB UI · 主题: 暗夜星云 (暗色 · 个性最强)
+ * 来源: theme-factory "Midnight Galaxy" 改调 —— 深紫宇宙底 + 薰衣草 accent。
+ * 紫基底下语义色整体提亮校准(绿/橙在紫底易脏), 适合想要强烈个性的场景。
+ */
+:root[data-theme="galaxy"] {
+  color-scheme: dark;
+
+  --bg: #151021;
+  --bg-card: #221a38;
+  --bg-row: #1c1530;
+  --bg-hover: #322653;
+  --bg-sunken: rgba(10, 6, 20, .55);
+  --bg-elev: #2b2149;
+  --glass: #191330;
+
+  --fg: #ece8f6;
+  --fg-muted: #a89dc7;
+  --fg-dim: #7d72a0;
+  --fg-soft: #c6bcde;
+
+  --accent: #b79fe0;
+  --accent-hi: #ccb8ec;
+  --accent-soft: rgba(183, 159, 224, .14);
+  --accent-line: rgba(183, 159, 224, .4);
+  --ring: rgba(203, 184, 236, .5);
+
+  --green: #5fd6a8;
+  --green-soft: rgba(95, 214, 168, .15);
+  --green-line: rgba(95, 214, 168, .42);
+  --blue: #6fb1ef;
+  --blue-soft: rgba(111, 177, 239, .15);
+  --blue-line: rgba(111, 177, 239, .42);
+  --warn: #f0b64a;
+  --warn-soft: rgba(240, 182, 74, .15);
+  --warn-line: rgba(240, 182, 74, .45);
+  --error: #f08080;
+  --error-soft: rgba(240, 128, 128, .15);
+  --error-line: rgba(240, 128, 128, .45);
+
+  --violet: #a678f0;
+  --violet-soft: rgba(166, 120, 240, .18);
+  --pink: #f07ec0;
+  --pink-soft: rgba(240, 126, 192, .16);
+  --teal: #4adccc;
+  --teal-soft: rgba(74, 220, 204, .16);
+  --indigo: #97a3f5;
+  --indigo-soft: rgba(151, 163, 245, .16);
+  --cyan: #55d4ea;
+  --cyan-soft: rgba(85, 212, 234, .16);
+  --lime: #b4e65a;
+
+  --hr-pending: #ff9a55;
+  --hr-pending-soft: rgba(255, 154, 85, .18);
+  --hr-pending-line: rgba(255, 154, 85, .5);
+  --hr-done: #63dcc4;
+  --hr-done-soft: rgba(99, 220, 196, .14);
+  --hr-done-line: rgba(99, 220, 196, .38);
+  --hr-hit: #ff9a55;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #372a55;
+  --border-strong: #4d3b74;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+}

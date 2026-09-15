@@ -160,6 +160,13 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **吸顶批量条与表头联动**: sticky 元素出现会与既有吸顶表头重叠, 偏移量用 CSS 变量接力 —— `--bulk-h` 由 app.js `_syncBulkHeight()` 量测写入(无选中/切页归 0, 值未变跳过), 表头 `top: calc(var(--head-h) + var(--bulk-h))`; 与 `--head-h` 同款模式。层叠次序: topbar(31)/status-strip(30)/bulk-bar(6)/group-head(5)。
 - **冒烟运维两坑(实测)**: ①Edge 同 user-data-dir 会**单例移交** —— 新 spawn 的进程立即退出, `/json/list` 拿到的是旧实例的**旧页面**; 冒烟必须每轮独立 profile 目录(带时间戳)。②被杀脚本的残留页面轮询会在新服务起来后自动重连, 页面里悬空的交互序列可能继续执行"幽灵操作"(实测把新环境里的同名组删了, 导致后续断言全歪)——起服务前先按命令行清 smoke edge(`CommandLine -match "edge-smoke"`; **不能全杀 msedge**, 用户自己开着浏览器)并确认端口无监听; kill 后端口释放有延迟, 立即重启必 10048。
 
+### 新版 UI (newui) 主题系统与冒烟补充 (2026-09-15)
+
+- **企业策略强装扩展会污染 headless 冒烟**: 本机 Edge 被策略强装 Dark Reader(chrome-extension, `kbijh...`), 即使 `--disable-extensions` + 全新 user-data-dir 也照样注入 —— 它改写 CSSOM(注入 `--darkreader-bg--*` 变量与自建样式表), 元素 computed 背景色不再等于应用令牌值(实测 .topbar background 与 `--glass` 完全脱钩, 改根变量也不变)。**颜色类断言必须读 `:root` 的自定义属性**(getComputedStyle(root).getPropertyValue), 而非元素 computed 背景; 控制台错误过滤 chrome-extension 来源; 截图可能被改色, 视觉验收以令牌 + 结构断言为准。
+- **CDP 颜色解析坑**: 自定义属性 getPropertyValue 返回**原始书写值(hex)**, 不是 rgb() —— 对比度计算要先解析 hex(天真的 `\d+` 抓数字会把 `#3d6aa3` 拆成 [3,6,3]); 另 JSON 序列化 NaN 变 null, 冒烟断言里出现 null 先怀疑 NaN。
+- **CSSStyleRule.cssRules 在 Chromium 已存在**(空 CSSRuleList, 真值): 递归遍历样式表不能用"有 cssRules 就是容器规则"判断, 必须按 rule.type 判定(MEDIA=4/SUPPORTS=12), 否则全部样式规则被当容器跳过(实测踩坑)。
+- **主题系统约定(newui)**: 组件样式只允许引用令牌, 颜色一律出自 themes/*.css(tokens.css 只放结构令牌); 加主题 = themes/ 加一个文件 + theme.js THEMES 注册表加一行, 组件零改动; theme.js 必须在 `<head>` 同步执行(首帧前定 data-theme 防 FOUC); 顶栏切换器用**事件委托**(登录验证前顶栏未渲染, 不能假设元素存在), 不进 Vue 状态(共享 app.js 零改动); 契约之外的新 UI 专属类(ui-tools/theme-pop/theme-menu/ui-link)不与 JS 耦合, 可自由改名。
+
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。

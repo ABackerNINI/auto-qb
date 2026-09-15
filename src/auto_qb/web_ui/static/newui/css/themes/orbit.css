@@ -1,0 +1,72 @@
+/* auto-qb 新版 WEB UI · 主题: 品牌轨道 (暗色 · 品牌定制)
+ * 从品牌标识(favicon / assets/icons: orbit 轨道弧 + 绿色种子点)提炼: 墨绿底 + 种子绿 accent。
+ * 同时验证自定义主题通道 —— 新增主题 = 复制本文件改色 + theme.js 注册表加一行。
+ * 分层绿(多层表面而非单一大 accent 面)避免"深底单酸绿"的模板感。
+ */
+:root[data-theme="orbit"] {
+  color-scheme: dark;
+
+  --bg: #0b1310;
+  --bg-card: #122019;
+  --bg-row: #0f1b15;
+  --bg-hover: #1a2e22;
+  --bg-sunken: rgba(3, 10, 7, .55);
+  --bg-elev: #152720;
+  --glass: #0e1a14;
+
+  --fg: #e7f2eb;
+  --fg-muted: #93b1a1;
+  --fg-dim: #67897a;
+  --fg-soft: #b2cfc0;
+
+  --accent: #3fa87e;
+  --accent-hi: #5cc79a;
+  --accent-soft: rgba(63, 168, 126, .14);
+  --accent-line: rgba(63, 168, 126, .45);
+  --ring: rgba(92, 199, 154, .5);
+
+  --green: #42d689;
+  --green-soft: rgba(66, 214, 137, .15);
+  --green-line: rgba(66, 214, 137, .42);
+  --blue: #41b6e8;
+  --blue-soft: rgba(65, 182, 232, .15);
+  --blue-line: rgba(65, 182, 232, .42);
+  --warn: #e8a13c;
+  --warn-soft: rgba(232, 161, 60, .15);
+  --warn-line: rgba(232, 161, 60, .45);
+  --error: #ef6f63;
+  --error-soft: rgba(239, 111, 99, .15);
+  --error-line: rgba(239, 111, 99, .45);
+
+  --violet: #a88ff0;
+  --violet-soft: rgba(168, 143, 240, .16);
+  --pink: #ef7bb0;
+  --pink-soft: rgba(239, 123, 176, .16);
+  --teal: #33cdb4;
+  --teal-soft: rgba(51, 205, 180, .16);
+  --indigo: #8b93f0;
+  --indigo-soft: rgba(139, 147, 240, .16);
+  --cyan: #38c8de;
+  --cyan-soft: rgba(56, 200, 222, .16);
+  --lime: #a3d94c;
+
+  --hr-pending: #ff8f45;
+  --hr-pending-soft: rgba(255, 143, 69, .18);
+  --hr-pending-line: rgba(255, 143, 69, .5);
+  --hr-done: #52d6ae;
+  --hr-done-soft: rgba(82, 214, 174, .14);
+  --hr-done-line: rgba(82, 214, 174, .38);
+  --hr-hit: #ff8f45;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #20362a;
+  --border-strong: #31523f;
+  --border-soft: rgba(255, 255, 255, .06);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .05);
+}

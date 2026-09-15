@@ -1,0 +1,78 @@
+/* auto-qb 新版 WEB UI · 基础层: reset / 排版 / 图标系统 / 可访问性
+ * 依赖: tokens.css(结构令牌) + themes/*.css(颜色令牌) 必须先于本文件加载。
+ */
+* { box-sizing: border-box; }
+[v-cloak] { display: none; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--accent-soft); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font-family: inherit; }
+h1, h2, h3 { font-family: var(--font-display); }
+
+/* 滚动条(细窄 + 半透明, 深浅色底都成立) */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border: 3px solid transparent;
+  background-clip: content-box; border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); background-clip: content-box; }
+*::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
+
+/* 数值一律 mono + 等宽位(避免刷新时数字跳动; 数据密集界面的基本功) */
+.g-stat, .m-stat, .m-hash, .m-progress .val, .m-pair, .rail-stat .val, .g-count, .h-cell,
+.pop-count, .ce-ord, .ce-num, .hist-axis text, .topbar .ver {
+  font-variant-numeric: tabular-nums; }
+.g-stat, .m-stat, .m-hash, .rail-stat .val, .m-pair .val { font-family: var(--font-mono); }
+
+/* 内联图标(sprite symbol 复用, 无外部图标库依赖) */
+.ico { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ico-sm { width: 13px; height: 13px; }
+.icon-sprite { display: none; }
+
+/* 图标语义着色(单一来源: 颜色一律取令牌) */
+.ico-up { color: var(--green); }
+.ico-down { color: var(--blue); }
+.ico-group { color: var(--violet); }
+.ico-store { color: var(--teal); }
+.ico-limit { color: var(--limit-hit); }
+.ico-today { color: var(--today-up); }
+.ico-hr-pending { color: var(--hr-pending); }
+.ico-hr-done { color: var(--hr-done); }
+.ico-refresh { color: var(--blue); }
+.ico-seed { color: var(--green); }
+.ico-config { color: var(--violet); }
+.ico-find { color: var(--cyan); }
+.ico-cols { color: var(--indigo); }
+.ico-clear { color: var(--fg-muted); }
+.ico-f-tag { color: var(--violet); }
+.ico-f-category { color: var(--indigo); }
+.ico-f-site { color: var(--teal); }
+.ico-f-path { color: var(--warn); }
+.ico-history { color: var(--today-up); }
+.ico-select { color: var(--indigo); }
+
+/* 动效原语: spin(进行中) + 呼吸; prefers-reduced-motion 全局降级 */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .9s linear infinite; }
+@keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
+@keyframes dot-pulse { 50% { opacity: .25; } }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
+@keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
+@keyframes loading-glow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+@keyframes hist-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* 语义工具类(模板散用) */
+.muted { color: var(--fg-muted); }
+.error { color: var(--error); }
+.ok { color: var(--green); }
+.center { text-align: center; }

@@ -1,0 +1,80 @@
+/* auto-qb 新版 WEB UI · 主题: 深海机房 (默认暗色)
+ * 来源: theme-factory "Ocean Depths" 改调 —— 深海军蓝底 + 鸭羽青 accent,
+ * 贴合"机房值守"气质; 状态色取同族冷暖对照, 与 accent 层次拉开。
+ * 本文件提供全部颜色令牌; 切主题 = html[data-theme] 换值, 组件零改动。
+ */
+:root[data-theme="ocean"] {
+  color-scheme: dark;
+
+  /* 背景分层: 页底 → 卡片 → 行底 → 悬浮 → 下沉(明细/代码块) → 浮层 → 吸顶玻璃 */
+  --bg: #0d1724;
+  --bg-card: #15233a;
+  --bg-row: #112034;
+  --bg-hover: #1c3050;
+  --bg-sunken: rgba(5, 12, 24, .5);
+  --bg-elev: #1b2d4b;
+  --glass: #111e31;
+
+  /* 前景三级 + 次级 */
+  --fg: #e9eff7;
+  --fg-muted: #9cadc6;
+  --fg-dim: #6e84a3;
+  --fg-soft: #bccadd;
+
+  /* 品牌(accent 鸭羽青) */
+  --accent: #3aa6a6;
+  --accent-hi: #5cc3c3;
+  --accent-soft: rgba(58, 166, 166, .15);
+  --accent-line: rgba(58, 166, 166, .45);
+  --ring: rgba(92, 195, 195, .5);
+
+  /* 语义四色(上传/下载/警示/错误 + 各自柔底与描边) */
+  --green: #3fd699;
+  --green-soft: rgba(63, 214, 153, .15);
+  --green-line: rgba(63, 214, 153, .42);
+  --blue: #4cc3f7;
+  --blue-soft: rgba(76, 195, 247, .15);
+  --blue-line: rgba(76, 195, 247, .42);
+  --warn: #f5bb42;
+  --warn-soft: rgba(245, 187, 66, .15);
+  --warn-line: rgba(245, 187, 66, .45);
+  --error: #f3766f;
+  --error-soft: rgba(243, 118, 111, .15);
+  --error-line: rgba(243, 118, 111, .45);
+
+  /* 数据扩展六色(筛选 chip/图例/分类图标) */
+  --violet: #ab8ffa;
+  --violet-soft: rgba(171, 143, 250, .16);
+  --pink: #f477b3;
+  --pink-soft: rgba(244, 119, 179, .16);
+  --teal: #2fd4bf;
+  --teal-soft: rgba(47, 212, 191, .16);
+  --indigo: #8b93f8;
+  --indigo-soft: rgba(139, 147, 248, .16);
+  --cyan: #2ad0e8;
+  --cyan-soft: rgba(42, 208, 232, .16);
+  --lime: #a8e63c;
+
+  /* HR 标记: pending = 已触发未达标(最醒目), done = 已达标(镇静对照) */
+  --hr-pending: #ff8f45;
+  --hr-pending-soft: rgba(255, 143, 69, .18);
+  --hr-pending-line: rgba(255, 143, 69, .5);
+  --hr-done: #5eead4;
+  --hr-done-soft: rgba(94, 234, 212, .14);
+  --hr-done-line: rgba(94, 234, 212, .38);
+  --hr-hit: #ff8f45;
+
+  /* 派生数据色(HR 栏 / 限速对照 / 今日流量) */
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  /* 描边与表面 */
+  --border: #23395a;
+  --border-strong: #34507c;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+}

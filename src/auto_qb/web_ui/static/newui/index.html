@@ -3,9 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>auto-qb · 辅种管理</title>
+  <meta name="color-scheme" content="dark light">
+  <title>auto-qb · 辅种管理 (新版)</title>
   <link rel="icon" type="image/png" href="/icon.png">
-  <link rel="stylesheet" href="/style.css">
+  <!-- 主题引擎必须在 head 同步执行(首帧前定 data-theme, 无 FOUC); 颜色全部来自 themes/*.css -->
+  <script src="/newui/js/theme.js"></script>
+  <link rel="stylesheet" href="/newui/css/tokens.css">
+  <link rel="stylesheet" href="/newui/css/themes/ocean.css">
+  <link rel="stylesheet" href="/newui/css/themes/galaxy.css">
+  <link rel="stylesheet" href="/newui/css/themes/frost.css">
+  <link rel="stylesheet" href="/newui/css/themes/golden.css">
+  <link rel="stylesheet" href="/newui/css/themes/orbit.css">
+  <link rel="stylesheet" href="/newui/css/base.css">
+  <link rel="stylesheet" href="/newui/css/components.css">
+  <link rel="stylesheet" href="/newui/css/views.css">
 </head>
 <body>
   <!-- 图标 sprite: use 引用, 无外部图标库依赖(继承 .ico 的 stroke/fill) -->
@@ -180,7 +191,24 @@
             </div>
           </div>
           <div class="spacer"></div>
-          <a class="newui-entry" href="/newui/" title="切换到新版界面(独立皮肤与多主题, 可随时切回)" style="display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer">新版 UI</a>
+          <!-- 新 UI 专属: 主题切换器 + 返回旧版(纯 DOM, theme.js 委托绑定, 不进 Vue 状态) -->
+          <div class="ui-tools">
+            <div class="theme-pop">
+              <button type="button" id="theme-btn" class="table-tool theme-btn" title="界面主题">
+                <svg class="ico ico-sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></svg>
+                主题
+              </button>
+              <div id="theme-menu" class="theme-menu" hidden>
+                <div class="theme-menu-title">界面主题</div>
+                <button type="button" class="theme-item" data-theme="ocean" style="--td-a:#3aa6a6;--td-b:#15233a"><i class="td"></i>深海机房<span class="t-kind">暗</span></button>
+                <button type="button" class="theme-item" data-theme="galaxy" style="--td-a:#b79fe0;--td-b:#221a38"><i class="td"></i>暗夜星云<span class="t-kind">暗</span></button>
+                <button type="button" class="theme-item" data-theme="frost" style="--td-a:#3d6aa3;--td-b:#e9f1f9"><i class="td"></i>极地晨霜<span class="t-kind">亮</span></button>
+                <button type="button" class="theme-item" data-theme="golden" style="--td-a:#9c7110;--td-b:#f6f1e6"><i class="td"></i>麦秋<span class="t-kind">亮</span></button>
+                <button type="button" class="theme-item" data-theme="orbit" style="--td-a:#3fa87e;--td-b:#122019"><i class="td"></i>品牌轨道<span class="t-kind">暗</span></button>
+              </div>
+            </div>
+            <a class="ui-link" href="/" title="返回旧版界面">旧版</a>
+          </div>
           <!-- 统计槽已移至辅种页左栏(.rail, 固定位置不随滚动); 顶栏只留全局状态徐标 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
             <i class="dot"></i>{{ statusBadge.text }}
