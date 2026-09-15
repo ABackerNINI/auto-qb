@@ -1455,3 +1455,31 @@ select option { background: var(--bg-elev); color: var(--fg); }
   .modal.add-dialog { width: 100%; }
   .add-dialog-grid { grid-template-columns: 1fr; }
 }
+
+/* ============ 种子编辑能力(D 轮) — 多字段编辑对话框/抽屉工具栏/行内小按钮 ============
+ * 多字段对话框复用 .modal 视觉语言(与 .modal-input 同源), 仅新增纵何字段堆叠;
+ * 抽屉工具栏与行内按钮供 Tracker/内容页签使用; 颜色全部走令牌。 */
+.modal-body { overflow-wrap: anywhere; }  /* 长路径/URL(如删除 tracker 确认)在确认框内可断行 */
+.modal-fields { display: flex; flex-direction: column; gap: 12px; margin: 10px 0 18px; }
+.modal-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.modal-field-label { font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+.modal-field input { width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--bg); color: var(--fg); font-size: 13.5px; }
+.modal-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.drawer-toolbar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.drawer-toolbar .ce-btn { display: inline-flex; align-items: center; gap: 6px; }
+.drawer-toolbar-hint { font-size: 11.5px; color: var(--dim); }
+.drawer-table th.th-act { width: 1%; }
+.drawer-table td.cell-act { white-space: nowrap; text-align: right; padding-top: 4px; }
+.row-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.row-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.row-btn.danger:hover { background: var(--error-soft); color: var(--error); }
+.drawer-table td.clickable { cursor: pointer; }
+.drawer-table tr.sel td { background: var(--accent-soft); }
+.prio-btn { padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--fg-soft); font: inherit; font-size: 11.5px; cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.prio-btn:hover { border-color: var(--accent); color: var(--accent); }
+.prio-btn.skipped { color: var(--dim); }
