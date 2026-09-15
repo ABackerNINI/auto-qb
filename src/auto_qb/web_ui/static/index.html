@@ -157,6 +157,7 @@
               <svg class="ico ico-sm ico-cols" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
               列
             </button>
+            <transition name="pop">
             <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip }" @click.stop>
               <div class="col-menu-title">分组表</div>
               <div v-for="c in groupColumns" :key="c.key" class="pop-item col-menu-item"
@@ -197,6 +198,7 @@
                 </button>
               </div>
             </div>
+            </transition>
           </div>
           <div class="spacer"></div>
           <!-- 信息栏模式切换(R09): 左栏悬浮卡 <-> 顶栏紧凑双排条; 持久化 localStorage autoqb.ui.rail -->
@@ -247,6 +249,7 @@
                 <span v-if="f.selected.length" class="filter-count">{{ f.selected.length }}</span>
                 <svg class="ico ico-sm filter-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
               </button>
+              <transition name="pop">
               <div v-if="filterMenu === f.kind" class="pop-menu" :class="{ 'flip-x': popFlip }" @click.stop>
                 <div class="pop-head">
                   <span>{{ f.label }}</span>
@@ -263,9 +266,10 @@
                 </div>
                 <p v-if="!f.options.length" class="pop-empty">暂无数据</p>
               </div>
+              </transition>
             </div>
-            <!-- 清除筛选: **常驻占位**(无筛选时 visibility:hidden) —— 若用 v-if 会出现/消失,
-                 会把同一行的筛选器整组左右推动, 与用户"需要固定位置"的诉求相違 -->
+            <!-- 清除筛选: **常驻占位**(无筛选时降透明度禁用, R02) —— 若用 v-if 会出现/消失,
+                 会把同一行的筛选器整组左右推动; 旧 visibility:hidden 占位策略留下过幽灵空位 -->
             <button class="dist-chip clear" :class="{ 'is-off': !filtersActive }"
                     :disabled="!filtersActive" @click="clearFilters()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
@@ -638,6 +642,7 @@
              · 开始 在 暂停 之前(正向操作在上, 破坏性操作在下)
              · 图标按语义着色(.ico-play/.ico-pause/.ico-sync/.ico-danger)
              · 删除只有一项: 是否连带磁盘文件在确认框里勾选(默认不删) -->
+        <transition name="pop">
         <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
           <template v-if="menu.hash">
             <div class="ctx-item" @click="actTorrent('resume')">
@@ -670,6 +675,7 @@
             </div>
           </template>
         </div>
+        </transition>
         </main>
       </div>
 
@@ -1136,6 +1142,7 @@
       </div>
     </div>
 
+    <transition name="pop">
     <div v-if="modal.visible" class="modal-mask" @click.self="resolveModal(false)">
       <div class="modal" :class="{ danger: modal.danger, wide: modal.wide }" role="dialog" aria-modal="true">
         <div class="modal-title">
@@ -1180,6 +1187,7 @@
         </div>
       </div>
     </div>
+    </transition>
 
     <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合折线图(SVG, 容器级悬停取值) -->
     <div v-if="historyOpen" class="modal-mask" @click.self="historyOpen = false">

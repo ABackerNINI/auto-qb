@@ -167,6 +167,18 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **CSSStyleRule.cssRules 在 Chromium 已存在**(空 CSSRuleList, 真值): 递归遍历样式表不能用"有 cssRules 就是容器规则"判断, 必须按 rule.type 判定(MEDIA=4/SUPPORTS=12), 否则全部样式规则被当容器跳过(实测踩坑)。
 - **主题系统约定(newui)**: 组件样式只允许引用令牌, 颜色一律出自 themes/*.css(tokens.css 只放结构令牌); 加主题 = themes/ 加一个文件 + theme.js THEMES 注册表加一行, 组件零改动; theme.js 必须在 `<head>` 同步执行(首帧前定 data-theme 防 FOUC); 顶栏切换器用**事件委托**(登录验证前顶栏未渲染, 不能假设元素存在), 不进 Vue 状态(共享 app.js 零改动); 契约之外的新 UI 专属类(ui-tools/theme-pop/theme-menu/ui-link)不与 JS 耦合, 可自由改名。
 
+### 诊断定案与实施第八轮 (2026-09-15: 吸顶贴合 / 幽灵空位 / 确认框路径 / H&R 筛选 / 单种子视图 / 信息栏双模式)
+
+- **"改了但没生效"类反馈必须先运行时诊断再改**(第八轮方法论): 三个"上轮未成功"项实测后两个根因与样式无关(占位策略/取数 bug), 一个实测已生效; 盲改样式永远修不到。诊断手段: FakeQbServer + Edge headless CDP 量 getComputedStyle + Range 字形留白 + getBoundingClientRect 几何(脚本 .openclaw/tmp/diag_ui.mjs → 冒烟 smoke8.mjs)。
+- **前端派生字段不在原始组字典: `_findGroup` 必须优先查 `decoratedGroups`**(R03 根因): 后端组字典没有 `save_path`(它是前端 decorated 层派生), `delGroup` 从 `this.groups` 取数 → 保存路径恒 "—"。判别法: 弹层里"后端明明有值前端显示 —"时, 先查取数来源是原始数据还是派生层。
+- **`visibility: hidden` 占位的幽灵空位**(R02 根因): "清除筛选"chip 未激活时 hidden 仍占位 85px —— 防按钮组推动的初衷是对的, 但右缘留下一个隐形块, 用户看成"路径筛选器右边有空位"。修法: 常驻可见 + 降透明禁用(宽度不变 → 位置稳定 + 空位消失)。
+- **`--bulk-h` 语义 = 吸顶条自身高度, 流内 margin 不计入**(R01 根因): 表头吸顶偏移 = head-h + bulk-h, 把 margin-bottom 算进 --bulk-h 会让吸顶态恒定多让一条缝(实测 10px)。修后吸顶态两根条零缝堆叠(冒烟断言 gap===0)。
+- **诊断/断言"吸顶"必须让页面真的滚得动**(冒烟环境坑, 两轮才定位): 冒烟假数据只有 2-3 行, 长视口下内容不满屏 → 两根条根本没进入 sticky 态, 量到的是流内 margin(误判成吸顶 bug); 且 `.rail` 的 `max-height: calc(100vh - ...)` 会把页面高度跟 viewport 一起抬走 —— 缩矮视口时滚动余量不增反减, 必须 press 到 rail 被 max-height 压得小于内容列(280px)滚动余量才够吸顶阈值(26px)。
+- **冒烟假数据的 HD 种子无文件列表 = 永久未归组 single**(设计行为, 别当 bug 查): files_map 只配了 HA/HB/HC → 分组表 2 组、单种子视图 4 行(3 成员 + 1 single)是正确状态; 第八轮首跑误判为"组消失"排查半天, 实为分组规则(文件列表不可读不归组)的正常表现。
+- **单种子视图数据面: singles 与 groups 同脏窗口同快照同版本门控**: `_build_singles_view` 与 `_build_group_view` 在 `ensure_group_view` 同一重建窗口产出, ensure_group_state 仅在 updated 时随 groups 一并回传; `store.view_changed` 对任意种子的 _VIEW_FIELDS 变化置真已覆盖未归组种子, 无需额外置脏。未归组种子此前只有搜索兕底路径, 单种子视图是第二个消费者。
+- **H&R 筛选只消费后端算好的组级计数/成员布尔**(hr_triggered/hr_pending/hr_satisfied), 前端只做 `_hrBucket` 比较 —— 与 tagClass 同一纪律, 前端重算模板/阈值会让自定义 HR 标签立即失效。
+- **新增列 page(torrent) 不升 COLS_STORE_KEY**: loadColState 对缺失 page 返回空属向后兼容; 只有重排既有 page 的列集才必须升版本。
+
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。
