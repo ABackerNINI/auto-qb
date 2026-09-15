@@ -163,6 +163,7 @@ _PLUGIN_SPEC_VALIDATORS = {
     "tags": _validate_tags_condition_spec,
     "category": _validate_pattern_list_spec,
     "trackers": _validate_pattern_list_spec,
+    "tracker_group": _validate_pattern_list_spec,
     "remove_tags": _validate_pattern_list_spec,
 }
 

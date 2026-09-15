@@ -47,7 +47,8 @@ SECTION_LEVELS = {
     "trackers": None,
 }
 
-# trackers.X.<field> 字段级别(tags/移除/限速/hr 运行时动态读; domains/rules 绑定固化)
+# trackers.X.<field> 字段级别(tags/移除/限速/hr 运行时动态读; domains/rules/groups 绑定固化:
+# groups 经 record.tracker_conf 引用被 tracker_group 条件读取, 热重载需 L2 重匹配才能看到新值)
 TRACKER_FIELD_LEVELS = {
     "tags": LEVEL_L0,
     "remove_tags": LEVEL_L0,
@@ -57,6 +58,7 @@ TRACKER_FIELD_LEVELS = {
     "hr": LEVEL_L0,
     "domains": LEVEL_L2,
     "rules": LEVEL_L2,
+    "groups": LEVEL_L2,
 }
 
 

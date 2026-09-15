@@ -32,6 +32,8 @@
 - test_models_default_sources: 默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量)
 - test_validate_section_type_errors: 各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags 坏项)
 - test_validate_hr_value_errors: 站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔)
+- test_validate_tracker_groups: 站点 groups 非列表/空串项报错(fail-fast)
+- test_load_tracker_groups: groups 解析回填 TrackerConfig, 未配置默认空列表
 """
 import logging
 import os
@@ -881,6 +883,44 @@ def test_validate_value_errors_extended():
         assert "config.example_rules.r1.conditions: 必须是列表" in err, err
         assert "config.example_rules.r1.actions: 必须是列表" in err, err
         assert "config.example_rules.r1: trigger 取值非法" in err, err
+
+
+def test_validate_tracker_groups():
+    """站点 groups 字段: 非列表/纯空白串项报错(空串项被 _strip_none 视为未配置剔除, 项目统一约定; 空列表合法)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      groups: not-a-list\n"
+            "    T2:\n"
+            "      domains: [b.com]\n"
+            "      groups: ['  ']\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.trackers.T1.groups: 必须是列表" in err, err
+        assert "config.trackers.T2.groups: 第 [0] 项必须是非空字符串" in err, err
+
+
+def test_load_tracker_groups():
+    """站点 groups 解析回填 TrackerConfig(字符串列表); 未配置默认空列表"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      groups: [国内, 影视]\n"
+            "    T2:\n"
+            "      domains: [b.com]\n"
+        )
+        path = os.path.join(td, "config.yml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        cfg = load_config(path)
+        assert cfg.trackers["T1"].groups == ["国内", "影视"]
+        assert cfg.trackers["T2"].groups == []
 
 
 def test_validate_tracker_field_errors():

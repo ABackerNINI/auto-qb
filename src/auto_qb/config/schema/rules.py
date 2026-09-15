@@ -75,6 +75,15 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
     ),
     Plugin("trackers", "站点", "condition", "list", "匹配站点配置名(非域名); 列表为或关系", item_kind="pattern", placeholder="HHan"),
     Plugin(
+        "tracker_group",
+        "站点分组",
+        "condition",
+        "list",
+        "匹配站点 groups 字段声明的分组(配置层概念, 不写种子); 列表为或关系",
+        item_kind="pattern",
+        placeholder="国内",
+    ),
+    Plugin(
         "state",
         "状态",
         "condition",

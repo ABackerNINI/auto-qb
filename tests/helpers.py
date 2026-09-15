@@ -588,12 +588,20 @@ class FakeTorrent:
 # ---------- 模拟 TrackerConfig ----------
 class FakeTracker:
     def __init__(
-        self, name, hr=None, rules=None, remove_similar_tags=False, upload_speed_limit=0, download_speed_limit=0
+        self,
+        name,
+        hr=None,
+        rules=None,
+        remove_similar_tags=False,
+        upload_speed_limit=0,
+        download_speed_limit=0,
+        groups=None,
     ):
         self.name = name
         self.domains = ["tracker.hhanclub.net"]
         self.tags = ["HHan"]
         self.remove_tags = []
+        self.groups = groups or []  # 站点分组(配置层声明, tracker_group 条件匹配来源)
         self.hr = hr  # HRRule 或 None
         self.rules = rules or []
         self.remove_similar_tags = remove_similar_tags

@@ -34,6 +34,7 @@ KNOWN_TRACKER_KEYS = {
     "domains",
     "tags",
     "remove_tags",
+    "groups",
     "upload_speed_limit",
     "download_speed_limit",
     "hr",
@@ -162,7 +163,7 @@ def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
             errors.append(f"{where}: 缺少必填键 domains(站点域名列表)")
         elif not (isinstance(domains, list) and domains and all(isinstance(d, str) and d.strip() for d in domains)):
             errors.append(f"{where}.domains: 必须是非空字符串列表")
-        for key in ("tags", "remove_tags"):
+        for key in ("tags", "remove_tags", "groups"):
             if key in tdata:
                 if _check_str_list(tdata[key], f"{where}.{key}", errors) and key == "remove_tags":
                     _check_regex_patterns(tdata[key], f"{where}.{key}", errors)
