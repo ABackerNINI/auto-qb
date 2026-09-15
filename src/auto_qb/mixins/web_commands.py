@@ -56,6 +56,13 @@ class WebCommandsMixin:
             "set_file_priority": self._cmd_set_file_priority,
             "rename_fs": self._cmd_rename_fs,
             "bulk_torrents": self._cmd_bulk_torrents,
+            "create_category": self._cmd_create_category,
+            "edit_category": self._cmd_edit_category,
+            "remove_categories": self._cmd_remove_categories,
+            "create_tags": self._cmd_create_tags,
+            "delete_tags": self._cmd_delete_tags,
+            "speed_override": self._cmd_speed_override,
+            "add_torrents": self._cmd_add_torrents,
             "reload_config": self._cmd_reload_config,
             "build_search_index": self._cmd_build_search_index,
         }
@@ -65,9 +72,9 @@ class WebCommandsMixin:
                 cmd_id = str(payload.get("cmd_id") or "")
                 args = {k: v for k, v in payload.items() if k != "cmd_id"}
                 try:
-                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent", "bulk_torrents"):
-                        # handler 只发指令并登记确认跟踪(bulk: 自行聚合写回执); 回执由后续 tick
-                        # (汇报确认)或 handler 内部(bulk)写入 —— 均不是简单的"执行完即 ok"
+                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent", "bulk_torrents", "add_torrents"):
+                        # handler 只发指令并登记确认跟踪(bulk: 聚合写回执; add: 依 qB 结果串写回执);
+                        # 回执由后续 tick(汇报确认)或 handler 内部写入 —— 均不是简单的"执行完即 ok"
                         handlers[cmd](cmd_id=cmd_id, **args)
                     else:
                         handlers[cmd](**args)
@@ -442,3 +449,75 @@ class WebCommandsMixin:
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)
+
+    # ---------- 管理命令(R2B: 分类/标签/限速覆盖/添加种子) ----------
+
+    def _cmd_create_category(self, name: str, save_path: str = ""):
+        self.api.torrents_create_category(name=name, save_path=save_path or None)
+        logger.info(f"WEB UI | 新建分类: {name}" + (f"(保存路径 {save_path})" if save_path else ""))
+
+    def _cmd_edit_category(self, name: str, save_path: str = ""):
+        self.api.torrents_edit_category(name=name, save_path=save_path or None)
+        logger.info(f"WEB UI | 修改分类: {name} -> 保存路径 {save_path or '(未设置)'}")
+
+    def _cmd_remove_categories(self, names=None):
+        self.api.torrents_remove_categories(categories=names)
+        logger.warning(f"WEB UI | 删除分类: {', '.join(names)}")
+
+    def _cmd_create_tags(self, tags=None):
+        self.api.torrents_create_tags(tags=tags)
+        logger.info(f"WEB UI | 新建标签: {', '.join(tags)}")
+
+    def _cmd_delete_tags(self, tags=None):
+        self.api.torrents_delete_tags(tags=tags)
+        logger.warning(f"WEB UI | 删除标签: {', '.join(tags)}")
+
+    def _cmd_speed_override(self, upload_kib: int = 0, download_kib: int = 0):
+        """全局限速手动覆盖(D2): 曲线启用时为"临时覆盖"——曲线任务下一档位切换写回目标值;
+        曲线停用即常态设置。不做"暂停曲线接管"状态。"""
+        self.api.set_global_speed_limits(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
+        logger.warning(f"WEB UI | 全局限速手动覆盖: 上 {upload_kib} / 下 {download_kib} KiB/s")
+
+    def _cmd_add_torrents(
+        self,
+        files=None,
+        urls=None,
+        save_path: str = "",
+        category: str = "",
+        tags=None,
+        paused: bool = False,
+        skip_checking: bool = False,
+        sequential: bool = False,
+        first_last_piece_prio: bool = False,
+        auto_tmm: bool = False,
+        cmd_id: str = ""
+    ):
+        """WEB UI 添加种子: .torrent 原始 bytes 经命令队列传给主循环线程, 内存直交 qB(qbittorrent-api
+        _normalize_torrent_files 原生支持 bytes) —— 零临时文件。
+
+        回执由本 handler 依 qB 结果串写("Ok."=ok, 其余 error) —— "指令已发"与"qB 接受"分开;
+        skip_checking 属高危选项, 前端默认关 + 警告, 此处照传(用户显式动作, 不做二次拦截)。"""
+        kwargs = dict(
+            save_path=save_path or None,
+            category=category or None,
+            tags=tags or None,
+            is_paused=bool(paused),
+            is_skip_checking=bool(skip_checking),
+            is_sequential_download=bool(sequential),
+            is_first_last_piece_priority=bool(first_last_piece_prio),
+        )
+        kwargs = {k: v for k, v in kwargs.items() if v not in (None, False)}
+        if auto_tmm:
+            kwargs["use_auto_torrent_management"] = True
+        results = []
+        if files:
+            results.append(str(self.api.torrents_add(torrent_files=files, **kwargs)))
+        if urls:
+            results.append(str(self.api.torrents_add(urls=urls, **kwargs)))
+        ok = bool(results) and all("Ok." in s for s in results)
+        if cmd_id:
+            if ok:
+                self._set_web_result(cmd_id, "ok")
+            else:
+                self._set_web_result(cmd_id, "error", f"qB 未接受添加: {'; '.join(results) or '无结果'}")
+        logger.warning(f"WEB UI | 添加种子: 文件 {len(files or [])} 个, 链接 {len(urls or [])} 条 -> {results}")

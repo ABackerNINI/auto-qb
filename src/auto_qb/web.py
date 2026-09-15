@@ -12,11 +12,11 @@ import os
 import secrets
 import threading
 import time
-from typing import Optional
+from typing import List, Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .utils import decode_group_key
@@ -376,6 +376,141 @@ def create_app(manager) -> FastAPI:
         """
         manager.touch_web_client()
         return {"server": manager.store.server_state}
+
+    # ---- 管理端点(R2B: 分类/标签/限速覆盖/添加种子/导出/日志) ----
+
+    @app.post("/api/categories")
+    def api_category_create(body: dict = None):
+        b = body or {}
+        name = str(b.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="分类名不能为空")
+        return _enqueue("create_category", {"name": name, "save_path": str(b.get("save_path") or "").strip()})
+
+    @app.post("/api/categories/edit")
+    def api_category_edit(body: dict = None):
+        b = body or {}
+        name = str(b.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="分类名不能为空")
+        return _enqueue("edit_category", {"name": name, "save_path": str(b.get("save_path") or "").strip()})
+
+    @app.post("/api/categories/remove")
+    def api_category_remove(body: dict = None):
+        names = [str(n).strip() for n in ((body or {}).get("names") or []) if str(n).strip()]
+        if not names:
+            raise HTTPException(status_code=400, detail="未提供要删除的分类")
+        return _enqueue("remove_categories", {"names": names})
+
+    @app.post("/api/tags")
+    def api_tags_create(body: dict = None):
+        tags = [str(t).strip() for t in ((body or {}).get("tags") or []) if str(t).strip()]
+        if not tags:
+            raise HTTPException(status_code=400, detail="未提供要新建的标签")
+        return _enqueue("create_tags", {"tags": tags})
+
+    @app.post("/api/tags/remove")
+    def api_tags_remove(body: dict = None):
+        tags = [str(t).strip() for t in ((body or {}).get("tags") or []) if str(t).strip()]
+        if not tags:
+            raise HTTPException(status_code=400, detail="未提供要删除的标签")
+        return _enqueue("delete_tags", {"tags": tags})
+
+    @app.get("/api/speed/mode")
+    def api_speed_mode():
+        """限速托管状态(D2): 曲线目标来自限速曲线任务快照(_traffic_view);
+        qB 当前全局限速直读(只读, 无状态副作用 —— 与 peers 透传同一先例)"""
+        manager.touch_web_client()
+        view = manager._traffic_view
+        curve_enabled = view.get("state") not in (None, "", "disabled")
+        target = None
+        if curve_enabled:
+            t = (view.get("limit") or {}).get("target") or {}
+            target = {"upload_kib": t.get("up"), "download_kib": t.get("down")}
+        current = None
+        if manager.client is not None:
+            try:
+                current = manager.api.get_global_speed_limits()
+            except Exception:
+                current = None
+        return {"curve_enabled": curve_enabled, "curve_target": target, "current": current}
+
+    @app.post("/api/speed/override")
+    def api_speed_override(body: dict = None):
+        """全局限速手动覆盖(D2 语义): 曲线启用时为临时覆盖(下一档位切换恢复), 停用即常态设置"""
+        b = body or {}
+        return _enqueue(
+            "speed_override", {
+                "upload_kib": int(b.get("upload_kib") or 0),
+                "download_kib": int(b.get("download_kib") or 0),
+            }
+        )
+
+    @app.post("/api/torrents/add")
+    def api_torrents_add(body: dict = None):
+        """添加种子(JSON): .torrent 文件由前端 FileReader 读取为 base64 随 JSON 提交,
+        后端解码后经命令队列内存直传 qB(qbittorrent-api 原生支持 bytes) ——
+        零临时文件、零额外依赖(multipart 需要 python-multipart, 不引入); 布尔字段为真布尔"""
+        import base64
+
+        b = body or {}
+        file_payload: List[bytes] = []
+        for item in b.get("files_b64") or []:
+            try:
+                data = base64.b64decode(str(item), validate=False)
+            except Exception:
+                raise HTTPException(status_code=400, detail="torrent 文件 base64 解码失败")
+            if data:
+                file_payload.append(data)
+        url_list = [u.strip() for u in (b.get("urls") or []) if str(u).strip()]
+        if not file_payload and not url_list:
+            raise HTTPException(status_code=400, detail="未提供 .torrent 文件或 magnet/URL")
+        return _enqueue(
+            "add_torrents", {
+                "files": file_payload,
+                "urls": url_list,
+                "save_path": str(b.get("save_path") or "").strip(),
+                "category": str(b.get("category") or "").strip(),
+                "tags": [str(t).strip() for t in (b.get("tags") or []) if str(t).strip()],
+                "paused": bool(b.get("paused")),
+                "skip_checking": bool(b.get("skip_checking")),
+                "sequential": bool(b.get("sequential")),
+                "first_last_piece_prio": bool(b.get("first_last_piece_prio")),
+                "auto_tmm": bool(b.get("auto_tmm")),
+            }
+        )
+
+    @app.get("/api/torrents/{hash}/export")
+    def api_torrent_export(hash: str):
+        """导出 .torrent(QbApi 透传原始字节): Content-Disposition 附种子名(浏览器下载)"""
+        manager.touch_web_client()
+        rec = _require_torrent(hash)
+        client = _require_client()
+        data = client.torrents_export(torrent_hash=hash)
+        safe = (rec.name or hash).replace('"', "").replace("\\", "_").replace("/", "_")
+        return Response(
+            content=data,
+            media_type="application/x-bittorrent",
+            headers={"Content-Disposition": f'attachment; filename="{safe}.torrent"'},
+        )
+
+    @app.get("/api/log")
+    def api_log(lines: int = 200, level: str = ""):
+        """auto-qb 自身日志 tail(只读; qB 日志不在范围)。level 按 [LEVEL] 标记过滤;
+        日志文件未配置/不存在时返回空列表(前端空态)。"""
+        manager.touch_web_client()
+        path = getattr(manager.config.logging, "file", "") or ""
+        out: List[str] = []
+        if path and os.path.isfile(path):
+            n = max(10, min(int(lines or 200), 2000))
+            with open(path, "rb") as f:
+                raw = f.read()[-256 * 1024:]
+            all_lines = [ln for ln in raw.decode("utf-8", errors="replace").splitlines() if ln.strip()]
+            lv = (level or "").strip().upper()
+            if lv:
+                all_lines = [ln for ln in all_lines if f"[{lv}" in ln]
+            out = all_lines[-n:]
+        return {"lines": out, "file": path}
 
     @app.get("/api/cmd/{cmd_id}")
     def api_cmd_result(cmd_id: str):

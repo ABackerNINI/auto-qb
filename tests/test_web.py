@@ -48,6 +48,12 @@
 - test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
 - test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
+- test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
+- test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
+- test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
+- test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
+- test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503)
+- test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
@@ -1927,6 +1933,173 @@ def test_start_web_server_reports_failure_when_port_taken(tmp_path, caplog):
         stop_web_server(handle)
 
 
+# ---------- 管理端点(R2B: 分类/标签/限速/添加/导出/日志) ----------
+
+
+def test_api_category_tag_endpoints(web_env):
+    """分类/标签 CRUD 端点: 正常入队返回 cmd_id; 空名/空列表 400"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.post("/api/categories", json={
+        "name": "电影",
+        "save_path": "R:/mv"
+    }, headers=auth).json()["queued"] is True
+    assert client.post(
+        "/api/categories/edit", json={
+            "name": "电影",
+            "save_path": "R:/mv2"
+        }, headers=auth
+    ).status_code == 200
+    assert client.post("/api/categories/remove", json={"names": ["电影"]}, headers=auth).status_code == 200
+    assert client.post("/api/tags", json={"tags": ["4K", "HDR"]}, headers=auth).status_code == 200
+    assert client.post("/api/tags/remove", json={"tags": ["4K"]}, headers=auth).status_code == 200
+    assert client.post("/api/categories", json={"name": "  "}, headers=auth).status_code == 400
+    assert client.post("/api/categories/remove", json={"names": []}, headers=auth).status_code == 400
+    assert client.post("/api/tags", json={"tags": []}, headers=auth).status_code == 400
+
+
+def test_category_tag_commands_execute():
+    """分类/标签命令: create/edit/remove/create_tags/delete_tags 调用 api 封装(带缓存失效)"""
+    from helpers import FakeClient, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr._cmd_create_category(name="电影", save_path="R:/mv")
+        mgr._cmd_edit_category(name="电影", save_path="R:/mv2")
+        mgr._cmd_remove_categories(names=["电影"])
+        mgr._cmd_create_tags(tags=["4K", "HDR"])
+        mgr._cmd_delete_tags(tags=["4K"])
+        assert [c[0] for c in client.calls] == [
+            "create_category", "edit_category", "remove_categories", "create_tags", "delete_tags"
+        ]
+        assert client.calls[0][1] == "电影" and client.calls[0][2] == "R:/mv"
+        assert client.calls[3][1] == ["4K", "HDR"]
+
+
+def test_api_speed_mode_and_override():
+    """限速托管(D2): /api/speed/mode 曲线启用/停用两形态(目标来自快照, 当前值直读);
+    /api/speed/override 命令落 transfer 端点(KiB -> bytes)"""
+    from fastapi.testclient import TestClient
+
+    from helpers import FakeClient, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr._web_token = "t"
+        mgr._traffic_view = {"state": "enabled", "limit": {"target": {"up": 100, "down": 50}}}
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": "Bearer t"}
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["curve_enabled"] is True
+        assert data["curve_target"] == {"upload_kib": 100, "download_kib": 50}
+        assert data["current"] == {"upload_limit": 0, "download_limit": 0}
+        mgr._traffic_view = {"state": "disabled", "limit": {}}
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["curve_enabled"] is False and data["curve_target"] is None
+        # 覆盖命令: 入队 + 主循环消费 -> transfer 端点写入(bytes)
+        cmd_id = tc.post("/api/speed/override", json={
+            "upload_kib": 2048,
+            "download_kib": 1024
+        }, headers=auth).json()["cmd_id"]
+        mgr._drain_web_commands()
+        assert mgr._web_results[cmd_id]["status"] == "ok"
+        assert ("transfer_set_upload_limit", 2048 * 1024) in client.calls
+        assert ("transfer_set_download_limit", 1024 * 1024) in client.calls
+
+
+def test_api_add_torrent_endpoint():
+    """添加种子(JSON+base64): bytes 经命令队列内存直传(零临时文件零新依赖) + 选项透传; 空来源 400"""
+    import base64
+
+    from fastapi.testclient import TestClient
+
+    from helpers import FakeClient, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr._web_token = "t"
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": "Bearer t"}
+        r = tc.post(
+            "/api/torrents/add",
+            json={
+                "files_b64": [base64.b64encode(b"d8:announce").decode()],
+                "urls": ["magnet:?xt=urn:btih:X"],
+                "save_path": "R:/new",
+                "category": "mv",
+                "tags": ["4K", "HDR"],
+                "paused": True,
+                "skip_checking": False,
+                "sequential": True,
+                "first_last_piece_prio": False,
+                "auto_tmm": True,
+            },
+            headers=auth,
+        )
+        assert r.status_code == 200
+        cmd_id = r.json()["cmd_id"]
+        cmd, payload = mgr.web_commands.queue[0]  # peek 不消费: drain 才是回执写入者
+        assert cmd == "add_torrents"
+        assert payload["files"] == [b"d8:announce"]
+        assert payload["urls"] == ["magnet:?xt=urn:btih:X"]
+        assert payload["paused"] is True and payload["auto_tmm"] is True
+        assert payload["sequential"] is True and payload["skip_checking"] is False
+        assert payload["tags"] == ["4K", "HDR"]
+        mgr._drain_web_commands()
+        assert mgr._web_results[cmd_id]["status"] == "ok"
+        adds = [c for c in client.calls if c[0] == "add"]
+        assert len(adds) == 2, "文件与链接各一次 torrents_add"
+        assert adds[0][1]["paused"] is True and adds[0][1]["use_auto_torrent_management"] is True
+        assert adds[0][1]["tags"] == ["4K", "HDR"]
+        # 空来源: 400
+        assert tc.post("/api/torrents/add", json={}, headers=auth).status_code == 400
+
+
+def test_api_export_endpoint(web_env):
+    """导出 .torrent: 原始字节 + Content-Disposition; 未知 hash 404, qB 断连 503"""
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord(hash="HA", name='Show"S01')
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    fake = FakeClient()
+    mgr.client = fake
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    r = client.get("/api/torrents/HA/export", headers=auth)
+    assert r.status_code == 200 and r.content == b"TORRENT-DATA"
+    assert "attachment" in r.headers["content-disposition"]
+    assert "ShowS01.torrent" in r.headers["content-disposition"], "文件名中的引号/路径符应被清洗"
+    assert client.get("/api/torrents/NOPE/export", headers=auth).status_code == 404
+    mgr.client = None
+    assert client.get("/api/torrents/HA/export", headers=auth).status_code == 503
+
+
+def test_api_log_endpoint(web_env):
+    """/api/log: 自身日志 tail + [LEVEL] 过滤; 文件未配置返回空"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    log_path = os.path.join(mgr.data_dir, "auto-qb.log")
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("2026-09-16 01:00:00 [INFO] 启动完成\n")
+        f.write("2026-09-16 01:00:05 [WARNING] 连接重试\n")
+        f.write("2026-09-16 01:00:10 [ERROR] 校验失败\n")
+    mgr.config.logging.file = log_path
+    data = client.get("/api/log?lines=10", headers=auth).json()
+    assert len(data["lines"]) == 3 and data["file"] == log_path
+    data = client.get("/api/log?lines=10&level=warning", headers=auth).json()
+    assert len(data["lines"]) == 1 and "WARNING" in data["lines"][0]
+    mgr.config.logging.file = ""
+    assert client.get("/api/log", headers=auth).json() == {"lines": [], "file": ""}
+
+
 def test_apply_web_config_toggle_enabled(monkeypatch):
     """web.enabled 热开关: 关 -> 开(启动服务器); 开 -> 关(停止并清空句柄)"""
     from helpers import make_manager
@@ -1984,20 +2157,79 @@ def test_seed_flat_view_fields_and_gating():
         assert [t["hash"] for t in items] == ["H1"]
         item = items[0]
         expected = {
-            "hash", "name", "site", "state", "kind", "dlspeed", "upspeed", "downloaded",
-            "uploaded", "size", "total_size", "progress", "eta", "ratio", "max_ratio",
-            "max_seeding_time", "max_inactive_seeding_time", "seeding_time", "added_on",
-            "completion_on", "time_active", "availability", "num_seeds", "num_leechs",
-            "num_complete", "num_incomplete", "tracker", "trackers_count", "category", "tags",
-            "save_path", "dl_limit", "up_limit", "seq_dl", "f_l_piece_prio", "auto_tmm",
-            "force_start", "super_seeding", "priority", "magnet_uri", "infohash_v1",
-            "infohash_v2", "private", "comment", "created_by", "creation_date", "has_metadata",
-            "piece_size", "pieces_have", "pieces_num", "last_activity", "total_wasted",
-            "connections_count", "connections_limit", "reannounce", "reannounce_in",
-            "has_tracker_error", "has_tracker_warning", "has_other_announce_error", "amount_left",
-            "content_path", "download_path", "root_path", "popularity", "seen_complete",
-            "downloaded_session", "uploaded_session", "hr_tag", "hr_tag_done", "hr_triggered",
-            "hr_satisfied", "hr_req_time", "hr_req_ratio",
+            "hash",
+            "name",
+            "site",
+            "state",
+            "kind",
+            "dlspeed",
+            "upspeed",
+            "downloaded",
+            "uploaded",
+            "size",
+            "total_size",
+            "progress",
+            "eta",
+            "ratio",
+            "max_ratio",
+            "max_seeding_time",
+            "max_inactive_seeding_time",
+            "seeding_time",
+            "added_on",
+            "completion_on",
+            "time_active",
+            "availability",
+            "num_seeds",
+            "num_leechs",
+            "num_complete",
+            "num_incomplete",
+            "tracker",
+            "trackers_count",
+            "category",
+            "tags",
+            "save_path",
+            "dl_limit",
+            "up_limit",
+            "seq_dl",
+            "f_l_piece_prio",
+            "auto_tmm",
+            "force_start",
+            "super_seeding",
+            "priority",
+            "magnet_uri",
+            "infohash_v1",
+            "infohash_v2",
+            "private",
+            "comment",
+            "created_by",
+            "creation_date",
+            "has_metadata",
+            "piece_size",
+            "pieces_have",
+            "pieces_num",
+            "last_activity",
+            "total_wasted",
+            "connections_count",
+            "connections_limit",
+            "reannounce",
+            "reannounce_in",
+            "has_tracker_error",
+            "has_tracker_warning",
+            "has_other_announce_error",
+            "amount_left",
+            "content_path",
+            "download_path",
+            "root_path",
+            "popularity",
+            "seen_complete",
+            "downloaded_session",
+            "uploaded_session",
+            "hr_tag",
+            "hr_tag_done",
+            "hr_triggered",
+            "hr_satisfied",
+            "hr_req_time",
+            "hr_req_ratio",
         }
         missing = expected - set(item)
         assert not missing, f"SEED_ITEM 缺字段: {missing}"

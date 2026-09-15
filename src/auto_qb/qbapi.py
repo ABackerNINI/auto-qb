@@ -264,6 +264,18 @@ class QbApi:
             torrent_hash=torrent_hash, old_path=old_path, new_path=new_path, **kwargs
         )
 
+    def torrents_edit_category(self, name: Optional[str] = None, save_path: Optional[str] = None, **kwargs: Any):
+        self._client.torrents_edit_category(name=name, save_path=save_path, **kwargs)
+        self.store.invalidate_categories()
+
+    def torrents_remove_categories(self, categories=None, **kwargs: Any):
+        self._client.torrents_remove_categories(categories=categories, **kwargs)
+        self.store.invalidate_categories()
+
+    def torrents_create_tags(self, tags=None, **kwargs: Any):
+        self._client.torrents_create_tags(tags=tags, **kwargs)
+        self.store.invalidate_tags()
+
     # ---------- 读操作: 优先 store 惰性缓存 ----------
 
     def torrents_info(self, *args: Any, **kwargs: Any):
