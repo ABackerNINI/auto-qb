@@ -181,9 +181,11 @@ button { font-family: inherit; }
 
 /* ---------------- 顶栏(吸顶 + 毛玻璃)与状态条 ---------------- */
 .sticky-head { position: sticky; top: 0; z-index: 30; }
-/* 服务不可达横幅: 用**不透明**实色底(半透明底在滚动内容上会透出文字, 可读性差) */
-.service-banner { padding: 9px 20px; text-align: center; font-weight: 600; font-size: 13px;
+/* 服务不可达横幅: 用**不透明**实色底(半透明底在滚动内容上会透出文字, 可读性差); 图标 + 文案居中 */
+.service-banner { display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 20px; text-align: center; font-weight: 600; font-size: 13px;
   color: #fecaca; background: #6b1f22; border-bottom: 1px solid #a33a3f; }
+.service-banner .ico { color: #fecaca; flex: 0 0 auto; }
 /* z-index 说明: 顶栏内的列选择器弹层必须能盖住下方的同级吸顶条(.status-strip)。两个吸顶条
  * 各自带 backdrop-filter -> **各自建立层叠上下文**, 弹层的 z-index 无法跨越父级; 因此必须在
  * "吸顶兄弟层"里把顶栏排到状态条之后(两者都必须 position+z-index, 只加之一无效)。
@@ -229,12 +231,6 @@ button { font-family: inherit; }
 .dist-chip.clear.is-off { visibility: hidden; }
 /* 筛选器区(右对齐)与当前筛选说明(紧跟状态图例之后) */
 .strip-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.strip-select { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 9px;
-  border: 1px solid var(--border-soft); border-radius: 999px; background: var(--surface-1); color: var(--fg-dim); }
-.strip-select select { max-width: 240px; padding: 2px 4px; border: 0; background: transparent; color: var(--fg-muted);
-  font-family: inherit; font-size: 11.5px; cursor: pointer; }
-.strip-select select:focus { outline: none; color: var(--fg); }
-.strip-select option { background: var(--bg-card); color: var(--fg); }
 .strip-note { font-size: 11.5px; color: var(--fg-muted); }
 .strip-note > b { color: var(--fg); }
 /* 多选筛选器(标签/分类/站点): 按钮 + 弹层; 与列选择器共用 .pop-menu 视觉 */
@@ -347,7 +343,8 @@ button { font-family: inherit; }
  * transform 跟随 .group-table 滚动, 不用 transition 跟手; 吸顶时给阴影/底边线浮起感。 */
 .group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim); font-size: 11.5px;
   font-weight: 600; letter-spacing: .04em; width: fit-content; min-width: 100%;
-  position: sticky; top: var(--head-h, 100px); z-index: 5;
+  position: sticky; top: calc(var(--head-h, 100px) + var(--bulk-h, 0px)); z-index: 5;
+  /* --bulk-h 由 app.js _syncBulkHeight 写入: 批量浮条吸顶时表头偏移随之下移(两吸顶条不重叠) */
   background: var(--bg-card); border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
@@ -360,7 +357,9 @@ button { font-family: inherit; }
 .hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size { text-align: right; }
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
-.h-cell .arrow { font-size: 10px; color: var(--accent); }
+/* 排序箭头已图标化(i-arrow-up/down sprite, 第七轮替换文本字形): 尺寸 11px, 颜色仍取 accent */
+.h-cell .arrow { color: var(--accent); }
+.h-cell .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
 /* 拖拽把手: 必须完全落在 .h-cell 之内 —— .h-cell 有 overflow:hidden, 用 right:-5px 时
  * 右半会被裁掉(既不可见也不可点), 实际命中区只剩 5px。这里放在 padding-right(10px) 内。 */
 .h-cell .resizer { position: absolute; right: 0; top: 0; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
@@ -374,7 +373,12 @@ button { font-family: inherit; }
   cursor: pointer; user-select: none;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); transform: translateY(-1px); }
-.group-row.expanded { background: var(--bg-hover); border-color: var(--accent); }
+/* 展开态 = "结构语言"(下沉底色 + 中性边框 + 底角取直与明细面板相连),
+ * 与选中态的"强调色语言"(accent 左条 + 柔底)分家 —— 第七轮: 两者此前都是
+ * accent 左条 + 高亮底 + accent 边框, 高度相似难以区分 */
+.group-row.expanded { background: var(--bg-sunken); border-color: var(--border);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.group-row.expanded + .detail { margin-top: -6px; border-top-left-radius: 0; border-top-right-radius: 0; }
 .g-name { display: flex; align-items: center; gap: 7px; font-weight: 600; overflow: hidden; white-space: nowrap; }
 .g-name-text { overflow: hidden; text-overflow: ellipsis; }
 .g-name .caret { color: var(--fg-dim); transition: transform var(--dur) var(--ease), color var(--dur) var(--ease); }
@@ -498,6 +502,12 @@ button { font-family: inherit; }
 .toast.ok .ico { color: var(--green); }
 .toast.error { border-color: rgba(248, 113, 113, .5); }
 .toast.error .ico { color: var(--error); }
+/* 强制汇报状态机两态(第七轮): busy = 常驻"等待中"(spinner 持续旋转);
+ * timeout = 超时未确认(琥珀 + 时钟, 中性提示) —— 区别于真实错误的红色 warning */
+.toast.busy { border-color: var(--accent-line); }
+.toast.busy .ico { color: var(--accent); }
+.toast.timeout { border-color: rgba(251, 191, 36, .5); }
+.toast.timeout .ico { color: var(--warn); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
 
 /* ---------------- 站内确认框: 替代 confirm / prompt ---------------- */
@@ -580,8 +590,6 @@ button { font-family: inherit; }
 .ce-sync { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
   background: var(--green-soft); color: var(--green); font-size: 11.5px; white-space: nowrap; }
 .ce-sync.on { background: var(--warn-soft); color: var(--warn); }
-.ce-dirty { padding: 3px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn);
-  font-size: 11.5px; white-space: nowrap; }
 /* 规则列表的小标题行(携带"新增规则"按钮) */
 .ce-sub-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0; }
 .ce-sub-title { font-size: 13px; font-weight: 600; color: var(--fg); }
@@ -707,8 +715,6 @@ button { font-family: inherit; }
 .ce-inline-switch .ce-slider::after { width: 13px; height: 13px; top: 2px; left: 2px; }
 .ce-inline-switch input:checked + .ce-slider::after { transform: translateX(13px); }
 .ce-inline-switch .ce-switch-text { font-size: 11.5px; color: var(--fg-dim); }
-
-.ce-warn { margin: 0 0 8px; font-size: 12.5px; color: var(--warn); }
 
 .ce-input { flex: 1 1 220px; max-width: 420px; min-width: 120px; padding: 7px 11px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px;
@@ -919,8 +925,6 @@ button { font-family: inherit; }
   justify-content: flex-end; gap: 10px; margin-top: 14px; padding: 12px 4px;
   backdrop-filter: blur(10px);
   background: linear-gradient(transparent, var(--bg) 42%); }
-.ce-dirty-hint { flex: 1; font-size: 12.5px; color: var(--fg-dim); }
-.ce-dirty-hint.on { color: var(--warn); }
 
 button.primary { background: var(--accent); }
 
@@ -963,9 +967,8 @@ button.primary { background: var(--accent); }
 /* 排序箭头: 出现/切换时轻微淡入 + 下移, 避免换列时"跳一下" */
 .h-cell .arrow { display: inline-block; animation: arrow-in .14s var(--ease-out); }
 @keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
-/* 展开明细: 已有 drop-in; 此处给"展开态"行一个更明确的左侧强调
- * (.group-row 本身不加左侧色条 —— 会与 search-hit 的渐变底打架) */
-.group-row.expanded { box-shadow: inset 3px 0 0 var(--accent), var(--shadow-1); }
+/* 展开态的左侧强调已移除(第七轮分家: 左侧 accent 色条是选中态的专属语言);
+ * 仅保留"已展开的行不再抬升"(视觉上保持"已定位") */
 .group-row.expanded:hover { transform: none; }  /* 已展开的行不再抬升(视觉上保持"已定位") */
 /* 顶栏 tabs: 激活态已并入上方基础规则(柔底 + 亮字 + 内描边), 此处不再覆盖 */
 /* 吸顶/吸底表面统一用玻璃令牌(此前顶栏硬写 rgba) */
@@ -1007,8 +1010,6 @@ button.primary { background: var(--accent); }
 .pop-item.on::before { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
   border-radius: 999px; background: var(--accent); }
 .pop-item.on .pop-count { color: var(--accent-hi); font-weight: 600; }
-.sr-check { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
-  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* 固定宽度的筛选按钮: 计数徽标绝对定位 -> 选中数变化不再改变按钮宽度与后续元素位置 */
 .filter-btn { position: relative; min-width: 92px; justify-content: center; }
@@ -1018,7 +1019,6 @@ button.primary { background: var(--accent); }
   box-shadow: 0 0 0 2px var(--bg-row); }
 .filter-caret { transition: transform var(--dur) var(--ease); }
 .filter-btn.active .filter-caret { transform: rotate(180deg); }
-.pill-limit .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 
 /* ============ 响应式收敛(2026-09-14 顶栏统计槽迁至左栏后重写) ============
  * 统计数值全部迁到左栏(.rail)后, 顶栏只剩品牌/页签/搜索/列/状态徐标 —— 不再需要"逐级隐藏 pill"。
@@ -1122,7 +1122,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
   /* 分组表: 保持列宽语义, 容器横向滚动 */
   .group-head, .group-row { min-width: 1180px; }
   .status-strip { align-items: flex-start; }
-  .strip-tools { margin-left: 0; }
 }
 
 /* ============ 2026-09-15 WEB UI 优化新增(多选/批量/历史流量/确认框扩展/登录加载态) ============ */
@@ -1151,8 +1150,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 选中行光标语义: 修饰键可切换选择 */
 .group-row, .member-row { cursor: pointer; }
 
-/* 批量操作浮条(选中集合非空时滑入; 不占位, 无选中时完全不渲染) */
-.bulk-bar { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 7px 12px;
+/* 批量操作浮条(选中集合非空时滑入; 不占位, 无选中时完全不渲染)。
+ * 第七轮: sticky 吸顶(top: --head-h)保证下滑时常驻; app.js 量测其高度写 --bulk-h,
+ * 表头吸顶偏移随之联动下移, 两吸顶条不重叠 */
+.bulk-bar { position: sticky; top: var(--head-h, 100px); z-index: 6;
+  display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 7px 12px;
   border: 1px solid var(--accent-line); border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card);
   box-shadow: var(--shadow-1); animation: drop-in .16s var(--ease-out); }
@@ -1174,20 +1176,29 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
 .bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
 
-/* 确认框目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标) */
+/* 删除类确认框加宽形态(第七轮: 种子名/保存路径完整可读 + 容纳成员明细) */
+.modal.wide { width: 560px; }
+/* 确认框目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标);
+ * 值允许换行(长种子名/路径不再被省略号截断)且可选中复制 */
 .modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
   padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
-  background: var(--surface-1); }
-.modal-detail-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
-.modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; }
+  background: var(--surface-1); user-select: text; }
+.modal-detail-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
+.modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; align-self: center; }
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
-.modal-detail-row .d-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere;
   color: var(--fg-soft); font-weight: 500; }
+/* 成员明细(删除整组): 逐行 站点 + 种子名, 超高滚动 */
+.modal-members { margin: -4px 0 14px; max-height: 180px; overflow-y: auto; padding: 4px 12px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-sunken); }
+.modal-member-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; min-width: 0; }
+.modal-member-row + .modal-member-row { border-top: 1px solid var(--border-soft); }
+.modal-member-row .mm-site { flex: 0 0 auto; min-width: 58px; color: var(--fg-muted); font-weight: 600; font-size: 11.5px; }
+.modal-member-row .mm-name { flex: 1; min-width: 0; color: var(--fg-soft); overflow-wrap: anywhere; }
 /* 多选项与单选 checkbox 同视觉(删除前强制汇报 / 同时删除磁盘文件) */
-.modal-checks .modal-check + .modal-check { margin-top: -12px; }
 
-/* 历史流量弹层 */
-.hist-modal { width: 680px; max-width: 100%; }
+/* 历史流量弹层(第七轮加宽: 折线图 920×380) */
+.hist-modal { width: 860px; max-width: 100%; }
 .hist-modal .modal-title { margin-bottom: 12px; }
 .hist-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
   background: var(--bg-sunken); border: 1px solid var(--border); }
@@ -1198,15 +1209,25 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .hist-tabs button.active { background: var(--accent-soft); color: var(--accent-hi);
   box-shadow: inset 0 0 0 1px var(--accent-line); }
 .hist-loading, .hist-empty { padding: 44px 0; text-align: center; color: var(--fg-dim); font-size: 13px; }
-/* 柱状图: 上传 teal / 下载 indigo(与今日流量卡 --today-up/--today-down 同源), 悬停柱提亮其余淡化 */
+/* 折线图(第七轮, 替代柱状图): 上传 teal / 下载 indigo(与今日流量卡 --today-up/--today-down 同源),
+ * 淡面积 + 双系列折线 + 悬停 crosshair/圆点; 打开时沿 pathLength=1000 一次 draw-in */
 .hist-chart { position: relative; }
-.hist-svg { display: block; width: 100%; height: auto; aspect-ratio: 640 / 240; }
+.hist-svg { display: block; width: 100%; height: auto; aspect-ratio: 920 / 380; }
 .hist-grid line { stroke: var(--hairline); }
 .hist-axis text { fill: var(--fg-dim); font-size: 10px; font-family: ui-monospace, Consolas, monospace; }
-.hist-hit { fill: transparent; }
-.hist-bar.up { fill: var(--today-up); opacity: .9; transition: opacity var(--dur-fast) var(--ease); }
-.hist-bar.down { fill: var(--today-down); opacity: .72; transition: opacity var(--dur-fast) var(--ease); }
-.hist-bar.dim { opacity: .3; }
+.hist-area.up { fill: var(--today-up); opacity: .08; }
+.hist-area.down { fill: var(--today-down); opacity: .08; }
+.hist-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; stroke-dasharray: 1000; stroke-dashoffset: 1000;
+  animation: hist-draw .7s var(--ease-out) forwards; }
+.hist-line.up { stroke: var(--today-up); }
+.hist-line.down { stroke: var(--today-down); }
+@keyframes hist-draw { to { stroke-dashoffset: 0; } }
+.hist-cross line { stroke: var(--fg-dim); stroke-width: 1; stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke; opacity: .8; }
+.hist-dot { stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.hist-dot.up { fill: var(--today-up); }
+.hist-dot.down { fill: var(--today-down); }
 .hist-tip { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px;
   padding: 7px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   background: var(--bg-elev); box-shadow: var(--shadow-2); font-size: 11.5px; color: var(--fg-muted);

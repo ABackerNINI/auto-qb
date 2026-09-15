@@ -403,6 +403,12 @@ window.CONFIG_EDITOR = {
             // 可选段: 缩进一级 + 边框成块(缩进用来表达"这是上一字段的展开内容")
             const subs = this.cfgFlatten(f.fields, path, depth + 1, basePath);
             items.push({ type: "section", field: f, path: path, depth: depth, items: subs });
+          } else if (f.open) {
+            // 平铺段(schema 声明 open, 如 日志/WEB UI/通知 这类短段): **不渲染折叠头**,
+            // 子字段以同级 depth 直接并入(2026-09-15 用户要求移除这三段的折叠;
+            // 旧 cfgGroupToggle 对 open 段写不出显式 false 的三态 bug 也因此不再触达渲染层)
+            const subs = this.cfgFlatten(f.fields, path, depth, basePath);
+            items.push(...subs);
           } else {
             // 普通 object 段: **默认折叠**, 仅渲染标题与摘要; 子项以 item.items 嵌套,
             // v-show 控制显隐 —— 设置页字段太多, 默认折叠让用户先看概览再决定展开哪段
@@ -440,7 +446,12 @@ window.CONFIG_EDITOR = {
     _attachGrey(items, byKey) {
       for (const it of items) {
         const f = it.field;
-        if (f && f.grey_if && f.grey_if.length) it.greyBy = byKey.get(f.grey_if[0]) || null;
+        // 仅当引用键在**本层**字段表内才覆写 greyBy: 平铺段(透明展开后 splice 进外层的子项)
+        // 自带内层 greyBy, 外层查不到该键时不能把它清成 null —— grey_if 引用的是同段字段,
+        // 内层字段表才是正确上下文(第七轮修复)
+        if (f && f.grey_if && f.grey_if.length && byKey.has(f.grey_if[0])) {
+          it.greyBy = byKey.get(f.grey_if[0]);
+        }
       }
       return items;
     },
@@ -474,11 +485,12 @@ window.CONFIG_EDITOR = {
       if (key in this.cfg.openGroups) return !!this.cfg.openGroups[key];
       return !!(field && field.open);
     },
-    cfgGroupToggle(path) {
+    cfgGroupToggle(path, field) {
       const key = this.cfgPathKey(path);
       const next = { ...this.cfg.openGroups };
-      if (next[key]) delete next[key];
-      else next[key] = true;
+      // 写"当前有效态的取反"而不是 true/删除 二态: 旧实现对缺省展开(open)的段永远写不出
+      // 显式 false, 点击无法收起(第七轮修复; 平铺段已不渲染折叠头, 此修复兑底其余段)
+      next[key] = !this.cfgGroupOpen(path, field);
       this.cfg.openGroups = next;
     },
     /* group 段折叠摘要: 已配置子字段数/总叶子数(折叠时也能看出规模) */
@@ -1091,7 +1103,7 @@ window.CE_FIELD_COMPONENT = {
       this.ce.cfgToggleSection(this.path, this.f, on);
     },
     toggleGroup() {
-      this.ce.cfgGroupToggle(this.path);
+      this.ce.cfgGroupToggle(this.path, this.f);
     },
     toggleList() {
       this.ce.cfgListToggle(this.path);

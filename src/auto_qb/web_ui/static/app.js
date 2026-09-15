@@ -159,6 +159,7 @@ const app = createApp({
       _toastSeq: 0,           // 提示条自增 id
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
       _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位)
+      _bulkH: 0,              // 批量操作浮条实测高度(+下边距; 写 :root --bulk-h, 供表头吸顶联动)
       // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
       selGroups: [],          // 选中组 key
       selMembers: [],         // 选中成员 hash
@@ -440,14 +441,14 @@ const app = createApp({
       const avg = rows.length ? (up + down) / rows.length : 0;
       return { up, down, peak, avg };
     },
-    /* 柱状图几何(常量 + 桶数派生): 无参 computed, 模板以属性访问(不加括号) */
+    /* 折线图几何(常量 + 桶数派生): 无参 computed, 模板以属性访问(不加括号);
+     * 尺寸放大(第七轮用户要求"改大一点"): 弹层 860px, viewBox 920×380 */
     histGeom() {
       const n = Math.max(1, this.historyBuckets.length);
-      const w = 640, h = 240, padL = 56, padR = 8, padT = 10, padB = 22;
+      const w = 920, h = 380, padL = 64, padR = 16, padT = 16, padB = 30;
       const chartH = h - padT - padB;
       const bw = (w - padL - padR) / n;
-      const barW = Math.max(2, Math.min(12, (bw - 5) / 2));
-      return { w, h, padL, padR, padT, padB, chartH, n, bw, barW };
+      return { w, h, padL, padR, padT, padB, chartH, n, bw };
     },
     histViewBox() {
       return `0 0 ${this.histGeom.w} ${this.histGeom.h}`;
@@ -472,12 +473,39 @@ const app = createApp({
       }
       return out;
     },
+    /* 双系列折线点(上传/下载): x = 槽位中心, y 按桶值比例 */
+    histSeries() {
+      const g = this.histGeom;
+      const max = this.historyMax;
+      const mk = (key) => this.historyBuckets.map((b, i) => ({
+        x: g.padL + i * g.bw + g.bw / 2,
+        y: g.padT + g.chartH * (1 - Math.min(1, b[key] / max)),
+        v: b[key],
+      }));
+      return { up: mk("up"), down: mk("down") };
+    },
+    histPaths() {
+      const toPath = (pts) => pts.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+      return { up: toPath(this.histSeries.up), down: toPath(this.histSeries.down) };
+    },
+    histAreaUp() {
+      return this._histArea("up");
+    },
+    histAreaDown() {
+      return this._histArea("down");
+    },
+    /* 悬停态(容器级 mousemove 连续追踪, 修复旧逐桶 enter/leave 在桶间空隙的闪烁):
+     * crosshair x / 两系列高亮点 / tooltip 定位 */
     histHover() {
       if (this.histHoverIdx < 0 || this.histHoverIdx >= this.historyBuckets.length) return null;
       const g = this.histGeom;
+      const i = this.histHoverIdx;
       return {
-        bucket: this.historyBuckets[this.histHoverIdx],
-        leftPct: ((g.padL + this.histHoverIdx * g.bw + g.bw / 2) / g.w) * 100,
+        bucket: this.historyBuckets[i],
+        x: this.histSeries.up[i].x,
+        up: this.histSeries.up[i],
+        down: this.histSeries.down[i],
+        leftPct: (this.histSeries.up[i].x / g.w) * 100,
       };
     },
   },
@@ -504,6 +532,7 @@ const app = createApp({
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         this._syncHeadHeight();
+        this._syncBulkHeight();
         this.materializeColumns();
       }, 120);
     });
@@ -534,8 +563,10 @@ const app = createApp({
     },
   },
   updated() {
-    // 顶栏高度会随"状态分布条是否渲染/窄屏折行"变化 -> 每帧后同步(值未变时内部直接返回)
+    // 顶栏高度会随"状态分布条是否渲染/窄屏折行"变化 -> 每帧后同步(值未变时内部直接返回);
+    // 批量浮条的出现/消失也在此量测(选中集合变化 -> --bulk-h 联动表头吸顶偏移)
     this._syncHeadHeight();
+    this._syncBulkHeight();
   },
   methods: {
     async api(path, options = {}) {
@@ -608,10 +639,22 @@ const app = createApp({
       }
     },
     /* ---------------------------------------------------------- 站内提示条(toast) */
-    toast(text, kind = "info", ms = 4000) {
+    toast(text, kind = "info", ms = 4000, opts = {}) {
       const id = ++this._toastSeq;
       this.toasts.push({ id, text, kind });
+      // sticky = 常驻不自动消失(强制汇报"等待中"): 由 _finishToast 更新终态后退场
+      if (opts.sticky) return id;
       setTimeout(() => this._dropToast(id), ms);
+      return id;
+    },
+    /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 —— "等待中"->"成功/超时"的强反馈 */
+    _finishToast(id, kind, text, ms = 4000) {
+      this._updateToast(id, { kind, text });
+      setTimeout(() => this._dropToast(id), ms);
+    },
+    _updateToast(id, patch) {
+      const t = this.toasts.find((x) => x.id === id);
+      if (t) Object.assign(t, patch);
     },
     _dropToast(id) {
       this.toasts = this.toasts.filter((t) => t.id !== id);
@@ -624,6 +667,8 @@ const app = createApp({
         checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
         checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制汇报 + 删除文件并存)
         details: null,  // 目标信息区 [{icon,label,value}](删除确认框显示待删种子信息)
+        members: null,  // 成员明细 [{site,name}](删除整组: 逐个列出待删种子, 滚动区)
+        wide: false,    // 加宽形态(删除确认框: 容纳完整种子名/路径与成员明细)
         icon: "",       // 标题图标覆盖(如删除用 i-trash-x); 缺省按 danger 取 warn/info
       };
     },
@@ -1047,10 +1092,7 @@ const app = createApp({
       this.sortKey = DEFAULT_SORT.key;
       this.sortDir = DEFAULT_SORT.dir;
     },
-    sortArrow(key) {
-      if (this.sortKey !== key) return "";
-      return this.sortDir === 1 ? "▲" : "▼";
-    },
+    /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
     /* 分组表横向滚动时同步表头位移(表头已脱离 .group-table 容器做纵向 sticky,
        横向滚动靠 JS 桥接避免列头与列体错位)。用 transform 而非 scrollLeft,
        避免反向触发自身 scroll 事件形成回环; 不带 transition 跟手不滞后 */
@@ -1062,7 +1104,10 @@ const app = createApp({
     toggleExpand(key, event) {
       // 仅左键触发展开: 右键菜单不应连带展开明细(旧实现在 openMenu 里主动展开, 已移除)
       if (event && event.button !== 0) return;
-      this.expandedKey = this.expandedKey === key ? null : key;
+      const next = this.expandedKey === key ? null : key;
+      this.expandedKey = next;
+      // 展开的组作为 Shift 多选默认起点(用户要求); 收起不改锚点(保留上一次起点)
+      if (next) this.selAnchorGroup = next;
       this.menu.visible = false;
     },
     openMenu(event, group) {
@@ -1110,10 +1155,11 @@ const app = createApp({
       try {
         const resp = await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
         if (action === "reannounce") {
-          this.toast("强制汇报已发送, 等待 tracker 确认…", "info", 4000);
+          // 强反馈状态机: 常驻"等待中" -> 原位换成 成功(绿) / 超时失败(琥珀), 不再用红色警告样式
+          const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
           const r = await this.waitCmd(resp.cmd_id);
-          if (r.ok) this.toast("强制汇报成功(tracker 已确认)", "ok", 4000);
-          else this.toast(`强制汇报失败: ${r.error}`, "error", 8000);
+          if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
+          else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
         } else {
           const r = await this.waitCmd(resp.cmd_id);
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
@@ -1147,8 +1193,11 @@ const app = createApp({
     },
     shiftGroupSel(g) {
       // 从锚点到当前行整段加入选择(锚点不更新: 多次 Shift 可从同一起点扩展)
+      // 锚点解析: Ctrl+点击设置的锚点 -> 当前展开的组(用户要求) -> 可见列表首行
       const list = this.filteredGroups.map((x) => x.key);
-      const anchor = list.includes(this.selAnchorGroup) ? this.selAnchorGroup : list[0];
+      let anchor = this.selAnchorGroup;
+      if (!list.includes(anchor) && list.includes(this.expandedKey)) anchor = this.expandedKey;
+      if (!list.includes(anchor)) anchor = list[0];
       const from = list.indexOf(anchor);
       const to = list.indexOf(g.key);
       if (from < 0 || to < 0) return;
@@ -1214,20 +1263,27 @@ const app = createApp({
         ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
       ];
       if (!jobs.length) return;
+      // 批量汇报: 常驻"等待中"(含目标数), 回执齐后原位换汇总终态(成功/超时, 琥珀不用红警告)
+      const isRe = action === "reannounce";
+      const tid = isRe
+        ? this.toast(`强制汇报等待中…(${jobs.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
+        : null;
       const results = await Promise.allSettled(
         jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
       );
       const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
       if (!fails.length) {
-        this.toast(`已执行: ${label}(${jobs.length} 个目标)`, "ok", 2500);
+        const okMsg = isRe
+          ? `强制汇报成功(tracker 已确认, ${jobs.length} 个目标)`
+          : `已执行: ${label}(${jobs.length} 个目标)`;
+        if (isRe) this._finishToast(tid, "ok", okMsg, 3000);
+        else this.toast(okMsg, "ok", 2500);
         return;
       }
       const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
-      this.toast(
-        `${label}: 成功 ${jobs.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
-        fails.length === jobs.length ? "error" : "info",
-        8000
-      );
+      const msg = `${label}: 成功 ${jobs.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`;
+      if (isRe) this._finishToast(tid, "timeout", msg, 6000);
+      else this.toast(msg, fails.length === jobs.length ? "error" : "info", 8000);
     },
     async bulkDelete() {
       const { groupKeys, memberHashes } = this._bulkTargets();
@@ -1249,16 +1305,16 @@ const app = createApp({
           ...groupKeys.map((k) => `/api/groups/${k}/reannounce`),
           ...memberHashes.map((h) => `/api/torrents/${h}/reannounce`),
         ];
-        this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "info", 4000);
+        const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
         const results = await Promise.allSettled(
           jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
         );
         const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
         if (fails.length) {
-          this.toast(`${fails.length}/${jobs.length} 个目标汇报确认失败, 已保留未删除`, "error", 8000);
+          this._finishToast(tid, "timeout", `${fails.length}/${jobs.length} 个目标汇报确认失败, 已保留未删除`, 6000);
           return;
         }
-        this.toast("汇报确认成功, 开始删除…", "ok", 2500);
+        this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
       }
       const body = JSON.stringify({ delete_files: deleteFiles });
       const delJobs = [
@@ -1277,6 +1333,8 @@ const app = createApp({
         title: opts.title,
         body: opts.body,
         details: opts.details || null,
+        members: opts.members || null,
+        wide: true,  // 删除类确认框一律加宽: 种子名/保存路径完整可读
         checks: [
           { key: "reannounce", label: "删除前先强制汇报(等待 tracker 确认, 失败则不删除)", checked: true },
           { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
@@ -1289,18 +1347,23 @@ const app = createApp({
     },
     /* 删除前的汇报编排: 发送汇报命令并等待回执(tracker 确认/超时), 失败提醒且不删除 */
     async _reannounceBeforeDelete(apiPath, label) {
+      let tid = null;
       try {
         const resp = await this.api(apiPath, { method: "POST" });
-        this.toast(`正在向 tracker 汇报${label}, 等待确认…`, "info", 4000);
+        tid = this.toast(`正在向 tracker 汇报${label}, 等待确认…`, "busy", 0, { sticky: true });
         const r = await this.waitCmd(resp.cmd_id);
         if (r.ok) {
-          this.toast(`汇报确认成功, 开始删除${label}`, "ok", 2500);
+          this._finishToast(tid, "ok", `汇报确认成功, 开始删除${label}`, 2000);
           return true;
         }
-        this.toast(`${label}汇报确认失败: ${r.error} —— 已保留未删除`, "error", 8000);
+        this._finishToast(tid, "timeout", `${label}汇报确认失败: ${r.error} —— 已保留未删除`, 6000);
         return false;
       } catch (e) {
-        if (!e.auth) this.toast(`汇报失败: ${e.message} —— 已保留未删除`, "error", 8000);
+        if (!e.auth) {
+          // 命令投递本身失败 = 真错误(与"超时"区分): 用红色 error 样式
+          if (tid) this._finishToast(tid, "error", `汇报失败: ${e.message} —— 已保留未删除`, 6000);
+          else this.toast(`汇报失败: ${e.message} —— 已保留未删除`, "error", 8000);
+        }
         return false;
       }
     },
@@ -1322,6 +1385,8 @@ const app = createApp({
           { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—" },
           { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
         ],
+        // 成员明细(用户要求确认框里能看到"正在删除哪些种子"): 站点 + 种子名逐行列出
+        members: g.members.map((m) => ({ site: m.site, name: m.name })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -1346,10 +1411,10 @@ const app = createApp({
       try {
         const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
         if (action === "reannounce") {
-          this.toast("强制汇报已发送, 等待 tracker 确认…", "info", 4000);
+          const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
           const r = await this.waitCmd(resp.cmd_id);
-          if (r.ok) this.toast("强制汇报成功(tracker 已确认)", "ok", 4000);
-          else this.toast(`强制汇报失败: ${r.error}`, "error", 8000);
+          if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
+          else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
         } else {
           const r = await this.waitCmd(resp.cmd_id);
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
@@ -1417,21 +1482,25 @@ const app = createApp({
         this.historyLoading = false;
       }
     },
-    /* 柱形几何(带参渲染辅助必须放 methods —— pitfalls: 模板里 computed 不能加括号调用) */
-    histBarX(i) {
+    /* 悬停追踪: 事件挂在 .hist-chart容器(mousemove), 指针 x 折算进 viewBox 坐标再换算
+     * 桶索引 —— 连续无空隙; 旧版逐桶 enter/leave + 命中区只盖单柱的闪烁根因即在此 */
+    histMove(ev) {
+      if (!this.historyBuckets.length) return;
+      const rect = ev.currentTarget.getBoundingClientRect();
       const g = this.histGeom;
-      const inner = g.barW * 2 + 1;
-      return g.padL + i * g.bw + Math.max(0, (g.bw - inner) / 2);
+      const x = ((ev.clientX - rect.left) / rect.width) * g.w;
+      const idx = Math.floor((x - g.padL) / g.bw);
+      this.histHoverIdx = Math.max(0, Math.min(this.historyBuckets.length - 1, idx));
     },
-    histBarW() {
-      return this.histGeom.barW;
+    histLeave() {
+      this.histHoverIdx = -1;
     },
-    histBarY(v) {
-      const g = this.histGeom;
-      return g.padT + g.chartH * (1 - Math.min(1, v / this.historyMax));
-    },
-    histBarH(v) {
-      return this.histGeom.chartH * Math.min(1, v / this.historyMax);
+    /* 面积填充路径(折线下方淡渐染; 带参辅助放 methods —— pitfalls: computed不能加括号调用) */
+    _histArea(key) {
+      const pts = this.histSeries[key];
+      if (!pts.length) return "";
+      const base = (this.histGeom.padT + this.histGeom.chartH).toFixed(1);
+      return `${this.histPaths[key]} L ${pts[pts.length - 1].x.toFixed(1)} ${base} L ${pts[0].x.toFixed(1)} ${base} Z`;
     },
     gridStyle(page) {
       // 列模板由 computed 缓存(见 groupGrid/detailGrid): 行渲染只取同一引用, 不每行拼字符串
@@ -1477,6 +1546,15 @@ const app = createApp({
       if (h === this._headH) return;
       this._headH = h;
       document.documentElement.style.setProperty("--head-h", h + "px");
+    },
+    /* 批量操作浮条实测高度(+下边距)写入 :root --bulk-h: 有选中集合时表头吸顶偏移随之
+     * 下移(两吸顶条不重叠), 无选中/切页时归 0 —— 与 --head-h 同款"值未变直接返回"模式 */
+    _syncBulkHeight() {
+      const el = document.querySelector(".bulk-bar");
+      const h = el ? Math.round(el.getBoundingClientRect().height) + 10 : 0;  // 10 = .bulk-bar margin-bottom
+      if (h === this._bulkH) return;
+      this._bulkH = h;
+      document.documentElement.style.setProperty("--bulk-h", h + "px");
     },
     /* 把默认模板"实体化"为 px:
      * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)

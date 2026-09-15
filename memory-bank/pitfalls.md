@@ -151,6 +151,15 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **成员视图补 `name` 字段**(2026-09-15): `_build_group_view` 的 members_view 原本没有种子名, 删除确认框需要它。`name` 已在 `_VIEW_FIELDS` 置脏集合内, 无需额外置脏; 但新增**展示字段**时仍要按判别法确认置脏源头。
 - **前端冒烟的具体做法已验证**: FakeQbServer(假 qB) + 真实 QbManager(临时 config/data_dir, web.enabled)后台进程 + Edge headless(`--remote-debugging-port`) + Node CDP 脚本(Runtime.evaluate 逐项断言 + captureScreenshot)。踩点: ①programmatic `btn.click()` 不触发 form submit, 要 `form.dispatchEvent(new Event("submit"))`; ②headless profile 持久 localStorage → 第二次启动直接进主界面(登录表单不出现, 属正确行为); ③断言即时色值可能取到 transition 中间值, 用语义断言(非默认灰/无 sc- 类)更稳; ④破坏性操作后的 UI 更新有轮询延迟(≈2s), 断言要轮询等待而非固定延时; ⑤PowerShell 管道读写 UTF-8 脚本会把中文写坏(GBK 转码), 批量改文件用 Python 或专用工具。
 
+### 视觉/交互打磨补充 (2026-09-15 第七轮: 折线图 / 吸顶批量条 / 状态分家 / 平铺段 / 冒烟运维)
+
+- **`cfgGroupToggle` 三态 bug (用户报告"有折叠但不能点击折叠")**: 旧实现是"记录存在→删除(回 schema 缺省) / 不存在→写 true"的二态切换, 对缺省展开(open=True)的段**永远写不出显式 false** → 点击无效果。修法: `next[key] = !cfgGroupOpen(path, field)` 写"当前有效态取反"。平铺段(open=True, 如 日志/WEB UI/通知)在 `cfgFlatten` 直接透明展开(splice 子项、同级 depth、无段头无缩进), 折叠头不再渲染; schema.py 的 `Field.open` 仍是唯一声明来源, 前端只改渲染方式。
+- **`_attachGrey` 只在本层命中才覆写 greyBy**: 透明展开把内层子项 splice 进外层 items 后, 外层 `_attachGrey(items, 外层 byKey)` 会把内层已算好的 greyBy 清成 null —— grey_if 引用的是同段字段, 内层字段表才是正确上下文。修法: `byKey.has(key)` 命中才赋值。判别: 动 grey 逻辑先想清楚"这段字段属于哪一层字段表"。
+- **历史流量图悬停闪烁根因与修法**: 命中区 `hist-hit` 宽度只等于**单根柱宽** + enter/leave 挂在逐桶 `<g>` 上 → 指针扫过桶间空隙时 hoverIdx 反复归 -1, tooltip 显隐交替。修法: mousemove 挂图表容器, 指针 x 按 getBoundingClientRect 折算 viewBox 坐标再换算桶索引(连续无空隙), 图形元素一律 `pointer-events:none`; tooltip 本就 pointer-events:none 不抢事件。
+- **SVG `pathLength` 与 viewBox 同属大小写敏感属性**: 折线 draw-in 用 `pathLength="1000"` 归一化 + CSS dasharray 动画; 静态写法会被模板编译器小写, 必须 `v-bind="{ pathLength: 1000 }"`(与 viewBox 同款坑, 同款修法)。
+- **吸顶批量条与表头联动**: sticky 元素出现会与既有吸顶表头重叠, 偏移量用 CSS 变量接力 —— `--bulk-h` 由 app.js `_syncBulkHeight()` 量测写入(无选中/切页归 0, 值未变跳过), 表头 `top: calc(var(--head-h) + var(--bulk-h))`; 与 `--head-h` 同款模式。层叠次序: topbar(31)/status-strip(30)/bulk-bar(6)/group-head(5)。
+- **冒烟运维两坑(实测)**: ①Edge 同 user-data-dir 会**单例移交** —— 新 spawn 的进程立即退出, `/json/list` 拿到的是旧实例的**旧页面**; 冒烟必须每轮独立 profile 目录(带时间戳)。②被杀脚本的残留页面轮询会在新服务起来后自动重连, 页面里悬空的交互序列可能继续执行"幽灵操作"(实测把新环境里的同名组删了, 导致后续断言全歪)——起服务前先按命令行清 smoke edge(`CommandLine -match "edge-smoke"`; **不能全杀 msedge**, 用户自己开着浏览器)并确认端口无监听; kill 后端口释放有延迟, 立即重启必 10048。
+
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。

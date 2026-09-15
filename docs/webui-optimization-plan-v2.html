@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auto-qb · WEB UI 第七轮优化计划</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .13);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  /* ---------- 封面 ---------- */
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 42px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 56em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  /* ---------- 布局: 左侧 sticky TOC ---------- */
+  .grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; margin-top: 46px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.4 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .04em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  /* ---------- 章节 ---------- */
+  section.sec { margin: 0 0 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  p { margin: 0 0 12px; max-width: 62em; color: var(--fg); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 1.4em; max-width: 62em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: var(--dim); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--fg); }
+  td .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  td.no, td.c { font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  td.ok { color: var(--accent); }
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .05em;
+    padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 3px;
+    color: var(--muted); white-space: nowrap; }
+  .tag.a { color: var(--accent); border-color: rgba(91, 200, 236, .4); }
+
+  /* ---------- 阶段块 ---------- */
+  .phase { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px;
+    padding: 18px 0 20px; border-top: 1px solid var(--line); }
+  .phase:last-of-type { border-bottom: 1px solid var(--line); }
+  .ph-rail { font: 12px/1.7 var(--mono); color: var(--dim); }
+  .ph-rail .ph-id { display: block; font-weight: 600; font-size: 13px; color: var(--accent);
+    letter-spacing: .06em; }
+  .phase h4 { margin: 2px 0 8px; font-size: 15.5px; font-weight: 600; }
+  .phase p { margin: 0 0 8px; }
+  @media (max-width: 760px) { .phase { grid-template-columns: 1fr; } }
+
+  /* ---------- 决策点 ---------- */
+  .decision { border: 1px solid var(--line); padding: 4px 20px 8px; margin: 16px 0; }
+  .decision h4 { margin: 14px 0 6px; font-size: 14.5px; }
+  .decision h4 .d-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 8px; }
+  .decision p { font-size: 13.5px; color: var(--muted); }
+  .decision p b { color: var(--fg); font-weight: 600; }
+
+  /* ---------- 图 ---------- */
+  figure { margin: 20px 0; padding: 0; }
+  figcaption { font: 12px/1.6 var(--mono); color: var(--dim); margin-top: 8px; }
+  svg text { font-family: var(--mono); }
+
+  .colophon { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
+    font: 12px/1.7 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ================= 封面 ================= -->
+  <header>
+    <div class="kicker">auto-qb · web ui · 第七轮打磨</div>
+    <h1>WEB UI 优化计划<br>折线图 · 强反馈 · 状态分家 · 折叠移除</h1>
+    <p class="lede">针对第六轮实施后的十项反馈逐条摸底: 其中 2 项经代码核实已经实现(转复核), 2 项定位到确定性 bug
+      (历史流量图悬停闪烁、设置页短段折叠点不动), 其余 6 项为增量交互与视觉改造。全部改动集中在前端四个文件, 后端零改动。</p>
+    <div class="meta">
+      <span><b>状态</b> 计划稿 · 未改任何代码</span>
+      <span><b>代码基线</b> 当前工作区(含第六轮全部改动)</span>
+      <span><b>涉及文件</b> app.js · index.html · style.css · config_editor.js</span>
+      <span><b>预估</b> 5 阶段 · 约 3.5 天</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s0"><span class="t-no">00</span>摘要</a>
+      <a href="#s1"><span class="t-no">01</span>现状摸底结论</a>
+      <a href="#s2"><span class="t-no">02</span>需求 × 方案总表</a>
+      <a href="#s3"><span class="t-no">03</span>分阶段实施</a>
+      <a href="#s4"><span class="t-no">04</span>关键设计细节</a>
+      <a href="#s5"><span class="t-no">05</span>待确认决策点</a>
+      <a href="#s6"><span class="t-no">06</span>风险与红线</a>
+      <a href="#s7"><span class="t-no">07</span>验证与验收</a>
+    </nav>
+
+    <main>
+
+    <!-- ================= 00 摘要 ================= -->
+    <section class="sec" id="s0">
+      <div class="sec-head"><span class="no">00</span><h2>摘要</h2></div>
+      <p>本轮需求分三类。<b>修 bug</b>: 历史流量图悬停闪烁(命中区只覆盖单柱, 桶间空隙反复触发 leave/enter)与设置页"日志 /
+        WEB UI / 通知"折叠头点了收不起来(三态记录永远写不出 false)。<b>补交互</b>: 已选批量条吸顶、Shift 多选以展开组为锚点、
+        强制汇报的"等待中 → 成功 / 超时失败"持续强反馈、删除确认框扩容并展示成员明细。<b>视觉分家与精修</b>: 展开态改"结构语言"、
+        选中态独占"强调色语言", 外加图标字形替换、配色令牌微调与轻动效。</p>
+      <p class="small">两个 bug 的根因均已在代码中定位到行级, 修复方案不影响既有耦合约束(列宽锚点、单例交互原语、列存储版本)。</p>
+    </section>
+
+    <!-- ================= 01 现状摸底 ================= -->
+    <section class="sec" id="s1">
+      <div class="sec-head"><span class="no">01</span><h2>现状摸底结论</h2></div>
+      <p>逐文件核实(app.js / index.html / style.css / config_editor.js / schema.py / web.py / qbmanager.py)后的十项结论:</p>
+      <table>
+        <thead><tr><th style="width:52px">编号</th><th style="width:210px">需求</th><th>代码现状</th><th style="width:30%">缺口 / 根因</th></tr></thead>
+        <tbody>
+          <tr><td class="no">R01</td><td>历史流量图改折线图、放大</td>
+            <td>弹层宽 680px, SVG 柱状图 viewBox 640×240, 双系列并列柱; 天(近 30)/月(12)/年(全部)聚合已具备<span class="sub">app.js <code>histGeom/histBarX</code>, style.css <code>.hist-modal</code></span></td>
+            <td>图类型与尺寸均按要求重做; 数据层(/api/traffic/history 按日行)不变</td></tr>
+          <tr><td class="no">R02</td><td>鼠标滑过历史流量图会闪烁</td>
+            <td>悬停命中区 <code>hist-hit</code> 的宽度只等于<b>单根柱宽</b>(<code>:width="histBarW()"</code>), 且按桶逐个挂 <code>mouseenter/mouseleave</code></td>
+            <td><b>确定性 bug</b>: 桶间约 4px 空隙无命中区 → 移动时反复离开/进入 → <code>histHoverIdx</code> 在 -1 与桶号间抖动, tooltip 显隐交替</td></tr>
+          <tr><td class="no">R03</td><td>"已选 N 组 · M 个种子"栏下滑常驻</td>
+            <td><code>.bulk-bar</code> 在 <code>.content</code> 文档流内, 无 sticky; 表头吸顶偏移只有 <code>--head-h</code> 一个变量</td>
+            <td>需 sticky 吸顶, 且表头吸顶偏移要随批量条出现联动下移(否则重叠)</td></tr>
+          <tr><td class="no">R04</td><td>数值列空值居中(仅空值)</td>
+            <td><b>已实现</b>: <code>.g-stat.zero,.m-stat.zero{text-align:center}</code> + <code>fmtSpeedOrDash/fmtSizeOrDash</code> 对 0 值输出"—"</td>
+            <td>转复核项: 实现阶段浏览器截图核对分组表/明细表全部五列(含搜索虚拟行)</td></tr>
+          <tr><td class="no">R05</td><td>强制汇报: 去掉 warning, 加"等待中 / 成功 / 超时失败"强反馈</td>
+            <td>回执链路已通(<code>/api/cmd/{id}</code>, 后端 30s tracker 确认窗口); 前端只有一条 4s 瞬时 toast, 等待期无持续指示; 失败/超时复用 error 样式(红底 + i-warn 警告图标)</td>
+            <td>等待期缺常驻反馈; 超时被渲染成警告样式。后端回执语义完备, 本轮只改前端反馈形态</td></tr>
+          <tr><td class="no">R06</td><td>删除确认框调大 + 展示种子信息</td>
+            <td>信息区已具备(单种: 名称/站点/状态/路径/大小; 整组: 组名/成员数/站点/路径/总大小), 但 modal 宽 404px, <code>d-value</code> 单行省略号截断长种子名与路径; 整组删除不列成员名</td>
+            <td>删除类确认框扩容; 值允许换行; 整组增加成员明细(站点 + 种子名)</td></tr>
+          <tr><td class="no">R07</td><td>展开态与选中态高度相似, 需区分</td>
+            <td>expanded = hover 底色 + accent 边框 + inset 3px accent 左条; selected = accent-soft 底 + accent 边框 + ::before 3px accent 左条 —— 两者都是"accent 左条 + 高亮底 + accent 边框"</td>
+            <td>语义分家: 选中独占强调色语言, 展开改结构语言(下沉底色 + 中性边框 + 与明细面板相连)</td></tr>
+          <tr><td class="no">R08</td><td>Shift 多选以展开的组为起点</td>
+            <td>Shift 锚点 <code>selAnchorGroup</code> 仅在 Ctrl+点击时设置; 无锚点时回退列表第一行; 展开组(<code>expandedKey</code>)不参与锚点解析</td>
+            <td>锚点解析顺序加入 expandedKey; 普通点击展开时同步锚点</td></tr>
+          <tr><td class="no">R09</td><td>筛选器右对齐</td>
+            <td><b>已实现</b>: <code>.strip-tools{margin-left:auto}</code>, 单行与折行场景下筛选器组均贴状态条右缘; 仅 &lt;900px 有 <code>margin-left:0</code> 的窄屏规则</td>
+            <td>转复核项: 多宽度截图确认; 若所指为弹层对齐或其它元素, 需指认后按指认改(见 D1)</td></tr>
+          <tr><td class="no">R10</td><td>设置页移除 日志/WEB UI/通知 的折叠</td>
+            <td>三段的 object 段已声明 <code>open=True</code>(schema.py 572/612/639 行)缺省平铺; 但折叠头(caret + 摘要)仍渲染, 且 <code>cfgGroupToggle</code> 只能在"删除记录(回缺省 open)"与"写入 true"之间切换 —— <b>永远写不出显式 false</b></td>
+            <td><b>确定性 bug</b>: 点击无法收起(与你的描述完全一致)。方案: 三段折叠头整体移除(透明平铺), 顺带修三态切换 bug 兜底</td></tr>
+        </tbody>
+      </table>
+      <p class="small">另有贯穿项 R11(整体视觉: 图标 / 配色 / 动效), 见 02 节与阶段 E。</p>
+    </section>
+
+    <!-- ================= 02 需求 × 方案总表 ================= -->
+    <section class="sec" id="s2">
+      <div class="sec-head"><span class="no">02</span><h2>需求 × 方案总表</h2></div>
+      <table>
+        <thead><tr><th style="width:52px">编号</th><th>方案要点</th><th style="width:24%">改动位置</th><th style="width:70px">风险</th><th style="width:64px">阶段</th></tr></thead>
+        <tbody>
+          <tr><td class="no">R01</td><td>重写为双系列折线图(上传/下载), 弹层 680→860px, viewBox 640×240→920×380; 保留天/月/年切换与汇总行</td>
+            <td>app.js 历史图几何 · index.html 模板 · style.css <code>.hist-*</code></td><td class="c">中</td><td class="c"><span class="tag">C</span></td></tr>
+          <tr><td class="no">R02</td><td>悬停改为图表容器级 <code>mousemove</code> 换算桶索引(按 rect 宽度折算 viewBox 坐标), 柱/线 <code>pointer-events:none</code>, 连续追踪无空隙</td>
+            <td>同上(与 R01 一并重写)</td><td class="c">中</td><td class="c"><span class="tag">C</span></td></tr>
+          <tr><td class="no">R03</td><td><code>.bulk-bar</code> sticky 吸顶(top: var(--head-h)); app.js 量测其高度写 <code>--bulk-h</code>, 表头吸顶偏移改 <code>calc(var(--head-h) + var(--bulk-h))</code></td>
+            <td>style.css · app.js(<code>_syncHeadHeight</code> 旁)</td><td class="c">低</td><td class="c"><span class="tag">B</span></td></tr>
+          <tr><td class="no">R04</td><td>复核: 分组表/明细表五列空值均应居中, 有遗漏才补样式</td>
+            <td>style.css(如有)</td><td class="c">—</td><td class="c"><span class="tag">A</span></td></tr>
+          <tr><td class="no">R05</td><td>toast 系统扩展: <code>toast()</code> 支持 sticky 返回句柄 + <code>updateToast(id, {text, kind})</code>; 新增 busy(等待中, spinner)与 timeout(超时, 琥珀钟表)两种样式; 四条汇报链路统一接入</td>
+            <td>app.js(toast + act/actTorrent/bulkAct/_reannounceBeforeDelete) · style.css</td><td class="c">低</td><td class="c"><span class="tag">D</span></td></tr>
+          <tr><td class="no">R06</td><td>删除确认框加 <code>wide</code>(约 560px); 信息值允许换行 + 可选中复制; 整组删除增列成员明细滚动区(站点 + 种子名)</td>
+            <td>app.js(<code>_confirmDelete</code>) · index.html · style.css</td><td class="c">低</td><td class="c"><span class="tag">B</span></td></tr>
+          <tr><td class="no">R07</td><td>选中态独占 accent(柔底 + 左条); 展开态改下沉底色 + 中性边框 + 底部圆角取直与明细相连, 移除左条</td>
+            <td>style.css</td><td class="c">低</td><td class="c"><span class="tag">B</span></td></tr>
+          <tr><td class="no">R08</td><td><code>shiftGroupSel</code> 锚点解析: selAnchorGroup → expandedKey → 首行; <code>toggleExpand</code> 展开时同步锚点</td>
+            <td>app.js</td><td class="c">低</td><td class="c"><span class="tag">A</span></td></tr>
+          <tr><td class="no">R09</td><td>复核: 多宽度截图确认筛选器组贴右; 与预期不符时按 D1 指认处理</td>
+            <td>—</td><td class="c">—</td><td class="c"><span class="tag">A</span></td></tr>
+          <tr><td class="no">R10</td><td><code>cfgFlatten</code> 对 <code>object &amp;&amp; open</code> 的段透明展开(子字段直接并入, 无段头无缩进); <code>cfgGroupToggle</code> 改写"当前有效态的取反"修三态 bug</td>
+            <td>config_editor.js · style.css(清理)</td><td class="c">低</td><td class="c"><span class="tag">A</span></td></tr>
+          <tr><td class="no">R11</td><td>文本字形图标化(⚠ / ▲▼ → sprite i-warn / i-arrow-*); 配色仅动 :root 令牌微调; 动效补折线图 draw-in 与浮层节奏统一; 死 CSS 清理(grep 类名)</td>
+            <td>index.html · style.css</td><td class="c">低</td><td class="c"><span class="tag">E</span></td></tr>
+        </tbody>
+      </table>
+      <p class="small">后端零改动; 列定义与列宽存储(<code>autoqb_cols_v4</code>)不加列不升版本; schema.py 不动(<code>open</code> 元数据仍是折叠声明的唯一来源, 本轮只改前端对它的渲染方式)。</p>
+    </section>
+
+    <!-- ================= 03 分阶段实施 ================= -->
+    <section class="sec" id="s3">
+      <div class="sec-head"><span class="no">03</span><h2>分阶段实施</h2></div>
+      <p class="small">排序原则: 先落地互不阻塞的确定项与 bug 修复(A), 再做交互增强(B), 然后是重写量最大的历史图(C)与反馈链路(D),
+        最后统一视觉并整体验收(E)。每个阶段收尾跑全量 pytest + 浏览器冒烟(前端表达式错误只有浏览器能发现, 见 pitfalls 第六轮条目)。</p>
+
+      <div class="phase">
+        <div class="ph-rail"><span class="ph-id">阶段 A</span>基础修复与复核<br>约 0.5 天</div>
+        <div>
+          <h4>两个低风险 bug 修复 + 两项复核 + 字形图标化</h4>
+          <p>R10 设置页三段折叠移除(<code>cfgFlatten</code> 透明展开 + <code>cfgGroupToggle</code> 三态修复);
+             R08 Shift 锚点解析加入展开组; R04 / R09 浏览器截图复核(有出入才改);
+             顺手把正文里的文本字形(服务横幅 ⚠、大小不一致 ⚠、排序 ▲▼)替换为既有 sprite 图标。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="ph-rail"><span class="ph-id">阶段 B</span>交互增强<br>约 1 天</div>
+        <div>
+          <h4>吸顶批量条 · 展开/选中分家 · 确认框扩容</h4>
+          <p>R03 批量条 sticky + <code>--bulk-h</code> 联动表头; R07 展开/选中视觉语义分家(纯 CSS);
+             R06 删除确认框 wide 化、信息值换行、整组成员明细滚动区。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="ph-rail"><span class="ph-id">阶段 C</span>历史流量折线图<br>约 1 天</div>
+        <div>
+          <h4>R01 + R02 一并重写</h4>
+          <p>折线图几何与容器级悬停追踪、crosshair、tooltip、draw-in 一次做成; 天/月/年聚合逻辑复用现有 computed,
+             仅重写几何与模板; 旧柱状类名同步清理。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="ph-rail"><span class="ph-id">阶段 D</span>强制汇报强反馈<br>约 0.5 天</div>
+        <div>
+          <h4>toast 升级 + 四链路接入</h4>
+          <p>sticky toast + 句柄更新; busy / timeout / ok 三态样式; 组汇报、单种汇报、批量汇报、删除前汇报统一走
+             "等待中 → 成功 / 超时失败"的持续反馈(见 4.3 状态机)。后端回执与 30s 确认窗口不动。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="ph-rail"><span class="ph-id">阶段 E</span>视觉精修与验收<br>约 0.5 天</div>
+        <div>
+          <h4>令牌微调 · 死 CSS 清理 · 全量验收</h4>
+          <p>:root 令牌级配色微调(不动组件色值); 浮层动效节奏统一; 按 pitfalls 方法 grep 清理失效类名与媒体查询;
+             执行 07 节全部验收项; README 与 memory-bank 回写。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 04 关键设计细节 ================= -->
+    <section class="sec" id="s4">
+      <div class="sec-head"><span class="no">04</span><h2>关键设计细节</h2></div>
+
+      <h3><span class="h-no">4.1</span>历史流量折线图与悬停修复(R01/R02)</h3>
+      <p><b>闪烁根因</b>: 现模板里命中区 <code>&lt;rect class="hist-hit" :width="histBarW()"&gt;</code> 只覆盖每组的第一根柱,
+        且 enter/leave 挂在逐桶的 <code>&lt;g&gt;</code> 上 —— 指针扫过桶间约 4px 空隙时 <code>histHoverIdx</code> 归 -1,
+        tooltip 随之显隐交替, 表现为闪烁。</p>
+      <p><b>改法</b>: 悬停事件上移到图表容器一层 —— 在 <code>.hist-chart</code> 上挂 <code>mousemove</code>,
+        用 <code>getBoundingClientRect()</code> 把指针 x 折算进 viewBox 坐标再换算桶索引, <code>mouseleave</code> 一次清除;
+        图形元素一律 <code>pointer-events:none</code>。追踪连续无空隙, tooltip(已有 <code>pointer-events:none</code>)不再闪烁。</p>
+      <p><b>折线图规格</b>: 双系列(上传 = <code>--today-up</code> 青, 下载 = <code>--today-down</code> 靛, 延续今日流量卡配色),
+        直线段 + 小数据点; 弹层 680→860px, viewBox 920×380; 悬停画竖向 crosshair + 两系列高亮点 + tooltip(靠右自动翻转);
+        打开弹层时线条做一次 stroke-dashoffset draw-in(全局 <code>prefers-reduced-motion</code> 已自动关停)。
+        天/月/年聚合(<code>historyBuckets</code>)、Y 轴刻度、汇总行全部复用。</p>
+
+      <h3><span class="h-no">4.2</span>批量条吸顶与表头联动(R03)</h3>
+      <p><code>.bulk-bar { position: sticky; top: var(--head-h); z-index: 6; }</code>。批量条出现时表头吸顶偏移必须同步下移,
+        否则两吸顶条重叠: app.js 在 <code>updated()</code> 里量测 <code>.bulk-bar</code> 高度 + 下边距, 值变化才写
+        <code>:root --bulk-h</code>(无选中时 0 —— 沿用 <code>--head-h</code> 的"值未变跳过"模式, 不每帧写变量);
+        表头吸顶改 <code>top: calc(var(--head-h) + var(--bulk-h, 0px))</code>。层叠次序遵循既有教训:
+        topbar(31) / status-strip(30) / bulk-bar(6) / group-head(5)。</p>
+
+      <h3><span class="h-no">4.3</span>强制汇报的反馈状态机(R05)</h3>
+      <p>第六轮已把回执做实: 命令投递返回 <code>cmd_id</code>, reannounce 的回执由主循环 tracker 确认跟踪器
+        (<code>_check_reannounce_pending</code>, 30s 窗口)在确认成功 / 确认失败 / 超时后写入, <code>/api/cmd/{id}</code>
+        以 <code>pending → ok | error</code> 透出。缺的只是前端呈现形态 —— 本轮把瞬时 toast 换成<b>常驻、可更新的状态条</b>:</p>
+      <figure>
+        <svg viewBox="0 0 920 132" width="100%" role="img" aria-label="强制汇报反馈状态机">
+          <defs>
+            <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L8 4 L0 8" fill="none" stroke="#9aa3ad" stroke-width="1.4"/>
+            </marker>
+          </defs>
+          <g stroke="#5bc8ec" fill="none" stroke-width="1.3">
+            <rect x="14" y="42" width="150" height="48" rx="4"/>
+            <rect x="300" y="42" width="180" height="48" rx="4" stroke-dasharray="3 3"/>
+            <rect x="620" y="12" width="160" height="42" rx="4"/>
+            <rect x="620" y="78" width="160" height="42" rx="4"/>
+          </g>
+          <g fill="#e7eaee" font-size="13">
+            <text x="89" y="63" text-anchor="middle">等待中…</text>
+            <text x="89" y="79" text-anchor="middle" fill="#6d7681" font-size="10.5">spinner · 常驻不消失</text>
+            <text x="390" y="63" text-anchor="middle" fill="#6d7681">等待 tracker 确认</text>
+            <text x="390" y="79" text-anchor="middle" fill="#6d7681" font-size="10.5">/api/cmd/{id} 轮询</text>
+            <text x="700" y="30" text-anchor="middle">汇报成功</text>
+            <text x="700" y="46" text-anchor="middle" fill="#6d7681" font-size="10.5">绿色 · check</text>
+            <text x="700" y="96" text-anchor="middle">超时失败</text>
+            <text x="700" y="112" text-anchor="middle" fill="#6d7681" font-size="10.5">琥珀 · 时钟 · 非警告红</text>
+          </g>
+          <g stroke="#9aa3ad" fill="none" stroke-width="1.2" marker-end="url(#arr)">
+            <line x1="164" y1="66" x2="292" y2="66"/>
+            <line x1="480" y1="55" x2="612" y2="36"/>
+            <line x1="480" y1="78" x2="612" y2="96"/>
+          </g>
+          <g fill="#6d7681" font-size="10.5">
+            <text x="228" y="58" text-anchor="middle">点击强制汇报</text>
+            <text x="546" y="38" text-anchor="middle">回执 ok</text>
+            <text x="548" y="108" text-anchor="middle">30s 未确认 / tracker 拒绝</text>
+          </g>
+        </svg>
+        <figcaption>图 1 · 强制汇报反馈状态机 —— 等待中为常驻状态条, 终态替换原位置文案后停留数秒自动退场</figcaption>
+      </figure>
+      <p>实现上给 toast 系统加最小扩展: <code>toast()</code> 支持 <code>sticky</code>(不自动消失)并返回 id,
+        新增 <code>updateToast(id, { text, kind })</code>; <code>_logout()</code> 清空 toasts 的既有逻辑天然覆盖新句柄。
+        四条链路统一接入: 组汇报(<code>act</code>)、单种汇报(<code>actTorrent</code>)、批量汇报(<code>bulkAct</code>,
+        终态含"成功 N / 失败 M"汇总)、删除前汇报(<code>_reannounceBeforeDelete</code>, 失败保留种子不删除的既有语义不变)。
+        命令投递失败(网络/鉴权)仍走红色 error, 与"超时"区分。</p>
+
+      <h3><span class="h-no">4.4</span>展开态与选中态分家(R07)</h3>
+      <p>现状两者都靠"accent 左条 + accent 边框 + 高亮底"表达, 是相似度的来源。分家方案:</p>
+      <table>
+        <thead><tr><th style="width:110px">状态</th><th>视觉语言</th><th style="width:38%">具体规则</th></tr></thead>
+        <tbody>
+          <tr><td>选中 selected</td><td>强调色语言(独占)</td><td>accent-soft 底 + accent 左条 + accent-line 边框(维持现状), 是页面上唯一的"accent 行"</td></tr>
+          <tr><td>展开 expanded</td><td>结构语言</td><td>底色改下沉(--bg-sunken 系), 边框中性(--border), <b>移除 inset 左条</b>, 底部圆角取直并与下方 .detail 面板相连 —— 行"打开成面板"而非"被染色"; caret 旋转保留</td></tr>
+          <tr><td>两者叠加</td><td>—</td><td>左条与柔底(选中) + 下沉与直角(展开)同时生效, 互不覆盖仍可读</td></tr>
+        </tbody>
+      </table>
+
+      <h3><span class="h-no">4.5</span>设置页短段折叠移除(R10)</h3>
+      <p>三段(日志 log / WEB UI web / 通知 notify)各由一个 <code>open=True</code> 的 object 段声明"平铺", 但渲染层仍生成
+        ce-group 折叠头; 且 <code>cfgGroupToggle</code> 的两态切换(记录存在 → 删除 / 不存在 → 写 true)对缺省即为 open 的段
+        <b>写不出显式 false</b>, 点击永远收不起来 —— 即"有折叠但不能点击折叠"。</p>
+      <p><b>改法</b>: ①<code>cfgFlatten</code> 对 <code>kind === 'object' && f.open</code> 的段不再生成 group 项,
+        子字段以同级 depth 直接并入渲染序列(无段头 / 无 caret / 无缩进, 输入框左缘与其它组对齐 —— 遵循"普通段子字段不缩进"的既定约束);
+        ②<code>cfgGroupToggle</code> 改为写入"当前有效态的取反"(<code>openGroups[key] = !cfgGroupOpen(path, field)</code>),
+        三态语义修补后对任何段都正确(防御性修复, 移除折叠头后主路径不再触达)。</p>
+
+      <h3><span class="h-no">4.6</span>删除确认框(R06)</h3>
+      <p><code>_confirmDelete</code> 增加 <code>wide</code> 形态(<code>.modal.wide { width: 560px }</code>);
+        信息区值元素从单行省略号改为可换行(<code>white-space: normal; word-break: break-all</code>)并允许选中复制 ——
+        长种子名与保存路径完整可读; 整组删除在信息区下增加成员明细滚动区(每行 = 站点 + 种子名, max-height 约 180px),
+        单种删除保持现有五行信息。两个勾选项(删除前强制汇报 / 同时删除磁盘文件)与"汇报失败不删除"的前端编排语义不变。</p>
+
+      <h3><span class="h-no">4.7</span>Shift 多选锚点(R08)</h3>
+      <p><code>shiftGroupSel</code> 的锚点解析改为: <code>selAnchorGroup</code>(Ctrl+点击设置的) →
+        <code>expandedKey</code>(当前展开组在可见列表内时) → 列表首行。同时 <code>toggleExpand</code> 在普通点击展开时把
+        <code>selAnchorGroup</code> 同步为该组 —— 于是"展开一组 → Shift 点另一组"即从展开组起选, Shift 仍不更新锚点,
+        可从同一起点多次扩展。明细表 Shift 已限定在展开组内, 行为不变。</p>
+    </section>
+
+    <!-- ================= 05 待确认决策点 ================= -->
+    <section class="sec" id="s5">
+      <div class="sec-head"><span class="no">05</span><h2>待确认决策点</h2></div>
+      <p class="small">以下均给了默认方案, 不阻塞实施 —— 不回复则按默认执行; 有指认按指认改。</p>
+      <div class="decision">
+        <h4><span class="d-no">D1</span>R09 筛选器右对齐: 代码现状已是右对齐</h4>
+        <p><code>.strip-tools{margin-left:auto}</code> 已让筛选器组在单行与折行时都贴状态条右缘。默认: 实现阶段多宽度截图复核并把截图结论反馈给你;
+          若你指的是<b>弹层展开方向</b>或其它元素, 请指认具体场景。</p>
+      </div>
+      <div class="decision">
+        <h4><span class="d-no">D2</span>R05 超时样式的分级</h4>
+        <p>默认: 成功 = 绿色 check; 超时失败 = <b>琥珀中性(时钟图标)</b>, 不再用红色警告 —— 超时在私站场景是常态而非故障;
+          只有命令投递本身失败才用红色 error。</p>
+      </div>
+      <div class="decision">
+        <h4><span class="d-no">D3</span>R06 整组成员明细的展示量</h4>
+        <p>默认: 成员全部列出(滚动区, max-height 约 180px); 若嫌长可改"前 5 条 + 其余折叠为 +N"。</p>
+      </div>
+      <div class="decision">
+        <h4><span class="d-no">D4</span>R01 折线图配色与合计线</h4>
+        <p>默认: 沿用今日流量卡双色(上传青 / 下载靛), 不加合计线(简约); 需要合计虚线再加。</p>
+      </div>
+    </section>
+
+    <!-- ================= 06 风险与红线 ================= -->
+    <section class="sec" id="s6">
+      <div class="sec-head"><span class="no">06</span><h2>风险与红线(不动清单)</h2></div>
+      <ul>
+        <li><b>生产文件</b>: <code>config.yml</code> 与 <code>auto-qb-data/</code> 不触碰。</li>
+        <li><b>类名 / DOM 耦合</b>: <code>.group-head</code> / <code>.detail-head</code>(列宽拖拽锚点)、<code>.search-hit</code> /
+          <code>.ctx-menu</code> / <code>.detail-*</code> / <code>.pop-menu</code> / <code>.col-menu</code> 等逻辑挂钩不得改名或增删列;
+          列定义与 <code>autoqb_cols_v4</code> 不动(本轮不加列)。</li>
+        <li><b>computed / methods 分界</b>: 模板里 computed 不加括号、带参辅助一律 methods —— 两次实锤翻车点, 阶段 B/C/D 模板改动逐条自查。</li>
+        <li><b>交互原语单例</b>: toast / modal 是单例, 新增 sticky toast 句柄要随 <code>_logout()</code> 一并清空;
+          confirm/prompt 的 Promise 契约不变。</li>
+        <li><b>sticky 层叠上下文</b>: topbar 与 status-strip 各有 backdrop-filter, z 序已排定(31/30), 批量条(6)与表头(5)不得越位。</li>
+        <li><b>动效边界</b>: 不做行入场与数字滚动(分组视图 2s 级重渲染会反复播放); 新动效只用 transform/opacity, reduced-motion 全局降级已覆盖。</li>
+        <li><b>图标</b>: 新增图标只进 index.html 的 sprite(16×16 + stroke 约定), 不引外部图标库。</li>
+        <li><b>后端</b>: web.py / qbmanager.py 零改动; 删除"汇报失败不删除"的前端编排语义不变; 跳检/删除守卫等高风险业务代码不触碰。</li>
+      </ul>
+    </section>
+
+    <!-- ================= 07 验证与验收 ================= -->
+    <section class="sec" id="s7">
+      <div class="sec-head"><span class="no">07</span><h2>验证与验收</h2></div>
+      <h3><span class="h-no">7.1</span>自动化</h3>
+      <p>每阶段收尾跑全量 <code>.venv/Scripts/python.exe -m pytest tests -q</code>, 基线数字对齐 memory-bank/testing.md
+        (本轮全为前端改动, 预期无后端测试变化)。</p>
+      <h3><span class="h-no">7.2</span>浏览器冒烟(FakeQbServer + Edge headless CDP, 沿用第六轮做法)</h3>
+      <ul>
+        <li>设置页: 日志 / WEB UI / 通知三组无折叠头、字段平铺且输入框左缘与其它组对齐; 其它含 object 段的分组折叠/展开仍可用。</li>
+        <li>历史流量: 三档切换渲染正常; CDP 派发连续 mousemove 扫过全图, 断言 tooltip 全程存在(不闪烁); 靠右点 tooltip 翻转; 弹层内尺寸明显放大。</li>
+        <li>批量条: 选中后滚动页面, 批量条与表头同时可见且不重叠(分别取 <code>getBoundingClientRect().top</code> 断言)。</li>
+        <li>强制汇报: 替身 <code>trackers_map</code> 驱动"确认成功"与"超时"两条路径, 断言等待态常驻、终态文案与样式分级正确。</li>
+        <li>删除确认框: wide 尺寸生效, 长种子名/路径完整换行显示, 整组成员明细滚动区渲染; 取消不发任何请求。</li>
+        <li>展开 vs 选中: 同一行两种状态的计算样式差分断言(底色 / 左条 / 圆角至少两项不同)。</li>
+        <li>Shift 多选: 展开组 A 后 Shift 点击组 C, 断言 A..C 全部选中。</li>
+        <li>筛选器: 1280 / 1512 / 1920 三档宽度截图, 筛选器组贴右。</li>
+      </ul>
+      <h3><span class="h-no">7.3</span>手动验收</h3>
+      <p>真机 qB + 真实站点配置下过一遍第七轮需求清单(先 <code>--dry-run</code> 观察, 再实机操作删除/汇报链路);
+        收尾回写 README 与 memory-bank(activeContext / pitfalls 增量条目)。</p>
+    </section>
+
+    <div class="colophon">
+      auto-qb · web ui 第七轮优化计划 · 计划稿 v1 · 2026-09-15<br>
+      代码基线: 当前工作区(第六轮实施后) · 本文档不对应任何代码变更
+    </div>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

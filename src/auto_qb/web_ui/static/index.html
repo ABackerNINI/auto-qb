@@ -109,7 +109,8 @@
       <div class="sticky-head">
         <!-- 服务不可达横幅(程序退出/网络失败) -->
         <div v-if="serviceDown" class="service-banner">
-          ⚠ 无法连接 auto-qb 服务 —— 程序可能已退出或正在重启, 请确认程序运行后页面将自动恢复
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+          <span>无法连接 auto-qb 服务 —— 程序可能已退出或正在重启, 请确认程序运行后页面将自动恢复</span>
         </div>
         <!-- 顶栏 -->
         <header class="topbar">
@@ -346,7 +347,11 @@
           <div v-for="col in visibleGroupCols" :key="col.key" class="h-cell"
                :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
             <span>{{ col.label }}</span>
-            <span v-if="col.sortable" class="arrow">{{ sortArrow(col.key) }}</span>
+            <span v-if="col.sortable" class="arrow">
+              <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">
+                <use :href="sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
+              </svg>
+            </span>
             <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                   @mousedown.stop.prevent="startResize($event, 'group', col.key)"
                   @dblclick.stop.prevent="autoFitColumn($event, 'group', col.key)"></span>
@@ -374,7 +379,9 @@
                 <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !g.size }">
                   {{ fmtSizeOrDash(g.size) }}
                   <span v-if="g.sizeMismatch" class="risk-mark"
-                        title="组内成员种子大小不一致 —— 辅种可能指向不同文件, 需人工确认">⚠</span>
+                        title="组内成员种子大小不一致 —— 辅种可能指向不同文件, 需人工确认">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+                  </span>
                 </div>
                 <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ fmtSizeOrDash(g.total_size) }}</div>
                 <div v-else-if="col.key === 'tags'" class="g-tags" :title="g.commonTags.list.join(', ')">
@@ -965,15 +972,15 @@
     <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
     <div class="toast-wrap">
       <div v-for="t in toasts" :key="t.id" class="toast" :class="t.kind">
-        <svg class="ico ico-sm" viewBox="0 0 16 16">
-          <use :href="t.kind === 'ok' ? '#i-check' : (t.kind === 'error' ? '#i-warn' : '#i-info')"></use>
+        <svg class="ico ico-sm" :class="{ spin: t.kind === 'busy' }" viewBox="0 0 16 16">
+          <use :href="{ ok: '#i-check', error: '#i-warn', busy: '#i-refresh', timeout: '#i-clock' }[t.kind] || '#i-info'"></use>
         </svg>
         <span>{{ t.text }}</span>
       </div>
     </div>
 
     <div v-if="modal.visible" class="modal-mask" @click.self="resolveModal(false)">
-      <div class="modal" :class="{ danger: modal.danger }" role="dialog" aria-modal="true">
+      <div class="modal" :class="{ danger: modal.danger, wide: modal.wide }" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16">
             <use :href="modal.icon || (modal.danger ? '#i-warn' : '#i-info')"></use>
@@ -987,6 +994,13 @@
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
             <span class="d-value" :title="d.value">{{ d.value }}</span>
+          </div>
+        </div>
+        <!-- 成员明细(删除整组): 逐个列出待删种子(站点 + 种子名), 滚动区 -->
+        <div v-if="modal.members && modal.members.length" class="modal-members">
+          <div v-for="(mm, i) in modal.members" :key="i" class="modal-member-row">
+            <span class="mm-site">{{ mm.site }}</span>
+            <span class="mm-name">{{ mm.name }}</span>
           </div>
         </div>
         <input v-if="modal.input" ref="modalInput" v-model="modal.value" class="modal-input"
@@ -1009,7 +1023,7 @@
       </div>
     </div>
 
-    <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合柱状图(SVG, 悬停取值) -->
+    <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合折线图(SVG, 容器级悬停取值) -->
     <div v-if="historyOpen" class="modal-mask" @click.self="historyOpen = false">
       <div class="modal hist-modal" role="dialog" aria-modal="true">
         <div class="modal-title">
@@ -1028,9 +1042,11 @@
         <p v-else-if="historyError" class="error">{{ historyError }}</p>
         <p v-else-if="!historyBuckets.length" class="hist-empty">暂无流量数据(数据源 history_traffic.dat 为空或不可用)</p>
         <template v-else>
-          <!-- 柱状图: 每桶双系列并列柱(上传 teal / 下载 indigo, 与今日流量卡同色);
-               viewBox 用 v-bind 动态绑定(静态写法会被模板编译器小写成 viewbox 被浏览器忽略) -->
-          <div class="hist-chart">
+          <!-- 折线图: 双系列(上传 teal / 下载 indigo, 与今日流量卡同色), 打开时一次 draw-in;
+               悬停事件挂在 .hist-chart 容器(mousemove)连续追踪 —— 修复旧逐桶 enter/leave
+               在桶间空隙的闪烁; viewBox/pathLength 用 v-bind 动态绑定(静态写法会被模板
+               编译器小写成 viewbox/pathlength, SVG 属性大小写敏感被浏览器忽略) -->
+          <div class="hist-chart" @mousemove="histMove" @mouseleave="histLeave">
             <svg class="hist-svg" v-bind="{ viewBox: histViewBox }">
               <g class="hist-grid">
                 <line v-for="(t, k) in histTicks" :key="'g' + k" :x1="histGeom.padL" :x2="histGeom.w - histGeom.padR"
@@ -1040,18 +1056,19 @@
                 <text v-for="(t, k) in histTicks" :key="'l' + k" :x="histGeom.padL - 7" :y="t.y + 3.5"
                       text-anchor="end">{{ t.label }}</text>
               </g>
-              <g v-for="(b, i) in historyBuckets" :key="'b' + i"
-                 @mouseenter="histHoverIdx = i" @mouseleave="histHoverIdx = -1">
-                <rect class="hist-hit" :x="histBarX(i)" :y="histGeom.padT" :width="histBarW()"
-                      :height="histGeom.chartH"></rect>
-                <rect class="hist-bar up" :class="{ dim: histHoverIdx >= 0 && histHoverIdx !== i }"
-                      :x="histBarX(i)" :y="histBarY(b.up)" :width="histGeom.barW" :height="histBarH(b.up)" rx="1.5"></rect>
-                <rect class="hist-bar down" :class="{ dim: histHoverIdx >= 0 && histHoverIdx !== i }"
-                      :x="histBarX(i) + histGeom.barW + 1" :y="histBarY(b.down)" :width="histGeom.barW"
-                      :height="histBarH(b.down)" rx="1.5"></rect>
+              <path class="hist-area up" :d="histAreaUp"></path>
+              <path class="hist-area down" :d="histAreaDown"></path>
+              <!-- pathLength 归一化后由 CSS dasharray 做 draw-in; 切换粒度时用 :key 重建重播 -->
+              <path class="hist-line up" v-bind="{ pathLength: 1000 }" :d="histPaths.up" :key="'lu' + historyGran"></path>
+              <path class="hist-line down" v-bind="{ pathLength: 1000 }" :d="histPaths.down" :key="'ld' + historyGran"></path>
+              <g v-if="histHover" class="hist-cross">
+                <line :x1="histHover.x" :x2="histHover.x" :y1="histGeom.padT"
+                      :y2="histGeom.padT + histGeom.chartH"></line>
+                <circle class="hist-dot up" :cx="histHover.up.x" :cy="histHover.up.y" r="3.5"></circle>
+                <circle class="hist-dot down" :cx="histHover.down.x" :cy="histHover.down.y" r="3.5"></circle>
               </g>
               <g class="hist-axis">
-                <text v-for="(b, i) in histXTicks" :key="'x' + i" :x="b.x" :y="histGeom.h - 6"
+                <text v-for="(b, i) in histXTicks" :key="'x' + i" :x="b.x" :y="histGeom.h - 8"
                       text-anchor="middle">{{ b.label }}</text>
               </g>
             </svg>
@@ -1066,7 +1083,7 @@
           <div class="hist-legend">
             <span><i class="sw up"></i>上传</span>
             <span><i class="sw down"></i>下载</span>
-            <span class="hist-hint">悬停柱体查看详情</span>
+            <span class="hist-hint">悬停查看详情</span>
           </div>
           <div class="hist-summary">
             <span>窗口 <b>{{ historyBuckets.length }}{{ { day: '天', month: '月', year: '年' }[historyGran] }}</b></span>
