@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星图与棱镜 · auto-qb 两套 UI 命名与目录迁移计划</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --ink-2: #3a4149;
+    --muted: #5c6470;
+    --dim: #8a919c;
+    --hair: #d9dde3;
+    --hair-soft: rgba(22,24,29,.08);
+    --paper: #fcfcfd;
+    --page: #f4f5f7;
+    --block: #f3f5f8;
+    --accent: #2563eb;
+    --accent-ink: #1e40af;
+    --ok: #1a7f4e;
+    --warn: #b45309;
+    --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --font-body: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.65;
+    padding: 48px 20px 80px;
+  }
+  .doc {
+    max-width: 1180px;
+    margin: 0 auto;
+    background: var(--paper);
+    border: 1px solid var(--hair);
+  }
+  .inner { padding: 56px 64px 48px; }
+
+  /* ---------- masthead ---------- */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .kicker b { color: var(--accent); font-weight: 600; }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 44px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.12;
+    margin: 14px 0 6px;
+  }
+  h1 .cn { font-size: 30px; color: var(--ink-2); font-weight: 500; }
+  .sub { font-size: 16px; color: var(--muted); max-width: 46em; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 0 28px;
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
+    margin-top: 28px; padding: 10px 0;
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+  }
+  .meta-row span b { color: var(--ink-2); font-weight: 600; }
+  .lede { margin-top: 28px; max-width: 70em; font-size: 15.5px; }
+  .lede b { font-weight: 600; }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 52px; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 14px;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 20px;
+  }
+  .folio {
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--accent); font-weight: 600;
+  }
+  .sec-head h2 {
+    font-family: var(--font-display);
+    font-size: 21px; font-weight: 600; letter-spacing: .01em;
+  }
+  .sec-head .aside { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--dim); letter-spacing: .08em; }
+  h3 {
+    font-family: var(--font-display);
+    font-size: 15.5px; font-weight: 600;
+    margin: 26px 0 10px;
+  }
+  p { max-width: 72em; }
+  p + p { margin-top: 10px; }
+  .muted { color: var(--muted); }
+  .dim { color: var(--dim); }
+  small { font-size: 12.5px; }
+  code {
+    font-family: var(--font-mono); font-size: .88em;
+    background: var(--block); border: 1px solid var(--hair-soft);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,.3); }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 6px; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 11px;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); font-family: var(--font-mono);
+    border-bottom: 1px solid var(--ink); padding: 7px 12px 7px 0;
+    white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--hair); padding: 9px 12px 9px 0; vertical-align: top; }
+  tr:last-child td { border-bottom: 1px solid var(--hair-soft); }
+  td.mono, .mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .tag {
+    display: inline-block; font-family: var(--font-mono); font-size: 10.5px;
+    letter-spacing: .06em; padding: 1px 7px; border: 1px solid var(--hair);
+    color: var(--muted); border-radius: 3px; margin-right: 4px; white-space: nowrap;
+  }
+  .tag.blue { color: var(--accent-ink); border-color: rgba(37,99,235,.35); }
+  .tag.green { color: var(--ok); border-color: rgba(26,127,78,.35); }
+  .tag.amber { color: var(--warn); border-color: rgba(180,83,9,.35); }
+
+  /* ---------- identity plates ---------- */
+  .plates { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 18px; }
+  .plate { border: 1px solid var(--ink); padding: 24px 26px 20px; }
+  .plate .role {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .plate .name {
+    font-family: var(--font-display); font-size: 40px; font-weight: 600;
+    letter-spacing: -.02em; line-height: 1.05; margin-top: 8px;
+  }
+  .plate .name .cn { font-size: 20px; font-weight: 500; color: var(--ink-2); margin-left: 10px; }
+  .plate .path {
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent-ink);
+    margin-top: 4px;
+  }
+  .plate p { font-size: 13.5px; margin-top: 12px; color: var(--ink-2); }
+  .plate ul { list-style: none; margin-top: 12px; }
+  .plate li {
+    font-size: 13px; color: var(--ink-2); padding: 7px 0;
+    border-top: 1px solid var(--hair-soft);
+    display: flex; gap: 10px;
+  }
+  .plate li .k {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em;
+    color: var(--dim); min-width: 74px; padding-top: 2px; text-transform: uppercase;
+  }
+
+  /* ---------- compare (style portrait) ---------- */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin: 16px 0 4px; }
+  .duo .col { border-top: 2px solid var(--ink); padding-top: 14px; }
+  .duo .col h4 {
+    font-family: var(--font-display); font-size: 15px; font-weight: 600; margin-bottom: 8px;
+  }
+  .duo .col h4 .mono { color: var(--dim); font-size: 11px; margin-left: 8px; }
+  .duo dl { font-size: 13px; }
+  .duo dt {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--dim); margin-top: 10px;
+  }
+  .duo dd { color: var(--ink-2); margin-top: 2px; }
+
+  /* ---------- tree ---------- */
+  pre.tree {
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55;
+    background: var(--block); border: 1px solid var(--hair-soft);
+    padding: 18px 22px; overflow-x: auto;
+  }
+  pre.tree .c { color: var(--dim); }
+  pre.tree .hl { color: var(--accent-ink); font-weight: 600; }
+  .trees { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+  .tree-label {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+  }
+
+  /* ---------- steps ---------- */
+  .step { display: grid; grid-template-columns: 92px 1fr; gap: 18px; padding: 18px 0; border-bottom: 1px solid var(--hair); }
+  .step:last-child { border-bottom: none; }
+  .step .no {
+    font-family: var(--font-display); font-size: 24px; font-weight: 600;
+    color: var(--accent); letter-spacing: -.01em; line-height: 1;
+    padding-top: 2px;
+  }
+  .step .no small { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; color: var(--dim); margin-top: 6px; text-transform: uppercase; }
+  .step h4 { font-family: var(--font-display); font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .step p, .step li { font-size: 13.5px; color: var(--ink-2); }
+  .step ul { margin: 6px 0 0 18px; }
+  .step pre {
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
+    background: var(--block); border: 1px solid var(--hair-soft);
+    padding: 12px 16px; margin-top: 10px; overflow-x: auto;
+  }
+  .step pre .cm { color: var(--dim); }
+
+  /* ---------- checklist ---------- */
+  ul.check { list-style: none; margin-top: 8px; }
+  ul.check li {
+    padding: 9px 0 9px 30px; border-bottom: 1px solid var(--hair-soft);
+    font-size: 13.5px; color: var(--ink-2); position: relative;
+  }
+  ul.check li::before {
+    content: ""; position: absolute; left: 4px; top: 13px;
+    width: 11px; height: 11px; border: 1.5px solid var(--muted);
+  }
+  ul.check li b { font-weight: 600; color: var(--ink); }
+
+  /* ---------- decision ---------- */
+  .decide { border: 1px solid var(--ink); padding: 22px 26px; margin-top: 22px; }
+  .decide .t {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 12px; font-weight: 600;
+  }
+  .decide ol { margin-left: 20px; }
+  .decide li { font-size: 13.5px; padding: 5px 0; color: var(--ink-2); }
+  .decide li b { color: var(--ink); }
+
+  .foot {
+    margin-top: 56px; border-top: 1px solid var(--ink); padding-top: 14px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--dim); letter-spacing: .06em;
+  }
+  @media (max-width: 900px) {
+    .inner { padding: 36px 24px; }
+    h1 { font-size: 32px; }
+    .plates, .duo, .trees { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="inner">
+
+    <div class="kicker">AUTO-QB · WEB UI · <b>命名与目录迁移计划</b> · 待确认</div>
+    <h1>Atlas <span class="cn">星图</span> &amp; Prism <span class="cn">棱镜</span></h1>
+    <div class="sub">两套并存 Web UI 各取一个身份名，目录随名落位，公共逻辑层收进 <span class="mono">shared/</span>，为后续更多 UI 预留干净的结构。</div>
+    <div class="meta-row">
+      <span>日期 <b>2026-09-15</b></span>
+      <span>分支 <b>frontend/develop</b>（工作区干净）</span>
+      <span>范围 <b>目录移动 + 引用改写 + 1 条路由</b></span>
+      <span>后端改动 <b>仅 web.py 重定向</b></span>
+    </div>
+
+    <p class="lede">
+      两套 UI 目前一个叫"旧版"、一个叫 <code>newui</code>—— 都是<b>代际词</b>：再添第三套 UI 就会失效，也不承载任何风格信息。本计划给它们各起一个与视觉气质同源的身份名：旧 UI 定名 <b>Atlas（星图）</b>—— 深色全景仪表盘，把满天种子收进一张图；新 UI 定名 <b>Prism（棱镜）</b>—— 一束光分出五色光谱，正对它的五主题工程仪器感。目录 <code>atlas/</code> 与 <code>prism/</code> 各自落位，公共逻辑层（app.js 三件套 + vendor + 图标）收进 <code>shared/</code> 单一来源；此后新增 UI = 新增一个同名目录，零结构成本。
+    </p>
+
+    <!-- ================= 01 现状 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">01</span><h2>现状盘点</h2><span class="aside">AS-IS</span></div>
+      <p>全部前端资产在 <code>src/auto_qb/web_ui/static/</code>，由 <code>web.py:277</code> 的 <code>StaticFiles(html=True)</code> 以根路径全量托管 —— 目录结构即 URL 结构，这是迁移方案的基础事实。</p>
+      <table>
+        <tr><th>资产</th><th>角色</th><th>被引用方式</th></tr>
+        <tr><td class="mono">index.html · style.css · icon.png</td><td>旧 UI（视觉层，单文件深色主题，八轮视觉打磨）</td><td class="mono">/ 与 /style.css、/icon.png（绝对路径）</td></tr>
+        <tr><td class="mono">app.js · config_editor.js · config_rules.js</td><td><b>共享逻辑层</b>（两套 UI 单一来源，不复制分叉）</td><td class="mono">两套 index.html 均引 /app.js 等绝对路径</td></tr>
+        <tr><td class="mono">vendor/vue.global.prod.js</td><td>共享依赖（Vue 3 本地托管）</td><td class="mono">两套 index.html 均引 /vendor/…</td></tr>
+        <tr><td class="mono">newui/</td><td>新 UI（tokens/themes×5 + base/components/views + theme.js）</td><td class="mono">/newui/ 及 /newui/css/… /newui/js/theme.js</td></tr>
+      </table>
+      <h3>关键事实（决定方案的四个约束）</h3>
+      <table>
+        <tr><th>事实</th><th>含义</th></tr>
+        <tr><td><b>目录即路由</b></td><td>StaticFiles 挂根，无逐文件路由 —— 挪目录 = 改 URL，<b>后端几乎零改动</b>；唯一例外是根路径 <code>/</code>：旧 index.html 挪走后根目录无 index.html，需补一条重定向。</td></tr>
+        <tr><td><b>共享逻辑层单一来源</b></td><td>app.js 三件套被两套 UI 引用且无路径硬编码（JS 内部不引用自身路径）—— 可整体挪入 <code>shared/</code>，只改两处 HTML 引用。</td></tr>
+        <tr><td><b>非 /api 全量 no-cache</b>（web.py:289）</td><td>升级后浏览器不会拿旧 HTML/JS 打新 URL —— 路径切换后缓存风险低。</td></tr>
+        <tr><td><b>测试有路径触点</b></td><td><code>test_web.py::test_static_assets_disable_heuristic_cache</code> 直接请求 <code>/app.js /style.css /config_editor.js</code>，且 <code>/</code> 将从 200 变为重定向 —— 测试必须同步改写。</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= 02 风格画像 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">02</span><h2>风格画像 → 命名推导</h2><span class="aside">PORTRAIT → NAME</span></div>
+      <p>名字要"符合各自风格"，先把两套 UI 的视觉事实摆出来，从事实推名字，而不是凭空挑好听的词。</p>
+      <div class="duo">
+        <div class="col">
+          <h4>旧 UI<span class="mono">static/ 根 · 单主题</span></h4>
+          <dl>
+            <dt>设计语言</dt><dd>深色现代主题，品牌蓝 #16294A 系；第八轮刷新后底色转中性冷灰蓝，语义色收敛给状态</dd>
+            <dt>结构与质感</dt><dd>单文件 style.css（约 1300 行 :root 令牌 + 组件）；手绘 16px SVG sprite 图标；绿色种子 + 轨道品牌图形</dd>
+            <dt>信息形态</dt><dd>高密度全景仪表盘：辅种分组表、明细、筛选、固定信息栏、限速对照 —— 一屏看尽全部状态</dd>
+            <dt>气质关键词</dt><dd>深夜机房 · 主力操作台 · 稳重 · 全局图鉴 · 经典</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>新 UI<span class="mono">newui/ · 五主题</span></h4>
+          <dl>
+            <dt>设计语言</dt><dd>"工程仪器"感：更紧圆角、1px hairline 高程、mono 数据字体、Bahnschrift 展示字体；tokens 与颜色令牌分层</dd>
+            <dt>结构与质感</dt><dd>设计系统化四层 CSS（tokens / themes / base / components / views）+ theme.js 首帧防 FOUC；五套主题：深海机房、暗夜星云、极地晨霜、麦穗、品牌轨道</dd>
+            <dt>信息形态</dt><dd>同一套功能，换一套更克制精密的呈现 —— 像一台可换滤镜的观测仪器</dd>
+            <dt>气质关键词</dt><dd>精密光学 · 光谱 · 可切换滤色 · 工程台 · 锐利</dd>
+          </dl>
+        </div>
+      </div>
+      <p>旧 UI 是"把满天繁星收进一张图"的全景图鉴，深蓝夜空正合它的冷灰蓝底色，轨道与种子又是品牌图形本源 —— <b>Atlas（星图）</b>。新 UI 的五主题就是一束白光经棱镜分出的五色光谱，tokens 分层与 hairline 是光学仪器的精度 —— <b>Prism（棱镜）</b>。两者都是观测仪器，成对自然：Atlas 负责看全，Prism 负责换滤色。</p>
+    </section>
+
+    <!-- ================= 03 命名方案 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">03</span><h2>命名方案</h2><span class="aside">RECOMMENDED + ALTERNATIVES</span></div>
+      <div class="plates">
+        <div class="plate">
+          <div class="role">旧 UI · 经典深色仪表盘</div>
+          <div class="name">Atlas<span class="cn">星图</span></div>
+          <div class="path">目录 atlas/ · URL /atlas/ · title「auto-qb · 辅种管理 · 星图」</div>
+          <p>星图是天文观测者案头那张全景图鉴：把亿万星辰标进一张图，供夜夜对照。冷灰蓝夜空底色、种子与轨道的品牌图形、高密度全局视图 —— 全部对得上。</p>
+          <ul>
+            <li><span class="k">风格锚点</span><span>深空 / 观测 / 全局收于一图，呼应冷灰蓝与高信息密度</span></li>
+            <li><span class="k">品牌同族</span><span>星图上画的就是轨道（品牌 icon 即 orbit + 绿色种子）</span></li>
+            <li><span class="k">语感</span><span>短、重、字典序居首，"老大哥"的位置感</span></li>
+          </ul>
+        </div>
+        <div class="plate">
+          <div class="role">新 UI · 工程仪器 · 五主题</div>
+          <div class="name">Prism<span class="cn">棱镜</span></div>
+          <div class="path">目录 prism/ · URL /prism/ · title「auto-qb · 辅种管理 · 棱镜」</div>
+          <p>一束白光穿过棱镜分出光谱 —— 一套代码穿过 Prism 分出五套主题。tokens/hairline/mono 的精密光学仪器感，与"工程仪器"的设计自述逐字吻合。</p>
+          <ul>
+            <li><span class="k">风格锚点</span><span>五主题 = 五色光谱；主题切换 = 转动棱镜换滤色</span></li>
+            <li><span class="k">体系呼应</span><span>设计令牌分层即光学系统的镜组结构</span></li>
+            <li><span class="k">语感</span><span>短促锐利，与 Bahnschrift 的工业字体气质一致</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>备选组合（若不想用推荐对）</h3>
+      <table>
+        <tr><th>旧 UI</th><th>新 UI</th><th>意象</th><th>顾虑</th></tr>
+        <tr><td class="mono">Meridian · 子午</td><td class="mono">Console · 仪台</td><td>天球基准线（经典基准）/ 直白工程台</td><td>"子午"作中文名稍生；Console 是泛用词，缺个性</td></tr>
+        <tr><td class="mono">Obsidian · 黑曜</td><td class="mono">Aurora · 极光</td><td>暗色矿物玻璃 / 多彩天光，明暗成对</td><td>Obsidian 与知名笔记应用撞名；极光与既frost 主题意象部分重叠</td></tr>
+        <tr><td class="mono">Heritage · 承</td><td class="mono">Nova · 新星</td><td>直白表达新旧传承</td><td>仍偏代际叙事，无风格锚点；"传承"略带 legacy 贬义</td></tr>
+      </table>
+
+      <h3>命名原则（本次沉淀，后续加 UI 沿用）</h3>
+      <table>
+        <tr><th>#</th><th>原则</th><th>理由</th></tr>
+        <tr><td>1</td><td><b>取身份名，不取代际名</b></td><td>classic / old / new / v2 会随第三套 UI 出现而失效；身份名（星图、棱镜）与时间无关</td></tr>
+        <tr><td>2</td><td><b>目录 = 英文小写单词，与 URL 一致</b></td><td><code>/atlas/</code> 好打好听好收藏；目录名即路由名，零映射成本</td></tr>
+        <tr><td>3</td><td><b>中文名两字，与视觉气质同源</b></td><td>顶栏切换器与 title 里显示，短名不挤布局</td></tr>
+        <tr><td>4</td><td><b>成对（或成组）不撞车</b></td><td>多 UI 并存时名字要像同一柜子里的仪器，避免一个具象一个抽象的错位</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= 04 目录结构 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">04</span><h2>目标目录结构</h2><span class="aside">TO-BE</span></div>
+      <div class="trees">
+        <div>
+          <div class="tree-label">Before（现状）</div>
+          <pre class="tree">web_ui/static/
+├── index.html        <span class="c">← 旧 UI 混在挂载根</span>
+├── style.css
+├── icon.png          <span class="c">← 共享品牌图标</span>
+├── app.js            <span class="c">← 共享逻辑层</span>
+├── config_editor.js
+├── config_rules.js
+├── vendor/
+│   └── vue.global.prod.js
+└── newui/            <span class="c">← 新 UI（代际词命名）</span>
+    ├── index.html
+    ├── css/ (tokens · themes×5 · base …)
+    └── js/theme.js</pre>
+        </div>
+        <div>
+          <div class="tree-label">After（目标）</div>
+          <pre class="tree">web_ui/static/
+├── shared/           <span class="c">← 公共层：单一来源</span>
+│   ├── app.js
+│   ├── config_editor.js
+│   ├── config_rules.js
+│   ├── icon.png
+│   └── vendor/vue.global.prod.js
+├── <span class="hl">atlas/</span>            <span class="c">← 旧 UI · 星图</span>
+│   ├── index.html
+│   └── style.css
+└── <span class="hl">prism/</span>            <span class="c">← 新 UI · 棱镜</span>
+    ├── index.html
+    ├── css/ (tokens · themes×5 · base …)
+    └── js/theme.js
+
+<span class="c"># 以后加 UI：static/&lt;新名字&gt;/ 一个目录
+# + 顶栏互切链接，完事。/&lt;新名字&gt;/ 天然可访问。</span></pre>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:14px"><b>为什么 shared/ 独立成目录而不是留在根：</b>挂载根只放"一个个 UI 目录 + 公共层"，扫一眼就是 UI 清单；逻辑层三件套继续单一来源（不复制分叉），新 UI 想复用就引 <code>/shared/app.js</code>，想另起炉灶也不受影响。</p>
+    </section>
+
+    <!-- ================= 05 路由与改动清单 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">05</span><h2>路由影响与改动清单</h2><span class="aside">URL MAP</span></div>
+      <table>
+        <tr><th>URL</th><th>现状</th><th>迁移后</th><th>实现</th></tr>
+        <tr><td class="mono">/</td><td>旧 UI index.html</td><td class="mono">307 → /atlas/</td><td>web.py 挂载前加 1 条重定向路由（<b>唯一后端改动</b>）</td></tr>
+        <tr><td class="mono">/atlas/</td><td>—</td><td>旧 UI（星图）</td><td>目录落位即生效，零代码</td></tr>
+        <tr><td class="mono">/prism/</td><td>—</td><td>新 UI（棱镜）</td><td>目录落位即生效，零代码</td></tr>
+        <tr><td class="mono">/newui/*</td><td>新 UI</td><td class="mono">307 → /prism/*</td><td>可选兼容路由，保旧书签；3 行，观察一轮后可删</td></tr>
+        <tr><td class="mono">/app.js 等 5 项</td><td>挂载根</td><td class="mono">/shared/*</td><td>两份 index.html 引用改写</td></tr>
+        <tr><td class="mono">/api/*</td><td colspan="2">不受影响</td><td>API 路由先于挂载注册，优先级不变</td></tr>
+      </table>
+      <h3>逐文件改动点</h3>
+      <table>
+        <tr><th>文件</th><th>改动</th><th>量级</th></tr>
+        <tr><td class="mono">atlas/index.html</td><td>6 处资源绝对路径改 <code>/shared/</code>、<code>/atlas/</code>；切换链接 → <code>/prism/</code>（文案"新版 UI"→"棱镜"）；title 加「星图」</td><td>约 10 行</td></tr>
+        <tr><td class="mono">prism/index.html</td><td>10 处 <code>/newui/*</code> → <code>/prism/*</code>；4 处共享资源 → <code>/shared/</code>；回链 → <code>/atlas/</code>（文案"旧版"→"星图"）；title 同步</td><td>约 16 行</td></tr>
+        <tr><td class="mono">web.py</td><td><code>GET /</code> → <code>/atlas/</code> 307；可选 <code>/newui/{path}</code> → <code>/prism/{path}</code>；注释更新</td><td>+6~10 行</td></tr>
+        <tr><td class="mono">tests/test_web.py</td><td>静态缓存测试改打新路径（<code>/atlas/</code>、<code>/atlas/style.css</code>、<code>/shared/app.js</code>、<code>/prism/</code>），并补一条 <code>/</code> 重定向断言</td><td>约 8 行</td></tr>
+        <tr><td class="mono">README.md</td><td>Web UI 节：路径、名称、目录说明</td><td>1 段</td></tr>
+        <tr><td class="mono">memory-bank/</td><td>modules.md（结构行）、techContext.md、activeContext.md、progress.md、pitfalls.md（newui 路径条目）</td><td>各 1~2 处</td></tr>
+        <tr><td class="mono">docs/webui-*.html</td><td><b>历史计划文档留档不改</b>（时间点档案，其中的 newui 字样保留原貌）</td><td>0</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= 06 迁移步骤 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">06</span><h2>迁移步骤</h2><span class="aside">git mv 保历史 · 一次提交</span></div>
+
+      <div class="step">
+        <div class="no">P1<small>移动</small></div>
+        <div>
+          <h4>git mv 目录与共享层（保 rename 历史）</h4>
+          <pre><span class="cm"># 共享层收进 shared/</span>
+git mv src/auto_qb/web_ui/static/app.js            src/auto_qb/web_ui/static/shared/app.js
+git mv src/auto_qb/web_ui/static/config_editor.js  src/auto_qb/web_ui/static/shared/config_editor.js
+git mv src/auto_qb/web_ui/static/config_rules.js   src/auto_qb/web_ui/static/shared/config_rules.js
+git mv src/auto_qb/web_ui/static/icon.png          src/auto_qb/web_ui/static/shared/icon.png
+git mv src/auto_qb/web_ui/static/vendor            src/auto_qb/web_ui/static/shared/vendor
+
+<span class="cm"># 两套 UI 各自落位（先建目录再挪，或直接 mv 整目录）</span>
+git mv src/auto_qb/web_ui/static/index.html        src/auto_qb/web_ui/static/atlas/index.html
+git mv src/auto_qb/web_ui/static/style.css         src/auto_qb/web_ui/static/atlas/style.css
+git mv src/auto_qb/web_ui/static/newui             src/auto_qb/web_ui/static/prism</pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="no">P2<small>改引用</small></div>
+        <div>
+          <h4>改写两份 index.html 的路径与互切链接</h4>
+          <ul>
+            <li>atlas：<code>/style.css</code>→<code>/atlas/style.css</code>；<code>/app.js /config_editor.js /config_rules.js /vendor/… /icon.png</code>→<code>/shared/…</code>；<code>&lt;a href="/newui/"&gt;新版 UI&lt;/a&gt;</code>→<code>&lt;a href="/prism/"&gt;棱镜&lt;/a&gt;</code>；title →「auto-qb · 辅种管理 · 星图」</li>
+            <li>prism：全部 <code>/newui/</code> 前缀 → <code>/prism/</code>；共享资源同上 → <code>/shared/…</code>；<code>&lt;a href="/"&gt;旧版&lt;/a&gt;</code>→<code>&lt;a href="/atlas/"&gt;星图&lt;/a&gt;</code>；title →「auto-qb · 辅种管理 · 棱镜」</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="no">P3<small>路由</small></div>
+        <div>
+          <h4>web.py 补根重定向（挂载前注册，优先于 StaticFiles）</h4>
+          <pre><span class="cm"># 静态前端：UI 目录化（atlas=星图 / prism=棱镜），根路径进默认 UI</span>
+<span class="cm"># 挂在 app.mount("/") 之前</span>
+@app.get("/", include_in_schema=False)
+async def _ui_root() -&gt; RedirectResponse:
+    return RedirectResponse("/atlas/", status_code=307)
+
+@app.get("/newui/{rest:path}", include_in_schema=False)   <span class="cm"># 可选：旧书签兼容</span>
+async def _newui_legacy(rest: str) -&gt; RedirectResponse:
+    return RedirectResponse(f"/prism/{rest}", status_code=307)</pre>
+          <p class="muted"><small>默认 UI 取星图 = 维持"根路径是老入口"的现状习惯；将来若棱镜转正，改一行即可。新增 config 键则需同步 validate_config + schema（黄金法则 4），<b>默认先不做配置化</b>，避免为一次性决定加键。</small></p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="no">P4<small>验证</small></div>
+        <div>
+          <h4>测试 + 实测双保险</h4>
+          <ul>
+            <li>改 <code>test_static_assets_disable_heuristic_cache</code>：请求 <code>/atlas/</code>、<code>/atlas/style.css</code>、<code>/shared/app.js</code>、<code>/prism/</code> 断言 no-cache；新增断言 <code>GET /</code> 得 307 且 Location=<code>/atlas/</code></li>
+            <li><code>uv run pytest tests -q</code> 全量（当前基线 872 passed，以分支实测为准）</li>
+            <li><code>uv run python src/auto-qb.py config.yml --dry-run</code> 起真实服务，浏览器过一遍：<code>/</code> 跳转、星图全功能、棱镜五主题切换 + 刷新持久化、两套 UI 的配置编辑器与规则页（验证 shared 逻辑层加载）、互切链接</li>
+            <li>可选：沿用上轮 headless CDP 冒烟 34 项跑新路径（注意 pitfalls 里的 Dark Reader 污染坑）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="no">P5<small>回写</small></div>
+        <div>
+          <h4>文档与知识库同步</h4>
+          <ul>
+            <li>README.md Web UI 节改写 + 命名一览（星图 /atlas/ · 棱镜 /prism/）</li>
+            <li>memory-bank 五处路径与名称回写；本计划文档（你正在看的这份）留档 docs/</li>
+            <li>activeContext.md 收尾更新</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="no">P6<small>提交</small></div>
+        <div>
+          <h4>单提交落地，干净可回退</h4>
+          <ul>
+            <li>提交信息（中文一句话）：「Web UI 目录化命名：旧 UI 迁入 atlas/（星图）、newui 迁入 prism/（棱镜）、共享逻辑层收进 shared/，根路径重定向」</li>
+            <li>P1–P5 全部进同一个 commit：rename + 引用改写 + 路由 + 测试不可拆，拆开任意一段都是坏状态</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 07 风险 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">07</span><h2>风险与回退</h2><span class="aside">RISKS</span></div>
+      <table>
+        <tr><th>风险</th><th>评估</th><th>对策</th></tr>
+        <tr><td>浏览器缓存旧 HTML/JS 引用旧路径</td><td><span class="tag green">低</span></td><td>非 /api 已全量 no-cache（带 ETag 重校验），路径切换后天然失效</td></tr>
+        <tr><td>外部收藏 /newui/ 失效</td><td><span class="tag amber">中</span></td><td>307 兼容重定向覆盖；重定向属可观测残留，后续可撤</td></tr>
+        <tr><td>共享逻辑层被误复制进某 UI 目录</td><td><span class="tag amber">中</span></td><td>shared/ 单一来源写入 modules.md 与 pitfalls；冒烟契约（JS→DOM 约定）不变</td></tr>
+        <tr><td>JS→DOM 契约在改 HTML 时被碰坏</td><td><span class="tag green">低</span></td><td>P2 只动 <code>&lt;head&gt;</code> 资源行、切换链接、title 三类行，不触模板结构；P4 全量测试兜底</td></tr>
+        <tr><td>rename 检测失真</td><td><span class="tag green">低</span></td><td>git mv 原子移动；审阅用 <code>git log --follow</code>、<code>git diff -M</code></td></tr>
+        <tr><td>回退</td><td colspan="2"><b>单提交 revert 即完全还原</b> —— 无数据迁移、无配置迁移、无外部依赖</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= 08 验收 ================= -->
+    <section>
+      <div class="sec-head"><span class="folio">08</span><h2>验收清单</h2><span class="aside">ACCEPTANCE</span></div>
+      <ul class="check">
+        <li><b>根路径</b>：<code>GET /</code> 返回 307 → <code>/atlas/</code>，浏览器直达星图</li>
+        <li><b>星图</b>：<code>/atlas/</code> 全功能可用（分组表、搜索、右键、信息栏、限速对照），样式无 404</li>
+        <li><b>棱镜</b>：<code>/prism/</code> 全功能可用，五主题切换 + localStorage 持久化 + 首帧无 FOUC</li>
+        <li><b>互切</b>：两套 UI 顶栏链接分别写「棱镜」「星图」，往返顺畅</li>
+        <li><b>共享层</b>：两套 UI 的配置编辑器与规则页正常 —— 证明 <code>/shared/app.js</code> 等单一来源加载成功</li>
+        <li><b>兼容</b>：旧书签 <code>/newui/</code>（及子路径）307 到 <code>/prism/</code></li>
+        <li><b>测试</b>：<code>uv run pytest tests -q</code> 全绿（≥ 基线 872）</li>
+        <li><b>文档</b>：README + memory-bank 回写完毕；历史计划文档未被改动</li>
+        <li><b>历史</b>：<code>git log --follow atlas/index.html</code> 能追到旧根 index.html 的提交历史</li>
+      </ul>
+
+      <div class="decide">
+        <div class="t">待确认 · 三个决定</div>
+        <ol>
+          <li><b>名称</b>：采用推荐对 <b>Atlas 星图 / Prism 棱镜</b>？还是备选表里的组合（或你另提）？</li>
+          <li><b>默认 UI</b>：根路径 307 去星图（推荐，维持现状习惯）？还是直接进棱镜？</li>
+          <li><b>旧书签兼容</b>：加 <code>/newui/*</code> → <code>/prism/*</code> 的 307 重定向（推荐，3 行）？还是不加、直接切换？</li>
+        </ol>
+      </div>
+    </section>
+
+    <div class="foot">
+      <span>AUTO-QB · WEB UI NAMING &amp; RESTRUCTURING PLAN</span>
+      <span>2026-09-15 · BRANCH frontend/develop · STATUS: 待确认</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

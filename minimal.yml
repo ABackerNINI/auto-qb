@@ -34,4 +34,11 @@ config:
         username: abacker
         password: "132435."
 
+    # Web UI: 辅种管理 + 图形化配置编辑(推荐的日常配置方式; 快速开始即从此进入)
+    web:
+        enabled: true       # 开启 Web UI(--dry-run 试运行不启动)
+        host: "127.0.0.1"   # 监听地址, 默认仅本机; 改 0.0.0.0 会暴露管理接口
+        port: 8080          # 本程序 Web UI 端口(注意与 qB WebUI 端口区分)
+        token: ""           # 访问密钥; 留空首次启动随机生成 -> <data_dir>/web.token
+
     trackers:

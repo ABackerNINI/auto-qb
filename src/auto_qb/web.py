@@ -15,7 +15,8 @@ import time
 from typing import Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .utils import decode_group_key
@@ -70,11 +71,16 @@ def ensure_web_token(manager) -> str:
 
 def create_app(manager) -> FastAPI:
     """构建 WEB 应用: 只读快照 + 命令投递 + 设置读写, 全部 /api/* 经 Bearer 密钥鉴权"""
-    def require_token(authorization: str = Header(default="")) -> None:
+    def require_token(request: Request, authorization: str = Header(default="")) -> None:
+        # 鉴权范围 = /api/*: 静态页面与 UI 重定向路由无密钥也可访问(页面本身不含数据,
+        # 密钥由前端加载后带 Authorization 头访问 API; 旧实现仅靠"StaticFiles 挂载不经
+        # 依赖系统"这个副作用放行静态, UI 目录化后根路径/重定向是真实路由, 必须显式放行)。
         # 缺省/畸形凭证(无头、scheme 错误、空 token)静默 401: 属客户端常态(登录框空提交、
         # 轮询竞态、端口探测), 记 WARNING 会经 notify 推送扰民(历史上前端空 token 请求被
         # HTTP 头 OWS 裁剪成裸 "Bearer", 曾持续误报); 仅"携带了但错误"的密钥记一条不含密钥
         # 内容的 WARNING, 保留真实错密钥/探测信号。比较走 compare_digest 防时序侧信道。
+        if not request.url.path.startswith("/api"):
+            return
         scheme = "Bearer "
         if not authorization.startswith(scheme):
             raise HTTPException(status_code=401, detail="invalid token")
@@ -271,9 +277,22 @@ def create_app(manager) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(e))
         return {"yaml": text}
 
-    # 静态前端(阶段 B 挂载: web_ui/static; index.html 兜底)
+    # 静态前端(UI 目录化: atlas=星图(旧) / prism=棱镜(新) / shared=公共逻辑层; 目录即 URL,
+    # 新增 UI = static/<名字>/ 一个目录, 无需后端改动)
     static_dir = os.path.join(os.path.dirname(__file__), "web_ui", "static")
     if os.path.isdir(static_dir):
+
+        @app.get("/", include_in_schema=False)
+        async def _ui_root() -> RedirectResponse:
+            """根路径进默认 UI(星图): StaticFiles 根下已无 index.html, 由重定向兜底。"""
+            return RedirectResponse("/atlas/", status_code=307)
+
+        @app.get("/newui", include_in_schema=False)
+        @app.get("/newui/{rest:path}", include_in_schema=False)
+        async def _newui_legacy(rest: str = "") -> RedirectResponse:
+            """旧 /newui/* 书签兼容: 307 到 /prism/*(观察一轮后可撤)。"""
+            return RedirectResponse(f"/prism/{rest}", status_code=307)
+
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
         @app.middleware("http")
