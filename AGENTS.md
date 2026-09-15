@@ -25,15 +25,15 @@
 ## 命令
 
 ```bash
-# Windows 本地用 .venv; Linux CI 直接 python (pytest.ini 的 pythonpath=src 免安装)
-.venv/Scripts/python.exe -m pytest tests -q            # 全量测试 (pytest.ini 已带分支覆盖率; 基线数字单点见 memory-bank/testing.md 顶部)
-.venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
-.venv/Scripts/python.exe -m pytest tests -q --no-cov   # 快速迭代 (跳过覆盖率报表)
-python src/auto-qb.py config.yml --dry-run             # 运行 (需真实 qBittorrent; 一律先 --dry-run 观察)
+# 依赖统一走 uv (pyproject.toml + uv.lock); 首次/依赖变更后先 `uv sync`
+uv run pytest tests -q                                 # 全量测试 (pytest.ini 已带分支覆盖率; 基线数字单点见 memory-bank/testing.md 顶部)
+uv run pytest tests/test_grouping.py -q
+uv run pytest tests -q --no-cov                        # 快速迭代 (跳过覆盖率报表)
+uv run python src/auto-qb.py config.yml --dry-run      # 运行 (需真实 qBittorrent; 一律先 --dry-run 观察)
 yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf: facebook 风格, 列宽 120)
 ```
 
-- 测试命令 2026-09-14 @ ec0704a 实测通过; 命令与 `memory-bank/testing.md` 同源维护。
+- 测试命令 2026-09-15 实测通过 (uv 环境下 872 passed); 命令与 `memory-bank/testing.md` 同源维护。
 - 新增测试必须同步该测试文件头部 docstring 的 "## 测试计划" 清单 (项目明文规定)。
 
 ## 知识库路由 (先查这里再动代码)

@@ -29,6 +29,9 @@ awesome-copilot-llms.txt
 # APM dependencies
 apm_modules/
 
+# Python 打包产物 (uv build / hatchling)
+dist/
+
 # AutoClaw相关文件
 .openclaw/
 HEARTBEAT.md

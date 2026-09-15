@@ -92,28 +92,17 @@ auto-qb 是一个常驻后台运行的 Python 程序，每 2 秒一个 tick，�
 ### 环境要求
 
 - Python 3.12+
+- [uv](https://docs.astral.sh/uv/) 0.12+（依赖与虚拟环境管理；Windows: `winget install astral-sh.uv`）
 - qBittorrent（已开启 Web UI；已在 qB 5.2.3 测试，其他版本待测）
 
 ### 1. 安装
 
 ```bash
 # 下载 / 克隆源码后，进入项目目录
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# Linux / macOS
-source .venv/bin/activate
-
-# 核心运行依赖(命令行模式)
-pip install pyyaml qbittorrent-api filelock
-
-# 可选: 托盘模式(--tray)依赖
-pip install pystray pillow customtkinter
-
-# 可选: Web UI(web.enabled)依赖; ruamel.yaml 用于图形化配置写回(保留注释与标量风格)
-pip install fastapi uvicorn ruamel.yaml
+uv sync    # 按 pyproject.toml + uv.lock 精确重建虚拟环境(含开发依赖)
 ```
+
+所有依赖版本已在 `pyproject.toml`(直接依赖)与 `uv.lock`(全量传递依赖)中锁定，重复执行 `uv sync` 结果可复现；托盘 / Web UI 能力随主包一起安装。
 
 ### 2. 配置
 
@@ -124,29 +113,29 @@ pip install fastapi uvicorn ruamel.yaml
 ```bash
 # 读 minimal.yml 的连接信息, 把生成的模板写入 config.yml
 # ⚠️ 注意: 该命令会写入(覆盖)指定的输出文件
-python src/auto-qb.py minimal.yml --export-yaml config.yml
+uv run python src/auto-qb.py minimal.yml --export-yaml config.yml
 ```
 
 加 `--only-missing` 只导出尚未配置的 tracker，生成最小骨架，方便随时增补新站点（同样会覆盖输出文件）：
 
 ```bash
-python src/auto-qb.py minimal.yml --export-yaml config.yml --only-missing
+uv run python src/auto-qb.py minimal.yml --export-yaml config.yml --only-missing
 ```
 
 ### 3. 运行
 
 ```bash
 # 强烈建议第一次先试运行: 只打印将执行的动作，不实际改动客户端
-python src/auto-qb.py --dry-run
+uv run python src/auto-qb.py --dry-run
 
 # 确认无误后正式运行(默认读 config.yml)
-python src/auto-qb.py
+uv run python src/auto-qb.py
 
 # 指定配置文件
-python src/auto-qb.py my-config.yml
+uv run python src/auto-qb.py my-config.yml
 
 # 托盘常驻模式(状态窗口 + 系统托盘, 详见[托盘模式](#托盘模式))
-python src/auto-qb.py --tray
+uv run python src/auto-qb.py --tray
 ```
 
 ## 命令行参数
@@ -164,8 +153,8 @@ python src/auto-qb.py --tray
 不想留终端窗口时，可用 `--tray` 让程序以系统托盘图标常驻（主循环在后台线程运行，仍是任务队列与状态文件的唯一修改者）：
 
 ```bash
-python src/auto-qb.py --tray             # 默认 config.yml, 也可在前面指定配置文件
-python src/auto-qb.py --tray --dry-run   # 托盘模式同样支持试运行
+uv run python src/auto-qb.py --tray             # 默认 config.yml, 也可在前面指定配置文件
+uv run python src/auto-qb.py --tray --dry-run   # 托盘模式同样支持试运行
 ```
 
 - **深色状态窗口**：受管种子数、运行时长、qB 连接状态与最近日志；点关闭按钮只是隐藏到托盘，程序继续后台运行
@@ -206,9 +195,13 @@ config:
 
 **辅种管理页**：
 
-- 辅种分组表格：组内下载 / 上传速度、总上传、总大小、站点徽章；点击列头排序、拖拽调整列宽，展开查看各站点成员明细（进度、做种时长、hash）
+- 双视图切换：**分组视图**（默认）与**单种子视图**（每个种子一行，含未归组种子；独立排序 / 列宽记忆 / 多选批量，右键单种子菜单）；筛选与搜索两视图共用
+- 辅种分组表格：组内下载 / 上传速度、总上传、总大小、站点徽章；点击列头三态排序（降序 → 升序 → 恢复默认）、拖拽调宽 + 列选择器显隐（列宽按列记忆），展开查看各站点成员明细（进度、做种时长、分享率、hash）
+- 多选筛选器：标签 / 分类 / 站点 / **H&R（达标 / 未达标）** / 保存路径组合（同一筛选器内"或"、不同筛选器间"且"），叠加搜索；状态分布条点击即筛
 - 按种子名 / 文件名搜索：任一成员命中即保留整组并高亮命中成员；搜索索引由主循环按需增量构建
-- 组级与单种子级右键操作：暂停 / 开始、强制汇报、删除（保留文件 / 连同文件删除）
+- 信息栏双模式：默认左侧悬浮卡（概览 / 今日流量 / 限速对照），可一键移到顶部导航成紧凑双排条（第一排 = 下载 / 上传速度，其余缩小显示），偏好本地记忆
+- 批量操作：Ctrl / Shift 多选组与成员，浮条开始 / 暂停 / 强制汇报 / 删除 / 清除
+- 组级与单种子级右键操作：暂停 / 开始、强制汇报、删除（保留文件 / 连同文件删除）；删除确认框显示待删种子明细（站点 / 名称 / **保存路径**），批量删除同样逐行列出，删除前默认先强制汇报（tracker 确认失败则不删除）
 
 **设置页（图形化配置编辑）**：
 
@@ -667,17 +660,17 @@ src/auto_qb/
 ## 开发测试
 
 ```bash
-# 安装开发依赖(含全部运行依赖: Web/托盘/GUI 测试均会用到)
-pip install -r .github/workflows/requirements-dev.txt
+# 同步开发依赖(uv sync 含 dev 组: Web/托盘/GUI 测试均会用到)
+uv sync
 
 # 运行全部测试(无需真实 qBittorrent，全部 Fake)
-pytest tests -q
+uv run pytest tests -q
 
 # 输出覆盖率
-pytest --cov=src --cov-report=term-missing tests -q
+uv run pytest --cov-report=term-missing tests -q
 
 # 生成 HTML 覆盖率报告
-pytest --cov=src --cov-report=html tests/
+uv run pytest --cov-report=html tests/
 ```
 
 - 测试基础设施见 `tests/helpers.py`（`FakeClient` / `FakeTorrent` / `FakeConfig`，无需真实 qBittorrent；另有 `FakeQbServer` 本地假 HTTP 服务，供真实 `qbittorrent-api` / requests 栈的集成测试）

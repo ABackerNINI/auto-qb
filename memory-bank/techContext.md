@@ -13,9 +13,11 @@
 
 ## 开发环境
 
-- 项目 venv: `.venv` (Windows, Python 3.12); 无包管理配置, pip 装依赖即用
-- 入口: `python src/auto-qb.py [config.yml]`; 干跑 `--dry-run`; 托盘 `--tray`
-- 测试: `.venv/Scripts/python.exe -m pytest tests -q` (pytest.ini 自带 `--cov-branch` 分支覆盖率; Linux CI 直接 `python -m pytest`)
+- 依赖管理: **uv** (2026-09-15 起, pyproject.toml PEP 621 + uv.lock 全量锁; Windows `winget install astral-sh.uv`); `uv sync` 重建 .venv 并把项目 editable 安装; 入口脚本 `auto-qb` = `auto_qb.cli:main`
+- 直接依赖 12 个全部 `==` 精确锁定 (升级时改 pyproject 再 `uv lock --upgrade`); 打包后端 hatchling, `uv build` 可出 sdist/wheel
+- 入口: `uv run python src/auto-qb.py [config.yml]`; 干跑 `--dry-run`; 托盘 `--tray` (源码入口与 `uv run auto-qb` 等价)
+- 测试: `uv run pytest tests -q` (pytest.ini 自带 `--cov-branch` 分支覆盖率; CI 用 astral-sh/setup-uv@v10 + uv sync)
+- 历史: 2026-09-15 前用 pip 直装 .venv (无锁), requirements-dev.txt 已由 pyproject 取代 (随 e7fb8d9 删除)
 
 ## 平台
 

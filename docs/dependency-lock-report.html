@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>依赖版本调研与锁定建议 — auto-qb</title>
+<style>
+  :root {
+    --bg: #f7f9fa;
+    --ink: #151c21;
+    --ink-2: #45535c;
+    --ink-3: #7a8890;
+    --hair: #d5dde1;
+    --hair-soft: #e4eaed;
+    --accent: #0e6f7a;
+    --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+
+  /* ---------- cover ---------- */
+  header { padding: 72px 0 44px; border-bottom: 1px solid var(--hair); }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+  h1 {
+    font-size: 44px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 18px 0 14px;
+  }
+  .lede { font-size: 16px; color: var(--ink-2); max-width: 62ch; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 30px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  }
+  .meta-row span b { color: var(--ink-2); font-weight: 400; }
+
+  /* ---------- metrics strip ---------- */
+  .strip { display: flex; border-bottom: 1px solid var(--hair); }
+  .strip .cell {
+    flex: 1; padding: 22px 18px 20px;
+    border-right: 1px solid var(--hair-soft);
+  }
+  .strip .cell:last-child { border-right: none; }
+  .strip .num { font-family: var(--mono); font-size: 30px; letter-spacing: -0.02em; line-height: 1.1; }
+  .strip .num small { font-size: 15px; color: var(--ink-3); }
+  .strip .lbl { font-size: 12px; color: var(--ink-3); margin-top: 6px; letter-spacing: 0.02em; }
+
+  /* ---------- layout: toc + main ---------- */
+  .layout { display: grid; grid-template-columns: 200px 1fr; gap: 56px; padding: 48px 0 24px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; }
+  nav.toc .toc-title {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-2); text-decoration: none;
+    font-size: 13px; padding: 5px 0; border-left: 1px solid var(--hair-soft);
+    padding-left: 14px; margin-left: -15px;
+  }
+  nav.toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+
+  main { min-width: 0; }
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  .sec-no { font-family: var(--mono); font-size: 13px; color: var(--ink-3); }
+  h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  .sec-rule { border: none; border-top: 1px solid var(--hair); margin: 14px 0 22px; }
+  p.body { color: var(--ink-2); max-width: 74ch; margin-bottom: 14px; }
+  p.body code, td code, li code {
+    font-family: var(--mono); font-size: 0.92em; color: var(--ink);
+    background: #eef2f4; padding: 1px 5px; border-radius: 2px;
+  }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 400;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+    text-align: left; padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--ink);
+  }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  td .sub { display: block; font-size: 11.5px; color: var(--ink-3); }
+  .st { white-space: nowrap; }
+  .st.ok { color: var(--ink-2); }
+  .st.lag { color: var(--accent); }
+  .st.lag::before {
+    content: ""; display: inline-block; width: 7px; height: 7px;
+    border: 1.5px solid var(--accent); border-radius: 50%;
+    margin-right: 7px; vertical-align: 1px;
+  }
+  .st.ok::before {
+    content: ""; display: inline-block; width: 7px; height: 7px;
+    border: 1.5px solid var(--ink-3); border-radius: 50%;
+    margin-right: 7px; vertical-align: 1px;
+  }
+
+  /* ---------- misc blocks ---------- */
+  .callout {
+    border: 1px solid var(--hair);
+    padding: 16px 20px; margin: 20px 0; max-width: 74ch;
+  }
+  .callout p { color: var(--ink-2); font-size: 14px; }
+  .callout p b { color: var(--ink); font-weight: 600; }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: #eef2f4; border: 1px solid var(--hair-soft);
+    padding: 18px 22px; overflow-x: auto; margin: 18px 0;
+  }
+  pre .c { color: var(--ink-3); }
+  ol.notes { max-width: 78ch; margin-left: 0; padding-left: 20px; color: var(--ink-2); }
+  ol.notes li { margin-bottom: 10px; }
+  ol.notes li b { color: var(--ink); font-weight: 600; }
+
+  /* plan compare */
+  .plans { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--hair); margin: 18px 0 8px; }
+  .plan { padding: 20px 22px 22px; border-right: 1px solid var(--hair-soft); }
+  .plan:last-child { border-right: none; }
+  .plan.reco { background: #eef4f5; }
+  .plan .p-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+  .plan .p-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.07em; color: var(--ink-3); text-transform: uppercase; }
+  .plan.reco .p-tag { color: var(--accent); }
+  .plan .p-do { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); margin: 12px 0; line-height: 1.6; }
+  .plan .p-pro, .plan .p-con { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+  .plan .p-pro { margin-bottom: 8px; }
+  .plan .p-con { color: var(--ink-3); }
+  .plan .p-pro b, .plan .p-con b { font-weight: 600; font-size: 11px; letter-spacing: 0.05em; }
+
+  footer.colophon {
+    border-top: 1px solid var(--hair); margin-top: 24px; padding: 26px 0 60px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.9;
+  }
+
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { display: none; }
+    .plans { grid-template-columns: 1fr; }
+    .plan { border-right: none; border-bottom: 1px solid var(--hair-soft); }
+    h1 { font-size: 34px; }
+    .strip { flex-wrap: wrap; }
+    .strip .cell { flex: 1 1 40%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">DEPENDENCY AUDIT · <b>SNAPSHOT 2026-09-15</b></div>
+    <h1>依赖版本调研与锁定建议</h1>
+    <p class="lede">项目所有 Python 依赖当前均以「最新可用版」方式安装，无任何版本约束。本报告盘点 12 个直接依赖、37 个已安装包与 3 个 GitHub Actions 的真实版本状态，并给出锁定方案。未改动任何文件。</p>
+    <div class="meta-row">
+      <span>PROJECT <b>auto-qb</b></span>
+      <span>声明文件 <b>.github/workflows/requirements-dev.txt</b></span>
+      <span>VENV <b>Python 3.12.0 · Windows</b></span>
+      <span>CI 矩阵 <b>3.12 / 3.13 · ubuntu-latest</b></span>
+    </div>
+  </header>
+
+  <div class="strip">
+    <div class="cell"><div class="num">12</div><div class="lbl">直接依赖（全部未锁）</div></div>
+    <div class="cell"><div class="num">10<small> / 12</small></div><div class="lbl">已是 PyPI 最新版</div></div>
+    <div class="cell"><div class="num">2</div><div class="lbl">小幅落后（filelock · uvicorn）</div></div>
+    <div class="cell"><div class="num">37</div><div class="lbl">venv 已安装包（含传递依赖）</div></div>
+    <div class="cell"><div class="num">2<small> / 3</small></div><div class="lbl">GitHub Actions 落后 1 个主版本</div></div>
+  </div>
+
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-title">目录</div>
+      <a href="#s1">01 · 依赖声明现状</a>
+      <a href="#s2">02 · 直接依赖盘点</a>
+      <a href="#s3">03 · 传递依赖映射</a>
+      <a href="#s4">04 · venv 环境卫生</a>
+      <a href="#s5">05 · GitHub Actions</a>
+      <a href="#s6">06 · 锁定方案对比</a>
+      <a href="#s7">07 · 锁定注意点</a>
+      <a href="#s8">08 · 建议锁定清单</a>
+    </nav>
+
+    <main>
+      <section id="s1">
+        <div class="sec-head"><span class="sec-no">01</span><h2>依赖声明现状</h2></div>
+        <hr class="sec-rule">
+        <p class="body">全项目只有一处 Python 依赖声明：CI 工作流旁边的 <code>requirements-dev.txt</code>，12 个依赖全部裸写包名、不带版本号——每次 CI 运行和每次本地重装 venv 都会拉到当时的最新版，构建不可复现。<code>apm.yml</code> / <code>apm.lock.yaml</code> 管的是 agent 技能包（gem-team 1.125.0，commit 026742a），那部分已经锁定，不在本次范围内。项目没有 <code>pyproject.toml</code>、<code>requirements.txt</code> 或任何 pip lock 文件。</p>
+        <table>
+          <tr><th>声明位置</th><th>内容</th><th>锁定状态</th></tr>
+          <tr><td class="mono">.github/workflows/requirements-dev.txt</td><td>10 个运行依赖 + 2 个测试依赖</td><td class="mono st lag">全部未锁</td></tr>
+          <tr><td class="mono">apm.lock.yaml</td><td>agent 技能包 gem-team 1.125.0 @ 026742a</td><td class="mono st ok">已锁 · 无需处理</td></tr>
+          <tr><td class="mono">pyproject.toml / requirements.txt / lock</td><td>—</td><td class="mono st ok">不存在</td></tr>
+        </table>
+      </section>
+
+      <section id="s2">
+        <div class="sec-head"><span class="sec-no">02</span><h2>直接依赖盘点（12 个）</h2></div>
+        <hr class="sec-rule">
+        <p class="body">「全部最新」的说法基本成立：对 PyPI 实时查询后，12 个里 10 个就是当前最新版；只有 <code>filelock</code> 落后一个补丁号、<code>uvicorn</code> 落后一个 minor 号——本地 venv 安装后上游又发了新版。建议锁定时顺手把这两个带到最新，而不是沿用旧号。</p>
+        <table>
+          <tr><th>包</th><th>用途</th><th class="mono">venv 已装</th><th class="mono">PyPI 最新</th><th>状态</th><th class="mono">建议锁定</th></tr>
+          <tr><td class="mono">pyyaml</td><td>config.yml 读取（yaml.BaseLoader 全字符串）<span class="sub">配置解析</span></td><td class="mono">6.0.3</td><td class="mono">6.0.3</td><td class="st ok">最新</td><td class="mono">==6.0.3</td></tr>
+          <tr><td class="mono">qbittorrent-api</td><td>qBittorrent WebUI API 客户端<span class="sub">核心依赖 · CalVer 日期版本号</span></td><td class="mono">2026.8.1</td><td class="mono">2026.8.1</td><td class="st ok">最新</td><td class="mono">==2026.8.1</td></tr>
+          <tr><td class="mono">filelock</td><td>单实例锁<span class="sub">跨轮次状态防重入</span></td><td class="mono">3.32.5</td><td class="mono">3.32.6</td><td class="st lag">落后 1 patch</td><td class="mono">==3.32.6</td></tr>
+          <tr><td class="mono">pystray</td><td>系统托盘（仅 --tray 分支加载）</td><td class="mono">0.19.5</td><td class="mono">0.19.5</td><td class="st ok">最新</td><td class="mono">==0.19.5</td></tr>
+          <tr><td class="mono">pillow</td><td>托盘图标绘制</td><td class="mono">12.3.0</td><td class="mono">12.3.0</td><td class="st ok">最新</td><td class="mono">==12.3.0</td></tr>
+          <tr><td class="mono">customtkinter</td><td>托盘 GUI 界面<span class="sub">6.x 为刚发布的大版本，已在用</span></td><td class="mono">6.0.0</td><td class="mono">6.0.0</td><td class="st ok">最新</td><td class="mono">==6.0.0</td></tr>
+          <tr><td class="mono">fastapi</td><td>WEB UI 后端</td><td class="mono">0.141.1</td><td class="mono">0.141.1</td><td class="st ok">最新</td><td class="mono">==0.141.1</td></tr>
+          <tr><td class="mono">uvicorn</td><td>WEB UI 服务器<span class="sub">线程内运行，不用 reload → 无需 [standard]</span></td><td class="mono">0.52.4</td><td class="mono">0.53.0</td><td class="st lag">落后 1 minor</td><td class="mono">==0.53.0</td></tr>
+          <tr><td class="mono">ruamel.yaml</td><td>config 写回（保留注释 round-trip）</td><td class="mono">0.19.1</td><td class="mono">0.19.1</td><td class="st ok">最新</td><td class="mono">==0.19.1</td></tr>
+          <tr><td class="mono">httpx</td><td>fastapi.testclient.TestClient 传输层<span class="sub">仅测试用</span></td><td class="mono">0.28.1</td><td class="mono">0.28.1</td><td class="st ok">最新</td><td class="mono">==0.28.1</td></tr>
+          <tr><td class="mono">pytest</td><td>测试框架</td><td class="mono">9.1.1</td><td class="mono">9.1.1</td><td class="st ok">最新</td><td class="mono">==9.1.1</td></tr>
+          <tr><td class="mono">pytest-cov</td><td>分支覆盖率</td><td class="mono">7.1.0</td><td class="mono">7.1.0</td><td class="st ok">最新</td><td class="mono">==7.1.0</td></tr>
+        </table>
+      </section>
+
+      <section id="s3">
+        <div class="sec-head"><span class="sec-no">03</span><h2>传递依赖映射</h2></div>
+        <hr class="sec-rule">
+        <p class="body">只锁直接依赖，传递依赖仍会漂移。若要 CI 与本地完全一致，需要一份 freeze 出来的全量 lock 文件把下面这些也钉死：</p>
+        <table>
+          <tr><th>直接依赖</th><th>传递依赖（lock 需覆盖）</th></tr>
+          <tr><td class="mono">qbittorrent-api</td><td class="mono">requests → charset-normalizer, idna, urllib3, certifi; six</td></tr>
+          <tr><td class="mono">fastapi</td><td class="mono">starlette; pydantic → pydantic-core, annotated-types, annotated-doc, typing-extensions, typing-inspection</td></tr>
+          <tr><td class="mono">uvicorn</td><td class="mono">click, h11; colorama (Windows)</td></tr>
+          <tr><td class="mono">httpx</td><td class="mono">anyio, certifi, httpcore, idna</td></tr>
+          <tr><td class="mono">pystray</td><td class="mono">pillow, six</td></tr>
+          <tr><td class="mono">customtkinter</td><td class="mono">darkdetect, packaging</td></tr>
+          <tr><td class="mono">pytest</td><td class="mono">iniconfig, packaging, pluggy, pygments; colorama (Windows)</td></tr>
+          <tr><td class="mono">pytest-cov</td><td class="mono">coverage, pluggy</td></tr>
+          <tr><td class="mono">pyyaml / filelock / pillow / ruamel.yaml</td><td>无强制依赖</td></tr>
+        </table>
+      </section>
+
+      <section id="s4">
+        <div class="sec-head"><span class="sec-no">04</span><h2>venv 环境卫生</h2></div>
+        <hr class="sec-rule">
+        <p class="body">当前 venv 基于系统 <b>Python 3.12.0</b>；CI 矩阵跑 3.12 / 3.13 两个版本，锁定值需要两边都验证。<code>pyvenv.cfg</code> 显示 venv 创建于项目改名前的旧路径 <code>d:\Projects\auto-qb\.venv</code>——仍能用，但建议锁定时一并重建。venv 里的 pip 是 23.2.1，已落后（最新 26.2.1）。</p>
+        <div class="callout">
+          <p><b>关键发现：venv 混有约 20 个与本项目无关的包</b>——environs、marshmallow、python-dotenv、argon2-cffi（+bindings）、cffi、pycparser、cryptography、rich、markdown-it-py、mdurl、jinja2、markupsafe、esprima、quickjs、prettyprinter、colorful、merge_args，以及 watchfiles、websockets、httptools（后三个是 uvicorn[standard] 的 extra，项目代码用不到）。<b>因此绝对不要在当前 venv 直接 pip freeze 当 lock 文件</b>——这些无关包会被锁进去。</p>
+        </div>
+      </section>
+
+      <section id="s5">
+        <div class="sec-head"><span class="sec-no">05</span><h2>GitHub Actions（ci.yml）</h2></div>
+        <hr class="sec-rule">
+        <p class="body">CI 里 3 个官方 Action 按主版本 tag 引用，其中 2 个落后一代。setup-python v7 移除了 <code>pip-install</code> 输入项——本项目没用它，升级无破坏。</p>
+        <table>
+          <tr><th>Action</th><th class="mono">ci.yml 现用</th><th class="mono">最新</th><th>状态</th><th>备注</th></tr>
+          <tr><td class="mono">actions/checkout</td><td class="mono">v5</td><td class="mono">v6</td><td class="st lag">落后 1 major</td><td>v6 强化凭据安全（persist-credentials 收紧）</td></tr>
+          <tr><td class="mono">actions/setup-python</td><td class="mono">v6</td><td class="mono">v7.0.0</td><td class="st lag">落后 1 major</td><td>v7 迁移 ESM；移除 pip-install 输入（本项目未用，无影响）</td></tr>
+          <tr><td class="mono">actions/upload-artifact</td><td class="mono">v6</td><td class="mono">v6</td><td class="st ok">最新</td><td>v6 需 runner ≥ 2.327.1，GitHub 托管 runner 已满足</td></tr>
+        </table>
+      </section>
+
+      <section id="s6">
+        <div class="sec-head"><span class="sec-no">06</span><h2>锁定方案对比</h2></div>
+        <hr class="sec-rule">
+        <p class="body">三个候选里，方案 A 与项目现状（无打包需求、改动最小、CI 已在读 requirements-dev.txt）最匹配。</p>
+        <div class="plans">
+          <div class="plan reco">
+            <div class="p-tag">方案 A · 推荐</div>
+            <div class="p-name">双层锁定</div>
+            <div class="p-do">requirements-dev.txt 直接依赖全部改 ==<br>+ 干净 venv pip freeze 生成 requirements-lock.txt<br>+ CI 改装 lock 文件</div>
+            <div class="p-pro"><b>优点</b><br>改动最小；本地与 CI 完全可复现；传递依赖一并锁死</div>
+            <div class="p-con"><b>代价</b><br>升级依赖需手动 bump + 回归测试</div>
+          </div>
+          <div class="plan">
+            <div class="p-tag">方案 B</div>
+            <div class="p-name">范围锁定</div>
+            <div class="p-do">pyyaml~=6.0<br>fastapi~=0.141<br>…（兼容范围）</div>
+            <div class="p-pro"><b>优点</b><br>patch 更新自动跟进，少一次手动维护</div>
+            <div class="p-con"><b>代价</b><br>依赖仍会漂移，与「锁定」的目标相悖</div>
+          </div>
+          <div class="plan">
+            <div class="p-tag">方案 C</div>
+            <div class="p-name">pyproject + uv / pip-tools</div>
+            <div class="p-do">迁移 pyproject.toml<br>uv lock / pip-compile<br>哈希校验可选</div>
+            <div class="p-pro"><b>优点</b><br>最规范，工程化最完整</div>
+            <div class="p-con"><b>代价</b><br>引入新工具链，改动最大——可作为后续演进</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s7">
+        <div class="sec-head"><span class="sec-no">07</span><h2>锁定时的七个注意点</h2></div>
+        <hr class="sec-rule">
+        <ol class="notes">
+          <li><b>filelock / uvicorn 直接锁到最新</b>（3.32.6 / 0.53.0），不沿用本地旧号；锁完跑全量测试 + CI 3.12 / 3.13 双版本验证。</li>
+          <li><b>不要在当前 venv 直接 pip freeze</b>——新建干净 venv，只装 12 个直接依赖后再 freeze，否则约 20 个无关包会进 lock 文件。</li>
+          <li><b>普通 uvicorn 即可，不需要 [standard]</b>：项目用法是线程内 <code>uvicorn.Config(app, host, port, log_level)</code>，不依赖 reload / watchfiles。</li>
+          <li><b>qbittorrent-api 是 CalVer</b>（2026.8.1），跟随 qBittorrent 5.x API 语义演进；未来升级时重点回归 <code>test_qbmanager</code> / <code>test_snapshot_sync</code>（见 memory-bank/pitfalls.md）。</li>
+          <li><b>customtkinter 6.0.0 是刚发布的 6.x 大版本</b>，当前 venv 已在用、托盘功能正常，直接锁定即可。</li>
+          <li><b>CI Action 可顺手升级</b>：checkout v5→v6、setup-python v6→v7；本项目未用到 v7 移除的 pip-install 输入。</li>
+          <li><b>apm.lock.yaml 已锁</b>（gem-team 1.125.0 @ 026742a），不需要动。</li>
+        </ol>
+      </section>
+
+      <section id="s8">
+        <div class="sec-head"><span class="sec-no">08</span><h2>建议的锁定清单（未写入，仅供决策）</h2></div>
+        <hr class="sec-rule">
+        <p class="body">这是方案 A 第一步落地后的 <code>requirements-dev.txt</code> 目标形态——注意 filelock 与 uvicorn 取的是最新号而非本地旧号：</p>
+<pre><span class="c"># 运行依赖 (锁定 @ 2026-09-15)</span>
+pyyaml==6.0.3
+qbittorrent-api==2026.8.1
+filelock==3.32.6
+pystray==0.19.5
+pillow==12.3.0
+customtkinter==6.0.0
+fastapi==0.141.1
+uvicorn==0.53.0
+ruamel.yaml==0.19.1
+httpx==0.28.1
+
+<span class="c"># 开发/测试依赖</span>
+pytest==9.1.1
+pytest-cov==7.1.0</pre>
+        <p class="body">第二步：新建干净 venv → 安装上述 12 个依赖 → <code>pip freeze &gt; requirements-lock.txt</code>（约 35 个包）→ CI 的安装步骤改为 <code>pip install -r .github/workflows/requirements-lock.txt</code>。</p>
+      </section>
+
+      <footer class="colophon">
+        数据快照 2026-09-15（Asia/Shanghai）· 本地：.venv（Windows, Python 3.12.0）pip list --outdated / pip index versions<br>
+        远端：PyPI 实时查询；GitHub Releases（actions/setup-python releases 页全文核读，checkout v6 / upload-artifact v6 经发布记录确认）<br>
+        本报告只做调研，未改动项目任何文件 · auto-qb / docs
+      </footer>
+    </main>
+  </div>
+</div>
+
+</body>
+</html>

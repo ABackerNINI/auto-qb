@@ -5,13 +5,14 @@
 ## 运行
 
 ```bash
-# 项目 venv (.venv, Python 3.12), 基线: 866 passed, 0 skipped (2026-09-14), 分支覆盖率 91%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent)
-.venv/Scripts/python.exe -m pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
-.venv/Scripts/python.exe -m pytest tests/test_grouping.py -q
-.venv/Scripts/python.exe -m pytest tests/test_checking.py -q -k "skip"   # 按关键词
+# 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
+# 基线: 872 passed, 0 skipped (2026-09-15, uv 环境), 分支覆盖率 91%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent)
+uv run pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
+uv run pytest tests/test_grouping.py -q
+uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 ```
 
-- `pytest.ini`: `pythonpath = src` (无需安装包), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
+- `pytest.ini`: `pythonpath = src` (uv sync 也会把项目 editable 装入 venv, 双保险), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
 - 测试**基本全部使用 Fake, 不连真实 qBittorrent**(随时可全量运行)。唯一例外是 `test_local_qb_service.py` + `test_ui.py::test_connect_failure_throttles_logging`: 它们用 `helpers.FakeQbServer`(标准库 `http.server` 监听回环随机端口)承载**真实** `qbittorrent-api`/requests 栈, 因为"trust_env 是否真的生效"“库重建 Session 是否弄丢我们的设置”这类行为在进程内替身上根本无法暴露(历史教训)。
 - 覆盖率现状 (2026-09-14 实测, 全量): 总 91%; 低洼: `ui.py` 27%(GUI 本体真机冒烟不单测)、`web.py` 75%(WEB UI 路由分支); 近乎全绿: `config/impact.py`/`config/schema.py`/`logging.py`/`registry.py`/`taskqueue.py`/`qbapi.py`/`speed_curve.py`/`tracker.py` 100%, `config/writer.py` 91%(剩余为 R 级回退的嵌套路径与异常分支), `qbmanager.py` 95%, conditions 99%, torrents 97%, utils 96%。补测试优先看 term-missing 输出。
 
