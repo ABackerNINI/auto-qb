@@ -3,6 +3,10 @@ test.yml
 torrents.txt
 example-torrent-info.txt
 test.py
+
+# Python虚拟环境
+.venv/
+
 # 运行时数据目录(2026-09-09: 状态/单实例锁/日志/跳检备份集中到 auto-qb-data/)
 auto-qb-data/
 
