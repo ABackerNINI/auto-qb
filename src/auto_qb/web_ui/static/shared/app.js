@@ -272,10 +272,10 @@ const app = createApp({
       histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面
       bootstrapping: false,
-      // 添加种子对话框(R1B): 来源 = .torrent 多选 + magnet/URL 文本域混合; 提交走原生 fetch FormData
+      // 添加种子对话框(R1B): 来源 = .torrent 多选 + magnet/URL 文本域混合; 提交走 JSON(base64 文件)
       addOpen: false,
       addSubmitting: false,   // 提交中(按钮 loading, 阻止重复提交与误关闭)
-      addFiles: [],           // 已选 .torrent File 对象(展示用元信息; File 本体随 FormData 上送)
+      addFiles: [],           // 已选 .torrent File 对象(展示用元信息; 前端读为 base64 随 JSON 上送)
       addUrls: "",            // magnet / http(s) 链接, 每行一条
       addSavePath: "",        // 保存路径(空 = qB 默认)
       addCategory: "",        // 分类(可空)
@@ -1562,37 +1562,37 @@ const app = createApp({
     },
     async submitAddTorrent() {
       if (!this.addCanSubmit) return;
-      const fd = new FormData();
-      for (const f of this.addFiles) fd.append("files", f, f.name);
-      fd.append("urls", this.addUrls.trim());
-      fd.append("save_path", this.addSavePath.trim());
-      fd.append("category", this.addCategory.trim());
-      fd.append("tags", this.addTags.trim());
-      // 布尔字段后端契约: 字符串 "true"/"false"(不缺省, 便于后端严格解析)
-      fd.append("paused", this.addPaused ? "true" : "false");
-      fd.append("skip_checking", this.addSkipCheck ? "true" : "false");
-      fd.append("sequential", this.addSequential ? "true" : "false");
-      fd.append("first_last_piece_prio", this.addFirstLast ? "true" : "false");
-      fd.append("auto_tmm", this.addTmm ? "true" : "false");
+      // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB —— 零临时文件零新依赖)
+      const filesB64 = [];
+      for (const f of this.addFiles) {
+        filesB64.push(
+          await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = String(reader.result || "");
+              resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
+            };
+            reader.onerror = () => reject(new Error(`无法读取文件: ${f.name}`));
+            reader.readAsDataURL(f);
+          })
+        );
+      }
+      const payload = {
+        files_b64: filesB64,
+        urls: this.addUrls.split("\n").map((u) => u.trim()).filter(Boolean),
+        save_path: this.addSavePath.trim(),
+        category: this.addCategory.trim(),
+        tags: this.addTags.split(",").map((t) => t.trim()).filter(Boolean),
+        paused: this.addPaused,
+        skip_checking: this.addSkipCheck,
+        sequential: this.addSequential,
+        first_last_piece_prio: this.addFirstLast,
+        auto_tmm: this.addTmm,
+      };
       this.addSubmitting = true;
       try {
         // 不设 Content-Type, 浏览器自动生成 multipart boundary
-        const resp = await fetch("/api/torrents/add", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${this.token}` },
-          body: fd,
-        });
-        if (resp.status === 401) {
-          this._logout("密钥无效或已更换");
-          const err = new Error("unauthorized");
-          err.auth = true;
-          throw err;
-        }
-        if (!resp.ok) {
-          const detail = await resp.json().catch(() => ({}));
-          throw new Error(detail.detail || `HTTP ${resp.status}`);
-        }
-        const queued = await resp.json();
+        const queued = await this.api("/api/torrents/add", { method: "POST", body: JSON.stringify(payload) });
         const r = await this.waitCmd(queued.cmd_id);
         if (r.ok) {
           this.toast("添加种子已受理, 列表稍后自动刷新", "ok", 4000);
