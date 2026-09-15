@@ -135,8 +135,8 @@
             <button :class="{ active: viewMode === 'groups' }" title="按辅种分组展示" @click="setViewMode('groups')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组
             </button>
-            <button :class="{ active: viewMode === 'torrents' }" title="每个种子一行(含未归组种子)" @click="setViewMode('torrents')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>单种子
+            <button :class="{ active: viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="setViewMode('torrents')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>种子
             </button>
             <button :class="{ active: viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="setViewMode('shows')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
@@ -183,7 +183,7 @@
                 <span v-if="c.locked" class="col-lock">必显</span>
                 <svg v-else-if="colVisible('detail', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
               </div>
-              <div class="col-menu-title">单种子视图</div>
+              <div class="col-menu-title">种子页</div>
               <div v-for="c in torrentColumns" :key="c.key" class="pop-item col-menu-item"
                    :class="{ locked: c.locked, on: colVisible('torrent', c.key) }"
                    role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('torrent', c.key)"
@@ -574,7 +574,8 @@
         </div>
         </template>
 
-        <!-- 单种子视图(R08): 全部种子平铺(含未归组 singles), 逐种子过筛选; 列模型 TORRENT_COLUMNS,
+        <!-- 种子页(R1A, 原 R08 单种子视图升级): 数据源 = state.torrents 全量平铺(SEED_ITEM),
+             逐种子过筛选 + 客户端文本过滤; 列模型 TORRENT_COLUMNS(默认核心列 + 选择器可选扩展列),
              排序/多选/右键(单种子菜单)/批量操作全部复用成员(hash)语义 -->
         <template v-if="viewMode === 'torrents'">
           <div class="group-head sticky-head" ref="torrentHead" :style="gridStyle('torrent')">
@@ -630,6 +631,20 @@
                   <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                   <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                 </div>
+                <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !m.num_seeds }">{{ m.num_seeds || 0 }}</div>
+                <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !m.num_leechs }">{{ m.num_leechs || 0 }}</div>
+                <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</div>
+                <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(m.added_on) }}</div>
+                <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="{ zero: !m.downloaded }">{{ fmtSizeOrDash(m.downloaded) }}</div>
+                <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ fmtSizeOrDash(m.amount_left) }}</div>
+                <div v-else-if="col.key === 'availability'" class="g-stat">{{ (m.availability || 0).toFixed(2) }}</div>
+                <div v-else-if="col.key === 'time_active'" class="g-stat">{{ fmtDuration(m.time_active) }}</div>
+                <div v-else-if="col.key === 'last_activity'" class="g-stat">{{ fmtTs(m.last_activity) }}</div>
+                <div v-else-if="col.key === 'completion_on'" class="g-stat">{{ fmtTs(m.completion_on) }}</div>
+                <div v-else-if="col.key === 'up_limit'" class="g-stat">{{ fmtLimitBytes(m.up_limit) }}</div>
+                <div v-else-if="col.key === 'dl_limit'" class="g-stat">{{ fmtLimitBytes(m.dl_limit) }}</div>
+                <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '—').slice(0, 8) }}</div>
+                <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '—' }}</div>
                 <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
                   {{ fmtDuration(m.seeding_time) }}
                   <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
@@ -645,7 +660,7 @@
             <div v-if="!filteredTorrents.length" class="empty">
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
               <span>
-                {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配种子')
+                {{ searchQuery.trim() ? '无匹配种子'
                    : (filtersActive ? '当前筛选下没有种子' : '暂无种子') }}
               </span>
             </div>
@@ -862,6 +877,17 @@
             </div>
             <div class="ctx-item" @click="actTorrent('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
+            <div class="ctx-sep"></div>
+            <!-- 复制(R1A): clipboard API + execCommand 降级, toast 反馈(见 app.js copyTorrentInfo) -->
+            <div class="ctx-item" @click="copyTorrentInfo('name')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
+            </div>
+            <div class="ctx-item" @click="copyTorrentInfo('hash')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
+            </div>
+            <div class="ctx-item" @click="copyTorrentInfo('magnet')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delTorrent()">

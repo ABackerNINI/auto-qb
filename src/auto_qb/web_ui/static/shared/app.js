@@ -42,23 +42,41 @@ const DETAIL_COLUMNS = [
   { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)" },
   { key: "hash", label: "Hash", tpl: "80px" },
 ];
-/* 单种子视图列模型(R08): name 锁定; 其余与成员视图字段一一对应(save_path 可选列)。
- * 列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后兼容扩展,
- * 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
+/* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
+ * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
+ * 站点/做种/用户/下载/上传/ETA/分享率/总上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
+ * (已下载/剩余量/可用性/做种时长/活跃时间/最近活动/完成于/限速/Hash v1/tracker/保存路径/Hash)
+ * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后
+ * 兼容扩展, 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
 const TORRENT_COLUMNS = [
-  { key: "name", label: "种子名", tpl: "minmax(220px, 2.6fr)", sortable: true, locked: true },
-  { key: "site", label: "站点", tpl: "110px", sortable: true },
+  { key: "name", label: "名称", tpl: "minmax(220px, 2.6fr)", sortable: true, locked: true },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
   { key: "state", label: "状态", tpl: "76px" },
+  { key: "site", label: "站点", tpl: "110px", sortable: true },
+  { key: "num_seeds", label: "做种", tpl: "64px", sortable: true },
+  { key: "num_leechs", label: "用户", tpl: "64px", sortable: true },
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
+  { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true },
+  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true },
   { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
-  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
   // 与分组表/明细表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
   { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
-  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", sortable: true },
-  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true },
+  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true },
+  // ---- 以下为列选择器可选列(默认隐藏; 字段集 = SEED_ITEM 扩展段) ----
+  { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true },
+  { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true },
+  { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true },
+  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true },
+  { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true },
+  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true },
+  { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)" },
+  { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)" },
+  { key: "infohash_v1", label: "Hash v1", tpl: "90px" },
+  { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)" },
   { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)" },
   { key: "hash", label: "Hash", tpl: "80px" },
 ];
@@ -171,7 +189,8 @@ const app = createApp({
       authErrorKind: "",   // "auth" = 密钥被拒(401); "unavailable" = 服务不可达(保留候选密钥供重试)
       page: "groups",
       groups: [],
-      singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供单种子视图/总数)
+      singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)
+      torrents: [],           // 种子页数据源: 全量种子平铺数组(SEED_ITEM, 与 groups 同门控回传)
       shows: { list: [], unrecognized: [] },  // 追剧视图(剧→季→集聚合, 与 groups 同门控回传)
       // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
@@ -413,19 +432,19 @@ const app = createApp({
       }
       return kept;
     },
-    /* 单种子视图(R08): 全部种子平铺(已归组成员 + 未归组 singles), 每个种子独立过同一套
-     * 筛选/搜索(与分组视图的"组内任一命中保留整组"语义不同: 这里逐种子判定), 排序独立 */
+    /* 种子页(R1A, 原 R08 单种子视图升级): 数据源 = state.torrents 全量平铺数组(SEED_ITEM),
+     * 每个种子独立过同一套筛选(与分组视图的"组内任一命中保留整组"语义不同: 这里逐种子判定);
+     * 搜索为**客户端文本过滤**(名称/站点/分类/标签/保存路径, 子串不区分大小写), 不依赖服务端
+     * 文件搜索结果 —— 文件命中(searchHits)仅用作高亮; 排序独立(三态同分组表) */
     filteredTorrents() {
-      const q = (this.searchQuery || "").trim();
+      const q = (this.searchQuery || "").trim().toLowerCase();
       const hits = this.searchHits;
       const out = [];
-      const push = (m, hit) => {
-        if (!this._memberPass(m)) return;
-        if (q && !hit) return;
-        out.push({ ...m, hit: q ? hit : false });
-      };
-      for (const g of this.groups) for (const m of g.members) push(m, hits.has(m.hash));
-      for (const r of this.singles) push(r, hits.has(r.hash));
+      for (const r of this.torrents) {
+        if (!this._memberPass(r)) continue;
+        if (q && !this._torrentTextMatch(r, q)) continue;
+        out.push({ ...r, hit: hits.has(r.hash) });
+      }
       const key = this.torrentSortKey;
       const dir = this.torrentSortDir;
       out.sort((a, b) => {
@@ -443,6 +462,8 @@ const app = createApp({
       return this.groups.find((g) => g.key === this.expandedKey) || null;
     },
     totalTorrents() {
+      // 种子页数据源到位后直接取平铺数组长度(权威口径); 旧响应缺 torrents 时回退 分组+未归组 合计
+      if (this.torrents.length) return this.torrents.length;
       return this.groups.reduce((n, g) => n + g.count, 0) + this.singles.length;
     },
     totalDl() {
@@ -534,6 +555,7 @@ const app = createApp({
       const map = new Map();
       for (const g of this.groups) for (const m of g.members) map.set(m.hash, m);
       for (const r of this.singles) if (!map.has(r.hash)) map.set(r.hash, r);
+      for (const r of this.torrents) if (!map.has(r.hash)) map.set(r.hash, r);  // SEED_ITEM 全量(magnet_uri 等扩展字段在这份)
       return map;
     },
     /* 追剧视图(R10): 后端已按剧→季→集聚合并算好聚合层; 前端只做 筛选/搜索(任一成员命中
@@ -845,6 +867,7 @@ const app = createApp({
       this.siteFilter = [];
       this.hrFilter = [];
       this.singles = [];
+      this.torrents = [];
       this.shows = { list: [], unrecognized: [] };
       this.expandedShows = [];
       this.expandedShowEp = null;
@@ -1044,6 +1067,7 @@ const app = createApp({
         this.status = state.status;
         this.groups = state.groups || [];
         this.singles = state.singles || [];
+        this.torrents = state.torrents || [];
         this.shows = state.shows || { list: [], unrecognized: [] };
         if (typeof state.rid === "number") this.lastRid = state.rid;
         this.serviceDown = false;
@@ -1105,7 +1129,8 @@ const app = createApp({
         if (state.updated !== false) {
           // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
           this.groups = state.groups || [];
-          this.singles = state.singles || [];  // 未归组种子与 groups 同门控回传(R08)
+          this.singles = state.singles || [];  // 未归组种子与 groups 同门控回传(搜索兜底/总数回退)
+          this.torrents = state.torrents || [];  // 种子页平铺数组(SEED_ITEM)与 groups 同门控回传
           this.shows = state.shows || { list: [], unrecognized: [] };  // 追剧视图同门控回传(R10)
           if (typeof state.rid === "number") this.lastRid = state.rid;
           this.idlePolls = 0;
@@ -1115,6 +1140,7 @@ const app = createApp({
             const keys = new Set(this.groups.map((g) => g.key));
             const hashes = new Set(this.groups.flatMap((g) => g.members.map((m) => m.hash)));
             for (const r of this.singles) hashes.add(r.hash);
+            for (const r of this.torrents) hashes.add(r.hash);  // 平铺数组 = 全量种子(超集, 覆盖种子页多选)
             this.selGroups = this.selGroups.filter((k) => keys.has(k) || k.startsWith("u-"));
             this.selMembers = this.selMembers.filter((h) => hashes.has(h));
           }
@@ -1218,6 +1244,22 @@ const app = createApp({
       if (sec < 3600) return `${Math.floor(sec / 60)}分钟`;
       if (sec < 86400) return `${Math.floor(sec / 3600)}时${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}分`;
       return `${Math.floor(sec / 86400)}天${String(Math.floor((sec % 86400) / 3600)).padStart(2, "0")}时`;
+    },
+    /* ETA(秒): qB 哨兵 8640000 = 无 ETA, 非正数 = 未知/缺失 —— 均显示 "—"(种子页 R1A) */
+    fmtEta(sec) {
+      if (!sec || sec <= 0 || sec >= 8640000) return "—";
+      return this.fmtDuration(sec);
+    },
+    /* 时间点(unix 秒): -1/0 = 从未(qB 哨兵) —— "—"; 其余与追剧“最近动静”同格式 */
+    fmtTs(ts) {
+      if (!ts || ts < 0) return "—";
+      return this.fmtTime(ts);
+    },
+    /* 种子限速(qB 原始 bytes/s; 0 = 不限速/跟随全局): 与限速曲线的 KiB/s 口径区分开 */
+    fmtLimitBytes(v) {
+      if (v === null || v === undefined) return "—";
+      if (!v) return "不限速";
+      return this.fmtSpeed(v);
     },
     /* ------------------------------------------- 组级"共同值"计算(组级标签/分类列)
      *
@@ -1328,6 +1370,14 @@ const app = createApp({
     _hrBucketMember(m) {
       if (!m.hr_triggered) return "";
       return m.hr_satisfied ? "达标" : "未达标";
+    },
+    /* 种子页客户端文本过滤(R1A): 名称/站点/分类/标签/保存路径任一命中即保留(不区分大小写) */
+    _torrentTextMatch(m, q) {
+      return (m.name || "").toLowerCase().includes(q)
+        || (m.site || "").toLowerCase().includes(q)
+        || (m.category || "").toLowerCase().includes(q)
+        || (m.save_path || "").toLowerCase().includes(q)
+        || (m.tags || []).some((t) => t.toLowerCase().includes(q));
     },
     hrGroupTitle(g) {
       if (!g.hr_triggered) return "该组没有成员触发 HR 条件";
@@ -1722,6 +1772,7 @@ const app = createApp({
       for (const g of this.decoratedGroups) for (const m of g.members) byHash.set(m.hash, m);
       for (const g of this.filteredGroups) if (g.virtual) byHash.set(g.members[0].hash, g.members[0]);
       for (const r of this.singles) if (!byHash.has(r.hash)) byHash.set(r.hash, r);
+      for (const r of this.torrents) if (!byHash.has(r.hash)) byHash.set(r.hash, r);
       const members = [];
       let totalSize = 0;
       const pushMember = (m) => {
@@ -1872,6 +1923,45 @@ const app = createApp({
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
+    /* 复制种子信息(种子页右键 R1A): clipboard API 优先, execCommand 降级(非安全上下文/权限拒绝);
+     * 无论成功失败都给 toast 反馈 */
+    async _copyText(text, label) {
+      let ok = false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          ok = true;
+        }
+      } catch { ok = false; }
+      if (!ok) {
+        // 降级: 离屏 textarea + execCommand(旧浏览器 / file:// 等 clipboard API 不可用场景)
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { ok = document.execCommand("copy"); } catch { ok = false; }
+        document.body.removeChild(ta);
+      }
+      if (ok) this.toast(`已复制${label}`, "ok", 2000);
+      else this.toast("复制失败: 浏览器未授权剪贴板访问", "error");
+    },
+    /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
+    copyTorrentInfo(field) {
+      this.menu.visible = false;
+      const m = this.memberByHash.get(this.menu.hash);
+      if (!m) return;
+      const value = field === "name" ? m.name
+        : field === "hash" ? (m.infohash_v1 || m.hash)
+          : (m.magnet_uri || "");
+      if (!value) {
+        this.toast("该种子没有 magnet 链接", "warn");
+        return;
+      }
+      const label = field === "name" ? "种子名" : field === "hash" ? "信息哈希" : "magnet 链接";
+      this._copyText(value, label);
+    },
     /* 删除单个种子: 确认框显示种子名/站点/状态/路径/大小 + 两个选项 */
     async delTorrent() {
       this.menu.visible = false;
@@ -1886,6 +1976,7 @@ const app = createApp({
         }
       }
       if (!m) m = this.singles.find((x) => x.hash === hash) || null;  // 单种子视图里的未归组种子
+      if (!m) m = this.torrents.find((x) => x.hash === hash) || null;  // 种子页平铺数组(全量兑底)
       if (!m) return;
       const res = await this._confirmDelete({
         title: "删除该种子",

@@ -360,8 +360,11 @@ button { font-family: inherit; }
  * "站数"列数值右对齐而表头左对齐 -> 视觉错位, 这里按列单独右对齐表头。
 /* 2026-09-14 第五轮: H&R / 站数列改居中(用户要求"H&R/站数栏居中显示")
  * 2026-09-15: 数值列(下载/上传/总上传/大小/总大小)右对齐(用户要求), 0 值"—"居中 */
-.hc-count, .hc-hr { text-align: center; }
-.hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size { text-align: right; }
+.hc-count, .hc-hr, .hc-num_seeds, .hc-num_leechs { text-align: center; }
+.hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size,
+.hc-eta, .hc-added_on, .hc-downloaded, .hc-amount_left, .hc-availability,
+.hc-seeding_time, .hc-time_active, .hc-last_activity, .hc-completion_on,
+.hc-up_limit, .hc-dl_limit { text-align: right; }
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
 /* 排序箭头已图标化(i-arrow-up/down sprite, 第七轮替换文本字形): 尺寸 11px, 颜色仍取 accent */
