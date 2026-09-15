@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>auto-qb · 辅种管理</title>
-  <link rel="icon" type="image/png" href="/icon.png">
-  <link rel="stylesheet" href="/style.css">
+  <title>auto-qb · 辅种管理 · 星图</title>
+  <link rel="icon" type="image/png" href="/shared/icon.png">
+  <link rel="stylesheet" href="/atlas/style.css">
 </head>
 <body>
   <!-- 图标 sprite: use 引用, 无外部图标库依赖(继承 .ico 的 stroke/fill) -->
@@ -87,7 +87,7 @@
     <div v-if="authRequired" class="login-mask">
       <div v-if="bootstrapping" class="login-card login-loading">
         <div class="brand">
-          <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+          <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
           <span>auto-qb</span>
         </div>
         <svg class="ico spin" viewBox="0 0 16 16"><use href="#i-orbit"></use></svg>
@@ -95,7 +95,7 @@
       </div>
       <form v-else class="login-card" @submit.prevent="saveToken">
         <div class="brand">
-          <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+          <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
           <span>auto-qb</span>
         </div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
@@ -117,7 +117,7 @@
         <!-- 顶栏 -->
         <header class="topbar">
           <div class="brand">
-            <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+            <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
             <span>auto-qb</span>
             <span class="ver">v{{ status.version || '—' }}</span>
           </div>
@@ -207,7 +207,7 @@
                   @click="toggleRailMode()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-panel"></use></svg>
           </button>
-          <a class="newui-entry" href="/newui/" title="切换到新版界面(独立皮肤与多主题, 可随时切回)" style="display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer">新版 UI</a>
+          <a class="ui-switch" href="/prism/" title="切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" style="display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer">棱镜</a>
           <!-- 统计槽已移至辅种页左栏(.rail, 固定位置不随滚动); 顶栏只留全局状态徐标 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
             <i class="dot"></i>{{ statusBadge.text }}
@@ -1422,9 +1422,9 @@
     </div>
   </script>
 
-  <script src="/vendor/vue.global.prod.js"></script>
-  <script src="/config_editor.js"></script>
-  <script src="/config_rules.js"></script>
-  <script src="/app.js"></script>
+  <script src="/shared/vendor/vue.global.prod.js"></script>
+  <script src="/shared/config_editor.js"></script>
+  <script src="/shared/config_rules.js"></script>
+  <script src="/shared/app.js"></script>
 </body>
 </html>

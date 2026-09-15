@@ -4,19 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <title>auto-qb · 辅种管理 (新版)</title>
-  <link rel="icon" type="image/png" href="/icon.png">
+  <title>auto-qb · 辅种管理 · 棱镜</title>
+  <link rel="icon" type="image/png" href="/shared/icon.png">
   <!-- 主题引擎必须在 head 同步执行(首帧前定 data-theme, 无 FOUC); 颜色全部来自 themes/*.css -->
-  <script src="/newui/js/theme.js"></script>
-  <link rel="stylesheet" href="/newui/css/tokens.css">
-  <link rel="stylesheet" href="/newui/css/themes/ocean.css">
-  <link rel="stylesheet" href="/newui/css/themes/galaxy.css">
-  <link rel="stylesheet" href="/newui/css/themes/frost.css">
-  <link rel="stylesheet" href="/newui/css/themes/golden.css">
-  <link rel="stylesheet" href="/newui/css/themes/orbit.css">
-  <link rel="stylesheet" href="/newui/css/base.css">
-  <link rel="stylesheet" href="/newui/css/components.css">
-  <link rel="stylesheet" href="/newui/css/views.css">
+  <script src="/prism/js/theme.js"></script>
+  <link rel="stylesheet" href="/prism/css/tokens.css">
+  <link rel="stylesheet" href="/prism/css/themes/ocean.css">
+  <link rel="stylesheet" href="/prism/css/themes/galaxy.css">
+  <link rel="stylesheet" href="/prism/css/themes/frost.css">
+  <link rel="stylesheet" href="/prism/css/themes/golden.css">
+  <link rel="stylesheet" href="/prism/css/themes/orbit.css">
+  <link rel="stylesheet" href="/prism/css/base.css">
+  <link rel="stylesheet" href="/prism/css/components.css">
+  <link rel="stylesheet" href="/prism/css/views.css">
 </head>
 <body>
   <!-- 图标 sprite: use 引用, 无外部图标库依赖(继承 .ico 的 stroke/fill) -->
@@ -96,7 +96,7 @@
     <div v-if="authRequired" class="login-mask">
       <div v-if="bootstrapping" class="login-card login-loading">
         <div class="brand">
-          <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+          <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
           <span>auto-qb</span>
         </div>
         <svg class="ico spin" viewBox="0 0 16 16"><use href="#i-orbit"></use></svg>
@@ -104,7 +104,7 @@
       </div>
       <form v-else class="login-card" @submit.prevent="saveToken">
         <div class="brand">
-          <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+          <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
           <span>auto-qb</span>
         </div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
@@ -126,7 +126,7 @@
         <!-- 顶栏 -->
         <header class="topbar">
           <div class="brand">
-            <span class="brand-mark"><img class="brand-img" src="/icon.png" alt=""></span>
+            <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
             <span>auto-qb</span>
             <span class="ver">v{{ status.version || '—' }}</span>
           </div>
@@ -207,7 +207,7 @@
                 <button type="button" class="theme-item" data-theme="orbit" style="--td-a:#3fa87e;--td-b:#122019"><i class="td"></i>品牌轨道<span class="t-kind">暗</span></button>
               </div>
             </div>
-            <a class="ui-link" href="/" title="返回旧版界面">旧版</a>
+            <a class="ui-link" href="/atlas/" title="返回星图界面(经典深色仪表盘, 可随时切回)">星图</a>
           </div>
           <!-- 统计槽已移至辅种页左栏(.rail, 固定位置不随滚动); 顶栏只留全局状态徐标 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
@@ -1285,9 +1285,9 @@
     </div>
   </script>
 
-  <script src="/vendor/vue.global.prod.js"></script>
-  <script src="/config_editor.js"></script>
-  <script src="/config_rules.js"></script>
-  <script src="/app.js"></script>
+  <script src="/shared/vendor/vue.global.prod.js"></script>
+  <script src="/shared/config_editor.js"></script>
+  <script src="/shared/config_rules.js"></script>
+  <script src="/shared/app.js"></script>
 </body>
 </html>
