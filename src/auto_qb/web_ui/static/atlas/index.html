@@ -894,6 +894,20 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
             </div>
             <div class="ctx-sep"></div>
+            <!-- 编辑(D 轮): 多字段编辑对话框, 预填当前值/空=不改, 回执 toast(见 app.js editLimits 等) -->
+            <div class="ctx-item" @click="editLimits()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速…
+            </div>
+            <div class="ctx-item" @click="editShareLimits()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
+            </div>
+            <div class="ctx-item" @click="editMove()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>移动…
+            </div>
+            <div class="ctx-item" @click="editRename()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
+            </div>
+            <div class="ctx-sep"></div>
             <div class="ctx-item" @click="copyTorrentInfo('name')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
             </div>
@@ -945,6 +959,23 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除整组…
             </div>
           </template>
+        </div>
+        </transition>
+        <!-- 文件优先级小菜单(详情抽屉内容页签): 复用 .ctx-menu 视觉, 锚定单元格, 视口吸附 -->
+        <transition name="pop">
+        <div v-if="filePrio.visible" class="ctx-menu" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
+          <div class="ctx-item" @click="setFilePriority(0)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>跳过
+          </div>
+          <div class="ctx-item" @click="setFilePriority(1)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>普通
+          </div>
+          <div class="ctx-item" @click="setFilePriority(6)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>高
+          </div>
+          <div class="ctx-item" @click="setFilePriority(7)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>最高
+          </div>
         </div>
         </transition>
         </main>
@@ -1432,6 +1463,10 @@
               <button class="ce-btn ghost small" @click="drawerAct('resume')">开始</button>
               <button class="ce-btn ghost small" @click="drawerAct('reannounce')">强制汇报</button>
               <button class="ce-btn ghost small" @click="drawerCmd('recheck', null, '重新校验')">校验</button>
+              <button class="ce-btn ghost small" @click="editLimits(drawer.hash)">限速…</button>
+              <button class="ce-btn ghost small" @click="editShareLimits(drawer.hash)">分享率…</button>
+              <button class="ce-btn ghost small" @click="editMove(drawer.hash)">移动…</button>
+              <button class="ce-btn ghost small" @click="editRename(drawer.hash)">重命名…</button>
               <button class="ce-btn ghost small danger" @click="drawerDel()">删除</button>
               <button class="ce-btn ghost small" title="关闭(Esc)" @click="closeDrawer()">
                 <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
@@ -1481,12 +1516,17 @@
                 </div>
               </details>
             </template>
-            <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示 -->
+            <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示; 顶部添加 + 行内编辑/删除(D 轮) -->
             <template v-else-if="drawer.tab === 'trackers'">
+              <div class="drawer-toolbar">
+                <button class="ce-btn ghost small" @click="trackerAdd()">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker
+                </button>
+              </div>
               <div v-if="drawer.trackersLoading && !drawer.trackers.length" class="empty"><span>正在加载…</span></div>
               <table v-else-if="drawer.trackers.length" class="drawer-table">
                 <thead>
-                  <tr><th>URL</th><th>状态</th><th>做种</th><th>用户</th><th>消息</th></tr>
+                  <tr><th>URL</th><th>状态</th><th>做种</th><th>用户</th><th>消息</th><th class="th-act"></th></tr>
                 </thead>
                 <tbody>
                   <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
@@ -1495,6 +1535,16 @@
                     <td>{{ t.num_seeds ?? "—" }}</td>
                     <td>{{ t.num_leeches ?? "—" }}</td>
                     <td class="wrap">{{ t.msg || "—" }}</td>
+                    <td class="cell-act">
+                      <template v-if="!drawerTrackerVirtual(t.url)">
+                        <button class="row-btn" title="编辑" @click="trackerEdit(t.url)">
+                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>
+                        </button>
+                        <button class="row-btn danger" title="删除" @click="trackerRemove(t.url)">
+                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
+                        </button>
+                      </template>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -1523,19 +1573,32 @@
               </table>
               <div v-else class="empty"><span>暂无已连接用户</span></div>
             </template>
-            <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级只读; 优先级编辑属后续轮次) -->
+            <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级); 行点选供重命名, 优先级点改(D 轮) -->
             <template v-else-if="drawer.tab === 'content'">
+              <div class="drawer-toolbar">
+                <button class="ce-btn ghost small" @click="renameFileRow()">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
+                </button>
+                <span class="drawer-toolbar-hint">点击行名选中文件/目录 · 点击优先级修改</span>
+              </div>
               <div v-if="drawer.filesLoading && !drawer.files.length" class="empty"><span>正在加载…</span></div>
               <table v-else-if="drawerFileRows().length" class="drawer-table">
                 <thead>
                   <tr><th>文件</th><th>大小</th><th>进度</th><th>优先级</th></tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(r, i) in drawerFileRows()" :key="i" :class="{ skipped: r.skipped }">
-                    <td class="wrap"><span class="dir-name" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span></td>
+                  <tr v-for="(r, i) in drawerFileRows()" :key="i"
+                      :class="{ skipped: r.skipped, sel: r.path === drawerSelPath }">
+                    <td class="wrap clickable" @click="fileRowSelect(r)">
+                      <span class="dir-name" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span>
+                    </td>
                     <td>{{ r.text }}</td>
                     <td>{{ r.dir ? "—" : r.progress + "%" }}</td>
-                    <td>{{ r.dir ? "—" : r.prio }}</td>
+                    <td>
+                      <button v-if="!r.dir" class="prio-btn" :class="{ skipped: r.skipped }"
+                              title="修改优先级" @click.stop="openFilePrio($event, r.index)">{{ r.prio }}</button>
+                      <span v-else>—</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -1660,6 +1723,13 @@
         </div>
         <input v-if="modal.input" ref="modalInput" v-model="modal.value" class="modal-input"
                :placeholder="modal.placeholder" @keyup.enter="resolveModal(true)">
+        <!-- 多字段编辑对话框(限速/分享率/移动/重命名): 纵向 label+input 对, 确认时返回 {key: value} -->
+        <div v-if="modal.fields && modal.fields.length" ref="modalFields" class="modal-fields">
+          <label v-for="f in modal.fields" :key="f.key" class="modal-field">
+            <span class="modal-field-label">{{ f.label }}</span>
+            <input v-model="f.value" type="text" :placeholder="f.placeholder" @keyup.enter="resolveModal(true)">
+          </label>
+        </div>
         <label v-if="modal.checkbox" class="modal-check">
           <input type="checkbox" v-model="modal.checked">
           <span>{{ modal.checkbox }}</span>
