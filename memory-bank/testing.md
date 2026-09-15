@@ -6,7 +6,7 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: 946 passed, 0 skipped (2026-09-15, uv 环境; 含 tracker 分组站点 groups 字段/tracker_group 条件新增 4 测 + 追剧视图新增: test_tvshows 66 测 + test_web shows 视图 3 测 + episodes extract_episodes_from_names), 分支覆盖率 91%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
+# 基线: 949 passed, 0 skipped (2026-09-15, uv 环境; 含 tracker 分组站点 groups 字段/tracker_group 条件新增 4 测 + 追剧视图新增: test_tvshows 66 测 + test_web shows 视图 3 测 + episodes extract_episodes_from_names + 跳过本地验证 web.skip_local_verify 新增 3 测), 分支覆盖率 91%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
 uv run pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 uv run pytest tests/test_grouping.py -q
 uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词

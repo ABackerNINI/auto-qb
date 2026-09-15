@@ -69,9 +69,24 @@ def ensure_web_token(manager) -> str:
     return token
 
 
+def _is_loopback_host(host) -> bool:
+    """是否为本机 loopback 地址: 仅 127.0.0.1 / ::1 及其 IPv4-mapped 形式"""
+    if not host:
+        return False
+    return host in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
 def create_app(manager) -> FastAPI:
     """构建 WEB 应用: 只读快照 + 命令投递 + 设置读写, 全部 /api/* 经 Bearer 密钥鉴权"""
-    def require_token(request: Request, authorization: str = Header(default="")) -> None:
+    def require_token(request: Request, authorization: str = Header(default="")):
+        # 公开只读端点: 前端登录前读取本机免鉴权等标志(不含任何机密), 免 token 放行
+        if request.url.path == "/api/config/public":
+            return
+        # 跳过本地验证: 本机(loopback)连接免 token 鉴权, 直接放行进入(web.skip_local_verify)
+        if manager.config.web.skip_local_verify and _is_loopback_host(request.client.host if request.client else None):
+            if not authorization.startswith("Bearer "):
+                logger.warning("WEB 跳过本地验证: 本机连接免密钥放行(web.skip_local_verify=true)")
+            return
         # 鉴权范围 = /api/*: 静态页面与 UI 重定向路由无密钥也可访问(页面本身不含数据,
         # 密钥由前端加载后带 Authorization 头访问 API; 旧实现仅靠"StaticFiles 挂载不经
         # 依赖系统"这个副作用放行静态, UI 目录化后根路径/重定向是真实路由, 必须显式放行)。
@@ -98,6 +113,11 @@ def create_app(manager) -> FastAPI:
         openapi_url=None,
         dependencies=[Depends(require_token)],
     )
+
+    @app.get("/api/config/public")
+    def api_config_public():
+        """前端登录前读取的公开只读标志(不含密钥等机密): 本机免鉴权开关"""
+        return {"web": {"skip_local_verify": manager.config.web.skip_local_verify}}
 
     def _enqueue(cmd: str, payload: dict) -> dict:
         """投递控制命令并生成回执 ID: 前端据 cmd_id 轮询 /api/cmd/{id} 获取执行结果"""

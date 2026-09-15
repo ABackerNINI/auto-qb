@@ -12,7 +12,7 @@ KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
 
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag"}
 
-KNOWN_WEB_KEYS = {"enabled", "host", "port", "token"}
+KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify"}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
@@ -202,6 +202,8 @@ def _validate_web(spec, errors: List[str]) -> None:
                 errors.append(f"config.web.port: 超出范围 1-65535: {port}")
     if "token" in spec and not isinstance(spec["token"], str):
         errors.append("config.web.token: 必须是字符串")
+    if "skip_local_verify" in spec:
+        _try(parse_bool, spec["skip_local_verify"], "config.web.skip_local_verify", errors)
 
 
 def _validate_notify(spec, errors: List[str]) -> None:

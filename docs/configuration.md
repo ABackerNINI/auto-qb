@@ -57,6 +57,7 @@ config:
         host: "127.0.0.1"        # 监听地址, 默认仅本机; 改 0.0.0.0 会暴露管理接口
         port: 8080               # 监听端口
         token: ""                # 访问密钥; 留空首启随机生成 -> <data_dir>/web.token
+        skip_local_verify: false  # 本机(127.0.0.1)访问跳过密钥鉴权直接进入; 对外暴露仍强制
 
     # 主动通知: WARNING 及以上日志推送系统原生通知(默认关闭)
     notify:
