@@ -24,8 +24,6 @@
 
 ## 命令
 
-注意: uv报毒, 暂时禁用uv等后续修复, 测试使用元素命令!!
-
 ```bash
 # 依赖统一走 uv (pyproject.toml + uv.lock); 首次/依赖变更后先 `uv sync`
 uv run pytest tests -q                                 # 全量测试 (pytest.ini 已带分支覆盖率; 基线数字单点见 memory-bank/testing.md 顶部)
