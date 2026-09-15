@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB UI 替代 qB 界面 · 功能差距调研与可行性计划 — 只计划不改代码</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .13);
+    --warn: #e8b45a;
+    --warn-dim: rgba(232, 180, 90, .12);
+    --bad: #e8a0a0;
+    --good: #9fd8ae;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 40px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 58em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; margin-top: 46px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.4 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .04em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  section.sec { margin: 0 0 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  p { margin: 0 0 12px; max-width: 62em; }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 1.4em; max-width: 62em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: var(--dim); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top; }
+  td .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  td.no, td.c { font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  td.ok { color: var(--accent); }
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .05em;
+    padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); white-space: nowrap; }
+  .tag.p0 { color: var(--accent); border-color: rgba(91, 200, 236, .4); }
+  .tag.p1 { color: var(--good); border-color: rgba(159, 216, 174, .35); }
+  .tag.p2 { color: var(--warn); border-color: rgba(232, 180, 90, .4); }
+  .tag.na { color: var(--dim); border-style: dashed; }
+  .tag.high { color: var(--good); }
+  .tag.mid { color: var(--warn); }
+  .tag.hold { color: var(--dim); }
+
+  .note { border-left: 2px solid rgba(91, 200, 236, .45); padding: 10px 14px; margin: 14px 0 18px;
+    background: var(--panel); color: var(--muted); font-size: 13.5px; max-width: 62em; }
+  .note b { color: var(--fg); }
+  .note.warn { border-left-color: rgba(232, 180, 90, .55); }
+
+  .ev { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+  .bad { color: var(--bad); }
+  .good { color: var(--good); }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 16px 0 22px; }
+  .metrics .m { background: var(--bg); padding: 14px 16px; }
+  .metrics .m .v { font: 600 24px/1.1 var(--mono); color: var(--accent); letter-spacing: -0.02em; }
+  .metrics .m .k { font: 12px/1.5 var(--mono); color: var(--dim); margin-top: 5px; }
+
+  .stage { border: 1px solid var(--line); background: var(--panel); padding: 14px 18px; margin: 0 0 14px; }
+  .stage h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .stage h4 .s-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  .stage p { margin: 0 0 4px; font-size: 13.5px; color: var(--muted); max-width: none; }
+  .stage .items { margin: 6px 0 0; font: 12.5px/1.7 var(--mono); color: var(--dim); }
+  .stage .items b { color: var(--muted); font-weight: 600; }
+
+  pre { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
+    overflow-x: auto; font: 12.5px/1.7 var(--mono); color: #cfe0ee; margin: 12px 0 18px; }
+  pre b { color: var(--accent); font-weight: 600; }
+  pre .cm { color: var(--dim); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0 18px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .cols .cell { border: 1px solid var(--line); background: var(--panel); padding: 12px 16px; }
+  .cols .cell h5 { margin: 0 0 6px; font: 600 12px/1 var(--mono); letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); }
+  .cols .cell p { font-size: 13px; color: var(--muted); margin: 0; }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
+    font: 12px/1.6 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">auto-qb · web ui · 调研与计划 · 不改代码</div>
+  <h1>WEB UI 替代 qB 界面<br>功能差距调研 · 可行性分析 · 分期路线</h1>
+  <p class="lede">
+    目标升级: <code>想法.md</code> 旧定位为「目前主要目标是辅种管理, 不是要做一个 qb 的 web ui」;
+    本轮用户明确新目标 —— <b>WEB UI 将来直接替换 qB 界面, 支持除非常用设置外的 qB 界面绝大部分功能</b>。
+    本轮只做调研与计划, 不改任何代码。核心结论: <b>技术上无根本障碍</b> —— 数据层
+    (TorrentRecord 70 字段全量缓存) 与写操作管线 (命令队列 + 回执) 两个最大前置条件已经就绪;
+    缺口集中在「种子中心视图」与「添加种子」两块, 其余约八成缺口是 qB API 直接映射 + 前端接线。
+  </p>
+  <div class="meta">
+    <span>基线 <b>998136f</b>(TorrentRecord 全字段缓存已合入) + 第八轮 WEB UI 未入库改动已并入 develop 线</span>
+    <span>对标 <b>qBittorrent 4.x / 5.x 桌面 GUI 与原生 WebUI</b></span>
+    <span>依赖锁定 <b>qbittorrent-api==2026.8.1 · FastAPI 0.141.1</b></span>
+    <span>日期 <b>2026-09-15</b></span>
+  </div>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s00"><span class="t-no">00</span>摘要</a>
+      <a href="#s01"><span class="t-no">01</span>对标范围与口径</a>
+      <a href="#s02"><span class="t-no">02</span>现状盘点</a>
+      <a href="#s03"><span class="t-no">03</span>数据层与 API 现状</a>
+      <a href="#s04"><span class="t-no">04</span>缺口清单与可行性</a>
+      <a href="#s05"><span class="t-no">05</span>架构影响</a>
+      <a href="#s06"><span class="t-no">06</span>自动化 × 手动冲突边界</a>
+      <a href="#s07"><span class="t-no">07</span>分期路线</a>
+      <a href="#s08"><span class="t-no">08</span>决策点</a>
+      <a href="#s09"><span class="t-no">09</span>风险红线与验收</a>
+    </nav>
+
+    <main>
+      <!-- ===================== 00 摘要 ===================== -->
+      <section class="sec" id="s00">
+        <div class="sec-head"><span class="no">00</span><h2>摘要</h2></div>
+        <p>
+          把 qB 界面拆成 9 个功能区逐项对照后, 结论分三句话:
+        </p>
+        <p>
+          <b>① 主体缺一座「种子中心视图」。</b> 现在 WEB UI 的一切以辅种分组为中心 (组 → 成员),
+          qB 的一切以种子为中心 (平铺列表 → 详情面板)。这是结构性缺口, 也是替代 qB 的第一优先级。
+          好消息是第八轮的 singles 视图 + TORRENT_COLUMNS列模型已经把这条路的头开出来了。
+        </p>
+        <p>
+          <b>② 数据层已经铺好路, 只差"端点 + UI"。</b> 2026-09-15 合入的 TorrentRecord 70 字段
+          全量缓存 (官方注释写明"为 WebUI 后续功能供数") 覆盖了 qB 详情面板所需的绝大部分字段
+          (ETA/做种数/下载量/可用性/magnet_uri/infohash_v1v2/分享率限制/超级做种标志…)。
+          唯一没接住的是 <code>server_state</code> (全局统计/DHT节点/队列状态) —— <code>apply_sync</code>
+          目前把它丢掉了, 属于小改。
+        </p>
+        <p>
+          <b>③ 两个真正要设计的是"人机边界", 不是"能不能做"。</b> 一是添加种子后 auto-qb
+          自动化 (归组/标签/校验) 如何接管并让用户理解; 二是手动限速/龟速模式与 auto-qb
+          限速曲线的托管语义。其余操作 (校验/超级做种/限速/移动/改名/导出…) 全部是
+          qB API 直接映射, 走现成的命令队列 + 回执模式, 单项规模 XS~S。
+        </p>
+        <div class="metrics">
+          <div class="m"><div class="v">70</div><div class="k">TorrentRecord 缓存字段<br>(详情面板数据基本齐)</div></div>
+          <div class="m"><div class="v">8 项</div><div class="k">P0 缺口<br>(没有就不算替代)</div></div>
+          <div class="m"><div class="v">10 项</div><div class="k">P1 缺口<br>(常用体验项)</div></div>
+          <div class="m"><div class="v">5 项</div><div class="k">P2 / 默认延后<br>(搜索·RSS·设置面板)</div></div>
+          <div class="m"><div class="v">5 个</div><div class="k">决策点<br>(全部是设计选择,非技术障碍)</div></div>
+        </div>
+      </section>
+
+      <!-- ===================== 01 对标范围 ===================== -->
+      <section class="sec" id="s01">
+        <div class="sec-head"><span class="no">01</span><h2>对标范围与口径</h2></div>
+        <p>
+          对标对象是 qBittorrent 桌面 GUI (4.x/5.x, 与原生 WebUI 功能面基本一致)。按使用频率把
+          qB 界面拆成 9 个功能区, 用户口径为「除 qB 非常用设置外, 支持绝大部分功能」——
+          因此 qB 设置对话框整体列入 P2 (只读展示 + 白名单可写, 默认不做), RSS/搜索两个大模块
+          按 PT 使用场景列入 P2 延后。
+        </p>
+        <table>
+          <tr><th>qB 功能区</th><th>qB 里的形态</th><th>WEB UI 现状</th><th>判定</th></tr>
+          <tr><td>1. 种子列表主视图</td><td>平铺全量种子, ~35 列, 状态/分类/标签/tracker 筛选侧栏, 多选批量, 右键菜单 ~25 项</td>
+            <td>分组视图 (组→成员展开) + singles 单种子视图; 13 个展示字段; 筛选/搜索/列管理齐备</td>
+            <td><span class="tag p0">P0 缺口</span></td></tr>
+          <tr><td>2. 种子详情面板</td><td>General / Trackers / Peers / HTTP Sources / Content / Speed 六个 tab</td>
+            <td>无详情面板 (成员行仅展示字段; <code>想法.md</code> 已有"详细信息显示所有字段"待办)</td>
+            <td><span class="tag p0">P0 缺口</span></td></tr>
+          <tr><td>3. 种子操作</td><td>添加/启停/删除/校验/汇报/限速/分享率限制/超级做种/移动/改名/队列/复制/导出…</td>
+            <td>仅 启停/汇报/删除 (组+单种, 带回执确认链)</td>
+            <td><span class="tag p0">P0/P1 缺口</span></td></tr>
+          <tr><td>4. 添加种子</td><td>文件/磁力/URL + 完整选项 (保存路径/分类/标签/启停/跳校验/顺序下载/分享率…)</td>
+            <td>无任何添加入口 (QbApi 透传已就绪)</td>
+            <td><span class="tag p0">P0 缺口</span></td></tr>
+          <tr><td>5. 分类与标签管理</td><td>分类 CRUD (含保存路径) / 标签增删 / 左侧树</td>
+            <td>只读透出 (筛选器 + 共同标签列); 无增删改 UI</td>
+            <td><span class="tag p1">P1 缺口</span></td></tr>
+          <tr><td>6. 全局状态与统计</td><td>底部状态栏 (DHT/速度/总量/龟速开关) + 统计对话框 + 全局速度图</td>
+            <td>速度/今日流量/限速对照有 (曲线数据源); DHT/累计统计无 (server_state 未捕获)</td>
+            <td><span class="tag p1">P1 缺口</span></td></tr>
+          <tr><td>7. 日志</td><td>WebUI Log tab (main/peers) ; GUI 消息日志</td>
+            <td>无日志页 (托盘 UI 有日志视图可参考; 自身 RotatingFileHandler 文件已在)</td>
+            <td><span class="tag p1">P1 缺口</span></td></tr>
+          <tr><td>8. 搜索 tab / RSS tab</td><td>搜索引擎插件 + 全网搜索; RSS 订阅 + 自动下载规则</td>
+            <td>无 (注意: 站内文件搜索是另一回事, 已有且比 qB 强)</td>
+            <td><span class="tag p2">P2 延后</span></td></tr>
+          <tr><td>9. qB 设置对话框</td><td>下载/连接/速度/BT/WebUI/高级 七组 preferences</td>
+            <td>无 (用户口径排除非常用设置; 且与 auto-qb 假设有冲突面)</td>
+            <td><span class="tag p2">P2 / 默认不做</span></td></tr>
+        </table>
+        <p class="small">
+          另有四类明确 <b>不做</b>: HTTP Sources tab (web seeds URL 清单, 场景极少);
+          「打开所在文件夹/预览」(浏览器沙箱做不到, 桌面专属); 多用户/登录体系/封禁 (单用户 Bearer
+          token 已覆盖); 多语言 (界面为中文单一语言)。
+        </p>
+      </section>
+
+      <!-- ===================== 02 现状盘点 ===================== -->
+      <section class="sec" id="s02">
+        <div class="sec-head"><span class="no">02</span><h2>现状盘点: 已覆盖与超集能力</h2></div>
+        <p>
+          评估"缺什么"之前先说清"有什么"。以下能力经过六轮打磨 + 重设计 + 第八轮, 均已实施并有冒烟/测试覆盖:
+        </p>
+        <table>
+          <tr><th>能力</th><th>现状</th><th>相对 qB</th></tr>
+          <tr><td>辅种分组视图</td><td>组→成员展开, 状态摘要/共同标签/保存路径/大小一致性, HR 栏与筛选 (达标/未达标), singles 单种子视图</td>
+            <td><b>qB 没有的超集</b> —— 这是本项目的立身之本, 替代 qB 后仍应保留为第一视角</td></tr>
+          <tr><td>筛选与搜索</td><td>状态 chip / 保存路径 / 标签·分类·站点多选 / H&R 筛选; 按种子名 + <b>文件列表内容</b>搜索 (带限流增量索引)</td>
+            <td>文件内容搜索是 qB WebUI 没有的</td></tr>
+          <tr><td>列表交互</td><td>列选择器/列宽拖拽记忆/排序/批量多选 (Shift 范围)/右键菜单/批量条吸顶</td>
+            <td>与 qB 相当 (列数少)</td></tr>
+          <tr><td>操作与回执</td><td>组/单种 暂停·开始·删除 (含文件可选)·强制汇报 (tracker 确认链, 非"发了就算")</td>
+            <td>汇报确认链比 qB 原生更认真</td></tr>
+          <tr><td>信息栏与图表</td><td>速度/今日流量/刷新间隔/限速对照卡; 历史流量双系列图 (天/月/年, Traffic Monitor dat)</td>
+            <td>历史流量 qB 原生没有</td></tr>
+          <tr><td>设置</td><td>auto-qb 全量配置图形化编辑 (schema 驱动, 热重载分级, R 级回退, 预览)</td>
+            <td>覆盖 auto-qb 自身; 不覆盖 qB preferences</td></tr>
+          <tr><td>形态</td><td>双 UI (星图 atlas / 棱镜 prism ×5 主题) + 共享逻辑层; rid 增量轮询退避; 移动端响应式</td><td>—</td></tr>
+        </table>
+        <div class="note">
+          <b>推论:</b> 替代 qB 不是推倒重来, 而是在现有骨架上加一个「种子页」一等公民 +
+          一批操作命令 + 三四个新端点。辅种视角与种子视角共享同一数据层与命令管线。
+        </div>
+      </section>
+
+      <!-- ===================== 03 数据层 ===================== -->
+      <section class="sec" id="s03">
+        <div class="sec-head"><span class="no">03</span><h2>数据层与 API 现状 (可行性的地基)</h2></div>
+
+        <h3><span class="h-no">3.1</span>TorrentRecord 70 字段 —— 详情面板的数据已备齐</h3>
+        <p>
+          <code>torrents/compat.py</code> 字段表 = 必需 21 + 重加升格 6 + 可选扩展 43。
+          扩展字段按 qB 真机样例定稿, 缺失时取 qB 自身哨兵值 (-1/-2/8640000), qB 新字段自动落
+          <code>_raw</code> 不丢数据。对替代 qB 而言, 关键是以下字段已经在缓存里:
+        </p>
+        <table>
+          <tr><th>详情面板区域</th><th>所需字段 (已在 70 字段内)</th><th>来源</th></tr>
+          <tr><td>传输概要</td><td>dlspeed / upspeed / eta (哨兵 8640000=无) / downloaded / uploaded / downloaded_session / uploaded_session / time_active / last_activity / availability / total_wasted</td><td>info / sync</td></tr>
+          <tr><td>做种与分享</td><td>ratio / max_ratio / max_seeding_time / max_inactive_seeding_time / share_limit_action / popularity / completion_on / seen_complete</td><td>info / sync</td></tr>
+          <tr><td>peer/tracker 概要</td><td>num_seeds / num_leechs / num_complete / num_incomplete / tracker / trackers_count / connections_count / connections_limit / reannounce(+reannounce_in) / has_tracker_error / has_tracker_warning</td><td>info / sync</td></tr>
+          <tr><td>元数据</td><td>magnet_uri / infohash_v1 / infohash_v2 / private / comment / created_by / creation_date / has_metadata / piece_size / pieces_have / pieces_num</td><td>info / sync</td></tr>
+          <tr><td>行为/路径</td><td>auto_tmm / download_path / root_path / force_start / super_seeding / priority / seq_dl / f_l_piece_prio</td><td>info / sync</td></tr>
+          <tr><td>General 表"全部字段"级展示</td><td><code>TorrentRecord.to_dict()</code> 已实现 (全字段导出)</td><td>本仓库</td></tr>
+        </table>
+        <p class="small">
+          不在 70 字段内、需要额外 API 的只有四样: tracker 明细列表 (rec.trackers_info 惰性缓存<b>已包装</b>)、
+          文件列表 (rec.files 惰性缓存<b>已包装</b>)、peer 列表 (<b>未包装</b>, 需透传)、piece 状态图
+          (<b>未包装</b>, 可选)。
+        </p>
+
+        <h3><span class="h-no">3.2</span>server_state —— 唯一没接住的全局数据</h3>
+        <p>
+          qB <code>/sync/maindata</code> 响应除 <code>torrents</code> 外还带 <code>server_state</code>
+          (全局累计上下行/会话统计/DHT 节点数/队列计数/平均速度/connection_status 等)。
+          <code>store.apply_sync</code> 目前只取 <code>torrents</code> 与 <code>torrents_removed</code>,
+          server_state 被丢弃。补法: store 增加一个原子替换的只读字段, 全量/增量轮都更新
+          (qB 每轮都回), Web 端点透出即可 —— <span class="ev">XS 级改动, 解锁全局状态栏与统计面板</span>。
+        </p>
+
+        <h3><span class="h-no">3.3</span>写操作管线 —— 命令队列 + 回执已是样板</h3>
+        <p>
+          现有 <code>WebCommandsMixin</code>: Web 线程只投递 <code>(cmd, payload)</code> 到队列,
+          主循环单线程消费执行, 写 <code>_web_results</code> 回执, 前端轮询 <code>/api/cmd/{id}</code>。
+          强制汇报的「tracker 确认链」(基线 → 逐 tick 复查 → 30s 超时聚合回执) 是"长结果确认"的
+          现成样板 —— <b>recheck 校验完成确认可完全复用同一模式</b>。handlers 是一张 dict 分发表,
+          新命令 = 加一行注册 + 一个 <code>_cmd_*</code> 方法。
+        </p>
+
+        <h3><span class="h-no">3.4</span>QbApi Facade 已封装面</h3>
+        <table>
+          <tr><th>分类</th><th>已封装</th><th>替代 qB 还需要新增的</th></tr>
+          <tr><td>写 (带 store 同步)</td><td>add_tags / remove_tags / delete_tags / create_category / set_category / start / stop / set_upload_limit / set_download_limit / set_location / delete</td>
+            <td>setShareLimits / setAutoManagement / queue 上下移置顶 / setForceStart / setSuperSeiding / toggleSequentialDownload / setFirstLastPiecePriority / rename / editTracker 三兄弟 / filePrio / renameFile(renameFolder)</td></tr>
+          <tr><td>透传 (无快照影响)</td><td>add / recheck / reannounce / pause / resume / info / piece_hashes / export / login</td>
+            <td>peers(读) / pieceStates(读, 可选) / addPeers / preferences(读, 若做 P2)</td></tr>
+          <tr><td>读 (store 缓存)</td><td>trackers / files(单种惰性) / tags / categories</td>
+            <td>— (够用)</td></tr>
+          <tr><td>全局</td><td>get/set_global_speed_limits (qB5 transfer 端点, 单位换算已处理)</td>
+            <td>transfer_speedLimitMode 读写 (龟速模式)</td></tr>
+        </table>
+        <div class="note">
+          <b>结论:</b> qB WebUI API 的能力面 (qbittorrent-api 全覆盖) 与本项目的封装面之间没有断崖,
+          缺的方法全部是薄封装; 单位/版本坑 (qB5 transfer 端点、-1/-2 哨兵) 已在现有代码里趟过并留了注释。
+        </div>
+      </section>
+
+      <!-- ===================== 04 缺口清单 ===================== -->
+      <section class="sec" id="s04">
+        <div class="sec-head"><span class="no">04</span><h2>缺口清单与可行性 (核心章节)</h2></div>
+        <p class="small">
+          可行性: <span class="good">高</span> = API/数据现成, 工作量在 UI 与接线;
+          <span class="ev">中</span> = 无技术障碍但有设计决策或新基建;
+          <span class="bad">延后</span> = 可行但规模大且非刚需。
+          规模: XS=单点小改 / S=单点功能 / M=整页或跨层 / L=整模块。以下均为本次逐文件核实的判断。
+        </p>
+
+        <h3><span class="h-no">A</span>种子中心视图 (替代 qB 的主体)</h3>
+        <table>
+          <tr><th style="width:34%">功能</th><th>要点</th><th style="width:13%">可行性</th><th style="width:8%">规模</th><th style="width:9%">优先级</th></tr>
+          <tr><td>A1 全量种子平铺列表页<span class="sub">qB 式主视图: 所有种子一屏, ~30 列可选</span></td>
+            <td>数据侧全部在 TorrentRecord; 需新端点 <code>/api/torrents</code> (平铺视图, 复用 rid 版本门控) + 扩展展示字段集 (<code>_VIEW_FIELDS</code> 现 13 项 → 平铺需 ~30 项) 并为新增速度/时间类字段定量步 (<code>_VIEW_QUANTUM</code>) 防每 tick 空转重建。前端: 第八轮 TORRENT_COLUMNS 列模型 + singles 视图已是雏形, 升级为一等页面 (辅种视角/种子视角双 tab 共存, 辅种视角保留为默认)</td>
+            <td class="ok">高</td><td class="c">M</td><td><span class="tag p0">P0</span></td></tr>
+          <tr><td>A2 详情面板 · General<span class="sub">全部属性: 传输/分享/时间/metadata/infohash</span></td>
+            <td>端点 <code>/api/torrents/{hash}</code> 返回 <code>to_dict()</code> (已实现) 即可; 前端抽屉或右侧面板。magnet_uri/infohash/评论/创建者全在缓存。piece 状态图 (块状可视化) 可选追加</td>
+            <td class="ok">高</td><td class="c">S</td><td><span class="tag p0">P0</span></td></tr>
+          <tr><td>A3 详情 · Trackers<span class="sub">列表 + 状态/peer 数/消息 + 增删改</span></td>
+            <td>读: rec.trackers_info 已包装 (汇报确认链已在用它); 写: addTrackers/editTracker/removeTrackers 薄封装 + 命令队列。PT 场景手工改 tracker 是低频但真实需求 (换 tracker/补备用)</td>
+            <td class="ok">高</td><td class="c">S</td><td><span class="tag p0">P0</span></td></tr>
+          <tr><td>A4 详情 · Peers<span class="sub">IP/客户端/flags/进度/速率; 添加 peer</span></td>
+            <td>读: client.torrents_peers 透传 (详情面板打开时按需轮询, <b>不进</b>主循环 tick, 避免污染数据层); 写: addPeers 低频。纯展示为主</td>
+            <td class="ok">高</td><td class="c">S</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>A5 详情 · Content 文件树<span class="sub">文件列表 + 优先级 (跳过/普通/高/最高) + 改名</span></td>
+            <td>读: rec.files 已包装 (搜索索引已验证此路径); 写: filePrio / renameFile / renameFolder 命令化。前端树形 UI 是本项主要工作量; 组视角下"同组文件列表一致"的事实可以反哺 (共享一棵树)</td>
+            <td class="ok">高</td><td class="c">M</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>A6 详情 · Speed 速率图<span class="sub">单种子速度曲线</span></td>
+            <td>主循环 2s tick 天然是采样器; 前端从 rid 轮询增量自行累积或后端环形缓冲。展示型功能, 不急</td>
+            <td class="ev">中</td><td class="c">S</td><td><span class="tag p2">P2</span></td></tr>
+        </table>
+
+        <h3><span class="h-no">B</span>种子操作补全</h3>
+        <table>
+          <tr><th style="width:34%">功能</th><th>要点</th><th style="width:13%">可行性</th><th style="width:8%">规模</th><th style="width:9%">优先级</th></tr>
+          <tr><td>B1 添加种子<span class="sub">.torrent 文件 / magnet / URL + 选项</span></td>
+            <td>后端: FastAPI multipart 上传端点 (鉴权已覆盖 /api/*) + <code>torrents_add</code> 命令 (透传已存在; 支持文件 base64/urls/magnets)。选项: 保存路径/分类/标签/添加即暂停/跳校验 (谨慎!)/顺序下载/首末块/分享率限制。前端对话框一项的工作量。设计点: 添加后 auto-qb 自动接管 (归组/标签/HR/校验) 的语义要在对话框里讲清楚 (见 §06/D4)</td>
+            <td class="ev">中</td><td class="c">M</td><td><span class="tag p0">P0</span></td></tr>
+          <tr><td>B2 重新校验 (recheck)<span class="sub">含批量</span></td>
+            <td>QbApi 透传已存在; 复用汇报确认链模式 (登记 pending, 逐 tick 观察状态离开 checking 后聚合回执)。与组内校验串行化闸门 (active_check_hashes) 有交互: 手动校验建议也登记进闸门, 避免与规则自动校验同组并发</td>
+            <td class="ok">高</td><td class="c">S</td><td><span class="tag p0">P0</span></td></tr>
+          <tr><td>B3 超级做种 / 强制开始<span class="sub">force_start / super_seeding</span></td>
+            <td>API 一步; 标志位已在缓存 (force_start/super_seeding) 可显示当前态。PT 辅种场景低频但偶用 (补传)。注意: 强制开始绕过队列, 与 auto-qb 的"同组同时下载冲突"逻辑并存无冲突 (属状态而非规则)</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B4 单种上传/下载限速<span class="sub">含查看当前值</span></td>
+            <td>QbApi set_upload/download_limit 已封装且带 store 同步; dl_limit/up_limit 已在缓存。冲突注记: tracker 级限速规则 (_apply_speed_limit, 幂等) 会周期性覆盖手动值 —— UI 需标注"该种子受站点限速托管" (来自 tracker_conf 匹配), 否则用户会以为设置失效</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B5 分享率/做种时间限制<span class="sub">ratio_limit / seeding_time_limit + 达标动作</span></td>
+            <td>API 一步 (setShareLimits); 当前值已在缓存 (ratio_limit/seeding_time_limit/inactive_seeding_time_limit/share_limit_action)。与 HR 体系语义不同 (qB 原生 vs 站点 HR), 并存即可, UI 文案区分</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B6 移动种子 (改保存路径)<span class="sub">set location</span></td>
+            <td>QbApi set_location 已封装。两个行为要讲清: ① qB 移动是长任务 (state=moving), 显示状态即可; ② <b>组键含 save_path</b> —— 手动移动成员会触发重归组 (_handle_save_path_changes 已监听), 同组其它成员不动时该种子离组。这其实是正确行为 (辅种组=同盘同路径), 但要在确认框里提示"移动后该种子将离开当前辅种组"</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B7 重命名种子</td><td>torrents_rename 一步; 触发视图 name 变化重建 (view_changed 已覆盖 name)</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B8 队列管理 / 自动 TMM<span class="sub">上移/下移/置顶/置底; auto_tmm 开关</span></td>
+            <td>API 全部现成 (priority/auto_tmm 已在缓存)。PT 辅种场景队列少用 (多为做种), 列入 P1 尾部</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B9 复制: 名称/哈希/magnet/评论<span class="sub">右键菜单 + 详情页</span></td>
+            <td>纯前端; magnet_uri 已在 70 字段 (qB 已生成好, 不用自己拼)</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p0">P0</span></td></tr>
+          <tr><td>B10 导出 .torrent<span class="sub">备份/迁移刚需</span></td>
+            <td>QbApi torrents_export 透传已存在; 需一个流式下载端点 (StreamingResponse + Content-Disposition, Bearer 鉴权走 header 无法用 a href 直链 —— 用 fetch+blob 即可)</td>
+            <td class="ok">高</td><td class="c">S</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>B11 顺序下载 / 首末块优先<span class="sub">seq_dl / f_l_piece_prio</span></td>
+            <td>API 一步, 标志已在缓存。PT 场景低频 (影视剧预览用), 挂 P2</td>
+            <td class="ok">高</td><td class="c">XS</td><td><span class="tag p2">P2</span></td></tr>
+        </table>
+
+        <h3><span class="h-no">C</span>分类与标签管理</h3>
+        <table>
+          <tr><th style="width:34%">功能</th><th>要点</th><th style="width:13%">可行性</th><th style="width:8%">规模</th><th style="width:9%">优先级</th></tr>
+          <tr><td>C1 分类 CRUD<span class="sub">新建/改名/删 + 保存路径</span></td><td>create_category 已封装 (带缓存失效); edit/remove 为薄封装。注意与 auto_categories 自动覆盖逻辑的关系 (见 §06)</td><td class="ok">高</td><td class="c">S</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>C2 标签增删<span class="sub">全局建删 + 单种打删</span></td><td>add/remove/delete_tags 已封装且带 store 同步 (usage 聚合已有); 前端在筛选器/详情页加编辑入口。<b>关键设计: HR 标签/集数标签/MISSING 等自动标签要视觉区分</b> (已有语义色), 手动删掉的自动标签下一轮规则会重新打上 —— 文案讲明</td><td class="ok">高</td><td class="c">S</td><td><span class="tag p1">P1</span></td></tr>
+        </table>
+
+        <h3><span class="h-no">D</span>全局状态 · 统计 · 日志</h3>
+        <table>
+          <tr><th style="width:34%">功能</th><th>要点</th><th style="width:13%">可行性</th><th style="width:8%">规模</th><th style="width:9%">优先级</th></tr>
+          <tr><td>D1 全局状态栏数据<span class="sub">DHT 节点/连接状态/累计与会话流量/平均速度</span></td><td>server_state 捕获 (§3.2) + 顶栏/信息栏透出。整个"统计面板"的地基</td><td class="ok">高</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>D2 统计面板<span class="sub">qB Statistics 对话框等价物</span></td><td>server_state 到手后纯展示; 历史流量图已有 (dat 数据源), 两相拼即是超集</td><td class="ok">高</td><td class="c">S</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>D3 龟速模式 (alt-speed)<span class="sub">开关 + 当前模式显示</span></td><td>transfer_speedLimitMode 读写 (qB5); 实现极小。<b>但全局限速曲线任务按档位覆盖全局限速</b> —— 手动开龟速会被曲线改写。必须先定托管语义 (见 §06/D2), 否则做了是坑</td><td class="ev">中</td><td class="c">XS</td><td><span class="tag p1">P1</span></td></tr>
+          <tr><td>E1 日志页<span class="sub">auto-qb 自身日志 tail + 等级过滤</span></td><td>RotatingFileHandler 文件已在 (5 备份); 后端 tail 端点 (主循环外只读文件, 安全) + 前端日志视图 (托盘 ui.py 的环形缓冲可参考)。qB 日志 (/log/main) 可选追加。注意通知节流逻辑不受影响</td><td class="ok">高</td><td class="c">M</td><td><span class="tag p1">P1</span></td></tr>
+        </table>
+
+        <h3><span class="h-no">F</span>按需评估项 (默认延后)</h3>
+        <table>
+          <tr><th style="width:34%">功能</th><th>要点</th><th style="width:13%">可行性</th><th style="width:8%">规模</th><th style="width:9%">优先级</th></tr>
+          <tr><td>F1 qB 搜索 tab<span class="sub">搜索引擎插件管理 + 全网搜索</span></td><td>API 全支持 (search_start/status/results/plugins CRUD); UI 是一整页。PT 用户主要用站内搜索/外部工具, 需求存疑</td><td class="ev">中</td><td class="c">L</td><td><span class="tag p2">P2</span></td></tr>
+          <tr><td>F2 RSS tab<span class="sub">订阅源 + 自动下载规则 + 文章列表</span></td><td>API 全支持; 三块 UI 规模大。PT 生态通常由 Flexget/RSS 助手类工具处理</td><td class="ev">中</td><td class="c">L</td><td><span class="tag p2">P2</span></td></tr>
+          <tr><td>F3 qB 设置面板<span class="sub">preferences 读写</span></td><td>app/preferences get/set API 现成, 但: ① 用户口径本就排除非常用设置; ② 全局限速/队列/保存路径等与 auto-qb 假设有冲突面。若做: 只读展示 + 白名单可写 (限速/端口/连接数), 默认不做</td><td class="ev">中</td><td class="c">M</td><td><span class="tag na">默认不做</span></td></tr>
+          <tr><td>F4 监视文件夹 / 自动添加</td><td>qB 功能; 本项目场景由外部下载器/脚本承担, 与规则引擎无互补</td><td class="hold">延后</td><td class="c">M</td><td><span class="tag na">默认不做</span></td></tr>
+        </table>
+      </section>
+
+      <!-- ===================== 05 架构影响 ===================== -->
+      <section class="sec" id="s05">
+        <div class="sec-head"><span class="no">05</span><h2>架构影响与复用模式</h2></div>
+
+        <h3><span class="h-no">5.1</span>直接复用的四套既有机制 (零新增架构)</h3>
+        <div class="cols">
+          <div class="cell"><h5>命令队列 + 回执</h5>
+            <p>所有写操作继续走 Web 线程投递 → 主循环单线程执行 → <code>/api/cmd/{id}</code> 轮询回执。
+            新命令只是 handlers 表加行。单一写线程黄金法则不破。</p></div>
+          <div class="cell"><h5>长结果确认链</h5>
+            <p>汇报确认 (baseline→逐 tick 复查→30s 超时聚合) 是"发指令≠完成"的样板,
+            recheck 与移动种子 (moving 状态观察) 直接套用。</p></div>
+          <div class="cell"><h5>rid 版本门控 + 惰性视图</h5>
+            <p>平铺列表沿用 groups/singles 的同快照同版本门控; 无变化不回传不重渲染。
+            已在 ensure_group_state 验证的语义直接复制。</p></div>
+          <div class="cell"><h5>量化步长防重建风暴</h5>
+            <p>新增展示字段 (尤其 ETA/速度/时间戳) 必须配套 <code>_VIEW_QUANTUM</code>,
+            否则活跃种子库每 tick 重建 —— 机制在, 纪律要跟上。</p></div>
+        </div>
+
+        <h3><span class="h-no">5.2</span>需要新增的基建 (全部小件)</h3>
+        <pre>
+server_state 捕获     store.apply_sync 增取 md["server_state"], 原子替换只读引用     <span class="cm">~15 行</span>
+/api/torrents         平铺种子视图 (rid 门控, 与 groups 同脏窗口)                    <span class="cm">~80-120 行</span>
+/api/torrents/{hash}  单种全量详情 (to_dict) + trackers/files/peers 子资源           <span class="cm">~60 行</span>
+/api/upload           multipart 添加种子 (文件落临时区, 命令携带路径在主循环消费)    <span class="cm">~50 行</span>
+/api/export/{hash}    .torrent 流式下载 (StreamingResponse)                         <span class="cm">~25 行</span>
+/api/log              自身日志 tail (只读文件, 等级过滤参数)                         <span class="cm">~40 行</span>
+QbApi 薄封装 ×12      setShareLimits/queue/forceStart/superSeeding/rename/trackers…  <span class="cm">每项 ~8 行</span>
+命令 ×~15             handlers 表注册 + _cmd_* + 危险操作确认语义                     <span class="cm">每项 ~10-25 行</span>
+        </pre>
+
+        <h3><span class="h-no">5.3</span>双 UI 成本 —— 最大的工程学问题</h3>
+        <p>
+          逻辑层三件套共享, 但模板双份: 每个新页面 = atlas + prism 两套模板 × 各自 CSS 契约。
+          「种子页 + 详情面板 + 添加对话框」是本轮最大增量, 双份成本真实存在。
+          三个选项:
+        </p>
+        <table>
+          <tr><th>选项</th><th>说明</th><th>代价</th></tr>
+          <tr><td>甲. prism 主战场</td><td>替代 qB 的新功能一律先落棱镜 (五主题/新设计语言), atlas 冻结增量只修 bug</td><td>atlas 用户 (当前默认 UI) 拿不到新功能; 需要一次"默认 UI 切换"</td></tr>
+          <tr><td>乙. 双 UI 同步跟进</td><td>每个功能两套模板都做</td><td>前端工作量 ×2, 长期漂移风险</td></tr>
+          <tr><td>丙. 收敛单 UI</td><td>承认替代 qB 的目标后, 择机合并为一套 UI (保留另一套目录只读归档)</td><td>一次性迁移成本 + 用户习惯切换</td></tr>
+        </table>
+        <p class="small">
+          建议: 短期按「甲」执行 (prism 承接替代功能, atlas 不动), 替代功能成型后再评估「丙」。
+          详见 §08 D1。
+        </p>
+      </section>
+
+      <!-- ===================== 06 冲突边界 ===================== -->
+      <section class="sec" id="s06">
+        <div class="sec-head"><span class="no">06</span><h2>自动化 × 手动操作的冲突边界 (本项目特有)</h2></div>
+        <p>
+          auto-qb 的立身之本是自动化规则; 替代 qB 界面意味着引入大量手动操作。
+          两者的互踩点必须在 UI 层讲清楚, 否则用户会得出"程序坏了"的错误结论。
+          逐项核对自动化代码后的边界表:
+        </p>
+        <table>
+          <tr><th>手动操作</th><th>会与之互踩的自动化</th><th>建议策略</th></tr>
+          <tr><td>手动打/删标签, 建分类</td>
+            <td><code>auto_categories</code> 覆盖逻辑 (hash 级记录, 同类自动设置可覆盖); <code>delete_tags</code> 定期清理未使用标签; <code>remove_similar_tags</code>; HR/集数标签模板打标</td>
+            <td>自动管理标签 (HR 语义色已有) 在 UI 标"自动"; 未使用标签清理给出规则提示; 分类编辑面板标注"auto_categories 已接管该种子的分类"</td></tr>
+          <tr><td>手动单种限速</td>
+            <td>tracker 级限速任务幂等覆盖 (_apply_speed_limit, 按站点配置周期执行)</td>
+            <td>受托管种子显示"站点限速托管中"徽标; 编辑入口仍开放但附说明</td></tr>
+          <tr><td>手动全局限速 / 龟速模式</td>
+            <td>全局限速曲线任务按时间档位覆盖全局上下行 (含 merge 取最严)</td>
+            <td>决策点 D2: 曲线启用时手动全局限速入口改为"查看 + 临时覆盖至下个档位切换", 曲线停用时恢复常规编辑</td></tr>
+          <tr><td>手动开始/暂停</td>
+            <td>规则动作 (start/stop)、同组下载冲突自动暂停、HR 达标暂停等状态机</td>
+            <td>手动操作保留 (自动化只管它该管的时刻); 组冲突暂停等带原因的场景在详情页显示最近一次自动操作原因 (state_file 已有轨迹可查)</td></tr>
+          <tr><td>手动移动种子 (set location)</td>
+            <td>组键 = (save_path, 文件路径元组); 移动成员触发重归组/离组; 缺文件扫描被触发</td>
+            <td>确认框明示"移动后该种子将离开当前辅种组"; 整组移动提供组级入口 (按组键整组改路径) 避免拆组</td></tr>
+          <tr><td>手动 recheck</td>
+            <td>组内校验串行化闸门 (active_check_hashes); skip/full-checking 规则流程</td>
+            <td>手动校验登记进同一闸门; 同组校验中提示"排队中"</td></tr>
+          <tr><td>手动删除种子</td>
+            <td>state_file 规则状态/执行记录、_pending_removed 回环保护 (已处理)</td>
+            <td>现状已正确; 删除确认框可补充"该组剩 N 个成员, 剩余是否仍构成完整辅种组"提示 (增强, 非必需)</td></tr>
+        </table>
+        <div class="note warn">
+          <b>总原则 (与黄金法则同源):</b> 手动操作不绕过命令队列、不绕过 QbApi (快照同步会失真)、
+          不绕过闸门; 自动化不改写用户手动值之外的东西; UI 把"谁在管"显示出来。
+        </div>
+      </section>
+
+      <!-- ===================== 07 分期路线 ===================== -->
+      <section class="sec" id="s07">
+        <div class="sec-head"><span class="no">07</span><h2>分期路线</h2></div>
+        <p>
+          按依赖关系排序: 数据/端点先行, 种子页是第一交付里程碑, 操作与管理随后,
+          评估项按需。规模为相对量级 (XS/S/M/L), 不承诺时间 —— 每阶段独立可验证、可中断。
+        </p>
+        <div class="stage">
+          <h4><span class="s-no">Phase 0</span>基建 (S)</h4>
+          <p>解锁后续一切的地基, 不带 UI 也值得先落。</p>
+          <div class="items"><b>server_state 捕获</b> · <b>/api/torrents 平铺端点</b> · <b>/api/torrents/{hash} 详情端点</b> · <b>展示字段集扩展 + 量步表</b> · <b>D1 决策落定 (prism 主战场)</b></div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">Phase 1</span>种子中心视图 (M) —— 第一个"能替代"的里程碑</h4>
+          <p>种子页一等公民: 平铺列表 (列管理/筛选/排序/批量复用现有交互原语) + 详情面板
+             (General / Trackers / Peers / Content) + 右键"详细信息"。完成后, "看"的部分已可完全离开 qB。</p>
+          <div class="items"><b>种子页</b> · <b>详情面板四 tab</b> · <b>复制名称/哈希/magnet (B9)</b> · <b>现有操作在种子页可用</b></div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">Phase 2</span>操作与管理 (M)</h4>
+          <p>"动"的部分补全: 校验/超级做种/限速/分享率/移动/改名/队列/导出 + 添加种子 +
+             分类标签管理 + 统计面板 + 日志页 + 龟速托管语义。</p>
+          <div class="items"><b>添加种子对话框 (B1)</b> · <b>操作补全 B2-B8/B10</b> · <b>分类标签 C1-C2</b> · <b>统计 D1-D3</b> · <b>日志 E1</b></div>
+        </div>
+        <div class="stage">
+          <h4><span class="s-no">Phase 3</span>按需评估 (默认不动)</h4>
+          <p>搜索 tab / RSS / qB 设置白名单 / 速率图 / 顺序下载等 P2 项, 用真实使用频率决定做不做。</p>
+          <div class="items"><b>F1 搜索</b> · <b>F2 RSS</b> · <b>F3 设置白名单</b> · <b>A6 速率图</b> · <b>B11 顺序下载</b></div>
+        </div>
+        <p class="small">
+          Phase 1 完成后的状态值得强调: 用户日常"查看/筛选/搜索/了解详情"不再需要 qB WebUI;
+          Phase 2 完成后, "写"操作也闭环 —— 目标口径 (§09) 即达成。
+        </p>
+      </section>
+
+      <!-- ===================== 08 决策点 ===================== -->
+      <section class="sec" id="s08">
+        <div class="sec-head"><span class="no">08</span><h2>决策点 (需要拍板, 均为设计选择)</h2></div>
+        <table>
+          <tr><th style="width:12%">编号</th><th>问题</th><th>建议</th></tr>
+          <tr><td class="no">D1</td><td><b>双 UI 主战场:</b> 替代 qB 的新功能落谁家? atlas/prism 同步还是收敛?</td><td>prism 主战场 (atlas 冻结增量), 替代功能成型后再评估合并单 UI</td></tr>
+          <tr><td class="no">D2</td><td><b>龟速/全局限速托管语义:</b> 曲线启用时, 手动控制是"临时覆盖至下档"还是"暂停曲线接管"? (暂停接管=引入新状态, 违反保守默认需谨慎)</td><td>先做"查看 + 临时覆盖" (无新状态, 曲线下一档自然恢复); "暂停接管"不做</td></tr>
+          <tr><td class="no">D3</td><td><b>搜索/RSS 是否在"常用"口径内?</b> 直接决定 Phase 3 是否立项。</td><td>按 PT 场景默认延后; 若用户实际用 qB RSS 则提前 F2</td></tr>
+          <tr><td class="no">D4</td><td><b>添加种子的接管语义:</b> 添加后立即被归组/打标/校验接管, 对话框里如何呈现"将会发生什么"?</td><td>对话框底部动态预览: 保存路径→预计归组/预计站点/将执行的校验策略 (数据全在本地配置, 可离线算)</td></tr>
+          <tr><td class="no">D5</td><td><b>种子页与辅种页关系:</b> 双 tab 平级 (种子页默认) 还是辅种页保持默认、种子页并列?</td><td>辅种页保持默认 (项目立身之本), 顶栏双 tab 切换; 记住上次停留页</td></tr>
+        </table>
+      </section>
+
+      <!-- ===================== 09 风险与验收 ===================== -->
+      <section class="sec" id="s09">
+        <div class="sec-head"><span class="no">09</span><h2>风险红线与验收口径</h2></div>
+
+        <h3><span class="h-no">9.1</span>风险与红线</h3>
+        <table>
+          <tr><th>风险</th><th>应对</th></tr>
+          <tr><td>视图重建成本: 平铺字段集 ~30 项, 活跃种子库速度字段每 tick 变</td><td>严格配 <code>_VIEW_QUANTUM</code> (速度类分桶/时间类取整); 复用"Web 活跃才重建"窗口机制; 必要时平铺视图降频 (速度列单独走轻量端点)</td></tr>
+          <tr><td>危险写操作 (删除/移动/跳校验添加) 误触</td><td>沿用第六轮确认框体系 (成员明细/勾选/汇报选项); 跳校验添加默认关闭 (保守默认原则)</td></tr>
+          <tr><td>上传端点安全 (multipart)</td><td>Bearer 已覆盖 /api/*; 限制单文件大小与类型; 临时文件落 data_dir, 主循环线程消费后即删</td></tr>
+          <tr><td>qB 版本 API 差异 (4.x/5.x 端点改名)</td><td>qbittorrent-api 已锁 2026.8.1; transfer 端点坑已趟; 新增封装沿用"qB5 优先 + 哨兵默认"的既有处理</td></tr>
+          <tr><td>双 UI 漂移</td><td>D1 决策后写入红线 (atlas 冻结期内不得加功能)</td></tr>
+          <tr><td>自动化互踩造成"设置失效"错觉</td><td>§06 边界表逐项落 UI 文案; 托管徽标优先于功能本身</td></tr>
+          <tr><td>per-torrent 轮询 (peers/trackers 详情) 放大请求量</td><td>详情面板打开时才轮询、关闭即停; 不进主循环 tick; 沿用退避策略</td></tr>
+        </table>
+
+        <h3><span class="h-no">9.2</span>验收口径: 什么时候算"能替代 qB 界面"</h3>
+        <ul>
+          <li><b>看</b>: 种子页平铺全量种子, 列/筛选/搜索/详情 (General/Trackers/Peers/Content) 不需要 qB WebUI —— Phase 1 完成。</li>
+          <li><b>动</b>: 添加/启停/删除/校验/汇报/限速/分享率限制/移动/改名/导出/分类标签管理全部在 WEB UI 闭环 —— Phase 2 完成。</li>
+          <li><b>懂</b>: 全局统计 (会话/累计/DHT) 与 auto-qb 日志可在 WEB UI 查看; 自动托管状态 (曲线/站点限速/HR) 在界面上可辨识。</li>
+          <li><b>留</b>: qB 原生 WebUI 保留为逃生门 (auto-qb 端口独立, 互不侵占), 设置类非常用操作走逃生门 —— 与用户"非常用设置除外"的口径闭环。</li>
+        </ul>
+        <div class="note">
+          <b>一句话总结:</b> 目标可行且路径清晰 —— 数据层已经铺好 (70 字段), 写管线已经验证 (命令队列+确认链),
+          缺口是"一个种子页 + 一批 XS/S 级命令 + 三个新端点 + 两个设计决策"。
+          真正要防的不是技术风险, 而是双 UI 成本与自动化互踩的体验债。
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    auto-qb · WEB UI 替代 qB 界面 · 调研与计划 (未改任何代码) · 2026-09-15 ·
+    依据: develop 线源码逐文件核实 (web.py / web_view.py / web_commands.py / qbapi.py / torrents/* / 想法.md / memory-bank)
+  </footer>
+</div>
+</body>
+</html>
