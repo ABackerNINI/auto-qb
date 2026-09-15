@@ -513,3 +513,33 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .stats-row .lbl { flex: 0 0 auto; color: var(--fg-dim); font-size: 12px; }
 .stats-row .val { color: var(--fg); font-weight: 600; font-size: 12.5px; text-align: right;
   font-family: var(--font-mono); overflow-wrap: anywhere; }
+
+/* ================= 分类/标签管理对话框(FE-2C2) —— 与 atlas 同构, 复用 .modal/.add-dialog 视觉语言 =================
+ * 列表行(名字 + 保存路径 + 行级操作) / 新建行 / 底部提示; 全部只引用既有 tokens。
+ */
+.modal.mgr-dialog { width: 560px; }
+.mgr-list { display: flex; flex-direction: column; margin: 4px 0 14px; max-height: 300px; overflow-y: auto; }
+.mgr-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; }
+.mgr-row + .mgr-row { border-top: 1px solid var(--border-soft); }
+.mgr-name { flex: 0 1 auto; min-width: 80px; max-width: 40%; font-weight: 600; font-size: 13px; color: var(--fg);
+  overflow-wrap: anywhere; }
+.mgr-sub { flex: 1 1 auto; min-width: 0; color: var(--fg-dim); font-size: 11.5px;
+  font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mgr-sub.dim { font-style: italic; }
+.mgr-acts { flex: 0 0 auto; display: flex; gap: 6px; }
+.mgr-empty { margin: 10px 0; color: var(--fg-dim); font-size: 12.5px; }
+.mgr-new { display: flex; gap: 8px; }
+.mgr-new .add-dialog-input { flex: 1 1 auto; width: auto; min-width: 0; }
+.mgr-new .add-dialog-input + .add-dialog-input { flex: 1.4 1 auto; }
+.mgr-new .ce-btn { flex: 0 0 auto; }
+.mgr-hint { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px;
+  border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
+  color: var(--warn); font-size: 11.5px; line-height: 1.5; }
+.mgr-hint .ico { flex: 0 0 auto; }
+
+/* 筛选弹层底部管理入口(FE-2C2): sticky 吸底(长列表滚动时管理入口不滚走), 顶部细线与列表区分隔 */
+.pop-mgr-btn { position: sticky; bottom: -8px; display: flex; align-items: center; gap: 6px;
+  margin: 6px -8px -8px; padding: 8px 8px 8px 10px; border: 0; border-top: 1px solid var(--border-soft);
+  background: var(--bg-elev); color: var(--accent-hi); font: inherit; font-size: 12px; cursor: pointer;
+  border-radius: 0 0 var(--radius) var(--radius); }
+.pop-mgr-btn:hover { color: var(--fg); background: var(--surface-2); }

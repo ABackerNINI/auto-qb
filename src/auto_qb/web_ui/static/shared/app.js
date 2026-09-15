@@ -2806,6 +2806,7 @@ const app = createApp({
       }
     },
     async submitMgrCategory() {
+      if (this.mgrBusy) return;  // 回车提交与按钮同源: 防回执等待期重复投递
       const name = this.mgrNewCatName.trim();
       if (!name) { this.toast("分类名称不能为空", "warn"); return; }
       this.mgrBusy = true;
@@ -2825,6 +2826,7 @@ const app = createApp({
       }
     },
     async submitMgrTags() {
+      if (this.mgrBusy) return;  // 回执等待期防重复投递
       // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
       const tags = this.mgrNewTags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
       if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
