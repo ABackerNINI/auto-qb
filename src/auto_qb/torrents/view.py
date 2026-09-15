@@ -2,8 +2,10 @@
 from collections.abc import Iterable
 from typing import Any, Dict
 
-# Web 分组视图展示的字段: 仅这些字段变化才需重建视图(_build_group_view 的取值集合),
-# 避免种子库无变化时主循环空转重建; save_path 决定分组键, 故一并计入
+# Web 视图展示字段: 仅这些字段变化才需重建视图(分组/平铺等所有 Web 视图的取值集合),
+# 避免种子库无变化时主循环空转重建; save_path 决定分组键, 故一并计入。
+# 前半段为分组视图展示字段; 后半段为种子平铺视图(SEED_ITEM, WEB UI 替代 qB 界面的种子页)
+# 扩展的原始数据字段 —— 平铺列表/详情抽屉要展示它们, 变化同样须触发重建。
 _VIEW_FIELDS = frozenset(
     (
         "name",
@@ -21,6 +23,55 @@ _VIEW_FIELDS = frozenset(
         "category",
         # 添加时间: 组级默认排序键(几乎不变, 加入仅为了"新添加种子"时能即时反映)
         "added_on",
+        # ---- 种子平铺视图(SEED_ITEM)扩展字段 ----
+        "downloaded",
+        "total_size",
+        "eta",
+        "time_active",
+        "last_activity",
+        "availability",
+        "num_seeds",
+        "num_leechs",
+        "num_complete",
+        "num_incomplete",
+        "tracker",
+        "trackers_count",
+        "dl_limit",
+        "up_limit",
+        "seq_dl",
+        "f_l_piece_prio",
+        "auto_tmm",
+        "force_start",
+        "super_seeding",
+        "priority",
+        "magnet_uri",
+        "infohash_v1",
+        "infohash_v2",
+        "private",
+        "comment",
+        "created_by",
+        "creation_date",
+        "has_metadata",
+        "piece_size",
+        "pieces_have",
+        "pieces_num",
+        "completion_on",
+        "seen_complete",
+        "total_wasted",
+        "popularity",
+        "connections_count",
+        "connections_limit",
+        "reannounce",
+        "reannounce_in",
+        "has_tracker_error",
+        "has_tracker_warning",
+        "has_other_announce_error",
+        "amount_left",
+        "content_path",
+        "download_path",
+        "root_path",
+        "downloaded_session",
+        "uploaded_session",
     )
 )
 
@@ -28,17 +79,25 @@ _VIEW_FIELDS = frozenset(
 # (保证"视图内容"与"脏标记依据"一致, 否则前端展示会与实际重建时机脱钩)。
 # seeding_time 每秒递增 —— 不量化时做种中的种子会每轮置脏, 使惰性重建对绝大多数种子失效;
 # 前端本就只展示到分钟, 故取整到 60s 无任何可见损失。
-_VIEW_QUANTUM: Dict[str, int] = {"seeding_time": 60}
+# eta/time_active/last_activity 同理(秒级跳动, 展示精度为分钟)。
+_VIEW_QUANTUM: Dict[str, int] = {
+    "seeding_time": 60,
+    "eta": 60,
+    "time_active": 60,
+    "last_activity": 60,
+}
 
 
 def view_field_value(field: str, value: Any) -> Any:
-    """视图字段的量化值(重建判定与 `_build_group_view` 展示值共用的唯一取整入口)
+    """视图字段的量化值(重建判定与 Web 视图展示值共用的唯一取整入口)
 
     未配置步长的字段原样返回(精确比较)。seeding_time 等单调递增但展示精度有限的字段
     按 `_VIEW_QUANTUM` 取整, 避免活跃但数据无实质变化的种子库每 tick 重建视图。
+    负数不量化: qB 哨兵 -1 = 从未/未设(last_activity/seen_complete/completion_on),
+    地板除会把它变成 -60, 破坏"从未"的展示语义。
     """
     q = _VIEW_QUANTUM.get(field)
-    if q:
+    if q and value >= 0:
         return value // q * q
     return value
 

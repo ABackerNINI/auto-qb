@@ -78,6 +78,9 @@ class FakeClient:
         self.trackers_map = {}  # hash -> trackers 列表(强制覆盖; 强制汇报确认测试用)
         self.files_calls = 0  # torrents_files 调用计数(验证分组检查不再全量拉文件列表)
         self.sync_calls = 0  # sync_maindata 调用计数(验证增量同步路径)
+        self.server_state = None  # 非空时随 sync 响应回传(模拟 qB 每轮都带 server_state)
+        self.peers_map = {}  # hash -> peers 响应(torrents_peers 替身; 未命中回空列表)
+        self.peers_calls = 0  # torrents_peers 调用计数
         self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
         self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
 
@@ -126,7 +129,16 @@ class FakeClient:
             resp = {"rid": self._sync_rid + 1, "full_update": True, "torrents": cur}
         self._sync_rid += 1
         self._sync_snapshot = cur
+        if self.server_state is not None:
+            resp["server_state"] = self.server_state  # qB 每轮(全量/增量)都带 server_state
         return resp
+
+    def torrents_peers(self, h, **kw):
+        """单种子 peer 列表替身: 返回 qB 形状 dict(peers 列表在 'peers' 键下)"""
+        self.peers_calls += 1
+        if h in self.peers_map:
+            return self.peers_map[h]
+        return {"peers": [], "rid": 0}
 
     def torrents_export(self, torrent_hashes=None, torrent_hash=None, **kw):
         self.calls.append(("export", torrent_hash if torrent_hash is not None else torrent_hashes))
@@ -455,6 +467,55 @@ class FakeTorrent:
         self._state_enum = None
         self._trackers_info = None
         self._files = None
+        # 扩展快照字段(与 TorrentRecord 扩展 slots 同默认值): 种子平铺视图/详情读取用;
+        # kw 可覆盖, 未提及取 qB 哨兵默认(与 TorrentRecord 一致)
+        _ext_defaults = {
+            "downloaded_session": 0,
+            "uploaded_session": 0,
+            "eta": 8640000,
+            "time_active": 0,
+            "last_activity": -1,
+            "availability": 0.0,
+            "num_seeds": 0,
+            "num_leechs": 0,
+            "num_complete": 0,
+            "num_incomplete": 0,
+            "tracker": "",
+            "trackers_count": 0,
+            "connections_count": 0,
+            "connections_limit": 0,
+            "reannounce_in": 0,
+            "reannounce": 0,
+            "max_ratio": -1.0,
+            "max_seeding_time": -1,
+            "max_inactive_seeding_time": -1,
+            "magnet_uri": "",
+            "infohash_v1": "",
+            "infohash_v2": "",
+            "private": False,
+            "comment": "",
+            "created_by": "",
+            "creation_date": 0,
+            "has_metadata": False,
+            "piece_size": 0,
+            "pieces_have": 0,
+            "pieces_num": 0,
+            "auto_tmm": False,
+            "download_path": "",
+            "root_path": "",
+            "force_start": False,
+            "super_seeding": False,
+            "priority": 0,
+            "completion_on": -1,
+            "seen_complete": -1,
+            "total_wasted": 0,
+            "popularity": 0.0,
+            "has_tracker_error": False,
+            "has_tracker_warning": False,
+            "has_other_announce_error": False,
+        }
+        for _f, _v in _ext_defaults.items():
+            setattr(self, _f, kw[_f] if _f in kw else _v)
 
     @property
     def state_enum(self):

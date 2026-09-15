@@ -7,7 +7,7 @@
 - self.store                种子数据层 TorrentStore(分组索引/by_hash/视图脏标记)
 - self.client               qB 原始客户端(搜索索引拉取文件列表用)
 - self.web_commands         WEB 控制命令队列(搜索 building 时投递构建命令)
-- self._group_view / self._singles_view / self._shows_view / self._group_view_ver
+- self._group_view / self._singles_view / self._shows_view / self._flat_view / self._group_view_ver
 - self._group_view_dirty / self._shows_pending / self._web_last_seen
 - self._search_index / self._search_index_dirty
 """
@@ -162,6 +162,76 @@ class WebviewMixin:
                 }
             )
         return view
+
+    def _seed_view(self, r) -> dict:
+        """种子中心视图条目(SEED_ITEM): 成员视图全字段 + 扩展 qB 数据字段
+
+        WEB UI 替代 qB 界面的"种子页"数据源: 平铺列表/详情抽屉展示用。在 _member_view
+        基础上补齐 TorrentRecord 的全部展示字段(字段集 = torrents/view._VIEW_FIELDS
+        的平铺扩展段); eta/time_active/last_activity 按分钟量化(与重建判定同一步长)。
+        """
+        return {
+            **self._member_view(r),
+            "downloaded": r.downloaded,
+            "total_size": r.total_size,
+            "eta": view_field_value("eta", r.eta),
+            "max_ratio": r.max_ratio,
+            "max_seeding_time": r.max_seeding_time,
+            "max_inactive_seeding_time": r.max_inactive_seeding_time,
+            "completion_on": r.completion_on,
+            "time_active": view_field_value("time_active", r.time_active),
+            "availability": round(r.availability, 2),
+            "num_seeds": r.num_seeds,
+            "num_leechs": r.num_leechs,
+            "num_complete": r.num_complete,
+            "num_incomplete": r.num_incomplete,
+            "tracker": r.tracker,
+            "trackers_count": r.trackers_count,
+            "dl_limit": r.dl_limit,
+            "up_limit": r.up_limit,
+            "seq_dl": r.seq_dl,
+            "f_l_piece_prio": r.f_l_piece_prio,
+            "auto_tmm": r.auto_tmm,
+            "force_start": r.force_start,
+            "super_seeding": r.super_seeding,
+            "priority": r.priority,
+            "magnet_uri": r.magnet_uri,
+            "infohash_v1": r.infohash_v1,
+            "infohash_v2": r.infohash_v2,
+            "private": r.private,
+            "comment": r.comment,
+            "created_by": r.created_by,
+            "creation_date": r.creation_date,
+            "has_metadata": r.has_metadata,
+            "piece_size": r.piece_size,
+            "pieces_have": r.pieces_have,
+            "pieces_num": r.pieces_num,
+            "last_activity": view_field_value("last_activity", r.last_activity),
+            "total_wasted": r.total_wasted,
+            "connections_count": r.connections_count,
+            "connections_limit": r.connections_limit,
+            "reannounce": r.reannounce,
+            "reannounce_in": r.reannounce_in,
+            "has_tracker_error": r.has_tracker_error,
+            "has_tracker_warning": r.has_tracker_warning,
+            "has_other_announce_error": r.has_other_announce_error,
+            "amount_left": r.amount_left,
+            "content_path": r.content_path,
+            "download_path": r.download_path,
+            "root_path": r.root_path,
+            "popularity": r.popularity,
+            "seen_complete": r.seen_complete,
+            "downloaded_session": r.downloaded_session,
+            "uploaded_session": r.uploaded_session,
+        }
+
+    def _build_flat_view(self) -> List[dict]:
+        """种子平铺视图(全部种子一列表): 与分组视图同一脏窗口同快照重建。
+
+        WEB UI 替代 qB 界面的"种子页"数据源: 不依赖辅种分组是否启用, store.by_hash
+        全量进视图(前端在平铺列表上自行筛选/排序/多选; 字段集 = SEED_ITEM 契约)。
+        """
+        return [self._seed_view(r) for r in self.store.by_hash.values()]
 
     def _build_singles_view(self) -> List[dict]:
         """未归组种子的单种子视图数据(分组未启用/文件列表不可读的种子不在任何组里,
@@ -353,11 +423,13 @@ class WebviewMixin:
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
         与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
-        singles(未归组种子)、shows(追剧视图)与分组视图在同一脏窗口同快照重建 —— 保证三组数据互相一致。"""
+        singles(未归组种子)、shows(追剧视图)与 flat(种子平铺视图)与分组视图在同一脏窗口同快照重建
+        —— 保证四组数据互相一致。"""
         if self._group_view_dirty:
             self._group_view = self._build_group_view()
             self._singles_view = self._build_singles_view()
             self._shows_view = self._build_shows_view()
+            self._flat_view = self._build_flat_view()
             self._group_view_ver += 1
             self._group_view_dirty = False
         return self._group_view
@@ -379,6 +451,8 @@ class WebviewMixin:
             state["singles"] = self._singles_view
             # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
             state["shows"] = self._shows_view
+            # 种子平铺视图同门控同版本回传(种子页数据源; 字段集 = SEED_ITEM 契约)
+            state["torrents"] = self._flat_view
         return state
 
     def _build_search_index(self) -> None:

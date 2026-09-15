@@ -213,6 +213,60 @@ def create_app(manager) -> FastAPI:
         result["delete_files"] = delete_files
         return result
 
+    # ---- 种子中心视图读端点(WEB UI 替代 qB 界面: 详情抽屉/全局统计) ----
+    # 全部只读: 快照读 store, tracker/文件/peer 按需直读 client(不写 store 惰性缓存 ——
+    # 缓存写入只在主循环线程, 保持 Web 线程无副作用); qB 断连时 503, 未知 hash 404。
+
+    def _require_torrent(hash: str):
+        rec = manager.store.get(hash)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="种子不存在")
+        return rec
+
+    def _require_client():
+        if manager.client is None:
+            raise HTTPException(status_code=503, detail="qB 未连接")
+        return manager.client
+
+    @app.get("/api/torrents/{hash}")
+    def api_torrent_detail(hash: str):
+        """单种子全量详情: TorrentRecord.to_dict 全字段(含 _raw 前向兼容字段)
+        + site(站点名) + HR 展示字段(与分组成员视图同源) —— 详情抽屉 General tab 数据源"""
+        manager.touch_web_client()
+        rec = _require_torrent(hash)
+        return {"torrent": {**rec.to_dict(), "site": rec.tracker_name, **manager._hr_view_fields(rec)}}
+
+    @app.get("/api/torrents/{hash}/trackers")
+    def api_torrent_trackers(hash: str):
+        """单种子 tracker 列表(qB 透传; 含 **/[DHT]/[PeX]/[LSD] 虚拟条目, 前端自行弱化)"""
+        manager.touch_web_client()
+        _require_torrent(hash)
+        return list(_require_client().torrents_trackers(hash) or [])
+
+    @app.get("/api/torrents/{hash}/files")
+    def api_torrent_files(hash: str):
+        """单种子文件列表(qB 透传; 详情抽屉 Content tab 数据源)"""
+        manager.touch_web_client()
+        _require_torrent(hash)
+        return list(_require_client().torrents_files(hash) or [])
+
+    @app.get("/api/torrents/{hash}/peers")
+    def api_torrent_peers(hash: str):
+        """单种子 peer 列表(qB 透传; 详情抽屉打开期间前端按需轮询, 关闭即停, 不进主循环 tick)"""
+        manager.touch_web_client()
+        _require_torrent(hash)
+        return dict(_require_client().torrents_peers(hash) or {})
+
+    @app.get("/api/stats")
+    def api_stats():
+        """qB 全局状态(sync/maindata 的 server_state: 会话/累计流量/DHT 节点/连接状态等)
+
+        数据源是主循环增量同步时原子替换的只读引用; 降级全量(无 sync 端点)或
+        尚未同步到响应时为 null, 前端按空态渲染。
+        """
+        manager.touch_web_client()
+        return {"server": manager.store.server_state}
+
     @app.get("/api/cmd/{cmd_id}")
     def api_cmd_result(cmd_id: str):
         """命令执行结果查询(前端投递后轮询): pending = 主循环尚未执行完或仍在确认中

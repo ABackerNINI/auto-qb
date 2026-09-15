@@ -26,7 +26,7 @@
 - test_store_unbound_client: 未绑定 client 时惰性拉取报错
 - test_record_trackers_info_unbound: 记录级 trackers_info 未绑定 client 报错
 - test_record_hr_boundaries: HR 判定边界(total_size=0 兜底/小种子完全下载即触发/无 hr 恒 False)
-- test_store_view_changed_only_for_view_fields: 仅视图字段/成员变化置脏, 其它字段不置脏
+- test_store_view_changed_only_for_view_fields: 仅视图字段/成员变化置脏, 其它字段不置脏(downloaded 已进平铺视图)
 - test_store_view_changed_consume: consume_view_changed 读取即复位
 - test_store_update_fields_marks_view_changed: state/save_path 写操作置脏, 标签不置脏
 - test_record_update_from_returns_changed: update_from 返回视图字段变化标记
@@ -35,7 +35,7 @@
 - test_record_seeding_time_quantized_update_from: update_from 双通道(Mapping/对象)的分钟量化
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
 - test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
-- test_store_extension_fields_do_not_dirty_view: 视图纪律(缓存≠展示): 仅扩展字段变化不置脏
+- test_store_extension_fields_dirty_view_and_quantum: 视图纪律(缓存≠展示): 扩展字段已进平铺视图置脏; eta 分钟量化; 非展示字段不置脏
 """
 from dataclasses import MISSING, fields as dc_fields
 
@@ -518,17 +518,23 @@ def test_record_tracker_name_and_hr_fallback():
 
 
 def test_store_view_changed_only_for_view_fields():
-    """仅视图相关字段变化置脏; 非视图字段(如 downloaded)变化不置脏"""
+    """仅视图相关字段变化置脏; 非视图字段(如 ratio_limit)变化不置脏
+
+    downloaded 已进种子平铺视图(SEED_ITEM), 变化会置脏 —— 非视图字段改用
+    ratio_limit(re-add 限速策略, 不在 Web 视图展示)作反例。
+    """
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0, downloaded=0)])
     assert store.consume_view_changed() is True  # 首轮(新增)
     store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0, downloaded=0)])
     assert store.consume_view_changed() is False  # 完全无变化
     store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=0, downloaded=123)])
-    assert store.consume_view_changed() is False  # downloaded 不在视图中
-    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=9, downloaded=123)])
+    assert store.consume_view_changed() is True  # downloaded 在平铺视图中(SEED_ITEM)
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=9, downloaded=123, ratio_limit=1.5)])
     assert store.consume_view_changed() is True  # upspeed 在视图中
-    store.refresh([FakeTorrent(hash="H1", name="T1", state="pausedUP", upspeed=9, downloaded=123)])
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="stalledUP", upspeed=9, downloaded=123, ratio_limit=-2.0)])
+    assert store.consume_view_changed() is False  # ratio_limit 不在视图中(非展示字段)
+    store.refresh([FakeTorrent(hash="H1", name="T1", state="pausedUP", upspeed=9, downloaded=123, ratio_limit=-2.0)])
     assert store.consume_view_changed() is True  # state 在视图中
     store.refresh(
         [FakeTorrent(hash="H1", name="T1", state="pausedUP", upspeed=9, downloaded=123, save_path=r"R:\Elsewhere")]
@@ -667,16 +673,26 @@ def test_record_from_real_example_payload():
     assert set(_EXAMPLE_TORRENT_INFO) <= set(d)  # 样例字段全量导出无丢失(记录现声明字段更多)
 
 
-def test_store_extension_fields_do_not_dirty_view():
-    """视图纪律(缓存≠展示): 仅扩展字段变化不置脏 view_changed ——
-    未来某字段进 Web 视图时必须显式加入 _VIEW_FIELDS(高频字段还需配 _VIEW_QUANTUM)"""
+def test_store_extension_fields_dirty_view_and_quantum():
+    """视图纪律(缓存≠展示): 扩展字段已进种子平铺视图(SEED_ITEM) -> 变化置脏;
+    高频字段(eta)按分钟量化抑制同桶跳动; 非展示字段(ratio_limit)仍不置脏"""
     store = TorrentStore()
     store.refresh([dict(_EXAMPLE_TORRENT_INFO, hash="H1")])
     store.consume_view_changed()  # 首轮(新增)置脏
 
     store.refresh([{"hash": "H1", "eta": 100, "num_seeds": 5, "popularity": 1.5}])
-    assert store.consume_view_changed() is False, "扩展字段变化不得触发视图重建"
+    assert store.consume_view_changed() is True, "扩展字段已进平铺视图, 变化应置脏"
+
+    # eta 分钟量化: 同桶内跳动不置脏(高频字段纪律), 跨桶才触发重建
+    store.refresh([{"hash": "H1", "eta": 119}])
+    assert store.consume_view_changed() is False, "eta 同分钟桶内变化不触发重建"
+    store.refresh([{"hash": "H1", "eta": 120}])
+    assert store.consume_view_changed() is True
+
+    # 非展示字段(re-add 限速策略)不置脏
+    store.refresh([{"hash": "H1", "ratio_limit": 1.5}])
+    assert store.consume_view_changed() is False
 
     # 视图字段照常置脏(同一轮混合变化时)
-    store.refresh([{"hash": "H1", "eta": 200, "state": "pausedUP"}])
+    store.refresh([{"hash": "H1", "state": "pausedUP"}])
     assert store.consume_view_changed() is True

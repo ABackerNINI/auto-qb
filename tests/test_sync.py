@@ -38,6 +38,10 @@
 - test_manager_no_change_round_is_cheap: 无变化轮变化集为空
 - test_manager_conflict_recheck_incremental: 冲突检查只重算脏组(登记->消费复位)
 - test_manager_refresh_fallback_client: 旧版 qB 替身(无 sync 端点)整轮可用
+- test_store_apply_sync_captures_server_state_full_and_delta: server_state 全量/增量都捕获(原子替换)
+- test_store_apply_sync_server_state_missing_keeps_previous: 响应缺失 server_state 时保留旧值
+- test_store_apply_sync_fallback_clears_server_state: 降级全量置 None(前端空态)
+- test_apply_delta_quantizes_eta_time_active_last_activity: 新量化字段(分钟桶); 负数哨兵不量化
 """
 import logging
 import os
@@ -523,3 +527,56 @@ def test_manager_refresh_fallback_client():
         assert mgr.store.using_fallback is True
         assert mgr.store.get("H1") is not None
         assert mgr._schema_validated is True
+
+
+# ---------- server_state 捕获(WEB /api/stats 数据源) ----------
+
+
+def test_store_apply_sync_captures_server_state_full_and_delta():
+    """server_state 捕获: 全量/增量响应都更新(整引用原子替换, Web 线程只读)"""
+    client = FakeClient()
+    store = TorrentStore()
+    api = _api(client, store)
+    client.server_state = {"dl_info_speed": 100, "dht_nodes": 3}
+    store.apply_sync(api)
+    assert store.server_state == {"dl_info_speed": 100, "dht_nodes": 3}
+    # 增量轮(无种子变化)也带 server_state -> 更新
+    client.server_state = {"dl_info_speed": 200, "dht_nodes": 5}
+    store.apply_sync(api)
+    assert store.server_state == {"dl_info_speed": 200, "dht_nodes": 5}
+
+
+def test_store_apply_sync_server_state_missing_keeps_previous():
+    """响应缺失 server_state(老版本/异常替身): 保留上次已知值, 不误清"""
+    client = FakeClient()
+    store = TorrentStore()
+    api = _api(client, store)
+    client.server_state = {"dht_nodes": 7}
+    store.apply_sync(api)
+    client.server_state = None  # 下一轮响应不再附带
+    store.apply_sync(api)
+    assert store.server_state == {"dht_nodes": 7}
+
+
+def test_store_apply_sync_fallback_clears_server_state():
+    """降级全量(torrents_info)无 server_state 可言 -> 置 None(前端空态渲染)"""
+    client = _NoSyncClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore()
+    store.server_state = {"stale": True}
+    store.apply_sync(_api(client, store))
+    assert store.server_state is None
+
+
+def test_apply_delta_quantizes_eta_time_active_last_activity():
+    """eta/time_active/last_activity 按分钟量化(与展示精度一致); 负数哨兵(-1)不量化"""
+    rec = TorrentRecord(hash="H1")
+    # 同一分钟桶内: 不计入变化(避免活跃种子每轮置脏)
+    assert rec.apply_delta({"eta": 8640030, "time_active": 30, "last_activity": -1}) == frozenset()
+    # 跨桶: 计入变化
+    assert rec.apply_delta({"eta": 8640060, "time_active": 120}) == {"eta", "time_active"}
+    assert rec.eta == 8640060 and rec.time_active == 120
+    # 负数哨兵: 保持 -1(从未)原值, 不被地板除破坏
+    assert rec.last_activity == -1
+    assert rec.apply_delta({"last_activity": 1700000030}) == {"last_activity"}
+    assert rec.last_activity == 1700000030

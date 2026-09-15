@@ -48,6 +48,9 @@ class TorrentStore:
         self.need_validate: bool = True
         self.using_fallback: bool = False
         self.validate_sample: Optional[Any] = None
+        # qB 全局状态(sync/maindata 响应的 server_state: 会话/累计流量/DHT 节点等)
+        # 每轮原子替换只读引用, 供 Web /api/stats 透出; 降级全量路径置 None(前端空态)
+        self.server_state: Optional[dict] = None
         # 本轮变化集
         self.delta_fields: Dict[str, FrozenSet[str]] = {}
         self.state_changed: List[Tuple[str, Any]] = []
@@ -95,6 +98,7 @@ class TorrentStore:
             tors = api.torrents_info()
             # 样本保持旧时序语义: 首个非 dict 的真实种子对象(测试注入的 plain dict 不作样本)
             self.validate_sample = next((t for t in tors if not isinstance(t, dict)), None)
+            self.server_state = None  # 降级路径无 server_state 可言(下轮 sync 恢复后重取)
             return self.refresh(tors)
         except Exception:
             self.rid = 0  # 未知异常: 下轮强制全量
@@ -103,6 +107,11 @@ class TorrentStore:
         self.rid = int(md.get("rid", 0) or 0)
         full = bool(md.get("full_update"))
         self.need_validate = full
+        # 全局状态捕获: qB 每轮 sync 响应都带 server_state(全量/增量皆然);
+        # 响应缺失时保留上次已知值(不误清)。整引用原子替换, Web 线程只读。
+        if "server_state" in md:
+            ss = md["server_state"]
+            self.server_state = dict(ss) if isinstance(ss, Mapping) else ss
         patches = md.get("torrents") or {}
         # 校验样本: 仅全量轮提供。注意 qB sync 响应的 **hash 是 torrents 字典的键**, 值内不含
         # hash(与 torrents/info 的数组元素不同) -> 校验前需补齐, 否则必报缺 'hash' 字段

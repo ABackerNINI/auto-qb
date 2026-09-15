@@ -41,6 +41,10 @@
 - test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
 - test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
+- test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
+- test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
+- test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
+- test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
@@ -170,6 +174,7 @@ def _make_web_manager(tmp_path, config_text):
     mgr = SimpleNamespace(
         _web_token="",
         _group_view=view,
+        _flat_view=[],
         web_commands=__import__("queue").Queue(),
         status_snapshot=lambda: {
             "connected": True,
@@ -180,7 +185,8 @@ def _make_web_manager(tmp_path, config_text):
         data_dir=str(tmp_path),
         config=config,
         config_path=config_file,
-        store=SimpleNamespace(groups=groups),
+        store=SimpleNamespace(groups=groups, get=lambda h: None, server_state=None),
+        client=None,
         _web_last_seen=0.0,
         _group_view_dirty=False,
         _group_view_ver=0,
@@ -194,6 +200,10 @@ def _make_web_manager(tmp_path, config_text):
         # 命令执行结果回执(真实 manager 由主循环写; 端点测试直接预置)
         _web_results={},
     )
+    # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
+    from auto_qb.qbmanager import QbManager
+
+    mgr._hr_view_fields = QbManager._hr_view_fields
     # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
     # ensure_group_state(带 rid 的增量状态)
     mgr.touch_web_client = lambda: setattr(mgr, "_web_last_seen", __import__("time").time())
@@ -205,6 +215,7 @@ def _make_web_manager(tmp_path, config_text):
         if updated:
             state["groups"] = mgr._group_view
             state["singles"] = []  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
+            state["torrents"] = mgr._flat_view  # 种子平铺视图同门控(与真实实现同形)
         return state
 
     mgr.ensure_group_state = _ensure_group_state
@@ -1443,3 +1454,146 @@ def test_apply_web_config_toggle_enabled(monkeypatch):
         mgr._apply_web_config(_web_stub(enabled=True, port=8080))
         stopped.assert_called_once()
         assert mgr._web_handle is None
+
+
+# ---------- 种子中心视图(WEB UI 替代 qB 界面: 种子页/详情抽屉/全局统计) ----------
+
+
+def test_seed_flat_view_fields_and_gating():
+    """种子平铺视图(SEED_ITEM): _build_flat_view 全字段契约 + ensure_group_state 同门控回传
+
+    字段集与前端契约一字不差(详见实施 prompt); eta/time_active 按分钟量化(与重建判定
+    同一步长); HR 字段与分组成员视图同源; 同版本请求不回传 torrents(与 groups/singles 同门控)。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        t1 = FakeTorrent(
+            hash="H1",
+            name="T1",
+            state="stalledUP",
+            save_path=r"R:\D",
+            eta=8640030,
+            time_active=3641,
+            num_seeds=5,
+            num_leechs=2,
+            magnet_uri="magnet:?xt=urn:btih:H1",
+            max_ratio=1.5,
+        )
+        seed_store(mgr, [t1])
+        state = mgr.ensure_group_state(rid=None)
+        items = state["torrents"]
+        assert [t["hash"] for t in items] == ["H1"]
+        item = items[0]
+        expected = {
+            "hash", "name", "site", "state", "kind", "dlspeed", "upspeed", "downloaded",
+            "uploaded", "size", "total_size", "progress", "eta", "ratio", "max_ratio",
+            "max_seeding_time", "max_inactive_seeding_time", "seeding_time", "added_on",
+            "completion_on", "time_active", "availability", "num_seeds", "num_leechs",
+            "num_complete", "num_incomplete", "tracker", "trackers_count", "category", "tags",
+            "save_path", "dl_limit", "up_limit", "seq_dl", "f_l_piece_prio", "auto_tmm",
+            "force_start", "super_seeding", "priority", "magnet_uri", "infohash_v1",
+            "infohash_v2", "private", "comment", "created_by", "creation_date", "has_metadata",
+            "piece_size", "pieces_have", "pieces_num", "last_activity", "total_wasted",
+            "connections_count", "connections_limit", "reannounce", "reannounce_in",
+            "has_tracker_error", "has_tracker_warning", "has_other_announce_error", "amount_left",
+            "content_path", "download_path", "root_path", "popularity", "seen_complete",
+            "downloaded_session", "uploaded_session", "hr_tag", "hr_tag_done", "hr_triggered",
+            "hr_satisfied", "hr_req_time", "hr_req_ratio",
+        }
+        missing = expected - set(item)
+        assert not missing, f"SEED_ITEM 缺字段: {missing}"
+        # 量化: eta 8640030->8640000, time_active 3641->3600(与重建判定同一步长)
+        assert item["eta"] == 8640000 and item["time_active"] == 3600
+        assert item["num_seeds"] == 5 and item["num_leechs"] == 2
+        assert item["magnet_uri"] == "magnet:?xt=urn:btih:H1" and item["max_ratio"] == 1.5
+        assert item["hr_triggered"] is False, "HR 字段与成员视图同源(未配置站点为 False)"
+        # 同版本: torrents 与 groups/singles/shows 同门控不回传
+        again = mgr.ensure_group_state(rid=state["rid"])
+        assert "torrents" not in again and "groups" not in again and "singles" not in again
+
+
+def test_api_torrent_detail_endpoint(web_env):
+    """GET /api/torrents/{hash}: 全字段详情(to_dict + site + HR 展示字段); 未知 hash 404"""
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord.from_torrent(
+        {
+            "hash": "HA",
+            "name": "Detail",
+            "save_path": r"R:\D",
+            "state": "stalledUP",
+            "size": 100,
+            "total_size": 100,
+            "downloaded": 100,
+            "uploaded": 5,
+            "dlspeed": 0,
+            "upspeed": 0,
+            "seeding_time": 60,
+            "ratio": 0.05,
+            "amount_left": 0,
+            "completed": 100,
+            "progress": 1.0,
+            "dl_limit": 0,
+            "up_limit": 0,
+            "added_on": 1700000000,
+            "tags": "",
+            "category": "",
+            "content_path": r"R:\D\Detail",
+            "magnet_uri": "magnet:?xt=urn:btih:HA",
+            "eta": 8640000,
+            "num_seeds": 3,
+        },
+        hash="HA",
+    )
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    resp = client.get("/api/torrents/HA", headers=auth)
+    assert resp.status_code == 200
+    t = resp.json()["torrent"]
+    assert t["hash"] == "HA" and t["name"] == "Detail"
+    assert t["magnet_uri"] == "magnet:?xt=urn:btih:HA" and t["num_seeds"] == 3
+    assert t["site"] == "Unknown", "未匹配站点时 site 为 Unknown(与 tracker_name 语义一致)"
+    assert "hr_triggered" in t and "infohash_v1" in t, "HR 字段与 to_dict 全字段都应透出"
+    assert client.get("/api/torrents/NOPE", headers=auth).status_code == 404
+
+
+def test_api_torrent_subresources(web_env):
+    """GET /api/torrents/{hash}/trackers|files|peers: qB 透传; 未知 hash 404, qB 断连 503"""
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord(hash="HA", name="X")
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    fake = FakeClient()
+    fake.trackers_map["HA"] = [{"url": "https://t.example/announce", "status": 2}]
+    fake.files_map["HA"] = [{"index": 0, "name": "a.mkv", "size": 1}]
+    fake.peers_map["HA"] = {"peers": [{"ip": "1.2.3.4", "client": "qB"}]}
+    mgr.client = fake
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.get("/api/torrents/HA/trackers", headers=auth).json() == fake.trackers_map["HA"]
+    assert client.get("/api/torrents/HA/files", headers=auth).json() == fake.files_map["HA"]
+    peers = client.get("/api/torrents/HA/peers", headers=auth).json()
+    assert peers["peers"][0]["ip"] == "1.2.3.4"
+    assert fake.peers_calls == 1, "peers 走透传(不写 store 惰性缓存)"
+    # 未知 hash: 404(先于 client 检查)
+    assert client.get("/api/torrents/NOPE/trackers", headers=auth).status_code == 404
+    # qB 断连: 503
+    mgr.client = None
+    assert client.get("/api/torrents/HA/files", headers=auth).status_code == 503
+    assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
+
+
+def test_api_stats_endpoint(web_env):
+    """GET /api/stats: 透出 store.server_state(qB 全局状态); 未同步/降级时 null"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.get("/api/stats", headers=auth).json() == {"server": None}
+    mgr.store.server_state = {"dl_info_speed": 1024, "dht_nodes": 9}
+    data = client.get("/api/stats", headers=auth).json()
+    assert data["server"] == {"dl_info_speed": 1024, "dht_nodes": 9}

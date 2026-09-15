@@ -124,6 +124,9 @@ class QbManager(
         self._group_view: List[dict] = []
         # 单种子视图数据(未归组种子, 与分组视图同一脏窗口同快照重建, 见 ensure_group_view)
         self._singles_view: List[dict] = []
+        # 种子平铺视图数据(全部种子的种子中心视图, WEB UI 替代 qB 界面的种子页数据源;
+        # 与分组视图同一脏窗口同快照重建, 见 ensure_group_view)
+        self._flat_view: List[dict] = []
         # 追剧视图数据(全量种子按 剧→季→集 聚合, 与分组视图同一脏窗口同快照重建):
         # {"list": [剧…], "unrecognized": [hash…]}, members 只放 hash(明细由前端从成员索引取)
         self._shows_view: dict = {"list": [], "unrecognized": []}
