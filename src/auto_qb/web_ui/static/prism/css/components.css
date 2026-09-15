@@ -460,6 +460,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
   color: var(--warn); font-size: 12.5px; font-weight: 600; }
 .add-dialog-warnbar .ico { color: var(--warn); }
+.add-dialog-preview .add-dialog-warnbar { margin: 0 0 6px; }
 /* D4 接管预览(静态说明区): 弱化底色 + 当前配置语义文案 */
 .add-dialog-preview { margin-top: 16px; padding: 11px 13px; border-radius: var(--radius-sm);
   background: var(--surface-1); border: 1px solid var(--border-soft); }

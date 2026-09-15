@@ -1313,11 +1313,6 @@
           </button>
         </div>
         <div class="add-dialog-body">
-          <div v-if="addSkipCheck" class="add-dialog-warnbar">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-            <span>已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种</span>
-          </div>
-
           <div class="add-dialog-field">
             <label class="add-dialog-label">来源(.torrent 文件与链接可混合)</label>
             <label class="add-dialog-filepick">
@@ -1342,7 +1337,7 @@
             <div class="add-dialog-field">
               <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
               <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
-                     placeholder="如 D:\\Torrents" autocomplete="off" spellcheck="false">
+                     placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false">
             </div>
             <div class="add-dialog-field">
               <label class="add-dialog-label" for="ad-category">分类(可空)</label>
@@ -1369,6 +1364,10 @@
           </div>
 
           <div class="add-dialog-preview">
+            <div v-if="addSkipCheck" class="add-dialog-warnbar">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+              <span>已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种</span>
+            </div>
             <div class="add-dialog-preview-title">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
               <span>auto-qb 接管预览</span>
