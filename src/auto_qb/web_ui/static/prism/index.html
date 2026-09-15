@@ -160,6 +160,12 @@
             <span v-if="searchBuilding" class="muted"><svg class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg> 构建索引…</span>
             <span v-if="searchError" class="error">{{ searchError }}</span>
           </div>
+          <!-- 添加种子入口(R1B): 辅种页/种子页共用顶栏入口(搜索框右侧), 点击开添加对话框 -->
+          <button v-if="page === 'groups'" class="table-tool add-btn" title="添加种子(.torrent / magnet / URL)"
+                  @click="openAddTorrent">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
+            添加种子
+          </button>
           <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。
                选项整行可点、**无勾选框**、**无数字徐标**(选中数量靠色条/亮字表达, 不必加数字),
                结构复用筛选器弹层的 .pop-item -> 两处弹层观感完全一致 -->
@@ -1295,6 +1301,95 @@
         </aside>
       </div>
     </transition>
+    <!-- 添加种子对话框(R1B): 与 atlas 同构 —— 来源三选一可混合(.torrent 多选 / magnet+URL 文本域) + 保存路径/分类/标签 + qB 添加选项;
+         底部 D4 接管预览(静态说明 + 已有组前缀计数), skip_checking 勾选时顶部出警告条 -->
+    <div v-if="addOpen" class="modal-mask add-dialog-mask" @click.self="closeAddTorrent()">
+      <div class="modal add-dialog" role="dialog" aria-modal="true" aria-label="添加种子">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
+          <span>添加种子</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeAddTorrent">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div v-if="addSkipCheck" class="add-dialog-warnbar">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+            <span>已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种</span>
+          </div>
+
+          <div class="add-dialog-field">
+            <label class="add-dialog-label">来源(.torrent 文件与链接可混合)</label>
+            <label class="add-dialog-filepick">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+              <span>选择 .torrent 文件(可多选)…</span>
+              <input type="file" multiple accept=".torrent" @change="onAddFilePick">
+            </label>
+            <div v-if="addFiles.length" class="add-dialog-filelist">
+              <span v-for="(f, i) in addFiles" :key="f.name + f.size" class="add-dialog-filechip" :title="f.name">
+                {{ f.name }}
+                <button class="add-dialog-chipx" title="移除" @click="removeAddFile(i)">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+                </button>
+              </span>
+            </div>
+            <textarea v-model="addUrls" class="add-dialog-textarea" rows="4"
+                      placeholder="magnet:?xt=… 或 http(s)://… 种子链接, 每行一条(可与文件混合)"></textarea>
+            <div class="add-dialog-hint">已选 {{ addFiles.length }} 个文件 · {{ addUrlCount() }} 条链接</div>
+          </div>
+
+          <div class="add-dialog-grid">
+            <div class="add-dialog-field">
+              <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
+              <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
+                     placeholder="如 D:\\Torrents" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="add-dialog-field">
+              <label class="add-dialog-label" for="ad-category">分类(可空)</label>
+              <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
+                     placeholder="如 TV" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="add-dialog-field">
+              <label class="add-dialog-label" for="ad-tags">标签(逗号分隔, 可空)</label>
+              <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
+                     placeholder="如 HR, Keep" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+
+          <div class="add-dialog-field">
+            <label class="add-dialog-label">选项</label>
+            <div class="add-dialog-checks">
+              <label class="add-dialog-check"><input type="checkbox" v-model="addPaused"><span>添加即暂停</span></label>
+              <label class="add-dialog-check add-dialog-check-danger"><input type="checkbox" v-model="addSkipCheck"><span>跳过校验</span></label>
+              <label class="add-dialog-check"><input type="checkbox" v-model="addSequential"><span>顺序下载</span></label>
+              <label class="add-dialog-check"><input type="checkbox" v-model="addFirstLast"><span>首末块优先</span></label>
+              <label class="add-dialog-check"><input type="checkbox" v-model="addTmm"><span>自动种子管理</span></label>
+            </div>
+            <div class="add-dialog-hint add-dialog-hint-warn">跳过校验可能损坏辅种, 仅在确信文件完整时使用</div>
+          </div>
+
+          <div class="add-dialog-preview">
+            <div class="add-dialog-preview-title">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
+              <span>auto-qb 接管预览</span>
+            </div>
+            <p class="add-dialog-preview-line">添加后 auto-qb 将自动: 按 <b>保存路径 + 文件列表</b> 归组 → <b>站点打标 / 分类</b> → 按规则执行<b>校验策略</b>。</p>
+            <p class="add-dialog-preview-line" :class="{ dim: !addPathGroupCount }">
+              <template v-if="addPathGroupCount">保存路径下已有 <b>{{ addPathGroupCount }}</b> 个辅种组(前缀匹配, 供参考)</template>
+              <template v-else>保存路径下暂无匹配的辅种组(计数 0: 路径为空或未命中已有组前缀)</template>
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="ce-btn ghost" :disabled="addSubmitting" @click="closeAddTorrent">取消</button>
+          <button class="ce-btn primary" :disabled="!addCanSubmit" @click="submitAddTorrent">
+            <svg v-if="addSubmitting" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+            {{ addSubmitting ? '提交中…' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
     <div v-if="modal.visible" class="modal-mask" @click.self="resolveModal(false)">
       <div class="modal" :class="{ danger: modal.danger, wide: modal.wide }" role="dialog" aria-modal="true">
         <div class="modal-title">
