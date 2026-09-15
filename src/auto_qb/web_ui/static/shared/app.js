@@ -272,6 +272,19 @@ const app = createApp({
       histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面
       bootstrapping: false,
+      // 添加种子对话框(R1B): 来源 = .torrent 多选 + magnet/URL 文本域混合; 提交走 JSON(base64 文件)
+      addOpen: false,
+      addSubmitting: false,   // 提交中(按钮 loading, 阻止重复提交与误关闭)
+      addFiles: [],           // 已选 .torrent File 对象(展示用元信息; 前端读为 base64 随 JSON 上送)
+      addUrls: "",            // magnet / http(s) 链接, 每行一条
+      addSavePath: "",        // 保存路径(空 = qB 默认)
+      addCategory: "",        // 分类(可空)
+      addTags: "",            // 标签(逗号分隔, 可空)
+      addPaused: false,       // 添加即暂停
+      addSkipCheck: false,    // 跳过校验(危险选项: 勾选时预览区顶部出警告条)
+      addSequential: false,   // 顺序下载
+      addFirstLast: false,    // 首末块优先
+      addTmm: false,          // 自动种子管理(TMM)
     };
   },
   computed: {
@@ -643,6 +656,26 @@ const app = createApp({
     selectedCount() {
       return this.selGroups.length + this.selMembers.length;
     },
+    /* 添加种子对话框: 保存路径前缀比对已有辅种组(输入变化时轻量计数, 不发请求)。
+     * 双向前缀: 输入是某组路径的父目录、或子目录, 都算同一路径树(尾部斜杠/大小写归一后比对)。 */
+    addPathGroupCount() {
+      const norm = (p) => (p || "").trim().replace(/[\\/]+$/, "").toLowerCase();
+      const input = norm(this.addSavePath);
+      if (!input) return 0;
+      let n = 0;
+      for (const g of this.decoratedGroups) {
+        const p = norm(g.save_path);
+        if (!p) continue;
+        if (p.startsWith(input) || input.startsWith(p)) n += 1;
+      }
+      return n;
+    },
+    /* 添加可提交条件: 有文件或有非空链接行, 且不在提交中 */
+    addCanSubmit() {
+      if (this.addSubmitting) return false;
+      if (this.addFiles.length) return true;
+      return this.addUrls.split(/\r?\n/).some((l) => l.trim());
+    },
     /* ---------------- 历史流量(弹层): 按日原始行 -> 天(最近30)/月(近12)/年(全部)聚合 ---------------- */
     historyBuckets() {
       const rows = this.historyData || [];
@@ -760,6 +793,7 @@ const app = createApp({
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
+      else if (this.addOpen) this.closeAddTorrent();  // 添加种子对话框: 确认框优先, 其后于其它浮层
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;
       else if (this.menu.visible) this.menu.visible = false;
@@ -1491,6 +1525,85 @@ const app = createApp({
         }
       } catch (e) {
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+      }
+    },
+    /* ---------------- 添加种子对话框(R1B): multipart 提交不走 this.api()(它强制 application/json 会破坏 multipart boundary),
+     * 用原生 fetch + Bearer(this.token); 回执仍复用 waitCmd 轮询 /api/cmd/{id} ---------------- */
+    openAddTorrent() {
+      this.addFiles = [];
+      this.addUrls = "";
+      this.addSavePath = "";
+      this.addCategory = "";
+      this.addTags = "";
+      this.addPaused = false;
+      this.addSkipCheck = false;
+      this.addSequential = false;
+      this.addFirstLast = false;
+      this.addTmm = false;
+      this.addOpen = true;
+    },
+    closeAddTorrent() {
+      if (this.addSubmitting) return;  // 回执等待期不允许误关
+      this.addOpen = false;
+    },
+    onAddFilePick(event) {
+      const picked = Array.from((event.target && event.target.files) || []);
+      for (const f of picked) {
+        // 同名同大小视为重复(同一文件二次误选); File 对象只存引用不读内容
+        if (!this.addFiles.some((x) => x.name === f.name && x.size === f.size)) this.addFiles.push(f);
+      }
+      event.target.value = "";  // 重置原生 input, 允许再次选择同一文件补选
+    },
+    removeAddFile(i) {
+      this.addFiles = this.addFiles.filter((_, idx) => idx !== i);
+    },
+    addUrlCount() {
+      return this.addUrls.split(/\r?\n/).filter((l) => l.trim()).length;
+    },
+    async submitAddTorrent() {
+      if (!this.addCanSubmit) return;
+      // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB —— 零临时文件零新依赖)
+      const filesB64 = [];
+      for (const f of this.addFiles) {
+        filesB64.push(
+          await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = String(reader.result || "");
+              resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
+            };
+            reader.onerror = () => reject(new Error(`无法读取文件: ${f.name}`));
+            reader.readAsDataURL(f);
+          })
+        );
+      }
+      const payload = {
+        files_b64: filesB64,
+        urls: this.addUrls.split("\n").map((u) => u.trim()).filter(Boolean),
+        save_path: this.addSavePath.trim(),
+        category: this.addCategory.trim(),
+        tags: this.addTags.split(",").map((t) => t.trim()).filter(Boolean),
+        paused: this.addPaused,
+        skip_checking: this.addSkipCheck,
+        sequential: this.addSequential,
+        first_last_piece_prio: this.addFirstLast,
+        auto_tmm: this.addTmm,
+      };
+      this.addSubmitting = true;
+      try {
+        // 不设 Content-Type, 浏览器自动生成 multipart boundary
+        const queued = await this.api("/api/torrents/add", { method: "POST", body: JSON.stringify(payload) });
+        const r = await this.waitCmd(queued.cmd_id);
+        if (r.ok) {
+          this.toast("添加种子已受理, 列表稍后自动刷新", "ok", 4000);
+          this.addOpen = false;
+        } else {
+          this.toast(`添加种子失败: ${r.error}`, "error", 8000);
+        }
+      } catch (e) {
+        if (!e.auth) this.toast("添加种子失败: " + e.message, "error", 8000);
+      } finally {
+        this.addSubmitting = false;
       }
     },
     /* ---------------- 多选与批量操作(Ctrl/⌘ 选中, Shift 范围; 普通点击行为不变) ---------------- */
