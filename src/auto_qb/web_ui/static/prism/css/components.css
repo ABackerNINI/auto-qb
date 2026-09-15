@@ -411,3 +411,64 @@ select.ce-input:focus, .ce-inline-select:focus, .ce-select:focus, .ce-unit-group
 }
 select option { background: var(--bg-elev); color: var(--fg); }
 .col-menu { max-height: 70vh; overflow-y: auto; }
+
+/* ================= 添加种子对话框(R1B) —— 类名 .add-dialog 前缀 =================
+ * 复用 .modal-mask/.modal/.modal-title/.modal-actions 视觉语言(仅引用 tokens 令牌, 不散写色值);
+ * 预览区为静态说明(D4 接管语义) + 已有辅种组前缀计数(纯前端比对, 不发请求)。
+ */
+.modal.add-dialog { width: 640px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
+.add-dialog-x { margin-left: auto; }
+.add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.add-dialog-field { margin-top: 14px; }
+.add-dialog-field:first-child { margin-top: 4px; }
+.add-dialog-label { display: block; margin-bottom: 6px; color: var(--fg-dim); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .04em; }
+.add-dialog-input, .add-dialog-textarea { width: 100%; padding: 8px 11px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px; }
+.add-dialog-input:focus, .add-dialog-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.add-dialog-textarea { resize: vertical; min-height: 72px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; }
+.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; }
+.add-dialog-grid .add-dialog-field { margin-top: 14px; }
+/* 文件选择按钮(隐藏原生 input, label 即按钮)与已选文件 chips */
+.add-dialog-filepick { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong); background: var(--surface-1); color: var(--fg-muted); font-size: 13px;
+  cursor: pointer; user-select: none; }
+.add-dialog-filepick:hover { border-color: var(--accent); color: var(--fg); }
+.add-dialog-filepick .ico { color: var(--accent); }
+.add-dialog-filepick input[type="file"] { display: none; }
+.add-dialog-filelist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.add-dialog-filechip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 4px 3px 9px;
+  border-radius: 999px; background: var(--surface-1); border: 1px solid var(--border-soft); font-size: 12px;
+  color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.add-dialog-chipx { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border-radius: 50%; border: none; background: transparent; color: var(--fg-dim); cursor: pointer; flex: 0 0 auto; }
+.add-dialog-chipx:hover { background: var(--error-soft); color: var(--error); }
+.add-dialog-chipx .ico { width: 10px; height: 10px; }
+/* 选项勾选行: 与 .modal-check 同族, 但五项并排换行; 跳过校验项高亮危险色 */
+.add-dialog-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-dialog-check { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: var(--radius-sm);
+  background: var(--surface-1); border: 1px solid var(--border-soft); font-size: 12.5px; color: var(--fg-muted);
+  cursor: pointer; user-select: none; }
+.add-dialog-check:hover { border-color: var(--border-strong); }
+.add-dialog-check input { accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 auto; margin: 0; }
+.add-dialog-check-danger { border-color: var(--error); color: var(--error); }
+.add-dialog-check-danger input { accent-color: var(--error); }
+.add-dialog-hint { margin-top: 7px; color: var(--fg-dim); font-size: 11.5px; }
+.add-dialog-hint-warn { color: var(--error); }
+/* skip_checking 勾选时的顶部警告条(显眼, 琥珀) */
+.add-dialog-warnbar { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; padding: 8px 11px;
+  border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
+  color: var(--warn); font-size: 12.5px; font-weight: 600; }
+.add-dialog-warnbar .ico { color: var(--warn); }
+/* D4 接管预览(静态说明区): 弱化底色 + 当前配置语义文案 */
+.add-dialog-preview { margin-top: 16px; padding: 11px 13px; border-radius: var(--radius-sm);
+  background: var(--surface-1); border: 1px solid var(--border-soft); }
+.add-dialog-preview-title { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+  color: var(--accent); letter-spacing: .03em; }
+.add-dialog-preview-line { margin: 8px 0 0; color: var(--fg-muted); font-size: 12.5px; line-height: 1.6; }
+.add-dialog-preview-line b { color: var(--fg); font-weight: 600; }
+.add-dialog-preview-line.dim { color: var(--fg-dim); }
+@media (max-width: 900px) {
+  .modal.add-dialog { width: 100%; }
+  .add-dialog-grid { grid-template-columns: 1fr; }
+}
