@@ -43,7 +43,8 @@ from qbittorrentapi import APIConnectionError, Client
 
 from auto_qb.config import QbittorrentConfig
 from auto_qb.errors import AutoQbError
-from auto_qb.qbmanager import LocalQbClient, QbManager, _new_client, _throttle
+from auto_qb.qbclient import LocalQbClient, _new_client
+from auto_qb.qbmanager import QbManager, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 

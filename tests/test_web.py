@@ -690,10 +690,10 @@ def test_build_search_index_incremental_and_evict():
 
 def test_build_search_index_budget_resumes(monkeypatch):
     """_build_search_index 限流: 单次最多拉预算条, 未拉完保持脏, 下次调用续建至完成"""
-    from auto_qb import qbmanager
+    from auto_qb.mixins import web_view
     from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
 
-    monkeypatch.setattr(qbmanager, "SEARCH_INDEX_BUILD_BUDGET", 1)
+    monkeypatch.setattr(web_view, "SEARCH_INDEX_BUILD_BUDGET", 1)
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()

@@ -11,6 +11,9 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - mixins.tracker      TrackerMixin     tracker 配置匹配/单种限速
 - mixins.speed_curve  SpeedCurveMixin  全局限速曲线(Traffic Monitor 流量聚合 -> qB 全局限速)
+- mixins.web_view     WebviewMixin     WEB 视图组装(分组/单种子视图/搜索索引/状态回传)
+- mixins.web_commands WebCommandsMixin WEB 控制命令消费/回执/汇报确认跟踪
+- qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
 """
 import logging
 import os
@@ -18,16 +21,25 @@ import queue
 import threading
 import time
 from typing import List, Optional
-from urllib.parse import urlparse
 
 from qbittorrentapi import APIConnectionError, Client
 
-from .config import Config, QbittorrentConfig, WebConfig, load_config
+from .config import Config, WebConfig, load_config
 from .errors import AutoQbError
 from .locking import SingleInstanceLock
-from .mixins import CheckingMixin, GroupingMixin, RuleEngineMixin, SpeedCurveMixin, TagsMixin, TrackerMixin
+from .mixins import (
+    CheckingMixin,
+    GroupingMixin,
+    RuleEngineMixin,
+    SpeedCurveMixin,
+    TagsMixin,
+    TrackerMixin,
+    WebCommandsMixin,
+    WebviewMixin,
+)
 from .notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
+from .qbclient import _new_client
 from .rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from .torrents import (
@@ -35,7 +47,6 @@ from .torrents import (
     TorrentRecord,
     TorrentStore,
     missing_torrent_fields,
-    view_field_value,
 )
 from . import utils
 from .logging import setup_logging
@@ -43,13 +54,6 @@ from .logging import setup_logging
 logger = logging.getLogger(__name__)
 
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
-SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
-
-# 强制汇报的 tracker 确认窗口: reannounce 后 qB 立即重发 announce, 私站响应通常 1~10s;
-# 留足慢站点余量取 30s(主循环 main_tick=2s -> 约 15 轮确认机会), 超时仍未确认即判失败。
-REANNOUNCE_CONFIRM_TIMEOUT = 30.0
-# 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
-_LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
 
 
 def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
@@ -70,41 +74,22 @@ def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
     return stop_event.wait(main_tick)
 
 
-def _is_local_qb(qb: QbittorrentConfig) -> bool:
-    """qB 地址是否指向本机(取 base_url 解析后的 hostname, 兼容带端口/带协议写法)"""
-    return urlparse(qb.base_url).hostname in _LOCAL_HOSTS
 
 
-class LocalQbClient(Client):
-    """本地 qB 客户端: 每个(重)建的 requests Session 都强制关闭 trust_env
-
-    背景: 打开 trust_env 时 requests 每次请求都要解析环境代理(get_environ_proxies ->
-    proxy_bypass_registry 读注册表)与 ~/.netrc(get_netrc_auth 走 expanduser + os.path.exists),
-    对 127.0.0.1/localhost 连接毫无意义(实测单请求 0.276ms -> 0.043ms)。
-
-    ❗为什么不"连上后给 client._session.trust_env 赋 False": 库的 `Request._session` 是**只读
-    property**(qbittorrentapi/request.py), 且库在 `build_base_url()`(首次请求)与
-    `_initialize_context()`(登录过期/qB 重启)中都会调用 `_trigger_session_initialization()`
-    **丢弃当前 Session 并在下次访问时重建** —— 旧实现赋的值在第一次真实请求时即被清除
-    (静默失效, 从未生效过; 实测: 赋值后触发重建 -> trust_env 回到 True 且对象已换)。
-    此处改为覆盖 property, 在返回前强制关闭, 因此对任何时刻新建的 Session 都生效。
-
-    仅本地地址使用本子类, 远程/域名连接保留 requests 默认行为(企业代理/~/.netrc 可能真实需要)。
-    """
-    @property
-    def _session(self):
-        session = super()._session
-        session.trust_env = False
-        return session
 
 
-def _new_client(qb: QbittorrentConfig) -> Client:
-    """按配置构造 qB 客户端(本地地址用关闭 trust_env 的 LocalQbClient)"""
-    cls = LocalQbClient if _is_local_qb(qb) else Client
-    return cls(host=qb.base_url, username=qb.username, password=qb.password)
 
 
-class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin):
+class QbManager(
+    RuleEngineMixin,
+    TagsMixin,
+    CheckingMixin,
+    GroupingMixin,
+    TrackerMixin,
+    SpeedCurveMixin,
+    WebviewMixin,
+    WebCommandsMixin,
+):
     def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
         self.config_path = config_path
         self.config = config or load_config(config_path)
@@ -310,490 +295,34 @@ class QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, Tracke
             "paused": self._pause_event is not None and self._pause_event.is_set(),
         }
 
-    def _drain_web_commands(self):
-        """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)
 
-        命令带 cmd_id: 执行完立即写回执(_web_results), 供前端 /api/cmd/{id} 轮询执行结果。
-        reannounce 例外: handler 只发指令并登记确认跟踪(_reannounce_pending), 回执由
-        _check_reannounce_pending 在 tracker 确认后写入 —— "已发送"不等于"汇报成功"。
-        """
-        handlers = {
-            "pause_group": self._cmd_pause_group,
-            "resume_group": self._cmd_resume_group,
-            "reannounce_group": self._cmd_reannounce_group,
-            "delete_group": self._cmd_delete_group,
-            "pause_torrent": self._cmd_pause_torrent,
-            "resume_torrent": self._cmd_resume_torrent,
-            "reannounce_torrent": self._cmd_reannounce_torrent,
-            "delete_torrent": self._cmd_delete_torrent,
-            "reload_config": self._cmd_reload_config,
-            "build_search_index": self._cmd_build_search_index,
-        }
-        try:
-            while True:
-                cmd, payload = self.web_commands.get_nowait()
-                cmd_id = str(payload.get("cmd_id") or "")
-                args = {k: v for k, v in payload.items() if k != "cmd_id"}
-                try:
-                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent"):
-                        # handler 只发指令并登记确认跟踪; 回执由 _check_reannounce_pending 在
-                        # tracker 确认后写入 —— "已发送"不等于"汇报成功", 故此处不写 ok
-                        handlers[cmd](cmd_id=cmd_id, **args)
-                    else:
-                        handlers[cmd](**args)
-                        if cmd_id:
-                            self._set_web_result(cmd_id, "ok")
-                except KeyError as e:
-                    logger.warning(f"WEB UI 未知命令: {e}")
-                    if cmd_id:
-                        self._set_web_result(cmd_id, "error", f"未知命令: {e}")
-                except Exception as e:
-                    logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
-                    if cmd_id:
-                        self._set_web_result(cmd_id, "error", str(e))
-        except queue.Empty:
-            pass
 
-    def _set_web_result(self, cmd_id: str, status: str, error: str = "") -> None:
-        """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长"""
-        now = time.time()
-        if len(self._web_results) > 64:
-            self._web_results = {k: v for k, v in self._web_results.items() if now - v.get("ts", 0) < 120}
-        self._web_results[cmd_id] = {"status": status, "error": error, "ts": now}
 
-    def _trackers_baseline(self, hashes: List[str]) -> dict:
-        """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}
 
-        排除 DHT/PeX/LSD 虚拟 tracker(url 以 **/[DHT]/[PeX]/[LSD] 开头, 它们不走 announce)。
-        qB 断连等读取失败时异常上抛, 由命令分发层写 error 回执。
-        """
-        baseline = {}
-        for h in hashes:
-            trackers = self.client.torrents_trackers(h) or []
-            real = {}
-            for t in trackers:
-                url = str(t.get("url") or "")
-                if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
-                    continue
-                real[url] = (t.get("status"), t.get("next_announce"))
-            baseline[h] = real
-        return baseline
 
-    @staticmethod
-    def _confirm_reannounce_result(trackers: list, baseline: dict) -> Optional[bool]:
-        """判定单个种子汇报确认结果: True=已确认成功 / False=已确认失败 / None=仍在进行
 
-        逐 tracker 检查, 任一命中即结论:
-        - status == 3 (updating)                    -> qB 正在汇报, 视为成功
-        - next_announce 比基线提前(>60 单位, 秒/毫秒通用) -> next_announce 被重置, 视为成功
-        - status 从非 working 变为 2 (working)      -> 视为成功
-        - status == 4 (not working) 且带错误消息    -> tracker 拒绝, 视为失败
-        """
-        for t in trackers:
-            url = str(t.get("url") or "")
-            if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
-                continue
-            b_status, b_na = baseline.get(url, (None, None))
-            status = t.get("status")
-            na = t.get("next_announce")
-            if status == 3:
-                return True
-            if na is not None and b_na is not None and na < b_na - 60:
-                return True
-            if status == 2 and b_status is not None and b_status != 2:
-                return True
-            if status == 4 and (t.get("msg") or ""):
-                return False
-        return None
 
-    def _check_reannounce_pending(self):
-        """每 tick 检查在途的强制汇报确认; 某 cmd_id 全部种子出结论后聚合写回执"""
-        if not self._reannounce_pending:
-            return
-        now = time.time()
-        finished = []
-        for cmd_id, entry in self._reannounce_pending.items():
-            for h, it in entry["items"].items():
-                if it["done"]:
-                    continue
-                if now >= entry["deadline"]:
-                    it["done"], it["ok"] = True, False
-                    it["err"] = f"汇报确认超时({REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未确认到 tracker 响应)"
-                    continue
-                if self.client is None:
-                    continue  # qB 断连: 等恢复继续确认, 或按超时判失败
-                try:
-                    trackers = self.client.torrents_trackers(h) or []
-                    r = self._confirm_reannounce_result(trackers, it["baseline"])
-                except Exception as e:
-                    it["done"], it["ok"], it["err"] = True, False, f"读取 tracker 状态失败: {e}"
-                    continue
-                if r is True:
-                    it["done"], it["ok"] = True, True
-                elif r is False:
-                    it["done"], it["ok"], it["err"] = True, False, "tracker 未接受汇报(not working)"
-            if all(it["done"] for it in entry["items"].values()):
-                finished.append(cmd_id)
-        for cmd_id in finished:
-            entry = self._reannounce_pending.pop(cmd_id)
-            items = list(entry["items"].values())
-            fails = [it for it in items if not it["ok"]]
-            if not fails:
-                self._set_web_result(cmd_id, "ok")
-                logger.info(f"WEB UI | 强制汇报确认成功({len(items)}个种子)")
-            else:
-                msg = f"{len(fails)}/{len(items)} 个种子汇报确认失败: " + "; ".join(it["err"] for it in fails[:3])
-                self._set_web_result(cmd_id, "error", msg)
-                logger.warning(f"WEB UI | {msg}")
 
-    @staticmethod
-    def _state_kind(rec: TorrentRecord) -> str:
-        """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰
 
-        注意 is_stopped 须先于 is_downloading/is_uploading 判定: 暂停的种子
-        (stoppedDL/stoppedUP)同时命中下载/做种类别, 暂停态优先展示。
-        """
-        e = rec.state_enum
-        if e.is_errored:
-            return "error"
-        if e.is_checking:
-            return "checking"
-        if e.is_stopped:
-            return "paused"
-        if e.is_downloading:
-            return "downloading"
-        if e.is_uploading:
-            return "seeding"
-        return "other"
 
-    @staticmethod
-    def _hr_view_fields(rec: TorrentRecord) -> dict:
-        """该成员的 HR 展示字段(标签文本 + 要求/达成布尔), 供前端渲染 H&R 栏与对照列
 
-        - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
-        - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
-        - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
-        - hr_req_ratio: 要求分享率(0 = 不要求)
 
-        判定委托 TorrentRecord.check_hr_condition/check_hr_satisfied, 标签文本经
-        utils.replace_vars 解析 ${required_seeding_time}, 与维护流程(打 HR 标签)完全同源 ——
-        前端只做展示比较, 不得在 JS 里重算模板或阈值(否则自定义标签格式/阈值会立即失效)。
-        未配置 HR 站点返回全空值(前端据此整列显示"—"), 不做 None 防御(早暴露配置匹配错误)。
-        """
-        from . import utils as _utils
 
-        conf = rec.tracker_conf
-        hr = conf.hr if conf is not None else None
-        if hr is None:
-            return {
-                "hr_tag": "",
-                "hr_tag_done": "",
-                "hr_triggered": False,
-                "hr_satisfied": False,
-                "hr_req_time": 0,
-                "hr_req_ratio": 0.0,
-            }
-        triggered = rec.check_hr_condition()
-        satisfied = triggered and rec.check_hr_satisfied()
-        fields = {
-            "hr_tag": "",
-            "hr_tag_done": "",
-            "hr_triggered": triggered,
-            "hr_satisfied": satisfied,
-            "hr_req_time": hr.required_seeding_time + hr.extra_seeding_time,
-            "hr_req_ratio": hr.required_share_ratio,
-        }
-        if triggered:
-            if satisfied:
-                fields["hr_tag_done"] = _utils.replace_vars(hr.add_tag_for_satisfied, conf)
-            else:
-                fields["hr_tag"] = _utils.replace_vars(hr.add_tag, conf)
-        return fields
 
-    def _member_view(self, r) -> dict:
-        """单成员展示视图(分组视图 members 与 singles 未归组种子共用同一字段构建)"""
-        return {
-            "hash": r.hash,
-            "name": r.name,
-            "site": r.tracker_name,
-            "state": r.state,
-            "kind": self._state_kind(r),
-            "dlspeed": r.dlspeed,
-            "upspeed": r.upspeed,
-            "uploaded": r.uploaded,
-            "size": r.size,
-            # 组级"共同标签/分类"与保存路径筛选器的数据来源(交集/共同值由前端计算,
-            # 后端只透出原始值, 避免每次重建做 O(成员数) 以上的集合运算)
-            "save_path": r.save_path,
-            "tags": sorted(r.tags_set),
-            "category": r.category,
-            "progress": round(r.progress, 4),
-            # 取整到分钟(与 torrents.view_field_value 的重建判定同一步长): 该字段每秒递增,
-            # 不取整会让做种中的种子每轮置脏, 惰性重建失效; 前端展示精度本就是分钟
-            "seeding_time": view_field_value("seeding_time", r.seeding_time),
-            "ratio": round(r.ratio, 3),
-            # 添加时间(unix 秒): 组级默认排序取组内最大值(见下方组级 added_on)
-            "added_on": r.added_on,
-            # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
-            **self._hr_view_fields(r),
-        }
 
-    def _build_singles_view(self) -> List[dict]:
-        """未归组种子的单种子视图数据(分组未启用/文件列表不可读的种子不在任何组里,
-        只能从这里进入单种子视图; 搜索兜底路径不含全量)。与分组视图在同一脏窗口重建,
-        store.view_changed 对任意种子的视图字段变化置真, 故不会读到陈旧状态。"""
-        grouped: set = set()
-        for members in self.store.groups.values():
-            grouped.update(members)
-        return [self._member_view(r) for h, r in self.store.by_hash.items() if h not in grouped]
 
-    def _build_group_view(self) -> List[dict]:
-        """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
-        from . import utils as _utils
 
-        view = []
-        for key, members in self.store.groups.items():
-            recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
-            if not recs:
-                continue
-            members_view = [self._member_view(r) for r in recs]
-            view.append(
-                {
-                    "key": _utils.encode_group_key(key),
-                    "name": recs[0].name,
-                    "count": len(recs),
-                    "dlspeed": sum(m["dlspeed"] for m in members_view),
-                    "upspeed": sum(m["upspeed"] for m in members_view),
-                    "uploaded": sum(m["uploaded"] for m in members_view),
-                    # size = **单种子**大小(同组文件列表相同, 取代表成员); total_size = 全组求和。
-                    # 两者不等即说明组内大小不一致(前端据此提示风险), 而非显示重复信息
-                    "size": members_view[0]["size"],
-                    "total_size": sum(m["size"] for m in members_view),
-                    # 组级默认排序键 = 组内**最近添加**时间(前端 sortKey=added_on 降序);
-                    # 用 max 而非 min: "刚补进来的那个辅种"才是用户最关心的新条目
-                    "added_on": max(m["added_on"] for m in members_view),
-                    # HR 栏: 分子 = 已触发但未达标(需关注), 分母 = 已触发 HR 的成员数;
-                    # 在**后端**算好计数, 前端只负责显示(与 memory-bank/pitfalls.md 的"派生值后端算"约定一致)
-                    "hr_triggered": sum(1 for m in members_view if m["hr_triggered"]),
-                    "hr_pending": sum(1 for m in members_view if m["hr_triggered"] and not m["hr_satisfied"]),
-                    "members": members_view,
-                }
-            )
-        return view
 
-    def ensure_group_view(self) -> List[dict]:
-        """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
-        与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
-        singles(未归组种子)与分组视图在同一脏窗口同快照重建 —— 保证两组数据互相一致。"""
-        if self._group_view_dirty:
-            self._group_view = self._build_group_view()
-            self._singles_view = self._build_singles_view()
-            self._group_view_ver += 1
-            self._group_view_dirty = False
-        return self._group_view
 
-    def ensure_group_state(self, rid: Optional[int]) -> dict:
-        """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
 
-        rid 与服务端视图版本一致时**不回传 groups**(响应体趋近于零); 不一致时回传
-        全量分组数据并带上新版本号。status 体积极小(4 个标量), 无关版本恒回传,
-        以保证连接状态/暂停状态/种子数变化能即时反映。
-        """
-        self.ensure_group_view()
-        ver = self._group_view_ver
-        updated = rid != ver
-        state: dict = {"rid": ver, "updated": updated}
-        if updated:
-            state["groups"] = self._group_view
-            # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
-            state["singles"] = self._singles_view
-        return state
-
-    def _build_search_index(self) -> None:
-        """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名]}), 单次限流拉取。
-
-        **原子交换契约**: 每轮在**新字典**上重组(消失的种子不进新字典即淘汰), 完成后整体替换
-        `_search_index` 引用 —— 绝不就地增删旧字典, 否则 Web 线程正在迭代时会抛
-        "dictionary changed size during iteration"。已建条目只刷新名称(值替换不改结构, 并发只读安全),
-        新种子拉取文件列表(rec.files 惰性拉取 + 记录 _files 跨 tick 缓存, 只在主循环线程), 单条失败
-        跳过(记空文件列表)不阻塞整体。
-        限流: 单次最多拉取 SEARCH_INDEX_BUILD_BUDGET 条, 未拉完保持 _search_index_dirty=True,
-        由后续调用(下一 tick 推进 / 前端据 building 重查投递)续建 —— 避免首轮 N 次 API 长时间阻塞主循环。
-        """
-        if self.client is None:
-            # qB 断开中: 无文件 API 可用, 保持脏待连接恢复后重建(不能把空文件列表当成"已建完")
-            self._search_index_dirty = True
-            return
-        prev = self._search_index if self._search_index is not None else {}
-        idx: dict = {}
-        budget = SEARCH_INDEX_BUILD_BUDGET
-        for h, rec in self.store.by_hash.items():
-            entry = prev.get(h)
-            if entry is not None:
-                entry["name"] = rec.name
-            elif budget > 0:
-                budget -= 1
-                try:
-                    files = [f.name for f in rec.files(self.client)]
-                except Exception:
-                    files = []
-                entry = {"name": rec.name, "files": files}
-            else:
-                # 预算用尽: 剩余种子本轮不进新字典(下次调用续建), 保持脏
-                self._search_index = idx
-                self._search_index_dirty = True
-                return
-            idx[h] = entry
-        self._search_index = idx
-        self._search_index_dirty = False
-
-    def _cmd_build_search_index(self):
-        """WEB UI 命令: 构建搜索索引(Web 线程检测到索引脏后投递, 主循环线程执行)。
-
-        限流构建可能需多轮: 仅在全部拉取完成(不再脏)时记录完成日志, 避免分批刷屏。
-        """
-        self._build_search_index()
-        if not self._search_index_dirty:
-            logger.info(f"WEB UI | 搜索索引已构建: {len(self._search_index)} 个种子")
-
-    def search_torrents(self, q: str) -> dict:
-        """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
-
-        种子名匹配即时遍历 store.by_hash(无 qB API); 文件列表匹配依赖 _search_index 缓存。
-        返回 {"results": [..], "building": bool}——building 为 True 表示文件索引已过期/缺失,
-        已投递构建命令, 前端应稍后重查以获取完整文件匹配结果。
-        结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/dlspeed/upspeed/
-        uploaded/size/progress/seeding_time/ratio/save_path/tags/category/by, 供前端完整展示命中种子信息。
-        """
-        def _view(rec, by):
-            return {
-                "hash": rec.hash,
-                "name": rec.name,
-                "site": rec.tracker_name,
-                "kind": self._state_kind(rec),
-                "dlspeed": rec.dlspeed,
-                "upspeed": rec.upspeed,
-                "uploaded": rec.uploaded,
-                "size": rec.size,
-                "save_path": rec.save_path,
-                "tags": sorted(rec.tags_set),
-                "category": rec.category,
-                "progress": round(rec.progress, 4),
-                "seeding_time": rec.seeding_time,
-                "ratio": round(rec.ratio, 3),
-                "added_on": rec.added_on,
-                # 未归组命中种子以单种子虚拟行展示, 同样需要 HR 列所需字段
-                **self._hr_view_fields(rec),
-                "by": by,
-            }
-
-        q = (q or "").strip().lower()
-        if not q:
-            return {"results": [], "building": False}
-        results = []
-        seen = set()
-        # 种子名匹配(即时)
-        for h, rec in self.store.by_hash.items():
-            if q in rec.name.lower():
-                seen.add(h)
-                results.append(_view(rec, "name"))
-        # 文件列表匹配(依赖缓存索引)
-        idx = self._search_index
-        if idx is not None:
-            for h, entry in idx.items():
-                if h in seen:
-                    continue
-                if any(q in fn.lower() for fn in entry["files"]):
-                    rec = self.store.by_hash.get(h)
-                    if rec is None:
-                        continue
-                    results.append(_view(rec, "file"))
-        building = self._search_index_dirty
-        if building:
-            self.web_commands.put(("build_search_index", {}))
-        return {"results": results, "building": building}
-
-    def touch_web_client(self) -> None:
-        """WEB 请求心跳: 刷新 _web_last_seen, 让主循环在 Web 活跃窗口内持续重建分组视图。"""
-        self._web_last_seen = time.time()
-
-    def _group_hashes(self, key: tuple) -> List[str]:
-        return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]
-
-    def _cmd_pause_group(self, key: tuple):
-        hashes = self._group_hashes(key)
-        if hashes:
-            self.api.torrents_pause(torrent_hashes=hashes)
-            logger.info(f"WEB UI | 暂停整组({len(hashes)}个种子)")
-
-    def _cmd_resume_group(self, key: tuple):
-        hashes = self._group_hashes(key)
-        if hashes:
-            self.api.torrents_resume(torrent_hashes=hashes)
-            logger.info(f"WEB UI | 开始整组({len(hashes)}个种子)")
-
-    def _cmd_reannounce_group(self, key: tuple, cmd_id: str = ""):
-        hashes = self._group_hashes(key)
-        if hashes:
-            self.api.torrents_reannounce(torrent_hashes=hashes)
-            # 发送仅是"已下发指令"; 成功回执由 tracker 确认跟踪器在后续 tick 写入
-            baseline = self._trackers_baseline(hashes)
-            self._register_reannounce_pending(cmd_id, hashes, baseline)
-            logger.warning(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
-
-    def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
-        hashes = self._group_hashes(key)
-        if hashes:
-            self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
-            logger.warning(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
 
     # ---------- 单种子命令(WEB 明细行右键) ----------
 
-    def _cmd_pause_torrent(self, hash: str):
-        if self.store.get(hash) is not None:
-            self.api.torrents_pause(torrent_hashes=[hash])
-            logger.info(f"WEB UI | 暂停种子 {hash[:8]}")
 
-    def _cmd_resume_torrent(self, hash: str):
-        if self.store.get(hash) is not None:
-            self.api.torrents_resume(torrent_hashes=[hash])
-            logger.info(f"WEB UI | 开始种子 {hash[:8]}")
 
-    def _cmd_reannounce_torrent(self, hash: str, cmd_id: str = ""):
-        if self.store.get(hash) is None:
-            # 种子已不存在: 无法汇报, 直接给失败回执(删除流程据此不删除)
-            if cmd_id:
-                self._set_web_result(cmd_id, "error", "种子不存在或已被删除")
-            return
-        self.api.torrents_reannounce(torrent_hashes=[hash])
-        baseline = self._trackers_baseline([hash])
-        self._register_reannounce_pending(cmd_id, [hash], baseline)
-        logger.warning(f"WEB UI | 强制汇报种子 {hash[:8]}, 等待 tracker 确认")
 
-    def _register_reannounce_pending(self, cmd_id: str, hashes: List[str], baseline: dict) -> None:
-        """登记汇报确认跟踪: 全部种子出结论(成功/失败/超时)后聚合写该 cmd_id 的回执"""
-        if not cmd_id:
-            return  # 无回执需求的调用(直接构造 manager 的场景): 只发指令不跟踪
-        self._reannounce_pending[cmd_id] = {
-            "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
-            "items": {
-                h: {
-                    "done": False,
-                    "ok": False,
-                    "err": "",
-                    "baseline": baseline[h]
-                }
-                for h in hashes
-            },
-        }
 
-    def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
-        if self.store.get(hash) is not None:
-            self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
-            logger.warning(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
 
-    def _cmd_reload_config(self, config: Config):
-        self.apply_new_config(config)
 
     def apply_new_config(self, config: Config) -> dict:
         """应用新配置(热重载, 主循环线程经命令队列调用): 按变更影响分级执行

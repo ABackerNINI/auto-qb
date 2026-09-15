@@ -21,7 +21,7 @@ from unittest import mock
 from qbittorrentapi import Client
 
 from auto_qb.config import QbittorrentConfig
-from auto_qb.qbmanager import LocalQbClient, _new_client
+from auto_qb.qbclient import LocalQbClient, _new_client
 from helpers import FakeQbServer, FakeTorrent, make_manager
 
 
