@@ -425,6 +425,9 @@
             <button class="bulk-btn" @click="bulkAct('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </button>
+            <button class="bulk-btn" @click="bulkAct('recheck')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
+            </button>
             <button class="bulk-btn danger" @click="bulkDelete()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除…
             </button>
@@ -893,6 +896,28 @@
             </div>
             <div class="ctx-item" @click="copyTorrentInfo('magnet')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="torrentCmd('recheck', null, '重新校验')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
+            </div>
+            <div class="ctx-item" @click="torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, menuTorrent().super_seeding ? '关闭超级做种' : '开启超级做种')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
+            </div>
+            <div class="ctx-item" @click="torrentCmd('force-start', { enable: !menuTorrent().force_start }, menuTorrent().force_start ? '取消强制开始' : '强制开始')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制开始" : "强制开始" }}
+            </div>
+            <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
+            </div>
+            <div class="ctx-item" @click="torrentCmd('queue', { action: 'up' }, '队列上移')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列上移
+            </div>
+            <div class="ctx-item" @click="torrentCmd('queue', { action: 'down' }, '队列下移')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列下移
+            </div>
+            <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列置底')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delTorrent()">
@@ -1400,6 +1425,7 @@
               <button class="ce-btn ghost small" @click="drawerAct('pause')">暂停</button>
               <button class="ce-btn ghost small" @click="drawerAct('resume')">开始</button>
               <button class="ce-btn ghost small" @click="drawerAct('reannounce')">强制汇报</button>
+              <button class="ce-btn ghost small" @click="drawerCmd('recheck', null, '重新校验')">校验</button>
               <button class="ce-btn ghost small danger" @click="drawerDel()">删除</button>
               <button class="ce-btn ghost small" title="关闭(Esc)" @click="closeDrawer()">
                 <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>

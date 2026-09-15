@@ -1742,11 +1742,22 @@ const app = createApp({
     /* 批量动作: 并行投递 + 逐个等回执, 汇总成败(reannounce 的回执含 tracker 确认) */
     async bulkAct(action) {
       const { groupKeys, memberHashes } = this._bulkTargets();
-      const label = this._actionText(action);
-      const jobs = [
-        ...groupKeys.map((k) => `/api/groups/${k}/${action}`),
-        ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
-      ];
+      const label = action === "recheck" ? "重新校验" : this._actionText(action);
+      let jobs;
+      if (action === "recheck") {
+        // 组级无 recheck 端点(校验是种子级动作): 把选中组展开为成员后逐种投递
+        const hashes = [...memberHashes];
+        for (const k of groupKeys) {
+          const g = this._findGroup(k);
+          if (g) for (const m of g.members) if (!hashes.includes(m.hash)) hashes.push(m.hash);
+        }
+        jobs = hashes.map((h) => `/api/torrents/${h}/recheck`);
+      } else {
+        jobs = [
+          ...groupKeys.map((k) => `/api/groups/${k}/${action}`),
+          ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
+        ];
+      }
       if (!jobs.length) return;
       // 批量汇报: 常驻"等待中"(含目标数), 回执齐后原位换汇总终态(成功/超时, 琥珀不用红警告)
       const isRe = action === "reannounce";
@@ -1955,6 +1966,32 @@ const app = createApp({
       else this.toast("复制失败: 浏览器未授权剪贴板访问", "error");
     },
     /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
+    /* 右键菜单当前种子(SEED_ITEM 完整字段): 供菜单项动态文案/开关初值 */
+    menuTorrent() {
+      return this.memberByHash.get(this.menu.hash) || {};
+    },
+    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制开始/队列) —— 走既有回执链 */
+    async torrentCmd(action, body = null, okText = "") {
+      this.menu.visible = false;
+      const hash = this.menu.hash;
+      if (!hash) return;
+      try {
+        const resp = await this.api(`/api/torrents/${hash}/${action}`, {
+          method: "POST",
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) this.toast(`已执行: ${okText || action}`, "ok", 2500);
+        else this.toast(`${okText || action}失败: ${r.error}`, "error", 8000);
+      } catch (e) {
+        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+      }
+    },
+    /* 抽屉内命令: 与 torrentCmd 同链路, 但 hash 取自抽屉(菜单未开时 menu.hash 为空) */
+    drawerCmd(action, body = null, okText = "") {
+      this.menu.hash = this.drawer.hash;
+      this.torrentCmd(action, body, okText);
+    },
     copyTorrentInfo(field) {
       this.menu.visible = false;
       const m = this.memberByHash.get(this.menu.hash);
