@@ -28,8 +28,9 @@ class WebCommandsMixin:
         """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)
 
         命令带 cmd_id: 执行完立即写回执(_web_results), 供前端 /api/cmd/{id} 轮询执行结果。
-        reannounce 例外: handler 只发指令并登记确认跟踪(_reannounce_pending), 回执由
-        _check_reannounce_pending 在 tracker 确认后写入 —— "已发送"不等于"汇报成功"。
+        例外: reannounce 只发指令并登记确认跟踪(_reannounce_pending), 回执由
+        _check_reannounce_pending 在 tracker 确认后写入 —— "已发送"不等于"汇报成功";
+        bulk_torrents 的回执由 handler 聚合写(部分失败需报缺失计数)。
         """
         handlers = {
             "pause_group": self._cmd_pause_group,
@@ -40,6 +41,21 @@ class WebCommandsMixin:
             "resume_torrent": self._cmd_resume_torrent,
             "reannounce_torrent": self._cmd_reannounce_torrent,
             "delete_torrent": self._cmd_delete_torrent,
+            "recheck_torrent": self._cmd_recheck_torrent,
+            "super_seeding": self._cmd_super_seeding,
+            "force_start": self._cmd_force_start,
+            "set_torrent_limits": self._cmd_set_torrent_limits,
+            "set_share_limits": self._cmd_set_share_limits,
+            "set_torrent_location": self._cmd_set_torrent_location,
+            "rename_torrent": self._cmd_rename_torrent,
+            "queue_torrent": self._cmd_queue_torrent,
+            "set_auto_tmm": self._cmd_set_auto_tmm,
+            "add_trackers": self._cmd_add_trackers,
+            "edit_tracker": self._cmd_edit_tracker,
+            "remove_tracker": self._cmd_remove_tracker,
+            "set_file_priority": self._cmd_set_file_priority,
+            "rename_fs": self._cmd_rename_fs,
+            "bulk_torrents": self._cmd_bulk_torrents,
             "reload_config": self._cmd_reload_config,
             "build_search_index": self._cmd_build_search_index,
         }
@@ -49,9 +65,9 @@ class WebCommandsMixin:
                 cmd_id = str(payload.get("cmd_id") or "")
                 args = {k: v for k, v in payload.items() if k != "cmd_id"}
                 try:
-                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent"):
-                        # handler 只发指令并登记确认跟踪; 回执由 _check_reannounce_pending 在
-                        # tracker 确认后写入 —— "已发送"不等于"汇报成功", 故此处不写 ok
+                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent", "bulk_torrents"):
+                        # handler 只发指令并登记确认跟踪(bulk: 自行聚合写回执); 回执由后续 tick
+                        # (汇报确认)或 handler 内部(bulk)写入 —— 均不是简单的"执行完即 ok"
                         handlers[cmd](cmd_id=cmd_id, **args)
                     else:
                         handlers[cmd](**args)
@@ -238,6 +254,191 @@ class WebCommandsMixin:
         if self.store.get(hash) is not None:
             self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
             logger.warning(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
+
+    def _cmd_recheck_torrent(self, hash: str):
+        if self.store.get(hash) is not None:
+            self.api.torrents_recheck(torrent_hashes=[hash])
+            logger.info(f"WEB UI | 重新校验种子 {hash[:8]}")
+
+    def _cmd_super_seeding(self, hash: str, enable: bool = False):
+        if self.store.get(hash) is not None:
+            self.api.torrents_set_super_seeding(enable=enable, torrent_hashes=[hash])
+            logger.info(f"WEB UI | 种子 {hash[:8]} 超级做种({'开' if enable else '关'})")
+
+    def _cmd_force_start(self, hash: str, enable: bool = False):
+        if self.store.get(hash) is not None:
+            self.api.torrents_set_force_start(enable=enable, torrent_hashes=[hash])
+            logger.info(f"WEB UI | 种子 {hash[:8]} 强制开始({'开' if enable else '关'})")
+
+    def _cmd_set_torrent_limits(self, hash: str, up_limit: Optional[int] = None, dl_limit: Optional[int] = None):
+        """种子传输限速(bytes/s, 0 = 不限); 只下发非 None 的方向, 快照 up_limit/dl_limit 同步更新"""
+        if self.store.get(hash) is None:
+            return
+        if up_limit is not None:
+            self.api.torrents_set_upload_limit(torrent_hashes=[hash], limit=int(up_limit))
+        if dl_limit is not None:
+            self.api.torrents_set_download_limit(torrent_hashes=[hash], limit=int(dl_limit))
+        logger.info(f"WEB UI | 种子 {hash[:8]} 限速更新(up={up_limit}, down={dl_limit} bytes/s, 0=不限; 仅设置提供的方向)")
+
+    def _cmd_set_share_limits(
+        self,
+        hash: str,
+        ratio_limit: Optional[float] = None,
+        seeding_time_limit: Optional[int] = None,
+        inactive_seeding_time_limit: Optional[int] = None,
+    ):
+        """种子分享限制; 缺失维度按 -2(使用全局默认)补齐 —— 库不过滤 None, 直传会发字面量 "None"
+
+        哨兵语义(与 qbittorrent-api torrents_set_share_limits 文档一致):
+        -2 = 使用全局分享限制默认值; -1 = 不限制; 正数 = 限制值(比例/分钟)。
+        """
+        if self.store.get(hash) is None:
+            return
+        self.api.torrents_set_share_limits(
+            ratio_limit=-2.0 if ratio_limit is None else float(ratio_limit),
+            seeding_time_limit=-2 if seeding_time_limit is None else int(seeding_time_limit),
+            inactive_seeding_time_limit=-2 if inactive_seeding_time_limit is None else int(inactive_seeding_time_limit),
+            torrent_hashes=[hash],
+        )
+        logger.info(
+            f"WEB UI | 种子 {hash[:8]} 分享限制更新(ratio={ratio_limit}, seeding_time={seeding_time_limit}, "
+            f"inactive={inactive_seeding_time_limit}; -1=不限制, -2=用全局)"
+        )
+
+    def _cmd_set_torrent_location(self, hash: str, location: str = ""):
+        if self.store.get(hash) is None:
+            return
+        if not location:
+            raise ValueError("location 不能为空")
+        self.api.torrents_set_location(torrent_hashes=[hash], location=location)
+        # 组键含 save_path: 移动后下轮同步会按新 save_path 重归组(旧组解散/新组建立), 属预期行为
+        logger.warning(f"WEB UI | 种子 {hash[:8]} 移动保存路径 -> {location}(将按新路径重归组, 属预期)")
+
+    def _cmd_rename_torrent(self, hash: str, name: str = ""):
+        if self.store.get(hash) is None:
+            return
+        if not name:
+            raise ValueError("重命名名称不能为空")
+        self.api.torrents_rename(torrent_hash=hash, new_torrent_name=name)
+        # 只改 qB 显示名: 快照 name 不手工改, 下轮 sync 自然更新
+        logger.info(f"WEB UI | 重命名种子 {hash[:8]} -> {name}")
+
+    # 队列调整动作 -> QbApi 方法映射(qB 端点语义: top/bottom 置顶/置底, up/down 相邻交换)
+    _QUEUE_ACTIONS = {
+        "top": "torrents_top_priority",
+        "up": "torrents_increase_priority",
+        "down": "torrents_decrease_priority",
+        "bottom": "torrents_bottom_priority",
+    }
+
+    def _cmd_queue_torrent(self, hash: str, action: str = ""):
+        method = self._QUEUE_ACTIONS.get(action)
+        if method is None:
+            raise ValueError(f"未知队列动作: {action}(可选 top/up/down/bottom)")
+        if self.store.get(hash) is None:
+            return
+        getattr(self.api, method)(torrent_hashes=[hash])
+        logger.info(f"WEB UI | 种子 {hash[:8]} 队列调整: {action}")
+
+    def _cmd_set_auto_tmm(self, hash: str, enable: bool = False):
+        if self.store.get(hash) is not None:
+            self.api.torrents_set_auto_management(enable=enable, torrent_hashes=[hash])
+            logger.info(f"WEB UI | 种子 {hash[:8]} 自动管理({'开' if enable else '关'})")
+
+    def _cmd_add_trackers(self, hash: str, urls=None):
+        if self.store.get(hash) is None:
+            return
+        url_list = [u for u in (urls or []) if u]
+        if not url_list:
+            raise ValueError("urls 不能为空")
+        self.api.torrents_add_trackers(torrent_hash=hash, urls=url_list)
+        logger.info(f"WEB UI | 种子 {hash[:8]} 添加 {len(url_list)} 个 tracker")
+
+    def _cmd_edit_tracker(self, hash: str, orig_url: str = "", new_url: str = ""):
+        if self.store.get(hash) is None:
+            return
+        if not orig_url or not new_url:
+            raise ValueError("orig_url/new_url 均不能为空")
+        self.api.torrents_edit_tracker(torrent_hash=hash, original_url=orig_url, new_url=new_url)
+        logger.info(f"WEB UI | 种子 {hash[:8]} 编辑 tracker: {orig_url} -> {new_url}")
+
+    def _cmd_remove_tracker(self, hash: str, url: str = ""):
+        if self.store.get(hash) is None:
+            return
+        if not url:
+            raise ValueError("url 不能为空")
+        self.api.torrents_remove_trackers(torrent_hash=hash, urls=[url])
+        logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {url}")
+
+    # qB 文件优先级合法值(0=不下载, 1=普通, 6=高, 7=最大)
+    _FILE_PRIORITIES = frozenset((0, 1, 6, 7))
+
+    def _cmd_set_file_priority(self, hash: str, indices=None, priority: int = 0):
+        if self.store.get(hash) is None:
+            return
+        idx = [int(i) for i in (indices or [])]
+        prio = int(priority)
+        if not idx:
+            raise ValueError("indices 不能为空")
+        if prio not in self._FILE_PRIORITIES:
+            raise ValueError(f"非法文件优先级: {priority}(可选 0/1/6/7)")
+        self.api.torrents_file_priority(torrent_hash=hash, file_ids=idx, priority=prio)
+        logger.info(f"WEB UI | 种子 {hash[:8]} 文件优先级: {idx} -> {prio}")
+
+    def _cmd_rename_fs(self, hash: str, old_path: str = "", new_path: str = "", is_folder: bool = False):
+        if self.store.get(hash) is None:
+            return
+        if not old_path or not new_path:
+            raise ValueError("old_path/new_path 均不能为空")
+        if is_folder:
+            self.api.torrents_rename_folder(torrent_hash=hash, old_path=old_path, new_path=new_path)
+        else:
+            self.api.torrents_rename_file(torrent_hash=hash, old_path=old_path, new_path=new_path)
+        logger.info(f"WEB UI | 种子 {hash[:8]} 重命名{'文件夹' if is_folder else '文件'}: {old_path} -> {new_path}")
+
+    # 批量动作 -> API 调用(单次调用传全部 hashes, 不逐个循环; delete 透传 delete_files)
+    _BULK_ACTIONS = {
+        "pause":
+            lambda api, hashes, delete_files: api.torrents_pause(torrent_hashes=hashes),
+        "resume":
+            lambda api, hashes, delete_files: api.torrents_resume(torrent_hashes=hashes),
+        "recheck":
+            lambda api, hashes, delete_files: api.torrents_recheck(torrent_hashes=hashes),
+        "delete":
+            lambda api, hashes, delete_files: api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files),
+    }
+
+    def _cmd_bulk_torrents(self, hashes=None, action: str = "", cmd_id: str = "", delete_files: bool = False):
+        """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
+
+        - 未知 action / 空 hash 列表 -> error 回执
+        - 不在快照中的 hash 跳过(删除守阵), 仍有缺失时回执 error 带缺失计数(部分成功也报错,
+          前端可据列表刷新后重试); 全部命中 -> ok
+        - API 只调一次: hashes 整体传给既有 api 调用(qB 端点原生接受批量)
+        """
+        req = [h for h in (hashes or []) if h]
+        fn = self._BULK_ACTIONS.get(action)
+        if fn is None:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", f"未知批量动作: {action}(可选 pause/resume/recheck/delete)")
+            return
+        if not req:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "未提供任何 hash")
+            return
+        known = [h for h in req if self.store.get(h) is not None]
+        missing = len(req) - len(known)
+        if known:
+            fn(self.api, known, delete_files)
+        if missing:
+            msg = f"{missing}/{len(req)} 个种子不存在或已被删除"
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", msg)
+            logger.warning(f"WEB UI | 批量 {action}({len(known)}个种子): {msg}")
+        else:
+            if cmd_id:
+                self._set_web_result(cmd_id, "ok")
+            logger.warning(f"WEB UI | 批量 {action}({len(known)}个种子, delete_files={delete_files})")
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)

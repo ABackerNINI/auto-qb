@@ -30,6 +30,13 @@
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
+- test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
+- test_drain_web_commands_torrent_write_actions: 二轮写命令正常执行(参数透传/cmd_id 回执 ok/限速位置同步快照)
+- test_drain_web_commands_torrent_write_unknown_hash_skips: 二轮写命令未知 hash 静默跳过不调 API
+- test_drain_web_commands_share_limits_and_queue_mapping: share-limits 缺省维度 -2 补齐; queue 动作映射; 未知动作 error 回执
+- test_drain_web_commands_torrent_write_param_errors: 写命令参数错误 -> error 回执且不调 API, 后续命令继续
+- test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
+- test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
 - test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
 - test_reannounce_confirm_success_and_timeout: 汇报确认跟踪 next_announce 重置 -> ok 回执; 超时 -> error 回执
@@ -981,6 +988,495 @@ def test_drain_web_commands_torrent_actions():
         mgr.web_commands.put(("delete_torrent", {"hash": "GONE", "delete_files": True}))
         mgr._drain_web_commands()
         assert client.calls == before, "种子不在快照应跳过(删除守阵)"
+
+
+def test_api_torrent_write_endpoints_enqueue(web_env):
+    """二轮种子写端点(15个) POST 转发: cmd 与参数正确入队; 无密钥 401(鉴权沿用 /api/* 依赖)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    cases = [
+        ("/api/torrents/HA/recheck", None, "recheck_torrent", {
+            "hash": "HA"
+        }),
+        ("/api/torrents/HA/super-seeding", {
+            "enable": True
+        }, "super_seeding", {
+            "hash": "HA",
+            "enable": True
+        }),
+        ("/api/torrents/HA/force-start", {
+            "enable": False
+        }, "force_start", {
+            "hash": "HA",
+            "enable": False
+        }),
+        (
+            "/api/torrents/HA/limits", {
+                "up_limit": 1024,
+                "dl_limit": 0
+            }, "set_torrent_limits", {
+                "hash": "HA",
+                "up_limit": 1024,
+                "dl_limit": 0
+            }
+        ),
+        ("/api/torrents/HA/limits", {
+            "dl_limit": 512
+        }, "set_torrent_limits", {
+            "hash": "HA",
+            "dl_limit": 512
+        }),
+        (
+            "/api/torrents/HA/share-limits", {
+                "ratio_limit": 1.5,
+                "seeding_time_limit": -1,
+                "inactive_seeding_time_limit": -2
+            }, "set_share_limits", {
+                "hash": "HA",
+                "ratio_limit": 1.5,
+                "seeding_time_limit": -1,
+                "inactive_seeding_time_limit": -2
+            }
+        ),
+        ("/api/torrents/HA/location", {
+            "location": "R:/X"
+        }, "set_torrent_location", {
+            "hash": "HA",
+            "location": "R:/X"
+        }),
+        ("/api/torrents/HA/rename", {
+            "name": "New"
+        }, "rename_torrent", {
+            "hash": "HA",
+            "name": "New"
+        }),
+        ("/api/torrents/HA/queue", {
+            "action": "top"
+        }, "queue_torrent", {
+            "hash": "HA",
+            "action": "top"
+        }),
+        ("/api/torrents/HA/auto-tmm", {
+            "enable": True
+        }, "set_auto_tmm", {
+            "hash": "HA",
+            "enable": True
+        }),
+        ("/api/torrents/HA/trackers/add", {
+            "urls": ["u1", "u2"]
+        }, "add_trackers", {
+            "hash": "HA",
+            "urls": ["u1", "u2"]
+        }),
+        (
+            "/api/torrents/HA/trackers/edit", {
+                "orig_url": "a",
+                "new_url": "b"
+            }, "edit_tracker", {
+                "hash": "HA",
+                "orig_url": "a",
+                "new_url": "b"
+            }
+        ),
+        ("/api/torrents/HA/trackers/remove", {
+            "url": "a"
+        }, "remove_tracker", {
+            "hash": "HA",
+            "url": "a"
+        }),
+        (
+            "/api/torrents/HA/files/priority", {
+                "indices": [0, 2],
+                "priority": 7
+            }, "set_file_priority", {
+                "hash": "HA",
+                "indices": [0, 2],
+                "priority": 7
+            }
+        ),
+        (
+            "/api/torrents/HA/rename-fs", {
+                "old_path": "a",
+                "new_path": "b",
+                "is_folder": True
+            }, "rename_fs", {
+                "hash": "HA",
+                "old_path": "a",
+                "new_path": "b",
+                "is_folder": True
+            }
+        ),
+        (
+            "/api/torrents/bulk", {
+                "hashes": ["HA", "HB"],
+                "action": "pause"
+            }, "bulk_torrents", {
+                "hashes": ["HA", "HB"],
+                "action": "pause",
+                "delete_files": False
+            }
+        ),
+        (
+            "/api/torrents/bulk", {
+                "hashes": ["HA"],
+                "action": "delete",
+                "delete_files": True
+            }, "bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "delete",
+                "delete_files": True
+            }
+        ),
+    ]
+    for path, body, want_cmd, want_payload in cases:
+        resp = client.post(path, headers=auth, json=body)
+        assert resp.status_code == 200, f"{path}: {resp.text}"
+        data = resp.json()
+        assert data["queued"] is True and data["cmd_id"], path
+        got_cmd, got_payload = mgr.web_commands.get_nowait()
+        assert got_cmd == want_cmd, f"{path}: {got_cmd}"
+        got_payload.pop("cmd_id")
+        assert got_payload == want_payload, f"{path}: {got_payload}"
+    # 鉴权沿用既有 /api/* 依赖: 无/错密钥 401
+    assert client.post("/api/torrents/HA/recheck").status_code == 401
+    assert client.post("/api/torrents/bulk", json={"hashes": ["HA"], "action": "pause"}).status_code == 401
+
+
+def test_drain_web_commands_torrent_write_actions():
+    """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速/保存路径写后同步快照"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        cmds = [
+            ("recheck_torrent", {
+                "hash": "HA",
+                "cmd_id": "c1"
+            }),
+            ("super_seeding", {
+                "hash": "HA",
+                "enable": True,
+                "cmd_id": "c2"
+            }),
+            ("force_start", {
+                "hash": "HA",
+                "enable": True,
+                "cmd_id": "c3"
+            }),
+            ("set_torrent_limits", {
+                "hash": "HA",
+                "up_limit": 1024,
+                "dl_limit": 2048,
+                "cmd_id": "c4"
+            }),
+            (
+                "set_share_limits", {
+                    "hash": "HA",
+                    "ratio_limit": 1.5,
+                    "seeding_time_limit": -1,
+                    "inactive_seeding_time_limit": -2,
+                    "cmd_id": "c5"
+                }
+            ),
+            ("set_torrent_location", {
+                "hash": "HA",
+                "location": "R:/Moved",
+                "cmd_id": "c6"
+            }),
+            ("rename_torrent", {
+                "hash": "HA",
+                "name": "NewName",
+                "cmd_id": "c7"
+            }),
+            ("set_auto_tmm", {
+                "hash": "HA",
+                "enable": True,
+                "cmd_id": "c8"
+            }),
+            ("add_trackers", {
+                "hash": "HA",
+                "urls": ["https://a/announce", "https://b/announce"],
+                "cmd_id": "c9"
+            }),
+            (
+                "edit_tracker", {
+                    "hash": "HA",
+                    "orig_url": "https://a/announce",
+                    "new_url": "https://c/announce",
+                    "cmd_id": "c10"
+                }
+            ),
+            ("remove_tracker", {
+                "hash": "HA",
+                "url": "https://c/announce",
+                "cmd_id": "c11"
+            }),
+            ("set_file_priority", {
+                "hash": "HA",
+                "indices": [0, 1],
+                "priority": 6,
+                "cmd_id": "c12"
+            }),
+            (
+                "rename_fs", {
+                    "hash": "HA",
+                    "old_path": "old/file.mkv",
+                    "new_path": "new/file.mkv",
+                    "is_folder": False,
+                    "cmd_id": "c13"
+                }
+            ),
+        ]
+        for cmd, payload in cmds:
+            mgr.web_commands.put((cmd, payload))
+        mgr._drain_web_commands()
+        assert client.calls[0] == ("recheck", None) and client.recheck_hashes_calls[0] == ["HA"]
+        assert client.calls[1] == ("set_super_seeding", True)
+        assert client.calls[2] == ("set_force_start", True)
+        assert client.calls[3] == ("set_upload_limit", 1024)
+        assert client.calls[4] == ("set_download_limit", 2048)
+        assert client.calls[5] == ("set_share_limits", (1.5, -1, -2)), "share-limits 三值映射"
+        assert client.calls[6] == ("set_location", "R:/Moved")
+        assert client.calls[7] == ("rename", ("HA", "NewName")), "rename 参数形态(torrent_hash, new_torrent_name)"
+        assert client.calls[8] == ("set_auto_tmm", True)
+        assert client.calls[9] == ("add_trackers", ("HA", ["https://a/announce", "https://b/announce"]))
+        assert client.calls[10] == ("edit_tracker", ("HA", "https://a/announce", "https://c/announce"))
+        assert client.calls[11] == ("remove_trackers", ("HA", ["https://c/announce"]))
+        assert client.calls[12] == ("file_priority", ("HA", [0, 1], 6))
+        assert client.calls[13] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
+        # 全部命令回执 ok
+        assert all(mgr._web_results[f"c{i}"]["status"] == "ok" for i in range(1, 14)), mgr._web_results
+        # 限速/保存路径写后快照同步(QbApi update_torrent_fields)
+        rec = mgr.store.get("HA")
+        assert rec.up_limit == 1024 and rec.dl_limit == 2048 and rec.save_path == "R:/Moved"
+
+
+def test_drain_web_commands_torrent_write_unknown_hash_skips():
+    """二轮写命令: hash 不在快照 -> 静默跳过不调 API(照 pause_torrent 删除守阵样板)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        cmds = [
+            ("recheck_torrent", {
+                "hash": "GONE"
+            }),
+            ("super_seeding", {
+                "hash": "GONE",
+                "enable": True
+            }),
+            ("force_start", {
+                "hash": "GONE",
+                "enable": True
+            }),
+            ("set_torrent_limits", {
+                "hash": "GONE",
+                "up_limit": 1,
+                "dl_limit": 1
+            }),
+            (
+                "set_share_limits", {
+                    "hash": "GONE",
+                    "ratio_limit": 1.0,
+                    "seeding_time_limit": -1,
+                    "inactive_seeding_time_limit": -1
+                }
+            ),
+            ("set_torrent_location", {
+                "hash": "GONE",
+                "location": "R:/X"
+            }),
+            ("rename_torrent", {
+                "hash": "GONE",
+                "name": "N"
+            }),
+            ("queue_torrent", {
+                "hash": "GONE",
+                "action": "top"
+            }),
+            ("set_auto_tmm", {
+                "hash": "GONE",
+                "enable": True
+            }),
+            ("add_trackers", {
+                "hash": "GONE",
+                "urls": ["u"]
+            }),
+            ("edit_tracker", {
+                "hash": "GONE",
+                "orig_url": "a",
+                "new_url": "b"
+            }),
+            ("remove_tracker", {
+                "hash": "GONE",
+                "url": "a"
+            }),
+            ("set_file_priority", {
+                "hash": "GONE",
+                "indices": [0],
+                "priority": 1
+            }),
+            ("rename_fs", {
+                "hash": "GONE",
+                "old_path": "a",
+                "new_path": "b",
+                "is_folder": True
+            }),
+        ]
+        for cmd, payload in cmds:
+            mgr.web_commands.put((cmd, payload))
+        mgr._drain_web_commands()
+        assert client.calls == [] and client.recheck_hashes_calls == [], client.calls
+
+
+def test_drain_web_commands_share_limits_and_queue_mapping():
+    """share-limits: 缺省维度按 -2(用全局)补齐; queue: 四动作映射到对应 qB 方法, 未知动作 error 回执"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # queue 四动作 -> qB 队列端点方法(方法名映射正确)
+        for action, want in (
+            ("top", "queue_top"), ("up", "queue_up"), ("down", "queue_down"), ("bottom", "queue_bottom")
+        ):
+            mgr.web_commands.put(("queue_torrent", {"hash": "HA", "action": action}))
+            mgr._drain_web_commands()
+            assert client.calls[-1] == (want, ["HA"]), f"{action}: {client.calls[-1]}"
+        # share-limits 缺省维度 -2 补齐(库不过滤 None, 直传会以字面量 "None" 发给 qB)
+        mgr.web_commands.put(("set_share_limits", {"hash": "HA", "ratio_limit": 2.0}))
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("set_share_limits", (2.0, -2, -2)), client.calls[-1]
+        # 未知队列动作 -> error 回执且不调 API
+        before = list(client.calls)
+        mgr.web_commands.put(("queue_torrent", {"hash": "HA", "action": "middle", "cmd_id": "qerr"}))
+        mgr._drain_web_commands()
+        assert client.calls == before
+        r = mgr._web_results["qerr"]
+        assert r["status"] == "error" and "middle" in r["error"], r
+
+
+def test_drain_web_commands_torrent_write_param_errors():
+    """写命令参数错误(空名称/路径/URL/非法优先级) -> error 回执且不调 API, 后续命令继续消费"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        errs = [
+            ("rename_torrent", {
+                "hash": "HA",
+                "name": ""
+            }, "e1"),
+            ("set_torrent_location", {
+                "hash": "HA",
+                "location": ""
+            }, "e2"),
+            ("add_trackers", {
+                "hash": "HA",
+                "urls": []
+            }, "e3"),
+            ("edit_tracker", {
+                "hash": "HA",
+                "orig_url": "a",
+                "new_url": ""
+            }, "e4"),
+            ("remove_tracker", {
+                "hash": "HA",
+                "url": ""
+            }, "e5"),
+            ("set_file_priority", {
+                "hash": "HA",
+                "indices": [0],
+                "priority": 3
+            }, "e6"),
+            ("set_file_priority", {
+                "hash": "HA",
+                "indices": [],
+                "priority": 1
+            }, "e7"),
+            ("rename_fs", {
+                "hash": "HA",
+                "old_path": "a",
+                "new_path": "",
+                "is_folder": False
+            }, "e8"),
+        ]
+        for cmd, payload, cmd_id in errs:
+            mgr.web_commands.put((cmd, {**payload, "cmd_id": cmd_id}))
+        mgr.web_commands.put(("pause_torrent", {"hash": "HA"}))  # 后续命令不受影响
+        mgr._drain_web_commands()
+        assert client.calls == [("pause", ["HA"])], client.calls
+        for _, _, cmd_id in errs:
+            assert mgr._web_results[cmd_id]["status"] == "error", (cmd_id, mgr._web_results[cmd_id])
+
+
+def test_drain_web_commands_bulk_torrents():
+    """批量命令: 多 hash 一次 API 调用 + 聚合回执; 部分缺失/未知动作/空列表 -> error 回执"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # pause: 一次调用传全部 hashes(单条 call 即单次调用), 全部命中 -> ok
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "pause", "cmd_id": "b1"}))
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("pause", ["HA", "HB"]), client.calls[-1]
+        assert mgr._web_results["b1"]["status"] == "ok"
+        # recheck: hash 级作用范围一次传入
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b2"}))
+        mgr._drain_web_commands()
+        assert client.recheck_hashes_calls[-1] == ["HA", "HB"]
+        assert mgr._web_results["b2"]["status"] == "ok"
+        # delete: delete_files 透传, 成员从快照移除
+        mgr.web_commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "b3"
+            })
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("delete", True)
+        assert mgr.store.get("HA") is None
+        assert mgr._web_results["b3"]["status"] == "ok"
+        # 部分缺失: 已知种子仍执行, 回执 error 带缺失计数
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HB", "GONE"], "action": "resume", "cmd_id": "b4"}))
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("resume", ["HB"])
+        r = mgr._web_results["b4"]
+        assert r["status"] == "error" and "1/2" in r["error"], r
+        # 未知动作 -> error 回执, 不调 API
+        before = list(client.calls)
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HB"], "action": "purge", "cmd_id": "b5"}))
+        mgr._drain_web_commands()
+        assert client.calls == before
+        assert mgr._web_results["b5"]["status"] == "error" and "purge" in mgr._web_results["b5"]["error"]
+        # 空 hash 列表 -> error 回执
+        mgr.web_commands.put(("bulk_torrents", {"hashes": [], "action": "pause", "cmd_id": "b6"}))
+        mgr._drain_web_commands()
+        assert mgr._web_results["b6"]["status"] == "error"
+
+
+def test_cmd_trackers_write_invalidates_lazy_cache():
+    """tracker 三兄弟写后失效 _trackers_info 惰性缓存: 下轮读取拉新值(同 tick 内后续读不拿旧值)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        rec = mgr.store.get("HA")
+        # 预热: 惰性缓存持有旧 tracker 列表
+        assert rec.trackers_info(mgr.client)[0]["url"] == "https://tracker.hhanclub.net/announce.php"
+        assert rec._trackers_info is not None
+        client.trackers_map["HA"] = [{"url": "https://new.example.com/announce"}]
+        mgr.web_commands.put(("add_trackers", {"hash": "HA", "urls": ["https://extra.example.com/announce"]}))
+        mgr._drain_web_commands()
+        assert rec._trackers_info is None, "add_trackers 应失效惰性缓存"
+        assert rec.trackers_info(mgr.client) == [{"url": "https://new.example.com/announce"}]
+        # edit: 再次失效
+        rec.trackers_info(mgr.client)  # 重新预热
+        mgr.web_commands.put(
+            (
+                "edit_tracker", {
+                    "hash": "HA",
+                    "orig_url": "https://new.example.com/announce",
+                    "new_url": "https://edited.example.com/announce"
+                }
+            )
+        )
+        mgr._drain_web_commands()
+        assert rec._trackers_info is None, "edit_tracker 应失效惰性缓存"
+        # remove: 再次失效
+        rec.trackers_info(mgr.client)  # 重新预热
+        mgr.web_commands.put(("remove_tracker", {"hash": "HA", "url": "https://new.example.com/announce"}))
+        mgr._drain_web_commands()
+        assert rec._trackers_info is None, "remove_tracker 应失效惰性缓存"
 
 
 def test_drain_web_commands_unknown_and_error_continues():

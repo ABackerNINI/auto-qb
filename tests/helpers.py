@@ -81,6 +81,7 @@ class FakeClient:
         self.server_state = None  # 非空时随 sync 响应回传(模拟 qB 每轮都带 server_state)
         self.peers_map = {}  # hash -> peers 响应(torrents_peers 替身; 未命中回空列表)
         self.peers_calls = 0  # torrents_peers 调用计数
+        self.recheck_hashes_calls = []  # torrents_recheck 作用范围(hash 列表; calls 保持旧约定只记 None)
         self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
         self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
 
@@ -246,6 +247,8 @@ class FakeClient:
 
     def torrents_recheck(self, torrent_hashes=None):
         self.calls.append(("recheck", None))
+        # hash 级作用范围另记(Web 命令/批量测试断言用; calls 里的 ("recheck", None) 约定被大量既有断言依赖)
+        self.recheck_hashes_calls.append(torrent_hashes)
 
     def torrents_reannounce(self, torrent_hashes=None):
         self.calls.append(("reannounce", None))
@@ -258,6 +261,55 @@ class FakeClient:
 
     def torrents_set_location(self, torrent_hashes=None, location=None):
         self.calls.append(("set_location", location))
+
+    # ---- WEB UI 二轮写命令替身(snake 命名与 QbApi 调用一致; 记 calls 供断言) ----
+
+    def torrents_set_super_seeding(self, enable=None, torrent_hashes=None):
+        self.calls.append(("set_super_seeding", enable))
+
+    def torrents_set_force_start(self, enable=None, torrent_hashes=None):
+        self.calls.append(("set_force_start", enable))
+
+    def torrents_set_share_limits(
+        self, ratio_limit=None, seeding_time_limit=None, inactive_seeding_time_limit=None, torrent_hashes=None
+    ):
+        self.calls.append(("set_share_limits", (ratio_limit, seeding_time_limit, inactive_seeding_time_limit)))
+
+    def torrents_rename(self, torrent_hash=None, new_torrent_name=None):
+        self.calls.append(("rename", (torrent_hash, new_torrent_name)))
+
+    def torrents_set_auto_management(self, enable=None, torrent_hashes=None):
+        self.calls.append(("set_auto_tmm", enable))
+
+    def torrents_top_priority(self, torrent_hashes=None):
+        self.calls.append(("queue_top", torrent_hashes))
+
+    def torrents_increase_priority(self, torrent_hashes=None):
+        self.calls.append(("queue_up", torrent_hashes))
+
+    def torrents_decrease_priority(self, torrent_hashes=None):
+        self.calls.append(("queue_down", torrent_hashes))
+
+    def torrents_bottom_priority(self, torrent_hashes=None):
+        self.calls.append(("queue_bottom", torrent_hashes))
+
+    def torrents_add_trackers(self, torrent_hash=None, urls=None):
+        self.calls.append(("add_trackers", (torrent_hash, list(urls or []))))
+
+    def torrents_edit_tracker(self, torrent_hash=None, original_url=None, new_url=None):
+        self.calls.append(("edit_tracker", (torrent_hash, original_url, new_url)))
+
+    def torrents_remove_trackers(self, torrent_hash=None, urls=None):
+        self.calls.append(("remove_trackers", (torrent_hash, list(urls or []))))
+
+    def torrents_file_priority(self, torrent_hash=None, file_ids=None, priority=None):
+        self.calls.append(("file_priority", (torrent_hash, list(file_ids or []), priority)))
+
+    def torrents_rename_file(self, torrent_hash=None, old_path=None, new_path=None):
+        self.calls.append(("rename_file", (torrent_hash, old_path, new_path)))
+
+    def torrents_rename_folder(self, torrent_hash=None, old_path=None, new_path=None):
+        self.calls.append(("rename_folder", (torrent_hash, old_path, new_path)))
 
 
 # ---------- 本地假 qBittorrent Web API 服务 ----------
@@ -634,6 +686,10 @@ class FakeTorrent:
                 raise RuntimeError("TorrentStore 未绑定 client")
             self._trackers_info = list(client.torrents_trackers(self.hash) or [])
         return self._trackers_info
+
+    def invalidate_trackers(self):
+        """tracker 写操作后失效惰性缓存(与 TorrentRecord.invalidate_trackers 鸭子兼容)"""
+        self._trackers_info = None
 
     def tracker_urls(self, client):
         return [t.get("url") for t in self.trackers_info(client) if t.get("url")]
