@@ -57,6 +57,7 @@ SPEC_KINDS = frozenset({"str", "bool", "list", "object", "enum", "speed"})
 # 插件列表项编辑方式(Plugin.item_kind): str 普通串 | pattern 模式串 | tag_group 逗号分组 | state_group 状态组
 ITEM_KINDS = frozenset({"str", "pattern", "tag_group", "state_group"})
 
+
 @dataclass(frozen=True)
 class Field:
     """一个可编辑字段的 UI 元数据
@@ -96,6 +97,7 @@ class Field:
     unit_default: str = ""
     open: bool = False  # object 段缺省展开态(True = 不折叠, 如 日志/WEB UI/通知 这类短段)
 
+
 @dataclass(frozen=True)
 class Group:
     """左侧导航分组: 一组顶层配置键(按声明顺序展示)"""
@@ -104,6 +106,7 @@ class Group:
     help: str = ""
     fields: Tuple[Field, ...] = ()
     icon: str = ""  # sprite symbol id(如 i-settings); 空 = 前端用默认图标
+
 
 @dataclass(frozen=True)
 class Plugin:
@@ -124,6 +127,7 @@ class Plugin:
     placeholder: str = ""
     fields: Tuple[Field, ...] = ()
     risk: str = ""  # 非空 = 高风险插件(前端在卡片头显示醒目警示)
+
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 

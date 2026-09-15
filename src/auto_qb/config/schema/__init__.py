@@ -53,14 +53,40 @@ from .rules import ACTION_PLUGINS, CHECKING_SECTION_FIELDS, CONDITION_PLUGINS, R
 from .trackers import HR_OUTPUT_FIELDS, TRACKER_FIELDS, TRACKER_HR_FIELDS
 
 __all__ = [
-    "Field", "Group", "Plugin",
-    "KINDS", "UNIT_KINDS", "TIME_UNITS", "SIZE_UNITS", "SPEED_UNITS", "SPEC_KINDS", "ITEM_KINDS",
-    "LOG_LEVELS", "NOTIFY_LEVELS", "NOTIFY_CHANNELS", "EXECUTE_ONCE", "STOP_IF", "TRIGGERS",
-    "CHECKING_BASIC", "CHECKING_MODES", "HR_MODES", "STATE_ATTRS", "DELETED_ALLOWED_ACTIONS",
-    "HR_OUTPUT_FIELDS", "TRACKER_HR_FIELDS", "TRACKER_FIELDS",
-    "RULE_FIELDS", "CONDITION_PLUGINS", "CHECKING_SECTION_FIELDS", "ACTION_PLUGINS",
+    "Field",
+    "Group",
+    "Plugin",
+    "KINDS",
+    "UNIT_KINDS",
+    "TIME_UNITS",
+    "SIZE_UNITS",
+    "SPEED_UNITS",
+    "SPEC_KINDS",
+    "ITEM_KINDS",
+    "LOG_LEVELS",
+    "NOTIFY_LEVELS",
+    "NOTIFY_CHANNELS",
+    "EXECUTE_ONCE",
+    "STOP_IF",
+    "TRIGGERS",
+    "CHECKING_BASIC",
+    "CHECKING_MODES",
+    "HR_MODES",
+    "STATE_ATTRS",
+    "DELETED_ALLOWED_ACTIONS",
+    "HR_OUTPUT_FIELDS",
+    "TRACKER_HR_FIELDS",
+    "TRACKER_FIELDS",
+    "RULE_FIELDS",
+    "CONDITION_PLUGINS",
+    "CHECKING_SECTION_FIELDS",
+    "ACTION_PLUGINS",
     "GROUPS",
-    "config_fields", "real_config_fields", "plugin_table", "plugins_by_kind", "schema_payload",
+    "config_fields",
+    "real_config_fields",
+    "plugin_table",
+    "plugins_by_kind",
+    "schema_payload",
 ]
 
 
@@ -68,17 +94,21 @@ def config_fields() -> Tuple[Field, ...]:
     """全部 config 顶层字段(守卫测试与键集合导出的单一入口)"""
     return tuple(f for g in GROUPS for f in g.fields)
 
+
 def real_config_fields() -> Tuple[Field, ...]:
     """对应真实配置键的顶层字段(排除 UI 专段入口)"""
     return tuple(f for f in config_fields() if not f.ui_only)
+
 
 def plugin_table() -> Dict[str, Tuple[Plugin, ...]]:
     """插件元数据表: {"condition": (...), "action": (...)}"""
     return {"condition": CONDITION_PLUGINS, "action": ACTION_PLUGINS}
 
+
 def plugins_by_kind(kind: str) -> Dict[str, Plugin]:
     """按插件名索引的元数据(供前端按名查 spec 结构)"""
     return {p.name: p for p in (CONDITION_PLUGINS if kind == "condition" else ACTION_PLUGINS)}
+
 
 def schema_payload() -> Dict[str, Any]:
     """给 /api/config/schema 的完整载荷(热重载级别不在此, 由 API 层合并)"""
