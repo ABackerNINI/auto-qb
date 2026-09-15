@@ -11,9 +11,13 @@ from .config import QbittorrentConfig
 
 # 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
+
+
 def _is_local_qb(qb: QbittorrentConfig) -> bool:
     """qB 地址是否指向本机(取 base_url 解析后的 hostname, 兼容带端口/带协议写法)"""
     return urlparse(qb.base_url).hostname in _LOCAL_HOSTS
+
+
 class LocalQbClient(Client):
     """本地 qB 客户端: 每个(重)建的 requests Session 都强制关闭 trust_env
 
@@ -35,6 +39,8 @@ class LocalQbClient(Client):
         session = super()._session
         session.trust_env = False
         return session
+
+
 def _new_client(qb: QbittorrentConfig) -> Client:
     """按配置构造 qB 客户端(本地地址用关闭 trust_env 的 LocalQbClient)"""
     cls = LocalQbClient if _is_local_qb(qb) else Client

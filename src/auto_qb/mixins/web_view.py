@@ -42,6 +42,7 @@ class WebviewMixin:
         if e.is_uploading:
             return "seeding"
         return "other"
+
     @staticmethod
     def _hr_view_fields(rec: TorrentRecord) -> dict:
         """该成员的 HR 展示字段(标签文本 + 要求/达成布尔), 供前端渲染 H&R 栏与对照列
@@ -85,6 +86,7 @@ class WebviewMixin:
             else:
                 fields["hr_tag"] = _utils.replace_vars(hr.add_tag, conf)
         return fields
+
     def _member_view(self, r) -> dict:
         """单成员展示视图(分组视图 members 与 singles 未归组种子共用同一字段构建)"""
         return {
@@ -112,6 +114,7 @@ class WebviewMixin:
             # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
             **self._hr_view_fields(r),
         }
+
     def _build_group_view(self) -> List[dict]:
         """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
         from .. import utils as _utils
@@ -145,6 +148,7 @@ class WebviewMixin:
                 }
             )
         return view
+
     def _build_singles_view(self) -> List[dict]:
         """未归组种子的单种子视图数据(分组未启用/文件列表不可读的种子不在任何组里,
         只能从这里进入单种子视图; 搜索兜底路径不含全量)。与分组视图在同一脏窗口重建,
@@ -153,6 +157,7 @@ class WebviewMixin:
         for members in self.store.groups.values():
             grouped.update(members)
         return [self._member_view(r) for h, r in self.store.by_hash.items() if h not in grouped]
+
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
         与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
@@ -163,6 +168,7 @@ class WebviewMixin:
             self._group_view_ver += 1
             self._group_view_dirty = False
         return self._group_view
+
     def ensure_group_state(self, rid: Optional[int]) -> dict:
         """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
 
@@ -179,6 +185,7 @@ class WebviewMixin:
             # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
             state["singles"] = self._singles_view
         return state
+
     def _build_search_index(self) -> None:
         """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名]}), 单次限流拉取。
 
@@ -216,6 +223,7 @@ class WebviewMixin:
             idx[h] = entry
         self._search_index = idx
         self._search_index_dirty = False
+
     def search_torrents(self, q: str) -> dict:
         """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
 
@@ -272,8 +280,10 @@ class WebviewMixin:
         if building:
             self.web_commands.put(("build_search_index", {}))
         return {"results": results, "building": building}
+
     def touch_web_client(self) -> None:
         """WEB 请求心跳: 刷新 _web_last_seen, 让主循环在 Web 活跃窗口内持续重建分组视图。"""
         self._web_last_seen = time.time()
+
     def _group_hashes(self, key: tuple) -> List[str]:
         return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]

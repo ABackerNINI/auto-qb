@@ -333,7 +333,11 @@ def test_api_traffic_history_endpoint(web_env):
     assert client.get("/api/traffic/history", headers=auth).json() == {"state": "disabled", "history": []}
     mgr._traffic_view = {
         "state": "ok",
-        "history": [{"date": "2026-09-14", "up": 1024, "down": 2048}],
+        "history": [{
+            "date": "2026-09-14",
+            "up": 1024,
+            "down": 2048
+        }],
     }
     data = client.get("/api/traffic/history", headers=auth).json()
     assert data["state"] == "ok" and data["history"][0]["date"] == "2026-09-14"
@@ -937,7 +941,6 @@ def test_reannounce_confirm_success_and_timeout():
 
 def test_reannounce_confirm_group_aggregate():
     """组强制汇报: 按种子逐个确认, 部分失败 -> 聚合 error 回执带失败计数"""
-
     def _tracker(status, na, msg=""):
         return {"url": "https://tracker.hhanclub.net/announce.php", "status": status, "next_announce": na, "msg": msg}
 

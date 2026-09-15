@@ -67,12 +67,14 @@ class WebCommandsMixin:
                         self._set_web_result(cmd_id, "error", str(e))
         except queue.Empty:
             pass
+
     def _set_web_result(self, cmd_id: str, status: str, error: str = "") -> None:
         """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长"""
         now = time.time()
         if len(self._web_results) > 64:
             self._web_results = {k: v for k, v in self._web_results.items() if now - v.get("ts", 0) < 120}
         self._web_results[cmd_id] = {"status": status, "error": error, "ts": now}
+
     def _trackers_baseline(self, hashes: List[str]) -> dict:
         """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}
 
@@ -90,6 +92,7 @@ class WebCommandsMixin:
                 real[url] = (t.get("status"), t.get("next_announce"))
             baseline[h] = real
         return baseline
+
     @staticmethod
     def _confirm_reannounce_result(trackers: list, baseline: dict) -> Optional[bool]:
         """判定单个种子汇报确认结果: True=已确认成功 / False=已确认失败 / None=仍在进行
@@ -116,6 +119,7 @@ class WebCommandsMixin:
             if status == 4 and (t.get("msg") or ""):
                 return False
         return None
+
     def _check_reannounce_pending(self):
         """每 tick 检查在途的强制汇报确认; 某 cmd_id 全部种子出结论后聚合写回执"""
         if not self._reannounce_pending:
@@ -155,6 +159,7 @@ class WebCommandsMixin:
                 msg = f"{len(fails)}/{len(items)} 个种子汇报确认失败: " + "; ".join(it["err"] for it in fails[:3])
                 self._set_web_result(cmd_id, "error", msg)
                 logger.warning(f"WEB UI | {msg}")
+
     def _cmd_build_search_index(self):
         """WEB UI 命令: 构建搜索索引(Web 线程检测到索引脏后投递, 主循环线程执行)。
 
@@ -163,16 +168,19 @@ class WebCommandsMixin:
         self._build_search_index()
         if not self._search_index_dirty:
             logger.info(f"WEB UI | 搜索索引已构建: {len(self._search_index)} 个种子")
+
     def _cmd_pause_group(self, key: tuple):
         hashes = self._group_hashes(key)
         if hashes:
             self.api.torrents_pause(torrent_hashes=hashes)
             logger.info(f"WEB UI | 暂停整组({len(hashes)}个种子)")
+
     def _cmd_resume_group(self, key: tuple):
         hashes = self._group_hashes(key)
         if hashes:
             self.api.torrents_resume(torrent_hashes=hashes)
             logger.info(f"WEB UI | 开始整组({len(hashes)}个种子)")
+
     def _cmd_reannounce_group(self, key: tuple, cmd_id: str = ""):
         hashes = self._group_hashes(key)
         if hashes:
@@ -181,19 +189,23 @@ class WebCommandsMixin:
             baseline = self._trackers_baseline(hashes)
             self._register_reannounce_pending(cmd_id, hashes, baseline)
             logger.warning(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
+
     def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
         hashes = self._group_hashes(key)
         if hashes:
             self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
             logger.warning(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
+
     def _cmd_pause_torrent(self, hash: str):
         if self.store.get(hash) is not None:
             self.api.torrents_pause(torrent_hashes=[hash])
             logger.info(f"WEB UI | 暂停种子 {hash[:8]}")
+
     def _cmd_resume_torrent(self, hash: str):
         if self.store.get(hash) is not None:
             self.api.torrents_resume(torrent_hashes=[hash])
             logger.info(f"WEB UI | 开始种子 {hash[:8]}")
+
     def _cmd_reannounce_torrent(self, hash: str, cmd_id: str = ""):
         if self.store.get(hash) is None:
             # 种子已不存在: 无法汇报, 直接给失败回执(删除流程据此不删除)
@@ -204,6 +216,7 @@ class WebCommandsMixin:
         baseline = self._trackers_baseline([hash])
         self._register_reannounce_pending(cmd_id, [hash], baseline)
         logger.warning(f"WEB UI | 强制汇报种子 {hash[:8]}, 等待 tracker 确认")
+
     def _register_reannounce_pending(self, cmd_id: str, hashes: List[str], baseline: dict) -> None:
         """登记汇报确认跟踪: 全部种子出结论(成功/失败/超时)后聚合写该 cmd_id 的回执"""
         if not cmd_id:
@@ -220,9 +233,11 @@ class WebCommandsMixin:
                 for h in hashes
             },
         }
+
     def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
         if self.store.get(hash) is not None:
             self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
             logger.warning(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
+
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)

@@ -74,12 +74,6 @@ def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
     return stop_event.wait(main_tick)
 
 
-
-
-
-
-
-
 class QbManager(
     RuleEngineMixin,
     TagsMixin,
@@ -295,34 +289,7 @@ class QbManager(
             "paused": self._pause_event is not None and self._pause_event.is_set(),
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # ---------- 单种子命令(WEB 明细行右键) ----------
-
-
-
-
-
-
 
     def apply_new_config(self, config: Config) -> dict:
         """应用新配置(热重载, 主循环线程经命令队列调用): 按变更影响分级执行
