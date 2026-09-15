@@ -246,6 +246,14 @@ class TorrentRecord:
         """该种子 tracker URL 列表(基于 trackers_info 派生)"""
         return [t.get("url") for t in self.trackers_info(client) if t.get("url")]
 
+    def invalidate_trackers(self) -> None:
+        """tracker 写操作后失效本记录的 tracker 惰性缓存(下轮 trackers_info 重新拉取)
+
+        由 QbApi 的 tracker 写操作(add/edit/remove_trackers)在主循环线程调用,
+        保证同 tick 内后续读取(如强制汇报基线)拿到写后新值。
+        """
+        self._trackers_info = None
+
     def files(self, client: Any) -> List[Any]:
         """该种子文件列表(惰性拉取+持久缓存; 异常向上传播, 由调用方决定处理)"""
         if self._files is None:

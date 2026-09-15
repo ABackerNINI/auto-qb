@@ -213,6 +213,116 @@ def create_app(manager) -> FastAPI:
         result["delete_files"] = delete_files
         return result
 
+    # ---- 种子控制写端点(WEB UI 替代 qB 界面二轮: 全部 POST + _enqueue, 主循环线程执行) ----
+    # 除 bulk 外, hash 不在快照时主循环侧静默跳过(照 pause_torrent 样板); 参数错误由
+    # _cmd_* 抛 ValueError -> 命令分发层写 error 回执。qB 写后的快照同步策略见 QbApi。
+
+    @app.post("/api/torrents/{hash}/recheck")
+    def api_t_recheck(hash: str):
+        return _enqueue("recheck_torrent", {"hash": hash})
+
+    @app.post("/api/torrents/{hash}/super-seeding")
+    def api_t_super_seeding(hash: str, body: dict = None):
+        enable = bool((body or {}).get("enable", False))
+        return _enqueue("super_seeding", {"hash": hash, "enable": enable})
+
+    @app.post("/api/torrents/{hash}/force-start")
+    def api_t_force_start(hash: str, body: dict = None):
+        enable = bool((body or {}).get("enable", False))
+        return _enqueue("force_start", {"hash": hash, "enable": enable})
+
+    @app.post("/api/torrents/{hash}/limits")
+    def api_t_limits(hash: str, body: dict = None):
+        """种子传输限速(bytes/s, 0=不限); 两方向均可缺省(缺省的方向不下发)"""
+        b = body or {}
+        payload = {"hash": hash}
+        if b.get("up_limit") is not None:
+            payload["up_limit"] = int(b["up_limit"])
+        if b.get("dl_limit") is not None:
+            payload["dl_limit"] = int(b["dl_limit"])
+        return _enqueue("set_torrent_limits", payload)
+
+    @app.post("/api/torrents/{hash}/share-limits")
+    def api_t_share_limits(hash: str, body: dict = None):
+        """分享限制: -1=不限制, -2=用全局; 前端应从详情回填三值后整组提交"""
+        b = body or {}
+        payload = {"hash": hash}
+        if b.get("ratio_limit") is not None:
+            payload["ratio_limit"] = float(b["ratio_limit"])
+        if b.get("seeding_time_limit") is not None:
+            payload["seeding_time_limit"] = int(b["seeding_time_limit"])
+        if b.get("inactive_seeding_time_limit") is not None:
+            payload["inactive_seeding_time_limit"] = int(b["inactive_seeding_time_limit"])
+        return _enqueue("set_share_limits", payload)
+
+    @app.post("/api/torrents/{hash}/location")
+    def api_t_location(hash: str, body: dict = None):
+        location = str((body or {}).get("location") or "")
+        return _enqueue("set_torrent_location", {"hash": hash, "location": location})
+
+    @app.post("/api/torrents/{hash}/rename")
+    def api_t_rename(hash: str, body: dict = None):
+        name = str((body or {}).get("name") or "")
+        return _enqueue("rename_torrent", {"hash": hash, "name": name})
+
+    @app.post("/api/torrents/{hash}/queue")
+    def api_t_queue(hash: str, body: dict = None):
+        action = str((body or {}).get("action") or "")
+        return _enqueue("queue_torrent", {"hash": hash, "action": action})
+
+    @app.post("/api/torrents/{hash}/auto-tmm")
+    def api_t_auto_tmm(hash: str, body: dict = None):
+        enable = bool((body or {}).get("enable", False))
+        return _enqueue("set_auto_tmm", {"hash": hash, "enable": enable})
+
+    @app.post("/api/torrents/{hash}/trackers/add")
+    def api_t_trackers_add(hash: str, body: dict = None):
+        urls = [str(u) for u in ((body or {}).get("urls") or []) if u]
+        return _enqueue("add_trackers", {"hash": hash, "urls": urls})
+
+    @app.post("/api/torrents/{hash}/trackers/edit")
+    def api_t_trackers_edit(hash: str, body: dict = None):
+        b = body or {}
+        payload = {"hash": hash, "orig_url": str(b.get("orig_url") or ""), "new_url": str(b.get("new_url") or "")}
+        return _enqueue("edit_tracker", payload)
+
+    @app.post("/api/torrents/{hash}/trackers/remove")
+    def api_t_trackers_remove(hash: str, body: dict = None):
+        url = str((body or {}).get("url") or "")
+        return _enqueue("remove_tracker", {"hash": hash, "url": url})
+
+    @app.post("/api/torrents/{hash}/files/priority")
+    def api_t_file_priority(hash: str, body: dict = None):
+        b = body or {}
+        payload = {
+            "hash": hash,
+            "indices": [int(i) for i in (b.get("indices") or [])],
+            "priority": int(b.get("priority") or 0),
+        }
+        return _enqueue("set_file_priority", payload)
+
+    @app.post("/api/torrents/{hash}/rename-fs")
+    def api_t_rename_fs(hash: str, body: dict = None):
+        b = body or {}
+        payload = {
+            "hash": hash,
+            "old_path": str(b.get("old_path") or ""),
+            "new_path": str(b.get("new_path") or ""),
+            "is_folder": bool(b.get("is_folder", False)),
+        }
+        return _enqueue("rename_fs", payload)
+
+    @app.post("/api/torrents/bulk")
+    def api_t_bulk(body: dict = None):
+        """批量操作(平铺视图多选): 单命令批量, 主循环侧一次 API 调用传全部 hashes"""
+        b = body or {}
+        payload = {
+            "hashes": [str(h) for h in (b.get("hashes") or []) if h],
+            "action": str(b.get("action") or ""),
+            "delete_files": bool(b.get("delete_files", False)),
+        }
+        return _enqueue("bulk_torrents", payload)
+
     # ---- 种子中心视图读端点(WEB UI 替代 qB 界面: 详情抽屉/全局统计) ----
     # 全部只读: 快照读 store, tracker/文件/peer 按需直读 client(不写 store 惰性缓存 ——
     # 缓存写入只在主循环线程, 保持 Web 线程无副作用); qB 断连时 503, 未知 hash 404。
