@@ -924,10 +924,16 @@
                 <span class="ce-side-label">{{ g.label }}</span>
                 <span v-if="g.badge" class="ce-side-badge">{{ g.badge }}</span>
               </button>
+              <!-- W4: 运行日志章节(原顶栏日志页迁入, schema 分组之外的特殊章节) -->
+              <button class="ce-side-item" :class="{ active: cfg.activeGroup === '__logs' }" @click="openLogs()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
+                <span class="ce-side-label">运行日志</span>
+              </button>
             </aside>
 
             <section class="ce-main">
-              <header class="ce-head">
+              <!-- W4: __logs 章节时隐藏配置页头(同步状态/YAML 预览属配置上下文), 标题由 logs-head 提供 -->
+              <header v-if="cfg.activeGroup !== '__logs'" class="ce-head">
                 <div class="ce-head-text">
                   <h2>
                     <svg class="ico ico-sm" :class="'icog-' + cfgActive.key" viewBox="0 0 16 16"><use :href="'#' + (cfgActive.icon || 'i-settings')"></use></svg>
@@ -1334,6 +1340,51 @@
                 </template>
               </div>
 
+              <!-- 运行日志(W4): 原顶层日志页(FE-2C)整体迁入设置页章节; 等级/行数变更与刷新均
+                   手动触发(无自动轮询); 顶层 page 不再有 'logs', 列宽重实体化由 watch(page) 兜底 -->
+              <div v-else-if="cfg.activeGroup === '__logs'" class="logs-embed">
+                <header class="logs-head">
+                  <div class="logs-head-text">
+                    <h2><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>运行日志</h2>
+                    <p v-if="logs.file" class="ce-sub" :title="logs.file">{{ logs.file }}</p>
+                    <p v-else class="ce-sub">日志文件未配置(config.logging.file)</p>
+                  </div>
+                  <div class="logs-actions">
+                    <label class="logs-ctl">等级
+                      <select v-model="logs.level" @change="loadLogs()">
+                        <option value="">全部</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                      </select>
+                    </label>
+                    <label class="logs-ctl">行数
+                      <select v-model.number="logs.num" @change="loadLogs()">
+                        <option :value="200">200</option>
+                        <option :value="300">300</option>
+                        <option :value="500">500</option>
+                        <option :value="1000">1000</option>
+                        <option :value="2000">2000</option>
+                      </select>
+                    </label>
+                    <button class="ce-btn ghost small" :disabled="logs.loading" @click="loadLogs()">
+                      <svg class="ico ico-sm" :class="{ spin: logs.loading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
+                    </button>
+                  </div>
+                </header>
+                <div class="logs-body">
+                  <div v-if="logs.loading && !logs.loaded" class="ce-placeholder loading">正在加载日志…</div>
+                  <div v-else-if="logs.error" class="ce-placeholder">
+                    <p class="error">{{ logs.error }}</p>
+                    <button class="ce-btn" @click="loadLogs()">重试</button>
+                  </div>
+                  <div v-else-if="!logs.lines.length" class="ce-placeholder">
+                    {{ logs.file ? '日志文件暂无内容' : '日志文件未配置, 无法读取日志' }}
+                  </div>
+                  <pre v-else class="logs-pre">{{ logs.lines.join('\n') }}</pre>
+                </div>
+              </div>
+
               <!-- 普通字段分组(卡片化) -->
               <div v-else class="ce-card">
                 <div class="ce-fields">
@@ -1359,50 +1410,6 @@
         </template>
       </main>
 
-      <!-- 日志页(FE-2C): auto-qb 自身日志 tail; 等级/行数变更与刷新均手动触发(无自动轮询,
-           与设置页同型顶层页切换: 表格区卸载, watch(page) 已处理列宽重实体化) -->
-      <main v-if="page==='logs'" class="logs-page">
-        <header class="logs-head">
-          <div class="logs-head-text">
-            <h2><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>运行日志</h2>
-            <p v-if="logs.file" class="ce-sub" :title="logs.file">{{ logs.file }}</p>
-            <p v-else class="ce-sub">日志文件未配置(config.logging.file)</p>
-          </div>
-          <div class="logs-actions">
-            <label class="logs-ctl">等级
-              <select v-model="logs.level" @change="loadLogs()">
-                <option value="">全部</option>
-                <option value="INFO">INFO</option>
-                <option value="WARNING">WARNING</option>
-                <option value="ERROR">ERROR</option>
-              </select>
-            </label>
-            <label class="logs-ctl">行数
-              <select v-model.number="logs.num" @change="loadLogs()">
-                <option :value="200">200</option>
-                <option :value="300">300</option>
-                <option :value="500">500</option>
-                <option :value="1000">1000</option>
-                <option :value="2000">2000</option>
-              </select>
-            </label>
-            <button class="ce-btn ghost small" :disabled="logs.loading" @click="loadLogs()">
-              <svg class="ico ico-sm" :class="{ spin: logs.loading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
-            </button>
-          </div>
-        </header>
-        <div class="logs-body">
-          <div v-if="logs.loading && !logs.loaded" class="ce-placeholder loading">正在加载日志…</div>
-          <div v-else-if="logs.error" class="ce-placeholder">
-            <p class="error">{{ logs.error }}</p>
-            <button class="ce-btn" @click="loadLogs()">重试</button>
-          </div>
-          <div v-else-if="!logs.lines.length" class="ce-placeholder">
-            {{ logs.file ? '日志文件暂无内容' : '日志文件未配置, 无法读取日志' }}
-          </div>
-          <pre v-else class="logs-pre">{{ logs.lines.join('\n') }}</pre>
-        </div>
-      </main>
     </template>
 
     <!-- 底部状态栏(TBL-08): 速度摘要 + 统计入口 + 全局状态徽章; 全页固定, 高度锁定 --statusbar-h -->

@@ -1550,6 +1550,9 @@ select option { background: var(--bg-elev); color: var(--fg); }
  */
 .logs-page { display: flex; flex-direction: column; padding: 16px 18px 18px; max-width: 2560px;
   margin: 0 auto; height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 20px); animation: page-in .2s var(--ease-out); }
+/* W4: 日志迁入设置页后的嵌入式容器(原 .logs-page 视口高度公式不再适用, 取视口扣除设置页头部/底部动作区的余量) */
+.logs-embed { display: flex; flex-direction: column; gap: 0;
+  height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 250px); min-height: 300px; }
 .logs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .logs-head-text h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; }
 .logs-head-text h2 .ico { color: var(--accent); }
