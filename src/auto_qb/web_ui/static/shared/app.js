@@ -4,7 +4,7 @@ const { createApp } = Vue;
 
 /* ---------------- 列表列模型(分组表 / 明细表) ----------------
  *
- * **单一来源**: 列头 / 行单元格 / grid 模板 / 列选择器 全部由这一份数组派生 —— 顺序天然一致。
+ * **单一来源**: 列头 / 行单元格 / grid 模板 / 列选择器 全部由这一份数组派生 -- 顺序天然一致。
  * (旧实现把"顺序"分散在表头、行内单元格与模板三处, 加列/改序极易错位, 且列宽按**索引**记忆,
  *  一旦支持隐藏列索引就会漂移。)
  *
@@ -46,7 +46,7 @@ const DETAIL_COLUMNS = [
  * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
  * 站点/做种/用户/下载/上传/ETA/分享率/总上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
  * (已下载/剩余量/可用性/做种时长/活跃时间/最近活动/完成于/限速/Hash v1/tracker/保存路径/Hash)
- * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后
+ * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 -- 新增 page 属向后
  * 兼容扩展, 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
 const TORRENT_COLUMNS = [
   { key: "name", label: "名称", tpl: "minmax(220px, 2.6fr)", sortable: true, locked: true },
@@ -54,8 +54,8 @@ const TORRENT_COLUMNS = [
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
   { key: "state", label: "状态", tpl: "76px" },
   { key: "site", label: "站点", tpl: "110px", sortable: true },
-  { key: "num_seeds", label: "做种", tpl: "64px", sortable: true },
-  { key: "num_leechs", label: "用户", tpl: "64px", sortable: true },
+  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true },  // "已连接 (总数)" 格式(TBL-04), 64px 放不下
+  { key: "num_leechs", label: "用户", tpl: "92px", sortable: true },
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
   { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true },
@@ -122,7 +122,7 @@ function columnDef(page, key) {
   return TABLE_COLUMNS[page].find((c) => c.key === key) || null;
 }
 
-/* 模板里的最小宽度(minmax 首参 或 固定 px) —— 新显示的列/自适应失败时用它兜底 */
+/* 模板里的最小宽度(minmax 首参 或 固定 px) -- 新显示的列/自适应失败时用它兜底 */
 function templateMinPx(tpl) {
   const m = String(tpl).match(/^minmax\((\d+(?:\.\d+)?)px/) || String(tpl).match(/^(\d+(?:\.\d+)?)px$/);
   return m ? Math.round(parseFloat(m[1])) : MIN_COL_PX;
@@ -183,8 +183,8 @@ const app = createApp({
       token: "",  // 已验证通过的密钥(唯一可信身份); 仅 bootstrap 验证成功后提交
       pendingToken: "",  // 验证中的候选密钥(不参与渲染门控/请求头); 服务不可达时供"重试连接"复用
       tokenInput: "",
-      authRequired: true,  // 遮罩唯一开关: 仅在密钥验证成功后置 false —— 与 token 赋值解耦, 防错误密钥瞬间主界面闪现
-      authPending: false,  // 密钥验证中: 禁用提交、按钮显示"验证中…", 防重复提交
+      authRequired: true,  // 遮罩唯一开关: 仅在密钥验证成功后置 false -- 与 token 赋值解耦, 防错误密钥瞬间主界面闪现
+      authPending: false,  // 密钥验证中: 禁用提交、按钮显示"验证中...", 防重复提交
       authError: "",
       authErrorKind: "",   // "auth" = 密钥被拒(401); "unavailable" = 服务不可达(保留候选密钥供重试)
       page: "groups",
@@ -229,7 +229,7 @@ const app = createApp({
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
       filePrio: { visible: false, x: 0, y: 0, index: -1 },
-      drawerSelPath: "",    // 内容页签选中行(文件/目录完整相对路径); 顶部"重命名…"的作用对象
+      drawerSelPath: "",    // 内容页签选中行(文件/目录完整相对路径); 顶部"重命名..."的作用对象
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
@@ -243,7 +243,7 @@ const app = createApp({
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
       // 多选筛选(组内任一成员命中任一选中值即保留该组; 同一筛选器内多选为"或")
-      // pathFilter 与其它筛选器同形(数组多选) —— 四个筛选器共用一份 filterDefs 与渲染模板
+      // pathFilter 与其它筛选器同形(数组多选) -- 四个筛选器共用一份 filterDefs 与渲染模板
       pathFilter: [],
       tagFilter: [],
       categoryFilter: [],
@@ -324,7 +324,7 @@ const app = createApp({
       if (this.status.paused) return { text: "已暂停", kind: "warn" };
       if (this.status.connected === false) return { text: "qB 断开", kind: "error" };
       if (this.status.connected === true) return { text: "运行中", kind: "ok" };
-      return { text: "连接中…", kind: "warn" };
+      return { text: "连接中...", kind: "warn" };
     },
     sortedGroups() {
       const key = this.sortKey, dir = this.sortDir;
@@ -362,7 +362,7 @@ const app = createApp({
         };
       });
     },
-    /* 保存路径筛选选项(按组数排序) —— 与标签/分类/站点同形, 供统一的 filterDefs 直接取用 */
+    /* 保存路径筛选选项(按组数排序) -- 与标签/分类/站点同形, 供统一的 filterDefs 直接取用 */
     pathOptions() {
       const counts = new Map();
       for (const g of this.decoratedGroups) counts.set(g.save_path, (counts.get(g.save_path) || 0) + 1);
@@ -419,7 +419,7 @@ const app = createApp({
     showGrid() {
       return { gridTemplateColumns: this._gridTemplate("show") };
     },
-    // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
+    // 搜索是辅种管理的筛选: 在真实辅种组上筛选--组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
     // 以单种子虚拟行兜底展示(虚拟行无组级操作, 右键退化为该种子的单种子菜单)。
     // 状态筛选(kindFilter)与之叠加: 先按成员状态筛组(组内任一成员为该状态即保留), 再做搜索匹配。
@@ -482,7 +482,7 @@ const app = createApp({
     /* 种子页(R1A, 原 R08 单种子视图升级): 数据源 = state.torrents 全量平铺数组(SEED_ITEM),
      * 每个种子独立过同一套筛选(与分组视图的"组内任一命中保留整组"语义不同: 这里逐种子判定);
      * 搜索为**客户端文本过滤**(名称/站点/分类/标签/保存路径, 子串不区分大小写), 不依赖服务端
-     * 文件搜索结果 —— 文件命中(searchHits)仅用作高亮; 排序独立(三态同分组表) */
+     * 文件搜索结果 -- 文件命中(searchHits)仅用作高亮; 排序独立(三态同分组表) */
     filteredTorrents() {
       const q = (this.searchQuery || "").trim().toLowerCase();
       const hits = this.searchHits;
@@ -557,7 +557,7 @@ const app = createApp({
       const lim = this.traffic.limit || {};
       const target = lim.target || {}, actual = lim.actual || {}, reasons = lim.reasons || [];
       // 无方向特定原因时的默认说明(按快照状态区分: 试运行/数据不可用/正常)。
-      // 必须在此内联为局部量 —— 本区段是 computed, 任何"看似方法的辅助函数"都会变成属性,
+      // 必须在此内联为局部量 -- 本区段是 computed, 任何"看似方法的辅助函数"都会变成属性,
       // 在 computed 内以 this.xxx() 调用会抛 TypeError 导致整块渲染失败(2026-09-14 实测)。
       const fallback = this.traffic.state === "dry_run"
         ? "试运行(dry_run): 只显示命中限速, 不读取/不写入 qB"
@@ -589,18 +589,18 @@ const app = createApp({
       if (!sm.loaded) return "";
       if (sm.curveEnabled) {
         const t = sm.target || {};
-        return `曲线托管中 · 目标 上${this.fmtLimit(t.upload_kib)} / 下${this.fmtLimit(t.download_kib)}`;
+        return `曲线托管中 · 目标 上${this.fmtLimit(t.upload_kib) || "不限速"} / 下${this.fmtLimit(t.download_kib) || "不限速"}`;
       }
       const c = sm.current || {};
       if (c.upload_limit === undefined && c.download_limit === undefined) return "未托管 · qB 限速未知";
-      return `未托管 · qB 当前 上${this.fmtLimit(c.upload_limit)} / 下${this.fmtLimit(c.download_limit)}`;
+      return `未托管 · qB 当前 上${this.fmtLimit(c.upload_limit) || "不限速"} / 下${this.fmtLimit(c.download_limit) || "不限速"}`;
     },
-    /* 覆盖表单可提交: 两方向都已有数字(空串/非数字不放行 —— 后端两方向都设置, 漏传会被当 0=不限) */
+    /* 覆盖表单可提交: 两方向都已有数字(空串/非数字不放行 -- 后端两方向都设置, 漏传会被当 0=不限) */
     speedOvReady() {
       const o = this.speedOverride;
       return o.up !== "" && o.down !== "" && Number.isFinite(Number(o.up)) && Number.isFinite(Number(o.down));
     },
-    /* 可见列(列选择器只改 colHidden; 顺序始终取自列定义) —— 表头/行/grid 模板共用 */
+    /* 可见列(列选择器只改 colHidden; 顺序始终取自列定义) -- 表头/行/grid 模板共用 */
     visibleGroupCols() {
       return this._visibleCols("group");
     },
@@ -624,7 +624,7 @@ const app = createApp({
     },
     /* 追剧视图(R10): 后端已按剧→季→集聚合并算好聚合层; 前端只做 筛选/搜索(任一成员命中
      * 保留整集) + 剧级搜索命中(剧名含关键字保留全剧) + 排序。showHit 与 epHit 分开:
-     * 剧名命中高亮整剧行, 集命中高亮集行(与分组视图“组内任一命中保留整组”同语义) */
+     * 剧名命中高亮整剧行, 集命中高亮集行(与分组视图"组内任一命中保留整组"同语义) */
     decoratedShows() {
       const q = (this.searchQuery || "").trim().toLowerCase();
       const hits = this.searchHits;
@@ -835,7 +835,7 @@ const app = createApp({
       this.filterMenu = "";
       this.filePrio.visible = false;
     });
-    // Esc: 优先关闭确认框, 其次历史弹层/右键菜单/列选择器(都是临时浮层)
+    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层/抽屉 → 筛选器下拉/弹层(pop) → 右键菜单 → 清选择/收展开兜底
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
@@ -844,10 +844,14 @@ const app = createApp({
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
-      else if (this.historyOpen) this.historyOpen = false;
-      else if (this.menu.visible) this.menu.visible = false;
-      else if (this.colMenuOpen) this.colMenuOpen = false;
-      else if (this.filterMenu) this.filterMenu = "";
+      else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
+      else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
+      else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
+      else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
+      else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
+      else if (this.expandedKey) this.expandedKey = null;  // 兜底: 收起分组展开
+      else if (this.expandedShowEp) this.expandedShowEp = null;  // 兜底: 收起追剧集展开
+      else if (this.expandedShows.length) this.expandedShows = [];  // 兜底: 收起追剧剧展开
     });
     // 列宽: 未手动调过时"实体化"为当前渲染 px(见 materializeColumns); 窗口变化后重新实体化,
     // 保持"填满容器 + 自适应"的观感; 手动调过则冻结(拖一列不再影响其它列)
@@ -878,7 +882,7 @@ const app = createApp({
       e.preventDefault();
     });
     // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除。
-    // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
+    // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 -- 修复刷新时闪现输入界面。
     // 跳过本地验证: 先读公开只读标志, 本机免鉴权则直接进入, 不弹登录表单
     const savedToken = localStorage.getItem("autoqb_token");
     fetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
@@ -940,7 +944,7 @@ const app = createApp({
       return resp.json();
     },
     _logout(message = "") {
-      // 鉴权失败唯一收口: 遮罩、凭证、定时器与所有已加载的受保护数据一并清空——
+      // 鉴权失败唯一收口: 遮罩、凭证、定时器与所有已加载的受保护数据一并清空--
       // 防错误密钥提交瞬间主界面(含上一会话残留的分组/设置)闪现, 也避免数据滞留内存视图
       this.authRequired = true;
       this.authPending = false;
@@ -1003,7 +1007,7 @@ const app = createApp({
       setTimeout(() => this._dropToast(id), ms);
       return id;
     },
-    /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 —— "等待中"->"成功/超时"的强反馈 */
+    /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 -- "等待中"->"成功/超时"的强反馈 */
     _finishToast(id, kind, text, ms = 4000) {
       this._updateToast(id, { kind, text });
       setTimeout(() => this._dropToast(id), ms);
@@ -1038,7 +1042,7 @@ const app = createApp({
     },
     /* 带"额外选项勾选框"的确认框: 返回 Promise<{checked:boolean}|null>(取消 = null)
      *
-     * 与 confirmDialog 的**布尔契约分开**, 互不影响 —— 删除类操作需要"一个确认动作 + 一个可选附加项"
+     * 与 confirmDialog 的**布尔契约分开**, 互不影响 -- 删除类操作需要"一个确认动作 + 一个可选附加项"
      * (是否连带磁盘文件), 拆成两个菜单项(保留文件/含文件)反而需要用户先判断自己点的是哪个。
      */
     confirmWithOption(title, body, opts = {}) {
@@ -1097,7 +1101,7 @@ const app = createApp({
     },
     /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
     /* 成员值 -> 选项(带计数, 按出现组数降序): 标签/分类/站点三个筛选器共用
-     * 计数口径 = "包含该值的组数"(与保存路径筛选一致), 而非成员总数 —— 筛选针对的是组。
+     * 计数口径 = "包含该值的组数"(与保存路径筛选一致), 而非成员总数 -- 筛选针对的是组。
      */
     _memberValueOptions(pick) {
       const counts = new Map();
@@ -1133,7 +1137,7 @@ const app = createApp({
       this.expandedKey = null;  // 筛选后组集合变化, 复位展开态
     },
     /* 筛选弹层互斥展开(同一时刻只开一个: 避免多个浮层叠在一起);
-     * 打开时测量锚点位置: 靠右(左对齐会伸出视口)则翻转成右对齐 —— 消除横向滚动条 */
+     * 打开时测量锚点位置: 靠右(左对齐会伸出视口)则翻转成右对齐 -- 消除横向滚动条 */
     toggleFilterMenu(kind, ev) {
       if (this.filterMenu === kind) { this.filterMenu = ""; return; }
       this.filterMenu = kind;
@@ -1343,14 +1347,14 @@ const app = createApp({
     },
     /* 0 值不显示 "0 B/s"/"0 B"(满屏零值噪声): 只留极淡占位符, 列对齐不受影响 */
     fmtSpeedOrDash(v) {
-      return v ? this.fmtSpeed(v) : "—";
+      return v ? this.fmtSpeed(v) : "";  // TBL-01: 主页面表格空值空白(抽屉调用方自行兜回"—")
     },
     fmtSizeOrDash(v) {
-      return v ? this.fmtSize(v) : "—";
+      return v ? this.fmtSize(v) : "";  // 同上(TBL-01)
     },
-    /* 时间点显示(追剧视图“最近动静”列): 今年省年份, 往年只到日 */
+    /* 时间点显示(追剧视图"最近动静"列): 今年省年份, 往年只到日 */
     fmtTime(ts) {
-      if (!ts) return "—";
+      if (!ts) return "";  // TBL-01: 表格空值空白
       const d = new Date(ts * 1000);
       const p = (n) => String(n).padStart(2, "0");
       if (d.getFullYear() !== new Date().getFullYear()) return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
@@ -1363,21 +1367,26 @@ const app = createApp({
       if (sec < 86400) return `${Math.floor(sec / 3600)}时${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}分`;
       return `${Math.floor(sec / 86400)}天${String(Math.floor((sec % 86400) / 3600)).padStart(2, "0")}时`;
     },
-    /* ETA(秒): qB 哨兵 8640000 = 无 ETA, 非正数 = 未知/缺失 —— 均显示 "—"(种子页 R1A) */
+    /* ETA(秒): qB 哨兵 8640000 = 无 ETA, 非正数 = 未知/缺失 —— 均显示空白(TBL-01, 种子页 R1A) */
     fmtEta(sec) {
-      if (!sec || sec <= 0 || sec >= 8640000) return "—";
+      if (!sec || sec <= 0 || sec >= 8640000) return "";
       return this.fmtDuration(sec);
     },
-    /* 时间点(unix 秒): -1/0 = 从未(qB 哨兵) —— "—"; 其余与追剧“最近动静”同格式 */
+    /* 时间点(unix 秒): -1/0 = 从未(qB 哨兵) —— 空白(TBL-01); 其余与追剧"最近动静"同格式 */
     fmtTs(ts) {
-      if (!ts || ts < 0) return "—";
+      if (!ts || ts < 0) return "";
       return this.fmtTime(ts);
     },
     /* 种子限速(qB 原始 bytes/s; 0 = 不限速/跟随全局): 与限速曲线的 KiB/s 口径区分开 */
     fmtLimitBytes(v) {
-      if (v === null || v === undefined) return "—";
-      if (!v) return "不限速";
+      if (v === null || v === undefined) return "";  // 缺失: 空白(TBL-01)
+      if (!v) return "";  // 0 = 不限速: 不再显示字样(TBL-02)
       return this.fmtSpeed(v);
+    },
+    /* 做种/用户列(TBL-04): qB 口径 "已连接 (总数)" —— 总数缺失(-1/null)只显示已连接 */
+    fmtPeersQb(connected, total) {
+      if (connected === null || connected === undefined || connected < 0) return "";
+      return total === null || total === undefined || total < 0 ? String(connected) : `${connected} (${total})`;
     },
     /* ------------------------------------------- 组级"共同值"计算(组级标签/分类列)
      *
@@ -1397,7 +1406,7 @@ const app = createApp({
       const diff = sets.some((s) => s.size !== first.size || [...s].some((t) => !first.has(t)));
       return { list: common, diff };
     },
-    /* 过滤与成员站点名一致(忽略大小写)的标签 —— 组级共同标签与明细行共用 */
+    /* 过滤与成员站点名一致(忽略大小写)的标签 -- 组级共同标签与明细行共用 */
     _filterSiteTags(tags, members) {
       const names = new Set((members || []).map((m) => (m.site || "").toLowerCase()).filter(Boolean));
       return (tags || []).filter((t) => !names.has(t.toLowerCase()));
@@ -1434,7 +1443,7 @@ const app = createApp({
      * pending = 已触发 HR 条件但尚未满足做种时长/分享率(需关注, 用最鲜亮的颜色);
      * done    = 已满足(可以放宽, 用另一组镇静的颜色)。判定依据是后端解析后的标签文本
      * (已展开 ${required_seeding_time} 变量), 因此与真正写入 qB 的标签逐字相等。
-     * 组级列展示的是"共同标签"——若某标签全组共有, 则组内 HR 状态必然一致, 故用代表成员即可。
+     * 组级列展示的是"共同标签"--若某标签全组共有, 则组内 HR 状态必然一致, 故用代表成员即可。
      */
     tagClass(tag, member) {
       if (!member) return "";
@@ -1453,7 +1462,7 @@ const app = createApp({
     hrRatioReached(m) {
       return m.hr_req_ratio > 0 && (m.ratio || 0) >= m.hr_req_ratio;
     },
-    /* 对照列配色: **按列各自的要求**判定 —— 未配要求的列(如只要求时长不要求分享率)必须
+    /* 对照列配色: **按列各自的要求**判定 -- 未配要求的列(如只要求时长不要求分享率)必须
      * 保持中性色, 否则会给一个"本来就没要求的数值"染上警示色, 反而是误读。
      */
     hrTimeClass(m) {
@@ -1505,7 +1514,7 @@ const app = createApp({
     /* 限速显示: 后端单位 KiB/s(0 = 不限速, null = 该方向不管理) */
     fmtLimit(kib) {
       if (kib === null || kib === undefined) return "—";
-      if (!kib) return "不限速";
+      if (!kib) return "";  // 0 = 不限速: 不再显示字样(TBL-02); 提示/toast 文案处调用方用 || "不限速" 兜回
       return this.fmtSpeed(kib * 1024);
     },
     setSort(key) {
@@ -1591,7 +1600,7 @@ const app = createApp({
         const resp = await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
         if (action === "reannounce") {
           // 强反馈状态机: 常驻"等待中" -> 原位换成 成功(绿) / 超时失败(琥珀), 不再用红色警告样式
-          const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
+          const tid = this.toast("强制汇报等待中...(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
           const r = await this.waitCmd(resp.cmd_id);
           if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
           else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
@@ -1639,7 +1648,7 @@ const app = createApp({
     },
     async submitAddTorrent() {
       if (!this.addCanSubmit) return;
-      // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB —— 零临时文件零新依赖)
+      // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB -- 零临时文件零新依赖)
       const filesB64 = [];
       for (const f of this.addFiles) {
         filesB64.push(
@@ -1784,7 +1793,7 @@ const app = createApp({
     },
     /* 集键 -> 展示文本(与后端 tvshows.ParsedRelease.episode_key 三形态对应) */
     epLabel(key) {
-      if (!key || !key.length) return "—";
+      if (!key || !key.length) return "-";
       if (key[0] === "ep") return "E" + String(key[1]).padStart(2, "0");
       if (key[0] === "range") return `E${String(key[1]).padStart(2, "0")}-E${String(key[2]).padStart(2, "0")}`;
       if (key[0] === "date") return key[1];
@@ -1812,7 +1821,7 @@ const app = createApp({
       const label = this._actionText(action);
       const isRe = action === "reannounce";
       const tid = isRe
-        ? this.toast(`强制汇报等待中…(${hashes.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
+        ? this.toast(`强制汇报等待中...(${hashes.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
         : null;
       const results = await Promise.allSettled(
         hashes.map((h) => this.api(`/api/torrents/${h}/${action}`, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
@@ -1844,12 +1853,12 @@ const app = createApp({
           { icon: "#i-cards", label: "目标", value: ep.label },
           { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${members.length} 个种子` },
         ],
-        members: members.map((m) => ({ site: m.site || "—", name: m.name || m.hash.slice(0, 12), path: m.save_path || "—" })),
+        members: members.map((m) => ({ site: m.site || "-", name: m.name || m.hash.slice(0, 12), path: m.save_path || "-" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
       if (res.checks.reannounce) {
-        const tid = this.toast(`正在向 tracker 汇报 ${ep.hashes.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
+        const tid = this.toast(`正在向 tracker 汇报 ${ep.hashes.length} 个目标, 等待确认...`, "busy", 0, { sticky: true });
         const results = await Promise.allSettled(
           ep.hashes.map((h) => this.api(`/api/torrents/${h}/reannounce`, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
         );
@@ -1858,7 +1867,7 @@ const app = createApp({
           this._finishToast(tid, "timeout", `${fails.length}/${ep.hashes.length} 个目标汇报确认失败, 已保留未删除`, 6000);
           return;
         }
-        this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
+        this._finishToast(tid, "ok", "汇报确认成功, 开始删除...", 2000);
       }
       const body = JSON.stringify({ delete_files: deleteFiles });
       const results = await Promise.allSettled(
@@ -1914,7 +1923,7 @@ const app = createApp({
     },
     _findGroup(key) {
       // **必须先查 decoratedGroups**(groups 的前端派生超集, 同 key): 原始组字典没有 save_path
-      // 等派生字段 —— 曾致删除确认框的保存路径恒为"—"(R03)。filteredGroups 兼容虚拟行(u-<hash>)
+      // 等派生字段 -- 曾致删除确认框的保存路径恒为"-"(R03)。filteredGroups 兼容虚拟行(u-<hash>)
       return this.decoratedGroups.find((g) => g.key === key) || this.filteredGroups.find((g) => g.key === key) || null;
     },
     /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过 */
@@ -1952,7 +1961,7 @@ const app = createApp({
       // 批量汇报: 常驻"等待中"(含目标数), 回执齐后原位换汇总终态(成功/超时, 琥珀不用红警告)
       const isRe = action === "reannounce";
       const tid = isRe
-        ? this.toast(`强制汇报等待中…(${jobs.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
+        ? this.toast(`强制汇报等待中...(${jobs.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
         : null;
       const results = await Promise.allSettled(
         jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
@@ -1974,7 +1983,7 @@ const app = createApp({
     async bulkDelete() {
       const { groupKeys, memberHashes } = this._bulkTargets();
       if (!groupKeys.length && !memberHashes.length) return;
-      // 待删明细(R04): 组展开到成员级(站点/名称/保存路径), 独立种子直取 —— 确认框逐行自证,
+      // 待删明细(R04): 组展开到成员级(站点/名称/保存路径), 独立种子直取 -- 确认框逐行自证,
       // 三入口(单种子/整组/批量)口径统一; _findGroup 已修复为优先查 decoratedGroups(含 save_path)
       const byHash = new Map();
       for (const g of this.decoratedGroups) for (const m of g.members) byHash.set(m.hash, m);
@@ -2003,7 +2012,7 @@ const app = createApp({
           { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个组 · ${memberHashes.length} 个独立种子` },
           { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${total} 个种子` },
         ],
-        members: members.map((m) => ({ site: m.site || "—", name: m.name || m.hash.slice(0, 12), path: m.save_path || "—" })),
+        members: members.map((m) => ({ site: m.site || "-", name: m.name || m.hash.slice(0, 12), path: m.save_path || "-" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -2012,7 +2021,7 @@ const app = createApp({
           ...groupKeys.map((k) => `/api/groups/${k}/reannounce`),
           ...memberHashes.map((h) => `/api/torrents/${h}/reannounce`),
         ];
-        const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
+        const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认...`, "busy", 0, { sticky: true });
         const results = await Promise.allSettled(
           jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
         );
@@ -2021,7 +2030,7 @@ const app = createApp({
           this._finishToast(tid, "timeout", `${fails.length}/${jobs.length} 个目标汇报确认失败, 已保留未删除`, 6000);
           return;
         }
-        this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
+        this._finishToast(tid, "ok", "汇报确认成功, 开始删除...", 2000);
       }
       const body = JSON.stringify({ delete_files: deleteFiles });
       const delJobs = [
@@ -2057,19 +2066,19 @@ const app = createApp({
       let tid = null;
       try {
         const resp = await this.api(apiPath, { method: "POST" });
-        tid = this.toast(`正在向 tracker 汇报${label}, 等待确认…`, "busy", 0, { sticky: true });
+        tid = this.toast(`正在向 tracker 汇报${label}, 等待确认...`, "busy", 0, { sticky: true });
         const r = await this.waitCmd(resp.cmd_id);
         if (r.ok) {
           this._finishToast(tid, "ok", `汇报确认成功, 开始删除${label}`, 2000);
           return true;
         }
-        this._finishToast(tid, "timeout", `${label}汇报确认失败: ${r.error} —— 已保留未删除`, 6000);
+        this._finishToast(tid, "timeout", `${label}汇报确认失败: ${r.error} -- 已保留未删除`, 6000);
         return false;
       } catch (e) {
         if (!e.auth) {
           // 命令投递本身失败 = 真错误(与"超时"区分): 用红色 error 样式
-          if (tid) this._finishToast(tid, "error", `汇报失败: ${e.message} —— 已保留未删除`, 6000);
-          else this.toast(`汇报失败: ${e.message} —— 已保留未删除`, "error", 8000);
+          if (tid) this._finishToast(tid, "error", `汇报失败: ${e.message} -- 已保留未删除`, 6000);
+          else this.toast(`汇报失败: ${e.message} -- 已保留未删除`, "error", 8000);
         }
         return false;
       }
@@ -2088,12 +2097,12 @@ const app = createApp({
         details: [
           { icon: "#i-cards", label: "组名", value: g.name },
           { icon: "#i-layers", label: "成员", value: `${g.count} 个种子` },
-          { icon: "#i-globe", label: "站点", value: sites || "—" },
-          { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—" },
+          { icon: "#i-globe", label: "站点", value: sites || "-" },
+          { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "-" },
           { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
         ],
         // 成员明细(用户要求确认框里能看到"正在删除哪些种子"): 站点 + 种子名 + 保存路径逐行列出
-        members: g.members.map((m) => ({ site: m.site, name: m.name, path: m.save_path || "—" })),
+        members: g.members.map((m) => ({ site: m.site, name: m.name, path: m.save_path || "-" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -2118,7 +2127,7 @@ const app = createApp({
       try {
         const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
         if (action === "reannounce") {
-          const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
+          const tid = this.toast("强制汇报等待中...(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
           const r = await this.waitCmd(resp.cmd_id);
           if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
           else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
@@ -2157,7 +2166,7 @@ const app = createApp({
     },
     /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
     /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 → blob 下载(Bearer 走 header, 不能用 a href 直链;
-     * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流) */
+     * 不能用 this.api -- 它固定 resp.json(), 而这里是二进制流) */
     async exportTorrent() {
       this.menu.visible = false;
       const hash = this.menu.hash;
@@ -2197,7 +2206,7 @@ const app = createApp({
     menuTorrent() {
       return this.memberByHash.get(this.menu.hash) || {};
     },
-    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制开始/队列) —— 走既有回执链 */
+    /* 种子控制命令(R2): 带 body 的单种命令(校验/超级做种/强制开始/队列) -- 走既有回执链 */
     async torrentCmd(action, body = null, okText = "") {
       this.menu.visible = false;
       const hash = this.menu.hash;
@@ -2261,7 +2270,7 @@ const app = createApp({
       }
       return false;
     },
-    /* 限速…: 上传/下载两输入(KiB/s; 空=不改, 0=不限) → POST limits(×1024 转 bytes, 0 原样传) */
+    /* 限速...: 上传/下载两输入(KiB/s; 空=不改, 0=不限) → POST limits(×1024 转 bytes, 0 原样传) */
     async editLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -2293,7 +2302,7 @@ const app = createApp({
       }
       await this._editPost(hash, "limits", body, "限速已更新");
     },
-    /* 分享率限制…: 分享率/做种时长(h)/不活跃做种时长(h) → POST share-limits(-1 = 恢复全局默认) */
+    /* 分享率限制...: 分享率/做种时长(h)/不活跃做种时长(h) → POST share-limits(-1 = 恢复全局默认) */
     async editShareLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -2334,7 +2343,7 @@ const app = createApp({
       }
       await this._editPost(hash, "share-limits", body, "分享率限制已更新");
     },
-    /* 移动…: 新保存路径输入(确认文案注明离开辅种组) → POST location */
+    /* 移动...: 新保存路径输入(确认文案注明离开辅种组) → POST location */
     async editMove(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -2352,7 +2361,7 @@ const app = createApp({
       }
       await this._editPost(hash, "location", { location: res.location }, "已移动");
     },
-    /* 重命名…: 种子显示名(不改磁盘文件名) → POST rename */
+    /* 重命名...: 种子显示名(不改磁盘文件名) → POST rename */
     async editRename(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -2409,7 +2418,7 @@ const app = createApp({
       await this._editPost(hash, "trackers/remove", { url }, "tracker 已删除");
     },
     /* ---------------- 抽屉内容页签编辑(D 轮): 行选中/优先级/文件重命名 ---------------- */
-    /* 行点击选中(文件/目录均可): 再点同一行取消 —— 顶部"重命名…"的作用对象 */
+    /* 行点击选中(文件/目录均可): 再点同一行取消 -- 顶部"重命名..."的作用对象 */
     fileRowSelect(r) {
       this.drawerSelPath = this.drawerSelPath === r.path ? "" : r.path;
     },
@@ -2478,7 +2487,7 @@ const app = createApp({
     },
     /* ---------------- 种子详情抽屉(R1B: WEB UI 替代 qB 界面的详情面板) ----------------
      * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
-     * trackers/peers 在对应 tab 激活期间 3s 轮询(页面隐藏时暂停), 关闭抽屉即停 —— 不进主循环 tick;
+     * trackers/peers 在对应 tab 激活期间 3s 轮询(页面隐藏时暂停), 关闭抽屉即停 -- 不进主循环 tick;
      * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。 */
     async openTorrentDrawer(hash) {
       this.menu.visible = false;
@@ -2585,23 +2594,23 @@ const app = createApp({
         this._drawerDeletePending = false;
       });
     },
-    /* General tab 分组行(预格式化): qB 哨兵在此统一翻译 —— -1=从未/未设, 8640000=无 ETA */
+    /* General tab 分组行(预格式化): qB 哨兵在此统一翻译 -- -1=从未/未设, 8640000=无 ETA */
     drawerGeneralSections() {
       const d = this.drawer.detail;
       if (!d) return [];
       const dur = (v, dash) => (v === null || v === undefined || v < 0) ? (dash || "未设") : this.fmtDuration(v);
-      const ts = (v) => this.fmtTs(v);
-      const size = (v) => this.fmtSizeOrDash(v);
+      const ts = (v) => this.fmtTs(v) || "—";  // 抽屉保留"—"(TBL-01 只改主页面表格)
+      const size = (v) => this.fmtSizeOrDash(v) || "—";
       const yn = (v) => (v ? "是" : "否");
       const lim = (v) => (v === null || v === undefined || v < 0) ? "未设" : (v === 0 ? "不限" : this.fmtDuration(v));
       return [
         {
           title: "传输",
           rows: [
-            { label: "下载速度", text: this.fmtSpeedOrDash(d.dlspeed) },
-            { label: "上传速度", text: this.fmtSpeedOrDash(d.upspeed) },
+            { label: "下载速度", text: this.fmtSpeedOrDash(d.dlspeed) || "—" },
+            { label: "上传速度", text: this.fmtSpeedOrDash(d.upspeed) || "—" },
             { label: "进度", text: `${((d.progress || 0) * 100).toFixed(1)}%` },
-            { label: "ETA", text: this.fmtEta(d.eta) },
+            { label: "ETA", text: this.fmtEta(d.eta) || "—" },
             { label: "已下载", text: size(d.downloaded) },
             { label: "已上传", text: size(d.uploaded) },
             { label: "本次会话下载", text: size(d.downloaded_session) },
@@ -2611,8 +2620,8 @@ const app = createApp({
             { label: "总大小", text: size(d.total_size) },
             { label: "可用性", text: (d.availability ?? 0).toFixed(2) },
             { label: "浪费", text: size(d.total_wasted) },
-            { label: "活跃时间", text: dur(d.time_active, "—") },
-            { label: "做种时间", text: dur(d.seeding_time, "—") },
+            { label: "活跃时间", text: dur(d.time_active, "-") },
+            { label: "做种时间", text: dur(d.seeding_time, "-") },
             { label: "最近活动", text: ts(d.last_activity) },
           ],
         },
@@ -2623,7 +2632,7 @@ const app = createApp({
             { label: "分享率限制", text: (d.max_ratio ?? -1) < 0 ? "未设" : d.max_ratio.toFixed(2) },
             { label: "做种时长限制", text: lim(d.max_seeding_time) },
             { label: "不活跃做种限制", text: lim(d.max_inactive_seeding_time) },
-            { label: "限制动作", text: d.share_limit_action || "—" },
+            { label: "限制动作", text: d.share_limit_action || "-" },
             { label: "完成于", text: ts(d.completion_on) },
             { label: "见到完整副本", text: ts(d.seen_complete) },
           ],
@@ -2636,7 +2645,7 @@ const app = createApp({
             { label: "完整/下载中", text: `${d.num_complete ?? 0} / ${d.num_incomplete ?? 0}` },
             { label: "tracker 数", text: String(d.trackers_count ?? 0) },
             { label: "连接数", text: `${d.connections_count ?? 0} / ${d.connections_limit ?? 0}` },
-            { label: "下次汇报", text: dur(d.reannounce_in || d.reannounce, "—") },
+            { label: "下次汇报", text: dur(d.reannounce_in || d.reannounce, "-") },
             { label: "tracker 错误", text: yn(d.has_tracker_error) },
             { label: "tracker 警告", text: yn(d.has_tracker_warning) },
           ],
@@ -2644,23 +2653,23 @@ const app = createApp({
         {
           title: "元数据",
           rows: [
-            { label: "信息哈希 v1", text: d.infohash_v1 || "—", mono: true },
-            { label: "信息哈希 v2", text: d.infohash_v2 || "—", mono: true },
+            { label: "信息哈希 v1", text: d.infohash_v1 || "-", mono: true },
+            { label: "信息哈希 v2", text: d.infohash_v2 || "-", mono: true },
             { label: "私有", text: yn(d.private) },
             { label: "创建于", text: ts(d.creation_date) },
-            { label: "创建工具", text: d.created_by || "—" },
-            { label: "分块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "—" },
+            { label: "创建工具", text: d.created_by || "-" },
+            { label: "分块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "-" },
             { label: "已含元数据", text: yn(d.has_metadata) },
-            { label: "备注", text: d.comment || "—" },
+            { label: "备注", text: d.comment || "-" },
           ],
         },
         {
           title: "行为与路径",
           rows: [
-            { label: "保存路径", text: d.save_path || "—" },
-            { label: "内容路径", text: d.content_path || "—" },
-            { label: "下载路径", text: d.download_path || "—" },
-            { label: "根路径", text: d.root_path || "—" },
+            { label: "保存路径", text: d.save_path || "-" },
+            { label: "内容路径", text: d.content_path || "-" },
+            { label: "下载路径", text: d.download_path || "-" },
+            { label: "根路径", text: d.root_path || "-" },
             { label: "自动种子管理", text: yn(d.auto_tmm) },
             { label: "强制开始", text: yn(d.force_start) },
             { label: "超级做种", text: yn(d.super_seeding) },
@@ -2710,24 +2719,24 @@ const app = createApp({
       walk(root, null, -1);
       return rows;
     },
-    /* Peers tab: qB 响应 peers 可能为 dict(以 ip:port 为键)或数组 —— 双形态归一 */
+    /* Peers tab: qB 响应 peers 可能为 dict(以 ip:port 为键)或数组 -- 双形态归一 */
     drawerPeerRows() {
       const p = this.drawer.peers || {};
       const list = Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
       return list.map((x) => ({
         addr: `${x.ip || "?"}${x.port ? ":" + x.port : ""}`,
-        client: x.client || "—",
-        flags: x.flags || "—",
+        client: x.client || "-",
+        flags: x.flags || "-",
         progress: Math.round((x.progress || 0) * 100),
-        dlspeed: this.fmtSpeedOrDash(x.dlspeed || 0),
-        upspeed: this.fmtSpeedOrDash(x.upspeed || 0),
-        downloaded: this.fmtSizeOrDash(x.downloaded || 0),
-        uploaded: this.fmtSizeOrDash(x.uploaded || 0),
+        dlspeed: this.fmtSpeedOrDash(x.dlspeed || 0) || "—",  // 抽屉 peers 表保留"—"
+        upspeed: this.fmtSpeedOrDash(x.upspeed || 0) || "—",
+        downloaded: this.fmtSizeOrDash(x.downloaded || 0) || "—",
+        uploaded: this.fmtSizeOrDash(x.uploaded || 0) || "—",
         relevance: `${Math.round((x.relevance || 0) * 100)}%`,
       }));
     },
     drawerTrackerStatus(s) {
-      return { 0: "未启用", 1: "未连接", 2: "正常", 3: "更新中", 4: "未连接" }[s] ?? "—";
+      return { 0: "未启用", 1: "未连接", 2: "正常", 3: "更新中", 4: "未连接" }[s] ?? "-";
     },
     drawerTrackerVirtual(url) {
       const u = String(url || "");
@@ -2754,9 +2763,9 @@ const app = createApp({
         body: "将删除该种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。",
         details: [
           { icon: "#i-tag", label: "种子名", value: m.name || m.hash.slice(0, 12) },
-          { icon: "#i-globe", label: "站点", value: m.site || "—" },
+          { icon: "#i-globe", label: "站点", value: m.site || "-" },
           { icon: "#i-pulse", label: "状态", value: this.kindText(m.kind) },
-          { icon: "#i-folder-open", label: "保存路径", value: m.save_path || "—" },
+          { icon: "#i-folder-open", label: "保存路径", value: m.save_path || "-" },
           { icon: "#i-hdd", label: "大小", value: this.fmtSize(m.size) },
         ],
       });
@@ -2776,7 +2785,7 @@ const app = createApp({
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
     },
-    /* ---------------- 统计面板(FE-2C): /api/stats 全局状态(server_state 直取, 缺失显示 —) ----------------
+    /* ---------------- 统计面板(FE-2C): /api/stats 全局状态(server_state 直取, 缺失显示 -) ----------------
      * 打开时取一次, 卡内"刷新"按钮重取; 不随主循环轮询(统计是低频信息)。
      * server 为 null(qB 未同步/降级全量不可用)时空态文案; 请求失败给重试。
      */
@@ -2800,14 +2809,14 @@ const app = createApp({
         this.statsLoading = false;
       }
     },
-    /* 统计值兜底: 字段缺失(null/undefined)显示 —; 0 是合法值(如 DHT 0 节点)原样展示 */
+    /* 统计值兜底: 字段缺失(null/undefined)显示 -; 0 是合法值(如 DHT 0 节点)原样展示 */
     statVal(v, fmt) {
-      if (v === null || v === undefined || v === "") return "—";
+      if (v === null || v === undefined || v === "") return "-";
       return fmt ? fmt(v) : String(v);
     },
-    /* qB connection_status 文案(原值兜底; 缺失显示 —) */
+    /* qB connection_status 文案(原值兜底; 缺失显示 -) */
     connText(v) {
-      if (v === null || v === undefined || v === "") return "—";
+      if (v === null || v === undefined || v === "") return "-";
       return { connected: "已连接", firewalled: "已连接(防火墙限制)", disconnected: "未连接" }[v] || String(v);
     },
     /* ---------------- 分类/标签管理对话框(FE-2C2): qB 分类/标签的增删改 ----------------
@@ -2873,7 +2882,7 @@ const app = createApp({
     async submitMgrTags() {
       if (this.mgrBusy) return;  // 回执等待期防重复投递
       // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
-      const tags = this.mgrNewTags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+      const tags = this.mgrNewTags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
       if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
       this.mgrBusy = true;
       try {
@@ -2979,7 +2988,7 @@ const app = createApp({
       if (!this.speedOvReady || this.speedOverride.busy) return;
       const up = Math.max(0, Math.round(Number(this.speedOverride.up)));
       const down = Math.max(0, Math.round(Number(this.speedOverride.down)));
-      const text = `上 ${this.fmtLimit(up)} / 下 ${this.fmtLimit(down)}`;
+      const text = `上 ${this.fmtLimit(up) || "不限速"} / 下 ${this.fmtLimit(down) || "不限速"}`;  // toast 保留"不限速"字样(TBL-02)
       this.speedOverride.busy = true;
       try {
         const resp = await this.api("/api/speed/override", {
@@ -3018,7 +3027,7 @@ const app = createApp({
       }
     },
     /* 悬停追踪: 事件挂在 .hist-chart容器(mousemove), 指针 x 折算进 viewBox 坐标再换算
-     * 桶索引 —— 连续无空隙; 旧版逐桶 enter/leave + 命中区只盖单柱的闪烁根因即在此 */
+     * 桶索引 -- 连续无空隙; 旧版逐桶 enter/leave + 命中区只盖单柱的闪烁根因即在此 */
     histMove(ev) {
       if (!this.historyBuckets.length) return;
       const rect = ev.currentTarget.getBoundingClientRect();
@@ -3030,7 +3039,7 @@ const app = createApp({
     histLeave() {
       this.histHoverIdx = -1;
     },
-    /* 面积填充路径(折线下方淡渐染; 带参辅助放 methods —— pitfalls: computed不能加括号调用) */
+    /* 面积填充路径(折线下方淡渐染; 带参辅助放 methods -- pitfalls: computed不能加括号调用) */
     _histArea(key) {
       const pts = this.histSeries[key];
       if (!pts.length) return "";
@@ -3072,7 +3081,7 @@ const app = createApp({
       return Array.isArray(ref) ? ref[0] : ref || null;
     },
     /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 辅种页左栏 .rail 的吸顶偏移与最大可用
-     * 高度都依赖它。**不写死数值** —— 高度会随媒体查询、状态条是否渲染、窄屏折行而变化;
+     * 高度都依赖它。**不写死数值** -- 高度会随媒体查询、状态条是否渲染、窄屏折行而变化;
      * 值未变时直接返回, 避免每帧都写一次 CSS 变量(updated 会频繁触发)。
      */
     _syncHeadHeight() {
@@ -3083,7 +3092,7 @@ const app = createApp({
       document.documentElement.style.setProperty("--head-h", h + "px");
     },
     /* 批量操作浮条实测高度(+下边距)写入 :root --bulk-h: 有选中集合时表头吸顶偏移随之
-     * 下移(两吸顶条不重叠), 无选中/切页时归 0 —— 与 --head-h 同款"值未变直接返回"模式 */
+     * 下移(两吸顶条不重叠), 无选中/切页时归 0 -- 与 --head-h 同款"值未变直接返回"模式 */
     _syncBulkHeight() {
       const el = document.querySelector(".bulk-bar");
       // 只量条高, **不把 margin-bottom 计入**(R01): --bulk-h 语义 = 吸顶条自身的占位高度,
@@ -3142,7 +3151,7 @@ const app = createApp({
       this.$nextTick(() => this.materializeColumns());
     },
     fitColumnsToWindow(page) {
-      // 适应窗口宽度: 先回到默认弹性模板(它会重新填满容器), 下一帧固化 —— 等价按比例缩放填满
+      // 适应窗口宽度: 先回到默认弹性模板(它会重新填满容器), 下一帧固化 -- 等价按比例缩放填满
       this.colWidths = { ...this.colWidths, [page]: {} };
       this.colManual = { ...this.colManual, [page]: false };
       this.$nextTick(() => {
@@ -3154,7 +3163,7 @@ const app = createApp({
 
     /* 列宽拖拽: 拖某列**只改该列**
      *
-     * 关键在于起始时把**全部可见列**固化为当前渲染 px —— 它们原本可能是 minmax/fr 弹性值,
+     * 关键在于起始时把**全部可见列**固化为当前渲染 px -- 它们原本可能是 minmax/fr 弹性值,
      * 不固化的话被拖列会把余量从邻居那儿抢走(表现为"调一列, 其它列跟着变")。
      * 按住 Shift 拖拽 = 与相邻列互相挤占(总宽不变), 对应主流表格的 shift-resize。
      *
@@ -3191,7 +3200,7 @@ const app = createApp({
         this.colManual = { ...this.colManual, [page]: true };  // 手动调过 -> 不再随窗口自适应
         this.saveColState();
         if (!dragged) return;  // 未拖动 = 纯点击 resizer, 不拦 click(保持原行为)
-        // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort —— capture 阶段拦掉即停
+        // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort -- capture 阶段拦掉即停
         const swallow = (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
