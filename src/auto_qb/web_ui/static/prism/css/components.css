@@ -551,3 +551,41 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* hover 底色必须不透明: --surface-2 是半透明高光, 直接当背景会让吸底按钮透出滚过的
  * 选项行( FIX-02 "管理标签"项 hover 背景变透明 ); 用同色渐变把高光叠进 --bg-elev, 仍只引用令牌 */
 .pop-mgr-btn:hover { color: var(--fg); background: linear-gradient(var(--surface-2), var(--surface-2)), var(--bg-elev); }
+
+/* ================= CTX-01 彩色图标集(波次三 W2) =================
+ * 右键菜单此前除 开始/暂停/汇报 三个语义色与危险项外, 其余图标一律继承 --fg-dim(灰),
+ * 15+ 项看起来"全都没颜色"。这里按操作族补色, 色值一律来自令牌(themes/*.css 单点可调)。 */
+.ctx-item .ico-info { color: var(--cyan); }       /* 查看: 详细信息 */
+.ctx-item .ico-gauge { color: var(--limit-hit); } /* 编辑: 限速 */
+.ctx-item .ico-percent { color: var(--pink); }    /* 编辑: 分享率 */
+.ctx-item .ico-move { color: var(--teal); }       /* 编辑: 移动 */
+.ctx-item .ico-rename { color: var(--indigo); }   /* 编辑: 重命名 */
+.ctx-item .ico-copy { color: var(--blue); }       /* 复制族 */
+.ctx-item .ico-recheck { color: var(--accent); }  /* 维护: 重新校验 */
+.ctx-item .ico-super { color: var(--violet); }    /* 高级: 超级做种 */
+.ctx-item .ico-force { color: var(--warn); }      /* 高级: 强制开始 */
+.ctx-item .ico-queue { color: var(--teal); }      /* 队列族(与"移动"同族: 位置语义) */
+.ctx-item .ico-tmm { color: var(--green); }       /* 自动种子管理开关 */
+.ctx-item .ico-export { color: var(--lime); }     /* 导出 .torrent */
+/* 点位图标: 统计 / 运行日志(章节入口) 此前同样无颜色 */
+.ico-chart { color: var(--cyan); }
+.ico-log { color: var(--pink); }
+.ico-risk { color: var(--warn); }   /* 风险标识(RFB-02 件2: 紧凑图标替代文字徽标) */
+
+/* ================= CTX-02 触发源强调 =================
+ * 右键菜单弹出期间把被作用的那一行框出来, 让"这次操作针对谁"一眼可见。
+ * 刻意**不改背景**: 行底色已承担状态语义, 再叠一层会互相打架 —— 只用内描边强调。
+ * 标记与清理都在共享层(app.js _markCtxSource/_clearCtxSource), 双 UI 同源。 */
+.group-row.ctx-src, .member-row.ctx-src, .show-row.ctx-src, .ep-row.ctx-src {
+  box-shadow: inset 2px 0 0 var(--accent), inset 0 0 0 1px var(--accent-line); }
+.ctx-anchor.ctx-src { box-shadow: 0 0 0 2px var(--ring); border-radius: var(--radius-sm); }
+
+/* ================= W4 顶栏: 一级导航三态 + 设置右置 + 品牌动态化 ================= */
+/* 设置按钮独立成组靠右(与左侧视图导航分列); 复用 .tabs 的 hover/active 语言 */
+.tabs-right { margin-left: auto; }
+.brand-name { font-family: var(--font-display); letter-spacing: .02em; }
+.brand-name .qb { font-size: .86em; }   /* qb 字样略微减小 */
+.brand-mark .brand-orbit { width: 20px; height: 20px; color: var(--accent); }
+/* 卫星绕心旋转: 12s 线性匀速, 低干扰; prefers-reduced-motion 由 base.css 全局降级停转 */
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+.brand-orbit { animation: orbit-spin 12s linear infinite; transform-origin: 50% 50%; }
