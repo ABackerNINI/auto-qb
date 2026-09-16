@@ -1513,8 +1513,10 @@
         </div>
       </div>
     </div>
-    <!-- 添加种子对话框(R1B): 与 atlas 同构 —— 来源三选一可混合(.torrent 多选 / magnet+URL 文本域) + 保存路径/分类/标签 + qB 添加选项;
-         底部 D4 接管预览(静态说明 + 已有组前缀计数), skip_checking 勾选时顶部出警告条 -->
+    <!-- 添加种子对话框(R1B/DLG-03): 来源 = .torrent 多选 + 「添加链接」按钮展开的 magnet/URL 文本域(可再收起) +
+         分类/标签 combobox(下拉候选 + 自由输入) + qB 添加选项(「添加后开始」默认不勾 = paused 添加;
+         跳过校验勾选后选项区下出警告行); DLG-04 保存路径 = 自由输入 + /api/paths 下拉推荐 + 「选择位置」面板;
+         底部 D4 接管预览(静态说明 + 已有组前缀计数) -->
     <div v-if="addOpen" class="modal-mask add-dialog-mask" @click.self="closeAddTorrent()">
       <div class="modal add-dialog" role="dialog" aria-modal="true" aria-label="添加种子">
         <div class="modal-title">
@@ -1527,11 +1529,17 @@
         <div class="add-dialog-body">
           <div class="add-dialog-field">
             <label class="add-dialog-label">来源(.torrent 文件与链接可混合)</label>
-            <label class="add-dialog-filepick">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-              <span>选择 .torrent 文件(可多选)…</span>
-              <input type="file" multiple accept=".torrent" @change="onAddFilePick">
-            </label>
+            <div class="add-dialog-source">
+              <label class="add-dialog-filepick">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                <span>选择 .torrent 文件(可多选)…</span>
+                <input type="file" multiple accept=".torrent" @change="onAddFilePick">
+              </label>
+              <button type="button" class="ce-btn ghost add-dialog-linkbtn" @click="toggleAddUrls">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg>
+                {{ addShowUrls ? '收起链接' : '添加链接' }}
+              </button>
+            </div>
             <div v-if="addFiles.length" class="add-dialog-filelist">
               <span v-for="(f, i) in addFiles" :key="f.name + f.size" class="add-dialog-filechip" :title="f.name">
                 {{ f.name }}
@@ -1540,7 +1548,7 @@
                 </button>
               </span>
             </div>
-            <textarea v-model="addUrls" class="add-dialog-textarea" rows="4"
+            <textarea v-if="addShowUrls" v-model="addUrls" class="add-dialog-textarea" rows="4"
                       placeholder="magnet:?xt=… 或 http(s)://… 种子链接, 每行一条(可与文件混合)"></textarea>
             <div class="add-dialog-hint">已选 {{ addFiles.length }} 个文件 · {{ addUrlCount() }} 条链接</div>
           </div>
@@ -1548,38 +1556,79 @@
           <div class="add-dialog-grid">
             <div class="add-dialog-field">
               <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
-              <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
-                     placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false">
+              <div class="add-dialog-pathrow">
+                <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
+                       placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false"
+                       list="ad-path-dl" @focus="addPathPop = false">
+                <button type="button" class="ce-btn ghost add-dialog-pathbtn" @click.stop="toggleAddPathPop"
+                        @keydown="onAddPathKeydown($event)">选择位置</button>
+              </div>
+              <!-- DLG-04: 下拉推荐(原生 datalist) + 「选择位置」面板(复用 .pop-menu 视觉, 键盘上下+回车, Esc 只收面板) -->
+              <datalist id="ad-path-dl"><option v-for="p in addPathOptions" :key="p" :value="p"></option></datalist>
+              <transition name="pop">
+                <div v-if="addPathPop" class="pop-menu add-pop" @click.stop>
+                  <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ addPathOptions.length }}</span></div>
+                  <div class="add-pop-list" ref="addPathList">
+                    <div v-for="(p, i) in addPathOptions" :key="p" class="pop-item add-pop-item"
+                         :class="{ on: i === addPathHi }" :data-hi="i === addPathHi ? '1' : '0'" @click="pickAddPath(p)">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                      <span class="pop-value">{{ p }}</span>
+                    </div>
+                    <p v-if="!addPathOptions.length" class="pop-empty">暂无历史位置</p>
+                  </div>
+                </div>
+              </transition>
             </div>
-            <div class="add-dialog-field">
+            <div class="add-dialog-field add-dialog-combo">
               <label class="add-dialog-label" for="ad-category">分类(可空)</label>
               <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
-                     placeholder="如 TV" autocomplete="off" spellcheck="false">
+                     placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
+                     @focus="openAddCatMenu" @click.stop="openAddCatMenu"
+                     @input="addCatHi = -1; addCatMenu = true" @keydown="onAddCatKeydown($event)">
+              <transition name="pop">
+                <div v-if="addCatMenu" class="pop-menu add-pop" @click.stop ref="addCatList">
+                  <div v-for="(c, i) in addCatFiltered()" :key="c" class="pop-item add-pop-item"
+                       :class="{ on: i === addCatHi }" :data-hi="i === addCatHi ? '1' : '0'"
+                       @click="pickAddCat(c)" @mouseenter="addCatHi = i">
+                    <span class="pop-value">{{ c }}</span>
+                  </div>
+                  <p v-if="!addCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
+                </div>
+              </transition>
             </div>
-            <div class="add-dialog-field">
+            <div class="add-dialog-field add-dialog-combo">
               <label class="add-dialog-label" for="ad-tags">标签(逗号分隔, 可空)</label>
               <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
-                     placeholder="如 HR, Keep" autocomplete="off" spellcheck="false">
+                     placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
+                     @focus="openAddTagMenu" @click.stop="openAddTagMenu"
+                     @input="addTagHi = -1; addTagMenu = true" @keydown="onAddTagKeydown($event)">
+              <transition name="pop">
+                <div v-if="addTagMenu" class="pop-menu add-pop" @click.stop ref="addTagList">
+                  <div v-for="(t, i) in addTagFiltered()" :key="t" class="pop-item add-pop-item"
+                       :class="{ on: i === addTagHi }" :data-hi="i === addTagHi ? '1' : '0'"
+                       @click="pickAddTag(t)" @mouseenter="addTagHi = i">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
+                    <span class="pop-value">{{ t }}</span>
+                  </div>
+                  <p v-if="!addTagFiltered().length" class="pop-empty">无匹配标签, 可直接自由输入</p>
+                </div>
+              </transition>
             </div>
           </div>
 
           <div class="add-dialog-field">
             <label class="add-dialog-label">选项</label>
             <div class="add-dialog-checks">
-              <label class="add-dialog-check"><input type="checkbox" v-model="addPaused"><span>添加即暂停</span></label>
-              <label class="add-dialog-check add-dialog-check-danger"><input type="checkbox" v-model="addSkipCheck"><span>跳过校验</span></label>
+              <label class="add-dialog-check"><input type="checkbox" v-model="addStart"><span>添加后开始</span></label>
+              <label class="add-dialog-check"><input type="checkbox" v-model="addSkipCheck"><span>跳过校验</span></label>
               <label class="add-dialog-check"><input type="checkbox" v-model="addSequential"><span>顺序下载</span></label>
               <label class="add-dialog-check"><input type="checkbox" v-model="addFirstLast"><span>首末块优先</span></label>
               <label class="add-dialog-check"><input type="checkbox" v-model="addTmm"><span>自动种子管理</span></label>
             </div>
-            <div class="add-dialog-hint add-dialog-hint-warn">跳过校验可能损坏辅种, 仅在确信文件完整时使用</div>
+            <div v-if="addSkipCheck" class="add-dialog-hint add-dialog-hint-warn">已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种</div>
           </div>
 
           <div class="add-dialog-preview">
-            <div v-if="addSkipCheck" class="add-dialog-warnbar">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-              <span>已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种</span>
-            </div>
             <div class="add-dialog-preview-title">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
               <span>auto-qb 接管预览</span>
