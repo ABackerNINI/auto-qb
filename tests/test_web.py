@@ -20,6 +20,7 @@
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
+- test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
 - test_build_search_index_incremental_and_evict: 增量维护(不重拉已建条目/补拉新增/淘汰已删)
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
@@ -606,6 +607,55 @@ def test_build_group_view(tmp_path):
     assert [m["category"] for m in g["members"]] == ["anime", "anime"]
     # seeding_time 展示值按分钟取整(与 store 重建判定同一步长, 防视图内容与脏标记脱钩)
     assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
+
+
+def test_build_group_view_member_num_seeds_fields(tmp_path):
+    """组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete(TorrentRecord 快照直取)
+
+    前端成员列/种子页展示连接数与可用性的数据源: _member_view 是组视图 members 与
+    singles 未归组种子的共同投影, 字段在成员层透出后两处同形。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    t1 = FakeTorrent(
+        hash="HA",
+        name="Show",
+        save_path=r"R:/s",
+        num_seeds=12,
+        num_leechs=3,
+        num_complete=45,
+        num_incomplete=6,
+    )
+    t2 = FakeTorrent(
+        hash="HB",
+        name="Show",
+        save_path=r"R:/s",
+        num_seeds=34,
+        num_leechs=5,
+        num_complete=67,
+        num_incomplete=8,
+    )
+    seed_store(mgr, [t1, t2])
+    key = ("R:/s", ("a.mkv", "b.mkv"))
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+
+    members = mgr._build_group_view()[0]["members"]
+    for m in members:
+        for f in ("num_seeds", "num_leechs", "num_complete", "num_incomplete"):
+            assert f in m, f"组视图成员缺少字段 {f}: {sorted(m)}"
+    by_hash = {m["hash"]: m for m in members}
+    assert by_hash["HA"]["num_seeds"] == 12
+    assert by_hash["HA"]["num_leechs"] == 3
+    assert by_hash["HA"]["num_complete"] == 45
+    assert by_hash["HA"]["num_incomplete"] == 6
+    assert by_hash["HB"]["num_seeds"] == 34
+    assert by_hash["HB"]["num_leechs"] == 5
+    assert by_hash["HB"]["num_complete"] == 67
+    assert by_hash["HB"]["num_incomplete"] == 8
 
 
 def test_build_group_view_hr_tags(tmp_path):
@@ -1659,6 +1709,36 @@ def test_build_singles_view_ungrouped_only():
         again = mgr.ensure_group_state(rid=state["rid"])
         assert "singles" not in again and "groups" not in again
         assert "shows" not in again, "追剧视图与 groups 同版本门控: 版本一致不回传"
+
+
+def test_build_singles_view_num_seeds_fields():
+    """singles 视图透出 num_seeds/num_leechs/num_complete/num_incomplete(与组视图成员同形)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        from helpers import FakeTorrent, seed_store
+
+        seed_store(
+            mgr, [
+                FakeTorrent(
+                    hash="HZ",
+                    name="Lone",
+                    save_path=r"R:\Elsewhere",
+                    num_seeds=9,
+                    num_leechs=2,
+                    num_complete=11,
+                    num_incomplete=4,
+                )
+            ]
+        )
+        mgr._group_view_dirty = True
+        state = mgr.ensure_group_state(rid=None)
+        singles = {s["hash"]: s for s in state["singles"]}
+        assert "HZ" in singles, f"singles 应只含未归组种子: {state['singles']}"
+        s = singles["HZ"]
+        assert s["num_seeds"] == 9
+        assert s["num_leechs"] == 2
+        assert s["num_complete"] == 11
+        assert s["num_incomplete"] == 4
 
 
 def test_build_shows_view_aggregation():

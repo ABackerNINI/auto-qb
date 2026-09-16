@@ -127,6 +127,11 @@ class WebviewMixin:
             "added_on": r.added_on,
             # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
             **self._hr_view_fields(r),
+            # 连接数快照(TorrentRecord 已有): 成员/未归组种子直接透出, 供前端种子页与成员列展示
+            "num_seeds": r.num_seeds,
+            "num_leechs": r.num_leechs,
+            "num_complete": r.num_complete,
+            "num_incomplete": r.num_incomplete,
         }
 
     def _build_group_view(self) -> List[dict]:
