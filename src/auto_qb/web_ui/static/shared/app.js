@@ -624,7 +624,7 @@ const app = createApp({
       return this._visibleCols("show");
     },
     /* 成员索引: groups ∪ singles = 全量种子(shows 明细只带 hash, 从这里取完整成员视图,
-     * 避免响应体重复成员数据; 同 bulkDelete 的 byHash 合并先例) */
+     * 避免响应体重复成员数据; bulkDelete 摘要计数同源于此) */
     memberByHash() {
       const map = new Map();
       for (const g of this.groups) for (const m of g.members) map.set(m.hash, m);
@@ -1040,9 +1040,8 @@ const app = createApp({
         checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
         checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制汇报 + 删除文件并存)
         details: null,  // 目标信息区 [{icon,label,value}](删除确认框显示待删种子信息)
-        members: null,  // 成员明细 [{site,name}](删除整组: 逐个列出待删种子, 滚动区)
         fields: null,   // 多字段输入 [{key,label,value,placeholder}](编辑类对话框: 限速/分享率/移动/重命名)
-        wide: false,    // 加宽形态(删除确认框: 容纳完整种子名/路径与成员明细)
+        wide: false,    // 加宽形态(删除确认框: 摘要与选项宽松可读; DLG-01 成员明细区已移除)
         icon: "",       // 标题图标覆盖(如删除用 i-trash-x); 缺省按 danger 取 warn/info
       };
     },
@@ -2013,7 +2012,7 @@ const app = createApp({
       if (isRe) this._finishToast(tid, "timeout", msg, 6000);
       else this.toast(msg, fails.length === hashes.length ? "error" : "info", 8000);
     },
-    /* 删除整集(全部版本): 确认框成员明细 = 该集全部种子, 与批量删除同口径 */
+    /* 删除整集(全部版本): 确认框摘要 = 集名 + 种子数(DLG-01 收缩后不再列成员明细) */
     async delEpisode() {
       this.menu.visible = false;
       const ep = this.menu.episode;
@@ -2028,7 +2027,6 @@ const app = createApp({
           { icon: "#i-cards", label: "目标", value: ep.label },
           { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${members.length} 个种子` },
         ],
-        members: members.map((m) => ({ site: m.site || "—", name: m.name || m.hash.slice(0, 12), path: m.save_path || "—" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -2155,39 +2153,49 @@ const app = createApp({
       if (isRe) this._finishToast(tid, "timeout", msg, 6000);
       else this.toast(msg, fails.length === jobs.length ? "error" : "info", 8000);
     },
+    /* DLG-02: 批量删除文案按选择构成计数(仅组=N 个组 / 仅种子=N 个种子 / 混合=N 个组、M 个种子)。
+     * 用 _bulkTargets 的有效口径 —— 虚拟行(未归组命中)无真实组 key、按种子投递, 计入"种子"
+     * 而非"组", 保证批量条按钮/确认框标题/提交体三处一致; 空串 = 选中项均已失效 */
+    _bulkCountText() {
+      const { groupKeys, memberHashes } = this._bulkTargets();
+      const parts = [];
+      if (groupKeys.length) parts.push(`${groupKeys.length} 个组`);
+      if (memberHashes.length) parts.push(`${memberHashes.length} 个种子`);
+      return parts.join("、");
+    },
+    /* 批量条删除按钮文案: 计数文本前缀"删除", 空选中退化为纯"删除" */
+    bulkDeleteLabel() {
+      const t = this._bulkCountText();
+      return t ? `删除 ${t}` : "删除";
+    },
     async bulkDelete() {
       const { groupKeys, memberHashes } = this._bulkTargets();
       if (!groupKeys.length && !memberHashes.length) return;
-      // 待删明细(R04): 组展开到成员级(站点/名称/保存路径), 独立种子直取 —— 确认框逐行自证,
-      // 三入口(单种子/整组/批量)口径统一; _findGroup 已修复为优先查 decoratedGroups(含 save_path)
-      const byHash = new Map();
-      for (const g of this.decoratedGroups) for (const m of g.members) byHash.set(m.hash, m);
-      for (const g of this.filteredGroups) if (g.virtual) byHash.set(g.members[0].hash, g.members[0]);
-      for (const r of this.singles) if (!byHash.has(r.hash)) byHash.set(r.hash, r);
-      for (const r of this.torrents) if (!byHash.has(r.hash)) byHash.set(r.hash, r);
-      const members = [];
+      const countText = this._bulkCountText();
+      // 摘要计数(DLG-01 收缩: 确认框不再列逐条成员明细, 只保留目标摘要+计数):
+      // 组展开到成员级, 与独立选择的种子并集去重 —— 与后端 bulk 组键展开(级联在册成员,
+      // 与 hashes 合并去重)同口径; 成员大小经 memberByHash 解析(groups ∪ singles ∪ torrents 全量)
+      const seen = new Set();
       let totalSize = 0;
-      const pushMember = (m) => {
-        if (!m || members.some((x) => x.hash === m.hash)) return;
-        members.push(m);
+      const countMember = (m) => {
+        if (!m || seen.has(m.hash)) return;
+        seen.add(m.hash);
         totalSize += m.size || 0;
       };
       for (const k of groupKeys) {
         const g = this._findGroup(k);
         if (!g) continue;
-        if (g.virtual) pushMember(g.members[0]);
-        else for (const m of g.members || []) pushMember(m);
+        if (g.virtual) countMember(g.members[0]);
+        else for (const m of g.members || []) countMember(m);
       }
-      for (const h of memberHashes) pushMember(byHash.get(h));
-      const total = members.length;
+      for (const h of memberHashes) countMember(this.memberByHash.get(h));
       const res = await this._confirmDelete({
-        title: "批量删除",
-        body: `将删除选中目标内的全部种子, 共 ${total} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
+        title: `删除 ${countText}`,
+        body: `将删除选中目标内的全部种子, 共 ${seen.size} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
         details: [
           { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个组 · ${memberHashes.length} 个独立种子` },
-          { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${total} 个种子` },
+          { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${seen.size} 个种子` },
         ],
-        members: members.map((m) => ({ site: m.site || "—", name: m.name || m.hash.slice(0, 12), path: m.save_path || "—" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -2207,15 +2215,19 @@ const app = createApp({
         }
         this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
       }
-      const body = JSON.stringify({ delete_files: deleteFiles });
-      const delJobs = [
-        ...groupKeys.map((k) => `/api/groups/${k}/delete`),
-        ...memberHashes.map((h) => `/api/torrents/${h}/delete`),
-      ];
-      const results = await Promise.allSettled(delJobs.map((p) => this.api(p, { method: "POST", body })));
-      const fails = results.filter((r) => r.status === "rejected");
-      if (fails.length) this.toast(`删除投递部分失败(${fails.length}/${delJobs.length})`, "error", 8000);
-      else this.toast(`已投递: 批量删除 ${delJobs.length} 个目标${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
+      // DLG-02: 提交体对齐 bulk 组键模式 —— 单命令批量(keys+hashes 可混合, 后端展开组键
+      // 级联成员并去重), 沿用 cmd_id 聚合回执(部分缺失时 error 带缺失计数)
+      try {
+        const resp = await this.api("/api/torrents/bulk", {
+          method: "POST",
+          body: JSON.stringify({ action: "delete", keys: groupKeys, hashes: memberHashes, delete_files: deleteFiles }),
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) this.toast(`已删除: ${countText}${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
+        else this.toast(`删除未完全成功: ${r.error}`, "error", 8000);
+      } catch (e) {
+        if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
+      }
       this.clearSelection();
     },
     /* ---------------- 删除确认框: 目标信息 + 强制汇报(默认勾选)/删除文件两选项 ---------------- */
@@ -2224,8 +2236,7 @@ const app = createApp({
         title: opts.title,
         body: opts.body,
         details: opts.details || null,
-        members: opts.members || null,
-        wide: true,  // 删除类确认框一律加宽: 种子名/保存路径完整可读
+        wide: true,  // 删除类确认框一律加宽: 摘要与选项宽松可读(DLG-01 成员明细已移除, 宽度见 --modal-wide-w)
         checks: [
           { key: "reannounce", label: "删除前先强制汇报(等待 tracker 确认, 失败则不删除)", checked: true },
           { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
@@ -2258,7 +2269,7 @@ const app = createApp({
         return false;
       }
     },
-    /* 删除整组: 单一菜单项 + 确认框显示目标信息(组名/成员/站点/路径/总大小)与两个选项 */
+    /* 删除该组(DLG-02: 旧"整组"叫法退役, 组删除一律计数语义): 单一菜单项 + 确认框显示目标信息(组名/成员/站点/路径/总大小)与两个选项 */
     async delGroup() {
       this.menu.visible = false;
       const key = this.menu.key;
@@ -2267,8 +2278,8 @@ const app = createApp({
       if (!g) return;
       const sites = [...new Set(g.members.map((m) => m.site))].join(", ");
       const res = await this._confirmDelete({
-        title: "删除整组",
-        body: `将删除"${g.name}"的组成员种子。`,
+        title: "删除该组",
+        body: `将删除"${g.name}"组的全部 ${g.count} 个种子。`,
         details: [
           { icon: "#i-cards", label: "组名", value: g.name },
           { icon: "#i-layers", label: "成员", value: `${g.count} 个种子` },
@@ -2276,8 +2287,6 @@ const app = createApp({
           { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—" },
           { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
         ],
-        // 成员明细(用户要求确认框里能看到"正在删除哪些种子"): 站点 + 种子名 + 保存路径逐行列出
-        members: g.members.map((m) => ({ site: m.site, name: m.name, path: m.save_path || "—" })),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -2290,7 +2299,7 @@ const app = createApp({
           method: "POST",
           body: JSON.stringify({ delete_files: deleteFiles }),
         });
-        this.toast(`已投递: 删除整组${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
+        this.toast(`已投递: 删除该组${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }

@@ -478,7 +478,7 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
             </button>
             <button class="bulk-btn danger" @click="bulkDelete()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除…
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ bulkDeleteLabel() }}…
             </button>
             <button class="bulk-btn ghost" @click="clearSelection()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除
@@ -999,7 +999,7 @@
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delGroup()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除整组…
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该组…
             </div>
           </template>
         </div>
@@ -1994,14 +1994,6 @@
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
             <span class="d-value" :title="d.value">{{ d.value }}</span>
-          </div>
-        </div>
-        <!-- 成员明细(删除整组/批量删除): 逐个列出待删种子(站点 + 种子名 + 保存路径), 滚动区 -->
-        <div v-if="modal.members && modal.members.length" class="modal-members">
-          <div v-for="(mm, i) in modal.members" :key="i" class="modal-member-row">
-            <span class="mm-site">{{ mm.site }}</span>
-            <span class="mm-name">{{ mm.name }}</span>
-            <span v-if="mm.path" class="mm-path" :title="mm.path">{{ mm.path }}</span>
           </div>
         </div>
         <input v-if="modal.input" ref="modalInput" v-model="modal.value" class="modal-input"
