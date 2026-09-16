@@ -536,13 +536,13 @@
                   <span v-for="t in g.commonTags.list.slice(0, 3)" :key="t" class="tag-chip"
                         :class="tagClass(t, g.members[0])">{{ t }}</span>
                   <span v-if="g.commonTags.list.length > 3" class="tag-more">+{{ g.commonTags.list.length - 3 }}</span>
-                  <span v-if="!g.commonTags.list.length" class="zero">—</span>
+                  <span v-if="!g.commonTags.list.length" class="zero"></span>
                   <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
                 </div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
                   <span v-if="g.commonCategory.value" class="cat-chip">{{ g.commonCategory.value }}</span>
                   <span v-else-if="g.commonCategory.diff" class="diff-mark" title="组内分类不一致">多分类</span>
-                  <span v-else class="zero">—</span>
+                  <span v-else class="zero"></span>
                 </div>
                 <div v-else-if="col.key === 'sites'" class="g-sites">
                   <span v-for="m in g.members" :key="m.hash"
@@ -553,7 +553,7 @@
                 </div>
                 <!-- H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
                 <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(g)" :title="hrGroupTitle(g)">
-                  <span v-if="!g.hr_triggered" class="zero">—</span>
+                  <span v-if="!g.hr_triggered" class="zero"></span>
                   <svg v-else-if="!g.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
                   <template v-else>
                     <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
@@ -589,11 +589,11 @@
                   <span v-else-if="col.key === 'tags'" class="m-tags" :title="mTags(m).join(', ')">
                     <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
                     <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
-                    <span v-if="!mTags(m).length" class="zero">—</span>
+                    <span v-if="!mTags(m).length" class="zero"></span>
                   </span>
                   <span v-else-if="col.key === 'category'" class="m-cat" :title="m.category">
                     <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
-                    <span v-else class="zero">—</span>
+                    <span v-else class="zero"></span>
                   </span>
                   <span v-else-if="col.key === 'progress'" class="m-progress">
                     <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
@@ -673,19 +673,19 @@
                 <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
                   <span v-if="m.category" class="cat-chip" :title="m.category">{{ m.category }}</span>
-                  <span v-else class="zero">—</span>
+                  <span v-else class="zero"></span>
                 </div>
                 <div v-else-if="col.key === 'tags'" class="g-tags" :title="mTags(m).join(', ')">
                   <span v-for="t in tagSlice(mTags(m), 3)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
                   <span v-if="mTags(m).length > 3" class="tag-more">+{{ mTags(m).length - 3 }}</span>
-                  <span v-if="!mTags(m).length" class="zero">—</span>
+                  <span v-if="!mTags(m).length" class="zero"></span>
                 </div>
                 <div v-else-if="col.key === 'progress'" class="m-progress">
                   <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                   <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                 </div>
-                <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !m.num_seeds }">{{ m.num_seeds || 0 }}</div>
-                <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !m.num_leechs }">{{ m.num_leechs || 0 }}</div>
+                <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !fmtPeersQb(m.num_seeds, m.num_complete) }">{{ fmtPeersQb(m.num_seeds, m.num_complete) }}</div>
+                <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</div>
                 <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</div>
                 <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(m.added_on) }}</div>
                 <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="{ zero: !m.downloaded }">{{ fmtSizeOrDash(m.downloaded) }}</div>
@@ -696,8 +696,8 @@
                 <div v-else-if="col.key === 'completion_on'" class="g-stat">{{ fmtTs(m.completion_on) }}</div>
                 <div v-else-if="col.key === 'up_limit'" class="g-stat">{{ fmtLimitBytes(m.up_limit) }}</div>
                 <div v-else-if="col.key === 'dl_limit'" class="g-stat">{{ fmtLimitBytes(m.dl_limit) }}</div>
-                <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '—').slice(0, 8) }}</div>
-                <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '—' }}</div>
+                <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
+                <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
                 <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
                   {{ fmtDuration(m.seeding_time) }}
                   <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
@@ -706,7 +706,7 @@
                   {{ (m.ratio || 0).toFixed(2) }}
                   <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                 </div>
-                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '—' }}</div>
+                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</div>
                 <div v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</div>
               </template>
             </div>
@@ -748,17 +748,17 @@
                     <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
                     <span class="g-name-text show-name-text">{{ s.name }}</span>
                   </div>
-                  <div v-else-if="col.key === 'state'" class="g-cat zero">—</div>
-                  <div v-else-if="col.key === 'progress'" class="g-cat zero">—</div>
-                  <div v-else-if="col.key === 'size'" class="g-stat zero">—</div>
+                  <div v-else-if="col.key === 'state'" class="g-cat zero"></div>
+                  <div v-else-if="col.key === 'progress'" class="g-cat zero"></div>
+                  <div v-else-if="col.key === 'size'" class="g-stat zero"></div>
                   <div v-else-if="col.key === 'versions'" class="g-count" title="种子数">{{ s.member_count }}</div>
                   <div v-else-if="col.key === 'sites'" class="g-cat">
                     <span class="zero">{{ s.seasons.length }} 个季</span>
                   </div>
-                  <div v-else-if="col.key === 'dlspeed'" class="g-stat zero">—</div>
-                  <div v-else-if="col.key === 'upspeed'" class="g-stat zero">—</div>
-                  <div v-else-if="col.key === 'uploaded'" class="g-stat zero">—</div>
-                  <div v-else-if="col.key === 'hr'" class="g-hr zero">—</div>
+                  <div v-else-if="col.key === 'dlspeed'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'upspeed'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'uploaded'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'hr'" class="g-hr zero"></div>
                   <div v-else-if="col.key === 'latest'" class="g-stat" :title="'剧内最近添加时间'">{{ fmtTime(s.latest) }}</div>
                 </template>
               </div>
@@ -810,7 +810,7 @@
                         <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }">{{ fmtSizeOrDash(e.uploaded) }}</div>
                         <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(e)"
                              :title="e.hr_triggered ? (e.hr_pending ? e.hr_pending + '/' + e.hr_triggered + ' 未满足要求' : 'HR 已全部达标') : '该集无成员触发 HR'">
-                          <span v-if="!e.hr_triggered" class="zero">—</span>
+                          <span v-if="!e.hr_triggered" class="zero"></span>
                           <svg v-else-if="!e.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
                           <template v-else>
                             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
@@ -844,12 +844,12 @@
                           <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
                           <span v-else-if="col.key === 'category'" class="m-cat">
                             <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
-                            <span v-else class="zero">—</span>
+                            <span v-else class="zero"></span>
                           </span>
                           <span v-else-if="col.key === 'tags'" class="m-tags" :title="mTags(m).join(', ')">
                             <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
                             <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
-                            <span v-if="!mTags(m).length" class="zero">—</span>
+                            <span v-if="!mTags(m).length" class="zero"></span>
                           </span>
                           <span v-else-if="col.key === 'progress'" class="m-progress">
                             <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
@@ -1626,8 +1626,8 @@
                   <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
                     <td class="wrap" :title="t.url">{{ t.url }}</td>
                     <td>{{ drawerTrackerStatus(t.status) }}</td>
-                    <td>{{ t.num_seeds ?? "—" }}</td>
-                    <td>{{ t.num_leeches ?? "—" }}</td>
+                    <td>{{ fmtPeersQb(t.num_seeds, t.num_complete) }}</td>
+                    <td>{{ fmtPeersQb(t.num_leeches, t.num_incomplete) }}</td>
                     <td class="wrap">{{ t.msg || "—" }}</td>
                     <td class="cell-act">
                       <template v-if="!drawerTrackerVirtual(t.url)">
