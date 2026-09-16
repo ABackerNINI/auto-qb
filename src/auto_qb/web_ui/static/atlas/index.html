@@ -123,18 +123,17 @@
             <span>auto-qb</span>
             <span class="ver">v{{ status.version || '—' }}</span>
           </div>
-          <nav class="tabs">
-            <button :class="{ active: page === 'groups' }" @click="page = 'groups'">
-              <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>辅种管理
+          <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
+               与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"运行日志"章节 -->
+          <nav class="tabs" aria-label="视图导航">
+            <button :class="{ active: page === 'groups' && viewMode === 'groups' }" title="按辅种分组展示" @click="goView('groups')">
+              <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组
             </button>
-            <button :class="{ active: page === 'settings' }" @click="openSettings">
-              <svg class="ico ico-sm ico-config" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
+            <button :class="{ active: page === 'groups' && viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="goView('torrents')">
+              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
             </button>
-            <button :class="{ active: statsOpen }" @click="openStats" title="qB 会话/累计流量 · DHT · 连接状态">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
-            </button>
-            <button :class="{ active: page === 'logs' }" @click="openLogs" title="auto-qb 运行日志(手动刷新)">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>日志
+            <button :class="{ active: page === 'groups' && viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="goView('shows')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
             </button>
           </nav>
           <!-- 视图开关(R08/R10): 分组表 / 单种子平铺 / 追剧; 筛选与搜索三视图共用, 列模型与排序独立 -->
