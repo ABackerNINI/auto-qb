@@ -32,9 +32,7 @@ window.CONFIG_EDITOR = {
         baseline: "",  // 已保存树的 JSON 快照(脏检测)
         loading: false,
         saving: false,
-        error: "",  // 加载/保存错误(加载失败时整页替换, 保存失败时顶部横幅)
-        notice: "",  // 成功提示
-        noticeKind: "",  // ok | warn | error
+        error: "",  // 加载/保存错误(加载失败时整页替换; 保存失败走 toast)
         activeGroup: "basic",
         previewOpen: false,
         previewText: "",
@@ -194,24 +192,21 @@ window.CONFIG_EDITOR = {
     },
     async cfgSave() {
       this.cfg.saving = true;
-      this.cfg.notice = "";
       try {
         const result = await this.api("/api/config", { method: "PUT", body: JSON.stringify({ tree: this.cfg.tree }) });
         // 后端会把 R 级字段回退为磁盘旧值 → 重新拉取树保证 UI 与磁盘一致
         const fresh = await this.api("/api/config");
         this.cfgSetTree(fresh.tree);
         const n = (result.changes || []).length;
+        // 保存结果反馈走全局 toast(timeout 型 = 琥珀色时钟, 恰合「已保存但需重启才生效」的中间态)
         if (result.restart_required && result.restart_required.length) {
-          this.cfg.noticeKind = "warn";
-          this.cfg.notice = `已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${result.restart_required.join(", ")}`;
+          this.toast(`已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${result.restart_required.join(", ")}`, "timeout", 9000);
         } else {
-          this.cfg.noticeKind = "ok";
-          this.cfg.notice = `已保存并热重载(变更 ${n} 项)`;
+          this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
         }
         this.cfg.previewOpen = false;
       } catch (e) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = "保存失败: " + (e.message || "未知错误");
+        this.toast("保存失败: " + (e.message || "未知错误"), "error", 9000);
       } finally {
         this.cfg.saving = false;
       }
@@ -224,7 +219,6 @@ window.CONFIG_EDITOR = {
         if (!ok) return;
       }
       await this.cfgLoad();
-      this.cfg.notice = "";
       this.cfg.previewOpen = false;
     },
     cfgReset() {
@@ -233,7 +227,6 @@ window.CONFIG_EDITOR = {
       this.cfg.tree = null;
       this.cfg.baseline = "";
       this.cfg.error = "";
-      this.cfg.notice = "";
       this.cfg.previewOpen = false;
       this.cfg.previewText = "";
       this.cfg.previewError = "";
@@ -587,8 +580,7 @@ window.CONFIG_EDITOR = {
       const name = (this.cfg.newTrackerName || "").trim();
       if (!name) return;
       if (this.cfgTracker(name)) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `站点 ${name} 已存在`;
+        this.toast(`站点 ${name} 已存在`, "error");
         return;
       }
       const spec = {};
@@ -598,7 +590,6 @@ window.CONFIG_EDITOR = {
       this.cfgSetPath([...this.cfgConfigPath(), "trackers", name], spec);
       this.cfg.trackerKey = name;
       this.cfg.newTrackerName = "";
-      this.cfg.notice = "";
       this.cfgAddCancel();
     },
     async cfgTrackerRename(oldName) {
@@ -608,8 +599,7 @@ window.CONFIG_EDITOR = {
       if (!name || name === oldName) return;
       const trackers = this.cfgConfig().trackers || {};
       if (trackers[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `站点 ${name} 已存在`;
+        this.toast(`站点 ${name} 已存在`, "error");
         return;
       }
       const rebuilt = {};
@@ -677,8 +667,7 @@ window.CONFIG_EDITOR = {
       if (!name) return;
       if (!name.endsWith("_rules")) name += "_rules";
       if (this.cfgRuleGroups()[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `规则集 ${name} 已存在`;
+        this.toast(`规则集 ${name} 已存在`, "error");
         return;
       }
       this.cfgSetPath([...this.cfgConfigPath(), name], {});
@@ -704,8 +693,7 @@ window.CONFIG_EDITOR = {
       if (!name) return;
       const group = this.cfgRuleGroups()[groupKey] || {};
       if (group[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `规则 ${name} 已存在`;
+        this.toast(`规则 ${name} 已存在`, "error");
         return;
       }
       // 新规则仅给 conditions/actions 两个空列表, 其余键留空由后端走默认值(保持 YAML 简洁)
@@ -727,8 +715,7 @@ window.CONFIG_EDITOR = {
       if (!name || name === ruleName) return;
       const group = this.cfgRuleGroups()[groupKey] || {};
       if (group[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `规则 ${name} 已存在`;
+        this.toast(`规则 ${name} 已存在`, "error");
         return;
       }
       const rebuilt = {};
