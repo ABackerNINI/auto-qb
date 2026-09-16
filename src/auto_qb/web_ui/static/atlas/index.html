@@ -1702,7 +1702,9 @@
       </div>
     </transition>
     <!-- 统计面板(FE-2C): /api/stats server_state 直取(缺失显示 —); server 为 null 时空态。
-         复用 .modal/.add-dialog 视觉语言(.stats-dialog 仅调宽与行样式); 打开时取一次, 卡内可手动刷新 -->
+         复用 .modal/.add-dialog 视觉语言(.stats-dialog 仅调宽与行样式); 打开时取一次, 卡内可手动刷新。
+         FIX-04: 字段 key 对照 qB 实测 server_state 全量 payload 校验(会话/累计/DHT/连接/空闲空间);
+         qB 不提供的平均速度标「qB 不提供」; 刷新不重挂字段列表(加载态仅按钮 spin + 列表半透明) -->
     <div v-if="statsOpen" class="modal-mask" @click.self="closeStats">
       <div class="modal add-dialog stats-dialog" role="dialog" aria-modal="true" aria-label="qBittorrent 统计">
         <div class="modal-title">
@@ -1713,40 +1715,48 @@
           </button>
         </div>
         <div class="add-dialog-body">
-          <div v-if="statsLoading" class="ce-placeholder loading">正在加载统计…</div>
-          <div v-else-if="statsError" class="ce-placeholder">
-            <p class="error">{{ statsError }}</p>
-            <button class="ce-btn" @click="loadStats()">重试</button>
+          <!-- FIX-04②: 加载态不再整窗重挂 —— 仅无数据(首次加载/空态/失败无旧值)时走占位区;
+               已有数据后刷新只作用于刷新按钮(spin/禁用)与列表半透明, 字段列表保持挂载 -->
+          <div v-if="!statsServer" class="ce-placeholder">
+            <template v-if="statsLoading">正在加载统计…</template>
+            <template v-else-if="statsError">
+              <p class="error">{{ statsError }}</p>
+              <button class="ce-btn" @click="loadStats()">重试</button>
+            </template>
+            <template v-else>暂无统计(qB 未同步)</template>
           </div>
-          <div v-else-if="!statsServer" class="ce-placeholder">暂无统计(qB 未同步)</div>
-          <div v-else class="stats-grid">
-            <div class="stats-row">
-              <span class="lbl">会话下载</span>
-              <span class="val">{{ statVal(statsServer.dl_info_data, fmtSize) }}<template v-if="statsServer.dl_info_speed"> · 当前 {{ fmtSpeed(statsServer.dl_info_speed) }}</template></span>
+          <template v-else>
+            <p v-if="statsError" class="error" style="margin: 0 0 6px;">刷新失败, 保留上次结果: {{ statsError }}</p>
+            <div class="stats-grid" :style="{ opacity: statsLoading ? '0.45' : '1', transition: 'opacity .15s ease' }">
+              <div class="stats-row">
+                <span class="lbl">会话下载</span>
+                <span class="val">{{ statVal(statsServer.dl_info_data, fmtSize) }}<template v-if="statsServer.dl_info_speed"> · 当前 {{ fmtSpeed(statsServer.dl_info_speed) }}</template></span>
+              </div>
+              <div class="stats-row">
+                <span class="lbl">会话上传</span>
+                <span class="val">{{ statVal(statsServer.up_info_data, fmtSize) }}<template v-if="statsServer.up_info_speed"> · 当前 {{ fmtSpeed(statsServer.up_info_speed) }}</template></span>
+              </div>
+              <div class="stats-row">
+                <span class="lbl">累计下载</span><span class="val">{{ statVal(statsServer.alltime_dl, fmtSize) }}</span>
+              </div>
+              <div class="stats-row">
+                <span class="lbl">累计上传</span><span class="val">{{ statVal(statsServer.alltime_ul, fmtSize) }}</span>
+              </div>
+              <div class="stats-row">
+                <!-- FIX-04①: qB server_state 无平均速度字段(实测 payload 无 average_*) → 标注「qB 不提供」 -->
+                <span class="lbl">平均速度</span><span class="val" style="color: var(--fg-dim); font-weight: 400;">qB 不提供</span>
+              </div>
+              <div class="stats-row">
+                <span class="lbl">DHT 节点</span><span class="val">{{ statVal(statsServer.dht_nodes) }}</span>
+              </div>
+              <div class="stats-row">
+                <span class="lbl">连接状态</span><span class="val">{{ connText(statsServer.connection_status) }}</span>
+              </div>
+              <div class="stats-row">
+                <span class="lbl">空闲空间</span><span class="val">{{ statVal(statsServer.free_space_on_disk, fmtSize) }}</span>
+              </div>
             </div>
-            <div class="stats-row">
-              <span class="lbl">会话上传</span>
-              <span class="val">{{ statVal(statsServer.up_info_data, fmtSize) }}<template v-if="statsServer.up_info_speed"> · 当前 {{ fmtSpeed(statsServer.up_info_speed) }}</template></span>
-            </div>
-            <div class="stats-row">
-              <span class="lbl">累计下载</span><span class="val">{{ statVal(statsServer.alltime_dl, fmtSize) }}</span>
-            </div>
-            <div class="stats-row">
-              <span class="lbl">累计上传</span><span class="val">{{ statVal(statsServer.alltime_ul, fmtSize) }}</span>
-            </div>
-            <div class="stats-row">
-              <span class="lbl">平均速度</span><span class="val">{{ statVal(statsServer.average_down_speed || statsServer.average_up_speed || null, fmtSpeed) }}</span>
-            </div>
-            <div class="stats-row">
-              <span class="lbl">DHT 节点</span><span class="val">{{ statVal(statsServer.dht_nodes) }}</span>
-            </div>
-            <div class="stats-row">
-              <span class="lbl">连接状态</span><span class="val">{{ connText(statsServer.connection_status) }}</span>
-            </div>
-            <div class="stats-row">
-              <span class="lbl">空闲空间</span><span class="val">{{ statVal(statsServer.free_space_on_disk, fmtSize) }}</span>
-            </div>
-          </div>
+          </template>
         </div>
         <div class="modal-actions">
           <button class="ce-btn ghost" :disabled="statsLoading" @click="loadStats()">

@@ -2770,7 +2770,8 @@ const app = createApp({
     },
     /* ---------------- 统计面板(FE-2C): /api/stats 全局状态(server_state 直取, 缺失显示 —) ----------------
      * 打开时取一次, 卡内"刷新"按钮重取; 不随主循环轮询(统计是低频信息)。
-     * server 为 null(qB 未同步/降级全量不可用)时空态文案; 请求失败给重试。
+     * server 为 null(qB 未同步/降级全量不可用)时空态文案; 首次加载失败给重试,
+     * 已有数据时刷新失败保留旧值并行内报错(FIX-04②: 加载态不重挂字段列表, 防整窗闪烁)。
      */
     async openStats() {
       this.statsOpen = true;
@@ -2780,6 +2781,7 @@ const app = createApp({
       this.statsOpen = false;
     },
     async loadStats() {
+      if (this.statsLoading) return;  // 防重入(按钮已 disabled, 兜底防连点)
       this.statsLoading = true;
       this.statsError = "";
       try {
@@ -2787,7 +2789,8 @@ const app = createApp({
         this.statsServer = r.server || null;
       } catch (e) {
         if (!e.auth) this.statsError = e.message || "加载失败";
-        this.statsServer = null;
+        // FIX-04②: 刷新失败保留上次结果(不清 statsServer), 错误行内呈现, 不整窗重挂;
+        // 首次加载尚无数据时 statsServer 本就是 null, 由占位区呈现错误与重试。
       } finally {
         this.statsLoading = false;
       }
