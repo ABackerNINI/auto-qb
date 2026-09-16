@@ -150,6 +150,9 @@ button { font-family: inherit; }
 .ico-f-site { color: var(--teal); }
 .ico-f-path { color: var(--warn); }
 .ico-f-hr { color: var(--hr-pending); }
+/* CTX-01 彩色图标集(波次三 W2): 统计/运行日志等"点位图标"此前继承 --fg-dim, 观感上没有颜色 */
+.ico-chart { color: var(--cyan); }         /* 统计 */
+.ico-log { color: var(--pink); }           /* 运行日志 */
 /* 旋转(索引构建中/刷新): 唯一持续的旋转动画, 只在明确的"进行中"语义下使用 */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .9s linear infinite; }
@@ -295,8 +298,10 @@ button { font-family: inherit; }
  * 吸顶偏移与可用高度用 --head-h(顶栏+状态条的实际高度, 由 app.js 写入 :root) ——
  * **不写死数值**: 顶栏高度会随媒体查询/状态条是否渲染而变化。
  */
+/* TBL-07 页面全宽: 不再 2560px 居中限宽, 两侧只留最小 12px 内边距
+ * (原先 2560px + auto 外边距在宽屏下把内容挤成中间一条, 且横向滚动时内容会被两侧页底色裁切) */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;
-  max-width: 2560px; margin: 0 auto; padding: 16px 18px calc(28px + var(--statusbar-h)); }
+  padding: 16px 12px calc(28px + var(--statusbar-h)); }
 /* 页面切换入场动效(v-if 重建元素触发): 轻微上浮 + 淡入, 不抢注意力 */
 .layout, .ce-page { animation: page-in .2s var(--ease-out); }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
@@ -536,10 +541,29 @@ button { font-family: inherit; }
 .ctx-item .ico-play { color: var(--green); }
 .ctx-item .ico-pause { color: var(--warn); }
 .ctx-item .ico-sync { color: var(--blue); }
+/* CTX-01: 补齐其余操作族的颜色 —— 此前除上面三个与危险项外一律继承 --fg-dim(灰),
+ * 整张菜单看起来"全都没颜色"。按操作族分组取色, 色值一律来自令牌 */
+.ctx-item .ico-info { color: var(--cyan); }       /* 查看: 详细信息 */
+.ctx-item .ico-gauge { color: var(--limit-hit); } /* 编辑: 限速 */
+.ctx-item .ico-percent { color: var(--pink); }    /* 编辑: 分享率 */
+.ctx-item .ico-move { color: var(--teal); }       /* 编辑: 移动 */
+.ctx-item .ico-rename { color: var(--indigo); }   /* 编辑: 重命名 */
+.ctx-item .ico-copy { color: var(--blue); }       /* 复制族 */
+.ctx-item .ico-recheck { color: var(--accent); }  /* 维护: 重新校验 */
+.ctx-item .ico-super { color: var(--violet); }    /* 高级: 超级做种 */
+.ctx-item .ico-force { color: var(--warn); }      /* 高级: 强制开始 */
+.ctx-item .ico-queue { color: var(--teal); }      /* 队列族(与"移动"同族: 位置语义) */
+.ctx-item .ico-tmm { color: var(--green); }       /* 自动种子管理开关 */
+.ctx-item .ico-export { color: var(--lime); }     /* 导出 .torrent */
 .ctx-item.danger { color: var(--error); }
 .ctx-item.danger .ico { color: currentColor; }
 .ctx-item.danger:hover { background: var(--error-soft); }
 .ctx-sep { height: 1px; background: var(--border-soft); margin: 5px 8px; }
+/* CTX-02 触发源强调: 右键菜单弹出期间把被作用的那一行框出来, 让"这次操作针对谁"一眼可见。
+ * 刻意**不改背景**: TBL-03 已用底色表达状态语义, 再叠一层就会互相打架 —— 这里只用内描边强调。 */
+.group-row.ctx-src, .member-row.ctx-src, .show-row.ctx-src, .ep-row.ctx-src {
+  box-shadow: inset 2px 0 0 var(--accent), inset 0 0 0 1px var(--accent-line); }
+.ctx-anchor.ctx-src { box-shadow: 0 0 0 2px var(--ring); border-radius: var(--radius-sm); }
 
 /* ---------------- 空态 ---------------- */
 .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 20px;
@@ -662,7 +686,9 @@ button { font-family: inherit; }
  * 折叠态 = 标题行 + 摘要; 展开才显示子字段 —— 设置页字段很多, 让"展开"成为用户主动选择。
  * 同组多段循环色(.ceg-0..5)给标题左侧 3px 色条, 一眼分辨"是哪种类型的配置段";
  * 文字色保持 --fg 高对比(色条只做识别, 不损可读性) —— 与 ai/08"对比色留给 HR/错误"原则一致。 */
-.ce-group { margin: 10px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
+/* 展开/折叠密度: 头部内边距与段间距用同一套数值(折叠头行高一致, 视觉密度统一);
+ * 段间距 8px 与 .ce-main 的卡片间距 14px 拉开层级: 段内 < 段间 < 卡间 */
+.ce-group { margin: 8px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
   background: var(--surface-1); border-left: 3px solid var(--accent);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .ce-group:hover { border-color: var(--border); box-shadow: var(--shadow-1); }
@@ -672,14 +698,15 @@ button { font-family: inherit; }
 .ce-group.ceg-3 { border-left-color: var(--pink); }
 .ce-group.ceg-4 { border-left-color: var(--indigo); }
 .ce-group.ceg-5 { border-left-color: var(--cyan); }
-.ce-group-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer;
+.ce-group-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer;
   user-select: none; transition: background var(--dur) var(--ease); }
 .ce-group-head:hover { background: var(--surface-2); }
 .ce-group-head .caret { color: var(--accent); opacity: .55; transform: rotate(0deg);
   transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
 .ce-group-head:hover .caret { opacity: 1; }
 .ce-group-head .caret.open { transform: rotate(90deg); }
-.ce-group-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+/* 标题分级(由大到小): 卡片题 14.5 > group 段 13.5 > section 段 13 > subcard 12 —— 层级一眼可达 */
+.ce-group-title { font-size: 13.5px; font-weight: 600; color: var(--fg); }
 .ce-group-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 /* 折叠/展开动效: max-height 过渡, 起始/结束 overflow:hidden(避免撑高时溢出);
@@ -710,7 +737,7 @@ button { font-family: inherit; }
   padding: 7px var(--ce-row-pad-x); border-radius: var(--radius); background: transparent; border: 1px solid transparent;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
     opacity var(--dur) var(--ease); }
-.ce-field:hover { background: var(--surface-1); border-color: var(--border-soft); }
+.ce-field:hover { background: var(--surface-2); border-color: var(--border-soft); }
 .ce-field-block { grid-template-columns: 1fr; }
 .ce-label { display: flex; align-items: center; gap: 6px; min-height: 34px; font-size: 13px; color: var(--fg); }
 .ce-req { color: var(--error); }
@@ -725,7 +752,7 @@ button { font-family: inherit; }
 /* 统一注记(段级/字段级警告与提示): 行内小字 + 色点, 不再用大框横幅。
  * 网格双列(色点列 + 文本列): 换行时文字悬挂缩进; 字段行内独占一行(宽度与输入区对齐) */
 .ce-note { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: start;
-  font-size: 12px; line-height: 1.55; color: var(--fg-muted); max-width: var(--ce-input-max); }
+  font-size: 12px; line-height: 1.5; color: var(--fg-muted); max-width: var(--ce-input-max); }
 .ce-note::before { content: ""; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%;
   background: var(--fg-dim); }
 .ce-note.warn { color: var(--warn); }
@@ -736,24 +763,24 @@ button { font-family: inherit; }
 
 /* 相关设置子卡(group_of): 缩进 + 左侧强调线, 表明从属于上一字段。
  * 头部色用 teal(青)与 group 的多色 / section 的紫拉开层级 —— 三种段一眼可辨 */
-.ce-subcard { margin: 4px 0 10px; padding: 6px 10px 8px; border-radius: var(--radius);
+.ce-subcard { margin: 6px 0 10px; padding: 6px 10px 8px; border-radius: var(--radius);
   background: var(--bg-sunken); border: 1px solid var(--border-soft); border-left: 2px solid var(--teal); }
 .ce-subcard-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 4px;
-  font-size: 12px; color: var(--fg-muted); }
+  font-size: 12px; font-weight: 500; color: var(--fg-muted); }
 .ce-subcard-head .ico { color: var(--teal); transform: rotate(90deg); }
-.ce-subcard .ce-field { grid-template-columns: var(--ce-label-w) minmax(0, 1fr); padding: 6px 0; }
+.ce-subcard .ce-field { grid-template-columns: var(--ce-label-w) minmax(0, 1fr); padding: 7px 0; }
 .ce-subcard .ce-field .ce-help { margin-top: -2px; }
 
 /* 可选段(站点 HR / checking 分支等): 默认折叠的整体容器
  * 折叠态 = 一行(折叠箭头 + 开关 + 段名 + 摘要), 展开才显示内部字段 ——
  * 设置页字段很多, 让"展开"成为用户主动选择, 页面高度才能可控。
  * 配色用 violet(紫)与 group 的多色 / subcard 的青区分开 —— 三种段一眼可辨。 */
-.ce-section { margin: 10px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
+.ce-section { margin: 8px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
   background: var(--surface-1); border-left: 3px solid var(--violet);
   transition: border-color var(--dur) var(--ease), opacity var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease); }
 .ce-section:hover { border-color: var(--border); box-shadow: var(--shadow-1); }
-.ce-section-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
+.ce-section-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
 .ce-section-head .caret { color: var(--violet); opacity: .55; transform: rotate(0deg);
   transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
 .ce-section:hover .ce-section-head .caret { opacity: 1; }
@@ -761,6 +788,10 @@ button { font-family: inherit; }
 .ce-section-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .ce-section-body { padding: 2px 9px 10px 9px; }
+/* 段内展开后的行奇偶区隔: 偶数行叠加极淡表面色(现有令牌), 长列表更容易横向跟行;
+ * 容器自身保留分组底色(surface-1), hover 仍以描边浮出 —— 两种提示并存不冲突 */
+.ce-group-body > .ce-item:nth-child(even) > .ce-field,
+.ce-section-body > .ce-item:nth-child(even) > .ce-field { background: var(--surface-2); }
 
 /* 布尔型从属项的内联开关(挂在父字段标签右侧): 从属语义靠紧邻与弱化字重体现 */
 .ce-inline-switch { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--border-soft); }
@@ -1558,8 +1589,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* ================= 日志页(FE-2C) —— 与设置页同型的顶层页; 无自动轮询 =================
  * mono 等宽原始行; 页头含等级/行数选择与手动刷新, 页体独立滚动。
  */
-.logs-page { display: flex; flex-direction: column; padding: 16px 18px 18px; max-width: 2560px;
-  margin: 0 auto; height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 20px); animation: page-in .2s var(--ease-out); }
+.logs-page { display: flex; flex-direction: column; padding: 16px 12px 18px;
+  height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 20px); animation: page-in .2s var(--ease-out); }
 /* W4: 日志迁入设置页后的嵌入式容器(原 .logs-page 视口高度公式不再适用, 取视口扣除设置页头部/底部动作区的余量) */
 .logs-embed { display: flex; flex-direction: column; gap: 0;
   height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 250px); min-height: 300px; }
@@ -1599,7 +1630,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 设置页: 页面骨架 + 字段行栅格令牌。栅格令牌(label 宽/列间距/控件最大宽/行内边距)单点声明,
  * 全部 .ce-field 行与嵌套容器(group/section/subcard)共用同一套 —— 同层输入框左缘逐级严格对齐,
  * 控件最大宽放开到 --ce-input-max, 宽屏下不再「页面很宽、内容只占一窄条」。 */
-.ce-page { padding: 16px 18px calc(24px + var(--statusbar-h)); max-width: 2560px; margin: 0 auto; display: flex; flex-direction: column;
+.ce-page { padding: 16px 12px calc(24px + var(--statusbar-h)); display: flex; flex-direction: column;
   --ce-label-w: 200px;    /* 字段标签列宽(全部层级一致) */
   --ce-ctl-gap: 12px;     /* 标签列与控件列的间距 */
   --ce-input-max: 720px;  /* 输入控件/说明文字的最大宽度(页面利用率) */
