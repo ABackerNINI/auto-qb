@@ -869,6 +869,14 @@ const app = createApp({
       if (document.hidden) this.stopPolling();
       else if (this.token) this.refresh();  // 登出态切回标签不发空 Bearer(由登录成功后自行启动轮询)
     });
+    // 全局右键屏蔽(CTX-03): 除顶部导航栏(header.topbar, atlas/prism 两套 UI 共用类名)与输入类
+    // 元素(input/textarea/contenteditable, 保留复制粘贴的原生菜单)外, 一律阻止原生右键菜单;
+    // 各处 .ctx-menu 自定义菜单由 Vue @contextmenu.prevent 触发, 与本监听器共存(preventDefault 幂等无害)
+    document.addEventListener("contextmenu", (e) => {
+      const t = e.target;
+      if (t && t.closest && (t.closest("header.topbar") || t.closest("input, textarea, [contenteditable]"))) return;
+      e.preventDefault();
+    });
     // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除。
     // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
     // 跳过本地验证: 先读公开只读标志, 本机免鉴权则直接进入, 不弹登录表单
