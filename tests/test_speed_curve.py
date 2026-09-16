@@ -16,6 +16,7 @@
 - test_curve_speed_plan_b: 全程分档覆盖(首档覆盖低端, 边界, 末档延续)
 - test_curve_speed_last_tier_clamp_matrix: 末档 clamp 边界矩阵(各档内部不变/恰好压线/超末档取末档速度/末档 0 显式放开)
 - test_speed_curve_beyond_last_tier_clamps_both_directions: 双向累计超末档 -> 写末档速度值而非解除限速(任务集成)
+- test_merge_direction_after_clamp_takes_strictest: 多曲线各自超末档 -> clamp 到末档速度后合并, 取最严仍正确(SPD-01/D5)
 - test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None) / KiB 半值进位
 - test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
 - test_speed_curve_global_task_uses_own_interval: 曲线配置专属 interval
@@ -613,6 +614,15 @@ def test_speed_curve_beyond_last_tier_clamps_both_directions(tmp_path):
         "download_kib": 1024,
         "dry_run": False,
     }
+
+
+def test_merge_direction_after_clamp_takes_strictest():
+    """多曲线各自超末档 -> 各自 clamp 到末档速度后, merge_direction 按现逻辑取最严(最小非零)仍正确(SPD-01/D5)"""
+    clamp_a = [CurvePoint(threshold_bytes=1000 * GIB, speed_bytes_per_s=3000)]
+    clamp_b = [CurvePoint(threshold_bytes=1000 * GIB, speed_bytes_per_s=5000)]
+    speeds = [curves.curve_speed(4000 * GIB, clamp_a), curves.curve_speed(4000 * GIB, clamp_b)]
+    assert speeds == [3000, 5000]  # 双双超末档 -> 各自 clamp 到各自末档速度
+    assert curves.merge_direction(speeds) == 3000  # 取最严(最小非零), 末档 clamp 值不干扰合并
 
 
 def test_merge_direction_and_bytes_to_kib():
