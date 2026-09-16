@@ -1414,7 +1414,8 @@
       <span class="sb-spacer"></span>
       <button class="sb-btn" title="qB 会话/累计流量 · DHT · 连接状态" @click="openStats()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
-      </button><button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
+      </button>
+<button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
       </button>
       
@@ -1435,6 +1436,7 @@
 
     <transition name="pop">
     <!-- 种子详情抽屉(R1B): WEB UI 替代 qB 界面的详情面板(常规/Tracker/用户/内容)。
+         W5-RFB-01 纯展示化: 抽屉头只留 标题+状态徽章+关闭, 全部操作走行右键菜单与批量条。
          Esc/遮罩点击关闭; trackers/peers 在对应 tab 激活期间 3s 轮询, 关闭即停(见 app.js _startDrawerPoll) -->
     <transition name="drawer">
       <div v-if="drawer.open" class="drawer-mask" @click.self="closeDrawer()">
@@ -1447,20 +1449,9 @@
               </span>
               <strong :title="drawer.detail ? drawer.detail.name : drawer.hash">{{ drawer.detail ? drawer.detail.name : drawer.hash }}</strong>
             </div>
-            <div class="drawer-actions">
-              <button class="ce-btn ghost small" @click="drawerAct('pause')">暂停</button>
-              <button class="ce-btn ghost small" @click="drawerAct('resume')">开始</button>
-              <button class="ce-btn ghost small" @click="drawerAct('reannounce')">强制汇报</button>
-              <button class="ce-btn ghost small" @click="drawerCmd('recheck', null, '重新校验')">校验</button>
-              <button class="ce-btn ghost small" @click="editLimits(drawer.hash)">限速…</button>
-              <button class="ce-btn ghost small" @click="editShareLimits(drawer.hash)">分享率…</button>
-              <button class="ce-btn ghost small" @click="editMove(drawer.hash)">移动…</button>
-              <button class="ce-btn ghost small" @click="editRename(drawer.hash)">重命名…</button>
-              <button class="ce-btn ghost small danger" @click="drawerDel()">删除</button>
-              <button class="ce-btn ghost small" title="关闭(Esc)" @click="closeDrawer()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-              </button>
-            </div>
+            <button class="drawer-close" title="关闭(Esc)" @click="closeDrawer()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+            </button>
           </header>
           <nav class="drawer-tabs" role="tablist">
             <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
@@ -1488,11 +1479,12 @@
               </div>
               <section v-for="sec in drawerGeneralSections()" :key="sec.title" class="drawer-sec">
                 <h4>{{ sec.title }}</h4>
-                <div class="drawer-rows">
-                  <template v-for="r in sec.rows" :key="r.label">
+                <div class="f-rows">
+                  <div v-for="r in sec.rows" :key="r.label" class="f-row">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
                     <span class="k">{{ r.label }}</span>
-                    <span class="v" :class="{ mono: r.mono }" :title="String(r.text)">{{ r.text }}</span>
-                  </template>
+                    <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
+                  </div>
                 </div>
               </section>
               <details class="drawer-raw">
@@ -1519,7 +1511,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
-                    <td class="wrap" :title="t.url">{{ t.url }}</td>
+                    <td class="wrap mono-cell" :title="t.url">{{ t.url }}</td>
                     <td>{{ drawerTrackerStatus(t.status) }}</td>
                     <td>{{ fmtPeersQb(t.num_seeds, t.num_complete) }}</td>
                     <td>{{ fmtPeersQb(t.num_leeches, t.num_incomplete) }}</td>
@@ -1581,7 +1573,7 @@
                     <td class="wrap clickable" @click="fileRowSelect(r)">
                       <span class="dir-name" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span>
                     </td>
-                    <td>{{ r.text }}</td>
+                    <td class="mono-cell">{{ r.text }}</td>
                     <td>{{ r.dir ? "—" : r.progress + "%" }}</td>
                     <td>
                       <button v-if="!r.dir" class="prio-btn" :class="{ skipped: r.skipped }"

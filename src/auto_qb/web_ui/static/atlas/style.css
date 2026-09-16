@@ -1357,42 +1357,56 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 层级: 抽屉 80(页面之上) < 右键菜单 100 < toast 120 < 确认框 130 —— 抽屉里触发的确认框恒在其上 */
 .drawer-mask { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end;
   background: rgba(4, 10, 22, .5); backdrop-filter: blur(2px); animation: fade-in .14s var(--ease); }
-.drawer { width: min(780px, 94vw); height: 100%; display: flex; flex-direction: column;
+.drawer { width: min(860px, 94vw); height: 100%; display: flex; flex-direction: column;
   background: var(--bg-card); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drawer-in .18s var(--ease); }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } }
 .drawer-enter-active, .drawer-leave-active { transition: opacity .15s var(--ease); }
 .drawer-enter-from, .drawer-leave-to { opacity: 0; }
-.drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border-soft); }
 .drawer-title { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: flex-start; }
 .drawer-title strong { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
-.drawer-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.drawer-tabs { display: flex; gap: 2px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
-.drawer-tabs button { padding: 7px 14px; border: 0; background: transparent; color: var(--muted);
+.drawer-close { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
+.drawer-tabs { display: flex; gap: 2px; padding: 8px 16px 0; border-bottom: 1px solid var(--border-soft); }
+.drawer-tabs button { padding: 7px 14px; border: 0; background: transparent; color: var(--fg-muted);
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
 .drawer-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-.drawer-body { flex: 1; overflow: auto; padding: 14px 16px 24px; }
-.drawer-hr { border: 1px solid var(--line); border-left: 2px solid var(--hr-pending); padding: 8px 12px;
+.drawer-body { flex: 1; overflow: auto; padding: 16px 18px 24px; }
+.drawer-hr { border: 1px solid var(--border-soft); border-left: 2px solid var(--hr-pending); padding: 8px 12px;
   margin: 0 0 16px; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .drawer-hr.done { border-left-color: var(--hr-done); }
 .drawer-sec { margin: 0 0 18px; }
 .drawer-sec h4 { margin: 0 0 8px; font: 600 11px/1 ui-monospace, Consolas, monospace;
-  letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+  letter-spacing: .1em; text-transform: uppercase; color: var(--fg-dim); }
 .drawer-rows { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 14px; font-size: 13px; }
-.drawer-rows .k { color: var(--muted); }
+.drawer-rows .k { color: var(--fg-muted); }
 .drawer-rows .v { overflow-wrap: anywhere; min-width: 0; }
 .drawer-rows .v.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+/* W5-RFB-01 字段行: 图标 + 小字字段名 + 等宽值(anywhere 断行, 超长两行内折, 完整值看 title) */
+.f-rows { display: flex; flex-direction: column; font-size: 13px; }
+.f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr); gap: 10px; align-items: flex-start;
+  padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+.f-row:last-child { border-bottom: 0; }
+.f-row .ico { margin-top: 2px; color: var(--fg-dim); }
+.f-row .k { color: var(--fg-muted); font-size: 11.5px; line-height: 1.7; }
+.f-row .v { min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1.55;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .drawer-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .drawer-table th { text-align: left; font: 600 11px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--dim); padding: 6px 8px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
-.drawer-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  text-transform: uppercase; color: var(--fg-dim); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.drawer-table td { padding: 6px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; line-height: 1.5;
+  font-variant-numeric: tabular-nums; }
 .drawer-table td.wrap { white-space: normal; overflow-wrap: anywhere; }
-.drawer-table tr.virtual td { color: var(--dim); }
+.drawer-table tr.virtual td { color: var(--fg-dim); }
 .drawer-table .mono-cell { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .drawer-table .dir-name { font-weight: 600; }
-.drawer-table tr.skipped td { color: var(--dim); }
+.drawer-table tr.skipped td { color: var(--fg-dim); }
 .drawer-raw { margin-top: 6px; }
-.drawer-raw summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
+.drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
 
 /* ================= 添加种子对话框(R1B) —— 类名 .add-dialog 前缀 =================
  * 复用 .modal-mask/.modal/.modal-title/.modal-actions 视觉语言; 仅对话框内部表单为新增样式。
@@ -1471,7 +1485,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .drawer-toolbar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
 .drawer-toolbar .ce-btn { display: inline-flex; align-items: center; gap: 6px; }
-.drawer-toolbar-hint { font-size: 11.5px; color: var(--dim); }
+.drawer-toolbar-hint { font-size: 11.5px; color: var(--fg-dim); }
 .drawer-table th.th-act { width: 1%; }
 .drawer-table td.cell-act { white-space: nowrap; text-align: right; padding-top: 4px; }
 .row-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
@@ -1485,7 +1499,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
   background: transparent; color: var(--fg-soft); font: inherit; font-size: 11.5px; cursor: pointer;
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .prio-btn:hover { border-color: var(--accent); color: var(--accent); }
-.prio-btn.skipped { color: var(--dim); }
+.prio-btn.skipped { color: var(--fg-dim); }
 
 /* ================= 统计面板对话框(FE-2C) —— 复用 .modal/.add-dialog 视觉语言 =================
  * server_state 字段直取, 缺失显示 —; 键值行斑马纹, 右对齐等宽值(数字/容量可读性)。
