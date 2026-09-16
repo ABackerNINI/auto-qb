@@ -1401,6 +1401,13 @@ const app = createApp({
       if (connected === null || connected === undefined || connected < 0) return "";
       return total === null || total === undefined || total < 0 ? String(connected) : `${connected} (${total})`;
     },
+    /* 数值色阶(TBL-03): value/denom 比值分两档底色 —— ratio<0.75 → tone-low(偏弱), >=0.75 → tone-high(接近满档);
+     * value<=0 或分母缺失/<=0 返回空串(交给 zero/空白机制)。全局限速分母来自 /api/stats 的 statsServer
+     * (懒加载, 未开过统计面板时为 null → 速度列自动无色阶, 属预期降级, 规则内自然兜住) */
+    numTone(value, denom) {
+      if (!value || value <= 0 || !denom || denom <= 0) return "";
+      return value / denom < 0.75 ? "tone-low" : "tone-high";
+    },
     /* ------------------------------------------- 组级"共同值"计算(组级标签/分类列)
      *
      * 后端只透出成员原始值, 共同值(交集/一致值)在**前端**计算: 这类派生展示数据不参与
