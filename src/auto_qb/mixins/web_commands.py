@@ -415,30 +415,50 @@ class WebCommandsMixin:
             lambda api, hashes, delete_files: api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files),
     }
 
-    def _cmd_bulk_torrents(self, hashes=None, action: str = "", cmd_id: str = "", delete_files: bool = False):
+    def _cmd_bulk_torrents(
+        self, hashes=None, action: str = "", cmd_id: str = "", delete_files: bool = False, keys=None
+    ):
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
         - 未知 action / 空 hash 列表 -> error 回执
         - 不在快照中的 hash 跳过(删除守阵), 仍有缺失时回执 error 带缺失计数(部分成功也报错,
           前端可据列表刷新后重试); 全部命中 -> ok
         - API 只调一次: hashes 整体传给既有 api 调用(qB 端点原生接受批量)
+        - 组键模式(DLG-02): keys 为分组 key 列表(tuple, Web 层已解码), 逐组展开成员
+          (经 _group_hashes 按快照过滤, 级联全部在册成员)并与 hashes 合并去重; 组不存在或
+          成员全部不在快照计一个缺失组, 缺失文案与种子缺失分列(纯 hash 模式文案不变, 前端契约保持)
         """
         req = [h for h in (hashes or []) if h]
+        keys = [k for k in (keys or []) if k]
         fn = self._BULK_ACTIONS.get(action)
         if fn is None:
             if cmd_id:
                 self._set_web_result(cmd_id, "error", f"未知批量动作: {action}(可选 pause/resume/recheck/delete)")
             return
-        if not req:
+        if not req and not keys:
             if cmd_id:
-                self._set_web_result(cmd_id, "error", "未提供任何 hash")
+                self._set_web_result(cmd_id, "error", "未提供任何 hash 或组")
             return
         known = [h for h in req if self.store.get(h) is not None]
         missing = len(req) - len(known)
+        seen = set(known)
+        missing_groups = 0
+        for key in keys:
+            members = [h for h in self._group_hashes(key) if h not in seen]
+            if members:
+                seen.update(members)
+                known.extend(members)
+            else:
+                missing_groups += 1
         if known:
             fn(self.api, known, delete_files)
+        msgs = []
         if missing:
-            msg = f"{missing}/{len(req)} 个种子不存在或已被删除"
+            msgs.append(f"{missing}/{len(req)} 个种子不存在或已被删除")
+        if missing_groups:
+            msgs.append(f"{missing_groups}/{len(keys)} 个组不存在或成员为空")
+        if msgs:
+            msg = "; ".join(msgs)
             if cmd_id:
                 self._set_web_result(cmd_id, "error", msg)
             logger.warning(f"WEB UI | 批量 {action}({len(known)}个种子): {msg}")
