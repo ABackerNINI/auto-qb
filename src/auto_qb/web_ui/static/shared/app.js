@@ -111,11 +111,12 @@ const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: T
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
-/* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}}
+/* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}, order:{page:[列key]}}
  * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列);
  * 新增独立 page(torrent)不升版本: loadColState 对缺失 page 返回空, 旧缓存不受影响,
- * 结构或默认列集变更才必须升版本(否则旧缓存里的 px 覆盖会与新列集错配)
- */
+ * 结构或默认列集变更才必须升版本(否则旧缓存里的 px 覆盖会与新列集错配);
+ * order(TBL-05 表头拖动重排)是增量子键: 旧缓存无 order = 定义顺序, 不必升版本
+ * (宽/隐仍按列 key 对应, 老代码读写新缓存最多丢自定义顺序, 不产生错配) */
 const COLS_STORE_KEY = "autoqb_cols_v4";
 
 /* 默认排序: 辅种组按组内**最近添加**时间降序(新补进来的种子最需要被看到);
@@ -123,7 +124,7 @@ const COLS_STORE_KEY = "autoqb_cols_v4";
  */
 const DEFAULT_SORT = { key: "added_on", dir: -1 };
 
-const emptyColState = () => ({ widths: {}, hidden: {}, manual: {} });
+const emptyColState = () => ({ widths: {}, hidden: {}, manual: {}, order: {} });
 
 function columnKeys(page) {
   return TABLE_COLUMNS[page].map((c) => c.key);
@@ -158,6 +159,16 @@ function loadColState() {
       if (Array.isArray(h)) {
         // locked 列即使被写进存储也忽略(列定义变更后可能残留)
         out.hidden[page] = h.filter((k) => keys.includes(k) && !(columnDef(page, k) || {}).locked);
+      }
+      const o = (raw.order || {})[page];
+      if (Array.isArray(o)) {
+        // 列序(TBL-05): 只收合法列 key 并去重; 缺失列(新增列)由 _visibleCols/_orderedKeys 按定义序补尾
+        const seen = new Set();
+        const clean = [];
+        for (const k of o) {
+          if (keys.includes(k) && !seen.has(k)) { seen.add(k); clean.push(k); }
+        }
+        if (clean.length) out.order[page] = clean;
       }
       out.manual[page] = !!(raw.manual || {})[page];
     }
@@ -236,7 +247,10 @@ const app = createApp({
       colWidths: initialColState.widths,  // {page: {列key: "120px"}}
       colHidden: initialColState.hidden,  // {page: [列key]}
       colManual: initialColState.manual,  // {page: bool}: 是否手动调过列宽(调过则不再随窗口自适应)
+      colOrder: initialColState.order,    // {page: [列key]}: 列顺序(TBL-05 表头拖动重排; 空 = 定义顺序)
       colMenuOpen: false,                 // 列选择器弹层开关
+      colMenuAt: null,                    // 列选择器 fixed 锚点(表头右键路径 {x,y,mh}; null = 按钮路径走 CSS 定位)
+      colDrag: null,                      // 表头拖动重排进行中(TBL-05): {page, key, idx, x} — idx=可视列插入边界, x=指示线位置
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
       filePrio: { visible: false, x: 0, y: 0, index: -1 },
@@ -620,7 +634,7 @@ const app = createApp({
       const o = this.speedOverride;
       return o.up !== "" && o.down !== "" && Number.isFinite(Number(o.up)) && Number.isFinite(Number(o.down));
     },
-    /* 可见列(列选择器只改 colHidden; 顺序始终取自列定义) —— 表头/行/grid 模板共用 */
+    /* 可见列(列选择器只改 colHidden; 顺序取 colOrder(表头拖动重排 TBL-05), 无自定义序时按列定义序) —— 表头/行/grid 模板共用 */
     visibleGroupCols() {
       return this._visibleCols("group");
     },
@@ -1164,8 +1178,30 @@ const app = createApp({
       this.popFlip = this._menuOverflowsRight(ev && ev.currentTarget, 260);
     },
     toggleColMenu(ev) {
+      this.colMenuAt = null;  // 按钮路径: 清掉右键锚点, 弹层回到 .col-picker 下的常规 CSS 定位
       this.colMenuOpen = !this.colMenuOpen;
       if (this.colMenuOpen) this.colFlip = this._menuOverflowsRight(ev && ev.currentTarget, 300);
+    },
+    /* 表头右键(TBL-05): 就地打开列选择器弹层(复用 col-menu 与 colHidden 勾选逻辑),
+     * fixed 定位锚在右键坐标; 右/下边界自钳制(宽 300 与 .col-menu 一致, 高度按剩余空间截断
+     * 由 colMenuStyle 给 maxHeight+滚动), 不走 flip-x(inline left 优先级高于类, 翻转不生效)。
+     * page 参数当前仅区分语义(弹层四段全量展示), 留作按视图段落定位的扩展点 */
+    openColMenuAt(ev, page) {
+      const W = 300, PAD = 8;
+      const y = Math.max(PAD, ev.clientY);
+      this.colFlip = false;
+      this.colMenuAt = {
+        x: Math.max(PAD, Math.min(ev.clientX, window.innerWidth - W - PAD)),
+        y,
+        mh: Math.max(160, window.innerHeight - y - PAD),
+      };
+      this.colMenuOpen = true;
+    },
+    /* 弹层内联样式: 仅右键路径给 fixed 坐标与视口内最大高度; 按钮路径返回 null 走原 CSS */
+    colMenuStyle() {
+      const at = this.colMenuAt;
+      if (!at) return null;
+      return { position: "fixed", left: at.x + "px", top: at.y + "px", maxHeight: at.mh + "px", overflowY: "auto" };
     },
     /* 锚点左缘 + 弹层宽度是否超出视口(留 8px 边距); ev.currentTarget 在同步代码内有效 */
     _menuOverflowsRight(anchor, menuW) {
@@ -3247,7 +3283,20 @@ const app = createApp({
 
     _visibleCols(page) {
       const hidden = this.colHidden[page] || [];
-      return TABLE_COLUMNS[page].filter((c) => !hidden.includes(c.key));
+      const defs = TABLE_COLUMNS[page];
+      const order = this.colOrder[page];
+      if (!order || !order.length) return defs.filter((c) => !hidden.includes(c.key));  // 无自定义序 = 定义序(向后兼容)
+      // 按 colOrder 输出; 未入序的列(新增/残留 key)按定义序补尾 —— 宽/隐仍按列 key 对应, 换序不丢宽度
+      const rest = new Map(defs.map((c) => [c.key, c]));
+      const out = [];
+      for (const k of order) {
+        const c = rest.get(k);
+        if (!c) continue;
+        rest.delete(k);
+        if (!hidden.includes(k)) out.push(c);
+      }
+      for (const c of defs) if (rest.has(c.key) && !hidden.includes(c.key)) out.push(c);
+      return out;
     },
     /* 列模板: 有 px 覆盖用覆盖值, 否则用默认模板(仅首次渲染会出现这种混合态) */
     _gridTemplate(page) {
@@ -3299,7 +3348,7 @@ const app = createApp({
     saveColState() {
       localStorage.setItem(
         COLS_STORE_KEY,
-        JSON.stringify({ widths: this.colWidths, hidden: this.colHidden, manual: this.colManual })
+        JSON.stringify({ widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder })
       );
     },
     colVisible(page, key) {
@@ -3411,6 +3460,99 @@ const app = createApp({
       this.colWidths = { ...this.colWidths, [page]: { ...widths, [key]: `${width}px` } };
       this.colManual = { ...this.colManual, [page]: true };
       this.saveColState();
+    },
+
+    /* ------------------------------------------------ 列序(表头拖动重排 TBL-05) */
+
+    /* 当前生效的全列序(可见+隐藏): colOrder 优先, 未入序的列(新增/残留)按定义序补尾 */
+    _orderedKeys(page) {
+      const defs = TABLE_COLUMNS[page].map((c) => c.key);
+      const order = this.colOrder[page];
+      if (!order || !order.length) return [...defs];
+      const head = order.filter((k) => defs.includes(k));
+      return [...head, ...defs.filter((k) => !head.includes(k))];
+    },
+
+    /* 落点换算: dropIdx 是**可视列空间**的插入边界(表头只渲染可见列), 存储的 colOrder 是
+     * **全序列**(含隐藏列) —— 移除自身后按"第 b 个可见列之前"折算插入点, 隐藏列的相对
+     * 次序不动(之后取消隐藏时插回原相对位)。落库后下一帧 materializeColumns 重实体化宽度。 */
+    applyColOrder(page, key, dropIdx) {
+      const full = this._orderedKeys(page);
+      const vis = full.filter((k) => this.colVisible(page, k));
+      const fromVis = vis.indexOf(key);
+      if (fromVis < 0 || dropIdx < 0 || dropIdx > vis.length) return;
+      const at = dropIdx > fromVis ? dropIdx - 1 : dropIdx;  // 移除自身后的插入边界(可视空间)
+      full.splice(full.indexOf(key), 1);
+      let inserted = false;
+      for (let i = 0, seen = 0; i < full.length; i++) {
+        if (!this.colVisible(page, full[i])) continue;
+        if (seen++ === at) { full.splice(i, 0, key); inserted = true; break; }
+      }
+      if (!inserted) full.push(key);  // 边界在末个可见列之后
+      this.colOrder = { ...this.colOrder, [page]: full };
+      this.saveColState();
+      this.$nextTick(() => this.materializeColumns());
+    },
+
+    /* 表头拖动重排手势: mousedown 阈值方案(与列宽拖拽 startResize 同款) —— 不用 HTML5
+     * draggable, 避免原生拖影/文本选择与"点击排序""列宽拖拽"互相干扰。resizer 的
+     * mousedown 已 .stop(不会进到这里); 位移超阈值才进入重排, 释放时若真拖过用 capture
+     * 阶段 swallow 拦掉冒泡 click(防误触排序, 同 startResize 手法)。
+     * 指示线: head 容器内绝对定位 .col-drop-line(不占 grid 轨道), left 由 move 实时更新。 */
+    startColDrag(event, page, key) {
+      if (event.button !== 0) return;  // 仅左键; 右键 = openColMenuAt(contextmenu), 中键不劫持
+      const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
+      if (!headEl) return;
+      if (this._visibleCols(page).length < 2) return;  // 单列无从重排
+      event.preventDefault();  // 抑制表头文本选择(拖拽手势的先决条件; 纯点击不受影响)
+      const startX = event.clientX, startY = event.clientY;
+      const TH = 6;  // 位移阈值(px): 之内视为普通点击(排序照旧), 超过才进入重排
+      let dragging = false;
+      const cells = () => Array.from(headEl.children).filter((el) => el.classList.contains("h-cell"));
+      const move = (e) => {
+        if (!dragging) {
+          if (Math.abs(e.clientX - startX) <= TH && Math.abs(e.clientY - startY) <= TH) return;
+          dragging = true;
+          headEl.classList.add("col-dragging");
+          document.body.style.cursor = "col-resize";
+        }
+        const list = cells();
+        const base = headEl.getBoundingClientRect();
+        let idx = list.length;  // 默认插到末尾之后
+        for (let i = 0; i < list.length; i++) {
+          const cr = list[i].getBoundingClientRect();
+          if (e.clientX < cr.left + cr.width / 2) { idx = i; break; }
+        }
+        // 指示线落在插入边界的列间隙中线(idx<len 取该列左缘-半间隙; 末尾取末列右缘+半间隙)
+        const edge = idx < list.length ? list[idx].getBoundingClientRect().left : list[list.length - 1].getBoundingClientRect().right;
+        this.colDrag = { page, key, idx, x: edge - base.left - headEl.clientLeft + (idx < list.length ? -5 : 5) };
+      };
+      const up = () => {
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+        headEl.classList.remove("col-dragging");
+        document.body.style.cursor = "";
+        const drag = this.colDrag;
+        this.colDrag = null;
+        if (!dragging) return;  // 未过阈值 = 普通点击, click 正常冒泡(排序不受影响)
+        if (drag && drag.page === page) this.applyColOrder(page, key, drag.idx);
+        // 拖拽尾冒泡 click 会触发 setSort(同列释放时) —— capture 阶段拦掉即停(同 startResize)
+        const swallow = (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          document.removeEventListener("click", swallow, true);
+        };
+        document.addEventListener("click", swallow, true);
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    },
+
+    /* 落点指示线内联样式(仅本 page 的表头渲染; top/height 走 CSS 全高, left 相对 head 盒) */
+    colDropLineStyle(page) {
+      const d = this.colDrag;
+      if (!d || d.page !== page) return {};
+      return { left: d.x + "px" };
     },
   },
 });

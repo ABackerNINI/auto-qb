@@ -383,6 +383,14 @@ button { font-family: inherit; }
 .h-cell .resizer::after { content: ""; position: absolute; left: 4px; top: 15%; width: 2px; height: 70%;
   background: transparent; border-radius: 2px; }
 .h-cell:hover .resizer::after { background: var(--accent); }  /* hover 列头时显示可拖拽提示线 */
+/* TBL-05: 表头拖动重排 —— 源列半透明; 落点指示线是 head 容器的绝对定位子元素(不占 grid
+ * 轨道, _renderedWidths 读 gridTemplateColumns 不受影响)。.group-head 自带 sticky 定位
+ * 上下文, .detail-head 非 sticky 需补 relative 作指示线包含块。 */
+.detail-head { position: relative; }
+.h-cell.drag-src { opacity: .45; }
+.group-head.col-dragging .h-cell, .detail-head.col-dragging .h-cell { cursor: col-resize; }
+.col-drop-line { position: absolute; top: 0; height: 100%; width: 2px; border-radius: 1px;
+  background: var(--accent); box-shadow: 0 0 6px var(--accent-line); pointer-events: none; z-index: 3; }
 
 /* 列模板由 JS 内联提供(app.js gridStyle -> groupGrid), 此处不写 grid-template-columns 以免误导 */
 .group-row { position: relative; display: grid; gap: 10px; align-items: center; background: var(--bg-row);
