@@ -351,14 +351,14 @@ button { font-family: inherit; }
  * transform 跟随 .group-table 滚动, 不用 transition 跟手; 吸顶时给阴影/底边线浮起感。
  * FIX-03 配色: 底色从 --bg-card 改为 --bg 页底色 —— 之前与顶栏 --glass 玻璃底明度相近,
  * 吸顶时像"第二根导航"; 改用不透明页底色读作"页面面板", 视觉权重更低且不透滚动内容。
- * FIX-03 防透缝: --head-h/--bulk-h 是 JS Math.round(实测高度), 顶栏/浮条行高含小数时
- * 取整可偏差 ±0.5px, 叠加设备像素取整即现 1-2px 竖缝(滚动时透出下方文字)。吸顶链每段
- * top 在"变量齐平值"上多压 1px(浮条 -1 / 表头 -2, 表头多出的 1px 吸收 --bulk-h 取整误差),
- * 重叠部分藏在上方吸顶条(z-index 更高)之下且与页底同色, 不遮挡内容不生横向滚动。 */
+ * FIX-03 防透缝(简化): --head-h 是 JS Math.round(实测高度), 顶栏行高含小数时取整可偏差
+ * ±0.5px, 叠加设备像素取整仍可能现 1px 竖缝 —— top 在齐平值上多压 1px, 重叠部分藏在
+ * 上方 .sticky-head(z-index 更高)之下且与页底同色, 不遮挡内容不生横向滚动。
+ * FIX-06: 批量操作条已并入筛选行(.status-strip 行首 .bulk-inline), 其高度随 --head-h
+ * 一起实测覆盖; 原 --bulk-h 吸顶联动(head-h + bulk-h - 2px 写法)随之退役。 */
 .group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim); font-size: 11.5px;
   font-weight: 600; letter-spacing: .04em; width: fit-content; min-width: 100%;
-  position: sticky; top: calc(var(--head-h, 100px) + var(--bulk-h, 0px) - 2px); z-index: 5;
-  /* --bulk-h 由 app.js _syncBulkHeight 写入: 批量浮条吸顶时表头偏移随之下移(防透缝重叠见上) */
+  position: sticky; top: calc(var(--head-h, 100px) - 1px); z-index: 5;
   background: var(--bg); border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
@@ -1185,18 +1185,14 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 选中行光标语义: 修饰键可切换选择 */
 .group-row, .member-row { cursor: pointer; }
 
-/* 批量操作浮条(选中集合非空时滑入; 不占位, 无选中时完全不渲染)。
- * 吸顶几何(R01, FIX-03 防透缝修订): top: head-h - 1px(比状态条底缘多压 1px, 重叠藏于
- * 状态条底边线之下); --bulk-h 仍只量条高(不含 margin) —— 表头吸顶偏移 head-h + bulk-h
- * - 2px 与浮条底缘恒重叠不小于 1px, 下滑时吸顶链零缝堆叠("自然靠近");
- * 流内 margin-bottom 仍保留未吸顶时与表格的间距 */
-.bulk-bar { position: sticky; top: calc(var(--head-h, 100px) - 1px); z-index: 6;
-  display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 7px 12px;
-  border: 1px solid var(--accent-line); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card);
-  box-shadow: var(--shadow-1); animation: drop-in .16s var(--ease-out); }
-.bulk-bar .bulk-count { font-size: 12.5px; color: var(--fg-muted); }
-.bulk-bar .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
+/* 批量操作段(FIX-06): 并入筛选行(.status-strip)行首 —— 不再是独立吸顶条, 无独立 top/
+ * z-index/margin; 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高, 不再跳动)。
+ * 段内 flex-wrap 兜窄屏溢出; 出入场仍走 name="bulk" transition(滑入+淡入) */
+.bulk-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px;
+  padding: 3px 10px 3px 9px; border: 1px solid var(--accent-line); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card); }
+.bulk-inline .bulk-count { font-size: 12.5px; color: var(--fg-muted); white-space: nowrap; }
+.bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
 .bulk-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
@@ -1209,7 +1205,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .bulk-btn.danger { color: var(--error); border-color: rgba(248, 113, 113, .35); }
 .bulk-btn.danger:hover { background: var(--error-soft); }
 .bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
-/* 浮条出入场(transition name="bulk"): 滑入 + 淡入 */
+/* 操作段出入场(transition name="bulk"): 滑入 + 淡入 */
 .bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
 .bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
 
