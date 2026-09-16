@@ -1408,16 +1408,27 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal.add-dialog { width: 640px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
 .add-dialog-x { margin-left: auto; }
 .add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
-.add-dialog-field { margin-top: 14px; }
-.add-dialog-field:first-child { margin-top: 4px; }
+.add-dialog-field { margin-top: 18px; }
+.add-dialog-field:first-child { margin-top: 6px; }
 .add-dialog-label { display: block; margin-bottom: 6px; color: var(--fg-dim); font-size: 11.5px; font-weight: 600;
   letter-spacing: .04em; }
 .add-dialog-input, .add-dialog-textarea { width: 100%; padding: 8px 11px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 13px; }
 .add-dialog-input:focus, .add-dialog-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .add-dialog-textarea { resize: vertical; min-height: 72px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
-.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; }
-.add-dialog-grid .add-dialog-field { margin-top: 14px; }
+.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 12px; }
+.add-dialog-grid .add-dialog-field { margin-top: 18px; }
+/* W2-FE-1(DLG-03/04): 来源行(文件选择 + 添加链接按钮) / 分类标签 combobox / 选择位置面板(复用 .pop-menu 视觉) */
+.add-dialog-source { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-dialog-source .add-dialog-filepick { flex: 1 1 auto; min-width: 0; }
+.add-dialog-linkbtn { flex: 0 0 auto; }
+.add-dialog-combo { position: relative; }
+.add-dialog-pathrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-dialog-pathrow .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+.add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
+.add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
+.add-pop-list { max-height: 210px; overflow-y: auto; }
+.add-pop-item { cursor: pointer; }
 /* 文件选择按钮(隐藏原生 input, label 即按钮)与已选文件 chips */
 .add-dialog-filepick { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--radius-sm);
   border: 1px dashed var(--border-strong); background: var(--surface-1); color: var(--fg-muted); font-size: 13px;
@@ -1433,23 +1444,15 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border-radius: 50%; border: none; background: transparent; color: var(--fg-dim); cursor: pointer; flex: 0 0 auto; }
 .add-dialog-chipx:hover { background: var(--error-soft); color: var(--error); }
 .add-dialog-chipx .ico { width: 10px; height: 10px; }
-/* 选项勾选行: 与 .modal-check 同族, 但五项并排换行; 跳过校验项高亮危险色 */
+/* 选项勾选行: 与 .modal-check 同族, 但五项并排换行 */
 .add-dialog-checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-check { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: var(--radius-sm);
   background: var(--surface-1); border: 1px solid var(--border-soft); font-size: 12.5px; color: var(--fg-muted);
   cursor: pointer; user-select: none; }
 .add-dialog-check:hover { border-color: var(--border-strong); }
 .add-dialog-check input { accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 auto; margin: 0; }
-.add-dialog-check-danger { border-color: rgba(248, 113, 113, .4); color: var(--error); }
-.add-dialog-check-danger input { accent-color: var(--error); }
 .add-dialog-hint { margin-top: 7px; color: var(--fg-dim); font-size: 11.5px; }
 .add-dialog-hint-warn { color: var(--error); }
-/* skip_checking 勾选时的顶部警告条(显眼, 琥珀) */
-.add-dialog-warnbar { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; padding: 8px 11px;
-  border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
-  color: var(--warn); font-size: 12.5px; font-weight: 600; }
-.add-dialog-warnbar .ico { color: var(--warn); }
-.add-dialog-preview .add-dialog-warnbar { margin: 0 0 6px; }
 /* D4 接管预览(静态说明区): 弱化底色 + 当前配置语义文案 */
 .add-dialog-preview { margin-top: 16px; padding: 11px 13px; border-radius: var(--radius-sm);
   background: var(--surface-1); border: 1px solid var(--border-soft); }
