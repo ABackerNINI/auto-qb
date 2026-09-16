@@ -1366,7 +1366,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 .drawer-title { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: flex-start; }
 .drawer-title strong { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
-.drawer-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.drawer-close { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
 .drawer-tabs { display: flex; gap: 2px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
 .drawer-tabs button { padding: 7px 14px; border: 0; background: transparent; color: var(--muted);
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
