@@ -147,18 +147,7 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
             </button>
           </nav>
-          <!-- 视图开关(R08/R10): 分组表 / 单种子平铺 / 追剧; 筛选与搜索三视图共用, 列模型与排序独立 -->
-          <div v-if="page === 'groups'" class="view-switch" role="tablist" aria-label="辅种视图切换">
-            <button :class="{ active: viewMode === 'groups' }" title="按辅种分组展示" @click="setViewMode('groups')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组
-            </button>
-            <button :class="{ active: viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="setViewMode('torrents')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>种子
-            </button>
-            <button :class="{ active: viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="setViewMode('shows')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
-            </button>
-          </div>
+          <!-- 视图开关已退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内重复的第二套"分组/种子/追剧"已删除 -->
           <div v-if="page === 'groups'" class="top-search">
             <div class="search-box">
               <svg class="ico ico-sm ico-find" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
@@ -269,9 +258,18 @@
         </header>
         <!-- 状态分布条 + 筛选器(仅辅种页): 分布由已加载的 groups 前端聚合, 点击 chip 按状态筛选 -->
         <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows' || selectedCount)" class="status-strip">
-          <!-- 批量操作段(FIX-06): 并入筛选行行首, 同排展示 —— 有选中时行内出现(Ctrl/⌘+点击选中,
-               Shift+点击范围选择), 无选中时完全不渲染; 不再以独立吸顶条插入/抽出表格上方,
-               选中前后筛选行高度不变(同排), 消除旧独立浮条造成的整页跳动; 段内换行兜窄屏 -->
+          <div class="dist-bar" :title="distTitle">
+            <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
+          </div>
+          <div class="dist-legend">
+            <button v-for="s in distSegments" :key="s.kind" class="dist-chip"
+                    :class="['k-' + s.kind, { active: kindFilter === s.kind }]"
+                    :title="'仅显示' + s.text + '的辅种组'" @click="toggleKindFilter(s.kind)">
+              <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
+            </button>
+          </div>
+          <!-- 批量操作段(FIX-06): 位置 = "做种数量统计后、筛选器前"(用户 2026-09-17); 有选中时行内出现,
+               无选中时不渲染; 同排插入/抽出不改变筛选行高度 -->
           <transition name="bulk">
             <div v-if="selectedCount" class="bulk-inline">
               <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
@@ -297,16 +295,6 @@
               </button>
             </div>
           </transition>
-          <div class="dist-bar" :title="distTitle">
-            <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
-          </div>
-          <div class="dist-legend">
-            <button v-for="s in distSegments" :key="s.kind" class="dist-chip"
-                    :class="['k-' + s.kind, { active: kindFilter === s.kind }]"
-                    :title="'仅显示' + s.text + '的辅种组'" @click="toggleKindFilter(s.kind)">
-              <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
-            </button>
-          </div>
           <!-- 当前筛选/搜索说明: 紧跟状态图例之后(无筛选时不占据任何空间) -->
           <span v-if="filtersActive" class="strip-note">
             <template v-if="searchQuery.trim()">搜索“{{ searchQuery.trim() }}” </template>
@@ -379,7 +367,7 @@
                :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'group' && colDrag.key === col.key }]"
                @click="col.sortable && setSort(col.key)"
                @mousedown="startColDrag($event, 'group', col.key)"
-               @contextmenu.prevent="openColMenuAt($event, 'group')">
+               @contextmenu.prevent="openHeadMenu($event, 'group', col)">
             <span>{{ col.label }}</span>
             <span v-if="col.sortable" class="arrow">
               <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">
@@ -456,7 +444,7 @@
                 <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
                      :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
                      @mousedown="startColDrag($event, 'detail', col.key)"
-                     @contextmenu.prevent="openColMenuAt($event, 'detail')">
+                     @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
                   <span>{{ col.label }}</span>
                   <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                         @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
@@ -531,7 +519,7 @@
                  :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'torrent' && colDrag.key === col.key }]"
                  @click="col.sortable && setSort(col.key)"
                  @mousedown="startColDrag($event, 'torrent', col.key)"
-                 @contextmenu.prevent="openColMenuAt($event, 'torrent')">
+                 @contextmenu.prevent="openHeadMenu($event, 'torrent', col)">
               <span>{{ col.label }}</span>
               <span v-if="col.sortable" class="arrow">
                 <svg v-if="torrentSortKey === col.key" class="ico" viewBox="0 0 16 16">
@@ -626,7 +614,7 @@
                  :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'show' && colDrag.key === col.key }]"
                  @click="col.sortable && setSort(col.key)"
                  @mousedown="startColDrag($event, 'show', col.key)"
-                 @contextmenu.prevent="openColMenuAt($event, 'show')">
+                 @contextmenu.prevent="openHeadMenu($event, 'show', col)">
               <span>{{ col.label }}</span>
               <span v-if="col.sortable" class="arrow">
                 <svg v-if="showSortKey === col.key" class="ico" viewBox="0 0 16 16">
@@ -727,7 +715,7 @@
                         <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
                              :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
                              @mousedown="startColDrag($event, 'detail', col.key)"
-                             @contextmenu.prevent="openColMenuAt($event, 'detail')">
+                             @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
                           <span>{{ col.label }}</span>
                           <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                                 @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
@@ -919,6 +907,29 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该组…
             </div>
           </template>
+        </div>
+        </transition>
+        <!-- 表头右键菜单(TBL-05): 针对**该列**的操作 —— "隐藏xxx"即隐藏这一列; 另给排序直达与完整列选择器入口 -->
+        <transition name="pop">
+        <div v-if="headMenu.visible" class="ctx-menu" :style="{left: headMenu.x+'px', top: headMenu.y+'px'}"
+             @click.stop @contextmenu.prevent>
+          <div class="ctx-item" :class="{ muted: headMenu.locked }" @click="headMenuHide()">
+            <svg class="ico ico-sm ico-hide" viewBox="0 0 16 16"><use href="#i-eye-off"></use></svg>
+            {{ headMenu.locked ? '「' + headMenu.label + '」为必显列' : '隐藏「' + headMenu.label + '」' }}
+          </div>
+          <template v-if="headMenu.sortable">
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="headMenuSort(-1)">
+              <svg class="ico ico-sm ico-sort" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>按「{{ headMenu.label }}」降序
+            </div>
+            <div class="ctx-item" @click="headMenuSort(1)">
+              <svg class="ico ico-sm ico-sort" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>按「{{ headMenu.label }}」升序
+            </div>
+          </template>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item" @click="headMenuPicker()">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>显示/隐藏列…
+          </div>
         </div>
         </transition>
         <!-- 文件优先级小菜单(详情抽屉内容页签): 复用 .ctx-menu 视觉, 锚定单元格, 视口吸附 -->
@@ -1445,23 +1456,27 @@
 
     </template>
 
-    <!-- 底部状态栏(TBL-08): 速度摘要 + 统计入口 + 全局状态徽章; 全页固定, 高度锁定 --statusbar-h -->
+    <!-- 底部状态栏(TBL-08 修订): 左=常显统计摘要 + 完整统计入口, 右=速度合计 + 限速入口;
+         全局状态徽标已移除(顶栏已有连接状态, 重复) -->
     <footer class="statusbar">
+      <span class="sb-stats" title="qBittorrent 服务器实时状态(与主轮询同周期同步)">
+        <span v-for="it in sbStats" :key="it.key" class="sb-item" :title="it.title">
+          <svg class="ico ico-sm" :class="it.cls" viewBox="0 0 16 16"><use :href="it.icon"></use></svg>
+          <span class="lbl">{{ it.label }}</span><span class="val">{{ it.value }}</span>
+        </span>
+        <span v-if="!sbStats.length" class="sb-empty">统计未同步(等待 qB 连接)</span>
+      </span>
+      <button class="sb-btn" title="打开完整 qBittorrent 统计面板" @click="openStats()">
+        <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
+      </button>
+      <span class="sb-spacer"></span>
       <span class="sb-speed" title="全部组下载/上传速度合计">
         <span class="sb-item"><svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg><span class="val">{{ fmtSpeed(totalDl) }}</span></span>
         <span class="sb-item"><svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg><span class="val">{{ fmtSpeed(totalUl) }}</span></span>
       </span>
-      <span class="sb-spacer"></span>
-      <button class="sb-btn" title="qB 会话/累计流量 · DHT · 连接状态" @click="openStats()">
-        <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
-      </button>
-<button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
+      <button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
       </button>
-      
-      <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
-        <i class="dot"></i>{{ statusBadge.text }}
-      </span>
     </footer>
 
     <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
@@ -1474,11 +1489,10 @@
       </div>
     </div>
 
-    <transition name="pop">
     <!-- 种子详情抽屉(R1B): WEB UI 替代 qB 界面的详情面板(常规/Tracker/用户/内容)。
          W5-RFB-01 纯展示化: 抽屉头只留 标题+状态徽章+关闭, 全部操作走行右键菜单与批量条。
          Esc/遮罩点击关闭; trackers/peers 在对应 tab 激活期间 3s 轮询, 关闭即停(见 app.js _startDrawerPoll) -->
-    <transition name="drawer">
+    <transition name="drawer" :duration="200">
       <div v-if="drawer.open" class="drawer-mask" @click.self="closeDrawer()">
         <aside class="drawer" role="dialog" aria-label="种子详情">
           <header class="drawer-head">
@@ -1995,7 +2009,6 @@
         </div>
       </div>
     </div>
-    </transition>
 
     <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合折线图(SVG, 容器级悬停取值) -->
     <div v-if="historyOpen" class="modal-mask" @click.self="historyOpen = false">

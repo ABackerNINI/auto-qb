@@ -8,7 +8,7 @@
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行 -> 整包 SyntaxError 白屏; 模板引用的 js/css/png 均存在)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
@@ -77,6 +77,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 from types import SimpleNamespace
 from unittest import mock
@@ -404,17 +406,88 @@ STATIC_ROOT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "web_ui", "static"
 )
 
+# CSS 容器型 at-rule: "开块后下一行是嵌套规则"属正常写法, 不参与"漏闭合"判定
+_CSS_CONTAINER_AT = ("@media", "@supports", "@keyframes", "@container", "@layer", "@scope")
+
+
+def _scan_css_blocks(path, rel, problems):
+    """CSS 规则块守阵: 顶层规则开了块却没闭合, 而下一非空行又开了新规则 -> 漏写 `; }`
+
+    (2026-09-17 实测: prism/css/views.css 有一条 `.ce-subcard .ce-field { … padding: 7px 0` 漏了
+    `; }`, 浏览器把其后约 200 条规则整段当作"未结束的声明块"丢弃 —— 棱镜大半样式静默消失而
+    pytest 全绿。注意**全文件花括号计数是配平的**(别处有多余 `}`), 只数括号查不出来。)
+    """
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    depth = 0
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        opens, closes = line.count("{"), line.count("}")
+        if depth == 0 and opens > closes and not stripped.startswith(_CSS_CONTAINER_AT):
+            nxt = next((l.strip() for l in lines[i:] if l.strip()), "")
+            if "{" in nxt:  # 本块还没闭合, 下一行又开了新规则 -> 语法已坏
+                problems.append(f"{rel}:{i} 规则块未闭合(下一非空行又开了新规则)")
+        depth += opens - closes
+        if depth < 0:
+            problems.append(f"{rel}:{i} 多余的 `}}`")
+            depth = 0
+    if depth != 0:
+        problems.append(f"{rel} 花括号未配平(差 {depth})")
+
+
+def _scan_template_transitions(path, rel, problems):
+    """模板 `<transition>` 结构守阵: 必须配对, 且弹窗不得落在 `<transition>` 内
+
+    (2026-09-17 实测: 抽屉外层多了一个未闭合的 `<transition name="pop">`, 于是统计/限速/添加/
+    管理/确认框全被浏览器解析成它的子节点 —— `Transition` 只渲染第一个子节点, **所有弹窗被静默
+    丢弃**: 点击毫无反应、控制台也不报错。配对计数 + 弹窗嵌套双查, 二者都能抓住这个 bug。)
+    """
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    depth = 0
+    for i, line in enumerate(lines, 1):
+        low = line.lower()
+        if "modal-mask" in low and depth > 0:
+            problems.append(f"{rel}:{i} 弹窗(.modal-mask)落在 <transition> 内(Transition 只渲染首个子节点 -> 弹窗会被丢弃)")
+        depth += low.count("<transition") - low.count("</transition>")
+        if depth < 0:
+            problems.append(f"{rel}:{i} 多余的 </transition>")
+            depth = 0
+    if depth != 0:
+        problems.append(f"{rel} `<transition>` 未闭合(差 {depth})")
+
+
+def _scan_js_syntax_with_node(js_files, problems):
+    """有 node 时用 `node --check` 对前端 JS 做**真**语法校验(2026-09-17 起本机已装 node)
+
+    这是启发式扫描(注释孤儿续行等)之上的一道硬闸: 任何语法错误都能以 `文件:行` 形式报出。
+    无 node(未装的机器/精简 CI)时**静默跳过**本项 —— 不引入 pytest skip(基线是 0 skipped),
+    启发式扫描仍在拦最常见的那类损坏。
+    """
+    node = shutil.which("node")
+    if not node:
+        return
+    for path, rel in js_files:
+        proc = subprocess.run([node, "--check", path], capture_output=True, text=True)
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout).strip().splitlines()
+            problems.append(f"{rel} node --check 报语法错误: {detail[0] if detail else 'unknown'}")
+
 
 def _scan_frontend_assets():
     """扫描 web_ui/static 返回问题清单(空 = 健康)
 
-    检查项(均为"整页白屏"级故障, 且 Python 侧测试天然看不见):
+    检查项(均为"整页白屏 / 整块功能静默失效"级故障, 且 Python 侧测试天然看不见):
     1. 合并冲突标记残留(`<<<<<<<` / `>>>>>>>` / 单独一行 `=======`) —— 语法错误;
     2. JS 里"注释已闭合却仍留续行"(上一非空行以 `*/` 结尾, 本行又以 `*` 起头) ——
        整包 SyntaxError, app.js 不执行, Vue 从不 mount, `v-cloak` 的 #app 恒 display:none;
-    3. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404)。
+    3. JS 语法硬校验: 有 node 时跑 `node --check`(见 _scan_js_syntax_with_node);
+    4. CSS 规则块漏闭合(浏览器会把其后规则整段当声明丢弃) —— 见 _scan_css_blocks;
+    5. 模板 `<transition>` 不配对 / 把弹窗包进 `<transition>`(只渲染首子节点 -> 弹窗全丢);
+    6. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404)。
     """
     problems = []
+    js_files = []
     for dirpath, _dirs, files in os.walk(STATIC_ROOT):
         for name in sorted(files):
             path = os.path.join(dirpath, name)
@@ -426,25 +499,35 @@ def _scan_frontend_assets():
             for i, line in enumerate(lines, 1):
                 if line.startswith(("<<<<<<<", ">>>>>>>")) or line == "=======":
                     problems.append(f"{rel}:{i} 合并冲突标记残留")
-            # 只扫自家前端(vendor 为第三方压缩产物, 不适用本仓库注释规范)
-            if name.endswith(".js") and "/vendor/" not in f"/{rel}":
-                for i, line in enumerate(lines):
-                    if not re.match(r"^\s*\*(?!/)", line):
-                        continue
-                    prev = next((l for l in reversed(lines[:i]) if l.strip()), "")
-                    if prev.rstrip().endswith("*/"):
-                        problems.append(f"{rel}:{i + 1} 注释块已闭合后仍有续行(会造成整包 SyntaxError)")
+            # 只扫自家前端(vendor 为第三方压缩产物, 不适用本仓库注释/结构规范)
+            if "/vendor/" not in f"/{rel}":
+                if name.endswith(".js"):
+                    js_files.append((path, rel))
+                    for i, line in enumerate(lines):
+                        if not re.match(r"^\s*\*(?!/)", line):
+                            continue
+                        prev = next((l for l in reversed(lines[:i]) if l.strip()), "")
+                        if prev.rstrip().endswith("*/"):
+                            problems.append(f"{rel}:{i + 1} 注释块已闭合后仍有续行(会造成整包 SyntaxError)")
+                elif name.endswith(".css"):
+                    _scan_css_blocks(path, rel, problems)
+                elif name.endswith(".html"):
+                    _scan_template_transitions(path, rel, problems)
             for ref in re.findall(r'(?:src|href)="(/[^"]+)"', "\n".join(lines)):
                 if not os.path.exists(os.path.join(STATIC_ROOT, ref.lstrip("/"))):
                     problems.append(f"{rel} 引用不存在的静态资源 {ref}")
+    _scan_js_syntax_with_node(js_files, problems)
     return problems
 
 
 def test_frontend_static_bundle_health():
-    """前端静态资源守阵: 冲突残留/注释孤儿续行/引用缺失 -> 白屏(2026-09-17 实测故障的防回归)
+    """前端静态资源守阵: 冲突残留/注释孤儿续行/node 语法校验/CSS 漏闭合/transition 吞弹窗/引用缺失
 
-    实测故障: 波次三合并把 app.js 一条注释续行留在了已闭合的 `*/` 之后 -> 整包 SyntaxError ->
-    Vue 从未 mount -> `v-cloak` 的 #app 恒 `display:none`, 页面只剩背景色, 而 pytest 全绿。
+    三个实测故障(2026-09-17)都是"pytest 全绿但界面废掉"的形态:
+    ① app.js 注释续行留在已闭合的 `*/` 之后 -> 整包 SyntaxError -> Vue 不 mount -> 只剩背景色;
+    ② prism views.css 一条规则漏 `; }` -> 其后约 200 条规则被浏览器丢弃 -> 棱镜大半样式消失;
+    ③ 抽屉外层 `<transition>` 未闭合 -> 统计/限速/添加/确认框被 Transition 丢弃(点了没反应且无报错)。
+    装了 node 的机器还会在此跑 `node --check` 对所有前端 JS 做真语法校验(无 node 则静默跳过)。
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)

@@ -308,25 +308,34 @@ button { font-family: inherit; }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
 /* 内容区自身不再限宽/加内边距(已由 .layout 承担); min-width:0 让内部表格能横向滚动而不撑破 grid */
 .content { min-width: 0; }
-/* ---------------- 底部状态栏(TBL-08): 速度摘要 + 统计入口 + 全局状态徽章 ---------------- */
-/* fixed 吸底全宽单行; 高度用 :root 的 --statusbar-h 锁定(不随内容变化, 内容超宽 overflow 隐藏);
+/* ---------------- 底部状态栏(TBL-08 修订): 左=常显统计摘要 + 完整统计入口, 右=速度合计 + 限速入口 ----------------
+ * fixed 吸底全宽单行; 高度用 :root 的 --statusbar-h 锁定(不随内容变化, 内容超宽 overflow 隐藏);
  * z-index 30 与吸顶条同层 —— 低于列选择器弹层(40)/右键菜单(100)/toast(120)/modal(130) */
 .statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center;
   gap: 16px; height: var(--statusbar-h); padding: 0 18px; overflow: hidden; white-space: nowrap;
   background: var(--glass); backdrop-filter: blur(10px); border-top: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--hairline); }
 .sb-speed { display: flex; align-items: center; gap: 16px; min-width: 0; overflow: hidden; }
+/* 左侧统计摘要: 指标项紧凑排列(标签灰 + 数值亮), 空间不足时整体裁切而不换行 */
+.sb-stats { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
+.sb-stats .lbl { color: var(--fg-dim); font-size: 11.5px; }
+.sb-empty { color: var(--fg-dim); font-size: 11.5px; }
 .sb-item { display: inline-flex; align-items: center; gap: 6px; }
 .sb-item .val { color: var(--fg); font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .sb-item .ico-down { color: var(--blue); }
 .sb-item .ico-up { color: var(--green); }
+/* 摘要项图标按语义着色(与右键菜单彩色图标同一语言) */
+.sb-item .ico-flow { color: var(--blue); }
+.sb-item .ico-alltime { color: var(--violet, var(--accent)); }
+.sb-item .ico-peers { color: var(--teal, var(--accent)); }
+.sb-item .ico-dht { color: var(--green); }
+.sb-item .ico-disk { color: var(--fg-dim); }
 .sb-spacer { flex: 1; }
 .sb-btn { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
   font-size: 12px; cursor: pointer; flex: 0 0 auto;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .sb-btn:hover { background: var(--surface-2); color: var(--fg); }
-.statusbar .badge { flex: 0 0 auto; }
 .muted { color: var(--fg-muted); }
 .error { color: var(--error); }
 .ok { color: var(--green); }
@@ -441,22 +450,20 @@ button { font-family: inherit; }
 .g-stat.zero, .m-stat.zero { text-align: center; }
 /* 0 值只留极淡占位符(满屏 "0 B/s" 是噪声), 但仍占位保持列对齐 */
 .zero { color: var(--fg-dim); opacity: .35; }
-/* ---- TBL-03: 行状态底 + 数值色阶 ----
- * 名称/数值文字的低透明状态底: 名称前状态图标移除后, 状态语义仍可沿行扫读。
+/* ---- TBL-03: 行状态**文字色** + 数值色阶(文字色) ----
+ * 用户 2026-09-17 明确: 要的是**文字颜色, 不是背景色** —— 大面积状态底是噪声, 且与数值色阶
+ * 互相抢视觉。名称与数值列的文字染状态语义色, 依旧可沿行扫读状态, 同时保留单元格背景干净。
  * 取舍: 只染有语义色的状态(seeding/downloading/checking/error); paused/other 的语义色是灰
- * (fg-dim), 大面积灰底是噪声不是信息 —— 保持无底, 状态列仍有图标+文字。与 .g-status 徽标
- * 默认 surface-2 不同: 徽标是小面积元素, 灰底可接受; 整行文字列大面积铺灰不行。
- * 色值全走现有 soft 令牌(.16 档); 圆角对无底单元格无可见影响, 不引入对齐偏移 */
-.group-row .g-name-text, .group-row .g-stat { border-radius: 6px; }
-.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat { background: var(--green-soft); }
-.group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat,
-.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat { background: var(--blue-soft); }
-.group-row.s-error .g-name-text, .group-row.s-error .g-stat { background: var(--error-soft); }
-/* 数值色阶(TBL-03): tone 背景优先于行状态底 —— 选择器同为 3 类但写在后面, 源顺序胜出;
- * tone-high 用品牌强调底(accent-soft, .16 档), tone-low 用中性 surface-2 弱提示,
- * 两者都与状态语义色不同族, 不会与同行名称列的状态底混淆 */
-.group-row .g-stat.tone-low { background: var(--surface-2); }
-.group-row .g-stat.tone-high { background: var(--accent-soft); }
+ * (fg-dim), 整行灰字降低可读性 —— 保持默认前景色, 状态仍由徽标/状态列表达。
+ * 0 值(.zero)与"—"占位不染: 它们只是空值占位, 上色会误导成"有值" */
+.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero) { color: var(--green); }
+.group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat:not(.zero),
+.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero) { color: var(--blue); }
+.group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero) { color: var(--error); }
+/* 数值色阶(TBL-03): tone 写在状态色之后(源顺序胜出) —— 数值列按"占分母比例"着色:
+ * 低档压暗(偏弱/离满档还远), 高档用品牌强调色(接近满档); 与状态文字色叠加时数值口径优先 */
+.group-row .g-stat.tone-low { color: var(--fg-muted); }
+.group-row .g-stat.tone-high { color: var(--accent-hi); }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
@@ -1319,15 +1326,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* ============ 第八轮新增(修复落地 / 单种子视图 / 信息栏双模式 / 视觉刷新配套) ============ */
 
-/* 视图开关(R08): 分组/单种子; 与历史流量弹层 tabs 同款分段控件观感 */
-.view-switch { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
-  background: var(--bg-sunken); border: 1px solid var(--border); }
-.view-switch button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border: 0;
-  border-radius: 999px; background: transparent; color: var(--fg-muted); font-size: 12px; cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.view-switch button:hover { color: var(--fg); }
-.view-switch button.active { background: var(--accent-soft); color: var(--accent-hi);
-  box-shadow: inset 0 0 0 1px var(--accent-line); }
+/* 视图开关(R08)样式已随元素退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内第二套切换器删除 */
 
 /* 单种子视图(R08): 状态文字弱化 / 保存路径列省略号(title 兜底) */
 .torrent-row .state-text { font-size: 12px; color: var(--fg-muted); }
@@ -1405,6 +1404,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } }
 .drawer-enter-active, .drawer-leave-active { transition: opacity .15s var(--ease); }
 .drawer-enter-from, .drawer-leave-to { opacity: 0; }
+/* 离场中的遮罩立刻停止接收指针: 全屏 fixed 遮罩一旦因过渡未触发(后台标签页不跑 CSS 过渡,
+ * transitionend 不来 -> Vue 不会移除元素)而滞留, 会以 opacity:0 拦截整个页面的点击 ——
+ * 双保险: 模板另加 :duration 兜底(不依赖 transitionend 也能清理) */
+.drawer-mask.drawer-leave-active { pointer-events: none; }
 .drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border-soft); }
 .drawer-title { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: flex-start; }
 .drawer-title strong { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }

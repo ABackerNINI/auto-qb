@@ -241,6 +241,8 @@ const app = createApp({
       colMenuAt: null,                    // 列选择器 fixed 锚点(表头右键路径 {x,y,mh}; null = 按钮路径走 CSS 定位)
       colDrag: null,                      // 表头拖动重排进行中(TBL-05): {page, key, idx, x} — idx=可视列插入边界, x=指示线位置
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
+      // 表头右键菜单(TBL-05): 针对**该列**的操作 —— 隐藏「列名」(隐藏单列)/升序/降序/打开列选择器
+      headMenu: { visible: false, x: 0, y: 0, page: "", key: "", label: "", sortable: false, locked: false },
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
       filePrio: { visible: false, x: 0, y: 0, index: -1 },
       drawerSelPath: "",    // 内容页签选中行(文件/目录完整相对路径); 顶部"重命名…"的作用对象
@@ -542,6 +544,56 @@ const app = createApp({
     },
     totalUl() {
       return this.groups.reduce((n, g) => n + g.upspeed, 0);
+    },
+    /* 底部状态栏左侧常显统计摘要(TBL-08 修订, 用户 2026-09-17): "统计不应该藏到弹出框中" ——
+     * 取 /api/stats 的 server_state(纯内存快照, 与主轮询同周期静默同步), 挑四个最常看的指标常显;
+     * 完整字段仍在统计面板(点"完整统计"打开)。server_state 未同步时返回空数组 → 显示未同步提示 */
+    sbStats() {
+      const s = this.statsServer;
+      if (!s) return [];
+      const items = [
+        {
+          key: "flow",
+          icon: "#i-chart",
+          cls: "ico-flow",
+          label: "本次",
+          value: `\u2193${this.statVal(s.dl_info_data, (v) => this.fmtSize(v))} \u2191${this.statVal(s.up_info_data, (v) => this.fmtSize(v))}`,
+          title: "本次会话累计: 下载 / 上传(字节)",
+        },
+        {
+          key: "alltime",
+          icon: "#i-layers",
+          cls: "ico-alltime",
+          label: "累计",
+          value: `\u2193${this.statVal(s.alltime_dl, (v) => this.fmtSize(v))} \u2191${this.statVal(s.alltime_ul, (v) => this.fmtSize(v))}`,
+          title: "qB 历史累计: 下载 / 上传(字节)",
+        },
+        {
+          key: "peers",
+          icon: "#i-link",
+          cls: "ico-peers",
+          label: "连接",
+          value: this.statVal(s.total_peer_connections),
+          title: "当前 peer 连接总数 · 连接状态: " + this.connText(s.connection_status),
+        },
+        {
+          key: "dht",
+          icon: "#i-globe",
+          cls: "ico-dht",
+          label: "DHT",
+          value: this.statVal(s.dht_nodes),
+          title: "DHT 节点数(kad 网络)",
+        },
+        {
+          key: "disk",
+          icon: "#i-hdd",
+          cls: "ico-disk",
+          label: "剩余",
+          value: this.statVal(s.free_space_on_disk, (v) => this.fmtSize(v)),
+          title: "qB 保存目录所在磁盘剩余空间",
+        },
+      ];
+      return items;
     },
     /* 状态分布(纯前端聚合 members[].kind): 供顶栏下方堆叠条与可点击图例使用 */
     distSegments() {
@@ -855,6 +907,7 @@ const app = createApp({
     // 点击页面空白处: 关闭右键菜单与列选择器(两者都是临时浮层)
     window.addEventListener("click", () => {
       this.menu.visible = false;
+      this.headMenu.visible = false;   // 表头右键菜单(TBL-05)与右键菜单同层
       this.colMenuOpen = false;
       this.filterMenu = "";
       this.filePrio.visible = false;
@@ -873,6 +926,7 @@ const app = createApp({
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
+      else if (this.headMenu.visible) this.headMenu.visible = false;  // 表头右键菜单(TBL-05)
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
@@ -936,6 +990,9 @@ const app = createApp({
     },
     // CTX-02: 任一浮层菜单关闭 -> 撤掉触发源强调(浮层可以多种方式关闭: Esc/点空白/执行动作)
     "menu.visible"(v) {
+      if (!v) this._clearCtxSource();
+    },
+    "headMenu.visible"(v) {
       if (!v) this._clearCtxSource();
     },
     "filePrio.visible"(v) {
@@ -1326,6 +1383,7 @@ const app = createApp({
         }
         this.serviceDown = false;
         this.pollFails = 0;
+        this.syncStats();  // 状态栏常显统计: 静默同步(不阻塞轮询排程)
       } catch (e) {
         // 服务不可达(程序退出/网络失败): 置 serviceDown 显示横幅; 轮询继续, 服务恢复后自动消失。
         // 401(密钥无效): 停止轮询并回到密钥输入界面(防无谓空转)。
@@ -1582,8 +1640,7 @@ const app = createApp({
     setSort(key) {
       // 三态(想法.md): 首次点击按该列降序 -> 再点升序 -> 第三次恢复默认排序(最近添加时间降序);
       // 单种子/追剧视图操作独立排序键, 各视图互不干扰
-      const gk = this.viewMode === "torrents" ? "torrentSortKey" : this.viewMode === "shows" ? "showSortKey" : "sortKey";
-      const gd = this.viewMode === "torrents" ? "torrentSortDir" : this.viewMode === "shows" ? "showSortDir" : "sortDir";
+      const { gk, gd } = this._sortKeys();
       if (this[gk] !== key) {
         this[gk] = key;
         this[gd] = -1;
@@ -1593,10 +1650,63 @@ const app = createApp({
         this[gd] = 1;
         return;
       }
-      // 追剧视图默认排序 = 最近动静降序(后端同序); 其余视图 = 最近添加降序
-      const defKey = this.viewMode === "shows" ? "latest" : DEFAULT_SORT.key;
-      this[gk] = defKey;
+      this._resetSort();
+    },
+    /* 当前视图的排序键/方向(data 属性名) —— 分组/种子/追剧三视图各自独立 */
+    _sortKeys() {
+      if (this.viewMode === "torrents") return { gk: "torrentSortKey", gd: "torrentSortDir" };
+      if (this.viewMode === "shows") return { gk: "showSortKey", gd: "showSortDir" };
+      return { gk: "sortKey", gd: "sortDir" };
+    },
+    /* 恢复默认排序: 追剧视图 = 最近动静降序(后端同序); 其余 = 最近添加降序 */
+    _resetSort() {
+      const { gk, gd } = this._sortKeys();
+      this[gk] = this.viewMode === "shows" ? "latest" : DEFAULT_SORT.key;
       this[gd] = DEFAULT_SORT.dir;
+    },
+    /* ---------------- 表头右键菜单(TBL-05): 按列操作 ----------------
+     * 用户明确该菜单指的是"隐藏xxx"(隐藏**这一列**), 而不是笼统的列选择器;
+     * 排序项直接从表头一键指定方向(与表头左键的三态循环互补)。
+     */
+    openHeadMenu(event, page, col) {
+      event.preventDefault();
+      this._markCtxSource(event);
+      const pos = this._menuPos(event);
+      this.headMenu = {
+        visible: true,
+        x: pos.x,
+        y: pos.y,
+        page,
+        key: col.key,
+        label: col.label,
+        sortable: !!col.sortable,
+        locked: !!col.locked,
+      };
+    },
+    headMenuHide() {
+      const m = this.headMenu;
+      this.headMenu.visible = false;
+      if (!m.page || !m.key) return;
+      if (m.locked) {
+        this.toast(`「${m.label}」是必显列(承载展开/标识), 不可隐藏`, "info");
+        return;
+      }
+      this.toggleColumn(m.page, m.key);
+      this.toast(`已隐藏「${m.label}」列(右键表头或"列"按钮可恢复)`);
+    },
+    headMenuSort(dir) {
+      const m = this.headMenu;
+      this.headMenu.visible = false;
+      if (!m.sortable) return;
+      const { gk, gd } = this._sortKeys();
+      this[gk] = m.key;
+      this[gd] = dir;
+    },
+    headMenuPicker() {
+      const m = this.headMenu;
+      this.headMenu.visible = false;
+      // 在右键处就地展开完整列选择器(复用 openColMenuAt 的视口钳位)
+      this.openColMenuAt({ clientX: m.x, clientY: m.y }, m.page);
     },
     /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
     /* 分组表横向滚动时同步表头位移(表头已脱离 .group-table 容器做纵向 sticky,
@@ -1963,15 +2073,13 @@ const app = createApp({
       this.selGroups = [...new Set([...this.selGroups, ...list.slice(a, b + 1)])];
     },
     onMemberClick(m, event) {
+      // 普通点击**不再选中**(用户 2026-09-17 明确: 点击种子不触发选择); 仅修饰键选择:
+      // Ctrl/⌘ 切换单行, Shift 从锚点整段范围
       if (event.ctrlKey || event.metaKey) {
         this.toggleMemberSel(m);
         return;
       }
-      if (event.shiftKey) {
-        this.shiftMemberSel(m);
-        return;
-      }
-      this.toggleMemberSel(m);  // 明细行普通点击 = 选中(原先无点击行为)
+      if (event.shiftKey) this.shiftMemberSel(m);
     },
     toggleMemberSel(m) {
       this.selMembers = this.selMembers.includes(m.hash)
@@ -2124,18 +2232,14 @@ const app = createApp({
       if (!head) return;
       head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
     },
-    /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围 / 普通点击选中) */
+    /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中 */
     onTorrentClick(m, event) {
       this.menu.visible = false;
       if (event.ctrlKey || event.metaKey) {
         this.toggleMemberSel(m);
         return;
       }
-      if (event.shiftKey) {
-        this.shiftTorrentSel(m);
-        return;
-      }
-      this.toggleMemberSel(m);
+      if (event.shiftKey) this.shiftTorrentSel(m);
     },
     shiftTorrentSel(m) {
       // 平铺列表内的连续范围选择(锚点不更新, 可从同一起点多次扩展)
@@ -3048,6 +3152,13 @@ const app = createApp({
       } finally {
         this.statsLoading = false;
       }
+    },
+    /* 状态栏常显统计的静默同步(与主轮询同周期): 不动 loading/error 状态, 失败保持旧值 */
+    async syncStats() {
+      try {
+        const r = await this.api("/api/stats");
+        this.statsServer = r.server || null;
+      } catch (e) { /* 静默: 连接不可达时由 serviceDown 横幅统一提示 */ }
     },
     /* 统计值兜底: 字段缺失(null/undefined)显示 —; 0 是合法值(如 DHT 0 节点)原样展示 */
     statVal(v, fmt) {
