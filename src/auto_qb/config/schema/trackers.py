@@ -8,7 +8,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "触发后添加标签",
         "str",
         default="",
-        help="已触发 HR(下载量/比例达条件)但尚未满足做种时长/分享率时自动添加的标签; 支持 ${required_seeding_time} 变量; 留空 = 不添加"
+        help="进入 HR 管理(下载量/比例达条件)但还没达标时给种子打的标签; 支持 ${required_seeding_time} 变量; 留空 = 不打标"
     ),
     Field(
         "add_category",
@@ -30,7 +30,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "达标后添加标签",
         "str",
         default="",
-        help="做种时长已达要求 + 额外时间(或分享率达标)后添加的标签; 用于标记“HR 已完成”; 可自行删除, 本程序不会再添加",
+        help="HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 删掉后程序不会再自动添加",
     ),
     Field(
         "add_category_for_satisfied",
@@ -56,19 +56,19 @@ TRACKER_HR_FIELDS: Tuple[Field, ...] = (
         "time",
         default="3D",
         required=True,
-        help="站点要求的做种时长(如 3D = 3 天 / 12H / 1.5D); 达到该时长才算满足 HR"
+        help="站点要求的做种时长(如 3D = 3 天; 也支持 12H / 1.5D); 做满才算 HR 达标"
     ),
-    Field("required_share_ratio", "要求分享率", "float", default="0", help="上传量/下载量 达到该值也算满足 HR(与做种时长二选一); 0 = 不要求"),
+    Field("required_share_ratio", "要求分享率", "float", default="0", help="分享率达到该值也算 HR 达标(与做种时长满足其一即可); 0 = 不要求"),
     Field(
         "extra_seeding_time",
         "额外做种时间",
         "time",
         default="0H",
         unit_default="H",
-        help="缓冲量: 要求时长 + 额外时长 才判定达标(避免刚好卡在边界时被站点判定未达标)"
+        help="在要求时长之上再多做种这么久才判达标(留出缓冲, 避免刚好卡线被站点判未达标)"
     ),
     Field(
-        "condition", "HR 触发条件", "ratio", default="80%", help="下载比例(如 80%)或下载量(如 10MiB)达到该值即视为需要 HR 管理; 注意辅种(无下载量)不触发"
+        "condition", "HR 触发条件", "ratio", default="80%", help="开始 HR 管理的门槛: 下载比例达(如 80%)或下载量达(如 10MiB)就进入 HR 管理; 辅种(无下载量)不会触发"
     ),
 ) + HR_OUTPUT_FIELDS
 
@@ -79,7 +79,7 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "str_list",
         default=[],
         required=True,
-        help="按 hostname 精确匹配(含子域名), 例: hhanclub.net; 必填; 每行一个",
+        help="该站点的 tracker 域名(含子域名自动匹配), 如 hhanclub.net; 每行一个; 必填",
     ),
     Field("tags", "站点标签", "str_list", default=[], help="该站点的种子自动添加这些标签; 第一个标签同时用作日志/界面里的站点名"),
     Field(
@@ -87,7 +87,7 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "删除标签格式",
         "pattern_list",
         default=[],
-        help="支持 regex: 前缀与 :ignore_case 后缀(可组合), 例: regex:^BTS / 'M-Team:ignore_case'",
+        help="从该站点的种子上删除匹配的标签; 支持 regex:/ 前缀与 :ignore_case 后缀(可组合), 例: regex:^BTS / 'M-Team:ignore_case'",
         risk="匹配到的标签会从该站点的种子中删除",
     ),
     Field(
@@ -95,16 +95,16 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "站点分组",
         "str_list",
         default=[],
-        help="站点的分组归属(可多个, 供规则 tracker_group 条件筛选); 配置层概念, 不写种子、不加标签 —— 与 grouping 段的辅种种子分组无关; 组名自由填写, 无需预定义",
+        help="给站点起的分组名(可多个), 供规则里「站点分组」条件筛选; 只是配置概念, 不会写到种子上; 组名随意填, 不用预先定义",
     ),
     Field(
         "upload_speed_limit",
         "单种上传限速",
         "speed",
         default="0KiB/s",
-        help="种子添加时写入 qB 的单种限速; 0 = 不限速; 奇数值(如 2001KiB/s)视为手动设置, 本程序不覆盖",
+        help="该站点种子添加时即设置的上传限速; 0 = 不限速; 奇数值(如 2001KiB/s)视为你的手动限速, 本程序不覆盖",
     ),
-    Field("download_speed_limit", "单种下载限速", "speed", default="0KiB/s", help="同上, 作用于下载; 0 = 不限速"),
+    Field("download_speed_limit", "单种下载限速", "speed", default="0KiB/s", help="同上, 作用于下载方向; 0 = 不限速"),
     Field(
         "hr",
         "HR 规则",
@@ -119,13 +119,13 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "引用的规则",
         "rules_ref",
         default=[],
-        help="填写 @规则集 或 @规则集.规则名(可从右侧下拉选, 也可直接粘贴); 留空 = 该站点不执行任何规则——不会回退为\"执行全部启用规则\""
+        help="该站点要执行的规则: 填 @规则集 或 @规则集.规则名(可从下拉选, 也可直接粘贴); 留空 = 该站点不执行任何规则(不会回退为执行全部启用规则)"
     ),
     Field(
         "remove_similar_tags",
         "删除类似标签",
         "bool",
         default="false",
-        help="未配置时回退全局 自动化.删除类似标签 的值; 删除仅大小写不同的同名标签",
+        help="未配置时回退全局「删除类似标签」的值; 自动清理仅大小写不同的重复标签",
     ),
 )

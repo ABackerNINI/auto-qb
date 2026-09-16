@@ -200,6 +200,14 @@ button { font-family: inherit; }
 .topbar .brand { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: .2px; }
 .topbar .ver { padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--fg-dim);
   font-size: 11px; font-weight: 500; }
+/* W4 动态品牌: 顶栏 logo 改用 i-orbit 矢量卫星并放大 1.15 倍(30px→34.5px), 绕中心旋转(12s linear);
+ * "qb"字样略减(基础 17px → 14.5px); 系统偏好减弱动效时停转(总体视觉不变) */
+.topbar .brand-mark { width: 34.5px; height: 34.5px; border-radius: 0; box-shadow: none; overflow: visible; }
+.topbar .brand-orbit { width: 34.5px; height: 34.5px; transform-origin: 50% 50%;
+  animation: brand-orbit-spin 12s linear infinite; }
+.topbar .brand-name .qb { font-size: 14.5px; }
+@keyframes brand-orbit-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .topbar .brand-orbit { animation: none; } }
 .tabs { display: flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--bg-sunken); border: 1px solid var(--border); }
 .tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 15px; border: 0;
   border-radius: 999px; background: transparent; color: var(--fg-muted);

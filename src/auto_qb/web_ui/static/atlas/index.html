@@ -119,8 +119,8 @@
         <!-- 顶栏 -->
         <header class="topbar">
           <div class="brand">
-            <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
-            <span>auto-qb</span>
+            <span class="brand-mark"><svg class="ico brand-orbit" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-orbit"></use></svg></span>
+            <span class="brand-name">auto-<span class="qb">qb</span></span>
             <span class="ver">v{{ status.version || '—' }}</span>
           </div>
           <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
@@ -1426,8 +1426,7 @@
       <span class="sb-spacer"></span>
       <button class="sb-btn" title="qB 会话/累计流量 · DHT · 连接状态" @click="openStats()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
-      </button>
-<button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
+      </button><button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
       </button>
       

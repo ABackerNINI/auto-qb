@@ -1969,6 +1969,7 @@ const app = createApp({
     /* ---------------- 单种子视图交互(R08)与信息栏模式(R09) ---------------- */
     /* W4: 顶栏一级导航(分组/种子/追剧)入口 — 复用 viewMode 三态; 从设置页点击时先回到辅种页,
      * 列宽重实体化契约由 watch(page) 与 setViewMode 内的 $nextTick 各自兑底, 路径与既有切页一致 */
+     * 列宽重实体化契约由 watch(page) 与 setViewMode 内的 $nextTick 各自兜底, 路径与既有切页一致 */
     goView(mode) {
       if (this.page !== "groups") this.page = "groups";
       this.setViewMode(mode);
