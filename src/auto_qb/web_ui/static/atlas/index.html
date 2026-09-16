@@ -516,9 +516,6 @@
               <template v-for="col in visibleGroupCols" :key="col.key">
                 <div v-if="col.key === 'name'" class="g-name" :title="g.name">
                   <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-                  <span class="g-status" :class="'k-' + g.status.primary" :title="'组内状态: ' + g.status.text">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(g.status.primary)"></use></svg>
-                  </span>
                   <span class="g-name-text">{{ g.name }}</span>
                 </div>
                 <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !g.dlspeed }">{{ fmtSpeedOrDash(g.dlspeed) }}</div>
@@ -653,9 +650,6 @@
                  @contextmenu.prevent="openMemberMenu($event, m)">
               <template v-for="col in visibleTorrentCols" :key="col.key">
                 <div v-if="col.key === 'name'" class="g-name" :title="m.name">
-                  <span class="g-status" :class="'k-' + m.kind" :title="'状态: ' + kindText(m.kind)">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(m.kind)"></use></svg>
-                  </span>
                   <span class="g-name-text">{{ m.name }}</span>
                 </div>
                 <div v-else-if="col.key === 'site'" class="g-sites">
@@ -667,9 +661,9 @@
                   </span>
                   <span class="state-text">{{ kindText(m.kind) }}</span>
                 </div>
-                <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</div>
-                <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</div>
-                <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</div>
+                <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, numTone(m.dlspeed, statsServer && statsServer.dl_limit)]">{{ fmtSpeedOrDash(m.dlspeed) }}</div>
+                <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, numTone(m.upspeed, statsServer && statsServer.up_limit)]">{{ fmtSpeedOrDash(m.upspeed) }}</div>
+                <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, numTone(m.uploaded, m.size)]">{{ fmtSizeOrDash(m.uploaded) }}</div>
                 <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
                   <span v-if="m.category" class="cat-chip" :title="m.category">{{ m.category }}</span>
@@ -688,14 +682,14 @@
                 <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</div>
                 <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</div>
                 <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(m.added_on) }}</div>
-                <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="{ zero: !m.downloaded }">{{ fmtSizeOrDash(m.downloaded) }}</div>
+                <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</div>
                 <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ fmtSizeOrDash(m.amount_left) }}</div>
-                <div v-else-if="col.key === 'availability'" class="g-stat">{{ (m.availability || 0).toFixed(2) }}</div>
+                <div v-else-if="col.key === 'availability'" class="g-stat" :class="numTone(m.availability, 1)">{{ (m.availability || 0).toFixed(2) }}</div>
                 <div v-else-if="col.key === 'time_active'" class="g-stat">{{ fmtDuration(m.time_active) }}</div>
                 <div v-else-if="col.key === 'last_activity'" class="g-stat">{{ fmtTs(m.last_activity) }}</div>
                 <div v-else-if="col.key === 'completion_on'" class="g-stat">{{ fmtTs(m.completion_on) }}</div>
-                <div v-else-if="col.key === 'up_limit'" class="g-stat">{{ fmtLimitBytes(m.up_limit) }}</div>
-                <div v-else-if="col.key === 'dl_limit'" class="g-stat">{{ fmtLimitBytes(m.dl_limit) }}</div>
+                <div v-else-if="col.key === 'up_limit'" class="g-stat" :class="numTone(m.up_limit, m.up_limit)">{{ fmtLimitBytes(m.up_limit) }}</div>
+                <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
                 <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
                 <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">

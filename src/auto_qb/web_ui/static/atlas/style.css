@@ -414,6 +414,22 @@ button { font-family: inherit; }
 .g-stat.zero, .m-stat.zero { text-align: center; }
 /* 0 值只留极淡占位符(满屏 "0 B/s" 是噪声), 但仍占位保持列对齐 */
 .zero { color: var(--fg-dim); opacity: .35; }
+/* ---- TBL-03: 行状态底 + 数值色阶 ----
+ * 名称/数值文字的低透明状态底: 名称前状态图标移除后, 状态语义仍可沿行扫读。
+ * 取舍: 只染有语义色的状态(seeding/downloading/checking/error); paused/other 的语义色是灰
+ * (fg-dim), 大面积灰底是噪声不是信息 —— 保持无底, 状态列仍有图标+文字。与 .g-status 徽标
+ * 默认 surface-2 不同: 徽标是小面积元素, 灰底可接受; 整行文字列大面积铺灰不行。
+ * 色值全走现有 soft 令牌(.16 档); 圆角对无底单元格无可见影响, 不引入对齐偏移 */
+.group-row .g-name-text, .group-row .g-stat { border-radius: 6px; }
+.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat { background: var(--green-soft); }
+.group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat,
+.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat { background: var(--blue-soft); }
+.group-row.s-error .g-name-text, .group-row.s-error .g-stat { background: var(--error-soft); }
+/* 数值色阶(TBL-03): tone 背景优先于行状态底 —— 选择器同为 3 类但写在后面, 源顺序胜出;
+ * tone-high 用品牌强调底(accent-soft, .16 档), tone-low 用中性 surface-2 弱提示,
+ * 两者都与状态语义色不同族, 不会与同行名称列的状态底混淆 */
+.group-row .g-stat.tone-low { background: var(--surface-2); }
+.group-row .g-stat.tone-high { background: var(--accent-soft); }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
