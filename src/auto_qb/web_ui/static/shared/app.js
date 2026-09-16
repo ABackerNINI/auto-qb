@@ -2148,6 +2148,43 @@ const app = createApp({
       else this.toast("复制失败: 浏览器未授权剪贴板访问", "error");
     },
     /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
+    /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 → blob 下载(Bearer 走 header, 不能用 a href 直链;
+     * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流) */
+    async exportTorrent() {
+      this.menu.visible = false;
+      const hash = this.menu.hash;
+      if (!hash) return;
+      try {
+        const resp = await fetch(`/api/torrents/${hash}/export`, { headers: { Authorization: `Bearer ${this.token}` } });
+        if (resp.status === 401) {
+          this._logout("密钥无效或已更换");
+          return;
+        }
+        if (!resp.ok) {
+          const detail = await resp.json().catch(() => ({}));
+          throw new Error(detail.detail || `HTTP ${resp.status}`);
+        }
+        const buf = await resp.arrayBuffer();
+        const m = this.memberByHash.get(hash) || {};
+        const name = String(m.name || hash).replace(/["\\/]/g, "_") + ".torrent";
+        const url = URL.createObjectURL(new Blob([buf], { type: "application/x-bittorrent" }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        this.toast("已导出 .torrent", "ok", 2500);
+      } catch (e) {
+        if (!e.auth) this.toast("导出失败: " + e.message, "error", 8000);
+      }
+    },
+    /* 自动种子管理开关(种子页右键 R2 补遗): 复用 torrentCmd 回执链 */
+    autoTmmToggle() {
+      const m = this.menuTorrent();
+      this.torrentCmd("auto-tmm", { enable: !m.auto_tmm }, m.auto_tmm ? "关闭自动种子管理" : "开启自动种子管理");
+    },
     /* 右键菜单当前种子(SEED_ITEM 完整字段): 供菜单项动态文案/开关初值 */
     menuTorrent() {
       return this.memberByHash.get(this.menu.hash) || {};

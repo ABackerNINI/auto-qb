@@ -981,6 +981,12 @@
             <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列置底')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
             </div>
+            <div class="ctx-item" @click="autoTmmToggle()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
+            </div>
+            <div class="ctx-item" @click="exportTorrent()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
+            </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delTorrent()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该种子…
