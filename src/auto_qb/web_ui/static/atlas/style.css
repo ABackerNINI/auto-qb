@@ -1556,7 +1556,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
   font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 11.5px; line-height: 1.6;
   color: var(--fg-muted); white-space: pre-wrap; word-break: break-all; }
 
-<<<<<<< HEAD
+/* 底部状态栏(TBL-08)落地后, 原 rail 限速覆盖控件(临时覆盖表单)随信息栏一并退役;
+ * 限速能力改造为独立 modal 由波次三 SPD-04 承接(端点已齐: /api/speed/mode · /api/speed/override) */
 /* ================= 限速对照卡·入口按钮 + 限速修改弹窗(SPD-04) =================
  * qB 式「点击限速 → 弹窗修改」: 信息栏只留入口按钮, 表单与曲线启用提示收进弹窗
  * (复用 .modal/.add-dialog 视觉语言, .speed-dialog 仅调窄)。两方向都必填(0 = 不限)。
@@ -1572,7 +1573,3 @@ select option { background: var(--bg-elev); color: var(--fg); }
   min-width: 0; overflow-wrap: anywhere; }
 .speed-mode-line .ico { flex: 0 0 auto; color: var(--accent); }
 .speed-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 4px; }
-=======
-/* 底部状态栏(TBL-08)落地后, 原 rail 限速覆盖控件(临时覆盖表单)随信息栏一并退役;
- * 限速能力改造为独立 modal 由波次三 SPD-04 承接(端点已齐: /api/speed/mode · /api/speed/override) */
->>>>>>> agentTrae/develop
