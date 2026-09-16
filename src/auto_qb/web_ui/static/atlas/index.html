@@ -437,23 +437,10 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
               <span class="lbl">托管</span><span class="val">状态未知</span>
             </div>
-            <!-- 临时覆盖表单: 两方向都必填(后端语义: 两方向都设置, 0=不限); 曲线启用时为临时覆盖, 下一档位恢复 -->
-            <div class="rail-speed-ov">
-              <div class="rail-speed-inputs">
-                <input v-model="speedOverride.up" class="rail-speed-input" type="number" min="0" inputmode="numeric"
-                       placeholder="上行 KiB/s" aria-label="上行限速 KiB/s(0 为不限)">
-                <input v-model="speedOverride.down" class="rail-speed-input" type="number" min="0" inputmode="numeric"
-                       placeholder="下行 KiB/s" aria-label="下行限速 KiB/s(0 为不限)">
-              </div>
-              <button class="rail-speed-btn" :disabled="!speedOvReady || speedOverride.busy"
-                      title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedOverride">
-                <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
-                <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
-                {{ speedOverride.busy ? '提交中…' : '临时覆盖' }}
-              </button>
-              <p v-if="speedMode.curveEnabled" class="rail-speed-hint">曲线启用中: 覆盖为临时, 下一档位切换时恢复</p>
-              <p v-else class="rail-speed-hint">两方向都需填写 · 0 = 不限速</p>
-            </div>
+            <!-- 限速入口(SPD-04): 修改表单收进弹窗(qB 式: 点击限速 → 弹窗), 信息栏只留一个按钮 -->
+            <button class="rail-speed-open" title="修改全局限速(两方向都需填写, 0 = 不限)" @click.stop="openSpeedDialog">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
+            </button>
           </div>
         </aside>
 
@@ -1375,8 +1362,8 @@
                         <button class="ce-btn ghost small" @click="cfgCurvePointAdd(i, dir)">+ 添加档位</button>
                       </div>
 
-                      <!-- 阶梯折线预览: 横轴累计流量, 纵轴限速(阈值为区间上限, 末档持续到无穷)
-                           带 XY 刻度/网格线, 鼠标移入显示该位置所属档位的 (累计流量, 限速) -->
+                      <!-- 阶梯折线预览: 横轴累计流量(SPD-02: 按档位边界分段等宽, 末档边界后为 ∞ 提示区),
+                           纵轴限速(阈值为区间上限, 末档持续到无穷); 鼠标移入显示该位置所属档位的 (累计流量, 限速) -->
                       <div v-if="cfgCurveChartOf(i, dir)" class="ce-chart"
                            @mousemove="cfgChartHover($event, i, dir)" @mouseleave="cfgChartLeave()">
                         <!-- [ch] 别名技巧: 无构建链下避免把 chOf(i,dir) 重复写十几次 -->
@@ -1389,9 +1376,8 @@
                                     :x1="ch.padL" :x2="ch.w - ch.padR" :y1="tk.pos" :y2="tk.pos"></line>
                             </g>
                             <path class="ce-chart-area" :d="ch.area"></path>
-                            <line v-for="(p, j) in ch.points" :key="'tk' + j" class="ce-chart-tick"
-                                  :x1="ch.padL + (ch.w - ch.padL - ch.padR) * (p.t / ch.spanT)"
-                                  :x2="ch.padL + (ch.w - ch.padL - ch.padR) * (p.t / ch.spanT)"
+                            <line v-for="(tl, j) in ch.tierLines" :key="'tk' + j" class="ce-chart-tick"
+                                  :x1="tl.x" :x2="tl.x"
                                   :y1="ch.padT" :y2="ch.baseY"></line>
                             <path class="ce-chart-line" :d="ch.line"></path>
                             <g v-if="cfgChartHovered(i, dir)">
@@ -1416,7 +1402,7 @@
                             <span>限速 {{ cfg.chartHover.sLabel }}</span>
                           </div>
                           <div class="ce-chart-legend">
-                            <span class="ce-lg-x">横轴: 累计流量</span>
+                            <span class="ce-lg-x">横轴: 累计流量(每档等宽)</span>
                             <span class="ce-lg-y">纵轴: 限速</span>
                             <span class="ce-lg-note">{{ ch.note }}</span>
                           </div>
@@ -1754,6 +1740,46 @@
             <svg class="ico ico-sm" :class="{ spin: statsLoading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
           </button>
           <button class="ce-btn primary" @click="closeStats">关闭</button>
+        </div>
+      </div>
+    </div>
+    <!-- 限速修改弹窗(SPD-04): qB 式「点击限速 → 弹窗」; 复用 .modal/.add-dialog 视觉语言(.speed-dialog 调窄)。
+         打开时取 /api/speed/mode 回填 qB 当前值; 曲线启用状态提示保留在窗内; 提交沿用 submitSpeedOverride -->
+    <div v-if="speedOpen" class="modal-mask" @click.self="closeSpeedDialog">
+      <div class="modal add-dialog speed-dialog" role="dialog" aria-modal="true" aria-label="限速">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+          <span>限速</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeSpeedDialog">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div class="speed-mode-line" :title="speedMode.error || speedModeLine">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
+            <span>{{ speedMode.loaded ? speedModeLine : (speedMode.error || "正在加载状态…") }}</span>
+          </div>
+          <div class="speed-dialog-grid">
+            <label class="modal-field">
+              <span class="modal-field-label">上行 KiB/s</span>
+              <input v-model="speedOverride.up" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
+            </label>
+            <label class="modal-field">
+              <span class="modal-field-label">下行 KiB/s</span>
+              <input v-model="speedOverride.down" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
+            </label>
+          </div>
+          <p v-if="speedMode.curveEnabled" class="add-dialog-hint">曲线启用中: 覆盖为临时, 下一档位切换时恢复</p>
+          <p v-else class="add-dialog-hint">两方向都需填写 · 0 = 不限速</p>
+        </div>
+        <div class="modal-actions">
+          <button class="ce-btn ghost" @click="closeSpeedDialog">取消</button>
+          <button class="ce-btn primary" :disabled="!speedOvReady || speedOverride.busy"
+                  title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedDialog">
+            <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+            <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
+            {{ speedOverride.busy ? '提交中…' : '应用' }}
+          </button>
         </div>
       </div>
     </div>

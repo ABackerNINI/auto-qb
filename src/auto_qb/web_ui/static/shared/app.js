@@ -313,6 +313,7 @@ const app = createApp({
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
       speedMode: { loaded: false, curveEnabled: false, target: null, current: null, error: "" },
       speedOverride: { up: "", down: "", busy: false },  // 两方向都必填数字(后端语义: 两方向都设置, 0=不限)
+      speedOpen: false,  // SPD-04: 限速修改弹窗(qB 式「点击限速 → 弹窗」, 表单从信息栏收进窗内)
       // 分类/标签管理对话框(FE-2C2): GET /api/categories|tags 拉列表 + 新建行; 行级改路径/删除走既有确认/输入原语
       mgrOpen: "",           // "" | "category" | "tag"(同一时刻只开一个)
       mgrLoading: false,
@@ -854,6 +855,7 @@ const app = createApp({
       if (this.modal.visible) this.resolveModal(false);
       else if (this.addOpen) this.escAddTorrent();  // 添加种子对话框: 先收内部浮层(分类/标签下拉 → 位置面板), 再关对话框
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
+      else if (this.speedOpen) this.closeSpeedDialog();  // 限速弹窗(SPD-04): 与统计面板同层
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
@@ -1002,6 +1004,7 @@ const app = createApp({
       this.logs = { loading: false, error: "", loaded: false, lines: [], file: "", level: "", num: 300 };
       this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: "" };
       this.speedOverride = { up: "", down: "", busy: false };
+      this.speedOpen = false;
       this.cfgReset();  // 配置树同样是受保护内容, 一并清除(编辑器状态复位)
       this.page = "groups";
       this.searchQuery = "";
@@ -3169,7 +3172,7 @@ const app = createApp({
       }
     },
     async submitSpeedOverride() {
-      if (!this.speedOvReady || this.speedOverride.busy) return;
+      if (!this.speedOvReady || this.speedOverride.busy) return false;
       const up = Math.max(0, Math.round(Number(this.speedOverride.up)));
       const down = Math.max(0, Math.round(Number(this.speedOverride.down)));
       const text = `上 ${this.fmtLimit(up) || "不限速"} / 下 ${this.fmtLimit(down) || "不限速"}`;  // toast 保留"不限速"字样(TBL-02)
@@ -3184,6 +3187,7 @@ const app = createApp({
           this.toast(`已临时覆盖全局限速: ${text}`, "ok", 3000);
           this.speedOverride = { up: "", down: "", busy: false };
           await this.loadSpeedMode(true);  // 覆盖后刷新托管状态(qB 当前值已变)
+          return true;  // SPD-04: 供弹窗判断成功关窗
         } else {
           this.toast(`限速覆盖失败: ${r.error}`, "error", 8000);
         }
@@ -3192,6 +3196,26 @@ const app = createApp({
       } finally {
         this.speedOverride.busy = false;
       }
+      return false;
+    },
+    /* ---------------- 限速修改弹窗(SPD-04): qB 式「点击限速 → 弹窗修改」 ----------------
+     * 打开时取一次 /api/speed/mode 并回填 qB 当前生效值(KiB/s, 0 = 不限); 提交沿用 submitSpeedOverride,
+     * 成功即关窗, 失败留在窗内看报错并重试。
+     */
+    async openSpeedDialog() {
+      this.speedOpen = true;
+      await this.loadSpeedMode(true);  // 开窗取当前值(强制刷新, 不吃缓存)
+      const c = this.speedMode.current || {};
+      const pick = (v) => (v === undefined || v === null ? "" : String(v));
+      this.speedOverride.up = pick(c.upload_limit);
+      this.speedOverride.down = pick(c.download_limit);
+    },
+    closeSpeedDialog() {
+      this.speedOpen = false;
+    },
+    async submitSpeedDialog() {
+      const ok = await this.submitSpeedOverride();
+      if (ok) this.speedOpen = false;
     },
     /* ---------------- 历史流量弹层(今日流量面板入口; 天/月/年切换 + 悬停取值) ---------------- */
     async openHistory() {
