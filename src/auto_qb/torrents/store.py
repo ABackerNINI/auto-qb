@@ -49,7 +49,8 @@ class TorrentStore:
         self.using_fallback: bool = False
         self.validate_sample: Optional[Any] = None
         # qB 全局状态(sync/maindata 响应的 server_state: 会话/累计流量/DHT 节点等)
-        # 每轮原子替换只读引用, 供 Web /api/stats 透出; 降级全量路径置 None(前端空态)
+        # 每轮合并为新 dict 后原子替换引用(增量轮部分键不丢旧值), 供 Web /api/stats 透出;
+        # 降级全量路径置 None(前端空态)
         self.server_state: Optional[dict] = None
         # 本轮变化集
         self.delta_fields: Dict[str, FrozenSet[str]] = {}
@@ -108,10 +109,13 @@ class TorrentStore:
         full = bool(md.get("full_update"))
         self.need_validate = full
         # 全局状态捕获: qB 每轮 sync 响应都带 server_state(全量/增量皆然);
-        # 响应缺失时保留上次已知值(不误清)。整引用原子替换, Web 线程只读。
+        # 响应缺失时保留上次已知值(不误清)。合并语义(FIX-04a): 增量轮(rid>0)qB 可能只带
+        # 部分键(真机观察: 统计窗口仅累计流量正确、其余字段空值), 与上一轮旧值合并避免丢
+        # 字段; 全量轮键集完整, 合并结果与整包替换一致(server_state 键集在 qB 侧稳定、
+        # 无"键被移除"语义, 不引入陈旧键)。每轮生成新 dict 原子替换引用, Web 线程只读。
         if "server_state" in md:
             ss = md["server_state"]
-            self.server_state = dict(ss) if isinstance(ss, Mapping) else ss
+            self.server_state = {**(self.server_state or {}), **dict(ss)} if isinstance(ss, Mapping) else ss
         patches = md.get("torrents") or {}
         # 校验样本: 仅全量轮提供。注意 qB sync 响应的 **hash 是 torrents 字典的键**, 值内不含
         # hash(与 torrents/info 的数组元素不同) -> 校验前需补齐, 否则必报缺 'hash' 字段
