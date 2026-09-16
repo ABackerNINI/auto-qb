@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!--
+  杂志风视觉骨架 · delivery-artifact skill
+  <style> = 焊死的设计系统（配色 / 字体 / class），一律不改。
+  body 里是版式积木，按内容自由取舍 / 增删 / 重组；只用本骨架的 class，守 SKILL.md 的去 AI 感禁律。
+  竖向滚动 editorial 长文怎么搭见 references/magazine.md。
+-->
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>替换为文章标题</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1a1a1a; --paper:#fafaf7; --line:#e7e5e0; --mute:#6b6760; --accent:#b8553a; --twitter:#1d9bf0; }
+  body { font-family:'Inter','Noto Sans SC',sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .serif { font-family:'Noto Serif SC',Georgia,serif; }
+  .ornament { display:flex; align-items:center; justify-content:center; gap:14px; margin:48px 0; color:var(--mute); }
+  .ornament::before, .ornament::after { content:""; flex:1; max-width:60px; height:1px; background:var(--line); }
+  .article p { font-size:1.0625rem; line-height:1.8; color:#262421; margin:1.1em 0; max-width:65ch; }
+  .article h2 { font-family:'Noto Serif SC',serif; font-size:1.875rem; font-weight:700; margin:2.4em 0 0.8em; letter-spacing:-0.01em; }
+  .article blockquote { border-left:3px solid var(--accent); padding:0 0 0 20px; margin:1.6em 0; font-style:italic; color:var(--mute); font-family:'Noto Serif SC',serif; font-size:1.0625rem; line-height:1.7; }
+  .article a { color:var(--accent); text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:1px; }
+  .grain::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:0.4; background-image:radial-gradient(circle at 12% 18%, rgba(106,92,56,0.05), transparent 45%), radial-gradient(circle at 88% 72%, rgba(106,92,56,0.04), transparent 50%); }
+</style>
+</head>
+<body class="grain">
+<article class="article max-w-[720px] mx-auto px-6 pt-20 pb-32">
+
+  <!-- ════ 版式积木 · 按内容自由取舍 / 增删 / 重组；只用本骨架的 class ════ -->
+
+  <!-- 积木 · 信息卡（可选）：一张带图标 + 链接的引用卡。引用外部出处 / 关联资料时放在 hero 之上；纯原创文章删掉 -->
+  <a href="#" class="!no-underline group block mb-10 rounded-2xl border border-[var(--line)] bg-white/70 hover:bg-white transition-colors p-4 flex items-start gap-4">
+    <div class="shrink-0 w-10 h-10 rounded-full bg-[var(--twitter)] grid place-items-center text-white">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+    </div>
+    <div class="min-w-0 flex-1">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mute)] mb-1">卡片标签</div>
+      <div class="text-[14px] font-medium text-[var(--ink)] leading-snug">一句话说明这张卡指向什么</div>
+      <div class="text-[12px] text-[var(--mute)] mt-1 break-all group-hover:text-[var(--accent)] transition-colors">链接占位  ↗</div>
+    </div>
+  </a>
+
+  <!-- 积木 · kicker：一行 accent 小字，放在大标题之上，定栏目 / 日期 / 类型 -->
+  <div class="text-[11px] font-medium tracking-[0.22em] uppercase text-[var(--accent)] mb-5">栏目 · 日期 · 类型</div>
+
+  <!-- 积木 · hero 标题：serif 大字，关键处可点一个 accent 词 -->
+  <h1 class="serif text-[3rem] leading-[1.08] font-black tracking-tight mb-5">
+    文章主标题，关键处<span class="italic font-bold" style="color:var(--accent)">点一个词</span>
+  </h1>
+
+  <!-- 积木 · 导语：比正文大一号的浅色字，一两句话定调 -->
+  <p class="text-[1.125rem] leading-relaxed text-[var(--mute)] font-light max-w-[60ch] mb-8">
+    导语 —— 用一两句话说清这篇文章讲什么、给谁看、核心观点是什么。
+  </p>
+
+  <!-- 积木 · 署名行：头像色块 + 作者 + 日期 + 阅读时长，底部 hairline 收口 hero 区 -->
+  <div class="flex items-center gap-3 text-[12px] text-[var(--mute)] pb-12 border-b border-[var(--line)]">
+    <div class="w-8 h-8 rounded-full" style="background:var(--accent)"></div>
+    <span class="font-medium text-[var(--ink)]">作者名</span>
+    <span>·</span><span>日期</span>
+    <span>·</span><span>N 分钟阅读</span>
+  </div>
+
+  <!-- 积木 · 章节标题 + 正文：h2 是 serif，p 自动套 article 排版。按内容复制多组 -->
+  <h2>章节标题</h2>
+  <!-- 首段可选 drop cap：句首单字用 serif 大字 + float-left，一篇只用一次 -->
+  <p><span class="serif font-bold text-[1.5rem] float-left mr-2 leading-none mt-1.5" style="color:var(--accent)">首</span>段正文 —— 句首单字做首字下沉。正文段落自动套 article 样式，65ch 限宽、1.8 行高。一段讲清一个意思。</p>
+  <p>普通正文段落。需要强调时用 <strong class="font-semibold text-[var(--ink)]">行内加粗</strong>，按内容复制段落即可。</p>
+
+  <!-- 积木 · 引用块 + 行内代码：blockquote 自动套左侧 accent 边线 + 斜体；code 是行内代码 -->
+  <h2>章节标题</h2>
+  <p>正文里嵌行内代码用 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">code 占位</code>，需要时保留。</p>
+  <blockquote>引用 / 金句放这里，自动是斜体 + 左侧 accent 边线。<br/>强调全文的一句话时用，不必每篇都有。</blockquote>
+
+  <!-- 积木 · ornament 分隔：章节之间的居中小装饰，用来换段叙事节奏 -->
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <!-- 积木 · 收尾卡片：文末的行动 / 致谢卡；图标用 inline SVG，不用 emoji；不需要可删 -->
+  <div class="rounded-2xl border border-[var(--line)] bg-white/60 p-6 mt-12 flex items-start gap-4">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" class="shrink-0 mt-0.5" style="color:var(--accent)"><rect x="3" y="5" width="18" height="14"/><path d="M3 6l9 7 9-7"/></svg>
+    <div>
+      <div class="font-semibold text-[var(--ink)] mb-1">收尾卡标题 —— 一句行动号召或致谢。</div>
+      <div class="text-[13px] text-[var(--mute)]">补充说明或链接占位</div>
+    </div>
+  </div>
+</article>
+</body>
+</html>

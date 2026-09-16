@@ -1,0 +1,8 @@
+interface:
+  display_name: "AutoClaw Design Capability"
+  short_description: "UI/PPT design, redesign, routing, systems, and craft rules."
+  brand_color: "#2563EB"
+  default_prompt: "Use $autoclaw-design-capability to route and complete this UI/PPT design task with the matching AutoClaw rules and resources."
+
+policy:
+  allow_implicit_invocation: true

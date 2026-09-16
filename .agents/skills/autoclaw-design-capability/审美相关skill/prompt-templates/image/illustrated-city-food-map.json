@@ -1,0 +1,21 @@
+{
+  "id": "illustrated-city-food-map",
+  "surface": "image",
+  "title": "Illustrated City Food Map",
+  "summary": "Generates a hand-drawn, watercolor-style tourist map featuring numbered local food specialties, landmarks, and a legend.",
+  "category": "Illustration",
+  "tags": [
+    "food",
+    "nature"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "{\n  \"type\": \"illustrated map infographic\",\n  \"style\": \"{argument name=\\\"art style\\\" default=\\\"watercolor and ink hand-drawn illustration on vintage parchment\\\"}\",\n  \"title_section\": {\n    \"text\": \"{argument name=\\\"city name\\\" default=\\\"Chengdu\\\"} {argument name=\\\"map title\\\" default=\\\"Foodie Adventure Map\\\"}\",\n    \"mascot\": \"cartoon red chili pepper wearing sunglasses and giving a thumbs up\"\n  },\n  \"border\": \"{argument name=\\\"border decoration\\\" default=\\\"vine of green leaves and red chili peppers\\\"}\",\n  \"layout\": {\n    \"background\": \"textured beige parchment paper with yellow roads, blue rivers, and green park areas\",\n    \"sections\": [\n      {\n        \"title\": \"landmarks\",\n        \"count\": 6,\n        \"illustrations\": [\"traditional pavilion\", \"traditional monastery\", \"modern skyscraper with climbing panda\", \"tall TV tower\", \"traditional gate\", \"industrial buildings\"],\n        \"labels\": \"{argument name=\\\"landmark labels\\\" default=\\\"People's Park, Wenshu Monastery, IFS, TV Tower, Kuanzhai Alley, Eastern Memory\\\"}\"\n      },\n      {\n        \"title\": \"food_spots\",\n        \"count\": 12,\n        \"illustrations\": [\"mapo tofu\", \"dumplings in chili oil\", \"skewers in pot\", \"sticky rice balls\", \"egg baking cake\", \"nine-grid hotpot\", \"sweet potato noodles\", \"cold skewers\", \"spicy mixed dish\", \"covered tea bowl\", \"ice jelly dessert\", \"spicy rabbit heads\"],\n        \"labels\": \"{argument name=\\\"food spot labels\\\" default=\\\"1 Chen Mapo Tofu, 2 Zhong Dumplings, 3 Chunxi Road, 4 Kuanzhai Alley · Three Cannon Balls, 5 Jianshe Road · Ye Popo Baked Cake, 6 Yulin Road · Xiaolongkan Hotpot, 7 Xiangxiang Alley · Intestine Noodle, 8 Wuhouci Street · Bobo Chicken, 9 Eastern Memory · Spicy Fire, 10 People's Park · Heming Teahouse, 11 Jinli Street · Ice Jelly, 12 Shuangliu Mom Rabbit Head\\\"}\"\n      },\n      {\n        \"title\": \"{argument name=\\\"legend title\\\" default=\\\"Legend\\\"}\",\n        \"position\": \"bottom-right\",\n        \"count\": 5,\n        \"items\": [\"red dot\", \"green house\", \"green tree\", \"blue line\", \"yellow double line\"],\n        \"labels\": \"{argument name=\\\"legend labels\\\" default=\\\"Food spots, Landmarks, Parks & green spaces, Rivers & lakes, Main roads\\\"}\"\n      }\n    ],\n    \"centerpiece\": \"giant panda sitting and eating bamboo\",\n    \"bottom_right_extras\": [\"vintage compass rose with N, S, E, W\", \"disclaimer text '{argument name=\\\"warm tip\\\" default=\\\"Warm tip: pace yourself with spicy food!\\\"}' with a red chili pepper icon\"]\n  },\n  \"text_language\": \"{argument name=\\\"text language\\\" default=\\\"match user conversation language\\\"}\"\n}",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "皮皮特",
+    "url": "https://x.com/mm_zzm44854/status/2045861258520568230#reversed-1"
+  }
+}

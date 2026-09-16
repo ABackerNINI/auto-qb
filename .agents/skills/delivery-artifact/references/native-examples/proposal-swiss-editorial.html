@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Native HTML archetype 扩库 · 修改提案</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --ink: #111;
+    --ink-soft: #4a4a4a;
+    --ink-faint: #8a8a8a;
+    --paper: #fafaf7;
+    --rule: #d6d3cc;
+    --rule-soft: #ebe9e3;
+    --accent: #0033a0;          /* IKB-ish */
+    --accent-soft: #e6ecf7;
+    --warn: #b8531c;
+    --good: #2d6a4f;
+    --muted-bg: #f3f1ec;
+    --code-bg: #f1efe9;
+    --serif: "Iowan Old Style", "Source Serif Pro", Georgia, "Songti SC", serif;
+    --sans: "Inter Tight", -apple-system, "PingFang SC", sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+
+  /* layout: sticky left TOC + main (eating our own dogfood = docs-page archetype) */
+  .shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr) 200px;
+    min-height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 36px 20px 36px 28px;
+    border-right: 1px solid var(--rule-soft);
+    font-size: 13px;
+  }
+  .sidebar h1 {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 590;
+    margin: 0 0 4px;
+    line-height: 1.25;
+  }
+  .sidebar .meta {
+    color: var(--ink-faint);
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+  }
+  .sidebar ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: toc;
+  }
+  .sidebar li {
+    counter-increment: toc;
+    margin: 4px 0;
+  }
+  .sidebar li::before {
+    content: counter(toc, decimal-leading-zero);
+    color: var(--ink-faint);
+    font-family: var(--mono);
+    font-size: 10px;
+    margin-right: 8px;
+  }
+  .sidebar a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .sidebar a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main {
+    padding: 56px 64px 120px;
+    max-width: 820px;
+  }
+  main > section { margin-bottom: 56px; }
+  main > section:last-child { margin-bottom: 0; }
+
+  .rail {
+    padding: 36px 24px;
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-family: var(--mono);
+    line-height: 1.5;
+  }
+  .rail strong { color: var(--ink-soft); font-weight: 500; display: block; margin-bottom: 4px; }
+  .rail .legend-row { margin-bottom: 12px; }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 26px;
+    font-weight: 590;
+    line-height: 1.2;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  h2::before {
+    content: attr(data-num);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--ink-faint);
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 590;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 28px 0 10px;
+    color: var(--ink-soft);
+  }
+  h4 {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 590;
+    margin: 18px 0 6px;
+  }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #5a3e00;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    background: var(--code-bg);
+    border-left: 2px solid var(--accent);
+    padding: 14px 18px;
+    margin: 12px 0 16px;
+    overflow-x: auto;
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid var(--rule-soft);
+    margin: 24px 0;
+  }
+  .lede {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin: 0 0 28px;
+  }
+
+  /* source tag chips */
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    vertical-align: middle;
+    margin-right: 6px;
+    line-height: 1.5;
+  }
+  .tag.canon { color: var(--good); }
+  .tag.obs   { color: var(--accent); }
+  .tag.syn   { color: var(--warn); }
+  .tag.op    { color: #8a3ac9; }
+
+  /* matrix table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 8px 0 18px;
+  }
+  th, td {
+    border-bottom: 1px solid var(--rule-soft);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    font-weight: 590;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 11px;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+  }
+  td.cell-state { font-family: var(--mono); font-size: 12px; }
+  .cell-have { color: var(--good); }
+  .cell-add  { color: var(--accent); font-weight: 590; }
+  .cell-skip { color: var(--ink-faint); }
+  .cell-rule { color: var(--warn); }
+
+  /* before/after diff */
+  .diff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 14px 0 18px;
+  }
+  .diff > div {
+    background: var(--muted-bg);
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .diff .label {
+    font-family: var(--sans);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    background: transparent;
+    padding: 0 0 4px;
+    margin: 0;
+  }
+  .diff-before .label::before { content: "— before · "; color: var(--warn); }
+  .diff-after  .label::before { content: "+ after  · "; color: var(--good); }
+  .diff-before { border-left: 2px solid var(--warn); }
+  .diff-after  { border-left: 2px solid var(--good); }
+
+  /* axis diagram */
+  .axes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 14px 0 22px;
+  }
+  .axes .axis {
+    border: 1px solid var(--rule);
+    padding: 14px 16px;
+  }
+  .axes .axis h4 { margin: 0 0 8px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+  .axes .axis .vals { font-family: var(--serif); font-size: 18px; font-weight: 500; }
+  .axes .axis .vals span { color: var(--ink); }
+  .axes .axis .vals span + span::before { content: " / "; color: var(--rule); padding: 0 2px; font-weight: 300; }
+  .axes .axis .note { font-size: 12px; color: var(--ink-faint); margin-top: 6px; line-height: 1.45; }
+
+  blockquote {
+    border-left: 2px solid var(--accent);
+    margin: 14px 0;
+    padding: 4px 14px;
+    color: var(--ink-soft);
+    background: var(--accent-soft);
+    font-size: 14px;
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+
+  .file-list {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: var(--code-bg);
+    padding: 14px 18px;
+    margin: 8px 0 14px;
+  }
+  .file-list .op-add  { color: var(--good); }
+  .file-list .op-mod  { color: var(--accent); }
+  .file-list .op-mv   { color: var(--warn); }
+
+  @media (max-width: 980px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule-soft); }
+    .rail { display: none; }
+    main { padding: 32px 24px 80px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <nav class="sidebar">
+    <h1>Native archetype 扩库</h1>
+    <div class="meta">提案 · 2026-05-25</div>
+    <ol>
+      <li><a href="#tldr">TL;DR</a></li>
+      <li><a href="#legend">来源标注图例</a></li>
+      <li><a href="#retract">自我撤回 — 上轮二维矩阵错了</a></li>
+      <li><a href="#taxonomy">真·三轴正交分解</a></li>
+      <li><a href="#matrix">当前 vs 目标 矩阵</a></li>
+      <li><a href="#change-a">改动 A · Native 库 +2 份</a></li>
+      <li><a href="#change-b">改动 B · SKILL.md 加 Stage 路由</a></li>
+      <li><a href="#change-c">改动 C · craft 文档升级</a></li>
+      <li><a href="#nongoals">Non-goals</a></li>
+      <li><a href="#verify">验证计划</a></li>
+      <li><a href="#files">文件清单</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="tldr">
+      <p class="meta" style="font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-faint);margin:0 0 4px;">PROPOSAL · DELIVERY-ARTIFACT · v3</p>
+      <h2 data-num="00 · TL;DR">解决 Native 范型库结构单调 → 输出永远窄框</h2>
+      <p class="lede">现状只有 2 份范型(都是单列流)→ LLM 没有结构 prior → 不管选什么形态最后都堆成中间一根窄柱。本轮补 2 份(侧栏 + composed data report),把一根轴变成三根。重型形态(原型 / 动画 / 海报)<strong>路由出去</strong>,不内化。</p>
+      <ul>
+        <li><strong>改动 A</strong>:<code>references/native-examples/</code> 加 <code>docs-page</code>(侧栏)+ <code>clinical-case-report</code>(composed data report),都从 open-design Apache-2.0 同源</li>
+        <li><strong>改动 B</strong>:<code>SKILL.md</code> 第一步加路由 — Stage 形态(iOS 原型 / motion / infographic)→ <code>huashu-design</code> 外部 skill</li>
+        <li><strong>改动 C</strong>:<code>craft/measure-and-canvas.md</code> → <code>craft/structure-and-canvas.md</code>,加 Navigation 轴决策树</li>
+      </ul>
+    </section>
+
+    <section id="legend">
+      <h2 data-num="01 · 来源">每条断言都标</h2>
+      <p>下文每段技术断言前缀一个 chip,你能直接看出我是引人家结论 / 看到的事实 / 自己推的 / 自己的偏好。</p>
+      <table>
+        <thead>
+          <tr><th>chip</th><th>含义</th><th>样本</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="tag canon">CANON</span></td><td>外部权威 / subagent 调研结论</td><td>「3 轴正交」来自 Explore subagent 跨 200+ HTML 样本归纳</td></tr>
+          <tr><td><span class="tag obs">OBS</span></td><td>本仓库 / 三个 reference 库的直接观察</td><td>「现 native-examples 只有 2 份且都是 prose」可 <code>ls references/native-examples/</code> 验</td></tr>
+          <tr><td><span class="tag syn">SYN</span></td><td>从已有规则推导(可能错)</td><td>「Stage 不进 Native = 因为 LLM 学了会误用 position:fixed」</td></tr>
+          <tr><td><span class="tag op">OP</span></td><td>我的偏好,无外部依据</td><td>「2 份比 3 份好」「dashboard 那格留空」</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="retract">
+      <h2 data-num="02 · 撤回">上一轮我画的二维矩阵是穿小鞋</h2>
+      <p><span class="tag op">OP</span> 我上轮提的「调性 × 结构」矩阵:</p>
+      <pre>            单列(prose)    侧栏(sidebar)    多区(grid)
+暖人文      ✅              空              空
+冷技术      ✅              新增            新增
+编辑混排    空              空              新增</pre>
+      <p>错在两点:</p>
+      <ul>
+        <li><strong>横轴不正交</strong>。单列 / 侧栏 / 多区是同一根轴(「结构复杂度 / 导航密度」)的三档 Likert 刻度,不是三个独立维度。我把刻度装成正交列,是粉饰。</li>
+        <li><strong>集合不完备</strong>。13 份打开过的 demo 里至少 5 类没进矩阵:iOS 设备框、海报式 infographic、对比评审卡、学术边注、asymmetric editorial。</li>
+      </ul>
+      <p><span class="tag op">OP</span> 直接撤回,这一轮重做。</p>
+    </section>
+
+    <section id="taxonomy">
+      <h2 data-num="03 · 三轴">真正的正交分解</h2>
+      <p><span class="tag canon">CANON</span> Explore subagent 跨 open-design(200+ 份)/ html-effectiveness(20 份)/ huashu-design(10 份)逐份抽 <code>grid-template-columns</code> + 视口绑定方式 + 内容打包方式,归纳出三根真正独立可变的轴:</p>
+      <div class="axes">
+        <div class="axis">
+          <h4>Axis 1 · Viewport</h4>
+          <div class="vals"><span>Scroll</span><span>Stage</span></div>
+          <div class="note">标准文档流(<code>body</code> 滚) vs 固定全屏舞台(<code>position:fixed; inset:0</code>)</div>
+        </div>
+        <div class="axis">
+          <h4>Axis 2 · Navigation</h4>
+          <div class="vals"><span>Linear</span><span>Branching</span></div>
+          <div class="note">顺读 vs 侧栏 nav + 随机访问</div>
+        </div>
+        <div class="axis">
+          <h4>Axis 3 · Content</h4>
+          <div class="vals"><span>Prose</span><span>Data</span><span>Visual</span></div>
+          <div class="note">叙述文本 / 表格-指标-列表 / 画布-SVG-图像</div>
+        </div>
+      </div>
+      <p><span class="tag canon">CANON</span> 为什么这三根真正交:</p>
+      <blockquote>
+        <p>Stage × Linear × Visual(huashu c1)和 Scroll × Branching × Prose(docs-page)同时存在 → 证明 Viewport 跟 Navigation 独立。Scroll × Linear × Prose(kami)和 Scroll × Branching × Data(dashboard)证明 Navigation 跟 Content 独立。Stage × Linear × Visual(c1)和 Scroll × Linear × Prose(kami)证明 Viewport 跟 Content 独立。</p>
+      </blockquote>
+      <p><span class="tag canon">CANON</span> <strong>「调性」(暖/冷/瑞士/学术)不是独立轴</strong>,是前三轴选定后由排版纪律派生的高层风格 — 不入决策树,不该当矩阵维度。</p>
+    </section>
+
+    <section id="matrix">
+      <h2 data-num="04 · 矩阵">9 格有效空间 · 我们目前 1 格</h2>
+      <p><span class="tag canon">CANON</span> 2 × 2 × 3 = 12 格,其中 <strong>Stage × Branching = 反模式</strong>(舞台空间被侧栏吃掉)→ 实际 9 格有效。</p>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th></th>
+            <th>Prose</th>
+            <th>Data</th>
+            <th>Visual</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td rowspan="2"><strong>Scroll</strong></td>
+            <td>Linear</td>
+            <td class="cell-state cell-have">✅ kami + runbook</td>
+            <td class="cell-state cell-add">🆕 clinical-case-report</td>
+            <td class="cell-state cell-skip">— 跳过(三库无样本)</td>
+          </tr>
+          <tr>
+            <td>Branching</td>
+            <td class="cell-state cell-add">🆕 docs-page</td>
+            <td class="cell-state cell-rule">⚠ 留空</td>
+            <td class="cell-state cell-skip">— 跳过</td>
+          </tr>
+          <tr>
+            <td rowspan="2"><strong>Stage</strong></td>
+            <td>Linear</td>
+            <td class="cell-state cell-skip">→ huashu</td>
+            <td class="cell-state cell-skip">→ huashu</td>
+            <td class="cell-state cell-skip">→ huashu(c1 iOS / c5 海报)</td>
+          </tr>
+          <tr>
+            <td>Branching</td>
+            <td class="cell-state cell-rule" colspan="3">⚠ 反模式 · 死格</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>逐格判断</h3>
+      <ul>
+        <li><span class="tag obs">OBS</span> <strong>Scroll × Linear × Prose</strong> — <code>kami-parchment</code>(暖)+ <code>eng-runbook</code>(冷)已占,双范型够。</li>
+        <li><span class="tag op">OP</span> <strong>Scroll × Linear × Data</strong> — 选 <code>clinical-case-report</code>(open-design,Apache)。subagent 比对 invoice / clinical / resume-modern / finance-report 后判定:clinical 是唯一同时满足「无 shadow / 1px hairline / serif print-journal feel / 无 KPI 卡」的;invoice 有阴影,finance-report 堆 KPI 卡(违反 SKILL.md 硬约束),resume-modern 用 Tailwind(违反单文件自包含)。</li>
+        <li><span class="tag op">OP</span> <strong>Scroll × Branching × Prose</strong> — 选 <code>docs-page</code>(open-design,Apache)。三栏(240px nav / 1fr main / 220px mini-TOC),GitBook 经典,最像用户截图那份 worktree-investigation。</li>
+        <li><span class="tag op">OP</span> <strong>Scroll × Branching × Data 留空</strong> — 三库里这格最佳样本是 <code>dashboard/example.html</code>,但 SKILL.md 硬约束「不堆 KPI 卡墙」、Native checklist P0 写「不是 dashboard」。subagent 机械填格推荐了它,被我拒。承认 native 语义下这格罕见(报告 + 侧栏 nav + 不堆卡 = 非常窄的子集,等遇到需求再补)。</li>
+        <li><span class="tag syn">SYN</span> <strong>整个 Stage 半边路由出去</strong> — Stage 形态(<code>position:fixed</code> + absolute 排版)是 kiosk / 原型 / 海报的工程模式,不是「文档」。把 c1 / c5 vendor 进 Native 库,LLM 会学到「写报告也能 fixed 全屏定位」,误用风险高。Stage 形态在「第一步:选介质」里跟 PDF 平行路由出去,Native 库内只管 Scroll 这半边 6 格。</li>
+      </ul>
+
+      <p><span class="tag op">OP</span> <strong>结论</strong>:本轮 Native 库从 2 份扩到 4 份,覆盖 4/6 Scroll 半边格;Stage 半边 3 格全路由 huashu;留 2 格(2 个 Visual + dashboard 那格)有意识不补。</p>
+    </section>
+
+    <section id="change-a">
+      <h2 data-num="05 · 改动 A">Native 库 +2 份</h2>
+
+      <h3>新增文件</h3>
+      <div class="file-list">
+<span class="op-add">+ references/native-examples/docs-page.html</span>              ← 拷自 open-design (Apache-2.0)
+<span class="op-add">+ references/native-examples/clinical-case-report.html</span>    ← 拷自 open-design (Apache-2.0)
+<span class="op-mod">M references/native-examples/SOURCE.md</span>                    ← 表格里加 2 行
+      </div>
+
+      <h3><code>SOURCE.md</code> 加这两行</h3>
+      <div class="diff">
+        <div class="diff-before">
+<div class="label">SOURCE.md 现表格</div>| 文件 | 上游路径 | 说明 |
+|---|---|---|
+| doc-kami-parchment.html | skills/doc-kami-parchment/example.html | 暖羊皮纸编辑文档 |
+| eng-runbook.html | plugins/_official/examples/eng-runbook/example.html | 深色技术运维手册 |</div>
+        <div class="diff-after">
+<div class="label">SOURCE.md 新表格</div>| 文件 | 上游路径 | archetype |
+|---|---|---|
+| doc-kami-parchment.html | skills/doc-kami-parchment/example.html | Scroll × Linear × Prose · 暖人文 |
+| eng-runbook.html | plugins/_official/examples/eng-runbook/example.html | Scroll × Linear × Prose · 冷技术 |
+| docs-page.html | design-templates/docs-page/example.html | Scroll × Branching × Prose · GitBook 三栏 |
+| clinical-case-report.html | design-templates/clinical-case-report/example.html | Scroll × Linear × Data · 印刷期刊 report |</div>
+      </div>
+
+      <p><span class="tag obs">OBS</span> 两份新文件 <strong>同许可同上游同 commit</strong>(Apache-2.0 / nexu-io/open-design / 同 SOURCE.md 已声明的 commit),零许可文件膨胀。</p>
+
+      <h3>clinical-case-report 的小注意</h3>
+      <p><span class="tag obs">OBS</span> 报告里红色左 border 用在 medical alerts(data-semantic,非装饰)。 <span class="tag op">OP</span> 在 SOURCE.md 备注里加一句「该范型的 alert 红 border 是语义而非装饰,LLM 不该照搬到非告警场景」,防止误学。</p>
+    </section>
+
+    <section id="change-b">
+      <h2 data-num="06 · 改动 B">SKILL.md 第一步加 Stage 路由</h2>
+
+      <h3>位置</h3>
+      <p><span class="tag obs">OBS</span> 现 <code>SKILL.md</code> 第一步「选介质(HTML / PDF)」只 6 行,加一段平行分支。</p>
+
+      <div class="diff">
+        <div class="diff-before">
+<div class="label">当前</div>## 第一步:选介质(HTML / PDF)
+
+默认 HTML —— HTML 能模拟绝大多数
+「看起来像文档」的场景。用户明确要
+PDF(打印 / 文件附件 / PDF reader
+阅读)改读 references/pdf-creator/
+pdf-creator.md,按它的流程走。</div>
+        <div class="diff-after">
+<div class="label">新版</div>## 第一步:选介质 / 形态例外
+
+默认 HTML(走第二步)。两个例外:
+
+- 用户明确要 PDF(打印 / 文件附件)
+  → references/pdf-creator/pdf-creator.md
+
+- 用户要 iOS / 手机原型、motion 动画、
+  印刷级 infographic、kiosk 全屏舞台
+  (Stage 形态:position:fixed 视口锁定)
+  → 外部 skill: huashu-design
+  (npx skills add alchaincyf/huashu-design)
+  本 skill 不内化此形态。</div>
+      </div>
+
+      <p><span class="tag op">OP</span> 没列具体触发词数组(诸如 "iOS / 手机 / mockup / 海报 / kiosk"),按 <code>prompt-engineering</code> bad smell #3「过拟合枚举」原则,讲一次原则就够,LLM 自己推断。</p>
+
+      <h3>SKILL.md triggers 顺手加</h3>
+      <div class="diff">
+        <div class="diff-before">
+<div class="label">triggers 当前</div>triggers:
+  - html
+  - 网页
+  - artifact
+  - 制品
+  - mockup
+  - pdf
+  - 打印</div>
+        <div class="diff-after">
+<div class="label">triggers 新增</div>triggers:
+  - html
+  - 网页
+  - artifact
+  - 制品
+  - mockup
+  - pdf
+  - 打印
+  - 原型
+  - 动画
+  - infographic</div>
+      </div>
+      <p><span class="tag op">OP</span> 这三个触发词目的是让本 skill <strong>被加载</strong>,然后第一步路由把它转走 — 而不是漏掉触发让用户拿到通用回答。</p>
+    </section>
+
+    <section id="change-c">
+      <h2 data-num="07 · 改动 C">craft 文档升级 — 加 Navigation 轴</h2>
+
+      <h3>改名</h3>
+      <div class="file-list">
+<span class="op-mv">R references/craft/measure-and-canvas.md → references/craft/structure-and-canvas.md</span>
+      </div>
+      <p><span class="tag op">OP</span> 改名理由:旧文档只处理「画布宽度 / measure」,是一根轴;新文档要承担「Navigation 维度」 + 原有「Content 宽度」两根轴的决策。原名词太窄。</p>
+
+      <h3>新文档结构(标题级)</h3>
+      <pre># Structure and Canvas
+
+## 核心区分(Prose vs Data vs Visual)        ← 原有,保留
+## 何时锁宽度(measure 65ch 决策)            ← 原有,保留
+## 何时加侧栏 nav(Navigation 决策树)        ← 新增 §
+## CSS escape hatch · .bleed / .full-bleed   ← 原有,保留
+## 反模式 / lint                              ← 原有,扩展
+## 来源标注                                   ← 原有,保留</pre>
+
+      <h3>新增 § 内容草拟</h3>
+      <pre>## 何时加侧栏 nav(Navigation 决策树)
+
+<span style="color:var(--good);">[CANONICAL · Explore subagent 跨 200+ HTML 样本归纳]</span>
+触发任一条件 → 走 Branching(sticky left TOC + main):
+
+- 章节 ≥ 4(用户能数得过来 = 不需要 nav;数不过来 = 需要)
+- 用户提到「目录 / TOC / 章节导航 / 索引」
+- 内容是技术文档 / API / 多层级手册 / 长 explainer
+- 同一文档需要被反复访问(reference doc),不是一次性读完
+
+否则走 Linear(单列顺读)。
+
+参考范型:
+- Scroll × Branching × Prose: references/native-examples/docs-page.html
+- 反例(不走 Branching): references/native-examples/eng-runbook.html
+  (技术内容,但章节 ≤ 3,顺读即可,加 nav = overkill)
+
+侧栏 CSS 约定(放进 :root 一起 token 化):
+  --nav-width: clamp(200px, 18vw, 260px);
+  --main-width: minmax(0, 1fr);
+  --rail-width: clamp(180px, 16vw, 220px);  /* 可选第三栏 mini-TOC */</pre>
+
+      <h3>反模式段扩两条</h3>
+      <ul>
+        <li><span class="tag syn">SYN</span> <strong>Stage 混入 Scroll 文档</strong> — Native 文档绝不用 <code>position:fixed</code> + absolute 全屏定位。那是 Stage 形态(kiosk / 原型 / 海报),已路由到 huashu-design,不在本 skill。</li>
+        <li><span class="tag syn">SYN</span> <strong>侧栏 nav 带数据 KPI 卡</strong> — Branching 形态的侧栏只放导航树,不放 metric / status / KPI(否则倒退成 dashboard,违反 SKILL.md 硬约束)。</li>
+      </ul>
+    </section>
+
+    <section id="nongoals">
+      <h2 data-num="08 · 不做">Non-goals(本轮明确不碰)</h2>
+      <ul>
+        <li><span class="tag op">OP</span> <strong>不扩 magazine 形态</strong>。magazine.md 本身是单列长文叙事,跟 archetype 单调问题是<em>另一回事</em>;真要扩 magazine,跟「magazine 是不是该死」是同一项,单独评估。</li>
+        <li><span class="tag op">OP</span> <strong>不 vendor huashu</strong>。huashu 自带 React+Babel+TTS+动画引擎一大堆基础设施(看其 <code>references/react-setup.md</code> / <code>voiceover-pipeline.md</code>),vendor 进来会让本 skill 体积翻倍。路由出去 + 一行 <code>npx skills add</code> 是更干净的边界。</li>
+        <li><span class="tag op">OP</span> <strong>不补 Scroll × Branching × Data 那格</strong>。dashboard 与硬约束冲突;承认这格在 native 语义下罕见,等真实需求出现再补。</li>
+        <li><span class="tag op">OP</span> <strong>不补 Scroll × Visual 那两格</strong>。subagent 在三仓库里没找到样本;空格表「理论存在,产品上还没遇到」,不硬填。</li>
+        <li><span class="tag op">OP</span> <strong>不动 native-html-checklist.md 的 P0</strong>。它现已有「1920px 留白 ≤ 35%」防窄框;structure 决策是「主动选侧栏」,不是 P0 enforcement 层的事。</li>
+      </ul>
+    </section>
+
+    <section id="verify">
+      <h2 data-num="09 · 验证">改完怎么知道修对了</h2>
+      <ol>
+        <li><strong>回归 lobehub.report.html / agent-research-weekly-report.html 那两个 case</strong>:重新生成,预期产出至少其一带 sticky left TOC + 主区,而不是一根窄柱。</li>
+        <li><strong>新生成一份"季度投研"或"半年度复盘"</strong>:预期 LLM 走 <code>clinical-case-report</code> 范型(印刷 report,无 KPI 卡)而非 <code>finance-report</code>(被本提案排除的 KPI 卡墙)。</li>
+        <li><strong>新生成一份"API 文档 / 多章节手册"</strong>:预期走 <code>docs-page</code> 三栏。</li>
+        <li><strong>用户说"做个 iOS 原型 mockup"</strong>:预期 SKILL.md 第一步路由出去,提示用户用 <code>huashu-design</code>,而不是本 skill 硬出一份 <code>position:fixed</code> 的伪原型。</li>
+        <li><strong>反向验证 — 普通信函 / 简短一页报告</strong>:预期仍走 <code>kami-parchment</code> 或 <code>eng-runbook</code> 单列,Navigation 决策树触发条件不命中。</li>
+      </ol>
+    </section>
+
+    <section id="files">
+      <h2 data-num="10 · 文件">最终文件清单</h2>
+      <div class="file-list">
+<span class="op-add">+ references/native-examples/docs-page.html</span>                          (Apache, ~400 行)
+<span class="op-add">+ references/native-examples/clinical-case-report.html</span>                (Apache, ~300 行)
+<span class="op-mod">M references/native-examples/SOURCE.md</span>                                (表格加 2 行 + clinical 注意)
+<span class="op-mod">M SKILL.md</span>                                                            (第一步重写 + triggers +3 词)
+<span class="op-mv">R references/craft/measure-and-canvas.md → structure-and-canvas.md</span>   (改名)
+<span class="op-mod">M references/craft/structure-and-canvas.md</span>                            (加 Navigation § + 反模式扩 2 条)
+<span class="op-mod">M references/native-html.md</span>                                           (引用路径跟改名同步,2-3 处)
+<span class="op-mod">M references/native-html-checklist.md</span>                                 (引用路径同步)
+<span class="op-mod">M references/magazine.md</span>                                              (引用路径同步)
+      </div>
+      <p style="color:var(--ink-faint);font-size:12px;">共 9 处改动 · 2 新文件 · 1 改名 · 6 文件 minor 编辑。零删除现有 archetype。</p>
+    </section>
+
+  </main>
+
+  <aside class="rail">
+    <div class="legend-row"><strong>来源 chip</strong>
+      <span class="tag canon">CANON</span> 外部权威<br>
+      <span class="tag obs">OBS</span> 仓库观察<br>
+      <span class="tag syn">SYN</span> 规则推导<br>
+      <span class="tag op">OP</span> 我的偏好
+    </div>
+    <div class="legend-row"><strong>本提案视觉</strong>
+      自己就是 docs-page archetype(sticky left TOC + main + 右 mini-rail)— eat our own dog food
+    </div>
+    <div class="legend-row"><strong>许可</strong>
+      新增 2 份均 Apache-2.0,跟现 LICENSE 同源,零文件膨胀
+    </div>
+    <div class="legend-row"><strong>本轮范围</strong>
+      仅扩 Native;magazine / interactive / PPT 不动
+    </div>
+  </aside>
+
+</div>
+
+</body>
+</html>
