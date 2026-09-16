@@ -1414,7 +1414,10 @@
       <span class="sb-spacer"></span>
       <button class="sb-btn" title="qB 会话/累计流量 · DHT · 连接状态" @click="openStats()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
+      </button><button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
       </button>
+      
       <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
         <i class="dot"></i>{{ statusBadge.text }}
       </span>
