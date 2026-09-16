@@ -175,7 +175,7 @@
               列
             </button>
             <transition name="pop">
-            <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip }" @click.stop>
+            <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip && !colMenuAt }" :style="colMenuStyle()" @click.stop>
               <div class="col-menu-title">分组表</div>
               <div v-for="c in groupColumns" :key="c.key" class="pop-item col-menu-item"
                    :class="{ locked: c.locked, on: colVisible('group', c.key) }"
@@ -494,7 +494,10 @@
              滚动, 上下滚时常驻、左右滚不错位 -->
         <div class="group-head sticky-head" ref="groupHead" :style="gridStyle('group')">
           <div v-for="col in visibleGroupCols" :key="col.key" class="h-cell"
-               :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
+               :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'group' && colDrag.key === col.key }]"
+               @click="col.sortable && setSort(col.key)"
+               @mousedown="startColDrag($event, 'group', col.key)"
+               @contextmenu.prevent="openColMenuAt($event, 'group')">
             <span>{{ col.label }}</span>
             <span v-if="col.sortable" class="arrow">
               <svg v-if="sortKey === col.key" class="ico" viewBox="0 0 16 16">
@@ -505,6 +508,7 @@
                   @mousedown.stop.prevent="startResize($event, 'group', col.key)"
                   @dblclick.stop.prevent="autoFitColumn($event, 'group', col.key)"></span>
           </div>
+          <span v-if="colDrag && colDrag.page === 'group'" class="col-drop-line" :style="colDropLineStyle('group')"></span>
         </div>
         <div class="group-table" ref="groupTable" @scroll="syncGroupHeadScroll">
 
@@ -567,12 +571,16 @@
             <!-- 展开明细: 紧跟本组行显示(列头 + 各分站点行) -->
             <div v-if="expandedKey===g.key" class="detail">
               <div class="detail-head" ref="detailHead" :style="gridStyle('detail')">
-                <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell" :class="'hc-' + col.key">
+                <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
+                     :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
+                     @mousedown="startColDrag($event, 'detail', col.key)"
+                     @contextmenu.prevent="openColMenuAt($event, 'detail')">
                   <span>{{ col.label }}</span>
                   <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                         @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
                         @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
                 </div>
+                <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
               </div>
               <div v-for="m in g.members" :key="m.hash"
                    class="member-row" :class="[m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
@@ -638,7 +646,10 @@
         <template v-if="viewMode === 'torrents'">
           <div class="group-head sticky-head" ref="torrentHead" :style="gridStyle('torrent')">
             <div v-for="col in visibleTorrentCols" :key="col.key" class="h-cell"
-                 :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
+                 :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'torrent' && colDrag.key === col.key }]"
+                 @click="col.sortable && setSort(col.key)"
+                 @mousedown="startColDrag($event, 'torrent', col.key)"
+                 @contextmenu.prevent="openColMenuAt($event, 'torrent')">
               <span>{{ col.label }}</span>
               <span v-if="col.sortable" class="arrow">
                 <svg v-if="torrentSortKey === col.key" class="ico" viewBox="0 0 16 16">
@@ -649,6 +660,7 @@
                     @mousedown.stop.prevent="startResize($event, 'torrent', col.key)"
                     @dblclick.stop.prevent="autoFitColumn($event, 'torrent', col.key)"></span>
             </div>
+            <span v-if="colDrag && colDrag.page === 'torrent'" class="col-drop-line" :style="colDropLineStyle('torrent')"></span>
           </div>
           <div class="group-table" ref="torrentTable" @scroll="syncTorrentHeadScroll">
             <div v-for="m in filteredTorrents" :key="m.hash" class="group-row torrent-row"
@@ -729,7 +741,10 @@
         <template v-if="viewMode === 'shows'">
           <div class="group-head sticky-head" ref="showHead" :style="gridStyle('show')">
             <div v-for="col in visibleShowCols" :key="col.key" class="h-cell"
-                 :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
+                 :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'show' && colDrag.key === col.key }]"
+                 @click="col.sortable && setSort(col.key)"
+                 @mousedown="startColDrag($event, 'show', col.key)"
+                 @contextmenu.prevent="openColMenuAt($event, 'show')">
               <span>{{ col.label }}</span>
               <span v-if="col.sortable" class="arrow">
                 <svg v-if="showSortKey === col.key" class="ico" viewBox="0 0 16 16">
@@ -740,6 +755,7 @@
                     @mousedown.stop.prevent="startResize($event, 'show', col.key)"
                     @dblclick.stop.prevent="autoFitColumn($event, 'show', col.key)"></span>
             </div>
+            <span v-if="colDrag && colDrag.page === 'show'" class="col-drop-line" :style="colDropLineStyle('show')"></span>
           </div>
           <div class="group-table" ref="showTable" @scroll="syncShowHeadScroll">
             <template v-for="s in decoratedShows" :key="s.key">
@@ -826,12 +842,16 @@
                     <!-- 集明细: 该集全部版本(成员), 列与交互复用明细表 -->
                     <div v-if="expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr)" class="detail">
                       <div class="detail-head" ref="detailHead" :style="gridStyle('detail')">
-                        <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell" :class="'hc-' + col.key">
+                        <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
+                             :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
+                             @mousedown="startColDrag($event, 'detail', col.key)"
+                             @contextmenu.prevent="openColMenuAt($event, 'detail')">
                           <span>{{ col.label }}</span>
                           <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                                 @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
                                 @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
                         </div>
+                        <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
                       </div>
                       <div v-for="m in e.members" :key="m.hash" class="member-row"
                            :class="[m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
