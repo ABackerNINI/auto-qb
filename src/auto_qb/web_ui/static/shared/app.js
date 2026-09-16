@@ -25,10 +25,17 @@ const GROUP_COLUMNS = [
   // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 qbmanager._build_group_view)
   { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true },
   { key: "count", label: "站数", tpl: "56px", sortable: true },
+  // TBL-06: 组级"最近添加"(组内成员最大 added_on, 后端 _build_group_view 已透出);
+  // DEFAULT_SORT 默认排序键本就是 added_on —— 补列后排序箭头有了落点
+  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true },
 ];
 const DETAIL_COLUMNS = [
   { key: "site", label: "站点", tpl: "110px", locked: true },
   { key: "state", label: "状态", tpl: "76px" },
+  // TBL-06: 做种/用户(与种子页同口径 "已连接 (总数)", fmtPeersQb) —— 字段 W1a-BE 已在 _member_view 透出;
+  // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头暂未接排序, 先标记字段语义)
+  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true },
+  { key: "num_leechs", label: "用户", tpl: "92px", sortable: true },
   { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)" },
   { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)" },
   { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)" },
@@ -40,6 +47,10 @@ const DETAIL_COLUMNS = [
   { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)" },
   // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值)
   { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)" },
+  // TBL-06: 添加于/保存路径(_member_view 已透出); 保存路径逐成员可不同
+  // (路径筛选取首成员值, 此处可见全量), 与 Hash 同置表尾低频区
+  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true },
+  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)" },
   { key: "hash", label: "Hash", tpl: "80px" },
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
@@ -259,8 +270,7 @@ const app = createApp({
       },
       _toastSeq: 0,           // 提示条自增 id
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
-      _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位)
-      _bulkH: 0,              // 批量操作浮条实测高度(+下边距; 写 :root --bulk-h, 供表头吸顶联动)
+      _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位; 含批量段, FIX-06)
       // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
       selGroups: [],          // 选中组 key
       selMembers: [],         // 选中成员 hash
@@ -873,7 +883,6 @@ const app = createApp({
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         this._syncHeadHeight();
-        this._syncBulkHeight();
         this.materializeColumns();
       }, 120);
     });
@@ -922,10 +931,9 @@ const app = createApp({
     },
   },
   updated() {
-    // 顶栏高度会随"状态分布条是否渲染/窄屏折行"变化 -> 每帧后同步(值未变时内部直接返回);
-    // 批量浮条的出现/消失也在此量测(选中集合变化 -> --bulk-h 联动表头吸顶偏移)
+    // 顶栏高度会随"状态分布条是否渲染/窄屏折行/批量段并入筛选行(FIX-06)"变化 -> 每帧后同步
+    // (值未变时内部直接返回); 批量段已并入筛选行, 其高度由 --head-h 一并覆盖, 无需独立量测
     this._syncHeadHeight();
-    this._syncBulkHeight();
   },
   methods: {
     async api(path, options = {}) {
@@ -3265,17 +3273,6 @@ const app = createApp({
       if (h === this._headH) return;
       this._headH = h;
       document.documentElement.style.setProperty("--head-h", h + "px");
-    },
-    /* 批量操作浮条实测高度(+下边距)写入 :root --bulk-h: 有选中集合时表头吸顶偏移随之
-     * 下移(两吸顶条不重叠), 无选中/切页时归 0 —— 与 --head-h 同款"值未变直接返回"模式 */
-    _syncBulkHeight() {
-      const el = document.querySelector(".bulk-bar");
-      // 只量条高, **不把 margin-bottom 计入**(R01): --bulk-h 语义 = 吸顶条自身的占位高度,
-      // 表头吸顶偏移 head-h + bulk-h 才能与批量条底缘齐平; 把流内间距算进去曾造成恒定 10px 缝隙
-      const h = el ? Math.round(el.getBoundingClientRect().height) : 0;
-      if (h === this._bulkH) return;
-      this._bulkH = h;
-      document.documentElement.style.setProperty("--bulk-h", h + "px");
     },
     /* 把默认模板"实体化"为 px:
      * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)

@@ -241,7 +241,35 @@
           </span>
         </header>
         <!-- 状态分布条 + 筛选器(仅辅种页): 分布由已加载的 groups 前端聚合, 点击 chip 按状态筛选 -->
-        <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows')" class="status-strip">
+        <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows' || selectedCount)" class="status-strip">
+          <!-- 批量操作段(FIX-06): 并入筛选行行首, 同排展示 —— 有选中时行内出现(Ctrl/⌘+点击选中,
+               Shift+点击范围选择), 无选中时完全不渲染; 不再以独立吸顶条插入/抽出表格上方,
+               选中前后筛选行高度不变(同排), 消除旧独立浮条造成的整页跳动; 段内换行兜窄屏 -->
+          <transition name="bulk">
+            <div v-if="selectedCount" class="bulk-inline">
+              <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
+              <span class="bulk-count">已选 <b>{{ selGroups.length }}</b> 组 · <b>{{ selMembers.length }}</b> 个种子</span>
+              <span class="bulk-sep"></span>
+              <button class="bulk-btn" @click="bulkAct('resume')">
+                <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
+              </button>
+              <button class="bulk-btn" @click="bulkAct('pause')">
+                <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停
+              </button>
+              <button class="bulk-btn" @click="bulkAct('reannounce')">
+                <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+              </button>
+              <button class="bulk-btn" @click="bulkAct('recheck')">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
+              </button>
+              <button class="bulk-btn danger" @click="bulkDelete()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除…
+              </button>
+              <button class="bulk-btn ghost" @click="clearSelection()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除
+              </button>
+            </div>
+          </transition>
           <div class="dist-bar" :title="distTitle">
             <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
           </div>
@@ -459,33 +487,6 @@
 
         <main class="content">
 
-        <!-- 批量操作浮条: 有选中集合时出现(Ctrl/⌘+点击选中, Shift+点击范围选择); 无选中时不占位 -->
-        <transition name="bulk">
-          <div v-if="selectedCount" class="bulk-bar">
-            <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
-            <span class="bulk-count">已选 <b>{{ selGroups.length }}</b> 组 · <b>{{ selMembers.length }}</b> 个种子</span>
-            <span class="bulk-sep"></span>
-            <button class="bulk-btn" @click="bulkAct('resume')">
-              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
-            </button>
-            <button class="bulk-btn" @click="bulkAct('pause')">
-              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停
-            </button>
-            <button class="bulk-btn" @click="bulkAct('reannounce')">
-              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
-            </button>
-            <button class="bulk-btn" @click="bulkAct('recheck')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
-            </button>
-            <button class="bulk-btn danger" @click="bulkDelete()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除…
-            </button>
-            <button class="bulk-btn ghost" @click="clearSelection()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除
-            </button>
-          </div>
-        </transition>
-
         <template v-if="viewMode === 'groups'">
         <!-- 列头吸顶(脱离 .group-table 的双轴滚动容器, 直接挂到 .content 下做纵向 sticky):
              spec 规定 overflow-x:auto + overflow-y:visible -> overflow-y:auto, sticky 上下文会变
@@ -558,6 +559,8 @@
                   </template>
                 </div>
                 <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
+                <!-- TBL-06: 组级"最近添加"(后端 _build_group_view 透出) -->
+                <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(g.added_on) }}</div>
               </template>
             </div>
 
@@ -579,6 +582,9 @@
                 <template v-for="col in visibleDetailCols" :key="col.key">
                   <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
                   <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
+                  <!-- TBL-06: 做种/用户("已连接 (总数)"口径, 与种子页同源 fmtPeersQb) -->
+                  <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_seeds, m.num_complete) }">{{ fmtPeersQb(m.num_seeds, m.num_complete) }}</span>
+                  <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</span>
                   <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
                   <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
                   <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
@@ -604,6 +610,9 @@
                     {{ (m.ratio || 0).toFixed(2) }}
                     <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                   </span>
+                  <!-- TBL-06: 添加于/保存路径(_member_view 已透出; 保存路径逐成员可不同) -->
+                  <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
+                  <span v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</span>
                   <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                 </template>
               </div>
@@ -832,6 +841,9 @@
                         <template v-for="col in visibleDetailCols" :key="col.key">
                           <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
                           <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
+                          <!-- TBL-06: 做种/用户(与种子页/明细表同口径 fmtPeersQb) -->
+                          <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_seeds, m.num_complete) }">{{ fmtPeersQb(m.num_seeds, m.num_complete) }}</span>
+                          <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</span>
                           <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
                           <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
                           <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
@@ -857,6 +869,9 @@
                             {{ (m.ratio || 0).toFixed(2) }}
                             <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                           </span>
+                          <!-- TBL-06: 添加于/保存路径(与明细表同列) -->
+                          <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
+                          <span v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</span>
                           <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                         </template>
                       </div>
