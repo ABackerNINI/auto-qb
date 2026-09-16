@@ -227,6 +227,12 @@
             </transition>
           </div>
           <div class="spacer"></div>
+          <!-- W4: 设置移至顶栏右侧(与左侧视图导航分列); 复用 .tabs 保证 hover/active 态一致 -->
+          <nav class="tabs tabs-right" aria-label="页面导航">
+            <button :class="{ active: page === 'settings' }" @click="openSettings">
+              <svg class="ico ico-sm ico-config" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
+            </button>
+          </nav>
           <a class="ui-switch" href="/prism/" title="切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer"><svg class="ico ico-sm"><use href="#i-prism"></use></svg>棱镜</a>
           <!-- 统计/速度槽已迁至底部状态栏(TBL-08); 顶栏只留全局状态徽章 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
