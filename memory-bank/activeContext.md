@@ -4,7 +4,7 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-17 (Memory Bank 触发机制修复**已完成** — skill 载体 + always-on 立档阈值 + TASK001~TASK010 回填 + activeContext 瘦身 (68→26 行) + 守卫 `test_memory_bank.py` 6 项; 995 passed, **未提交**; 详见 [tasks/TASK010](tasks/TASK010-memory-bank-trigger-fix.md))
+**最后更新**: 2026-09-17 (Memory Bank 触发机制修复**已完成并提交** — skill 载体 `.agents/skills/memory-bank/SKILL.md` + always-on 立档阈值 + TASK001~TASK010 回填 + activeContext 瘦身 (68→26 行) + 守卫 `test_memory_bank.py` 6 项; 995 passed; 提交 `b4ce7bd`; 详见 [tasks/TASK010](tasks/TASK010-memory-bank-trigger-fix.md))
 
 ## 正在进行
 
