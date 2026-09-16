@@ -653,11 +653,6 @@ button { font-family: inherit; }
 .ce-card:hover { border-color: var(--border-strong); }
 .ce-detail-title { font-size: 14.5px; letter-spacing: .2px; }
 
-.ce-banner { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; border: 1px solid transparent; }
-.ce-banner.ok { background: var(--green-soft); color: var(--green); border-color: rgba(52, 211, 153, .3); }
-.ce-banner.warn { background: var(--warn-soft); color: var(--warn); border-color: rgba(251, 191, 36, .3); }
-.ce-banner.error { background: var(--error-soft); color: var(--error); border-color: rgba(248, 113, 113, .3); }
-
 /* 字段区(行底基本透明, hover 才浮出表面 —— 减少大量字段堆叠时的视觉噪声) */
 .ce-fields { display: flex; flex-direction: column; gap: 2px; }
 /* 普通 object 段(group): 默认折叠的整体容器(同 section 思路)。
@@ -724,14 +719,17 @@ button { font-family: inherit; }
 .ce-field.ce-inactive { opacity: .45; }
 .ce-field.ce-inactive:hover { opacity: .8; }
 
-/* 风险标识: 徽标 + 说明行都用暖红底, 与普通帮助文字明显区分 */
-.ce-risk { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px;
-  background: var(--warn-soft); color: var(--warn); font-size: 10.5px; white-space: nowrap; }
-.ce-risk .ico { width: 11px; height: 11px; }
-/* 风险说明: 行内小字(宽度与输入区一致), 不再是横贯整页的大警告框 */
-.ce-risk-line { flex: 1 1 100%; max-width: var(--ce-input-max); display: flex; align-items: flex-start; gap: 7px;
-  margin: 2px 0 0; padding: 0; border: 0; background: transparent; color: var(--warn); font-size: 12px; line-height: 1.5; }
-.ce-risk-line .ico { flex: 0 0 auto; margin-top: 1px; color: var(--warn); }
+/* 统一注记(段级/字段级警告与提示): 行内小字 + 色点, 不再用大框横幅。
+ * 网格双列(色点列 + 文本列): 换行时文字悬挂缩进; 字段行内独占一行(宽度与输入区对齐) */
+.ce-note { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: start;
+  font-size: 12px; line-height: 1.55; color: var(--fg-muted); max-width: var(--ce-input-max); }
+.ce-note::before { content: ""; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%;
+  background: var(--fg-dim); }
+.ce-note.warn { color: var(--warn); }
+.ce-note.warn::before { background: var(--warn); }
+.ce-note.error { color: var(--error); }
+.ce-note.error::before { background: var(--error); }
+.ce-ctl .ce-note { flex: 1 1 100%; }
 
 /* 相关设置子卡(group_of): 缩进 + 左侧强调线, 表明从属于上一字段。
  * 头部色用 teal(青)与 group 的多色 / section 的紫拉开层级 —— 三种段一眼可辨 */
