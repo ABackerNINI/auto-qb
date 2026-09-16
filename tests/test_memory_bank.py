@@ -75,8 +75,10 @@ def test_task_status_matches_index_section() -> None:
         task_id = path.name[:7]
         match = STATUS_RE.search(path.read_text(encoding="utf-8"))
         assert match, f"{path.name} 缺少 `**Status:**`"
-        assert sections[task_id] == match.group(1), (f"{task_id} 档案 Status={match.group(1)} 与索引分区 "
-                                                     f"`## {sections[task_id]}` 不一致")
+        assert sections[task_id] == match.group(1), (
+            f"{task_id} 档案 Status={match.group(1)} 与索引分区 "
+            f"`## {sections[task_id]}` 不一致"
+        )
 
 
 def test_index_has_all_status_sections() -> None:
