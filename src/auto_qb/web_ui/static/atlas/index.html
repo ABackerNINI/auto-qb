@@ -817,59 +817,59 @@
             <div class="ctx-sep"></div>
             <!-- 复制(R1A): clipboard API + execCommand 降级, toast 反馈(见 app.js copyTorrentInfo) -->
             <div class="ctx-item" @click="openTorrentDrawer(menu.hash)">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
+              <svg class="ico ico-sm ico-info" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
             </div>
             <div class="ctx-sep"></div>
             <!-- 编辑(D 轮): 多字段编辑对话框, 预填当前值/空=不改, 回执 toast(见 app.js editLimits 等) -->
             <div class="ctx-item" @click="editLimits()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速…
+              <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速…
             </div>
             <div class="ctx-item" @click="editShareLimits()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
+              <svg class="ico ico-sm ico-percent" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
             </div>
             <div class="ctx-item" @click="editMove()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>移动…
+              <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>移动…
             </div>
             <div class="ctx-item" @click="editRename()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
+              <svg class="ico ico-sm ico-rename" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item" @click="copyTorrentInfo('name')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
+              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
             </div>
             <div class="ctx-item" @click="copyTorrentInfo('hash')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
+              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
             </div>
             <div class="ctx-item" @click="copyTorrentInfo('magnet')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
+              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item" @click="torrentCmd('recheck', null, '重新校验')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
+              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
             </div>
             <div class="ctx-item" @click="torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, menuTorrent().super_seeding ? '关闭超级做种' : '开启超级做种')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
+              <svg class="ico ico-sm ico-super" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
             </div>
             <div class="ctx-item" @click="torrentCmd('force-start', { enable: !menuTorrent().force_start }, menuTorrent().force_start ? '取消强制开始' : '强制开始')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制开始" : "强制开始" }}
+              <svg class="ico ico-sm ico-force" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制开始" : "强制开始" }}
             </div>
             <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
+              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
             </div>
             <div class="ctx-item" @click="torrentCmd('queue', { action: 'up' }, '队列上移')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列上移
+              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列上移
             </div>
             <div class="ctx-item" @click="torrentCmd('queue', { action: 'down' }, '队列下移')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列下移
+              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列下移
             </div>
             <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列置底')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
+              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
             </div>
             <div class="ctx-item" @click="autoTmmToggle()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
+              <svg class="ico ico-sm ico-tmm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
             </div>
             <div class="ctx-item" @click="exportTorrent()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
+              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delTorrent()">
@@ -931,7 +931,7 @@
               </button>
               <!-- W4: 运行日志章节(原顶栏日志页迁入, schema 分组之外的特殊章节) -->
               <button class="ce-side-item" :class="{ active: cfg.activeGroup === '__logs' }" @click="openLogs()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
+                <svg class="ico ico-sm ico-log" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
                 <span class="ce-side-label">运行日志</span>
               </button>
             </aside>
@@ -1350,7 +1350,7 @@
               <div v-else-if="cfg.activeGroup === '__logs'" class="logs-embed">
                 <header class="logs-head">
                   <div class="logs-head-text">
-                    <h2><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>运行日志</h2>
+                    <h2><svg class="ico ico-sm ico-log" viewBox="0 0 16 16"><use href="#i-list"></use></svg>运行日志</h2>
                     <p v-if="logs.file" class="ce-sub" :title="logs.file">{{ logs.file }}</p>
                     <p v-else class="ce-sub">日志文件未配置(config.logging.file)</p>
                   </div>
@@ -1425,8 +1425,9 @@
       </span>
       <span class="sb-spacer"></span>
       <button class="sb-btn" title="qB 会话/累计流量 · DHT · 连接状态" @click="openStats()">
-        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
-      </button><button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
+        <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
+      </button>
+<button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
       </button>
       
@@ -1605,7 +1606,7 @@
     <div v-if="statsOpen" class="modal-mask" @click.self="closeStats">
       <div class="modal add-dialog stats-dialog" role="dialog" aria-modal="true" aria-label="qBittorrent 统计">
         <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
           <span>qBittorrent 统计</span>
           <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeStats">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>

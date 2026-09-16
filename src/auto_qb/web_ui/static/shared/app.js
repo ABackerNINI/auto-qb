@@ -934,6 +934,13 @@ const app = createApp({
         this.materializeColumns();
       });
     },
+    // CTX-02: 任一浮层菜单关闭 -> 撤掉触发源强调(浮层可以多种方式关闭: Esc/点空白/执行动作)
+    "menu.visible"(v) {
+      if (!v) this._clearCtxSource();
+    },
+    "filePrio.visible"(v) {
+      if (!v) this._clearCtxSource();
+    },
   },
   updated() {
     // 顶栏高度会随"状态分布条是否渲染/窄屏折行/批量段并入筛选行(FIX-06)"变化 -> 每帧后同步
@@ -1609,8 +1616,25 @@ const app = createApp({
       if (next) this.selAnchorGroup = next;
       this.menu.visible = false;
     },
+    /* ---------------- CTX-02 触发源强调 ----------------
+     * 右键菜单弹出期间把"是在操作谁"标出来(被点的行/按钮挂 .ctx-src)。
+     * 用 DOM 标记而不是状态字段: 触发点分布在 组行/种子行/整集行/文件优先级单元格 以及
+     * 若干按钮, 逐个加模板绑定既啰嗦又容易漏; 直接标记事件目标所在的行, 双 UI 模板零改动即生效。
+     * 清理走 watch(menu.visible/filePrio.visible), 覆盖 Esc/点空白/执行动作全部关闭路径。
+     */
+    _markCtxSource(event) {
+      this._clearCtxSource();
+      const t = event && event.target;
+      if (!t || typeof t.closest !== "function") return;
+      const el = t.closest(".group-row, .member-row, .ep-row, .show-row, .tb-row, .ctx-anchor") || t;
+      if (el && el.classList) el.classList.add("ctx-src");
+    },
+    _clearCtxSource() {
+      document.querySelectorAll(".ctx-src").forEach((el) => el.classList.remove("ctx-src"));
+    },
     openMenu(event, group) {
       event.preventDefault();
+      this._markCtxSource(event);
       if (group.virtual) {
         // 虚拟行(未归组命中种子): 无真实组 key(组级路由会解析失败), 退化为该种子的单种子菜单
         this.openMemberMenu(event, group.members[0]);
@@ -1622,6 +1646,7 @@ const app = createApp({
     openMemberMenu(event, member) {
       event.preventDefault();
       event.stopPropagation();
+      this._markCtxSource(event);
       this.menu = { visible: true, ...this._menuPos(event), key: null, hash: member.hash };
     },
     // 命令 => 中文动作名(用于投递成功/失败的提示文案)
@@ -2023,6 +2048,7 @@ const app = createApp({
     openShowEpMenu(event, show, ep) {
       event.preventDefault();
       event.stopPropagation();
+      this._markCtxSource(event);
       this.menu = {
         visible: true,
         ...this._menuPos(event),
@@ -2642,6 +2668,7 @@ const app = createApp({
     },
     /* 文件优先级小菜单: 锚定单元格下方, 视口吸附(@click.stop 防止开菜单的点击立即被窗口关闭) */
     openFilePrio(ev, index) {
+      this._markCtxSource(ev);
       const rect = ev.currentTarget.getBoundingClientRect();
       const w = 150, h = 176;
       this.filePrio = {
