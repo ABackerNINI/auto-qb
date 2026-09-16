@@ -228,14 +228,8 @@
             </transition>
           </div>
           <div class="spacer"></div>
-          <!-- 信息栏模式切换(R09): 左栏悬浮卡 <-> 顶栏紧凑双排条; 持久化 localStorage autoqb.ui.rail -->
-          <button v-if="page === 'groups'" class="table-tool rail-toggle"
-                  :title="railMode === 'side' ? '信息栏移到顶部导航' : '信息栏移回左侧'"
-                  @click="toggleRailMode()">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-panel"></use></svg>
-          </button>
           <a class="ui-switch" href="/prism/" title="切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer"><svg class="ico ico-sm"><use href="#i-prism"></use></svg>棱镜</a>
-          <!-- 统计槽已移至辅种页左栏(.rail, 固定位置不随滚动); 顶栏只留全局状态徐标 -->
+          <!-- 统计/速度槽已迁至底部状态栏(TBL-08); 顶栏只留全局状态徽章 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
             <i class="dot"></i>{{ statusBadge.text }}
           </span>
@@ -336,142 +330,10 @@
           </div>
         </div>
 
-        <!-- 信息栏顶部模式(R09): 与顶栏/状态条构成一体的玻璃吸顶块。
-             第一排 = 重点信息(下载/上传速度, 加粗大字); 第二排 = 其余信息缩小胶囊(分组/种子/刷新/今日流量/限速),
-             条件渲染与左栏卡片一致。--head-h 由 _syncHeadHeight 实测自动包含本条, 表头/批量条偏移零额外代码联动 -->
-        <div v-if="page === 'groups' && railMode === 'top'" class="rail-top">
-          <div class="rail-top-row primary">
-            <span class="rail-stat top-big" title="全部组下载速度合计">
-              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
-              <span class="val">{{ fmtSpeed(totalDl) }}</span>
-            </span>
-            <span class="rail-stat top-big" title="全部组上传速度合计">
-              <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
-              <span class="val">{{ fmtSpeed(totalUl) }}</span>
-            </span>
-          </div>
-          <div class="rail-top-row minor">
-            <span class="rail-stat" title="辅种组总数">
-              <svg class="ico ico-sm ico-group" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>
-              <span class="lbl">分组</span><span class="val">{{ groups.length }}</span>
-            </span>
-            <span class="rail-stat" title="种子总数(含未归组)">
-              <svg class="ico ico-sm ico-store" viewBox="0 0 16 16"><use href="#i-hdd"></use></svg>
-              <span class="lbl">种子</span><span class="val">{{ totalTorrents }}</span>
-            </span>
-            <span class="rail-stat" title="当前刷新间隔(无变化/服务不可达时自动放慢)">
-              <svg class="ico ico-sm ico-refresh" viewBox="0 0 16 16"><use href="#i-clock"></use></svg>
-              <span class="lbl">刷新</span><span class="val">{{ pollLabel }}s</span>
-            </span>
-            <template v-if="trafficOn && todayTraffic">
-              <span class="rail-stat" :title="'今日上传累计' + (traffic.date ? ' · ' + traffic.date : '')">
-                <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
-                <span class="lbl">今上</span><span class="val">{{ fmtSize(todayTraffic.up) }}</span>
-                <button class="rail-btn" title="查看历史流量(天/月/年)" @click.stop="openHistory">
-                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
-                </button>
-              </span>
-              <span class="rail-stat" title="今日下载累计">
-                <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
-                <span class="lbl">今下</span><span class="val">{{ fmtSize(todayTraffic.down) }}</span>
-              </span>
-            </template>
-            <span v-for="r in limitRows" :key="r.dir" class="rail-stat pill-limit"
-                  :class="{ mismatch: r.mismatch, manual: r.reason && r.reason.code === 'manual' }" :title="r.tip">
-              <svg v-if="r.reason && r.reason.code === 'manual'" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-lock"></use></svg>
-              <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-              <span class="lbl">{{ r.label }}</span>
-              <span class="val">{{ fmtLimit(r.target) }}<template v-if="r.mismatch"> / {{ fmtLimit(r.actual) }}</template></span>
-            </span>
-          </div>
-        </div>
       </div>
 
-      <!-- 辅种分组页: 信息栏(左栏悬浮卡 或 顶栏紧凑条, R09 可切换) + 右侧表格区 -->
-      <div v-if="page==='groups'" class="layout" :class="{ 'rail-top-mode': railMode === 'top' }">
-        <aside v-if="railMode === 'side'" class="rail">
-          <div class="rail-card">
-            <div class="rail-title">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pulse"></use></svg>概览
-            </div>
-            <div class="rail-stat" title="辅种组总数">
-              <svg class="ico ico-sm ico-group" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>
-              <span class="lbl">辅种分组</span><span class="val">{{ groups.length }}</span>
-            </div>
-            <div class="rail-stat" title="种子总数">
-              <svg class="ico ico-sm ico-store" viewBox="0 0 16 16"><use href="#i-hdd"></use></svg>
-              <span class="lbl">种子总数</span><span class="val">{{ totalTorrents }}</span>
-            </div>
-            <div class="rail-stat" title="全部组下载速度合计">
-              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
-              <span class="lbl">下载速度</span><span class="val">{{ fmtSpeed(totalDl) }}</span>
-            </div>
-            <div class="rail-stat" title="全部组上传速度合计">
-              <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
-              <span class="lbl">上传速度</span><span class="val">{{ fmtSpeed(totalUl) }}</span>
-            </div>
-            <div class="rail-stat" title="当前刷新间隔(无变化/服务不可达时自动放慢)">
-              <svg class="ico ico-sm ico-refresh" viewBox="0 0 16 16"><use href="#i-clock"></use></svg>
-              <span class="lbl">刷新间隔</span><span class="val">{{ pollLabel }}s</span>
-            </div>
-          </div>
-
-          <!-- 今日累计上传/下载(数据源: Traffic Monitor; 未启用限速曲线时不渲染)。
-               标题右侧历史流量入口: 点击打开按日历史柱状图(天/月/年视图) -->
-          <div v-if="trafficOn && todayTraffic" class="rail-card"
-               :title="'今日累计流量(数据源 Traffic Monitor' + (traffic.date ? ', ' + traffic.date : '') + ')'">
-            <div class="rail-title">
-              <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>今日流量
-              <span class="rail-spacer"></span>
-              <button class="rail-btn" title="查看历史流量(天/月/年)" @click.stop="openHistory">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
-              </button>
-            </div>
-            <div class="rail-stat">
-              <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
-              <span class="lbl">上传</span><span class="val">{{ fmtSize(todayTraffic.up) }}</span>
-            </div>
-            <div class="rail-stat">
-              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
-              <span class="lbl">下载</span><span class="val">{{ fmtSize(todayTraffic.down) }}</span>
-            </div>
-          </div>
-
-          <!-- 限速对照 + 临时覆盖(FE-2C D2): 一致只显示命中值; 不一致显示"命中 / 实际"并把原因放进悬停提示。
-               卡体在无曲线命中(limitRows 空)时也渲染: 覆盖控件与托管状态不限曲线启停 —— 以 speedMode 已加载为准 -->
-          <div v-if="limitRows.length || speedMode.loaded" class="rail-card">
-            <div class="rail-title">
-              <svg class="ico ico-sm ico-limit" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速对照
-              <span class="rail-spacer"></span>
-              <button class="rail-btn" title="刷新托管状态" @click.stop="loadSpeedMode(true)">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
-              </button>
-            </div>
-            <div v-for="r in limitRows" :key="r.dir" class="rail-stat pill-limit"
-                 :class="{ mismatch: r.mismatch, manual: r.reason && r.reason.code === 'manual' }"
-                 :title="r.tip">
-              <svg v-if="r.reason && r.reason.code === 'manual'" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-lock"></use></svg>
-              <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-              <span class="lbl">{{ r.label }}</span>
-              <span class="val">{{ fmtLimit(r.target) }}<template v-if="r.mismatch"> / {{ fmtLimit(r.actual) }}</template></span>
-            </div>
-            <!-- 托管状态一行: 曲线托管中(目标值) / 未托管(qB 当前值); 数据源 /api/speed/mode -->
-            <div v-if="speedMode.loaded" class="rail-stat" :title="speedModeLine">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
-              <span class="lbl">托管</span>
-              <span class="val">{{ speedModeLine }}</span>
-            </div>
-            <div v-else-if="speedMode.error" class="rail-stat" :title="speedMode.error">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
-              <span class="lbl">托管</span><span class="val">状态未知</span>
-            </div>
-            <!-- 限速入口(SPD-04): 修改表单收进弹窗(qB 式: 点击限速 → 弹窗), 信息栏只留一个按钮 -->
-            <button class="rail-speed-open" title="修改全局限速(两方向都需填写, 0 = 不限)" @click.stop="openSpeedDialog">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
-            </button>
-          </div>
-        </aside>
-
+      <!-- 辅种分组页: 左栏信息栏已退役(TBL-08), 单列全宽表格 + 底部状态栏 -->
+      <div v-if="page==='groups'" class="layout">
         <main class="content">
 
         <template v-if="viewMode === 'groups'">
@@ -1542,6 +1404,21 @@
         </div>
       </main>
     </template>
+
+    <!-- 底部状态栏(TBL-08): 速度摘要 + 统计入口 + 全局状态徽章; 全页固定, 高度锁定 --statusbar-h -->
+    <footer class="statusbar">
+      <span class="sb-speed" title="全部组下载/上传速度合计">
+        <span class="sb-item"><svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg><span class="val">{{ fmtSpeed(totalDl) }}</span></span>
+        <span class="sb-item"><svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg><span class="val">{{ fmtSpeed(totalUl) }}</span></span>
+      </span>
+      <span class="sb-spacer"></span>
+      <button class="sb-btn" title="qB 会话/累计流量 · DHT · 连接状态" @click="openStats()">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>统计
+      </button>
+      <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
+        <i class="dot"></i>{{ statusBadge.text }}
+      </span>
+    </footer>
 
     <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
     <div class="toast-wrap">

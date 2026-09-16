@@ -190,15 +190,6 @@ function initialViewMode() {
   }
 }
 
-function initialRailMode() {
-  try {
-    return localStorage.getItem("autoqb.ui.rail") === "top" ? "top" : "side";
-  } catch {
-    return "side";
-  }
-}
-
-
 const app = createApp({
   data() {
     return {
@@ -216,8 +207,6 @@ const app = createApp({
       shows: { list: [], unrecognized: [] },  // 追剧视图(剧→季→集聚合, 与 groups 同门控回传)
       // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
-      // 信息栏模式: side(左栏悬浮卡) | top(并入顶栏吸顶区的紧凑双排条); 见 toggleRailMode
-      railMode: initialRailMode(),
       status: {},
       pollSec: 2,
       expandedKey: null,
@@ -2097,15 +2086,6 @@ const app = createApp({
       if (fails.length) this.toast(`删除投递部分失败(${fails.length}/${ep.hashes.length})`, "error", 8000);
       else this.toast(`已投递: 删除整集 ${ep.hashes.length} 个种子${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
     },
-    toggleRailMode() {
-      this.railMode = this.railMode === "side" ? "top" : "side";
-      try { localStorage.setItem("autoqb.ui.rail", this.railMode); } catch { /* 持久化失败不影响功能 */ }
-      // top 模式信息条并入 sticky-head -> --head-h 随之变高: 立即同步, 表头/批量条/左栏偏移自动跟随
-      this.$nextTick(() => {
-        this._syncHeadHeight();
-        this.materializeColumns();
-      });
-    },
     /* 单种子表横向滚动 -> 表头位移同步(与分组表同款 transform 桥接, 避免双向 scroll 回环) */
     syncTorrentHeadScroll(ev) {
       const head = this.$refs.torrentHead;
@@ -3345,7 +3325,7 @@ const app = createApp({
       const ref = this.$refs[{ group: "groupHead", detail: "detailHead", torrent: "torrentHead", show: "showHead" }[page]];
       return Array.isArray(ref) ? ref[0] : ref || null;
     },
-    /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 辅种页左栏 .rail 的吸顶偏移与最大可用
+    /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 吸顶元素的偏移与最大可用
      * 高度都依赖它。**不写死数值** —— 高度会随媒体查询、状态条是否渲染、窄屏折行而变化;
      * 值未变时直接返回, 避免每帧都写一次 CSS 变量(updated 会频繁触发)。
      */
