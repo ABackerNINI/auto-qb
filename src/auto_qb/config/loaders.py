@@ -189,6 +189,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     fail-fast 校验阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。
     配置样式:
         interval: 10M              # 曲线任务执行间隔(可选, 缺省用主 interval)
+        enabled: true              # 功能总开关(可选, 缺省 true; false = 整体停用, 任务短路不动 qB)
         traffic_source:
             - traffic_monitor:
                 dat_path: ".../history_traffic.dat"
@@ -229,7 +230,12 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
                 ),
             )
         )
-    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=period_curves, interval=interval)
+    return GlobalSpeedLimitCurve(
+        dat_path=dat_path,
+        curves=period_curves,
+        interval=interval,
+        enabled=parse_bool(spec["enabled"]) if "enabled" in spec else True,
+    )
 
 
 def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:

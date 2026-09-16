@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_speed_curve_config_disabled_by_default: 未配置 global_speed_limit_curve -> None(不启用)
 - test_speed_curve_config_parses_sample: 完整样例解析(period 归一化/阈值字节/速度字节)
+- test_speed_curve_config_enabled_key: enabled 总开关解析(缺省 True/显式 true|false/非法值报错)
 - test_speed_curve_config_rejects_bad_section: 顶层非 dict / 未知键
 - test_speed_curve_config_interval_optional_and_validated: interval 缺省回退主 interval / 非法值报错
 - test_speed_curve_config_rejects_bad_traffic_source: 数据源缺失/空/多元素/未知来源/元素非 dict/缺 traffic_monitor/内部未知键/缺 dat_path
@@ -28,6 +29,7 @@
 - test_speed_curve_dry_run_no_read_no_write: dry_run 不读当前不写 qB, 记录 state
 - test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
 - test_speed_curve_no_config_noop: 未配置曲线(conf None) -> handler 直接返回
+- test_speed_curve_enabled_false_short_circuits: enabled=False -> 任务仍注册但短路, 不读 dat 不写 qB, 发布 disabled
 - test_speed_curve_dat_all_bad_lines_noop: dat 有文件但全坏行 -> 本轮不动
 - test_speed_curve_dat_bad_lines_still_applies: dat 部分坏行 -> 跳过坏行仍写 qB
 - test_speed_curve_success_logs_period_stats: 设置成功按各 period 输出累计上传/下载(今日/七日/本月/三十日)
@@ -244,6 +246,25 @@ def test_speed_curve_config_parses_sample(tmp_path):
     # 第二曲线只配 download_curve -> upload_points None(不管理上传)
     assert week.upload_points is None
     assert week.download_points[0].speed_bytes_per_s == 10 * MIB
+
+
+def test_speed_curve_config_enabled_key(tmp_path):
+    """enabled 总开关: 缺省 True(现行行为) / 显式 true|false 解析为 bool / 非法值报错"""
+    g = _load(tmp_path, copy.deepcopy(_valid_spec())).global_speed_limit_curve
+    assert g.enabled is True  # 缺省 = True
+
+    spec = copy.deepcopy(_valid_spec())
+    spec["enabled"] = "false"
+    assert _load(tmp_path, spec).global_speed_limit_curve.enabled is False
+
+    spec = copy.deepcopy(_valid_spec())
+    spec["enabled"] = "true"
+    assert _load(tmp_path, spec).global_speed_limit_curve.enabled is True
+
+    spec = copy.deepcopy(_valid_spec())
+    spec["enabled"] = "abc"
+    with pytest.raises(ConfigError):
+        _load(tmp_path, spec)
 
 
 def test_speed_curve_config_rejects_bad_section(tmp_path):
@@ -753,6 +774,24 @@ def test_speed_curve_no_config_noop(tmp_path):
 
     assert _run_curve(mgr) is True
     assert client.transfer.calls == []
+
+
+def test_speed_curve_enabled_false_short_circuits(tmp_path):
+    """enabled=False: 曲线任务仍注册但整体短路 -> 不读 dat 不写 qB, 快照发布 disabled(Web 视为未启用)"""
+    gslc = _gslc(_write_dat(tmp_path, [(date.today(), 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
+    gslc.enabled = False  # 数据可用, 证明短路先于读数据
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 999 * 1024  # 当前非目标值: 若未短路将被改写
+
+    # 任务仍注册(enabled=False 只在 handler 内短路, 不影响任务创建)
+    mgr._create_global_tasks()
+    assert [t.name for t in mgr.task_queue._fast] == ["speed_limit_curve"]
+
+    assert _run_curve(mgr) is True
+    assert client.transfer.calls == []  # 不动 qB 限速
+    assert client.transfer.limits["upload_limit"] == 999 * 1024
+    assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state
+    assert mgr._traffic_view["state"] == "disabled"  # Web 端据此渲染为未启用
 
 
 def test_speed_curve_dat_all_bad_lines_noop(tmp_path):
