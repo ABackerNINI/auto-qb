@@ -1720,7 +1720,9 @@
             <p class="error">{{ statsError }}</p>
             <button class="ce-btn" @click="loadStats()">重试</button>
           </div>
-          <div v-else-if="!statsServer && !statsLoading" class="ce-placeholder">暂无统计(qB 未同步)</div>
+          <!-- FIX-04 首开兜底: 无值分支必须兜住 loading 期 — 否则首开(statsServer 尚为 null)落入 v-else
+               字段列表分支, 模板解引用 null 直接渲染崩溃; 文案随加载态切换(加载中/暂无统计) -->
+          <div v-else-if="!statsServer" class="ce-placeholder" :class="{ loading: statsLoading }">{{ statsLoading ? "正在加载统计…" : "暂无统计(qB 未同步)" }}</div>
           <template v-else>
             <p v-if="statsError" class="error" style="margin: 0 0 8px; font-size: 12px;">{{ statsError }}(显示上次结果)</p>
             <div class="stats-grid" :style="{ opacity: statsLoading ? 0.55 : 1, transition: 'opacity .15s ease' }">
