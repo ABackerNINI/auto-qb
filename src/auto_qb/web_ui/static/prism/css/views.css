@@ -1,5 +1,5 @@
 /* auto-qb 新版 WEB UI · 视图层: 辅种页 / 设置页 / 历史流量
- * 布局契约(与 app.js 耦合, 勿改名): .sticky-head(--head-h 量测) / .bulk-bar(--bulk-h) /
+ * 布局契约(与 app.js 耦合, 勿改名): .sticky-head(--head-h 量测) / .bulk-bar(独立吸顶条, top 跟随 --head-h) /
  * .group-head/.detail-head(列宽拖拽) / gridStyle 内联列模板 / .search-hit/.ctx-menu。
  * 记忆点 = 左栏"舵台": 全站速度与流量的仪表读数(mono 大数字), 其余视觉保持安静。
  */
@@ -42,7 +42,7 @@
 .group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim);
   font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .06em;
   width: fit-content; min-width: 100%;
-  position: sticky; top: calc(var(--head-h, 100px) + var(--bulk-h, 0px)); z-index: 5;
+  position: sticky; top: var(--head-h, 100px); z-index: 5;
   background: var(--bg-card); border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
@@ -182,7 +182,7 @@
 /* 校验中呼吸 */
 .g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
 
-/* ---------------- 批量操作浮条(吸顶, --bulk-h 由 app.js 量测联动表头) ---------------- */
+/* ---------------- 批量操作浮条(独立吸顶, top 跟随 --head-h; W1b-2 后共享 app.js 停写 --bulk-h, 表头不再联动让位, 吸顶时以 z-index 6 盖住列头为既定取舍) ---------------- */
 .bulk-bar { position: sticky; top: var(--head-h, 100px); z-index: 6;
   display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 7px 12px;
   border: 1px solid var(--accent-line); border-radius: var(--radius);
