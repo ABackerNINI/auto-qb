@@ -24,6 +24,7 @@
     <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M8 7.4v3.4M8 5.3v.7"/></symbol>
     <!-- 品牌: orbit 轨道(330° 轨道弧 + 绿色种子点 + 中心圆), 与 favicon / assets/icons 设计一致 -->
     <symbol id="i-orbit" viewBox="0 0 16 16"><path d="M4.9 3.6A5.4 5.4 0 1 0 11.1 3.6" fill="none"/><circle cx="11.1" cy="3.6" r="1.7" fill="var(--green)" stroke="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
+    <symbol id="i-prism" viewBox="0 0 16 16"><path d="M8 2.8 12.6 13.2H3.4z"/><path d="M1.6 6.8 6 7.6 12.8 12.6"/></symbol>
     <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.4v7.8M4.9 7.1 8 10.2l3.1-3.1M3.2 12.9h9.6"/></symbol>
     <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.8V3M4.9 6.1 8 3l3.1 3.1M3.2 12.9h9.6"/></symbol>
     <symbol id="i-tag" viewBox="0 0 16 16"><path d="M3 7.8V3.2h4.6L13 8.6 8.6 13z"/><path d="M5.6 5.7v.01"/></symbol>
@@ -233,7 +234,7 @@
                   @click="toggleRailMode()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-panel"></use></svg>
           </button>
-          <a class="ui-switch" href="/prism/" title="切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" style="display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer">棱镜</a>
+          <a class="ui-switch" href="/prism/" title="切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer"><svg class="ico ico-sm"><use href="#i-prism"></use></svg>棱镜</a>
           <!-- 统计槽已移至辅种页左栏(.rail, 固定位置不随滚动); 顶栏只留全局状态徐标 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
             <i class="dot"></i>{{ statusBadge.text }}
