@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .utils import decode_group_key
+from .utils import decode_group_key, path_normalize
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +175,20 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         return manager.search_torrents(q)
 
+    @app.get("/api/paths")
+    def api_paths():
+        """已知目录聚合(DLG-04, 决策 D3): 添加种子对话框「保存位置」下拉的推荐目录集
+
+        浏览器无法枚举本地目录树, 聚合两组已知目录排序去重后返回, 前端仍允许自由输入:
+        ①当前分组索引各组 key 首元(store.groups 的 key = (规范化 save_path, 文件列表), 组空即删,
+        无陈旧条目); ②store 现有种子的 save_path(经 path_normalize 归一分隔符后参与去重, 与组 key
+        同径不重复出现)。只读快照, 无副作用(不触发视图重建/不投命令)。
+        """
+        manager.touch_web_client()
+        paths = {key[0] for key in manager.store.groups if key and key[0]}
+        paths.update(path_normalize(rec.save_path) for rec in manager.store.by_hash.values() if rec.save_path)
+        return {"paths": sorted(paths)}
+
     @app.post("/api/groups/{key}/pause")
     def api_pause(key: str):
         return _enqueue("pause_group", {"key": decode_group_key(key)})
@@ -314,13 +328,22 @@ def create_app(manager) -> FastAPI:
 
     @app.post("/api/torrents/bulk")
     def api_t_bulk(body: dict = None):
-        """批量操作(平铺视图多选): 单命令批量, 主循环侧一次 API 调用传全部 hashes"""
+        """批量操作(平铺视图多选): 单命令批量, 主循环侧一次 API 调用传全部目标
+
+        两种模式(DLG-02): hashes=种子 hash 列表; keys=分组 key 列表(URL 编码态, 与
+        /api/groups/{key}/delete 同一编解码), 可混合。主循环侧展开组成员并与 hashes
+        合并去重后一次调用; 回执结构与纯 hash 模式一致(queued/cmd_id + 聚合回执)。
+        """
         b = body or {}
         payload = {
             "hashes": [str(h) for h in (b.get("hashes") or []) if h],
             "action": str(b.get("action") or ""),
             "delete_files": bool(b.get("delete_files", False)),
         }
+        # 组键模式(DLG-02): 非空才入 payload, 纯 hash 调用的队列载荷与历史形态完全一致
+        keys = [decode_group_key(str(k)) for k in (b.get("keys") or []) if k]
+        if keys:
+            payload["keys"] = keys
         return _enqueue("bulk_torrents", payload)
 
     # ---- 种子中心视图读端点(WEB UI 替代 qB 界面: 详情抽屉/全局统计) ----
@@ -362,10 +385,15 @@ def create_app(manager) -> FastAPI:
 
     @app.get("/api/torrents/{hash}/peers")
     def api_torrent_peers(hash: str):
-        """单种子 peer 列表(qB 透传; 详情抽屉打开期间前端按需轮询, 关闭即停, 不进主循环 tick)"""
+        """单种子 peer 列表(qB 透传; 详情抽屉打开期间前端按需轮询, 关闭即停, 不进主循环 tick)
+
+        走 sync/torrentPeers(qbittorrent-api 2026.8.1 无 torrents_peers 方法, 旧调用线上
+        AttributeError): 响应整包含 rid/full_update/peers/peers_removed, 前端对 peers 键
+        做 dict/数组双形态归一。
+        """
         manager.touch_web_client()
         _require_torrent(hash)
-        return dict(_require_client().torrents_peers(hash) or {})
+        return dict(_require_client().sync_torrent_peers(torrent_hash=hash) or {})
 
     @app.get("/api/stats")
     def api_stats():
@@ -435,6 +463,10 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         view = manager._traffic_view
         curve_enabled = view.get("state") not in (None, "", "disabled")
+        # 曲线存在但 enabled=False: 功能整体停用, 视为未启用(快照滞后/未发布时也兜底正确)
+        gslc = manager.config.global_speed_limit_curve
+        if gslc is not None and not gslc.enabled:
+            curve_enabled = False
         target = None
         if curve_enabled:
             t = (view.get("limit") or {}).get("target") or {}

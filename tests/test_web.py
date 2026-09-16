@@ -20,6 +20,7 @@
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
+- test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
 - test_build_search_index_incremental_and_evict: 增量维护(不重拉已建条目/补拉新增/淘汰已删)
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
@@ -28,14 +29,17 @@
 - test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
+- test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
+- test_api_t_bulk_group_keys_enqueue: bulk 组键模式(DLG-02): keys 编码组键入队解码回 tuple, 可与 hashes 混合; 纯 hash 载荷不带 keys 键; 无密钥 401
 - test_drain_web_commands_torrent_write_actions: 二轮写命令正常执行(参数透传/cmd_id 回执 ok/限速位置同步快照)
 - test_drain_web_commands_torrent_write_unknown_hash_skips: 二轮写命令未知 hash 静默跳过不调 API
 - test_drain_web_commands_share_limits_and_queue_mapping: share-limits 缺省维度 -2 补齐; queue 动作映射; 未知动作 error 回执
 - test_drain_web_commands_torrent_write_param_errors: 写命令参数错误 -> error 回执且不调 API, 后续命令继续
 - test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
+- test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
 - test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
 - test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
@@ -51,6 +55,7 @@
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
+- test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503)
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
@@ -58,6 +63,7 @@
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
+- test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
@@ -199,7 +205,7 @@ def _make_web_manager(tmp_path, config_text):
         data_dir=str(tmp_path),
         config=config,
         config_path=config_file,
-        store=SimpleNamespace(groups=groups, get=lambda h: None, server_state=None),
+        store=SimpleNamespace(groups=groups, by_hash={}, get=lambda h: None, server_state=None),
         client=None,
         _web_last_seen=0.0,
         _group_view_dirty=False,
@@ -607,6 +613,55 @@ def test_build_group_view(tmp_path):
     assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
 
 
+def test_build_group_view_member_num_seeds_fields(tmp_path):
+    """组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete(TorrentRecord 快照直取)
+
+    前端成员列/种子页展示连接数与可用性的数据源: _member_view 是组视图 members 与
+    singles 未归组种子的共同投影, 字段在成员层透出后两处同形。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    t1 = FakeTorrent(
+        hash="HA",
+        name="Show",
+        save_path=r"R:/s",
+        num_seeds=12,
+        num_leechs=3,
+        num_complete=45,
+        num_incomplete=6,
+    )
+    t2 = FakeTorrent(
+        hash="HB",
+        name="Show",
+        save_path=r"R:/s",
+        num_seeds=34,
+        num_leechs=5,
+        num_complete=67,
+        num_incomplete=8,
+    )
+    seed_store(mgr, [t1, t2])
+    key = ("R:/s", ("a.mkv", "b.mkv"))
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+
+    members = mgr._build_group_view()[0]["members"]
+    for m in members:
+        for f in ("num_seeds", "num_leechs", "num_complete", "num_incomplete"):
+            assert f in m, f"组视图成员缺少字段 {f}: {sorted(m)}"
+    by_hash = {m["hash"]: m for m in members}
+    assert by_hash["HA"]["num_seeds"] == 12
+    assert by_hash["HA"]["num_leechs"] == 3
+    assert by_hash["HA"]["num_complete"] == 45
+    assert by_hash["HA"]["num_incomplete"] == 6
+    assert by_hash["HB"]["num_seeds"] == 34
+    assert by_hash["HB"]["num_leechs"] == 5
+    assert by_hash["HB"]["num_complete"] == 67
+    assert by_hash["HB"]["num_incomplete"] == 8
+
+
 def test_build_group_view_hr_tags(tmp_path):
     """分组视图透出 HR 标签展示值: 已触发未达标 -> hr_tag, 已达标 -> hr_tag_done
 
@@ -939,6 +994,33 @@ def test_api_search_endpoint(web_env):
     assert client.get("/api/search", params={"q": "movie"}).status_code == 401
 
 
+def test_api_paths_endpoint(web_env):
+    """GET /api/paths: 已知目录聚合(DLG-04): 组 save_path + 现有种子 save_path, 排序去重
+
+    组 key 首元已是规范化 save_path; 种子侧经 path_normalize 归一分隔符后去重(反斜杠写法
+    与组同径不重复); 空路径跳过; 只读快照无副作用; 鉴权沿用 /api/* 依赖。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    mgr.store.groups = {
+        ("R:/Downloads", ("a.mkv", "b.mkv")): ["HA", "HB"],
+        ("D:/ISO", ("x.iso", )): ["HC"],
+    }
+    mgr.store.by_hash = {
+        "HA": SimpleNamespace(hash="HA", save_path="R:\\Downloads"),  # 反斜杠写法 -> 与组 key 同径去重
+        "HC": SimpleNamespace(hash="HC", save_path="D:/ISO"),
+        "HD": SimpleNamespace(hash="HD", save_path="E:/TV/"),
+        "HE": SimpleNamespace(hash="HE", save_path=""),  # 空路径跳过
+    }
+    r = client.get("/api/paths", headers=auth).json()
+    assert r == {"paths": ["D:/ISO", "E:/TV/", "R:/Downloads"]}, r
+    # 只读无副作用: 快照未被改动
+    assert set(mgr.store.groups) == {("R:/Downloads", ("a.mkv", "b.mkv")), ("D:/ISO", ("x.iso", ))}
+    assert set(mgr.store.by_hash) == {"HA", "HC", "HD", "HE"}
+    # 鉴权: 无密钥 401
+    assert client.get("/api/paths").status_code == 401
+
+
 # ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------
 
 
@@ -1147,6 +1229,38 @@ def test_api_torrent_write_endpoints_enqueue(web_env):
     # 鉴权沿用既有 /api/* 依赖: 无/错密钥 401
     assert client.post("/api/torrents/HA/recheck").status_code == 401
     assert client.post("/api/torrents/bulk", json={"hashes": ["HA"], "action": "pause"}).status_code == 401
+
+
+def test_api_t_bulk_group_keys_enqueue(web_env):
+    """bulk 组键模式(DLG-02): keys 传编码组键, 入队前解码回 tuple; 可与 hashes 混合
+
+    纯 hash 调用不带 keys 键(队列载荷与历史形态完全一致, 不碰既有断言); 无密钥 401。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    key = encode_group_key(("R:/Downloads", ("a.mkv", "b.mkv")))
+    # 混合选择: hashes + keys(解码回原组键 tuple) 同 payload 入队
+    resp = client.post(
+        "/api/torrents/bulk",
+        headers=auth,
+        json={"hashes": ["HC"], "keys": [key], "action": "delete", "delete_files": True},
+    )
+    assert resp.status_code == 200 and resp.json()["queued"] is True
+    cmd, payload = mgr.web_commands.get_nowait()
+    payload.pop("cmd_id")
+    assert cmd == "bulk_torrents"
+    assert payload == {
+        "hashes": ["HC"],
+        "keys": [("R:/Downloads", ("a.mkv", "b.mkv"))],
+        "action": "delete",
+        "delete_files": True,
+    }, payload
+    # 纯 hash 调用: 载荷不含 keys 键(历史形态不变)
+    client.post("/api/torrents/bulk", headers=auth, json={"hashes": ["HA"], "action": "pause"})
+    _, payload2 = mgr.web_commands.get_nowait()
+    assert "keys" not in payload2
+    # 鉴权: 无密钥 401
+    assert client.post("/api/torrents/bulk", json={"keys": [key], "action": "delete"}).status_code == 401
 
 
 def test_drain_web_commands_torrent_write_actions():
@@ -1453,6 +1567,52 @@ def test_drain_web_commands_bulk_torrents():
         assert mgr._web_results["b6"]["status"] == "error"
 
 
+def test_drain_web_commands_bulk_torrents_group_keys():
+    """bulk 组键模式(DLG-02): 逐组展开成员级联全组, 与 hashes 合并去重, 缺失按组计数
+
+    组键删除 = 组内全部在册成员一次 API 调用(与 delete_group 同级联语义);
+    组不存在/成员全部不在快照计一个缺失组(不按种子数), 回执文案与种子缺失分列。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # 组键删除: 级联全组(一次调用传全部成员), delete_files 透传, 成员从快照移除, 回执 ok
+        mgr.web_commands.put(
+            ("bulk_torrents", {"keys": [key], "action": "delete", "delete_files": True, "cmd_id": "g1"})
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("delete", True), client.calls
+        assert mgr.store.get("HA") is None and mgr.store.get("HB") is None
+        assert mgr._web_results["g1"]["status"] == "ok"
+
+
+def test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing():
+    """bulk 组键模式: 混合选择合并去重(显式 hash 与组员重叠不重复调用); 缺失组分列计数"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # 混合: 组(含 HA/HB) + 散种子 HA(重叠) + 散种子 GONE(缺失) -> 去重后 [HA, HB] 一次调用; 回执带缺失计数
+        mgr.web_commands.put(
+            ("bulk_torrents", {"hashes": ["HA", "GONE"], "keys": [key], "action": "pause", "cmd_id": "g2"})
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("pause", ["HA", "HB"]), client.calls[-1]
+        r = mgr._web_results["g2"]
+        assert r["status"] == "error" and "1/2" in r["error"], r
+        # 组键不存在/成员不在快照 -> 计缺失组, 不调 API
+        before = list(client.calls)
+        gone_key = ("R:/gone", ("x.mkv", ))
+        mgr.web_commands.put(("bulk_torrents", {"keys": [gone_key], "action": "pause", "cmd_id": "g3"}))
+        mgr._drain_web_commands()
+        assert client.calls == before, "缺失组不应调用 qB API"
+        r = mgr._web_results["g3"]
+        assert r["status"] == "error" and "1/1 个组" in r["error"], r
+        # 组部分成员仍在: 只作用于在册成员, 组不算缺失
+        mgr.store.by_hash.pop("HA")
+        mgr.web_commands.put(("bulk_torrents", {"keys": [key], "action": "resume", "cmd_id": "g4"}))
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("resume", ["HB"]), client.calls[-1]
+        assert mgr._web_results["g4"]["status"] == "ok"
+
+
 def test_cmd_trackers_write_invalidates_lazy_cache():
     """tracker 三兄弟写后失效 _trackers_info 惰性缓存: 下轮读取拉新值(同 tick 内后续读不拿旧值)"""
     with tempfile.TemporaryDirectory() as td:
@@ -1658,6 +1818,36 @@ def test_build_singles_view_ungrouped_only():
         again = mgr.ensure_group_state(rid=state["rid"])
         assert "singles" not in again and "groups" not in again
         assert "shows" not in again, "追剧视图与 groups 同版本门控: 版本一致不回传"
+
+
+def test_build_singles_view_num_seeds_fields():
+    """singles 视图透出 num_seeds/num_leechs/num_complete/num_incomplete(与组视图成员同形)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        from helpers import FakeTorrent, seed_store
+
+        seed_store(
+            mgr, [
+                FakeTorrent(
+                    hash="HZ",
+                    name="Lone",
+                    save_path=r"R:\Elsewhere",
+                    num_seeds=9,
+                    num_leechs=2,
+                    num_complete=11,
+                    num_incomplete=4,
+                )
+            ]
+        )
+        mgr._group_view_dirty = True
+        state = mgr.ensure_group_state(rid=None)
+        singles = {s["hash"]: s for s in state["singles"]}
+        assert "HZ" in singles, f"singles 应只含未归组种子: {state['singles']}"
+        s = singles["HZ"]
+        assert s["num_seeds"] == 9
+        assert s["num_leechs"] == 2
+        assert s["num_complete"] == 11
+        assert s["num_incomplete"] == 4
 
 
 def test_build_shows_view_aggregation():
@@ -2012,6 +2202,35 @@ def test_api_speed_mode_and_override():
         assert ("transfer_set_download_limit", 1024 * 1024) in client.calls
 
 
+def test_api_speed_mode_curve_config_disabled():
+    """曲线存在但 enabled=False -> /api/speed/mode 返回 curve_enabled=False(快照滞后也兑底); 对照 enabled=True 不影响"""
+    from fastapi.testclient import TestClient
+
+    from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
+    from helpers import FakeClient, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr._web_token = "t"
+        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
+            dat_path="x.dat",
+            curves=[PeriodCurve(period="day", upload_points=[CurvePoint(threshold_bytes=1, speed_bytes_per_s=1)])],
+            enabled=False,
+        )
+        mgr._traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 滞后快照
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": "Bearer t"}
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["curve_enabled"] is False and data["curve_target"] is None
+
+        # 对照: 恢复 enabled=True(缺省)后, 快照判定不受配置叠加影响
+        mgr.config.global_speed_limit_curve.enabled = True
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["curve_enabled"] is True
+        assert data["curve_target"] == {"upload_kib": 100, "download_kib": 50}
+
+
 def test_api_add_torrent_endpoint():
     """添加种子(JSON+base64): bytes 经命令队列内存直传(零临时文件零新依赖) + 选项透传; 空来源 400"""
     import base64
@@ -2329,6 +2548,40 @@ def test_api_torrent_subresources(web_env):
     # qB 断连: 503
     mgr.client = None
     assert client.get("/api/torrents/HA/files", headers=auth).status_code == 503
+    assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
+
+
+def test_api_torrent_peers_endpoint(web_env):
+    """GET /api/torrents/{hash}/peers: 走 sync_torrent_peers(torrent_hash=..)整包透传
+
+    qbittorrent-api 2026.8.1 无 torrents_peers 方法(线上调用 AttributeError), 端点改走
+    sync/torrentPeers —— 响应整包含 rid/full_update/peers/peers_removed, 前端对 peers 键
+    做 dict/数组双形态归一(抽屉 state 默认 peers: {peers: []} 同形状)。回归守阵:
+    若改回旧调用, FakeClient 已无 torrents_peers, 本测试 500 红。
+    """
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord(hash="HA", name="X")
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    fake = FakeClient()
+    fake.peers_map["HA"] = {
+        "rid": 7,
+        "full_update": True,
+        "peers": {"1.2.3.4:51413": {"ip": "1.2.3.4", "port": 51413, "client": "qBittorrent 5.0"}},
+        "peers_removed": [],
+    }
+    mgr.client = fake
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    resp = client.get("/api/torrents/HA/peers", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json() == fake.peers_map["HA"], "sync 响应整包透传(前端按 peers 键归一)"
+    assert fake.peers_calls == 1
+    # 未知 hash: 404(先于 client 检查); qB 断连: 503
+    assert client.get("/api/torrents/NOPE/peers", headers=auth).status_code == 404
+    mgr.client = None
     assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
 
 

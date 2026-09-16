@@ -1,6 +1,6 @@
 """全局限速曲线 mixin: Traffic Monitor 流量数据 -> qB 全局速度限制
 
-由 QbManager 组合。对应 config.global_speed_limit_curve(缺省 None = 不启用), 作为
+由 QbManager 组合。对应 config.global_speed_limit_curve(缺省 None 或 enabled: false = 不启用), 作为
 global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按每条 period 曲线
 聚合当前累计上传/下载量, 查档得到该方向限速(方案B 全程分档覆盖), 同方向多条曲线
 取最严(最小非零)速度, 有变化时经 QbApi.set_global_speed_limits 写 qB 全局偏好。
@@ -66,6 +66,9 @@ class SpeedCurveMixin:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
         conf = self.config.global_speed_limit_curve
         if conf is None:  # 未启用该功能
+            self._publish_traffic("disabled")
+            return REQUEUE
+        if not conf.enabled:  # 显式停用(enabled: false): 功能整体关闭, 不读数据不动 qB
             self._publish_traffic("disabled")
             return REQUEUE
 

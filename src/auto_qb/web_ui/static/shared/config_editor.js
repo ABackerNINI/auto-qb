@@ -32,9 +32,7 @@ window.CONFIG_EDITOR = {
         baseline: "",  // 已保存树的 JSON 快照(脏检测)
         loading: false,
         saving: false,
-        error: "",  // 加载/保存错误(加载失败时整页替换, 保存失败时顶部横幅)
-        notice: "",  // 成功提示
-        noticeKind: "",  // ok | warn | error
+        error: "",  // 加载/保存错误(加载失败时整页替换; 保存失败走 toast)
         activeGroup: "basic",
         previewOpen: false,
         previewText: "",
@@ -194,24 +192,21 @@ window.CONFIG_EDITOR = {
     },
     async cfgSave() {
       this.cfg.saving = true;
-      this.cfg.notice = "";
       try {
         const result = await this.api("/api/config", { method: "PUT", body: JSON.stringify({ tree: this.cfg.tree }) });
         // 后端会把 R 级字段回退为磁盘旧值 → 重新拉取树保证 UI 与磁盘一致
         const fresh = await this.api("/api/config");
         this.cfgSetTree(fresh.tree);
         const n = (result.changes || []).length;
+        // 保存结果反馈走全局 toast(timeout 型 = 琥珀色时钟, 恰合「已保存但需重启才生效」的中间态)
         if (result.restart_required && result.restart_required.length) {
-          this.cfg.noticeKind = "warn";
-          this.cfg.notice = `已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${result.restart_required.join(", ")}`;
+          this.toast(`已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${result.restart_required.join(", ")}`, "timeout", 9000);
         } else {
-          this.cfg.noticeKind = "ok";
-          this.cfg.notice = `已保存并热重载(变更 ${n} 项)`;
+          this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
         }
         this.cfg.previewOpen = false;
       } catch (e) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = "保存失败: " + (e.message || "未知错误");
+        this.toast("保存失败: " + (e.message || "未知错误"), "error", 9000);
       } finally {
         this.cfg.saving = false;
       }
@@ -224,7 +219,6 @@ window.CONFIG_EDITOR = {
         if (!ok) return;
       }
       await this.cfgLoad();
-      this.cfg.notice = "";
       this.cfg.previewOpen = false;
     },
     cfgReset() {
@@ -233,7 +227,6 @@ window.CONFIG_EDITOR = {
       this.cfg.tree = null;
       this.cfg.baseline = "";
       this.cfg.error = "";
-      this.cfg.notice = "";
       this.cfg.previewOpen = false;
       this.cfg.previewText = "";
       this.cfg.previewError = "";
@@ -587,8 +580,7 @@ window.CONFIG_EDITOR = {
       const name = (this.cfg.newTrackerName || "").trim();
       if (!name) return;
       if (this.cfgTracker(name)) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `站点 ${name} 已存在`;
+        this.toast(`站点 ${name} 已存在`, "error");
         return;
       }
       const spec = {};
@@ -598,7 +590,6 @@ window.CONFIG_EDITOR = {
       this.cfgSetPath([...this.cfgConfigPath(), "trackers", name], spec);
       this.cfg.trackerKey = name;
       this.cfg.newTrackerName = "";
-      this.cfg.notice = "";
       this.cfgAddCancel();
     },
     async cfgTrackerRename(oldName) {
@@ -608,8 +599,7 @@ window.CONFIG_EDITOR = {
       if (!name || name === oldName) return;
       const trackers = this.cfgConfig().trackers || {};
       if (trackers[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `站点 ${name} 已存在`;
+        this.toast(`站点 ${name} 已存在`, "error");
         return;
       }
       const rebuilt = {};
@@ -677,8 +667,7 @@ window.CONFIG_EDITOR = {
       if (!name) return;
       if (!name.endsWith("_rules")) name += "_rules";
       if (this.cfgRuleGroups()[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `规则集 ${name} 已存在`;
+        this.toast(`规则集 ${name} 已存在`, "error");
         return;
       }
       this.cfgSetPath([...this.cfgConfigPath(), name], {});
@@ -704,8 +693,7 @@ window.CONFIG_EDITOR = {
       if (!name) return;
       const group = this.cfgRuleGroups()[groupKey] || {};
       if (group[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `规则 ${name} 已存在`;
+        this.toast(`规则 ${name} 已存在`, "error");
         return;
       }
       // 新规则仅给 conditions/actions 两个空列表, 其余键留空由后端走默认值(保持 YAML 简洁)
@@ -727,8 +715,7 @@ window.CONFIG_EDITOR = {
       if (!name || name === ruleName) return;
       const group = this.cfgRuleGroups()[groupKey] || {};
       if (group[name]) {
-        this.cfg.noticeKind = "error";
-        this.cfg.notice = `规则 ${name} 已存在`;
+        this.toast(`规则 ${name} 已存在`, "error");
         return;
       }
       const rebuilt = {};
@@ -763,6 +750,9 @@ window.CONFIG_EDITOR = {
     cfgCurveItems() {
       const base = this.cfgCurvePath();
       return [
+        // SPD-03 enabled 总开关: 勾 = 写 enabled:true, 取消勾 = 写 enabled:false(保留各档配置, 不删段);
+        // 键缺省 = 后端默认 true, 开关按勾选显示并带"默认"角标
+        { type: "field", field: { key: "enabled", label: "启用", kind: "bool", default: true, help: "关闭后曲线任务整体停用(不写 qB), 各档配置保留" }, path: [...base, "enabled"], depth: 0 },
         { type: "field", field: { key: "interval", label: "执行间隔", kind: "time", help: "留空 = 回退主 interval", default: "" }, path: [...base, "interval"], depth: 0 },
         { type: "field", field: { key: "dat_path", label: "Traffic Monitor 数据文件", kind: "path", placeholder: ".../history_traffic.dat", default: "" }, path: [...base, "traffic_source", 0, "traffic_monitor", "dat_path"], depth: 0 },
       ];
@@ -860,8 +850,10 @@ window.CONFIG_EDITOR = {
     /* 阶梯折线数据(纯展示)
      *
      * 语义与 curves.curve_speed 一致: 阈值是区间**上限**, 末档之后一直沿用末档速度。
-     * 输出包含: 曲线 path、面积 path、X/Y 轴刻度(4 段)、悬停标记点几何 —— 全部由前端算,
+     * 输出包含: 曲线 path、面积 path、X/Y 轴刻度与档位边界参考线、悬停标记点几何 —— 全部由前端算,
      * 图尺寸足够大可读(PAD 留出轴标签空间)。合法性/解析失败仍只提示不阻断(后端把关)。
+     * SPD-02: x 轴改为**按档位边界分段等宽**(每档固定宽度, 末档边界后只留 ∞ 提示区),
+     * 不再按流量线性映射 —— 否则末档区间远宽于前面档位时最后一档占位超 80%, 各档形状不可读。
      */
     _curveChart(i, direction) {
       return this._buildCurveChart(i, direction);
@@ -881,33 +873,47 @@ window.CONFIG_EDITOR = {
 
       // 几何: 左侧留 Y 轴标签, 底部留 X 轴标签; 图体明显放大(旧版 320×96 太小)
       const W = 560, H = 210, PAD_L = 58, PAD_R = 14, PAD_T = 12, PAD_B = 30;
-      const maxT = points[points.length - 1].t;
-      const tail = maxT * 0.08;  // 末档向右延伸一段, 表示"此后一直沿用末档"
-      const spanT = maxT + tail;
+      const usableW = W - PAD_L - PAD_R;
       const maxS = Math.max(...points.map((p) => p.s), 1);
-      const x = (t) => PAD_L + (W - PAD_L - PAD_R) * (t / spanT);
       const y = (s) => H - PAD_B - (H - PAD_B - PAD_T) * (s / maxS);
 
+      // SPD-02: x 轴按档位边界分段等宽 —— 每档固定 segW 宽, 末档边界之后只留半档宽的"∞"提示区,
+      // 不再按流量线性延伸(否则末档区间远宽于前面档位时, 最后一档占位超 80%)。
+      const n = points.length;
+      const segW = usableW / (n + 0.5);  // n 档 + 半档 ∞ 区
+      // t -> px: t 落在 [b(j-1), b(j)](b(-1)=0)时在第 j 段内线性插值; 超出末档边界贴右缘
+      const x = (t) => {
+        if (t <= 0) return PAD_L;
+        for (let j = 0; j < n; j++) {
+          if (t <= points[j].t) {
+            const lo = j === 0 ? 0 : points[j - 1].t;
+            const f = points[j].t > lo ? (t - lo) / (points[j].t - lo) : 1;
+            return PAD_L + segW * (j + f);
+          }
+        }
+        return PAD_L + usableW;
+      };
+
       let line = `M ${x(0).toFixed(1)} ${y(points[0].s).toFixed(1)}`;
-      for (let k = 1; k < points.length; k++) {
+      for (let k = 1; k < n; k++) {
         line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k - 1].s).toFixed(1)}`;
         line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k].s).toFixed(1)}`;
       }
-      const lastS = points[points.length - 1].s;
-      line += ` L ${x(spanT).toFixed(1)} ${y(lastS).toFixed(1)}`;
-      const area = `${line} L ${x(spanT).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+      const lastS = points[n - 1].s;
+      line += ` L ${(PAD_L + usableW).toFixed(1)} ${y(lastS).toFixed(1)}`;
+      const area = `${line} L ${(PAD_L + usableW).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
 
-      // 刻度: X 取 5 个等距累计流量, Y 取 5 个等距限速(含 0 与最大值)
-      const xTicks = [];
-      for (let k = 0; k <= 4; k++) {
-        const t = (spanT * k) / 4;
-        xTicks.push({ pos: x(t), label: this._fmtBytes(t) });
-      }
+      // 刻度: X 取档位边界(分段等宽后等距刻度不再对应整齐的流量值), 右缘标 ∞; Y 仍取 5 个等距限速
+      const xTicks = [{ pos: PAD_L, label: "0" }];
+      for (let j = 0; j < n; j++) xTicks.push({ pos: x(points[j].t), label: this._fmtBytes(points[j].t) });
+      xTicks.push({ pos: PAD_L + usableW, label: "∞" });
       const yTicks = [];
       for (let k = 0; k <= 4; k++) {
         const s = (maxS * k) / 4;
         yTicks.push({ pos: y(s), label: this._fmtSpeed(s) });
       }
+      // 档位边界竖参考线(预计算像素位置, 模板不再按线性比例折算)
+      const tierLines = points.map((p) => ({ x: x(p.t) }));
       return {
         viewBox: `0 0 ${W} ${H}`,
         w: W,
@@ -920,13 +926,13 @@ window.CONFIG_EDITOR = {
         area: area,
         xTicks: xTicks,
         yTicks: yTicks,
+        tierLines: tierLines,
         baseY: y(0),
-        // 悬停换算所需的数据域
-        spanT: spanT,
+        // 悬停换算所需的数据域: segW(每档宽) + points(各档边界/限速)
+        segW: segW,
         maxS: maxS,
         points: points,
-        maxLabel: this._fmtBytes(spanT),
-        note: `${points.length} 档 · 最严 ${this._fmtSpeed(maxS)}`,
+        note: `${n} 档 · 最严 ${this._fmtSpeed(maxS)}`,
       };
     },
     /* 鼠标在图上移动: 把像素位置换算回 (累计流量, 限速) 并高亮该档(阶梯: 找所属区间) */
@@ -936,23 +942,27 @@ window.CONFIG_EDITOR = {
       const svg = event.currentTarget.querySelector("svg");
       const rect = svg.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * chart.w;
-      const py = ((event.clientY - rect.top) / rect.height) * chart.h;
-      const usableW = chart.w - chart.padL - chart.padR;
-      const t = Math.max(0, Math.min(1, (px - chart.padL) / usableW)) * chart.spanT;
+      const rel = Math.max(0, Math.min(chart.w - chart.padR, px) - chart.padL);
+      // SPD-02 分段等宽: 第 j 段固定 segW 宽; 末档之后的 ∞ 提示区仍属末档(阈值为其上限)
+      const n = chart.points.length;
+      const j = Math.min(n - 1, Math.floor(rel / chart.segW));
+      const f = Math.min(1, Math.max(0, (rel - chart.segW * j) / chart.segW));
+      const lo = j === 0 ? 0 : chart.points[j - 1].t;
+      const t = lo + (chart.points[j].t - lo) * f;
       // 阶梯语义: 该累计流量落入哪一档(阈值为区间上限) -> 用该档的限速
-      let idx = chart.points.findIndex((p) => t < p.t);
-      if (idx < 0) idx = chart.points.length - 1;
-      const speed = chart.points[idx].s;
+      const speed = chart.points[j].s;
+      const hx = chart.padL + rel;
+      const hy = chart.h - chart.padB - (chart.h - chart.padB - chart.padT) * (speed / chart.maxS);
       this.cfg.chartHover = {
         key: `${i}:${direction}`,
-        x: chart.padL + usableW * (t / chart.spanT),
-        y: chart.h - chart.padB - (chart.h - chart.padB - chart.padT) * (speed / chart.maxS),
-        tLabel: this._fmtBytes(t),
+        x: hx,
+        y: hy,
+        tLabel: rel > chart.segW * n ? "∞" : this._fmtBytes(t),
         sLabel: this._fmtSpeed(speed),
-        index: idx + 1,
+        index: j + 1,
         // tooltip 位置(用百分比定位在容器内)
-        leftPct: ((chart.padL + usableW * (t / chart.spanT)) / chart.w) * 100,
-        topPct: ((chart.h - chart.padB - (chart.h - chart.padB - chart.padT) * (speed / chart.maxS)) / chart.h) * 100,
+        leftPct: (hx / chart.w) * 100,
+        topPct: (hy / chart.h) * 100,
       };
     },
     cfgChartLeave() {

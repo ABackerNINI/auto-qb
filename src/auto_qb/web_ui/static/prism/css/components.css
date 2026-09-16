@@ -106,7 +106,12 @@
 .dist-chip .swatch { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
 .dist-chip.clear { color: var(--fg-dim); }
 .dist-chip.clear:hover { color: var(--fg); }
-.dist-chip.clear.is-off { visibility: hidden; }
+/* 无筛选时不再隐藏(仍保留占位以免按钮组左右推动), 改为降透明度的禁用态 ——
+ * R02: 旧方案 visibility:hidden 虽保留了占位宽度, 但在路径筛选器右侧留下一个
+ * 隐形占位造成的"幽灵空位"(实测 93px); 常驻可见 + 降透明后宽度不变、位置稳定、空位消失 */
+.dist-chip.clear.is-off { opacity: .32; }
+.dist-chip.clear:disabled { cursor: default; }
+.dist-chip.clear.is-off:hover { background: transparent; }
 .strip-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .strip-note { font-size: 11.5px; color: var(--fg-muted); }
 .strip-note > b { color: var(--fg); }
@@ -147,6 +152,10 @@
   border-radius: 999px; background: var(--accent); }
 .pop-item.on .pop-count { color: var(--accent-hi); font-weight: 600; }
 .pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* 弹层关闭淡出(enter 仍走各弹层已有的 drop-in 动画; 配合 index.html 的 <transition name="pop">) */
+.pop-leave-active { transition: opacity var(--dur-fast) var(--ease); }
+.pop-leave-to { opacity: 0; }
 
 /* 状态语义配色(分布条/chip/明细圆点共用, 与后端 kind 一一对应) */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
@@ -217,7 +226,7 @@
 .modal { width: 404px; max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
   background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: modal-in .2s var(--ease-spring); }
-.modal.wide { width: 560px; }
+.modal.wide { width: var(--modal-wide-w); }
 .modal-title { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; }
 .modal-title .ico { color: var(--warn); }
 .modal.danger .modal-title .ico { color: var(--error); }
@@ -240,12 +249,6 @@
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
 .modal-detail-row .d-value { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere;
   color: var(--fg-soft); font-weight: 500; }
-.modal-members { margin: -4px 0 14px; max-height: 180px; overflow-y: auto; padding: 4px 12px;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-sunken); }
-.modal-member-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; min-width: 0; }
-.modal-member-row + .modal-member-row { border-top: 1px solid var(--border-soft); }
-.modal-member-row .mm-site { flex: 0 0 auto; min-width: 58px; color: var(--fg-muted); font-weight: 600; font-size: 11.5px; }
-.modal-member-row .mm-name { flex: 1; min-width: 0; color: var(--fg-soft); overflow-wrap: anywhere; }
 
 /* ---------------- 表单控件(ce-*) ---------------- */
 .ce-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm);
@@ -419,16 +422,27 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal.add-dialog { width: 640px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
 .add-dialog-x { margin-left: auto; }
 .add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
-.add-dialog-field { margin-top: 14px; }
-.add-dialog-field:first-child { margin-top: 4px; }
+.add-dialog-field { margin-top: 18px; }
+.add-dialog-field:first-child { margin-top: 6px; }
 .add-dialog-label { display: block; margin-bottom: 6px; color: var(--fg-dim); font-size: 11.5px; font-weight: 600;
   letter-spacing: .04em; }
 .add-dialog-input, .add-dialog-textarea { width: 100%; padding: 8px 11px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px; }
 .add-dialog-input:focus, .add-dialog-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .add-dialog-textarea { resize: vertical; min-height: 72px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; }
-.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; }
-.add-dialog-grid .add-dialog-field { margin-top: 14px; }
+.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 12px; }
+.add-dialog-grid .add-dialog-field { margin-top: 18px; }
+/* W2-FE-1(DLG-03/04): 来源行(文件选择 + 添加链接按钮) / 分类标签 combobox / 选择位置面板(复用 .pop-menu 视觉) */
+.add-dialog-source { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-dialog-source .add-dialog-filepick { flex: 1 1 auto; min-width: 0; }
+.add-dialog-linkbtn { flex: 0 0 auto; }
+.add-dialog-combo { position: relative; }
+.add-dialog-pathrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-dialog-pathrow .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+.add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
+.add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
+.add-pop-list { max-height: 210px; overflow-y: auto; }
+.add-pop-item { cursor: pointer; }
 /* 文件选择按钮(隐藏原生 input, label 即按钮)与已选文件 chips */
 .add-dialog-filepick { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--radius-sm);
   border: 1px dashed var(--border-strong); background: var(--surface-1); color: var(--fg-muted); font-size: 13px;
@@ -444,23 +458,15 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border-radius: 50%; border: none; background: transparent; color: var(--fg-dim); cursor: pointer; flex: 0 0 auto; }
 .add-dialog-chipx:hover { background: var(--error-soft); color: var(--error); }
 .add-dialog-chipx .ico { width: 10px; height: 10px; }
-/* 选项勾选行: 与 .modal-check 同族, 但五项并排换行; 跳过校验项高亮危险色 */
+/* 选项勾选行: 与 .modal-check 同族, 但五项并排换行 */
 .add-dialog-checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-check { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: var(--radius-sm);
   background: var(--surface-1); border: 1px solid var(--border-soft); font-size: 12.5px; color: var(--fg-muted);
   cursor: pointer; user-select: none; }
 .add-dialog-check:hover { border-color: var(--border-strong); }
 .add-dialog-check input { accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 auto; margin: 0; }
-.add-dialog-check-danger { border-color: var(--error); color: var(--error); }
-.add-dialog-check-danger input { accent-color: var(--error); }
 .add-dialog-hint { margin-top: 7px; color: var(--fg-dim); font-size: 11.5px; }
 .add-dialog-hint-warn { color: var(--error); }
-/* skip_checking 勾选时的顶部警告条(显眼, 琥珀) */
-.add-dialog-warnbar { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; padding: 8px 11px;
-  border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
-  color: var(--warn); font-size: 12.5px; font-weight: 600; }
-.add-dialog-warnbar .ico { color: var(--warn); }
-.add-dialog-preview .add-dialog-warnbar { margin: 0 0 6px; }
 /* D4 接管预览(静态说明区): 弱化底色 + 当前配置语义文案 */
 .add-dialog-preview { margin-top: 16px; padding: 11px 13px; border-radius: var(--radius-sm);
   background: var(--surface-1); border: 1px solid var(--border-soft); }
@@ -542,4 +548,44 @@ select option { background: var(--bg-elev); color: var(--fg); }
   margin: 6px -8px -8px; padding: 8px 8px 8px 10px; border: 0; border-top: 1px solid var(--border-soft);
   background: var(--bg-elev); color: var(--accent-hi); font: inherit; font-size: 12px; cursor: pointer;
   border-radius: 0 0 var(--radius) var(--radius); }
-.pop-mgr-btn:hover { color: var(--fg); background: var(--surface-2); }
+/* hover 底色必须不透明: --surface-2 是半透明高光, 直接当背景会让吸底按钮透出滚过的
+ * 选项行( FIX-02 "管理标签"项 hover 背景变透明 ); 用同色渐变把高光叠进 --bg-elev, 仍只引用令牌 */
+.pop-mgr-btn:hover { color: var(--fg); background: linear-gradient(var(--surface-2), var(--surface-2)), var(--bg-elev); }
+
+/* ================= CTX-01 彩色图标集(波次三 W2) =================
+ * 右键菜单此前除 开始/暂停/汇报 三个语义色与危险项外, 其余图标一律继承 --fg-dim(灰),
+ * 15+ 项看起来"全都没颜色"。这里按操作族补色, 色值一律来自令牌(themes/*.css 单点可调)。 */
+.ctx-item .ico-info { color: var(--cyan); }       /* 查看: 详细信息 */
+.ctx-item .ico-gauge { color: var(--limit-hit); } /* 编辑: 限速 */
+.ctx-item .ico-percent { color: var(--pink); }    /* 编辑: 分享率 */
+.ctx-item .ico-move { color: var(--teal); }       /* 编辑: 移动 */
+.ctx-item .ico-rename { color: var(--indigo); }   /* 编辑: 重命名 */
+.ctx-item .ico-copy { color: var(--blue); }       /* 复制族 */
+.ctx-item .ico-recheck { color: var(--accent); }  /* 维护: 重新校验 */
+.ctx-item .ico-super { color: var(--violet); }    /* 高级: 超级做种 */
+.ctx-item .ico-force { color: var(--warn); }      /* 高级: 强制开始 */
+.ctx-item .ico-queue { color: var(--teal); }      /* 队列族(与"移动"同族: 位置语义) */
+.ctx-item .ico-tmm { color: var(--green); }       /* 自动种子管理开关 */
+.ctx-item .ico-export { color: var(--lime); }     /* 导出 .torrent */
+/* 点位图标: 统计 / 运行日志(章节入口) 此前同样无颜色 */
+.ico-chart { color: var(--cyan); }
+.ico-log { color: var(--pink); }
+.ico-risk { color: var(--warn); }   /* 风险标识(RFB-02 件2: 紧凑图标替代文字徽标) */
+
+/* ================= CTX-02 触发源强调 =================
+ * 右键菜单弹出期间把被作用的那一行框出来, 让"这次操作针对谁"一眼可见。
+ * 刻意**不改背景**: 行底色已承担状态语义, 再叠一层会互相打架 —— 只用内描边强调。
+ * 标记与清理都在共享层(app.js _markCtxSource/_clearCtxSource), 双 UI 同源。 */
+.group-row.ctx-src, .member-row.ctx-src, .show-row.ctx-src, .ep-row.ctx-src {
+  box-shadow: inset 2px 0 0 var(--accent), inset 0 0 0 1px var(--accent-line); }
+.ctx-anchor.ctx-src { box-shadow: 0 0 0 2px var(--ring); border-radius: var(--radius-sm); }
+
+/* ================= W4 顶栏: 一级导航三态 + 设置右置 + 品牌动态化 ================= */
+/* 设置按钮独立成组靠右(与左侧视图导航分列); 复用 .tabs 的 hover/active 语言 */
+.tabs-right { margin-left: auto; }
+.brand-name { font-family: var(--font-display); letter-spacing: .02em; }
+.brand-name .qb { font-size: .86em; }   /* qb 字样略微减小 */
+.brand-mark .brand-orbit { width: 20px; height: 20px; color: var(--accent); }
+/* 卫星绕心旋转: 12s 线性匀速, 低干扰; prefers-reduced-motion 由 base.css 全局降级停转 */
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+.brand-orbit { animation: orbit-spin 12s linear infinite; transform-origin: 50% 50%; }

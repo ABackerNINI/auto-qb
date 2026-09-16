@@ -38,6 +38,7 @@ dist/
 
 # AutoClaw相关文件
 .openclaw/
+.openclaw-attachments/
 HEARTBEAT.md
 IDENTITY.md
 SOUL.md

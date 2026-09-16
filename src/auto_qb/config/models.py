@@ -171,10 +171,12 @@ class GlobalSpeedLimitCurve:
     dat_path: history_traffic.dat 路径(每行 "YYYY/MM/DD <上传KB>/<下载KB>", 单位 KB=1024B)
     curves: 多条 period 曲线(同方向多条命中时取最严限速, 见 curves.merge_direction)
     interval: 曲线任务执行间隔(秒), 对应配置 interval: 10M; None = 未指定, 回退主 interval
+    enabled: 功能总开关; True(缺省) = 现行行为, False = 整体停用(曲线任务短路不动 qB, Web 端视为未启用)
     """
     dat_path: str
     curves: List[PeriodCurve]
     interval: Optional[float] = None  # 秒; None = 使用 config.interval
+    enabled: bool = True  # False = 整体停用(任务短路: 不读 dat 不写 qB, 不按曲线调档)
 
 
 @dataclass

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEBUI 替代 qB 界面 · 波次三 需求拆解与修改计划 — auto-qb</title>
+<style>
+  :root {
+    --bg: #fafbfc;
+    --ink: #1a2530;
+    --ink-dim: #5a6a78;
+    --ink-faint: #8a99a6;
+    --line: #d9e0e6;
+    --line-soft: #e6ecf1;
+    --accent: #2d5f8a;
+    --accent-ink: #24496a;
+    --surface: #f2f5f7;
+    --warn: #8a5a2d;
+    --mono: "Cascadia Code", Consolas, "Courier New", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 0 32px 96px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono {
+    font-family: var(--mono); font-size: 0.86em; background: var(--surface);
+    border: 1px solid var(--line-soft); border-radius: 2px; padding: 0.08em 0.35em; white-space: nowrap;
+  }
+  /* ---------- 封面 ---------- */
+  header.cover { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: 52px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.08; margin: 18px 0 14px; }
+  .lede { font-size: 19px; color: var(--ink-dim); max-width: 62ch; }
+  .meta-row { display: flex; gap: 40px; margin-top: 34px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); flex-wrap: wrap; }
+  .meta-row b { display: block; color: var(--ink-dim); font-weight: 500; letter-spacing: 0.04em; }
+  /* ---------- 布局 ---------- */
+  .layout { display: grid; grid-template-columns: 240px 1fr; gap: 56px; margin-top: 48px; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 13.5px; }
+  nav.toc .toc-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--ink-dim); padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
+  nav.toc a .no { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 10px; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  main { min-width: 0; }
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 88px; }
+  .folio { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; }
+  h2 { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; margin-bottom: 8px; }
+  h3 { font-size: 19px; font-weight: 600; margin: 40px 0 12px; }
+  h4 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; }
+  p { max-width: 74ch; margin-bottom: 14px; }
+  p.small-note { font-size: 13.5px; color: var(--ink-dim); }
+  ul.tight { margin: 0 0 16px 20px; max-width: 74ch; }
+  ul.tight li { margin-bottom: 7px; }
+  ol.tight { margin: 0 0 16px 22px; max-width: 74ch; }
+  ol.tight li { margin-bottom: 7px; }
+  section.rule-top { border-top: 1px solid var(--line); padding-top: 44px; }
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 22px; font-size: 14px; }
+  th { text-align: left; font-weight: 600; font-size: 12.5px; letter-spacing: 0.04em; color: var(--ink-dim); border-bottom: 1px solid var(--line); padding: 8px 12px 8px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--line-soft); padding: 9px 12px 9px 0; vertical-align: top; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  .rec { color: var(--accent-ink); font-weight: 600; }
+  /* ---------- 标注 ---------- */
+  hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; border: 1px solid var(--line); padding: 1px 7px; color: var(--ink-dim); white-space: nowrap; }
+  .tag.b { color: var(--accent-ink); border-color: var(--accent); }
+  .tag.w { color: var(--warn); border-color: var(--warn); }
+  .callout { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); padding: 14px 18px; margin: 18px 0 22px; max-width: 74ch; }
+  .callout p { margin: 0; font-size: 14.5px; }
+  .callout .t { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; color: var(--accent-ink); text-transform: uppercase; margin-bottom: 6px; }
+  /* ---------- 指标 ---------- */
+  .metrics { display: flex; gap: 0; border: 1px solid var(--line); margin: 22px 0 26px; flex-wrap: wrap; }
+  .metric { flex: 1 1 140px; padding: 18px 20px; border-right: 1px solid var(--line-soft); }
+  .metric:last-child { border-right: 0; }
+  .metric .num { font-family: var(--mono); font-size: 34px; font-weight: 600; color: var(--accent-ink); line-height: 1; }
+  .metric .lbl { font-size: 12.5px; color: var(--ink-dim); margin-top: 8px; letter-spacing: 0.03em; }
+  /* ---------- 波次时间线 ---------- */
+  .wave { border: 1px solid var(--line); margin: 0 0 18px; }
+  .wave-head { display: flex; align-items: baseline; gap: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+  .wave-head .wid { font-family: var(--mono); font-size: 13px; color: var(--accent-ink); font-weight: 600; letter-spacing: 0.06em; }
+  .wave-head .wname { font-weight: 600; font-size: 15.5px; }
+  .wave-head .wmeta { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .wave-body { padding: 14px 18px 16px; font-size: 14px; }
+  .wave-body ul { margin: 0 0 8px 18px; }
+  .wave-body li { margin-bottom: 5px; }
+  .wave-body .dep { font-size: 12.5px; color: var(--ink-dim); font-family: var(--mono); }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } nav.toc { position: static; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">auto-qb · web ui · qb replacement wave 3</div>
+  <h1>WEBUI 替代 qB 界面<br>需求拆解与修改计划</h1>
+  <p class="lede">用户 30 条界面诉求的逐条拆解归类（32 个工作项 × 8 个类别），编排为 6 个可派发波次，附集群派发指引、5 个决策点与实施红线。目标不变：WEBUI 最终直接替代 qBittorrent 界面。</p>
+  <div class="callout">
+    <div class="t">执行状态 · 2026-09-17</div>
+    <p><b>32 个工作项已全部落地</b>（星图 atlas 与棱镜 prism 双 UI 同构），闸门 <code>uv run pytest tests -q</code> = <b>988 passed / 92% 分支覆盖</b>。收口明细与剩余人工项见 <a href="webui-qb-replace-wave3-handover.md">波次三交接文档 · §0.1 收口更新</a>（仍需人工：浏览器 CDP 双 UI 走查、真机 <code>--dry-run</code>、回流 <code>develop</code>、<code>DELIVERY/</code> 报告）。</p>
+  </div>
+  <div class="meta-row">
+    <div><b>来源</b>用户口述清单 2026-09-16</div>
+    <div><b>工作项</b>32（原始诉求 30 条）</div>
+    <div><b>波次</b>W0–W5，最大并行 3</div>
+    <div><b>测试基线</b>testing.md 单点（波次二后 971）</div>
+    <div><b>前置</b>波次一/二已合并 agentAutoClaw/develop</div>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <div class="toc-title">目录</div>
+  <a href="#s0"><span class="no">00</span>结论摘要</a>
+  <a href="#s1"><span class="no">01</span>拆解归类总表</a>
+  <a href="#s2"><span class="no">02</span>分类详述与验收</a>
+  <a href="#s3"><span class="no">03</span>波次编排</a>
+  <a href="#s4"><span class="no">04</span>集群派发指引</a>
+  <a href="#s5"><span class="no">05</span>决策点 D1–D5</a>
+  <a href="#s6"><span class="no">06</span>风险与红线</a>
+  <a href="#s7"><span class="no">07</span>验收与回归</a>
+</nav>
+
+<main>
+
+<!-- ================= 00 结论 ================= -->
+<section id="s0">
+  <div class="folio">00 · summary</div>
+  <h2>结论摘要</h2>
+  <div class="metrics">
+    <div class="metric"><div class="num">32</div><div class="lbl">工作项（30 条诉求拆出）</div></div>
+    <div class="metric"><div class="num">8</div><div class="lbl">归类（缺陷/表格/弹窗/右键/限速/导航/重构/棱镜）</div></div>
+    <div class="metric"><div class="num">6</div><div class="lbl">波次 W0–W5</div></div>
+    <div class="metric"><div class="num">5</div><div class="lbl">待拍板决策点</div></div>
+    <div class="metric"><div class="num">1</div><div class="lbl">确认级 bug（peers 端点）</div></div>
+  </div>
+
+  <h3>核心判断</h3>
+  <ul class="tight">
+    <li><b>没有结构性障碍，全是工程量。</b>波次一/二已把种子中心视图、16 个写命令端点、管理端点补齐；本轮 30 条诉求中 28 条是前端呈现与交互打磨，只有 4 条半动后端（peers 修复、统计空值、bulk 删除语义、限速体系）。</li>
+    <li><b>一条已定位的硬 bug 打头阵：</b><code>/api/torrents/{hash}/peers</code> 调用了 <code>torrents_peers()</code>，而 qbittorrent-api 2026.8.1 只有 <code>sync_torrent_peers()</code>（本机实测 <code>hasattr=False</code>），一行修复 + 补测。</li>
+    <li><b>先修缺陷、再动表格层、再动骨架。</b>导航 IA 重排（NAV-01）和两个大面重构（详情/设置页）必须排在表格布局（TBL-08 底部状态栏）之后，否则返工两次。</li>
+    <li><b>双 UI 纪律是本轮最大成本项。</b>30 条里 20 条要求「同步实现两个 UI」：星图（atlas）与棱镜（prism）模板层各一份，共享逻辑层（shared/app.js）单一来源——凡是列语义、色彩规则、键盘逻辑尽量下沉 shared，模板只做呈现。</li>
+    <li><b>派发友好。</b>32 项已按「单 agent 一个波次可独立吃下」的粒度切分，波次间只有 3 处硬依赖（TBL-08 → NAV-01，NAV-01b → RFB-02，SPD-04 ← SPD-01 语义），其余可并行。</li>
+  </ul>
+
+  <div class="callout">
+    <div class="t">建议节奏</div>
+    <p>W0 缺陷快修立即派发（当天完成）→ W1 表格层为主线（约 2 个工作日）→ W2 弹窗右键与 W3 限速并行插空 → W4 导航重排 → W5 两个大面重构收尾。全程遵守 testing.md 基线闸门 + 双 UI 走查。</p>
+  </div>
+</section>
+
+<!-- ================= 01 总表 ================= -->
+<section id="s1" class="rule-top">
+  <div class="folio">01 · inventory</div>
+  <h2>拆解归类总表</h2>
+  <p>ID 规则：类别前缀 + 序号，派发时直接引用。<b>面</b>列标注改动落在哪一层：A=星图 atlas、P=棱镜 prism、S=共享层 shared、B=后端。<b>规模</b>：XS≈0.5h、S≈1–2h、M≈3–6h、L≈1–2 个工作日（单人）。</p>
+
+  <h3>A · 缺陷与一致性修复（7 项）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注 / 已核实事实</th></tr>
+    <tr><td class="mono">FIX-01</td><td>详细信息 peers 页报错 <code>AttributeError: 'LocalQbClient' object has no attribute 'torrents_peers'</code></td><td>B</td><td>XS</td><td class="mono">W0</td><td>已定位：<code>web.py:368</code> 应改调 <code>sync_torrent_peers(torrent_hash=hash)</code>；qbittorrent-api 2026.8.1 无 <code>torrents_peers</code>（实测）。补 test_web 端点测试</td></tr>
+    <tr><td class="mono">FIX-02</td><td>标签筛选器下拉框「管理标签」hover 背景变透明导致显示混乱</td><td>A+P</td><td>XS</td><td class="mono">W0</td><td>实施前先在两 UI 复现，确认是 hover 规则缺背景声明还是层级覆盖</td></tr>
+    <tr><td class="mono">FIX-03</td><td>种子信息 title 栏与导航栏颜色雷同；上移时与做种数量栏有 1–2px 缺口透字</td><td>A+P</td><td>S</td><td class="mono">W0</td><td>吸顶贴合类问题，参照第八轮 <code>--bulk-h</code> 缝隙教训：margin/gap 计入补偿变量导致</td></tr>
+    <tr><td class="mono">FIX-04</td><td>统计窗口仅累计下载/上传正确，其余空值；点刷新整窗闪烁</td><td>B+A+P</td><td>S</td><td class="mono">W0</td><td>摸底两步：①核对 server_state 各字段实际可得性，拿不到的字段在 UI 明示「qB 不提供」而非空值；②刷新改局部更新/值 diff，不重挂面板</td></tr>
+    <tr><td class="mono">FIX-05</td><td>棱镜筛选器右侧「清除筛选」改为与星图一致：常显、未生效时低饱和</td><td>P</td><td>XS</td><td class="mono">W0</td><td>对齐第八轮 R02 星图做法（降透明常驻）</td></tr>
+    <tr><td class="mono">FIX-06</td><td>「已选 0 组 · 1 个种子 开始 暂停…」栏导致跳动，移到筛选器前面同一栏</td><td>A+P</td><td>S</td><td class="mono">W1</td><td>与表头区布局强耦合，放 W1 与 TBL-08 同批处理；注意 <code>--bulk-h</code> 吸顶联动语义变化</td></tr>
+    <tr><td class="mono">FIX-07</td><td>Esc 取消选择；多个可取消项时按顺序取消（弹出窗口优先）</td><td>A+P</td><td>S</td><td class="mono">W1</td><td>建立统一的「可取消栈」：modal → 下拉/菜单 → 选择/展开；两 UI 共用逻辑下沉 shared</td></tr>
+  </table>
+
+  <h3>B · 种子/分组表格呈现层（8 项，本轮主战场）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注</th></tr>
+    <tr><td class="mono">TBL-01</td><td>移除所有空值显示「—」（不好对齐）</td><td>S+A+P</td><td>S</td><td class="mono">W1</td><td>空值渲染为空白单元格；注意只动表格数据单元格，弹窗/详情中语义化占位另行判断</td></tr>
+    <tr><td class="mono">TBL-02</td><td>移除「不限速」文案（与上行对齐）</td><td>S+A+P</td><td>XS</td><td class="mono">W1</td><td>限速列空值语义与 TBL-01 同一渲染函数处理</td></tr>
+    <tr><td class="mono">TBL-03</td><td>行文字底色=状态底色（已有色栏不动）；下载/上传/总上传/已下载/可用性/限速上行/限速下行按总数变化着色；移除名称前状态图标</td><td>S+A+P</td><td>M</td><td class="mono">W1</td><td>映射关系见决策点 D1；状态色沿用现有令牌，数值色阶建议三档（无/低/高）；速度类列已有站点色，先盘点再扩</td></tr>
+    <tr><td class="mono">TBL-04</td><td>做种/用户列显示 qB 格式：已连接(做种数) / 已连接(用户)</td><td>S+B</td><td>S</td><td class="mono">W1</td><td>数据源见 D2：已连接=num_seeds/num_leechs，总数=num_complete/num_incomplete；70 字段快照应已含，实施前核对</td></tr>
+    <tr><td class="mono">TBL-05</td><td>所有信息栏可拖动排序 + 右键隐藏菜单</td><td>S+A+P</td><td>L</td><td class="mono">W1</td><td>列模型重构：列序数组 + 隐藏集合 + localStorage 持久化（列宽记忆机制已存在，同路扩展）；注意与 sticky-head 契约</td></tr>
+    <tr><td class="mono">TBL-06</td><td>分组表/明细表增加所有适用的信息栏</td><td>B+S+A+P</td><td>M</td><td class="mono">W1</td><td>以 qB 主表列集为基准盘点 TorrentRecord 70 字段，确定两表各自补哪些；后端 <code>web_view.py</code> 视图字段同步</td></tr>
+    <tr><td class="mono">TBL-07</td><td>页面全宽显示（去除两侧预留间隔）；修复横向滚动被两侧背景遮挡</td><td>A+P</td><td>S</td><td class="mono">W1</td><td>纯 CSS 布局改版；两 UI 各自的容器宽度约束都要清</td></tr>
+    <tr><td class="mono">TBL-08</td><td>左侧悬浮信息栏改为下方状态栏；移除「切换至导航栏」功能；同步两 UI</td><td>S+A+P</td><td>L</td><td class="mono">W1</td><td>删 railMode top 模式（第八轮 R09 的 side|top 二态收敛为底部单态）；状态栏成为 NAV-01a 统计的承载容器，是 W1→W4 的关键交接件</td></tr>
+  </table>
+
+  <h3>C · 弹窗与交互（4 项）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注</th></tr>
+    <tr><td class="mono">DLG-01</td><td>删除确认框再次调大；移除下方分站点种子详细信息</td><td>A+P</td><td>S</td><td class="mono">W2</td><td>方向反转：第八轮 R04 加的成员明细现按新诉求收缩，保留计数摘要即可</td></tr>
+    <tr><td class="mono">DLG-02</td><td>多选删除语义：「删除整组」→「删除 N 个组」，多选种子 →「删除 N 个种子」，逻辑与语义一致</td><td>A+P+B</td><td>M</td><td class="mono">W2</td><td>核对 <code>/api/torrents/bulk</code> 聚合端点的组键/hash 两种模式；混合选择（组+散种子）的计数文案需定义</td></tr>
+    <tr><td class="mono">DLG-03</td><td>添加种子窗口改版：链接输入框默认隐藏（按钮展开）；窗口调大；分类/标签下拉可选可输入；去跳过校验红框、警告仅勾选后显示；「添加即暂停」→「添加后开始」默认不勾</td><td>A+P</td><td>M</td><td class="mono">W2</td><td>注意语义反转：勾选=添加后立即开始，不勾=暂停添加，默认不勾；「添加即暂停」残留文案全清</td></tr>
+    <tr><td class="mono">DLG-04</td><td>添加种子支持点击选择位置 + 下拉选择已有目录</td><td>A+P+B</td><td>M</td><td class="mono">W2</td><td>边界见 D3：浏览器无法枚举本地目录树，推荐「已知目录聚合」（组 save_path + 现有种子的 save_path 去重）+ 自由输入</td></tr>
+  </table>
+
+  <h3>D · 右键菜单系统（3 项）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注</th></tr>
+    <tr><td class="mono">CTX-01</td><td>右键菜单图标彩色化（菜单大部分灰色 + 统计/日志/主题/HR 筛选器图标）</td><td>A+P</td><td>S</td><td class="mono">W2</td><td>现有 sprite 是单色 <code>#i-*</code> 体系，需补彩色版图标集或双 sprite；范围含页面其它指名图标</td></tr>
+    <tr><td class="mono">CTX-02</td><td>右键菜单出现时强调显示触发的选项（源行/按钮高亮）</td><td>A+P</td><td>S</td><td class="mono">W2</td><td>菜单 open 时给触发源挂 accent 类，close 时移除；与展开/选中视觉分家原则一致</td></tr>
+    <tr><td class="mono">CTX-03</td><td>屏蔽除顶部导航栏外所有右键原生响应</td><td>A+P</td><td>XS</td><td class="mono">W0</td><td>全局 <code>contextmenu</code> preventDefault，导航栏白名单；注意别拦截自定义菜单自身的目标元素</td></tr>
+  </table>
+
+  <h3>E · 限速体系（4 项，跨前后端）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注</th></tr>
+    <tr><td class="mono">SPD-01</td><td>限速档位最后一档默认当作无限大档位，防止超过档位反而解除限速</td><td>B</td><td>M</td><td class="mono">W3</td><td>改 <code>curves.py</code> 档位查找：流量超出末档边界时 clamp 到末档速度值而非落到「不限速」；语义细则见 D5，必须带单测</td></tr>
+    <tr><td class="mono">SPD-02</td><td>调整限速曲线预览图：最后一档占位超 80%，缩小其显示比例</td><td>A+P</td><td>S</td><td class="mono">W3</td><td>预览图 x 轴对末档做截断/压缩映射；实施前定位两 UI 各自的预览渲染代码</td></tr>
+    <tr><td class="mono">SPD-03</td><td>为限速曲线添加「enabled」配置，同步 webui 相关功能</td><td>B+A+P</td><td>M</td><td class="mono">W3</td><td>新键 <code>global_speed_limit_curve.enabled</code>（models.py:168 <code>GlobalSpeedLimitCurve</code>）：黄金法则 4——validate_config + schema 同步 + 守卫测试；mixin 短路 + <code>/api/speed/mode</code> 语义 + 设置页渲染</td></tr>
+    <tr><td class="mono">SPD-04</td><td>限速功能改为与 qB 类似：点击限速出现修改窗口</td><td>A+P</td><td>S</td><td class="mono">W3</td><td>现 rail 限速卡/覆盖控件改为 modal；端点已齐（<code>/api/speed/mode</code>、<code>/api/speed/override</code>、单种 limits）</td></tr>
+  </table>
+
+  <h3>F · 导航与信息架构（3 项）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注</th></tr>
+    <tr><td class="mono">NAV-01</td><td>分组/种子/追剧升为一级导航（放当前 辅种管理/设置/统计/日志 位置），移除辅种管理聚合页；设置移到右边；统计入状态栏；日志移入设置</td><td>A+P</td><td>L</td><td class="mono">W4</td><td>本轮最大单项，拆两个子项：NAV-01a 统计→状态栏（依赖 TBL-08）；NAV-01b 日志→设置页。页面拓扑假设见 D4；注意 watch(page)/列宽重实体化契约</td></tr>
+    <tr><td class="mono">NAV-02</td><td>星图/棱镜 UI 切换添加不同的图标</td><td>A+P</td><td>XS</td><td class="mono">W0</td><td>两 UI 互切链接（<code>.ui-switch</code>）各配身份图标</td></tr>
+    <tr><td class="mono">NAV-03</td><td>导航栏 logo 动态化：总体不变，qb 字样略微减小，卫星增大并围绕旋转</td><td>A+P</td><td>S</td><td class="mono">W4</td><td>CSS 动画（transform 旋转）；注意 prefers-reduced-motion 与低性能设备可关</td></tr>
+  </table>
+
+  <h3>G · 页面重构（2 项）与 H · 棱镜补齐（1 项）</h3>
+  <table>
+    <tr><th class="mono">ID</th><th>诉求</th><th>面</th><th>规模</th><th>波次</th><th>备注</th></tr>
+    <tr><td class="mono">RFB-01</td><td>种子详情全面重构：过长内容（内容路径/根路径/Tracker 地址）排版凌乱、界面生硬；移除上方控制按钮（暂停/开始等），仅展示信息；添加图标</td><td>A+P</td><td>L</td><td class="mono">W5</td><td>详情抽屉四 tab（常规/Tracker/用户/内容）信息架构重排；控制操作保留在右键菜单与批量条，抽屉纯展示</td></tr>
+    <tr><td class="mono">RFB-02</td><td>设置页全面重构：输入框没对齐、页面宽但利用率低、警告框过长、描述缺失/过技术/不正确、整体零乱</td><td>S+A+P</td><td>L</td><td class="mono">W5</td><td>排在 NAV-01b 之后（日志已迁入）；文案全面用户化（README 用户视角重写的措辞基准可复用）；config_editor.js 契约（tpl-ce-field 等）不动</td></tr>
+    <tr><td class="mono">PRS-01</td><td>追剧视图适配两套 UI（棱镜目前没有）</td><td>P</td><td>M</td><td class="mono">W2</td><td>已知欠账：prism <code>viewMode=shows</code> 目前兜底渲染种子页；参照 atlas 追剧模板（剧行/季头/集行/未识别折叠/缺集徽章）移植</td></tr>
+  </table>
+
+  <p class="small-note">统计：32 项 = 7 FIX + 8 TBL + 4 DLG + 3 CTX + 4 SPD + 3 NAV + 2 RFB + 1 PRS。规模分布：XS 6 / S 12 / M 9 / L 5。后端触点：FIX-01、FIX-04、TBL-04（核对）、TBL-06、DLG-02、DLG-04、SPD-01、SPD-03。</p>
+</section>
+
+<!-- ================= 02 分类详述 ================= -->
+<section id="s2" class="rule-top">
+  <div class="folio">02 · category notes</div>
+  <h2>分类详述与实施要点</h2>
+
+  <h3>归类逻辑</h3>
+  <p>用户的原始分组（辅种管理/设置页面/其它）是「发现问题的位置」，不是「改动发生的位置」——同一条诉求的修改往往横跨共享逻辑与两套模板。因此按<b>改动性质</b>重新归类为 8 类，使每个类别的验收方式与实施顺序一致：</p>
+  <table>
+    <tr><th>类别</th><th>性质</th><th>主要验收方式</th><th>风险等级</th></tr>
+    <tr><td>FIX 缺陷</td><td>行为错误或明显不一致，先复现再修</td><td>复现路径回归 + 单测/冒烟</td><td>低（改动小）</td></tr>
+    <tr><td>TBL 表格</td><td>表格渲染与布局体系改动，牵一发动全身</td><td>双 UI 列清单走查 + 吸顶冒烟</td><td><b>高</b>（sticky/列宽契约）</td></tr>
+    <tr><td>DLG 弹窗</td><td>对话框信息架构与文案语义</td><td>逐弹窗冒烟脚本</td><td>低</td></tr>
+    <tr><td>CTX 右键</td><td>菜单视觉与全局行为</td><td>走查 + 事件冒烟</td><td>低</td></tr>
+    <tr><td>SPD 限速</td><td>唯一动限速决策逻辑的类别，必须单测先行</td><td>curves 单测 + 真机 dry-run</td><td><b>高</b>（影响生产限速）</td></tr>
+    <tr><td>NAV 导航</td><td>页面拓扑与导航结构</td><td>全页面切换冒烟 + 列宽记忆回归</td><td><b>高</b>（watch(page) 契约）</td></tr>
+    <tr><td>RFB 重构</td><td>整页信息架构重排</td><td>真机走查清单</td><td>中（范围大但隔离）</td></tr>
+    <tr><td>PRS 棱镜</td><td>功能补齐（移植已有实现）</td><td>与星图对拍冒烟</td><td>低</td></tr>
+  </table>
+
+  <h3>关键实施要点</h3>
+  <h4>表格层（TBL-01/02/03/05/08 的公共底座）</h4>
+  <ul class="tight">
+    <li><b>先定列模型，再动渲染。</b>TBL-05（列拖排+隐藏）要求把散落在模板里的列定义收拢为 shared 层的统一列模型（现有 <code>TORRENT_COLUMNS</code>/<code>SHOW_COLUMNS</code> 与 page 列宽记忆机制是起点），TBL-01/02/03 的渲染规则挂在列模型上。顺序：列模型 → 空值/文案语义 → 色彩规则 → 布局 → 拖排交互。</li>
+    <li><b>状态底色只做「文字底色」。</b>诉求明确是行文字底色（chip/单元格文字带状态底），且「已有颜色的栏不用修改」——实施前先盘点现有底色栏（站点配色、HR、速度类），输出清单避免双重着色。</li>
+    <li><b>底部状态栏是交接件。</b>TBL-08 产出的状态栏容器要预留 slot（速度摘要 / 统计入口 / 全局状态），NAV-01a 直接填入，避免二次返工。railMode 的 <code>top</code> 模式与 <code>--head-h</code> 联动逻辑按第八轮经验做实测联动冒烟。</li>
+    <li><b>空值语义分层。</b>表格单元格空白化（TBL-01/02），但详情/弹窗里「qB 未提供」类信息保留占位说明——两处诉求不同，不要一刀切。</li>
+  </ul>
+
+  <h4>限速体系（SPD-01/03 的正确性优先）</h4>
+  <ul class="tight">
+    <li>SPD-01 是本轮唯一改变<b>生产行为</b>的逻辑修改（全局限速决策），必须：先写失败单测（超出末档流量 → 当前行为=解除限速，期望=末档 clamp），再改 <code>curves.py</code>，真机 dry-run 观察一档周期。</li>
+    <li>SPD-03 新配置键走完整管线：models 字段 → <code>validate_config</code> 聚合校验 → <code>schema/</code> Field 声明（设置页自动渲染）→ 守卫测试 → mixin 短路 → <code>/api/speed/mode</code> 状态透出。缺任何一环守卫测试会红。</li>
+    <li>SPD-04 的弹窗只是搬运现有控件，端点零改动——不要顺手重构限速端点。</li>
+  </ul>
+
+  <h4>导航 IA（NAV-01 的拆解）</h4>
+  <ul class="tight">
+    <li>当前拓扑：辅种管理（内含 分组/种子/追剧 三态视图切换 + 左 rail）/ 设置 / 统计（弹窗）/ 日志（顶层页），共 4 个一级页。</li>
+    <li>目标拓扑：分组 / 种子 / 追剧 三个一级页（原三态视图升级）+ 右侧设置（内含日志）+ 底部状态栏（常显统计摘要 + 打开完整统计）。辅种管理聚合壳层取消。</li>
+    <li>风险集中在 <code>page</code> 切换机制：表格区卸载重建、列宽记忆重实体化、命令回执目标页——全部要走一遍双 UI 切换冒烟。建议 NAV-01a/01b 分两次提交。</li>
+  </ul>
+</section>
+
+<!-- ================= 03 波次 ================= -->
+<section id="s3" class="rule-top">
+  <div class="folio">03 · waves</div>
+  <h2>波次编排</h2>
+  <p>编排原则：缺陷先行恢复信心 → 表格层一次到底（避免同区域两次施工）→ 独立波次插空并行 → 骨架性改动（导航）在大面重构之前 → 重构收尾。每个波次是<b>一个可独立派发、独立验收的合同单元</b>。</p>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wid">W0</span><span class="wname">缺陷快修</span><span class="wmeta">7 项 · FIX-01~05 + CTX-03 + NAV-02 · 约 0.5 天 · 可 2 agent 并行</span></div>
+    <div class="wave-body">
+      <ul>
+        <li>后端 agent：FIX-01（peers 端点 + test_web 回归测试）。</li>
+        <li>前端 agent：FIX-02 hover 透明、FIX-03 吸顶缺口、FIX-04 统计空值与闪烁、FIX-05 棱镜清除筛选、CTX-03 全局右键屏蔽、NAV-02 切换图标。</li>
+        <li class="dep">依赖：无。验收：pytest 全绿 + peers 真机冒烟 + 两 UI 走查。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wid">W1</span><span class="wname">表格呈现层（主战场）</span><span class="wmeta">10 项 · TBL-01~08 + FIX-06/07 · 约 2 个工作日 · 建议 2 agent（shared 逻辑 / 双 UI 落地）</span></div>
+    <div class="wave-body">
+      <ul>
+        <li>内部顺序（同波次内串行）：① 列模型与空值语义（TBL-01/02/04/06，TBL-06 后端字段同步先行）→ ② 色彩体系（TBL-03）→ ③ 布局（TBL-07 全宽、TBL-08 底部状态栏、FIX-06 已选栏并入筛选行）→ ④ 列拖排与隐藏（TBL-05，最后做，依赖列模型稳定）。</li>
+        <li>FIX-07（Esc 可取消栈）随时穿插。</li>
+        <li class="dep">依赖：无（可与 W2 并行）。交接：状态栏容器 slot → W4；列模型 → W5 详情重构可复用。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wid">W2</span><span class="wname">弹窗、右键与棱镜补齐</span><span class="wmeta">8 项 · DLG-01~04 + CTX-01/02 + PRS-01 + （FIX-07 若未在 W1 完成）· 约 1.5 个工作日 · 可 2 agent 并行</span></div>
+    <div class="wave-body">
+      <ul>
+        <li>agent 甲（弹窗线）：DLG-01 删除确认框、DLG-02 多选删除语义（含 bulk 端点核对）、DLG-03 添加种子改版、DLG-04 位置选择。</li>
+        <li>agent 乙（菜单+棱镜线）：CTX-01 彩色图标集、CTX-02 触发源强调、PRS-01 棱镜追剧视图移植。</li>
+        <li class="dep">依赖：与 W1 并行无冲突（触点文件不同：弹窗/菜单模板 vs 表格区）。验收：逐弹窗冒烟 + 追剧视图与星图对拍。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wid">W3</span><span class="wname">限速体系</span><span class="wmeta">4 项 · SPD-01~04 · 约 1 个工作日 · 1 agent（跨前后端串行）</span></div>
+    <div class="wave-body">
+      <ul>
+        <li>顺序：SPD-01 单测先行改 curves → SPD-03 enabled 键全管线 → SPD-02 预览图 → SPD-04 弹窗化。</li>
+        <li>SPD-01 依赖 D5 拍板；真机 dry-run 观察一个档位周期后关闭本波次。</li>
+        <li class="dep">依赖：D5 决策。可与 W1/W2 并行（触点完全不同）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wid">W4</span><span class="wname">导航 IA 重排</span><span class="wmeta">3 项 · NAV-01a/01b/03 · 约 1 个工作日 · 1 agent（骨架改动不并行）</span></div>
+    <div class="wave-body">
+      <ul>
+        <li>顺序：NAV-01a 统计入状态栏 → NAV-01b 日志迁设置 → 导航四页改三页+右侧设置 → NAV-03 动态 logo。</li>
+        <li class="dep">依赖：<b>TBL-08 状态栏容器（W1）硬依赖</b>；NAV-01b 产出是 W5 设置页重构的前置。验收：全页面切换 + 列宽记忆 + 命令回执目标页冒烟。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wid">W5</span><span class="wname">大面重构收尾</span><span class="wmeta">2 项 · RFB-01/02 · 约 2 个工作日 · 可 2 agent 并行</span></div>
+    <div class="wave-body">
+      <ul>
+        <li>agent 甲：RFB-01 种子详情纯展示重构（复用 W1 列模型与图标集）。</li>
+        <li>agent 乙：RFB-02 设置页全面重构（含日志子页排版、文案用户化、对齐与宽度体系）。</li>
+        <li class="dep">依赖：RFB-02 依赖 NAV-01b（W4）；RFB-01 只依赖 W1。收尾后做一轮全量真机走查 + README/memory-bank 回写。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>依赖关系一图流</h3>
+  <table>
+    <tr><th>波次</th><th>前置</th><th>可并行对象</th><th>关键交接物</th></tr>
+    <tr><td class="mono">W0</td><td>无</td><td>全部</td><td>干净基线</td></tr>
+    <tr><td class="mono">W1</td><td>无</td><td>W2、W3</td><td>统一列模型；底部状态栏容器（slot 预留）</td></tr>
+    <tr><td class="mono">W2</td><td>无</td><td>W1、W3</td><td>彩色图标集（RFB-01 复用）；棱镜三视图对齐</td></tr>
+    <tr><td class="mono">W3</td><td>D5 拍板</td><td>W1、W2</td><td>限速语义定版（末档 clamp + enabled）</td></tr>
+    <tr><td class="mono">W4</td><td>W1（TBL-08）</td><td>—</td><td>新页面拓扑（分组/种子/追剧/设置）</td></tr>
+    <tr><td class="mono">W5</td><td>W4（RFB-02 侧）/ W1（RFB-01 侧）</td><td>两线互不依赖</td><td>替代 qB 界面的最终形态</td></tr>
+  </table>
+</section>
+
+<!-- ================= 04 派发 ================= -->
+<section id="s4" class="rule-top">
+  <div class="folio">04 · dispatch</div>
+  <h2>集群派发指引</h2>
+  <p>沿用波次一/二验证过的双 bot 编排模式（backend / frontend worktree 分治 + 主线合并），本轮扩展为按波次拼装。派发时直接引用 ID + 本文档章节。</p>
+
+  <h3>Agent 角色定义</h3>
+  <table>
+    <tr><th>角色</th><th>负责类别</th><th>工作树</th><th>触点文件（主要）</th></tr>
+    <tr><td>后端 agent</td><td>FIX-01、TBL-06（字段）、DLG-02（bulk 核对）、SPD-01/03（逻辑与配置）</td><td class="mono">backend/</td><td class="mono">web.py、mixins/web_view.py、mixins/web_commands.py、curves.py、mixins/speed_curve.py、config/models.py、config/schema/、tests/</td></tr>
+    <tr><td>前端 agent（星图）</td><td>atlas 模板与样式侧的全部落地</td><td class="mono">frontend/</td><td class="mono">static/atlas/index.html、style.css、static/shared/app.js</td></tr>
+    <tr><td>前端 agent（棱镜）</td><td>prism 模板与样式侧的全部落地</td><td class="mono">frontend/ 或独立</td><td class="mono">static/prism/index.html、css/*、static/shared/app.js</td></tr>
+    <tr><td>主线（编排）</td><td>契约文件、合并、冲突裁决、基线闸门</td><td class="mono">agentAutoClaw/develop</td><td class="mono">memory-bank/、testing.md、README</td></tr>
+  </table>
+
+  <h3>派发合同要素（每单必含）</h3>
+  <ul class="tight">
+    <li><b>范围</b>：工作项 ID 列表 + 「波次内串行顺序」；明确列出<b>不许碰</b>的相邻区域（如表格 agent 不碰弹窗模板）。</li>
+    <li><b>契约</b>：JS↔DOM 契约清单（.group-head / .detail-head / gridStyle 列数 / .ctx-menu / .sticky-head+--head-h / .bulk-bar+--bulk-h / tpl-ce-field / sprite #i-* / toast 确认框单例）；本波次新增契约（底部状态栏 slot、列模型字段）以 <code>.cluster/webui-w3/contract.md</code> 形式先落盘再派发。</li>
+    <li><b>验收</b>：pytest 全绿（基线数字以 testing.md 顶部为单点）+ 对应冒烟脚本 + 双 UI 走查清单。</li>
+    <li><b>窗口</b>：bot 单次 20 分钟窗口装不下大型前端任务——波次内按「一单一派」，每单给出代码地图与落盘续作指引（波次二教训）。</li>
+  </ul>
+
+  <h3>建议派发序列</h3>
+  <table>
+    <tr><th class="mono">批次</th><th>派发</th><th>内容</th><th>并行度</th></tr>
+    <tr><td class="mono">D-1</td><td>backend + frontend 各 1</td><td>W0 全部（FIX-01 单独给后端）</td><td>2</td></tr>
+    <tr><td class="mono">D-2</td><td>frontend 2（星图/棱镜）+ backend 1</td><td>W1（表格层）+ W3（限速，若 D5 已拍板）</td><td>3</td></tr>
+    <tr><td class="mono">D-3</td><td>frontend 2</td><td>W2（弹窗右键 / 棱镜追剧）</td><td>2</td></tr>
+    <tr><td class="mono">D-4</td><td>frontend 1（或主线自做）</td><td>W4 导航重排</td><td>1</td></tr>
+    <tr><td class="mono">D-5</td><td>frontend 2</td><td>W5 详情重构 / 设置页重构</td><td>2</td></tr>
+  </table>
+  <p class="small-note">最大并行 3 出现在 D-2。若集群规模只有 2 agents：W3 顺延到 D-3 之后，其余不变。</p>
+</section>
+
+<!-- ================= 05 决策点 ================= -->
+<section id="s5" class="rule-top">
+  <div class="folio">05 · decisions</div>
+  <h2>决策点 D1–D5（实施前拍板）</h2>
+  <p>每项给出推荐值；不拍板则按推荐值实施（与既往波次惯例一致）。</p>
+  <table>
+    <tr><th class="mono">ID</th><th>问题</th><th>选项</th><th>推荐</th></tr>
+    <tr>
+      <td class="mono">D1</td>
+      <td>TBL-03 数值列色阶的映射规则</td>
+      <td>每列定义分母：下载↔全局下载限速、上传↔全局上传限速、总上传↔总大小、已下载↔总大小、可用性↔1.0、限速↔对应档位/单种上限；色阶三档（0 不着色 / 中段低饱和 / 接近分母高饱和）</td>
+      <td class="rec">按上述映射 + 三档色阶，复用状态色令牌；分母不可得（如无全局限速）时该列不着色</td>
+    </tr>
+    <tr>
+      <td class="mono">D2</td>
+      <td>TBL-04 做种/用户的「已连接(总数)」数据源</td>
+      <td>已连接=num_seeds/num_leechs（qB 实时连接数），总数=num_complete/num_incomplete（tracker/scrape 获知）；无 scrape 数据时只显示已连接</td>
+      <td class="rec">显示为 <code>已连接 (总数)</code>；总数缺失时退化为单值——70 字段快照应已含这四列，实施前核对即可</td>
+    </tr>
+    <tr>
+      <td class="mono">D3</td>
+      <td>DLG-04「点击选择位置」的实现边界</td>
+      <td>A：已知目录聚合下拉（分组 save_path + 现有种子的 save_path 去重）+ 允许自由输入；B：后端新增目录浏览 API（真实文件树）</td>
+      <td class="rec">方案 A。B 把本地文件系统暴露给 Web 面，安全面扩大且 qB WebUI 本身也只是路径输入；A 已覆盖「选已有目录」诉求</td>
+    </tr>
+    <tr>
+      <td class="mono">D4</td>
+      <td>NAV-01 页面拓扑确认</td>
+      <td>分组页是否保留「分组表 + 明细表」主从结构，还是分组只列组、点进组再看成员</td>
+      <td class="rec">保留主从结构（现实现成熟、列宽记忆等契约都在），仅把三态视图升级为一级页 + 移除聚合壳层；统计=状态栏常显摘要+点击展开完整面板</td>
+    </tr>
+    <tr>
+      <td class="mono">D5</td>
+      <td>SPD-01 末档语义细则</td>
+      <td>①超出末档流量 → clamp 末档速度值（末档 speed=0 仍解释为「不限」，属用户显式配置）；②同①但末档 speed=0 时按配置的下限速度兜底；③仅 UI 提示不改逻辑</td>
+      <td class="rec">①：档位查找改为末档 clamp（这正是「把最后一档当作无限大档位」的字面语义），设置页给末档加「∞ 档」提示并建议非 0 值。带失败单测先行</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ================= 06 红线 ================= -->
+<section id="s6" class="rule-top">
+  <div class="folio">06 · guardrails</div>
+  <h2>风险与红线</h2>
+
+  <h3>项目红线（AGENTS.md，违反即返工）</h3>
+  <ul class="tight">
+    <li><code>config.yml</code> 与 <code>auto-qb-data/</code> 是生产文件，任何 agent 不许改/提交/顺手格式化。</li>
+    <li>黄金法则 4：新配置键（SPD-03 的 <code>enabled</code>）必须进 <code>validate_config</code> 并同步 <code>config/schema/</code>，守卫测试会查。</li>
+    <li>黄金法则 1：限速动作幂等——SPD-01 改的是档位查找，不许引入跨 tick 状态。</li>
+    <li>测试基线数字单点在 testing.md 顶部，回写只改那里；新增测试必须同步测试文件头部「测试计划」清单。</li>
+  </ul>
+
+  <h3>工程坑清单（历次波次实证）</h3>
+  <table>
+    <tr><th>坑</th><th>对策</th></tr>
+    <tr><td>prism <code>views.css</code> 是 CRLF 行尾</td><td>编辑锚必须按 CRLF 匹配或采用追加式修改（波次一踩坑）</td></tr>
+    <tr><td>PowerShell 中文/重定向编码（GBK 误读、UTF-16 坏 git patch）</td><td>补丁走 UTF-8 patch 文件或 <code>--output</code>，不用 <code>&gt;</code> 重定向（波次一/追剧会话踩坑）</td></tr>
+    <tr><td>bot 单窗口 20 分钟装不下大型前端任务</td><td>按单工作项派发 + 代码地图 + 允许从落盘现场续作（波次一/二教训）</td></tr>
+    <tr><td>吸顶缝隙类 bug（margin/gap 计入补偿变量）</td><td>FIX-03/FIX-06/TBL-08 都涉及，实施后必须做窄视口+滚动的联动冒烟（第八轮方法论）</td></tr>
+    <tr><td>残留服务/端口占用导致冒烟假败</td><td>冒烟前清场：按端口杀残留进程，Edge 独立 profile（第七轮教训）</td></tr>
+    <tr><td>双 UI 漂移</td><td>逻辑一律下沉 shared；模板差异在波次验收时用「同一操作双 UI 对拍」清单兜住</td></tr>
+    <tr><td>工作树脏状态挡合并</td><td>各 worktree 提交前 <code>checkout -- .</code> 清理冗余脏状态（波次二教训）</td></tr>
+  </table>
+
+  <h3>文档漂移提醒</h3>
+  <p class="small-note">波次二完成后 testing.md 顶部仍写 949（实际闸门 971）——W0 期间顺手核对回写；README 的 Web UI 章节在 W4/W5 后需按新页面拓扑重写。</p>
+</section>
+
+<!-- ================= 07 验收 ================= -->
+<section id="s7" class="rule-top">
+  <div class="folio">07 · acceptance</div>
+  <h2>验收与回归</h2>
+  <h3>每波次闸门（缺一不放行）</h3>
+  <ol class="tight">
+    <li><code>uv run pytest tests -q</code> 全绿，基线数字与 testing.md 一致（新测试同步回写）。</li>
+    <li>Edge CDP 冒烟脚本（沿用 <code>.openclaw/tmp/</code> 假服务基建）覆盖本波次改动面，0 控制台错误。</li>
+    <li>双 UI 走查：本波次每个改动项在星图与棱镜各过一遍并截图留档 <code>.openclaw/tmp/wave3/</code>。</li>
+    <li>波次涉及后端行为（W0/W3）：真机 <code>--dry-run</code> 观察通过。</li>
+  </ol>
+  <h3>全部完成后的收尾（W5 末）</h3>
+  <ul class="tight">
+    <li>README「Web UI」章节按新导航拓扑重写；memory-bank（modules/systemPatterns/pitfalls/progress/activeContext）回写。</li>
+    <li>「替代 qB 界面」差距清单复核：对照 qB WebUI 功能面（不含搜索/RSS，波次一已拍板不做）列出剩余缺口，决定是否开启波次四。</li>
+    <li>全部改动合并 <code>agentAutoClaw/develop</code>，交付报告落 <code>DELIVERY/</code>。</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+</div>
+</body>
+</html>

@@ -17,6 +17,8 @@
   --radius-lg: 8px;
   --radius: 6px;
   --radius-sm: 4px;
+  --modal-wide-w: 840px; /* 宽确认框(删除类)宽度, 对齐 atlas 几何区 */
+  --statusbar-h: 34px;   /* 底部状态栏高度(TBL-08): 状态栏自身与内容区底部预留共用, 锁定不随内容变化(防取整透缝) */
 
   /* ---- 高程: 阴影只做极轻的"浮起"提示, 层次主要靠 1px hairline 描边 ---- */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .16);

@@ -38,9 +38,12 @@
 - test_manager_no_change_round_is_cheap: 无变化轮变化集为空
 - test_manager_conflict_recheck_incremental: 冲突检查只重算脏组(登记->消费复位)
 - test_manager_refresh_fallback_client: 旧版 qB 替身(无 sync 端点)整轮可用
-- test_store_apply_sync_captures_server_state_full_and_delta: server_state 全量/增量都捕获(原子替换)
+- test_store_apply_sync_captures_server_state_full_and_delta: server_state 全量/增量都捕获(合并为新 dict 后原子替换引用)
+- test_store_apply_sync_server_state_partial_delta_keeps_previous: 增量轮部分 server_state 与上轮合并(缺键保留旧值, FIX-04a)
+- test_store_apply_sync_server_state_first_round_partial: 首次响应即部分 server_state -> 仅含所给键
 - test_store_apply_sync_server_state_missing_keeps_previous: 响应缺失 server_state 时保留旧值
 - test_store_apply_sync_fallback_clears_server_state: 降级全量置 None(前端空态)
+- test_store_apply_sync_server_state_after_fallback_merges_from_empty: 降级置 None 后恢复 sync -> 从零合并(旧键不残留)
 - test_apply_delta_quantizes_eta_time_active_last_activity: 新量化字段(分钟桶); 负数哨兵不量化
 """
 import logging
@@ -533,7 +536,7 @@ def test_manager_refresh_fallback_client():
 
 
 def test_store_apply_sync_captures_server_state_full_and_delta():
-    """server_state 捕获: 全量/增量响应都更新(整引用原子替换, Web 线程只读)"""
+    """server_state 捕获: 全量/增量响应都更新(合并为新 dict 后原子替换引用, Web 线程只读)"""
     client = FakeClient()
     store = TorrentStore()
     api = _api(client, store)
@@ -544,6 +547,33 @@ def test_store_apply_sync_captures_server_state_full_and_delta():
     client.server_state = {"dl_info_speed": 200, "dht_nodes": 5}
     store.apply_sync(api)
     assert store.server_state == {"dl_info_speed": 200, "dht_nodes": 5}
+
+
+def test_store_apply_sync_server_state_partial_delta_keeps_previous():
+    """增量轮 server_state 只带部分键 -> 与上一轮旧值合并, 未提及字段保留(FIX-04a)
+
+    真机观察: 增量轮(rid>0)响应的 server_state 可能只含部分键, 整包替换会把上一轮的
+    alltime_ul 等字段整批丢掉 -> /api/stats 统计窗口除累计流量外全部空值。
+    """
+    client = FakeClient()
+    store = TorrentStore()
+    api = _api(client, store)
+    client.server_state = {"dl_info_speed": 100, "alltime_dl": 1000, "alltime_ul": 2000, "dht_nodes": 3}
+    store.apply_sync(api)  # 全量轮: 键集完整
+    assert store.server_state["alltime_ul"] == 2000
+
+    client.server_state = {"alltime_ul": 2500}  # 增量轮: 只带部分键(缺 alltime_dl/dht_nodes)
+    store.apply_sync(api)
+    assert store.server_state == {"dl_info_speed": 100, "alltime_dl": 1000, "alltime_ul": 2500, "dht_nodes": 3}
+
+
+def test_store_apply_sync_server_state_first_round_partial():
+    """首次响应即只带部分 server_state(无旧值可合并) -> 结果仅含所给键"""
+    client = FakeClient()
+    store = TorrentStore()
+    client.server_state = {"alltime_ul": 42}
+    store.apply_sync(_api(client, store))
+    assert store.server_state == {"alltime_ul": 42}
 
 
 def test_store_apply_sync_server_state_missing_keeps_previous():
@@ -566,6 +596,22 @@ def test_store_apply_sync_fallback_clears_server_state():
     store.server_state = {"stale": True}
     store.apply_sync(_api(client, store))
     assert store.server_state is None
+
+
+def test_store_apply_sync_server_state_after_fallback_merges_from_empty():
+    """降级全量置 None 后恢复 sync: 合并基线从零开始, 降级前的旧键不残留"""
+    client = FakeClient()
+    store = TorrentStore()
+    api = _api(client, store)
+    client.server_state = {"alltime_dl": 1, "alltime_ul": 2}
+    store.apply_sync(api)
+
+    store.apply_sync(_api(_NoSyncClient(), store))  # 降级一轮: server_state 置 None
+    assert store.server_state is None
+
+    client.server_state = {"alltime_ul": 3}  # 恢复轮(rid=0 -> 全量)只回部分键
+    store.apply_sync(api)
+    assert store.server_state == {"alltime_ul": 3}  # 降级前的 alltime_dl 不残留
 
 
 def test_apply_delta_quantizes_eta_time_active_last_activity():
