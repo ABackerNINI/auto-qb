@@ -90,6 +90,7 @@
   --radius-lg: 14px;
   --radius: 10px;
   --radius-sm: 7px;
+  --modal-wide-w: 840px;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .22);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, .32);
   --shadow-3: 0 20px 48px rgba(0, 0, 0, .42);
@@ -1196,8 +1197,9 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
 .bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
 
-/* 删除类确认框加宽形态(R05: 560 -> 720, 保存路径完整可读 + 容纳成员明细三列) */
-.modal.wide { width: 720px; }
+/* 删除类确认框加宽形态(R05: 560 -> 720; W2-FE-2 DLG-01 再调大一档 720 -> 840 并令牌化,
+ * 成员明细区已移除, 宽度服务于目标摘要/选项的宽松可读) */
+.modal.wide { width: var(--modal-wide-w); }
 /* 确认框目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标);
  * 值允许换行(长种子名/路径不再被省略号截断)且可选中复制 */
 .modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
