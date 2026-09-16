@@ -58,6 +58,7 @@
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
+- test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
@@ -2329,6 +2330,40 @@ def test_api_torrent_subresources(web_env):
     # qB 断连: 503
     mgr.client = None
     assert client.get("/api/torrents/HA/files", headers=auth).status_code == 503
+    assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
+
+
+def test_api_torrent_peers_endpoint(web_env):
+    """GET /api/torrents/{hash}/peers: 走 sync_torrent_peers(torrent_hash=..)整包透传
+
+    qbittorrent-api 2026.8.1 无 torrents_peers 方法(线上调用 AttributeError), 端点改走
+    sync/torrentPeers —— 响应整包含 rid/full_update/peers/peers_removed, 前端对 peers 键
+    做 dict/数组双形态归一(抽屉 state 默认 peers: {peers: []} 同形状)。回归守阵:
+    若改回旧调用, FakeClient 已无 torrents_peers, 本测试 500 红。
+    """
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord(hash="HA", name="X")
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    fake = FakeClient()
+    fake.peers_map["HA"] = {
+        "rid": 7,
+        "full_update": True,
+        "peers": {"1.2.3.4:51413": {"ip": "1.2.3.4", "port": 51413, "client": "qBittorrent 5.0"}},
+        "peers_removed": [],
+    }
+    mgr.client = fake
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    resp = client.get("/api/torrents/HA/peers", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json() == fake.peers_map["HA"], "sync 响应整包透传(前端按 peers 键归一)"
+    assert fake.peers_calls == 1
+    # 未知 hash: 404(先于 client 检查); qB 断连: 503
+    assert client.get("/api/torrents/NOPE/peers", headers=auth).status_code == 404
+    mgr.client = None
     assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
 
 

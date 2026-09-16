@@ -362,10 +362,15 @@ def create_app(manager) -> FastAPI:
 
     @app.get("/api/torrents/{hash}/peers")
     def api_torrent_peers(hash: str):
-        """单种子 peer 列表(qB 透传; 详情抽屉打开期间前端按需轮询, 关闭即停, 不进主循环 tick)"""
+        """单种子 peer 列表(qB 透传; 详情抽屉打开期间前端按需轮询, 关闭即停, 不进主循环 tick)
+
+        走 sync/torrentPeers(qbittorrent-api 2026.8.1 无 torrents_peers 方法, 旧调用线上
+        AttributeError): 响应整包含 rid/full_update/peers/peers_removed, 前端对 peers 键
+        做 dict/数组双形态归一。
+        """
         manager.touch_web_client()
         _require_torrent(hash)
-        return dict(_require_client().torrents_peers(hash) or {})
+        return dict(_require_client().sync_torrent_peers(torrent_hash=hash) or {})
 
     @app.get("/api/stats")
     def api_stats():
