@@ -46,6 +46,7 @@
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-width="1.9"/><circle cx="12" cy="12" r="3.1" stroke-width="1.9"/></symbol>
     <symbol id="i-list" viewBox="0 0 16 16"><path d="M3 4.4h10M3 8h10M3 11.6h6.2"/></symbol>
     <symbol id="i-cards" viewBox="0 0 16 16"><path d="M8 2.6 13.6 5.6 8 8.6 2.4 5.6z"/><path d="M2.4 8.6 8 11.6l5.6-3"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 16 16"><path d="M2.5 5.4h11v7h-11z"/><path d="M5.6 2.4 8 4.8l2.4-2.4"/></symbol>
     <symbol id="i-bell" viewBox="0 0 16 16"><path d="M6.2 12.8h3.6"/><path d="M8 3a3.1 3.1 0 0 0-3.1 3.1v2.7L3.9 11h8.2l-1-2.2V6.1A3.1 3.1 0 0 0 8 3z"/></symbol>
     <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2.4 12.8 4.3v3.9c0 3-2.1 5.2-4.8 6.1-2.7-.9-4.8-3.1-4.8-6.1V4.3z"/><path d="M8 6.1v2.7M8 10.6v.5"/></symbol>
     <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.7V8l2.3 1.6"/></symbol>
@@ -145,14 +146,17 @@
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>日志
             </button>
           </nav>
-          <!-- 视图开关(R1A 种子页): 分组表 / 种子页; 追剧视图暂未落地 prism(后续段落), 此处不提供入口;
-               localStorage 与 atlas 共源, 若残留 viewMode='shows' 则种子页容器以 v-if="!== 'groups'" 兑底渲染 -->
+          <!-- 视图开关(R1A/R10): 分组表 / 种子页 / 追剧; 筛选与搜索三视图共用, 列模型与排序独立;
+               localStorage 与 atlas 共源(同键同值), 三态模板各自 v-if, 不再需要兑底渲染 -->
           <div v-if="page === 'groups'" class="view-switch" role="tablist" aria-label="辅种视图切换">
             <button :class="{ active: viewMode === 'groups' }" title="按辅种分组展示" @click="setViewMode('groups')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组
             </button>
-            <button :class="{ active: viewMode !== 'groups' }" title="全部种子一行一条(替代 qB 主列表)" @click="setViewMode('torrents')">
+            <button :class="{ active: viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="setViewMode('torrents')">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-list"></use></svg>种子
+            </button>
+            <button :class="{ active: viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="setViewMode('shows')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
             </button>
           </div>
           <div v-if="page === 'groups'" class="top-search">
@@ -213,11 +217,21 @@
                 <span v-if="c.locked" class="col-lock">必显</span>
                 <svg v-else-if="colVisible('torrent', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
               </div>
+              <div class="col-menu-title">追剧视图</div>
+              <div v-for="c in showColumns" :key="c.key" class="pop-item col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('show', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('show', c.key)"
+                   @click="!c.locked && toggleColumn('show', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('show', c.key)">
+                <span class="pop-value">{{ c.label }}</span>
+                <span v-if="c.locked" class="col-lock">必显</span>
+                <svg v-else-if="colVisible('show', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              </div>
               <div class="col-menu-actions">
-                <button class="ce-btn ghost small" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail'); resetAllColumnWidths('torrent')">
+                <button class="ce-btn ghost small" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail'); resetAllColumnWidths('torrent'); resetAllColumnWidths('show')">
                   恢复默认列宽
                 </button>
-                <button class="ce-btn ghost small" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail'); fitColumnsToWindow('torrent')">
+                <button class="ce-btn ghost small" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail'); fitColumnsToWindow('torrent'); fitColumnsToWindow('show')">
                   适应窗口宽度
                 </button>
               </div>
@@ -267,7 +281,7 @@
             <template v-if="categoryFilter.length">分类“{{ categoryFilter.join('/') }}” </template>
             <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
             <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
-            → <b>{{ viewMode === 'groups' ? filteredGroups.length : filteredTorrents.length }}</b>{{ viewMode === 'groups' ? ' 个辅种组' : ' 个种子' }}<template v-if="searchQuery.trim() && viewMode === 'groups'">(仅命中成员高亮)</template>
+            → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ' 个辅种组' }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
             <template v-if="searchBuilding"> · 索引构建中…</template>
           </span>
           <div class="strip-tools">
@@ -582,8 +596,8 @@
 
         <!-- 种子页(R1A): 数据源 = state.torrents 全量平铺(SEED_ITEM), 逐种子过筛选 + 客户端文本过滤;
              列模型 TORRENT_COLUMNS, 排序/多选/右键(单种子菜单)/批量操作全部复用成员(hash)语义;
-             容器用 !== 'groups' 而非 === 'torrents': 兑底 atlas 残留的 viewMode='shows'(prism 无追剧模板) -->
-        <template v-if="viewMode !== 'groups'">
+             容器用 === 'torrents' 显式三态(groups/torrents/shows 各自分支), 与 atlas 对齐 -->
+        <template v-if="viewMode === 'torrents'">
           <div class="group-head sticky-head" ref="torrentHead" :style="gridStyle('torrent')">
             <div v-for="col in visibleTorrentCols" :key="col.key" class="h-cell"
                  :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
@@ -669,6 +683,186 @@
               <span>
                 {{ searchQuery.trim() ? '无匹配种子'
                    : (filtersActive ? '当前筛选下没有种子' : '暂无种子') }}
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 追剧视图(R10): 全量种子按 剧→季→集 聚合(聚合层后端算好, 多站点同集归并成一行);
+             剧行展开后季子标题(含缺集提示) + 集行; 集行左键展开成员明细(复用明细列),
+             右键 = 整集操作(作用于该集全部版本); 无剧集标记的种子进底部未识别折叠区 -->
+        <template v-if="viewMode === 'shows'">
+          <div class="group-head sticky-head" ref="showHead" :style="gridStyle('show')">
+            <div v-for="col in visibleShowCols" :key="col.key" class="h-cell"
+                 :class="['hc-' + col.key, { sortable: col.sortable }]" @click="col.sortable && setSort(col.key)">
+              <span>{{ col.label }}</span>
+              <span v-if="col.sortable" class="arrow">
+                <svg v-if="showSortKey === col.key" class="ico" viewBox="0 0 16 16">
+                  <use :href="showSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
+                </svg>
+              </span>
+              <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
+                    @mousedown.stop.prevent="startResize($event, 'show', col.key)"
+                    @dblclick.stop.prevent="autoFitColumn($event, 'show', col.key)"></span>
+            </div>
+          </div>
+          <div class="group-table" ref="showTable" @scroll="syncShowHeadScroll">
+            <template v-for="s in decoratedShows" :key="s.key">
+              <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义) -->
+              <div class="group-row show-row" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit }"
+                   :style="gridStyle('show')" @click="toggleShow(s.key)">
+                <template v-for="col in visibleShowCols" :key="col.key">
+                  <div v-if="col.key === 'name'" class="g-name" :title="s.name">
+                    <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+                    <span class="g-name-text show-name-text">{{ s.name }}</span>
+                  </div>
+                  <div v-else-if="col.key === 'state'" class="g-cat zero"></div>
+                  <div v-else-if="col.key === 'progress'" class="g-cat zero"></div>
+                  <div v-else-if="col.key === 'size'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'versions'" class="g-count" title="种子数">{{ s.member_count }}</div>
+                  <div v-else-if="col.key === 'sites'" class="g-cat">
+                    <span class="zero">{{ s.seasons.length }} 个季</span>
+                  </div>
+                  <div v-else-if="col.key === 'dlspeed'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'upspeed'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'uploaded'" class="g-stat zero"></div>
+                  <div v-else-if="col.key === 'hr'" class="g-hr zero"></div>
+                  <div v-else-if="col.key === 'latest'" class="g-stat" :title="'剧内最近添加时间'">{{ fmtTime(s.latest) }}</div>
+                </template>
+              </div>
+              <template v-if="isShowExpanded(s.key)">
+                <template v-for="sn in s.seasons" :key="s.key + '~' + sn.season">
+                  <!-- 季子标题: 名称 + 缺集提示(E1,E2,E4 -> 缺 E3) -->
+                  <div class="season-head">
+                    <span class="season-name">{{ seasonLabel(sn.season) }}</span>
+                    <span v-if="sn.gaps.length" class="gap-badge"
+                          :title="'缺集: ' + sn.gaps.map((n) => epLabel(['ep', n])).join(', '">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+                      缺 {{ sn.gaps.length }} 集
+                    </span>
+                  </div>
+                  <template v-for="e in sn.episodes" :key="s.key + '~' + sn.season + '~' + e.epKeyStr">
+                    <div class="group-row ep-row" :class="['s-' + e.state, { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit }]"
+                         :style="gridStyle('show')"
+                         @click="toggleShowEp(s.key, sn.season, e.epKeyStr)"
+                         @contextmenu.prevent="openShowEpMenu($event, s, e)">
+                      <template v-for="col in visibleShowCols" :key="col.key">
+                        <div v-if="col.key === 'name'" class="g-name ep-name">
+                          <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+                          <span class="ep-key">{{ epLabel(e.key) }}</span>
+                          <span v-if="e.key[0] === 'pack' || e.key[0] === 'range'" class="ep-pack">包</span>
+                          <span class="ep-site-count" :title="e.count + ' 个版本(同集不同站点/编码)'">×{{ e.count }}</span>
+                        </div>
+                        <div v-else-if="col.key === 'state'" class="g-cat">
+                          <span class="g-status" :class="'k-' + e.state" :title="kindText(e.state)">
+                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(e.state)"></use></svg>
+                          </span>
+                          <span class="state-text">{{ kindText(e.state) }}</span>
+                        </div>
+                        <div v-else-if="col.key === 'progress'" class="m-progress">
+                          <span class="bar"><i :style="{ width: Math.min(100, e.progress * 100) + '%' }"></i></span>
+                          <span class="val">{{ (e.progress * 100).toFixed(1) }}%</span>
+                        </div>
+                        <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
+                             :title="'最完整版本大小'">{{ fmtSizeOrDash(e.size) }}</div>
+                        <div v-else-if="col.key === 'versions'" class="g-count" :title="e.count + ' 个版本'">{{ e.count }}</div>
+                        <div v-else-if="col.key === 'sites'" class="g-sites">
+                          <span v-for="m in e.members" :key="m.hash" class="site-chip"
+                                :class="[m.kind, { 'search-hit': m.hit }]"
+                                :title="m.site + ' · ' + kindText(m.kind)">
+                            {{ m.site }}
+                          </span>
+                        </div>
+                        <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }">{{ fmtSpeedOrDash(e.dlspeed) }}</div>
+                        <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }">{{ fmtSpeedOrDash(e.upspeed) }}</div>
+                        <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }">{{ fmtSizeOrDash(e.uploaded) }}</div>
+                        <div v-else-if="col.key === 'hr'" class="g-hr" :class="hrGroupClass(e)"
+                             :title="e.hr_triggered ? (e.hr_pending ? e.hr_pending + '/' + e.hr_triggered + ' 未满足要求' : 'HR 已全部达标') : '该集无成员触发 HR'">
+                          <span v-if="!e.hr_triggered" class="zero"></span>
+                          <svg v-else-if="!e.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
+                          <template v-else>
+                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
+                            <span class="hr-num">{{ e.hr_pending }}/{{ e.hr_triggered }}</span>
+                          </template>
+                        </div>
+                        <div v-else-if="col.key === 'latest'" class="g-stat">{{ fmtTime(e.added_on) }}</div>
+                      </template>
+                    </div>
+                    <!-- 集明细: 该集全部版本(成员), 列与交互复用明细表 -->
+                    <div v-if="expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr)" class="detail">
+                      <div class="detail-head" ref="detailHead" :style="gridStyle('detail')">
+                        <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell" :class="'hc-' + col.key">
+                          <span>{{ col.label }}</span>
+                          <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
+                                @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
+                                @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
+                        </div>
+                      </div>
+                      <div v-for="m in e.members" :key="m.hash" class="member-row"
+                           :class="[m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
+                           :style="gridStyle('detail')"
+                           @click="onMemberClick(m, $event)"
+                           @contextmenu.prevent="openMemberMenu($event, m)">
+                        <template v-for="col in visibleDetailCols" :key="col.key">
+                          <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
+                          <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
+                          <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
+                          <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
+                          <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
+                          <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
+                          <span v-else-if="col.key === 'category'" class="m-cat">
+                            <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
+                            <span v-else class="zero"></span>
+                          </span>
+                          <span v-else-if="col.key === 'tags'" class="m-tags" :title="mTags(m).join(', '">
+                            <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
+                            <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
+                            <span v-if="!mTags(m).length" class="zero"></span>
+                          </span>
+                          <span v-else-if="col.key === 'progress'" class="m-progress">
+                            <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
+                            <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+                          </span>
+                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                            {{ fmtDuration(m.seeding_time) }}
+                            <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                          </span>
+                          <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
+                            {{ (m.ratio || 0).toFixed(2) }}
+                            <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+                          </span>
+                          <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </template>
+              </template>
+            </template>
+            <!-- 未识别折叠区: 无剧集标记的种子(电影/合集/命名过野), 参与搜索与筛选 -->
+            <div v-if="unrecognizedTorrents.length" class="unrecognized">
+              <button class="unrecognized-head" @click="unrecognizedOpen = !unrecognizedOpen">
+                <svg class="ico ico-sm caret" :class="{ open: unrecognizedOpen }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
+                未识别 · {{ unrecognizedTorrents.length }}
+                <span class="unrecognized-hint">无剧集标记的种子(电影 / 合集 / 命名过野)</span>
+              </button>
+              <div v-show="unrecognizedOpen" class="unrecognized-body">
+                <div v-for="m in unrecognizedTorrents" :key="m.hash" class="member-row unrecognized-row"
+                     :class="[m.kind, { 'search-hit': m.hit }]"
+                     @contextmenu.prevent="openMemberMenu($event, m)">
+                  <span class="m-site"><i class="dot"></i>{{ m.site }}</span>
+                  <span class="m-name" :title="m.name">{{ m.name }}</span>
+                  <span class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
+                  <span class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
+                  <span class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="!decoratedShows.length" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
+              <span>
+                {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配剧集')
+                   : (filtersActive ? '当前筛选下没有剧集' : '暂无剧集可展示') }}
               </span>
             </div>
           </div>
