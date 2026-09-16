@@ -1303,19 +1303,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .view-switch button.active { background: var(--accent-soft); color: var(--accent-hi);
   box-shadow: inset 0 0 0 1px var(--accent-line); }
 
-/* 信息栏顶部模式(R09): 紧凑双排条(排一 = 速度重点, 排二 = 其余缩小), 并入 sticky-head 玻璃块;
- * --head-h 由 _syncHeadHeight 实测自动包含本条, 表头/批量条/左栏吸附偏移零额外代码联动 */
-.rail-top { display: flex; flex-direction: column; gap: 3px; padding: 6px 18px 8px;
-  background: rgba(17, 23, 34, .72); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
-.rail-top-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 18px; min-height: 22px; }
-.rail-top-row.primary { gap: 28px; }
-.rail-top .rail-stat .lbl { font-size: 11px; }
-.rail-top .rail-stat .val { font-size: 12.5px; }
-.rail-top-row.primary .rail-stat .val { font-size: 15px; font-weight: 700; }
-.rail-top .rail-btn { width: 20px; height: 20px; }
-/* top 模式下左栏不渲染, 布局退化为单列 */
-.layout.rail-top-mode { grid-template-columns: minmax(0, 1fr); }
-
 /* 单种子视图(R08): 状态文字弱化 / 保存路径列省略号(title 兜底) */
 .torrent-row .state-text { font-size: 12px; color: var(--fg-muted); }
 .g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
