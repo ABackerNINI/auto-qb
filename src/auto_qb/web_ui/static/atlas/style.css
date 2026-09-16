@@ -582,7 +582,6 @@ button { font-family: inherit; }
 /* ============ 图形化配置编辑器(设置页) ============ */
 /* 说明: 编辑器令牌已并入顶部全局 :root(--radius/--radius-sm/--ring), 此处不再重复声明, 避免两处调色不一致。 */
 
-.ce-page { padding: 16px 18px calc(24px + var(--statusbar-h)); max-width: 2560px; margin: 0 auto; display: flex; flex-direction: column; }
 .ce-grid { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 18px; align-items: start; }
 .ce-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px;
   text-align: center; color: var(--fg-dim); padding: 56px 20px; }
@@ -647,11 +646,6 @@ button { font-family: inherit; }
 .ce-card:hover { border-color: var(--border-strong); }
 .ce-detail-title { font-size: 14.5px; letter-spacing: .2px; }
 
-.ce-banner { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; border: 1px solid transparent; }
-.ce-banner.ok { background: var(--green-soft); color: var(--green); border-color: rgba(52, 211, 153, .3); }
-.ce-banner.warn { background: var(--warn-soft); color: var(--warn); border-color: rgba(251, 191, 36, .3); }
-.ce-banner.error { background: var(--error-soft); color: var(--error); border-color: rgba(248, 113, 113, .3); }
-
 /* 字段区(行底基本透明, hover 才浮出表面 —— 减少大量字段堆叠时的视觉噪声) */
 .ce-fields { display: flex; flex-direction: column; gap: 2px; }
 /* 普通 object 段(group): 默认折叠的整体容器(同 section 思路)。
@@ -680,7 +674,7 @@ button { font-family: inherit; }
   text-overflow: ellipsis; white-space: nowrap; }
 /* 折叠/展开动效: max-height 过渡, 起始/结束 overflow:hidden(避免撑高时溢出);
    动画时长 180ms + ease-out, "手感"级, 不抢注意力(全局 prefers-reduced-motion 已降级) */
-.ce-group-body { overflow: hidden; padding: 2px 12px 8px; }
+.ce-group-body { overflow: hidden; padding: 2px 9px 10px; }
 .ce-group-body[style*="display: none"] { padding: 0; }
 .ce-inline-help { font-weight: 400; font-size: 12px; color: var(--fg-dim); }
 .ce-hint { font-style: normal; font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
@@ -700,9 +694,10 @@ button { font-family: inherit; }
 .ce-list-sum { font-size: 11.5px; color: var(--fg-dim); }
 .ce-list-body { padding-top: 4px; }
 
-/* 字段行: 标签列**定宽**(不再 minmax 浮动) -> 全表输入框左缘严格对齐 */
-.ce-field { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: start;
-  padding: 7px 12px; border-radius: var(--radius); background: transparent; border: 1px solid transparent;
+/* 字段行: 标签列**定宽**(栅格令牌 --ce-label-w) -> 全表输入框左缘严格对齐;
+ * group/section/subcard 容器的内边距按自身边框宽度折算后与 --ce-row-pad-x 一致, 嵌套层级不错位 */
+.ce-field { display: grid; grid-template-columns: var(--ce-label-w) minmax(0, 1fr); gap: var(--ce-ctl-gap); align-items: start;
+  padding: 7px var(--ce-row-pad-x); border-radius: var(--radius); background: transparent; border: 1px solid transparent;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
     opacity var(--dur) var(--ease); }
 .ce-field:hover { background: var(--surface-1); border-color: var(--border-soft); }
@@ -711,20 +706,23 @@ button { font-family: inherit; }
 .ce-req { color: var(--error); }
 .ce-tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--fg-dim); }
 .ce-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.ce-help { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--fg-dim); line-height: 1.5; }
+.ce-help { flex-basis: 100%; max-width: var(--ce-input-max); margin: 0; font-size: 12px; color: var(--fg-dim); line-height: 1.5; }
 
 /* 未启用项(grey_if 不满足): 灰显但仍可编辑 —— 保留可操作性, 只降低视觉权重 */
 .ce-field.ce-inactive { opacity: .45; }
 .ce-field.ce-inactive:hover { opacity: .8; }
 
-/* 风险标识: 徽标 + 说明行都用暖红底, 与普通帮助文字明显区分 */
-.ce-risk { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px;
-  background: var(--warn-soft); color: var(--warn); font-size: 10.5px; white-space: nowrap; }
-.ce-risk .ico { width: 11px; height: 11px; }
-.ce-risk-line { flex-basis: 100%; display: flex; align-items: flex-start; gap: 7px; margin: 2px 0 0;
-  padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(248, 113, 113, .1);
-  border: 1px solid rgba(248, 113, 113, .3); color: #fca5a5; font-size: 12px; line-height: 1.5; }
-.ce-risk-line .ico { flex: 0 0 auto; margin-top: 1px; color: var(--error); }
+/* 统一注记(段级/字段级警告与提示): 行内小字 + 色点, 不再用大框横幅。
+ * 网格双列(色点列 + 文本列): 换行时文字悬挂缩进; 字段行内独占一行(宽度与输入区对齐) */
+.ce-note { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: start;
+  font-size: 12px; line-height: 1.55; color: var(--fg-muted); max-width: var(--ce-input-max); }
+.ce-note::before { content: ""; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%;
+  background: var(--fg-dim); }
+.ce-note.warn { color: var(--warn); }
+.ce-note.warn::before { background: var(--warn); }
+.ce-note.error { color: var(--error); }
+.ce-note.error::before { background: var(--error); }
+.ce-ctl .ce-note { flex: 1 1 100%; }
 
 /* 相关设置子卡(group_of): 缩进 + 左侧强调线, 表明从属于上一字段。
  * 头部色用 teal(青)与 group 的多色 / section 的紫拉开层级 —— 三种段一眼可辨 */
@@ -733,7 +731,7 @@ button { font-family: inherit; }
 .ce-subcard-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 4px;
   font-size: 12px; color: var(--fg-muted); }
 .ce-subcard-head .ico { color: var(--teal); transform: rotate(90deg); }
-.ce-subcard .ce-field { grid-template-columns: 160px minmax(0, 1fr); padding: 6px 8px; }
+.ce-subcard .ce-field { grid-template-columns: var(--ce-label-w) minmax(0, 1fr); padding: 6px 0; }
 .ce-subcard .ce-field .ce-help { margin-top: -2px; }
 
 /* 可选段(站点 HR / checking 分支等): 默认折叠的整体容器
@@ -752,7 +750,7 @@ button { font-family: inherit; }
 .ce-section-title { font-size: 13px; font-weight: 600; color: var(--fg); }
 .ce-section-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
-.ce-section-body { padding: 2px 10px 8px 14px; }
+.ce-section-body { padding: 2px 9px 10px 9px; }
 
 /* 布尔型从属项的内联开关(挂在父字段标签右侧): 从属语义靠紧邻与弱化字重体现 */
 .ce-inline-switch { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--border-soft); }
@@ -761,14 +759,12 @@ button { font-family: inherit; }
 .ce-inline-switch input:checked + .ce-slider::after { transform: translateX(13px); }
 .ce-inline-switch .ce-switch-text { font-size: 11.5px; color: var(--fg-dim); }
 
-.ce-input { flex: 1 1 220px; max-width: 420px; min-width: 120px; padding: 7px 11px; border-radius: var(--radius-sm);
+.ce-input { flex: 1 1 240px; max-width: var(--ce-input-max); min-width: 120px; padding: 7px 11px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .ce-input:hover { border-color: var(--border-strong); }
 .ce-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .ce-input::placeholder { color: var(--fg-dim); }
-/* 枚举/短值控件不跟着拉满宽度(避免 "WARNING" 撑出空荡的长框) */
-.ce-input.ce-select { flex: 0 1 240px; }
 /* 数值 + 单位下拉: 数值框不必很宽, 单位框贴合内容; 两者间距紧贴成视觉整体的一个控件 */
 .ce-unit-group { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; }
 .ce-unit-group .ce-input { max-width: none; min-width: 0; }
@@ -799,7 +795,7 @@ button { font-family: inherit; }
 /* 列表 */
 .ce-list { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; }
 .ce-list-row { display: flex; align-items: center; gap: 6px; }
-.ce-list-row .ce-input { flex: 1 1 auto; max-width: 460px; }
+.ce-list-row .ce-input { flex: 1 1 auto; max-width: var(--ce-input-max); }
 .ce-icon { flex: 0 0 auto; width: 28px; height: 28px; display: inline-grid; place-items: center;
   border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 13px; line-height: 1;
@@ -1573,3 +1569,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
   min-width: 0; overflow-wrap: anywhere; }
 .speed-mode-line .ico { flex: 0 0 auto; color: var(--accent); }
 .speed-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 4px; }
+/* 设置页: 页面骨架 + 字段行栅格令牌。栅格令牌(label 宽/列间距/控件最大宽/行内边距)单点声明,
+ * 全部 .ce-field 行与嵌套容器(group/section/subcard)共用同一套 —— 同层输入框左缘逐级严格对齐,
+ * 控件最大宽放开到 --ce-input-max, 宽屏下不再「页面很宽、内容只占一窄条」。 */
+.ce-page { padding: 16px 18px calc(24px + var(--statusbar-h)); max-width: 2560px; margin: 0 auto; display: flex; flex-direction: column;
+  --ce-label-w: 200px;    /* 字段标签列宽(全部层级一致) */
+  --ce-ctl-gap: 12px;     /* 标签列与控件列的间距 */
+  --ce-input-max: 720px;  /* 输入控件/说明文字的最大宽度(页面利用率) */
+  --ce-row-pad-x: 12px;   /* 字段行水平内边距(嵌套容器按边框宽度同步折算, 见各 body) */
+}
