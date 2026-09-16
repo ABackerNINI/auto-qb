@@ -1714,13 +1714,16 @@
           </button>
         </div>
         <div class="add-dialog-body">
-          <div v-if="statsLoading" class="ce-placeholder loading">正在加载统计…</div>
-          <div v-else-if="statsError" class="ce-placeholder">
+          <!-- FIX-04b 防闪烁: 骨架常驻 — 加载态不卸载字段列表(仅值区降透明), 刷新按钮自身 disabled+spin;
+               错误仅在无数据时占位重试, 有数据时顶部细条提示并保留上次结果 -->
+          <div v-if="statsError && !statsServer" class="ce-placeholder">
             <p class="error">{{ statsError }}</p>
             <button class="ce-btn" @click="loadStats()">重试</button>
           </div>
-          <div v-else-if="!statsServer" class="ce-placeholder">暂无统计(qB 未同步)</div>
-          <div v-else class="stats-grid">
+          <div v-else-if="!statsServer && !statsLoading" class="ce-placeholder">暂无统计(qB 未同步)</div>
+          <template v-else>
+            <p v-if="statsError" class="error" style="margin: 0 0 8px; font-size: 12px;">{{ statsError }}(显示上次结果)</p>
+            <div class="stats-grid" :style="{ opacity: statsLoading ? 0.55 : 1, transition: 'opacity .15s ease' }">
             <div class="stats-row">
               <span class="lbl">会话下载</span>
               <span class="val">{{ statVal(statsServer.dl_info_data, fmtSize) }}<template v-if="statsServer.dl_info_speed"> · 当前 {{ fmtSpeed(statsServer.dl_info_speed) }}</template></span>
@@ -1736,7 +1739,7 @@
               <span class="lbl">累计上传</span><span class="val">{{ statVal(statsServer.alltime_ul, fmtSize) }}</span>
             </div>
             <div class="stats-row">
-              <span class="lbl">平均速度</span><span class="val">{{ statVal(statsServer.average_down_speed || statsServer.average_up_speed || null, fmtSpeed) }}</span>
+              <span class="lbl">平均速度</span><span class="val" style="color: var(--fg-dim); font-weight: 500;">qB 不提供</span>
             </div>
             <div class="stats-row">
               <span class="lbl">DHT 节点</span><span class="val">{{ statVal(statsServer.dht_nodes) }}</span>
@@ -1747,7 +1750,8 @@
             <div class="stats-row">
               <span class="lbl">空闲空间</span><span class="val">{{ statVal(statsServer.free_space_on_disk, fmtSize) }}</span>
             </div>
-          </div>
+            </div>
+          </template>
         </div>
         <div class="modal-actions">
           <button class="ce-btn ghost" :disabled="statsLoading" @click="loadStats()">

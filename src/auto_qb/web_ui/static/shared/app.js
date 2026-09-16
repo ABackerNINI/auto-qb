@@ -2787,7 +2787,7 @@ const app = createApp({
         this.statsServer = r.server || null;
       } catch (e) {
         if (!e.auth) this.statsError = e.message || "加载失败";
-        this.statsServer = null;
+        // FIX-04b: 失败不清空已有数据(骨架常驻防闪烁); 仅首次加载失败保持 null → 错误占位重试
       } finally {
         this.statsLoading = false;
       }
