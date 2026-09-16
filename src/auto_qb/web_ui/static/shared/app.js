@@ -280,14 +280,24 @@ const app = createApp({
       addSubmitting: false,   // 提交中(按钮 loading, 阻止重复提交与误关闭)
       addFiles: [],           // 已选 .torrent File 对象(展示用元信息; 前端读为 base64 随 JSON 上送)
       addUrls: "",            // magnet / http(s) 链接, 每行一条
+      addShowUrls: false,     // DLG-03: 链接输入框展开态(默认隐藏, 「添加链接」按钮切换)
       addSavePath: "",        // 保存路径(空 = qB 默认)
-      addCategory: "",        // 分类(可空)
-      addTags: "",            // 标签(逗号分隔, 可空)
-      addPaused: false,       // 添加即暂停
-      addSkipCheck: false,    // 跳过校验(危险选项: 勾选时预览区顶部出警告条)
+      addCategory: "",        // 分类(可空; combobox = 下拉候选 + 自由输入)
+      addTags: "",            // 标签(逗号分隔, 可空; combobox)
+      addStart: false,        // DLG-03: 添加后开始(勾选 = 立即开始; 默认不勾 = paused 添加)
+      addSkipCheck: false,    // 跳过校验(危险选项: 勾选后选项区下出警告行)
       addSequential: false,   // 顺序下载
       addFirstLast: false,    // 首末块优先
       addTmm: false,          // 自动种子管理(TMM)
+      addCatOptions: [],      // DLG-03: 分类候选(GET /api/categories, 打开窗口时拉取)
+      addTagOptions: [],      // DLG-03: 标签候选(GET /api/tags, 打开窗口时拉取)
+      addCatMenu: false,      // 分类下拉展开态
+      addTagMenu: false,      // 标签下拉展开态
+      addCatHi: -1,           // 分类下拉键盘高亮
+      addTagHi: -1,           // 标签下拉键盘高亮
+      addPathOptions: [],     // DLG-04: 保存路径候选(GET /api/paths, 已排序去重)
+      addPathPop: false,      // DLG-04: 选择位置面板展开态
+      addPathHi: -1,          // 位置面板键盘高亮
       // 统计面板(FE-2C): /api/stats → {server: qB server_state | null}; 打开时取一次, 卡内可手动刷新
       statsOpen: false,
       statsLoading: false,
@@ -834,12 +844,15 @@ const app = createApp({
       this.colMenuOpen = false;
       this.filterMenu = "";
       this.filePrio.visible = false;
+      this.addCatMenu = false;  // 添加种子对话框内浮层: 点空白处统一收起(触发元素自身已 @click.stop 拦截)
+      this.addTagMenu = false;
+      this.addPathPop = false;
     });
     // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层/抽屉 → 筛选器下拉/弹层(pop) → 右键菜单 → 清选择/收展开兜底
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (this.modal.visible) this.resolveModal(false);
-      else if (this.addOpen) this.closeAddTorrent();  // 添加种子对话框: 确认框优先, 其后于其它浮层
+      else if (this.addOpen) this.escAddTorrent();  // 添加种子对话框: 先收内部浮层(分类/标签下拉 → 位置面板), 再关对话框
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
@@ -1618,19 +1631,174 @@ const app = createApp({
     openAddTorrent() {
       this.addFiles = [];
       this.addUrls = "";
+      this.addShowUrls = false;  // DLG-03: 链接输入框默认收起
       this.addSavePath = "";
       this.addCategory = "";
       this.addTags = "";
-      this.addPaused = false;
+      this.addStart = false;  // 默认不勾 = paused 添加
       this.addSkipCheck = false;
       this.addSequential = false;
       this.addFirstLast = false;
       this.addTmm = false;
+      this.addCatMenu = false;
+      this.addTagMenu = false;
+      this.addCatHi = -1;
+      this.addTagHi = -1;
+      this.addPathPop = false;
+      this.addPathHi = -1;
       this.addOpen = true;
+      this.loadAddOptions();  // DLG-03/04: 异步拉取分类/标签/历史路径候选, 不阻塞窗口打开
     },
     closeAddTorrent() {
       if (this.addSubmitting) return;  // 回执等待期不允许误关
       this.addOpen = false;
+    },
+    async loadAddOptions() {
+      // DLG-03/04: 并行拉取分类/标签/历史路径候选; 单个端点失败静默降级为空候选(不阻塞窗口)
+      const safe = async (url, pick) => {
+        try {
+          return pick(await this.api(url));
+        } catch (e) {
+          return [];
+        }
+      };
+      const [cats, tags, paths] = await Promise.all([
+        safe("/api/categories", (r) => Object.keys(r.categories || {}).sort((a, b) => a.localeCompare(b))),
+        safe("/api/tags", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
+        safe("/api/paths", (r) => r.paths || []),
+      ]);
+      if (this.addOpen) {  // 仅窗口仍开着时回填(慢响应不得污染下一次打开)
+        this.addCatOptions = cats;
+        this.addTagOptions = tags;
+        this.addPathOptions = paths;
+      }
+    },
+    escAddTorrent() {
+      // Esc 逐层退栈(FIX-07)接入: 对话框内浮层(分类/标签下拉 → 位置面板)先收起, 再关对话框
+      if (this.addCatMenu || this.addTagMenu) {
+        this.addCatMenu = false;
+        this.addTagMenu = false;
+        this.addCatHi = -1;
+        this.addTagHi = -1;
+      } else if (this.addPathPop) {
+        this.addPathPop = false;
+        this.addPathHi = -1;
+      } else {
+        this.closeAddTorrent();
+      }
+    },
+    toggleAddUrls() {
+      this.addShowUrls = !this.addShowUrls;  // 收起不清空已输入链接, 再展开仍可继续编辑
+    },
+    openAddCatMenu() {
+      this.addTagMenu = false;
+      this.addCatHi = -1;
+      this.addCatMenu = true;
+    },
+    openAddTagMenu() {
+      this.addCatMenu = false;
+      this.addTagHi = -1;
+      this.addTagMenu = true;
+    },
+    addCatFiltered() {
+      const q = this.addCategory.trim().toLowerCase();
+      if (!q) return this.addCatOptions;
+      return this.addCatOptions.filter((c) => c.toLowerCase().includes(q));
+    },
+    addTagCurrent() {
+      const m = this.addTags.match(/([^,]*)$/);  // 从简: 只按最后一个逗号后的片段过滤
+      return (m ? m[1] : "").trim();
+    },
+    addTagFiltered() {
+      const q = this.addTagCurrent().toLowerCase();
+      const picked = new Set(this.addTags.split(",").map((t) => t.trim()).filter(Boolean));
+      return this.addTagOptions.filter((t) => !picked.has(t) && (!q || t.toLowerCase().includes(q)));
+    },
+    pickAddCat(name) {
+      this.addCategory = name;
+      this.addCatMenu = false;
+      this.addCatHi = -1;
+    },
+    pickAddTag(tag) {
+      const parts = this.addTags.split(",").map((t) => t.trim()).filter(Boolean);
+      if (!parts.includes(tag)) parts.push(tag);
+      this.addTags = parts.join(", ") + ", ";  // 尾随逗号: 便于继续挑选下一个
+      this.addTagMenu = false;
+      this.addTagHi = -1;
+    },
+    onAddCatKeydown(e) {
+      this._comboKeydown(e, "cat");
+    },
+    onAddTagKeydown(e) {
+      this._comboKeydown(e, "tag");
+    },
+    _comboKeydown(e, kind) {
+      // 分类/标签 combobox 共用键盘导航: 上下循环高亮, 回车选中, Esc 只收下拉(阻断冒泡, 不关对话框)
+      const opts = kind === "cat" ? this.addCatFiltered() : this.addTagFiltered();
+      const menuKey = kind === "cat" ? "addCatMenu" : "addTagMenu";
+      const hiKey = kind === "cat" ? "addCatHi" : "addTagHi";
+      const listRef = kind === "cat" ? "addCatList" : "addTagList";
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && opts.length) {
+        e.preventDefault();
+        if (!this[menuKey]) {
+          this[menuKey] = true;
+          this[hiKey] = e.key === "ArrowDown" ? -1 : 0;
+        }
+        this[hiKey] = (this[hiKey] + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
+        this._hiScroll(listRef);
+      } else if (e.key === "Enter" && this[menuKey] && this[hiKey] >= 0 && opts[this[hiKey]]) {
+        e.preventDefault();
+        if (kind === "cat") this.pickAddCat(opts[this[hiKey]]);
+        else this.pickAddTag(opts[this[hiKey]]);
+      } else if (e.key === "Escape" && this[menuKey]) {
+        e.stopPropagation();
+        this[menuKey] = false;
+        this[hiKey] = -1;
+      }
+    },
+    toggleAddPathPop() {
+      if (this.addPathPop) {
+        this.addPathPop = false;
+        return;
+      }
+      this.addCatMenu = false;
+      this.addTagMenu = false;
+      this.addPathHi = this.addPathOptions.indexOf(this.addSavePath.trim());  // 当前路径命中则预高亮
+      this.addPathPop = true;
+      this._hiScroll("addPathList");
+    },
+    pickAddPath(p) {
+      this.addSavePath = p;  // 单选回填(覆盖自由输入框内容)
+      this.addPathPop = false;
+      this.addPathHi = -1;
+    },
+    onAddPathKeydown(e) {
+      // 面板未开时不接管按键(按钮默认行为); 开启后: 上下移动高亮, 回车回填, Esc 只收面板(阻断冒泡不关对话框)
+      if (!this.addPathPop) return;
+      const n = this.addPathOptions.length;
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
+        e.preventDefault();
+        if (this.addPathHi < 0) this.addPathHi = e.key === "ArrowDown" ? -1 : 0;
+        this.addPathHi = (this.addPathHi + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+        this._hiScroll("addPathList");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const p = this.addPathOptions[this.addPathHi];
+        if (p) this.pickAddPath(p);
+      } else if (e.key === "Escape") {
+        e.stopPropagation();
+        this.addPathPop = false;
+        this.addPathHi = -1;
+      }
+    },
+    _hiScroll(refName) {
+      // 键盘高亮项滚动进可视区(block: nearest 不跳动)
+      this.$nextTick(() => {
+        const box = this.$refs[refName];
+        if (!box) return;
+        const el = box.querySelector('[data-hi="1"]');
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+      });
     },
     onAddFilePick(event) {
       const picked = Array.from((event.target && event.target.files) || []);
@@ -1669,7 +1837,7 @@ const app = createApp({
         save_path: this.addSavePath.trim(),
         category: this.addCategory.trim(),
         tags: this.addTags.split(",").map((t) => t.trim()).filter(Boolean),
-        paused: this.addPaused,
+        paused: !this.addStart,  // DLG-03: 「添加后开始」勾选 = 立即开始; 默认不勾 = paused 添加
         skip_checking: this.addSkipCheck,
         sequential: this.addSequential,
         first_last_piece_prio: this.addFirstLast,
