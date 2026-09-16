@@ -961,7 +961,7 @@
                 </div>
               </header>
 
-              <div v-if="cfg.notice" class="ce-banner" :class="cfg.noticeKind">{{ cfg.notice }}</div>
+              <!-- RFB-02 件2: 原 cfg.notice 顶栏横幅已退役(保存成败与重名拦截统一走全局 toast) -->
 
               <!-- 站点专段: 左列表 + 右详情 -->
               <div v-if="cfg.activeGroup === 'trackers'" class="ce-master-detail">
@@ -1061,10 +1061,7 @@
                         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
                       </button>
                     </div>
-                    <p v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="ce-risk-line">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
-                      <span>{{ cfgRuleRisk(cfg.ruleGroupKey, rn) }}</span>
-                    </p>
+                    <p v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="ce-note warn">{{ cfgRuleRisk(cfg.ruleGroupKey, rn) }}</p>
 
                     <div v-show="!cfgRuleCollapsed(cfg.ruleGroupKey, rn)" class="ce-rule-body">
                       <div class="ce-fields">
@@ -1131,9 +1128,6 @@
                                 @click="cfgPluginAdd(cfg.ruleGroupKey, rn, 'actions', p.name); cfgPickerClose()">
                           <span class="ce-picker-name">
                             {{ p.label }}
-                            <span v-if="p.risk" class="ce-risk" title="该动作存在风险">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
-                            </span>
                           </span>
                           <span v-if="p.help" class="ce-picker-help">{{ p.help }}</span>
                         </button>
@@ -1158,9 +1152,8 @@
                                     @change="cfgPluginReplace(cfg.ruleGroupKey, rn, 'actions', i, $event.target.value)">
                               <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
                             </select>
-                            <span v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-risk" title="该动作存在风险">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
-                            </span>
+                            <svg v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ico ico-sm ico-risk"
+                                 viewBox="0 0 16 16" title="该动作存在风险"><use href="#i-shield"></use></svg>
                             <span class="ce-spacer"></span>
                             <button class="ce-icon" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">
                               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>
@@ -1173,10 +1166,7 @@
                             </button>
                           </div>
                           <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).help" class="ce-help">{{ cfgPluginMeta(entry).help }}</p>
-                          <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-risk-line">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
-                            <span>{{ cfgPluginMeta(entry).risk }}</span>
-                          </p>
+                          <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-note warn">{{ cfgPluginMeta(entry).risk }}</p>
                           <div class="ce-fields">
                             <ce-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
                                       :key="item.path.join('.')" :item="item"></ce-field>
@@ -1316,10 +1306,7 @@
                           </div>
                         </template>
                       </div>
-                      <p v-if="cfgCurveInvalid(i, dir)" class="ce-risk-line">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
-                        <span>{{ cfgCurveInvalid(i, dir) }} 个档位无法解析(需形如 10GiB / 6MiB/s), 保存时后端会拒绝</span>
-                      </p>
+                      <p v-if="cfgCurveInvalid(i, dir)" class="ce-note warn">{{ cfgCurveInvalid(i, dir) }} 个档位无法解析(需形如 10GiB / 6MiB/s), 保存时后端会拒绝</p>
 
                       <div v-if="cfgCurvePoints(i, dir).length" class="ce-curve-points">
                         <div class="ce-curve-point-head">
@@ -2085,9 +2072,8 @@
           </label>
           <span class="ce-section-title">{{ f.label }}</span>
           <span class="ce-section-sum">{{ sectionSummary }}</span>
-          <span v-if="f.risk" class="ce-risk" title="该段存在风险, 详见段内说明">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
-          </span>
+          <!-- RFB-02 件2: 风险标识 = 紧凑图标(不再是"盾牌 + 风险"文字徽标), 说明见段内 .ce-note -->
+          <svg v-if="f.risk" class="ico ico-sm ico-risk" viewBox="0 0 16 16" title="该段存在风险, 详见段内说明"><use href="#i-shield"></use></svg>
         </div>
         <div v-show="sectionOpen && sectionExists()" class="ce-section-body">
           <ce-field v-for="sub in item.items" :key="sub.path.join('.')" :item="sub"></ce-field>
@@ -2101,9 +2087,8 @@
         <label v-if="!isBare" class="ce-label">
           {{ f.label }}<span v-if="f.required" class="ce-req" title="必填">*</span>
           <span v-if="isDefault()" class="ce-tag" title="当前未显式配置, 此处显示默认值">默认</span>
-          <span v-if="f.risk" class="ce-risk" title="该项存在风险, 详见下方说明">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
-          </span>
+          <!-- RFB-02 件2: 风险标识 = 紧凑图标, 说明走下方 .ce-note(不再用文字徽标) -->
+          <svg v-if="f.risk" class="ico ico-sm ico-risk" viewBox="0 0 16 16" title="该项存在风险, 详见下方说明"><use href="#i-shield"></use></svg>
           <!-- 布尔型从属项: 作为父字段的**内联额外开关**(比单独占一张子卡更符合从属语义) -->
           <label v-for="inl in item.inline" :key="inl.field.key" class="ce-switch ce-inline-switch"
                  :title="inl.field.risk || inl.field.help || ''">
@@ -2193,10 +2178,8 @@
           </template>
 
           <p v-if="f.help" class="ce-help">{{ f.help }}</p>
-          <!-- 风险提示: 醒目标识(盾牌 + 橙红文字), 需明显区别于普通说明 -->
-          <p v-if="f.risk" class="ce-risk-line">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg><span>{{ f.risk }}</span>
-          </p>
+          <!-- 风险提示(RFB-02 件2): 统一注记 —— 色点 + 行内小字, 不再用盾牌徽标与大框 -->
+          <p v-if="f.risk" class="ce-note warn">{{ f.risk }}</p>
         </div>
       </div>
     </div>
