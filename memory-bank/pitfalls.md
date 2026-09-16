@@ -211,3 +211,11 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 5. **共用逻辑层决定"改一处还是两处"**: 逻辑在 `shared/app.js` 的(如 CTX-02 用 DOM 标记 + watch 清理) → 模板零改动即双 UI 生效; 需要**模板事件绑定或样式**的(如 TBL-05 表头拖动、状态栏布局) → 必须两边都改。移植前先按这条分类, 能把工作量砍掉一半。
 6. **"CSS 已入库但模板从未切换"这类两不管缺口**: 波次二/三的多次交接出现过 `.ce-note` 样式已落盘、模板却仍用旧类名(渲染成无样式默认元素)。**判别法**: 静态 class 覆盖检查里"模板用到但 CSS 未定义"的集合, 与"CSS 定义了但模板从不使用"的集合, 两边都查一遍。
 7. **`keep/*` 孤儿标签 = 留档, 不是待合并分支**: `keep/agentZCode-old-line-f396972` 与 `keep/agentZCode-old-line-48836d7` 是**同一条被放弃的线**(后者是前者的后代), 都 fork 自 `beb8642`。放弃原因是该线**不含 `ada3d77`(W5-RFB-01 详情抽屉重构)**, 其 W4 改动建立在"抽屉仍有 9 个操作按钮"的旧模板上; 主线先合了 `ada3d77`(index.html 大改 4398 行), 所以选择**在新基线上重放**而非 merge。判别这类线要不要合: `git merge-base --is-ancestor <关键重构提交> <旧线>` —— 不包含关键重构就应重放。**教训**: 当年"按字节核验挑文件重放"时只搬了 `config_editor.js` + `config/schema/*.py`, 把同一提交里 `index.html`/`style.css` 的部分判为"已被新基线取代"而跳过 → 直接造成上面第 6 条的两不管缺口(风险标识整整一轮无样式)。**重放一个提交时必须逐文件核验, 判定"跳过"的要写明理由并留缺口登记**。
+
+### WEB UI 整页白屏: 一条注释续行落在已闭合的 `*/` 之后 (2026-09-17 实测)
+
+- **症状**: 打开 `/atlas/`(与 `/prism/`)只看到页面背景色, 登录框/顶栏/表格全部没有; `getComputedStyle(document.getElementById('app')).display === 'none'` —— `#app` 带 `v-cloak`(Vue 未 mount 前隐藏), **Vue 一旦不 mount 它就永远隐藏, 于是"只剩背景"**。任何"整包 JS 语法/加载失败"都长这个样子, 见到"只剩背景"先按这条查。
+- **根因**: `shared/app.js` 里 `* 列宽重实体化契约由 watch(page) 与 …` 这行**被留在已经用 `*/` 闭合的注释块之后**(波次三"以星图模板为基线重建 + 批量替换"引入) → 整文件 `SyntaxError: Unexpected identifier 'watch'` → app.js 一行都不执行。
+- **定位手法(无需 node, 也不用搭冒烟基建)**: ①起静态服务即可复现: `.venv\Scripts\python.exe -m http.server <port> --directory src\auto_qb\web_ui\static`, 浏览器开 `/atlas/`; ②在 `page.addInitScript` 里挂 `window.addEventListener('error', e => push({msg:e.message, file:e.filename, line:e.lineno, col:e.colno}), true)` 然后 reload —— 直接拿到 `shared/app.js:1997:18`。**只靠后端日志/curl/pytest 都看不到这个错误**(静态文件 200、pytest 全绿)。
+- **防回归**: `tests/test_web.py::test_frontend_static_bundle_health` 静态扫 `web_ui/static`(冲突标记残留 / JS 注释孤儿续行 / 模板引用的静态资源是否存在), 已做红绿验证 —— 对修复前的 app.js 精确报出 `shared/app.js:1997`, 对修复后的工作区 0 问题。
+- **判别法**: 改完前端"页面整块没内容"时分两类查 —— ①**整页连骨架都没有**(含 v-cloak 未摘)= 包级失败(语法错误/404/文件被改名), 用上面手法看 `window.onerror`; ②**骨架在但某块区域空**(如设置页只剩分组标题)= 模板表达式错误(computed 当函数, 见上文 2026-09-14 两条), 只能真机看页面。

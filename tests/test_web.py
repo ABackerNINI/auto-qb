@@ -8,6 +8,7 @@
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行 -> 整包 SyntaxError 白屏; 模板引用的 js/css/png 均存在)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
@@ -75,6 +76,7 @@
 import json
 import logging
 import os
+import re
 import tempfile
 from types import SimpleNamespace
 from unittest import mock
@@ -396,6 +398,56 @@ def test_ui_root_and_legacy_newui_redirect(web_env):
         resp = client.get(old, follow_redirects=False)
         assert resp.status_code == 307, f"{old} 应 307 重定向"
         assert resp.headers["location"] == new, f"{old} 应映射到 {new}"
+
+
+STATIC_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "web_ui", "static"
+)
+
+
+def _scan_frontend_assets():
+    """扫描 web_ui/static 返回问题清单(空 = 健康)
+
+    检查项(均为"整页白屏"级故障, 且 Python 侧测试天然看不见):
+    1. 合并冲突标记残留(`<<<<<<<` / `>>>>>>>` / 单独一行 `=======`) —— 语法错误;
+    2. JS 里"注释已闭合却仍留续行"(上一非空行以 `*/` 结尾, 本行又以 `*` 起头) ——
+       整包 SyntaxError, app.js 不执行, Vue 从不 mount, `v-cloak` 的 #app 恒 display:none;
+    3. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404)。
+    """
+    problems = []
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            if not name.endswith((".js", ".css", ".html")):
+                continue
+            with open(path, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+            for i, line in enumerate(lines, 1):
+                if line.startswith(("<<<<<<<", ">>>>>>>")) or line == "=======":
+                    problems.append(f"{rel}:{i} 合并冲突标记残留")
+            # 只扫自家前端(vendor 为第三方压缩产物, 不适用本仓库注释规范)
+            if name.endswith(".js") and "/vendor/" not in f"/{rel}":
+                for i, line in enumerate(lines):
+                    if not re.match(r"^\s*\*(?!/)", line):
+                        continue
+                    prev = next((l for l in reversed(lines[:i]) if l.strip()), "")
+                    if prev.rstrip().endswith("*/"):
+                        problems.append(f"{rel}:{i + 1} 注释块已闭合后仍有续行(会造成整包 SyntaxError)")
+            for ref in re.findall(r'(?:src|href)="(/[^"]+)"', "\n".join(lines)):
+                if not os.path.exists(os.path.join(STATIC_ROOT, ref.lstrip("/"))):
+                    problems.append(f"{rel} 引用不存在的静态资源 {ref}")
+    return problems
+
+
+def test_frontend_static_bundle_health():
+    """前端静态资源守阵: 冲突残留/注释孤儿续行/引用缺失 -> 白屏(2026-09-17 实测故障的防回归)
+
+    实测故障: 波次三合并把 app.js 一条注释续行留在了已闭合的 `*/` 之后 -> 整包 SyntaxError ->
+    Vue 从未 mount -> `v-cloak` 的 #app 恒 `display:none`, 页面只剩背景色, 而 pytest 全绿。
+    """
+    problems = _scan_frontend_assets()
+    assert not problems, "前端静态资源问题: " + "; ".join(problems)
 
 
 def test_api_group_commands_enqueue(web_env):
@@ -1243,7 +1295,12 @@ def test_api_t_bulk_group_keys_enqueue(web_env):
     resp = client.post(
         "/api/torrents/bulk",
         headers=auth,
-        json={"hashes": ["HC"], "keys": [key], "action": "delete", "delete_files": True},
+        json={
+            "hashes": ["HC"],
+            "keys": [key],
+            "action": "delete",
+            "delete_files": True
+        },
     )
     assert resp.status_code == 200 and resp.json()["queued"] is True
     cmd, payload = mgr.web_commands.get_nowait()
@@ -1577,7 +1634,12 @@ def test_drain_web_commands_bulk_torrents_group_keys():
         mgr, client, key = _make_grouped_manager(td)
         # 组键删除: 级联全组(一次调用传全部成员), delete_files 透传, 成员从快照移除, 回执 ok
         mgr.web_commands.put(
-            ("bulk_torrents", {"keys": [key], "action": "delete", "delete_files": True, "cmd_id": "g1"})
+            ("bulk_torrents", {
+                "keys": [key],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "g1"
+            })
         )
         mgr._drain_web_commands()
         assert client.calls[-1] == ("delete", True), client.calls
@@ -1591,7 +1653,12 @@ def test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing():
         mgr, client, key = _make_grouped_manager(td)
         # 混合: 组(含 HA/HB) + 散种子 HA(重叠) + 散种子 GONE(缺失) -> 去重后 [HA, HB] 一次调用; 回执带缺失计数
         mgr.web_commands.put(
-            ("bulk_torrents", {"hashes": ["HA", "GONE"], "keys": [key], "action": "pause", "cmd_id": "g2"})
+            ("bulk_torrents", {
+                "hashes": ["HA", "GONE"],
+                "keys": [key],
+                "action": "pause",
+                "cmd_id": "g2"
+            })
         )
         mgr._drain_web_commands()
         assert client.calls[-1] == ("pause", ["HA", "HB"]), client.calls[-1]
@@ -2570,7 +2637,13 @@ def test_api_torrent_peers_endpoint(web_env):
     fake.peers_map["HA"] = {
         "rid": 7,
         "full_update": True,
-        "peers": {"1.2.3.4:51413": {"ip": "1.2.3.4", "port": 51413, "client": "qBittorrent 5.0"}},
+        "peers": {
+            "1.2.3.4:51413": {
+                "ip": "1.2.3.4",
+                "port": 51413,
+                "client": "qBittorrent 5.0"
+            }
+        },
         "peers_removed": [],
     }
     mgr.client = fake
