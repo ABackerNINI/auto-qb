@@ -1581,21 +1581,18 @@ select option { background: var(--bg-elev); color: var(--fg); }
   font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 11.5px; line-height: 1.6;
   color: var(--fg-muted); white-space: pre-wrap; word-break: break-all; }
 
-/* ================= 限速对照卡·临时覆盖(FE-2C D2) =================
- * 两方向都必填(后端语义: 两方向都设置, 0=不限); 曲线启用时覆盖为临时(下一档位恢复), 提示条注明。
+/* ================= 限速对照卡·入口按钮 + 限速修改弹窗(SPD-04) =================
+ * qB 式「点击限速 → 弹窗修改」: 信息栏只留入口按钮, 表单与曲线启用提示收进弹窗
+ * (复用 .modal/.add-dialog 视觉语言, .speed-dialog 仅调窄)。两方向都必填(0 = 不限)。
  */
-.rail-speed-ov { display: flex; flex-direction: column; gap: 6px; margin-top: 2px;
-  padding-top: 8px; border-top: 1px dashed var(--border); }
-.rail-speed-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.rail-speed-input { width: 100%; min-width: 0; padding: 6px 8px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border); background: var(--bg-card); color: var(--fg);
-  font: inherit; font-size: 11.5px; }
-.rail-speed-input::placeholder { color: var(--fg-dim); }
-.rail-speed-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.rail-speed-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--accent-line);
+.rail-speed-open { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  margin-top: 2px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--accent-line);
   background: var(--accent-soft); color: var(--accent); font: inherit; font-size: 11.5px;
   font-weight: 600; cursor: pointer; transition: filter var(--dur-fast) var(--ease); }
-.rail-speed-btn:hover:not(:disabled) { filter: brightness(1.1); }
-.rail-speed-btn:disabled { opacity: .45; cursor: not-allowed; }
-.rail-speed-hint { margin: 0; color: var(--fg-dim); font-size: 10.5px; line-height: 1.5; }
+.rail-speed-open:hover { filter: brightness(1.1); }
+.modal.speed-dialog { width: 460px; }
+.speed-mode-line { display: flex; align-items: center; gap: 8px; margin: 2px 0 12px; padding: 8px 11px;
+  border-radius: var(--radius-sm); background: var(--bg-sunken); color: var(--fg-muted); font-size: 12px;
+  min-width: 0; overflow-wrap: anywhere; }
+.speed-mode-line .ico { flex: 0 0 auto; color: var(--accent); }
+.speed-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 4px; }
