@@ -290,7 +290,7 @@ GROUPS: Tuple[Group, ...] = (
                 "全局限速曲线",
                 "curve",
                 default=None,
-                help="读取 Traffic Monitor 数据, 按 day/month/Nd 累计流量分档限速(0 = 该档不限速)"
+                help="读取 Traffic Monitor 数据, 按 day/month/Nd 累计流量分档限速(0 = 该档不限速); enabled: false 整体停用(缺省 true)"
             ),
         ),
         icon="i-gauge",

@@ -440,6 +440,10 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         view = manager._traffic_view
         curve_enabled = view.get("state") not in (None, "", "disabled")
+        # 曲线存在但 enabled=False: 功能整体停用, 视为未启用(快照滞后/未发布时也兜底正确)
+        gslc = manager.config.global_speed_limit_curve
+        if gslc is not None and not gslc.enabled:
+            curve_enabled = False
         target = None
         if curve_enabled:
             t = (view.get("limit") or {}).get("target") or {}
