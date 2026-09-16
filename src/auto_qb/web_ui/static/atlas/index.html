@@ -1479,11 +1479,12 @@
               </div>
               <section v-for="sec in drawerGeneralSections()" :key="sec.title" class="drawer-sec">
                 <h4>{{ sec.title }}</h4>
-                <div class="drawer-rows">
-                  <template v-for="r in sec.rows" :key="r.label">
+                <div class="f-rows">
+                  <div v-for="r in sec.rows" :key="r.label" class="f-row">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
                     <span class="k">{{ r.label }}</span>
-                    <span class="v" :class="{ mono: r.mono }" :title="String(r.text)">{{ r.text }}</span>
-                  </template>
+                    <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
+                  </div>
                 </div>
               </section>
               <details class="drawer-raw">
@@ -1510,7 +1511,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="(t, i) in drawer.trackers" :key="i" :class="{ virtual: drawerTrackerVirtual(t.url) }">
-                    <td class="wrap" :title="t.url">{{ t.url }}</td>
+                    <td class="wrap mono-cell" :title="t.url">{{ t.url }}</td>
                     <td>{{ drawerTrackerStatus(t.status) }}</td>
                     <td>{{ fmtPeersQb(t.num_seeds, t.num_complete) }}</td>
                     <td>{{ fmtPeersQb(t.num_leeches, t.num_incomplete) }}</td>
@@ -1572,7 +1573,7 @@
                     <td class="wrap clickable" @click="fileRowSelect(r)">
                       <span class="dir-name" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span>
                     </td>
-                    <td>{{ r.text }}</td>
+                    <td class="mono-cell">{{ r.text }}</td>
                     <td>{{ r.dir ? "—" : r.progress + "%" }}</td>
                     <td>
                       <button v-if="!r.dir" class="prio-btn" :class="{ skipped: r.skipped }"
