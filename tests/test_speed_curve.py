@@ -26,6 +26,7 @@
 - test_speed_curve_dry_run_no_read_no_write: dry_run 不读当前不写 qB, 记录 state
 - test_speed_curve_dat_missing_noop: dat 文件缺失 -> 本轮不动
 - test_speed_curve_no_config_noop: 未配置曲线(conf None) -> handler 直接返回
+- test_speed_curve_enabled_false_short_circuit: enabled=False -> 任务短路不动 qB(限速保持原值), 快照回 disabled
 - test_speed_curve_dat_all_bad_lines_noop: dat 有文件但全坏行 -> 本轮不动
 - test_speed_curve_dat_bad_lines_still_applies: dat 部分坏行 -> 跳过坏行仍写 qB
 - test_speed_curve_success_logs_period_stats: 设置成功按各 period 输出累计上传/下载(今日/七日/本月/三十日)
@@ -103,8 +104,8 @@ def _pc(period: str, up=None, down=None) -> PeriodCurve:
     return PeriodCurve(period=period, upload_points=up, download_points=down)
 
 
-def _gslc(dat_path, *period_curves, interval=None) -> GlobalSpeedLimitCurve:
-    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=list(period_curves), interval=interval)
+def _gslc(dat_path, *period_curves, interval=None, enabled=True) -> GlobalSpeedLimitCurve:
+    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=list(period_curves), interval=interval, enabled=enabled)
 
 
 def _dat_text(rows) -> str:
@@ -701,6 +702,21 @@ def test_speed_curve_no_config_noop(tmp_path):
 
     assert _run_curve(mgr) is True
     assert client.transfer.calls == []
+
+
+def test_speed_curve_enabled_false_short_circuit(tmp_path):
+    """enabled=False -> 功能整体关闭: 任务短路不读 dat 不写 qB, 已设限速保持原值(不恢复默认), 快照回 disabled"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])  # 若未短路本应命中 5MiB/s 档
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)), enabled=False)
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 5120 * 1024  # 既有限速(此前曲线或手动设置)
+
+    assert _run_curve(mgr) is True  # 任务保留(短路非注销)
+    assert client.transfer.calls == []  # 完全未触碰 qB(不读当前不写限速)
+    assert client.transfer.limits["upload_limit"] == 5120 * 1024  # 保持原值
+    assert mgr._traffic_view["state"] == "disabled"  # 快照回 disabled(前端不渲染流量/限速 pill)
+    assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state(与 conf None 短路一致)
 
 
 def test_speed_curve_dat_all_bad_lines_noop(tmp_path):

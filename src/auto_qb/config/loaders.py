@@ -188,6 +188,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     先验证再解析: 结构/键/数值合法性由 validation._validate_global_speed_limit_curve 在
     fail-fast 校验阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。
     配置样式:
+        enabled: true               # 功能总开关(可选, 缺省 true; false = 整体关闭不干预 qB)
         interval: 10M              # 曲线任务执行间隔(可选, 缺省用主 interval)
         traffic_source:
             - traffic_monitor:
@@ -209,6 +210,9 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     # 曲线任务执行间隔(可选; 缺省 None = 回退主 interval)
     interval: Optional[float] = parse_time(str(spec["interval"])) if "interval" in spec else None
 
+    # 功能总开关(可选; 缺省 True = 现行行为; False = 功能整体关闭, 曲线任务短路)
+    enabled: bool = _get(spec, "enabled", GlobalSpeedLimitCurve.enabled, parse_bool)
+
     # 数据源: 校验已保证仅单个 traffic_monitor
     (source, ) = spec["traffic_source"]
     dat_path = str(source["traffic_monitor"]["dat_path"]).strip()
@@ -229,7 +233,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
                 ),
             )
         )
-    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=period_curves, interval=interval)
+    return GlobalSpeedLimitCurve(dat_path=dat_path, curves=period_curves, interval=interval, enabled=enabled)
 
 
 def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:

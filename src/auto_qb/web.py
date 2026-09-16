@@ -439,7 +439,9 @@ def create_app(manager) -> FastAPI:
         qB 当前全局限速直读(只读, 无状态副作用 —— 与 peers 透传同一先例)"""
         manager.touch_web_client()
         view = manager._traffic_view
-        curve_enabled = view.get("state") not in (None, "", "disabled")
+        gslc = manager.config.global_speed_limit_curve
+        # 叠加功能总开关: 曲线存在但 enabled=false 时立即视为关闭(不等快照刷新, 热重载后同样正确)
+        curve_enabled = view.get("state") not in (None, "", "disabled") and (gslc is None or gslc.enabled)
         target = None
         if curve_enabled:
             t = (view.get("limit") or {}).get("target") or {}

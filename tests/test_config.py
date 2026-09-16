@@ -27,6 +27,7 @@
 - test_validate_notify: notify 段校验(未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels)
 - test_load_notify_config: notify 段解析(默认 platform 渠道/min_level 归一/dedup_window 时间解析)
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
+- test_validate_gslc_enabled_key: global_speed_limit_curve.enabled 总开关(缺省 True/false/true 解析/非布尔报错)
 - test_validate_empty_file: 空文件/非字典根节点报错
 - test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
 - test_models_default_sources: 默认值单一来源 = dataclass 字段默认(段级/Config 顶层标量)
@@ -762,6 +763,34 @@ def test_validate_gslc():
         )
         err = _load_errors(td, text)
         assert "config.global_speed_limit_curve.traffic_source: 必须是非空列表" in err, err
+
+
+def test_validate_gslc_enabled_key():
+    """global_speed_limit_curve.enabled 功能总开关: 缺省 True / false 关闭 / true 开启 / 非布尔报错"""
+    base = (
+        "config:\n"
+        "  global_speed_limit_curve:\n"
+        "    traffic_source:\n"
+        "      - traffic_monitor:\n"
+        "          dat_path: a.dat\n"
+        "    curves:\n"
+        "      - curve:\n"
+        "          period: 1D\n"
+        "          upload_curve:\n"
+        "            - 10GiB: {upload_speed_limit: 6MiB/s}\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, base))
+        assert cfg.global_speed_limit_curve.enabled is True  # 缺省 True = 现行行为
+
+        cfg = load_config(_write_raw(td, base + "    enabled: false\n"))
+        assert cfg.global_speed_limit_curve.enabled is False
+
+        cfg = load_config(_write_raw(td, base + "    enabled: true\n"))
+        assert cfg.global_speed_limit_curve.enabled is True
+
+        err = _load_errors(td, base + "    enabled: not-bool\n")
+        assert "config.global_speed_limit_curve.enabled" in err, err
 
 
 def test_validate_empty_file():

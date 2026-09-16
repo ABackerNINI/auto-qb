@@ -52,6 +52,7 @@
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
+- test_api_speed_mode_curve_enabled_false_switch: /api/speed/mode 叠加曲线总开关(enabled=false -> curve_enabled=False)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503)
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
@@ -2091,6 +2092,36 @@ def test_api_speed_mode_and_override():
         assert mgr._web_results[cmd_id]["status"] == "ok"
         assert ("transfer_set_upload_limit", 2048 * 1024) in client.calls
         assert ("transfer_set_download_limit", 1024 * 1024) in client.calls
+
+
+def test_api_speed_mode_curve_enabled_false_switch():
+    """限速托管(D2+SPD-03): 曲线段存在但 enabled=false -> curve_enabled=False(即使快照仍是旧 ok 状态)
+
+    /api/speed/mode 的判定叠加 config.global_speed_limit_curve.enabled: 热重载关闭总开关后,
+    无需等待曲线任务下一轮刷新快照, 端点立即报关闭。
+    """
+    from fastapi.testclient import TestClient
+
+    from auto_qb.config import GlobalSpeedLimitCurve
+    from helpers import FakeClient, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr._web_token = "t"
+        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(dat_path="x.dat", curves=[], enabled=False)
+        mgr._traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 热重载前的旧快照
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": f"Bearer {mgr._web_token}"}
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["curve_enabled"] is False
+        assert data["curve_target"] is None
+
+        # 总开关重新打开 -> 恢复按快照判定
+        mgr.config.global_speed_limit_curve.enabled = True
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["curve_enabled"] is True
+        assert data["curve_target"] == {"upload_kib": 100, "download_kib": 50}
 
 
 def test_api_add_torrent_endpoint():

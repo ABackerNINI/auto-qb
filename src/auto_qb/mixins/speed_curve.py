@@ -6,6 +6,7 @@ global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按�
 取最严(最小非零)速度, 有变化时经 QbApi.set_global_speed_limits 写 qB 全局偏好。
 
 规则:
+- enabled: false = 功能整体关闭: 任务短路, 不读数据不写限速(已设置的 qB 限速保持原值, 不自动恢复默认)
 - 档位速度 0 = 不限速; 目标与当前均为 0 时幂等不写
 - 不覆盖用户手动全局限速: 当前值为正奇数 KiB(如 2001KiB/s)时跳过该方向
   (每轮重读当前值, 手动取消后自动恢复接管)
@@ -66,6 +67,9 @@ class SpeedCurveMixin:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
         conf = self.config.global_speed_limit_curve
         if conf is None:  # 未启用该功能
+            self._publish_traffic("disabled")
+            return REQUEUE
+        if not conf.enabled:  # 功能总开关关闭: 整体不干预(不读数据不写限速, 快照回 disabled)
             self._publish_traffic("disabled")
             return REQUEUE
 

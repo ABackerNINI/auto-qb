@@ -2,7 +2,7 @@
 from typing import List
 
 from ... import curves
-from ...utils import parse_fsize, parse_speed
+from ...utils import parse_bool, parse_fsize, parse_speed
 from .core import _try, _try_time
 
 
@@ -15,13 +15,17 @@ def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:
     if not isinstance(spec, dict):
         errors.append(f"{where}: 必须是字典")
         return
-    unknown = set(spec) - {"traffic_source", "curves", "interval"}
+    unknown = set(spec) - {"traffic_source", "curves", "interval", "enabled"}
     if unknown:
         errors.append(f"{where}: 未知键: {sorted(unknown)}")
 
     # interval: 曲线任务执行间隔(可选; 缺省回退主 interval), 须为正时间
     if "interval" in spec:
         _try_time(spec["interval"], f"{where}.interval", errors, positive=True)
+
+    # enabled: 功能总开关(可选; 缺省 true; false = 功能整体关闭, 曲线任务短路不干预 qB)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
 
     # traffic_source: 数据源列表, 当前仅支持单个 traffic_monitor
     raw_sources = spec.get("traffic_source")
