@@ -229,3 +229,13 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 3. **不可见的全屏遮罩会拦掉整页点击**: `.drawer-mask` 关闭后若过渡未走完(见下条环境坑), Vue 不移除元素, 于是留着一个 `opacity:0` 的 `position:fixed` 全屏层吃掉所有点击/右键。加固: 模板 `<transition :duration="200">`(不依赖 `transitionend` 也能清理) + CSS `.drawer-mask.drawer-leave-active { pointer-events: none }`。
 4. **集成浏览器(VS Code 内置页)里页面是 `hidden` 态**: `document.visibilityState === 'hidden'` 且 **rAF 完全不触发** → ①Vue 的 `<Transition>` 永远停在 `enter-from`(元素在 DOM 里但 `opacity:0`, 看上去"没渲染"); ②Playwright 的 `click()` 因拿不到两帧稳定盒模型而**全部超时**(报 "waiting for element to be visible, enabled and stable")。冒烟对策: 交互一律用 `page.evaluate` + `dispatchEvent(new MouseEvent('click', {bubbles:true, view:window}))`(JS 事件), 判定一律看 **DOM/状态**而不是 opacity; 视觉确认靠截图时要先注入 `*[class*="-enter-from"]{opacity:1 !important; transform:none !important}` 中和过渡类, 且截图可视区域小于 CSS 视口(固定定位元素可能落在截图之外, 用 `getBoundingClientRect` 判断而不是"截图里没看到")。
 5. **状态栏/表头菜单等本轮口径修订(用户 2026-09-17 明确)**: ①底部状态栏 = 左统计摘要(本次/累计/连接/DHT/剩余)+完整统计入口, 右速度合计+限速入口, 删掉全局状态徽标(顶栏已有连接状态); ②页内第二套"分组/种子/追剧"切换器退役(顶栏一级导航已覆盖); ③已选批量条位置 = "做种数量统计(dist-legend)之后、筛选器之前"; ④TBL-03 是**文字颜色**不是背景色(状态语义色染名称/数值列文字, 0 值占位不染); ⑤明文"点击种子即选中"取消 —— 明细行/种子行普通点击不再选择, 只保留 Ctrl/⌘ 与 Shift; ⑥TBL-05 的表头右键菜单要的是「隐藏**该列**」(单列)而非笼统打开列选择器(列选择器仍作为菜单末项保留)。
+
+### 知识库纪律: "立档规则"写在只对 `memory-bank/**` 生效的 instruction 里 → 3 天只立 1 档 (2026-09-17 诊断)
+
+- **症状**: `memory-bank/tasks/` 在 09-14~09-17 三天里只有 **1 条**登记, 而同期 25 条跨会话大任务 (WEB UI 波次一~三 / 大文件拆分 / 依赖现代化 / tracker 分组 / 追剧视图…) 全部堆在 `activeContext.md` 的"会话纪要"里, 把"易变层"泡成了流水账。
+- **根因 4 条** (按因果排序, 均有文件证据):
+  1. **载体不存在**: `.github/skills/` 是空目录 — 大家口中的 "memory bank skill" 只是概念, 仓库里只有 `.github/instructions/memory-bank.instructions.md`。instruction 靠 `applyTo` 文件 glob 生效, skill 靠 `description` 语义触发, **两者发现机制不同**。
+  2. **决策点与规则暴露点错位**(本次最机械的一条): 该 instruction 的 `applyTo: 'memory-bank/**'` 只在**编辑 `memory-bank/` 下文件时**注入上下文; 而"这个任务该不该立档"的决策发生在编辑 `src/`、`tests/` 的时刻 → 那一刻规则**不在上下文里**。规则必须写在决策点能看见的地方 (always-on 的 `AGENTS.md` / `.github/copilot-instructions.md`, 或 skill)。
+  3. **规则不可判定**: 原文只写"跨会话的**大**任务要立档" — 无阈值 ⇒ 无法判定 ⇒ 默认不立档。改成硬阈值 (跨 ≥2 会话 / ≥5 轮指令或 ≥3 个源文件 / 出现"计划·波次·后续阶段" / 需产出交付文档) 后才可执行。
+  4. **零机械后果**: 项目对代码约定有守卫测试, 知识库当时零校验 — 登记了没文件、纪要回流都不会被发现。现由 `tests/test_memory_bank.py` 双向校验索引↔文件/命名/状态分区/必备章节, 并禁止 `activeContext.md` 出现 `^- 2026-` 纪要行 (已做红绿验证)。
+- **通用判别法 (给未来)**: 若某条纪律"反复强调但从不执行", 按顺序查 ①载体 (skill/instruction 文件真在吗) ②规则暴露点是否落在决策点 ③阈值是否可判定 ④有没有机械后果。四条缺任何一条, 纪律都会衰减。

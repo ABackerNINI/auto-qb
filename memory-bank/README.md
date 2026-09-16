@@ -7,12 +7,15 @@
 > 2026-09-14 知识库改造: 新增根级 [AGENTS.md](../AGENTS.md) 统一跨 agent 入口与 [activeContext.md](activeContext.md) 易变层; 测试基线数字单点维护于 [testing.md](testing.md), 其它文档一律引用不手抄。
 >
 > 2026-09-15 全面迁移为 Memory Bank 结构: 原 `ai/` 整体迁入 `memory-bank/` 并按六核心文件语义重命名 (01→productContext, 02→systemPatterns, 09→progress, 10→activeContext), 新增 projectbrief / techContext / tasks/; `.github/instructions/memory-bank.instructions.md` 恢复原版 (applyTo: 'memory-bank/**')。核心文件职责: projectbrief=目标与范围, productContext=为什么存在/领域知识, systemPatterns=架构与技术决策, techContext=技术栈与环境, **activeContext=当前焦点 (会话入口)**, progress=完成与规划。
+>
+> 2026-09-17 会话协议加固: 新增 skill 载体 [../.agents/skills/memory-bank/SKILL.md](../.agents/skills/memory-bank/SKILL.md) (可 `/memory-bank` 调用; 先建于 `.github/skills/`, 同日按仓库技能根惯例搬到 `.agents/skills/`), **立档阈值与收尾 DoD 同时写进 always-on 入口** (`AGENTS.md` / `.github/copilot-instructions.md`) — 修掉"规则只在 applyTo memory-bank/** 的 instruction 里⇒决策时看不见"的错位; `tasks/` 按专题回填 TASK001~TASK010, `activeContext.md` 瘦身回易变层; 守卫 [../tests/test_memory_bank.py](../tests/test_memory_bank.py)。
 
 ## 按任务选择文档
 
 | 你要做的事 | 先读 |
 |-----------|------|
 | **会话开始/收尾** (现在做什么/做到哪) | [activeContext.md](activeContext.md) |
+| **会话协议 / 立档阈值 / 收尾 DoD** | [../.agents/skills/memory-bank/SKILL.md](../.agents/skills/memory-bank/SKILL.md) |
 | 项目目标与范围 (纲领) | [projectbrief.md](projectbrief.md) |
 | 技术栈/开发环境/约束 | [techContext.md](techContext.md) |
 | 第一次接触本项目 / 问"这是什么" | [productContext.md](productContext.md) |
