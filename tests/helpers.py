@@ -79,8 +79,8 @@ class FakeClient:
         self.files_calls = 0  # torrents_files 调用计数(验证分组检查不再全量拉文件列表)
         self.sync_calls = 0  # sync_maindata 调用计数(验证增量同步路径)
         self.server_state = None  # 非空时随 sync 响应回传(模拟 qB 每轮都带 server_state)
-        self.peers_map = {}  # hash -> peers 响应(torrents_peers 替身; 未命中回空列表)
-        self.peers_calls = 0  # torrents_peers 调用计数
+        self.peers_map = {}  # hash -> peers 响应(sync_torrent_peers 替身; 未命中回空整包)
+        self.peers_calls = 0  # sync_torrent_peers 调用计数
         self.transfer_upload_limit_value = 0  # transfer/uploadLimit 读数(bytes/s)
         self.transfer_download_limit_value = 0
         self.recheck_hashes_calls = []  # torrents_recheck 作用范围(hash 列表; calls 保持旧约定只记 None)
@@ -136,11 +136,11 @@ class FakeClient:
             resp["server_state"] = self.server_state  # qB 每轮(全量/增量)都带 server_state
         return resp
 
-    def torrents_peers(self, h, **kw):
-        """单种子 peer 列表替身: 返回 qB 形状 dict(peers 列表在 'peers' 键下)"""
+    def sync_torrent_peers(self, torrent_hash=None, rid=0, **kw):
+        """单种子 peer 列表替身(qB sync/torrentPeers 同形状: 整包含 peers 键; 未命中回空整包)"""
         self.peers_calls += 1
-        if h in self.peers_map:
-            return self.peers_map[h]
+        if torrent_hash in self.peers_map:
+            return self.peers_map[torrent_hash]
         return {"peers": [], "rid": 0}
 
     def torrents_edit_category(self, name=None, save_path=None, **kw):
