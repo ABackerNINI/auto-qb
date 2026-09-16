@@ -1524,7 +1524,9 @@ select option { background: var(--bg-elev); color: var(--fg); }
   margin: 6px -8px -8px; padding: 8px 8px 8px 10px; border: 0; border-top: 1px solid var(--border-soft);
   background: var(--bg-elev); color: var(--accent-hi); font: inherit; font-size: 12px; cursor: pointer;
   border-radius: 0 0 var(--radius) var(--radius); }
-.pop-mgr-btn:hover { color: var(--fg); background: var(--surface-2); }
+/* hover 底色必须不透明: --surface-2 是半透明高光, 直接当背景会让吸底按钮透出滚过的
+ * 选项行( FIX-02 "管理标签"项 hover 背景变透明 ); 用同色渐变把高光叠进 --bg-elev, 仍只引用令牌 */
+.pop-mgr-btn:hover { color: var(--fg); background: linear-gradient(var(--surface-2), var(--surface-2)), var(--bg-elev); }
 
 /* ================= 日志页(FE-2C) —— 与设置页同型的顶层页; 无自动轮询 =================
  * mono 等宽原始行; 页头含等级/行数选择与手动刷新, 页体独立滚动。

@@ -302,8 +302,8 @@
                 </button>
               </div>
             </div>
-            <!-- 清除筛选: **常驻占位**(无筛选时 visibility:hidden) —— 若用 v-if 会出现/消失,
-                 会把同一行的筛选器整组左右推动, 与用户"需要固定位置"的诉求相違 -->
+            <!-- 清除筛选: **常驻占位**(无筛选时降透明度禁用, R02) —— 若用 v-if 会出现/消失,
+                 会把同一行的筛选器整组左右推动; 旧 visibility:hidden 占位策略留下过幽灵空位 -->
             <button class="dist-chip clear" :class="{ 'is-off': !filtersActive }"
                     :disabled="!filtersActive" @click="clearFilters()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
