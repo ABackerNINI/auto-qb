@@ -291,6 +291,10 @@
                   <span class="pop-count">{{ o.count }}</span>
                 </div>
                 <p v-if="!f.options.length" class="pop-empty">暂无数据</p>
+                <!-- 管理入口(FE-2C2): 标签/分类弹层底部直达管理对话框(sticky 吸底不随长列表滚走) -->
+                <button v-if="f.kind === 'tag' || f.kind === 'category'" class="pop-mgr-btn" @click="openMgr(f.kind)">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>管理{{ f.label }}…
+                </button>
               </div>
               </transition>
             </div>
@@ -1831,6 +1835,91 @@
             <svg v-if="addSubmitting" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
             {{ addSubmitting ? '提交中…' : '添加' }}
           </button>
+        </div>
+      </div>
+    </div>
+    <!-- 分类管理对话框(FE-2C2): 列表(名字+保存路径) + 新建行 + 行级改路径/删除; CRUD 走 /api/categories 系端点,
+         成功后重拉列表; 关闭后主列表随下一轮 rid 轮询自然更新。复用 .modal/.add-dialog 视觉体系(.mgr-dialog 调宽与行样式) -->
+    <div v-if="mgrOpen === 'category'" class="modal-mask" @click.self="closeMgr">
+      <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理分类">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
+          <span>管理分类</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeMgr">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div v-if="mgrLoading" class="ce-placeholder loading">正在加载分类…</div>
+          <div v-else-if="mgrError" class="ce-placeholder">
+            <p class="error">{{ mgrError }}</p>
+            <button class="ce-btn" @click="loadMgr()">重试</button>
+          </div>
+          <template v-else>
+            <div class="mgr-list">
+              <div v-for="c in mgrCategories" :key="c.name" class="mgr-row">
+                <span class="mgr-name" :title="c.name">{{ c.name }}</span>
+                <span class="mgr-sub" :class="{ dim: !c.save_path }" :title="c.save_path || '未设置保存路径'">{{ c.save_path || '未设置保存路径' }}</span>
+                <span class="mgr-acts">
+                  <button class="ce-btn ghost small" :disabled="mgrBusy" @click="mgrEditCatPath(c.name)">改路径…</button>
+                  <button class="ce-btn ghost small danger" :disabled="mgrBusy" @click="mgrDeleteCategory(c.name)">删除</button>
+                </span>
+              </div>
+              <p v-if="!mgrCategories.length" class="mgr-empty">暂无分类, 在下方新建</p>
+            </div>
+            <div class="mgr-new">
+              <input v-model="mgrNewCatName" class="add-dialog-input" type="text" placeholder="分类名称"
+                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
+              <input v-model="mgrNewCatPath" class="add-dialog-input" type="text" placeholder="保存路径(可空)"
+                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
+              <button class="ce-btn primary" :disabled="!mgrNewCatName.trim() || mgrBusy" @click="submitMgrCategory">添加</button>
+            </div>
+          </template>
+        </div>
+        <div class="modal-actions">
+          <button class="ce-btn primary" @click="closeMgr">关闭</button>
+        </div>
+      </div>
+    </div>
+    <!-- 标签管理对话框(FE-2C2): 列表 + 新建行(逗号分隔可批量) + 行级删除; 底部静态提示自动规则标签 -->
+    <div v-if="mgrOpen === 'tag'" class="modal-mask" @click.self="closeMgr">
+      <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理标签">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
+          <span>管理标签</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeMgr">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div v-if="mgrLoading" class="ce-placeholder loading">正在加载标签…</div>
+          <div v-else-if="mgrError" class="ce-placeholder">
+            <p class="error">{{ mgrError }}</p>
+            <button class="ce-btn" @click="loadMgr()">重试</button>
+          </div>
+          <template v-else>
+            <div class="mgr-list">
+              <div v-for="t in mgrTags" :key="t" class="mgr-row">
+                <span class="mgr-name" :title="t">{{ t }}</span>
+                <span class="mgr-acts">
+                  <button class="ce-btn ghost small danger" :disabled="mgrBusy" @click="mgrDeleteTag(t)">删除</button>
+                </span>
+              </div>
+              <p v-if="!mgrTags.length" class="mgr-empty">暂无标签, 在下方新建</p>
+            </div>
+            <div class="mgr-new">
+              <input v-model="mgrNewTags" class="add-dialog-input" type="text" placeholder="新标签(逗号分隔可批量, 如 HR, Keep)"
+                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrTags">
+              <button class="ce-btn primary" :disabled="!mgrNewTags.trim() || mgrBusy" @click="submitMgrTags">添加</button>
+            </div>
+            <div class="mgr-hint">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>
+              <span>H&R / 集数 / MISSING 等标签由自动规则管理, 手动删除后可能被重新打上</span>
+            </div>
+          </template>
+        </div>
+        <div class="modal-actions">
+          <button class="ce-btn primary" @click="closeMgr">关闭</button>
         </div>
       </div>
     </div>
