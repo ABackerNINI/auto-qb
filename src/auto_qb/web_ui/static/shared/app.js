@@ -3157,7 +3157,9 @@ const app = createApp({
     },
     /* ---------------- 日志页(FE-2C): /api/log 只读 tail(等级过滤 + 行数选择 + 手动刷新, 不轮询) ---------------- */
     async openLogs() {
-      this.page = "logs";  // 顶层页切换(与设置页同型): 表格区卸载, watch(page) 已处理列宽重实体化
+      // W4: 日志迁入设置页"运行日志"章节; 顶层 page 收敛为 groups/settings, 不再有 'logs'
+      await this.openSettings();
+      this.cfg.activeGroup = "__logs";
       if (!this.logs.loaded) await this.loadLogs();
     },
     async loadLogs() {
