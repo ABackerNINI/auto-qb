@@ -153,6 +153,7 @@ button { font-family: inherit; }
 /* CTX-01 彩色图标集(波次三 W2): 统计/运行日志等"点位图标"此前继承 --fg-dim, 观感上没有颜色 */
 .ico-chart { color: var(--cyan); }         /* 统计 */
 .ico-log { color: var(--pink); }           /* 运行日志 */
+.ico-risk { color: var(--warn); }          /* 风险标识(RFB-02 件2: 紧凑图标替代文字徽标) */
 /* 旋转(索引构建中/刷新): 唯一持续的旋转动画, 只在明确的"进行中"语义下使用 */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .9s linear infinite; }
