@@ -40,12 +40,14 @@
 - test_is_manual_speed_limit: 奇数KiB手动限速保护(0/偶数不命中)
 - test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
 - test_parse_bool_invalid: 非法布尔值 -> ValueError
+- test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
 """
 import os
 import pytest
 import sys
 import tempfile
 from types import SimpleNamespace
+from unittest import mock
 
 from auto_qb import utils
 from auto_qb.mixins.checking import CheckingMixin
@@ -468,3 +470,48 @@ def test_fmt_size_invalid():
     """fmt_size: 非数字输入返回 '-'"""
     assert utils.fmt_size("not-a-number") == "-"
     assert utils.fmt_size(None) == "-"
+
+
+def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
+    """open_path(select=True) 跨平台(R10-10): win explorer /select, · mac open -R · linux 退化父目录
+
+    平台行为必须 monkeypatch sys.platform(CI 跑 Linux 而本项目以 Windows 为主);
+    Windows 分支还要 patch os.startfile —— 该属性在非 Windows 解释器上不存在, 故用 create=True。
+    非文件目标 / 不存在目标一律退化为普通打开(动作类工具容错优先, 不抛错)。
+    """
+    f = tmp_path / "a.mkv"
+    f.write_bytes(b"x")
+    missing = tmp_path / "nope.mkv"
+
+    # Windows: 打开父目录并选中该文件(不是打开文件本身)
+    monkeypatch.setattr(sys, "platform", "win32")
+    with mock.patch.object(utils.os, "startfile", create=True) as sfile, \
+            mock.patch.object(utils.subprocess, "run") as run:
+        utils.open_path(str(f), select=True)
+        assert sfile.call_count == 0
+        run.assert_called_once_with(["explorer", "/select,", os.path.normpath(str(f))], check=False)
+        # 目标不是文件(目录) -> 普通打开该目录
+        run.reset_mock()
+        utils.open_path(str(tmp_path), select=True)
+        assert run.call_count == 0
+        sfile.assert_called_once_with(str(tmp_path))
+        # 目标文件不存在 -> 退化为普通打开(避免"点了没反应"还报错)
+        sfile.reset_mock()
+        utils.open_path(str(missing), select=True)
+        sfile.assert_called_once_with(str(missing))
+
+    # macOS: open -R(Reveal in Finder)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    with mock.patch.object(utils.subprocess, "run") as run:
+        utils.open_path(str(f), select=True)
+        run.assert_called_once_with(["open", "-R", str(f)], check=False)
+        # 不带 select 时仍是普通打开
+        run.reset_mock()
+        utils.open_path(str(f))
+        run.assert_called_once_with(["open", str(f)], check=False)
+
+    # Linux: 无通用"选中"语义 -> 退化为打开父目录(明确降级优于静默失败)
+    monkeypatch.setattr(sys, "platform", "linux")
+    with mock.patch.object(utils.subprocess, "run") as run:
+        utils.open_path(str(f), select=True)
+        run.assert_called_once_with(["xdg-open", os.path.dirname(str(f))], check=False)

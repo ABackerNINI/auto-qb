@@ -82,4 +82,12 @@
   --paused: var(--fg-muted);
   --paused-soft: transparent;
   --paused-line: var(--border-strong);
+
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #17273c;
+
+  /* R10-07: 选中态专用令牌族(靛蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(139, 147, 248, .16);
+  --sel-line: rgba(139, 147, 248, .45);
+  --sel-bar: #8b93f8;
 }

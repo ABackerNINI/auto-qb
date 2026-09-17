@@ -231,7 +231,7 @@
 /* ---------------- 站内确认框 ---------------- */
 .modal-mask { position: fixed; inset: 0; z-index: 130; display: flex; align-items: center; justify-content: center;
   padding: 20px; background: var(--bg-sunken), rgba(0, 0, 0, .35); animation: fade-in .14s var(--ease); }
-.modal { width: 404px; max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
+.modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
   background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: modal-in .2s var(--ease-spring); }
 .modal.wide { width: var(--modal-wide-w); }
@@ -248,15 +248,18 @@
 .modal-check:hover { border-color: var(--border-strong); }
 .modal-check input { accent-color: var(--error); width: 15px; height: 15px; flex: 0 0 auto; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
-/* 待删目标信息区(值可换行可复制) */
+/* 待删目标信息区(值可复制)
+ * R10-13: 长文本口径统一为"**单行省略 + title 全文 + 复制按钮**" —— 旧写法 overflow-wrap:
+ * anywhere 会把超长 tracker URL / hash 换成很多行, 把弹窗顶高、且右边缘参差不齐。
+ * 真需要多行展示的超长名/路径仍可显式标 wide(块行, 最多 3 行)。 */
 .modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
   padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
   background: var(--surface-1); user-select: text; }
 .modal-detail-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
 .modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; align-self: center; }
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
-.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere;
-  color: var(--fg-soft); font-weight: 500; }
+.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--fg-soft); font-weight: 500; }
 /* FX-23: 超长值行(种子名 / 保存路径 / 目标剧集)升格为**块行** —— 标签一行、值独占下一行,
  * 且在 / \\ . - 与空格处断行(break-word)。旧写法 overflow-wrap: anywhere 会在任意字符处硬切,
  * 中文目录名混排时被切成参差不齐的三行(用户反馈的"缩进错乱")。行数上限 3 行 + title 给全文。 */
@@ -268,7 +271,38 @@
 .modal-detail-row.wide > .d-value { grid-area: value; display: -webkit-box; -webkit-box-orient: vertical;
   -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: break-word; word-break: normal; }
 .modal-detail-row.wide > .d-copy { grid-area: copy; align-self: center; }
-.modal-detail-row .d-copy { width: 22px; height: 22px; }
+/* R10-13: 复制按钮**所有行都渲染**(窄行靠悬停才显形, 不抢视觉也不占额外宽度) */
+.modal-detail-row .d-copy { width: 22px; height: 22px; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.modal-detail-row:hover .d-copy, .modal-detail-row .d-copy:focus-visible { opacity: .75; }
+.modal-detail-row .d-copy:hover { opacity: 1; }
+
+/* ================= R10-11 路径选择器(服务端目录浏览) =================
+ * “选择位置”不再是自绘候选下拉: 由服务端给真实目录树(浏览器物理上拿不到绝对路径)。
+ * 宽度取尺寸令牌族的“**宽**”档(与添加窗口同档): 目录路径才是这个窗口的主体内容, 窄框放不下。 */
+.modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
+.db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.db-bar > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+/* R10-11 修订: 路径**必须看得见** —— 原先单行省略, 长路径只剩开头几个字符。
+ * 现改为最多 3 行换行(任意字符处断行, 中文与分隔符都不会溢出), 盘符/多级目录一眼可读;
+ * 更长的仍可悬停看 title。 */
+.db-path { flex: 1; min-width: 0; padding: 5px 9px; border-radius: var(--radius-sm); background: var(--bg-sunken);
+  border: 1px solid var(--border-soft); color: var(--fg-soft);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.55; word-break: break-all; }
+.db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  padding: 4px; border-radius: var(--radius-sm); background: var(--surface-1);
+  border: 1px solid var(--border-soft); }
+.db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
+  border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.db-row:hover { background: var(--surface-2); color: var(--fg); }
+.db-row .ico { color: var(--accent); flex: 0 0 auto; }
+.db-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-new { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.db-new .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* 按钮不许被输入框挤掉宽度: input 的 flex-basis 是 100%(width:100%), 不锁按钮就会把
+ * "新建"压成两行(实测: 文字竖排) */
+.db-new > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
 
 /* ================= 选项胶囊(FX-20 / FX-24) =================
  * 勾选框从本项目的交互语汇中退役: 选项一律是"无勾选框的整行切换胶囊" ——
@@ -460,7 +494,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 预览区为静态说明(D4 接管语义) + 已有辅种组前缀计数(纯前端比对, 不发请求)。
  */
 /* FX-19: 窗口从 640px 放宽到 760px —— 三个字段一行(路径 1.6fr + 分类 + 标签)时输入框不再局促 */
-.modal.add-dialog { width: 760px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
+.modal.add-dialog { width: var(--modal-w-add); max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
 .add-dialog-x { margin-left: auto; }
 .add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
 .add-dialog-field { margin-top: 18px; }
@@ -471,8 +505,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px; }
 .add-dialog-input:focus, .add-dialog-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .add-dialog-textarea { resize: vertical; min-height: 72px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; }
-.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 12px; }
+.add-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .add-dialog-grid .add-dialog-field { margin-top: 18px; }
+/* 保存路径独占一整行(R10-11 修订): 路径是本窗口最长的输入(绝对路径 + 盘符 + 中文目录),
+ * 原先与分类/标签并成 3 列时只剩 ~400px, 输入框里看到的永远只是开头一截。
+ * 分类与标签仍两列均分(双列后每个都比原先 1.6fr/1fr 更宽)。 */
+.add-dialog-grid .add-dialog-pathfield { grid-column: 1 / -1; }
 /* W2-FE-1(DLG-03/04): 来源行(文件选择 + 添加链接按钮) / 分类标签 combobox / 选择位置面板(复用 .pop-menu 视觉) */
 .add-dialog-source { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-source .add-dialog-filepick { flex: 1 1 auto; min-width: 0; }
@@ -488,6 +526,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 面板宽度与输入框逐像素对齐、顶边贴住输入框下缘。 */
 .add-input-row { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .add-input-row > .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* R10-11 修订: 输入行必须能**撑满**剩余的同行空间 —— 原先只有 min-width:0 没有增长因子,
+ * 它在 flex 行里退到"内容宽"(input 的 auto 宽 ≈ 180px), 结果是保存路径独占整行后右侧
+ * 仍留一大片空白(用户: "路径输入框太小")。 */
+.add-dialog-pathrow > .add-input-row { flex: 1 1 auto; }
 .add-input-row > .add-pop { left: 0; right: 0; width: auto; }
 .add-dialog-pathrow .add-dialog-input { flex: 1 1 auto; min-width: 0; }
 .add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
@@ -560,7 +602,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* ================= 统计面板对话框(FE-2C) —— 复用 .modal/.add-dialog 视觉语言(仅引用 tokens) =================
  * server_state 字段直取, 缺失显示 —; 键值行斑马纹, 右值用 mono 数据字体。
  */
-.modal.stats-dialog { width: 460px; }
+.modal.stats-dialog { width: var(--modal-w-narrow); }
 .stats-grid { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .stats-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   padding: 7px 9px; border-radius: var(--radius-sm); }
@@ -572,7 +614,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* ================= 分类/标签管理对话框(FE-2C2) —— 与 atlas 同构, 复用 .modal/.add-dialog 视觉语言 =================
  * 列表行(名字 + 保存路径 + 行级操作) / 新建行 / 底部提示; 全部只引用既有 tokens。
  */
-.modal.mgr-dialog { width: 560px; }
+.modal.mgr-dialog { width: var(--modal-w-form); }
 .mgr-list { display: flex; flex-direction: column; margin: 4px 0 14px; max-height: 300px; overflow-y: auto; }
 .mgr-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; }
 .mgr-row + .mgr-row { border-top: 1px solid var(--border-soft); }

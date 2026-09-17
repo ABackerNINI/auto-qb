@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_api_requires_token: 无/错密钥访问 /api/* -> 401
 - test_config_public_endpoint_no_auth: 公开端点 /api/config/public 免 token 只读本机免鉴权标志(不含机密)
-- test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行, 对外/远端仍强制鉴权
+- test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志**每进程只记一次**), 对外/远端仍强制鉴权
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
@@ -31,7 +31,9 @@
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
-- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14) —— 目录/文件型 content_path、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
+- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
+- test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
+- test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
@@ -312,6 +314,8 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
 
     默认 false(保守): 本机连接仍强制鉴权; 开启后仅 loopback 放行 —— 对外/远端连接
     (request.client.host 非 127.0.0.1/::1)即使带对密钥以外的任何请求也须密钥(仍强制)。
+    提示日志**每进程只记一次**(R10-01): 免鉴权模式下前端按设计不发 Authorization 头,
+    每请求都记会把轮询日志刷满; 首次记一条足以说明该实例不校验密钥。
     """
     from fastapi.testclient import TestClient
 
@@ -324,15 +328,17 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     loopback = TestClient(app, client=("127.0.0.1", 50000))
     remote = TestClient(app, client=("192.168.1.50", 50000))
 
-    # 本机: 无密钥/错密钥均放行(直接进入)
-    assert loopback.get("/api/status").status_code == 200
-    assert loopback.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 200
-    # 本机免密钥放行记一条 WARNING(透明可追溯)
     caplog.set_level(logging.WARNING, logger="auto_qb.web")
     caplog.clear()
-    loopback.get("/api/status")
+    # 本机: 无密钥/错密钥均放行(直接进入)
+    assert loopback.get("/api/status").status_code == 200
     warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
     assert warns and "skip_local_verify" in warns[-1].getMessage()
+    # 只记一次: 其余免密钥请求不再刷日志
+    caplog.clear()
+    assert loopback.get("/api/status").status_code == 200
+    assert loopback.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 200
+    assert not [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
     # 对外/远端连接: 仍强制鉴权(错密钥 401, 对密钥 200)
     assert remote.get("/api/status").status_code == 401
     assert remote.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200
@@ -1158,10 +1164,11 @@ def test_api_paths_endpoint(web_env):
 
 
 def test_api_open_path_endpoint(web_env, tmp_path):
-    """POST /api/open-path (FX-14): 服务端自行派生目录后交系统默认程序打开
+    """POST /api/open-path (FX-14 + R10-10): 服务端自行派生目录/文件后交系统默认程序打开
 
-    覆盖: 目录型 content_path 取自身 / 文件型 content_path 取父目录 / content_path 缺失回退 save_path /
-    组键取 key 首元 / 未知组与不存在目录 404 / kind 非法 400 /
+    覆盖: 目录型 content_path 取自身 / **文件型 content_path 取文件本身并带 select=True(R10-10
+    "在文件夹中选中相关文件")** / content_path 缺失回退 save_path / 组键取 key 首元 /
+    未知组与不存在目录 404 / kind 非法 400 /
     **客户端额外传入的 path 被忽略**(安全红线: 否则等于把"任意文件执行"暴露给 WEB 端点) / 鉴权 401。
     """
     mgr, client = web_env
@@ -1183,27 +1190,27 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     mgr.store.get = lambda h: mgr.store.by_hash.get(h)
     post = lambda body: client.post("/api/open-path", json=body, headers=auth)  # noqa: E731
     with mock.patch("auto_qb.web.open_path") as spy:
-        # ① 目录型 content_path -> 取自身
+        # ① 目录型 content_path -> 取自身(非选中语义)
         r = post({"kind": "torrent", "hash": "HA"})
-        assert r.status_code == 200 and r.json() == {"opened": norm(d_content)}, r.text
-        spy.assert_called_once_with(norm(d_content))
-        # ② 文件型 content_path -> 取父目录
+        assert r.status_code == 200 and r.json() == {"opened": norm(d_content), "select": False}, r.text
+        spy.assert_called_once_with(norm(d_content), select=False)
+        # ② 文件型 content_path(单文件种子) -> 打开该文件并**定位选中**(R10-10)
         spy.reset_mock()
-        assert post({"kind": "torrent", "hash": "HB"}).json() == {"opened": norm(d_content)}
-        spy.assert_called_once_with(norm(d_content))
+        assert post({"kind": "torrent", "hash": "HB"}).json() == {"opened": norm(f_file), "select": True}
+        spy.assert_called_once_with(norm(f_file), select=True)
         # ③ content_path 缺失 -> 回退 save_path
         spy.reset_mock()
-        assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_seed)}
-        spy.assert_called_once_with(norm(d_seed))
+        assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_seed), "select": False}
+        spy.assert_called_once_with(norm(d_seed), select=False)
         # ④ 组: 组键首元即规范化 save_path(组内成员天然一致)
         spy.reset_mock()
         group_key = encode_group_key((norm(d_seed), ("a.mkv", )))
-        assert post({"kind": "group", "key": group_key}).json() == {"opened": norm(d_seed)}
-        spy.assert_called_once_with(norm(d_seed))
+        assert post({"kind": "group", "key": group_key}).json() == {"opened": norm(d_seed), "select": False}
+        spy.assert_called_once_with(norm(d_seed), select=False)
         # ⑤ 安全: 客户端多传的 path 被忽略 —— 打开的是服务端派生的目录, 不是它
         spy.reset_mock()
         post({"kind": "group", "key": group_key, "path": "C:/Windows/System32"})
-        spy.assert_called_once_with(norm(d_seed))
+        spy.assert_called_once_with(norm(d_seed), select=False)
         # ⑥ 未知组 / 未知 hash / 不存在目录 -> 404; kind 非法 -> 400; 均不调用系统打开
         spy.reset_mock()
         assert post({"kind": "group", "key": encode_group_key(("D:/nope", ("z", )))}).status_code == 404
@@ -1220,6 +1227,96 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     assert mgr.web_commands.empty()
     # 鉴权: 无密钥 401
     assert client.post("/api/open-path", json={"kind": "wat"}).status_code == 401
+
+
+def test_api_fs_dirs_endpoint(web_env, tmp_path):
+    """GET /api/fs/dirs (R10-11): 服务端目录浏览 —— 允许根白名单/只列目录/穿越防护/鉴权
+
+    这是本项目唯一新增的**文件系统读**能力, 安全边界逐条固化: ①首屏(path 空)= 允许根列表;
+    ②只返回目录条目(同名文件不出现); ③上溯到允许根为止(根之上 parent 为空);
+    ④`..` 穿越与白名单外路径一律 403; ⑤不存在/不是目录 404; ⑥无白名单时空返回(不报错);
+    ⑦指向根外的符号链接不出现在列表里(逃逸防护); ⑧无密钥 401; ⑨只读不入命令队列。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    root = tmp_path / "root"
+    (root / "sub" / "deep").mkdir(parents=True)
+    (root / "b.txt").write_bytes(b"x")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    get = lambda p=None: client.get("/api/fs/dirs", headers=auth, params={} if p is None else {"path": p})  # noqa: E731
+
+    # ① 首屏 = 允许根列表(前端入口)
+    body = get().json()
+    assert body["path"] == "" and body["roots"] == [norm(root)]
+    assert body["dirs"] == [{"name": norm(root), "path": norm(root)}]
+    # ② 列子目录: 只出现目录(同名文件被排除); 已在允许根 -> 不能再上溯
+    body = get(norm(root)).json()
+    assert [d["name"] for d in body["dirs"]] == ["sub"]
+    assert body["path"] == norm(root) and body["parent"] == ""
+    # ③ 进入子目录后可上溯回根
+    body = get(norm(root / "sub")).json()
+    assert [d["name"] for d in body["dirs"]] == ["deep"]
+    assert body["parent"] == norm(root)
+    # ④ 越界 / .. 穿越 / 不存在 -> 403 / 403 / 404
+    assert get(norm(outside)).status_code == 403
+    assert get(norm(root / ".." / "outside")).status_code == 403
+    assert get(norm(root / "nope")).status_code == 404
+    assert get(norm(root / "b.txt")).status_code == 404  # 目标存在但是文件 -> 不是目录
+    # ⑤ 符号链接逃逸: 指向根外的子目录不进列表(Windows 无权限建链 -> 跳过该断言)
+    link = root / "escape"
+    try:
+        os.symlink(outside, link, target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError):
+        pass
+    else:
+        assert "escape" not in [d["name"] for d in get(norm(root)).json()["dirs"]]
+    # ⑥ 无白名单(还没有任何已知保存路径) -> 空返回而非报错
+    mgr.store.by_hash = {}
+    assert get().json() == {"path": "", "parent": "", "roots": [], "dirs": []}
+    # ⑦ 鉴权 + 只读无副作用
+    assert client.get("/api/fs/dirs").status_code == 401
+    assert mgr.web_commands.empty()
+
+
+def test_api_fs_mkdir_endpoint(web_env, tmp_path):
+    """POST /api/fs/mkdir (R10-11): 新建目录的边界 —— 单层名字/白名单/幂等/同名文件 409
+
+    覆盖: 正常新建(目录真的出现在磁盘上 + 返回绝对路径) / 重名目录幂等(200 + existed=True) /
+    同名**文件** 409 / 名字含分隔符或为 . .. -> 400 / 白名单外父目录 403 / 父目录不存在 404 /
+    无密钥 401 / 不入命令队列(只建目录, 不碰任务队列与 state)。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    post = lambda body: client.post("/api/fs/mkdir", json=body, headers=auth)  # noqa: E731
+
+    # ① 正常新建
+    r = post({"path": norm(root), "name": "新文件夹"})
+    assert r.status_code == 200 and r.json() == {"created": norm(root / "新文件夹"), "existed": False}, r.text
+    assert (root / "新文件夹").is_dir()
+    # ② 重名目录幂等(不报错)
+    assert post({"path": norm(root), "name": "新文件夹"}).json()["existed"] is True
+    # ③ 同名文件 -> 409
+    (root / "b.txt").write_bytes(b"x")
+    assert post({"path": norm(root), "name": "b.txt"}).status_code == 409
+    # ④ 名字含路径成分 / . / .. -> 400(只接受单层名字, 不做路径拼接)
+    for bad in ("", "  ", "a/b", "a\\b", ".", ".."):
+        assert post({"path": norm(root), "name": bad}).status_code == 400, bad
+    # ⑤ 白名单外 / 父目录不存在 -> 403 / 404
+    assert post({"path": norm(outside), "name": "x"}).status_code == 403
+    assert post({"path": "", "name": "x"}).status_code == 403
+    assert post({"path": norm(root / "missing"), "name": "x"}).status_code == 404
+    # ⑥ 鉴权 + 不入命令队列(不绕过单一写线程: 只建目录)
+    assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "x"}).status_code == 401
+    assert mgr.web_commands.empty()
 
 
 # ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------

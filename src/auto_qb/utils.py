@@ -402,8 +402,24 @@ def replace_vars(text: str, tracker_conf) -> str:
     return str(text).replace("${required_seeding_time}", hr_conf.required_seeding_time_raw)
 
 
-def open_path(path: str) -> None:
-    """用系统默认方式打开文件/目录(跨平台: Windows 资源管理器 / macOS open / Linux xdg-open)"""
+def open_path(path: str, select: bool = False) -> None:
+    """用系统默认方式打开文件/目录(跨平台: Windows 资源管理器 / macOS open / Linux xdg-open)
+
+    R10-10: `select=True` 表示"打开所在文件夹并**定位选中**该文件"(单文件种子: 用户要在
+    文件夹里看到那一个文件, 而不是被丢进一个装了上百个种子的目录):
+    - Windows: `explorer /select,<file>` 打开父目录并高亮选中该文件;
+    - macOS: `open -R <file>`(Reveal in Finder);
+    - Linux: 无通用"选中"语义(依赖具体文件管理器), 退化为打开父目录 —— 明确比静默丢弃好。
+    目标不是已存在文件(或平台不支持)时退化为普通打开该路径, 不抛错(动作类工具的容错优先)。
+    """
+    if select and os.path.isfile(path):
+        if sys.platform.startswith("win32"):
+            subprocess.run(["explorer", "/select,", os.path.normpath(path)], check=False)
+            return
+        if sys.platform.startswith("darwin"):
+            subprocess.run(["open", "-R", path], check=False)
+            return
+        path = os.path.dirname(path)  # Linux: 退化到父目录
     if sys.platform.startswith("win32"):
         os.startfile(path)  # noqa: S606  仅 Windows 存在
     elif sys.platform.startswith("darwin"):

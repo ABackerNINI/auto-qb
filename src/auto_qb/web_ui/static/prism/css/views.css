@@ -38,10 +38,13 @@
 /* ---------------- 底部状态栏(TBL-08 修订) ----------------
  * 原左栏"舵台"(.rail*)整块退役: 左 = 常显统计摘要 + 完整统计入口, 右 = 速度摘要 + 限速入口。
  * 高度用 --statusbar-h 令牌锁定(不随内容变化, 与内容区底部预留共用同一值, 避免取整透缝);
- * z-index 30 与吸顶条同层 —— 低于列选择器弹层/右键菜单/toast/modal。 */
+ * z-index 30 与吸顶条同层 —— 低于列选择器弹层/右键菜单/toast/modal。
+ * R10-02: 底色从 --glass 换专用令牌 --statusbar-bg —— 暗主题下 --glass 与页底 --bg 明度差不足 2%,
+ * 状态栏"与背景色一致"看不出来。不用 --glass 是因为它同时管顶栏, 改它会把顶栏一起带偏。
+ * 同步去掉 backdrop-filter: 底色已不透明, 模糊无效; 少一层层叠上下文也少一类遮挡问题。 */
 .statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center;
   gap: 16px; height: var(--statusbar-h, 34px); padding: 0 18px; overflow: hidden; white-space: nowrap;
-  background: var(--glass); backdrop-filter: blur(10px); border-top: 1px solid var(--border);
+  background: var(--statusbar-bg, var(--bg-card)); border-top: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--hairline); }
 .sb-speed { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
 /* FX-08: 速度与限速配对 —— "下载速度 12.3 MiB/s · 限制速度 不限" 是一个不可断开的组合,
@@ -59,11 +62,19 @@
 .sb-limit .val { font-size: 12px; }
 /* 不限速: 弱化(它不是受限状态, 不需要强调) */
 .sb-limit.off .val { color: var(--fg-dim); font-weight: 500; }
-/* 今日流量(FX-07): 数据源与连接/剩余不同(Traffic Monitor dat), 用竖线与右侧摘要区分 */
-.sb-today { padding-right: 12px; border-right: 1px solid var(--border-soft); }
+/* 今日流量(FX-07): 数据源与连接/剩余不同(Traffic Monitor dat), 用竖线与右侧摘要区分。
+ * R10-05: 历史入口已并入本组作子元素 -> 不再需要右边框与额外间距: 原先那道 1px 竖线
+ * 正好在两者之间, 读作"两个不相干的块"(用户: "中间有隔断")。 */
 .sb-today .v-down { color: var(--today-down); }
 .sb-today .v-up { color: var(--today-up); }
-.sb-hist { margin-left: -6px; }
+/* R10-05: 历史入口(今日流量组的子元素) —— 轻量按钮, 与块内数值同排只留图标间距 */
+.sb-hist { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 1px 8px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-hist:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.sb-hist .ico { color: var(--fg-dim); }
+.sb-hist:hover .ico { color: var(--accent-hi); }
 /* 左侧统计摘要: 指标项紧凑排列(标签暗 + 数值亮), 空间不足时整体裁切而不换行 */
 .sb-stats { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
 .sb-stats .lbl { color: var(--fg-dim); font-size: 11.5px; }
@@ -101,15 +112,10 @@
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
 .h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
-/* FX-05(决策 D4 = 方案A): 做种/用户列的表头与单元格统一右对齐。
- * 旧规则把这两列的表头居中(hc-count/hc-hr 仍居中), 而单元格是右对齐 -> 表头与内容错位;
- * 原 TBL-01 的"0 值居中"已随本轮 FX-02/03/04 不再显示 0 值一并取消, 故直接右对齐。 */
-.hc-count, .hc-hr { text-align: center; }
-.hc-num_seeds, .hc-num_leechs { text-align: right; }
-.hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size,
-.hc-eta, .hc-added_on, .hc-downloaded, .hc-amount_left, .hc-availability,
-.hc-seeding_time, .hc-time_active, .hc-last_activity, .hc-completion_on,
-.hc-up_limit, .hc-dl_limit { text-align: right; }
+/* R10-08: 列对齐不再在这里硬编码名单 —— 口径唯一来源是 app.js 的列模型 `align`,
+ * 由 colAlignCss 按**当前可见列**生成 :nth-child 规则注入 <head>(表头与单元格同源)。
+ * 这样加/删/换序列都只改列模型一处, 不会再出现"表头左、值右"的错位。
+ * 旧规则(.hc-dlspeed…右对齐名单 + .hc-count/.hc-hr 居中)已删。 */
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
 .h-cell .arrow { color: var(--accent); display: inline-block; animation: arrow-in .14s var(--ease-out); }
@@ -217,18 +223,22 @@
   background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row); }
 .member-row.search-hit { background: linear-gradient(90deg, var(--accent-soft), transparent 42%); }
 
-/* 多选选中态 */
-.group-row.selected { background: var(--accent-soft); border-color: var(--accent-line); }
+/* 多选选中态(R10-07): 改用**选中态专用令牌族**(--sel-bg/--sel-line/--sel-bar)。
+ * 原先选中态引用 --accent-soft/--accent, 而品牌主题(orbit)的 --accent 与"做种中"的 --green
+ * 同属绿族且明度接近 -> 用户反馈"不好分辨"。现在五主题统一给非绿值(靖蓝族),
+ * 与状态色彻底分家; 换主题不再撞色。 */
+.group-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 .group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
-  width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
-.member-row.selected { background: var(--accent-soft); }
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); }
 /* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 例如在种子页选了某辅种组的
  * 2 个种子后回辅种页, 该组应显示"半选"而不是"没选"。视觉 = 同款左色条但降透明 + 柔底,
- * 与全选明确区分; 仍只引用既有令牌(不引新色)。 */
-.group-row.partial, .member-row.partial { background: var(--accent-soft); border-color: var(--accent-line); }
+ * 与全选明确区分。 */
+.group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
+  border-color: var(--sel-line, var(--accent-line)); }
 .member-row { position: relative; }
 .group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
-  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); opacity: .42; }
+  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); opacity: .42; }
 .member-row.partial::before { top: 18%; bottom: 18%; }
 
 /* 限速对照 */
@@ -530,7 +540,7 @@
   background: linear-gradient(transparent, var(--bg) 42%); }
 
 /* ---------------- 历史流量弹层 ---------------- */
-.hist-modal { width: 860px; max-width: 100%; }
+.hist-modal { width: var(--modal-w-add); max-width: 100%; }
 .hist-modal .modal-title { margin-bottom: 12px; }
 .hist-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-sm);
   background: var(--bg-sunken); border: 1px solid var(--border-soft); }
@@ -646,7 +656,10 @@
 .drawer-table td.wrap { white-space: normal; overflow-wrap: anywhere; }
 .drawer-table tr.virtual td { color: var(--fg-muted); }
 .drawer-table .mono-cell { font-family: var(--font-mono); font-size: 12px; }
-.drawer-table .dir-name { font-weight: 600; }
+.drawer-table .dir-name { color: var(--fg-muted); }
+/* R10-15: 内容页目录/文件分色 —— 目录是**结构**(亮一档 + 加粗), 文件是内容(中间调),
+ * 只引既有令牌族不散写色值; skipped(优先级=跳过)仍由 tr.skipped 统一弱化 */
+.drawer-table .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
 .drawer-table tr.skipped td { color: var(--fg-muted); }
 .drawer-raw { margin-top: 6px; }
 .drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
@@ -677,7 +690,6 @@
  * 交互改为 qB 式「点击限速 -> 弹窗修改」; 原左栏"限速对照卡 + 临时覆盖表单"随 .rail 一并退役。
  * 表单两方向都必填(后端语义: 两方向都设置, 0 = 不限); 曲线启用时为临时覆盖, 下一档位恢复。
  */
-.modal.speed-dialog { width: 460px; }
 .speed-dialog .add-dialog-body { display: flex; flex-direction: column; gap: 12px; }
 .speed-mode-line { display: flex; align-items: center; gap: 7px; padding: 8px 10px;
   border-radius: var(--radius-sm); background: var(--surface-1); border: 1px solid var(--border-soft);
@@ -753,11 +765,25 @@
 /* TBL-03 行状态**文字色** + 数值色阶(用户 2026-09-17: 要的是**文字颜色**而非背景色)。
  * 棱镜此前只有 .g-status 徽标底色, 缺行级状态色 —— 本次与星图对齐: 名称/数值列文字染语义色;
  * 只染有语义色的状态(seeding/downloading/checking/error), paused/other 保持默认前景(整行灰字伤可读性);
- * 0 值(.zero)与"—"占位不染; 数值色阶 tone-* 写在状态色之后 -> 同权重时源顺序胜出 */
-.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero) { color: var(--green); }
+ * 0 值(.zero)与"—"占位不染; 数值色阶 tone-* 写在状态色之后 -> 同权重时源顺序胜出。
+ *
+ * R10-06: 覆盖面从"名称 + 数值格子"扩到**文本型格子** —— 保存路径 / Hash v1 / Hash / Tracker /
+ * 站数。芯片类(站点/标签/分类)按决策 D6-A **不跟随**行状态色: 芯片表达的是**成员级**语义
+ * (组内不同站点状态可不同), 强行覆盖会把这层信息抹平。 */
+.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero),
+.group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count { color: var(--green); }
 .group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat:not(.zero),
-.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero) { color: var(--blue); }
-.group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero) { color: var(--error); }
+.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero),
+.group-row.s-downloading .g-save-path, .group-row.s-downloading .m-hash, .group-row.s-downloading .g-count,
+.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count { color: var(--blue); }
+.group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero),
+.group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count { color: var(--error); }
+/* 成员行(展开明细/追剧集明细)同口径: 行类名是 m.kind 而非 s-*, 故单独一组 */
+.member-row.seeding .m-stat:not(.zero), .member-row.seeding .m-hash, .member-row.seeding .g-save-path { color: var(--green); }
+.member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero),
+.member-row.downloading .m-hash, .member-row.checking .m-hash,
+.member-row.downloading .g-save-path, .member-row.checking .g-save-path { color: var(--blue); }
+.member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path { color: var(--error); }
 
 /* TBL-03 数值色阶: tone-low 压暗(偏弱) / tone-high 品牌强调色(接近满档) */
 .group-row .g-stat.tone-low, .member-row .m-stat.tone-low { color: var(--fg-muted); }

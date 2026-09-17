@@ -335,7 +335,7 @@
              spec 规定 overflow-x:auto + overflow-y:visible -> overflow-y:auto, sticky 上下文会变
              成 .group-table 自身(它不纵向滚动)失效; 把 .group-head 移出表容器 + JS 同步横向
              滚动, 上下滚时常驻、左右滚不错位 -->
-        <div class="group-head sticky-head" ref="groupHead" :style="gridStyle('group')">
+        <div class="group-head sticky-head" ref="groupHead" data-table="group" :style="gridStyle('group')">
           <div v-for="col in visibleGroupCols" :key="col.key" class="h-cell"
                :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'group' && colDrag.key === col.key }]"
                @click="col.sortable && setSort(col.key)"
@@ -357,7 +357,7 @@
 
           <template v-for="g in filteredGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
-            <div class="group-row" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial }]"
+            <div class="group-row" data-table="group" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial }]"
                  :style="gridStyle('group')"
                  @click="onGroupClick(g, $event)"
                  @contextmenu.prevent="openMenu($event, g)">
@@ -413,7 +413,7 @@
 
             <!-- 展开明细: 紧跟本组行显示(列头 + 各分站点行) -->
             <div v-if="expandedKey===g.key" class="detail">
-              <div class="detail-head" ref="detailHead" :style="gridStyle('detail')">
+              <div class="detail-head" ref="detailHead" data-table="detail" :style="gridStyle('detail')">
                 <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
                      :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
                      @mousedown="startColDrag($event, 'detail', col.key)"
@@ -426,7 +426,7 @@
                 <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
               </div>
               <div v-for="m in g.members" :key="m.hash"
-                   class="member-row" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
+                   class="member-row" data-table="detail" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                    :style="gridStyle('detail')"
                    @click="onMemberClick(m, $event)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
@@ -489,7 +489,7 @@
              逐种子过筛选 + 客户端文本过滤; 列模型 TORRENT_COLUMNS(默认核心列 + 选择器可选扩展列),
              排序/多选/右键(单种子菜单)/批量操作全部复用成员(hash)语义 -->
         <template v-if="viewMode === 'torrents'">
-          <div class="group-head sticky-head" ref="torrentHead" :style="gridStyle('torrent')">
+          <div class="group-head sticky-head" ref="torrentHead" data-table="torrent" :style="gridStyle('torrent')">
             <div v-for="col in visibleTorrentCols" :key="col.key" class="h-cell"
                  :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'torrent' && colDrag.key === col.key }]"
                  @click="col.sortable && setSort(col.key)"
@@ -508,7 +508,7 @@
             <span v-if="colDrag && colDrag.page === 'torrent'" class="col-drop-line" :style="colDropLineStyle('torrent')"></span>
           </div>
           <div class="group-table" ref="torrentTable" @scroll="syncTorrentHeadScroll">
-            <div v-for="m in filteredTorrents" :key="m.hash" class="group-row torrent-row"
+            <div v-for="m in filteredTorrents" :key="m.hash" class="group-row torrent-row" data-table="torrent"
                  :class="['s-' + m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                  :style="gridStyle('torrent')"
                  @click="onTorrentClick(m, $event)"
@@ -527,8 +527,8 @@
                   </span>
                   <span class="state-text">{{ kindText(m.kind) }}</span>
                 </div>
-                <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, numTone(m.dlspeed, statsServer && statsServer.dl_limit)]">{{ fmtSpeedOrDash(m.dlspeed) }}</div>
-                <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, numTone(m.upspeed, statsServer && statsServer.up_limit)]">{{ fmtSpeedOrDash(m.upspeed) }}</div>
+                <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, numTone(m.dlspeed, speedLimitBytes.down)]">{{ fmtSpeedOrDash(m.dlspeed) }}</div>
+                <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, numTone(m.upspeed, speedLimitBytes.up)]">{{ fmtSpeedOrDash(m.upspeed) }}</div>
                 <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, numTone(m.uploaded, m.size)]">{{ fmtSizeOrDash(m.uploaded) }}</div>
                 <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
@@ -584,7 +584,7 @@
              剧行展开后季子标题(含缺集提示) + 集行; 集行左键展开成员明细(复用明细列),
              右键 = 整集操作(作用于该集全部版本); 无剧集标记的种子进底部未识别折叠区 -->
         <template v-if="viewMode === 'shows'">
-          <div class="group-head sticky-head" ref="showHead" :style="gridStyle('show')">
+          <div class="group-head sticky-head" ref="showHead" data-table="show" :style="gridStyle('show')">
             <div v-for="col in visibleShowCols" :key="col.key" class="h-cell"
                  :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'show' && colDrag.key === col.key }]"
                  @click="col.sortable && setSort(col.key)"
@@ -606,7 +606,7 @@
             <template v-for="s in decoratedShows" :key="s.key">
               <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义)
                    FX-13: 右键 = 整剧菜单(此前该层无 @contextmenu) -->
-              <div class="group-row show-row" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial }"
+              <div class="group-row show-row" data-table="show" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial }"
                    :style="gridStyle('show')" @click="onShowClick(s, $event)"
                    @contextmenu.prevent="openShowMenu($event, s)">
                 <template v-for="col in visibleShowCols" :key="col.key">
@@ -640,7 +640,7 @@
                     </span>
                   </div>
                   <template v-for="e in sn.episodes" :key="s.key + '~' + sn.season + '~' + e.epKeyStr">
-                    <div class="group-row ep-row" :class="['s-' + e.state, { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial }]"
+                    <div class="group-row ep-row" data-table="show" :class="['s-' + e.state, { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial }]"
                          :style="gridStyle('show')"
                          @click="onShowEpClick(s, sn, e, $event)"
                          @contextmenu.prevent="openShowEpMenu($event, s, e)">
@@ -688,7 +688,7 @@
                     </div>
                     <!-- 集明细: 该集全部版本(成员), 列与交互复用明细表 -->
                     <div v-if="expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr)" class="detail">
-                      <div class="detail-head" ref="detailHead" :style="gridStyle('detail')">
+                      <div class="detail-head" ref="detailHead" data-table="detail" :style="gridStyle('detail')">
                         <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
                              :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
                              @mousedown="startColDrag($event, 'detail', col.key)"
@@ -700,7 +700,7 @@
                         </div>
                         <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
                       </div>
-                      <div v-for="m in e.members" :key="m.hash" class="member-row"
+                      <div v-for="m in e.members" :key="m.hash" class="member-row" data-table="detail"
                            :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                            :style="gridStyle('detail')"
                            @click="onMemberClick(m, $event)"
@@ -841,10 +841,11 @@
               <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
             </div>
             <div class="ctx-sep"></div>
-            <!-- FX-15 次级菜单(高级能力): qB 通用低频项从一级下沉; hover 与点击均可展开 -->
+            <!-- FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子控制);
+                 hover 与点击均可展开 -->
             <div class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }"
                  @mouseenter="openSub('advanced', $event)" @click.stop="toggleSub('advanced', $event)">
-              <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>高级能力
+              <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>更多操作
               <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
               <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }" @click.stop>
                 <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
@@ -1453,20 +1454,24 @@
 
     </template>
 
-    <!-- 底部状态栏(TBL-08 修订; FX-07/08 与棱镜同步): 左 = 今日流量(含历史入口) + 连接/剩余摘要 + 完整统计入口,
-         右 = 下载/上传速度 与 各自"限制速度"(点击就近弹出限速浮层)。
+    <!-- 底部状态栏(TBL-08 修订; FX-07/08 与棱镜同步, R10-02/03/05 再修):
+         左 = 今日流量(**历史入口是其子元素**) + 连接/剩余摘要 + 完整统计入口,
+         右 = 下载/上传速度 与各自"限制速度"(仅图标 + 数值, 语义靠 title 悬浮补全);
+         底色改专用令牌 --statusbar-bg(原先与页底同色不可辨)。
          FX-07: 退役 本次/累计/DHT 三项, 加回 今日流量并复活"历史流量"入口。 -->
     <footer class="statusbar">
       <template v-if="todayTraffic">
+        <!-- R10-05: 历史入口并入"今日流量"组(结构上成为子元素) —— 原先两者是兄弟节点,
+             中间那道竖线来自 .sb-today 自身的右边框, 读起来像两个不相干的块。 -->
         <span class="sb-item sb-today" :title="todayTrafficTitle">
           <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
           <span class="lbl">今日</span>
           <span class="val v-down">↓{{ fmtSize(todayTraffic.down) }}</span>
           <span class="val v-up">↑{{ fmtSize(todayTraffic.up) }}</span>
+          <button class="sb-hist" title="历史流量(按天/月/年)" @click.stop="openHistory()">
+            <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>历史
+          </button>
         </span>
-        <button class="sb-btn sb-hist" title="历史流量(按天/月/年)" @click="openHistory()">
-          <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>历史
-        </button>
       </template>
       <span class="sb-stats" title="qBittorrent 服务器实时状态(与主轮询同周期同步)">
         <span v-for="it in sbStats" :key="it.key" class="sb-item" :title="it.title">
@@ -1479,26 +1484,28 @@
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
       </button>
       <span class="sb-spacer"></span>
-      <!-- FX-08: 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」; 取值见 sbLimits(D3) -->
+      <!-- FX-08: 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」;
+           R10-03: 三个文字标签去棹(同排已有图标 + 数值, 文字纯冗余), 语义由 title 补全;
+           R10-04: 取值口径 = speedLimitBytes 单点(状态栏与速度染色分母同源)。 -->
       <span class="sb-speed" title="全部组下载/上传速度合计, 与 qB 当前限速">
-        <span class="sb-pair">
+        <span class="sb-pair" :title="'下载速度合计: ' + fmtSpeed(totalDl)">
           <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
-          <span class="lbl">下载速度</span><span class="val">{{ fmtSpeed(totalDl) }}</span>
+          <span class="val">{{ fmtSpeed(totalDl) }}</span>
         </span>
         <button class="sb-limit" :class="{ off: sbLimits.down === '不限' }"
-                title="点击修改下载限速(就近弹出)" @click.stop="openSpeedAt($event, 'down')">
+                :title="'下载限速: ' + sbLimits.down + ' · 点击修改(就近弹出)'" @click.stop="openSpeedAt($event, 'down')">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-          <span class="lbl">限制速度</span><span class="val">{{ sbLimits.down }}</span>
+          <span class="val">{{ sbLimits.down }}</span>
         </button>
         <span class="sb-sep"></span>
-        <span class="sb-pair">
+        <span class="sb-pair" :title="'上传速度合计: ' + fmtSpeed(totalUl)">
           <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
-          <span class="lbl">上传速度</span><span class="val">{{ fmtSpeed(totalUl) }}</span>
+          <span class="val">{{ fmtSpeed(totalUl) }}</span>
         </span>
         <button class="sb-limit" :class="{ off: sbLimits.up === '不限' }"
-                title="点击修改上传限速(就近弹出)" @click.stop="openSpeedAt($event, 'up')">
+                :title="'上传限速: ' + sbLimits.up + ' · 点击修改(就近弹出)'" @click.stop="openSpeedAt($event, 'up')">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-          <span class="lbl">限制速度</span><span class="val">{{ sbLimits.up }}</span>
+          <span class="val">{{ sbLimits.up }}</span>
         </button>
       </span>
     </footer>
@@ -1699,7 +1706,8 @@
                   <tr v-for="(r, i) in drawerFileRows()" :key="i"
                       :class="{ skipped: r.skipped, sel: r.path === drawerSelPath }">
                     <td class="wrap clickable" @click="fileRowSelect(r)">
-                      <span class="dir-name" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span>
+                      <!-- R10-15: 目录/文件分色(目录 = 结构色且加粗, 文件 = 正文色; 跳过态仍弱化) -->
+                      <span class="dir-name" :class="{ dir: r.dir }" :style="{ paddingLeft: r.depth * 16 + 'px' }">{{ r.name }}</span>
                     </td>
                     <td class="mono-cell">{{ r.text }}</td>
                     <td>{{ r.dir ? "—" : r.progress + "%" }}</td>
@@ -1778,46 +1786,10 @@
         </div>
       </div>
     </div>
-    <!-- 限速修改弹窗(SPD-04): qB 式「点击限速 → 弹窗」; 复用 .modal/.add-dialog 视觉语言(.speed-dialog 调窄)。
-         打开时取 /api/speed/mode 回填 qB 当前值; 曲线启用状态提示保留在窗内; 提交沿用 submitSpeedOverride -->
-    <div v-if="speedOpen" class="modal-mask" @click.self="closeSpeedDialog">
-      <div class="modal add-dialog speed-dialog" role="dialog" aria-modal="true" aria-label="限速">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-          <span>限速</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeSpeedDialog">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
-          <div class="speed-mode-line" :title="speedMode.error || speedModeLine">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
-            <span>{{ speedMode.loaded ? speedModeLine : (speedMode.error || "正在加载状态…") }}</span>
-          </div>
-          <div class="speed-dialog-grid">
-            <label class="modal-field">
-              <span class="modal-field-label">上行 KiB/s</span>
-              <input v-model="speedOverride.up" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
-            </label>
-            <label class="modal-field">
-              <span class="modal-field-label">下行 KiB/s</span>
-              <input v-model="speedOverride.down" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
-            </label>
-          </div>
-          <p v-if="speedMode.curveEnabled" class="add-dialog-hint">曲线启用中: 覆盖为临时, 下一档位切换时恢复</p>
-          <p v-else class="add-dialog-hint">两方向都需填写 · 0 = 不限速</p>
-        </div>
-        <div class="modal-actions">
-          <button class="ce-btn ghost" @click="closeSpeedDialog">取消</button>
-          <button class="ce-btn primary" :disabled="!speedOvReady || speedOverride.busy"
-                  title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedDialog">
-            <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
-            <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
-            {{ speedOverride.busy ? '提交中…' : '应用' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- R10-04②: SPD-04 时代的**居中限速模态窗在此删除**。它与第九轮新增的就近浮层
+         (.speed-pop, 见上)由同一个 speedOpen 开关控制 ⇒ 点一次"限制速度"同时渲染两个窗口
+         (用户: "会弹出两个窗口")。棱镜侧第九轮已删净, 星图遗漏, 本轮补上。
+         限速的唯一界面现在是 .speed-pop。 -->
     <!-- 添加种子对话框(R1B/DLG-03): 来源 = .torrent 多选 + 「添加链接」按钮展开的 magnet/URL 文本域(可再收起) +
          分类/标签 combobox(下拉候选 + 自由输入) + qB 添加选项(「添加后开始」默认不勾 = paused 添加;
          跳过校验勾选后选项区下出警告行); DLG-04 保存路径 = 自由输入 + /api/paths 下拉推荐 + 「选择位置」面板;
@@ -1859,7 +1831,7 @@
           </div>
 
           <div class="add-dialog-grid">
-            <div class="add-dialog-field">
+            <div class="add-dialog-field add-dialog-pathfield">
               <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
               <div class="add-dialog-pathrow">
                 <!-- FX-18: 浮层必须锚在**输入行**上(.add-input-row 有 position:relative)。
@@ -1887,8 +1859,10 @@
                     </div>
                   </transition>
                 </div>
-                <button type="button" class="ce-btn ghost add-dialog-pathbtn" @click.stop="toggleAddPathPop"
-                        @keydown="onAddPathKeydown($event)">选择位置</button>
+                <!-- R10-11 决策 D2-A: "选择位置"改为**服务端目录浏览**(列目录 + 上溯 + 新建文件夹,
+                     回填绝对路径) —— 浏览器物理上拿不到本地绝对路径, 只能由服务端给;
+                     输入框聚焦仍弹已知历史路径候选, 两个入口互补。 -->
+                <button type="button" class="ce-btn ghost add-dialog-pathbtn" @click.stop="openDirBrowse()">选择位置…</button>
               </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
@@ -1964,6 +1938,48 @@
             <svg v-if="addSubmitting" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
             {{ addSubmitting ? '提交中…' : '添加' }}
           </button>
+        </div>
+      </div>
+    </div>
+    <!-- R10-11 路径选择器(决策 D2-A): 服务端目录浏览 —— 浏览器拿不到本地绝对路径(目录上传控件
+         只给相对路径), 所以"像选 .torrent 那样选目录"只能由服务端给路径。它也是本轮唯一新增的
+         文件系统读能力: 安全边界(允许根白名单 / .. 穿越 / 符号链接逃逸 / 只列目录)全在后端。 -->
+    <div v-if="dirBrowse.open" class="modal-mask dir-browse-mask" @click.self="closeDirBrowse">
+      <div class="modal dir-browse" role="dialog" aria-modal="true" aria-label="选择保存位置">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+          <span>选择保存位置</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeDirBrowse">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div class="db-bar">
+            <button class="ce-btn ghost small" :disabled="!dirBrowse.parent" title="上一级(到允许根为止)" @click="dirUp()">
+              上一级
+            </button>
+            <span class="db-path" :title="dirBrowse.path || '起始位置'">{{ dirBrowse.path || "请选择起始目录(仅限已有保存路径)" }}</span>
+          </div>
+          <div v-if="dirBrowse.error" class="ce-note error">{{ dirBrowse.error }}</div>
+          <div class="db-list">
+            <button v-for="e in dirBrowse.dirs" :key="e.path" type="button" class="db-row"
+                    :title="e.path" @click="dirEnter(e.path)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+              <span class="db-name">{{ e.name }}</span>
+            </button>
+            <p v-if="dirBrowse.loading" class="pop-empty">正在读取…</p>
+            <p v-else-if="!dirBrowse.dirs.length" class="pop-empty">该目录下没有子目录</p>
+          </div>
+          <div class="db-new">
+            <input v-model="dirBrowse.newName" class="add-dialog-input" type="text"
+                   placeholder="新建文件夹名" @keyup.enter="dirMkdir()">
+            <button class="ce-btn ghost small" :disabled="!dirBrowse.newName.trim() || dirBrowse.busy" @click="dirMkdir()">新建</button>
+          </div>
+          <p class="add-dialog-hint">只能浏览已有保存路径及其子目录(安全边界); 其它位置请直接在输入框填写。</p>
+        </div>
+        <div class="modal-actions">
+          <button class="ce-btn ghost" @click="closeDirBrowse">取消</button>
+          <button class="ce-btn primary" :disabled="!dirBrowse.path" @click="dirPick()">选择该文件夹</button>
         </div>
       </div>
     </div>
@@ -2061,12 +2077,18 @@
           <span>{{ modal.title }}</span>
         </div>
         <p class="modal-body">{{ modal.body }}</p>
-        <!-- 待操作目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标) -->
+        <!-- 待操作目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标)
+             R10-16: 四个删除入口的详情行由 _deleteFlow 统一派生(目标/成员/站点/路径/总大小);
+             R10-13: 长值单行省略 + title 全文 + 复制按钮(wide 行为块行, 值最多 3 行)。 -->
         <div v-if="modal.details" class="modal-details">
-          <div v-for="d in modal.details" :key="d.label" class="modal-detail-row">
+          <div v-for="d in modal.details" :key="d.label" class="modal-detail-row" :class="{ wide: d.wide }">
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
-            <span class="d-value" :title="d.value">{{ d.value }}</span>
+            <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
+            <button v-if="String(d.value || '').length" type="button" class="ce-icon flat d-copy" :title="'复制' + d.label"
+                    @click="_copyText(String(d.value), d.label)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
+            </button>
           </div>
         </div>
         <input v-if="modal.input" ref="modalInput" v-model="modal.value" class="modal-input"

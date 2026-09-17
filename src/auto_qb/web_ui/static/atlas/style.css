@@ -86,11 +86,24 @@
   --glass: rgba(19, 26, 38, .88);
   --hairline: rgba(255, 255, 255, .055);
 
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #171f2c;
+
+  /* R10-07: 选中态专用令牌族(靖蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(129, 140, 248, .18);
+  --sel-line: rgba(129, 140, 248, .5);
+  --sel-bar: #818cf8;
+
   /* 几何/阴影/动效 */
   --radius-lg: 14px;
   --radius: 10px;
   --radius-sm: 7px;
-  --modal-wide-w: 840px;
+  /* ---- 弹窗尺寸族(R10-12): 与棱镜 tokens.css 同族同值, 两套 UI 不再各写一个数字 ---- */
+  --modal-w-narrow: 460px; /* 窄: 限速/统计等单列小表单 */
+  --modal-w-base: 520px;   /* 标准: 确认框 / 输入框 */
+  --modal-w-form: 560px;   /* 表单: 分类/标签管理等双列编辑 */
+  --modal-w-add: 860px;    /* 宽: 添加种子 / 历史流量(含图表) */
+  --modal-wide-w: 920px;   /* 超宽: 删除确认(明细 + 选项); 旧名保留供既有规则与文档引用 */
   --statusbar-h: 34px;  /* 底部状态栏高度(TBL-08): 状态栏自身与内容区底部预留共用此令牌, 不随内容变化避免取整透缝 */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .22);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, .32);
@@ -313,7 +326,7 @@ button { font-family: inherit; }
  * z-index 30 与吸顶条同层 —— 低于列选择器弹层(40)/右键菜单(100)/toast(120)/modal(130) */
 .statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center;
   gap: 16px; height: var(--statusbar-h); padding: 0 18px; overflow: hidden; white-space: nowrap;
-  background: var(--glass); backdrop-filter: blur(10px); border-top: 1px solid var(--border);
+  background: var(--statusbar-bg, var(--bg-card)); border-top: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--hairline); }
 .sb-speed { display: flex; align-items: center; gap: 16px; min-width: 0; overflow: hidden; }
 /* 左侧统计摘要: 指标项紧凑排列(标签灰 + 数值亮), 空间不足时整体裁切而不换行 */
@@ -390,15 +403,9 @@ button { font-family: inherit; }
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
 .h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
-/* 逐列表头对齐类(模板统一挂 `hc-<列key>`, 与行单元格的 `g-*`/`m-*` 同一列 key):
- * "站数"列数值右对齐而表头左对齐 -> 视觉错位, 这里按列单独右对齐表头。
-/* 2026-09-14 第五轮: H&R / 站数列改居中(用户要求"H&R/站数栏居中显示")
- * 2026-09-15: 数值列(下载/上传/总上传/大小/总大小)右对齐(用户要求), 0 值"—"居中 */
-.hc-count, .hc-hr, .hc-num_seeds, .hc-num_leechs { text-align: center; }
-.hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size,
-.hc-eta, .hc-added_on, .hc-downloaded, .hc-amount_left, .hc-availability,
-.hc-seeding_time, .hc-time_active, .hc-last_activity, .hc-completion_on,
-.hc-up_limit, .hc-dl_limit { text-align: right; }
+/* R10-08: 列对齐不再在这里硬编码名单 —— 口径唯一来源是 app.js 的列模型 `align`,
+ * 由 colAlignCss 按**当前可见列**生成 :nth-child 规则注入 <head>(表头与单元格同源),
+ * 加/删/换序列都只改列模型一处。旧规则(.hc-* 右对齐/居中名单)已删。 */
 .h-cell.sortable { cursor: pointer; user-select: none; transition: color var(--dur) var(--ease); }
 .h-cell.sortable:hover { color: var(--fg); }
 /* 排序箭头已图标化(i-arrow-up/down sprite, 第七轮替换文本字形): 尺寸 11px, 颜色仍取 accent */
@@ -456,10 +463,21 @@ button { font-family: inherit; }
  * 取舍: 只染有语义色的状态(seeding/downloading/checking/error); paused/other 的语义色是灰
  * (fg-dim), 整行灰字降低可读性 —— 保持默认前景色, 状态仍由徽标/状态列表达。
  * 0 值(.zero)与"—"占位不染: 它们只是空值占位, 上色会误导成"有值" */
-.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero) { color: var(--green); }
+.group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero),
+.group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count { color: var(--green); }
 .group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat:not(.zero),
-.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero) { color: var(--blue); }
-.group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero) { color: var(--error); }
+.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero),
+.group-row.s-downloading .g-save-path, .group-row.s-downloading .m-hash, .group-row.s-downloading .g-count,
+.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count { color: var(--blue); }
+.group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero),
+.group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count { color: var(--error); }
+/* R10-06: 成员行(展开明细/追剧集明细)同口径 —— 行类名是 m.kind 而非 s-*, 故单独一组;
+ * 芯片类(站点/标签/分类)按决策 D6-A **不跟随**行状态色(它们表达成员级语义) */
+.member-row.seeding .m-stat:not(.zero), .member-row.seeding .m-hash, .member-row.seeding .g-save-path { color: var(--green); }
+.member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero),
+.member-row.downloading .m-hash, .member-row.checking .m-hash,
+.member-row.downloading .g-save-path, .member-row.checking .g-save-path { color: var(--blue); }
+.member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path { color: var(--error); }
 /* 数值色阶(TBL-03): tone 写在状态色之后(源顺序胜出) —— 数值列按"占分母比例"着色:
  * 低档压暗(偏弱/离满档还远), 高档用品牌强调色(接近满档); 与状态文字色叠加时数值口径优先 */
 .group-row .g-stat.tone-low { color: var(--fg-muted); }
@@ -617,7 +635,7 @@ button { font-family: inherit; }
 .modal-mask { position: fixed; inset: 0; z-index: 130; display: flex; align-items: center; justify-content: center;
   padding: 20px; background: rgba(4, 10, 22, .62); backdrop-filter: blur(3px); animation: fade-in .14s var(--ease); }
 @keyframes fade-in { from { opacity: 0; } }
-.modal { width: 404px; max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
+.modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
   background: linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 42%), var(--bg-card);
   border: 1px solid var(--border-strong); box-shadow: var(--shadow-3); animation: modal-in .16s var(--ease); }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
@@ -1234,17 +1252,20 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .login-loading .ico { width: 26px; height: 26px; color: var(--accent); }
 .login-loading p { margin: 0; }
 
-/* 多选选中态(组行/成员行): accent 左条 + 柔和底, 与 expanded/search-hit 共存 */
-.group-row.selected { background: var(--accent-soft); border-color: var(--accent-line); }
+/* 多选选中态(R10-07): 改用**选中态专用令牌族**(--sel-bg/--sel-line/--sel-bar)。
+ * 原先选中态引用 --accent-soft/--accent, 品牌主题下与"做种中"的 --green 同属绿/青族且
+ * 明度接近 -> 用户反馈"不好分辨"; 现统一给非绿值(靖蓝族), 换主题不再撞色。 */
+.group-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
 .group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
-  width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
-.member-row.selected { background: var(--accent-soft); }
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); }
 /* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 同款左色条但降透明 + 柔底,
- * 与全选明确区分; 仍只引用既有令牌(不引新色)。 */
-.group-row.partial, .member-row.partial { background: var(--accent-soft); border-color: var(--accent-line); }
+ * 与全选明确区分。 */
+.group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
+  border-color: var(--sel-line, var(--accent-line)); }
 .member-row { position: relative; }
 .group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
-  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); opacity: .42; }
+  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); opacity: .42; }
 .member-row.partial::before { top: 18%; bottom: 18%; }
 /* 选中行光标语义: 修饰键可切换选择 */
 .group-row, .member-row { cursor: pointer; }
@@ -1277,15 +1298,28 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 成员明细区已移除, 宽度服务于目标摘要/选项的宽松可读) */
 .modal.wide { width: var(--modal-wide-w); }
 /* 确认框目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标);
- * 值允许换行(长种子名/路径不再被省略号截断)且可选中复制 */
+ * R10-13: 长值口径统一为**单行省略 + title 全文 + 复制按钮**(旧写法无限换行会把弹窗顶高);
+ * wide 行仍为块行(值独占一行冡 3 行), 给"必须看到全貌"的超长名/路径。 */
 .modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
   padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
   background: var(--surface-1); user-select: text; }
 .modal-detail-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
 .modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; align-self: center; }
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
-.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere;
-  color: var(--fg-soft); font-weight: 500; }
+.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--fg-soft); font-weight: 500; }
+.modal-detail-row.wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "ico label copy" "value value value"; align-items: center; row-gap: 3px;
+  margin-bottom: 2px; }
+.modal-detail-row.wide > .ico { grid-area: ico; }
+.modal-detail-row.wide > .d-label { grid-area: label; flex: none; }
+.modal-detail-row.wide > .d-value { grid-area: value; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; overflow: hidden; white-space: normal; overflow-wrap: break-word; }
+.modal-detail-row.wide > .d-copy { grid-area: copy; align-self: center; }
+/* R10-13: 复制按钮**所有行都渲染**(窄行靠悬停才显形, 不抢视觉也不额外占宽) */
+.modal-detail-row .d-copy { width: 22px; height: 22px; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.modal-detail-row:hover .d-copy, .modal-detail-row .d-copy:focus-visible { opacity: .75; }
+.modal-detail-row .d-copy:hover { opacity: 1; }
 /* 成员明细(删除整组/批量删除): 逐行 站点 + 种子名 + 保存路径, 超高滚动 */
 .modal-members { margin: -4px 0 14px; max-height: 260px; overflow-y: auto; padding: 4px 12px;
   border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-sunken); }
@@ -1295,10 +1329,37 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-member-row .mm-name { flex: 1 1 40%; min-width: 0; color: var(--fg-soft); overflow-wrap: anywhere; }
 /* 保存路径(R04): 弱化色但完整可读(折行), 悬停 title 兕底 */
 .modal-member-row .mm-path { flex: 1 1 45%; min-width: 0; color: var(--fg-dim); font-size: 11.5px; overflow-wrap: anywhere; }
+/* ================= R10-11 路径选择器(服务端目录浏览) =================
+ * “选择位置”不再是自绘候选下拉: 由服务端给真实目录树(浏览器物理上拿不到绝对路径)。
+ * 宽度取尺寸令牌族的“**宽**”档(与添加窗口同档): 目录路径才是这个窗口的主体内容。 */
+.modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
+.db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.db-bar > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+/* R10-11 修订: 路径**必须看得见** —— 原先单行省略, 长路径只剩开头几个字符;
+ * 现改为最多 3 行换行(任意字符处断行), 盘符/多级目录一眼可读, 更长的仍可悬停看 title。 */
+.db-path { flex: 1; min-width: 0; padding: 5px 9px; border-radius: var(--radius-sm); background: var(--bg-sunken);
+  border: 1px solid var(--border-soft); color: var(--fg-soft);
+  font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 12px; line-height: 1.55;
+  word-break: break-all; }
+.db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  padding: 4px; border-radius: var(--radius-sm); background: var(--surface-1);
+  border: 1px solid var(--border-soft); }
+.db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
+  border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.db-row:hover { background: var(--surface-2); color: var(--fg); }
+.db-row .ico { color: var(--accent); flex: 0 0 auto; }
+.db-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-new { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.db-new .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* 按钮不许被输入框挤掉宽度(input 的 flex-basis = 100%, 不锁按钮会把"新建"压成两行) */
+.db-new > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+
 /* 多选项与单选 checkbox 同视觉(删除前强制汇报 / 同时删除磁盘文件) */
 
 /* 历史流量弹层(第七轮加宽: 折线图 920×380) */
-.hist-modal { width: 860px; max-width: 100%; }
+.hist-modal { width: var(--modal-w-add); max-width: 100%; }
 .hist-modal .modal-title { margin-bottom: 12px; }
 .hist-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
   background: var(--bg-sunken); border: 1px solid var(--border); }
@@ -1494,7 +1555,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .drawer-table td.wrap { white-space: normal; overflow-wrap: anywhere; }
 .drawer-table tr.virtual td { color: var(--fg-dim); }
 .drawer-table .mono-cell { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-.drawer-table .dir-name { font-weight: 600; }
+.drawer-table .dir-name { color: var(--fg-muted); }
+/* R10-15: 内容页目录/文件分色 —— 目录是**结构**(亮一档 + 加粗), 文件是内容(中间调);
+ * 只引既有令牌族不散写色值 */
+.drawer-table .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
 .drawer-table tr.skipped td { color: var(--fg-dim); }
 .drawer-raw { margin-top: 6px; }
 .drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
@@ -1503,7 +1567,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 复用 .modal-mask/.modal/.modal-title/.modal-actions 视觉语言; 仅对话框内部表单为新增样式。
  * 预览区为静态说明(D4 接管语义) + 已有辅种组前缀计数(纯前端比对, 不发请求)。
  */
-.modal.add-dialog { width: 640px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
+.modal.add-dialog { width: var(--modal-w-add); max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
 .add-dialog-x { margin-left: auto; }
 .add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
 .add-dialog-field { margin-top: 18px; }
@@ -1514,8 +1578,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 13px; }
 .add-dialog-input:focus, .add-dialog-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .add-dialog-textarea { resize: vertical; min-height: 72px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
-.add-dialog-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 12px; }
+.add-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .add-dialog-grid .add-dialog-field { margin-top: 18px; }
+/* 保存路径独占一整行(R10-11 修订): 路径是最长的输入(绝对路径 + 盘符 + 中文目录),
+ * 原先与分类/标签并成 3 列时只剩 ~300px(星图窗口更窄), 输入框里只能看到开头一截。 */
+.add-dialog-grid .add-dialog-pathfield { grid-column: 1 / -1; }
 /* W2-FE-1(DLG-03/04): 来源行(文件选择 + 添加链接按钮) / 分类标签 combobox / 选择位置面板(复用 .pop-menu 视觉) */
 .add-dialog-source { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-source .add-dialog-filepick { flex: 1 1 auto; min-width: 0; }
@@ -1529,6 +1596,9 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* FX-18: 浮层锚点从"整个 field 盒"下沉到"输入行"(.add-dialog-field 是 grid 项会被拉伸) */
 .add-input-row { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .add-input-row > .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* R10-11 修订: 输入行必须能**撑满**同行剩余空间(原先只有 min-width:0 没有增长因子,
+ * flex 行里退到 input 的内容宽 ≈ 180px -> 独占整行后右侧仍是一大片空白)。 */
+.add-dialog-pathrow > .add-input-row { flex: 1 1 auto; }
 .add-input-row > .add-pop { left: 0; right: 0; width: auto; }
 .add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
 .add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
@@ -1602,7 +1672,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* ================= 统计面板对话框(FE-2C) —— 复用 .modal/.add-dialog 视觉语言 =================
  * server_state 字段直取, 缺失显示 —; 键值行斑马纹, 右对齐等宽值(数字/容量可读性)。
  */
-.modal.stats-dialog { width: 460px; }
+.modal.stats-dialog { width: var(--modal-w-narrow); }
 .stats-grid { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .stats-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   padding: 7px 9px; border-radius: var(--radius-sm); }
@@ -1614,7 +1684,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* ================= 分类/标签管理对话框(FE-2C2) —— 复用 .modal/.add-dialog 视觉语言 =================
  * 列表行(名字 + 保存路径 + 行级操作) / 新建行 / 底部提示; 全部只引用既有 tokens。
  */
-.modal.mgr-dialog { width: 560px; }
+.modal.mgr-dialog { width: var(--modal-w-form); }
 .mgr-list { display: flex; flex-direction: column; margin: 4px 0 14px; max-height: 300px; overflow-y: auto; }
 .mgr-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; }
 .mgr-row + .mgr-row { border-top: 1px solid var(--border-soft); }
@@ -1678,7 +1748,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
   background: var(--accent-soft); color: var(--accent); font: inherit; font-size: 11.5px;
   font-weight: 600; cursor: pointer; transition: filter var(--dur-fast) var(--ease); }
 .rail-speed-open:hover { filter: brightness(1.1); }
-.modal.speed-dialog { width: 460px; }
+/* R10-04②: 走 modal 的限速弹窗已删(与 .speed-pop 共用 speedOpen -> 点一次开两窗),
+ * 这里同步删掉它的死样式 .modal.speed-dialog; .speed-dialog-grid 仍被 .speed-pop 使用, 保留。 */
 .speed-mode-line { display: flex; align-items: center; gap: 8px; margin: 2px 0 12px; padding: 8px 11px;
   border-radius: var(--radius-sm); background: var(--bg-sunken); color: var(--fg-muted); font-size: 12px;
   min-width: 0; overflow-wrap: anywhere; }
@@ -1702,10 +1773,18 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .sb-limit:hover .ico { color: var(--accent-hi); }
 .sb-limit .val { color: var(--fg); font-weight: 600; font-size: 12px; font-variant-numeric: tabular-nums; }
 .sb-limit.off .val { color: var(--fg-dim); font-weight: 500; }
-.sb-today { padding-right: 12px; border-right: 1px solid var(--border-soft); }
+/* R10-05: 历史入口已并入本组作子元素 -> 不再需要右边框与额外间距: 原先那道 1px 竖线
+ * 正好在两者之间, 读作"两个不相干的块"(用户: "中间有隔断")。 */
 .sb-today .v-down { color: var(--today-down, var(--blue)); }
 .sb-today .v-up { color: var(--today-up, var(--teal, var(--accent))); }
-.sb-hist { margin-left: -6px; }
+/* R10-05: 历史入口(今日流量组的子元素) —— 轻量按钮, 与块内数值同排只留图标间距 */
+.sb-hist { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 1px 8px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-hist:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.sb-hist .ico { color: var(--fg-dim); }
+.sb-hist:hover .ico { color: var(--accent-hi); }
 .speed-pop { position: fixed; z-index: 131; width: 380px; padding: 14px 16px 12px;
   bottom: calc(var(--statusbar-h, 34px) + 8px);
   display: flex; flex-direction: column; gap: 10px;

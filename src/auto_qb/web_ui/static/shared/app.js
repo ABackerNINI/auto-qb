@@ -10,48 +10,55 @@ const { createApp } = Vue;
  *
  * locked: 不可隐藏(承载展开 caret / 组状态徽标 / 站点名, 隐藏后行就失去身份)
  * tpl:    默认列宽模板(minmax(最小px, 权重fr) 或 固定 px), 用于首次渲染与"恢复默认"
+ * align:  对齐口径(R10-08) —— **表头与值单元格的唯一来源**, 由 colAlignCss 生成规则注入,
+ *         不在模板里逐格挂类(67 个值单元格 × 4 视图 × 2 套 UI, 逐格挂必漏)。
+ *         取值 left | right | center; 缺省 = left。
+ *         用户清单(2026-09-17): 名称/进度/状态/站点/分类/标签/添加于/做种时长/最近活动/
+ *         hashv1/hash/tracker/保存路径 = 左, 其余数值/大小/速度/比率 = 右, 计数类(站数/H&R/版本)
+ *         保持既有居中口径。
  */
 const GROUP_COLUMNS = [
-  { key: "name", label: "名称", tpl: "minmax(210px, 2.4fr)", sortable: true, locked: true },
-  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
-  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
-  { key: "total_size", label: "总大小", tpl: "minmax(100px, 1fr)", sortable: true },
+  { key: "name", label: "名称", tpl: "minmax(210px, 2.4fr)", sortable: true, locked: true, align: "left" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
+  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
+  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "total_size", label: "总大小", tpl: "minmax(100px, 1fr)", sortable: true, align: "right" },
   // 分类在标签之前(用户要求分组表/明细表口径一致); 列宽按**列 key**记忆 -> 换序不丢宽度
-  { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
-  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
-  { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)" },
+  { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
+  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)", align: "left" },
+  { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)", align: "left" },
   // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 qbmanager._build_group_view)
-  { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "count", label: "站数", tpl: "56px", sortable: true },
+  { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true, align: "center" },
+  { key: "count", label: "站数", tpl: "56px", sortable: true, align: "center" },
   // TBL-06: 组级"最近添加"(组内成员最大 added_on, 后端 _build_group_view 已透出);
   // DEFAULT_SORT 默认排序键本就是 added_on —— 补列后排序箭头有了落点
-  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true },
+  // R10-08: 时间列由右改左(表头与值同源, 不会再出现"表头左、值右"的错位)
+  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
 ];
 const DETAIL_COLUMNS = [
-  { key: "site", label: "站点", tpl: "110px", locked: true },
-  { key: "state", label: "状态", tpl: "76px" },
+  { key: "site", label: "站点", tpl: "110px", locked: true, align: "left" },
+  { key: "state", label: "状态", tpl: "76px", align: "left" },
   // TBL-06: 做种/用户(与种子页同口径 "已连接 (总数)", fmtPeersQb) —— 字段 W1a-BE 已在 _member_view 透出;
   // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头暂未接排序, 先标记字段语义)
-  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true },
-  { key: "num_leechs", label: "用户", tpl: "92px", sortable: true },
-  { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)" },
-  { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)" },
-  { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)" },
-  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)" },
+  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true, align: "right" },
+  { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)", align: "right" },
+  { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", align: "right" },
+  { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)", align: "right" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", align: "right" },
   // 与分组表同序: 分类在标签之前
-  { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)" },
-  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)" },
-  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)" },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)" },
+  { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)", align: "left" },
+  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)", align: "left" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", align: "left" },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", align: "left" },
   // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值)
-  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)" },
+  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", align: "right" },
   // TBL-06: 添加于/保存路径(_member_view 已透出); 保存路径逐成员可不同
   // (路径筛选取首成员值, 此处可见全量), 与 Hash 同置表尾低频区
-  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true },
-  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)" },
-  { key: "hash", label: "Hash", tpl: "80px" },
+  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
+  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", align: "left" },
+  { key: "hash", label: "Hash", tpl: "80px", align: "left" },
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
  * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
@@ -60,64 +67,75 @@ const DETAIL_COLUMNS = [
  * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后
  * 兼容扩展, 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
 const TORRENT_COLUMNS = [
-  { key: "name", label: "名称", tpl: "minmax(220px, 2.6fr)", sortable: true, locked: true },
-  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
-  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
-  { key: "state", label: "状态", tpl: "76px" },
-  { key: "site", label: "站点", tpl: "110px", sortable: true },
-  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true },  // "已连接 (总数)" 格式(TBL-04), 64px 放不下
-  { key: "num_leechs", label: "用户", tpl: "92px", sortable: true },
-  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true },
-  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true },
-  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
+  { key: "name", label: "名称", tpl: "minmax(220px, 2.6fr)", sortable: true, locked: true, align: "left" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
+  { key: "state", label: "状态", tpl: "76px", align: "left" },
+  { key: "site", label: "站点", tpl: "110px", sortable: true, align: "left" },
+  { key: "num_seeds", label: "做种", tpl: "92px", sortable: true, align: "right" },  // "已连接 (总数)" 格式(TBL-04), 64px 放不下
+  { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
+  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
+  { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
+  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   // 与分组表/明细表同序: 分类在标签之前
-  { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)" },
-  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)" },
-  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true },
+  { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
+  { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)", align: "left" },
+  { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
   // ---- 以下为列选择器可选列(默认隐藏; 字段集 = SEED_ITEM 扩展段) ----
-  { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true },
-  { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true },
-  { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true },
-  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true },
-  { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true },
-  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true },
-  { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)" },
-  { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)" },
-  { key: "infohash_v1", label: "Hash v1", tpl: "90px" },
-  { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)" },
-  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)" },
-  { key: "hash", label: "Hash", tpl: "80px" },
+  { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right" },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
+  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "right" },
+  { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
+  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "right" },
+  { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)", align: "right" },
+  { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)", align: "right" },
+  { key: "infohash_v1", label: "Hash v1", tpl: "90px", align: "left" },
+  { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)", align: "left" },
+  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", align: "left" },
+  { key: "hash", label: "Hash", tpl: "80px", align: "left" },
 ];
 /* 追剧视图列模型: 剧行(剧名) / 季子标题 / 集行共用同一套列; 集行是展示主体(聚合层后端算好,
  * 明细成员经 memberByHash 索引取, 不随 shows 重复回传)。列宽按列 key 记忆在独立 page "show" 下
  * (同 R08 torrent page 先例: 新增 page 向后兼容, 不升 COLS_STORE_KEY 版本) */
 const SHOW_COLUMNS = [
-  { key: "name", label: "剧名 / 集", tpl: "minmax(220px, 2.4fr)", sortable: true, locked: true },
-  { key: "state", label: "状态", tpl: "76px" },
-  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true },
-  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true },
-  { key: "versions", label: "版本", tpl: "64px", sortable: true },
-  { key: "sites", label: "站点", tpl: "minmax(150px, 1.4fr)" },
-  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true },
-  { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true },
-  { key: "latest", label: "最近动静", tpl: "minmax(110px, 1fr)", sortable: true },
+  { key: "name", label: "剧名 / 集", tpl: "minmax(220px, 2.4fr)", sortable: true, locked: true, align: "left" },
+  { key: "state", label: "状态", tpl: "76px", align: "left" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "versions", label: "版本", tpl: "64px", sortable: true, align: "center" },
+  { key: "sites", label: "站点", tpl: "minmax(150px, 1.4fr)", align: "left" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
+  { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
+  { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
+  { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true, align: "center" },
+  // 最近动静: 与分组表"最近活动"同族(时间列), 一律左对齐
+  { key: "latest", label: "最近动静", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
 ];
 const TABLE_COLUMNS = { group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
-/* 列状态持久化: {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}, order:{page:[列key]}}
- * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列);
- * 新增独立 page(torrent)不升版本: loadColState 对缺失 page 返回空, 旧缓存不受影响,
- * 结构或默认列集变更才必须升版本(否则旧缓存里的 px 覆盖会与新列集错配);
- * order(TBL-05 表头拖动重排)是增量子键: 旧缓存无 order = 定义顺序, 不必升版本
- * (宽/隐仍按列 key 对应, 老代码读写新缓存最多丢自定义顺序, 不产生错配) */
+/* 列状态持久化(决策 D3 = **只存浏览器**, 不上服务端):
+ * {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}, order:{page:[列key]}}
+ * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列)。
+ *
+ * R10-09 修订两条:
+ * ① **不再靠"升版本"应对列集变更** —— 宽/隐/序一律按**列 key** 存, 新增列在旧缓存里只是
+ *    "没有记录"(回退 tpl 默认宽), 不会错配; 历史上 v3->v4 升版本反而把用户手调的宽/隐/序
+ *    清零, 正是"时不时被重置"的机制性来源。故本轮列模型增 `align` **不升版本**。
+ * ② 保留旧键迁移: 当前键缺失/损坏时依次读 LEGACY_COLS_KEYS, 命中即按列 key 求交集洗净后
+ *    立刻回写当前键 —— 升级/换键都不再清空偏好。v2 是**按列索引**式, 索引在支持隐藏列后
+ *    会漂移, 无法可靠迁移 -> 刻意不读。
+ *
+ * 不被重置的保证: _logout()/换密钥只清 `autoqb_token`, 全仓尤 `localStorage.clear()`。
+ * 仍存在的限制(已写入 pitfalls): localStorage 按 **origin** 隔离 —— localhost 与 127.0.0.1
+ * 或换端口 = 不同站点, 各有自己的偏好(用户已明确要求只存浏览器, 不接受服务端化)。 */
 const COLS_STORE_KEY = "autoqb_cols_v4";
+const LEGACY_COLS_KEYS = ["autoqb_cols_v3"];  // v2 为索引式覆盖, 不可迁移(见上)
 
 /* 默认排序: 辅种组按组内**最近添加**时间降序(新补进来的种子最需要被看到);
  * 其它列点击 3 次回到这里(见 setSort 的三态语义)
@@ -146,9 +164,26 @@ function templateMinPx(tpl) {
   return m ? Math.round(parseFloat(m[1])) : MIN_COL_PX;
 }
 
+/* 读列状态原始对象: 当前键优先; 缺失/损坏时回退旧键(跨版本迁移), 迁移命中即回写当前键。
+ * 单点收口在这里 —— loadColState 只管洗净与兜底, 不关心键从哪来。 */
+function readColStateRaw() {
+  for (const key of [COLS_STORE_KEY, ...LEGACY_COLS_KEYS]) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(key));
+      if (raw && typeof raw === "object") {
+        if (key !== COLS_STORE_KEY) {
+          try { localStorage.setItem(COLS_STORE_KEY, JSON.stringify(raw)); } catch { /* 私隐模式: 本次会话内仍生效 */ }
+        }
+        return raw;
+      }
+    } catch { /* 该键缺失/损坏: 继续尝试旧键 */ }
+  }
+  return null;
+}
+
 function loadColState() {
   try {
-    const raw = JSON.parse(localStorage.getItem(COLS_STORE_KEY));
+    const raw = readColStateRaw();
     if (!raw || typeof raw !== "object") return emptyColState();
     const out = emptyColState();
     for (const page of ["group", "detail", "torrent", "show"]) {
@@ -207,6 +242,10 @@ const app = createApp({
       authPending: false,  // 密钥验证中: 禁用提交、按钮显示"验证中…", 防重复提交
       authError: "",
       authErrorKind: "",   // "auth" = 密钥被拒(401); "unavailable" = 服务不可达(保留候选密钥供重试)
+      // R10-01: 鉴权模式显式化 —— 旧实现把"有身份"与"有密钥串"绑死, 本机免鉴权时 token 为空串,
+      // 于是进主界面后首个请求就被自己的守卫判成无凭证 -> 登出回密钥页("必须先输一次才进得去")。
+      // 现在守卫一律看 authMode: "local" = 本机免鉴权(直接放行, 且不发空 Bearer), "token" = 密钥流程。
+      authMode: "token",
       page: "groups",
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)
@@ -288,6 +327,7 @@ const app = createApp({
       },
       _toastSeq: 0,           // 提示条自增 id
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
+      _colAlignCss: "",       // 已注入的列对齐 CSS(值未变不重写 <style>)
       _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位; 含批量段, FIX-06)
       // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
       selGroups: [],          // 选中组 key
@@ -329,6 +369,13 @@ const app = createApp({
       addPathOptions: [],     // DLG-04: 保存路径候选(GET /api/paths, 已排序去重)
       addPathPop: false,      // DLG-04: 选择位置面板展开态
       addPathHi: -1,          // 位置面板键盘高亮
+      // R10-11 路径选择器(决策 D2-A): 服务端目录浏览 —— 浏览器拿不到本地绝对路径
+      // (目录上传控件只暴露相对路径), 所以"像选 .torrent 那样"只能由服务端给路径。
+      // 只列目录 + 上遒 + 新建文件夹; 安全边界(允许根白名单/.. 穿越/符号链接逃逸)在后端。
+      dirBrowse: {
+        open: false, path: "", parent: "", roots: [], dirs: [],
+        loading: false, error: "", newName: "", busy: false,
+      },
       // 统计面板(FE-2C): /api/stats → {server: qB server_state | null}; 打开时取一次, 卡内可手动刷新
       statsOpen: false,
       statsLoading: false,
@@ -369,6 +416,11 @@ const app = createApp({
       if (this.status.connected === false) return { text: "qB 断开", kind: "error" };
       if (this.status.connected === true) return { text: "运行中", kind: "ok" };
       return { text: "连接中…", kind: "warn" };
+    },
+    /* R10-01 鉴权判据单点: 所有"能不能发请求"的守卫(api/轮询续排/标签页可见性)都用它,
+     * 避免"改两处漏一处"导致轮询静默停摆。本机免鉴权下 token 为空是合法状态。 */
+    authOk() {
+      return this.authMode === "local" || !!this.token;
     },
     sortedGroups() {
       const key = this.sortKey, dir = this.sortDir;
@@ -462,6 +514,31 @@ const app = createApp({
     },
     showGrid() {
       return { gridTemplateColumns: this._gridTemplate("show") };
+    },
+    /* 列对齐规则(R10-08): align 定义在列模型里, 这里按**当前可见列**生成 :nth-child 规则注入 <head>。
+     *
+     * 为何生成而非在模板里逐格挂类: 值单元格共 67 个 × 4 视图 × 2 套 UI, 逐格挂类必然漏改;
+     * 生成则"列模型改一处, 表头与值同源"(表头同样按可见列索引渲染, 顺序天然一致)。
+     *
+     * 选择器用 :where() 把特异性压到 0,1,0(只剩 :nth-child 那一位), 于是:
+     *   - 胜过 .g-stat/.m-stat(0,1,0, 同权重靠源顺序: 注入的 <style> 在样式表之后) -> 非默认对齐生效;
+     *   - 输给 .g-stat.zero/.m-stat.zero(0,2,0) -> 保留既有"0 值居中"口径。
+     * 同时写 text-align 与 justify-content: 值单元格有的是块级文本, 有的是 flex(进度条/
+     * 分享率对/芯片组), 只写 text-align 会漏掉后者。
+     * ⚠ **left 也必须生成**: 数值列的值格子带 .g-stat/.m-stat(right), 若因为"left 是默认值"就跳过,
+     *    左对齐的口径会被这两条通用规则盖掉(实测: 添加于列表头左、值右)。
+     */
+    colAlignCss() {
+      const out = [];
+      for (const page of ["group", "detail", "torrent", "show"]) {
+        const cols = this._visibleCols(page);
+        for (let i = 0; i < cols.length; i++) {
+          const align = cols[i].align || "left";
+          const just = align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start";
+          out.push(`:where([data-table="${page}"]) > :nth-child(${i + 1}) { text-align: ${align}; justify-content: ${just}; }`);
+        }
+      }
+      return out.join("\n");
     },
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
@@ -628,17 +705,27 @@ const app = createApp({
       return `今日流量(Traffic Monitor 按日口径): 下载 ${this.fmtSize(t.down)} / 上传 ${this.fmtSize(t.up)}`
         + ` · 数据状态: ${this.traffic.state}`;
     },
-    /* 状态栏"限制速度"文案(决策 D3 = 方案A 的收窄版: **只取 qB 当前生效值**)。
-     * 取值 = /api/stats 的 server_state.dl_limit / up_limit(字节/秒); 0 = 不限速 → 显示"不限"。
+    /* 全局限速取数单点(R10-04): qB server_state 的全局限速键是 **dl_rate_limit / up_rate_limit**
+     * (bytes/s, 0 = 不限速), **不是 dl_limit/up_limit** —— 后者是**单种子**级字段(TorrentRecord,
+     * 见 mixins/web_view.py 的种子限速列)。前端曾读 s.dl_limit/s.up_limit ⇒ 恒 undefined ⇒
+     * 状态栏"限制速度"永远显示 "—", 同时作速度染色分母时也恒缺失 ⇒ 色阶从未生效(连带故障)。
+     * 现在状态栏文案、速度染色分母两处全部引用本单点, 改口径只改这里。
+     * 单位维持 bytes/s(与 fmtSpeed 同源); 浮层内的编辑仍走 /api/speed/mode 的 KiB/s 口径,
+     * 两套单位各在自己的显示层换算, 不在同一函数里混用。
+     * 语义: null = 未知(字段缺失), 0 = 不限速。 */
+    speedLimitBytes() {
+      const s = this.statsServer || {};
+      const pick = (v) => (v === null || v === undefined || v === "" ? null : Number(v) || 0);
+      return { down: pick(s.dl_rate_limit), up: pick(s.up_rate_limit) };
+    },
+    /* 状态栏"限制速度"文案(决策 D3 的收窄版: **只取 qB 当前生效值**)。
+     * 0 = 不限速 -> "不限"; 字段缺失 -> "—"(区分"未知"与"不限")。
      * 刻意不从限速曲线快照的 limit.actual 取数: 状态栏并列两个口径会变成"限速对照面板"
      * (那是已退役的信息栏形态); 曲线的目标/命中信息在限速浮层内的 .speed-mode-line 展示。 */
     sbLimits() {
-      const s = this.statsServer || {};
-      const f = (v) => {
-        if (v === null || v === undefined) return "—";
-        return v ? this.fmtSpeed(v) : "不限";
-      };
-      return { down: f(s.dl_limit), up: f(s.up_limit) };
+      const { down, up } = this.speedLimitBytes;
+      const f = (v) => (v === null ? "—" : (v ? this.fmtSpeed(v) : "不限"));
+      return { down: f(down), up: f(up) };
     },
     /* 限速对照行: 每个受管方向一行(该方向无曲线则不显示该行);
      * mismatch = 实际值已知且与命中目标不同 -> 前端据此"显示两个 + 原因"
@@ -985,7 +1072,7 @@ const app = createApp({
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
-      else if (this.token) this.refresh();  // 登出态切回标签不发空 Bearer(由登录成功后自行启动轮询)
+      else if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
     });
     // 全局右键屏蔽(CTX-03): 除顶部导航栏(header.topbar, atlas/prism 两套 UI 共用类名)与输入类
     // 元素(input/textarea/contenteditable, 保留复制粘贴的原生菜单)外, 一律阻止原生右键菜单;
@@ -1003,7 +1090,8 @@ const app = createApp({
       if (pub && pub.web && pub.web.skip_local_verify) {
         this.authRequired = false;  // 唯一放行点(与 bootstrap 成功后语义一致)
         this.bootstrapping = false;  // FX-01: 本机免鉴权 -> 直接离开"验证中", 不经过密钥表单
-        this.token = savedToken || "";
+        this.authMode = "local";  // R10-01: 身份来源 = 本机免鉴权(不再要求非空密钥串)
+        this.token = savedToken || "";  // 有旧密钥仍留着: 关掉开关后无需重新输入
         this.lastRid = null;
         this.startPolling();
         return;
@@ -1045,12 +1133,14 @@ const app = createApp({
     // 顶栏高度会随"状态分布条是否渲染/窄屏折行/批量段并入筛选行(FIX-06)"变化 -> 每帧后同步
     // (值未变时内部直接返回); 批量段已并入筛选行, 其高度由 --head-h 一并覆盖, 无需独立量测
     this._syncHeadHeight();
+    this._syncColAlignCss();  // 列对齐规则(R10-08): 值未变时内部直接返回
   },
   methods: {
     async api(path, options = {}) {
-      if (!this.token) {
-        // 无密钥不出网: 否则会发出 "Bearer " 空头(被 HTTP 层裁剪成裸 "Bearer"),
+      if (!this.authOk) {
+        // 无凭证不出网: 否则会发出 "Bearer " 空头(被 HTTP 层裁剪成裸 "Bearer"),
         // 后端白记一次 401。调用方按 401 同路径处理(回密钥输入界面/静默)。
+        // R10-01: 判据改为**鉴权模式**而非"密钥串非空" —— 本机免鉴权下 token 为空是合法状态。
         this._logout();
         const noAuth = new Error("unauthorized");
         noAuth.auth = true;
@@ -1059,10 +1149,12 @@ const app = createApp({
       return this._request(path, options, this.token);
     },
     async _request(path, options, token) {
-      const resp = await fetch(path, {
-        ...options,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) },
-      });
+      // R10-01: **无密钥就不带 Authorization 头**(本机免鉴权模式)。旧实现无条件拼
+      // `Bearer ${token}`, token 为空时发出裸 "Bearer", 而后端的免鉴权分支会把它当"未带凭证"
+      // 每次请求记一条 WARNING(噪音); 带上真实密钥时后端也是忽略, 两种都不如干脆不发。
+      const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const resp = await fetch(path, { ...options, headers });
       if (resp.status === 401) {
         this._logout("密钥无效或已更换");
         const err = new Error("unauthorized");
@@ -1348,6 +1440,7 @@ const app = createApp({
         if (typeof state.rid === "number") this.lastRid = state.rid;
         this.serviceDown = false;
         this.token = candidate;  // 验证通过才提交为当前身份
+        this.authMode = "token";  // R10-01: 显式声明身份来源(覆盖可能残留的 local 模式)
         this.authRequired = false;  // 唯一放行点
         localStorage.setItem("autoqb_token", candidate);
         this.pendingToken = "";
@@ -1389,7 +1482,7 @@ const app = createApp({
     scheduleNext() {
       // 用 setTimeout 链式续排(而非 setInterval): 保证上一轮请求结束后再计时, 不堆叠请求
       this.stopPolling();
-      if (document.hidden || !this.token) return;
+      if (document.hidden || !this.authOk) return;  // R10-01: 按鉴权模式判断(本机免鉴权下 token 为空)
       this.pollTimer = setTimeout(() => this.refresh(), this.currentPollMs());
     },
     currentPollMs() {
@@ -1845,7 +1938,9 @@ const app = createApp({
       this.openSub(name, ev);
     },
     /* FX-14: 打开目标文件夹 —— 路径由**服务端**从自己的快照派生(web.py /api/open-path),
-     * 前端只传 kind + 标识: 后端绝不接受客户端传路径(防"任意文件执行"), 且只允许目录。 */
+     * 前端只传 kind + 标识: 后端绝不接受客户端传路径(防"任意文件执行"), 且只允许目录/单文件种子的文件。
+     * R10-10: 单文件种子返回 `select: true`(打开所在目录并**定位选中**该文件) —— 文案随之区分,
+     * 否则用户会以为"只是打开了文件夹"。 */
     async openTargetPath(kind, id) {
       this.menu.visible = false;
       if (!id) return;
@@ -1854,7 +1949,8 @@ const app = createApp({
           method: "POST",
           body: JSON.stringify(kind === "group" ? { kind: "group", key: id } : { kind: "torrent", hash: id }),
         });
-        this.toast(`已打开目标文件夹: ${r.opened}`, "ok", 3000);
+        const how = r.select ? "已在文件夹中选中该文件" : "已打开目标文件夹";
+        this.toast(`${how}: ${r.opened}`, "ok", 3000);
       } catch (e) {
         if (!e.auth) this.toast("打开目标文件夹失败: " + e.message, "error", 8000);
       }
@@ -1929,6 +2025,7 @@ const app = createApp({
     closeAddTorrent() {
       if (this.addSubmitting) return;  // 回执等待期不允许误关
       this.addOpen = false;
+      this.dirBrowse.open = false;  // R10-11: 目录浏览器是添加窗口的子层, 一并关闭
     },
     async loadAddOptions() {
       // DLG-03/04: 并行拉取分类/标签/历史路径候选; 单个端点失败静默降级为空候选(不阻塞窗口)
@@ -1951,8 +2048,10 @@ const app = createApp({
       }
     },
     escAddTorrent() {
-      // Esc 逐层退栈(FIX-07)接入: 对话框内浮层(分类/标签下拉 → 位置面板)先收起, 再关对话框
-      if (this.addCatMenu || this.addTagMenu) {
+      // Esc 逐层退栈(FIX-07)接入: 对话框内浮层(目录浏览器 → 分类/标签下拉 → 位置面板)先收起, 再关对话框
+      if (this.dirBrowse.open) {
+        this.closeDirBrowse();
+      } else if (this.addCatMenu || this.addTagMenu) {
         this.addCatMenu = false;
         this.addTagMenu = false;
         this.addCatHi = -1;
@@ -2033,16 +2132,71 @@ const app = createApp({
         this[hiKey] = -1;
       }
     },
-    toggleAddPathPop() {
-      if (this.addPathPop) {
-        this.addPathPop = false;
-        return;
-      }
+    /* ---------------- R10-11 路径选择器(服务端目录浏览) ----------------
+     * “选择位置”不再只是自绘下拉: 由服务端给真实目录树(浏览器物理上拿不到绝对路径)。
+     * 只列目录 + 可上溯到允许根 + 可新建文件夹; 选中后回填输入框(绝对路径)。
+     * 安全边界全部在后端(GET /api/fs/dirs, POST /api/fs/mkdir)。 */
+    async openDirBrowse() {
       this.addCatMenu = false;
       this.addTagMenu = false;
-      this.addPathHi = this.addPathOptions.indexOf(this.addSavePath.trim());  // 当前路径命中则预高亮
-      this.addPathPop = true;
-      this._hiScroll("addPathList");
+      this.addPathPop = false;
+      this.dirBrowse = {
+        open: true, path: "", parent: "", roots: [], dirs: [],
+        loading: true, error: "", newName: "", busy: false,
+      };
+      await this.loadDir("");
+    },
+    closeDirBrowse() {
+      this.dirBrowse.open = false;
+    },
+    async loadDir(path) {
+      this.dirBrowse.loading = true;
+      this.dirBrowse.error = "";
+      try {
+        const r = await this.api("/api/fs/dirs?path=" + encodeURIComponent(path || ""));
+        this.dirBrowse.path = r.path || "";
+        this.dirBrowse.parent = r.parent || "";
+        this.dirBrowse.roots = r.roots || [];
+        this.dirBrowse.dirs = r.dirs || [];
+      } catch (e) {
+        if (!e.auth) this.dirBrowse.error = e.message || "读取目录失败";
+      } finally {
+        this.dirBrowse.loading = false;
+      }
+    },
+    dirEnter(p) {
+      this.loadDir(p);
+    },
+    dirUp() {
+      if (this.dirBrowse.parent) this.loadDir(this.dirBrowse.parent);
+    },
+    async dirMkdir() {
+      const name = (this.dirBrowse.newName || "").trim();
+      if (!name || this.dirBrowse.busy) return;
+      this.dirBrowse.busy = true;
+      try {
+        const r = await this.api("/api/fs/mkdir", {
+          method: "POST",
+          body: JSON.stringify({ path: this.dirBrowse.path, name }),
+        });
+        this.dirBrowse.newName = "";
+        await this.loadDir(r.path || this.dirBrowse.path);
+        this.toast(`已新建文件夹: ${r.created}`, "ok", 3000);
+      } catch (e) {
+        if (!e.auth) this.toast("新建文件夹失败: " + e.message, "error", 8000);
+      } finally {
+        this.dirBrowse.busy = false;
+      }
+    },
+    /* 选定当前目录(首层/未进入具体目录时落到首个允许根) */
+    dirPick() {
+      const p = this.dirBrowse.path || (this.dirBrowse.dirs[0] && this.dirBrowse.dirs[0].path) || "";
+      if (!p) {
+        this.toast("请先选择一个目录", "warn");
+        return;
+      }
+      this.addSavePath = p;
+      this.dirBrowse.open = false;
     },
     /* FX-17: 输入框聚焦即展开候选面板。旧实现写在模板上的 @focus 是 `addPathPop = false`
      * —— 聚焦反而把面板关掉(为让位于原生 datalist 的建议浮层), 而那个浮层会自行超时消失,
@@ -2333,26 +2487,20 @@ const app = createApp({
       if (isRe) this._finishToast(tid, "timeout", msg, 6000);
       else this.toast(msg, fails.length === hashes.length ? "error" : "info", 8000);
     },
-    /* 删除整集/整剧(全部版本; FX-13 起两者共用): 确认框摘要 = 目标名 + 种子数
-     * (DLG-01 收缩后不再列成员明细) */
+    /* 删除整集/整剧(全部版本; FX-13 起两者共用): 目标名与种子数进 body, 详情行由 _deleteFlow 统一派生 */
     async delEpisode() {
       this.menu.visible = false;
       const ep = this.menu.episode;
       if (!ep || !ep.hashes.length) return;
       const members = ep.hashes.map((h) => this.memberByHash.get(h)).filter(Boolean);
       if (!members.length) return;
-      const totalSize = members.reduce((n, m) => n + (m.size || 0), 0);
       const what = ep.scope === "show" ? "整剧" : "整集";
-      // FX-16: 与右键/批量/该种子共用同一条删除链
+      // FX-16: 与右键/批量/该种子共用同一条删除链; R10-16: 详情行由 _deleteFlow 统一派生
       await this._deleteFlow({
         keys: [],
         hashes: ep.hashes.slice(),
         title: `删除${what}`,
         body: `将删除"${ep.label}"的全部 ${members.length} 个种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
-        details: [
-          { icon: "#i-cards", label: "目标", value: ep.label, wide: true },
-          { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${members.length} 个种子` },
-        ],
         countText: `${what}(${members.length} 个种子)`,
         label: ep.label,
       });
@@ -2578,13 +2726,12 @@ const app = createApp({
       const countText = this.bulkCountText();
       // 摘要计数(DLG-01 收缩: 确认框不再列逐条成员明细, 只保留目标摘要+计数):
       // 组展开到成员级, 与选中的种子并集去重 —— 与后端 bulk 组键展开(级联在册成员,
-      // 与 hashes 合并去重)同口径; 成员大小经 memberByHash 解析(groups ∪ singles ∪ torrents 全量)
+      // 与 hashes 合并去重)同口径; 成员大小经 memberByHash 解析(groups ∪ singles ∪ torrents 全量)。
+      // R10-16: 确认框的详情行改由 _deleteFlow 统一派生, 这里只算 body 要用的**种子数**(seen.size)。
       const seen = new Set();
-      let totalSize = 0;
       const countMember = (m) => {
         if (!m || seen.has(m.hash)) return;
         seen.add(m.hash);
-        totalSize += m.size || 0;
       };
       for (const k of groupKeys) {
         const g = this._findGroup(k);
@@ -2594,15 +2741,12 @@ const app = createApp({
       }
       for (const h of memberHashes) countMember(this.memberByHash.get(h));
       // FX-16: 统一走 _deleteFlow(与右键同一套: 目标明细 + 汇报前置 + 等聚合回执 + 收尾清选择)
+      // R10-16: 不再自传 details(由 _deleteFlow 从目标集合派生), 四个入口的窗口结构由此完全一致
       await this._deleteFlow({
         keys: groupKeys,
         hashes: memberHashes,
         title: `删除 ${countText}`,
         body: `将删除选中目标内的全部种子, 共 ${seen.size} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
-        details: [
-          { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个${L10N_GROUP} · ${memberHashes.length} 个独立种子` },
-          { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${seen.size} 个种子` },
-        ],
         countText,
         label: countText,
       });
@@ -2616,6 +2760,42 @@ const app = createApp({
      * targets = { keys[], hashes[], title, body, details[], countText, label }
      * 注: /api/groups/{k}/delete 与 /api/torrents/{h}/delete 端点**保留不动**(旧 UI 与第三方脚本仍可用)。
      */
+    /* R10-16 删除详情行统一派生: 四个入口(右键组/右键种子/批量/整集整剧)过去各自拼 details,
+     * 结果"同壳不同构"(右键 5 行含站点/保存路径, 批量只有 2 行摘要) —— 用户看到的就是
+     * "不是同一个删除窗口"。现在入口只交目标集合, 明细行一律由本函数算: 目标 -> 计数 ->
+     * 站点集合 -> 保存路径集合 -> 总大小; 单目标自然退化成逐项明细(站点/路径回到单体值)。
+     * 多目标走集合摘要(决策 D8-A): 避免几十个目标把弹窗撑爆。 */
+    _deleteDetails(keys, hashes) {
+      const seen = new Map();  // hash -> member(组展开与 hashes 去重)
+      const collect = (m) => {
+        if (m && m.hash && !seen.has(m.hash)) seen.set(m.hash, m);
+      };
+      const names = [];
+      for (const k of keys || []) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        names.push(g.name);
+        if (g.virtual) collect(g.members[0]);
+        else for (const m of g.members || []) collect(m);
+      }
+      for (const h of hashes || []) collect(this.memberByHash.get(h));
+      const members = [...seen.values()];
+      const sites = [...new Set(members.map((m) => m.site).filter(Boolean))];
+      const paths = [...new Set(members.map((m) => m.save_path).filter(Boolean))];
+      const totalSize = members.reduce((n, m) => n + (m.size || 0), 0);
+      const single = (keys || []).length + (hashes || []).length <= 1 && members.length <= 1;
+      // 目标: 单目标退化为**它的名字**(单辅种 = 辅种名, 单种子 = 种子名), 多目标走集合摘要
+      const target = single && names.length === 1 ? names[0]
+        : single && members.length === 1 ? (members[0].name || members[0].hash.slice(0, 12))
+          : `${(keys || []).length} 个${L10N_GROUP} · ${members.length} 个种子`;
+      return [
+        { icon: "#i-cards", label: "目标", value: target, wide: true },
+        { icon: "#i-layers", label: "成员", value: `${members.length} 个种子` },
+        { icon: "#i-globe", label: "站点", value: sites.join(", ") || "—" },
+        { icon: "#i-folder-open", label: "保存路径", value: paths.join(" · ") || "—", wide: true },
+        { icon: "#i-hdd", label: "总大小", value: this.fmtSize(totalSize) },
+      ];
+    },
     async _deleteFlow(targets) {
       const keys = targets.keys || [];
       const hashes = targets.hashes || [];
@@ -2623,7 +2803,8 @@ const app = createApp({
       const res = await this._confirmDelete({
         title: targets.title,
         body: targets.body,
-        details: targets.details,
+        // R10-16: 入口不再传 details(传了也忽略) —— 四入口看到的窗口结构完全一致
+        details: this._deleteDetails(keys, hashes),
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
@@ -2691,19 +2872,13 @@ const app = createApp({
       if (!key) return;
       const g = this._findGroup(key);
       if (!g) return;
-      const sites = [...new Set(g.members.map((m) => m.site))].join(", ");
+      // R10-16: 详情行(辅种名/成员/站点/保存路径/总大小)改由 _deleteFlow 统一派生 ——
+      // 单目标时自然退化成逐项明细, 与批量/整集入口结构一致
       await this._deleteFlow({
         keys: [key],
         hashes: [],
         title: `删除该${L10N_GROUP}`,
         body: `将删除"${g.name}"的全部 ${g.count} 个种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
-        details: [
-          { icon: "#i-cards", label: `${L10N_GROUP}名`, value: g.name, wide: true },
-          { icon: "#i-layers", label: "成员", value: `${g.count} 个种子` },
-          { icon: "#i-globe", label: "站点", value: sites || "—" },
-          { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—", wide: true },
-          { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
-        ],
         countText: `该${L10N_GROUP}(${g.count} 个种子)`,
         label: `"${g.name}"`,
       });
@@ -3370,19 +3545,12 @@ const app = createApp({
       if (!m) m = this.torrents.find((x) => x.hash === hash) || null;  // 种子页平铺数组(全量兑底)
       if (!m) return;
       // FX-16: 删除链统一 —— 走 _deleteFlow(目标明细 + 汇报前置 + 等聚合回执 + 收尾清选择)
+      // R10-16: 不再自传 details(条目与右键/批量/整集同构)
       await this._deleteFlow({
         keys: [],
         hashes: [hash],
         title: "删除该种子",
         body: "将删除该种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。",
-        details: [
-          // FX-23: 种子名/路径可能极长 -> wide 块行(值独占一行, 最多 3 行 + 复制按钮)
-          { icon: "#i-tag", label: "种子名", value: m.name || m.hash.slice(0, 12), wide: true },
-          { icon: "#i-globe", label: "站点", value: m.site || "—" },
-          { icon: "#i-pulse", label: "状态", value: this.kindText(m.kind) },
-          { icon: "#i-folder-open", label: "保存路径", value: m.save_path || "—", wide: true },
-          { icon: "#i-hdd", label: "大小", value: this.fmtSize(m.size) },
-        ],
         countText: "该种子",
         label: m.name || hash.slice(0, 12),
       });
@@ -3750,6 +3918,20 @@ const app = createApp({
       const ref = this.$refs[{ group: "groupHead", detail: "detailHead", torrent: "torrentHead", show: "showHead" }[page]];
       return Array.isArray(ref) ? ref[0] : ref || null;
     },
+    /* 列对齐规则注入(单例 <style id="col-align-css">): 首次创建后只改 textContent ——
+     * 不能重建元素: 重建会让它排到 <head> 末尾的其它运行时样式之后, 层叠顺序不再稳定。 */
+    _syncColAlignCss() {
+      const css = this.colAlignCss;
+      if (css === this._colAlignCss) return;
+      this._colAlignCss = css;
+      let el = document.getElementById("col-align-css");
+      if (!el) {
+        el = document.createElement("style");
+        el.id = "col-align-css";
+        document.head.appendChild(el);
+      }
+      el.textContent = css;
+    },
     /* 顶栏(+状态分布条)的实测高度写入 :root 的 --head-h: 吸顶元素的偏移与最大可用
      * 高度都依赖它。**不写死数值** —— 高度会随媒体查询、状态条是否渲染、窄屏折行而变化;
      * 值未变时直接返回, 避免每帧都写一次 CSS 变量(updated 会频繁触发)。
@@ -3775,10 +3957,13 @@ const app = createApp({
       }
     },
     saveColState() {
-      localStorage.setItem(
-        COLS_STORE_KEY,
-        JSON.stringify({ widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder })
-      );
+      // 写失败(私隐模式/配额满)不得影响功能: 本次会话内的调整仍在内存里生效
+      try {
+        localStorage.setItem(
+          COLS_STORE_KEY,
+          JSON.stringify({ widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder })
+        );
+      } catch { /* 忽略: 仅失去跨会话记忆 */ }
     },
     colVisible(page, key) {
       return !(this.colHidden[page] || []).includes(key);
