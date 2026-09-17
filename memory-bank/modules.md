@@ -44,11 +44,15 @@
 | `exporter.py` | 139 | YAML 模板导出 | 收集全部 tracker 域名 → 找未配置的 → 生成条目 (默认标签=倒数第二级域名, `hd/pt` 后字母大写), `--only-missing` 最小骨架; 重读原始文件时复用 `_strip_none`(文件已被 load_config 校验) |
 | `logging.py` | 47 | 日志配置 | `setup_logging`: 控制台 + RotatingFileHandler(5 备份), **两者均跟随配置 level**; root 跟随配置拦第三方 DEBUG, `auto_qb` logger 放开 DEBUG, `qbittorrentapi` 封顶 INFO(排除请求噪音), `urllib3` 封顶 ERROR(排除断连期间连接重试的 Retry WARNING 刷屏)。注意与 stdlib logging 同名, 包内相对导入 |
 
-### web_ui/static/ 前端契约速查 (2026-09-17 第十轮补)  |  第九轮版见本节末尾
+### web_ui/static/ 前端契约速查 (2026-09-17 第十一轮补)  |  第十轮版见本节末尾
 
 - **分层**: `shared/app.js` 是唯一逻辑层(两套 UI 共用 `shared/app.js`); `atlas/`(星图)与 `prism/`(棱镜)只放模板与主题 CSS —— 逻辑类改动两套自动生效, 版式类需各自改模板/CSS。
-- **列模型**: `GROUP_COLUMNS`/`DETAIL_COLUMNS`/`TORRENT_COLUMNS`/`SHOW_COLUMNS` 是列头 / 单元格 / grid 模板 / 列选择器 / **列对齐**的唯一来源; 列宽按**列 key** 存 `autoqb_cols_v4`。
+- **列模型**: `GROUP_COLUMNS`/`DETAIL_COLUMNS`/`TORRENT_COLUMNS`/`SHOW_COLUMNS` 是列头 / 单元格 / grid 模板 / 列选择器 / **列对齐**的唯一来源; 列宽按**列 key** 存 `autoqb_cols_v4`。保存路径只在**辅种表**(组级取首位成员值 = 路径筛选器同口径)与**种子页**保留, 明细表已删(组内成员路径本就一致)。
+- **排序键族(R11)**: 四个视图各自的键 `sortKey`/`torrentSortKey`/`showSortKey`/`detailSortKey`(明细表与三视图**正交**, 三视图的明细共用一套); `setSort(key, scope)` / `_sortKeys(scope)` / `_resetSort(scope)` 是唯一入口, **表头右键菜单的排序项也必须带 scope**(从 `m.page === "detail"` 推); 明细行序由 `sortedMembers(list)` 派生(空键 = 后端原序, 数组字段先 `join(",")` 再比)。
+- **行/表头宽度口径(R11)**: `.group-row` / `.group-head` / `.detail` / `.detail-head` / `.member-row` 一律 **`fit-content; min-width: 100%`** —— 行底色/边框必须覆盖**内容**宽度(改"定宽 100%"会让溢出段没有底色, 实测反馈)。但**行内单元格必须 `min-width: 0`**(`.group-row/.group-head/.detail-head/.member-row > *`): 表格层 `white-space: nowrap` + 单元格 `min-width: auto` ⇒ 自动最小宽 = 文本全长, 累加会把行顶得比容器宽几像素、造成**列没溢出却常驻横滚条**。`.content` 必须保留 `overflow-x: clip`(表头脱离滚动容器做 sticky, 不裁切会把整页撑出第二条横滚条; `clip` 不建滚动容器, sticky 不受影响)。`.detail` **不得**再写 `overflow-x: auto`。
 - **列对齐(R10-08)**: 列模型的 `align`(`left|right|center`, 缺省 left)是唯一口径; `colAlignCss` 按**当前可见列**生成 `:where([data-table="<page>"]) > :nth-child(n)` 规则注入 `<head>`, 因此**表头与值单元格所在容器必须带 `data-table="group|detail|torrent|show"`**(新增行/表头时照此办理, 否则该行不受对齐口径管辖)。用 `:where()` 把特异性压到 0,1,0: 胜过 `.g-stat/.m-stat`, 但保留 `.g-stat.zero` 的"0 值居中"。
+- **图标语义色族**: 导航/工具图标必须挂语义类(`ico-seed`/`ico-tv`/`ico-add`/`ico-find`/`ico-cols`/`ico-config`/`ico-chart`/`ico-log`/`ico-limit`/`ico-history` …) —— 不挂类就继承 `--fg-dim`, 观感上"没有颜色"(多次反馈的根因)。新增图标照此在**两套 CSS** 各加一条令牌色规则。
+- **状态语义色族**: 行状态色同时染纯文本列(名称/数值/站数/保存路径/hash)与**标签·分类芯片**(R11 起; HR 标签用 `:not(.hr-pending):not(.hr-done)` 排除, 保住橙/青语义); 站点芯片另有 `.site-chip.<kind>` 一套。paused/other 保持中性灰。
 - **单元格口径单点**: `cellSeedingTime` / `cellRatio` / `cellPeers`(FX-02/03/04 收口) —— 模板里不得再写这三列的判据表达式。
 - **全局限速取数单点(R10-04)**: `speedLimitBytes`(读 qB `server_state.dl_rate_limit/up_rate_limit`)—— 状态栏文案(`sbLimits`)与速度染色分母(`numTone`) 必须同源; **不得**用单种子字段 `dl_limit/up_limit` 顶替。
 - **选择模型**: 唯一权威 = `selGroups`(辅种 key) 与 `selMembers`(成员 hash), **两者互斥**(FX-11); 所有视图的"已选"一律读派生 computed `selHashSet`(FX-12, 组选择展开为成员闭包), 半选态 = `.partial` 类。

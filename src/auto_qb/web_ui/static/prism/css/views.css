@@ -34,7 +34,10 @@
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;
   padding: 16px 12px calc(28px + var(--statusbar-h, 34px)); }
 .layout, .ce-page { animation: page-in .2s var(--ease-out); }
-.content { min-width: 0; }
+/* overflow-x: clip(2026-09-17): 表头 .group-head 脱离 .group-table 滚动容器做纵向 sticky,
+ * 列多/拖宽时它会比 .content 宽 —— 不裁切就把整页撑出**第二条**横向滚动条。
+ * clip 不建立滚动容器, 不影响 sticky 顶贴与它的 transform 跟随。 */
+.content { min-width: 0; overflow-x: clip; }
 /* ---------------- 底部状态栏(TBL-08 修订) ----------------
  * 原左栏"舵台"(.rail*)整块退役: 左 = 常显统计摘要 + 完整统计入口, 右 = 速度摘要 + 限速入口。
  * 高度用 --statusbar-h 令牌锁定(不随内容变化, 与内容区底部预留共用同一值, 避免取整透缝);
@@ -57,7 +60,9 @@
   color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .sb-limit:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
-.sb-limit .ico { color: var(--fg-dim); }
+/* 限速仪表盘: 用"限速命中"语义色(与右键菜单的限速项同源), 不再继承暗淡的 --fg-dim;
+ * "不限速"只弱化数值(.sb-limit.off .val), 图标保持可辨认 */
+.sb-limit .ico { color: var(--limit-hit); }
 .sb-limit:hover .ico { color: var(--accent-hi); }
 .sb-limit .val { font-size: 12px; }
 /* 不限速: 弱化(它不是受限状态, 不需要强调) */
@@ -73,7 +78,8 @@
   color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .sb-hist:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
-.sb-hist .ico { color: var(--fg-dim); }
+/* 历史入口(2026-09-17): 文字已移除, 只剩图标 -> 图标自己有色(与今日流量同族 today-up) */
+.sb-hist .ico { color: var(--today-up); }
 .sb-hist:hover .ico { color: var(--accent-hi); }
 /* 左侧统计摘要: 指标项紧凑排列(标签暗 + 数值亮), 空间不足时整体裁切而不换行 */
 .sb-stats { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
@@ -87,7 +93,8 @@
 .sb-item .ico-alltime { color: var(--accent-hi); }
 .sb-item .ico-peers { color: var(--green); }
 .sb-item .ico-dht { color: var(--teal, var(--accent)); }
-.sb-item .ico-disk { color: var(--fg-dim); }
+/* 空间剩余: 磁盘图标原先继承 --fg-dim(观感"没有颜色"), 改用存储中性色 indigo */
+.sb-item .ico-disk { color: var(--indigo); }
 .sb-spacer { flex: 1; }
 .sb-btn { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
@@ -97,7 +104,15 @@
 
 /* ---------------- 分组表 ---------------- */
 .group-table { display: flex; flex-direction: column; gap: 5px; overflow-x: auto; padding-bottom: 2px; }
+/* 行宽口径: 数据行与表头一律 **fit-content + min-width: 100%** —— 行底色/边框必须覆盖**内容**宽度
+ * (定宽 100% 时一旦内容宽于容器, 横向滚到右侧就没有行底色/边框)。
+ * 假滚动条的真因在单元格: 默认 `min-width: auto` + 表格层 `white-space: nowrap` => 自动最小宽 = 文本全长,
+ * 累加后把行的最小宽顶到容器之上, 于是 fit-content 恒宽几像素 => 列没溢出却常驻横滚动条。
+ * 解决法 = 行内单元格统一 `min-width: 0`, 行最小宽回到 `minmax(Xpx,·)` 之和。
+ * 明细与外层共用**同一条**横向滚动(原先 .detail 自带 overflow-x: auto 会形成第二条, 见下方)。 */
 .group-row, .detail, .detail-head, .member-row { width: fit-content; min-width: 100%; }
+.group-row > *, .group-head > *, .detail-head > *, .member-row > * { min-width: 0; }
+.g-stat, .g-count, .g-hr, .m-stat { overflow: hidden; text-overflow: ellipsis; }
 /* 表头: 脱离滚动容器做纵向 sticky; 横向位移由 app.js 写 transform 跟随。
  * FIX-03 配色: 底色从 --bg-card 改为 --bg 页底色 —— 之前与顶栏 --glass 玻璃底明度相近,
  * 吸顶时像"第二根导航"; 改用不透明页底色读作"页面面板", 权重更低且不透滚动内容。
@@ -177,15 +192,36 @@
 .tag-chip.hr-done { background: var(--hr-done-soft); color: var(--hr-done);
   box-shadow: inset 0 0 0 1px var(--hr-done-line); }
 .cat-chip { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: var(--radius-sm);
-  background: var(--blue-soft); color: var(--blue); font-size: 11px; white-space: nowrap;
+  background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
+/* 标签/分类芯片改"状态色"(2026-09-17 用户要求): 原先分类永远蓝、普通标签永远灰 —— 颜色不带语义,
+ * 蓝色分类 chip 还会和"下载中"撞色。改为跟随**所在行的状态语义色**(与 .site-chip 同口径);
+ * HR 标签(hr-pending/hr-done)自带 HR 语义, 用 :not() 排除不受影响; paused/other 保持中性灰。 */
+.group-row.s-seeding .tag-chip:not(.hr-pending):not(.hr-done),
+.group-row.s-seeding .cat-chip,
+.member-row.seeding .tag-chip:not(.hr-pending):not(.hr-done),
+.member-row.seeding .cat-chip { background: var(--green-soft); color: var(--green); }
+.group-row.s-downloading .tag-chip:not(.hr-pending):not(.hr-done),
+.group-row.s-downloading .cat-chip,
+.group-row.s-checking .tag-chip:not(.hr-pending):not(.hr-done),
+.group-row.s-checking .cat-chip,
+.member-row.downloading .tag-chip:not(.hr-pending):not(.hr-done),
+.member-row.downloading .cat-chip,
+.member-row.checking .tag-chip:not(.hr-pending):not(.hr-done),
+.member-row.checking .cat-chip { background: var(--blue-soft); color: var(--blue); }
+.group-row.s-error .tag-chip:not(.hr-pending):not(.hr-done),
+.group-row.s-error .cat-chip,
+.member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
+.member-row.error .cat-chip { background: var(--error-soft); color: var(--error); }
 .tag-more { font-size: 11px; color: var(--fg-dim); flex: 0 0 auto; }
 .diff-mark { flex: 0 0 auto; padding: 0 5px; border-radius: var(--radius-sm); background: var(--surface-2);
   color: var(--fg-dim); font-size: 11px; white-space: nowrap; }
 .g-count { text-align: center; color: var(--fg-dim); font-size: 12.5px; }
 
 /* 展开明细 */
-.detail { margin: -2px 0 6px; padding: 4px 14px 8px; overflow-x: auto;
+/* 不再自建滚动容器(2026-09-17): 原先 overflow-x: auto 会让明细区出现第二条横向滚动条,
+ * 改为可见溢出 -> 明细内容并入外层 .group-table 滚动区, 全局只保一条横滚动。 */
+.detail { margin: -2px 0 6px; padding: 4px 14px 8px;
   background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius);
   animation: drop-in .16s var(--ease); }
 .detail-head { display: grid; gap: 10px; padding: 7px 4px; color: var(--fg-dim);

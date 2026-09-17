@@ -224,6 +224,20 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **H&R 筛选只消费后端算好的组级计数/成员布尔**(hr_triggered/hr_pending/hr_satisfied), 前端只做 `_hrBucket` 比较 —— 与 tagClass 同一纪律, 前端重算模板/阈值会让自定义 HR 标签立即失效。
 - **新增列 page(torrent) 不升 COLS_STORE_KEY**: loadColState 对缺失 page 返回空属向后兼容; 只有重排既有 page 的列集才必须升版本。
 
+### 横向滚动条三项根因 / fr 列取整 / 明细排序 (2026-09-17 第十一轮 TASK013)
+
+- **"两个横向滚动条"是两条独立真因**(实测复现, 不是同一条的两个症状):
+  1. **`.group-head` 脱离滚动容器**(为做纵向 sticky 而挂在 `.content` 下): 表头比 `.content` 宽时把**整页**撑宽 → 表格内一条 + 页面级一条。实测判据: 把表头 inline `width` 写 3000px, `documentElement.scrollWidth` 1872 → 3012(页面级横滚条), 而表体内的行不会(在 `.group-table` 滚动容器内)。修法: `.content { overflow-x: clip }` —— **clip 不创建滚动容器**, 所以 `.group-head` 的 sticky 顶贴与 JS `syncGroupHeadScroll` 的 transform 跟随都不受影响(用 `overflow-x: hidden` 会把 `.content` 变成滚动容器, sticky 立刻失效)。
+  2. **`.detail` 自带 `overflow-x: auto`**: 与外层 `.group-table` 各滚各的, 展开明细时出现第二条(老注释写着"共用同一条滚动"但属性一直没删)。修法: 去掉 inner 滚动, 溢出交由外层滚动容器承载。
+- **行宽口径 = `fit-content + min-width: 100%`, 且行内单元格必须 `min-width: 0`**(2026-09-17 第十一轮, 两轮才定位):
+  - 症状 A「**列没溢出却常驻一条横滚动条**」: 行**不是**被栅格轨道放大的, 而是被单元格的**自动最小尺寸**顶宽的 —— 表格层有 `white-space: nowrap`, 而单元格 `min-width: auto` ⇒ 自动最小宽 = **文本全长**; 13 列文本累加把行的 `min-content` 顶到容器之上 ⇒ `fit-content` 恒比容器宽 2~6px ⇒ 滚动容器常驻一条横滚条(实测: 轨道是 260.88px/108.71px 小数, 行却是 1850.28 vs 容器 1848)。修法 = `.group-row/.group-head/.detail-head/.member-row > * { min-width: 0 }`(文本排不下由各格自己的 overflow/ellipsis 收尾), 行最小宽回到 `minmax(Xpx,·)` 之和, 轨道回到**小数**铺满 → `scrollWidth == clientWidth`。
+  - 症状 B「**横向滚动到右侧没有行底色/边框**」(用户实测): 上一轮曾用「行定宽 `width: 100%`」治症状 A —— 那是**改错位置**: 定宽后行盒永远等于容器宽, 一旦内容真正宽于容器(存有旧列宽 / 拖宽列 / 窄窗口)溢出段就没有行底色。已回退为 `fit-content`, 靠上面的 `min-width: 0` 治 A。
+  - 判别口诀: **底色跟内容、滚动条看容器** —— 两者同时满足才算对。回归验证: 注入宽模板(如 `.group-row { grid-template-columns: 420px 300px … !important }`)后断言 `行盒宽 == 最后一格右边界` 且 `scrollWidth > clientWidth`(合法滚动), 再去掉注入断言 `scrollWidth == clientWidth`(无假滚动)。
+  - 另两处同时保留: `.content { overflow-x: clip }`(表头脱离滚动容器做 sticky, 不裁切会把整页撑出第二条横滚条) 与 `.detail` **不得**再写 `overflow-x: auto`(否则明细与外层各滚各的)。
+- **明细表排序与三视图正交**(三视图都有明细): 不要复用 `sortKey`/`torrentSortKey`/`showSortKey`, 新增 `detailSortKey/detailSortDir` 并让 `setSort(key, scope)`/`_sortKeys(scope)`/`_resetSort(scope)`/`headMenuSort` 都走 scope 分支(表头右键菜单从 `m.page === "detail"` 推 scope)。三点易漏: ①明细列模型的 `sortable` 标记要补齐(当年"暂未接排序"的遗留); ②**数组字段(标签)先 `join(",")` 再比**, 否则相减得 NaN、比较器语义失义; ③空键 = 后端原序, 第三态要能回到原序。
+- **芯片状态色改口径时 HR 标签必须排除**: `.tag-chip` 的 hr-pending/hr-done 是唯一真带信息的 chip 配色, 行状态色规则要用 `.tag-chip:not(.hr-pending):not(.hr-done)` 才盖不住它们(用裸 `.tag-chip` 会因特异性更高把 HR 色一并覆盖)。
+- **集成浏览器(页面 hidden)会让 `page.evaluate` 里的"等两帧"永久挂起**(本次再次踩到): `document.hidden === true` 时 rAF 不触发 → `new Promise(r => requestAnimationFrame(...))` 永不 resolve → 工具报 deferred 且轮询不完; 同一页面的 `getComputedStyle`/`getBoundingClientRect` 读数也可能停在旧布局。对策: 先 `page.bringToFront()` 让页面可见, 等待改用 Playwright 侧 `page.waitForTimeout`(不依赖 rAF), 交互一律 `dispatchEvent`(Playwright click 会因过渡停在 enter-from 而超时)。
+
 ## ⚠️ 代码内 TODO (改动相关区域时顺带了解)
 
 - ~~`qbmanager.py` `_get_torrent` 兼容方法标记"TODO: 删除"~~ — 已删除, 代码统一用 `self.store.get(hash)`。

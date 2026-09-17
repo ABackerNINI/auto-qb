@@ -4,13 +4,15 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-17 (WEB UI 第十轮 16 项 **已完成并验证, 未提交 git** — 状态栏三项硬 bug / 列对齐进列模型 / 列偏好不再重置 / 服务端目录浏览 + open-path 定位选中 / 弹窗尺寸令牌族; 999 passed, 双 UI 浏览器冒烟逐项实测通过; 详见 [tasks/TASK012](tasks/TASK012-webui-fix-round10.md))
+**最后更新**: 2026-09-17 (WEB UI 第十一轮 7 项 **已完成并验证, 未提交 git** — 图标着色 / 历史去文字 / 明细表点击排序 / 辅种表加保存路径·明细表删列 / **两个横向滚动条三项根因**(表头撑页 + `.detail` 自成滚动 + fr 取整) / 标签分类芯片改状态色; 999 passed, 双 UI 浏览器冒烟逐项实测通过; 详情见 [tasks/TASK013](tasks/TASK013-webui-fix-round11.md))
 
 ## 正在进行
 
-- **TASK012 第十轮修复**: 代码与验证已完 + **真机走查反馈 r1 已修**(保存路径独占一行 / 目录浏览器 560→860px 且长路径可见), **待提交**(用户未说推送则不 push; 提交流程见 AGENTS.md "提交 / PR")。剩余观感类走查: 状态栏配色/图标化、选中色与状态色是否好分、弹窗尺寸、目录浏览器能否替代"选择位置"
+- **TASK013 第十一轮修复**: 代码与验证已完, **待提交**(用户未说推送则不 push; 提交流程见 AGENTS.md "提交 / PR")
+- **TASK012 第十轮修复**: 已完并验证(含真机走查 r1 反馈两处), **待提交** —— 与 TASK013 同属前端, 可一并提交
 - **TASK011 第九轮修复**: 已入库 `49d3151`, 剩用户真机走查反馈
 - **第十轮的两处已知限制**(已写入 pitfalls, 非待办): ① 列偏好受 localStorage **origin 隔离** 影响(`localhost` 与 `127.0.0.1`/换端口 = 不同站点各存一份) —— 用户明确要求只存浏览器, 不做服务端化; ② 目录浏览器只能浏览**已有保存路径及其子目录**(安全边界), 全新位置需在输入框手填
+- **第十一轮的定案口径**(已写入 pitfalls, 别改回去): 行/表头一律 `fit-content; min-width: 100%`(**底色跟内容**), **行内单元格必须 `min-width: 0`**(否则 nowrap 文本把行顶宽 → 列没溢出却常驻横滚条); 曾用"行定宽 100%"治假滚动条, 会让**溢出段没有底色**(用户实测"滚动后右边无背景条"), 已回退
 - **未入库的 `想法.md`**: 含用户自己的未提交改动 —— 本轮只勾选 WEBUI 条目, 其余改动未暂存, 由用户自行决定何时一并入库
 - **WEB UI 替代 qB 界面** (波次三复查已修完, **未提交 git**): 剩余 = 实机 CDP 双 UI 走查 + 真机 dry-run + prism 追剧模板 → 档案 [tasks/TASK002-webui-qb-replacement.md](tasks/TASK002-webui-qb-replacement.md)
 - **tracker 分组阶段 2/3 前端** (待排期): 设置页 groups 快捷追加 + 辅种管理页按组筛选 → 档案 [tasks/TASK007-tracker-groups.md](tasks/TASK007-tracker-groups.md)

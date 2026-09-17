@@ -133,7 +133,7 @@
               <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
             </button>
             <button :class="{ active: page === 'groups' && viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="goView('shows')">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
+              <svg class="ico ico-sm ico-tv" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
             </button>
           </nav>
           <!-- 视图开关已退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内重复的第二套"分组/种子/追剧"会让人重复看到两个同位切换器 -->
@@ -152,7 +152,7 @@
           <!-- 添加种子入口(R1B): 辅种页/种子页共用顶栏入口(搜索框右侧), 点击开添加对话框 -->
           <button v-if="page === 'groups'" class="table-tool add-btn" title="添加种子(.torrent / magnet / URL)"
                   @click="openAddTorrent">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
+            <svg class="ico ico-sm ico-add" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
             添加种子
           </button>
           <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。 -->
@@ -408,6 +408,8 @@
                 <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
                 <!-- TBL-06: 组级"最近添加"(后端 _build_group_view 透出) -->
                 <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(g.added_on) }}</div>
+                <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
+                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">{{ g.save_path || '' }}</div>
               </template>
             </div>
 
@@ -415,17 +417,23 @@
             <div v-if="expandedKey===g.key" class="detail">
               <div class="detail-head" ref="detailHead" data-table="detail" :style="gridStyle('detail')">
                 <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
-                     :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
+                     :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
+                     @click="col.sortable && setSort(col.key, 'detail')"
                      @mousedown="startColDrag($event, 'detail', col.key)"
                      @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
                   <span>{{ col.label }}</span>
+                  <span v-if="col.sortable" class="arrow">
+                    <svg v-if="detailSortKey === col.key" class="ico" viewBox="0 0 16 16">
+                      <use :href="detailSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
+                    </svg>
+                  </span>
                   <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                         @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
                         @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
                 </div>
                 <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
               </div>
-              <div v-for="m in g.members" :key="m.hash"
+              <div v-for="m in sortedMembers(g.members)" :key="m.hash"
                    class="member-row" data-table="detail" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                    :style="gridStyle('detail')"
                    @click="onMemberClick(m, $event)"
@@ -463,9 +471,8 @@
                     {{ cellRatio(m) }}
                     <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                   </span>
-                  <!-- TBL-06: 添加于/保存路径(_member_view 已透出; 保存路径逐成员可不同) -->
+                  <!-- TBL-06: 添加于(_member_view 已透出); 保存路径列已移出明细表(见 GROUP_COLUMNS) -->
                   <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
-                  <span v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</span>
                   <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                 </template>
               </div>
@@ -690,17 +697,23 @@
                     <div v-if="expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr)" class="detail">
                       <div class="detail-head" ref="detailHead" data-table="detail" :style="gridStyle('detail')">
                         <div v-for="col in visibleDetailCols" :key="col.key" class="h-cell"
-                             :class="['hc-' + col.key, { 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
+                             :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'detail' && colDrag.key === col.key }]"
+                             @click="col.sortable && setSort(col.key, 'detail')"
                              @mousedown="startColDrag($event, 'detail', col.key)"
                              @contextmenu.prevent="openHeadMenu($event, 'detail', col)">
                           <span>{{ col.label }}</span>
+                          <span v-if="col.sortable" class="arrow">
+                            <svg v-if="detailSortKey === col.key" class="ico" viewBox="0 0 16 16">
+                              <use :href="detailSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
+                            </svg>
+                          </span>
                           <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
                                 @mousedown.stop.prevent="startResize($event, 'detail', col.key)"
                                 @dblclick.stop.prevent="autoFitColumn($event, 'detail', col.key)"></span>
                         </div>
                         <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
                       </div>
-                      <div v-for="m in e.members" :key="m.hash" class="member-row" data-table="detail"
+                      <div v-for="m in sortedMembers(e.members)" :key="m.hash" class="member-row" data-table="detail"
                            :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                            :style="gridStyle('detail')"
                            @click="onMemberClick(m, $event)"
@@ -736,9 +749,8 @@
                             {{ cellRatio(m) }}
                             <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                           </span>
-                          <!-- TBL-06: 添加于/保存路径(与明细表同列) -->
+                          <!-- TBL-06: 添加于(与明细表同列); 保存路径列已移出明细表 -->
                           <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
-                          <span v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</span>
                           <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                         </template>
                       </div>
@@ -1469,7 +1481,7 @@
           <span class="val v-down">↓{{ fmtSize(todayTraffic.down) }}</span>
           <span class="val v-up">↑{{ fmtSize(todayTraffic.up) }}</span>
           <button class="sb-hist" title="历史流量(按天/月/年)" @click.stop="openHistory()">
-            <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>历史
+            <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
           </button>
         </span>
       </template>
@@ -1494,7 +1506,7 @@
         </span>
         <button class="sb-limit" :class="{ off: sbLimits.down === '不限' }"
                 :title="'下载限速: ' + sbLimits.down + ' · 点击修改(就近弹出)'" @click.stop="openSpeedAt($event, 'down')">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+          <svg class="ico ico-sm ico-limit" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
           <span class="val">{{ sbLimits.down }}</span>
         </button>
         <span class="sb-sep"></span>
@@ -1504,7 +1516,7 @@
         </span>
         <button class="sb-limit" :class="{ off: sbLimits.up === '不限' }"
                 :title="'上传限速: ' + sbLimits.up + ' · 点击修改(就近弹出)'" @click.stop="openSpeedAt($event, 'up')">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+          <svg class="ico ico-sm ico-limit" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
           <span class="val">{{ sbLimits.up }}</span>
         </button>
       </span>

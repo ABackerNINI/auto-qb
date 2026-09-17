@@ -35,29 +35,31 @@ const GROUP_COLUMNS = [
   // DEFAULT_SORT 默认排序键本就是 added_on —— 补列后排序箭头有了落点
   // R10-08: 时间列由右改左(表头与值同源, 不会再出现"表头左、值右"的错位)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
+  // 保存路径(用户 2026-09-17): 辅种表的路径取**首位成员**值(与路径筛选器同口径); 明细表
+  // 相应取消该列 —— 组内成员路径本就一致(组 key 首元即规范化 save_path), 重复展示无信息量。
+  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", sortable: true, align: "left" },
 ];
 const DETAIL_COLUMNS = [
-  { key: "site", label: "站点", tpl: "110px", locked: true, align: "left" },
-  { key: "state", label: "状态", tpl: "76px", align: "left" },
+  { key: "site", label: "站点", tpl: "110px", sortable: true, locked: true, align: "left" },
+  { key: "state", label: "状态", tpl: "76px", sortable: true, align: "left" },
   // TBL-06: 做种/用户(与种子页同口径 "已连接 (总数)", fmtPeersQb) —— 字段 W1a-BE 已在 _member_view 透出;
-  // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头暂未接排序, 先标记字段语义)
+  // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头已接排序, 2026-09-17)
   { key: "num_seeds", label: "做种", tpl: "92px", sortable: true, align: "right" },
   { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
-  { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)", align: "right" },
-  { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", align: "right" },
-  { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)", align: "right" },
-  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", align: "right" },
+  { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   // 与分组表同序: 分类在标签之前
-  { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)", align: "left" },
-  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)", align: "left" },
-  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", align: "left" },
-  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", align: "left" },
-  // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值)
-  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", align: "right" },
-  // TBL-06: 添加于/保存路径(_member_view 已透出); 保存路径逐成员可不同
-  // (路径筛选取首成员值, 此处可见全量), 与 Hash 同置表尾低频区
+  { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
+  { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)", sortable: true, align: "left" },
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", sortable: true, align: "left" },
+  // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值); Hash 不可排序(无语义), 其余列均可
+  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "right" },
+  // TBL-06: 添加于(_member_view 已透出), 与 Hash 同置表尾低频区
+  // (保存路径列 2026-09-17 移出本表 -> 见 GROUP_COLUMNS: 组内路径天然一致, 只保留组级一处)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
-  { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", align: "left" },
   { key: "hash", label: "Hash", tpl: "80px", align: "left" },
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
@@ -259,6 +261,9 @@ const app = createApp({
       // 排序: 默认 = 组内最近添加时间降序(见 DEFAULT_SORT); 点击列头按 降序->升序->恢复默认 三态循环
       sortKey: DEFAULT_SORT.key,
       sortDir: DEFAULT_SORT.dir,
+      // 展开明细表排序(与三视图正交, 三个视图的明细共用): 空键 = 后端原序
+      detailSortKey: "",
+      detailSortDir: -1,
       // 单种子视图独立排序键(与分组表互不干扰, 同三态语义)
       torrentSortKey: DEFAULT_SORT.key,
       torrentSortDir: DEFAULT_SORT.dir,
@@ -1799,10 +1804,10 @@ const app = createApp({
       if (!kib) return "";  // 0 = 不限速: 不再显示字样(TBL-02); 提示/toast 文案处调用方用 || "不限速" 兜回
       return this.fmtSpeed(kib * 1024);
     },
-    setSort(key) {
+    setSort(key, scope) {
       // 三态(想法.md): 首次点击按该列降序 -> 再点升序 -> 第三次恢复默认排序(最近添加时间降序);
-      // 单种子/追剧视图操作独立排序键, 各视图互不干扰
-      const { gk, gd } = this._sortKeys();
+      // 单种子/追剧视图操作独立排序键, 各视图互不干扰; scope="detail" 走展开明细表自己的键
+      const { gk, gd } = this._sortKeys(scope);
       if (this[gk] !== key) {
         this[gk] = key;
         this[gd] = -1;
@@ -1812,19 +1817,48 @@ const app = createApp({
         this[gd] = 1;
         return;
       }
-      this._resetSort();
+      this._resetSort(scope);
     },
-    /* 当前视图的排序键/方向(data 属性名) —— 分组/种子/追剧三视图各自独立 */
-    _sortKeys() {
+    /* 当前视图的排序键/方向(data 属性名) —— 分组/种子/追剧三视图各自独立;
+     * scope="detail" = 展开明细表(与视图正交: 三视图的明细共用同一套排序键) */
+    _sortKeys(scope) {
+      if (scope === "detail") return { gk: "detailSortKey", gd: "detailSortDir" };
       if (this.viewMode === "torrents") return { gk: "torrentSortKey", gd: "torrentSortDir" };
       if (this.viewMode === "shows") return { gk: "showSortKey", gd: "showSortDir" };
       return { gk: "sortKey", gd: "sortDir" };
     },
-    /* 恢复默认排序: 追剧视图 = 最近动静降序(后端同序); 其余 = 最近添加降序 */
-    _resetSort() {
-      const { gk, gd } = this._sortKeys();
+    /* 恢复默认排序: 追剧视图 = 最近动静降序(后端同序); 明细表 = 后端原序(成员扫描顺序);
+     * 其余 = 最近添加降序 */
+    _resetSort(scope) {
+      const { gk, gd } = this._sortKeys(scope);
+      if (scope === "detail") {
+        this[gk] = "";
+        this[gd] = -1;
+        return;
+      }
       this[gk] = this.viewMode === "shows" ? "latest" : DEFAULT_SORT.key;
       this[gd] = DEFAULT_SORT.dir;
+    },
+    /* 明细表行序(展开的组明细 / 追剧集明细共用): 空键 = 后端原序, 点击列头后按该列三态排序;
+     * 同值时按站点名稳定排序(与分组表"同值按名称"同思路, 避免刷新抖动)。
+     * 数组字段(标签)先归并成字符串再比 —— 否则相减得到 NaN, 比较器语义失义。 */
+    sortedMembers(list) {
+      const key = this.detailSortKey;
+      if (!key || !list) return list || [];
+      const dir = this.detailSortDir;
+      const val = (m) => {
+        const v = m[key];
+        return Array.isArray(v) ? v.join(",") : v;
+      };
+      return [...list].sort((a, b) => {
+        const va = val(a);
+        const vb = val(b);
+        let r;
+        if (typeof va === "string") r = (va || "").localeCompare(vb || "");
+        else r = (va || 0) - (vb || 0);
+        if (r === 0) r = (a.site || "").localeCompare(b.site || "");
+        return dir * r;
+      });
     },
     /* ---------------- 表头右键菜单(TBL-05): 按列操作 ----------------
      * 用户明确该菜单指的是"隐藏xxx"(隐藏**这一列**), 而不是笼统的列选择器;
@@ -1860,7 +1894,8 @@ const app = createApp({
       const m = this.headMenu;
       this.headMenu.visible = false;
       if (!m.sortable) return;
-      const { gk, gd } = this._sortKeys();
+      // 明细表头右键的排序项也走明细表自己的键(m.page 已是列所属的表名)
+      const { gk, gd } = this._sortKeys(m.page === "detail" ? "detail" : undefined);
       this[gk] = m.key;
       this[gd] = dir;
     },

@@ -41,6 +41,8 @@ h1, h2, h3 { font-family: var(--font-display); }
 .ico-hr-done { color: var(--hr-done); }
 .ico-refresh { color: var(--blue); }
 .ico-seed { color: var(--green); }
+.ico-tv { color: var(--violet); }           /* 追剧视图页签(与分组/聚合语义同族) */
+.ico-add { color: var(--green); }           /* 添加种子(正向动作) */
 .ico-config { color: var(--violet); }
 .ico-find { color: var(--cyan); }
 .ico-cols { color: var(--indigo); }
