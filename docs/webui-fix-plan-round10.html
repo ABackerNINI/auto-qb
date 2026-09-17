@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB UI 修复计划 · 第十轮 — 16 项分类拆解 · 根因定位 · 分阶段实施</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .13);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  .page { max-width: 1220px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 42px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 56em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; margin-top: 46px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.4 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .04em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  section.sec { margin: 0 0 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  h4 { margin: 20px 0 8px; font-size: 14.5px; font-weight: 600; color: var(--fg); }
+  p { margin: 0 0 12px; max-width: 64em; color: var(--fg); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 1.4em; max-width: 64em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: var(--dim); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--fg); }
+  td .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  td.no, td.c { font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  td.wrap { white-space: normal; }
+  td.ok { color: var(--accent); }
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .05em;
+    padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); }
+  .tag.hot { color: var(--accent); border-color: rgba(91, 200, 236, .4); }
+  .tag.warn { color: #e8b45a; border-color: rgba(232, 180, 90, .4); }
+  .tag.bad { color: #e8a0a0; border-color: rgba(232, 160, 160, .4); }
+  .tag.fe { color: #9fd8ae; border-color: rgba(159, 216, 174, .4); }
+  .tag.be { color: #c3aef0; border-color: rgba(195, 174, 240, .4); }
+
+  .note { border-left: 2px solid rgba(91, 200, 236, .45); padding: 10px 14px; margin: 14px 0 18px;
+    background: var(--panel); color: var(--muted); font-size: 13.5px; max-width: 64em; }
+  .note b { color: var(--fg); }
+  .note.warn { border-left-color: rgba(232, 180, 90, .5); }
+  .note.warn b { color: #e8b45a; }
+
+  .ev { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+  .bad { color: #e8a0a0; }
+  .good { color: #9fd8ae; }
+
+  .stage { border: 1px solid var(--line); background: var(--panel); padding: 14px 18px; margin: 0 0 14px; }
+  .stage h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .stage h4 .s-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  .stage p { margin: 0 0 4px; font-size: 13.5px; color: var(--muted); max-width: none; }
+  .stage .items { margin: 6px 0 0; font: 12.5px/1.7 var(--mono); color: var(--dim); }
+
+  pre { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
+    overflow-x: auto; font: 12.5px/1.7 var(--mono); color: #cfe0ee; margin: 12px 0 18px; }
+  pre b { color: var(--accent); font-weight: 600; }
+  pre .cm { color: var(--dim); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
+    font: 12px/1.6 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">auto-qb · web ui · round 10 · 棱镜为主, 星图随共享层联动</div>
+  <h1>WEB UI 修复计划<br>16 项分类拆解 · 根因定位 · 分阶段实施</h1>
+  <p class="lede">
+    本轮 16 条已全部落到「具体文件 + 具体行 + 根因」三件套。其中有 <b>3 条是硬 bug</b>
+    (状态栏限速读了不存在的字段名、星图残留旧限速弹窗与新浮层共用同一个开关、本机免鉴权模式下前端仍要求非空密钥),
+    <b>2 条是结构性缺陷</b>(列偏好"升版本即清空 + 绑定浏览器 origin"、对齐口径散落在 CSS 与模板三处),
+    <b>3 条是上一轮未修净或改了方向</b>(删除确认框四入口仍不同构、添加窗口第 N 次局促、"选择位置"仍是自绘下拉而非系统选择器)。
+    本文件只出计划, 不改代码。
+  </p>
+  <div class="meta">
+    <span>分支 <b>develop</b> @ <b>7ac1f70</b></span>
+    <span>范围 <b>棱镜/星图模板 + CSS + shared/app.js + web.py 新增端点</b></span>
+    <span>规模 <b>7 类 / 16 项 / 6 阶段</b></span>
+    <span>日期 <b>2026-09-17</b></span>
+  </div>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s00"><span class="t-no">00</span>摘要</a>
+      <a href="#s01"><span class="t-no">01</span>分类拆解(7 类 16 项)</a>
+      <a href="#s02"><span class="t-no">02</span>根因定位(已核实)</a>
+      <a href="#s03"><span class="t-no">03</span>分阶段实施</a>
+      <a href="#s04"><span class="t-no">04</span>关键设计细节</a>
+      <a href="#s05"><span class="t-no">05</span>待确认决策点</a>
+      <a href="#s06"><span class="t-no">06</span>风险与红线</a>
+      <a href="#s07"><span class="t-no">07</span>验证与验收</a>
+    </nav>
+
+    <main>
+      <!-- ===================== 00 摘要 ===================== -->
+      <section class="sec" id="s00">
+        <div class="sec-head"><span class="no">00</span><h2>摘要</h2></div>
+
+        <p>16 条诉求按<b>成因</b>归并成 7 类。归并的理由很直接: 有 4 条同属"底部状态栏"、3 条同属"表格口径"、
+          2 条是"服务端能力缺失(前端根本拿不到这个数据)" —— 不先归并, 就会修成"改一处漏两处"。</p>
+
+        <table>
+          <tr><th>性质</th><th>条数</th><th>说明</th></tr>
+          <tr>
+            <td class="no">硬 bug</td>
+            <td class="c">3</td>
+            <td class="wrap">① 状态栏"限制速度"读了 <code>server_state</code> 里<b>不存在</b>的字段名 → 恒显示 "—", 且速度染色一并失效(R10-04);
+                ② 星图<b>同时存在</b>旧限速弹窗与新限速浮层、两者共用一个开关 → 点一次开两窗(R10-04);
+                ③ 本机免鉴权模式下前端仍要求非空密钥 → 仍被弹回密钥页(R10-01)。三条都有确定根因, 不属"看运气"。</td>
+          </tr>
+          <tr>
+            <td class="no">结构性缺陷</td>
+            <td class="c">2</td>
+            <td class="wrap">① 列偏好"升版本即清空 + 绑定浏览器 origin" → 用户感知为"时不时重置"(R10-09);
+                ② 列对齐口径散落在表头 CSS、单元格 CSS、模板三处, 想改一列要动三处(R10-08)。</td>
+          </tr>
+          <tr>
+            <td class="no">上轮未修净</td>
+            <td class="c">3</td>
+            <td class="wrap">删除确认框四入口虽已同壳, 但<b>详情行内容不同构</b>(R10-16); 添加窗口第 N 次仍局促(R10-12);
+                "选择位置"仍是自绘下拉而非系统选择器(R10-11)。</td>
+          </tr>
+          <tr>
+            <td class="no">纯版式/文案</td>
+            <td class="c">8</td>
+            <td class="wrap">状态栏配色与信息密度(R10-02/03/05)、文本列状态着色(R10-06)、选择高亮换色(R10-07)、
+                抽屉内容页目录/文件分色(R10-15)、弹窗尺寸(R10-12)、长文本三件套(R10-13)、菜单文案(R10-14)。</td>
+          </tr>
+        </table>
+
+        <div class="note">
+          <b>本轮与第九轮的关系</b>: 第九轮把"口径"收进了单点(单元格口径函数、浮层锚定契约、选择模型、删除链壳),
+          本轮要动的是两处<b>上一轮刻意没碰的地方</b> —— ① 状态栏取数源头(第九轮只改了"取哪个值", 没核对"字段名对不对");
+          ② 列偏好的<b>存储载体</b>(第九轮只保证同一页面内不丢, 没解决跨 origin / 跨版本)。换句话: 上一轮修"渲染", 这一轮修"数据来源"。
+        </div>
+      </section>
+
+      <!-- ===================== 01 分类拆解 ===================== -->
+      <section class="sec" id="s01">
+        <div class="sec-head"><span class="no">01</span><h2>分类拆解 · 7 类 16 项</h2></div>
+
+        <p class="small">编号 <code>R10-xx</code> 供后续提交信息与任务档案引用。每项给"现象 → 归因 → 主落点"。</p>
+
+        <h3><span class="h-no">A</span>启动与鉴权(1)</h3>
+        <table>
+          <tr><th>#</th><th>现象(用户原话)</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-01</td>
+            <td class="wrap">跳过本地密钥时直接进入主页面, 无需输入任意密钥点"进入"才进入</td>
+            <td class="wrap">免鉴权分支把 <code>token</code> 置为 <code>savedToken || ""</code>, 而共享层的
+                <code>api()</code> 与轮询守卫都要求 <code>token</code> 非空 → 进主界面后首个请求就自判"无凭证"并登出回密钥页;
+                用户随手输任意密钥后端放行(loopback 免鉴权不看 header), 于是表现为"要输一次才进得去"</td>
+            <td class="c">shared/app.js(鉴权状态机)<br>两模板登录遮罩</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">B</span>底部状态栏(4)</h3>
+        <table>
+          <tr><th>#</th><th>现象</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-02</td>
+            <td class="wrap">状态栏与背景色一致, 换一种颜色</td>
+            <td class="wrap">状态栏底色取 <code>--glass</code>, 而它在暗主题下与页底 <code>--bg</code> 明度差不足 2%</td>
+            <td class="c">两套 .statusbar CSS<br>五主题令牌</td>
+          </tr>
+          <tr>
+            <td class="no">R10-03</td>
+            <td class="wrap">下载/上传速度文字移除只留图标; 限制速度也不要文字</td>
+            <td class="wrap">三个标签(<code>.lbl</code>)是第九轮"速度与限速融合"时保留的可读性兜底, 实际同排已有图标 + 数值</td>
+            <td class="c">两模板状态栏</td>
+          </tr>
+          <tr>
+            <td class="no">R10-04</td>
+            <td class="wrap">限制速度均未正确显示; 点击限制速度会弹出两个窗口</td>
+            <td class="wrap"><b>两处独立根因</b>: 取值读了 <code>dl_limit/up_limit</code>(qB 真键为 <code>dl_rate_limit/up_rate_limit</code>, 恒 undefined → "—");
+                星图残留 SPD-04 旧弹窗与 FX-08 新浮层<b>共用 speedOpen</b> → 同时渲染两个窗口</td>
+            <td class="c">shared/app.js 取数<br>星图模板(删旧弹窗)</td>
+          </tr>
+          <tr>
+            <td class="no">R10-05</td>
+            <td class="wrap">历史按钮移到今日流量组中(当前中间有隔断)</td>
+            <td class="wrap">历史按钮是"今日流量"块的<b>兄弟节点</b>, 中间那道线来自今日块自身的右边框</td>
+            <td class="c">两模板状态栏<br>.sb-today / .sb-hist</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">C</span>表格呈现口径(3)</h3>
+        <table>
+          <tr><th>#</th><th>现象</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-06</td>
+            <td class="wrap">分类/标签/站数/保存路径/hashv1/hash/tracker 文字改为状态色</td>
+            <td class="wrap">行级状态色第九轮只覆盖名称与数值格子, 文本型列(站点/分类/标签/路径/哈希/tracker)未纳入</td>
+            <td class="c">views.css 行状态色段<br>(两套同构)</td>
+          </tr>
+          <tr>
+            <td class="no">R10-07</td>
+            <td class="wrap">选择高亮色与"做种中"状态色类似不好分辨</td>
+            <td class="wrap">选择态用 <code>--accent-soft</code>, 做种态用 <code>--green-soft</code>; 品牌主题下二者同为绿族且明度接近</td>
+            <td class="c">五主题令牌<br>选中态 CSS</td>
+          </tr>
+          <tr>
+            <td class="no">R10-08</td>
+            <td class="wrap">统一对齐: 名称/进度/状态/站点/分类/标签/添加于/做种时长/最近活动/hashv1/hash/tracker/保存路径 左对齐, 其它右对齐</td>
+            <td class="wrap">对齐散在三处(表头 <code>.hc-*</code> 名单、单元格 <code>.g-stat/.m-stat</code> 的 right、模板), 且时间列当前被归在 right 名单里
+                —— 只改 CSS 会出现"表头左、值右"的新错位</td>
+            <td class="c">列模型(新增 align)<br>表头/单元格模板<br>两套 CSS</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">D</span>用户偏好持久化(1)</h3>
+        <table>
+          <tr><th>#</th><th>现象</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-09</td>
+            <td class="wrap">记住的列宽与显示列时不时重置(怀疑换密钥), 需永久保存</td>
+            <td class="wrap">偏好只存浏览器 localStorage: ① 按 <b>origin(含端口/host)</b> 隔离 —— <code>localhost</code> 与 <code>127.0.0.1</code>、
+                换端口都算不同站点; ② 存储键<b>带版本号且无迁移</b> —— 每次升版(v2→v3→v4)等于把用户偏好清零。
+                换密钥本身并不清偏好(<code>_logout</code> 只清数据态)</td>
+            <td class="c">app.js 列状态载入/保存<br>web.py 新增偏好端点<br>主循环落盘通道</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">E</span>服务端能力缺失(2)</h3>
+        <table>
+          <tr><th>#</th><th>现象</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-10</td>
+            <td class="wrap">打开目标文件夹要进入种子主文件夹(如果有), 没建文件夹的要在文件夹中选中相关文件</td>
+            <td class="wrap">端点对"单文件种子"取父目录后<b>直接打开</b>, 没有"定位并选中该文件"的语义; 多文件种子(current_path 已是目录)
+                其实已符合诉求 —— 缺的是"文件型 → 打开所在主目录并选中文件"这一步</td>
+            <td class="c">web.py /api/open-path<br>utils 打开函数</td>
+          </tr>
+          <tr>
+            <td class="no">R10-11</td>
+            <td class="wrap">"选择位置"应像选 .torrent 一样打开系统文件选择器, 不是弹窗下拉</td>
+            <td class="wrap">浏览器<b>拿不到</b>任意目录的绝对路径(目录上传控件只给相对路径), 所以"前端弹系统选择器"物理上做不到;
+                要满足诉求必须由<b>服务端</b>给出路径: 要么服务端原生对话框(仅托盘模式有 GUI 线程), 要么服务端目录浏览(列目录 + 上级 + 新建文件夹)</td>
+            <td class="c">web.py 新增端点<br>添加种子对话框</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">F</span>弹窗与长文本(3)</h3>
+        <table>
+          <tr><th>#</th><th>现象</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-12</td>
+            <td class="wrap">添加种子窗口仍局促, 所有弹窗都调大(第 N 次)</td>
+            <td class="wrap">尺寸是散点: 普通确认框 404px、添加窗口棱镜 760 / 星图 640(两套不等宽)、宽确认框 840px、历史弹层 860px, 缺"窄/标准/宽"分层</td>
+            <td class="c">几何令牌(新增尺寸族)<br>两套 components CSS</td>
+          </tr>
+          <tr>
+            <td class="no">R10-13</td>
+            <td class="wrap">所有弹窗的超长种子名/URL 统一: 截断 + tooltip + 可复制按钮</td>
+            <td class="wrap">第九轮只在<b>删除确认框</b>做了"宽行 + 复制按钮", 其余弹窗(限速/分享率/移动/重命名/统计/分类管理/添加种子/抽屉表格)无统一口径;
+                长值目前靠 <code>overflow-wrap</code> 换行, 长 hash/URL 会把弹窗顶高</td>
+            <td class="c">抽公共"值行"口径<br>组件 CSS + 各弹窗模板</td>
+          </tr>
+          <tr>
+            <td class="no">R10-14</td>
+            <td class="wrap">更换"高级能力" —— 这些功能并不"高级"</td>
+            <td class="wrap">该子菜单装的是 qB 常规种子控制(队列置顶/上移/下移/置底、超级做种、强制开始、自动种子管理、分享率限制), 文案与内容不匹配;
+                它也是本轮唯一纯粹"改名"的项</td>
+            <td class="c">两模板菜单文案<br>(+ CSS 注释/图标语义)</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">G</span>抽屉与删除(2)</h3>
+        <table>
+          <tr><th>#</th><th>现象</th><th>归因</th><th>主落点</th></tr>
+          <tr>
+            <td class="no">R10-15</td>
+            <td class="wrap">种子详细窗口内容页把目录与文件加上合适且不同的颜色</td>
+            <td class="wrap">内容页表只有"目录名加粗"一条样式, 无目录/文件色彩区分; 数据侧已带 <code>dir</code> 标记, 属纯呈现缺口</td>
+            <td class="c">抽屉内容页 CSS<br>(两套同构)</td>
+          </tr>
+          <tr>
+            <td class="no">R10-16</td>
+            <td class="wrap">右键删除与选择后控制按钮删除行为不一致(第二次修复), 似乎不是同一个删除窗口</td>
+            <td class="wrap">壳已统一(<code>_deleteFlow</code>), 但四个入口传入的<b>详情行不同构</b>: 右键组删除 5 行(含站点/保存路径),
+                批量删除与整集/整剧只有 2 行摘要 → 用户看到"不是同一个窗口"</td>
+            <td class="c">shared/app.js 四入口<br>确认框详情口径</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- ===================== 02 根因定位 ===================== -->
+      <section class="sec" id="s02">
+        <div class="sec-head"><span class="no">02</span><h2>根因定位(已核实到行)</h2></div>
+
+        <p class="small">行号以 <code>develop@7ac1f70</code> 为准。每条给"症状 → 证据 → 结论", 结论里写明改动方向。</p>
+
+        <h3><span class="h-no">2.1</span>硬 bug 三条(确定根因, 不属"看运气")</h3>
+
+        <h4>① 状态栏"限制速度"读了不存在的字段 (R10-04 前半)</h4>
+        <pre><span class="cm">// shared/app.js:635-641 —— 状态栏限速取数</span>
+sbLimits() {
+  const s = this.statsServer || {};
+  const f = (v) =&gt; { if (v === null || v === undefined) return "—"; ... };
+  return { <b>down: f(s.dl_limit), up: f(s.up_limit)</b> };   <span class="cm">// ← 这两个键在 server_state 里不存在</span>
+}
+
+<span class="cm">// src/auto_qb/web.py:433-441 —— /api/stats 原样透传, 无键过滤</span>
+@app.get("/api/stats")
+def api_stats():
+    return {"server": manager.store.server_state}
+
+<span class="cm">// src/auto_qb/torrents/store.py:111-118 —— server_state 来自 qB sync/maindata 的合并快照</span></pre>
+        <p>qB 的 <code>server_state</code> 里全局限速键是 <code>dl_rate_limit</code> / <code>up_rate_limit</code>(bytes/s);
+           <code>src/auto_qb/**</code> 全仓库搜 <code>rate_limit</code> <b>0 命中</b> —— 后端从未改名成 <code>dl_limit</code>。
+           全站只有单<b>种子</b>级的 <code>dl_limit/up_limit</code>(<code>mixins/web_view.py:195-196</code> 来自 <code>TorrentRecord</code>),
+           与状态栏的全局口径不是同一个东西 ⇒ 前端读到的永远是 <code>undefined</code> ⇒ 恒显示 "—"。</p>
+        <div class="note warn">
+          <b>连带故障</b>: 同一字段名还用作"速度染色"的分母 —— <code>prism/index.html:556-557</code> /
+          <code>atlas/index.html:530-531</code> 的 <code>numTone(m.dlspeed, statsServer &amp;&amp; statsServer.dl_limit)</code>。
+          分母恒 undefined ⇒ 速度色阶<b>从未生效过</b>(<code>app.js:1574</code> 约定"分母缺失返回空串")。
+          修一处必须同时修这两处, 否则"限制速度对了、速度染色还是死的"。
+        </div>
+        <p><b>结论</b>: 新增单一取数点(如 computed <code>speedLimitBytes</code>)读 <code>dl_rate_limit</code>/<code>up_rate_limit</code>,
+          状态栏、染色分母、悬浮说明三处全部改为引用它; 单位维持 bytes/s(与 <code>fmtSpeed</code> 同源),
+          浮层里的 KiB/s 口径走 <code>/api/speed/mode</code> 既有路径, 两套单位不在同一处混用。</p>
+
+        <h4>② 星图同时存在两个限速窗口 (R10-04 后半)</h4>
+        <pre><span class="cm">// atlas/index.html:1508 —— FX-08 新增的"就近弹出"浮层(无遮罩)</span>
+&lt;div <b>v-if="speedOpen"</b> ref="speedPop" class="speed-pop" :style="speedPopStyle()" ...&gt;
+
+<span class="cm">// atlas/index.html:1783 —— SPD-04 时代的居中模态弹窗, 第九轮忘了删</span>
+&lt;div <b>v-if="speedOpen"</b> class="modal-mask" @click.self="closeSpeedDialog"&gt;
+  &lt;div class="modal add-dialog speed-dialog" ...&gt;</pre>
+        <p>两个容器由<b>同一个</b> <code>speedOpen</code> 开关控制 ⇒ 点一次"限制速度"必然同时渲染浮层与模态, 即用户所说的"弹出两个窗口"。
+           棱镜侧第九轮已删净(只剩 <code>prism/index.html:1794</code> 一处 <code>.speed-pop</code>), <b>星图遗漏</b>。</p>
+        <p><b>结论</b>: 删除星图 1781-1812 旧弹窗整块(含其 CSS 死规则), 并在验证里加一条静态断言
+           "全站 <code>.speed-dialog</code> 模态引用计数 = 0"。</p>
+
+        <h4>③ 本机免鉴权仍被弹回密钥页 (R10-01)</h4>
+        <pre><span class="cm">// src/auto_qb/web.py:83-89 —— 免鉴权放行(loopback 且开关为 true 时**不看 Authorization**)</span>
+if manager.config.web.skip_local_verify and _is_loopback_host(request.client.host ...):
+    if not authorization.startswith("Bearer "):
+        logger.warning("WEB 跳过本地验证: 本机连接免密钥放行(web.skip_local_verify=true)")
+    return
+
+<span class="cm">// web.py:117-120 —— 前端登录前读的公开标志</span>
+@app.get("/api/config/public")
+def api_config_public():
+    return {"web": {"skip_local_verify": manager.config.web.skip_local_verify}}
+
+<span class="cm">// shared/app.js:1001-1020 —— 免鉴权分支: 直接把 token 置空</span>
+const savedToken = localStorage.getItem("autoqb_token");
+fetch("/api/config/public").then(...).then((pub) =&gt; {
+  if (pub &amp;&amp; pub.web &amp;&amp; pub.web.skip_local_verify) {
+    this.authRequired = false;
+    this.bootstrapping = false;
+    <b>this.token = savedToken || "";</b>      <span class="cm">// ← 空串</span>
+    this.startPolling();
+    return;
+  }
+  ...
+
+<span class="cm">// shared/app.js:1105+ —— api(): 无 token 即登出</span>
+async api(path, options = {}) {
+  if (!this.token) { this._logout(); throw noAuth; }     <span class="cm">// ← 首个请求就回到密钥页</span>
+
+<span class="cm">// shared/app.js:1408+ —— 轮询守卫同理: if (document.hidden || !this.token) return;</span></pre>
+        <p>后端在 loopback + 开关开启时<b>完全不需要</b>凭证; 但前端把"有身份"与"有密钥串"绑死
+           ⇒ 进主界面后第一个 <code>/api/state</code> 就被自己判成无凭证 → 登出 → 回密钥表单。
+           用户在表单里<b>随便输什么</b>都能进(后端放行), 于是呈现为"必须先输一次密钥"。</p>
+        <p><b>结论</b>: 引入显式鉴权模式(如 <code>authMode = "local" | "token"</code>),
+           <code>api()</code> / <code>scheduleNext()</code> / <code>visibilitychange</code> 的守卫统一改为"按模式判断";
+           local 模式下<b>不发</b> Authorization 头(后端对"非 Bearer"才打一次提示日志, 空头反而制造噪音)。</p>
+
+        <h3><span class="h-no">2.2</span>结构性缺陷两条</h3>
+
+        <h4>① 列偏好"升版本即清空 + 绑定 origin" (R10-09)</h4>
+        <pre><span class="cm">// shared/app.js:114-120 —— 存储键带版本, 注释里已写明"结构变更必须升版本"</span>
+const COLS_STORE_KEY = "autoqb_cols_v4";   <span class="cm">// v2 -&gt; v3 -&gt; v4 已升过三次</span>
+
+<span class="cm">// shared/app.js:151-177 —— 只读**当前**键, 没有从旧版本迁移的分支</span>
+function loadColState() {
+  const raw = JSON.parse(localStorage.getItem(COLS_STORE_KEY));
+  if (!raw || typeof raw !== "object") return emptyColState();   <span class="cm">// ← 新版键不存在 = 全丢</span>
+  ...
+
+<span class="cm">// shared/app.js:1120-1165 —— _logout() 并不清列偏好(所以"换密钥导致重置"这个猜测不成立)</span></pre>
+        <p>两个独立机制叠加成"时不时重置"的体感:</p>
+        <ul>
+          <li><b>origin 隔离</b>: localStorage 按 <code>scheme://host:port</code> 分区。用 <code>127.0.0.1:8080</code> 看过、
+              又用 <code>localhost:8080</code> 打开一次, 就是两套偏好; 换端口/换机器更彻底。</li>
+          <li><b>版本升级 = 清空</b>: 每次为新列升 <code>COLS_STORE_KEY</code>, 用户此前手调的列宽、隐藏列、列序全部归零
+              —— 这是"前几轮升级后感觉被重置"的机制性来源(第九轮只加列、未升版本, 所以当时没触发)。</li>
+        </ul>
+        <p><b>结论</b>: ① 偏好改存<b>服务端</b>(见 §04.7), 浏览器存储降级为"首屏快速渲染缓存";
+           ② 载入时做<b>跨版本迁移</b>(旧键 → 新键, 按列 key 求交集合并), 升版本不再清空用户偏好。</p>
+
+        <h4>② 列对齐口径散在三处 (R10-08)</h4>
+        <pre><span class="cm">// prism/css/views.css:76-84 —— 表头对齐 = 硬编码名单(注意时间列被归在 right)</span>
+.hc-count, .hc-hr { text-align: center; }
+.hc-num_seeds, .hc-num_leechs { text-align: right; }
+.hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size,
+.hc-eta, <b>.hc-added_on</b>, .hc-downloaded, .hc-amount_left, .hc-availability,
+<b>.hc-seeding_time</b>, .hc-time_active, <b>.hc-last_activity</b>, .hc-completion_on,
+.hc-up_limit, .hc-dl_limit { text-align: right; }
+
+<span class="cm">// prism/css/views.css:145-147 —— 单元格对齐 = 另一套(值类格子统一 right)</span>
+.g-stat, .m-stat { text-align: right; }
+
+<span class="cm">// 模板第三处: prism/index.html:437 / 576 / 581 / 712 —— 时间列用 .g-stat 渲染</span>
+&lt;div v-else-if="col.key === 'added_on'" class="g-stat"&gt;{{ fmtTime(g.added_on) }}&lt;/div&gt;</pre>
+        <p>用户要求"添加于/做种时长/最近活动"改为<b>左</b>对齐, 而这三列现在: 表头走 <code>.hc-*</code> 的 right、
+           值走 <code>.g-stat</code> 的 right、格子结构在模板里 —— 只改一处会出现"表头与值错位"的新问题。</p>
+        <p><b>结论</b>: 把对齐提升为<b>列模型属性</b>(<code>TORRENT_COLUMNS</code> 等定义里加 <code>align</code>),
+           表头与单元格共用同一来源(模板输出 <code>c-align-{align}</code> 类), 两套 UI 都只改这一处口径。</p>
+
+        <h3><span class="h-no">2.3</span>上轮未修净三条</h3>
+
+        <h4>① 删除确认框"同壳不同构" (R10-16)</h4>
+        <pre><span class="cm">// shared/app.js:2690-2705 —— 右键删组: 5 行详情(含站点 / 保存路径)</span>
+details: [
+  { label: `${L10N_GROUP}名`, value: g.name, wide: true },
+  { label: "成员", value: `${g.count} 个种子` },
+  { label: "站点", value: sites || "—" },
+  { label: "保存路径", value: g.save_path || "—", wide: true },
+  { label: "总大小", value: this.fmtSize(g.total_size) },
+]
+
+<span class="cm">// shared/app.js:2588-2605 —— 批量删除: 只有 2 行摘要</span>
+details: [
+  { label: "目标", value: `${groupKeys.length} 个${L10N_GROUP} · ${memberHashes.length} 个独立种子` },
+  { label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${seen.size} 个种子` },
+]
+
+<span class="cm">// shared/app.js:2346-2356 —— 整集/整剧: 同样只有 2 行</span></pre>
+        <p>第九轮统一了"壳"(汇报前置 + 等回执 + 收尾清选择), 但<b>详情行仍由各入口自己组织</b> —— 同一个删除动作,
+           从右键进去能看到站点与保存路径, 从批量条进去看不到。用户说的"不是同一个删除窗口"指的就是这个。</p>
+        <p><b>结论</b>: 详情行改为<b>由 targets 统一派生</b>(组名 + 计数 + 站点集合 + 路径集合 + 总大小),
+           四个入口只交"目标集合", 不再各自拼 details; 单目标时自然退化成原右键那 5 行。</p>
+
+        <h4>② 弹窗尺寸是散点 (R10-12)</h4>
+        <pre><span class="cm">// prism/css/components.css:234 / atlas/style.css:620 —— 普通确认框</span>
+.modal { width: <b>404px</b>; ... }
+
+<span class="cm">// prism/css/components.css:463 —— 添加种子窗口(棱镜 760)</span>
+.modal.add-dialog { width: <b>760px</b>; ... }
+<span class="cm">// atlas/style.css:1506 —— 同一窗口在星图只有 640(两套 UI 不等宽)</span>
+.modal.add-dialog { width: <b>640px</b>; ... }
+
+<span class="cm">// prism/css/tokens.css:20 —— 宽确认框; 历史弹层另写 860(不是令牌)</span>
+--modal-wide-w: <b>840px</b>;</pre>
+        <p>没有"窄 / 标准 / 宽"分层, 也没有两套 UI 的对齐约束 ⇒ 每轮都在<b>原地加数字</b>, 这就是"第 N 次调整"的成因。</p>
+        <p><b>结论</b>: 引入尺寸令牌族(窄/标准/宽/超宽 + 抽屉宽), 两套 UI 共用同一组值; 本轮一次性把标准与宽上调,
+           并把历史弹层的硬编码宽度收回令牌。</p>
+
+        <h4>③ "选择位置"仍是自绘下拉 (R10-11)</h4>
+        <pre><span class="cm">// prism/index.html:1900 —— 按钮只切换自绘面板</span>
+&lt;button ... class="ce-btn ghost add-dialog-pathbtn" @click.stop="toggleAddPathPop"&gt;选择位置&lt;/button&gt;
+
+<span class="cm">// 面板数据源: GET /api/paths(web.py:178-190, 已见保存路径聚合去重)</span>
+<span class="cm">// 浏览器侧物理限制: 目录上传控件只暴露相对路径; File System Access API 亦不返回绝对路径</span>
+<span class="cm">// 服务端 GUI 只在 --tray 模式存在(cli.py:87-90), 且 Tk 主线程与 uvicorn 子线程(web.py:780)不同线程</span></pre>
+        <p>"像选 .torrent 一样弹系统选择器"这件事, <b>浏览器前端做不到</b>(拿不到绝对路径)。能做的是<b>结果等价</b>:
+           由服务端提供路径选择能力。两条技术路线与代价见 §04.9 与决策点 <b>D2</b>。</p>
+
+        <h3><span class="h-no">2.4</span>纯版式与文案(改动小, 但要成对改)</h3>
+        <table>
+          <tr><th>#</th><th>证据</th><th>结论</th></tr>
+          <tr>
+            <td class="no">R10-02</td>
+            <td class="wrap"><code>views.css:42-46</code> / <code>atlas/style.css:314-318</code>: 状态栏底色 <code>var(--glass)</code>;
+                <code>themes/orbit.css:8/15</code>: <code>--bg:#0b1310</code> 与 <code>--glass:#0e1a14</code></td>
+            <td class="wrap">给状态栏专用底色令牌(与页底形成明确层级), 五主题各给一值 —— 不直接改 <code>--glass</code>
+                (它同时被顶栏使用, 改了会带偏顶栏)</td>
+          </tr>
+          <tr>
+            <td class="no">R10-03</td>
+            <td class="wrap"><code>prism/index.html:1527/1537</code>(下载速度/上传速度)、<code>1531/1541</code>(限制速度)内的 <code>.lbl</code></td>
+            <td class="wrap">删标签、保留图标 + 数值; "限制速度"的 <code>title</code> 补全语义(悬浮仍可读),
+                并保留 <code>.off</code> 弱化态区分"不限速"</td>
+          </tr>
+          <tr>
+            <td class="no">R10-05</td>
+            <td class="wrap"><code>prism/index.html:1504-1512</code>: 历史按钮与今日流量块<b>平级</b>;
+                <code>views.css:63/66</code>: 隔断来自 <code>.sb-today{border-right}</code></td>
+            <td class="wrap">历史按钮并入"今日流量"块(结构上成为其子元素), 去掉块右边框; 两者之间只留图标间距</td>
+          </tr>
+          <tr>
+            <td class="no">R10-06</td>
+            <td class="wrap"><code>views.css:756-762</code>: 行状态色只写 <code>.g-name-text</code> 与 <code>.g-stat</code></td>
+            <td class="wrap">把状态色覆盖面扩到文本型格子(站点/分类/标签/路径/哈希/tracker);
+                <b>芯片类自身已有语义底色</b>, 是否一并染色见决策点 <b>D6</b></td>
+          </tr>
+          <tr>
+            <td class="no">R10-07</td>
+            <td class="wrap"><code>views.css:221-224</code> 选中态用 <code>--accent-soft/--accent</code>;
+                <code>themes/orbit.css:23/29</code>: <code>--accent:#3fa87e</code> 与 <code>--green:#42d689</code> 同族</td>
+            <td class="wrap">新增"选中态"专用令牌族(底色/描边/左色条), 五主题统一给非绿值; 选中态不再引用 accent 家族,
+                避免换主题时再次撞色</td>
+          </tr>
+          <tr>
+            <td class="no">R10-13</td>
+            <td class="wrap"><code>components.css:263-271</code>(<code>.modal-detail-row.wide</code> + <code>.d-copy</code>);
+                抽屉 <code>.f-row.wide</code>; 其余弹窗无对应结构</td>
+            <td class="wrap">把"截断 + title + 复制按钮"抽成可复用值行口径, 在全部弹窗与抽屉表格落地;
+                长 URL/hash 用省略号而非无限换行(避免顶高窗口)</td>
+          </tr>
+          <tr>
+            <td class="no">R10-14</td>
+            <td class="wrap"><code>atlas/index.html:845-847</code> / <code>prism/index.html:871-873</code> 文案「高级能力」;
+                子项 = 队列置顶/上移/下移/置底/超级做种/强制开始/自动种子管理/分享率限制</td>
+            <td class="wrap">改名(候选见决策点 <b>D5</b>); 子项本身不动 —— 用户指出的是"文案与内容不符", 不是功能不合理</td>
+          </tr>
+          <tr>
+            <td class="no">R10-15</td>
+            <td class="wrap"><code>prism/index.html:1694-1712</code> 内容页表格; <code>views.css:682</code> 附近 <code>.dir-name{font-weight:600}</code></td>
+            <td class="wrap">目录行与文件行分色(目录 = 结构色, 文件 = 正文色; 跳过/虚拟态保持弱化), 只引既有令牌族, 不散写色值</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">2.5</span>需在阶段 0 实测取证的两点</h3>
+        <ul>
+          <li><b>列偏好重置的真实触发路径</b>(R10-09): 现有结论是"origin 隔离 + 升版本清空"两个机制, 但用户体感是"时不时"
+              —— 阶段 0 用 CDP 记录一次 <code>location.origin</code>、localStorage 键快照与操作序列, 确认是否还有第三条路径
+              (浏览器清理 / 隐私模式 / 同源其它页面写入)。取证结果决定"服务端持久化"是否<b>完全</b>解决诉求。</li>
+          <li><b>"点一次开两窗"是否只在星图出现</b>(R10-04): 棱镜侧静态检查只剩一处 <code>.speed-pop</code>,
+              但用户可能也在棱镜下遇到 —— 阶段 0 两个 UI 各点一次实测; 若棱镜也复现, 需继续查是否另有
+              "浮层 + 统计面板"同开路径(复用第九轮记录的层叠契约)。</li>
+        </ul>
+      </section>
+
+      <!-- ===================== 03 分阶段实施 ===================== -->
+      <section class="sec" id="s03">
+        <div class="sec-head"><span class="no">03</span><h2>分阶段实施</h2></div>
+
+        <p class="small">排序原则: <b>先取证 → 再单点底座 → 后结构改动</b>。底座的先后有依赖 ——
+          对齐与状态色都建立在"列模型 / 渲染口径"上, 先做底座能让后面每一步少改两遍。</p>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 0</span>取证 · 不改代码(约 30 分钟)</h4>
+          <p>两个 UI 各点一次"限制速度"确认双窗范围; 记录 <code>location.origin</code> 与 localStorage 键快照;
+             用最小配置起服务(不碰 <code>config.yml</code>), 截图四类删除入口的确认框作对照基线。</p>
+          <p class="items">产出: 一页实测记录(必要时补进 pitfalls) · 触点: 无</p>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 1</span>单点底座(把"一对多"的口径先收拢)</h4>
+          <p>① 限速取数单点(R10-04 前半 + 速度染色分母); ② 列对齐口径进列模型(R10-08); ③ 状态色覆盖面扩到文本列(R10-06);
+             ④ 选中态令牌族(R10-07); ⑤ 弹窗尺寸令牌族(R10-12) —— 五项都是"改一处、两套 UI 生效", 且互不冲突。</p>
+          <p class="items">触点: shared/app.js · prism/css/tokens.css · 五主题 · prism/css/views.css · atlas/style.css · 两模板单元格类名</p>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 2</span>状态栏重构(4 项一次做完)</h4>
+          <p>背景色令牌化 → 去文字标签 → 历史按钮并入今日流量组 → 删除星图旧限速弹窗。
+             四项都在同一块 DOM/CSS 上, 分两次做必然重复回归。</p>
+          <p class="items">触点: 两模板状态栏 · views.css / atlas style.css 状态栏段 · 五主题新增状态栏底色令牌</p>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 3</span>服务端能力(3 项, 需决策点定案)</h4>
+          <p>① <code>/api/open-path</code> 增加"定位并选中文件"语义(R10-10);
+             ② 新增路径选择能力端点(R10-11, 方案见 D2);
+             ③ 新增 UI 偏好持久化端点 + 主循环落盘通道(R10-09)。</p>
+          <p class="items">触点: web.py(端点) · utils.py(打开/定位函数) · mixins/web_commands.py(偏好落盘命令) · tests/test_web.py</p>
+          <p class="small">注: ③ 必须走既有命令队列通道(单一写线程原则), 不能在 Web 线程直接写状态文件。</p>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 4</span>弹窗与长文本</h4>
+          <p>尺寸上调后逐窗复查排版 → 抽公共"值行"口径并在所有弹窗/抽屉表格落地截断 + tooltip + 复制(R10-13, 收 R10-12);
+             添加种子窗口切到新的路径选择能力(R10-11 前端侧) → 抽屉内容页目录/文件分色(R10-15)。</p>
+          <p class="items">触点: 两模板全部弹窗模板 · components.css · 抽屉内容页</p>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 5</span>鉴权门与删除链(两处状态机改动)</h4>
+          <p>① 鉴权模式显式化(R10-01) —— 改的是<b>所有</b> <code>token</code> 守卫点, 必须一次改完, 半途状态最危险;
+             ② 删除详情行由 targets 统一派生(R10-16) —— 四入口同时改, 否则"同壳不同构"继续存在;
+             ③ 菜单文案改名(R10-14, 与 ② 同文件同区域, 顺带完成)。</p>
+          <p class="items">触点: shared/app.js(api/轮询/免鉴权分支/_deleteFlow 四入口) · 两模板登录遮罩与菜单文案</p>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">阶段 6</span>验证与回写</h4>
+          <p>全量测试 + 静态守阵 + 两套 UI 浏览器冒烟(§07.2 断言表逐项) → 五主题走查(亮/暗各一) →
+             回写 README 与 memory-bank → 立档 TASK012 → 提交(用户未说推送则不 push)。</p>
+          <p class="items">触点: tests/ · memory-bank/ · README.md · 想法.md(勾选并注明落点)</p>
+        </div>
+
+        <div class="note">
+          <b>为什么阶段 1 先于阶段 2</b>: 状态栏的"限速取数"与"速度染色分母"若是两处各改一次,
+          第 2 阶段会再动一次同一段 CSS/模板; 先把取数收到单点, 后面就只剩渲染改动 —— 这是第九轮
+          "单元格口径单点化"验证过的顺序。
+        </div>
+      </section>
+
+      <!-- ===================== 04 关键设计细节 ===================== -->
+      <section class="sec" id="s04">
+        <div class="sec-head"><span class="no">04</span><h2>关键设计细节</h2></div>
+
+        <h3><span class="h-no">4.1</span>状态栏取数与单位(R10-04 前半)</h3>
+        <p>单一取数点输出 <b>bytes/s</b>(与 <code>fmtSpeed</code> 同源): <code>server_state.dl_rate_limit</code> /
+           <code>up_rate_limit</code>;<code>0</code> = 不限速(显示"不限"), 缺失 = "—"(区分"未知"与"不限")。
+           状态栏文案、速度染色分母、悬浮说明三处引用它。浮层内的编辑仍走 <code>/api/speed/mode</code>(KiB/s),
+           两套单位只在各自的显示层换算 —— <b>不在同一函数里混用</b>(这是本轮唯一容易写错的地方)。</p>
+
+        <h3><span class="h-no">4.2</span>状态栏配色与信息密度(R10-02/03/05)</h3>
+        <p>新增状态栏专用底色令牌(五主题各一值, 与页底形成可见层级, 但不与顶栏冲突);
+           去文字标签后保留图标 + 数值, 语义靠 <code>title</code> 悬浮补全, 且"不限速"保持弱化态;
+           历史按钮并入今日流量块, 去掉该块右边框, 只留图标间距 —— 结构上成为子元素后, "隔断"自然消失。</p>
+
+        <h3><span class="h-no">4.3</span>对齐口径进列模型(R10-08)</h3>
+        <p>给列定义加 <code>align</code>(<code>left</code> / <code>right</code> / <code>center</code>), 表头与单元格共用同一来源:
+           模板输出 <code>c-align-{align}</code>, CSS 只保留三条通用规则(不再维护 <code>.hc-*</code> 硬编码名单)。
+           按用户清单逐一确认: 文本/时间/哈希类 = 左(含<b>添加于 / 做种时长 / 最近活动</b>三列, 本轮由右改左),
+           数值/大小/速度/比率 = 右, 计数类保持既有居中口径不变。</p>
+
+        <h3><span class="h-no">4.4</span>状态色与选中色(R10-06/07)</h3>
+        <p>状态色覆盖面扩到文本型格子, 但<b>只染文字</b>(不铺底), 零值/"—"不染(既有规则延续);
+           芯片类(站点/标签/分类)是否一并跟随行状态色见 <b>D6</b> —— 它们自身已表达成员级语义, 强行覆盖会丢信息。
+           选中态改为独立令牌族(底色 + 描边 + 左色条), 五主题统一给非绿值, 与"做种中"的绿族彻底分开。</p>
+
+        <h3><span class="h-no">4.5</span>UI 偏好服务端化(R10-09)</h3>
+        <p>数据结构沿用现有形态(<code>{widths, hidden, manual, order}</code>, 按 page 分组), 落到服务端单点存储;
+           前端载入顺序 = 服务端值 → 浏览器缓存兜底(首屏不闪); 变更时<b>节流上报</b>(拖列宽不必每次 mousemove 都发请求)。
+           同时补 <b>跨版本迁移</b>: 读旧键按列 key 求交集合并, 升版本不再清空用户偏好。
+           落盘通道走主循环(单一写线程), 崩溃丢失窗口需在决策点 <b>D3</b> 明确是否可接受。</p>
+
+        <h3><span class="h-no">4.6</span>打开目标文件夹(R10-10)</h3>
+        <p>语义改为: 路径是<b>目录</b> → 直接打开; 路径是<b>文件</b> → 打开其所在目录并<b>定位选中该文件</b>
+           (Windows 走"选中"参数, macOS 走"reveal", Linux 退化为打开父目录)。
+           仍坚持"路径由服务端从自身快照派生"的红线 —— 不接受客户端传路径。</p>
+
+        <h3><span class="h-no">4.7</span>路径选择能力与安全边界(R10-11)</h3>
+        <p>新增端点只提供<b>目录</b>浏览: 给定起点列出子目录、支持上溯、支持新建文件夹, 返回绝对路径。
+           <b>安全边界(必须写进实现)</b>: ① 路径规范化后必须落在允许的根集合内(已配置保存路径 / 用户显式授权根),
+           越界一律 403; ② 只列目录不读文件内容; ③ 仅鉴权通过(或本机免鉴权)可用; ④ 拒绝 <code>..</code> 穿越与符号链接逃逸。
+           这条是本轮<b>唯一新增的服务端文件系统读能力</b>, 也是唯一需要专项安全用例的改动。</p>
+
+        <h3><span class="h-no">4.8</span>弹窗尺寸与长文本三件套(R10-12/13)</h3>
+        <p>尺寸令牌族: <b>窄</b>(确认/输入框) · <b>标准</b>(表单/统计) · <b>宽</b>(删除确认/添加种子) · <b>超宽</b>(历史流量),
+           两套 UI 共用同一组值, 抽屉宽度一并纳入。长文本统一口径: 单行省略 + <code>title</code> 全文 + 复制按钮;
+           URL/hash/路径这类<b>不可断行</b>的值走"宽行 + 复制", 不再无限换行顶高窗口。</p>
+
+        <h3><span class="h-no">4.9</span>鉴权模式显式化(R10-01)</h3>
+        <p>把"是否有身份"从"是否有密钥串"里拆出来: 免鉴权 = 直接进主界面 + 不发 Authorization 头;
+           密钥模式 = 原流程不变。三条守卫(<code>api</code> / 轮询续排 / 标签页可见性)统一按模式判断,
+           避免"改两处漏一处"导致轮询静默停摆。</p>
+
+        <h3><span class="h-no">4.10</span>删除详情行统一派生(R10-16)</h3>
+        <p>四个入口只交目标集合(<code>keys</code> / <code>hashes</code> / 文案上下文), 详情行由统一函数派生:
+           目标名 → 计数 → 站点集合 → 保存路径集合 → 总大小; 单目标退化为逐项明细, 多目标给"集合 + 计数"。
+           这样四个入口<b>看到的窗口结构完全一致</b>, 差异只剩标题与文案 —— 正是用户要的"同一个删除窗口"。</p>
+      </section>
+
+      <!-- ===================== 05 决策点 ===================== -->
+      <section class="sec" id="s05">
+        <div class="sec-head"><span class="no">05</span><h2>待确认决策点</h2></div>
+
+        <p class="small">下列 8 条会影响实现方向; 未确认前对应项<b>不动手</b>(其余项可先做)。每条都给了推荐值, 直接说"全按推荐"即可开工。</p>
+
+        <table>
+          <tr><th>#</th><th>决策</th><th>选项</th><th>推荐</th></tr>
+          <tr>
+            <td class="no">D1</td>
+            <td class="wrap">本轮双 UI 范围</td>
+            <td class="c wrap">A. 只做棱镜<br>B. 只做星图<br>C. 两套都做(共享层自动, 模板/CSS 各改一次)</td>
+            <td class="ok wrap">C —— 本轮 16 项里状态栏(4)、弹窗尺寸/长文本(2)、菜单改名(1)、抽屉分色(1)都<b>必须</b>在两套模板各改一次;
+                共享层改动(取数/对齐/鉴权/删除)天然两套生效。只做一套会立刻出现"两个 UI 表现不一致"的新问题</td>
+          </tr>
+          <tr>
+            <td class="no">D2</td>
+            <td class="wrap">"选择位置"怎么落地</td>
+            <td class="c wrap">A. 服务端目录浏览端点(列目录 + 上溯 + 新建文件夹, 返回绝对路径)<br>
+                B. 服务端原生系统对话框(仅 <code>--tray</code> 模式可用, 需新建"Web 线程 → Tk 主线程"通道)<br>
+                C. 维持自绘下拉, 只补"已有目录"与手输</td>
+            <td class="ok wrap">A —— 结果与"系统文件选择器"等价且跨平台稳定; B 的代价是新增线程通道 + 非托盘模式必须降级,
+                且依赖运行时有 GUI(与"Web UI 替代 qB 界面"的定位冲突); C 不满足诉求</td>
+          </tr>
+          <tr>
+            <td class="no">D3</td>
+            <td class="wrap">UI 偏好(列宽/隐藏列/列序)存哪</td>
+            <td class="c wrap">A. 状态文件(经主循环命令写入) + 浏览器缓存兜底<br>
+                B. 写进 <code>config.yml</code> 新段(经配置写盘通道)<br>C. 独立 JSON 文件, Web 线程直写</td>
+            <td class="ok wrap">A —— 符合"状态持久化进 state_file + 单一写线程"两条黄金法则; B 会把机器生成的偏好混进<b>用户手写配置</b>
+                (且要动 5 个配置触点 + 守卫测试), 不合适; C 绕过单一写线程假设</td>
+          </tr>
+          <tr>
+            <td class="no">D4</td>
+            <td class="wrap">弹窗尺寸上调幅度</td>
+            <td class="c wrap">A. 标准 404 → 520; 宽 840 → 920; 添加种子 760 → 860(星图同步); 历史弹层收回令牌<br>
+                B. 更激进(标准 560 / 宽 1000)<br>C. 只调添加种子窗口</td>
+            <td class="ok wrap">A —— 兼顾"大气"与"不空旷"; 16:9 屏下 520 标准宽可容纳两列表单; C 会继续留"第 N+1 次"的尾巴</td>
+          </tr>
+          <tr>
+            <td class="no">D5</td>
+            <td class="wrap">「高级能力」改成什么</td>
+            <td class="c wrap">A. 更多操作<br>B. 队列与选项<br>C. 种子控制</td>
+            <td class="ok wrap">A —— 该子菜单装的是"低频但常规"的 qB 种子操作(队列四项 + 超级做种/强制开始/自动管理/分享率限制),
+                "更多操作"只表达层级不评价能力高低, 也不会在后续增删子项时再次失准</td>
+          </tr>
+          <tr>
+            <td class="no">D6</td>
+            <td class="wrap">状态色是否覆盖芯片内部文字</td>
+            <td class="c wrap">A. 只染纯文本格子(站点数/保存路径/hash/tracker 等), 芯片保持自身语义色<br>
+                B. 全部跟随行状态色(含站点/标签/分类芯片)</td>
+            <td class="ok wrap">A —— 芯片表达的是<b>成员级</b>语义(组内不同站点可有不同状态), 跟随行色会把这层信息抹平;
+                用户诉求里的"站数"若指<b>站点芯片</b>, 请指明按 B 执行</td>
+          </tr>
+          <tr>
+            <td class="no">D7</td>
+            <td class="wrap">打开目标文件夹时"文件型种子"的行为</td>
+            <td class="c wrap">A. 打开所在主目录并<b>定位选中</b>该文件<br>B. 只打开所在主目录(不比现在多)</td>
+            <td class="ok wrap">A —— 用户原话"没有创建文件夹的需要在文件夹中选择相关文件"就是"定位选中"</td>
+          </tr>
+          <tr>
+            <td class="no">D8</td>
+            <td class="wrap">删除确认框在多目标时的详情展开度</td>
+            <td class="c wrap">A. 集合摘要(目标数 + 站点集合 + 路径集合 + 总大小)<br>B. 逐条列出每个目标(长列表可滚动)</td>
+            <td class="ok wrap">A —— 与"统一为右键行为"一致(右键单目标本就是明细), 且避免批量几十个目标时窗口被撑爆;
+                集合为空时回退为"—"</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- ===================== 06 风险与红线 ===================== -->
+      <section class="sec" id="s06">
+        <div class="sec-head"><span class="no">06</span><h2>风险与红线(不动清单)</h2></div>
+
+        <ul>
+          <li><b>生产文件红线</b>: <code>config.yml</code> 与 <code>auto-qb-data/</code> 一律不碰(AGENTS.md 明文);
+              调试一律用 <code>minimal.yml</code> / <code>test_yamls/</code> + 临时 data_dir, 用完清理。</li>
+          <li><b>本轮唯一的高风险改动 = 新增文件系统读端点</b>(路径浏览): 必须做路径规范化 + 允许根白名单 + 越界 403 +
+              拒绝符号链接逃逸, 并配专项用例。这是本轮唯一可能造成"越权读目录"的功能, 不能按"顺手加的辅助接口"对待。</li>
+          <li><b>单一写线程</b>: UI 偏好落盘走命令队列(主循环消费), Web 线程不直接写状态文件; 新增端点保持"只读快照 + 投递命令"的既有形态。</li>
+          <li><b>前端契约</b>(views.css 头注 + pitfalls 已列): <code>.sticky-head</code>/<code>--head-h</code>、<code>--statusbar-h</code>、
+              <code>.group-head/.detail-head</code>、gridStyle 列模板、<code>.ctx-menu</code>、sprite <code>#i-*</code> 单点、
+              toast/确认框单例 —— <b>一律保留</b>, 新功能以"新增类/新增令牌"接入。</li>
+          <li><b>列状态存储版本</b>: 本轮会动列模型(新增 <code>align</code>)与尺寸令牌 —— <code>align</code> 属渲染属性(不影响存储结构),
+              <b>不需要</b>升 <code>COLS_STORE_KEY</code>; 若最终仍要升, 必须同时实现旧键迁移(否则重演"升版本即清空")。</li>
+          <li><b>CSS 结构守阵</b>: "漏 <code>; }</code> 导致其后规则被整段丢弃"与"<code>&lt;transition&gt;</code> 吞弹窗"是已入 pitfalls 的真实故障形态
+              ⇒ 每次改完先跑 <code>test_frontend_static_bundle_health</code>, 不做批量收尾式修改。</li>
+          <li><b>鉴权改动是状态机改动</b>: R10-01 会碰 <code>api()</code> 与两处轮询守卫, 必须<b>一次改完并实测三条路径</b>
+              (本机免鉴权 / 有效密钥 / 错误密钥), 半途状态最容易出"能进但轮询静默停摆"这种难查的问题。</li>
+          <li><b>不做的事</b>: 不引构建链 / 不引新依赖 / 不引图标库; 不加行入场动画与数字滚动(pitfalls 明文: 2s 整表重渲染会反复播放);
+              动效仍尊重 <code>prefers-reduced-motion</code>。</li>
+          <li><b>两套 UI 同构纪律</b>: 星图与棱镜的模板改动必须成对; 本轮状态栏 4 项、弹窗 2 项、菜单 1 项、抽屉 1 项都要过两遍。</li>
+        </ul>
+      </section>
+
+      <!-- ===================== 07 验证与验收 ===================== -->
+      <section class="sec" id="s07">
+        <div class="sec-head"><span class="no">07</span><h2>验证与验收</h2></div>
+
+        <h3><span class="h-no">7.1</span>自动化</h3>
+        <ul>
+          <li><b>后端基线不回退</b>: <code>uv run pytest tests -q</code>(当前基线 <b>996 passed</b>, 见 <code>testing.md</code> 顶部), 实测数字回写该文件。</li>
+          <li><b>新增后端用例</b>:
+              <br>· <code>/api/open-path</code> 定位语义: 目录型 → 直接打开; 文件型 → 打开父目录 + 定位参数(打桩断言实参);
+              <br>· 路径浏览端点: 越界路径 → 403; <code>..</code> 穿越 → 403; 符号链接逃逸 → 403; 正常列目录 → 200 且仅返回目录项; 未鉴权 → 401;
+              <br>· UI 偏好端点: 写入 → 读回一致(round-trip); 非法结构被拒; 旧版本键迁移后宽度/隐藏列/列序保留。
+              <br><b>新增测试必须同步该测试文件头部 docstring 的「## 测试计划」清单</b>(项目明文规定)。</li>
+          <li><b>前端静态守阵</b>: <code>test_frontend_static_bundle_health</code>(冲突标记 / 注释孤儿续行 / <code>node --check</code> /
+              CSS 漏闭合 / <code>&lt;transition&gt;</code> 吞弹窗 / 静态引用缺失)每阶段收尾必跑;
+              另加一条本轮专属静态断言: <b>全站 <code>.speed-dialog</code> 模态引用计数 = 0</b>(防星图双窗回归)。</li>
+          <li><b>断言不得依赖真实 qBittorrent</b>: 浏览器冒烟用 <code>helpers.FakeQbServer</code> + 临时配置(沿用上一轮诊断脚本)。</li>
+        </ul>
+
+        <h3><span class="h-no">7.2</span>浏览器冒烟断言表(16 项, 逐项可执行)</h3>
+        <table>
+          <tr><th>#</th><th>断言</th><th>判定</th></tr>
+          <tr><td class="no">R10-01</td><td class="wrap">开 <code>skip_local_verify</code> 起服务, 清空 localStorage 后打开页面</td>
+              <td class="c">不出现密钥输入框; 主界面数据到位; 无 <code>api()</code> 触发的登出; 轮询持续推进(观察 rid 变化)</td></tr>
+          <tr><td class="no">R10-02</td><td class="wrap">量 <code>.statusbar</code> 与 <code>body</code> 的计算背景色</td>
+              <td class="c">两者不同色; 且状态栏与页底在五主题下都可见层级(亮度差 ≥ 3%)</td></tr>
+          <tr><td class="no">R10-03</td><td class="wrap">读状态栏速度区文本</td>
+              <td class="c">不含"下载速度/上传速度/限制速度"字样; 图标与数值仍在; 各元素 <code>title</code> 含完整语义</td></tr>
+          <tr><td class="no">R10-04</td><td class="wrap">限制速度显示值 + 点一次按钮</td>
+              <td class="c">非 "—"(qB 有限速时值随设置变化); 点击后<b>可见浮层数 = 1</b>(两个 UI 各测); 提交后状态栏值随之更新</td></tr>
+          <tr><td class="no">R10-05</td><td class="wrap">量今日流量块与历史按钮的几何关系</td>
+              <td class="c">历史按钮是今日块的子元素; 两者之间不存在 1px 竖线(border 计数 = 0)</td></tr>
+          <tr><td class="no">R10-06</td><td class="wrap">构造 seeding / downloading / paused 三类行, 读文本列颜色</td>
+              <td class="c">seeding 行的路径/hash/tracker 等文本列 <code>color</code> = 语义色; paused/other 行保持默认前景; 零值与"—"不染</td></tr>
+          <tr><td class="no">R10-07</td><td class="wrap">同时存在"选中行"与"做种中行", 比较计算色</td>
+              <td class="c">选中态底色与 <code>--green-soft</code> 不同族(色相角差 ≥ 60° 或明度差 ≥ 6%)</td></tr>
+          <tr><td class="no">R10-08</td><td class="wrap">逐列读表头与首行单元格的 <code>text-align</code></td>
+              <td class="c">每列表头与值同值; 左对齐清单(名称/进度/状态/站点/分类/标签/添加于/做种时长/最近活动/hashv1/hash/tracker/保存路径)为 left,
+                  其余为 right/center; 四个视图(辅种/明细/种子/追剧)一致</td></tr>
+          <tr><td class="no">R10-09</td><td class="wrap">调窄两列 + 隐藏一列 + 拖动换序 → 刷新页面 → 换 <code>localhost</code>/<code>127.0.0.1</code> 再打开</td>
+              <td class="c">三次打开后列宽/隐藏/顺序完全一致(不再随 origin 变化)</td></tr>
+          <tr><td class="no">R10-10</td><td class="wrap">对一个单文件种子点"打开目标文件夹"(打桩打开函数)</td>
+              <td class="c">实参 = 目标<b>文件</b>路径且带"定位选中"开关; 多文件种子实参 = 其主目录; 客户端传路径的请求被拒</td></tr>
+          <tr><td class="no">R10-11</td><td class="wrap">添加种子窗口点"选择位置"</td>
+              <td class="c">打开的是服务端目录浏览器(可上溯/新建/确认); 选中后输入框填入<b>绝对路径</b>; 越界路径被拒并有提示</td></tr>
+          <tr><td class="no">R10-12</td><td class="wrap">量各弹窗宽度</td>
+              <td class="c">标准 ≥ 520、宽 ≥ 920、添加种子 ≥ 860(两套 UI 同值); 窗内无横向滚动</td></tr>
+          <tr><td class="no">R10-13</td><td class="wrap">用超长种子名/超长 tracker URL 触发各弹窗</td>
+              <td class="c">单行省略(不顶高窗口); <code>title</code> 为全文; 存在复制按钮且复制内容 = 全文</td></tr>
+          <tr><td class="no">R10-14</td><td class="wrap">右键菜单文案</td>
+              <td class="c">不出现"高级能力"; 子菜单结构与功能项集合未变(逐项可点)</td></tr>
+          <tr><td class="no">R10-15</td><td class="wrap">抽屉内容页, 比较目录行与文件行名字颜色</td>
+              <td class="c">两者 <code>color</code> 不同且都在主题色板内; skipped 行保持弱化</td></tr>
+          <tr><td class="no">R10-16</td><td class="wrap">四个删除入口各触发一次, 抓取确认框 DOM</td>
+              <td class="c">四次的详情行<b>结构一致</b>(目标/计数/站点/路径/总大小); 勾选态默认值一致; 汇报前置与收尾清选择行为一致</td></tr>
+        </table>
+
+        <h3><span class="h-no">7.3</span>手动验收(用户真机)</h3>
+        <ul>
+          <li>真实配置 <code>--dry-run</code> 起服务, 按 7 类逐项走查; 重点观感项:
+              <b>状态栏(配色 + 图标化 + 限速取值)</b> / <b>表格状态色与选中色是否好分</b> / <b>对齐后的整体观感</b> /
+              <b>弹窗尺寸与长文本</b> / <b>路径选择器是否真能替代"选择位置"</b>。</li>
+          <li>R10-12/R10-13 属"第 N 次修改": 必须有一次"实现 → 截图 → 参数微调"的回路, 不等用户提下一轮。</li>
+          <li>整套改动在五个主题下各看一眼(至少 orbit + frost 亮/暗各一): 状态栏底色、选中色、状态色三处新增令牌在亮色主题下同样可读。</li>
+        </ul>
+
+        <h3><span class="h-no">7.4</span>文档与知识库回写(收尾 DoD)</h3>
+        <ul>
+          <li><b>README</b>: 状态栏描述(去掉速度文字标签/限速来源)、添加种子(路径选择器)、删除确认框(统一详情)、
+              右键菜单文案 —— 这些在 README 里都有对应句子, 必须同步。</li>
+          <li><b>memory-bank</b>: <code>activeContext.md</code> 焦点替换(R10 系列完成态迁出) · <code>progress.md</code> 记本轮 ·
+              <code>modules.md</code>(新端点 / 状态栏与弹窗尺寸契约 / 偏好存储位置) · <code>conventions.md</code>(选中态与状态色的令牌分工) ·
+              <code>pitfalls.md</code>(至少记: "qB server_state 全局限速键是 <code>*_rate_limit</code>, 不是 <code>dl_limit</code>" 与
+              "localStorage 按 origin 隔离 + 存储键升版即清空" 两条) · <code>testing.md</code> 基线实测数字 · 新端点写进 <code>config-reference.md</code> 若涉及配置。</li>
+          <li><b>任务立档</b>: <code>memory-bank/tasks/TASK012-webui-fix-round10.md</code> + 同步 <code>tasks/_index.md</code>(阈值命中: 改动 ≥ 3 个源文件 + 长周期表述)。</li>
+          <li><b>想法.md</b>: 本批 16 条勾选为已处理并注明落点(与波次三/第九轮的勾选风格一致)。</li>
+          <li><b>提交纪律</b>: 逐路径 <code>git add</code>, 只暂存本轮范围; 改过的 Python 先 <code>yapf -i</code>;
+              提交后查"幽灵 diff"; 用户未说推送则不 push。</li>
+        </ul>
+      </section>
+
+      <footer>
+        auto-qb · WEB UI 第十轮修复计划 · 仅计划未改代码 · 2026-09-17 · 基线 develop@7ac1f70 ·
+        前序: webui-fix-plan-round9.html(25 项) · webui-qb-replacement-plan / wave3 系列 · 对话来源: 想法.md TODO(WEBUI 16 条)
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>
