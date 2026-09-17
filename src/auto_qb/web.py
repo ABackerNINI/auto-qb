@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .utils import decode_group_key, path_normalize
+from .utils import decode_group_key, open_path, path_normalize
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,41 @@ def create_app(manager) -> FastAPI:
         paths = {key[0] for key in manager.store.groups if key and key[0]}
         paths.update(path_normalize(rec.save_path) for rec in manager.store.by_hash.values() if rec.save_path)
         return {"paths": sorted(paths)}
+
+    @app.post("/api/open-path")
+    def api_open_path(body: dict = None):
+        """用系统默认方式打开辅种组/种子的目标文件夹(FX-14)。
+
+        **安全红线**: 绝不接受客户端传入任意路径 —— os.startfile / open / xdg-open 会用系统
+        默认程序打开目标, 等于把"任意文件执行"暴露给 WEB 端点。故请求只带 kind + 标识,
+        路径一律由服务端从自己的快照派生, 且只允许**已存在的目录**。
+
+        解析口径: group 取组 key 首元(store.groups 的 key = (规范化 save_path, 文件列表),
+        组内成员路径天然一致, 无需再比对); torrent 的 content_path 指向文件时取父目录
+        (单文件种子), 否则取 content_path, 都缺则回退 save_path。
+        只读: 不投命令、不写 state —— 单一写线程假设不受影响。
+        """
+        manager.touch_web_client()
+        b = body or {}
+        kind = str(b.get("kind") or "").strip()
+        if kind == "group":
+            key = decode_group_key(str(b.get("key") or ""))
+            if key not in manager.store.groups:
+                raise HTTPException(status_code=404, detail="辅种不存在")
+            target = key[0] or ""
+        elif kind == "torrent":
+            rec = _require_torrent(str(b.get("hash") or "").strip())
+            content = path_normalize(rec.content_path or "")
+            if content and not os.path.isdir(content):
+                content = os.path.dirname(content)  # content_path 指向文件(单文件种子) -> 取父目录
+            target = content or path_normalize(rec.save_path or "")
+        else:
+            raise HTTPException(status_code=400, detail="kind 必须是 group 或 torrent")
+        target = path_normalize(target)
+        if not target or not os.path.isdir(target):
+            raise HTTPException(status_code=404, detail="目标目录不存在或不可访问")
+        open_path(target)
+        return {"opened": target}
 
     @app.post("/api/groups/{key}/pause")
     def api_pause(key: str):

@@ -26,7 +26,10 @@
 .login-card button:disabled { opacity: .5; cursor: default; }
 .login-card button.secondary { margin-top: 8px; background: transparent; color: var(--fg-muted);
   border: 1px solid var(--border); font-weight: 400; }
-.login-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 32px 28px; }
+/* FX-01 配套: 加载卡与密钥表单等高(表单实测约 218px) —— 否则\"加载卡 -> 表单\"这一步
+ * 本身还会跳一次高度, 只是把闪现换成了跳动。 */
+.login-loading { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; min-height: 218px; padding: 34px 32px 28px; }
 .login-loading .ico { width: 26px; height: 26px; color: var(--accent); }
 .login-loading p { margin: 0; }
 
@@ -92,8 +95,11 @@
 .theme-item.on .t-kind { color: var(--accent-hi); }
 
 /* ---------------- 状态分布条 + 筛选器(仅辅种页) ---------------- */
+/* FX-09: 锁定筛选行高度 —— 批量段(FX-06 起并入本行)出现/消失时不得推动下方表格。
+ * min-height = 7px*2 内边距 + 26px 内容高(批量段) + 1px 下边框(box-sizing: border-box 下
+ * 边框计入 min-height, 只写 40 会在有批量段时被内容撑到 41 —— 实测差 1px) */
 .status-strip { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center;
-  gap: 10px 12px; padding: 7px 18px; background: var(--bg);
+  gap: 10px 12px; padding: 7px 18px; min-height: 41px; background: var(--bg);
   border-bottom: 1px solid var(--border-soft); }
 .dist-bar { display: flex; flex: 0 1 240px; height: 6px; border-radius: 2px; overflow: hidden; background: var(--surface-2); }
 .dist-bar > span { height: 100%; background: currentColor; transition: width .35s var(--ease); }
@@ -160,7 +166,9 @@
 /* 状态语义配色(分布条/chip/明细圆点共用, 与后端 kind 一一对应) */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
 .k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch { color: var(--blue); }
-.k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--fg-dim); }
+/* FX-06(D8-B): 暂停/其它保持无色相, 但字色从 --fg-dim 抬到中性中间调(--paused) ——
+ * 旧写法用 dim 灰, 叠加白色高光底就读作"白底看不到字"。 */
+.k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }
 .k-error, .k-error .swatch { color: var(--error); }
 
 /* 表格工具按钮(列选择器入口) */
@@ -249,6 +257,38 @@
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
 .modal-detail-row .d-value { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere;
   color: var(--fg-soft); font-weight: 500; }
+/* FX-23: 超长值行(种子名 / 保存路径 / 目标剧集)升格为**块行** —— 标签一行、值独占下一行,
+ * 且在 / \\ . - 与空格处断行(break-word)。旧写法 overflow-wrap: anywhere 会在任意字符处硬切,
+ * 中文目录名混排时被切成参差不齐的三行(用户反馈的"缩进错乱")。行数上限 3 行 + title 给全文。 */
+.modal-detail-row.wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "ico label copy" "value value value"; align-items: center; row-gap: 3px;
+  margin-bottom: 2px; }
+.modal-detail-row.wide > .ico { grid-area: ico; }
+.modal-detail-row.wide > .d-label { grid-area: label; flex: none; }
+.modal-detail-row.wide > .d-value { grid-area: value; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: break-word; word-break: normal; }
+.modal-detail-row.wide > .d-copy { grid-area: copy; align-self: center; }
+.modal-detail-row .d-copy { width: 22px; height: 22px; }
+
+/* ================= 选项胶囊(FX-20 / FX-24) =================
+ * 勾选框从本项目的交互语汇中退役: 选项一律是"无勾选框的整行切换胶囊" ——
+ * 左侧色块 + 柔底 + 亮字即为已选(与筛选弹层 .pop-item.on 同构, 只是横排)。
+ * 添加种子窗口的 5 个选项与删除确认框的 2 个选项共用这一份。 */
+.opt-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-soft); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 12.5px; cursor: pointer; user-select: none;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.opt-pill:hover { border-color: var(--border-strong); color: var(--fg); }
+.opt-pill .opt-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 2px;
+  border: 1px solid var(--border-strong); background: transparent;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.opt-pill.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--fg); font-weight: 600; }
+.opt-pill.on .opt-dot { background: var(--accent); border-color: var(--accent); }
+/* 危险项(如"同时删除磁盘文件"): 选中时走错误色, 与普通选中的 accent 语义区分 */
+.opt-pill.danger.on { background: var(--error-soft); border-color: var(--error-line); }
+.opt-pill.danger.on .opt-dot { background: var(--error); border-color: var(--error); }
+.opt-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.modal-opts { display: flex; flex-direction: column; gap: 8px; margin: -6px 0 16px; }
 
 /* ---------------- 表单控件(ce-*) ---------------- */
 .ce-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm);
@@ -419,7 +459,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 复用 .modal-mask/.modal/.modal-title/.modal-actions 视觉语言(仅引用 tokens 令牌, 不散写色值);
  * 预览区为静态说明(D4 接管语义) + 已有辅种组前缀计数(纯前端比对, 不发请求)。
  */
-.modal.add-dialog { width: 640px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
+/* FX-19: 窗口从 640px 放宽到 760px —— 三个字段一行(路径 1.6fr + 分类 + 标签)时输入框不再局促 */
+.modal.add-dialog { width: 760px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
 .add-dialog-x { margin-left: auto; }
 .add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
 .add-dialog-field { margin-top: 18px; }
@@ -437,7 +478,17 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .add-dialog-source .add-dialog-filepick { flex: 1 1 auto; min-width: 0; }
 .add-dialog-linkbtn { flex: 0 0 auto; }
 .add-dialog-combo { position: relative; }
-.add-dialog-pathrow { display: flex; flex-wrap: wrap; gap: 8px; }
+/* FX-18 根因修复: 浮层是 position:absolute + top: calc(100% + 4px), 因此**容器必须有定位祖先**。
+ * .add-dialog-combo 有 relative, 但包着路径输入框与"选择位置"按钮的 .add-dialog-pathrow **没有** ——
+ * 最近的定位祖先是 .modal-mask(position: fixed; inset: 0), 于是 top: 100% 换算到视口下沿之外,
+ * 面板被渲染到屏幕外, 表现为"点了没反应"。 */
+.add-dialog-pathrow { position: relative; display: flex; flex-wrap: wrap; gap: 8px; }
+/* FX-18: 浮层锚点从"整个 field 盒"下沉到"输入行" —— .add-dialog-field 是 grid 项, 默认被拉伸到
+ * 同行最高项的底边, 用 100% 定位就会离输入框很远。包一层 .add-input-row(relative) 后,
+ * 面板宽度与输入框逐像素对齐、顶边贴住输入框下缘。 */
+.add-input-row { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.add-input-row > .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+.add-input-row > .add-pop { left: 0; right: 0; width: auto; }
 .add-dialog-pathrow .add-dialog-input { flex: 1 1 auto; min-width: 0; }
 .add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
 .add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
@@ -458,15 +509,13 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border-radius: 50%; border: none; background: transparent; color: var(--fg-dim); cursor: pointer; flex: 0 0 auto; }
 .add-dialog-chipx:hover { background: var(--error-soft); color: var(--error); }
 .add-dialog-chipx .ico { width: 10px; height: 10px; }
-/* 选项勾选行: 与 .modal-check 同族, 但五项并排换行 */
-.add-dialog-checks { display: flex; flex-wrap: wrap; gap: 8px; }
-.add-dialog-check { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: var(--radius-sm);
-  background: var(--surface-1); border: 1px solid var(--border-soft); font-size: 12.5px; color: var(--fg-muted);
-  cursor: pointer; user-select: none; }
-.add-dialog-check:hover { border-color: var(--border-strong); }
-.add-dialog-check input { accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 auto; margin: 0; }
+/* FX-20: 选项区改胶囊容器的横排流式布局(与原 .add-dialog-checks 同位) */
+.add-dialog-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-hint { margin-top: 7px; color: var(--fg-dim); font-size: 11.5px; }
-.add-dialog-hint-warn { color: var(--error); }
+/* FX-21: 警告行**常驻占位** —— 勾选"跳过校验"前后窗口高度不变。
+ * 用 visibility(而非 opacity)是为了让占位高度由真实文本决定, 不依赖人工估高。 */
+.add-dialog-hint-warn { color: var(--error); visibility: hidden; }
+.add-dialog-hint-warn.on { visibility: visible; }
 /* D4 接管预览(静态说明区): 弱化底色 + 当前配置语义文案 */
 .add-dialog-preview { margin-top: 16px; padding: 11px 13px; border-radius: var(--radius-sm);
   background: var(--surface-1); border: 1px solid var(--border-soft); }
@@ -567,6 +616,23 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .ctx-item .ico-queue { color: var(--teal); }      /* 队列族(与"移动"同族: 位置语义) */
 .ctx-item .ico-tmm { color: var(--green); }       /* 自动种子管理开关 */
 .ctx-item .ico-export { color: var(--lime); }     /* 导出 .torrent */
+.ctx-item .ico-folder { color: var(--accent-hi); } /* FX-14: 打开目标文件夹(走系统默认程序) */
+.ctx-item .ico-tune { color: var(--violet); }      /* FX-15: 次级菜单入口(高级能力) */
+
+/* ================= FX-15 次级菜单(flyout) =================
+ * 一级只放 PT 日常高频动作; qB 通用能力进子面板。子面板锚在父项右缘, 靠右时向左翻(flip-x)。
+ * 展开交互: hover 与点击都能展开(@mouseenter + @click.stop), 键盘用户走 Enter/Space。
+ * 注意: 父项必须 position: relative —— 与"浮层缺定位祖先"是同一类坑(FX-18)。 */
+.ctx-item.has-sub { position: relative; }
+.ctx-item.has-sub .ctx-caret { margin-left: auto; color: var(--fg-dim); opacity: .7;
+  transform: rotate(-90deg); transition: transform var(--dur) var(--ease); }
+.ctx-item.has-sub.open .ctx-caret { opacity: 1; transform: none; color: var(--accent-hi); }
+.ctx-item.has-sub.open { background: var(--bg-hover); }
+.ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
+  min-width: 190px; padding: 6px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  animation: drop-in .12s var(--ease); }
+.ctx-sub.flip-x { left: auto; right: calc(100% + 4px); }
 /* 点位图标: 统计 / 运行日志(章节入口) 此前同样无颜色 */
 .ico-chart { color: var(--cyan); }
 .ico-log { color: var(--pink); }

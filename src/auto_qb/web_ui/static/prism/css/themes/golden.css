@@ -76,4 +76,9 @@
 
   /* 本主题的排版个性: 衬线 display(仅标题/品牌, 正文不变) */
   --font-display: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+
+  /* FX-06(D8-B): 暂停/其它状态保持无色相, 只调对比(不铺底, 改中性描边 + 中性中间调字色) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
 }

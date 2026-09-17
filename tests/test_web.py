@@ -31,6 +31,7 @@
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
+- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14) —— 目录/文件型 content_path、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
@@ -1154,6 +1155,71 @@ def test_api_paths_endpoint(web_env):
     assert set(mgr.store.by_hash) == {"HA", "HC", "HD", "HE"}
     # 鉴权: 无密钥 401
     assert client.get("/api/paths").status_code == 401
+
+
+def test_api_open_path_endpoint(web_env, tmp_path):
+    """POST /api/open-path (FX-14): 服务端自行派生目录后交系统默认程序打开
+
+    覆盖: 目录型 content_path 取自身 / 文件型 content_path 取父目录 / content_path 缺失回退 save_path /
+    组键取 key 首元 / 未知组与不存在目录 404 / kind 非法 400 /
+    **客户端额外传入的 path 被忽略**(安全红线: 否则等于把"任意文件执行"暴露给 WEB 端点) / 鉴权 401。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    d_content = tmp_path / "content"
+    d_content.mkdir()
+    f_file = d_content / "movie.mkv"
+    f_file.write_bytes(b"x")
+    d_seed = tmp_path / "seeds"
+    d_seed.mkdir()
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径(仅统一分隔符)
+    mgr.store.groups = {(norm(d_seed), ("a.mkv", )): ["HA"]}
+    mgr.store.by_hash = {
+        "HA": SimpleNamespace(hash="HA", save_path=str(d_seed), content_path=str(d_content)),
+        "HB": SimpleNamespace(hash="HB", save_path=str(d_seed), content_path=str(f_file)),
+        "HC": SimpleNamespace(hash="HC", save_path=str(d_seed), content_path=""),
+    }
+    # web_env 的 store 是轻量 namespace(get 恒 None), 这里按真实 Store.get 语义接上 by_hash
+    mgr.store.get = lambda h: mgr.store.by_hash.get(h)
+    post = lambda body: client.post("/api/open-path", json=body, headers=auth)  # noqa: E731
+    with mock.patch("auto_qb.web.open_path") as spy:
+        # ① 目录型 content_path -> 取自身
+        r = post({"kind": "torrent", "hash": "HA"})
+        assert r.status_code == 200 and r.json() == {"opened": norm(d_content)}, r.text
+        spy.assert_called_once_with(norm(d_content))
+        # ② 文件型 content_path -> 取父目录
+        spy.reset_mock()
+        assert post({"kind": "torrent", "hash": "HB"}).json() == {"opened": norm(d_content)}
+        spy.assert_called_once_with(norm(d_content))
+        # ③ content_path 缺失 -> 回退 save_path
+        spy.reset_mock()
+        assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_seed)}
+        spy.assert_called_once_with(norm(d_seed))
+        # ④ 组: 组键首元即规范化 save_path(组内成员天然一致)
+        spy.reset_mock()
+        group_key = encode_group_key((norm(d_seed), ("a.mkv", )))
+        assert post({"kind": "group", "key": group_key}).json() == {"opened": norm(d_seed)}
+        spy.assert_called_once_with(norm(d_seed))
+        # ⑤ 安全: 客户端多传的 path 被忽略 —— 打开的是服务端派生的目录, 不是它
+        spy.reset_mock()
+        post({"kind": "group", "key": group_key, "path": "C:/Windows/System32"})
+        spy.assert_called_once_with(norm(d_seed))
+        # ⑥ 未知组 / 未知 hash / 不存在目录 -> 404; kind 非法 -> 400; 均不调用系统打开
+        spy.reset_mock()
+        assert post({"kind": "group", "key": encode_group_key(("D:/nope", ("z", )))}).status_code == 404
+        assert post({"kind": "torrent", "hash": "NOPE"}).status_code == 404
+        assert post(
+            {
+                "kind": "group",
+                "key": encode_group_key((norm(tmp_path / "missing"), ("a.mkv", )))
+            }
+        ).status_code == 404
+        assert post({"kind": "wat"}).status_code == 400
+        spy.assert_not_called()
+    # 只读无副作用: 不入命令队列
+    assert mgr.web_commands.empty()
+    # 鉴权: 无密钥 401
+    assert client.post("/api/open-path", json={"kind": "wat"}).status_code == 401
 
 
 # ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------

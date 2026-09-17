@@ -44,6 +44,18 @@
 | `exporter.py` | 139 | YAML 模板导出 | 收集全部 tracker 域名 → 找未配置的 → 生成条目 (默认标签=倒数第二级域名, `hd/pt` 后字母大写), `--only-missing` 最小骨架; 重读原始文件时复用 `_strip_none`(文件已被 load_config 校验) |
 | `logging.py` | 47 | 日志配置 | `setup_logging`: 控制台 + RotatingFileHandler(5 备份), **两者均跟随配置 level**; root 跟随配置拦第三方 DEBUG, `auto_qb` logger 放开 DEBUG, `qbittorrentapi` 封顶 INFO(排除请求噪音), `urllib3` 封顶 ERROR(排除断连期间连接重试的 Retry WARNING 刷屏)。注意与 stdlib logging 同名, 包内相对导入 |
 
+### web_ui/static/ 前端契约速查 (2026-09-17 第九轮补)
+
+- **分层**: `shared/app.js` 是唯一逻辑层(两套 UI 共用 `shared/app.js`); `atlas/`(星图)与 `prism/`(棱镜)只放模板与主题 CSS —— 逻辑类改动两套自动生效, 版式类需各自改模板/CSS。
+- **列模型**: `GROUP_COLUMNS`/`DETAIL_COLUMNS`/`TORRENT_COLUMNS`/`SHOW_COLUMNS` 是列头 / 单元格 / grid 模板 / 列选择器的唯一来源; 列宽按**列 key** 存 `autoqb_cols_v4`。
+- **单元格口径单点**: `cellSeedingTime` / `cellRatio` / `cellPeers`(FX-02/03/04 收口) —— 模板里不得再写这三列的判据表达式(此前同一口径在模板里存在六份)。
+- **选择模型**: 唯一权威 = `selGroups`(辅种 key) 与 `selMembers`(成员 hash), **两者互斥**(FX-11); 所有视图的"已选"一律读派生 computed `selHashSet`(FX-12, 组选择展开为成员闭包), 半选态 = `.partial` 类。
+- **删除链单点**: 四个入口(`delGroup`/`delTorrent`/`delEpisode`/`bulkDelete`)只负责组织 targets, 统一走 `_deleteFlow`(确认 → `_reannounceAll` 汇报前置 → bulk 单命令 + 等聚合回执 → clearSelection)。
+- **浮层锚定契约**(FX-18): 绝对定位浮层的容器必须有 `position: relative`; 自绘候选面板一律走 `.pop-menu` 家族; 原生 `<datalist>` 已退役。
+- **无遮罩浮层**: `.speed-pop`(限速)必须是状态栏的**兄弟节点**(`.statusbar` 有 `overflow: hidden`, 嵌进去会被裁掉), 只由 JS 写 `left` 并夹取到视口内。
+- **选项语汇**: 勾选框已从浮层/对话框退役, 一律用 `.opt-pill` 切换胶囊(危险项加 `.danger`)。
+- **后端**: `POST /api/open-path`(只读; 路径由服务端从快照派生, 不接受客户端传路径, 且只允许目录)。
+
 ## mixins/ (QbManager 的职责拆分, 组合进宿主)
 
 | 文件 | 行数 | 职责 | 关键方法 |

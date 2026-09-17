@@ -6,7 +6,7 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: 995 passed, 0 skipped (2026-09-17 实测, uv 环境; WEB UI 波次三 32 项全部落地后 + 前端静态守阵 1 项 = 989, 再加 `tests/test_memory_bank.py` 知识库守卫 6 项 (= 995); 相对波次二 971 基线 +24 测, 增量集中在 test_web(+peers 修复/统计/添加/bulk 键/限速 mode/静态资源守阵 等) 与 test_speed_curve(+多曲线 clamp 合并)/test_config(SPD-03 enabled 校验); 前端双 UI 改动不影响单测, 知识库守卫不覆盖 src), 分支覆盖率 92%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
+# 基线: 996 passed, 0 skipped (2026-09-17 实测, uv 环境; WEB UI 第九轮 25 项修复后 = 995 + `test_api_open_path_endpoint` 1 项; 前端改动不影响单测, 双 UI 模板/CSS 由静态守阵 + 浏览器冒烟覆盖), 分支覆盖率 92%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
 uv run pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 uv run pytest tests/test_grouping.py -q
 uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词

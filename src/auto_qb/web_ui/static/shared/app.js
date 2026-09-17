@@ -124,6 +124,12 @@ const COLS_STORE_KEY = "autoqb_cols_v4";
  */
 const DEFAULT_SORT = { key: "added_on", dir: -1 };
 
+/* 业务名词单点表(FX-10): "分组"这个叫法不够具体, **面向用户**的文案统一改称"辅种"。
+ * 只改文案 —— 代码标识(变量 / 后端键 / API 路径 / CSS 类)一律不动, 否则会牵动后端契约
+ * 与列宽存储键; 集中成常量便于下次口径统一时单点替换, 也让"哪些是业务名词"在代码里可检索。
+ * 设置页里的"配置分组"是 schema 分组(无关语义), 不适用本常量。 */
+const L10N_GROUP = "辅种";
+
 const emptyColState = () => ({ widths: {}, hidden: {}, manual: {}, order: {} });
 
 function columnKeys(page) {
@@ -194,6 +200,7 @@ const app = createApp({
   data() {
     return {
       token: "",  // 已验证通过的密钥(唯一可信身份); 仅 bootstrap 验证成功后提交
+      l10nGroup: L10N_GROUP,  // FX-10: 模板里的业务名词(单点, 见文件顶部常量)
       pendingToken: "",  // 验证中的候选密钥(不参与渲染门控/请求头); 服务不可达时供"重试连接"复用
       tokenInput: "",
       authRequired: true,  // 遮罩唯一开关: 仅在密钥验证成功后置 false —— 与 token 赋值解耦, 防错误密钥瞬间主界面闪现
@@ -240,7 +247,13 @@ const app = createApp({
       colMenuOpen: false,                 // 列选择器弹层开关
       colMenuAt: null,                    // 列选择器 fixed 锚点(表头右键路径 {x,y,mh}; null = 按钮路径走 CSS 定位)
       colDrag: null,                      // 表头拖动重排进行中(TBL-05): {page, key, idx, x} — idx=可视列插入边界, x=指示线位置
+      // FX-25: 拖动虚影(跟随光标的列名胶囊)。刻意不用 HTML5 draggable 的原生拖影 —— 它会与
+      // "点击排序"与"列宽拖拽"互相干扰; 自绘虚影与现有 mousedown 阈值手势完全解耦。
+      colGhost: null,                     // {label, x, y} | null
       menu: { visible: false, x: 0, y: 0, key: null, hash: null },
+      // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— "高级能力"/"复制" 两个子面板
+      subMenu: "",        // "" | "advanced" | "copy"
+      subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
       // 表头右键菜单(TBL-05): 针对**该列**的操作 —— 隐藏「列名」(隐藏单列)/升序/降序/打开列选择器
       headMenu: { visible: false, x: 0, y: 0, page: "", key: "", label: "", sortable: false, locked: false },
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
@@ -281,6 +294,7 @@ const app = createApp({
       selMembers: [],         // 选中成员 hash
       selAnchorGroup: null,   // 分组表 Shift 锚点(组 key; shift 后不更新, 便于多次扩展同一范围)
       selAnchorMember: null,  // 明细表 Shift 锚点(成员 hash)
+      selAnchorUnit: null,    // FX-12: 追剧页 Shift 锚点(剧/集单元 id)
       // 历史流量弹层(今日流量面板入口; 数据源 /api/traffic/history, 按日原始行)
       historyOpen: false,
       historyGran: "day",     // day | month | year
@@ -288,8 +302,10 @@ const app = createApp({
       historyLoading: false,
       historyError: "",
       histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)
-      // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面
-      bootstrapping: false,
+      // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
+      // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
+      // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。
+      bootstrapping: true,
       // 添加种子对话框(R1B): 来源 = .torrent 多选 + magnet/URL 文本域混合; 提交走 JSON(base64 文件)
       addOpen: false,
       addSubmitting: false,   // 提交中(按钮 loading, 阻止重复提交与误关闭)
@@ -328,7 +344,9 @@ const app = createApp({
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
       speedMode: { loaded: false, curveEnabled: false, target: null, current: null, error: "" },
       speedOverride: { up: "", down: "", busy: false },  // 两方向都必填数字(后端语义: 两方向都设置, 0=不限)
-      speedOpen: false,  // SPD-04: 限速修改弹窗(qB 式「点击限速 → 弹窗」, 表单从信息栏收进窗内)
+      speedOpen: false,  // SPD-04: 限速修改浮层(qB 式「点击限速 → 弹窗」, 表单从信息栏收进窗内)
+      // FX-08: 浮层锚点 —— left 由点击坐标算出(状态栏"限制速度"按钮左缘 - 12), dir 为预聚焦方向
+      speedAt: { left: 0, dir: "up" },
       // 分类/标签管理对话框(FE-2C2): GET /api/categories|tags 拉列表 + 新建行; 行级改路径/删除走既有确认/输入原语
       mgrOpen: "",           // "" | "category" | "tag"(同一时刻只开一个)
       mgrLoading: false,
@@ -545,29 +563,15 @@ const app = createApp({
     totalUl() {
       return this.groups.reduce((n, g) => n + g.upspeed, 0);
     },
-    /* 底部状态栏左侧常显统计摘要(TBL-08 修订, 用户 2026-09-17): "统计不应该藏到弹出框中" ——
-     * 取 /api/stats 的 server_state(纯内存快照, 与主轮询同周期静默同步), 挑四个最常看的指标常显;
-     * 完整字段仍在统计面板(点"完整统计"打开)。server_state 未同步时返回空数组 → 显示未同步提示 */
+    /* 底部状态栏左侧常显统计摘要(TBL-08 修订; **FX-07 精简**): "统计不应该藏到弹出框中" ——
+     * 取 /api/stats 的 server_state(纯内存快照, 与主轮询同周期静默同步)。
+     * FX-07: 退役 本次 / 累计 / DHT 三项(本次与累计与"今日流量"口径重叠, DHT 属低频诊断),
+     * 只留 连接 与 剩余 两个运行态指标; 今日流量改由模板单独渲染(数据源不同, 见 todayTraffic)。
+     * server_state 未同步时返回空数组 → 显示未同步提示 */
     sbStats() {
       const s = this.statsServer;
       if (!s) return [];
       const items = [
-        {
-          key: "flow",
-          icon: "#i-chart",
-          cls: "ico-flow",
-          label: "本次",
-          value: `\u2193${this.statVal(s.dl_info_data, (v) => this.fmtSize(v))} \u2191${this.statVal(s.up_info_data, (v) => this.fmtSize(v))}`,
-          title: "本次会话累计: 下载 / 上传(字节)",
-        },
-        {
-          key: "alltime",
-          icon: "#i-layers",
-          cls: "ico-alltime",
-          label: "累计",
-          value: `\u2193${this.statVal(s.alltime_dl, (v) => this.fmtSize(v))} \u2191${this.statVal(s.alltime_ul, (v) => this.fmtSize(v))}`,
-          title: "qB 历史累计: 下载 / 上传(字节)",
-        },
         {
           key: "peers",
           icon: "#i-link",
@@ -575,14 +579,6 @@ const app = createApp({
           label: "连接",
           value: this.statVal(s.total_peer_connections),
           title: "当前 peer 连接总数 · 连接状态: " + this.connText(s.connection_status),
-        },
-        {
-          key: "dht",
-          icon: "#i-globe",
-          cls: "ico-dht",
-          label: "DHT",
-          value: this.statVal(s.dht_nodes),
-          title: "DHT 节点数(kad 网络)",
         },
         {
           key: "disk",
@@ -624,6 +620,25 @@ const app = createApp({
     },
     todayTraffic() {
       return (this.traffic.periods || []).find((p) => p.period === "day") || null;
+    },
+    /* 今日流量悬浮说明: 把口径写清楚(数据源 = Traffic Monitor dat 的按日行, 单位字节) */
+    todayTrafficTitle() {
+      const t = this.todayTraffic;
+      if (!t) return "";
+      return `今日流量(Traffic Monitor 按日口径): 下载 ${this.fmtSize(t.down)} / 上传 ${this.fmtSize(t.up)}`
+        + ` · 数据状态: ${this.traffic.state}`;
+    },
+    /* 状态栏"限制速度"文案(决策 D3 = 方案A 的收窄版: **只取 qB 当前生效值**)。
+     * 取值 = /api/stats 的 server_state.dl_limit / up_limit(字节/秒); 0 = 不限速 → 显示"不限"。
+     * 刻意不从限速曲线快照的 limit.actual 取数: 状态栏并列两个口径会变成"限速对照面板"
+     * (那是已退役的信息栏形态); 曲线的目标/命中信息在限速浮层内的 .speed-mode-line 展示。 */
+    sbLimits() {
+      const s = this.statsServer || {};
+      const f = (v) => {
+        if (v === null || v === undefined) return "—";
+        return v ? this.fmtSpeed(v) : "不限";
+      };
+      return { down: f(s.dl_limit), up: f(s.up_limit) };
     },
     /* 限速对照行: 每个受管方向一行(该方向无曲线则不显示该行);
      * mismatch = 实际值已知且与命中目标不同 -> 前端据此"显示两个 + 原因"
@@ -777,6 +792,22 @@ const app = createApp({
     selectedCount() {
       return this.selGroups.length + this.selMembers.length;
     },
+    /* FX-12: 选择权威 -> 派生集合。**唯一权威**仍是 selGroups(组 key) 与 selMembers(成员 hash)
+     * (FX-11 起两者互斥, 同一时刻只有一侧非空); 所有视图的"已选"一律读这里 ——
+     * 组选择展开为成员 hash 闭包, 于是"辅种页选了 1 组"在种子页/追剧页同样看得出选中。 */
+    selHashSet() {
+      const s = new Set(this.selMembers);
+      for (const k of this.selGroups) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        if (g.virtual) {
+          if (g.members[0]) s.add(g.members[0].hash);
+          continue;
+        }
+        for (const m of g.members || []) s.add(m.hash);
+      }
+      return s;
+    },
     /* 添加种子对话框: 保存路径前缀比对已有辅种组(输入变化时轻量计数, 不发请求)。
      * 双向前缀: 输入是某组路径的父目录、或子目录, 都算同一路径树(尾部斜杠/大小写归一后比对)。 */
     addPathGroupCount() {
@@ -914,6 +945,8 @@ const app = createApp({
       this.addCatMenu = false;  // 添加种子对话框内浮层: 点空白处统一收起(触发元素自身已 @click.stop 拦截)
       this.addTagMenu = false;
       this.addPathPop = false;
+      // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
+      if (this.speedOpen) this.closeSpeedDialog();
     });
     // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层/抽屉 → 筛选器下拉/弹层(pop) → 右键菜单 → 清选择/收展开兜底
     document.addEventListener("keydown", (e) => {
@@ -969,6 +1002,7 @@ const app = createApp({
     fetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
       if (pub && pub.web && pub.web.skip_local_verify) {
         this.authRequired = false;  // 唯一放行点(与 bootstrap 成功后语义一致)
+        this.bootstrapping = false;  // FX-01: 本机免鉴权 -> 直接离开"验证中", 不经过密钥表单
         this.token = savedToken || "";
         this.lastRid = null;
         this.startPolling();
@@ -976,8 +1010,13 @@ const app = createApp({
       }
       if (savedToken) {
         this.bootstrapping = true;
-        this.bootstrap(savedToken);
+        this.bootstrap(savedToken);  // 成功/失败均由 bootstrap 的 finally 落 bootstrapping = false
+        return;
       }
+      this.bootstrapping = false;  // FX-01: 无本地密钥 -> 才渲染密钥表单
+    }).catch(() => {
+      // 公开标志读取失败(服务未就绪/网络异常): 退到密钥表单, 不能让加载卡永久占位
+      this.bootstrapping = false;
     });
   },
   watch: {
@@ -990,7 +1029,10 @@ const app = createApp({
     },
     // CTX-02: 任一浮层菜单关闭 -> 撤掉触发源强调(浮层可以多种方式关闭: Esc/点空白/执行动作)
     "menu.visible"(v) {
-      if (!v) this._clearCtxSource();
+      if (!v) {
+        this._clearCtxSource();
+        this.subMenu = "";  // FX-15: 一级菜单关闭时子面板一并收起
+      }
     },
     "headMenu.visible"(v) {
       if (!v) this._clearCtxSource();
@@ -1080,6 +1122,7 @@ const app = createApp({
       this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: "" };
       this.speedOverride = { up: "", down: "", busy: false };
       this.speedOpen = false;
+      this.speedAt = { left: 0, dir: "up" };
       this.cfgReset();  // 配置树同样是受保护内容, 一并清除(编辑器状态复位)
       this.page = "groups";
       this.searchQuery = "";
@@ -1334,6 +1377,9 @@ const app = createApp({
     startPolling() {
       this.stopPolling();
       this.loadSpeedMode();  // 限速托管状态(非轮询: 登录/重连时取一次, 卡内可手动刷新)
+      // FX-08: 状态栏恒显"限制速度"(取 qB 当前生效值), 因此必须主动取一次 /api/stats ——
+      // 不能等用户点"完整统计"才有值(否则那三个字长期显示"—")。仍非轮询: 只在登录/重连时取
+      this.loadStats();
       this.refresh();
     },
     stopPolling() {
@@ -1501,6 +1547,29 @@ const app = createApp({
       if (connected === null || connected === undefined || connected < 0) return "";
       return total === null || total === undefined || total < 0 ? String(connected) : `${connected} (${total})`;
     },
+    /* ---------------- 单元格口径单点化(FX-02/03/04) ----------------
+     * 以下三个函数是这三列口径的**唯一来源**: 明细表 / 种子页 / 追剧集明细各自引用它们,
+     * 不再把表达式写在模板里(上一版同一口径在模板里各写三份, 改口径必须三处同改, 必漏)。
+     * 返回值语义 = 单元格显示文本, 空串即"该状态不显示"; 刻意用空串而非 v-if 摘除节点 ——
+     * 单元格仍在 grid 中占位, 列宽与表头不会错位。 */
+    cellSeedingTime(m) {
+      const t = m.seeding_time || 0;
+      // 0 分钟且无 HR 要求 -> 不显示; HR 已触发但尚未开始做种(0 分钟)的种子**必须保留**
+      // (那正是最需要被看见的一类), 故隐藏判据带上 HR 条件豁免
+      if (t <= 0 && !(m.hr_triggered && m.hr_req_time)) return "";
+      return this.fmtDuration(t);
+    },
+    /* dir = "seeds"(做种/已连接) | "leechs"(用户/下载中) */
+    cellPeers(m, dir) {
+      if (m.kind === "paused") return "";  // FX-03: 暂停中的种子不显示 用户/做种
+      return dir === "seeds"
+        ? this.fmtPeersQb(m.num_seeds, m.num_complete)
+        : this.fmtPeersQb(m.num_leechs, m.num_incomplete);
+    },
+    cellRatio(m) {
+      if (!m.progress) return "";  // FX-04: 进度为 0(未开始/未下载)的种子不显示分享率
+      return (m.ratio || 0).toFixed(2);
+    },
     /* 数值色阶(TBL-03): value/denom 比值分两档底色 —— ratio<0.75 → tone-low(偏弱), >=0.75 → tone-high(接近满档);
      * value<=0 或分母缺失/<=0 返回空串(交给 zero/空白机制)。全局限速分母来自 /api/stats 的 statsServer
      * (懒加载, 未开过统计面板时为 null → 速度列自动无色阶, 属预期降级, 规则内自然兜住) */
@@ -1627,7 +1696,7 @@ const app = createApp({
         || (m.tags || []).some((t) => t.toLowerCase().includes(q));
     },
     hrGroupTitle(g) {
-      if (!g.hr_triggered) return "该组没有成员触发 HR 条件";
+      if (!g.hr_triggered) return `该${L10N_GROUP}没有成员触发 HR 条件`;
       if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时长/分享率要求`;
       return `已触发 HR ${g.hr_triggered} 个, 其中 ${g.hr_pending} 个尚未满足做种时长/分享率要求`;
     },
@@ -1758,6 +1827,37 @@ const app = createApp({
       event.stopPropagation();
       this._markCtxSource(event);
       this.menu = { visible: true, ...this._menuPos(event), key: null, hash: member.hash };
+    },
+    /* ---------------- FX-15 次级菜单(flyout) ----------------
+     * 入口按"PT 日常高频"与"qB 通用能力"分层: 一级只放高频动作, 队列/TMM/超级做种/
+     * 强制开始/分享率限制/复制族 一律进次级菜单(原则已写入 memory-bank conventions.md)。
+     * hover 与点击都能展开(键盘走 Enter/Space); 子面板按父项右缘判定是否需要向左翻。
+     */
+    openSub(name, ev) {
+      this.subMenu = name;
+      this.subFlip = this._menuOverflowsRight(ev && ev.currentTarget, 200);
+    },
+    toggleSub(name, ev) {
+      if (this.subMenu === name) {
+        this.subMenu = "";
+        return;
+      }
+      this.openSub(name, ev);
+    },
+    /* FX-14: 打开目标文件夹 —— 路径由**服务端**从自己的快照派生(web.py /api/open-path),
+     * 前端只传 kind + 标识: 后端绝不接受客户端传路径(防"任意文件执行"), 且只允许目录。 */
+    async openTargetPath(kind, id) {
+      this.menu.visible = false;
+      if (!id) return;
+      try {
+        const r = await this.api("/api/open-path", {
+          method: "POST",
+          body: JSON.stringify(kind === "group" ? { kind: "group", key: id } : { kind: "torrent", hash: id }),
+        });
+        this.toast(`已打开目标文件夹: ${r.opened}`, "ok", 3000);
+      } catch (e) {
+        if (!e.auth) this.toast("打开目标文件夹失败: " + e.message, "error", 8000);
+      }
     },
     // 命令 => 中文动作名(用于投递成功/失败的提示文案)
     _actionText(action) {
@@ -1944,6 +2044,16 @@ const app = createApp({
       this.addPathPop = true;
       this._hiScroll("addPathList");
     },
+    /* FX-17: 输入框聚焦即展开候选面板。旧实现写在模板上的 @focus 是 `addPathPop = false`
+     * —— 聚焦反而把面板关掉(为让位于原生 datalist 的建议浮层), 而那个浮层会自行超时消失,
+     * 于是表现为"下拉 2 秒后不见了"。datalist 退役后聚焦 = 展开。 */
+    openAddPathPop() {
+      this.addCatMenu = false;
+      this.addTagMenu = false;
+      this.addPathHi = this.addPathOptions.indexOf(this.addSavePath.trim());
+      this.addPathPop = true;
+      this._hiScroll("addPathList");
+    },
     pickAddPath(p) {
       this.addSavePath = p;  // 单选回填(覆盖自由输入框内容)
       this.addPathPop = false;
@@ -2054,12 +2164,18 @@ const app = createApp({
       this.toggleExpand(g.key, event);  // 普通点击保持"展开明细"原行为(不清除已有选择, 清除走浮条)
     },
     toggleGroupSel(g) {
+      // FX-11: 组选择与种子选择互斥(同一时刻只一种口径, 否则批量目标混发、计数含义不明)
+      this.selMembers = [];
+      this.selAnchorMember = null;
       this.selGroups = this.selGroups.includes(g.key)
         ? this.selGroups.filter((k) => k !== g.key)
         : [...this.selGroups, g.key];
       this.selAnchorGroup = g.key;
     },
     shiftGroupSel(g) {
+      // FX-11: Shift 扩展同样属"组选择口径" -> 清掉另一侧
+      this.selMembers = [];
+      this.selAnchorMember = null;
       // 从锚点到当前行整段加入选择(锚点不更新: 多次 Shift 可从同一起点扩展)
       // 锚点解析: Ctrl+点击设置的锚点 -> 当前展开的组(用户要求) -> 可见列表首行
       const list = this.filteredGroups.map((x) => x.key);
@@ -2082,12 +2198,17 @@ const app = createApp({
       if (event.shiftKey) this.shiftMemberSel(m);
     },
     toggleMemberSel(m) {
+      // FX-11: 选种子 -> 清空辅种组选择(两个口径不共存)
+      this.selGroups = [];
+      this.selAnchorGroup = null;
       this.selMembers = this.selMembers.includes(m.hash)
         ? this.selMembers.filter((h) => h !== m.hash)
         : [...this.selMembers, m.hash];
       this.selAnchorMember = m.hash;
     },
     shiftMemberSel(m) {
+      this.selGroups = [];  // FX-11: 同 toggleMemberSel
+      this.selAnchorGroup = null;
       // 当前展开明细的成员内连续选择(跨组范围由分组表的多选承担)
       const g = this.filteredGroups.find((x) => x.key === this.expandedKey);
       if (!g) return;
@@ -2161,13 +2282,37 @@ const app = createApp({
         ...this._menuPos(event),
         key: null,
         hash: null,
-        episode: { hashes: ep.members.slice(), label: `${show.name} ${this.epLabel(ep.key)}` },
+        episode: { hashes: ep.members.slice(), label: `${show.name} ${this.epLabel(ep.key)}`, scope: "ep" },
       };
+    },
+    /* FX-13: 整剧右键菜单。追剧页的"剧"这一层此前只有左键展开、没有 @contextmenu ——
+     * 越级的整剧操作(开始/暂停/汇报/打开目录/删除)无处可做。目标 = 该剧全部集的全部成员(去重),
+     * 与整集菜单共用同一分支与动作链, 仅用 scope 区分文案与确认框标题。 */
+    openShowMenu(event, show) {
+      event.preventDefault();
+      event.stopPropagation();
+      this._markCtxSource(event);
+      const hashes = [];
+      const seen = new Set();
+      for (const sn of show.seasons || []) {
+        for (const e of sn.episodes || []) {
+          for (const h of e.members || []) {
+            if (!seen.has(h)) {
+              seen.add(h);
+              hashes.push(h);
+            }
+          }
+        }
+      }
+      if (!hashes.length) return;
+      this.menu = { visible: true, ...this._menuPos(event), key: null, hash: null, episode: { hashes, label: show.name, scope: "show" } };
     },
     async actEpisode(action) {
       this.menu.visible = false;
-      const hashes = (this.menu.episode || {}).hashes || [];
+      const ep = this.menu.episode || {};
+      const hashes = ep.hashes || [];
       if (!hashes.length) return;
+      const what = ep.scope === "show" ? "整剧" : "整集";
       const label = this._actionText(action);
       const isRe = action === "reannounce";
       const tid = isRe
@@ -2178,7 +2323,7 @@ const app = createApp({
       );
       const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
       if (!fails.length) {
-        const okMsg = isRe ? `强制汇报成功(tracker 已确认, ${hashes.length} 个目标)` : `已执行: ${label}整集(${hashes.length} 个种子)`;
+        const okMsg = isRe ? `强制汇报成功(tracker 已确认, ${hashes.length} 个目标)` : `已执行: ${label}${what}(${hashes.length} 个种子)`;
         if (isRe) this._finishToast(tid, "ok", okMsg, 3000);
         else this.toast(okMsg, "ok", 2500);
         return;
@@ -2188,7 +2333,8 @@ const app = createApp({
       if (isRe) this._finishToast(tid, "timeout", msg, 6000);
       else this.toast(msg, fails.length === hashes.length ? "error" : "info", 8000);
     },
-    /* 删除整集(全部版本): 确认框摘要 = 集名 + 种子数(DLG-01 收缩后不再列成员明细) */
+    /* 删除整集/整剧(全部版本; FX-13 起两者共用): 确认框摘要 = 目标名 + 种子数
+     * (DLG-01 收缩后不再列成员明细) */
     async delEpisode() {
       this.menu.visible = false;
       const ep = this.menu.episode;
@@ -2196,35 +2342,20 @@ const app = createApp({
       const members = ep.hashes.map((h) => this.memberByHash.get(h)).filter(Boolean);
       if (!members.length) return;
       const totalSize = members.reduce((n, m) => n + (m.size || 0), 0);
-      const res = await this._confirmDelete({
-        title: "删除整集",
+      const what = ep.scope === "show" ? "整剧" : "整集";
+      // FX-16: 与右键/批量/该种子共用同一条删除链
+      await this._deleteFlow({
+        keys: [],
+        hashes: ep.hashes.slice(),
+        title: `删除${what}`,
         body: `将删除"${ep.label}"的全部 ${members.length} 个种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
         details: [
-          { icon: "#i-cards", label: "目标", value: ep.label },
+          { icon: "#i-cards", label: "目标", value: ep.label, wide: true },
           { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${members.length} 个种子` },
         ],
+        countText: `${what}(${members.length} 个种子)`,
+        label: ep.label,
       });
-      if (!res) return;
-      const deleteFiles = res.checks.delete_files;
-      if (res.checks.reannounce) {
-        const tid = this.toast(`正在向 tracker 汇报 ${ep.hashes.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
-        const results = await Promise.allSettled(
-          ep.hashes.map((h) => this.api(`/api/torrents/${h}/reannounce`, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
-        );
-        const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
-        if (fails.length) {
-          this._finishToast(tid, "timeout", `${fails.length}/${ep.hashes.length} 个目标汇报确认失败, 已保留未删除`, 6000);
-          return;
-        }
-        this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
-      }
-      const body = JSON.stringify({ delete_files: deleteFiles });
-      const results = await Promise.allSettled(
-        ep.hashes.map((h) => this.api(`/api/torrents/${h}/delete`, { method: "POST", body }))
-      );
-      const fails = results.filter((r) => r.status === "rejected");
-      if (fails.length) this.toast(`删除投递部分失败(${fails.length}/${ep.hashes.length})`, "error", 8000);
-      else this.toast(`已投递: 删除整集 ${ep.hashes.length} 个种子${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
     },
     /* 单种子表横向滚动 -> 表头位移同步(与分组表同款 transform 桥接, 避免双向 scroll 回环) */
     syncTorrentHeadScroll(ev) {
@@ -2242,6 +2373,8 @@ const app = createApp({
       if (event.shiftKey) this.shiftTorrentSel(m);
     },
     shiftTorrentSel(m) {
+      this.selGroups = [];  // FX-11: 同 toggleMemberSel
+      this.selAnchorGroup = null;
       // 平铺列表内的连续范围选择(锚点不更新, 可从同一起点多次扩展)
       const list = this.filteredTorrents.map((x) => x.hash);
       const anchor = list.includes(this.selAnchorMember) ? this.selAnchorMember : list[0];
@@ -2256,6 +2389,109 @@ const app = createApp({
       this.selMembers = [];
       this.selAnchorGroup = null;
       this.selAnchorMember = null;
+      this.selAnchorUnit = null;
+    },
+    /* ---------------- FX-12: 追剧页选中态与修饰键选择 ----------------
+     * 剧行/集行保留"点击 = 展开"的原行为; **修饰键才选中**(与表格一致):
+     * Ctrl/⌘+点击 = 切换该剧/该集全部成员; Shift+点击 = 从锚点单元整段选择。
+     * "全部成员被选" = selected, "命中但非全选" = partial(indeterminate 语义)。
+     */
+    _selState(hashes) {
+      const list = hashes || [];
+      if (!list.length) return { selected: false, partial: false };
+      const set = this.selHashSet;
+      let hit = 0;
+      for (const h of list) if (set.has(h)) hit += 1;
+      return { selected: hit === list.length, partial: hit > 0 && hit < list.length };
+    },
+    isMemberSelected(m) {
+      return this.selHashSet.has(m.hash);
+    },
+    /* 组行选中态: 组本身被选 -> selected; 否则派生集合命中其**部分**成员 -> partial。
+     * (典型场景: 在种子页选了某辅种组的几个种子, 切回辅种页该组应显示"半选"而非"没选") */
+    groupSelState(g) {
+      if (this.isGroupSelected(g)) return { selected: true, partial: false };
+      const st = this._selState((g.members || []).map((m) => m.hash));
+      return { selected: false, partial: st.partial };
+    },
+    _showHashes(s) {
+      const out = [];
+      for (const sn of s.seasons || []) {
+        for (const e of sn.episodes || []) {
+          for (const m of e.members || []) out.push(m.hash);
+        }
+      }
+      return [...new Set(out)];
+    },
+    _showUnits() {
+      return this.decoratedShows.map((s) => ({ id: "show|" + s.key, hashes: this._showHashes(s) }));
+    },
+    _epUnits(s) {
+      const out = [];
+      for (const sn of s.seasons || []) {
+        for (const e of sn.episodes || []) {
+          out.push({ id: this.showEpRowId(s.key, sn.season, e.epKeyStr), hashes: (e.members || []).map((m) => m.hash) });
+        }
+      }
+      return out;
+    },
+    showSelState(s) {
+      const u = this._showUnits().find((x) => x.id === "show|" + s.key);
+      return this._selState(u ? u.hashes : []);
+    },
+    epSelState(e) {
+      return this._selState((e.members || []).map((m) => m.hash));
+    },
+    /* 整单元切换: 全选中则整段取消, 否则整段加入(并清掉辅种组口径) */
+    _toggleUnit(unit) {
+      if (!unit || !unit.hashes.length) return;
+      this.selGroups = [];
+      this.selAnchorGroup = null;
+      const all = unit.hashes;
+      const cur = this.selMembers;
+      const allIn = all.every((h) => cur.includes(h));
+      this.selMembers = allIn ? cur.filter((h) => !all.includes(h)) : [...new Set([...cur, ...all])];
+      this.selAnchorUnit = unit.id;
+    },
+    _extendUnit(unit, list) {
+      if (!unit) return;
+      const units = list || [];
+      const anchorIdx = units.findIndex((u) => u.id === this.selAnchorUnit);
+      const curIdx = units.findIndex((u) => u.id === unit.id);
+      if (anchorIdx < 0 || curIdx < 0) {
+        this._toggleUnit(unit);
+        return;
+      }
+      this.selGroups = [];
+      this.selAnchorGroup = null;
+      const [a, b] = anchorIdx <= curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
+      const add = [];
+      for (const u of units.slice(a, b + 1)) add.push(...u.hashes);
+      this.selMembers = [...new Set([...this.selMembers, ...add])];
+    },
+    onShowClick(s, event) {
+      if (event.ctrlKey || event.metaKey) {
+        this._toggleUnit(this._showUnits().find((u) => u.id === "show|" + s.key));
+        return;
+      }
+      if (event.shiftKey) {
+        this._extendUnit(this._showUnits().find((u) => u.id === "show|" + s.key), this._showUnits());
+        return;
+      }
+      this.toggleShow(s.key);
+    },
+    onShowEpClick(s, sn, e, event) {
+      const id = this.showEpRowId(s.key, sn.season, e.epKeyStr);
+      const units = this._epUnits(s);
+      if (event.ctrlKey || event.metaKey) {
+        this._toggleUnit(units.find((u) => u.id === id));
+        return;
+      }
+      if (event.shiftKey) {
+        this._extendUnit(units.find((u) => u.id === id), units);
+        return;
+      }
+      this.toggleShowEp(s.key, sn.season, e.epKeyStr);
     },
     _findGroup(key) {
       // **必须先查 decoratedGroups**(groups 的前端派生超集, 同 key): 原始组字典没有 save_path
@@ -2316,27 +2552,32 @@ const app = createApp({
       if (isRe) this._finishToast(tid, "timeout", msg, 6000);
       else this.toast(msg, fails.length === jobs.length ? "error" : "info", 8000);
     },
-    /* DLG-02: 批量删除文案按选择构成计数(仅组=N 个组 / 仅种子=N 个种子 / 混合=N 个组、M 个种子)。
+    /* DLG-02: 批量删除文案按选择构成计数(仅辅种=N 个辅种 / 仅种子=N 个种子)。
      * 用 _bulkTargets 的有效口径 —— 虚拟行(未归组命中)无真实组 key、按种子投递, 计入"种子"
-     * 而非"组", 保证批量条按钮/确认框标题/提交体三处一致; 空串 = 选中项均已失效 */
-    _bulkCountText() {
+     * 而非"辅种", 保证批量条按钮/确认框标题/提交体三处一致; 空串 = 选中项均已失效。
+     * FX-12: 批量条直接渲染它 —— 计数随**权威选择**而非当前视图漂移
+     * (在种子页看"N 个辅种"不变, 这正是"三视图打通"的直观体现)。
+     * ⚠ 方法名不得以 `_` 开头: Vue 模板编译器不解析下划线前缀标识符
+     *   (会报 "_xxx is not defined" 且整块渲染失败 —— 2026-09-17 浏览器冒烟实测)。
+     */
+    bulkCountText() {
       const { groupKeys, memberHashes } = this._bulkTargets();
       const parts = [];
-      if (groupKeys.length) parts.push(`${groupKeys.length} 个组`);
+      if (groupKeys.length) parts.push(`${groupKeys.length} 个${L10N_GROUP}`);
       if (memberHashes.length) parts.push(`${memberHashes.length} 个种子`);
       return parts.join("、");
     },
     /* 批量条删除按钮文案: 计数文本前缀"删除", 空选中退化为纯"删除" */
     bulkDeleteLabel() {
-      const t = this._bulkCountText();
+      const t = this.bulkCountText();
       return t ? `删除 ${t}` : "删除";
     },
     async bulkDelete() {
       const { groupKeys, memberHashes } = this._bulkTargets();
       if (!groupKeys.length && !memberHashes.length) return;
-      const countText = this._bulkCountText();
+      const countText = this.bulkCountText();
       // 摘要计数(DLG-01 收缩: 确认框不再列逐条成员明细, 只保留目标摘要+计数):
-      // 组展开到成员级, 与独立选择的种子并集去重 —— 与后端 bulk 组键展开(级联在册成员,
+      // 组展开到成员级, 与选中的种子并集去重 —— 与后端 bulk 组键展开(级联在册成员,
       // 与 hashes 合并去重)同口径; 成员大小经 memberByHash 解析(groups ∪ singles ∪ torrents 全量)
       const seen = new Set();
       let totalSize = 0;
@@ -2352,46 +2593,76 @@ const app = createApp({
         else for (const m of g.members || []) countMember(m);
       }
       for (const h of memberHashes) countMember(this.memberByHash.get(h));
-      const res = await this._confirmDelete({
+      // FX-16: 统一走 _deleteFlow(与右键同一套: 目标明细 + 汇报前置 + 等聚合回执 + 收尾清选择)
+      await this._deleteFlow({
+        keys: groupKeys,
+        hashes: memberHashes,
         title: `删除 ${countText}`,
         body: `将删除选中目标内的全部种子, 共 ${seen.size} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
         details: [
-          { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个组 · ${memberHashes.length} 个独立种子` },
+          { icon: "#i-cards", label: "目标", value: `${groupKeys.length} 个${L10N_GROUP} · ${memberHashes.length} 个独立种子` },
           { icon: "#i-hdd", label: "总大小", value: `${this.fmtSize(totalSize)} · 共 ${seen.size} 个种子` },
         ],
+        countText,
+        label: countText,
+      });
+    },
+    /* ---------------- FX-16 删除链统一 ----------------
+     * 旧实现是**两条链**: 右键(逐目标专用端点, 不等回执)与 批量(bulk 单命令, 等聚合回执),
+     * 确认框内容也分叉(逐目标详情 vs 纯计数)。统一成一条链, **以右键的行为为准**
+     * (目标明细 + 汇报前置 + 汇报失败即中止保留), 并保留批量侧更稳的两点(单命令聚合回执、
+     * 收尾清选择)。四个入口(delGroup / delTorrent / delEpisode / bulkDelete)只负责组织 targets。
+     *
+     * targets = { keys[], hashes[], title, body, details[], countText, label }
+     * 注: /api/groups/{k}/delete 与 /api/torrents/{h}/delete 端点**保留不动**(旧 UI 与第三方脚本仍可用)。
+     */
+    async _deleteFlow(targets) {
+      const keys = targets.keys || [];
+      const hashes = targets.hashes || [];
+      if (!keys.length && !hashes.length) return;
+      const res = await this._confirmDelete({
+        title: targets.title,
+        body: targets.body,
+        details: targets.details,
       });
       if (!res) return;
       const deleteFiles = res.checks.delete_files;
       if (res.checks.reannounce) {
         const jobs = [
-          ...groupKeys.map((k) => `/api/groups/${k}/reannounce`),
-          ...memberHashes.map((h) => `/api/torrents/${h}/reannounce`),
+          ...keys.map((k) => `/api/groups/${k}/reannounce`),
+          ...hashes.map((h) => `/api/torrents/${h}/reannounce`),
         ];
-        const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
-        const results = await Promise.allSettled(
-          jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
-        );
-        const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
-        if (fails.length) {
-          this._finishToast(tid, "timeout", `${fails.length}/${jobs.length} 个目标汇报确认失败, 已保留未删除`, 6000);
-          return;
-        }
-        this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
+        const ok = await this._reannounceAll(jobs, targets.label);
+        if (!ok) return;  // 汇报失败: 已提示且保留未删除
       }
-      // DLG-02: 提交体对齐 bulk 组键模式 —— 单命令批量(keys+hashes 可混合, 后端展开组键
-      // 级联成员并去重), 沿用 cmd_id 聚合回执(部分缺失时 error 带缺失计数)
+      // 投递删除: 统一走 bulk 单命令并等聚合回执(比旧右键的"已投递"更可信: 失败可见)
       try {
         const resp = await this.api("/api/torrents/bulk", {
           method: "POST",
-          body: JSON.stringify({ action: "delete", keys: groupKeys, hashes: memberHashes, delete_files: deleteFiles }),
+          body: JSON.stringify({ action: "delete", keys, hashes, delete_files: deleteFiles }),
         });
         const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) this.toast(`已删除: ${countText}${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
+        if (r.ok) this.toast(`已删除: ${targets.countText}${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
         else this.toast(`删除未完全成功: ${r.error}`, "error", 8000);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
-      this.clearSelection();
+      this.clearSelection();  // 列表交下一轮 rid 轮询自然刷新(不主动 refresh)
+    },
+    /* 汇报前置: 逐目标投递并**全部等回执**; 全部成功返回 true(任一失败 -> 已提示且保留未删除) */
+    async _reannounceAll(jobs, label) {
+      if (!jobs.length) return true;
+      const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
+      const results = await Promise.allSettled(
+        jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+      );
+      const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
+      if (fails.length) {
+        this._finishToast(tid, "timeout", `${fails.length}/${jobs.length} 个目标汇报确认失败${label ? `(${label})` : ""}, 已保留未删除`, 6000);
+        return false;
+      }
+      this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
+      return true;
     },
     /* ---------------- 删除确认框: 目标信息 + 强制汇报(默认勾选)/删除文件两选项 ---------------- */
     _confirmDelete(opts) {
@@ -2410,29 +2681,10 @@ const app = createApp({
         icon: "#i-trash-x",
       });
     },
-    /* 删除前的汇报编排: 发送汇报命令并等待回执(tracker 确认/超时), 失败提醒且不删除 */
-    async _reannounceBeforeDelete(apiPath, label) {
-      let tid = null;
-      try {
-        const resp = await this.api(apiPath, { method: "POST" });
-        tid = this.toast(`正在向 tracker 汇报${label}, 等待确认…`, "busy", 0, { sticky: true });
-        const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) {
-          this._finishToast(tid, "ok", `汇报确认成功, 开始删除${label}`, 2000);
-          return true;
-        }
-        this._finishToast(tid, "timeout", `${label}汇报确认失败: ${r.error} —— 已保留未删除`, 6000);
-        return false;
-      } catch (e) {
-        if (!e.auth) {
-          // 命令投递本身失败 = 真错误(与"超时"区分): 用红色 error 样式
-          if (tid) this._finishToast(tid, "error", `汇报失败: ${e.message} —— 已保留未删除`, 6000);
-          else this.toast(`汇报失败: ${e.message} —— 已保留未删除`, "error", 8000);
-        }
-        return false;
-      }
-    },
-    /* 删除该组(DLG-02: 旧"整组"叫法退役, 组删除一律计数语义): 单一菜单项 + 确认框显示目标信息(组名/成员/站点/路径/总大小)与两个选项 */
+    /* 删除前汇报编排已被 _reannounceAll 取代(FX-16: 右键/批量/整集/整剧 四条入口统一走
+     * _deleteFlow -> _reannounceAll 一套链), 旧单目标版本删除 —— 不再保留两条链。 */
+    /* 删除该辅种(DLG-02: 旧"整组"叫法退役, 组删除一律计数语义): 单一菜单项 + 确认框显示目标信息
+     * (辅种名/成员/站点/路径/总大小)与两个选项; FX-16 起删除动作本身交由 _deleteFlow 统一驱壳。 */
     async delGroup() {
       this.menu.visible = false;
       const key = this.menu.key;
@@ -2440,32 +2692,21 @@ const app = createApp({
       const g = this._findGroup(key);
       if (!g) return;
       const sites = [...new Set(g.members.map((m) => m.site))].join(", ");
-      const res = await this._confirmDelete({
-        title: "删除该组",
-        body: `将删除"${g.name}"组的全部 ${g.count} 个种子。`,
+      await this._deleteFlow({
+        keys: [key],
+        hashes: [],
+        title: `删除该${L10N_GROUP}`,
+        body: `将删除"${g.name}"的全部 ${g.count} 个种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
         details: [
-          { icon: "#i-cards", label: "组名", value: g.name },
+          { icon: "#i-cards", label: `${L10N_GROUP}名`, value: g.name, wide: true },
           { icon: "#i-layers", label: "成员", value: `${g.count} 个种子` },
           { icon: "#i-globe", label: "站点", value: sites || "—" },
-          { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—" },
+          { icon: "#i-folder-open", label: "保存路径", value: g.save_path || "—", wide: true },
           { icon: "#i-hdd", label: "总大小", value: this.fmtSize(g.total_size) },
         ],
+        countText: `该${L10N_GROUP}(${g.count} 个种子)`,
+        label: `"${g.name}"`,
       });
-      if (!res) return;
-      const deleteFiles = res.checks.delete_files;
-      if (res.checks.reannounce) {
-        const ok = await this._reannounceBeforeDelete(`/api/groups/${key}/reannounce`, `"${g.name}"`);
-        if (!ok) return;  // 汇报失败: 已提醒且不删除
-      }
-      try {
-        await this.api(`/api/groups/${key}/delete`, {
-          method: "POST",
-          body: JSON.stringify({ delete_files: deleteFiles }),
-        });
-        this.toast(`已投递: 删除该组${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
-      } catch (e) {
-        if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
-      }
     },
     async actTorrent(action) {
       this.menu.visible = false;
@@ -2955,6 +3196,7 @@ const app = createApp({
       return [
         {
           title: "基础",
+          sum: `容量 ${size(d.size)} · 分享率 ${(d.ratio ?? 0).toFixed(2)}`,
           rows: [
             { icon: "#i-percent", label: "进度", text: `${((d.progress || 0) * 100).toFixed(1)}%` },
             { icon: "#i-hdd", label: "大小", text: size(d.size) },
@@ -2963,17 +3205,19 @@ const app = createApp({
             { icon: "#i-pulse", label: "可用性", text: (d.availability ?? 0).toFixed(2) },
             { icon: "#i-percent", label: "分享率", text: (d.ratio ?? 0).toFixed(3) },
             { icon: "#i-lock", label: "私有", text: yn(d.private) },
-            { icon: "#i-hash", label: "信息哈希 v1", text: d.infohash_v1 || "—", mono: true },
-            { icon: "#i-hash", label: "信息哈希 v2", text: d.infohash_v2 || "—", mono: true },
+            // FX-22: 哈希/备注可能极长 -> 块行 + 右侧"复制"(不再只能悬停看 title)
+            { icon: "#i-hash", label: "信息哈希 v1", text: d.infohash_v1 || "—", mono: true, wide: true, act: "copy" },
+            { icon: "#i-hash", label: "信息哈希 v2", text: d.infohash_v2 || "—", mono: true, wide: true, act: "copy" },
             { icon: "#i-columns", label: "分块", text: d.piece_size ? `${d.pieces_have ?? 0} / ${d.pieces_num ?? 0} × ${this.fmtSize(d.piece_size)}` : "—" },
             { icon: "#i-info", label: "已含元数据", text: yn(d.has_metadata) },
             { icon: "#i-calendar", label: "创建于", text: ts(d.creation_date) },
             { icon: "#i-settings", label: "创建工具", text: d.created_by || "—" },
-            { icon: "#i-list", label: "备注", text: d.comment || "—" },
+            { icon: "#i-list", label: "备注", text: d.comment || "—", wide: true },
           ],
         },
         {
           title: "传输",
+          sum: `实时 ↓${this.fmtSpeedOrDash(d.dlspeed) || "—"} ↑${this.fmtSpeedOrDash(d.upspeed) || "—"}`,
           rows: [
             { icon: "#i-download", label: "下载速度", text: this.fmtSpeedOrDash(d.dlspeed) || "—" },
             { icon: "#i-upload", label: "上传速度", text: this.fmtSpeedOrDash(d.upspeed) || "—" },
@@ -2999,6 +3243,7 @@ const app = createApp({
         },
         {
           title: "时间",
+          sum: `添加 ${ts(d.added_on)}`,
           rows: [
             { icon: "#i-calendar", label: "添加于", text: ts(d.added_on) },
             { icon: "#i-check-circle", label: "完成于", text: ts(d.completion_on) },
@@ -3010,11 +3255,14 @@ const app = createApp({
         },
         {
           title: "路径",
+          sum: `自动种子管理 ${yn(d.auto_tmm)}`,
+          // FX-22: 路径行一律块行 + 右侧"打开目录"(走后端 /api/open-path) —— 路径是本页最长、
+          // 最常需要"去磁盘上看一眼"的一类值
           rows: [
-            { icon: "#i-folder-open", label: "保存路径", text: d.save_path || "—" },
-            { icon: "#i-folder", label: "内容路径", text: d.content_path || "—" },
-            { icon: "#i-folder-open", label: "下载路径", text: d.download_path || "—" },
-            { icon: "#i-folder", label: "根路径", text: d.root_path || "—" },
+            { icon: "#i-folder-open", label: "保存路径", text: d.save_path || "—", wide: true, act: "open" },
+            { icon: "#i-folder", label: "内容路径", text: d.content_path || "—", wide: true, act: "open" },
+            { icon: "#i-folder-open", label: "下载路径", text: d.download_path || "—", wide: true, act: "open" },
+            { icon: "#i-folder", label: "根路径", text: d.root_path || "—", wide: true, act: "open" },
             { icon: "#i-sliders", label: "自动种子管理", text: yn(d.auto_tmm) },
             { icon: "#i-play", label: "强制开始", text: yn(d.force_start) },
             { icon: "#i-upload", label: "超级做种", text: yn(d.super_seeding) },
@@ -3023,6 +3271,25 @@ const app = createApp({
           ],
         },
       ];
+    },
+    /* FX-22: 字段行图标着色 —— 由**图标名派生**色调类, 而不是给 48 行逐个加 tone 字段:
+     * 图标本身已隐含语义(下载/上传/日历/文件夹/哈希...), 派生表是单点, 新增行自动生效。
+     * 色值全在 views.css 的 .ico-t-* 族里走主题令牌。 */
+    icoTone(icon) {
+      const map = {
+        "#i-download": "ico-t-io", "#i-upload": "ico-t-io", "#i-arrow-up": "ico-t-io", "#i-arrow-down": "ico-t-io",
+        "#i-hdd": "ico-t-cap", "#i-layers": "ico-t-cap", "#i-columns": "ico-t-cap",
+        "#i-calendar": "ico-t-time", "#i-clock": "ico-t-time", "#i-timer": "ico-t-time",
+        "#i-hourglass": "ico-t-time", "#i-eye": "ico-t-time",
+        "#i-globe": "ico-t-site", "#i-link": "ico-t-site",
+        "#i-lock": "ico-t-sw", "#i-sliders": "ico-t-sw", "#i-play": "ico-t-sw", "#i-sort": "ico-t-sw",
+        "#i-bolt": "ico-t-sw", "#i-settings": "ico-t-sw", "#i-refresh": "ico-t-sw",
+        "#i-hash": "ico-t-id", "#i-info": "ico-t-id", "#i-tag": "ico-t-id", "#i-list": "ico-t-id",
+        "#i-folder": "ico-t-path", "#i-folder-open": "ico-t-path",
+        "#i-percent": "ico-t-state", "#i-pulse": "ico-t-state", "#i-check-circle": "ico-t-state",
+        "#i-x-circle": "ico-t-state", "#i-warn": "ico-t-state",
+      };
+      return map[icon] || "";
     },
     /* Content tab: qB files[].name 为 '/' 分隔相对路径 -> 构树后扁平化(缩进渲染);
      * 目录行聚合大小; 文件行展示 进度/优先级(0=跳过 1=普通 4|6=高 7=最高), 优先级可点改(小菜单);
@@ -3102,32 +3369,23 @@ const app = createApp({
       if (!m) m = this.singles.find((x) => x.hash === hash) || null;  // 单种子视图里的未归组种子
       if (!m) m = this.torrents.find((x) => x.hash === hash) || null;  // 种子页平铺数组(全量兑底)
       if (!m) return;
-      const res = await this._confirmDelete({
+      // FX-16: 删除链统一 —— 走 _deleteFlow(目标明细 + 汇报前置 + 等聚合回执 + 收尾清选择)
+      await this._deleteFlow({
+        keys: [],
+        hashes: [hash],
         title: "删除该种子",
         body: "将删除该种子。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。",
         details: [
-          { icon: "#i-tag", label: "种子名", value: m.name || m.hash.slice(0, 12) },
+          // FX-23: 种子名/路径可能极长 -> wide 块行(值独占一行, 最多 3 行 + 复制按钮)
+          { icon: "#i-tag", label: "种子名", value: m.name || m.hash.slice(0, 12), wide: true },
           { icon: "#i-globe", label: "站点", value: m.site || "—" },
           { icon: "#i-pulse", label: "状态", value: this.kindText(m.kind) },
-          { icon: "#i-folder-open", label: "保存路径", value: m.save_path || "—" },
+          { icon: "#i-folder-open", label: "保存路径", value: m.save_path || "—", wide: true },
           { icon: "#i-hdd", label: "大小", value: this.fmtSize(m.size) },
         ],
+        countText: "该种子",
+        label: m.name || hash.slice(0, 12),
       });
-      if (!res) return;
-      const deleteFiles = res.checks.delete_files;
-      if (res.checks.reannounce) {
-        const ok = await this._reannounceBeforeDelete(`/api/torrents/${hash}/reannounce`, "该种子");
-        if (!ok) return;
-      }
-      try {
-        await this.api(`/api/torrents/${hash}/delete`, {
-          method: "POST",
-          body: JSON.stringify({ delete_files: deleteFiles }),
-        });
-        this.toast(`已投递: 删除该种子${deleteFiles ? "(含文件)" : ""}`, "ok", 2500);
-      } catch (e) {
-        if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
-      }
     },
     /* ---------------- 统计面板(FE-2C): /api/stats 全局状态(server_state 直取, 缺失显示 —) ----------------
      * 打开时取一次, 卡内"刷新"按钮重取; 不随主循环轮询(统计是低频信息)。
@@ -3364,20 +3622,45 @@ const app = createApp({
       }
       return false;
     },
-    /* ---------------- 限速修改弹窗(SPD-04): qB 式「点击限速 → 弹窗修改」 ----------------
+    /* ---------------- 限速修改浮层(SPD-04; FX-08 改为**就近弹出**) ----------------
+     * FX-08: 不再居中 + 遮罩弹出, 而是锚在点击的"限制速度"按钮附近向上弹(该方向输入框预聚焦),
+     * 位置夹取到视口内(左右各留 12px), 不会跑到屏幕外; 点空白/Esc 关闭(无遮罩, 页面其余部分仍可操作)。
      * 打开时取一次 /api/speed/mode 并回填 qB 当前生效值(KiB/s, 0 = 不限); 提交沿用 submitSpeedOverride,
      * 成功即关窗, 失败留在窗内看报错并重试。
      */
-    async openSpeedDialog() {
+    async openSpeedAt(ev, dir) {
+      const el = ev && ev.currentTarget;
+      const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      const W = 380;  // 与 .speed-pop 的 width 单点一致
+      const left = rect ? rect.left - 12 : window.innerWidth - W - 12;
+      this.speedAt = { left, dir: dir === "down" ? "down" : "up" };
       this.speedOpen = true;
       await this.loadSpeedMode(true);  // 开窗取当前值(强制刷新, 不吃缓存)
       const c = this.speedMode.current || {};
       const pick = (v) => (v === undefined || v === null ? "" : String(v));
       this.speedOverride.up = pick(c.upload_limit);
       this.speedOverride.down = pick(c.download_limit);
+      this.$nextTick(() => {
+        // 只在当前方向预聚焦(点击"限制速度"就是为改这一方向), 并全选便于直接覆写
+        const inp = this.$refs.speedPop && this.$refs.speedPop.querySelector("#sp-" + this.speedAt.dir);
+        if (inp) {
+          inp.focus();
+          inp.select();
+        }
+      });
+    },
+    /* 浮层内联定位: 只写 left(纵向由 CSS 锚定状态栏上缘), 并夹取到视口内 */
+    speedPopStyle() {
+      const W = 380, PAD = 12;
+      return { left: Math.max(PAD, Math.min(this.speedAt.left, window.innerWidth - W - PAD)) + "px" };
+    },
+    /* 旧入口(居中弹窗)保留为薄包装: 无点击坐标时锚在视口右侧(第三方链接/键盘触发路径) */
+    openSpeedDialog() {
+      return this.openSpeedAt(null, "up");
     },
     closeSpeedDialog() {
       this.speedOpen = false;
+      this.speedAt = { left: 0, dir: "up" };
     },
     async submitSpeedDialog() {
       const ok = await this.submitSpeedOverride();
@@ -3653,6 +3936,7 @@ const app = createApp({
       event.preventDefault();  // 抑制表头文本选择(拖拽手势的先决条件; 纯点击不受影响)
       const startX = event.clientX, startY = event.clientY;
       const TH = 6;  // 位移阈值(px): 之内视为普通点击(排序照旧), 超过才进入重排
+      const label = (columnDef(page, key) || {}).label || key;  // FX-25 虚影文案
       let dragging = false;
       const cells = () => Array.from(headEl.children).filter((el) => el.classList.contains("h-cell"));
       const move = (e) => {
@@ -3672,6 +3956,8 @@ const app = createApp({
         // 指示线落在插入边界的列间隙中线(idx<len 取该列左缘-半间隙; 末尾取末列右缘+半间隙)
         const edge = idx < list.length ? list[idx].getBoundingClientRect().left : list[list.length - 1].getBoundingClientRect().right;
         this.colDrag = { page, key, idx, x: edge - base.left - headEl.clientLeft + (idx < list.length ? -5 : 5) };
+        // FX-25: 虚影只更新 x/y(走 transform, 不触发重排); 无虚影时鼠标无处可依, 用户分不清"拖的是什么"
+        this.colGhost = { label, x: e.clientX, y: e.clientY };
       };
       const up = () => {
         document.removeEventListener("mousemove", move);
@@ -3680,6 +3966,7 @@ const app = createApp({
         document.body.style.cursor = "";
         const drag = this.colDrag;
         this.colDrag = null;
+        this.colGhost = null;   // FX-25: 松手即消失
         if (!dragging) return;  // 未过阈值 = 普通点击, click 正常冒泡(排序不受影响)
         if (drag && drag.page === page) this.applyColOrder(page, key, drag.idx);
         // 拖拽尾冒泡 click 会触发 setSort(同列释放时) —— capture 阶段拦掉即停(同 startResize)

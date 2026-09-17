@@ -77,8 +77,16 @@
 - **全中文**; 默认 `log.format` 含 `%(name)s` (来源模块): `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 - **通知联动** (2026-09-12): `notify.enabled` 时 NotifyHandler 挂在 `auto_qb` logger 上, 达到 `notify.min_level` 的日志自动推送平台原生通知 —— 因此**日志级别/骨架即通知语义**, 新增 WARNING/ERROR 日志点无需单独接入通知; 免打扰时段与节流在 notify.py 过滤, 消息内容直接复用日志消息(遵守本骨架); `--tray` 模式下 UiLogHandler 同样直挂 `auto_qb` logger, 窗口日志视图实时跟随本骨架输出
 
-## 格式化 (yapf, .style.yapf)
+## WEB UI 菜单/入口分层原则 (2026-09-17 用户明确要求记入)
 
+右键菜单(及同类动作入口)按**使用频率**分两层, 不是按功能族平铺:
+
+- **一级 = PT 日常高频动作**: 开始 / 暂停 / 强制汇报 / 详细信息 / 限速 / 移动 / 重命名 / 重新校验 / 导出 .torrent / 打开目标文件夹 / 删除。
+- **次级菜单(flyout) = qB 通用低频能力**: 队列(置顶·上移·下移·置底) · 自动种子管理 · 超级做种 · 强制开始 · 分享率限制 → 「高级能力」; 复制名称/哈希/magnet → 「复制」。
+- **判据**: 该动作是否"每天都要点" —— 不是则下沉。菜单项数增长时**先问能否归入既有次级菜单**, 不要直接往一级追加。
+- 实现: `.ctx-item.has-sub` + `.ctx-sub`(锚在父项右缘, 靠右时 `.flip-x` 向左翻); hover 与点击都能展开; 状态的唯一权威是 `app.js` 的 `subMenu`(随 `menu.visible` 关闭一并复位)。
+
+## 格式化 (yapf, .style.yapf)
 - based_on_style=facebook, indent=4, column_limit=**120**, spaces_before_comment=2, split_before_logical_operator=false, allow_split_before_default_or_named_assigns=false
 - 提交前对改动文件跑 `yapf -i <file>` (git 历史有独立的"格式化代码"提交)
 

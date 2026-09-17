@@ -563,6 +563,22 @@ button { font-family: inherit; }
 .ctx-item .ico-queue { color: var(--teal); }      /* 队列族(与"移动"同族: 位置语义) */
 .ctx-item .ico-tmm { color: var(--green); }       /* 自动种子管理开关 */
 .ctx-item .ico-export { color: var(--lime); }     /* 导出 .torrent */
+.ctx-item .ico-folder { color: var(--accent-hi); } /* FX-14: 打开目标文件夹(走系统默认程序) */
+.ctx-item .ico-tune { color: var(--violet); }      /* FX-15: 次级菜单入口(高级能力) */
+
+/* ================= FX-15 次级菜单(flyout) =================
+ * 一级只放 PT 日常高频动作; qB 通用能力进子面板。子面板锚在父项右缘, 靠右时向左翻(flip-x)。
+ * 父项必须 position: relative —— 与"浮层缺定位祖先"是同一类坑(FX-18)。 */
+.ctx-item.has-sub { position: relative; }
+.ctx-item.has-sub .ctx-caret { margin-left: auto; color: var(--fg-dim); opacity: .7;
+  transform: rotate(-90deg); transition: transform var(--dur) var(--ease); }
+.ctx-item.has-sub.open .ctx-caret { opacity: 1; transform: none; color: var(--accent-hi); }
+.ctx-item.has-sub.open { background: var(--bg-hover); }
+.ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
+  min-width: 190px; padding: 6px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  animation: drop-in .12s var(--ease); }
+.ctx-sub.flip-x { left: auto; right: calc(100% + 4px); }
 .ctx-item.danger { color: var(--error); }
 .ctx-item.danger .ico { color: currentColor; }
 .ctx-item.danger:hover { background: var(--error-soft); }
@@ -1223,6 +1239,13 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
   width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
 .member-row.selected { background: var(--accent-soft); }
+/* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 同款左色条但降透明 + 柔底,
+ * 与全选明确区分; 仍只引用既有令牌(不引新色)。 */
+.group-row.partial, .member-row.partial { background: var(--accent-soft); border-color: var(--accent-line); }
+.member-row { position: relative; }
+.group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
+  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); opacity: .42; }
+.member-row.partial::before { top: 18%; bottom: 18%; }
 /* 选中行光标语义: 修饰键可切换选择 */
 .group-row, .member-row { cursor: pointer; }
 
@@ -1430,16 +1453,39 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .drawer-rows .k { color: var(--fg-muted); }
 .drawer-rows .v { overflow-wrap: anywhere; min-width: 0; }
 .drawer-rows .v.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-/* W5-RFB-01 字段行: 图标 + 小字字段名 + 等宽值(anywhere 断行, 超长两行内折, 完整值看 title) */
+/* W5-RFB-01 字段行; FX-22 重构: 长值块行 + 图标语义色 + 行内值操作 + 分组卡片化 */
 .f-rows { display: flex; flex-direction: column; font-size: 13px; }
-.f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr); gap: 10px; align-items: flex-start;
-  padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+.f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr) auto; gap: 10px;
+  align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
 .f-row:last-child { border-bottom: 0; }
 .f-row .ico { margin-top: 2px; color: var(--fg-dim); }
 .f-row .k { color: var(--fg-muted); font-size: 11.5px; line-height: 1.7; }
 .f-row .v { min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1.55;
   overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.f-row.wide { grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-areas:
+  "ico k act" "v v v"; row-gap: 2px; }
+.f-row.wide > .ico { grid-area: ico; }
+.f-row.wide > .k { grid-area: k; line-height: 1.5; }
+.f-row.wide > .v { grid-area: v; -webkit-line-clamp: 3; overflow-wrap: break-word; word-break: normal; }
+.f-row > .f-row-act { grid-area: act; align-self: center; width: 22px; height: 22px; }
+.f-row-act { width: 22px; height: 22px; opacity: .55;
+  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.f-row:hover .f-row-act { opacity: 1; }
+/* FX-22 图标语义色(与右键菜单 CTX-01 彩图标集同语言; 色值一律走令牌) */
+.f-row .ico-t-io { color: var(--blue); }
+.f-row .ico-t-cap { color: var(--teal); }
+.f-row .ico-t-time { color: var(--indigo); }
+.f-row .ico-t-site { color: var(--cyan); }
+.f-row .ico-t-sw { color: var(--green); }
+.f-row .ico-t-id { color: var(--violet); }
+.f-row .ico-t-path { color: var(--accent-hi); }
+.f-row .ico-t-state { color: var(--pink); }
+.drawer-sec { padding: 10px 12px 6px; margin: 0 0 12px; border-radius: var(--radius);
+  background: var(--surface-1); border: 1px solid var(--border-soft); }
+.drawer-sec h4 { display: flex; align-items: baseline; gap: 10px; }
+.drawer-sec h4 .s-sum { margin-left: auto; font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+  letter-spacing: 0; text-transform: none; color: var(--fg-dim); }
 .drawer-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .drawer-table th { text-align: left; font: 600 11px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .08em;
   text-transform: uppercase; color: var(--fg-dim); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -1475,8 +1521,15 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .add-dialog-source .add-dialog-filepick { flex: 1 1 auto; min-width: 0; }
 .add-dialog-linkbtn { flex: 0 0 auto; }
 .add-dialog-combo { position: relative; }
-.add-dialog-pathrow { display: flex; flex-wrap: wrap; gap: 8px; }
+/* FX-18 根因修复: 绝对定位浮层的容器必须有定位祖先。.add-dialog-combo 有 relative, 但包着
+ * 路径输入框与"选择位置"按钮的 .add-dialog-pathrow **没有** —— 最近的定位祖先是
+ * .modal-mask(position: fixed; inset: 0), top: 100% 换算到视口下沿之外, 面板渲染到屏幕外。 */
+.add-dialog-pathrow { position: relative; display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-pathrow .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* FX-18: 浮层锚点从"整个 field 盒"下沉到"输入行"(.add-dialog-field 是 grid 项会被拉伸) */
+.add-input-row { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.add-input-row > .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+.add-input-row > .add-pop { left: 0; right: 0; width: auto; }
 .add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
 .add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
 .add-pop-list { max-height: 210px; overflow-y: auto; }
@@ -1631,6 +1684,37 @@ select option { background: var(--bg-elev); color: var(--fg); }
   min-width: 0; overflow-wrap: anywhere; }
 .speed-mode-line .ico { flex: 0 0 auto; color: var(--accent); }
 .speed-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 4px; }
+
+/* ================= (FX-07/08) 状态栏重排: 今日流量 / 速度·限速配对 / 就近限速浮层 =================
+ * 与棱镜同设计语言、同令牌族(颜色只引用令牌, 不散写色值)。
+ * ① 今日流量 = Traffic Monitor dat 的按日行; 未启用限速曲线时整项不渲染(D2)。
+ * ② 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」, 组合内距离 < 组间距离。
+ * ③ \"限制速度\"= 按钮(点击就近弹出浮层); 浮层无遮罩、锚在状态栏上缘, 横向由 JS 夹取到视口内。
+ */
+.sb-pair { display: inline-flex; align-items: center; gap: 6px; }
+.sb-sep { width: 1px; height: 14px; background: var(--border); flex: 0 0 auto; }
+.sb-limit { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; margin-left: -2px;
+  border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent;
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-limit:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
+.sb-limit .ico { color: var(--fg-dim); }
+.sb-limit:hover .ico { color: var(--accent-hi); }
+.sb-limit .val { color: var(--fg); font-weight: 600; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sb-limit.off .val { color: var(--fg-dim); font-weight: 500; }
+.sb-today { padding-right: 12px; border-right: 1px solid var(--border-soft); }
+.sb-today .v-down { color: var(--today-down, var(--blue)); }
+.sb-today .v-up { color: var(--today-up, var(--teal, var(--accent))); }
+.sb-hist { margin-left: -6px; }
+.speed-pop { position: fixed; z-index: 131; width: 380px; padding: 14px 16px 12px;
+  bottom: calc(var(--statusbar-h, 34px) + 8px);
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3); animation: drop-in .12s var(--ease-out); }
+.speed-pop .add-dialog-body { display: flex; flex-direction: column; gap: 10px; overflow: visible; }
+.speed-pop .speed-dialog-grid { grid-template-columns: 1fr 1fr; margin: 0; }
+.speed-pop .modal-field input { width: 100%; }
+.speed-pop .speed-mode-line { margin: 0; }
 /* 设置页: 页面骨架 + 字段行栅格令牌。栅格令牌(label 宽/列间距/控件最大宽/行内边距)单点声明,
  * 全部 .ce-field 行与嵌套容器(group/section/subcard)共用同一套 —— 同层输入框左缘逐级严格对齐,
  * 控件最大宽放开到 --ce-input-max, 宽屏下不再「页面很宽、内容只占一窄条」。 */

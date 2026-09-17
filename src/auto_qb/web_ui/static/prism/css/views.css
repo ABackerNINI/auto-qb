@@ -5,6 +5,29 @@
  * 记忆点 = 底部状态栏: 全站速度与流量摘要常显, 其余视觉保持安静。
  */
 
+/* ---------------- 限速浮层(SPD-04; FX-08 改为就近弹出) ----------------
+ * 无遮罩 anchored popover: 宽度 380px 与 app.js 的 W 常量单点对齐; 纵向由 CSS 锚在状态栏上缘
+ * (bottom: --statusbar-h + 8px), 横向由 JS 写 inline left 并夹取到视口内。
+ * 层级 131 = 与确认框同层但无遮罩 —— 高于 toast(120), 低于不去遮罩的状态栏(30)不冲突。 */
+.speed-pop { position: fixed; z-index: 131; width: 380px; padding: 14px 16px 12px;
+  bottom: calc(var(--statusbar-h, 34px) + 8px);
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3); animation: drop-in .12s var(--ease-out); }
+.speed-pop .add-dialog-body { display: flex; flex-direction: column; gap: 10px; overflow: visible; }
+.speed-pop .speed-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.speed-pop .modal-field input { width: 100%; }
+
+/* ---------------- 列头拖动虚影(FX-25) ----------------
+ * 跟随光标的列名胶囊。**不用 HTML5 draggable 的原生拖影**(它会与点击排序/列宽拖拽互相干扰),
+ * 与已有的 mousedown 阈值手势完全解耦; pointer-events: none 不吃事件。
+ * 必须渲染在 #app 层(不能放进 .group-head: 它的 will-change/transform 会另建包含块,
+ * fixed 定位会相对表头而非视口)。 */
+.col-ghost { position: fixed; z-index: 120; pointer-events: none; transform: translate(10px, 12px);
+  padding: 3px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); border: 1px solid var(--accent-line); box-shadow: var(--shadow-2);
+  color: var(--fg); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+
 /* ---------------- 辅种页布局 ---------------- */
 /* TBL-08: 左栏"舵台"信息栏退役 -> 底部状态栏(.statusbar); 布局改单列全宽。
  * TBL-07: 不再 2560px 居中限宽, 两侧只留最小 12px 内边距(横向滚动内容不再被两侧页底色裁切) */
@@ -20,7 +43,27 @@
   gap: 16px; height: var(--statusbar-h, 34px); padding: 0 18px; overflow: hidden; white-space: nowrap;
   background: var(--glass); backdrop-filter: blur(10px); border-top: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--hairline); }
-.sb-speed { display: flex; align-items: center; gap: 16px; min-width: 0; overflow: hidden; }
+.sb-speed { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
+/* FX-08: 速度与限速配对 —— "下载速度 12.3 MiB/s · 限制速度 不限" 是一个不可断开的组合,
+ * 同组内距离小于组间距离, 读起来才是一个整体。 */
+.sb-pair { display: inline-flex; align-items: center; gap: 6px; }
+.sb-sep { width: 1px; height: 14px; background: var(--border); flex: 0 0 auto; }
+/* "限制速度"= 按钮(点击就近弹出限速浮层), 视觉上仍属状态栏正文: 无底色, 仅 hover 浮出 */
+.sb-limit { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; margin-left: -2px;
+  border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent;
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-limit:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
+.sb-limit .ico { color: var(--fg-dim); }
+.sb-limit:hover .ico { color: var(--accent-hi); }
+.sb-limit .val { font-size: 12px; }
+/* 不限速: 弱化(它不是受限状态, 不需要强调) */
+.sb-limit.off .val { color: var(--fg-dim); font-weight: 500; }
+/* 今日流量(FX-07): 数据源与连接/剩余不同(Traffic Monitor dat), 用竖线与右侧摘要区分 */
+.sb-today { padding-right: 12px; border-right: 1px solid var(--border-soft); }
+.sb-today .v-down { color: var(--today-down); }
+.sb-today .v-up { color: var(--today-up); }
+.sb-hist { margin-left: -6px; }
 /* 左侧统计摘要: 指标项紧凑排列(标签暗 + 数值亮), 空间不足时整体裁切而不换行 */
 .sb-stats { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
 .sb-stats .lbl { color: var(--fg-dim); font-size: 11.5px; }
@@ -58,7 +101,11 @@
   box-shadow: var(--shadow-1); will-change: transform; }
 .group-head.sticky-head { border-radius: 0; }
 .h-cell { position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
-.hc-count, .hc-hr, .hc-num_seeds, .hc-num_leechs { text-align: center; }
+/* FX-05(决策 D4 = 方案A): 做种/用户列的表头与单元格统一右对齐。
+ * 旧规则把这两列的表头居中(hc-count/hc-hr 仍居中), 而单元格是右对齐 -> 表头与内容错位;
+ * 原 TBL-01 的"0 值居中"已随本轮 FX-02/03/04 不再显示 0 值一并取消, 故直接右对齐。 */
+.hc-count, .hc-hr { text-align: center; }
+.hc-num_seeds, .hc-num_leechs { text-align: right; }
 .hc-dlspeed, .hc-upspeed, .hc-uploaded, .hc-size, .hc-total_size,
 .hc-eta, .hc-added_on, .hc-downloaded, .hc-amount_left, .hc-availability,
 .hc-seeding_time, .hc-time_active, .hc-last_activity, .hc-completion_on,
@@ -92,6 +139,11 @@
 .g-status.k-seeding { background: var(--green-soft); }
 .g-status.k-downloading, .g-status.k-checking { background: var(--blue-soft); }
 .g-status.k-error { background: var(--error-soft); }
+/* FX-06(D8-B): 暂停/其它芯片此前没有背景修饰符, 落回 .g-status 的 --surface-2(暗主题 = 白 6%)
+ * 读作"太白/没颜色"; 改为不铺底 + 中性描边 + 中性中间调字色 —— 与其它四色并列时"有色/无色"
+ * 的层次反而更清楚, 且不抢眼。 */
+.g-status.k-paused, .g-status.k-other { background: var(--paused-soft); color: var(--paused);
+  box-shadow: inset 0 0 0 1px var(--paused-line); }
 .g-stat, .member-row span { white-space: nowrap; }
 .g-stat, .m-stat { text-align: right; }
 .g-stat.zero, .m-stat.zero { text-align: center; }
@@ -103,7 +155,8 @@
   transition: background var(--dur) var(--ease); }
 .site-chip.seeding { background: var(--green-soft); color: var(--green); }
 .site-chip.downloading, .site-chip.checking { background: var(--blue-soft); color: var(--blue); }
-.site-chip.paused { background: var(--surface-2); color: var(--fg-muted); }
+.site-chip.paused { background: var(--paused-soft); color: var(--paused);
+  box-shadow: inset 0 0 0 1px var(--paused-line); }  /* FX-06: 同 .g-status.k-paused(去白高光底) */
 .site-chip.error { background: var(--error-soft); color: var(--error); }
 .site-chip.search-hit { background: var(--accent-soft); color: var(--accent-hi); font-weight: 600;
   box-shadow: inset 0 0 0 1px var(--accent-line); }
@@ -147,7 +200,8 @@
 .member-row.seeding .m-state { color: var(--green); }
 .member-row.downloading .m-state, .member-row.checking .m-state { color: var(--blue); }
 .member-row.error .m-state { color: var(--error); }
-.member-row.paused .m-state { color: var(--fg-dim); }
+.member-row.paused .m-state { color: var(--paused); }  /* FX-06: 与状态芯片同族(不再是 dim 灰) */
+.member-row.paused .m-site .dot { background: var(--paused); }
 .m-hash { color: var(--fg-dim); font-size: 12px; }
 
 /* 进度条 */
@@ -168,6 +222,14 @@
 .group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
   width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
 .member-row.selected { background: var(--accent-soft); }
+/* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 例如在种子页选了某辅种组的
+ * 2 个种子后回辅种页, 该组应显示"半选"而不是"没选"。视觉 = 同款左色条但降透明 + 柔底,
+ * 与全选明确区分; 仍只引用既有令牌(不引新色)。 */
+.group-row.partial, .member-row.partial { background: var(--accent-soft); border-color: var(--accent-line); }
+.member-row { position: relative; }
+.group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
+  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); opacity: .42; }
+.member-row.partial::before { top: 18%; bottom: 18%; }
 
 /* 限速对照 */
 .pill-limit .ico { opacity: .9; }
@@ -196,16 +258,19 @@
 /* ---------------- 批量操作段(FIX-06: 并入筛选行) ----------------
  * 原为独立吸顶浮条(.bulk-bar, top 跟随 --head-h), 选中/取消选中时会插入或抽出表格上方,
  * 造成整页跳动; 现改为 .status-strip 行首的同行段 —— 无独立 top/z-index/margin,
- * 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高)。 */
-.bulk-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px;
-  padding: 3px 10px 3px 9px; border: 1px solid var(--accent-line); border-radius: var(--radius);
+ * 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高)。
+ * FX-09: 高度必须 ≤ 26px(与 .dist-chip 齐平) —— 它是靠"自然高度不超"来实现同排不改变行高,
+ * 只靠 ① 压按钮不够: 段自身的 padding+border 也会超出, 所以两处都锁死。 */
+.bulk-inline { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 9px; height: 26px;
+  padding: 0 9px 0 8px; border: 1px solid var(--accent-line); border-radius: var(--radius);
   background: linear-gradient(180deg, var(--accent-soft), transparent 70%), var(--bg-card); }
-.bulk-inline .bulk-count { font-size: 12.5px; color: var(--fg-muted); white-space: nowrap; }
+.bulk-inline .bulk-count { font-size: 11.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
 .bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
-.bulk-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--radius-sm);
+.bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
-  font-size: 12px; cursor: pointer;
+  font-size: 11.5px; line-height: 1; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .bulk-btn:hover { background: var(--surface-2); color: var(--fg); }
 .bulk-btn .ico-play { color: var(--green); }
@@ -703,12 +768,40 @@
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 .drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
-/* 字段行: 图标 + 小字字段名 + 等宽值(anywhere 断行, 超长两行内折, 完整值看 title) */
+/* 字段行: 图标 + 小字字段名 + 等宽值(超长值看下方 .wide 块行)
+ * FX-22 重构三件: ① 长值行升格为**块行**(标签一行, 值独占下一行) —— 旧写法所有行都是
+ * "16px / 112px / 1fr" 三列 + anywhere 硬断, 长路径被切成两行且与邻行参差; ② 图标按语义着色
+ * (.ico-t-*, 不再是 48 行全灰); ③ 值区右侧可挂操作按钮(复制/打开目录)。 */
 .f-rows { display: flex; flex-direction: column; font-size: 13px; }
-.f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr); gap: 10px; align-items: flex-start;
-  padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+.f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr) auto; gap: 10px;
+  align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
 .f-row:last-child { border-bottom: 0; }
 .f-row .ico { margin-top: 2px; color: var(--fg-dim); }
 .f-row .k { color: var(--fg-muted); font-size: 11.5px; line-height: 1.7; }
 .f-row .v { min-width: 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
   overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* 长值块行(路径 / 哈希 / 备注): 图标+键一行, 值独占下一行, 3 行上限 + break-word 断行 */
+.f-row.wide { grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-areas:
+  "ico k act" "v v v"; row-gap: 2px; }
+.f-row.wide > .ico { grid-area: ico; }
+.f-row.wide > .k { grid-area: k; line-height: 1.5; }
+.f-row.wide > .v { grid-area: v; -webkit-line-clamp: 3; overflow-wrap: break-word; word-break: normal; }
+.f-row > .f-row-act { grid-area: act; align-self: center; width: 22px; height: 22px; }
+.f-row-act { width: 22px; height: 22px; opacity: .55;
+  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.f-row:hover .f-row-act { opacity: 1; }
+/* FX-22 图标语义色: 与右键菜单 CTX-01 彩图标集同语言(色值一律走主题令牌, 改色只改令牌) */
+.f-row .ico-t-io { color: var(--blue); }      /* 传输: 下载/上传/箭头 */
+.f-row .ico-t-cap { color: var(--teal); }     /* 容量: 大小/总大小/分块 */
+.f-row .ico-t-time { color: var(--indigo); }  /* 时间: 日历/时钟/计时/ETA */
+.f-row .ico-t-site { color: var(--cyan); }    /* 站点与连接: 地球/链接 */
+.f-row .ico-t-sw { color: var(--green); }     /* 开关与设置族 */
+.f-row .ico-t-id { color: var(--violet); }    /* 标识: 哈希/信息/标签/备注 */
+.f-row .ico-t-path { color: var(--accent-hi); }  /* 路径: 文件夹 */
+.f-row .ico-t-state { color: var(--pink); }   /* 状态与比率: 进度/分享率/校验/警示 */
+/* FX-22 分组层级: 组标题行右侧给一句汇总(组间节奏 + 一眼看重点); 卡片化与设置页 .ce-section 同语言 */
+.drawer-sec { padding: 10px 12px 6px; margin: 0 0 12px; border-radius: var(--radius);
+  background: var(--surface-1); border: 1px solid var(--border-soft); }
+.drawer-sec h4 { display: flex; align-items: baseline; gap: 10px; }
+.drawer-sec h4 .s-sum { margin-left: auto; font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0; text-transform: none; color: var(--fg-dim); }

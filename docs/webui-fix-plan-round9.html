@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB UI 修复计划 · 第九轮 — 25 项分类拆解 · 根因定位 · 分阶段实施</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .13);
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  .page { max-width: 1220px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 42px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 56em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; margin-top: 46px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.4 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .04em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  section.sec { margin: 0 0 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 30px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  h4 { margin: 20px 0 8px; font-size: 14.5px; font-weight: 600; color: var(--fg); }
+  p { margin: 0 0 12px; max-width: 64em; color: var(--fg); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 1.4em; max-width: 64em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: var(--dim); padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--fg); }
+  td .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  td.no, td.c { font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  td.wrap { white-space: normal; }
+  td.ok { color: var(--accent); }
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .05em;
+    padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); }
+  .tag.hot { color: var(--accent); border-color: rgba(91, 200, 236, .4); }
+  .tag.warn { color: #e8b45a; border-color: rgba(232, 180, 90, .4); }
+  .tag.bad { color: #e8a0a0; border-color: rgba(232, 160, 160, .4); }
+  .tag.fe { color: #9fd8ae; border-color: rgba(159, 216, 174, .4); }
+  .tag.be { color: #c3aef0; border-color: rgba(195, 174, 240, .4); }
+
+  .note { border-left: 2px solid rgba(91, 200, 236, .45); padding: 10px 14px; margin: 14px 0 18px;
+    background: var(--panel); color: var(--muted); font-size: 13.5px; max-width: 64em; }
+  .note b { color: var(--fg); }
+  .note.warn { border-left-color: rgba(232, 180, 90, .5); }
+  .note.warn b { color: #e8b45a; }
+
+  .ev { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+  .bad { color: #e8a0a0; }
+  .good { color: #9fd8ae; }
+
+  .stage { border: 1px solid var(--line); background: var(--panel); padding: 14px 18px; margin: 0 0 14px; }
+  .stage h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .stage h4 .s-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  .stage p { margin: 0 0 4px; font-size: 13.5px; color: var(--muted); max-width: none; }
+  .stage .items { margin: 6px 0 0; font: 12.5px/1.7 var(--mono); color: var(--dim); }
+
+  pre { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
+    overflow-x: auto; font: 12.5px/1.7 var(--mono); color: #cfe0ee; margin: 12px 0 18px; }
+  pre b { color: var(--accent); font-weight: 600; }
+  pre .cm { color: var(--dim); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
+    font: 12px/1.6 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">auto-qb · web ui · round 9 · 棱镜为主, 星图随共享层联动</div>
+  <h1>WEB UI 修复计划<br>25 项分类拆解 · 根因定位 · 分阶段实施</h1>
+  <p class="lede">
+    本轮 25 条诉求已全部落到「具体文件 + 具体行 + 根因」三件套。其中 <b>9 条来自同一批根因</b>
+    (状态芯片缺暂停修饰符、浮层缺定位祖先、单元格口径在模板里重复三份、认证门首帧状态未知、
+    左栏退役后遗留的死代码), 若不先按类归并, 会修成"改一处漏两处"。
+    本文件只出计划, 不改代码。
+  </p>
+  <div class="meta">
+    <span>分支 <b>develop</b> @ <b>6da4504</b></span>
+    <span>范围 <b>棱镜模板/CSS + shared/app.js + web.py 一个端点</b></span>
+    <span>规模 <b>8 类 / 25 项 / 8 阶段</b></span>
+    <span>日期 <b>2026-09-17</b></span>
+  </div>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s00"><span class="t-no">00</span>摘要</a>
+      <a href="#s01"><span class="t-no">01</span>分类拆解(8 类 25 项)</a>
+      <a href="#s02"><span class="t-no">02</span>根因定位(已核实)</a>
+      <a href="#s03"><span class="t-no">03</span>分阶段实施</a>
+      <a href="#s04"><span class="t-no">04</span>关键设计细节</a>
+      <a href="#s05"><span class="t-no">05</span>待确认决策点</a>
+      <a href="#s06"><span class="t-no">06</span>风险与红线</a>
+      <a href="#s07"><span class="t-no">07</span>验证与验收</a>
+    </nav>
+
+    <main>
+      <!-- ===================== 00 摘要 ===================== -->
+      <section class="sec" id="s00">
+        <div class="sec-head"><span class="no">00</span><h2>摘要</h2></div>
+
+        <p>
+          25 条按<b>成因</b>而非按<b>界面位置</b>归并成 8 类; 其中 6 类的多项可一次改完,
+          剩下 2 类(选择模型、删除流程)属结构性重构 —— 各自牵动 4 个入口的一致性, 必须整类一起动。
+        </p>
+
+        <table>
+          <tr><th>类别</th><th>项数</th><th>性质</th><th>主要落点</th><th>风险</th></tr>
+          <tr>
+            <td>A 启动与鉴权</td><td class="c">1</td><td class="c wrap">状态机初始值</td>
+            <td class="c wrap">app.js data()/mounted</td><td class="c">低</td>
+          </tr>
+          <tr>
+            <td>B 表格呈现口径</td><td class="c">5</td><td class="c wrap">口径收口 + 缺令牌</td>
+            <td class="c wrap">app.js 派生函数 + 模板 ×3 + 5 主题</td><td class="c">低</td>
+          </tr>
+          <tr>
+            <td>C 底部状态栏</td><td class="c">2</td><td class="c wrap">结构重排 + 浮层化</td>
+            <td class="c wrap">app.js sbStats + 模板 + views.css</td><td class="c">中</td>
+          </tr>
+          <tr>
+            <td>D 选择模型与视图打通</td><td class="c">4</td><td class="c wrap bad">结构性重构</td>
+            <td class="c wrap">app.js 选择态/批量目标 + 三视图模板</td><td class="c bad">高</td>
+          </tr>
+          <tr>
+            <td>E 右键菜单与删除口径</td><td class="c">4</td><td class="c wrap">重构 + 新端点</td>
+            <td class="c wrap">app.js 菜单/删除链 + web.py</td><td class="c warn">中高</td>
+          </tr>
+          <tr>
+            <td>F 添加种子对话框</td><td class="c">5</td><td class="c wrap">浮层锚定 + 版式重排</td>
+            <td class="c wrap">prism/index.html + components.css</td><td class="c">中</td>
+          </tr>
+          <tr>
+            <td>G 详情抽屉与确认框</td><td class="c">3</td><td class="c wrap">呈现层重构</td>
+            <td class="c wrap">drawerGeneralSections + .f-* / .modal-*</td><td class="c">中</td>
+          </tr>
+          <tr>
+            <td>H 表格交互</td><td class="c">1</td><td class="c wrap">指针手势补视觉</td>
+            <td class="c wrap">app.js startColDrag + CSS</td><td class="c">低</td>
+          </tr>
+        </table>
+
+        <div class="note">
+          <b>三条公共底座</b> —— 各自被 2~4 条诉求共享, 必须排在最前:
+          <br>① <b>单元格口径单点化</b>: 做种时长 / 分享率 / 用户·做种 三处口径目前在模板里各写三份
+          (明细表 · 种子页 · 追剧集明细 ⇒ <code>prism/index.html</code> 的 483/586/754 等行) —
+          本轮同时要改其中三条口径, 不先抽函数必然漏改。
+          <br>② <b>浮层锚定契约</b>: "选择位置没反应"+"下拉 2 秒消失"是同一个缺失的定位祖先 + 原生 datalist 抢管;
+          "分类/标签离输入框太远"同源。
+          <br>③ <b>状态色令牌缺一族</b>: <code>.g-status.k-paused</code> 没有任何背景规则, 落回 <code>--surface-2</code>
+          (暗主题下 = 白 6%)才显得"太白"; 状态分布条图例的暂停 swatch 同因。
+        </div>
+
+        <div class="note warn">
+          <b>顺带发现一处真断链(建议一并修)</b>: 左栏信息栏退役(TBL-08)时,
+          <b>今日流量卡 / 限速对照 pill / 历史流量入口</b>的模板引用一并消失, 但
+          <code>app.js</code> 的 <code>trafficOn</code> / <code>todayTraffic</code> / <code>limitRows</code> 三个 computed 与
+          <code>historyOpen</code> 弹层留了下来 —— 现在<b>历史流量弹层没有任何入口</b>(只能关不能开)。
+          本轮"加回今日流量"正好把它接回来, 而不是新增一套。
+        </div>
+      </section>
+
+      <!-- ===================== 01 分类拆解 ===================== -->
+      <section class="sec" id="s01">
+        <div class="sec-head"><span class="no">01</span><h2>分类拆解 · 8 类 25 项</h2></div>
+
+        <p class="small">
+          编号 <code>FX-nn</code> 为本轮新增的稳定 id(不含 W/FIX/TBL/DLG 旧轮次前缀, 便于在代码注释与提交信息里检索)。
+          「层」列: <span class="tag fe">FE</span> 纯前端 / <span class="tag be">BE</span> 需后端 / <span class="tag">共享</span> 两套 UI 同时生效。
+        </p>
+
+        <h3><span class="h-no">A</span>启动与鉴权(1)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-01</td>
+            <td class="wrap">刷新页面会闪现"输入密钥"界面(第二次出现)</td>
+            <td class="c wrap">app.js <code>data().bootstrapping</code> / <code>mounted()</code>;<br>模板 <code>v-if="authRequired"</code> 分支</td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">B</span>表格呈现口径(5)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-02</td>
+            <td class="wrap">"0 分钟"做种时长且无 HR 要求 → 不显示</td>
+            <td class="c wrap">新增 <code>cellSeedingTime()</code>;<br>模板 483/586/754 行</td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-03</td>
+            <td class="wrap">暂停中的种子不显示 用户 / 做种</td>
+            <td class="c wrap">新增 <code>cellPeers()</code>;<br>模板 464-465 / 735-736 行</td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-04</td>
+            <td class="wrap">进度不为 0 的种子才显示分享率</td>
+            <td class="c wrap">新增 <code>cellRatio()</code>;<br>模板 487 / 590 / 758 行</td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-05</td>
+            <td class="wrap">"用户 / 做种"列的表头与内容没有对齐</td>
+            <td class="c wrap">views.css <code>.hc-num_seeds/.hc-num_leechs</code> + <code>.m-stat</code></td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-06</td>
+            <td class="wrap">暂停中的种子状态色"太白"(无颜色)</td>
+            <td class="c wrap">5 个主题各加 paused 令牌族;<br>components.css/views.css 状态修饰符</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">C</span>底部状态栏(2)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-07</td>
+            <td class="wrap">移除 本次 / 累计 / DHT, 加回 今日流量<br><span class="sub">含复活"历史流量"入口(现为无入口的死弹层)</span></td>
+            <td class="c wrap">app.js <code>sbStats</code>;<br>模板 <code>&lt;footer class="statusbar"&gt;</code></td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-08</td>
+            <td class="wrap">速度与限速按钮融合为「下载速度 / 限制速度、上传速度 / 限制速度」,
+                点击"限制速度"就近弹窗, 且弹窗不得跑到屏幕外</td>
+            <td class="c wrap">模板状态栏 + <code>speedOpen</code> 弹层改锚定浮层;<br>app.js 新增 <code>openSpeedAt(ev, dir)</code></td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">D</span>选择模型与视图打通(4)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-09</td>
+            <td class="wrap">点击种子后出现的控制按钮比所在栏高 → UI 上下变化</td>
+            <td class="c wrap">views.css <code>.bulk-inline/.bulk-btn</code>;<br>components.css <code>.status-strip</code></td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-10</td>
+            <td class="wrap">"分组"不够具体 → 改为"辅种"</td>
+            <td class="c wrap">两模板导航/列选择器标题/空态 +<br>app.js <code>_bulkCountText</code></td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-11</td>
+            <td class="wrap">不能同时选择分组与种子(互斥)</td>
+            <td class="c wrap">app.js <code>toggleGroupSel/toggleMemberSel</code> 等 6 处</td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-12</td>
+            <td class="wrap">打通 辅种页 ↔ 种子页 ↔ 追剧页 的选择(双向保持)</td>
+            <td class="c wrap">app.js 新增 <code>selHashSet</code> 派生 + 三视图选中态</td>
+            <td class="c"><span class="tag bad">高</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">E</span>右键菜单与删除口径(4)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-13</td>
+            <td class="wrap">追剧页"单部剧"没有右键菜单</td>
+            <td class="c wrap">prism/atlas 模板 <code>.show-row</code>(prism:633);<br>app.js 新增 <code>openShowMenu</code>/<code>actShow</code>/<code>delShow</code></td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-14</td>
+            <td class="wrap">右键菜单加"打开目标文件夹"(分组 / 种子都有效, 走 py 后端)</td>
+            <td class="c wrap">web.py 新端点 + app.js 菜单项;<br>复用现有 <code>utils.open_path</code></td>
+            <td class="c"><span class="tag be">BE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-15</td>
+            <td class="wrap">队列族 / 自动种子管理 / 分享率限制 / 超级做种 / 强制开始 / 复制族 → 次级菜单
+                <span class="sub">并要求"记入 memory bank"</span></td>
+            <td class="c wrap">ctx-menu 支持 flyout;<br>conventions.md 立"菜单分层原则"</td>
+            <td class="c"><span class="tag">共享</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-16</td>
+            <td class="wrap">右键删除 与 批量条删除 行为不一致 → 统一为右键的行为</td>
+            <td class="c wrap">app.js 抽 <code>_deleteFlow()</code>;<br>4 个入口改薄包装</td>
+            <td class="c"><span class="tag warn">中高</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">F</span>添加种子对话框(5)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-17</td>
+            <td class="wrap">保存路径下拉框 2 秒后自动消失; 下拉风格未与主题统一</td>
+            <td class="c wrap">删原生 <code>&lt;datalist&gt;</code>+<code>list=</code>;<br>PRISM 模板 1788 行 / app.js <code>toggleAddPathPop</code></td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-18</td>
+            <td class="wrap">"选择位置"按钮没反应; 分类/标签下拉框离输入框太远</td>
+            <td class="c wrap">components.css <code>.add-dialog-pathrow</code> 缺 <code>position: relative</code>(根因);<br>浮层改为锚定输入行</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-19</td>
+            <td class="wrap">添加种子窗口布局局促 → 增大窗口</td>
+            <td class="c wrap">components.css <code>.modal.add-dialog</code>(640px)</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-20</td>
+            <td class="wrap">移除添加窗口中的选项勾选框(违背本项美学)</td>
+            <td class="c wrap">模板 5 项 checkbox → 无勾选框的切换胶囊</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-21</td>
+            <td class="wrap">勾"跳过校验"后警告行出现 → UI 高度变化</td>
+            <td class="c wrap">模板 1834 行 + <code>.add-dialog-hint-warn</code> 常驻占位</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">G</span>详情抽屉与确认框(3)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-22</td>
+            <td class="wrap">种子详细排版混乱、长内容(内容路径/根路径/Tracker)凌乱、界面生硬、图标需要颜色
+                <span class="sub">用户标注"第二次修改"</span></td>
+            <td class="c wrap">app.js <code>drawerGeneralSections()</code> + 模板 <code>.f-row</code> + views.css <code>.f-*</code></td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-23</td>
+            <td class="wrap">删除窗口中超长种子名显示混乱(被硬断成 3 行且缩进错乱)</td>
+            <td class="c wrap">components.css <code>.modal-detail-row .d-value</code>;<br>app.js <code>_confirmDelete</code> 的 details</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-24</td>
+            <td class="wrap">删除窗口中两个勾选框违背本项美学</td>
+            <td class="c wrap">components.css <code>.modal-check</code> → 切换胶囊</td>
+            <td class="c"><span class="tag">FE</span></td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">H</span>表格交互(1)</h3>
+        <table>
+          <tr><th>#</th><th>诉求</th><th>落点</th><th>层</th></tr>
+          <tr>
+            <td class="no">FX-25</td>
+            <td class="wrap">拖动列头重排时显示列名虚影(跟随光标)</td>
+            <td class="c wrap">app.js <code>startColDrag</code> 加 <code>colDragGhost</code>;<br>views.css 虚影样式</td>
+            <td class="c"><span class="tag fe">FE</span></td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- ===================== 02 根因定位 ===================== -->
+      <section class="sec" id="s02">
+        <div class="sec-head"><span class="no">02</span><h2>根因定位(已核实到行)</h2></div>
+
+        <p class="small">下列 9 条是"读代码即可确证"的根因; 另有 5 条(FX-05/08/09/17/23)需要在阶段 0 用浏览器实测取几何/样式证据后再定改法。</p>
+
+        <table>
+          <tr><th>#</th><th>根因</th><th>证据</th></tr>
+          <tr>
+            <td class="no">FX-01</td>
+            <td class="wrap">首帧渲染的是密钥表单: <code>authRequired: true</code> + <code>bootstrapping: false</code> 是 data() 的初始值,
+                而 <code>bootstrapping = true</code> 只在 <code>mounted()</code> 里读到 <code>savedToken</code> <b>之后</b>才设置 —
+                中间隔着一次 <code>fetch("/api/config/public")</code> 往返 ⇒ 那一两帧就是"闪现输入界面"</td>
+            <td class="c wrap">app.js <code>data()</code> 200/202/291 行;<br><code>mounted()</code> 968-984 行</td>
+          </tr>
+          <tr>
+            <td class="no">FX-06</td>
+            <td class="wrap"><code>.g-status</code> 默认背景 = <code>--surface-2</code>(暗主题 = 白 6%);
+                只有 <code>k-seeding / k-downloading / k-checking / k-error</code> 有背景修饰符,
+                <b><code>k-paused / k-other</code> 没有</b> ⇒ 暂停芯片落回"白底", 且文字仅 <code>--fg-dim</code></td>
+            <td class="c wrap">views.css <code>.g-status{background:var(--surface-2)}</code>;
+                components.css 161-164 行</td>
+          </tr>
+          <tr>
+            <td class="no">FX-18</td>
+            <td class="wrap"><code>.pop-menu</code> 是 <code>position:absolute; top:calc(100% + 6px)</code>, 需要<b>定位祖先</b>:
+                <code>.add-dialog-combo</code> 有 <code>position:relative</code>, 但包着路径输入框与"选择位置"按钮的
+                <code>.add-dialog-pathrow</code> <b>没有</b> ⇒ 最近定位祖先是 <code>.modal-mask</code>(<code>position:fixed; inset:0</code>),
+                <code>top: 100%+6px</code> = 视口下沿之外 ⇒ 面板渲染到屏幕外 ⇒ 表现为"点了没反应"</td>
+            <td class="c wrap">components.css 133/440 行;<br>模板 1786-1801 行</td>
+          </tr>
+          <tr>
+            <td class="no">FX-17</td>
+            <td class="wrap">路径输入框挂着原生 <code>list="ad-path-dl"</code> + <code>&lt;datalist&gt;</code>:
+                浏览器自带的建议浮层会自行出现/自动消失(即"2 秒后消失"), 样式完全不受主题控制,
+                还与自绘的 <code>.add-pop</code> 面板抢同一交互; 且输入框 <code>@focus</code> 上写着
+                <code>addPathPop = false</code>(聚焦反而关面板)</td>
+            <td class="c wrap">模板 1789/1800 行;<br>app.js <code>openAddTorrent</code>/<code>toggleAddPathPop</code></td>
+          </tr>
+          <tr>
+            <td class="no">FX-11/12</td>
+            <td class="wrap">选择态是两套并列数组 <code>selGroups</code>(组 key) 与 <code>selMembers</code>(hash),
+                <b>无互斥、无派生</b>; 追剧页的剧行/集行<b>根本没有 selected 类</b>
+                (只有展开后的集明细 member-row 用了 <code>selMembers</code>) ⇒ 组选中不映射到成员, 追剧页看不出选中</td>
+            <td class="c wrap">app.js 275-279 行;<br>模板 633/666/726 行</td>
+          </tr>
+          <tr>
+            <td class="no">FX-16</td>
+            <td class="wrap">右键与批量去的是<b>两条链</b>: 右键 = <code>_confirmDelete</code> + <code>_reannounceBeforeDelete</code> + 专用端点
+                <code>/api/groups/{k}/delete</code>、<code>/api/torrents/{h}/delete</code>(<b>不等回执</b>);
+                批量 = <code>_confirmDelete</code> + 自建并行汇报 + <code>/api/torrents/bulk</code> 单命令(<b>等聚合回执</b>) + <code>clearSelection()</code>;
+                确认框内容也分叉(逐目标详情 vs 纯计数)</td>
+            <td class="c wrap">app.js <code>delGroup</code>/<code>delTorrent</code>/<code>delEpisode</code>/<code>bulkDelete</code>;<br>
+                web_commands.py <code>_cmd_bulk_torrents</code></td>
+          </tr>
+          <tr>
+            <td class="no">FX-13</td>
+            <td class="wrap">剧行 <code>.show-row</code> 只绑了 <code>@click="toggleShow"</code>, 没有 <code>@contextmenu</code>;
+                集行有 <code>openShowEpMenu</code> ⇒ 越级的"剧"这一层没有菜单</td>
+            <td class="c wrap">prism/index.html 633 行;<br>atlas 对应段</td>
+          </tr>
+          <tr>
+            <td class="no">FX-09</td>
+            <td class="wrap">批量段已并入筛选行(<code>.bulk-inline</code>), 但段高 = 按钮高 + 上下 padding + 边框
+                (按钮 <code>padding:4px 10px; font-size:12px</code>), 比同排 chip(<code>padding:3px 9px</code>)高约 6~10px;
+                而 <code>.status-strip</code> 自身没有 min-height 锁定 ⇒ 选中/取消时整行高度变化, 下方表格整体位移</td>
+            <td class="c wrap">views.css 200-215 行;<br>components.css 95-101 行 <span class="ev">待实测确认差值</span></td>
+          </tr>
+          <tr>
+            <td class="no">FX-07</td>
+            <td class="wrap">同上文断链: <code>trafficOn</code>/<code>todayTraffic</code>/<code>limitRows</code> 三个 computed 与
+                <code>historyOpen</code> 弹层在模板中<b>已无任何引用</b>(全库 grep 只命中定义处) ⇒ 历史流量无入口</td>
+            <td class="c wrap">app.js 619-662/291 行;<br>prism 模板 2013 行(仅关闭)</td>
+          </tr>
+        </table>
+
+        <h3><span class="h-no">2.1</span>需在阶段 0 实测取证的 5 条</h3>
+        <table>
+          <tr><th>#</th><th>要量什么</th><th>为什么必须实测</th></tr>
+          <tr><td class="no">FX-05</td><td class="wrap">表头/单元格的实际 <code>text-align</code> 与字形包围盒左右间隙</td>
+              <td class="c wrap">"没对齐"有右对齐/居中两种改法, 要先看零值"—"占比与观感</td></tr>
+          <tr><td class="no">FX-08</td><td class="wrap">窄窗口(900/760px)下浮层的 <code>left/right/bottom</code> 越界量</td>
+              <td class="c wrap">"不要显示到屏幕外"需要阈值断言, 先量出可用夹取公式</td></tr>
+          <tr><td class="no">FX-09</td><td class="wrap"><code>.status-strip</code> 选中前后的 <code>getBoundingClientRect().height</code> 差</td>
+              <td class="c wrap">决定是"压按钮"还是"锁行高"还是两者都做</td></tr>
+          <tr><td class="no">FX-17</td><td class="wrap">面板在视口内的实际矩形 + 原生 datalist 是否出现</td>
+              <td class="c wrap">证伪/证实"渲染到屏幕外"这一根因</td></tr>
+          <tr><td class="no">FX-23</td><td class="wrap">长名称值块的行盒宽度序列(逐行 <code>clientWidth</code>)</td>
+              <td class="c wrap">"3 行且缩进错乱"的判定阈值(行宽差的容忍度)</td></tr>
+        </table>
+      </section>
+
+      <!-- ===================== 03 分阶段实施 ===================== -->
+      <section class="sec" id="s03">
+        <div class="sec-head"><span class="no">03</span><h2>分阶段实施</h2></div>
+
+        <p class="small">
+          阶段顺序按<b>依赖</b>而非按类别排: 公共底座(B 的口径函数、F 的浮层契约)先落地,
+          结构性重构(D 选择模型、E 删除链)放在中段(此时口径与浮层都已稳定), 纯呈现重构(G 抽屉)放最后单独一段,
+          避免"大重构 + 大改版"同时进行导致回归不可二分定位。
+        </p>
+
+        <div class="stage">
+          <h4><span class="s-no">A</span>诊断取证(先量后改)</h4>
+          <p>复用既有浏览器冒烟底座(FakeQbServer + 临时 data_dir + Edge headless CDP), 对 §02.1 的 5 项取几何/样式证据,
+             并额外验证 FX-01 的时序(用 CDP <code>Fetch</code> 域延迟 <code>/api/config/public</code> 响应, 稳定复现"输入界面闪现")。</p>
+          <div class="items">FX-05 · FX-08 · FX-09 · FX-17 · FX-23 + FX-01 时序复现 → 产出 report.json(样式/矩形/时序三类证据)</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">B</span>口径与文案(零依赖, 一次改完)</h4>
+          <p>先抽三个单元格派生函数(同一口径在模板里重复三份的地方一次性收口), 再改文案单点表。
+             此阶段不碰 CSS 结构, 只加类与文本。</p>
+          <div class="items">FX-02 · FX-03 · FX-04 · FX-05 · FX-06(令牌族) · FX-10(文案) · FX-01(认证门)</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">C</span>浮层与对话框(添加框 + 确认框)</h4>
+          <p>先立浮层锚定契约(定位祖先行 + 浮层宽度对齐输入框 + 关闭条件收敛), 再在此契约上重排添加窗口版式
+             与确认框的值区/选项区。</p>
+          <div class="items">FX-17 · FX-18 · FX-19 · FX-20 · FX-21 · FX-23 · FX-24</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">D</span>状态栏与表格交互</h4>
+          <p>状态栏左右两段整体重排(含复活历史入口、限速改锚定浮层), 以及批量段行高锁定; 两者都属"固定栏"层,
+             一起改便于用同一组视口断言验收。</p>
+          <div class="items">FX-07 · FX-08 · FX-09 · FX-25</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">E</span>菜单分层与后端能力</h4>
+          <p>ctx-menu 支持 flyout 后立刻做一次"入口重排"(一级只留 PT 高频项), 再接入新端点"打开目标文件夹";
+             追剧页剧行菜单与此同批(共用同一套 flyout 与菜单项组件)。</p>
+          <div class="items">FX-14(web.py 端点 + 单测) · FX-15(flyout + 重排 + memory bank) · FX-13(剧行菜单)</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">F</span>选择模型与删除语义(结构性, 一次到位)</h4>
+          <p>引入单一选择权威 + 派生集合, 三视图共用; 删除链抽成单一 <code>_deleteFlow()</code>,
+             四个入口改薄包装。<b>此阶段必须做完一个子项就跑一次 CDP 断言</b>(选择态改动是全轮最容易连带回归的一处)。</p>
+          <div class="items">FX-11(互斥) → FX-12(三视图派生) → FX-16(删除链统一)</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">G</span>详情抽屉常规区重构</h4>
+          <p>数据侧(字段行的 <code>tone</code>/<code>wide</code> 标记)与呈现侧(块行升格 + 图标着色 + 组标题汇总)分两步,
+             改完立即在浏览器里对照截图确认观感, 再做一轮参数微调(用户已明确这是"第二次修改", 不验收就别收工)。</p>
+          <div class="items">FX-22(数据侧 → 版式 → 着色 → 截图确认)</div>
+        </div>
+
+        <div class="stage">
+          <h4><span class="s-no">H</span>验证与回写</h4>
+          <p>全量 pytest + 前端静态守阵 + 完整 CDP 冒烟断言表 + 用户真机 dry-run 走查; 文档与知识库按收尾 DoD 回写。</p>
+          <div class="items">uv run pytest tests -q · node --check / CSS-模板守阵 · CDP 25 项断言 · README + memory-bank 回写 · 任务立档</div>
+        </div>
+
+        <div class="note">
+          <b>立档判定(AGENTS.md 阈值)</b>: 本任务跨 ≥2 次会话、单会话指令 ≥5 轮、改动源文件 ≥3 个、
+          且已产出计划文档 —— <b>四条阈值全部命中</b>, 收尾时必须立档
+          <code>memory-bank/tasks/TASK011-webui-fix-round9.md</code> 并同步 <code>tasks/_index.md</code>。
+        </div>
+      </section>
+
+      <!-- ===================== 04 设计细节 ===================== -->
+      <section class="sec" id="s04">
+        <div class="sec-head"><span class="no">04</span><h2>关键设计细节</h2></div>
+
+        <h3><span class="h-no">4.1</span>认证门首帧(FX-01)</h3>
+        <p>
+          根因是"首帧状态未知却被当成已知"。修法把初始值从"未授权"改为<b>"未知(验证中)"</b>,
+          三条明确路径才能离开该状态 —— 与 fail-closed 一致: 由"假定要密钥"变成"假定正在验证",
+          最坏情况只是多一次加载态, 而不是把密钥表单闪给用户。
+        </p>
+        <pre><span class="cm">// app.js data(): 初始即"验证中"(遮罩显示加载卡而非表单)</span>
+authRequired: true,
+bootstrapping: <b>true</b>,      <span class="cm">// was: false —— 这一行就是"闪现输入界面"的根因</span>
+
+<span class="cm">// mounted(): 只有这三条路径离开 bootstrapping</span>
+1) pub.web.skip_local_verify  → authRequired = false           <span class="cm">// 本机免鉴权, 直进</span>
+2) savedToken 验证通过        → authRequired = false           <span class="cm">// bootstrap() 成功分支</span>
+3) 无 savedToken / 验证被拒    → bootstrapping = false           <span class="cm">// 才渲染密钥表单</span>
+</pre>
+        <p class="small">
+          配套: 加载卡加 <code>min-height</code>(与表单等高的占位), 避免"加载卡 → 表单"本身的高度跳动;
+          并把它写成 CDP 可断言项(见 §07.2), 让"第二次出现"的这类回归以后能被测试挡住。
+        </p>
+
+        <h3><span class="h-no">4.2</span>表格口径单点化(FX-02/03/04)</h3>
+        <p>
+          现状: 三条口径的表达式在模板里各出现三次(明细表 / 种子页 / 追剧集明细), 且逻辑直接写在
+          <code>{{ }}</code> 里。本轮把三条口径收成 methods, 模板改为调用 —— 这既是本轮三条诉求的实现方式,
+          也顺带消掉"改一处漏两处"的结构性隐患。
+        </p>
+        <pre><span class="cm">/* methods 新增三个派生函数(返回值语义 = 单元格显示文本, 空串即不显示) */</span>
+cellSeedingTime(m) {                       <span class="cm">// FX-02</span>
+  const t = m.seeding_time || 0;
+  if (t &lt;= 0 &amp;&amp; !(m.hr_triggered &amp;&amp; m.hr_req_time)) return "";   <span class="cm">// 0 分钟且无 HR 要求 -> 不显示</span>
+  return this.fmtDuration(t);
+}
+cellPeers(m, dir) {                        <span class="cm">// FX-03: dir = "seeds" | "leechs"</span>
+  if (m.kind === "paused") return "";      <span class="cm">// 暂停种子不显示用户/做种</span>
+  return dir === "seeds"
+    ? this.fmtPeersQb(m.num_seeds, m.num_complete)
+    : this.fmtPeersQb(m.num_leechs, m.num_incomplete);
+}
+cellRatio(m) {                             <span class="cm">// FX-04</span>
+  if (!m.progress) return "";              <span class="cm">// 进度为 0 的种子不显示分享率</span>
+  return (m.ratio || 0).toFixed(2);
+}
+</pre>
+        <p class="small">
+          <b>HR 前缀保留</b>: 做种时长列在 HR 已触发时仍显示 <code>/ 要求时长</code>, 所以隐藏判断必须带上
+          <code>hr_triggered &amp;&amp; hr_req_time</code> 条件 —— 只看 <code>seeding_time &lt;= 0</code> 会把"HR 要求但还没开始做种"
+          的种子一起隐藏掉(那正是最需要看见的一类)。
+          <b>对齐占位</b>: 隐藏用空串而非 <code>v-if</code> 移除节点 —— 单元格仍在 grid 里, 列宽与表头不会错位。
+        </p>
+
+        <h3><span class="h-no">4.3</span>状态色令牌族(FX-06)</h3>
+        <p>
+          现状把 <code>paused</code> 与 <code>other</code> 直接复用 <code>--fg-dim</code>, 且没有背景修饰符,
+          于是落在 <code>--surface-2</code> 上读作"白底灰字"。修法是补齐一族语义令牌, 让暂停在五个主题下
+          都<b>有明确色相、且不与做种(绿)/下载(蓝)/错误(红)/警告(橙)撞色</b>:
+        </p>
+        <pre><span class="cm">/* themes/*.css 各加三行(按主题取冷石板/灰蓝族; 亮色主题压暗保对比) */</span>
+--paused:      <span class="cm">/* 主色: 状态文字/图标 */</span>
+--paused-soft: <span class="cm">/* 芯片底(与 --green-soft/--blue-soft 同权重) */</span>
+--paused-line: <span class="cm">/* 选中/Hover 描边 */</span>
+
+<span class="cm">/* 单点补齐全部引用点(现只覆盖 color) */</span>
+.g-status.k-paused, .g-status.k-other      { background: var(--paused-soft); color: var(--paused); }
+.k-paused, .k-paused .swatch               { color: var(--paused); }
+.dist-chip.k-paused .swatch                { background: var(--paused); }   <span class="cm">// 状态分布条同源</span>
+.site-chip.paused                          { background: var(--paused-soft); color: var(--paused); }
+.member-row.paused .m-state                { color: var(--paused); }
+</pre>
+        <p class="small">
+          依据 <code>tokens.css</code> 头注"组件样式只允许引用令牌, 不许散写色值": 五主题必须各改一处, 而不是在组件里写死一个灰蓝。
+          <b>待确认</b>见 D8(方向: 语义色化 vs 继续降饱和)。
+        </p>
+
+        <h3><span class="h-no">4.4</span>底部状态栏重构(FX-07/08)</h3>
+        <p>左"状态摘要"、右"速度 · 限速"两段重排, 高度仍锁 <code>--statusbar-h</code>(34px), 不随内容变化:</p>
+        <pre>今日流量 ↓ 12.4 GiB ↑ 3.1 GiB [⏱历史]   │   连接 128   │   剩余 412 GiB   ⟨spacer⟩
+↓ 下载速度 12.3 MiB/s · 限制速度 不限      ↑ 上传速度 2.1 MiB/s · 限制速度 8 MiB/s   [完整统计]</pre>
+        <ul>
+          <li><b>移除</b> 本次流量 / 累计流量 / DHT 三项(<code>sbStats</code> 里直接删条目);</li>
+          <li><b>加回</b> 今日流量: 数据源 = <code>traffic.periods</code> 中 <code>period === "day"</code> 的 up/down(字节, Traffic Monitor dat 口径);
+              配色沿用既有 <code>--today-up</code>(青)/ <code>--today-down</code>(靛);</li>
+          <li><b>复活历史入口</b>: 复用现有 <code>i-history</code> sprite 与 <code>hist-modal</code>, 点图标置 <code>historyOpen = true</code> ——
+              这一步是"修断链", 不是新功能;</li>
+          <li><b>速度与限速融合</b>: 每方向一个 <code>.sb-pair</code>(速度 = 数值; 限制速度 = 可点击按钮), 点击仅打开该方向预聚焦的限速浮层,
+              不再有独立的「限速」按钮;</li>
+          <li><b>限速取值</b>: 曲线启用时取 <code>traffic.limit.actual[dir]</code>(KiB/s), 未启用回退 qB <code>server_state.dl_limit/up_limit</code>(bytes/s),
+              统一显示为同一单位 —— <b>单一来源, 不在状态栏并列两个口径</b>(见 D3);</li>
+          <li><b>限速浮层就近弹出</b>(FX-08): 由点击事件坐标计算位置, 复用 <code>_menuPos()</code> 的视口吸附思路但改为"向上弹":
+              <code>bottom = --statusbar-h + 8</code>, <code>left</code> 夹取到 <code>[12, vw - w - 12]</code>;
+              容器从 <code>.modal-mask</code> + 居中 <code>.modal</code> 改为 <code>position: fixed</code> 的无遮罩浮层
+              (点外部/Esc 关闭, 复用全局关闭监听)。</li>
+        </ul>
+        <div class="note warn">
+          <b>踩坑提醒(已入 pitfalls)</b>: 浮层严禁落在 <code>&lt;transition&gt;</code> 内(上一轮"弹窗全部失效"的根因),
+          且移动/定位由 JS 写在 <code>style</code> 上而非 CSS <code>left/top</code> 硬编码;
+          状态栏 <code>overflow: hidden</code> 会把<i>子元素溢出</i>裁掉, 所以限速浮层必须是状态栏的<b>兄弟节点</b>(挂到 body 层),
+          不能嵌在 <code>&lt;footer&gt;</code> 里 —— 这一条要在实现时先确认, 否则又会得到"点了没反应"的同一现象。
+        </div>
+
+        <h3><span class="h-no">4.5</span>批量段行高锁定(FX-09)</h3>
+        <p>
+          <code>.bulk-inline</code> 已并入筛选行(FIX-06), 但段高比同排 chip 高 ⇒ 出现/消失时整行变高。
+          两手一起做(只做一手都会留残余跳动):
+        </p>
+        <pre><span class="cm">/* ① 压按钮到与 chip 同高 */</span>
+.bulk-inline { padding: 2px 9px; }
+.bulk-btn    { padding: 2px 9px; font-size: 11.5px; line-height: 1.5; }   <span class="cm">// 高度对齐 .dist-chip</span>
+<span class="cm">/* ② 锁定筛选行高度(出现/消失只换内容不换高度) */</span>
+.status-strip { min-height: var(--strip-h); align-items: center; }         <span class="cm">// --strip-h 由实测值定</span>
+</pre>
+        <p class="small">
+          竖排/窄屏分支(<code>@media</code> 里已有 <code>align-items: flex-start</code>)需同步确认: 窄屏允许换行, 那时行高变化是预期的,
+          断言只在宽屏分支做。
+        </p>
+
+        <h3><span class="h-no">4.6</span>选择模型: 互斥 + 派生(FX-11/12)</h3>
+        <p>
+          现状是"两个并列数组, 各视图各看一个"。目标模型是<b>一个权威 + 一份派生</b>:
+          权威仍是两个数组(组 key / 成员 hash), 但入口处互斥; 所有视图的选中态一律读<b>派生集合</b>。
+        </p>
+        <pre><span class="cm">// 1) 互斥(FX-11): 入口处清另一侧, 并给一次轻提示说明口径已切换</span>
+toggleGroupSel(g)  { this.selMembers = []; ... }     <span class="cm">// 选辅种 -> 清种子选择</span>
+toggleMemberSel(m) { this.selGroups  = []; ... }     <span class="cm">// 选种子 -> 清辅种选择</span>
+<span class="cm">// shift 系列(shiftGroupSel/shiftMemberSel/shiftTorrentSel) 与 clearSelection 同步改</span>
+
+<span class="cm">// 2) 派生(FX-12): 组选择 -> 成员 hash 闭包, 供所有视图读</span>
+selHashSet() {                                        <span class="cm">// computed</span>
+  const s = new Set(this.selMembers);
+  for (const k of this.selGroups) {
+    const g = this._findGroup(k);
+    if (g) for (const m of g.members) s.add(m.hash);   <span class="cm">// 虚拟行只有 1 个成员</span>
+  }
+  return s;
+}
+<span class="cm">// 3) 三视图统一读派生集合</span>
+种子页 .torrent-row   :selected = selHashSet.has(m.hash)
+追剧集明细 .member-row :selected = selHashSet.has(m.hash)
+追剧剧行/集行          :selected = 该集全部成员 ⊆ selHashSet; :partial = 命中但非全选
+辅种页 .group-row      :selected = selGroups.includes(g.key); :partial = 派生集合命中其部分成员
+</pre>
+        <ul>
+          <li><b>批量条计数不随视图漂移</b>: <code>selGroups</code> 非空就报 <code>N 个辅种</code>(即使当前在种子页),
+              <code>selMembers</code> 非空报 <code>N 个种子</code> —— 用户切视图时看到的"已选"口径保持不变, 这是"打通"的直观体现;</li>
+          <li><b>批量目标</b>: <code>_bulkTargets()</code> 按 <code>selMode</code> 只出 keys 或只出 hashes(不再混发);
+              后端 <code>_cmd_bulk_torrents</code> 已同时支持两者, 无需改后端;</li>
+          <li><b>追剧页选中入口</b>: 剧行/集行保留"点击 = 展开"的原行为(不破坏现状), <code>Ctrl/⌘+点击 = 选中该剧/该集全部成员</code>,
+              <code>Shift+点击 = 范围选择</code>(与表格一致的修饰键语义);</li>
+          <li><b>半选态</b>需要新视觉(左色条 + 半透明底, 对应"部分成员被选"的 indeterminate 语义),
+              用现有 <code>--accent-soft</code> 降透明即可, 不引新色;</li>
+          <li><b>Esc 取消选择</b>顺手接入既有 Esc 退栈(浮层 → 对话框 → 清选择), 与 <code>想法.md</code> 里的同源诉求合并落地。</li>
+        </ul>
+
+        <h3><span class="h-no">4.7</span>删除链统一(FX-16)</h3>
+        <p>统一后的流程以<b>右键的行为为准</b>, 并把批量的两处"更稳"的做法一并保留(不降级):</p>
+        <pre>_deleteFlow(targets, meta)        <span class="cm">// targets = {keys[], hashes[], label, details[]}</span>
+  ① 确认框: _confirmDelete(...)   <span class="cm">// 结构一致: 目标摘要 + 目标清单(可滚动) + 两个切换项</span>
+  ② 汇报前置: reannounce ? 逐目标投递并全部等回执 : 跳过
+       任一失败 -> 中止 + 保留未删除(与右键一致)
+  ③ 投递删除: 统一走 /api/torrents/bulk { action:"delete", keys, hashes, delete_files }
+       -> 等聚合回执 -> ok/error 均给明确 toast(比右键的"已投递"更可信)
+  ④ 收尾: clearSelection(); 列表交下一轮 rid 轮询自然刷新(不主动 refresh)
+
+delGroup() / delTorrent() / delEpisode() / bulkDelete()   <span class="cm">// 全部改为薄包装, 只负责组织 targets</span>
+</pre>
+        <p class="small">
+          <b>兼容性</b>: <code>/api/groups/{k}/delete</code> 与 <code>/api/torrents/{h}/delete</code> 端点<b>保留不动</b>
+          (旧 UI 与第三方脚本仍可用, 且不属本轮范围); 明细区的目标清单同时对 FX-23 的长名称问题提供落点(见 4.12)。
+          <b>待确认</b>: 统一后是否接受"删除也等回执"(右键现在不等) —— 见 D5。
+        </p>
+
+        <h3><span class="h-no">4.8</span>浮层锚定契约(FX-17/18)</h3>
+        <p>三条诉求同一个根因, 因此立三条契约后一次性套用到添加窗口的全部浮层(保存路径 / 分类 / 标签):</p>
+        <pre><span class="cm">① 定位祖先: 浮层的直接容器必须有 position: relative(锚定"输入行"而非整个 field 盒)</span>
+.add-dialog-pathrow { position: relative; }      <span class="cm">// 缺这一行 => 面板渲染到视口外"点了没反应"</span>
+.add-dialog-combo   { position: relative; }      <span class="cm">// 已有, 但浮层锚点要从"field"下沉到"输入行"</span>
+
+<span class="cm">② 浮层几何: 宽度对齐输入框, 顶边贴输入框下缘 6px</span>
+.add-pop { left: 0; right: 0; width: auto; top: calc(100% + 6px); }
+<span class="cm">// 分类/标签: 把 input 与 .pop-menu 包进同一 .add-input-row(relative), 面板即贴住输入框</span>
+
+<span class="cm">③ 开关条件收敛(不再依赖 blur 时序 + 退役原生 datalist)</span>
+删 &lt;datalist id="ad-path-dl"&gt; 与输入框的 list="ad-path-dl" 属性
+input @focus -> 打开面板(原为 addPathPop = false)
+面板项 @mousedown.prevent -> 保住输入焦点
+关闭 = 选中 / Esc / document 捕获点击且 !e.target.closest(".add-dialog-pathrow")
+</pre>
+        <p class="small">
+          原生 <code>&lt;datalist&gt;</code> 的建议浮层既不受主题控制又会自行超时消失, 与本项目"浮层统一走
+          <code>.pop-menu</code> 家族"的做法冲突 ⇒ <b>直接退役</b>, 不试图接管它的样式。
+          验证方式见 §07.2(失焦 2 秒后面板仍在 + 面板 left 与输入框 left 差 ≤ 2px)。
+        </p>
+
+        <h3><span class="h-no">4.9</span>次级菜单(FX-15)</h3>
+        <p>ctx-menu 增加一级 flyout, 按"PT 高频 / qB 通用低频"重排入口:</p>
+        <pre>一级(常显)  开始 · 暂停 · 强制汇报 · 详细信息 · 限速… · 移动… · 重命名… · 重新校验 · 导出 .torrent · 打开目标文件夹 · 删除…
+　▸ 高级     队列置顶 / 队列上移 / 队列下移 / 队列置底 · 自动种子管理 · 超级做种 · 强制开始 · 分享率限制…
+　▸ 复制     名称 / 哈希 / magnet
+</pre>
+        <ul>
+          <li>flyout 锚定父项右缘, 右侧空间不足时向左翻(复用既有 <code>_menuOverflowsRight()</code> 判定);</li>
+          <li>展开交互: hover <b>与</b> 点击都能展开(键盘用户走 Enter), 子面板内点击直接执行并关闭整条菜单链;</li>
+          <li><b>记忆点写进 memory bank</b>(用户明确要求): <code>conventions.md</code> 增一条
+              「菜单/入口分层原则: 一级只放 PT 日常高频动作; qB 通用能力(队列 / TMM / 超级做种 / 强制开始 / 分享率限制 / 复制族) 一律进次级菜单」,
+              <code>modules.md</code> 静态资源段补一行 flyout 契约。</li>
+        </ul>
+
+        <h3><span class="h-no">4.10</span>打开目标文件夹(FX-14)</h3>
+        <pre><span class="cm"># web.py 新增(只读路径解析 + 系统打开; 不进命令队列, 不碰 state —— 单一写线程假设不受影响)</span>
+POST /api/open-path   { "kind": "group" | "torrent", "key" | "hash": "..." }
+
+解析(服务端自己算, <b>不接受前端传路径</b>):
+  torrent -> content_path 是文件时取其父目录; 否则 content_path / save_path
+  group   -> 组内成员 save_path 的一致值; 不一致 -> 400 "组内保存路径不一致, 请按种子打开"
+校验: 目录必须存在(os.path.isdir), 否则 404
+执行: utils.open_path(path)    <span class="cm"># 已存在, tray "打开日志目录" 在用; 三平台回退已实现</span>
+</pre>
+        <div class="note warn">
+          <b>安全红线</b>: 绝不接受客户端传入任意路径 —— <code>os.startfile</code> 会用系统默认程序打开目标,
+          等于把"任意文件执行"暴露给 WEB 端点。路径一律由后端从自己的快照派生, 且只允许目录。
+          (同族风险见仓库安全指令 I6/命令注入条目。)
+        </div>
+
+        <h3><span class="h-no">4.11</span>详情抽屉常规区重构(FX-22)</h3>
+        <p>四条改动, 按"数据 → 版式 → 着色 → 确认"顺序落地:</p>
+        <table>
+          <tr><th>维度</th><th>现状</th><th>改为</th></tr>
+          <tr>
+            <td class="c">行高与断行</td>
+            <td class="wrap">所有行都是 <code>16px / 112px / 1fr</code> 三列 grid, 值区 <code>-webkit-line-clamp: 2</code> +
+                <code>overflow-wrap: anywhere</code> ⇒ 长路径被切成 2 行且与相邻行错位</td>
+            <td class="wrap"><b>长值行升格为块行</b>: 图标+键 一行, 值独占下一行(等宽 + 优先在 <code>/ \ . -</code> 处断);
+                标记由数据侧给 <code>wide: true</code> —— 不在模板里按长度猜</td>
+          </tr>
+          <tr>
+            <td class="c">图标</td>
+            <td class="wrap"><code>.f-row .ico { color: var(--fg-dim) }</code> —— 48 行全是灰</td>
+            <td class="wrap">数据侧加 <code>tone</code> 字段 → <code>ico-t-*</code> 族(下载/上传/容量/时间/站点/开关),
+                色值全走主题令牌, 与 ctx-menu 的 CTX-01 彩图标集同语言</td>
+          </tr>
+          <tr>
+            <td class="c">值操作</td>
+            <td class="wrap">长值只能靠 <code>title</code> 悬停看全文</td>
+            <td class="wrap">路径行加"打开目录"图标按钮(复用 4.10 端点), 哈希行加"复制"按钮(复用 <code>_copyText</code>)</td>
+          </tr>
+          <tr>
+            <td class="c">分组层级</td>
+            <td class="wrap">四组(基础/传输/时间/路径)只有 mono 小标题, 组间无节奏差</td>
+            <td class="wrap">组标题行右侧加一句汇总(如"容量 12.3 GiB · 分享率 1.24"), 组卡片化(与设置页 <code>.ce-section</code> 同语言);
+                "全部字段(原始键值)"保留为<b>调试视图</b>, 默认折叠</td>
+          </tr>
+        </table>
+        <p class="small">
+          字段映射本身(48 行的键名/哨兵值翻译)沿用不动 —— 本轮只重排呈现, 不重写数据来源, 避免把
+          "排版问题"扩大成"数据口径问题"。用户标注这是"第二次修改": 阶段 G 必须包含一次截图对照后的微调回路。
+        </p>
+
+        <h3><span class="h-no">4.12</span>确认框: 长值与选项形态(FX-23/24)</h3>
+        <pre><span class="cm">/* FX-23 长值: anywhere(任意位置硬断, 中文混排下"错乱") -> 块行 + break-word + 省略 + 复制 */</span>
+.modal-detail-row.wide            { display: block; }                     <span class="cm">// 标签一行, 值另起一行</span>
+.modal-detail-row.wide .d-value   { overflow-wrap: break-word; word-break: normal;
+                                    display: -webkit-box; -webkit-line-clamp: 3; overflow: hidden; }
+<span class="cm">/* 值随 title 给全文 + 右侧一个"复制"图标按钮(复用 .ce-icon flat) */</span>
+
+<span class="cm">/* FX-24 选项: 去掉复选框, 改为项目既有的"整行点击切换"胶囊(与筛选器弹层 .pop-item.on 同构) */</span>
+.modal-opt        { display: flex; align-items: center; gap: 9px; padding: 8px 11px; cursor: pointer; }
+.modal-opt.on     { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.modal-opt.on::before { content: ""; position: absolute; left: 0; width: 3px; ...; background: var(--accent); }
+.modal-opt.danger.on::before { background: var(--error); }   <span class="cm">// "同时删除磁盘文件" 用危险色条</span>
+</pre>
+        <p class="small">
+          同款胶囊同时用于 FX-20(添加窗口的 5 个选项) —— 一处定义、两处复用, 顺带把"勾选框"从本项目的
+          交互语汇里清掉(用户已就两处分别提出同一诉求)。
+        </p>
+
+        <h3><span class="h-no">4.13</span>列头拖动虚影(FX-25)</h3>
+        <pre><span class="cm">// startColDrag: 越过阈值时记录被拖列, 并渲染跟随光标的胶囊</span>
+colDragGhost = { label: col.label, w: cellRect.width, x: e.clientX, y: e.clientY }
+<span class="cm">// move: 只更新 x/y(transform, 不触发重排); up: 清空</span>
+
+<span class="cm">/* 虚影: fixed + pointer-events:none, 与 .ctx-menu 同族视觉但不吃事件 */</span>
+.col-ghost { position: fixed; z-index: 120; pointer-events: none;
+  background: var(--bg-elev); border: 1px solid var(--accent-line);
+  box-shadow: var(--shadow-2); padding: 4px 10px; font: 600 11px var(--font-mono); }
+</pre>
+        <p class="small">
+          刻意<b>不用 HTML5 <code>draggable</code></b> —— <code>startColDrag</code> 的注释已记明: 原生拖影会与"点击排序""列宽拖拽"互相干扰,
+          现方案是 mousedown 阈值手势 + 落点指示线, 自绘虚影与既有手势完全解耦(z-index 与 <code>.ctx-menu</code>(100) /
+          <code>.sticky-head</code> 层级已对齐, 不压住 toast 与 modal)。
+        </p>
+
+        <h3><span class="h-no">4.14</span>文案改名: 分组 → 辅种(FX-10)</h3>
+        <p>只改<b>面向用户</b>的文本, 代码标识(变量/键/API 路径/CSS 类)一律不动 —— 否则会牵动后端契约与列宽存储键。</p>
+        <table>
+          <tr><th>位置</th><th>现</th><th>改</th></tr>
+          <tr><td class="c wrap">两套 UI 顶栏一级导航</td><td class="c">分组</td><td class="c">辅种</td></tr>
+          <tr><td class="c wrap">批量条计数 / 删除按钮文案</td><td class="c">N 个组</td><td class="c">N 个辅种</td></tr>
+          <tr><td class="c wrap">列选择器段落标题</td><td class="c">分组表</td><td class="c">辅种表</td></tr>
+          <tr><td class="c wrap">空态 / 筛选 chip title</td><td class="c">暂无辅种分组 / …的辅种组</td><td class="c">暂无辅种 / …的辅种</td></tr>
+          <tr><td class="c wrap">设置页 schema 分组(无关语义)</td><td class="c">"配置分组"</td><td class="c">不改(这是 schema 分组, 非业务辅种)</td></tr>
+        </table>
+        <p class="small">
+          改名清单集中成 <code>app.js</code> 顶部一组常量(如 <code>L10N_GROUP = "辅种"</code>)而非散写字符串,
+          便于下次口径统一时单点替换, 也让"哪些是业务名词"在代码里可检索。
+        </p>
+      </section>
+
+      <!-- ===================== 05 决策点 ===================== -->
+      <section class="sec" id="s05">
+        <div class="sec-head"><span class="no">05</span><h2>待确认决策点</h2></div>
+
+        <p class="small">下列 8 条会影响实现方向; 未确认前对应项<b>不动手</b>(其余项可先做)。每条都给了推荐值, 直接说"全按推荐"即可开工。</p>
+
+        <table>
+          <tr><th>#</th><th>决策</th><th>选项</th><th>推荐</th></tr>
+          <tr>
+            <td class="no">D1</td>
+            <td class="wrap">本轮双 UI 范围</td>
+            <td class="c wrap">A. 只做棱镜<br>B. 棱镜 + 星图同步<br>C. 共享逻辑层两套自动生效, 模板/CSS 只做棱镜</td>
+            <td class="ok wrap">C —— 两套模板都引 <code>shared/app.js</code>, 逻辑类改动(FX-01~04/07/10~16)天然两套生效;
+                纯版式类(FX-05/06/08/09/17~25)先棱镜, 星图按需再补</td>
+          </tr>
+          <tr>
+            <td class="no">D2</td>
+            <td class="wrap">今日流量在"未启用限速曲线"时怎么显示</td>
+            <td class="c wrap">A. 整项不渲染<br>B. 回退显示"本次会话"流量<br>C. 常显但值为"—"</td>
+            <td class="ok wrap">A —— 今日流量只来自 Traffic Monitor dat; 用"本次会话"顶替会换掉口径(用户此前已两次强调口径一致), "—"则白占位</td>
+          </tr>
+          <tr>
+            <td class="no">D3</td>
+            <td class="wrap">"限制速度"取哪个值</td>
+            <td class="c wrap">A. 曲线 actual 优先, 回退 qB 当前值<br>B. 只取 qB 当前值<br>C. 同时显示 target/actual 两个</td>
+            <td class="ok wrap">A —— 单一来源; C 会让状态栏变成"限速对照面板"(那是信息栏时代的形态, 已退役)</td>
+          </tr>
+          <tr>
+            <td class="no">D4</td>
+            <td class="wrap">FX-05 对齐口径(与旧的 TBL-01"0 值居中"冲突)</td>
+            <td class="c wrap">A. 做种/用户列 → 表头与值统一右对齐(零值也右对齐, 仅降对比)<br>B. 表头改居中(与零值居中一致, 有值时仍右对齐)<br>C. 全表统一: 表头与值同源取列模型 align</td>
+            <td class="ok wrap">A(最小改) —— 用户当时的"0 值居中"诉求只针对下载/上传/总上传/大小/总大小;
+                做种/用户是后加列, 统一右对齐最直观。C 是更彻底的后续重构, 但会动全表列对齐, 建议单独一轮</td>
+          </tr>
+          <tr>
+            <td class="no">D5</td>
+            <td class="wrap">FX-16 统一后, "删除"是否也等回执</td>
+            <td class="c wrap">A. 等(与批量现行为一致)<br>B. 不等(与右键现行为一致, 更快但失败无感)</td>
+            <td class="ok wrap">A —— 用户诉求是"统一为右键行为", 指向的是<b>汇报前置 + 目标详情</b>这两点;
+                回执属批量的更优实现, 保留不降级。若您认为 B 更符合直觉请明示</td>
+          </tr>
+          <tr>
+            <td class="no">D6</td>
+            <td class="wrap">FX-13 剧行的右键动作集</td>
+            <td class="c wrap">A. 开始/暂停整剧 · 强制汇报 · 打开目标文件夹 · 删除整剧…<br>B. 再加 复制剧名 / 导出该剧全部 .torrent</td>
+            <td class="ok wrap">A —— 与集行菜单同构(集行已有开始/暂停/汇报/删除); 导出整剧会一次性投递 N 个下载, 语义偏重, 先不做</td>
+          </tr>
+          <tr>
+            <td class="no">D7</td>
+            <td class="wrap">FX-20 添加窗口"选项"的落地形态</td>
+            <td class="c wrap">A. 5 项全保留, 改为无勾选框的切换胶囊<br>B. 只留常用 2~3 项, 其余进"更多"折叠</td>
+            <td class="ok wrap">A —— 用户诉求是"移除勾选框"而非"减少选项"; 胶囊化后 5 项一行放得下</td>
+          </tr>
+          <tr>
+            <td class="no">D8</td>
+            <td class="wrap">FX-06 暂停色的方向</td>
+            <td class="c wrap">A. 给语义色(冷石板 / 灰蓝族), 与其它状态并列为"有色"
+                <br>B. 保持无色相, 只是把对比压到"明确可见但不抢眼"</td>
+            <td class="ok wrap">A —— "太白了"读作"没有颜色"; 暂停是辅种场景里需要一眼辨别的状态, 无色相会与"其它"混在一起。
+                若您要的是更弱, 请指明改 B</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- ===================== 06 风险与红线 ===================== -->
+      <section class="sec" id="s06">
+        <div class="sec-head"><span class="no">06</span><h2>风险与红线(不动清单)</h2></div>
+
+        <ul>
+          <li><b>生产文件红线</b>: <code>config.yml</code> 与 <code>auto-qb-data/</code> 一律不碰(AGENTS.md 明文);
+              调试一律用 <code>minimal.yml</code> / <code>test_yamls/</code> + 临时 data_dir, 完事清理。</li>
+          <li><b>单一写线程</b>: 新增的 <code>/api/open-path</code> 只读快照 + 调用系统打开, <b>不进命令队列、不写 state</b>;
+              其余改动全在前端。删除链统一后仍走 <code>bulk_torrents</code> 既有命令通道。</li>
+          <li><b>前端 DOM/CSS 契约</b>(<code>views.css</code> 头注 + pitfalls 已列): <code>.sticky-head</code> 与 <code>--head-h</code>、
+              <code>--statusbar-h</code>、<code>.group-head/.detail-head</code>、<code>gridStyle</code> 列模板、<code>.ctx-menu</code>、
+              <code>tpl-ce-field</code>、sprite <code>#i-*</code> 单点、toast/确认框单例 —— <b>一律保留</b>, 新功能以"新增类"接入。</li>
+          <li><b>CSS 结构守阵</b>: 本轮大量改 CSS/模板, 而"漏 <code>; }</code> / 选择器被吞"与"<code>&lt;transition&gt;</code> 吞弹窗"
+              都是已入 pitfalls 的真实故障形态 ⇒ <b>每次改完先跑 <code>test_frontend_static_bundle_health</code></b>, 不做批量收尾式修改。</li>
+          <li><b>不做的事</b>: 不引构建链 / 不引新依赖 / 不引第三方图标库(手写 inline SVG + sprite 单点);
+              不做行入场动画与数字滚动(pitfalls 明文: 2s 整表重渲染会反复播放); 动效仍尊重 <code>prefers-reduced-motion</code>。</li>
+          <li><b>旧口径冲突先在决策点定案</b>: FX-05 的列对齐与 FX-02/03/04 的"空值显示"都动到 TBL-01/TBL-02 时代的显示规则,
+              <b>改动只改本轮明确点到的那几列/那几种状态</b>, 不顺手统一全表空值策略。</li>
+          <li><b>HR 口径</b>: FX-02 隐藏做种时长时必须保留"HR 已触发"分支(见 4.2 注), 不得让 HR 种子因"0 分钟"而隐身;
+              <code>hr_triggered/hr_req_time</code> 一律消费后端算好的字段, 前端不重算阈值。</li>
+          <li><b>选择模型改动面最大</b>: FX-12 会改三视图的选中渲染与批量目标构成 ⇒ 必须逐子项跑 CDP 断言,
+              不允许"一次改完再看"(回归不可二分定位)。</li>
+        </ul>
+      </section>
+
+      <!-- ===================== 07 验证 ===================== -->
+      <section class="sec" id="s07">
+        <div class="sec-head"><span class="no">07</span><h2>验证与验收</h2></div>
+
+        <h3><span class="h-no">7.1</span>自动化</h3>
+        <ul>
+          <li><b>后端基线不回退</b>: <code>uv run pytest tests -q</code>(当前基线 <b>995 passed</b>, 见 <code>testing.md</code> 顶部), 实测数字回写该文件。</li>
+          <li><b>新增后端用例</b>(FX-14, 4 例): 文件型 content_path → 父目录; 目录型 → 自身; 组内路径不一致 → 400;
+              路径不存在 → 404; 均断言 <code>utils.open_path</code> 被调/未被调(打桩)。
+              <b>新增测试必须同步该测试文件头部 docstring 的「## 测试计划」清单</b>(项目明文规定)。</li>
+          <li><b>前端静态守阵</b>: <code>test_frontend_static_bundle_health</code>(冲突标记 / 注释孤儿续行 / <code>node --check</code> /
+              CSS 漏闭合 / <code>&lt;transition&gt;</code> 吞弹窗 / 静态引用缺失)每阶段收尾必跑一次。</li>
+          <li><b>断言不得依赖真实 qBittorrent</b>: 浏览器冒烟用 <code>helpers.FakeQbServer</code> + 临时配置(沿用上一轮诊断脚本)。</li>
+        </ul>
+
+        <h3><span class="h-no">7.2</span>浏览器冒烟断言表(25 项, 逐项可执行)</h3>
+        <table>
+          <tr><th>#</th><th>断言</th><th>判定</th></tr>
+          <tr><td class="no">FX-01</td><td class="wrap">用 CDP 延迟 <code>/api/config/public</code> 响应, 检查首帧 DOM</td>
+              <td class="c">首帧不存在 <code>input[type=password]</code>; 出现的是加载卡</td></tr>
+          <tr><td class="no">FX-02</td><td class="wrap">构造 seeding_time=0 且无 HR 的种子</td><td class="c">做种时长单元格文本为空; 有 HR 的仍显示 "0分钟 / 要求"</td></tr>
+          <tr><td class="no">FX-03</td><td class="wrap">暂停种子行</td><td class="c">用户/做种两格均为空</td></tr>
+          <tr><td class="no">FX-04</td><td class="wrap">progress = 0 的种子行</td><td class="c">分享率格为空; progress &gt; 0 的仍显示</td></tr>
+          <tr><td class="no">FX-05</td><td class="wrap">比较 <code>.hc-num_seeds</code> 与首行单元格</td><td class="c">两者 <code>text-align</code> 相同, 且字形左右间隙差 ≤ 2px</td></tr>
+          <tr><td class="no">FX-06</td><td class="wrap">读 <code>.g-status.k-paused</code> 的计算样式</td>
+              <td class="c">背景 ≠ <code>--surface-2</code>, 且与 seeding/downloading/error 三色互不相等</td></tr>
+          <tr><td class="no">FX-07</td><td class="wrap">状态栏文本</td>
+              <td class="c">不含"本次/累计/DHT"; 含"今日流量"; 点历史图标 → <code>.hist-modal</code> 可见</td></tr>
+          <tr><td class="no">FX-08</td><td class="wrap">点"限制速度"(窗宽 1400 / 1024 / 900)</td>
+              <td class="c">浮层 <code>left ≥ 12</code> 且 <code>right ≤ vw-12</code>; <code>bottom ≤ vh</code>; 不产生横向滚动条</td></tr>
+          <tr><td class="no">FX-09</td><td class="wrap">选中 1 个种子前后量 <code>.status-strip</code> 高度</td><td class="c">两次高度差 ≤ 1px</td></tr>
+          <tr><td class="no">FX-10</td><td class="wrap">导航与批量条文案</td><td class="c">导航 = "辅种"; 批量条含 "N 个辅种"</td></tr>
+          <tr><td class="no">FX-11</td><td class="wrap">先选 1 组(计数 "1 个辅种"), 再 Ctrl+点一个种子</td><td class="c">组选择被清空, 计数变 "1 个种子"; 反向同理</td></tr>
+          <tr><td class="no">FX-12</td><td class="wrap">辅种页选中 1 组 → 切种子页 → 切追剧页</td>
+              <td class="c">种子页该组成员行 <code>selected</code>; 追剧页对应集行 <code>selected/partial</code>; 计数文本不漂移</td></tr>
+          <tr><td class="no">FX-13</td><td class="wrap">追剧页剧行右键</td><td class="c">菜单可见且含 4 项(D6-A)</td></tr>
+          <tr><td class="no">FX-14</td><td class="wrap">右键"打开目标文件夹"</td>
+              <td class="c">后端 200 且桩被调 1 次(路径 = 期望目录); 组内路径不一致 → 400; 传任意路径 → 不接受(参数校验)</td></tr>
+          <tr><td class="no">FX-15</td><td class="wrap">一级菜单项数与 flyout</td>
+              <td class="c">一级项数 ≤ 11; hover"高级/复制" → 子面板出现且右缘不越界(靠右时向左翻)</td></tr>
+          <tr><td class="no">FX-16</td><td class="wrap">四个删除入口逐一触发</td>
+              <td class="c">确认框结构一致(目标明细区存在); 汇报勾选时均等回执; 收尾均清选择</td></tr>
+          <tr><td class="no">FX-17</td><td class="wrap">打开添加窗口, 聚焦路径输入后移开焦点等 2.5s</td><td class="c">自绘面板仍在; 原生建议浮层不存在</td></tr>
+          <tr><td class="no">FX-18</td><td class="wrap">点"选择位置"; 聚焦分类/标签输入</td>
+              <td class="c">面板可见且完全在视口内; 面板 <code>left</code> 与输入框 <code>left</code> 差 ≤ 2px; 宽度差 ≤ 2px</td></tr>
+          <tr><td class="no">FX-19</td><td class="wrap">量添加窗口</td><td class="c">宽度 ≥ 720px; 窗内无横向滚动(<code>scrollWidth ≤ clientWidth</code>)</td></tr>
+          <tr><td class="no">FX-20</td><td class="wrap">添加窗口内复选框计数</td><td class="c"><code>input[type=checkbox]</code> = 0; 5 个胶囊可独立切换</td></tr>
+          <tr><td class="no">FX-21</td><td class="wrap">切换"跳过校验"前后量窗口高度</td><td class="c">高度差 ≤ 1px(警告文案常驻占位)</td></tr>
+          <tr><td class="no">FX-22</td><td class="wrap">打开抽屉常规页, 检查长值行与图标</td>
+              <td class="c">内容路径/根路径/Tracker 值独占一行且不破版; 图标 <code>color</code> ≠ <code>--fg-dim</code>(至少 3 种不同色)</td></tr>
+          <tr><td class="no">FX-23</td><td class="wrap">用超长名种子触发删除框, 量值区各行宽度</td>
+              <td class="c">行数 ≤ 3 且各行宽度差 &lt; 4px(不再"一行半"); <code>title</code> 含全名</td></tr>
+          <tr><td class="no">FX-24</td><td class="wrap">删除框内复选框计数</td><td class="c">= 0; 两个胶囊默认态与原勾选默认值一致(汇报=开, 删文件=关)</td></tr>
+          <tr><td class="no">FX-25</td><td class="wrap">按住列头拖动 &gt; 6px</td>
+              <td class="c">出现跟随光标的虚影且文本 = 列名; 松手后消失; 未拖动(≤6px)点排序仍正常</td></tr>
+        </table>
+
+        <h3><span class="h-no">7.3</span>手动验收(用户真机)</h3>
+        <ul>
+          <li>真实配置 <code>--dry-run</code> 起服务, 按 8 类逐项走查; 重点观感项:
+              <b>状态栏拥挤度与"限制速度"就近弹出</b> / <b>三视图选择一致性</b> / <b>添加窗口(变大 + 浮层 + 胶囊选项)</b> /
+              <b>抽屉常规页(块行 + 彩图标)</b> / <b>删除框长名称</b> / <b>暂停状态色</b>。</li>
+          <li>FX-22 属"第二次修改": 必须有一次"实现 → 截图 → 参数微调"的回路, 不等用户提第三轮。</li>
+          <li>整套改动在提交前需在五个主题下各看一眼(至少 orbit + frost 亮/暗各一), 确认新增的 paused 令牌族与浮层配色在亮色主题下同样可读。</li>
+        </ul>
+
+        <h3><span class="h-no">7.4</span>文档与知识库回写(收尾 DoD)</h3>
+        <ul>
+          <li><b>README</b>: 底部状态栏描述(改为 今日流量/连接/剩余 + 速度·限速配对)、添加种子对话框(无勾选框 + 浮层)、
+              删除确认框(无勾选框)、右键菜单分层、导航"辅种"文案 —— 这些在 README 里都有对应句子, 必须同步。</li>
+          <li><b>memory-bank</b>: <code>activeContext.md</code> 焦点替换(FX 系列完成态迁出) ·
+              <code>progress.md</code> 记本轮 · <code>modules.md</code> 静态资源段(状态栏/浮层契约/flyout/新端点) ·
+              <code>conventions.md</code> <b>新增菜单分层原则(用户明确要求记入)</b> · <code>pitfalls.md</code> 记新坑
+              (至少记: "浮层锚定祖先缺失 ⇒ 渲染色到视口外, 表现为'点了没反应'") · <code>testing.md</code> 基线实测数字。</li>
+          <li><b>任务立档</b>: <code>memory-bank/tasks/TASK011-webui-fix-round9.md</code> + 同步 <code>tasks/_index.md</code>(阈值四命中, 见 §03)。</li>
+          <li><b>想法.md</b>: 本批 25 条勾选为已处理并注明落点(与波次三的勾选风格一致)。</li>
+          <li><b>提交纪律</b>: 逐路径 <code>git add</code>, 只暂存本轮范围; 改过的 Python 先 <code>yapf -i</code>;
+              提交后查"幽灵 diff"; 用户未说推送则不 push。</li>
+        </ul>
+      </section>
+
+      <footer>
+        auto-qb · WEB UI 第九轮修复计划 · 仅计划未改代码 · 2026-09-17 · 基线 develop@6da4504 ·
+        前序: webui-optimization-plan(-v2/-v3).html · docs/webui-qb-replace-wave3-*.md · 对话来源: 想法.md TODO(WEBUI 25 条)
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>

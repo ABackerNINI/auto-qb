@@ -69,4 +69,11 @@
   --surface-1: rgba(255, 255, 255, .03);
   --surface-2: rgba(255, 255, 255, .06);
   --hairline: rgba(255, 255, 255, .05);
+
+  /* FX-06(D8-B): 暂停/其它状态保持**无色相**, 只把对比调到"明确可见但不抢眼"。
+     不铺底色 —— --surface-2 是白色高光, 暗主题下读作"白底灰字"(用户反馈的"太白");
+     改用中性描边 + 中性中间调字色, 与做种(绿)/下载(蓝)/错误(红)/警告(橙)均不撞色。 */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
 }

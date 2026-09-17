@@ -68,4 +68,9 @@
   --surface-1: rgba(255, 255, 255, .03);
   --surface-2: rgba(255, 255, 255, .06);
   --hairline: rgba(255, 255, 255, .055);
+
+  /* FX-06(D8-B): 暂停/其它状态保持无色相, 只调对比(不铺底, 改中性描边 + 中性中间调字色) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
 }

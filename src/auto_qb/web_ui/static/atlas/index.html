@@ -126,8 +126,8 @@
           <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
                与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"运行日志"章节 -->
           <nav class="tabs" aria-label="视图导航">
-            <button :class="{ active: page === 'groups' && viewMode === 'groups' }" title="按辅种分组展示" @click="goView('groups')">
-              <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>分组
+            <button :class="{ active: page === 'groups' && viewMode === 'groups' }" :title="`按${l10nGroup}展示`" @click="goView('groups')">
+              <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>{{ l10nGroup }}
             </button>
             <button :class="{ active: page === 'groups' && viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="goView('torrents')">
               <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
@@ -164,7 +164,7 @@
             </button>
             <transition name="pop">
             <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip && !colMenuAt }" :style="colMenuStyle()" @click.stop>
-              <div class="col-menu-title">分组表</div>
+              <div class="col-menu-title">{{ l10nGroup }}表</div>
               <div v-for="c in groupColumns" :key="c.key" class="pop-item col-menu-item"
                    :class="{ locked: c.locked, on: colVisible('group', c.key) }"
                    role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('group', c.key)"
@@ -236,7 +236,7 @@
           <div class="dist-legend">
             <button v-for="s in distSegments" :key="s.kind" class="dist-chip"
                     :class="['k-' + s.kind, { active: kindFilter === s.kind }]"
-                    :title="'仅显示' + s.text + '的辅种组'" @click="toggleKindFilter(s.kind)">
+                    :title="'仅显示' + s.text + '的' + l10nGroup" @click="toggleKindFilter(s.kind)">
               <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
             </button>
           </div>
@@ -246,7 +246,7 @@
           <transition name="bulk">
             <div v-if="selectedCount" class="bulk-inline">
               <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
-              <span class="bulk-count">已选 <b>{{ selGroups.length }}</b> 组 · <b>{{ selMembers.length }}</b> 个种子</span>
+              <span class="bulk-count">已选 <b>{{ bulkCountText() }}</b></span>
               <span class="bulk-sep"></span>
               <button class="bulk-btn" @click="bulkAct('resume')">
                 <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
@@ -277,7 +277,7 @@
             <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
             <template v-if="hrFilter.length">H&R“{{ hrFilter.join('/') }}” </template>
             <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
-            → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ' 个辅种组' }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
+            → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ` 个${l10nGroup}` }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
             <template v-if="searchBuilding"> · 索引构建中…</template>
           </span>
           <div class="strip-tools">
@@ -285,7 +285,7 @@
                  点击整行即选中/取消(不显示勾选框), 计数徽标绝对定位 -> 选中数不改变按钮宽度 -->
             <div v-for="f in filterDefs" :key="f.kind" class="filter-pop">
               <button class="filter-btn" :class="{ active: f.selected.length }"
-                      :title="'按' + f.label + '筛选辅种组(可多选)'"
+                      :title="'按' + f.label + '筛选' + l10nGroup + '(可多选)'"
                       @click.stop="toggleFilterMenu(f.kind, $event)">
                 <svg class="ico ico-sm" :class="'ico-f-' + f.kind" viewBox="0 0 16 16"><use :href="'#' + f.icon"></use></svg>
                 {{ f.label }}
@@ -357,7 +357,7 @@
 
           <template v-for="g in filteredGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
-            <div class="group-row" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: isGroupSelected(g) }]"
+            <div class="group-row" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial }]"
                  :style="gridStyle('group')"
                  @click="onGroupClick(g, $event)"
                  @contextmenu.prevent="openMenu($event, g)">
@@ -426,7 +426,7 @@
                 <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
               </div>
               <div v-for="m in g.members" :key="m.hash"
-                   class="member-row" :class="[m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
+                   class="member-row" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                    :style="gridStyle('detail')"
                    @click="onMemberClick(m, $event)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
@@ -434,8 +434,9 @@
                   <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
                   <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
                   <!-- TBL-06: 做种/用户("已连接 (总数)"口径, 与种子页同源 fmtPeersQb) -->
-                  <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_seeds, m.num_complete) }">{{ fmtPeersQb(m.num_seeds, m.num_complete) }}</span>
-                  <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</span>
+                  <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示 -->
+                  <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
+                  <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</span>
                   <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
                   <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
                   <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
@@ -453,13 +454,14 @@
                     <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                     <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                   </span>
+                  <!-- 做种时长/分享率: 口径单点化(FX-02/04) -->
                   <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
-                    {{ fmtDuration(m.seeding_time) }}
-                    <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                    {{ cellSeedingTime(m) }}
+                    <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                   </span>
                   <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
-                    {{ (m.ratio || 0).toFixed(2) }}
-                    <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+                    {{ cellRatio(m) }}
+                    <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                   </span>
                   <!-- TBL-06: 添加于/保存路径(_member_view 已透出; 保存路径逐成员可不同) -->
                   <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
@@ -474,7 +476,7 @@
             <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
             <span>
               {{ searchQuery.trim() ? (searchBuilding ? '正在构建文件索引…' : '无匹配种子')
-                 : (filtersActive ? '当前筛选下没有辅种组' : '暂无辅种分组') }}
+                 : (filtersActive ? `当前筛选下没有${l10nGroup}` : `暂无${l10nGroup}`) }}
             </span>
           </div>
           <p v-if="searchQuery.trim() && searchBuilding && filteredGroups.length" class="muted center">
@@ -507,7 +509,7 @@
           </div>
           <div class="group-table" ref="torrentTable" @scroll="syncTorrentHeadScroll">
             <div v-for="m in filteredTorrents" :key="m.hash" class="group-row torrent-row"
-                 :class="['s-' + m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
+                 :class="['s-' + m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                  :style="gridStyle('torrent')"
                  @click="onTorrentClick(m, $event)"
                  @dblclick="openTorrentDrawer(m.hash)"
@@ -542,8 +544,8 @@
                   <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                   <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                 </div>
-                <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !fmtPeersQb(m.num_seeds, m.num_complete) }">{{ fmtPeersQb(m.num_seeds, m.num_complete) }}</div>
-                <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</div>
+                <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</div>
+                <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</div>
                 <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</div>
                 <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(m.added_on) }}</div>
                 <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</div>
@@ -557,12 +559,12 @@
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
                 <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
                 <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
-                  {{ fmtDuration(m.seeding_time) }}
-                  <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                  {{ cellSeedingTime(m) }}
+                  <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                 </div>
                 <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
-                  {{ (m.ratio || 0).toFixed(2) }}
-                  <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+                  {{ cellRatio(m) }}
+                  <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                 </div>
                 <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</div>
                 <div v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</div>
@@ -602,9 +604,11 @@
           </div>
           <div class="group-table" ref="showTable" @scroll="syncShowHeadScroll">
             <template v-for="s in decoratedShows" :key="s.key">
-              <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义) -->
-              <div class="group-row show-row" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit }"
-                   :style="gridStyle('show')" @click="toggleShow(s.key)">
+              <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义)
+                   FX-13: 右键 = 整剧菜单(此前该层无 @contextmenu) -->
+              <div class="group-row show-row" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial }"
+                   :style="gridStyle('show')" @click="onShowClick(s, $event)"
+                   @contextmenu.prevent="openShowMenu($event, s)">
                 <template v-for="col in visibleShowCols" :key="col.key">
                   <div v-if="col.key === 'name'" class="g-name" :title="s.name">
                     <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
@@ -636,9 +640,9 @@
                     </span>
                   </div>
                   <template v-for="e in sn.episodes" :key="s.key + '~' + sn.season + '~' + e.epKeyStr">
-                    <div class="group-row ep-row" :class="['s-' + e.state, { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit }]"
+                    <div class="group-row ep-row" :class="['s-' + e.state, { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial }]"
                          :style="gridStyle('show')"
-                         @click="toggleShowEp(s.key, sn.season, e.epKeyStr)"
+                         @click="onShowEpClick(s, sn, e, $event)"
                          @contextmenu.prevent="openShowEpMenu($event, s, e)">
                       <template v-for="col in visibleShowCols" :key="col.key">
                         <div v-if="col.key === 'name'" class="g-name ep-name">
@@ -697,16 +701,16 @@
                         <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
                       </div>
                       <div v-for="m in e.members" :key="m.hash" class="member-row"
-                           :class="[m.kind, { 'search-hit': m.hit, selected: selMembers.includes(m.hash) }]"
+                           :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
                            :style="gridStyle('detail')"
                            @click="onMemberClick(m, $event)"
                            @contextmenu.prevent="openMemberMenu($event, m)">
                         <template v-for="col in visibleDetailCols" :key="col.key">
                           <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
                           <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i>{{ kindText(m.kind) }}</span>
-                          <!-- TBL-06: 做种/用户(与种子页/明细表同口径 fmtPeersQb) -->
-                          <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_seeds, m.num_complete) }">{{ fmtPeersQb(m.num_seeds, m.num_complete) }}</span>
-                          <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !fmtPeersQb(m.num_leechs, m.num_incomplete) }">{{ fmtPeersQb(m.num_leechs, m.num_incomplete) }}</span>
+                          <!-- 做种/用户: 与种子页/明细表同口径(FX-03 起统一走 cellPeers) -->
+                          <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
+                          <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</span>
                           <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
                           <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
                           <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
@@ -725,12 +729,12 @@
                             <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                           </span>
                           <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
-                            {{ fmtDuration(m.seeding_time) }}
-                            <span v-if="m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                            {{ cellSeedingTime(m) }}
+                            <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                           </span>
                           <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
-                            {{ (m.ratio || 0).toFixed(2) }}
-                            <span v-if="m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+                            {{ cellRatio(m) }}
+                            <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                           </span>
                           <!-- TBL-06: 添加于/保存路径(与明细表同列) -->
                           <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
@@ -772,25 +776,33 @@
           </div>
         </template>
 
-        <!-- 右键菜单(整集/组/单种子共用; 坐标已做视口边界吸附, 由 JS 计算)
+        <!-- 右键菜单(整集/整剧/组/单种子共用; 坐标已做视口边界吸附, 由 JS 计算)
              · 开始 在 暂停 之前(正向操作在上, 破坏性操作在下)
              · 图标按语义着色(.ico-play/.ico-pause/.ico-sync/.ico-danger)
-             · 删除只有一项: 是否连带磁盘文件在确认框里勾选(默认不删) -->
+             · 删除只有一项: 是否连带磁盘文件在确认框里勾选(默认不删)
+             · FX-15 分层原则(见 memory-bank conventions.md): **一级只放 PT 日常高频动作**;
+               qB 通用能力(队列 / TMM / 超级做种 / 强制开始 / 分享率限制 / 复制族)一律进次级菜单。
+             · FX-14: "打开目标文件夹"走后端 /api/open-path(路径由服务端派生, 前端不传路径)。 -->
         <transition name="pop">
         <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
           <template v-if="menu.episode">
             <div class="ctx-item" @click="actEpisode('resume')">
-              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始整集
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>{{ menu.episode.scope === 'show' ? '开始整剧' : '开始整集' }}
             </div>
             <div class="ctx-item" @click="actEpisode('pause')">
-              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停整集
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>{{ menu.episode.scope === 'show' ? '暂停整剧' : '暂停整集' }}
             </div>
             <div class="ctx-item" @click="actEpisode('reannounce')">
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
+            <!-- FX-14: 整集/整剧的"打开目标文件夹"取首个成员; 同剧同集通常共用同一保存路径 -->
+            <div class="ctx-item" @click="openTargetPath('torrent', menu.episode.hashes[0])">
+              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
+            </div>
+            <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delEpisode()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除整集…
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ menu.episode.scope === 'show' ? '删除整剧…' : '删除整集…' }}
             </div>
           </template>
           <template v-else-if="menu.hash">
@@ -804,7 +816,6 @@
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
-            <!-- 复制(R1A): clipboard API + execCommand 降级, toast 反馈(见 app.js copyTorrentInfo) -->
             <div class="ctx-item" @click="openTorrentDrawer(menu.hash)">
               <svg class="ico ico-sm ico-info" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
             </div>
@@ -813,9 +824,6 @@
             <div class="ctx-item" @click="editLimits()">
               <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速…
             </div>
-            <div class="ctx-item" @click="editShareLimits()">
-              <svg class="ico ico-sm ico-percent" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
-            </div>
             <div class="ctx-item" @click="editMove()">
               <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>移动…
             </div>
@@ -823,42 +831,65 @@
               <svg class="ico ico-sm ico-rename" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
             </div>
             <div class="ctx-sep"></div>
-            <div class="ctx-item" @click="copyTorrentInfo('name')">
-              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
-            </div>
-            <div class="ctx-item" @click="copyTorrentInfo('hash')">
-              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
-            </div>
-            <div class="ctx-item" @click="copyTorrentInfo('magnet')">
-              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
-            </div>
-            <div class="ctx-sep"></div>
             <div class="ctx-item" @click="torrentCmd('recheck', null, '重新校验')">
               <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
             </div>
-            <div class="ctx-item" @click="torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, menuTorrent().super_seeding ? '关闭超级做种' : '开启超级做种')">
-              <svg class="ico ico-sm ico-super" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
-            </div>
-            <div class="ctx-item" @click="torrentCmd('force-start', { enable: !menuTorrent().force_start }, menuTorrent().force_start ? '取消强制开始' : '强制开始')">
-              <svg class="ico ico-sm ico-force" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制开始" : "强制开始" }}
-            </div>
-            <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
-              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
-            </div>
-            <div class="ctx-item" @click="torrentCmd('queue', { action: 'up' }, '队列上移')">
-              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列上移
-            </div>
-            <div class="ctx-item" @click="torrentCmd('queue', { action: 'down' }, '队列下移')">
-              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列下移
-            </div>
-            <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列置底')">
-              <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
-            </div>
-            <div class="ctx-item" @click="autoTmmToggle()">
-              <svg class="ico ico-sm ico-tmm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
-            </div>
             <div class="ctx-item" @click="exportTorrent()">
               <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
+            </div>
+            <div class="ctx-item" @click="openTargetPath('torrent', menu.hash)">
+              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
+            </div>
+            <div class="ctx-sep"></div>
+            <!-- FX-15 次级菜单(高级能力): qB 通用低频项从一级下沉; hover 与点击均可展开 -->
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }"
+                 @mouseenter="openSub('advanced', $event)" @click.stop="toggleSub('advanced', $event)">
+              <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>高级能力
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }" @click.stop>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
+                </div>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'up' }, '队列上移')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列上移
+                </div>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'down' }, '队列下移')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列下移
+                </div>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列置底')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
+                </div>
+                <div class="ctx-sep"></div>
+                <div class="ctx-item" @click="torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, menuTorrent().super_seeding ? '关闭超级做种' : '开启超级做种')">
+                  <svg class="ico ico-sm ico-super" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
+                </div>
+                <div class="ctx-item" @click="torrentCmd('force-start', { enable: !menuTorrent().force_start }, menuTorrent().force_start ? '取消强制开始' : '强制开始')">
+                  <svg class="ico ico-sm ico-force" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制开始" : "强制开始" }}
+                </div>
+                <div class="ctx-item" @click="autoTmmToggle()">
+                  <svg class="ico ico-sm ico-tmm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
+                </div>
+                <div class="ctx-item" @click="editShareLimits()">
+                  <svg class="ico ico-sm ico-percent" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
+                </div>
+              </div>
+            </div>
+            <!-- FX-15 次级菜单(复制族): 三个复制项从一级下沉 -->
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'copy' }"
+                 @mouseenter="openSub('copy', $event)" @click.stop="toggleSub('copy', $event)">
+              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'copy'" class="ctx-sub" :class="{ 'flip-x': subFlip }" @click.stop>
+                <div class="ctx-item" @click="copyTorrentInfo('name')">
+                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
+                </div>
+                <div class="ctx-item" @click="copyTorrentInfo('hash')">
+                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
+                </div>
+                <div class="ctx-item" @click="copyTorrentInfo('magnet')">
+                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
+                </div>
+              </div>
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delTorrent()">
@@ -876,8 +907,13 @@
               <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
             </div>
             <div class="ctx-sep"></div>
+            <!-- FX-14: 组内成员 save_path 天然一致(组 key 首元即规范化 save_path) -->
+            <div class="ctx-item" @click="openTargetPath('group', menu.key)">
+              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
+            </div>
+            <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delGroup()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该组…
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该{{ l10nGroup }}…
             </div>
           </template>
         </div>
@@ -1417,9 +1453,21 @@
 
     </template>
 
-    <!-- 底部状态栏(TBL-08 修订): 左侧常显统计摘要(不再藏进弹窗) + 完整统计入口; 右侧速度合计 + 限速入口。
-         全局状态徽标已移除(顶栏已有连接状态, 重复) -->
+    <!-- 底部状态栏(TBL-08 修订; FX-07/08 与棱镜同步): 左 = 今日流量(含历史入口) + 连接/剩余摘要 + 完整统计入口,
+         右 = 下载/上传速度 与 各自"限制速度"(点击就近弹出限速浮层)。
+         FX-07: 退役 本次/累计/DHT 三项, 加回 今日流量并复活"历史流量"入口。 -->
     <footer class="statusbar">
+      <template v-if="todayTraffic">
+        <span class="sb-item sb-today" :title="todayTrafficTitle">
+          <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          <span class="lbl">今日</span>
+          <span class="val v-down">↓{{ fmtSize(todayTraffic.down) }}</span>
+          <span class="val v-up">↑{{ fmtSize(todayTraffic.up) }}</span>
+        </span>
+        <button class="sb-btn sb-hist" title="历史流量(按天/月/年)" @click="openHistory()">
+          <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>历史
+        </button>
+      </template>
       <span class="sb-stats" title="qBittorrent 服务器实时状态(与主轮询同周期同步)">
         <span v-for="it in sbStats" :key="it.key" class="sb-item" :title="it.title">
           <svg class="ico ico-sm" :class="it.cls" viewBox="0 0 16 16"><use :href="it.icon"></use></svg>
@@ -1431,14 +1479,69 @@
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
       </button>
       <span class="sb-spacer"></span>
-      <span class="sb-speed" title="全部组下载/上传速度合计">
-        <span class="sb-item"><svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg><span class="val">{{ fmtSpeed(totalDl) }}</span></span>
-        <span class="sb-item"><svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg><span class="val">{{ fmtSpeed(totalUl) }}</span></span>
+      <!-- FX-08: 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」; 取值见 sbLimits(D3) -->
+      <span class="sb-speed" title="全部组下载/上传速度合计, 与 qB 当前限速">
+        <span class="sb-pair">
+          <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
+          <span class="lbl">下载速度</span><span class="val">{{ fmtSpeed(totalDl) }}</span>
+        </span>
+        <button class="sb-limit" :class="{ off: sbLimits.down === '不限' }"
+                title="点击修改下载限速(就近弹出)" @click.stop="openSpeedAt($event, 'down')">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+          <span class="lbl">限制速度</span><span class="val">{{ sbLimits.down }}</span>
+        </button>
+        <span class="sb-sep"></span>
+        <span class="sb-pair">
+          <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
+          <span class="lbl">上传速度</span><span class="val">{{ fmtSpeed(totalUl) }}</span>
+        </span>
+        <button class="sb-limit" :class="{ off: sbLimits.up === '不限' }"
+                title="点击修改上传限速(就近弹出)" @click.stop="openSpeedAt($event, 'up')">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+          <span class="lbl">限制速度</span><span class="val">{{ sbLimits.up }}</span>
+        </button>
       </span>
-      <button class="sb-btn" title="限速覆盖与曲线状态" @click="openSpeedDialog()">
-        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速
-      </button>
     </footer>
+
+    <!-- 限速浮层(SPD-04; FX-08 就近弹出) —— 星图此前只有入口按钮、没有浮层(点了没反应), 本次一并补齐。
+         无遮罩; 必须是状态栏的兄弟节点(.statusbar 有 overflow: hidden, 嵌在里面会被裁掉)。 -->
+    <div v-if="speedOpen" ref="speedPop" class="speed-pop" :style="speedPopStyle()"
+         role="dialog" aria-label="限速" @click.stop>
+      <div class="modal-title">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+        <span>限速</span>
+        <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeSpeedDialog">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="add-dialog-body">
+        <div class="speed-mode-line" :title="speedMode.error || speedModeLine">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
+          <span>{{ speedMode.loaded ? speedModeLine : (speedMode.error || "正在加载状态…") }}</span>
+        </div>
+        <div class="speed-dialog-grid">
+          <label class="modal-field">
+            <span class="modal-field-label">上行 KiB/s</span>
+            <input id="sp-up" v-model="speedOverride.up" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
+          </label>
+          <label class="modal-field">
+            <span class="modal-field-label">下行 KiB/s</span>
+            <input id="sp-down" v-model="speedOverride.down" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
+          </label>
+        </div>
+        <p v-if="speedMode.curveEnabled" class="add-dialog-hint">曲线启用中: 覆盖为临时, 下一档位切换时恢复</p>
+        <p v-else class="add-dialog-hint">两方向都需填写 · 0 = 不限速</p>
+      </div>
+      <div class="modal-actions">
+        <button class="ce-btn ghost" @click="closeSpeedDialog">取消</button>
+        <button class="ce-btn primary" :disabled="!speedOvReady || speedOverride.busy"
+                title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedDialog">
+          <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+          <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
+          {{ speedOverride.busy ? '提交中…' : '应用' }}
+        </button>
+      </div>
+    </div>
 
     <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
     <div class="toast-wrap">
@@ -1492,13 +1595,23 @@
                 <span>要求做种 {{ fmtDuration(drawer.detail.hr_req_time) }}</span>
                 <span v-if="drawer.detail.hr_req_ratio > 0">要求分享率 {{ drawer.detail.hr_req_ratio.toFixed(2) }}</span>
               </div>
+              <!-- FX-22 常规页重构: 分组卡片化 + 组标题右侧汇总 + 图标语义着色 + 长值块行(路径/哈希/备注)
+                   与行内值操作(打开目录 / 复制) -->
               <section v-for="sec in drawerGeneralSections()" :key="sec.title" class="drawer-sec">
-                <h4>{{ sec.title }}</h4>
+                <h4><span>{{ sec.title }}</span><span v-if="sec.sum" class="s-sum">{{ sec.sum }}</span></h4>
                 <div class="f-rows">
-                  <div v-for="r in sec.rows" :key="r.label" class="f-row">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
+                  <div v-for="r in sec.rows" :key="r.label" class="f-row" :class="{ wide: r.wide }">
+                    <svg class="ico ico-sm" :class="icoTone(r.icon)" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
                     <span class="k">{{ r.label }}</span>
                     <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
+                    <button v-if="r.act === 'open'" type="button" class="ce-icon flat f-row-act" :title="'打开' + r.label"
+                            @click="openTargetPath('torrent', drawer.hash)">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                    </button>
+                    <button v-else-if="r.act === 'copy'" type="button" class="ce-icon flat f-row-act" :title="'复制' + r.label"
+                            @click="_copyText(String(r.text), r.label)">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
+                    </button>
                   </div>
                 </div>
               </section>
@@ -1749,62 +1862,74 @@
             <div class="add-dialog-field">
               <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
               <div class="add-dialog-pathrow">
-                <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
-                       placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false"
-                       list="ad-path-dl" @focus="addPathPop = false">
+                <!-- FX-18: 浮层必须锚在**输入行**上(.add-input-row 有 position:relative)。
+                     旧写法把面板挂在 .add-dialog-pathrow 下, 而它没有定位祖先 -> 面板按
+                     .modal-mask(fixed; inset:0) 换算, 被渲染到视口下沿之外("点了没反应")。 -->
+                <div class="add-input-row">
+                  <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
+                         placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false"
+                         @focus="openAddPathPop" @click.stop="openAddPathPop" @input="addPathHi = -1"
+                         @keydown="onAddPathKeydown($event)">
+                  <!-- FX-17: 原生 <datalist> + list= 退役 —— 它的建议浮层样式不受主题控制, 还会
+                       自行超时消失(即"下拉 2 秒后消失"), 并与自绘面板抢同一次交互。 -->
+                  <transition name="pop">
+                    <div v-if="addPathPop" class="pop-menu add-pop" @click.stop>
+                      <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ addPathOptions.length }}</span></div>
+                      <div class="add-pop-list" ref="addPathList">
+                        <div v-for="(p, i) in addPathOptions" :key="p" class="pop-item add-pop-item"
+                             :class="{ on: i === addPathHi }" :data-hi="i === addPathHi ? '1' : '0'"
+                             @mousedown.prevent="pickAddPath(p)">
+                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                          <span class="pop-value">{{ p }}</span>
+                        </div>
+                        <p v-if="!addPathOptions.length" class="pop-empty">暂无历史位置</p>
+                      </div>
+                    </div>
+                  </transition>
+                </div>
                 <button type="button" class="ce-btn ghost add-dialog-pathbtn" @click.stop="toggleAddPathPop"
                         @keydown="onAddPathKeydown($event)">选择位置</button>
               </div>
-              <!-- DLG-04: 下拉推荐(原生 datalist) + 「选择位置」面板(复用 .pop-menu 视觉, 键盘上下+回车, Esc 只收面板) -->
-              <datalist id="ad-path-dl"><option v-for="p in addPathOptions" :key="p" :value="p"></option></datalist>
-              <transition name="pop">
-                <div v-if="addPathPop" class="pop-menu add-pop" @click.stop>
-                  <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ addPathOptions.length }}</span></div>
-                  <div class="add-pop-list" ref="addPathList">
-                    <div v-for="(p, i) in addPathOptions" :key="p" class="pop-item add-pop-item"
-                         :class="{ on: i === addPathHi }" :data-hi="i === addPathHi ? '1' : '0'" @click="pickAddPath(p)">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-                      <span class="pop-value">{{ p }}</span>
-                    </div>
-                    <p v-if="!addPathOptions.length" class="pop-empty">暂无历史位置</p>
-                  </div>
-                </div>
-              </transition>
             </div>
             <div class="add-dialog-field add-dialog-combo">
               <label class="add-dialog-label" for="ad-category">分类(可空)</label>
-              <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
-                     placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
-                     @focus="openAddCatMenu" @click.stop="openAddCatMenu"
-                     @input="addCatHi = -1; addCatMenu = true" @keydown="onAddCatKeydown($event)">
-              <transition name="pop">
-                <div v-if="addCatMenu" class="pop-menu add-pop" @click.stop ref="addCatList">
-                  <div v-for="(c, i) in addCatFiltered()" :key="c" class="pop-item add-pop-item"
-                       :class="{ on: i === addCatHi }" :data-hi="i === addCatHi ? '1' : '0'"
-                       @click="pickAddCat(c)" @mouseenter="addCatHi = i">
-                    <span class="pop-value">{{ c }}</span>
+              <!-- FX-18: 面板锚定"输入行"而非整个 field 盒(后者是 grid 项会被拉伸, 面板离输入框很远) -->
+              <div class="add-input-row">
+                <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
+                       placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
+                       @focus="openAddCatMenu" @click.stop="openAddCatMenu"
+                       @input="addCatHi = -1; addCatMenu = true" @keydown="onAddCatKeydown($event)">
+                <transition name="pop">
+                  <div v-if="addCatMenu" class="pop-menu add-pop" @click.stop ref="addCatList">
+                    <div v-for="(c, i) in addCatFiltered()" :key="c" class="pop-item add-pop-item"
+                         :class="{ on: i === addCatHi }" :data-hi="i === addCatHi ? '1' : '0'"
+                         @mousedown.prevent="pickAddCat(c)" @mouseenter="addCatHi = i">
+                      <span class="pop-value">{{ c }}</span>
+                    </div>
+                    <p v-if="!addCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
                   </div>
-                  <p v-if="!addCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
-                </div>
-              </transition>
+                </transition>
+              </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
               <label class="add-dialog-label" for="ad-tags">标签(逗号分隔, 可空)</label>
-              <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
-                     placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
-                     @focus="openAddTagMenu" @click.stop="openAddTagMenu"
-                     @input="addTagHi = -1; addTagMenu = true" @keydown="onAddTagKeydown($event)">
-              <transition name="pop">
-                <div v-if="addTagMenu" class="pop-menu add-pop" @click.stop ref="addTagList">
-                  <div v-for="(t, i) in addTagFiltered()" :key="t" class="pop-item add-pop-item"
-                       :class="{ on: i === addTagHi }" :data-hi="i === addTagHi ? '1' : '0'"
-                       @click="pickAddTag(t)" @mouseenter="addTagHi = i">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
-                    <span class="pop-value">{{ t }}</span>
+              <div class="add-input-row">
+                <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
+                       placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
+                       @focus="openAddTagMenu" @click.stop="openAddTagMenu"
+                       @input="addTagHi = -1; addTagMenu = true" @keydown="onAddTagKeydown($event)">
+                <transition name="pop">
+                  <div v-if="addTagMenu" class="pop-menu add-pop" @click.stop ref="addTagList">
+                    <div v-for="(t, i) in addTagFiltered()" :key="t" class="pop-item add-pop-item"
+                         :class="{ on: i === addTagHi }" :data-hi="i === addTagHi ? '1' : '0'"
+                         @mousedown.prevent="pickAddTag(t)" @mouseenter="addTagHi = i">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
+                      <span class="pop-value">{{ t }}</span>
+                    </div>
+                    <p v-if="!addTagFiltered().length" class="pop-empty">无匹配标签, 可直接自由输入</p>
                   </div>
-                  <p v-if="!addTagFiltered().length" class="pop-empty">无匹配标签, 可直接自由输入</p>
-                </div>
-              </transition>
+                </transition>
+              </div>
             </div>
           </div>
 
