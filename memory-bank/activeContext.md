@@ -4,7 +4,7 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (TASK012 UI 组件库 20 式: 交付物已移至 `resources/ui-component-libraries/modelscope.dsv4.1flash/` 并修正全部引用, 未提交 git — 20 套风格组件库单页 + 挑选索引 + 目录 README; 996 passed, 详见 [tasks/TASK012](tasks/TASK012-ui-component-libraries.md))
+**最后更新**: 2026-09-18 (TASK012 UI 组件库 20 式**已提交** `fae019a` — 20 套风格组件库单页 + 挑选索引 + 目录 README 在 `resources/ui-component-libraries/modelscope.dsv4.1flash/`; 四轮自检 + 7 项缺陷修复, 996 passed; 详见 [tasks/TASK012](tasks/TASK012-ui-component-libraries.md))
 
 ## 正在进行
 

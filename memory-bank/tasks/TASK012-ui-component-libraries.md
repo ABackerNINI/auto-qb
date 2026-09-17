@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Started:** 2026-09-17
-**Owner:** 主线 (单会话完成产出与自检); **未提交 git** —— 剩用户挑选与按需迭代
+**Owner:** 主线 (单会话完成产出与自检); 已提交 `fae019a` (agentZCode/develop 分支) —— 剩用户挑选与按需迭代
 **Deliverable:** [`resources/ui-component-libraries/modelscope.dsv4.1flash/`](../../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md) (22 文件: 20 套组件库单页 + 挑选索引 `index.html` + 目录 `README.md`)
 
 ## 原始请求
@@ -58,4 +58,5 @@
 
 - 2026-09-17: 单会话完成 —— 读 skills 与上下文 → 生成器与 20 套风格定义 → 22 文件产出 → 文本层/渲染层/功能/断点四轮自检 → 7 项缺陷修复并重新生成 → `uv run pytest tests -q` 实测 **996 passed, 2 warnings** (20.69s, 分支覆盖率 92%), 与 [testing.md](../testing.md) 基线一致(纯文档新增, 不动代码); 交付物未提交 git, 待用户挑选。
 - 20 套风格编号与 aesthetic-preset-library 预设一一对应: 01 Pentagram / 02 Stamen / 03 Information Architects / 04 Fathom / 05 Locomotive / 06 Active Theory / 07 Field.io / 08 Resn / 09 Experimental Jetset / 10 Müller-Brockmann / 11 Build / 12 Sagmeister & Walsh / 13 Zach Lieberman / 14 Raven Kwok / 15 Ash Thorp / 16 Territory Studio / 17 Takram / 18 Kenya Hara / 19 Irma Boom / 20 Neo Shen。
-- 2026-09-18: 按用户要求迁址 —— `docs/design/ui-component-libraries/` → `resources/ui-component-libraries/modelscope.dsv4.1flash/` (22 文件 `mv`; `docs/design/` 随之清空移除)。同步修正 6 处引用: 交付物 README 的 skill 相对链接(深度 +1)、`index.html` 页脚目录字样、[../README.md](../README.md) 路由表、[../activeContext.md](../activeContext.md)、[_index.md](_index.md)、本档案。搬后浏览器复核: 索引页 20 张实时预览正常(同目录相对路径不受影响)。
+- 2026-09-18: 按用户要求迁址 —— `docs/design/ui-component-libraries/` → `resources/ui-component-libraries/modelscope.dsv4.1flash/` (22 文件 `mv`; `docs/design/` 随之清空移除)。同步修正 6 处引用: 交付物 README 的 skill 相对链接(前后同为离根 3 层, 深度不变)、`index.html` 页脚目录字样、[../README.md](../README.md) 路由表、[../activeContext.md](../activeContext.md)、[_index.md](_index.md)、本档案。搬后浏览器复核: 索引页 20 张实时预览正常(同目录相对路径不受影响)。
+- 2026-09-18: 用户指令"提交" → 已入库 `fae019a` (27 文件 / +19027 行: 22 交付文件 + 4 更新 + 1 新档); 提交前 `uv run pytest tests -q` = 996 passed; 提交后 `git status --short` 为空、`git diff --quiet` 退出码 0 (无幽灵 diff); **未 push**。
