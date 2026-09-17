@@ -28,6 +28,7 @@
 | 改代码前必读 (魔法值/风险点/文档漂移) | [pitfalls.md](pitfalls.md) |
 | 问"XX做了吗 / XX计划怎么做" | [progress.md](progress.md) |
 | 跨会话任务档案 (立档/查档) | [tasks/_index.md](tasks/_index.md) |
+| 做 UI/视觉设计: 找可挑选的风格与组件参考 (20 套) | [../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md](../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md) |
 
 ## 一分钟速览
 

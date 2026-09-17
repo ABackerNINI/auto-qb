@@ -10,6 +10,7 @@
 - [TASK011] WEB UI 第九轮修复 (25 项 FX-01~FX-25) - 口径单点化 + 浮层锁定契约 + 选择模型互斥/派生 + 删除链统一 + 菜单分层 + 新端点 `/api/open-path`; 996 passed, 浏览器冒烟 25 项全过; 已提交 `49d3151` (剩用户真机 dry-run)
 - [TASK002] WEB UI 替代 qB 界面 (波次一~三 + 复查) - 32 工作项双 UI 同构 + 两大根因修复完成; 剩实机 CDP 双 UI 走查 + 真机 dry-run + prism 追剧模板, **未提交 git**
 - [TASK010] Memory Bank 触发机制修复 - skill 载体 + always-on 阈值 + TASK001~TASK009 回填 + activeContext 瘦身 + 守卫测试完成; 待提交
+- [TASK012] UI 组件库 20 式 - 按设计哲学风格库 5 流派 × 20 preset 各出一套自包含组件库单页 + 挑选索引 + 目录 README (`resources/ui-component-libraries/modelscope.dsv4.1flash/`); 四轮自检 + 7 项缺陷修复; 996 passed; **未提交 git** (剩用户挑选与按需迭代)
 
 ## Pending
 
