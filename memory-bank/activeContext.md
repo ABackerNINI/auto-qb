@@ -4,9 +4,11 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-17 (WEB UI 第十一轮 7 项 **已完成并验证, 未提交 git** — 图标着色 / 历史去文字 / 明细表点击排序 / 辅种表加保存路径·明细表删列 / **两个横向滚动条三项根因**(表头撑页 + `.detail` 自成滚动 + fr 取整) / 标签分类芯片改状态色; 999 passed, 双 UI 浏览器冒烟逐项实测通过; 详情见 [tasks/TASK013](tasks/TASK013-webui-fix-round11.md)) + **导出 .torrent 中文种子名 500 修复**(2026-09-17, 见下; 1000 passed)
+**最后更新**: 2026-09-18 (TASK012 UI 组件库 20 式**已提交** `fae019a` — 20 套风格组件库单页 + 挑选索引 + 目录 README 在 `resources/ui-component-libraries/modelscope.dsv4.1flash/`; 四轮自检 + 7 项缺陷修复, 996 passed; 详见 [tasks/TASK012](tasks/TASK012-ui-component-libraries.md))
 
 ## 正在进行
+
+- **TASK014 UI 组件库 20 式**: 交付物已产出并自检(文本层/渲染层/功能探针/390px 断点), 7 项缺陷已修; 剩用户挑选与按需迭代 → 档案 [tasks/TASK012-ui-component-libraries.md](tasks/TASK012-ui-component-libraries.md)
 
 - **导出 .torrent 中文名 500 已修 (2026-09-17, 已入库 `4de0953`)**: `/api/torrents/{hash}/export` 把种子名直拼进 `Content-Disposition`, HTTP 头只能 latin-1 → 中文名 `UnicodeEncodeError` 500。修法: 新增 `web.content_disposition(filename, fallback, ext)` 双段头(`filename=` ASCII 回退 + `filename*=UTF-8''<百分号编码>`)并清洗控制字符; 测试 `test_content_disposition_encoding` + 导出端点非 ASCII 用例。剩用户真机走查
 - **TASK013 第十一轮修复**: 代码/文档/验证已完, **已入库 `4a027ef`** —— 剩用户真机走查反馈
@@ -15,8 +17,6 @@
 - **第十轮的两处已知限制**(已写入 pitfalls, 非待办): ① 列偏好受 localStorage **origin 隔离** 影响(`localhost` 与 `127.0.0.1`/换端口 = 不同站点各存一份) —— 用户明确要求只存浏览器, 不做服务端化; ② 目录浏览器只能浏览**已有保存路径及其子目录**(安全边界), 全新位置需在输入框手填
 - **第十一轮的定案口径**(已写入 pitfalls, 别改回去): 行/表头一律 `fit-content; min-width: 100%`(**底色跟内容**), **行内单元格必须 `min-width: 0`**(否则 nowrap 文本把行顶宽 → 列没溢出却常驻横滚条); 曾用"行定宽 100%"治假滚动条, 会让**溢出段没有底色**(用户实测"滚动后右边无背景条"), 已回退
 - **未入库的 `想法.md`**: 含用户自己的未提交改动 —— 本轮只勾选 WEBUI 条目, 其余改动未暂存, 由用户自行决定何时一并入库
-- **WEB UI 替代 qB 界面** (波次三复查已修完, **未提交 git**): 剩余 = 实机 CDP 双 UI 走查 + 真机 dry-run + prism 追剧模板 → 档案 [tasks/TASK002-webui-qb-replacement.md](tasks/TASK002-webui-qb-replacement.md)
-- **tracker 分组阶段 2/3 前端** (待排期): 设置页 groups 快捷追加 + 辅种管理页按组筛选 → 档案 [tasks/TASK007-tracker-groups.md](tasks/TASK007-tracker-groups.md)
 
 ## 下一步候选 (来源: `想法.md` 待办 + progress.md 规划中)
 

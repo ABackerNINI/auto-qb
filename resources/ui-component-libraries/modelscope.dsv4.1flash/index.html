@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI 组件库 20 式 · 风格总览与挑选索引</title>
+<meta name="description" content="20 套不同风格的 UI 组件库: 每套含风格介绍 / 设计变量 / 扩展指南 / 常用组件, 单文件自包含, 可在线预览挑选。">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:#fff;color:#16181d;font:400 15px/1.6 "Segoe UI",system-ui,"Microsoft YaHei",sans-serif}
+h1,h2,h3,p{margin:0}
+a{color:#16181d}
+.wrap{max-width:1320px;margin:0 auto;padding:0 clamp(18px,3.4vw,40px)}
+header.top{padding:clamp(40px,6vw,84px) 0 26px;border-bottom:1px solid #e6e6e3}
+.eyebrow{font:500 11.5px/1.6 "Cascadia Mono",Consolas,monospace;color:#7c7f86;letter-spacing:.08em}
+h1{margin:12px 0 0;font:600 clamp(28px,4.4vw,46px)/1.08 "Segoe UI",system-ui,sans-serif;letter-spacing:-.02em}
+.sub{margin:14px 0 0;max-width:70ch;color:#4b4f57;font-size:15.5px}
+.meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.pill{border:1px solid #e0e0dc;border-radius:999px;padding:5px 12px;font-size:12.5px;color:#4b4f57;background:#fafaf8}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:22px 0 6px}
+.filters .lb{font:500 12px/1.6 "Cascadia Mono",Consolas,monospace;color:#7c7f86;margin-right:4px}
+.fbtn{border:1px solid #dcdcd8;background:#fff;color:#3c4047;border-radius:999px;padding:7px 14px;font-size:13px;cursor:pointer}
+.fbtn:hover{border-color:#16181d}
+.fbtn[aria-pressed="true"]{background:#16181d;border-color:#16181d;color:#fff}
+.count{margin-left:auto;font:500 12px/1.6 "Cascadia Mono",Consolas,monospace;color:#7c7f86}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:18px 0 8px}
+.card{border:1px solid #e6e6e3;display:flex;flex-direction:column;background:#fff;overflow:hidden}
+.card[hidden]{display:none}
+.pv{position:relative;height:250px;overflow:hidden;border-bottom:1px solid #e6e6e3;background:#fbfbf9;display:grid;place-items:start center}
+.pvs{width:340px;height:250px;overflow:hidden;position:relative;border-left:1px solid #f0f0ed;border-right:1px solid #f0f0ed}
+.pvs iframe{position:absolute;top:0;left:0;width:1300px;height:958px;border:0;transform:scale(.2615);transform-origin:0 0;pointer-events:none;display:block}
+.pv .tag{position:absolute;right:9px;bottom:9px;background:rgba(22,24,29,.82);color:#fff;font:500 11px/1.5 "Cascadia Mono",Consolas,monospace;padding:3px 8px;border-radius:2px}
+.cbody{padding:15px 16px 16px;display:flex;flex-direction:column;gap:9px;flex:1}
+.cnum{font:600 11.5px/1.5 "Cascadia Mono",Consolas,monospace;color:#8a8d94}
+.ctitle{font:600 17.5px/1.28 "Segoe UI",system-ui,sans-serif;letter-spacing:-.01em}
+.ctitle a{text-decoration:none}
+.ctitle a:hover{text-decoration:underline;text-underline-offset:3px}
+.czh{font-size:13px;color:#5b5f66}
+.sw{display:flex;gap:5px;margin-top:2px}
+.sw i{width:20px;height:20px;border:1px solid rgba(0,0,0,.12);display:block}
+.ckw{display:flex;flex-wrap:wrap;gap:5px}
+.ckw span{border:1px solid #e6e6e3;background:#fafaf8;color:#5b5f66;font-size:11.5px;padding:3px 8px;border-radius:999px}
+.cfor{font-size:12.5px;color:#5b5f66}
+.cfor b{color:#16181d;font-weight:600}
+.cfoot{margin-top:auto;padding-top:11px;border-top:1px solid #efefec;display:flex;align-items:center;gap:10px}
+.cfoot .open{font-size:13px;font-weight:600;text-decoration:none;border-bottom:1px solid #16181d}
+.cfoot .school{margin-left:auto;font:500 11px/1.5 "Cascadia Mono",Consolas,monospace;color:#8a8d94}
+section.tbl{padding:44px 0 20px;border-top:1px solid #e6e6e3;margin-top:34px}
+section.tbl h2{font:600 clamp(20px,2.4vw,26px)/1.25 "Segoe UI",system-ui,sans-serif;letter-spacing:-.015em}
+section.tbl p.lead{margin-top:10px;color:#5b5f66;font-size:14px;max-width:80ch}
+table{width:100%;border-collapse:collapse;margin-top:20px;font-size:13px}
+th{text-align:left;font-size:11.5px;font-weight:600;color:#7c7f86;border-bottom:1px solid #16181d;padding:9px 12px;white-space:nowrap}
+td{border-bottom:1px solid #ececea;padding:10px 12px;vertical-align:top}
+td.n{font:500 11.5px/1.7 "Cascadia Mono",Consolas,monospace;color:#8a8d94;white-space:nowrap}
+td.v{font:400 11.5px/1.7 "Cascadia Mono",Consolas,monospace;color:#4b4f57;white-space:nowrap}
+tbody tr:hover{background:#fafaf8}
+footer{border-top:1px solid #e6e6e3;margin-top:30px;padding:26px 0 42px;color:#7c7f86;font-size:12.5px}
+footer .wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.howto{padding:26px 0 6px}
+.howto .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px}
+.howto .box{border:1px solid #e6e6e3;padding:16px 17px;background:#fdfdfb}
+.howto h3{font:600 14px/1.4 "Segoe UI",system-ui,sans-serif;margin-bottom:7px}
+.howto p{font-size:13px;color:#5b5f66}
+.howto code{font:400 12px/1.6 "Cascadia Mono",Consolas,monospace;background:#f4f4f1;padding:1px 5px}
+@media (max-width:1120px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.howto .cols{grid-template-columns:1fr}.pv{height:250px}}
+@media print{.filters,.pv{display:none}.card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">UI COMPONENT LIBRARIES · 20 STYLES · 5 SCHOOLS</p>
+    <h1>UI 组件库 20 式</h1>
+    <p class="sub">按「设计哲学风格库」的 5 大流派 × 20 位设计师/工作室体系，各出一套完整 UI 组件库：
+    风格介绍、设计变量、扩展指南与 7 组常用组件（按钮 / 表单 / 数据展示 / 表格 / 导航 / 反馈 / 组合示例）全部内置，单文件自包含，双击即开。</p>
+    <div class="meta">
+      <span class="pill">5 流派 × 20 套皮肤</span>
+      <span class="pill">每套: 介绍 + 变量 + 扩展指南 + 组件</span>
+      <span class="pill">单文件 · 系统字体 · 无外链</span>
+      <span class="pill">交互可试用（标签页 / 对话框 / 表单态）</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="filters" role="group" aria-label="按流派筛选">
+    <span class="lb">按流派筛选:</span>
+    <button class="fbtn" type="button" data-school="*" aria-pressed="true">全部 20 套</button><button class="fbtn" type="button" data-school="信息建筑派" aria-pressed="false">信息建筑派</button><button class="fbtn" type="button" data-school="运动诗学派" aria-pressed="false">运动诗学派</button><button class="fbtn" type="button" data-school="极简主义派" aria-pressed="false">极简主义派</button><button class="fbtn" type="button" data-school="实验先锋派" aria-pressed="false">实验先锋派</button><button class="fbtn" type="button" data-school="东方哲学派" aria-pressed="false">东方哲学派</button>
+    <span class="count" id="count">显示 20 / 20</span>
+  </div>
+
+  <div class="grid" id="grid">
+<article class="card" data-school="信息建筑派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="01-pentagram.html" title="Pentagram 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">信息建筑派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 01 / 20 · 信息建筑派</span>
+    <h3 class="ctitle"><a href="01-pentagram.html">Pentagram</a></h3>
+    <p class="czh">字体即语言 · 瑞士网格的现代演绎</p>
+    <div class="sw"><i style="background:#FFFFFF" title="背景 bg · #FFFFFF"></i><i style="background:#111111" title="主色 primary · #111111"></i><i style="background:#E3120B" title="品牌红 accent · #E3120B"></i></div>
+    <div class="ckw"><span>信息层级</span><span>瑞士网格</span><span>60% 留白</span><span>黑白 + 1 品牌色</span></div>
+    <p class="cfor"><b>适合:</b> 文档站 / 内容型产品 / 需要长期稳定识别度的管理系统</p>
+    <div class="cfoot">
+      <a class="open" href="01-pentagram.html">打开完整组件库</a>
+      <span class="school">Pentagram / Michael Bierut</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="信息建筑派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="02-stamen.html" title="Stamen 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">信息建筑派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 02 / 20 · 信息建筑派</span>
+    <h3 class="ctitle"><a href="02-stamen.html">Stamen</a></h3>
+    <p class="czh">数据诗学 · 让数据成为可触摸的风景</p>
+    <div class="sw"><i style="background:#F9F4EA" title="背景 bg · #F9F4EA"></i><i style="background:#B25A24" title="主色 primary · #B25A24"></i><i style="background:#274060" title="强调 accent · #274060"></i><i style="background:#2B2A26" title="正文 ink · #2B2A26"></i></div>
+    <div class="ckw"><span>地图学思维</span><span>大地色系</span><span>数据分层</span><span>纸面质感</span></div>
+    <p class="cfor"><b>适合:</b> 数据看板 / 地图与地理类产品 / 需要温度感的分析工具</p>
+    <div class="cfoot">
+      <a class="open" href="02-stamen.html">打开完整组件库</a>
+      <span class="school">Stamen Design</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="信息建筑派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="03-information-architects.html" title="Information Architects 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">信息建筑派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 03 / 20 · 信息建筑派</span>
+    <h3 class="ctitle"><a href="03-information-architects.html">Information Architects</a></h3>
+    <p class="czh">内容优先 · 设计不是装饰, 是内容的建筑</p>
+    <div class="sw"><i style="background:#FFFFFF" title="背景 bg · #FFFFFF"></i><i style="background:#0000EE" title="主色 primary · #0000EE"></i><i style="background:#1A1A1A" title="正文 ink · #1A1A1A"></i></div>
+    <div class="ckw"><span>内容优先</span><span>系统字体</span><span>蓝色超链接</span><span>66ch 行宽</span></div>
+    <p class="cfor"><b>适合:</b> 长文阅读 / 笔记与写作工具 / 内部文档与知识库</p>
+    <div class="cfoot">
+      <a class="open" href="03-information-architects.html">打开完整组件库</a>
+      <span class="school">Information Architects (iA)</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="信息建筑派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="04-fathom.html" title="Fathom 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">信息建筑派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 04 / 20 · 信息建筑派</span>
+    <h3 class="ctitle"><a href="04-fathom.html">Fathom</a></h3>
+    <p class="czh">科学叙事 · 每一个像素都必须承载信息</p>
+    <div class="sw"><i style="background:#F2F4F7" title="背景 bg · #F2F4F7"></i><i style="background:#16283C" title="主色 primary · #16283C"></i><i style="background:#B0761A" title="高亮 accent · #B0761A"></i><i style="background:#101720" title="正文 ink · #101720"></i></div>
+    <div class="ckw"><span>科学期刊</span><span>数据叙事</span><span>注释系统</span><span>琥珀高亮</span></div>
+    <p class="cfor"><b>适合:</b> 研究报告 / 数据产品 / 金融与科研仪表盘</p>
+    <div class="cfoot">
+      <a class="open" href="04-fathom.html">打开完整组件库</a>
+      <span class="school">Fathom Information Design</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="运动诗学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="05-locomotive.html" title="Locomotive 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">运动诗学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 05 / 20 · 运动诗学派</span>
+    <h3 class="ctitle"><a href="05-locomotive.html">Locomotive</a></h3>
+    <p class="czh">滚动叙事 · 滚动不是浏览, 是旅程</p>
+    <div class="sw"><i style="background:#0A0B0D" title="背景 bg · #0A0B0D"></i><i style="background:#7DD3FC" title="主色 primary · #7DD3FC"></i><i style="background:#FFB26B" title="强调 accent · #FFB26B"></i><i style="background:#F2F4F7" title="正文 ink · #F2F4F7"></i></div>
+    <div class="ckw"><span>滚动叙事</span><span>暗场电影感</span><span>光晕强调</span><span>大字排版</span></div>
+    <p class="cfor"><b>适合:</b> 品牌官网 / 产品发布页 / 沉浸式作品集</p>
+    <div class="cfoot">
+      <a class="open" href="05-locomotive.html">打开完整组件库</a>
+      <span class="school">Locomotive (Lusion 等作品)</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="运动诗学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="06-active-theory.html" title="Active Theory 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">运动诗学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 06 / 20 · 运动诗学派</span>
+    <h3 class="ctitle"><a href="06-active-theory.html">Active Theory</a></h3>
+    <p class="czh">WebGL 诗人 · 让技术可见化即让技术可理解</p>
+    <div class="sw"><i style="background:#05060A" title="背景 bg · #05060A"></i><i style="background:#3BE8FF" title="主色 primary · #3BE8FF"></i><i style="background:#FF4FD8" title="强调 accent · #FF4FD8"></i><i style="background:#EAF2FF" title="正文 ink · #EAF2FF"></i></div>
+    <div class="ckw"><span>粒子系统</span><span>玻璃拟态</span><span>撞色渐变</span><span>深空底色</span></div>
+    <p class="cfor"><b>适合:</b> 技术产品官网 / 数据平台展示 / 沉浸式演示</p>
+    <div class="cfoot">
+      <a class="open" href="06-active-theory.html">打开完整组件库</a>
+      <span class="school">Active Theory</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="运动诗学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="07-field-io.html" title="Field.io 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">运动诗学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 07 / 20 · 运动诗学派</span>
+    <h3 class="ctitle"><a href="07-field-io.html">Field.io</a></h3>
+    <p class="czh">算法美学 · 代码即设计师</p>
+    <div class="sw"><i style="background:#F1F1EF" title="背景 bg · #F1F1EF"></i><i style="background:#2F5BFF" title="主色 primary · #2F5BFF"></i><i style="background:#FF5C35" title="警示 accent · #FF5C35"></i><i style="background:#141416" title="正文 ink · #141416"></i></div>
+    <div class="ckw"><span>生成艺术</span><span>算法图形</span><span>单色 + 单强调</span><span>网格显影</span></div>
+    <p class="cfor"><b>适合:</b> 开发者工具 / 数据平台 / 生成艺术与技术品牌</p>
+    <div class="cfoot">
+      <a class="open" href="07-field-io.html">打开完整组件库</a>
+      <span class="school">Field.io</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="运动诗学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="08-resn.html" title="Resn 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">运动诗学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 08 / 20 · 运动诗学派</span>
+    <h3 class="ctitle"><a href="08-resn.html">Resn</a></h3>
+    <p class="czh">叙事驱动 · 每个点击都推进故事</p>
+    <div class="sw"><i style="background:#FBEFE2" title="背景 bg · #FBEFE2"></i><i style="background:#E8574A" title="主色 primary · #E8574A"></i><i style="background:#2E7D74" title="强调 accent · #2E7D74"></i><i style="background:#3B2B33" title="正文 ink · #3B2B33"></i></div>
+    <div class="ckw"><span>游戏化旅程</span><span>暖色插画</span><span>硬阴影</span><span>贴纸细节</span></div>
+    <p class="cfor"><b>适合:</b> 向导式流程 / 新手引导 / 任务型工具与教育产品</p>
+    <div class="cfoot">
+      <a class="open" href="08-resn.html">打开完整组件库</a>
+      <span class="school">Resn</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="极简主义派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="09-experimental-jetset.html" title="Experimental Jetset 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">极简主义派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 09 / 20 · 极简主义派</span>
+    <h3 class="ctitle"><a href="09-experimental-jetset.html">Experimental Jetset</a></h3>
+    <p class="czh">概念极简 · 一个想法 = 一个形式</p>
+    <div class="sw"><i style="background:#FFFFFF" title="背景 bg · #FFFFFF"></i><i style="background:#E42313" title="主色 primary · #E42313"></i><i style="background:#1D4ED8" title="强调 accent · #1D4ED8"></i><i style="background:#000000" title="正文 ink · #000000"></i></div>
+    <div class="ckw"><span>概念极简</span><span>三原色</span><span>字体即图形</span><span>3px 结构线</span></div>
+    <p class="cfor"><b>适合:</b> 文化机构 / 品牌识别系统 / 展览与活动页面</p>
+    <div class="cfoot">
+      <a class="open" href="09-experimental-jetset.html">打开完整组件库</a>
+      <span class="school">Experimental Jetset</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="极简主义派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="10-muller-brockmann.html" title="Müller-Brockmann 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">极简主义派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 10 / 20 · 极简主义派</span>
+    <h3 class="ctitle"><a href="10-muller-brockmann.html">Müller-Brockmann</a></h3>
+    <p class="czh">瑞士网格 · 客观性即美</p>
+    <div class="sw"><i style="background:#F4F3EF" title="背景 bg · #F4F3EF"></i><i style="background:#17171A" title="主色 primary · #17171A"></i><i style="background:#D22B2B" title="强调 accent · #D22B2B"></i></div>
+    <div class="ckw"><span>8pt 基线</span><span>数学网格</span><span>双色上限</span><span>发丝线</span></div>
+    <p class="cfor"><b>适合:</b> 印刷物与出版物 / 音乐与文化活动 / 数据报表</p>
+    <div class="cfoot">
+      <a class="open" href="10-muller-brockmann.html">打开完整组件库</a>
+      <span class="school">Josef Müller-Brockmann</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="极简主义派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="11-build.html" title="Build 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">极简主义派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 11 / 20 · 极简主义派</span>
+    <h3 class="ctitle"><a href="11-build.html">Build</a></h3>
+    <p class="czh">当代极简 · 精致的简单比复杂更难</p>
+    <div class="sw"><i style="background:#FCFCFB" title="背景 bg · #FCFCFB"></i><i style="background:#1C1C1E" title="主色 primary · #1C1C1E"></i><i style="background:#8C7A5B" title="强调 accent · #8C7A5B"></i></div>
+    <div class="ckw"><span>奢侈留白</span><span>轻字重</span><span>单强调色</span><span>漫射阴影</span></div>
+    <p class="cfor"><b>适合:</b> 品牌官网 / 高端产品 / 内容精选与作品集</p>
+    <div class="cfoot">
+      <a class="open" href="11-build.html">打开完整组件库</a>
+      <span class="school">Build (London)</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="极简主义派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="12-sagmeister-walsh.html" title="Sagmeister & Walsh 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">极简主义派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 12 / 20 · 极简主义派</span>
+    <h3 class="ctitle"><a href="12-sagmeister-walsh.html">Sagmeister & Walsh</a></h3>
+    <p class="czh">快乐极简 · 美即功能的情感维度</p>
+    <div class="sw"><i style="background:#FFFDF4" title="背景 bg · #FFFDF4"></i><i style="background:#FF3EA5" title="主色 primary · #FF3EA5"></i><i style="background:#3EA8FF" title="强调 accent · #3EA8FF"></i><i style="background:#141414" title="正文 ink · #141414"></i></div>
+    <div class="ckw"><span>色彩爆发</span><span>贴纸元素</span><span>衬线斜体</span><span>乐观交互</span></div>
+    <p class="cfor"><b>适合:</b> 创意机构 / 活动与展览 / 面向大众的消费产品</p>
+    <div class="cfoot">
+      <a class="open" href="12-sagmeister-walsh.html">打开完整组件库</a>
+      <span class="school">Sagmeister & Walsh</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="实验先锋派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="13-zach-lieberman.html" title="Zach Lieberman 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">实验先锋派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 13 / 20 · 实验先锋派</span>
+    <h3 class="ctitle"><a href="13-zach-lieberman.html">Zach Lieberman</a></h3>
+    <p class="czh">代码诗学 · 编程即绘画</p>
+    <div class="sw"><i style="background:#FFFFFF" title="背景 bg · #FFFFFF"></i><i style="background:#000000" title="主色 primary · #000000"></i></div>
+    <div class="ckw"><span>代码诗学</span><span>纯黑白</span><span>手绘线稿</span><span>等宽排版</span></div>
+    <p class="cfor"><b>适合:</b> 实验性作品 / 开发者文档 / 创意编码社区</p>
+    <div class="cfoot">
+      <a class="open" href="13-zach-lieberman.html">打开完整组件库</a>
+      <span class="school">Zach Lieberman</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="实验先锋派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="14-raven-kwok.html" title="Raven Kwok 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">实验先锋派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 14 / 20 · 实验先锋派</span>
+    <h3 class="ctitle"><a href="14-raven-kwok.html">Raven Kwok</a></h3>
+    <p class="czh">参数化美学 · 系统的美胜过个体的美</p>
+    <div class="sw"><i style="background:#0B0B0C" title="背景 bg · #0B0B0C"></i><i style="background:#ECECEC" title="主色 primary · #ECECEC"></i><i style="background:#FFFFFF" title="强调 accent · #FFFFFF"></i></div>
+    <div class="ckw"><span>递归细分</span><span>嵌套框架</span><span>高对比黑白</span><span>参数化</span></div>
+    <p class="cfor"><b>适合:</b> 生成艺术展示 / 建筑与工程 / 技术型品牌</p>
+    <div class="cfoot">
+      <a class="open" href="14-raven-kwok.html">打开完整组件库</a>
+      <span class="school">Raven Kwok</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="实验先锋派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="15-ash-thorp.html" title="Ash Thorp 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">实验先锋派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 15 / 20 · 实验先锋派</span>
+    <h3 class="ctitle"><a href="15-ash-thorp.html">Ash Thorp</a></h3>
+    <p class="czh">赛博诗意 · 未来不是冰冷的, 是孤独的诗</p>
+    <div class="sw"><i style="background:#12100E" title="背景 bg · #12100E"></i><i style="background:#FF8A3D" title="主色 primary · #FF8A3D"></i><i style="background:#43C7C0" title="强调 accent · #43C7C0"></i><i style="background:#F5EFE6" title="正文 ink · #F5EFE6"></i></div>
+    <div class="ckw"><span>暖色赛博</span><span>机械切角</span><span>分段 LED</span><span>体积光</span></div>
+    <p class="cfor"><b>适合:</b> 概念设计展示 / 工业与硬件产品 / 沉浸式叙事页面</p>
+    <div class="cfoot">
+      <a class="open" href="15-ash-thorp.html">打开完整组件库</a>
+      <span class="school">Ash Thorp</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="实验先锋派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="16-territory-studio.html" title="Territory Studio 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">实验先锋派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 16 / 20 · 实验先锋派</span>
+    <h3 class="ctitle"><a href="16-territory-studio.html">Territory Studio</a></h3>
+    <p class="czh">虚构屏幕界面 · 未来 UI 的今日想象</p>
+    <div class="sw"><i style="background:#0A0A07" title="背景 bg · #0A0A07"></i><i style="background:#FFB000" title="主色 primary · #FFB000"></i><i style="background:#5FE0FF" title="信息 accent · #5FE0FF"></i></div>
+    <div class="ckw"><span>FUI</span><span>琥珀单色</span><span>支架角标</span><span>层叠全息</span></div>
+    <p class="cfor"><b>适合:</b> 科幻与游戏项目 / 数据监控大屏 / 叙事型产品展示</p>
+    <div class="cfoot">
+      <a class="open" href="16-territory-studio.html">打开完整组件库</a>
+      <span class="school">Territory Studio</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="东方哲学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="17-takram.html" title="Takram 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">东方哲学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 17 / 20 · 东方哲学派</span>
+    <h3 class="ctitle"><a href="17-takram.html">Takram</a></h3>
+    <p class="czh">日式思辨设计 · 技术是思考的媒介</p>
+    <div class="sw"><i style="background:#F5F3EE" title="背景 bg · #F5F3EE"></i><i style="background:#68836E" title="主色 primary · #68836E"></i><i style="background:#C2A57B" title="强调 accent · #C2A57B"></i><i style="background:#33352F" title="正文 ink · #33352F"></i></div>
+    <div class="ckw"><span>思辨设计</span><span>柔和科技感</span><span>自然中性色</span><span>图表即艺术</span></div>
+    <p class="cfor"><b>适合:</b> 研究报告 / 概念原型 / 思辨设计展示与数据叙事</p>
+    <div class="cfoot">
+      <a class="open" href="17-takram.html">打开完整组件库</a>
+      <span class="school">Takram</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="东方哲学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="18-kenya-hara.html" title="Kenya Hara 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">东方哲学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 18 / 20 · 东方哲学派</span>
+    <h3 class="ctitle"><a href="18-kenya-hara.html">Kenya Hara</a></h3>
+    <p class="czh">空的设计 · 设计不是填充, 是清空</p>
+    <div class="sw"><i style="background:#FFFFFF" title="背景 bg · #FFFFFF"></i><i style="background:#2A2A28" title="主色 primary · #2A2A28"></i></div>
+    <div class="ckw"><span>空的设计</span><span>极致留白</span><span>三层白</span><span>发丝线</span></div>
+    <p class="cfor"><b>适合:</b> 高端零售 / 品牌手册 / 阅读型产品与展览说明</p>
+    <div class="cfoot">
+      <a class="open" href="18-kenya-hara.html">打开完整组件库</a>
+      <span class="school">Kenya Hara (原研哉)</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="东方哲学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="19-irma-boom.html" title="Irma Boom 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">东方哲学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 19 / 20 · 东方哲学派</span>
+    <h3 class="ctitle"><a href="19-irma-boom.html">Irma Boom</a></h3>
+    <p class="czh">书籍建筑师 · 信息的物理诗学</p>
+    <div class="sw"><i style="background:#FFEDE6" title="背景 bg · #FFEDE6"></i><i style="background:#E0322B" title="主色 primary · #E0322B"></i><i style="background:#F26A2E" title="强调 accent · #F26A2E"></i><i style="background:#4A1310" title="正文 ink · #4A1310"></i></div>
+    <div class="ckw"><span>书籍建筑</span><span>页码系统</span><span>意外配色</span><span>纸张交替</span></div>
+    <p class="cfor"><b>适合:</b> 出版与展览 / 编辑型内容 / 文化与研究机构的数字档案</p>
+    <div class="cfoot">
+      <a class="open" href="19-irma-boom.html">打开完整组件库</a>
+      <span class="school">Irma Boom</span>
+    </div>
+  </div>
+</article>
+<article class="card" data-school="东方哲学派">
+  <div class="pv" aria-hidden="true">
+    <div class="pvs"><iframe src="20-neo-shen.html" title="Neo Shen 预览" loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+    <span class="tag">东方哲学派</span>
+  </div>
+  <div class="cbody">
+    <span class="cnum">№ 20 / 20 · 东方哲学派</span>
+    <h3 class="ctitle"><a href="20-neo-shen.html">Neo Shen</a></h3>
+    <p class="czh">东方光影诗 · 技术需要人的温度</p>
+    <div class="sw"><i style="background:#0C1424" title="背景 bg · #0C1424"></i><i style="background:#D9B36A" title="主色 primary · #D9B36A"></i><i style="background:#7FA8C9" title="强调 accent · #7FA8C9"></i><i style="background:#E8E4DA" title="正文 ink · #E8E4DA"></i></div>
+    <div class="ckw"><span>水墨晕染</span><span>柔金光晕</span><span>诗意留白</span><span>衬线楷体</span></div>
+    <p class="cfor"><b>适合:</b> 文化类产品 / 影音与文学平台 / 品牌叙事与节庆主题</p>
+    <div class="cfoot">
+      <a class="open" href="20-neo-shen.html">打开完整组件库</a>
+      <span class="school">Neo Shen</span>
+    </div>
+  </div>
+</article>
+  </div>
+
+  <section class="howto">
+    <h2 style="font:600 clamp(20px,2.4vw,26px)/1.25 'Segoe UI',system-ui,sans-serif;letter-spacing:-.015em">怎么用这份索引</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>1 · 先看再挑</h3>
+        <p>每张卡片的预览是真实页面缩放（非截图），风格辨识度主要看标题字体、色板与主视觉。点击标题或「打开完整组件库」进入完整页面。</p>
+      </div>
+      <div class="box">
+        <h3>2 · 在页面里核对</h3>
+        <p>完整页面自上而下是：风格介绍 → 设计变量（色板 / 字体 / 形状）→ 扩展指南（该做的 / 会破坏风格的）→ 常用组件 → 组合示例。可现场试用交互态。</p>
+      </div>
+      <div class="box">
+        <h3>3 · 交给开发</h3>
+        <p>每套页面的 <code>:root</code> 变量块 + 组件覆写规则就是一份可直接落地的样式说明；扩展新组件时引用同一批变量即可保持风格。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="tbl">
+    <h2>20 套速查表</h2>
+    <p class="lead">按流派分组顺序排列；「关键色」列取该套的主色 / 强调色，便于快速比对。</p>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>№</th><th>风格</th><th>流派</th><th>灵感来源</th><th>适合场景</th><th>关键色 (主 / 强调)</th><th>文件</th></tr></thead>
+      <tbody>
+<tr><td class="n">01</td><td>Pentagram<br><span style="color:#8a8d94;font-size:12px">字体即语言 · 瑞士网格的现代演绎</span></td><td>信息建筑派</td><td>Pentagram / Michael Bierut</td><td>文档站 / 内容型产品 / 需要长期稳定识别度的管理系统</td><td class="v" >#111111 / #E3120B</td><td class="v"><a href="01-pentagram.html">打开</a></td></tr>
+<tr><td class="n">02</td><td>Stamen<br><span style="color:#8a8d94;font-size:12px">数据诗学 · 让数据成为可触摸的风景</span></td><td>信息建筑派</td><td>Stamen Design</td><td>数据看板 / 地图与地理类产品 / 需要温度感的分析工具</td><td class="v" >#B25A24 / #274060</td><td class="v"><a href="02-stamen.html">打开</a></td></tr>
+<tr><td class="n">03</td><td>Information Architects<br><span style="color:#8a8d94;font-size:12px">内容优先 · 设计不是装饰, 是内容的建筑</span></td><td>信息建筑派</td><td>Information Architects (iA)</td><td>长文阅读 / 笔记与写作工具 / 内部文档与知识库</td><td class="v" >#0000EE / #0000EE</td><td class="v"><a href="03-information-architects.html">打开</a></td></tr>
+<tr><td class="n">04</td><td>Fathom<br><span style="color:#8a8d94;font-size:12px">科学叙事 · 每一个像素都必须承载信息</span></td><td>信息建筑派</td><td>Fathom Information Design</td><td>研究报告 / 数据产品 / 金融与科研仪表盘</td><td class="v" >#16283C / #B0761A</td><td class="v"><a href="04-fathom.html">打开</a></td></tr>
+<tr><td class="n">05</td><td>Locomotive<br><span style="color:#8a8d94;font-size:12px">滚动叙事 · 滚动不是浏览, 是旅程</span></td><td>运动诗学派</td><td>Locomotive (Lusion 等作品)</td><td>品牌官网 / 产品发布页 / 沉浸式作品集</td><td class="v" >#7DD3FC / #FFB26B</td><td class="v"><a href="05-locomotive.html">打开</a></td></tr>
+<tr><td class="n">06</td><td>Active Theory<br><span style="color:#8a8d94;font-size:12px">WebGL 诗人 · 让技术可见化即让技术可理解</span></td><td>运动诗学派</td><td>Active Theory</td><td>技术产品官网 / 数据平台展示 / 沉浸式演示</td><td class="v" >#3BE8FF / #FF4FD8</td><td class="v"><a href="06-active-theory.html">打开</a></td></tr>
+<tr><td class="n">07</td><td>Field.io<br><span style="color:#8a8d94;font-size:12px">算法美学 · 代码即设计师</span></td><td>运动诗学派</td><td>Field.io</td><td>开发者工具 / 数据平台 / 生成艺术与技术品牌</td><td class="v" >#2F5BFF / #FF5C35</td><td class="v"><a href="07-field-io.html">打开</a></td></tr>
+<tr><td class="n">08</td><td>Resn<br><span style="color:#8a8d94;font-size:12px">叙事驱动 · 每个点击都推进故事</span></td><td>运动诗学派</td><td>Resn</td><td>向导式流程 / 新手引导 / 任务型工具与教育产品</td><td class="v" >#E8574A / #2E7D74</td><td class="v"><a href="08-resn.html">打开</a></td></tr>
+<tr><td class="n">09</td><td>Experimental Jetset<br><span style="color:#8a8d94;font-size:12px">概念极简 · 一个想法 = 一个形式</span></td><td>极简主义派</td><td>Experimental Jetset</td><td>文化机构 / 品牌识别系统 / 展览与活动页面</td><td class="v" >#E42313 / #1D4ED8</td><td class="v"><a href="09-experimental-jetset.html">打开</a></td></tr>
+<tr><td class="n">10</td><td>Müller-Brockmann<br><span style="color:#8a8d94;font-size:12px">瑞士网格 · 客观性即美</span></td><td>极简主义派</td><td>Josef Müller-Brockmann</td><td>印刷物与出版物 / 音乐与文化活动 / 数据报表</td><td class="v" >#17171A / #D22B2B</td><td class="v"><a href="10-muller-brockmann.html">打开</a></td></tr>
+<tr><td class="n">11</td><td>Build<br><span style="color:#8a8d94;font-size:12px">当代极简 · 精致的简单比复杂更难</span></td><td>极简主义派</td><td>Build (London)</td><td>品牌官网 / 高端产品 / 内容精选与作品集</td><td class="v" >#1C1C1E / #8C7A5B</td><td class="v"><a href="11-build.html">打开</a></td></tr>
+<tr><td class="n">12</td><td>Sagmeister & Walsh<br><span style="color:#8a8d94;font-size:12px">快乐极简 · 美即功能的情感维度</span></td><td>极简主义派</td><td>Sagmeister & Walsh</td><td>创意机构 / 活动与展览 / 面向大众的消费产品</td><td class="v" >#FF3EA5 / #3EA8FF</td><td class="v"><a href="12-sagmeister-walsh.html">打开</a></td></tr>
+<tr><td class="n">13</td><td>Zach Lieberman<br><span style="color:#8a8d94;font-size:12px">代码诗学 · 编程即绘画</span></td><td>实验先锋派</td><td>Zach Lieberman</td><td>实验性作品 / 开发者文档 / 创意编码社区</td><td class="v" >#000000 / #000000</td><td class="v"><a href="13-zach-lieberman.html">打开</a></td></tr>
+<tr><td class="n">14</td><td>Raven Kwok<br><span style="color:#8a8d94;font-size:12px">参数化美学 · 系统的美胜过个体的美</span></td><td>实验先锋派</td><td>Raven Kwok</td><td>生成艺术展示 / 建筑与工程 / 技术型品牌</td><td class="v" >#ECECEC / #FFFFFF</td><td class="v"><a href="14-raven-kwok.html">打开</a></td></tr>
+<tr><td class="n">15</td><td>Ash Thorp<br><span style="color:#8a8d94;font-size:12px">赛博诗意 · 未来不是冰冷的, 是孤独的诗</span></td><td>实验先锋派</td><td>Ash Thorp</td><td>概念设计展示 / 工业与硬件产品 / 沉浸式叙事页面</td><td class="v" >#FF8A3D / #43C7C0</td><td class="v"><a href="15-ash-thorp.html">打开</a></td></tr>
+<tr><td class="n">16</td><td>Territory Studio<br><span style="color:#8a8d94;font-size:12px">虚构屏幕界面 · 未来 UI 的今日想象</span></td><td>实验先锋派</td><td>Territory Studio</td><td>科幻与游戏项目 / 数据监控大屏 / 叙事型产品展示</td><td class="v" >#FFB000 / #5FE0FF</td><td class="v"><a href="16-territory-studio.html">打开</a></td></tr>
+<tr><td class="n">17</td><td>Takram<br><span style="color:#8a8d94;font-size:12px">日式思辨设计 · 技术是思考的媒介</span></td><td>东方哲学派</td><td>Takram</td><td>研究报告 / 概念原型 / 思辨设计展示与数据叙事</td><td class="v" >#68836E / #C2A57B</td><td class="v"><a href="17-takram.html">打开</a></td></tr>
+<tr><td class="n">18</td><td>Kenya Hara<br><span style="color:#8a8d94;font-size:12px">空的设计 · 设计不是填充, 是清空</span></td><td>东方哲学派</td><td>Kenya Hara (原研哉)</td><td>高端零售 / 品牌手册 / 阅读型产品与展览说明</td><td class="v" >#2A2A28 / #FFFFFF</td><td class="v"><a href="18-kenya-hara.html">打开</a></td></tr>
+<tr><td class="n">19</td><td>Irma Boom<br><span style="color:#8a8d94;font-size:12px">书籍建筑师 · 信息的物理诗学</span></td><td>东方哲学派</td><td>Irma Boom</td><td>出版与展览 / 编辑型内容 / 文化与研究机构的数字档案</td><td class="v" >#E0322B / #F26A2E</td><td class="v"><a href="19-irma-boom.html">打开</a></td></tr>
+<tr><td class="n">20</td><td>Neo Shen<br><span style="color:#8a8d94;font-size:12px">东方光影诗 · 技术需要人的温度</span></td><td>东方哲学派</td><td>Neo Shen</td><td>文化类产品 / 影音与文学平台 / 品牌叙事与节庆主题</td><td class="v" >#D9B36A / #7FA8C9</td><td class="v"><a href="20-neo-shen.html">打开</a></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>UI 组件库 20 式 — 由本项目设计哲学风格库（aesthetic-preset-library）的 20 个预设生成。</span>
+    <span style="margin-left:auto">目录: resources/ui-component-libraries/modelscope.dsv4.1flash/</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var grid = document.getElementById('grid');
+  var cards = Array.prototype.slice.call(grid.querySelectorAll('.card'));
+  var btns = Array.prototype.slice.call(document.querySelectorAll('.fbtn'));
+  var count = document.getElementById('count');
+  btns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var sc = btn.getAttribute('data-school');
+      btns.forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+      var shown = 0;
+      cards.forEach(function (c) {
+        var hit = (sc === '*') || (c.getAttribute('data-school') === sc);
+        c.hidden = !hit;
+        if (hit) { shown++; }
+      });
+      count.textContent = '显示 ' + shown + ' / ' + cards.length;
+    });
+  });
+})();
+</script>
+</body>
+</html>
