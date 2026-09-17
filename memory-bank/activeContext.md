@@ -4,11 +4,12 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-17 (WEB UI 第九轮 25 项修复**代码与验证已完成, 未提交 git** — 口径单点化 / 浮层锚定契约 / 选择模型互斥与派生 / 删除链统一 / 菜单分层 + 新端点 `/api/open-path`; 996 passed, 浏览器冒烟 25 项全过; 详见 [tasks/TASK011](tasks/TASK011-webui-fix-round9.md))
+**最后更新**: 2026-09-17 (WEB UI 第九轮 25 项修复**已完成并提交** `49d3151` — 口径单点化 / 浮层锁定契约 / 选择模型互斥与派生 / 删除链统一 / 菜单分层 + 新端点 `/api/open-path`; 996 passed, 浏览器冒烟 25 项全过; 详见 [tasks/TASK011](tasks/TASK011-webui-fix-round9.md))
 
 ## 正在进行
 
-- **TASK011 第九轮修复的收尾**: 代码与验证已完, 剩用户真机 `--dry-run` 走查 + 决定是否提交 git (含是否把 `想法.md` 一并入库 —— 该文件含用户自己的未提交改动, 属高危, 本次未暂存)
+- **TASK011 第九轮修复**: 代码与验证已完并入库, 剩用户真机 `--dry-run` 走查反馈(如需调整再开小循环)
+- **未入库的 `想法.md`**: 第九轮 25 条已在该文件标注落点, 但该文件含用户自己的未提交改动 —— 本次**未暂存**, 由用户自行决定何时一并入库
 - **WEB UI 替代 qB 界面** (波次三复查已修完, **未提交 git**): 剩余 = 实机 CDP 双 UI 走查 + 真机 dry-run + prism 追剧模板 → 档案 [tasks/TASK002-webui-qb-replacement.md](tasks/TASK002-webui-qb-replacement.md)
 - **tracker 分组阶段 2/3 前端** (待排期): 设置页 groups 快捷追加 + 辅种管理页按组筛选 → 档案 [tasks/TASK007-tracker-groups.md](tasks/TASK007-tracker-groups.md)
 

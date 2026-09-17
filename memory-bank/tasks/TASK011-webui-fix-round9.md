@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Started:** 2026-09-17
-**Owner:** 主线 (单会话连续实施, 未提交 git)
+**Owner:** 主线 (单会话连续实施); 已提交 `49d3151` (develop 分支) —— 剩用户真机 `--dry-run` 走查反馈
 **Plan doc:** [docs/webui-fix-plan-round9.html](../../docs/webui-fix-plan-round9.html) (25 项分类拆解 / 根因定位 / 分阶段实施)
 
 ## 原始请求
