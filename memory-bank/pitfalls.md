@@ -259,6 +259,13 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 - **症状与根因**: WEB UI 每个连接抛 `AttributeError: module 'httptools' has no attribute 'HttpRequestParser'`。venv 里的 httptools 残留是**半截包**(目录在但 `__init__.py` 丢失、dist-info 只剩 licenses/, 疑似杀软误杀或安装/清理中断), Python 把它当**命名空间包**导入成功 → uvicorn `http="auto"` 探测到"httptools 可导入"就选它, 每个连接建协议时炸。判别法: `import httptools` 成功但 `httptools.__file__ is None` 且 dir 为空 = 命名空间残留; `pip show` 报 "invalid metadata entry 'name'" = dist-info 损坏。
 - **修法是删不是补装**: 项目锁文件不含 httptools(pyproject 的 uvicorn 不带 [standard], 锁定态就是 h11 协议), 补装锁外包反而偏离 uv.lock; 直接删除残留目录即可。web.py 若将来想用 httptools, 应走 pyproject 显式加依赖再锁版本。
+
+### 导出 .torrent 报 500: HTTP 头只能 latin-1, 文件名必须走 filename* (2026-09-17 实测)
+
+- **症状**: 日志 `UnicodeEncodeError: 'latin-1' codec can't encode characters in position 22-24`, 栈底是 `starlette/responses.py init_headers -> v.encode("latin-1")`, 触发端点是 `/api/torrents/{hash}/export`(右键"导出 .torrent")。
+- **根因**: 头值由 `Content-Disposition: attachment; filename="{种子名}.torrent"` **直拼种子名**; 种子名含中文(PT 站常态)时 Starlette 按 latin-1 编码整条头 → 抛错。这是 HTTP 头字符集约束(RFC 7230 头字段值 = latin-1 字节流), 与 qB / 种子内容无关。
+- **修法**: 统一走 `web.content_disposition(filename, fallback, ext)` — 双段头 `filename="<ASCII 回退>"` + `filename*=UTF-8''<百分号编码原名>`(RFC 6266); ASCII 回退名剔除非 ASCII 后**若不含字母数字**(纯中文名清洗后只剩 `_`)则改用 hash, 否则下载名不可辨识; 同时剔除 CR/LF 等控制字符(防头注入)。
+- **判别**: 凡"把用户数据拼进响应头"(下载文件名、自定义头)的位置都要过这类编码层。**测试盲区提醒**: 前端是 `fetch` + blob 自取 `a.download` 命名, 该头只是兜底 → 浏览器冒烟也看不出问题; 只有"非 ASCII 名 + 直连该端点"才会炸, 所以必须补一个中文名用例(TestClient 会把 UnicodeEncodeError 上抛)。
 - **删 venv 的进程占用坑**: VS Code 的 ms-python isort 等格式化辅助进程会用 venv 的 python.exe 起子进程, 且被杀后**自动重生** —— 删除前按 `ExecutablePath -like '*<venv路径>*'` 过滤 Win32_Process 杀掉, 然后**同一条命令内**立刻删(分两步会被重生的进程抢锁); 删除中途失败会留下"只剩 Scripts\python.exe"的残壳, 需补删。
 
 ### WEB UI 波次三 · 双 UI 镜像与批量替换的坑 (2026-09-17 实测)

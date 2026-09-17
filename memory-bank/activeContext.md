@@ -4,10 +4,11 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-17 (WEB UI 第十一轮 7 项 **已完成并验证, 未提交 git** — 图标着色 / 历史去文字 / 明细表点击排序 / 辅种表加保存路径·明细表删列 / **两个横向滚动条三项根因**(表头撑页 + `.detail` 自成滚动 + fr 取整) / 标签分类芯片改状态色; 999 passed, 双 UI 浏览器冒烟逐项实测通过; 详情见 [tasks/TASK013](tasks/TASK013-webui-fix-round11.md))
+**最后更新**: 2026-09-17 (WEB UI 第十一轮 7 项 **已完成并验证, 未提交 git** — 图标着色 / 历史去文字 / 明细表点击排序 / 辅种表加保存路径·明细表删列 / **两个横向滚动条三项根因**(表头撑页 + `.detail` 自成滚动 + fr 取整) / 标签分类芯片改状态色; 999 passed, 双 UI 浏览器冒烟逐项实测通过; 详情见 [tasks/TASK013](tasks/TASK013-webui-fix-round11.md)) + **导出 .torrent 中文种子名 500 修复**(2026-09-17, 见下; 1000 passed)
 
 ## 正在进行
 
+- **导出 .torrent 中文名 500 已修 (2026-09-17, 未提交 git)**: `/api/torrents/{hash}/export` 把种子名直拼进 `Content-Disposition`, HTTP 头只能 latin-1 → 中文名 `UnicodeEncodeError` 500。修法: 新增 `web.content_disposition(filename, fallback, ext)` 双段头(`filename=` ASCII 回退 + `filename*=UTF-8''<百分号编码>`)并清洗控制字符; 测试 `test_content_disposition_encoding` + 导出端点非 ASCII 用例。剩用户真机走查
 - **TASK013 第十一轮修复**: 代码/文档/验证已完, **已入库 `4a027ef`** —— 剩用户真机走查反馈
 - **TASK012 第十轮修复**: 已入库 `cb57bef` (用户自行提交) —— 剩用户真机走查反馈
 - **TASK011 第九轮修复**: 已入库 `49d3151`, 剩用户真机走查反馈

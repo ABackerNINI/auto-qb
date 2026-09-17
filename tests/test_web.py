@@ -61,7 +61,8 @@
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
-- test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503)
+- test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
+- test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
 - test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
@@ -2595,14 +2596,19 @@ def test_api_add_torrent_endpoint():
 
 
 def test_api_export_endpoint(web_env):
-    """导出 .torrent: 原始字节 + Content-Disposition; 未知 hash 404, qB 断连 503"""
+    """导出 .torrent: 原始字节 + Content-Disposition; 未知 hash 404, qB 断连 503
+
+    非 ASCII 种子名是回归点: HTTP 头只能 latin-1, 直写中文时 Starlette 编码头抛
+    UnicodeEncodeError 导致整个导出 500(TestClient 会把该异常上抛到测试里)。
+    """
     from helpers import FakeClient
 
     from auto_qb.torrents import TorrentRecord
 
     mgr, client = web_env
     rec = TorrentRecord(hash="HA", name='Show"S01')
-    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    cn = TorrentRecord(hash="HB", name="我的种子/第一季")
+    mgr.store.get = lambda h: {"HA": rec, "HB": cn}.get(h)
     fake = FakeClient()
     mgr.client = fake
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
@@ -2610,9 +2616,40 @@ def test_api_export_endpoint(web_env):
     assert r.status_code == 200 and r.content == b"TORRENT-DATA"
     assert "attachment" in r.headers["content-disposition"]
     assert "ShowS01.torrent" in r.headers["content-disposition"], "文件名中的引号/路径符应被清洗"
+    # 中文名: 回退名用 hash, 原名走 filename*=UTF-8''(百分号编码), 头值本身仍是纯 ASCII
+    rc = client.get("/api/torrents/HB/export", headers=auth)
+    assert rc.status_code == 200 and rc.content == b"TORRENT-DATA"
+    cd = rc.headers["content-disposition"]
+    assert 'filename="HB.torrent"' in cd, "纯非 ASCII 名无可用回退 -> 用 hash"
+    assert "filename*=UTF-8''%E6%88%91%E7%9A%84%E7%A7%8D%E5%AD%90_%E7%AC%AC%E4%B8%80%E5%AD%A3.torrent" in cd
     assert client.get("/api/torrents/NOPE/export", headers=auth).status_code == 404
     mgr.client = None
     assert client.get("/api/torrents/HA/export", headers=auth).status_code == 503
+
+
+def test_content_disposition_encoding():
+    """content_disposition: 头值恒为 latin-1 可编码的纯 ASCII, 原名走 filename* 百分号编码
+
+    覆盖清洗(引号/路径符/控制字符 -> 防头注入)、ASCII/非 ASCII 混合名的回退、ext 后缀。
+    """
+    from auto_qb.web import content_disposition
+
+    # 全非 ASCII: 回退名取 fallback, 原名保留在 filename*
+    cd = content_disposition("中文种子", "HASH", "torrent")
+    assert cd.encode("latin-1")  # 头值必须可 latin-1 编码, 否则响应 500
+    assert 'filename="HASH.torrent"' in cd
+    assert cd.endswith("filename*=UTF-8''%E4%B8%AD%E6%96%87%E7%A7%8D%E5%AD%90.torrent")
+    # 混合名: 回退名去掉非 ASCII 部分, 中文部分仍需在 filename* 里完整保留
+    cd = content_disposition("Show/我的\\种子\"X", "HASH", "torrent")
+    assert cd.encode("latin-1")
+    assert 'filename="Show__X.torrent"' in cd, "路径符与引号应被清洗"
+    assert "%E6%88%91%E7%9A%84_%E7%A7%8D%E5%AD%90X" in cd
+    # 控制字符(CR/LF)必须剔除, 否则可截断/注入头
+    cd = content_disposition("a\r\nb", "HASH", "torrent")
+    assert "\r" not in cd and "\n" not in cd
+    assert 'filename="ab.torrent"' in cd
+    # 无 ext 时不加后缀
+    assert content_disposition("a", "HASH") == "attachment; filename=\"a\"; filename*=UTF-8''a"
 
 
 def test_api_category_tag_list_endpoints(web_env):

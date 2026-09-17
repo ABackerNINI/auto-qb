@@ -38,7 +38,7 @@ uv run python src/auto-qb.py config.yml --dry-run      # 运行 (需真实 qBitt
 yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf: facebook 风格, 列宽 120)
 ```
 
-- 测试命令 2026-09-17 实测通过 (uv 环境下 995 passed); 命令与 `memory-bank/testing.md` 同源维护。
+- 测试命令 2026-09-17 实测通过; 命令与 `memory-bank/testing.md` 同源维护 (基线数字单点见该文件顶部)。
 - 新增测试必须同步该测试文件头部 docstring 的 "## 测试计划" 清单 (项目明文规定)。
 
 ## 知识库路由 (先查这里再动代码)

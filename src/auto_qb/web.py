@@ -9,10 +9,12 @@
 """
 import logging
 import os
+import re
 import secrets
 import threading
 import time
 from typing import List, Optional
+from urllib.parse import quote
 
 import uvicorn
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -24,6 +26,11 @@ from .utils import decode_group_key, open_path, path_normalize
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_ui", "static")
+
+# 头值清洗: 控制字符(含 CR/LF)会截断响应头或造成头注入
+_HEADER_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f]")
+# ASCII 回退名有效性判定: 至少含一个字母/数字, 否则视为清洗残留(仅有 `_`/`.`/空格)
+_ASCII_ALNUM_RE = re.compile(r"[A-Za-z0-9]")
 
 # 热重载重启服务器的时间预算: uvicorn 的 should_exit 只是"请求退出"(主循环每 0.1s 才读一次,
 # 之后才关闭监听套接字), 不等旧线程退出就启新服务会撞 Errno 10048 —— 见 stop_web_server。
@@ -74,6 +81,23 @@ def _is_loopback_host(host) -> bool:
     if not host:
         return False
     return host in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+def content_disposition(filename: str, fallback: str, ext: str = "") -> str:
+    """构造 Content-Disposition 值(RFC 6266): HTTP 头只能 latin-1 编码, 中文/emoji 名必须走 `filename*`
+
+    直接 `filename="中文.torrent"` 会让 Starlette 编码头时抛 UnicodeEncodeError(整个响应 500)。
+    双段写法: ASCII 回退名给老旧客户端, `filename*=UTF-8''<百分号编码>` 给现代浏览器(取回原名)。
+    另剔除引号/路径符/控制字符(换行会截断头, 即头注入)。
+    """
+    name = _HEADER_UNSAFE_RE.sub("", filename or "")
+    name = name.replace('"', "").replace("\\", "_").replace("/", "_").strip()
+    suffix = f".{ext}" if ext else ""
+    ascii_name = name.encode("ascii", "ignore").decode("ascii").strip()
+    if not _ASCII_ALNUM_RE.search(ascii_name):
+        ascii_name = fallback  # 只剩清洗残留符号(如纯中文名的 "/" -> "_")时用 hash, 回退名才可辨识
+    quoted = quote(name, safe="")
+    return f"attachment; filename=\"{ascii_name}{suffix}\"; filename*=UTF-8''{quoted}{suffix}"
 
 
 def create_app(manager) -> FastAPI:
@@ -676,11 +700,10 @@ def create_app(manager) -> FastAPI:
         rec = _require_torrent(hash)
         client = _require_client()
         data = client.torrents_export(torrent_hash=hash)
-        safe = (rec.name or hash).replace('"', "").replace("\\", "_").replace("/", "_")
         return Response(
             content=data,
             media_type="application/x-bittorrent",
-            headers={"Content-Disposition": f'attachment; filename="{safe}.torrent"'},
+            headers={"Content-Disposition": content_disposition(rec.name or "", hash, "torrent")},
         )
 
     @app.get("/api/log")
