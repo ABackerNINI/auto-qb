@@ -249,6 +249,17 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - ~~`episodes.py` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。
 - `config/loaders.py` `load_global_hr`/`load_tracker_hr` 上方仍留 `# TODO: optimize`。
 
+### ⚠️ 本仓是多 worktree + 多 agent 并行, 提交可能被别的会话顶掉 (2026-09-19 实测)
+
+- **拓扑**: `D:/Projects/auto-qb-backend` 是 **worktree**(`.git` 是文件, 指向 `D:/Projects/auto-qb/.git/worktrees/auto-qb-backend`); 同仓还有 `auto-qb`(主仓, develop)、`-autoclaw`、`-trae`、`-zcode`、`-other`(含 be/fe 子 worktree)、`-frontend` 共 9 个 worktree, 共享同一个 `.git`。
+- **事故**: `git commit` 打印 `[backend/develop 6e572af]` 看似成功, 几秒后 `git log -1` 却退回 `ed4cdd0`, `git status` 冒出 2133 个 staged。真相是**分支 ref 被别的会话回退/钉住**, 不是提交失败也不是有人动了文件:
+  - `git update-ref refs/heads/backend/develop <sha>` → rc=0、reflog 有 "reset: moving to ..." 条目, 但 loose ref 文件随即消失, `for-each-ref` 仍读到旧值。
+  - `git branch -f` → `fatal: cannot force update the branch 'backend/develop' used by worktree at 'D:/Projects/auto-qb-backend'`。
+  - 不在 packed-refs 里的新 ref(如 `refs/heads/tmp-sync-agent-skills`)能正常写入 → 说明只针对这个被争用的分支 ref。
+- **判别法**: 提交后若 `git status` 突然冒出成百上千个 "staged", **先别急着 stage/commit**, 用 `git write-tree` 对比 `git rev-parse <刚才的提交>^{tree}` —— 两者一致的话, 说明工作区/索引完好, 只是分支指针被回退了, 改动一个字都没丢。
+- **处置**: ①确认没有别的会话正在操作同一个 `.git`; ②改动用 `git format-patch -1 <sha> --stdout > 备份.patch` 留底 + `git update-ref refs/heads/tmp-xxx <sha>` 建锚点防 GC; ③等对方结束后再 `git reset --soft <sha>` 恢复指针(工作区/索引无需变动)。**不要**用 `git add -A` / 全量提交去"解决"那批 staged —— 那是别人的在途改动(含 `想法.md` 这类高危文件)。
+- **复核动作**: 提交后必须跑 `git log --oneline -1` 确认 HEAD 真的是刚建的提交, 只看 commit 的输出会被骗。
+
 ## ⚠️ 并发/状态机约束回顾 (违反即引入难以复现的 bug)
 
 1. 主循环线程是唯一修改队列/state_file/store 分组索引的线程 — 不要在校验回调、信号处理器、新线程里改这些。
