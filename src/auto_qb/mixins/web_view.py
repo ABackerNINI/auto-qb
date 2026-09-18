@@ -15,11 +15,24 @@ import logging
 import time
 from typing import Dict, List, Optional
 
+from qbittorrentapi import TorrentState, TrackerStatus
+
 from ..torrents import TorrentRecord, view_field_value
 
 logger = logging.getLogger(__name__)
 
 SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
+
+# 错误原因(状态列"错误"背后的具体原因)刷新: qB torrents/info **不含**错误文本, 原因只能从
+# torrents/trackers 的 msg 取 —— 故只对错误状态种子按 TTL 限额预取, 视图组装只读缓存。
+ERROR_REASON_TTL = 300.0  # 单条原因的重取间隔(秒): tracker msg 随站点状态变化, 过期重取
+ERROR_REASON_BUDGET = 5  # 单轮最多拉取的 tracker 请求数(限流, 错误种子成片时不阻塞主循环)
+# "tracker 报错"状态集合(qB TrackerStatus): 4=not working / 5=tracker error / 6=unreachable
+_TRACKER_ERROR_STATUSES = frozenset(
+    int(s) for s in (TrackerStatus.NOT_WORKING, TrackerStatus.TRACKER_ERROR, TrackerStatus.UNREACHABLE)
+)
+# 虚拟 tracker 条目(DHT/PeX/LSD, 非真实站点): 与强制汇报确认同一口径, 不参与报错文本提取
+_VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")
 
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 暂停 > 做种 > 其它(前端按 state 着色)
 _SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "paused": 3, "seeding": 4, "other": 5}
@@ -56,6 +69,79 @@ class WebviewMixin:
         if e.is_uploading:
             return "seeding"
         return "other"
+
+    @staticmethod
+    def _error_reason(rec: TorrentRecord) -> str:
+        """错误状态种子的**具体原因**(前端状态列据此替代笼统的"错误"; 非错误状态返回空串)
+
+        - missingFiles: 状态本身即原因(文件丢失), 不依赖任何 API
+        - error: 主循环预取的 tracker 报错文本(如 "torrent not registered with this
+          tracker"); 取不到时(纯磁盘/IO 错误, 或预取尚未跑到)回退状态文本"错误"
+
+        取数单点: 前端只展示这里的字符串, 不得在 JS 里按 state 猜原因(与 HR 标签同约定)。
+        """
+        e = rec.state_enum
+        if e is TorrentState.MISSING_FILES:
+            return "文件丢失"
+        if e is TorrentState.ERROR:
+            return rec.tracker_error_msg or "错误"
+        return ""
+
+    @staticmethod
+    def _fetch_tracker_error(rec: TorrentRecord, client) -> str:
+        """从 tracker 列表提取报错文本(取第一条非空错误 msg); 异常按"取不到"处理
+
+        虚拟条目(DHT/PeX/LSD)跳过 —— 其 msg 与真实站点无关。单条拉取失败不阻塞整体,
+        下个 TTL 周期自然重试。
+        """
+        try:
+            entries = client.torrents_trackers(rec.hash) or []
+        except Exception as e:
+            logger.debug(f"读取 tracker 状态失败({rec.log_repr}): {e}")
+            return ""
+        for t in entries:
+            if str(t.get("url") or "").startswith(_VIRTUAL_TRACKER_PREFIXES):
+                continue
+            if t.get("status") in _TRACKER_ERROR_STATUSES and (t.get("msg") or "").strip():
+                return t["msg"].strip()
+        return ""
+
+    def refresh_error_reasons(self) -> None:
+        """主循环调用: 刷新错误状态种子的具体原因(WebUI 状态列展示)
+
+        只对 kind=="error" 且原因非状态自明(missingFiles = "文件丢失", 见 _error_reason)
+        的种子按 TTL 限额拉取 tracker 状态(错误种子通常个位数; 单轮预算 ERROR_REASON_BUDGET
+        条, 成片错误时按轮次摊开, 不阻塞主循环)。
+        记录已离开错误状态时清空缓存 —— 否则恢复做种后仍挂着旧原因。
+
+        原因不是快照字段, `store.view_changed` 覆盖不到它, 故变化时显式置
+        `_group_view_dirty`(与"由配置派生的展示值"同一判别法: 种子数据一字未变时该值也会变)。
+        """
+        client = self.client
+        if client is None:
+            return  # qB 断开: 无 API 可用, 保持现值待连接恢复后刷新
+        now = time.time()
+        budget = ERROR_REASON_BUDGET
+        changed = False
+        for rec in self.store.by_hash.values():
+            if self._state_kind(rec) != "error" or rec.state_enum is TorrentState.MISSING_FILES:
+                if rec.tracker_error_msg:
+                    rec.tracker_error_msg = ""
+                    rec.tracker_error_ts = 0.0
+                    changed = True
+                continue
+            if rec.tracker_error_ts and now - rec.tracker_error_ts < ERROR_REASON_TTL:
+                continue  # 未过期: 直接复用现值
+            if budget <= 0:
+                continue  # 本轮预算用尽: 余下种子下一轮续取
+            budget -= 1
+            rec.tracker_error_ts = now  # 先记时间戳: 拉取失败也不在 TTL 内反复重试
+            msg = self._fetch_tracker_error(rec, client)
+            if msg != rec.tracker_error_msg:
+                rec.tracker_error_msg = msg
+                changed = True
+        if changed:
+            self._group_view_dirty = True
 
     @staticmethod
     def _hr_view_fields(rec: TorrentRecord) -> dict:
@@ -109,6 +195,9 @@ class WebviewMixin:
             "site": r.tracker_name,
             "state": r.state,
             "kind": self._state_kind(r),
+            # 错误状态的具体原因(文件丢失 / tracker 报错原文; 非错误状态为空串) ——
+            # 前端状态列以它替代笼统的"错误", 见 _error_reason
+            "error_reason": self._error_reason(r),
             "dlspeed": r.dlspeed,
             "upspeed": r.upspeed,
             "uploaded": r.uploaded,
@@ -517,7 +606,7 @@ class WebviewMixin:
         种子名匹配即时遍历 store.by_hash(无 qB API); 文件列表匹配依赖 _search_index 缓存。
         返回 {"results": [..], "building": bool}——building 为 True 表示文件索引已过期/缺失,
         已投递构建命令, 前端应稍后重查以获取完整文件匹配结果。
-        结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/dlspeed/upspeed/
+        结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/error_reason/dlspeed/upspeed/
         uploaded/size/progress/seeding_time/ratio/save_path/tags/category/by, 供前端完整展示命中种子信息。
         """
         def _view(rec, by):
@@ -526,6 +615,7 @@ class WebviewMixin:
                 "name": rec.name,
                 "site": rec.tracker_name,
                 "kind": self._state_kind(rec),
+                "error_reason": self._error_reason(rec),
                 "dlspeed": rec.dlspeed,
                 "upspeed": rec.upspeed,
                 "uploaded": rec.uploaded,

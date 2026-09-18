@@ -342,3 +342,45 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **根因**: 同一专题在两条分支上各自立档 → 编号各自递增(14 / 15), 合并后两边文件与索引条目**双双入库**。`_indexed_sections()` 是 dict, 同一 TASKID 重复登记会**静默覆盖** —— 所以"重复条目"这一半故障比"多余文件"更隐蔽, 双向一致守卫也查不出来。
 - **修法**: 保留被索引登记且内容完整的那份(`TASK014`), 删除重复档案, 删掉索引重复条目, 并把档案内标题的错号(`# TASK012 —`)改正为与文件名一致的编号; 顺手修掉指向旧编号的失效相对链接(`tasks/TASK012-ui-component-libraries.md` → `TASK014-...`)。
 - **守卫**: 新增 `test_task_ids_and_slugs_are_unique`(档案 slug 唯一 + 索引同 ID 只登记一次), 把这类重复拦在"合并后第一次跑测试"。立档前先查 `tasks/_index.md` 是否已有同专题档案, 能直接避免。
+
+### qB API 没有"错误原因"字段 + WebUI 错误原因预取的设计约束 (2026-09-18 实测, TASK015)
+
+- **核实结论(别再翻第二遍)**: qB Web API 的 **`torrents/info` 不含任何错误文本/原因字段** —— 只有粗粒度的
+  `state` 字符串(`missingFiles` / `error`, 见 `serialize_torrent.h` / `torrentscontroller.cpp`)。错误文本
+  **只**存在于 **`/torrents/trackers`** 的每条记录里(`msg` 文本 + 数值 `status`)。因此"界面显示具体错误原因"
+  **不存在直接透出这条路**, 只能①由状态派生(`missingFiles` 自明)或②额外调 API 取 `trackers.msg`。
+  `qbittorrentapi` 侧对应 `TorrentState.is_errored`(={MISSING_FILES, ERROR})与 `TrackerStatus`
+  (4=NOT_WORKING / 5=TRACKER_ERROR / 6=UNREACHABLE 是"报错"三态)。
+- **视图组装里绝对不能发 qB API**(这是本项目的硬约束, 不是优化): 视图可能**每 tick 重建**
+  (`ensure_group_view` 脏窗口), 在里面发 API = 主循环被 N 次网络往返拖死。取数一律**主循环预取 + 视图只读缓存**。
+- **预取必须 TTL + 单轮预算双限额**: ①错误种子会**成片**(整站挂掉 / 批量文件丢失), 全量拉会把主循环卡住
+  → 单轮预算(本项目 `ERROR_REASON_BUDGET = 5`), 余下按轮次摊开; ②`msg` 随站点状态变化, 不能永久缓存
+  → TTL(本项目 300s)。**先写时间戳再拉取** —— 拉取失败也不在 TTL 内反复重试。
+- **`missingFiles` 必须排除在拉取分支外**: 原因自明("文件丢失"), 再花预算去拉 tracker 是浪费; 而"文件成片丢失"
+  恰恰是最需要保住预算的场景(实测该分支会吃掉预算并产生多余 tracker 调用)。
+- **非快照字段的脏判定必须显式置**: 缓存槽若**不进** `_SNAPSHOT_FIELDS`/`_raw`(本项目刻意如此, 免得污染
+  `apply_delta` 与快照槽守卫), 则 `store.view_changed` **覆盖不到它** ⇒ "种子数据一字未变、原因却变了"时视图
+  不会重建。判别法同"配置派生的展示值": **值能在数据不变时变化 ⇒ 变化方负责 `_group_view_dirty = True`**。
+- **取数单点放后端, 前端只展示**: 原因文本由后端 `_error_reason()` 一个出口算好透出(`error_reason`), 前端
+  `stateText(m)` 仅在 `kind === "error"` 且有值时采用, 其余回落 `kindText`。**前端不得按 state 猜原因**
+  (与 HR 标签/悬浮提示同纪律); `kindText` 继续服务状态图例 / 筛选器 / 组级与集级聚合文案(那里没有"某一种子的原因")。
+
+### flex 子元素里的**裸文本节点**不可省略 —— 长文本要包一层 span (2026-09-18 实测, TASK015)
+
+- **症状**: 状态列(tracker 报错原文可能很长)在窄列里**不省略、把行顶宽**; 给容器加 `min-width: 0` +
+  `overflow: hidden` + `text-overflow: ellipsis` 也无效。
+- **根因**: 该格是 flex 子元素, 里面是**匿名文本节点**(直接 `{{ text }}`)。`min-width: 0` 只对**盒**生效,
+  匿名文本节点不可压缩 → 省略规则无处落脚。修法: 文本包一层 `<span class="state-text">`(它才是可压缩的盒,
+  再对 span 写 `min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`), 容器给 `title` 看全文。
+- **判别**: "加了 ellipsis 却不生效" 且该处是 flex/grid 子元素时, 先看被省略的是**盒**还是**裸文本节点**。
+
+### 无头 Chrome 冒烟本轮踩到的四个环境坑 (2026-09-18 实测, TASK015)
+
+- **`--headless=new` 在本次环境挂起/无输出**(首个 dump 尝试直接收到 SIGTERM), 回落 **legacy `--headless`**
+  可用(会打印无害的 net/disk-cache stderr 噪音, 可忽略)。
+- **临时注入的路由会被 `StaticFiles` 挂载(`/`)遮蔽**: `create_app` 最后把静态目录挂到 `/`, 之后新增的路由
+  永远匹配不到(表现: 注入的 `/smoke-seed` 返回 **404**)。修法: 把注入路由**插到 `app.router.routes` 最前**。
+- **注入脚本必须放 `<head>`(在 `app.js` 之前)**: 放在 `</body>` 时 `app.js` 已执行完(已读过 `localStorage`
+  的视图偏好), 注入无效; 想让页面按指定视图启动, 只能在 `app.js` 读偏好**之前**写 `localStorage`。
+- **`--dump-dom` 里顶层 `id="app"` 的 DOM 是整整一行**: 按行 grep 渲染出的单元格会**全部落空**(只剩 `x-template`
+  片段能命中), 容易误判成"页面没渲染"。要判渲染结果请对整串做正则/子串匹配, 或用截图。

@@ -1714,6 +1714,15 @@ const app = createApp({
     kindText(kind) {
       return { seeding: "做种", downloading: "下载", checking: "校验中", paused: "已暂停", error: "错误", other: "其他" }[kind] || kind;
     },
+    /* 单种子状态文案: 错误状态优先显示**后端算好的具体原因**(error_reason: "文件丢失" /
+     * tracker 报错原文), 其余状态回落 kindText。原因文本一律由后端给出(取数单点), 前端不得
+     * 按 state 猜原因。kindText 仍用于状态图例/筛选器/组级与集级聚合文案 —— 那里没有
+     * "某一种子的原因"可言。 */
+    stateText(m) {
+      if (!m || !m.kind) return "";
+      if (m.kind === "error" && m.error_reason) return m.error_reason;
+      return this.kindText(m.kind);
+    },
     kindIcon(kind) {
       // 状态图标(与 sprite symbol 一一对应): 校验中用 i-pulse(配合 CSS 呼吸动画, 语义=进行中)
       return {

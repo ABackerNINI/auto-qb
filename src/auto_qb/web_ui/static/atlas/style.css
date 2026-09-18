@@ -1448,7 +1448,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* 视图开关(R08)样式已随元素退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内第二套切换器删除 */
 
-/* 单种子视图(R08): 状态文字弱化 / 保存路径列省略号(title 兜底) */
+/* 单种子视图(R08): 状态文字弱化 / 保存路径列省略号(title 兜底)
+ * 状态文案在错误状态下是**具体原因**("文件丢失" / tracker 报错原文, 可能很长): 一律省略号
+ * 截断 + title 悬停给全文, 不撑破状态列(行内单元格 min-width:0 见上方 .member-row > * 规则)。
+ * .m-state 内的文本必须包一层 .state-text 才能拿到省略号 —— flex 容器的匿名文本项不可压缩。 */
+.state-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .torrent-row .state-text { font-size: 12px; color: var(--fg-muted); }
 .g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }

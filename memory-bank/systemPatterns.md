@@ -127,6 +127,10 @@ _tick(dry_run):
   - `hr_req_time`/`hr_req_ratio`: 要求做种时长(= required + extra)与要求分享率(0 = 不要求); 供明细表显示 `实际 / 要求` 并**按列各自的要求**决定是否着色(未配要求的列必须保持中性色)。
 
   判定全部委托 `check_hr_condition`/`check_hr_satisfied`(与打标签流程同一语义), **不得在 JS 里重算模板或阈值**。组级另透出 `hr_triggered`(分母: 已触发成员数) 与 `hr_pending`(分子: 已触发未达标成员数), 由后端算好, 前端只显示。**这类派生值的置脏来源比纯粹的快照字段多一个**: 除 `_VIEW_FIELDS`(seeding_time/ratio/progress 变化会经 `store.view_changed` 驱动)外, 配置热重载也会改变它(标签模板里的 `${required_seeding_time}`) —— 故 `apply_new_config` 必须显式 `_group_view_dirty = True`。
+- **需额外调 API 的派生展示值: 错误原因(2026-09-18, TASK015)**: 错误状态种子的**具体原因**是"派生展示值"的第二种来源 —— 它既不是快照字段(qB `torrents/info` **没有**错误文本字段), 也不能在视图组装里现取(视图每 tick 可能重建, 发 API 会拖死主循环)。定式: **主循环按 TTL + 单轮预算预取 → 写进记录的非快照缓存槽 → 视图只读缓存**。
+  - 缓存槽 `TorrentRecord.tracker_error_msg`/`tracker_error_ts` 刻意**不进** `_SNAPSHOT_FIELDS`/`_raw`(不参与 `apply_delta`/`store.view_changed`/快照槽守卫), 因此**变化必须由预取方显式 `_group_view_dirty = True`** —— 与上面 HR 派生值同一判别法: **值能在种子数据一字未变时变化 ⇒ 变化方负责置脏**。
+  - 取数限额是**必需**而非优化: `ERROR_REASON_BUDGET = 5` 条/轮(错误种子会成片, 全量拉会卡主循环) + `ERROR_REASON_TTL = 300s`(tracker `msg` 随站点状态变化, 不能永久缓存); **先写时间戳再拉取**(失败也不在 TTL 内反复重试); `missingFiles` 原因自明故**不花预算**; 预取与视图重建/搜索索引同门控(网页关掉不发请求); qB 断连时**保持现值不清空**(待连接恢复再刷)。
+  - 展示口径单点在后端 `_error_reason`(`missingFiles`→"文件丢失"; `error`→预取文本否则"错误"; 非错误→空串), 视图透出 `error_reason`, 前端 `stateText(m)` 仅错误态采用 —— **前端不得按 state 猜原因**。
 - **限速/流量只读快照 `_traffic_view`(2026-09-14)**: 限速曲线任务每次执行后由 `SpeedCurveMixin._publish_traffic` **整体替换**该 dict(Web 线程只读引用, 无锁即自洽), 经 `/api/status` 与 `/api/state` 的 `status.traffic` 恒回传(**不参与 rid 门控** —— 它的数据源是曲线任务而非分组视图, 掺进版本门控会与 groups 的脏语义耦合)。结构: `{ts, date, state, periods[{period,label,up,down}], limit{target{up,down}, actual{up,down}, reasons[{dir,code,text}]}}`; `state` ∈ `disabled`(未启用曲线, 前端整组 pill 不渲染) / `ok` / `dry_run`(只有 target, 不读不写) / `stale`(数据源缺失或无有效行, 本轮不动限速)。**单位**: `periods[].up|down` 为**字节**, `limit.target|actual` 为 **KiB/s**(0 = 不限速, null = 该方向不管理 —— 前端跳过该方向)。`reasons` 让前端能回答“为何命中与实际不一致”(如 `manual` = 当前为奇数 KiB 疑似手动设置故不覆盖; `read_failed` = 写入后回读失败), 前端只按方向取对应原因的文本, 不自己拼原因。
 
 ### WEB UI 图形化配置编辑 (web.py + config/schema.py + config/writer.py, 2026-09-14)

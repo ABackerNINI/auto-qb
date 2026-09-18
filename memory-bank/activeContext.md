@@ -4,9 +4,16 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (①WEB 跳过本地验证提示日志由 WARNING 降为 INFO — 免鉴权是显式配置而非异常, 避免经 notify 推送扰民; `test_web.py` 断言同步 ②TASK014 UI 组件库 20 式**已提交** `fae019a`, 996 passed — 详见 [tasks/TASK014](tasks/TASK014-ui-component-libraries.md) ③清理并行分支造成的重复档案: 删除与 TASK014 逐字节相同的 `TASK015-ui-component-libraries.md` + 索引重复条目, 守卫测试新增同 slug/重复登记检查)
+**最后更新**: 2026-09-18 (①WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文): 后端主循环 TTL+预算预取 + `error_reason` 透出 + 前端 `stateText` 双 UI 生效, 1006 passed, **未提交** — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ②WEB 跳过本地验证提示日志由 WARNING 降为 INFO — 免鉴权是显式配置而非异常, 避免经 notify 推送扰民; `test_web.py` 断言同步 ②TASK014 UI 组件库 20 式**已提交** `fae019a`, 996 passed — 详见 [tasks/TASK014](tasks/TASK014-ui-component-libraries.md) ③清理并行分支造成的重复档案: 删除与 TASK014 逐字节相同的 `TASK015-ui-component-libraries.md` + 索引重复条目, 守卫测试新增同 slug/重复登记检查)
 
 ## 正在进行
+
+- **TASK015 WEB UI 错误原因展示 (2026-09-18, 未提交)**: 错误种子的状态列不再只显示「错误」——
+  `missingFiles` → "文件丢失"(零 API, 状态自明), `error` → tracker 报错原文(如
+  `torrent not registered with this tracker`)。关键设计: qB `torrents/info` **无**错误文本字段(已核实),
+  原因只能从 `torrents/trackers` 的 `msg` 取 → 主循环 `refresh_error_reasons` 按 TTL(300s)+预算(5/轮)
+  预取, 视图组装**只读缓存**(视图可能每 tick 重建, 不得在里面发 API); 原因非快照字段, 变化由预取方
+  **显式置脏**。剩用户真机走查 → 档案 [tasks/TASK015-webui-error-reason.md](tasks/TASK015-webui-error-reason.md)
 
 - **WEB 跳过本地验证日志降为 INFO (2026-09-18, 已入库 `7ce54e9`)**: `web.py` 里"本机免密钥放行"提示原为 `logger.warning` → 改 `logger.info`(免鉴权是用户显式开的配置而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING
 

@@ -44,7 +44,6 @@ from auto_qb.torrents.compat import _SNAPSHOT_FIELDS
 
 from helpers import FakeClient, FakeTorrent
 
-
 # 真机 TorrentDictionary 字段样例(qB 5.x, 2026-09-15 字段表定稿依据; 见 docs/record-full-fields-plan.html)
 # 全部字段必须能进入 TorrentRecord 快照(声明字段进 slot, 未声明的落 _raw —— 两者都不允许丢弃)
 _EXAMPLE_TORRENT_INFO = {
@@ -645,6 +644,9 @@ def test_snapshot_fields_match_record_slots():
     """守卫: _SNAPSHOT_FIELDS ↔ TorrentRecord 声明字段一一对应(防漏声明/拼写错位);
     REQUIRED ⊆ SNAPSHOT; 除主键 hash 外全部字段带默认值"""
     lazy_slots = {"_tags_set", "_state_enum", "_trackers_info", "_files", "_raw", "tracker_conf"}
+    # 错误原因(WebUI 状态列): 记录级派生展示字段, 非 qB 快照字段(不进字段表/不参与 apply_delta),
+    # 由 WebviewMixin.refresh_error_reasons 在主循环预取后写入
+    lazy_slots |= {"tracker_error_msg", "tracker_error_ts"}
     declared = {f.name for f in dc_fields(TorrentRecord)}
     snapshot = set(_SNAPSHOT_FIELDS)
 

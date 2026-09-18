@@ -22,6 +22,11 @@
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
+- test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
+- test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
+- test_refresh_error_reasons_budget_and_ttl: 错误原因预取限流(单轮预算条数/TTL 内不重取/过期重取)
+- test_refresh_error_reasons_clears_when_recovered: 状态恢复后清空原因缓存并置脏(不留旧原因)
+- test_refresh_error_reasons_skips_when_disconnected: qB 断开时跳过(不发请求/不清空现值)
 - test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
 - test_build_search_index_incremental_and_evict: 增量维护(不重拉已建条目/补拉新增/淘汰已删)
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
@@ -84,6 +89,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -806,6 +812,142 @@ def test_build_group_view_member_num_seeds_fields(tmp_path):
     assert by_hash["HB"]["num_leechs"] == 5
     assert by_hash["HB"]["num_complete"] == 67
     assert by_hash["HB"]["num_incomplete"] == 8
+
+
+def _tracker_calls(client):
+    """给 FakeClient 的 torrents_trackers 挂调用计数器(返回被查询过的 hash 列表)
+
+    "免 API"/"TTL 内不重取"/"单轮预算限流"三类断言都需要该计数, 而公共替身无此计数
+    (既有用例不依赖), 故在测试侧按需包装, 不改动 helpers.FakeClient 的既有语义。
+    """
+    seen = []
+    orig = client.torrents_trackers
+    client.torrents_trackers = lambda h: (seen.append(h), orig(h))[1]
+    return seen
+
+
+def test_error_reason_from_tracker_msg(tmp_path):
+    """错误状态的具体原因: 取 tracker 报错 msg(虚拟条目跳过), 并透出到成员/种子视图
+
+    qB torrents/info **不含**错误文本(Web API 无该字段), 原因只能从 torrents/trackers 的
+    msg 取; 预取结果写在记录上, 视图组装只读缓存 —— 视图可能每 tick 重建, 不能在里面发 API。
+    取不到报错 msg 的错误种子(磁盘/IO 类)回退状态文本, 不留空串(否则前端显示空白状态)。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    client.trackers_map["HA"] = [
+        {
+            "url": "** [DHT] **",
+            "status": 4,
+            "msg": "virtual-entry-msg"
+        },  # 虚拟条目: 不得采信
+        {
+            "url": "https://tracker.hhanclub.net/announce.php",
+            "status": 2,
+            "msg": "Working"
+        },
+        {
+            "url": "https://tracker.other.net/announce.php",
+            "status": 4,
+            "msg": "torrent not registered"
+        },
+    ]
+    client.trackers_map["HB"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 2, "msg": "Working"}]
+    err = FakeTorrent(hash="HA", name="Show", state="error")
+    no_msg = FakeTorrent(hash="HB", name="Show", state="error")
+    seed_store(mgr, [err, no_msg])
+
+    mgr._group_view_dirty = False
+    mgr.refresh_error_reasons()
+
+    assert err.tracker_error_msg == "torrent not registered", "取第一条非空错误 msg(虚拟条目跳过)"
+    assert mgr._group_view_dirty is True, "原因变化须显式置脏(非快照字段, store.view_changed 覆盖不到)"
+    assert mgr._member_view(err)["error_reason"] == "torrent not registered"
+    assert mgr._seed_view(err)["error_reason"] == "torrent not registered"
+    assert no_msg.tracker_error_msg == "" and mgr._member_view(no_msg)["error_reason"] == "错误"
+    assert mgr._member_view(FakeTorrent(hash="HC", state="stalledUP"))["error_reason"] == "", "非错误状态不带原因"
+
+
+def test_error_reason_missing_files_without_api(tmp_path):
+    """missingFiles 的原因由状态本身给出("文件丢失"), 不需要任何 tracker 请求"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    seen = _tracker_calls(client)
+    t = FakeTorrent(hash="HA", name="Show", state="missingFiles")
+    seed_store(mgr, [t])
+
+    mgr.refresh_error_reasons()
+
+    assert mgr._member_view(t)["error_reason"] == "文件丢失"
+    assert seen == [], "missingFiles 的原因不依赖 API"
+
+
+def test_refresh_error_reasons_budget_and_ttl(tmp_path, monkeypatch):
+    """预取限流: 单轮最多预算条, TTL 内不重取, 过期后重取
+
+    错误种子成片时(整组文件丢失)不能一轮打满 tracker 请求 —— 与搜索索引同一限流哲学。
+    """
+    from auto_qb.mixins import web_view
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    monkeypatch.setattr(web_view, "ERROR_REASON_BUDGET", 1)
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    seen = _tracker_calls(client)
+    seed_store(mgr, [FakeTorrent(hash="HA", name="A", state="error"), FakeTorrent(hash="HB", name="B", state="error")])
+
+    mgr.refresh_error_reasons()
+    assert seen == ["HA"], "单轮只拉预算条数"
+    mgr.refresh_error_reasons()
+    assert seen == ["HA", "HB"], "下一轮续取剩余种子"
+    mgr.refresh_error_reasons()
+    assert seen == ["HA", "HB"], "TTL 内不重取"
+
+    monkeypatch.setattr(web_view, "ERROR_REASON_BUDGET", 5)
+    monkeypatch.setattr(web_view, "ERROR_REASON_TTL", 0.0)
+    mgr.refresh_error_reasons()
+    assert seen == ["HA", "HB", "HA", "HB"], "TTL 过期后重取(tracker msg 随站点状态变化)"
+
+
+def test_refresh_error_reasons_clears_when_recovered(tmp_path):
+    """状态恢复(离开错误态)后清空原因缓存 —— 否则恢复做种仍挂着旧原因"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    t = FakeTorrent(hash="HA", name="A", state="error", tracker_error_msg="unregistered", tracker_error_ts=time.time())
+    seed_store(mgr, [t])
+
+    mgr._group_view_dirty = False
+    mgr.refresh_error_reasons()
+    assert t.tracker_error_msg == "unregistered", "错误态且未过期: 原样保留"
+    assert mgr._group_view_dirty is False, "无变化不置脏"
+
+    t.state = "stalledUP"
+    mgr.refresh_error_reasons()
+    assert t.tracker_error_msg == "" and t.tracker_error_ts == 0.0
+    assert mgr._group_view_dirty is True, "清空也是视图变化"
+
+
+def test_refresh_error_reasons_skips_when_disconnected(tmp_path):
+    """qB 断开(client None)时跳过: 不发请求、不清空已有原因(连接恢复后自然刷新)"""
+    from helpers import FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = None
+    t = FakeTorrent(hash="HA", name="A", state="error", tracker_error_msg="unregistered")
+    seed_store(mgr, [t])
+
+    mgr.refresh_error_reasons()  # 不抛异常
+
+    assert t.tracker_error_msg == "unregistered" and t.tracker_error_ts == 0.0
 
 
 def test_build_group_view_hr_tags(tmp_path):

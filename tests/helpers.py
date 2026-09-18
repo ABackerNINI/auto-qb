@@ -556,6 +556,9 @@ class FakeTorrent:
         self._state_enum = None
         self._trackers_info = None
         self._files = None
+        # 错误原因(WebUI 状态列): 与 TorrentRecord 同名的非快照字段, 由主循环预取写入
+        self.tracker_error_msg = kw.get("tracker_error_msg", "")
+        self.tracker_error_ts = kw.get("tracker_error_ts", 0.0)
         # 扩展快照字段(与 TorrentRecord 扩展 slots 同默认值): 种子平铺视图/详情读取用;
         # kw 可覆盖, 未提及取 qB 哨兵默认(与 TorrentRecord 一致)
         _ext_defaults = {

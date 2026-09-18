@@ -378,10 +378,16 @@ class QbManager(
             logger.warning("WEB UI 已停止(web.enabled=false)")
 
     def _tick(self, dry_run: bool):
-        """单次 tick: 1) 刷新快照 2) 执行到期任务(执行与收尾统一由 TaskQueue.run_due 管理)"""
+        """单次 tick: 1) 刷新快照 2) WEB 错误原因预取(Web 活跃时) 3) 执行到期任务
+        (执行与收尾统一由 TaskQueue.run_due 管理)"""
         now = time.time()
 
         self._refresh_torrents(dry_run)
+
+        # WEB UI: 错误状态种子的具体原因(状态列的"文件丢失"/tracker 报错原文)按 TTL 限额预取。
+        # 与视图重建/搜索索引同一门控: 仅 Web 客户端活跃时推进, 关闭网页后不发多余的 tracker 请求。
+        if (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
+            self.refresh_error_reasons()
 
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
