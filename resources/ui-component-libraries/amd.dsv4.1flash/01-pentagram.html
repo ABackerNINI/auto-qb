@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 · Pentagram — 字体即语言 · 组件库</title>
+<style>
+  /* ============ 风格说明 ============
+     流派：信息建筑派 · 风格：Pentagram (Michael Bierut)
+     哲学：字体即语言，网格即思想。
+     特征：黑白 + 1 品牌色；瑞士网格；字体排印为主视觉；60%+ 留白。
+     设计 token：色板见 :root；字体用瑞士理性家族；直角 + 发丝线；无阴影层级靠留白。
+     扩展指南：见页面底部「扩展你的组件」区。
+  ============ 设计 Token ============ */
+  :root{
+    --c-bg:#ffffff; --c-ink:#141417; --c-ink-2:#56565e; --c-ink-3:#8b8b93;
+    --c-line:#e5e5ea; --c-line-2:#c8c8cf; --c-brand:#1f3a68; --c-brand-tint:#eef1f6;
+    --c-danger:#a23b2e; --c-success:#2f6b4f; --c-warn:#96680f;
+    --f-sans:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+    --r:0px; --r-sm:0px; --r-pill:999px;
+    --sh:0 0 0 1px var(--c-line);
+    --sp-1:8px; --sp-2:16px; --sp-3:24px; --sp-4:40px; --sp-5:64px;
+    --font-1:40px; --font-2:22px; --font-3:16px; --font-4:14px; --font-5:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--f-sans);line-height:1.6;letter-spacing:.01em}
+  /* ---------- 骨架 ---------- */
+  .shell{max-width:1120px;margin:0 auto;padding:var(--sp-5) var(--sp-3) 120px}
+  .mast{display:grid;grid-template-columns:1fr 320px;gap:var(--sp-4);align-items:end;border-top:3px solid var(--c-ink);padding-top:var(--sp-3)}
+  .mast h1{margin:0;font-size:clamp(34px,6vw,64px);font-weight:700;line-height:1.02;letter-spacing:-.02em}
+  .mast .meta{font-size:var(--font-3);color:var(--c-ink-2);text-align:right}
+  .mast .meta b{display:block;font-weight:600;color:var(--c-ink)}
+  .rule{border-top:1px solid var(--c-line);margin:var(--sp-4) 0}
+  .back{display:inline-block;margin-bottom:var(--sp-3);color:var(--c-brand);text-decoration:none;font-size:var(--font-4);font-weight:600;border-bottom:1px solid var(--c-brand)}
+  .back:hover{color:var(--c-ink)}
+  /* ---------- 风格介绍 ---------- */
+  .intro{display:grid;grid-template-columns:2fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4)}
+  .intro .phil{font-size:var(--font-2);font-weight:600;line-height:1.35}
+  .intro p{color:var(--c-ink-2);margin:.4em 0 0;max-width:62ch}
+  .intro .tokens{border:1px solid var(--c-line);border-top:3px solid var(--c-ink);padding:var(--sp-2)}
+  .intro .tokens h3{margin:0 0 var(--sp-1);font-size:var(--font-5);letter-spacing:.12em;text-transform:uppercase;color:var(--c-ink-3)}
+  .swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .sw{height:44px;border:1px solid var(--c-line)}
+  .token-row{display:flex;justify-content:space-between;font-size:var(--font-5);color:var(--c-ink-2);padding:6px 0;border-top:1px solid var(--c-line)}
+  /* ---------- 区块标题 ---------- */
+  .sec{margin:var(--sp-4) 0 var(--sp-2)}
+  .sec h2{margin:0;font-size:var(--font-3);font-weight:600;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:var(--sp-2)}
+  .sec h2::after{content:"";flex:1;height:1px;background:var(--c-line)}
+  .sec .desc{color:var(--c-ink-3);font-size:var(--font-4);margin-top:4px}
+  .grid{display:grid;gap:var(--sp-4)}
+  .row{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center}
+  .demo{padding:var(--sp-3) 0}
+  /* ---------- 按钮 ---------- */
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-sans);font-size:var(--font-4);font-weight:600;padding:10px 22px;border:1px solid var(--c-ink);background:transparent;color:var(--c-ink);cursor:pointer;text-decoration:none;line-height:1;transition:.15s}
+  .btn:hover{border-color:var(--c-brand);color:var(--c-brand)}
+  .btn.primary{background:var(--c-brand);border-color:var(--c-brand);color:#fff}
+  .btn.primary:hover{background:var(--c-ink)}
+  .btn.ghost{border-color:var(--c-line-2);color:var(--c-ink-2)}
+  .btn.danger{color:var(--c-danger);border-color:var(--c-danger)}
+  .btn[disabled]{opacity:.4;cursor:not-allowed;pointer-events:none}
+  /* ---------- 表单 ---------- */
+  .field{display:grid;gap:6px;width:280px}
+  .field label{font-size:var(--font-5);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--c-ink-2)}
+  .input{font-family:var(--f-sans);font-size:var(--font-4);padding:10px 12px;border:1px solid var(--c-line-2);background:#fff;color:var(--c-ink);outline:none;width:100%}
+  .input:focus{border-color:var(--c-brand);box-shadow:0 0 0 2px var(--c-brand-tint)}
+  .select{font-family:var(--f-sans);font-size:var(--font-4);padding:10px 12px;border:1px solid var(--c-line-2);background:#fff;color:var(--c-ink);width:100%;border-radius:0}
+  .check{display:flex;gap:10px;align-items:center;font-size:var(--font-4);cursor:pointer}
+  .check input{width:16px;height:16px;accent-color:var(--c-brand)}
+  .switch{position:relative;width:44px;height:24px}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .track{position:absolute;inset:0;background:var(--c-line-2);transition:.2s}
+  .switch input:checked+.track{background:var(--c-brand)}
+  .switch .track::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;transition:.2s}
+  .switch input:checked+.track::after{transform:translateX(20px)}
+  /* ---------- 标签 / 徽章 ---------- */
+  .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;font-size:var(--font-5);font-weight:600;letter-spacing:.06em;border:1px solid var(--c-line-2);color:var(--c-ink-2)}
+  .tag.brand{color:var(--c-brand);border-color:var(--c-brand)}
+  .badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;font-size:var(--font-5);font-weight:600;background:var(--c-brand);color:#fff;border-radius:var(--r-pill)}
+  .badge.dark{background:var(--c-ink)}
+  /* ---------- 卡片 ---------- */
+  .card{border:1px solid var(--c-line);border-top:3px solid var(--c-ink);padding:var(--sp-3);background:var(--c-bg)}
+  .card h4{margin:0 0 8px;font-size:var(--font-2);font-weight:600}
+  .card p{margin:0;color:var(--c-ink-2);font-size:var(--font-4)}
+  .card.metric{border-top-color:var(--c-brand);text-align:right}
+  .card.metric .num{font-size:44px;font-weight:700;line-height:1;letter-spacing:-.02em}
+  /* ---------- 告警 ---------- */
+  .alert{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border:1px solid var(--c-line);border-left:3px solid var(--c-ink);font-size:var(--font-4)}
+  .alert .t{font-weight:600}
+  .alert.error{border-left-color:var(--c-danger);color:var(--c-danger)}
+  .alert.success{border-left-color:var(--c-success);color:var(--c-success)}
+  .alert.warn{border-left-color:var(--c-warn);color:var(--c-warn)}
+  .alert.info{border-left-color:var(--c-brand);color:var(--c-brand)}
+  /* ---------- 表格 ---------- */
+  table.tbl{width:100%;border-collapse:collapse;font-size:var(--font-4)}
+  .tbl th{text-align:left;font-size:var(--font-5);letter-spacing:.08em;text-transform:uppercase;color:var(--c-ink-3);font-weight:600;padding:10px 12px;border-bottom:2px solid var(--c-ink)}
+  .tbl td{padding:12px;border-bottom:1px solid var(--c-line);color:var(--c-ink-2)}
+  .tbl tbody tr:hover td{background:var(--c-brand-tint);color:var(--c-ink)}
+  /* ---------- 导航 / 面包屑 ---------- */
+  .navbar{display:flex;align-items:center;gap:var(--sp-3);border-top:3px solid var(--c-ink);border-bottom:1px solid var(--c-line);padding:14px 0}
+  .navbar .logo{font-weight:700;font-size:var(--font-3);letter-spacing:-.01em}
+  .navbar .links{display:flex;gap:var(--sp-2);margin-left:auto}
+  .navbar a{color:var(--c-ink-2);text-decoration:none;font-size:var(--font-4);font-weight:600}
+  .navbar a:hover,.navbar a.on{color:var(--c-ink);border-bottom:2px solid var(--c-brand)}
+  .crumbs{display:flex;gap:8px;align-items:center;font-size:var(--font-4);color:var(--c-ink-3)}
+  .crumbs a{color:var(--c-brand);text-decoration:none}
+  .crumbs span::before{content:"/";margin-right:8px;color:var(--c-line-2)}
+  /* ---------- 弹窗 ---------- */
+  .modal{width:420px;border:1px solid var(--c-line);border-top:4px solid var(--c-ink);background:#fff;box-shadow:0 24px 64px rgba(20,20,23,.18)}
+  .modal .hd{padding:20px 24px 0;font-size:var(--font-2);font-weight:600}
+  .modal .bd{padding:12px 24px;color:var(--c-ink-2);font-size:var(--font-4)}
+  .modal .ft{padding:16px 24px 20px;display:flex;gap:12px;justify-content:flex-end}
+  /* ---------- 进度条 ---------- */
+  .bar{height:6px;background:var(--c-line);overflow:hidden}
+  .bar>span{display:block;height:100%;background:var(--c-brand)}
+  .bar.thin{height:2px}
+  /* ---------- 提示气泡 ---------- */
+  .tip{position:relative;display:inline-block;padding:8px 14px;background:var(--c-ink);color:#fff;font-size:var(--font-5);font-weight:600}
+  .tip::after{content:"";position:absolute;top:100%;left:24px;border:6px solid transparent;border-top-color:var(--c-ink)}
+  /* ---------- 空状态 / 列表 ---------- */
+  .empty{padding:var(--sp-4);border:1px dashed var(--c-line-2);text-align:center;color:var(--c-ink-3)}
+  .empty .act{margin-top:10px;font-size:var(--font-5);letter-spacing:.06em;text-transform:uppercase}
+  .list{list-style:none;margin:0;padding:0;border-top:1px solid var(--c-line)}
+  .list li{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--c-line);font-size:var(--font-4)}
+  .list li .meta{color:var(--c-ink-3);font-size:var(--font-5)}
+  /* ---------- 扩展指南 ---------- */
+  .ext{border-top:3px solid var(--c-ink);padding:var(--sp-3) 0;margin-top:var(--sp-5)}
+  .ext h2{margin:0 0 var(--sp-2);font-size:var(--font-3);text-transform:uppercase;letter-spacing:.06em}
+  .ext ol{margin:0;padding-left:18px;color:var(--c-ink-2);font-size:var(--font-4)}
+  .ext code{background:var(--c-brand-tint);padding:1px 6px;font-size:.95em;color:var(--c-brand)}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <a class="back" href="../index.html">← 返回组件库索引</a>
+
+  <!-- ======= 顶部 ======= -->
+  <header class="mast">
+    <h1>01<br>Pentagram</h1>
+    <div class="meta">
+      <b>信息建筑派</b>
+      字体即语言，网格即思想
+    </div>
+  </header>
+  <div class="rule"></div>
+
+  <!-- ======= 风格介绍 ======= -->
+  <section class="intro">
+    <div>
+      <p class="phil">一个设计系统应当像一份精排的版面：字重即语气，网格即秩序，留白即呼吸。除了黑白，只允许一种品牌色存在。</p>
+      <p>本套组件以瑞士网格的现代演绎为骨架。克制是它的全部：形状只用直角与发丝线，层级不靠颜色而靠字号、字重与留白；唯一品牌色用于那些真正需要被看见的时刻。适合品牌官网、机构级产品与一切"内容本身即设计"的场景。</p>
+    </div>
+    <aside class="tokens">
+      <h3>设计 Token</h3>
+      <div class="swatches">
+        <div class="sw" style="background:var(--c-ink)" title="#141417"></div>
+        <div class="sw" style="background:var(--c-brand)" title="#1f3a68"></div>
+        <div class="sw" style="background:var(--c-bg)"></div>
+        <div class="sw" style="background:var(--c-line)" title="#e5e5ea"></div>
+        <div class="sw" style="background:var(--c-brand-tint)" title="#eef1f6"></div>
+      </div>
+      <div class="token-row"><span>字体</span><span>Helvetica / Helvetica Neue</span></div>
+      <div class="token-row"><span>圆角</span><span>0 (直角)</span></div>
+      <div class="token-row"><span>阴影</span><span>仅发丝线 1px</span></div>
+      <div class="token-row"><span>留白</span><span>≥ 60%</span></div>
+    </aside>
+  </section>
+
+  <!-- ======= 色板 ======= -->
+  <section class="sec"><h2>色板</h2><p class="desc">黑白 + 单品牌色。语义色仅用于状态，克制使用。</p></section>
+  <div class="row" style="gap:0;margin-bottom:16px">
+    <div style="flex:1;background:var(--c-ink);color:#fff;padding:20px">墨 #141417</div>
+    <div style="flex:1;background:var(--c-brand);color:#fff;padding:20px">品牌 #1f3a68</div>
+    <div style="flex:1;background:var(--c-ink-2);color:#fff;padding:20px">次墨 #56565e</div>
+    <div style="flex:1;background:var(--c-danger);color:#fff;padding:20px">危险 #a23b2e</div>
+    <div style="flex:1;background:var(--c-success);color:#fff;padding:20px">成功 #2f6b4f</div>
+  </div>
+
+  <!-- ======= 字体层级 ======= -->
+  <section class="sec"><h2>字体层级</h2></section>
+  <div class="demo" style="border-bottom:1px solid var(--c-line)">
+    <div style="font-size:var(--font-1);font-weight:700;letter-spacing:-.02em;line-height:1.05">标题 Display</div>
+    <div style="font-size:var(--font-2);font-weight:600;margin-top:8px">小节 Heading</div>
+    <div style="font-size:var(--font-3);margin-top:8px;color:var(--c-ink-2)">正文 Body，行宽 62 字符内。信息架构以字号与字重传达。</div>
+    <div style="font-size:var(--font-5);letter-spacing:.12em;text-transform:uppercase;margin-top:8px;color:var(--c-ink-3)">标签 Label</div>
+  </div>
+
+  <!-- ======= 按钮 ======= -->
+  <section class="sec"><h2>按钮</h2></section>
+  <div class="demo row">
+    <button class="btn primary">主要操作</button>
+    <button class="btn">次要操作</button>
+    <button class="btn ghost">幽灵按钮</button>
+    <button class="btn danger">危险操作</button>
+    <button class="btn" disabled>禁用</button>
+  </div>
+
+  <!-- ======= 表单 ======= -->
+  <section class="sec"><h2>表单</h2></section>
+  <div class="demo grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+    <div class="field"><label>文本框</label><input class="input" placeholder="在此输入"></div>
+    <div class="field"><label>下拉选择</label>
+      <select class="select"><option>选项 A</option><option>选项 B</option><option>选项 C</option></select>
+    </div>
+    <div class="field" style="gap:10px">
+      <label>单选与复选</label>
+      <label class="check"><input type="checkbox" checked> 启用通知</label>
+      <label class="check"><input type="radio" name="g1" checked> 方案一</label>
+      <label class="check"><input type="radio" name="g1"> 方案二</label>
+    </div>
+    <div class="field">
+      <label>开关</label>
+      <div class="row"><label class="switch"><input type="checkbox" checked><span class="track"></span></label><span style="font-size:var(--font-4);color:var(--c-ink-2)">已开启</span></div>
+    </div>
+  </div>
+
+  <!-- ======= 标签 / 徽章 ======= -->
+  <section class="sec"><h2>标签 / 徽章</h2></section>
+  <div class="demo row">
+    <span class="tag brand">品牌</span>
+    <span class="tag">默认</span>
+    <span class="tag" style="border-color:var(--c-success);color:var(--c-success)">成功</span>
+    <span class="badge">3</span>
+    <span class="badge dark">新</span>
+  </div>
+
+  <!-- ======= 卡片 ======= -->
+  <section class="sec"><h2>卡片</h2></section>
+  <div class="demo grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+    <div class="card"><h4>条目卡片</h4><p>描述文字，克制而清晰。直角与发丝线界定边界，信息通过留白呼吸。</p></div>
+    <div class="card metric"><span style="font-size:var(--font-5);color:var(--c-ink-3);text-transform:uppercase;letter-spacing:.1em">本月活跃</span><div class="num">12,480</div><p style="font-size:var(--font-4)">较上月 +8.2%</p></div>
+  </div>
+
+  <!-- ======= 告警 ======= -->
+  <section class="sec"><h2>告警</h2></section>
+  <div class="demo grid">
+    <div class="alert info"><div><div class="t">信息</div>这是一条中性提示。</div></div>
+    <div class="alert success"><div><div class="t">成功</div>操作已保存。</div></div>
+    <div class="alert warn"><div><div class="t">警告</div>请复核输入内容。</div></div>
+    <div class="alert error"><div><div class="t">错误</div>未找到匹配记录。</div></div>
+  </div>
+
+  <!-- ======= 表格 ======= -->
+  <section class="sec"><h2>表格</h2></section>
+  <div class="demo">
+    <table class="tbl">
+      <thead><tr><th>任务</th><th>状态</th><th>负责人</th><th>更新</th></tr></thead>
+      <tbody>
+        <tr><td>发布 v3 设计规范</td><td>进行中</td><td>林一</td><td>今日</td></tr>
+        <tr><td>组件库评审</td><td>待处理</td><td>周放</td><td>昨日</td></tr>
+        <tr><td>视觉回归通过率</td><td>已完成</td><td>许澄</td><td>周一</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ======= 导航 / 面包屑 ======= -->
+  <section class="sec"><h2>导航 / 面包屑</h2></section>
+  <div class="demo grid">
+    <nav class="navbar"><span class="logo">STUDIO</span>
+      <div class="links"><a class="on" href="#">工作台</a><a href="#">项目</a><a href="#">资产</a><a href="#">设置</a></div>
+    </nav>
+    <nav class="crumbs"><a href="#">首页</a><span>设计系统</span><span>组件库</span></nav>
+  </div>
+
+  <!-- ======= 弹窗 ======= -->
+  <section class="sec"><h2>弹窗</h2></section>
+  <div class="demo">
+    <div class="modal">
+      <div class="hd">确认导出</div>
+      <div class="bd">导出将生成当前版本的规范快照。此操作可随时重做。</div>
+      <div class="ft"><button class="btn ghost">取消</button><button class="btn primary">导出</button></div>
+    </div>
+  </div>
+
+  <!-- ======= 进度条 ======= -->
+  <section class="sec"><h2>进度条</h2></section>
+  <div class="demo grid" style="max-width:520px">
+    <div class="bar" style="margin-bottom:12px"><span style="width:64%"></span></div>
+    <div class="bar thin"><span style="width:32%"></span></div>
+  </div>
+
+  <!-- ======= 提示气泡 ======= -->
+  <section class="sec"><h2>提示气泡</h2></section>
+  <div class="demo">
+    <div class="tip">提示信息 · 次级文字</div>
+  </div>
+
+  <!-- ======= 空状态 / 列表 ======= -->
+  <section class="sec"><h2>空状态 / 列表</h2></section>
+  <div class="demo grid" style="grid-template-columns:1fr 1.4fr">
+    <div class="empty">尚无数据<span class="act">→ 新建首条记录</span></div>
+    <ul class="list">
+      <li><span>资产命名规范</span><span class="meta">文档 · 2.4MB</span></li>
+      <li><span>组件验收清单</span><span class="meta">表格 · 48KB</span></li>
+      <li><span>品牌色板 v2</span><span class="meta">色板 · 12KB</span></li>
+    </ul>
+  </div>
+
+  <!-- ======= 扩展指南 ======= -->
+  <section class="ext">
+    <h2>扩展你的组件</h2>
+    <ol>
+      <li><b>色调</b>：新增颜色前先自问"它传达的是信息层级还是情绪"——前者用字重/字号，后者才用色。保持黑白 + 单品牌色。</li>
+      <li><b>圆角</b>：坚持直角 <code>0px</code>；只有标签/徽章/开关可保留圆角胶囊。</li>
+      <li><b>阴影</b>：层级交给 <code>1px 发丝线</code> 与留白，不用投影。弹窗用无色的深投影制造浮起感即可。</li>
+      <li><b>字体</b>：沿用 Helvetica 家族；粗细 400/600/700 三档足够表达全部语气。</li>
+      <li><b>间距</b>：只使用 <code>8/16/24/40/64</code> 五档，服从 8pt 基线。</li>
+    </ol>
+  </section>
+
+</div>
+</body>
+</html>
