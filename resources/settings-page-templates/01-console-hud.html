@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方案 A · 仪表台 Console — 设置页重构模板</title>
+<!-- 说明: 本文件是「挑选用模板」, 不是最终实现。
+     颜色令牌与真实 WEB UI 同源(_shared/theme-tokens.css), 因此切主题时本页跟着变;
+     「皮肤 = Ash Thorp 原色」是额外开关, 用来看用户最喜欢的那套观感 1:1 落在设置页上是什么样。 -->
+<link rel="stylesheet" href="_shared/theme-tokens.css">
+<link rel="stylesheet" href="_shared/demo.css">
+<style>
+/* ==========================================================================
+   方案 A · 仪表台 Console
+   --------------------------------------------------------------------------
+   设计取向: 把设置页当「设备控制台」 —— 一律用 hairline 描边 + 10px 切角表达机械感,
+   数值用等宽字体当读数, 状态用分段 LED 光条。光源统一来自左上(渐变与高光同向)。
+   结构: 左侧 rail 常驻导航 → 右侧单一分区; 分区内按「块」分组, 块内是「标签 | 控件」行,
+   说明文字在控件正下方(而不是挤在标签旁边), 风险项用左侧色条标出。
+   ========================================================================== */
+
+/* 切角是这套风格的签名: 只用在「有边界的实体」(块/按钮/输入), 不用在行或文字上 */
+.cut { --cut: 10px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+
+.shell { display: grid; grid-template-columns: 214px minmax(0, 1fr); align-items: start; }
+
+/* ---- 左侧 rail ---- */
+.rail {
+  position: sticky; top: 41px;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 14px 10px calc(20px + 56px);
+  border-right: 1px solid var(--border);
+  background: var(--bg-card);
+  min-height: calc(100vh - 41px);
+}
+.rail-cap {
+  padding: 2px 10px 10px;
+  font: 500 10.5px/1.4 var(--font-mono);
+  letter-spacing: .08em; color: var(--fg-dim);
+}
+.rail-i {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: 0;
+  background: transparent; color: var(--fg-muted);
+  font-size: 13px; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.rail-i:hover { background: var(--bg-hover); color: var(--fg); }
+.rail-i.on {
+  background: var(--accent-soft); color: var(--fg); font-weight: 600;
+  border-color: var(--accent-line);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.rail-i.on .u-ico { color: var(--accent-hi); }
+.rail-i .ri-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-i .ri-n {
+  font: 500 11px/1 var(--font-mono); padding: 2px 6px; border-radius: 3px;
+  background: var(--surface-2); color: var(--fg-dim);
+}
+.rail-i.on .ri-n { background: var(--accent-soft); color: var(--accent-hi); }
+
+/* ---- 右侧舞台 ---- */
+.stage { padding: 22px clamp(16px, 3vw, 40px) calc(28px + 56px); min-width: 0; }
+.sec { display: none; }
+.sec.on { display: block; animation: sec-in .18s var(--ease-out); }
+@keyframes sec-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.sec-hd { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 18px; }
+.sec-hd .sh-mark {
+  flex: none; width: 38px; height: 38px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-hi);
+  border: 1px solid var(--accent-line);
+}
+.sec-hd h1 { margin: 0; font: 600 21px/1.25 var(--font-display); letter-spacing: .005em; }
+.sec-hd .sh-lede { margin: 5px 0 0; color: var(--fg-muted); font-size: 13.5px; max-width: 74ch; }
+.sec-hd .sh-state { margin-left: auto; flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* 状态用分段 LED(而不是圆点) —— 这是本方案区别于其他三套的签名元件 */
+.led { display: inline-block; width: 46px; height: 7px; background: repeating-linear-gradient(90deg, var(--fg-dim) 0 5px, transparent 5px 8px); opacity: .5; }
+.led.ok { background: repeating-linear-gradient(90deg, var(--green) 0 5px, transparent 5px 8px); opacity: 1; }
+.led.warn { background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 8px); opacity: 1; }
+
+/* ---- 块 ---- */
+.blk { margin-bottom: 14px; border: 1px solid var(--border); background: var(--bg-card); }
+.blk-hd {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+}
+.blk-hd .bh-t { font: 600 13px/1.35 var(--font-display); letter-spacing: .01em; }
+.blk-hd .bh-n { font-size: 11.5px; color: var(--fg-dim); }
+.blk-hd .bh-r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ---- 行: 标签 | 控件(说明在控件下) ---- */
+.row { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; padding: 11px 14px; border-top: 1px solid var(--hairline); align-items: start; }
+.blk > .row:first-of-type { border-top: 0; }
+.row:hover { background: var(--surface-1); }
+.row.risk { box-shadow: inset 3px 0 0 var(--warn); }
+.row.off { opacity: .5; }
+.row-lb { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; padding-top: 7px; }
+.row-lb .lb-req { color: var(--error); }
+.row-ct { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.row-ct .u-input { flex: 0 1 260px; }
+.row-ct .u-input.w-sm { flex: 0 0 96px; }
+.row-ct .u-input.w-lg { flex: 1 1 340px; }
+.row-hp { flex: 1 0 100%; font-size: 12.2px; color: var(--fg-dim); line-height: 1.55; max-width: 72ch; }
+.row-hp.risk { color: var(--warn); }
+.row-hp.risk::before { content: "注意 · "; color: var(--warn); font-weight: 600; }
+.row-unit { font: 500 12px/1 var(--font-mono); color: var(--fg-dim); }
+
+/* 读数字段(不可编辑, 纯展示) —— 等宽 + 沉底, 像仪表读数 */
+.readout {
+  font: 500 12.5px/1 var(--font-mono);
+  padding: 7px 10px; background: var(--bg-sunken);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+}
+
+/* ---- 站点 / 规则: 主从两栏(保持现有信息架构, 只换皮) ---- */
+.md { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: start; }
+.md-list { border: 1px solid var(--border); background: var(--bg-card); padding: 8px; }
+.md-list-hd { display: flex; align-items: center; gap: 7px; padding: 4px 8px 9px; font: 600 12.5px/1 var(--font-display); color: var(--fg-muted); }
+.md-i {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 9px; border: 1px solid transparent; background: transparent;
+  color: var(--fg-muted); font-size: 13px; text-align: left; cursor: pointer;
+}
+.md-i:hover { background: var(--bg-hover); color: var(--fg); }
+.md-i.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; border-color: var(--accent-line); }
+.md-i .mi-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 规则卡 */
+.rule { border: 1px solid var(--border); background: var(--bg-card); margin-bottom: 10px; }
+.rule-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.rule-hd .rh-n { font: 600 13.5px/1.3 var(--font-display); }
+.rule-hd .rh-s { font-size: 12px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-hd .rh-r { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.rule-bd { padding: 4px 0; }
+.rule-flow { display: flex; gap: 10px; padding: 10px 14px; flex-wrap: wrap; }
+.flow-grp { flex: 1 1 300px; min-width: 0; }
+.flow-grp-hd { display: flex; align-items: center; gap: 7px; font: 600 12px/1 var(--font-display); color: var(--fg-muted); margin-bottom: 7px; }
+.flow-grp-hd .fg-hint { font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
+.step {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin-bottom: 5px;
+  background: var(--bg-row); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12.8px;
+}
+.step .st-n { font: 600 11px/1 var(--font-mono); color: var(--accent-hi); background: var(--accent-soft); padding: 3px 5px; border-radius: 3px; flex: none; }
+.step .st-t { flex: 1; min-width: 0; }
+.step.danger { border-color: var(--error-line); background: var(--error-soft); }
+
+/* ---- 限速曲线: 阶梯图 ---- */
+.curve-card { border: 1px solid var(--border); background: var(--bg-card); margin-bottom: 12px; }
+.curve-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.curve-hd .ch-p { font: 600 13px/1 var(--font-display); }
+.curve-bd { padding: 12px 14px; }
+.stepline { width: 100%; height: 132px; display: block; }
+.tiers { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.tier { display: grid; grid-template-columns: 26px 1fr 1fr 32px; gap: 8px; align-items: center; }
+.tier .t-n { font: 600 11px/1 var(--font-mono); color: var(--fg-dim); text-align: right; }
+.tier .u-input { width: 100%; }
+
+/* ---- 底部动作条 ---- */
+.actbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px; background: var(--glass);
+  border-top: 1px solid var(--border); backdrop-filter: blur(10px);
+}
+.actbar .ab-st { display: flex; align-items: center; gap: 9px; font-size: 12.8px; color: var(--fg-muted); }
+.actbar .ab-r { margin-left: auto; display: flex; gap: 9px; }
+
+/* 窄屏: rail 收成横向条 */
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { position: static; flex-direction: row; overflow-x: auto; min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; }
+  .rail-cap { display: none; }
+  .rail-i { flex: none; }
+  .rail-i.on { box-shadow: inset 0 -3px 0 var(--accent); }
+  .row { grid-template-columns: 1fr; gap: 7px; }
+  .row-lb { padding-top: 0; }
+  .md { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* --------------------------------------------------------------------------
+   皮肤: Ash Thorp 原色(用户点名最喜欢的一套)。
+   只是把令牌换成暖炭 + 暖橙, 结构与其余部分零改动 —— 也就是说
+   「要不要真的把这套做成第 6 个主题」是个独立决定, 不影响版式选择。
+   -------------------------------------------------------------------------- */
+:root[data-skin="ash"] {
+  --bg: #12100e; --bg-card: #1b1815; --bg-row: #171411; --bg-hover: #221e1a;
+  --bg-sunken: #0e0c0a; --bg-elev: #221e1a; --glass: rgba(18, 16, 14, .88);
+  --fg: #f5efe6; --fg-muted: #c9beb0; --fg-dim: #8e8375; --fg-soft: #c9beb0;
+  --accent: #ff8a3d; --accent-hi: #ffa45f; --accent-soft: rgba(255, 138, 61, .14);
+  --accent-line: rgba(255, 138, 61, .45); --ring: rgba(255, 138, 61, .34);
+  --green: #54d3a0; --green-soft: rgba(84, 211, 160, .14); --green-line: rgba(84, 211, 160, .42);
+  --blue: #43c7c0; --blue-soft: rgba(67, 199, 192, .14); --blue-line: rgba(67, 199, 192, .42);
+  --warn: #ffc266; --warn-soft: rgba(255, 194, 102, .14); --warn-line: rgba(255, 194, 102, .45);
+  --error: #e2563f; --error-soft: rgba(226, 86, 63, .16); --error-line: rgba(226, 86, 63, .45);
+  --violet: #b39cf0; --violet-soft: rgba(179, 156, 240, .16);
+  --teal: #43c7c0; --teal-soft: rgba(67, 199, 192, .16);
+  --indigo: #8b93f8; --indigo-soft: rgba(139, 147, 248, .16);
+  --pink: #f477b3; --pink-soft: rgba(244, 119, 179, .16);
+  --cyan: #2ad0e8; --cyan-soft: rgba(42, 208, 232, .16); --lime: #a8e63c;
+  --border: #2c2723; --border-strong: #453d36; --border-soft: rgba(255, 255, 255, .06);
+  --surface-1: rgba(255, 255, 255, .03); --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .05); --statusbar-bg: #171411;
+  --font-display: "Franklin Gothic Medium", "Arial Narrow", "Segoe UI", Arial, sans-serif;
+  --radius: 0; --radius-sm: 0;
+}
+:root[data-skin="ash"] .u-btn.primary { background: linear-gradient(180deg, #ff9a55, #e8762a); border-color: #e8762a; box-shadow: 0 8px 20px -12px rgba(255, 138, 61, .9); }
+:root[data-skin="ash"] .u-btn.primary:hover { background: linear-gradient(180deg, #ffab6d, #f2812f); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="db-idx">A</span>
+  <b>仪表台 Console</b>
+  <span class="db-note">左侧 rail 常驻 · 机械切角 · 等宽读数 · 分段 LED</span>
+  <span class="db-spacer"></span>
+  <label>主题
+    <select id="themePick">
+      <option value="ocean">深海机房</option>
+      <option value="galaxy">暗夜星云</option>
+      <option value="frost">极地晨霜</option>
+      <option value="golden">麦秋</option>
+      <option value="orbit">品牌轨道</option>
+    </select>
+  </label>
+  <label>皮肤
+    <select id="skinPick">
+      <option value="">跟随主题</option>
+      <option value="ash">Ash Thorp 原色</option>
+    </select>
+  </label>
+  <a class="db-back" href="index.html">← 返回挑选</a>
+</div>
+
+<div class="shell">
+  <nav class="rail" aria-label="设置分区">
+    <div class="rail-cap">设置 · 7 个分区</div>
+    <button class="rail-i on" data-sec="conn"><svg class="u-ico" viewBox="0 0 16 16"><path d="M8 1v6M5.5 3.5 8 6l2.5-2.5"/><path d="M3 10v3h10v-3"/><rect x="5" y="9" width="6" height="4"/></svg><span class="ri-t">连接 qBittorrent</span></button>
+    <button class="rail-i" data-sec="auto"><svg class="u-ico" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5l5.5-7.5h-4z"/></svg><span class="ri-t">自动化</span></button>
+    <button class="rail-i" data-sec="speed"><svg class="u-ico" viewBox="0 0 16 16"><path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12 11.5 6"/></svg><span class="ri-t">限速</span></button>
+    <button class="rail-i" data-sec="sites"><svg class="u-ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg><span class="ri-t">站点</span><span class="ri-n">3</span></button>
+    <button class="rail-i" data-sec="rules"><svg class="u-ico" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg><span class="ri-t">规则</span><span class="ri-n">2</span></button>
+    <button class="rail-i" data-sec="notify"><svg class="u-ico" viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 3 1 3.5 1 3.5H3s1-.5 1-3.5Z"/><path d="M6.5 13a1.7 1.7 0 0 0 3 0"/></svg><span class="ri-t">通知</span></button>
+    <button class="rail-i" data-sec="ui"><svg class="u-ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1"/><path d="M5.5 14h5"/></svg><span class="ri-t">界面与日志</span></button>
+  </nav>
+
+  <main class="stage">
+
+    <!-- ============================ 连接 ============================ -->
+    <section class="sec on" id="sec-conn">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M8 1v6M5.5 3.5 8 6l2.5-2.5"/><path d="M3 10v3h10v-3"/></svg></span>
+        <div>
+          <h1>连接 qBittorrent</h1>
+          <p class="sh-lede">auto-qb 通过 qBittorrent 的 Web UI 读取和修改种子。把地址和登录信息填对，它就能接管种子管理。</p>
+        </div>
+        <span class="sh-state"><span class="led ok"></span><span class="u-dim">已连接</span></span>
+      </header>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">qBittorrent</span><span class="bh-n">Web UI 地址与登录</span><span class="bh-r"><span class="u-badge on">4.6.5</span></span></div>
+        <div class="row">
+          <div class="row-lb">主机<span class="lb-req">*</span></div>
+          <div class="row-ct">
+            <input class="u-input mono" value="127.0.0.1">
+            <p class="row-hp">qBittorrent 所在的那台机器。auto-qb 和 qB 装在同一台电脑上就填 127.0.0.1。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">端口<span class="lb-req">*</span></div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="8080">
+            <p class="row-hp">在 qB 的「设置 → Web UI」里可以看到，默认是 8080。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">用户名</div>
+          <div class="row-ct">
+            <input class="u-input" value="admin">
+            <p class="row-hp">qB Web UI 的登录用户名。qB 里没设用户名就留空。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">密码</div>
+          <div class="row-ct">
+            <input class="u-input" type="password" value="secret-pass">
+            <p class="row-hp">保存后会以明文写进配置文件，别把配置文件发给别人。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">检查节奏</span><span class="bh-n">多久看一次、一次做多少</span></div>
+        <div class="row">
+          <div class="row-lb">检查间隔</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="2"><span class="row-unit">秒</span>
+            <p class="row-hp">每隔多久检查一次种子状态、并处理到期任务。默认 2 秒；不能为 0。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">每轮最多处理</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="20"><span class="row-unit">个任务</span>
+            <p class="row-hp">一轮里最多执行多少个自动化任务。太大单轮耗时长，界面反应会变钝，保持默认即可。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">内置任务间隔</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="60"><span class="row-unit">秒</span>
+            <p class="row-hp">清理、限速曲线这类周期性任务的间隔，从上一次结束开始算，不会越跑越密。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">运行时数据</span></div>
+        <div class="row risk">
+          <div class="row-lb">数据目录</div>
+          <div class="row-ct">
+            <input class="u-input w-lg mono" value="auto-qb-data">
+            <p class="row-hp">运行状态、日志、跳检备份放在哪个目录。可以是相对路径，也可以是绝对路径。</p>
+            <p class="row-hp risk">改了要重启 auto-qb 才生效。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">状态文件</div>
+          <div class="row-ct">
+            <input class="u-input w-lg mono" placeholder="留空 = 数据目录/state.json">
+            <p class="row-hp">重启后接着上次的进度继续。留空就用默认位置。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 自动化 ============================ -->
+    <section class="sec" id="sec-auto">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5l5.5-7.5h-4z"/></svg></span>
+        <div>
+          <h1>自动化</h1>
+          <p class="sh-lede">种子加入之后自动做什么：打标签、把辅种归成一组、检查文件是否还在、清理没用的标签。</p>
+        </div>
+      </header>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">标签</span></div>
+        <div class="row">
+          <div class="row-lb">清理相似标签</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label>
+            <p class="row-hp">自动去掉只有大小写不同的重复标签，比如 HHan 和 hhan 只留一个。某个站点想例外，可以到「站点」里单独关掉。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">跳检标签</div>
+          <div class="row-ct">
+            <input class="u-input mono" value="zSkipChecked">
+            <p class="row-hp">跳过哈希校验的种子会被打上这个标签，方便日后一眼认出它们没校验过。留空 = 不启用。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">辅种分组</span><span class="bh-n">把指向同一批文件的种子视为一组</span><span class="bh-r"><span class="u-badge on">已启用</span></span></div>
+        <div class="row">
+          <div class="row-lb">启用分组</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label>
+            <p class="row-hp">开启后按「组」而不是单个种子来做检查，原种和它的辅种不会再各自重复下载。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">检查文件是否还在</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label>
+            <p class="row-hp">核对组里的文件是否还在磁盘上。发现缺失就整组暂停，避免继续做种却上传不了。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">缺文件标签</div>
+          <div class="row-ct">
+            <input class="u-input mono" value="MISSING">
+            <p class="row-hp">发现缺文件时，给组里每个种子加上这个标签。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">集数标签</span><span class="bh-n">从文件名里认集数</span><span class="bh-r"><span class="u-badge">未启用</span></span></div>
+        <div class="row">
+          <div class="row-lb">启用</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label>
+            <p class="row-hp">从新种子的文件名里解析集数，自动打上 zE01 这样的标签。只对刚加入的种子生效，集数不连续时视为不可靠、不打。</p>
+          </div>
+        </div>
+        <div class="row off">
+          <div class="row-lb">单集模板</div>
+          <div class="row-ct">
+            <input class="u-input mono" value="zE${episode_first}">
+            <p class="row-hp">${episode_first} 会替换成集数，例如 zE01。</p>
+          </div>
+        </div>
+        <div class="row off">
+          <div class="row-lb">多集模板</div>
+          <div class="row-ct">
+            <input class="u-input mono" value="zE${episode_first}-${episode_last}">
+            <p class="row-hp">${episode_first} 和 ${episode_last} 分别是首集和末集，例如 zE01-12。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">清理标签</span></div>
+        <div class="row risk">
+          <div class="row-lb">彻底删除标签</div>
+          <div class="row-ct">
+            <span class="readout">未配置任何匹配规则</span>
+            <button class="u-btn sm">编辑…</button>
+            <p class="row-hp">把匹配的标签从所有种子上摘掉，并从 qB 的标签表里注销。写法支持 regex: 前缀、:ignore_case，以及 @站点标签 引用。</p>
+            <p class="row-hp risk">标签定义会一起删掉，依赖它的自动化（比如 HR 标记）会跟着失效。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">删除无人使用的标签</div>
+          <div class="row-ct">
+            <span class="readout">2 条匹配规则</span>
+            <button class="u-btn sm">编辑…</button>
+            <p class="row-hp">只删已经没有种子在用的标签。还有种子在用的不删，可以放心配。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 限速 ============================ -->
+    <section class="sec" id="sec-speed">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12 11.5 6"/></svg></span>
+        <div>
+          <h1>限速</h1>
+          <p class="sh-lede">按累计流量自动调整 qB 的全局速度上限。比如当月上传超过 500 GiB 之后自动降到 1 MiB/s，避免超额。</p>
+        </div>
+        <span class="sh-state"><span class="u-dim">多条曲线同时命中时取最严的那条</span></span>
+      </header>
+
+      <div class="curve-card cut">
+        <div class="curve-hd">
+          <span class="ch-p">第 1 条曲线</span>
+          <span class="u-badge on">周期 MONTH</span>
+          <span class="u-dim">上传 3 档 · 下载 2 档</span>
+          <span class="bh-r" style="margin-left:auto"><button class="u-btn ghost sm">删除曲线</button></span>
+        </div>
+        <div class="curve-bd">
+          <svg class="stepline" viewBox="0 0 640 132" preserveAspectRatio="none" aria-label="上传限速阶梯图">
+            <line x1="44" y1="14" x2="44" y2="104" stroke="var(--border)" />
+            <line x1="44" y1="104" x2="624" y2="104" stroke="var(--border)" />
+            <line x1="44" y1="14" x2="624" y2="14" stroke="var(--hairline)" />
+            <line x1="44" y1="59" x2="624" y2="59" stroke="var(--hairline)" />
+            <text x="38" y="18" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">8M</text>
+            <text x="38" y="63" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">4M</text>
+            <text x="38" y="108" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">0</text>
+            <path d="M44 20 H200 H200 V60 H380 V104 H624" fill="none" stroke="var(--accent)" stroke-width="2" />
+            <rect x="44" y="20" width="156" height="84" fill="var(--accent-soft)" />
+            <rect x="200" y="60" width="180" height="44" fill="var(--accent-soft)" />
+            <text x="120" y="96" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">8 MiB/s</text>
+            <text x="290" y="96" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">2 MiB/s</text>
+            <text x="510" y="96" text-anchor="middle" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">不限速</text>
+            <text x="44" y="122" text-anchor="middle" fill="var(--fg-dim)" font-size="10">0</text>
+            <text x="200" y="122" text-anchor="middle" fill="var(--fg-dim)" font-size="10">300 GiB</text>
+            <text x="380" y="122" text-anchor="middle" fill="var(--fg-dim)" font-size="10">500 GiB</text>
+            <text x="620" y="122" text-anchor="middle" fill="var(--fg-dim)" font-size="10">∞</text>
+          </svg>
+          <p class="row-hp">横轴是当月累计流量（每档等宽），纵轴是限速。鼠标移到图上可以看每档的具体数值。</p>
+
+          <div class="tiers">
+            <div class="tier"><span class="t-n">1</span><input class="u-input mono" value="300GiB"><input class="u-input mono" value="8MiB/s"><button class="u-btn ghost sm">✕</button></div>
+            <div class="tier"><span class="t-n">2</span><input class="u-input mono" value="500GiB"><input class="u-input mono" value="2MiB/s"><button class="u-btn ghost sm">✕</button></div>
+            <div class="tier"><span class="t-n">3</span><input class="u-input mono" value="800GiB"><input class="u-input mono" value="0"><button class="u-btn ghost sm">✕</button></div>
+          </div>
+          <p class="row-hp">左边填「累计流量低于多少」，右边填「这时限速多少」。填 0 表示这一档不限速。</p>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">下载档位</span><span class="bh-n">不配置就不管这个方向</span></div>
+        <div class="row">
+          <div class="row-lb">下载限速</div>
+          <div class="row-ct">
+            <span class="readout">未配置 = 不管理下载速度</span>
+            <button class="u-btn sm">添加档位</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 站点 ============================ -->
+    <section class="sec" id="sec-sites">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg></span>
+        <div>
+          <h1>站点</h1>
+          <p class="sh-lede">用 tracker 域名判断种子来自哪个站点，然后套用这个站点的标签、限速和 HR 设置。没配置的站点不做任何管理。</p>
+        </div>
+      </header>
+
+      <div class="md">
+        <div class="md-list cut">
+          <div class="md-list-hd">站点配置<button class="u-btn ghost sm" style="margin-left:auto">＋</button></div>
+          <button class="md-i on"><span class="mi-t">HHan</span><span class="ri-n">4</span></button>
+          <button class="md-i"><span class="mi-t">PTer</span><span class="ri-n">3</span></button>
+          <button class="md-i"><span class="mi-t">M-Team</span><span class="ri-n">2</span></button>
+        </div>
+
+        <div class="blk cut" style="margin:0">
+          <div class="blk-hd"><span class="bh-t">HHan</span><span class="bh-r"><button class="u-btn ghost sm">重命名</button><button class="u-btn ghost sm">删除</button></span></div>
+          <div class="row">
+            <div class="row-lb">站点域名</div>
+            <div class="row-ct">
+              <input class="u-input w-lg mono" value="hhan.club">
+              <p class="row-hp">用种子 tracker 地址里的域名来匹配，一行一个，子域名也算命中。</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-lb">标签</div>
+            <div class="row-ct">
+              <input class="u-input" value="HHan">
+              <p class="row-hp">命中这个站点的种子会自动带上这些标签。</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-lb">分类</div>
+            <div class="row-ct"><input class="u-input" value="PT"></div>
+          </div>
+          <div class="row">
+            <div class="row-lb">上传限速</div>
+            <div class="row-ct">
+              <input class="u-input mono w-sm" value=""><span class="row-unit">MiB/s</span>
+              <p class="row-hp">只对这个站点的种子生效。留空 = 不限速。</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-lb">要执行的规则</div>
+            <div class="row-ct">
+              <input class="u-input w-lg mono" value="@default_rules">
+              <select class="u-select" style="margin-left:0"><option>从已有规则里选…</option><option>@default_rules</option><option>@default_rules.cleanup</option></select>
+              <p class="row-hp">@规则集 表示跑整个规则集，@规则集.规则名 表示只跑其中一条。留空 = 这个站点不跑规则。</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-lb">HR 标记</div>
+            <div class="row-ct">
+              <label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label>
+              <button class="u-btn sm">展开 3 项…</button>
+              <p class="row-hp">命中 HR（Hit and Run）时给种子加标签或改分类，具体规则在展开的几项里配。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 规则 ============================ -->
+    <section class="sec" id="sec-rules">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></span>
+        <div>
+          <h1>规则</h1>
+          <p class="sh-lede">一条规则就是「当满足条件时，执行这些动作」。条件要全部满足才会执行，动作按从上到下的顺序执行。</p>
+        </div>
+      </header>
+
+      <div class="md">
+        <div class="md-list cut">
+          <div class="md-list-hd">规则集<button class="u-btn ghost sm" style="margin-left:auto">＋</button></div>
+          <button class="md-i on"><span class="mi-t">default_rules</span><span class="ri-n">2</span></button>
+          <button class="md-i"><span class="mi-t">site_rules</span><span class="ri-n">1</span></button>
+        </div>
+
+        <div>
+          <div class="rule cut">
+            <div class="rule-hd">
+              <span class="rh-n">做种满 7 天后删除</span>
+              <span class="rh-s">做种时间 ≥ 7 天 → 删除种子</span>
+              <span class="rh-r">
+                <span class="u-badge risk">含风险动作</span>
+                <label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label>
+              </span>
+            </div>
+            <div class="rule-bd">
+              <div class="rule-flow">
+                <div class="flow-grp">
+                  <div class="flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div>
+                  <div class="step"><span class="st-n">1</span><span class="st-t">做种时间 至少 7 天</span></div>
+                </div>
+                <div class="flow-grp">
+                  <div class="flow-grp-hd">动作<span class="fg-hint">按顺序执行</span></div>
+                  <div class="step danger"><span class="st-n">1</span><span class="st-t">删除种子（同时删除文件）</span></div>
+                </div>
+              </div>
+              <div class="row" style="border-top:1px solid var(--hairline)">
+                <div class="row-ct" style="padding-left:0">
+                  <p class="row-hp risk">删除会连同文件一起删掉，且无法撤销。确认你知道自己在删什么。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rule cut">
+            <div class="rule-hd">
+              <span class="rh-n">上传率低就暂停</span>
+              <span class="rh-s">分享率 &lt; 0.5 且 做种时间 ≥ 2 天 → 暂停</span>
+              <span class="rh-r"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span>
+            </div>
+            <div class="rule-bd">
+              <div class="rule-flow">
+                <div class="flow-grp">
+                  <div class="flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div>
+                  <div class="step"><span class="st-n">1</span><span class="st-t">分享率 小于 0.5</span></div>
+                  <div class="step"><span class="st-n">2</span><span class="st-t">做种时间 至少 2 天</span></div>
+                </div>
+                <div class="flow-grp">
+                  <div class="flow-grp-hd">动作<span class="fg-hint">按顺序执行</span></div>
+                  <div class="step"><span class="st-n">1</span><span class="st-t">暂停种子</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="u-btn">＋ 新增规则</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 通知 ============================ -->
+    <section class="sec" id="sec-notify">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 3 1 3.5 1 3.5H3s1-.5 1-3.5Z"/><path d="M6.5 13a1.7 1.7 0 0 0 3 0"/></svg></span>
+        <div>
+          <h1>通知</h1>
+          <p class="sh-lede">出错或者做了有风险的操作时，用电脑的系统通知提醒你。不用额外装任何东西。</p>
+        </div>
+        <span class="sh-state"><span class="led ok"></span><span class="u-dim">推送正常</span></span>
+      </header>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">主动通知</span></div>
+        <div class="row">
+          <div class="row-lb">启用通知</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label>
+            <p class="row-hp">关掉之后只有界面里能看到消息，不会再弹系统通知。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">最低提醒级别</div>
+          <div class="row-ct">
+            <select class="u-select"><option>WARNING</option><option>ERROR</option><option>INFO</option></select>
+            <p class="row-hp">达到哪个严重程度才提醒。WARNING 表示只提醒异常和错误，日常信息不打扰你。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">免打扰时段</div>
+          <div class="row-ct">
+            <input class="u-input mono" value="23:00-08:00" placeholder="23:00-08:00">
+            <p class="row-hp">这段时间里不弹通知，可以跨午夜。留空 = 全天都弹。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">每小时上限</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="20"><span class="row-unit">条</span>
+            <p class="row-hp">一小时内最多弹多少条，超出的直接丢掉，防止刷屏。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">重复合并窗口</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="10"><span class="row-unit">分钟</span>
+            <p class="row-hp">这段时间里内容相同的通知只弹第一条。填 0 = 不做合并。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">通知渠道</div>
+          <div class="row-ct">
+            <span class="readout">platform · 系统原生通知</span>
+            <p class="row-hp">目前只支持系统原生通知（Windows / macOS / Linux 都走系统自己的通知中心）。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 界面与日志 ============================ -->
+    <section class="sec" id="sec-ui">
+      <header class="sec-hd">
+        <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1"/><path d="M5.5 14h5"/></svg></span>
+        <div>
+          <h1>界面与日志</h1>
+          <p class="sh-lede">这个浏览器管理界面怎么开、谁能访问，以及日志记在哪里、留多久。</p>
+        </div>
+      </header>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">WEB 界面</span><span class="bh-n">你现在正在用的这个界面</span></div>
+        <div class="row">
+          <div class="row-lb">启用界面</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label>
+            <p class="row-hp">关掉之后只能改配置文件，不能再从浏览器管理。</p>
+          </div>
+        </div>
+        <div class="row risk">
+          <div class="row-lb">监听地址</div>
+          <div class="row-ct">
+            <input class="u-input mono" value="127.0.0.1">
+            <p class="row-hp">保持 127.0.0.1 表示只有这台电脑能打开。</p>
+            <p class="row-hp risk">改成 0.0.0.0 会把「能暂停和删除种子」的界面暴露给局域网里所有设备。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">端口</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="8080">
+            <p class="row-hp">和 qB 的 Web UI 端口撞了就换一个。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">访问密钥</div>
+          <div class="row-ct">
+            <input class="u-input" type="password" value="a7f3-9c21">
+            <p class="row-hp">登录这个界面要填的密钥。留空 = 第一次启动时随机生成一个，并打印在启动日志里。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">跳过本机验证</div>
+          <div class="row-ct">
+            <label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label>
+            <p class="row-hp">开着的话，从这台电脑打开界面不用输密钥；从别的机器访问仍然要。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk cut">
+        <div class="blk-hd"><span class="bh-t">日志</span><span class="bh-r"><button class="u-btn ghost sm">刷新</button></span></div>
+        <div class="row">
+          <div class="row-lb">日志等级</div>
+          <div class="row-ct">
+            <select class="u-select"><option>INFO</option><option>DEBUG</option><option>WARNING</option><option>ERROR</option></select>
+            <p class="row-hp">DEBUG 最详细，ERROR 只记出错。日常用 INFO。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">单个日志上限</div>
+          <div class="row-ct">
+            <input class="u-input mono w-sm" value="10"><span class="row-unit">MiB</span>
+            <p class="row-hp">写满就另起一个新文件，最多留 5 个旧文件，防止日志无限膨胀。</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-lb">运行日志</div>
+          <div class="row-ct">
+            <select class="u-select"><option>最近 200 行</option><option>最近 500 行</option><option>最近 2000 行</option></select>
+            <select class="u-select"><option>全部级别</option><option>只看 WARNING 以上</option></select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="actbar">
+  <span class="ab-st"><span class="led warn"></span>有 2 处改动还没保存</span>
+  <span class="ab-r">
+    <button class="u-btn ghost">放弃改动</button>
+    <button class="u-btn primary cut">保存并应用</button>
+  </span>
+</div>
+
+<script>
+  // 分区切换(纯演示, 无框架)
+  document.querySelectorAll('.rail-i').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.rail-i').forEach(function (x) { x.classList.remove('on'); });
+      document.querySelectorAll('.sec').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      document.getElementById('sec-' + b.dataset.sec).classList.add('on');
+      window.scrollTo({ top: 0 });
+    });
+  });
+  // 站点 / 规则集列表选中态(纯演示)
+  document.querySelectorAll('.md-list').forEach(function (list) {
+    list.querySelectorAll('.md-i').forEach(function (b) {
+      b.addEventListener('click', function () {
+        list.querySelectorAll('.md-i').forEach(function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+      });
+    });
+  });
+  var tp = document.getElementById('themePick');
+  tp.value = new URLSearchParams(location.search).get('theme') || 'ocean';
+  document.documentElement.dataset.theme = tp.value;
+  tp.addEventListener('change', function () { document.documentElement.dataset.theme = tp.value; });
+  var sp = document.getElementById('skinPick');
+  sp.addEventListener('change', function () {
+    if (sp.value) { document.documentElement.dataset.skin = sp.value; } else { delete document.documentElement.dataset.skin; }
+  });
+</script>
+</body>
+</html>

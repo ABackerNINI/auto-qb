@@ -1,0 +1,1242 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方案 A+C+D · 仪表台 × 卡片总览 × 就近说明浮窗 — 设置页重构模板</title>
+<!-- 说明: 三套合一 —— 视觉取 A(切角 / hairline / 等宽读数 / 分段 LED / 左上方向光),
+     布局取 C(首页卡片总览 + 搜索 → 二级页 + 面包屑), 说明取 D 但**改为就近浮窗**
+     (不再占右侧常驻面板, 点行尾的 ? 就在该行旁边弹出, Esc / 点别处关闭)。
+     颜色仍走真实主题令牌, Ash Thorp 原色是可切开关。 -->
+<link rel="stylesheet" href="_shared/theme-tokens.css">
+<link rel="stylesheet" href="_shared/demo.css">
+<style>
+/* ==========================================================================
+   方案 A+C+D · 三合一
+   --------------------------------------------------------------------------
+   ① 视觉 = A 仪表台: 10px 切角(hairline 描边被切角一起裁掉, 得到「机加工」的斜边)、
+      数值一律等宽当读数、状态用分段 LED 光条、渐变与高光统一来自左上。
+   ② 布局 = C Hub & Spoke: 首页是卡片网格(每张卡回答「是什么 / 现在什么状态 / 要不要处理」),
+      点进二级页只处理一个分区, 顶部面包屑一步退回; 首页带搜索框直跳配置项。
+   ③ 说明 = D 的内容、就近浮窗的形态: 行尾一个 ? , 点开就在该行旁边弹出,
+      内容是「它是什么 / 默认值 / 什么时候需要改 / 注意 / 容易和谁搞混」五段。
+      不再占一条常驻侧栏 —— 二级页因此能把内容铺满, 也不会出现「右栏空着」的浪费。
+   ========================================================================== */
+
+/* 切角: 只用在「有边界的实体」(卡片 / 块 / 按钮 / 输入 / 徽章), 不用在行和文字上 */
+.cut { --cut: 10px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+
+/* ==========================================================================
+   控件层: 输入框 / 下拉框 / 按钮取自 Ash Thorp(15), 开关取自 Fathom(04)
+   --------------------------------------------------------------------------
+   形状   —— 控件层一律**方角**(零圆角、无切角)。切角这条路的结论:
+     10px `clip-path` 在卡片 / 块这类大面上没问题, 但在 30~40px 高的控件上会把
+     字形和边框一起切糊; 更要命的是 `clip-path` 会把 `box-shadow` 和 `filter`
+     的外发光**整圈裁掉**, 只剩 `drop-shadow` 一条路, 而它没有 spread 参数,
+     调来调去不是糊就是弱(实测过 11px / 4px / 2+6px 三档, 都不满意)。
+     回到方角之后发光直接走 `box-shadow`, spread 可用, 好调得多。
+     切角仍留在卡片 / 块 / 规则卡 / 曲线卡这类**大面**上, 作为 A 的签名。
+   发光   —— **所有可交互且有边框的对象都发光, 纯文字除外**:
+     输入框 / 下拉框(聚焦) · 按钮(悬浮 + 聚焦) · 小标签 pill(悬浮 + 选中) ·
+     「?」说明钮(悬浮 + 打开) · 首页卡片(悬浮 + 聚焦) · 开关(聚焦 + 开启态)。
+     统一由 `--glow` / `--glow-soft` 两个令牌提供, 改一处全站生效。
+   按钮   —— 一律**不带橙色填充**。橙渐变实心是那套里 .btn(主 CTA) 才有的,
+     设置页几十个按钮全用实心会把主次冲掉。四档:
+     默认(沉底 = .btn-secondary) / ghost / primary(描边型) / danger。
+   开关   —— 形态取自 amd/04-fathom: 44×24 **方角**轨道、18px 纯白滑块、
+     3px 内缩、行程 20px。开启态走主题 accent(不能写死 Fathom 的深海军蓝
+     `#1d3a54` —— 那是亮色主题的色, 在暗色主题上等于隐形)。
+   ========================================================================== */
+
+/* ---- 发光令牌: 改这里, 全站生效 ----
+   三层 = 柔光环(0 spread, 贴边) + 亮芯(小 blur, 负 spread 收一点) + 余光
+   (沿用 Ash Thorp 原值 22px / -6px)。全部由 accent 派生, 切主题整组跟着变。
+   --glow-soft 给**悬浮态**用, 比聚焦态弱一档 —— 否则划过一行按钮会满屏发光。 */
+:root {
+  /* --tone = 「这个对象是什么性质」的唯一开关。
+     它同时驱动**描边色**和**整组发光色**: 因为下面的 --glow 里引用了 var(--tone),
+     而自定义属性是「用时才替换」的 —— 在任何元素上改 --tone, 那一支的发光就整体换色。
+     默认值(accent)给输入框 / 卡片这类中性交互物; 按钮各类型会各自覆盖它。 */
+  --tone: var(--accent);
+  --tone-soft: var(--accent-soft);
+  /* ⚠⚠ 派生变量(--tone-line / --glow / --glow-soft)**不能只声明在 :root**, 见下面
+     「语调派生」那一块的详细说明。这里只放 --tone 的默认值。 */
+  /* ⚠ 发光的边缘**不能亮**。`box-shadow` 全不透明 + 零/负 spread 时, 阴影
+     在元素边缘的 alpha 接近 50%~100%, 加上 1px accent 描边 = 一道亮亮的
+     实色"双层"边, 读起来是「描边加粗了」而不是「发光」。
+     正确做法: **正 spread 把光晕推到元素外面** + **`color-mix` 降边缘 alpha**。
+     第三轮: **逐像素实测**(自写 PNG 解码器 `pngscan.py`, 扫一条横切线量
+     "描边外 1px 处的发光强度 = 描边色的百分之多少"), 6 配方结果:
+       A 正 spread  `0 0 10px 3px / 0 0 26px 8px`   → 边缘 **76%** ❌ 几乎和描边一样亮
+       B 负 spread  `0 0 20px -4px / 0 0 40px -12px` → 边缘 29%
+       C 负 spread  `0 0 16px -3px / 0 0 34px -10px` → 边缘 **36%** ✅ 柔和但清晰
+       D 零 spread  `0 0 12px 0   / 0 0 28px -6px`   → 边缘 45%
+       E Ash Thorp  `0 0 22px -6px rgba(.8)`         → 边缘 17% (太弱)
+       F 超大负 spread                                → 边缘 10% (太弱)
+     ⚠ 之前的判断全错在: **正 spread 会把光晕"贴"在描边上**(阴影实心区从元素
+       边缘就开始), 边缘反而最亮; 真正让边缘变暗的是**负 spread**(把阴影实心区
+       推到元素底下, 只露外面的模糊尾巴)。
+     ⚠ 用户最终拍板: **完全复刻 Ash Thorp 原值**, 不要再自己发挥。
+     Ash Thorp 的 `15-ash-thorp.html:344`(这段是那套的风格覆写, 不是基础层):
+       .input:focus{ outline:none;
+                     border-color:var(--primary);
+                     box-shadow: inset 0 0 0 1px var(--primary),
+                                 0 0 22px -6px rgba(255,138,61,.8) }
+     两层: ①`inset 0 0 0 1px` 内描边(主色实色)
+           ②`0 0 22px -6px` 外余光(主色 80% alpha)
+     令牌化(--primary → --tone, rgba(...,.8) → color-mix 80%):
+       --glow: inset 0 0 0 1px var(--tone),
+               0 0 22px -6px color-mix(in srgb, var(--tone) 80%, transparent)
+     ⚠ 注意 ①②加起来是**贴在一起的同色 2px**(不是两道分开的线)——
+       这正是 Ash Thorp 的观感: 一道"被点亮的粗边" + 一圈范围很大的柔光。
+       之前误以为是"两个描边", 其实真凶是原生 select 外框和浏览器 focus ring
+       (那两个才是**分开的**两道线, 已修)。
+     ⚠ `--glow` / `--glow-soft` 的**声明已经移出本块**, 见下面「语调派生」——
+       这里只剩下说明。改配方请去下面那一块, 不要在这里加声明。 */
+}
+
+/* ==========================================================================
+   语调派生: --tone-line / --glow / --glow-soft
+   --------------------------------------------------------------------------
+   ⚠⚠ **必须声明在使用 --tone 的那一层元素上, 不能只声明在 :root**。
+   CSS 自定义属性是「在元素上计算一次, 然后按计算值继承」的:
+     在 :root 写 `--glow: ... var(--tone) ...`
+     ⇒ :root 上就把 var(--tone) 替换成 :root 的 --tone(accent) 并**固化**,
+       后代继承到的是已经不含 var(--tone) 的成品 —— 之后在 .u-input.danger 上
+       覆盖 --tone 完全无效。
+   实测症状(密码框, danger): 静息描边**绿**(--tone-line 卡在 accent) /
+     hover 描边**红**(border-color 里的 var(--tone) 是现算的) /
+     聚焦 **红描边 + 绿 inset 环 + 绿发光**(--glow 卡在 accent)
+     —— 一半绿一半红, 正是这个"固化"造成的。
+   修法: 把派生声明放到**能同时匹配到 --tone 覆盖规则**的那组选择器上,
+   于是替换发生在该元素自身, 用的是该元素最终生效的 --tone。
+   ========================================================================== */
+.u-input, .u-select, .u-btn, .card, .pill, .ask, .u-switch, .demo-bar select {
+  /* 静息描边: --tone 的 45% 淡版(同色相) */
+  --tone-line: color-mix(in srgb, var(--tone) 45%, transparent);
+  --glow: inset 0 0 0 1px var(--tone),
+          0 0 22px -6px color-mix(in srgb, var(--tone) 80%, transparent);
+  --glow-soft: inset 0 0 0 1px color-mix(in srgb, var(--tone) 50%, transparent),
+               0 0 16px -8px color-mix(in srgb, var(--tone) 60%, transparent);
+}
+
+/* ---- 输入框 / 下拉框 (Ash Thorp · 方角 + 聚焦发光) ---- */
+.u-input, .u-select {
+  padding: 10px 14px;               /* Ash Thorp 原值(15-ash-thorp.html:342) */
+  background-color: var(--bg-sunken);
+  color: var(--fg);
+  border: 1px solid var(--tone-line);   /* 静息态 = tone 的淡版, 与发光同色相 */
+  border-radius: 0;                 /* 方角: 零圆角、无切角(用户定的, 不用 Ash 的切角) */
+  font-size: 13px;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.u-input::placeholder { color: var(--fg-dim); opacity: 1; }
+/* ⚠ 描边色必须和发光色**同一个来源**: 之前 hover 用的是 `--fg-dim`(中性灰)而
+   box-shadow 用的是 `--accent`(青), 一灰一青 —— 这就是"边框和发光颜色不一致"。
+   统一改成 `var(--tone)`, 描边与发光必然同色(语义档 important/danger 也自动跟随)。
+   下拉框和输入框同一口径: 悬浮柔光, 聚焦满档(之前下拉框只给了聚焦态, 划过去没反应)。 */
+.u-input:hover, .u-select:hover { border-color: var(--tone); box-shadow: var(--glow-soft); }
+.u-input:focus, .u-select:focus {
+  outline: none;
+  border-color: var(--tone);
+  box-shadow: var(--glow);
+}
+/* 下拉框: 右侧给箭头留位。用 background-color 长写, 别用 background 简写 ——
+   简写会把 demo.css 里画箭头的 background-image 一起清掉 */
+.u-select { padding-right: 30px; }
+
+/* 上下文宽度(回到 input 自己身上, 它重新参与 flex 了) */
+.row-ct .u-input, .row-ct .u-select { flex: 0 1 250px; }
+.row-ct .u-input.w-sm, .row-ct .u-select.w-sm { flex: 0 0 104px; }
+.row-ct .u-input.w-lg, .row-ct .u-select.w-lg { flex: 1 1 330px; }
+.tier .u-input { width: 100%; min-width: 0; }
+
+/* ---- 按钮 (Ash Thorp · 方角描边, 不带橙色填充) ----
+   四档类型**靠 --tone 区分**: 描边色和发光色都跟着 --tone 走, 所以一眼能分清
+   「这是次要动作 / 主行动 / 破坏性动作 / 安静的文字按钮」。 */
+.u-btn {
+  --tone: var(--fg-dim);            /* 默认(次要动作): 中性灰 —— 不该抢主行动的注意力 */
+  --tone-soft: var(--surface-2);
+  padding: 9px 16px;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--tone-line);   /* 静息 = --tone 的淡版, 与发光同色相 */
+  border-radius: 0;                 /* 方角: 不用切角 */
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  box-shadow: none;
+  clip-path: none;                  /* 显式锁死: 即便有人加了 .cut, 按钮也保持方角 */
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+/* ---- 语义化语调: 重要 / 危险 用**不同色的描边 + 发光** ----
+   三档, 全部由 --tone 驱动(所以描边和发光必然同色):
+     常规  --accent  绝大多数输入框; 主行动按钮
+     重要  --warn    影响面大但可逆 —— 凭据、改了要重启、弱化安全边界
+     危险  --error   破坏性 / 不可逆 / 有安全后果 —— 明文密码、对外暴露、删除
+   ⚠ 静息态的描边**也**带语义色(不用聚焦就能看出轻重), 聚焦时才变实色 + 发光。 */
+.u-input.important, .u-select.important { --tone: var(--warn); }
+.u-input.danger,    .u-select.danger    { --tone: var(--error); }
+/* 上面两条只覆盖 --tone 即可: --tone-line 由 color-mix 自动推出同色相淡版。 */
+/* 语义档**不需要**再写 hover 描边: 上面的 `.u-input:hover` 用的是 `var(--tone)`,
+   而 important/danger 已经把 --tone 覆盖成 --warn / --error, 会自动跟随。 */
+
+.u-btn.important {
+  --tone: var(--warn);
+  background: transparent; border-color: var(--tone-line); color: var(--warn);
+}
+.u-btn.important:hover {
+  background: var(--warn-soft); border-color: var(--warn); color: var(--warn);
+  box-shadow: var(--glow-soft);
+}
+.u-btn.important:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; box-shadow: var(--glow-soft); }
+
+/* 开关也能挂语义: important 用 warn 底, danger 用 error 底 */
+.u-switch.important { --tone: var(--warn); }
+.u-switch.important input:checked + .sw-track { background: var(--warn); }
+.u-switch.danger { --tone: var(--error); }
+.u-switch.danger input:checked + .sw-track { background: var(--error); }
+
+/* 可交互 + 有边框 ⇒ 发光(悬浮 / 聚焦两态都给); 颜色 = 各自的 --tone */
+.u-btn:hover { background: var(--bg-hover); border-color: var(--tone); box-shadow: var(--glow-soft); }
+.u-btn:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; box-shadow: var(--glow-soft); }
+.u-btn:active { transform: none; }
+.u-btn[disabled] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+/* ghost = Ash Thorp .btn-ghost: 无描边、不发光, hover 只点亮文字 —— 最安静的一档 */
+.u-btn.ghost { --tone: transparent; --tone-soft: transparent; --tone-line: transparent; background: transparent; border-color: transparent; color: var(--fg-muted); }
+.u-btn.ghost:hover { background: transparent; color: var(--accent-hi); box-shadow: none; }
+
+/* primary 走「描边型」而不是实心: 强调靠 accent 描边 + accent 文字 + accent 发光(满档) */
+.u-btn.primary { --tone: var(--accent); --tone-soft: var(--accent-soft); background: transparent; border-color: var(--tone-line); color: var(--accent-hi); }
+.u-btn.primary:hover {
+  background: var(--accent-soft); border-color: var(--accent-hi); color: var(--accent-hi);
+  box-shadow: var(--glow);          /* primary 用满档, 和普通按钮拉开 */
+}
+.u-btn.primary:focus-visible { outline-color: var(--accent-hi); box-shadow: var(--glow); border-color: var(--accent-hi); }
+
+/* danger = Ash Thorp .btn-danger: 透明底 + error 描边/文字/发光 —— 绝不能和 primary 同色 */
+.u-btn.danger { --tone: var(--error); --tone-soft: var(--error-soft); background: transparent; border-color: var(--tone-line); color: var(--error); }
+.u-btn.danger:hover { background: var(--error-soft); border-color: var(--error); box-shadow: var(--glow-soft); }
+.u-btn.danger:focus-visible { outline-color: var(--error); box-shadow: var(--glow-soft); }
+
+.u-btn.sm { padding: 6px 12px; font-size: 12.5px; }
+
+/* 演示条上的主题 / 皮肤下拉也是「可交互 + 有边框」, 一并发光(保持全站同一个口径)。
+   写在 05 自己的 style 里, 不动 _shared/demo.css —— 那会影响另外四套模板。 */
+/* ⚠ 演示条的下拉原来是**原生控件** —— `_shared/demo.css` 的 `.demo-bar select`
+   没有写 `appearance: none`(只有 `.u-select` 写了)。原生 select 自带一圈外框,
+   再叠 CSS 的 1px 边框 = **两道线**; 聚焦后外面那道变 accent、里面那道还是原生灰,
+   就是"两个描边"的直接来源。
+   这里补 `appearance: none` 去掉原生外观, 只留 CSS 那一道; 顺带补一个下拉箭头
+   (不然箭头跟原生外观一起没了), 并把圆角改成方角(原生是圆角 + 渐变底,
+   和全站"方角、零圆角"的语言不一致)。 */
+.demo-bar select {
+  appearance: none; -webkit-appearance: none;
+  padding: 4px 26px 4px 8px;
+  border-radius: 0;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+/* ⚠ 必须 `outline: none` —— 逐像素实测抓到: 聚焦时描边外面 2~3px 处有一圈
+   `#5cc3c3`(比 accent 还亮), 那是**浏览器默认的 focus ring**。
+   `.u-input:focus / .u-select:focus` 写了 `outline: none`, 这里漏了 ——
+   于是「CSS 的 1px 描边 + 浏览器的 focus ring」= 用户说的两个描边。
+   (第二个坑, 和上面缺 `appearance: none` 同源: 两套 select 约定没配对。)
+   发光用满档: 演示条就两个下拉, 不存在"划过一片"的干扰, 满档才看得出反馈。 */
+.demo-bar select:hover,
+.demo-bar select:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow); }
+
+/* ---- 开关 (Fathom · 方角 44×24 + 纯白滑块) ---- */
+.u-switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; font-size: 13px; }
+.u-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.u-switch .sw-track {
+  position: relative; flex: none;
+  width: 44px; height: 24px;
+  border-radius: 0;
+  background: var(--tone-line);
+  transition: background .2s var(--ease);
+}
+.u-switch input:checked + .sw-track { background: var(--accent); }
+.u-switch .sw-track::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 0;
+  background: #fff;
+  transition: transform .2s var(--ease);
+}
+.u-switch input:checked + .sw-track::after { transform: translateX(20px); }
+/* 开关也可交互: 聚焦给外描边 + 柔光; 开启态轨道本身发一点光(它是「通了电」的暗示) */
+.u-switch input:focus-visible + .sw-track {
+  outline: 2px solid var(--accent-hi); outline-offset: 2px;
+  box-shadow: var(--glow-soft);
+}
+.u-switch input:checked + .sw-track { box-shadow: 0 0 10px -3px var(--accent); }
+.u-switch .sw-text { color: var(--fg-muted); font-size: 12.5px; }
+.u-switch input:checked ~ .sw-text { color: var(--fg); }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 32px) calc(40px + 62px); }
+.view { display: none; }
+.view.on { display: block; animation: v-in .18s var(--ease-out); }
+@keyframes v-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* ---- 首页抬头 ---- */
+.hub-hd { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+.hub-hd h1 { margin: 0; font: 600 26px/1.2 var(--font-display); letter-spacing: -.01em; }
+.hub-hd .hh-sub { margin: 6px 0 0; font: 500 12px/1.5 var(--font-mono); color: var(--fg-dim); letter-spacing: .02em; }
+.hub-hd .hh-search { margin-left: auto; position: relative; }
+.hub-hd .hh-search input { width: 250px; padding-left: 32px; }
+.hub-hd .hh-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--fg-dim); }
+.hub-hd .hh-sub .on { color: var(--warn); }
+
+/* ---- 需要你先看一眼的(沿 C, 但换成 A 的 hairline + 左侧光条) ---- */
+.attn {
+  display: flex; align-items: flex-start; gap: 11px; margin-bottom: 18px;
+  padding: 12px 15px; background: var(--warn-soft);
+  border: 1px solid var(--warn-line); box-shadow: inset 3px 0 0 var(--warn);
+}
+.attn .at-ico { color: var(--warn); flex: none; margin-top: 1px; }
+.attn b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.attn p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
+.attn a { margin-left: auto; white-space: nowrap; flex: none; font-size: 13px; }
+
+/* ---- 卡片网格(切角 + 左上方向光 + LED 状态) ---- */
+.hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; }
+.card {
+  display: flex; flex-direction: column; gap: 9px; text-align: left; padding: 15px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  /* 左上方向光: 这是 A 的灵魂 —— 底色不变, 只靠一层很淡的渐变给个光源方向 */
+  background-image: linear-gradient(135deg, var(--surface-1), transparent 46%);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease);
+}
+/* 卡片是入口(可点击), 所以也发光; 方角 —— clip-path 会裁掉 box-shadow */
+.card:hover { border-color: var(--tone); transform: translateY(-2px); box-shadow: var(--glow-soft); }
+.card:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; box-shadow: var(--glow-soft); }
+.card-top { display: flex; align-items: flex-start; gap: 11px; }
+.card-ico {
+  flex: none; width: 34px; height: 34px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-hi); border: 1px solid var(--accent-line);
+}
+.card-ico.off { background: var(--surface-2); color: var(--fg-dim); border-color: var(--border); }
+.card-t { font: 600 14.5px/1.3 var(--font-display); }
+.card-d { font-size: 12.8px; line-height: 1.6; color: var(--fg-muted); min-height: 2.6em; }
+.card-f { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 1px; }
+.card-f .cf-v { font: 500 11.5px/1 var(--font-mono); color: var(--fg-dim); }
+
+/* 分段 LED: 绿=正常 / 橙=需要注意 / 灰=未启用 */
+.led { display: inline-block; width: 34px; height: 7px; flex: none; background: repeating-linear-gradient(90deg, var(--fg-dim) 0 5px, transparent 5px 8px); opacity: .55; }
+.led.ok { background: repeating-linear-gradient(90deg, var(--green) 0 5px, transparent 5px 8px); opacity: 1; }
+.led.warn { background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 8px); opacity: 1; }
+
+/* ---- 二级页: 面包屑 ---- */
+.crumb { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg-dim); margin-bottom: 13px; }
+.crumb button { background: transparent; border: 0; color: var(--accent-hi); cursor: pointer; padding: 0; font-size: 12.5px; }
+.crumb button:hover { text-decoration: underline; }
+.crumb .cb-now { color: var(--fg-muted); }
+
+.sec-hd { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 18px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+.sec-hd .sh-mark {
+  flex: none; width: 38px; height: 38px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-hi); border: 1px solid var(--accent-line);
+}
+.sec-hd h1 { margin: 0; font: 600 21px/1.25 var(--font-display); letter-spacing: .005em; }
+.sec-hd .sh-lede { margin: 5px 0 0; font-size: 13.5px; color: var(--fg-muted); max-width: 72ch; }
+.sec-hd .sh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+
+/* ---- 块 / 行(沿用 A) ---- */
+/* 注意: 这里**不设 overflow: hidden** —— 块的 clip-path 已经够了, 再加 overflow
+   会把靠近块边缘那几个字段的聚焦发光裁掉一条边(发光外扩约 8px) */
+.blk { margin-bottom: 14px; background: var(--bg-card); border: 1px solid var(--border); }
+.blk-hd { display: flex; align-items: center; gap: 9px; padding: 9px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.blk-hd .bh-t { font: 600 13px/1.35 var(--font-display); letter-spacing: .01em; }
+.blk-hd .bh-n { font-size: 11.5px; color: var(--fg-dim); }
+.blk-hd .bh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+/* 行: 标签 | 控件 | ?(说明浮窗触发点) */
+.row { display: grid; grid-template-columns: 178px minmax(0, 1fr) 24px; gap: 12px; padding: 10px 14px; align-items: start; border-top: 1px solid var(--hairline); }
+.blk > .row:first-of-type { border-top: 0; }
+.row:hover { background: var(--surface-1); }
+.row.risk { box-shadow: inset 3px 0 0 var(--warn); }
+.row-lb { font-size: 13px; padding-top: 7px; display: flex; gap: 5px; align-items: baseline; flex-wrap: wrap; }
+.row-lb .lb-req { color: var(--error); }
+.row-ct { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.row-hp { flex: 1 0 100%; font-size: 12.2px; line-height: 1.6; color: var(--fg-dim); max-width: 70ch; }
+.row-hp.risk { color: var(--warn); }
+
+/* 说明浮窗的触发点: 做成一小块切角按钮, 平时很淡, hover / 打开时点亮 */
+.ask {
+  flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+  border: 1px solid var(--border); background: transparent; color: var(--fg-dim);
+  font: 500 11px/1 var(--font-mono); cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.ask:hover { color: var(--accent-hi); border-color: var(--tone); background: var(--accent-soft); box-shadow: var(--glow-soft); }
+.ask.on { color: var(--accent-hi); border-color: var(--tone); background: var(--accent-soft); box-shadow: var(--glow-soft); }
+
+/* ---- 就近说明浮窗(D 的内容, 改成浮窗形态) ----
+   两个 fixed 元素: 面板本身(切角) + 箭头(独立元素, 否则会被面板的 clip-path 裁掉) */
+.pop {
+  position: fixed; z-index: 60; width: 336px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 40px); overflow-y: auto;
+  padding: 14px 15px;
+  background: var(--bg-elev); border: 1px solid var(--tone-line);
+  background-image: linear-gradient(135deg, var(--surface-1), transparent 52%);
+  box-shadow: var(--shadow-3);
+  display: none;
+}
+.pop.on { display: block; animation: pop-in .14s var(--ease-out); }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.pop-arrow {
+  position: fixed; z-index: 61; width: 9px; height: 9px; display: none;
+  background: var(--bg-elev);
+}
+.pop-arrow.on { display: block; }
+.pop-arrow.left { border-bottom: 1px solid var(--border-strong); border-left: 1px solid var(--border-strong); transform: rotate(45deg); }
+.pop-arrow.right { border-top: 1px solid var(--border-strong); border-right: 1px solid var(--border-strong); transform: rotate(45deg); }
+
+.pop-hd { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.pop-hd h2 { margin: 0; font: 600 15px/1.35 var(--font-display); flex: 1; }
+.pop-hd .pk { font: 500 10.5px/1.4 var(--font-mono); color: var(--fg-dim); display: block; margin-top: 3px; }
+.pop-hd .pop-x { flex: none; border: 0; background: transparent; color: var(--fg-dim); cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; }
+.pop-hd .pop-x:hover { color: var(--fg); }
+.pop-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+.pop-sec { margin-bottom: 12px; }
+.pop-sec:last-child { margin-bottom: 0; }
+.pop-sec h3 { margin: 0 0 4px; font: 600 10.5px/1 var(--font-mono); letter-spacing: .07em; color: var(--fg-dim); }
+.pop-sec p { margin: 0; font-size: 12.8px; line-height: 1.7; color: var(--fg-muted); }
+.pop-sec ul { margin: 0; padding-left: 15px; font-size: 12.8px; line-height: 1.7; color: var(--fg-muted); }
+.pop-sec code { font-family: var(--font-mono); font-size: 11.8px; padding: 1px 5px; border-radius: 3px; background: var(--surface-2); color: var(--fg); }
+.pop-val { font: 500 12.5px/1.6 var(--font-mono); padding: 6px 10px; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg); }
+.pop-risk { padding: 9px 11px; background: var(--warn-soft); border-left: 2px solid var(--warn); font-size: 12.6px; line-height: 1.65; color: var(--fg); }
+.pop-risk b { color: var(--warn); }
+.pop-rel { display: flex; flex-direction: column; gap: 4px; }
+.pop-rel span { padding: 5px 8px; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.2px; color: var(--fg-muted); }
+.pop-rel span i { font-style: normal; display: block; font-size: 11.5px; color: var(--fg-dim); margin-top: 2px; }
+
+/* ---- 站点 / 规则集: 二级页内用切角小标签切换 ---- */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 13px; }
+/* 小标签也是按钮, 同按钮的口径: 方角 + 1px 强描边 + 无实心填充, 选中再叠一点发光 */
+.pill {
+  padding: 7px 14px; border: 1px solid var(--tone-line); background: var(--bg-elev);
+  color: var(--fg-muted); font-size: 12.5px; font-weight: 600; letter-spacing: .02em; cursor: pointer;
+  border-radius: 0; clip-path: none;   /* 小标签也是按钮, 保持方角 */
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+/* 描边同样取 --tone, 与发光同色 */
+.pill:hover { background: var(--bg-hover); color: var(--fg); border-color: var(--tone); box-shadow: var(--glow-soft); }
+.pill.on {
+  background: var(--accent-soft); border-color: var(--tone); color: var(--accent-hi);
+  box-shadow: var(--glow-soft);
+}
+.pill .p-n { font: 500 11px/1 var(--font-mono); margin-left: 5px; opacity: .8; }
+
+/* 规则: 「当…做…」两栏 */
+.rule { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; }
+.rule-hd { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.rule-hd .rh-n { font: 600 13.5px/1.3 var(--font-display); }
+.rule-hd .rh-s { font-size: 12px; color: var(--fg-dim); }
+.rule-hd .rh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+.rule-flow { display: flex; gap: 10px; padding: 11px 14px; flex-wrap: wrap; }
+.flow-grp { flex: 1 1 290px; min-width: 0; }
+.flow-grp-hd { display: flex; align-items: center; gap: 7px; font: 600 12px/1 var(--font-display); color: var(--fg-muted); margin-bottom: 7px; }
+.flow-grp-hd .fg-hint { font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
+.step { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin-bottom: 5px; background: var(--bg-row); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.8px; }
+.step .st-n { font: 600 11px/1 var(--font-mono); color: var(--accent-hi); background: var(--accent-soft); padding: 3px 5px; border-radius: 3px; flex: none; }
+.step.danger { border-color: var(--error-line); background: var(--error-soft); }
+
+/* 限速: 阶梯图 + 档位 */
+.curve-card { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 12px; overflow: hidden; }
+.curve-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.curve-bd { padding: 13px 14px; }
+.curve-bd svg { width: 100%; height: 128px; display: block; }
+/* 档位: 每一档做成**一个整体**的小格(「流量低于 X → 限速 Y」), 而不是两个并排的
+   独立输入框 —— 这样两者的因果关系一眼可见(呼应上面阶梯图的"阶梯"语义)。
+   输入框给**固定窄宽**: 值是 300GiB / 8MiB/s 这种短串, 拉满整行既浪费又难扫。 */
+.tiers { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.tier-head, .tier {
+  display: grid;
+  grid-template-columns: 20px 118px 22px 118px 28px;
+  gap: 8px; align-items: center;
+  width: max-content; max-width: 100%;
+}
+.tier-head {
+  font: 600 10.5px/1 var(--font-mono); letter-spacing: .06em; color: var(--fg-dim);
+  padding: 0 2px 1px;
+}
+.tier {
+  padding: 7px 10px;
+  background: var(--bg-row); border: 1px solid var(--border);
+}
+.tier .t-n { font: 600 11px/1 var(--font-mono); color: var(--fg-dim); text-align: right; }
+/* 因果箭头: 用 accent 色, 是这一排里唯一强调"→ 导致"的元素 */
+.tier .t-arrow { text-align: center; color: var(--accent-hi); font: 600 14px/1 var(--font-mono); }
+.tier .u-input { width: 100%; min-width: 0; padding: 6px 10px; font-size: 12.5px; }
+.tier .u-btn.ghost { padding: 2px 6px; font-size: 12px; }
+.tier-add { margin-top: 9px; }
+
+/* ---- 底部动作条 ---- */
+.actbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px clamp(16px, 3vw, 32px); background: var(--glass);
+  border-top: 1px solid var(--border); backdrop-filter: blur(10px);
+}
+.actbar .ab-st { display: flex; align-items: center; gap: 9px; font-size: 12.8px; color: var(--fg-muted); }
+.actbar .ab-r { margin-left: auto; display: flex; gap: 9px; }
+
+@media (max-width: 760px) {
+  .row { grid-template-columns: 1fr; gap: 6px; }
+  .row .ask { justify-self: end; margin-top: -26px; }
+  .hub-hd .hh-search { margin-left: 0; width: 100%; }
+  .hub-hd .hh-search input { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* --------------------------------------------------------------------------
+   皮肤: Ash Thorp 原色(A 的签名观感)。只是换令牌, 版式零改动。
+   -------------------------------------------------------------------------- */
+:root[data-skin="ash"] {
+  --bg: #12100e; --bg-card: #1b1815; --bg-row: #171411; --bg-hover: #221e1a;
+  --bg-sunken: #0e0c0a; --bg-elev: #221e1a; --glass: rgba(18, 16, 14, .88);
+  --fg: #f5efe6; --fg-muted: #c9beb0; --fg-dim: #8e8375; --fg-soft: #c9beb0;
+  --accent: #ff8a3d; --accent-hi: #ffa45f; --accent-soft: rgba(255, 138, 61, .14);
+  --accent-line: rgba(255, 138, 61, .45); --ring: rgba(255, 138, 61, .34);
+  --green: #54d3a0; --green-soft: rgba(84, 211, 160, .14); --green-line: rgba(84, 211, 160, .42);
+  --blue: #43c7c0; --blue-soft: rgba(67, 199, 192, .14); --blue-line: rgba(67, 199, 192, .42);
+  --warn: #ffc266; --warn-soft: rgba(255, 194, 102, .14); --warn-line: rgba(255, 194, 102, .45);
+  --error: #e2563f; --error-soft: rgba(226, 86, 63, .16); --error-line: rgba(226, 86, 63, .45);
+  --violet: #b39cf0; --violet-soft: rgba(179, 156, 240, .16);
+  --teal: #43c7c0; --teal-soft: rgba(67, 199, 192, .16);
+  --indigo: #8b93f8; --indigo-soft: rgba(139, 147, 248, .16);
+  --pink: #f477b3; --pink-soft: rgba(244, 119, 179, .16);
+  --cyan: #2ad0e8; --cyan-soft: rgba(42, 208, 232, .16); --lime: #a8e63c;
+  --border: #2c2723; --border-strong: #453d36; --border-soft: rgba(255, 255, 255, .06);
+  --surface-1: rgba(255, 255, 255, .03); --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .05); --statusbar-bg: #171411;
+  --font-display: "Franklin Gothic Medium", "Arial Narrow", "Segoe UI", Arial, sans-serif;
+  --radius: 0; --radius-sm: 0;
+}
+/* 注意: 这里**不再**给 primary 补橙色渐变实心(早期版本有, 与「按钮不带橙色填充」冲突)。
+   Ash 皮肤下按钮走通用规则: --bg-elev(#221E1A) + --border-strong(#453d36) 描边 + 10px 切角,
+   与 15-ash-thorp 的 .btn-secondary 完全一致。 */
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="db-idx">A+C+D</span>
+  <b>仪表台 × 卡片总览 × 就近说明浮窗</b>
+  <span class="db-note">首页卡片 → 二级页；点「?」看说明；全部控件方角，发光（--glow / --glow-soft）应用到所有可交互对象，开关 Fathom</span>
+  <span class="db-spacer"></span>
+  <label>主题
+    <select id="themePick">
+      <option value="ocean">深海机房</option>
+      <option value="galaxy">暗夜星云</option>
+      <option value="frost">极地晨霜</option>
+      <option value="golden">麦秋</option>
+      <option value="orbit">品牌轨道</option>
+    </select>
+  </label>
+  <label>皮肤
+    <select id="skinPick">
+      <option value="">跟随主题</option>
+      <option value="ash">Ash Thorp 原色</option>
+    </select>
+  </label>
+  <a class="db-back" href="index.html">← 返回挑选</a>
+</div>
+
+<div class="wrap">
+
+  <!-- ============================ 首页: 卡片总览 ============================ -->
+  <div class="view on" id="view-hub">
+    <header class="hub-hd">
+      <div>
+        <h1>设置</h1>
+        <p class="hh-sub">7 个分区 · 共 60 项 · <span class="on">2 项尚未保存</span></p>
+      </div>
+      <div class="hh-search">
+        <svg class="u-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+        <input class="u-input" placeholder="搜索配置项，比如「端口」">
+      </div>
+    </header>
+
+    <div class="attn">
+      <svg class="u-ico at-ico lg" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13z"/><path d="M8 6.5v3M8 11.6v.6"/></svg>
+      <div>
+        <b>有 1 项建议你看一下</b>
+        <p>「规则」里有 1 条带风险动作的规则（做种满 7 天后删除，会连带删除文件），确认无误再保存。</p>
+      </div>
+      <a href="#" data-go="rules">去看 →</a>
+    </div>
+
+    <div class="hub-grid">
+      <a class="card" href="#" data-go="conn">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M8 1v6M5.5 3.5 8 6l2.5-2.5"/><path d="M3 10v3h10v-3"/></svg></span>
+          <div class="card-t">连接 qBittorrent</div>
+        </div>
+        <p class="card-d">auto-qb 通过 qB 的 Web UI 管理种子。这里填地址、端口和登录账号。</p>
+        <div class="card-f"><span class="led ok"></span><span class="cf-v">127.0.0.1:8080</span><span class="u-badge">6 项</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="auto">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5l5.5-7.5h-4z"/></svg></span>
+          <div class="card-t">自动化</div>
+        </div>
+        <p class="card-d">种子加进来之后自动做什么：打标签、把辅种归组、检查文件是否还在。</p>
+        <div class="card-f"><span class="led ok"></span><span class="cf-v">分组已启用</span><span class="u-badge">集数标签未开</span><span class="u-badge">9 项</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="speed">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12 11.5 6"/></svg></span>
+          <div class="card-t">限速</div>
+        </div>
+        <p class="card-d">按累计流量自动调整 qB 的全局速度上限，防止超额。</p>
+        <div class="card-f"><span class="led ok"></span><span class="cf-v">1 条 · MONTH</span><span class="u-badge">3 档</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="sites">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg></span>
+          <div class="card-t">站点</div>
+        </div>
+        <p class="card-d">按 tracker 域名识别站点，再套用这个站点的标签、限速和 HR 设置。</p>
+        <div class="card-f"><span class="led ok"></span><span class="cf-v">HHan / PTer / M-Team</span><span class="u-badge">3 个</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="rules">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></span>
+          <div class="card-t">规则</div>
+        </div>
+        <p class="card-d">「当满足条件时执行动作」的自动化规则，按规则集分组管理。</p>
+        <div class="card-f"><span class="led warn"></span><span class="cf-v">2 个规则集 · 3 条</span><span class="u-badge risk">1 条含风险</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="notify">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 3 1 3.5 1 3.5H3s1-.5 1-3.5Z"/><path d="M6.5 13a1.7 1.7 0 0 0 3 0"/></svg></span>
+          <div class="card-t">通知</div>
+        </div>
+        <p class="card-d">出错或有风险操作时，用电脑的系统通知提醒你。</p>
+        <div class="card-f"><span class="led ok"></span><span class="cf-v">23:00-08:00 免打扰</span><span class="u-badge">6 项</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="ui">
+        <div class="card-top">
+          <span class="card-ico cut"><svg class="u-ico lg" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1"/><path d="M5.5 14h5"/></svg></span>
+          <div class="card-t">界面与日志</div>
+        </div>
+        <p class="card-d">这个浏览器界面怎么开、谁能访问，以及日志记在哪、留多久。</p>
+        <div class="card-f"><span class="led ok"></span><span class="cf-v">仅本机可访问</span><span class="u-badge">7 项</span></div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 连接 ============================ -->
+  <div class="view" id="view-conn">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">连接 qBittorrent</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M8 1v6M5.5 3.5 8 6l2.5-2.5"/><path d="M3 10v3h10v-3"/></svg></span>
+      <div>
+        <h1>连接 qBittorrent</h1>
+        <p class="sh-lede">auto-qb 通过 qBittorrent 的 Web UI 读取和修改种子。把地址和登录信息填对，它就能接管种子管理。每行末尾的「?」可以看这一项的完整说明。</p>
+      </div>
+      <span class="sh-r"><span class="u-badge on"><span class="led ok" style="width:22px"></span>已连接</span><button class="u-btn sm">测试连接</button></span>
+    </header>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">地址和登录</span><span class="bh-n">qB 的「设置 → Web UI」里都能查到</span></div>
+      <div class="row" data-key="qbittorrent.host" data-note="装 qBittorrent 的那台机器。和 auto-qb 装在同一台电脑上就填 127.0.0.1。" data-def="127.0.0.1">
+        <div class="row-lb">主机<span class="lb-req">*</span></div>
+        <div class="row-ct"><input class="u-input mono" value="127.0.0.1"></div>
+        <button class="ask" aria-label="主机 说明">?</button>
+      </div>
+      <div class="row" data-key="qbittorrent.port" data-note="qB Web UI 监听的端口，默认是 8080。" data-def="8080">
+        <div class="row-lb">端口<span class="lb-req">*</span></div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="8080"></div>
+        <button class="ask" aria-label="端口 说明">?</button>
+      </div>
+      <div class="row" data-key="qbittorrent.username" data-note="qB Web UI 的登录用户名。qB 里没设就留空。" data-def="（空）">
+        <div class="row-lb">用户名</div>
+        <div class="row-ct"><input class="u-input" value="admin"></div>
+        <button class="ask" aria-label="用户名 说明">?</button>
+      </div>
+      <div class="row risk" data-key="qbittorrent.password" data-note="qB Web UI 的登录密码。" data-def="（空）" data-risk="保存后会以明文写进配置文件，别把配置文件直接发给别人。">
+        <div class="row-lb">密码</div>
+        <div class="row-ct"><input class="u-input danger" type="password" value="secret-pass"></div>
+        <button class="ask" aria-label="密码 说明">?</button>
+      </div>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">多久检查一次</span><span class="bh-n">一般不用改</span></div>
+      <div class="row" data-key="main_tick" data-note="每隔多久看一次所有种子的状态，并处理到期的任务。" data-def="2 秒">
+        <div class="row-lb">检查间隔</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="2"><span class="u-dim">秒</span></div>
+        <button class="ask" aria-label="检查间隔 说明">?</button>
+      </div>
+      <div class="row" data-key="max_tasks_per_tick" data-note="一轮里最多执行多少个自动化任务。" data-def="20">
+        <div class="row-lb">每轮最多处理</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="20"><span class="u-dim">个任务</span></div>
+        <button class="ask" aria-label="每轮最多处理 说明">?</button>
+      </div>
+      <div class="row" data-key="interval" data-note="清理、限速曲线这类周期性任务的间隔，从上一次结束开始算。" data-def="60 秒">
+        <div class="row-lb">内置任务间隔</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="60"><span class="u-dim">秒</span></div>
+        <button class="ask" aria-label="内置任务间隔 说明">?</button>
+      </div>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">运行状态存在哪</span></div>
+      <div class="row risk" data-key="data_dir" data-note="运行状态、日志、跳检备份放在哪个目录。可以写相对路径或绝对路径。" data-def="auto-qb-data" data-risk="改了要重启 auto-qb 才生效。">
+        <div class="row-lb">数据目录</div>
+        <div class="row-ct"><input class="u-input important mono w-lg" value="auto-qb-data"></div>
+        <button class="ask" aria-label="数据目录 说明">?</button>
+      </div>
+      <div class="row" data-key="state_file" data-note="记录「上次做到哪了」，重启之后接着上次的进度继续。" data-def="&lt;数据目录&gt;/state.json">
+        <div class="row-lb">状态文件</div>
+        <div class="row-ct"><input class="u-input mono w-lg" placeholder="留空 = 数据目录/state.json"></div>
+        <button class="ask" aria-label="状态文件 说明">?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 自动化 ============================ -->
+  <div class="view" id="view-auto">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">自动化</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5l5.5-7.5h-4z"/></svg></span>
+      <div>
+        <h1>自动化</h1>
+        <p class="sh-lede">种子加入之后自动做什么：打标签、把辅种归成一组、检查文件是否还在、清理没用的标签。每一项都是可选的。</p>
+      </div>
+    </header>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">标签</span></div>
+      <div class="row" data-key="remove_similar_tags" data-note="自动去掉只有大小写不同的重复标签，比如 HHan 和 hhan 只留一个。" data-def="关闭">
+        <div class="row-lb">清理相似标签</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label></div>
+        <button class="ask" aria-label="清理相似标签 说明">?</button>
+      </div>
+      <div class="row" data-key="skip_checking_tag" data-note="跳过哈希校验的种子会被打上这个标签，方便日后一眼认出它们没校验过。" data-def="zSkipChecked">
+        <div class="row-lb">跳检标签</div>
+        <div class="row-ct"><input class="u-input mono" value="zSkipChecked"></div>
+        <button class="ask" aria-label="跳检标签 说明">?</button>
+      </div>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">辅种分组</span><span class="bh-r"><span class="u-badge on">已启用</span></span></div>
+      <div class="row" data-key="grouping.enabled" data-note="把原种和它的辅种看成一组，统一检查、统一暂停，避免重复下载同一批文件。" data-def="启用">
+        <div class="row-lb">启用分组</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></div>
+        <button class="ask" aria-label="启用分组 说明">?</button>
+      </div>
+      <div class="row" data-key="grouping.check_missing_files" data-note="核对组里的文件是否还在磁盘上，发现少了就整组暂停并打标签。" data-def="启用">
+        <div class="row-lb">检查文件是否还在</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></div>
+        <button class="ask" aria-label="检查文件是否还在 说明">?</button>
+      </div>
+      <div class="row" data-key="grouping.missing_tag" data-note="发现缺文件时给组里每个种子加上这个标签，方便在 qB 里筛出来处理。" data-def="MISSING">
+        <div class="row-lb">缺文件标签</div>
+        <div class="row-ct"><input class="u-input mono" value="MISSING"></div>
+        <button class="ask" aria-label="缺文件标签 说明">?</button>
+      </div>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">集数标签</span><span class="bh-r"><span class="u-badge">未启用</span></span></div>
+      <div class="row" data-key="add_episode_tags.enabled" data-note="从新种子的文件名里解析集数，自动打上 zE01 这样的标签。只对刚加入的种子生效，集数不连续时视为不可靠、不打。" data-def="关闭">
+        <div class="row-lb">启用</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label></div>
+        <button class="ask" aria-label="集数标签启用 说明">?</button>
+      </div>
+      <div class="row" data-key="add_episode_tags.add_tag_single" data-note="单集种子的标签模板。" data-def="zE${episode_first}">
+        <div class="row-lb">单集模板</div>
+        <div class="row-ct"><input class="u-input mono" value="zE${episode_first}"></div>
+        <button class="ask" aria-label="单集模板 说明">?</button>
+      </div>
+      <div class="row" data-key="add_episode_tags.add_tag_multi" data-note="多集合集种子的标签模板。" data-def="zE${episode_first}-${episode_last}">
+        <div class="row-lb">多集模板</div>
+        <div class="row-ct"><input class="u-input mono" value="zE${episode_first}-${episode_last}"></div>
+        <button class="ask" aria-label="多集模板 说明">?</button>
+      </div>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">清理标签</span></div>
+      <div class="row risk" data-key="delete_tags" data-note="把匹配的标签从所有种子上摘掉，并从 qB 的标签表里注销。" data-def="（空）" data-risk="标签定义会一起删掉，依赖它的自动化（比如 HR 标记）会跟着失效。">
+        <div class="row-lb">彻底删除标签</div>
+        <div class="row-ct"><span class="u-badge">未配置</span><button class="u-btn sm">编辑…</button></div>
+        <button class="ask" aria-label="彻底删除标签 说明">?</button>
+      </div>
+      <div class="row" data-key="delete_tags_if_has_no_torrents" data-note="只删已经没有种子在用的标签。还有种子在用的不会动，可以放心配。" data-def="（空）">
+        <div class="row-lb">删除无人使用的标签</div>
+        <div class="row-ct"><span class="u-badge">2 条</span><button class="u-btn sm">编辑…</button></div>
+        <button class="ask" aria-label="删除无人使用的标签 说明">?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 限速 ============================ -->
+  <div class="view" id="view-speed">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">限速</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12 11.5 6"/></svg></span>
+      <div>
+        <h1>限速</h1>
+        <p class="sh-lede">按累计流量自动调整 qB 的全局速度上限。比如当月上传超过 500 GiB 之后自动降到 2 MiB/s，到下个月自动恢复。多条曲线同时命中时取最严的那条。</p>
+      </div>
+      <span class="sh-r">
+        <button class="ask" data-key="global_speed_limit_curve" aria-label="限速曲线 说明">?</button>
+      </span>
+    </header>
+
+    <div class="curve-card cut">
+      <div class="curve-hd"><span class="bh-t">第 1 条曲线</span><span class="u-badge on">周期 MONTH</span><span class="u-dim">上传 3 档 · 下载 0 档</span><span class="bh-r"><button class="u-btn danger sm">删除曲线</button></span></div>
+      <div class="curve-bd">
+        <!-- 横轴按档位等宽分段: 0 / 300 / 500 / 800 / ∞, 与下面三档一一对应
+             (3 档 = 3 段等宽 + 末尾 ∞ 提示区)。纵轴限速: 8M → 2M → 0。 -->
+        <svg viewBox="0 0 640 128" preserveAspectRatio="none" aria-label="上传限速阶梯图">
+          <line x1="44" y1="12" x2="44" y2="100" stroke="var(--border)" />
+          <line x1="44" y1="100" x2="624" y2="100" stroke="var(--border)" />
+          <line x1="44" y1="56" x2="624" y2="56" stroke="var(--hairline)" />
+          <text x="38" y="22" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">8M</text>
+          <text x="38" y="62" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">2M</text>
+          <text x="38" y="104" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">0</text>
+          <path d="M44 18 H207 V58 H370 V100 H624" fill="none" stroke="var(--accent)" stroke-width="2" />
+          <rect x="44" y="18" width="163" height="82" fill="var(--accent-soft)" />
+          <rect x="207" y="58" width="163" height="42" fill="var(--accent-soft)" />
+          <text x="125" y="92" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">8 MiB/s</text>
+          <text x="288" y="92" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">2 MiB/s</text>
+          <text x="497" y="92" text-anchor="middle" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">不限速</text>
+          <text x="44" y="120" text-anchor="start" fill="var(--fg-dim)" font-size="10">0</text>
+          <text x="207" y="120" text-anchor="middle" fill="var(--fg-dim)" font-size="10">300 GiB</text>
+          <text x="370" y="120" text-anchor="middle" fill="var(--fg-dim)" font-size="10">500 GiB</text>
+          <text x="533" y="120" text-anchor="middle" fill="var(--fg-dim)" font-size="10">800 GiB</text>
+          <text x="624" y="120" text-anchor="end" fill="var(--fg-dim)" font-size="10">∞</text>
+        </svg>
+        <div class="tiers">
+          <div class="tier-head">
+            <span>档</span><span>流量低于</span><span></span><span>限速设为</span><span></span>
+          </div>
+          <div class="tier">
+            <span class="t-n">1</span>
+            <input class="u-input mono" value="300GiB" placeholder="10GiB" aria-label="第 1 档 累计流量低于">
+            <span class="t-arrow" aria-hidden="true">→</span>
+            <input class="u-input mono" value="8MiB/s" placeholder="6MiB/s" aria-label="第 1 档 限速设为">
+            <button class="u-btn ghost sm" title="删除该档位">✕</button>
+          </div>
+          <div class="tier">
+            <span class="t-n">2</span>
+            <input class="u-input mono" value="500GiB" placeholder="10GiB" aria-label="第 2 档 累计流量低于">
+            <span class="t-arrow" aria-hidden="true">→</span>
+            <input class="u-input mono" value="2MiB/s" placeholder="6MiB/s" aria-label="第 2 档 限速设为">
+            <button class="u-btn ghost sm" title="删除该档位">✕</button>
+          </div>
+          <div class="tier">
+            <span class="t-n">3</span>
+            <input class="u-input mono" value="800GiB" placeholder="10GiB" aria-label="第 3 档 累计流量低于">
+            <span class="t-arrow" aria-hidden="true">→</span>
+            <input class="u-input mono" value="0" placeholder="0 = 不限速" aria-label="第 3 档 限速设为">
+            <button class="u-btn ghost sm" title="删除该档位">✕</button>
+          </div>
+        </div>
+        <button class="u-btn sm tier-add">＋ 添加档位</button>
+        <p class="row-hp">读法：累计流量<b>还没到</b>左边那个值时，限速就按右边那个值。填 0 = 这一档不限速；最后一档会一直生效到周期结束。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 站点 ============================ -->
+  <div class="view" id="view-sites">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">站点</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg></span>
+      <div>
+        <h1>站点</h1>
+        <p class="sh-lede">用 tracker 域名判断种子来自哪个站点，然后套用这个站点的标签、限速和 HR 设置。没配置的站点完全不做任何管理。</p>
+      </div>
+    </header>
+
+    <div class="pills">
+      <button class="pill on">HHan<span class="p-n">4</span></button>
+      <button class="pill">PTer<span class="p-n">3</span></button>
+      <button class="pill">M-Team<span class="p-n">2</span></button>
+      <button class="pill">＋ 新增站点</button>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">HHan</span><span class="bh-r"><button class="u-btn sm">重命名</button><button class="u-btn danger sm">删除</button></span></div>
+      <div class="row" data-key="trackers.host" data-note="用种子 tracker 地址里的域名来匹配，一行一个，子域名也算命中。" data-def="（必填）">
+        <div class="row-lb">站点域名</div>
+        <div class="row-ct"><input class="u-input mono w-lg" value="hhan.club"></div>
+        <button class="ask" aria-label="站点域名 说明">?</button>
+      </div>
+      <div class="row" data-key="trackers.tags" data-note="命中这个站点的种子会自动带上这些标签。" data-def="（空）">
+        <div class="row-lb">自动打的标签</div>
+        <div class="row-ct"><input class="u-input" value="HHan"></div>
+        <button class="ask" aria-label="自动打的标签 说明">?</button>
+      </div>
+      <div class="row" data-key="trackers.category" data-note="qB 里的分类。留空表示不改分类。" data-def="（空）">
+        <div class="row-lb">自动归到的分类</div>
+        <div class="row-ct"><input class="u-input" value="PT"></div>
+        <button class="ask" aria-label="自动归到的分类 说明">?</button>
+      </div>
+      <div class="row" data-key="trackers.speed_limit" data-note="只对这个站点的种子生效。" data-def="（空 = 不限速）">
+        <div class="row-lb">上传限速</div>
+        <div class="row-ct"><input class="u-input mono w-sm"><span class="u-dim">MiB/s</span></div>
+        <button class="ask" aria-label="站点上传限速 说明">?</button>
+      </div>
+      <div class="row" data-key="trackers.rules_ref" data-note="@规则集 表示跑整个规则集，@规则集.规则名 表示只跑其中一条。" data-def="（空 = 不跑规则）">
+        <div class="row-lb">要跑哪些规则</div>
+        <div class="row-ct"><input class="u-input mono w-lg" value="@default_rules"></div>
+        <button class="ask" aria-label="要跑哪些规则 说明">?</button>
+      </div>
+      <div class="row" data-key="trackers.hr" data-note="命中 HR（Hit and Run）时给种子加标签或改分类。" data-def="（未启用）">
+        <div class="row-lb">HR 标记</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label><button class="u-btn sm">展开 3 项…</button></div>
+        <button class="ask" aria-label="HR 标记 说明">?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 规则 ============================ -->
+  <div class="view" id="view-rules">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">规则</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></span>
+      <div>
+        <h1>规则</h1>
+        <p class="sh-lede">一条规则就是「当满足条件时，执行这些动作」。条件要全部满足才会执行，动作按从上到下的顺序执行。</p>
+      </div>
+      <span class="sh-r"><button class="ask" data-key="rules.overview" aria-label="规则 说明">?</button></span>
+    </header>
+
+    <div class="pills">
+      <button class="pill on">default_rules<span class="p-n">2</span></button>
+      <button class="pill">site_rules<span class="p-n">1</span></button>
+      <button class="pill">＋ 新增规则集</button>
+    </div>
+
+    <div class="rule cut">
+      <div class="rule-hd">
+        <span class="rh-n">做种满 7 天后删除</span>
+        <span class="rh-s">做种时间 ≥ 7 天 → 删除种子</span>
+        <span class="rh-r"><span class="u-badge risk">含风险动作</span><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span>
+      </div>
+      <div class="rule-flow">
+        <div class="flow-grp"><div class="flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div><div class="step"><span class="st-n">1</span>做种时间 至少 7 天</div></div>
+        <div class="flow-grp"><div class="flow-grp-hd">动作<span class="fg-hint">按顺序执行</span></div><div class="step danger"><span class="st-n">1</span>删除种子（同时删除文件）</div></div>
+      </div>
+      <div style="border-top:1px solid var(--hairline);padding:8px 14px 10px"><p class="row-hp risk" style="margin:0">删除会连同文件一起删掉，且无法撤销。确认你知道自己在删什么。</p></div>
+    </div>
+
+    <div class="rule cut">
+      <div class="rule-hd">
+        <span class="rh-n">上传率低就暂停</span>
+        <span class="rh-s">分享率 &lt; 0.5 且 做种 ≥ 2 天 → 暂停</span>
+        <span class="rh-r"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span>
+      </div>
+      <div class="rule-flow">
+        <div class="flow-grp"><div class="flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div><div class="step"><span class="st-n">1</span>分享率 小于 0.5</div><div class="step"><span class="st-n">2</span>做种时间 至少 2 天</div></div>
+        <div class="flow-grp"><div class="flow-grp-hd">动作<span class="fg-hint">按顺序执行</span></div><div class="step"><span class="st-n">1</span>暂停种子</div></div>
+      </div>
+    </div>
+    <button class="u-btn">＋ 新增规则</button>
+  </div>
+
+  <!-- ============================ 二级页: 通知 ============================ -->
+  <div class="view" id="view-notify">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">通知</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 3 1 3.5 1 3.5H3s1-.5 1-3.5Z"/><path d="M6.5 13a1.7 1.7 0 0 0 3 0"/></svg></span>
+      <div>
+        <h1>通知</h1>
+        <p class="sh-lede">出错或者做了有风险的操作时，用电脑的系统通知提醒你。走的是系统自己的通知中心，不用装插件、也不用配微信邮件之类。</p>
+      </div>
+      <span class="sh-r"><span class="led ok" style="width:22px"></span></span>
+    </header>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">主动通知</span></div>
+      <div class="row" data-key="notify.enabled" data-note="关掉之后消息只出现在界面里，不会再弹系统通知。" data-def="关闭">
+        <div class="row-lb">启用通知</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></div>
+        <button class="ask" aria-label="启用通知 说明">?</button>
+      </div>
+      <div class="row" data-key="notify.min_level" data-note="达到哪个严重程度才提醒你。默认 WARNING，也就是日常信息不打扰，只有出问题才弹。" data-def="WARNING">
+        <div class="row-lb">最低提醒级别</div>
+        <div class="row-ct"><select class="u-select"><option>WARNING — 只提醒异常和错误</option><option>ERROR — 只提醒错误</option><option>INFO — 什么都提醒</option></select></div>
+        <button class="ask" aria-label="最低提醒级别 说明">?</button>
+      </div>
+      <div class="row" data-key="notify.quiet_hours" data-note="这段时间里不弹通知。可以跨午夜，比如 23:00-08:00。" data-def="（空 = 全天都弹）">
+        <div class="row-lb">免打扰时段</div>
+        <div class="row-ct"><input class="u-input mono" value="23:00-08:00" placeholder="23:00-08:00"></div>
+        <button class="ask" aria-label="免打扰时段 说明">?</button>
+      </div>
+      <div class="row" data-key="notify.max_per_hour" data-note="一小时内最多弹多少条，超出的直接丢掉。用来防止一次故障刷出几百条通知。" data-def="20">
+        <div class="row-lb">每小时上限</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="20"><span class="u-dim">条</span></div>
+        <button class="ask" aria-label="每小时上限 说明">?</button>
+      </div>
+      <div class="row" data-key="notify.dedup_window" data-note="这段时间里内容相同的通知只弹第一条，避免同一件事反复轰炸。" data-def="10 分钟">
+        <div class="row-lb">重复合并窗口</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="10"><span class="u-dim">分钟</span></div>
+        <button class="ask" aria-label="重复合并窗口 说明">?</button>
+      </div>
+      <div class="row" data-key="notify.channels" data-note="Windows / macOS / Linux 都走系统自己的通知中心。" data-def="platform">
+        <div class="row-lb">通知渠道</div>
+        <div class="row-ct"><span class="u-badge on">platform · 系统原生通知</span></div>
+        <button class="ask" aria-label="通知渠道 说明">?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 界面与日志 ============================ -->
+  <div class="view" id="view-ui">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">界面与日志</span></nav>
+    <header class="sec-hd">
+      <span class="sh-mark cut"><svg class="u-ico lg" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1"/><path d="M5.5 14h5"/></svg></span>
+      <div>
+        <h1>界面与日志</h1>
+        <p class="sh-lede">你现在用的这个浏览器界面怎么开、谁能访问，以及 auto-qb 把日志记在哪、留多久。</p>
+      </div>
+    </header>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">WEB 界面</span><span class="bh-n">你现在正在用的这个界面</span></div>
+      <div class="row" data-key="web.enabled" data-note="关掉之后只能直接改配置文件，不能再从浏览器管理种子。" data-def="关闭">
+        <div class="row-lb">启用界面</div>
+        <div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></div>
+        <button class="ask" aria-label="启用界面 说明">?</button>
+      </div>
+      <div class="row risk" data-key="web.host" data-note="决定「谁可以访问这个界面」。保持 127.0.0.1 表示只有这台电脑能打开。" data-def="127.0.0.1" data-risk="改成 0.0.0.0 会把「能暂停和删除种子」的界面暴露给局域网里所有设备。">
+        <div class="row-lb">监听地址</div>
+        <div class="row-ct"><input class="u-input danger mono" value="127.0.0.1"></div>
+        <button class="ask" aria-label="监听地址 说明">?</button>
+      </div>
+      <div class="row" data-key="web.port" data-note="auto-qb 自己界面的端口，和 qB 的 Web UI 端口是两回事。" data-def="8080">
+        <div class="row-lb">端口</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="8080"></div>
+        <button class="ask" aria-label="界面端口 说明">?</button>
+      </div>
+      <div class="row" data-key="web.token" data-note="登录这个界面要填的密钥。" data-def="（空 = 首次启动随机生成）">
+        <div class="row-lb">访问密钥</div>
+        <div class="row-ct"><input class="u-input important" type="password" value="a7f3-9c21"></div>
+        <button class="ask" aria-label="访问密钥 说明">?</button>
+      </div>
+      <div class="row" data-key="web.skip_local_verify" data-note="开着的话，从这台电脑打开界面不用输密钥；从别的机器访问仍然要输。" data-def="关闭">
+        <div class="row-lb">跳过本机验证</div>
+        <div class="row-ct"><label class="u-switch important"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label></div>
+        <button class="ask" aria-label="跳过本机验证 说明">?</button>
+      </div>
+    </div>
+
+    <div class="blk cut">
+      <div class="blk-hd"><span class="bh-t">日志</span><span class="bh-r"><button class="u-btn ghost sm">刷新</button></span></div>
+      <div class="row" data-key="log.level" data-note="DEBUG 会把每一步都记下来，排查问题时再开；日常用 INFO。" data-def="INFO">
+        <div class="row-lb">日志等级</div>
+        <div class="row-ct"><select class="u-select"><option>INFO — 常规</option><option>DEBUG — 最详细</option><option>WARNING — 只记警告以上</option><option>ERROR — 只记错误</option></select></div>
+        <button class="ask" aria-label="日志等级 说明">?</button>
+      </div>
+      <div class="row" data-key="log.max_bytes" data-note="写满就另起一个新文件，最多留 5 个旧文件，防止日志把磁盘占满。" data-def="10 MiB">
+        <div class="row-lb">单个日志上限</div>
+        <div class="row-ct"><input class="u-input mono w-sm" value="10"><span class="u-dim">MiB</span></div>
+        <button class="ask" aria-label="单个日志上限 说明">?</button>
+      </div>
+      <div class="row" data-key="log.view" data-note="在这里直接看最新日志，不用去翻文件。改了选项要手动刷新才会重新读取。" data-def="200 行 / 全部级别">
+        <div class="row-lb">运行日志</div>
+        <div class="row-ct"><select class="u-select"><option>最近 200 行</option><option>最近 500 行</option><option>最近 2000 行</option></select><select class="u-select"><option>全部级别</option><option>只看 WARNING 以上</option></select></div>
+        <button class="ask" aria-label="运行日志 说明">?</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="actbar">
+  <span class="ab-st"><span class="led warn"></span>有 2 处改动还没保存</span>
+  <span class="ab-r">
+    <button class="u-btn ghost">放弃改动</button>
+    <button class="u-btn primary">保存并应用</button>
+  </span>
+</div>
+
+<!-- 就近说明浮窗: 面板(切角) + 箭头(独立元素, 否则会被面板的 clip-path 裁掉) -->
+<div class="pop cut" id="pop" role="dialog" aria-label="配置项说明"></div>
+<div class="pop-arrow" id="popArrow"></div>
+
+<script>
+/* --------------------------------------------------------------------------
+   说明浮窗: 内容沿用 D 方案的五段结构(是什么 / 默认值 / 什么时候改 / 注意 / 易混淆),
+   形态改成**就近浮窗** —— 不占常驻侧栏, 点行尾的 ? 就在该行旁边弹出。
+   真实实现里这些内容应由 schema 的 help / risk / default 拼出来; 这里只放了几条
+   「写满五段」的示例, 其余项退回 data-note / data-def / data-risk 三属性。
+   -------------------------------------------------------------------------- */
+var EX = {
+  'qbittorrent.port': {
+    t: '端口', k: 'qbittorrent.port', tags: ['必填', '整数 1–65535'],
+    what: 'qBittorrent 的 Web UI 监听在哪个端口。auto-qb 就是从这个端口去读种子、改种子的。',
+    def: '8080',
+    when: ['你在 qB 里把 Web UI 端口改过（以 qB 里显示的为准）。', '一台机器上跑多个 qB 实例，端口被占用。'],
+    risk: '',
+    rel: [['界面与日志 → 端口', 'auto-qb 自己的界面端口，不是 qB 的'], ['连接 → 主机', '端口填对了但主机写错，一样连不上']]
+  },
+  'web.host': {
+    t: '监听地址', k: 'web.host', tags: ['字符串'],
+    what: 'auto-qb 的浏览器界面监听在哪个地址，决定「谁可以访问这个界面」。',
+    def: '127.0.0.1',
+    when: ['想从局域网里另一台设备（比如手机、NAS）打开这个界面。'],
+    risk: '改成 0.0.0.0 会暴露给局域网。这个界面能暂停和删除种子，局域网里任何设备都能操作。',
+    rel: [['界面与日志 → 访问密钥', '对外暴露时密钥是唯一防线'], ['界面与日志 → 跳过本机验证', '只对 127.0.0.1 生效，对外仍强制鉴权']]
+  },
+  'main_tick': {
+    t: '检查间隔', k: 'main_tick', tags: ['时间', '不能为 0'],
+    what: 'auto-qb 每隔多久把所有种子看一遍，并处理到期的任务。可以理解为「心跳」。',
+    def: '2 秒',
+    when: ['种子特别多、机器比较慢、感觉界面卡 —— 可以放宽到 5 秒。', '想让自动化更即时 —— 可以缩到 1 秒，但别填 0。'],
+    risk: '',
+    rel: [['每轮最多处理', '两者共同决定一轮的耗时'], ['内置任务间隔', '比心跳更慢的周期任务']]
+  },
+  'global_speed_limit_curve': {
+    t: '全局限速曲线', k: 'global_speed_limit_curve', tags: ['可选'],
+    what: '让 auto-qb 盯着 qB 的累计流量，跨过一档阈值就把全局限速降到该档的数值。',
+    def: '（未启用）',
+    when: ['站点有流量考核、超额会被处罚。', '想在夜间或月末自动省带宽。'],
+    risk: '',
+    rel: [['站点 → 上传限速', '只管单个站点的种子'], ['每轮最多处理', '无关，别看混']]
+  },
+  'rules.overview': {
+    t: '规则', k: '<规则集名>_rules', tags: ['可选'],
+    what: '一条规则就是「当满足条件时，执行这些动作」。规则按列表顺序逐条判断，不会命中一条就停。',
+    def: '（无）',
+    when: ['想让 auto-qb 自动删种、暂停、改分类等。'],
+    risk: '带「风险」标记的动作（尤其是删除类）会真的动你的文件，启用前先确认条件写得够严。',
+    rel: [['站点 → 要跑哪些规则', '决定是否对某个站点执行规则'], ['自动化', '不需要写规则也能做的常规管理']]
+  }
+};
+
+var pop = document.getElementById('pop');
+var arrow = document.getElementById('popArrow');
+var curAsk = null;
+
+function popHtml(d) {
+  var h = '';
+  h += '<div class="pop-hd"><h2>' + d.t + '<span class="pk">' + d.k + '</span></h2><button class="pop-x" aria-label="关闭">✕</button></div>';
+  if (d.tags && d.tags.length) h += '<div class="pop-tags">' + d.tags.map(function (x) { return '<span class="u-badge on">' + x + '</span>'; }).join('') + '</div>';
+  h += '<div class="pop-sec"><h3>它是什么</h3><p>' + d.what + '</p></div>';
+  h += '<div class="pop-sec"><h3>默认值</h3><div class="pop-val">' + d.def + '</div></div>';
+  if (d.when && d.when.length) h += '<div class="pop-sec"><h3>什么时候需要改</h3><ul>' + d.when.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>';
+  if (d.risk) h += '<div class="pop-sec"><h3>注意</h3><div class="pop-risk"><b>风险 · </b>' + d.risk + '</div></div>';
+  if (d.rel && d.rel.length) h += '<div class="pop-sec"><h3>容易和它搞混的</h3><div class="pop-rel">' + d.rel.map(function (r) { return '<span>' + r[0] + '<i>' + r[1] + '</i></span>'; }).join('') + '</div></div>';
+  return h;
+}
+
+function closePop() {
+  pop.classList.remove('on');
+  arrow.classList.remove('on');
+  if (curAsk) { curAsk.classList.remove('on'); curAsk = null; }
+}
+
+function openPop(btn) {
+  var key = btn.dataset.key || (btn.closest('[data-key]') && btn.closest('[data-key]').dataset.key);
+  var host = btn.closest('[data-key]') || btn;
+  var rich = EX[key];
+  var d = rich || {
+    t: host.querySelector('.row-lb') ? host.querySelector('.row-lb').textContent.trim() : '说明',
+    k: key || '', tags: [],
+    what: host.dataset.note || '这一项还没有说明。',
+    def: host.dataset.def || '—',
+    when: [], risk: host.dataset.risk || '', rel: []
+  };
+  pop.innerHTML = popHtml(d);
+  pop.classList.add('on');
+  if (curAsk && curAsk !== btn) curAsk.classList.remove('on');
+  btn.classList.add('on');
+  curAsk = btn;
+
+  // 定位: 优先放在触发点右侧; 右边放不下就翻到左侧; 垂直方向贴住触发点并夹在视口内
+  var b = btn.getBoundingClientRect();
+  var pw = pop.offsetWidth, ph = pop.offsetHeight;
+  var gap = 10;
+  var left = b.right + gap;
+  var place = 'left';            // 箭头朝向: 面板在右 → 箭头指左
+  if (left + pw > window.innerWidth - 12) {
+    left = b.left - gap - pw;
+    place = 'right';
+    if (left < 12) { left = Math.max(12, window.innerWidth - pw - 12); place = 'left'; }
+  }
+  var top = b.top - 6;
+  if (top + ph > window.innerHeight - 12) top = window.innerHeight - ph - 12;
+  if (top < 12) top = 12;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+
+  // 箭头: 独立 fixed 元素, 垂直对齐触发点中心(并夹在面板内)
+  arrow.className = 'pop-arrow on ' + place;
+  var ay = Math.min(Math.max(b.top + b.height / 2 - 4, top + 10), top + ph - 18);
+  arrow.style.top = ay + 'px';
+  arrow.style.left = (place === 'left' ? left - 5 : left + pw - 4) + 'px';
+  pop.querySelector('.pop-x').onclick = closePop;
+}
+
+document.addEventListener('click', function (e) {
+  var ask = e.target.closest('.ask');
+  if (ask) {
+    e.preventDefault();
+    if (curAsk === ask && pop.classList.contains('on')) { closePop(); } else { openPop(ask); }
+    return;
+  }
+  if (!e.target.closest('#pop')) closePop();
+});
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePop(); });
+window.addEventListener('resize', closePop);
+document.querySelector('.wrap').addEventListener('scroll', closePop, true);
+
+/* ---- 视图切换(C 的 Hub & Spoke) ---- */
+function go(id) {
+  closePop();
+  document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('on'); });
+  document.getElementById('view-' + id).classList.add('on');
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll('[data-go]').forEach(function (el) {
+  el.addEventListener('click', function (e) { e.preventDefault(); go(el.dataset.go); });
+});
+document.querySelectorAll('[data-back]').forEach(function (el) {
+  el.addEventListener('click', function () { go('hub'); });
+});
+document.querySelectorAll('.pills').forEach(function (box) {
+  box.querySelectorAll('.pill').forEach(function (b) {
+    b.addEventListener('click', function () {
+      box.querySelectorAll('.pill').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+    });
+  });
+});
+
+var tp = document.getElementById('themePick');
+tp.value = new URLSearchParams(location.search).get('theme') || 'ocean';
+document.documentElement.dataset.theme = tp.value;
+tp.addEventListener('change', function () { document.documentElement.dataset.theme = tp.value; });
+var sp = document.getElementById('skinPick');
+sp.addEventListener('change', function () {
+  if (sp.value) { document.documentElement.dataset.skin = sp.value; } else { delete document.documentElement.dataset.skin; }
+});
+</script>
+</body>
+</html>

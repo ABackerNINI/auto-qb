@@ -1,0 +1,503 @@
+/* settings-page-templates · 共享令牌
+ * 由 src/auto_qb/web_ui/static/prism/css/tokens.css + themes/*.css 原样拼接生成,
+ * 模板与实际 WEB UI 用同一套令牌 —— 切主题 = 换 html[data-theme], 组件零改动。
+ * 重新生成: python -c "..."(见 resources/settings-page-templates/README.md)
+ */
+/* auto-qb 新版 WEB UI · 设计令牌契约
+ *
+ * 分层: 本文件只定义「结构令牌」(字体/几何/阴影/动效) —— 全部颜色令牌由 css/themes/*.css
+ * 按主题提供(html[data-theme] 选择器), theme.js 在首帧前同步写入 data-theme, 无 FOUC。
+ * 命名与旧版 style.css 的 :root 语义保持同族(组件可平移概念), 但取值是全新设计语言:
+ * 更紧的圆角、更克制的阴影(高程靠 1px hairline 而非投影)、 mono 数据字体。
+ *
+ * ⚠ 组件样式只允许引用这里的令牌, 不许散写色值 —— 调色改 themes/*.css 一处即可。
+ */
+:root {
+  /* ---- 字体(系统栈, 不引外部字体; 主题可覆盖 --font-display 换排版个性) ---- */
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+  /* ---- 几何: 比旧版更紧的圆角, 工程"仪器"感 ---- */
+  --radius-lg: 8px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  /* ---- 弹窗尺寸族(R10-12): 窄/标准/表单/宽/超宽五档, 两套 UI 共用同一组值 ----
+   * 背景: 此前尺寸是散点(确认框 404 / 添加种子 prism 760 与 atlas 640 / 宽确认框 840 / 历史弹层硬编码 860),
+   * 每轮都在原地加数字 -> "第 N 次调整"。新增弹窗只挑档, 不再写新数字。 */
+  --modal-w-narrow: 460px; /* 窄: 限速/统计等单列小表单 */
+  --modal-w-base: 520px;   /* 标准: 确认框 / 输入框 */
+  --modal-w-form: 560px;   /* 表单: 分类/标签管理等双列编辑 */
+  --modal-w-add: 860px;    /* 宽: 添加种子 / 历史流量(含图表) */
+  --modal-wide-w: 920px;   /* 超宽: 删除确认(明细 + 选项); 旧名保留供既有规则与文档引用 */
+  --statusbar-h: 34px;   /* 底部状态栏高度(TBL-08): 状态栏自身与内容区底部预留共用, 锁定不随内容变化(防取整透缝) */
+
+  /* ---- 高程: 阴影只做极轻的"浮起"提示, 层次主要靠 1px hairline 描边 ---- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .16);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, .22);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, .3);
+
+  /* ---- 动效: 与旧版同节奏(组件过渡时长不改), 缓动统一取令牌 ---- */
+  --ease: cubic-bezier(.2, .8, .3, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --dur-fast: 100ms;
+  --dur: 160ms;
+  --dur-slow: 280ms;
+}
+
+/* ---- 主题: frost ---- */
+/* auto-qb 新版 WEB UI · 主题: 极地晨霜 (默认亮色)
+ * 来源: theme-factory "Arctic Frost" 改调 —— 冰蓝底 + 钢青 accent。
+ * 亮色语言整体重写: 语义色压暗保对比度, 阴影减淡, 表面用冷灰 hairline。
+ * accent #3d6aa3 对卡片底对比度 ≈ 4.6:1(小字可用)。
+ */
+:root[data-theme="frost"] {
+  color-scheme: light;
+
+  --bg: #f2f6fb;
+  --bg-card: #fdfeff;
+  --bg-row: #f7fafd;
+  --bg-hover: #e9f1f9;
+  --bg-sunken: rgba(219, 231, 244, .55);
+  --bg-elev: #ffffff;
+  --glass: rgba(250, 252, 255, .94);
+
+  --fg: #1b2a3a;
+  --fg-muted: #52708c;
+  --fg-dim: #6f88a0;
+  --fg-soft: #3a5470;
+
+  --accent: #3d6aa3;
+  --accent-hi: #4f80bd;
+  --accent-soft: rgba(61, 106, 163, .1);
+  --accent-line: rgba(61, 106, 163, .35);
+  --ring: rgba(79, 128, 189, .4);
+
+  --green: #178a5c;
+  --green-soft: rgba(23, 138, 92, .12);
+  --green-line: rgba(23, 138, 92, .38);
+  --blue: #1a76ad;
+  --blue-soft: rgba(26, 118, 173, .12);
+  --blue-line: rgba(26, 118, 173, .38);
+  --warn: #a86f08;
+  --warn-soft: rgba(168, 111, 8, .12);
+  --warn-line: rgba(168, 111, 8, .4);
+  --error: #bc4438;
+  --error-soft: rgba(188, 68, 56, .12);
+  --error-line: rgba(188, 68, 56, .4);
+
+  --violet: #7153cf;
+  --violet-soft: rgba(113, 83, 207, .12);
+  --pink: #bb4a8b;
+  --pink-soft: rgba(187, 74, 139, .12);
+  --teal: #0f8f81;
+  --teal-soft: rgba(15, 143, 129, .12);
+  --indigo: #5061d6;
+  --indigo-soft: rgba(80, 97, 214, .12);
+  --cyan: #177f9e;
+  --cyan-soft: rgba(23, 127, 158, .12);
+  --lime: #648a0a;
+
+  --hr-pending: #c56a1a;
+  --hr-pending-soft: rgba(197, 106, 26, .14);
+  --hr-pending-line: rgba(197, 106, 26, .4);
+  --hr-done: #0e8574;
+  --hr-done-soft: rgba(14, 133, 116, .12);
+  --hr-done-line: rgba(14, 133, 116, .35);
+  --hr-hit: #c56a1a;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #d3e0ee;
+  --border-strong: #b3c9de;
+  --border-soft: rgba(27, 42, 58, .08);
+  --surface-1: rgba(27, 42, 58, .035);
+  --surface-2: rgba(27, 42, 58, .06);
+  --hairline: rgba(27, 42, 58, .07);
+
+  /* 亮色主题阴影减淡(结构令牌的主题级覆盖) */
+  --shadow-1: 0 1px 2px rgba(27, 42, 58, .08);
+  --shadow-2: 0 6px 18px rgba(27, 42, 58, .1);
+  --shadow-3: 0 14px 40px rgba(27, 42, 58, .14);
+
+  /* FX-06(D8-B): 暂停/其它状态保持无色相, 只调对比(不铺底, 改中性描边 + 中性中间调字色) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #e2ebf7;
+
+  /* R10-07: 选中态专用令牌族(靛蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(80, 97, 214, .11);
+  --sel-line: rgba(80, 97, 214, .38);
+  --sel-bar: #5061d6;
+}
+
+/* ---- 主题: galaxy ---- */
+/* auto-qb 新版 WEB UI · 主题: 暗夜星云 (暗色 · 个性最强)
+ * 来源: theme-factory "Midnight Galaxy" 改调 —— 深紫宇宙底 + 薰衣草 accent。
+ * 紫基底下语义色整体提亮校准(绿/橙在紫底易脏), 适合想要强烈个性的场景。
+ */
+:root[data-theme="galaxy"] {
+  color-scheme: dark;
+
+  --bg: #151021;
+  --bg-card: #221a38;
+  --bg-row: #1c1530;
+  --bg-hover: #322653;
+  --bg-sunken: rgba(10, 6, 20, .55);
+  --bg-elev: #2b2149;
+  --glass: #191330;
+
+  --fg: #ece8f6;
+  --fg-muted: #a89dc7;
+  --fg-dim: #7d72a0;
+  --fg-soft: #c6bcde;
+
+  --accent: #b79fe0;
+  --accent-hi: #ccb8ec;
+  --accent-soft: rgba(183, 159, 224, .14);
+  --accent-line: rgba(183, 159, 224, .4);
+  --ring: rgba(203, 184, 236, .5);
+
+  --green: #5fd6a8;
+  --green-soft: rgba(95, 214, 168, .15);
+  --green-line: rgba(95, 214, 168, .42);
+  --blue: #6fb1ef;
+  --blue-soft: rgba(111, 177, 239, .15);
+  --blue-line: rgba(111, 177, 239, .42);
+  --warn: #f0b64a;
+  --warn-soft: rgba(240, 182, 74, .15);
+  --warn-line: rgba(240, 182, 74, .45);
+  --error: #f08080;
+  --error-soft: rgba(240, 128, 128, .15);
+  --error-line: rgba(240, 128, 128, .45);
+
+  --violet: #a678f0;
+  --violet-soft: rgba(166, 120, 240, .18);
+  --pink: #f07ec0;
+  --pink-soft: rgba(240, 126, 192, .16);
+  --teal: #4adccc;
+  --teal-soft: rgba(74, 220, 204, .16);
+  --indigo: #97a3f5;
+  --indigo-soft: rgba(151, 163, 245, .16);
+  --cyan: #55d4ea;
+  --cyan-soft: rgba(85, 212, 234, .16);
+  --lime: #b4e65a;
+
+  --hr-pending: #ff9a55;
+  --hr-pending-soft: rgba(255, 154, 85, .18);
+  --hr-pending-line: rgba(255, 154, 85, .5);
+  --hr-done: #63dcc4;
+  --hr-done-soft: rgba(99, 220, 196, .14);
+  --hr-done-line: rgba(99, 220, 196, .38);
+  --hr-hit: #ff9a55;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #372a55;
+  --border-strong: #4d3b74;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+
+  /* FX-06(D8-B): 暂停/其它状态保持无色相, 只调对比(不铺底, 改中性描边 + 中性中间调字色) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #1e1734;
+
+  /* R10-07: 选中态专用令牌族(靛蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(151, 163, 245, .18);
+  --sel-line: rgba(151, 163, 245, .5);
+  --sel-bar: #97a3f5;
+}
+
+/* ---- 主题: golden ---- */
+/* auto-qb 新版 WEB UI · 主题: 麦秋 (亮色 · 暖调编辑风)
+ * 来源: theme-factory "Golden Hour" 改调 —— 暖秋纸底 + 压暗芥末金 accent。
+ * 排版个性: 衬线 display(Georgia), 其余主题为 Bahnschrift 工业无衬线 —— 主题差异入口。
+ * 注意: 陶土红只作数据色不作 accent(避开模板特征色); warn 取偏橙与金色 accent 拉开。
+ */
+:root[data-theme="golden"] {
+  color-scheme: light;
+
+  --bg: #f6f1e6;
+  --bg-card: #fdfaf2;
+  --bg-row: #f9f5eb;
+  --bg-hover: #efe7d4;
+  --bg-sunken: rgba(233, 222, 199, .6);
+  --bg-elev: #fffdf6;
+  --glass: rgba(253, 250, 242, .94);
+
+  --fg: #3c3327;
+  --fg-muted: #79684f;
+  --fg-dim: #857657;
+  --fg-soft: #574a37;
+
+  --accent: #9c7110;
+  --accent-hi: #b8880f;
+  --accent-soft: rgba(156, 113, 16, .1);
+  --accent-line: rgba(156, 113, 16, .35);
+  --ring: rgba(184, 136, 15, .4);
+
+  --green: #2e7d4f;
+  --green-soft: rgba(46, 125, 79, .12);
+  --green-line: rgba(46, 125, 79, .38);
+  --blue: #2a6a96;
+  --blue-soft: rgba(42, 106, 150, .12);
+  --blue-line: rgba(42, 106, 150, .38);
+  --warn: #ba5e0f;
+  --warn-soft: rgba(186, 94, 15, .12);
+  --warn-line: rgba(186, 94, 15, .4);
+  --error: #b04a3a;
+  --error-soft: rgba(176, 74, 58, .12);
+  --error-line: rgba(176, 74, 58, .4);
+
+  --violet: #6f51c2;
+  --violet-soft: rgba(111, 81, 194, .12);
+  --pink: #b04a80;
+  --pink-soft: rgba(176, 74, 128, .12);
+  --teal: #0f7f6f;
+  --teal-soft: rgba(15, 127, 111, .12);
+  --indigo: #4d58c4;
+  --indigo-soft: rgba(77, 88, 196, .12);
+  --cyan: #1a7591;
+  --cyan-soft: rgba(26, 117, 145, .12);
+  --lime: #5f7f07;
+
+  --hr-pending: #b35a14;
+  --hr-pending-soft: rgba(179, 90, 20, .14);
+  --hr-pending-line: rgba(179, 90, 20, .4);
+  --hr-done: #0d7565;
+  --hr-done-soft: rgba(13, 117, 101, .12);
+  --hr-done-line: rgba(13, 117, 101, .35);
+  --hr-hit: #b35a14;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #e0d5bd;
+  --border-strong: #c9b995;
+  --border-soft: rgba(60, 51, 39, .09);
+  --surface-1: rgba(60, 51, 39, .04);
+  --surface-2: rgba(60, 51, 39, .07);
+  --hairline: rgba(60, 51, 39, .08);
+
+  --shadow-1: 0 1px 2px rgba(60, 51, 39, .08);
+  --shadow-2: 0 6px 18px rgba(60, 51, 39, .1);
+  --shadow-3: 0 14px 40px rgba(60, 51, 39, .14);
+
+  /* 本主题的排版个性: 衬线 display(仅标题/品牌, 正文不变) */
+  --font-display: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+
+  /* FX-06(D8-B): 暂停/其它状态保持无色相, 只调对比(不铺底, 改中性描边 + 中性中间调字色) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #eae1cd;
+
+  /* R10-07: 选中态专用令牌族(靛蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(77, 88, 196, .12);
+  --sel-line: rgba(77, 88, 196, .4);
+  --sel-bar: #4d58c4;
+}
+
+/* ---- 主题: ocean ---- */
+/* auto-qb 新版 WEB UI · 主题: 深海机房 (默认暗色)
+ * 来源: theme-factory "Ocean Depths" 改调 —— 深海军蓝底 + 鸭羽青 accent,
+ * 贴合"机房值守"气质; 状态色取同族冷暖对照, 与 accent 层次拉开。
+ * 本文件提供全部颜色令牌; 切主题 = html[data-theme] 换值, 组件零改动。
+ */
+:root[data-theme="ocean"] {
+  color-scheme: dark;
+
+  /* 背景分层: 页底 → 卡片 → 行底 → 悬浮 → 下沉(明细/代码块) → 浮层 → 吸顶玻璃 */
+  --bg: #0d1724;
+  --bg-card: #15233a;
+  --bg-row: #112034;
+  --bg-hover: #1c3050;
+  --bg-sunken: rgba(5, 12, 24, .5);
+  --bg-elev: #1b2d4b;
+  --glass: #111e31;
+
+  /* 前景三级 + 次级 */
+  --fg: #e9eff7;
+  --fg-muted: #9cadc6;
+  --fg-dim: #6e84a3;
+  --fg-soft: #bccadd;
+
+  /* 品牌(accent 鸭羽青) */
+  --accent: #3aa6a6;
+  --accent-hi: #5cc3c3;
+  --accent-soft: rgba(58, 166, 166, .15);
+  --accent-line: rgba(58, 166, 166, .45);
+  --ring: rgba(92, 195, 195, .5);
+
+  /* 语义四色(上传/下载/警示/错误 + 各自柔底与描边) */
+  --green: #3fd699;
+  --green-soft: rgba(63, 214, 153, .15);
+  --green-line: rgba(63, 214, 153, .42);
+  --blue: #4cc3f7;
+  --blue-soft: rgba(76, 195, 247, .15);
+  --blue-line: rgba(76, 195, 247, .42);
+  --warn: #f5bb42;
+  --warn-soft: rgba(245, 187, 66, .15);
+  --warn-line: rgba(245, 187, 66, .45);
+  --error: #f3766f;
+  --error-soft: rgba(243, 118, 111, .15);
+  --error-line: rgba(243, 118, 111, .45);
+
+  /* 数据扩展六色(筛选 chip/图例/分类图标) */
+  --violet: #ab8ffa;
+  --violet-soft: rgba(171, 143, 250, .16);
+  --pink: #f477b3;
+  --pink-soft: rgba(244, 119, 179, .16);
+  --teal: #2fd4bf;
+  --teal-soft: rgba(47, 212, 191, .16);
+  --indigo: #8b93f8;
+  --indigo-soft: rgba(139, 147, 248, .16);
+  --cyan: #2ad0e8;
+  --cyan-soft: rgba(42, 208, 232, .16);
+  --lime: #a8e63c;
+
+  /* HR 标记: pending = 已触发未达标(最醒目), done = 已达标(镇静对照) */
+  --hr-pending: #ff8f45;
+  --hr-pending-soft: rgba(255, 143, 69, .18);
+  --hr-pending-line: rgba(255, 143, 69, .5);
+  --hr-done: #5eead4;
+  --hr-done-soft: rgba(94, 234, 212, .14);
+  --hr-done-line: rgba(94, 234, 212, .38);
+  --hr-hit: #ff8f45;
+
+  /* 派生数据色(HR 栏 / 限速对照 / 今日流量) */
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  /* 描边与表面 */
+  --border: #23395a;
+  --border-strong: #34507c;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+
+  /* FX-06(D8-B): 暂停/其它状态保持无色相, 只调对比(不铺底, 改中性描边 + 中性中间调字色) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #17273c;
+
+  /* R10-07: 选中态专用令牌族(靛蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(139, 147, 248, .16);
+  --sel-line: rgba(139, 147, 248, .45);
+  --sel-bar: #8b93f8;
+}
+
+/* ---- 主题: orbit ---- */
+/* auto-qb 新版 WEB UI · 主题: 品牌轨道 (暗色 · 品牌定制)
+ * 从品牌标识(favicon / assets/icons: orbit 轨道弧 + 绿色种子点)提炼: 墨绿底 + 种子绿 accent。
+ * 同时验证自定义主题通道 —— 新增主题 = 复制本文件改色 + theme.js 注册表加一行。
+ * 分层绿(多层表面而非单一大 accent 面)避免"深底单酸绿"的模板感。
+ */
+:root[data-theme="orbit"] {
+  color-scheme: dark;
+
+  --bg: #0b1310;
+  --bg-card: #122019;
+  --bg-row: #0f1b15;
+  --bg-hover: #1a2e22;
+  --bg-sunken: rgba(3, 10, 7, .55);
+  --bg-elev: #152720;
+  --glass: #0e1a14;
+
+  --fg: #e7f2eb;
+  --fg-muted: #93b1a1;
+  --fg-dim: #67897a;
+  --fg-soft: #b2cfc0;
+
+  --accent: #3fa87e;
+  --accent-hi: #5cc79a;
+  --accent-soft: rgba(63, 168, 126, .14);
+  --accent-line: rgba(63, 168, 126, .45);
+  --ring: rgba(92, 199, 154, .5);
+
+  --green: #42d689;
+  --green-soft: rgba(66, 214, 137, .15);
+  --green-line: rgba(66, 214, 137, .42);
+  --blue: #41b6e8;
+  --blue-soft: rgba(65, 182, 232, .15);
+  --blue-line: rgba(65, 182, 232, .42);
+  --warn: #e8a13c;
+  --warn-soft: rgba(232, 161, 60, .15);
+  --warn-line: rgba(232, 161, 60, .45);
+  --error: #ef6f63;
+  --error-soft: rgba(239, 111, 99, .15);
+  --error-line: rgba(239, 111, 99, .45);
+
+  --violet: #a88ff0;
+  --violet-soft: rgba(168, 143, 240, .16);
+  --pink: #ef7bb0;
+  --pink-soft: rgba(239, 123, 176, .16);
+  --teal: #33cdb4;
+  --teal-soft: rgba(51, 205, 180, .16);
+  --indigo: #8b93f0;
+  --indigo-soft: rgba(139, 147, 240, .16);
+  --cyan: #38c8de;
+  --cyan-soft: rgba(56, 200, 222, .16);
+  --lime: #a3d94c;
+
+  --hr-pending: #ff8f45;
+  --hr-pending-soft: rgba(255, 143, 69, .18);
+  --hr-pending-line: rgba(255, 143, 69, .5);
+  --hr-done: #52d6ae;
+  --hr-done-soft: rgba(82, 214, 174, .14);
+  --hr-done-line: rgba(82, 214, 174, .38);
+  --hr-hit: #ff8f45;
+
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+
+  --border: #20362a;
+  --border-strong: #31523f;
+  --border-soft: rgba(255, 255, 255, .06);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .05);
+
+  /* FX-06(D8-B): 暂停/其它状态保持**无色相**, 只把对比调到"明确可见但不抢眼"。
+     不铺底色 —— --surface-2 是白色高光, 暗主题下读作"白底灰字"(用户反馈的"太白");
+     改用中性描边 + 中性中间调字色, 与做种(绿)/下载(蓝)/错误(红)/警告(橙)均不撞色。 */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
+  /* R10-02: 状态栏专用底色 —— 与页底 --bg 拉开可见层级(不复用 --glass, 它还管顶栏) */
+  --statusbar-bg: #15251d;
+
+  /* R10-07: 选中态专用令牌族(靛蓝族, 与"做种中"的绿族彻底分开) */
+  --sel-bg: rgba(139, 147, 240, .16);
+  --sel-line: rgba(139, 147, 240, .45);
+  --sel-bar: #8b93f0;
+}

@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方案 C · 卡片总览 Hub &amp; Spoke — 设置页重构模板</title>
+<!-- 说明: 挑选用模板。与 A / B 同一套内容, 只换信息架构: 首页是卡片总览, 点进去才是具体分区。 -->
+<link rel="stylesheet" href="_shared/theme-tokens.css">
+<link rel="stylesheet" href="_shared/demo.css">
+<style>
+/* ==========================================================================
+   方案 C · 卡片总览 Hub & Spoke
+   --------------------------------------------------------------------------
+   设计取向: 承认「设置有一百多项, 但一次只想改一两项」。
+   首页不做导航、不做表单, 只放一组卡片: 每张卡回答三个问题 —— 这是什么、
+   现在是什么状态、有没有需要我处理的。想改就点进去, 二级页只有这一个分区,
+   顶部有面包屑可以一步退回。另外配一个搜索框, 直接按配置项名跳转。
+   卡片状态色(绿=正常 / 橙=需要注意 / 灰=未启用)是这套方案的签名。
+   ========================================================================== */
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 26px clamp(16px, 3vw, 32px) calc(40px + 60px); }
+.view { display: none; }
+.view.on { display: block; animation: v-in .18s var(--ease-out); }
+@keyframes v-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* ---- 首页抬头 ---- */
+.hub-hd { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin-bottom: 22px; }
+.hub-hd h1 { margin: 0; font: 600 25px/1.25 var(--font-display); letter-spacing: -.01em; }
+.hub-hd .hh-sub { margin: 5px 0 0; color: var(--fg-muted); font-size: 13.5px; }
+.hub-hd .hh-search { margin-left: auto; position: relative; }
+.hub-hd .hh-search input { width: 250px; padding-left: 32px; }
+.hub-hd .hh-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--fg-dim); }
+
+/* ---- 需要你先看一眼的几项 ---- */
+.attn {
+  display: flex; align-items: flex-start; gap: 11px; margin-bottom: 20px;
+  padding: 13px 15px; border-radius: var(--radius);
+  background: var(--warn-soft); border: 1px solid var(--warn-line);
+}
+.attn .at-ico { color: var(--warn); flex: none; margin-top: 1px; }
+.attn b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.attn p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
+.attn a { white-space: nowrap; }
+
+/* ---- 卡片网格 ---- */
+.hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 13px; }
+.card {
+  display: flex; flex-direction: column; gap: 9px; text-align: left;
+  padding: 16px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border);
+  cursor: pointer; transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.card:hover { border-color: var(--accent-line); background: var(--bg-hover); transform: translateY(-2px); }
+.card:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.card-top { display: flex; align-items: flex-start; gap: 11px; }
+.card-ico {
+  flex: none; width: 34px; height: 34px; border-radius: var(--radius);
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-hi);
+  border: 1px solid var(--accent-line);
+}
+.card-ico.off { background: var(--surface-2); color: var(--fg-dim); border-color: var(--border); }
+.card-t { font: 600 14.5px/1.3 var(--font-display); }
+.card-d { font-size: 12.8px; line-height: 1.6; color: var(--fg-muted); min-height: 2.6em; }
+.card-f { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 1px; }
+.card-f .cf-more { margin-left: auto; font-size: 12px; color: var(--accent-hi); }
+
+/* 状态点: 三态, 直接回答「这块现在好不好」 */
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--fg-dim); }
+.dot.ok { background: var(--green); }
+.dot.warn { background: var(--warn); }
+
+/* ---- 二级页 ---- */
+.crumb { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg-dim); margin-bottom: 14px; }
+.crumb button { background: transparent; border: 0; color: var(--accent-hi); cursor: pointer; padding: 0; font-size: 12.5px; }
+.crumb button:hover { text-decoration: underline; }
+.crumb .cb-sep { color: var(--fg-dim); }
+.crumb .cb-now { color: var(--fg-muted); }
+
+.sec-hd { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.sec-hd .sh-ico { flex: none; width: 38px; height: 38px; border-radius: var(--radius); display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-hi); border: 1px solid var(--accent-line); }
+.sec-hd h1 { margin: 0; font: 600 21px/1.25 var(--font-display); }
+.sec-hd .sh-lede { margin: 5px 0 0; color: var(--fg-muted); font-size: 13.5px; max-width: 70ch; }
+.sec-hd .sh-r { margin-left: auto; display: flex; gap: 8px; flex: none; }
+
+/* 二级页字段: 紧凑两列 */
+.blk { margin-bottom: 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-card); overflow: hidden; }
+.blk-hd { display: flex; align-items: center; gap: 9px; padding: 10px 14px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+.blk-hd .bh-t { font: 600 13px/1.35 var(--font-display); }
+.blk-hd .bh-n { font-size: 11.5px; color: var(--fg-dim); }
+.blk-hd .bh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.row { display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 14px; padding: 10px 14px; align-items: start; }
+.row + .row { border-top: 1px solid var(--hairline); }
+.row:hover { background: var(--surface-1); }
+.row.risk { box-shadow: inset 3px 0 0 var(--warn); }
+.row-lb { font-size: 13px; padding-top: 7px; display: flex; gap: 5px; align-items: baseline; flex-wrap: wrap; }
+.row-lb .lb-req { color: var(--error); }
+.row-ct { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.row-ct .u-input { flex: 0 1 250px; }
+.row-ct .u-input.w-sm { flex: 0 0 92px; }
+.row-ct .u-input.w-lg { flex: 1 1 330px; }
+.row-hp { flex: 1 0 100%; font-size: 12.2px; line-height: 1.6; color: var(--fg-dim); max-width: 70ch; }
+.row-hp.risk { color: var(--warn); }
+
+/* 规则: 卡片内做成「当…做…」两栏 */
+.rule { border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-card); margin-bottom: 10px; overflow: hidden; }
+.rule-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.rule-hd .rh-n { font: 600 13.5px/1.3 var(--font-display); }
+.rule-hd .rh-s { font-size: 12px; color: var(--fg-dim); }
+.rule-hd .rh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+.rule-flow { display: flex; gap: 10px; padding: 11px 14px; flex-wrap: wrap; }
+.flow-grp { flex: 1 1 280px; min-width: 0; }
+.flow-grp-hd { font: 600 12px/1 var(--font-display); color: var(--fg-muted); margin-bottom: 7px; }
+.step { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin-bottom: 5px; background: var(--bg-row); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.8px; }
+.step .st-n { font: 600 11px/1 var(--font-mono); color: var(--accent-hi); background: var(--accent-soft); padding: 3px 5px; border-radius: 3px; flex: none; }
+.step.danger { border-color: var(--error-line); background: var(--error-soft); }
+
+/* 限速: 阶梯图 */
+.curve-card { border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-card); margin-bottom: 12px; overflow: hidden; }
+.curve-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.curve-bd { padding: 13px 14px; }
+.curve-bd svg { width: 100%; height: 128px; display: block; }
+.tiers { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; }
+.tier { display: grid; grid-template-columns: 26px 1fr 1fr 32px; gap: 8px; align-items: center; }
+.tier .t-n { font: 600 11px/1 var(--font-mono); color: var(--fg-dim); text-align: right; }
+
+/* 站点: 二级页里用横向小标签切换 */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.pill { padding: 6px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--fg-muted); font-size: 13px; cursor: pointer; }
+.pill:hover { background: var(--bg-hover); color: var(--fg); }
+.pill.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+.pill .p-n { font: 500 11px/1 var(--font-mono); margin-left: 5px; opacity: .8; }
+
+/* ---- 底部动作条 ---- */
+.actbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; align-items: center; gap: 12px; padding: 11px clamp(16px, 3vw, 32px); background: var(--glass); border-top: 1px solid var(--border); backdrop-filter: blur(10px); }
+.actbar .ab-st { font-size: 12.8px; color: var(--fg-muted); display: flex; align-items: center; gap: 8px; }
+.actbar .ab-r { margin-left: auto; display: flex; gap: 9px; }
+
+@media (max-width: 760px) {
+  .row { grid-template-columns: 1fr; gap: 6px; }
+  .row-lb { padding-top: 0; }
+  .hub-hd .hh-search { margin-left: 0; width: 100%; }
+  .hub-hd .hh-search input { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="db-idx">C</span>
+  <b>卡片总览 Hub &amp; Spoke</b>
+  <span class="db-note">首页 = 状态卡片网格 + 搜索；点进二级页只处理一个分区</span>
+  <span class="db-spacer"></span>
+  <label>主题
+    <select id="themePick">
+      <option value="ocean">深海机房</option>
+      <option value="galaxy">暗夜星云</option>
+      <option value="frost">极地晨霜</option>
+      <option value="golden">麦秋</option>
+      <option value="orbit">品牌轨道</option>
+    </select>
+  </label>
+  <a class="db-back" href="index.html">← 返回挑选</a>
+</div>
+
+<div class="wrap">
+
+  <!-- ============================ 首页: 卡片总览 ============================ -->
+  <div class="view on" id="view-hub">
+    <header class="hub-hd">
+      <div>
+        <h1>设置</h1>
+        <p class="hh-sub">7 个分区 · 共 60 项 · 2 项尚未保存</p>
+      </div>
+      <div class="hh-search">
+        <svg class="u-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+        <input class="u-input" placeholder="搜索配置项，比如「端口」">
+      </div>
+    </header>
+
+    <div class="attn">
+      <svg class="u-ico at-ico lg" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13z"/><path d="M8 6.5v3M8 11.6v.6"/></svg>
+      <div>
+        <b>有 1 项建议你看一下</b>
+        <p>「规则」里有 1 条带风险动作的规则（做种满 7 天后删除，会连带删除文件），确认无误再保存。</p>
+      </div>
+      <a href="#" data-go="rules" style="margin-left:auto">去看 →</a>
+    </div>
+
+    <div class="hub-grid">
+      <a class="card" href="#" data-go="conn">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M8 1v6M5.5 3.5 8 6l2.5-2.5"/><path d="M3 10v3h10v-3"/></svg></span>
+          <div><div class="card-t">连接 qBittorrent</div></div>
+        </div>
+        <p class="card-d">auto-qb 通过 qB 的 Web UI 管理种子。这里填地址、端口和登录账号。</p>
+        <div class="card-f"><span class="dot ok"></span><span class="u-dim">已连接 · 127.0.0.1:8080</span><span class="cf-more">6 项 →</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="auto">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5l5.5-7.5h-4z"/></svg></span>
+          <div><div class="card-t">自动化</div></div>
+        </div>
+        <p class="card-d">种子加进来之后自动做什么：打标签、把辅种归组、检查文件是否还在。</p>
+        <div class="card-f"><span class="dot ok"></span><span class="u-dim">分组已启用</span><span class="u-badge">集数标签未开</span><span class="cf-more">9 项 →</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="speed">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12 11.5 6"/></svg></span>
+          <div><div class="card-t">限速</div></div>
+        </div>
+        <p class="card-d">按累计流量自动调整 qB 的全局速度上限，防止超额。</p>
+        <div class="card-f"><span class="dot ok"></span><span class="u-dim">1 条曲线 · 按自然月</span><span class="cf-more">3 档 →</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="sites">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg></span>
+          <div><div class="card-t">站点</div></div>
+        </div>
+        <p class="card-d">按 tracker 域名识别站点，再套用这个站点的标签、限速和 HR 设置。</p>
+        <div class="card-f"><span class="dot ok"></span><span class="u-dim">3 个站点</span><span class="cf-more">→</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="rules">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></span>
+          <div><div class="card-t">规则</div></div>
+        </div>
+        <p class="card-d">「当满足条件时执行动作」的自动化规则，按规则集分组管理。</p>
+        <div class="card-f"><span class="dot warn"></span><span class="u-dim">2 个规则集 · 3 条规则</span><span class="u-badge risk">1 条含风险</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="notify">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 3 1 3.5 1 3.5H3s1-.5 1-3.5Z"/><path d="M6.5 13a1.7 1.7 0 0 0 3 0"/></svg></span>
+          <div><div class="card-t">通知</div></div>
+        </div>
+        <p class="card-d">出错或有风险操作时，用电脑的系统通知提醒你。</p>
+        <div class="card-f"><span class="dot ok"></span><span class="u-dim">已启用 · 23:00-08:00 免打扰</span><span class="cf-more">6 项 →</span></div>
+      </a>
+
+      <a class="card" href="#" data-go="ui">
+        <div class="card-top">
+          <span class="card-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1"/><path d="M5.5 14h5"/></svg></span>
+          <div><div class="card-t">界面与日志</div></div>
+        </div>
+        <p class="card-d">这个浏览器界面怎么开、谁能访问，以及日志记在哪、留多久。</p>
+        <div class="card-f"><span class="dot ok"></span><span class="u-dim">仅本机可访问</span><span class="cf-more">7 项 →</span></div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 连接 ============================ -->
+  <div class="view" id="view-conn">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">连接 qBittorrent</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M8 1v6M5.5 3.5 8 6l2.5-2.5"/><path d="M3 10v3h10v-3"/></svg></span>
+      <div>
+        <h1>连接 qBittorrent</h1>
+        <p class="sh-lede">auto-qb 通过 qBittorrent 的 Web UI 读取和修改种子。把地址和登录信息填对，它就能接管种子管理。</p>
+      </div>
+      <span class="sh-r"><span class="u-badge on"><span class="dot ok"></span>已连接</span><button class="u-btn sm">测试连接</button></span>
+    </header>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">地址和登录</span><span class="bh-n">qB 的「设置 → Web UI」里都能查到</span></div>
+      <div class="row"><div class="row-lb">主机<span class="lb-req">*</span></div><div class="row-ct"><input class="u-input mono" value="127.0.0.1"><p class="row-hp">装 qBittorrent 的那台机器。auto-qb 和 qB 装在同一台电脑上就填 127.0.0.1。</p></div></div>
+      <div class="row"><div class="row-lb">端口<span class="lb-req">*</span></div><div class="row-ct"><input class="u-input mono w-sm" value="8080"><p class="row-hp">qB Web UI 监听的端口，默认是 8080。</p></div></div>
+      <div class="row"><div class="row-lb">用户名</div><div class="row-ct"><input class="u-input" value="admin"><p class="row-hp">qB 里没设用户名就留空。</p></div></div>
+      <div class="row risk"><div class="row-lb">密码</div><div class="row-ct"><input class="u-input" type="password" value="secret-pass"><p class="row-hp">qB Web UI 的登录密码。</p><p class="row-hp risk">保存后会以明文写进配置文件，别把配置文件发给别人。</p></div></div>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">多久检查一次</span><span class="bh-n">一般不用改</span></div>
+      <div class="row"><div class="row-lb">检查间隔</div><div class="row-ct"><input class="u-input mono w-sm" value="2"><span class="u-dim">秒</span><p class="row-hp">每隔多久看一次所有种子的状态，并处理到期的任务。不能填 0。</p></div></div>
+      <div class="row"><div class="row-lb">每轮最多处理</div><div class="row-ct"><input class="u-input mono w-sm" value="20"><span class="u-dim">个任务</span><p class="row-hp">一轮里最多执行多少个自动化任务。太大单轮耗时长，界面反应会变钝。</p></div></div>
+      <div class="row"><div class="row-lb">内置任务间隔</div><div class="row-ct"><input class="u-input mono w-sm" value="60"><span class="u-dim">秒</span><p class="row-hp">清理、限速曲线这类周期性任务的间隔，从上一次结束开始算。</p></div></div>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">运行状态存在哪</span></div>
+      <div class="row risk"><div class="row-lb">数据目录</div><div class="row-ct"><input class="u-input mono w-lg" value="auto-qb-data"><p class="row-hp">运行状态、日志、跳检备份放在哪。可以写相对路径或绝对路径。</p><p class="row-hp risk">改了要重启 auto-qb 才生效。</p></div></div>
+      <div class="row"><div class="row-lb">状态文件</div><div class="row-ct"><input class="u-input mono w-lg" placeholder="留空 = 数据目录/state.json"><p class="row-hp">记录「上次做到哪了」，重启后接着上次的进度继续。</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 自动化 ============================ -->
+  <div class="view" id="view-auto">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">自动化</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5l5.5-7.5h-4z"/></svg></span>
+      <div>
+        <h1>自动化</h1>
+        <p class="sh-lede">种子加入之后自动做什么。每一项都是可选的，不想要就关掉。</p>
+      </div>
+    </header>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">标签</span></div>
+      <div class="row"><div class="row-lb">清理相似标签</div><div class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label><p class="row-hp">自动去掉只有大小写不同的重复标签，比如 HHan 和 hhan 只留一个。</p></div></div>
+      <div class="row"><div class="row-lb">跳检标签</div><div class="row-ct"><input class="u-input mono" value="zSkipChecked"><p class="row-hp">跳过哈希校验的种子会被打上这个标签。留空 = 不启用。</p></div></div>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">辅种分组</span><span class="bh-r"><span class="u-badge on">已启用</span></span></div>
+      <div class="row"><div class="row-lb">启用分组</div><div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label><p class="row-hp">把原种和它的辅种看成一组，统一检查、统一暂停。</p></div></div>
+      <div class="row"><div class="row-lb">检查文件是否还在</div><div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label><p class="row-hp">核对组里的文件是否还在磁盘上，发现少了就整组暂停。</p></div></div>
+      <div class="row"><div class="row-lb">缺文件标签</div><div class="row-ct"><input class="u-input mono" value="MISSING"><p class="row-hp">发现缺文件时给组里每个种子加上这个标签。</p></div></div>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">集数标签</span><span class="bh-r"><span class="u-badge">未启用</span></span></div>
+      <div class="row"><div class="row-lb">启用</div><div class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label><p class="row-hp">从新种子的文件名里解析集数，自动打上 zE01 这样的标签。只对刚加入的种子生效。</p></div></div>
+      <div class="row"><div class="row-lb">单集模板</div><div class="row-ct"><input class="u-input mono" value="zE${episode_first}"><p class="row-hp">${episode_first} 会替换成集数。</p></div></div>
+      <div class="row"><div class="row-lb">多集模板</div><div class="row-ct"><input class="u-input mono" value="zE${episode_first}-${episode_last}"><p class="row-hp">分别是首集和末集，例如 zE01-12。</p></div></div>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">清理标签</span></div>
+      <div class="row risk"><div class="row-lb">彻底删除标签</div><div class="row-ct"><span class="u-badge">未配置</span><button class="u-btn sm">编辑…</button><p class="row-hp">把匹配的标签从所有种子上摘掉并注销。支持 regex:、:ignore_case、@站点标签。</p><p class="row-hp risk">标签定义会一起删掉，依赖它的自动化跟着失效。</p></div></div>
+      <div class="row"><div class="row-lb">删除无人使用的标签</div><div class="row-ct"><span class="u-badge">2 条</span><button class="u-btn sm">编辑…</button><p class="row-hp">只删已经没有种子在用的标签，可以放心配。</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 限速 ============================ -->
+  <div class="view" id="view-speed">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">限速</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12 11.5 6"/></svg></span>
+      <div>
+        <h1>限速</h1>
+        <p class="sh-lede">按累计流量自动调整 qB 的全局速度上限。多条曲线同时命中时取最严的那条。</p>
+      </div>
+    </header>
+
+    <div class="curve-card">
+      <div class="curve-hd"><span class="bh-t">第 1 条曲线</span><span class="u-badge on">周期 MONTH</span><span class="u-dim">上传 3 档 · 下载 0 档</span><span class="bh-r"><button class="u-btn ghost sm">删除</button></span></div>
+      <div class="curve-bd">
+        <svg viewBox="0 0 640 128" preserveAspectRatio="none" aria-label="上传限速阶梯图">
+          <line x1="44" y1="12" x2="44" y2="100" stroke="var(--border)" />
+          <line x1="44" y1="100" x2="624" y2="100" stroke="var(--border)" />
+          <line x1="44" y1="56" x2="624" y2="56" stroke="var(--hairline)" />
+          <text x="38" y="16" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">8M</text>
+          <text x="38" y="60" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">2M</text>
+          <text x="38" y="104" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">0</text>
+          <path d="M44 18 H200 V58 H380 V100 H624" fill="none" stroke="var(--accent)" stroke-width="2" />
+          <rect x="44" y="18" width="156" height="82" fill="var(--accent-soft)" />
+          <rect x="200" y="58" width="180" height="42" fill="var(--accent-soft)" />
+          <text x="122" y="92" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">8 MiB/s</text>
+          <text x="290" y="92" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">2 MiB/s</text>
+          <text x="510" y="92" text-anchor="middle" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">不限速</text>
+          <text x="44" y="120" text-anchor="start" fill="var(--fg-dim)" font-size="10">0</text>
+          <text x="200" y="120" text-anchor="middle" fill="var(--fg-dim)" font-size="10">300 GiB</text>
+          <text x="380" y="120" text-anchor="middle" fill="var(--fg-dim)" font-size="10">500 GiB</text>
+          <text x="624" y="120" text-anchor="end" fill="var(--fg-dim)" font-size="10">∞</text>
+        </svg>
+        <div class="tiers">
+          <div class="tier"><span class="t-n">1</span><input class="u-input mono" value="300GiB"><input class="u-input mono" value="8MiB/s"><button class="u-btn ghost sm">✕</button></div>
+          <div class="tier"><span class="t-n">2</span><input class="u-input mono" value="500GiB"><input class="u-input mono" value="2MiB/s"><button class="u-btn ghost sm">✕</button></div>
+          <div class="tier"><span class="t-n">3</span><input class="u-input mono" value="800GiB"><input class="u-input mono" value="0"><button class="u-btn ghost sm">✕</button></div>
+        </div>
+        <p class="row-hp">左边填「累计流量低于多少」，右边填「限速设为多少」。填 0 = 这一档不限速。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 站点 ============================ -->
+  <div class="view" id="view-sites">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">站点</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg></span>
+      <div>
+        <h1>站点</h1>
+        <p class="sh-lede">用 tracker 域名判断种子来自哪个站点，再套用这个站点的设置。没配置的站点完全不管。</p>
+      </div>
+    </header>
+
+    <div class="pills">
+      <button class="pill on">HHan<span class="p-n">4</span></button>
+      <button class="pill">PTer<span class="p-n">3</span></button>
+      <button class="pill">M-Team<span class="p-n">2</span></button>
+      <button class="pill">＋ 新增</button>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">HHan</span><span class="bh-r"><button class="u-btn ghost sm">重命名</button><button class="u-btn ghost sm">删除</button></span></div>
+      <div class="row"><div class="row-lb">站点域名</div><div class="row-ct"><input class="u-input mono w-lg" value="hhan.club"><p class="row-hp">用 tracker 地址里的域名匹配，一行一个，子域名也算命中。</p></div></div>
+      <div class="row"><div class="row-lb">自动打的标签</div><div class="row-ct"><input class="u-input" value="HHan"></div></div>
+      <div class="row"><div class="row-lb">自动归到的分类</div><div class="row-ct"><input class="u-input" value="PT"></div></div>
+      <div class="row"><div class="row-lb">上传限速</div><div class="row-ct"><input class="u-input mono w-sm"><span class="u-dim">MiB/s</span><p class="row-hp">只对这个站点的种子生效。留空 = 不限速。</p></div></div>
+      <div class="row"><div class="row-lb">要跑哪些规则</div><div class="row-ct"><input class="u-input mono w-lg" value="@default_rules"><p class="row-hp">@规则集 跑整个规则集，@规则集.规则名 只跑一条。留空 = 不跑规则。</p></div></div>
+      <div class="row"><div class="row-lb">HR 标记</div><div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label><button class="u-btn sm">展开 3 项…</button></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 规则 ============================ -->
+  <div class="view" id="view-rules">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">规则</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></span>
+      <div>
+        <h1>规则</h1>
+        <p class="sh-lede">一条规则就是「当满足条件时执行动作」。条件全部满足才执行，动作按从上到下的顺序执行。</p>
+      </div>
+    </header>
+
+    <div class="pills">
+      <button class="pill on">default_rules<span class="p-n">2</span></button>
+      <button class="pill">site_rules<span class="p-n">1</span></button>
+      <button class="pill">＋ 新增</button>
+    </div>
+
+    <div class="rule">
+      <div class="rule-hd"><span class="rh-n">做种满 7 天后删除</span><span class="rh-s">做种时间 ≥ 7 天 → 删除种子</span><span class="rh-r"><span class="u-badge risk">含风险动作</span><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span></div>
+      <div class="rule-flow">
+        <div class="flow-grp"><div class="flow-grp-hd">条件 · 全部满足才执行</div><div class="step"><span class="st-n">1</span>做种时间 至少 7 天</div></div>
+        <div class="flow-grp"><div class="flow-grp-hd">动作 · 按顺序执行</div><div class="step danger"><span class="st-n">1</span>删除种子（同时删除文件）</div></div>
+      </div>
+      <div class="row" style="border-top:1px solid var(--hairline)"><div class="row-ct"><p class="row-hp risk">删除会连同文件一起删掉，且无法撤销。</p></div></div>
+    </div>
+
+    <div class="rule">
+      <div class="rule-hd"><span class="rh-n">上传率低就暂停</span><span class="rh-s">分享率 &lt; 0.5 且 做种 ≥ 2 天 → 暂停</span><span class="rh-r"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span></div>
+      <div class="rule-flow">
+        <div class="flow-grp"><div class="flow-grp-hd">条件 · 全部满足才执行</div><div class="step"><span class="st-n">1</span>分享率 小于 0.5</div><div class="step"><span class="st-n">2</span>做种时间 至少 2 天</div></div>
+        <div class="flow-grp"><div class="flow-grp-hd">动作 · 按顺序执行</div><div class="step"><span class="st-n">1</span>暂停种子</div></div>
+      </div>
+    </div>
+    <button class="u-btn">＋ 新增规则</button>
+  </div>
+
+  <!-- ============================ 二级页: 通知 ============================ -->
+  <div class="view" id="view-notify">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">通知</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 3 1 3.5 1 3.5H3s1-.5 1-3.5Z"/><path d="M6.5 13a1.7 1.7 0 0 0 3 0"/></svg></span>
+      <div>
+        <h1>通知</h1>
+        <p class="sh-lede">出错或者做了有风险的操作时，用电脑的系统通知提醒你。不用额外装任何东西。</p>
+      </div>
+    </header>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">主动通知</span></div>
+      <div class="row"><div class="row-lb">启用通知</div><div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label><p class="row-hp">关掉之后消息只出现在界面里。</p></div></div>
+      <div class="row"><div class="row-lb">最低提醒级别</div><div class="row-ct"><select class="u-select"><option>WARNING — 只提醒异常和错误</option><option>ERROR — 只提醒错误</option><option>INFO — 什么都提醒</option></select><p class="row-hp">达到哪个严重程度才提醒你。</p></div></div>
+      <div class="row"><div class="row-lb">免打扰时段</div><div class="row-ct"><input class="u-input mono" value="23:00-08:00"><p class="row-hp">这段时间里不弹通知，可以跨午夜。留空 = 全天都弹。</p></div></div>
+      <div class="row"><div class="row-lb">每小时上限</div><div class="row-ct"><input class="u-input mono w-sm" value="20"><span class="u-dim">条</span><p class="row-hp">一小时内最多弹多少条，超出的直接丢掉，防止刷屏。</p></div></div>
+      <div class="row"><div class="row-lb">重复合并窗口</div><div class="row-ct"><input class="u-input mono w-sm" value="10"><span class="u-dim">分钟</span><p class="row-hp">这段时间里内容相同的通知只弹第一条。填 0 = 不合并。</p></div></div>
+      <div class="row"><div class="row-lb">通知渠道</div><div class="row-ct"><span class="u-badge on">platform · 系统原生通知</span><p class="row-hp">目前只支持系统原生通知。</p></div></div>
+    </div>
+  </div>
+
+  <!-- ============================ 二级页: 界面与日志 ============================ -->
+  <div class="view" id="view-ui">
+    <nav class="crumb"><button data-back>设置</button><span class="cb-sep">/</span><span class="cb-now">界面与日志</span></nav>
+    <header class="sec-hd">
+      <span class="sh-ico"><svg class="u-ico lg" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1"/><path d="M5.5 14h5"/></svg></span>
+      <div>
+        <h1>界面与日志</h1>
+        <p class="sh-lede">这个浏览器界面怎么开、谁能访问，以及日志记在哪、留多久。</p>
+      </div>
+    </header>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">WEB 界面</span></div>
+      <div class="row"><div class="row-lb">启用界面</div><div class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label><p class="row-hp">关掉之后只能直接改配置文件。</p></div></div>
+      <div class="row risk"><div class="row-lb">监听地址</div><div class="row-ct"><input class="u-input mono" value="127.0.0.1"><p class="row-hp">保持 127.0.0.1 表示只有这台电脑能打开。</p><p class="row-hp risk">改成 0.0.0.0 会把管理界面暴露给局域网里所有设备。</p></div></div>
+      <div class="row"><div class="row-lb">端口</div><div class="row-ct"><input class="u-input mono w-sm" value="8080"><p class="row-hp">和 qB 的 Web UI 端口撞了就换一个。</p></div></div>
+      <div class="row"><div class="row-lb">访问密钥</div><div class="row-ct"><input class="u-input" type="password" value="a7f3-9c21"><p class="row-hp">留空 = 第一次启动时随机生成，并打印在启动日志里。</p></div></div>
+      <div class="row"><div class="row-lb">跳过本机验证</div><div class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label><p class="row-hp">开着的话本机不用输密钥，别的机器访问仍然要。</p></div></div>
+    </div>
+
+    <div class="blk">
+      <div class="blk-hd"><span class="bh-t">日志</span><span class="bh-r"><button class="u-btn ghost sm">刷新</button></span></div>
+      <div class="row"><div class="row-lb">日志等级</div><div class="row-ct"><select class="u-select"><option>INFO — 常规</option><option>DEBUG — 最详细</option><option>WARNING — 只记警告以上</option><option>ERROR — 只记错误</option></select><p class="row-hp">DEBUG 会把每一步都记下来，排查问题时再开。</p></div></div>
+      <div class="row"><div class="row-lb">单个日志上限</div><div class="row-ct"><input class="u-input mono w-sm" value="10"><span class="u-dim">MiB</span><p class="row-hp">写满就另起新文件，最多留 5 个旧文件。</p></div></div>
+      <div class="row"><div class="row-lb">运行日志</div><div class="row-ct"><select class="u-select"><option>最近 200 行</option><option>最近 500 行</option><option>最近 2000 行</option></select><select class="u-select"><option>全部级别</option><option>只看 WARNING 以上</option></select></div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="actbar">
+  <span class="ab-st"><span class="dot warn"></span>有 2 处改动还没保存</span>
+  <span class="ab-r">
+    <button class="u-btn ghost">放弃改动</button>
+    <button class="u-btn primary">保存并应用</button>
+  </span>
+</div>
+
+<script>
+  function go(id) {
+    document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('on'); });
+    document.getElementById('view-' + id).classList.add('on');
+    window.scrollTo({ top: 0 });
+  }
+  document.querySelectorAll('[data-go]').forEach(function (el) {
+    el.addEventListener('click', function (e) { e.preventDefault(); go(el.dataset.go); });
+  });
+  document.querySelectorAll('[data-back]').forEach(function (el) {
+    el.addEventListener('click', function () { go('hub'); });
+  });
+  document.querySelectorAll('.pills').forEach(function (box) {
+    box.querySelectorAll('.pill').forEach(function (b) {
+      b.addEventListener('click', function () {
+        box.querySelectorAll('.pill').forEach(function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+      });
+    });
+  });
+  var tp = document.getElementById('themePick');
+  tp.value = new URLSearchParams(location.search).get('theme') || 'ocean';
+  document.documentElement.dataset.theme = tp.value;
+  tp.addEventListener('change', function () { document.documentElement.dataset.theme = tp.value; });
+</script>
+</body>
+</html>

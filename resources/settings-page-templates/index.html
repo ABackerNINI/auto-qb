@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设置页重构 · 四套模板挑选</title>
+<link rel="stylesheet" href="_shared/theme-tokens.css">
+<link rel="stylesheet" href="_shared/demo.css">
+<style>
+/* 挑选页自身的版式: 中性、克制, 不抢四套模板的戏 */
+.wrap { max-width: 1120px; margin: 0 auto; padding: 30px clamp(16px, 3vw, 32px) 80px; }
+h1 { margin: 0; font: 600 27px/1.25 var(--font-display); letter-spacing: -.01em; }
+.sub { margin: 9px 0 0; font-size: 14px; line-height: 1.72; color: var(--fg-muted); max-width: 78ch; }
+h2 { margin: 0; font: 600 18px/1.3 var(--font-display); }
+.sec { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border); }
+.sec-hd { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.sec-hd .sh-note { margin-left: auto; font-size: 12.5px; color: var(--fg-dim); }
+p.lede { margin: 0 0 16px; font-size: 13.5px; line-height: 1.75; color: var(--fg-muted); max-width: 76ch; }
+
+/* 现状诊断 */
+.diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 11px; }
+.diag-i { padding: 13px 15px; border-radius: var(--radius); background: var(--bg-card); border: 1px solid var(--border); }
+.diag-i b { display: block; font-size: 13.5px; margin-bottom: 5px; }
+.diag-i p { margin: 0; font-size: 12.8px; line-height: 1.65; color: var(--fg-muted); }
+
+/* 方案条目 */
+.plan { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; padding: 20px 0; border-top: 1px solid var(--hairline); align-items: start; }
+.plan-l { position: sticky; top: 20px; }
+.plan-l .pl-idx { font: 600 11px/1 var(--font-mono); color: var(--accent-hi); background: var(--accent-soft); padding: 4px 7px; border-radius: 3px; display: inline-block; margin-bottom: 9px; }
+.plan-l h3 { margin: 0 0 7px; font: 600 17px/1.3 var(--font-display); }
+.plan-l .pl-tag { font-size: 13px; color: var(--fg-muted); line-height: 1.65; margin: 0 0 12px; }
+.plan-l ul { margin: 0 0 14px; padding-left: 17px; font-size: 12.8px; line-height: 1.75; color: var(--fg-muted); }
+.plan-l .pl-act { display: flex; gap: 8px; flex-wrap: wrap; }
+.wire { width: 100%; height: auto; display: block; margin-bottom: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); }
+
+/* 实页预览: 缩放 iframe */
+.pf-box { position: relative; height: 560px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.pf-box iframe { width: 1280px; height: 900px; border: 0; transform: scale(.58); transform-origin: top left; }
+.pf-box .pf-mask { position: absolute; inset: 0; cursor: pointer; }
+.pf-box .pf-open {
+  position: absolute; right: 10px; bottom: 10px; z-index: 2;
+  padding: 6px 13px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--glass); color: var(--fg); font-size: 12.5px; text-decoration: none;
+  backdrop-filter: blur(6px);
+}
+.pf-box .pf-open:hover { border-color: var(--accent); color: var(--accent-hi); }
+
+/* 对比表 */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 880px; }
+th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+th { font-size: 12px; color: var(--fg-dim); font-weight: 600; border-bottom: 1px solid var(--border); }
+td b { font-weight: 600; }
+.tbl-wrap td:first-child { color: var(--fg-muted); white-space: nowrap; }
+
+/* 文案对照 */
+.copy-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.copy-t th { font-size: 12px; }
+.copy-t td { vertical-align: top; line-height: 1.65; }
+.copy-t .old { color: var(--fg-dim); }
+.copy-t .old em { font-style: normal; text-decoration: line-through; text-decoration-color: var(--error); }
+.copy-t .why { font-size: 12px; color: var(--fg-dim); }
+@media (max-width: 860px) {
+  .plan { grid-template-columns: 1fr; }
+  .plan-l { position: static; }
+  .pf-box { height: 400px; }
+  .pf-box iframe { transform: scale(.42); }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <h1>设置页重构 · 四套模板</h1>
+    <p class="sub">
+      这次没有沿用旧版式 —— 四套模板的导航模型、字段排版、说明文字的落点都不一样，挑一套再动手改。
+      另外还有一套按「A 的视觉 + C 的布局 + D 的说明（改成就近浮窗）」拼出来的<b>组合方案</b>，列在最前面。
+      五套用的是<b>同一份内容</b>（连接 / 自动化 / 限速 / 站点 / 规则 / 通知 / 界面与日志），
+      所以差异纯粹是版式与信息架构，横向比较才有意义。
+      顶部可以切主题：<b>所有模板都走真实 WEB UI 的同一套颜色令牌</b>，切主题时模板跟着变，不会出现「只在深色下好看」。
+    </p>
+    <div class="sec-hd" style="margin-top:16px">
+      <label style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--fg-muted)">主题
+        <select id="themePick" class="u-select">
+          <option value="ocean">深海机房</option>
+          <option value="galaxy">暗夜星云</option>
+          <option value="frost">极地晨霜</option>
+          <option value="golden">麦秋</option>
+          <option value="orbit">品牌轨道</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <!-- ===================== 现状诊断 ===================== -->
+  <section class="sec">
+    <div class="sec-hd"><h2>先说清楚现在的问题</h2><span class="sh-note">诊断来自 src/auto_qb/web_ui 当前实现</span></div>
+    <p class="lede">「乱、硬、丑、描述不对」其实是四个不同的毛病，分别对应下面四块。新版把每一块都换了个解法，不是换个配色了事。</p>
+    <div class="diag">
+      <div class="diag-i">
+        <b>① 乱 · 三种折叠容器语义重叠</b>
+        <p>现在有 group / section / subcard 三种「可折叠块」，还有 pattern_list 的折叠列表，规则卡又有自己的折叠。用户看不出该点哪个。</p>
+      </div>
+      <div class="diag-i">
+        <b>② 硬 · 一律「标签 | 控件」两列</b>
+        <p>所有字段挤进同一套两列网格，说明文字只能塞在控件下面当小字。长说明写不下、短说明又显得干。</p>
+      </div>
+      <div class="diag-i">
+        <b>③ 丑 · 卡片与行的层级靠边框堆</b>
+        <p>普通分组是一张卡片，站点/规则/限速又各是一套完全不同的布局，同一页里四种视觉语言并存。</p>
+      </div>
+      <div class="diag-i">
+        <b>④ 描述 · 写的是实现，不是用途</b>
+        <p>「落盘轮转与格式」「图形界面的监听与鉴权」这类分组说明是技术视角；个别条目还写错了（见文末对照表）。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 四套方案 ===================== -->
+  <section class="sec">
+    <div class="sec-hd"><h2>四套模板 + 一套组合</h2><span class="sh-note">点「打开实页」在新标签里交互试用</span></div>
+
+    <!-- A+C+D 组合 -->
+    <div class="plan" style="border:1px solid var(--accent-line);border-radius:var(--radius);padding:20px 18px;margin-bottom:8px;background:var(--accent-soft)">
+      <div class="plan-l">
+        <span class="pl-idx">A + C + D</span>
+        <h3>仪表台 × 卡片总览 × 就近说明浮窗</h3>
+        <p class="pl-tag">按「A 的视觉 + C 的布局 + D 的说明」拼出来的那一套：切角与分段 LED 的仪表台观感、首页卡片总览与二级页、说明改成点「?」就近弹出的浮窗。</p>
+        <svg class="wire" viewBox="0 0 300 170">
+          <rect x="1" y="1" width="298" height="168" fill="none" />
+          <!-- 首页: 卡片网格 -->
+          <rect x="8" y="8" width="68" height="34" fill="none" stroke="var(--border)" />
+          <rect x="14" y="13" width="14" height="14" fill="var(--accent-soft)" /><rect x="32" y="15" width="38" height="7" fill="var(--border)" /><rect x="14" y="32" width="56" height="5" fill="var(--border)" />
+          <rect x="82" y="8" width="68" height="34" fill="none" stroke="var(--border)" />
+          <rect x="88" y="13" width="14" height="14" fill="var(--accent-soft)" /><rect x="106" y="15" width="38" height="7" fill="var(--border)" /><rect x="88" y="32" width="56" height="5" fill="var(--border)" />
+          <rect x="156" y="8" width="68" height="34" fill="none" stroke="var(--border)" />
+          <rect x="162" y="13" width="14" height="14" fill="var(--accent-soft)" /><rect x="180" y="15" width="38" height="7" fill="var(--border)" /><rect x="162" y="32" width="56" height="5" fill="var(--border)" />
+          <rect x="230" y="8" width="62" height="34" fill="none" stroke="var(--border)" />
+          <rect x="236" y="13" width="14" height="14" fill="var(--accent-soft)" /><rect x="254" y="15" width="32" height="7" fill="var(--border)" /><rect x="236" y="32" width="50" height="5" fill="var(--border)" />
+          <!-- 二级页: 块 + 行(行尾一个 ?) -->
+          <rect x="8" y="50" width="180" height="114" fill="none" stroke="var(--border)" />
+          <rect x="8" y="50" width="180" height="11" fill="var(--surface-2)" />
+          <rect x="14" y="70" width="44" height="7" fill="var(--border)" /><rect x="64" y="67" width="86" height="12" fill="var(--bg-sunken)" stroke="var(--border)" /><rect x="156" y="67" width="12" height="12" fill="var(--accent-soft)" stroke="var(--accent-line)" />
+          <rect x="14" y="92" width="44" height="7" fill="var(--border)" /><rect x="64" y="89" width="86" height="12" fill="var(--bg-sunken)" stroke="var(--border)" /><rect x="156" y="89" width="12" height="12" fill="var(--accent-soft)" stroke="var(--accent-line)" />
+          <rect x="14" y="114" width="44" height="7" fill="var(--border)" /><rect x="64" y="111" width="86" height="12" fill="var(--bg-sunken)" stroke="var(--border)" /><rect x="156" y="111" width="12" height="12" fill="var(--accent-soft)" stroke="var(--accent-line)" />
+          <rect x="14" y="136" width="44" height="7" fill="var(--border)" /><rect x="64" y="133" width="86" height="12" fill="var(--bg-sunken)" stroke="var(--border)" /><rect x="156" y="133" width="12" height="12" fill="var(--accent-soft)" stroke="var(--accent-line)" />
+          <!-- 就近浮窗(带箭头指向中间那行) -->
+          <polygon points="196,86 188,92 196,98" fill="var(--bg-elev)" stroke="var(--border-strong)" />
+          <rect x="196" y="72" width="98" height="76" fill="var(--bg-elev)" stroke="var(--border-strong)" />
+          <rect x="204" y="80" width="54" height="8" fill="var(--fg-dim)" opacity=".5" />
+          <rect x="204" y="96" width="82" height="6" fill="var(--border)" /><rect x="204" y="106" width="72" height="6" fill="var(--border)" />
+          <rect x="204" y="118" width="40" height="5" fill="var(--fg-dim)" opacity=".6" /><rect x="204" y="128" width="82" height="6" fill="var(--border)" /><rect x="204" y="138" width="62" height="6" fill="var(--border)" />
+        </svg>
+        <ul>
+          <li>视觉: 10px 切角 + hairline + 等宽读数 + 分段 LED（A）</li>
+          <li>布局: 首页卡片网格 + 搜索 → 二级页 + 面包屑（C）</li>
+          <li>说明: 行尾「?」点开就近浮窗，内容是 D 那五段（D 的内容，浮窗的形态）</li>
+          <li>说明不再占常驻侧栏 → 二级页能铺满，也不会出现「右栏空着」</li>
+          <li><b>控件</b>: 全部方角、零圆角、无切角（切角在卡片/块这类大面上保留作 A 的签名）。发光走
+            <code style="font-family:var(--font-mono);font-size:12px">box-shadow</code>，由
+            <code style="font-family:var(--font-mono);font-size:12px">--glow</code>（聚焦态，三层：柔光环 + 亮芯 + 22px 余光，沿用 Ash Thorp 原值）与
+            <code style="font-family:var(--font-mono);font-size:12px">--glow-soft</code>（悬浮态）两个令牌统一提供，改一处全站生效。
+            应用范围：输入框/下拉框（聚焦）· 按钮（悬浮+聚焦）· 首页卡片（悬浮+聚焦）·
+            小标签 pill（悬浮+选中）· 「?」说明钮（悬浮+打开）· 开关（聚焦+开启态）。
+            按钮依旧不带橙色填充；开关取自 amd/04-fathom（方角 44×24 + 纯白滑块）。</li>
+          <li><b>语义化语调</b>：重要 / 危险的按钮与输入框用<b>不同色的描边 + 发光</b>，
+            由 <code style="font-family:var(--font-mono);font-size:12px">--tone</code> 驱动（描边与发光必然同色）。
+            三档：<b>常规</b> <code style="font-family:var(--font-mono);font-size:12px">--accent</code>
+            · <b>重要</b> <code style="font-family:var(--font-mono);font-size:12px">--warn</code>（影响面大但可逆：凭据、改了要重启、弱化安全边界）
+            · <b>危险</b> <code style="font-family:var(--font-mono);font-size:12px">--error</code>（破坏性 / 不可逆：明文密码、对外暴露、删除）。
+            ⚠ <b>静息态描边也带语义色</b>，不用聚焦就能看出轻重；聚焦时才变实色并发光。</li>
+        </ul>
+        <div class="pl-act">
+          <a class="u-btn primary" href="05-console-hub.html" target="_blank">打开实页 →</a>
+        </div>
+      </div>
+      <div class="pf-box">
+        <iframe src="05-console-hub.html?theme=ocean" title="A+C+D 组合方案 预览" loading="lazy"></iframe>
+        <a class="pf-open" href="05-console-hub.html" target="_blank">打开实页 ↗</a>
+      </div>
+    </div>
+
+    <!-- A -->
+    <div class="plan">
+      <div class="plan-l">
+        <span class="pl-idx">A</span>
+        <h3>仪表台 Console</h3>
+        <p class="pl-tag">把设置页当设备控制台：10px 切角、hairline 描边、等宽读数、分段 LED 状态条。光源统一来自左上。</p>
+        <svg class="wire" viewBox="0 0 300 170">
+          <rect x="1" y="1" width="298" height="168" fill="none" />
+          <rect x="8" y="10" width="62" height="150" fill="var(--surface-2)" stroke="var(--border)" />
+          <rect x="14" y="18" width="44" height="9" fill="var(--accent-soft)" />
+          <rect x="14" y="33" width="44" height="7" fill="var(--border)" /><rect x="14" y="45" width="44" height="7" fill="var(--border)" /><rect x="14" y="57" width="44" height="7" fill="var(--border)" /><rect x="14" y="69" width="44" height="7" fill="var(--border)" /><rect x="14" y="81" width="44" height="7" fill="var(--border)" />
+          <rect x="80" y="10" width="212" height="14" fill="var(--accent-soft)" />
+          <rect x="80" y="30" width="212" height="62" fill="none" stroke="var(--border)" />
+          <rect x="80" y="30" width="212" height="12" fill="var(--surface-2)" />
+          <rect x="88" y="48" width="52" height="8" fill="var(--border)" /><rect x="150" y="46" width="110" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="88" y="62" width="52" height="8" fill="var(--border)" /><rect x="150" y="60" width="110" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="80" y="98" width="212" height="46" fill="none" stroke="var(--border)" />
+          <rect x="80" y="98" width="212" height="12" fill="var(--surface-2)" />
+          <rect x="88" y="116" width="52" height="8" fill="var(--border)" /><rect x="150" y="114" width="110" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="80" y="150" width="212" height="10" fill="var(--surface-2)" />
+        </svg>
+        <ul>
+          <li>左侧 rail 常驻导航，右侧一次一个分区</li>
+          <li>字段仍是「标签 | 控件」两列，但说明独占一行、可以写长</li>
+          <li>风险项用左侧色条 + 「注意 ·」前缀，不再是灰掉一行</li>
+          <li>额外提供「Ash Thorp 原色」皮肤开关，1:1 看那套观感</li>
+        </ul>
+        <div class="pl-act">
+          <a class="u-btn primary" href="01-console-hud.html" target="_blank">打开实页 →</a>
+        </div>
+      </div>
+      <div class="pf-box">
+        <iframe src="01-console-hud.html?theme=ocean" title="方案 A 预览" loading="lazy"></iframe>
+        <a class="pf-open" href="01-console-hud.html" target="_blank">打开实页 ↗</a>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="plan">
+      <div class="plan-l">
+        <span class="pl-idx">B</span>
+        <h3>文档式 Editorial</h3>
+        <p class="pl-tag">把设置页当一篇可以填的文章：去掉大部分卡片和边框，靠留白、字号层级和细分隔线分层。说明就是正文。</p>
+        <svg class="wire" viewBox="0 0 300 170">
+          <rect x="1" y="1" width="298" height="168" fill="none" />
+          <rect x="8" y="10" width="284" height="12" fill="var(--surface-2)" />
+          <rect x="12" y="12" width="46" height="8" fill="var(--accent)" />
+          <rect x="66" y="12" width="40" height="8" fill="var(--border)" /><rect x="112" y="12" width="40" height="8" fill="var(--border)" />
+          <rect x="8" y="34" width="150" height="13" fill="var(--fg-dim)" opacity=".5" />
+          <rect x="8" y="53" width="200" height="7" fill="var(--border)" /><rect x="8" y="63" width="176" height="7" fill="var(--border)" />
+          <rect x="8" y="82" width="96" height="9" fill="var(--fg-muted)" opacity=".45" />
+          <rect x="8" y="97" width="150" height="13" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="8" y="118" width="212" height="7" fill="var(--border)" /><rect x="8" y="128" width="188" height="7" fill="var(--border)" />
+          <rect x="8" y="145" width="90" height="9" fill="var(--fg-muted)" opacity=".45" />
+          <rect x="8" y="160" width="150" height="6" fill="var(--border)" />
+          <rect x="240" y="34" width="52" height="7" fill="var(--border)" /><rect x="240" y="46" width="52" height="7" fill="var(--border)" /><rect x="240" y="58" width="52" height="7" fill="var(--border)" />
+        </svg>
+        <ul>
+          <li>顶部横向标签（分区少，一眼看全）+ 右侧本页小节锚点</li>
+          <li>字段改成「标签在上、控件在下」，说明能写两到三句</li>
+          <li>风险提示独立成浅色提示段，不再是行内小字</li>
+          <li>站点 / 规则改成手风琴，不再做左右两栏</li>
+        </ul>
+        <div class="pl-act">
+          <a class="u-btn primary" href="02-editorial-flow.html" target="_blank">打开实页 →</a>
+        </div>
+      </div>
+      <div class="pf-box">
+        <iframe src="02-editorial-flow.html?theme=ocean" title="方案 B 预览" loading="lazy"></iframe>
+        <a class="pf-open" href="02-editorial-flow.html" target="_blank">打开实页 ↗</a>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="plan">
+      <div class="plan-l">
+        <span class="pl-idx">C</span>
+        <h3>卡片总览 Hub &amp; Spoke</h3>
+        <p class="pl-tag">承认「设置有一百多项，但一次只想改一两项」：首页只放状态卡片 + 搜索，点进去才处理一个分区。</p>
+        <svg class="wire" viewBox="0 0 300 170">
+          <rect x="1" y="1" width="298" height="168" fill="none" />
+          <rect x="8" y="10" width="120" height="11" fill="var(--fg-dim)" opacity=".5" />
+          <rect x="240" y="10" width="52" height="11" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="8" y="30" width="284" height="22" fill="var(--warn-soft)" stroke="var(--warn-line)" />
+          <rect x="14" y="37" width="130" height="7" fill="var(--warn)" />
+          <rect x="8" y="60" width="90" height="46" fill="none" stroke="var(--border)" />
+          <rect x="14" y="67" width="18" height="18" fill="var(--accent-soft)" /><rect x="38" y="70" width="52" height="8" fill="var(--border)" /><rect x="14" y="90" width="78" height="7" fill="var(--border)" />
+          <rect x="104" y="60" width="90" height="46" fill="none" stroke="var(--border)" />
+          <rect x="110" y="67" width="18" height="18" fill="var(--accent-soft)" /><rect x="134" y="70" width="52" height="8" fill="var(--border)" /><rect x="110" y="90" width="78" height="7" fill="var(--border)" />
+          <rect x="200" y="60" width="92" height="46" fill="none" stroke="var(--border)" />
+          <rect x="206" y="67" width="18" height="18" fill="var(--accent-soft)" /><rect x="230" y="70" width="52" height="8" fill="var(--border)" /><rect x="206" y="90" width="78" height="7" fill="var(--border)" />
+          <rect x="8" y="114" width="90" height="46" fill="none" stroke="var(--border)" />
+          <rect x="14" y="121" width="18" height="18" fill="var(--accent-soft)" /><rect x="38" y="124" width="52" height="8" fill="var(--border)" /><rect x="14" y="144" width="78" height="7" fill="var(--border)" />
+          <rect x="104" y="114" width="90" height="46" fill="none" stroke="var(--border)" />
+          <rect x="110" y="121" width="18" height="18" fill="var(--accent-soft)" /><rect x="134" y="124" width="52" height="8" fill="var(--border)" /><rect x="110" y="144" width="78" height="7" fill="var(--border)" />
+        </svg>
+        <ul>
+          <li>首页每张卡回答三件事：这是什么、现在什么状态、要不要我处理</li>
+          <li>顶部「有 1 项建议你看一下」把风险规则主动推到面前</li>
+          <li>搜索框直接按配置项名跳转，不用记它在哪个分区</li>
+          <li>二级页有面包屑，一步退回总览</li>
+        </ul>
+        <div class="pl-act">
+          <a class="u-btn primary" href="03-hub-spoke.html" target="_blank">打开实页 →</a>
+        </div>
+      </div>
+      <div class="pf-box">
+        <iframe src="03-hub-spoke.html?theme=ocean" title="方案 C 预览" loading="lazy"></iframe>
+        <a class="pf-open" href="03-hub-spoke.html" target="_blank">打开实页 ↗</a>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div class="plan">
+      <div class="plan-l">
+        <span class="pl-idx">D</span>
+        <h3>双栏说明 Split Explain</h3>
+        <p class="pl-tag">把说明从控件底下搬出来，放进右侧常驻面板。行因此可以压到极紧凑，说明则能写到「默认值 / 什么时候才要改 / 容易和谁搞混」。</p>
+        <svg class="wire" viewBox="0 0 300 170">
+          <rect x="1" y="1" width="298" height="168" fill="none" />
+          <rect x="8" y="10" width="54" height="150" fill="var(--surface-2)" stroke="var(--border)" />
+          <rect x="14" y="18" width="42" height="7" fill="var(--accent-soft)" /><rect x="14" y="31" width="42" height="7" fill="var(--border)" /><rect x="14" y="42" width="42" height="7" fill="var(--border)" /><rect x="14" y="53" width="42" height="7" fill="var(--border)" /><rect x="14" y="64" width="42" height="7" fill="var(--border)" />
+          <rect x="70" y="18" width="44" height="8" fill="var(--border)" /><rect x="124" y="16" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="34" width="44" height="8" fill="var(--border)" /><rect x="124" y="32" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="50" width="44" height="8" fill="var(--border)" /><rect x="124" y="48" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="66" width="44" height="8" fill="var(--border)" /><rect x="124" y="64" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="82" width="44" height="8" fill="var(--border)" /><rect x="124" y="80" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="98" width="44" height="8" fill="var(--border)" /><rect x="124" y="96" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="114" width="44" height="8" fill="var(--border)" /><rect x="124" y="112" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="70" y="130" width="44" height="8" fill="var(--border)" /><rect x="124" y="128" width="66" height="12" fill="var(--bg-sunken)" stroke="var(--border)" />
+          <rect x="198" y="10" width="94" height="150" fill="var(--bg-card)" stroke="var(--border)" />
+          <rect x="206" y="20" width="60" height="11" fill="var(--fg-dim)" opacity=".5" />
+          <rect x="206" y="38" width="78" height="7" fill="var(--border)" /><rect x="206" y="49" width="70" height="7" fill="var(--border)" />
+          <rect x="206" y="64" width="36" height="6" fill="var(--fg-dim)" opacity=".6" /><rect x="206" y="76" width="78" height="7" fill="var(--border)" /><rect x="206" y="87" width="62" height="7" fill="var(--border)" />
+          <rect x="206" y="102" width="36" height="6" fill="var(--fg-dim)" opacity=".6" /><rect x="206" y="114" width="78" height="7" fill="var(--border)" /><rect x="206" y="125" width="66" height="7" fill="var(--border)" /><rect x="206" y="136" width="72" height="7" fill="var(--border)" />
+        </svg>
+        <ul>
+          <li>行只剩「标签 + 控件」，一屏能扫完几十项</li>
+          <li>右侧面板随点击 / 键盘 Tab 聚焦切换，说明可以写四段</li>
+          <li>专门有「容易和它搞混的」一栏，解决端口 / 主机这类混淆</li>
+          <li>窄屏自动收成每行一个「?」就地展开，不丢信息</li>
+        </ul>
+        <div class="pl-act">
+          <a class="u-btn primary" href="04-split-explain.html" target="_blank">打开实页 →</a>
+        </div>
+      </div>
+      <div class="pf-box">
+        <iframe src="04-split-explain.html?theme=ocean" title="方案 D 预览" loading="lazy"></iframe>
+        <a class="pf-open" href="04-split-explain.html" target="_blank">打开实页 ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 横向对比 ===================== -->
+  <section class="sec">
+    <div class="sec-hd"><h2>横向对比</h2><span class="sh-note">同一份内容，只比结构和代价</span></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>A · 仪表台 Console</th><th>B · 文档式 Editorial</th><th>C · 卡片总览 Hub</th><th>D · 双栏说明 Split</th><th><b>⑤ A+C+D 组合</b></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>导航模型</td><td><b>左侧 rail 常驻</b>，一次一个分区</td><td>顶部横向标签 + 右侧锚点</td><td><b>首页卡片 → 二级页</b> + 搜索</td><td>左侧 rail + 右侧说明栏</td><td>同 C：<b>首页卡片 → 二级页</b> + 搜索</td></tr>
+          <tr><td>字段排版</td><td>标签 | 控件（说明独占一行）</td><td><b>标签在上、控件在下</b></td><td>标签 | 控件（紧凑）</td><td><b>极紧凑行</b>，说明不在行内</td><td>同 A：标签 | 控件 + 行尾「?」</td></tr>
+          <tr><td>说明落点</td><td>控件下方小字</td><td><b>当正文写</b>，可写 2–3 句</td><td>控件下方小字</td><td><b>右侧常驻面板</b>，可写 4 段</td><td><b>就近浮窗</b>，内容同 D 那五段</td></tr>
+          <tr><td>视觉语言</td><td>切角 / hairline / LED</td><td>留白 / 字号层级</td><td>圆角卡片 + 状态点</td><td>极简行 + 面板</td><td>同 A：切角 / hairline / LED</td></tr>
+          <tr><td>风险提示</td><td>左侧色条 + 「注意 ·」</td><td><b>独立浅色提示段</b></td><td>首页「建议你看一下」主动推</td><td>说明栏「注意」区块</td><td>左侧色条（A）+ 首页主动推（C）+ 浮窗「注意」（D）</td></tr>
+          <tr><td>站点 / 规则</td><td>左右主从两栏</td><td><b>手风琴</b>（同页展开）</td><td>二级页 + 顶部小标签切换</td><td>规则卡「当…做…」两栏</td><td>同 C 的二级页小标签 + 「当…做…」两栏</td></tr>
+          <tr><td>一屏能看到多少项</td><td>中</td><td>少（约 6–8 项）</td><td>首页 0 项，二级页中</td><td><b>多（20+ 项）</b></td><td>首页 0 项，二级页中（说明按需弹）</td></tr>
+          <tr><td>适合谁</td><td>喜欢密度和「仪表感」的人</td><td>第一次配置、需要被解释的人</td><td>平时只改一两处的人</td><td>配置项多、又想看清说明的人</td><td>既要辨识度、又想说明能写长</td></tr>
+          <tr><td>改造代价</td><td>小（结构最接近现状）</td><td>中（分组要重排、文案要重写）</td><td><b>大</b>（多一层路由 + 首页状态聚合）</td><td>中（新增说明面板 + schema 补字段）</td><td><b>大</b>（C 的路由 + A 的样式重写 + 浮窗组件 + schema 补字段）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== 文案改写对照 ===================== -->
+  <section class="sec">
+    <div class="sec-hd"><h2>顺带：文案改写对照</h2><span class="sh-note">四套模板里已经全部用了右列的说法</span></div>
+    <p class="lede">
+      模板里的说明文字不是占位符，是<b>真的改写过的成品文案</b>。下面是从 <code style="font-family:var(--font-mono);font-size:12px">config/schema/groups.py</code>
+      和现有模板里挑出来的几条，左列是现在线上在用的说法。挑完版式之后，这批文案可以直接落到 schema 的 help / risk 字段上。
+    </p>
+    <div class="tbl-wrap">
+      <table class="copy-t">
+        <thead><tr><th style="width:34%">现在</th><th style="width:40%">改成</th><th>为什么</th></tr></thead>
+        <tbody>
+          <tr><td class="old"><em>qBittorrent 连接与主循环节奏</em></td><td>让 auto-qb 连上你的 qBittorrent，并决定它多久检查一次</td><td class="why">「主循环」是实现词，用户不知道那是什么</td></tr>
+          <tr><td class="old"><em>落盘轮转与格式</em></td><td>日志记在哪、留多久、记多细</td><td class="why">改成回答用户真正关心的三个问题</td></tr>
+          <tr><td class="old"><em>图形界面的监听与鉴权</em></td><td>这个浏览器界面怎么开、谁能访问</td><td class="why">用户不知道「监听」「鉴权」指的是自己眼前的界面</td></tr>
+          <tr><td class="old"><em>WARNING 及以上日志推送平台原生通知</em></td><td>出错或有风险操作时，用电脑的系统通知提醒你</td><td class="why">原来的说法要求读者先懂日志级别</td></tr>
+          <tr><td class="old"><em>主循环间隔</em></td><td>检查间隔</td><td class="why">说它做了什么，不说它叫什么</td></tr>
+          <tr><td class="old"><em>每轮最大任务数</em></td><td>每轮最多处理多少个任务</td><td class="why">补上「处理」这个动作，避免和别的数量搞混</td></tr>
+          <tr><td class="old"><em>轮转大小</em></td><td>单个日志文件上限</td><td class="why">「轮转」是行业黑话</td></tr>
+          <tr><td class="old"><em>保存并热重载</em></td><td>保存并应用</td><td class="why">用户不需要知道「热重载」这个机制</td></tr>
+          <tr><td class="old"><em>未配置条件 = 对所有匹配该规则的种子执行动作</em></td><td>没配条件 = 这条规则总是执行</td><td class="why">原文有歧义：无条件时不是「匹配才执行」，而是对所有种子都执行</td></tr>
+          <tr><td class="old"><em>（无说明）</em></td><td>端口：注意别和「界面与日志 → 端口」搞混，那是 auto-qb 自己的界面端口</td><td class="why">两个端口最容易填错，说明里必须点出来</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== Ash Thorp ===================== -->
+  <section class="sec">
+    <div class="sec-hd"><h2>关于 Ash Thorp</h2><span class="sh-note">你点名最喜欢的一套</span></div>
+    <p class="lede">
+      方案 A 里加了一个「皮肤 → Ash Thorp 原色」开关，切过去就是暖炭底 + 暖橙主光 + 10px 切角 + 分段 LED 那套观感的 1:1 落地版。
+      但要注意一件事：<b>现在的 WEB UI 有 5 套主题，其中 2 套是亮色</b>，如果直接把 Ash Thorp 的色值写死，亮色主题会立刻崩掉。
+    </p>
+    <p class="lede">
+      所以模板的做法是：<b>版式用 Ash Thorp 的形式语言（切角、hairline、等宽读数、方向光），颜色仍然走主题令牌</b>，
+      于是 5 套主题都能看。要不要把「暖炭 + 暖橙」真的做成第 6 套主题（<code style="font-family:var(--font-mono);font-size:12px">css/themes/ash.css</code> + theme.js 加一行），
+      是个可以独立于版式选择的决定 —— 你先挑版式，主题的事之后单独定。
+    </p>
+  </section>
+
+</div>
+
+<script>
+  var tp = document.getElementById('themePick');
+  tp.addEventListener('change', function () {
+    document.documentElement.dataset.theme = tp.value;
+    document.querySelectorAll('.pf-box iframe').forEach(function (f) {
+      f.src = f.src.split('?')[0] + '?theme=' + tp.value;
+    });
+  });
+</script>
+</body>
+</html>

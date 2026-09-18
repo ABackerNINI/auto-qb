@@ -1,0 +1,124 @@
+/* settings-page-templates · 挑选页与四套模板共用的「演示外壳」样式
+ *
+ * 只负责: 顶部演示条(方案名 / 主题切换 / 返回)、以及模板里反复出现的通用元件
+ * (开关 / 输入框 / 按钮 / 徽章)。**具体版式由各模板自己的 <style> 决定**, 这里不干预。
+ * 颜色一律走 theme-tokens.css 的令牌, 不写死色值 —— 这样切主题时模板跟着变。
+ */
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 400 14px/1.6 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-hi); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+
+/* ---- 顶部演示条(非设计内容, 仅用于挑选时切主题) ---- */
+.demo-bar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--glass);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  backdrop-filter: blur(10px);
+}
+.demo-bar .db-idx {
+  font: 600 12px/1 var(--font-mono);
+  padding: 4px 8px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-hi);
+}
+.demo-bar b { font-size: 13.5px; font-weight: 600; }
+.demo-bar .db-note { color: var(--fg-dim); }
+.demo-bar .db-spacer { flex: 1 1 auto; }
+.demo-bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); }
+.demo-bar select {
+  padding: 4px 8px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--fg);
+  border: 1px solid var(--border);
+}
+.demo-bar .db-back { color: var(--fg-muted); }
+.demo-bar .db-back:hover { color: var(--fg); }
+
+/* ---- 通用表单元件(四套模板共用, 尺寸一致便于横向比较) ---- */
+.u-input {
+  padding: 7px 10px;
+  background: var(--bg-sunken);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  min-width: 0;
+}
+.u-input::placeholder { color: var(--fg-dim); }
+.u-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.u-input.mono { font-family: var(--font-mono); }
+.u-select {
+  padding: 7px 26px 7px 10px;
+  background: var(--bg-sunken); color: var(--fg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fg-dim) 50%), linear-gradient(135deg, var(--fg-dim) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+
+/* 开关 */
+.u-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; }
+.u-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.u-switch .sw-track {
+  flex: none; width: 36px; height: 20px; border-radius: 999px;
+  background: var(--border-strong); position: relative; transition: background var(--dur) var(--ease);
+}
+.u-switch .sw-track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--fg); transition: transform var(--dur) var(--ease);
+}
+.u-switch input:checked + .sw-track { background: var(--accent); }
+.u-switch input:checked + .sw-track::after { transform: translateX(16px); background: #fff; }
+.u-switch input:focus-visible + .sw-track { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.u-switch .sw-text { color: var(--fg-muted); font-size: 12.5px; }
+.u-switch input:checked ~ .sw-text { color: var(--fg); }
+
+/* 按钮 */
+.u-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 15px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.u-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.u-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.u-btn.primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+.u-btn.ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+.u-btn.ghost:hover { background: var(--bg-hover); color: var(--fg); }
+.u-btn.sm { padding: 5px 10px; font-size: 12.5px; }
+.u-btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* 徽章 / 提示 */
+.u-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500;
+  background: var(--surface-2); color: var(--fg-muted);
+}
+.u-badge.on { background: var(--accent-soft); color: var(--accent-hi); }
+.u-badge.warn { background: var(--warn-soft); color: var(--warn); }
+.u-badge.risk { background: var(--error-soft); color: var(--error); }
+.u-mono { font-family: var(--font-mono); }
+.u-dim { color: var(--fg-dim); }
+.u-muted { color: var(--fg-muted); }
+.u-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* 图标(内嵌 svg, 走 currentColor) */
+.u-ico { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.u-ico.sm { width: 13px; height: 13px; }
+.u-ico.lg { width: 18px; height: 18px; }

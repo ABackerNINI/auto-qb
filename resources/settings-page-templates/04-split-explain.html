@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方案 D · 双栏说明 Split Explain — 设置页重构模板</title>
+<!-- 说明: 挑选用模板。核心差异: 说明文字不再挤在控件旁边, 而是放进右侧常驻的「说明栏」,
+     可以写默认值 / 什么时候要改 / 例子 / 容易搞混的相邻项, 直接解决「描述缺失、太短、太技术」。 -->
+<link rel="stylesheet" href="_shared/theme-tokens.css">
+<link rel="stylesheet" href="_shared/demo.css">
+<style>
+/* ==========================================================================
+   方案 D · 双栏说明 Split Explain
+   --------------------------------------------------------------------------
+   设计取向: 现在的问题不是「说明写不下」, 而是「说明只能挤在控件下面当小字」。
+   把说明挪到右侧常驻面板之后, 行本身可以做到极紧凑(一眼扫完几十项),
+   说明则能写到「它是什么 / 默认值是多少 / 什么时候才需要改 / 容易和谁搞混」这个程度。
+   面板跟随点击(也跟随键盘 Tab 聚焦), 窄屏时收成每行一个「?」按钮就地展开。
+   ========================================================================== */
+
+.shell { display: grid; grid-template-columns: 196px minmax(0, 1fr) 316px; align-items: start; }
+
+/* ---- 左: 分区导航 ---- */
+.rail { position: sticky; top: 41px; padding: 16px 10px calc(30px + 60px); border-right: 1px solid var(--border); background: var(--bg-card); min-height: calc(100vh - 41px); }
+.rail .ri {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 10px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--fg-muted); font-size: 13px; text-align: left; cursor: pointer;
+}
+.rail .ri:hover { background: var(--bg-hover); color: var(--fg); }
+.rail .ri.on { background: var(--accent-soft); color: var(--accent-hi); font-weight: 600; }
+.rail .ri .ri-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .ri .ri-n { font: 500 11px/1 var(--font-mono); color: var(--fg-dim); }
+
+/* ---- 中: 紧凑设置项 ---- */
+.stage { padding: 20px clamp(14px, 2.4vw, 30px) calc(30px + 60px); min-width: 0; }
+.sec { display: none; }
+.sec.on { display: block; animation: f .16s var(--ease-out); }
+@keyframes f { from { opacity: 0; } to { opacity: 1; } }
+.sec-hd { margin-bottom: 16px; }
+.sec-hd h1 { margin: 0; font: 600 20px/1.25 var(--font-display); }
+.sec-hd .sh-lede { margin: 5px 0 0; font-size: 13.3px; color: var(--fg-muted); max-width: 62ch; }
+
+.grp { margin-bottom: 18px; }
+.grp-hd { display: flex; align-items: center; gap: 8px; padding: 0 2px 7px; font: 600 12px/1 var(--font-display); letter-spacing: .02em; color: var(--fg-dim); }
+
+/* 行: 只有「标签 + 控件」, 说明在右边 —— 所以行可以压到很矮 */
+.row {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; cursor: pointer;
+}
+.row:hover { background: var(--surface-1); }
+.row.on { background: var(--accent-soft); border-color: var(--accent-line); }
+.row.risk .row-lb::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); margin-right: 6px; vertical-align: middle; }
+.row-lb { font-size: 12.8px; color: var(--fg-muted); display: flex; align-items: center; min-width: 0; }
+.row.on .row-lb { color: var(--fg); font-weight: 600; }
+.row-lb .lb-req { color: var(--error); margin-left: 2px; }
+.row-ct { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.row-ct .u-input { flex: 0 1 220px; }
+.row-ct .u-input.w-sm { flex: 0 0 84px; }
+.row-ct .u-input.w-lg { flex: 1 1 300px; }
+.row-ct .u-input, .row-ct .u-select { font-size: 12.5px; padding: 5px 9px; }
+.row-ct .u-select { padding-right: 24px; }
+.row-ask { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--fg-dim); font-size: 11px; line-height: 1; cursor: pointer; }
+.row-ask:hover { border-color: var(--accent); color: var(--accent-hi); }
+.row-note { display: none; }
+
+/* 站点 / 规则也走同一套(左列表换成小标签) */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+.pill { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--fg-muted); font-size: 12.5px; cursor: pointer; }
+.pill.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill .p-n { font: 500 10.5px/1 var(--font-mono); margin-left: 5px; opacity: .8; }
+
+.rule { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); margin-bottom: 8px; overflow: hidden; }
+.rule-hd { display: flex; align-items: center; gap: 9px; padding: 8px 11px; background: var(--surface-1); }
+.rule-hd .rh-n { font: 600 12.8px/1.3 var(--font-display); }
+.rule-hd .rh-s { font-size: 11.8px; color: var(--fg-dim); }
+.rule-hd .rh-r { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+.rule-flow { display: flex; gap: 9px; padding: 9px 11px; flex-wrap: wrap; }
+.flow-grp { flex: 1 1 230px; min-width: 0; }
+.flow-grp-hd { font: 600 11.5px/1 var(--font-display); color: var(--fg-dim); margin-bottom: 6px; }
+.step { display: flex; align-items: center; gap: 7px; padding: 5px 9px; margin-bottom: 4px; background: var(--bg-row); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.3px; }
+.step .st-n { font: 600 10.5px/1 var(--font-mono); color: var(--accent-hi); background: var(--accent-soft); padding: 2px 4px; border-radius: 3px; }
+.step.danger { border-color: var(--error-line); background: var(--error-soft); }
+
+.curve { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); padding: 11px; margin-bottom: 8px; }
+.curve svg { width: 100%; height: 116px; display: block; }
+.tiers { margin-top: 9px; display: flex; flex-direction: column; gap: 4px; }
+.tier { display: grid; grid-template-columns: 22px 1fr 1fr 28px; gap: 6px; align-items: center; }
+.tier .t-n { font: 600 10.5px/1 var(--font-mono); color: var(--fg-dim); text-align: right; }
+.tier .u-input { font-size: 12.3px; padding: 5px 8px; }
+
+/* ---- 右: 说明栏(本方案的签名) ---- */
+.explain { position: sticky; top: 41px; padding: 16px 14px calc(30px + 60px); border-left: 1px solid var(--border); background: var(--bg-card); min-height: calc(100vh - 41px); }
+.ex-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.ex-head h2 { margin: 0; font: 600 15px/1.35 var(--font-display); flex: 1; }
+.ex-head .ex-key { font: 500 10.5px/1.4 var(--font-mono); color: var(--fg-dim); display: block; margin-top: 3px; }
+.ex-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+.ex-sec { margin-bottom: 14px; }
+.ex-sec h3 { margin: 0 0 5px; font: 600 11px/1 var(--font-mono); letter-spacing: .06em; color: var(--fg-dim); }
+.ex-sec p { margin: 0; font-size: 13px; line-height: 1.72; color: var(--fg-muted); }
+.ex-sec ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.7; color: var(--fg-muted); }
+.ex-sec code { font-family: var(--font-mono); font-size: 11.8px; padding: 1px 5px; border-radius: 3px; background: var(--surface-2); color: var(--fg); }
+.ex-val { font: 500 12.5px/1.6 var(--font-mono); padding: 7px 10px; border-radius: var(--radius-sm); background: var(--bg-sunken); border: 1px solid var(--border); color: var(--fg); }
+.ex-risk { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); border-left: 2px solid var(--warn); font-size: 12.8px; line-height: 1.65; color: var(--fg); }
+.ex-risk b { color: var(--warn); }
+.ex-rel { display: flex; flex-direction: column; gap: 4px; }
+.ex-rel button { text-align: left; padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: transparent; color: var(--fg-muted); font-size: 12.3px; cursor: pointer; }
+.ex-rel button:hover { background: var(--bg-hover); color: var(--fg); }
+.ex-hint { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--hairline); font-size: 11.8px; color: var(--fg-dim); line-height: 1.6; }
+
+/* ---- 底部动作条 ---- */
+.actbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--glass); border-top: 1px solid var(--border); backdrop-filter: blur(10px); }
+.actbar .ab-st { font-size: 12.8px; color: var(--fg-muted); display: flex; align-items: center; gap: 8px; }
+.actbar .ab-r { margin-left: auto; display: flex; gap: 9px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
+
+/* 窄屏: 说明栏收起, 改成行内展开 */
+@media (max-width: 1080px) {
+  .shell { grid-template-columns: 168px minmax(0, 1fr); }
+  .explain { display: none; }
+  .row { grid-template-columns: 130px minmax(0, 1fr) auto; }
+  .row-note { display: block; grid-column: 1 / -1; font-size: 12.2px; line-height: 1.6; color: var(--fg-dim); padding-top: 2px; }
+  .row-note:empty { display: none; }
+}
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { position: static; display: flex; overflow-x: auto; min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; }
+  .rail .ri { flex: none; }
+  .row { grid-template-columns: 1fr; gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="db-idx">D</span>
+  <b>双栏说明 Split Explain</b>
+  <span class="db-note">左侧导航 · 中间极紧凑设置行 · 右侧常驻说明栏(点任意一行试试)</span>
+  <span class="db-spacer"></span>
+  <label>主题
+    <select id="themePick">
+      <option value="ocean">深海机房</option>
+      <option value="galaxy">暗夜星云</option>
+      <option value="frost">极地晨霜</option>
+      <option value="golden">麦秋</option>
+      <option value="orbit">品牌轨道</option>
+    </select>
+  </label>
+  <a class="db-back" href="index.html">← 返回挑选</a>
+</div>
+
+<div class="shell">
+  <nav class="rail" aria-label="设置分区">
+    <button class="ri on" data-sec="conn"><span class="ri-t">连接 qBittorrent</span></button>
+    <button class="ri" data-sec="auto"><span class="ri-t">自动化</span></button>
+    <button class="ri" data-sec="speed"><span class="ri-t">限速</span></button>
+    <button class="ri" data-sec="sites"><span class="ri-t">站点</span><span class="ri-n">3</span></button>
+    <button class="ri" data-sec="rules"><span class="ri-t">规则</span><span class="ri-n">2</span></button>
+    <button class="ri" data-sec="notify"><span class="ri-t">通知</span></button>
+    <button class="ri" data-sec="ui"><span class="ri-t">界面与日志</span></button>
+  </nav>
+
+  <main class="stage">
+
+    <!-- ============================ 连接 ============================ -->
+    <section class="sec on" id="sec-conn">
+      <div class="sec-hd">
+        <h1>连接 qBittorrent</h1>
+        <p class="sh-lede">auto-qb 通过 qB 的 Web UI 管理种子。点任意一行，右侧会说明这一项。</p>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">地址和登录</div>
+        <div class="row" data-key="qbittorrent.host">
+          <span class="row-lb">主机<span class="lb-req">*</span></span>
+          <span class="row-ct"><input class="u-input mono" value="127.0.0.1"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">装 qBittorrent 的那台机器。和 auto-qb 同一台电脑就填 127.0.0.1，在别的机器上就填那台机器的内网 IP，比如 192.168.1.20。</span>
+        </div>
+        <div class="row on" data-key="qbittorrent.port">
+          <span class="row-lb">端口<span class="lb-req">*</span></span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="8080"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">qB Web UI 监听的端口，默认是 8080。注意别和「界面与日志 → 端口」搞混，那是 auto-qb 自己的界面端口。</span>
+        </div>
+        <div class="row" data-key="qbittorrent.username">
+          <span class="row-lb">用户名</span>
+          <span class="row-ct"><input class="u-input" value="admin"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">qB Web UI 的登录用户名。qB 里没设就留空。</span>
+        </div>
+        <div class="row risk" data-key="qbittorrent.password">
+          <span class="row-lb">密码</span>
+          <span class="row-ct"><input class="u-input" type="password" value="secret-pass"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">qB Web UI 的登录密码。保存后会以明文写进配置文件。</span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">多久检查一次</div>
+        <div class="row" data-key="main_tick">
+          <span class="row-lb">检查间隔</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="2"><span class="u-dim">秒</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">每隔多久看一次所有种子的状态，并处理到期的任务。默认 2 秒，不能填 0。</span>
+        </div>
+        <div class="row" data-key="max_tasks_per_tick">
+          <span class="row-lb">每轮最多处理</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="20"><span class="u-dim">个</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">一轮里最多执行多少个自动化任务。太大单轮耗时长，界面反应会变钝。</span>
+        </div>
+        <div class="row" data-key="interval">
+          <span class="row-lb">内置任务间隔</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="60"><span class="u-dim">秒</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">清理、限速曲线这类周期性任务的间隔，从上一次结束开始算。</span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">运行状态存在哪</div>
+        <div class="row risk" data-key="data_dir">
+          <span class="row-lb">数据目录</span>
+          <span class="row-ct"><input class="u-input mono w-lg" value="auto-qb-data"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">运行状态、日志、跳检备份放在哪个目录。改了要重启 auto-qb 才生效。</span>
+        </div>
+        <div class="row" data-key="state_file">
+          <span class="row-lb">状态文件</span>
+          <span class="row-ct"><input class="u-input mono w-lg" placeholder="留空 = 数据目录/state.json"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">记录「上次做到哪了」，重启后接着上次的进度继续。</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 自动化 ============================ -->
+    <section class="sec" id="sec-auto">
+      <div class="sec-hd">
+        <h1>自动化</h1>
+        <p class="sh-lede">种子加入之后自动做什么。每一项都是可选的。</p>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">标签</div>
+        <div class="row" data-key="remove_similar_tags">
+          <span class="row-lb">清理相似标签</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">自动去掉只有大小写不同的重复标签，比如 HHan 和 hhan 只留一个。某个站点想例外可以到「站点」里单独关掉。</span>
+        </div>
+        <div class="row" data-key="skip_checking_tag">
+          <span class="row-lb">跳检标签</span>
+          <span class="row-ct"><input class="u-input mono" value="zSkipChecked"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">跳过哈希校验的种子会被打上这个标签。留空 = 不启用跳检。</span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">辅种分组</div>
+        <div class="row" data-key="grouping.enabled">
+          <span class="row-lb">启用分组</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">把原种和它的辅种看成一组，统一检查、统一暂停。</span>
+        </div>
+        <div class="row" data-key="grouping.check_missing_files">
+          <span class="row-lb">检查文件是否还在</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">核对组里的文件是否还在磁盘上，发现少了就整组暂停。</span>
+        </div>
+        <div class="row" data-key="grouping.missing_tag">
+          <span class="row-lb">缺文件标签</span>
+          <span class="row-ct"><input class="u-input mono" value="MISSING"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">发现缺文件时给组里每个种子加上这个标签。</span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">集数标签</div>
+        <div class="row" data-key="add_episode_tags.enabled">
+          <span class="row-lb">启用</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">从新种子的文件名里解析集数，自动打上 zE01 这样的标签。只对刚加入的种子生效。</span>
+        </div>
+        <div class="row" data-key="add_episode_tags.add_tag_single">
+          <span class="row-lb">单集模板</span>
+          <span class="row-ct"><input class="u-input mono" value="zE${episode_first}"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">${episode_first} 会替换成集数，例如 zE01。</span>
+        </div>
+        <div class="row" data-key="add_episode_tags.add_tag_multi">
+          <span class="row-lb">多集模板</span>
+          <span class="row-ct"><input class="u-input mono" value="zE${episode_first}-${episode_last}"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">分别是首集和末集，例如 zE01-12。</span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">清理标签</div>
+        <div class="row risk" data-key="delete_tags">
+          <span class="row-lb">彻底删除标签</span>
+          <span class="row-ct"><span class="u-badge">未配置</span><button class="u-btn sm">编辑…</button></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">把匹配的标签从所有种子上摘掉并注销。标签定义会一起删掉，依赖它的自动化跟着失效。</span>
+        </div>
+        <div class="row" data-key="delete_tags_if_has_no_torrents">
+          <span class="row-lb">删除无人使用的标签</span>
+          <span class="row-ct"><span class="u-badge">2 条</span><button class="u-btn sm">编辑…</button></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">只删已经没有种子在用的标签，可以放心配。</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 限速 ============================ -->
+    <section class="sec" id="sec-speed">
+      <div class="sec-hd">
+        <h1>限速</h1>
+        <p class="sh-lede">按累计流量自动调整 qB 的全局速度上限，防止超额。</p>
+      </div>
+
+      <div class="row" data-key="global_speed_limit_curve">
+        <span class="row-lb">全局限速曲线</span>
+        <span class="row-ct"><span class="u-badge on">已启用 · 1 条</span></span>
+        <button class="row-ask" tabindex="-1">?</button>
+        <span class="row-note">多条曲线同时命中时取最严的那条。某档限速填 0 = 该档不限速。</span>
+      </div>
+
+      <div class="curve">
+        <svg viewBox="0 0 640 116" preserveAspectRatio="none" aria-label="上传限速阶梯图">
+          <line x1="44" y1="10" x2="44" y2="92" stroke="var(--border)" />
+          <line x1="44" y1="92" x2="624" y2="92" stroke="var(--border)" />
+          <line x1="44" y1="51" x2="624" y2="51" stroke="var(--hairline)" />
+          <text x="38" y="14" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">8M</text>
+          <text x="38" y="55" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">2M</text>
+          <text x="38" y="96" text-anchor="end" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">0</text>
+          <path d="M44 16 H200 V54 H380 V92 H624" fill="none" stroke="var(--accent)" stroke-width="2" />
+          <rect x="44" y="16" width="156" height="76" fill="var(--accent-soft)" />
+          <rect x="200" y="54" width="180" height="38" fill="var(--accent-soft)" />
+          <text x="122" y="84" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">8 MiB/s</text>
+          <text x="290" y="84" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">2 MiB/s</text>
+          <text x="510" y="84" text-anchor="middle" fill="var(--fg-dim)" font-size="10" font-family="var(--font-mono)">不限速</text>
+          <text x="44" y="110" text-anchor="start" fill="var(--fg-dim)" font-size="10">0</text>
+          <text x="200" y="110" text-anchor="middle" fill="var(--fg-dim)" font-size="10">300 GiB</text>
+          <text x="380" y="110" text-anchor="middle" fill="var(--fg-dim)" font-size="10">500 GiB</text>
+          <text x="624" y="110" text-anchor="end" fill="var(--fg-dim)" font-size="10">∞</text>
+        </svg>
+        <div class="tiers">
+          <div class="tier"><span class="t-n">1</span><input class="u-input mono" value="300GiB"><input class="u-input mono" value="8MiB/s"><button class="u-btn ghost sm">✕</button></div>
+          <div class="tier"><span class="t-n">2</span><input class="u-input mono" value="500GiB"><input class="u-input mono" value="2MiB/s"><button class="u-btn ghost sm">✕</button></div>
+          <div class="tier"><span class="t-n">3</span><input class="u-input mono" value="800GiB"><input class="u-input mono" value="0"><button class="u-btn ghost sm">✕</button></div>
+        </div>
+      </div>
+      <p class="u-dim" style="font-size:12.2px;margin:0 0 12px">左边填「累计流量低于多少」，右边填「限速设为多少」。填 0 = 这一档不限速。</p>
+    </section>
+
+    <!-- ============================ 站点 ============================ -->
+    <section class="sec" id="sec-sites">
+      <div class="sec-hd">
+        <h1>站点</h1>
+        <p class="sh-lede">用 tracker 域名判断种子来自哪个站点，再套用这个站点的设置。</p>
+      </div>
+      <div class="pills">
+        <button class="pill on">HHan<span class="p-n">4</span></button>
+        <button class="pill">PTer<span class="p-n">3</span></button>
+        <button class="pill">M-Team<span class="p-n">2</span></button>
+        <button class="pill">＋</button>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">HHan</div>
+        <div class="row" data-key="trackers.HHan.host">
+          <span class="row-lb">站点域名</span>
+          <span class="row-ct"><input class="u-input mono w-lg" value="hhan.club"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">用 tracker 地址里的域名匹配，一行一个，子域名也算命中。</span>
+        </div>
+        <div class="row" data-key="trackers.HHan.tags">
+          <span class="row-lb">自动打的标签</span>
+          <span class="row-ct"><input class="u-input" value="HHan"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">命中这个站点的种子会自动带上这些标签。</span>
+        </div>
+        <div class="row" data-key="trackers.HHan.category">
+          <span class="row-lb">自动归到的分类</span>
+          <span class="row-ct"><input class="u-input" value="PT"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">qB 里的分类。留空表示不改分类。</span>
+        </div>
+        <div class="row" data-key="trackers.HHan.speed_limit">
+          <span class="row-lb">上传限速</span>
+          <span class="row-ct"><input class="u-input mono w-sm"><span class="u-dim">MiB/s</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">只对这个站点的种子生效。留空 = 不限速。</span>
+        </div>
+        <div class="row" data-key="trackers.HHan.rules_ref">
+          <span class="row-lb">要跑哪些规则</span>
+          <span class="row-ct"><input class="u-input mono w-lg" value="@default_rules"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">@规则集 跑整个规则集，@规则集.规则名 只跑一条。留空 = 不跑规则。</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 规则 ============================ -->
+    <section class="sec" id="sec-rules">
+      <div class="sec-hd">
+        <h1>规则</h1>
+        <p class="sh-lede">一条规则就是「当满足条件时执行动作」。条件全部满足才执行，动作按顺序执行。</p>
+      </div>
+      <div class="pills">
+        <button class="pill on">default_rules<span class="p-n">2</span></button>
+        <button class="pill">site_rules<span class="p-n">1</span></button>
+        <button class="pill">＋</button>
+      </div>
+
+      <div class="rule">
+        <div class="rule-hd"><span class="rh-n">做种满 7 天后删除</span><span class="rh-r"><span class="u-badge risk">含风险动作</span><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span></div>
+        <div class="rule-flow">
+          <div class="flow-grp"><div class="flow-grp-hd">条件 · 全部满足才执行</div><div class="step"><span class="st-n">1</span>做种时间 至少 7 天</div></div>
+          <div class="flow-grp"><div class="flow-grp-hd">动作 · 按顺序执行</div><div class="step danger"><span class="st-n">1</span>删除种子（同时删除文件）</div></div>
+        </div>
+      </div>
+
+      <div class="rule">
+        <div class="rule-hd"><span class="rh-n">上传率低就暂停</span><span class="rh-r"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span></label></span></div>
+        <div class="rule-flow">
+          <div class="flow-grp"><div class="flow-grp-hd">条件 · 全部满足才执行</div><div class="step"><span class="st-n">1</span>分享率 小于 0.5</div><div class="step"><span class="st-n">2</span>做种时间 至少 2 天</div></div>
+          <div class="flow-grp"><div class="flow-grp-hd">动作 · 按顺序执行</div><div class="step"><span class="st-n">1</span>暂停种子</div></div>
+        </div>
+      </div>
+      <button class="u-btn">＋ 新增规则</button>
+    </section>
+
+    <!-- ============================ 通知 ============================ -->
+    <section class="sec" id="sec-notify">
+      <div class="sec-hd">
+        <h1>通知</h1>
+        <p class="sh-lede">出错或者做了有风险的操作时，用电脑的系统通知提醒你。</p>
+      </div>
+      <div class="grp">
+        <div class="grp-hd">主动通知</div>
+        <div class="row" data-key="notify.enabled">
+          <span class="row-lb">启用通知</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">关掉之后消息只出现在界面里，不会再弹系统通知。</span>
+        </div>
+        <div class="row" data-key="notify.min_level">
+          <span class="row-lb">最低提醒级别</span>
+          <span class="row-ct"><select class="u-select"><option>WARNING — 只提醒异常和错误</option><option>ERROR — 只提醒错误</option><option>INFO — 什么都提醒</option></select></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">达到哪个严重程度才提醒你。默认 WARNING，日常信息不打扰。</span>
+        </div>
+        <div class="row" data-key="notify.quiet_hours">
+          <span class="row-lb">免打扰时段</span>
+          <span class="row-ct"><input class="u-input mono" value="23:00-08:00"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">这段时间里不弹通知，可以跨午夜。留空 = 全天都弹。</span>
+        </div>
+        <div class="row" data-key="notify.max_per_hour">
+          <span class="row-lb">每小时上限</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="20"><span class="u-dim">条</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">一小时内最多弹多少条，超出的直接丢掉。</span>
+        </div>
+        <div class="row" data-key="notify.dedup_window">
+          <span class="row-lb">重复合并窗口</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="10"><span class="u-dim">分钟</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">这段时间里内容相同的通知只弹第一条。填 0 = 不合并。</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 界面与日志 ============================ -->
+    <section class="sec" id="sec-ui">
+      <div class="sec-hd">
+        <h1>界面与日志</h1>
+        <p class="sh-lede">这个浏览器界面怎么开、谁能访问，以及日志记在哪、留多久。</p>
+      </div>
+      <div class="grp">
+        <div class="grp-hd">WEB 界面</div>
+        <div class="row" data-key="web.enabled">
+          <span class="row-lb">启用界面</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox" checked><span class="sw-track"></span><span class="sw-text">启用</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">关掉之后只能直接改配置文件。</span>
+        </div>
+        <div class="row risk" data-key="web.host">
+          <span class="row-lb">监听地址</span>
+          <span class="row-ct"><input class="u-input mono" value="127.0.0.1"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">保持 127.0.0.1 表示只有这台电脑能打开。改成 0.0.0.0 会暴露给局域网。</span>
+        </div>
+        <div class="row" data-key="web.port">
+          <span class="row-lb">端口</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="8080"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">auto-qb 自己界面的端口，和 qB 的 Web UI 端口是两回事。</span>
+        </div>
+        <div class="row" data-key="web.token">
+          <span class="row-lb">访问密钥</span>
+          <span class="row-ct"><input class="u-input" type="password" value="a7f3-9c21"></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">留空 = 第一次启动时随机生成，并打印在启动日志里。</span>
+        </div>
+        <div class="row" data-key="web.skip_local_verify">
+          <span class="row-lb">跳过本机验证</span>
+          <span class="row-ct"><label class="u-switch"><input type="checkbox"><span class="sw-track"></span><span class="sw-text">关闭</span></label></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">开着的话本机不用输密钥，别的机器访问仍然要。</span>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="grp-hd">日志</div>
+        <div class="row" data-key="log.level">
+          <span class="row-lb">日志等级</span>
+          <span class="row-ct"><select class="u-select"><option>INFO — 常规</option><option>DEBUG — 最详细</option><option>WARNING — 只记警告以上</option><option>ERROR — 只记错误</option></select></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">DEBUG 会把每一步都记下来，排查问题时再开。</span>
+        </div>
+        <div class="row" data-key="log.max_bytes">
+          <span class="row-lb">单个日志上限</span>
+          <span class="row-ct"><input class="u-input mono w-sm" value="10"><span class="u-dim">MiB</span></span>
+          <button class="row-ask" tabindex="-1">?</button>
+          <span class="row-note">写满就另起新文件，最多留 5 个旧文件。</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================ 右: 说明栏 ============================ -->
+  <aside class="explain" id="explain" aria-live="polite">
+    <div class="ex-head">
+      <h2 id="ex-t">端口<span class="ex-key" id="ex-k">qbittorrent.port</span></h2>
+    </div>
+    <div class="ex-tags" id="ex-tags">
+      <span class="u-badge on">必填</span><span class="u-badge">整数 1–65535</span>
+    </div>
+
+    <div class="ex-sec">
+      <h3>它是什么</h3>
+      <p>qBittorrent 的 Web UI 监听在哪个端口。auto-qb 就是从这个端口去读种子、改种子的。</p>
+    </div>
+
+    <div class="ex-sec">
+      <h3>默认值</h3>
+      <div class="ex-val">8080</div>
+    </div>
+
+    <div class="ex-sec">
+      <h3>什么时候需要改</h3>
+      <ul>
+        <li>你在 qB 里把 Web UI 端口改过（改过就以 qB 里显示的为准）。</li>
+        <li>一台机器上跑多个 qB 实例，端口被占用。</li>
+      </ul>
+    </div>
+
+    <div class="ex-sec">
+      <h3>容易和它搞混的</h3>
+      <div class="ex-rel">
+        <button>界面与日志 → 端口<br><span class="u-dim" style="font-size:11.5px">auto-qb 自己的界面端口，不是 qB 的</span></button>
+        <button>连接 → 主机<br><span class="u-dim" style="font-size:11.5px">端口填对了但主机写错，一样连不上</span></button>
+      </div>
+    </div>
+
+    <p class="ex-hint">说明栏跟随点击。键盘用 Tab 在左侧行之间移动时也会跟着变 —— 说明不再挤在控件下面当小字。</p>
+  </aside>
+</div>
+
+<div class="actbar">
+  <span class="ab-st"><span class="dot"></span>有 2 处改动还没保存</span>
+  <span class="ab-r">
+    <button class="u-btn ghost">放弃改动</button>
+    <button class="u-btn primary">保存并应用</button>
+  </span>
+</div>
+
+<script>
+  /* 说明栏内容: 真实实现里应由 schema 的 help / risk / default 拼出来;
+     这里只放三条示例, 用来演示「说明能写到什么程度」。 */
+  var EX = {
+    'qbittorrent.port': {
+      t: '端口', k: 'qbittorrent.port', tags: ['必填', '整数 1–65535'],
+      what: 'qBittorrent 的 Web UI 监听在哪个端口。auto-qb 就是从这个端口去读种子、改种子的。',
+      def: '8080',
+      when: ['你在 qB 里把 Web UI 端口改过（以 qB 里显示的为准）。', '一台机器上跑多个 qB 实例，端口被占用。'],
+      risk: '',
+      rel: [['界面与日志 → 端口', 'auto-qb 自己的界面端口，不是 qB 的'], ['连接 → 主机', '端口填对了但主机写错，一样连不上']]
+    },
+    'web.host': {
+      t: '监听地址', k: 'web.host', tags: ['字符串'],
+      what: 'auto-qb 的浏览器界面监听在哪个地址。决定「谁可以访问这个界面」。',
+      def: '127.0.0.1',
+      when: ['想从局域网里另一台设备（比如手机、NAS）打开这个界面。'],
+      risk: '改成 0.0.0.0 会暴露给局域网。这个界面能暂停和删除种子，局域网里任何设备都能操作。',
+      rel: [['界面与日志 → 访问密钥', '对外暴露时密钥是唯一防线'], ['界面与日志 → 跳过本机验证', '只对 127.0.0.1 生效，对外访问仍强制鉴权']]
+    },
+    'main_tick': {
+      t: '检查间隔', k: 'main_tick', tags: ['时间', '不能为 0'],
+      what: 'auto-qb 每隔多久把所有种子看一遍，并处理到期的任务。可以理解为「心跳」。',
+      def: '2 秒',
+      when: ['种子特别多、机器比较慢，感觉界面卡 —— 可以放宽到 5 秒。', '想让自动化更即时 —— 可以缩到 1 秒，但别填 0。'],
+      risk: '',
+      rel: [['每轮最多处理', '两者共同决定一轮的耗时'], ['内置任务间隔', '比心跳更慢的周期任务']]
+    }
+  };
+  var FALLBACK = {
+    t: '说明', k: '', tags: [],
+    what: '点左边任意一行，这里会显示这一项的完整说明：它是什么、默认值、什么时候才需要改，以及容易和谁搞混。',
+    def: '—', when: [], risk: '', rel: []
+  };
+
+  function render(d) {
+    var html = '';
+    html += '<div class="ex-sec"><h3>它是什么</h3><p>' + d.what + '</p></div>';
+    html += '<div class="ex-sec"><h3>默认值</h3><div class="ex-val">' + d.def + '</div></div>';
+    if (d.when && d.when.length) html += '<div class="ex-sec"><h3>什么时候需要改</h3><ul>' + d.when.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>';
+    if (d.risk) html += '<div class="ex-sec"><h3>注意</h3><div class="ex-risk"><b>风险 · </b>' + d.risk + '</div></div>';
+    if (d.rel && d.rel.length) html += '<div class="ex-sec"><h3>容易和它搞混的</h3><div class="ex-rel">' + d.rel.map(function (r) { return '<button>' + r[0] + '<br><span class="u-dim" style="font-size:11.5px">' + r[1] + '</span></button>'; }).join('') + '</div></div>';
+    var box = document.getElementById('explain');
+    var hint = box.querySelector('.ex-hint').outerHTML;
+    box.innerHTML = '<div class="ex-head"><h2 id="ex-t">' + d.t + '<span class="ex-key" id="ex-k">' + d.k + '</span></h2></div>' +
+      '<div class="ex-tags" id="ex-tags">' + (d.tags || []).map(function (x) { return '<span class="u-badge on">' + x + '</span>'; }).join('') + '</div>' + html + hint;
+  }
+
+  function pick(row) {
+    document.querySelectorAll('.row').forEach(function (r) { r.classList.remove('on'); });
+    row.classList.add('on');
+    render(EX[row.dataset.key] || FALLBACK);
+  }
+  document.querySelectorAll('.row').forEach(function (r) {
+    r.addEventListener('click', function (e) { if (e.target.closest('input,select,button:not(.row-ask)')) return; pick(r); });
+    r.addEventListener('focusin', function () { pick(r); });
+  });
+
+  document.querySelectorAll('.rail .ri').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.rail .ri').forEach(function (x) { x.classList.remove('on'); });
+      document.querySelectorAll('.sec').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      document.getElementById('sec-' + b.dataset.sec).classList.add('on');
+      window.scrollTo({ top: 0 });
+    });
+  });
+  document.querySelectorAll('.pills').forEach(function (box) {
+    box.querySelectorAll('.pill').forEach(function (b) {
+      b.addEventListener('click', function () { box.querySelectorAll('.pill').forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); });
+    });
+  });
+  var tp = document.getElementById('themePick');
+  tp.value = new URLSearchParams(location.search).get('theme') || 'ocean';
+  document.documentElement.dataset.theme = tp.value;
+  tp.addEventListener('change', function () { document.documentElement.dataset.theme = tp.value; });
+</script>
+</body>
+</html>
