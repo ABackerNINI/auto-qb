@@ -17,6 +17,11 @@
 - test_setup_notify_attaches_and_unsupported: 启用挂载到 auto_qb logger; 不支持平台抛 AutoQbError
 - test_setup_notify_force_hot_attach: 配置未启用时 force=True 热挂载(UI 开关), 不带 force 返回 None
 - test_notify_fatal_skips_when_disabled: notify_fatal 在无配置/未启用时不发送
+- test_notify_emit_exception_swallowed: emit 内部异常(如 getMessage 抛错)不外抛(handleError 兜底)
+- test_notify_close_twice_safe: close 幂等(重复调用/队列已空均不炸)
+- test_notify_fatal_channel_error_swallowed: notify_fatal 渠道构造异常 -> 静默(不外抛)
+- test_notify_legacy_shortcut_cleanup: legacy lnk 清理: 存在的旧快捷方式被删除(APPDATA 显式给定, 文件操作经 monkeypatch, 不动真实开始菜单)
+- test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知器命令(不启动真实进程), send 走失败分支返回 False
 """
 import base64
 import logging
@@ -355,19 +360,29 @@ def test_notify_fatal_channel_error_swallowed(monkeypatch):
     notify_fatal("消息", NotifyConfig(enabled=True))
 
 
-def test_notify_legacy_shortcut_cleanup():
-    """legacy lnk 清理: 存在的旧快捷方式被删除(文件操作经 monkeypatch, 不动真实开始菜单)"""
+def test_notify_legacy_shortcut_cleanup(monkeypatch):
+    """legacy lnk 清理: 存在的旧快捷方式被删除(文件操作经 monkeypatch, 不动真实开始菜单)
+
+    APPDATA 必须**显式给定**: `_legacy_shortcut_paths()` 在 APPDATA 缺失时直接返回 `[]` ——
+    不设的话路径清单为空、`os.path.exists` 根本不会被问到, `removed` 恒空、断言必失败。
+    这是**环境依赖**(某些 CI/沙箱不设 APPDATA), 不是逻辑错误; 显式 setenv 后该用例也顺带
+    真正覆盖了 `_legacy_shortcut_paths` 的路径拼接分支(此前在无 APPDATA 环境下等于空跑)。
+    """
     removed = []
-    monkey_removed = []
-    monkeypatch = None  # 占位(实际用闭包 monkeypatch 不便, 直接改函数引用)
-    orig_exists = notify_mod.os.path.exists
-    orig_remove = notify_mod.os.remove
-    notify_mod.os.path.exists = lambda p: "AutoQB.lnk" in str(p) or "AutoQB.UI.lnk" in str(p)
-    notify_mod.os.remove = lambda p: removed.append(p)
-    try:
-        channel = PlatformChannel("win32")
-    finally:
-        notify_mod.os.path.exists = orig_exists
-        notify_mod.os.remove = orig_remove
+    monkeypatch.setenv("APPDATA", r"C:\Users\tester\AppData\Roaming")
+    monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: "AutoQB.lnk" in str(p) or "AutoQB.UI.lnk" in str(p))
+    monkeypatch.setattr(notify_mod.os, "remove", lambda p: removed.append(p))
+    channel = PlatformChannel("win32")
     assert any("AutoQB.lnk" in p for p in removed), removed
     assert channel._appid == notify_mod.WINDOWS_TOAST_APPID
+
+
+def test_notify_real_send_blocked_under_pytest():
+    """conftest 会话夹具: 测试期通知器命令被拦截(不启动真实进程), send 走失败分支返回 False
+
+    回归点: 此前测试里写 PlatformChannel("linux") 只是"换了个后端", **并不阻止真实执行**
+    notify-send —— 在装了通知器的机器(Linux 开发机/CI)上跑测试会真的弹出系统通知。
+    """
+    with pytest.raises(OSError):
+        notify_mod.subprocess.run(["notify-send", "-a", "auto-qb", "标题", "正文"])
+    assert PlatformChannel("linux").send("标题", "正文") is False

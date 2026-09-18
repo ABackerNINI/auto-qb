@@ -10,7 +10,7 @@
 - test_main_export_torrents_info_connect_failure: --export-torrents_info 连接失败 -> 不导出返回 1
 - test_main_config_error_clean_exit: ConfigError 提前捕获, stderr 无堆栈, 返回 1
 - test_main_lock_error_clean_exit: SingleInstanceLockError(构造期锁竞争)干净退出返回 1, 无堆栈无"配置错误"前缀
-- test_main_qb_compat_error_clean_exit: QbCompatError(run 期 qB 版本不兼容)穿透 run 后干净退出返回 1, 无堆栈
+- test_main_qb_compat_error_clean_exit: QbCompatError(run 期 qB 版本不兼容)穿透 run 后干净退出返回 1, 无堆栈; 补发通知走 notify_fatal(测试内 mock —— MagicMock 的 config.notify 恒真, 不 mock 会真的发系统通知)
 - test_main_unrelated_value_error_not_swallowed: 非 AutoQbError 的 ValueError(程序 bug)不被误捕, 照常抛出
 - test_main_tray_mutex_with_export: --tray 与 --export-yaml 互斥 -> 退出码 2
 - test_main_tray_mode_calls_run_tray: --tray 模式交由 ui.run_tray 托管
@@ -155,12 +155,15 @@ def test_main_lock_error_clean_exit(capsys):
 
 
 def test_main_qb_compat_error_clean_exit(capsys):
-    """QbCompatError(run 期 qB 字段不兼容, AutoQbError 但非 ConfigError): 穿透 run 后干净退出返回 1, 无堆栈"""
+    """QbCompatError(run 期 qB 字段不兼容, AutoQbError 但非 ConfigError): 穿透 run 后干净退出返回 1, 无堆栈;
+    致命退出补发通知走 notify_fatal —— 必须 mock: manager 是 MagicMock, `manager.config.notify` 恒真,
+    notify_fatal 的 `not config or not config.enabled` 守卫会放行 -> 真的构造 PlatformChannel 发系统通知"""
     from auto_qb.torrents import QbCompatError
     manager = mock.MagicMock()
     manager.run.side_effect = QbCompatError("qBittorrent torrent info 缺少字段: ['foo']; 请检查版本兼容性")
     with _patch_argv("auto-qb", "config.yml"), \
-            mock.patch("auto_qb.cli.QbManager", return_value=manager):
+            mock.patch("auto_qb.cli.QbManager", return_value=manager), \
+            mock.patch("auto_qb.cli.notify_fatal") as m_notify:
         from auto_qb.cli import main
         ret = main()
     assert ret == 1
@@ -168,6 +171,8 @@ def test_main_qb_compat_error_clean_exit(capsys):
     assert "缺少字段" in err
     assert "配置错误" not in err
     assert "Traceback" not in err
+    assert m_notify.call_args[0][0] == "qBittorrent torrent info 缺少字段: ['foo']; 请检查版本兼容性", \
+        "致命退出应把消息补发给 notify_fatal"
 
 
 def test_main_unrelated_value_error_not_swallowed():

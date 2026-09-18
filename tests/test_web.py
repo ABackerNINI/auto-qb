@@ -1411,14 +1411,19 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     assert get(norm(root / ".." / "outside")).status_code == 403
     assert get(norm(root / "nope")).status_code == 404
     assert get(norm(root / "b.txt")).status_code == 404  # 目标存在但是文件 -> 不是目录
-    # ⑤ 符号链接逃逸: 指向根外的子目录不进列表(Windows 无权限建链 -> 跳过该断言)
+    # ⑤ 符号链接逃逸: 指向根外的子目录不进列表
+    #    跳过条件有两种: (a) 环境不允许建链(Windows 未开开发者模式 -> OSError);
+    #    (b) **建了但落成真实目录** —— 部分沙箱/文件系统重定向层会让 os.symlink "成功"却
+    #    islink=False(实测 mode=0o40777), 此时根本不存在"逃逸链接", 断言无意义。
+    #    这两种都是环境能力缺失, 不是代码缺陷 —— 真机上能建真链接时照常断言。
     link = root / "escape"
     try:
         os.symlink(outside, link, target_is_directory=True)
     except (OSError, NotImplementedError, AttributeError):
         pass
     else:
-        assert "escape" not in [d["name"] for d in get(norm(root)).json()["dirs"]]
+        if os.path.islink(link):
+            assert "escape" not in [d["name"] for d in get(norm(root)).json()["dirs"]]
     # ⑥ 无白名单(还没有任何已知保存路径) -> 空返回而非报错
     mgr.store.by_hash = {}
     assert get().json() == {"path": "", "parent": "", "roots": [], "dirs": []}

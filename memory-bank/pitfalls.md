@@ -433,3 +433,58 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
    才能肉眼分辨 `--fg-muted` 与 `--fg-dim` 这种一档灰差。
 5. **对照出图**: 改动前后各跑一轮(文件名带 `before`/`after`), 逐张比对; 关注 `暂停` 行是否还"发白"、进度/状态两列文字是否
    随状态变色、以及**亮色主题**(frost/golden)下中性描边是否够可见 —— 亮色主题是这类"无色相"改动最容易翻车的一侧。
+
+### 测试真的会弹系统通知: MagicMock 配置绕过 notify_fatal 守卫 + "换后端 ≠ 不发" (2026-09-18 实测)
+
+**现象**: 跑 `uv run pytest tests` 时弹出系统通知框(本机实测标题 `auto-qb 已停止`)。
+
+**主犯**: `test_cli.py::test_main_qb_compat_error_clean_exit` 把 `manager` 设成 `mock.MagicMock()`, 于是
+`cli.py` 致命退出路径的 `notify_fatal(msg, manager.config.notify)` 拿到的是**恒真的 MagicMock** ——
+`notify_fatal` 的守卫 `if not config or not config.enabled` **放行**, 真的构造 `PlatformChannel()` 并
+`send("auto-qb 已停止", ..., urgent=True)` ⇒ **真发一条 Windows toast**。修法: 该测试 mock 掉
+`auto_qb.cli.notify_fatal` 并断言调用(顺带把"致命退出要补发通知"这条也测了)。
+**通用教训**: 给被测代码传 `MagicMock` 当配置对象时, **任何 `if not cfg.xxx` 形式的守卫都会放行** ——
+凡是守卫后面接着"真实系统副作用"的路径, 测试里必须显式 mock 那个副作用入口。
+
+**从犯**: 测试里写 `PlatformChannel("linux")`(`test_ui.py::test_notify_handler_enabled_toggle`、
+`test_notify.py::test_notify_emit_exception_swallowed` / `test_notify_close_twice_safe`)只是**换了个后端**,
+`NotifyHandler` 的后台 daemon 线程照样真实执行 `notify-send` —— 在**装了通知器的机器**(Linux 开发机 /
+带 libnotify 的 CI)上就是真的弹通知。
+
+**处置**: `tests/conftest.py` 会话级夹具把通知器命令名(`notify-send`/`osascript`/`powershell`/`pwsh`)拦在
+`subprocess.run` 之前(抛 `OSError`, 等价于"机器上没装通知器")。要点三条:
+① **只拦命令名**, 不拦 `_build_*` 的命令**构造**(结构断言照常)与 `node --check` 等非通知器子进程;
+② 需要真实 `subprocess.run` 的用例(如 `test_notify_channel_send_failure`)自行 monkeypatch 即可自然覆盖夹具;
+③ 夹具让 `send()` 走"发送失败"分支(返回 False, 只记 DEBUG), **调用方语义不变**。
+
+**排查方法论坑(差点误判成"没问题")**: 诊断插件的输出**不能写 `sys.stderr`** —— pytest 会按用例捕获 stdout/stderr,
+**通过的用例直接丢弃**, 于是"真实发送"的横幅全被吞掉, 统计出来是 0(假阴性)。必须写**文件**。
+另一个同源坑: 日志/输出里的中文会被写坏, **统计一律用 ASCII 标记**(本次先按中文串 grep 得到 0, 改用 `CMD:`/`REAL SEND` 才看到真相)。
+正确姿势: 探针挂 `subprocess.Popen.__init__` + `PlatformChannel.send` + `NotifyHandler.emit`, 三者都往同一个**文件**追加,
+并用 `-p <plugin>` 注入。
+
+**教训**: 想"测试里不产生系统副作用", 不能靠"换一个后端/换一个平台"绕过 —— 要么拦在**真实执行点**, 要么让被测代码
+**可注入**(本项目 `NotifyHandler` 已支持传任意 channel)。同理适用于 `_register_appid_registry`(真写注册表 +
+清理开始菜单 `.lnk`)与 `autostart`(真写 HKCU Run) —— 这些已有逐用例的 monkeypatch, 新增测试务必照做。
+
+### 环境能力缺失 ≠ 代码缺陷: APPDATA 未设 / 沙箱把 symlink 落成真目录 (2026-09-18 实测)
+
+全量测试在本机(沙箱化 shell)曾有 **2 个稳定失败**, 排查后都是**环境能力**差异, 不是代码错 —— 记录判据与修法:
+
+1. **`test_notify.py::test_notify_legacy_shortcut_cleanup`**: 该用例 monkeypatch 了 `os.path.exists` / `os.remove`
+   来"删旧 `.lnk`", 但 `PlatformChannel._legacy_shortcut_paths()` 在 **`APPDATA` 未设时直接返回 `[]`** ⇒
+   路径清单为空、`os.path.exists` 根本不会被问到 ⇒ `removed` 恒空、断言必失败。
+   修法: 用例显式 `monkeypatch.setenv("APPDATA", ...)`, 顺带真正覆盖了路径拼接分支(此前在无 APPDATA 环境等于空跑)。
+2. **`test_web.py::test_api_fs_dirs_endpoint`** 第 ⑤ 条"符号链接逃逸"断言: 本机
+   `os.symlink(dir, link, target_is_directory=True)` **返回成功但落成真实目录**(实测 `islink=False`,
+   `lstat mode=0o40777`) ⇒ `realpath` 仍在根内 ⇒ 逃逸链接被**正常列出** ⇒ 断言失败。
+   **生产代码没问题**(`_within_roots` 走 `normcase(realpath())`, 真链接会被挡掉), 是**沙箱/文件系统重定向层**
+   表达不了"逃逸链接"这个场景。修法: 建链后补一道 `os.path.islink(link)` 判定, 不是真链接就跳过该断言
+   (与用例原有的"Windows 无权限建链 -> 跳过"同一口径; 真机上能建真链接时照常断言, 覆盖率不减)。
+
+**通用教训**: 断言"环境相关能力"的测试必须**显式给定前提**(setenv / 明确的跳过条件), 不能依赖宿主环境。
+判据: 该用例 **单跑通过、全量失败**, 或 **本机失败但从逻辑上看不出问题** ⇒ 先怀疑环境能力(环境变量、
+符号链接权限、注册表 / 文件系统重定向), 再怀疑代码。**排除环境之前不要动 `src/`**。
+
+**顺带修的一处噪声**: `.gitignore` 原本只忽略 `.coverage`(**精确名**, 不带通配), 而覆盖率并行数据文件名是
+`.coverage.<host>.<pid>.<随机>` ⇒ 会漏进 `git status` 变成未跟踪噪声(易被误当"该提交的东西")。已补 `.coverage.*`。
