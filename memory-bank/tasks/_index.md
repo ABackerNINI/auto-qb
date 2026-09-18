@@ -7,7 +7,7 @@
 
 ## In Progress
 
-- [TASK015] WEB UI 错误种子显示具体原因 - 状态列由笼统「错误」改为具体原因(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文); 后端 `refresh_error_reasons` 主循环 TTL(300s)+预算(5/轮)预取 + 显式置脏, 视图透出 `error_reason`, 前端 `stateText` 双 UI 生效; 1006 passed, 假 qB 服务浏览器冒烟实测; **未提交** (剩用户真机走查)
+- [TASK015] WEB UI 错误种子显示具体原因 - 状态列由笼统「错误」改为具体原因(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文); 后端 `refresh_error_reasons` 主循环 TTL(300s)+预算(5/轮)预取 + 显式置脏, 视图透出 `error_reason`, 前端 `stateText` 双 UI 生效; 1006 passed, 假 qB 服务浏览器冒烟实测; **已入库 `9723a76`** (剩用户真机走查)
 - [TASK014] UI 组件库 20 式 - 按设计哲学风格库 5 流派 × 20 preset 各出一套自包含组件库单页 + 挑选索引 + 目录 README (`resources/ui-component-libraries/modelscope.dsv4.1flash/`); 四轮自检 + 7 项缺陷修复; 996 passed; 已提交 `fae019a` (剩用户挑选与按需迭代)
 - [TASK013] WEB UI 第十一轮修复 (7 项) - 图标着色(导航/状态栏) + 历史去文字 + 明细表点击排序 + 辅种表加保存路径/明细表删列 + 两个横向滚动条根因(表头撑页 / `.detail` 自成滚动 / 单元格 min-width) + 标签分类芯片改状态色; 999 passed, 双 UI 冒烟逐项实测; **已入库 `4a027ef`**
 - [TASK012] WEB UI 第十轮修复 (16 项 R10-01~R10-16) - 状态栏三项硬 bug(限速取数单点/星图双窗/免鉴权放行) + 列对齐进列模型 + 列偏好不重置 + 服务端目录浏览与 open-path 定位选中 + 弹窗尺寸令牌族; 999 passed, 双 UI 浏览器冒烟逐项实测通过; **已入库 `cb57bef`** (含真机走查 r1 反馈两处)

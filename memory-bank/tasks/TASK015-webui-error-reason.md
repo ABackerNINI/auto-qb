@@ -1,6 +1,6 @@
 # TASK015 — WEB UI 错误种子显示具体原因 (状态列 `error_reason`)
 
-**Status:** In Progress (代码/测试/文档已完, **未提交**; 剩用户真机走查反馈)
+**Status:** In Progress (代码/测试/文档已完, **已入库 `9723a76`**; 剩用户真机走查反馈)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** (无 —— 单点特性, 未产出计划文档)
@@ -101,3 +101,7 @@
 - 2026-09-18: 全量测试 `uv run pytest tests -q` → **1006 passed**(基线 1001 + 5 项新测试), 覆盖率 92%。
 - 2026-09-18: 文档收尾(本档案 + `tasks/_index.md` + `activeContext.md` + `testing.md` 基线单点 +
   `pitfalls.md` 三条新坑 + `modules.md` 前端契约 + 根 `README.md` 行为描述)。
+- 2026-09-18: 用户下令提交 → `9723a76` (20 文件 +449/-21, 含文档回写; 无红线文件入库)。提交后按本 worktree
+  的已知坑核对分支 ref(见 `.workbuddy-ai/memory/2026-09-18.md`), 并用 `fix-branch-ref.sh <sha>` 修正。
+- 2026-09-18: 同日后继提交 `3559685` 修复 `progress.md` 的 GBK 乱码条目 + 4 处失效 docs 链接;
+  `4e84faa` 把该乱码的检测/恢复手法补进 `pitfalls.md`。
