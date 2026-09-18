@@ -478,3 +478,11 @@ config:
             rules:
               - '@add_drive_letter_tag_rules'
               - '@skip_checking_rules'
+        HDHome:
+            domains:
+              - t.hdhome.org
+            tags:
+              - HDHome
+            groups: []
+            rules:
+              - '@add_drive_letter_tag_rules'
