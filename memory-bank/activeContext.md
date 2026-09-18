@@ -8,6 +8,7 @@
 
 ## 正在进行
 
+- **WEB UI 视图重建范围收口 · 种子速度刷新滞后修复 (2026-09-18, 未提交)**: 用户报"WEBUI 种子速度更新慢但状态栏正常"。**真因**: 后端两条视图重建路径**范围不一致** —— 主循环 `_tick` 只重建 `_group_view` 却清掉共享的 `_group_view_dirty` ⇒ 会重建 singles/shows/flat 的 Web 线程兜底(`ensure_group_view`)永不触发, 而 `_group_view_ver` 照常自增 ⇒ 前端判 `updated=true` 把**陈旧数组整表换上去**; 状态栏"速度合计" = `Σ groups[].dlspeed` 恰是唯一在重建的那份 ⇒ 显正常。**同源第二坑**: 置脏写在 `if grouping.enabled` 块内而 consume 在块外 ⇒ 分组关闭时标记被吞。**已改**: 新增 `WebviewMixin.rebuild_views()` 作**唯一重建入口**(四视图 + 版本号 + 清标记一次完成, 两条路径都只调它); 置脏移出门控; 前端取消 `idlePolls` 退避(只留失败退避)并把 `server_state` 并入 `/api/state.status.server`(状态栏与行数据同源同轮, 每轮仍 1 请求)。**测试**: 改写 2 条固化缺陷的用例(`test_tick_rebuilds_group_view_only_when_changed` → `test_tick_rebuilds_all_views_when_changed`; `test_tick_skips_group_view_when_grouping_disabled` → `test_tick_rebuilds_views_when_grouping_disabled`) + 新增 3 条, 均**已红绿验证**(旧代码上必失败); **1021 passed / 0 failed**(基线 1018)。剩用户真机走查 → 档案 [tasks/TASK017](tasks/TASK017-webui-view-rebuild-scope.md)
 - **测试期禁止真实系统通知 (2026-09-18, 已入库 `7ae21a1`)**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` ——
   `manager` 是 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到**恒真配置**, 守卫 `if not config or
   not config.enabled` 放行 ⇒ 真的发一条 Windows toast(探针实测抓到: `auto-qb 已停止`)。已 mock 掉

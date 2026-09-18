@@ -61,6 +61,7 @@
 - test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
 - test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
+- test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
@@ -71,6 +72,8 @@
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
 - test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
+- test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
+- test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
@@ -2975,6 +2978,85 @@ def test_seed_flat_view_fields_and_gating():
         # 同版本: torrents 与 groups/singles/shows 同门控不回传
         again = mgr.ensure_group_state(rid=state["rid"])
         assert "torrents" not in again and "groups" not in again and "singles" not in again
+
+
+def test_flat_view_refreshed_by_main_loop_tick():
+    """种子页速度随主循环刷新(2026-09-18 缺陷回归: 平铺视图曾被"饿死")
+
+    症状: 状态栏"速度合计"正常(它取 groups 求和, 由主循环每 tick 重建), 而种子页行内
+    速度长时间不变。真因: 主循环只重建 `_group_view` 就把**共享**脏标记清掉 ⇒ Web 线程
+    的兜底重建永不触发 ⇒ 平铺视图(flat)永远停在旧快照, 而版本号照常自增 ⇒ 前端判
+    `updated=true` 把**陈旧数组整表换上去**。
+
+    本用例钉住端到端事实: 主循环 tick 之后, Web 请求拿到的 torrents 必须是**新**速度。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="downloading", dlspeed=100, progress=0.5)
+        client.torrents["H2"] = FakeTorrent(hash="H2", name="T2", state="downloading", dlspeed=200, progress=0.5)
+        mgr.config.grouping.enabled = True
+        mgr.touch_web_client()  # Web 活跃(否则主循环跳过组装)
+        mgr._tick(dry_run=False)
+        first = mgr.ensure_group_state(rid=None)
+        assert sorted(t["dlspeed"] for t in first["torrents"]) == [100, 200], "首轮应建出平铺视图"
+
+        client.torrents["H1"].dlspeed = 999
+        client.torrents["H2"].dlspeed = 888
+        mgr.touch_web_client()
+        mgr._tick(dry_run=False)  # 速度变化 -> 置脏 -> 主循环重建
+        second = mgr.ensure_group_state(rid=first["rid"])
+        assert second["updated"] is True, "视图版本号应随速度变化自增"
+        got = {t["hash"]: t["dlspeed"] for t in second["torrents"]}
+        assert got == {"H1": 999, "H2": 888}, f"种子页速度应随主循环刷新(修前恒为旧快照): {got}"
+        # 未归组单种子视图(第二个受害者)同样要跟上
+        assert {t["hash"]: t["dlspeed"] for t in second["singles"]} == got
+
+
+def test_rebuild_views_single_entry_point():
+    """rebuild_views 是**唯一**重建入口: 四份视图 + 版本号 + 脏标记一次完成
+
+    在调用点各建一部分必然漏建(历史漏了 flat/singles/shows)—— 新增视图只能挂在这里。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        seed_store(mgr, [FakeTorrent(hash="H1", name="T1", dlspeed=1), FakeTorrent(hash="H2", name="T2", dlspeed=2)])
+        mgr._group_view_dirty = True
+        ver = mgr._group_view_ver
+        mgr.rebuild_views()
+        assert mgr._group_view_dirty is False, "重建后脏标记复位"
+        assert mgr._group_view_ver == ver + 1, "版本号自增"
+        assert sorted(t["dlspeed"] for t in mgr._flat_view) == [1, 2], "平铺视图同次重建"
+        assert sorted(t["dlspeed"] for t in mgr._singles_view) == [1, 2], "单种子视图同次重建"
+        assert mgr._shows_view["unrecognized"] == ["H1", "H2"], "追剧视图同次重建(T1/T2 无集数标记)"
+        # 幂等: 标记已清 -> 不重复重建(惰性语义不被破坏)
+        mgr.ensure_group_view()
+        assert mgr._group_view_ver == ver + 1
+
+
+def test_api_state_status_carries_server_state(web_env):
+    """/api/state 的 status **恒**回传 server_state(不受 rid 门控)
+
+    状态栏常显统计与"限制速度"取它。以前前端要为此单独再打一次 /api/stats —— 两条链路
+    刷新频率不同 ⇒ 出现"状态栏速度正常、种子行速度滞后"的错位观测。合并后每轮只剩
+    1 条请求, 且两者**同源同轮**。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    body = client.get("/api/state", headers=auth).json()
+    assert "server" in body["status"], "status 须带 server_state(恒回传)"
+    assert body["status"]["server"] is None, "未同步时为 null(前端显示未同步文案)"
+
+    mgr.store.server_state = {"dl_info_speed": 1234}
+    same = client.get(f"/api/state?rid={body['rid']}", headers=auth).json()
+    assert "groups" not in same, "版本一致时不回传 groups(响应体趋近于零)"
+    assert same["status"]["server"] == {"dl_info_speed": 1234}, "但 server_state 恒回传"
 
 
 def test_api_torrent_detail_endpoint(web_env):

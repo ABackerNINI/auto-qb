@@ -191,6 +191,12 @@ def create_app(manager) -> FastAPI:
                     # 限速/流量快照: 恒回传(不受 rid 门控) —— 数据源是限速曲线任务而非分组视图,
                     # 若参与版本门控会与 groups 的脏语义耦合, 反而可能长时间不刷新
                     "traffic": manager._traffic_view,
+                    # qB 全局状态(server_state: 连接状态/全局速度/累计流量/磁盘剩余等)。
+                    # 与 traffic 同为"恒回传"口径: 数据源是 sync 快照而非分组视图, 不参与
+                    # rid 门控。此前前端状态栏要为此**单独再打一次 /api/stats**, 两条链路
+                    # 刷新频率不同 ⇒ 出现"状态栏速度正常、种子行速度滞后"的错位观测;
+                    # 合并后每轮只剩 1 条请求, 且两者同源同轮。
+                    "server": manager.store.server_state,
                 },
             **manager.ensure_group_state(rid),
         }

@@ -514,18 +514,32 @@ class WebviewMixin:
             self._shows_pending = False
         return {"list": out, "unrecognized": sorted(unrecognized)}
 
+    def rebuild_views(self) -> None:
+        """重建全部 Web 视图快照并自增版本号 —— **唯一**的重建入口
+
+        四份视图(groups / singles / shows / flat)必须在**同一脏窗口内同快照**重建, 因为
+        它们共用 `_group_view_ver` 一个版本号回传(前端按 rid 整表替换)。任何一份漏建,
+        该视图就会长期停留在旧快照上, 而版本号仍在自增 ⇒ 前端判定 `updated=true`, 把
+        **陈旧数组当成新数据换上去**(2026-09-18 实测: 主循环只重建 groups 却清掉共享脏
+        标记 ⇒ 种子页速度冻结, 而状态栏"速度合计"因取 groups 求和反而一直新鲜)。
+
+        故本方法是唯一重建入口: 主循环 `_tick` 与 Web 线程 `ensure_group_view` 都只能调它,
+        **新增视图也只在这里挂** —— 在调用点各建一部分必然再次漏建。
+        """
+        self._group_view = self._build_group_view()
+        self._singles_view = self._build_singles_view()
+        self._shows_view = self._build_shows_view()
+        self._flat_view = self._build_flat_view()
+        self._group_view_ver += 1
+        self._group_view_dirty = False
+
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
         与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
         singles(未归组种子)、shows(追剧视图)与 flat(种子平铺视图)与分组视图在同一脏窗口同快照重建
-        —— 保证四组数据互相一致。"""
+        —— 保证四组数据互相一致; 重建统一走 `rebuild_views`(唯一入口)。"""
         if self._group_view_dirty:
-            self._group_view = self._build_group_view()
-            self._singles_view = self._build_singles_view()
-            self._shows_view = self._build_shows_view()
-            self._flat_view = self._build_flat_view()
-            self._group_view_ver += 1
-            self._group_view_dirty = False
+            self.rebuild_views()
         return self._group_view
 
     def ensure_group_state(self, rid: Optional[int]) -> dict:

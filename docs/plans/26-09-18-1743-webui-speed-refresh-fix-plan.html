@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB UI 种子速度刷新滞后 · 根因定位与修复计划</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #14181d;
+    --panel-2: #171c22;
+    --fg: #e7eaee;
+    --muted: #9aa3ad;
+    --dim: #6d7681;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .17);
+    --accent: #5bc8ec;
+    --accent-dim: rgba(91, 200, 236, .12);
+    --warn: #e0a458;
+    --warn-dim: rgba(224, 164, 88, .12);
+    --bad: #e0736e;
+    --bad-dim: rgba(224, 115, 110, .12);
+    --ok: #7bc47f;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+  pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--panel);
+    border: 1px solid var(--line); border-left: 2px solid var(--line-strong);
+    padding: 14px 16px; overflow-x: auto; margin: 14px 0; color: var(--muted); }
+  pre b { color: var(--fg); font-weight: 600; }
+  pre .cm { color: var(--dim); }
+  pre .hl { color: var(--accent); }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 96px; }
+
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; }
+  h1 { margin: 18px 0 10px; font-size: 40px; line-height: 1.14; font-weight: 600;
+    letter-spacing: -0.02em; }
+  .lede { max-width: 60em; color: var(--muted); font-size: 16px; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 30px; padding: 14px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font: 12.5px/1.5 var(--mono); color: var(--dim); }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 44px; margin-top: 44px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column;
+    gap: 9px; font: 12px/1.45 var(--mono); }
+  nav.toc a { color: var(--dim); letter-spacing: .03em; }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+  nav.toc .t-no { color: var(--accent); margin-right: 7px; }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  section.sec { margin: 0 0 62px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .sec-head .no { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: .08em; }
+  .sec-head h2 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: .01em; }
+  h3 { margin: 32px 0 10px; font-size: 16.5px; font-weight: 600; }
+  h3 .h-no { font: 600 12px/1 var(--mono); color: var(--accent); margin-right: 9px; }
+  h4 { margin: 22px 0 8px; font-size: 14.5px; font-weight: 600; color: var(--fg); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  .dim { color: var(--dim); }
+  .mut { color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font: 600 12px/1.4 var(--mono); letter-spacing: .05em; color: var(--dim);
+    text-transform: uppercase; border-bottom: 1px solid var(--line-strong); }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  tbody tr:hover { background: rgba(255, 255, 255, .018); }
+
+  .tag { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .06em;
+    padding: 4px 7px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); }
+  .tag.ok { color: var(--ok); border-color: rgba(123, 196, 127, .4); background: rgba(123, 196, 127, .09); }
+  .tag.bad { color: var(--bad); border-color: rgba(224, 115, 110, .42); background: var(--bad-dim); }
+  .tag.warn { color: var(--warn); border-color: rgba(224, 164, 88, .42); background: var(--warn-dim); }
+  .tag.acc { color: var(--accent); border-color: rgba(91, 200, 236, .42); background: var(--accent-dim); }
+
+  .callout { border: 1px solid var(--line-strong); border-left: 2px solid var(--accent);
+    background: var(--panel); padding: 14px 18px; margin: 18px 0; }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout .ct { font: 600 12px/1 var(--mono); letter-spacing: .1em; color: var(--accent);
+    text-transform: uppercase; margin-bottom: 8px; }
+  .callout.bad .ct { color: var(--bad); }
+  .callout.warn .ct { color: var(--warn); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 18px;
+    font-size: 13.5px; margin: 14px 0; }
+  .kv dt { font: 600 12px/1.7 var(--mono); color: var(--dim); letter-spacing: .04em; }
+  .kv dd { margin: 0; color: var(--muted); }
+  .kv dd b { color: var(--fg); font-weight: 600; }
+
+  figure { margin: 22px 0; }
+  figure svg { display: block; width: 100%; height: auto; border: 1px solid var(--line);
+    background: var(--panel); }
+  figcaption { margin-top: 9px; font: 12px/1.5 var(--mono); color: var(--dim); }
+
+  .steps { counter-reset: st; margin: 18px 0; }
+  .step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px;
+    padding: 14px 0; border-top: 1px solid var(--line); }
+  .step:last-child { border-bottom: 1px solid var(--line); }
+  .step .n { font: 600 13px/1.5 var(--mono); color: var(--accent); }
+  .step h4 { margin: 0 0 6px; }
+  .step p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+  .step .files { font: 12.5px/1.7 var(--mono); color: var(--dim); margin-top: 8px; }
+  .step .files span { color: var(--muted); }
+
+  footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
+    font: 12px/1.6 var(--mono); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="kicker">auto-qb · WEB UI 缺陷诊断 / 修复计划</div>
+  <h1>种子速度刷新滞后 —— 根因定位与修复计划</h1>
+  <p class="lede">
+    现象: 种子行的「下载 / 上传」速度长时间不刷新(或十几秒才跳一次), 而状态栏的速度合计看起来完全正常。
+    已用可复现探针定位到根因 —— 不是 qB 取数慢, 也不是前端渲染慢, 而是
+    <b>后端两条视图重建路径的重建范围不一致, 共享脏标记被主循环提前消费</b>,
+    导致种子页/单种子/追剧三份视图长期拿不到重建, 版本号却照常自增, 前端于是把陈旧数组当成新数据换上去。
+  </p>
+
+  <div class="meta">
+    <span><b>日期</b> 2026-09-18 17:43</span>
+    <span><b>范围</b> WebUI 速度刷新链路(后端视图重建 + 前端轮询)</span>
+    <span><b>状态</b> 仅诊断与计划, 未改代码</span>
+    <span><b>证据</b> 探针实测(下文第 3 节)</span>
+    <span><b>预计立档</b> TASK016</span>
+  </div>
+
+  <div class="grid">
+    <nav class="toc">
+      <a href="#s1"><span class="t-no">01</span>结论速览</a>
+      <a href="#s2"><span class="t-no">02</span>两个速度来源</a>
+      <a href="#s3"><span class="t-no">03</span>探针实测</a>
+      <a href="#s4"><span class="t-no">04</span>根因拆解</a>
+      <a href="#s5"><span class="t-no">05</span>真机确认清单</a>
+      <a href="#s6"><span class="t-no">06</span>修复计划</a>
+      <a href="#s7"><span class="t-no">07</span>测试与收尾</a>
+      <a href="#s8"><span class="t-no">08</span>风险与回退</a>
+    </nav>
+
+    <div>
+
+    <section class="sec" id="s1">
+      <div class="sec-head"><span class="no">01</span><h2>结论速览</h2></div>
+
+      <div class="callout bad">
+        <div class="ct">根因(主因)</div>
+        <p>
+          后端有<b>两条</b>视图重建路径, 重建范围却不一致:
+        </p>
+        <ul>
+          <li><code>QbManager._tick</code>(主循环) 只重建 <code>_group_view</code>, 却把<b>共享</b>的
+            <code>_group_view_dirty</code> 标记清掉;</li>
+          <li><code>WebviewMixin.ensure_group_view</code>(Web 线程) 会重建全部四份视图
+            (<code>groups</code>/<code>singles</code>/<code>shows</code>/<code>flat</code>),
+            但它只在标记仍为真时才动手 —— 而主循环已经把它清了。</li>
+        </ul>
+        <p>
+          结果: <b>种子页(<code>_flat_view</code>)、未归组单种子(<code>_singles_view</code>)、
+          追剧页(<code>_shows_view</code>) 长期不重建</b>, 而版本号 <code>_group_view_ver</code>
+          照常每 tick 自增 ⇒ 前端判定 <code>updated = true</code>, 把陈旧数组整表换上去。
+        </p>
+      </div>
+
+      <div class="callout">
+        <div class="ct">为什么状态栏看起来正常</div>
+        <p>
+          状态栏的「下载 / 上传速度合计」是 <code>Σ groups[].dlspeed</code>
+          (<code>app.js</code> 的 <code>totalDl</code>/<code>totalUl</code>), 取的是
+          <b>分组视图</b> —— 恰恰是主循环每 tick 都在重建的那一份, 所以它永远新鲜。
+          同一屏上「新鲜的速度合计」与「陈旧的种子行速度」并存, 观感就是"状态栏对、种子不对"。
+        </p>
+      </div>
+
+      <div class="callout warn">
+        <div class="ct">次因(放大器)</div>
+        <p>
+          前端把「视图版本没变」当成「没数据」, 触发轮询退避 2s → 5s → 10s
+          (<code>currentPollMs()</code> 的 <code>idlePolls</code>)。而状态栏走的
+          <code>/api/stats</code> 是<b>恒回传、不受版本门控</b>的独立请求 —— 两条数据源在
+          同一轮轮询里刷新频率被彻底解耦, 进一步放大了"只有种子行慢"的观感。
+        </p>
+      </div>
+    </section>
+
+    <section class="sec" id="s2">
+      <div class="sec-head"><span class="no">02</span><h2>两个速度来源: 同一屏, 两套链路</h2></div>
+
+      <p>
+        先把"速度"这个数字在全链路上的出口列全。它们<b>不是同一个数据源</b>, 门控方式也完全不同:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>展示位置</th>
+            <th class="mono">前端取数</th>
+            <th class="mono">后端来源</th>
+            <th>刷新门控</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>状态栏「下载/上传速度合计」</td>
+            <td class="mono">totalDl / totalUl</td>
+            <td class="mono">_group_view 求和</td>
+            <td><span class="tag ok">每 tick 重建 → 新鲜</span></td>
+          </tr>
+          <tr>
+            <td>统计面板 / 限速 pill</td>
+            <td class="mono">statsServer.*</td>
+            <td class="mono">store.server_state</td>
+            <td><span class="tag ok">/api/stats 恒回传</span></td>
+          </tr>
+          <tr>
+            <td><b>种子页 行内 下载/上传</b></td>
+            <td class="mono">state.torrents[]</td>
+            <td class="mono">_flat_view</td>
+            <td><span class="tag bad">仅 ensure_group_view 重建 → 饿死</span></td>
+          </tr>
+          <tr>
+            <td>未归组单种子行</td>
+            <td class="mono">state.singles[]</td>
+            <td class="mono">_singles_view</td>
+            <td><span class="tag bad">同上</span></td>
+          </tr>
+          <tr>
+            <td>追剧页 集行</td>
+            <td class="mono">state.shows.list[]</td>
+            <td class="mono">_shows_view</td>
+            <td><span class="tag bad">同上</span></td>
+          </tr>
+          <tr>
+            <td>辅种管理 成员行</td>
+            <td class="mono">groups[].members[]</td>
+            <td class="mono">_group_view</td>
+            <td><span class="tag ok">每 tick 重建 → 新鲜</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <figure>
+        <svg viewBox="0 0 1040 300" role="img" aria-label="速度数据通路对比">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#6d7681"/>
+            </marker>
+            <marker id="arb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#e0736e"/>
+            </marker>
+          </defs>
+          <g font-family="ui-monospace, Consolas, monospace" font-size="11.5" fill="#9aa3ad">
+            <!-- qB -->
+            <rect x="18" y="112" width="118" height="76" fill="#14181d" stroke="rgba(255,255,255,.17)"/>
+            <text x="77" y="143" text-anchor="middle" fill="#e7eaee" font-size="12.5">qBittorrent</text>
+            <text x="77" y="162" text-anchor="middle" font-size="10.5">sync/maindata</text>
+            <text x="77" y="177" text-anchor="middle" font-size="10.5">dlspeed/upspeed</text>
+
+            <!-- store -->
+            <rect x="176" y="112" width="132" height="76" fill="#14181d" stroke="rgba(255,255,255,.17)"/>
+            <text x="242" y="140" text-anchor="middle" fill="#e7eaee" font-size="12.5">TorrentStore</text>
+            <text x="242" y="158" text-anchor="middle" font-size="10.5">apply_sync 增量</text>
+            <text x="242" y="173" text-anchor="middle" font-size="10.5">view_changed 置脏</text>
+
+            <!-- 两条重建路径 -->
+            <rect x="348" y="34" width="238" height="88" fill="#14181d" stroke="rgba(123,196,127,.45)"/>
+            <text x="362" y="56" fill="#7bc47f" font-size="11">主循环 _tick</text>
+            <text x="362" y="76" font-size="10.5">重建: _group_view ✔</text>
+            <text x="362" y="92" font-size="10.5" fill="#e0736e">清 _group_view_dirty ✘</text>
+            <text x="362" y="108" font-size="10.5" fill="#6d7681">其余三份: 不碰</text>
+
+            <rect x="348" y="182" width="238" height="88" fill="#14181d" stroke="rgba(224,115,110,.45)"/>
+            <text x="362" y="204" fill="#e0736e" font-size="11">Web 线程 ensure_group_view</text>
+            <text x="362" y="224" font-size="10.5">重建: groups/singles/</text>
+            <text x="362" y="239" font-size="10.5">　　　shows/flat ✔</text>
+            <text x="362" y="256" font-size="10.5" fill="#e0736e">前置: 标记为真 —— 已被清 ⇒ 跳过</text>
+
+            <!-- 输出 -->
+            <rect x="646" y="34" width="176" height="88" fill="#14181d" stroke="rgba(255,255,255,.17)"/>
+            <text x="734" y="58" text-anchor="middle" fill="#7bc47f" font-size="11.5">状态栏合计 / 辅种管理</text>
+            <text x="734" y="78" text-anchor="middle" font-size="10.5">totalDl = Σ groups</text>
+            <text x="734" y="98" text-anchor="middle" fill="#7bc47f" font-size="10.5">新鲜</text>
+
+            <rect x="646" y="182" width="176" height="88" fill="#14181d" stroke="rgba(255,255,255,.17)"/>
+            <text x="734" y="206" text-anchor="middle" fill="#e0736e" font-size="11.5">种子页 / 单种子 / 追剧</text>
+            <text x="734" y="226" text-anchor="middle" font-size="10.5">state.torrents[]</text>
+            <text x="734" y="246" text-anchor="middle" fill="#e0736e" font-size="10.5">陈旧(版本号却自增)</text>
+
+            <rect x="866" y="112" width="158" height="76" fill="#14181d" stroke="rgba(255,255,255,.17)"/>
+            <text x="945" y="136" text-anchor="middle" fill="#e7eaee" font-size="12.5">前端 /api/state</text>
+            <text x="945" y="155" text-anchor="middle" font-size="10.5">updated = rid != ver</text>
+            <text x="945" y="171" text-anchor="middle" fill="#e0a458" font-size="10.5">⇒ 整表替换为陈旧值</text>
+
+            <!-- 连线 -->
+            <path d="M136 150 L172 150" stroke="#6d7681" fill="none" marker-end="url(#ar)"/>
+            <path d="M308 140 L344 92" stroke="#6d7681" fill="none" marker-end="url(#ar)"/>
+            <path d="M308 162 L344 212" stroke="#e0736e" fill="none" marker-end="url(#arb)"/>
+            <path d="M586 78 L642 78" stroke="#6d7681" fill="none" marker-end="url(#ar)"/>
+            <path d="M586 226 L642 226" stroke="#e0736e" fill="none" marker-end="url(#arb)"/>
+            <path d="M822 78 L900 108" stroke="#6d7681" fill="none" marker-end="url(#ar)"/>
+            <path d="M822 226 L900 192" stroke="#e0736e" fill="none" marker-end="url(#arb)"/>
+          </g>
+        </svg>
+        <figcaption>
+          同一份 <code>_group_view_dirty</code> 脏标记被两条路径共享, 但两条路径的重建范围不同:
+          主循环消费标记后只重建分组视图, 于是其余三份视图再也不会被重建。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section class="sec" id="s3">
+      <div class="sec-head"><span class="no">03</span><h2>探针实测: 可复现的确定性结果</h2></div>
+
+      <p>
+        用仓库既有测试替身(<code>tests/helpers.make_manager</code> + <code>FakeClient</code>)搭最小复现:
+        两个下载中种子, 每轮 tick 前把速度改成新值, 交替执行「主循环 tick → Web 请求」。
+      </p>
+
+      <pre><span class="cm">--- grouping.enabled=True (用户最可能的配置) ---</span>
+  seed ver=1789724721
+  after tick1: ver=1789724722 dirty=False store.view_changed=False
+     group_view rows=0  flat=[]  singles=[]  shows=0      <span class="hl">← flat/singles 从未被建起来</span>
+  web1: rid=1789724722 updated=True  flat=[]
+  t2: ver=1789724723 updated=<b>True</b>  回传flat=<b>[]</b>  | store真值=[('H1', 999), ('H2', 888)]
+  t3: ver=1789724724 updated=<b>True</b>  回传flat=<b>[]</b>  | store真值=[('H1', 555), ('H2', 444)]
+
+<span class="cm">--- grouping.enabled=False ---</span>
+  after tick1: ver=1789724721 dirty=True
+  web1: rid=1789724722 updated=True  flat=[('H1', 100), ('H2', 200)]   <span class="hl">← Web 线程自己撞上脏窗口, 建对了</span>
+  t2: ver=1789724722 updated=<b>False</b> 回传flat=[]  | store真值=[('H1', 999), ('H2', 888)]
+  t3: ver=1789724722 updated=<b>False</b> 回传flat=[]  | store真值=[('H1', 555), ('H2', 444)]</pre>
+
+      <h3><span class="h-no">3.1</span>两种配置都坏, 坏法不同</h3>
+      <table>
+        <thead>
+          <tr><th>配置</th><th>表现</th><th>机制</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">grouping.enabled = true</td>
+            <td>
+              版本号每轮自增 ⇒ <code>updated=true</code> ⇒ 前端<b>每次都换表</b>,
+              换上去的却是永不重建的 <code>_flat_view</code>。
+              <span class="tag bad">种子页速度冻结</span>
+            </td>
+            <td class="mono">主循环消费标记 + 只重建 group view</td>
+          </tr>
+          <tr>
+            <td class="mono">grouping.enabled = false</td>
+            <td>
+              标记被 <code>consume_view_changed()</code> 读走后丢弃(置脏语句在
+              <code>if grouping.enabled</code> 块内) ⇒ 版本号再不变化 ⇒
+              <code>updated=false</code> ⇒ 前端<b>不换表且开始退避</b>。
+              <span class="tag bad">四份视图全冻结 + 轮询降到 5s/10s</span>
+            </td>
+            <td class="mono">脏标记被吞</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="ct">注意</div>
+        <p>
+          上表第二行说明 <code>_flat_view</code> 只在「Web 线程恰好自己撞上脏窗口」时才被建起来 ——
+          这个窗口要求 <code>_web_last_seen</code> 已过期(&gt; <code>WEB_VIEW_TTL</code> = 10s)。
+          所以真机上它会<b>偶尔跳一次</b>再冻住, 这正好解释了用户说的"更新慢"而不是"完全不更新"。
+        </p>
+      </div>
+    </section>
+
+    <section class="sec" id="s4">
+      <div class="sec-head"><span class="no">04</span><h2>根因拆解(含代码位置)</h2></div>
+
+      <h3><span class="h-no">R1</span>两条重建路径范围不一致(主因)</h3>
+      <p class="mut"><code>src/auto_qb/qbmanager.py:394-405</code></p>
+      <pre><span class="cm"># 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方分组视图惰性重建判定</span>
+view_changed = self.store.consume_view_changed()
+if self.config.grouping.enabled:
+    if view_changed:
+        self._group_view_dirty = True
+    if self._group_view_dirty and (time.time() - self._web_last_seen) &lt; WEB_VIEW_TTL:
+        self._group_view = self._build_group_view()   <span class="hl">← 只重建这一份</span>
+        self._group_view_ver += 1
+        self._group_view_dirty = False                <span class="hl">← 共享标记被清</span></pre>
+      <p class="mut"><code>src/auto_qb/mixins/web_view.py:517-529</code></p>
+      <pre>def ensure_group_view(self):
+    if self._group_view_dirty:            <span class="hl">← 走到这里时通常已是 False</span>
+        self._group_view = self._build_group_view()
+        self._singles_view = self._build_singles_view()
+        self._shows_view = self._build_shows_view()
+        self._flat_view = self._build_flat_view()
+        self._group_view_ver += 1
+        self._group_view_dirty = False</pre>
+      <p>
+        两份代码都想表达"惰性组装", 但主循环那份<b>少建了三份视图却照清标记</b>,
+        使 Web 线程那份的兜底彻底失效。这正是
+        <code>memory-bank/pitfalls.md</code> 里"单种子视图数据面: singles 与 groups 同脏窗口同快照同版本门控"
+        那条约定被单方面破坏的地方 —— 约定写了, 但没有机械守卫。
+      </p>
+
+      <h3><span class="h-no">R2</span>关闭分组时脏标记被吞</h3>
+      <p>
+        <code>consume_view_changed()</code> 在门控<b>外</b>被调用(读走并复位),
+        而唯一的置脏语句在门控<b>内</b>。于是 <code>grouping.enabled=false</code> 时,
+        标记读一次就永久丢失, <code>_group_view_dirty</code> 再也不会变真。
+        这条与 R1 同源: <b>把"分组是否启用"错当成了"Web 视图是否需要维护"</b> ——
+        两者无关(分组关闭时 <code>_flat_view</code>/<code>_singles_view</code> 恰恰是种子页的唯一数据源)。
+      </p>
+
+      <h3><span class="h-no">R3</span>前端 idle 退避与状态栏数据源解耦(放大器)</h3>
+      <p class="mut"><code>src/auto_qb/web_ui/static/shared/app.js:1493-1500, 1507-1530</code></p>
+      <pre>currentPollMs() {
+  if (this.pollFails) return Math.min(15000, this.pollSec * 1000 * 2 ** this.pollFails);
+  <span class="cm">// 无变化退避: 连续多轮无更新逐步放慢(2s→5s→10s); 一旦有更新立即回到 2s</span>
+  if (this.idlePolls &gt;= 6) return 10000;
+  if (this.idlePolls &gt;= 2) return 5000;
+  return this.pollSec * 1000;
+}</pre>
+      <ul>
+        <li><code>idlePolls</code> 只在 <code>state.updated === false</code> 时自增 ——
+          即把<b>视图版本号</b>当成了"数据是否新鲜"的代理。</li>
+        <li>但状态栏数据来自 <code>/api/stats</code>(<code>server_state</code>),
+          <b>完全不走版本门控</b>, 每轮都刷新。</li>
+        <li>两个源在同一轮轮询里刷新频率不同 ⇒ 只要视图版本安静几轮, 行数据就退到 5s/10s,
+          而状态栏仍在 2s 更新 —— 观感上就是"只有种子慢"。</li>
+      </ul>
+
+      <div class="callout">
+        <div class="ct">一句话归因</div>
+        <p>
+          <b>主循环与 Web 线程各自维护同一份视图, 却对"重建哪些视图"没有共识</b>;
+          前端又把"版本号未变"误读为"数据未变", 于是把这一处后端不一致放大成肉眼可见的
+          「状态栏正常 / 种子行滞后」。
+        </p>
+      </div>
+    </section>
+
+    <section class="sec" id="s5">
+      <div class="sec-head"><span class="no">05</span><h2>真机确认清单(动手前 5 分钟)</h2></div>
+
+      <p>
+        探针结论是确定性的, 但"用户说的种子"具体指哪个表, 建议先用下面三步钉死,
+        避免修了错的表。三条都指向同一处 R1, 只是确认主诉位置:
+      </p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="n">A</div>
+          <div>
+            <h4>看是哪张表慢</h4>
+            <p>
+              打开 <b>种子页</b>(种子中心) 与 <b>辅种管理</b> 并排观察: 若前者速度不动、后者成员行正常,
+              即完全吻合 R1(前者取 <code>_flat_view</code>, 后者取 <code>_group_view</code>)。
+              若两者都慢, 则需再查第 2 节表格里对应来源。
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">B</div>
+          <div>
+            <h4>DevTools 抓两条请求</h4>
+            <p>
+              同时看 <code>/api/state</code> 与 <code>/api/stats</code>: 前者
+              <code>status.traffic</code> 与 <code>status.*</code> 恒变、<code>updated</code> 也多为 true,
+              但 <code>torrents[].dlspeed</code> 与 <code>singles[].dlspeed</code> 长时间是同一批数字 —— 即坐实。
+            </p>
+            <p class="files">
+              <span>判据:</span> <code>state.torrents[i].dlspeed</code> 与
+              <code>/api/stats</code> 的 <code>server_state.dl_info_speed</code> 趋势背离
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">C</div>
+          <div>
+            <h4>对照开关做反向验证</h4>
+            <p>
+              把 <code>grouping.enabled</code> 反过来(或临时切到另一个 WebUI 皮肤)再观察:
+              按第 3 节实测, 关闭分组会让 <code>updated</code> 恒为 false 并触发退避,
+              速度会更明显地"卡一下跳一下" —— 反向验证成立即锁定 R1 + R3。
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="s6">
+      <div class="sec-head"><span class="no">06</span><h2>修复计划</h2></div>
+
+      <p>
+        分三阶段: P0 修正确性(必做), P1 消除放大器(必做, 小改), P2 测试与文档收尾。
+        原则是<b>收敛成唯一重建入口</b>, 而不是在两处各打一个补丁 —— 否则下次加第五份视图还会漏。
+      </p>
+
+      <h3><span class="h-no">P0</span>后端: 视图重建收敛为唯一入口</h3>
+
+      <div class="steps">
+        <div class="step">
+          <div class="n">P0-1</div>
+          <div>
+            <h4>在 <code>WebviewMixin</code> 抽出 <code>rebuild_views()</code></h4>
+            <p>
+              把"重建四份视图 + 自增版本号 + 清脏标记"收成一个方法, 作为<b>唯一</b>的重建入口。
+              <code>ensure_group_view</code> 与 <code>_tick</code> 都改为调用它,
+              从此不可能再出现"只重建一半"。
+            </p>
+            <p class="files">
+              <span>改:</span> <code>src/auto_qb/mixins/web_view.py</code> ·
+              <code>ensure_group_view</code> 内联代码抽出
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">P0-2</div>
+          <div>
+            <h4>把置脏语句移出 <code>grouping.enabled</code> 门控</h4>
+            <p>
+              <code>if view_changed: self._group_view_dirty = True</code> 必须在门控外 ——
+              标记是 Web 视图的共享状态, 与分组功能是否启用无关(修 R2)。
+              门控只保留给"要不要在主循环里花 CPU 重建"这一个决策。
+            </p>
+            <p class="files">
+              <span>改:</span> <code>src/auto_qb/qbmanager.py:394-405</code>
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">P0-3</div>
+          <div>
+            <h4>主循环改调 <code>rebuild_views()</code>, 并去掉"分组未启用就不重建"的分支</h4>
+            <p>
+              建议直接把主循环的重建分支改为
+              <code>if self._group_view_dirty and web_active: self.rebuild_views()</code> ——
+              去掉 <code>grouping.enabled</code> 前置判断。
+              理由: 种子页的数据源 <code>_flat_view</code> 与分组功能无关, 主循环仍受
+              <code>WEB_VIEW_TTL</code>(网页不开就不建)与脏标记(没变化就不建)双重节流,
+              惰性语义不受影响。
+            </p>
+            <p class="files">
+              <span>备选:</span> 若担心 CPU, 保留门控 —— 但必须同时保证标记不被吞(即 P0-2),
+              此时分组关闭时由 Web 线程每请求重建一次(与今日行为一致)。
+              <span>两者取其一, 不可都省。</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="ct">性能提示</div>
+        <p>
+          P0-3 采用"去掉门控"方案后, 主循环每 tick 会多建 <code>_flat_view</code>(O(N) 个 dict)
+          与 <code>_shows_view</code>(每种子一次 <code>tvshows.parse_release</code>)。
+          仅在 <b>Web 活跃且视图有变化</b> 时发生(活跃下载中才会每轮置脏), 但仍应在真机
+          1000+ 种子的库上观察一次 tick 耗时; 若明显变差, 再考虑给 shows 视图单独加节流(不建议一开始就加)。
+        </p>
+      </div>
+
+      <h3><span class="h-no">P1</span>前端: 拆掉与状态栏不一致的退避</h3>
+
+      <div class="steps">
+        <div class="step">
+          <div class="n">P1-1</div>
+          <div>
+            <h4>取消 idle 退避, 只保留失败退避</h4>
+            <p>
+              轮询间隔恒定 <code>pollSec</code>(2s); <code>pollFails</code> 的失败退避保留不动。
+              理由: 每次轮询本来就会额外打一发 <code>/api/stats</code>, idle 退避省下的请求极少,
+              却直接牺牲了行数据的新鲜度 —— 收益与代价完全不对等。
+            </p>
+            <p class="files">
+              <span>改:</span> <code>app.js currentPollMs()</code> ·
+              顺带清理 <code>idlePolls</code> 相关状态与 <code>refresh()</code> 里的自增
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">P1-2</div>
+          <div>
+            <h4>(建议同批) 把 <code>server_state</code> 并入 <code>/api/state</code></h4>
+            <p>
+              P1-1 会让请求频率稳定在 1 轮/2s, 但每轮仍是两条请求(<code>/api/state</code> +
+              <code>/api/stats</code>)。把 <code>store.server_state</code> 作为
+              <code>status.server</code> 一并回传, <code>syncStats()</code> 即可退役,
+              请求数回到 1/轮, 且状态栏与行数据<b>同源同轮</b> —— 从结构上消灭"两个速度来源"的错位。
+              <code>/api/stats</code> 端点保留给统计面板手动刷新用。
+            </p>
+            <p class="files">
+              <span>改:</span> <code>src/auto_qb/web.py api_state</code> ·
+              <code>app.js syncStats()/refresh()</code>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h3><span class="h-no">P2</span>验收与回归</h3>
+      <ul>
+        <li>两套皮肤(星图 <code>atlas</code> / 棱镜 <code>prism</code>)各走查一次种子页与追剧页, 速度列应每 2s 连续变化。</li>
+        <li>对照 <code>/api/stats</code> 的全局速度与种子页行速之和, 量级应吻合(允许采样时刻差)。</li>
+        <li>关闭分组功能再走查一次(验证 R2 修复: 行数据仍新鲜)。</li>
+        <li>关掉网页 30s 后确认主循环不再重建(验证惰性未被 P0-3 破坏)。</li>
+      </ul>
+    </section>
+
+    <section class="sec" id="s7">
+      <div class="sec-head"><span class="no">07</span><h2>测试与文档收尾</h2></div>
+
+      <h3><span class="h-no">7.1</span>测试改动(项目规定: 新增用例须同步文件头 docstring 的测试计划清单)</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>用例</th><th>动作</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">tests/test_qbmanager.py</td>
+            <td class="mono">test_tick_rebuilds_group_view_only_when_changed</td>
+            <td><span class="tag warn">改写</span> 现断言"只重建 group view", 正是被固化的缺陷; 改为断言四份视图同步重建</td>
+          </tr>
+          <tr>
+            <td class="mono">tests/test_qbmanager.py</td>
+            <td class="mono">test_tick_skips_group_view_when_grouping_disabled</td>
+            <td><span class="tag warn">改写</span> 改为断言"脏标记不被吞 / 视图仍可被重建", 而非"不组装视图"</td>
+          </tr>
+          <tr>
+            <td class="mono">tests/test_web.py</td>
+            <td class="mono">test_flat_view_refreshed_by_main_loop_tick</td>
+            <td><span class="tag acc">新增</span> 分组启用 + Web 活跃 + 速度变化 ⇒ <code>_flat_view</code> 速度随之更新(修前必失败)</td>
+          </tr>
+          <tr>
+            <td class="mono">tests/test_web.py</td>
+            <td class="mono">test_view_dirty_flag_not_swallowed_when_grouping_disabled</td>
+            <td><span class="tag acc">新增</span> 覆盖 R2</td>
+          </tr>
+          <tr>
+            <td class="mono">tests/test_web.py</td>
+            <td class="mono">test_rebuild_views_single_entry_point</td>
+            <td><span class="tag acc">新增</span> 断言四份视图 + 版本号 + 脏标记在一次调用内同步完成</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="mut">
+        前端 <code>app.js</code> 无 JS 单测基建, 仅由
+        <code>test_frontend_static_bundle_health</code> 做语法/引用守阵 —— P1 改动靠该守阵 + 真机走查兜住。
+        基线数字单点维护在 <code>memory-bank/testing.md</code> 顶部, 预期 1007 → 1010 左右(以实测为准)。
+      </p>
+
+      <h3><span class="h-no">7.2</span>文档与档案(按 AGENTS.md 收尾 DoD)</h3>
+      <ul>
+        <li><code>memory-bank/pitfalls.md</code>: 新增条目 ——
+          「<b>同一份视图脏标记被两条重建路径共享时, 两条路径的重建范围必须完全一致</b>;
+          惰性组装的兜底不能依赖'另一边还没消费标记'」。附本次探针的判据(版本号自增但数组未更新)。</li>
+        <li><code>memory-bank/systemPatterns.md</code>(或 <code>modules.md</code>): 补一句
+          "Web 视图唯一重建入口 = <code>rebuild_views()</code>", 并注明新增视图必须挂在这里。</li>
+        <li><code>memory-bank/testing.md</code>: 回写实测通过数。</li>
+        <li><code>memory-bank/tasks/TASK016-*.md</code> 立档 + 同步 <code>tasks/_index.md</code>:
+          本次改动跨 3 个源文件 + 测试, 命中"单会话改动 ≥3 个源文件"的立档阈值。</li>
+        <li><code>memory-bank/activeContext.md</code> / <code>progress.md</code>: 完成后迁移条目。</li>
+      </ul>
+    </section>
+
+    <section class="sec" id="s8">
+      <div class="sec-head"><span class="no">08</span><h2>风险与回退</h2></div>
+
+      <table>
+        <thead><tr><th>风险</th><th>影响</th><th>对策</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>主循环每 tick 多建 3 份视图</td>
+            <td>大种子库(1000+)且活跃下载时, tick 耗时上升</td>
+            <td>先在真机测 tick 耗时; 必要时退回"保留 grouping 门控 + 标记不吞"的备选方案(P0-3 备选)</td>
+          </tr>
+          <tr>
+            <td>P1-1 取消退避后请求变密</td>
+            <td>每轮 2 条请求; 若不做 P1-2 则翻倍</td>
+            <td>与 P1-2 同批提交, 回到 1 请求/轮</td>
+          </tr>
+          <tr>
+            <td>改写既有用例会"看起来删了断言"</td>
+            <td>评审误解为降低覆盖</td>
+            <td>改写时保留原用例的意图(惰性/不空转), 只把断言对象从"仅 group"换成"四份视图同建"; 并在 commit message 注明"原断言固化了缺陷"</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="mut">
+        回退成本: 全部改动集中在 <code>web_view.py</code> / <code>qbmanager.py</code> /
+        <code>app.js</code> / <code>web.py</code> 四处, 建议分两个 commit(P0 后端 / P1 前端),
+        任一可独立 revert。
+      </p>
+    </section>
+
+    <footer>
+      auto-qb · WEB UI 种子速度刷新滞后诊断与修复计划 · 2026-09-18 17:43 ·
+      证据来源: 本地探针(<code>tests/helpers</code> 替身, 已删除临时脚本) + 源码逐行核对
+    </footer>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

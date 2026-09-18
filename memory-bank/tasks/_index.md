@@ -7,6 +7,7 @@
 
 ## In Progress
 
+- [TASK017] WEB UI 视图重建范围收口 (种子速度刷新滞后) - 真因: 主循环 `_tick` 只重建 `_group_view` 却清掉共享脏标记 ⇒ singles/shows/flat 被饿死(版本号照常自增 ⇒ 前端换上陈旧数组), 状态栏因取 groups 求和反而正常; 同源: 置脏在 grouping 门控内 ⇒ 分组关闭时标记被吞。修法: 唯一入口 `rebuild_views()` + 置脏移出门控 + 前端取消 idle 退避并把 `server_state` 并入 `/api/state`; **1021 passed / 0 failed** (基线 1018, 红绿验证); **未提交** (剩用户真机走查)
 - [TASK016] 测试期真实系统副作用收口 (通知框 + 环境依赖假失败) - 真凶 `test_cli.py::test_main_qb_compat_error_clean_exit` 用 MagicMock 当配置 ⇒ 绕过 `notify_fatal` 守卫真发 Windows toast; 修 mock + 新增 `tests/conftest.py` 会话级通知器命令拦截; 另修 2 个环境依赖假失败(`APPDATA` 未设 / 沙箱把 `os.symlink` 落成真实目录) + `.gitignore` 补 `.coverage.*`; **1007 passed / 0 failed**; **已入库 `7ae21a1`** (剩用户再跑一次测试确认不再弹框)
 - [TASK015] WEB UI 错误种子显示具体原因 - 状态列由笼统「错误」改为具体原因(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文); 后端 `refresh_error_reasons` 主循环 TTL(300s)+预算(5/轮)预取 + 显式置脏, 视图透出 `error_reason`, 前端 `stateText` 双 UI 生效; 1006 passed, 假 qB 服务浏览器冒烟实测; **已入库 `9723a76`** (剩用户真机走查)
 - [TASK014] UI 组件库 20 式 - 按设计哲学风格库 5 流派 × 20 preset 各出一套自包含组件库单页 + 挑选索引 + 目录 README (`resources/ui-component-libraries/modelscope.dsv4.1flash/`); 四轮自检 + 7 项缺陷修复; 996 passed; 已提交 `fae019a` (剩用户挑选与按需迭代)

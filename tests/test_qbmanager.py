@@ -29,6 +29,8 @@
 - test_refresh_schema_validation_missing_raises: 首次拉到非空种子信息时校验字段, 缺失抛 QbCompatError
 - test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
 - test_export_torrents_info: export_torrents_info 写种子信息到文件
+- test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
+- test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
 """
 import json
 import os
@@ -451,39 +453,61 @@ def test_export_torrents_info():
         assert text.count("\n\n") == 2  # 每条种子后空行分隔
 
 
-def test_tick_rebuilds_group_view_only_when_changed():
-    """分组视图惰性重建: 仅视图变化且 Web 活跃时重建(无变化/网页关闭时不空转)"""
+def test_tick_rebuilds_all_views_when_changed():
+    """视图惰性重建: 仅视图变化且 Web 活跃时重建 —— **四份视图同一入口同次重建**
+
+    历史缺陷(2026-09-18, 症状"种子页速度冻结、状态栏正常"): 主循环曾**只**重建
+    `_group_view` 就把共享的 `_group_view_dirty` 清掉 ⇒ Web 线程的兜底重建永不触发,
+    singles/shows/flat 三份视图长期停留在旧快照, 而版本号照常自增 ⇒ 前端判
+    `updated=true` 把**陈旧数组整表换上去**; 状态栏"速度合计"因取 groups 求和反而一直新鲜。
+
+    故本用例断言的是"四份视图**同次**重建", 而不是"某一份被重建" —— 只断言其中一份
+    会漏掉这个缺陷(原用例正是只 spy 了 `_build_group_view`, 把缺陷固化成了预期行为)。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         mgr.config.grouping.enabled = True
         mgr.touch_web_client()  # Web 活跃
         with mock.patch.object(mgr, "_refresh_torrents"), \
-             mock.patch.object(mgr, "_build_group_view", return_value=[]) as spy:
+             mock.patch.object(mgr, "_build_group_view", return_value=[]) as g, \
+             mock.patch.object(mgr, "_build_singles_view", return_value=[]) as s, \
+             mock.patch.object(mgr, "_build_shows_view", return_value={"list": [], "unrecognized": []}) as sh, \
+             mock.patch.object(mgr, "_build_flat_view", return_value=[]) as f:
+            counts = lambda: (g.call_count, s.call_count, sh.call_count, f.call_count)  # noqa: E731
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
-            assert spy.call_count == 1  # 视图变化 -> 重建
+            assert counts() == (1, 1, 1, 1)  # 视图变化 -> 四份同次重建
             mgr._tick(dry_run=False)
-            assert spy.call_count == 1  # 标记已消费且无新变化 -> 不重建
+            assert counts() == (1, 1, 1, 1)  # 标记已消费且无新变化 -> 不重建
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
-            assert spy.call_count == 2  # 再次变化 -> 重建
+            assert counts() == (2, 2, 2, 2)  # 再次变化 -> 仍四份同次
             mgr.store.view_changed = True
             mgr._web_last_seen = 0.0  # Web 不活跃(超过 TTL)
             mgr._tick(dry_run=False)
-            assert spy.call_count == 2  # 不重建
+            assert counts() == (2, 2, 2, 2)  # 不重建
             assert mgr._group_view_dirty is True  # 脏标记保留, 待 Web 恢复后重建
 
 
-def test_tick_skips_group_view_when_grouping_disabled():
-    """分组未启用: 不组装分组视图(即使视图标记为脏)"""
+def test_tick_rebuilds_views_when_grouping_disabled():
+    """分组未启用: 视图**仍须**重建(种子页平铺视图与"辅种分组是否启用"无关)
+
+    历史缺陷: 整个重建块曾被 `if grouping.enabled` 包住 —— 而 `consume_view_changed()`
+    在块**外**已把脏标记读走复位 ⇒ 分组关闭时标记无处落地、永久丢失 ⇒ 版本号不再变化
+    ⇒ 前端 `updated=false` 并退避轮询, 四份视图全部冻住。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         mgr.config.grouping.enabled = False
         mgr.touch_web_client()
         with mock.patch.object(mgr, "_refresh_torrents"), \
-             mock.patch.object(mgr, "_build_group_view", return_value=[]) as spy:
+             mock.patch.object(mgr, "_build_group_view", return_value=[]) as g, \
+             mock.patch.object(mgr, "_build_singles_view", return_value=[]) as s, \
+             mock.patch.object(mgr, "_build_shows_view", return_value={"list": [], "unrecognized": []}) as sh, \
+             mock.patch.object(mgr, "_build_flat_view", return_value=[]) as f:
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
-            assert spy.call_count == 0
+            assert (g.call_count, s.call_count, sh.call_count, f.call_count) == (1, 1, 1, 1)
+            assert mgr._group_view_dirty is False  # 标记被真正消费(不是被吞掉)

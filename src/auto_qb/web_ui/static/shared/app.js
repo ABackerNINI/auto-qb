@@ -307,7 +307,6 @@ const app = createApp({
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
       pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
       lastRid: null,       // 已持有的分组视图版本(服务端 rid); null = 尚未取到(强制全量)
-      idlePolls: 0,        // 连续无更新轮数(无变化退避: 2s→5s→10s; 有更新立即归零)
       searchQuery: "",       // 搜索关键字
       searchHits: new Set(),  // 命中种子 hash 集合(名称/文件匹配)
       searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示
@@ -1187,7 +1186,6 @@ const app = createApp({
       this.groups = [];
       this.status = {};
       this.lastRid = null;
-      this.idlePolls = 0;
       this.pollFails = 0;
       this.serviceDown = false;
       this.expandedKey = null;
@@ -1433,7 +1431,6 @@ const app = createApp({
       this.authErrorKind = "";
       this.pendingToken = candidate;
       this.lastRid = null;  // 重新鉴权/换密钥: 强制全量取一次分组视图
-      this.idlePolls = 0;
       try {
         // 用候选密钥直接验证: 成功前 this.token 不提交、authRequired 不解除, 主界面 DOM 绝不渲染
         const state = await this._request("/api/state", {}, candidate);
@@ -1475,9 +1472,8 @@ const app = createApp({
     startPolling() {
       this.stopPolling();
       this.loadSpeedMode();  // 限速托管状态(非轮询: 登录/重连时取一次, 卡内可手动刷新)
-      // FX-08: 状态栏恒显"限制速度"(取 qB 当前生效值), 因此必须主动取一次 /api/stats ——
-      // 不能等用户点"完整统计"才有值(否则那三个字长期显示"—")。仍非轮询: 只在登录/重连时取
-      this.loadStats();
+      // 状态栏常显统计(server_state)已随 /api/state.status.server 每轮回传 —— 登录首轮的
+      // refresh() 即可填上, 不再需要为"限制速度/连接/剩余"单独补一次 /api/stats(FX-08 旧做法)。
       this.refresh();
     },
     stopPolling() {
@@ -1493,9 +1489,10 @@ const app = createApp({
     currentPollMs() {
       // 失败退避: 连续失败翻倍至上限 15s(减少服务不可达时的空转)
       if (this.pollFails) return Math.min(15000, this.pollSec * 1000 * 2 ** this.pollFails);
-      // 无变化退避: 连续多轮无更新逐步放慢(2s→5s→10s); 一旦有更新立即回到 2s
-      if (this.idlePolls >= 6) return 10000;
-      if (this.idlePolls >= 2) return 5000;
+      // 恒定间隔, **不做"无变化退避"**: 曾按"视图版本未变"逐步放慢(2s→5s→10s), 但状态栏的
+      // 全局速度走 /api/stats(不受 rid 门控, 每轮都刷)⇒ 两个速度来源刷新频率被解耦,
+      // 观感上变成"状态栏正常、种子行滞后"。版本未变时响应体已趋近于零(不回传 groups),
+      // 退避省不下什么, 却直接牺牲行数据新鲜度 —— 收益与代价不对等, 故只保留失败退避。
       return this.pollSec * 1000;
     },
     async refresh() {
@@ -1504,6 +1501,10 @@ const app = createApp({
         const query = this.lastRid === null ? "" : `?rid=${this.lastRid}`;
         const state = await this.api("/api/state" + query);
         this.status = state.status;
+        // qB 全局状态(server_state)随 status **恒回传**(与 traffic 同口径: 不受 rid 门控) ——
+        // 状态栏常显统计与"限制速度"取它, 不再单独打 /api/stats ⇒ 每轮只剩 1 条请求,
+        // 且状态栏与行数据**同源同轮**(不再出现"状态栏新鲜 / 种子行滞后"的错位观测)。
+        if (state.status && state.status.server !== undefined) this.statsServer = state.status.server || null;
         if (state.updated !== false) {
           // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
           this.groups = state.groups || [];
@@ -1511,7 +1512,6 @@ const app = createApp({
           this.torrents = state.torrents || [];  // 种子页平铺数组(SEED_ITEM)与 groups 同门控回传
           this.shows = state.shows || { list: [], unrecognized: [] };  // 追剧视图同门控回传(R10)
           if (typeof state.rid === "number") this.lastRid = state.rid;
-          this.idlePolls = 0;
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
           // 虚拟行 key(u-<hash>)不做存在性校验(搜索视图由 filteredGroups 重建)
           if (this.selectedCount) {
@@ -1522,12 +1522,9 @@ const app = createApp({
             this.selGroups = this.selGroups.filter((k) => keys.has(k) || k.startsWith("u-"));
             this.selMembers = this.selMembers.filter((h) => hashes.has(h));
           }
-        } else {
-          this.idlePolls += 1;
         }
         this.serviceDown = false;
         this.pollFails = 0;
-        this.syncStats();  // 状态栏常显统计: 静默同步(不阻塞轮询排程)
       } catch (e) {
         // 服务不可达(程序退出/网络失败): 置 serviceDown 显示横幅; 轮询继续, 服务恢复后自动消失。
         // 401(密钥无效): 停止轮询并回到密钥输入界面(防无谓空转)。
@@ -3599,9 +3596,11 @@ const app = createApp({
         label: m.name || hash.slice(0, 12),
       });
     },
-    /* ---------------- 统计面板(FE-2C): /api/stats 全局状态(server_state 直取, 缺失显示 —) ----------------
-     * 打开时取一次, 卡内"刷新"按钮重取; 不随主循环轮询(统计是低频信息)。
-     * server 为 null(qB 未同步/降级全量不可用)时空态文案; 请求失败给重试。
+    /* ---------------- 统计面板(FE-2C): 全局状态(server_state, 缺失显示 —) ----------------
+     * 数据源随 /api/state.status.server 每轮回传(见 refresh()), 状态栏常显统计直接取
+     * `statsServer`; 打开面板 / 卡内"刷新"按钮才走 /api/stats 重取一次(统计是低频信息,
+     * 且"刷新"按钮语义上就该真的发一次请求)。server 为 null(qB 未同步/降级全量不可用)
+     * 时空态文案; 请求失败给重试。
      */
     async openStats() {
       this.statsOpen = true;
@@ -3622,13 +3621,6 @@ const app = createApp({
       } finally {
         this.statsLoading = false;
       }
-    },
-    /* 状态栏常显统计的静默同步(与主轮询同周期): 不动 loading/error 状态, 失败保持旧值 */
-    async syncStats() {
-      try {
-        const r = await this.api("/api/stats");
-        this.statsServer = r.server || null;
-      } catch (e) { /* 静默: 连接不可达时由 serviceDown 横幅统一提示 */ }
     },
     /* 统计值兜底: 字段缺失(null/undefined)显示 —; 0 是合法值(如 DHT 0 节点)原样展示 */
     statVal(v, fmt) {

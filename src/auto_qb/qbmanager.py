@@ -391,18 +391,20 @@ class QbManager(
 
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
-        # 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方分组视图惰性重建判定
+        # 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方视图惰性重建判定
         view_changed = self.store.consume_view_changed()
-        if self.config.grouping.enabled:
-            # WEB UI: 分组视图快照——惰性组装。仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)
-            # 且视图内容确有变化(视图字段/成员变化, 或显式置脏)时才重建, 否则主循环不空转;
-            # 关闭网页后 CPU 回落。
-            if view_changed:
-                self._group_view_dirty = True
-            if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
-                self._group_view = self._build_group_view()
-                self._group_view_ver += 1
-                self._group_view_dirty = False
+        # 置脏必须在 grouping 门控**之外**: 脏标记是**全部** Web 视图的共享状态 —— 种子页的
+        # 平铺视图(flat)/ 未归组单种子(singles)/ 追剧视图(shows)与"辅种分组是否启用"无关。
+        # 曾把置脏写在 `if grouping.enabled` 块内, 而 consume 在块外 ⇒ 分组关闭时标记被吞,
+        # 版本号不再变化 ⇒ 前端 updated=false 并退避轮询, 四份视图全部冻住。
+        if view_changed:
+            self._group_view_dirty = True
+        # WEB UI: 视图快照——惰性组装。仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)
+        # 且视图内容确有变化(视图字段/成员变化, 或显式置脏)时才重建, 否则主循环不空转;
+        # 关闭网页后 CPU 回落。重建统一走 `rebuild_views`(四份视图 + 版本号的唯一入口,
+        # 不得在这里只建其中一份 —— 见该方法 docstring 的 2026-09-18 缺陷)。
+        if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
+            self.rebuild_views()
 
         # WEB UI: 搜索索引限流构建——同样仅 Web 活跃时推进(每 tick 一批, 直至不再脏);
         # 关闭网页后停止推进, 避免无谓的文件 API 调用
