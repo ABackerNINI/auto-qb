@@ -115,6 +115,7 @@
         "windowsg",
         "winget",
         "winotify",
+        "workbuddy",
         "WRONLY"
     ],
     "python.useEnvironmentsExtension": true,
