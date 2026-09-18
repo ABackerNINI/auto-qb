@@ -22,6 +22,7 @@
 - test_notify_fatal_channel_error_swallowed: notify_fatal 渠道构造异常 -> 静默(不外抛)
 - test_notify_legacy_shortcut_cleanup: legacy lnk 清理: 存在的旧快捷方式被删除(APPDATA 显式给定, 文件操作经 monkeypatch, 不动真实开始菜单)
 - test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知器命令(不启动真实进程), send 走失败分支返回 False
+- test_notify_fatal_enabled_does_not_launch_process: 通知**启用且全程不 mock** 走 `notify_fatal` 真实路径 ⇒ 一个进程都不启动(用户原始诉求"测试时弹出通知框"的最直接回归点)
 """
 import base64
 import logging
@@ -386,3 +387,20 @@ def test_notify_real_send_blocked_under_pytest():
     with pytest.raises(OSError):
         notify_mod.subprocess.run(["notify-send", "-a", "auto-qb", "标题", "正文"])
     assert PlatformChannel("linux").send("标题", "正文") is False
+
+
+def test_notify_fatal_enabled_does_not_launch_process(sidefx_recorder):
+    """通知**启用且全程不 mock** 走 `notify_fatal` 真实路径 ⇒ **一个进程都不启动**
+
+    这是用户原始诉求("测试时会弹出系统通知框")的**最直接**回归点: 与
+    `test_notify_real_send_blocked_under_pytest`(直接断言 `subprocess.run` 被拦)不同,
+    这里**不 mock 任何东西** —— 真的构造 `PlatformChannel()`、真的走 `send()`,
+    靠 `tests/conftest.py` 的会话夹具把命令拦在启动之前, 再用副作用记账器验证零进程启动。
+
+    之所以要这条: 真凶是 `test_cli.py` 里 MagicMock 配置绕过 `notify_fatal` 守卫; 那条已单独 mock。
+    本条守的是**第二层** —— 万一将来又有测试忘了 mock, 夹具仍能兜住, 不会真的弹框。
+    """
+    before = len(sidefx_recorder.records)
+    notify_fatal("致命: 测试期不应弹出", NotifyConfig(enabled=True))  # 不 mock: 走真实发送路径
+    launched = [r for r in sidefx_recorder.records[before:] if r[0] == "POPEN"]
+    assert not launched, f"通知启用时竟启动了外部进程(会真弹系统通知): {launched}"

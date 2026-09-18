@@ -488,3 +488,66 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 **顺带修的一处噪声**: `.gitignore` 原本只忽略 `.coverage`(**精确名**, 不带通配), 而覆盖率并行数据文件名是
 `.coverage.<host>.<pid>.<随机>` ⇒ 会漏进 `git status` 变成未跟踪噪声(易被误当"该提交的东西")。已补 `.coverage.*`。
+
+### 测试期"真实系统副作用"普查: 手法 + AUMID 注册表键 (2026-09-18 实测)
+
+**为什么要普查**: 修完通知弹框后, "测试会不会碰真实系统"只答了一半 —— 通知只是**已知的一种**。
+把**所有**真实副作用都记下来再逐类判定, 比逐个猜可靠。
+
+**探针手法(可复用)**: 一个 pytest 插件, 在 `pytest_configure` 里 patch 五类入口, 输出**一律写文件**:
+① `subprocess.Popen.__init__`(外部进程) ② `winreg.CreateKeyEx`/`SetValueEx`/`DeleteKey`/`DeleteValue`(注册表)
+③ `os.remove`/`unlink`/`rmdir` + `shutil.rmtree`(文件删除) ④ `os.symlink`(建链) ⑤ `socket.socket.bind`(网络监听)。
+`-p <插件名>` 注入 → 跑全量 → 按类别 `sort | uniq -c` 归类判定。
+**过滤临时目录的坑**: 用 `tempfile.gettempdir()` 做 `abspath` 前缀过滤会被 Windows 长路径前缀 `\\?\`
+绕过(`abspath` 不剥它) —— 本次 157 条"仓库外删除"**全是这个假阳性**; 改用"路径里是否含 TEMP"复核,
+才发现全部落在 `C:\TEMP\pytest-of-*`。**别只信 abspath 前缀**。
+
+**普查结论(2026-09-18, 全量 1007 项)**:
+
+| 类别 | 实测 | 判定 |
+|---|---|---|
+| 外部进程 | **0** | 通知拦截夹具生效 |
+| 注册表 · **AUMID 键** | **真写 2 值, 写完不清理** | ⚠️ **唯一真问题** —— 已加会话级守卫 |
+| 注册表 · HKCU Run 键 | 写 + 删(自清理) | 既有明文约定(`test_autostart_windows_registry`, [testing.md](testing.md) 已记) |
+| 文件删除 | 157 条, **全部**在 `C:\TEMP\pytest-of-11059\` | 仓库内 0、仓库外 0 |
+| 建符号链接 | 117 条: pytest 自己的 `pytest-current` + 逃逸用例 | 全在临时目录 |
+| 网络监听 | 161 条回环随机端口(`FakeQbServer`)+ 2 条同端口重启复现 + 1 条随机端口 | 全是 `127.0.0.1`, 自清理 |
+
+**AUMID 键为什么值得修**: `PlatformChannel("win32")` 构造时会调 `_ensure_appid_registered()` **真写**
+`HKCU\Software\Classes\AppUserModelId\AutoQB.UI`。与 autostart 的 Run 键的**关键区别是它不清理** ——
+每跑一次测试就在用户注册表里留一个持久键。触发用例是 `test_notify_legacy_shortcut_cleanup`
+(它只想测 `.lnk` 清理, 注册表写入是顺带发生的; 另两个构造 win32 渠道的用例都显式 patch 了注册环节 ——
+**同一个类里两种写法并存, 正是"逐用例 patch 容易漏"的实证**)。
+**修法(conftest 第二道会话级守卫)**: 只把**属于 AUMID 前缀**的 `CreateKeyEx`/`SetValueEx` 变成空操作,
+其余注册表写入放行 ⇒ autostart 的 Run 键测试行为完全不变。
+**两个关键细节**: ①让写入**静默成功而不是抛异常** —— `_ensure_appid_registered()` 只 catch `OSError`,
+抛异常会让 `channel._appid` 回退成 `WINDOWS_TOAST_APPID_FALLBACK`、打乱既有断言;
+②`CreateKeyEx` 的替身**必须支持 `with` 语句**(源码是 `with winreg.CreateKeyEx(...) as key:`)。
+
+**后续: 普查能力已固化** (2026-09-18): 那次用的临时探针在 `%TEMP%` 里、会随会话消失,
+同类问题下次还得靠人肉发现。已固化为 `tests/sidefx.py`(记账器 + 放行清单 + `is_violation` 判定)
++ `tests/conftest.py` 会话级 autouse 夹具(收尾有越界项即让本次 pytest 失败)
++ `tests/test_sidefx.py` 策略单测(8 项)。两个实施细节值得记:
+①`StubRegKey` 放在 `sidefx.py` 而不是 conftest —— 记账器据此识别"被 AUMID 守卫拦下的调用";
+**否则两个夹具谁先安装会让 AUMID 键一会儿被记成越界、一会儿不被记**(顺序依赖是隐藏 bug 的温床,
+这次用"替身类型识别"把它变成顺序无关); ②`SetValueEx` 只记值名不记键路径 —— 本仓两处调用都紧跟
+`CreateKeyEx`, 键路径由 `REG` 那条记录覆盖(已在模块 docstring 写明这一局限)。
+
+**补 `LAUNCH` 类 + 端到端验证** (2026-09-18): 记完五类后发现还有口子 —— `os.startfile`(开资源管理器) /
+`webbrowser.open`(开浏览器)/ `os.system` **不走 `subprocess`**, `POPEN` 抓不到; 而 `utils.open_path()`
+在 Windows 上就走 `os.startfile`, `/api/open-path` 能触达它 —— 与用户最初报的"测试时弹出系统通知框"同一族。
+新增 `LAUNCH` 类, **放行清单为空**(`subprocess.call/check_output/run` 内部都走 `Popen`, 由 `POPEN` 覆盖, 不重复)。
+单测里**不真调用**这些入口(那本身就是越界副作用、会让会话夹具报错), 只验证"入口已被包装"。
+**端到端验证(重要)**: 用独立脚本跑(不经 pytest ⇒ AUMID 守卫不生效)构造 `PlatformChannel("win32")`,
+记账器确实抓到 `REG: ...AppUserModelId\AutoQB.UI` + `REGVAL: DisplayName/IconUri` 三条越界,
+并正确放行了临时目录删除与回环监听 —— 证明"守卫一旦失效就会被记账器抓到", 而不是靠"检测不到"蒙混过关。
+**以后动这类守卫都要做一次这种"撤掉守卫看它报不报"的验证, 否则可能只是装了个永远不触发的空壳。**
+
+**再补 `CONNECT`** (2026-09-18): 原本只记 `BIND`(监听), **出站连接是盲区** —— 测试若真连了外网
+(慢、不稳定、还可能泄露数据)看不出来。新增 `CONNECT` 类覆盖 `socket.socket.connect` 与
+`socket.create_connection`, 放行条件同 `BIND`(回环)。**全量实测零越界 ⇒ 本项目测试确实全部走回环、零外网连接**,
+这条也顺带成了"测试不依赖外网"的守阵(以后谁在测试里引了真外网请求会立刻失败)。
+自此记账器共 **七类**: `POPEN` / `LAUNCH` / `REG` / `REGVAL` / `FSDEL` / `SYMLINK` / `BIND` / `CONNECT`
+(前两个算"启动类", 后两个算"网络类")。**仍未覆盖**: 文件**写入**(`open(...,'w')`)与 `os.rename/mkdir` 等 ——
+`coverage`/`pytest` 自身会在仓库根写 `.coverage`、`.pytest_cache`, 要放开它们就得开白名单, 收益不抵噪音,
+暂不做; 真要防"测试写脏仓库", 靠 `git status` 更直接。

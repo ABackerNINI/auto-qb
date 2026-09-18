@@ -4,7 +4,7 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (①**测试期禁止真实系统通知**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` 的 `manager` 为 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到恒真配置、守卫放行 ⇒ 真发 Windows toast `auto-qb 已停止`(探针实测抓到); 已 mock 掉 `auto_qb.cli.notify_fatal` + 新增 `tests/conftest.py` 会话夹具拦通知器命令(安全网), 基线 1006→1007, **已入库 `7ae21a1`** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 新条目 ②WEB UI **第十二轮·状态色收口**(R12, 纯 CSS, 已入库 `f47e6b8`): 「进度/状态两列文字」纳入行状态色; **星图补齐暂停中性令牌族** —— 棱镜第九轮 FX-06 已落地、星图漏改, 于是 `.g-status.k-paused` 落回 `--surface-2` 白 6% 底 = 用户说的"**还是太白**"真因; paused/other 行文字由近白 `--fg` 改中性中间调 `--paused`(= `--fg-muted`, 即"已暂停"状态文字那支色); 双 UI × 六主题截图逐张核对, 1006 passed **不变** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 两条新条目 ③WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文) 已入库 `9723a76` — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ④TASK014 UI 组件库 20 式已提交 `fae019a` ⑤**测试环境假失败清理**: 修掉 2 个环境性假失败(`APPDATA` 未设 ⇒ 通知用例断言必失败; 沙箱把 `os.symlink` 落成**真实目录** ⇒ 逃逸链接场景不存在) + `.gitignore` 补 `.coverage.*`, **实测 1007 passed / 0 failed**, 已入库 `7ae21a1`)
+**最后更新**: 2026-09-18 (①**测试期禁止真实系统通知**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` 的 `manager` 为 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到恒真配置、守卫放行 ⇒ 真发 Windows toast `auto-qb 已停止`(探针实测抓到); 已 mock 掉 `auto_qb.cli.notify_fatal` + 新增 `tests/conftest.py` 会话夹具拦通知器命令(安全网), 基线 1006→1007, **已入库 `7ae21a1`** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 新条目 ②WEB UI **第十二轮·状态色收口**(R12, 纯 CSS, 已入库 `f47e6b8`): 「进度/状态两列文字」纳入行状态色; **星图补齐暂停中性令牌族** —— 棱镜第九轮 FX-06 已落地、星图漏改, 于是 `.g-status.k-paused` 落回 `--surface-2` 白 6% 底 = 用户说的"**还是太白**"真因; paused/other 行文字由近白 `--fg` 改中性中间调 `--paused`(= `--fg-muted`, 即"已暂停"状态文字那支色); 双 UI × 六主题截图逐张核对, 1006 passed **不变** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 两条新条目 ③WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文) 已入库 `9723a76` — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ④TASK014 UI 组件库 20 式已提交 `fae019a` ⑤**测试环境假失败清理**: 修掉 2 个环境性假失败(`APPDATA` 未设 ⇒ 通知用例断言必失败; 沙箱把 `os.symlink` 落成**真实目录** ⇒ 逃逸链接场景不存在) + `.gitignore` 补 `.coverage.*`, **实测 1007 passed / 0 failed**, 已入库 `7ae21a1` ⑥**测试期真实系统副作用普查**: patch 五类入口写文件记账跑全量 —— 外部进程 0, **唯一真问题 = AUMID 注册表键**(真写且不清理), 已加 conftest 第二道守卫后**归零** ⑦**普查能力固化**: `tests/sidefx.py` 记账器 + 会话夹具(收尾有越界项即失败)+ 策略单测 10 项, **1015 passed / 0 failed**)
 
 ## 正在进行
 
@@ -21,6 +21,22 @@
   **真实目录**, "逃逸链接"场景不存在)。另: `.gitignore` 补 `.coverage.*`(并行覆盖率数据漏进 `git status`)。
   **实测 1007 passed / 0 failed**(修前 1006 + 1 failed) — 判据入 [pitfalls.md](pitfalls.md) 与 [testing.md](testing.md) 约定 9
   → 档案 [tasks/TASK016-test-notification-and-env-guard.md](tasks/TASK016-test-notification-and-env-guard.md)(本任务含上面那条"测试期禁止真实系统通知", 同属一个专题)
+
+- **副作用普查能力固化进测试 (2026-09-18)**: 普查探针原是临时脚本(在 `%TEMP%`, 随会话消失),
+  已固化为 `tests/sidefx.py`(七类入口记账器 + 放行清单 + `is_violation` 判定)+ `tests/conftest.py`
+  第三道会话级夹具(**收尾有越界项即让 pytest 失败**)+ `tests/test_sidefx.py` 策略单测 8 项。
+  **已反向验证**(注入越界记录 ⇒ 退出码 1 + 明细台账, 确认不是摆设), 临时验证文件已删。
+  **实测 1018 passed / 0 failed**(基线 1007 + 11) — 详见 [testing.md](testing.md) 约定 10 与 [pitfalls.md](pitfalls.md)
+
+- **测试期真实系统副作用普查 (2026-09-18)**: 通知只是**已知的一种**副作用, 于是 patch 五类入口
+  (`subprocess.Popen` / `winreg` / 文件删除 / `os.symlink` / `socket.bind`) 写文件记账, 跑全量逐类判定。
+  **结论(全量 1007 项)**: 外部进程 **0**(通知夹具生效); **唯一真问题 = AUMID 注册表键** ——
+  `PlatformChannel("win32")` 构造时真写 `HKCU\Software\Classes\AppUserModelId\AutoQB.UI` 且**写完不清理**
+  (autostart 的 Run 键是 `finally` 里自清理的, 性质不同), 触发用例 `test_notify_legacy_shortcut_cleanup`;
+  其余干净(文件删除 157 条全在 `C:\TEMP\pytest-of-*`、建链全在临时目录、监听全为 `127.0.0.1` 自清理)。
+  已加 `tests/conftest.py` **第二道会话级守卫**(只拦 AUMID 前缀, 静默成功**不抛异常** —— 否则 `_appid`
+  会回退成 FALLBACK 打乱断言) ⇒ 复核 **AUMID 归零**, 注册表台账只剩 autostart 的自清理 Run 键;
+  1007 passed / 0 failed — 手法与过滤坑入 [pitfalls.md](pitfalls.md) 与 [testing.md](testing.md) 约定 8
 
 - **R12 状态色收口 (2026-09-18, 已入库 `f47e6b8`)**: 进度/状态两列文字随行状态着色 + 星图补 `--paused` 令牌族
   (与棱镜同值) + paused/other 行不再保持近白前景。改的是 `atlas/style.css` 与 `prism/css/views.css`;
@@ -43,7 +59,7 @@
 - **TASK011 第九轮修复**: 已入库 `49d3151`, 剩用户真机走查反馈
 - **第十轮的两处已知限制**(已写入 pitfalls, 非待办): ① 列偏好受 localStorage **origin 隔离** 影响(`localhost` 与 `127.0.0.1`/换端口 = 不同站点各存一份) —— 用户明确要求只存浏览器, 不做服务端化; ② 目录浏览器只能浏览**已有保存路径及其子目录**(安全边界), 全新位置需在输入框手填
 - **第十一轮的定案口径**(已写入 pitfalls, 别改回去): 行/表头一律 `fit-content; min-width: 100%`(**底色跟内容**), **行内单元格必须 `min-width: 0`**(否则 nowrap 文本把行顶宽 → 列没溢出却常驻横滚条); 曾用"行定宽 100%"治假滚动条, 会让**溢出段没有底色**(用户实测"滚动后右边无背景条"), 已回退
-- **未入库的 `想法.md`**: 含用户自己的未提交改动 —— 本轮只勾选 WEBUI 条目, 其余改动未暂存, 由用户自行决定何时一并入库
+- **`想法.md`**: 工作区**干净**(最后一次入库 `3bface9`)。它属于红线文件(与 `config.yml` / `auto-qb-data/` 同级), 提交前照例用 `git status --short` 确认一遍是否又有改动, 不进暂存区
 
 ## 下一步候选 (来源: `想法.md` 待办 + progress.md 规划中)
 
