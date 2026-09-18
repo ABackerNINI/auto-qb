@@ -1,6 +1,6 @@
 # TASK016 — 测试期真实系统副作用收口 (通知框 + 环境依赖假失败)
 
-**Status:** In Progress (代码/测试/文档已完, **未提交**; 剩用户再跑一次测试确认不再弹框)
+**Status:** In Progress (代码/测试/文档已完, **已入库 `7ae21a1`**; 剩用户再跑一次测试确认不再弹框)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** (无 —— 缺陷修复, 未产出计划文档)
@@ -109,4 +109,9 @@
   修完全量 **1007 / 0 failed**。
 - 2026-09-18: 顺带补 `.gitignore` 的 `.coverage.*` 与 `test_notify.py` 计划清单 4 项; 文档收尾
   (`testing.md` 基线 1007 + 约定 8/9, `pitfalls.md` 2 条新条目, `progress.md`, `activeContext.md`,
-  本档案 + `_index.md`)。**未提交** —— 用户说"提交"才 commit。
+  本档案 + `_index.md`)。**已入库 `7ae21a1`**(11 文件 +289/-21, 无红线文件)。
+- 2026-09-18: 用户下令提交 → `7ae21a1`。提交后本 worktree 的**分支 ref 静默丢失第 9 次复发**(`HEAD`/松散 ref/
+  packed-refs 全部停在父提交 `2b69f9e`), 用加固后的 `fix-branch-ref.sh <40 位 sha>` **一步**修好(松散 ref 与
+  packed-refs 同时对齐); 提交后三项核对(内容/红线/逐文件 `log` + `diff --quiet`)全部通过。
+- 2026-09-18: 补一次纯状态回写提交 —— 首个提交里 `activeContext.md` / 本档案 / `_index.md` 还写着"未提交",
+  属**已知教训**(提交前应把状态标记一并改好, 否则要多一次回写补交)。

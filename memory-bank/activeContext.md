@@ -4,17 +4,17 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (①**测试期禁止真实系统通知**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` 的 `manager` 为 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到恒真配置、守卫放行 ⇒ 真发 Windows toast `auto-qb 已停止`(探针实测抓到); 已 mock 掉 `auto_qb.cli.notify_fatal` + 新增 `tests/conftest.py` 会话夹具拦通知器命令(安全网), 基线 1006→1007 — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 新条目 ②WEB UI **第十二轮·状态色收口**(R12, 纯 CSS, 已入库 `f47e6b8`): 「进度/状态两列文字」纳入行状态色; **星图补齐暂停中性令牌族** —— 棱镜第九轮 FX-06 已落地、星图漏改, 于是 `.g-status.k-paused` 落回 `--surface-2` 白 6% 底 = 用户说的"**还是太白**"真因; paused/other 行文字由近白 `--fg` 改中性中间调 `--paused`(= `--fg-muted`, 即"已暂停"状态文字那支色); 双 UI × 六主题截图逐张核对, 1006 passed **不变** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 两条新条目 ③WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文) 已入库 `9723a76` — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ④TASK014 UI 组件库 20 式已提交 `fae019a` ⑤**测试环境假失败清理**: 修掉 2 个环境性假失败(`APPDATA` 未设 ⇒ 通知用例断言必失败; 沙箱把 `os.symlink` 落成**真实目录** ⇒ 逃逸链接场景不存在) + `.gitignore` 补 `.coverage.*`, **实测 1007 passed / 0 failed**)
+**最后更新**: 2026-09-18 (①**测试期禁止真实系统通知**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` 的 `manager` 为 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到恒真配置、守卫放行 ⇒ 真发 Windows toast `auto-qb 已停止`(探针实测抓到); 已 mock 掉 `auto_qb.cli.notify_fatal` + 新增 `tests/conftest.py` 会话夹具拦通知器命令(安全网), 基线 1006→1007, **已入库 `7ae21a1`** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 新条目 ②WEB UI **第十二轮·状态色收口**(R12, 纯 CSS, 已入库 `f47e6b8`): 「进度/状态两列文字」纳入行状态色; **星图补齐暂停中性令牌族** —— 棱镜第九轮 FX-06 已落地、星图漏改, 于是 `.g-status.k-paused` 落回 `--surface-2` 白 6% 底 = 用户说的"**还是太白**"真因; paused/other 行文字由近白 `--fg` 改中性中间调 `--paused`(= `--fg-muted`, 即"已暂停"状态文字那支色); 双 UI × 六主题截图逐张核对, 1006 passed **不变** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 两条新条目 ③WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文) 已入库 `9723a76` — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ④TASK014 UI 组件库 20 式已提交 `fae019a` ⑤**测试环境假失败清理**: 修掉 2 个环境性假失败(`APPDATA` 未设 ⇒ 通知用例断言必失败; 沙箱把 `os.symlink` 落成**真实目录** ⇒ 逃逸链接场景不存在) + `.gitignore` 补 `.coverage.*`, **实测 1007 passed / 0 failed**, 已入库 `7ae21a1`)
 
 ## 正在进行
 
-- **测试期禁止真实系统通知 (2026-09-18, 未提交)**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` ——
+- **测试期禁止真实系统通知 (2026-09-18, 已入库 `7ae21a1`)**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` ——
   `manager` 是 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到**恒真配置**, 守卫 `if not config or
   not config.enabled` 放行 ⇒ 真的发一条 Windows toast(探针实测抓到: `auto-qb 已停止`)。已 mock 掉
   `auto_qb.cli.notify_fatal` 并断言调用; 另加 `tests/conftest.py` 会话夹具把通知器命令拦在 `subprocess.run` 之前(安全网)。
   全量真实 send 4 → **0**; 基线 1006 → **1007**; 剩**用户再跑一次测试确认不再弹框**
 
-- **测试环境假失败清理 (2026-09-18, 未提交)**: 全量测试曾有 **2 个稳定失败**, 排查确认都是**环境能力**差异、
+- **测试环境假失败清理 (2026-09-18, 已入库 `7ae21a1`)**: 全量测试曾有 **2 个稳定失败**, 排查确认都是**环境能力**差异、
   `src/` 无问题 —— ① `test_notify.py::test_notify_legacy_shortcut_cleanup` 补 `monkeypatch.setenv("APPDATA", ...)`
   (`_legacy_shortcut_paths()` 在 `APPDATA` 缺失时返回 `[]`, `os.path.exists` 的 monkeypatch 从未被问到 ⇒ 断言必失败);
   ② `test_web.py::test_api_fs_dirs_endpoint` 第⑤条补 `os.path.islink()` 判定(本机 `os.symlink` 返回成功却落成
