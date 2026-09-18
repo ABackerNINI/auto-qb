@@ -49,5 +49,8 @@ USER.md
 # WorkBuddy AI 相关文件(会话记忆/技能数据目录)
 .workbuddy-ai/
 
+# 内置 CLI (codebuddy.js) 的项目级技能扫描目录; 由 scripts/sync_agent_skills.py 生成链接
+.codebuddy/
+
 # ?
 .mimosa/

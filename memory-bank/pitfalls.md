@@ -249,6 +249,17 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - ~~`episodes.py` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。
 - `config/loaders.py` `load_global_hr`/`load_tracker_hr` 上方仍留 `# TODO: optimize`。
 
+### ⚠️ 本仓是多 worktree + 多 agent 并行, 提交可能被别的会话顶掉 (2026-09-19 实测)
+
+- **拓扑**: `D:/Projects/auto-qb-backend` 是 **worktree**(`.git` 是文件, 指向 `D:/Projects/auto-qb/.git/worktrees/auto-qb-backend`); 同仓还有 `auto-qb`(主仓, develop)、`-autoclaw`、`-trae`、`-zcode`、`-other`(含 be/fe 子 worktree)、`-frontend` 共 9 个 worktree, 共享同一个 `.git`。
+- **事故**: `git commit` 打印 `[backend/develop 6e572af]` 看似成功, 几秒后 `git log -1` 却退回 `ed4cdd0`, `git status` 冒出 2133 个 staged。真相是**分支 ref 被别的会话回退/钉住**, 不是提交失败也不是有人动了文件:
+  - `git update-ref refs/heads/backend/develop <sha>` → rc=0、reflog 有 "reset: moving to ..." 条目, 但 loose ref 文件随即消失, `for-each-ref` 仍读到旧值。
+  - `git branch -f` → `fatal: cannot force update the branch 'backend/develop' used by worktree at 'D:/Projects/auto-qb-backend'`。
+  - 不在 packed-refs 里的新 ref(如 `refs/heads/tmp-sync-agent-skills`)能正常写入 → 说明只针对这个被争用的分支 ref。
+- **判别法**: 提交后若 `git status` 突然冒出成百上千个 "staged", **先别急着 stage/commit**, 用 `git write-tree` 对比 `git rev-parse <刚才的提交>^{tree}` —— 两者一致的话, 说明工作区/索引完好, 只是分支指针被回退了, 改动一个字都没丢。
+- **处置**: ①确认没有别的会话正在操作同一个 `.git`; ②改动用 `git format-patch -1 <sha> --stdout > 备份.patch` 留底 + `git update-ref refs/heads/tmp-xxx <sha>` 建锚点防 GC; ③等对方结束后再 `git reset --soft <sha>` 恢复指针(工作区/索引无需变动)。**不要**用 `git add -A` / 全量提交去"解决"那批 staged —— 那是别人的在途改动(含 `想法.md` 这类高危文件)。
+- **复核动作**: 提交后必须跑 `git log --oneline -1` 确认 HEAD 真的是刚建的提交, 只看 commit 的输出会被骗。
+
 ## ⚠️ 并发/状态机约束回顾 (违反即引入难以复现的 bug)
 
 1. 主循环线程是唯一修改队列/state_file/store 分组索引的线程 — 不要在校验回调、信号处理器、新线程里改这些。
@@ -570,3 +581,22 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **修法**: 守卫改为在**进程内**加载脚本模块并比对字符串, 零子进程(也更快):
   `spec = importlib.util.spec_from_file_location("gen_tasks_index", GEN)` → `module.render(module.collect())` 与磁盘 `_index.md` 逐字节比对; 语义与 `--check` 等价。
 - **判别法**: 测试代码里一旦出现 `subprocess` / `os.system` / `os.startfile` / `webbrowser.open`, 先怀疑会被 sidefx 拦下 —— 尤其"单独跑绿、全量跑 ERROR"这种症状, 基本就是它。
+
+### WorkBuddy 项目级 skills 挂在 `.codebuddy/skills`, 不是 `.workbuddy-ai/skills` (2026-09-18 实测)
+
+- **症状**: 把 `.agents/skills` 链接到 `.workbuddy-ai/skills` 之后, 会话的技能列表里一个项目级 skill 都没出现。
+- **根因**: 内置 CLI 运行时 `cli/dist/codebuddy.js` 的 `SkillLoader.loadSkills()` 只扫三类根 —— `PathUtils.getProjectSkillsDir()` = `<workspace>/.codebuddy/skills`、`getHomeSkillsDir()` = `$CODEBUDDY_CONFIG_DIR/skills`、`$CODEBUDDY_SESSION_SKILL_DIRS`(path.delimiter 分隔, 仅当次会话有效)。产品文档里写的 `.workbuddy-ai/skills` **这个 CLI 根本不读**(对该 bundle 全量 grep `workbuddy-ai`: 0 命中)。
+- **递归坑**: `scanSkillsDirectory()` 会**递归最深 5 层**收集每一个 `SKILL.md`, 不是只读顶层。整棵 `.agents/skills` 挂上去 = 213 条技能, 其中 193 条来自 `autoclaw-design-capability`(12MB 设计预设库)及其完整副本 `autoclaw-design-capability_noqa`; 按 name 去重后仍会全部注入系统提示, 严重挤占上下文。
+- **现状**: `scripts/sync_agent_skills.py` 只把 21 个顶层 skill 以目录联接(junction, 免管理员权限)挂到 **`.codebuddy/skills` 这一处**, 排除上述两个预设包; 幂等, `--prune` 清失效链接, `--dry-run` 预演。源目录 `.agents/skills` 仍是唯一事实源(已入库), 链接两边读写同一份文件。
+- **不要再给 `.workbuddy-ai/skills` 留兼容链接** (2026-09-18 已移除): 该路径 CLI 不读, 留着只会多一处需要同步、且容易让人误判"链接在、为什么没生效"。`.workbuddy-ai/` 下现在只剩会话记忆目录 `memory/`。
+- **维护约束**: junction 不会自动跟随源目录增删 —— **在 `.agents/skills` 里增删 skill 后必须重跑该脚本**, 否则新 skill 不会出现在列表里。
+- **判别法**: 技能没出现, 先查两件事 —— ①链接是否建在 `.codebuddy/skills` 下(不是 `.workbuddy-ai/`); ②是否重启了会话(技能列表在会话启动时加载一次)。
+- **完整挂载清单 (2026-09-18 实测枚举, 按加载优先级从高到低, 同名先到先得)**:
+  1. **project** `<workspace>/.codebuddy/skills` —— 21 条(本仓库 junction 挂载)
+  2. **user** `$CODEBUDDY_CONFIG_DIR/skills` = `C:\Users\11059\.workbuddy-ai\skills` —— 14 个 SKILL.md / 13 条生效(`skill-vetter` 被项目级同名覆盖)
+  3. **connector** `~/.workbuddy-ai/connectors/skills` —— 不存在
+  4. **session** `$CODEBUDDY_SESSION_SKILL_DIRS` —— 未设置
+  5. **bundled** `$CODEBUDDY_BUILTIN_SKILLS_DIR` —— 未设置
+  6. **plugin**(`SkillExtensionLoader`, 每个已装插件的 `skills/`): `~/.workbuddy-ai/plugins/cache/workbuddy-builtin/*`(weixinpay 3 / tencent-docx 8 / tencent-docs-plugin 2 / sheetagent 2 / tencent-pptx 1)、`cache/codebuddy-plugins-official/*`(playwright-cli 1、find-skills 1 被项目级覆盖、document-skills 2)、`cache/cb_teams_marketplace/document-skills`(pdf、pdfkit-py)、以及应用内置 `H:\Programs\WorkBuddyAI\resources\app.asar.unpacked\resources\plugins\workbuddy-builtin\skills`(27 个 / 26 生效)。
+  - 去重后共 **79** 条。注意应用内置 `builtin-plugins/*/skills` 与 `plugins/cache/` 下的同名副本重复, 后者先加载、前者全部落空 —— 排查"改了内置 skill 没生效"时先看是不是被 cache 副本挡了。
+- **Windows 操作坑**: 在本会话的 Git Bash 里 `cmd //c ...` 会被路径转换坑掉(参数里的 `\` 变 `/`, cmd 把 `/Projects` 当成命令行开关报"无效开关"), 且可能退化成交互式 cmd 而**静默不执行**。删 junction 用 Python `os.rmdir()`(等价于 RemoveDirectory, 只摘链接不碰目标), 别用 `cmd /c rmdir`。
