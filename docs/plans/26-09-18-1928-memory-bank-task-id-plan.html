@@ -144,10 +144,10 @@
 
   <table>
     <tr><th>证据</th><th>现象</th></tr>
-    <tr><td><code>d93b087</code></td><td>并行分支各建一份 <code>TASK014-ui-component-libraries.md</code> 与 <code>TASK015-ui-component-libraries.md</code>, 两者 <b>md5 一致</b>; 索引同条目登记两次, <code>_indexed_sections()</code> 是 dict, <b>静默覆盖</b>, 双向一致守卫查不出来。事后删重复档 + 补 slug 唯一性守卫。</td></tr>
+    <tr><td><code>d93b087</code></td><td>并行分支各建一份 <code>26-09-17-webui-component-libraries.md</code> 与 <code>TASK015-ui-component-libraries.md</code>, 两者 <b>md5 一致</b>; 索引同条目登记两次, <code>_indexed_sections()</code> 是 dict, <b>静默覆盖</b>, 双向一致守卫查不出来。事后删重复档 + 补 slug 唯一性守卫。</td></tr>
     <tr><td><code>pitfalls.md:339</code></td><td>索引里同一条目被写成 <code>[TASK014]</code> 与 <code>[TASK012]</code> 两行, 而 TASK012 真实身份是「第十轮修复」→ <b>撞号</b>。</td></tr>
     <tr><td>zcode worktree</td><td>同一专题「UI 组件库 20 式」、<b>同一个提交 <code>fae019a</code></b>, 在 <code>agentZCode/develop</code> 编号 <b>TASK012</b>, 在 <code>other/develop</code> 编号 <b>TASK014</b> → <b>同题异号</b>。两分支一旦合并 = 两份同 slug 档案 + 索引双登记。</td></tr>
-    <tr><td>2026-09-18 19:41</td><td>本 worktree 内另一会话新建 <code>TASK017-webui-view-rebuild-scope.md</code>。它正确登记了, 但说明发号动作<b>正在被并发执行</b> —— 若此刻另一 worktree 也取号, 同样会算出 017。</td></tr>
+    <tr><td>2026-09-18 19:41</td><td>本 worktree 内另一会话新建 <code>26-09-18-webui-view-rebuild-scope.md</code>。它正确登记了, 但说明发号动作<b>正在被并发执行</b> —— 若此刻另一 worktree 也取号, 同样会算出 017。</td></tr>
   </table>
 
   <p class="sub">规模: 9 个 worktree(<code>auto-qb</code> 主线 + <code>backend</code> / <code>frontend</code> / <code>autoclaw</code> / <code>trae</code> / <code>zcode</code> / <code>other</code> 六个 agent 分支 + <code>.worktrees/be</code> / <code>.worktrees/fe</code>), 每个都持有完整的 <code>memory-bank/tasks/</code> 副本。</p>
@@ -209,7 +209,7 @@
   <h3>方案 I 如何两头都要</h3>
   <p>日期到<b>天</b>、不到分, 后面接 slug:</p>
   <div class="rename">
-    <div class="from">TASK015-webui-error-reason.md</div>
+    <div class="from">26-09-18-webui-error-reason.md</div>
     <span>→</span>
     <div class="to">26-09-18-webui-error-reason.md</div>
   </div>
@@ -289,23 +289,23 @@
   <h3>阶段 1 映射表(日期取自档案 <code>Added:</code> / <code>Started:</code>)</h3>
   <table>
     <tr><th>现文件名</th><th>迁移后</th><th>Legacy-ID</th></tr>
-    <tr><td><code>TASK001-memory-bank-migration.md</code></td><td><code>26-09-14-memory-bank-migration.md</code></td><td>TASK001</td></tr>
-    <tr><td><code>TASK002-webui-qb-replacement.md</code></td><td><code>26-09-15-webui-qb-replacement.md</code></td><td>TASK002</td></tr>
-    <tr><td><code>TASK003-webui-polish-and-redesign.md</code></td><td><code>26-09-15-webui-polish-and-redesign.md</code></td><td>TASK003</td></tr>
-    <tr><td><code>TASK004-backend-file-split.md</code></td><td><code>26-09-15-backend-file-split.md</code></td><td>TASK004</td></tr>
-    <tr><td><code>TASK005-dependency-and-env-modernization.md</code></td><td><code>26-09-15-deps-env-modernization.md</code></td><td>TASK005</td></tr>
-    <tr><td><code>TASK006-torrentrecord-full-fields.md</code></td><td><code>26-09-15-backend-torrentrecord-fields.md</code></td><td>TASK006</td></tr>
-    <tr><td><code>TASK007-tracker-groups.md</code></td><td><code>26-09-15-rule-tracker-groups.md</code></td><td>TASK007</td></tr>
-    <tr><td><code>TASK008-tvshows-view.md</code></td><td><code>26-09-15-webui-tvshows-view.md</code></td><td>TASK008</td></tr>
-    <tr><td><code>TASK009-docs-restructure.md</code></td><td><code>26-09-15-docs-restructure.md</code></td><td>TASK009</td></tr>
-    <tr><td><code>TASK010-memory-bank-trigger-fix.md</code></td><td><code>26-09-17-memory-bank-trigger-fix.md</code></td><td>TASK010</td></tr>
-    <tr><td><code>TASK011-webui-fix-round9.md</code></td><td><code>26-09-17-webui-fix-round9.md</code> <span class="sub">→ 阶段 3 并入 <code>webui-polish</code></span></td><td>TASK011</td></tr>
-    <tr><td><code>TASK012-webui-fix-round10.md</code></td><td><code>26-09-17-webui-fix-round10.md</code> <span class="sub">同上</span></td><td>TASK012</td></tr>
-    <tr><td><code>TASK013-webui-fix-round11.md</code></td><td><code>26-09-17-webui-fix-round11.md</code> <span class="sub">同上</span></td><td>TASK013</td></tr>
-    <tr><td><code>TASK014-ui-component-libraries.md</code></td><td><code>26-09-17-webui-component-libraries.md</code></td><td>TASK014</td></tr>
-    <tr><td><code>TASK015-webui-error-reason.md</code></td><td><code>26-09-18-webui-error-reason.md</code></td><td>TASK015</td></tr>
-    <tr><td><code>TASK016-test-notification-and-env-guard.md</code></td><td><code>26-09-18-test-sidefx-guard.md</code></td><td>TASK016</td></tr>
-    <tr><td><code>TASK017-webui-view-rebuild-scope.md</code></td><td><code>26-09-18-webui-view-rebuild-scope.md</code></td><td>TASK017</td></tr>
+    <tr><td><code>26-09-14-memory-bank-migration.md</code></td><td><code>26-09-14-memory-bank-migration.md</code></td><td>TASK001</td></tr>
+    <tr><td><code>26-09-15-webui-qb-replacement.md</code></td><td><code>26-09-15-webui-qb-replacement.md</code></td><td>TASK002</td></tr>
+    <tr><td><code>26-09-15-webui-polish-and-redesign.md</code></td><td><code>26-09-15-webui-polish-and-redesign.md</code></td><td>TASK003</td></tr>
+    <tr><td><code>26-09-15-backend-file-split.md</code></td><td><code>26-09-15-backend-file-split.md</code></td><td>TASK004</td></tr>
+    <tr><td><code>26-09-15-deps-env-modernization.md</code></td><td><code>26-09-15-deps-env-modernization.md</code></td><td>TASK005</td></tr>
+    <tr><td><code>26-09-15-backend-torrentrecord-fields.md</code></td><td><code>26-09-15-backend-torrentrecord-fields.md</code></td><td>TASK006</td></tr>
+    <tr><td><code>26-09-15-rule-tracker-groups.md</code></td><td><code>26-09-15-rule-tracker-groups.md</code></td><td>TASK007</td></tr>
+    <tr><td><code>26-09-15-webui-tvshows-view.md</code></td><td><code>26-09-15-webui-tvshows-view.md</code></td><td>TASK008</td></tr>
+    <tr><td><code>26-09-15-docs-restructure.md</code></td><td><code>26-09-15-docs-restructure.md</code></td><td>TASK009</td></tr>
+    <tr><td><code>26-09-17-memory-bank-trigger-fix.md</code></td><td><code>26-09-17-memory-bank-trigger-fix.md</code></td><td>TASK010</td></tr>
+    <tr><td><code>26-09-17-webui-fix-round9.md</code></td><td><code>26-09-17-webui-fix-round9.md</code> <span class="sub">→ 阶段 3 并入 <code>webui-polish</code></span></td><td>TASK011</td></tr>
+    <tr><td><code>26-09-17-webui-fix-round10.md</code></td><td><code>26-09-17-webui-fix-round10.md</code> <span class="sub">同上</span></td><td>TASK012</td></tr>
+    <tr><td><code>26-09-17-webui-fix-round11.md</code></td><td><code>26-09-17-webui-fix-round11.md</code> <span class="sub">同上</span></td><td>TASK013</td></tr>
+    <tr><td><code>26-09-17-webui-component-libraries.md</code></td><td><code>26-09-17-webui-component-libraries.md</code></td><td>TASK014</td></tr>
+    <tr><td><code>26-09-18-webui-error-reason.md</code></td><td><code>26-09-18-webui-error-reason.md</code></td><td>TASK015</td></tr>
+    <tr><td><code>26-09-18-test-sidefx-guard.md</code></td><td><code>26-09-18-test-sidefx-guard.md</code></td><td>TASK016</td></tr>
+    <tr><td><code>26-09-18-webui-view-rebuild-scope.md</code></td><td><code>26-09-18-webui-view-rebuild-scope.md</code></td><td>TASK017</td></tr>
   </table>
   <p class="sub">TASK005/006/007/008/014 顺手补领域前缀以符合 5.1; 若想让阶段 1 保持"零判定", 可只加日期前缀、把补领域前缀并入阶段 3。</p>
 </section>

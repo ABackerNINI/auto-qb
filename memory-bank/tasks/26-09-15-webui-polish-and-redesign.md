@@ -1,9 +1,11 @@
-# TASK003 - WEB UI 打磨轮次与棱镜重设计 (第六 ~ 八轮 + 双界面命名)
+# 26-09-15-webui-polish-and-redesign — WEB UI 打磨轮次与棱镜重设计 (第六 ~ 八轮 + 双界面命名)
 
 **Status:** Completed
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** WEB UI / 前端打磨 / 多主题
+**Legacy-ID:** TASK003
+**Summary:** `atlas`/`prism`/`shared` 目录化 + 五主题令牌 + 各轮冒烟全绿 (2026-09-15)
 
 ## 原始请求
 
@@ -43,7 +45,7 @@
 ### 2026-09-15
 
 - 第六 / 七 / 八轮打磨全部落地 (仅前端 + 少量后端 singles/回执), 各轮均经 Edge headless CDP 冒烟 (20/20 → 24/24 → 10/10) 与 pytest 871→872 闸门。
-- 重设计 M1-M3 与"双界面命名"完成, 后续界面级诉求转入 [TASK002](TASK002-webui-qb-replacement.md) (替代 qB 界面波次)。
+- 重设计 M1-M3 与"双界面命名"完成, 后续界面级诉求转入 [TASK002](26-09-15-webui-qb-replacement.md) (替代 qB 界面波次)。
 
 ## 历史会话纪要 (原文归档)
 

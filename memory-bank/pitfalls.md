@@ -340,7 +340,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 ### 并行 worktree 同时立档会造成重复档案与重复索引条目 (2026-09-18 实测, 多分支合并后)
 
-- **症状**: `tests/test_memory_bank.py` 双向一致守卫报 `仅有文件=['TASK015']`、状态分区守卫 `KeyError: 'TASK015'`; 但磁盘上 `TASK015-ui-component-libraries.md` 与 `TASK014-ui-component-libraries.md` **逐字节相同**(md5 一致), 索引里同一条 UI 组件库条目还被登记了两次(一次 `[TASK014]`、一次误写 `[TASK012]`, 与真实 TASK012「第十轮修复」撞号)。
+- **症状**: `tests/test_memory_bank.py` 双向一致守卫报 `仅有文件=['TASK015']`、状态分区守卫 `KeyError: 'TASK015'`; 但磁盘上 `TASK015-ui-component-libraries.md` 与 `26-09-17-webui-component-libraries.md` **逐字节相同**(md5 一致), 索引里同一条 UI 组件库条目还被登记了两次(一次 `[TASK014]`、一次误写 `[TASK012]`, 与真实 TASK012「第十轮修复」撞号)。
 - **根因**: 同一专题在两条分支上各自立档 → 编号各自递增(14 / 15), 合并后两边文件与索引条目**双双入库**。`_indexed_sections()` 是 dict, 同一 TASKID 重复登记会**静默覆盖** —— 所以"重复条目"这一半故障比"多余文件"更隐蔽, 双向一致守卫也查不出来。
 - **修法**: 保留被索引登记且内容完整的那份(`TASK014`), 删除重复档案, 删掉索引重复条目, 并把档案内标题的错号(`# TASK012 —`)改正为与文件名一致的编号; 顺手修掉指向旧编号的失效相对链接(`tasks/TASK012-ui-component-libraries.md` → `TASK014-...`)。
 - **守卫**: 新增 `test_task_ids_and_slugs_are_unique`(档案 slug 唯一 + 索引同 ID 只登记一次), 把这类重复拦在"合并后第一次跑测试"。立档前先查 `tasks/_index.md` 是否已有同专题档案, 能直接避免。
@@ -562,3 +562,11 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **修法(改名三步, 缺一不可)**: ①改之前先全仓 grep 旧文件名统计引用数(含 `.html` / `.md` / `.py` / `.yml`, 排除 `uv.lock`); ②用 **Python 显式 UTF-8** 批量替换(不要 PowerShell 重定向, 见本文件编码坑); ③替换后再 grep 一次确认为 0。
 - **判别法**: 只要动 `docs/` 或 `memory-bank/` 下的文件名, 必须走这三步 —— **不要凭"我记得没人引用它"跳过**, 上面那个既有坏链就是这么来的。
 - **已知守卫缺口(建议, 未做)**: 加一个链接守卫测试, 扫描 `*.md` / `*.html` 里的相对链接指向的文件是否存在。2026-09-17 那 34 处是人工扫出来的, 机器化之后不会再漏。
+
+### 在 pytest 里用 subprocess 跑脚本会被副作用记账器判为越界 (2026-09-18 实测)
+
+- **症状**: 给 `tests/test_memory_bank.py` 加"索引是否为生成结果"的守卫时, 用 `subprocess.run([sys.executable, "scripts/gen_tasks_index.py", "--check"])` 实现 —— **单独跑该测试通过, 跑整个文件时却是 `ERROR` 而不是失败**(`8 passed, 1 error`)。
+- **根因**: 本项目禁止测试启动外部进程(`tests/sidefx.py` 七类副作用记账, `POPEN` 放行清单为空, 见 TASK016 收口)。`subprocess` 起的 Python 子进程被记入台账并判为越界, 由**会话级守卫在收尾时报错** —— 所以报错出现在收尾而不是断言处, 单独运行时看不出来。
+- **修法**: 守卫改为在**进程内**加载脚本模块并比对字符串, 零子进程(也更快):
+  `spec = importlib.util.spec_from_file_location("gen_tasks_index", GEN)` → `module.render(module.collect())` 与磁盘 `_index.md` 逐字节比对; 语义与 `--check` 等价。
+- **判别法**: 测试代码里一旦出现 `subprocess` / `os.system` / `os.startfile` / `webbrowser.open`, 先怀疑会被 sidefx 拦下 —— 尤其"单独跑绿、全量跑 ERROR"这种症状, 基本就是它。

@@ -1,9 +1,11 @@
-# TASK008 - 追剧视图 (tvshows)
+# 26-09-15-webui-tvshows-view — 追剧视图 (tvshows)
 
 **Status:** Completed
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** WEB UI / 剧集聚合
+**Legacy-ID:** TASK008
+**Summary:** 剧/季/集解析 + 缺集计算 + atlas 三态视图, 已合入 develop; 遗留: prism 模板欠账 (2026-09-15)
 
 ## 原始请求
 
@@ -33,7 +35,7 @@
 | 8.2 | M1 `tvshows.py` + 66 测 | Complete | 2026-09-15 | 手写零依赖 |
 | 8.3 | M2 后端聚合与文件兑底 | Complete | 2026-09-15 | `_build_shows_view` |
 | 8.4 | M3 atlas 前端三态视图 | Complete | 2026-09-15 | 已随 `526a7b2` 合入 |
-| 8.5 | prism 追剧模板 | Not Started | 2026-09-15 | 见 [TASK002](TASK002-webui-qb-replacement.md) 2.10 |
+| 8.5 | prism 追剧模板 | Not Started | 2026-09-15 | 见 [TASK002](26-09-15-webui-qb-replacement.md) 2.10 |
 
 ## 进度日志
 

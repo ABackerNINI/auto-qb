@@ -1,9 +1,11 @@
-# TASK007 - tracker 分组 (站点 groups 字段 + tracker_group 条件)
+# 26-09-15-rule-tracker-groups — tracker 分组 (站点 groups 字段 + tracker_group 条件)
 
 **Status:** Completed
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** 规则系统 / 配置模型
+**Legacy-ID:** TASK007
+**Summary:** 后端与条件插件完成入库, 条件 15→16; 遗留: 阶段 2/3 前端增强待排期 (2026-09-15)
 
 ## 原始请求
 

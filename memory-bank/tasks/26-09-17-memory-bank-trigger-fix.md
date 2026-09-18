@@ -1,9 +1,11 @@
-# TASK010 - Memory Bank 触发机制修复 (skill 缺失 + 立档纪律失败)
+# 26-09-17-memory-bank-trigger-fix — Memory Bank 触发机制修复 (skill 缺失 + 立档纪律失败)
 
 **Status:** In Progress
 **Added:** 2026-09-17
 **Updated:** 2026-09-17
 **专题:** 知识库治理 / 代理协作机制
+**Legacy-ID:** TASK010
+**Summary:** skill 载体 + always-on 阈值 + TASK001~TASK009 回填 + activeContext 瘦身 + 守卫测试完成; 待提交
 
 ## 原始请求
 

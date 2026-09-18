@@ -191,8 +191,8 @@ The format is flexible - focus on capturing valuable insights that help me work 
 
 The `tasks/` folder contains individual markdown files for each task, along with an index file:
 
-- `tasks/_index.md` - Master list of all tasks with IDs, names, and current statuses
-- `tasks/TASKID-taskname.md` - Individual files for each task (e.g., `TASK001-implement-login.md`)
+- `tasks/_index.md` - Master list of all tasks, **generated** - do not edit by hand, rebuild it with `python scripts/gen_tasks_index.py` (a guard test fails if it drifts from the generator output)
+- `tasks/YY-MM-DD-<slug>.md` - Individual files for each task (e.g., `26-09-18-webui-error-reason.md`). **The name is derived from the topic, never from a serial number**: date to the day (no time), then an `<area>-<topic>` slug (area enum: `webui` / `backend` / `rule` / `memory-bank` / `docs` / `test` / `deps` / `config`). Two worktrees picking up the same topic on the same day therefore collide on the same path and the duplicate surfaces immediately, instead of silently becoming two files. **Check for an existing slug before creating a file** - never "take the next number".
 
 ### Task Index Structure
 
@@ -202,32 +202,36 @@ The `_index.md` file maintains a structured record of all tasks sorted by status
 # Tasks Index
 
 ## In Progress
-- [TASK003] Implement user authentication - Working on OAuth integration
-- [TASK005] Create dashboard UI - Building main components
+- [26-09-18-webui-error-reason] Implement user authentication - Working on OAuth integration
+- [26-09-17-webui-component-libraries] Create dashboard UI - Building main components
 
 ## Pending
-- [TASK006] Add export functionality - Planned for next sprint
-- [TASK007] Optimize database queries - Waiting for performance testing
+- [26-09-15-docs-restructure] Add export functionality - Planned for next sprint
+- [26-09-15-rule-tracker-groups] Optimize database queries - Waiting for performance testing
 
 ## Completed
-- [TASK001] Project setup - Completed on 2025-03-15
-- [TASK002] Create database schema - Completed on 2025-03-17
-- [TASK004] Implement login page - Completed on 2025-03-20
+- [26-09-14-memory-bank-migration] Project setup - Completed on 2025-03-15
+- [26-09-15-backend-file-split] Create database schema - Completed on 2025-03-17
+- [26-09-15-webui-tvshows-view] Implement login page - Completed on 2025-03-20
 
 ## Abandoned
-- [TASK008] Integrate with legacy system - Abandoned due to API deprecation
+- [26-09-15-deps-env-modernization] Integrate with legacy system - Abandoned due to API deprecation
 ```
+
+The key inside `[...]` is the **file stem** (date prefix + slug), not a task number. Entries inside a section are ordered by `**Updated:**` descending (most recently touched first), so an old-but-active task never sinks out of sight.
 
 ### Individual Task Structure
 
 Each task file follows this format:
 
 ```markdown
-# [Task ID] - [Task Name]
+# <file stem: YY-MM-DD-<slug>> - [Task Name]
 
 **Status:** [Pending/In Progress/Completed/Abandoned]  
 **Added:** [Date Added]  
-**Updated:** [Date Last Updated]
+**Updated:** [Date Last Updated]  
+**Summary:** [One line - this is what `_index.md` is generated from]  
+**Legacy-ID:** [TASKnnn - only for files migrated from the old numbering, kept for back-references]
 
 ## Original Request
 [The original task description as provided by the user]

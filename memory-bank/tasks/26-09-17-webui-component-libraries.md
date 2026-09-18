@@ -1,9 +1,11 @@
-# TASK014 — UI 组件库 20 式 (设计风格库落地为可挑选的组件库)
+# 26-09-17-webui-component-libraries — UI 组件库 20 式 (设计风格库落地为可挑选的组件库)
 
 **Status:** In Progress
 **Started:** 2026-09-17
 **Owner:** 主线 (单会话完成产出与自检); 已提交 `fae019a` (agentZCode/develop 分支) —— 剩用户挑选与按需迭代
 **Deliverable:** [`resources/ui-component-libraries/modelscope.dsv4.1flash/`](../../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md) (22 文件: 20 套组件库单页 + 挑选索引 `index.html` + 目录 `README.md`)
+**Legacy-ID:** TASK014
+**Summary:** 按设计哲学风格库 5 流派 × 20 preset 各出一套自包含组件库单页 + 挑选索引 + 目录 README (`resources/ui-component-libraries/modelscope.dsv4.1flash/`); 四轮自检 + 7 项缺陷修复; 996 passed; 已提交 `fae019a` (剩用户挑选与按需迭代)
 
 ## 原始请求
 

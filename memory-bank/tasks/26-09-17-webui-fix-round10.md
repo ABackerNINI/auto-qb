@@ -1,9 +1,11 @@
-# TASK012 — WEB UI 第十轮修复 (16 项 · R10-01~R10-16)
+# 26-09-17-webui-fix-round10 — WEB UI 第十轮修复 (16 项 · R10-01~R10-16)
 
 **Status:** In Progress
 **Started:** 2026-09-17
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [docs/plans/26-09-17-0901-webui-fix-plan-round10.html](../../docs/plans/26-09-17-0901-webui-fix-plan-round10.html) (16 项分类拆解 / 根因定位 / 分阶段实施)
+**Legacy-ID:** TASK012
+**Summary:** 状态栏三项硬 bug(限速取数单点/星图双窗/免鉴权放行) + 列对齐进列模型 + 列偏好不重置 + 服务端目录浏览与 open-path 定位选中 + 弹窗尺寸令牌族; 999 passed, 双 UI 浏览器冒烟逐项实测通过; **已入库 `cb57bef`** (含真机走查 r1 反馈两处)
 
 ## 原始请求
 

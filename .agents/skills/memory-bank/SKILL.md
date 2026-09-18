@@ -31,18 +31,23 @@ user-invocable: true
 ## 收尾 DoD (5 步, 缺一不可)
 
 1. **activeContext**: 更新"最后更新"与"正在进行"; 已完成条目沉淀到 `progress.md` 或主题文档后**从本文件删除** — 它是易变层, 不是流水账。
-2. **tasks/**: 命中阈值 → 建/更新 `memory-bank/tasks/TASKnnn-*.md`(追加进度日志 + 更新子任务状态表)并同步 `tasks/_index.md` 状态分区。
+2. **tasks/**: 命中阈值 → 按"任务档案规范"定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后跑 `python scripts/gen_tasks_index.py` 重建索引 —— **不要手改 `tasks/_index.md`**。
 3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只改** `testing.md` 顶部(单点事实源, 其它文档一律引用不手抄)。
 4. **闸门**: 跑 `uv run pytest tests -q`, 把实测数字记进 `testing.md` 与本次结论。
 5. **新坑**: 遇到非显然的失败 / 陷阱 → 追加 `pitfalls.md` 条目(带日期与判别法)。
 
 ## 任务档案规范
 
-- 路径 `memory-bank/tasks/TASKnnn-<slug>.md`(slug 英文小写连字符), 编号连续不复用。
-- 必备章节: 标题行 `# TASKnnn - 名称`、状态行(`Status`/`Added`/`Updated`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。
+- 路径 `memory-bank/tasks/YY-MM-DD-<slug>.md` — **日期到天, 不带时分**; 日期取档案 `Added:` / `Started:`(创建日), 不是修改日。
+- `<slug>` 由**专题**决定, 不由序号决定: 组成为 `<领域>-<专题>`, 领域用固定枚举(不够用先扩枚举再建档): `webui` / `backend` / `rule` / `memory-bank` / `docs` / `test` / `deps` / `config`。
+- **立档第一步是查重, 不是取号**: 本 worktree `ls memory-bank/tasks/` **且** 跨 worktree `ls ../auto-qb-*/memory-bank/tasks/` 与 `.worktrees/*/memory-bank/tasks/`, 按 **slug 部分**比对(忽略日期前缀); 命中同名 → **追加不新建**。
+- **slug 禁止出现**: 轮次(`round9` / `r10` / `第十轮`)、日期(已在文件名前缀)、会话序号、编号、分支名。轮次属于档案内"子任务状态表"的一行, 不属于文件名。
+- 不带时分是**特性**: 同一天同一专题必然撞到同一路径, 重复才能当场暴露(显式 add/add 冲突), 而不是静默变成两份。
+- 必备章节: 标题行 `# <文件名> — 名称`、状态行(`Status`/`Added`/`Updated`/`Summary`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。`**Summary:**` 是 `_index.md` 摘要的数据源。
+- 迁移期档案保留 `**Legacy-ID:** TASKnnn`, 供历史文档与历史对话中的旧编号回溯。
 - 状态取值仅四种: `In Progress` / `Pending` / `Completed` / `Abandoned`; `_index.md` 的分区必须用同样的词。
 - 一个专题一个档案(不逐会话建文件): 新会话追加**结论与决策**; 历史流水账原文归档在该档案的 `## 历史会话纪要 (原文归档)` 段。
-- 守卫: `tests/test_memory_bank.py` 校验索引↔文件双向一致、命名规范、状态分区、必备章节 — 登记了没文件 / 有文件没登记都会让 pytest 失败。
+- 守卫: `tests/test_memory_bank.py` 校验索引↔文件双向一致、忽略日期前缀的 slug 唯一、命名规范、状态分区、必备章节、索引 == 生成结果 — 登记了没文件 / 有文件没登记都会让 pytest 失败。
 
 ## 反模式 (本仓库已踩过, 勿重犯)
 
@@ -50,3 +55,5 @@ user-invocable: true
 - ❌ 规则写成"跨会话的**大**任务要立档"这类不可判定措辞 → 无阈值 = 不执行。
 - ❌ 把维护规则只放在 `applyTo: 'memory-bank/**'` 的 instruction 里 → 编辑 `src/` 时该规则不在上下文, **决策点(该不该立档)与生效点错位**。
 - ❌ 基线数字手抄到 README/AGENTS/progress → 必然漂移; 只改 `testing.md`。
+- ❌ 用"全局单调序号"当档案主键(TASKnnn) → 9 个并行 worktree 各自发号必然撞号(2026-09-18 实测)。同理不要用"精确到分"的时间戳: 每次续作都算出新文件名, 永远"看起来是新的", 而且会让"忽略日期前缀的 slug 唯一性"守卫彻底失效。
+- ❌ 手改 `tasks/_index.md` → 它是生成物, 冲突的解决方式是重跑生成器, 不是人工合并两版文本。

@@ -1,9 +1,11 @@
-# TASK001 - 知识库 (Memory Bank) 建设与仓库治理
+# 26-09-14-memory-bank-migration — 知识库 (Memory Bank) 建设与仓库治理
 
 **Status:** Completed
 **Added:** 2026-09-14
 **Updated:** 2026-09-17
 **专题:** 知识库 / 跨 agent 协作 / worktree 同步
+**Legacy-ID:** TASK001
+**Summary:** `ai/` → `memory-bank/` 六核心文件迁移 + 跨 agent 入口统一 + 测试基线单点化 + worktree 同步 (2026-09-14 ~ 09-15)
 
 ## 原始请求
 
@@ -24,7 +26,7 @@
 - [x] 测试基线单点化到 `testing.md`
 - [x] `ai/` → `memory-bank/` 迁移 (git mv 保留历史) 与重命名
 - [x] `README.md` 补齐路由表 (`memory-bank/README.md`)
-- [ ] (2026-09-17 发现) `tasks/` 维护纪律未落地 → 转 [TASK010](TASK010-memory-bank-trigger-fix.md)
+- [ ] (2026-09-17 发现) `tasks/` 维护纪律未落地 → 转 [TASK010](26-09-17-memory-bank-trigger-fix.md)
 
 ## 子任务状态表
 
@@ -41,7 +43,7 @@
 
 ### 2026-09-17
 
-- 复盘发现: 本档案是整个 `tasks/` 里唯一被登记的条目, 而 09-14~09-17 的其它大专题 (WEB UI 各波次 / 大文件拆分 / 依赖现代化 / tracker 分组 / 追剧视图) 全部只沉淀在 `activeContext.md` 的会话纪要里 — 根因与修复见 [TASK010](TASK010-memory-bank-trigger-fix.md)。
+- 复盘发现: 本档案是整个 `tasks/` 里唯一被登记的条目, 而 09-14~09-17 的其它大专题 (WEB UI 各波次 / 大文件拆分 / 依赖现代化 / tracker 分组 / 追剧视图) 全部只沉淀在 `activeContext.md` 的会话纪要里 — 根因与修复见 [TASK010](26-09-17-memory-bank-trigger-fix.md)。
 
 ### 2026-09-15
 

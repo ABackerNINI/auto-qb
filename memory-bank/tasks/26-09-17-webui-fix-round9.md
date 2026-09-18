@@ -1,9 +1,11 @@
-# TASK011 — WEB UI 第九轮修复 (25 项 · FX-01~FX-25)
+# 26-09-17-webui-fix-round9 — WEB UI 第九轮修复 (25 项 · FX-01~FX-25)
 
 **Status:** In Progress
 **Started:** 2026-09-17
 **Owner:** 主线 (单会话连续实施); 已提交 `49d3151` (develop 分支) —— 剩用户真机 `--dry-run` 走查反馈
 **Plan doc:** [docs/plans/26-09-17-0847-webui-fix-plan-round9.html](../../docs/plans/26-09-17-0847-webui-fix-plan-round9.html) (25 项分类拆解 / 根因定位 / 分阶段实施)
+**Legacy-ID:** TASK011
+**Summary:** 口径单点化 + 浮层锁定契约 + 选择模型互斥/派生 + 删除链统一 + 菜单分层 + 新端点 `/api/open-path`; 996 passed, 浏览器冒烟 25 项全过; 已提交 `49d3151` (剩用户真机 dry-run)
 
 ## 原始请求
 

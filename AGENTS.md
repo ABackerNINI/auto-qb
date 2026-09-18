@@ -8,7 +8,7 @@
 > 完整规程(含任务档案模板)见 [.agents/skills/memory-bank/SKILL.md](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。
 
 - **开始**: 读 [memory-bank/activeContext.md](memory-bank/activeContext.md) (当前焦点) + [memory-bank/README.md](memory-bank/README.md) 路由表, 按任务选择深入文档; 已有 `tasks/` 档案的任务从档案续作。
-- **收尾 (5 步 DoD)**: ①更新 activeContext (已完成条目**迁出**到 `progress.md` / 主题文档, 不是追加流水账) ②命中阈值的任务在 `memory-bank/tasks/` 立档 + 同步 `tasks/_index.md` ③代码事实变更回写 `memory-bank/` 对应文档与根 `README.md` (测试基线只改 `testing.md`) ④跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` ⑤新坑追加 `pitfalls.md`。
+- **收尾 (5 步 DoD)**: ①更新 activeContext (已完成条目**迁出**到 `progress.md` / 主题文档, 不是追加流水账) ②命中阈值的任务在 `memory-bank/tasks/` 立档 (命名 `YY-MM-DD-<slug>.md`, **先按 slug 查重再建**) + 跑 `python scripts/gen_tasks_index.py` 重建索引 (不要手改 `_index.md`) ③代码事实变更回写 `memory-bank/` 对应文档与根 `README.md` (测试基线只改 `testing.md`) ④跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` ⑤新坑追加 `pitfalls.md`。
 - **立档阈值** (满足任一条**必须**立档): ①跨 ≥2 次会话; ②单会话 ≥5 轮指令或改动 ≥3 个源文件; ③出现"计划/方案/波次/第 N 轮/后续阶段"等长周期表述; ④需产出计划文档或交付报告。其余小修与答疑只记 activeContext。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`。发现文档漂移时以代码为准并回写文档。
 
