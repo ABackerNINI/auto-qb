@@ -8,6 +8,7 @@
 ## 测试计划
 
 - test_tasks_index_and_files_are_bijective: `_index.md` 登记的 TASKID 与 `tasks/TASK*.md` 文件双向一致
+- test_task_ids_and_slugs_are_unique: 档案 slug 不重复、索引中同一 TASKID 不重复登记(并行 worktree 各自立档的重复档案/重复条目)
 - test_task_file_naming_and_sections: 文件名符合 `TASKnnn-slug.md`, 且五个必备章节齐全
 - test_task_status_matches_index_section: 档案 `**Status:**` 与索引所在分区一致
 - test_index_has_all_status_sections: 索引保留四个状态分区标题
@@ -55,6 +56,23 @@ def test_tasks_index_and_files_are_bijective() -> None:
 
     assert indexed == on_disk, (f"索引与档案文件不一致: 仅索引登记={sorted(indexed - on_disk)}, "
                                 f"仅有文件={sorted(on_disk - indexed)}")
+
+
+def test_task_ids_and_slugs_are_unique() -> None:
+    """并行 worktree 各自立档会产出重复: 同一专题两份档案 (2026-09-18 实测 TASK014/TASK015 逐字节相同)
+    + 索引里重复登记。重复条目在 dict 式解析里会静默覆盖, 双向一致与状态分区两个守卫都发现不了,
+    所以必须单独守。"""
+    slugs: dict[str, list[str]] = {}
+    for path in _task_files():
+        slugs.setdefault(path.name[8:-3], []).append(path.name)  # 去掉 `TASKnnn-` 前缀与 `.md`
+    dup_slugs = {slug: names for slug, names in slugs.items() if len(names) > 1}
+
+    assert not dup_slugs, f"存在同 slug 的重复任务档案 (并行分支各建一份): {dup_slugs}"
+
+    indexed = INDEX_ID_RE.findall(INDEX.read_text(encoding="utf-8"))
+    dup_ids = sorted({task_id for task_id in indexed if indexed.count(task_id) > 1})
+
+    assert not dup_ids, f"索引中同一 TASKID 被重复登记: {dup_ids}"
 
 
 def test_task_file_naming_and_sections() -> None:

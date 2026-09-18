@@ -6,7 +6,7 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: 1000 passed, 0 skipped (2026-09-17 实测, uv 环境; 修复导出 .torrent 的 latin-1 头崩溃 + `test_content_disposition_encoding` 后 = 999 + 1; 此前 999 = 第十轮 996 + 3 项 fs 端点测试; WEB UI 第十轮 16 项修复后 = 996 + `test_open_path_select_file_per_platform` + `test_api_fs_dirs_endpoint` + `test_api_fs_mkdir_endpoint` 3 项; **第十一轮 7 项前端修复后复核同为 999**(无新增后端逻辑, 改动由静态守阵 + 双 UI 浏览器冒烟覆盖), 前端改动不影响单测, 双 UI 模板/CSS 由静态守阵 + 浏览器冒烟覆盖), 分支覆盖率 92%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
+# 基线: 1001 passed, 0 skipped (2026-09-18 实测 = 1000 + `test_memory_bank.py::test_task_ids_and_slugs_are_unique` 1 项, 清理并行 worktree 造成的重复档案 TASK015 时新增的结构守卫; 此前 2026-09-17 实测 1000, uv 环境; 修复导出 .torrent 的 latin-1 头崩溃 + `test_content_disposition_encoding` 后 = 999 + 1; 此前 999 = 第十轮 996 + 3 项 fs 端点测试; WEB UI 第十轮 16 项修复后 = 996 + `test_open_path_select_file_per_platform` + `test_api_fs_dirs_endpoint` + `test_api_fs_mkdir_endpoint` 3 项; **第十一轮 7 项前端修复后复核同为 999**(无新增后端逻辑, 改动由静态守阵 + 双 UI 浏览器冒烟覆盖), 前端改动不影响单测, 双 UI 模板/CSS 由静态守阵 + 浏览器冒烟覆盖), 分支覆盖率 92%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
 uv run pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
 uv run pytest tests/test_grouping.py -q
 uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
@@ -29,7 +29,7 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ⚠ **前端渲染逻辑无法靠 pytest 覆盖**: 模板表达式错误(computed 当函数调用等)会让页面整块空白而测试全绿 —— 改前端必须做浏览器冒烟(假 qB + 临时 data_dir, 完事清理), 详见 [pitfalls.md](pitfalls.md)。**半个例外**: "整包 JS 语法损坏"(合并冲突残留、注释孤儿续行)与"模板引用缺失静态资源"属纯静态可判定, 已由 `test_frontend_static_bundle_health` 守阵(2026-09-17 实测白屏故障的防回归); 模板/表达式层面的错误仍只能靠真机页面看。
 5.5 **`test_sync.py` 专测增量同步层**: `TorrentRecord.apply_delta`(只遍历 patch 字段/变化字段集/量化/双通道源/`_raw` 兜底/`state_enum` 缓存)、`TorrentStore.apply_sync`(首轮全量/增量只改变化记录/无变化零成本/增删/全量剪除/待报删除/降级/异常/`reset_sync`)、以及 QbManager 接线(增量轮不做 schema 校验、变化集与冲突脏组)。改 `torrents.py` 的同步层或 `_refresh_torrents` 时必须同步此文件。
 6. **`test_impact.py` 直接测分级表而非被测端**: 用真实 `Config()`(字段默认即全默认实例) 构造新旧配置做 diff, 分级表外字段用 `SimpleNamespace` 替身(验证“未列出默认 L2”); 含 `_diff_flat`/`_diff_trackers`/`max_level`/`restart_required_paths` 直测。**改分级表或新增配置项时必须同步此文件**(新增配置项未补表 -> 默认 L2, 分级错误会让热重载静默不生效或误要求重启)。
-7. **`test_memory_bank.py` 守知识库结构**(2026-09-17 新增, 不覆盖 src): `_index.md` 登记项 ↔ `tasks/TASK*.md` **双向一致** / 文件名 `TASKnnn-slug.md` / 五个必备章节齐全 / 档案 `**Status:**` 与索引分区一致 / 索引保留四个状态分区 / **`activeContext.md` 不得出现 `^- 2026-` 流水账纪要行** / skill 载体存在且 `AGENTS.md` 与 `copilot-instructions.md` 均声明立档阈值并指向 skill。改 `memory-bank/` 结构或会话协议时必须同步此文件 (红绿验证过: 幽灵任务与纪要回流两类违例都会失败)。
+7. **`test_memory_bank.py` 守知识库结构**(2026-09-17 新增, 不覆盖 src): `_index.md` 登记项 ↔ `tasks/TASK*.md` **双向一致** / 文件名 `TASKnnn-slug.md` / 五个必备章节齐全 / 档案 `**Status:**` 与索引分区一致 / 索引保留四个状态分区 / **档案 slug 唯一 + 索引同一 TASKID 只登记一次**(2026-09-18 补: 并行 worktree 各自立档会产出逐字节相同的重复档案与重复索引条目, 而 dict 式解析会静默覆盖, 双向一致与状态分区两个守卫都漏) / **`activeContext.md` 不得出现 `^- 2026-` 流水账纪要行** / skill 载体存在且 `AGENTS.md` 与 `copilot-instructions.md` 均声明立档阈值并指向 skill。改 `memory-bank/` 结构或会话协议时必须同步此文件 (红绿验证过: 幽灵任务与纪要回流两类违例都会失败)。
 
 ## tests/helpers.py 基础设施 (写测试前必读)
 

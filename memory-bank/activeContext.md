@@ -4,13 +4,13 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (①WEB 跳过本地验证提示日志由 WARNING 降为 INFO — 免鉴权是显式配置而非异常, 避免经 notify 推送扰民; `test_web.py` 断言同步 ②TASK012 UI 组件库 20 式**已提交** `fae019a`, 996 passed — 详见 [tasks/TASK012](tasks/TASK012-ui-component-libraries.md))
+**最后更新**: 2026-09-18 (①WEB 跳过本地验证提示日志由 WARNING 降为 INFO — 免鉴权是显式配置而非异常, 避免经 notify 推送扰民; `test_web.py` 断言同步 ②TASK014 UI 组件库 20 式**已提交** `fae019a`, 996 passed — 详见 [tasks/TASK014](tasks/TASK014-ui-component-libraries.md) ③清理并行分支造成的重复档案: 删除与 TASK014 逐字节相同的 `TASK015-ui-component-libraries.md` + 索引重复条目, 守卫测试新增同 slug/重复登记检查)
 
 ## 正在进行
 
-- **WEB 跳过本地验证日志降为 INFO (2026-09-18)**: `web.py` 里"本机免密钥放行"提示原为 `logger.warning` → 改 `logger.info`(免鉴权是用户显式开的配置而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING。全量 `998 passed, 2 failed`(2 failed 为既有 memory-bank TASK015 索引缺登记, 与本次改动无关)
+- **WEB 跳过本地验证日志降为 INFO (2026-09-18, 已入库 `7ce54e9`)**: `web.py` 里"本机免密钥放行"提示原为 `logger.warning` → 改 `logger.info`(免鉴权是用户显式开的配置而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING
 
-- **TASK014 UI 组件库 20 式**: 交付物已产出并自检(文本层/渲染层/功能探针/390px 断点), 7 项缺陷已修; 剩用户挑选与按需迭代 → 档案 [tasks/TASK012-ui-component-libraries.md](tasks/TASK012-ui-component-libraries.md)
+- **TASK014 UI 组件库 20 式**: 交付物已产出并自检(文本层/渲染层/功能探针/390px 断点), 7 项缺陷已修; 剩用户挑选与按需迭代 → 档案 [tasks/TASK014-ui-component-libraries.md](tasks/TASK014-ui-component-libraries.md)
 
 - **导出 .torrent 中文名 500 已修 (2026-09-17, 已入库 `4de0953`)**: `/api/torrents/{hash}/export` 把种子名直拼进 `Content-Disposition`, HTTP 头只能 latin-1 → 中文名 `UnicodeEncodeError` 500。修法: 新增 `web.content_disposition(filename, fallback, ext)` 双段头(`filename=` ASCII 回退 + `filename*=UTF-8''<百分号编码>`)并清洗控制字符; 测试 `test_content_disposition_encoding` + 导出端点非 ASCII 用例。剩用户真机走查
 - **TASK013 第十一轮修复**: 代码/文档/验证已完, **已入库 `4a027ef`** —— 剩用户真机走查反馈
