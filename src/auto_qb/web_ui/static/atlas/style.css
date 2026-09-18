@@ -75,6 +75,14 @@
   --hr-pending-line: rgba(255, 138, 61, .5);
   --hr-done-line: rgba(94, 234, 212, .38);
 
+  /* FX-06 对齐(棱镜早已落地, 星图补齐): 暂停/其它状态的中性中间调令牌族。
+   * 原先星图的暂停徽标没有背景修饰符, 落回 .g-status 的 --surface-2(暗底 = 白 6%)读作
+   * "太白/没颜色"; 字色也从 --fg-dim 抬到中性中间调 —— 与"已暂停"状态文字同族。
+   * 三值与棱镜 themes/*.css 同口径, 两套 UI 不再各写一套灰。 */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
   /* 衍生语义色(HR 栏 / 限速对照 / 今日流量): 与状态色同族但语义独立, 避免"紫色=限速"这类误读 */
   --hr-hit: #ff8a3d;
   --limit-hit: var(--violet);
@@ -303,10 +311,12 @@ button { font-family: inherit; }
 .pop-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop-count { color: var(--fg-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 .pop-empty { margin: 4px 8px; color: var(--fg-dim); font-size: 12px; }
-/* 状态语义配色(分布条/chip/明细圆点共用; 与后端 _state_kind 的 kind 取值一一对应) */
+/* 状态语义配色(分布条/chip/明细圆点共用; 与后端 _state_kind 的 kind 取值一一对应)
+ * 暂停/其它用中性中间调 --paused(与棱镜同口径): 此前用更暗的 --fg-dim, 与"已暂停"状态文字
+ * 不同族; 见下方令牌声明处的说明。 */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
 .k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch { color: var(--blue); }
-.k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--fg-dim); }
+.k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }
 .k-error, .k-error .swatch { color: var(--error); }
 
 /* ---------------- 辅种页布局: 单列全宽内容(左栏信息栏已退役, TBL-08) ---------------- */
@@ -462,6 +472,10 @@ button { font-family: inherit; }
 .g-status.k-seeding { background: var(--green-soft); }
 .g-status.k-downloading, .g-status.k-checking { background: var(--blue-soft); }
 .g-status.k-error { background: var(--error-soft); }
+/* FX-06 对齐: 暂停/其它不铺底(原先落回 --surface-2 的白 6% 底 -> 读作"太白"), 改中性描边 +
+ * 中间调图标色 —— 与做种/下载/错误三个有色底并列时, "有色/无色"的层次反而更清楚。 */
+.g-status.k-paused, .g-status.k-other { background: var(--paused-soft); color: var(--paused);
+  box-shadow: inset 0 0 0 1px var(--paused-line); }
 /* 数值列右对齐; 0 值"—"在右对齐列中居中。
  * R06 复核: 该规则自第六轮起生效(运行时实测 textAlign=center 且字形左右留白相等);
  * 用户反馈不一致时先按真实数据复现, 不盲改 */
@@ -473,24 +487,47 @@ button { font-family: inherit; }
 /* ---- TBL-03: 行状态**文字色** + 数值色阶(文字色) ----
  * 用户 2026-09-17 明确: 要的是**文字颜色, 不是背景色** —— 大面积状态底是噪声, 且与数值色阶
  * 互相抢视觉。名称与数值列的文字染状态语义色, 依旧可沿行扫读状态, 同时保留单元格背景干净。
- * 取舍: 只染有语义色的状态(seeding/downloading/checking/error); paused/other 的语义色是灰
- * (fg-dim), 整行灰字降低可读性 —— 保持默认前景色, 状态仍由徽标/状态列表达。
+ * R12 两处修订(用户要求, 两套 UI 同口径):
+ *   ① **进度/状态两列文字纳入同一套规则** —— 此前只有名称/数值/文本格子着色, 这两列恒为
+ *      --fg-muted 灰, 读起来像"这两列不参与状态表达";
+ *   ② **paused/other 不再保持默认前景色(近白)** —— 旧取舍理由(整行灰字伤可读性)针对的是更暗的
+ *      --fg-dim; 改用中性中间调 --paused(即"已暂停"状态文字那支色)后整行仍清晰可读,
+ *      且"暂停 = 去强调"的语义一眼可见。
  * 0 值(.zero)与"—"占位不染: 它们只是空值占位, 上色会误导成"有值" */
 .group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero),
-.group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count { color: var(--green); }
+.group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count,
+.group-row.s-seeding .m-progress .val, .group-row.s-seeding .state-text { color: var(--green); }
 .group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat:not(.zero),
 .group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero),
 .group-row.s-downloading .g-save-path, .group-row.s-downloading .m-hash, .group-row.s-downloading .g-count,
-.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count { color: var(--blue); }
+.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count,
+.group-row.s-downloading .m-progress .val, .group-row.s-checking .m-progress .val,
+.group-row.s-downloading .state-text, .group-row.s-checking .state-text { color: var(--blue); }
 .group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero),
-.group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count { color: var(--error); }
+.group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count,
+.group-row.s-error .m-progress .val, .group-row.s-error .state-text { color: var(--error); }
+/* paused/other: 中性中间调(无色相那支, 见令牌声明处) —— 不再是纯白前景 */
+.group-row.s-paused .g-name-text, .group-row.s-paused .g-stat:not(.zero),
+.group-row.s-paused .g-save-path, .group-row.s-paused .m-hash, .group-row.s-paused .g-count,
+.group-row.s-paused .m-progress .val, .group-row.s-paused .state-text,
+.group-row.s-other .g-name-text, .group-row.s-other .g-stat:not(.zero),
+.group-row.s-other .g-save-path, .group-row.s-other .m-hash, .group-row.s-other .g-count,
+.group-row.s-other .m-progress .val, .group-row.s-other .state-text { color: var(--paused); }
 /* R10-06: 成员行(展开明细/追剧集明细)同口径 —— 行类名是 m.kind 而非 s-*, 故单独一组;
  * 芯片类(站点/标签/分类)按决策 D6-A **不跟随**行状态色(它们表达成员级语义) */
-.member-row.seeding .m-stat:not(.zero), .member-row.seeding .m-hash, .member-row.seeding .g-save-path { color: var(--green); }
+.member-row.seeding .m-stat:not(.zero), .member-row.seeding .m-hash, .member-row.seeding .g-save-path,
+.member-row.seeding .m-progress .val, .member-row.seeding .state-text { color: var(--green); }
 .member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero),
 .member-row.downloading .m-hash, .member-row.checking .m-hash,
-.member-row.downloading .g-save-path, .member-row.checking .g-save-path { color: var(--blue); }
-.member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path { color: var(--error); }
+.member-row.downloading .g-save-path, .member-row.checking .g-save-path,
+.member-row.downloading .m-progress .val, .member-row.checking .m-progress .val,
+.member-row.downloading .state-text, .member-row.checking .state-text { color: var(--blue); }
+.member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path,
+.member-row.error .m-progress .val, .member-row.error .state-text { color: var(--error); }
+.member-row.paused .m-stat:not(.zero), .member-row.paused .m-hash, .member-row.paused .g-save-path,
+.member-row.paused .m-progress .val, .member-row.paused .state-text,
+.member-row.other .m-stat:not(.zero), .member-row.other .m-hash, .member-row.other .g-save-path,
+.member-row.other .m-progress .val, .member-row.other .state-text { color: var(--paused); }
 /* 数值色阶(TBL-03): tone 写在状态色之后(源顺序胜出) —— 数值列按"占分母比例"着色:
  * 低档压暗(偏弱/离满档还远), 高档用品牌强调色(接近满档); 与状态文字色叠加时数值口径优先 */
 .group-row .g-stat.tone-low { color: var(--fg-muted); }
@@ -506,7 +543,9 @@ button { font-family: inherit; }
  * stalled 系列从不出现在 chip 上; 见 memory-bank/pitfalls.md 回写条目) */
 .site-chip.seeding { background: var(--green-soft); color: var(--green); }
 .site-chip.downloading, .site-chip.checking { background: var(--blue-soft); color: var(--blue); }
-.site-chip.paused { background: var(--surface-2); color: var(--fg-muted); }
+/* FX-06 对齐: 暂停/其它去掉白 6% 底, 改中性描边 + 中间调字色(与棱镜 .site-chip.paused 同口径) */
+.site-chip.paused, .site-chip.other { background: var(--paused-soft); color: var(--paused);
+  box-shadow: inset 0 0 0 1px var(--paused-line); }
 .site-chip.error { background: var(--error-soft); color: var(--error); }
 /* 标签/分类列: chip 制, 超长/超量折叠(完整值在 title) */
 .g-tags, .m-tags { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
@@ -579,7 +618,9 @@ button { font-family: inherit; }
 .member-row.seeding .m-state { color: var(--green); }
 .member-row.downloading .m-state, .member-row.checking .m-state { color: var(--blue); }
 .member-row.error .m-state { color: var(--error); }
-.member-row.paused .m-state { color: var(--fg-dim); }
+/* FX-06 对齐: 暂停/其它与状态芯片同族(不再是更暗的 --fg-dim) */
+.member-row.paused .m-state, .member-row.other .m-state { color: var(--paused); }
+.member-row.paused .m-site .dot, .member-row.other .m-site .dot { background: var(--paused); }
 .m-hash { color: var(--fg-dim); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 
 /* 进度: 细条 + 数字(同一 grid 单元格内横排, 不改变列数) */

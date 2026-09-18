@@ -4,9 +4,13 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (①WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文): 后端主循环 TTL+预算预取 + `error_reason` 透出 + 前端 `stateText` 双 UI 生效, 1006 passed, **已入库 `9723a76`** — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ②WEB 跳过本地验证提示日志由 WARNING 降为 INFO — 免鉴权是显式配置而非异常, 避免经 notify 推送扰民; `test_web.py` 断言同步 ②TASK014 UI 组件库 20 式**已提交** `fae019a`, 996 passed — 详见 [tasks/TASK014](tasks/TASK014-ui-component-libraries.md) ③清理并行分支造成的重复档案: 删除与 TASK014 逐字节相同的 `TASK015-ui-component-libraries.md` + 索引重复条目, 守卫测试新增同 slug/重复登记检查)
+**最后更新**: 2026-09-18 (①WEB UI **第十二轮·状态色收口**(R12, 纯 CSS): 「进度/状态两列文字」纳入行状态色; **星图补齐暂停中性令牌族** —— 棱镜第九轮 FX-06 已落地、星图漏改, 于是 `.g-status.k-paused` 落回 `--surface-2` 白 6% 底 = 用户说的"**还是太白**"真因; paused/other 行文字由近白 `--fg` 改中性中间调 `--paused`(= `--fg-muted`, 即"已暂停"状态文字那支色); 双 UI × 六主题截图逐张核对, 1006 passed **不变** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 两条新条目 ②WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文) 已入库 `9723a76` — 详见 [tasks/TASK015](tasks/TASK015-webui-error-reason.md) ③TASK014 UI 组件库 20 式已提交 `fae019a`)
 
 ## 正在进行
+
+- **R12 状态色收口 (2026-09-18, 纯 CSS 未提交)**: 进度/状态两列文字随行状态着色 + 星图补 `--paused` 令牌族
+  (与棱镜同值) + paused/other 行不再保持近白前景。改的是 `atlas/style.css` 与 `prism/css/views.css`;
+  双 UI × 六主题截图已逐张核对(见 [pitfalls.md](pitfalls.md) 的核对手法条目), 剩**用户真机观感确认**
 
 - **TASK015 WEB UI 错误原因展示 (2026-09-18, 已入库 `9723a76`)**: 错误种子的状态列不再只显示「错误」——
   `missingFiles` → "文件丢失"(零 API, 状态自明), `error` → tracker 报错原文(如

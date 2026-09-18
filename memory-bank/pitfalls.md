@@ -393,3 +393,43 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **恢复(别反解, 从 git 取原文)**: 关键是**取哪一侧的版本** —— 先 `git cat-file -p <merge>` 列出父提交, 再逐父 `git show <parent>:<file>` 比对, 确认该条目只来自哪一侧(本次 `998136f` 是唯一来源, 另一父根本没有该条目)。整行替换后三项核对: ①无乱码字符 ②相对链接全部存在 ③**行尾风格不变**(本仓库工作区是 CRLF, 用 `\r\n` 写回, 否则整文件 diff 炸开)。被粘连进来的重复条目若在别处已有正确副本, 直接丢弃即可。
 - **顺带(两类缺陷要分开查)**: 同一文件另有 4 处 `docs/*.html` 相对链接, 在 `docs/` 迁入 `docs/plans/<日期-时间>-*` 后未同步 → **失效链接**。修乱码时顺手做一次全文件链接存在性扫描(把 `](target)` 逐个 resolve), 别只修乱码就收工。
 - **验证编码一律用 Python 显式按 UTF-8 读, 别信 Git Bash 的管道输出**(本次差点误判): `sed -n '11,17p' file | cut -c1-260` 对**完好的** UTF-8 文件会打印出 `WEB UI 绗�涔濊疆淇�澶�` 这种"乱码", 而 `git diff | cat` 同一批行却是正常的 —— 这是**控制台/管道解码层**的问题(Windows 控制台代码页), 不是文件坏了。判据: `open(p,"rb").read().decode("utf-8")` 不抛错 且 `"\ufffd" not in text` ⇒ 文件没问题(真乱码文件的特征正是含 U+FFFD 替换符)。**同一环境里 `sed` 有的文件正常有的"乱码"**, 所以不能靠"换个命令试试"下结论。
+
+### "两套 UI 同口径"必须逐 UI 核对 —— 第九轮 FX-06 只落了棱镜, 星图漏改藏了两轮 (2026-09-18 实测, R12)
+
+- **症状**: 用户反馈"暂停的种子状态色**还是**太白"。第九轮 FX-06 的诉求原文就是"暂停中的种子状态色'太白'(无颜色)",
+  且计划文档里写明了修法(五主题补 `--paused/--paused-soft/--paused-line` + 补 `.g-status.k-paused` 等修饰符),
+  验收时也确实"过了" —— 但**只改了棱镜**(`prism/css/components.css` + `themes/*.css`)。
+- **真因**: 星图 `atlas/style.css` 是**独立的一套主题**(只有 `:root` 一组暗色令牌, 不共享 `tokens.css`),
+  FX-06 的令牌与修饰符在星图**完全缺失** ⇒ `.g-status.k-paused` 落回基类 `.g-status` 的 `background: var(--surface-2)`,
+  暗底上 = **白 6% 的"白底灰字"** —— 这正是"太白"的观感来源。
+- **判据(自查手法)**: 凡"状态色/令牌族/修饰符"类改动, **按选择器在两套 CSS 各 grep 一遍**(`.k-paused`/`.site-chip.paused`/
+  `.member-row.paused`/`--paused`), 数量对不上就是漏改。仅改 `shared/app.js`(逻辑层)才天然两套生效。
+- **口径落点**: 星图 `:root` 与棱镜 `themes/*.css` 的 `--paused` 三值**必须逐字同值**; 星图 `--paused` 指向 `--fg-muted`
+  (即"已暂停"状态文字那支色), 棱镜同。**不要**给暂停铺任何底(包括 `--surface-2`): 暂停是"无色相"那一支,
+  表达方式是"不铺底 + 中性描边", 与四个有色底(绿/蓝/红/琥珀)并列时层次反而更清楚。
+
+### 视觉类改动的核对手法: 桩 `/api/state` + 系统 Edge + 主题注入 (2026-09-18 实测, R12)
+
+纯 CSS 改动"pytest 全绿但观感不对"是常态, 且本项目有 **2 套 UI × 6 套主题**(星图 1 + 棱镜 5), 靠推理不可靠。
+可复用的最小手法(不必起真 qB, 不必 `uvicorn`):
+
+1. **造真 state**: 用项目自带 `tests/helpers.py`(`make_manager` + `FakeTorrent` + `seed_store`)灌入覆盖**全部 6 种 kind**
+   的种子(seeding/paused/downloading/checking/error/other), 设好 `store.groups`/`member_to_key` 分组, 再
+   `mgr.ensure_group_state(-1)` + `mgr.status_snapshot()` 拼成 `/api/state` 的响应体落 JSON。
+   **必须用 `uv run python` 跑**(裸解释器缺 `qbittorrentapi`); 脚本放临时目录, 别进仓库。
+   **追剧视图(`shows`)要另外合成**: 后端 `_shows_view` 依赖 `tvshows` 配置, 临时 manager 造不出来 ——
+   直接按前端消费的形状手写 `{list:[{key,name,episode_count,latest,seasons:[{season,gaps,episodes:[{key,state,members,count,progress,size,...}]}]}],unrecognized:[]}`
+   塞进响应体即可(`ep.key` 取 `["ep", N]` 三形态之一; `members` 里的 hash 复用**已灌进 `torrents` 平铺视图**的种子,
+   前端 `memberByHash` 才能解析出成员)。集行是 `group-row ep-row s-<state>`, 与种子页行同一套状态色规则。
+   另外**状态分布条/图例(`.status-strip`)**在**吸顶条**里, 不在 `.content` 内 —— 截 `.content` 拍不到, 要单独截该元素。
+2. **桩 + 静态服务**: 一个几十行的 node 脚本起 `http` 服务指向 `src/auto_qb/web_ui/static`, 再用 Playwright 的
+   `page.route("**/api/**")` 把 `/api/config/public`(回 `{web:{skip_local_verify:true}}` 免鉴权)、`/api/state`(回上面的 JSON)、
+   `/api/stats`/`/api/log` 全部 stub 掉 —— **不用起后端**。
+3. **主题**: 棱镜主题由 `localStorage["autoqb.ui.theme"]` 决定, 用 `context.addInitScript` 在页面脚本前写入即可逐主题出图
+   (星图无主题切换, 只有一套暗色)。
+4. **浏览器**: 本机 `ms-playwright` 里的 chromium 版本常与 `npm i playwright` 装到的版本**对不上**
+   (`Executable doesn't exist at ... chromium_headless_shell-1243`), 不必下载 —— 直接用系统浏览器:
+   `chromium.launch({ channel: "msedge" })`(Windows 自带 Edge; `channel: "chrome"` 亦可)。设 `deviceScaleFactor: 2` 再裁剪放大,
+   才能肉眼分辨 `--fg-muted` 与 `--fg-dim` 这种一档灰差。
+5. **对照出图**: 改动前后各跑一轮(文件名带 `before`/`after`), 逐张比对; 关注 `暂停` 行是否还"发白"、进度/状态两列文字是否
+   随状态变色、以及**亮色主题**(frost/golden)下中性描边是否够可见 —— 亮色主题是这类"无色相"改动最容易翻车的一侧。
