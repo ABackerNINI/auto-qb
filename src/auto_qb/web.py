@@ -102,20 +102,21 @@ def content_disposition(filename: str, fallback: str, ext: str = "") -> str:
 
 def create_app(manager) -> FastAPI:
     """构建 WEB 应用: 只读快照 + 命令投递 + 设置读写, 全部 /api/* 经 Bearer 密钥鉴权"""
-    _local_skip_warned = False  # 免鉴权提示每个进程只记一次(见下)
+    _local_skip_logged = False  # 免鉴权提示每个进程只记一次(见下)
 
     def require_token(request: Request, authorization: str = Header(default="")):
-        nonlocal _local_skip_warned
+        nonlocal _local_skip_logged
         # 公开只读端点: 前端登录前读取本机免鉴权等标志(不含任何机密), 免 token 放行
         if request.url.path == "/api/config/public":
             return
         # 跳过本地验证: 本机(loopback)连接免 token 鉴权, 直接放行进入(web.skip_local_verify)。
-        # 提示日志**只记一次**: 免鉴权模式下前端按设计不发 Authorization 头(R10-01), 每请求都记
-        # 会把轮询日志刷满(实测 2 条/轮); 首次记一条足以说明"这个实例不校验密钥"。
+        # 提示日志**只记一次**且为 INFO: 免鉴权是用户显式开启的配置(非异常), 记 WARNING 会经 notify
+        # 推送扰民; 又因免鉴权模式下前端按设计不发 Authorization 头(R10-01), 每请求都记会把轮询
+        # 日志刷满(实测 2 条/轮); 首次记一条足以说明"这个实例不校验密钥"。
         if manager.config.web.skip_local_verify and _is_loopback_host(request.client.host if request.client else None):
-            if not authorization.startswith("Bearer ") and not _local_skip_warned:
-                _local_skip_warned = True
-                logger.warning("WEB 跳过本地验证: 本机连接免密钥放行(web.skip_local_verify=true)")
+            if not authorization.startswith("Bearer ") and not _local_skip_logged:
+                _local_skip_logged = True
+                logger.info("WEB 跳过本地验证: 本机连接免密钥放行(web.skip_local_verify=true)")
             return
         # 鉴权范围 = /api/*: 静态页面与 UI 重定向路由无密钥也可访问(页面本身不含数据,
         # 密钥由前端加载后带 Authorization 头访问 API; 旧实现仅靠"StaticFiles 挂载不经

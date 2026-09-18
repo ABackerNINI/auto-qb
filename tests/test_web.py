@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_api_requires_token: 无/错密钥访问 /api/* -> 401
 - test_config_public_endpoint_no_auth: 公开端点 /api/config/public 免 token 只读本机免鉴权标志(不含机密)
-- test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志**每进程只记一次**), 对外/远端仍强制鉴权
+- test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志 **INFO 级**、**每进程只记一次**), 对外/远端仍强制鉴权
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
@@ -315,8 +315,9 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
 
     默认 false(保守): 本机连接仍强制鉴权; 开启后仅 loopback 放行 —— 对外/远端连接
     (request.client.host 非 127.0.0.1/::1)即使带对密钥以外的任何请求也须密钥(仍强制)。
-    提示日志**每进程只记一次**(R10-01): 免鉴权模式下前端按设计不发 Authorization 头,
-    每请求都记会把轮询日志刷满; 首次记一条足以说明该实例不校验密钥。
+    提示日志**每进程只记一次**(R10-01)且为 **INFO**: 免鉴权模式下前端按设计不发 Authorization
+    头, 每请求都记会把轮询日志刷满; 首次记一条足以说明该实例不校验密钥。级别用 INFO 而非
+    WARNING —— 免鉴权是用户显式开启的配置(非异常), WARNING 会经 notify 推送扰民。
     """
     from fastapi.testclient import TestClient
 
@@ -329,17 +330,19 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     loopback = TestClient(app, client=("127.0.0.1", 50000))
     remote = TestClient(app, client=("192.168.1.50", 50000))
 
-    caplog.set_level(logging.WARNING, logger="auto_qb.web")
+    caplog.set_level(logging.INFO, logger="auto_qb.web")
     caplog.clear()
     # 本机: 无密钥/错密钥均放行(直接进入)
     assert loopback.get("/api/status").status_code == 200
-    warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
-    assert warns and "skip_local_verify" in warns[-1].getMessage()
+    infos = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.INFO]
+    assert infos and "skip_local_verify" in infos[-1].getMessage()
+    assert not [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno >= logging.WARNING], \
+        "免鉴权是显式配置而非异常: 不得记 WARNING 及以上(否则经 notify 推送扰民)"
     # 只记一次: 其余免密钥请求不再刷日志
     caplog.clear()
     assert loopback.get("/api/status").status_code == 200
     assert loopback.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 200
-    assert not [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
+    assert not [r for r in caplog.records if r.name == "auto_qb.web" and "skip_local_verify" in r.getMessage()]
     # 对外/远端连接: 仍强制鉴权(错密钥 401, 对密钥 200)
     assert remote.get("/api/status").status_code == 401
     assert remote.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200

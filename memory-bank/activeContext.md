@@ -4,9 +4,11 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (TASK012 UI 组件库 20 式**已提交** `fae019a` — 20 套风格组件库单页 + 挑选索引 + 目录 README 在 `resources/ui-component-libraries/modelscope.dsv4.1flash/`; 四轮自检 + 7 项缺陷修复, 996 passed; 详见 [tasks/TASK012](tasks/TASK012-ui-component-libraries.md))
+**最后更新**: 2026-09-18 (①WEB 跳过本地验证提示日志由 WARNING 降为 INFO — 免鉴权是显式配置而非异常, 避免经 notify 推送扰民; `test_web.py` 断言同步 ②TASK012 UI 组件库 20 式**已提交** `fae019a`, 996 passed — 详见 [tasks/TASK012](tasks/TASK012-ui-component-libraries.md))
 
 ## 正在进行
+
+- **WEB 跳过本地验证日志降为 INFO (2026-09-18)**: `web.py` 里"本机免密钥放行"提示原为 `logger.warning` → 改 `logger.info`(免鉴权是用户显式开的配置而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING。全量 `998 passed, 2 failed`(2 failed 为既有 memory-bank TASK015 索引缺登记, 与本次改动无关)
 
 - **TASK014 UI 组件库 20 式**: 交付物已产出并自检(文本层/渲染层/功能探针/390px 断点), 7 项缺陷已修; 剩用户挑选与按需迭代 → 档案 [tasks/TASK012-ui-component-libraries.md](tasks/TASK012-ui-component-libraries.md)
 
