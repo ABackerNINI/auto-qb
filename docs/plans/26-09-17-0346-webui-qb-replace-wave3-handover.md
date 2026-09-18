@@ -2,7 +2,7 @@
 
 > 交接对象: 接手波次三剩余工作的编排者 / agent 集群。
 > 生成时间: 2026-09-17。事实来源: `git` 实测 + 代码静态核对 + `uv run pytest tests -q` 实跑。
-> 计划文档: [webui-qb-replace-wave3-plan.html](webui-qb-replace-wave3-plan.html) · 派工契约: `.cluster/webui-w3/{plan.md,contract.md}`
+> 计划文档: [webui-qb-replace-wave3-plan.html](26-09-16-1128-webui-qb-replace-wave3-plan.html) · 派工契约: `.cluster/webui-w3/{plan.md,contract.md}`
 
 ---
 
@@ -264,7 +264,7 @@ uv run pytest tests -q    →   988 passed, 0 skipped, 2 warnings, 30.53s, TOTAL
 | `memory-bank/activeContext.md` | 最后更新 2026-09-15，**波次三实施零记录**（只有 09-16 的计划会话条目） | 补会话纪要 + 收敛"正在进行" |
 | `memory-bank/progress.md` / `pitfalls.md` / `modules.md` / `systemPatterns.md` | 无波次三内容 | 补（尤其 prism CRLF、--bulk-h 退役、rail 退役、状态栏令牌等新坑） |
 | `想法.md` | WEB UI 章节仍是旧定位（"不是要做一个 qb 的 web ui"），30 条诉求未勾选 | 回写勾选 + 更正定位 |
-| `docs/webui-qb-replace-wave3-plan.html` | 无执行状态标注 | 加状态回写（各 ID 完成度） |
+| `docs/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html` | 无执行状态标注 | 加状态回写（各 ID 完成度） |
 | 交付报告 | `DELIVERY/` 目录**不存在** | 补 `DELIVERY/webui-qb-replace-wave3-report.md`（波次二有先例） |
 
 ### 5.6 P2 · 分支回流与工作区清理

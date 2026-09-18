@@ -31,7 +31,7 @@
 | 6.1 | 字段表分层与 slots 声明 | Complete | 2026-09-15 | `compat.py` / `record.py` |
 | 6.2 | 测试补强 (+9 净 +7) | Complete | 2026-09-15 | 基线 879 passed |
 | 6.3 | 真机只读冒烟 | Complete | 2026-09-15 | 119 种子, 补 4 字段 |
-| 6.4 | 计划文档 | Complete | 2026-09-15 | `docs/record-full-fields-plan.html` |
+| 6.4 | 计划文档 | Complete | 2026-09-15 | `docs/plans/26-09-15-1302-record-full-fields-plan.html` |
 
 ## 进度日志
 
