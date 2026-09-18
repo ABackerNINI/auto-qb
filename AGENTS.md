@@ -59,6 +59,17 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 | XX 做了吗 / 计划怎么做 | [memory-bank/progress.md](memory-bank/progress.md) |
 | 跨会话任务档案 | [memory-bank/tasks/_index.md](memory-bank/tasks/_index.md) |
 
+## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有, 用户自己的普通终端无此问题)
+
+> 本仓库 9 个 worktree 共享同一个对象库 `D:/Projects/auto-qb/.git`, **任一处出事波及全部**, 备份要备份主 gitdir。
+
+- **禁止在工具 shell 里跑「非快进合并 + 工作区脏」**: git 2.55 在**非快进合并**时**无条件**调用 `git stash create`; 工作区脏时它要真写对象, 而本环境的文件删除拦截层会顺着这次写入把 `.git/objects` **批量删掉**(走回收站), 表现为 `fatal: <oid> is not a valid object` / `unable to read tree`, 随后对象库大面积损坏。2026-09-19 事故即由此丢 318 个对象 + 全部 reflog。详见 [pitfalls](memory-bank/pitfalls.md)。
+- **安全矩阵 (2026-09-19 实测)**: 非快进合并 + 干净工作区 = 安全; 快进合并 + 脏工作区 = 安全; **非快进合并 + 脏工作区 = 必炸**。
+- **唯一可靠规避: 合并前先把工作区弄干净**(先提交, 或把改动移出去)。`merge.autoStash=false` **挡不住**(全局配置与 `-c` 均实测无效); 关沙箱、换系统 git、剔除 PATH 里的 safe-bin 同样无效 —— `rm` 是 **bash 函数**, 拦截层仍在。
+- 同理**避免**在工具 shell 里跑 `git stash` / `git rebase` / `git checkout`(脏工作区时)等会触发 stash 的操作; 高风险 git 操作请让用户在自己的普通终端执行。
+- **提交后必查 ref**: 本 worktree 每次 `git commit` 的 ref 更新都可能被拦截层静默丢弃, 必须核对 `HEAD` == `refs/heads/other/develop` == `packed-refs`, 必要时用 `.workbuddy-ai/fix-branch-ref.sh <sha>` 修复 —— **不要只看 commit 输出**。
+- 高风险 git 操作前先整份备份 `.git`(`cp -a .git <备份路径>`)。
+
 ## 提交 / PR
 
 - 日常开发在 `develop` 分支; 提交信息为中文一句话概述 (参照 `git log` 风格)。
