@@ -9,8 +9,10 @@
 # 基线: **1053 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1049 passed + 2 skipped** —— 2026-09-19 实测;
 # = 1052 + **热路径跳过 FastAPI `jsonable_encoder`** 新增 1 项:
 #   `test_web.py::test_api_state_skips_jsonable_encoder`(用**计数替身**包住
-#   `fastapi.routing.jsonable_encoder`, 断言 /api/state?view=torrent、/api/state、/api/groups
-#   三个热路径调用次数为 0)。**这是"优化被后人重构掉"的守阵, 不是功能断言** ——
+#   `fastapi.routing.jsonable_encoder`, 断言 8 条 URL(7 个端点)调用次数为 0: /api/state?view=torrent、/api/state、
+#   /api/groups、/api/search、/api/torrents/{hash} 及 /trackers、/files、/peers;
+#   **清单里明确排除 `/api/config/schema`** —— 它的载荷含 dataclass(Group/Field/Plugin), 必须保留
+#   编码器做转换(直返会 `TypeError: Object of type Group is not JSON serializable` ⇒ 500, 实测)。**这是"优化被后人重构掉"的守阵, 不是功能断言** ——
 #   返回裸 dict 时 FastAPI 会先递归遍历整个响应体做一次 jsonable_encoder(3000 种子实测
 #   **161 ms**, 占端点总耗时 189 ms 的 85%, 全程占 GIL); 改成 `JSONResponse` 直返即被
 #   `fastapi/routing.py` 的 `isinstance(raw_response, Response)` 短路。刻意用计数而非计时:

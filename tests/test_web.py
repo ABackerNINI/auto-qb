@@ -2660,9 +2660,22 @@ def test_api_state_skips_jsonable_encoder(web_env, monkeypatch):
     (不用时间型断言 —— 计时在 CI 上不可靠; 计数是确定性的。)
     """
     import fastapi.routing as fr
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    # 详情族需要一个存在的种子 + 一个"连着的"客户端(否则 404/503, 测不到响应管线)
+    mgr.store.get = lambda h: {"HA": TorrentRecord(hash="HA", name="X")}.get(h)
+    # web_env 的 manager 是 SimpleNamespace 替身, 没有真实方法 —— 补上被测端点要用到的那几个
+    mgr.search_torrents = lambda q: {"HA": {"name": "X", "files": []}}
+    fake = FakeClient()
+    fake.trackers_map["HA"] = [{"url": "https://t.example/announce", "status": 2}]
+    fake.files_map["HA"] = [{"index": 0, "name": "a.mkv", "size": 1}]
+    fake.peers_map["HA"] = {"peers": [{"ip": "1.2.3.4", "client": "qB"}]}
+    mgr.client = fake
+
     calls = []
     real = fr.jsonable_encoder
 
@@ -2671,7 +2684,15 @@ def test_api_state_skips_jsonable_encoder(web_env, monkeypatch):
         return real(*a, **kw)
 
     monkeypatch.setattr(fr, "jsonable_encoder", spy)
-    for url in ("/api/state?view=torrent", "/api/state", "/api/groups"):
+    urls = (
+        "/api/state?view=torrent", "/api/state", "/api/groups",
+        # 注: /api/config/schema **故意不在**清单里 —— 它的载荷含 dataclass(Group/Field/Plugin),
+        # 必须保留 FastAPI 的 jsonable_encoder 做转换(直返会 500, 见 web.py 该端点的注释)。
+        "/api/search?q=Show",
+        "/api/torrents/HA", "/api/torrents/HA/trackers",
+        "/api/torrents/HA/files", "/api/torrents/HA/peers",
+    )
+    for url in urls:
         resp = client.get(url, headers=auth)
         assert resp.status_code == 200, f"{url}: {resp.text}"
         assert calls == [], (

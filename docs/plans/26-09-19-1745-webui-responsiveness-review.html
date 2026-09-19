@@ -592,7 +592,16 @@
     <li><b>框架的「方便」是有价的</b>。FastAPI 自动做 <code>jsonable_encoder</code> 对普通接口是便利，对「一次回传几 MB 原生数据」的热路径就是纯税。凡是返回体超过百 KB 的端点，都该走 <code>Response</code> 直返（<code>/api/torrents/{hash}/files</code>、<code>/api/search</code> 等同类端点<b>尚未改</b>，见下）。</li>
     <li><b>对照实验值得花时间</b>。第 3 步那个「5 MiB 静态文件走 uvicorn 只要 1.6 ms」的对照，一句话就把「网络/框架传输层」整片排除掉了 —— 否则很容易在错误的方向上做优化（比如加 gzip）。</li>
   </ul>
-  <p class="note">尚未改的同类端点（同样的 1 行改法，收益取决于响应体大小）：<code>/api/torrents/{hash}</code>、<code>/api/torrents/{hash}/files</code>（整包可能有上千个文件）、<code>/api/search</code>、<code>/api/torrents/{hash}/trackers</code>、<code>/api/log</code>。这些是用户触发型、不在 1.5~3 s 的轮询路径上，故未纳入本批。</p>
+  <p class="note"><b>后续已全部补做（同日，见 issues/26-09-19-1900-webui-hot-endpoints-jsonable-encoder，已 Fixed）</b>：
+    <code>/api/search</code>、<code>/api/torrents/{hash}</code> 及 <code>/trackers</code>、<code>/files</code>、
+    <code>/peers</code> 一并改为 <code>JSONResponse</code> 直返。<b><code>/api/search</code> 服务端 82.6 → 23.3~30.1 ms</b>
+    （输出字节与基线逐字节一致）；详情族在桩里 payload 太小测不出收益，改为真实数据预置。
+    守阵清单同步扩到 8 个端点并红绿双验。</p>
+  <p class="note"><b>⚠ 一条重要例外（值得单独记住）</b>：<code>/api/config/schema</code> <b>不能</b>这样改 ——
+    它的 <code>schema_payload()</code> 返回 dataclass 实例（<code>Group</code>/<code>Field</code>/<code>Plugin</code>），
+    直返会抛 <code>TypeError: Object of type Group is not JSON serializable</code> ⇒ 500；它<b>正是</b>靠
+    <code>jsonable_encoder</code> 做转换的，那趟遍历对它<b>不是</b>白跑。判据：<b>载荷里有非 JSON 原生类型就必须保留编码器</b>。
+    已回退并在端点留注释。</p>
 </section>
 
 <section id="s10">

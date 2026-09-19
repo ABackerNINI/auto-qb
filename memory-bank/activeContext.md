@@ -24,18 +24,20 @@
   (评级 计划 A− / 实施 A− / BUG B / 安全 A− / 性能 B+ / 测试 B−), 报表已追加 **§10 复核修订与修复回执** +
   **§11 热路径白跑 85%**(FastAPI `jsonable_encoder`)。**第 1、2 批与 §11 均已实施未提交**
   (明细见 [progress.md](progress.md) 三波次总条目末段 + 档案进度日志)。
-  **剩余两项已入池为 issue(见 [issues/_index.md](issues/_index.md)), 未开工**:
-  1. **[webui-poll-cadence-mismatch](issues/26-09-19-1900-webui-poll-cadence-mismatch.html)** ——
+  **剩余一项已入池为 issue(见 [issues/_index.md](issues/_index.md)), 未开工**:
+  1. **[webui-poll-cadence-mismatch](issues/26-09-19-1900-webui-poll-cadence-mismatch.html)**(Open) ——
      `sync_interval`(1.5s)与前端分档轮询(1.5/2/3s)在 >3000 种子时错配, 约一半 `rebuild_views` 无人消费。
      **需先拍板方向**: 让轮询跟上快档(降 `basePollMs` 下界) vs 给快照刷新加 Web 活跃门控(无人看就不刷)。
      ⚠ 这条是**频率类**改动, 拍板前先按 pitfalls 「主循环分层节拍」与「把 main_tick 缩短来换响应速度」两条判据过一遍。
      ⚠ 另注: 第 1 批给 `sync_interval` 加的钳制(`min(sync_interval, main_tick)`)只兜住了"快照新鲜度
      掉到心跳之下", **没有**解决"重建了没人消费"这一半 —— 两件事别混。
-  2. **[webui-hot-endpoints-jsonable-encoder](issues/26-09-19-1900-webui-hot-endpoints-jsonable-encoder.html)** ——
-     同类端点的同样改法(低优先): `/api/search`(实测 1.46MB / 服务端 82.6ms, **第二大载荷**)与
-     `/api/torrents/{hash}` 详情族(`/files`、`/trackers`、`/peers`)仍返回裸 dict, 改法与 `/api/state`
-     一致(`return JSONResponse(content=…)`)。收益取决于响应体大小; 这些是用户触发型、不在 1.5~3s
-     轮询路径上, 故未纳入本批。改完必须逐个真请求一次(防 fail-fast)。
+  2. ~~**热端点改 JSONResponse 直返**~~ —— **已修并验证, issue 已置 Fixed**
+     ([webui-hot-endpoints-jsonable-encoder](issues/26-09-19-1900-webui-hot-endpoints-jsonable-encoder.html)):
+     `/api/search` 服务端 **82.6 → 23.3~30.1 ms**(输出字节与基线逐字节一致), 详情族
+     (`/api/torrents/{hash}` + `/trackers`、`/files`、`/peers`)一并统一写法(桩里 payload 太小测不出收益,
+     为真实数据预置)。⚠ **例外**: `/api/config/schema` 载荷含 dataclass(`Group`/`Field`/`Plugin`),
+     直返会 `TypeError: Object of type Group is not JSON serializable` ⇒ 500, **必须保留 jsonable_encoder**,
+     已回退并在端点留注释 —— 判据见 pitfalls 该条目。守阵清单扩到 8 条 URL(7 个端点)并红绿双验。**尚未提交。**
 - **② WEB UI 操作跟手性优化 (2026-09-19)**: 三波次全部入库(`10e06a8` 分层节拍 + 命令唤醒 + 乐观 UI + 批量合单
   / `5d1e52c` 请求超时 + 视图分片回传 + 只读缓存 / `366092d` 行窗口化)。计划
   [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html); 档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)。

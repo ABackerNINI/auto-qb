@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="aqb-issue-slug" content="webui-hot-endpoints-jsonable-encoder">
 <meta name="aqb-issue-stamp" content="26-09-19-1900">
-<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-status" content="Fixed">
 <meta name="aqb-issue-title" content="/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)">
 <meta name="aqb-issue-summary" content="/api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改">
 <title>/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms) · auto-qb 计划外问题</title>
@@ -94,7 +94,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-1900-webui-hot-endpoints-jsonable-encoder</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:00</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">auto-qb-clone1 / 复核续查</div></div>
     </div>
@@ -193,6 +193,13 @@ curl -s "http://127.0.0.1:8099/api/search?q=Some.Show" | wc -c     # 1464051</co
     <h3>方案 B（更大，另开计划）：给 <code>/api/search</code> 做结果裁剪/分页</h3>
       <p>1.46 MB 的搜索结果本身就是设计问题（含全量文件列表）。但会动前端对搜索结果的使用方式，
       成本显著高于 A。<b>建议先做 A（1 行、零风险、立刻见效），把 B 作为独立计划评估。</b></p>
+      <div class="callout"><b>实际改道（与建议不同，建议原文保留）</b>：方案 A 里标注「可顺手带上」的
+      <code>/api/config/schema</code> <b>实测不能直返</b> —— <code>schema_payload()</code> 返回的是
+      <b>dataclass 实例</b>（<code>Group</code> / <code>Field</code> / <code>Plugin</code>），
+      直返会在 <code>json.dumps</code> 处抛
+      <code>TypeError: Object of type Group is not JSON serializable</code> ⇒ 500。
+      <b>判据：载荷里有没有非 JSON 原生类型 —— 有就必须保留编码器</b>（或先显式转换成原生类型再直返）。
+      已把它回退为裸 dict，并在端点上留注释防后人再改。这也印证了本条「fail-fast 提醒」不是理论风险。</div>
   </section>
 
   <section id="s6">
@@ -209,9 +216,29 @@ curl -s "http://127.0.0.1:8099/api/search?q=Some.Show" | wc -c     # 1464051</co
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-19 19:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-19 19:1x — 认领开工（用户「继续」指派，按本报告方案 A 实施），状态 <strong>In Progress</strong></li>
+      <li>2026-09-19 19:2x — 已修并验证（<code>/api/config/schema</code> 实测不可直返，改道保留编码器，见 §05 末尾），状态 <strong>Fixed</strong></li>
     </ul>
     <h3>修复后补充</h3>
-    <p>待修。验证方式：改完重启桩服务，用计时中间件量 <code>/api/search</code> 的服务端耗时并与本条基线（82.6 ms）对比；同时逐个端点真请求一次确认仍 200（防 fail-fast）；单测与冒烟保持绿。</p>
+    <p><b>实际修法</b>：按方案 A 把 <code>/api/search</code>、<code>/api/torrents/{hash}</code> 及其
+      <code>/trackers</code>、<code>/files</code>、<code>/peers</code> 改为
+      <code>return JSONResponse(content=…)</code>（<code>/api/state</code>、<code>/api/groups</code>
+      上一提交已改）。<b>唯一改道：<code>/api/config/schema</code> 实测不可直返，已回退</b> —— 见 §05 末尾。</p>
+      <p><b>实测</b>（3000 种子桩服务，服务端耗时用计时中间件量）：</p>
+      <table>
+        <tr><th>端点</th><th>改前</th><th>改后</th><th>结论</th></tr>
+        <tr><td><code>/api/search?q=Some.Show</code></td><td>82.6 ms</td><td><b>23.3 / 28.2 / 30.1 ms</b></td><td>≈2.9×，省 ~55 ms/次</td></tr>
+        <tr><td><code>/api/torrents/{hash}</code></td><td>0.9 ms</td><td>1.1 ms</td><td>桩里 payload 仅 1.7 KB，无可测收益</td></tr>
+        <tr><td><code>…/files</code> / <code>…/trackers</code></td><td>0.8 ms</td><td>1.0 / 1.2 ms</td><td>同上（FakeClient 返回空/小数据）</td></tr>
+        <tr><td><code>/api/config/schema</code></td><td>8.0 ms</td><td>8.1 ms（已回退）</td><td>不可直返，见 §05</td></tr>
+      </table>
+      <p><b>输出一致性</b>：<code>/api/search</code> 1,464,051 B、<code>/api/state?view=torrent</code>
+      4,764,992 B，与本条记录的基线<b>逐字节一致</b>；全部端点 HTTP 200。</p>
+      <p><b>守阵</b>：<code>test_api_state_skips_jsonable_encoder</code> 的清单扩到 8 条 URL（<b>7 个端点</b>：
+      state / groups / search / torrents/{hash} / trackers / files / peers；state 带参与不带参各测一次），并<b>明确排除</b> <code>/api/config/schema</code>
+      （附注释说明原因，防后人又改回去）；对 <code>/api/search</code> 做了红绿双验
+      （注入裸 dict 返回 → 报「/api/search 走了 jsonable_encoder(1 次)」）。</p>
+      <p><b>测试数字</b>：单测 <b>1053 passed / cov 92%</b>（EXIT=0）；浏览器冒烟 <b>46 项 0 失败</b>（双 UI）。</p>
   </section>
 
   <footer>

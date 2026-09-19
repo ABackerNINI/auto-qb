@@ -272,7 +272,8 @@ def create_app(manager) -> FastAPI:
     def api_search(q: str = ""):
         """按种子名/文件列表搜索种子(主循环构建的缓存索引, Web 线程只读; 索引脏时投递构建命令)"""
         manager.touch_web_client()
-        return manager.search_torrents(q)
+        return JSONResponse(content=manager.search_torrents(q))
+  # 同 /api/state: 返回裸 dict 会让 FastAPI 白跑一遍 jsonable_encoder(见 api_state 注释)
 
     @app.get("/api/paths")
     def api_paths():
@@ -605,7 +606,8 @@ def create_app(manager) -> FastAPI:
         + site(站点名) + HR 展示字段(与分组成员视图同源) —— 详情抽屉 General tab 数据源"""
         manager.touch_web_client()
         rec = _require_torrent(hash)
-        return {"torrent": {**rec.to_dict(), "site": rec.tracker_name, **manager._hr_view_fields(rec)}}
+        return JSONResponse(content={"torrent": {**rec.to_dict(), "site": rec.tracker_name,
+                                                **manager._hr_view_fields(rec)}})
 
     @app.get("/api/torrents/{hash}/trackers")
     def api_torrent_trackers(hash: str):
@@ -613,7 +615,8 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         _require_torrent(hash)
         client = _require_client()  # 断开即 503: 绝不能拿缓存里的旧值冒充"还连着"
-        return _cached_read(f"trackers:{hash}", lambda: list(client.torrents_trackers(hash) or []))
+        return JSONResponse(content=_cached_read(f"trackers:{hash}",
+                                                 lambda: list(client.torrents_trackers(hash) or [])))
 
     @app.get("/api/torrents/{hash}/files")
     def api_torrent_files(hash: str):
@@ -621,7 +624,8 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
-        return _cached_read(f"files:{hash}", lambda: list(client.torrents_files(hash) or []))
+        return JSONResponse(content=_cached_read(f"files:{hash}",
+                                                 lambda: list(client.torrents_files(hash) or [])))
 
     @app.get("/api/torrents/{hash}/peers")
     def api_torrent_peers(hash: str):
@@ -635,9 +639,9 @@ def create_app(manager) -> FastAPI:
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
         # peers 是"活"数据: 窗口更短(1s), 抽屉 5s 轮询本就在窗口外
-        return _cached_read(
+        return JSONResponse(content=_cached_read(
             f"peers:{hash}", lambda: dict(client.sync_torrent_peers(torrent_hash=hash) or {}), ttl=1.0
-        )
+        ))
 
     @app.get("/api/stats")
     def api_stats():
@@ -830,6 +834,10 @@ def create_app(manager) -> FastAPI:
         payload = config_schema.schema_payload()
         # 级别表由 impact 单一维护(与热重载实际分级同源), API 层只做合并
         payload["levels"] = {"sections": SECTION_LEVELS, "tracker_fields": TRACKER_FIELD_LEVELS}
+        # ⚠ 这里**不能**改 JSONResponse 直返(与 /api/state 不同): schema_payload() 里是
+        # dataclass 实例(Group / Field / Plugin), 靠 FastAPI 的 jsonable_encoder 转成 dict;
+        # 直返会在 json.dumps 处抛 `Object of type Group is not JSON serializable` 变 500
+        # (2026-09-19 实测)。判据: **载荷里有没有非 JSON 原生类型** —— 有就必须保留编码器。
         return payload
 
     @app.get("/api/config")

@@ -1047,10 +1047,21 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   解析后除自增的 `rid` 外全同)。
 - **代价(fail-fast)**: 日后往 payload 里塞非 JSON 原生类型(`datetime`/`set`/`Decimal`)会**直接抛
   TypeError 变 500**, 而不是被静默转成字符串 —— 加字段时注意。已改 `/api/state` 与 `/api/groups`;
-  同类端点(`/api/torrents/{hash}/files`、`/api/search` 等)尚未改, 收益取决于响应体大小。
+- **已修范围(2026-09-19)**: `/api/state`、`/api/groups`、`/api/search`、`/api/torrents/{hash}`
+  及 `/trackers`、`/files`、`/peers` —— 共 **7 个端点**(守阵清单是 8 条 URL, 因为 `/api/state` 带参与不带参各测一次)。`/api/search` 服务端 82.6 → **23.3~30.1 ms**
+  (输出字节与基线逐字节一致); 详情族在桩里 payload 很小(1.7 KB / 2 B / 53 B)测不出收益,
+  改它们是为真实数据(整包上千文件的 `/files`)预置。
+- **⚠ 不是所有端点都能直返 —— 载荷里有非 JSON 原生类型就必须保留编码器**(2026-09-19 实测踩到):
+  `/api/config/schema` 的 `schema_payload()` 返回的是 **dataclass 实例**(`Group` / `Field` / `Plugin`),
+  直返会在 `json.dumps` 处抛 `TypeError: Object of type Group is not JSON serializable` ⇒ 500 ——
+  它此前**正是**靠 `jsonable_encoder` 把 dataclass 转成 dict 的, **那趟遍历对它不是白跑**。
+  判据: **载荷里有没有非 JSON 原生类型(dataclass / datetime / set / Decimal / Enum)** ——
+  有就必须保留编码器, 或先显式转换成原生类型再直返。已回退该端点并留注释防后人再改。
+  ⇒ 这也是「框架的方便是有价的」的反向补充: 那趟转换**有时是必需的**, 别一律砍掉。
 - **守阵**: `tests/test_web.py::test_api_state_skips_jsonable_encoder` —— 用**计数替身**包住
-  `fastapi.routing.jsonable_encoder`, 断言热路径调用次数为 0。**刻意不用计时断言**(CI 上不可靠),
+  `fastapi.routing.jsonable_encoder`, 断言这 8 条 URL(7 个端点)调用次数为 0。**刻意不用计时断言**(CI 上不可靠),
   计数是确定性的; 红绿双验过(注入 `return payload` → 报"走了 jsonable_encoder(1 次)")。
+  清单里**明确排除** `/api/config/schema` 并写明原因 —— 否则后人会以为漏了又给加上去。
 
 ### 「载荷大」不等于「要裁字段」: 优化前先把开销量到具体那一行 (2026-09-19 实测, 否决了自家报表的建议)
 
