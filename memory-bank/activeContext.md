@@ -18,6 +18,7 @@
 
 ## 正在进行
 
+
 - **① 上轮计划复核的收尾(只剩第 7 项) (2026-09-19)**: 复核报表
   [docs/plans/26-09-19-1745-webui-responsiveness-review.html](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)
   (评级 计划 A− / 实施 A− / BUG B / 安全 A− / 性能 B+ / 测试 B−), 报表已追加 **§10 复核修订与修复回执** +
@@ -42,6 +43,30 @@
 - **③ 前端轮询按种子量分档 (2026-09-19, 待提交)**: 计划里唯一排在 P1 之后的项 —— 降轮询间隔会**放大**全量回传 + 整树重渲染, 顺序错了会加剧不跟手。档位实测而定: 1000 种子单轮 143ms / 3000 种子 353ms / 5000 种子 ~550ms ⇒ **≤1000 → 1.5s / 1000~3000 → 2s / >3000 → 3s**(主线程占用率 10%/15%/17%); 下界 1.5s = 服务端 `sync_interval`(再快只是多拿空响应)。实现: `pollSec` 字段退役(不留死字段), 新增 `basePollMs()`; 冒烟新增分档断言 ⇒ 30 项 0 失败。
 - **④ WEB UI 视图重建范围收口 · 种子速度刷新滞后修复 (2026-09-18, 未提交)**: 真因是两条重建路径**范围不一致**(主循环 `_tick` 只重建 `_group_view` 却清掉共享脏标记 ⇒ singles/shows/flat 被饿死, 版本号照常自增 ⇒ 前端换上陈旧数组)。已改为唯一入口 `rebuild_views()` + 置脏移出门控 + 前端取消 idle 退避并把 `server_state` 并入 `/api/state`。基线 1018 → **1021 passed**。剩用户真机走查 → [tasks/26-09-18-webui-view-rebuild-scope.md](tasks/26-09-18-webui-view-rebuild-scope.md)
 - **⑤ 浏览器冒烟能力 (2026-09-19, dev-only, 长期有效)**: `scripts/ui_harness.py`(真 `create_app` + `FakeClient` + 合成种子 + 命令泵 `ok|error|hang`)+ `scripts/ui_smoke.cjs`(Playwright, 双 UI **46 项断言** + 内置 A/B 基准)。**Windows 上可跑**, 攻破了"单测测不到前端交互"这个长期卡点。⚠ `--host` 现在只接受回环(免鉴权服务不得暴露到局域网)。⚠ **两种模式都要跑**: `ok` 看正向、`--expect-cmd error` 看回滚 —— 后者此前必红所以没人跑, 已按模式分流断言。
+
+- **5000 种子仿真客户端 · 独立安全/性能测试 (2026-09-19, W0 已出数, W1 未开工)**: 用户要"独立测试 + 仿真客户端 + 5000 种子 + 每 1.5s 活跃 10%, 主要测安全/性能"。**计划已产出** [docs/plans/26-09-19-1433-sim-client-5000-plan.html](../../docs/plans/26-09-19-1433-sim-client-5000-plan.html); 已立档 [tasks/TASK018](tasks/26-09-19-sim-client-5000.md)。**评审四项口径**: ①负载两种语义都做可切换(`churn` 滚动换批默认 / `steady` 固定活跃池) ②形态**独立 HTTP 仿真服务**为主(进程内 Fake 仅 W5 归因用, 不出性能数字) ③**不进 CI**, 手动跑 ④**先纯外部观测, W5 前不动 `src/`**。**W0 探针实测**(真实 `qbittorrent-api` + 回环, 5000×70 字段): 全量载荷 8.77 MB / 端到端 205–240 ms, 增量(500×8)107 KB / **3.3 ms**(差 62×); 朴素全量 diff 22.6 ms vs 脏集合 0.34 ms(67×); 单次回环请求 2.27 ms。**踩坑**: `sync/maindata` 的 **`rid` 在 POST body**, 只解析 query 恒得 `rid=0` ⇒ 永远退化全量(已定为 W1 单测回归点)。**两个产品级发现**(推算, 待 W4 实测): 首轮灌入约 **34 s 主循环停摆**(5000 次 `torrents/files` ≈ 11.4 s + maintenance 立即执行 ≈ 1 万次写 ≈ 22.7 s); `max_tasks_per_tick=20` 下 5000 种子 +2 规则时**规则实际执行周期 ≈ 25 min**(名义 60s)。**二轮补充(同日)**: ①日志分**两层** —— 统计层 `summary.json` 每项 check 自带 `值/op/阈值/result` + 一行 `verdict`(OK/WARN/FAIL), 供 AI 扫读判断有无问题; 完整层 trace/writes/sim-events/fs 快照/子进程日志四路统一 `time.time()` 时间戳对齐供回溯; 阈值未固化时记 `BASELINE` 而非 FAIL ②新增**破坏性场景 D1–D5**(删种子/删文件), 关键是引入**真实落盘的虚拟文件树**(`--fs-root`, 默认物化 300 个种子且必含全部辅种群) —— 否则"文件删没删"只是记账、测不出真实行为; **D4 外部删文件 → 缺文件保护**为头号场景, 判据是组内成员停止率 **== 100%**(漏一个即上传垃圾数据被封号)+ 响应 ≤3 轮, 且必须由磁盘扫描自己发现、不能由 sim 直接改 state ③性能矩阵扩到 P7 删除风暴, 波次加 W3b。计划文档已重排为 12 节。**三轮补充(同日)**: ①新增 **`--root` 工作根**(默认 `R:\auto-qb-sim`, 环境变量覆盖), 文件树/配置/data_dir/两层日志全部落在 `<root>/runs/<时间戳-场景ID>/`; R 盘不存在时回退临时目录并 WARN ②**R 盘即真实下载盘**, 加 **B1–B4 四道边界校验**(哨兵根 `.auto-qb-sim-root` / 删除前 realpath 逃逸判定 / 单次删除数量上限 / 收尾 `unexpected_removals` 核账), 任一不过即拒绝, W1 带单测 ③**修正**: 文件树由"只物化 300"改为**默认全量物化** —— 未物化种子会被缺文件扫描误判丢失并整组误暂停, 会让 D4 判据失效。**第四轮(同日)· W1+W2 已实施并跑通**: 落地 `scripts/sim_qb.py`(仿真服务端) 与 `scripts/sim_run.py`(驱动器, 一键场景 + 两层日志), 端到端跑通(真实 `qbittorrent-api` + auto-qb 子进程)。**实测**: 首轮 5000 种子 **17.19 s 停摆**(2000 种子 7.46 s, 约 3.7 ms/种子线性), 稳态 **2.017 s / 漂移 19 ms 完全跟得上**; S1 dry-run 写台账 **0 条**; D4 组内**停止率 1.0、响应 0.77 tick**; 高风险端点全程 0 命中; `--self-test` 8 项全绿。**修正 W0 推算** 34 s → 17.19 s(差额: 1/3 种子未配置站点被跳过 + 回环比真 qB 快, 真实 qB 只会更久); 判据改为**首轮/稳态分离**(混算会每次假红)。**踩到四个"测假"陷阱**已修并入 pitfalls: ①`"errored"` 非合法 qB 状态(应 `"error"`, 否则缺文件扫描完全不触发) ②辅种组内成员必须共享**完全相同**的文件相对路径(否则根本没归成组) ③未配置站点种子不归组 ⇒ D4 停止率基准失真 ④首轮/稳态必须分开统计; 另实测到 `qbittorrent-api` 每次写请求前额外查一次 `app/webapiVersion`(库内无缓存) ⇒ 写请求量翻倍, 归入 W5 归因候选。全量 **1041 passed 不变**。**第五轮(同日)· W3b 已完成 + W3 挖到真缺陷**: **D1–D5 五个破坏性场景全部 verdict OK** —— D1 外部删 20 个种子: 快照 300→280、跌幅 20 == 20; D2 带文件删除: 267→262(少 5, 整组共享文件)、unexpected=0; D3 经 WEB UI 删 4 个: 4/4 投递成功、hash 集合与 `deleteFiles` 逐条全等、`torrents/delete` 请求数 4 == 命令数 4; D4 组内**停止率 1.0 / 响应 0.42 tick**; D5 批量删 500(跌幅 500==500、重复投递 removed 不崩) + 两相运行 `exec_history` **71 → 71 零增长**(跨进程幂等成立)。**D3 改定义**: 静态核查 `rules.registry.ACTIONS` **没有 delete**, 全仓唯一 `torrents_delete` 在 `mixins/web_commands.py`(WEB UI 命令触发) ⇒ auto-qb **不存在任何自动删除路径**(保守默认), 原计划"配置一条删除规则"无法成立, 改测 WEB 命令路径。**又修四处"测假"**(已入 pitfalls): ①`torrents_removed` 曾硬编码 `[]` ⇒ 外部删除 auto-qb 永远看不到(反向对照: 抹掉后 `snapshot_drop` 由 20 变 **0**, 快照全是幽灵) ②只盯写台账看不出幽灵(打标签一次性) ⇒ 新增 WEB `/api/status` 的**快照数**观测通道(不开 `--web-port` 该项记 BASELINE 提示空转) ③**硬 kill 拿不到 `state.json`**(Windows `terminate()` = TerminateProcess, `finally` 不跑; `CTRL_BREAK_EVENT` 也只得到 0xC000013A, Python 不转成 KeyboardInterrupt) ⇒ 新增 `scripts/sim_autoqb.py` 启动包装(装 SIGBREAK 处理器), 并加 `RUN.graceful_exit` 判据(反向对照: 硬 kill 时 `state_file_present` 必红) ④两相运行的**相位重启间隔**被算成稳态漂移(1.84 s 假红) ⇒ 传入相位边界剔除。**S5 实测 FAIL(真缺陷, 未修)**: `--abort-after 12 --abort-duration 10` 断连 10 秒后 auto-qb **永久停在断连态** —— 重连只在 `except APIConnectionError` 分支触发, 而该分支第一步 `self.client = None`; client 为 None 后 `api.sync_maindata()` 抛的是 **AttributeError** 而非 APIConnectionError ⇒ 落进 `except Exception`(只打日志、**不重连**) ⇒ 死循环, 30 秒 28 条异常栈、sync 轮次 22→5、全量自愈从未发生, 只能重启进程。修复方向(不在本轮范围): 断连期间跳过 `_tick` + 独立重连分支, 或让 `QbApi` 在 `_client is None` 时抛 `APIConnectionError`。**本轮未动 `src/`**。**第六轮(同日)· W3 收口 + W4 基线固化完成**: **S6/S7/S8 全绿** —— S6 `data_dir` 跑前后快照只允许
+`state.json`/`.bak`/日志/`web.token`/锁(实测 0 越界); S7 并发轮询 500 次 4xx/5xx **0**;
+S8 奇数 KiB/s 手设限速 30 个**一个没被改写**、`setUploadLimit` **0** 命中(初版造了偶数 KiB 导致 21/30 假红 ——
+项目约定奇数值才是"手动限速不覆盖")。**W4 跑齐 P1–P7 并固化阈值**: 新增 `scripts/sim_baseline.py`
+(`--only` / `--merge`), `sim_run.py` 启动时读 `…baseline.json` 填阈值(未固化记 BASELINE)。
+实测 P1 首轮 **14.37 s**(修正 W0 推算 34 s)、P3 tick2 14.20 s、P3b tick1.5 13.52 s、P4 steady 14.37 s、
+P7 删除风暴 9.56 s —— 稳态全部跟得上(漂移 < 0.35 s); **P2 渐进灌入掉拍**(稳态 2.87 s vs tick 2.0 s);
+**P6x 4 线程轮询时主循环近乎停摆**(45 s 只 1 轮 sync、`torrents/files` 一次没拉、`/api/state` p95 1.28 s;
+单线程轮询也已把漂移从 0.33 s 顶到 0.95 s)。固化阈值 `first_round ≤ 22.68` / `写速率 ≤ 6210.49` /
+`p95 ≤ 1218.4` / `稳态漂移 ≤ 1.0`(纯主循环; ramp 与压力档**不进**稳态阈值候选集)。
+顺带实现 `--ramp`(渐进灌入, 新暴露种子须整条进脏集合)。修掉三处工具问题: 停机掐断轮询 ⇒
+uvicorn/h11 异常栈污染 `LOG.tracebacks`(加 `quiesce` 事件)、`--tick 1.5` 漂移仍按写死 2.0 算、
+阈值硬编码在调用处 ⇒ 固化值用不上。**新建 `TODO.md`**(BUG-01 断连无法自愈 + PERF-01/02 + 剩余波次)。
+**第七轮(同日)· W5 归因 + W6 收尾完成(计划 W0–W6 全部走完)**: 计划文档新增 §13 归因四条 ——
+① 首轮灌入 = 请求数 bound(5000 种子第一轮 **15 754 次请求 ≈ 0.96 ms/次**)
+② 稳态吞吐被 `max_tasks_per_tick=20` 卡死(**实测 10.6 任务/s**)
+③ WEB 全量视图(PERF-01) ④ 写请求放大一倍(`app/webapiVersion` 命中数恒等于写请求数)。
+**纠正 W0 两处推算**: 首轮 34 s → **14.4 s**;「R=2 → 25 min」→ 按实测吞吐重算 **16.7 min**(多算一档规则)。
+**⚠ 框架性误判已纠正**: 首轮与稳态是两条互不相干的路径 —— 首轮新种子在 `_refresh_torrents` 里
+对 `matched_added` **逐个内联**跑(拉 trackers + files), **不经任务队列**, 故 `max_tasks_per_tick` 对它无效;
+只有稳态周期任务走 `TaskQueue.run_due(max_tasks=20)`。P5 的「队列深度」需进程内剖面, 未出数。
+**W6**: 基线 + 5 条判据设计约定写入 `memory-bank/testing.md` 新增一节。
+**全量 1041 passed 不变, `src/` 全程未动**。**遗留**: BUG-01(断连不自愈)按用户决定**暂不修**, 已立档在 `TODO.md`
 
 ## 待用户真机走查 (代码/测试均已完, 只差真实 qB 数据下的观感确认)
 

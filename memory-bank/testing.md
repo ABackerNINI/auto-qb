@@ -188,3 +188,62 @@ def test_xxx(tmp_path):
 - `FakeTorrent.tracker_conf` 默认 None — 需要变量替换 (`${required_seeding_time}`)/HR 判定的测试要传 tracker_conf (含 hr) 或依赖 make_ctx 自动匹配 (FakeTracker 带 hr)。
 - `FakeConfig` 的类属性 `check_missing_files = False` 是历史遗留 (真实配置在 grouping 段: `config.grouping.check_missing_files`, 默认 True) — 分组测试记得开 `mgr.config.grouping.enabled = True`; 缺文件扫描由 `grouping.check_missing_files` 控制, 测试时按需在 `mgr.config.grouping` 上设置。
 - helpers 在未安装 qbittorrentapi 时降级 (`TorrentState=None`), 但项目 venv 已装, 一般无需考虑。
+
+## 5000 种子仿真测试（手动工具，不进 CI）
+
+> **使用手册（怎么跑 / 怎么判 / 怎么回溯 / AI 调用约定）在
+> [docs/sim-client-test-howto.md](../../docs/sim-client-test-howto.md)** —— 本节只放基线与约定要点。
+
+> 独立 HTTP 仿真服务端 + 驱动器，用于 **5000 种子规模的安全 / 性能测试**。
+> 脚本：`scripts/sim_qb.py`（仿真服务端，可独立运行）/ `scripts/sim_run.py`（驱动器，编排 + 断言 + 两层日志）/
+> `scripts/sim_autoqb.py`（auto-qb 子进程启动包装，装 SIGBREAK 处理器以便优雅停机）/
+> `scripts/sim_baseline.py`（一键跑 P1–P7 并固化阈值）。
+> 计划与全部实测：[docs/plans/26-09-19-1433-sim-client-5000-plan.html](../../docs/plans/26-09-19-1433-sim-client-5000-plan.html)。
+> **不进 CI**（跑数分钟且依赖 R 盘），手动跑；产物全落 `--root`（默认 `R:\auto-qb-sim`，环境变量 `AUTOQB_SIM_ROOT` 覆盖）。
+
+### 为什么不是进程内替身
+
+单元测试用 `FakeQbServer` 承载**真实** `qbittorrent-api` 栈（见上文），但**规模行为测不到**：
+全量 sync 端到端 205–240 ms / 8.77 MB，增量 3.3 ms / 107 KB（**差 62 倍**）；
+仿真端自己的 diff 策略也要跟着对（朴素全量 diff 22.6 ms vs 脏集合 0.34 ms，**差 67 倍**）——
+否则测的是仿真器自己。
+
+### 固化基线（W4，2026-09-19 实测：Windows 本机 / R 盘 / 回环）
+
+文件：`docs/plans/26-09-19-1433-sim-client-5000.baseline.json`。
+`sim_run.py` 启动时自动读取填阈值；**文件不存在时相关项记 `BASELINE`（不算 FAIL）**，
+固化后同一指标即成硬判据。重跑：`uv run python scripts/sim_baseline.py`（`--only P1,P3` 跑部分 /
+`--merge` 只覆盖重跑的场景 / `--dry` 只打印命令）。
+
+| 阈值 | 值 | 来源 |
+|---|---|---|
+| `P1.first_round_s` | ≤ 22.68 | 实测 max 15.1 s × 1.5 |
+| `S3.write_rate_per_min` | ≤ 6210.49 | 实测 4777.3/min × 1.3 |
+| `S7.p95_ms` | ≤ 1218.4 | `/api/state` p95 609 ms × 2 |
+| `SYNC.drift_max_s` | ≤ 1.0 | **纯主循环**场景实测 max 0.32 + 0.5（下限 1.0） |
+
+❗**阈值候选集是分级的**：`--ramp`（渐进灌入）、`--stress`（压力档）、带 `--web-poll` 的场景
+**不进** `SYNC.drift_max_s` 的基线 —— 否则阈值被抬到 1.77，会放走真正的稳态回归。
+它们的漂移另记 `P2.drift_max_s` 观测（不判红）。
+
+### 关键实测数字（速查）
+
+- **首轮灌入**：5000 种子 **14.4 s**（回环）≈ 15 754 次请求 ≈ 0.96 ms/次 —— 每新种子约 2 次内联请求
+  （`torrents/trackers` + `torrents/files`），**在 `_refresh_torrents` 里逐个内联跑，不受 `max_tasks_per_tick` 约束**。
+- **稳态**：tick 2.0 与 1.5 两档都跟得上（漂移 < 0.35 s）；删除风暴反而更轻（种子少了）。
+- **任务吞吐**：**10.6 任务/s**（= `max_tasks_per_tick 20 ÷ tick 2 s`）。
+  执行周期 ≈ `(1+规则数) × 种子数 ÷ 20 × tick`：5000 种子 R=1 → 8.3 min，R=2 → **16.7 min**。
+- **写请求放大一倍**：`qbittorrent-api` 每次写前额外查一次 `app/webapiVersion`（库内无缓存），
+  trace 里其命中数恒等于写请求数。
+- 归因与改进建议见计划文档第 13 节（W5，只出结论未动代码）。
+
+### 判据设计约定（踩过的坑，详见 pitfalls.md）
+
+1. **外部删除必须经 `torrents_removed` 上报** —— 否则 auto-qb 快照里全是幽灵，判据全绿但什么都没测到。
+2. **别只看写台账判"种子是否还在"** —— 打标签是一次性的（state 记过就不再写）。
+   要直接问 auto-qb：开 `--web-port` 轮询 `/api/status` 的 `torrents`（= `len(store.by_hash)`）。
+3. **别硬 kill auto-qb** —— Windows 上 `terminate()` = TerminateProcess，`finally` 不跑 ⇒ `state.json` 不落盘；
+   原生 `CTRL_BREAK_EVENT` 也只得到 0xC000013A。必须经 `sim_autoqb.py` 启动（装了 SIGBREAK 处理器）。
+4. **停机前先让观测/轮询收手**（`quiesce`）—— 否则半截请求让 uvicorn 抛 h11 异常栈，污染 `LOG.tracebacks`。
+5. **断言"某保护生效"前先确认测试数据落在保护范围内** —— 例：项目约定**奇数 KiB/s** 才是
+   "用户手动限速、程序不覆盖"（`utils.is_manual_speed_limit`），造偶数会被正常覆盖 ⇒ 假红。

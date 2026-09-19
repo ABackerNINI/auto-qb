@@ -731,6 +731,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **端到端冒烟(可复用)**: 桩一个最小 HTTP 服务就能让**真页面在真浏览器里跑起来** —— ①静态托管 `web_ui/static`(注意 `.js` 必须回 `text/javascript`, 否则 ES 模块/脚本被拒); ②只需桩三个端点: `/api/config/public` 回 `{"web":{"skip_local_verify":true}}`(免鉴权直入, 不用走密钥表单)、`/api/state`(含 `shows`/`torrents`, `torrents` 里的 SEED_ITEM 供 `memberByHash` 解析 —— 缺了剧行渲染不出来)、目标端点(如 `/api/open-path` 把请求体落盘, 事后直接看载荷); ③`/atlas/` 顶栏第三个按钮 = 追剧。浏览器用 **node playwright**(在 `~/.workbuddy-ai/binaries/node/workspace/node_modules`, 配 `NODE_PATH`) + `chromium.launch({ channel: "msedge" })` —— 缓存里的 chromium 版本号与 playwright 期望的经常对不上(本次 1234 vs 1243), **系统 Edge 永远可用**。本次红验: 修复前 `/api/open-path` 收到的是 `hash: {整个成员对象}`(含 `hit:false`), 修复后是 `hash: "aaaa…"` —— 这就是用户看到的「种子不存在」。
   - 两个小坑: 桩服务**不要用 `os.remove` 清空记录文件**(会触发工具环境的批量删除拦截, 进程直接死; 用 `open(path,"w").close()`); 无头页里 Vue 实例**不在 window 上**(`const app = createApp(...)` 是模块作用域), 要操作只能点 DOM。
 - **已固化**: `tests/test_web.py::test_frontend_static_bundle_health` 新增第 7 项 —— app.js 里凡是"集成员取 hash"的行(`e.members`/`ep.members` + `hashes`/`.hash`/`for (const h of`)必须含 `memberHashesOf(`, 否则报问题(对 HEAD 旧版实测报出全部 5 处)。
+
 ### 主循环「命令即时唤醒」不能连带唤醒 tick: max_tasks_per_tick 与两个每 tick 预算会一起失效 (2026-09-19 设计评审)
 
 - **背景**: 为修「WEB UI 操作不跟手」提出「Web 投递命令即唤醒主循环」。初版设想是投递后立刻跑下一轮
@@ -1130,3 +1131,103 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   `tracker_conf` 配置对象 —— 后者不可 JSON 化)。
 - 判别法: 桩对象与真对象"长得像"不等于"够用"。加一条断言去**访问**那条链路(哪怕只是 GET 一次),
   比对着桩的字段列表核对有效得多。
+
+### 仿真客户端: 四类"测假"陷阱 (2026-09-19 实施 `scripts/sim_qb.py` 时实测)
+
+> 写仿真/假客户端时最容易犯的错, 是**仿真端自以为在测某件事, 实际什么都没测到**。以下四条全部是"跑起来一片绿、结论完全错"的类型。
+
+- **① `"errored"` 不是合法 qB 状态名** —— `TorrentState` 会把它解析成 `UNKNOWN`, `is_errored` 为 **False**, 于是 `_handle_state_transitions` 的"进入 errored"分支**完全不触发**, 缺文件扫描一次都不跑(现象: D4 场景写台账里一条 stop 都没有)。合法名是 **`"error"`**(另一个是 `"missingFiles"`)。
+  - **判别法**: 造 qB 状态值时用 `TorrentState("xxx")` 验一遍再写进代码; 日志里若完全没有预期分支的 WARNING, 先怀疑状态名而不是怀疑触发条件。
+- **② 辅种组内成员必须共享**完全相同**的文件相对路径** —— 分组键是 `(path_normalize(save_path), 排序后的文件相对路径元组)`, 只共享 `save_path` 不够。初版按**种子序号**算集数 `ep`, 同组 4 个种子文件名各不相同 ⇒ **根本没归成组**(sim 侧数出 11 个组, 实际每组 1 人, 缺文件保护形同虚设)。改为按**组号**算 ep + 组专用目录。
+  - **判别法**: 归组后核对"组数 × 组大小 == 辅种种子数", 或看文件树文件数是否等于 `种子数 - 辅种数 + 组数`(本次 5000 → 4439 才对得上)。
+- **③ 未配置站点的种子会被跳过且**不归组** —— `_match_tracker_conf` 未命中就 `continue`, 归组逻辑在它之后。于是 sim 侧"组内 4 人"与 auto-qb 侧"组内 3 人"不一致, D4 停止率算出 **0.75** 而不是 1.0(auto-qb 视角其实已经 100% 停完, 是判据基准错了)。
+  - **判别法**: 破坏性场景的"组内成员"必须以 **auto-qb 实际归组结果**为准。最省事的做法: 让辅种组成员**一律用已配置站点**, 未配置站点的覆盖交给非辅种种子。
+- **④ 首轮与稳态的 tick 间隔必须分开统计** —— 5000 种子首轮要 17.19 s(约 3.7 ms/种子, 随 N 线性), 而稳态是 2.017 s。混在一起算平均间隔会得到 2.438 s、最大漂移 15 s, **每次跑都假红**, 反而把真正的稳态劣化掩盖掉。
+  - **判别法**: 同步间隔序列里第一个 gap 单列为"首轮一次性成本", 稳态漂移只对 `gaps[1:]` 计算。
+- **顺带实测到的真实开销**: `qbittorrent-api` 在**每次写请求前都要再查一次 `app/webapiVersion`**(`request.py:750` 的版本检查, **库内无缓存**) —— 实测 `addTags` 与 `webapiVersion` 命中数完全相同 ⇒ **写请求量翻倍**, 真实 qB 上同样发生。叠加"auto-qb 逐种子打标签"(5000 种子 = 5000 次 `addTags`, 而 qB 的该端点支持一次传多个 hash) ⇒ 批量提交可降一到两个数量级, 已归入 W5 归因候选(本阶段不动代码)。
+
+### 仿真驱动器: 又四类"测假"陷阱 + 一个真缺陷 (2026-09-19 实施 W3b / S5 时实测)
+
+> 接上一条(仿真客户端四类陷阱)。这一轮是在**跑通之后**才发现的: 判据全是绿的, 但其中有四条**根本没测到东西**。
+
+- **⑤ `torrents_removed` 曾硬编码 `[]` ⇒ 外部删除永远测不到** —— sim 删掉种子后只从内存 dict 移除,
+  从不上报, auto-qb 的快照里**一直留着幽灵**。更阴的是此时"写台账"依然全绿(打标签是一次性的,
+  state 记过就不再写), 于是 D1 看起来完美通过。
+  - **判别法**: 必须**直接问 auto-qb 快照里还有几个**(开 `--web-port` 轮询 `/api/status` 的 `torrents`,
+    它读的就是 `len(store.by_hash)`), 断言"终值 == 仿真端剩余"与"峰值-终值 == 删除总数"。
+  - **反向对照(必做)**: 把 `torrents_removed` 抹回 `[]` 重跑一次 —— 实测 `snapshot_drop` 由 **20 掉到 0**
+    (快照停在 300 不动), 而 `writes_to_removed` **仍是 PASS**(证明它单独看是空转的)。
+- **⑥ Windows 上硬 kill 拿不到 `state.json` ⇒ "状态持久化"判据空转** —— `proc.terminate()` 在 Windows 是
+  **TerminateProcess**, `finally` 根本不跑 ⇒ `save_state()` 永远不执行(实测 run 目录里只有 `state.lock`)。
+  而 `CTRL_BREAK_EVENT` 也救不了: 实测 Python **不会**把它转成 KeyboardInterrupt, 进程直接以
+  **0xC000013A**(STATUS_CONTROL_C_EXIT)退出。
+  - **解法**: 用 `scripts/sim_autoqb.py` 作启动包装 —— 在子进程里 `signal.signal(signal.SIGBREAK, raise KeyboardInterrupt)`,
+    再 `from auto_qb.cli import main`; 父进程用 `CREATE_NEW_PROCESS_GROUP` + `send_signal(CTRL_BREAK_EVENT)`。
+    同时加 `RUN.graceful_exit`(rc == 0)硬判据, 否则这个坑会静默复发。
+  - **反向对照**: 把 `graceful_stop` 换回 `kill()` 重跑 —— `D5.state_file_present` 与 `exec_history_seeded` 必红。
+- **⑦ 两相运行(跨进程幂等)时, 相位重启的间隔会被算成稳态漂移** —— 新进程起来前的那个 gap 是**重启**造成的,
+  实测把 `drift_max` 顶到 **1.84 s**(阈值 1.0)假红。
+  - **解法**: 记录每相结束时刻传给 `collect_sync_metrics`, 剔除跨越该时刻的 gap; 同时 `SYNC.full_rounds`
+    的阈值要放宽到"进程数"(每相首轮必然是全量)。
+- **⑧ 规则块必须落在 `config:` 之内、且键名以 `_rules` 结尾** —— `validate_config` 里
+  `rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules")}`, 而**根节点只认 `config`**。
+  `test_yamls/test_actions/*.yml` 里那种**顶层** `xxx_rules:` 写法是**旧格式**, 照抄会得到
+  "根节点: 未知键 ['sim_once_rules']"。另外规则内**没有 `log_level` 键**(可用键只有
+  actions/conditions/cooldown/enabled/execute_once/interval/stop_following_rules_if/trigger)。
+  - 好消息: 配置校验是 **fail-fast 且聚合报错**的, 一次就能把错处全列出来, 不用猜。
+- **⑨(真缺陷, 未修) qB 短暂断连后 auto-qb 无法自愈** —— S5 实测 `--abort-after 12 --abort-duration 10`
+  (断 10 秒后恢复): 断连期间 `writes == 0`(符合预期), 但**恢复后再也没接上**, 直到运行结束
+  每 tick 一条 `主循环异常: 'NoneType' object has no attribute 'torrents_info'` + 完整异常栈
+  (30 秒 28 条栈), sync 轮次 22 → 5, `sync_full_rounds` 停在 1(**全量自愈从未发生**)。
+  - **根因**(`qbmanager.run` 主循环): 重连只在 `except APIConnectionError` 分支里做, 而该分支第一步就是
+    `self.client = None`。client 一旦为 None, 下一次 `api.sync_maindata()` 抛的是 **AttributeError**
+    而不再是 `APIConnectionError` ⇒ 落进 `except Exception`(只打日志、**不重连**) ⇒ **死循环, 只能重启进程**。
+    退避逻辑 `_reconnect_due`(2→4→8→…→30s)本身是对的, 但它被放在一个**再也进不去的分支**里。
+  - **附带**: 断连期间每 tick 一条 ERROR + 20 行栈(30 秒 ≈ 300 行), 且真实原因被二次异常掩盖, 回溯极易误判。
+  - **修复方向(供后续任务)**: ①把"已断连"做成显式状态位, 断连期间**跳过 `_tick`** 并由独立分支按退避重连;
+    或 ②让 `QbApi` 在 `_client is None` 时抛 `APIConnectionError` 而不是 AttributeError, 保证异常类型
+    始终能表达"连接不可用"。二者都需红绿验证: 先用本 sim 的 S5 场景跑出红, 再验绿。
+  - **通用教训**: 凡是"异常处理器里改了状态、而这个状态又决定了下次抛什么异常"的结构, 都要警惕
+    **异常类型漂移**导致的分支永久失效 —— 单测要断言"断连 N 秒后能自愈", 而不是只断言"断连期间不崩"。
+
+### 仿真测试: W4 基线与判据设计 (2026-09-19 实施 P1–P7 时实测)
+
+- **⑩ 停机时被掐断的轮询请求会污染「异常栈」判据** —— 驱动器 kill auto-qb 时, 观测/轮询线程
+  的请求正卡在半路 ⇒ uvicorn 回 400 时连接已关 ⇒ `h11 LocalProtocolError` 异常栈
+  (外加一条 `WARNING: Invalid HTTP request received.`)。这是**测试工具自己的锅**, 不是 auto-qb 缺陷,
+  却会让 `LOG.tracebacks == 0` 这个硬判据变红。
+  - **解法**: 加一个 `quiesce` 事件, 停机前先置位让观测/轮询收手, 睡 0.8 s 再发停止信号。
+  - **判别法**: 异常栈出现在**进程停止那一刻**、且栈里只有 uvicorn/h11/asyncio, 基本就是这一类。
+- **⑪ 项目约定「奇数 KiB/s = 用户手动限速, 程序不覆盖」**(`utils.is_manual_speed_limit`:
+  `bytes > 0 and (bytes // 1024) % 2 == 1`)。造 S8 的测试数据时若造出**偶数** KiB,
+  会被程序正常覆盖 ⇒ **假红**(初版写 `i*7+1`, 而 i 恒为奇数 ⇒ KiB 恒为偶数, 30 个里 21 个被改写)。
+  改成 `i*8+1`(恒为奇数)后全绿。
+  - **教训**: 断言"某保护生效"之前, 先确认**测试数据真的落在保护范围内** —— 否则测的是"保护没生效时的正常行为"。
+- **⑫ 固化阈值时, 哪些场景能进候选集是有讲究的** —— 把 `--ramp`(渐进灌入)或人为打满的
+  压力档算进 `SYNC.drift_max_s` 的基线, 会把阈值从 1.0 抬到 1.77, **放走真正的稳态回归**。
+  - **做法**: 分两级候选池 —— `steady()`(无 ramp / 无 WEB 轮询 / 非压力档)只喂稳态漂移阈值;
+    `normal()`(可带真实节奏的 WEB 轮询)喂首轮耗时 / 写速率 / p95。
+    灌入期与带 WEB 负载的漂移换成另一个 id 记 BASELINE 观测, 不判红。
+  - 另: `add(cid, value, op, threshold)` 只有在 **threshold 为 None** 时才去查固化表 ——
+    把阈值**硬编码**在调用处会让固化值永远用不上(实测 `SYNC.drift_max_s` 就踩了这个)。
+- **⑬ 手动限速 / 状态这类"程序不该碰"的东西, 判据要能区分"没碰"和"没测到"** ——
+  加一条 `*_seeded`(`>= 1`)确认样本真的存在, 否则主判据会在样本为空时静默通过。
+- **实测到的两个性能结论**(详见 `TODO.md` PERF-01 / PERF-02):
+  ① 5000 种子下 `/api/state` 全量(`rid=-1`)**单次约 0.6 s**; 单线程轮询(≈4 req/s)就把稳态漂移
+  从 0.33 s 顶到 0.95 s, 4 线程打满时主循环近乎停摆(45 s 只完成 1 轮 sync, `torrents/files` 一次没拉)。
+  ⚠ 测试用的是 `rid=-1` 强制全量, 比真实前端更狠, 结论前建议按真实节奏复测。
+  ② 渐进灌入(`--ramp 200`/拍)会持续掉拍(稳态 2.87 s vs tick 2.0 s), 首轮成本被打散成"每拍还债"。
+
+### 同步上游: 未提交改动 + 行尾导致快进合并被拒 (2026-09-19 实测)
+
+- **场景**: 工作区有未提交的 `memory-bank/*.md` 改动, 而上游 `develop` 也改了同几个文件 ⇒ 快进合并不让过。
+- **安全流程**(全程可回退, 不动未跟踪文件): ①`git diff > <备份>.patch` + 原文件另存; ②只对被改的跟踪文件
+  `git restore --source=HEAD -- <文件>` 清干净; ③`git merge --ff-only origin/develop`; ④`git apply --3way --ignore-whitespace
+  <备份>.patch` 合回; ⑤`.md` 的冲突基本都是"两边各自追加了一段", **取并集**即可(`tasks/_index.md` 例外 ——
+  它是生成物, 直接重跑 `scripts/gen_tasks_index.py`); ⑥`git add` 标记已解决后 `git reset` 变回未暂存状态。
+- **卡点**: 第 ② 步之后个别文件 `git diff` 为空、`git status` 却仍显示 ` M`, 快进合并照样被拒
+  (本次 `memory-bank/pitfalls.md`: 还原后工作区比 blob 大 733 字节 = 多出来的 CR)。**把文件强制成纯 LF 即可**
+  (`sed -i 's/$//' <文件>`), 随即判干净、合并放行。
+  - 判别法: `git diff --stat` 为空但 `git status` 显示 M、且工作区文件比 blob 大 ⇒ 是行尾不是内容;
+    别急着 `git stash` —— 本仓库在工具 shell 里跑 stash / 非快进合并有炸对象库的前科(见上文)。
+  - ⚠ 根因未完全定位: 同一操作对 `README.md` 不复发, 这里只记录可复现的现象与解法。

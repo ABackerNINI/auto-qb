@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5000 种子仿真客户端 · 独立测试设计与可行性分析</title>
+<style>
+  :root{
+    --bg:#0f0f0f; --panel:#151515; --fg:#ececec; --fg-2:#a8a8a8; --fg-3:#6f6f6f;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.14);
+    --accent:#7fd1c1; --warn:#d8b25f; --danger:#e0785f;
+    --mono:"SF Mono","JetBrains Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+    --sans:"Helvetica Neue","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+       font-size:15px;line-height:1.62;font-weight:400;letter-spacing:0}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 120px}
+
+  /* ---------- cover ---------- */
+  .cover{padding:96px 0 56px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+          color:var(--fg-3);margin:0 0 28px}
+  h1{font-size:52px;line-height:1.08;letter-spacing:-.022em;font-weight:600;margin:0 0 20px;max-width:19ch}
+  .lede{font-size:17px;line-height:1.6;color:var(--fg-2);max-width:62ch;margin:0 0 40px}
+  .meta{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);padding-top:18px}
+  .meta div{padding-right:36px;margin-right:36px;border-right:1px solid var(--line)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin:0 0 4px}
+  .meta dd{margin:0;font-family:var(--mono);font-size:13px;color:var(--fg)}
+
+  /* ---------- layout ---------- */
+  .cols{display:grid;grid-template-columns:206px 1fr;gap:56px;padding-top:56px}
+  nav.toc{position:sticky;top:40px;align-self:start}
+  nav.toc p{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+            color:var(--fg-3);margin:0 0 14px}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 9px}
+  nav.toc a{color:var(--fg-2);text-decoration:none;font-size:13px;line-height:1.4;display:block;
+            padding-left:11px;border-left:1px solid var(--line);transition:color .12s,border-color .12s}
+  nav.toc a:hover{color:var(--accent);border-color:var(--accent)}
+  nav.toc .n{font-family:var(--mono);font-size:10px;color:var(--fg-3);margin-right:7px}
+
+  article{max-width:760px}
+  section{margin:0 0 68px;scroll-margin-top:40px}
+  h2{font-size:24px;line-height:1.2;letter-spacing:-.012em;font-weight:590;margin:0 0 6px}
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--fg-3);margin-right:12px;letter-spacing:.06em}
+  .sub{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+       color:var(--fg-3);margin:0 0 26px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;font-weight:550;letter-spacing:-.005em;margin:36px 0 12px}
+  p{margin:0 0 16px;max-width:68ch}
+  p.tight{margin-bottom:10px}
+  ul,ol{margin:0 0 16px;padding-left:20px;max-width:68ch}
+  li{margin-bottom:7px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--panel);
+       border:1px solid var(--line);padding:1px 5px;letter-spacing:-.01em}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,209,193,.3)}
+  strong{font-weight:550}
+  .muted{color:var(--fg-3)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---------- tables ---------- */
+  .bleed{max-width:980px;width:calc(100% + 220px)}
+  table{width:100%;border-collapse:collapse;margin:20px 0 8px;font-size:13.5px}
+  caption{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+          text-transform:uppercase;color:var(--fg-3);padding-bottom:10px}
+  th{text-align:left;font-weight:550;font-size:12px;letter-spacing:.04em;color:var(--fg-2);
+     padding:8px 12px 8px 0;border-bottom:1px solid var(--line-2);white-space:nowrap}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--fg)}
+  td:first-child,th:first-child{padding-left:0}
+  td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+       padding:2px 6px;border:1px solid var(--line-2);color:var(--fg-2);white-space:nowrap}
+  .tag.ok{color:var(--accent);border-color:rgba(127,209,193,.35)}
+  .tag.warn{color:var(--warn);border-color:rgba(216,178,95,.35)}
+  .tag.risk{color:var(--danger);border-color:rgba(224,120,95,.35)}
+
+  /* ---------- figure ---------- */
+  figure{margin:30px 0 26px;padding:0}
+  figcaption{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+             color:var(--fg-3);margin-top:12px}
+  .bars{border-top:1px solid var(--line);padding-top:18px}
+  .bar{display:grid;grid-template-columns:200px 1fr 92px;align-items:center;gap:14px;margin-bottom:12px}
+  .bar .lb{font-family:var(--mono);font-size:11.5px;color:var(--fg-2)}
+  .bar .track{height:9px;background:var(--panel);border:1px solid var(--line);position:relative}
+  .bar .fill{position:absolute;left:0;top:0;bottom:0;background:var(--danger);opacity:.85}
+  .bar .fill.cool{background:var(--accent);opacity:.75}
+  .bar .vl{font-family:var(--mono);font-size:11.5px;color:var(--fg);text-align:right;font-variant-numeric:tabular-nums}
+
+  /* ---------- callout (hairline, no card) ---------- */
+  .note{border-left:1px solid var(--line-2);padding:2px 0 2px 18px;margin:22px 0;max-width:68ch}
+  .note.risk{border-left-color:var(--danger)}
+  .note.warn{border-left-color:var(--warn)}
+  .note p{margin:0 0 8px}
+  .note p:last-child{margin:0}
+  .note .hd{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+            color:var(--fg-3);margin-bottom:8px}
+  .note.risk .hd{color:var(--danger)}
+  .note.warn .hd{color:var(--warn)}
+
+  /* ---------- code block ---------- */
+  pre{background:var(--panel);border:1px solid var(--line);padding:16px 18px;overflow-x:auto;
+      margin:20px 0;font-family:var(--mono);font-size:12px;line-height:1.65;color:var(--fg-2)}
+  pre b{color:var(--fg);font-weight:400}
+
+  footer{margin-top:80px;padding-top:20px;border-top:1px solid var(--line);
+         font-family:var(--mono);font-size:11px;color:var(--fg-3);letter-spacing:.04em}
+
+  @media (max-width:1080px){
+    .cols{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static;margin-bottom:48px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+    .wrap{padding:0 24px 80px}
+    h1{font-size:38px}
+    .bleed{width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <p class="kicker">Feasibility &amp; Plan · auto-qb</p>
+  <h1>5000 种子仿真客户端：独立测试设计</h1>
+  <p class="lede">用一个讲 qB WebUI 协议的仿真客户端替代真实 qBittorrent，在 5000 种子、每 1.5 秒 10% 活跃的负载下，对 auto-qb 做安全与性能验证。本文件给出实测可行性数据、两条技术路线的利弊、以及分波次实施计划。</p>
+  <dl class="meta">
+    <div><dt>日期</dt><dd>2026-09-19</dd></div>
+    <div><dt>基线</dt><dd>1041 passed</dd></div>
+    <div><dt>规模</dt><dd>5000 种子 · 10% / 1.5s</dd></div>
+    <div><dt>状态</dt><dd>待评审</dd></div>
+    <div><dt>改动 src</dt><dd>无（W5 前）</dd></div>
+  </dl>
+</header>
+
+<div class="cols">
+
+<nav class="toc">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#s0"><span class="n">00</span>结论摘要</a></li>
+    <li><a href="#s1"><span class="n">01</span>需求界定</a></li>
+    <li><a href="#s2"><span class="n">02</span>形态选型 · 利弊</a></li>
+    <li><a href="#s3"><span class="n">03</span>可行性实测</a></li>
+    <li><a href="#s4"><span class="n">04</span>风险与边界</a></li>
+    <li><a href="#s5"><span class="n">05</span>负载模型</a></li>
+    <li><a href="#s6"><span class="n">06</span>仿真服务端设计</a></li>
+    <li><a href="#s7"><span class="n">07</span>观测与日志（两层）</a></li>
+    <li><a href="#s8"><span class="n">08</span>破坏性场景 D1–D5</a></li>
+    <li><a href="#s9"><span class="n">09</span>安全矩阵 S1–S8</a></li>
+    <li><a href="#s10"><span class="n">10</span>性能矩阵 P1–P7</a></li>
+    <li><a href="#s11"><span class="n">11</span>波次计划 W0–W6</a></li>
+    <li><a href="#s12"><span class="n">12</span>红线与验收</a></li>
+  </ol>
+</nav>
+
+<article>
+
+<!-- ============ 00 ============ -->
+<section id="s0">
+  <h2><span class="n">00</span>结论摘要</h2>
+  <p class="sub">Bottom line</p>
+
+  <p><strong>可行，且瓶颈不在我们以为的地方。</strong>探针实测：增量同步在 5000 种子规模下每轮只需约 3–5 毫秒，完全不是瓶颈；真正的压力集中在两处 —— <strong>首轮灌入</strong>（实测 14–17 秒主循环停摆；W0 推算的 34 秒偏高）与
+  <strong>任务队列吞吐</strong>（实测 10.6 任务/秒，被 <code>max_tasks_per_tick=20</code> 卡死；
+  5000 种子 + 2 条规则时执行周期约 16.7 分钟）。</p>
+
+  <p><strong>⚠ 这两处是两条互不相干的代码路径</strong>（W5 归因纠正了 W0 的框架性误判）：
+  首轮新种子在 <code>_refresh_torrents</code> 里<strong>逐个内联</strong>处理，<strong>不受</strong>
+  <code>max_tasks_per_tick</code> 约束；只有稳态周期任务才走 <code>TaskQueue.run_due</code>。
+  归因与改进建议见第 <strong>13</strong> 节。</p>
+
+  <p>三条最需要注意的实测结论：</p>
+  <ol>
+    <li><strong>增量 vs 全量差 62 倍。</strong>全量 sync（5000×70 字段）端到端 205–240 ms / 8.77 MB；增量（500×8 字段）3.3 ms / 107 KB。任何让 rid 语义失效的实现错误，都会把每轮成本抬两个数量级。</li>
+    <li><strong>rid 藏在 POST body 里。</strong>探针第一版只解析 query string，结果每次都收到 <code>rid=0</code>、服务端永远回全量 —— 这是仿真客户端必须做对的头号细节（<code>FakeQbServer</code> 已经合并解析 body 与 query，可复用）。</li>
+    <li><strong>仿真端自己不能成为瓶颈。</strong>朴素全量 diff（5000×70 字段逐字段比对）每轮 22.6 ms，脏集合 O(变化数) 只要 0.34 ms，差 67 倍。仿真端必须用脏集合，否则测的是仿真器自己。</li>
+  </ol>
+
+  <p>推荐路线：<strong>独立 HTTP 仿真服务</strong>（真实 qbittorrent-api 协议栈），auto-qb 以子进程方式接入、源码零改动；仅当需要 tick 内部剖面时，才临时用进程内版本做归因。测试定位为 <code>scripts/</code> 下的手动工具，<strong>不进 CI</strong>。</p>
+
+  <p>日志按<strong>两层</strong>产出（第 07 节）：统计层 <code>summary.json</code> 每项自带阈值与结论、一行 <code>verdict</code> 定生死，供 AI 扫读判断有无问题；完整层四路流水时间戳对齐，供回溯定位。破坏性场景（第 08 节 D1–D5，删种子 / 删文件）依赖一棵<strong>真实落盘的虚拟文件树</strong> —— 否则「文件到底删没删」永远只是记账，测不出真实行为。其中 <strong>D4 外部删文件 → 缺文件保护</strong> 是头号场景：判据是组内成员停止率 == 100%，漏停一个就是向站点上传垃圾数据。</p>
+
+  <p>所有产物统一落在 <code>--root</code> 指定的工作根下（日常 <code>R:\auto-qb-sim</code>，第 08 节）：文件树、配置、auto-qb 的 data_dir、两层日志按运行 ID 分目录存放，不再散落系统临时目录。因为 <strong>R 盘就是真实下载盘</strong>，删除动作必须有硬边界 —— 哨兵根判定、realpath 逃逸校验、数量上限、收尾核账四道校验（B1–B4），任一不过即拒绝执行。另有一处对初稿的修正：文件树<strong>必须全量物化</strong>，否则未物化种子会被缺文件扫描误判丢失、整组暂停，D4 的判据也就失去意义。</p>
+
+  <p><strong>实测进展（W3b 已完成 / W3 进行中）</strong>：D1–D5 五个破坏性场景<strong>全部 verdict OK</strong>（数字见第 08 节），期间修掉四处「测假」—— ① <code>torrents_removed</code> 曾硬编码 <code>[]</code>，外部删掉的种子 auto-qb 永远看不到、快照里全是幽灵；② 只盯写台账看不出幽灵（打标签是一次性的），必须改问 WEB <code>/api/status</code> 的快照数；③ 硬 kill 拿不到 <code>state.json</code>（Windows 上 <code>terminate()</code> = TerminateProcess，<code>finally</code> 根本不跑，须经装了 SIGBREAK 处理器的 <code>sim_autoqb.py</code> 启动）；④ 两相运行的相位重启间隔被算成稳态漂移。
+  <strong>同时 S5 挖出一个真缺陷</strong>：qB 短暂断连（10 秒）后 auto-qb <strong>无法自愈</strong>，会永久停在断连态直到重启进程 —— 详见第 09 节，<strong>尚未修</strong>（本轮只做外部观测，未动 <code>src/</code>）。</p>
+</section>
+
+<!-- ============ 01 ============ -->
+<section id="s1">
+  <h2><span class="n">01</span>需求界定</h2>
+  <p class="sub">Scope &amp; semantics</p>
+
+  <p>原始需求是「独立测试 + 仿真客户端 + 5000 种子 + 每 1.5 秒活跃 10% + 主要测安全/性能」。其中「活跃 10%」有两种截然不同的读法，已在评审中确认为<strong>两种都做、可切换</strong>，因为它们测的东西互补：</p>
+
+  <table>
+    <caption>负载模型的两种语义</caption>
+    <thead><tr><th>模式</th><th>行为</th><th>能测出什么</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="tag">churn</span> 滚动换批<br><span class="muted">默认</span></td>
+        <td>每 1.5 s 换<strong>另外</strong> 500 个种子发生变化，其余 4500 个静止</td>
+        <td>最坏情况：每轮视图必脏、每轮冲突检查全量。压测上限。</td>
+      </tr>
+      <tr>
+        <td><span class="tag">steady</span> 固定活跃池</td>
+        <td>选定 500 个种子持续活跃，其余 4500 个全程静止</td>
+        <td>验证惰性重建/脏集合优化<strong>确实生效</strong> —— 静止种子不应触发重建。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>两者共用同一套「变化字段集」：<code>upspeed</code> / <code>dlspeed</code> / <code>uploaded</code> / <code>seeding_time</code> / <code>ratio</code> / <code>state</code> / <code>last_activity</code> / <code>time_active</code>。这组字段全部落在 <code>_VIEW_FIELDS</code> 内，因此必然驱动视图置脏 —— 这是有意的，WEB UI 是本项目已知的昂贵路径。</p>
+
+  <div class="note warn">
+    <div class="hd">节奏错位</div>
+    <p>仿真端 1.5 s 一拍，auto-qb 默认 <code>main_tick=2s</code>。不刻意对齐时，每轮实际看到约 <span class="num">667</span> 个变化种子（500 × 2 / 1.5），而不是 500。计划里把这作为<strong>默认场景</strong>（客户端比我们快，更接近真实），另提供 <code>--tick 1.5</code> 对齐场景做 1:1 对照。</p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 168" width="100%" height="168" role="img" aria-label="仿真端 1.5 秒节拍与 auto-qb 2 秒主循环 tick 的错位时序">
+      <g font-family="SF Mono, Consolas, monospace" font-size="11">
+        <!-- sim beats -->
+        <text x="0" y="20" fill="#6f6f6f">sim 1.5s</text>
+        <line x1="92" y1="16" x2="880" y2="16" stroke="rgba(255,255,255,.09)"/>
+        <g fill="#7fd1c1">
+          <rect x="92"  y="10" width="6" height="12" opacity=".9"/>
+          <rect x="212" y="10" width="6" height="12" opacity=".9"/>
+          <rect x="332" y="10" width="6" height="12" opacity=".9"/>
+          <rect x="452" y="10" width="6" height="12" opacity=".9"/>
+          <rect x="572" y="10" width="6" height="12" opacity=".9"/>
+          <rect x="692" y="10" width="6" height="12" opacity=".9"/>
+          <rect x="812" y="10" width="6" height="12" opacity=".9"/>
+        </g>
+        <!-- autu-qb ticks -->
+        <text x="0" y="66" fill="#6f6f6f">tick 2.0s</text>
+        <line x1="92" y1="62" x2="880" y2="62" stroke="rgba(255,255,255,.09)"/>
+        <g fill="#e0785f">
+          <rect x="92"  y="56" width="6" height="12"/>
+          <rect x="252" y="56" width="6" height="12"/>
+          <rect x="412" y="56" width="6" height="12"/>
+          <rect x="572" y="56" width="6" height="12"/>
+          <rect x="732" y="56" width="6" height="12"/>
+        </g>
+        <!-- brackets -->
+        <g stroke="rgba(255,255,255,.22)" fill="none">
+          <path d="M92 84 L92 96 L252 96 L252 84"/>
+          <path d="M252 84 L252 96 L412 96 L412 84"/>
+        </g>
+        <text x="172" y="114" fill="#a8a8a8" text-anchor="middle">每轮看到 2 拍 ≈ 667 个变化种子</text>
+        <text x="332" y="114" fill="#a8a8a8" text-anchor="middle">≈ 667</text>
+        <!-- legend -->
+        <rect x="92" y="140" width="6" height="10" fill="#7fd1c1"/>
+        <text x="106" y="149" fill="#6f6f6f">仿真变更拍 (500 种子/拍)</text>
+        <rect x="300" y="140" width="6" height="10" fill="#e0785f"/>
+        <text x="314" y="149" fill="#6f6f6f">auto-qb 主循环 tick</text>
+        <text x="560" y="149" fill="#6f6f6f">0 ─────────────── 12 s</text>
+      </g>
+    </svg>
+    <figcaption>图 1 · 1.5 s 节拍与 2 s tick 的错位：稳态下每轮承载约 667 个变化种子</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="s2">
+  <h2><span class="n">02</span>形态选型 · 利弊</h2>
+  <p class="sub">Two candidate forms</p>
+
+  <p>仿真客户端有两种做法，取舍的本质是：<strong>要不要保留真实协议栈的成本</strong>。探针已经证明这段成本恰恰是数量级差异的来源，因此不能想当然地选「跑得快的那个」。</p>
+
+  <table class="bleed">
+    <caption>形态对比</caption>
+    <thead><tr><th style="width:150px">维度</th><th>A · 独立 HTTP 仿真服务</th><th>B · 进程内 Fake 扩展</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>协议真实性</td>
+        <td>真实 <code>qbittorrent-api</code> + HTTP + JSON 序列化 + Session 行为</td>
+        <td>直接调 Fake 方法，序列化/网络/Session 全部消失</td>
+      </tr>
+      <tr>
+        <td>性能数字可信度</td>
+        <td><span class="tag ok">可信</span> 含 205 ms 全量 / 3.3 ms 增量的真实成本</td>
+        <td><span class="tag risk">不可信</span> 差 62 倍的那段成本测不到</td>
+      </tr>
+      <tr>
+        <td>rid 增量语义</td>
+        <td>真实暴露（rid 在 POST body、不匹配退化全量等）</td>
+        <td>由 Fake 内部记账模拟，行为是自己写的</td>
+      </tr>
+      <tr>
+        <td>dry-run 断言强度</td>
+        <td><span class="tag ok">硬证据</span> 服务端台账：写端点命中数 == 0</td>
+        <td>靠 mock 调用记录，属「同一套代码的自证」</td>
+      </tr>
+      <tr>
+        <td>断连 / 半开连接</td>
+        <td>可真实 abort socket，测重连退避与自愈</td>
+        <td>只能抛异常模拟，测不到库层重试行为</td>
+      </tr>
+      <tr>
+        <td>tick 内部剖面</td>
+        <td><span class="tag warn">拿不到</span> 只能靠请求时间戳与间隔漂移推断</td>
+        <td><span class="tag ok">可打点</span> 直接测 <code>_tick</code> 内各段耗时</td>
+      </tr>
+      <tr>
+        <td>噪声</td>
+        <td>有回环网络抖动、端口竞争</td>
+        <td>几乎无噪声，稳定可重复</td>
+      </tr>
+      <tr>
+        <td>实现成本</td>
+        <td>约 15–20 个端点 + rid 语义 + 负载模型</td>
+        <td>复用现有 <code>helpers.FakeClient</code>，成本低</td>
+      </tr>
+      <tr>
+        <td>自伤风险</td>
+        <td><span class="tag warn">有</span> 服务端若用朴素全量 diff，22.6 ms/轮污染测量</td>
+        <td>无</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <div class="hd">结论</div>
+    <p><strong>主路线选 A。</strong>用户要的是「独立测试」，而 A 才配得上「独立」二字：auto-qb 以子进程接入、源码零改动、安全断言有服务端台账作硬证据。</p>
+    <p><strong>B 不作为交付物</strong>，只在 W5 归因阶段按需临时使用 —— 当 A 的实测发现某段耗时异常、需要拆到 <code>_tick</code> 内部各阶段时，才用进程内版本做一次剖面。它不该被用来产出性能数字。</p>
+  </div>
+
+  <h3>复用的既有资产</h3>
+  <p>不必从零写。<code>tests/helpers.py</code> 的 <code>FakeQbServer</code> 已经解决了最难的三件事：ThreadingHTTPServer + 随机回环端口的生命周期、<strong>body 与 query 参数合并解析</strong>（这正是 rid 的关键）、以及「库对读端点不区分 HTTP 方法」的分派策略。W1 的做法是把它<strong>提升为独立脚本</strong>并扩端点，而不是另起炉灶。</p>
+</section>
+
+<!-- ============ 03 ============ -->
+<section id="s3">
+  <h2><span class="n">03</span>可行性实测</h2>
+  <p class="sub">Measured, not estimated</p>
+
+  <p>以下数字来自本会话的临时探针（<code>.workbuddy-ai/tmp/sim_probe*.py</code>，Windows 本机，5000 种子 × 70 字段，真实 <code>qbittorrent-api</code> 客户端走回环 HTTP）。探针脚本为一次性产物，不入库。<strong>首轮与稳态数字已由 W1 的 <code>scripts/sim_run.py</code> 真机实测替换</strong>（见下文）。</p>
+
+  <table class="bleed">
+    <caption>实测基线</caption>
+    <thead><tr><th>项</th><th class="n">实测值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>全量 sync 载荷</td><td class="n">8.77 MB</td><td>5000 × 70 字段；服务端 <code>json.dumps</code> 35 ms</td></tr>
+      <tr><td>全量端到端</td><td class="n">205 – 240 ms</td><td>含 HTTP 往返 + 库侧反序列化</td></tr>
+      <tr><td>增量载荷</td><td class="n">107 KB</td><td>500 种子 × 8 字段；<code>dumps</code> 0.46 ms</td></tr>
+      <tr><td>增量端到端</td><td class="n">3.3 ms</td><td>约为全量的 <strong>1/62</strong></td></tr>
+      <tr><td>朴素全量 diff</td><td class="n">22.6 ms</td><td>仿真端若这么写即自伤</td></tr>
+      <tr><td>脏集合 diff（O 变化数）</td><td class="n">0.34 ms</td><td>快约 <strong>67×</strong></td></tr>
+      <tr><td>单次回环 API 请求</td><td class="n">2.27 ms</td><td>N=400 均值，用于推算首轮</td></tr>
+    </tbody>
+  </table>
+
+  <figure class="bars">
+    <div class="bar">
+      <span class="lb">全量 sync（5000 种子）</span>
+      <span class="track"><span class="fill" style="width:100%"></span></span>
+      <span class="vl">205 ms</span>
+    </div>
+    <div class="bar">
+      <span class="lb">增量 sync（667 变化）</span>
+      <span class="track"><span class="fill cool" style="width:2.2%"></span></span>
+      <span class="vl">≈ 4 ms</span>
+    </div>
+    <figcaption>图 2 · 稳态每轮同步成本占 2 s tick 的 0.2% —— 同步层不是瓶颈</figcaption>
+  </figure>
+
+  <h3>首轮成本（W1 已实测）</h3>
+  <p>启动时若客户端已有 5000 个种子且开启分组，第一 tick 会同步做完三件事：<code>_assign_new_torrent</code> 对每个新种子发一次 <code>torrents/files</code>（<code>grouping.py:143</code>），新种子的内置 maintenance <strong>立即执行</strong>而非入队，每个种子还要拉一次 <code>torrents/trackers</code> 匹配站点。</p>
+
+  <table class="bleed">
+    <caption>实测（scripts/sim_run.py，R 盘，回环；tick = 2 s）</caption>
+    <thead><tr><th>项</th><th class="n">2000 种子</th><th class="n">5000 种子</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><strong>首轮耗时</strong></td><td class="n">7.46 s</td><td class="n"><strong>17.19 s</strong></td><td>主循环完全停摆，约 3.7 ms/种子，随 N 线性</td></tr>
+      <tr><td>稳态 tick 间隔</td><td class="n">2.008 s</td><td class="n">2.017 s</td><td>目标 2.0 s，稳态<strong>完全跟得上</strong></td></tr>
+      <tr><td>稳态最大漂移</td><td class="n">0.019 s</td><td class="n">—</td><td>首轮之外无任何卡顿</td></tr>
+      <tr><td>稳态每轮载荷</td><td class="n">383 KB</td><td class="n">418 KB</td><td>约 667 个变化种子/轮</td></tr>
+      <tr><td>写速率</td><td class="n">2868 /min</td><td class="n">2389 /min</td><td>全部为 addTags；高风险端点 0 命中</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note risk">
+    <div class="hd">首轮 17 秒是唯一的结构性问题</div>
+    <p>实测与 W0 推算（约 34 s）方向一致、量级差一半 —— 差额来自：约 1/3 种子是未配置站点、会被跳过不归组；且回环比真实 qB 快（真实 qB 还要序列化 + 读盘）。因此<strong>真实 qB 装 5000 种子时只会比 17 s 更久</strong>。</p>
+    <p>性质上：这 17 秒是主循环完全停摆（不节流、不响应），期间集中打出数千次写请求。对 PT 站而言是「批量写风暴」，正是「保守默认」要防的情形。<strong>每次启动都要付一次</strong>。</p>
+    <p>好消息是稳态非常健康（2.017 s / 漂移 19 ms），即首轮是一次性成本而非持续劣化。判据因此必须把<strong>首轮与稳态分开</strong>——混在一起算平均漂移，每次跑都会假红，反而掩盖真正的稳态问题。</p>
+  </div>
+
+  <div class="note warn">
+    <div class="hd">顺带实测到的一个真实开销</div>
+    <p><code>qbittorrent-api</code> 在每次写请求前都会再查一次 <code>app/webapiVersion</code>（<code>request.py:750</code> 的版本检查，<strong>库内无缓存</strong>）—— 实测 2000 种子场景下 <code>addTags</code> 与 <code>webapiVersion</code> 命中数完全相同。<strong>写请求量因此翻倍</strong>，真实 qB 上同样发生。</p>
+    <p>叠加另一个观察：auto-qb 是<strong>逐种子</strong>打标签（5000 种子 = 5000 次 addTags），而 qB 的 <code>addTags</code> 支持一次传多个 hash。按组/按站点批量提交可把这一项降一到两个数量级 —— 归入 W5 归因候选，本阶段不动代码。</p>
+  </div>
+
+  <h3>任务吞吐天花板（推算）</h3>
+  <p>5000 个种子各建 1 个 maintenance 任务 + R 条种子级规则任务；<code>run_due</code> 每轮只跑 <code>max_tasks_per_tick = 20</code> 个。于是「名义 interval 60 s」的规则，实际执行周期被稀释：</p>
+
+  <table class="bleed">
+    <caption>规则实际执行周期 vs 规则条数（main_tick = 2 s）</caption>
+    <thead><tr><th class="n">R（种子级规则数）</th><th class="n">队列任务数</th><th class="n">全量扫一遍</th><th class="n">规则实际执行周期</th></tr></thead>
+    <tbody>
+      <tr><td class="n">0</td><td class="n">5 000</td><td class="n">500 s</td><td class="n">≈ 8.3 min</td></tr>
+      <tr><td class="n">2</td><td class="n">15 000</td><td class="n">1 500 s</td><td class="n">≈ 25 min</td></tr>
+      <tr><td class="n">5</td><td class="n">30 000</td><td class="n">3 000 s</td><td class="n">≈ 50 min</td></tr>
+    </tbody>
+  </table>
+
+  <p>这是<strong>产品级发现，不只是测试发现</strong>：大规模种子库下规则的实际生效延迟以「十分钟」计，而用户配置里写的是 60 s。是否要按种子规模自适应放宽 <code>max_tasks_per_tick</code>，属于 W5 的归因议题 —— 本计划阶段不动代码，只把它测出来并记录。</p>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="s4">
+  <h2><span class="n">04</span>风险与边界</h2>
+  <p class="sub">What could break the plan</p>
+
+  <table class="bleed">
+    <caption>风险登记</caption>
+    <thead><tr><th style="width:42px">ID</th><th>风险</th><th>缓解</th></tr></thead>
+    <tbody>
+      <tr><td class="n">R1</td><td><strong>仿真端成为瓶颈</strong>：朴素全量 diff 22.6 ms/轮 + 8.77 MB 抖动</td><td>脏集合 O(变化数) diff；服务端只维护变更集</td></tr>
+      <tr><td class="n">R2</td><td><strong>rid 解析错误导致恒全量</strong>（探针已踩：rid 在 POST body）</td><td>body + query 合并解析，与 <code>FakeQbServer</code> 同口径；单测锁死</td></tr>
+      <tr><td class="n">R3</td><td><strong>首轮 34 s 停摆</strong>被误判为「测试太慢」而跳过</td><td>拆成 P1 独立场景，显式记录，不作为整体超时</td></tr>
+      <tr><td class="n">R4</td><td><strong>端口/资源泄漏</strong>：仿真端或 auto-qb 子进程残留</td><td><code>with</code> 生命周期 + 超时 kill + 收尾端口与进程断言</td></tr>
+      <tr><td class="n">R5</td><td><strong>污染生产</strong>：误连真实 qB 16585 / 写 <code>config.yml</code></td><td>只绑 127.0.0.1 随机端口；配置与 data_dir 全落临时目录（见第 10 节红线）</td></tr>
+      <tr><td class="n">R6</td><td><strong>进程外观测精度不足</strong>：拿不到 tick 内部分段耗时</td><td>先用间隔漂移 + 请求时间戳推断；确需剖面时临时用进程内版（B）</td></tr>
+      <tr><td class="n">R7</td><td><strong>内存/CPU 采样依赖 psutil</strong>（项目仅 2 个运行依赖）</td><td>零依赖优先；RSS 采样作为可选增强，psutil 缺失即跳过，不影响主结论</td></tr>
+      <tr><td class="n">R8</td><td><strong>结果不可复现</strong>（随机种子、时序抖动）</td><td>负载生成用固定 seed；报告记录 seed 与环境；判据用区间而非单点</td></tr>
+      <tr><td class="n">R9</td><td><strong>删除场景被"测假"</strong>：只在内存里删 dict，文件删除从未真实验证</td><td>虚拟文件树真实落盘 + 前后快照 diff；D4 必须由磁盘扫描自己发现文件消失，不能由仿真端直接改 state 通知</td></tr>
+      <tr><td class="n">R10</td><td><strong>删除场景污染真实数据</strong>：R 盘即真实下载盘，删除越界不可逆</td><td>四道边界校验 B1–B4（哨兵根 / realpath 逃逸 / 数量上限 / 收尾核账），见第 08 节；W1 即带单测</td></tr>
+      <tr><td class="n">R11</td><td><strong>完整层日志撑爆磁盘</strong>（P1 首轮约 1.5 万条请求/场景）</td><td><code>--trace-sample</code> / <code>--trace-writes-only</code> 裁剪；统计层不受裁剪影响</td></tr>
+      <tr><td class="n">R12</td><td><strong>未物化种子被缺文件扫描误判丢失</strong>，导致误打 MISSING 并整组暂停，D4 判据失效</td><td>默认<strong>全量物化</strong>（初稿的「只物化 300」已废弃）；<code>--fs-materialize 0</code> 仅限不开分组的场景</td></tr>
+      <tr><td class="n">R13</td><td><strong>运行目录累积占满 R 盘</strong>（每次约 17 MB 文件树 + 数 MB 日志）</td><td><code>--keep-last N</code>（默认保留最近 10 次，其余归档删除）；summary 报告本次占用字节</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="s5">
+  <h2><span class="n">05</span>负载模型</h2>
+  <p class="sub">Load profile</p>
+
+  <p>仿真端持有一份 5000 个种子的权威状态，按节拍变异，并把变异登记进脏集合。生成用固定随机 seed，保证同参数可复现。</p>
+
+  <table class="bleed">
+    <caption>参数</caption>
+    <thead><tr><th>参数</th><th class="n">默认</th><th>语义</th></tr></thead>
+    <tbody>
+      <tr><td><code>--n</code></td><td class="n">5000</td><td>种子总数</td></tr>
+      <tr><td><code>--beat</code></td><td class="n">1.5</td><td>变更节拍（秒）</td></tr>
+      <tr><td><code>--active</code></td><td class="n">0.10</td><td>每拍变更比例（500 个）</td></tr>
+      <tr><td><code>--mode</code></td><td class="n">churn</td><td><code>churn</code> 滚动换批 / <code>steady</code> 固定活跃池</td></tr>
+      <tr><td><code>--ramp</code></td><td class="n">0</td><td>渐进添加：每轮加若干个，0 = 首轮全量灌入</td></tr>
+      <tr><td><code>--seed</code></td><td class="n">7</td><td>随机种子</td></tr>
+      <tr><td><code>--abort-after</code></td><td class="n">—</td><td>运行 N 秒后断连，测重连自愈</td></tr>
+      <tr><td><code>--read-only</code></td><td class="n">off</td><td>写端点一律 403 并记账，用于 dry-run 硬断言</td></tr>
+      <tr><td><code>--ledger</code></td><td class="n">—</td><td>写请求台账路径（JSONL）</td></tr>
+      <tr><td><code>--root</code></td><td class="n">R:\auto-qb-sim</td><td><strong>工作根</strong>：文件树 / 配置 / data_dir / 两层日志全部落此；环境变量 <code>AUTOQB_SIM_ROOT</code> 可覆盖；R 盘不存在时回退临时目录并 WARN</td></tr>
+      <tr><td><code>--fs-root</code></td><td class="n">&lt;run&gt;/fs</td><td>虚拟文件树根（默认由 <code>--root</code> 派生，一般不用手填）</td></tr>
+      <tr><td><code>--fs-materialize</code></td><td class="n">全量</td><td>物化种子数；<strong>默认全量</strong>（未物化会被缺文件扫描误判丢失），<code>0</code> = 不建树，仅限不开分组的场景</td></tr>
+      <tr><td><code>--fs-file-size</code></td><td class="n">4 KiB</td><td>占位文件大小</td></tr>
+      <tr><td><code>--fs-reuse</code></td><td class="n">—</td><td>复用已建好的文件树省建树时间；<strong>D 系列强制重建</strong></td></tr>
+      <tr><td><code>--delete-torrents</code></td><td class="n">—</td><td><code>K:N[:with-files]</code> 第 K 拍删除 N 个种子（D1 / D2 / D5）</td></tr>
+      <tr><td><code>--delete-files</code></td><td class="n">—</td><td><code>K:G</code> 第 K 拍删除第 G 个辅种组的文件（D4）</td></tr>
+      <tr><td><code>--trace-sample</code></td><td class="n">0</td><td>每 N 轮记一条 sync 摘要；0 = 全量（体积控制，见第 07 节）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>种子画像</h3>
+  <p>为贴近真实，5000 个种子按固定 seed 分层生成，而不是全同构：</p>
+  <ul>
+    <li>站点分布：映射到若干 tracker 域名（含<strong>未配置站点</strong>的少量种子，覆盖「未匹配 → 警告并跳过」分支）。</li>
+    <li>状态分布：以 <code>stalledUP</code> / <code>pausedUP</code> 为主，掺入 <code>uploading</code> / <code>downloading</code> / <code>errored</code> / <code>missingFiles</code> 少量，用来触发错误原因预取与缺文件扫描路径。</li>
+    <li>辅种：约 15% 的种子以 3–4 个一组共享文件列表，形成真实的辅种分组（其余各自成组）。</li>
+    <li>保存路径：40 个目录轮转，避免退化成单组。</li>
+  </ul>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="s6">
+  <h2><span class="n">06</span>仿真服务端设计</h2>
+  <p class="sub">scripts/sim_qb.py</p>
+
+  <p>单文件、仅标准库。可独立运行（<code>python scripts/sim_qb.py --n 5000</code>）供人工观察，也可由 W2 的驱动器拉起。</p>
+
+  <h3>端点清单</h3>
+  <table class="bleed">
+    <caption>需实现的 qB WebUI 端点子集</caption>
+    <thead><tr><th style="width:150px">分类</th><th>端点</th></tr></thead>
+    <tbody>
+      <tr><td>握手</td><td><code>auth/login</code>、<code>app/webapiVersion</code>、<code>app/version</code>、<code>app/preferences</code></td></tr>
+      <tr><td>同步</td><td><code>sync/maindata</code>（rid 增量语义，核心）</td></tr>
+      <tr><td>读</td><td><code>torrents/info</code>、<code>torrents/files</code>、<code>torrents/trackers</code>、<code>torrents/tags</code>、<code>torrents/categories</code>、<code>transfer/info</code>、<code>transfer/uploadLimit</code>、<code>transfer/downloadLimit</code></td></tr>
+      <tr><td>写（全部记账）</td><td><code>torrents/addTags</code>、<code>removeTags</code>、<code>createTags</code>、<code>deleteTags</code>、<code>createCategory</code>、<code>setCategory</code>、<code>start</code>、<code>stop</code>、<code>pause</code>、<code>resume</code>、<code>delete</code>、<code>recheck</code>、<code>reannounce</code>、<code>setLocation</code>、<code>setUploadLimit</code>、<code>setDownloadLimit</code>、<code>add</code>、<code>addTrackers</code>、<code>removeTrackers</code>、<code>transfer/setUploadLimit</code>、<code>transfer/setDownloadLimit</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>rid 语义（核心，不可简化）</h3>
+  <p>服务端维护 <code>last_sent_id</code> 与一个脏集合。请求到达时：</p>
+  <ul>
+    <li><code>rid == last_sent_id</code> → 回增量：<code>{rid: 新ID, full_update: false, torrents: 脏集合快照, torrents_removed: [...]}</code>，随后清空脏集合。</li>
+    <li><code>rid != last_sent_id</code>（含首轮 0、漏拍、重连）→ 回全量：<code>full_update: true</code>，并重置基线。这与真实 qB 的「自愈性」一致。</li>
+    <li><strong>参数必须合并解析 body 与 query</strong> —— 库对 <code>sync/maindata</code> 用 POST，rid 在 body 里。探针已实证：只解析 query 会恒得 <code>rid=0</code>，每轮退化全量。</li>
+    <li>脏集合按 O(变化数) 聚合，绝不做 5000×70 的逐字段比对（22.6 ms vs 0.34 ms）。</li>
+  </ul>
+
+  <h3>写台账</h3>
+  <p>每个非只读请求追加一行 JSONL：<code>{ts, endpoint, params, payload_bytes}</code>。这是全部安全断言的证据源 —— 所有 S 场景的判据都归结为对这份台账的查询，而不是读 auto-qb 的日志。</p>
+
+  <pre><b># 台账样例</b>
+{"ts":1758270000.12,"endpoint":"torrents/addTags","params":{"hashes":["ab12..."],"tags":"HHan"},"bytes":96}
+{"ts":1758270000.14,"endpoint":"torrents/setCategory","params":{"hashes":["ab12..."],"category":"!!HR3D!!"},"bytes":88}</pre>
+</section>
+
+<!-- ============ 07 ============ -->
+<section id="s7">
+  <h2><span class="n">07</span>观测与日志（两层）</h2>
+  <p class="sub">Two-tier logging</p>
+
+  <p>一次运行产出<strong>两层</strong>日志，用途严格分开：统计层回答「有没有问题」，完整层回答「问题出在哪」。混在一起的日志两头不讨好 —— 扫读时太长，回溯时又不够。</p>
+
+  <table class="bleed">
+    <caption>两层日志的分工</caption>
+    <thead><tr><th style="width:150px">层</th><th>回答什么</th><th>体积量级</th><th>读者</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>统计层</strong><br><code>summary.json</code><br><code>summary.txt</code></td>
+        <td>有没有问题？哪一条触发？</td>
+        <td>单次 &lt; 4 KB</td>
+        <td>AI 扫读 / 人看一眼</td>
+      </tr>
+      <tr>
+        <td><strong>完整层</strong><br><code>trace.jsonl</code><br><code>writes.jsonl</code><br><code>sim-events.jsonl</code><br><code>fs-*.txt</code><br><code>autoqb.log</code></td>
+        <td>问题出在哪？当时发生了什么？</td>
+        <td>单次数 MB</td>
+        <td>回溯 / 复盘</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>统计层：判定式，不是数字堆砌</h3>
+  <p>统计层的核心设计是<strong>每项自带阈值与结论</strong>，让读者不需要拿数字去对照记忆里的基线。<code>verdict</code> 一行定生死，<code>triggers</code> 列出触发项，AI 只需读这两个字段。</p>
+
+  <pre><b># summary.json（节选）</b>
+{
+  "verdict": "WARN",                    <b># OK / WARN / FAIL</b>
+  "triggers": ["S3.write_rate", "P5.task_cycle"],
+  "scenario": {"id":"D4","n":5000,"beat":1.5,"active":0.10,"mode":"churn",
+               "tick":2.0,"seed":7,"duration_s":180},
+  "checks": [
+    {"id":"S1.dryrun_writes",   "value":0,   "op":"==", "threshold":0,   "result":"PASS"},
+    {"id":"S2.risky_endpoints", "value":0,   "op":"==", "threshold":0,   "result":"PASS"},
+    {"id":"S3.write_rate",      "value":245, "op":"&lt;=", "threshold":120, "result":"WARN"},
+    {"id":"D4.group_stop_rate", "value":1.0, "op":"==", "threshold":1.0, "result":"PASS"},
+    {"id":"D4.group_stop_lag",  "value":2,   "op":"&lt;=", "threshold":3,   "result":"PASS"},
+    {"id":"P5.task_cycle_s",    "value":1490,"op":"&lt;=", "threshold":600, "result":"WARN"},
+    {"id":"P3.tick_drift_s",    "value":0.31,"op":"&lt;=", "threshold":0.5, "result":"PASS"}
+  ],
+  "sync":  {"rounds":90,"full_rounds":1,"avg_interval_s":2.01,"p95_interval_s":2.09,
+            "drift_max_s":0.31,"avg_changed":667,"max_changed":700,"avg_bytes":141000},
+  "writes":{"total":12043,"per_min":245,
+            "by_endpoint":{"torrents/addTags":8000,"torrents/setCategory":4000},
+            "risky":{"torrents/delete":0,"torrents/setLocation":0,
+                     "torrents/reannounce":0,"torrents/recheck":0}},
+  "fs":    {"files_before":912,"files_after":912,
+            "removed":[],"unexpected_removals":[]},
+  "torrents":{"start":5000,"end":5000,"added":0,"removed":0}
+}</pre>
+
+  <p>四条设计约束：</p>
+  <ul>
+    <li><strong>阈值必须有出处</strong>。安全类用硬阈值（0 次、必须相等）；性能类用基线阈值，首次实测后固化进 <code>docs/plans/&lt;plan&gt;.baseline.json</code>。</li>
+    <li><strong>未固化的阈值不算失败</strong>。基线缺失时该项 <code>result</code> 记 <code>BASELINE</code>，<code>verdict</code> 计算时忽略 —— 否则第一次跑必然满屏红，反而掩盖真问题。</li>
+    <li><strong><code>verdict</code> 规则单一</strong>：任一 FAIL → FAIL；无 FAIL 有 WARN → WARN；否则 OK。<code>BASELINE</code> 不参与。</li>
+    <li><strong>统计层必须能独立存在</strong>。完整层可以因体积被裁剪（见下），统计层永远完整。</li>
+  </ul>
+
+  <div class="note">
+    <div class="hd">为什么阈值写在 summary 里而不是留在计划文档</div>
+    <p>阈值会随代码演进漂移。写进 summary 后，每次运行的判定依据与那次运行<strong>同文件共存</strong>，三个月后回看某次 WARN 还能知道当时的标准是什么；只留数字、阈值靠文档回忆，等于没有阈值。</p>
+  </div>
+
+  <h3>完整层：时间戳对齐的四路流水</h3>
+  <p>仿真端与 auto-qb 是两个进程，回溯的最大障碍是「两边的时间对不上」。因此所有流水统一用 <code>time.time()</code>（墙上时钟，同机器同源），按 ts 即可串成一条时间线。</p>
+
+  <table class="bleed">
+    <caption>完整层文件</caption>
+    <thead><tr><th style="width:170px">文件</th><th>内容</th><th>回溯时用来</th></tr></thead>
+    <tbody>
+      <tr><td><code>trace.jsonl</code></td><td>每个 HTTP 请求：ts / method / endpoint / params / status / 请求响应字节 / 耗时 ms</td><td>定位「那几秒到底发了什么」</td></tr>
+      <tr><td><code>writes.jsonl</code></td><td>写端点的完整副本（含完整 params，不被截断）</td><td>安全断言的证据源</td></tr>
+      <tr><td><code>sim-events.jsonl</code></td><td>仿真端每拍注入的动作：ts / 拍号 / kind（mutate / add / remove / delete-files）/ 影响 hash 数与样本</td><td>对照「当时我们制造了什么」</td></tr>
+      <tr><td><code>fs-before.txt</code><br><code>fs-after.txt</code></td><td>虚拟文件树快照（相对路径 + 大小）</td><td>diff 即「真实删了哪些文件」</td></tr>
+      <tr><td><code>autoqb.log</code></td><td>子进程 stdout / stderr 全文</td><td>看程序自己怎么说</td></tr>
+      <tr><td><code>report.json</code></td><td>完整结构化结果（含 summary 与全部原始统计）</td><td>机器消费</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>回溯路径</strong>：<code>summary.verdict</code> 触发 → <code>triggers</code> 拿到 check id → <code>checks</code> 里读出值与阈值 → 按场景时刻去 <code>trace.jsonl</code> 取那几秒的请求 → 与 <code>sim-events.jsonl</code> 对照当时注入了什么 → 到 <code>autoqb.log</code> 看程序侧记录。</p>
+
+  <div class="note warn">
+    <div class="hd">体积控制</div>
+    <p>稳态 2 s 一轮、跑 10 分钟约 300 轮，加上 P1 首轮的约 1.5 万次 files 拉取，<code>trace.jsonl</code> 单场景可达数 MB（约 200 字节/条）。默认全量记录，另给两个开关：<code>--trace-sample N</code>（每 N 轮记一条 sync 摘要，其余只记账计数）与 <code>--trace-writes-only</code>（只记写端点）。<strong>统计层不受任何裁剪影响</strong>。</p>
+  </div>
+</section>
+
+<!-- ============ 08 ============ -->
+<section id="s8">
+  <h2><span class="n">08</span>破坏性场景与文件布局</h2>
+  <p class="sub">Deletion scenarios &amp; run directory</p>
+
+  <p>删种子与删文件是本项目最该被验证、也最容易测假的两类场景。难点在于：仿真客户端的种子是虚拟的，如果「删除」只是在内存里删个 dict，那么「有没有真的删掉文件」这个问题<strong>根本没被测到</strong> —— 只是记账而已。</p>
+
+  <h3>指定目录：所有测试产物落一处</h3>
+  <p>新增 <code>--root</code> 指定<strong>唯一的工作根</strong>：虚拟文件树、临时配置、auto-qb 的 data_dir、两层日志、报告，全部落在这一棵树下，不再散落到系统临时目录。日常跑在 R 盘（与真实种子同盘，路径处理与磁盘 stat 行为都更贴近生产）：</p>
+
+  <pre><b>R:\auto-qb-sim\</b>                       <b># --root（默认，可用环境变量 AUTOQB_SIM_ROOT 覆盖）</b>
+├── .auto-qb-sim-root       <b># 哨兵文件：证明这是仿真专用根</b>
+└── runs\
+    └── 20260919-150233-D4\ <b># 每次运行一个目录（时间戳 + 场景 ID）</b>
+        ├── fs\             <b># 虚拟文件树（种子 save_path 指向树内）</b>
+        ├── config.yml      <b># 本次运行生成的配置</b>
+        ├── data\           <b># auto-qb 的 state.json / 锁 / 程序日志</b>
+        ├── summary.json    <b># 统计层</b>
+        ├── summary.txt
+        ├── trace.jsonl     <b># 完整层</b>
+        ├── writes.jsonl
+        ├── sim-events.jsonl
+        ├── fs-before.txt
+        ├── fs-after.txt
+        └── autoqb.log</pre>
+
+  <ul>
+    <li><strong>运行目录按 ID 隔离</strong>：多次运行互不覆盖，回溯时能直接翻到那一次的完整现场。</li>
+    <li><strong>R 盘不存在时自动回退</strong>（换机器 / Linux / CI 复现）：回退到系统临时目录并在 summary 记一条 <code>ROOT_FALLBACK</code> 的 WARN，<strong>不硬崩</strong>。</li>
+    <li><code>--fs-reuse &lt;path&gt;</code> 可复用已建好的文件树省去建树时间，但<strong>破坏性场景（D 系列）强制重建</strong> —— 复用一棵被删过文件的树等于拿脏现场跑测试。</li>
+  </ul>
+
+  <h3>虚拟文件树：让删除可被真实验证</h3>
+  <p>仿真端在 <code>&lt;run&gt;/fs/</code> 下建一棵<strong>真实的</strong>文件树，种子的 <code>save_path</code> / <code>content_path</code> 直接指向树内目录。<code>torrents/delete</code> 带 <code>deleteFiles=true</code> 时，仿真端<strong>真的删除</strong>对应目录。跑前跑后各做一次文件树快照，diff 就是「实际删了什么」。</p>
+
+  <div class="note warn">
+    <div class="hd">为什么必须全量物化（与初稿不同）</div>
+    <p>初稿打算只物化 300 个种子。这是错的：未物化的种子 <code>save_path</code> 指向的路径在磁盘上并不存在，缺文件扫描会<strong>把它们全判成文件丢失</strong> —— 结果是 4700 个种子被误打 MISSING 并整组暂停，D4 的「组内停止率 100%」彻底失去意义，首轮还会多出几千次多余的 stop 写操作。</p>
+    <p>因此改为<strong>默认全量物化</strong>：每个种子 1 个 4 KiB 占位文件，辅种群共享同一份。5000 个种子约 4300 个文件 / 约 17 MB，建树数秒。<code>--fs-materialize 0</code> 保留为降级开关，但<strong>仅限不开分组的场景</strong>（如 P3 纯同步压测），并在 summary 标注。</p>
+  </div>
+
+  <h3>R 盘边界：删除动作的路径逃逸防护</h3>
+  <p>日常跑在 R 盘，而 R 盘正是真实下载盘 —— 删除场景会真删文件。这不是「小心一点」就能解决的，必须有硬校验：</p>
+
+  <table class="bleed">
+    <caption>四道边界校验（任一不过即拒绝启动）</caption>
+    <thead><tr><th style="width:52px">ID</th><th>校验</th><th>不过时</th></tr></thead>
+    <tbody>
+      <tr><td class="n">B1</td><td><code>--root</code> 不得是盘根目录或已有真实下载目录；必须是新建空目录，或含哨兵 <code>.auto-qb-sim-root</code> 的既有目录</td><td>拒绝启动，提示换目录</td></tr>
+      <tr><td class="n">B2</td><td>每次删除前对目标路径做 <code>os.path.realpath</code> 归一，断言其位于 <code>&lt;run&gt;/fs/</code> 之下（防 <code>..</code> 与符号链接逃逸）</td><td>拒绝删除，记 <code>FS_ESCAPE</code></td></tr>
+      <tr><td class="n">B3</td><td>删除目标计数上限（单次 ≤ 场景声明数量 × 2）；超限时中止整轮删除</td><td>拒绝删除，记 <code>FS_BULK</code></td></tr>
+      <tr><td class="n">B4</td><td>运行收尾核对 <code>fs-after.txt</code>：只允许出现「预期删除」，任何预期外缺失进 <code>unexpected_removals</code></td><td><code>verdict = FAIL</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>B1 的哨兵文件是关键：它让「这是仿真专用根」成为可判定的事实，而不是靠人记得哪個目录能删。B2 的 realpath 归一必须同时处理 Windows 的 <code>\\?\</code> 长路径前缀与大小写差异，否则形同虚设。</p>
+
+  <div class="note risk">
+    <div class="hd">这条红线的代价</div>
+    <p>在 R 盘跑的好处是路径语义与磁盘 stat 行为贴近生产（真实 save_path 就是 <code>R:\Downloads\...</code>）；代价是删除动作一旦越界就是<strong>不可逆的真实数据损失</strong>。四道校验一条都不能省，且 B1/B2 在 W1 就要有单测覆盖 —— 不是等出事再补。</p>
+  </div>
+
+  <table class="bleed">
+    <caption>破坏性场景</caption>
+    <thead><tr><th style="width:44px">ID</th><th>场景</th><th>注入方式</th><th>通过判据</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="n">D1</td><td><strong>外部删除种子</strong>（不删文件）</td>
+        <td>仿真端在第 K 拍移除 100 个种子</td>
+        <td>auto-qb 不崩、其任务自然消亡；<strong>不误删其它种子</strong>；缺文件扫描只波及受影响组</td>
+      </tr>
+      <tr>
+        <td class="n">D2</td><td><strong>外部删除种子 + 连带删文件</strong></td>
+        <td>仿真端移除并真实删除其文件</td>
+        <td>文件树 diff 确认文件确实消失；auto-qb 作为被动方<strong>不产生任何删除动作</strong></td>
+      </tr>
+      <tr>
+        <td class="n">D3</td><td><strong>auto-qb 主动删除</strong>（WEB 命令驱动）<span class="tag warn">已改定义</span></td>
+        <td>经 auto-qb 自带 WEB UI 投递 <code>/api/torrents/{hash}/delete</code></td>
+        <td>只对命令指定的 hash 删；<code>deleteFiles</code> 逐 hash 与命令一致；删除请求数 == 命令数（不得重复删）</td>
+      </tr>
+      <tr>
+        <td class="n">D4</td><td><strong>外部删文件 → 缺文件保护</strong><span class="tag risk">核心</span></td>
+        <td>删掉某个辅种组的文件</td>
+        <td><strong>组内成员停止率 == 100%</strong>（漏一个就会上传垃圾数据被封号）；MISSING 标签；响应 ≤ 3 轮；组外零影响；无 <code>uploading</code> 残留</td>
+      </tr>
+      <tr>
+        <td class="n">D5</td><td><strong>批量删除与幂等</strong></td>
+        <td>一次性删 500（含若干整组）</td>
+        <td>不产生写风暴（速率阈值内）；重复注入同一删除，第二次无新增写</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <div class="hd">W3b 实测（2026-09-19，全部 verdict OK）</div>
+    <table>
+      <thead><tr><th>ID</th><th>注入</th><th>判据</th><th>实测值</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr><td class="n">D1</td><td>第 3 拍删 20 个种子（不带文件）</td>
+            <td>快照终值 == 仿真端剩余；快照跌幅 == 删除数</td>
+            <td>300 → 280，跌幅 20 == 20</td><td><span class="tag ok">PASS</span></td></tr>
+        <tr><td class="n">D2</td><td>第 3 拍删 20 个种子 + 其文件</td>
+            <td>文件确实减少；只允许预期删除</td>
+            <td>267 → 262（少 5，整组共享文件），unexpected = 0</td><td><span class="tag ok">PASS</span></td></tr>
+        <tr><td class="n">D3</td><td>WEB UI 删 4 个（2 带文件 / 2 不带）</td>
+            <td>hash 集合精确相等；<code>deleteFiles</code> 逐条一致；请求数 == 命令数</td>
+            <td>4/4 投递成功；hash 与 flag 全等；<code>torrents/delete</code> = 4</td><td><span class="tag ok">PASS</span></td></tr>
+        <tr><td class="n">D4</td><td>第 5 拍删第 0 个辅种组的文件</td>
+            <td>组内停止率 == 100%；响应 ≤ 3 tick</td>
+            <td>停止率 1.0；延迟 0.42 tick</td><td><span class="tag ok">PASS</span></td></tr>
+        <tr><td class="n">D5</td><td>删 500（批量）+ 第 6 拍重投 <code>torrents_removed</code>；两相运行</td>
+            <td>批量后快照一致；重复投递不崩；跨进程 <code>exec_history</code> 零增长</td>
+            <td>跌幅 500 == 500；traceback 0；两相 exec_history 71 → 71（增长 0）</td><td><span class="tag ok">PASS</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <div class="hd">D3 为何改定义：动作注册表里根本没有 delete</div>
+    <p>静态核查 <code>auto_qb.rules.registry.ACTIONS</code>：<code>add_category / add_tags / checking /
+      download_speed_limit / move_to / print_torrent_details / reannounce / remove_category /
+      remove_tags / start / stop / upload_speed_limit</code> —— <strong>没有 delete</strong>。
+      全仓唯一的 <code>torrents_delete</code> 调用点在 <code>mixins/web_commands.py</code>（单种子 / 整组 / 批量三处），
+      全部由 WEB UI 命令触发。换言之：<strong>auto-qb 不存在任何自动删除路径</strong>，删除只能由人在 WEB UI 上点 ——
+      这是设计上的保守默认（黄金法则 #2），也让原计划「配置一条带删除动作的规则」无法成立。</p>
+    <p>改测法后反而更严：驱动器真的去 POST <code>/api/torrents/{hash}/delete</code>，验证
+      「命令说删谁就只删谁」「<code>deleteFiles</code> 逐条透传」「不重复删」。默认配置下 <code>torrents/delete</code>
+      仍必须 == 0（由 S2 覆盖，D3 运行时才豁免这一项）。</p>
+  </div>
+
+  <div class="note risk">
+    <div class="hd">D4 是本套测试的头号场景</div>
+    <p>辅种缺文件保护是项目的核心安全特性：同组种子指向同一份文件，文件没了却仍在做种，就是在向站点上传垃圾数据 —— 多数 PT 站对此直接封号。因此 D4 的判据不是「有没有停」，而是<strong>「组内是否一个不漏地全停」</strong>，用比率 100% 作为硬判据，并单独测响应延迟（从文件消失到最后一个成员被停经过了几个 tick）。</p>
+    <p>这个场景只有在有真实文件树时才成立：文件消失必须由 auto-qb 的磁盘扫描<strong>自己发现</strong>，而不是由仿真端直接把 state 改成 <code>missingFiles</code> 通知它 —— 后者等于把答案告诉考生。</p>
+  </div>
+
+  <h3>删除场景的 dry-run 覆盖</h3>
+  <p>D1–D5 每个都要跑一遍 <code>--dry-run</code>：写端点命中 0、文件树 <code>files_before == files_after</code>、<code>unexpected_removals</code> 为空。破坏性操作的 dry-run 语义正确性，比任何读路径都重要。</p>
+</section>
+
+<!-- ============ 09 ============ -->
+<section id="s9">
+  <h2><span class="n">09</span>安全矩阵 S1–S8</h2>
+  <p class="sub">Safety scenarios</p>
+
+  <p>全部以服务端写台账为判据来源。S1–S4 是硬性零容忍项，S5–S8 是行为正确性项。</p>
+
+  <table class="bleed">
+    <caption>安全场景</caption>
+    <thead><tr><th style="width:44px">ID</th><th>场景</th><th>通过判据</th></tr></thead>
+    <tbody>
+      <tr><td class="n">S1</td><td><strong>dry-run 零写</strong><br><span class="muted">--dry-run + --read-only</span></td><td>写端点命中数 <strong>== 0</strong>；auto-qb 不因 403 崩溃、不反复重试风暴</td></tr>
+      <tr><td class="n">S2</td><td><strong>高风险动作默认关闭</strong></td><td>未显式开启时，<code>delete</code> / <code>setLocation</code> / <code>reannounce</code> / <code>recheck</code> / <code>add</code> 命中数 == 0</td></tr>
+      <tr><td class="n">S3</td><td><strong>写速率上限</strong></td><td>稳态下写请求速率 ≤ 阈值（先取实测值作基线，再定阈值）；<code>reannounce</code> 单独限流</td></tr>
+      <tr><td class="n">S4</td><td><strong>幂等性</strong></td><td>同初始状态跑两遍，写台账<strong>逐条 diff 为空</strong>；同 state_file 连续两次启动，第二遍不重复首轮写入</td></tr>
+      <tr><td class="n">S5</td><td><strong>断连降级</strong><br><span class="muted">--abort-after 12 --abort-duration 10</span></td><td>断连期间 0 写、不崩溃、不误删种子；恢复后 rid 断层走全量自愈，sync 恢复正常节拍 <span class="tag risk">实测 FAIL — 发现真缺陷</span></td></tr>
+      <tr><td class="n">S6</td><td><strong>数据面只读</strong></td><td>临时 data_dir 与仿真种子目录跑前后快照对比，除 state.json / 日志外无变化</td></tr>
+      <tr><td class="n">S7</td><td><strong>WEB 并发只读</strong></td><td>开启 <code>web.enabled</code> 并并发轮询：无 5xx，主循环 tick 间隔不恶化，且 Web 线程不产生写台账</td></tr>
+      <tr><td class="n">S8</td><td><strong>限速保护</strong></td><td>奇数 KiB/s 的手设单种限速不被覆盖（台账中 <code>setUploadLimit</code> 未改写这些种子）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note risk">
+    <div class="hd">⚠ S5 实测：qB 短暂断连后 auto-qb 无法自愈（真缺陷，未修）</div>
+    <p><strong>现象</strong>：<code>--abort-after 12 --abort-duration 10</code>（第 12 秒断连，持续 10 秒后恢复）。
+      断连期间 <code>writes_during_outage = 0</code>（符合预期，没误删、没写风暴）。但<strong>恢复后再也没接上</strong>：
+      从断连开始到运行结束共 30 秒、约 15 个 tick，每个 tick 打一条
+      <code>主循环异常: 'NoneType' object has no attribute 'torrents_info'</code> 加完整异常栈（28 条栈），
+      sync 轮次从常态 ~22 掉到 5，且 <code>sync_full_rounds</code> 停在 1（<strong>全量自愈从未发生</strong>）。</p>
+    <p><strong>根因</strong>（<code>qbmanager.run</code> 主循环）：重连只在
+      <code>except APIConnectionError</code> 分支里触发，而该分支第一步就是 <code>self.client = None</code>。
+      client 一旦为 None，下一次 <code>api.sync_maindata()</code> 抛的是 <strong><code>AttributeError</code></strong>
+      而不再是 <code>APIConnectionError</code>，于是落到 <code>except Exception</code> —— 这条分支<strong>不重连</strong>，
+      只打日志。死循环就此形成：</p>
+    <pre><code>tick k   : APIConnectionError → client=None → _reconnect_due() 若未到期则不 connect()
+tick k+1 : client is None → AttributeError → except Exception（只打日志，不重连）
+tick k+2 … : 同上，永远停在这里 —— 只能重启进程</code></pre>
+    <p>退避逻辑（<code>_reconnect_due</code>：2s → 4s → 8s → … → 30s 上限）本身是对的，
+      但它被放在了一个<strong>再也进不去的分支</strong>里。断连 10 秒是 PT 场景里很常见的抖动
+      （qB 重启 / 网络闪断），目前的后果是<strong>程序静默失去同步，必须人工重启</strong>。</p>
+    <p><strong>附带问题</strong>：断连期间每 tick 一条 ERROR + 20 行栈，30 秒 ≈ 300 行噪音，
+      会淹没真正的错误；且真实原因（连接断开）被 <code>'NoneType' has no attribute</code>
+      这个二次异常掩盖，回溯时极易误判。</p>
+    <p><strong>处置</strong>：本轮只做外部观测（未改 <code>src/</code>）。已立档待决，
+      修复方向（供参考，不在本计划范围）：把「已断连」做成显式状态位，断连期间跳过
+      <code>_tick</code> 并由<strong>独立分支</strong>按退避重连；或让 <code>QbApi</code> 在
+      <code>_client is None</code> 时抛 <code>APIConnectionError</code> 而不是 AttributeError，
+      保证异常类型始终能表达「连接不可用」。</p>
+  </div>
+
+  <div class="note">
+    <div class="hd">为什么 S1 用 --read-only</div>
+    <p>如果只统计「auto-qb 有没有发写请求」，一旦它真的发了，测试已经对服务端状态造成了改变。<code>--read-only</code> 让写端点返回 403 但<strong>仍然记账</strong> —— 既拿到「确实发了」的证据，又保证服务端状态不被污染。这与本项目既有的「测试期禁止真实系统副作用」守卫是同一思路，只是把它搬到了进程外。</p>
+  </div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="s10">
+  <h2><span class="n">10</span>性能矩阵 P1–P7</h2>
+  <p class="sub">Performance scenarios</p>
+
+  <table class="bleed">
+    <caption>性能场景</caption>
+    <thead><tr><th style="width:44px">ID</th><th>场景</th><th>观测指标</th><th>参考基线</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="n">P1</td><td><strong>首轮灌入</strong><br><span class="muted">--n 5000 --ramp 0</span></td>
+        <td>首 tick 墙钟耗时、files 请求数、写请求数</td>
+        <td class="n">推算 ≈ 34 s / 5000 files / ≈ 10 000 写</td>
+      </tr>
+      <tr>
+        <td class="n">P2</td><td><strong>渐进灌入</strong><br><span class="muted">--ramp 50</span></td>
+        <td>各 tick 耗时分布、是否有单 tick 尖峰</td>
+        <td class="n">—（与 P1 对比用）</td>
+      </tr>
+      <tr>
+        <td class="n">P3</td><td><strong>稳态 churn</strong><br><span class="muted">10% / 1.5s，tick 2s 与 1.5s 两档</span></td>
+        <td>sync 间隔漂移、每轮载荷、tick 是否能跟上节拍</td>
+        <td class="n">增量 ≈ 4 ms / 轮，载荷 ≈ 140 KB</td>
+      </tr>
+      <tr>
+        <td class="n">P4</td><td><strong>稳态 steady</strong><br><span class="muted">固定 500 活跃池</span></td>
+        <td>视图重建次数、静止种子是否被误置脏</td>
+        <td class="n">—（验证惰性重建生效）</td>
+      </tr>
+      <tr>
+        <td class="n">P5</td><td><strong>任务吞吐</strong></td>
+        <td>队列深度、任务实际执行周期（vs 名义 interval）</td>
+        <td class="n">R=2 时推算 ≈ 25 min</td>
+      </tr>
+      <tr>
+        <td class="n">P6</td><td><strong>WEB UI 并发</strong></td>
+        <td><code>/api/state</code> 响应耗时、视图重建占比</td>
+        <td class="n">—</td>
+      </tr>
+      <tr>
+        <td class="n">P7</td><td><strong>删除风暴</strong><br><span class="muted">D5 的性能侧</span></td>
+        <td>批量删除期间的单 tick 耗时尖峰、写请求速率、缺文件扫描是否拖垮主循环</td>
+        <td class="n">—（与 P3 稳态对比）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <div class="hd">W4 实测（2026-09-19，R 盘 / 回环 / 5000 种子）</div>
+    <table>
+      <thead><tr><th>ID</th><th>场景</th><th>首轮</th><th>稳态间隔 / 漂移</th><th>写速率</th><th>载荷</th></tr></thead>
+      <tbody>
+        <tr><td class="n">P1</td><td>一次性灌入 5000</td><td><strong>14.37 s</strong></td><td>2.23 s / 0.31 s</td><td>4300/min</td><td>745 KB</td></tr>
+        <tr><td class="n">P2</td><td>渐进灌入（<code>--ramp 200</code>/拍）</td><td>2.68 s</td><td><strong>2.87 s / 1.22 s</strong><span class="tag warn">掉拍</span></td><td>4300/min</td><td>646 KB</td></tr>
+        <tr><td class="n">P3</td><td>稳态 churn（tick 2 s）</td><td>14.20 s</td><td>2.26 s / 0.32 s</td><td>4777/min</td><td>823 KB</td></tr>
+        <tr><td class="n">P3b</td><td>稳态 churn（tick 1.5 s）</td><td>13.52 s</td><td>1.72 s / 0.30 s</td><td>4777/min</td><td>656 KB</td></tr>
+        <tr><td class="n">P4</td><td>稳态 steady（固定活跃池）</td><td>14.37 s</td><td>2.24 s / 0.32 s</td><td>4777/min</td><td>748 KB</td></tr>
+        <tr><td class="n">P6</td><td>WEB 并发（1 线程 ≈ 4 req/s）</td><td>15.12 s</td><td>2.43 s / <strong>0.95 s</strong></td><td>4777/min</td><td>889 KB</td></tr>
+        <tr><td class="n">P6x</td><td>WEB 并发压力档（4 线程 ≈ 16 req/s）</td><td><strong>未完成</strong></td><td><strong>8.52 s / 8.11 s</strong><span class="tag risk">近乎停摆</span></td><td>—</td><td>2.4 MB</td></tr>
+        <tr><td class="n">P7</td><td>删除风暴（3000 中删 1500）</td><td>9.56 s</td><td>2.06 s / 0.18 s</td><td>2865/min</td><td>369 KB</td></tr>
+      </tbody>
+    </table>
+    <p><strong>两个结论</strong>：① 稳态本身非常健康 —— tick 1.5 与 2.0 两档都能跟上（漂移 &lt; 0.35 s），
+    删除风暴反而更轻（种子少了）；② 真正的风险在 <strong>WEB UI</strong> ——
+    <code>/api/state</code> 全量在 5000 种子下单次约 <strong>0.6 s</strong>，
+    单线程轮询已把漂移从 0.33 s 顶到 0.95 s，4 线程打满时首轮灌入 45 s 都没跑完（<code>torrents/files</code> 一次都没拉）。
+    详见 <code>TODO.md</code> 的 PERF-01 / PERF-02。</p>
+    <p><strong>已固化阈值</strong>（写入 <code>…baseline.json</code>，<code>sim_run.py</code> 自动读取）：
+    <code>P1.first_round_s ≤ 22.68</code> · <code>S3.write_rate_per_min ≤ 6210.49</code> ·
+    <code>S7.p95_ms ≤ 1218.4</code> · <code>SYNC.drift_max_s ≤ 1.0</code>。
+    灌入期与带 WEB 轮询的漂移另记 <code>P2.drift_max_s</code>（观测项，不判红）——
+    否则会用稳态阈值把"灌入期跟不上"这个结论埋掉。</p>
+    <p>重跑命令：<code>uv run python scripts/sim_baseline.py</code>（<code>--only P1,P3</code> 跑部分、
+    <code>--merge</code> 只覆盖重跑的场景）。<strong>P5 任务吞吐</strong>尚未单独出数 ——
+    外部观测只能拿到写台账收敛时间，队列深度需要进程内剖面，留到 W5。</p>
+  </div>
+
+  <p><strong>「能不能跟上」的判据</strong>：连续记录 <code>sync/maindata</code> 的请求时间戳，与配置的 <code>main_tick</code> 比对。若观测间隔稳定在 tick 附近 → 跟得上；若持续拉长 → 主循环处理耗时已超过一个 tick，队列开始积压。这个指标零依赖、跨进程可测，是本方案的主指标。</p>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="s11">
+  <h2><span class="n">11</span>波次计划 W0–W6</h2>
+  <p class="sub">Execution</p>
+
+  <table class="bleed">
+    <caption>波次</caption>
+    <thead><tr><th style="width:52px">波次</th><th>内容</th><th>产出与判据</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="n">W0</td><td><strong>可行性探针</strong><span class="tag ok">已完成</span></td>
+        <td>本会话实测：载荷体积、全量/增量端到端、diff 策略、单次请求成本。产出第 03 节全部数字。探针脚本一次性，不入库。</td>
+      </tr>
+      <tr>
+        <td class="n">W1<br><span class="tag ok">已完成</span></td><td><strong>仿真服务端</strong> <code>scripts/sim_qb.py</code></td>
+        <td>端点子集 + rid 语义 + 负载模型 + 写台账 + <code>--read-only</code> / <code>--abort-after</code> + <strong>虚拟文件树</strong>（<code>--root</code> 下全量物化）+ <strong>B1–B4 边界校验</strong> + <strong>删除注入</strong> + <code>sim-events.jsonl</code>。<strong>实测</strong>：<code>--self-test</code> 8 项全绿（全量 18.6 ms / 增量 1.2 ms、必需字段无缺失、files 与磁盘一致、B2 逃逸与 B3 上限均拦截、D4 删组文件生效）；<code>--n 60</code> 起服务 <strong>1 秒内</strong>可用。</td>
+      </tr>
+      <tr>
+        <td class="n">W2<br><span class="tag ok">已完成</span></td><td><strong>驱动器</strong> <code>scripts/sim_run.py</code></td>
+        <td>生成配置与 data_dir → 起 sim（随机端口）→ 拉起 <code>python -m auto_qb</code> 子进程 → 采样 → 超时/kill → <strong>出两层日志</strong>。<strong>实测</strong>：S1（dry-run）verdict OK 且写台账 0 条；D4 verdict OK 且组内停止率 1.0 / 响应 0.77 tick；P1（5000）跑出首轮 17.19 s + 稳态 2.017 s。判据已按「首轮 / 稳态」分离。</td>
+      </tr>
+      <tr>
+        <td class="n">W3</td><td><strong>安全场景 S1–S8</strong></td>
+        <td>每个场景一条命令 + 明确判据。<strong>判据</strong>：S1–S4 全绿；S5–S8 全部有实测结论（不论红绿）。
+        <strong>进度</strong>：S1/S2 每次运行都判（全绿）；S3 记 BASELINE 待 W4 固化；
+        S4 已由 D5 两相运行覆盖（<code>exec_history</code> 零增长）；<strong>S5 实测 FAIL，发现断连无法自愈的缺陷</strong>（详见第 09 节）；S6/S7/S8 待测。</td>
+      </tr>
+      <tr>
+        <td class="n">W3b</td><td><strong>破坏性场景 D1–D5</strong><span class="tag ok">已完成</span></td>
+        <td>依赖 W1 的虚拟文件树与删除注入。<strong>判据</strong>：D4 组内成员停止率 == 100% 且响应 ≤ 3 轮；D1–D5 各自再跑一遍 dry-run，文件树零变化。
+        <strong>实测</strong>：D1–D5 全部 verdict OK（数字见第 08 节）；D3 因动作注册表无 delete 而改走 WEB 命令路径。
+        过程中修掉四处「测假」：<code>torrents_removed</code> 曾硬编码 <code>[]</code>（外部删除 auto-qb 根本看不到）、
+        硬 kill 拿不到 <code>state.json</code>、写台账看不出幽灵种子（改问 WEB <code>/api/status</code> 的快照数）、
+        两相运行的相位重启间隔被算成稳态漂移。</td>
+      </tr>
+      <tr>
+        <td class="n">W4</td><td><strong>性能场景 P1–P7</strong><span class="tag ok">已完成</span></td>
+        <td>跑齐七场景，记录基线并固化阈值。<strong>判据</strong>：首轮与稳态数字落地，替换第 03 节的推算值；基线写入 <code>baseline.json</code> 供后续统计层引用。
+        <strong>实测</strong>：P1–P4 / P6 / P6x / P7 全部出数（表见第 10 节），阈值已固化且被统计层采用（未固化时记 BASELINE，固化后同一指标即成硬判据）。
+        新增 <code>scripts/sim_baseline.py</code> 一键重跑 + 固化（<code>--only</code> / <code>--merge</code>）。
+        阈值候选集有讲究：<strong>ramp 与压力档不能进稳态阈值</strong>（否则放走真正的回归），灌入期漂移另记 <code>P2.drift_max_s</code>。
+        P5 任务吞吐待 W5。</td>
+      </tr>
+      <tr>
+        <td class="n">W5</td><td><strong>归因（按需，不动代码）</strong><span class="tag ok">已完成</span></td>
+        <td>只对实测暴露的瓶颈做归因报告 + 改进建议（候选：files 拉取预算、视图增量重建、<code>max_tasks_per_tick</code> 自适应）。本波次<strong>只出结论</strong>，改代码另立任务档案并走红绿验证。
+        <strong>产出</strong>：第 13 节四条归因（① 首轮内联请求数 bound ② 稳态吞吐被 20/tick 卡死 ③ WEB 全量视图 ④ 写请求放大一倍），
+        每条附 trace 级证据 / 改进方向 / 预期收益。<strong>纠正 W0 两处推算</strong>：首轮 34 s → 实测 14.4 s；
+        「R=2 → 25 min」→ 实测吞吐重算为 16.7 min（原推算多算一档规则）。
+        P5 的「队列深度」需进程内剖面，未出数。</td>
+      </tr>
+      <tr>
+        <td class="n">W6</td><td><strong>收尾与回写</strong></td>
+        <td>基线数字写入 <code>memory-bank/testing.md</code> 新增一节；新坑入 <code>pitfalls.md</code>；命中立档阈值时在 <code>memory-bank/tasks/</code> 立档并重建索引。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>文件布局</h3>
+  <pre>scripts/
+├── sim_qb.py      <b># 仿真服务端（可独立运行）</b>
+├── sim_run.py     <b># 驱动器：编排 + 断言 + 两层日志</b>
+└── sim_autoqb.py  <b># auto-qb 子进程启动包装：装 SIGBREAK 处理器，让驱动器能优雅停机</b>
+                   <b># （硬 kill = TerminateProcess，finally 不跑 -> state.json 不落盘）</b>
+
+docs/plans/
+├── 26-09-19-1433-sim-client-5000-plan.html      <b># 本文件</b>
+└── 26-09-19-1433-sim-client-5000.baseline.json  <b># W4 固化阈值，供统计层引用</b>
+
+<b>R:\auto-qb-sim\runs\&lt;时间戳-场景ID&gt;\</b>  <b># --root 下的每次运行（完整布局见第 08 节）</b>
+├── fs\  config.yml  data\               <b># 虚拟文件树 / 本次配置 / auto-qb data_dir</b>
+├── summary.json  summary.txt            <b># 统计层</b>
+└── trace.jsonl  writes.jsonl  sim-events.jsonl
+    fs-before.txt  fs-after.txt  autoqb.log   <b># 完整层</b></pre>
+
+  <p>测试配置由驱动器在运行目录内动态生成（不新增 <code>test_yamls/</code> 文件，避免又一份要维护的配置）。<strong>统计层永远完整</strong>，完整层可按 <code>--trace-sample</code> 裁剪。</p>
+
+  <h3>常用命令（W3b 已跑通的口径）</h3>
+  <pre><b># D1 外部删种子（不带文件）—— 快照跌幅必须 == 删除数</b>
+uv run python scripts/sim_run.py --scenario D1 --n 300 --duration 30 \
+    --delete-torrents 3:20:no --web-port 18101
+
+<b># D2 同上但带文件；D3 经 WEB UI 让 auto-qb 自己删 4 个</b>
+uv run python scripts/sim_run.py --scenario D2 --n 300 --duration 30 \
+    --delete-torrents 3:20:yes --web-port 18102
+uv run python scripts/sim_run.py --scenario D3 --n 300 --duration 40 \
+    --web-delete 4 --web-port 18103
+
+<b># D4 缺文件保护（头号场景）</b>
+uv run python scripts/sim_run.py --scenario D4 --n 500 --duration 40 \
+    --delete-files 5:0 --web-port 18104
+
+<b># D5 批量删除 + 重复投递 + 两相幂等</b>
+uv run python scripts/sim_run.py --scenario D5 --n 1000 --duration 48 \
+    --delete-torrents 3:500:no --redeliver-removed 6 --web-port 18087
+uv run python scripts/sim_run.py --scenario D5 --n 200 --duration 60 --interval 15 \
+    --two-phase --with-rules --web-port 18105
+
+<b># S5 断连降级（当前 FAIL：断连后无法自愈）</b>
+uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
+    --abort-after 12 --abort-duration 10 --web-port 18111</pre>
+  <p class="sub"><code>--web-port</code> 同时是观测通道：不开它就拿不到 auto-qb 的快照规模，D1 的判据会退化成空转。</p>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="s12">
+  <h2><span class="n">12</span>红线与验收</h2>
+  <p class="sub">Non-negotiables</p>
+
+  <h3>红线</h3>
+  <ul>
+    <li><strong>只绑 127.0.0.1 随机端口</strong> —— 绝不连真实 qB 的 16585，不连任何非回环地址。这条与 <code>tests/sidefx.py</code> 既有的「出站连接必须回环」守卫同源。</li>
+    <li><strong>不动生产文件</strong> —— <code>config.yml</code>、<code>auto-qb-data/</code>、<code>想法.md</code> 一律不碰；配置与 data_dir 全落临时目录。</li>
+    <li><strong>不动 src（W5 之前）</strong> —— 已确认本阶段纯外部观测。若后续要加埋点或做优化，另立任务档案，且新配置键必须同步 <code>validate_config</code> 与 <code>config/schema.py</code>。</li>
+    <li><strong>不进 CI</strong> —— 已确认为手动工具。5000 种子场景跑数分钟，进 CI 既慢又不稳定。</li>
+    <li><strong>不新增运行依赖</strong> —— 项目运行依赖只有两个（<code>qbittorrent-api</code>、<code>PyYAML</code>），仿真端只用标准库；可选的 RSS 采样在缺 psutil 时静默跳过。</li>
+    <li><strong>R 盘是真实下载盘，删除只在仿真专用根内</strong> —— <code>--root</code> 必须有哨兵 <code>.auto-qb-sim-root</code>、不得是盘根目录或真实下载目录；每次删除前 realpath 归一并断言位于 <code>&lt;run&gt;/fs/</code> 之下（B1–B3）；收尾核对 <code>unexpected_removals</code> 为空（B4）。四道校验任一不过即拒绝，<strong>W1 就要带单测</strong>。</li>
+    <li><strong>绝不复用真实保存路径</strong> —— 种子的 <code>save_path</code> 一律指向 <code>&lt;run&gt;/fs/</code> 树内，不得指向 <code>R:\Downloads</code> 等真实目录。</li>
+  </ul>
+
+  <h3>验收标准</h3>
+  <ol>
+    <li>W1 完成后，真实 <code>qbittorrent-api</code> 能连上仿真端并稳定走<strong>增量</strong>路径（单测锁死 rid 语义，含「rid 在 body」这个回归点）。</li>
+    <li>S1–S4 全部通过（零容忍项）。</li>
+    <li>S5–S8 每个都有实测结论，红的记录为已知问题并给出定位。</li>
+    <li><strong>D1–D5 全部跑出结论</strong>；其中 D4 组内成员停止率必须 == 100%，响应 ≤ 3 轮。</li>
+    <li>D1–D5 的 dry-run 复跑：写命中 0 且文件树零变化。</li>
+    <li>P1–P7 全部跑出数字，第 03 节的推算值被实测值替换或确认，阈值固化进 <code>baseline.json</code>。</li>
+    <li><strong>边界校验 B1–B4 有单测覆盖</strong>（哨兵根判定 / <code>..</code> 与符号链接逃逸 / 数量上限 / 收尾核账），并在真实 R 盘目录上跑过一次 D4 验证不越界。</li>
+    <li><strong>R 盘不可用时可回退</strong>：换机器或 Linux 复现时回退临时目录并 WARN，不硬崩。</li>
+    <li><strong>统计层可独立判读</strong>：任意一次运行，只看 <code>summary.json</code> 就能得出与看完整层相同的结论。</li>
+    <li>报告可复现：固定 seed + 记录环境，同参数两次运行结论一致。</li>
+    <li>收尾：无残留进程与端口，临时目录清理干净。</li>
+  </ol>
+</section>
+
+<!-- ============ 13 ============ -->
+<section id="s13">
+  <h2><span class="n">13</span>归因与改进建议（W5）</h2>
+  <p class="sub">Attribution — 只出结论，不动代码</p>
+
+  <p>本节回答「<strong>实测暴露的瓶颈到底在哪</strong>」。四条结论全部有 trace 级证据，
+  <strong>都不在本次动手范围内</strong> —— 每条都给了方向与预期收益，改代码需另立任务档案并走红绿验证。</p>
+
+  <div class="note">
+    <div class="hd">先纠正一个框架性误判：首轮与稳态是两条<strong>互不相干</strong>的路径</div>
+    <p>W0 把「首轮灌入」和「任务队列吞吐」当成一件事，其实它们的<b>代码路径完全不同</b>：</p>
+    <ul>
+      <li><b>首轮新种子</b>：在 <code>_refresh_torrents</code> 里对 <code>matched_added</code>
+          <strong>逐个种子内联</strong>跑 <code>_handle_maintenance</code>（拉 trackers）+
+          <code>_apply_speed_limit</code> + <code>_assign_new_torrent</code>（拉 files）+
+          <code>_add_episode_tags</code> —— <strong>不经任务队列</strong>，
+          因此 <code>max_tasks_per_tick</code> 对它<strong>完全无效</strong>。</li>
+      <li><b>稳态周期任务</b>：走 <code>TaskQueue.run_due(max_tasks=20)</code>，
+          每 tick 只弹 20 个 —— 这才是 <code>max_tasks_per_tick</code> 真正约束的东西。</li>
+    </ul>
+    <p>所以「首轮 14 s」与「规则周期 25 min」<strong>不是同一个瓶颈的两个表现，而是两个独立问题</strong>，
+    必须分别治。</p>
+  </div>
+
+  <table>
+    <caption>四条归因结论</caption>
+    <thead><tr><th>#</th><th>瓶颈</th><th>证据（trace 级）</th><th>改进方向</th><th>预期收益</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="n">①</td>
+        <td><strong>首轮灌入 = 每新种子 ≥2 次<em>内联</em>请求</strong><br><span class="muted">请求数 bound，非 CPU bound</span></td>
+        <td>5000 种子的第一轮共 <strong>15 754 次</strong>请求 ≈ <strong>0.96 ms/次</strong>（回环）：
+            <code>trackers</code> 5007 + <code>files</code> 5000 + <code>addTags</code> 3583 +
+            <code>webapiVersion</code> 3583。首轮 ~15 s 几乎全花在这上面。</td>
+        <td>a) <code>files</code> / <code>trackers</code> <strong>并发拉取</strong>（当前严格串行）；
+            b) 预筛「该 save_path 下种子数 &gt; 1」再拉 files（只有可能成组的才需要文件列表）；
+            c) 新种子分批处理，别让单 tick 阻塞十几秒。</td>
+        <td>并发 8 路：回环约 8×；<strong>真机（单次网络往返 ms 级）收益更大</strong>，
+            且这是唯一能明显改善「程序启动后十几秒才响应」的一条。</td>
+      </tr>
+      <tr>
+        <td class="n">②</td>
+        <td><strong>稳态吞吐被 <code>max_tasks_per_tick=20</code> 卡死</strong></td>
+        <td>P5 实测：214 个规则任务耗时 <strong>20.2 s</strong> ⇒ <strong>10.6 任务/s</strong>，
+            与 <code>20/tick ÷ 2 s</code> 完全吻合。<br>
+            公式：<code>实际周期 = max(名义 interval, 任务数 ÷ 20 × main_tick)</code>。</td>
+        <td>a) <strong>自适应</strong>：<code>max_tasks = ceil(任务数 × tick ÷ 目标周期)</code>；
+            b) 把「每种子一条任务」改成「<strong>一批种子一条任务</strong>」（批量任务）；
+            c) 至少在配置说明里写明「这是吞吐上限，不是精度旋钮」。</td>
+        <td>5000 种子 +1 条规则：8.3 min → 目标周期。<br>
+            <strong>⚠ 放大吞吐会同步放大请求速率，必须与 ① 的预算一起定，别打爆 qB。</strong></td>
+      </tr>
+      <tr>
+        <td class="n">③</td>
+        <td><strong>WEB 全量视图拖垮主循环</strong>（PERF-01）</td>
+        <td><code>/api/state</code> 全量 5000 种子 <strong>p95 609 ms</strong>；
+            单线程轮询即把漂移 0.33 → 0.95 s；4 线程打满时 45 s 只完成 <strong>1 轮</strong> sync、
+            <code>files</code> 一次没拉。</td>
+        <td>a) 前端用满 <strong>rid 增量</strong>（机制已存在，需确认前端是否用满）；
+            b) 全量构建加节流 / 缓存（视图已有版本号与 <code>_view_lock</code> 可复用）；
+            c) 5000 规模考虑分页或按需字段。</td>
+        <td>命中时首屏/切页从「明显卡顿」回到可用，主循环不再被抢。<br>
+            <span class="tag warn">测试用 <code>rid=-1</code> 强制全量，比真实前端更狠 —— 建议先按真实节奏复测</span></td>
+      </tr>
+      <tr>
+        <td class="n">④</td>
+        <td><strong>写请求被放大一倍</strong></td>
+        <td>trace 里 <code>app/webapiVersion</code> 命中数 <strong>恒等于</strong>写请求数
+            （3583 = 3583）—— <code>qbittorrent-api</code> 每次写前都要再查一次版本且<strong>库内无缓存</strong>。
+            叠加逐种子打标签：5000 种子 = <strong>7166 次</strong>请求。</td>
+        <td>a) <strong>批量提交</strong>：qB 的 <code>addTags</code> 支持一次多 hash，
+            按 200 个/批 ⇒ 18 次而非 5000 次；
+            b) 给 <code>QbApi</code> 加版本缓存（<code>app/webapiVersion</code> 进程内只查一次）。</td>
+        <td>写请求 <strong>7166 → ~20</strong>（约 350×），首轮省数秒；真机上收益同样放大。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <div class="hd">P5 结论：修正 W0 的推算</div>
+    <table>
+      <thead><tr><th>场景</th><th>W0 推算</th><th>本次实测 / 修正</th></tr></thead>
+      <tbody>
+        <tr><td>5000 种子首轮停摆</td><td>≈ 34 s</td><td><strong>实测 14.4 s</strong>（回环）；差额来自「约 1/3 种子未配置站点被跳过」+
+            回环比真 qB 快。<strong>真机只会更久。</strong></td></tr>
+        <tr><td>5000 种子 + 2 条规则的执行周期</td><td>≈ 25 min</td><td>按实测吞吐重算
+            <code>(1+R) × 5000 ÷ 20 × 2 s</code> ⇒ R=1 → <strong>8.3 min</strong>；
+            R=2 → <strong>16.7 min</strong>；R=3 → 25 min。<strong>原推算把规则数多算了一档。</strong></td></tr>
+        <tr><td>任务吞吐</td><td>—</td><td><strong>实测 10.6 任务/s</strong>
+            （= <code>max_tasks_per_tick 20 ÷ tick 2 s</code>），是上面所有周期推算的基准。</td></tr>
+      </tbody>
+    </table>
+    <p>P5 的「队列深度」未能单独出数 —— 需要进程内剖面，外部观测拿不到；本波次按计划不动 <code>src/</code>，留待后续。</p>
+  </div>
+
+  <div class="note risk">
+    <div class="hd">本波次的边界</div>
+    <p>以上<strong>全是结论，没有一行代码改动</strong>（<code>src/</code> 全程未动，全量测试 1041 passed 不变）。
+    四条里 <strong>② 与 ④ 收益最大、风险最低</strong>（都是「批量 / 缓存」，不改变语义）；
+    ① 需要引入并发，要重新评估「不打爆 qB」这条红线；
+    ③ 建议先按真实前端节奏复测再定。
+    <strong>任一要动手，都请另立任务档案，并先用本套仿真跑红再跑绿。</strong></p>
+  </div>
+</section>
+
+</article>
+</div>
+
+<footer>auto-qb · 5000 种子仿真客户端 · 可行性分析与实施计划 · 2026-09-19 · 实测数据来自 W0 探针 + W1–W5 真机实测</footer>
+
+</div>
+</body>
+</html>
