@@ -24,6 +24,7 @@
 
 ## Completed
 
+- [26-09-19-webui-cols-store-version-audit] WEB UI 列状态存储键 `autoqb_cols_v?` 版本沿革审计与口径回写 - 用 `git log -S` 逐键追溯列状态存储键的 4 次升版本(v1→v4, 集中在 2026-09-13 08:32 ~ 09-14 07:25), 确认 v4 之后 R10-09(`cb57bef`)已把政策反转为"列集变更一律不升版本"; 据此回写 `pitfalls.md`(2 处) / `systemPatterns.md` / `activeContext.md` 三条仍写着"加/减列**必须**升版本"的旧口径, 并补一条"不并发也会偶发的全量失败"判别法; 测试基线 1041 passed 不变。
 - [26-09-14-memory-bank-migration] 知识库 (Memory Bank) 建设与仓库治理 - `ai/` → `memory-bank/` 六核心文件迁移 + 跨 agent 入口统一 + 测试基线单点化 + worktree 同步 (2026-09-14 ~ 09-15)
 - [26-09-15-backend-file-split] 后端大文件拆分 - `qbmanager` / `schema` / `torrents` / `validation` 四包拆分, 纯移动零行为变化; 遗留: 既有测试顺序污染待排查 (2026-09-15)
 - [26-09-15-backend-torrentrecord-fields] TorrentRecord 全字段缓存 (快照 21 → 70 字段) - 快照 21 → 70 字段 (`_raw` 降为兜底) + `to_dict()`; 基线 879 (2026-09-15)
