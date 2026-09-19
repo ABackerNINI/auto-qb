@@ -105,6 +105,24 @@
   冒烟 **46 项 0 失败**。**教训入 pitfalls**: 「载荷大」不等于「要裁字段」—— 只说明有开销, 不说明开销在哪;
   凭载荷大小直接开药方十有八九修错地方。同类端点(`/api/torrents/{hash}/files`、`/api/search` 等)同样的
   1 行改法**尚未做**(用户触发型、不在轮询路径上)。报表已追加 **§11**。
+  **真机走查反馈 · 乐观 UI 反应 2-4s (2026-09-19, 已实施未提交)**: 用户真机反馈「乐观 UI 已生效, 但反应
+  时间太长, 估计 2-4 秒」([issue 26-09-19-1939](issues/26-09-19-1939-webui-optimistic-latency.html))。
+  **先量后改**: 桩服务回执是瞬时的, 本地复现不出来 —— 用 Playwright `page.route` 给命令 POST **注入人为
+  延迟**, 钩住 `applyOptimistic` 量三个时刻(菜单项 click → 补丁贴上 → DOM `.is-pending`)。结果:
+  注入 2000ms 时 `act()`(整组)补丁 **2012ms** / `actTorrent()`(单种子)**2004ms** 才贴, 而 `actEpisode()`
+  (补丁先贴)恒 **0ms** 自带对照 ⇒ **POST 慢多少, 反馈就晚多少(1:1)**。
+  **修法(方案 A + B)**: ①`act()`/`actTorrent()` 的 `applyOptimistic()` **提到 POST 之前**(与 `actEpisode`/bulk
+  统一), POST 抛错时显式 `resolveOptimistic(hashes, false)` 回滚(补丁提前后这条路径才第一次真正存在);
+  ②**3s 兜底改从「回执到达」起算**(成功时刷 `op.ts`), 否则慢 POST 会在命令刚完成时烧光窗口 ⇒ 弹回陈旧真值
+  再等下一轮(hang 不刷新, 照旧 3s 回落); ③补埋点 `_newCmdStats/_markCmdPatch/_markCmdPost`, 把
+  「点击→补丁」「点击→POST 返回」写进 `cmdStats`(`waitCmd` 由替换改合并), `[perf]` 阈值扩为
+  补丁>50 / POST>400 / 排队>100 / 端到端>400 —— 这两段此前是**盲区**(只能靠用户肉眼报)。
+  **验证**: 复测注入 2000ms → 补丁 **0ms**; 单测 **1053 passed** 不变; 冒烟 **46 → 48 项 0 失败**
+  (新增「P0-3 补丁先于 POST(注入 800ms 仍 <400ms)」, 实测 4~5ms; error 模式加「慢投递 + 失败回执后
+  回滚干净」)。**未追**: 真机 POST 为何慢到秒级(长 tick / GIL / 线程池)—— UI 已不依赖它, 复测看
+  `[perf] … POST xxxms`, 持续 >400ms 再动服务端。
+  **顺带发现另立 issue(未修)**: [整剧操作在剧行上无 `is-pending`](issues/26-09-19-1959-webui-show-row-no-pending.html)
+  —— 补丁 0ms 贴上但 `.show-row` 不绑 pending(剧行默认折叠), 与 BUG-3 同类的漏绑。
 - WEB UI 追剧页 剧/集右键「打开目标文件夹」报"种子不存在" (2026-09-19, 已入库 `c888fba`): 用户报追剧页**剧右键与集右键**失败, 种子右键正常。**真因**: 后端 shows 视图的 `members` 是 **hash 数组**, 前端 `decoratedShows` 把它换成**成员对象**, 而 `openShowEpMenu`/`openShowMenu` 直接把 members 当 hash 用 ⇒ 拼进 URL/JSON 时字符串化成 `[object Object]` ⇒ 后端 404。**同一根因还让整集/整剧的开始/暂停/强制汇报报 Not Found、删除静默无反应**(用户尚未察觉)。**修法**: `shared/app.js` 新增 `memberHashesOf(list)`(两种形态都收)统一取 hash, 菜单与选中态(`_showHashes`/`_epUnits`/`epSelState`)一律走它; 双 UI 共用该文件 ⇒ 一次修两处。**验证**: 用 node 桩掉 `Vue.createApp`/`window`/`document` 直接加载**真 app.js** 断言产出是字符串 hash —— 新版 9/9 通过, 旧版挂 5 项(**红绿双验**); 守阵固化进 `tests/test_web.py::test_frontend_static_bundle_health` 第 7 项; 端到端冒烟(桩服务 + 无头浏览器)同样红绿验证。基线 1041 不变。
 - WEB 跳过本地验证日志降为 INFO (2026-09-18, 已入库 `7ce54e9`): `web.py` 里"本机免密钥放行"提示原为 `logger.warning` ⇒ 改 `logger.info`(免鉴权是用户**显式开的配置**而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING。
 - 导出 .torrent 中文名 500 已修 (2026-09-17, 已入库 `4de0953`): `/api/torrents/{hash}/export` 把种子名直拼进 `Content-Disposition`, 而 HTTP 头只能 latin-1 ⇒ 中文名触发 `UnicodeEncodeError` 500。修法: 新增 `web.content_disposition(filename, fallback, ext)` 双段头(`filename=` ASCII 回退 + `filename*=UTF-8''<百分号编码>`)并清洗控制字符; 测试 `test_content_disposition_encoding` + 导出端点非 ASCII 用例。

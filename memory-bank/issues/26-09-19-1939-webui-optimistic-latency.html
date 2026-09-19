@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="webui-optimistic-latency">
+<meta name="aqb-issue-stamp" content="26-09-19-1939">
+<meta name="aqb-issue-status" content="Fixed">
+<meta name="aqb-issue-title" content="乐观 UI 反应迟缓: 真机点击后约 2-4 秒才看到变化(补丁被 POST 往返挡在后面)">
+<meta name="aqb-issue-summary" content="乐观补丁在 await POST 之后才贴(app.js:3319→3327 等 4 处), 真机点击到界面变化 2-4s, 违背「点击即变」设计; 需先定测量口径再定位 POST 慢还是命令消费慢">
+<title>乐观 UI 反应迟缓: 真机点击后约 2-4 秒才看到变化(补丁被 POST 往返挡在后面) · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>乐观 UI 反应迟缓: 真机点击后约 2-4 秒才看到变化(补丁被 POST 往返挡在后面)</h1>
+    <p class="lede">乐观补丁在 await POST 之后才贴(app.js:3319→3327 等 4 处), 真机点击到界面变化 2-4s, 违背「点击即变」设计; 需先定测量口径再定位 POST 慢还是命令消费慢</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-1939-webui-optimistic-latency</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:39</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><strong>发现场景</strong>: 2026-09-19 用户真机走查 —— 这正是「WEB UI 操作跟手性优化」三波次
+      (<a href="../tasks/26-09-19-webui-responsiveness.md">tasks/26-09-19-webui-responsiveness.md</a>)
+      里唯一剩下的待走查项。用户原话: <em>「目前乐观 UI 已生效, 但反应时间太长, 估计 2-4 秒左右, 远比设计的要长」</em>。</p>
+    <p><strong>已生效的部分</strong>: pending 半透明、状态色翻转、失败回滚都正常 —— 说明 P0-3 链路本身是通的,
+      BUG-3(组/集行没接乐观)已在复核第 2 批修掉, 本条不是它。</p>
+    <p><strong>设计目标(对照口径)</strong>: 该任务的决策 2 写明「主观延迟的主因是 <em>沉默</em> 不是慢」, 因此
+      P0-3 乐观 UI 的定位是<strong>点击即变、不等网络</strong>(亚 100ms 级); 后端加速只负责把真值对齐压到百毫秒级。
+      前端埋点阈值就是按这个定的 —— <code>waitMs &gt; 100</code> 或 <code>totalMs &gt; 400</code> 即打
+      <code>[perf]</code>(app.js:2257-2261)。真机 2~4s 是这个阈值的 <strong>5~10 倍</strong>。</p>
+    <p><strong>触发条件</strong>: 真实 qB 数据下(大库)的种子页单种子右键、辅种页整组右键。
+      <strong>本地复现不出来</strong>: <code>scripts/ui_harness.py</code> 的 FakeClient 与
+      <code>ui_smoke.cjs</code> 里 POST 都是本地瞬时返回(冒烟断言「点击后立即可见 pending」恒绿),
+      所以这条缺陷在设计、实施、冒烟三道关口都没被拦住 —— 只能靠真机肉眼发现。</p>
+    <div class="callout">
+      <strong>⚠ 口径待确认(开工第一步)</strong>: 用户说的「反应时间」可能是
+      ① 点击 → 行变灰/变色(乐观补丁生效)、也可能是 ② 点击 → toast 出「已执行」(端到端)。
+      两者根因不同、修法不同(见 §04 假设表 H1/H3 vs H2/H5)。<strong>先量再改</strong>, 别凭猜测定方案。
+    </div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <h3>证据 1: 4 条乐观入口里有 2 条把补丁放在 POST <em>之后</em>(原文)</h3>
+    <p>先贴补丁的两条(顺序<strong>正确</strong>, 与「点击即变」一致):</p>
+<pre><code>// app.js:2864-2870  actEpisode() 整集/整剧
+this.applyOptimistic(hashes, action);      // 2865: 先贴
+const resp = await this.api("/api/torrents/bulk", { method: "POST", ... });
+
+// app.js:3089-3094  批量 act() bulk 入口
+this.applyOptimistic(hashes, action);      // 3089: 先贴
+const resp = await this.api("/api/torrents/bulk", { method: "POST", ... });</code></pre>
+    <p>先发请求再贴补丁的两条(顺序<strong>错误</strong>, 恰好是种子页/辅种页最常用的两条):</p>
+<pre><code>// app.js:2353-2371  act() 整组(辅种页主路径)
+const resp = await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });   // 2358 先发
+...
+this.applyOptimistic(hashes, action);      // 2368 后贴 —— 「点击即变」被网络往返 gate 住
+const r = await this.waitCmd(resp.cmd_id);
+this.resolveOptimistic(hashes, r.ok);
+
+// app.js:3314-3329  actTorrent() 单种子(种子页主路径)
+const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" }); // 3319 先发
+...
+this.applyOptimistic(hashes, action);      // 3327 后贴 —— 同上
+const r = await this.waitCmd(resp.cmd_id);
+this.resolveOptimistic(hashes, r.ok);</code></pre>
+    <p>只要 POST 慢, 这两条路径的「即时反馈」就整体推迟 —— 乐观的前提是<strong>不等网络</strong>。</p>
+
+    <h3>证据 2: 命令 POST 没有超时、也没有打点(盲区)</h3>
+<pre><code>// app.js:1324-1331  _request(): 命令投递走裸 fetch
+const resp = await fetch(path, { ...options, headers });
+
+// app.js:2243-2263  waitCmd(): 埋点只从「回执」开始算, 不覆盖「点击 → 投递」段
+const start = Date.now();
+...
+this.cmdStats = { totalMs: Date.now() - start, waitMs: r.wait_ms, execMs: r.exec_ms, cmdId };</code></pre>
+    <p>即: 现有 <code>cmdStats</code> 只量「回执段」(<code>wait_ms</code>/<code>exec_ms</code>/端到端),
+      <strong>「点击 → POST 返回」这一段完全没有消费者</strong> —— 真机慢 2-4s 在日志里是看不见的,
+      这也是为什么只能等用户肉眼报。</p>
+
+    <h3>证据 3: 3s pending 兜底从 POST 返回才开始计时, 慢 POST 会吃掉兜底窗口</h3>
+<pre><code>// app.js:2280-2288  isPending(): ts 由 applyOptimistic 写入(Date.now())
+if (Date.now() - op.ts &gt; 3000) { delete this.pendingOps[hash]; return false; }</code></pre>
+    <p>POST 若耗 2s, 贴补丁时兜底窗口只剩 1s; 而真值要等下一轮 <code>/api/state</code>
+      (>3000 种子时前端 3s 才取一次, 见关联 issue <a href="26-09-19-1900-webui-poll-cadence-mismatch.html">webui-poll-cadence-mismatch</a>)。
+      结果就是<strong>「晚了才变过去 → 1s 后弹回陈旧真值 → 下一轮才对」</strong>的抖动, 观感比单纯慢更糟。</p>
+
+    <h3>最小复现 / 测量步骤(不改码即可量)</h3>
+<pre><code>1) 真机 + 真实 qB(3000+ 种子), 打开种子页 / 辅种页
+2) F12 → Network 面板保留日志, Performance 面板开录制
+3) 右键任一行 → 暂停, 肉眼盯「行变灰(is-pending)」的时刻
+4) 读三个数:
+   T1 = /api/.../pause 的 Timing(TTFB / Waiting)   ← 判 H1(POST 慢)
+   T2 = 控制台 [perf] 行的 排队 wait_ms            ← 判 H2(命令消费慢)
+   T3 = Performance 里点击后最长的一个 Long Task   ← 判 H3(渲染慢)
+5) 同时记录 toast「已执行」出现的时刻              ← 判用户指的是 ① 还是 ②(H5)
+6) 对照: 在同页面点一次「整集暂停」(补丁先贴)看是否仍然慢 —— 若显著更快, H1/顺序问题基本坐实</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td><strong>每次点击</strong>(pause/resume 是日常最高频动作), 不是偶发</td></tr>
+      <tr><td>影响范围</td><td>种子页单种子右键(<code>actTorrent</code>) + 辅种页整组右键(<code>act</code>)两条主路径;
+        整集/整剧(<code>actEpisode</code>)与批量(<code>bulk</code>)补丁顺序正确、不受 POST 慢影响, 但仍受 H2/H5 影响。
+        与站点无关, 与<strong>库大小/机器负载</strong>正相关(本地小库与 harness 复现不出)</td></tr>
+      <tr><td>数据风险</td><td>无。乐观补丁是纯前端只读改写, 失败仍回滚(<code>resolveOptimistic(false)</code>);
+        风险只在「假状态停留过久」与「弹回抖动」造成的误判, 不写后端状态、不涉及删除/限速</td></tr>
+      <tr><td>严重度</td><td><strong>高</strong> —— 乐观 UI 是三波次里收益最大的一项(决策 2 明写「主因是沉默」),
+        反应慢到 2-4s 等于<strong>收益归零</strong>, 用户主观仍是「点了没反应」;
+        而且它是本次跟手性优化的<strong>对外交付体感</strong>, 这一条不成立, 前后三波次的观感都打折</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><strong>结论: 待查。</strong>但已定位到一处<strong>结构性缺陷(事实, 非猜测)</strong>:
+      <code>act()</code> / <code>actTorrent()</code> 把乐观补丁放在 <code>await POST</code> 之后,
+      与另两条入口顺序相反 —— 这两条路径的「即时反馈」<strong>必然</strong>被网络往返延迟(见 §02 证据 1)。
+      至于真机上这一段往返为什么会长到 2-4s, 有以下候选, <strong>未经验证前一律按待查处理</strong>。</p>
+    <table>
+      <tr><th>假设</th><th>内容</th><th>判据(怎么证伪/证实)</th></tr>
+      <tr><td><strong>H1</strong><br>(最可能)</td><td><strong>命令 POST 往返慢</strong>。uvicorn 跑在独立线程
+        (web.py:1004), 但主线程长 tick(真机大库 <code>_refresh_torrents</code> + <code>rebuild_views</code>,
+        实测 5000 种子首轮 ~14s)期间存在 <strong>GIL 争用</strong>; 且命令端点是同步 <code>def</code>,
+        进 anyio 线程池执行, 池被并发的同步 handler(<code>/api/state</code> 等)占满时也要排队</td>
+        <td>DevTools 里该 POST 的 <code>TTFB / Waiting</code>; 与同页面「整集暂停」(补丁先贴)对比耗时</td></tr>
+      <tr><td><strong>H2</strong></td><td><strong>命令消费慢(唤醒被长 tick 吞掉)</strong>。投递即
+        <code>manager.wake()</code>(web.py:205), 主循环
+        <code>_wait_next(stop_event, _wake_event, main_tick)</code>(qbmanager.py:353)被唤醒后 drain;
+        若此刻正卡在长 tick 内部, 唤醒要等这一轮走完</td>
+        <td>控制台 <code>[perf]</code> 行的 <code>排队 wait_ms</code>(&gt;100ms 即异常)</td></tr>
+      <tr><td><strong>H3</strong></td><td><strong>前端渲染慢</strong>: 每轮 refresh 整表替换 + <code>reapplyPending</code>
+        (app.js:1726 / 2322); 实测 3000 种子单轮 ~353ms 主线程占用</td>
+        <td>Performance 面板点击后的 Long Task 时长; 单轮 353ms <strong>不足以</strong>解释 2-4s,
+        除非用户库远大于 3000 或机器很慢 —— 需实测</td></tr>
+      <tr><td><strong>H4</strong></td><td><strong>真值对齐晚</strong>: <code>/api/state</code> 轮询节拍 1.5/2/3s
+        (与关联 issue <a href="26-09-19-1900-webui-poll-cadence-mismatch.html">webui-poll-cadence-mismatch</a> 同源)</td>
+        <td>看是否出现「变过去 → 弹回 → 下一轮才对」; 只影响真值, 不影响首变时刻</td></tr>
+      <tr><td><strong>H5</strong></td><td>用户指的是<strong>端到端</strong>(点击 → toast「已执行」), 而非首屏变化</td>
+        <td>记录 toast 出现时刻; 若是, 本条与 H2/H4 合流, 应归到节拍那条一起拍板</td></tr>
+    </table>
+    <div class="callout">
+      <strong>已排除</strong>: ① 乐观链路本身坏了 —— 用户确认变化会来、失败能回滚;
+      ② BUG-3(组/集行没接乐观)—— 复核第 2 批已修(组行 <code>is-pending</code> + 集行 <code>epState</code>);
+      ③ <code>/api/state</code> 序列化慢 —— §11 已把服务端 189ms → 23.5ms;
+      ④ 回执轮询曲线过慢 —— 快命令曲线已是 0 → 150 → 300 → 500 封顶(app.js:2237-2245)。
+    </div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>方向: <strong>先把「点击即变」从网络往返里解耦(改顺序), 同时补上打点消除盲区</strong>;
+      服务端侧的方案等 H1 有证据再动。<strong>本报告只写方案, 不实施。</strong></p>
+    <h3>方案 A(推荐 · 小且直接): 补丁提到 POST 之前</h3>
+    <p>把 <code>act()</code>(整组)与 <code>actTorrent()</code>(单种子)里的 <code>applyOptimistic()</code> 提到
+      <code>await this.api(...)</code> 之前, 与 <code>actEpisode</code>/<code>bulk</code> 对齐。</p>
+    <ul>
+      <li><strong>代价</strong>: 极小(两处移动 + 调整 try/catch 边界)。</li>
+      <li><strong>必须一并处理的点</strong>: ① POST <strong>抛错</strong>时现在补丁还没贴(天然安全), 改顺序后必须显式
+        <code>resolveOptimistic(hashes, false)</code> 回滚 —— 「失败不留假状态」是硬要求, 不能破;
+        ② <code>pendingOps.ts</code> 起点提前 ⇒ 3s 兜底窗口相对变短(见 §02 证据 3), 建议兜底改为按
+        「POST 已返回且真值未到」判定, 或显式放宽窗口 —— <strong>这一处需先拍板</strong>, 别顺手定;
+        ③ 失败回滚路径已有冒烟覆盖(<code>ui_smoke.cjs</code> 的 <code>--expect-cmd error</code>), 改完必须两种模式都跑。</li>
+      <li><strong>不解决</strong>: H2/H4(真值对齐晚)与 H5(端到端慢) —— 顺序改完若用户仍报慢, 说明是后两者。</li>
+    </ul>
+    <h3>方案 B(推荐 · 与 A 并行): 补打点, 消除盲区</h3>
+    <p>在 4 条入口统一埋 <code>T0 点击 → T1 POST 返回 → T2 DOM class 变化</code>, 复用 <code>cmdStats</code>,
+      超阈值打 <code>[perf]</code>(与现有 waitMs/execMs 同一条日志); 冒烟脚本加「点击 → <code>is-pending</code> 出现」
+      的耗时断言。<strong>为什么必须做</strong>: 埋点没有消费者就是死字段(项目既定教训), 现在这条链路在真机上
+      是盲的, 不补上下次还得靠用户肉眼报。<strong>代价</strong>: 小(前端 + 冒烟)。
+      <strong>注意</strong>: 冒烟要造出「慢 POST」才能覆盖本问题 —— 现有 harness 的 ok/error 模式回执都是瞬时的,
+      需要新增一个延迟档(否则断言恒绿, 等于没测)。</p>
+    <h3>方案 C(仅在 H1 被证实后): 服务端侧降 POST 成本</h3>
+    <p>命令 POST 应做到「只入队 + 回 cmd_id」的最小成本(web.py <code>_enqueue</code> 193-206 本身已经很轻),
+      所以若实测 TTFB 仍是秒级, 瓶颈在<strong>调度</strong>而非 handler: 排查同步 <code>def</code> 端点进 anyio
+      线程池的排队、以及长 tick 期间的 GIL 争用; 必要时把命令端点改 <code>async def</code> 或单独 executor。
+      <strong>代价</strong>: 中~大, 且要动 <code>web.py</code> 的线程模型假设 —— <strong>先拿证据再开</strong>。</p>
+    <h3>方案 D(仅在 H5 被证实后): 降级并合流</h3>
+    <p>若用户指的是端到端而非首屏变化, 本条归到
+      <a href="26-09-19-1900-webui-poll-cadence-mismatch.html">webui-poll-cadence-mismatch</a> 的节拍拍板里一起处理,
+      本条标 <code>Duplicate</code> 或作为它的补充证据。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>src/auto_qb/web_ui/static/shared/app.js</code> —— 主改点:
+        <code>act()</code> 2353-2377 / <code>actTorrent()</code> 3314-3336(顺序)/
+        <code>actEpisode()</code> 2854-2880 / bulk 3078-3105(打点)/
+        <code>isPending()</code> 2280-2288(兜底窗口, 与方案 A 的拍板点耦合)/
+        <code>waitCmd()</code> 2236-2272 / <code>_request()</code> 1324-1342</li>
+      <li><code>scripts/ui_smoke.cjs</code> —— P0-3 断言段(227-268 单种子 / 324-365 整组 / 403-431 整集);
+        两种模式(<code>ok</code> 与 <code>--expect-cmd error</code>)都要跑</li>
+      <li><code>scripts/ui_harness.py</code> —— 需新增「慢回执/慢 POST」档位, 否则新断言恒绿</li>
+      <li><code>src/auto_qb/web.py</code> —— 仅在方案 C 下动: <code>_enqueue</code> 193-206、
+        命令路由 449-530、<code>/api/cmd/{id}</code> 802-811、uvicorn 线程启动 1004</li>
+      <li><code>src/auto_qb/qbmanager.py</code> —— 仅在 H2 下查: <code>wake()</code> 271-285、主循环
+        <code>_wait_next(..., _wake_event, main_tick)</code> 348-373</li>
+      <li><code>tests/test_web.py</code> —— 若改后端行为需同步(前端为主时不动)</li>
+      <li><code>memory-bank/systemPatterns.md</code>(乐观 UI 段, 约 187 行)与
+        <code>memory-bank/tasks/26-09-19-webui-responsiveness.md</code> —— 修完回写</li>
+      <li>关联 issue: <a href="26-09-19-1900-webui-poll-cadence-mismatch.html">26-09-19-1900-webui-poll-cadence-mismatch</a>
+        (H4/H5 成立时会合流, 那条同样「需先拍板方向」, 一起决策更省事)</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 19:56 — <strong>Open → Fixed</strong>（方案 A + B 已实施，未提交）：受控复测
+        注入 2000ms 时补丁 2012ms → 0ms；1053 passed 不变；冒烟 48 项 0 失败（新增 2 条守阵）。
+        真机 POST 变慢的底层成因未追（见 §07 ③ 未验证项）</li>
+      <li>2026-09-19 19:39 — 入池，状态 <strong>Open</strong>（计划外，未修）。
+        已定位结构性缺陷（<code>act</code>/<code>actTorrent</code> 补丁在 POST 之后）；
+        <strong>前置动作：先按 §02 量 T1/T2/T3 与 toast 时刻定口径</strong>，再决定走方案 A/B/C/D 哪一条</li>
+    </ul>
+    <h3>修复后补充（2026-09-19 20:0x · 方案 A + B）</h3>
+    <h4>① 先量（受控测量，未改码）</h4>
+    <p>用 Playwright 的 <code>page.route</code> 给命令 POST 注入人为延迟，量「菜单项 click 事件 →
+      <code>applyOptimistic</code> 贴上（钩住该方法）→ DOM 出现 <code>.is-pending</code>」三个时刻。
+      <strong>桩服务回执是瞬时的，不注入延迟就永远复现不出来</strong> —— 这正是这条缺陷能穿过设计、实施、
+      冒烟三道关口的原因。</p>
+    <table>
+      <tr><th>入口</th><th>注入 POST 延迟 0ms</th><th>注入 POST 延迟 2000ms（修前）</th><th>注入 2000ms（修后）</th></tr>
+      <tr><td>整组 <code>act()</code></td><td>补丁 14ms / DOM 22ms</td><td><strong>补丁 2012ms / DOM 2018ms</strong></td><td>补丁 0ms / DOM 7ms</td></tr>
+      <tr><td>单种子 <code>actTorrent()</code></td><td>补丁 14ms / DOM 17ms</td><td><strong>补丁 2004ms / DOM 2008ms</strong></td><td>补丁 0ms / DOM 4ms</td></tr>
+      <tr><td>整剧 <code>actEpisode()</code>（对照）</td><td>补丁 0ms</td><td>补丁 0ms</td><td>补丁 0ms</td></tr>
+    </table>
+    <p>结论：<strong>POST 慢多少，反馈就晚多少（1:1 传导）</strong> —— 与实际建议 A 的判断一致；
+      <code>actEpisode</code>（补丁先贴）全程不受影响，等于自带对照组。</p>
+    <h4>② 实际修法（与建议一致，无改道）</h4>
+    <ul>
+      <li><code>app.js</code>：<code>act()</code> 与 <code>actTorrent()</code> 的
+        <code>applyOptimistic()</code> <strong>提到 POST 之前</strong>（<code>hashes</code> 也提前算好），
+        与 <code>actEpisode</code>/<code>bulk</code> 统一；<code>try</code> 块内 POST 抛错时显式
+        <code>resolveOptimistic(hashes, false)</code> 回滚（补丁提前后这条路径才第一次真正存在）。</li>
+      <li><strong>3s 兜底窗口改从「回执到达」起算</strong>（<code>resolveOptimistic(ok)</code> 里刷 <code>op.ts</code>）——
+        按 §04 的拍板点选了「POST 已返回且真值未到」这一档：补丁提前后若仍按点击起算，慢 POST 会在命令刚完成时就
+        把窗口烧光 ⇒ 弹回陈旧真值再等下一轮。<strong>无回执（hang）不刷新 ts</strong>，3s 后照旧回落真值，
+        「失败/未知绝不留永久假状态」这条不变。</li>
+      <li>方案 B 一并做掉：新增 <code>_newCmdStats()</code> / <code>_markCmdPatch()</code> / <code>_markCmdPost()</code>，
+        把「点击 → 补丁」与「点击 → POST 返回」两段写进 <code>cmdStats</code>（4 条入口统一打点），
+        <code>waitCmd</code> 由<strong>替换改为合并</strong>以免冲掉，<code>[perf]</code> 阈值扩展为
+        补丁 &gt;50 / POST &gt;400 / 排队 &gt;100 / 端到端 &gt;400。<strong>真机再报慢时，日志里会自己说话。</strong></li>
+      <li>回归守阵：冒烟新增「P0-3 补丁先于 POST（注入 800ms 仍即时）」—— 人为拖慢命令 POST，
+        断言点击 → <code>.is-pending</code> &lt; 400ms（实测 4~5ms）；error 模式加一条
+        「慢投递 + 失败回执后回滚干净」。</li>
+    </ul>
+    <h4>③ 验证方式与测试数字</h4>
+    <ul>
+      <li>受控复测（同上表）：注入 2000ms 时 2012ms → <strong>0ms</strong>。</li>
+      <li><code>uv run pytest tests -q --no-cov</code> → <strong>1053 passed</strong>（与基线一致，静态守阵未破）。</li>
+      <li>冒烟双 UI：<strong>48 项 0 失败</strong>（原 46 + 新增 2 条守阵）；
+        <code>--expect-cmd error</code> 模式 24 项 0 失败（回滚路径干净）。</li>
+      <li>未验证项：<strong>真机 POST 为什么慢到 2-4s 仍未实测</strong>（H1 的底层成因：长 tick / GIL /
+        线程池）。本次修法让 UI <strong>不再依赖</strong> POST 快慢，但成因本身没消除 ——
+        建议真机复测时看新的 <code>[perf] … POST xxxms</code>，若 POST 持续 &gt;400ms 再按方案 C 追。</li>
+    </ul>
+    <h4>④ 顺带发现（已另立 issue）</h4>
+    <p>测量时发现：<strong>整剧（show 级）操作在剧行上没有 <code>is-pending</code> 绑定</strong> ——
+      补丁 0ms 就贴上了，但 <code>.show-row</code> 不绑 pending 标记（只有集行 <code>.ep-row</code> 绑），
+      剧行折叠时用户看不到任何即时反馈。与 BUG-3 同类，属计划外，已另立 issue
+      <a href="26-09-19-1959-webui-show-row-no-pending.html">26-09-19-1959-webui-show-row-no-pending</a>，本次未改。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-1939-webui-optimistic-latency.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

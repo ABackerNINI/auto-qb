@@ -186,6 +186,14 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
   与 `server_state`, 分组/任务/事件/索引全不管 ⇒ 留下半刷新态); 整批命令 drain 完**只补一次**。
 - **乐观 UI 只做白名单(pause/resume)**: `pendingOps[hash] = {patch, prev, ts}`, 真值匹配即清,
   3s 兜底回落, **失败立即回滚**。
+  - ❗**补丁必须先于 POST 贴上**(4 条入口: `act` / `actTorrent` / `actEpisode` / bulk 一律如此)。
+    放在 `await POST` 之后 = 把"点击即变"押在网络往返上 —— 受控测量(注入 2000ms POST 延迟):
+    修前补丁 2012ms 才贴, 修后 0ms(issue 26-09-19-1939, 用户真机报"点了 2-4s 才变")。
+    POST 失败走 `resolveOptimistic(hashes, false)` 回滚, 不留假状态。
+  - ❗**3s 兜底从「回执到达」起算**(成功时刷 `op.ts`), 不是从点击起算: 补丁提前后若按点击算,
+    慢 POST 会在命令刚完成时就烧光窗口 ⇒ 弹回陈旧真值。**无回执(hang)不刷新 ts**, 3s 后照旧回落。
+  - 埋点: `cmdStats` 含点击侧两段(`patchMs` / `postMs`)与回执段(`waitMs` / `execMs` / `totalMs`),
+    阈值 补丁>50 / POST>400 / 排队>100 / 端到端>400 打 `[perf]` —— **「点击 → 投递」曾经是盲区**。
 - **按视图回传**: `/api/state?view=group|torrent|show` 只回该视图数组; 前端赋值必须
   "键不存在则保留原引用"(否则另外两个视图每轮被抹空)。
 - **只读端点短缓存 key 含 `_web_write_seq`**: 写后自动失效; **断连检查必须在查缓存之前**

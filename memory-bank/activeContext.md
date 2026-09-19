@@ -13,6 +13,9 @@
   `jsonable_encoder`(占端点耗时 85%), 改 `return JSONResponse(...)` 后服务端 `view=torrent`
   189 → **23.5 ms**、**前端整轮 refresh ~240 → ~85 ms**。
   **基线 1049 → 1053 passed / cov 92%; 冒烟 34 → 46 项(ok) / 44 项(error) 0 失败**。
+  **真机走查报的「乐观 UI 反应 2-4s」已修未提交**: `act()`/`actTorrent()` 补丁提到 POST 之前 + 3s 兜底改从
+  回执起算 + 补两段埋点; 受控复测注入 2000ms 时补丁 2012 → **0ms**, 1053 passed 不变, 冒烟 **48 项 0 失败**
+  (详见「正在进行」① 第 3 条与 [progress.md](progress.md))。
   只剩报表 §08 第 7 项(节拍对齐, 需先拍板方向) —— 见下「正在进行」第 ① 条与
   [progress.md](progress.md) 三波次总条目 — 详见 [testing.md](testing.md))
 
@@ -38,6 +41,15 @@
      为真实数据预置)。⚠ **例外**: `/api/config/schema` 载荷含 dataclass(`Group`/`Field`/`Plugin`),
      直返会 `TypeError: Object of type Group is not JSON serializable` ⇒ 500, **必须保留 jsonable_encoder**,
      已回退并在端点留注释 —— 判据见 pitfalls 该条目。守阵清单扩到 8 条 URL(7 个端点)并红绿双验。**尚未提交。**
+  3. **[webui-optimistic-latency](issues/26-09-19-1939-webui-optimistic-latency.html)** —— ✅ **已修(本提交)**
+     (2026-09-19): 真机走查报「乐观 UI 反应 2-4s」。受控测量(Playwright 给命令 POST 注入延迟)
+     证明 POST 慢多少反馈就晚多少: 注入 2000ms 时补丁 **2012ms** 才贴(`actEpisode` 对照 0ms)。
+     已把 `act()`/`actTorrent()` 的 `applyOptimistic()` 提到 POST 之前 + 3s 兜底改从回执起算 +
+     补「点击→补丁/POST」两段埋点; 复测 **0ms**。1053 passed 不变, 冒烟 **48 项 0 失败**(新增 2 条守阵)。
+     **未追**: 真机 POST 为何慢到秒级(长 tick / GIL / 线程池)—— 修法已让 UI 不依赖它, 复测时看新的
+     `[perf] … POST xxxms`, 持续 >400ms 再按方案 C 追。
+     ⚠ 顺带发现并**另立 issue**(未修): [整剧操作在剧行上无 is-pending](issues/26-09-19-1959-webui-show-row-no-pending.html)
+     —— 补丁 0ms 贴上但 `.show-row` 不绑 pending(剧行默认折叠), 与 BUG-3 同类的漏绑。
 - **② WEB UI 操作跟手性优化 (2026-09-19)**: 三波次全部入库(`10e06a8` 分层节拍 + 命令唤醒 + 乐观 UI + 批量合单
   / `5d1e52c` 请求超时 + 视图分片回传 + 只读缓存 / `366092d` 行窗口化)。计划
   [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html); 档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)。

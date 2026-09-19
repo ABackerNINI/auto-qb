@@ -2229,6 +2229,29 @@ const app = createApp({
     _actionText(action) {
       return { pause: "暂停", resume: "开始", reannounce: "强制汇报", delete: "删除" }[action] || action;
     },
+    /* ---------------- P0-3 埋点(点击侧): 「点击 → 补丁」/「点击 → POST 返回」 ----------------
+     * 原先 cmdStats 只量**回执段**(wait_ms / exec_ms / 端到端), 「点击 → 命令投递」这一段
+     * 既没打点也没超时, 是**盲区**: 真机上 POST 慢到秒级时, 前端日志全绿、只有用户肉眼能看见
+     * "点了 2-4s 才有反应"(issue 26-09-19-1939-webui-optimistic-latency 就是这么报上来的)。
+     * 埋点没有消费者就是死字段 —— 这两段一并写进 cmdStats, 由 waitCmd 的 [perf] 统一消费。 */
+    _newCmdStats(action) {
+      this.cmdStats = {
+        action: action || null,
+        patchMs: null,  // 点击 -> 乐观补丁贴上(补丁先于 POST, 正常 ~0ms)
+        postMs: null,   // 点击 -> 命令 POST 返回(真机大库可能秒级 —— 本埋点要的就是它)
+        totalMs: null,
+        waitMs: null,
+        execMs: null,
+        cmdId: null,
+      };
+      return performance.now();
+    },
+    _markCmdPatch(t0) {
+      if (this.cmdStats && t0) this.cmdStats.patchMs = Math.round(performance.now() - t0);
+    },
+    _markCmdPost(t0) {
+      if (this.cmdStats && t0) this.cmdStats.postMs = Math.round(performance.now() - t0);
+    },
     /* ---------------- 命令回执(轮询 /api/cmd/{id}): 主循环执行完/确认完才出结果 ----------------
      * pause/resume 等命令几乎即时; reannounce 的回执由后端 tracker 确认跟踪器在
      * "status 变 working / next_announce 被重置"或超时后写入(窗口 30s, 前端多留余量)。
@@ -2250,14 +2273,25 @@ const app = createApp({
           const r = await this.api(`/api/cmd/${cmdId}`);
           if (r.status === "ok" || r.status === "error") {
             if (typeof r.wait_ms === "number") {
-              this.cmdStats = { totalMs: Date.now() - start, waitMs: r.wait_ms, execMs: r.exec_ms, cmdId };
+              // 合并而非替换: 点击侧的两段(_newCmdStats 写入)不能在这里被冲掉
+              this.cmdStats = {
+                ...(this.cmdStats || {}),
+                totalMs: Date.now() - start,
+                waitMs: r.wait_ms,
+                execMs: r.exec_ms,
+                cmdId,
+              };
               /* 埋点必须有消费者, 否则就是死字段(2026-09-19 复核: 此前 cmdStats 只写不读,
                * 计划里那张"走查表"从未产出)。超阈值时打一条 [perf] —— 冒烟脚本会收集并打印。
-               * waitMs 大 = 命令没被及时消费(P0-1 唤醒退化); totalMs 大 = 轮询曲线或网络慢。 */
-              if (this.cmdStats.waitMs > 100 || this.cmdStats.totalMs > 400) {
+               * patchMs 大 = 补丁没做到"点击即变"(被同步工作或 POST 挡住); postMs 大 = 命令投递慢
+               * (真机大库长 tick / GIL 争用); waitMs 大 = 命令没被及时消费(P0-1 唤醒退化);
+               * totalMs 大 = 轮询曲线或网络慢。 */
+              const c = this.cmdStats;
+              if (c.waitMs > 100 || c.totalMs > 400 || (c.postMs || 0) > 400 || (c.patchMs || 0) > 50) {
                 console.warn(
-                  `[perf] 命令 ${cmdId}: 排队 ${this.cmdStats.waitMs}ms / 执行 ${this.cmdStats.execMs}ms` +
-                  ` / 端到端 ${this.cmdStats.totalMs}ms(排队>100 或端到端>400 属异常)`
+                  `[perf] 命令 ${cmdId}${c.action ? "(" + c.action + ")" : ""}: 补丁 ${c.patchMs}ms` +
+                  ` / POST ${c.postMs}ms / 排队 ${c.waitMs}ms / 执行 ${c.execMs}ms` +
+                  ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>400 属异常)`
                 );
               }
             }
@@ -2314,7 +2348,15 @@ const app = createApp({
       for (const h of hashes || []) {
         const op = this.pendingOps[h];
         if (!op) continue;
-        if (ok) continue;  // 成功: 保留到服务端一致或 3s 超时(见 isPending)
+        if (ok) {
+          /* 成功: 保留到服务端数据一致或 3s 超时(见 isPending)。
+           * ❗3s 兜底**从回执到达重算**, 不再从点击算起: 补丁已提前到 POST 之前, 若仍按点击
+           * 起算, 慢 POST(真机 2-4s)会把整个兜底窗口在命令刚完成时就烧光 ⇒ 立刻弹回陈旧真值、
+           * 再等下一轮轮询才对上(抖动比单纯慢更难看)。**无回执(hang)时不重置** —— 3s 后照旧
+           * 回落真值, "失败/未知绝不留永久假状态"这条不变。 */
+          op.ts = Date.now();
+          continue;
+        }
         this._forEachRow(h, (row) => Object.assign(row, op.prev));  // 失败: 回滚
         delete this.pendingOps[h];
       }
@@ -2354,24 +2396,35 @@ const app = createApp({
       this.menu.visible = false;
       if (!this.menu.key) return;
       const label = this._actionText(action);
+      const isRe = action === "reannounce";
+      /* P0-3「点击即变」: 补丁必须**先于** POST 贴上(与 actEpisode / bulk 同一顺序)。
+       * 放在 await 之后 = 把即时反馈押在网络往返上 —— 真机大库下 POST 可达秒级, 用户看到的就是
+       * "点了 2-4s 才变"(issue 26-09-19-1939-webui-optimistic-latency; 受控测量: 注入 2000ms
+       * POST 延迟时补丁 2012ms 才贴, 改顺序后恒 ~0ms)。reannounce 结果在远端, 不做乐观。 */
+      const g = isRe ? null : this._findGroup(this.menu.key);
+      const hashes = isRe ? [] : (g && g.members ? g.members : []).map((m) => m.hash);
+      const t0 = isRe ? 0 : this._newCmdStats(action);
+      if (!isRe) {
+        this.applyOptimistic(hashes, action);
+        this._markCmdPatch(t0);
+      }
       try {
         const resp = await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
-        if (action === "reannounce") {
+        if (isRe) {
           // 强反馈状态机: 常驻"等待中" -> 原位换成 成功(绿) / 超时失败(琥珀), 不再用红色警告样式
           const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
           const r = await this.waitCmd(resp.cmd_id, 40000, { firstMs: 500, capMs: 1000 });
           if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
           else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
         } else {
-          const g = this._findGroup(this.menu.key);
-          const hashes = (g && g.members ? g.members : []).map((m) => m.hash);
-          this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
+          this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
           else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
         }
       } catch (e) {
+        if (!isRe) this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },
@@ -2861,13 +2914,16 @@ const app = createApp({
       const isRe = action === "reannounce";
       // P0-4: pause/resume 合单为一条 bulk 命令 —— 整剧动辄上百集, 逐条投递要发上百次请求
       if (!isRe) {
+        const t0 = this._newCmdStats(action);
         // P0-3: 与整组/单种子同一条乐观链路(整集/整剧此前**完全没接**, 点了没有任何即时反馈)
         this.applyOptimistic(hashes, action);
+        this._markCmdPatch(t0);
         try {
           const resp = await this.api("/api/torrents/bulk", {
             method: "POST",
             body: JSON.stringify({ action, hashes }),
           });
+          this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
@@ -3086,12 +3142,15 @@ const app = createApp({
           const g = this._findGroup(k);
           if (g) for (const m of g.members) hashes.push(m.hash);
         }
+        const t0 = this._newCmdStats(action);
         this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
+        this._markCmdPatch(t0);
         try {
           const resp = await this.api("/api/torrents/bulk", {
             method: "POST",
             body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes }),
           });
+          this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           const n = groupKeys.length + memberHashes.length;
@@ -3315,22 +3374,30 @@ const app = createApp({
       this.menu.visible = false;
       if (!this.menu.hash) return;
       const label = this._actionText(action);
+      const isRe = action === "reannounce";
+      // 同 act(): 补丁先于 POST(见那里的注释与 issue 26-09-19-1939-webui-optimistic-latency)
+      const hashes = isRe ? [] : [this.menu.hash];
+      const t0 = isRe ? 0 : this._newCmdStats(action);
+      if (!isRe) {
+        this.applyOptimistic(hashes, action);
+        this._markCmdPatch(t0);
+      }
       try {
         const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
-        if (action === "reannounce") {
+        if (isRe) {
           const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
           const r = await this.waitCmd(resp.cmd_id, 40000, { firstMs: 500, capMs: 1000 });
           if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
           else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
         } else {
-          const hashes = [this.menu.hash];
-          this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
+          this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
           else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
         }
       } catch (e) {
+        if (!isRe) this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
     },

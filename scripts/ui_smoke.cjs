@@ -55,6 +55,13 @@ const add = (ui, name, ok, detail) => {
  */
 const INST = "document.querySelector('#app')._vnode.component.proxy";
 
+/** 命令投递端点(给 P0-3「补丁先于 POST」那一条注入人为延迟用)。
+ *  ❗Playwright 新版的路由谓词收到的是 URL 对象而不是字符串, 别直接当 string 用。 */
+const CMD_URL = (u) => {
+  const s = typeof u === "string" ? u : String(u);
+  return /\/api\/(torrents|groups)\/[^/?]+\/(pause|resume)(\?|$)/.test(s) || s.includes("/api/torrents/bulk");
+};
+
 async function readInst(page, expr) {
   return page.evaluate(`(() => { const vm = ${INST}; return vm ? (${expr}) : null; })()`);
 }
@@ -266,6 +273,77 @@ async function smokeUi(browser, ui) {
       }
       add(ui, `P0-3 回执(${EXPECT_CMD})后不留假状态`, pendingLater === 0 && pendingOps === 0,
         `${waited}ms 后: 残留 ${pendingLater} 行 / pendingOps ${pendingOps}`);
+    }
+
+    /*
+     * P0-3「点击即变」回归守阵(issue 26-09-19-1939-webui-optimistic-latency):
+     * 人为把命令 POST 拖慢(route 注入 800ms), 行仍必须**在 POST 返回之前**就变灰 ——
+     * 这判的就是"补丁贴在第几行", 不是"网络快不快"。
+     * 背景: 修之前 `act()` / `actTorrent()` 把 applyOptimistic 放在 `await POST` **之后**,
+     * 而桩服务回执是瞬时的 ⇒ 本地永远测不出来, 真机大库下 POST 慢到秒级才暴露
+     * (用户报"点了 2-4s 才有反应")。受控注入 2000ms 实测: 修前补丁 2012ms, 修后 0ms。
+     * 判据 400ms = 远小于注入的 800ms、又远高于本地正常的 ~10ms。
+     */
+    {
+      const DELAY = 800;
+      const BUDGET = 400;
+      await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
+      await page.route(CMD_URL, async (route) => {
+        await new Promise((r) => setTimeout(r, DELAY));
+        await route.continue();
+      });
+      // 挑一个**未暂停**的行(上一段刚暂停过一行, 再点它菜单里就是"开始"了)
+      const rows = await page.$$(".torrent-row");
+      let target = null;
+      for (const r of rows) {
+        const cls = (await r.getAttribute("class")) || "";
+        if (!cls.includes("s-paused")) { target = r; break; }
+      }
+      if (!target) {
+        add(ui, "P0-3 补丁先于 POST(慢投递不挡反馈)", false, "找不到未暂停的行");
+      } else {
+        await target.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        const handles = await page.$$(".ctx-item");
+        let clicked = false;
+        let lat = null;
+        for (const h of handles) {
+          const t = ((await h.textContent()) || "").trim();
+          if (!t.includes("暂停该种子") && t.trim() !== "暂停" && !t.includes("暂停整组")) continue;
+          await page.evaluate(`(() => {
+            window.__m = { t0: null, dom: null };
+            if (window.__mo2) window.__mo2.disconnect();
+            window.__mo2 = new MutationObserver(() => {
+              if (window.__m.dom === null && document.querySelector(".is-pending")) window.__m.dom = performance.now();
+            });
+            window.__mo2.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], childList: true });
+          })()`);
+          // 时刻取菜单项的 click 事件(捕获阶段) —— 不用 Playwright 的 click 时刻, 那含鼠标开销
+          await h.evaluate((el) => el.addEventListener("click", () => { window.__m.t0 = performance.now(); }, { capture: true, once: true }));
+          await h.click();
+          clicked = true;
+          const deadline = Date.now() + DELAY + 1500;
+          while (Date.now() < deadline) {
+            lat = await page.evaluate("(() => { const m = window.__m; return (m.t0 && m.dom) ? Math.round(m.dom - m.t0) : null; })()");
+            if (lat !== null) break;
+            await page.waitForTimeout(20);
+          }
+          break;
+        }
+        add(ui, `P0-3 补丁先于 POST(注入 ${DELAY}ms 仍即时)`, clicked && lat !== null && lat < BUDGET,
+          `点击 → is-pending ${lat === null ? "未出现" : lat + "ms"}(阈值 ${BUDGET}ms)`);
+      }
+      await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
+      await page.waitForTimeout(1200);  // 让被拖慢的命令走完回执/回滚
+      /* 补丁提前了, "发送失败"这条路径也跟着变了(原来补丁还没贴, 现在必须显式回滚) */
+      const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
+      if (EXPECT_CMD === "error") {
+        const pendRows = await page.$$eval(".torrent-row.is-pending, .group-row.is-pending", (n) => n.length);
+        add(ui, "P0-3 慢投递 + 失败回执后回滚干净", pend === 0 && pendRows === 0, `pendingOps ${pend} / 残留行 ${pendRows}`);
+      } else {
+        console.log(`      [info] ok 模式: 慢投递后 pendingOps ${pend}(真值对齐前不清, 属预期)`);
+      }
+      await page.waitForTimeout(2600);  // 等 3s 兜底窗口过, 免得污染后面的断言
     }
 
     /*

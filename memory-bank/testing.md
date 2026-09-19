@@ -95,10 +95,12 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
-> prism/atlas 双 UI 断言(当前 **46 项 0 失败**(ok 模式)/ **44 项 0 失败**(`--expect-cmd error`, 回滚路径),
+> prism/atlas 双 UI 断言(当前 **48 项 0 失败**(ok 模式)/ **24 项 0 失败**(`--expect-cmd error`, 回滚路径;
+> 单 UI 计, 双 UI 为 48/48),
 > 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
 > **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 2026-09-19 加, 见下方读数时机坑)、
 > **P0-4 批量合单数请求**、**P0-3 整组/整集乐观**(组行与集行各自的 `is-pending` 与状态色翻转)、
+> **P0-3 补丁先于 POST**(注入 800ms 命令延迟仍要求 <400ms 出 pending, 见下)、
 > **BUG-8 刷新后追剧页不空白**、**BUG-9 辅种页复制磁力可用**)
 > 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
 > 顺带一提: 换 `--torrents N` 跑不同规模的库, 就能量出"单轮 refresh 耗时 × 种子数"曲线 ——
@@ -111,6 +113,14 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ⚠ 新增断言务必**红绿双验**: 把被测优化临时关掉(如把 `bulkAct` 的合单分支短路成
 > `if (false && …)`), 确认断言真的变红(实测拿到 "bulk 0 次 / 逐目标 60 次"), 再改回跑绿。
 > 否则很容易写出一条"永远为真"的摆设断言。
+> ⚠ **延迟类缺陷必须人为造慢才测得出来**(2026-09-19, issue 26-09-19-1939): 桩服务回执与本地
+>   POST 都是**瞬时**的, 而真机大库下命令 POST 可达秒级 ⇒ "补丁贴在 `await POST` 之后"这种
+>   **顺序型**缺陷在本地恒测不出来(冒烟"点击后立即可见 pending"一路 PASS, 直到用户真机肉眼报
+>   "点了 2-4s 才变")。解法: 用 `page.route(CMD_URL)` 给命令 POST **注入人为延迟**(800ms),
+>   再断言"点击 → `.is-pending`"仍 < 400ms —— 判的是"补丁贴在第几行", 不是"网络快不快"。
+>   ❗Playwright 新版的路由谓词收到的是 **URL 对象**不是字符串(直接 `u.includes` 会
+>   `TypeError`), 先 `String(u)`。点击时刻取**菜单项的 click 事件**(捕获阶段), 不要用
+>   Playwright 的 `h.click()` 时刻 —— 那含鼠标开销(实测虚高 ~250ms)。
 > ⚠ 两条反例(2026-09-19 实测, 都是"摆设断言"的变体, 且都真的漏过了缺陷):
 > ① **恒真断言** —— `add(ui, "切到追剧视图无异常", epRows >= 0)` 永远为真, 于是"追剧页 0 行"
 >   这种整页空白照样 PASS(BUG-8 就是这么溜过去的)。判据一律写成 `> 0` / 等值比较;

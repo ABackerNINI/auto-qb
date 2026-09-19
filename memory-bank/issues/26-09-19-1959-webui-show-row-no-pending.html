@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="webui-show-row-no-pending">
+<meta name="aqb-issue-stamp" content="26-09-19-1959">
+<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-title" content="整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈">
+<meta name="aqb-issue-summary" content="剧行 .show-row 不绑 is-pending(只有集行 .ep-row 绑), 整剧暂停/开始时剧行折叠 ⇒ 补丁 0ms 也无可见反馈; 与 BUG-3 同类的漏绑">
+<title>整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈 · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈</h1>
+    <p class="lede">剧行 .show-row 不绑 is-pending(只有集行 .ep-row 绑), 整剧暂停/开始时剧行折叠 ⇒ 补丁 0ms 也无可见反馈; 与 BUG-3 同类的漏绑</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-1959-webui-show-row-no-pending</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:59</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">受控测量（顺带发现，2026-09-19）</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><strong>发现场景</strong>: 2026-09-19 在给
+      <a href="26-09-19-1939-webui-optimistic-latency.html">issue 26-09-19-1939（乐观 UI 反应 2-4s）</a>
+      做受控测量时撞见的 —— 测量脚本钩住 <code>applyOptimistic</code> 与 DOM，三条入口对照跑时发现：
+      <strong>整剧（show 级）暂停的补丁 0ms 就贴上了，但 DOM 里始终等不到 <code>.is-pending</code></strong>。</p>
+    <p><strong>触发条件</strong>: 追剧页右键<strong>剧行</strong> → 「暂停整剧 / 开始整剧」。
+      剧行默认折叠（集行要展开才渲染），所以用户此时<strong>看不到任何即时反馈</strong> ——
+      补丁贴了，但没有任何一个可见元素把它显示出来。</p>
+    <p>与 BUG-3 是同一批漏绑的第三处：BUG-3 修的是<strong>组行</strong>（辅种页）与<strong>集行</strong>（追剧页），
+      <strong>剧行</strong>没人补。属计划外，本次未改。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>绑定现状（<code>prism/index.html</code>，<code>atlas/index.html</code> 同构）：</p>
+<pre><code># 剧行 —— 没有任何 is-pending 绑定(prism/index.html:650)
+&lt;div class="group-row show-row" data-table="show" :class="{ expanded: isShowExpanded(s.key),
+     'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial }"
+
+# 集行 —— 绑了(prism/index.html:684, 即 BUG-3 修的那处)
+&lt;div class="group-row ep-row" data-table="show" :class="['s-' + epState(e), { ...,
+     'is-pending': isEpPending(e) }]"
+
+# 组行(辅种页) —— 绑了(prism/index.html:389, BUG-3 修的那处)
+'is-pending': isGroupPending(g)</code></pre>
+    <p>app.js 里也只有两个对应的 computed（<code>isGroupPending</code> 2333 / <code>isEpPending</code> 2340），
+      <strong>没有 <code>isShowPending</code></strong>。</p>
+    <p>受控测量的输出（钩住 <code>applyOptimistic</code> + MutationObserver 等 <code>.is-pending</code>）：</p>
+<pre><code>整剧 actEpisode() (补丁在 POST 之前): 「暂停整剧」→ 补丁 0ms / DOM is-pending 未出现</code></pre>
+    <p>同一次测量里组行与集行都能在 4~8ms 内见到 <code>.is-pending</code>，只有剧行始终「未出现」。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td>中 —— 整剧暂停/开始是追剧页的高频动作（不是每次点击都发生，但一用就中）</td></tr>
+      <tr><td>影响范围</td><td>追剧页<strong>剧级</strong>操作（暂停整剧 / 开始整剧）；剧行<strong>展开</strong>时
+        集行会显示 pending，所以只在折叠态（默认态）完全无反馈。与站点/配置无关</td></tr>
+      <tr><td>数据风险</td><td>无。纯视觉标记缺失，命令照常执行、失败照常回滚</td></tr>
+      <tr><td>严重度</td><td><strong>中</strong> —— 与 BUG-3 同类（定为「中」），但只在折叠态发生、且命令本身有效，
+        故不按「高」计；不修会让「整剧操作没反应」的观感一直留在追剧页</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><strong>根因明确（不需要查）</strong>: 剧行模板<strong>漏绑</strong> <code>is-pending</code>，
+      且 app.js 里<strong>没有对应的 computed</strong>（组行有 <code>isGroupPending</code>、集行有
+      <code>isEpPending</code>，剧行这一级当初就没做）。不是时序问题、不是数据问题 ——
+      测量已经证明补丁 0ms 贴上、命令也照常执行。</p>
+    <div class="callout">
+      <strong>连带的一处（同构，别只修一半）</strong>: 剧行的状态色也是<strong>后端聚合标量</strong>
+      （与集行 <code>e.state</code> 同款）—— 集行当初为这个加了 <code>epState(e)</code>
+      （成员在飞时按 <code>STATE_RANK</code> 现算，否则用后端真值）。剧行若只加 <code>is-pending</code>
+      而不处理颜色，会出现「行变灰了但颜色还是旧的」—— 与 BUG-3 修复前的集行完全是同一个形状。
+      <strong>两处要一起改。</strong>
+    </div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>只写方案，<strong>不在本报告里实施</strong>（计划外，等被某个计划认领）。</p>
+    <h3>方案 A（推荐）: 补齐剧行的 pending 标记 + 状态色</h3>
+    <ul>
+      <li>app.js 加 <code>isShowPending(s)</code>（语义：该剧任一种子在飞；可复用
+        <code>pendingAny</code> 短路 + 收集该剧全部集成员的 hash —— 注意成员已是对象，取 hash 一律走
+        <code>memberHashesOf</code>，那条静态守阵会拦）。</li>
+      <li>颜色：<strong>照 <code>epState</code> 的同一张表</strong>现算剧级状态（成员在飞时现算，否则用后端真值），
+        别自造第二张优先级表（<code>STATE_RANK</code> 与后端 <code>_SHOW_STATE_RANK</code> 由守阵比对，
+        改一边必须改另一边）。</li>
+      <li>模板：prism / atlas 两份的 <code>.show-row</code> 各加一行绑定（两处必须同步，否则双 UI 漂移）。</li>
+      <li>代价：小。风险点：<code>pendingAny</code> 为 true 时才逐成员查，别把「逐成员」做成每帧 O(全集)。</li>
+    </ul>
+    <h3>方案 B（不推荐）: 只靠展开后的集行</h3>
+    <p>剧行展开时集行确实会显示 pending。但<strong>默认折叠</strong>，用户点完整剧不会先展开 ——
+      等于没有反馈，不能算修。</p>
+    <h3>验收（修的时候一并补）</h3>
+    <p>冒烟现在只断言<strong>集行</strong>（<code>ui_smoke.cjs</code> “P0-3 整集乐观(集行 is-pending)”），
+      需补一条<strong>剧行</strong>的：右键剧行 → 暂停整剧 → 剧行本身出现 <code>is-pending</code>
+      （与集行那条同构，error 模式断言回滚）。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>src/auto_qb/web_ui/static/shared/app.js</code> —— 新增 <code>isShowPending()</code>
+        （<code>isGroupPending</code> 2333 / <code>isEpPending</code> 2340 旁边）与剧级状态色
+        （<code>epState</code> 2349 同款）</li>
+      <li><code>src/auto_qb/web_ui/static/prism/index.html</code> —— 剧行 <code>.show-row</code> 绑定（650 行一带）</li>
+      <li><code>src/auto_qb/web_ui/static/atlas/index.html</code> —— 同上（双 UI 必须同步）</li>
+      <li><code>scripts/ui_smoke.cjs</code> —— 补剧行 pending 断言（现只有集行那条）</li>
+      <li>关联 issue: <a href="26-09-19-1939-webui-optimistic-latency.html">26-09-19-1939-webui-optimistic-latency</a>
+        （本条是在给它做受控测量时撞见的）；历史同型: BUG-3（组行/集行乐观，复核第 2 批已修）</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 19:59 — 入池，状态 <strong>Open</strong>（计划外，未修；在给
+        <a href="26-09-19-1939-webui-optimistic-latency.html">26-09-19-1939</a> 做受控测量时顺带发现）</li>
+    </ul>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-1959-webui-show-row-no-pending.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
