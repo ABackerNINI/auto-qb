@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="aqb-issue-slug" content="memory-bank-push-rule-drift">
 <meta name="aqb-issue-stamp" content="26-09-19-2359">
-<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-status" content="Fixed">
 <meta name="aqb-issue-title" content="conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾">
 <meta name="aqb-issue-summary" content="知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送">
 <title>conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾 · auto-qb 计划外问题</title>
@@ -94,7 +94,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-2359-memory-bank-push-rule-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 23:59</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">memory-bank</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">本 worktree 会话 (auto-qb-clone2, 2026-09-19)</div></div>
     </div>
@@ -180,9 +180,25 @@ conventions.md:140
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-19 23:59 — 入池，状态 <strong>Open</strong>（计划外，未修；按 scope-guard 只记录不改码，等用户拍板 A / B）</li>
+      <li>2026-09-20 00:05 — 用户拍板<strong>方案 A</strong>，认领 → <strong>In Progress</strong>（同一次提交内完成，未单独落一次 In Progress 提交）</li>
+      <li>2026-09-20 00:05 — 已修并验证 → <strong>Fixed</strong>（详见下方「修复后补充」）</li>
     </ul>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h4>实际修法（= 建议方案 A，另加一处连带改动）</h4>
+    <ul>
+      <li><code>memory-bank/conventions.md</code> 五处改为单点定义 + 指针：<code>:8</code> 由「🔴🔴 绝对不要 push」改为「提交/push 口径以 <code>AGENTS.md</code>『提交 / PR』为单点定义」并列出五步流程；其下新增一行「历史沿革（2026-09-10 当时的口径，已被上面取代，别照抄）」—— 09-10 越界实例与「推送必须经用户明确授权」的教训**完整保留**，只是不再作为现行口径。<code>:13</code> / <code>:14</code> / <code>:140</code> 的「不主动 commit/push」「提交仅指 commit」「不要直接提交」同步改为「未要求时不主动 commit；要求提交时按 AGENTS.md 一次走完（含推送）」。<code>:137</code> 的「🔴 绝对不要 push（2026-09-10）」替换为「口径单点定义在 AGENTS.md，本文件不复述，免得第三次漂移」。</li>
+      <li><strong>连带（方案 A 里的「可能连带」项，一并做了）</strong>：<code>AGENTS.md:126</code> 补一句「本条是『提交 / push』口径的单点定义，优先于 <code>memory-bank/</code> 里的历史表述」—— 直击根因：此前两边都是文档，<code>代码 &gt; memory-bank</code> 的裁决链给不出方向，现在有了显式优先级。</li>
+    </ul>
+    <h4>验证方式</h4>
+    <ul>
+      <li>全文搜索 <code>绝对不要 push</code> / <code>不主动 commit/push</code> / <code>不要直接提交</code> / <code>仅指 commit</code>（<code>--include=*.md --include=*.html</code>，排除本 issue 报告与 <code>.workbuddy-ai/</code> 会话记忆）：<strong>剩余命中全部是历史沿革引用</strong>（<code>conventions.md:9</code> 沿革句、<code>:137</code>「已作废」句），无一处仍是现行口径。</li>
+      <li>口径对照演练：两个入口读到的答案现在一致 —— 只读 <code>conventions.md</code> 会看到「以 AGENTS.md 为准（提交 = commit + 推送）」，只读 <code>AGENTS.md</code> 看到同一条；不再出现「一句『提交』两种结局」。</li>
+      <li>闸门：<code>uv run pytest tests -q</code> → <strong>1054 passed</strong>（与基线一致；纯文档改动，无代码/用例变动）。</li>
+    </ul>
+    <h4>与建议修法的差异</h4>
+    <ul>
+      <li>无差异 —— 采用 A。未走 B（覆盖声明）是因为它把旧口径原文留在正文里，读者仍可能先读到「绝对不要 push」再读到作废声明，留着误读窗口。</li>
+    </ul>
   </section>
 
   <footer>

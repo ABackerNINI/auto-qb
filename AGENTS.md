@@ -123,7 +123,7 @@ wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv run pytest 
 - **提交信息**: 中文, **一句话概述 + 详细描述** —— 首行一句话说清"改了什么 / 为什么"(参照
   `git log` 风格, 如"修复 WEB UI 种子速度刷新滞后: …"), 空一行后写细节: 改动动机、关键取舍、
   影响面、实测数字。单句能说清的小改只写首行。
-- **用户说"提交"= commit + 自动推送** (2026-09-19 用户指定), 一次流程走完:
+- **用户说"提交"= commit + 自动推送** (2026-09-19 用户指定), 一次流程走完 —— **本条是"提交 / push"口径的单点定义, 优先于 `memory-bank/` 里的历史表述** (`conventions.md` 2026-09-10 的"绝对不要 push"已作废, 仅作沿革保留; 该冲突此前无解是因为两边都是文档, 「冲突裁决」链的 `代码 > memory-bank` 给不出方向):
   1. `git push origin develop` —— 推 Gitee (稳定, 这是协作主线, 必须成功)。若该 clone 的 `origin`
      指向 GitHub 则用 `git push gitee develop` (同上条: 先 `git remote -v` 确认);
   2. 再**尝试一次** GitHub 直连:
