@@ -128,7 +128,7 @@ def test_run_pause_event_skips_ticks(tmp_path):
     stop = threading.Event()
     mgr.config.main_tick = 0.02
     ticks = []
-    mgr._tick = lambda dry_run: ticks.append(1)
+    mgr._tick = lambda dry_run, force=False: ticks.append(1)
 
     def stopper():
         time.sleep(0.2)
@@ -254,7 +254,7 @@ def test_run_autoqb_error_propagates(tmp_path):
     mgr = _make_ready_manager(tmp_path)
     mgr.config.main_tick = 0.02
 
-    def boom(dry_run):
+    def boom(dry_run, force=False):
         raise AutoQbError("qB 字段不兼容")
 
     mgr._tick = boom

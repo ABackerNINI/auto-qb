@@ -144,7 +144,7 @@ def test_main_loop_throttled_by_main_tick(tmp_path):
         start = time.monotonic()
         real_tick = mgr._tick
 
-        def tick(dry_run):
+        def tick(dry_run, force=False):
             real_tick(dry_run)
             if time.monotonic() - start > 0.9:
                 raise KeyboardInterrupt  # 非托管模式唯一退出途径(Ctrl+C); 每轮只发一次真实 HTTP

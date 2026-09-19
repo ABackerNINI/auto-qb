@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="aqb-issue-slug" content="webui-poll-cadence-mismatch">
 <meta name="aqb-issue-stamp" content="26-09-19-1900">
-<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-status" content="Fixed">
 <meta name="aqb-issue-title" content="sync_interval 与前端分档轮询错配: &gt;3000 种子时约一半视图重建无人消费">
 <meta name="aqb-issue-summary" content="服务端固定 1.5s 重建四视图, 前端 &gt;3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向">
 <title>sync_interval 与前端分档轮询错配: &gt;3000 种子时约一半视图重建无人消费 · auto-qb 计划外问题</title>
@@ -94,7 +94,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-1900-webui-poll-cadence-mismatch</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:00</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">auto-qb-clone1 / 复核续查</div></div>
     </div>
@@ -180,6 +180,11 @@ return 1500;  // 下界 1.5s = 服务端 sync_interval(再快只是多拿一次"
       只在「这一版会被取走」时才跑（例如按客户端实际轮询档位节流，或让 <code>/api/state</code> 的 rid
       消费情况反向驱动）。<b>优点：不动前端轮询频率，不引入「更频繁回传」的风险</b>。
       <b>代价：需要服务端知道客户端当前档位/上次取的版本，属于新契约</b>，改动面大于 A。</p>
+      <div class="callout"><b>用户已拍板：走方案 B</b>（2026-09-19），已实施 —— 见 §07。
+      <b>⚠ 本文对代价的估计偏保守</b>：落地时发现方案 B <b>并不需要新契约</b> —— 客户端本来就在每次轮询时
+      把 <code>rid</code> 发给服务端，"这一版有没有人取走"用现有参数就能表达（<code>rid == 当前版本号</code>
+      即已消费）。因此实际改动面比预估小得多。<b>教训：先确认"信息是不是已经在协议里",
+      再下"需要新契约"的结论</b> —— 本条当初把它当成方案 B 的主要缺点，实际不成立。</div>
   </section>
 
   <section id="s6">
@@ -199,9 +204,28 @@ return 1500;  // 下界 1.5s = 服务端 sync_interval(再快只是多拿一次"
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-19 19:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-19 19:4x — 用户拍板走<b>方案 B（给快照刷新加"会有人取"的门控）</b>，认领开工，状态 <strong>In Progress</strong></li>
+      <li>2026-09-19 19:5x — 已按方案 B 实施并验证（实测省 50%），状态 <strong>Fixed</strong></li>
     </ul>
     <h3>修复后补充</h3>
-    <p>待修。验证方式建议：<code>/api/state</code> 侧记「版本号自增次数」与「被取走次数」两个计数，用计时中间件 + 3000 种子桩服务跑 60s 直接量「无人消费比例」，不要只靠推导。</p>
+    <p><b>实际修法（方案 B）</b>：让"生产"等"消费" —— 用 <code>_web_pending_ver</code> 记下"已发布但还没被
+      任何 <code>/api/state</code> 请求取走的版本号"；<code>_flush_views()</code> 只在没有欠账时重建。
+      <code>rebuild_views()</code> 发布时登记，<code>ensure_group_state()</code> 观察到当前版本时清空
+      （请求要么拿到该版数组、要么被告知"你已是最新"，两者都算已消费）。
+      <b><code>force=True</code> 必须绕过</b> —— 本轮有命令改了种子状态时，P0-5 要求真值几十毫秒内进快照，
+      不能等客户端下一次轮询。<code>run()</code> 里由 <code>state_changed</code> 推导并透传给
+      <code>_sync_line</code> / <code>_task_line</code>。</p>
+      <p><b>实测</b>（3000 种子，模拟"客户端 3s 取一次 / 服务端 1.5s 一拍"共 20 个周期）：</p>
+      <table>
+        <tr><th>形态</th><th>rebuild_views 次数</th><th>结论</th></tr>
+        <tr><td>无门控（修复前）</td><td>40</td><td>每周期 2 版，只有最后 1 版被取走</td></tr>
+        <tr><td>有门控（方案 B）</td><td><b>20</b></td><td><b>省 50%</b>（与本文推导的 ≈50% 吻合）</td></tr>
+      </table>
+      <p>≤1000 种子（客户端同为 1.5s）不受影响 —— 门控只在"服务端比客户端快"时才生效。</p>
+      <p><b>守阵</b>：<code>test_view_rebuild_waits_for_client_consume</code> 钉住三件事 ——
+      ① 上一版没被取走就不重建；② <b>脏标记必须保留</b>（否则这次变化会被丢掉，客户端一取走立刻补上）；
+      ③ <code>force=True</code> 必须绕过。<b>红绿双验</b>过：去掉门控后 <code>assert 2 == 1</code> 失败。
+      <b>测试数字</b>：单测 <b>1054 passed / cov 92%</b>（新增本用例）；冒烟 <b>46 项 0 失败</b>。</p>
   </section>
 
   <footer>

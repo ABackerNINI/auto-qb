@@ -37,6 +37,7 @@
 - test_refresh_schema_validation_missing_raises: 首次拉到非空种子信息时校验字段, 缺失抛 QbCompatError
 - test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
 - test_export_torrents_info: export_torrents_info 写种子信息到文件
+- test_view_rebuild_waits_for_client_consume: 节拍对齐门控 —— 上一版没被 /api/state 取走就不生产下一版(>3000 种子时约一半 rebuild 无人消费), 且**脏标记必须保留**; 命令驱动的那一轮 force=True **必须绕过**(P0-5 要求真值几十毫秒内进快照, 不能等客户端轮询)
 - test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
 """
@@ -218,12 +219,12 @@ def test_run_loop_layered_cadence():
         mgr.config.main_tick = 0.2
         calls = {"sync": 0, "task": 0}
 
-        def sync_line(dry_run, flush=True):
+        def sync_line(dry_run, flush=True, force=False):
             calls["sync"] += 1
             if calls["sync"] >= 12:
                 raise KeyboardInterrupt  # 同步线 12 次 ≈ 0.6s 后退出
 
-        def task_line(dry_run):
+        def task_line(dry_run, force=False):
             calls["task"] += 1
 
         mgr._sync_line = sync_line
@@ -253,8 +254,8 @@ def test_wake_drains_commands_without_extra_ticks():
             return real_drain()
 
         mgr._drain_web_commands = drain
-        mgr._sync_line = lambda dry_run, flush=True: calls.__setitem__("sync", calls["sync"] + 1)
-        mgr._task_line = lambda dry_run: calls.__setitem__("task", calls["task"] + 1)
+        mgr._sync_line = lambda dry_run, flush=True, force=False: calls.__setitem__("sync", calls["sync"] + 1)
+        mgr._task_line = lambda dry_run, force=False: calls.__setitem__("task", calls["task"] + 1)
         stop = threading.Event()
 
         def waker():
@@ -306,7 +307,7 @@ def test_command_batch_triggers_single_resync():
                 raise KeyboardInterrupt  # 观测到"补的那一次"即退出
 
         mgr._refresh_torrents = refresh
-        mgr._task_line = lambda dry_run: None
+        mgr._task_line = lambda dry_run, force=False: None
         mgr._cmd_pause_torrent = mock.Mock()
         stop = threading.Event()
 
@@ -729,14 +730,64 @@ def test_tick_rebuilds_all_views_when_changed():
             assert counts() == (1, 1, 1, 1)  # 视图变化 -> 四份同次重建
             mgr._tick(dry_run=False)
             assert counts() == (1, 1, 1, 1)  # 标记已消费且无新变化 -> 不重建
+            # ⚠ 新增前提: 上面那一版**还没被任何 /api/state 请求取走**(pending 未清) ⇒
+            # 即便又脏了也不生产新版本(节拍对齐门控)。这里模拟客户端取走一次再继续。
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
-            assert counts() == (2, 2, 2, 2)  # 再次变化 -> 仍四份同次
+            assert counts() == (1, 1, 1, 1)  # 上一版没人取 -> 不重建(脏标记保留)
+            mgr.ensure_group_state(mgr._group_view_ver)  # 客户端取走当前版本
+            mgr._tick(dry_run=False)
+            assert counts() == (2, 2, 2, 2)  # 已取走 + 仍脏 -> 重建, 且四份同次
             mgr.store.view_changed = True
             mgr._web_last_seen = 0.0  # Web 不活跃(超过 TTL)
             mgr._tick(dry_run=False)
             assert counts() == (2, 2, 2, 2)  # 不重建
             assert mgr._group_view_dirty is True  # 脏标记保留, 待 Web 恢复后重建
+
+
+def test_view_rebuild_waits_for_client_consume():
+    """节拍对齐: 上一版没被 /api/state 取走就不生产下一版; 命令驱动的那轮必须绕过
+
+    服务端 `sync_interval` 固定 1.5s, 而前端 `basePollMs()` 按种子量取 1.5/2/3s ⇒
+    >3000 种子时服务端每 3s 产 2 版、客户端只取最后一版, 中间那版的重建 CPU 无人消费
+    (issues/26-09-19-1900-webui-poll-cadence-mismatch, 方案 B)。
+    这里让"生产"等"消费": `_web_pending_ver` 未清(没人取)就不重建, 但**脏标记必须保留**
+    (否则这次变化会被丢掉) —— 客户端一取走立刻补上。
+
+    ⚠ `force=True`(本轮有命令改了种子状态)**必须绕过** —— P0-5 要求用户操作后真值几十毫秒内
+    进快照; 若被门控挡住, 真值要等客户端下一次轮询才可见, 与 P0-5 相悖。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr.touch_web_client()  # Web 活跃
+        with mock.patch.object(mgr, "_refresh_torrents"),              mock.patch.object(mgr, "_build_group_view", return_value=[]) as g,              mock.patch.object(mgr, "_build_singles_view", return_value=[]),              mock.patch.object(mgr, "_build_shows_view", return_value={"list": [], "unrecognized": []}),              mock.patch.object(mgr, "_build_flat_view", return_value=[]):
+            # ① 首版: 无 pending -> 重建, 并登记"这一版还没人取走"
+            mgr.store.view_changed = True
+            mgr._flush_views()
+            assert g.call_count == 1
+            assert mgr._web_pending_ver == mgr._group_view_ver
+
+            # ② 又脏了但上一版还没人取 -> **不生产**(这就是省掉的那一次)
+            mgr.store.view_changed = True
+            mgr._flush_views()
+            assert g.call_count == 1, "上一版没人取就再产一版 = 白烧 CPU(节拍错配的症状)"
+            assert mgr._group_view_dirty is True, "脏标记必须保留, 否则这次变化会被丢掉"
+
+            # ③ 命令驱动: force=True 必须绕过门控(P0-5: 真值不能等客户端轮询)
+            mgr._flush_views(force=True)
+            assert g.call_count == 2, "命令改了状态就必须立刻重建, 不能等客户端轮询"
+            assert mgr._group_view_dirty is False
+
+            # ④ 客户端取走当前版本(此时不脏, 不会顺带重建) -> pending 清空
+            mgr.ensure_group_state(mgr._group_view_ver)
+            assert mgr._web_pending_ver is None
+            assert g.call_count == 2
+
+            # ⑤ 已被取走 -> 门控重新打开, 再脏就能重建
+            mgr.store.view_changed = True
+            mgr._flush_views()
+            assert g.call_count == 3
 
 
 def test_tick_rebuilds_views_when_grouping_disabled():

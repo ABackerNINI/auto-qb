@@ -566,6 +566,10 @@ class WebviewMixin:
         self._flat_view = self._build_flat_view()
         self._group_view_ver += 1
         self._group_view_dirty = False
+        # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)。
+        # 只在**真正发布**时登记(而不是每次调用 rebuild_views), 因为 ensure_group_state 可能
+        # 在判脏后走 `_publish_views_locked` 就地发布, 那条路径同样要登记。
+        self._web_pending_ver = self._group_view_ver
 
     def ensure_group_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
@@ -600,6 +604,9 @@ class WebviewMixin:
             if self._group_view_dirty:
                 self._publish_views_locked()
             ver = self._group_view_ver
+            # 本请求观察到了 ver(要么拿到了它的数组, 要么被告知"你已是最新") ⇒ 这一版已被消费,
+            # 允许主循环生产下一版。这是"服务端节拍向客户端节拍看齐"的另一半(见 _publish_views_locked)。
+            self._web_pending_ver = None
             updated = rid != ver
             state: dict = {"rid": ver, "updated": updated}
             if updated:

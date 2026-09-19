@@ -176,6 +176,11 @@ class QbManager(
         # 主循环仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)才重建快照, 否则跳过以降低 CPU。
         self._group_view_dirty: bool = True
         self._web_last_seen: float = 0.0
+        # 已发布但**还没被任何 /api/state 请求取走**的版本号(None = 没有"欠着"的版本)。
+        # 用于把"服务端重建节拍"对齐到"客户端实际取数据的节拍": 上一版没人看就不生产下一版
+        # (否则 >3000 种子时前端 3s 取一次、服务端 1.5s 重建 ⇒ 约一半重建无人消费)。
+        # 详见 _flush_views 的判据注释与 issues/26-09-19-1900-webui-poll-cadence-mismatch。
+        self._web_pending_ver: Optional[int] = None
         # 重连退避(见 _reconnect_due): 断开后按 main_tick → 2× → 4× … 递增重试, 上限
         # RECONNECT_MAX_INTERVAL; 每 tick 无脑 connect() 会在 qB 长时间宕机时每 2s 重建一次
         # Client(含 netrc / 代理解析), 纯属空转。连接成功即在 _reset_reconnect_backoff 归零。
@@ -361,15 +366,18 @@ class QbManager(
                     sync_due = (now >= next_sync_at) or (state_changed and not dry_run)
                     tick_due = now >= next_tick_at
                     try:
+                        # 命令驱动(state_changed)的那一轮 force=True: 绕过"上一版是否被取走"门控,
+                        # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
+                        cmd_forced = bool(state_changed) and not dry_run
                         if sync_due and tick_due:
-                            self._tick(dry_run)
+                            self._tick(dry_run, force=cmd_forced)
                             next_sync_at = time.time() + sync_interval
                             next_tick_at = time.time() + main_tick
                         elif sync_due:
-                            self._sync_line(dry_run)
+                            self._sync_line(dry_run, force=cmd_forced)
                             next_sync_at = time.time() + sync_interval
                         elif tick_due:
-                            self._task_line(dry_run)
+                            self._task_line(dry_run, force=cmd_forced)
                             next_tick_at = time.time() + main_tick
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
@@ -494,11 +502,14 @@ class QbManager(
         else:
             logger.warning("WEB UI 已停止(web.enabled=false)")
 
-    def _flush_views(self) -> None:
+    def _flush_views(self, force: bool = False) -> None:
         """消费视图脏标记并在 Web 活跃时惰性重建(同步线/任务线各自调用一次)
 
         consume_view_changed 是 consume 语义(读后复位), 两条线各调一次即可完整覆盖
         自上次消费以来由「刷新」或「任务执行」产生的视图变化。
+
+        `force=True` 表示"本轮有命令改了种子状态", 必须**绕过**下面的"已取走"门控 ——
+        P0-5 要求用户操作后真值在几十毫秒内进快照, 不能因为上一版还没被取走就跳过。
         """
         # 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方视图惰性重建判定
         view_changed = self.store.consume_view_changed()
@@ -512,10 +523,18 @@ class QbManager(
         # 且视图内容确有变化(视图字段/成员变化, 或显式置脏)时才重建, 否则主循环不空转;
         # 关闭网页后 CPU 回落。重建统一走 `rebuild_views`(四份视图 + 版本号的唯一入口,
         # 不得在这里只建其中一份 —— 见该方法 docstring 的 2026-09-18 缺陷)。
-        if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
+        web_active = (time.time() - self._web_last_seen) < WEB_VIEW_TTL
+        # 「上一版有没有人取走」门控: 服务端节拍(固定 1.5s)与客户端节拍(按种子量 1.5/2/3s)
+        # 各自独立定档 ⇒ 大库下服务端每 3s 产 2 版而客户端只取最后一版, 中间那版的重建 CPU
+        # 没有任何请求消费过。这里让"生产"等一等"消费": 上一版没被取走就不生产下一版。
+        # 判据: _web_pending_ver 为 None(没有欠着的版本)才重建; force(命令改了状态)必须绕过。
+        # 效果: >3000 种子由 2 版/次取降为 1 版/次取(≈省一半), ≤1000 种子(同为 1.5s)不受影响。
+        # 数据新鲜度不受影响 —— 客户端本来就只在自己那拍才看得到数据。
+        unconsumed = self._web_pending_ver is not None
+        if self._group_view_dirty and web_active and (force or not unconsumed):
             self.rebuild_views()
 
-    def _sync_line(self, dry_run: bool, flush: bool = True) -> None:
+    def _sync_line(self, dry_run: bool, flush: bool = True, force: bool = False) -> None:
         """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建
 
         只做状态同步、**不跑任务** —— 状态新鲜度不再被任务节拍(main_tick)拖累。
@@ -523,9 +542,9 @@ class QbManager(
         """
         self._refresh_torrents(dry_run)
         if flush:
-            self._flush_views()
+            self._flush_views(force=force)
 
-    def _task_line(self, dry_run: bool) -> None:
+    def _task_line(self, dry_run: bool, force: bool = False) -> None:
         """任务线(main_tick 节拍): 错误原因预取 + 执行到期任务 + 视图/搜索索引推进
 
         tracker 预取与文件 API 批量调用**仍跟 main_tick, 不跟随快档**: 它们不是状态新鲜度的
@@ -540,21 +559,21 @@ class QbManager(
 
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
-        self._flush_views()
+        self._flush_views(force=force)
 
         # WEB UI: 搜索索引限流构建——同样仅 Web 活跃时推进(每 tick 一批, 直至不再脏);
         # 关闭网页后停止推进, 避免无谓的文件 API 调用
         if self._search_index_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
             self._build_search_index()
 
-    def _tick(self, dry_run: bool):
+    def _tick(self, dry_run: bool, force: bool = False):
         """完整一轮 = 同步线 + 任务线(执行与收尾统一由 TaskQueue.run_due 管理)
 
         主循环按节拍**分别**调度两条线(见 run); 本方法保留"同步+任务"的完整语义,
         供测试与一次性调用使用。两条线同时到期时走这里, 保证视图只重建一次。
         """
         self._sync_line(dry_run, flush=False)
-        self._task_line(dry_run)
+        self._task_line(dry_run, force=force)
 
     # ---------- 全局任务 ----------
 

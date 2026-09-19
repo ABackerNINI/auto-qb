@@ -27,13 +27,17 @@
   (评级 计划 A− / 实施 A− / BUG B / 安全 A− / 性能 B+ / 测试 B−), 报表已追加 **§10 复核修订与修复回执** +
   **§11 热路径白跑 85%**(FastAPI `jsonable_encoder`)。**第 1、2 批与 §11 均已实施未提交**
   (明细见 [progress.md](progress.md) 三波次总条目末段 + 档案进度日志)。
-  **剩余一项已入池为 issue(见 [issues/_index.md](issues/_index.md)), 未开工**:
-  1. **[webui-poll-cadence-mismatch](issues/26-09-19-1900-webui-poll-cadence-mismatch.html)**(Open) ——
+  **已全部完成(两条 issue 均 Fixed, 见 [issues/_index.md](issues/_index.md)) —— 均尚未提交**:
+  1. **[webui-poll-cadence-mismatch](issues/26-09-19-1900-webui-poll-cadence-mismatch.html)**(Fixed) ——
      `sync_interval`(1.5s)与前端分档轮询(1.5/2/3s)在 >3000 种子时错配, 约一半 `rebuild_views` 无人消费。
      **需先拍板方向**: 让轮询跟上快档(降 `basePollMs` 下界) vs 给快照刷新加 Web 活跃门控(无人看就不刷)。
      ⚠ 这条是**频率类**改动, 拍板前先按 pitfalls 「主循环分层节拍」与「把 main_tick 缩短来换响应速度」两条判据过一遍。
      ⚠ 另注: 第 1 批给 `sync_interval` 加的钳制(`min(sync_interval, main_tick)`)只兜住了"快照新鲜度
      掉到心跳之下", **没有**解决"重建了没人消费"这一半 —— 两件事别混。
+     **已按方案 B 实施**(用户拍板): `_web_pending_ver` 记"已发布但还没被取走的版本号", `_flush_views()`
+     只在没欠账时重建; 实测 20 周期 **40 → 20 次(省 50%)**。两个边界由
+     `test_view_rebuild_waits_for_client_consume` 钉住: 脏标记必须保留、`force=True`(命令改状态)必须绕过。
+     顺带发现: 方案 B **不需要新契约** —— 客户端本来就在轮询时发 `rid`, "有没有人取走"现有参数即可表达。
   2. ~~**热端点改 JSONResponse 直返**~~ —— **已修并验证, issue 已置 Fixed**
      ([webui-hot-endpoints-jsonable-encoder](issues/26-09-19-1900-webui-hot-endpoints-jsonable-encoder.html)):
      `/api/search` 服务端 **82.6 → 23.3~30.1 ms**(输出字节与基线逐字节一致), 详情族

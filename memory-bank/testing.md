@@ -6,7 +6,12 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1053 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1049 passed + 2 skipped** —— 2026-09-19 实测;
+# 基线: **1054 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1049 passed + 2 skipped** —— 2026-09-19 实测;
+# = 1053 + **节拍对齐门控(issues/26-09-19-1900-webui-poll-cadence-mismatch, 方案 B)** 新增 1 项:
+#   `test_qbmanager.py::test_view_rebuild_waits_for_client_consume`(上一版没被 /api/state 取走就不生产下一版:
+#   >3000 种子时服务端 3s 产 2 版而客户端只取 1 版 ⇒ 实测 20 周期 40 次 → **20 次(省 50%)**;
+#   同时钉住两个边界: **脏标记必须保留**(只是不生产, 不是丢弃变化) 与 **force=True 必须绕过** ——
+#   本轮有命令改了种子状态时必须立刻重建, 否则与 P0-5「真值几十毫秒内进快照」相悖。红绿双验过)。
 # = 1052 + **热路径跳过 FastAPI `jsonable_encoder`** 新增 1 项:
 #   `test_web.py::test_api_state_skips_jsonable_encoder`(用**计数替身**包住
 #   `fastapi.routing.jsonable_encoder`, 断言 8 条 URL(7 个端点)调用次数为 0: /api/state?view=torrent、/api/state、

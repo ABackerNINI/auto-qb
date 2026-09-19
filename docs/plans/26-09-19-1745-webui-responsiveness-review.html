@@ -546,6 +546,7 @@
       <tr><td class="num">5</td><td>组行补乐观补丁 + <code>is-pending</code>；<code>actEpisode</code> 接入同一套；冒烟各补一条</td><td>BUG-3</td><td class="num">中</td></tr>
       <tr><td class="num">6</td><td><s>平铺数组按可见列裁剪字段，或直接做 P2-2 增量回传</s> <b>⚠ 已被实测否决，见 §11</b>（字段裁剪是死路：80% 的字节需要 74 个字段里的 52 个；真正的开销在服务端序列化前的 <code>jsonable_encoder</code>，已用别的办法修掉）</td><td>5.1 响应体</td><td class="num">中</td></tr>
       <tr><td class="num">7</td><td><code>sync_interval</code> 与分档轮询对齐（或给快照刷新加 Web 活跃门控），消除无人消费的刷新</td><td>5.4</td><td class="num">小</td></tr>
+      <tr><td class="num">7′</td><td><b>已按「加会有人取的门控」实施（用户拍板）</b> —— <code>_web_pending_ver</code> 记"已发布但没被取走的版本号"，只在没欠账时重建；实测 20 周期 <b>40 → 20 次（省 50%）</b>；<code>force=True</code> 供命令驱动绕过（P0-5）。详见 <code>issues/26-09-19-1900-webui-poll-cadence-mismatch</code>（已 Fixed）</td><td>5.4 / issue</td><td class="num">小</td></tr>
       <tr><td class="num">8</td><td>改掉 <code>app.js</code> 头部「行高必须齐 / 自动回退」注释与 <code>rowWin</code> 的 data 注释；去掉测试计划清单重复行；修 <code>renderMs</code> 警告文案</td><td>DOC-1~3</td><td class="num">小</td></tr>
       <tr><td class="num">9</td><td><code>ui_harness.py</code> 拒绝非 loopback 绑定；<code>cmdStats</code> 接一个可见出口（诊断区或冒烟打印）</td><td>SEC / TEST-3</td><td class="num">小</td></tr>
     </tbody>
