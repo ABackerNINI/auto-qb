@@ -647,3 +647,22 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **症状**: 全量跑着的同时又起几个 pytest 子进程跑子集, 结果全量里多出 2 条失败、且覆盖率阶段 `INTERNALERROR`。单独重跑那 2 条全绿。
 - **根因**: ①`helpers.FakeQbServer` 会绑定本地端口, 并发抢端口/时序; ②`tests/sidefx.py` 的越界判定是**会话级**的 —— 任何进程删了越界文件都算到当前会话头上。
 - **判别法**: 全量跑完前不要开第二个 pytest。另: 带 `--cov-branch` 的全量在本机约 **32 秒**(空载), `--no-cov` 约 **25 秒** —— 文档里"约 12 秒"已过时(可能是早期用例更少时的数字)。
+
+### 在工具 shell 里「非快进合并 + 工作区脏」会删掉整个 .git 对象库 (2026-09-19 实测, 重大事故)
+
+- **症状**: `git merge <分支>` 报 `fatal: <oid> is not a valid object` / `fatal: stash failed` 或 `fatal: unable to read tree (<oid>)`; 之后 `git status` 报 `bad tree object HEAD`、`git fsck` 大面积 broken link、多个分支尖端断链、`.git/logs/**`(reflog)全空。
+- **根因**: git 2.55 在**非快进合并**时**无条件**调用 `git stash create`(`GIT_TRACE=1` 可见, 干净工作区时也会调, 只是无内容可存)。工作区脏时它要真写 stash 对象, 而本工具环境的文件删除拦截层(`[safe-delete]`, 注意 `rm` 是 **bash 函数**而非 PATH 里的可执行文件)会顺着这次写入把 `.git/objects/**` **批量删除**。铁证: 被删文件**全部进了 Windows 回收站**(`D:\$Recycle.Bin` 的 `$I*` 元数据里能查到原始路径) —— git 原生 `unlink()` 绝不会走回收站, 说明删除者不是 git。
+- **实测矩阵 (2026-09-19, 一次性临时仓库, 已清理)**:
+
+  | 场景 | 结果 |
+  |---|---|
+  | 非快进合并 + 干净工作区 | **安全**: 对象 9→11, 合并成功 |
+  | 非快进合并 + 脏工作区 | **必炸**: 对象 →0, `.git/objects` 全毁 |
+  | 同上 + `merge.autoStash=false`(全局配置与 `-c` 均试) | 照样全毁 |
+  | 同上 + 关沙箱 / 换系统 `D:/Program Files/Git`(同为 2.55.0) / 剔除 safe-bin 的 PATH / 清 `CODEBUDDY_SAFE_DELETE_*` | 照样全毁 |
+  | 快进合并 + 脏工作区 | **安全**: git 不调用 stash create |
+
+- **事故实例**: 2026-09-19 把 `backend/develop` 合进 `develop`(非快进)时工作区有 3 个脏文件 → 02:05:54~58 两秒内删掉 **319 个对象 + 全部 reflog + `hooks/*.sample` + `info/`**, 4 个分支尖端断链(`develop`/`other/develop`/`backend/develop`/`agentAutoClaw/develop`/`agentZCode/develop`)。同批的快进合并(`other/develop`)安然无恙。
+- **修法(唯一可靠)**: **合并前先把工作区弄干净** —— 先提交, 或把改动移出仓库再合并; 高风险 git 操作前整份备份 `.git`。
+- **事故后补救(已走通)**: ①被删对象基本都在 **Windows 回收站**, 按 `$I*` 里的原始路径还原即可。解析要点: `$I` 文件偏移 **16-24** 是删除时间(FILETIME, **UTC, 换算本地要 +8h**), 偏移 **28** 起是 UTF-16LE 的原始路径; 内容在同名 `$R*` 文件里。②**还原后必须先删掉被一起还原的陈旧 `*.lock`**(`index.lock` / `HEAD.lock` / `AUTO_MERGE.lock` / `packed-refs.lock` / `objects/maintenance.lock`), 否则任何 git 命令都报 `Unable to create '.git/index.lock': File exists`。③工作区文件若成片消失但在 `HEAD` 里仍在 → `git checkout -- <file>` 直接还原。④收尾 `git fsck --no-progress` 确认 **0 broken link**(dangling 无害)。
+- **判别法**: 准备在工具 shell 里跑 `merge` / `rebase` / `checkout` / `stash` 之前, 先看 `git status --short` —— **非空就先弄干净**。记不住细节就记这句: **非快进 + 脏 = 必炸**。另外本 worktree 每次 `git commit` 的 ref 更新也可能被同一层拦截静默丢弃(lock+rename 失效, git 拿到 0 返回码), 提交后必须核对 `HEAD` == 松散 ref == `packed-refs`。
