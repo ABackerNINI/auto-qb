@@ -9,6 +9,8 @@
 > 2026-09-15 全面迁移为 Memory Bank 结构: 原 `ai/` 整体迁入 `memory-bank/` 并按六核心文件语义重命名 (01→productContext, 02→systemPatterns, 09→progress, 10→activeContext), 新增 projectbrief / techContext / tasks/; `.github/instructions/memory-bank.instructions.md` 恢复原版 (applyTo: 'memory-bank/**')。核心文件职责: projectbrief=目标与范围, productContext=为什么存在/领域知识, systemPatterns=架构与技术决策, techContext=技术栈与环境, **activeContext=当前焦点 (会话入口)**, progress=完成与规划。
 >
 > 2026-09-17 会话协议加固: 新增 skill 载体 [../.agents/skills/memory-bank/SKILL.md](../.agents/skills/memory-bank/SKILL.md) (可 `/memory-bank` 调用; 先建于 `.github/skills/`, 同日按仓库技能根惯例搬到 `.agents/skills/`), **立档阈值与收尾 DoD 同时写进 always-on 入口** (`AGENTS.md` / `.github/copilot-instructions.md`) — 修掉"规则只在 applyTo memory-bank/** 的 instruction 里⇒决策时看不见"的错位; `tasks/` 按专题回填 TASK001~TASK010, `activeContext.md` 瘦身回易变层; 守卫 [../tests/test_memory_bank.py](../tests/test_memory_bank.py)。
+> 2026-09-19 计划外问题入池: 拆成两个 skill —— [scope-guard](../.agents/skills/scope-guard/SKILL.md) 只管"该不该现在修"(**计划外的代码/文档缺陷一行都不改**, 协作开发时"顺手修"会让提交混进两条意图并撞车), [create-issue](../.agents/skills/create-issue/SKILL.md) 可**单独使用**, 负责在 `issues/<YY-MM-DD-HHMM>-<slug>.html` 写够别人直接开工的详细报告; 索引 `issues/_index.md` 是**生成物**(每行 = 状态 · 日期 · 简述 · 链接), 由 [../.agents/skills/create-issue/scripts/gen_issues_index.py](../.agents/skills/create-issue/scripts/gen_issues_index.py) 重建; 状态五取值 `Open` / `In Progress` / `Fixed` / `WontFix` / `Duplicate`。
+>
 > 2026-09-18 任务档案改名与索引生成化: `tasks/TASKnnn-<slug>.md` → `tasks/YY-MM-DD-<slug>.md` —— 全局单调序号在 9 个并行 worktree 下必然撞号 (实测: TASK014/TASK015 同一专题两份且逐字节相同、zcode 分支把同一提交编成 TASK012 而主线编成 TASK014), 改成"日期到天 + 专题 slug"后, 同一天同一专题必然撞到同一路径, 重复当场暴露而不是静默变两份; 旧编号保留在各档案 `**Legacy-ID:**` 供历史引用回溯; `_index.md` 降级为**生成物**, 由 [../scripts/gen_tasks_index.py](../scripts/gen_tasks_index.py) 产出 (分区内按 `Updated` 倒序), 合并冲突只需重跑脚本。计划: [docs/plans/26-09-18-1928-memory-bank-task-id-plan.html](../docs/plans/26-09-18-1928-memory-bank-task-id-plan.html)。
 
 ## 按任务选择文档
@@ -29,6 +31,8 @@
 | 改代码前必读 (魔法值/风险点/文档漂移) | [pitfalls.md](pitfalls.md) |
 | 问"XX做了吗 / XX计划怎么做" | [progress.md](progress.md) |
 | 跨会话任务档案 (立档/查档) | [tasks/_index.md](tasks/_index.md) |
+| **撞见计划外问题: 该不该现在修** | [../.agents/skills/scope-guard/SKILL.md](../.agents/skills/scope-guard/SKILL.md) |
+| **建 issue 报告 / 改 issue 状态** | [../.agents/skills/create-issue/SKILL.md](../.agents/skills/create-issue/SKILL.md) + [issues/_index.md](issues/_index.md) |
 | 做 UI/视觉设计: 找可挑选的风格与组件参考 (20 套) | [../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md](../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md) |
 
 ## 一分钟速览

@@ -21,6 +21,7 @@
 3. **状态持久化**: 跨轮次状态统一进 state_file, 程序退出时才落盘。
 4. **fail-fast**: 配置在 `config.validate_config` 全量校验并聚合报错; 校验之后的代码假定配置正确, 不做防御性检查; **新配置键必须加入 validate_config 并同步 `config/schema.py`** (守卫测试会查)。
 5. **单一写线程**: 只有主循环线程修改任务队列结构与 state_file; 不要引入绕开该假设的并发代码。
+6. **范围守恒**: 计划外的代码/文档缺陷**一行都不改** —— 入池到 `memory-bank/issues/`(HTML 详细报告 + `_index.md` 登记状态/日期/简述)。该不该现在修见 [scope-guard skill](.agents/skills/scope-guard/SKILL.md); 建报告与改状态见 [create-issue skill](.agents/skills/create-issue/SKILL.md)。
 
 ## 红线 (生产文件, 禁止改动/提交)
 
@@ -83,6 +84,8 @@ wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv run pytest 
 | 技术栈/开发环境/约束 | [memory-bank/techContext.md](memory-bank/techContext.md) |
 | 写/跑测试 | [memory-bank/testing.md](memory-bank/testing.md) |
 | **CI 报错 / 平台差异复现** | 本文件「💡 CI 报错排查: 建议先在本机 WSL 复现」+ [pitfalls.md](memory-bank/pitfalls.md)「Windows 全绿 / Linux 全红」 |
+| **撞见计划外问题: 该不该现在修** | [scope-guard skill](.agents/skills/scope-guard/SKILL.md) |
+| **建 issue 报告 / 改 issue 状态** | [create-issue skill](.agents/skills/create-issue/SKILL.md) + [issues/_index.md](memory-bank/issues/_index.md) |
 | 改代码前必读 (风险点/陷阱) | [memory-bank/pitfalls.md](memory-bank/pitfalls.md) |
 | XX 做了吗 / 计划怎么做 | [memory-bank/progress.md](memory-bank/progress.md) |
 | 跨会话任务档案 | [memory-bank/tasks/_index.md](memory-bank/tasks/_index.md) |
