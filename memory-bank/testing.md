@@ -6,8 +6,18 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: 1041 passed (Windows 本地, 0 skipped) / Linux CI 1039 passed + 2 skipped (两条 winreg 专属用例只在 Windows 跑) —— 2026-09-19 实测;
-# = 修复前实测 1039 + 本次 **Linux CI 三处失败修复** 新增 2 项(`test_sidefx.py::test_sidefx_rmtree_dir_fd_entries_not_flagged`、
+# 基线: **1046 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1044 passed + 2 skipped** —— 2026-09-19 实测;
+# = 1041 + **WEB UI 响应性波次一(分层节拍 + P0-1 命令唤醒 + P0-5 命令后补刷新 + P0-0 埋点)** 新增 5 项:
+#   `test_qbmanager.py::test_run_loop_layered_cadence`(同步线按 sync_interval / 任务线按 main_tick, 两线次数不等)、
+#   `test_wake_drains_commands_without_extra_ticks`(命令唤醒只走命令线, 命令风暴下 tick 次数不增加)、
+#   `test_drain_web_commands_reports_resync_needed`(P0-5 门控: 只有改种子状态的命令置 changed)、
+#   `test_command_batch_triggers_single_resync`(P0-5 一批命令后只补**一次**完整刷新)、
+#   `test_web.py::test_api_enqueue_wakes_main_loop`(投递用户命令唤醒主循环 + 自投递命令须登记防自激)。
+#   ⚠️ 同时**改写**了 3 条既有用例的判据(不是新增): `test_run_loop_throttles_without_stop_event` /
+#   `test_run_loop_managed_never_sleeps` 的阻塞原语从 `time.sleep(main_tick)` 换成 `_wait_next`
+#   (按"真实经过时间"判定, 仍是防空转的回归守卫); `test_local_qb_service.py::test_main_loop_throttled_by_main_tick`
+#   需把 sync_interval 一并设成 0.2 —— 两线不同拍时 `_tick` 只在两线同时到期才走到, 原"每轮一次 sync"假设失效。
+# 此前 1041 = 修复前实测 1039 + **Linux CI 三处失败修复** 新增 2 项(`test_sidefx.py::test_sidefx_rmtree_dir_fd_entries_not_flagged`、
 # `test_utils.py::test_atomic_write_rejects_empty_path`)。注: 修复前实测 1039, 比本文件此前记的 1038 多 1 —— 以实测为准,
 # 下面链条里的 1036/1022 等历史基数不再逐一追平。历史链条: 1036 = 1022 + **架构审查 Wave 3/4 第二批** 2 项(`test_actions.py::test_stop_preserves_completeness` 暂停/恢复不得翻转完成位、`test_qbmanager.py::test_reconnect_backoff_and_reset` 重连指数退避与归零); 此前 1036 = 1022 + **架构审查 Wave 0/1/3/4 固化缺陷** 14 项: `test_utils.py` 原子写 3 项(`test_atomic_write_creates_file` / `test_atomic_write_failure_keeps_old_content` / `test_atomic_write_keep_backup`)、`test_checking.py` 跳检未确认也备份 1 项(`test_checking_skip_readd_unconfirmed_backs_up`)、`test_web.py` 密钥不进日志 + 配置树掩码 2 项(`test_web_token_not_printed_in_logs` / `test_config_tree_masks_secrets`)、`test_config_writer.py` 掩码还原 2 项(`test_mask_tree_hides_sensitive_scalars` / `test_unmask_tree_restores_from_disk`)、`test_config.py` 任务数范围校验 1 项(`test_validate_max_tasks_per_tick_range`)、`test_web.py` 视图并发原子发布 1 项(`test_views_published_atomically_when_rebuilt_concurrently`)、`test_tvshows.py` bare 集数 0 拦截 1 项(`test_bare_zero_not_episode`)、`test_conditions.py` HR 无站点判定 1 项(`test_hr_condition_no_tracker_conf`)、`test_web.py` 畸形分组 key 转 400 1 项(`test_api_group_malformed_key_returns_400`)、`test_notify.py` 免打扰不吃配额 + 去重表淘汰 2 项(`test_notify_quiet_hours_does_not_consume_quota` / `test_notify_throttle_dedup_table_evicted`); 此前 1022 = 1021 + 任务档案改名与索引生成化新增 `test_memory_bank.py::test_index_is_regenerated` 1 项; 1021 = 1018 + WEB UI **视图重建范围收口** 3 项(`test_flat_view_refreshed_by_main_loop_tick` / `test_rebuild_views_single_entry_point` / `test_api_state_status_carries_server_state`); 此前 = 1007 + **副作用记账器固化**(`tests/sidefx.py` 记账与判定策略 + `tests/test_sidefx.py` 10 项策略单测) + `test_notify.py` 1 项 "启用且不 mock" 真实路径回归; 此前 1007 = 1006 + **测试期禁止真实系统通知**(`tests/conftest.py` 会话夹具)新增 1 项 `test_notify_real_send_blocked_under_pytest`; 此前 1006 = 1001 + WEB UI **错误种子显示具体原因**(TASK015)5 项新测试: `test_error_reason_from_tracker_msg` / `test_error_reason_missing_files_without_api` / `test_refresh_error_reasons_budget_and_ttl` / `test_refresh_error_reasons_clears_when_recovered` / `test_refresh_error_reasons_skips_when_disconnected`; 此前 1001 = 1000 + `test_memory_bank.py::test_task_ids_and_slugs_are_unique` 1 项, 清理并行 worktree 造成的重复档案时新增的结构守卫; 此前 2026-09-17 实测 1000, uv 环境; 修复导出 .torrent 的 latin-1 头崩溃 + `test_content_disposition_encoding` 后 = 999 + 1; 此前 999 = 第十轮 996 + 3 项 fs 端点测试; WEB UI 第十轮 16 项修复后 = 996 + `test_open_path_select_file_per_platform` + `test_api_fs_dirs_endpoint` + `test_api_fs_mkdir_endpoint` 3 项; **第十一轮 7 项前端修复后复核同为 999**(无新增后端逻辑, 改动由静态守阵 + 双 UI 浏览器冒烟覆盖), 前端改动不影响单测, 双 UI 模板/CSS 由静态守阵 + 浏览器冒烟覆盖), 分支覆盖率 92%(ui.py 窗口/托盘本体不单测, 真机冒烟验证; WEB UI 端到端为后端单测 + 临时 Fake 服务浏览器冒烟; 真实 HTTP 栈的集成测试用 `helpers.FakeQbServer` 本地假服务, 不连真实 qBittorrent; 注意: test_ui.py::test_autostart_windows_registry 真写 HKCU 注册表, 沙箱化 shell 里会因写入受限失败, 常规终端应通过)
 uv run pytest tests -q                 # pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch
@@ -18,7 +28,10 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 - `pytest.ini`: `pythonpath = src` (uv sync 也会把项目 editable 装入 venv, 双保险), `testpaths = tests`, addopts 含覆盖率 → 每次 pytest 输出 coverage 表 (会稍慢, 调试单个测试可加 `--no-cov`)。
 - 测试**基本全部使用 Fake, 不连真实 qBittorrent**(随时可全量运行)。唯一例外是 `test_local_qb_service.py` + `test_ui.py::test_connect_failure_throttles_logging`: 它们用 `helpers.FakeQbServer`(标准库 `http.server` 监听回环随机端口)承载**真实** `qbittorrent-api`/requests 栈, 因为"trust_env 是否真的生效"“库重建 Session 是否弄丢我们的设置”这类行为在进程内替身上根本无法暴露(历史教训)。
 - 覆盖率现状 (2026-09-19 实测, 全量): 总 92%; 低洼: `ui.py`(GUI 本体真机冒烟不单测); 近乎全绿: `config/impact.py`/`config/schema.py`/`logging.py`/`registry.py`/`taskqueue.py`/`qbapi.py`/`speed_curve.py`/`tracker.py` 100%, `notify.py` 98%, `utils.py` 98%, `qbmanager.py` 96%, `tvshows.py` 94%, `web.py` 92%(较 2026-09-14 的 75% 提升: 架构审查 Wave 0 补了配置掩码/密钥日志/畸形 key 等分支), conditions 99%。补测试优先看 term-missing 输出。
-- **耗时实测 (2026-09-19, 空载)**: `uv run pytest tests -q`(含 `--cov-branch`)≈ **32 秒**; 加 `--no-cov` ≈ **25 秒**。此前文档写的"约 12 秒"已过时 —— 另注意**不要并发起多个 pytest**: 本项目有绑定本地端口的 `FakeQbServer` 用例, 且 sidefx 守卫按**会话**记账(任何进程删了越界文件都会算到当前会话头上), 并发跑会出现假的失败。
+- **耗时实测 (2026-09-19, 空载, 波次一后)**: `uv run pytest tests -q`(含 `--cov-branch`)≈ **40 秒**; 加 `--no-cov` ≈ **30 秒**;
+  Linux(WSL 沙箱, ext4)≈ **12 秒** —— Windows 慢约 3 倍, 差值主要来自 drvfs 与进程/文件操作。
+  波次一新增的 4 条主循环用例用**真实睡眠**(0.05~0.6s)观测节拍, 共约 2s, 是耗时上升的主因; 判据用真实时间而非
+  mock 时钟 —— 若换成 mocked sleep, 时间不前进会导致"两条线都不到期"的死循环, 用例会挂死而非失败。此前文档写的"约 12 秒"已过时 —— 另注意**不要并发起多个 pytest**: 本项目有绑定本地端口的 `FakeQbServer` 用例, 且 sidefx 守卫按**会话**记账(任何进程删了越界文件都会算到当前会话头上), 并发跑会出现假的失败。
 
 > **图形化配置编辑器测试**: `test_config_schema.py`(UI 元数据与配置键/插件的**一致性守卫**, 20 项: 顶层键 vs `KNOWN_CONFIG_KEYS`、各段子键 vs `KNOWN_*_KEYS`、插件表 vs `registry`、kind/optional/enum 形态自检) 与 `test_config_writer.py`(结构化写回: 读取语义/校验拒绝不碰磁盘/注释与标量风格保留/增删键/R 级回退/预览不落盘/有损数字串不被规范化)。**新增配置键或插件时必须同步 schema.py**, 否则守卫测试直接失败。
 

@@ -22,15 +22,68 @@ logger = logging.getLogger(__name__)
 # 留足慢站点余量取 30s(主循环 main_tick=2s -> 约 15 轮确认机会), 超时仍未确认即判失败。
 REANNOUNCE_CONFIRM_TIMEOUT = 30.0
 
+# **自投递**命令: 由 Web 侧在自己处理过程中 put 回队列(不是用户操作), 投递后**不唤醒**主循环。
+# 目前只有 build_search_index —— web_view 在搜索索引脏时自投递(web_view.py:513/:699)。
+# ❗若允许它唤醒会形成自激循环: 唤醒 -> drain(单轮最多 SEARCH_INDEX_BUILD_BUDGET=500 条文件 API)
+# -> 索引仍脏 -> 再投递 -> 立刻再唤醒 …… 中间没有 tick 兜底, 直接打满 CPU 并冲垮 qB。
+# 新增自投递命令时必须同步加进这里(测试守卫: tests/test_web_commands.py)。
+SELF_POSTED_COMMANDS = frozenset({"build_search_index"})
+
+# 执行后会**改变 qB 种子状态**的命令: 主循环在这批命令消费完后补一次完整刷新,
+# 让真实状态立刻进快照, 而不必等下个节拍(P0-5)。按操作次数计费, 不是按时间计费。
+# 用白名单而非黑名单: 配置/标签/分类类命令(reload_config/create_tags/edit_category …)
+# 改的不是种子状态, 补刷新无收益; reannounce_* 的结果由 tracker 确认跟踪器单独推进。
+RESYNC_COMMANDS = frozenset(
+    {
+        "pause_group",
+        "resume_group",
+        "delete_group",
+        "pause_torrent",
+        "resume_torrent",
+        "delete_torrent",
+        "recheck_torrent",
+        "super_seeding",
+        "force_start",
+        "set_torrent_limits",
+        "set_share_limits",
+        "set_torrent_location",
+        "rename_torrent",
+        "queue_torrent",
+        "set_auto_tmm",
+        "add_trackers",
+        "set_file_priority",
+        "rename_fs",
+        "bulk_torrents",
+        "add_torrents",
+    }
+)
+
+
+def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
+    """P0-0 埋点: 把一次命令拆成两段耗时(毫秒), 供 /api/cmd/{id} 回传
+
+    wait_ms = 出队时刻 - 投递时刻(命令排队等主循环的空档, P0-1 唤醒后应趋近 0)
+    exec_ms = 执行完时刻 - 出队时刻(真正干活: 多数是 1 次 qB API 往返)
+    """
+    if not queued_ts:
+        return {}
+    return {
+        "wait_ms": round((start_ts - queued_ts) * 1000, 1),
+        "exec_ms": round((time.time() - start_ts) * 1000, 1),
+    }
+
 
 class WebCommandsMixin:
-    def _drain_web_commands(self):
+    def _drain_web_commands(self) -> bool:
         """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)
 
         命令带 cmd_id: 执行完立即写回执(_web_results), 供前端 /api/cmd/{id} 轮询执行结果。
         例外: reannounce 只发指令并登记确认跟踪(_reannounce_pending), 回执由
         _check_reannounce_pending 在 tracker 确认后写入 —— "已发送"不等于"汇报成功";
         bulk_torrents 的回执由 handler 聚合写(部分失败需报缺失计数)。
+
+        返回本批是否含"改了 qB 种子状态"的命令(RESYNC_COMMANDS)且执行成功 ——
+        主循环据此补一次完整刷新(P0-5)。整批只补一次, 不是每条命令各补一次。
         """
         handlers = {
             "pause_group": self._cmd_pause_group,
@@ -66,11 +119,15 @@ class WebCommandsMixin:
             "reload_config": self._cmd_reload_config,
             "build_search_index": self._cmd_build_search_index,
         }
+        changed = False
         try:
             while True:
                 cmd, payload = self.web_commands.get_nowait()
                 cmd_id = str(payload.get("cmd_id") or "")
-                args = {k: v for k, v in payload.items() if k != "cmd_id"}
+                # 下划线前缀的键是埋点/元数据, 不传给 handler(否则被当命令参数报 TypeError)
+                args = {k: v for k, v in payload.items() if k != "cmd_id" and not k.startswith("_")}
+                queued_ts = payload.get("_queued_ts")
+                start_ts = time.time()  # P0-0: 出队即开始, 用于拆 wait_ms / exec_ms
                 try:
                     if cmd_id and cmd in ("reannounce_group", "reannounce_torrent", "bulk_torrents", "add_torrents"):
                         # handler 只发指令并登记确认跟踪(bulk: 聚合写回执; add: 依 qB 结果串写回执);
@@ -79,24 +136,35 @@ class WebCommandsMixin:
                     else:
                         handlers[cmd](**args)
                         if cmd_id:
-                            self._set_web_result(cmd_id, "ok")
+                            self._set_web_result(cmd_id, "ok", timing=_timing(queued_ts, start_ts))
+                    # handler 已同步改完 qB 状态(未抛异常即成功) -> 记一笔, 整批结束后补刷新
+                    if cmd in RESYNC_COMMANDS:
+                        changed = True
                 except KeyError as e:
                     logger.warning(f"WEB UI 未知命令: {e}")
                     if cmd_id:
-                        self._set_web_result(cmd_id, "error", f"未知命令: {e}")
+                        self._set_web_result(cmd_id, "error", f"未知命令: {e}", _timing(queued_ts, start_ts))
                 except Exception as e:
                     logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
                     if cmd_id:
-                        self._set_web_result(cmd_id, "error", str(e))
+                        self._set_web_result(cmd_id, "error", str(e), _timing(queued_ts, start_ts))
         except queue.Empty:
             pass
+        return changed
 
-    def _set_web_result(self, cmd_id: str, status: str, error: str = "") -> None:
-        """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长"""
+    def _set_web_result(self, cmd_id: str, status: str, error: str = "", timing: Optional[dict] = None) -> None:
+        """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长
+
+        timing: P0-0 埋点(wait_ms 排队等主循环 / exec_ms 执行耗时), 由 /api/cmd/{id} 一并返回,
+        前端据此把"点下去到看到结果"拆成可归因的几段, 而不是只有一个"感觉慢"。
+        """
         now = time.time()
         if len(self._web_results) > 64:
             self._web_results = {k: v for k, v in self._web_results.items() if now - v.get("ts", 0) < 120}
-        self._web_results[cmd_id] = {"status": status, "error": error, "ts": now}
+        rec = {"status": status, "error": error, "ts": now}
+        if timing:
+            rec.update(timing)
+        self._web_results[cmd_id] = rec
 
     def _trackers_baseline(self, hashes: List[str]) -> dict:
         """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}

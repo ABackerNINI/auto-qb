@@ -773,6 +773,7 @@ class FakeConfig:
     state_file = ""  # 由测试设置
     interval = 60  # QbManager 主刷新任务 interval(测试不触发 refresh)
     main_tick = 1.0
+    sync_interval = 1.5  # 同步线节拍(状态刷新); 与 Config 默认一致
     max_tasks_per_tick = 20
     logging = LoggingConfig(
         level="WARNING", file="", max_bytes="10MiB", format="%(asctime)s [%(levelname)s] %(message)s"

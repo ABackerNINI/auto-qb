@@ -256,7 +256,13 @@ const app = createApp({
       // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
       status: {},
-      pollSec: 2,
+      pollSec: 2,  // 前端轮询间隔(秒)。⚠️ 服务端状态再快也要等下一轮轮询才可见 —— 后端所有
+      // "降低状态延迟"的优化都被这个值封顶。降它之前必须先完成 P1(按视图回传 + 行窗口化),
+      // 否则只是把"每轮全量回传 + 整树重渲染"的频率提上去, 在大库上会**加剧**不跟手。
+      // P0-0 埋点(排查用, 不参与渲染): 单次命令端到端耗时与单轮视图赋值耗时
+      cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行
+      renderMs: 0,  // 单轮 refresh() 中"赋值 + 多选交集"的耗时(不含网络)
+      pendingOps: {},  // P0-3 乐观 UI: hash -> { patch, prev, ts }, 见 isPending/applyOptimistic
       expandedKey: null,
       // 排序: 默认 = 组内最近添加时间降序(见 DEFAULT_SORT); 点击列头按 降序->升序->恢复默认 三态循环
       sortKey: DEFAULT_SORT.key,
@@ -1506,6 +1512,9 @@ const app = createApp({
         // 且状态栏与行数据**同源同轮**(不再出现"状态栏新鲜 / 种子行滞后"的错位观测)。
         if (state.status && state.status.server !== undefined) this.statsServer = state.status.server || null;
         if (state.updated !== false) {
+          // P0-0 埋点: 这段赋值 + 多选交集是"点了没反应"里唯一发生在前端的部分,
+          // 超过 50ms 就在控制台留痕 —— 大库下这是 P1(行窗口化)要不要做的直接判据。
+          const _t0 = performance.now();
           // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
           this.groups = state.groups || [];
           this.singles = state.singles || [];  // 未归组种子与 groups 同门控回传(搜索兜底/总数回退)
@@ -1522,7 +1531,10 @@ const app = createApp({
             this.selGroups = this.selGroups.filter((k) => keys.has(k) || k.startsWith("u-"));
             this.selMembers = this.selMembers.filter((h) => hashes.has(h));
           }
+          this.renderMs = Math.round((performance.now() - _t0) * 10) / 10;
+          if (this.renderMs > 50) console.warn(`[perf] 单轮视图赋值 ${this.renderMs}ms(>50ms, 需 P1 行窗口化)`);
         }
+        this.reapplyPending();  // P0-3: 整表替换后把仍 pending 的乐观值重新贴上
         this.serviceDown = false;
         this.pollFails = 0;
       } catch (e) {
@@ -2004,20 +2016,88 @@ const app = createApp({
      * pause/resume 等命令几乎即时; reannounce 的回执由后端 tracker 确认跟踪器在
      * "status 变 working / next_announce 被重置"或超时后写入(窗口 30s, 前端多留余量)。
      */
-    async waitCmd(cmdId, timeoutMs = 40000) {
+    async waitCmd(cmdId, timeoutMs = 40000, opts = {}) {
+      /* 首查后退避(原实现第一查也要先睡 500ms —— 快命令平白多 500ms):
+       * 快命令曲线 0 → 150 → 300 → 500 封顶; reannounce 走宽松曲线 500 → 1000 封顶
+       * (tracker 确认本来就要几秒, 密轮询只增请求数不减延迟)。
+       * 多发的请求只落在"命令在途"的极短窗口内, 空闲时没有任何额外轮询。
+       * P0-0 埋点: 后端回执带 wait_ms/exec_ms 时记入 this.cmdStats(排查用, 不打日志)。 */
       const start = Date.now();
+      const firstMs = opts.firstMs || 0;
+      const capMs = opts.capMs || 500;
+      let delay = firstMs;
       while (Date.now() - start < timeoutMs) {
-        await new Promise((r) => setTimeout(r, 500));
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         try {
           const r = await this.api(`/api/cmd/${cmdId}`);
-          if (r.status === "ok") return { ok: true };
-          if (r.status === "error") return { ok: false, error: r.error || "执行失败" };
+          if (r.status === "ok" || r.status === "error") {
+            if (typeof r.wait_ms === "number") {
+              this.cmdStats = { totalMs: Date.now() - start, waitMs: r.wait_ms, execMs: r.exec_ms, cmdId };
+            }
+            return r.status === "ok" ? { ok: true } : { ok: false, error: r.error || "执行失败" };
+          }
         } catch (e) {
           if (e.auth) throw e;  // 401 由统一收口处理(回登录)
           // 网络抖动: 继续轮询(服务恢复后回执仍可取到)
         }
+        delay = delay === 0 ? 150 : Math.min(capMs, delay * 2);
       }
       return { ok: false, error: `执行等待超时(${Math.round(timeoutMs / 1000)}s), 结果以程序日志为准` };
+    },
+    /* ---------------- P0-3 乐观 UI: 点击即变 ----------------
+     * 只对"结果可预测"的动作做乐观(白名单: pause/resume); 强制汇报/重新校验/添加种子这类
+     * "结果在远端"的动作不做, 由"等待中"常驻 toast 承担。
+     * pending 行的乐观字段每轮 refresh 后被重新贴上(整表替换会盖掉), 直到服务端数据与预期
+     * 一致或 3s 超时 —— 避免"先变过去、下一轮又弹回来"的抖动; 回执 error 立即回滚原值,
+     * 绝不留假状态(断网/qB 未启动时必须能看到失败)。 */
+    isPending(hash) {
+      const op = this.pendingOps[hash];
+      if (!op) return false;
+      if (Date.now() - op.ts > 3000) {
+        delete this.pendingOps[hash];  // 超时回落真值: 不再贴补丁, 下轮以服务端为准
+        return false;
+      }
+      return true;
+    },
+    _optimisticPatch(action, row) {
+      if (action === "pause") return { kind: "paused" };
+      if (action === "resume") return { kind: row && row.progress >= 1 ? "seeding" : "downloading" };
+      return null;  // 不在白名单 -> 不做乐观
+    },
+    _forEachRow(hash, fn) {
+      for (const r of this.torrents || []) if (r.hash === hash) fn(r);
+      for (const r of this.singles || []) if (r.hash === hash) fn(r);
+      for (const g of this.groups || []) for (const m of g.members || []) if (m.hash === hash) fn(m);
+    },
+    applyOptimistic(hashes, action) {
+      const now = Date.now();
+      for (const h of hashes || []) {
+        if (!h) continue;
+        this._forEachRow(h, (row) => {
+          const patch = this._optimisticPatch(action, row);
+          if (!patch) return;
+          const prev = {};
+          for (const k of Object.keys(patch)) prev[k] = row[k];
+          Object.assign(row, patch);
+          this.pendingOps[h] = { patch, prev, ts: now, action };
+        });
+      }
+    },
+    resolveOptimistic(hashes, ok) {
+      for (const h of hashes || []) {
+        const op = this.pendingOps[h];
+        if (!op) continue;
+        if (ok) continue;  // 成功: 保留到服务端一致或 3s 超时(见 isPending)
+        this._forEachRow(h, (row) => Object.assign(row, op.prev));  // 失败: 回滚
+        delete this.pendingOps[h];
+      }
+    },
+    reapplyPending() {
+      // 每轮 refresh 整表替换会盖掉乐观值, 这里把仍 pending 的补丁重新贴上
+      for (const h of Object.keys(this.pendingOps)) {
+        if (!this.isPending(h)) continue;  // 顺带清掉已超时的
+        this._forEachRow(h, (row) => Object.assign(row, this.pendingOps[h].patch));
+      }
     },
     async act(action) {
       this.menu.visible = false;
@@ -2028,11 +2108,15 @@ const app = createApp({
         if (action === "reannounce") {
           // 强反馈状态机: 常驻"等待中" -> 原位换成 成功(绿) / 超时失败(琥珀), 不再用红色警告样式
           const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
-          const r = await this.waitCmd(resp.cmd_id);
+          const r = await this.waitCmd(resp.cmd_id, 40000, { firstMs: 500, capMs: 1000 });
           if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
           else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
         } else {
+          const g = this._findGroup(this.menu.key);
+          const hashes = (g && g.members ? g.members : []).map((m) => m.hash);
+          this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
           const r = await this.waitCmd(resp.cmd_id);
+          this.resolveOptimistic(hashes, r.ok);
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
           else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
         }
@@ -2518,23 +2602,41 @@ const app = createApp({
       const what = ep.scope === "show" ? "整剧" : "整集";
       const label = this._actionText(action);
       const isRe = action === "reannounce";
-      const tid = isRe
-        ? this.toast(`强制汇报等待中…(${hashes.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
-        : null;
+      // P0-4: pause/resume 合单为一条 bulk 命令 —— 整剧动辄上百集, 逐条投递要发上百次请求
+      if (!isRe) {
+        try {
+          const resp = await this.api("/api/torrents/bulk", {
+            method: "POST",
+            body: JSON.stringify({ action, hashes }),
+          });
+          const r = await this.waitCmd(resp.cmd_id);
+          if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
+          else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
+        } catch (e) {
+          if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+        }
+        return;
+      }
+      const tid = this.toast(`强制汇报等待中…(${hashes.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true });
       const results = await Promise.allSettled(
-        hashes.map((h) => this.api(`/api/torrents/${h}/${action}`, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+        hashes.map((h) =>
+          this.api(`/api/torrents/${h}/${action}`, { method: "POST" }).then((r) =>
+            this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 })
+          )
+        )
       );
       const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
       if (!fails.length) {
-        const okMsg = isRe ? `强制汇报成功(tracker 已确认, ${hashes.length} 个目标)` : `已执行: ${label}${what}(${hashes.length} 个种子)`;
-        if (isRe) this._finishToast(tid, "ok", okMsg, 3000);
-        else this.toast(okMsg, "ok", 2500);
+        this._finishToast(tid, "ok", `强制汇报成功(tracker 已确认, ${hashes.length} 个目标)`, 3000);
         return;
       }
       const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
-      const msg = `${label}: 成功 ${hashes.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`;
-      if (isRe) this._finishToast(tid, "timeout", msg, 6000);
-      else this.toast(msg, fails.length === hashes.length ? "error" : "info", 8000);
+      this._finishToast(
+        tid,
+        "timeout",
+        `强制汇报: 成功 ${hashes.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
+        6000
+      );
     },
     /* 删除整集/整剧(全部版本; FX-13 起两者共用): 目标名与种子数进 body, 详情行由 _deleteFlow 统一派生 */
     async delEpisode() {
@@ -2707,47 +2809,63 @@ const app = createApp({
       }
       return { groupKeys, memberHashes };
     },
-    /* 批量动作: 并行投递 + 逐个等回执, 汇总成败(reannounce 的回执含 tracker 确认) */
+    /* 批量动作: pause/resume/recheck **合单**为一条 bulk 命令(一次 POST + 一个聚合回执);
+     * reannounce 仍逐目标投递(后端 _BULK_ACTIONS 不含它 —— tracker 确认要逐个跟踪)。
+     * 合单前 100 个目标 = 100 次 POST + 100 条回执轮询, 后端还要串行跑 100 次 qB 调用
+     * (在主循环线程上, 期间界面"卡住"); 合单后是 1 + 1。 */
     async bulkAct(action) {
       const { groupKeys, memberHashes } = this._bulkTargets();
       const label = action === "recheck" ? "重新校验" : this._actionText(action);
-      let jobs;
-      if (action === "recheck") {
-        // 组级无 recheck 端点(校验是种子级动作): 把选中组展开为成员后逐种投递
+      if (action !== "reannounce") {
+        // 后端 bulk 会自己展开 keys 的组成员并与 hashes 合并去重, 组级端点不支持的
+        // recheck 也因此不必在前端展开 —— 只有组没有成员时后端计一个"缺失组"。
+        if (!groupKeys.length && !memberHashes.length) return;
         const hashes = [...memberHashes];
         for (const k of groupKeys) {
           const g = this._findGroup(k);
-          if (g) for (const m of g.members) if (!hashes.includes(m.hash)) hashes.push(m.hash);
+          if (g) for (const m of g.members) hashes.push(m.hash);
         }
-        jobs = hashes.map((h) => `/api/torrents/${h}/recheck`);
-      } else {
-        jobs = [
-          ...groupKeys.map((k) => `/api/groups/${k}/${action}`),
-          ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
-        ];
+        this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
+        try {
+          const resp = await this.api("/api/torrents/bulk", {
+            method: "POST",
+            body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes }),
+          });
+          const r = await this.waitCmd(resp.cmd_id);
+          this.resolveOptimistic(hashes, r.ok);
+          const n = groupKeys.length + memberHashes.length;
+          if (r.ok) this.toast(`已执行: ${label}(${n} 个目标)`, "ok", 2500);
+          else this.toast(`${label}失败: ${r.error}`, "error", 8000);
+        } catch (e) {
+          this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
+          if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+        }
+        return;
       }
+      const jobs = [
+        ...groupKeys.map((k) => `/api/groups/${k}/${action}`),
+        ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
+      ];
       if (!jobs.length) return;
       // 批量汇报: 常驻"等待中"(含目标数), 回执齐后原位换汇总终态(成功/超时, 琥珀不用红警告)
-      const isRe = action === "reannounce";
-      const tid = isRe
-        ? this.toast(`强制汇报等待中…(${jobs.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true })
-        : null;
+      const tid = this.toast(`强制汇报等待中…(${jobs.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true });
       const results = await Promise.allSettled(
-        jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
+        jobs.map((p) =>
+          this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 }))
+        )
       );
       const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
       if (!fails.length) {
-        const okMsg = isRe
-          ? `强制汇报成功(tracker 已确认, ${jobs.length} 个目标)`
-          : `已执行: ${label}(${jobs.length} 个目标)`;
-        if (isRe) this._finishToast(tid, "ok", okMsg, 3000);
-        else this.toast(okMsg, "ok", 2500);
+        this._finishToast(tid, "ok", `强制汇报成功(tracker 已确认, ${jobs.length} 个目标)`, 3000);
         return;
       }
       const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
-      const msg = `${label}: 成功 ${jobs.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`;
-      if (isRe) this._finishToast(tid, "timeout", msg, 6000);
-      else this.toast(msg, fails.length === jobs.length ? "error" : "info", 8000);
+      this._finishToast(
+        tid,
+        "timeout",
+        `强制汇报: 成功 ${jobs.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
+        6000
+      );
     },
     /* DLG-02: 批量删除文案按选择构成计数(仅辅种=N 个辅种 / 仅种子=N 个种子)。
      * 用 _bulkTargets 的有效口径 —— 虚拟行(未归组命中)无真实组 key、按种子投递, 计入"种子"
@@ -2940,11 +3058,14 @@ const app = createApp({
         const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
         if (action === "reannounce") {
           const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
-          const r = await this.waitCmd(resp.cmd_id);
+          const r = await this.waitCmd(resp.cmd_id, 40000, { firstMs: 500, capMs: 1000 });
           if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
           else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
         } else {
+          const hashes = [this.menu.hash];
+          this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
           const r = await this.waitCmd(resp.cmd_id);
+          this.resolveOptimistic(hashes, r.ok);
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
           else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
         }

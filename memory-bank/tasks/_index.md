@@ -20,7 +20,7 @@
 
 ## Pending
 
-(暂无 — 下一步候选见 [../activeContext.md](../activeContext.md) 的"下一步候选"段)
+- [26-09-19-webui-responsiveness] WEB UI 操作跟手性优化 - 用户报「WEBUI 操作不跟手」。链路剖面定位四类根因: ①命令要等主循环 main_tick(默认 2s)才被 drain ②waitCmd 首查前固定睡 500ms 且全程无即时反馈 ③每 2s 全量回传四视图 + 单个巨型 Vue 实例整树重渲染(种子页无虚拟化) ④bulkAct 逐目标 POST ⇒ 后端 N 次 qB 串行调用阻塞主循环。计划含 P0×5 / P1×5 / P2×4 共 14 项、三波次、验收口径与红线
 
 ## Completed
 

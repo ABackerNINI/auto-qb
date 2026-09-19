@@ -11,6 +11,10 @@
 - test_throttle_waits_stop_event: 托管模式节流走 Event.wait 并回传停止信号
 - test_run_loop_throttles_without_stop_event: 非托管模式主循环每轮 sleep(main_tick)(回归守卫)
 - test_run_loop_managed_never_sleeps: 传 stop_event 时不 sleep(托盘模式停止信号即时响应)
+- test_run_loop_layered_cadence: 分层节拍——同步线按 sync_interval、任务线按 main_tick, 两线次数不等
+- test_wake_drains_commands_without_extra_ticks: 命令唤醒只走命令线, 命令风暴下 tick 次数不增加
+- test_drain_web_commands_reports_resync_needed: P0-5 门控——只有改种子状态的命令置 changed
+- test_command_batch_triggers_single_resync: P0-5 一批命令后补**一次**完整刷新(整批合单)
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
@@ -36,6 +40,7 @@
 import json
 import os
 import tempfile
+import threading
 import time
 from unittest import mock
 
@@ -138,35 +143,167 @@ def test_throttle_waits_stop_event():
 
 
 def test_run_loop_throttles_without_stop_event():
-    """回归守卫: 非托管模式下主循环每轮必须 sleep(main_tick), 不得空转
+    """回归守卫: 非托管模式下主循环每轮必须真实阻塞到"下一条时间线", 不得空转
 
     曾因 `if stop_event is not None and stop_event.wait(main_tick)` 的短路使非托管模式
     完全不阻塞 -> 满速空转(py-spy 实证约 2800 tick/s), CPU 打满且 sync/maindata 请求量放大数千倍。
+
+    分层节拍后阻塞原语换成了 `_wait_next`(非托管模式走 wake_event.wait(剩余时间)),
+    故判据改为**真实经过时间**: 循环若不阻塞, 两次 _tick 会在微秒内连续发生。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.connect = mock.Mock(return_value=True)
+        # 两条线同拍 -> 每轮走完整 _tick(与改造前"单一 cadence"的循环结构等价)
+        mgr.config.main_tick = 0.05
+        mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
-        with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
-            mgr.run(dry_run=False)
+        start = time.monotonic()
+        mgr.run(dry_run=False)
+        elapsed = time.monotonic() - start
         assert mgr._tick.call_count == 2
-        assert fake_sleep.call_args_list == [mock.call(mgr.config.main_tick)
-                                            ], (f"每轮 tick 后都要 sleep(main_tick), 实际 {fake_sleep.call_args_list}")
+        assert elapsed >= 0.05, f"每轮循环后应阻塞到下一条时间线, 实际 {elapsed:.3f}s —— 主循环在空转"
 
 
 def test_run_loop_managed_never_sleeps():
-    """托管模式(传 stop_event): 节流走 Event.wait, 不调用 time.sleep(托盘停止信号即时响应)"""
+    """托管模式(传 stop_event): 阻塞走 Event.wait, 绝不调用 time.sleep(托盘停止信号即时响应)
+
+    分层节拍后停止信号与命令唤醒是两个独立事件(Python 无多事件等待原语), `_wait_next`
+    按 STOP_POLL_INTERVAL 分段 wait(stop_event) 并在段间检查唤醒 —— 分段不影响本用例
+    的判据: 只要没走 time.sleep, 停止信号就仍是即时响应的。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.connect = mock.Mock(return_value=True)
+        # 两条线同拍 -> 每轮走完整 _tick
+        mgr.config.main_tick = 0.05
+        mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
-        stop_event = mock.Mock()
-        stop_event.is_set.return_value = False
-        stop_event.wait.return_value = False
+        stop_event = threading.Event()
         with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
             mgr.run(dry_run=True, stop_event=stop_event)
         fake_sleep.assert_not_called()
-        stop_event.wait.assert_called_with(mgr.config.main_tick)
+        assert mgr._tick.call_count == 2
+
+
+def test_run_loop_layered_cadence():
+    """分层节拍: 同步线按 sync_interval、任务线按 main_tick, 两条线各有各的节拍
+
+    这是"状态新鲜度不再被任务节拍拖累"的直接判据 —— 若退化成单一 cadence, 两线次数会相等。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.sync_interval = 0.05
+        mgr.config.main_tick = 0.2
+        calls = {"sync": 0, "task": 0}
+
+        def sync_line(dry_run, flush=True):
+            calls["sync"] += 1
+            if calls["sync"] >= 12:
+                raise KeyboardInterrupt  # 同步线 12 次 ≈ 0.6s 后退出
+
+        def task_line(dry_run):
+            calls["task"] += 1
+
+        mgr._sync_line = sync_line
+        mgr._task_line = task_line
+        mgr.run(dry_run=False)
+        assert calls["sync"] == 12
+        # 0.6s / 0.2s ≈ 3 次(允许调度抖动); 关键是远小于同步线的 12 次
+        assert 2 <= calls["task"] <= 4, f"任务线不应跟同步线同频, 实际 {calls['task']}"
+
+
+def test_wake_drains_commands_without_extra_ticks():
+    """P0-1 命令唤醒: 只走命令线 —— 命令风暴下 tick/同步线次数**不增加**, 但命令被立即消费
+
+    反过来若退化成"投递即跑一轮 tick", 本用例的 task 计数会随唤醒次数一起涨。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        # 两条线都设成 5s: 若没有唤醒, 观测窗口内一次 drain 都不会发生
+        mgr.config.main_tick = 5.0
+        mgr.config.sync_interval = 5.0
+        calls = {"drain": 0, "task": 0, "sync": 0}
+        real_drain = mgr._drain_web_commands
+
+        def drain():
+            calls["drain"] += 1
+            return real_drain()
+
+        mgr._drain_web_commands = drain
+        mgr._sync_line = lambda dry_run, flush=True: calls.__setitem__("sync", calls["sync"] + 1)
+        mgr._task_line = lambda dry_run: calls.__setitem__("task", calls["task"] + 1)
+        stop = threading.Event()
+
+        def waker():
+            for _ in range(3):
+                time.sleep(0.15)
+                mgr.wake()  # 模拟 Web 线程连续投递 3 条命令
+            stop.set()
+            mgr.wake()
+
+        threading.Thread(target=waker, daemon=True).start()
+        mgr.run(dry_run=False, stop_event=stop)
+        # 命令线: 首轮 + 3 次唤醒(第 4 次唤醒与停止同时, 可能不再 drain)
+        assert calls["drain"] >= 3, f"唤醒后应立即消费命令, 实际 drain {calls['drain']} 次"
+        # 任务线/同步线: 只有首轮, 不因唤醒而增加
+        assert calls["task"] == 1, f"唤醒不应触发任务线, 实际 {calls['task']}"
+        assert calls["sync"] == 1, f"唤醒不应触发同步线, 实际 {calls['sync']}"
+
+
+def test_drain_web_commands_reports_resync_needed():
+    """P0-5 门控: 只有"改 qB 种子状态"的命令(RESYNC_COMMANDS)才置 changed"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        # handler 用替身(不碰 qB), 只验证 changed 判定
+        mgr._cmd_pause_torrent = mock.Mock()
+        mgr._cmd_reload_config = mock.Mock()
+        mgr._cmd_build_search_index = mock.Mock()
+        mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
+        mgr.web_commands.put(("build_search_index", {"cmd_id": "c2"}))
+        assert mgr._drain_web_commands() is False, "配置热重载/索引构建改的不是种子状态, 不补刷新"
+        mgr.web_commands.put(("pause_torrent", {"cmd_id": "c3", "hash": "HA"}))
+        assert mgr._drain_web_commands() is True
+
+
+def test_command_batch_triggers_single_resync():
+    """P0-5: 一批改状态命令后补**一次**完整刷新(整批合单), 而不是每条一次
+
+    判据: 同步线设成 5s(观测窗口内本不会再同步), 一批 5 条命令后刷新应恰好 +1。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.main_tick = 5.0
+        mgr.config.sync_interval = 5.0  # 无补刷新时观测窗口内不会再次同步
+        calls = {"refresh": 0}
+
+        def refresh(dry_run=False):
+            calls["refresh"] += 1
+            if calls["refresh"] >= 2:
+                raise KeyboardInterrupt  # 观测到"补的那一次"即退出
+
+        mgr._refresh_torrents = refresh
+        mgr._task_line = lambda dry_run: None
+        mgr._cmd_pause_torrent = mock.Mock()
+        stop = threading.Event()
+
+        def poster():
+            time.sleep(0.15)
+            for i in range(5):
+                mgr.web_commands.put(("pause_torrent", {"cmd_id": f"c{i}", "hash": "HA"}))
+            mgr.wake()
+            # 兜底: 补刷新缺失时循环不会自行退出(刷新停在 1 次), 这里兜住避免用例挂死
+            time.sleep(0.8)
+            stop.set()
+            mgr.wake()
+
+        threading.Thread(target=poster, daemon=True).start()
+        mgr.run(dry_run=False, stop_event=stop)
+        # 首轮(两条线都到期)一次 + 命令批一次 = 2; 5 条命令不产生 5 次
+        assert calls["refresh"] == 2, f"一批 5 条命令应只补一次刷新, 实际 {calls['refresh']}"
 
 
 def test_run_due_requeues():

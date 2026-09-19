@@ -32,19 +32,59 @@
 run(dry_run, stop_event=None, pause_event=None):
     connect()                       # _new_client(本地地址 -> LocalQbClient) + auth_log_in
     _load_state(); _load_rules(); _create_global_tasks()
+    next_sync_at = next_tick_at = 0.0
     while True:
-        _tick(dry_run)              # 异常捕获后继续
-        _throttle(stop_event, main_tick)   # 托管: Event.wait(即时响应停止); 非托管: time.sleep
+        main_tick = config.main_tick          # L0 热重载: 每轮重读
+        sync_interval = config.sync_interval
+        _wake_event.clear()
+        state_changed = _drain_web_commands()  # 命令线: 被唤醒即消费(不等节拍)
+        _check_reannounce_pending()
+        if paused: _wait_next(...); continue   # 暂停 = 完全旁观
+        sync_due = now >= next_sync_at or (state_changed and not dry_run)  # P0-5 命令后补一次
+        tick_due = now >= next_tick_at
+        if sync_due and tick_due: _tick(dry_run)   # 两线同拍 -> 完整一轮, 视图只重建一次
+        elif sync_due:            _sync_line(dry_run)
+        elif tick_due:            _task_line(dry_run)
+        _wait_next(stop_event, _wake_event, min(next_sync_at, next_tick_at) - now)
     finally: save_state()           # 仅退出时落盘
 
-_tick(dry_run):
-    _refresh_torrents(dry_run)      # ① 刷新快照 + 事件处理
-    task_queue.run_due(dry_run, now=now, max_tasks=max_tasks_per_tick)  # ② 弹出+执行+收尾(默认最多20个/tick)
+_sync_line(dry_run, flush=True):     # 同步线 (sync_interval, 默认 1.5s)
+    _refresh_torrents(dry_run)       # 刷新快照 + 事件/分组
+    _flush_views()                   # 消费脏标记 + Web 活跃时惰性重建
+
+_task_line(dry_run):                 # 任务线 (main_tick, 默认 2s)
+    refresh_error_reasons()          # Web 活跃时; tracker 预取跟 main_tick, **不跟快档**
+    task_queue.run_due(dry_run, now=now, max_tasks=max_tasks_per_tick)
+    _flush_views()
+    _build_search_index()            # Web 活跃且脏; 文件 API 同样只跟 main_tick
+
+_tick(dry_run) = _sync_line(flush=False) + _task_line()   # 完整一轮; 两线同时到期时走它
 ```
+
+**分层节拍 (2026-09-19)**: 主循环拆成**两条独立时间线** —— 同步线(`sync_interval`, 默认 1.5s)只刷新状态不跑任务,
+任务线(`main_tick`, 默认 2s)跑任务 + tracker 预取 + 搜索索引。拆开后状态新鲜度不再被任务节拍拖累, 而
+`max_tasks_per_tick` 的**速率语义**(20 个/2s = 10 任务/秒)与每 tick 的 qB 请求预算仍由 `main_tick` 唯一决定。
+取值 1.5s 的依据: qB 自带 WebUI **1500ms** 更新一次, 比 qB 自身数据粒度更快没有意义。
+❗**不能**退化成"单一 cadence + 任务线在内部按 next_tick_at 门控": 那样任务实际间隔会被循环粒度量化
+(1.5s 循环粒 + 2s 任务间隔 ⇒ 实际 3s 一次), 速率语义失真 —— 等待必须用 `min(两条线的到期时间)` 才能各自精确。
 
 **节流 (`_throttle`, 2026-09-14 修复)**: 非托管模式(CLI 默认, `stop_event=None`)走 `time.sleep(main_tick)`; 托管模式(`--tray` 传入 `stop_event`)走 `Event.wait(main_tick)` 以保持停止信号即时响应。**主循环的节流绝不能依赖 `stop_event` 是否存在** —— 曾写成 `if stop_event is not None and stop_event.wait(main_tick)`, 在非托管模式被 `and` 短路导致**完全不阻塞**, 主循环空转(实测约 2800 tick/s, 为 main_tick=2s 设计值的约 5500 倍), 详见 [pitfalls.md](pitfalls.md)。注意首连失败重试循环(`while not self.connect()`)的语义**不同**: 非托管模式首连失败直接返回(不重试), 不可改成 `_throttle`。
 
-连接恢复检测: `_tick` 成功(即 API 可达)后若 `_last_conn_ok is False` 则置 True 并记一次"已重新连接"——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。连接异常节流 (2026-09-12): 运行期 tick 内的 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败静默 (防 qB 宕机刷屏); 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。启动首连失败 → `connect()` 返回 False → `run` 直接结束。
+**等待 (`_wait_next`, 2026-09-19 取代循环里的 `_throttle`)**: 阻塞到"距最近一条时间线的剩余时间", 同时响应
+**命令唤醒**(`manager.wake()`, Web 线程投递命令后调用)与停止信号。`stop_event` 与 `_wake_event` 是两个独立事件,
+Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event` 上(命令到达即返回, 延迟 ≈ 0), 按
+`STOP_POLL_INTERVAL=0.5s` 分段, 段间用**非阻塞**的 `stop_event.is_set()` 检查停止。顺序不能反 —— 先阻塞等
+`stop_event` 会让唤醒等满一个分段才被看见, 命令延迟从 ≈0 退化到 ≤0.5s。`_throttle` 仍保留(被单测直接覆盖),
+但循环里不再使用。
+
+**命令线 / 唤醒 (`wake()`, 2026-09-19)**: Web 线程投递命令后 `manager.wake()` ⇒ 主循环不等下个节拍立即消费一次
+命令(命令延迟 0~main_tick ⇒ ≈0)。❗**只走命令线, 绝不退化成"投递即跑下一轮 tick"**: ① `max_tasks_per_tick` 承载
+速率语义, tick 频率一旦由命令决定即失效; ② 存在**自投递命令**(Web 侧索引脏时自己 `put build_search_index`),
+会形成自激循环(唤醒→drain 500 条文件 API→索引仍脏→再投递→立刻再唤醒), 中间没有 tick 兜底 —— 不是变慢, 是
+打满 CPU 并冲垮 qB。故自投递命令登记在 `SELF_POSTED_COMMANDS` 里**不唤醒**(有静态反向守卫: 扫 `web_view.py`
+里所有 `web_commands.put` 的 cmd 名, 未登记即失败)。
+
+连接恢复检测: 任一条时间线跑通(即 API 可达)后若 `_last_conn_ok is False` 则置 True 并记一次"已重新连接"——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。连接异常节流 (2026-09-12): 运行期 tick 内的 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败静默 (防 qB 宕机刷屏); 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。启动首连失败 → `connect()` 返回 False → `run` 直接结束。
 
 `run_due` 内部: 先快照到期任务再逐个执行 (异常捕获内联; 执行中途重新入队的任务留到下一轮), 收尾:
 - handler 返回 **FINISHED** → 任务消亡, kind=="check" 释放在途校验标记 (典型: 种子已删除, 由 handler 的删除守卫判定)。

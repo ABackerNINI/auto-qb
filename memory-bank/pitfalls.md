@@ -731,3 +731,119 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **端到端冒烟(可复用)**: 桩一个最小 HTTP 服务就能让**真页面在真浏览器里跑起来** —— ①静态托管 `web_ui/static`(注意 `.js` 必须回 `text/javascript`, 否则 ES 模块/脚本被拒); ②只需桩三个端点: `/api/config/public` 回 `{"web":{"skip_local_verify":true}}`(免鉴权直入, 不用走密钥表单)、`/api/state`(含 `shows`/`torrents`, `torrents` 里的 SEED_ITEM 供 `memberByHash` 解析 —— 缺了剧行渲染不出来)、目标端点(如 `/api/open-path` 把请求体落盘, 事后直接看载荷); ③`/atlas/` 顶栏第三个按钮 = 追剧。浏览器用 **node playwright**(在 `~/.workbuddy-ai/binaries/node/workspace/node_modules`, 配 `NODE_PATH`) + `chromium.launch({ channel: "msedge" })` —— 缓存里的 chromium 版本号与 playwright 期望的经常对不上(本次 1234 vs 1243), **系统 Edge 永远可用**。本次红验: 修复前 `/api/open-path` 收到的是 `hash: {整个成员对象}`(含 `hit:false`), 修复后是 `hash: "aaaa…"` —— 这就是用户看到的「种子不存在」。
   - 两个小坑: 桩服务**不要用 `os.remove` 清空记录文件**(会触发工具环境的批量删除拦截, 进程直接死; 用 `open(path,"w").close()`); 无头页里 Vue 实例**不在 window 上**(`const app = createApp(...)` 是模块作用域), 要操作只能点 DOM。
 - **已固化**: `tests/test_web.py::test_frontend_static_bundle_health` 新增第 7 项 —— app.js 里凡是"集成员取 hash"的行(`e.members`/`ep.members` + `hashes`/`.hash`/`for (const h of`)必须含 `memberHashesOf(`, 否则报问题(对 HEAD 旧版实测报出全部 5 处)。
+### 主循环「命令即时唤醒」不能连带唤醒 tick: max_tasks_per_tick 与两个每 tick 预算会一起失效 (2026-09-19 设计评审)
+
+- **背景**: 为修「WEB UI 操作不跟手」提出「Web 投递命令即唤醒主循环」。初版设想是投递后立刻跑下一轮
+  （把 `_throttle(main_tick)` 换成 `wake.wait(main_tick)`）—— 听起来只是让命令少等 0~2s, 实际连坐三处。
+- **连坐一（速率语义）**: `max_tasks_per_tick` 的字面语义是**每次 `run_due` 最多弹 N 个**（taskqueue.py 的
+  `_pop_due`, `max_tasks<=0` 才不限量）—— 唤醒后每次仍 ≤ N, 字面不失效。但它实际承载的是**速率语义**:
+  默认 `max_tasks_per_tick=20` × `main_tick=2s` ⇒ 吞吐上限 10 任务/秒。tick 频率一旦改由命令决定, 上限就没了。
+- **连坐二（自激循环, 最严重）**: `web_view.py` 的 `_build_shows_view` 与 `search_torrents` 在索引脏时会**自己投递**
+  `build_search_index`, 而 `_build_search_index` 单轮可拉 `SEARCH_INDEX_BUILD_BUDGET=500` 条文件 API。
+  「投递即唤醒」⇒ 唤醒 → drain(500 次 API) → tick → 重建视图 → 又投递 → 立刻再唤醒 …… 中间没有 main_tick 兜底,
+  直到索引建完。这不是变慢, 是打满 CPU 并冲垮 qB（前端搜索在 `building` 期间还按 1s 重查, 每次补一刀）。
+- **连坐三（每 tick 预算被摊薄）**: `_refresh_torrents`（每 tick 一次 qB sync）与 `refresh_error_reasons`
+  （Web 活跃时每 tick `ERROR_REASON_BUDGET=5` 次 tracker 请求）—— tick 变密, qB 请求同比变密。
+- **修法（设计 v2）**: 把**命令线**与 **tick 线**解耦 —— 唤醒只触发 `_drain_web_commands()`（汇报确认检查自带
+  ≥1s 最小间隔, 不随唤醒放大）; `_tick()` 严格按 `next_tick_at` 走, 跑完推到 `now + main_tick`。
+  两道保险: 自投递类命令（`build_search_index`）**不唤醒**; 验收加不变量用例 —— 2s 内连投 100 条命令,
+  `_tick` 次数与无命令时**相同**。
+- **判别法**: 任何「让主循环提前醒来」的改动, 先问一句 —— **提前跑的是消费, 还是整轮 tick?** 只要答案是整轮,
+  就得重新确认 `max_tasks_per_tick` / 每 tick API 预算 / 自投递命令这三条是否还成立。
+
+### 「把 main_tick 缩短来换响应速度」是 40× 成本买 0 收益 (2026-09-19 实测否决, 含单轮成本基线)
+
+- **提议**: 主循环 50ms / 任务仍按 2s(=50ms×40) / 种子状态刷新 50ms。**结论: 不可行。**
+- **实测单轮成本**(helpers 的 FakeClient + make_manager, 纯 CPU **不含** qB 网络往返 ⇒ 下界;
+  浏览器打开时速度字段恒脏 ⇒ `rebuild_views` 是常态而非最坏):
+  | 种子数 | `_refresh_torrents` | `rebuild_views` | 单轮合计 | 20Hz 占用 |
+  |---|---|---|---|---|
+  | 200 | 0.87ms | 2.98ms | 3.85ms | ≈8% 核 |
+  | 1000 | 4.86ms | 13.79ms | 18.65ms | ≈37% 核 |
+  | 3000 | 14.52ms | 46.91ms | **61.43ms** | **>100% 核** |
+- **三条硬否决**: ①3000 种子单轮 61.43ms **已超 50ms 预算** ⇒ 循环追不上节拍、剩余休眠恒为 0,
+  退化成无间隔连续跑(**越忙越慢、越慢越忙的正反馈**; 现在的 2s 正是这条正反馈的隔离带);
+  ②空闲成本 ×40(0.7% → 29% 核)且永久; ③每 tick 预算 ×40(qB sync 0.5→20/s、tracker 2.5→100/s、
+  搜索索引 250→10000 文件 API/s、任务吞吐 10→400/s ⇒ `max_tasks_per_tick` 限流被架空)。
+- **收益侧为 0(关键)**: 命令延迟 —— wake 事件已经给 ≈0ms 且零成本; 状态可见延迟 ——
+  **前端 `pollSec=2s` 才是端到端下限**, 后端再快用户也是 ≤2s 才看到(要把前端也提到 50ms,
+  每轮 MB 级响应体 ×20/s, 传输与渲染先崩)。**提频只是把瓶颈从后端节拍搬到前端轮询。**
+- **便宜的替代**: 命令执行完**补一次完整刷新**(单次 14.52ms @3000, **按操作次数计费**而非按时间计费)
+  + 乐观 UI; 彻底去掉 2s 下限走 SSE 推送。
+- **⚠ 补充红线**: 补刷新**必须调完整的 `_refresh_torrents()`**, **绝不能只调 `store.apply_sync()`** ——
+  `apply_sync`(store.py:81)只更新 `by_hash` + `server_state`, 分组索引/任务/事件/搜索索引一概不碰。
+  单调它的后果(半刷新态): ①`added` 未处理 → 新种子不 match tracker、不建任务、不归组、`on_torrent_added` 不触发;
+  ②`removed` 被丢弃 → `on_torrent_deleted` 不触发、`_handle_removed_torrents` 不跑、**`store.groups` 残留已删 hash**、
+  `_search_index_dirty` 不置位; ③`update_state_snapshot()` 未推进 → 命令造成的暂停在下轮被当成"外部状态变化"再触发一次事件;
+  ④分组侧的上传转暂停扫描/路径重归组/下载冲突检查全部推迟。
+  反之 `_refresh_torrents` 本来每轮都跑, 转换与事件由快照 diff 消费一次, 天然幂等
+  (`_dispatch_events` 的 `state_changed` 参数就是为"同轮多处调用只有一处负责状态分派"准备的)。
+  另: 补刷新要放在 `_drain_web_commands()` **整批结束后一次**, 不是每条命令后各一次(否则 N 条 = N × 14.5ms)。
+
+### 主循环分层节拍: 拆分时必须把 `_tick` 的**五项**都归档, 只分三项会漏掉最贵的两个 (2026-09-19 设计评审)
+
+- **提议**: 刷新 50ms / 视图重建 1s / 任务 2s。**技术可行**(与"整轮 50ms"不同: 单轮只剩刷新 14.52ms@3000,
+  占 50ms 预算 29%, 节拍站得住; 3000 种子合计 ≈33.7% 核)。
+- **⚠ 漏项警告**: `_tick` 里是**五项**不是三项。用户只点名三项时, 剩下两项若仍按 50ms 跑:
+  `_build_search_index` = 单轮 500 条文件 API × 20 = **10000 次/秒**(qB 直接被打爆);
+  `refresh_error_reasons` = 5 次 tracker × 20 = **100 次/秒**。
+  ⇒ **归档清单**: `_refresh_torrents`(快档) / `rebuild_views`(1s) / `run_due`(2s) /
+  **`_build_search_index`(2s 或更慢)** / **`refresh_error_reasons`(2s)**。
+  (`_check_download_conflicts` 每轮跑但**增量 + 带去重**, 静止库零成本; 活跃下载时 amount_left 每轮变 ⇒ 0.5Hz 变 20Hz, 需实测。)
+- **两个隐藏成本(不在我方 CPU 预算里)**: ①**打在 qB 进程上** —— `sync/maindata` 20/s, qB 每请求要做 O(N) diff,
+  3000 种子 ≈ 6 万次字段比较/秒(qB 官方 WebUI 默认 1500ms, 20/s 极激进) ⇒ **快档建议 250~500ms, 别给 50ms**;
+  ②**GIL 争用** —— 主循环 33.7% + Web 线程重建 47ms/次 + MB 级 JSON 序列化都持 GIL,
+  可能出现"后台更快、前台更卡"。
+- **落地形态建议**: 挂到已有的 **Web 活跃门控**(`_web_last_seen` / `WEB_VIEW_TTL=10s`)上做成**快档** ——
+  浏览器开着才快, 关掉网页自动回落到 main_tick ⇒ 29% 只发生在用户正在看时, 空闲回到 0.7%。
+  配置键 `web.fast_sync_ms`(默认 0 = 关闭, 跟随 main_tick; 取值 250~500, **不提供 50**), 必须进 validate_config + schema。
+- **判别法**: 主循环任何"拆档/提频"改动, 先列全 `_tick` 的**全部动作**再逐个归档 —— 只对自己熟悉的三项归档,
+  漏掉的往往是最贵的那两项(批量 API 型)。
+
+### 定档: 刷新 1s / WEB UI 1.5s / 任务 2s —— 后端免费, 风险全在前端 (2026-09-19 评估, 含"别给视图重建单独配节拍")
+
+- **后端成本(实测折算)**: 刷新 @1Hz + 重建 @1.5Hz ⇒ 200 种子 0.29% / 1000 种子 1.4% / **3000 种子 ≈4.6% 核**
+  (现状 2s/2s 是 3.1%, 只多 1.5 个点)。qB 请求 0.5 → 1 次/秒, 与 qB 自带 WebUI 的 1500ms(0.67/s)**同量级**。
+  ⇒ **刷新快于 qB 自身数据粒度没有意义**(速度类按滑动窗口更新), 1s/1.5s 是"刚好够快"的档位。
+- **⚠ 别给 `rebuild_views` 单独配节拍**: `ensure_group_state()` 已是「**请求驱动 + 脏门控**」——
+  Web 请求到达时脏才重建, 不脏直接返回当前引用 ⇒ **视图重建频率天然 = 前端轮询频率**。
+  另外给它配定时器只会在"前端没来取"时白建。要改就只改前端 `pollSec`, 后端自动跟随。
+- **⚠ 真正的风险在前端**: WEB UI 2s → 1.5s 会把「每轮全量回传 + 整树重渲染」频率**提高 33%**,
+  而那正是"不跟手"的主因 ⇒ **未做 P1-1/P1-2 前降 pollSec 会加剧症状**。
+  顺序必须是: P0 → P0-0 埋点测出单次渲染耗时 → P1-1(响应体 ≈1/4) / P1-2(行窗口化) → 最后才动 pollSec。
+- **取值建议(让两个节拍成整数倍)**: ①刷新 1.5s / 轮询 1.5s(与 qB 对齐, 零浪费, 推荐);
+  ②刷新 1s / 轮询 2s(两次刷新配一次拉取, 后端只 1.45%); 1s/1.5s 可行但不整齐(1/3 的刷新没人取)。
+- **落地**: 新增 `sync_interval`(默认 1s 或 1.5s, **必须进 validate_config + schema**), `main_tick` 语义收窄为
+  "任务节拍 + 兜底节流"; `_build_search_index` / `refresh_error_reasons` 仍跟 main_tick(2s), **不跟随快档**;
+  前端 `pollSec`(app.js 硬编码 2)改可配, **默认仍 2s**, P1 落地后再按种子量放宽(≤1000 → 1.5s)。
+- **判别法**: 谈"响应慢"时先分清 **轮询频率** 与 **响应延迟** —— 延迟该用**事件**解(唤醒/单次同步/推送),
+  不是把轮询周期调小; 调小周期同时放大"每轮固定成本 × 频率", 而这份成本在空闲时也照付。
+
+### 波次一落地踩到的四个坑 (2026-09-19 实施)
+
+- **⚠ 多事件等待的顺序不能反**: 主循环要同时响应「命令唤醒」与「停止信号」, 而 Python 没有
+  WaitForMultipleObjects。第一版写成「分段阻塞等 `stop_event` + 段间看 `wake_event`」, 结果唤醒要等满
+  一个 0.5s 分段才被看见 —— 命令延迟从 ≈0 退化到 ≤0.5s, 恰好抵消了 P0-1 的全部收益。
+  **正确顺序**: 阻塞在 `wake_event` 上(命令到达即返回), 分段只是为了让**非阻塞**的 `stop_event.is_set()`
+  有机会被检查。判据: 单元测试里连投 3 条命令, `drain` 次数必须 = 3(实测反序时只有 1)。
+- **⚠ 分层节拍不能退化成"单一 cadence + 内部门控"**: 若循环按 `sync_interval` 单一节拍跑、任务线在
+  `_tick` 内部按 `next_tick_at` 判断是否执行, 任务实际间隔会被**循环粒度量化** —— 1.5s 循环粒 + 2s 任务
+  间隔 ⇒ 实测 3s 一次(0→3→6), `max_tasks_per_tick` 的速率语义从 10 任务/秒 悄悄变成 6.7。
+  **等待必须是 `min(两条线的到期时间)`**, 两条线各自精确推进(实测 0→2→4→6)。
+- **⚠ 改主循环会静默废掉既有的节流守卫**: `test_run_loop_throttles_without_stop_event` 断言
+  `time.sleep` 被调用、`test_local_qb_service.py::test_main_loop_throttled_by_main_tick` 假设"每轮一次 sync"。
+  分层后 `_tick` **只在两条线同时到期时**才走到 ⇒ 该用例的 `_tick` 包装层(靠它抛 KeyboardInterrupt 退出)
+  再也触发不了, 表现是**挂死**而不是失败。**改写这类用例时判据要用真实经过时间, 不能用 mocked sleep** ——
+  时间不前进会让"两条线都不到期"的循环永远跑下去。
+- **⚠ `yapf -i` 会顺手重排文件里**本来就超宽**的旧行**: 对 `config/schema/groups.py` 跑格式化, 除了新增的
+  `sync_interval` 还多出 48 行无关重排(host/port/state_file 等原本就超 120 列)。
+  **改配置 schema 这类文件时只格式化自己加的那段**, 或改完先 `git diff --stat` 看行数是否异常(11 行 vs 59 行一眼可辨)。
+
+### 命令回执埋点: 下划线前缀键的约定 (2026-09-19)
+
+- 投递时随命令带上 `_queued_ts`(P0-0 埋点用), 但**不能**直接塞进 payload —— drain 侧
+  `args = payload - cmd_id` 会被 `**args` 原样传给 handler, 多一个键就是 `TypeError: unexpected keyword argument`。
+  约定: **下划线前缀的键是元数据**, drain 里 `not k.startswith("_")` 过滤掉, 不传 handler; 前端/测试断言
+  入队参数时也要先 pop 掉(已在 `test_api_torrent_write_endpoints_enqueue` / `test_api_t_bulk_group_keys_enqueue`
+  里补)。回执回传 `wait_ms`(排队等主循环)与 `exec_ms`(执行), 前端再补"投递→回执"总时长 ⇒
+  "感觉慢"变成可归因的三段。

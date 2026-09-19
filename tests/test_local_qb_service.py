@@ -137,7 +137,10 @@ def test_main_loop_throttled_by_main_tick(tmp_path):
     """
     with FakeQbServer() as srv:
         mgr = _make_manager_for(srv, tmp_path)
+        # 两条线同拍(分层节拍后若不同拍, 循环按 min(sync_interval, main_tick) 唤醒而
+        # _tick 只在两线同时到期时才走到, 本用例的"每轮一次 sync"假设不再成立)
         mgr.config.main_tick = 0.2
+        mgr.config.sync_interval = 0.2
         start = time.monotonic()
         real_tick = mgr._tick
 

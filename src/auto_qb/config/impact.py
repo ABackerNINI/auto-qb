@@ -24,6 +24,7 @@ LEVEL_L0 = "L0"
 SECTION_LEVELS = {
     # L0: 运行时动态读取
     "main_tick": LEVEL_L0,
+    "sync_interval": LEVEL_L0,  # 主循环每轮读取的同步节拍阈值, 改值下一轮即生效
     "max_tasks_per_tick": LEVEL_L0,
     "remove_similar_tags": LEVEL_L0,
     "skip_checking_tag": LEVEL_L0,

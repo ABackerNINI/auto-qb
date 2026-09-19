@@ -8,6 +8,7 @@ from ...utils import MatchPattern, parse_bool, parse_time
 KNOWN_CONFIG_KEYS = {
     "qbittorrent",
     "main_tick",
+    "sync_interval",
     "max_tasks_per_tick",
     "interval",
     "data_dir",
@@ -128,6 +129,8 @@ def validate_config(data) -> List[str]:
     _check_unknown_keys(cfg, KNOWN_CONFIG_KEYS | set(rules_config), "config", errors)
     if "main_tick" in cfg:
         _try_time(cfg["main_tick"], "config.main_tick", errors, positive=True)
+    if "sync_interval" in cfg:
+        _try_time(cfg["sync_interval"], "config.sync_interval", errors, positive=True)
     if "max_tasks_per_tick" in cfg:
         _try(int, cfg["max_tasks_per_tick"], "config.max_tasks_per_tick(须为整数)", errors)
         # 范围必须显式校验: TaskQueue._pop_due 把 `max_tasks <= 0` 当作"不限量"(内部语义),

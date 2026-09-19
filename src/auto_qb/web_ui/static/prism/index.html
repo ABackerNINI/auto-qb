@@ -461,7 +461,7 @@
                 <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
               </div>
               <div v-for="m in sortedMembers(g.members)" :key="m.hash"
-                   class="member-row" data-table="detail" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
+                   class="member-row" data-table="detail" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
                    :style="gridStyle('detail')"
                    @click="onMemberClick(m, $event)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
@@ -542,7 +542,7 @@
           </div>
           <div class="group-table" ref="torrentTable" @scroll="syncTorrentHeadScroll">
             <div v-for="m in filteredTorrents" :key="m.hash" class="group-row torrent-row" data-table="torrent"
-                 :class="['s-' + m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
+                 :class="['s-' + m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
                  :style="gridStyle('torrent')"
                  @click="onTorrentClick(m, $event)"
                  @dblclick="openTorrentDrawer(m.hash)"
@@ -740,7 +740,7 @@
                         <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
                       </div>
                       <div v-for="m in sortedMembers(e.members)" :key="m.hash" class="member-row" data-table="detail"
-                           :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m) }]"
+                           :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
                            :style="gridStyle('detail')"
                            @click="onMemberClick(m, $event)"
                            @contextmenu.prevent="openMemberMenu($event, m)">

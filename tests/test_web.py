@@ -13,6 +13,7 @@
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
+- test_api_enqueue_wakes_main_loop: 投递用户命令唤醒主循环; 反向守卫——自投递命令须登记进 SELF_POSTED_COMMANDS(防自激)
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
@@ -128,6 +129,7 @@ def _make_web_manager(tmp_path, config_text):
     """构造 WEB API 所需的 manager 替身(轻量 namespace, 不连 qB)"""
     from types import SimpleNamespace
 
+    wake_calls = []  # 记录 manager.wake() 调用: 投递用户命令应唤醒, 自投递命令不应唤醒
     state_file = os.path.join(tmp_path, "state.json")
     config_file = os.path.join(tmp_path, "config.yml")
     with open(config_file, "w", encoding="utf-8") as f:
@@ -159,6 +161,7 @@ def _make_web_manager(tmp_path, config_text):
         qbittorrent=SimpleNamespace(host="127.0.0.1", port=1, username="u", password="p"),
         logging=SimpleNamespace(level="WARNING", file="", max_bytes=1048576, format="%(message)s"),
         main_tick=2.0,
+        sync_interval=1.5,
         max_tasks_per_tick=20,
         interval=60.0,
         remove_similar_tags=False,
@@ -241,11 +244,14 @@ def _make_web_manager(tmp_path, config_text):
         },
         # 命令执行结果回执(真实 manager 由主循环写; 端点测试直接预置)
         _web_results={},
+        # 命令唤醒(真实 manager 置位 _wake_event 让主循环立即消费); 此处记录调用供断言
+        wake=lambda: wake_calls.append(1),
     )
     # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
     from auto_qb.qbmanager import QbManager
 
     mgr._hr_view_fields = QbManager._hr_view_fields
+    mgr._wake_calls = wake_calls  # 供端点测试断言"投递命令是否唤醒主循环"
     # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
     # ensure_group_state(带 rid 的增量状态)
     mgr.touch_web_client = lambda: setattr(mgr, "_web_last_seen", __import__("time").time())
@@ -1833,6 +1839,8 @@ def test_api_torrent_write_endpoints_enqueue(web_env):
         got_cmd, got_payload = mgr.web_commands.get_nowait()
         assert got_cmd == want_cmd, f"{path}: {got_cmd}"
         got_payload.pop("cmd_id")
+        got_payload.pop("_queued_ts", None)  # P0-0 埋点元数据, 不参与入队参数断言
+        got_payload.pop("_queued_ts", None)  # P0-0 埋点元数据, 不参与入队参数断言
         assert got_payload == want_payload, f"{path}: {got_payload}"
     # 鉴权沿用既有 /api/* 依赖: 无/错密钥 401
     assert client.post("/api/torrents/HA/recheck").status_code == 401
@@ -1861,6 +1869,8 @@ def test_api_t_bulk_group_keys_enqueue(web_env):
     assert resp.status_code == 200 and resp.json()["queued"] is True
     cmd, payload = mgr.web_commands.get_nowait()
     payload.pop("cmd_id")
+    payload.pop("_queued_ts", None)  # 同上
+    payload.pop("_queued_ts", None)  # 同上
     assert cmd == "bulk_torrents"
     assert payload == {
         "hashes": ["HC"],
@@ -3337,3 +3347,30 @@ def test_api_stats_endpoint(web_env):
     mgr.store.server_state = {"dl_info_speed": 1024, "dht_nodes": 9}
     data = client.get("/api/stats", headers=auth).json()
     assert data["server"] == {"dl_info_speed": 1024, "dht_nodes": 9}
+
+
+def test_api_enqueue_wakes_main_loop(web_env):
+    """P0-1: 投递用户命令 -> 唤醒主循环立即消费(命令不必等下个 tick)
+
+    反向守卫: **自投递**命令(build_search_index 等)不得唤醒, 否则形成自激循环
+    (唤醒 -> drain 500 条文件 API -> 索引仍脏 -> 再投递 -> 立刻再唤醒)打满 CPU 并冲垮 qB。
+    """
+    import re
+
+    from auto_qb.mixins.web_commands import SELF_POSTED_COMMANDS
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    mgr._wake_calls.clear()
+    assert client.post("/api/torrents/HA/recheck", headers=auth).status_code == 200
+    assert len(mgr._wake_calls) == 1, f"用户命令投递后应唤醒主循环, 实际 {len(mgr._wake_calls)} 次"
+
+    # 静态反向守卫: Web 侧所有 self-posted 的 cmd 名都必须登记, 否则下次新增就会自激
+    src = open(
+        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "mixins", "web_view.py"), encoding="utf-8"
+    ).read()
+    posted = set(re.findall(r'web_commands\.put\(\(\s*"([^"]+)"', src))
+    assert posted, "未解析到任何自投递命令 —— 正则或源码位置已变, 守卫失效"
+    missing = posted - set(SELF_POSTED_COMMANDS)
+    assert not missing, (f"自投递命令 {missing} 未登记进 SELF_POSTED_COMMANDS —— "
+                         "遗漏会让主循环自激打满 CPU 并冲垮 qB")

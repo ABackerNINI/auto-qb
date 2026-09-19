@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
 RECONNECT_MAX_INTERVAL = 30.0  # 重连退避上限(秒): qB 长时间宕机时最多每 30s 试一次
+STOP_POLL_INTERVAL = 0.5  # 停止信号轮询粒度(秒): 见 _wait_next —— 多事件等待的分段间隔
 
 
 def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
@@ -73,6 +74,33 @@ def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
         time.sleep(main_tick)
         return False
     return stop_event.wait(main_tick)
+
+
+def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Event, timeout: float) -> bool:
+    """主循环等待: 睡到 timeout / 被命令唤醒 / 收到停止信号; 返回 True 表示收到停止信号
+
+    与 _throttle 的区别: 本函数额外响应「命令唤醒」, 让 WEB 操作不必等到下个节拍才被消费;
+    且 timeout 是「距下一条时间线的剩余时间」而非固定的 main_tick。
+
+    ❗stop_event 与 wake_event 是两个独立事件, Python 无多事件等待原语。这里**以唤醒为主**:
+    阻塞在 wake_event 上(命令到达即返回, 延迟 ≈ 0), 按 STOP_POLL_INTERVAL 分段,
+    段间用**非阻塞**的 stop_event.is_set() 检查停止 —— 停止延迟 ≤ 0.5s(UI 退出路径另在
+    stop_event.set() 后直接调 manager.wake(), 立即响应)。
+    顺序不能反过来(先阻塞等 stop_event): 那样唤醒要等满一个分段才被看见, 命令延迟
+    会从 ≈0 退化到 ≤0.5s —— 正是本函数要消除的延迟。
+    """
+    if stop_event is None:
+        wake_event.wait(timeout)
+        return False
+    deadline = time.time() + timeout
+    while True:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return False
+        if wake_event.wait(min(remaining, STOP_POLL_INTERVAL)):
+            return False
+        if stop_event.is_set():
+            return True
 
 
 class QbManager(
@@ -114,6 +142,9 @@ class QbManager(
         self._notify_handler: Optional[NotifyHandler] = None
         # WEB UI: 控制命令队列(Web 线程投递, 主循环消费执行——写操作只在主循环线程)
         self.web_commands: "queue.Queue" = queue.Queue()
+        # WEB UI: 命令唤醒事件。Web 线程投递命令后 set, 主循环不等下个节拍立即消费一次命令
+        # (只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)
+        self._wake_event = threading.Event()
         # WEB UI: 命令执行结果回执(cmd_id -> {status, error, ts})。主循环线程唯一写者,
         # Web 线程经 /api/cmd/{id} 只读。多数命令执行完立即写; reannounce 的回执由
         # tracker 确认跟踪器(_reannounce_pending)在后续 tick 写入。
@@ -234,6 +265,22 @@ class QbManager(
             self._last_conn_ok = False
             return False
 
+    def wake(self) -> None:
+        """唤醒主循环立即消费一次 WEB 控制命令(命令线; **不触发 tick**)
+
+        Web 线程投递命令后调用: 命令延迟从 0~main_tick(最坏 2s)降到近乎 0。
+
+        ❗只走命令线是硬约束, 不能退化成"投递即跑下一轮 tick":
+        1) max_tasks_per_tick 承载的是**速率语义**(20 个/2s = 10 任务/秒), tick 频率一旦由命令
+           决定, 这个上限即失效;
+        2) 存在**自投递命令**(Web 侧索引脏时自己 put build_search_index), "投递即唤醒跑 tick"
+           会形成自激循环: 唤醒 -> drain(单轮 500 条文件 API) -> 索引仍脏 -> 再投递 -> 立刻再唤醒,
+           中间没有 tick 兜底 —— 不是变慢, 是打满 CPU 并冲垮 qB。
+        故: 自投递命令不唤醒(见 mixins/web_commands.py 的 SELF_POSTED_COMMANDS),
+        且唤醒后只 drain 命令, tick 仍由 sync_interval / main_tick 严格决定。
+        """
+        self._wake_event.set()
+
     def run(
         self,
         dry_run: bool = False,
@@ -275,24 +322,51 @@ class QbManager(
             self._create_global_tasks()
 
             try:
+                # 两条独立时间线(分层节拍):
+                #   同步线 sync_interval(默认 1.5s) —— 只刷新快照, 不跑任务;
+                #   任务线 main_tick(默认 2s)     —— 跑任务 + tracker 预取 + 搜索索引。
+                # 拆开后状态新鲜度不再被任务节拍拖累, 而任务速率语义(max_tasks_per_tick)
+                # 与每 tick 的 qB 请求预算仍由 main_tick 唯一决定。
+                next_sync_at = 0.0
+                next_tick_at = 0.0
                 while True:
                     if stop_event is not None and stop_event.is_set():
                         logger.info("收到停止信号, 退出主循环")
                         break
-                    # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作
-                    self._drain_web_commands()
+                    # L0 热重载: 每轮重读节拍(配置对象可能被 apply_new_config 整体替换)
+                    main_tick = self.config.main_tick
+                    sync_interval = self.config.sync_interval
+                    # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作。
+                    # 先清唤醒位再 drain —— drain 期间新到的命令会再次置位, 下一轮立即消费。
+                    self._wake_event.clear()
+                    state_changed = self._drain_web_commands()
                     self._check_reannounce_pending()
                     if pause_event is not None and pause_event.is_set():
-                        # 已暂停: 完全旁观; 节流保持对停止信号的即时响应
-                        if _throttle(stop_event, main_tick):
+                        # 已暂停: 完全旁观; 等待保持对停止信号与命令的响应
+                        if _wait_next(stop_event, self._wake_event, main_tick):
                             logger.info("收到停止信号, 退出主循环")
                             break
                         continue
+                    now = time.time()
+                    # P0-5: 本批命令改了 qB 种子状态 -> 立即同步一次, 让真实状态在几十毫秒内
+                    # 进快照(不必等下个节拍)。整批只补一次: sync_due 为真时本轮至多跑一次刷新。
+                    # dry_run 不补(只观察); 暂停时上面已 continue(暂停 = 完全旁观)。
+                    sync_due = (now >= next_sync_at) or (state_changed and not dry_run)
+                    tick_due = now >= next_tick_at
                     try:
-                        self._tick(dry_run)
-                        # 连接恢复检测: tick 成功即 API 可达(connect() 仅启动时调用一次,
+                        if sync_due and tick_due:
+                            self._tick(dry_run)
+                            next_sync_at = time.time() + sync_interval
+                            next_tick_at = time.time() + main_tick
+                        elif sync_due:
+                            self._sync_line(dry_run)
+                            next_sync_at = time.time() + sync_interval
+                        elif tick_due:
+                            self._task_line(dry_run)
+                            next_tick_at = time.time() + main_tick
+                        # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
-                        if self._last_conn_ok is False:
+                        if (sync_due or tick_due) and self._last_conn_ok is False:
                             self._last_conn_ok = True
                             self._reset_reconnect_backoff()
                             logger.info("已重新连接 qBittorrent")
@@ -311,7 +385,9 @@ class QbManager(
                             self.connect()
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
-                    if _throttle(stop_event, main_tick):
+                    # 等待到最近一条时间线到期, 或被命令唤醒(命令线近乎零延迟)
+                    wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
+                    if _wait_next(stop_event, self._wake_event, wait_for):
                         logger.info("收到停止信号, 退出主循环")
                         break
             except KeyboardInterrupt:
@@ -411,20 +487,12 @@ class QbManager(
         else:
             logger.warning("WEB UI 已停止(web.enabled=false)")
 
-    def _tick(self, dry_run: bool):
-        """单次 tick: 1) 刷新快照 2) WEB 错误原因预取(Web 活跃时) 3) 执行到期任务
-        (执行与收尾统一由 TaskQueue.run_due 管理)"""
-        now = time.time()
+    def _flush_views(self) -> None:
+        """消费视图脏标记并在 Web 活跃时惰性重建(同步线/任务线各自调用一次)
 
-        self._refresh_torrents(dry_run)
-
-        # WEB UI: 错误状态种子的具体原因(状态列的"文件丢失"/tracker 报错原文)按 TTL 限额预取。
-        # 与视图重建/搜索索引同一门控: 仅 Web 客户端活跃时推进, 关闭网页后不发多余的 tracker 请求。
-        if (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
-            self.refresh_error_reasons()
-
-        self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
-
+        consume_view_changed 是 consume 语义(读后复位), 两条线各调一次即可完整覆盖
+        自上次消费以来由「刷新」或「任务执行」产生的视图变化。
+        """
         # 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方视图惰性重建判定
         view_changed = self.store.consume_view_changed()
         # 置脏必须在 grouping 门控**之外**: 脏标记是**全部** Web 视图的共享状态 —— 种子页的
@@ -440,10 +508,46 @@ class QbManager(
         if self._group_view_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
             self.rebuild_views()
 
+    def _sync_line(self, dry_run: bool, flush: bool = True) -> None:
+        """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建
+
+        只做状态同步、**不跑任务** —— 状态新鲜度不再被任务节拍(main_tick)拖累。
+        sync_interval 取 1.5s 与 qB 自带 WebUI(1500ms)同量级: 比 qB 自身数据粒度更快没有意义。
+        """
+        self._refresh_torrents(dry_run)
+        if flush:
+            self._flush_views()
+
+    def _task_line(self, dry_run: bool) -> None:
+        """任务线(main_tick 节拍): 错误原因预取 + 执行到期任务 + 视图/搜索索引推进
+
+        tracker 预取与文件 API 批量调用**仍跟 main_tick, 不跟随快档**: 它们不是状态新鲜度的
+        瓶颈, 提频只会线性放大 qB 请求量(见计划附录 A3 的五动作归档)。
+        """
+        now = time.time()
+
+        # WEB UI: 错误状态种子的具体原因(状态列的"文件丢失"/tracker 报错原文)按 TTL 限额预取。
+        # 与视图重建/搜索索引同一门控: 仅 Web 客户端活跃时推进, 关闭网页后不发多余的 tracker 请求。
+        if (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
+            self.refresh_error_reasons()
+
+        self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
+
+        self._flush_views()
+
         # WEB UI: 搜索索引限流构建——同样仅 Web 活跃时推进(每 tick 一批, 直至不再脏);
         # 关闭网页后停止推进, 避免无谓的文件 API 调用
         if self._search_index_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
             self._build_search_index()
+
+    def _tick(self, dry_run: bool):
+        """完整一轮 = 同步线 + 任务线(执行与收尾统一由 TaskQueue.run_due 管理)
+
+        主循环按节拍**分别**调度两条线(见 run); 本方法保留"同步+任务"的完整语义,
+        供测试与一次性调用使用。两条线同时到期时走这里, 保证视图只重建一次。
+        """
+        self._sync_line(dry_run, flush=False)
+        self._task_line(dry_run)
 
     # ---------- 全局任务 ----------
 

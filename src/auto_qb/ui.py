@@ -502,6 +502,9 @@ class TrayUi:
         self.root.mainloop()
         # mainloop 结束(托盘"退出"/root.quit): 依序停托盘 -> 停主循环(落盘) -> 清理 IPC
         self.stop_event.set()
+        # 主循环的等待同时响应 stop_event 与命令唤醒两个事件(见 qbmanager._wait_next),
+        # 停止信号按 STOP_POLL_INTERVAL 分段才被察觉; 这里一并唤醒, 让退出立即生效。
+        self.manager.wake()
         if self._icon is not None:
             self._icon.stop()
         if self._manager_thread is not None:

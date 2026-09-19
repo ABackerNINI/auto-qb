@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .mixins.web_commands import SELF_POSTED_COMMANDS
 from .utils import decode_group_key, open_path, path_normalize
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,14 @@ def create_app(manager) -> FastAPI:
         cmd_id = secrets.token_hex(8)
         body = dict(payload or {})
         body["cmd_id"] = cmd_id
+        # P0-0 埋点: 投递时刻随命令走(下划线前缀的键在 drain 侧被剔除, 不会传给 handler),
+        # 回执据此拆出"排队等主循环 wait_ms"与"执行 exec_ms"两段耗时
+        body["_queued_ts"] = time.time()
         manager.web_commands.put((cmd, body))
+        # 唤醒主循环立即消费(命令延迟 0~main_tick -> 近乎 0); 自投递命令不唤醒, 见
+        # mixins/web_commands.py 的 SELF_POSTED_COMMANDS —— 否则会自激打满 CPU。
+        if cmd not in SELF_POSTED_COMMANDS:
+            manager.wake()
         return {"queued": True, "cmd_id": cmd_id}
 
     @app.get("/api/status")

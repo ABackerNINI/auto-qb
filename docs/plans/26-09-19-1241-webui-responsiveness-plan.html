@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEB UI 操作跟手性优化计划 · auto-qb</title>
+<style>
+  :root{
+    --bg:#0f0f0f;
+    --bg-2:#141414;
+    --fg:#eceae7;
+    --fg-2:#a8a5a0;
+    --fg-3:#6f6c67;
+    --rule:rgba(255,255,255,.10);
+    --rule-2:rgba(255,255,255,.06);
+    --accent:#c98f43;
+    --accent-dim:rgba(201,143,67,.16);
+    --ok:#7fb08a;
+    --warn:#c98f43;
+    --sans:"Inter","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:15px;line-height:1.62;font-weight:400;letter-spacing:0;
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:0 40px}
+
+  /* ---------- 封面 ---------- */
+  .cover{padding:104px 0 64px;border-bottom:1px solid var(--rule)}
+  .kicker{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fg-3);margin:0 0 40px;
+  }
+  h1{
+    font-size:52px;line-height:1.06;letter-spacing:-.022em;font-weight:590;
+    margin:0 0 22px;max-width:19em;
+  }
+  .lede{font-size:17px;line-height:1.6;color:var(--fg-2);max-width:62ch;margin:0 0 44px}
+  .lede b{color:var(--fg);font-weight:510}
+  .meta{
+    display:flex;flex-wrap:wrap;gap:0;margin:0;padding:0;list-style:none;
+    border-top:1px solid var(--rule);
+  }
+  .meta li{
+    flex:1 1 160px;padding:14px 20px 14px 0;border-right:1px solid var(--rule-2);
+  }
+  .meta li:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin:0 0 5px}
+  .meta dd{margin:0;font-size:13.5px;color:var(--fg)}
+  .meta dd.mono{font-family:var(--mono);font-size:12.5px}
+
+  /* ---------- 布局：TOC + 正文 ---------- */
+  .body-wrap{display:grid;grid-template-columns:212px 1fr;gap:56px;padding:56px 0 0;align-items:start}
+  nav.toc{position:sticky;top:40px}
+  nav.toc .t-h{
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-3);
+    margin:0 0 14px;
+  }
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin-bottom:7px}
+  nav.toc a{
+    display:block;color:var(--fg-2);text-decoration:none;font-size:13px;line-height:1.4;
+    padding-left:26px;position:relative;transition:color .12s;
+  }
+  nav.toc a::before{
+    content:counter(toc,decimal-leading-zero);position:absolute;left:0;top:1px;
+    font-family:var(--mono);font-size:10.5px;color:var(--fg-3);
+  }
+  nav.toc a:hover{color:var(--accent)}
+
+  article{max-width:780px}
+  section{margin:0 0 64px;scroll-margin-top:40px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin:0 0 8px}
+  .sec-num{
+    font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.06em;
+    padding-top:6px;
+  }
+  h2{font-size:27px;line-height:1.2;letter-spacing:-.016em;font-weight:590;margin:0}
+  .sec-rule{height:1px;background:var(--rule);margin:0 0 26px}
+  h3{font-size:16.5px;font-weight:550;letter-spacing:-.008em;margin:36px 0 10px;color:var(--fg)}
+  h4{font-size:13.5px;font-weight:550;margin:24px 0 6px;color:var(--fg)}
+  p{margin:0 0 16px;max-width:70ch}
+  p+p{margin-top:-2px}
+  .muted{color:var(--fg-2)}
+  .small{font-size:13px;line-height:1.55}
+  code{
+    font-family:var(--mono);font-size:12.5px;color:var(--fg);
+    background:var(--bg-2);border:1px solid var(--rule-2);padding:1px 5px;
+  }
+  a.ref{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-dim)}
+  ul.tight{margin:0 0 16px;padding-left:18px;max-width:70ch}
+  ul.tight li{margin-bottom:7px}
+  ul.tight li::marker{color:var(--fg-3)}
+
+  /* ---------- 表格 ---------- */
+  .tbl{width:100%;border-collapse:collapse;margin:8px 0 22px;font-size:13px}
+  .tbl caption{
+    caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--fg-3);padding-bottom:10px;
+  }
+  .tbl th{
+    text-align:left;font-weight:510;font-size:11.5px;letter-spacing:.03em;color:var(--fg-2);
+    border-bottom:1px solid var(--rule);padding:0 14px 9px 0;white-space:nowrap;
+  }
+  .tbl td{border-bottom:1px solid var(--rule-2);padding:11px 14px 11px 0;vertical-align:top;line-height:1.5}
+  .tbl td:last-child,.tbl th:last-child{padding-right:0}
+  .tbl .num{font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .tbl .p{white-space:nowrap;font-family:var(--mono);font-size:11.5px}
+  .tag{
+    display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+    padding:2px 6px;border:1px solid var(--rule);color:var(--fg-2);
+  }
+  .tag.p0{color:var(--accent);border-color:rgba(201,143,67,.4);background:var(--accent-dim)}
+  .tag.p1{color:var(--fg);border-color:var(--rule)}
+  .tag.p2{color:var(--fg-3);border-color:var(--rule-2)}
+  .cost{font-family:var(--mono);font-size:12px;color:var(--accent)}
+  .dim{color:var(--fg-3)}
+
+  /* ---------- 链路剖面 ---------- */
+  .chain{margin:6px 0 24px;border:1px solid var(--rule);background:var(--bg-2)}
+  .chain-row{
+    display:grid;grid-template-columns:34px 1fr 132px;gap:0;align-items:center;
+    border-bottom:1px solid var(--rule-2);padding:12px 16px;
+  }
+  .chain-row:last-child{border-bottom:0}
+  .chain-row .i{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+  .chain-row .t{font-size:13.5px;line-height:1.45}
+  .chain-row .t span{display:block;font-family:var(--mono);font-size:11px;color:var(--fg-3);margin-top:3px}
+  .chain-row .v{font-family:var(--mono);font-size:12px;text-align:right}
+  .bar{height:3px;background:rgba(255,255,255,.14);margin-top:6px;position:relative}
+  .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);display:block}
+
+  /* ---------- 条目卡（无圆角、无阴影、无彩色左边框） ---------- */
+  .item{border-top:1px solid var(--rule);padding:22px 0 26px}
+  .item:first-of-type{border-top:0}
+  .item-h{display:flex;align-items:baseline;gap:12px;margin:0 0 4px}
+  .item-h .id{font-family:var(--mono);font-size:11px;color:var(--fg-3);letter-spacing:.05em}
+  .item-h h4{margin:0;font-size:15.5px;letter-spacing:-.01em;font-weight:550}
+  .item-h .tag{margin-left:auto}
+  .item p{margin:8px 0 12px}
+  .kv{display:grid;grid-template-columns:74px 1fr;gap:0 16px;font-size:13px;margin:0}
+  .kv dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);padding:5px 0}
+  .kv dd{margin:0;padding:5px 0;color:var(--fg-2);line-height:1.55}
+  .kv dd b{color:var(--fg);font-weight:510}
+
+  .note{
+    border:1px solid var(--rule);background:var(--bg-2);padding:16px 18px;margin:20px 0 24px;
+    font-size:13.5px;color:var(--fg-2);
+  }
+  .note .nh{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+  .note p{margin:0 0 10px;max-width:66ch}
+  .note p:last-child{margin:0}
+
+  footer.colophon{border-top:1px solid var(--rule);margin-top:20px;padding:28px 0 72px;font-size:12px;color:var(--fg-3);font-family:var(--mono);letter-spacing:.02em}
+
+  @media (max-width:960px){
+    .body-wrap{grid-template-columns:1fr;gap:32px}
+    nav.toc{position:static}
+    .wrap{padding:0 24px}
+    h1{font-size:38px}
+    .chain-row{grid-template-columns:26px 1fr 96px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <p class="kicker">AUTO-QB · WEB UI · 优化计划</p>
+  <h1>WEB UI 操作不跟手<br>优化计划</h1>
+  <p class="lede">
+    用户反馈「点一下要等一会儿才反应」。本计划先把「一次点击」拆成可度量的五段链路，定位到
+    <b>四类根因</b>（命令要等主循环节拍、回执首查固定 500 ms、每 2 秒全量回传四视图并整树重渲染、批量动作 N 次 qB 串行调用），
+    再按 <b>P0 / P1 / P2</b> 三档给出 14 项改动、实施波次、验收口径与红线。
+    先埋点量化，再改代码 —— 每条优化都写明「怎么证明它生效」。
+  </p>
+  <ul class="meta">
+    <li><dt>日期</dt><dd class="mono">2026-09-19</dd></li>
+    <li><dt>分支</dt><dd class="mono">develop</dd></li>
+    <li><dt>状态</dt><dd>待确认后实施</dd></li>
+    <li><dt>测试基线</dt><dd class="mono">1041 passed</dd></li>
+    <li><dt>前置任务</dt><dd>TASK017 视图重建收口</dd></li>
+  </ul>
+</header>
+
+<div class="body-wrap">
+<nav class="toc">
+  <p class="t-h">目录</p>
+  <ol>
+    <li><a href="#s1">结论先行</a></li>
+    <li><a href="#s9">方案全景与横向对比</a></li>
+    <li><a href="#s2">一次点击的链路剖面</a></li>
+    <li><a href="#s3">四类根因</a></li>
+    <li><a href="#s4">优化项总表</a></li>
+    <li><a href="#s5">逐项说明</a></li>
+    <li><a href="#s6">实施波次</a></li>
+    <li><a href="#s7">验收口径</a></li>
+    <li><a href="#s8">红线与不做</a></li>
+    <li><a href="#a1">附录 · 50 ms 主循环评估</a></li>
+    <li><a href="#a2">附录 · 分层节拍评估</a></li>
+    <li><a href="#a3">附录 · 1 s / 1.5 s 档位评估</a></li>
+  </ol>
+</nav>
+
+<article>
+
+<section id="s1">
+  <div class="sec-head"><span class="sec-num">01</span><h2>结论先行</h2></div>
+  <div class="sec-rule"></div>
+  <p>
+    「不跟手」不是一个性能问题，而是<b>四段延迟叠加</b>的结果：点击之后界面什么都不做（没有即时反馈），
+    命令还要等主循环的下一个 2 秒节拍才被消费，回执又固定先睡 500 ms 才第一次查，
+    最后行状态要等下一轮同步 + 下一轮轮询才变。四段叠加，用户感知就是「点了没反应，过几秒突然一起变」。
+  </p>
+  <p>
+    好消息是：<b>这四段都不需要动架构就能砍掉</b>。主循环加一个唤醒事件（命令一到立即消费）、
+    回执改成首查不等、前端做乐观 UI、批量动作合单 —— 这四项做完，主观延迟从「秒级」降到「百毫秒级」，
+    且全部保持「写操作只在主循环线程」的既有约束。
+  </p>
+  <p>
+    剩下的一类（大库下每次渲染整树重算、每 2 秒全量回传四视图）属于<b>规模问题</b>：
+    种子量上去之后，单次点击的渲染成本与每轮响应体同步膨胀。这部分放进 P1，用「按视图回传 + 行窗口化 + 去布局抖动」解决。
+  </p>
+  <p class="small muted">
+    下一节（02）把本轮讨论过的 <b>14 个候选方案</b>按「感知 / 命令 / 真实状态 / 规模」四层摊开横向对比，
+    含 <b>3 个被否决方案</b>与各自的否决判据 —— 想直接看权衡去那里。
+  </p>
+  <div class="note">
+    <p class="nh">先说清一件事</p>
+    <p>
+      视图重建本身<b>不是</b>瓶颈。TASK017 实测过：200 / 1000 / 3000 个种子重建四视图耗时
+      4.97 / 25.22 / 79.36 ms，占 2 秒 tick 预算 0.25% / 1.26% / 3.97%。
+      真正的开销在<b>传输与渲染</b>侧：每轮把四份视图全量序列化回传，前端整表替换后整棵 Vue 树重渲染。
+    </p>
+  </div>
+</section>
+
+<section id="s9">
+  <div class="sec-head"><span class="sec-num">02</span><h2>方案全景与横向对比</h2></div>
+  <div class="sec-rule"></div>
+  <p>
+    本轮讨论一共出现过 <b>14 个候选方案</b>，其中 3 个被否决。先按「<b>解决的是哪一层</b>」归类，
+    再横向对比 —— 因为不同层的方案之间不是互斥关系，真正的问题一直是「<b>哪一层才是瓶颈</b>」。
+  </p>
+
+  <h3>先分层：不跟手其实是四层问题叠在一起</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:88px">层</th><th style="width:150px">问的是什么</th><th>候选方案</th></tr></thead>
+    <tbody>
+      <tr><td class="p">① 感知层</td><td>点了有没有反应</td><td><b>I</b> 乐观 UI（点击即变 + pending）</td></tr>
+      <tr><td class="p">② 命令层</td><td>命令多久被执行 / 回执多久拿到</td><td><b>A</b> 投递即跑整轮 tick · <b>B</b> 唤醒只消费命令 · <b>C</b> 主循环 50 ms · <b>H</b> 回执首查退避</td></tr>
+      <tr><td class="p">③ 真实状态层</td><td>多久看到 qB 的真值</td><td><b>E</b> 命令后补一次完整刷新 · <b>F</b> 拉前下一轮 tick · <b>G</b> 只调 apply_sync · <b>D</b> 状态同步提频 · <b>P</b> SSE 推送</td></tr>
+      <tr><td class="p">④ 规模层</td><td>大库下别卡</td><td><b>J</b> 批量合单 · <b>K</b> 按视图回传 · <b>L</b> 行窗口化 · <b>M</b> 去布局抖动 · <b>N</b> 抽屉缓存 · <b>O</b> qB 超时</td></tr>
+    </tbody>
+  </table>
+
+  <h3>横向对比（②③ 层：本轮争议焦点）</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:34px">#</th><th style="width:150px">方案</th><th style="width:96px">命令延迟</th><th style="width:120px">真实状态可见</th><th style="width:170px">成本</th><th style="width:180px">语义 / 风险</th><th style="width:60px">结论</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="p">A</td><td>投递即唤醒<b>整轮 tick</b></td>
+        <td class="num">≈ 0 ms</td><td class="num">不变（≤2 s）</td>
+        <td>不定倍数：tick 频率改由命令决定</td>
+        <td><b>否决</b>：<code>max_tasks_per_tick</code> 速率语义失效；<code>build_search_index</code> 自投递形成自激循环；每 tick 预算放大</td>
+        <td><span class="dim">否决</span></td>
+      </tr>
+      <tr>
+        <td class="p">B</td><td>唤醒只<b>消费命令</b>（P0-1 v2）</td>
+        <td class="num">≈ 0 ms</td><td class="num">不变（≤2 s）</td>
+        <td>≈ 0：事件等待，无轮询</td>
+        <td>stop 信号需桥接；不得退化成忙等</td>
+        <td><b>采纳</b></td>
+      </tr>
+      <tr>
+        <td class="p">C</td><td>主循环 <b>50 ms</b>，任务 2 s 门控</td>
+        <td class="num">≤ 50 ms</td><td class="num">后端 50 ms，<b>用户侧仍 ≤2 s</b></td>
+        <td><b>40×</b>：3000 种子单轮 61.4 ms 已超预算；空闲 0.7% → 29% 核</td>
+        <td><b>否决</b>：单轮超预算 ⇒ 退化为无间隔连续跑（正反馈）；每 tick 预算 ×40；收益被前端 <code>pollSec</code> 截断</td>
+        <td><span class="dim">否决</span></td>
+      </tr>
+      <tr>
+        <td class="p">D</td><td>分层节拍（命令线 / 同步 / 任务 / 视图各自节拍）</td>
+        <td class="num">≈ 0 ms</td><td class="num">可选同步降到 1 s</td>
+        <td>可控：状态同步最多 2×</td>
+        <td>无新风险；是 B 的结构化表述</td>
+        <td><b>采纳为框架</b></td>
+      </tr>
+      <tr>
+        <td class="p">E</td><td>命令后补一次<b>完整</b>刷新（P0-5）</td>
+        <td class="num">—（靠 B）</td><td class="num">≈ 一次刷新（14.5 ms @3000）</td>
+        <td><b>按次计费</b>，不按时间</td>
+        <td>幂等需验证（事件 / 冲突告警 / 扫描不重放）；必须整批一次</td>
+        <td><b>采纳</b></td>
+      </tr>
+      <tr>
+        <td class="p">F</td><td>拉前下一轮 tick（P0-5 备选 B）</td>
+        <td class="num">—（靠 B）</td><td class="num">≈ 一次 tick</td>
+        <td>同 E（复用既有 tick 路径）</td>
+        <td>需最小间隔下限，否则连点顶高 tick 频率</td>
+        <td>备选</td>
+      </tr>
+      <tr>
+        <td class="p">G</td><td>只调 <code>store.apply_sync()</code></td>
+        <td class="num">—</td><td class="num">—</td>
+        <td>最低，但<b>是错的</b></td>
+        <td><b>否决</b>：半刷新 —— 新增不建任务不归组、删除事件不触发且 <code>store.groups</code> 残留 hash、状态快照不推进致事件错位</td>
+        <td><span class="dim">否决</span></td>
+      </tr>
+      <tr>
+        <td class="p">H</td><td>回执首查 0 ms + 退避（P0-2）</td>
+        <td class="num">−500 ms</td><td class="num">—</td>
+        <td>忽略不计</td>
+        <td>无</td>
+        <td><b>采纳</b></td>
+      </tr>
+      <tr>
+        <td class="p">P</td><td>SSE / WebSocket 推送（P2-3）</td>
+        <td class="num">≈ 0 ms</td><td class="num"><b>去掉 2 s 下限</b> ⇒ 亚秒</td>
+        <td>架构改动：鉴权 / 重连 / 与主循环耦合</td>
+        <td>唯一能突破前端轮询下限的方案</td>
+        <td>远期</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>横向对比（①④ 层与规模项）</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:34px">#</th><th style="width:190px">方案</th><th style="width:150px">解决什么</th><th style="width:130px">收益</th><th style="width:150px">风险 / 约束</th><th style="width:70px">结论</th></tr></thead>
+    <tbody>
+      <tr><td class="p">I</td><td>乐观 UI（P0-3）</td><td>感知层「沉默」</td><td class="cost">主观收益最大</td><td>失败须回滚；只对结果可预测的动作做</td><td><b>采纳</b></td></tr>
+      <tr><td class="p">J</td><td>批量合单（P0-4）</td><td>N 次串行 qB 调用阻塞主循环</td><td class="cost">N 次 → 1 次</td><td>部分失败文案口径变化</td><td><b>采纳（纠错）</b></td></tr>
+      <tr><td class="p">K</td><td>按视图回传（P1-1）</td><td>每轮四视图全量回传</td><td class="cost">响应体 ≈ 1/4</td><td>切页首帧需全量</td><td>采纳 P1</td></tr>
+      <tr><td class="p">L</td><td>行窗口化（P1-2）</td><td>万级 DOM / vnode</td><td class="cost">3000 行 → ~60 行</td><td>与 <code>:nth-child</code> 列对齐、多选区间、右键定位耦合；必须整行渲染</td><td>采纳 P1（单独波次）</td></tr>
+      <tr><td class="p">M</td><td>去布局抖动（P1-3）</td><td>每次渲染强制同步布局</td><td class="cost">省每帧 forced layout</td><td>低</td><td>采纳 P1</td></tr>
+      <tr><td class="p">N</td><td>抽屉降频 + 缓存（P1-4）</td><td>抽屉直连 qB</td><td class="cost">qB 请求减半</td><td>抽屉数据旧 1–2 s</td><td>采纳 P1</td></tr>
+      <tr><td class="p">O</td><td>qB 客户端超时（P1-5）</td><td>qB 假死即永久挂起</td><td class="cost">消除假死</td><td>读超时可能截断超大响应</td><td>采纳 P1</td></tr>
+    </tbody>
+  </table>
+
+  <h3>组合效果：端到端延迟能做到多少</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:220px">组合</th><th style="width:150px">「点了有反应」</th><th style="width:170px">真实状态对齐</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="p">现状</td><td class="num">0.5 – 6.5 s</td><td class="num">0.5 – 6.5 s</td><td>中途零反馈</td></tr>
+      <tr><td class="p">B + H + I（最小集合）</td><td class="num">≈ 0 ms</td><td class="num">≤ 2 s</td><td>感知即时；真值等前端下一次轮询</td></tr>
+      <tr><td class="p">+ E / F + J</td><td class="num">≈ 0 ms</td><td class="num">≤ 2 s（但真值更早进 store）</td><td>后端侧延迟消除，剩余全是<b>前端轮询</b>下限</td></tr>
+      <tr><td class="p">+ P（SSE 推送）</td><td class="num">≈ 0 ms</td><td class="num">亚秒</td><td>唯一能突破 <code>pollSec=2s</code> 的一步</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">
+    读法：<b>③ 层的收益被前端 2 s 轮询封顶</b> —— 这正是 C（50 ms 主循环）被否决的根本原因：
+    它花 40× 成本去优化一段「优化完了用户也看不到」的延迟。要真正突破，只能走 P。
+  </p>
+</section>
+
+<section id="s2">
+  <div class="sec-head"><span class="sec-num">03</span><h2>一次点击的链路剖面</h2></div>
+  <div class="sec-rule"></div>
+  <p>
+    以「右键一个种子 → 暂停」为例，把从 mousedown 到行状态真正变化拆成五段。
+    耗时列标注了性质：<span class="cost">实测</span> = 代码常量/既有实测数字，<span class="dim">估算</span> = 待埋点确认的上限。
+  </p>
+
+  <div class="chain">
+    <div class="chain-row">
+      <span class="i">01</span>
+      <div class="t">点击 → POST 命令入队
+        <span>app.js:2022 act() → torrentCmd() → web.py:168 _enqueue()，只做 queue.put</span>
+        <span class="bar"><i style="width:2%"></i></span>
+      </div>
+      <span class="v">≈ 1–5 ms</span>
+    </div>
+    <div class="chain-row">
+      <span class="i">02</span>
+      <div class="t">等主循环下一个节拍消费
+        <span>qbmanager.py:283 _drain_web_commands() 在循环顶部；_throttle 睡满 main_tick（默认 2 s）</span>
+        <span class="bar"><i style="width:38%"></i></span>
+      </div>
+      <span class="v">0–2 s <span class="dim">估算</span></span>
+    </div>
+    <div class="chain-row">
+      <span class="i">03</span>
+      <div class="t">主循环执行：一次 qB API 调用（同步阻塞）
+        <span>web_commands.py:222 _cmd_pause_torrent → api.torrents_pause()；qbclient.py:44 未设超时</span>
+        <span class="bar"><i style="width:8%"></i></span>
+      </div>
+      <span class="v">10–300 ms <span class="dim">估算</span></span>
+    </div>
+    <div class="chain-row">
+      <span class="i">04</span>
+      <div class="t">前端取回执：先睡 500 ms 才第一次查
+        <span>app.js:2007 waitCmd()：循环体第一行就是 await sleep(500)</span>
+        <span class="bar"><i style="width:12%"></i></span>
+      </div>
+      <span class="v">500 ms <span class="cost">实测常量</span></span>
+    </div>
+    <div class="chain-row">
+      <span class="i">05</span>
+      <div class="t">行状态变化：等下一轮 sync + 下一轮轮询
+        <span>store 每 tick 同步一次、视图每 tick 重建一次；前端 pollSec = 2 s（app.js:259）</span>
+        <span class="bar"><i style="width:42%"></i></span>
+      </div>
+      <span class="v">0–4 s <span class="dim">估算</span></span>
+    </div>
+  </div>
+
+  <p class="small muted">
+    合计「点击 → 行状态变化」约 <b>0.5–6.5 s</b>；而中间 <b>没有任何即时反馈</b> —— 菜单收起、行不变、toast 要等回执才出现。
+    这才是「不跟手」的主观来源：不是慢，是<b>沉默</b>。
+  </p>
+</section>
+
+<section id="s3">
+  <div class="sec-head"><span class="sec-num">04</span><h2>四类根因</h2></div>
+  <div class="sec-rule"></div>
+
+  <h3>A · 命令要等主循环节拍（P0）</h3>
+  <p>
+    所有写操作必须落在主循环线程（项目黄金法则「单一写线程」），这个约束是对的、不动。
+    但现在的等待方式太粗：主循环 <code>_throttle()</code> 无条件睡满 <code>main_tick</code>
+    （qbmanager.py:60–75），命令在队列里躺到下一轮才被 <code>_drain_web_commands()</code> 取走。
+    队列是现成的唤醒源，却没有用起来。
+  </p>
+
+  <h3>B · 回执首查固定 500 ms，且全程无即时反馈（P0）</h3>
+  <p>
+    <code>waitCmd()</code>（app.js:2007）第一次轮询前先睡 500 ms —— 哪怕命令 20 ms 就执行完了也要等满。
+    同时整个交互路径上<b>没有乐观更新、没有 pending 态、没有禁用双击</b>：用户在等待期唯一能看到的就是「什么都没发生」，
+    于是重复点击，把 N 条命令灌进同一个队列。
+  </p>
+
+  <h3>C · 每 2 秒全量回传 + 全树重渲染（P1）</h3>
+  <p>
+    <code>/api/state</code> 一旦版本变化，就把 <code>groups / singles / shows / torrents</code>
+    <b>四份视图全量回传</b>（web_view.py:567），而前端一次只用其中一份。
+    前端拿到新数组后整表替换（app.js:1508–1524），触发整棵 Vue 树重渲染 —— 这是<b>单个巨型 Vue 实例</b>，
+    任何响应式变化（点一行、开个菜单、敲一个搜索字符）都会重跑整棵树。
+    种子页无虚拟化（prism/index.html:544 <code>v-for="m in filteredTorrents"</code>），
+    3000 个种子就是一个屏幕里几万个 vnode 与 DOM 节点。
+    叠加 <code>updated()</code> 钩子每次渲染后都做一次 <code>getBoundingClientRect()</code>（app.js:1136 → 3975），
+    强制同步布局。
+  </p>
+
+  <h3>D · 批量动作 N 条命令 × N 次 qB 调用，串行阻塞主循环（P0）</h3>
+  <p>
+    <code>bulkAct()</code>（app.js:2703）对 pause / resume / recheck 是<b>逐目标</b> POST 并各自等回执，
+    而后端已有单命令批量端点 <code>/api/torrents/bulk</code>（web.py:521）与
+    <code>_cmd_bulk_torrents</code>（一次 qB 调用 + 聚合回执）却没被用上。
+    后果是双向放大：前端 100 个目标 = 100 次 POST + 100 条 500 ms 轮询；后端 100 条命令在同一个 drain 里
+    <b>串行</b>各发一次 qB HTTP 请求，主循环被占满，连状态刷新都停摆 —— 这正是「点批量之后整个界面卡住」的成因。
+  </p>
+</section>
+
+<section id="s4">
+  <div class="sec-head"><span class="sec-num">05</span><h2>优化项总表</h2></div>
+  <div class="sec-rule"></div>
+
+  <table class="tbl">
+    <caption>P0 · 主观「点了就有反应」</caption>
+    <thead><tr><th style="width:52px">编号</th><th>动作</th><th style="width:180px">主要文件</th><th style="width:110px">预期收益</th></tr></thead>
+    <tbody>
+      <tr><td class="p">P0-0</td><td>埋点量化：命令三段时间戳 + 前端渲染耗时采样</td><td>web_commands.py / app.js</td><td class="cost">先有数再改</td></tr>
+      <tr><td class="p">P0-1</td><td>命令即时唤醒主循环（wake 事件取代纯 sleep）</td><td>qbmanager.py / web.py</td><td class="cost">−0~2 s</td></tr>
+      <tr><td class="p">P0-2</td><td>回执首查不等 500 ms，改退避曲线</td><td>app.js waitCmd</td><td class="cost">−500 ms</td></tr>
+      <tr><td class="p">P0-3</td><td>乐观 UI：点击即变 + pending 态 + 失败回滚</td><td>app.js / 双 UI 模板</td><td class="cost">−0.5~6 s 感知</td></tr>
+      <tr><td class="p">P0-4</td><td>批量动作合单：走 /api/torrents/bulk</td><td>app.js bulkAct</td><td class="cost">N 次 qB → 1 次</td></tr>
+      <tr><td class="p">P0-5</td><td>命令执行后<b>补一次完整刷新</b>（<code>_refresh_torrents</code>，按次计费）</td><td>web_commands.py / qbmanager.py</td><td class="cost">真实状态 ≈ 50 ms 进 store</td></tr>
+    </tbody>
+  </table>
+
+  <table class="tbl">
+    <caption>P1 · 大库下依然跟手</caption>
+    <thead><tr><th style="width:52px">编号</th><th>动作</th><th style="width:180px">主要文件</th><th style="width:110px">预期收益</th></tr></thead>
+    <tbody>
+      <tr><td class="p">P1-1</td><td>按当前视图回传（?view=），不再四份全量</td><td>web.py / web_view.py / app.js</td><td class="cost">响应体 ≈ 1/4</td></tr>
+      <tr><td class="p">P1-2</td><td>行窗口化渲染（种子页 + 展开成员行）</td><td>app.js / 双 UI 模板 / CSS</td><td class="cost">万级 DOM → 百级</td></tr>
+      <tr><td class="p">P1-3</td><td>updated() 去布局抖动：ResizeObserver + rAF</td><td>app.js</td><td class="cost">省每帧强制布局</td></tr>
+      <tr><td class="p">P1-4</td><td>抽屉活数据降频 + 服务端 1~2 s 只读缓存</td><td>app.js / web.py</td><td class="cost">qB 调用减半</td></tr>
+      <tr><td class="p">P1-5</td><td>qB 客户端加请求超时（现为无限等待）</td><td>qbclient.py</td><td class="cost">消除假死</td></tr>
+    </tbody>
+  </table>
+
+  <table class="tbl">
+    <caption>P2 · 选做 / 远期</caption>
+    <thead><tr><th style="width:52px">编号</th><th>动作</th><th style="width:180px">主要文件</th><th style="width:110px">性质</th></tr></thead>
+    <tbody>
+      <tr><td class="p">P2-1</td><td>单次渲染成本降维：行组件化 / 装饰计算按引用缓存</td><td>app.js</td><td class="dim">重构，收益中等</td></tr>
+      <tr><td class="p">P2-2</td><td>增量回传：按 hash 回传变化行，前端 patch</td><td>web_view.py / app.js</td><td class="dim">替代 P1-1 的更强版</td></tr>
+      <tr><td class="p">P2-3</td><td>SSE / WebSocket 推送取代轮询（想法.md 已列）</td><td>web.py / app.js</td><td class="dim">架构改动，单列一期</td></tr>
+      <tr><td class="p">P2-4</td><td>评估 SIMPLE_RESPONSES 降低全量轮解析成本</td><td>qbclient.py / store.py</td><td class="dim">需先核类型依赖</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s5">
+  <div class="sec-head"><span class="sec-num">06</span><h2>逐项说明</h2></div>
+  <div class="sec-rule"></div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P0-0</span><h4>埋点量化</h4><span class="tag p0">P0</span></div>
+    <p>在改任何代码之前，先把「慢在哪一段」变成数字。否则每改一项都无法证明它生效。</p>
+    <dl class="kv">
+      <dt>改什么</dt><dd>后端 <code>_web_results</code> 增加 <code>queued_ts / start_ts / done_ts</code>，<code>/api/cmd/{id}</code> 一并回传耗时分解；前端 <code>waitCmd</code> 记录「投递 → 回执」耗时，<code>refresh()</code> 用 <code>performance.now()</code> 包住赋值 + <code>$nextTick</code>，超 50 ms 打 warning。</dd>
+      <dt>交付</dt><dd>一份走查表：200 / 1000 / 3000 种子三档，各测「点暂停 → 行变化」秒表 + Chrome Performance 录 10 s。</dd>
+      <dt>风险</dt><dd>极低。仅新增字段，前端不消费即无影响。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P0-1</span><h4>命令即时唤醒主循环</h4><span class="tag p0">P0</span></div>
+    <p>
+      <b>设计已修订（v2） —— 唤醒只触发「消费命令」，不触发 tick。</b>
+      初版设想是「投递即 <code>wake</code>，主循环提前跑下一轮」，但那会让 <code>main_tick</code> 不再是 tick 频率的唯一决定者，
+      连带把 <code>max_tasks_per_tick</code> 与两个每 tick 预算一起放大（详见下一节）。v2 把两者解耦：
+    </p>
+    <dl class="kv">
+      <dt>结构</dt><dd>循环拆成两条独立时间线 —— <b>命令线</b>：任何时刻被唤醒即 <code>_drain_web_commands()</code>（+ 汇报确认检查，自带 ≥1 s 间隔）；
+        <b>tick 线</b>：<code>next_tick_at</code> 到点才跑 <code>_tick()</code>（含 <code>run_due</code>），跑完推到 <code>now + main_tick</code>。等待 = <code>wake.wait(剩余时间)</code>。</dd>
+      <dt>收益</dt><dd>链路第 02 段 0–2 s → 近乎 0，而 <code>_tick</code> 频率<b>严格不变</b>（仍每 main_tick 一次）。</dd>
+      <dt>取舍</dt><dd>停止信号：托管模式下 <code>stop_event</code> 与 wake 是两个事件。方案 —— ui.py 在 <code>stop_event.set()</code> 后一并调 <code>manager.wake()</code>（一处改动）；若不接受，退化为 wake 等待 + 每轮循环顶部已有 stop 检查，最坏延迟 1 个 tick。</dd>
+      <dt>验收</dt><dd>① 投递命令后 200 ms 内 <code>_web_results</code> 出现回执；② <b>命令风暴下 tick 次数不增加</b>（连投 100 条命令，2 s 窗口内 <code>_tick</code> 仍只跑 1 次）；③ 无命令时等待仍睡满 main_tick（防忙等回归）。</dd>
+    </dl>
+  </div>
+
+  <div class="note">
+    <p class="nh">为什么不能「投递即跑下一轮 tick」</p>
+    <p>
+      <code>max_tasks_per_tick</code> 的字面语义是<b>每次 <code>run_due</code> 最多弹 N 个</b>（taskqueue.py:184 <code>_pop_due</code>）——
+      唤醒后每次仍 ≤ N，字面不失效。但它实际承载的是<b>速率语义</b>：默认 <code>max_tasks_per_tick=20</code> × <code>main_tick=2s</code>
+      ⇒ 吞吐上限 10 任务/秒。tick 频率一旦由命令决定，这个上限就失效了。
+    </p>
+    <p>
+      更严重的是<b>自投递命令会形成自激循环</b>：<code>_build_shows_view</code>（web_view.py:513）与 <code>search_torrents</code>（:699）
+      在索引脏时会自己投递 <code>build_search_index</code>，而该命令单轮可拉 <code>SEARCH_INDEX_BUILD_BUDGET=500</code> 条文件 API。
+      「投递即唤醒」⇒ 唤醒 → drain(500 次 API) → tick → 重建视图 → 又投递 → 立刻再唤醒 …… 直到索引建完为止，
+      中间没有 main_tick 兜底 —— 这不是变慢，是打满 CPU 并把 qB 冲垮。
+    </p>
+    <p>
+      同层受影响的还有两个每 tick 预算：<code>_refresh_torrents</code>（每 tick 一次 qB sync）与
+      <code>refresh_error_reasons</code>（Web 活跃时每 tick 5 次 tracker 请求）。tick 变密 ⇒ qB 请求变密。
+    </p>
+    <p>
+      <b>因此 P0-1 加三道保险</b>：① 唤醒只走命令线（tick 线不动）；② 命令白名单 —— <code>build_search_index</code>
+      这类自投递命令不唤醒；③ 汇报确认检查自带最小间隔，不随唤醒频率放大。
+    </p>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P0-2</span><h4>回执首查不等 500 ms</h4><span class="tag p0">P0</span></div>
+    <p>
+      <code>waitCmd</code> 改成<b>先查后退避</b>：0 ms 首查 → 150 → 300 → 500 ms 封顶；
+      强制汇报（reannounce，确认窗口 30 s）另走宽松曲线（500 ms → 1 s 封顶），避免刷请求。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>第 04 段稳定 −500 ms；单次快命令（pause/resume）端到端可压到百毫秒级。</dd>
+      <dt>风险</dt><dd>请求数略增（仅在命令在途的极短窗口内），可接受。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P0-3</span><h4>乐观 UI：点击即变</h4><span class="tag p0">P0</span></div>
+    <p>
+      新增 <code>applyOptimistic(targets, patch)</code>：按动作白名单（暂停 / 开始 / 删除 / 限速 / 分享率 / 超级做种 /
+      强制开始 / 队列调整 / 移动 / 重命名）在本地把目标行立刻改成预期状态，并打 pending 标记（半透明 + 细微动效）；
+      回执 ok 清除 pending，error 回滚原值并弹错误 toast；下一轮轮询以服务端数据为准覆盖。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>把「沉默的几秒」变成「立刻有反馈」。这是主观跟手性收益最大的一项。</dd>
+      <dt>取舍</dt><dd>只对<b>结果可预测</b>的动作做乐观（白名单）；强制汇报、重新校验、添加种子这类「结果在远端」的动作不做，改由「等待中」常驻 toast 承担（现有 reannounce 已是这样）。</dd>
+      <dt>风险</dt><dd>状态抖动（乐观值被服务端下一轮覆盖时闪一下）。缓解：pending 期间不再被轮询覆盖同一字段，超时 3 s 未确认则回落真值。</dd>
+      <dt>验收</dt><dd>断网 / qB 未启动时点暂停：应在回执失败后回滚并报错，不允许留假状态；双 UI（prism / atlas）各走查一遍。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P0-4</span><h4>批量动作合单</h4><span class="tag p0">P0</span></div>
+    <p>
+      <code>bulkAct</code> 的 pause / resume / recheck 改为一次 POST <code>/api/torrents/bulk</code>
+      （传 <code>keys</code> + <code>hashes</code> + <code>action</code>），等一个聚合回执；
+      后端 <code>_cmd_bulk_torrents</code> 已有展开组键、去重、缺失计数与单条 qB 调用。删除动作已走这条链，口径对齐。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>100 个目标：前端 100 次 POST + 100 条轮询 → 1 次；后端 100 次 qB 调用（串行阻塞主循环）→ 1 次。顺带消除「批量后界面卡住」。</dd>
+      <dt>风险</dt><dd>失败文案口径变化（部分成功也报 error 并带缺失计数，前端沿用现有汇总文案）。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P0-5</span><h4>命令执行后立即同步一次</h4><span class="tag p0">P0</span></div>
+    <p>
+      这是「把主循环提到 50 ms」想买的东西的<b>便宜买法</b>：命令在主循环线程执行完（qB 已改状态）后，
+      立刻补一次刷新，让真实状态在几十毫秒内进入快照，而不必等下一轮 tick。<b>成本按操作次数计费</b>，不是按时间计费。
+    </p>
+    <dl class="kv">
+      <dt>红线</dt><dd><b>必须调完整的 <code>_refresh_torrents()</code>，绝不能只调 <code>store.apply_sync()</code>。</b>
+        <code>apply_sync</code> 只更新 <code>by_hash</code> + <code>server_state</code>（store.py:81），
+        分组索引 / 任务 / 事件 / 搜索索引一概不碰 —— 单调用它会留下"已进快照但未处理"的半刷新态：
+        新增种子不建任务不归组、删除种子的 <code>on_torrent_deleted</code> 不触发且 <code>store.groups</code> 残留 hash、
+        状态快照不推进导致事件时机错位。而 <code>_refresh_torrents</code> 本来就每轮都跑，转换与事件由快照 diff 消费一次，天然幂等。</dd>
+      <dt>触发点</dt><dd><code>_drain_web_commands()</code> <b>整批结束后补一次</b>，不是每条命令后各补一次 —— 否则 N 条命令 = N × 14.5 ms（3000 种子）。</dd>
+      <dt>门控</dt><dd>仅当本批含"改 qB 状态"的命令（白名单；<code>reload_config</code> / <code>build_search_index</code> 不触发）；
+        <b>程序暂停时不补</b>（drain 在 pause 检查之前，但"暂停 = 完全旁观"的语义要保持）；dry_run 不补。</dd>
+      <dt>实测</dt><dd>单次 <code>_refresh_torrents()</code>：200 / 1000 / 3000 种子 = 0.87 / 4.86 / 14.52 ms（纯 CPU，不含 qB 往返）。</dd>
+      <dt>收益</dt><dd>把链路第 05 段（等下轮 sync）从 0–2 s 压到 ≈ 一次刷新的耗时。</dd>
+      <dt>备选 B</dt><dd>不补刷新，改为「把下一轮 tick 拉前」（在 P0-1 v2 的分层结构里改 <code>next_tick_at</code>）。代码更少、完全复用既有 tick 路径，
+        但需加<b>最小间隔下限</b>（如 ≥ main_tick/2），否则连续点击会把 tick 频率顶上去。</dd>
+      <dt>注意</dt><dd>端到端仍受<b>前端轮询</b> <code>pollSec=2s</code> 限制 —— 真实状态进 store 快了，用户看到仍 ≤2 s。
+        因此本项与 P0-3 乐观 UI 配套：感知靠乐观 UI，真实值靠本项在下一次轮询时对齐。彻底去掉这 2 s 要走 P2-3（SSE 推送）。</dd>
+      <dt>验收</dt><dd>红绿用例：同一状态下连跑两次 <code>_refresh_torrents()</code>，断言 ①状态变化事件只触发一次 ②下载冲突告警不重复
+        ③缺文件扫描不重复 ④<code>on_torrent_deleted</code> 不重放 ⑤热重载后的事件抑制窗口不被误消耗。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P1-1</span><h4>按当前视图回传</h4><span class="tag p1">P1</span></div>
+    <p>
+      <code>/api/state?view=group|torrent|show</code>：只回传当前视图那一份数组（四视图仍共享同一版本号，
+      前端切视图时把 <code>lastRid</code> 置空强制取一次全量）。status / traffic / server 恒回传不变。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>每轮响应体降到约 1/4（3000 种子量级下从 MB 级到百 KB 级），序列化、网络、JSON.parse 与重渲染成本同步下降。</dd>
+      <dt>风险</dt><dd>切页首帧多一次全量（可在切页前预取）；前端必须保证「未回传的数组保留原引用」不被清空。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P1-2</span><h4>行窗口化渲染</h4><span class="tag p1">P1</span></div>
+    <p>
+      种子页（最易爆炸）与展开组的成员行改为窗口渲染：只渲染视口 ±N 行，上下用占位高度撑起滚动条。
+    </p>
+    <dl class="kv">
+      <dt>硬约束</dt><dd>列对齐 CSS 依赖 <code>:nth-child</code>（app.js:535 colAlignCss）与 <code>data-table</code>，
+        窗口化后<b>每一行仍必须渲染完整单元格序列</b>，绝不能只渲染部分单元格；列宽实体化从表头读值，不受影响。</dd>
+      <dt>连带</dt><dd>多选的 shift 区间选择、右键定位、行内搜索高亮需按「虚拟索引 → 数据索引」换算，逐一回归。</dd>
+      <dt>风险</dt><dd>本项改动面最大，建议单独一个波次、配截图核对，不与 P0 混提。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P1-3</span><h4>updated() 去布局抖动</h4><span class="tag p1">P1</span></div>
+    <p>
+      <code>updated()</code> 每次渲染后都调 <code>_syncHeadHeight()</code>（内含 <code>getBoundingClientRect</code>，
+      强制同步布局）。改为 ResizeObserver 观察 <code>.sticky-head</code> + rAF 合并写入 <code>--head-h</code>。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>省掉「每次渲染一次强制布局」，在大 DOM 下是直接的主线程时间。</dd>
+      <dt>风险</dt><dd>低。 <code>--head-h</code> 的写入时机从「每帧」变「尺寸真变时」，语义等价。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P1-4</span><h4>抽屉活数据降频 + 短缓存</h4><span class="tag p1">P1</span></div>
+    <p>
+      抽屉 trackers / peers 由 3 s 轮询放宽到 5 s（页面隐藏已暂停，保持）；
+      服务端对 <code>/files /trackers /peers /categories /tags</code> 这类「Web 线程直连 qB」的只读端点加 1~2 s TTL 缓存，
+      避免打开抽屉/添加窗口就打一串 qB 请求。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>每次开抽屉的 qB 请求数下降；主循环不再被抽屉轮询挤占。</dd>
+      <dt>取舍</dt><dd>抽屉数据最多旧 1~2 s。抽屉是观察用途，可接受；若用户要求实时，peers tab 可单独保留 3 s 直连。</dd>
+    </dl>
+  </div>
+
+  <div class="item">
+    <div class="item-h"><span class="id">P1-5</span><h4>qB 客户端加请求超时</h4><span class="tag p1">P1</span></div>
+    <p>
+      <code>_new_client()</code>（qbclient.py:44）未设任何超时：qB 假死时，主循环的命令执行或 Web 线程的抽屉请求会<b>无限期挂起</b>，
+      表现为「点一下之后整个界面再也不动」。加 <code>REQUESTS_ARGS={'timeout': (3, 10)}</code>（连接 / 读）。
+    </p>
+    <dl class="kv">
+      <dt>收益</dt><dd>把最坏情形从「永久假死」变成「超时报错 + 走既有重连退避」。</dd>
+      <dt>风险</dt><dd>读超时可能截断超大响应（如几千文件的 <code>/files</code>）。取宽松读超时，并保持现有重试与重连逻辑；先在 3000 种子量级实测一次。</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="sec-head"><span class="sec-num">07</span><h2>实施波次</h2></div>
+  <div class="sec-rule"></div>
+  <table class="tbl">
+    <thead><tr><th style="width:96px">波次</th><th>内容</th><th style="width:150px">退出条件</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="p">波次一</td>
+        <td>P0-0 埋点 → P0-1 唤醒 → P0-2 首查 → P0-3 乐观 UI → P0-4 批量合单</td>
+        <td class="num">单目标 ≤ 400 ms<br>批量 100 ≤ 1.5 s</td>
+      </tr>
+      <tr>
+        <td class="p">波次二</td>
+        <td>P1-1 按视图回传 → P1-3 去布局抖动 → P1-4 抽屉缓存 → P1-5 超时</td>
+        <td class="num">3000 种子下<br>每帧 ≤ 50 ms</td>
+      </tr>
+      <tr>
+        <td class="p">波次三</td>
+        <td>P1-2 行窗口化（改动面最大，单独提）</td>
+        <td class="num">双 UI 截图核对<br>+ 多选/右键回归</td>
+      </tr>
+      <tr>
+        <td class="p">选做</td>
+        <td>P2-1 ~ P2-4，视实测数字再定</td>
+        <td class="dim">—</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="small muted">
+    每个波次结束都跑一次 <code>uv run pytest tests -q</code>，基线不得下降（当前 1041 passed，
+    数字单点维护在 memory-bank/testing.md）；涉及平台行为的改动按 AGENTS.md 建议在 WSL 里复现一遍。
+  </p>
+</section>
+
+<section id="s7">
+  <div class="sec-head"><span class="sec-num">08</span><h2>验收口径</h2></div>
+  <div class="sec-rule"></div>
+  <ul class="tight">
+    <li><b>单目标操作</b>：点「暂停」→ 行状态变化 ≤ <span class="cost">400 ms</span>（当前 0.5–6.5 s）。以 P0-0 埋点为准，不用秒表拍脑袋。</li>
+    <li><b>批量 100 个目标</b>：端到端 ≤ <span class="cost">1.5 s</span>，且后端 qB 调用次数 = 1（用记账探针数，不靠日志数行数）。</li>
+    <li><b>3000 种子种子页</b>：滚动与点击的单帧主线程耗时 ≤ <span class="cost">50 ms</span>（Chrome Performance 录 10 s 取 P95）。</li>
+    <li><b>每轮 /api/state 响应体</b>：P1-1 后 ≤ <span class="cost">200 KB</span>（DevTools Network 取样）。</li>
+    <li><b>失败路径</b>：qB 断连时点暂停，必须回滚 + 报错 toast，不留假状态；不产生未捕获异常。</li>
+    <li><b>测试</b>：全量 ≥ 1041 passed；P0 各项至少一条红绿验证过的回归用例。</li>
+    <li><b>不变量</b>：命令风暴（2 s 内连投 100 条）下，<code>_tick</code> 调用次数与无命令时<b>相同</b>；<code>run_due</code> 的单次任务数仍 ≤ <code>max_tasks_per_tick</code>。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <div class="sec-head"><span class="sec-num">09</span><h2>红线与不做</h2></div>
+  <div class="sec-rule"></div>
+  <ul class="tight">
+    <li><b>不在 Web 线程写状态。</b> 命令仍然只投递、由主循环线程执行（黄金法则「单一写线程」）。P0-1 只是让主循环<b>早点醒来</b>，不是让它旁路。</li>
+    <li><b>不把节流改成忙等。</b> <code>_throttle</code> 必须保持真实阻塞；新增一条防回归用例。</li>
+    <li><b>唤醒不得改变 tick 频率。</b> <code>main_tick</code> 是 tick 的唯一节拍源：命令只提前"被消费"，不提前"跑一轮任务"。
+      由此 <code>max_tasks_per_tick</code> 的吞吐上限（N / main_tick 每秒）与两个每 tick 预算（一次 qB sync、5 次 tracker 请求）保持原样。</li>
+    <li><b>不动生产文件</b>：<code>config.yml</code>、<code>auto-qb-data/</code>。若本计划引入新配置键（如 <code>web.poll_sec</code>），必须同时进 <code>validate_config</code> 与 <code>config/schema.py</code>（守卫测试会查）。</li>
+    <li><b>双 UI 同步</b>：prism 与 atlas 两套模板/CSS 一并改，不落下一套（历史教训：星图漏改导致观感回退）。</li>
+    <li><b>不靠缩短 <code>main_tick</code> 换响应。</b> 轮询频率与响应延迟是两件事：命令侧用 wake 事件（≈0 ms、零成本），
+      状态侧用「命令后单次同步」（按次计费）。把主循环提到 50 ms 是 40× 成本换 0 收益（收益被前端 2 s 轮询截断），见附录 A1。</li>
+    <li><b>不预先做 P2-3 推送化。</b> 轮询在 P0/P1 之后已足够跟手；推送化涉及鉴权、重连、与主循环的耦合，单列一期评估。</li>
+    <li><b>提交纪律</b>：日常在 <code>develop</code>，以 Gitee 的 <code>origin/develop</code> 为准；GitHub 只作镜像，直连失败不重试。</li>
+  </ul>
+</section>
+
+</article>
+</div>
+
+<section id="a1" style="max-width:780px;padding:0 0 20px">
+  <div class="sec-head"><span class="sec-num">A1</span><h2>附录 · 方案 B「主循环 50 ms」可行性评估</h2></div>
+  <div class="sec-rule"></div>
+  <p>
+    提议：主循环改成 50 ms，任务仍按 <code>main_tick=2s</code>（= 50 ms × 40）触发，种子状态刷新提到 50 ms。
+    结论：<b>不可行</b> —— 成本 40×，收益被前端 2 s 轮询截断为 0。下面是实测与逐条判据。
+  </p>
+
+  <h3>实测：单轮各项成本（Fake 替身，纯 CPU，<b>不含</b> qB 网络往返 ⇒ 下界）</h3>
+  <table class="tbl">
+    <caption>2026-09-19 本机实测 · helpers.FakeClient + make_manager</caption>
+    <thead><tr><th>种子数</th><th>_refresh_torrents</th><th>rebuild_views</th><th>单轮合计</th><th>20 Hz 占用</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td class="num">200</td><td class="num">0.87 ms</td><td class="num">2.98 ms</td><td class="num">3.85 ms</td><td class="num">≈ 8% 核</td><td>能跑，纯浪费</td></tr>
+      <tr><td class="num">1000</td><td class="num">4.86 ms</td><td class="num">13.79 ms</td><td class="num">18.65 ms</td><td class="num">≈ 37% 核</td><td>能跑，明显浪费</td></tr>
+      <tr><td class="num">3000</td><td class="num">14.52 ms</td><td class="num">46.91 ms</td><td class="num">61.43 ms</td><td class="num">&gt; 100% 核</td><td><b>物理上跑不动</b></td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">
+    说明：<code>rebuild_views</code> 只在「视图脏 + Web 活跃（<code>WEB_VIEW_TTL=10s</code>）」时发生，而速度类字段属于视图字段
+    ⇒ 浏览器开着时基本每轮都脏。故第三列在浏览器打开时是常态，不是最坏情形。
+  </p>
+
+  <h3>三条硬否决</h3>
+  <ul class="tight">
+    <li><b>① 3000 种子下单轮 61.4 ms &gt; 50 ms 预算</b> —— 循环永远追不上节拍，<code>_throttle</code> 的剩余时间恒为 0，
+      退化成<b>无间隔连续跑</b>。这形成正反馈：负载越高 → 单轮越慢 → 越没有休眠 → CPU 100%。当前的 2 s 节拍正是这条正反馈的隔离带。</li>
+    <li><b>② 空闲成本 ×40</b> —— 现在空闲（无浏览器）时每 2 s 才 14.5 ms ≈ 0.7% 核；50 ms 后是 <b>29% 核</b>，且<b>永久</b>。
+      这是"没人操作时也在烧"的开销，与长驻托盘进程的定位冲突。</li>
+    <li><b>③ 每 tick 预算同步放大 40×</b> —— qB sync 0.5 → <b>20 次/秒</b>；<code>refresh_error_reasons</code> 2.5 → <b>100 次 tracker/秒</b>；
+      <code>_build_search_index</code> 250 → <b>10000 次文件 API/秒</b>；<code>run_due</code> 若每次仍弹 20 个 ⇒ 任务吞吐 10 → <b>400 个/秒</b>，
+      <code>max_tasks_per_tick</code> 的限流作用被完全架空（这一点与 P0-1 v1 是同一类问题，只是倍数从"不定"变成"恒定 40×"）。</li>
+  </ul>
+
+  <h3>收益侧：买到的东西相对现方案为 0</h3>
+  <ul class="tight">
+    <li><b>命令延迟</b>：50 ms 轮询换来 ≤50 ms；而 P0-1 v2 的 wake 事件是 <b>≈0 ms 且零成本</b>。相对收益 = 0。</li>
+    <li><b>状态可见延迟</b>：后端刷新再快也救不了 —— <b>前端 <code>pollSec=2s</code> 是端到端的下限</b>。
+      要让前端也 50 ms，就得每轮回传 MB 级响应体 × 20/s，传输与渲染（P1 要解决的正是这个）先崩。
+      也就是说：<b>50 ms 循环把瓶颈从"后端节拍"搬到"前端轮询"，端到端延迟不变。</b></li>
+  </ul>
+
+  <h3>真正的诉求与更便宜的买法</h3>
+  <p>
+    想要的是「操作之后立刻看到<b>真实</b>状态」。按时间提频是最贵的买法；按事件触发是最便宜的：
+    命令执行完<b>补一次完整刷新</b>（<b>P0-5</b>，单次 14.5 ms @3000，按操作次数计费；注意不能只调 <code>apply_sync</code>），
+    感知层交给乐观 UI（P0-3），
+    彻底去掉前端那 2 s 下限则走 SSE 推送（P2-3）。三者相加的成本远低于把整个循环提频 40 倍。
+  </p>
+
+  <h3>若一定要提频：分层节拍（不是统一 50 ms）</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:110px">层</th><th style="width:130px">节拍</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td class="p">命令线</td><td class="num">事件（0 轮询）</td><td>drain 命令 + 汇报确认（自带最小间隔）；<b>不需要 50 ms 轮询</b></td></tr>
+      <tr><td class="p">状态同步</td><td class="num">保持 2 s</td><td>最多降到 1 s（2× 成本）。50 ms 无收益（被前端轮询截断）</td></tr>
+      <tr><td class="p">任务</td><td class="num">2 s 门控</td><td><code>run_due</code> 每 2 s 一次，<code>max_tasks_per_tick</code> 语义完整保留</td></tr>
+      <tr><td class="p">视图重建</td><td class="num">脏驱动</td><td>与状态同步同频或更低；<b>绝不与命令线同频</b></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="a2" style="max-width:780px;padding:0 0 20px">
+  <div class="sec-head"><span class="sec-num">A2</span><h2>附录 · 分层节拍「刷新 50 ms / 视图 1 s / 任务 2 s」可行性评估</h2></div>
+  <div class="sec-rule"></div>
+  <p>
+    结论：<b>技术可行</b>（与 A1 那版 50 ms 全量不同 —— 那版是物理上跑不动，这版跑得动），
+    但<b>需要补三个门控</b>，且<b>有两处收益打折</b>。若要做，建议把 50 ms 放宽到 250–500 ms，并挂在「Web 活跃」门控上。
+  </p>
+
+  <h3>为什么这版跑得动（与 A1 的关键差别）</h3>
+  <p>
+    A1 的 50 ms 是「整轮 tick 50 ms」⇒ 单轮 = 刷新 14.52 + 重建 46.91 = <b>61.43 ms &gt; 50 ms 预算</b>（3000 种子），
+    直接退化成无间隔连续跑。本版把重建降到 1 Hz 后，<b>单轮只剩刷新 14.52 ms，占 50 ms 预算的 29%</b> —— 节拍站得住了。
+  </p>
+  <table class="tbl">
+    <caption>按实测值折算的占用（浏览器打开时，视图每轮都脏）</caption>
+    <thead><tr><th>种子数</th><th>刷新 @20 Hz</th><th>重建 @1 Hz</th><th>合计</th><th>单轮 / 预算</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td class="num">200</td><td class="num">17.4 ms/s（1.7%）</td><td class="num">2.98 ms/s</td><td class="num">≈ 2.0% 核</td><td class="num">0.87 / 50 ms</td><td>轻松</td></tr>
+      <tr><td class="num">1000</td><td class="num">97 ms/s（9.7%）</td><td class="num">13.79 ms/s</td><td class="num">≈ 11.1% 核</td><td class="num">4.86 / 50 ms</td><td>轻松</td></tr>
+      <tr><td class="num">3000</td><td class="num">290 ms/s（29%）</td><td class="num">46.91 ms/s</td><td class="num">≈ 33.7% 核</td><td class="num">14.52 / 50 ms</td><td><b>可行</b>（偏高）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>必须补的三个门控（漏一个就会被 qB 打脸）</h3>
+  <p>
+    你列了三项，但 <code>_tick</code> 里实际有 <b>五项</b>。剩下两项仍按 50 ms 跑的话，代价远超刷新本身：
+  </p>
+  <table class="tbl">
+    <thead><tr><th style="width:190px">_tick 内的动作</th><th style="width:110px">建议档位</th><th>不门控的后果（20 Hz）</th></tr></thead>
+    <tbody>
+      <tr><td class="p">`_refresh_torrents`</td><td class="num">50 ms</td><td>—（本方案主体）</td></tr>
+      <tr><td class="p">`rebuild_views`</td><td class="num">1 s</td><td>938 ms/s ≈ 94% 核（A1 就是死在这）</td></tr>
+      <tr><td class="p">`run_due`（任务）</td><td class="num">2 s</td><td>吞吐 10 → 400 任务/s，<code>max_tasks_per_tick</code> 限流被架空</td></tr>
+      <tr><td class="p"><b>`_build_search_index`</b></td><td class="num"><b>2 s（或更慢）</b></td><td><b>单轮 500 条文件 API × 20 = 10000 次/秒</b> ⇒ qB 直接被打爆</td></tr>
+      <tr><td class="p"><b>`refresh_error_reasons`</b></td><td class="num"><b>2 s</b></td><td>单轮 5 次 tracker × 20 = <b>100 次/秒</b></td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">
+    另：<code>_check_download_conflicts</code> 每轮都跑，但它<b>增量且带去重</b>（只重算 <code>store.dirty_groups</code>，
+    冲突持续不重复暂停），静止库零成本；活跃下载时 <code>amount_left</code> 每轮变 ⇒ 从 0.5 Hz 变 20 Hz，
+    成本 O(脏组 × 成员数)，可控但建议实测。
+  </p>
+
+  <h3>两处收益打折</h3>
+  <ul class="tight">
+    <li><b>重建 1 s vs 前端轮询 2 s</b> —— 一半的重建没人来取。要么前端 <code>pollSec</code> 一起降到 1 s（响应体频率翻倍，
+      正是 P1 要治的问题），要么重建保持 2 s。<b>建议：先对齐 2 s，等 P1-1（按视图回传，响应体 ≈1/4）落地后两边一起降。</b></li>
+    <li><b>状态 50 ms 新鲜度用户看不到</b> —— 端到端仍被前端 <code>pollSec=2s</code> 封顶。50 ms 档唯一落到用户身上的收益是
+      「命令执行后 ≤50 ms 被感知」，而这件事 P0-1 的 wake 事件用 <b>≈0 成本</b>就能做到（且是 ≈0 ms 而非 ≤50 ms）。</li>
+  </ul>
+
+  <h3>两个隐藏成本（不在我们的 CPU 预算里）</h3>
+  <ul class="tight">
+    <li><b>打在 qB 进程上</b>：<code>sync/maindata</code> 20 次/秒，qB 的 synccontroller 每请求要做 O(N) diff 构造响应
+      （N = 种子数）⇒ 3000 种子 ≈ 6 万次字段比较/秒，<b>消耗的是 qB 的 CPU</b>，还会拖慢 qB 自带 WebUI。
+      qB 官方 WebUI 默认 1500 ms 一轮；20/s 属极激进。<b>建议快档取 250–500 ms（2–4 Hz）起步。</b></li>
+    <li><b>GIL 争用</b>：主循环 33.7% + Web 线程每轮重建 47 ms + MB 级 JSON 序列化，三层都持 GIL
+      ⇒ 可能出现「后台更快了、前台更卡了」的反直觉结果。需真机对比 Web 请求 P95 才能定论。</li>
+  </ul>
+
+  <h3>与 P0-1/P0-5 方案的对比</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:150px">维度</th><th style="width:200px">本方案（分层节拍）</th><th>B + E（事件唤醒 + 补刷新，tick 仍 2 s）</th></tr></thead>
+    <tbody>
+      <tr><td class="p">命令延迟</td><td class="num">≤ 50 ms</td><td class="num">≈ 0 ms</td></tr>
+      <tr><td class="p">真实状态可见</td><td class="num">50 ms 进 store（用户侧仍 ≤2 s）</td><td class="num">命令后 ≈15 ms 进 store（用户侧仍 ≤2 s）</td></tr>
+      <tr><td class="p">我方 CPU @3000</td><td class="num">≈ 33.7% 核</td><td class="num">≈ 1%（0.7% + 按次）</td></tr>
+      <tr><td class="p">qB 请求</td><td class="num">sync 20/s</td><td class="num">sync 0.5/s + 每次操作 1 次</td></tr>
+      <tr><td class="p">空闲（无浏览器）成本</td><td class="num">29% 核（若不做活跃门控则永久）</td><td class="num">0.7% 核</td></tr>
+      <tr><td class="p">改动量</td><td>主循环重构：节拍器 + 五项门控</td><td>小：wake 事件 + 批末一次刷新</td></tr>
+      <tr><td class="p">风险</td><td>qB 侧压力 / GIL 争用 / 门控漏项</td><td>幂等验证（5 条用例）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>建议的落地形态：做成「Web 活跃快档」</h3>
+  <p>
+    分层节拍本身是<b>对的架构</b>（P0-1 v2 的 D 方案就是这个形状），问题只在档位取值。别把它设成常态，
+    而是挂到<b>已有的 Web 活跃门控</b>上（<code>_web_last_seen</code> / <code>WEB_VIEW_TTL=10s</code>）：
+    浏览器开着 ⇒ 同步走快档；关掉网页 ⇒ 自动回落到 <code>main_tick</code>。这样 29% 核只发生在用户正在看的时候，
+    空闲成本回到 0.7%。
+  </p>
+  <ul class="tight">
+    <li>新增配置键 <code>web.fast_sync_ms</code>（默认 0 = 关闭，跟随 main_tick）；取值建议 250–500，
+      <b>不提供 50</b>（qB 侧成本与收益不成比例）。新键必须进 <code>validate_config</code> 与 <code>config/schema.py</code>。</li>
+    <li>五项门控全部显式声明档位，<code>_build_search_index</code> 与 <code>refresh_error_reasons</code> <b>不得</b>跟随快档。</li>
+    <li>先做 P0-1/B + P0-5/E（成本 1%，拿走 ≈0 ms 命令延迟）；快档作为 P1 末的<b>可选增强</b>，
+      真机对比「qB 侧 CPU + Web 请求 P95」后再决定是否默认开启。</li>
+  </ul>
+</section>
+
+<section id="a3" style="max-width:780px;padding:0 0 20px">
+  <div class="sec-head"><span class="sec-num">A3</span><h2>附录 · 「刷新 1 s / WEB UI 1.5 s / 任务 2 s」可行性评估</h2></div>
+  <div class="sec-rule"></div>
+  <p>
+    结论：<b>后端侧完全可行且几乎免费</b>（3000 种子合计 ≈4.6% 核，只比现状多 1.5 个点）；
+    <b>唯一风险在前端侧</b> —— WEB UI 从 2 s 提到 1.5 s 会把「每轮全量回传 + 整树重渲染」的频率提高 33%，
+    而那正是「不跟手」的主因。所以这项<b>必须与 P1 的降本配套</b>，否则大库下会越改越卡。
+  </p>
+
+  <h3>后端成本（按实测值折算）</h3>
+  <table class="tbl">
+    <caption>刷新 1 Hz + 视图重建 1.5 Hz（浏览器打开时视图基本每轮都脏）</caption>
+    <thead><tr><th>种子数</th><th>_refresh_torrents @1 Hz</th><th>rebuild_views @1.5 s</th><th>合计</th><th>现状（2 s / 2 s）</th></tr></thead>
+    <tbody>
+      <tr><td class="num">200</td><td class="num">0.87 ms/s</td><td class="num">1.99 ms/s</td><td class="num">≈ 0.29% 核</td><td class="num">≈ 0.19% 核</td></tr>
+      <tr><td class="num">1000</td><td class="num">4.86 ms/s</td><td class="num">9.19 ms/s</td><td class="num">≈ 1.4% 核</td><td class="num">≈ 0.93% 核</td></tr>
+      <tr><td class="num">3000</td><td class="num">14.52 ms/s</td><td class="num">31.27 ms/s</td><td class="num"><b>≈ 4.6% 核</b></td><td class="num">≈ 3.1% 核</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">
+    qB 请求：sync/maindata 由 0.5 次/秒 → <b>1 次/秒</b>，与 qB 自带 WebUI 的 1500 ms（0.67 次/秒）<b>同一量级</b> —— 你这条判断成立：
+    比 qB 自身的数据粒度更快没有意义（速度类字段按滑动窗口更新），但 1 s 是"刚好够快"的档位。
+  </p>
+
+  <h3>一个可以省掉的节拍：视图重建不需要自己的定时器</h3>
+  <p>
+    现有实现里 <code>ensure_group_state()</code> 已经是「<b>请求驱动 + 脏门控</b>」：Web 请求到达时，脏才重建，不脏直接返回当前引用。
+    也就是说 <b>视图重建频率天然 = 前端轮询频率</b>，且只在真有变化时发生。给它单独配一个节拍（1 s / 1.5 s）反而是多余的，
+    还会在"前端没来取"时白建。
+  </p>
+  <p class="small muted">
+    故本节把「WEB UI 1.5 s」理解为<b>前端 <code>pollSec</code> = 1.5 s</b>，视图重建自动跟随 —— 后端不需要第三个节拍。
+  </p>
+
+  <h3>风险：前端 1.5 s 的代价（这才是要盯的）</h3>
+  <table class="tbl">
+    <thead><tr><th style="width:150px">阶段</th><th style="width:170px">单次成本（3000 种子）</th><th style="width:110px">@2 s</th><th style="width:110px">@1.5 s</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="p">未做 P1（现状）</td><td>响应体 ~1–2 MB + 3000 行整树重渲染</td>
+        <td class="num">~0.5 次/s</td><td class="num">~0.67 次/s</td>
+        <td><b>不建议</b>：<b>加剧</b>不跟手（我们要治的正是它）</td>
+      </tr>
+      <tr>
+        <td class="p">P1-1 后（响应体 ≈1/4）</td><td>~300–500 KB + 整树重渲染</td>
+        <td class="num">轻</td><td class="num">轻</td>
+        <td>可以试</td>
+      </tr>
+      <tr>
+        <td class="p">P1-1 + P1-2 后（~60 行）</td><td>~50 KB + 窗口内重渲染</td>
+        <td class="num">极轻</td><td class="num">极轻</td>
+        <td><b>纯赚</b>：此时降 pollSec 才是白捡的收益</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="small muted">
+    具体数字待 P0-0 埋点实测（先把"单次渲染耗时"测出来，再决定 pollSec 能降到多少 —— 不要拍脑袋定 1.5）。
+  </p>
+
+  <h3>取值建议：让两个节拍成整数倍</h3>
+  <p>
+    刷新 1 s 与轮询 1.5 s 不构成错误（前端拿到的永远是最新快照），只是有 1/3 的刷新没人取 —— 成本 1.45% @3000 可忽略，
+    但更整齐的取法是：
+  </p>
+  <ul class="tight">
+    <li><b>方案 i（推荐）</b>：刷新 1.5 s / 轮询 1.5 s —— 与 qB 自己的节奏对齐，一次刷新配一次拉取，零浪费。</li>
+    <li><b>方案 ii</b>：刷新 1 s / 轮询 2 s —— 两次刷新配一次拉取，前端拿到的一定是"最新那一版"，后端成本仍只有 1.45%。</li>
+    <li>你提的 1 s / 1.5 s：可行，只是不整齐；若不在意那 1.45%，也能用。</li>
+  </ul>
+
+  <h3>落地清单</h3>
+  <ul class="tight">
+    <li>新增配置键 <code>sync_interval</code>（默认 1 s，或按上面方案取 1.5 s）；<b>必须进 <code>validate_config</code> 与 <code>config/schema.py</code></b>（守卫测试会查）。
+      <code>main_tick</code> 语义收窄为「任务节拍 + 兜底节流」。</li>
+    <li>门控不变：<code>_build_search_index</code> 与 <code>refresh_error_reasons</code> 跟 <code>main_tick</code>（2 s），
+      <b>不跟随</b> 1 s 快档（否则 500 条文件 API/轮、5 次 tracker/轮的预算被翻倍）。</li>
+    <li>前端 <code>pollSec</code>（app.js 现为硬编码 2）改为可配：<b>默认仍 2 s</b>，P0-0 测出单次渲染耗时、
+      且 P1-1/P1-2 落地后再按种子量放宽到 1.5 s（建议阈值 ≤1000 种子用 1.5 s，大库保持 2 s）。</li>
+    <li>顺序：<b>P0（wake + 首查 + 乐观 UI + 批量合单 + 补刷新）→ P0-0 埋点 → P1-1 / P1-2 → 最后才动 pollSec</b>。
+      反过来先降 pollSec 会在大库上把症状放大。</li>
+  </ul>
+</section>
+
+<footer class="colophon">
+  auto-qb · WEB UI 操作跟手性优化计划 · 2026-09-19 · 计划编号 26-09-19-1241 · 证据取自 develop 分支源码（行号随改动漂移，以符号名为准）
+</footer>
+
+</div>
+</body>
+</html>

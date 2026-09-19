@@ -184,6 +184,7 @@ class Config:
     """配置聚合根: 全字段默认(= Config() 即全默认实例), 由 load_config 按 YAML 覆盖构造"""
 
     main_tick: float = 2.0  # 主循环间隔(秒); YAML 原始缺省 "2s"
+    sync_interval: float = 1.5  # 种子状态同步间隔(秒): 只刷新快照, 不跑任务 —— 与 qB 自带 WebUI(1500ms)同量级
     max_tasks_per_tick: int = 20
 
     interval: float = 60.0  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒

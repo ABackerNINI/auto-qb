@@ -304,6 +304,7 @@ def load_config(config_path: str) -> Config:
 
     return Config(
         main_tick=_get(cfg, "main_tick", d.main_tick, parse_time),
+        sync_interval=_get(cfg, "sync_interval", d.sync_interval, parse_time),
         max_tasks_per_tick=_get(cfg, "max_tasks_per_tick", d.max_tasks_per_tick, int),
         interval=_get(cfg, "interval", d.interval, parse_time),
         data_dir=data_dir,

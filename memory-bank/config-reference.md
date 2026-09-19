@@ -60,7 +60,8 @@ WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
 | 键 | 类型/默认 | 说明 |
 |----|-----------|------|
 | `qbittorrent` | 必填 | `{host, port, username, password}` → `http://host:port` |
-| `main_tick` | `"2s"` | 主循环间隔 |
+| `main_tick` | `"2s"` | **任务线**间隔: 到期任务 + tracker 错误原因预取 + 搜索索引推进(见下方"分层节拍") |
+| `sync_interval` | `"1.5s"` | **同步线**间隔: 只拉 qB 增量刷新快照/事件/分组, **不跑任务**。默认 1.5s 与 qB 自带 WebUI(1500ms)同量级 —— 比 qB 自身数据粒度更快没有意义。大于 `main_tick` 时按 `main_tick` 生效(两条线谁先到就先跑谁)。L0 热重载, 主循环每轮重读 |
 | `max_tasks_per_tick` | 20 | 每 tick 最多弹出的任务数 |
 | `interval` | `"60s"` | 默认任务间隔 (maintenance/全局任务), 从上一轮结束起算 |
 | `data_dir` | `"auto-qb-data"` | 运行时数据主目录; state/锁/日志/跳检备份默认均派生其下 (显式配 `state_file`/`log.file` 优先; 留空走默认) |
