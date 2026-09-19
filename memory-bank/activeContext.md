@@ -13,7 +13,7 @@
   `jsonable_encoder`(占端点耗时 85%), 改 `return JSONResponse(...)` 后服务端 `view=torrent`
   189 → **23.5 ms**、**前端整轮 refresh ~240 → ~85 ms**。
   **基线 1049 → 1053 passed / cov 92%; 冒烟 34 → 46 项(ok) / 44 项(error) 0 失败**。
-  **真机走查报的「乐观 UI 反应 2-4s」已修未提交**: `act()`/`actTorrent()` 补丁提到 POST 之前 + 3s 兜底改从
+  **真机走查报的「乐观 UI 反应 2-4s」已修并推送主线(Gitee `a8eb6e8`)**: `act()`/`actTorrent()` 补丁提到 POST 之前 + 3s 兜底改从
   回执起算 + 补两段埋点; 受控复测注入 2000ms 时补丁 2012 → **0ms**, 1053 passed 不变, 冒烟 **48 项 0 失败**
   (详见「正在进行」① 第 3 条与 [progress.md](progress.md))。
   只剩报表 §08 第 7 项(节拍对齐, 需先拍板方向) —— 见下「正在进行」第 ① 条与
