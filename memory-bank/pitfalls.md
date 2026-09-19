@@ -929,6 +929,16 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **⚠ Vue 3.5.13 取根实例要绕一下**: `#app.__vue_app__._instance` 恒为 `null`(key 存在但
   `instance: false`)。可用的是 `document.querySelector('#app')._vnode.component.proxy`。踩过一次,
   别改回去。
+- **⚠ rid 门控下「下轮以服务端为准」是不成立的**(2026-09-19 实测): `/api/state` 的
+  `updated === false`(视图版本未变)时前端**不回传数组也不整表替换**, 行对象保持原引用。
+  于是任何"我不再写它了, 下轮服务端会覆盖"的写法都会把值**永久留在行上** ——
+  乐观 UI 的 3s 兜底就栽在这: 超时只 `delete pendingOps[hash]`, 行上的 `kind: "paused"` 一直挂着,
+  界面显示已暂停而命令根本没执行(hang 模式实测 3.66s 后仍 `s-paused`, 真值 `s-downloading`;
+  已修, 见 issue 26-09-19-2141 —— 现在由 `_expirePending()` 显式回滚 `op.prev`)。
+  **要"回到真值"就显式回滚 `op.prev`, 别指望下一轮。** 同理, 判"真值是否已对齐"也不能拿行上的
+  当前值比(见 issue 26-09-19-2024)。
+  ⚠ 推论: **回滚这一步要放在每轮 `refresh()` 里做, 不要在渲染函数里做** —— `isPending()` 被模板
+  每帧调用, 在那儿改响应式字段有递归更新风险; 让它只返回 false, 真正的写值交给每轮一次的清扫。
 - **⚠ 桩服务的命令队列是 2 元组**: `mgr.web_commands.get()` 返回 `(cmd, body)`, **不是** 3 元组 ——
   `cmd_id` 在 `body` 里。写错会 `ValueError` 而且命令被吃掉、永远不回 ack, 表现为冒烟测试里
   `pendingOps` 卡在 1 不动(排查了很久才定位到是桩的问题而不是前端的问题)。

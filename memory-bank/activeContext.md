@@ -69,6 +69,15 @@
      **只有给断言设下界能抓住它**。实测: 修前清除 28ms(假) → 修后 **272ms**(真); 冒烟双 UI
      **54 项 0 失败**(ok)/ error **54 项 0 失败**(与对方「剧行 is-pending + 节拍对齐」两笔合流后重测;
      单 UI 各 27 项); 单测 **1054 passed**(基线随对方新增 1 条守阵从 1053 上移); 红绿双验(22ms 红 / 263ms 绿)。
+     ⚠ **补验 hang 模式时又撞出一条** → ✅ **已修未提交**(2026-09-19 21:54):
+     [3s 兜底超时后补丁值永久留在行上](issues/26-09-19-2141-webui-pending-timeout-stale-patch.html) ——
+     `isPending()` 超时只 `delete`、注释称"下轮以服务端为准", 而 rid 未变时**根本不回传数组** ⇒
+     行仍是 `s-paused`(真值 `s-downloading`)。修法(方案 A): 新增 `_expirePending()` 显式回滚
+     `op.prev` 再 delete, 每轮 refresh 里先于 `reapplyPending()` 跑; `isPending()` 改为超时只判 false
+     不 delete(避免渲染函数改响应式数据)。hang 是 3s 兜底唯一还活着的场景, ok/error 两轮都碰不到
+     ⇒ 顺手把它做成**常驻守阵**(`--expect-cmd hang` 独占一轮, 双 UI 8 项 0 失败)。
+     实测: 修前 3660ms 清除后仍 `s-paused` ⇒ 修后 3658ms 清除并回到 `s-downloading`;
+     红绿双验(去掉回滚 ⇒ FAIL `s-downloading -> s-paused`); ok/error 各 54 项 0 失败; 单测 1054 passed。
   3. **[webui-optimistic-latency](issues/26-09-19-1939-webui-optimistic-latency.html)** —— ✅ **已修(本提交)**
      (2026-09-19): 真机走查报「乐观 UI 反应 2-4s」。受控测量(Playwright 给命令 POST 注入延迟)
      证明 POST 慢多少反馈就晚多少: 注入 2000ms 时补丁 **2012ms** 才贴(`actEpisode` 对照 0ms)。

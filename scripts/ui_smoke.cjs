@@ -131,6 +131,71 @@ async function readInst(page, expr) {
   return page.evaluate(`(() => { const vm = ${INST}; return vm ? (${expr}) : null; })()`);
 }
 
+/*
+ * hang 模式(命令永不回执)的**常驻守阵** —— 只在 `--expect-cmd hang` 时跑, 且**独占**一轮
+ * (不与其他断言混跑): hang 下前端 waitCmd 超时是 40s, 混进主轮会把一轮拖到十分钟。
+ * 判的是「失败/未知绝不留永久假状态」这条红线在无回执场景下还成不成立:
+ *   ① pending 立即出现(乐观) ② 约 3s 后消失(兜底) ③ 消失后**状态色回到点击前**
+ * ③ 是这条守阵的全部意义: 2026-09-19 之前兜底只 delete pendingOps 不回滚字段值, 而 rid 未变时
+ *   服务端不回传数组、行对象不被替换 ⇒ 补丁值(kind:"paused")永久留在行上, 命令根本没执行
+ *   界面却一直显示已暂停。ok / error 两轮都碰不到这条路径, 缺陷才躺到了现在(issue 26-09-19-2141)。
+ */
+async function hangChecks(page, ui) {
+  const nav = await page.$$("nav.tabs button");
+  if (nav.length >= 3) await nav[1].click();  // 种子视图
+  await page.waitForFunction("document.querySelectorAll('.torrent-row').length > 0", null, { timeout: 15000 });
+  await page.waitForTimeout(900);
+  const row = await pausableRow(page, ".torrent-row", "开始该种子");
+  if (!row) {
+    add(ui, "P0-3 hang: 3s 兜底落回原状态", false, "找不到未暂停的行(且恢复失败)");
+    return;
+  }
+  const hash = await row.evaluate((el) => el.getAttribute("data-hash"));
+  const sCls = (c) => ((c || "").split(" ").find((x) => x.startsWith("s-")) || "");
+  const before = sCls(await row.evaluate((el) => el.className));
+
+  await page.evaluate(`(() => {
+    const H = ${JSON.stringify(hash)};
+    window.__h = { t0: null, rows: [] };
+    window.__hi = setInterval(() => {
+      const s = window.__h;
+      if (s.t0 === null) return;
+      const el = document.querySelector('.torrent-row[data-hash="' + H + '"]');
+      s.rows.push({
+        t: Math.round(performance.now() - s.t0),
+        pend: el ? el.className.includes('is-pending') : null,
+        cls: el ? ((el.className.split(' ').find((x) => x.startsWith('s-')) || '')) : null,
+      });
+    }, 10);
+  })()`);
+  await row.click({ button: "right" });
+  await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+  for (const h of await page.$$(".ctx-item")) {
+    const t = ((await h.textContent()) || "").trim();
+    if (t.includes("暂停该种子") || t === "暂停") {
+      await h.evaluate((el) => el.addEventListener("click", () => { window.__h.t0 = performance.now(); }, { capture: true, once: true }));
+      await h.click();
+      break;
+    }
+  }
+  /* 兜底 3s + 轮询周期(1500 种子 → 2s) ⇒ 最长约 5s; 留到 6.5s 保证采到"消失"那一帧。 */
+  await page.waitForTimeout(6500);
+  const rows = await page.evaluate(`(() => { clearInterval(window.__hi); return window.__h.rows; })()`);
+  const i0 = rows.findIndex((r) => r.pend);
+  const appear = i0 >= 0 ? rows[i0].t : null;
+  let gone = null;
+  if (i0 >= 0) for (let j = i0; j < rows.length; j++) if (!rows[j].pend) { gone = rows[j].t; break; }
+  const after = rows.length ? rows[rows.length - 1].cls : null;
+
+  add(ui, "P0-3 hang: 无回执时立刻可见 pending(乐观)", appear !== null && appear < 500,
+    `点击 → 出现 ${appear === null ? "从未出现" : appear + "ms"}`);
+  add(ui, "P0-3 hang: 3s 兜底清除 pending", gone !== null && gone >= 2500 && gone <= 6000,
+    `点击 → 消失 ${gone === null ? "始终未消失" : gone + "ms"}(须 2500~6000ms)`);
+  /* 光"消失"不够 —— 回滚也会让它消失。**必须落回点击前的状态色**, 证明兜底真的把补丁撤了。 */
+  add(ui, "P0-3 hang: 兜底后落回原状态(不留假状态)", after !== null && after === before,
+    `${before} -> ${after}`);
+}
+
 async function smokeUi(browser, ui) {
   // clipboard 权限: "复制磁力/种子名"类断言要真写剪贴板, headless 默认会拒
   const ctx = await browser.newContext({
@@ -149,6 +214,13 @@ async function smokeUi(browser, ui) {
   await page.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
   // 首屏: 分组视图有行(种子数据经 /api/state 回来后渲染)
   await page.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+  /* hang 模式独占一轮: 它只验 3s 兜底, 主轮那些断言在 40s 的命令超时下会拖到十分钟 */
+  if (EXPECT_CMD === "hang") {
+    await hangChecks(page, ui);
+    add(ui, "无 console.error / pageerror", errors.length === 0, errors.slice(0, 3).join(" | ") || "干净");
+    await ctx.close();
+    return;
+  }
   const groupRows = await page.$$eval(".group-row", (n) => n.length);
   add(ui, "分组视图渲染", groupRows > 0, `${groupRows} 行`);
   await page.screenshot({ path: path.join(SHOTS, `${ui}-1-groups.png`) });

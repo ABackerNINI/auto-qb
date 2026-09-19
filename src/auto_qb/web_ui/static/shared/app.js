@@ -1727,7 +1727,8 @@ const app = createApp({
           if (this.renderMs > 50) console.warn(`[perf] 单轮视图赋值 ${this.renderMs}ms(>50ms)` +
             ` —— 稳态应远低于此; 首次切视图要全量渲染一帧量行高, 那一帧超属预期(P1-2 已落地)`);
         }
-        this.reapplyPending();  // P0-3: 整表替换后把仍 pending 的乐观值重新贴上
+        this._expirePending();    // ❗先回滚超时的(不回滚会留永久假状态, issue 26-09-19-2141)
+        this.reapplyPending();    // P0-3: 整表替换后把仍 pending 的乐观值重新贴上
         this.serviceDown = false;
         this.pollFails = 0;
       } catch (e) {
@@ -2318,11 +2319,26 @@ const app = createApp({
     isPending(hash) {
       const op = this.pendingOps[hash];
       if (!op) return false;
-      if (Date.now() - op.ts > 3000) {
-        delete this.pendingOps[hash];  // 超时回落真值: 不再贴补丁, 下轮以服务端为准
-        return false;
-      }
+      /* ❗超时**只判 false、不在这里 delete**: 模板每帧都会调 isPending, 在渲染函数里改响应式
+       * 数据(回滚字段)有递归更新风险; 真正的回滚交给 _expirePending()(每轮 refresh 一次)。
+       * 另注: 光 delete 不叫"回落真值" —— 见 _expirePending 的注释(issue 26-09-19-2141)。 */
+      if (Date.now() - op.ts > 3000) return false;
       return true;
+    },
+    /* 3s 兜底: 超时未确认的补丁**显式回滚到补丁前的值**, 与失败回滚同一写法。
+     * ❗旧写法"不再贴补丁、下轮以服务端为准"在 rid 门控下**不成立**: 服务端版本未变时不回传
+     * 数组、行对象不被替换 ⇒ 上一轮贴的 kind:"paused" 会一直留在行上 —— 命令根本没执行,
+     * 界面却一直显示已暂停(hang 模式实测: 3.66s 清 pending 后行仍是 s-paused, 真值 s-downloading)。
+     * 回滚用的是 op.prev(贴补丁那一刻的行值 = 最近一次已知的服务端真值); 之后若真值真的变了,
+     * 下一轮 refresh 自然会把它换成真值, 不会互相打架。 */
+    _expirePending() {
+      const now = Date.now();
+      for (const h of Object.keys(this.pendingOps)) {
+        const op = this.pendingOps[h];
+        if (!op || now - op.ts <= 3000) continue;
+        this._forEachRow(h, (row) => Object.assign(row, op.prev));
+        delete this.pendingOps[h];
+      }
     },
     _optimisticPatch(action, row) {
       if (action === "pause") return { kind: "paused" };

@@ -101,7 +101,7 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
 > prism/atlas 双 UI 断言(当前 **54 项 0 失败**(ok 模式)/ **54 项 0 失败**(`--expect-cmd error`, 回滚路径;
-> 单 UI 各 27 项),
+> 单 UI 各 27 项)/ **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4 项),
 > 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
 > **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 2026-09-19 加, 见下方读数时机坑)、
 > **P0-4 批量合单数请求**、**P0-3 整组/整集/整剧乐观**(组行 / 集行 / **剧行**各自的 `is-pending`
@@ -143,6 +143,13 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 >   (s-paused)"那条都照样绿(补丁值还留在行上, 看着就像真值)。**必须设下界**: 桩服务真值 +120ms
 >   才落 ⇒ `clear` 落在 80~1000ms 才算数。红绿双验过: 把判定改回"拿行上的值比" ⇒ 22ms 变红。
 > ③ error 模式没有"等真值"这回事(失败立即回滚 ~21ms), 给它套下界会恒红 ⇒ 按模式把下界置 0。
+> ⚠ **hang 模式(命令永不回执)是第三种模式, 独占一轮跑**: `--cmd-result hang` +
+>   `--expect-cmd hang` ⇒ 只跑 `hangChecks()`(双 UI **8 项 0 失败**), 判据 = pending 立即出现 /
+>   3s 兜底清除 / **最终状态色 == 点击前**。
+>   ❗它判的是「失败/未知绝不留永久假状态」在无回执场景下还成不成立, ok / error 两轮**都碰不到**
+>   —— [26-09-19-2141](issues/26-09-19-2141-webui-pending-timeout-stale-patch.html)(超时后补丁值
+>   永久留在行上)就是这么溜过三道关口的。hang 下前端 `waitCmd` 超时是 40s, 混进主轮会把一轮拖到
+>   十分钟, 故做成独立模式而不是主轮的一段。
 > ⚠ 跑测用仓外 `--basetemp` 时, **该目录必须不存在**: 已存在则 pytest 开跑前会删它, 而本机
 >   沙箱的删除拦截层会拉起回收站助手进程, 被 `tests/sidefx.py` 记成越界 POPEN ⇒ 全绿也会在
 >   某个用例的 teardown 报 ERROR(实测复用旧目录得 `1052 passed + 1 error`, 换全新路径即干净)。

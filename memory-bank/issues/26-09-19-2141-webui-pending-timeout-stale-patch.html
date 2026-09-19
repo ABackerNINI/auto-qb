@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="webui-pending-timeout-stale-patch">
+<meta name="aqb-issue-stamp" content="26-09-19-2141">
+<meta name="aqb-issue-status" content="Fixed">
+<meta name="aqb-issue-title" content="3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立">
+<meta name="aqb-issue-summary" content="isPending() 超时只 delete pendingOps[hash], 注释称&#x27;下轮以服务端为准&#x27;; 但 rid 未变时服务端不回传数组、行对象不被替换 ⇒ 乐观补丁(kind=paused)留在行上不走。hang 模式实测: 3.66s 清 pending 后行仍 s-paused, 真值 s-downloading">
+<title>3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立 · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立</h1>
+    <p class="lede">isPending() 超时只 delete pendingOps[hash], 注释称&#x27;下轮以服务端为准&#x27;; 但 rid 未变时服务端不回传数组、行对象不被替换 ⇒ 乐观补丁(kind=paused)留在行上不走。hang 模式实测: 3.66s 清 pending 后行仍 s-paused, 真值 s-downloading</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-2141-webui-pending-timeout-stale-patch</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 21:41</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><strong>怎么撞见的</strong>：<code>32f531d</code>（真值对齐那条）提交后收尾，补验 hang 模式 ——
+      它是「3s 兜底」唯一还活着的使用场景（命令发出但永远拿不到回执），而那条提交正好动了
+      pending 的清除逻辑，不能只验 ok / error 两种模式就收工。</p>
+    <p><strong>现象</strong>：命令永不回执时，pending（半透明）确实在 ~3s 后消失了，但<strong>行上的状态色
+      停在补丁值上不走</strong> —— 点了暂停、命令根本没执行，界面却一直显示已暂停。</p>
+    <p><strong>触发条件</strong>：①命令没有回执（qB 未启动 / 主循环长时间没消费 / 网络中断）走满 3s 兜底；
+      ②此后服务端视图版本<strong>没有变化</strong>（不是每次 sync 都重建 ——
+      <code>95fb673</code>「上一版没被取走就不重建」之后这更常见）。两条同时满足即永久残留；
+      只满足 ①的话，残留会一直持续到下一次视图重建为止。</p>
+    <p><strong>与平台/配置无关</strong>，纯前端，两个 UI（prism / atlas）共用同一份 <code>app.js</code>，同样命中。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>代码：<code>src/auto_qb/web_ui/static/shared/app.js</code> 的 <code>isPending()</code>（约 2314-2322）——
+      超时分支只做 <code>delete</code>，注释写的却是“下轮以服务端为准”：</p>
+<pre><code>isPending(hash) {
+  const op = this.pendingOps[hash];
+  if (!op) return false;
+  if (Date.now() - op.ts &gt; 3000) {
+    delete this.pendingOps[hash];  // 超时回落真值: 不再贴补丁, 下轮以服务端为准
+    return false;
+  }
+  return true;
+},</code></pre>
+    <p>而“下轮以服务端为准”在 rid 门控下<strong>不成立</strong>：<code>refresh()</code> 里
+      <code>if (state.updated !== false) { …整表替换… }</code>，服务端版本未变时数组<strong>根本不回传</strong>，
+      行对象不被替换 ⇒ 上一轮贴上去的 <code>kind: "paused"</code> 一直留在行上。</p>
+    <p>实测（桩服务 <code>--cmd-result hang</code>，页面内 10ms 采样，脚本
+      <code>.workbuddy-ai/tmp/probe-hang-fallback.cjs</code>）：</p>
+<pre><code>目标 hash: 000000000000  点击前状态色: s-downloading
+ t(ms) | 行有pending | 行状态色
+    13 |       true | s-paused   &lt;= 变化      ← 乐观补丁贴上(对)
+  3660 |      false | s-paused   &lt;= 变化      ← 3s 兜底清了 pending, 但状态色仍是补丁值(错)
+① pending 立即出现: 13ms
+② pending 消失时刻: 3660ms
+③ 最终状态色: s-paused (点击前 s-downloading)
+FAIL: 兜底窗口或落回状态不对</code></pre>
+    <p>对照：失败回滚路径（<code>resolveOptimistic(hashes, false)</code>）是<strong>显式</strong>
+      <code>Object.assign(row, op.prev)</code> 的，所以 error 模式一直是干净的 ——
+      这也解释了为什么冒烟跑了 ok / error 两轮都没碰到它，只有 hang 模式会暴露。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td>低（要命令 3s 无回执）但<strong>一触发就持续</strong>，且不留痕、不报错</td></tr>
+      <tr><td>影响范围</td><td>所有视图（补丁贴在 <code>torrents</code> / <code>singles</code> / 组成员上，三处都残留）；
+        prism 与 atlas 共用 <code>app.js</code>，同样命中；与站点/配置开关无关</td></tr>
+      <tr><td>数据风险</td><td><strong>不改数据</strong>（只是显示错），但会误导判断：用户看到“已暂停”就不再操作，
+        实际上命令从未执行；若据此去删种子/改限速，判断依据是错的</td></tr>
+      <tr><td>严重度</td><td><strong>中</strong> —— 违反 <code>systemPatterns</code> 明写的红线
+        「失败/未知绝不留永久假状态」，但需 3s 无回执才触发，不丢数据</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><strong>结论（已定位，非猜测）</strong>：兜底语义写错了 —— 它把“清除 pending 标记”当成了
+      “回到真值”。清除标记只让行<strong>不再半透明</strong>，行上的字段值仍是补丁值；真正能覆盖它的
+      只有“服务端回传新数组把行对象换掉”，而这被 rid 门控挡住了（服务端没变化就不回传）。</p>
+    <p>同类的另一处：失败回滚路径显式 <code>Object.assign(row, op.prev)</code>，所以 error 模式干净 ——
+      两条路径写法不一致，超时的那条漏了回滚。</p>
+    <div class="callout">已排除：①不是 <code>reapplyPending</code> 又贴回去（pendingOps 已删，循环直接 continue，实测
+      3660ms 后 class 不再变化）；②不是服务端真值被改（hang 模式桩服务<strong>永不改状态</strong>，
+      <code>_apply_truth</code> 根本没跑）；③不是选择器/DOM 陈旧（探针直接读该 hash 的行 class）。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>方向：让超时路径与失败路径<strong>写法一致</strong> —— 超时也显式回滚到 <code>op.prev</code>。</p>
+    <h3>方案 A（推荐）：超时显式回滚 prev</h3>
+    <p>新增 <code>_expirePending()</code>：遍历 <code>pendingOps</code>，凡 <code>now - op.ts &gt; 3000</code> 的
+      <code>Object.assign(row, op.prev)</code> 后 <code>delete</code>；在 <code>refresh()</code> 里先于
+      <code>_snapshotTruth()</code> / <code>reapplyPending()</code> 调用一次。
+      同时把 <code>isPending()</code> 改成超时<strong>只返回 false、不 delete</strong>（回滚交给上面的清扫），
+      避免在渲染函数里改响应式数据（模板每帧都会调 <code>isPending</code>，在那儿写字段有递归更新风险）。
+      代价：过期条目最多多活一个轮询周期（1.5~3s），期间行不再半透明但字段仍是补丁值
+      ⇒ 与现状一致，不更差；回滚发生在下一次 refresh，实测约 3.6s 到位。</p>
+    <h3>方案 B：超时立即在前台回滚（不等下一轮 refresh）</h3>
+    <p>点命令时挂一个 <code>setTimeout(…, 3000)</code>，到点直接回滚 + 删条目，不等 refresh。
+      落地更快（3.0s 而非 3.6s），但要为每个 pending 管定时器，且要在回执/回滚时成对清理，
+      漏一个就会把<strong>已成功</strong>的操作回滚掉（比慢 0.6s 危险得多）。收益小、风险大，不推荐。</p>
+    <h3>验收（两者都要）</h3>
+    <p>把 hang 模式做成<strong>常驻冒烟</strong>而不是一次性探针 —— 现在 ok / error 两轮都碰不到这条路径，
+      缺陷才能躺到现在。判据：pending 立即出现 / 约 3s 后消失 / <strong>最终状态色 == 点击前</strong>。
+      ⚠ hang 模式 <code>waitCmd</code> 超时是 40s，整轮冒烟会很久 ⇒ 建议单独起一个
+      <code>--cmd-result hang</code> 的桩服务只跑这一条断言。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>src/auto_qb/web_ui/static/shared/app.js</code> —— 主改点：<code>isPending()</code>（约 2314）
+        改成超时只返回 false、不 delete；新增 <code>_expirePending()</code>（回滚 <code>op.prev</code> + delete）；
+        <code>refresh()</code> 里在 <code>_snapshotTruth()</code> 之前调一次。
+        ⚠ 与 <code>32f531d</code>（真值对齐）同一片代码，改动前先看那条的结构。</li>
+      <li><code>scripts/ui_smoke.cjs</code> —— 建议把 hang 模式做成常驻断言（当前只有 ok / error 两轮），
+        判据「最终状态色 == 点击前」；hang 模式 <code>waitCmd</code> 超时 40s ⇒ 单独起桩服务跑，不要塞进主轮。</li>
+      <li><code>scripts/ui_harness.py</code> —— 无需改（<code>--cmd-result hang</code> 已有）；
+        但注意 hang 模式下 <code>_apply_truth</code> 不跑，真值恒定不变，正好用来验这条。</li>
+      <li><code>memory-bank/systemPatterns.md</code> —— 「乐观 UI」段把兜底语义改准：
+        超时不是"不再贴、等下轮服务端"，而是<strong>显式回滚 prev</strong>。</li>
+      <li>关联：<a href="26-09-19-2024-webui-truth-convergence.html">26-09-19-2024-webui-truth-convergence</a>
+        （已 Fixed；本条是补验它时顺带撞出来的 —— 同一个 <code>pendingOps</code> 生命周期的另一条出口）</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 21:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-19 21:54 — 实施完成（方案 A）+ hang 常驻守阵，状态 <strong>Fixed</strong>；改动未提交</li>
+    </ul>
+    <h3>修复后补充（2026-09-19 实施完成，走方案 A）</h3>
+    <p><strong>实际修法</strong>：与方案 A 一致，未改道。</p>
+    <ol>
+      <li>新增 <code>_expirePending()</code>：遍历 <code>pendingOps</code>，凡 <code>now - op.ts &gt; 3000</code>
+        的先 <code>Object.assign(row, op.prev)</code> 回滚、再 <code>delete</code> —— 与失败回滚同一写法。</li>
+      <li><code>refresh()</code> 里在 <code>reapplyPending()</code> <strong>之前</strong>调一次
+        （必须先回滚再贴，否则这一轮又会把补丁贴回去）。</li>
+      <li><code>isPending()</code> 改成超时<strong>只返回 false、不 delete</strong>：模板每帧都调它，
+        在渲染函数里改响应式数据有递归更新风险；回滚统一交给上面那步。
+        代价是过期条目最多多活一个轮询周期（1.5~3s），期间行不再半透明但字段仍是补丁值 ⇒ 与现状一致。</li>
+    </ol>
+    <p><strong>顺带把 hang 做成常驻守阵</strong>（不是一次性探针）：<code>ui_smoke.cjs</code> 新增
+      <code>hangChecks()</code>，只在 <code>--expect-cmd hang</code> 时跑且<strong>独占一轮</strong>
+      （hang 下 <code>waitCmd</code> 超时 40s，混进主轮会把一轮拖到十分钟）。三条判据：
+      pending 立即出现 / 3s 兜底清除 / <strong>最终状态色 == 点击前</strong>。
+      缺陷能躺过设计、实施、冒烟三道关口，正是因为这条路径此前没有任何常驻断言。</p>
+    <p><strong>验证方式与实测数字</strong>：
+      <code>--cmd-result hang</code> 桩服务 + 页面内 10ms 采样 ——
+      修前：pending 13ms 出现 / 3660ms 消失 / 最终 <code>s-paused</code>（真值 <code>s-downloading</code>）⇒ FAIL；
+      修后：13ms / 3658ms / 最终 <code>s-downloading</code> ⇒ PASS。
+      冒烟 hang 模式双 UI <strong>8 项 0 失败</strong>（清除 3976 / 3994ms）。
+      回归：ok 模式双 UI <strong>54 项 0 失败</strong>、error 模式双 UI <strong>54 项 0 失败</strong>；
+      <code>uv run pytest tests -q --no-cov</code> → <strong>1054 passed</strong>。
+      红绿双验：把 <code>_expirePending</code> 的回滚临时去掉（只 delete，复刻旧行为）⇒
+      「兜底后落回原状态」<strong>FAIL: s-downloading -&gt; s-paused</strong>；还原 ⇒ PASS。</p>
+    <p><strong>未做</strong>：方案 B（前台 <code>setTimeout</code> 立即回滚）—— 收益只有 0.6s，
+      却要为每条 pending 管定时器、且漏清理会把<strong>已成功</strong>的操作回滚掉，风险大于收益。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-2141-webui-pending-timeout-stale-patch.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
