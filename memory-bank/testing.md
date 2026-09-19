@@ -67,13 +67,19 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
-> prism/atlas 双 UI 断言(当前 30 项 0 失败, 含"轮询间隔按种子量分档"与"滚动到底不塌陷")
+> prism/atlas 双 UI 断言(当前 34 项 0 失败, 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
+> **P0-4 批量合单数请求**)
 > 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
 > 顺带一提: 换 `--torrents N` 跑不同规模的库, 就能量出"单轮 refresh 耗时 × 种子数"曲线 ——
 > 前端轮询档位就是这么定的(1000:143ms / 3000:353ms / 5000:~550ms)。
 > 典型用法: 起服务 → `NODE_PATH=<workspace>/node_modules node scripts/ui_smoke.cjs` → 关服务。
 > 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、
-> 滚动总高与末行可达、主线程长任务。改前端任何一处渲染/交互逻辑后**应当跑它**。
+> 滚动总高与末行可达、主线程长任务、**批量动作是否真的合成一条请求**(靠 `page.on("request")`
+> 数 `/api/torrents/bulk` 与逐目标端点的次数 —— 这类"发了几次请求"的断言单测根本写不出来)。
+> 改前端任何一处渲染/交互逻辑后**应当跑它**。
+> ⚠ 新增断言务必**红绿双验**: 把被测优化临时关掉(如把 `bulkAct` 的合单分支短路成
+> `if (false && …)`), 确认断言真的变红(实测拿到 "bulk 0 次 / 逐目标 60 次"), 再改回跑绿。
+> 否则很容易写出一条"永远为真"的摆设断言。
 > 版本与取实例的三条硬约束见 pitfalls(playwright-core 版本须与本机 chromium 对齐 / 必须 CJS /
 > Vue 根实例走 `#app._vnode.component.proxy`)。
 5.5 **`test_sync.py` 专测增量同步层**: `TorrentRecord.apply_delta`(只遍历 patch 字段/变化字段集/量化/双通道源/`_raw` 兜底/`state_enum` 缓存)、`TorrentStore.apply_sync`(首轮全量/增量只改变化记录/无变化零成本/增删/全量剪除/待报删除/降级/异常/`reset_sync`)、以及 QbManager 接线(增量轮不做 schema 校验、变化集与冲突脏组)。改 `torrents.py` 的同步层或 `_refresh_torrents` 时必须同步此文件。

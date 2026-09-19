@@ -240,6 +240,49 @@ async function smokeUi(browser, ui) {
         `${waited}ms 后: 残留 ${pendingLater} 行 / pendingOps ${pendingOps}`);
     }
 
+    /*
+     * P0-4 批量合单: 选 N 个目标点暂停 ⇒ 必须只有 **1** 条 POST /api/torrents/bulk,
+     * 且**零**条逐目标 /api/torrents/{hash}/pause。合单前这是 N 次 POST + N 条回执轮询 +
+     * 后端 N 次串行 qB 调用(在主循环线程上, 期间界面"卡住")—— 这是"点批量后界面卡住"的真因。
+     * 单测覆盖不到(全是前端行为), 只能在真浏览器里数请求。
+     */
+    {
+      const N = 60;
+      const picked = await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm.selGroups = [];
+        vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash);
+        return vm.selMembers.length;
+      })()`);
+      await page.waitForSelector(".bulk-inline", { timeout: 5000 }).catch(() => null);
+      const hits = { bulk: 0, single: 0 };
+      const onReq = (r) => {
+        const u = r.url();
+        if (u.includes("/api/torrents/bulk")) hits.bulk++;
+        else if (/\/api\/torrents\/[^/?]+\/pause(\?|$)/.test(u)) hits.single++;
+      };
+      page.on("request", onReq);
+      const btns = await page.$$(".bulk-inline .bulk-btn");
+      let bulkClicked = false;
+      for (const b of btns) {
+        const t = (await b.textContent()) || "";
+        if (t.includes("暂停")) { await b.click(); bulkClicked = true; break; }
+      }
+      await page.waitForTimeout(1500);
+      page.off("request", onReq);
+      add(ui, "P0-4 批量动作合单为一条请求", bulkClicked && hits.bulk === 1 && hits.single === 0,
+        `选中 ${picked} 个 → bulk ${hits.bulk} 次 / 逐目标 ${hits.single} 次`);
+      /*
+       * 顺带验 P0-3 的批量形态: 乐观值要一次性贴到**全部**目标上(不是只贴第一行)。
+       */
+      const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
+      add(ui, "P0-3 批量乐观覆盖全部目标", pend >= Math.min(picked, N) * 0.8,
+        `pendingOps ${pend} / 目标 ${picked}`);
+      // 清掉选择, 免得影响后面的视图切换断言
+      await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
+      await page.waitForTimeout(300);
+    }
+
     await nav[2].click();  // 追剧
     await page.waitForTimeout(800);
     const epRows = await page.$$eval(".ep-row, .group-row", (n) => n.length);
