@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="webui-hot-endpoints-jsonable-encoder">
+<meta name="aqb-issue-stamp" content="26-09-19-1900">
+<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-title" content="/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)">
+<meta name="aqb-issue-summary" content="/api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改">
+<title>/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms) · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)</h1>
+    <p class="lede">/api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-1900-webui-hot-endpoints-jsonable-encoder</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:00</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">auto-qb-clone1 / 复核续查</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>修复核报告 §11（<code>/api/state</code>、<code>/api/groups</code> 改为 <code>JSONResponse</code> 直返）
+      时，顺手把全部 GET 端点的<b>体积与服务端耗时</b>量了一遍，发现 <code>/api/search</code> 是<b>第二大载荷</b>
+      （1.46 MB / 服务端 82.6 ms），仍然 <code>return</code> 裸 dict ⇒ 仍在白跑
+      <code>jsonable_encoder</code>。详情族（<code>/api/torrents/{hash}</code> 及 <code>/files</code>、
+      <code>/trackers</code>、<code>/peers</code>）写法相同，只是桩服务的 FakeClient 返回空/小数据，
+      <b>真实体积被严重低估</b>。</p>
+      <p>触发条件：每次搜索（前端有防抖，但大库下每次仍要传 1.46 MB）、每次打开详情抽屉。与平台无关。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>端点实测（3000 种子桩服务，服务端耗时用 5 行计时中间件量）：</p>
+      <table>
+        <tr><th>端点</th><th>字节</th><th>服务端耗时</th><th>是否已修</th></tr>
+        <tr><td><code>/api/state</code></td><td>6,645,735</td><td>32.8 ms</td><td>✅ 已修</td></tr>
+        <tr><td><code>/api/state?view=torrent</code></td><td>4,764,992</td><td>23.5 ms</td><td>✅ 已修（改前 189.0 ms）</td></tr>
+        <tr><td><code>/api/search?q=Some.Show</code></td><td><b>1,464,051</b></td><td><b>82.6 ms</b></td><td>❌ <b>未修</b></td></tr>
+        <tr><td><code>/api/groups</code></td><td>285,510</td><td>3.7 ms</td><td>✅ 已修</td></tr>
+        <tr><td><code>/api/config/schema</code></td><td>45,626</td><td>8.0 ms</td><td>❌ 未修（体积小，收益有限）</td></tr>
+        <tr><td>其余（status/paths/log/tags/…）</td><td>&lt; 10 KB</td><td>≈1 ms</td><td>❌ 未修，且无需修</td></tr>
+      </table>
+      <p>未修端点的原文：</p>
+<pre><code># src/auto_qb/web.py:271-275
+@app.get("/api/search")
+def api_search(q: str = ""):
+    """按种子名/文件列表搜索种子(主循环构建的缓存索引, Web 线程只读; 索引脏时投递构建命令)"""
+    manager.touch_web_client()
+    return manager.search_torrents(q)          # &lt;- 裸 dict
+
+# src/auto_qb/web.py:602-608
+@app.get("/api/torrents/{hash}")
+def api_torrent_detail(hash: str):
+    manager.touch_web_client()
+    rec = _require_torrent(hash)
+    return {"torrent": {**rec.to_dict(), "site": rec.tracker_name,
+                        **manager._hr_view_fields(rec)}}   # &lt;- 裸 dict</code></pre>
+      <p>对照（已修的那个）：</p>
+<pre><code># src/auto_qb/web.py:263
+return JSONResponse(content=payload)   # 改前: return payload  → 服务端 189.0 ms → 23.5 ms</code></pre>
+      <p>框架侧的短路依据：</p>
+<pre><code># fastapi/routing.py
+if isinstance(raw_response, Response):
+    if raw_response.background is None:
+        raw_response.background = solved_result.background_tasks
+    response = raw_response          # &lt;- 直接短路, 跳过 serialize_response / jsonable_encoder</code></pre>
+      <p>复现：</p>
+<pre><code>uv run python scripts/ui_harness.py --torrents 3000 --port 8099
+curl -s "http://127.0.0.1:8099/api/search?q=Some.Show" | wc -c     # 1464051</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td><code>/api/search</code>：每次搜索（有防抖）；详情族：每次打开详情抽屉（peers 还会 5s 轮询）</td></tr>
+      <tr><td>影响范围</td><td>大库（<code>/api/search</code> 索引含全量文件列表）；文件数多的整包（<code>/files</code>）。桩服务下 <code>files/peers/trackers</code> 返回空，<b>真实体积被低估</b>，真机可能比 search 还大</td></tr>
+      <tr><td>数据风险</td><td><b>无</b> —— 纯性能（但改造后若 payload 混入非 JSON 原生类型会 500，见「建议修法」的 fail-fast 提醒）</td></tr>
+      <tr><td>严重度</td><td><b>低~中</b> —— <code>/api/search</code> 82.6 ms 服务端耗时且<b>全程占 GIL</b>，与主循环抢 CPU；大库搜索时是可感知的卡顿来源之一</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><b>结论（与 §11 同源，机制已实测确认）</b>：FastAPI 对<b>普通 dict 返回值</b>会先跑
+      <code>jsonable_encoder</code> <b>递归遍历整个响应体</b>（<code>/api/state</code> 3000×74 = 22 万个值实测
+      <b>161 ms</b>，占端点总耗时 189 ms 的 85%），而我们的数据本来就是 JSON 原生类型
+      （<code>str/int/float/bool/None/dict/list</code>），这趟遍历纯属白跑。返回 <code>Response</code> 实例
+      即被 <code>fastapi/routing.py</code> 短路跳过。</p>
+      <div class="callout">已排除：① 不是搜索索引本身慢 —— 索引由主循环预建，Web 线程只读
+      （<code>api_search</code> 的函数体只有两行）；② 不是网络/传输 —— 同尺寸 5.12 MiB JSON 走
+      uvicorn+StaticFiles 实测只要 1.6 ms，gzip 也无从可省；③ 不是客户端解析 —— 浏览器内
+      <code>JSON.parse</code> 只占 4.1 ms（4.76 MB 那次实测）。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>与已修的 <code>/api/state</code>、<code>/api/groups</code> 完全同一套改法，<b>推荐 A</b>。</p>
+    <h3>方案 A（推荐）：逐个改为 <code>return JSONResponse(content=…)</code></h3>
+      <p>零契约变更，改法与 <code>web.py:263</code> 逐字一致。预期 <code>/api/search</code>
+      服务端 82.6 ms → 十几毫秒（按 <code>/api/state</code> 的比例粗估，实际以量出来为准）。
+      建议范围：<code>/api/search</code>、<code>/api/torrents/{hash}</code>、
+      <code>/api/torrents/{hash}/files</code>、<code>/trackers</code>、<code>/peers</code>；
+      <code>/api/config/schema</code>（45 KB / 8 ms）可顺手带上，其余 &lt;10 KB 的端点<b>不必改</b>（省不到 1 ms，
+      反而多一处 fail-fast 面）。</p>
+      <p><b>fail-fast 提醒</b>：改成 <code>JSONResponse</code> 后，若 payload 里出现非 JSON 原生类型
+      （<code>datetime</code>/<code>set</code>/<code>Decimal</code>）会<b>直接抛 TypeError 变 500</b>，
+      而不再被静默转成字符串 —— 所以改完必须<b>逐个端点真请求一次</b>（尤其 <code>/files</code> 与
+      <code>/peers</code>，它们是 qB 透传，字段类型不完全由我们控制）。</p>
+    <h3>方案 B（更大，另开计划）：给 <code>/api/search</code> 做结果裁剪/分页</h3>
+      <p>1.46 MB 的搜索结果本身就是设计问题（含全量文件列表）。但会动前端对搜索结果的使用方式，
+      成本显著高于 A。<b>建议先做 A（1 行、零风险、立刻见效），把 B 作为独立计划评估。</b></p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>src/auto_qb/web.py</code> —— <code>api_search</code>(271)、<code>api_torrent_detail</code>(602)、<code>api_torrent_trackers</code>(610)、<code>api_torrent_files</code>(618)、<code>api_torrent_peers</code>(626)；可选 <code>api_config_schema</code>(824)</li>
+      <li><code>tests/test_web.py</code> —— 可把新端点并入 <code>test_api_state_skips_jsonable_encoder</code> 的循环清单（该测试用计数替身，加端点即可，成本极低且确定性）</li>
+      <li><code>docs/plans/26-09-19-1745-…review.html</code> §11 —— 补记这批端点的实测数字</li>
+      <li><code>memory-bank/pitfalls.md</code> —— 「热路径返回裸 dict 会被 FastAPI 白跑一遍 jsonable_encoder」条目，把已修范围从 2 个端点扩到全部</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 19:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>修复后补充</h3>
+    <p>待修。验证方式：改完重启桩服务，用计时中间件量 <code>/api/search</code> 的服务端耗时并与本条基线（82.6 ms）对比；同时逐个端点真请求一次确认仍 200（防 fail-fast）；单测与冒烟保持绿。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-1900-webui-hot-endpoints-jsonable-encoder.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

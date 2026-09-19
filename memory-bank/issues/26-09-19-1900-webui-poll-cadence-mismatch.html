@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="webui-poll-cadence-mismatch">
+<meta name="aqb-issue-stamp" content="26-09-19-1900">
+<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-title" content="sync_interval 与前端分档轮询错配: &gt;3000 种子时约一半视图重建无人消费">
+<meta name="aqb-issue-summary" content="服务端固定 1.5s 重建四视图, 前端 &gt;3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向">
+<title>sync_interval 与前端分档轮询错配: &gt;3000 种子时约一半视图重建无人消费 · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>sync_interval 与前端分档轮询错配: &gt;3000 种子时约一半视图重建无人消费</h1>
+    <p class="lede">服务端固定 1.5s 重建四视图, 前端 &gt;3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-1900-webui-poll-cadence-mismatch</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:00</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">auto-qb-clone1 / 复核续查</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>做「WEB UI 操作跟手性优化」的对抗性复核时（报告 <code>docs/plans/26-09-19-1745-webui-responsiveness-review.html</code>
+      §05.4）量到的：服务端同步线按 <code>sync_interval</code>（默认 1.5s）跑，每次 <code>_sync_line</code>
+      只要视图脏且 Web 活跃就 <code>rebuild_views()</code>；而前端 <code>basePollMs()</code> 按<b>种子量</b>
+      分档取 1.5s / 2s / 3s。两条节拍各自独立定档，中间没有任何协商。</p>
+      <p>种子数 &gt;3000 时前端 3s 才取一次 ⇒ 服务端在这 3s 里产出 2 个版本，客户端只取到最后一个，
+      <b>中间那一版的重建 CPU 没有任何请求消费过</b>。</p>
+      <p>触发条件：只要 WEB UI 开着且种子数超过分档阈值。与平台无关，<b>默认配置即命中</b>。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>服务端节拍（默认 1.5s，固定值）：</p>
+<pre><code># src/auto_qb/config/models.py:187
+sync_interval: float = 1.5  # 种子状态同步间隔(秒): 只刷新快照, 不跑任务 —— 与 qB 自带 WebUI(1500ms)同量级
+
+# src/auto_qb/qbmanager.py:518-527
+def _sync_line(self, dry_run: bool, flush: bool = True) -&gt; None:
+    """同步线(sync_interval 节拍): 拉 qB 增量 -&gt; 推进快照/事件/分组 -&gt; 视图惰性重建
+    只做状态同步、**不跑任务** —— 状态新鲜度不再被任务节拍(main_tick)拖累。
+    sync_interval 取 1.5s 与 qB 自带 WebUI(1500ms)同量级: 比 qB 自身数据粒度更快没有意义。
+    """
+    self._refresh_torrents(dry_run)
+    if flush:
+        self._flush_views()</code></pre>
+      <p>现有门控（注意它判的是「最近有没有网页连过」，<b>不是</b>「这一版有没有人取」）：</p>
+<pre><code># src/auto_qb/qbmanager.py:515-516
+if self._group_view_dirty and (time.time() - self._web_last_seen) &lt; WEB_VIEW_TTL:
+    self.rebuild_views()</code></pre>
+      <p>前端节拍（按种子量分档）：</p>
+<pre><code># src/auto_qb/web_ui/static/shared/app.js:1667 basePollMs()
+if (n &gt; 3000) return 3000;
+if (n &gt; 1000) return 2000;
+return 1500;  // 下界 1.5s = 服务端 sync_interval(再快只是多拿一次"版本未变"的空响应)</code></pre>
+      <p>由此得到的浪费比例（推导，非逐一埋点实测）：</p>
+      <table>
+        <tr><th>种子数</th><th>客户端间隔</th><th>服务端 3s 内重建次数</th><th>无人消费比例</th></tr>
+        <tr><td>≤1000</td><td>1.5s</td><td>1（每 1.5s 一版，客户端每次都取）</td><td>0</td></tr>
+        <tr><td>1000~3000</td><td>2s</td><td>1.33 版/次取</td><td>≈25%</td></tr>
+        <tr><td>&gt;3000</td><td>3s</td><td>2 版/次取</td><td>≈50%</td></tr>
+      </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td>常驻 —— WEB UI 开着即持续（不是偶发）</td></tr>
+      <tr><td>影响范围</td><td>种子数 &gt;3000 的库约 50% 的 rebuild 无人消费；1000~3000 约 25%；≤1000 无浪费。与视图/站点无关，只与种子量和「网页是否开着」有关</td></tr>
+      <tr><td>数据风险</td><td><b>无</b> —— 不丢数据、不写坏状态、不影响限速；纯粹是 CPU 与电量的浪费（页不严重时甚至更省）</td></tr>
+      <tr><td>严重度</td><td><b>低</b>（复核报告 §05.4 原判「小」，本报告沿用；属优化项不是缺陷）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><b>结论（机制明确，浪费比例是推导）</b>：两条节拍各自独立定档 —— 服务端 <code>sync_interval</code>
+      是<b>固定</b> 1.5s，前端 <code>basePollMs()</code> 是<b>按种子量</b> 1.5/2/3s，两者之间没有协商或门控；
+      现有的 <code>WEB_VIEW_TTL</code> 门控只判「最近有没有网页连过」，不判「这一版有没有被取过」，
+      挡不住这个浪费。</p>
+      <div class="callout">已排除：① 不是前端分档算错 —— 档位由实测单轮 refresh 耗时按「主线程占用率 ≈15%」反推
+      （1000:143ms / 3000:353ms / 5000:~550ms，见 testing.md），分档本身有依据；
+      ② 不是 <code>rebuild_views()</code> 太慢 —— 3000 种子实测约 50ms，慢不慢都改变不了「这一版没人看」；
+      ③ 与第 1 批加的 <code>min(sync_interval, main_tick)</code> 钳制（qbmanager.py:345）<b>无关</b> ——
+      那条只兜住「sync_interval 配太大导致快照新鲜度掉到心跳之下」，解决不了「重建了没人消费」。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>两个方向<b>互斥</b>，且代价量级不同，需要先拍板（本报告不给结论）。</p>
+    <h3>方案 A：让轮询跟上快档（降 <code>basePollMs()</code> 档位）</h3>
+      <p>把前端在大库下的间隔从 3s 降下来，让服务端每版都有人取。<b>代价：会放大全量回传与整树重渲染</b> ——
+      这正是当初「P1 落地后才敢降轮询」的原因，顺序错了会加剧不跟手。有 §11 的修复（服务端 189→23.5ms）
+      垫底后，这条路比之前安全，但仍需重新实测 A/B 决定档位。</p>
+    <h3>方案 B：给快照刷新加「会有人取」的门控（推荐方向，但成本更高）</h3>
+      <p>细化现有的 <code>WEB_VIEW_TTL</code>：不只看「有没有网页连过」，而是让 <code>rebuild_views()</code>
+      只在「这一版会被取走」时才跑（例如按客户端实际轮询档位节流，或让 <code>/api/state</code> 的 rid
+      消费情况反向驱动）。<b>优点：不动前端轮询频率，不引入「更频繁回传」的风险</b>。
+      <b>代价：需要服务端知道客户端当前档位/上次取的版本，属于新契约</b>，改动面大于 A。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>src/auto_qb/qbmanager.py</code> —— <code>run()</code> / <code>_sync_line()</code> / <code>_flush_views()</code>（节拍与门控）</li>
+      <li><code>src/auto_qb/config/models.py</code> —— <code>sync_interval</code>（若改为可协商/按档位）</li>
+      <li><code>src/auto_qb/web_ui/static/shared/app.js</code> —— <code>basePollMs()</code> / <code>currentPollMs()</code>（若走 A）</li>
+      <li><code>src/auto_qb/web.py</code> —— <code>/api/state</code> 的 rid 门控（若走 B，可能要回传档位信号）</li>
+      <li><code>tests/test_qbmanager.py</code>（节拍用例，现有用例取值成对 0.05/0.2、5.0/5.0，改钳制时注意别让它们变得有意义变化）</li>
+      <li><code>scripts/ui_smoke.cjs</code> —— 「轮询间隔按种子量分档」断言（走 A 时必须同步改期望值）</li>
+      <li><code>memory-bank/testing.md</code> / <code>docs/plans/26-09-19-1745-…review.html</code> §05.4</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 19:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>修复后补充</h3>
+    <p>待修。验证方式建议：<code>/api/state</code> 侧记「版本号自增次数」与「被取走次数」两个计数，用计时中间件 + 3000 种子桩服务跑 60s 直接量「无人消费比例」，不要只靠推导。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-1900-webui-poll-cadence-mismatch.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
