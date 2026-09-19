@@ -338,7 +338,11 @@ class QbManager(
                         break
                     # L0 热重载: 每轮重读节拍(配置对象可能被 apply_new_config 整体替换)
                     main_tick = self.config.main_tick
-                    sync_interval = self.config.sync_interval
+                    # 同步线只刷快照, 而任务线(_task_line)不拉快照 ⇒ sync_interval 一旦大于
+                    # main_tick, 快照新鲜度就掉到主循环心跳之下, 任务会基于陈旧快照做判定。
+                    # schema 已把契约写成「大于主循环间隔时按主循环间隔生效」, 这里落实为钳制
+                    # (默认 1.5s < 2s, 对默认配置零影响; 见 BUG-6)。
+                    sync_interval = min(self.config.sync_interval, main_tick)
                     # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作。
                     # 先清唤醒位再 drain —— drain 期间新到的命令会再次置位, 下一轮立即消费。
                     self._wake_event.clear()

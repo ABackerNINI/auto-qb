@@ -31,8 +31,11 @@
 ----
 * 仅开发期使用, 不参与打包; 数据全在内存 + 临时 state 文件, 关闭即弃。
 * 鉴权走 `skip_local_verify`(本机免密钥), 浏览器不需要带 token。
+  ❗正因如此 `--host` **只接受回环地址**(127.0.0.0/8 / ::1 / localhost) —— 绑 0.0.0.0
+  等于把一个免鉴权的 WEB UI 交给整个局域网(合成数据也含配置结构), 直接拒绝启动。
 """
 import argparse
+import ipaddress
 import os
 import queue
 import sys
@@ -73,6 +76,9 @@ def _make_torrents(count: int, site_conf):
                 seeding_time=(i % 400) * 3600,
                 ratio=(i % 30) / 10,
                 added_on=1700000000 + i * 37,
+                # magnet: 真实 qB 恒有(合成名 + 40 位 hash)。**必须给** —— 前端"复制磁力"
+                # 要按需取详情读它(BUG-9), 桩里留空则那条断言退化成"永远提示没有 magnet"。
+                magnet_uri=f"magnet:?xt=urn:btih:{i:040x}&dn=Some.Show.S01E{(i % 24) + 1:02d}",
                 category=["", "Movies", "TV", "Anime"][i % 4],
                 tags=",".join([t for k, t in enumerate(["HHan", "seed-3D", "low-ratio"]) if (i >> k) & 1]),
                 tracker=f"https://tracker.hhanclub.net/announce/{i}",
@@ -118,15 +124,32 @@ def _start_command_pump(mgr, mode: str):
     return t
 
 
+def _is_loopback(host: str) -> bool:
+    """只认回环地址: `localhost` / `::1` / 127.0.0.0/8(含 `0.0.0.0` 之外的任何写法)"""
+    if host in ("localhost", "::1"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="WEB UI 浏览器冒烟桩服务")
     ap.add_argument("--torrents", type=int, default=1500, help="合成种子总数")
     ap.add_argument("--groups", type=int, default=200, help="归组数量(每组 2 个种子)")
     ap.add_argument("--no-groups", action="store_true", help="不建分组(纯平铺)")
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
-    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--host", default="127.0.0.1", help="监听地址(**只接受回环**)")
     ap.add_argument("--port", type=int, default=8099)
     args = ap.parse_args()
+
+    # ❗本服务故意免鉴权(skip_local_verify), 绑到非回环等于把 WEB UI 交给整个局域网。
+    if not _is_loopback(args.host):
+        print(f"[harness] 拒绝启动: --host 只接受回环地址(127.0.0.0/8 / ::1 / localhost), 收到 {args.host!r}\n"
+              "          该服务免鉴权, 绑非回环会把它暴露给同网段的任何人。",
+              file=sys.stderr)
+        return 2
 
     tmp = tempfile.mkdtemp(prefix="aqb-harness-")
     state_file = os.path.join(tmp, "state.json")

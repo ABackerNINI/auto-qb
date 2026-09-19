@@ -359,7 +359,7 @@
           <div v-if="groupPadTop" class="row-pad" :style="{ height: groupPadTop + 'px' }" aria-hidden="true"></div>
           <template v-for="g in visibleGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
-            <div class="group-row" data-table="group" :data-key="g.key" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial }]"
+            <div class="group-row" data-table="group" :data-key="g.key" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial, 'is-pending': isGroupPending(g) }]"
                  :style="gridStyle('group')"
                  @click="onGroupClick(g, $event)"
                  @contextmenu.prevent="openMenu($event, g)">
@@ -435,7 +435,7 @@
                 </div>
                 <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
               </div>
-              <div v-if="memberPadTop" class="row-pad" :style="{ height: memberPadTop + 'px' }" aria-hidden="true"></div>
+              <div v-if="memberPadTop(g.members)" class="row-pad" :style="{ height: memberPadTop(g.members) + 'px' }" aria-hidden="true"></div>
               <div v-for="m in winMembers(g.members)" :key="m.hash"
                    class="member-row" data-table="detail" :data-hash="m.hash" :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
                    :style="gridStyle('detail')"
@@ -479,7 +479,7 @@
                   <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                 </template>
               </div>
-              <div v-if="memberPadBottom" class="row-pad" :style="{ height: memberPadBottom + 'px' }" aria-hidden="true"></div>
+              <div v-if="memberPadBottom(g.members)" class="row-pad" :style="{ height: memberPadBottom(g.members) + 'px' }" aria-hidden="true"></div>
             </div>
           </template>
           <div v-if="groupPadBottom" class="row-pad" :style="{ height: groupPadBottom + 'px' }" aria-hidden="true"></div>
@@ -655,7 +655,7 @@
                     </span>
                   </div>
                   <template v-for="e in sn.episodes" :key="s.key + '~' + sn.season + '~' + e.epKeyStr">
-                    <div class="group-row ep-row" data-table="show" :class="['s-' + e.state, { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial }]"
+                    <div class="group-row ep-row" data-table="show" :class="['s-' + epState(e), { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial, 'is-pending': isEpPending(e) }]"
                          :style="gridStyle('show')"
                          @click="onShowEpClick(s, sn, e, $event)"
                          @contextmenu.prevent="openShowEpMenu($event, s, e)">
@@ -722,7 +722,7 @@
                         <span v-if="colDrag && colDrag.page === 'detail'" class="col-drop-line" :style="colDropLineStyle('detail')"></span>
                       </div>
                       <!-- 集成员行同样走窗口(通常不到阈值; 超 200 个版本的集才真正生效) -->
-                      <div v-if="memberPadTop" class="row-pad" :style="{ height: memberPadTop + 'px' }" aria-hidden="true"></div>
+                      <div v-if="memberPadTop(e.members)" class="row-pad" :style="{ height: memberPadTop(e.members) + 'px' }" aria-hidden="true"></div>
                       <div v-for="m in winMembers(e.members)" :key="m.hash" class="member-row" data-table="detail" :data-hash="m.hash"
                            :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
                            :style="gridStyle('detail')"
@@ -764,7 +764,7 @@
                           <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                         </template>
                       </div>
-                      <div v-if="memberPadBottom" class="row-pad" :style="{ height: memberPadBottom + 'px' }" aria-hidden="true"></div>
+                      <div v-if="memberPadBottom(e.members)" class="row-pad" :style="{ height: memberPadBottom(e.members) + 'px' }" aria-hidden="true"></div>
                     </div>
                   </template>
                 </template>

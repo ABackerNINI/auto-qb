@@ -16,6 +16,8 @@
 - test_wake_drains_commands_without_extra_ticks: 命令唤醒只走命令线, 命令风暴下 tick 次数不增加
 - test_drain_web_commands_reports_resync_needed: P0-5 门控——只有改种子状态的命令置 changed
 - test_command_batch_triggers_single_resync: P0-5 一批命令后补**一次**完整刷新(整批合单)
+- test_drain_web_commands_bumps_write_seq: P1-4 失效接线——写命令自增 _web_write_seq, 自投递不自增
+- test_drain_bumps_write_seq_before_writing_receipt: BUG-5 顺序——回执写入时写序号须已自增
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
@@ -322,6 +324,53 @@ def test_command_batch_triggers_single_resync():
         mgr.run(dry_run=False, stop_event=stop)
         # 首轮(两条线都到期)一次 + 命令批一次 = 2; 5 条命令不产生 5 次
         assert calls["refresh"] == 2, f"一批 5 条命令应只补一次刷新, 实际 {calls['refresh']}"
+
+
+def test_drain_web_commands_bumps_write_seq():
+    """P1-4 只读缓存**失效接线**: 写命令执行后 `_web_write_seq` 必须自增; 自投递命令不得自增
+
+    缓存以 `(key, write_seq)` 组键 ⇒ 序号不自增则缓存**永不失效**(改完分类仍看到旧列表);
+    而自投递命令(build_search_index)频次高, 计进去会让缓存在建索引期间完全失效。
+    此前全仓只测了缓存机制本身, 没有任何用例断言这条接线 —— 字段改名或把自增挪走
+    都会让测试全绿而缓存静默失效。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr._cmd_reload_config = mock.Mock()
+        mgr._cmd_build_search_index = mock.Mock()
+        before = mgr._web_write_seq
+
+        mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
+        mgr._drain_web_commands()
+        assert mgr._web_write_seq == before + 1, "写命令执行后写序号必须自增(否则只读缓存永不失效)"
+
+        mgr.web_commands.put(("build_search_index", {"cmd_id": "c2"}))
+        mgr._drain_web_commands()
+        assert mgr._web_write_seq == before + 1, "自投递命令不得自增(否则建索引期间缓存全废)"
+
+
+def test_drain_bumps_write_seq_before_writing_receipt():
+    """BUG-5: 先让缓存失效, 再宣布命令成功 —— 回执写入时写序号必须**已经**自增
+
+    前端拿到回执会立刻重取只读端点(如改完分类重取 /api/categories); 若回执先写, 那一瞬的
+    读会命中旧写序号的缓存键。用 spy 在 _set_web_result 内部观察当时看到的序号, 把顺序钉死。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr._cmd_reload_config = mock.Mock()
+        seen = {}
+        real_set = mgr._set_web_result
+
+        def spy(cmd_id, status, error="", timing=None):
+            seen["seq"] = mgr._web_write_seq  # 回执写入那一刻的序号
+            return real_set(cmd_id, status, error, timing)
+
+        mgr._set_web_result = spy
+        before = mgr._web_write_seq
+        mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
+        mgr._drain_web_commands()
+        assert seen.get("seq") == before + 1, (
+            f"回执写入时写序号应已自增(先失效缓存再宣布成功), 实际 {seen.get('seq')} vs 期望 {before + 1}")
 
 
 def test_run_due_requeues():

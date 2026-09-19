@@ -8,7 +8,7 @@
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -64,9 +64,10 @@
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
 - test_ensure_group_view_rebuilds_when_dirty: 分组视图脏时重建(Web 请求侧兜底)/干净时复用引用
 - test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
+- test_ensure_group_state_show_view_carries_member_index: 追剧页必须连带成员索引(groups+singles), 但不回传种子平铺数组(否则刷新后追剧页永久空白)
 - test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
-- test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
+- test_api_state_skips_jsonable_encoder: 热路径(/api/state、/api/groups)必须返回 JSONResponse 而非裸 dict —— 否则 FastAPI 会白跑一遍 jsonable_encoder 递归遍历响应体(3000 种子实测 161ms, 占端点耗时 85%); 用计数替身钉死
 - test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
@@ -83,7 +84,6 @@
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
-- test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
@@ -543,6 +543,33 @@ def _scan_episode_member_hashes(path, rel, problems):
             )
 
 
+def _scan_state_rank(path, rel, problems):
+    """状态优先级表守阵: 前端 `STATE_RANK` 必须与后端 `_SHOW_STATE_RANK` 逐项一致(2026-09-19)
+
+    两表是**同一概念**("一组/一集种子该显示成什么状态")的两份实现:
+    前端那份决定辅种页组行取哪个成员状态着色(`decoratedGroups.status.primary`),
+    后端那份决定追剧页集行的 `e.state`。漂移的后果有两层 ——
+    ① 同一批种子在辅种页与追剧页显示成**不同颜色**(用户没法解释, 只会觉得"颜色乱");
+    ② 乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
+    实测曾漂移两处({downloading,checking} 与 {paused,seeding} 两组取值相反), 人眼不可能发现,
+    故机械比对(改一边必须改另一边 —— 这正是本守阵要逼出来的动作)。
+    """
+    from auto_qb.mixins.web_view import _SHOW_STATE_RANK
+
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r"const STATE_RANK = \{([^}]*)\}", text)
+    if not m:
+        problems.append(f"{rel} 找不到 `const STATE_RANK = {{...}}`(状态优先级单点表, 见 isPending 一带注释)")
+        return
+    front = {k: int(v) for k, v in re.findall(r"(\w+)\s*:\s*(\d+)", m.group(1))}
+    if front != _SHOW_STATE_RANK:
+        problems.append(
+            f"{rel} STATE_RANK 与后端 _SHOW_STATE_RANK 不一致"
+            f"(前端 {front} / 后端 {_SHOW_STATE_RANK}) —— 同一批种子会在辅种页与追剧页显示成不同颜色"
+        )
+
+
 def _scan_frontend_assets():
     """扫描 web_ui/static 返回问题清单(空 = 健康)
 
@@ -554,7 +581,9 @@ def _scan_frontend_assets():
     4. CSS 规则块漏闭合(浏览器会把其后规则整段当声明丢弃) —— 见 _scan_css_blocks;
     5. 模板 `<transition>` 不配对 / 把弹窗包进 `<transition>`(只渲染首子节点 -> 弹窗全丢);
     6. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404);
-    7. 追剧视图"集成员 -> hash"必须走 `memberHashesOf`(见 _scan_episode_member_hashes)。
+    7. 追剧视图"集成员 -> hash"必须走 `memberHashesOf`(见 _scan_episode_member_hashes);
+    8. `STATE_RANK` 必须与后端 `_SHOW_STATE_RANK` 逐项一致(见 _scan_state_rank) ——
+       两表分别决定"辅种页组行"与"追剧页集行"的颜色, 漂移的后果是同一批种子两页不同色。
     """
     problems = []
     js_files = []
@@ -575,6 +604,7 @@ def _scan_frontend_assets():
                     js_files.append((path, rel))
                     if name == "app.js":
                         _scan_episode_member_hashes(path, rel, problems)
+                        _scan_state_rank(path, rel, problems)
                     for i, line in enumerate(lines):
                         if not re.match(r"^\s*\*(?!/)", line):
                             continue
@@ -593,7 +623,7 @@ def _scan_frontend_assets():
 
 
 def test_frontend_static_bundle_health():
-    """前端静态资源守阵: 冲突残留/注释孤儿续行/node 语法校验/CSS 漏闭合/transition 吞弹窗/引用缺失
+    """前端静态资源守阵: 冲突残留/注释孤儿续行/node 语法校验/CSS 漏闭合/transition 吞弹窗/引用缺失/集成员取 hash/状态优先级表
 
     三个实测故障(2026-09-17)都是"pytest 全绿但界面废掉"的形态:
     ① app.js 注释续行留在已闭合的 `*/` 之后 -> 整包 SyntaxError -> Vue 不 mount -> 只剩背景色;
@@ -2446,6 +2476,26 @@ def test_ensure_group_state_versioning():
         assert "groups" in bumped and "singles" in bumped
 
 
+def test_ensure_group_state_show_view_carries_member_index():
+    """追剧页(view=show)必须**连带成员索引** groups+singles 一起回传, 但不得回传种子平铺数组
+
+    前端 `decoratedShows` 的成员解析走 `memberByHash`(由 groups + singles + torrents 拼出来),
+    而后端 shows 里的 `members` 只是一串 hash(设计上"不随 shows 重复回传")。
+    只回 shows ⇒ 前端索引为空 ⇒ 每个集的成员都被 `filter(Boolean)` 丢掉 ⇒ 追剧页**永久空白**
+    (2026-09-19 实测: 刷新后 groups=0 / memberByHash=0 / 0 行; 且 rid 已记住 ⇒ 之后每轮都是
+    "版本未变不回传", 自己不会恢复, 必须手动切一次视图才回来)。
+    同时守住另一头: 种子平铺数组(3000 种子 ≈ 4.5MB)不能顺手一起回 —— 追剧页用不到它。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr._group_view_dirty = True
+        state = mgr.ensure_group_state(rid=None, view="show")
+        assert "shows" in state, "追剧页应回 shows"
+        assert "groups" in state and "singles" in state, \
+            "追剧页必须连带成员索引(groups+singles), 否则前端 memberByHash 为空 -> 整页空白"
+        assert "torrents" not in state, "追剧页不该回传种子平铺数组(4.5MB, 用不到)"
+
+
 def test_build_singles_view_ungrouped_only():
     """_build_singles_view: 只含未归组种子且字段与 members 同形(save_path/name/HR 齐全);
     singles 随 ensure_group_state 与 groups 同门控回传/同版本不回传"""
@@ -2597,10 +2647,44 @@ def test_api_state_rid_gate(web_env):
     assert other["updated"] is True and len(other["groups"]) == 1
 
 
-def test_api_state_view_scoped_payload(web_env):
-    """P1-1 按视图回传: view=torrent/show 只回该视图的数组; 未知 view 回全部(保守默认)
+def test_api_state_skips_jsonable_encoder(web_env, monkeypatch):
+    """热路径必须**跳过** FastAPI 的 jsonable_encoder(3000 种子实测省 ~160 ms/轮, 占端点耗时 85%)
 
-    收益: 大库下每轮响应体 ≈1/4(序列化/网络/JSON.parse/重渲染同步下降)。
+    `/api/state` 若返回裸 dict, FastAPI 会先跑一遍 `jsonable_encoder` **递归遍历整个响应体**
+    (3000 种子 × 74 字段 = 22 万个值, 实测 **161 ms**, 而端点总耗时 189 ms); 我们的视图本来就是
+    JSON 原生类型(str/int/float/bool/None/dict/list), 这趟遍历纯属白跑, 且全程占着 GIL —— 与主循环
+    抢 CPU, 是大库下"点了没反应"的一个真实来源。改成返回 `JSONResponse` 后 FastAPI 直接短路
+    (`fastapi/routing.py`: `isinstance(raw_response, Response)` ⇒ 跳过 `serialize_response`)。
+
+    用**计数替身**把它钉死: 谁把返回值改回裸 dict, 这条断言立刻变红。
+    (不用时间型断言 —— 计时在 CI 上不可靠; 计数是确定性的。)
+    """
+    import fastapi.routing as fr
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    calls = []
+    real = fr.jsonable_encoder
+
+    def spy(*a, **kw):
+        calls.append(1)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(fr, "jsonable_encoder", spy)
+    for url in ("/api/state?view=torrent", "/api/state", "/api/groups"):
+        resp = client.get(url, headers=auth)
+        assert resp.status_code == 200, f"{url}: {resp.text}"
+        assert calls == [], (
+            f"{url} 走了 jsonable_encoder({len(calls)} 次) —— 返回值又变成裸 dict 了? "
+            "见 web.py api_state 注释: 3000 种子实测这趟白跑 161ms, 占端点耗时 85%"
+        )
+
+
+def test_api_state_view_scoped_payload(web_env):
+    """P1-1 按视图回传: view=torrent 只回 torrents; view=show 回 shows **+ 成员索引**; 未知 view 回全部
+
+    收益: 大库下每轮响应体明显下降(3000 种子实测: 全量 6.41MB / 种子页 4.52MB /
+    辅种页 1.75MB / 追剧页 1.88MB)。注意追剧页**不是**最小的那份 —— 它必须带成员索引, 见下。
     风险面: 前端**必须**按"键不存在则保留原引用"赋值, 不能用 `|| []` 把没回的视图抹空。
     """
     mgr, client = web_env
@@ -2613,7 +2697,10 @@ def test_api_state_view_scoped_payload(web_env):
     assert "groups" not in t and "singles" not in t and "shows" not in t
 
     s = client.get("/api/state?view=show", headers=auth).json()
-    assert "shows" in s and "groups" not in s and "torrents" not in s
+    # 追剧页必须连带**成员索引**(groups+singles): shows 里的 members 只是一串 hash,
+    # 前端靠索引还原成成员对象 —— 只回 shows 会让 memberByHash 为空、整页空白(BUG-8)
+    assert "shows" in s and "groups" in s and "singles" in s
+    assert "torrents" not in s, "追剧页用不到种子平铺数组(4.5MB), 不该一起回"
 
     g = client.get("/api/state?view=group", headers=auth).json()
     # 辅种页要同时用 groups 与 singles(未归组单种子是同页兜底行), 必须一起回

@@ -609,6 +609,21 @@ class FakeTorrent:
         for _f, _v in _ext_defaults.items():
             setattr(self, _f, kw[_f] if _f in kw else _v)
 
+    def to_dict(self) -> dict:
+        """全字段导出(真记录是 `TorrentRecord.to_dict`: 快照字段 + `_raw` 前向兼容字段)
+
+        ❗没有这个方法时桩服务的详情端点 `/api/torrents/{hash}` **恒 500**
+        (`'FakeTorrent' object has no attribute 'to_dict'`, 2026-09-19 实测), 于是整条依赖详情的
+        链路在冒烟里从未被覆盖: 详情抽屉、限速/分享率/移动/重命名对话框、以及"复制磁力"
+        (magnet_uri 只在平铺 SEED_ITEM 与详情里, 成员索引没有该字段 —— 见 app.js copyTorrentInfo)。
+        与真实现一致: 惰性缓存槽(下划线开头)与 tracker_conf 不进导出(后者是配置对象, 不可 JSON 化)。
+        """
+        skip = {"tor", "tracker_conf"}
+        return {
+            k: v for k, v in vars(self).items()
+            if not k.startswith("_") and k not in skip and not callable(v)
+        }
+
     @property
     def state_enum(self):
         """模拟真实客户端: 由 state 字符串动态构造 TorrentState(与 qB 版本无关的状态类别判定)

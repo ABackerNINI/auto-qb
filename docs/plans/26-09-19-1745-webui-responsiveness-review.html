@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEB UI 响应性计划 · 实施评估报表 — auto-qb</title>
+<style>
+  :root {
+    --paper: #f6f4ef;
+    --paper-2: #efebe3;
+    --ink: #1b1a17;
+    --ink-2: #4a463f;
+    --ink-3: #6f6a60;
+    --hair: #d8d2c6;
+    --hair-2: #e6e1d7;
+    --accent: #8a4a1f;
+    --accent-soft: #f0e2d6;
+    --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 40px; }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+
+  /* ---------- cover ---------- */
+  header { padding: 66px 0 38px; border-bottom: 1px solid var(--hair); }
+  h1 { font-size: 42px; font-weight: 600; letter-spacing: -.022em; line-height: 1.14; margin: 18px 0 14px; max-width: 24ch; }
+  .lede { font-size: 16px; color: var(--ink-2); max-width: 68ch; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px 34px; margin-top: 28px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  }
+  .meta-row span b { color: var(--ink-2); font-weight: 400; }
+
+  /* ---------- verdict strip ---------- */
+  .strip { display: flex; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
+  .strip .cell {
+    flex: 1 1 190px; padding: 20px 20px 18px 0; border-right: 1px solid var(--hair-2);
+  }
+  .strip .cell:last-child { border-right: 0; }
+  .strip .k { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; color: var(--ink-3); text-transform: uppercase; }
+  .strip .v { font-size: 27px; font-weight: 600; letter-spacing: -.02em; margin: 6px 0 3px; }
+  .strip .v small { font-size: 14px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
+  .strip .n { font-size: 12.5px; color: var(--ink-3); }
+
+  /* ---------- layout ---------- */
+  .body-grid { display: grid; grid-template-columns: 196px 1fr; gap: 56px; padding: 46px 0 90px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; }
+  nav.toc .t { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  nav.toc a {
+    display: block; font-size: 13px; color: var(--ink-2); text-decoration: none;
+    padding: 4px 0 4px 11px; border-left: 1px solid var(--hair); line-height: 1.35;
+  }
+  nav.toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+  nav.toc a .num { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-right: 7px; }
+  main { min-width: 0; }
+
+  section { margin-bottom: 60px; scroll-margin-top: 24px; }
+  h2 {
+    font-size: 25px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2;
+    padding-bottom: 11px; border-bottom: 1px solid var(--hair); margin-bottom: 22px;
+  }
+  h2 .num { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 11px; letter-spacing: .06em; }
+  h3 { font-size: 16px; font-weight: 600; margin: 26px 0 9px; letter-spacing: -.005em; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--ink-2); }
+  p { max-width: 74ch; margin-bottom: 12px; color: var(--ink-2); }
+  p strong { color: var(--ink); font-weight: 600; }
+  ul, ol { max-width: 74ch; margin: 0 0 14px 20px; color: var(--ink-2); }
+  li { margin-bottom: 6px; }
+  code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--paper-2);
+    border: 1px solid var(--hair-2); padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--paper-2);
+    border: 1px solid var(--hair); border-left: 2px solid var(--accent);
+    padding: 12px 14px; overflow-x: auto; margin: 0 0 16px; color: var(--ink); border-radius: 2px;
+  }
+  pre code { background: none; border: 0; padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 18px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hair-2); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 400; border-bottom: 1px solid var(--hair);
+  }
+  td:first-child, th:first-child { padding-left: 0; }
+  td.num, th.num { font-family: var(--mono); white-space: nowrap; }
+  tr.tot td { border-top: 1px solid var(--hair); border-bottom: 0; font-weight: 600; }
+
+  .sev { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
+  .sev i { width: 8px; height: 8px; display: block; }
+  .sev-hi { color: #97331c; } .sev-hi i { background: #97331c; }
+  .sev-md { color: var(--accent); } .sev-md i { background: var(--accent); }
+  .sev-lo { color: var(--ink-3); } .sev-lo i { background: var(--ink-3); }
+  .sev-ok { color: #2f5a41; } .sev-ok i { background: #2f5a41; }
+
+  .finding { border-top: 1px solid var(--hair); padding-top: 18px; margin-top: 24px; }
+  .finding:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+  .finding-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .finding-head h3 { margin: 0; }
+  .finding-head .id { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); letter-spacing: .04em; }
+  .finding dl { display: grid; grid-template-columns: 88px 1fr; gap: 4px 16px; margin: 10px 0 0; font-size: 13.5px; }
+  .finding dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); padding-top: 3px; }
+  .finding dd { color: var(--ink-2); }
+  .finding dd strong { color: var(--ink); }
+
+  .note {
+    border-left: 2px solid var(--accent); background: var(--accent-soft);
+    padding: 13px 16px; margin: 16px 0; max-width: 74ch;
+  }
+  .note p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+  .note .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
+  @media (max-width: 1100px) {
+    .body-grid { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { position: static; margin-bottom: 34px; }
+    .cols2 { grid-template-columns: 1fr; }
+    .wrap { padding: 0 24px; }
+    h1 { font-size: 32px; }
+  }
+  footer { border-top: 1px solid var(--hair); padding: 22px 0 60px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">Review report &nbsp;·&nbsp; <b>26-09-19-1241</b> webui-responsiveness</div>
+    <h1>WEB UI 操作跟手性计划 · 实施评估</h1>
+    <p class="lede">对上一轮计划本身与其实施结果做一次对抗性复核：逐条核对 12 项 P0/P1 落地证据，重点挖 BUG、安全与性能。结论是功能面基本达成、架构判断正确，但有三处「计划承诺了、实现只做到一半」的口径漂移，以及一个只有 prism 中招的窗口化高度缺陷 —— 现有冒烟测恰好测不到它。</p>
+    <div class="meta-row">
+      <span>评估对象 <b>docs/plans/26-09-19-1241-webui-responsiveness-plan.html</b></span>
+      <span>实现提交 <b>10e06a8 · 5d1e52c · 366092d · d83ea61 · 021d75a</b></span>
+      <span>分支 <b>develop</b> (工作区干净)</span>
+      <span>复核时间 <b>2026-09-19 17:45</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="strip">
+  <div class="wrap" style="display:flex;flex-wrap:wrap;width:100%">
+    <div class="cell" style="flex:1 1 190px;padding:20px 20px 18px 0">
+      <div class="k">P0 + P1 落地</div>
+      <div class="v">12 / 12 <small>项</small></div>
+      <div class="n">含计划外补做的 pollSec 分档</div>
+    </div>
+    <div class="cell" style="flex:1 1 190px;padding:20px 0 18px 20px">
+      <div class="k">发现缺陷</div>
+      <div class="v">6 <small>BUG / 3 文档漂移</small></div>
+      <div class="n">1 高 · 2 中 · 3 低</div>
+    </div>
+    <div class="cell" style="flex:1 1 190px;padding:20px 0 18px 20px">
+      <div class="k">验收口径达成</div>
+      <div class="v">2 / 6 <small>条有数字</small></div>
+      <div class="n">≤400 ms ✓ · ≤200 KB ✗</div>
+    </div>
+    <div class="cell" style="flex:1 1 190px;padding:20px 0 18px 20px">
+      <div class="k">测试基线</div>
+      <div class="v">1049 <small>passed</small></div>
+      <div class="n">覆盖率 92%，与文档一致</div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="body-grid">
+
+<nav class="toc">
+  <div class="t">目录</div>
+  <a href="#s1"><span class="num">01</span>结论先行</a>
+  <a href="#s2"><span class="num">02</span>实施盘点</a>
+  <a href="#s3"><span class="num">03</span>缺陷（BUG）</a>
+  <a href="#s4"><span class="num">04</span>安全审查</a>
+  <a href="#s5"><span class="num">05</span>性能审查</a>
+  <a href="#s6"><span class="num">06</span>计划本身的质量</a>
+  <a href="#s7"><span class="num">07</span>验证与测试缺口</a>
+  <a href="#s8"><span class="num">08</span>修复建议</a>
+  <a href="#s9"><span class="num">09</span>附录 · 复现证据</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="num">01</span>结论先行</h2>
+  <p><strong>实施质量高于一般水平，架构判断经得起复核，但「证据链」比代码弱一档。</strong>P0/P1 十二项全部落地且落点与计划一致：命令唤醒只走命令线、命令后整批补一次完整刷新、按视图回传、只读端点短缓存、请求超时、行窗口化 —— 每一条的实现都能在源码里指到具体位置，注释里写清了「为什么不能那样做」（例如为什么不能只调 <code>apply_sync</code>、为什么自投递命令不能唤醒），这些否决理由在本次复核中全部成立。</p>
+  <p>问题集中在三处：</p>
+  <ol>
+    <li><strong>三层行窗口共用了一个硬编码的间距常量</strong>，而三个容器的真实 <code>gap</code> 各不相同（6 / 5 / 0）。实测 prism 的滚动总高比全量渲染高 <span class="num">2973 px</span>（3000 行），atlas 恰好为 0 —— 也就是说这个 bug 只在棱镜一套 UI 上存在，而双 UI 的冒烟断言是「窗口化前后各测一次」，天然测不到它。</li>
+    <li><strong>P0-3 乐观 UI 只覆盖了三个入口中的一个。</strong>种子行右键 ✓；整组操作只给成员行打补丁，组行本身的状态色与 pending 标记都不变（不展开明细就看不到反馈）；整集/整剧走 <code>actEpisode</code>，完全没有乐观更新。而用户最初的抱怨场景正是辅种页。</li>
+    <li><strong>计划的量化验收口径没有落成任何产物。</strong>「单目标 ≤ 400 ms」「响应体 ≤ 200 KB」「单帧 ≤ 50 ms」三条中，只有第一条能用埋点间接证实；第二条实测<b>未达成</b>（种子页 4.31 MiB / 轮，是目标的 22 倍），第三条没有任何数字。P0-0 埋点本身做得很干净（<code>wait_ms</code>/<code>exec_ms</code> 一路回传到前端），但前端 <code>cmdStats</code> 全仓只写不读，计划的「走查表」始终没产出。</li>
+  </ol>
+  <p>安全面本轮没有引入新风险：新增端点都挂在全局鉴权依赖下，只读缓存的写入点在 <code>_require_torrent()</code> 校验<b>之后</b>（伪造 hash 无法污染缓存），断连判定被刻意提到缓存之前，请求超时把「永久挂死」变成「有界失败」。三条低危项都是工程习惯问题，不是漏洞。</p>
+
+  <table>
+    <thead><tr><th>维度</th><th class="num">评级</th><th>判据</th></tr></thead>
+    <tbody>
+      <tr><td>计划本身</td><td class="num">A−</td><td>14 候选 / 3 否决全部带实测数字；附录用实测把「主循环 50 ms」方案否决得很干净。扣分在验收口径没有配交付物、以及白名单在实施中悄悄收窄后没有回写计划。</td></tr>
+      <tr><td>实现符合度</td><td class="num">A−</td><td>12/12 项落地，落点与计划描述一致；偏差集中在 P0-3 的覆盖面（见 BUG-3）。</td></tr>
+      <tr><td>BUG 风险</td><td class="num">B</td><td>1 个高（prism 窗口化总高 +2973 px）、2 个中、3 个低。无数据损坏类缺陷，无并发写冲突。</td></tr>
+      <tr><td>安全</td><td class="num">A−</td><td>无新增攻击面；鉴权/校验次序正确。3 条低危工程项。</td></tr>
+      <tr><td>性能</td><td class="num">B+</td><td>长任务与整轮 refresh 大幅下降（实测 1384 → 244 ms）；但按视图回传对种子页几乎无收益，且 sync_interval 与分档轮询不匹配造成约一半重建白烧。</td></tr>
+      <tr><td>测试与证据</td><td class="num">B−</td><td>1049 passed / 92% 与文档一致；34 项浏览器冒烟可复跑全绿。但「写后失效」只测机制不测接线，关键性能数字不可复现。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02</span>实施盘点</h2>
+  <p>逐条核对计划「05 优化项总表」与代码事实。判定列只看源码位置能否指认，不看提交信息自述。</p>
+  <table>
+    <thead><tr><th>编号</th><th>计划要求</th><th>落地位置与证据</th><th class="num">判定</th></tr></thead>
+    <tbody>
+      <tr><td class="num">P0-0</td><td>埋点量化</td><td><code>web.py:200</code> 随命令带 <code>_queued_ts</code>；<code>web_commands.py</code> 的 <code>_timing()</code> 拆 wait/exec；<code>/api/cmd/{id}</code> 原样回传；前端 <code>app.js:2193</code> 记 <code>cmdStats</code></td><td class="num"><span class="sev sev-md"><i></i>部分</span></td></tr>
+      <tr><td class="num">P0-1</td><td>命令唤醒主循环</td><td><code>qbmanager.wake()</code> + <code>_wait_next()</code>；<code>SELF_POSTED_COMMANDS</code> 拦自投递；实测 wait_ms=0</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P0-2</td><td>回执首查不等 500 ms</td><td><code>waitCmd</code> 改 0→150→300→500 封顶；汇报走 500→1000。实测首查即命中（5/5 轮）</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P0-3</td><td>乐观 UI（10 动作白名单）</td><td>实现收窄为 pause/resume（有注释说明），且只覆盖种子行；组行与整集/整剧未覆盖</td><td class="num"><span class="sev sev-md"><i></i>部分</span></td></tr>
+      <tr><td class="num">P0-4</td><td>批量合单走 /api/torrents/bulk</td><td><code>bulkAct</code>/<code>actEpisode</code>/<code>_deleteFlow</code> 三处均改单条 bulk；冒烟实证「60 目标 → bulk 1 次 / 逐目标 0 次」</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P0-5</td><td>命令后补一次完整刷新</td><td><code>RESYNC_COMMANDS</code> 白名单 + <code>_drain_web_commands()</code> 返回 changed；整批只补一次；dry_run / 暂停不补</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P1-1</td><td>按视图回传</td><td><code>VIEW_ARRAYS</code> + <code>ensure_group_state(rid, view)</code>；切视图置空 lastRid；前端「键不存在则保留原引用」</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P1-2</td><td>行窗口化（种子页 + 展开成员）</td><td>三层窗口 + 逐行测高 + 前缀和二分；DOM 3000 → 26 行。⚠ 间距常量与实际 gap 不符（BUG-1）</td><td class="num"><span class="sev sev-hi"><i></i>有缺陷</span></td></tr>
+      <tr><td class="num">P1-3</td><td>updated() 去布局抖动</td><td><code>_ensureHeadObserver()</code> + ResizeObserver + rAF；冒烟量到 3 轮共 106 次 gBCR（窗口内 26 行/轮）</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P1-4</td><td>抽屉降频 + 只读短缓存</td><td>抽屉 3 s → 5 s；<code>_cached_read()</code> 按 <code>(key, write_seq)</code> 组键。⚠ 失效接线无用例（TEST-1）</td><td class="num"><span class="sev sev-md"><i></i>达成/证据弱</span></td></tr>
+      <tr><td class="num">P1-5</td><td>qB 客户端超时</td><td><code>REQUESTS_TIMEOUT=(3,10)</code> 经 <code>REQUESTS_ARGS</code> 透传，有单测守卫</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">附</td><td>pollSec 分档（计划排在 P1 之后）</td><td><code>basePollMs()</code>：≤1000 → 1.5 s / ≤3000 → 2 s / &gt;3000 → 3 s；旧字段 <code>pollSec</code> 已退役</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      <tr><td class="num">P2-1~4</td><td>选做 / 远期</td><td>未做（与计划一致）。其中 P2-2 增量回传是 P1-1 收益不足的真正解药，见 05 节</td><td class="num"><span class="sev sev-lo"><i></i>按计划未做</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="lbl">口径说明</span>
+    <p>「达成」= 计划描述的行为在源码里可指认且与描述一致；「部分」= 行为存在但覆盖面或证据弱于计划承诺；「有缺陷」= 行为存在但引入了新的不正确行为。本表不评价观感。</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03</span>缺陷（BUG）</h2>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-1</span>
+      <h3>三层行窗口共用一个硬编码间距，与 prism 的实际 <code>gap</code> 不符 —— 棱镜滚动总高偏差 +2973 px</h3>
+      <span class="sev sev-hi"><i></i>高</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd>同一进程内 A/B 实测（3000 种子 / 200 组，1440×900，桩服务）：<br>
+        <code>prism  gap=5px  窗口化 167043 → 全量 164070  ⇒ Δ = +2973 px</code><br>
+        <code>atlas  gap=6px  窗口化 167071 → 全量 167071  ⇒ Δ = 0 px</code></dd>
+      <dt>根因</dt>
+      <dd><code>app.js:170</code> 的 <code>const ROW_WIN_GAP = 6</code> 注释写着「与 CSS <code>gap: 6px</code> 同源」，但三个行容器并不都是 6 px：atlas <code>.group-table{gap:6px}</code>（style.css:395）、<b>prism <code>.group-table{gap:5px}</code>（views.css:106）</b>、成员行容器 <code>.detail</code> 是 block 容器根本没有 flex gap（间距为 0）。<code>_rowWindow()</code> 的前缀和、<code>padTop</code>、<code>padBottom</code> 全部按 6 px/行累加。</dd>
+      <dt>影响</dt>
+      <dd>棱镜页的滚动条比全量渲染长 ≈1.8%（3000 行）；「滚动位置 ↔ 可见行」的映射整体偏移，中段最大约 49 行。末行仍可达、视口不出现空白（占位与滚动解释用的是同一套虚标尺，彼此自洽），因此是<b>观感/一致性缺陷而非功能中断</b>。但它同时说明「占位撑住总高」这一硬约束在 prism 上不成立。</dd>
+      <dt>为何漏网</dt>
+      <dd>冒烟断言 <code>Math.abs(after - before) &lt; 200</code> 的 <code>before</code> 在 A/B 之后才读，而 A/B 结束时已把 <code>rowWin</code> 还原为 <code>true</code> —— 两次测的都是<b>窗口化高度</b>，不是「窗口化 vs 全量」。本次复跑输出的 <code>167043 -&gt; 167043px</code> 正是这两个窗口化值。</dd>
+      <dt>建议</dt>
+      <dd>不要硬编码：首次测量时用 <code>getComputedStyle(container).rowGap</code> 取真实值（<code>_measureRowH</code> 里顺手做，一次成本），三层各存一份；或把占位改成用 <code>margin-top/bottom</code> 表达、让 flex gap 不参与高度公式。断言改为「窗口化高度 vs 关闭窗口后的全量高度」。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-2</span>
+      <h3>成员行窗口的间距假设同样错（实际 0 px），且追剧页的成员窗口是死路径</h3>
+      <span class="sev sev-md"><i></i>中</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd><code>prism/css/views.css:232</code> <code>.detail { margin:…; padding:…; background:…; }</code> 无 <code>display:flex</code> ⇒ 块级容器，成员行之间只有 <code>border-bottom</code>，行间距为 0；代码按 <code>ROW_WIN_GAP=6</code> 算。另：<code>memberWin()</code> 由 <code>expandedGroup</code> 驱动，而追剧页用的是 <code>expandedShows</code>/<code>expandedShowEp</code>，<code>expandedKey</code> 在追剧页恒为 <code>null</code> ⇒ <code>memberPadTop/Bottom</code> 在追剧页恒为 0，模板注释「集成员行同样走窗口（超 200 个版本的集才真正生效）」与事实相反。</dd>
+      <dt>影响</dt>
+      <dd>两条都属于「当前很难触发」：成员窗口需要 ≥200 个成员的组才会启用（<code>ROW_WIN_MIN=200</code>），触发时占位会偏大 6 px/行；追剧页则永远退化为全量渲染（正确但不省）。属<b>潜伏缺陷 + 注释失真</b>。</dd>
+      <dt>建议</dt>
+      <dd>与 BUG-1 一并修（间距改为实测）；成员窗口的驱动源改为「当前展开单元」而不是 <code>expandedGroup</code>，或明确删掉追剧页的占位与 <code>winMembers</code> 调用并回写注释。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-3</span>
+      <h3>P0-3 乐观 UI 只覆盖三个入口中的一个：整组无可见反馈、整集/整剧完全没有</h3>
+      <span class="sev sev-md"><i></i>中</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd>① 种子行 <code>actTorrent()</code>：<code>applyOptimistic</code> + <code>resolveOptimistic</code> ✓（冒烟实证「1 行半透明」「60 目标 pendingOps 60」）。<br>
+        ② <s>整组 <code>act()</code>：只把成员 hash 传进 <code>applyOptimistic</code>，而组行的状态色取自 <code>g.status.primary</code>（模板 <code>:class="['s-' + g.status.primary, …]"</code>），组行也没有 <code>is-pending</code> 绑定 ⇒ 不展开明细时「点击即变」不发生。</s>
+        <b>⚠️ 本条判断已被实测推翻，见 §10.1</b>：组行颜色<b>本来就是变的</b>（<code>s-checking → s-paused</code>，实测），真正缺的只有 <code>is-pending</code> 绑定。<br>
+        ③ 整集/整剧 <code>actEpisode()</code>（app.js:2770-2782）：直接投 bulk + 等回执，<b>没有任何乐观调用</b>。</dd>
+      <dt>影响</dt>
+      <dd>计划把 P0-3 定为「主观收益最大的一项」，而用户最初的抱怨发生在辅种页。现在整组暂停的可见反馈仍然要等回执（P0-1/P0-2 之后约几十毫秒，体感已可接受，但「感知层」的收益没有兑现）。冒烟只走了种子行路径，因此这条缺口在自动化里不可见。</dd>
+      <dt>建议</dt>
+      <dd>给组行加乐观：补丁 <code>g.status = {primary, text}</code> 并按成员状态重算，同时给 <code>.group-row</code> 绑 <code>is-pending</code>（键用组 key，<code>pendingOps</code> 需要支持组粒度）；<code>actEpisode</code> 复用同一套。冒烟补两条断言（整组 / 整集各一条）。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-4</span>
+      <h3>容器偏移是非响应式的：窗口宽度变化后的第一帧用旧偏移算窗口</h3>
+      <span class="sev sev-lo"><i></i>低</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd><code>_winTop</code> 在 <code>created()</code> 里是普通对象（刻意不入 data，注释解释了原因），只在 <code>updated()</code> 的 <code>_ensureWinTop()</code> 里更新；而 <code>_rowWindow</code> 是 computed，在渲染阶段先求值。<code>_onWinResize()</code> 只递增 <code>_winResize</code> 与 <code>_winViewH</code>。</dd>
+      <dt>影响</dt>
+      <dd>resize 后的第一次重算读到的是旧 <code>_winTop</code>，而写回新值不会触发重渲染（非响应式）⇒ 窗口切片可能偏一行左右，直到下一次轮询/滚动带来新的响应式变化才纠正。观感上是极轻微的跳动。</dd>
+      <dt>建议</dt>
+      <dd>把 <code>_winTopSig</code> 或一个 <code>_winTopVer</code> 计数放进 data，<code>_ensureWinTop</code> 更新后自增，让 computed 依赖它；或在 <code>_onWinResize</code> 里同步 <code>$nextTick</code> 后重算。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-5</span>
+      <h3>回执写入先于缓存失效序号自增（微秒级竞态，顺序反了）</h3>
+      <span class="sev sev-lo"><i></i>低</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd><code>web_commands.py:138-146</code>：先 <code>_set_web_result(cmd_id, "ok", …)</code>，再 <code>self._web_write_seq += 1</code>。前端拿到回执后会立刻重取只读端点（如改完分类重取 <code>/api/categories</code>），理论上存在命中旧缓存键的窗口。</dd>
+      <dt>影响</dt>
+      <dd>窗口在微秒量级，且写序号只被主循环线程写、Web 线程读，实际撞上的概率极低。但顺序在语义上应当反过来：<b>先让缓存失效，再宣布命令成功</b>。</dd>
+      <dt>建议</dt>
+      <dd>把 <code>_web_write_seq += 1</code> 提到 <code>_set_web_result()</code> 之前。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-6</span>
+      <h3><code>sync_interval</code> 的帮助文案承诺了实现里不存在的钳制</h3>
+      <span class="sev sev-lo"><i></i>低</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd><code>config/schema/groups.py</code> 的 help 写「大于主循环间隔时按主循环间隔生效」，但 <code>qbmanager.run()</code> 是 <code>next_sync_at = time.time() + sync_interval</code>，没有任何 <code>min(sync_interval, main_tick)</code>。配 <code>sync_interval: 5S</code> 时同步线真的 5 s 一次，且此时任务线（2 s）不再刷新快照 —— 与文案暗示的「至少保持主循环频率」相反。</dd>
+      <dt>建议</dt>
+      <dd>二选一：在 <code>run()</code> 里 <code>sync_interval = min(sync_interval, main_tick)</code> 落实文案；或改文案为「独立节拍，可快可慢于主循环」。校验侧 <code>positive=True</code> 已挡住 0（不会忙等），这点是对的。</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04</span>安全审查</h2>
+  <p>本轮改动引入了新的对外接口面（<code>/api/state?view=</code>）、新的服务端缓存、以及一条新的线程间失效信号。逐项核对结论：<strong>没有引入新漏洞</strong>，设计上还有两处刻意为之的正确取舍。</p>
+
+  <table>
+    <thead><tr><th>检查项</th><th>结论</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>鉴权覆盖</td><td><span class="sev sev-ok"><i></i>通过</span></td><td><code>web.py:161</code> <code>dependencies=[Depends(require_token)]</code> 挂在 app 级；本轮新增/修改的端点（<code>/api/state</code>、只读缓存化的 5 个端点）全部继承，无绕过。</td></tr>
+      <tr><td>缓存投毒</td><td><span class="sev sev-ok"><i></i>通过</span></td><td><code>_cached_read()</code> 一律在 <code>_require_torrent(hash)</code> <b>之后</b>调用 ⇒ 不存在的 hash 先 404，不会以攻击者可控的键写入缓存；<code>/api/categories</code>、<code>/api/tags</code> 键固定。这是正确次序。</td></tr>
+      <tr><td>断连不被缓存掩盖</td><td><span class="sev sev-ok"><i></i>通过</span></td><td>三个直连 qB 的端点把 <code>_require_client()</code> 提到 <code>_cached_read()</code> 之前，断连仍返回 503；有单测固化。</td></tr>
+      <tr><td>参数注入 / 类型混淆</td><td><span class="sev sev-ok"><i></i>通过</span></td><td>新增 <code>view</code> 参数只用于字典查表（<code>VIEW_ARRAYS.get(view)</code>），未知值回落「全量」；不参与 SQL / 路径 / 命令拼接。<code>bulk</code> 的 <code>keys</code> 走既有 <code>_group_key_param</code> 编解码，未新增解析路径。</td></tr>
+      <tr><td>埋点字段污染命令参数</td><td><span class="sev sev-ok"><i></i>通过</span></td><td><code>_queued_ts</code> 以下划线前缀约定隔离，drain 侧 <code>not k.startswith("_")</code> 剔除后才 <code>**args</code>；否则会被原样传给 handler 报 <code>TypeError</code>。这个约定有注释、有测试。</td></tr>
+      <tr><td>拒绝服务 / 资源耗尽</td><td><span class="sev sev-md"><i></i>改善但有残留</span></td><td>P1-5 的 <code>(3, 10)</code> 超时把「qB 假死 ⇒ 主循环无限期挂起」变成有界失败，是净改善。残留：<code>_cached_read()</code> 在锁<b>外</b>调用 <code>fn()</code>，同键并发会重复打 qB（惊群）；且 <code>len(_ro_cache) &gt; 128</code> 时整表 <code>clear()</code>（连新鲜项一起丢）。均为低频、有界，不构成可被放大的攻击。</td></tr>
+      <tr><td>XSS / 注入面</td><td><span class="sev sev-ok"><i></i>通过</span></td><td>新增的 <code>data-hash</code>/<code>data-key</code>、<code>isHit()</code>、占位 div 全部走 Vue 绑定与属性插值，无 <code>v-html</code>/<code>innerHTML</code>/<code>eval</code> 新增；无新外链资源。</td></tr>
+      <tr><td>密钥 / 凭证泄漏</td><td><span class="sev sev-ok"><i></i>通过</span></td><td>回执新增字段只有 <code>wait_ms</code>/<code>exec_ms</code>；无 token、无路径回显。</td></tr>
+      <tr><td>dev 工具暴露面</td><td><span class="sev sev-lo"><i></i>低危</span></td><td><code>scripts/ui_harness.py</code> 以 <code>skip_local_verify=True</code> 起真实 app，且提供 <code>--host</code> 参数 ⇒ 传 <code>0.0.0.0</code> 会在局域网上暴露一个<b>无鉴权</b>服务（数据是合成的，风险有限）。建议硬编码 loopback 或对非 loopback 直接拒绝启动。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="lbl">一处值得肯定的设计</span>
+    <p>只读缓存的失效键选择是「写序号」而不是「时间戳 + 主动失效」，这意味着缓存是<b>按键自动换代</b>的：任何写命令后旧键自然不再被命中，不需要在每个写路径上记得调失效函数。用「忘记调用」这一类 bug 换成了「键空间增长」，而键空间又有 128 条上限兜底 —— 取舍是对的。</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05</span>性能审查</h2>
+  <p>三组实测（桩服务，3000 种子 / 200 组）：响应体构成、行窗口高度、命令端到端。前两组是本轮新增的测量，计划里没有。</p>
+
+  <h3>5.1 按视图回传的真实收益：种子页几乎没有</h3>
+  <p>计划把 P1-1 的收益写成「响应体 ≈ 1/4」，验收口径是「≤ 200 KB」。实测 <code>/api/state</code> 各视图字节数：</p>
+  <table>
+    <thead><tr><th>请求</th><th class="num">字节</th><th class="num">占全量</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>/api/state</code>（不带 view）</td><td class="num">6 405 735</td><td class="num">100 %</td><td>四份数组全回，≈ 6.11 MiB</td></tr>
+      <tr><td><code>?view=group</code>（辅种页）</td><td class="num">1 746 319</td><td class="num">27 %</td><td>≈ 1.67 MiB，接近计划的 1/4 ✓</td></tr>
+      <tr><td><code>?view=torrent</code>（种子页）</td><td class="num">4 524 992</td><td class="num">71 %</td><td>≈ 4.31 MiB —— <b>不是 1/4</b></td></tr>
+      <tr><td><code>?view=show</code>（追剧页）</td><td class="num">134 808</td><td class="num">2 %</td><td>≈ 132 KiB，唯一达成 ≤200 KB 的视图</td></tr>
+    </tbody>
+  </table>
+  <p>原因很直接：<code>VIEW_ARRAYS["torrent"]</code> 要回的就是那个「每条 74 个字段 × 3000 条」的平铺数组，它本来就是全量里最大的那一份（也是 <code>filteredTorrents</code> 曾经复制 68 ms 的同一份）。按视图回传只切掉了「这一页用不到的另外两份」，切不掉这一页自己要用的那份。</p>
+  <p>后果是：种子页 3000 种子时前端每轮仍要收 4.31 MiB（分档后 2 s 一轮 ⇒ 峰值约 2.1 MiB/s），而 <code>updated</code> 在速度类字段每轮都变的情况下几乎恒为真 ⇒ 每轮都是全量替换。计划验收的「≤ 200 KB」在种子页差 22 倍，且没有任何产物给出过这个数字。</p>
+  <div class="note">
+    <span class="lbl">建议</span>
+    <p>真正的解药是计划里的 <b>P2-2（按 hash 增量回传）</b>，或退一步：给平铺数组做「按可见列裁剪字段集」——种子页最多同时显示 13 列，74 个字段里大半是抽屉才要的。两者都不需要改前端渲染路径。</p>
+  </div>
+
+  <h3>5.2 行窗口化的收益与代价（复跑 A/B，同进程 3 轮）</h3>
+  <table>
+    <thead><tr><th>指标</th><th class="num">全量渲染</th><th class="num">窗口化</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>整轮 refresh（prism）</td><td class="num">1384 ms</td><td class="num">244 ms</td><td>含冷启动首轮 3197 ms；稳态 455/501 → 249/251/233</td></tr>
+      <tr><td>整轮 refresh（atlas）</td><td class="num">1569 ms</td><td class="num">246 ms</td><td>稳态 454/465 → 238/234/267</td></tr>
+      <tr><td>长任务（prism）</td><td class="num">181 ms</td><td class="num">147 ms</td><td>窗口化后 3 轮里仍有 1 次 147 ms（冷启动全量测高那一帧）</td></tr>
+      <tr><td>DOM 行数</td><td class="num">3000</td><td class="num">26</td><td>窗口化确实生效</td></tr>
+      <tr><td>3 轮 gBCR 调用</td><td class="num">9000 量级</td><td class="num">106</td><td>P1-3 去抖动有效</td></tr>
+      <tr><td>滚动总高（prism）</td><td class="num">164070 px</td><td class="num">167043 px</td><td class="tnum">Δ +2973 px ← BUG-1</td></tr>
+      <tr><td>滚动总高（atlas）</td><td class="num">167071 px</td><td class="num">167071 px</td><td>Δ 0 px ✓</td></tr>
+    </tbody>
+  </table>
+  <p>收益是实打实的：稳态整轮 refresh 下降约 47%，长任务从每轮 180 ms 量级降到「3 轮共 1 次 147 ms」。<strong>但提交信息里「长任务 240~350 ms/轮 → 0」这个口径本次复跑没有重现</strong>（实测 181 → 147 ms，且窗口化后仍存在一次 147 ms 长任务）。计划验收要求「单帧 ≤ 50 ms（P95）」，而冷启动那一帧（首次切视图必须全量渲染一次以量行高）注定远超 50 ms —— 这一条要么把冷启动排除在统计窗口外并写明，要么就不该写成单帧指标。</p>
+
+  <h3>5.3 命令延迟：这是本轮最成功的一项</h3>
+  <pre><code>round1..5: 回执 = {"status":"ok","wait_ms":0,"exec_ms":1}   wall 24.7 / 34.1 / 16.1 / 2.7 / 2.8 ms   首查即命中</code></pre>
+  <p><code>wait_ms = 0</code> 直接证明 P0-1 生效（命令不再等下个节拍）；<code>wall</code> 全部低于 400 ms 的验收线，且首查（0 ms 延迟）就拿到回执，证明 P0-2 的退避曲线生效。注意桩服务的 qB 是即时返回的，<code>exec_ms=1</code> 是下界 —— 真机上还要加上一次 qB HTTP 往返。</p>
+
+  <h3>5.4 一处被忽略的节拍错配</h3>
+  <p><code>sync_interval</code> 固定 1.5 s，而前端轮询按种子量分档为 1.5 / 2 / 3 s。&gt;3000 种子时前端 3 s 才来取一次，后端仍每 1.5 s 刷新快照并重建视图 ⇒ <strong>约一半的 <code>rebuild_views</code>（3000 种子实测 46.9 ms）与 qB <code>sync/maindata</code> 请求没人消费</strong>，粗算约 4.7% 单核白烧。计划附录 A3 明确写过「方案 i（推荐）：刷新 1.5 s / 轮询 1.5 s —— 零浪费」以及「别把快档设成常态，挂到已有的 Web 活跃门控上」；实现两条都没走：既没有让轮询跟上快档，也没有给 <code>_refresh_torrents</code> 加活跃门控（视图重建有 <code>WEB_VIEW_TTL</code> 门控，快照刷新没有）。空闲（无浏览器）时 qB sync 从 0.5 次/s 提到 0.667 次/s（+33%），绝对量小（3000 种子下约 +0.24 个百分点单核），但与计划自己写的「空闲成本回到 0.7%」的意图相悖。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06</span>计划本身的质量</h2>
+
+  <div class="cols2">
+    <div>
+      <h3>做得好的</h3>
+      <ul>
+        <li><strong>先量化再动手。</strong>把「一次点击」拆成五段链路，每段标注「实测 / 估算」，避免了「凭感觉优化」。</li>
+        <li><strong>否决方案写清了判据。</strong>「主循环 50 ms」「投递即跑整轮 tick」「只调 apply_sync」三个否决项都给了可验证的理由（实测单轮 61.43 ms &gt; 50 ms 预算 ⇒ 退化为无间隔连续跑；自投递命令会自激）。本次复核确认这三条判断全部成立。</li>
+        <li><strong>红线写得具体且被遵守。</strong>「不把节流改成忙等」「唤醒不得改变 tick 频率」两条都有对应的回归用例，且用例本身是「改坏必红」型的（真实耗时断言而非 mock sleep 计数）。</li>
+        <li><strong>波次切分正确。</strong>把改动面最大的 P1-2 单独一个波次，且明确「先 P0/P1 降本、最后才动 pollSec」—— 实施顺序完全按此执行。</li>
+        <li><strong>实现里的取舍有记录。</strong>乐观 UI 从 10 个动作白名单收窄到 pause/resume、读超时取宽松的 (3,10)、首查 0 ms 而非固定间隔 —— 每处都在代码注释里写了理由。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>做得不够的</h3>
+      <ul>
+        <li><strong>验收口径没有配「谁在何时产出」。</strong>08 节列了 5 条量化指标，但没有任何一条被指派成交付物（走查表 / 报表 / 断言）。结果：功能全落地，数字基本没留下 —— 这正是本报表要补的。</li>
+        <li><strong>白名单收窄没有回写计划。</strong>P0-3 承诺 10 个动作，实现只做 2 个且只覆盖一个入口；这个决策只出现在 commit message 里。计划文档是「待确认后实施」状态，实施完也没有更新状态字段。</li>
+        <li><strong>P1-2 的「三条硬约束」第一条已被实施推翻，但计划与代码注释都留着旧口径。</strong>见下 DOC-1。</li>
+        <li><strong>波次三的退出条件「多选/右键回归」没有留痕。</strong>计划要求「逐一回归」多选 shift 区间、右键定位、搜索高亮 —— 代码上确实都是数据索引口径（本次复核确认无窗口化污染），但没有任何自动断言，属于「靠人看」的验收项。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>文档漂移（本次发现 3 处）</h3>
+  <table>
+    <thead><tr><th class="num">ID</th><th>位置</th><th>漂移内容</th><th class="num">严重度</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="num">DOC-1</td>
+        <td><code>app.js:161-167</code></td>
+        <td>头部注释仍写「① 行高必须<b>齐</b>……差异 &gt;2px 立即关闭窗口化回退全量渲染」。实现早已改成逐行实测 + 前缀和，全仓<b>没有任何地方</b>会把 <code>rowWin</code> 置 false（两处引用都是读）。第 295 行的 data 注释同样声称「行高不齐/有展开面板时自动置 false」。</td>
+        <td class="num"><span class="sev sev-md"><i></i>中</span></td>
+      </tr>
+      <tr>
+        <td class="num">DOC-2</td>
+        <td><code>app.js:1693</code></td>
+        <td>超阈值的 console 警告文案是「需 P1 行窗口化」—— P1 已完成，该文案会误导排查者以为还要做。</td>
+        <td class="num"><span class="sev sev-lo"><i></i>低</span></td>
+      </tr>
+      <tr>
+        <td class="num">DOC-3</td>
+        <td><code>tests/test_web.py</code> 头部「测试计划」清单</td>
+        <td>两条新用例（<code>test_api_state_view_scoped_payload</code>、<code>test_api_readonly_endpoints_short_cache</code>）各被<b>重复列了两遍</b>。项目明文要求新增测试同步该清单，重复行属清单维护失误。</td>
+        <td class="num"><span class="sev sev-lo"><i></i>低</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>DOC-1 值得单独强调：它描述的正是被实施推翻的<b>第一稿</b>设计。读者若信注释，会以为存在「行高不齐自动回退」的安全网，从而在改动窗口化时做出错误假设 —— 这类注释比没有注释更危险。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07</span>验证与测试缺口</h2>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">TEST-1</span>
+      <h3>P1-4「写后失效」只测了缓存机制，没测接线</h3>
+      <span class="sev sev-md"><i></i>中</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd>全仓 <code>_web_write_seq</code> 只有 4 处引用：定义（qbmanager）、自增（web_commands）、读取（web.py 的缓存键）、以及测试里<b>手动</b>的 <code>mgr._web_write_seq += 1</code>。没有任何用例断言 <code>_drain_web_commands()</code> 执行写命令后会自增该字段。</dd>
+      <dt>影响</dt>
+      <dd>把自增语句挪走、或字段改名（<code>getattr(manager, "_web_write_seq", 0)</code> 会静默回落到 0），缓存将永不失效，用户看到「改完没生效」，而测试套件<b>全绿</b>。这正是计划里被列为硬要求的那一条。</dd>
+      <dt>建议</dt>
+      <dd>在 <code>test_drain_web_commands_reports_resync_needed</code> 旁边补一条：投一条 <code>pause_torrent</code>，断言 <code>_web_write_seq</code> 从 n 变 n+1；再投一条 <code>build_search_index</code>，断言不变（自投递不计数）。两条断言即可锁死接线。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">TEST-2</span>
+      <h3>「占位撑住总高」的冒烟断言测的不是它声称的东西</h3>
+      <span class="sev sev-md"><i></i>中</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd><code>ui_smoke.cjs:180</code> 的 <code>before</code> 在 A/B 之后读取，而 <code>bench()</code> 结束时会 <code>vm.rowWin = saved</code>（<code>saved = true</code>）⇒ <code>before</code> 与 <code>after</code> 都是窗口化高度。本次复跑的输出 <code>167043 -&gt; 167043px</code> 与 <code>167071 -&gt; 167071px</code> 印证了这一点；而真实的全量高度是 164070 / 167071。</dd>
+      <dt>影响</dt>
+      <dd>断言只能发现「滚到底塌陷」，发现不了「占位高度算错」。BUG-1 正是从这个缺口溜过去的，且 commit message 把这两个数字当成了「与全量逐像素相同」的证据。</dd>
+      <dt>建议</dt>
+      <dd>加一次对照：先记窗口化高度 → <code>vm.rowWin=false</code> + <code>lastRid=null</code> + refresh → 记全量高度 → 还原，断言两者差值 &lt; 2 px。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">TEST-3</span>
+      <h3>计划的量化验收里，只有一半有数字来源</h3>
+      <span class="sev sev-md"><i></i>中</span>
+    </div>
+    <table>
+      <thead><tr><th>计划验收口径（08 节）</th><th class="num">实测</th><th class="num">状态</th></tr></thead>
+      <tbody>
+        <tr><td>单目标操作 ≤ 400 ms（以 P0-0 埋点为准）</td><td class="num">wait 0 ms / wall ≤ 34 ms</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+        <tr><td>批量 100 目标 ≤ 1.5 s 且 qB 调用 = 1</td><td class="num">60 目标 → bulk 1 / 逐目标 0</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+        <tr><td>3000 种子单帧主线程 ≤ 50 ms（P95）</td><td class="num">冷启动帧 147 ms；无 P95 数据</td><td class="num"><span class="sev sev-md"><i></i>未证实</span></td></tr>
+        <tr><td>每轮 <code>/api/state</code> ≤ 200 KB</td><td class="num">group 1.67 MiB / torrent 4.31 MiB</td><td class="num"><span class="sev sev-hi"><i></i>未达成</span></td></tr>
+        <tr><td>失败路径回滚 + 报错 toast</td><td class="num">冒烟 error 模式实证</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+        <tr><td>全量 ≥ 1041 passed + P0 各项红绿用例</td><td class="num">1049 passed / cov 92%</td><td class="num"><span class="sev sev-ok"><i></i>达成</span></td></tr>
+      </tbody>
+    </table>
+    <p>另：P0-0 埋点做完了链路（后端两段耗时 → 回执 → 前端 <code>cmdStats</code>），但 <code>cmdStats</code> 全仓只写不读，计划的「走查表（200 / 1000 / 3000 三档）」从未产出。<strong>埋点不消费 = 埋点不存在</strong>，建议至少把它显示在设置页的诊断区，或让冒烟脚本打印出来。</p>
+  </div>
+
+  <h3>测试基线复核</h3>
+  <p>用默认 <code>basetemp</code> 复跑：<code>uv run pytest tests -q</code> 输出 1049 个通过点、无 F，与 <code>memory-bank/testing.md</code> 的「1049 passed / 覆盖率 92%」一致。换到仓内 <code>--basetemp</code> 会报 5 failed + 1 error —— 那是副作用守阵把仓内临时目录判成越界（<code>FSDEL</code>/<code>SYMLINK</code> 指向 <code>.workbuddy-ai/tmp/pytest-base</code>）以及 <code>test_sidefx_is_temp_path</code> 的前置假设，属环境口径差异，<b>不是回归</b>。这一点值得记进 pitfalls：<b>不要用仓内目录当 basetemp</b>。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08</span>修复建议</h2>
+  <table>
+    <thead><tr><th class="num">序</th><th>动作</th><th>对应</th><th class="num">成本</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>行窗口间距改为运行时实测（<code>getComputedStyle(...).rowGap</code>），三层各存一份；顺手修成员窗口的驱动源</td><td>BUG-1 / BUG-2</td><td class="num">小</td></tr>
+      <tr><td class="num">2</td><td>冒烟断言改为「窗口化 vs 全量」对照，补 prism/atlas 双 UI 各一条</td><td>TEST-2 / BUG-1</td><td class="num">小</td></tr>
+      <tr><td class="num">3</td><td>补 <code>_drain_web_commands</code> 自增 <code>_web_write_seq</code> 的两条断言（写命令 +1 / 自投递不变）</td><td>TEST-1</td><td class="num">小</td></tr>
+      <tr><td class="num">4</td><td>回执写入与写序号自增调换顺序；<code>sync_interval</code> 帮助文案与实现对齐（或加钳制）</td><td>BUG-5 / BUG-6</td><td class="num">小</td></tr>
+      <tr><td class="num">5</td><td>组行补乐观补丁 + <code>is-pending</code>；<code>actEpisode</code> 接入同一套；冒烟各补一条</td><td>BUG-3</td><td class="num">中</td></tr>
+      <tr><td class="num">6</td><td><s>平铺数组按可见列裁剪字段，或直接做 P2-2 增量回传</s> <b>⚠ 已被实测否决，见 §11</b>（字段裁剪是死路：80% 的字节需要 74 个字段里的 52 个；真正的开销在服务端序列化前的 <code>jsonable_encoder</code>，已用别的办法修掉）</td><td>5.1 响应体</td><td class="num">中</td></tr>
+      <tr><td class="num">7</td><td><code>sync_interval</code> 与分档轮询对齐（或给快照刷新加 Web 活跃门控），消除无人消费的刷新</td><td>5.4</td><td class="num">小</td></tr>
+      <tr><td class="num">8</td><td>改掉 <code>app.js</code> 头部「行高必须齐 / 自动回退」注释与 <code>rowWin</code> 的 data 注释；去掉测试计划清单重复行；修 <code>renderMs</code> 警告文案</td><td>DOC-1~3</td><td class="num">小</td></tr>
+      <tr><td class="num">9</td><td><code>ui_harness.py</code> 拒绝非 loopback 绑定；<code>cmdStats</code> 接一个可见出口（诊断区或冒烟打印）</td><td>SEC / TEST-3</td><td class="num">小</td></tr>
+    </tbody>
+  </table>
+  <p>1–4 与 8 是同一批「小改动、高确定性」的活，建议合成一个提交；5 与 6 各自独立成波次（6 会牵动字段契约，需要按 SEED_ITEM 契约走一遍前端列映射）。</p>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11</span>续查：热路径白跑 85% —— FastAPI <code>jsonable_encoder</code>（同日追加）</h2>
+  <p>动手做 §08 第 6 项之前，先把「一轮 refresh 到底花在哪」量清楚（报表 §05.1 只量了载荷<b>大小</b>，没量它的<b>去向</b>）。量完的结论是：<b>第 6 项要修的地方修错了</b>，真正的开销在别处，而且是一个一行改动就能拿掉的。</p>
+
+  <h3>11.1 四步定位（每步都是实测，不是推断）</h3>
+  <table>
+    <thead><tr><th class="num">步</th><th>测什么</th><th>实测结果</th><th>排除/指向</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>平铺数组的字节<b>构成</b>（3000 种子 / 74 字段）</td><td>占比最大的字段 <code>magnet_uri</code> 仅 <b>6.3%</b>；要覆盖 <b>80%</b> 字节需要 <b>52/74</b> 个字段</td><td><b>否决字段裁剪</b>：裁不动（真裁掉一半字段也省不到 30%，还要重走 SEED_ITEM 契约）</td></tr>
+      <tr><td class="num">2</td><td>客户端成本拆分（浏览器内）</td><td>单轮 237 ms = 网络+读文本 <b>224 ms</b> + <code>JSON.parse</code> <b>4.1 ms</b> + 赋值+patch <b>8.3 ms</b></td><td><b>排除前端</b>：parse 只占 2%，裁剪字段能省的也就这几毫秒</td></tr>
+      <tr><td class="num">3</td><td>网络传输（对照实验）</td><td>同尺寸 5.12 MiB JSON：<code>python -m http.server</code> 1.0 ms；<b>uvicorn + StaticFiles 1.6 ms</b>（首轮 71 ms 是冷读盘）</td><td><b>排除网络与 uvicorn</b>：5 MiB 走回环 ≈1.6 ms ⇒ gzip 也无意义（没有可省的东西）</td></tr>
+      <tr><td class="num">4</td><td>服务端端点内耗时（中间件实测）</td><td><code>view=torrent</code> <b>189 ms</b>；而应用层可解释的只有 <code>rebuild</code>（该轮未重建）+ <code>json.dumps</code> <b>25~50 ms</b></td><td><b>锁定</b>：缺口 ~160 ms 在 FastAPI 的响应管线里</td></tr>
+    </tbody>
+  </table>
+  <p>缺口落在 <code>fastapi/encoders.py::jsonable_encoder</code>：FastAPI 对**普通 dict 返回值**会先递归遍历整个响应体做一次「可 JSON 化」转换，再交给 <code>JSONResponse</code>。我们的视图本来就是 JSON 原生类型（<code>str/int/float/bool/None/dict/list</code>），这趟遍历<b>纯属白跑</b>—— 实测 <b>161 ms</b>（22 万个值），占端点总耗时 189 ms 的 <b>85%</b>，而且全程占着 GIL，与主循环抢 CPU。</p>
+  <p>关键在 <code>fastapi/routing.py</code> 的一行短路：<code>if isinstance(raw_response, Response): response = raw_response</code> —— <b>返回 <code>Response</code> 实例就跳过整个 <code>serialize_response</code></b>（也就跳过 <code>jsonable_encoder</code>）。</p>
+
+  <h3>11.2 改动与实测</h3>
+  <p><code>web.py</code> 的 <code>/api/state</code> 与 <code>/api/groups</code> 从「<code>return payload</code>」改为「<code>return JSONResponse(content=payload)</code>」（<code>web.py:263</code>），并在注释里写清代价：<b>日后若往 payload 里塞非 JSON 原生类型会直接 500（fail-fast）</b>，不会被静默转成字符串。</p>
+  <table>
+    <thead><tr><th>口径（3000 种子）</th><th class="num">改前</th><th class="num">改后</th><th class="num">提升</th></tr></thead>
+    <tbody>
+      <tr><td>服务端端点耗时 <code>view=torrent</code>（4.54 MiB）</td><td class="num">189.0 ms</td><td class="num"><b>23.5 ms</b></td><td class="num">8.0×</td></tr>
+      <tr><td>服务端端点耗时 <code>view=show</code>（1.88 MiB）</td><td class="num">79.6 ms</td><td class="num"><b>11.6 ms</b></td><td class="num">6.9×</td></tr>
+      <tr><td>前端整轮 refresh（prism，窗口化，A/B 3 轮）</td><td class="num">239 / 233 / 234 ms</td><td class="num"><b>95 / 84 / 84 ms</b></td><td class="num">2.8×</td></tr>
+      <tr><td>前端整轮 refresh（atlas，窗口化，A/B 3 轮）</td><td class="num">268 / 266 / 267 ms</td><td class="num"><b>74 / 83 / 83 ms</b></td><td class="num">3.2×</td></tr>
+    </tbody>
+  </table>
+  <p><b>输出零变化</b>：新旧服务并排取 <code>torrent/group/show/full</code> 四份响应，字节长度完全一致（4 764 992 / 1 746 319 / 1 880 935 / 6 645 735），解析后 JSON 除自增的 <code>rid</code> 外完全相同。前端那 3 倍的提升是因为整轮 refresh 本来就在<b>等服务端</b> —— 服务端从 190 ms 掉到 25 ms，前端自然跟着掉。</p>
+
+  <h3>11.3 守阵</h3>
+  <p>新增 <code>tests/test_web.py::test_api_state_skips_jsonable_encoder</code>：用<b>计数替身</b>包住 <code>fastapi.routing.jsonable_encoder</code>，断言 <code>/api/state?view=torrent</code>、<code>/api/state</code>、<code>/api/groups</code> 三个热路径调用次数为 <b>0</b>。谁把返回值改回裸 dict，这条立刻变红（<b>红绿双验</b>：注入后报「走了 jsonable_encoder(1 次)」）。刻意不用时间型断言 —— 计时在 CI 上不可靠，计数是确定性的。</p>
+
+  <h3>11.4 教训</h3>
+  <ul>
+    <li><b>「载荷大」不等于「要裁字段」</b>。报表 §05.1 量到 <code>view=torrent</code> 4.31 MiB 就推出「按可见列裁剪」，但没量三件事：字节怎么分布、客户端花在哪、服务端花在哪。量完发现三处结论都与直觉相反（裁不动 / 客户端只占 10 ms / 服务端占了 85% 且全是白跑）。</li>
+    <li><b>框架的「方便」是有价的</b>。FastAPI 自动做 <code>jsonable_encoder</code> 对普通接口是便利，对「一次回传几 MB 原生数据」的热路径就是纯税。凡是返回体超过百 KB 的端点，都该走 <code>Response</code> 直返（<code>/api/torrents/{hash}/files</code>、<code>/api/search</code> 等同类端点<b>尚未改</b>，见下）。</li>
+    <li><b>对照实验值得花时间</b>。第 3 步那个「5 MiB 静态文件走 uvicorn 只要 1.6 ms」的对照，一句话就把「网络/框架传输层」整片排除掉了 —— 否则很容易在错误的方向上做优化（比如加 gzip）。</li>
+  </ul>
+  <p class="note">尚未改的同类端点（同样的 1 行改法，收益取决于响应体大小）：<code>/api/torrents/{hash}</code>、<code>/api/torrents/{hash}/files</code>（整包可能有上千个文件）、<code>/api/search</code>、<code>/api/torrents/{hash}/trackers</code>、<code>/api/log</code>。这些是用户触发型、不在 1.5~3 s 的轮询路径上，故未纳入本批。</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10</span>修复回执 · 复核修订（同日追加）</h2>
+  <p>本报表交付后按 §08 清单开工修复。修复过程中又发现 3 个此前漏报的缺陷（BUG-7/8/9，其中一个属高危功能性回归），并用真浏览器复核推翻了本报表对 BUG-3 的一条判断。下面按「修订 → 新发现 → 回执」三段记录；所有数字均为本次实测。</p>
+
+  <h3>10.1 修订：BUG-3 证据② 判断有误（把「没接线」误判成「机制不生效」）</h3>
+  <p>用 <code>--cmd-result hang</code> 的桩（命令永不回执）实测：整组暂停后组行 class 由 <code>s-checking</code> 变为 <code>s-paused is-pending</code> 前的那一步 —— 即<b>颜色本来就变</b>，<code>pendingOps</code> 2 条。原因：组行状态色取自 <code>decoratedGroups.status.primary</code>，而它是 <code>_aggStatus(成员 kind)</code> 算出来的 <code>computed</code>；<code>applyOptimistic</code> 改的正是成员对象的 <code>kind</code>，computed 自动重算并重渲染。</p>
+  <p>真正的缺口只有一条：<b>组行没有 <code>is-pending</code> 绑定</b>（缺「在飞」的视觉标记）。证据③（整集/整剧完全没有乐观调用）实测属实：<code>actEpisode('pause')</code> 后 <code>pendingOps</code> 为 0、集行 class 不变、<code>e.state</code> 不变。</p>
+  <p class="note">教训：把「机制」与「接线」分开断言。本报表只读了调用点就下了「不生效」的结论，没有真跑一次看 class —— 于是把「没绑 class」误判成「机制没工作」。同族坑已写进 <code>memory-bank/pitfalls.md</code>。</p>
+
+  <h3>10.2 新发现（本报表漏报）</h3>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-8</span>
+      <h3>刷新后停在追剧页 ⇒ 整页永久空白（P1-1 按视图回传与成员索引互斥）</h3>
+      <span class="sev sev-hi"><i></i>高</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd>视图偏好持久化在 <code>localStorage.autoqb.ui.view</code>。把它设为 <code>shows</code> 后刷新，实测 <code>groups=0 / singles=0 / memberByHash=0 / decoratedShows=0 / 0 行</code>。根因：<code>VIEW_ARRAYS["show"]=("shows",)</code> 只回 shows，而 <code>shows[].members</code> 只是一串 hash，前端要靠 <code>memberByHash</code>（由 groups+singles+torrents 拼出来）还原成成员对象 ⇒ 索引为空则每个集的成员都被 <code>filter(Boolean)</code> 丢掉。更糟的是 <code>lastRid</code> 已被记住，之后每轮都是「版本未变不回传」，<b>自己不会恢复</b>，必须手动切一次视图才回来。</dd>
+      <dt>影响</dt>
+      <dd>把追剧页当默认页的用户，刷新一次就再也看不到内容。这属功能性回归，且正好落在本报表 §05.1 判为「收益」的那次改动上 —— 报表量到了 134KB 的响应体，却没问「这份响应够不够把页面渲染出来」。同时它暴露了 <code>ui_smoke.cjs</code> 里一条<b>恒真断言</b>（<code>epRows &gt;= 0</code>），所以 34 项冒烟全绿也没拦住。</dd>
+      <dt>修复</dt>
+      <dd><code>VIEW_ARRAYS["show"] = ("shows", "groups", "singles")</code>（仍不回 4.5MB 的 <code>torrents</code>）。响应体实测 134,808 → <b>1,880,935</b> B（全量 6,405,735 / 辅种页 1,746,319 / 种子页 4,524,992）。守卫：改写 <code>test_api_state_view_scoped_payload</code>，新增 <code>test_ensure_group_state_show_view_carries_member_index</code>；冒烟新增「刷新后追剧页不空白」，并把那条恒真断言改成 <code>&gt; 0</code>。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-9</span>
+      <h3>「复制磁力」对所有种子恒失败</h3>
+      <span class="sev sev-md"><i></i>中</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd><code>magnet_uri</code> 只出现在种子页的平铺 SEED_ITEM（<code>web_view.py:305</code>），分组/未归组的成员视图（<code>_member_view</code>）没有该字段。而 <code>memberByHash</code> 先无条件注册 groups、再用 <code>if (!map.has(hash))</code> 注册 singles/torrents ⇒ 平铺数组永远当不上「兜底」，索引条目恒无 <code>magnet_uri</code>。实测（种子页，平铺数组已加载）：<code>flatHasMagnet=true</code> 但 <code>idxHasMagnet=false</code>，<code>copyTorrentInfo('magnet')</code> 得到 <code>「该种子没有 magnet 链接」</code>。</dd>
+      <dt>影响</dt>
+      <dd>右键「复制磁力」100% 失效（与种子是否真有磁力无关），而提示文案还把人往「这个种子没磁力」上带。辅种页/追剧页同样失效 —— 因为索引优先取分组条目，与当前在哪个视图无关。</dd>
+      <dt>修复</dt>
+      <dd>点的时候按需取一次详情（复用 <code>_editDetail</code>，抽屉已开则连请求都不发），<b>不给每 1.5~3s 一轮的响应体加字段</b>（3000 种子 ≈ +0.6MB/轮）。冒烟新增断言，并刻意同时断言「索引里确实没有该字段」，否则这条断言会因为「索引恰好带 magnet」而空过。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <span class="id">BUG-7</span>
+      <h3>同一概念两张状态优先级表：辅种页与追剧页对同一批种子显示不同颜色</h3>
+      <span class="sev sev-lo"><i></i>低</span>
+    </div>
+    <dl>
+      <dt>证据</dt>
+      <dd>后端 <code>_SHOW_STATE_RANK = {error:0, downloading:1, checking:2, paused:3, seeding:4, other:5}</code>（决定追剧页集行的 <code>e.state</code>）；前端 <code>decoratedGroups</code> 用的是 <code>["error","checking","downloading","seeding","paused","other"]</code>（决定辅种页组行颜色）。两处结论相反的混合态：<code>{downloading,checking}</code> 后端取 downloading、前端取 checking；<code>{paused,seeding}</code> 后端取 paused、前端取 seeding。</dd>
+      <dt>影响</dt>
+      <dd>同一批种子在辅种页是绿、在追剧页是黄，用户无法解释（只会觉得「颜色乱」）。乐观 UI 更危险：前端按自己的表算「点击后的颜色」，下一轮回执却按后端的表算真值 ⇒ 颜色弹回。本批实际未触发弹回（白名单动作后成员 kind 是齐的），但那是运气不是设计。</dd>
+      <dt>修复</dt>
+      <dd>前端抽 <code>STATE_RANK</code> 单点表并<b>对齐后端顺序</b>（语义：先报需要处理的、再报在跑的、最后报已完成的），组行与集行共用 <code>_aggStatus</code>。可见变化仅限上述 2 种混合态（6 组样例实测：2 组变、4 组不变）。守卫：静态守阵机械比对前后端两张表，改一边不改另一边即红。</dd>
+    </dl>
+  </div>
+
+  <h3>10.3 §08 清单回执</h3>
+  <table>
+    <thead><tr><th class="num">序</th><th>动作</th><th>对应</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>行窗口间距改为运行时实测（<code>getComputedStyle(...).rowGap</code>），三层各存一份；成员窗口驱动源改为「当前展开单元」</td><td>BUG-1 / BUG-2</td><td>✅ 占位总高 Δ0（prism 164070 / atlas 167071）</td></tr>
+      <tr><td class="num">2</td><td>冒烟断言改为「窗口化 vs 全量」同帧对照</td><td>TEST-2 / BUG-1</td><td>✅ 且它当场抓出了修复过程中的一次缓存 bug</td></tr>
+      <tr><td class="num">3</td><td>补 <code>_drain_web_commands</code> 自增 <code>_web_write_seq</code> 的两条断言</td><td>TEST-1</td><td>✅ 红绿验证（旧顺序 → 实际 0 vs 期望 1）</td></tr>
+      <tr><td class="num">4</td><td>回执写入与写序号自增调换顺序；<code>sync_interval</code> 加钳制</td><td>BUG-5 / BUG-6</td><td>✅ 默认配置下为无操作, 无回归</td></tr>
+      <tr><td class="num">5</td><td>组行补乐观 + <code>is-pending</code>；<code>actEpisode</code> 接入同一套；冒烟各补一条</td><td>BUG-3</td><td>✅ 见 §10.1（组行只需 <code>is-pending</code>；集行新增 <code>epState()</code> 现算）</td></tr>
+      <tr><td class="num">6</td><td>平铺数组按可见列裁剪字段，或做 P2-2 增量回传</td><td>5.1 响应体</td><td>⬜ 未做（牵动 SEED_ITEM 字段契约，独立成波次）</td></tr>
+      <tr><td class="num">7</td><td><code>sync_interval</code> 与分档轮询对齐（或加 Web 活跃门控）</td><td>5.4</td><td>⬜ 未做（需要先定「让轮询跟着快线」还是「给快照刷新加门控」）</td></tr>
+      <tr><td class="num">8</td><td>改掉 <code>app.js</code> 头部与 <code>rowWin</code> 的失真注释；去重复行；修 <code>renderMs</code> 文案</td><td>DOC-1~3</td><td>✅ 另修 4 处同类失真引用</td></tr>
+      <tr><td class="num">9</td><td><code>ui_harness.py</code> 拒绝非 loopback；<code>cmdStats</code> 接可见出口</td><td>SEC / TEST-3</td><td>✅ 非回环绑定 exit 2；<code>cmdStats</code> 超阈值打 <code>[perf]</code></td></tr>
+      <tr><td class="num">10</td><td>（新增）修 BUG-7/8/9 与冒烟自身的 3 处缺陷</td><td>§10.2</td><td>✅ 见下</td></tr>
+    </tbody>
+  </table>
+
+  <h3>10.4 冒烟脚本自身的缺陷（本轮一并修掉）</h3>
+  <table>
+    <thead><tr><th>缺陷</th><th>形态</th><th>后果</th></tr></thead>
+    <tbody>
+      <tr><td>恒真断言</td><td><code>add(ui, "切到追剧视图无异常", epRows &gt;= 0)</code></td><td>追剧页 0 行也 PASS —— BUG-8 正是这样溜过去的。已改为断言 <code>.show-row &gt; 0</code></td></tr>
+      <tr><td>error 模式恒红</td><td>批量乐观断言在 <code>--expect-cmd error</code> 下 <code>pendingOps</code> 恒 0</td><td>该模式下 2 项必红 ⇒ 没人跑 error 模式。已按模式分流：ok/hang 断言「覆盖全部目标」，error 断言「回滚干净」</td></tr>
+      <tr><td>详情端点从未被覆盖</td><td><code>FakeTorrent</code> 没有 <code>to_dict()</code> ⇒ <code>/api/torrents/{hash}</code> 恒 500</td><td>详情抽屉 + 依赖详情的编辑对话框（限速/分享率/移动/重命名）+ 复制磁力在冒烟里<b>从未被跑过</b>。已给 <code>FakeTorrent</code> 补 <code>to_dict()</code>（与真记录同形：不导出惰性缓存槽与 <code>tracker_conf</code>）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>10.5 复跑基线</h3>
+  <table>
+    <thead><tr><th>项</th><th class="num">本报表</th><th class="num">本批之后</th></tr></thead>
+    <tbody>
+      <tr><td>单测</td><td class="num">1049 passed / cov 92%</td><td class="num">1052 passed / cov 92%</td></tr>
+      <tr><td>浏览器冒烟（ok 模式，双 UI）</td><td class="num">34 项 / 失败 0</td><td class="num">46 项 / 失败 0</td></tr>
+      <tr><td>浏览器冒烟（error 模式，回滚路径）</td><td class="num">未跑</td><td class="num">44 项 / 失败 0</td></tr>
+    </tbody>
+  </table>
+  <p class="note">跑测注意：<code>--basetemp</code> 指向仓外目录时，<b>该目录必须不存在</b>。已存在时 pytest 会在开跑前删它，而本机沙箱的删除拦截层会拉起回收站助手进程，被 <code>tests/sidefx.py</code> 记成一条越界 POPEN ⇒ 全绿也会在某个用例的 teardown 报 ERROR（实测：复用旧 basetemp 得到 <code>1052 passed + 1 error</code>，换全新路径即 <code>1052 passed / EXIT=0</code>）。</p>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09</span>附录 · 复现证据</h2>
+  <p>本报表所有数字均由以下命令产出，未使用提交信息里的自述数字（自述数字与复跑不一致处已在 5.2 标出）。</p>
+  <pre><code># ① 桩服务(真 create_app + 合成种子), 两个终端
+uv run python scripts/ui_harness.py --torrents 3000 --port 8099
+
+# ② 双 UI 冒烟 34 项(本次复跑: 34 项, 失败 0 项)
+NODE_PATH=C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules \
+  node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 3000
+
+# ③ 行窗口高度对照(本次为定位 BUG-1 新写): 同页对比 窗口化 / 全量 的 scrollHeight 与真实 gap
+node gapcheck.cjs http://127.0.0.1:8099
+#   prism {"gapPx":5,"winH":167043,"fullH":164070,"delta":2973}
+#   atlas {"gapPx":6,"winH":167071,"fullH":167071,"delta":0}
+
+# ④ 响应体按视图实测
+curl -s "http://127.0.0.1:8099/api/state?view=torrent" | wc -c     # 4524992
+curl -s "http://127.0.0.1:8099/api/state?view=group"   | wc -c     # 1746319
+curl -s "http://127.0.0.1:8099/api/state?view=show"    | wc -c     # 134808
+curl -s "http://127.0.0.1:8099/api/state"              | wc -c     # 6405735
+
+# ⑤ 命令端到端(读回执里的 wait_ms / exec_ms)
+uv run python cmdtime.py
+#   round1..5: {"status":"ok","wait_ms":0,"exec_ms":1}  wall 24.7/34.1/16.1/2.7/2.8 ms, 首查即命中
+
+# ⑥ 单测基线(注意: 不要用仓内目录当 basetemp, 会触发副作用守阵误判)
+uv run pytest tests -q            # 1049 passed, cov 92%</code></pre>
+  <p>静态复核范围：<code>qbmanager.py</code>（run/_wait_next/_sync_line/_task_line/_flush_views/wake）、<code>mixins/web_commands.py</code>（drain/RESYNC/SELF_POSTED/_timing）、<code>mixins/web_view.py</code>（VIEW_ARRAYS/ensure_group_state）、<code>web.py</code>（_enqueue/_cached_read/只读端点）、<code>qbclient.py</code>、<code>config/{schema,validation,loaders,models}</code>、<code>shared/app.js</code>（行窗口/乐观 UI/轮询分档/ResizeObserver/bulkAct/actEpisode）、<code>prism</code> 与 <code>atlas</code> 两套模板与 CSS、<code>tests/test_qbmanager.py</code>、<code>tests/test_web.py</code>、<code>scripts/ui_harness.py</code>、<code>scripts/ui_smoke.cjs</code>。</p>
+</section>
+
+</main>
+</div>
+</div>
+
+<footer>
+  <div class="wrap">
+    评估对象 26-09-19-1241 · 实现 10e06a8 / 5d1e52c / 366092d / d83ea61 / 021d75a · 复跑时间 2026-09-19 17:45 · 基线 1049 passed / cov 92% · §10 修订与回执 / §11 热路径白跑 85% 2026-09-19 19:3x（基线 1053 passed / 冒烟 46 项）
+  </div>
+</footer>
+
+</body>
+</html>

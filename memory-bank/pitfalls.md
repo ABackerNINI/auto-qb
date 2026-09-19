@@ -869,6 +869,15 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   里直接 `refresh()` 一次, 免得首次切到某视图要空/旧 ≤2s(`scheduleNext` 内部先 `stopPolling`
   再排下一次, 所以不会造成双份轮询)。
 - 服务端 `view` 参数取**保守默认**: 未知值 / 缺省 ⇒ 四份全回。老客户端与非视图调用方不受影响。
+- **⚠ 每条视图的数组集必须覆盖"该视图渲染所需的全部数据源", 不只是它自己那份**(2026-09-19 补,
+  追剧页空白事故): `VIEW_ARRAYS["show"]` 原本只回 `shows`, 而 `shows[].members` 只是一串 hash ——
+  前端要靠 `memberByHash`(由 groups+singles+torrents 拼出来)把 hash 还原成成员对象。
+  只回 shows ⇒ 索引为空 ⇒ 每个集的成员都被 `filter(Boolean)` 丢掉 ⇒ **刷新后停在追剧页得到
+  一张永久空表**(实测 `groups=0 / memberByHash=0 / decoratedShows=0 / 0 行`)。
+  更毒的是它**不会自愈**: `lastRid` 已被记住, 之后每轮都是"版本未变不回传", 必须手动切一次视图。
+  现在 `"show": ("shows", "groups", "singles")`(仍不回 4.5MB 的 `torrents`)。
+  判别法: 改 `VIEW_ARRAYS` 时逐个视图问"它渲染时还会读哪些数组", 并**用刷新页面的方式验证**
+  (视图偏好是持久化的, 切视图能掩盖这个问题 —— 切过去时 `lastRid` 被置空, 恰好会补一次全量)。
 
 ### P1-2 行窗口化: 行高不齐 / 取整 / 展开面板 / 响应式代理复制 (2026-09-19)
 
@@ -929,3 +938,195 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   "只能靠单测覆盖不到的交互"验掉(P0-3 乐观回退、P1-1 视图切换、P1-3 无逐帧强制布局、P1-2 窗口化)。
 - 收尾时若端口被占: `taskkill //F //PID` 在 Git Bash 下不好使, 用 PowerShell
   `Get-NetTCPConnection -State Listen -LocalPort 8099,8100 | Stop-Process -Force`。
+
+### 行窗口化的「间距常量」必须实测: 两套 UI 的 flex gap 不同 (2026-09-19)
+
+- **⚠ 硬编码容器间距 ⇒ 两套 UI 表现不同**: `app.js` 的 `ROW_WIN_GAP = 6` 注释写着"与 CSS `gap: 6px` 同源",
+  但它只对 atlas 成立 —— atlas `.group-table{gap:6px}`、**prism `.group-table{gap:5px}`**、
+  成员行容器 `.detail` 是**块级容器**(无 flex gap, 行间距 0)。占位高度按 `Σ(行高 + GAP)` 累加 ⇒ prism 每行多算 1px。
+- **⚠ 判别法(改这块代码前必做)**: 同页对比「窗口化」与「关掉 `rowWin` 的全量渲染」的
+  `document.documentElement.scrollHeight`。实测 3000 行: `prism 167043 vs 164070 = +2973px`;
+  `atlas 167071 vs 167071 = 0`。**只比"滚动前后"是测不出来的** —— 见下一条。
+- 症状形态值得记: 总高偏 ≈ n×1px(1.8% @3000) ⇒ 滚动条长度与"滚动位置 ↔ 行"的映射整体偏移,
+  但**末行仍可达、视口不出现空白** —— 因为占位高度与滚动位置解释用的是**同一套虚标尺**, 彼此自洽。
+  所以"滚到底能不能看到末行"这类断言天然抓不到它。
+- 修法: 首次测量时用 `getComputedStyle(container).rowGap` 取真值(三层各存一份), 或让占位用
+  `margin` 表达而不依赖父容器的 `gap`。
+- **⚠ 但"实测 + 缓存"有个更隐蔽的坑: 量不到时不要缓存兜底值**(2026-09-19 修复时自己踩到, 冒烟当场抓住)。
+  第一版把实测写在 `_measureRowH` 里、用 `if (_winGap[kind] === undefined)` 只读一次 —— 而 `_measureRowH`
+  对三个 kind 都跑, **在分组页问 `.group-table`(种子页的容器)时它是 null** ⇒ 把种子页的间距永久缓存成兜底
+  0px。之后切到种子页, 占位按 0px 算 ⇒ 总高比全量**少** `5px × 2999 ≈ 14855px`(实测 149215 vs 164070)。
+  正确做法: 取不到就返回 `null` 并**不缓存**, 由调用方本轮退回全量渲染; 只在真取到值时落缓存。
+  教训泛化: 任何"读一次就缓存"的实测值, 都要先分清"值真的是这个"与"现在读不到"。
+- **⚠ 缓存值 + 非响应式 ⇒ 算错的窗口会被 computed 缓存住**: `_winGap` 刻意不入 `data`(见 `created()`
+  注释), 所以"后来才填上的值"不会让已算出的窗口重算。要么保证**取值在首次使用之前**, 要么用
+  `_rowHVer` 之类的响应式计数显式触发重算。本轮选了前者(惰性取值 + 容器缺失即退回全量)。
+
+### 冒烟断言的「读数时机」比断言本身更容易出错 (2026-09-19)
+
+- **⚠ A/B 结束后读到的基线是"改动后"的值**: `ui_smoke.cjs` 的高度断言在 `bench()` **之后**读 `before`,
+  而 `bench()` 收尾会把 `vm.rowWin` 还原成 `true` ⇒ `before` 与 `after` 都是窗口化高度, 断言退化成
+  "滚动前后自比"。提交信息里「滚动总高逐像素相同 (167043 → 167043)」的两个数都是窗口化值。
+- 判别法: 任何"改前 vs 改后"的断言, 先问一句**读数时开关处在哪一侧**。A/B 型基准要在切换开关后
+  **显式重新取值**, 不能复用 A/B 函数返回后的现场。
+- **修法(2026-09-19 已落地)**: 在同一段 `page.evaluate` 里**来回切开关各读一次**并等两帧
+  (`requestAnimationFrame` ×2 让 Vue 完成 patch), 断言 `|窗口化 - 全量| < 50px`, 同时把
+  `getComputedStyle(.group-table).rowGap` 一起打出来 —— 实测 prism 164070 vs 164070 (Δ0, gap 5px)、
+  atlas 167071 vs 167071 (Δ0, gap 6px)。红验: 把间距改回硬编码 6px, prism 立刻报 +2973px。
+- 顺带记一个方向性判据: **占位偏大** ⇒ 间距按大了算(硬编码 6px vs 实际 5px); **占位偏小** ⇒
+  间距根本没生效(取到 0 / 兜底 0)。两个方向指向完全不同的原因。
+- **⚠ 两种"摆设断言"比读数时机更致命**(2026-09-19 实测, 各漏过一个真缺陷):
+  ① **恒真断言** —— `add(ui, "切到追剧视图无异常", epRows >= 0)` 永远为真, 于是"追剧页 0 行"
+     这种整页空白照样 PASS(BUG-8 就是这么溜过 34 项全绿冒烟的)。判据一律写 `> 0` / 等值比较。
+  ② **某种模式下恒红** —— 批量乐观那条断言在 `--expect-cmd error` 下 `pendingOps` 恒 0
+     (回执瞬间返回, 乐观窗口在采样前就关了) ⇒ 该模式必红 ⇒ 实际上没人跑 error 模式。
+     按模式分流: ok/hang 断言"覆盖全部目标", error 断言"回滚干净"。
+  **"恒红"和"恒真"一样让断言失去意义**, 而且更隐蔽(它看起来像在报真问题)。新增断言时两条都查一遍。
+
+### 测试基线的 `--basetemp` 不要指到仓库内 (2026-09-19)
+
+- **⚠ 副作用守阵会把仓内临时目录判成越界**: `uv run pytest tests -q --basetemp=.workbuddy-ai/tmp/pytest-base`
+  会报 **5 failed + 1 error**(`FSDEL`/`SYMLINK` 台账指向仓内该目录; 连带 `test_sidefx_is_temp_path` 的
+  前置假设被破坏、`test_lock_file_path_derives_from_state_file` 失败)。**这是环境口径差异, 不是回归** ——
+  默认 basetemp 下同一份代码 **1049 passed / cov 92%**。
+- 判别法: 失败清单里若同时出现 `test_sidefx_*` 与仓内路径, 先查 basetemp 指到哪, 别急着查业务代码。
+- **反过来, 仓外 basetemp 是治"跑完打不出 summary"的干净解法**: 默认 basetemp 下 pytest 收尾会
+  批量删 `%TEMP%\pytest-of-<user>\garbage-*`(实测 169 个), 撞上删除拦截层 ⇒ 进程被打断, **点号全过但
+  打不出 `N passed` 与覆盖率表**(退出码 1, 看起来像失败)。改 `--basetemp=H:/Temp/<专用目录>` 即可拿到
+  完整 summary —— 2026-09-19 实测 `1051 passed, 3 warnings in 27.02s`, `TOTAL … 92%`, 退出码 0。
+  该目录须在 `tempfile.gettempdir()` 之下(否则又踩上面那条越界判定)。
+- **⚠ 同理 `COVERAGE_FILE` 也要挪出仓库**(2026-09-19 实测踩到): 仓库根那个 gitignore 的 `.coverage`
+  是 pytest-cov 的**输出文件**, 下次开跑时 coverage 会**先擦掉它再重建** ⇒ 这次删除同样被拦截层拦下,
+  表现为**开跑 1 秒即退出**、只有一行 `[SAFE_DELETE_BULK_CONFIRM_REQUIRED] targets:[…\.coverage]`。
+  与上面那条的区别: basetemp 的坑在**收尾**, 这条在**开局**, 且清理掉 `.coverage` 也只是治一次
+  (下一轮又生成)。根治写法:
+  ```bash
+  COVERAGE_FILE=H:/Temp/aqb.coverage uv run pytest tests -q --basetemp=H:/Temp/aqb-base
+  ```
+  两条一起给, 仓库根就再不会被删改, summary 也能稳定打出来。
+- **⚠ 仓外 basetemp 目录本身必须"不存在"**(2026-09-19 实测补): pytest 开跑前会 `rm_rf` 掉已存在的
+  basetemp, 而这次删除同样被拦截层拦下 —— 但它不是"删不掉", 而是**拉起回收站助手进程**,
+  于是被 `tests/sidefx.py` 记成一条越界的 `POPEN`(`genie-trash … <basetemp>`)。表现极具误导性:
+  **点号全过、`1052 passed`, 却在某个用例的 teardown 报 `ERROR … 越界的真实系统副作用`**
+  (因为守阵是按用例累积判定, 谁先跑到就挂在谁头上)。实测对照: 复用旧目录 `aqb-base-b3-final`
+  → `1052 passed + 1 error`; 换全新路径 `aqb-base-fresh1` → `1052 passed / EXIT=0`。
+  判别法: teardown 报 `POPEN: ['…genie-trash…', '<basetemp 路径>']` 时, 先换一个**没被创建过**的
+  basetemp, 不要去查业务代码。用完的目录下次别再复用。
+
+### 埋点写完必须有人消费 (2026-09-19)
+
+- **⚠「埋点链路通了」≠「验收口径达成」**: P0-0 把 `wait_ms`/`exec_ms` 一路传到前端 `cmdStats`,
+  但全仓**只写不读** ⇒ 计划的"走查表"从未产出, 5 条量化验收只有 3 条有数字,
+  其中「每轮 `/api/state` ≤ 200 KB」实测**未达成**(3000 种子: group 1.67MiB / torrent 4.31MiB ——
+  平铺数组本身就是全量里最大那份, "按视图回传"切不掉它自己)。
+- 判别法: 立计划时给每条验收口径**指派交付物**(断言 / 报表字段 / 走查表)。没有承接方的口径等于没写。
+
+### 只读端点短缓存的四个边界 (2026-09-19)
+
+- **写入点必须在 `_require_torrent()` 之后** —— 否则不存在的 hash 也会以攻击者可控的键进缓存(投毒)。
+- **断连判定必须在缓存之前** —— 否则缓存会把 503 掩盖成 200, 表现成"qB 断了但界面还显示连着"(已踩过一次)。
+- **失效键用"写序号"而不是"主动失效"** —— 把"忘记调失效函数"这类 bug 换成"键空间增长", 且有上限兜底。
+  代价是缓存**不被主循环自身的写失效**(规则引擎改状态/改文件优先级后, 只读端点最多旧一个 TTL)。
+- 残留(改这个函数时要知道): `_cached_read()` 在锁**外**调 `fn()` ⇒ 同键并发会重复打 qB(惊群);
+  `len(_ro_cache) > 128` 时整表 `clear()`, 连新鲜项一起丢。
+
+### 热路径返回裸 dict 会被 FastAPI 白跑一遍 `jsonable_encoder` (2026-09-19 实测, 占端点耗时 85%)
+
+- **⚠ 症状**: `/api/state?view=torrent` 在 3000 种子下服务端耗时 **189 ms**(中间件实测), 而应用层
+  能解释的只有 `json.dumps` 的 25~50 ms(该轮没有重建视图)⇒ 缺口 ~160 ms 无处安放。
+- **真因**: FastAPI 对**普通 dict 返回值**会先跑 `fastapi.encoders.jsonable_encoder` **递归遍历整个
+  响应体**做一次"可 JSON 化"转换, 再交给 `JSONResponse`。我们的视图本来就是 JSON 原生类型
+  (`str/int/float/bool/None/dict/list`), 这趟遍历纯属白跑 —— 实测 **161 ms**(3000×74 = 22 万个值),
+  占端点总耗时 **85%**, 而且**全程占着 GIL**(与主循环抢 CPU, 是大库下"点了没反应"的一个真实来源)。
+- **修法(1 行)**: 端点里 `return JSONResponse(content=payload)` 而不是 `return payload`。
+  `fastapi/routing.py` 有一行短路 `if isinstance(raw_response, Response): response = raw_response`
+  ⇒ **跳过整个 `serialize_response`**(也就跳过 `jsonable_encoder`)。实测 `view=torrent`
+  189 → **23.5 ms**(8.0×), `view=show` 79.6 → **11.6 ms**(6.9×); 前端整轮 refresh 跟着从
+  ~240 ms 掉到 ~85 ms(它本来就在等服务端)。**输出字节完全一致**(新旧并排取四份响应, 长度全同、
+  解析后除自增的 `rid` 外全同)。
+- **代价(fail-fast)**: 日后往 payload 里塞非 JSON 原生类型(`datetime`/`set`/`Decimal`)会**直接抛
+  TypeError 变 500**, 而不是被静默转成字符串 —— 加字段时注意。已改 `/api/state` 与 `/api/groups`;
+  同类端点(`/api/torrents/{hash}/files`、`/api/search` 等)尚未改, 收益取决于响应体大小。
+- **守阵**: `tests/test_web.py::test_api_state_skips_jsonable_encoder` —— 用**计数替身**包住
+  `fastapi.routing.jsonable_encoder`, 断言热路径调用次数为 0。**刻意不用计时断言**(CI 上不可靠),
+  计数是确定性的; 红绿双验过(注入 `return payload` → 报"走了 jsonable_encoder(1 次)")。
+
+### 「载荷大」不等于「要裁字段」: 优化前先把开销量到具体那一行 (2026-09-19 实测, 否决了自家报表的建议)
+
+- **⚠ 事故**: 复核报表 §05.1 量到 `view=torrent` 响应体 4.31 MiB, 就据此在 §08 第 6 项写下
+  「平铺数组按可见列裁剪字段」。真去量四步后发现**三个结论都与直觉相反**:
+  ① **裁不动** —— 占比最大的字段 `magnet_uri` 仅 6.3%, 要覆盖 80% 字节需要 74 个字段里的 **52** 个;
+  ② **客户端不贵** —— 浏览器内单轮 237 ms 里 `JSON.parse` 只占 **4.1 ms**、赋值+patch **8.3 ms**,
+     网络+读文本占 224 ms(即 95% 是"在等服务端");
+  ③ **网络不贵** —— 同尺寸 5.12 MiB JSON 走 uvicorn+StaticFiles 只要 **1.6 ms**(对照实验;
+     `python -m http.server` 1.0 ms)⇒ gzip 也无意义(没有可省的东西)。
+  真正贵的是服务端那趟白跑的 `jsonable_encoder`(见上一条), 一行改掉省 160 ms —— 比裁字段
+  省得多且**零契约风险**。
+- **判别法(四步, 每步都能独立否决一个方向)**: ① 字节**构成**(最大的字段占多少? 裁掉能省几成?)
+  ② 客户端**拆分**(parse / 赋值 / patch 各多少?) ③ 网络**对照**(同尺寸静态文件走同一栈要多久?)
+  ④ 服务端**端点内耗时**(中间件量, 与 ①+②+③ 对账, 对不上就是框架在收税)。
+- **教训**: 「载荷大」只说明有开销, **不说明开销在哪**。凭载荷大小直接开药方, 十有八九修错地方
+  (这次就是); 而 ④ 那一步只要加一层 5 行的计时中间件, 成本极低。
+- **对照实验的价值**: 第 ③ 步「5 MiB 静态文件走 uvicorn 只要 1.6 ms」一句话排除掉整片"网络/传输层",
+  否则很容易在错误方向上加 gzip。**排除法比猜测便宜。**
+
+### 同一概念两张表: 前端 `STATE_RANK` 与后端 `_SHOW_STATE_RANK` 漂移 (2026-09-19 实测)
+
+- **⚠ "一组/一集种子该显示成什么状态"有两份实现, 且顺序曾经不同**: 后端
+  `_SHOW_STATE_RANK = {error:0, downloading:1, checking:2, paused:3, seeding:4, other:5}`
+  决定追剧页集行的 `e.state`; 前端 `decoratedGroups` 用的是
+  `["error","checking","downloading","seeding","paused","other"]` 决定辅种页组行颜色。
+  六种混合态里有 **2 种结论相反**: `{downloading,checking}`(后端 downloading / 前端 checking)、
+  `{paused,seeding}`(后端 paused / 前端 seeding)。
+- 后果有两层: ① 同一批种子在辅种页是绿、在追剧页是黄, 用户无法解释; ② **乐观 UI 会弹回** ——
+  前端按自己的表算"点击后的颜色", 下一轮回执按后端的表算真值。本次白名单动作恰好没触发
+  (暂停后成员 kind 是齐的), 但那是运气不是设计。
+- **修法**: 前端抽 `STATE_RANK` 单点表并**对齐后端顺序**(语义: 先报需要处理的, 再报在跑的,
+  最后报已完成的), 组行与集行共用同一个 `_aggStatus`。可见变化仅限上面那 2 种混合态
+  (6 组样例实测: 2 组变、4 组不变)。
+- **守阵**: `tests/test_web.py` 的静态守阵第 8 项机械比对前后端两张表(从 `app.js` 正则抓
+  `const STATE_RANK = {…}`), 改一边不改另一边即红。红验过(把 paused/seeding 对调 → 报
+  "前端 {…'paused':4,'seeding':3…} / 后端 {…'paused':3,'seeding':4…}")。
+  注意 `distSegments` 里还有第三张表(`["seeding","downloading","checking","paused","error","other"]`),
+  那是**图例展示顺序**不是优先级, 不参与比对 —— 别顺手"统一"它。
+
+### 成员索引 `memberByHash` 的字段不够用: 只存在于平铺数组里的字段 (2026-09-19 实测)
+
+- **⚠ `memberByHash` 的"兜底"写法让它永远用不上平铺数组**: 原实现先无条件 `map.set` 分组成员,
+  再用 `if (!map.has(hash))` 注册 singles/torrents ⇒ groups/singles 覆盖了全部种子,
+  平铺数组那条**永远不生效**。而 `magnet_uri`/`infohash_v1` 这些扩展字段**只在**种子页的平铺
+  SEED_ITEM 里(`web_view.py:305`), 分组/未归组的 `_member_view` 没有 ⇒ 索引条目恒无 magnet。
+- 后果: 右键"复制磁力"**100% 失效**(与种子是否真有磁力无关), 提示还写着"该种子没有 magnet 链接",
+  把人往错误方向带。实测(平铺数组已加载的种子页): `flatHasMagnet=true` 但 `idxHasMagnet=false`。
+- **修法**: 点的时候按需取一次详情(复用 `_editDetail`, 抽屉已开则零请求), 而**不是**给
+  每 1.5~3s 一轮的响应体加字段(3000 种子 ≈ +0.6MB/轮)。判据: 只在用户显式动作时才需要的字段,
+  不要塞进轮询载荷。
+- 冒烟断言要**同时**断言"索引里确实没有该字段", 否则将来有人给索引补上 magnet 后,
+  这条断言会因为"恰好带 magnet"而空过(测试变成摆设)。
+
+### 只读调用点就断言"机制不生效" —— 先看 computed 依赖链 (2026-09-19 实测, 自己的报表误判)
+
+- **⚠ 事故**: 复核报表断言"整组 `act()` 只补成员 hash ⇒ 组行颜色不变, 所以点击即变不发生"。
+  真跑一次(hang 桩, 回执永不返回)后实测组行 class 由 `s-checking` 变 `s-paused` —— **颜色本来就是变的**。
+  原因: 组行状态色取自 `decoratedGroups.status.primary`, 而它是 `_aggStatus(成员 kind)` 的 `computed`;
+  `applyOptimistic` 改的正是成员对象的 `kind`, computed 自动重算并重渲染。
+- 真正缺的只有一条: 组行没绑 `is-pending`(缺"在飞"的视觉标记)。**"机制没工作"与"没绑 class"
+  在源码里长得一样**, 只看调用点区分不了。
+- 判别法: 凡是"某个响应式效果没发生"的判断, 一律先问三件事 —— ① 值是不是 `computed` 派生出来的
+  (是 ⇒ 上游变了它就会变, 不需要额外接线); ② 模板有没有绑这个 class/属性; ③ 真跑一次看 DOM。
+  前两步是读代码, 第三步只要一个 hang 桩 + 150ms 就够, 别省。
+- 同族坑(已固化在测试指南): 断言要红绿双验 —— 这次误判正是"只读不跑"的产物。
+
+### 桩对象缺 `to_dict()` ⇒ 整条详情链路在冒烟里从未被跑过 (2026-09-19 实测)
+
+- **⚠ `FakeTorrent` 没有 `to_dict()`, 而 `/api/torrents/{hash}` 直接调它** ⇒ 桩服务的详情端点
+  **恒 500**(`AttributeError: 'FakeTorrent' object has no attribute 'to_dict'`)。真实 store 里放的是
+  `TorrentRecord`(有 `to_dict`), 所以生产没事 —— 这是**桩保真度**问题。
+- 后果被低估得多: 冒烟里所有依赖详情的路径**从未被覆盖** —— 详情抽屉、限速/分享率/移动/重命名
+  四个编辑对话框(都走 `_editDetail`)、以及复制磁力。它还是**静默**的: 前端 catch 后弹个 toast,
+  断言看不到; 只有把 `page.on("console")` 的 `console.error` 当判据才暴露(本次正是靠
+  "无 console.error" 那条断言把它揪出来)。
+- 修法: 给 `FakeTorrent` 补 `to_dict()`, 与真实现同形(导出非下划线属性, **不导出** `tor` 自引用与
+  `tracker_conf` 配置对象 —— 后者不可 JSON 化)。
+- 判别法: 桩对象与真对象"长得像"不等于"够用"。加一条断言去**访问**那条链路(哪怕只是 GET 一次),
+  比对着桩的字段列表核对有效得多。

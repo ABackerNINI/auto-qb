@@ -6,8 +6,34 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1049 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1047 passed + 2 skipped** —— 2026-09-19 实测;
-# 波次三(P1-2 行窗口化)为**纯前端**改动, 未新增/减少单测 —— 由静态守阵
+# 基线: **1053 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1049 passed + 2 skipped** —— 2026-09-19 实测;
+# = 1052 + **热路径跳过 FastAPI `jsonable_encoder`** 新增 1 项:
+#   `test_web.py::test_api_state_skips_jsonable_encoder`(用**计数替身**包住
+#   `fastapi.routing.jsonable_encoder`, 断言 /api/state?view=torrent、/api/state、/api/groups
+#   三个热路径调用次数为 0)。**这是"优化被后人重构掉"的守阵, 不是功能断言** ——
+#   返回裸 dict 时 FastAPI 会先递归遍历整个响应体做一次 jsonable_encoder(3000 种子实测
+#   **161 ms**, 占端点总耗时 189 ms 的 85%, 全程占 GIL); 改成 `JSONResponse` 直返即被
+#   `fastapi/routing.py` 的 `isinstance(raw_response, Response)` 短路。刻意用计数而非计时:
+#   计时在 CI 上不可靠。红绿双验过(注入 `return payload` → 报"走了 jsonable_encoder(1 次)")。
+# = 1052 + **复核第二波(组/集乐观 BUG-3 + 追剧页空白 BUG-8 + 复制磁力 BUG-9 + 状态优先级表 BUG-7)** 新增 1 项:
+#   `test_web.py::test_ensure_group_state_show_view_carries_member_index`(BUG-8: 追剧页的按视图回传
+#   必须**连带成员索引** groups+singles, 但不回 4.5MB 的 torrents —— 只回 shows 时前端 memberByHash
+#   为空, 每个集的成员都被 filter(Boolean) 丢掉, 刷新后停在追剧页会得到**永久空白**且不会自愈)。
+#   另改 2 项既有测试的口径: `test_api_state_view_scoped_payload`(view=show 的期望从"只回 shows"
+#   改为"回 shows+groups+singles"), `test_frontend_static_bundle_health`(静态守阵新增第 8 项:
+#   `STATE_RANK` 必须与后端 `_SHOW_STATE_RANK` 逐项一致 —— BUG-7 就是两张表漂移, 人眼发现不了)。
+#   BUG-9(复制磁力)与 BUG-3(组行 is-pending / 集行 epState)是纯前端, 由冒烟覆盖;
+#   `tests/helpers.py::FakeTorrent.to_dict` 是**桩保真度**修复(缺它则详情端点恒 500, 详情抽屉与
+#   依赖详情的编辑对话框在冒烟里从未被跑过), 不影响单测基线。
+# = 1051 + **复核缺陷修复批(1~4 + 8~9)** 新增 2 项(均为「接线」断言, 红绿双验):
+#   `test_qbmanager.py::test_drain_web_commands_bumps_write_seq`(P1-4 失效接线: 写命令执行后
+#   `_web_write_seq` 必须自增, **自投递命令不得自增** —— 此前全仓只测缓存机制、没测接线,
+#   字段改名或把自增挪走都会让测试全绿而只读缓存静默永不失效);
+#   `test_drain_bumps_write_seq_before_writing_receipt`(BUG-5 顺序: 用 spy 观察 `_set_web_result`
+#   内部看到的序号 —— 回执必须先失效缓存再宣布成功; 旧顺序下实测报 "实际 0 vs 期望 1")。
+#   其余修复项(P1-2 间距实测 / 冒烟读数时机 / 文档漂移 / harness 限回环 / cmdStats 出口)不改单测基线:
+#   前两项由**浏览器冒烟**覆盖(`P1-2 占位总高 == 全量渲染`, 见本节末), 后者为注释/脚本改动。
+# 此前 1049 —— 波次三(P1-2 行窗口化)为**纯前端**改动, 未新增/减少单测 —— 由静态守阵
 #   `test_frontend_static_bundle_health` + **真浏览器冒烟**覆盖(见本节末「浏览器冒烟」)。
 # = 1046 + **WEB UI 响应性波次二(P1-5 超时 / P1-1 按视图回传 / P1-4 只读端点短缓存)** 新增 3 项:
 #   `test_qbmanager.py::test_new_client_sets_request_timeout`(P1-5 守卫: 客户端必须带请求超时,
@@ -67,8 +93,11 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
-> prism/atlas 双 UI 断言(当前 34 项 0 失败, 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
-> **P0-4 批量合单数请求**)
+> prism/atlas 双 UI 断言(当前 **46 项 0 失败**(ok 模式)/ **44 项 0 失败**(`--expect-cmd error`, 回滚路径),
+> 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
+> **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 2026-09-19 加, 见下方读数时机坑)、
+> **P0-4 批量合单数请求**、**P0-3 整组/整集乐观**(组行与集行各自的 `is-pending` 与状态色翻转)、
+> **BUG-8 刷新后追剧页不空白**、**BUG-9 辅种页复制磁力可用**)
 > 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
 > 顺带一提: 换 `--torrents N` 跑不同规模的库, 就能量出"单轮 refresh 耗时 × 种子数"曲线 ——
 > 前端轮询档位就是这么定的(1000:143ms / 3000:353ms / 5000:~550ms)。
@@ -80,6 +109,16 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ⚠ 新增断言务必**红绿双验**: 把被测优化临时关掉(如把 `bulkAct` 的合单分支短路成
 > `if (false && …)`), 确认断言真的变红(实测拿到 "bulk 0 次 / 逐目标 60 次"), 再改回跑绿。
 > 否则很容易写出一条"永远为真"的摆设断言。
+> ⚠ 两条反例(2026-09-19 实测, 都是"摆设断言"的变体, 且都真的漏过了缺陷):
+> ① **恒真断言** —— `add(ui, "切到追剧视图无异常", epRows >= 0)` 永远为真, 于是"追剧页 0 行"
+>   这种整页空白照样 PASS(BUG-8 就是这么溜过去的)。判据一律写成 `> 0` / 等值比较;
+> ② **某种模式下恒红** —— 批量乐观那条断言在 `--expect-cmd error` 下 `pendingOps` 恒 0
+>   (回执瞬间返回, 乐观窗口在采样前就关了) ⇒ 该模式必红 ⇒ 没人跑 error 模式。按模式分流:
+>  ok/hang 断言"覆盖全部目标", error 断言"回滚干净"。**"恒红"和"恒真"一样会让断言失去意义。**
+> ⚠ 跑测用仓外 `--basetemp` 时, **该目录必须不存在**: 已存在则 pytest 开跑前会删它, 而本机
+>   沙箱的删除拦截层会拉起回收站助手进程, 被 `tests/sidefx.py` 记成越界 POPEN ⇒ 全绿也会在
+>   某个用例的 teardown 报 ERROR(实测复用旧目录得 `1052 passed + 1 error`, 换全新路径即干净)。
+>   `COVERAGE_FILE` 同理要指到仓外(仓内 `.coverage` 会让覆盖率在启动时删仓内文件而中止)。
 > 版本与取实例的三条硬约束见 pitfalls(playwright-core 版本须与本机 chromium 对齐 / 必须 CJS /
 > Vue 根实例走 `#app._vnode.component.proxy`)。
 5.5 **`test_sync.py` 专测增量同步层**: `TorrentRecord.apply_delta`(只遍历 patch 字段/变化字段集/量化/双通道源/`_raw` 兜底/`state_enum` 缓存)、`TorrentStore.apply_sync`(首轮全量/增量只改变化记录/无变化零成本/增删/全量剪除/待报删除/降级/异常/`reset_sync`)、以及 QbManager 接线(增量轮不做 schema 校验、变化集与冲突脏组)。改 `torrents.py` 的同步层或 `_refresh_torrents` 时必须同步此文件。

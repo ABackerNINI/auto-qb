@@ -8,6 +8,7 @@
 
 ## In Progress
 
+- [26-09-19-webui-responsiveness] WEB UI 操作跟手性优化 - 用户报「WEBUI 操作不跟手」。链路剖面定位四类根因(命令要等 main_tick / waitCmd 首查固定睡 500ms / 每 2s 全量回传四视图 + 整树重渲染 / bulkAct 逐目标串行阻塞主循环)。计划 14 项(P0×5 / P1×5 / P2×4)三波次 + 红线与验收口径。**P0/P1 十二项已全部落地并入库**(`10e06a8` `5d1e52c` `366092d` `d83ea61` `021d75a`), 另有计划外补做的前端轮询按种子量分档。**2026-09-19 对抗性复核**(见 Review doc): 架构判断成立、命令延迟实测 wait_ms=0/首查即命中; 但查出 6 个缺陷(1 高 2 中 3 低: 棱镜行窗口占位总高 +2973px / 乐观 UI 只覆盖种子行 / 写后失效无接线用例)+ 3 处文档漂移。**复核缺陷修复第 1 批(报表 1~4 + 8~9)已实施未提交**: 行间距改运行时实测(棱镜 Δ +2973 → **0**)、冒烟改同帧「窗口化 vs 全量」对照(34 → **36 项 0 失败**)、补两条写序号接线断言(**红绿双验**)、回执/失效顺序调换、`sync_interval` 落实钳制、文档漂移清理、harness 限回环、`cmdStats` 接消费者; **基线 1049 → 1051 passed / cov 92%**。**第 2 批(报表 5 = BUG-3)亦已实施未提交**: 开工先做真浏览器实证, 推翻报表对 BUG-3 证据②的判断 —— 组行颜色**本来就是乐观变化的**(取自 `_aggStatus(成员 kind)` 的 computed), 真正缺的只有 `is-pending`; 集行则确实完全没有乐观调用, 新增 `epState(e)` 按同一张优先级表现算。过程中又查出并修掉 3 个报表漏报的缺陷: **BUG-8(高)** 追剧页刷新后**永久空白**(`VIEW_ARRAYS["show"]` 只回 shows, 而成员索引是 groups+singles 拼的 ⇒ 索引空 ⇒ 0 行, 且 rid 已记住不会自愈)、**BUG-9(中)** 复制磁力 100% 失败(`magnet_uri` 只在平铺数组里而 `memberByHash` 的兜底分支永不生效)、**BUG-7(低)** 前端/后端两张状态优先级表有 2 种混合态结论相反。另修掉冒烟自身 3 处缺陷(恒真断言 / error 模式恒红 / `FakeTorrent` 缺 `to_dict()` 导致详情链路从未被覆盖); **基线 1051 → 1052 passed / cov 92%, 冒烟 46 项(ok) / 44 项(error) 0 失败**。**续查又拿掉一处热路径白跑**: 动手做报表 §08 第 6 项(响应体裁剪)前先量「一轮 refresh 花在哪」, 结果**否决了第 6 项** —— 字段裁剪是死路(占比最大的字段仅 6.3%, 80% 字节需要 74 个字段里的 52 个), 客户端 `JSON.parse` 只占 4.1 ms、网络 5 MiB 走 uvicorn 只要 1.6 ms; 真正的开销是 FastAPI 对**普通 dict 返回值**先跑一遍 `jsonable_encoder` 递归遍历整个响应体(3000 种子实测 **161 ms**, 占端点耗时 **85%**, 全程占 GIL)。改成 `return JSONResponse(content=payload)` 即被 `fastapi/routing.py` 的 `isinstance(raw_response, Response)` 短路: 服务端 `view=torrent` 189 → **23.5 ms**(8.0×), **前端整轮 refresh ~240 → ~85 ms**(整轮本就在等服务端), 输出字节零变化(新旧并排四份响应长度全同)。**基线 1052 → 1053 passed / cov 92%, 冒烟 46 项 0 失败**。剩报表 §08 第 7 项(节拍对齐, 需先拍板方向)与同类端点的同样改法
 - [26-09-18-test-sidefx-guard] 测试期真实系统副作用收口 (通知框 + 环境依赖假失败) - 真凶 `test_cli.py::test_main_qb_compat_error_clean_exit` 用 MagicMock 当配置 ⇒ 绕过 `notify_fatal` 守卫真发 Windows toast; 修 mock + 新增 `tests/conftest.py` 会话级通知器命令拦截; 另修 2 个环境依赖假失败(`APPDATA` 未设 / 沙箱把 `os.symlink` 落成真实目录) + `.gitignore` 补 `.coverage.*`; **1007 passed / 0 failed**; **已入库 `7ae21a1`** (剩用户再跑一次测试确认不再弹框)
 - [26-09-18-webui-error-reason] WEB UI 错误种子显示具体原因 (状态列 `error_reason`) - 状态列由笼统「错误」改为具体原因(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文); 后端 `refresh_error_reasons` 主循环 TTL(300s)+预算(5/轮)预取 + 显式置脏, 视图透出 `error_reason`, 前端 `stateText` 双 UI 生效; 1006 passed, 假 qB 服务浏览器冒烟实测; **已入库 `9723a76`** (剩用户真机走查)
 - [26-09-18-webui-view-rebuild-scope] WEB UI 视图重建范围收口 (种子速度刷新滞后) - 真因: 主循环 `_tick` 只重建 `_group_view` 却清掉共享脏标记 ⇒ singles/shows/flat 被饿死(版本号照常自增 ⇒ 前端换上陈旧数组), 状态栏因取 groups 求和反而正常; 同源: 置脏在 grouping 门控内 ⇒ 分组关闭时标记被吞。修法: 唯一入口 `rebuild_views()` + 置脏移出门控 + 前端取消 idle 退避并把 `server_state` 并入 `/api/state`; **1021 passed / 0 failed** (基线 1018, 红绿验证); **未提交** (剩用户真机走查)
@@ -20,7 +21,7 @@
 
 ## Pending
 
-- [26-09-19-webui-responsiveness] WEB UI 操作跟手性优化 - 用户报「WEBUI 操作不跟手」。链路剖面定位四类根因: ①命令要等主循环 main_tick(默认 2s)才被 drain ②waitCmd 首查前固定睡 500ms 且全程无即时反馈 ③每 2s 全量回传四视图 + 单个巨型 Vue 实例整树重渲染(种子页无虚拟化) ④bulkAct 逐目标 POST ⇒ 后端 N 次 qB 串行调用阻塞主循环。计划含 P0×5 / P1×5 / P2×4 共 14 项、三波次、验收口径与红线
+(暂无 — 下一步候选见 [../activeContext.md](../activeContext.md) 的"下一步候选"段)
 
 ## Completed
 

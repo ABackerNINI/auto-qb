@@ -60,7 +60,11 @@ async function readInst(page, expr) {
 }
 
 async function smokeUi(browser, ui) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  // clipboard 权限: "复制磁力/种子名"类断言要真写剪贴板, headless 默认会拒
+  const ctx = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   const page = await ctx.newPage();
   const errors = [];
   const warns = [];
@@ -176,7 +180,31 @@ async function smokeUi(browser, ui) {
       add(ui, "P1-2 行窗口化生效", tRows < tTotal * 0.5, `DOM ${tRows} 行 << 数据 ${tTotal} 条`);
     }
 
-    // 滚到底: 总高度必须仍等于全量(占位撑住), 且最后一行可见
+    /*
+     * P1-2 占位总高必须**等于全量渲染**的总高(窗口化只少渲染 DOM, 不改布局高度)。
+     * ❗必须在**同一帧序列**里对照开关两侧: 早先只在"滚动前后"各读一次 scrollHeight,
+     * 而那个读点发生在 bench(true) 把 rowWin 还原成 true **之后** ⇒ 两次量的都是窗口化
+     * 高度, 恒等成立。正是这个读数时机让 prism 的行间距硬编码(6px vs 实际 5px)造成的
+     * +2973px 偏差一路溜到提交(BUG-1 / TEST-2)。
+     */
+    const hCmp = await page.evaluate(`(async () => {
+      const vm = ${INST};
+      const saved = vm.rowWin;
+      const settle = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const read = async () => { await settle(); return document.documentElement.scrollHeight; };
+      vm.rowWin = true;  const win = await read();
+      vm.rowWin = false; const full = await read();
+      vm.rowWin = saved; await read();
+      const el = document.querySelector(".group-table");
+      return { win, full, gap: el ? parseFloat(getComputedStyle(el).rowGap) : null };
+    })()`);
+    add(ui, "P1-2 占位总高 == 全量渲染", Math.abs(hCmp.win - hCmp.full) < 50,
+      `窗口化 ${hCmp.win} vs 全量 ${hCmp.full}px (Δ ${hCmp.win - hCmp.full}, 实测行间距 ${hCmp.gap}px)`);
+    results[results.length - 1].winHeight = hCmp.win;
+    results[results.length - 1].fullHeight = hCmp.full;
+    results[results.length - 1].rowGapPx = hCmp.gap;
+
+    // 滚到底: 总高度在滚动前后不塌陷, 且最后一行可见
     const before = await page.evaluate("document.documentElement.scrollHeight");
     await page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
     await page.waitForTimeout(400);
@@ -274,25 +302,163 @@ async function smokeUi(browser, ui) {
         `选中 ${picked} 个 → bulk ${hits.bulk} 次 / 逐目标 ${hits.single} 次`);
       /*
        * 顺带验 P0-3 的批量形态: 乐观值要一次性贴到**全部**目标上(不是只贴第一行)。
+       * error 模式下回执是**瞬间**回的, 乐观窗口在采样前就关了(实测 pendingOps 恒 0) ——
+       * 那不是缺陷, 是采样时机; 此时改断言"失败后回滚干净"(否则这条断言在 error 模式恒红,
+       * 而"某种模式下恒红的断言"和"恒真的断言"一样没用)。
        */
       const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
-      add(ui, "P0-3 批量乐观覆盖全部目标", pend >= Math.min(picked, N) * 0.8,
-        `pendingOps ${pend} / 目标 ${picked}`);
+      if (EXPECT_CMD === "error") {
+        const pendRows = await page.$$eval(".torrent-row.is-pending, .group-row.is-pending", (n) => n.length);
+        add(ui, "P0-3 批量失败后回滚干净", pend === 0 && pendRows === 0,
+          `pendingOps ${pend} / 残留行 ${pendRows} / 目标 ${picked}`);
+      } else {
+        add(ui, "P0-3 批量乐观覆盖全部目标", pend >= Math.min(picked, N) * 0.8,
+          `pendingOps ${pend} / 目标 ${picked}`);
+      }
       // 清掉选择, 免得影响后面的视图切换断言
       await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
       await page.waitForTimeout(300);
     }
 
+    /*
+     * P0-3 整组乐观(BUG-3): 整组暂停后**组行本身**必须立刻可见 —— 颜色随成员 kind 重算 + is-pending。
+     * 只补成员 hash 不够: 组行的状态色取自 g.status.primary(不展开明细时看不到成员行),
+     * 而组行此前也没有 is-pending 绑定 ⇒ 整组操作在感知层完全没有反馈。
+     * 走真实右键菜单(与用户路径一致), 不用 vm.act() 直调。
+     * ❗先切回分组视图: 上一段 P0-4 是在**种子页**做的, 此时 DOM 里没有任何组行。
+     */
+    await nav[0].click();  // 回分组
+    await page.waitForTimeout(600);
+    {
+      const idx = await page.evaluate(`(() => {
+        const rows = [...document.querySelectorAll('.group-row[data-table="group"]')];
+        return rows.findIndex((r) => !r.className.includes('s-paused'));
+      })()`);
+      const gHandles = await page.$$('.group-row[data-table="group"]');
+      if (idx < 0 || !gHandles[idx]) {
+        add(ui, "P0-3 整组乐观(组行 is-pending)", false, "找不到可暂停的组行");
+      } else {
+        const key = await gHandles[idx].evaluate((el) => el.dataset.key);
+        const before = await gHandles[idx].evaluate((el) => el.className);
+        await gHandles[idx].click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        const gItems = await page.$$(".ctx-item");
+        let gClicked = false;
+        for (const h of gItems) {
+          const t = (await h.textContent()) || "";
+          if (t.includes("暂停整组") || t.trim() === "暂停") { await h.click(); gClicked = true; break; }
+        }
+        await page.waitForTimeout(150);
+        const after = await page.evaluate(
+          `(() => { const el = document.querySelector('.group-row[data-table="group"][data-key=${JSON.stringify(key)}]'); return el ? el.className : null; })()`);
+        if (EXPECT_CMD === "error") {
+          // error 模式: 回执是**瞬间**回的, 乐观窗口可能在采样前就关了 ⇒ 改断言"回滚干净"
+          const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
+          const sCls = (c) => ((c || "").split(" ").find((x) => x.startsWith("s-")) || "");
+          add(ui, "P0-3 整组乐观失败后回滚(组行)",
+            gClicked && !!after && !after.includes("is-pending") && pend === 0 && sCls(after) === sCls(before),
+            `${before} -> ${after} / pendingOps ${pend}`);
+        } else {
+          add(ui, "P0-3 整组乐观(组行 is-pending)", gClicked && !!after && after.includes("is-pending"),
+            `${before} -> ${after}`);
+        }
+        await page.waitForTimeout(3400);  // 等乐观回落(3s 兜底), 别把 pending 带进后面的断言
+      }
+    }
+
+    /*
+     * BUG-9: "复制磁力"必须真拿到 magnet。magnet_uri **只**在种子页的平铺 SEED_ITEM 里,
+     * 成员索引(groups/singles)不带该字段 ⇒ 修复前在辅种页恒提示"该种子没有 magnet 链接"
+     * (100% 失败, 与种子是否真有磁力无关)。断言刻意避开剪贴板差异: 只要求
+     * "不再出现'没有 magnet 链接'", 并把实际 toast 打出来; 同时断言索引里确实没有该字段
+     * (否则这条断言会因为"索引恰好带 magnet"而空过)。
+     */
+    {
+      const r = await page.evaluate(`(async () => {
+        const vm = ${INST};
+        const g = vm.groups.find((x) => (x.members || []).length);
+        if (!g) return { err: "no group" };
+        const h = g.members[0].hash;
+        const idxHasMagnet = "magnet_uri" in (vm.memberByHash.get(h) || {});
+        vm.menu = { visible: true, hash: h, key: null };
+        await vm.copyTorrentInfo("magnet");
+        await new Promise((res) => setTimeout(res, 500));
+        const t = (vm.toasts || []).slice(-1)[0];
+        return { idxHasMagnet, toast: t ? t.text : null, kind: t ? t.kind : null };
+      })()`);
+      add(ui, "BUG-9 辅种页复制磁力不再恒失败",
+        !r.err && r.idxHasMagnet === false && r.toast !== "该种子没有 magnet 链接",
+        `索引带 magnet=${r.idxHasMagnet} / toast=${r.toast}`);
+    }
+
     await nav[2].click();  // 追剧
-    await page.waitForTimeout(800);
-    const epRows = await page.$$eval(".ep-row, .group-row", (n) => n.length);
-    add(ui, "切到追剧视图无异常", epRows >= 0, `${epRows} 行`);
+    await page.waitForTimeout(900);
+    // 原来是 `epRows >= 0`(恒真, 等于没断言) —— BUG-8 正是"追剧页 0 行"却照样 PASS 的那类故障
+    const showRowCount = await page.$$eval(".show-row", (n) => n.length);
+    add(ui, "切到追剧视图有剧行", showRowCount > 0, `${showRowCount} 行`);
     await page.screenshot({ path: path.join(SHOTS, `${ui}-6-shows.png`) });
+
+    /*
+     * P0-3 整集乐观(BUG-3): 集行状态色来自后端回传的 e.state(**标量拷贝**), 成员 kind 被补丁
+     * 改过也不会变 ⇒ 整集/整剧此前点了没有任何即时反馈。这里断言集行在回执前就带上 is-pending
+     * 且 s- 状态色已换(epState() 按与后端同一张 STATE_RANK 表现算)。
+     */
+    if (showRowCount > 0) {
+      const sHandles = await page.$$(".show-row");
+      await sHandles[0].click();  // 展开剧 -> 出集行
+      await page.waitForSelector(".group-row.ep-row", { timeout: 8000 }).catch(() => null);
+      const epHandles = await page.$$(".group-row.ep-row");
+      add(ui, "展开剧后有集行", epHandles.length > 0, `${epHandles.length} 集`);
+      if (epHandles.length) {
+        const before = await epHandles[0].evaluate((el) => el.className);
+        await epHandles[0].click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        const eItems = await page.$$(".ctx-item");
+        let eClicked = false;
+        for (const h of eItems) {
+          const t = (await h.textContent()) || "";
+          if (t.includes("暂停整集") || t.includes("暂停整剧") || t.trim() === "暂停") { await h.click(); eClicked = true; break; }
+        }
+        await page.waitForTimeout(150);
+        const after = await page.$$eval(".group-row.ep-row", (ns) => (ns[0] ? ns[0].className : null));
+        if (EXPECT_CMD === "error") {
+          const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
+          const sCls = (c) => ((c || "").split(" ").find((x) => x.startsWith("s-")) || "");
+          add(ui, "P0-3 整集乐观失败后回滚(集行)",
+            eClicked && !!after && !after.includes("is-pending") && pend === 0 && sCls(after) === sCls(before),
+            `${before} -> ${after} / pendingOps ${pend}`);
+        } else {
+          add(ui, "P0-3 整集乐观(集行 is-pending)", eClicked && !!after && after.includes("is-pending"),
+            `${before} -> ${after}`);
+        }
+        await page.waitForTimeout(3400);
+      }
+    }
 
     await nav[0].click();  // 回分组
     await page.waitForTimeout(600);
     const backRows = await page.$$eval(".group-row", (n) => n.length);
     add(ui, "切回分组视图有数据", backRows > 0, `${backRows} 行`);
+
+    /*
+     * BUG-8: 刷新后停在追剧页**不能空白**。视图偏好是持久化的(localStorage), 而 P1-1 的
+     * "按视图回传"若只回 shows, 前端的成员索引(memberByHash)就是空的 ⇒ 每个集的成员都被
+     * filter(Boolean) 丢掉 ⇒ 0 行; 且 rid 已记住 ⇒ 之后每轮都是"版本未变不回传", 自己不会恢复,
+     * 必须手动切一次视图才回来。放最后做(要 reload, 会重置页面状态)。
+     */
+    {
+      await page.evaluate(`localStorage.setItem("autoqb.ui.view", "shows")`);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(3500);
+      const d = await page.evaluate(`(() => {
+        const vm = ${INST};
+        return { viewMode: vm.viewMode, idx: vm.memberByHash.size, shows: vm.decoratedShows.length,
+                 rows: document.querySelectorAll(".show-row").length };
+      })()`);
+      add(ui, "BUG-8 刷新后追剧页不空白", d.viewMode === "shows" && d.rows > 0,
+        `索引 ${d.idx} / 剧 ${d.shows} / 行 ${d.rows}`);
+      await page.evaluate(`localStorage.removeItem("autoqb.ui.view")`);
+    }
   } else {
     add(ui, "顶栏三视图按钮存在", false, `nav.tabs button = ${nav.length}`);
   }

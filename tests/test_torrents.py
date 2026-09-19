@@ -13,7 +13,6 @@
 - test_store_refresh_keeps_records: 已存在记录对象跨 tick 保留(惰性缓存存活)
 - test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理
 - test_missing_torrent_fields: 缺失字段清单(全字段/缺字段/dict 形状)
-- test_record_check_hr_on_real_record: 真实 TorrentRecord.check_hr_* 直测(防鸭子影子掩盖)
 - test_store_restore_torrent: restore_torrent 恢复删除前记录(对象身份+幂等)
 - test_store_queries: get/__contains__/all/hashes/__len__
 - test_store_trackers_lazy: 记录级 trackers_info/tracker_urls 惰性拉取+缓存

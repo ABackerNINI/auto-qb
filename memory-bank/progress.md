@@ -14,7 +14,102 @@
   refresh 耗时(1000:143ms / 3000:353ms / 5000:~550ms)按"主线程占用率 ≈15%"反推, **下界 1.5s =
   服务端 `sync_interval`**(再快只是多拿一次"版本未变"的空响应)。`pollSec` 字段退役改 `basePollMs()`;
   冒烟新增分档断言 ⇒ 30 项 0 失败, 三档逐个实测通过。
-  剩: 真机走查(真实 qB 数据下的观感)。计划 [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html); 档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)
+  **2026-09-19 对抗性复核 (计划本身 + 实施情况, 重点 BUG/安全/性能)**: 报表
+  [docs/plans/26-09-19-1745-webui-responsiveness-review.html](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)。
+  评级 计划 A− / 实施 A− / BUG B / 安全 A− / 性能 B+ / 测试 B−。**架构判断成立且实测坐实**:
+  命令延迟 `wait_ms=0` / 首查即命中 / 端到端 2.7~34ms; 行窗口化 A/B 同进程 3 轮 —— refresh
+  1384→244ms(prism) / 1569→246ms(atlas), `getBoundingClientRect` 9000→106, DOM 行 3000→26。
+  **但查出 6 个缺陷 (1 高 2 中 3 低)**: ①**高** `ROW_WIN_GAP=6` 是硬编码常量, 而棱镜
+  `.group-table { gap:5px }`(星图 6px)、`.detail` 是**块容器**(gap 0)⇒ 窗口化占位总高比全量
+  **多 2973px**(棱镜 167043 vs 全量 164070; 星图 0)。自洽性尚在(占位与滚动数学用同一把"虚拟尺",
+  末行仍可达、无空白洞), 但滚动条长度失真。②**中** 乐观 UI 只覆盖种子行 —— 分组行不 patch
+  `g.status.primary` 也不加 `is-pending`, `actEpisode` 批量路径**根本没调** `applyOptimistic`。
+  ③**中** `_drain_web_commands` 里回执先写、`_web_write_seq += 1` 在后 ⇒ 窗口内并发读会拿到
+  写前缓存。另 3 低: `sync_interval` 帮助文案称"大于主循环间隔时按主循环间隔生效"但 `run()`
+  **没有任何 clamp**; `_cached_read` 的 `fn()` 在锁外调用(惊群)+ 超 128 条整表清空;
+  `web_view.py` 静态守卫是"正则扫源码"而非行为断言。**测试缺口 3 项**: 冒烟的高度基线读数
+  时机错(`before` 在 `bench()` 恢复 `rowWin=true` 之后取 ⇒ 实际是"窗口化 vs 窗口化", 提交信息里
+  "167043 → 167043" 两个都是窗口化值, 这正是 BUG-1 溜过冒烟的原因); 无任何用例断言
+  `_web_write_seq` 自增; `ui_harness.py --host` 可绑 0.0.0.0 且带 `skip_local_verify`。
+  **计划外实测数字**: `/api/state` 全量 6 405 735 B / group 1 746 319(27%) / torrent 4 524 992
+  (**71%**) / show 134 808(2%) ⇒ 计划里"≤200KB"的验收口径在种子页差 ~22 倍,**P1-1 的实际收益
+  主要在分组页**; 另发现固定 `sync_interval=1.5s` 与前端分档轮询(1.5/2/3s)在 >3000 种子时错配,
+  约一半 `rebuild_views` 白做。**未改任何源码**, 修复清单 9 项待排期。
+  **复核缺陷修复 · 第 1 批 (报表 1~4 + 8~9, 已实施未提交)**: ①**行窗口间距改运行时实测** —— 新增
+  `_winGapOf/_winGapFor` 读 `getComputedStyle(container).rowGap`(块级容器 `normal`→0, 三层各存一份),
+  删掉硬编码的 `ROW_WIN_GAP=6`; 修前 prism 占位总高 +2973px, 修后 **prism 164070==164070 / atlas
+  167071==167071 (Δ0)**。②**冒烟断言改同帧「窗口化 vs 全量」对照**(新增 1 项 ⇒ 34 → **36 项 0 失败**),
+  这个断言当场抓出了修复第一版的坑: 实测值在"容器未渲染"时被缓存成兜底 0 ⇒ 总高反而少 14855px ——
+  「读一次就缓存」必须分清"值真是这个"与"现在读不到", 已入 pitfalls。③**补两条写序号接线断言**
+  (`test_drain_web_commands_bumps_write_seq` + `..._before_writing_receipt`, 后者**红绿双验**: 旧顺序报
+  "实际 0 vs 期望 1") —— 此前全仓只测缓存机制不测接线。④**回执与失效顺序调换**(先失效缓存再宣布成功)。
+  ⑤**`sync_interval` 落实钳制** `min(sync_interval, main_tick)` —— 文案承诺此前是空话, 而 `_task_line`
+  **不拉快照**, 配 5s 会让快照新鲜度掉到心跳之下。⑥**文档漂移清理**(窗口化头部注释仍是"行高必须齐"
+  那稿被推翻的口径 / `renderMs` 警告仍写"需 P1 行窗口化" / 3 处测试计划重复行 / `web_commands.py`
+  指向**不存在**的 `tests/test_web_commands.py`)。⑦**harness 限回环**(免鉴权服务绑 0.0.0.0 = 暴露给
+  整个局域网, 实测非回环一律拒绝启动)。⑧**`cmdStats` 接上消费者**(超阈值打 `[perf]`, 此前只写不读的死字段)。
+  ⑨顺带把 `memberWin` 改方法并接收成员数组, 修掉追剧页成员窗口是**死路径**的问题(原写死读 `expandedGroup`)。
+  **基线 1049 → 1051 passed / cov 92%**。
+  剩: 真机走查(真实 qB 数据下的观感) + 复核缺陷修复第 2 批(组行乐观 / 响应体裁剪 / 节拍对齐)。计划 [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html); 档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)
+  **复核缺陷修复 · 第 2 批 (报表 5 + 修复过程中新发现的 3 个缺陷, 已实施未提交)**: 开工先做了一次
+  **真浏览器实证**, 结果推翻了报表自己的一条判断 —— 组行颜色**本来就是乐观变化的**(实测
+  `s-checking → s-paused`, 因为它取自 `_aggStatus(成员 kind)` 的 computed, 而 `applyOptimistic` 改的正是
+  成员 `kind`), 真正缺的只有 `is-pending` 绑定; 集行则确实完全没有乐观调用。据此把「组行」的工作量
+  从"加一套补丁表"缩到"加一个绑定", 并顺手发现 3 个报表漏报的缺陷:
+  ① **BUG-8(高)** `VIEW_ARRAYS["show"]` 只回 `shows`, 而 `shows[].members` 只是一串 hash、前端要靠
+  `memberByHash`(groups+singles 拼出来)还原成成员对象 ⇒ **刷新后停在追剧页得到永久空表**(实测
+  `groups=0 / memberByHash=0 / 0 行`), 且 `lastRid` 已记住 ⇒ 每轮都"版本未变不回传", **自己不会恢复**。
+  修法 `("shows", "groups", "singles")`(仍不回 4.5MB 的 `torrents`); 响应体实测 134 808 → **1 880 935 B**
+  (全量 6 405 735) —— 报表当初量到 134KB 却没问"这份响应够不够把页面渲染出来"。同时暴露出冒烟里
+  一条**恒真断言**(`epRows >= 0`), 所以 34 项全绿也没拦住。② **BUG-9(中)** `magnet_uri` 只在平铺
+  SEED_ITEM 里, 而 `memberByHash` 先无条件注册 groups、再用 `if (!map.has())` 注册 singles/torrents
+  ⇒ 平铺数组**永远当不上兜底**, 索引条目恒无 magnet ⇒ 右键"复制磁力"**100% 失败**且提示误导
+  ("该种子没有 magnet 链接")。改为点击时按需取详情(复用 `_editDetail`), **不给每轮响应体加字段**。
+  ③ **BUG-7(低)** 同一概念两张状态优先级表: 后端 `_SHOW_STATE_RANK`(追剧页集行) vs 前端
+  `decoratedGroups` 内联表(辅种页组行), 六种混合态里 **2 种结论相反** ⇒ 同一批种子两页不同色, 且
+  乐观 UI 有"颜色弹回"风险。前端抽 `STATE_RANK` 单点表并对齐后端顺序(可见变化仅那 2 种混合态)。
+  **BUG-3 落地**: 组行绑 `is-pending`(`isGroupPending`, 用 `pendingAny` computed 做 O(1) 短路);
+  集行新增 `epState(e)` —— `e.state` 是后端回传的**标量拷贝**, 成员被补丁改过也不动, 故有成员在飞时
+  按同一张 `STATE_RANK` 表现算; `actEpisode` 的 pause/resume 分支接入 `applyOptimistic`/`resolveOptimistic`
+  (失败回滚)。**顺带修掉冒烟自身的 3 处缺陷**: 恒真断言、error 模式恒红(按模式分流为"覆盖全部目标"/
+  "回滚干净")、以及 **`FakeTorrent` 缺 `to_dict()` 导致 `/api/torrents/{hash}` 恒 500** ⇒ 详情抽屉与
+  四个编辑对话框在冒烟里**从未被跑过**(静默 500, 只有把 console.error 当判据才暴露)。
+  **验证**: 单测 **1051 → 1052 passed / cov 92%**(新增 `test_ensure_group_state_show_view_carries_member_index`
+  + 静态守阵第 8 项比对两张状态表 + 改写 `test_api_state_view_scoped_payload` 口径, 两条守阵**红绿双验**);
+  冒烟 **36 → 46 项 0 失败**(ok 模式) / **44 项 0 失败**(error 模式回滚路径, 该模式此前必红所以没人跑)。
+  未做: 报表 §08 第 6 项(响应体裁剪, 牵动 SEED_ITEM 契约)与第 7 项(节拍对齐, 需先定方向)。报表已追加
+  [§10 复核修订与修复回执](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)(含对 BUG-3 证据②的更正)。
+  **续查 · 热路径白跑 85%: FastAPI `jsonable_encoder` (同日, 已实施未提交)**: 动手做第 6 项前先把
+  「一轮 refresh 到底花在哪」量清楚 —— 量完发现**第 6 项要修的地方修错了**。四步定位(每步独立否决一个方向):
+  ① **字节构成**: 3000 种子/74 字段里占比最大的 `magnet_uri` 仅 **6.3%**, 要覆盖 80% 字节需要 **52/74** 个字段
+  ⇒ **字段裁剪是死路**(真裁掉一半字段也省不到 30%, 还要重走 SEED_ITEM 契约);
+  ② **客户端拆分**(浏览器内): 单轮 237 ms = 网络+读文本 **224 ms** + `JSON.parse` **4.1 ms** + 赋值+patch **8.3 ms**
+  ⇒ 前端只占 10 ms, 95% 是"在等服务端";
+  ③ **网络对照**: 同尺寸 5.12 MiB JSON 走 uvicorn+StaticFiles 只要 **1.6 ms**(`http.server` 1.0 ms)
+  ⇒ 排除网络与 uvicorn, **gzip 也无意义**(没有可省的东西);
+  ④ **服务端端点内耗时**(加 5 行计时中间件): `view=torrent` **189 ms**, 而应用层可解释的只有 `json.dumps`
+  25~50 ms(该轮未重建视图)⇒ 缺口 ~160 ms 在 FastAPI 响应管线里。
+  **真因**: FastAPI 对**普通 dict 返回值**会先跑 `jsonable_encoder` **递归遍历整个响应体**(3000×74 = 22 万个值,
+  实测 **161 ms**, 占端点耗时 **85%**), 而我们的视图本来就是 JSON 原生类型 ⇒ 纯白跑, 且**全程占着 GIL**
+  (与主循环抢 CPU, 是大库下"点了没反应"的一个真实来源)。
+  **修法(1 行)**: `web.py` 的 `/api/state` 与 `/api/groups` 改 `return JSONResponse(content=payload)` ——
+  `fastapi/routing.py` 有 `if isinstance(raw_response, Response): response = raw_response` 直接短路,
+  跳过整个 `serialize_response`。**实测**: 服务端 `view=torrent` 189 → **23.5 ms**(8.0×)、
+  `view=show` 79.6 → **11.6 ms**(6.9×); **前端整轮 refresh 跟着掉**: prism 窗口化 239/233/234 → **95/84/84 ms**、
+  atlas 268/266/267 → **74/83/83 ms**(整轮本来就在等服务端)。**输出零变化**: 新旧服务并排取
+  torrent/group/show/full 四份响应, 字节长度全同(4 764 992 / 1 746 319 / 1 880 935 / 6 645 735),
+  解析后除自增的 `rid` 外完全相同。**代价**: 日后往 payload 塞非 JSON 原生类型会直接 500(fail-fast)。
+  **守阵**: `test_web.py::test_api_state_skips_jsonable_encoder` 用**计数替身**包住
+  `fastapi.routing.jsonable_encoder`, 断言三个热路径调用次数为 0(**刻意用计数不用计时** —— 计时在 CI 不可靠;
+  红绿双验: 注入 `return payload` → 报"走了 jsonable_encoder(1 次)")。**基线 1052 → 1053 passed / cov 92%**;
+  冒烟 **46 项 0 失败**。**教训入 pitfalls**: 「载荷大」不等于「要裁字段」—— 只说明有开销, 不说明开销在哪;
+  凭载荷大小直接开药方十有八九修错地方。同类端点(`/api/torrents/{hash}/files`、`/api/search` 等)同样的
+  1 行改法**尚未做**(用户触发型、不在轮询路径上)。报表已追加 **§11**。
+- WEB UI 追剧页 剧/集右键「打开目标文件夹」报"种子不存在" (2026-09-19, 已入库 `c888fba`): 用户报追剧页**剧右键与集右键**失败, 种子右键正常。**真因**: 后端 shows 视图的 `members` 是 **hash 数组**, 前端 `decoratedShows` 把它换成**成员对象**, 而 `openShowEpMenu`/`openShowMenu` 直接把 members 当 hash 用 ⇒ 拼进 URL/JSON 时字符串化成 `[object Object]` ⇒ 后端 404。**同一根因还让整集/整剧的开始/暂停/强制汇报报 Not Found、删除静默无反应**(用户尚未察觉)。**修法**: `shared/app.js` 新增 `memberHashesOf(list)`(两种形态都收)统一取 hash, 菜单与选中态(`_showHashes`/`_epUnits`/`epSelState`)一律走它; 双 UI 共用该文件 ⇒ 一次修两处。**验证**: 用 node 桩掉 `Vue.createApp`/`window`/`document` 直接加载**真 app.js** 断言产出是字符串 hash —— 新版 9/9 通过, 旧版挂 5 项(**红绿双验**); 守阵固化进 `tests/test_web.py::test_frontend_static_bundle_health` 第 7 项; 端到端冒烟(桩服务 + 无头浏览器)同样红绿验证。基线 1041 不变。
+- WEB 跳过本地验证日志降为 INFO (2026-09-18, 已入库 `7ce54e9`): `web.py` 里"本机免密钥放行"提示原为 `logger.warning` ⇒ 改 `logger.info`(免鉴权是用户**显式开的配置**而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING。
+- 导出 .torrent 中文名 500 已修 (2026-09-17, 已入库 `4de0953`): `/api/torrents/{hash}/export` 把种子名直拼进 `Content-Disposition`, 而 HTTP 头只能 latin-1 ⇒ 中文名触发 `UnicodeEncodeError` 500。修法: 新增 `web.content_disposition(filename, fallback, ext)` 双段头(`filename=` ASCII 回退 + `filename*=UTF-8''<百分号编码>`)并清洗控制字符; 测试 `test_content_disposition_encoding` + 导出端点非 ASCII 用例。
+- UI 组件库 20 式 · 设计风格库落地为可挑选的组件库 (2026-09-17, 已入库 `fae019a`): 按设计哲学风格库 5 流派 × 20 preset 各出一套自包含组件库单页 + 挑选索引 + 目录 README(`resources/ui-component-libraries/modelscope.dsv4.1flash/`); 四轮自检(文本层/渲染层/功能探针/390px 断点)+ 7 项缺陷修复; 基线 996 passed。剩用户挑选与按需迭代。
+- 追剧视图 (tvshows) (2026-09-15, 已合入 develop): 剧/季/集解析 + 缺集计算 + atlas 三态视图。遗留: **prism 模板欠账**(棱镜侧追剧模板未做)。
 - Memory Bank 任务档案命名重构 · 去序号化与索引生成化 (2026-09-18): `tasks/TASKnnn-<slug>.md` → `tasks/YY-MM-DD-<slug>.md`。**动因**: 全局单调序号在 9 个并行 worktree 下必然撞号 —— 实测 TASK014/TASK015 同一专题两份且 md5 一致、zcode 分支把同一提交 `fae019a` 编成 TASK012 而主线编成 TASK014(**同题异号**)。**方案**: 文件名 = 日期到天(不带时分) + 专题 slug, 由专题派生而非发号; 同日同专题必然撞同一路径, 重复当场暴露为显式 add/add 冲突; 跨天同专题由新增守卫 `test_slug_is_unique_ignoring_date_prefix`(比对时忽略日期前缀)拦下。**索引生成化**: 新增 `scripts/gen_tasks_index.py` 扫 `Status` / `Summary` / 标题按四状态分区生成(分区内按 `Updated` 倒序, 活跃度不靠创建日), `_index.md` 降级为**生成物**, 合并冲突只需重跑脚本; 新增守卫 `test_index_is_regenerated` 保证没人手改。**迁移**: 17 个档案 `git mv` 改名 + 补 `**Summary:**`(摘要由旧索引迁入) 与 `**Legacy-ID:**`(旧号回溯) + 标题行同步; 全仓 9 个文件的路径引用同步修正(只改路径, 历史叙述中的旧编号保留, 靠 Legacy-ID 回溯)。**规范同步**: 两份 `SKILL.md`(`.agents` / `.codebuddy`)、`AGENTS.md`、`.github/copilot-instructions.md`、`.github/instructions/memory-bank.instructions.md`、`memory-bank/README.md`。**基线 1021 → 1022 passed / 0 failed**。计划 [docs/plans/26-09-18-1928-memory-bank-task-id-plan.html](../docs/plans/26-09-18-1928-memory-bank-task-id-plan.html); 阶段 3(把三个 `webui-fix-roundN` 合并为一份 `webui-polish`)按计划默认**未做**
 - WEB UI 视图重建范围收口 · 种子速度刷新滞后修复 (2026-09-18): 用户报"WEBUI 种子的下载/上传速度更新慢, 但状态栏速度更新正常"。**根因(探针确定性复现)**: `qbmanager._tick` 与 `web_view.ensure_group_view` 是两条重建路径, 共享同一个 `_group_view_dirty`, 但主循环**只**重建 `_group_view` 就把标记清掉 ⇒ `_singles_view`/`_shows_view`/`_flat_view`(种子页数据源)长期拿不到重建, 版本号却每 tick 自增 ⇒ 前端把陈旧数组整表换上去; 状态栏"速度合计"取 groups 求和故一直新鲜。**同源第二坑**: 置脏语句在 `if grouping.enabled` 块内而 `consume_view_changed()` 在块外 ⇒ 分组关闭时标记被吞(版本号不再变化 ⇒ 前端退避轮询)。**实施**: ①新增 `WebviewMixin.rebuild_views()` 作**唯一重建入口**(四视图 + 版本号 + 清标记一次完成), 主循环与 Web 线程都只调它; ②置脏移出 grouping 门控(脏标记服务全部视图); ③前端 `currentPollMs()` 取消 `idlePolls` 无变化退避(只留失败退避), 并把 `store.server_state` 作为 `status.server` 并入 `/api/state` ⇒ 状态栏与行数据**同源同轮**, 每轮仍 1 条请求。**测试**: 改写 2 条把缺陷固化成预期的用例 + 新增 3 条(含端到端 `test_flat_view_refreshed_by_main_loop_tick`: 主循环 tick 后 Web 请求必须拿到新速度), 全部**红绿验证**; 基线 1018 → **1021 passed / 0 failed**。计划 [docs/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html](../docs/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html); 档案 [tasks/TASK017](tasks/26-09-18-webui-view-rebuild-scope.md); **未提交**
 - 副作用普查能力固化进测试 (2026-09-18): 那次普查用的探针是临时脚本(在 `%TEMP%`, 随会话消失), 于是把它固化成常驻守卫 —— 新增 `tests/sidefx.py`(记账器: patch `subprocess.Popen` / `winreg.*` / `os.remove|unlink|rmdir` + `shutil.rmtree` / `os.symlink` / `socket.bind` / `os.startfile`·`os.system`·`webbrowser.open` / `socket.connect`·`create_connection` 七类入口**只记账不阻断**; 放行清单 + `is_violation` 判定) + `tests/conftest.py` 第三道会话级 autouse 夹具(**收尾有越界项即让本次 pytest 失败**, 报告含分类计数与逐条明细) + `tests/test_sidefx.py` 策略单测 10 项。**放行清单**: `node` 子进程 / autostart 的 Run 键与 `auto-qb` 值 / 临时目录内删除与建链 / 回环监听 —— 其余一律越界。**已做反向验证**: 注入一条越界记录后 pytest 退出码 1 并打出明细台账(确认守卫不是摆设), 验证文件用完即删。**细节**: ①`StubRegKey` 放在 `sidefx.py` 而非 conftest, 让记账器能识别"被 AUMID 守卫拦下的调用" ⇒ 两个夹具**安装顺序无关**(否则 AUMID 键一会儿被判越界一会儿不判); ②`is_temp_path` 显式剥掉 Windows `\\?\` 前缀(普查 157 条假阳性的根因, 已有单测锁定); ③模块 docstring 用 raw 字符串以免 `\` 触发 `SyntaxWarning`。**实测 1018 passed / 0 failed**(基线 1007 + 11); 手法与放行清单详见 [pitfalls.md](pitfalls.md) 与 [testing.md](testing.md) 约定 10

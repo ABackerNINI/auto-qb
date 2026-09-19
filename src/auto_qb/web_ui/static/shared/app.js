@@ -159,18 +159,26 @@ const DEFAULT_SORT = { key: "added_on", dir: -1 };
  *      窗口只决定"渲染哪一段", 不参与任何业务语义。
  *
  * 三条硬约束(漏了就出事):
- *   ① 行高必须**齐**: 占位高度 = 行数 × (行高 + gap), 行高不齐 => 位置漂移/滚动跳动。
- *      故测量时采样多行, 差异 >2px 立即关闭窗口化回退全量渲染(宁可慢也不能错位)。
+ *   ① 占位高度必须等于被折叠掉的行高之和 —— 而**行高是不齐的**(带 H&R 要求的行多渲染一行,
+ *      实测 43.7px 与 65.4px 混排), 故一律**逐行实测 + 前缀和**, 不做"等高"近似
+ *      (等高假设在 3000 行上会漂 218px ⇒ 滚到底够不着)。首轮先全量渲染一次量齐。
  *   ② 视图有"插队元素"时必须退避: 分组页展开的 .detail 面板高度不定, 会让后续行整体下移,
- *      此时窗口的"第 i 行在 i×step"假设失效 —— 有展开即回退全量。
+ *      此时窗口的"第 i 行在 pre[i]"假设失效 —— 有展开即回退全量。
  *   ③ 阈值以下不开窗: 小库(<ROW_WIN_MIN)开窗只是平白多一次测量, 且更容易露白。
+ *
+ * ⚠️ 行间距必须**实测**, 不能硬编码(2026-09-19 修 BUG-1): 三个行容器的真实 gap 并不相同 ——
+ * atlas `.group-table` 是 6px, prism `.group-table` 是 5px, 而成员容器 `.detail` 是**块级容器**
+ * (没有 flex gap, 行间距为 0)。曾按 6px 写死, 结果 prism 的占位总高比全量渲染多 2973px
+ * (3000 行实测) ⇒ 滚动条长度失真、中段位置最多偏 49 行。真值由 `_measureRowH` 读
+ * `getComputedStyle(container).rowGap` 实测, 三层各存一份。
  */
 const ROW_WIN_MIN = 200;        // 行数低于此值不开窗口
 const ROW_WIN_OVERSCAN = 10;    // 视口上下各多渲染的行数(快速滚动时不露白)
-const ROW_WIN_GAP = 6;          // .group-table 的 flex 行间距(与 CSS `gap: 6px` 同源)
 // 首帧还没量到行高时的估算值(px)。估错只会让第一帧窗口略偏, 测到真值后同一帧即纠正;
 // 若没有它, 首轮就得先全量渲染 3000 行才能量到行高 —— 白付一次 300ms。
 const ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34 };
+// 行间距兜底值: 仅在容器还没量到(或 rowGap 解析不出, 如块级容器的 "normal")时使用。
+const ROW_WIN_GAP_FALLBACK = 0;
 
 
 /* 业务名词单点表(FX-10): "分组"这个叫法不够具体, **面向用户**的文案统一改称"辅种"。
@@ -262,6 +270,22 @@ function initialViewMode() {
   }
 }
 
+/* 状态优先级**单点表**(数值越小越"该被看到"): "一组/一集种子的聚合状态取哪个"。
+ *
+ * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态
+ * (`e.state`) 是后端按那张表算好后回传的, 而辅种页的组状态 (`decoratedGroups.status.primary`)
+ * 是前端按这张表算的。两张表一旦不一致, **同一批种子在两个页面会显示成不同颜色**;
+ * 更糟的是乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
+ * 两表一致性由 `tests/test_web.py::test_frontend_state_rank_matches_backend` 机械守卫(改一边必须改另一边)。
+ *
+ * 曾用顺序 ["error","checking","downloading","seeding","paused","other"] —— 与后端差两处:
+ * {downloading,checking} 组后端取 downloading、前端取 checking; {paused,seeding} 组后端取 paused、
+ * 前端取 seeding(BUG-7)。统一到后端表 = 语义变成"先报需要处理的, 再报在跑的, 最后报已完成的"。
+ */
+const STATE_RANK = { error: 0, downloading: 1, checking: 2, paused: 3, seeding: 4, other: 5 };
+// 表里没有的 kind 排到最后(与后端 `_SHOW_STATE_RANK.get(k, 9)` 同口径)
+const STATE_RANK_LAST = 9;
+
 const app = createApp({
   data() {
     return {
@@ -291,8 +315,14 @@ const app = createApp({
       cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行
       renderMs: 0,  // 单轮 refresh() 中"赋值 + 多选交集"的耗时(不含网络)
       pendingOps: {},  // P0-3 乐观 UI: hash -> { patch, prev, ts }, 见 isPending/applyOptimistic
+      /* P0-3 组行乐观: 组 key -> { primary, ts }。与 pendingOps 同一套语义, 但**只存"结果"**
+       * 不存 prev —— 组对象是 decoratedGroups 的**拷贝**(非响应式), 直接改 g.status 不会触发
+       * 重渲染, 所以补丁走这个响应式覆盖表, 由 groupPrimary(g) 现问现用; 回滚 = 删掉覆盖,
+       * 真值本来就没被改过(比成员行的 prev 回滚更不容易留假状态)。 */
+      pendingGroupOps: {},
       // P1-2 行窗口化(常量与原理见文件顶部 ROW_WIN_* 注释)
-      rowWin: true,          // 总开关: 行高不齐/有展开面板时自动置 false 回退全量渲染
+      rowWin: true,          // 总开关(诊断用): 关掉即全量渲染。窗口的"退避"不走这里 ——
+                             // 展开分组/行数不足阈值时由 _rowWindow 直接返回 inactive(见其注释)
       _winScrollY: 0,        // 最近一次窗口滚动位置(rAF 合帧写入; 响应式 -> 触发窗口重算)
       _winViewH: 0,          // 视口高度
       _winResize: 0,         // resize 计数(签名里带上它, 让窗口/列宽变化后重算)
@@ -484,24 +514,22 @@ const app = createApp({
         return dir * r;
       });
     },
+    /* 是否有任何乐观补丁在飞(computed 缓存)。给"逐成员问 isPending"的调用点做 O(1) 短路 ——
+     * 集行动辄上百成员, 若无补丁还逐个查, 每次重渲染都是几百次无用查找(见 isEpPending)。 */
+    pendingAny() {
+      return Object.keys(this.pendingOps).length > 0;
+    },
     /* 组级派生展示数据(依赖 groups, 仅在分组数据变化时算一次; 渲染多帧不重算):
      * 保存路径(筛选器)、状态摘要(图标+配色+计数)、共同标签/分类(含差异标记)、大小一致性
      *
      * 交集/共同值在**前端**计算: 后端只透出成员原始值, 避免每次视图重建做集合运算。
      */
     decoratedGroups() {
-      const order = ["error", "checking", "downloading", "seeding", "paused", "other"];
       return this.groups.map((g) => {
-        const counts = {};
-        for (const m of g.members) counts[m.kind] = (counts[m.kind] || 0) + 1;
-        const present = order.filter((k) => counts[k]);
         return {
           ...g,
           save_path: (g.members[0] && g.members[0].save_path) || "",
-          status: {
-            primary: present[0] || "other",
-            text: present.map((k) => `${this.kindText(k)} ${counts[k]}`).join(" · "),
-          },
+          status: this._aggStatus(g.members),
           commonTags: this._commonTags(g.members),
           commonCategory: this._commonCategory(g.members),
           sizeMismatch: new Set(g.members.map((m) => m.size)).size > 1,
@@ -711,20 +739,19 @@ const app = createApp({
     groupPadBottom() {
       return this.groupWin.padBottom;
     },
-    /* 成员行(展开明细): 行数 = 当前展开组/集的成员数。容器是 .detail(不是 .group-table),
-     * 用 ref=detailHead 的父元素定位; 成员数通常很小(阈值以下自动不开窗)。 */
-    memberWin() {
-      const g = this.expandedGroup;
-      return this._rowWindow("member", (g && g.members) || [], null);
+    /* 成员行(展开明细): 行数 = **当前展开单元**的成员数。容器是 .detail(不是 .group-table),
+     * 用 ref=detailHead 的父元素定位; 成员数通常很小(阈值以下自动不开窗)。
+     * ❗参数是当前展开单元的成员数组, 由模板传入(分组页传 g.members, 追剧页传 e.members) ——
+     * 曾经写死读 expandedGroup, 而追剧页的展开态是 expandedShowEp(expandedKey 恒为 null)
+     * ⇒ 追剧页的成员窗口恒为空、占位恒为 0, 与模板注释"集成员行同样走窗口"相反(BUG-2)。 */
+    memberWin(list) {
+      return this._rowWindow("member", list || [], null);
     },
-    memberPadTop() {
-      return this.memberWin.padTop;
+    memberPadTop(list) {
+      return this.memberWin(list).padTop;
     },
-    memberPadBottom() {
-      return this.memberWin.padBottom;
-    },
-    expandedGroup() {
-      return this.groups.find((g) => g.key === this.expandedKey) || null;
+    memberPadBottom(list) {
+      return this.memberWin(list).padBottom;
     },
     totalTorrents() {
       // 种子页数据源到位后直接取平铺数组长度(权威口径); 旧响应缺 torrents 时回退 分组+未归组 合计
@@ -1130,6 +1157,9 @@ const app = createApp({
      * 会在几千行上累积成**上百像素**的漂移(滚到底够不着 / 滚动条长度不对), 必须逐行记。 */
     this._rowHs = {};
     this._winMeasured = { torrent: false, group: false, member: false };  // 该 kind 是否量齐
+    /* 行间距(px)**实测**缓存: 三个容器的真实 gap 不同(atlas .group-table 6px / prism 5px /
+     * 成员容器 .detail 是块级容器 = 0), 硬编码会让占位总高失真(见文件头 BUG-1 注释)。 */
+    this._winGap = {};
     this._winRaf = 0;      // 滚动合帧句柄
     this._winListening = false;
   },
@@ -1690,7 +1720,8 @@ const app = createApp({
             this.selMembers = this.selMembers.filter((h) => hashes.has(h));
           }
           this.renderMs = Math.round((performance.now() - _t0) * 10) / 10;
-          if (this.renderMs > 50) console.warn(`[perf] 单轮视图赋值 ${this.renderMs}ms(>50ms, 需 P1 行窗口化)`);
+          if (this.renderMs > 50) console.warn(`[perf] 单轮视图赋值 ${this.renderMs}ms(>50ms)` +
+            ` —— 稳态应远低于此; 首次切视图要全量渲染一帧量行高, 那一帧超属预期(P1-2 已落地)`);
         }
         this.reapplyPending();  // P0-3: 整表替换后把仍 pending 的乐观值重新贴上
         this.serviceDown = false;
@@ -1847,6 +1878,34 @@ const app = createApp({
      * 后端只透出成员原始值, 共同值(交集/一致值)在**前端**计算: 这类派生展示数据不参与
      * 后端视图重建判定, 且 computed 缓存后可复用, 无需让后端每轮做集合运算。
      */
+    /* 组状态聚合口径(**单点**): 按 STATE_RANK 取"最该被看到"的成员状态 + 计数文案。
+     *
+     * `decoratedGroups` 与组行乐观补丁共用这一份 —— 两处各写一套必然漂移, 那就会出现
+     * "点了暂停, 乐观算出的颜色和真值算出来的不一样"的抖动(见 STATE_RANK 注释)。
+     */
+    _aggStatus(members) {
+      const counts = {};
+      for (const m of members || []) counts[m.kind] = (counts[m.kind] || 0) + 1;
+      const present = Object.keys(counts).sort((a, b) => this._rank(a) - this._rank(b));
+      return {
+        primary: present[0] || "other",
+        // 计数文案按同一优先级排(与主色同序, 避免"颜色说 A、文案先说 B")
+        text: present.map((k) => `${this.kindText(k)} ${counts[k]}`).join(" · "),
+      };
+    },
+    /* kind -> 优先级数值(表里没有的 kind 排最后, 与后端 `_SHOW_STATE_RANK.get(k, 9)` 同口径) */
+    _rank(kind) {
+      return STATE_RANK[kind] === undefined ? STATE_RANK_LAST : STATE_RANK[kind];
+    },
+    /* 一组种子按同一张表聚合出的状态(供集行乐观补丁用: 与后端 e.state 同口径) */
+    _aggKind(members) {
+      let best = null;
+      for (const m of members || []) {
+        if (!m) continue;
+        if (best === null || this._rank(m.kind) < this._rank(best)) best = m.kind;
+      }
+      return best;
+    },
     _commonTags(members) {
       const sets = members.map((m) => new Set(m.tags || []));
       if (!sets.length) return { list: [], diff: false };
@@ -2179,7 +2238,8 @@ const app = createApp({
        * 快命令曲线 0 → 150 → 300 → 500 封顶; reannounce 走宽松曲线 500 → 1000 封顶
        * (tracker 确认本来就要几秒, 密轮询只增请求数不减延迟)。
        * 多发的请求只落在"命令在途"的极短窗口内, 空闲时没有任何额外轮询。
-       * P0-0 埋点: 后端回执带 wait_ms/exec_ms 时记入 this.cmdStats(排查用, 不打日志)。 */
+       * P0-0 埋点: 后端回执带 wait_ms/exec_ms 时记入 this.cmdStats, 并在超阈值时打一条
+       * [perf](见下方 —— 埋点没有消费者就是死字段)。 */
       const start = Date.now();
       const firstMs = opts.firstMs || 0;
       const capMs = opts.capMs || 500;
@@ -2191,6 +2251,15 @@ const app = createApp({
           if (r.status === "ok" || r.status === "error") {
             if (typeof r.wait_ms === "number") {
               this.cmdStats = { totalMs: Date.now() - start, waitMs: r.wait_ms, execMs: r.exec_ms, cmdId };
+              /* 埋点必须有消费者, 否则就是死字段(2026-09-19 复核: 此前 cmdStats 只写不读,
+               * 计划里那张"走查表"从未产出)。超阈值时打一条 [perf] —— 冒烟脚本会收集并打印。
+               * waitMs 大 = 命令没被及时消费(P0-1 唤醒退化); totalMs 大 = 轮询曲线或网络慢。 */
+              if (this.cmdStats.waitMs > 100 || this.cmdStats.totalMs > 400) {
+                console.warn(
+                  `[perf] 命令 ${cmdId}: 排队 ${this.cmdStats.waitMs}ms / 执行 ${this.cmdStats.execMs}ms` +
+                  ` / 端到端 ${this.cmdStats.totalMs}ms(排队>100 或端到端>400 属异常)`
+                );
+              }
             }
             return r.status === "ok" ? { ok: true } : { ok: false, error: r.error || "执行失败" };
           }
@@ -2256,6 +2325,30 @@ const app = createApp({
         if (!this.isPending(h)) continue;  // 顺带清掉已超时的
         this._forEachRow(h, (row) => Object.assign(row, this.pendingOps[h].patch));
       }
+    },
+    /* 组行是否有成员在飞(模板绑 is-pending)。**组行的颜色本身不需要额外补丁** ——
+     * 组行状态色取自 decoratedGroups 的 status.primary, 而它是 _aggStatus(成员 kind) 算出来的
+     * computed, 成员 kind 被 applyOptimistic 改过之后会自动重算(2026-09-19 实测:
+     * 整组暂停后组行 class 由 s-checking 变 s-paused)。缺的只是"在飞"这个视觉标记。 */
+    isGroupPending(g) {
+      if (!this.pendingAny) return false;   // 常见路径 O(1)
+      return (g.members || []).some((m) => this.isPending(m.hash));
+    },
+    /* 集行是否有成员在飞(同 isGroupPending, 但集的成员是 memberByHash 的**拷贝**)。
+     * 取 hash 走 memberHashesOf(项目约定: 集成员在前端已是对象, 直接取 .hash 会被静态守阵拦下 ——
+     * 那个守阵防的是"把对象当 hash 发给后端", 这里虽是本地查表, 但统一走归一函数没有代价)。 */
+    isEpPending(e) {
+      if (!this.pendingAny) return false;
+      return this.memberHashesOf(e.members).some((h) => this.isPending(h));
+    },
+    /* 集行状态色。真值 `e.state` 是后端按 _SHOW_STATE_RANK 聚合后**当标量拷贝**进来的 ——
+     * decoratedShows 每轮重建 {...e}, 但 e.state 只在下一次 /api/state 回包时才更新,
+     * 所以成员 kind 被乐观补丁改掉后集行颜色不动(BUG-3: 整集暂停后仍是 s-seeding)。
+     * 有成员在飞时按**同一张 STATE_RANK 表**现算; 没有在飞时一律用后端真值 ——
+     * 不碰"筛选后成员子集"与后端全量成员口径不一致的语义(那是另一件事)。 */
+    epState(e) {
+      if (!this.isEpPending(e)) return e.state;
+      return this._aggKind(e.members) || e.state;
     },
     async act(action) {
       this.menu.visible = false;
@@ -2768,15 +2861,19 @@ const app = createApp({
       const isRe = action === "reannounce";
       // P0-4: pause/resume 合单为一条 bulk 命令 —— 整剧动辄上百集, 逐条投递要发上百次请求
       if (!isRe) {
+        // P0-3: 与整组/单种子同一条乐观链路(整集/整剧此前**完全没接**, 点了没有任何即时反馈)
+        this.applyOptimistic(hashes, action);
         try {
           const resp = await this.api("/api/torrents/bulk", {
             method: "POST",
             body: JSON.stringify({ action, hashes }),
           });
           const r = await this.waitCmd(resp.cmd_id);
+          this.resolveOptimistic(hashes, r.ok);
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
           else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
         } catch (e) {
+          this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
           if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
         }
         return;
@@ -3569,13 +3666,23 @@ const app = createApp({
         old_path: row.path, new_path: parent + nn, is_folder: !!row.dir,
       }, row.dir ? "目录已重命名" : "文件已重命名");
     },
-    copyTorrentInfo(field) {
+    async copyTorrentInfo(field) {
       this.menu.visible = false;
-      const m = this.memberByHash.get(this.menu.hash);
+      const hash = this.menu.hash;
+      const m = this.memberByHash.get(hash);
       if (!m) return;
-      const value = field === "name" ? m.name
+      let value = field === "name" ? m.name
         : field === "hash" ? (m.infohash_v1 || m.hash)
           : (m.magnet_uri || "");
+      /* magnet_uri **不在成员索引里**: 只有种子页的平铺 SEED_ITEM 数组带它(见 memberByHash
+       * 注释), 而索引优先取分组/未归组条目 —— 那两份都出自后端 _member_view, 没有该字段
+       * ⇒ 索引条目恒为 undefined, "复制磁力"曾 100% 落到"该种子没有 magnet 链接"(BUG-9)。
+       * 改成**点的时候按需取一次详情**(复用 _editDetail: 抽屉已开则连请求都不发),
+       * 而不是给每 1.5~3s 一轮的响应体加一个几十字节的字段(3000 种子 ≈ +0.6MB/轮)。 */
+      if (!value && field === "magnet") {
+        const d = await this._editDetail(hash);
+        value = (d && d.magnet_uri) || "";
+      }
       if (!value) {
         this.toast("该种子没有 magnet 链接", "warn");
         return;
@@ -4314,6 +4421,30 @@ const app = createApp({
       const head = this.$refs.detailHead;
       return head && head.parentElement ? head.parentElement : null;
     },
+    /* 行容器的**真实**行间距(px): 三个容器并不相同 —— atlas `.group-table` 是 6px、
+     * prism 是 5px、成员容器 `.detail` 是块级容器(没有 flex gap = 0)。硬编码任何一个值
+     * 都会让另外两层的占位总高失真, 所以一律读计算样式实测(见文件头 BUG-1 注释)。
+     * 块级容器的 rowGap 计算值是 "normal" ⇒ parseFloat 得 NaN ⇒ 回落 0, 正是我们要的值。
+     * ❗返回 **null = 容器当前没渲染**(如种子页未打开时问 .group-table) —— 调用方**不得**
+     * 把它当 0 缓存: 否则在分组页问一次就把种子页的间距永久记成 0(实测占位总高少 5px×2999)。 */
+    _winGapOf(kind) {
+      const el = kind === "torrent" ? this._winContainer(kind, "torrentTable")
+        : kind === "group" ? this._winContainer(kind, "groupTable")
+          : this._winContainer(kind, null);
+      if (!el) return null;
+      if (typeof getComputedStyle !== "function") return ROW_WIN_GAP_FALLBACK;
+      const g = parseFloat(getComputedStyle(el).rowGap);
+      return Number.isFinite(g) ? g : 0;
+    },
+    /* 取该层的行间距(带缓存)。容器未渲染时返回 null, 由调用方决定回退策略。 */
+    _winGapFor(kind) {
+      if (this._winGap[kind] === undefined) {
+        const g = this._winGapOf(kind);
+        if (g === null) return null;
+        this._winGap[kind] = g;
+      }
+      return this._winGap[kind];
+    },
     _winSigExtra() {
       // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态
       return `${this.distTotal ? 1 : 0}${this.searchQuery && this.searchQuery.trim() ? 1 : 0}${this.filtersActive ? 1 : 0}`;
@@ -4389,13 +4520,16 @@ const app = createApp({
       // 行高还没量齐 -> 这一轮先全量渲染(首轮/改列之后各一次), 下次就走窗口了
       if (!this._winMeasured[kind]) return off;
       const est = this._rowH[kind] || ROW_WIN_EST_H[kind];
+      // 行间距实测(见 _winGapFor); 容器还没渲染时本轮先全量, 免得按错的间距撑占位
+      const gap = this._winGapFor(kind);
+      if (gap === null) return off;
       const hs = this._rowHs;
       const pre = new Array(n + 1);
       pre[0] = 0;
       let y = 0;
       for (let i = 0; i < n; i++) {
         const h = hs[this._rowKeyOf(kind, list[i])];
-        y += (h === undefined ? est : h) + ROW_WIN_GAP;
+        y += (h === undefined ? est : h) + gap;
         pre[i + 1] = y;
       }
       const rel = this._winScrollY - (this._winTop[kind] || 0);
@@ -4404,11 +4538,11 @@ const app = createApp({
       if (!(start >= 0) || start > n) start = 0;
       if (!(end > 0) || end > n) end = n;
       if (start >= end) return off;  // 数值异常: 宁可全渲染, 也不渲染"空窗口"
-      // 占位两侧各多出一个 gap(顶替了行块内部原有的间距), 故减一个 GAP 对齐
+      // 占位两侧各多出一个 gap(顶替了行块内部原有的间距), 故减一个 gap 对齐
       return {
         active: true, start, end,
-        padTop: start > 0 ? pre[start] - ROW_WIN_GAP : 0,
-        padBottom: end < n ? pre[n] - ROW_WIN_GAP - pre[end] : 0,
+        padTop: start > 0 ? pre[start] - gap : 0,
+        padBottom: end < n ? pre[n] - gap - pre[end] : 0,
       };
     },
     _prefixFloor(pre, y) {
@@ -4440,7 +4574,7 @@ const app = createApp({
     /* 模板用: 成员行切片(展开明细)。窗口未启用时原样返回, 与改动前完全等价 */
     winMembers(list) {
       const rows = this.sortedMembers(list);
-      const w = this.memberWin;
+      const w = this.memberWin(list);
       return w.active ? rows.slice(w.start, w.end) : rows;
     },
     /* 把默认模板"实体化"为 px:

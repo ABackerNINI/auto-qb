@@ -26,7 +26,7 @@ REANNOUNCE_CONFIRM_TIMEOUT = 30.0
 # 目前只有 build_search_index —— web_view 在搜索索引脏时自投递(web_view.py:513/:699)。
 # ❗若允许它唤醒会形成自激循环: 唤醒 -> drain(单轮最多 SEARCH_INDEX_BUILD_BUDGET=500 条文件 API)
 # -> 索引仍脏 -> 再投递 -> 立刻再唤醒 …… 中间没有 tick 兜底, 直接打满 CPU 并冲垮 qB。
-# 新增自投递命令时必须同步加进这里(测试守卫: tests/test_web_commands.py)。
+# 新增自投递命令时必须同步加进这里(测试守卫: tests/test_web.py::test_api_enqueue_wakes_main_loop)。
 SELF_POSTED_COMMANDS = frozenset({"build_search_index"})
 
 # 执行后会**改变 qB 种子状态**的命令: 主循环在这批命令消费完后补一次完整刷新,
@@ -57,6 +57,10 @@ RESYNC_COMMANDS = frozenset(
         "add_torrents",
     }
 )
+
+# **延迟回执**命令: handler 只发指令并登记确认跟踪, 真正的结果由后续 tick(tracker 确认)或
+# handler 内部(依 qB 返回串写)写入 —— 它们不是"执行完即 ok", 所以 drain 侧**不**补写回执。
+DEFERRED_RECEIPT_COMMANDS = frozenset({"reannounce_group", "reannounce_torrent", "bulk_torrents", "add_torrents"})
 
 
 def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
@@ -129,21 +133,25 @@ class WebCommandsMixin:
                 queued_ts = payload.get("_queued_ts")
                 start_ts = time.time()  # P0-0: 出队即开始, 用于拆 wait_ms / exec_ms
                 try:
-                    if cmd_id and cmd in ("reannounce_group", "reannounce_torrent", "bulk_torrents", "add_torrents"):
+                    deferred = cmd in DEFERRED_RECEIPT_COMMANDS
+                    if cmd_id and deferred:
                         # handler 只发指令并登记确认跟踪(bulk: 聚合写回执; add: 依 qB 结果串写回执);
                         # 回执由后续 tick(汇报确认)或 handler 内部写入 —— 均不是简单的"执行完即 ok"
                         handlers[cmd](cmd_id=cmd_id, **args)
                     else:
                         handlers[cmd](**args)
-                        if cmd_id:
-                            self._set_web_result(cmd_id, "ok", timing=_timing(queued_ts, start_ts))
+                    # 写命令序号: Web 线程的只读端点短缓存据此失效(P1-4)。自投递命令不计数 ——
+                    # 它只是内部索引推进, 且频次高, 计进去会让缓存在建索引期间完全失效。
+                    # ❗必须在写回执**之前**自增: 前端拿到回执会立刻重取只读端点(如改完分类重取
+                    # /api/categories), 若先写回执, 那一瞬的读会命中旧写序号对应的缓存键 ——
+                    # 顺序反过来才是"先让缓存失效, 再宣布命令成功"。
+                    if cmd not in SELF_POSTED_COMMANDS:
+                        self._web_write_seq += 1
+                    if cmd_id and not deferred:
+                        self._set_web_result(cmd_id, "ok", timing=_timing(queued_ts, start_ts))
                     # handler 已同步改完 qB 状态(未抛异常即成功) -> 记一笔, 整批结束后补刷新
                     if cmd in RESYNC_COMMANDS:
                         changed = True
-                    # 写命令序号: Web 线程的只读端点短缓存据此失效(P1-4)。自投递命令不计数 ——
-                    # 它只是内部索引推进, 且频次高, 计进去会让缓存在建索引期间完全失效。
-                    if cmd not in SELF_POSTED_COMMANDS:
-                        self._web_write_seq += 1
                 except KeyError as e:
                     logger.warning(f"WEB UI 未知命令: {e}")
                     if cmd_id:

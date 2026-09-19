@@ -46,8 +46,13 @@ VIEW_ARRAYS = {
     "group": ("groups", "singles"),
     # 种子页: 全部种子一行一条的平铺数组
     "torrent": ("torrents",),
-    # 追剧页: 剧→季→集聚合
-    "show": ("shows",),
+    # 追剧页: 剧→季→集聚合 + **成员索引**。
+    # ❗shows 里的 members 只是一串 hash(见前端 memberByHash 注释: 明细成员经索引取, 不随 shows
+    #   重复回传), 而索引正是 groups + singles 拼出来的 ⇒ 只回 shows 时前端索引为空,
+    #   decoratedShows 的成员解析全部落空: **刷新后停在追剧页会得到一张永久空表**
+    #   (2026-09-19 实测: groups=0 / memberByHash=0 / 0 行; 且 rid 已记住 ⇒ 后续每轮都是
+    #   "版本未变不回传", 自己不会恢复, 必须切一次视图)。故追剧页必须连带成员索引一起回。
+    "show": ("shows", "groups", "singles"),
 }
 
 
