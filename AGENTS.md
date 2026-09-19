@@ -61,23 +61,24 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 
 ## 提交 / PR
 
-- **协作开发统一走 Gitee 的 `develop` 分支 (2026-09-19 用户指定)**: 日常开发、提交、推送、拉齐都以
-  `origin/develop` (Gitee) 为唯一协作主线 —— 开工先 `git pull --rebase origin develop`, 交付以
-  Gitee 上有该提交为准。GitHub 只作镜像, **允许滞后**; 判断"某某改动是否已交付"只看 Gitee,
-  不要用 GitHub 的提交状态判断进度。
-- 日常开发在 `develop` 分支; 提交信息为中文一句话概述 (参照 `git log` 风格)。
-- **用户说"提交"= 只 `commit`, 不 `push`**; 需要推送时用户会明说。
-- **推送顺序与策略 (2026-09-19 用户指定)**:
-  - 远端: `origin` = Gitee (`https://gitee.com/ABacker/auto-qb.git`); `github` = `https://github.com/ABackerNINI/auto-qb.git` (没有就 `git remote add github <url>`)。
-  - **先推 Gitee**: `git push origin develop` —— 稳定, 正常推。
-  - **再尝试 GitHub, 且必须直连不走代理**: 全局 git config 里给 github.com 配了 per-URL 代理
-    (`http.https://github.com.proxy=http://127.0.0.1:10808`), 推送时用 `-c` 覆盖为空即禁用:
-    ```bash
-    git -c http.https://github.com.proxy= push github develop
-    ```
-  - **GitHub 直连失败不重试**: 直连本来就不稳定 (2026-09-19 实测 `fatal: ... Recv failure: Connection was reset`)。
-    失败即**如实报告**, 不重试、不换代理再试、不改走 SSH、不调整超时反复试 —— 交由用户决定。
-  - **不要因为 GitHub 失败而回滚或改写 Gitee 上已完成的推送**: 两个远端互不影响, Gitee 成功就算推送达成。
+- **协作主线**: 日常开发在 `develop` 分支, 且统一以 **Gitee 的 `develop`** 为准 (`origin`)。开工先
+  `git pull --rebase origin develop`; **交付与否只看 Gitee 上有没有该提交**。GitHub 只作镜像,
+  **允许滞后** —— 不要用 GitHub 的提交状态判断进度 (直连不稳定, 会误判成"改动没推上去")。
+- **提交信息**: 中文, **一句话概述 + 详细描述** —— 首行一句话说清"改了什么 / 为什么"(参照
+  `git log` 风格, 如"修复 WEB UI 种子速度刷新滞后: …"), 空一行后写细节: 改动动机、关键取舍、
+  影响面、实测数字。单句能说清的小改只写首行。
+- **用户说"提交"= commit + 自动推送** (2026-09-19 用户指定), 一次流程走完:
+  1. `git push origin develop` —— 推 Gitee (稳定, 这是协作主线, 必须成功);
+  2. 再**尝试一次** GitHub 直连:
+     ```bash
+     git -c http.https://github.com.proxy= push github develop
+     ```
+     全局 git config 给 github.com 配了 per-URL 代理 (`http.https://github.com.proxy=http://127.0.0.1:10808`),
+     用 `-c` 覆盖为空即**禁用代理走直连**。
+  3. **GitHub 直连失败不重试**: 直连本来就不稳定 (2026-09-19 实测两种形态: `Recv failure: Connection
+     was reset` 与 `Failed to connect to github.com:443 after 21025 ms`)。失败**只如实报告一次** ——
+     不重试、不换代理再试、不改走 SSH、不调超时反复试, 也不回滚或改写 Gitee 上已完成的推送。
+     远端只有 `origin` 时先补 `git remote add github https://github.com/ABackerNINI/auto-qb.git`。
 - 提交前: 全量测试通过; 用户可见行为变更需同步 `README.md` 与 `memory-bank/`。
 - **只暂存本次范围**: 逐路径写 `git add <文件...>`, 不用 `git add -A`; 暂存清单里不得混入用户自己的未提交改动 (`想法.md` 属高危, `config.yml` 是红线)。
 - **提交前先格式化**: 改过的 Python 文件先过 `yapf -i <file>` (含 `tests/`)。
