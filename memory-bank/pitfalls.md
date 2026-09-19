@@ -673,3 +673,11 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **根因**: 该 action 从 v8 起只发**固定标签**(v8.0.0…v8.3.2 / v9.0.0 / v10.0.0 / v10.0.1 / v10.1.0), 仓库里**没有** `refs/tags/v10` 这种随大版本移动的浮动标签(对比 `actions/checkout`、`setup-python`、`upload-artifact` 都有 v1…v7 浮动标签, 所以同文件里写 `@v6` / `@v7` 是没问题的)。写 `@v10` 就是引用了一个不存在的 ref。
 - **修法**: 按上游 v10.1.0 README 的推荐写法**固定到 commit SHA** 并在行尾加版本注释 —— `uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0`(次选是直接写 `@v10.1.0`)。
 - **判别法**: 给第三方 action 升大版本前, 先 `curl -s https://api.github.com/repos/<owner>/<repo>/git/refs/tags | grep -o '"ref": "refs/tags/[^"]*"'` 确认目标 ref 真的存在, 别照着上一个大版本的写法顺推 —— "上一个大版本有浮动标签" 不代表下一个也有。
+
+### `git status -sb` 的 ahead/behind 会拿陈旧的远端 ref 骗你 (2026-09-19 实测)
+
+- **症状**: 推 CI 修复提交前看 `git status -sb` 是 `## develop...origin/develop`, **没有 ahead/behind**, 以为和主线同步; 结果 `git push origin develop` 被拒 —— `Updates were rejected because the remote contains work that you do not have locally`。
+- **根因**: `-sb` 的 ahead/behind 是拿**本地缓存的远端跟踪 ref**(`refs/remotes/origin/develop`)比出来的, 不会实时问服务器。本次这个 ref 停在 `d3b5d4c`, 而 Gitee 实际已到 `d4d2326`(领先 3 个提交), 差值只有 `git fetch` 之后(或者 push 被拒时)才暴露。
+- **判别法**: **要回答"我有没有落后", 必须先 `git fetch`**, 再看 `git status -sb` 或 `git log --oneline HEAD..origin/develop`。裸 `git status` 只能回答"工作区干不干净", 回答不了"主线到哪了"。反向同样成立: 显示 `[ahead N]` 也不代表推得上去 —— 那是相对**当前上游**的, 上游若指向 GitHub 镜像就毫无意义(见 AGENTS.md「提交 / PR」节)。
+- **修法**: 推之前按 AGENTS.md 走 `git pull --rebase origin develop` 即可 —— `pull` 自带 fetch, 所以"先 fetch 看差集"与"直接 pull"只差在要不要先瞄一眼对方改了什么。
+- **与上面那条坑连起来看**: 一旦发现自己落后, **别在脏工作区上直接合并** —— 先提交弄干净, 再 pull/rebase(「非快进 + 脏 = 必炸」)。
