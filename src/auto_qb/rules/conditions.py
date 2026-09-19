@@ -145,11 +145,20 @@ class HrCondition(BaseCondition):
     def match(self, ctx: RuleContext):
         torrent = ctx.torrent
         conf = torrent.tracker_conf
+        # 无 HR 可判定的两种情形**必须显式分支**: 直接读 conf.hr 会在 conf=None 时抛
+        # AttributeError, 被上层吞掉后故障表现为"规则没匹配"而不是报错 —— 极难定位。
+        if conf is None:
+            # 未匹配站点: 拿不到站点配置, 无从判定 ⇒ 保守按"未触发/未满足"处理
+            # (与 trackers / tracker_group 的"无 tracker_conf 恒不匹配"同语义)
+            return self.mode == "condition-not-met"
+        if conf.hr is None:
+            # 站点已匹配但没配 HR = 没有 HR 要求 ⇒ "已满足"与"未触发"同为真
+            return self.mode != "condition-met"
         if self.mode == "condition-not-met":
             return not torrent.check_hr_condition()
         if self.mode == "satisfied":
-            # 没有HR的站点默认满足HR做种条件
-            return conf.hr is None or torrent.check_hr_condition() and torrent.check_hr_satisfied()
+            # 括号不可省: `a or b and c` 实为 `a or (b and c)`, 极易被误读成 `(a or b) and c`
+            return torrent.check_hr_condition() and torrent.check_hr_satisfied()
         # condition-met
         return torrent.check_hr_condition()
 

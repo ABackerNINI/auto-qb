@@ -7,6 +7,8 @@
 - test_notify_handler_dispatch: WARNING/ERROR 日志入队并由后台线程派发, ERROR 标记 urgent
 - test_notify_handler_self_loop_guard: auto_qb.notify 来源的记录被忽略(防自环)
 - test_notify_handler_quiet_hours: 免打扰时段(含跨午夜)跳过发送, 时段外照常
+- test_notify_quiet_hours_does_not_consume_quota: 免打扰判定在节流**之前**, 免打扰期间不消耗每小时配额/不刷新去重窗口
+- test_notify_throttle_dedup_table_evicted: 去重表按窗口淘汰(长跑进程里唯一的无界增长点)
 - test_notify_handler_throttle_drops: 同键重复与超限的记录不派发
 - test_notify_channel_windows_command: Windows 命令构造(powershell -EncodedCommand, toast XML 经双层 base64, AUMID 注册跳过)
 - test_notify_windows_appid_ensure: AUMID 幂等注册(已存在复用/无 APPDATA/注册失败回退 PowerShell 来源)
@@ -179,6 +181,63 @@ def test_notify_handler_quiet_hours():
     handler._now = lambda: datetime(2026, 9, 12, 12, 0)
     handler.emit(record)
     assert _wait_for(lambda: len(channel.sent) == 1), "时段外应照常派发"
+
+
+def test_notify_quiet_hours_does_not_consume_quota():
+    """免打扰期间的通知**不吃配额**: 判定必须在 `throttle.allow` 之前
+
+    `allow` 有副作用(计入 `_sent_at` + 刷新 `_dedup_at`)。若先 allow 再判安静时段, 免打扰
+    期间产生的通知会白白吃掉每小时配额并推迟去重窗口 ⇒ 时段一结束, 本该立刻发出的通知
+    仍被挡住 —— 用户体感是"免打扰结束后反而收不到通知"。
+    """
+    night = datetime(2026, 9, 12, 23, 30)
+    # 上限 1 条: 免打扰期间发 5 条, 配额必须仍是满的
+    handler, channel = _make_handler(quiet_hours="23:00-08:00", max_per_hour=1, dedup_window=600.0, now=lambda: night)
+    for i in range(5):
+        handler.emit(
+            logging.LogRecord(
+                name="auto_qb.test",
+                level=logging.WARNING,
+                pathname="p",
+                lineno=1,
+                msg=f"夜间消息 {i}",
+                args=None,
+                exc_info=None,
+            )
+        )
+    assert channel.sent == []
+    assert handler.throttle._sent_at == [], f"免打扰不该消耗配额: {handler.throttle._sent_at}"
+    assert handler.throttle._dedup_at == {}, f"免打扰不该刷新去重窗口: {handler.throttle._dedup_at}"
+
+    # 免打扰结束: 第一条必须立刻放行(配额与去重窗口都没被夜间那条吃掉)
+    handler.quiet_hours = None
+    handler.emit(
+        logging.LogRecord(
+            name="auto_qb.test",
+            level=logging.WARNING,
+            pathname="p",
+            lineno=1,
+            msg="夜间消息 0",
+            args=None,
+            exc_info=None,
+        )
+    )
+    assert _wait_for(lambda: len(channel.sent) == 1), "免打扰结束后应立刻放行(未被配额挡住)"
+
+
+def test_notify_throttle_dedup_table_evicted():
+    """去重表按窗口淘汰: 窗口滑出的键被清掉, 窗口内的保留"""
+    clock = {"t": 1000.0}
+    throttle = NotifyThrottle(max_per_hour=100, dedup_window=10.0, now=lambda: clock["t"])
+    assert throttle.allow("a")
+    assert throttle.allow("b")
+    assert set(throttle._dedup_at) == {"a", "b"}
+    clock["t"] += 5.0
+    assert throttle.allow("c")  # 触发一次淘汰: a/b 仍在窗口内
+    assert set(throttle._dedup_at) == {"a", "b", "c"}
+    clock["t"] += 6.0  # a/b 已超窗口(11s > 10s), c 仍在(6s)
+    assert throttle.allow("d")
+    assert set(throttle._dedup_at) == {"c", "d"}, f"过期键应被淘汰: {throttle._dedup_at}"
 
 
 def test_notify_handler_throttle_drops():

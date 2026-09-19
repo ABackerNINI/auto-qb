@@ -117,7 +117,7 @@ GROUPS: Tuple[Group, ...] = (
                         risk="改成 0.0.0.0 会把可暂停/删除种子的管理界面暴露给局域网其他设备",
                     ),
                     Field("port", "监听端口", "int", default="8080", min=1, max=65535, help="Web UI 的端口; 若与 qB Web UI 相同请改开一个"),
-                    Field("token", "访问密钥", "password", default="", help="登录 Web UI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志打印一次)"),
+                    Field("token", "访问密钥", "password", default="", help="登录 Web UI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志只提示文件路径, 密钥内容不打印)"),
                     Field(
                         "skip_local_verify",
                         "跳过本地验证",

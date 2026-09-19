@@ -91,13 +91,38 @@ class QbApi:
         self._client.torrents_set_category(category=category, torrent_hashes=torrent_hashes, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, category=category)
 
+    def _sync_paused_state(self, torrent_hashes: Optional[HashType], *, paused: bool) -> None:
+        """暂停/恢复后按各记录**当前是否已完成**写回 state(按完成状态分桶, 逐桶同步)
+
+        **不能硬编码** `stalledUP` / `pausedUP`: 那等于把"正在下载(pausedDL 语义)的种子"
+        标成"已完成 + 上传"—— `is_complete` 由 state 后缀 UP 判定, 一旦为真就会误触下载冲突
+        与缺文件分组分支(grouping.py 一带), 属于"静默的错误分类"而不是显示误差。
+
+        写回只覆盖**完成位 + 暂停位**两根轴: qB 的 stalled / queued / forced / 检查中等细分
+        由下轮 sync 校准(瞬态, 不影响判定)。保留写回本身是为了同 tick 的动作幂等 ——
+        不写回的话, 同一 tick 内第二个 stop 会因 `is_paused` 仍为假而再发一次请求。
+        """
+        hashes = self._to_list(torrent_hashes)
+        buckets: dict = {}
+        for h in hashes:
+            rec = self.store.by_hash.get(h)
+            enum = getattr(rec, "state_enum", None) if rec is not None else None
+            complete = bool(enum is not None and getattr(enum, "is_complete", False))
+            if paused:
+                want = "pausedUP" if complete else "pausedDL"
+            else:
+                want = "stalledUP" if complete else "stalledDL"
+            buckets.setdefault(want, []).append(h)
+        for state, hs in buckets.items():
+            self.store.update_torrent_fields(hs, state=state)
+
     def torrents_start(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_start(torrent_hashes=torrent_hashes, **kwargs)
-        self.store.update_torrent_fields(torrent_hashes, state="stalledUP")
+        self._sync_paused_state(torrent_hashes, paused=False)
 
     def torrents_stop(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         self._client.torrents_stop(torrent_hashes=torrent_hashes, **kwargs)
-        self.store.update_torrent_fields(torrent_hashes, state="pausedUP")
+        self._sync_paused_state(torrent_hashes, paused=True)
 
     def torrents_set_upload_limit(
         self,

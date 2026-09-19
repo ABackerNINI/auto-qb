@@ -6,6 +6,7 @@
 - test_add_category_overwrite_semantics: 加分类动作的 overwrite 覆盖语义
 - test_remove_category: 移除分类动作
 - test_start_stop_idempotent: 开始/停止动作幂等(重复执行不报错)
+- test_stop_preserves_completeness: 暂停/恢复后快照 state 的**完成位**不得翻转(停一个正在下载的种子不能被写成 pausedUP ⇒ is_complete 变真)
 - test_move_to: 移动保存路径动作
 - test_reannounce: 重新 announce 动作
 - test_speed_limit_actions: 限速动作(下载/上传/全局)
@@ -163,6 +164,37 @@ def test_start_stop_idempotent():
         tor.state = "stalledUP"
         assert StopAction("").execute(ctx).is_ok
         assert ("stop", None) in client.calls
+
+
+def test_stop_preserves_completeness():
+    """暂停/恢复只翻"暂停位", 不得翻"完成位"
+
+    修复前 `QbApi.torrents_stop` 硬编码 `state="pausedUP"`、`torrents_start` 硬编码
+    `"stalledUP"` —— 停一个**正在下载**的种子会被记成"已完成 + 上传", `is_complete` 变真,
+    可能误触下载冲突与缺文件分组分支。反向同理: 恢复一个未完成的种子不能被记成 UP。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+
+        # 正在下载(未下完): 停 -> pausedDL, 恢复 -> stalledDL
+        tor = FakeTorrent(state="downloading", downloaded=10 * 1024**2, total_size=100 * 1024**2)
+        ctx = make_ctx(mgr, tor, client)
+        assert StopAction("").execute(ctx).is_ok
+        assert tor.state == "pausedDL", f"未完成种子暂停后应为 pausedDL: {tor.state}"
+        assert tor.state_enum.is_complete is False, "完成位被翻转 ⇒ is_complete 误真"
+        assert tor.state_enum.is_paused is True, "同 tick 幂等依赖暂停位即时生效"
+        assert StartAction("").execute(ctx).is_ok
+        assert tor.state == "stalledDL", f"未完成种子恢复后应为 stalledDL: {tor.state}"
+        assert tor.state_enum.is_complete is False
+
+        # 已完成做种: 停 -> pausedUP, 恢复 -> stalledUP(原行为在这条路径上是对的)
+        tor2 = FakeTorrent(state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
+        ctx2 = make_ctx(mgr, tor2, client)
+        assert StopAction("").execute(ctx2).is_ok
+        assert tor2.state == "pausedUP", tor2.state
+        assert StartAction("").execute(ctx2).is_ok
+        assert tor2.state == "stalledUP", tor2.state
 
 
 def test_move_to():

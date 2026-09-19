@@ -180,7 +180,12 @@ class SkipCheckingMixin:
                                      f".torrent 已备份: {backup}, 请手动重加")
         appeared = _poll_until(lambda: ctx.api.torrents_info(torrent_hashes=ctx.hash), attempts=3, interval=0.3)
         if not appeared:
-            return ActionResult.fail("重加后未确认到种子, 请检查客户端")
+            # 种子已从客户端移除, 而 data 字节只存在于内存 —— 这一支若直接返回, .torrent 就永久
+            # 丢了(用户得回站点重新下载), 且 store 无记录、下轮不会执行 restore_torrent, 会被
+            # 误判为"用户主动删除"。故与 add 抛异常那一支一致: 先备份再失败。
+            backup = self._backup_torrent(ctx.manager, torrent, data)
+            return ActionResult.fail(f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "
+                                     f"种子已从客户端移除(文件保留), .torrent 已备份: {backup}")
         ctx.manager.store.restore_torrent(torrent)
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
         ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()

@@ -27,6 +27,13 @@ from .loaders import load_config
 # 树根键(与 validate_config 的"根节点仅允许 config"一致)
 ROOT_KEY = "config"
 
+# 敏感字段掩码: `/api/config` 把配置树整棵返回前端, qB 密码 / tracker passkey / WEB 密钥会明文
+# 进浏览器内存与截图。GET 时按**键名**掩码为哨兵, PUT/预览时由 unmask_tree 用磁盘旧值还原 ——
+# 哨兵即"用户未修改"的显式信号, 因此掩码不会把密码写成 "********"(那会直接毁掉生产配置)。
+# 只处理 dict 内的标量, 不进列表: 列表内项无法与磁盘旧值稳定对应, 掩码后还原不了。
+SENSITIVE_KEY_PARTS = ("password", "passkey", "token", "secret", "cookie", "authkey")
+MASK_SENTINEL = "********"
+
 
 @dataclass
 class WriteResult:
@@ -49,6 +56,49 @@ def read_tree(config_path: str) -> Dict[str, Any]:
     if not isinstance(data.get(ROOT_KEY), dict):
         data[ROOT_KEY] = {}
     return data
+
+
+def mask_tree(tree: Dict[str, Any]) -> Dict[str, Any]:
+    """深拷贝配置树并把敏感键(键名含 SENSITIVE_KEY_PARTS)的非空标量替换为 MASK_SENTINEL
+
+    空值不掩码: 空密码掩码后前端会以为"已设置密码", 反而误导。
+    """
+    return _mask_node(tree)
+
+
+def _mask_node(node: Any) -> Any:
+    if not isinstance(node, dict):
+        return node  # 列表整体不动(见 SENSITIVE_KEY_PARTS 注释: 无法稳定还原)
+    out = {}
+    for key, value in node.items():
+        lowered = str(key).lower()
+        if isinstance(value, dict):
+            out[key] = _mask_node(value)
+            continue
+        if value not in (None, "") and any(part in lowered for part in SENSITIVE_KEY_PARTS):
+            out[key] = MASK_SENTINEL
+        else:
+            out[key] = value
+    return out
+
+
+def unmask_tree(tree: Dict[str, Any], old_tree: Dict[str, Any]) -> Dict[str, Any]:
+    """就地还原哨兵: 值等于 MASK_SENTINEL 的键回填磁盘旧值(即"用户没改密码")
+
+    旧值缺失或旧值本身就是哨兵时**保持哨兵不动** —— 宁可写成一个明显的占位串让人发现,
+    也不要静默把密码写成空。返回同一棵树(便于链式调用)。
+    """
+    if not isinstance(tree, dict) or not isinstance(old_tree, dict):
+        return tree
+    for key, value in tree.items():
+        if isinstance(value, dict) and isinstance(old_tree.get(key), dict):
+            unmask_tree(value, old_tree[key])
+            continue
+        if value == MASK_SENTINEL:
+            old = old_tree.get(key)
+            if old not in (None, MASK_SENTINEL):
+                tree[key] = old
+    return tree
 
 
 def write_tree(config_path: str, tree: Dict[str, Any], old_config, backup_path: str) -> WriteResult:
@@ -185,11 +235,15 @@ def _dump_roundtrip(config_path: str, tree: Dict[str, Any]) -> None:
     """ruamel round-trip 写盘: 已存在键原地改值以保留注释, 新增键追加, 缺失键删除
 
     列表整体替换(项级注释不保留) —— 树与磁盘的同构结构使其可安全重建。
+
+    走 utils.atomic_write: 配置文件是生产资产, 直写会在中断时留下半截 YAML(热重载随即读到
+    半写状态)。写盘前已由 write_tree 做过 .bak 备份, 故此处不再重复备份。
     """
+    from .. import utils
+
     ry = _build_yaml()
     doc = _build_doc(config_path, tree)
-    with open(config_path, "w", encoding="utf-8") as f:
-        ry.dump(doc, f)
+    utils.atomic_write(config_path, lambda f: ry.dump(doc, f))
 
 
 def _sync_mapping(commented: dict, plain: dict) -> None:

@@ -29,7 +29,14 @@ import datetime
 import re
 import unicodedata
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import List, Optional, Tuple
+
+# 种子名解析缓存上限: 追剧视图(_build_shows_view)对**每个种子**跑一次 parse_release,
+# 十余条正则 —— 视图每 tick 重建时就是 N 次全量解析(N=2000 时约 2000 次/2s)。种子名
+# 不变则结果恒定(ParsedRelease 是 frozen dataclass, 纯函数可安全缓存), 故缓存命中后
+# 该成本归零。上限按"种子数 + 改名冗余"取 4096, 超出按 LRU 淘汰。
+PARSE_RELEASE_CACHE_SIZE = 4096
 
 KIND_EPISODE = "episode"  # 有明确集数(S01E05/第5集/动画编号等)
 KIND_SEASON_PACK = "season_pack"  # 有季无集(S01 整包), 集范围待文件列表兜底
@@ -175,7 +182,13 @@ _BARE_EXCLUDE = {480, 576, 720, 1080, 2160, 4320}
 
 
 def _bare_ok(n: Optional[int]) -> bool:
-    return n is not None and n not in _BARE_EXCLUDE and not (1900 <= n <= 2099)
+    """bare 形态(纯数字)能否当集数: 排除分辨率/年份, 且必须 >= 1
+
+    **必须显式判 >= 1**: `_find_episode` 里 bare 分支只走 `_bare_ok`, 不像非 bare 分支那样
+    检查 `1 <= start <= 9999` —— 漏判会让 "[00]" / "- 00" 解出 ep_start=0, 视图多一个不存在的
+    0 集节点、标签生成 zE0。
+    """
+    return n is not None and n >= 1 and n not in _BARE_EXCLUDE and not (1900 <= n <= 2099)
 
 
 def _find_season(name: str) -> Optional[tuple]:
@@ -361,11 +374,15 @@ def _title_and_key(seg: str) -> Tuple[str, str]:
 _UNKNOWN = ParsedRelease("", "", KIND_UNKNOWN)
 
 
+@lru_cache(maxsize=PARSE_RELEASE_CACHE_SIZE)
 def parse_release(name: str) -> ParsedRelease:
     """种子名 → ParsedRelease; 解析不出剧名时 key 为空串(视图层归未识别桶)
 
     标题切分点 = 最早出现的任意标记(季/集/日期)的起点 —— 如 "Show Name S2 - 05"
     的标题按季标记切("Show Name"), 而不是按集数标记切("Show Name S2")。
+
+    带缓存(见 PARSE_RELEASE_CACHE_SIZE): 同名种子复用解析结果。安全性来自两点 ——
+    ①只依赖入参 name(纯函数); ②返回值是 frozen dataclass, 调用方改不了, 不会串味。
     """
     name = (name or "").strip()
     if not name:

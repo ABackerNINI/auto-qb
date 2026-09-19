@@ -28,6 +28,9 @@
 - test_parse_speed_empty: 空串 -> 0
 - test_parse_speed_invalid: 非法速度格式 -> ValueError
 - test_add_long_path_prefix_non_windows: 非 Windows 原样返回
+- test_atomic_write_creates_file: 原子写生成目标文件且不残留临时文件
+- test_atomic_write_failure_keeps_old_content: 写盘回调抛异常时旧内容不变(直写 open("w") 会先 truncate 成半截文件), 临时文件被清理
+- test_atomic_write_keep_backup: keep_backup=True 写盘前复制 .bak; 无旧文件时不凭空造备份
 - test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
 - test_add_long_path_prefix_already_prefixed: 已加前缀 -> 原样返回
 - test_parse_compare_invalid: 无效比较表达式 -> ValueError
@@ -515,3 +518,48 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
     with mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(str(f), select=True)
         run.assert_called_once_with(["xdg-open", os.path.dirname(str(f))], check=False)
+
+
+# ---------------------------------------------------------------- 原子写
+
+
+def test_atomic_write_creates_file(tmp_path):
+    """原子写: 内容落到目标路径, 且同目录不残留临时文件"""
+    from auto_qb.utils import atomic_write
+
+    p = tmp_path / "state.json"
+    atomic_write(str(p), lambda f: f.write('{"a": 1}'))
+    assert p.read_text(encoding="utf-8") == '{"a": 1}'
+    assert sorted(c.name for c in tmp_path.iterdir()) == ["state.json"], "临时文件必须已被替换/清理"
+
+
+def test_atomic_write_failure_keeps_old_content(tmp_path):
+    """写盘回调抛异常时旧内容保持不变 —— 这是原子写存在的全部理由
+
+    直接 `open(path, "w")` 会先 truncate: 写盘途中被杀/磁盘满/序列化异常都会留下**半截文件**,
+    而 state.json 没有备份 ⇒ 执行历史与去重记录全丢, 重启后规则重放。
+    """
+    from auto_qb.utils import atomic_write
+
+    def _boom(_f):
+        raise RuntimeError("simulated write failure")
+
+    p = tmp_path / "state.json"
+    p.write_text("OLD", encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        atomic_write(str(p), _boom)
+    assert p.read_text(encoding="utf-8") == "OLD", "失败时旧内容必须完好"
+    assert sorted(c.name for c in tmp_path.iterdir()) == ["state.json"], "失败的临时文件必须清理"
+
+
+def test_atomic_write_keep_backup(tmp_path):
+    """keep_backup=True: 写盘前把当前文件复制为 .bak; 无旧文件时不凭空造备份"""
+    from auto_qb.utils import atomic_write
+
+    p = tmp_path / "state.json"
+    atomic_write(str(p), lambda f: f.write("NEW"), keep_backup=True)
+    assert not (tmp_path / "state.json.bak").exists(), "无旧文件不应产生备份"
+
+    atomic_write(str(p), lambda f: f.write("NEWER"), keep_backup=True)
+    assert (tmp_path / "state.json.bak").read_text(encoding="utf-8") == "NEW"
+    assert p.read_text(encoding="utf-8") == "NEWER"

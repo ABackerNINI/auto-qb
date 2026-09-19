@@ -71,8 +71,10 @@ def ensure_web_token(manager) -> str:
     fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as f:
         f.write(token)
-    logger.info(f"WEB 访问密钥已生成: {token_file}(下方启动日志亦打印一次)")
-    logger.warning(f"WEB UI 访问密钥: {token}")
+    # 密钥内容**不进日志**: 记 WARNING 会被 notify 处理器(min_level 默认 WARNING)推到系统
+    # 通知, 且落到日志文件后 /api/log 可读回 —— 拿到密钥即等于拿到改配置/删种子的能力。
+    # 改为 INFO 只提示文件路径: 用户打开 web.token 即可, 或配置 web.token 使用固定密钥。
+    logger.info(f"WEB 访问密钥已生成: {token_file}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")
     return token
 
 
@@ -98,6 +100,19 @@ def content_disposition(filename: str, fallback: str, ext: str = "") -> str:
         ascii_name = fallback  # 只剩清洗残留符号(如纯中文名的 "/" -> "_")时用 hash, 回退名才可辨识
     quoted = quote(name, safe="")
     return f"attachment; filename=\"{ascii_name}{suffix}\"; filename*=UTF-8''{quoted}{suffix}"
+
+
+def _group_key_param(text: str) -> tuple:
+    """URL/请求体里的分组标识 → (剧名, 文件 tuple); 畸形标识转 400 而不是 500
+
+    `decode_group_key` 在 base64 非 ASCII / 非法 JSON / 结构不符时会抛(binascii.Error 与
+    json.JSONDecodeError 均为 ValueError 子类, 另有 TypeError / IndexError / KeyError)——
+    不拦截就是一条 500 + 栈回溯: 前端手输或被篡改的 key 都能打到服务端错误页。客户端错误应回 400。
+    """
+    try:
+        return decode_group_key(text)
+    except (ValueError, TypeError, LookupError):  # LookupError 覆盖 IndexError / KeyError
+        raise HTTPException(status_code=400, detail="分组标识无效")
 
 
 def create_app(manager) -> FastAPI:
@@ -343,7 +358,7 @@ def create_app(manager) -> FastAPI:
         kind = str(b.get("kind") or "").strip()
         select = False
         if kind == "group":
-            key = decode_group_key(str(b.get("key") or ""))
+            key = _group_key_param(str(b.get("key") or ""))
             if key not in manager.store.groups:
                 raise HTTPException(status_code=404, detail="辅种不存在")
             target = key[0] or ""
@@ -367,20 +382,20 @@ def create_app(manager) -> FastAPI:
 
     @app.post("/api/groups/{key}/pause")
     def api_pause(key: str):
-        return _enqueue("pause_group", {"key": decode_group_key(key)})
+        return _enqueue("pause_group", {"key": _group_key_param(key)})
 
     @app.post("/api/groups/{key}/resume")
     def api_resume(key: str):
-        return _enqueue("resume_group", {"key": decode_group_key(key)})
+        return _enqueue("resume_group", {"key": _group_key_param(key)})
 
     @app.post("/api/groups/{key}/reannounce")
     def api_reannounce(key: str):
-        return _enqueue("reannounce_group", {"key": decode_group_key(key)})
+        return _enqueue("reannounce_group", {"key": _group_key_param(key)})
 
     @app.post("/api/groups/{key}/delete")
     def api_delete(key: str, body: dict = None):
         delete_files = bool((body or {}).get("delete_files", False))
-        result = _enqueue("delete_group", {"key": decode_group_key(key), "delete_files": delete_files})
+        result = _enqueue("delete_group", {"key": _group_key_param(key), "delete_files": delete_files})
         result["delete_files"] = delete_files
         return result
 
@@ -517,7 +532,7 @@ def create_app(manager) -> FastAPI:
             "delete_files": bool(b.get("delete_files", False)),
         }
         # 组键模式(DLG-02): 非空才入 payload, 纯 hash 调用的队列载荷与历史形态完全一致
-        keys = [decode_group_key(str(k)) for k in (b.get("keys") or []) if k]
+        keys = [_group_key_param(str(k)) for k in (b.get("keys") or []) if k]
         if keys:
             payload["keys"] = keys
         return _enqueue("bulk_torrents", payload)
@@ -766,24 +781,36 @@ def create_app(manager) -> FastAPI:
 
     @app.get("/api/config")
     def api_config_get():
-        """当前配置树(YAML 同构, 标量为字符串) + 写盘路径"""
-        from .config.writer import read_tree
+        """当前配置树(YAML 同构, 标量为字符串) + 写盘路径
 
-        return {"tree": read_tree(manager.config_path), "path": manager.config_path}
+        敏感字段(qB 密码 / tracker passkey / WEB 密钥)按**键名**掩码为 MASK_SENTINEL: 明文
+        进浏览器内存、截图与日志即为凭据泄漏。保存时 PUT 会用磁盘旧值还原哨兵 —— 掩码只影响
+        展示, 不会把密码写死成占位串。
+        """
+        from .config.writer import MASK_SENTINEL, mask_tree, read_tree
+
+        return {
+            "tree": mask_tree(read_tree(manager.config_path)),
+            "path": manager.config_path,
+            "masked": True,
+            "mask_sentinel": MASK_SENTINEL,
+        }
 
     @app.put("/api/config")
     def api_config_put(body: dict):
         """保存图形化配置: 结构校验(与启动同路径) -> R 级字段回退 -> round-trip 写盘 -> 投递热重载
 
         校验失败不触碰磁盘; R 级字段(state_file/data_dir)保留旧值, 其余立即生效。
+        提交树里的掩码哨兵先按磁盘旧值还原(见 api_config_get), 未修改的密码保持原值。
         """
         from .config.errors import ConfigError
         from .config.loaders import load_config
-        from .config.writer import write_tree
+        from .config.writer import read_tree, unmask_tree, write_tree
 
         tree = (body or {}).get("tree")
         if not isinstance(tree, dict):
             raise HTTPException(status_code=400, detail="tree 必须是对象")
+        unmask_tree(tree, read_tree(manager.config_path))
         try:
             result = write_tree(manager.config_path, tree, manager.config, _config_backup_path(manager))
         except (ConfigError, ValueError) as e:
@@ -802,13 +829,17 @@ def create_app(manager) -> FastAPI:
 
     @app.post("/api/config/preview")
     def api_config_preview(body: dict):
-        """只读预览: 返回"即将写入"的 YAML 文本(不落盘、不投递热重载), 校验口径与保存一致"""
+        """只读预览: 返回"即将写入"的 YAML 文本(不落盘、不投递热重载), 校验口径与保存一致
+
+        与 PUT 同口径: 先还原掩码哨兵, 否则预览里会显示一串占位符(与实际写入结果不符)。
+        """
         from .config.errors import ConfigError
-        from .config.writer import preview_tree
+        from .config.writer import preview_tree, read_tree, unmask_tree
 
         tree = (body or {}).get("tree")
         if not isinstance(tree, dict):
             raise HTTPException(status_code=400, detail="tree 必须是对象")
+        unmask_tree(tree, read_tree(manager.config_path))
         try:
             text = preview_tree(manager.config_path, tree, manager.config)
         except (ConfigError, ValueError) as e:

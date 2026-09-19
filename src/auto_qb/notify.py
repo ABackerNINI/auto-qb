@@ -63,6 +63,10 @@ class NotifyThrottle:
         """是否放行该通知: 超每小时上限或处于同键去重窗口内则丢弃"""
         now = self._now()
         self._sent_at = [t for t in self._sent_at if now - t < 3600.0]
+        # 去重表按窗口淘汰(与 _sent_at 同理): 只写不清会随通知种类单调膨胀 —— 每条不同的
+        # 日志文本都是一个键, 长跑进程里这张表是唯一的无界内存增长点。
+        if self._dedup_at and self.dedup_window > 0:
+            self._dedup_at = {k: t for k, t in self._dedup_at.items() if now - t < self.dedup_window}
         if len(self._sent_at) >= self.max_per_hour:
             return False
         if self.dedup_window > 0:
@@ -224,14 +228,17 @@ class NotifyHandler(logging.Handler):
             if record.name and record.name.startswith(NOTIFY_LOGGER_PREFIX):
                 return  # 防自环
             message = record.getMessage()
+            # 免打扰判定必须**在节流之前**: `allow` 有副作用(计入每小时配额 + 刷新去重窗口),
+            # 若先 allow 再判安静时段, 免打扰期间的通知会白白吃掉配额并推迟去重窗口 ——
+            # 时段一结束, 本该立刻发出的通知可能仍被配额/去重挡住。
+            if self.quiet_hours and utils.time_in_range(self._now().time(), self.quiet_hours):
+                logger.debug("免打扰时段(%s), 跳过通知: %s", self.quiet_hours, message[:80])
+                return
             key = f"{record.name}:{record.levelname}:{message[:self.DEDUP_PREFIX_LEN]}"
             with self._lock:
                 allowed = self.throttle.allow(key)
             if not allowed:
                 return  # 节流丢弃(防风暴, 不再打日志避免自身刷屏)
-            if self.quiet_hours and utils.time_in_range(self._now().time(), self.quiet_hours):
-                logger.debug("免打扰时段(%s), 跳过通知: %s", self.quiet_hours, message[:80])
-                return
             self._queue.put_nowait((f"auto-qb {record.levelname}", message, record.levelno >= logging.ERROR))
         except Exception:
             self.handleError(record)

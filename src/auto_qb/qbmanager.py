@@ -54,6 +54,7 @@ from .logging import setup_logging
 logger = logging.getLogger(__name__)
 
 WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
+RECONNECT_MAX_INTERVAL = 30.0  # 重连退避上限(秒): qB 长时间宕机时最多每 30s 试一次
 
 
 def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
@@ -141,6 +142,15 @@ class QbManager(
         # 主循环仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)才重建快照, 否则跳过以降低 CPU。
         self._group_view_dirty: bool = True
         self._web_last_seen: float = 0.0
+        # 重连退避(见 _reconnect_due): 断开后按 main_tick → 2× → 4× … 递增重试, 上限
+        # RECONNECT_MAX_INTERVAL; 每 tick 无脑 connect() 会在 qB 长时间宕机时每 2s 重建一次
+        # Client(含 netrc / 代理解析), 纯属空转。连接成功即在 _reset_reconnect_backoff 归零。
+        self._reconnect_at: float = 0.0
+        self._reconnect_interval: float = 0.0
+        # 视图发布锁: 四份视图 + 版本号必须**同一临界区内**发布, 否则 Web 线程会读到
+        # "半新半旧"的组合(groups 来自本轮重建、torrents 来自上一轮), 而版本号只有一个
+        # ⇒ 前端按 rid 判定"已更新"却拿到互相错位的数据。详见 WebviewMixin.rebuild_views。
+        self._view_lock = threading.Lock()
         # WEB UI 搜索索引(hash -> {name, files[文件名]}): 主循环按需构建并原子替换, Web 线程只读。
         # 种子名匹配直接读 store.by_hash(即时无 API); 文件列表匹配依赖此索引(文件 API 只在主循环线程)。
         # 索引仅在种子集变化(added/removed)时置脏, 避免每 tick 重复构建; 记录 _files 缓存跨 tick 复用。
@@ -183,6 +193,25 @@ class QbManager(
         logging_conf = self.config.logging
         setup_logging(logging_conf.file, logging_conf.level, logging_conf.max_bytes, logging_conf.format)
 
+    def _reset_reconnect_backoff(self) -> None:
+        """连接成功后清零退避(下次断开从最短间隔重新开始)"""
+        self._reconnect_at = 0.0
+        self._reconnect_interval = 0.0
+
+    def _reconnect_due(self, main_tick: float) -> bool:
+        """断开期间是否到了该重试的时刻(指数退避, 上限 RECONNECT_MAX_INTERVAL)
+
+        每 tick 无脑重连在 qB 宕机时是纯空转: 一次 connect() 要重建 Client(含 netrc /
+        代理解析), 2s 一次既刷不到有用日志也不加快恢复。恢复后由 _reset_reconnect_backoff 归零。
+        """
+        now = time.monotonic()
+        if now < self._reconnect_at:
+            return False
+        base = self._reconnect_interval or main_tick
+        self._reconnect_interval = min(max(base * 2, main_tick), RECONNECT_MAX_INTERVAL)
+        self._reconnect_at = now + base
+        return True
+
     def connect(self) -> bool:
         """连接 qBittorrent(本地地址经 _new_client 使用关闭 trust_env 的 LocalQbClient)"""
         try:
@@ -192,6 +221,7 @@ class QbManager(
             if self._last_conn_ok is False:
                 logger.info("已重新连接 qBittorrent")
             self._last_conn_ok = True
+            self._reset_reconnect_backoff()
             return True
         except APIConnectionError as e:
             # 仅状态转换时记录一次失败(首次失败或从连接态转入); 断开期间静默不刷屏
@@ -264,6 +294,7 @@ class QbManager(
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
                         if self._last_conn_ok is False:
                             self._last_conn_ok = True
+                            self._reset_reconnect_backoff()
                             logger.info("已重新连接 qBittorrent")
                     except AutoQbError:
                         raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑
@@ -274,7 +305,10 @@ class QbManager(
                             logger.error(f"连接 qBittorrent 失败: {e}")
                             self._last_conn_ok = False
                         self.client = None
-                        self.connect()
+                        # 退避: 不在每 tick 重建 Client(见 _reconnect_due)。qB 重启/网络恢复后
+                        # 仍会自动接上, 只是重试间隔逐步拉长到 30s, 而不是 2s 一次空转。
+                        if self._reconnect_due(main_tick):
+                            self.connect()
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     if _throttle(stop_event, main_tick):

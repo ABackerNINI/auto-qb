@@ -18,6 +18,7 @@
 - test_validate_root_unknown_key: 顶层未知键报错
 - test_validate_required_missing: 缺 domains / 站点 hr 缺 required_seeding_time 报错
 - test_validate_bad_formats: 非法格式聚合(main_tick/port/log.level/限速/布尔)
+- test_validate_max_tasks_per_tick_range: max_tasks_per_tick 非正值报错(0/负值被 TaskQueue 当"不限量", 与配置语义相反)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
 - test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键)
@@ -408,6 +409,20 @@ def test_validate_bad_formats():
         assert "config.log.max_bytes" in err, err  # MB 非二进制单位
         assert "config.qbittorrent.port: 超出范围" in err, err
         assert "config.trackers.T1.upload_speed_limit: 无效速度格式" in err, err
+
+
+def test_validate_max_tasks_per_tick_range():
+    """max_tasks_per_tick 非正值 must 报错
+
+    `TaskQueue._pop_due` 把 `max_tasks <= 0` 当"不限量"的内部语义, 配置放行 0/负值会让
+    "每轮最多 N 个"反转成"一轮弹出全部到期任务"; schema 的 min=1 只管前端控件, 不进校验。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        for bad in ("0", "-5"):
+            err = _load_errors(td, "config:\n  max_tasks_per_tick: %s\n" % bad)
+            assert "config.max_tasks_per_tick: 须 >= 1" in err, err
+        # 合法值与非整数不得被误伤(非整数的格式错误由 _try 记录)
+        assert "config.max_tasks_per_tick" not in _load_errors(td, "config:\n  max_tasks_per_tick: 20\n")
 
 
 def test_validate_rule_spec():

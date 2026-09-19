@@ -17,6 +17,8 @@
 - test_preview_tree_does_not_touch_disk: 预览不落盘, 且内容与写盘结果一致(除注释形态)
 - test_preview_tree_invalid_raises: 预览同样做校验
 - test_preview_tree_does_not_create_backup: 预览不产生任何备份文件
+- test_mask_tree_hides_sensitive_scalars: 敏感键(键名含 password/passkey/token)的非空标量被掩码; 空值与普通键不受影响; 原树不被就地修改
+- test_unmask_tree_restores_from_disk: 提交树里的掩码哨兵按磁盘旧值还原 —— 前端"未改密码"原样保存不会把密码写成占位串
 """
 import os
 
@@ -307,3 +309,56 @@ def test_preview_tree_invalid_raises(tmp_path):
     tree["config"]["main_tick"] = "oops"
     with pytest.raises(ConfigError):
         preview_tree(path, tree, load_config(path))
+
+
+# ---------------------------------------------------------------- 敏感字段掩码
+
+
+def test_mask_tree_hides_sensitive_scalars():
+    """掩码只作用于 dict 内非空标量: 密码/passkey/token 类键被替换, 空值与普通键原样返回
+
+    空值不掩码是刻意的 —— 空密码掩码后前端会以为"已设置密码", 反而误导。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree
+
+    tree = {
+        "config":
+            {
+                "qbittorrent": {
+                    "host": "h",
+                    "username": "u",
+                    "password": "p"
+                },
+                "web": {
+                    "token": "",
+                    "enabled": "true"
+                },
+            }
+    }
+    masked = mask_tree(tree)
+    assert masked["config"]["qbittorrent"]["password"] == MASK_SENTINEL
+    assert masked["config"]["qbittorrent"]["host"] == "h", "非敏感键不得被动到"
+    assert masked["config"]["web"]["token"] == "", "空值不掩码(否则前端以为已设置)"
+    assert tree["config"]["qbittorrent"]["password"] == "p", "掩码不得就地修改原树"
+
+
+def test_unmask_tree_restores_from_disk(tmp_path):
+    """提交树里的哨兵按磁盘旧值还原: 前端"没改密码"地原样保存不会把密码写成占位串
+
+    这是掩码能否成立的关键 —— 只掩码不还原的话, 一次保存就会毁掉生产配置里的 qB 密码。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree, unmask_tree
+
+    path = _make(tmp_path, BASE)
+    old = read_tree(path)
+    submitted = mask_tree(old)
+    assert submitted["config"]["qbittorrent"]["password"] == MASK_SENTINEL, "前置: GET 侧确实掩码了"
+
+    submitted["config"]["main_tick"] = "5s"  # 模拟用户只改了一个无关字段
+    unmask_tree(submitted, old)
+    assert submitted["config"]["qbittorrent"]["password"] == "p", "哨兵应还原为磁盘旧值"
+
+    write_tree(path, submitted, load_config(path), _bak(tmp_path))
+    text = _text(path)
+    assert "password: p" in text, f"未改密码不应被写成占位串: {text}"
+    assert "5s" in text, "真正改动的字段仍应写回"

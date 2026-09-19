@@ -30,6 +30,7 @@
 - test_checking_skip_guard_file_missing: 跳检前置文件检查失败
 - test_checking_skip_guard_file_size_mismatch: 跳检前置文件大小不符
 - test_checking_skip_guard_add_fail_backup: 重加标签失败回退
+- test_checking_skip_readd_unconfirmed_backs_up: 重加已发出但轮询确认不到种子 -> 同样备份 .torrent(否则种子已从客户端移除、data 只存内存随即丢弃)
 - test_checking_skip_dedup_same_day: 同日跳检去重
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_recheck_fail_cooldown: 校验连续失败达上限 -> 当日不再重试(防 recheck 死循环)
@@ -605,6 +606,38 @@ def test_checking_no_reference_skip_checking_warns():
         assert handled
         assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"{client.calls}"
         assert any("无参考跳检" in str(c) for c in mw.call_args_list), f"应有高风险警告: {mw.call_args_list}"
+
+
+def test_checking_skip_readd_unconfirmed_backs_up():
+    """测试: 重加已发出但轮询确认不到种子 -> 同样备份 .torrent
+
+    原实现只在 `torrents_add` 抛异常时备份: add 成功但 _poll_until 三次确认不到(大种子/磁盘忙
+    时 qB 重加可能慢于 0.9s)就直接返回失败 —— 此时种子已从客户端删除、data 字节只存在于内存
+    随即丢弃, 用户得回站点重新下载; store 也无该记录, 下轮不会执行 restore_torrent。
+
+    场景构造: FakeClient.torrents_add 总会把种子登记进客户端(正常语义), 故这里在 add 之后
+    把它从客户端摘掉, 精确模拟"add 返回成功、但客户端迟迟不出现该种子"。
+    """
+    import os
+
+    class _NotAppearedClient(CheckingFakeClient):
+        def torrents_add(self, **kw):
+            ret = super().torrents_add(**kw)
+            self.torrents.pop("HASH123", None)  # add 成功但客户端里查不到
+            return ret
+
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
+    mgr = make_mgr(cfg)
+    client = _NotAppearedClient()
+    mgr.client = client
+    t = make_target()
+    process_rule(mgr, client, t, dry_run=False)
+
+    assert any(c[0] == "add" for c in client.calls), f"前置: 应已发出重加: {client.calls}"
+    meta = mgr.state.get("skip_check_backup", {}).get("HASH123")
+    assert meta, f"未确认到种子也必须备份 .torrent: {mgr.state}"
+    assert os.path.exists(meta["path"]), f"备份文件应真实落盘: {meta}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未成功跳检不应记录跨日去重"
 
 
 def test_checking_piecehashes_same():

@@ -6,6 +6,8 @@
 import base64
 import json
 import os
+import shutil
+import tempfile
 from functools import lru_cache
 import re
 import subprocess
@@ -46,6 +48,39 @@ def time_in_range(now: dtime, spec: str) -> bool:
     if t_start <= t_end:
         return t_start <= now <= t_end
     return now >= t_start or now <= t_end  # 跨午夜: 不在 start-24:00 即在 00:00-end
+
+
+def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
+    """原子写盘: 同目录临时文件 -> fsync -> os.replace(Windows 上为原子替换)
+
+    直接 `open(path, "w")` 会先 truncate 旧文件: 写盘途中被杀 / 磁盘满 / 序列化抛异常都会留下
+    **半截文件**, 而 state.json 无备份 ⇒ 执行历史与去重记录全丢(规则重放)。本函数保证
+    目标路径要么完全是旧内容, 要么完全是新内容。
+
+    keep_backup=True 时先把当前文件复制为 `<path>.bak`(仅在写盘前存在旧文件时), 用于
+    兜住"新内容本身是错的"这类非截断型损坏。临时文件与失败清理都由本函数负责。
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    os.makedirs(directory, exist_ok=True)
+    if keep_backup and os.path.exists(path):
+        try:
+            shutil.copy2(path, path + ".bak")
+        except OSError as e:
+            logger.warning(f"备份 {path} 失败(继续写盘): {e}")
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            write_fn(f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        if os.path.exists(tmp_path):  # os.replace 已成功时临时文件不存在, 不该再删
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise
 
 
 def parse_bool(value) -> bool:

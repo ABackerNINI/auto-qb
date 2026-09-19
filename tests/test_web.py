@@ -10,6 +10,7 @@
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
+- test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
@@ -19,8 +20,11 @@
 - test_config_tree_restart_field_fallback: R 级字段(data_dir)提交后被回退为磁盘旧值
 - test_config_tree_requires_config_root: 缺少 config 根段 -> 400
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
+- test_web_token_not_printed_in_logs: 生成的访问密钥不进任何日志(WARNING 会被 notify 推送, 且 /api/log 可读回)
+- test_config_tree_masks_secrets: /api/config 掩码敏感字段, 且"读取→原样保存"不会把密码写成占位串
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
+- test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
 - test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
@@ -85,6 +89,7 @@
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
 """
+import base64
 import json
 import logging
 import os
@@ -566,6 +571,25 @@ def test_api_group_commands_enqueue(web_env):
     assert all(p["key"] == KEY for _, p in cmds), "key 应解码回原 tuple"
 
 
+def test_api_group_malformed_key_returns_400(web_env):
+    """畸形分组 key -> 400(客户端错误), 不是 500
+
+    `decode_group_key` 对 base64 非 ASCII / 非法 JSON / 结构不符分别抛 ValueError 系与
+    TypeError/IndexError; 不拦截就是 500 + 栈回溯 —— 手输或被篡改的 URL 都能打出服务端错误页。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    bad_keys = [
+        "!!!not-base64!!!",  # 非法 base64 → binascii.Error
+        base64.urlsafe_b64encode(b"not json{").decode(),  # 合法 base64, 解出非法 JSON
+        base64.urlsafe_b64encode(b"123").decode(),  # 合法 JSON 但结构不符(不可下标)→ TypeError
+    ]
+    for bad in bad_keys:
+        resp = client.post(f"/api/groups/{bad}/pause", headers=auth)
+        assert resp.status_code == 400, f"{bad!r} 应回 400, 实际 {resp.status_code}: {resp.text}"
+        assert mgr.web_commands.empty(), "畸形 key 不该投递命令"
+
+
 def test_api_delete_with_files_flag(web_env):
     """delete 命令透传 delete_files 标志(默认 False 保留文件)"""
     mgr, client = web_env
@@ -701,6 +725,47 @@ def test_config_tree_preserves_comments(web_env):
     text = open(mgr.config_path, encoding="utf-8").read()
     assert "# 保留我" in text, "已有键的注释应在 round-trip 写盘后保留"
     assert "3s" in text
+
+
+def test_web_token_not_printed_in_logs(tmp_path, caplog):
+    """生成的访问密钥不得出现在任何日志里
+
+    原实现用 `logger.warning(f"WEB UI 访问密钥: {token}")`: notify 处理器的级别取
+    config.min_level(默认 WARNING) ⇒ 密钥被推到系统通知; 落日志文件后已登录者可经
+    /api/log 读回。拿到密钥即等于拿到改配置/删种子的能力。改为只提示文件路径。
+    """
+    from auto_qb.web import ensure_web_token
+
+    mgr = _make_web_manager(
+        tmp_path, "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
+    )
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.web"):
+        token = ensure_web_token(mgr)
+    assert token, "前置: 应生成随机密钥"
+    assert any(r.name == "auto_qb.web" for r in caplog.records), "前置: 应有生成提示日志"
+    for r in caplog.records:
+        assert token not in r.getMessage(), f"密钥不得出现在日志: {r.getMessage()}"
+        assert token[:8] not in r.getMessage(), f"密钥前缀也不得出现: {r.getMessage()}"
+
+
+def test_config_tree_masks_secrets(web_env):
+    """/api/config 掩码敏感字段, 且"读取后原样保存"不会把密码写成占位串
+
+    掩码只影响展示: PUT 侧用磁盘旧值还原哨兵, 因此前端不改密码地保存一遍仍是真密码 ——
+    只掩码不还原的话, 一次保存就会毁掉生产配置。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    data = client.get("/api/config", headers=auth).json()
+    assert data["masked"] is True
+    assert data["tree"]["config"]["qbittorrent"]["password"] == data["mask_sentinel"]
+    assert data["tree"]["config"]["qbittorrent"]["host"] == "h", "非敏感字段不掩码"
+
+    resp = client.put("/api/config", headers=auth, json={"tree": data["tree"]})
+    assert resp.status_code == 200, resp.text
+    text = open(mgr.config_path, encoding="utf-8").read()
+    assert "password: p" in text, f"原样保存不得把密码写成占位串: {text}"
+    assert data["mask_sentinel"] not in text
 
 
 def test_group_key_codec_roundtrip():
@@ -1078,6 +1143,69 @@ def test_build_group_view_added_on_is_latest_member(tmp_path):
     assert groups["Other"]["added_on"] == 2000
     # 成员级也透出 added_on(排序/展示共用的原始值)
     assert sorted(m["added_on"] for m in groups["Show"]["members"]) == [1000, 3000]
+
+
+def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
+    """并发重建: 四份视图与版本号必须**同一轮**发布(主循环线程 vs Web 线程)
+
+    web.py 的同步 `def` 处理器跑在 FastAPI 线程池里, 会与主循环同时走 `rebuild_views`。
+    无锁时后者的"逐条赋值 + 版本号自增"会被前者插到中间 ⇒ ①`_group_view_ver += 1` 是
+    读-改-写, 丢失更新; ②Web 线程可能拿到"groups 来自本轮、flat 来自上一轮"的错位组合,
+    而版本号只有一个 ⇒ 前端按 rid 判定 updated=true 却把错位数据整表换上去。
+
+    检测手法(刻意做成**确定性**, 不依赖线程调度): 让重建卡在 builder 里不放行, 再把脏标记
+    置为 False —— 于是读取路径不需要重建, 它能否返回**只取决于有没有锁**, 与交错时序无关。
+    (更直觉的"比对四份视图的 build 号"写法是 flaky 的: 无锁时若两个线程各自完整发布一轮,
+    最后发布者胜出, 四份仍是自洽的, 用例会假绿。)
+    """
+    import threading as _threading
+
+    from helpers import FakeClient, make_manager
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+
+    inside = _threading.Event()  # 重建已进入 builder
+    release = _threading.Event()  # 放行重建
+    errors = []
+
+    def _build_group():
+        inside.set()
+        release.wait(5)  # 卡在临界区里, 模拟"重建尚未发布"
+        return []
+
+    mgr._build_group_view = _build_group
+
+    def _main_loop_path():
+        try:
+            mgr.rebuild_views()  # 主循环 _tick 走的重建路径(持锁)
+        except Exception as e:  # 线程内异常不能静默吞掉
+            errors.append(e)
+
+    t = _threading.Thread(target=_main_loop_path)
+    t.start()
+    assert inside.wait(5), "前置: 重建线程应已进入 builder"
+
+    # 关键: 置脏为 False, 让读取路径**不需要重建** —— 于是它是否返回只取决于"有没有锁",
+    # 不再受线程调度影响(若改成依赖交错时序, 用例会变 flaky)。
+    mgr._group_view_dirty = False
+
+    read_done = _threading.Event()
+
+    def _web_path():
+        try:
+            mgr.ensure_group_view()  # Web 线程路径
+        finally:
+            read_done.set()
+
+    r = _threading.Thread(target=_web_path)
+    r.start()
+    assert not read_done.wait(0.5), ("重建进行中读取不应立即返回 —— 锁未生效时, "
+                                     "Web 线程会读到半新半旧的四视图组合")
+    release.set()
+    t.join()
+    r.join()
+    assert not errors, f"重建线程异常: {errors}"
 
 
 def test_build_search_index_files():

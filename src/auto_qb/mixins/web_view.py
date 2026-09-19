@@ -10,6 +10,7 @@
 - self._group_view / self._singles_view / self._shows_view / self._flat_view / self._group_view_ver
 - self._group_view_dirty / self._shows_pending / self._web_last_seen
 - self._search_index / self._search_index_dirty
+- self._view_lock              视图发布锁(四视图 + 版本号的原子发布)
 """
 import logging
 import time
@@ -525,6 +526,22 @@ class WebviewMixin:
 
         故本方法是唯一重建入口: 主循环 `_tick` 与 Web 线程 `ensure_group_view` 都只能调它,
         **新增视图也只在这里挂** —— 在调用点各建一部分必然再次漏建。
+
+        并发: 主循环线程与 Web 线程(web.py 的同步 `def` 处理器跑在 FastAPI 线程池里)都会走到
+        这里。`_group_view_ver += 1` 是读-改-写, 且四份视图是逐条赋值的 —— 无锁时两线程交错
+        会让版本号丢失更新, 并让 Web 线程读到"半新半旧"的组合(如 groups 来自本轮、flat 来自
+        上一轮), 而版本号只有一个 ⇒ 前端判定 updated=true 却拿到互相错位的数据。故重建与读取
+        统一在 `_view_lock` 内完成。
+        """
+        with self._view_lock:
+            self._publish_views_locked()
+
+    def _publish_views_locked(self) -> None:
+        """重建四视图并发布 —— **调用方必须持有 `self._view_lock`**
+
+        与 `rebuild_views` 分离, 使"判脏 → 重建 → 读取"能在**同一个临界区**内一次完成
+        (见 `ensure_group_view`); 若拆成"加锁重建 / 释放 / 再加锁读", 中间仍可能被另一线程
+        插入一次重建, 读到的四份视图依旧不属于同一轮。
         """
         self._group_view = self._build_group_view()
         self._singles_view = self._build_singles_view()
@@ -537,10 +554,15 @@ class WebviewMixin:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
         与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
         singles(未归组种子)、shows(追剧视图)与 flat(种子平铺视图)与分组视图在同一脏窗口同快照重建
-        —— 保证四组数据互相一致; 重建统一走 `rebuild_views`(唯一入口)。"""
-        if self._group_view_dirty:
-            self.rebuild_views()
-        return self._group_view
+        —— 保证四组数据互相一致; 重建统一走 `_publish_views_locked`(唯一入口)。
+
+        **"判脏 → 重建 → 读取"全程持锁**: 否则 Web 线程刚重建完正要读时, 主循环可能又重建
+        一轮, 读到的四份视图不属于同一轮。
+        """
+        with self._view_lock:
+            if self._group_view_dirty:
+                self._publish_views_locked()
+            return self._group_view
 
     def ensure_group_state(self, rid: Optional[int]) -> dict:
         """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
@@ -548,19 +570,24 @@ class WebviewMixin:
         rid 与服务端视图版本一致时**不回传 groups**(响应体趋近于零); 不一致时回传
         全量分组数据并带上新版本号。status 体积极小(4 个标量), 无关版本恒回传,
         以保证连接状态/暂停状态/种子数变化能即时反映。
+
+        与 `ensure_group_view` 同口径: 判脏 / 重建 / 取版本号 / 取四视图**全程持锁**, 保证回传的
+        `rid` 与四份数组严格同轮。
         """
-        self.ensure_group_view()
-        ver = self._group_view_ver
-        updated = rid != ver
-        state: dict = {"rid": ver, "updated": updated}
-        if updated:
-            state["groups"] = self._group_view
-            # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
-            state["singles"] = self._singles_view
-            # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
-            state["shows"] = self._shows_view
-            # 种子平铺视图同门控同版本回传(种子页数据源; 字段集 = SEED_ITEM 契约)
-            state["torrents"] = self._flat_view
+        with self._view_lock:
+            if self._group_view_dirty:
+                self._publish_views_locked()
+            ver = self._group_view_ver
+            updated = rid != ver
+            state: dict = {"rid": ver, "updated": updated}
+            if updated:
+                state["groups"] = self._group_view
+                # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
+                state["singles"] = self._singles_view
+                # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
+                state["shows"] = self._shows_view
+                # 种子平铺视图同门控同版本回传(种子页数据源; 字段集 = SEED_ITEM 契约)
+                state["torrents"] = self._flat_view
         return state
 
     def _build_search_index(self) -> None:

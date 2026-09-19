@@ -57,9 +57,17 @@ class RuleEngineMixin:
         return {}
 
     def save_state(self):
+        """落盘状态文件: 原子写(tmp + os.replace)并保留一份 .bak
+
+        原实现 `open(path, "w")` 会先 truncate: 写盘途中进程被杀 / 磁盘满 ⇒ state.json 变成半截
+        文件, 而 state 没有备份 ⇒ 执行历史(exec_history)与跨日去重(skip_check_day)全丢, 重启后
+        规则重放(同一天可能对同一种子重复跳检)。原子写保证目标文件"要么全旧、要么全新",
+        .bak 再兜一层"新内容本身写错了"的情况。
+        """
         try:
-            with open(self.state_file, "w", encoding="utf-8") as f:
-                json.dump(self.state, f, ensure_ascii=False, indent=2)
+            utils.atomic_write(
+                self.state_file, lambda f: json.dump(self.state, f, ensure_ascii=False, indent=2), keep_backup=True
+            )
         except OSError as e:
             logger.warning(f"保存状态文件失败: {e}")
 

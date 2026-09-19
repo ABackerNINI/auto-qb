@@ -14,6 +14,7 @@
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
 - test_run_connect_failure: 连接失败 run 直接返回不进入主循环
+- test_reconnect_backoff_and_reset: 重连指数退避(间隔翻倍、上限 30s、未到点不重试)且连接成功后归零
 - test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
 - test_tick_full_flow: 快速队列到期任务执行全流程(含 check 轮询任务首轮发送)
 - test_create_torrent_tasks_tor_missing: 种子不在快照 -> 直接返回
@@ -46,7 +47,7 @@ from qbittorrentapi import APIConnectionError, Client
 from auto_qb.config import QbittorrentConfig
 from auto_qb.errors import AutoQbError
 from auto_qb.qbclient import LocalQbClient, _new_client
-from auto_qb.qbmanager import QbManager, _throttle
+from auto_qb.qbmanager import RECONNECT_MAX_INTERVAL, QbManager, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
@@ -198,6 +199,44 @@ def test_run_connect_failure():
         mgr.connect = mock.Mock(return_value=False)
         mgr.run(dry_run=False)  # 不应抛异常/不应调用 _tick
         mgr.connect.assert_called_once()
+
+
+def test_reconnect_backoff_and_reset():
+    """重连指数退避: 未到点不重试 / 间隔翻倍 / 上限 30s / 连接成功后归零
+
+    修复前主循环每 tick 都 `client = None; connect()` —— qB 长时间宕机时每 2s 重建一次
+    Client(含 netrc / 代理解析), 纯空转。退避后重试间隔逐步拉长到 30s, 恢复即归零。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        tick = 2.0
+        clock = {"t": 1000.0}
+
+        def _monotonic():
+            return clock["t"]
+
+        with mock.patch("auto_qb.qbmanager.time.monotonic", _monotonic):
+            assert mgr._reconnect_due(tick) is True, "首次应立即重试"
+            assert mgr._reconnect_at == pytest.approx(1000.0 + tick)
+            # 未到点: 不重试
+            clock["t"] += tick - 0.01
+            assert mgr._reconnect_due(tick) is False
+            # 到点: 重试, 间隔翻倍
+            clock["t"] = 1000.0 + tick
+            assert mgr._reconnect_due(tick) is True
+            assert mgr._reconnect_at == pytest.approx(1000.0 + tick + 2 * tick)
+            # 连续失败推到上限 30s 后不再增长
+            for _ in range(12):
+                clock["t"] = mgr._reconnect_at
+                mgr._reconnect_due(tick)
+            assert mgr._reconnect_interval == pytest.approx(RECONNECT_MAX_INTERVAL), (
+                f"退避应封顶 {RECONNECT_MAX_INTERVAL}s: {mgr._reconnect_interval}"
+            )
+            # 连接成功(走真实 connect)后归零: 下次断开从最短间隔重新开始
+            with mock.patch("auto_qb.qbmanager._new_client", return_value=mock.Mock()):
+                assert mgr.connect() is True
+            assert mgr._reconnect_interval == 0.0 and mgr._reconnect_at == 0.0
+            assert mgr._reconnect_due(tick) is True, "归零后应能立即重试"
 
 
 def test_run_main_loop():

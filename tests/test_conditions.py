@@ -10,6 +10,7 @@
 - test_trackers_condition: trackers 条件匹配
 - test_state_condition: state 条件匹配
 - test_hr_condition: HR 条件(做种时间/分享率/上传量; 无hr站点 satisfied 默认满足)
+- test_hr_condition_no_tracker_conf: 未匹配站点(conf=None)不抛 AttributeError, 保守按未触发/未满足
 - test_date_time_condition: 日期时间条件
 - test_seedtime_condition: 做种时间条件
 - test_upload_ratio_condition: 上传分享率条件
@@ -279,6 +280,24 @@ def test_hr_condition():
         assert HrCondition("condition-met").match(ctx3) is False
         assert HrCondition("condition-not-met").match(ctx3) is True
         assert HrCondition("satisfied").match(ctx3) is True, "无 hr 站点 satisfied 默认满足"
+
+
+def test_hr_condition_no_tracker_conf():
+    """未匹配站点(tracker_conf=None): HR 条件不抛 AttributeError, 且保守判否
+
+    修复前 `satisfied` 分支直接读 `conf.hr` ⇒ `None.hr` 抛 AttributeError, 被规则分派吞掉后
+    表现为"规则静默不匹配"(故障被掩盖)。未匹配站点拿不到 HR 配置, 无从判定 ⇒ 按"未触发 /
+    未满足"处理, 与 trackers / tracker_group 条件的"无 tracker_conf 恒不匹配"同语义。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(tags="", downloaded=70 * 1024**2, total_size=100 * 1024**2)
+        ctx = _ctx(mgr, tor, client)
+        tor.tracker_conf = None  # 未匹配站点(ctx.torrent 即 tor 本体, 改动对条件实时可见)
+        assert HrCondition("condition-met").match(ctx) is False
+        assert HrCondition("condition-not-met").match(ctx) is True
+        assert HrCondition("satisfied").match(ctx) is False
 
 
 def test_date_time_condition():

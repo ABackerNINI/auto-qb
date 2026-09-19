@@ -130,6 +130,15 @@ def validate_config(data) -> List[str]:
         _try_time(cfg["main_tick"], "config.main_tick", errors, positive=True)
     if "max_tasks_per_tick" in cfg:
         _try(int, cfg["max_tasks_per_tick"], "config.max_tasks_per_tick(须为整数)", errors)
+        # 范围必须显式校验: TaskQueue._pop_due 把 `max_tasks <= 0` 当作"不限量"(内部语义),
+        # 若配置放行 0/负值, "每轮最多执行 N 个任务"就变成**一轮弹出全部到期任务** —— 与配置
+        # 语义完全相反(单 tick 可能执行上千任务 ⇒ 卡顿 + API 风暴)。schema 声明的 min=1
+        # 只作用于前端控件, 不进校验, 故这里必须补。
+        try:
+            if int(cfg["max_tasks_per_tick"]) < 1:
+                errors.append("config.max_tasks_per_tick: 须 >= 1")
+        except (TypeError, ValueError):
+            pass  # 格式错误已由上面的 _try 记录, 不重复报错
     if "interval" in cfg:
         _try_time(cfg["interval"], "config.interval", errors)
     if "state_file" in cfg and not str(cfg["state_file"]).strip():

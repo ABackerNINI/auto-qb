@@ -11,6 +11,7 @@
 - [x] 日期型: 2026.09.15 → ISO; 非法日期(2023.13.99)不判为日期
 - [x] 动画 bare number: - 05 [1080p] / [Group][Show][05][1080p] / 行尾 - 05
 - [x] bare number 排除: 分辨率(720/1080)与年份(1900-2099); 裸尾随数字不识别(Oceans.11)
+- [x] bare number 排除 0: [00] / - 00 不得解出 ep_start=0(视图会多一个不存在的 0 集节点、标签生成 zE0)
 - [x] 季包: Show.Name.S01.1080p / Show Name Season 1 → season_pack
 - [x] 多季合包 S01-S04 / 第1-4季 → unknown
 - [x] 身份差分保留: 年份/国家/续作数字参与聚合键(同剧异型不误并)
@@ -161,6 +162,20 @@ class TestBareNumber:
         assert p("[Group] Show - 1080 [1080p]").kind == KIND_UNKNOWN
         assert p("[Group] Show - 2023 [1080p]").kind == KIND_UNKNOWN
         assert p("[Group] Show [2023] [1080p]").kind == KIND_UNKNOWN
+
+    def test_bare_zero_not_episode(self):
+        """bare 形态的 0 不是集数
+
+        `_find_episode` 的 bare 分支只过 `_bare_ok`(不像非 bare 分支那样检查 1..9999),
+        漏判会让 "[00]" / "- 00" 解出 ep_start=0 ⇒ 视图多一个不存在的 0 集节点、标签生成 zE0。
+        正常编号 01 必须仍然识别(不能把 0 的排除扩散到前导零)。
+        """
+        for name in ("[00]", "Show - 00", "Show [00]"):
+            r = p(name)
+            assert r.kind != KIND_EPISODE, f"{name!r} 不应解为 episode: {r}"
+            assert r.ep_start != 0, f"{name!r} 不应解出 ep_start=0: {r}"
+        assert p("[01]").ep_start == 1
+        assert p("Show - 01 [1080p]").ep_start == 1
 
     def test_bare_trailing_without_context_not_matched(self):
         # 裸尾随数字(Oceans.11): 无破折号/括号语境, 不识别为集数
