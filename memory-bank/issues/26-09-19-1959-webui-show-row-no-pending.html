@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="aqb-issue-slug" content="webui-show-row-no-pending">
 <meta name="aqb-issue-stamp" content="26-09-19-1959">
-<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-status" content="Fixed">
 <meta name="aqb-issue-title" content="整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈">
 <meta name="aqb-issue-summary" content="剧行 .show-row 不绑 is-pending(只有集行 .ep-row 绑), 整剧暂停/开始时剧行折叠 ⇒ 补丁 0ms 也无可见反馈; 与 BUG-3 同类的漏绑">
 <title>整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈 · auto-qb 计划外问题</title>
@@ -94,7 +94,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-1959-webui-show-row-no-pending</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:59</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">受控测量（顺带发现，2026-09-19）</div></div>
     </div>
@@ -203,9 +203,36 @@
     <ul>
       <li>2026-09-19 19:59 — 入池，状态 <strong>Open</strong>（计划外，未修；在给
         <a href="26-09-19-1939-webui-optimistic-latency.html">26-09-19-1939</a> 做受控测量时顺带发现）</li>
+      <li>2026-09-19 20:0x — 认领开工（用户「继续」指派，按方案 A 实施），状态 <strong>In Progress</strong></li>
+      <li>2026-09-19 20:1x — 已实施并验证（双 UI × 双模式冒烟均绿；状态色那半**不适用**，见下），状态 <strong>Fixed</strong></li>
     </ul>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（方案 A）</b>：<code>app.js</code> 新增 <code>isShowPending(s)</code>
+      （<code>isGroupPending</code> / <code>isEpPending</code> 旁边）—— <code>pendingAny</code> 短路后
+      逐集复用 <code>isEpPending(e)</code>，命中即返回；hash 归一仍走 <code>memberHashesOf</code>，
+      不为这一层单开一套收集逻辑。prism / atlas 两份模板的 <code>.show-row</code> 各加一行
+      <code>'is-pending': isShowPending(s)</code>（双 UI 同步）。
+      冒烟补了一条<a href="#s5">剧行</a>断言（原来只有集行那条）。</p>
+    <p><b>⚠ 一处与建议不同的改道（建议原文保留）</b>：§04 说"剧行的状态色也是后端聚合标量，
+      要与 is-pending 一起改（照 <code>epState</code> 同款）"。实测<b>不成立</b> ——
+      剧行<b>根本不渲染状态色</b>：<code>.show-row</code> 的 class 绑定里没有 <code>s-*</code>，
+      状态列渲染的是空占位 <code>&lt;div class="g-cat zero"&gt;&lt;/div&gt;</code>（实测行 class
+      始终为 <code>group-row show-row</code>，无 <code>s-</code> 前缀）。
+      ⇒ 只加 <code>is-pending</code> 即完整，"行变灰但颜色是旧的"这个连带问题不存在。
+      教训：<b>先确认那一行到底渲染了什么，再照搬另一层的修法。</b></p>
+    <p><b>验证</b>：单测 <b>1054 passed / cov 92%</b>；冒烟 <b>50 项 0 失败</b> ——
+      ok 模式（prism/atlas 剧行 is-pending 出现）与 error 模式（失败不留假状态）双双通过；
+      <b>红绿双验</b>：去掉剧行绑定后两条都 FAIL（"轮询 1.5s 内未出现"）。</p>
+    <p><b>两个排查期间的坑（值得记住）</b>：<br>
+      ① <b>端口撞车</b>：<code>127.0.0.1:8099</code> 当时被<b>另一个 worktree 的桩服务</b>占着，
+      我连上去的探针一直在测<b>别人的代码</b>（因此一度出现"atlas 通过、prism 失败"这种假象）。
+      判别法：<b>起桩服务后先 <code>curl</code> 一眼确认它服务的就是本 worktree 的文件</b>
+      （<code>curl -s .../shared/app.js | grep -c &lt;你的新符号&gt;</code>），再跑冒烟。
+      改用专属端口（8111 / 8112）后一切正常。<br>
+      ② <b>固定采样不可靠</b>：整剧操作会把该剧<b>全部</b>成员一起补丁（桩里这一"剧"就有 1500 个种子），
+      <code>applyOptimistic</code> 逐 hash 扫表 ⇒ 成功路径 150ms 采样太早（假失败）；
+      失败路径因补丁贴在 POST 之前，要等回执回来才回滚 ⇒ 150ms 采样又太早（假阳性，实测 atlas 抓到过）。
+      故断言改成<b>等条件成立</b>：成功等 <code>is-pending</code> 出现，失败等 <code>pendingOps</code> 归零。</p>
   </section>
 
   <footer>

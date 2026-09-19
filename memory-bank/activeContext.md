@@ -38,6 +38,13 @@
      只在没欠账时重建; 实测 20 周期 **40 → 20 次(省 50%)**。两个边界由
      `test_view_rebuild_waits_for_client_consume` 钉住: 脏标记必须保留、`force=True`(命令改状态)必须绕过。
      顺带发现: 方案 B **不需要新契约** —— 客户端本来就在轮询时发 `rid`, "有没有人取走"现有参数即可表达。
+     ~~**整剧(剧行)操作没有 is-pending**~~ —— **已修并验证, issue 已置 Fixed**
+     ([webui-show-row-no-pending](issues/26-09-19-1959-webui-show-row-no-pending.html)):
+     `app.js` 新增 `isShowPending(s)`(复用 `isEpPending`), prism/atlas 的 `.show-row` 各加一行绑定;
+     冒烟补了剧行断言(双 UI × 双模式)。⚠ 两个排查坑: ① **8099 端口被别的 worktree 的桩服务占着**,
+     探针一度在测别人的代码 —— 起桩服务后先 `curl` 确认服务的就是本 worktree 的文件, 并改用专属端口;
+     ② **冒烟别用固定睡 N 毫秒采样**(成功路径会因补丁是逐 hash 贴而假失败, 失败路径会因补丁在 POST
+     之前而假阳性), 改成"等条件成立"。**尚未提交。**
   2. ~~**热端点改 JSONResponse 直返**~~ —— **已修并验证, issue 已置 Fixed**
      ([webui-hot-endpoints-jsonable-encoder](issues/26-09-19-1900-webui-hot-endpoints-jsonable-encoder.html)):
      `/api/search` 服务端 **82.6 → 23.3~30.1 ms**(输出字节与基线逐字节一致), 详情族

@@ -100,11 +100,11 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
-> prism/atlas 双 UI 断言(当前 **48 项 0 失败**(ok 模式)/ **24 项 0 失败**(`--expect-cmd error`, 回滚路径;
-> 单 UI 计, 双 UI 为 48/48),
+> prism/atlas 双 UI 断言(当前 **50 项 0 失败**(ok 模式)/ **50 项 0 失败**(`--expect-cmd error`, 回滚路径)),
 > 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
 > **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 2026-09-19 加, 见下方读数时机坑)、
-> **P0-4 批量合单数请求**、**P0-3 整组/整集乐观**(组行与集行各自的 `is-pending` 与状态色翻转)、
+> **P0-4 批量合单数请求**、**P0-3 整组/整集/整剧乐观**(组行 / 集行 / **剧行**各自的 `is-pending`
+> 与状态色翻转 —— 剧行是 issues/26-09-19-1959 补的第三层: 剧行默认折叠、集行不渲染, 只有剧行能显示"在飞")、
 > **P0-3 补丁先于 POST**(注入 800ms 命令延迟仍要求 <400ms 出 pending, 见下)、
 > **BUG-8 刷新后追剧页不空白**、**BUG-9 辅种页复制磁力可用**)
 > 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。

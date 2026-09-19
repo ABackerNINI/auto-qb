@@ -647,7 +647,7 @@
             <template v-for="s in decoratedShows" :key="s.key">
               <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义)
                    FX-13: 右键 = 整剧菜单(此前该层无 @contextmenu, "剧"这一级操作无处可做) -->
-              <div class="group-row show-row" data-table="show" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial }"
+              <div class="group-row show-row" data-table="show" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial, 'is-pending': isShowPending(s) }"
                    :style="gridStyle('show')" @click="onShowClick(s, $event)"
                    @contextmenu.prevent="openShowMenu($event, s)">
                 <template v-for="col in visibleShowCols" :key="col.key">

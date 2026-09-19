@@ -2383,6 +2383,21 @@ const app = createApp({
       if (!this.pendingAny) return false;
       return this.memberHashesOf(e.members).some((h) => this.isPending(h));
     },
+    /* 剧行(show 级)是否有种子在飞 —— 与 isGroupPending / isEpPending 同一族, 是 BUG-3 当年
+     * 漏掉的第三层(issues/26-09-19-1959-webui-show-row-no-pending)。
+     * 语义: 该剧**任何一集**有成员在飞即在飞(整剧操作会把该剧全部成员一起补丁)。
+     * 剧行默认折叠(集行不渲染), 所以这一层是折叠态下**唯一**能显示"在飞"的元素。
+     * 复用 isEpPending 逐集查(hash 归一仍走 memberHashesOf), 命中即返回 —— 不为它单开一套
+     * hash 收集逻辑, 免得再长出一份与守阵不一致的写法。 */
+    isShowPending(s) {
+      if (!this.pendingAny) return false;   // 常见路径 O(1)
+      for (const sn of s.seasons || []) {
+        for (const e of sn.episodes || []) {
+          if (this.isEpPending(e)) return true;
+        }
+      }
+      return false;
+    },
     /* 集行状态色。真值 `e.state` 是后端按 _SHOW_STATE_RANK 聚合后**当标量拷贝**进来的 ——
      * decoratedShows 每轮重建 {...e}, 但 e.state 只在下一次 /api/state 回包时才更新,
      * 所以成员 kind 被乐观补丁改掉后集行颜色不动(BUG-3: 整集暂停后仍是 s-seeding)。

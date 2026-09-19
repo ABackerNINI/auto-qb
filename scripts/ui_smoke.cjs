@@ -477,6 +477,51 @@ async function smokeUi(browser, ui) {
     await page.screenshot({ path: path.join(SHOTS, `${ui}-6-shows.png`) });
 
     /*
+     * P0-3 剧行乐观(issues/26-09-19-1959): 剧行默认**折叠**, 集行根本不渲染 ⇒
+     * 剧行是折叠态下**唯一**能显示"在飞"的元素。BUG-3 当年只补了组行(辅种页)与集行(追剧页),
+     * 剧行这一级漏了 —— 整剧暂停的补丁 0ms 就贴上, 但折叠态下没有任何可见元素把它显示出来。
+     * 故必须在**折叠态**下断言(下面展开剧的那一节测的是集行, 覆盖不到这里)。
+     */
+    if (showRowCount > 0) {
+      const sRow = (await page.$$(".show-row"))[0];
+      const before = await sRow.evaluate((el) => el.className);
+      await sRow.click({ button: "right" });
+      await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+      const sItems = await page.$$(".ctx-item");
+      let sClicked = false;
+      for (const h of sItems) {
+        const t = (await h.textContent()) || "";
+        if (t.includes("暂停整剧")) { await h.click(); sClicked = true; break; }
+      }
+      /*
+       * 不能用「固定睡 150ms 再采一次」:
+       * ① 成功路径 —— 整剧操作会把该剧**全部**成员一起补丁(桩里这一"剧"就有 1500 个种子),
+       *    applyOptimistic 逐 hash 扫表, 补丁贴完前 pendingOps 还没填齐 ⇒ 150ms 采样会假失败;
+       * ② 失败路径 —— 补丁贴在 POST **之前**(issue 26-09-19-1939 的修法), 失败要等回执回来才回滚,
+       *    150ms 采样会看到"还没回滚"的假阳性(实测 atlas 就抓到过)。
+       * 故两条路径都等条件成立再断言: 成功等 is-pending 出现, 失败等 pendingOps 归零。
+       * 真机上单剧通常几十个种子, 会比桩里快得多 —— 轮询把两种规模都覆盖到。
+       */
+      let after = null;
+      if (sClicked && EXPECT_CMD === "error") {
+        await page.waitForFunction(`Object.keys(${INST}.pendingOps || {}).length === 0`,
+          null, { timeout: 4000 }).catch(() => null);   // 等回滚
+        after = await page.$$eval(".show-row", (ns) => (ns[0] ? ns[0].className : null));
+        add(ui, "P0-3 剧行乐观(失败不留假状态)", !!after && !after.includes("is-pending"),
+          `${before} -> ${after}`);
+      } else {
+        const appeared = sClicked ? await page.waitForFunction(
+          "!!document.querySelector('.show-row') && document.querySelector('.show-row').className.includes('is-pending')",
+          null, { timeout: 1500 }
+        ).then(() => true).catch(() => false) : false;
+        after = await page.$$eval(".show-row", (ns) => (ns[0] ? ns[0].className : null));
+        add(ui, "P0-3 剧行乐观(剧行 is-pending)", sClicked && appeared,
+          `${before} -> ${after}(轮询 1.5s ${appeared ? "内出现" : "内未出现"})`);
+      }
+      await page.waitForTimeout(3400);  // 等乐观回落, 别把 pending 带进后面的集行断言
+    }
+
+    /*
      * P0-3 整集乐观(BUG-3): 集行状态色来自后端回传的 e.state(**标量拷贝**), 成员 kind 被补丁
      * 改过也不会变 ⇒ 整集/整剧此前点了没有任何即时反馈。这里断言集行在回执前就带上 is-pending
      * 且 s- 状态色已换(epState() 按与后端同一张 STATE_RANK 表现算)。
