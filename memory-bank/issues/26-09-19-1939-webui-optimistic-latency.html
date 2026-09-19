@@ -292,7 +292,7 @@ if (Date.now() - op.ts &gt; 3000) { delete this.pendingOps[hash]; return false; 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
-      <li>2026-09-19 19:56 — <strong>Open → Fixed</strong>（方案 A + B 已实施，未提交）：受控复测
+      <li>2026-09-19 19:56 — <strong>Open → Fixed</strong>（方案 A + B 已实施，已入库 <code>a8eb6e8</code>）：受控复测
         注入 2000ms 时补丁 2012ms → 0ms；1053 passed 不变；冒烟 48 项 0 失败（新增 2 条守阵）。
         真机 POST 变慢的底层成因未追（见 §07 ③ 未验证项）</li>
       <li>2026-09-19 19:39 — 入池，状态 <strong>Open</strong>（计划外，未修）。
