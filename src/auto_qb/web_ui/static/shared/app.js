@@ -2251,6 +2251,7 @@ const app = createApp({
          * —— 前三次全都只埋了 patchMs/postMs, 于是"撤下慢"在日志里全绿、只能靠肉眼报。
          * 修前这一段恒 3~4.5s(3s 常量兜底 + 等到下一次轮询), 修后 ~200~350ms。 */
         settleMs: null,
+        settleVia: null,  // 撤下走的哪条路: truth(回执带真值) / pull(退回拉全量) / 回滚
         targets: null,    // 本次命令的目标数(供 [perf] 阈值分档, 见 _markCmdSettle)
         totalMs: null,
         waitMs: null,
@@ -2273,8 +2274,13 @@ const app = createApp({
       if (c.totalMs == null) return;
       const budget = (c.targets || 0) > 100 ? 2500 : 800;
       if (c.settleMs > budget) {
+        /* `via` = 撤下走的是哪条路, 真机排查的第一判据:
+         *   truth = 回执自带真值、就地撤下(最快, 与库大小解耦; 需要服务端是"补刷新后才写回执"的新版);
+         *   pull  = 回执没带真值或真值没对上, 退回 _pullTruthAfterCmd 拉全量(大库就慢在这里);
+         *   其它  = 兜底回滚 / 失败回滚。
+         * 看到 pull 且后端日志里没有「回执(补刷新后)已写」 ⇒ 服务端还是旧代码, 先重启进程。 */
         console.warn(`[perf] 命令 ${c.cmdId || "-"}${c.action ? "(" + c.action + ")" : ""}: 撤下 ${c.settleMs}ms` +
-          ` (${c.targets || "?"} 个目标, >${budget}ms 属异常 —— 真值已到却还灰着, 多半是 _optimisticSettled 没命中或 _pullTruthAfterCmd 没跑到)`);
+          ` via=${c.settleVia || "?"} (${c.targets || "?"} 个目标, >${budget}ms 属异常)`);
       }
     },
     _markCmdPatch(t0) {
@@ -2479,12 +2485,21 @@ const app = createApp({
         const op = this.pendingOps[h];
         if (!op) continue;
         const t = truth[h];
-        let ok = !!t;
-        if (ok) for (const k of Object.keys(op.patch)) if (t[k] !== op.patch[k]) ok = false;
-        if (ok) delete this.pendingOps[h];
-        else all = false;
+        if (!t) { all = false; continue; }  // 回执里没这个种子 -> 只能去拉一次
+        let match = true;
+        for (const k of Object.keys(op.patch)) if (t[k] !== op.patch[k]) match = false;
+        if (match) { delete this.pendingOps[h]; continue; }
+        /* 不一致时**采纳真值**, 而不是再等: 真值是服务端补刷新**之后**从 qB 读的, 它就是权威值;
+         * 预测值算错其实很常见(resume 后 qB 立刻回报 stalledDL/checkingDL, 与前端按 progress
+         * 猜的 seeding/downloading 不一致)。此时再退避拉一次全量(大库 1.5s)纯属白等。 */
+        this._forEachRow(h, (row) => Object.assign(row, t));
+        delete this.pendingOps[h];
       }
-      if (all) this._markCmdSettle();
+      // 路径标记: 真机排查时 [perf] 会把它打出来, 一眼看出撤下走的是哪条路
+      if (all) {
+        if (this.cmdStats) this.cmdStats.settleVia = "truth";
+        this._markCmdSettle();
+      }
       return all;
     },
     /* ---------------- 回执后立刻把真值拉回来(issue 26-09-19-2024) ----------------
@@ -2577,7 +2592,10 @@ const app = createApp({
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           // 回执已带真值 ⇒ 就地撤下(与库大小解耦); 没对上才补拉一次(旧服务端 / 取不到真值)
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
+            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
+            await this._pullTruthAfterCmd(hashes);
+          }
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
           else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
         }
@@ -3084,7 +3102,10 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
+            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
+            await this._pullTruthAfterCmd(hashes);
+          }
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
           else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
         } catch (e) {
@@ -3312,7 +3333,10 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
+            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
+            await this._pullTruthAfterCmd(hashes);
+          }
           const n = groupKeys.length + memberHashes.length;
           if (r.ok) this.toast(`已执行: ${label}(${n} 个目标)`, "ok", 2500);
           else this.toast(`${label}失败: ${r.error}`, "error", 8000);
@@ -3553,7 +3577,10 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
+            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
+            await this._pullTruthAfterCmd(hashes);
+          }
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
           else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
         }

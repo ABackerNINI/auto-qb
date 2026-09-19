@@ -244,6 +244,7 @@ class WebCommandsMixin:
         if not d:
             return
         self._deferred_receipts = {}
+        n_truth = 0
         for cmd_id, item in d.items():
             truth = {}
             try:
@@ -254,7 +255,11 @@ class WebCommandsMixin:
                     truth[h] = {"kind": self._state_kind(rec)}
             except Exception:
                 truth = {}
+            n_truth += len(truth)
             self._set_web_result(cmd_id, "ok", timing=item["timing"], truth=truth or None)
+        # 排查标记: 日志里**没有这一行** = 服务端还在跑旧代码(回执在补刷新之前就写了),
+        # 前端只能走 via=pull 拉全量 —— 真机大库上就是"点了要 1.7~2s 才恢复正常"。
+        logger.info(f"[cmd] 回执(补刷新后)已写 {len(d)} 条, 带真值 {n_truth} 个种子")
 
     def _log_cmd_timing(self, cmd: str, timing: Optional[dict]) -> None:
         """命令耗时落日志 —— 排查"点了要等几秒"的**主出口**(不依赖浏览器控制台)
