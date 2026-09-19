@@ -61,14 +61,29 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 
 ## 提交 / PR
 
-- **协作主线**: 日常开发在 `develop` 分支, 且统一以 **Gitee 的 `develop`** 为准 (`origin`)。开工先
-  `git pull --rebase origin develop`; **交付与否只看 Gitee 上有没有该提交**。GitHub 只作镜像,
-  **允许滞后** —— 不要用 GitHub 的提交状态判断进度 (直连不稳定, 会误判成"改动没推上去")。
+- **协作主线**: 日常开发在 `develop` 分支, 且统一以 **Gitee 的 `develop`** 为准。**交付与否只看
+  Gitee 上有没有该提交**; GitHub 只作镜像, **允许滞后** —— 不要用 GitHub 的提交状态判断进度
+  (直连不稳定, 会误判成"改动没推上去")。
+- **开工先同步主线, 但先确认 `origin` 指向哪** —— 历史 clone 的 `origin` 可能是 GitHub, 照抄
+  `origin` 会拉到滞后的镜像 (2026-09-19 实测: 某 clone `origin`=GitHub, `git pull` 一直"已是最新",
+  实际落后 Gitee 5 个提交):
+  ```bash
+  git remote -v                        # 先确认: origin 指向 gitee.com 才用下面的 origin 写法
+  git pull --rebase origin develop     # origin = Gitee 时
+  git pull --rebase gitee develop      # Gitee 挂在 `gitee` 这个远端名时 —— 分支名**必须写**
+  ```
+  - `git pull <remote>` 不带分支名时**只 fetch 不合并**当前分支 (对象拉下来了但 HEAD 不动, 仍显示
+    "已是最新"), 必须写成 `git pull <remote> <branch>`。
+  - 一劳永逸: 把 develop 的上游改到 Gitee, 之后裸 `git pull` / `git push` 都走主线 ——
+    `git branch --set-upstream-to=gitee/develop develop`。
+  - 判进度看 `git status -sb` 的 `ahead/behind` 是相对**当前上游**的: 上游若指向 GitHub, 显示的
+    "ahead N" 不代表比主线新。
 - **提交信息**: 中文, **一句话概述 + 详细描述** —— 首行一句话说清"改了什么 / 为什么"(参照
   `git log` 风格, 如"修复 WEB UI 种子速度刷新滞后: …"), 空一行后写细节: 改动动机、关键取舍、
   影响面、实测数字。单句能说清的小改只写首行。
 - **用户说"提交"= commit + 自动推送** (2026-09-19 用户指定), 一次流程走完:
-  1. `git push origin develop` —— 推 Gitee (稳定, 这是协作主线, 必须成功);
+  1. `git push origin develop` —— 推 Gitee (稳定, 这是协作主线, 必须成功)。若该 clone 的 `origin`
+     指向 GitHub 则用 `git push gitee develop` (同上条: 先 `git remote -v` 确认);
   2. 再**尝试一次** GitHub 直连:
      ```bash
      git -c http.https://github.com.proxy= push github develop
