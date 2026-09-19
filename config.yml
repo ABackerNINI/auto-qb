@@ -191,7 +191,6 @@ config:
             interval: 5M
             cooldown: 5M
             conditions:
-              - size: ">10GiB"
               - path:
                   - "regex:^R:/"
             actions:
