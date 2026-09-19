@@ -45,6 +45,7 @@ user-invocable: true
 - **slug 禁止出现**: 轮次(`round9` / `r10` / `第十轮`)、日期(已在文件名前缀)、会话序号、编号、分支名。轮次属于档案内"子任务状态表"的一行, 不属于文件名。
 - 不带时分是**特性**: 同一天同一专题必然撞到同一路径, 重复才能当场暴露(显式 add/add 冲突), 而不是静默变成两份。
 - 必备章节: 标题行 `# <文件名> — 名称`、状态行(`Status`/`Added`/`Updated`/`Summary`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。`**Summary:**` 是 `_index.md` 摘要的数据源。
+- **`**Status:**` 取值只能是这 4 个英文单词**: `In Progress` / `Pending` / `Completed` / `Abandoned` —— 守阵 `tests/test_memory_bank.py` 用正则 `\*\*Status:\*\* (In Progress|Pending|Completed|Abandoned)` 匹配, 并且 `gen_tasks_index.py` 按它决定档案落在 `_index.md` 的哪个分区。写成中文「完成」或加前缀符号(`✅ 完成` / `已完成`)会被判为**非法状态行**, 表现为两条守阵同时红(状态行缺失 + 索引分区不一致)。
 - 迁移期档案保留 `**Legacy-ID:** TASKnnn`, 供历史文档与历史对话中的旧编号回溯。
 - 状态取值仅四种: `In Progress` / `Pending` / `Completed` / `Abandoned`; `_index.md` 的分区必须用同样的词。
 - 一个专题一个档案(不逐会话建文件): 新会话追加**结论与决策**; 历史流水账原文归档在该档案的 `## 历史会话纪要 (原文归档)` 段。
