@@ -869,3 +869,49 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   里直接 `refresh()` 一次, 免得首次切到某视图要空/旧 ≤2s(`scheduleNext` 内部先 `stopPolling`
   再排下一次, 所以不会造成双份轮询)。
 - 服务端 `view` 参数取**保守默认**: 未知值 / 缺省 ⇒ 四份全回。老客户端与非视图调用方不受影响。
+
+### P1-2 行窗口化: 行高不齐 / 取整 / 展开面板 / 响应式代理复制 (2026-09-19)
+
+- **⚠ 行高不是等高的, "等高假设"会漂移上百像素**: 3000 条种子实测 **2179 行 43.7px + 821 行 65.4px**
+  —— H&R 行多渲染一行 `.m-pair m-dur`(`22时00分 / 3天12时`), 占比 27%。第一版用
+  "量首行高、不等高就整体关窗口" 的设计, 在真实数据上直接退化为"永不窗口化", 而且即使强行窗口化,
+  总高也会从 149238 漂到 149456px(表现为**滚到底够不着最后一行**)。正解是**逐行测高 + 前缀和 +
+  二分查找**: `_rowHs[kind:key] = px`, 每次 `updated()` 后补测, 列签名变化时清空重测。
+- **⚠ 测高必须用 `getBoundingClientRect().height`, 不能用 `offsetHeight`**: `offsetHeight` 是取整的
+  整数, 每行差 0.4px × 3000 行 ≈ 1200px 漂移。同样地, 行间距 `.group-table` 的 flex `gap`
+  也要单独计入(`ROW_WIN_GAP`), 否则窗口越往下偏得越多。
+- **⚠ 窗口化绝不能改变布局模型**: 行必须仍然"每行渲染完整单元格序列"、仍然是 flex 列的子元素,
+  只靠上下两个 `.row-pad` 占位 div 撑高度。曾经想过"渲染成一层薄壳", 那会让 `:nth-child` 列对齐
+  与 `[data-table]` 的列宽协议全部失效(现有 CSS 重度依赖 nth-child 定位列)。
+- **⚠ 有"不定高插队元素"时必须退避回全量**: 分组视图里展开某个组时, 成员行是**插在组行之间**的,
+  窗口边界会被打断。所以 `groupWin` 在 `expandedKey` 非空时**直接返回 inactive**(组数本来也远少于
+  种子数); 成员行自己再走一层 `memberWin`。
+- **⚠ `{ ...r, hit }` 在响应式代理上是灾难**: 每条种子 74 个字段, 展开要经过一遍 Proxy 的 `get`
+  陷阱 —— 3000 条 = 22 万次, **实测仅这一句就 68ms**, 比整个窗口渲染还贵(排查时发现"窗口化之后
+  refresh 只快了 20ms", 元凶就是它)。改成 `out.push(r)` 原引用出栈, 由模板现场问
+  `isHit(m)` / `searchHits.has(m.hash)`。同理: 任何"为了让模板少写一个判断"而在 computed 里复制
+  大对象数组的写法都要重估。
+- **⚠ 行数阈值 + 兜底**: `ROW_WIN_MIN = 200` 以下不开窗口(小数据集开窗口只有开销没有收益);
+  `ROW_WIN_OVERSCAN = 10` 上下各多渲染 10 行, 否则快速滚动会看到白块。首次进入/列签名变化时必须
+  **先全量渲染一帧**把高度测出来, 再切窗口 —— 这解释了"首次切视图耗时没变"(2073 → 2085ms),
+  是刻意接受的一次性代价。
+- **⚠ Playwright 版本要和本机已装的 chromium 对齐**: 直接装 `playwright@1.63` 会拉
+  `chromium-1243`, 而本机浏览器缓存里只有 `chromium-1234` ⇒ `Executable doesn't exist`。
+  解法: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright-core@1.62.0`, 脚本里
+  `require("playwright-core")` 优先。另外 **ESM 的 `import` 不认 `NODE_PATH`**, 所以冒烟脚本必须写成
+  **CJS**(`require`), 否则找不到包。
+- **⚠ Vue 3.5.13 取根实例要绕一下**: `#app.__vue_app__._instance` 恒为 `null`(key 存在但
+  `instance: false`)。可用的是 `document.querySelector('#app')._vnode.component.proxy`。踩过一次,
+  别改回去。
+- **⚠ 桩服务的命令队列是 2 元组**: `mgr.web_commands.get()` 返回 `(cmd, body)`, **不是** 3 元组 ——
+  `cmd_id` 在 `body` 里。写错会 `ValueError` 而且命令被吃掉、永远不回 ack, 表现为冒烟测试里
+  `pendingOps` 卡在 1 不动(排查了很久才定位到是桩的问题而不是前端的问题)。
+
+### Windows 上跑真浏览器冒烟 (2026-09-19, 长期有效的能力)
+
+- 之前一直认为"Windows 上没法做浏览器冒烟", 这次证实**可以**: 本机有可用的 Node + chromium 缓存,
+  配 `scripts/ui_harness.py`(真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子 + 命令泵)
+  与 `scripts/ui_smoke.cjs`(Playwright, prism/atlas 各 14~28 项断言 + 内置 A/B 基准), 就能把
+  "只能靠单测覆盖不到的交互"验掉(P0-3 乐观回退、P1-1 视图切换、P1-3 无逐帧强制布局、P1-2 窗口化)。
+- 收尾时若端口被占: `taskkill //F //PID` 在 Git Bash 下不好使, 用 PowerShell
+  `Get-NetTCPConnection -State Listen -LocalPort 8099,8100 | Stop-Process -Force`。

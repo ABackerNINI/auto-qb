@@ -144,6 +144,35 @@ const LEGACY_COLS_KEYS = ["autoqb_cols_v3"];  // v2 为索引式覆盖, 不可�
  */
 const DEFAULT_SORT = { key: "added_on", dir: -1 };
 
+/* ---------------- P1-2 行窗口化(windowed rows) ----------------
+ *
+ * 背景(实测, 3000 种子, 见 scripts/ui_smoke.cjs): 每轮全量回传后前端整表替换,
+ * **主线程被单个长任务占住 240~350ms** —— 这就是"点一下要等一会儿"的真身:
+ * 每 2s 一次的刷新把 3000 行 × 13 列重新 patch 一遍, 期间点击/滚动全部排队。
+ *
+ * 做法: 只渲染视口附近的行, 上下各用占位 div 撑住总高度(滚动条长度与滚到底都照旧)。
+ * 与"虚拟滚动"常见实现的区别 —— 这里**不改布局模型**: 行仍在原地流式排列(flex column),
+ * 占位只是两个空盒子, 因此:
+ *   ① 每行仍渲染**完整单元格序列**(CSS 的 :nth-child 列对齐与 data-table 都依赖它);
+ *   ② 横向滚动/sticky 表头/列宽拖拽全部不受影响;
+ *   ③ 多选 shift 区间、右键、搜索高亮仍按**数据索引**走(filteredTorrents 原数组不变),
+ *      窗口只决定"渲染哪一段", 不参与任何业务语义。
+ *
+ * 三条硬约束(漏了就出事):
+ *   ① 行高必须**齐**: 占位高度 = 行数 × (行高 + gap), 行高不齐 => 位置漂移/滚动跳动。
+ *      故测量时采样多行, 差异 >2px 立即关闭窗口化回退全量渲染(宁可慢也不能错位)。
+ *   ② 视图有"插队元素"时必须退避: 分组页展开的 .detail 面板高度不定, 会让后续行整体下移,
+ *      此时窗口的"第 i 行在 i×step"假设失效 —— 有展开即回退全量。
+ *   ③ 阈值以下不开窗: 小库(<ROW_WIN_MIN)开窗只是平白多一次测量, 且更容易露白。
+ */
+const ROW_WIN_MIN = 200;        // 行数低于此值不开窗口
+const ROW_WIN_OVERSCAN = 10;    // 视口上下各多渲染的行数(快速滚动时不露白)
+const ROW_WIN_GAP = 6;          // .group-table 的 flex 行间距(与 CSS `gap: 6px` 同源)
+// 首帧还没量到行高时的估算值(px)。估错只会让第一帧窗口略偏, 测到真值后同一帧即纠正;
+// 若没有它, 首轮就得先全量渲染 3000 行才能量到行高 —— 白付一次 300ms。
+const ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34 };
+
+
 /* 业务名词单点表(FX-10): "分组"这个叫法不够具体, **面向用户**的文案统一改称"辅种"。
  * 只改文案 —— 代码标识(变量 / 后端键 / API 路径 / CSS 类)一律不动, 否则会牵动后端契约
  * 与列宽存储键; 集中成常量便于下次口径统一时单点替换, 也让"哪些是业务名词"在代码里可检索。
@@ -263,6 +292,14 @@ const app = createApp({
       cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行
       renderMs: 0,  // 单轮 refresh() 中"赋值 + 多选交集"的耗时(不含网络)
       pendingOps: {},  // P0-3 乐观 UI: hash -> { patch, prev, ts }, 见 isPending/applyOptimistic
+      // P1-2 行窗口化(常量与原理见文件顶部 ROW_WIN_* 注释)
+      rowWin: true,          // 总开关: 行高不齐/有展开面板时自动置 false 回退全量渲染
+      _winScrollY: 0,        // 最近一次窗口滚动位置(rAF 合帧写入; 响应式 -> 触发窗口重算)
+      _winViewH: 0,          // 视口高度
+      _winResize: 0,         // resize 计数(签名里带上它, 让窗口/列宽变化后重算)
+      // 实测行高**均值**(未量过的行的兜底值; 逐行真值在 _rowHs); 响应式 —— 变了要重排窗口
+      _rowH: { torrent: 0, group: 0, member: 0 },
+      _rowHVer: 0,       // 行高表版本: 每量到新高度就 +1, 触发窗口重算(逐行真值是非响应式的)
       expandedKey: null,
       // 排序: 默认 = 组内最近添加时间降序(见 DEFAULT_SORT); 点击列头按 降序->升序->恢复默认 三态循环
       sortKey: DEFAULT_SORT.key,
@@ -620,12 +657,14 @@ const app = createApp({
      * 文件搜索结果 —— 文件命中(searchHits)仅用作高亮; 排序独立(三态同分组表) */
     filteredTorrents() {
       const q = (this.searchQuery || "").trim().toLowerCase();
-      const hits = this.searchHits;
       const out = [];
       for (const r of this.torrents) {
         if (!this._memberPass(r)) continue;
         if (q && !this._torrentTextMatch(r, q)) continue;
-        out.push({ ...r, hit: hits.has(r.hash) });
+        /* ❗刻意**不复制**成 { ...r, hit }: 每条 74 个字段, 复制要经一遍响应式代理的 get 陷阱
+         * (3000 条 = 22 万次), 实测**仅这一句就 68ms** —— 比整个窗口渲染还贵。
+         * 命中高亮改由模板问 searchHits(见 isHit), 语义不变; 顺带每轮少建 3000 个临时对象。 */
+        out.push(r);
       }
       const key = this.torrentSortKey;
       const dir = this.torrentSortDir;
@@ -639,6 +678,51 @@ const app = createApp({
         return dir * r;
       });
       return out;
+    },
+    /* ---------------- P1-2 行窗口: 只决定"渲染哪一段", 不参与任何业务语义 ----------------
+     * 三个窗口共用 _rowWindow(); 未启用时 win.active=false, 切片 = 全量、上下占位 = 0,
+     * 模板与不开窗时完全等价(因此关掉开关就是老行为, 回退路径零成本)。 */
+    torrentWin() {
+      return this._rowWindow("torrent", this.filteredTorrents, "torrentTable");
+    },
+    visibleTorrents() {
+      const w = this.torrentWin;
+      return w.active ? this.filteredTorrents.slice(w.start, w.end) : this.filteredTorrents;
+    },
+    torrentPadTop() {
+      return this.torrentWin.padTop;
+    },
+    torrentPadBottom() {
+      return this.torrentWin.padBottom;
+    },
+    /* 分组页: **有展开面板时退避** —— .detail 高度不定(含明细表头 + N 行成员), 会让后续行的
+     * 位置偏离"第 i 行在 i×step"的假设(硬约束 ②); 此时回退全量渲染, 宁可慢也不能错位。 */
+    groupWin() {
+      const n = this.filteredGroups.length;
+      if (this.expandedKey) return { active: false, start: 0, end: n, padTop: 0, padBottom: 0 };
+      return this._rowWindow("group", this.filteredGroups, "groupTable");
+    },
+    visibleGroups() {
+      const w = this.groupWin;
+      return w.active ? this.filteredGroups.slice(w.start, w.end) : this.filteredGroups;
+    },
+    groupPadTop() {
+      return this.groupWin.padTop;
+    },
+    groupPadBottom() {
+      return this.groupWin.padBottom;
+    },
+    /* 成员行(展开明细): 行数 = 当前展开组/集的成员数。容器是 .detail(不是 .group-table),
+     * 用 ref=detailHead 的父元素定位; 成员数通常很小(阈值以下自动不开窗)。 */
+    memberWin() {
+      const g = this.expandedGroup;
+      return this._rowWindow("member", (g && g.members) || [], null);
+    },
+    memberPadTop() {
+      return this.memberWin.padTop;
+    },
+    memberPadBottom() {
+      return this.memberWin.padBottom;
     },
     expandedGroup() {
       return this.groups.find((g) => g.key === this.expandedKey) || null;
@@ -1035,7 +1119,27 @@ const app = createApp({
       };
     },
   },
+  created() {
+    /* P1-2 窗口化的**非响应式**缓存: 刻意不放进 data —— 容器偏移与签名每轮都会写,
+     * 放进 data 会让它参与依赖追踪, 每次写入都额外触发一轮重渲染(白付一次整表 patch)。
+     * 窗口重算真正需要的响应式输入只有 _winScrollY / _winViewH / _winResize / _rowH。 */
+    this._winTop = { torrent: 0, group: 0, member: 0 };        // 容器顶边相对文档的偏移
+    this._winTopSig = { torrent: "", group: "", member: "" };
+    this._rowHSig = { torrent: "", group: "", member: "" };    // 行高签名(列集合/窗口宽变化才重量)
+    /* 逐行实测高度 {kind:hash -> px}: 行高**本来就不齐** —— 带 H&R 要求的行多渲染一行
+     * ("22时00分 / 3天12时"), 实测 3000 种子里 27% 是 65.4px、其余 43.7px。按"等高"算占位
+     * 会在几千行上累积成**上百像素**的漂移(滚到底够不着 / 滚动条长度不对), 必须逐行记。 */
+    this._rowHs = {};
+    this._winMeasured = { torrent: false, group: false, member: false };  // 该 kind 是否量齐
+    this._winRaf = 0;      // 滚动合帧句柄
+    this._winListening = false;
+  },
   async mounted() {
+    /* P1-2: 视口高度 + 页面滚动监听(被动 + rAF 合帧, 滚动本身不做任何布局读取) */
+    this._winViewH = window.innerHeight;
+    window.addEventListener("scroll", this._onWinScroll, { passive: true });
+    window.addEventListener("resize", this._onWinResize);
+    this._winListening = true;
     // 点击页面空白处: 关闭右键菜单与列选择器(两者都是临时浮层)
     window.addEventListener("click", () => {
       this.menu.visible = false;
@@ -1144,6 +1248,16 @@ const app = createApp({
     },
   },
   unmounted() {
+    // P1-2: 滚动/缩放监听随组件销毁撤掉(否则热重载后句柄堆叠, 滚动一次算 N 次)
+    if (this._winListening) {
+      window.removeEventListener("scroll", this._onWinScroll);
+      window.removeEventListener("resize", this._onWinResize);
+      this._winListening = false;
+    }
+    if (this._winRaf) {
+      cancelAnimationFrame(this._winRaf);
+      this._winRaf = 0;
+    }
     // P1-3: 顶栏尺寸观察器随组件销毁断开(ResizeObserver 不随元素消失自动停)
     if (this._headObs) {
       this._headObs.disconnect();
@@ -1161,6 +1275,9 @@ const app = createApp({
     // 这里只做"元素换没换"的引用比较(不触发布局), 换了才重新挂观察器并立即量一次。
     this._ensureHeadObserver();
     this._syncColAlignCss();  // 列对齐规则(R10-08): 值未变时内部直接返回
+    // P1-2: 行高/容器偏移都只在签名变化时量(见 _measureRowH / _ensureWinTop), 不是每渲染一次
+    this._measureRowH();
+    this._ensureWinTop();
   },
   methods: {
     async api(path, options = {}) {
@@ -4173,6 +4290,143 @@ const app = createApp({
         this._headRaf = 0;
         this._syncHeadHeight();
       });
+    },
+    /* ---------------- P1-2 行窗口化 ----------------
+     * 模板只消费三个产物: 可见切片、上占位高、下占位高。窗口关闭时 == 全量渲染(零差异回退)。 */
+    _winContainer(kind, refName) {
+      if (refName) return this.$refs[refName] || null;
+      // 成员行: 容器 = .detail —— 明细表头(ref="detailHead")的父元素
+      const head = this.$refs.detailHead;
+      return head && head.parentElement ? head.parentElement : null;
+    },
+    _winSigExtra() {
+      // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态
+      return `${this.distTotal ? 1 : 0}${this.searchQuery && this.searchQuery.trim() ? 1 : 0}${this.filtersActive ? 1 : 0}`;
+    },
+    /* 容器顶边相对文档的偏移: 只在签名变化时读一次(getBoundingClientRect = 强制同步布局,
+     * 每帧读会把 P1-3 的收益又吐回去)。签名含 lastRid ⇒ 每轮数据最多读一次。 */
+    _ensureWinTop() {
+      const base = `${this.viewMode}|${this.page}|${this._winResize}|${this._winSigExtra()}|${this.lastRid}`;
+      for (const kind of ["torrent", "group", "member"]) {
+        const sig = `${base}|${kind}`;
+        if (this._winTopSig[kind] === sig) continue;
+        const el = kind === "torrent" ? this._winContainer(kind, "torrentTable")
+          : kind === "group" ? this._winContainer(kind, "groupTable")
+            : this._winContainer(kind, null);
+        this._winTop[kind] = el ? el.getBoundingClientRect().top + window.scrollY : 0;
+        this._winTopSig[kind] = sig;
+      }
+    },
+    /* 行高: **逐行实测**(不是采样几行取均值)。行高本就不齐(带 H&R 要求的行多一行),
+     * 用"等高"近似会在几千行上累积成上百像素漂移 —— 表现为滚到底够不着、滚动条长度不对。
+     * 首次(或列集合变化后)由一轮**全量渲染**量齐所有行, 之后每轮只更新当前窗口里的行。 */
+    _measureRowH() {
+      if (!this.rowWin) return;
+      const sig = `${this.viewMode}|${this._winResize}|${this.visibleGroupCols.length}|${this.visibleTorrentCols.length}|${this.visibleDetailCols.length}`;
+      // ❗用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
+      // 3000 行就是 1200px 的漂移。
+      const probes = [["torrent", ".torrent-row[data-hash]"], ["group", ".group-row:not(.torrent-row)[data-key]"], ["member", ".member-row[data-hash]"]];
+      for (const [kind, sel] of probes) {
+        if (this._rowHSig[kind] !== sig) {
+          // 列集合/窗口宽变了: 旧高度作废, 下一轮走全量重新量齐(只多付一次全量渲染)
+          for (const k of Object.keys(this._rowHs)) {
+            if (k.startsWith(kind + ":")) delete this._rowHs[k];
+          }
+          this._rowHSig[kind] = sig;
+          this._winMeasured[kind] = false;
+          this._rowHVer++;
+          continue;
+        }
+        const rows = document.querySelectorAll(sel);
+        if (!rows.length) continue;
+        let sum = 0, changed = false;
+        for (const r of rows) {
+          const h = r.getBoundingClientRect().height;
+          const key = kind + ":" + (r.getAttribute("data-hash") || r.getAttribute("data-key") || "");
+          if (this._rowHs[key] === undefined || Math.abs(this._rowHs[key] - h) > 0.5) {
+            this._rowHs[key] = h;
+            changed = true;
+          }
+          sum += h;
+        }
+        const avg = sum / rows.length;  // 未量过的行(新种子)用它兜底
+        if (this._rowH[kind] === undefined || Math.abs(this._rowH[kind] - avg) > 0.01) {
+          this._rowH = { ...this._rowH, [kind]: avg };
+          changed = true;
+        }
+        if (!this._winMeasured[kind]) {
+          this._winMeasured[kind] = true;  // 这一轮是全量渲染, 高度已量齐
+          changed = true;
+        }
+        if (changed) this._rowHVer++;  // 响应式: 让窗口按新高度重算
+      }
+    },
+    _rowKeyOf(kind, item) {
+      return kind + ":" + (kind === "group" ? item.key : item.hash);
+    },
+    /* 前缀和 y(i) = 第 i 行的顶边偏移(含行间距)。每帧重算: 3000 次加法 ≈ 0.03ms,
+     * 比维护"失效缓存 + 增量更新"简单得多, 也不会因为漏失效而算错。 */
+    _rowWindow(kind, list, refName) {
+      const n = list.length;
+      const off = { active: false, start: 0, end: n, padTop: 0, padBottom: 0 };
+      void this._rowHVer;  // 依赖: 行高表更新后重算
+      if (!this.rowWin || n < ROW_WIN_MIN || this._winViewH <= 0) return off;
+      // 行高还没量齐 -> 这一轮先全量渲染(首轮/改列之后各一次), 下次就走窗口了
+      if (!this._winMeasured[kind]) return off;
+      const est = this._rowH[kind] || ROW_WIN_EST_H[kind];
+      const hs = this._rowHs;
+      const pre = new Array(n + 1);
+      pre[0] = 0;
+      let y = 0;
+      for (let i = 0; i < n; i++) {
+        const h = hs[this._rowKeyOf(kind, list[i])];
+        y += (h === undefined ? est : h) + ROW_WIN_GAP;
+        pre[i + 1] = y;
+      }
+      const rel = this._winScrollY - (this._winTop[kind] || 0);
+      let start = this._prefixFloor(pre, rel) - ROW_WIN_OVERSCAN;
+      let end = this._prefixFloor(pre, rel + this._winViewH) + 1 + ROW_WIN_OVERSCAN;
+      if (!(start >= 0) || start > n) start = 0;
+      if (!(end > 0) || end > n) end = n;
+      if (start >= end) return off;  // 数值异常: 宁可全渲染, 也不渲染"空窗口"
+      // 占位两侧各多出一个 gap(顶替了行块内部原有的间距), 故减一个 GAP 对齐
+      return {
+        active: true, start, end,
+        padTop: start > 0 ? pre[start] - ROW_WIN_GAP : 0,
+        padBottom: end < n ? pre[n] - ROW_WIN_GAP - pre[end] : 0,
+      };
+    },
+    _prefixFloor(pre, y) {
+      // 最大的 i 使 pre[i] <= y(pre 单调不减, 二分)
+      let lo = 0, hi = pre.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (pre[mid] <= y) lo = mid;
+        else hi = mid - 1;
+      }
+      return lo;
+    },
+    _onWinScroll() {
+      if (this._winRaf) return;
+      this._winRaf = requestAnimationFrame(() => {
+        this._winRaf = 0;
+        this._winScrollY = window.scrollY;
+      });
+    },
+    _onWinResize() {
+      this._winResize++;
+      this._winViewH = window.innerHeight;
+      this._winScrollY = window.scrollY;
+    },
+    /* 搜索命中高亮: 种子页不再逐条复制出 hit 字段(见 filteredTorrents), 高亮由模板现问现用 */
+    isHit(row) {
+      return !!row && this.searchHits.has(row.hash);
+    },
+    /* 模板用: 成员行切片(展开明细)。窗口未启用时原样返回, 与改动前完全等价 */
+    winMembers(list) {
+      const rows = this.sortedMembers(list);
+      const w = this.memberWin;
+      return w.active ? rows.slice(w.start, w.end) : rows;
     },
     /* 把默认模板"实体化"为 px:
      * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)

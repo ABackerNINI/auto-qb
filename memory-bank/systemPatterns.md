@@ -173,6 +173,38 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
   - 展示口径单点在后端 `_error_reason`(`missingFiles`→"文件丢失"; `error`→预取文本否则"错误"; 非错误→空串), 视图透出 `error_reason`, 前端 `stateText(m)` 仅错误态采用 —— **前端不得按 state 猜原因**。
 - **限速/流量只读快照 `_traffic_view`(2026-09-14)**: 限速曲线任务每次执行后由 `SpeedCurveMixin._publish_traffic` **整体替换**该 dict(Web 线程只读引用, 无锁即自洽), 经 `/api/status` 与 `/api/state` 的 `status.traffic` 恒回传(**不参与 rid 门控** —— 它的数据源是曲线任务而非分组视图, 掺进版本门控会与 groups 的脏语义耦合)。结构: `{ts, date, state, periods[{period,label,up,down}], limit{target{up,down}, actual{up,down}, reasons[{dir,code,text}]}}`; `state` ∈ `disabled`(未启用曲线, 前端整组 pill 不渲染) / `ok` / `dry_run`(只有 target, 不读不写) / `stale`(数据源缺失或无有效行, 本轮不动限速)。**单位**: `periods[].up|down` 为**字节**, `limit.target|actual` 为 **KiB/s**(0 = 不限速, null = 该方向不管理 —— 前端跳过该方向)。`reasons` 让前端能回答“为何命中与实际不一致”(如 `manual` = 当前为奇数 KiB 疑似手动设置故不覆盖; `read_failed` = 写入后回读失败), 前端只按方向取对应原因的文本, 不自己拼原因。
 
+### WEB UI 前端渲染与响应性 (2026-09-19, P0/P1 波次)
+
+**总原则: 感知延迟与真实延迟分开治。** 用户说"不跟手"时第一反应常是"后端慢", 但剖面显示
+**主因是"沉默"**(点击后 0.5~6.5s 无任何反馈), 所以收益最大的一项是**乐观 UI**, 后端加速
+(命令唤醒 / 命令后立即刷新)只负责把真值对齐时间压到百毫秒级。
+
+- **命令线 / tick 线解耦**: `wake()` + `_wake_event` 只触发"消费命令", **不触发 tick** ——
+  否则 `max_tasks_per_tick` 的速率语义失效, 且自投递命令(`build_search_index`)会形成自激循环
+  ⇒ `SELF_POSTED_COMMANDS` 白名单里的命令不唤醒。
+- **命令后补刷新走完整 `_refresh_torrents()`**: 绝不单独调 `store.apply_sync()`(只更 `by_hash`
+  与 `server_state`, 分组/任务/事件/索引全不管 ⇒ 留下半刷新态); 整批命令 drain 完**只补一次**。
+- **乐观 UI 只做白名单(pause/resume)**: `pendingOps[hash] = {patch, prev, ts}`, 真值匹配即清,
+  3s 兜底回落, **失败立即回滚**。
+- **按视图回传**: `/api/state?view=group|torrent|show` 只回该视图数组; 前端赋值必须
+  "键不存在则保留原引用"(否则另外两个视图每轮被抹空)。
+- **只读端点短缓存 key 含 `_web_write_seq`**: 写后自动失效; **断连检查必须在查缓存之前**
+  (否则 qB 断开仍返回缓存 200, 把断连藏起来)。
+- **行窗口化(P1-2)是渲染侧最大的一刀**: 核心约束是**只减 DOM 行数, 不改布局模型** ——
+  行仍是 flex 列里"渲染完整单元格序列"的元素, 只靠上下两个 `.row-pad` 占位撑高度,
+  这样 `:nth-child` 列对齐与 `[data-table]` 列宽协议全部保持有效。高度必须**逐行实测 + 前缀和 +
+  二分**(真实数据行高不齐: H&R 行多一行 ⇒ 43.7px 与 65.4px 混排, 等高假设会漂上百像素);
+  展开成员行会插队打断边界 ⇒ 有 `expandedKey` 时 group 窗口**退避回全量**。
+  ⚠ 附带发现: **别在 computed 里对响应式大对象做展开复制** —— `filteredTorrents` 里的
+  `{ ...r, hit }` 单项 74 字段 × 3000 条 = 22 万次 Proxy `get` 陷阱, **单这一句 68ms**,
+  比整个窗口渲染还贵; 改成原引用出栈 + 模板现问 `isHit(m)` 后 115ms → 5ms。
+
+**验证手段**: 单测覆盖不到前端渲染, 靠两道 —— ①静态守阵
+`test_frontend_static_bundle_health`(JS 语法、`node --check`、CSS 闭合、`<transition>` 吞弹窗、
+模板引用的资源存在); ②**真浏览器冒烟** `scripts/ui_harness.py`(真 `create_app` + `FakeClient`
++ 合成种子 + 命令泵)配 `scripts/ui_smoke.cjs`(Playwright, 双 UI 断言 + 内置 A/B 基准)。
+改前端渲染/交互逻辑后应当跑第 ② 道。
+
 ### WEB UI 图形化配置编辑 (web.py + config/schema.py + config/writer.py, 2026-09-14)
 
 - **模式**: 设置页不再直接编辑 YAML 全文 —— 每个配置项经图形控件增删改; 只读 YAML 预览(展示"即将写入"的文本)供核对。

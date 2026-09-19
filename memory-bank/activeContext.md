@@ -4,11 +4,11 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-18 (①**测试期禁止真实系统通知**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` 的 `manager` 为 `MagicMock` ⇒ `notify_fatal(msg, manager.config.notify)` 拿到恒真配置、守卫放行 ⇒ 真发 Windows toast `auto-qb 已停止`(探针实测抓到); 已 mock 掉 `auto_qb.cli.notify_fatal` + 新增 `tests/conftest.py` 会话夹具拦通知器命令(安全网), 基线 1006→1007, **已入库 `7ae21a1`** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 新条目 ②WEB UI **第十二轮·状态色收口**(R12, 纯 CSS, 已入库 `f47e6b8`): 「进度/状态两列文字」纳入行状态色; **星图补齐暂停中性令牌族** —— 棱镜第九轮 FX-06 已落地、星图漏改, 于是 `.g-status.k-paused` 落回 `--surface-2` 白 6% 底 = 用户说的"**还是太白**"真因; paused/other 行文字由近白 `--fg` 改中性中间调 `--paused`(= `--fg-muted`, 即"已暂停"状态文字那支色); 双 UI × 六主题截图逐张核对, 1006 passed **不变** — 详见 [progress.md](progress.md) 顶部与 [pitfalls.md](pitfalls.md) 两条新条目 ③WEB UI **错误种子状态列改显示具体原因**(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文) 已入库 `9723a76` — 详见 [tasks/TASK015](tasks/26-09-18-webui-error-reason.md) ④TASK014 UI 组件库 20 式已提交 `fae019a` ⑤**测试环境假失败清理**: 修掉 2 个环境性假失败(`APPDATA` 未设 ⇒ 通知用例断言必失败; 沙箱把 `os.symlink` 落成**真实目录** ⇒ 逃逸链接场景不存在) + `.gitignore` 补 `.coverage.*`, **实测 1007 passed / 0 failed**, 已入库 `7ae21a1` ⑥**测试期真实系统副作用普查**: patch 五类入口写文件记账跑全量 —— 外部进程 0, **唯一真问题 = AUMID 注册表键**(真写且不清理), 已加 conftest 第二道守卫后**归零** ⑦**普查能力固化**: `tests/sidefx.py` 记账器 + 会话夹具(收尾有越界项即失败)+ 策略单测 10 项, **1015 passed / 0 failed**)
+**最后更新**: 2026-09-19 (①**波次二已入库 `5d1e52c`**(Gitee + GitHub)—— 详见 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md) 与 [progress.md](progress.md) ②**波次三(P1-2 行窗口化)**已实施未提交: 三层改动(真)推翻了第一稿 —— 见 [pitfalls.md](pitfalls.md) 新条目 "**行高不齐 ⇒ 改"等高"思路错**: 3000 种子里 27% 因 `.m-pair` 多渲染一行变成 65.4px, 其余 43.7px; 实测一次 `({...r, hit}).map(x)` 响应式代理上 68ms。a) 种子页行用**逐行前缀和**(按 hash 实测缓存, 未知行用均值兜底), 首轮全量渲染一次量齐列集合的行高(之后改列/换窗口宽度才再量); 模板加 `data-hash` / `data-key` 让脚本可定位行; 分组页 200 组也加进来(展开明细时退避回全量); b) `filteredTorrents` 不再 `{...r, hit}` 复制 3000 条, 改 `isHit(m)` 由模板现问 `searchHits.has(m.hash)`; 离线验证: 实测**单轮 refresh 600ms → 300ms, 主线程长任务 250ms/轮 → <50ms**, A/B 在 `scripts/ui_smoke.cjs` 一次性产出; 首次切页耗时不变(2073→2085ms), 净收益全部落在稳态轮询 ③**浏览器冒烟桩服务已建立** —— `scripts/ui_harness.py`(真实 `create_app` + 合成种子 + 命令泵 `ok|error|hang`) + `scripts/ui_smoke.cjs`(Playwright + Node, 28 项断言) + `scripts/ui_smoke.cjs` A/B 内置; Windows 本机 (`H:/Programs/nodejs/playwright` + 本机 chromium-1234) 可跑, 验证了 P0-3/P1-1/P1-3 与 P1-2, 同时**补做了一直欠着的"浏览器双 UI 冒烟"卡点** ④**基线 1049 passed (Windows) / WSL 1047+2 skipped, 覆盖率 92% 不变** — 详见 [testing.md](testing.md))
 
 ## 正在进行
 
-- **WEB UI 操作跟手性优化 · 波次一已入库 `10e06a8` (2026-09-19, Gitee + GitHub 均已推送; 待浏览器双 UI 冒烟)**: 计划见
+- **WEB UI 操作跟手性优化 · 波次一已入库 `10e06a8` (2026-09-19, Gitee + GitHub 均已推送; 浏览器双 UI 冒烟已补做)**: 计划见
   [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html),
   档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)。
   **波次一已落地 7 项**: 分层节拍(`sync_interval=1.5s` 同步线 / `main_tick=2s` 任务线, tracker 预取与搜索索引**不跟快档**)、
@@ -18,14 +18,26 @@
   **实测 1046 passed (Windows) / WSL 1044 + 2 skipped**, 覆盖率 92% 不变; 改写了 3 条既有主循环守卫的判据
   (阻塞原语 `time.sleep` → `_wait_next`, 判据改用真实经过时间 —— mocked sleep 会让循环挂死而非失败)。
   ⚠️ **未做**: 前端 `pollSec` 仍 2s(降它会放大"全量回传 + 整树重渲染", 必须等 P1-1/P1-2)。
-- **WEB UI 响应性 · 波次二已实施 (2026-09-19, 未提交)**: **P1-5** qB 客户端加请求超时 `(3, 10)`
+- **WEB UI 响应性 · 波次二已入库 `5d1e52c` (2026-09-19)**: **P1-5** qB 客户端加请求超时 `(3, 10)`
   (此前完全没超时 ⇒ qB 假死时请求无限期挂起, 连重连退避都跑不起来); **P1-1** `/api/state?view=…`
   按视图回传(响应体 ≈1/4; 前端赋值改"键不存在则保留原引用", 切视图置空 lastRid 并立即 refresh);
   **P1-4** 只读端点 TTL 缓存(断连优先于缓存 + 写后失效两条硬约束) + 抽屉轮询 3s→5s;
   **P1-3** `updated()` 不再每次 `getBoundingClientRect`(改 ResizeObserver + rAF)。
   **实测 1049 passed (Windows) / WSL 1047 + 2 skipped**, 覆盖 92% 不变。
-  **当前卡点**: ①P0-3 乐观 UI 与 P1-3/P1-1 的**浏览器双 UI 冒烟**一直没做(单测覆盖不到);
-  ②波次三 = P1-2 行窗口化(改动面最大, 需单独提 + 截图核对)
+  **原卡点①②均已解除**: 浏览器冒烟已脚本化(见下条); 波次三已实施。
+- **WEB UI 响应性 · 波次三(P1-2 行窗口化)已实施 (2026-09-19, 待提交)**: 种子页 / 分组页 /
+  展开成员行三层窗口; **逐行测高 + 前缀和 + 二分**(真实数据 43.7px 与 65.4px 混排, 等高假设会漂
+  218px ⇒ 滚到底够不着); 上下 `.row-pad` 占位, 不破坏 `:nth-child` 列对齐; 有 `expandedKey` 时
+  退避回全量。顺手拆掉 `filteredTorrents` 的 `{ ...r, hit }` 复制(**单这一句 68ms**)。
+  实测(3000 种子, A/B 同进程 3 轮): DOM 行 3000 → **26**; 滚动总高逐像素相同且末行可达;
+  整轮 refresh **1675 → 309ms(prism) / 1780 → 301ms(atlas)**; 长任务 240~350ms/轮 → **0**;
+  `filteredTorrents` 重算 115ms → **5ms**。唯一代价: 首次切视图仍 ~2.08s(要先全量渲染一帧测高),
+  刻意接受。1049 passed 不变, 覆盖 92% 不变。
+- **浏览器冒烟能力已建立 (2026-09-19, dev-only)**: `scripts/ui_harness.py`(真 `create_app` +
+  `FakeClient` + 合成种子 + 命令泵 `ok|error|hang`) + `scripts/ui_smoke.cjs`(Playwright,
+  双 UI 28 项断言 + 内置 A/B 基准)。**Windows 上可跑**, 终于把"单测测不到的前端交互"验掉了
+  (P0-3 乐观 + 回滚 / P1-1 视图切换 / P1-3 无逐帧强制布局 / P1-2 窗口化)。
+  **剩**: 波次三提交 → 按种子量放宽前端 `pollSec`(现仍 2s)
 - **WEB UI 追剧视图 剧/集右键"打开目标文件夹: 种子不存在" (2026-09-19, 已入库 `c888fba`, Gitee 推送成功 `044908d..c888fba`; GitHub 直连 `Recv failure` 不重试, 镜像滞后 3 个)**: 用户报追剧页**剧右键与集右键**的"打开目标文件夹"失败, 种子右键正常。**真因**: 后端 shows 视图的 `members` 是 **hash 数组**, 前端 `decoratedShows` 把它换成**成员对象**;`openShowEpMenu`/`openShowMenu` 直接把 members 当 hash ⇒ 拼进 URL/JSON 时字符串化成 `[object Object]` ⇒ 后端 404「种子不存在」。**同一根因还让整集/整剧的 开始/暂停/强制汇报 报 Not Found、删除静默无反应**(用户尚未察觉)。**已改**: `shared/app.js` 新增 `memberHashesOf(list)`(两形态都收)统一取 hash, 菜单(`openShowEpMenu`/`openShowMenu`)与选中态(`_showHashes`/`_epUnits`/`epSelState`)一律走它; 双 UI(星图/棱镜)共用该文件 ⇒ 一次修两处。**测试**: `node --check` 通过; 另用 node 桩掉 `Vue.createApp`/`window`/`document` 直接**加载真 app.js** 调 `openShowEpMenu`/`openShowMenu` 断言产出是字符串 hash —— 新版 9/9 通过, `git show HEAD:` 旧版 9 项挂 5 项(含"载荷 hash = 对象")(**红绿双验**); 守阵已固化进 `tests/test_web.py::test_frontend_static_bundle_health` 第 7 项(对旧版实测报出全部 5 处)。全量 **1041 passed / 0 failed**(未新增用例, 基线不变)。**端到端冒烟已过**(桩服务 + 无头 Edge 开真页面: 修复版 open-path 收到真 hash, 换成 `044908d` 版收到整个成员对象 —— 红验实证, 手法见 pitfalls 末条)。**剩用户真机走查**(真实 qB 数据下再点一次)(剧 → 集 → 种子 三级各点一次"打开目标文件夹", 并顺带确认整剧的开始/暂停/删除已恢复) → 坑已入 [pitfalls.md](pitfalls.md) 末条
 - **WEB UI 视图重建范围收口 · 种子速度刷新滞后修复 (2026-09-18, 未提交)**: 用户报"WEBUI 种子速度更新慢但状态栏正常"。**真因**: 后端两条视图重建路径**范围不一致** —— 主循环 `_tick` 只重建 `_group_view` 却清掉共享的 `_group_view_dirty` ⇒ 会重建 singles/shows/flat 的 Web 线程兜底(`ensure_group_view`)永不触发, 而 `_group_view_ver` 照常自增 ⇒ 前端判 `updated=true` 把**陈旧数组整表换上去**; 状态栏"速度合计" = `Σ groups[].dlspeed` 恰是唯一在重建的那份 ⇒ 显正常。**同源第二坑**: 置脏写在 `if grouping.enabled` 块内而 consume 在块外 ⇒ 分组关闭时标记被吞。**已改**: 新增 `WebviewMixin.rebuild_views()` 作**唯一重建入口**(四视图 + 版本号 + 清标记一次完成, 两条路径都只调它); 置脏移出门控; 前端取消 `idlePolls` 退避(只留失败退避)并把 `server_state` 并入 `/api/state.status.server`(状态栏与行数据同源同轮, 每轮仍 1 请求)。**测试**: 改写 2 条固化缺陷的用例(`test_tick_rebuilds_group_view_only_when_changed` → `test_tick_rebuilds_all_views_when_changed`; `test_tick_skips_group_view_when_grouping_disabled` → `test_tick_rebuilds_views_when_grouping_disabled`) + 新增 3 条, 均**已红绿验证**(旧代码上必失败); **1021 passed / 0 failed**(基线 1018)。剩用户真机走查 → 档案 [tasks/TASK017](tasks/26-09-18-webui-view-rebuild-scope.md)
 - **测试期禁止真实系统通知 (2026-09-18, 已入库 `7ae21a1`)**: 真凶是 `test_cli.py::test_main_qb_compat_error_clean_exit` ——

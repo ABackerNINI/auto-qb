@@ -454,6 +454,10 @@ button { font-family: inherit; }
    半透明 + 轻微动效表示"进行中"; 回执失败会回滚原值(见 app.js resolveOptimistic),
    3s 未确认也会回落真值 —— 绝不允许停在假状态上。 */
 .is-pending { opacity: .55; transition: opacity .18s ease; }
+/* P1-2 行窗口化占位: 撑住"窗口外的行"所占的高度, 使滚动条长度与滚到底的行为与全量渲染一致。
+   必须是**空盒**且不吃事件 —— 它只是高度, 不能参与行内的 :nth-child 列对齐(那是行内单元格的事),
+   也不该被 hover/右键命中。flex 列里的 flex: 0 0 <高度> 保证不被压缩(父容器是 flex column)。 */
+.row-pad { flex: 0 0 auto; pointer-events: none; }
 /* 列模板由 JS 内联提供(app.js gridStyle -> groupGrid), 此处不写 grid-template-columns 以免误导 */
 .group-row { position: relative; display: grid; gap: 10px; align-items: center; background: var(--bg-row);
   border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 10px 14px;

@@ -72,8 +72,11 @@
 | 链路剖面诊断 | ✅ | 五段拆分 + 逐段源码证据 |
 | 计划文档交付 | ✅ | `docs/plans/26-09-19-1241-webui-responsiveness-plan.html`(Native HTML) |
 | P0-1 设计评审(用户追问) | ✅ | 发现自激循环风险, 降级为 v2 解耦方案, 已回写计划 + pitfalls |
-| P0-0 ~ P0-4 实施 | ⏳ | 待用户确认波次 |
-| P1 / P2 | ⏳ | 待 P0 实测数字再定 |
+| P0-0 ~ P0-5 实施(波次一) | ✅ | `10e06a8`, 1046 passed |
+| P1-5 / P1-1 / P1-4 / P1-3(波次二) | ✅ | `5d1e52c`, 1049 passed |
+| P1-2 行窗口化(波次三) | ✅ | 已实测, 待提交 |
+| 浏览器双 UI 冒烟 | ✅ | `scripts/ui_harness.py` + `ui_smoke.cjs`, 28 项 0 失败 |
+| 放宽前端 pollSec(2s → 按种子量) | ⏳ | 待 P1 全部落地 |
 
 ## 进度日志
 
@@ -150,3 +153,25 @@
   **测试 1046 → 1049 passed**（Windows）/ WSL 1047 + 2 skipped；覆盖 92% 不变。
   **下一步**：波次三 = P1-2 行窗口化（改动面最大，需单独提 + 双 UI 截图核对）；
   P1 全部落地后再按种子量放宽前端 `pollSec`（现在仍是 2s）。**P0-3 乐观 UI 仍待浏览器冒烟**。
+- 2026-09-19 1x:xx — **攻破"Windows 上没法做浏览器冒烟"这个长期阻塞点**：确认本机有可用 Node +
+  chromium 缓存，写了 `scripts/ui_harness.py`(真 `create_app` + 真 `QbManager` + `FakeClient` +
+  合成种子 + 命令泵；`--torrents/--groups/--port/--cmd-result ok|error|hang`) 与
+  `scripts/ui_smoke.cjs`(Playwright，prism/atlas 各若干项 + 内置 A/B 基准)。**28 项断言 0 失败**，
+  终于把单测覆盖不到的交互验掉了：P0-3 乐观 + 失败回滚 / P1-1 视图切换 / P1-3 无逐帧强制布局 /
+  P1-2 窗口化。踩坑 4 条已入 pitfalls：`playwright@1.63`↔chromium-1243 与本机 1234 不匹配(装
+  `playwright-core@1.62` + 必须 CJS)、Vue 3.5.13 根实例走 `#app._vnode.component.proxy`、
+  桩服务命令队列是 **2 元组** `(cmd, body)`、`taskkill //F //PID` 在 Git Bash 下无效。
+- 2026-09-19 1x:xx — **波次三实施完成（P1-2 行窗口化）**：种子页 / 分组页 / 展开成员行三层窗口，
+  `ROW_WIN_MIN=200` + `OVERSCAN=10` + `GAP=6` + `EST_H` 兜底；**逐行测高 + 前缀和 + 二分**
+  （真实数据行高不齐：2179 行 43.7px + 821 行 65.4px，等高假设会漂 218px ⇒ 滚到底够不着）；
+  测高用 `getBoundingClientRect().height`（`offsetHeight` 取整 ×3000 漂 ~1200px）；
+  上下 `.row-pad` 占位保持"每行渲染完整单元格序列"，不破坏 `:nth-child` 列对齐与 `data-table`；
+  有 `expandedKey` 时 group 窗口退避回全量（成员行插队会打断边界）。
+  顺手拆掉 `filteredTorrents` 里的 `{ ...r, hit }` 复制 —— 74 字段 × 3000 条 = 22 万次响应式
+  `get` 陷阱，**单这一句 68ms**，改由模板现问 `isHit(m)`。
+  **实测（3000 种子，1440×900，A/B 同进程 3 轮）**：DOM 行 3000 → **26**；滚动总高逐像素相同
+  （167043 → 167043）且末行可达；整轮 refresh **1675 → 309ms（prism）/ 1780 → 301ms（atlas）**；
+  主线程长任务 **240~350ms/轮 → 0**；`filteredTorrents` 重算 115ms → **5ms**。
+  唯一代价：首次切视图仍 ~2.08s（要先全量渲染一帧测高），刻意接受。
+  **测试 1049 passed 不变**，覆盖 92% 不变（含静态前端守卫 `test_frontend_static_bundle_health`）。
+  **下一步**：提交波次三 → 按种子量放宽前端 `pollSec`（现在仍 2s）→ WSL 复跑。

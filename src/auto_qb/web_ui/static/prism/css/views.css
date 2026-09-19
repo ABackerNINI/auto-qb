@@ -145,6 +145,9 @@
    半透明 + 轻微动效表示"进行中"; 回执失败会回滚原值(见 app.js resolveOptimistic),
    3s 未确认也会回落真值 —— 绝不允许停在假状态上。 */
 .is-pending { opacity: .55; transition: opacity .18s ease; }
+/* P1-2 行窗口化占位: 撑住"窗口外的行"所占的高度(滚动条长度/滚到底与全量渲染一致)。
+   空盒 + 不吃事件: 只提供高度, 不参与行内 :nth-child 列对齐, 也不该被 hover/右键命中。 */
+.row-pad { flex: 0 0 auto; pointer-events: none; }
 .group-row { position: relative; display: grid; gap: 10px; align-items: center; background: var(--bg-row);
   border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 10px 14px;
   cursor: pointer; user-select: none;
