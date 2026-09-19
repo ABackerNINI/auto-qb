@@ -2066,8 +2066,17 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[11] == ("remove_trackers", ("HA", ["https://c/announce"]))
         assert client.calls[12] == ("file_priority", ("HA", [0, 1], 6))
         assert client.calls[13] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
+        # 改种子状态的命令(RESYNC)回执**推迟到补刷新之后** —— 这是 2026-09-20 的修复:
+        # 原写法在补刷新**之前**就写 ok ⇒ 前端"拿到回执立刻 refresh"取到的一定是旧快照,
+        # 第一次拉取 100% 扑空 ⇒ 大库上就是"点了要 2 秒才恢复正常"(真机撤下实测 1998ms)。
+        assert "c1" not in mgr._web_results, "recheck 属 RESYNC 命令, drain 阶段不应就写回执"
+        # run() 在补刷新之后无条件落回执(幂等; 漏调会让前端 waitCmd 干等 40s)
+        mgr._flush_deferred_receipts()
+        assert mgr._flush_deferred_receipts() is None, "重复 flush 必须是安全的空操作"
         # 全部命令回执 ok
         assert all(mgr._web_results[f"c{i}"]["status"] == "ok" for i in range(1, 14)), mgr._web_results
+        # 回执附带真值: 前端据此就地撤下乐观态, 不必再拉一次全量 /api/state
+        assert mgr._web_results["c1"].get("truth"), "RESYNC 命令的回执应带真值({hash: {kind}})"
         # 限速/保存路径写后快照同步(QbApi update_torrent_fields)
         rec = mgr.store.get("HA")
         assert rec.up_limit == 1024 and rec.dl_limit == 2048 and rec.save_path == "R:/Moved"

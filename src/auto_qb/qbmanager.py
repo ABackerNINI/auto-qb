@@ -384,6 +384,10 @@ class QbManager(
                         elif tick_due:
                             self._task_line(dry_run, force=cmd_forced)
                             next_tick_at = time.time() + main_tick
+                        # ❗无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
+                        # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
+                        # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
+                        self._flush_deferred_receipts()
                         if _t_line:
                             _resync_ms = round((time.time() - _t_line) * 1000, 1)
                             if _resync_ms > CMD_SLOW_MS:
@@ -414,6 +418,9 @@ class QbManager(
                             self.connect()
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
+                    # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉(幂等, 正常路径下是空操作)
+                    # —— 漏写会让前端 waitCmd 干等 40s, 界面一直半透明。
+                    self._flush_deferred_receipts()
                     # 等待到最近一条时间线到期, 或被命令唤醒(命令线近乎零延迟)
                     wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
                     if _wait_next(stop_event, self._wake_event, wait_for):

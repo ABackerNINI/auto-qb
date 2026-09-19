@@ -155,10 +155,20 @@ class WebCommandsMixin:
                     # 顺序反过来才是"先让缓存失效, 再宣布命令成功"。
                     if cmd not in SELF_POSTED_COMMANDS:
                         self._web_write_seq += 1
+                    timing = _timing(queued_ts, start_ts)
                     if cmd_id and not deferred:
-                        self._set_web_result(cmd_id, "ok", timing=_timing(queued_ts, start_ts))
+                        if cmd in RESYNC_COMMANDS:
+                            # ❗改种子状态的命令: 回执**推迟到补刷新之后**再写(见 _flush_deferred_receipts)。
+                            # 原写法在这里就写 ok, 而 P0-5 的补刷新还在**后面**才跑 ⇒ 前端"拿到回执就
+                            # 立刻 refresh"取到的必然是补刷新**之前**的旧快照(rid 未变), 第一次拉取
+                            # 100% 扑空, 要等 200ms 退避重试 —— 大库单轮 refresh 慢时, 这一次扑空就是
+                            # 用户肉眼看到的"点了要 2 秒才恢复正常"(真机实测 排队 0 / 执行 8.4 /
+                            # 补刷新 88.4ms, 而前端撤下 1998ms)。推迟后第一次拉取即可命中。
+                            self._defer_receipt(cmd_id, cmd, args, timing)
+                        else:
+                            self._set_web_result(cmd_id, "ok", timing=timing)
                     if cmd_id:
-                        self._log_cmd_timing(cmd, _timing(queued_ts, start_ts))
+                        self._log_cmd_timing(cmd, timing)
                     # handler 已同步改完 qB 状态(未抛异常即成功) -> 记一笔, 整批结束后补刷新
                     if cmd in RESYNC_COMMANDS:
                         changed = True
@@ -174,7 +184,9 @@ class WebCommandsMixin:
             pass
         return changed
 
-    def _set_web_result(self, cmd_id: str, status: str, error: str = "", timing: Optional[dict] = None) -> None:
+    def _set_web_result(
+        self, cmd_id: str, status: str, error: str = "", timing: Optional[dict] = None, truth: Optional[dict] = None
+    ) -> None:
         """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长
 
         timing: P0-0 埋点(wait_ms 排队等主循环 / exec_ms 执行耗时), 由 /api/cmd/{id} 一并返回,
@@ -186,7 +198,63 @@ class WebCommandsMixin:
         rec = {"status": status, "error": error, "ts": now}
         if timing:
             rec.update(timing)
+        if truth:
+            # 受影响种子的**当前真值**({hash: {"kind": ...}}): 前端拿到即可撤下乐观态,
+            # 省掉"回执后再拉一次全量 /api/state"这一趟(大库单轮 refresh 可达数百毫秒)。
+            rec["truth"] = truth
         self._web_results[cmd_id] = rec
+
+    def _defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
+        """登记"等补刷新跑完再写"的回执(主循环线程唯一写者)
+
+        与 `_set_web_result` 的区别只是**时机**: 登记后由 `run()` 在补刷新之后调
+        `_flush_deferred_receipts()` 落盘, 并顺带把受影响种子的**当前真值**写进回执
+        ⇒ 前端拿到回执就能撤下乐观态, 不必再发一次全量 refresh。
+        """
+        d = getattr(self, "_deferred_receipts", None)
+        if d is None:
+            d = {}
+            self._deferred_receipts = d
+        d[cmd_id] = {"cmd": cmd, "args": dict(args or {}), "timing": timing}
+
+    def _affected_hashes(self, cmd: str, args: dict) -> List[str]:
+        """命令影响了哪些种子(用于回执带真值); 取不到就返回空 —— 只影响能否省一次 refresh, 不影响正确性"""
+        try:
+            if cmd.endswith("_torrent"):
+                h = (args or {}).get("hash")
+                return [h] if h else []
+            if cmd.endswith("_group"):
+                return list(self.store.groups.get((args or {}).get("key") or (), []) or [])
+            if cmd == "bulk_torrents":
+                out = list((args or {}).get("hashes") or [])
+                for k in (args or {}).get("keys") or []:
+                    out.extend(self.store.groups.get(k, []) or [])
+                return list(dict.fromkeys(out))
+        except Exception:  # 桩/异常配置下取不到就退化为"不写真值", 前端照旧拉一次
+            return []
+        return []
+
+    def _flush_deferred_receipts(self) -> None:
+        """补刷新跑完后落回执, 并附上受影响种子的当前真值(主循环线程调用)
+
+        ❗**必须无条件调用**(哪怕本轮没跑补刷新 / dry_run): 漏调会让前端 waitCmd 干等 40s。
+        真值取 `store.by_hash` 的当前 kind —— 补刷新之后它就是服务端认为的最新状态。
+        """
+        d = getattr(self, "_deferred_receipts", None)
+        if not d:
+            return
+        self._deferred_receipts = {}
+        for cmd_id, item in d.items():
+            truth = {}
+            try:
+                for h in self._affected_hashes(item["cmd"], item["args"]):
+                    rec = self.store.by_hash.get(h)
+                    if rec is None:
+                        continue
+                    truth[h] = {"kind": self._state_kind(rec)}
+            except Exception:
+                truth = {}
+            self._set_web_result(cmd_id, "ok", timing=item["timing"], truth=truth or None)
 
     def _log_cmd_timing(self, cmd: str, timing: Optional[dict]) -> None:
         """命令耗时落日志 —— 排查"点了要等几秒"的**主出口**(不依赖浏览器控制台)

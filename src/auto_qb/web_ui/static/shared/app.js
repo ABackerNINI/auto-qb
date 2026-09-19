@@ -2326,7 +2326,11 @@ const app = createApp({
                 );
               }
             }
-            return r.status === "ok" ? { ok: true } : { ok: false, error: r.error || "执行失败" };
+            // `truth` = 回执里附带的真值({hash: {kind}}, 服务端在补刷新**之后**才写回执, 见
+            // mixins/web_commands.py 的 _defer_receipt)。带上它前端就不必再拉一次全量 /api/state。
+            return r.status === "ok"
+              ? { ok: true, truth: r.truth || null }
+              : { ok: false, error: r.error || "执行失败" };
           }
         } catch (e) {
           if (e.auth) throw e;  // 401 由统一收口处理(回登录)
@@ -2462,6 +2466,27 @@ const app = createApp({
       }
       return true;
     },
+    /* 用回执里附带的真值直接撤下乐观态(不必再拉一次全量 /api/state)。
+     * 背景: 服务端原本**在补刷新之前**就写回执, 于是"拿到回执立刻 refresh"取到的一定是
+     * 补刷新前的旧快照 ⇒ 第一次拉取 100% 扑空 ⇒ 要等 200ms 退避重试。真机实测(排队 0.0 /
+     * 执行 8.4 / 补刷新 88.4ms, 前端撤下却 1998ms): 大库单轮 refresh 慢时, 这一次扑空就
+     * 是用户看到的"点了要 2 秒才恢复正常"。回执带真值后, 撤下耗时与库大小解耦。
+     * ❗只在**完全匹配**时撤: 对不上就留给 _pullTruthAfterCmd / 3s 兜底, 绝不提前交还真值。 */
+    _settleFromTruth(hashes, truth) {
+      if (!truth) return false;
+      let all = true;
+      for (const h of hashes || []) {
+        const op = this.pendingOps[h];
+        if (!op) continue;
+        const t = truth[h];
+        let ok = !!t;
+        if (ok) for (const k of Object.keys(op.patch)) if (t[k] !== op.patch[k]) ok = false;
+        if (ok) delete this.pendingOps[h];
+        else all = false;
+      }
+      if (all) this._markCmdSettle();
+      return all;
+    },
     /* ---------------- 回执后立刻把真值拉回来(issue 26-09-19-2024) ----------------
      * 真值原本只能等下一轮轮询(≤1000→1.5s / 1000~3000→2s / >3000→3s)才到 ⇒ 行一直半透明。
      * 这里不等: 拿到 ok 回执就 refresh 一次。❗竞态: 服务端补刷新(P0-5)是在**回执之后**才跑的
@@ -2551,7 +2576,8 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok) await this._pullTruthAfterCmd(hashes);  // 不等下一轮轮询, 立刻把真值拉回来
+          // 回执已带真值 ⇒ 就地撤下(与库大小解耦); 没对上才补拉一次(旧服务端 / 取不到真值)
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
           else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
         }
@@ -3058,7 +3084,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
           else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
         } catch (e) {
@@ -3286,7 +3312,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
           const n = groupKeys.length + memberHashes.length;
           if (r.ok) this.toast(`已执行: ${label}(${n} 个目标)`, "ok", 2500);
           else this.toast(`${label}失败: ${r.error}`, "error", 8000);
@@ -3527,7 +3553,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok) await this._pullTruthAfterCmd(hashes);
+          if (r.ok && !this._settleFromTruth(hashes, r.truth)) await this._pullTruthAfterCmd(hashes);
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
           else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
         }
