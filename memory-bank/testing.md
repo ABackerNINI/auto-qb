@@ -43,6 +43,12 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 - 覆盖率现状 (2026-09-19 实测, 全量): 总 92%; 低洼: `ui.py`(GUI 本体真机冒烟不单测); 近乎全绿: `config/impact.py`/`config/schema.py`/`logging.py`/`registry.py`/`taskqueue.py`/`qbapi.py`/`speed_curve.py`/`tracker.py` 100%, `notify.py` 98%, `utils.py` 98%, `qbmanager.py` 96%, `tvshows.py` 94%, `web.py` 92%(较 2026-09-14 的 75% 提升: 架构审查 Wave 0 补了配置掩码/密钥日志/畸形 key 等分支), conditions 99%。补测试优先看 term-missing 输出。
 - **耗时实测 (2026-09-19, 空载, 波次一后)**: `uv run pytest tests -q`(含 `--cov-branch`)≈ **40 秒**; 加 `--no-cov` ≈ **30 秒**;
   Linux(WSL 沙箱, ext4)≈ **12 秒** —— Windows 慢约 3 倍, 差值主要来自 drvfs 与进程/文件操作。
+- ⚠ **WSL 里不能直接复用 Windows 建的 `.venv`** (2026-09-19): 项目在 `/mnt/d/...` 上、`.venv` 是 Windows 侧
+  `uv sync` 建的(`Lib/` + `Scripts/`)时, WSL 的 uv 会判定环境不兼容并试图删掉重建 ⇒
+  `error: failed to remove directory .venv/Lib: Input/output error (os error 5)`, 而且可能把 Windows 侧的
+  venv 弄坏。解法: **给 WSL 单独指定环境目录**, 不要碰共享的 `.venv` ——
+  `UV_PROJECT_ENVIRONMENT=/tmp/aqb-venv uv sync && UV_PROJECT_ENVIRONMENT=/tmp/aqb-venv uv run pytest tests -q`
+  (首次 sync 约几十秒, 之后 `/tmp` 里的环境可复用)。
   波次一新增的 4 条主循环用例用**真实睡眠**(0.05~0.6s)观测节拍, 共约 2s, 是耗时上升的主因; 判据用真实时间而非
   mock 时钟 —— 若换成 mocked sleep, 时间不前进会导致"两条线都不到期"的死循环, 用例会挂死而非失败。此前文档写的"约 12 秒"已过时 —— 另注意**不要并发起多个 pytest**: 本项目有绑定本地端口的 `FakeQbServer` 用例, 且 sidefx 守卫按**会话**记账(任何进程删了越界文件都会算到当前会话头上), 并发跑会出现假的失败。
 

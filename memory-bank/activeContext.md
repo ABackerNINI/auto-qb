@@ -4,7 +4,8 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-19 (①**波次二已入库 `5d1e52c`**(Gitee + GitHub)—— 详见 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md) 与 [progress.md](progress.md) ②**波次三(P1-2 行窗口化)**已实施未提交: 三层改动(真)推翻了第一稿 —— 见 [pitfalls.md](pitfalls.md) 新条目 "**行高不齐 ⇒ 改"等高"思路错**: 3000 种子里 27% 因 `.m-pair` 多渲染一行变成 65.4px, 其余 43.7px; 实测一次 `({...r, hit}).map(x)` 响应式代理上 68ms。a) 种子页行用**逐行前缀和**(按 hash 实测缓存, 未知行用均值兜底), 首轮全量渲染一次量齐列集合的行高(之后改列/换窗口宽度才再量); 模板加 `data-hash` / `data-key` 让脚本可定位行; 分组页 200 组也加进来(展开明细时退避回全量); b) `filteredTorrents` 不再 `{...r, hit}` 复制 3000 条, 改 `isHit(m)` 由模板现问 `searchHits.has(m.hash)`; 离线验证: 实测**单轮 refresh 600ms → 300ms, 主线程长任务 250ms/轮 → <50ms**, A/B 在 `scripts/ui_smoke.cjs` 一次性产出; 首次切页耗时不变(2073→2085ms), 净收益全部落在稳态轮询 ③**浏览器冒烟桩服务已建立** —— `scripts/ui_harness.py`(真实 `create_app` + 合成种子 + 命令泵 `ok|error|hang`) + `scripts/ui_smoke.cjs`(Playwright + Node, 28 项断言) + `scripts/ui_smoke.cjs` A/B 内置; Windows 本机 (`H:/Programs/nodejs/playwright` + 本机 chromium-1234) 可跑, 验证了 P0-3/P1-1/P1-3 与 P1-2, 同时**补做了一直欠着的"浏览器双 UI 冒烟"卡点** ④**基线 1049 passed (Windows) / WSL 1047+2 skipped, 覆盖率 92% 不变** — 详见 [testing.md](testing.md))
+**最后更新**: 2026-09-19 (⓪**波次三已入库 `366092d`**(Gitee + GitHub 均推送成功) —— 见下「正在进行」
+与 [progress.md](progress.md) 的三波次总条目 ①**波次二已入库 `5d1e52c`**(Gitee + GitHub)(Gitee + GitHub)—— 详见 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md) 与 [progress.md](progress.md) ②**波次三(P1-2 行窗口化)**已实施未提交: 三层改动(真)推翻了第一稿 —— 见 [pitfalls.md](pitfalls.md) 新条目 "**行高不齐 ⇒ 改"等高"思路错**: 3000 种子里 27% 因 `.m-pair` 多渲染一行变成 65.4px, 其余 43.7px; 实测一次 `({...r, hit}).map(x)` 响应式代理上 68ms。a) 种子页行用**逐行前缀和**(按 hash 实测缓存, 未知行用均值兜底), 首轮全量渲染一次量齐列集合的行高(之后改列/换窗口宽度才再量); 模板加 `data-hash` / `data-key` 让脚本可定位行; 分组页 200 组也加进来(展开明细时退避回全量); b) `filteredTorrents` 不再 `{...r, hit}` 复制 3000 条, 改 `isHit(m)` 由模板现问 `searchHits.has(m.hash)`; 离线验证: 实测**单轮 refresh 600ms → 300ms, 主线程长任务 250ms/轮 → <50ms**, A/B 在 `scripts/ui_smoke.cjs` 一次性产出; 首次切页耗时不变(2073→2085ms), 净收益全部落在稳态轮询 ③**浏览器冒烟桩服务已建立** —— `scripts/ui_harness.py`(真实 `create_app` + 合成种子 + 命令泵 `ok|error|hang`) + `scripts/ui_smoke.cjs`(Playwright + Node, 28 项断言) + `scripts/ui_smoke.cjs` A/B 内置; Windows 本机 (`H:/Programs/nodejs/playwright` + 本机 chromium-1234) 可跑, 验证了 P0-3/P1-1/P1-3 与 P1-2, 同时**补做了一直欠着的"浏览器双 UI 冒烟"卡点** ④**基线 1049 passed (Windows) / WSL 1047+2 skipped, 覆盖率 92% 不变** — 详见 [testing.md](testing.md))
 
 ## 正在进行
 
@@ -25,7 +26,7 @@
   **P1-3** `updated()` 不再每次 `getBoundingClientRect`(改 ResizeObserver + rAF)。
   **实测 1049 passed (Windows) / WSL 1047 + 2 skipped**, 覆盖 92% 不变。
   **原卡点①②均已解除**: 浏览器冒烟已脚本化(见下条); 波次三已实施。
-- **WEB UI 响应性 · 波次三(P1-2 行窗口化)已实施 (2026-09-19, 待提交)**: 种子页 / 分组页 /
+- **WEB UI 响应性 · 波次三(P1-2 行窗口化)已入库 `366092d` (2026-09-19)**: 种子页 / 分组页 /
   展开成员行三层窗口; **逐行测高 + 前缀和 + 二分**(真实数据 43.7px 与 65.4px 混排, 等高假设会漂
   218px ⇒ 滚到底够不着); 上下 `.row-pad` 占位, 不破坏 `:nth-child` 列对齐; 有 `expandedKey` 时
   退避回全量。顺手拆掉 `filteredTorrents` 的 `{ ...r, hit }` 复制(**单这一句 68ms**)。

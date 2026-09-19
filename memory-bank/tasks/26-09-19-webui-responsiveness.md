@@ -74,7 +74,7 @@
 | P0-1 设计评审(用户追问) | ✅ | 发现自激循环风险, 降级为 v2 解耦方案, 已回写计划 + pitfalls |
 | P0-0 ~ P0-5 实施(波次一) | ✅ | `10e06a8`, 1046 passed |
 | P1-5 / P1-1 / P1-4 / P1-3(波次二) | ✅ | `5d1e52c`, 1049 passed |
-| P1-2 行窗口化(波次三) | ✅ | 已实测, 待提交 |
+| P1-2 行窗口化(波次三) | ✅ | 已入库 `366092d` |
 | 浏览器双 UI 冒烟 | ✅ | `scripts/ui_harness.py` + `ui_smoke.cjs`, 28 项 0 失败 |
 | 放宽前端 pollSec(2s → 按种子量) | ⏳ | 待 P1 全部落地 |
 
@@ -174,4 +174,8 @@
   主线程长任务 **240~350ms/轮 → 0**；`filteredTorrents` 重算 115ms → **5ms**。
   唯一代价：首次切视图仍 ~2.08s（要先全量渲染一帧测高），刻意接受。
   **测试 1049 passed 不变**，覆盖 92% 不变（含静态前端守卫 `test_frontend_static_bundle_health`）。
-  **下一步**：提交波次三 → 按种子量放宽前端 `pollSec`（现在仍 2s）→ WSL 复跑。
+- 2026-09-19 1x:xx — **波次三已入库 `366092d`**（Gitee `5d1e52c..366092d` 与 GitHub `4cf7a67..366092d`
+  本次**均推送成功**）。知识库回写完成：pitfalls 新增「P1-2 行窗口化」与「Windows 上跑真浏览器冒烟」
+  两条、testing.md 记基线不变的原因与冒烟用法、systemPatterns.md 新增「WEB UI 前端渲染与响应性」节、
+  progress.md 立三波次总条目、activeContext 清掉已解除的卡点。
+  **下一步**：按种子量放宽前端 `pollSec`（现在仍 2s）→ WSL 复跑确认 1047+2 skipped。
