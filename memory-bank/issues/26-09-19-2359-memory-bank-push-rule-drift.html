@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="memory-bank-push-rule-drift">
+<meta name="aqb-issue-stamp" content="26-09-19-2359">
+<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-title" content="conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾">
+<meta name="aqb-issue-summary" content="知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送">
+<title>conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾 · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾</h1>
+    <p class="lede">知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-2359-memory-bank-push-rule-drift</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 23:59</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">memory-bank</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">本 worktree 会话 (auto-qb-clone2, 2026-09-19)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>撞见于「把『开工前先拉取远程分支』写进 <code>AGENTS.md</code>（用户 2026-09-19 指定），并把同一条规则同步到各 always-on 入口」这一轮工作。为确认规则不漏副本，回读 <code>memory-bank/conventions.md</code> 的「Git 约定」一节时，发现它仍然写着 <strong>禁止 push</strong>，而同一次会话里 <code>AGENTS.md</code> 要求的是 <strong>「用户说提交 = commit + 自动推送」</strong> —— 两处口径相反，且都带有 <code>🔴</code> 级强调。</p>
+    <p>触发条件很普通：任何一次「用户说『提交』」的收尾都会同时命中两份文档 —— 照 <code>AGENTS.md</code> 做就要 push，照 <code>conventions.md</code> 做就必须在 commit 后停下等第二次明确指令。</p>
+    <p class="todo">本轮实际是按 <code>AGENTS.md</code> 的新规执行的（已 commit 并推送 Gitee + GitHub 共 4 笔：<code>72a45f9</code> / <code>738fe0d</code> / <code>67b3828</code> / <code>dc9a854</code>），即已发生的动作本身没有回滚风险，漂的是文档。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>现行口径（<code>AGENTS.md:126</code>，2026-09-19 用户指定）原文：</p>
+<pre><code>AGENTS.md:126
+- **用户说"提交"= commit + 自动推送** (2026-09-19 用户指定), 一次流程走完:
+  1. `git push origin develop` —— 推 Gitee (稳定, 这是协作主线, 必须成功)。…</code></pre>
+    <p>与之矛盾的旧口径（<code>memory-bank/conventions.md</code>），共四处：</p>
+<pre><code>conventions.md:8   (## 协作约定 节)
+- **🔴🔴 绝对不要 push!!** (2026-09-10)： 除非用户显式要求"提交/提交并推送/发布"且明确提到 push
+  或推送到远程, AI **一律不执行 `git push`**（包括任何远程 gitee/github）。…**用户说"提交"默认只指
+  commit。** 违反实例: 2026-09-10 用户说"提交", AI 擅自连带 push 到 gitee(成功)与 github(网络失败),
+  属于越界动作。
+
+conventions.md:13
+  - 其余纪律不变: 不主动 commit/push (见上条), "提交"仅指 commit。
+
+conventions.md:14
+- **修改完不要直接提交**： AI 完成代码/文档改动后留在工作区，由用户逐项审核，确认后再由用户或
+  显式要求时再提交。AI 不主动 `git commit` / `git push`。
+
+conventions.md:136 (## Git 约定 节)
+- **🔴 绝对不要 push (2026-09-10)**： 除非用户显式单独说"push/推送/推送到远程", 否则 `git commit`
+  后保持本地, **不执行任何 `git push`** (gitee/github 均不推)。commit 与 push 分离, "提交"二字不
+  暗含 push。
+
+conventions.md:140
+- 用户未要求时不主动 commit/push。</code></pre>
+    <p>最小复现：让一个会话只读 <code>memory-bank/conventions.md</code>（AGENTS.md 路由表与 memory-bank skill 都要求「动代码前必读」）再执行用户的一句「提交」，它会停在 commit 不推；让另一个会话只读 <code>AGENTS.md</code> 执行同一句话，它会连推两个远端。同一句指令两种结局。</p>
+    <p>补充事实：本轮已在 <code>conventions.md:135</code> 插入了「开工前先同步分支」的<strong>指针</strong>（不复述全文、明确回指 AGENTS.md 并注明该规则共 4 处入口）。正是这次插入让上面 <code>:136</code> 那行紧挨着新规则出现，矛盾变得显眼。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td>高 —— 每次「提交」收尾都会读到；本仓库 9 个 worktree 并行，任一会话读到旧口径就会漏推</td></tr>
+      <tr><td>影响范围</td><td>所有 AI 会话（与平台/站点/配置无关）。表现为两种：①漏推 —— 交付口径是「看 Gitee 有没有该提交」，漏推即等于没交付；②误判进度 —— 用户以为已推，实际本地躺着，下一次会话又在落后分支上开工（与本次新加的「先拉分支」规则直接对冲）</td></tr>
+      <tr><td>数据风险</td><td>无 —— 不涉及代码/种子/限速；纯文档口径问题（唯一实质风险是"漏推后别人在落后分支上继续改"，属流程风险不是数据破坏）</td></tr>
+      <tr><td>严重度</td><td><strong>中</strong> —— 不会跑坏程序，但会稳定地让"交付"这件高频动作出错，且错误方向（少做）不易被察觉</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><strong>结论：规则在两处各自演化，知识库没跟上入口文件的更新。</strong>时间线可直接对上 —— <code>conventions.md</code> 那几条是 2026-09-10 因「AI 擅自 push」事故写下的（文件里连违反实例都记着），而 <code>AGENTS.md</code> 的「提交 = commit + 推送」是 2026-09-19 用户<strong>重新指定</strong>的（同一天还要求「提交后核对 ref」等一整套流程）。用户在 09-19 改了口径，但只改了 <code>AGENTS.md</code>，<code>conventions.md</code> 这四处自 09-10 起没有再动过。</p>
+    <p>为什么没被自动纠正：<code>AGENTS.md</code> 的「冲突裁决」是 <code>代码 &gt; memory-bank &gt; README &gt; 想法.md</code>，这条只对「代码事实漂移」有效；本次两边<strong>都是文档</strong>，裁决链给不出方向，谁先被读到谁生效。</p>
+    <div class="callout">已排除：①不是"两份文档指向不同远端"的问题（两边说的都是 gitee/github 全禁 vs 全推）；②不是本轮 <code>72a45f9</code>~<code>dc9a854</code> 引入的（这几笔只加了「先拉分支」，未碰 push 口径）；③不是读取顺序可自行消解的（两处都带 <code>🔴</code>，同级强调）。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>方向：让「提交/push 的现行口径」<strong>单点定义</strong>在 <code>AGENTS.md</code>「提交 / PR」一节，知识库只留指针 + 历史沿革，不再复述规则本身（与本次「开工先拉分支」采用的做法一致 —— 那次就是只留指针）。</p>
+    <h3>方案 A（推荐）：改写三处旧口径 + 保留事故上下文</h3>
+    <p>把 <code>conventions.md:8</code> / <code>:136</code> 的「绝对不要 push」改为「以 <code>AGENTS.md</code>『提交 / PR』为准：(2026-09-19 起) 用户说『提交』= commit + 推送 Gitee（+ 尝试一次 GitHub）；2026-09-10 之前是禁 push 口径」，并把 09-10 的越界实例保留成「历史沿革（当时口径）」小字 —— 事故教训不丢，现行口径不再有两个答案。<code>:13</code> / <code>:140</code> 的「不主动 commit/push」同步改为「未被要求时不主动 commit；被要求提交时按 AGENTS.md 一次走完（含推送）」。<code>:14</code>「修改完不要直接提交」同理改为「留工作区待审，用户说提交后再按 AGENTS.md 流程走」。<br>代价：动 5 行，需与并发会话确认 <code>conventions.md</code> 无冲突；收益：唯一答案。</p>
+    <h3>方案 B：只加一条覆盖声明，保留旧原文</h3>
+    <p>在「协作约定」与「Git 约定」两节各加一行：<strong>「本节 push 相关条目已被 2026-09-19 用户新规取代，现行口径见 AGENTS.md『提交 / PR』」</strong>，旧条目原文一字不动。<br>代价：读者要读完旧条目再读到覆盖声明才知道作废，中间仍有误读窗口；收益：改动最小（+2 行）、历史记录零损失、冲突面最小。</p>
+    <p><strong>推荐 A</strong>（本次「开工先拉分支」已经确立了「入口文件定规则、知识库只留指针」的做法，A 与之同构，不留第三次漂移的土壤；若担心并发冲突，可先做 B 过渡，后续再转 A）。<br><strong>验收方式</strong>：改完后全文搜索 <code>绝对不要 push</code> / <code>不主动 commit/push</code>，应只剩历史沿革里的引用；任选一个只读 <code>conventions.md</code> 的会话做一次「提交」演练，确认它推到 Gitee 而不是停在 commit。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>memory-bank/conventions.md</code> — 第 8 / 13 / 14 / 136 / 140 行（仅文档，无代码）</li>
+      <li>可能连带：<code>AGENTS.md</code>「提交 / PR」一节可加一句「本条为 push 口径单点定义，优先于知识库中的历史表述」，用于给未来的裁决链补上方向</li>
+      <li>不涉及：<code>src/</code>、<code>tests/</code>、<code>config.yml</code> 与运行时数据</li>
+      <li>跨计划冲突面：<code>conventions.md</code> 属高频被改文档（多个 worktree 并行），动之前先 <code>git fetch</code> 看落后几个提交，改完先 commit 再 <code>git pull --rebase</code>（脏工作区 + rebase 会触发 stash，本环境会损坏对象库）</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 23:59 — 入池，状态 <strong>Open</strong>（计划外，未修；按 scope-guard 只记录不改码，等用户拍板 A / B）</li>
+    </ul>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-2359-memory-bank-push-rule-drift.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

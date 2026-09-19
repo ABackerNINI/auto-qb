@@ -9,6 +9,7 @@
 
 ## Open
 
+- `Open` · 26-09-19 · [conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾](26-09-19-2359-memory-bank-push-rule-drift.html) — 知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送
 - `Open` · 26-09-19 · [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](26-09-19-2122-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
 ## In Progress
