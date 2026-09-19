@@ -5,6 +5,7 @@
 - test_connect_failure: 连接失败返回 False 且 client 为 None
 - test_connect_success: 连接成功返回 True 并登录(客户端经 _new_client 构造)
 - test_new_client_local_disables_trust_env: 本地地址用 LocalQbClient, Session(含重建)trust_env 恒为 False
+- test_new_client_sets_request_timeout: P1-5 守卫——客户端必须带请求超时(否则 qB 假死时界面永久假死)
 - test_new_client_local_host_variants: localhost/IPv6 本机写法同样判定为本地
 - test_new_client_remote_keeps_default_trust_env: 远程地址用原生 Client 且保留 trust_env 默认
 - test_throttle_sleeps_without_stop_event: 非托管模式节流真实睡眠且返回 False
@@ -51,7 +52,7 @@ from qbittorrentapi import APIConnectionError, Client
 
 from auto_qb.config import QbittorrentConfig
 from auto_qb.errors import AutoQbError
-from auto_qb.qbclient import LocalQbClient, _new_client
+from auto_qb.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
 from auto_qb.qbmanager import RECONNECT_MAX_INTERVAL, QbManager, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
@@ -111,6 +112,23 @@ def test_new_client_local_disables_trust_env():
     second = client._session
     assert second is not first, "库应已重建 Session(证明控制点在 property 上而非一次性赋值)"
     assert second.trust_env is False
+
+
+def test_new_client_sets_request_timeout():
+    """P1-5 守卫: 客户端必须带请求超时(连接 3s / 读 10s)
+
+    不设超时时 qB 假死(进程还在但不再响应)会让请求**无限期挂起**: 主循环线程被命令执行占住 ⇒
+    连重连退避都跑不起来, 表现为"点一下之后整个界面再也不动"。
+    读超时刻意宽松(10s): /files 在几千文件的种子上响应体很大, 截窄会把它误判成断连。
+    """
+    cfg = QbittorrentConfig(host="127.0.0.1", port=1, username="u", password="p")
+    client = _new_client(cfg)
+    assert client._REQUESTS_ARGS.get("timeout") == REQUESTS_TIMEOUT, (
+        f"客户端缺少请求超时, 实际 {client._REQUESTS_ARGS} —— qB 假死时请求会无限期挂起"
+    )
+    # 远程地址同样要带(企业代理下连接阶段更可能卡住)
+    remote = _new_client(QbittorrentConfig(host="qb.example.com", port=8080))
+    assert remote._REQUESTS_ARGS.get("timeout") == REQUESTS_TIMEOUT
 
 
 def test_new_client_local_host_variants():

@@ -135,3 +135,18 @@
   **已入库 `10e06a8`**(提交前落后主线 11 个提交 ⇒ 先 commit 再 rebase; 冲突 2 处均在知识库追加型文档, 用并集解;
   rebase 后重跑 1046 passed 与 rebase 前一致)。**Gitee `76e3623..10e06a8` 与 GitHub `ccedce8..10e06a8` 均推送成功。**
   **下一步**: 浏览器双 UI 冒烟(尤其 P0-3 的 pending 半透明与失败回滚) → 波次二(P1-1 按视图回传 / P1-2 行窗口化)。
+- 2026-09-19 15:xx — **波次二实施完成(P1-5 / P1-1 / P1-4 / P1-3), 未提交**：
+  1. **P1-5 qB 客户端请求超时**：`_new_client` 加 `REQUESTS_ARGS={"timeout": (3, 10)}`。此前**完全没设
+     超时** ⇒ qB 假死时请求无限期挂起, 主循环线程被占住连重连退避都跑不起来("点一下界面再也不动")。
+     读超时取 10s 宽松值：/files 在几千文件的种子上响应体很大, 截窄会误判成断连。
+  2. **P1-1 按视图回传**：`/api/state?view=group|torrent|show` 只回该视图数组（`VIEW_ARRAYS`；
+     group 视图要同时回 groups+singles，未归组单种子是同页兜底行）。未知/缺省 view ⇒ 四份全回（保守默认）。
+     前端：赋值改"键不存在则保留原引用"（否则另两个视图每轮被抹空）；切视图置空 lastRid 并立即 refresh。
+  3. **P1-4 只读端点短缓存**：files/trackers(2s)、peers(1s)、categories/tags(2s) 加 TTL 缓存，
+     失效靠 `manager._web_write_seq`（**断连优先于缓存**、**写后失效** 两条硬约束，见 pitfalls）；
+     前端抽屉轮询 3s → 5s。
+  4. **P1-3 去布局抖动**：`updated()` 不再每次调 `_syncHeadHeight()`（getBoundingClientRect = 强制同步布局），
+     改 ResizeObserver 观察 `.sticky-head` + rAF 合并写入；无 ResizeObserver 时降级为原行为。
+  **测试 1046 → 1049 passed**（Windows）/ WSL 1047 + 2 skipped；覆盖 92% 不变。
+  **下一步**：波次三 = P1-2 行窗口化（改动面最大，需单独提 + 双 UI 截图核对）；
+  P1 全部落地后再按种子量放宽前端 `pollSec`（现在仍是 2s）。**P0-3 乐观 UI 仍待浏览器冒烟**。

@@ -38,6 +38,18 @@ _VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 暂停 > 做种 > 其它(前端按 state 着色)
 _SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "paused": 3, "seeding": 4, "other": 5}
 
+# P1-1 按视图回传: 每个视图实际要用的数组。四视图共享同一版本号(rid), 所以"只回一部分"
+# 不会让别的视图停在旧数据上 —— 前端切视图时会把 lastRid 置空强制取一次全量。
+# 键未列出 / view 为空 ⇒ 回传全部(保守默认)。
+VIEW_ARRAYS = {
+    # 辅种页: 分组表 + 未归组单种子(singles 是同页的兜底行, 必须一起回)
+    "group": ("groups", "singles"),
+    # 种子页: 全部种子一行一条的平铺数组
+    "torrent": ("torrents",),
+    # 追剧页: 剧→季→集聚合
+    "show": ("shows",),
+}
+
 
 def _ep_sort_key(nkey: tuple):
     """集节点排序键: 整季包(覆盖全季)最先, 其余按集号起点/终点; 日期桶内按日期字符串"""
@@ -564,12 +576,17 @@ class WebviewMixin:
                 self._publish_views_locked()
             return self._group_view
 
-    def ensure_group_state(self, rid: Optional[int]) -> dict:
+    def ensure_group_state(self, rid: Optional[int], view: Optional[str] = None) -> dict:
         """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
 
-        rid 与服务端视图版本一致时**不回传 groups**(响应体趋近于零); 不一致时回传
+        rid 与服务端视图版本一致时**不回传任何数组**(响应体趋近于零); 不一致时回传
         全量分组数据并带上新版本号。status 体积极小(4 个标量), 无关版本恒回传,
         以保证连接状态/暂停状态/种子数变化能即时反映。
+
+        **P1-1 按视图回传**: `view` 指定当前视图时只回传该视图需要的数组(见 VIEW_ARRAYS),
+        响应体降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次
+        全量, 因此"只回一部分"不会让别的视图停在旧数据上。view 缺省/未知值 ⇒ 回传全部
+        (保守默认, 老客户端与非视图调用方不受影响)。
 
         与 `ensure_group_view` 同口径: 判脏 / 重建 / 取版本号 / 取四视图**全程持锁**, 保证回传的
         `rid` 与四份数组严格同轮。
@@ -581,13 +598,18 @@ class WebviewMixin:
             updated = rid != ver
             state: dict = {"rid": ver, "updated": updated}
             if updated:
-                state["groups"] = self._group_view
-                # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
-                state["singles"] = self._singles_view
-                # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
-                state["shows"] = self._shows_view
-                # 种子平铺视图同门控同版本回传(种子页数据源; 字段集 = SEED_ITEM 契约)
-                state["torrents"] = self._flat_view
+                arrays = {
+                    "groups": self._group_view,
+                    # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
+                    "singles": self._singles_view,
+                    # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
+                    "shows": self._shows_view,
+                    # 种子平铺视图同门控同版本回传(种子页数据源; 字段集 = SEED_ITEM 契约)
+                    "torrents": self._flat_view,
+                }
+                keys = VIEW_ARRAYS.get(view) if view else None
+                for k in keys or arrays:
+                    state[k] = arrays[k]
         return state
 
     def _build_search_index(self) -> None:

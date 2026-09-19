@@ -339,6 +339,10 @@ const app = createApp({
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
       _colAlignCss: "",       // 已注入的列对齐 CSS(值未变不重写 <style>)
       _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位; 含批量段, FIX-06)
+      // P1-3 顶栏尺寸观察器: 元素引用 / 观察器 / rAF 句柄(字段名避开同名方法 _headEl)
+      _headObsEl: null,
+      _headObs: null,
+      _headRaf: 0,
       // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
       selGroups: [],          // 选中组 key
       selMembers: [],         // 选中成员 hash
@@ -1139,10 +1143,23 @@ const app = createApp({
       if (!v) this._clearCtxSource();
     },
   },
+  unmounted() {
+    // P1-3: 顶栏尺寸观察器随组件销毁断开(ResizeObserver 不随元素消失自动停)
+    if (this._headObs) {
+      this._headObs.disconnect();
+      this._headObs = null;
+    }
+    if (this._headRaf) {
+      cancelAnimationFrame(this._headRaf);
+      this._headRaf = 0;
+    }
+  },
   updated() {
-    // 顶栏高度会随"状态分布条是否渲染/窄屏折行/批量段并入筛选行(FIX-06)"变化 -> 每帧后同步
-    // (值未变时内部直接返回); 批量段已并入筛选行, 其高度由 --head-h 一并覆盖, 无需独立量测
-    this._syncHeadHeight();
+    // P1-3: 顶栏高度改由 ResizeObserver 驱动 —— **只在尺寸真变时量一次**。
+    // 旧实现每次渲染都调 _syncHeadHeight() → getBoundingClientRect 是**强制同步布局**,
+    // 在大 DOM(3000 行)下每次渲染都要付一次, 是"不跟手"的直接来源之一。
+    // 这里只做"元素换没换"的引用比较(不触发布局), 换了才重新挂观察器并立即量一次。
+    this._ensureHeadObserver();
     this._syncColAlignCss();  // 列对齐规则(R10-08): 值未变时内部直接返回
   },
   methods: {
@@ -1503,8 +1520,15 @@ const app = createApp({
     },
     async refresh() {
       try {
-        // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传 groups(响应体趋近于零)
-        const query = this.lastRid === null ? "" : `?rid=${this.lastRid}`;
+        // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传数组(响应体趋近于零)。
+        // P1-1: 同时带上当前视图名, 服务端只回该视图需要的数组(响应体 ≈1/4)。
+        // 切视图时 goView 会把 lastRid 置空 ⇒ 强制取一次全量, 别的视图不会停在旧数据上。
+        const qs = [];
+        if (this.lastRid !== null) qs.push(`rid=${this.lastRid}`);
+        if (this.viewMode === "torrents") qs.push("view=torrent");
+        else if (this.viewMode === "shows") qs.push("view=show");
+        else qs.push("view=group");
+        const query = qs.length ? `?${qs.join("&")}` : "";
         const state = await this.api("/api/state" + query);
         this.status = state.status;
         // qB 全局状态(server_state)随 status **恒回传**(与 traffic 同口径: 不受 rid 门控) ——
@@ -1515,11 +1539,13 @@ const app = createApp({
           // P0-0 埋点: 这段赋值 + 多选交集是"点了没反应"里唯一发生在前端的部分,
           // 超过 50ms 就在控制台留痕 —— 大库下这是 P1(行窗口化)要不要做的直接判据。
           const _t0 = performance.now();
-          // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染
-          this.groups = state.groups || [];
-          this.singles = state.singles || [];  // 未归组种子与 groups 同门控回传(搜索兜底/总数回退)
-          this.torrents = state.torrents || [];  // 种子页平铺数组(SEED_ITEM)与 groups 同门控回传
-          this.shows = state.shows || { list: [], unrecognized: [] };  // 追剧视图同门控回传(R10)
+          // 视图有变化: 整表替换并记录新版本; 无变化时保留原数组, 不触发重渲染。
+          // P1-1: 服务端只回当前视图的数组 —— **键不存在时必须保留原引用**, 绝不能 `|| []` 清空
+          // (否则每次轮询都把另外两个视图抹成空, 切回去要等一轮全量)。
+          if (state.groups !== undefined) this.groups = state.groups;
+          if (state.singles !== undefined) this.singles = state.singles;  // 未归组种子(搜索兜底/总数回退)
+          if (state.torrents !== undefined) this.torrents = state.torrents;  // 种子页平铺数组(SEED_ITEM)
+          if (state.shows !== undefined) this.shows = state.shows;  // 追剧视图(R10)
           if (typeof state.rid === "number") this.lastRid = state.rid;
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
           // 虚拟行 key(u-<hash>)不做存在性校验(搜索视图由 filteredGroups 重建)
@@ -2510,6 +2536,9 @@ const app = createApp({
       if (this.viewMode === mode) return;
       this.viewMode = mode;
       try { localStorage.setItem("autoqb.ui.view", mode); } catch { /* 持久化失败不影响功能 */ }
+      // P1-1: 服务端只回当前视图的数组, 切视图后本地持有的 rid 与新视图的数据不再对应
+      // ⇒ 置空强制下一轮取全量(切页首帧多一次全量, 换来的是之后每轮只传 1/4)
+      this.lastRid = null;
       this.expandedKey = null;  // 展开态属于分组视图, 切换不跨视图残留
       this.expandedShows = [];  // 追剧视图展开态同理不跨视图残留
       this.expandedShowEp = null;
@@ -2517,6 +2546,9 @@ const app = createApp({
         this._syncHeadHeight();
         this.materializeColumns();
       });
+      // 立刻取一次新视图的数据, 不等下轮轮询(否则首次切到某视图要空/旧 ≤2s)。
+      // scheduleNext 内部先 stopPolling 再排下一次, 所以这里不会造成双份轮询。
+      if (this.authOk) this.refresh();
     },
     /* ---------------- 追剧视图(R10): 剧/集展开与整集操作 ---------------- */
     syncShowHeadScroll(ev) {
@@ -3447,11 +3479,14 @@ const app = createApp({
     },
     _startDrawerPoll() {
       this._stopDrawerPoll();
+      // P1-4: 3s → 5s。抽屉是观察用途, peers/trackers 秒级变化对操作没有意义;
+      // 而每次轮询都要 Web 线程直连 qB(peers 走 sync/torrentPeers, 响应体随 peer 数增长),
+      // 在主循环之外额外占用 qB。5s 仍远快于人工观察节奏。
       this._drawerTimer = setInterval(() => {
         if (!this.drawer.open || document.hidden) return;
         if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
         else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
-      }, 3000);
+      }, 5000);
     },
     async _fetchDrawerDetail() {
       this.drawer.loading = true;
@@ -4107,6 +4142,37 @@ const app = createApp({
       if (h === this._headH) return;
       this._headH = h;
       document.documentElement.style.setProperty("--head-h", h + "px");
+    },
+    /* P1-3: 用 ResizeObserver 取代"每次渲染量一次顶栏"。
+     * - 观察 .sticky-head 的**盒尺寸**: 状态条是否渲染 / 窄屏折行 / 批量段并入都会改高度, 都会被捕获;
+     * - 回调用 rAF 合并写入(同一帧多次变化只量一次);
+     * - 元素被 v-if 换掉时(引用变化)重新挂观察器并立即量一次 —— 这是唯一仍走同步路径的时机,
+     *   而且只在元素真的换了才发生, 不是每帧。
+     * 降级: 无 ResizeObserver(很老的浏览器)时退回"每次渲染同步一次", 行为与改动前一致。 */
+    _ensureHeadObserver() {
+      if (typeof ResizeObserver === "undefined") {
+        this._syncHeadHeight();
+        return;
+      }
+      const el = document.querySelector(".sticky-head");
+      // 字段名不能叫 _headEl: 与下方取表头元素的方法 `_headEl(page)` 同名(data 与 methods 共命名空间)
+      if (el === this._headObsEl) return;  // 元素没换: 什么都不做(不触发任何布局读取)
+      this._headObsEl = el;
+      if (this._headObs) {
+        this._headObs.disconnect();
+        this._headObs = null;
+      }
+      if (!el) return;
+      this._headObs = new ResizeObserver(() => this._queueHeadSync());
+      this._headObs.observe(el);
+      this._queueHeadSync();  // 新元素: 立刻量一次拿到初值
+    },
+    _queueHeadSync() {
+      if (this._headRaf) return;  // 同一帧内多次变化合并为一次
+      this._headRaf = requestAnimationFrame(() => {
+        this._headRaf = 0;
+        this._syncHeadHeight();
+      });
     },
     /* 把默认模板"实体化"为 px:
      * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)

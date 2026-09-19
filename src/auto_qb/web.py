@@ -166,6 +166,30 @@ def create_app(manager) -> FastAPI:
         """前端登录前读取的公开只读标志(不含密钥等机密): 本机免鉴权开关"""
         return {"web": {"skip_local_verify": manager.config.web.skip_local_verify}}
 
+    # P1-4: Web 线程"直连 qB"的只读端点短缓存。打开抽屉会连打一串这类请求
+    # (trackers / files / peers + categories / tags), 加 1~2s TTL 后同一时间窗内的重复请求
+    # 合并为一次 qB 调用。数据最多旧 1~2s —— 抽屉是观察用途, 可接受。
+    # ❗失效靠 `manager._web_write_seq`(任何写命令执行成功即自增, 见 WebCommandsMixin):
+    # 不加这道保险会出现"刚改完文件优先级、重取还拿到缓存旧值"这种**看起来没生效**的假象。
+    _ro_cache: dict = {}
+    _ro_lock = threading.Lock()
+    RO_CACHE_TTL = 2.0  # 秒; peers 更"活", 单独用更短的窗口
+
+    def _cached_read(key: str, fn, ttl: float = RO_CACHE_TTL):
+        """带写失效的短缓存: 键里带上写序号, 任何写命令后自动换键(= 缓存失效)"""
+        full_key = (key, getattr(manager, "_web_write_seq", 0))
+        now = time.time()
+        with _ro_lock:
+            hit = _ro_cache.get(full_key)
+            if hit is not None and now - hit[0] < ttl:
+                return hit[1]
+            if len(_ro_cache) > 128:  # 防无界增长: 只留新鲜的
+                _ro_cache.clear()
+        value = fn()
+        with _ro_lock:
+            _ro_cache[full_key] = (time.time(), value)
+        return value
+
     def _enqueue(cmd: str, payload: dict) -> dict:
         """投递控制命令并生成回执 ID: 前端据 cmd_id 轮询 /api/cmd/{id} 获取执行结果"""
         cmd_id = secrets.token_hex(8)
@@ -195,11 +219,15 @@ def create_app(manager) -> FastAPI:
         }
 
     @app.get("/api/state")
-    def api_state(rid: int = -1):
+    def api_state(rid: int = -1, view: str = ""):
         """合并端点: status + groups 一次返回(前端单请求轮询, 请求数减半)
 
-        rid 为前端已持有的分组视图版本: 版本一致时只回 status(体积极小), groups 不回传,
+        rid 为前端已持有的分组视图版本: 版本一致时只回 status(体积极小), 数组不回传,
         前端据此跳过整表替换与重渲染; rid 缺省/不匹配时回传全量分组数据。
+
+        view(P1-1): 当前视图名(group/torrent/show), 只回传该视图需要的数组 —— 大库下
+        响应体降到约 1/4(序列化/网络/JSON.parse 与重渲染成本同步下降)。
+        缺省或未知值 ⇒ 回传四份(保守默认, 老客户端不受影响)。
         """
         manager.touch_web_client()
         snap = manager.status_snapshot()
@@ -221,7 +249,7 @@ def create_app(manager) -> FastAPI:
                     # 合并后每轮只剩 1 条请求, 且两者同源同轮。
                     "server": manager.store.server_state,
                 },
-            **manager.ensure_group_state(rid),
+            **manager.ensure_group_state(rid, view or None),
         }
 
     @app.get("/api/groups")
@@ -573,14 +601,16 @@ def create_app(manager) -> FastAPI:
         """单种子 tracker 列表(qB 透传; 含 **/[DHT]/[PeX]/[LSD] 虚拟条目, 前端自行弱化)"""
         manager.touch_web_client()
         _require_torrent(hash)
-        return list(_require_client().torrents_trackers(hash) or [])
+        client = _require_client()  # 断开即 503: 绝不能拿缓存里的旧值冒充"还连着"
+        return _cached_read(f"trackers:{hash}", lambda: list(client.torrents_trackers(hash) or []))
 
     @app.get("/api/torrents/{hash}/files")
     def api_torrent_files(hash: str):
         """单种子文件列表(qB 透传; 详情抽屉 Content tab 数据源)"""
         manager.touch_web_client()
         _require_torrent(hash)
-        return list(_require_client().torrents_files(hash) or [])
+        client = _require_client()  # 同上: 断连优先于缓存
+        return _cached_read(f"files:{hash}", lambda: list(client.torrents_files(hash) or []))
 
     @app.get("/api/torrents/{hash}/peers")
     def api_torrent_peers(hash: str):
@@ -592,7 +622,11 @@ def create_app(manager) -> FastAPI:
         """
         manager.touch_web_client()
         _require_torrent(hash)
-        return dict(_require_client().sync_torrent_peers(torrent_hash=hash) or {})
+        client = _require_client()  # 同上: 断连优先于缓存
+        # peers 是"活"数据: 窗口更短(1s), 抽屉 5s 轮询本就在窗口外
+        return _cached_read(
+            f"peers:{hash}", lambda: dict(client.sync_torrent_peers(torrent_hash=hash) or {}), ttl=1.0
+        )
 
     @app.get("/api/stats")
     def api_stats():
@@ -610,13 +644,13 @@ def create_app(manager) -> FastAPI:
     def api_categories_list():
         """全部分类(name -> {save_path,...}, 读 store 缓存; 首次访问可能触发一次 qB 拉取)"""
         manager.touch_web_client()
-        return {"categories": manager.api.torrents_categories()}
+        return {"categories": _cached_read("categories", lambda: manager.api.torrents_categories())}
 
     @app.get("/api/tags")
     def api_tags_list():
         """全部标签(读 store 缓存)"""
         manager.touch_web_client()
-        return {"tags": manager.api.torrents_tags()}
+        return {"tags": _cached_read("tags", lambda: manager.api.torrents_tags())}
 
     @app.post("/api/categories")
     def api_category_create(body: dict = None):

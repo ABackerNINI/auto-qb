@@ -145,6 +145,9 @@ class QbManager(
         # WEB UI: 命令唤醒事件。Web 线程投递命令后 set, 主循环不等下个节拍立即消费一次命令
         # (只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)
         self._wake_event = threading.Event()
+        # WEB UI: 写命令序号。任何一条非自投递命令执行成功即自增 —— Web 线程据此让
+        # "直连 qB 的只读端点"短缓存失效(P1-4), 避免改完立刻重取还拿到缓存里的旧值。
+        self._web_write_seq = 0
         # WEB UI: 命令执行结果回执(cmd_id -> {status, error, ts})。主循环线程唯一写者,
         # Web 线程经 /api/cmd/{id} 只读。多数命令执行完立即写; reannounce 的回执由
         # tracker 确认跟踪器(_reannounce_pending)在后续 tick 写入。

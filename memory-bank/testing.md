@@ -6,7 +6,18 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1046 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1044 passed + 2 skipped** —— 2026-09-19 实测;
+# 基线: **1049 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1047 passed + 2 skipped** —— 2026-09-19 实测;
+# = 1046 + **WEB UI 响应性波次二(P1-5 超时 / P1-1 按视图回传 / P1-4 只读端点短缓存)** 新增 3 项:
+#   `test_qbmanager.py::test_new_client_sets_request_timeout`(P1-5 守卫: 客户端必须带请求超时,
+#   否则 qB 假死时主循环被占住、连重连退避都跑不起来);
+#   `test_web.py::test_api_state_view_scoped_payload`(P1-1: view=torrent/show 只回该视图数组;
+#   未知 view 回全部作保守默认; 版本一致时增量门控优先于 view);
+#   `test_web.py::test_api_readonly_endpoints_short_cache`(P1-4: 窗口内合并重复请求 /
+#   **写命令后立即失效** / 断连仍 503 —— 后两条是硬要求, 缺一条就会出现"改了没生效"或"断连被藏住")。
+#   P1-3(updated() 去布局抖动)纯前端, 由静态守阵 + 浏览器冒烟覆盖, 无新增单测。
+#   另: `test_web.py` 的 `_make_web_manager` 替身需同步 `ensure_group_state(rid, view)` 与
+#   `_web_write_seq` 字段 —— 真实 manager 加了参数/字段后, 替身不同步就会 TypeError。
+# 此前 1046 = 1041 + **WEB UI 响应性波次一** 新增 5 项, 见下。
 # = 1041 + **WEB UI 响应性波次一(分层节拍 + P0-1 命令唤醒 + P0-5 命令后补刷新 + P0-0 埋点)** 新增 5 项:
 #   `test_qbmanager.py::test_run_loop_layered_cadence`(同步线按 sync_interval / 任务线按 main_tick, 两线次数不等)、
 #   `test_wake_drains_commands_without_extra_ticks`(命令唤醒只走命令线, 命令风暴下 tick 次数不增加)、

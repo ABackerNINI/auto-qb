@@ -12,6 +12,14 @@ from .config import QbittorrentConfig
 # 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
 
+# 请求超时(连接 / 读), 秒。P1-5: 此前**完全没设超时**, qB 假死(进程还在但不再响应)时
+# 主循环的命令执行或 Web 线程的抽屉请求会**无限期挂起** —— 表现为"点一下之后整个界面再也不动",
+# 且因为主循环线程被占住, 连重连退避都跑不起来。
+# 取值: 连接 3s(本机/局域网连不上很快就能判定); 读 10s 刻意宽松 —— qB 的 /files 在几千文件
+# 的种子上响应体很大, 读超时截窄会把它误判成断连; 宽松读超时只影响"真死"的判定速度,
+# 不影响正常请求。超时后抛的仍是库的连接异常, 走既有的重连退避与错误日志。
+REQUESTS_TIMEOUT = (3, 10)
+
 
 def _is_local_qb(qb: QbittorrentConfig) -> bool:
     """qB 地址是否指向本机(取 base_url 解析后的 hostname, 兼容带端口/带协议写法)"""
@@ -42,6 +50,15 @@ class LocalQbClient(Client):
 
 
 def _new_client(qb: QbittorrentConfig) -> Client:
-    """按配置构造 qB 客户端(本地地址用关闭 trust_env 的 LocalQbClient)"""
+    """按配置构造 qB 客户端(本地地址用关闭 trust_env 的 LocalQbClient)
+
+    REQUESTS_ARGS 是 qbittorrent-api 透传给 requests 的关键字参数, 库内部每次请求都会带上;
+    这里只用来设超时(见 REQUESTS_TIMEOUT) —— 不设则 qB 假死时请求会无限期挂起。
+    """
     cls = LocalQbClient if _is_local_qb(qb) else Client
-    return cls(host=qb.base_url, username=qb.username, password=qb.password)
+    return cls(
+        host=qb.base_url,
+        username=qb.username,
+        password=qb.password,
+        REQUESTS_ARGS={"timeout": REQUESTS_TIMEOUT},
+    )

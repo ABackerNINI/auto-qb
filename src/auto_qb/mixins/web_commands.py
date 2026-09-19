@@ -140,6 +140,10 @@ class WebCommandsMixin:
                     # handler 已同步改完 qB 状态(未抛异常即成功) -> 记一笔, 整批结束后补刷新
                     if cmd in RESYNC_COMMANDS:
                         changed = True
+                    # 写命令序号: Web 线程的只读端点短缓存据此失效(P1-4)。自投递命令不计数 ——
+                    # 它只是内部索引推进, 且频次高, 计进去会让缓存在建索引期间完全失效。
+                    if cmd not in SELF_POSTED_COMMANDS:
+                        self._web_write_seq += 1
                 except KeyError as e:
                     logger.warning(f"WEB UI 未知命令: {e}")
                     if cmd_id:

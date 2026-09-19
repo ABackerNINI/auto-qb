@@ -66,6 +66,8 @@
 - test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
 - test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
+- test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
+- test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
@@ -81,6 +83,8 @@
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(未知 404/断连 503)
+- test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
+- test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
@@ -244,6 +248,7 @@ def _make_web_manager(tmp_path, config_text):
         },
         # 命令执行结果回执(真实 manager 由主循环写; 端点测试直接预置)
         _web_results={},
+        _web_write_seq=0,  # P1-4 只读端点短缓存的失效键(写命令执行后自增)
         # 命令唤醒(真实 manager 置位 _wake_event 让主循环立即消费); 此处记录调用供断言
         wake=lambda: wake_calls.append(1),
     )
@@ -257,13 +262,21 @@ def _make_web_manager(tmp_path, config_text):
     mgr.touch_web_client = lambda: setattr(mgr, "_web_last_seen", __import__("time").time())
     mgr.ensure_group_view = lambda: mgr._group_view
 
-    def _ensure_group_state(rid):
+    def _ensure_group_state(rid, view=None):
+        # 与真实实现同形: 默认回全部; P1-1 带 view 时只回该视图的数组
+        from auto_qb.mixins.web_view import VIEW_ARRAYS
+
         updated = rid != mgr._group_view_ver
         state = {"rid": mgr._group_view_ver, "updated": updated}
         if updated:
-            state["groups"] = mgr._group_view
-            state["singles"] = []  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
-            state["torrents"] = mgr._flat_view  # 种子平铺视图同门控(与真实实现同形)
+            arrays = {
+                "groups": mgr._group_view,
+                "singles": [],  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
+                "shows": {"list": [], "unrecognized": []},
+                "torrents": mgr._flat_view,  # 种子平铺视图同门控(与真实实现同形)
+            }
+            for k in (VIEW_ARRAYS.get(view) if view else None) or arrays:
+                state[k] = arrays[k]
         return state
 
     mgr.ensure_group_state = _ensure_group_state
@@ -2584,6 +2597,36 @@ def test_api_state_rid_gate(web_env):
     assert other["updated"] is True and len(other["groups"]) == 1
 
 
+def test_api_state_view_scoped_payload(web_env):
+    """P1-1 按视图回传: view=torrent/show 只回该视图的数组; 未知 view 回全部(保守默认)
+
+    收益: 大库下每轮响应体 ≈1/4(序列化/网络/JSON.parse/重渲染同步下降)。
+    风险面: 前端**必须**按"键不存在则保留原引用"赋值, 不能用 `|| []` 把没回的视图抹空。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    base = client.get("/api/state", headers=auth).json()
+    assert {"groups", "singles", "shows", "torrents"} <= set(base), "不带 view 时四份全回(保守默认)"
+
+    t = client.get("/api/state?view=torrent", headers=auth).json()
+    assert "torrents" in t
+    assert "groups" not in t and "singles" not in t and "shows" not in t
+
+    s = client.get("/api/state?view=show", headers=auth).json()
+    assert "shows" in s and "groups" not in s and "torrents" not in s
+
+    g = client.get("/api/state?view=group", headers=auth).json()
+    # 辅种页要同时用 groups 与 singles(未归组单种子是同页兜底行), 必须一起回
+    assert "groups" in g and "singles" in g and "torrents" not in g
+
+    # 未知 view: 回全部(保守默认, 老客户端/非视图调用方不受影响)
+    weird = client.get("/api/state?view=nope", headers=auth).json()
+    assert {"groups", "singles", "shows", "torrents"} <= set(weird)
+    # 版本一致时无论带不带 view 都不回数组(增量门控优先)
+    same = client.get(f"/api/state?rid={base['rid']}&view=torrent", headers=auth).json()
+    assert same["updated"] is False and "torrents" not in same
+
+
 @pytest.mark.parametrize(
     "state, kind",
     [
@@ -3297,6 +3340,38 @@ def test_api_torrent_subresources(web_env):
     mgr.client = None
     assert client.get("/api/torrents/HA/files", headers=auth).status_code == 503
     assert client.get("/api/torrents/HA/peers", headers=auth).status_code == 503
+
+
+def test_api_readonly_endpoints_short_cache(web_env):
+    """P1-4: 直连 qB 的只读端点短缓存 —— 窗口内合并重复请求; **写命令后立即失效**; 断连仍 503
+
+    "写后失效"是硬要求: 没有它就会出现"刚改完文件优先级、重取还拿到缓存旧值"这种
+    **看起来没生效**的假象。断连优先于缓存也是硬要求: 拿旧值冒充"还连着"会把 qB 已断开藏起来。
+    """
+    from helpers import FakeClient
+
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    rec = TorrentRecord(hash="HA", name="X")
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    fake = FakeClient()
+    fake.files_map["HA"] = [{"index": 0, "name": "a.mkv", "size": 1}]
+    mgr.client = fake
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    first = client.get("/api/torrents/HA/files", headers=auth).json()
+    assert first == fake.files_map["HA"]
+    assert fake.files_calls == 1
+    # 窗口内重复请求: 命中缓存, 不再打 qB
+    assert client.get("/api/torrents/HA/files", headers=auth).json() == first
+    assert fake.files_calls == 1, "同一时间窗内的重复请求应合并为一次 qB 调用"
+    # 写命令后失效(模拟主循环消费了一条写命令)
+    mgr._web_write_seq += 1
+    assert client.get("/api/torrents/HA/files", headers=auth).json() == first
+    assert fake.files_calls == 2, "写命令后缓存必须失效, 否则用户会看到'改了没生效'"
+    # 断连优先于缓存: 仍 503, 不拿旧值冒充还连着
+    mgr.client = None
+    assert client.get("/api/torrents/HA/files", headers=auth).status_code == 503
 
 
 def test_api_torrent_peers_endpoint(web_env):
