@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="aqb-issue-slug" content="webui-poll-gate-no-net-saving">
+<meta name="aqb-issue-stamp" content="26-09-19-2122">
+<meta name="aqb-issue-status" content="Open">
+<meta name="aqb-issue-title" content="节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径">
+<meta name="aqb-issue-summary" content="节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档">
+<title>节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径 · auto-qb 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
+    <a href="#s4"><span class="no">04</span>根因（初步）</a>
+    <a href="#s5"><span class="no">05</span>建议修法</a>
+    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      计划外问题 · 入池不改码<br>
+      规范见 .agents/skills/create-issue/SKILL.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <h1>节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径</h1>
+    <p class="lede">节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-19-2122-webui-poll-gate-no-net-saving</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 21:22</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-09-19 对提交 <code>95fb673</code>「节拍对齐: 上一版没被取走就不重建(实测省 50%)」做 code review 时撞见。
+      该提交把"上一版没被 <code>/api/state</code> 取走"做成主循环的重建门控，实测主循环重建次数确实 40 → 20；
+      但复核 <code>ensure_group_state</code> 时发现它<b>是第二个生产者且不受门控约束</b>——只要脏就在请求里就地重建
+      （<code>web_view.py:602</code>）。于是被门控省下的那一版，会在客户端下一次取数时<b>原封不动地在请求路径上补回来</b>。</p>
+    <p>触发条件：Web UI 打开 + 库处于活跃状态（每拍都有速度/进度变化 ⇒ 每拍置脏）+ 客户端节拍慢于服务端节拍（&gt;3000 种子时为 3s 档）。
+      ≤1000 种子（客户端同为 1.5s）实测不受影响，与提交说法一致。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <h3>① 代码事实（两处生产者，只有一处被门控）</h3>
+<pre><code># src/auto_qb/qbmanager.py:526-535  —— 主循环（受门控）
+web_active = (time.time() - self._web_last_seen) &lt; WEB_VIEW_TTL
+unconsumed = self._web_pending_ver is not None
+if self._group_view_dirty and web_active and (force or not unconsumed):
+    self.rebuild_views()
+
+# src/auto_qb/mixins/web_view.py:601-609  —— 请求路径（**不受门控**）
+with self._view_lock:
+    if self._group_view_dirty:
+        self._publish_views_locked()      # &lt;= 脏就就地重建，与门控无关
+    ver = self._group_view_ver
+    self._web_pending_ver = None          # 本请求观察到了 ver ⇒ 清欠账</code></pre>
+
+    <h3>② 实测：总重建次数（3000 种子，60s 窗口，活跃库，单客户端）</h3>
+    <p>计数点是 <code>_publish_views_locked</code>（主循环与请求路径<b>都</b>走它），所以这是"总账"，
+      不是提交里只数主循环的那个口径。</p>
+    <table>
+      <tr><th>客户端节拍</th><th>无门控 主循环/请求/合计</th><th>有门控 主循环/请求/合计</th><th>净省</th></tr>
+      <tr><td>1.5s（≤1000 种子档）</td><td>40 / 1 / 41</td><td>40 / 1 / 41</td><td>0%（不受影响 ✓）</td></tr>
+      <tr><td>3.0s（&gt;3000 种子档，真实档位）</td><td>40 / 1 / 41</td><td>20 / 20 / 40</td><td><b>≈0%</b></td></tr>
+      <tr><td>6.0s</td><td>40 / 1 / 41</td><td>10 / 10 / 20</td><td>51%</td></tr>
+    </table>
+    <p>即：提交声称的"40 → 20 省 50%"是<b>主循环一列</b>的数字；真实档位（3s）下总账 41 → 40，
+      一半只是换了执行线程。两种拍序（客户端先取 / 服务端先拍）结论一致。表中恒定多出的那 1 次是首次轮询
+      （<code>__init__</code> 里 <code>_group_view_dirty = True</code>）。</p>
+
+    <h3>③ 实测：搬到请求路径后每次请求贵了多少（3000 种子 / 400 组）</h3>
+<pre><code>① rebuild_views()                    p50 =  50.8 ms   （group 16.7 / shows 9.8 / flat 22.0）
+② ensure_group_state(不脏, rid 命中)  p50 =   0.0 ms   ← 门控前 /api/state 的典型形态
+③ ensure_group_state(脏, 就地重建)    p50 =  48.8 ms   ← 门控后的典型形态
+④ json.dumps(全量回包体 6.3 MiB)      p50 =  26.4 ms   （与 49d81cf 实测的 25~50 ms 同量级）
+
+⇒ 门控给每次 /api/state 增加约 +48.7 ms；该值与序列化同量级，但远小于 49d81cf 去掉的 161 ms
+  （所以是"可接受的取舍"，不是回归）</code></pre>
+
+    <h3>④ 复现方式（脚本未入库，正文保留可复现版本）</h3>
+<pre><code># 用真实 QbManager + helpers.FakeTorrent 造 3000 种子 / 400 组；包一层计数 _publish_views_locked
+# 循环 40 拍（60s）：每拍 store.view_changed = True 模拟活跃库，每 N 拍调一次 ensure_group_state
+def run(mgr, gate):
+    for k in range(40):
+        mgr.store.view_changed = True
+        if k % POLL_EVERY == 0:
+            st = mgr.ensure_group_state(rid); rid = st["rid"]     # 客户端取数
+        if not gate:
+            mgr._web_pending_ver = None                            # 模拟"没有门控"
+        mgr._flush_views()                                          # 服务端一拍
+# 关键前提: mgr.touch_web_client() 必须先调，否则 web_active 为假、主循环根本不重建（第一次跑就踩了）</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面与严重度</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发频率</td><td>常驻：只要开着 Web UI 且库在活跃做种/下载（每拍都置脏）</td></tr>
+      <tr><td>影响范围</td><td>仅 &gt;3000 种子的 3s 客户端档；≤1000 种子（1.5s 档）实测不受影响；单/多客户端都成立（多客户端时门控甚至不生效，因为欠账被更快的那个客户端清掉）</td></tr>
+      <tr><td>数据风险</td><td><b>无</b>。新鲜度不受损（请求侧就地重建拿到的还是最新一版，甚至更鲜）；脏标记也确实保留（用例已钉住）。纯粹是 CPU 归属与请求延迟问题。</td></tr>
+      <tr><td>严重度</td><td><b>低</b>（无正确性/数据风险）<br>但提交结论"省 50%"与实际不符 —— 会误导后续优化决策（以为这条已经榨干），故入池留痕。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>根因（初步）</h2>
+    <p><b>结论（已实测，非推测）：</b>视图版本有两个生产者 —— 主循环 <code>_flush_views</code>（受门控）与请求路径
+      <code>ensure_group_state</code>（不受门控，脏就建）。门控只掐掉了前者，后者立刻把产量补回来。
+      总产量由"消费者取数频率 + 主循环在两次取数之间能插进几拍"决定：</p>
+    <ul>
+      <li>无门控：每拍一版 ⇒ 3s 档每轮 2 版（1 版被消费、1 版白烧）；</li>
+      <li>有门控：请求侧 1 版（被消费）+ 主循环在"欠账刚被清掉"的那一拍补 1 版（白烧）⇒ 同样 2 版。</li>
+    </ul>
+    <p>只有当两拍之间能插进 ≥2 个空闲拍（客户端节拍 ≥ 服务端节拍的 4 倍，即 6s 档）时，主循环那 1 版才真的省得下来 ——
+      这正是表里 6s 档出现 51% 的原因。提交把"主循环 40 → 20"当成了总账，而它恰好等于 6s 档的数字。</p>
+    <div class="callout"><b>已排除：</b>① 门控逻辑本身没错 —— 脏标记保留、<code>force</code> 绕过、并发置位/清零都在锁内，用例也钉住了；
+      ② 不是并发或锁的问题（单线程仿真同样复现）；③ 不是测量脚本没调 <code>touch_web_client()</code> 导致的假象（已修，见证据④）。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>建议修法</h2>
+    <p>先说清楚：现门控<b>不是 bug</b>，不改也不会出问题。下面按"想要真省 CPU"排序。</p>
+    <h3>方案 A（推荐，真能省）：主循环在 Web 是唯一消费者时不再重建 —— 全惰性</h3>
+    <p>主循环只负责把 <code>view_changed</code> 落成 <code>_group_view_dirty</code>，重建全部交给请求路径。
+      实测（同口径）：3s 档 41 → 20（<b>-51%</b>）、6s 档 41 → 10（-76%）、1.5s 档 40（持平，不吃亏）。
+      原理：每一次取数恰好对应一版，白烧版归零。</p>
+    <p><b>代价</b>：<code>/api/state</code> 每次都要付一次重建（3000 种子约 +50 ms），延迟从"双峰（0 / +50 ms）"
+      变成"稳定 +50 ms"；好处是主循环彻底不再被重建阻塞（对 P0-5 命令响应是正面），且客户端关掉标签、
+      只剩 TTL 内空转时不再白烧。<br>
+      <b>注意</b>：方案 A 下 <code>force</code> 通路要重新定义（命令改状态后仍应立刻可查 —— 请求侧按需重建已天然满足，
+      但 <code>ensure_group_view</code> 等其它调用方要一起看）。</p>
+    <h3>方案 B（零风险）：保留现门控，只把结论与文档改对</h3>
+    <p>把"省 50%"改写为"主循环重建减半；总重建次数不变，一半换到请求路径执行；每轮 3s 档每次
+      <code>/api/state</code> 多付约 50 ms（3000 种子实测）"。同时在 <code>_flush_views</code> docstring 里写明
+      "新鲜度由 <code>ensure_group_state</code> 的脏就建兜底"这条因果（现在没写，后人容易误判成延迟被推后一拍）。</p>
+    <h3>方案 C（折中）：给请求侧重建加最短间隔</h3>
+    <p>例如 1s 内已重建过就直接交当前版本并保持脏（由主循环下一拍补），把请求延迟压回去；
+      代价是新鲜度最多差一个间隔，且要新增一个"上次重建时间"状态（记得同时进 <code>validate_config</code>？
+      不需要 —— 它不是配置项，但要在 <code>__init__</code> 里与其它视图状态并列初始化）。</p>
+    <h3>顺带（独立小修，与本条同源）</h3>
+    <p><code>ensure_group_view()</code>（<code>web.py:269</code> 的 <code>/api/groups</code>）发布了一版却<b>不清</b>
+      <code>_web_pending_ver</code>，与 <code>ensure_group_state</code> 的"消费即清"语义不一致。当前 UI 只走
+      <code>/api/state</code> 所以不卡（靠请求侧兜底），但只打 <code>/api/groups</code> 的外部脚本会让欠账永远清不掉。
+      一行修复：在它的持锁区内同样置 <code>None</code>。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>涉及文件清单</h2>
+    <ul>
+      <li><code>src/auto_qb/qbmanager.py</code> —— <code>_flush_views</code> 门控判据 / <code>force</code> 语义（方案 A、C）</li>
+      <li><code>src/auto_qb/mixins/web_view.py</code> —— <code>ensure_group_state</code>（消费记账）、<code>ensure_group_view</code>（补清账）、<code>_publish_views_locked</code>（登记欠账）</li>
+      <li><code>tests/test_qbmanager.py</code> —— <code>test_view_rebuild_waits_for_client_consume</code>（现钉的是"主循环不重建"，改方案后口径要跟着变）</li>
+      <li><code>memory-bank/pitfalls.md</code> —— 建议加一条「视图版本有两个生产者，只掐一个等于没掐」</li>
+      <li><code>memory-bank/issues/26-09-19-1900-webui-poll-cadence-mismatch.html</code> —— 该条已 Fixed，若改方案要在它的实施回执里补一句口径更正</li>
+      <li>（方案 B 只动文档：上面两个 docstring + <code>pitfalls.md</code> / 1900 号报告的实施回执）</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-19 21:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/issues/26-09-19-2122-webui-poll-gate-no-net-saving.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
