@@ -21,7 +21,6 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .mixins.web_commands import SELF_POSTED_COMMANDS
 from .utils import decode_group_key, open_path, path_normalize
 
 logger = logging.getLogger(__name__)
@@ -191,19 +190,12 @@ def create_app(manager) -> FastAPI:
         return value
 
     def _enqueue(cmd: str, payload: dict) -> dict:
-        """投递控制命令并生成回执 ID: 前端据 cmd_id 轮询 /api/cmd/{id} 获取执行结果"""
-        cmd_id = secrets.token_hex(8)
-        body = dict(payload or {})
-        body["cmd_id"] = cmd_id
-        # P0-0 埋点: 投递时刻随命令走(下划线前缀的键在 drain 侧被剔除, 不会传给 handler),
-        # 回执据此拆出"排队等主循环 wait_ms"与"执行 exec_ms"两段耗时
-        body["_queued_ts"] = time.time()
-        manager.web_commands.put((cmd, body))
-        # 唤醒主循环立即消费(命令延迟 0~main_tick -> 近乎 0); 自投递命令不唤醒, 见
-        # mixins/web_commands.py 的 SELF_POSTED_COMMANDS —— 否则会自激打满 CPU。
-        if cmd not in SELF_POSTED_COMMANDS:
-            manager.wake()
-        return {"queued": True, "cmd_id": cmd_id}
+        """投递控制命令: 经表现层门面(生成 cmd_id / 入队 / 按需唤醒), 返回 cmd_id 供前端轮询
+
+        投递的三种语义(生成回执 ID、埋点时间戳、自投递不唤醒)统一在
+        `WebUIRuntime.post_command` —— Web 传输层不再自己拼命令体, 避免两处判据漂移。
+        """
+        return manager.web.post_command(cmd, payload)
 
     @app.get("/api/status")
     def api_status():
@@ -273,7 +265,8 @@ def create_app(manager) -> FastAPI:
         """按种子名/文件列表搜索种子(主循环构建的缓存索引, Web 线程只读; 索引脏时投递构建命令)"""
         manager.touch_web_client()
         return JSONResponse(content=manager.search_torrents(q))
-  # 同 /api/state: 返回裸 dict 会让 FastAPI 白跑一遍 jsonable_encoder(见 api_state 注释)
+
+# 同 /api/state: 返回裸 dict 会让 FastAPI 白跑一遍 jsonable_encoder(见 api_state 注释)
 
     @app.get("/api/paths")
     def api_paths():
@@ -606,8 +599,12 @@ def create_app(manager) -> FastAPI:
         + site(站点名) + HR 展示字段(与分组成员视图同源) —— 详情抽屉 General tab 数据源"""
         manager.touch_web_client()
         rec = _require_torrent(hash)
-        return JSONResponse(content={"torrent": {**rec.to_dict(), "site": rec.tracker_name,
-                                                **manager._hr_view_fields(rec)}})
+        return JSONResponse(
+            content={"torrent": {
+                **rec.to_dict(), "site": rec.tracker_name,
+                **manager._hr_view_fields(rec)
+            }}
+        )
 
     @app.get("/api/torrents/{hash}/trackers")
     def api_torrent_trackers(hash: str):
@@ -615,8 +612,9 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         _require_torrent(hash)
         client = _require_client()  # 断开即 503: 绝不能拿缓存里的旧值冒充"还连着"
-        return JSONResponse(content=_cached_read(f"trackers:{hash}",
-                                                 lambda: list(client.torrents_trackers(hash) or [])))
+        return JSONResponse(
+            content=_cached_read(f"trackers:{hash}", lambda: list(client.torrents_trackers(hash) or []))
+        )
 
     @app.get("/api/torrents/{hash}/files")
     def api_torrent_files(hash: str):
@@ -624,8 +622,7 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
-        return JSONResponse(content=_cached_read(f"files:{hash}",
-                                                 lambda: list(client.torrents_files(hash) or [])))
+        return JSONResponse(content=_cached_read(f"files:{hash}", lambda: list(client.torrents_files(hash) or [])))
 
     @app.get("/api/torrents/{hash}/peers")
     def api_torrent_peers(hash: str):
@@ -639,9 +636,11 @@ def create_app(manager) -> FastAPI:
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
         # peers 是"活"数据: 窗口更短(1s), 抽屉 5s 轮询本就在窗口外
-        return JSONResponse(content=_cached_read(
-            f"peers:{hash}", lambda: dict(client.sync_torrent_peers(torrent_hash=hash) or {}), ttl=1.0
-        ))
+        return JSONResponse(
+            content=_cached_read(
+                f"peers:{hash}", lambda: dict(client.sync_torrent_peers(torrent_hash=hash) or {}), ttl=1.0
+            )
+        )
 
     @app.get("/api/stats")
     def api_stats():

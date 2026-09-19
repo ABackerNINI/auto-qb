@@ -201,7 +201,7 @@ class SpeedCurveMixin:
     ) -> None:
         """发布限速/流量只读快照(Web UI 顶栏 pill 的数据来源)
 
-        由主循环线程**整体替换** `self._traffic_view`(Web 线程只读该引用, 不原地修改) ——
+        由主循环线程**整体替换** `self.web.traffic_view`(Web 线程只读该引用, 不原地修改) ——
         无锁即可保证 Web 侧读到自洽的一份数据。state 语义(前端的渲染分支依据):
         - disabled: 未启用限速曲线 -> 不渲染流量/限速 pill
         - ok:       本轮正常读取并(必要时)写入限速, actual 为回读值
@@ -211,7 +211,7 @@ class SpeedCurveMixin:
         单位: periods 为**字节**; target/actual 为 **KiB/s**(0 = 不限速, None = 该方向不管理);
         history 为按日升序的原始行(仅 ok/dry_run 发布), Web 端经 /api/traffic/history 读取。
         """
-        self._traffic_view = {
+        self.web.traffic_view = {
             "ts": time.time(),
             "date": date.today().isoformat(),
             "state": state,

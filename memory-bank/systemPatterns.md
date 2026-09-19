@@ -24,7 +24,7 @@
                     state(state_file JSON) ← 仅退出时落盘
 ```
 
-**组合关系**: `QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin, WebviewMixin, WebCommandsMixin)`(2026-09-15 由 6 mixin 扩至 8, 同日拆分出 qbclient.py) — mixin 依赖宿主实例属性 (`config`/`store`/`api`/`state`/`task_queue`/`client`), 各 mixin 文件头部 docstring 声明了所依赖的属性, 新 mixin 照此模式写。`__init__` 是唯一组合根: 全部实例状态(web_commands/_web_results/_group_view/_search_index 等)留在核心 `__init__`, mixin 是纯方法簇。
+**组合关系**: `QbManager(RuleEngineMixin, TagsMixin, CheckingMixin, GroupingMixin, TrackerMixin, SpeedCurveMixin, WebviewMixin, WebCommandsMixin)`(2026-09-15 由 6 mixin 扩至 8, 同日拆分出 qbclient.py) — mixin 依赖宿主实例属性 (`config`/`store`/`api`/`state`/`task_queue`/`client`), 各 mixin 文件头部 docstring 声明了所依赖的属性, 新 mixin 照此模式写。`__init__` 是唯一组合根, 但**实例状态分两层**: 核心域状态(`store`/`api`/`task_queue`/`state`/`_wake_event` …)留在 `__init__`; **WEB 表现层状态全部在 `self.web`(`WebUIRuntime` 门面, 2026-09-20 拆出 19 个字段)** —— mixin 仍是纯方法簇(构建器只产出 dict, 命令处理器只发一次写操作), 快照/版本号/回执/索引/活跃心跳一概不留在宿主上。
 
 ## 主循环 (qbmanager.py)
 
@@ -37,8 +37,8 @@ run(dry_run, stop_event=None, pause_event=None):
         main_tick = config.main_tick          # L0 热重载: 每轮重读
         sync_interval = config.sync_interval
         _wake_event.clear()
-        state_changed = _drain_web_commands()  # 命令线: 被唤醒即消费(不等节拍)
-        _check_reannounce_pending()
+        state_changed = web.consume_commands()  # 命令线: 被唤醒即消费(不等节拍); 门面内含分发/回执/写序号
+        web.check_pending()                     # 强制汇报的 tracker 确认跟踪
         if paused: _wait_next(...); continue   # 暂停 = 完全旁观
         sync_due = now >= next_sync_at or (state_changed and not dry_run)  # P0-5 命令后补一次
         tick_due = now >= next_tick_at
@@ -50,13 +50,13 @@ run(dry_run, stop_event=None, pause_event=None):
 
 _sync_line(dry_run, flush=True):     # 同步线 (sync_interval, 默认 1.5s)
     _refresh_torrents(dry_run)       # 刷新快照 + 事件/分组
-    _flush_views()                   # 消费脏标记 + Web 活跃时惰性重建
+    web.flush_views()                # 消费脏标记 + Web 活跃 + 已取走门控(判据全在门面内)
 
 _task_line(dry_run):                 # 任务线 (main_tick, 默认 2s)
-    refresh_error_reasons()          # Web 活跃时; tracker 预取跟 main_tick, **不跟快档**
+    web.advance_error_reasons()      # 门面内判"Web 活跃"; tracker 预取跟 main_tick, **不跟快档**
     task_queue.run_due(dry_run, now=now, max_tasks=max_tasks_per_tick)
-    _flush_views()
-    _build_search_index()            # Web 活跃且脏; 文件 API 同样只跟 main_tick
+    web.flush_views()
+    web.advance_search_index()       # 门面内判"Web 活跃且脏"; 文件 API 同样只跟 main_tick
 
 _tick(dry_run) = _sync_line(flush=False) + _task_line()   # 完整一轮; 两线同时到期时走它
 ```
@@ -77,12 +77,15 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 `stop_event` 会让唤醒等满一个分段才被看见, 命令延迟从 ≈0 退化到 ≤0.5s。`_throttle` 仍保留(被单测直接覆盖),
 但循环里不再使用。
 
-**命令线 / 唤醒 (`wake()`, 2026-09-19)**: Web 线程投递命令后 `manager.wake()` ⇒ 主循环不等下个节拍立即消费一次
-命令(命令延迟 0~main_tick ⇒ ≈0)。❗**只走命令线, 绝不退化成"投递即跑下一轮 tick"**: ① `max_tasks_per_tick` 承载
-速率语义, tick 频率一旦由命令决定即失效; ② 存在**自投递命令**(Web 侧索引脏时自己 `put build_search_index`),
+**命令线 / 唤醒 (`wake()`, 2026-09-19; 投递归口 2026-09-20)**: Web 侧投递命令统一走
+`WebUIRuntime.post_command`(生成 cmd_id + 埋点时间戳 + 入队 + 按需 `manager.wake()`)⇒ 主循环不等下个节拍
+立即消费一次命令(命令延迟 0~main_tick ⇒ ≈0)。`wake()` 本身是**核心域原语**(托盘 UI 停止时也用它打断等待),
+不在表现层。❗**只走命令线, 绝不退化成"投递即跑下一轮 tick"**: ① `max_tasks_per_tick` 承载
+速率语义, tick 频率一旦由命令决定即失效; ② 存在**自投递命令**(Web 侧索引脏时自己投递 `build_search_index`),
 会形成自激循环(唤醒→drain 500 条文件 API→索引仍脏→再投递→立刻再唤醒), 中间没有 tick 兜底 —— 不是变慢, 是
-打满 CPU 并冲垮 qB。故自投递命令登记在 `SELF_POSTED_COMMANDS` 里**不唤醒**(有静态反向守卫: 扫 `web_view.py`
-里所有 `web_commands.put` 的 cmd 名, 未登记即失败)。
+打满 CPU 并冲垮 qB。故自投递命令登记在 `SELF_POSTED_COMMANDS` 里**不唤醒、不带 cmd_id**(有静态反向守卫: 扫
+`web_view.py` 里所有 `web_commands.put(` 与 `web.post_command(` 的 cmd 名, 未登记即失败 —— 2026-09-20 起两种
+写法都认)。
 
 连接恢复检测: 任一条时间线跑通(即 API 可达)后若 `_last_conn_ok is False` 则置 True 并记一次"已重新连接"——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。连接异常节流 (2026-09-12): 运行期 tick 内的 `APIConnectionError` 经 `_last_conn_ok` 状态机节流 — 仅"连接态→断开"转换时记一次 ERROR, 恢复时记一次 INFO("已重新连接 qBittorrent", `connect()` 内), 断开期间每 tick 重试失败静默 (防 qB 宕机刷屏); 非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。启动首连失败 → `connect()` 返回 False → `run` 直接结束。
 
@@ -154,9 +157,9 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 
 ### WEB UI 线程模型 (web.py, 2026-09-13)
 
-- **Web 线程(uvicorn 独立线程)只做两件事**: 读 `manager` 暴露的只读快照(`_group_view`/`status_snapshot`)与向 `manager.web_commands` 投递命令 —— 暂停/开始/汇报/删除/热重载等写操作全由主循环 `_drain_web_commands` 消费执行(单一写线程约束不变); Web 线程不得触碰 store/队列/state_file。
+- **Web 线程(uvicorn 独立线程)只做两件事**: 读只读快照(`manager.web.*` 的视图/流量快照与 `status_snapshot`)与经 `manager.web.post_command()` 投递命令 —— 暂停/开始/汇报/删除/热重载等写操作全由主循环 `web.consume_commands()` 消费执行(单一写线程约束不变); Web 线程不得触碰 store/队列/state_file。**表现层状态归 `WebUIRuntime`(2026-09-20)**: 视图快照/版本号/脏标记/活跃心跳/回执/搜索索引/命令队列都在 `manager.web`; 旧字段名(`manager._group_view` 等)经 `_WEB_STATE_ALIAS` 代理转发, 属过渡层, 新代码一律写 `manager.web.<新名>`。
 - **热重载重启 WEB 服务 (2026-09-14, `_apply_web_config`)**: `web` 段虽是 L1, 但**只在"监听身份"(`enabled`/`host`/`port`)真变化时才重启** —— 密钥(`web.token`)鉴权每请求实时读 `manager._web_token`, 原实现只靠“顺带重启”生效, 导致改个日志级别也会把服务器拆了重建。重启次序**必须是 `stop_web_server(handle)`(置 `should_exit` **并 join 等线程退出**) -> 启新服务**: uvicorn 的 `should_exit` 只被其主循环每 0.1s 读一次, 之后才 `server.close()` 释放监听套接字, 不等就启新服务会撞 `Errno 10048` 且旧句柄指向已死 server(后续热重载行为不确定), 详见 [pitfalls.md](pitfalls.md)。
-- **惰性组装 + 活跃窗口**: `_group_view`(分组视图)与 `_search_index`(搜索索引)均只在主循环构建, 且仅当 `_web_last_seen` 距今 < `WEB_VIEW_TTL`(10s) 时推进 —— 关闭网页后主循环不空转。**精确置脏**: `_tick` 消费 `store.consume_view_changed()`, 仅视图字段/成员**真有变化**时才重建 (不再每 tick 无条件置脏 —— 静止种子库不再每 2s 重建); 置脏**必须**在 `grouping.enabled` 门控之外(脏标记服务**全部**四份视图, 与分组功能是否启用无关)。`ensure_group_view()` 作 Web 请求侧兜底(脏则即时重建)。**重建唯一入口 = `WebviewMixin.rebuild_views()`**: groups/singles/shows/flat 四份 + 版本号 + 清标记一次完成, 主循环与 Web 线程都只调它 —— 两处各建一部分会让漏建的视图长期停在旧快照(2026-09-18 缺陷, 详见 pitfalls)。
+- **惰性组装 + 活跃窗口**: 四份视图与 `_search_index`(搜索索引)均只在主循环构建, 且仅当 `web.last_seen` 距今 < `WEB_VIEW_TTL`(10s, 常量在 `web_runtime.py`) 时推进 —— 关闭网页后主循环不空转。**精确置脏**: 门面的 `flush_views()` 消费 `store.consume_view_changed()`, 仅视图字段/成员**真有变化**时才重建 (不再每 tick 无条件置脏 —— 静止种子库不再每 2s 重建); 置脏**必须**在 `grouping.enabled` 门控之外(脏标记服务**全部**四份视图, 与分组功能是否启用无关)。`web.ensure_view()` 作 Web 请求侧兜底(脏则即时重建)。**重建唯一入口 = `WebUIRuntime._publish_locked()`**(2026-09-20 从 `WebviewMixin.rebuild_views` 迁来): groups/singles/shows/flat 四份 + 版本号 + 清标记在同一次 `view_lock` 临界区内完成, 主循环与 Web 线程都只调它 —— 两处各建一部分会让漏建的视图长期停在旧快照(2026-09-18 缺陷, 详见 pitfalls)。
 - **视图版本门控 (等价 qB 的 rid)**: `_group_view_ver` 每次重建自增; `ensure_group_state(rid)` 在 rid 与服务端版本一致时**不回传 groups**(响应体趋近于零), 仅回 status(标量 + `traffic` 与 `server` 快照, 与版本无关恒回传 —— `server` 即 `store.server_state`, 状态栏常显统计与"限制速度"的数据源, 2026-09-18 起随 `/api/state` 回传, 免得状态栏与行数据的刷新频率被解耦)。`/api/state?rid=` 暴露该语义, 前端据此跳过整表替换与重渲染。前端另配: 页面隐藏(`document.hidden`)停轮询、恢复即刷; `setTimeout` 链式续排(不堆叠请求); **只做失败退避**(`pollFails` 翻倍至 15s 上限), 不做"无变化退避"。
 - **搜索索引 `_search_index` (hash -> {name, files})**: 种子名匹配即时扫 `store.by_hash`(无 API 开销), 文件列表匹配依赖索引(文件 API 只在主循环线程, 种子记录 `_files` 缓存跨 tick 复用)。索引按 hash **增量**维护: 已建条目只刷新名称(不重拉文件), 新种子补拉, 已删种子淘汰; 单次限流 `SEARCH_INDEX_BUILD_BUDGET`(500)条, 未拉完保持 `_search_index_dirty=True` 由下一 tick 续建, 前端据 `building` 每 1s 自动重查。
 - **搜索结果是辅种组的筛选**: 前端用命中 hash 集合过滤 `sortedGroups`(组行沿用真实组 key, 组级操作可用); 未归组命中种子以虚拟行兜底 —— 组级路由 key 必须能过 `decode_group_key`, 虚拟 key 会让解码失败 500, 详见 [pitfalls.md](pitfalls.md)。

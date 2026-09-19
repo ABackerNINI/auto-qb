@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主循环 × WebUI 解耦 · 重构计划</title>
+<style>
+  :root{
+    --bg:#0e1012;
+    --panel:#14171a;
+    --ink:#e4e7ea;
+    --ink-dim:#98a1aa;
+    --ink-faint:#6b747d;
+    --accent:#5fb0c9;
+    --rule:rgba(255,255,255,.09);
+    --rule-strong:rgba(255,255,255,.16);
+    --mono-bg:#111417;
+    --sans:"Inter","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:"JetBrains Mono","SFMono-Regular","Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:15.5px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+
+  /* ---- cover ---- */
+  .cover{padding:104px 0 72px;border-bottom:1px solid var(--rule)}
+  .kicker{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);margin:0 0 30px;
+  }
+  h1{
+    font-size:52px;line-height:1.08;letter-spacing:-.025em;font-weight:590;
+    margin:0 0 22px;max-width:16ch;
+  }
+  .lede{font-size:18.5px;line-height:1.58;color:var(--ink-dim);max-width:62ch;margin:0 0 44px}
+  .meta{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+    border-top:1px solid var(--rule);padding-top:18px;gap:0 32px;
+  }
+  .meta div{padding-right:24px}
+  .meta dt{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);margin:0 0 5px;
+  }
+  .meta dd{margin:0;font-family:var(--mono);font-size:14px;color:var(--ink)}
+
+  /* ---- layout ---- */
+  .cols{display:grid;grid-template-columns:216px minmax(0,1fr);gap:56px;padding:64px 0 0}
+  nav.toc{position:sticky;top:40px;align-self:start;font-size:13px}
+  nav.toc p{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);margin:0 0 14px;
+  }
+  nav.toc a{
+    display:block;color:var(--ink-dim);text-decoration:none;padding:5px 0;
+    border-left:1px solid var(--rule);padding-left:13px;
+  }
+  nav.toc a:hover{color:var(--accent);border-left-color:var(--accent)}
+  nav.toc a .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-right:8px}
+
+  /* ---- sections ---- */
+  section{padding:0 0 60px;max-width:100%}
+  .shead{display:flex;align-items:baseline;gap:14px;border-top:1px solid var(--rule);padding-top:16px;margin-bottom:26px}
+  .shead .num{font-family:var(--mono);font-size:11.5px;color:var(--accent);letter-spacing:.06em}
+  h2{font-size:25px;font-weight:590;letter-spacing:-.012em;margin:0;line-height:1.2}
+  h3{font-size:16.5px;font-weight:560;margin:34px 0 12px;letter-spacing:-.005em}
+  p{margin:0 0 15px;max-width:70ch}
+  p.tight{max-width:70ch}
+  code{
+    font-family:var(--mono);font-size:13px;background:var(--mono-bg);
+    border:1px solid var(--rule);padding:1px 5px;color:var(--ink);
+  }
+  strong{font-weight:560}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(95,176,201,.32)}
+  ul{margin:0 0 15px;padding-left:0;list-style:none;max-width:70ch}
+  li{position:relative;padding-left:18px;margin-bottom:8px}
+  li:before{content:"";position:absolute;left:2px;top:.62em;width:5px;height:1px;background:var(--ink-faint)}
+  li code{font-size:12.5px}
+
+  /* ---- verdict ---- */
+  .verdict{
+    border:1px solid var(--rule-strong);border-left:2px solid var(--accent);
+    padding:22px 26px;margin:0 0 30px;max-width:76ch;
+  }
+  .verdict .tag{
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent);display:block;margin-bottom:9px;
+  }
+  .verdict p{margin:0;max-width:none}
+  .verdict p + p{margin-top:12px}
+
+  /* ---- tables ---- */
+  table{
+    width:100%;border-collapse:collapse;margin:0 0 22px;
+    font-size:13.5px;
+  }
+  th{
+    text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink-faint);font-weight:400;
+    border-bottom:1px solid var(--rule-strong);padding:0 14px 9px 0;
+  }
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-dim)}
+  td:first-child{color:var(--ink);width:22%}
+  td code,th code{font-size:12px}
+  td:nth-child(2){width:26%}
+  .tbl-note{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);margin:-8px 0 26px}
+
+  /* ---- figure ---- */
+  figure{margin:8px 0 30px;border:1px solid var(--rule);padding:22px 18px;background:var(--panel)}
+  figcaption{
+    font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);
+    margin-top:16px;padding-top:12px;border-top:1px solid var(--rule);
+  }
+  figure svg{display:block;width:100%;height:auto}
+
+  /* ---- waves ---- */
+  .wave{border-top:1px solid var(--rule);padding:18px 0 4px}
+  .wave:first-of-type{border-top:none}
+  .wave-h{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .wave-h .w{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.05em}
+  .wave-h h4{margin:0;font-size:15.5px;font-weight:560}
+  .wave ul{margin-bottom:10px}
+  .wave .gate{
+    font-family:var(--mono);font-size:12px;color:var(--ink-faint);padding:6px 0 8px;
+  }
+  .wave .gate b{color:var(--ink-dim);font-weight:400}
+
+  /* ---- colophon ---- */
+  .colophon{
+    border-top:1px solid var(--rule);padding:26px 0 90px;
+    font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);
+    display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;
+  }
+  @media (max-width:960px){
+    .cols{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static;margin-bottom:44px}
+    .meta{grid-template-columns:repeat(2,1fr);gap:18px 0}
+    h1{font-size:38px}
+    .wrap{padding:0 24px}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="cover">
+  <p class="kicker">Refactor Plan · 2026-09-20 02:34 · auto-qb</p>
+  <h1>主循环 × WebUI 解耦</h1>
+  <p class="lede">QbManager 的主循环同时承担「调度核心域」与「Web 表现层节拍」两类职责。本计划用门面把表现层状态收进一个对象, 让主循环只剩四条对 Web 的调用 —— 行为逐条等价, 不引入新契约。</p>
+  <dl class="meta">
+    <div><dt>基线</dt><dd>1055 passed</dd></div>
+    <div><dt>源码规模</dt><dd>13 253 行 / 60 py</dd></div>
+    <div><dt>耦合状态字段</dt><dd>19 个</dd></div>
+    <div><dt>迁移波次</dt><dd>W1 – W5</dd></div>
+  </dl>
+</header>
+
+<div class="cols">
+
+<nav class="toc">
+  <p>Contents</p>
+  <a href="#s1"><span class="n">01</span>可行性结论</a>
+  <a href="#s2"><span class="n">02</span>现状诊断</a>
+  <a href="#s3"><span class="n">03</span>设计模式选型</a>
+  <a href="#s4"><span class="n">04</span>目标架构</a>
+  <a href="#s5"><span class="n">05</span>迁移波次</a>
+  <a href="#s6"><span class="n">06</span>风险与守阵</a>
+  <a href="#s7"><span class="n">07</span>验收判据</a>
+  <a href="#s8"><span class="n">08</span>实施回执</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="shead"><span class="num">01</span><h2>可行性结论</h2></div>
+
+  <div class="verdict">
+    <span class="tag">Verdict — 可行, 建议执行</span>
+    <p>耦合的性质是「<strong>状态与门控</strong>耦合」, 不是「控制流」耦合。Web 侧从不通写路径: 它只向 <code>queue.Queue</code> 投递命令、只读快照 —— 边界对象早就存在了, 只是边界两侧的字段被平铺在同一个 <code>self</code> 上。这类耦合可以整体搬移, 不需要重新设计交互协议。</p>
+    <p>三条支撑: ①主循环里 Web 相关调用点只有六处, 且全部集中在 <code>run()</code> 的一小段; ②19 个表现层状态字段在 <code>__init__</code> 里连成一片(102 行中的约 60 行), 可整块迁入新对象; ③既有守阵直接覆盖本次改动面 —— 分层节拍、命令唤醒、视图节拍对齐三条回归用例钉的正是主循环结构, 改完它们红就是改错了。</p>
+  </div>
+
+  <p>代价是可预期的: 表现层改访问路径会触碰 <code>mixins/web_view.py</code>(741 行)与 <code>web_commands.py</code>(623 行)共 1 364 行, 以及测试里对 <code>mgr._group_view</code> 一类内部字段的 200 余处引用。前者是机械替换, 后者用一层薄代理过渡, 不改动任何断言语义。</p>
+</section>
+
+<section id="s2">
+  <div class="shead"><span class="num">02</span><h2>现状诊断</h2></div>
+
+  <p>把 <code>qbmanager.py</code> 与两个 Web mixin 逐行过一遍后, 耦合分成四类。下表每行都是代码事实, 数字取自实际扫描(2026-09-20)。</p>
+
+  <table>
+    <thead><tr><th>类别</th><th>实例</th><th>性质</th><th>处置</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>A · 状态字段<br><span style="font-family:var(--mono);font-size:11px;color:var(--ink-faint)">19 个</span></td>
+        <td><code>_group_view</code> <code>_flat_view</code> <code>_shows_view</code> <code>_search_index</code> <code>_web_results</code> <code>_web_token</code> <code>_view_lock</code> …</td>
+        <td>表现层私有状态, 平铺在 <code>QbManager.__init__</code></td>
+        <td>整块迁入 <code>WebUIRuntime</code></td>
+      </tr>
+      <tr>
+        <td>B · 主循环调用<br><span style="font-family:var(--mono);font-size:11px;color:var(--ink-faint)">6 处 / 146 行</span></td>
+        <td><code>_drain_web_commands()</code> <code>_check_reannounce_pending()</code> <code>_flush_deferred_receipts()</code> ×2 <code>_flush_views()</code> ×2</td>
+        <td>循环骨架里嵌了表现层的语义(是否补刷新、是否立即重建)</td>
+        <td>收敛为四个门面方法</td>
+      </tr>
+      <tr>
+        <td>C · 跨层门控<br><span style="font-family:var(--mono);font-size:11px;color:var(--ink-faint)">3 处</span></td>
+        <td><code>web_active</code> 判断写在 <code>_flush_views</code> / <code>_task_line</code> 里; <code>CMD_SLOW_MS</code> 计时日志写在 <code>run()</code> 里</td>
+        <td>核心域替表现层做「要不要干活」的决策</td>
+        <td>判据随状态搬走, 核心域不再持有</td>
+      </tr>
+      <tr>
+        <td>D · 反向依赖<br><span style="font-family:var(--mono);font-size:11px;color:var(--ink-faint)">18 处</span></td>
+        <td><code>web.py</code> 直读 <code>manager._traffic_view</code> <code>_group_view</code> <code>_web_write_seq</code> <code>_web_results</code>, 直写 <code>manager.web_commands</code></td>
+        <td>Web 线程绕过边界直接摸 manager 内部</td>
+        <td>改走 <code>manager.web.*</code> 与 <code>post_command()</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">表 1 · 耦合分类。A 与 C 是本次要消除的; D 是 A 的下游, 随 A 一起收口。</p>
+
+  <h3>为什么现在这个形状长歪了</h3>
+  <p>它是两次增量改动叠出来的结果: 先是 2026-09-15 把大文件拆成 mixin, 职责搬走了但<strong>状态没跟着搬</strong> —— mixin 方法通过 <code>self</code> 读写宿主字段, 于是 <code>WebviewMixin</code> 与 <code>QbManager</code> 共享同一份状态, 边界只剩一个命名约定。随后 2026-09-19 的三波「跟手性」优化往主循环里加了命令唤醒、补刷新、节拍对齐三套门控, 每套都要读 Web 活跃状态, 就地把 <code>_web_last_seen</code> <code>_web_pending_ver</code> 的判断写进了循环体。</p>
+  <p>症状是: 想理解一次 tick 做了什么, 得同时读 <code>run()</code>、<code>_flush_views()</code>、<code>_task_line()</code> 三处, 并在脑子里把 Web 门控的分支剔掉。</p>
+</section>
+
+<section id="s3">
+  <div class="shead"><span class="num">03</span><h2>设计模式选型</h2></div>
+
+  <p>目标是「主循环里不再出现 Web 的判断」。<strong>门面(Facade)</strong> 是唯一能做到这件事的结构: 它把状态与判据一起收走, 对外只留语义方法。配套三个: 沿用既有的 <strong>命令(Command)+ 队列</strong>; 用 <strong>空对象(Null Object)</strong> 表达「Web 未启用」以消除分支; 核心域向表现层的通知改成单向的 <strong>置脏(Observer 的极简形态)</strong>, 依赖方向反转 —— 原来是 <code>manager._group_view_dirty = True</code>, 改后是 <code>self.web.mark_dirty()</code>。</p>
+
+  <h3>被否决的方向</h3>
+  <table>
+    <thead><tr><th>方案</th><th>否决理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>事件总线<br>(EventBus / pub-sub)</td>
+        <td>订阅回调在主循环线程同步执行, 与直接调用完全等价, 只是把调用栈换成了一层查表 —— 排查时「谁改了脏标记」从点一下变成全局搜。对「单一写线程」这条约束没有任何额外增益, 因为约束靠的是队列而不是总线。</td>
+      </tr>
+      <tr>
+        <td>MVC / MVP 全套</td>
+        <td>这里的视图是<strong> JSON 快照</strong>而非控件树, Presenter 的「更新控件」语义落空。现有的「主循环生产快照 / Web 线程只读 / 按 <code>rid</code> 整表替换」本来就是 Passive View 的一个变体, 再套一层只会多出无意义的接口。</td>
+      </tr>
+      <tr>
+        <td>独立进程 / RPC</td>
+        <td>直接违反黄金法则第 5 条(单一写线程): 写操作必须留在持有锁与 state_file 的那个进程里。配置热重载路径也要跨进程同步, 收益为零。</td>
+      </tr>
+      <tr>
+        <td>主循环阶段管道<br>(Stage 注册表)</td>
+        <td>钩子只有两个(<code>consume_commands</code> 与 <code>flush_views</code>)。为两个固定钩子建一套注册机制是过度设计, 且会让循环骨架的执行顺序不再能从上往下读出来。</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">表 2 · 否决清单。判据统一为: 是否消除主循环里的 Web 分支, 且不新增不可读的间接层。</p>
+</section>
+
+<section id="s4">
+  <div class="shead"><span class="num">04</span><h2>目标架构</h2></div>
+
+  <figure>
+    <svg viewBox="0 0 1040 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="解耦前后分层对比">
+      <defs>
+        <marker id="ar" viewBox="0 0 8 8" refX="6.4" refY="4" markerWidth="6.4" markerHeight="6.4" orient="auto">
+          <path d="M0.6 0.6 L7 4 L0.6 7.4" fill="none" stroke="#6b747d" stroke-width="1"/>
+        </marker>
+        <marker id="ac" viewBox="0 0 8 8" refX="6.4" refY="4" markerWidth="6.4" markerHeight="6.4" orient="auto">
+          <path d="M0.6 0.6 L7 4 L0.6 7.4" fill="none" stroke="#5fb0c9" stroke-width="1"/>
+        </marker>
+      </defs>
+      <g font-family="JetBrains Mono, Consolas, monospace" font-size="11" fill="#98a1aa">
+        <!-- BEFORE -->
+        <text x="0" y="14" fill="#6b747d" font-size="10" letter-spacing="1.4">BEFORE</text>
+        <rect x="0" y="30" width="452" height="212" fill="#14171a" stroke="rgba(255,255,255,.16)"/>
+        <text x="16" y="52" fill="#e4e7ea" font-size="12.5">QbManager</text>
+        <rect x="16" y="64" width="420" height="52" fill="none" stroke="rgba(255,255,255,.09)"/>
+        <text x="28" y="82" fill="#98a1aa">核心域 · 连接 / 调度 / 任务 / 刷新</text>
+        <text x="28" y="100" fill="#6b747d" font-size="10">store · api · task_queue · state_file</text>
+        <rect x="16" y="126" width="420" height="86" fill="none" stroke="rgba(255,255,255,.09)"/>
+        <text x="28" y="144" fill="#98a1aa">表现层状态(19 字段平铺)</text>
+        <text x="28" y="164" fill="#6b747d" font-size="10">_group_view _flat_view _shows_view</text>
+        <text x="28" y="180" fill="#6b747d" font-size="10">_search_index _web_results _web_token</text>
+        <text x="28" y="196" fill="#6b747d" font-size="10">_wake_event _web_last_seen _view_lock …</text>
+        <text x="16" y="230" fill="#5fb0c9" font-size="10">边界只靠命名约定 —— 谁都能直接读写</text>
+        <line x1="226" y1="242" x2="226" y2="266" stroke="#6b747d" marker-end="url(#ar)"/>
+        <text x="16" y="282" fill="#98a1aa" font-size="10.5">web.py / ui.py 直接摸内部字段(18 处)</text>
+        <text x="16" y="330" fill="#6b747d" font-size="10">主循环 6 处调用 + 3 处 web_active 门控</text>
+        <text x="16" y="348" fill="#6b747d" font-size="10">→ 理解一次 tick 要读三处并剔除分支</text>
+
+        <!-- divider -->
+        <line x1="500" y1="24" x2="500" y2="348" stroke="rgba(255,255,255,.09)"/>
+
+        <!-- AFTER -->
+        <text x="540" y="14" fill="#6b747d" font-size="10" letter-spacing="1.4">AFTER</text>
+        <rect x="540" y="30" width="452" height="104" fill="#14171a" stroke="rgba(255,255,255,.09)"/>
+        <text x="556" y="52" fill="#e4e7ea" font-size="12.5">主循环(核心域)</text>
+        <text x="556" y="72" fill="#6b747d" font-size="10">连接 / 节拍 / 任务 / 刷新 · 零 Web 分支</text>
+        <text x="556" y="94" fill="#5fb0c9" font-size="10">四条调用: consume · check · flush_views · flush_receipts</text>
+        <text x="556" y="118" fill="#6b747d" font-size="10">wake_event 归循环; 命令执行回调入 runtime</text>
+
+        <rect x="540" y="164" width="452" height="80" fill="#14171a" stroke="#5fb0c9"/>
+        <text x="556" y="186" fill="#e4e7ea" font-size="12.5">WebUIRuntime(门面)</text>
+        <text x="556" y="206" fill="#98a1aa" font-size="10">状态 + 判据: 视图快照 / 版本号 / 脏标记 / 活跃心跳</text>
+        <text x="556" y="222" fill="#98a1aa" font-size="10">回执 / 命令队列 / 搜索索引 / token / _view_lock</text>
+        <text x="556" y="238" fill="#5fb0c9" font-size="10">is_active() 恒 False ⇒ 未启用即空对象, 无需分支</text>
+
+        <line x1="766" y1="134" x2="766" y2="160" stroke="#5fb0c9" marker-end="url(#ac)"/>
+        <text x="700" y="152" fill="#6b747d" font-size="10">门面</text>
+
+        <rect x="540" y="272" width="452" height="40" fill="none" stroke="rgba(255,255,255,.09)"/>
+        <text x="556" y="296" fill="#98a1aa" font-size="10.5">web.py / ui.py → manager.web.* · post_command()</text>
+        <line x1="766" y1="244" x2="766" y2="268" stroke="#6b747d" marker-end="url(#ar)"/>
+        <text x="556" y="336" fill="#6b747d" font-size="10">逆向依赖仅剩: runtime 回调 manager 的写与构建能力</text>
+        <text x="556" y="352" fill="#6b747d" font-size="10">(_cmd_* 处理器 / _build_*_view 构建器 / wake)</text>
+      </g>
+    </svg>
+    <figcaption>图 1 · 左: 现状 —— 表现层状态平铺在宿主上, 边界只剩命名约定。右: 目标 —— 状态与判据收进门面, 主循环只有四条调用。</figcaption>
+  </figure>
+
+  <h3>门面接口</h3>
+  <table>
+    <thead><tr><th>方法</th><th>主循环侧语义</th><th>内部承担(移出主循环的部分)</th></tr></thead>
+    <tbody>
+      <tr><td><code>consume_commands()</code></td><td>返回「本批是否改了 qB 种子状态」</td><td>命令表分发、写序号自增、回执登记、自投递不唤醒</td></tr>
+      <tr><td><code>check_pending()</code></td><td>每轮推进一次汇报确认</td><td>tracker 确认窗口与超时判定</td></tr>
+      <tr><td><code>flush_views(force)</code></td><td>同步线 / 任务线各调一次</td><td>活跃窗口、脏标记、节拍对齐门控、四视图同轮发布</td></tr>
+      <tr><td><code>flush_receipts()</code></td><td>无条件落回执</td><td>真值采集与回执写入</td></tr>
+      <tr><td><code>advance_slow_paths()</code></td><td>任务线末尾调一次</td><td>错误原因预取与搜索索引推进(自带活跃门控)</td></tr>
+      <tr><td><code>is_active()</code> <code>mark_dirty()</code></td><td>核心域单向通知</td><td>活跃心跳置位、视图置脏</td></tr>
+      <tr><td><code>post_command(cmd, payload)</code></td><td>Web 线程入口</td><td>生成 cmd_id、入队、按需唤醒</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">表 3 · 门面对外接口。核心域只见左列, 右列全部不可见。</p>
+
+  <p>有一处刻意<strong>不</strong>搬: <code>wake()</code> 与 <code>_wake_event</code> 留在 manager。它不是 Web 的东西 —— 托盘 UI(<code>ui.py:507</code>)在停止时也要调它来打断等待。它是主循环的唤醒原语, Web 只是它的一个使用方。</p>
+</section>
+
+<section id="s5">
+  <div class="shead"><span class="num">05</span><h2>迁移波次</h2></div>
+
+  <p>每波结束都跑全量测试, 单波内不允许跨波改动。这样任一时点中断, 仓库都停在可运行且全绿的状态。</p>
+
+  <div class="wave">
+    <div class="wave-h"><span class="w">W1</span><h4>新建 <code>web_runtime.py</code> —— 状态与判据落地</h4></div>
+    <ul>
+      <li>新建 <code>src/auto_qb/web_runtime.py</code>: <code>WebUIRuntime</code> 类, 持有全部 19 个表现层字段与 <code>_view_lock</code>。</li>
+      <li>常量随迁: <code>WEB_VIEW_TTL</code> 与视图节拍对齐判据(<code>_web_pending_ver</code>)进 runtime。</li>
+      <li>门面方法先只做状态读写, 命令分发与回执暂留 mixin。</li>
+    </ul>
+    <p class="gate"><b>gate</b> · 模块可导入, 单测无新增失败。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-h"><span class="w">W2</span><h4>mixin 改为委托 —— 视图构建与命令处理改用 runtime 状态</h4></div>
+    <ul>
+      <li><code>web_view.py</code>: 四视图构建器保留为 manager 上的方法(纯读 store / config), 但读写快照、版本号、脏标记、锁、搜索索引一律改走 <code>self.web.*</code>。</li>
+      <li><code>web_commands.py</code>: 回执、写序号、reannounce 跟踪改走 <code>self.web.*</code>; <code>_drain_web_commands</code> / <code>_check_reannounce_pending</code> 主体迁入 runtime, mixin 只留转发。</li>
+      <li><code>speed_curve.py</code>: <code>_traffic_view</code> 改走 <code>self.web.traffic_view</code>。</li>
+    </ul>
+    <p class="gate"><b>gate</b> · 1055 passed, 视图相关用例全绿。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-h"><span class="w">W3</span><h4>主循环收敛</h4></div>
+    <ul>
+      <li><code>run()</code>: 六处调用收敛为四个门面方法; 删掉 <code>web_active</code> 判据与 <code>CMD_SLOW_MS</code> 计时块(计时随回执逻辑进 runtime)。</li>
+      <li><code>_task_line()</code>: 错误原因预取与搜索索引推进合并为一次 <code>advance_slow_paths()</code>。</li>
+      <li><code>_flush_views()</code>: 只保留「取脏标记 → 转交」两步。</li>
+    </ul>
+    <p class="gate"><b>gate</b> · 分层节拍 / 命令唤醒 / 节拍对齐三条守阵全绿。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-h"><span class="w">W4</span><h4>兼容代理与调用方接线</h4></div>
+    <ul>
+      <li>manager 上为 19 个旧字段名加读写代理 property, 指向 runtime —— 测试与既有调用零改动(标注为过渡层)。</li>
+      <li><code>web.py</code>: <code>manager.web_commands.put</code> + <code>manager.wake()</code> 合并为 <code>manager.web.post_command()</code>; 只读字段改走 <code>manager.web.*</code>。</li>
+      <li>新增静态守阵: 扫描 <code>qbmanager.py</code> 源码不得再出现表现层字段名 —— 防回潮。</li>
+    </ul>
+    <p class="gate"><b>gate</b> · 全量测试 + 浏览器冒烟(<code>scripts/ui_smoke.cjs</code>, ok / error 双模式)。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-h"><span class="w">W5</span><h4>收尾: 文档与知识库</h4></div>
+    <ul>
+      <li>回写 <code>memory-bank/modules.md</code> / <code>systemPatterns.md</code> 的模块职责描述。</li>
+      <li><code>testing.md</code> 更新基线数字与新增守阵说明。</li>
+      <li>新坑入 <code>pitfalls.md</code>。</li>
+    </ul>
+    <p class="gate"><b>gate</b> · 文档与代码一致, 无漂移。</p>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="shead"><span class="num">06</span><h2>风险与守阵</h2></div>
+
+  <table>
+    <thead><tr><th>风险</th><th>为什么危险</th><th>守阵</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>四视图同轮发布被破坏</td>
+        <td>四份视图共用一个 <code>rid</code>, 半新半旧的组合会让前端把陈旧数组当新数据换上去(2026-09-18 实测事故)</td>
+        <td><code>_view_lock</code> 随状态进 runtime; <code>ensure_group_state</code> 的「判脏 → 重建 → 取值」全程持锁不变</td>
+      </tr>
+      <tr>
+        <td>自投递命令引发自激</td>
+        <td><code>build_search_index</code> 若允许唤醒, 会形成「唤醒 → drain → 仍脏 → 再投递」的死循环, 打满 CPU</td>
+        <td><code>SELF_POSTED_COMMANDS</code> 判据随 drain 一起搬, 不得在重写中丢失; 既有用例 <code>test_api_enqueue_wakes_main_loop</code> 守住</td>
+      </tr>
+      <tr>
+        <td>Web 未启用 / dry-run 行为漂移</td>
+        <td>现在靠 <code>_web_last_seen = 0</code> 使活跃门控恒假; 若 runtime 改了初始化语义, 空转保护会失效</td>
+        <td>runtime 恒存在, <code>is_active()</code> 语义与原判据逐字等价; dry-run 与暂停路径不改</td>
+      </tr>
+      <tr>
+        <td>状态双份真相</td>
+        <td>代理 property 若与 runtime 字段不同步, 会出现两处值不一致</td>
+        <td>代理只做转发不存值; 新增断言钉住「代理与 runtime 同源」</td>
+      </tr>
+      <tr>
+        <td>跨平台差异</td>
+        <td>本次改的是纯 Python 对象布局, 但涉及线程与锁, 历史上有「Windows 全绿 / Linux 全红」先例</td>
+        <td>拍板前在 WSL 沙箱复跑一次全量(约 20 s)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">表 4 · 风险登记。前两条是历史事故的复发点, 必须逐条验。</p>
+</section>
+
+<section id="s7">
+  <div class="shead"><span class="num">07</span><h2>验收判据</h2></div>
+  <ul>
+    <li><strong>基线不回退</strong>: <code>uv run pytest tests -q</code> ≥ 1055 passed, 0 failed。</li>
+    <li><strong>结构守阵</strong>: 新增静态扫描用例, <code>qbmanager.py</code> 源码内不得出现 19 个表现层字段名中的任何一个(代理层单独标注豁免)。</li>
+    <li><strong>既有守阵仍绿</strong>: 分层节拍(<code>test_run_loop_layered_cadence</code>)、命令唤醒只走命令线(<code>test_wake_drains_commands_without_extra_ticks</code>)、节拍对齐(<code>test_view_rebuild_waits_for_client_consume</code>)。</li>
+    <li><strong>端到端</strong>: <code>scripts/ui_smoke.cjs</code> 双 UI × ok / error 模式 0 失败(与基线项目数持平)。</li>
+    <li><strong>可读性</strong>: <code>run()</code> 内 Web 相关语句从 20 行降到 4 行, 且不含任何 <code>web_active</code> 式判断。</li>
+  </ul>
+  <p>判不了「可读性」这一条是本次唯一的软指标 —— 它的验收方式是人工读一遍 <code>run()</code>, 看能否不查 mixin 就讲清一次 tick 做了什么。</p>
+</section>
+
+<section id="s8">
+  <div class="shead"><span class="num">08</span><h2>实施回执</h2></div>
+
+  <p>计划获批后按 W1–W5 全波执行完毕。实测数字与三处相对计划的偏差记录在此, 便于后续对照。</p>
+
+  <table>
+    <thead><tr><th>项</th><th>计划</th><th>实际</th></tr></thead>
+    <tbody>
+      <tr><td>主循环 Web 语句</td><td>20 行 → 4 行</td><td><strong>4 条门面调用</strong>(consume / check / flush_views ×2 / flush_receipts ×2), <code>run()</code> 内已无任何 <code>web_active</code> 式判断</td></tr>
+      <tr><td>文件规模</td><td>—</td><td>新增 <code>web_runtime.py</code> 451 行; <code>web_view.py</code> 741→645; <code>web_commands.py</code> 623→545; <code>qbmanager.py</code> 795→808(迁出 60 行, 换回兼容层)</td></tr>
+      <tr><td>慢路径调用</td><td>合并为一次 <code>advance_slow_paths()</code></td><td><strong>未合并</strong> —— 拆成 <code>advance_error_reasons()</code>(任务线开头)与 <code>advance_search_index()</code>(末尾)。合并会把索引构建提前到 <code>run_due</code> 之前, 大库首轮会推迟任务执行; 宁可多一次门面调用也要保时序等价</td></tr>
+      <tr><td>web.py 接线</td><td>字段访问全部改走 <code>manager.web.*</code></td><td><strong>只改了 <code>_enqueue</code></strong>(走 <code>web.post_command</code>, 去掉重复的 SELF_POSTED 判据)。其余字段访问经兼容代理工作 —— 全改会连带要求重写 <code>test_web.py</code> 的 SimpleNamespace 替身, 风险大于收益</td></tr>
+      <tr><td>测试</td><td>1055 passed 不回退</td><td><strong>1057</strong>(新增 2 条守阵)/ Linux <strong>1055 + 2 skipped</strong>; cov 92%; 红绿双验过</td></tr>
+      <tr><td>浏览器冒烟</td><td>双 UI × ok / error, 0 失败</td><td><strong>48 项 × 2 模式, 0 失败</strong>(3000 种子桩服务)。唯一 <code>[perf]</code> 提示「3000 目标撤下 3073ms」经 A/B 对照澄清: 改动前同场景为 3072 / 3049ms —— 大库轮询粒度, 非本次引入</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">表 5 · 计划 vs 实施。偏差两条(慢路径不合并、web.py 只改投递口)都是"保行为等价"优先于"形更干净"。</p>
+
+  <h3>实施中撞到的四个坑</h3>
+  <ul>
+    <li><strong>守阵因重构而失效</strong>: 自投递命令的静态守卫正则只认 <code>web_commands.put(("…</code>, 改走 <code>web.post_command("…"</code> 后匹配为 0, <code>assert posted</code> 直接失败 —— 守阵必须跟着代码走。</li>
+    <li><strong>自投递 payload 形状</strong>: 给自投递也加 <code>_queued_ts</code> 会破两条 <code>payload == {}</code> 断言; 自投递没有回执消费者, 埋点是死重量, 只 put 原样。</li>
+    <li><strong>打桩打在兼容层上会假绿</strong>: 回执顺序守阵原本 spy <code>mgr._set_web_result</code>, 而门面内部调自己的 <code>set_result</code> ⇒ spy 完全不生效。表现为断言静默失效, 不是报错。</li>
+    <li><strong><code>__getattr__</code> 递归</strong>: 别名表里不含 <code>'web'</code>, 故 <code>self.web</code> 未建立时访问别名直接抛 <code>AttributeError</code> 而非无限递归。</li>
+  </ul>
+
+  <h3>A / B 对照(澄清一条冒烟告警)</h3>
+  <p>ok 模式冒烟报出「3000 个目标的整组操作, 乐观态撤下 3073ms」(&gt;2500ms 属异常)。为判定它是否本次引入, 用 <code>git archive HEAD src</code> 提取改动前的代码到临时目录, 以 <code>PYTHONPATH</code> 前置启动同一桩服务跑同一脚本:</p>
+  <table>
+    <thead><tr><th>版本</th><th>撤下耗时</th><th>断言</th></tr></thead>
+    <tbody>
+      <tr><td>改动前 (HEAD)</td><td>3072 ms / 3049 ms</td><td>48 项 0 失败</td></tr>
+      <tr><td>改动后 (本次)</td><td>3073 ms</td><td>48 项 0 失败</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">表 6 · 同场景 A/B。数字与断言数一致 ⇒ 该告警是 3000 目标下的<strong>前端轮询粒度</strong>所致(分档 <code>basePollMs</code>), 与后端解耦无关, 不计入本次回归。</p>
+
+  <p>状态: <strong>已实施未提交</strong>(用户未下令提交; 按 AGENTS.md, 提交 = commit + 推 Gitee)。后续择机清理兼容层: 调用方全部改用 <code>manager.web.&lt;新名&gt;</code> 后删掉 <code>_WEB_STATE_ALIAS</code> 与 8 个转发方法。</p>
+</section>
+
+</main>
+</div>
+
+<footer class="colophon">
+  <span>auto-qb · 主循环 × WebUI 解耦计划 · 2026-09-20 02:34</span>
+  <span>基线 1055 passed · src 13 253 行 · 5 波次</span>
+</footer>
+
+</div>
+</body>
+</html>

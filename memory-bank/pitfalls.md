@@ -1396,3 +1396,59 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - 表现极具迷惑性: 终端只显示 `[develop xxxxx] …` 提交成功, 远端却没有任何新提交 —— 很容易被误读成"推送失败 / 网络问题", 去重试一个从没跑过的命令。
 - **修法**: commit 与 push 写成**两条独立命令**; heredoc 结束符单独占一行、行首无空格、后面不带任何内容。
 - **判别法**: 提交后照例 `git status -sb`, 看到 `[ahead N]` 就说明还没推 —— 不要只看 commit 的输出判断"已完成"。
+
+### ⚠ 不改工作区做「改动前 vs 改动后」对照: `git archive` + `PYTHONPATH`, 不要 stash (2026-09-20 实测)
+
+重构后想确认某个性能数字**是不是自己引入的**, 常规做法是 `git stash` 切回去再跑一遍 —— 但本仓库
+**明令禁止在工具 shell 里 stash**(非快进合并 + 脏工作区会顺着删除拦截层损坏共享对象库)。替代方案:
+
+```bash
+git archive HEAD src | tar -x -C .workbuddy-ai/tmp/aqb_old     # 只取改动前的 src, 工作区一字不动
+PYTHONPATH="D:/Projects/auto-qb-clone2/.workbuddy-ai/tmp/aqb_old/src" \
+  uv run python -c "import auto_qb.qbmanager as m; print(m.__file__)"   # 先确认加载的是旧代码
+PYTHONPATH=".../aqb_old/src" uv run python scripts/ui_harness.py --torrents 3000 --port 8257
+```
+
+- **必须先验证 `PYTHONPATH` 真的覆盖了 editable install** —— 上面那行 `print(m.__file__)` 不是走过场:
+  若打印的还是仓内 `src/`, 后面的对照就是在拿新代码比新代码, 白跑。
+- 本次用它澄清了一条冒烟告警: 3000 目标「乐观态撤下」改动后 3073ms、改动前 **3072 / 3049ms**
+  ⇒ 同一现象(前端 `basePollMs` 分档的轮询粒度), 与重构无关。没有这一步就只能含糊地写"疑似"。
+
+### ⚠ 起桩服务前先扫端口; `npm i playwright-core` 会被安全层拦下 (2026-09-20)
+
+- **端口**: 除已记录在案的 8099, **8123 也被别的 worktree 的桩服务占着**(现象是
+  `[Errno 10048]`, 且 harness 会先打印一行 `http://127.0.0.1:8123/…` 再崩, 具有迷惑性 ——
+  看起来像"启动成功又退出")。起服务前先 `netstat -ano | grep ":<端口>"`, 或直接换 82xx/83xx 段。
+- **`npm i` 会撞上 safe-delete**: workspace 的 `node_modules/playwright-core` 已存在时, npm 要先删
+  1248 个文件, 超过单轮 50 个的阈值 ⇒ `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 直接报错退出。
+  **正确做法: 不要重装** —— workspace 里已装的 1.62.0 配缓存里的 `chromium-1234` 就能跑
+  (`NODE_PATH=…/workspace/node_modules node scripts/ui_smoke.cjs`)。
+  若真要换版本, 装到**干净的新目录**再指 `NODE_PATH` 过去, 别让 npm 去删已有目录。
+
+### ⚠ 不改工作区做「改动前 vs 改动后」对照: `git archive` + `PYTHONPATH`, 不要 stash (2026-09-20 实测)
+
+重构后想确认某个性能数字**是不是自己引入的**, 常规做法是 `git stash` 切回去再跑一遍 —— 但本仓库
+**明令禁止在工具 shell 里 stash**(非快进合并 + 脏工作区会顺着删除拦截层损坏共享对象库)。替代方案:
+
+```bash
+git archive HEAD src | tar -x -C .workbuddy-ai/tmp/aqb_old     # 只取改动前的 src, 工作区一字不动
+PYTHONPATH="D:/Projects/auto-qb-clone2/.workbuddy-ai/tmp/aqb_old/src" \
+  uv run python -c "import auto_qb.qbmanager as m; print(m.__file__)"   # 先确认加载的是旧代码
+PYTHONPATH=".../aqb_old/src" uv run python scripts/ui_harness.py --torrents 3000 --port 8257
+```
+
+- **必须先验证 `PYTHONPATH` 真的覆盖了 editable install** —— 上面那行 `print(m.__file__)` 不是走过场:
+  若打印的还是仓内 `src/`, 后面的对照就是在拿新代码比新代码, 白跑。
+- 本次用它澄清了一条冒烟告警: 3000 目标「乐观态撤下」改动后 3073ms、改动前 **3072 / 3049ms**
+  ⇒ 同一现象(前端 `basePollMs` 分档的轮询粒度), 与重构无关。没有这一步就只能含糊地写"疑似"。
+
+### ⚠ 起桩服务前先扫端口; `npm i playwright-core` 会被安全层拦下 (2026-09-20)
+
+- **端口**: 除已记录在案的 8099, **8123 也被别的 worktree 的桩服务占着**(现象是
+  `[Errno 10048]`, 且 harness 会先打印一行 `http://127.0.0.1:8123/…` 再崩, 具有迷惑性 ——
+  看起来像"启动成功又退出")。起服务前先 `netstat -ano | grep ":<端口>"`, 或直接换 82xx/83xx 段。
+- **`npm i` 会撞上 safe-delete**: workspace 的 `node_modules/playwright-core` 已存在时, npm 要先删
+  1248 个文件, 超过单轮 50 个的阈值 ⇒ `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 直接报错退出。
+  **正确做法: 不要重装** —— workspace 里已装的 1.62.0 配缓存里的 `chromium-1234` 就能跑
+  (`NODE_PATH=…/workspace/node_modules node scripts/ui_smoke.cjs`)。
+  若真要换版本, 装到**干净的新目录**再指 `NODE_PATH` 过去, 别让 npm 去删已有目录。

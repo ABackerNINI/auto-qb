@@ -255,6 +255,12 @@ def _make_web_manager(tmp_path, config_text):
     # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
     from auto_qb.qbmanager import QbManager
 
+    # 命令投递经表现层门面(WebUIRuntime.post_command): 替身挂一个, 并与上面那个
+    # web_commands 共用同一队列 —— 端点测试直投命令的断言才仍然成立
+    from auto_qb.web_runtime import WebUIRuntime
+
+    mgr.web = WebUIRuntime(mgr)
+    mgr.web.commands = mgr.web_commands
     mgr._hr_view_fields = QbManager._hr_view_fields
     mgr._wake_calls = wake_calls  # 供端点测试断言"投递命令是否唤醒主循环"
     # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
@@ -272,7 +278,10 @@ def _make_web_manager(tmp_path, config_text):
             arrays = {
                 "groups": mgr._group_view,
                 "singles": [],  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
-                "shows": {"list": [], "unrecognized": []},
+                "shows": {
+                    "list": [],
+                    "unrecognized": []
+                },
                 "torrents": mgr._flat_view,  # 种子平铺视图同门控(与真实实现同形)
             }
             for k in (VIEW_ARRAYS.get(view) if view else None) or arrays:
@@ -2731,12 +2740,16 @@ def test_api_state_skips_jsonable_encoder(web_env, monkeypatch):
 
     monkeypatch.setattr(fr, "jsonable_encoder", spy)
     urls = (
-        "/api/state?view=torrent", "/api/state", "/api/groups",
+        "/api/state?view=torrent",
+        "/api/state",
+        "/api/groups",
         # 注: /api/config/schema **故意不在**清单里 —— 它的载荷含 dataclass(Group/Field/Plugin),
         # 必须保留 FastAPI 的 jsonable_encoder 做转换(直返会 500, 见 web.py 该端点的注释)。
         "/api/search?q=Show",
-        "/api/torrents/HA", "/api/torrents/HA/trackers",
-        "/api/torrents/HA/files", "/api/torrents/HA/peers",
+        "/api/torrents/HA",
+        "/api/torrents/HA/trackers",
+        "/api/torrents/HA/files",
+        "/api/torrents/HA/peers",
     )
     for url in urls:
         resp = client.get(url, headers=auth)
@@ -3598,7 +3611,9 @@ def test_api_enqueue_wakes_main_loop(web_env):
     src = open(
         os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "mixins", "web_view.py"), encoding="utf-8"
     ).read()
-    posted = set(re.findall(r'web_commands\.put\(\(\s*"([^"]+)"', src))
+    # 两种投递写法都要认(2026-09-20 起统一走门面的 post_command; 旧写法保留匹配以防回退)
+    posted = set(re.findall(r'web_commands\.put\(\(\s*"([^"]+)"', src)
+                ) | set(re.findall(r'web\.post_command\(\s*"([^"]+)"', src))
     assert posted, "未解析到任何自投递命令 —— 正则或源码位置已变, 守卫失效"
     missing = posted - set(SELF_POSTED_COMMANDS)
     assert not missing, (f"自投递命令 {missing} 未登记进 SELF_POSTED_COMMANDS —— "
@@ -3616,15 +3631,14 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     import logging
 
     from auto_qb.mixins.web_commands import CMD_SLOW_MS
+    from auto_qb.web_runtime import WebUIRuntime
 
     class _T:
         """只需要 _log_cmd_timing 用到的两个属性"""
         _web_results = {}
         _web_write_seq = 0
 
-        from auto_qb.mixins.web_commands import WebCommandsMixin as _M
-
-        _log_cmd_timing = _M._log_cmd_timing
+        _log_cmd_timing = WebUIRuntime._log_cmd_timing
 
     t = _T()
     # ① 慢 -> WARNING, 且带归因提示(排队/执行各自指向不同的后端原因)

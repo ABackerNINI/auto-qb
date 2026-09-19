@@ -1,16 +1,15 @@
-"""WebCommandsMixin: WEB UI 控制命令消费与回执(主循环线程侧执行体)
+"""WebCommandsMixin: WEB UI 控制命令**处理器**与命令表(主循环线程侧执行体)
 
-从 qbmanager.py 拆出(2026-09-15 大文件拆分批次一)。Web 线程只向 self.web_commands
-投递命令并只读 self._web_results 回执; 本 mixin 全部方法都在主循环线程执行
-(_tick 经 _drain_web_commands 消费命令, _check_reannounce_pending 每 tick 推进汇报确认)。
+从 qbmanager.py 拆出(2026-09-15 大文件拆分批次一)。2026-09-20 二次拆分后本模块只留
+**命令实现**: 每个 `_cmd_*` 就是一次 qB 写操作, 由 `WebUIRuntime.consume_commands`
+(门面)在主循环线程里分发执行 —— 排队、回执、写序号、自投递判据全部归门面, 不在本模块。
 
-依赖的宿主属性(由 QbManager.__init__ 初始化):
-- self.web_commands / self._web_results / self._reannounce_pending
+依赖的宿主属性:
 - self.api(QbApi) / self.store / self.client
+- self.web                  WebUIRuntime(回执 / 汇报确认跟踪 / 搜索索引状态)
 - self.apply_new_config(配置热重载, 定义于 QbManager 核心)
 """
 import logging
-import queue
 import time
 from typing import List, Optional
 
@@ -86,18 +85,13 @@ CMD_SLOW_MS = 300.0
 
 
 class WebCommandsMixin:
-    def _drain_web_commands(self) -> bool:
-        """消费 WEB UI 控制命令(Web 线程投递, 主循环线程执行写操作——单一写者约束保持)
+    def _web_command_handlers(self) -> dict:
+        """WEB 控制命令 -> 处理器映射(命令表与处理器实现同处一处, 避免漏挂)
 
-        命令带 cmd_id: 执行完立即写回执(_web_results), 供前端 /api/cmd/{id} 轮询执行结果。
-        例外: reannounce 只发指令并登记确认跟踪(_reannounce_pending), 回执由
-        _check_reannounce_pending 在 tracker 确认后写入 —— "已发送"不等于"汇报成功";
-        bulk_torrents 的回执由 handler 聚合写(部分失败需报缺失计数)。
-
-        返回本批是否含"改了 qB 种子状态"的命令(RESYNC_COMMANDS)且执行成功 ——
-        主循环据此补一次完整刷新(P0-5)。整批只补一次, 不是每条命令各补一次。
+        由 `WebUIRuntime.consume_commands` 取用: 编排(排队/回执/写序号/自投递判据)在 runtime,
+        命令表留在实现旁边 —— 新增命令只改这里, 不用去 runtime 里补映射。
         """
-        handlers = {
+        return {
             "pause_group": self._cmd_pause_group,
             "resume_group": self._cmd_resume_group,
             "reannounce_group": self._cmd_reannounce_group,
@@ -131,164 +125,20 @@ class WebCommandsMixin:
             "reload_config": self._cmd_reload_config,
             "build_search_index": self._cmd_build_search_index,
         }
-        changed = False
-        try:
-            while True:
-                cmd, payload = self.web_commands.get_nowait()
-                cmd_id = str(payload.get("cmd_id") or "")
-                # 下划线前缀的键是埋点/元数据, 不传给 handler(否则被当命令参数报 TypeError)
-                args = {k: v for k, v in payload.items() if k != "cmd_id" and not k.startswith("_")}
-                queued_ts = payload.get("_queued_ts")
-                start_ts = time.time()  # P0-0: 出队即开始, 用于拆 wait_ms / exec_ms
-                try:
-                    deferred = cmd in DEFERRED_RECEIPT_COMMANDS
-                    if cmd_id and deferred:
-                        # handler 只发指令并登记确认跟踪(bulk: 聚合写回执; add: 依 qB 结果串写回执);
-                        # 回执由后续 tick(汇报确认)或 handler 内部写入 —— 均不是简单的"执行完即 ok"
-                        handlers[cmd](cmd_id=cmd_id, **args)
-                    else:
-                        handlers[cmd](**args)
-                    # 写命令序号: Web 线程的只读端点短缓存据此失效(P1-4)。自投递命令不计数 ——
-                    # 它只是内部索引推进, 且频次高, 计进去会让缓存在建索引期间完全失效。
-                    # ❗必须在写回执**之前**自增: 前端拿到回执会立刻重取只读端点(如改完分类重取
-                    # /api/categories), 若先写回执, 那一瞬的读会命中旧写序号对应的缓存键 ——
-                    # 顺序反过来才是"先让缓存失效, 再宣布命令成功"。
-                    if cmd not in SELF_POSTED_COMMANDS:
-                        self._web_write_seq += 1
-                    timing = _timing(queued_ts, start_ts)
-                    if cmd_id and not deferred:
-                        if cmd in RESYNC_COMMANDS:
-                            # ❗改种子状态的命令: 回执**推迟到补刷新之后**再写(见 _flush_deferred_receipts)。
-                            # 原写法在这里就写 ok, 而 P0-5 的补刷新还在**后面**才跑 ⇒ 前端"拿到回执就
-                            # 立刻 refresh"取到的必然是补刷新**之前**的旧快照(rid 未变), 第一次拉取
-                            # 100% 扑空, 要等 200ms 退避重试 —— 大库单轮 refresh 慢时, 这一次扑空就是
-                            # 用户肉眼看到的"点了要 2 秒才恢复正常"(真机实测 排队 0 / 执行 8.4 /
-                            # 补刷新 88.4ms, 而前端撤下 1998ms)。推迟后第一次拉取即可命中。
-                            self._defer_receipt(cmd_id, cmd, args, timing)
-                        else:
-                            self._set_web_result(cmd_id, "ok", timing=timing)
-                    if cmd_id:
-                        self._log_cmd_timing(cmd, timing)
-                    # handler 已同步改完 qB 状态(未抛异常即成功) -> 记一笔, 整批结束后补刷新
-                    if cmd in RESYNC_COMMANDS:
-                        changed = True
-                except KeyError as e:
-                    logger.warning(f"WEB UI 未知命令: {e}")
-                    if cmd_id:
-                        self._set_web_result(cmd_id, "error", f"未知命令: {e}", _timing(queued_ts, start_ts))
-                except Exception as e:
-                    logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
-                    if cmd_id:
-                        self._set_web_result(cmd_id, "error", str(e), _timing(queued_ts, start_ts))
-        except queue.Empty:
-            pass
-        return changed
 
     def _set_web_result(
-        self, cmd_id: str, status: str, error: str = "", timing: Optional[dict] = None, truth: Optional[dict] = None
+        self,
+        cmd_id: str,
+        status: str,
+        error: str = "",
+        timing: Optional[dict] = None,
+        truth: Optional[dict] = None
     ) -> None:
-        """写入命令执行结果回执(主循环线程唯一写者); 顺手清理 2 分钟前的旧回执防无限增长
+        """写回执(转发到 WebUIRuntime) —— 命令处理器内部写回执走这里, 实现不分家
 
-        timing: P0-0 埋点(wait_ms 排队等主循环 / exec_ms 执行耗时), 由 /api/cmd/{id} 一并返回,
-        前端据此把"点下去到看到结果"拆成可归因的几段, 而不是只有一个"感觉慢"。
+        真实存储与过期清理在 `WebUIRuntime.set_result`。
         """
-        now = time.time()
-        if len(self._web_results) > 64:
-            self._web_results = {k: v for k, v in self._web_results.items() if now - v.get("ts", 0) < 120}
-        rec = {"status": status, "error": error, "ts": now}
-        if timing:
-            rec.update(timing)
-        if truth:
-            # 受影响种子的**当前真值**({hash: {"kind": ...}}): 前端拿到即可撤下乐观态,
-            # 省掉"回执后再拉一次全量 /api/state"这一趟(大库单轮 refresh 可达数百毫秒)。
-            rec["truth"] = truth
-        self._web_results[cmd_id] = rec
-
-    def _defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
-        """登记"等补刷新跑完再写"的回执(主循环线程唯一写者)
-
-        与 `_set_web_result` 的区别只是**时机**: 登记后由 `run()` 在补刷新之后调
-        `_flush_deferred_receipts()` 落盘, 并顺带把受影响种子的**当前真值**写进回执
-        ⇒ 前端拿到回执就能撤下乐观态, 不必再发一次全量 refresh。
-        """
-        d = getattr(self, "_deferred_receipts", None)
-        if d is None:
-            d = {}
-            self._deferred_receipts = d
-        d[cmd_id] = {"cmd": cmd, "args": dict(args or {}), "timing": timing}
-
-    def _affected_hashes(self, cmd: str, args: dict) -> List[str]:
-        """命令影响了哪些种子(用于回执带真值); 取不到就返回空 —— 只影响能否省一次 refresh, 不影响正确性"""
-        try:
-            if cmd.endswith("_torrent"):
-                h = (args or {}).get("hash")
-                return [h] if h else []
-            if cmd.endswith("_group"):
-                return list(self.store.groups.get((args or {}).get("key") or (), []) or [])
-            if cmd == "bulk_torrents":
-                out = list((args or {}).get("hashes") or [])
-                for k in (args or {}).get("keys") or []:
-                    out.extend(self.store.groups.get(k, []) or [])
-                return list(dict.fromkeys(out))
-        except Exception:  # 桩/异常配置下取不到就退化为"不写真值", 前端照旧拉一次
-            return []
-        return []
-
-    def _flush_deferred_receipts(self) -> None:
-        """补刷新跑完后落回执, 并附上受影响种子的当前真值(主循环线程调用)
-
-        ❗**必须无条件调用**(哪怕本轮没跑补刷新 / dry_run): 漏调会让前端 waitCmd 干等 40s。
-        真值取 `store.by_hash` 的当前 kind —— 补刷新之后它就是服务端认为的最新状态。
-        """
-        d = getattr(self, "_deferred_receipts", None)
-        if not d:
-            return
-        self._deferred_receipts = {}
-        n_truth = 0
-        for cmd_id, item in d.items():
-            truth = {}
-            try:
-                for h in self._affected_hashes(item["cmd"], item["args"]):
-                    rec = self.store.by_hash.get(h)
-                    if rec is None:
-                        continue
-                    truth[h] = {"kind": self._state_kind(rec)}
-            except Exception:
-                truth = {}
-            n_truth += len(truth)
-            self._set_web_result(cmd_id, "ok", timing=item["timing"], truth=truth or None)
-        # 排查标记: 日志里**没有这一行** = 服务端还在跑旧代码(回执在补刷新之前就写了),
-        # 前端只能走 via=pull 拉全量 —— 真机大库上就是"点了要 1.7~2s 才恢复正常"。
-        logger.info(f"[cmd] 回执(补刷新后)已写 {len(d)} 条, 带真值 {n_truth} 个种子")
-
-    def _log_cmd_timing(self, cmd: str, timing: Optional[dict]) -> None:
-        """命令耗时落日志 —— 排查"点了要等几秒"的**主出口**(不依赖浏览器控制台)
-
-        2026-09-20: 用户连续四次报"乐观 UI 生效但要 2-4s 才恢复正常", 四轮修复全在前端找,
-        因为本地桩服务**没有主循环** ⇒ `wait_ms` 恒为 0 ⇒ "命令投递 → 回执"这一段从来没被测到。
-        而真机上用户往往开不了/不愿开 F12, 埋点只回传在回执里等于没有。故这里直接落到日志。
-
-        三段的读法(配合 qbmanager.run() 里补刷新那段日志):
-          排队 wait_ms 大 = 主循环正被长任务占住(搜索索引 500 条文件 API / 任务批 / tracker 预取);
-          执行 exec_ms 大 = qB API 本身慢(库大 / qB 忙 / 网络);
-          补刷新大       = 命令后的强制同步慢(大库 /sync/maindata 往返)。
-        """
-        if not timing:
-            return
-        w = timing.get("wait_ms")
-        e = timing.get("exec_ms")
-        msg = f"[cmd] {cmd}: 排队 {w}ms / 执行 {e}ms"
-        if cmd in SELF_POSTED_COMMANDS:
-            logger.debug(msg + "(自投递, 不唤醒主循环)")  # 自投递频次高, 不进常规日志
-            return
-        if (w or 0) > CMD_SLOW_MS or (e or 0) > CMD_SLOW_MS:
-            logger.warning(
-                msg + f" —— 超过 {CMD_SLOW_MS:.0f}ms:"
-                " 排队大=主循环被长任务占住(搜索索引/任务批/tracker 预取),"
-                " 执行大=qB API 慢; 前端再快也盖不住这一段(乐观 UI 只遮住回执之前的一半)"
-            )
-        else:
-            logger.info(msg)
+        self.web.set_result(cmd_id, status, error, timing, truth)
 
     def _trackers_baseline(self, hashes: List[str]) -> dict:
         """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}
@@ -335,54 +185,14 @@ class WebCommandsMixin:
                 return False
         return None
 
-    def _check_reannounce_pending(self):
-        """每 tick 检查在途的强制汇报确认; 某 cmd_id 全部种子出结论后聚合写回执"""
-        if not self._reannounce_pending:
-            return
-        now = time.time()
-        finished = []
-        for cmd_id, entry in self._reannounce_pending.items():
-            for h, it in entry["items"].items():
-                if it["done"]:
-                    continue
-                if now >= entry["deadline"]:
-                    it["done"], it["ok"] = True, False
-                    it["err"] = f"汇报确认超时({REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未确认到 tracker 响应)"
-                    continue
-                if self.client is None:
-                    continue  # qB 断连: 等恢复继续确认, 或按超时判失败
-                try:
-                    trackers = self.client.torrents_trackers(h) or []
-                    r = self._confirm_reannounce_result(trackers, it["baseline"])
-                except Exception as e:
-                    it["done"], it["ok"], it["err"] = True, False, f"读取 tracker 状态失败: {e}"
-                    continue
-                if r is True:
-                    it["done"], it["ok"] = True, True
-                elif r is False:
-                    it["done"], it["ok"], it["err"] = True, False, "tracker 未接受汇报(not working)"
-            if all(it["done"] for it in entry["items"].values()):
-                finished.append(cmd_id)
-        for cmd_id in finished:
-            entry = self._reannounce_pending.pop(cmd_id)
-            items = list(entry["items"].values())
-            fails = [it for it in items if not it["ok"]]
-            if not fails:
-                self._set_web_result(cmd_id, "ok")
-                logger.info(f"WEB UI | 强制汇报确认成功({len(items)}个种子)")
-            else:
-                msg = f"{len(fails)}/{len(items)} 个种子汇报确认失败: " + "; ".join(it["err"] for it in fails[:3])
-                self._set_web_result(cmd_id, "error", msg)
-                logger.warning(f"WEB UI | {msg}")
-
     def _cmd_build_search_index(self):
         """WEB UI 命令: 构建搜索索引(Web 线程检测到索引脏后投递, 主循环线程执行)。
 
         限流构建可能需多轮: 仅在全部拉取完成(不再脏)时记录完成日志, 避免分批刷屏。
         """
         self._build_search_index()
-        if not self._search_index_dirty:
-            logger.info(f"WEB UI | 搜索索引已构建: {len(self._search_index)} 个种子")
+        if not self.web.search_index_dirty:
+            logger.info(f"WEB UI | 搜索索引已构建: {len(self.web.search_index)} 个种子")
 
     def _cmd_pause_group(self, key: tuple):
         hashes = self._group_hashes(key)
@@ -436,7 +246,7 @@ class WebCommandsMixin:
         """登记汇报确认跟踪: 全部种子出结论(成功/失败/超时)后聚合写该 cmd_id 的回执"""
         if not cmd_id:
             return  # 无回执需求的调用(直接构造 manager 的场景): 只发指令不跟踪
-        self._reannounce_pending[cmd_id] = {
+        self.web.reannounce_pending[cmd_id] = {
             "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
             "items": {
                 h: {

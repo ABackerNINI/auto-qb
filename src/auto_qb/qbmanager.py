@@ -1,8 +1,12 @@
-"""QbManager: qBittorrent 主管理类
+"""QbManager: qBittorrent 主管理类(核心域)
 
 任务队列统一协调: 种子刷新 / 规则 / 种子级内置功能 / 异步校验 全部是带内置 interval 的任务。
 检测到新增种子时, 自动为该种子创建所有符合条件的 rule 任务(仅 tracker 显式引用的规则; 站点未配置
 rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执行全部启用规则")。
+
+**本类只管核心域**: 连接 / 主循环节拍 / 状态同步 / 任务执行 / 种子刷新。WEB UI 的表现层状态
+与节拍判据在 `web_runtime.WebUIRuntime`(门面), 主循环通过 `self.web` 的四个语义方法与它交互,
+不持有也不判断任何表现层字段(2026-09-20 拆出, 见 docs/plans/26-09-20-0234-webui-decoupling-plan.html)。
 
 职责拆分(mixins 包, 各模块组合进本类):
 - mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务
@@ -11,13 +15,13 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - mixins.tracker      TrackerMixin     tracker 配置匹配/单种限速
 - mixins.speed_curve  SpeedCurveMixin  全局限速曲线(Traffic Monitor 流量聚合 -> qB 全局限速)
-- mixins.web_view     WebviewMixin     WEB 视图组装(分组/单种子视图/搜索索引/状态回传)
-- mixins.web_commands WebCommandsMixin WEB 控制命令消费/回执/汇报确认跟踪
+- mixins.web_view     WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
+- mixins.web_commands WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
+- web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排)
 - qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
 """
 import logging
 import os
-import queue
 import threading
 import time
 from typing import List, Optional
@@ -37,12 +41,12 @@ from .mixins import (
     WebCommandsMixin,
     WebviewMixin,
 )
-from .mixins.web_commands import CMD_SLOW_MS
 from .notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .qbclient import _new_client
 from .rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
+from .web_runtime import WebUIRuntime
 from .torrents import (
     QbCompatError,
     TorrentRecord,
@@ -54,7 +58,6 @@ from .logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
-WEB_VIEW_TTL = 10.0  # Web 客户端活跃窗口: 超时无请求则主循环跳过分组视图组装(惰性)
 RECONNECT_MAX_INTERVAL = 30.0  # 重连退避上限(秒): qB 长时间宕机时最多每 30s 试一次
 STOP_POLL_INTERVAL = 0.5  # 停止信号轮询粒度(秒): 见 _wait_next —— 多事件等待的分段间隔
 
@@ -114,6 +117,52 @@ class QbManager(
     WebviewMixin,
     WebCommandsMixin,
 ):
+    # ---- 兼容代理(过渡层) ----
+    # 表现层状态已迁到 self.web(WebUIRuntime); 这里把**旧字段名**转发过去, 让既有调用
+    # (测试 / 尚未改名的入口)零改动。代理只做转发、不存值, 故不存在"两份真相"。
+    # 清理路径: 调用方全部改用 self.web.<新名> 之后, 删掉本表与下面两个 dunder。
+    _WEB_STATE_ALIAS = {
+        "web_commands": "commands",
+        "_web_write_seq": "write_seq",
+        "_web_results": "results",
+        "_reannounce_pending": "reannounce_pending",
+        "_deferred_receipts": "deferred_receipts",
+        "_group_view": "group_view",
+        "_singles_view": "singles_view",
+        "_flat_view": "flat_view",
+        "_shows_view": "shows_view",
+        "_shows_pending": "shows_pending",
+        "_group_view_ver": "group_view_ver",
+        "_group_view_dirty": "group_view_dirty",
+        "_web_last_seen": "last_seen",
+        "_web_pending_ver": "pending_ver",
+        "_view_lock": "view_lock",
+        "_search_index": "search_index",
+        "_search_index_dirty": "search_index_dirty",
+        "_web_token": "token",
+        "_web_handle": "handle",
+        "_traffic_view": "traffic_view",
+    }
+
+    def __getattr__(self, name: str):
+        """旧字段名 -> self.web 的只读转发(仅在普通属性查找失败时被调用)
+
+        ❗'web' 自身不在别名表里, 故 __init__ 之前访问任何别名都会在这里抛 AttributeError
+        而不是递归 —— 别名属性必须在 self.web 建立之后才可用。
+        """
+        alias = self._WEB_STATE_ALIAS.get(name)
+        if alias is None:
+            raise AttributeError(f"{type(self).__name__!r} 对象没有属性 {name!r}")
+        return getattr(self.web, alias)
+
+    def __setattr__(self, name: str, value) -> None:
+        """旧字段名的写入同样转发到 self.web(与 __getattr__ 成对, 否则写会创建第二份真相)"""
+        alias = self._WEB_STATE_ALIAS.get(name)
+        if alias is None:
+            super().__setattr__(name, value)
+        else:
+            setattr(self.web, alias, value)
+
     def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
         self.config_path = config_path
         self.config = config or load_config(config_path)
@@ -141,68 +190,20 @@ class QbManager(
         self._last_conn_ok: Optional[bool] = None
         # 主动通知 handler(run() 启用时挂载; dry-run/export 模式不挂载)
         self._notify_handler: Optional[NotifyHandler] = None
-        # WEB UI: 控制命令队列(Web 线程投递, 主循环消费执行——写操作只在主循环线程)
-        self.web_commands: "queue.Queue" = queue.Queue()
-        # WEB UI: 命令唤醒事件。Web 线程投递命令后 set, 主循环不等下个节拍立即消费一次命令
-        # (只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)
+        # WEB UI: 表现层门面 —— 视图快照 / 版本号 / 脏标记 / 活跃心跳 / 回执 / 命令队列 /
+        # 搜索索引 / 密钥与句柄 全部收在 WebUIRuntime 里, 主循环只见它暴露的少数语义方法。
+        # (2026-09-20 从本类拆出: 原先 19 个表现层字段平铺在 __init__, 主循环因此要替表现层
+        #  做"要不要重建 / 要不要补刷新"的判断。详见 web_runtime.py 的模块 docstring。)
+        self.web = WebUIRuntime(self)
+        # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
+        # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
+        # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
         self._wake_event = threading.Event()
-        # WEB UI: 写命令序号。任何一条非自投递命令执行成功即自增 —— Web 线程据此让
-        # "直连 qB 的只读端点"短缓存失效(P1-4), 避免改完立刻重取还拿到缓存里的旧值。
-        self._web_write_seq = 0
-        # WEB UI: 命令执行结果回执(cmd_id -> {status, error, ts})。主循环线程唯一写者,
-        # Web 线程经 /api/cmd/{id} 只读。多数命令执行完立即写; reannounce 的回执由
-        # tracker 确认跟踪器(_reannounce_pending)在后续 tick 写入。
-        self._web_results: dict = {}
-        # WEB UI: 强制汇报确认跟踪(cmd_id -> {deadline, items: {hash: {done, ok, err, baseline}}})。
-        # 每 tick 检查一次: 读 torrents/trackers 判定 "status 变 working / next_announce 被重置"。
-        self._reannounce_pending: dict = {}
-        # WEB UI: 分组视图快照(主循环每 tick 重建并原子替换, Web 线程只读)
-        self._group_view: List[dict] = []
-        # 单种子视图数据(未归组种子, 与分组视图同一脏窗口同快照重建, 见 ensure_group_view)
-        self._singles_view: List[dict] = []
-        # 种子平铺视图数据(全部种子的种子中心视图, WEB UI 替代 qB 界面的种子页数据源;
-        # 与分组视图同一脏窗口同快照重建, 见 ensure_group_view)
-        self._flat_view: List[dict] = []
-        # 追剧视图数据(全量种子按 剧→季→集 聚合, 与分组视图同一脏窗口同快照重建):
-        # {"list": [剧…], "unrecognized": [hash…]}, members 只放 hash(明细由前端从成员索引取)
-        self._shows_view: dict = {"list": [], "unrecognized": []}
-        # 追剧视图文件兑底待解析标记: 名称无标记的种子需等搜索索引提供文件列表,
-        # 索引推进后置 _group_view_dirty 触发重建归位(见 _build_search_index / _build_shows_view)
-        self._shows_pending: bool = False
-        # WEB UI: 分组视图版本号(等价 qB 的 rid): 每次重建自增, Web 端按版本跳过整表替换。
-        # 以进程启动时间播种: 进程重启后版本号不会回落到旧客户端已持有的值(否则前端会误判
-        # "无更新"而一直展示重启前的旧列表)。
-        self._group_view_ver: int = int(time.time())
-        # WEB UI 惰性组装: _group_view_dirty 标记快照是否过期; _web_last_seen 记录最近一次 Web 请求时间。
-        # 主循环仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)才重建快照, 否则跳过以降低 CPU。
-        self._group_view_dirty: bool = True
-        self._web_last_seen: float = 0.0
-        # 已发布但**还没被任何 /api/state 请求取走**的版本号(None = 没有"欠着"的版本)。
-        # 用于把"服务端重建节拍"对齐到"客户端实际取数据的节拍": 上一版没人看就不生产下一版
-        # (否则 >3000 种子时前端 3s 取一次、服务端 1.5s 重建 ⇒ 约一半重建无人消费)。
-        # 详见 _flush_views 的判据注释与 issues/26-09-19-1900-webui-poll-cadence-mismatch。
-        self._web_pending_ver: Optional[int] = None
         # 重连退避(见 _reconnect_due): 断开后按 main_tick → 2× → 4× … 递增重试, 上限
         # RECONNECT_MAX_INTERVAL; 每 tick 无脑 connect() 会在 qB 长时间宕机时每 2s 重建一次
         # Client(含 netrc / 代理解析), 纯属空转。连接成功即在 _reset_reconnect_backoff 归零。
         self._reconnect_at: float = 0.0
         self._reconnect_interval: float = 0.0
-        # 视图发布锁: 四份视图 + 版本号必须**同一临界区内**发布, 否则 Web 线程会读到
-        # "半新半旧"的组合(groups 来自本轮重建、torrents 来自上一轮), 而版本号只有一个
-        # ⇒ 前端按 rid 判定"已更新"却拿到互相错位的数据。详见 WebviewMixin.rebuild_views。
-        self._view_lock = threading.Lock()
-        # WEB UI 搜索索引(hash -> {name, files[文件名]}): 主循环按需构建并原子替换, Web 线程只读。
-        # 种子名匹配直接读 store.by_hash(即时无 API); 文件列表匹配依赖此索引(文件 API 只在主循环线程)。
-        # 索引仅在种子集变化(added/removed)时置脏, 避免每 tick 重复构建; 记录 _files 缓存跨 tick 复用。
-        self._search_index: Optional[dict] = None
-        self._search_index_dirty: bool = True
-        # WEB UI: 访问密钥/服务器句柄(run() 启用时确定)
-        self._web_token: str = ""
-        self._web_handle = None
-        # WEB UI: 限速/流量只读快照(限速曲线任务每次执行后**整体替换**, Web 线程只读)。
-        # 含今日/多周期累计流量与"命中(曲线目标)/实际(qB 当前)"限速对照, 供顶栏 pill 显示。
-        # 未启用曲线功能时保持 state="disabled"(前端据此不渲染流量/限速 pill)。
-        self._traffic_view: dict = {"state": "disabled", "periods": [], "limit": {}}
         # 热重载后首轮抑制事件分派(全量重建的 added 重放保护)
         self._suppress_events = False
         # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
@@ -314,7 +315,7 @@ class QbManager(
             from .web import start_web_server
 
             # 密钥由 start_web_server 内部确定(显式配置或随机生成持久化到 data_dir/web.token)
-            self._web_handle = start_web_server(self)
+            self.web.handle = start_web_server(self)
         if not dry_run:
             self._notify_handler = setup_notify(self.config.notify)
         try:
@@ -349,11 +350,13 @@ class QbManager(
                     # schema 已把契约写成「大于主循环间隔时按主循环间隔生效」, 这里落实为钳制
                     # (默认 1.5s < 2s, 对默认配置零影响; 见 BUG-6)。
                     sync_interval = min(self.config.sync_interval, main_tick)
-                    # WEB UI 控制命令(暂停/开始/删除/强制汇报/热重载): 主循环线程执行写操作。
+                    # 命令线: WEB 控制命令(暂停/开始/删除/强制汇报/热重载)由主循环线程执行写操作。
                     # 先清唤醒位再 drain —— drain 期间新到的命令会再次置位, 下一轮立即消费。
+                    # 门面内部承担命令表分发 / 回执 / 写序号 / 自投递判据, 这里只取"本批是否改了
+                    # qB 种子状态"这一个语义结果。
                     self._wake_event.clear()
-                    state_changed = self._drain_web_commands()
-                    self._check_reannounce_pending()
+                    state_changed = self.web.consume_commands()
+                    self.web.check_pending()
                     if pause_event is not None and pause_event.is_set():
                         # 已暂停: 完全旁观; 等待保持对停止信号与命令的响应
                         if _wait_next(stop_event, self._wake_event, main_tick):
@@ -371,7 +374,7 @@ class QbManager(
                         # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
                         cmd_forced = bool(state_changed) and not dry_run
                         # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
-                        # (前两段 排队/执行 由 web_commands._log_cmd_timing 落日志)。
+                        # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
                         # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
                         _t_line = time.time() if cmd_forced else 0.0
                         if sync_due and tick_due:
@@ -387,16 +390,9 @@ class QbManager(
                         # ❗无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
                         # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
                         # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
-                        self._flush_deferred_receipts()
+                        self.web.flush_receipts()
                         if _t_line:
-                            _resync_ms = round((time.time() - _t_line) * 1000, 1)
-                            if _resync_ms > CMD_SLOW_MS:
-                                logger.warning(
-                                    f"[cmd] 命令后补刷新 {_resync_ms}ms —— 真值要这一轮跑完才进快照,"
-                                    " 前端的乐观撤下再快也得等它(大库 /sync/maindata 往返 + 四视图重建)"
-                                )
-                            else:
-                                logger.info(f"[cmd] 命令后补刷新 {_resync_ms}ms")
+                            self.web.resync_elapsed_ms(_t_line)
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
                         if (sync_due or tick_due) and self._last_conn_ok is False:
@@ -420,7 +416,7 @@ class QbManager(
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉(幂等, 正常路径下是空操作)
                     # —— 漏写会让前端 waitCmd 干等 40s, 界面一直半透明。
-                    self._flush_deferred_receipts()
+                    self.web.flush_receipts()
                     # 等待到最近一条时间线到期, 或被命令唤醒(命令线近乎零延迟)
                     wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
                     if _wait_next(stop_event, self._wake_event, wait_for):
@@ -429,8 +425,8 @@ class QbManager(
             except KeyboardInterrupt:
                 logger.info("停止")
         finally:
-            if self._web_handle is not None:
-                self._web_handle.stop()
+            if self.web.handle is not None:
+                self.web.handle.stop()
             if not dry_run:
                 self.save_state()
             if self._lock is not None:
@@ -470,7 +466,7 @@ class QbManager(
         self.config = config
         # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_fields),
         # 配置变了视图内容就可能变 —— 与 store 视图字段变化无关, 需显式置脏
-        self._group_view_dirty = True
+        self.web.mark_dirty()
         if "L1" in levels:
             self._setup_logging()
             if self._notify_handler is not None:
@@ -501,7 +497,7 @@ class QbManager(
     def _apply_web_config(self, old_web: WebConfig) -> None:
         """WEB 服务器热应用: 仅"监听身份"(enabled/host/port)变化才重启
 
-        - 监听身份未变: 只同步密钥(鉴权每请求实时读 self._web_token, 无需重启 —— 否则改个
+        - 监听身份未变: 只同步密钥(鉴权每请求实时读 self.web.token, 无需重启 —— 否则改个
           日志级别也会把 web 服务器拆了重建, 白白放大竞态窗口)
         - 变化时: 按目标态启停; 重启必须"先停旧服务并等其线程退出"再启新服务
           (uvicorn 的 should_exit 是异步生效的, 直接重启会与新服务竞抢端口 -> WinError 10048)
@@ -512,80 +508,48 @@ class QbManager(
         want = (enabled, self.config.web.host, self.config.web.port)
         have = (bool(old_web.enabled), old_web.host, old_web.port)
         if want == have:
-            if self._web_handle is not None:
-                self._web_token = ensure_web_token(self)
+            if self.web.handle is not None:
+                self.web.token = ensure_web_token(self)
             return
-        if self._web_handle is not None:
-            stop_web_server(self._web_handle)
-            self._web_handle = None
+        if self.web.handle is not None:
+            stop_web_server(self.web.handle)
+            self.web.handle = None
         if enabled:
-            self._web_handle = start_web_server(self)
+            self.web.handle = start_web_server(self)
         else:
             logger.warning("WEB UI 已停止(web.enabled=false)")
-
-    def _flush_views(self, force: bool = False) -> None:
-        """消费视图脏标记并在 Web 活跃时惰性重建(同步线/任务线各自调用一次)
-
-        consume_view_changed 是 consume 语义(读后复位), 两条线各调一次即可完整覆盖
-        自上次消费以来由「刷新」或「任务执行」产生的视图变化。
-
-        `force=True` 表示"本轮有命令改了种子状态", 必须**绕过**下面的"已取走"门控 ——
-        P0-5 要求用户操作后真值在几十毫秒内进快照, 不能因为上一版还没被取走就跳过。
-        """
-        # 视图相关内容变化(store 视图字段/组成员)读取并复位, 供下方视图惰性重建判定
-        view_changed = self.store.consume_view_changed()
-        # 置脏必须在 grouping 门控**之外**: 脏标记是**全部** Web 视图的共享状态 —— 种子页的
-        # 平铺视图(flat)/ 未归组单种子(singles)/ 追剧视图(shows)与"辅种分组是否启用"无关。
-        # 曾把置脏写在 `if grouping.enabled` 块内, 而 consume 在块外 ⇒ 分组关闭时标记被吞,
-        # 版本号不再变化 ⇒ 前端 updated=false 并退避轮询, 四份视图全部冻住。
-        if view_changed:
-            self._group_view_dirty = True
-        # WEB UI: 视图快照——惰性组装。仅当 Web 客户端活跃(_web_last_seen 距今 < WEB_VIEW_TTL)
-        # 且视图内容确有变化(视图字段/成员变化, 或显式置脏)时才重建, 否则主循环不空转;
-        # 关闭网页后 CPU 回落。重建统一走 `rebuild_views`(四份视图 + 版本号的唯一入口,
-        # 不得在这里只建其中一份 —— 见该方法 docstring 的 2026-09-18 缺陷)。
-        web_active = (time.time() - self._web_last_seen) < WEB_VIEW_TTL
-        # 「上一版有没有人取走」门控: 服务端节拍(固定 1.5s)与客户端节拍(按种子量 1.5/2/3s)
-        # 各自独立定档 ⇒ 大库下服务端每 3s 产 2 版而客户端只取最后一版, 中间那版的重建 CPU
-        # 没有任何请求消费过。这里让"生产"等一等"消费": 上一版没被取走就不生产下一版。
-        # 判据: _web_pending_ver 为 None(没有欠着的版本)才重建; force(命令改了状态)必须绕过。
-        # 效果: >3000 种子由 2 版/次取降为 1 版/次取(≈省一半), ≤1000 种子(同为 1.5s)不受影响。
-        # 数据新鲜度不受影响 —— 客户端本来就只在自己那拍才看得到数据。
-        unconsumed = self._web_pending_ver is not None
-        if self._group_view_dirty and web_active and (force or not unconsumed):
-            self.rebuild_views()
 
     def _sync_line(self, dry_run: bool, flush: bool = True, force: bool = False) -> None:
         """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建
 
         只做状态同步、**不跑任务** —— 状态新鲜度不再被任务节拍(main_tick)拖累。
         sync_interval 取 1.5s 与 qB 自带 WebUI(1500ms)同量级: 比 qB 自身数据粒度更快没有意义。
+
+        视图那一步整体转交门面: 「要不要重建」的判据(客户端活跃窗口 / 上一版有没有被取走)
+        属于表现层, 不再出现在核心域(见 WebUIRuntime.flush_views)。
         """
         self._refresh_torrents(dry_run)
         if flush:
-            self._flush_views(force=force)
+            self.web.flush_views(force=force)
 
     def _task_line(self, dry_run: bool, force: bool = False) -> None:
         """任务线(main_tick 节拍): 错误原因预取 + 执行到期任务 + 视图/搜索索引推进
 
         tracker 预取与文件 API 批量调用**仍跟 main_tick, 不跟随快档**: 它们不是状态新鲜度的
         瓶颈, 提频只会线性放大 qB 请求量(见计划附录 A3 的五动作归档)。
+
+        「错误原因预取」与「搜索索引推进」都是表现层的慢路径(Tracker/文件 API), 只在 Web
+        客户端活跃时才有意义 —— 门控在门面里, 核心域只负责在节拍上调用它。
         """
         now = time.time()
 
-        # WEB UI: 错误状态种子的具体原因(状态列的"文件丢失"/tracker 报错原文)按 TTL 限额预取。
-        # 与视图重建/搜索索引同一门控: 仅 Web 客户端活跃时推进, 关闭网页后不发多余的 tracker 请求。
-        if (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
-            self.refresh_error_reasons()
+        self.web.advance_error_reasons()
 
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
-        self._flush_views(force=force)
+        self.web.flush_views(force=force)
 
-        # WEB UI: 搜索索引限流构建——同样仅 Web 活跃时推进(每 tick 一批, 直至不再脏);
-        # 关闭网页后停止推进, 避免无谓的文件 API 调用
-        if self._search_index_dirty and (time.time() - self._web_last_seen) < WEB_VIEW_TTL:
-            self._build_search_index()
+        self.web.advance_search_index()
 
     def _tick(self, dry_run: bool, force: bool = False):
         """完整一轮 = 同步线 + 任务线(执行与收尾统一由 TaskQueue.run_due 管理)
@@ -675,7 +639,7 @@ class QbManager(
         # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:
-            self._search_index_dirty = True
+            self.web.mark_search_index_dirty()
         # 删除种子的删除前快照: 种子已从 store 移除后, ctx.torrent 回退此副本供只读动作留档
         removed_snapshots = {h: prev_records[h] for h in removed if h in prev_records}
 
@@ -814,3 +778,31 @@ class QbManager(
         with open(path, "w") as f:
             for tor in torrents:
                 f.write(f"{tor}\n\n")
+
+    # ---------- 兼容转发(过渡层): WEB 表现层入口的旧名字 ----------
+    # 主循环一律走 self.web.* 的新名; 下面这些只保留给既有调用方(web.py / 测试),
+    # 全部是单行转发 —— 不含状态、不含判据。清理方式与 _WEB_STATE_ALIAS 相同。
+
+    def _drain_web_commands(self) -> bool:
+        return self.web.consume_commands()
+
+    def _check_reannounce_pending(self) -> None:
+        self.web.check_pending()
+
+    def _flush_deferred_receipts(self) -> None:
+        self.web.flush_receipts()
+
+    def _flush_views(self, force: bool = False) -> None:
+        self.web.flush_views(force=force)
+
+    def rebuild_views(self) -> None:
+        self.web.rebuild_views()
+
+    def ensure_group_view(self) -> List[dict]:
+        return self.web.ensure_view()
+
+    def ensure_group_state(self, rid: Optional[int] = None, view: Optional[str] = None) -> dict:
+        return self.web.ensure_state(rid, view)
+
+    def touch_web_client(self) -> None:
+        self.web.touch()

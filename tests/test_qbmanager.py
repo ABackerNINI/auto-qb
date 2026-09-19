@@ -40,6 +40,8 @@
 - test_view_rebuild_waits_for_client_consume: 节拍对齐门控 —— 上一版没被 /api/state 取走就不生产下一版(>3000 种子时约一半 rebuild 无人消费), 且**脏标记必须保留**; 命令驱动的那一轮 force=True **必须绕过**(P0-5 要求真值几十毫秒内进快照, 不能等客户端轮询)
 - test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
+- test_qbmanager_source_has_no_web_state_fields: 静态守阵(2026-09-20 解耦)——主循环源码不得再直接读写 19 个表现层字段(代理会静默转发, 只能靠扫描抓回潮)
+- test_web_state_alias_proxies_to_runtime: 兼容代理守阵——旧字段名与 self.web 的字段必须是同一份(读同一对象 / 写双向可见), 防"两份真相"
 """
 import json
 import os
@@ -126,9 +128,8 @@ def test_new_client_sets_request_timeout():
     """
     cfg = QbittorrentConfig(host="127.0.0.1", port=1, username="u", password="p")
     client = _new_client(cfg)
-    assert client._REQUESTS_ARGS.get("timeout") == REQUESTS_TIMEOUT, (
-        f"客户端缺少请求超时, 实际 {client._REQUESTS_ARGS} —— qB 假死时请求会无限期挂起"
-    )
+    assert client._REQUESTS_ARGS.get("timeout"
+                                    ) == REQUESTS_TIMEOUT, (f"客户端缺少请求超时, 实际 {client._REQUESTS_ARGS} —— qB 假死时请求会无限期挂起")
     # 远程地址同样要带(企业代理下连接阶段更可能卡住)
     remote = _new_client(QbittorrentConfig(host="qb.example.com", port=8080))
     assert remote._REQUESTS_ARGS.get("timeout") == REQUESTS_TIMEOUT
@@ -247,13 +248,13 @@ def test_wake_drains_commands_without_extra_ticks():
         mgr.config.main_tick = 5.0
         mgr.config.sync_interval = 5.0
         calls = {"drain": 0, "task": 0, "sync": 0}
-        real_drain = mgr._drain_web_commands
+        real_drain = mgr.web.consume_commands
 
         def drain():
             calls["drain"] += 1
             return real_drain()
 
-        mgr._drain_web_commands = drain
+        mgr.web.consume_commands = drain  # 命令线入口(门面), 主循环每轮调用它
         mgr._sync_line = lambda dry_run, flush=True, force=False: calls.__setitem__("sync", calls["sync"] + 1)
         mgr._task_line = lambda dry_run, force=False: calls.__setitem__("task", calls["task"] + 1)
         stop = threading.Event()
@@ -360,18 +361,17 @@ def test_drain_bumps_write_seq_before_writing_receipt():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr._cmd_reload_config = mock.Mock()
         seen = {}
-        real_set = mgr._set_web_result
+        real_set = mgr.web.set_result
 
-        def spy(cmd_id, status, error="", timing=None):
+        def spy(cmd_id, status, error="", timing=None, truth=None):
             seen["seq"] = mgr._web_write_seq  # 回执写入那一刻的序号
-            return real_set(cmd_id, status, error, timing)
+            return real_set(cmd_id, status, error, timing, truth)
 
-        mgr._set_web_result = spy
+        mgr.web.set_result = spy  # 回执的唯一落点在门面(见 WebUIRuntime.set_result)
         before = mgr._web_write_seq
         mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
         mgr._drain_web_commands()
-        assert seen.get("seq") == before + 1, (
-            f"回执写入时写序号应已自增(先失效缓存再宣布成功), 实际 {seen.get('seq')} vs 期望 {before + 1}")
+        assert seen.get("seq") == before + 1, (f"回执写入时写序号应已自增(先失效缓存再宣布成功), 实际 {seen.get('seq')} vs 期望 {before + 1}")
 
 
 def test_run_due_requeues():
@@ -761,7 +761,14 @@ def test_view_rebuild_waits_for_client_consume():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         mgr.touch_web_client()  # Web 活跃
-        with mock.patch.object(mgr, "_refresh_torrents"),              mock.patch.object(mgr, "_build_group_view", return_value=[]) as g,              mock.patch.object(mgr, "_build_singles_view", return_value=[]),              mock.patch.object(mgr, "_build_shows_view", return_value={"list": [], "unrecognized": []}),              mock.patch.object(mgr, "_build_flat_view", return_value=[]):
+        with mock.patch.object(mgr, "_refresh_torrents"), mock.patch.object(
+            mgr, "_build_group_view", return_value=[]
+        ) as g, mock.patch.object(mgr, "_build_singles_view", return_value=[]), mock.patch.object(
+            mgr, "_build_shows_view", return_value={
+                "list": [],
+                "unrecognized": []
+            }
+        ), mock.patch.object(mgr, "_build_flat_view", return_value=[]):
             # ① 首版: 无 pending -> 重建, 并登记"这一版还没人取走"
             mgr.store.view_changed = True
             mgr._flush_views()
@@ -811,3 +818,47 @@ def test_tick_rebuilds_views_when_grouping_disabled():
             mgr._tick(dry_run=False)
             assert (g.call_count, s.call_count, sh.call_count, f.call_count) == (1, 1, 1, 1)
             assert mgr._group_view_dirty is False  # 标记被真正消费(不是被吞掉)
+
+
+def test_qbmanager_source_has_no_web_state_fields():
+    """静态守阵: 主循环源码不得再直接读写表现层字段(防回潮)
+
+    2026-09-20 解耦后 19 个表现层字段归 WebUIRuntime, QbManager 只经 `self.web` 的门面方法
+    交互。若有人图省事写回 `self._group_view = ...`, 兼容代理会**静默转发** —— 代码照样能跑,
+    但状态归属又散回核心域(且下一次读走的是代理, 人眼在 diff 里看不出问题)。这类回潮只能
+    靠扫描源码抓住。别名表本身是豁免的: 它存的是字符串, 不含 `self.` 前缀。
+    """
+    import re
+
+    src = open(os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "qbmanager.py"), encoding="utf-8").read()
+    assert QbManager._WEB_STATE_ALIAS, "别名表为空 —— 兼容代理被拆掉了? 同步更新本守阵"
+    hits = [old for old in QbManager._WEB_STATE_ALIAS if re.search(rf"self\.{re.escape(old)}\b", src)]
+    assert not hits, (
+        f"主循环源码又直接引用了表现层字段 {hits} —— 应改用 self.web 的门面方法"
+        "(consume_commands / flush_views / flush_receipts / mark_dirty …)"
+    )
+
+
+def test_web_state_alias_proxies_to_runtime():
+    """兼容代理守阵: 旧字段名与 self.web 的字段必须是**同一份**(读同一对象 / 写互相可见)
+
+    代理只做转发、不存值。若哪天退化成"赋值进实例字典", 就会出现两份真相: 主循环改 runtime
+    那份、Web 线程读 manager 那份, 视图静默停在旧快照上 —— 而且不会报错。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        # 读: 拿到的是同一个对象(不是副本)
+        assert mgr.web_commands is mgr.web.commands, "命令队列必须只有一份"
+        assert mgr._group_view is mgr.web.group_view
+        assert mgr._web_results is mgr.web.results
+        assert mgr._search_index is mgr.web.search_index
+        assert mgr._traffic_view is mgr.web.traffic_view
+        # 写: 双向可见
+        mgr._group_view_dirty = False
+        assert mgr.web.group_view_dirty is False, "旧名字的写入必须落到 runtime"
+        mgr.web.mark_dirty()
+        assert mgr._group_view_dirty is True, "runtime 的写入必须对旧名字可见"
+        mgr._web_write_seq = 7
+        assert mgr.web.write_seq == 7
+        mgr.web.write_seq = 8
+        assert mgr._web_write_seq == 8

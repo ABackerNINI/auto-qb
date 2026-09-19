@@ -1,0 +1,457 @@
+"""WebUIRuntime: WEB UI 表现层运行时(**门面**)
+
+把 WEB UI 的全部状态与节拍判据从 QbManager 里收出来, 使主循环不再持有、也不再判断任何
+表现层细节 —— 主循环只见本对象暴露的少数语义方法(见下方「主循环接口」)。
+
+为什么是门面而不是别的
+----------------------
+耦合的性质是「状态与门控」耦合: Web 侧从不通写路径, 只投递命令 + 只读快照, 边界对象早
+就存在(命令队列 + 视图快照), 只是边界两侧的字段被平铺在同一个 self 上。故正解是把状态
+与判据一起收走, 而不是引入事件总线(同步回调等价于直接调用, 只增加间接层)或 MVP 全套
+(视图是 JSON 快照而非控件树, Presenter 的"更新控件"语义落空)。
+
+依赖方向
+--------
+- **核心域 → 表现层**: 单向。主循环调本对象的门面方法; 核心域状态变化经 `mark_dirty()`
+  / `mark_search_index_dirty()` 单向通知, 而不是直接写表现层的字段。
+- **表现层 → 核心域**: 只有一条 —— 本对象通过 `self._host` 回调 QbManager 的写能力与
+  视图**构建器**(`_cmd_*` 命令处理器 / `_build_*_view` / `store` / `api`)。构建器是纯读
+  (读 store + config 产出 dict), 快照的装配、版本号与锁全部留在本对象。
+
+线程契约(与拆分前**逐字一致**, 不得在后续改动中放松)
+--------------------------------------------------
+- 命令队列: Web 线程投递, 主循环线程消费 —— 写操作只在主循环线程(单一写者)。
+- 视图快照: 主循环线程**发布**(持 `view_lock` 一次性替换四份视图 + 版本号),
+  Web 线程**只读**;`ensure_*` 的「判脏 → 重建 → 取值」全程持锁, 保证四份视图同轮。
+- `wake()` / 唤醒事件**不在这里**: 它是主循环的等待原语(托盘 UI 停止时也要用), 归核心域。
+
+❗「四视图同轮发布」是硬约束: 四份视图共用 `group_view_ver` 一个版本号回传, 任何一份漏建
+或跨轮混拼, 前端都会把陈旧数组当成新数据换上去(2026-09-18 实测事故)。新增视图只挂
+`_publish_locked`, 不要在调用点各建一部分。
+"""
+import logging
+import queue
+import secrets
+import threading
+import time
+from typing import List, Optional
+
+from .mixins.web_commands import (
+    CMD_SLOW_MS,
+    DEFERRED_RECEIPT_COMMANDS,
+    REANNOUNCE_CONFIRM_TIMEOUT,
+    RESYNC_COMMANDS,
+    SELF_POSTED_COMMANDS,
+    _timing,
+)
+
+logger = logging.getLogger(__name__)
+
+# Web 客户端活跃窗口: 超时无请求则主循环跳过视图组装(惰性), 关闭网页后 CPU 回落
+WEB_VIEW_TTL = 10.0
+# 回执保留窗口与容量上限: 前端轮询完即弃, 兜底防无界增长
+WEB_RESULT_TTL = 120.0
+WEB_RESULT_MAX = 64
+
+
+class WebUIRuntime:
+    """WEB UI 表现层状态 + 节拍判据 + 命令编排(主循环经门面方法调用, Web 线程经只读方法调用)"""
+    def __init__(self, host):
+        # host = QbManager。逆向引用只用于回调写能力与视图构建器, 不读它的表现层字段
+        self._host = host
+        # 控制命令队列: Web 线程投递, 主循环线程消费(写操作只在主循环线程)
+        self.commands: "queue.Queue" = queue.Queue()
+        # 写命令序号: 任何一条非自投递命令执行成功即自增 —— Web 线程的只读端点短缓存据此失效,
+        # 避免改完立刻重取还拿到缓存里的旧值
+        self.write_seq: int = 0
+        # 命令执行结果回执(cmd_id -> {status, error, ts, wait_ms, exec_ms, truth})。
+        # 主循环线程唯一写者, Web 线程经 /api/cmd/{id} 只读
+        self.results: dict = {}
+        # 强制汇报确认跟踪(cmd_id -> {deadline, items: {hash: {done, ok, err, baseline}}})
+        self.reannounce_pending: dict = {}
+        # 补刷新后落地的回执(cmd_id -> {cmd, args, timing}); 见 defer_receipt
+        self.deferred_receipts: dict = {}
+        # ---- 视图快照(Web 线程只读, 发布时整体替换) ----
+        self.group_view: List[dict] = []
+        self.singles_view: List[dict] = []  # 未归组单种子视图
+        self.flat_view: List[dict] = []  # 种子平铺视图(种子页数据源)
+        self.shows_view: dict = {"list": [], "unrecognized": []}  # 追剧视图(剧→季→集)
+        # 追剧视图文件兑底待解析标记: 名称无标记的种子需等搜索索引提供文件列表
+        self.shows_pending: bool = False
+        # 视图版本号(等价 qB 的 rid): 每次发布自增, Web 端按版本跳过整表替换。
+        # 以进程启动时间播种 —— 进程重启后版本号不会回落到旧客户端已持有的值
+        self.group_view_ver: int = int(time.time())
+        # 快照是否过期(全部 Web 视图共享: 主循环据此惰性重建)
+        self.group_view_dirty: bool = True
+        # 最近一次 Web 请求时间(活跃门控的心跳)
+        self.last_seen: float = 0.0
+        # 已发布但**还没被任何 /api/state 请求取走**的版本号(None = 没有"欠着"的版本)。
+        # 用于把"服务端重建节拍"对齐到"客户端实际取数据的节拍": 上一版没人看就不生产下一版
+        self.pending_ver: Optional[int] = None
+        # 发布锁: 四份视图 + 版本号必须**同一临界区内**发布
+        self.view_lock = threading.Lock()
+        # 搜索索引(hash -> {name, files[文件名]}): 主循环按需构建并原子替换, Web 线程只读
+        self.search_index: Optional[dict] = None
+        self.search_index_dirty: bool = True
+        # 访问密钥 / 服务器句柄(启用时确定)
+        self.token: str = ""
+        self.handle = None
+        # 限速/流量只读快照(限速曲线任务整体替换, Web 线程只读); 未启用曲线时 state="disabled"
+        self.traffic_view: dict = {"state": "disabled", "periods": [], "limit": {}}
+
+    # ------------------------------------------------------------------ 活跃门控
+
+    def is_active(self) -> bool:
+        """Web 客户端是否活跃(最近一次请求距今 < WEB_VIEW_TTL)
+
+        「Web 未启用 / 网页已关闭」在本方法里自然恒为 False —— 主循环因此不需要任何
+        `if web_enabled` 分支(空对象语义): 这与拆分前 `_web_last_seen = 0` 的判据逐字等价。
+        """
+        return (time.time() - self.last_seen) < WEB_VIEW_TTL
+
+    def touch(self) -> None:
+        """WEB 请求心跳: 刷新 last_seen, 让主循环在活跃窗口内持续组装视图"""
+        self.last_seen = time.time()
+
+    def mark_dirty(self) -> None:
+        """核心域 → 表现层: 视图内容已变, 下次组装前必须重建
+
+        覆盖四份视图(groups/singles/shows/flat): 它们共享同一个版本号, 置脏必须一致 ——
+        曾因只在"分组启用"分支内置脏, 导致分组关闭时另三份视图被饿死(2026-09-18 事故)。
+        """
+        self.group_view_dirty = True
+
+    def mark_search_index_dirty(self) -> None:
+        """核心域 → 表现层: 种子集变化, 搜索索引需重建"""
+        self.search_index_dirty = True
+
+    # ------------------------------------------------------------------ 主循环接口
+
+    def consume_commands(self) -> bool:
+        """消费 WEB UI 控制命令; 返回本批是否含"改了 qB 种子状态"的命令(主循环据此补刷新)
+
+        命令带 cmd_id: 执行完立即写回执(见 results), 供前端 /api/cmd/{id} 轮询。
+        例外: reannounce 只发指令并登记确认跟踪(reannounce_pending), 回执由 check_pending()
+        在 tracker 确认后写入 —— "已发送"不等于"汇报成功"; bulk/add 的回执由 handler 聚合写。
+
+        ❗写序号必须在写回执**之前**自增: 前端拿到回执会立刻重取只读端点(如改完分类重取
+        /api/categories), 顺序反过来会让那一瞬的读命中旧写序号对应的缓存键。
+        """
+        host = self._host
+        handlers = host._web_command_handlers()
+        changed = False
+        try:
+            while True:
+                cmd, payload = self.commands.get_nowait()
+                cmd_id = str(payload.get("cmd_id") or "")
+                # 下划线前缀的键是埋点/元数据, 不传给 handler(否则被当命令参数报 TypeError)
+                args = {k: v for k, v in payload.items() if k != "cmd_id" and not k.startswith("_")}
+                queued_ts = payload.get("_queued_ts")
+                start_ts = time.time()  # 出队即开始, 用于拆 wait_ms / exec_ms
+                try:
+                    deferred = cmd in DEFERRED_RECEIPT_COMMANDS
+                    if cmd_id and deferred:
+                        handlers[cmd](cmd_id=cmd_id, **args)
+                    else:
+                        handlers[cmd](**args)
+                    # 自投递命令不计数: 它只是内部索引推进, 且频次高, 计进去会让缓存在
+                    # 建索引期间完全失效
+                    if cmd not in SELF_POSTED_COMMANDS:
+                        self.write_seq += 1
+                    timing = _timing(queued_ts, start_ts)
+                    if cmd_id and not deferred:
+                        if cmd in RESYNC_COMMANDS:
+                            # 改种子状态的命令: 回执**推迟到补刷新之后**再写(见 flush_receipts)。
+                            # 原写法在这里就写 ok, 而补刷新还在后面才跑 ⇒ 前端"拿到回执就立刻
+                            # refresh"取到的必然是补刷新之前的旧快照(rid 未变), 第一次拉取 100%
+                            # 扑空。推迟后第一次拉取即可命中。
+                            self.defer_receipt(cmd_id, cmd, args, timing)
+                        else:
+                            self.set_result(cmd_id, "ok", timing=timing)
+                    if cmd_id:
+                        self._log_cmd_timing(cmd, timing)
+                    if cmd in RESYNC_COMMANDS:
+                        changed = True
+                except KeyError as e:
+                    logger.warning(f"WEB UI 未知命令: {e}")
+                    if cmd_id:
+                        self.set_result(cmd_id, "error", f"未知命令: {e}", _timing(queued_ts, start_ts))
+                except Exception as e:
+                    logger.error(f"WEB UI 命令执行失败: {cmd}: {e}", exc_info=True)
+                    if cmd_id:
+                        self.set_result(cmd_id, "error", str(e), _timing(queued_ts, start_ts))
+        except queue.Empty:
+            pass
+        return changed
+
+    def check_pending(self) -> None:
+        """每 tick 检查在途的强制汇报确认; 某 cmd_id 全部种子出结论后聚合写回执"""
+        host = self._host
+        if not self.reannounce_pending:
+            return
+        now = time.time()
+        finished = []
+        for cmd_id, entry in self.reannounce_pending.items():
+            for h, it in entry["items"].items():
+                if it["done"]:
+                    continue
+                if now >= entry["deadline"]:
+                    it["done"], it["ok"] = True, False
+                    it["err"] = f"汇报确认超时({REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未确认到 tracker 响应)"
+                    continue
+                if host.client is None:
+                    continue  # qB 断连: 等恢复继续确认, 或按超时判失败
+                try:
+                    trackers = host.client.torrents_trackers(h) or []
+                    r = host._confirm_reannounce_result(trackers, it["baseline"])
+                except Exception as e:
+                    it["done"], it["ok"], it["err"] = True, False, f"读取 tracker 状态失败: {e}"
+                    continue
+                if r is True:
+                    it["done"], it["ok"] = True, True
+                elif r is False:
+                    it["done"], it["ok"], it["err"] = True, False, "tracker 未接受汇报(not working)"
+            if all(it["done"] for it in entry["items"].values()):
+                finished.append(cmd_id)
+        for cmd_id in finished:
+            entry = self.reannounce_pending.pop(cmd_id)
+            items = list(entry["items"].values())
+            fails = [it for it in items if not it["ok"]]
+            if not fails:
+                self.set_result(cmd_id, "ok")
+                logger.info(f"WEB UI | 强制汇报确认成功({len(items)}个种子)")
+            else:
+                msg = f"{len(fails)}/{len(items)} 个种子汇报确认失败: " + "; ".join(it["err"] for it in fails[:3])
+                self.set_result(cmd_id, "error", msg)
+                logger.warning(f"WEB UI | {msg}")
+
+    def flush_views(self, force: bool = False) -> None:
+        """消费视图脏标记并在 Web 活跃时惰性重建(同步线 / 任务线各自调用一次)
+
+        `force=True` 表示"本轮有命令改了种子状态", 必须**绕过**下面的"已取走"门控 ——
+        用户操作后真值要在几十毫秒内进快照, 不能因为上一版还没被取走就跳过。
+        """
+        host = self._host
+        # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖
+        if host.store.consume_view_changed():
+            self.mark_dirty()
+        web_active = self.is_active()
+        # 「上一版有没有人取走」门控: 服务端节拍与客户端节拍各自独立定档, 大库下服务端
+        # 生产的中间版本可能无人消费。让"生产"等一等"消费"。
+        unconsumed = self.pending_ver is not None
+        if self.group_view_dirty and web_active and (force or not unconsumed):
+            self.rebuild_views()
+
+    def advance_error_reasons(self) -> None:
+        """任务线: 错误状态种子的具体原因预取(仅 Web 活跃时发 tracker 请求)"""
+        if self.is_active():
+            self._host.refresh_error_reasons()
+
+    def advance_search_index(self) -> None:
+        """任务线末尾: 搜索索引限流推进(仅 Web 活跃时), 关闭网页后不发多余的文件 API"""
+        if self.search_index_dirty and self.is_active():
+            self._host._build_search_index()
+
+    def flush_receipts(self) -> None:
+        """补刷新跑完后落回执, 并附上受影响种子的当前真值
+
+        ❗**必须无条件调用**(哪怕本轮没跑补刷新 / dry_run): 漏调会让前端 waitCmd 干等 40s。
+        真值取 store.by_hash 的当前 kind —— 补刷新之后它就是服务端认为的最新状态。
+        """
+        if not self.deferred_receipts:
+            return
+        pending, self.deferred_receipts = self.deferred_receipts, {}
+        n_truth = 0
+        for cmd_id, item in pending.items():
+            truth = self._affected_truth(item["cmd"], item["args"])
+            n_truth += len(truth or {})
+            self.set_result(cmd_id, "ok", timing=item["timing"], truth=truth)
+        # 排查标记: 日志里**没有这一行** = 服务端还在跑旧代码(回执在补刷新之前就写了),
+        # 前端只能走 via=pull 拉全量 —— 真机大库上就是"点了要 1.7~2s 才恢复正常"。
+        logger.info(f"[cmd] 回执(补刷新后)已写 {len(pending)} 条, 带真值 {n_truth} 个种子")
+
+    def resync_elapsed_ms(self, t0: float) -> None:
+        """命令后补刷新耗时落日志(计时口径见 qbmanager.run 的"命令驱动那一轮")
+
+        与 set_result 里的 wait_ms / exec_ms 合起来是"点下去到真值进快照"的三段归因。
+        """
+        ms = round((time.time() - t0) * 1000, 1)
+        if ms > CMD_SLOW_MS:
+            logger.warning(f"[cmd] 命令后补刷新 {ms}ms —— 真值要这一轮跑完才进快照,"
+                           " 前端的乐观撤下再快也得等它(大库 /sync/maindata 往返 + 四视图重建)")
+        else:
+            logger.info(f"[cmd] 命令后补刷新 {ms}ms")
+
+    # ------------------------------------------------------------------ 回执
+
+    def set_result(
+        self,
+        cmd_id: str,
+        status: str,
+        error: str = "",
+        timing: Optional[dict] = None,
+        truth: Optional[dict] = None,
+    ) -> None:
+        """写入命令执行结果回执(主循环线程唯一写者); 顺手清理过期回执防无限增长
+
+        timing: 埋点(wait_ms 排队等主循环 / exec_ms 执行耗时), 由 /api/cmd/{id} 一并返回。
+        truth: 受影响种子的当前真值, 前端拿到即可撤下乐观态, 省掉一次全量 refresh。
+        """
+        now = time.time()
+        if len(self.results) > WEB_RESULT_MAX:
+            self.results = {k: v for k, v in self.results.items() if now - v.get("ts", 0) < WEB_RESULT_TTL}
+        rec = {"status": status, "error": error, "ts": now}
+        if timing:
+            rec.update(timing)
+        if truth:
+            rec["truth"] = truth
+        self.results[cmd_id] = rec
+
+    def defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
+        """登记"等补刷新跑完再写"的回执(与 set_result 的区别只是时机)"""
+        self.deferred_receipts[cmd_id] = {"cmd": cmd, "args": dict(args or {}), "timing": timing}
+
+    def _affected_hashes(self, cmd: str, args: dict) -> List[str]:
+        """命令影响了哪些种子(用于回执带真值); 取不到就返回空 —— 只影响能否省一次 refresh"""
+        host = self._host
+        try:
+            if cmd.endswith("_torrent"):
+                h = (args or {}).get("hash")
+                return [h] if h else []
+            if cmd.endswith("_group"):
+                return list(host.store.groups.get((args or {}).get("key") or (), []) or [])
+            if cmd == "bulk_torrents":
+                out = list((args or {}).get("hashes") or [])
+                for k in (args or {}).get("keys") or []:
+                    out.extend(host.store.groups.get(k, []) or [])
+                return list(dict.fromkeys(out))
+        except Exception:  # 桩/异常配置下取不到就退化为"不写真值", 前端照旧拉一次
+            return []
+        return []
+
+    def _affected_truth(self, cmd: str, args: dict) -> Optional[dict]:
+        """受影响种子的当前真值({hash: {"kind": ...}})"""
+        truth = {}
+        try:
+            for h in self._affected_hashes(cmd, args):
+                rec = self._host.store.by_hash.get(h)
+                if rec is None:
+                    continue
+                truth[h] = {"kind": self._host._state_kind(rec)}
+        except Exception:
+            return None
+        return truth or None
+
+    def _log_cmd_timing(self, cmd: str, timing: Optional[dict]) -> None:
+        """命令耗时落日志 —— 排查"点了要等几秒"的**主出口**(不依赖浏览器控制台)
+
+        三段的读法(配合 resync_elapsed_ms 的补刷新那段):
+          排队 wait_ms 大 = 主循环正被长任务占住(搜索索引 500 条文件 API / 任务批 / tracker 预取);
+          执行 exec_ms 大 = qB API 本身慢(库大 / qB 忙 / 网络);
+          补刷新大       = 命令后的强制同步慢(大库 /sync/maindata 往返)。
+        """
+        if not timing:
+            return
+        w = timing.get("wait_ms")
+        e = timing.get("exec_ms")
+        msg = f"[cmd] {cmd}: 排队 {w}ms / 执行 {e}ms"
+        if cmd in SELF_POSTED_COMMANDS:
+            logger.debug(msg + "(自投递, 不唤醒主循环)")  # 自投递频次高, 不进常规日志
+            return
+        if (w or 0) > CMD_SLOW_MS or (e or 0) > CMD_SLOW_MS:
+            logger.warning(
+                msg + f" —— 超过 {CMD_SLOW_MS:.0f}ms:"
+                " 排队大=主循环被长任务占住(搜索索引/任务批/tracker 预取),"
+                " 执行大=qB API 慢; 前端再快也盖不住这一段(乐观 UI 只遮住回执之前的一半)"
+            )
+        else:
+            logger.info(msg)
+
+    # ------------------------------------------------------------------ 命令投递(Web 线程)
+
+    def post_command(self, cmd: str, payload: Optional[dict] = None) -> dict:
+        """投递控制命令并生成回执 ID: 前端据 cmd_id 轮询 /api/cmd/{id} 获取执行结果
+
+        自投递命令(SELF_POSTED_COMMANDS)**不唤醒主循环**且不带 cmd_id —— 否则会形成
+        「唤醒 → drain → 索引仍脏 → 再投递」的自激循环, 打满 CPU 并冲垮 qB。
+        """
+        body = dict(payload or {})
+        if cmd in SELF_POSTED_COMMANDS:
+            # 自投递: 不入回执(没有 cmd_id), 也不带埋点 —— 它根本没有回执消费者
+            self.commands.put((cmd, body))
+            return {"queued": True, "cmd_id": ""}
+        body["_queued_ts"] = time.time()  # 埋点: 投递时刻, 回执据此拆出排队耗时
+        cmd_id = secrets.token_hex(8)
+        body["cmd_id"] = cmd_id
+        self.commands.put((cmd, body))
+        self._host.wake()  # 唤醒主循环立即消费(命令延迟从 0~main_tick 降到近乎 0)
+        return {"queued": True, "cmd_id": cmd_id}
+
+    # ------------------------------------------------------------------ 视图发布 / 读取
+
+    def rebuild_views(self) -> None:
+        """重建全部视图快照并自增版本号 —— **唯一**的重建入口(主循环侧)"""
+        with self.view_lock:
+            self._publish_locked()
+
+    def _publish_locked(self) -> None:
+        """重建四视图并发布 —— **调用方必须持有 view_lock**
+
+        与 rebuild_views 分离, 使"判脏 → 重建 → 读取"能在**同一个临界区**内一次完成
+        (见 ensure_view); 若拆成"加锁重建 / 释放 / 再加锁读", 中间仍可能被另一线程插入
+        一次重建, 读到的四份视图依旧不属于同一轮。
+        """
+        host = self._host
+        self.group_view = host._build_group_view()
+        self.singles_view = host._build_singles_view()
+        self.shows_view = host._build_shows_view()
+        self.flat_view = host._build_flat_view()
+        self.group_view_ver += 1
+        self.group_view_dirty = False
+        # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
+        self.pending_ver = self.group_view_ver
+
+    def ensure_view(self) -> List[dict]:
+        """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则返回当前引用
+
+        与主循环惰性组装配合; 全程持锁保证"判脏 → 重建 → 读取"不被另一线程的重建插入。
+        """
+        with self.view_lock:
+            if self.group_view_dirty:
+                self._publish_locked()
+            return self.group_view
+
+    def ensure_state(self, rid: Optional[int], view: Optional[str] = None) -> dict:
+        """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
+
+        rid 与服务端视图版本一致时**不回传任何数组**(响应体趋近于零)。status 体积极小,
+        无关版本恒回传, 以保证连接状态 / 暂停状态 / 种子数变化能即时反映。
+
+        **按视图回传**: view 指定当前视图时只回传该视图需要的数组(见 VIEW_ARRAYS), 响应体
+        降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次全量。
+        """
+        from .mixins.web_view import VIEW_ARRAYS
+
+        with self.view_lock:
+            if self.group_view_dirty:
+                self._publish_locked()
+            ver = self.group_view_ver
+            # 本请求观察到了 ver ⇒ 这一版已被消费, 允许主循环生产下一版(节拍对齐的另一半)
+            self.pending_ver = None
+            updated = rid != ver
+            state: dict = {"rid": ver, "updated": updated}
+            if updated:
+                arrays = {
+                    "groups": self.group_view,
+                    "singles": self.singles_view,
+                    "shows": self.shows_view,
+                    "torrents": self.flat_view,
+                }
+                keys = VIEW_ARRAYS.get(view) if view else None
+                for k in keys or arrays:
+                    state[k] = arrays[k]
+        return state
+
+    def mark_shows_pending(self, pending: bool) -> None:
+        """追剧视图文件兑底标记: 索引推进后由构建器据此置脏重建"""
+        self.shows_pending = pending

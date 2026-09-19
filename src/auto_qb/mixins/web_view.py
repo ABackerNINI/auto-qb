@@ -1,20 +1,20 @@
-"""WebviewMixin: WEB UI 视图组装(分组视图/单种子视图/追剧视图/搜索索引/状态回传)
+"""WebviewMixin: WEB UI 视图**构建器**(分组/单种子/追剧/平铺视图 + 搜索索引)
 
-从 qbmanager.py 拆出(2026-09-15 大文件拆分批次一): 视图组装只读 store 快照与宿主状态,
-与核心循环解耦; 组合进 QbManager 后经 self 访问宿主属性。
+从 qbmanager.py 拆出(2026-09-15 大文件拆分批次一)。2026-09-20 二次拆分后本模块只留
+**构建**: 每个 `_build_*` 都是纯读(读 store / config 产出 dict), 不碰快照、版本号与锁 ——
+那些归 `web_runtime.WebUIRuntime`(门面), 由它调本模块的构建器并在同一临界区内发布。
 
-依赖的宿主属性(由 QbManager.__init__ 初始化):
+❗新增视图必须挂进 `WebUIRuntime._publish_locked`, 不要在调用点各建一份: 四份视图共用
+一个版本号回传, 漏建一份会让前端把陈旧数组当成新数据换上去(2026-09-18 实测事故)。
+
+依赖的宿主属性:
 - self.store                种子数据层 TorrentStore(分组索引/by_hash/视图脏标记)
 - self.client               qB 原始客户端(搜索索引拉取文件列表用)
-- self.web_commands         WEB 控制命令队列(搜索 building 时投递构建命令)
-- self._group_view / self._singles_view / self._shows_view / self._flat_view / self._group_view_ver
-- self._group_view_dirty / self._shows_pending / self._web_last_seen
-- self._search_index / self._search_index_dirty
-- self._view_lock              视图发布锁(四视图 + 版本号的原子发布)
+- self.web                  WebUIRuntime(快照 / 脏标记 / 搜索索引 / 命令投递)
 """
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from qbittorrentapi import TorrentState, TrackerStatus
 
@@ -45,7 +45,7 @@ VIEW_ARRAYS = {
     # 辅种页: 分组表 + 未归组单种子(singles 是同页的兜底行, 必须一起回)
     "group": ("groups", "singles"),
     # 种子页: 全部种子一行一条的平铺数组
-    "torrent": ("torrents",),
+    "torrent": ("torrents", ),
     # 追剧页: 剧→季→集聚合 + **成员索引**。
     # ❗shows 里的 members 只是一串 hash(见前端 memberByHash 注释: 明细成员经索引取, 不随 shows
     #   重复回传), 而索引正是 groups + singles 拼出来的 ⇒ 只回 shows 时前端索引为空,
@@ -159,7 +159,7 @@ class WebviewMixin:
                 rec.tracker_error_msg = msg
                 changed = True
         if changed:
-            self._group_view_dirty = True
+            self.web.mark_dirty()
 
     @staticmethod
     def _hr_view_fields(rec: TorrentRecord) -> dict:
@@ -416,7 +416,7 @@ class WebviewMixin:
         """
         from .. import tvshows
 
-        index = self._search_index or {}
+        index = self.web.search_index or {}
         shows: Dict[str, dict] = {}
         unrecognized: List[str] = []
         pending: List[str] = []
@@ -525,104 +525,12 @@ class WebviewMixin:
         # 拉取限流由索引侧 SEARCH_INDEX_BUILD_BUDGET 控制; 索引已覆盖但无文件的不再投递)
         pending = [h for h in pending if h not in index]
         if pending:
-            self._shows_pending = True
-            if self._search_index_dirty or self._search_index is None:
-                self.web_commands.put(("build_search_index", {}))
+            self.web.mark_shows_pending(True)
+            if self.web.search_index_dirty or self.web.search_index is None:
+                self.web.post_command("build_search_index")
         else:
-            self._shows_pending = False
+            self.web.mark_shows_pending(False)
         return {"list": out, "unrecognized": sorted(unrecognized)}
-
-    def rebuild_views(self) -> None:
-        """重建全部 Web 视图快照并自增版本号 —— **唯一**的重建入口
-
-        四份视图(groups / singles / shows / flat)必须在**同一脏窗口内同快照**重建, 因为
-        它们共用 `_group_view_ver` 一个版本号回传(前端按 rid 整表替换)。任何一份漏建,
-        该视图就会长期停留在旧快照上, 而版本号仍在自增 ⇒ 前端判定 `updated=true`, 把
-        **陈旧数组当成新数据换上去**(2026-09-18 实测: 主循环只重建 groups 却清掉共享脏
-        标记 ⇒ 种子页速度冻结, 而状态栏"速度合计"因取 groups 求和反而一直新鲜)。
-
-        故本方法是唯一重建入口: 主循环 `_tick` 与 Web 线程 `ensure_group_view` 都只能调它,
-        **新增视图也只在这里挂** —— 在调用点各建一部分必然再次漏建。
-
-        并发: 主循环线程与 Web 线程(web.py 的同步 `def` 处理器跑在 FastAPI 线程池里)都会走到
-        这里。`_group_view_ver += 1` 是读-改-写, 且四份视图是逐条赋值的 —— 无锁时两线程交错
-        会让版本号丢失更新, 并让 Web 线程读到"半新半旧"的组合(如 groups 来自本轮、flat 来自
-        上一轮), 而版本号只有一个 ⇒ 前端判定 updated=true 却拿到互相错位的数据。故重建与读取
-        统一在 `_view_lock` 内完成。
-        """
-        with self._view_lock:
-            self._publish_views_locked()
-
-    def _publish_views_locked(self) -> None:
-        """重建四视图并发布 —— **调用方必须持有 `self._view_lock`**
-
-        与 `rebuild_views` 分离, 使"判脏 → 重建 → 读取"能在**同一个临界区**内一次完成
-        (见 `ensure_group_view`); 若拆成"加锁重建 / 释放 / 再加锁读", 中间仍可能被另一线程
-        插入一次重建, 读到的四份视图依旧不属于同一轮。
-        """
-        self._group_view = self._build_group_view()
-        self._singles_view = self._build_singles_view()
-        self._shows_view = self._build_shows_view()
-        self._flat_view = self._build_flat_view()
-        self._group_view_ver += 1
-        self._group_view_dirty = False
-        # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)。
-        # 只在**真正发布**时登记(而不是每次调用 rebuild_views), 因为 ensure_group_state 可能
-        # 在判脏后走 `_publish_views_locked` 就地发布, 那条路径同样要登记。
-        self._web_pending_ver = self._group_view_ver
-
-    def ensure_group_view(self) -> List[dict]:
-        """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则直接返回当前引用。
-        与主循环惰性组装配合: 主循环只在 Web 活跃且视图有变化时重建, 这里兜底保证每次请求都拿到最新。
-        singles(未归组种子)、shows(追剧视图)与 flat(种子平铺视图)与分组视图在同一脏窗口同快照重建
-        —— 保证四组数据互相一致; 重建统一走 `_publish_views_locked`(唯一入口)。
-
-        **"判脏 → 重建 → 读取"全程持锁**: 否则 Web 线程刚重建完正要读时, 主循环可能又重建
-        一轮, 读到的四份视图不属于同一轮。
-        """
-        with self._view_lock:
-            if self._group_view_dirty:
-                self._publish_views_locked()
-            return self._group_view
-
-    def ensure_group_state(self, rid: Optional[int], view: Optional[str] = None) -> dict:
-        """WEB 线程调用: 带版本号的合并状态(前端按 rid 跳过整表替换与重渲染)
-
-        rid 与服务端视图版本一致时**不回传任何数组**(响应体趋近于零); 不一致时回传
-        全量分组数据并带上新版本号。status 体积极小(4 个标量), 无关版本恒回传,
-        以保证连接状态/暂停状态/种子数变化能即时反映。
-
-        **P1-1 按视图回传**: `view` 指定当前视图时只回传该视图需要的数组(见 VIEW_ARRAYS),
-        响应体降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次
-        全量, 因此"只回一部分"不会让别的视图停在旧数据上。view 缺省/未知值 ⇒ 回传全部
-        (保守默认, 老客户端与非视图调用方不受影响)。
-
-        与 `ensure_group_view` 同口径: 判脏 / 重建 / 取版本号 / 取四视图**全程持锁**, 保证回传的
-        `rid` 与四份数组严格同轮。
-        """
-        with self._view_lock:
-            if self._group_view_dirty:
-                self._publish_views_locked()
-            ver = self._group_view_ver
-            # 本请求观察到了 ver(要么拿到了它的数组, 要么被告知"你已是最新") ⇒ 这一版已被消费,
-            # 允许主循环生产下一版。这是"服务端节拍向客户端节拍看齐"的另一半(见 _publish_views_locked)。
-            self._web_pending_ver = None
-            updated = rid != ver
-            state: dict = {"rid": ver, "updated": updated}
-            if updated:
-                arrays = {
-                    "groups": self._group_view,
-                    # singles 与 groups 同版本门控: 版本一致时不回传(前端保留原数组, 不触发重渲染)
-                    "singles": self._singles_view,
-                    # 追剧视图同门控同版本回传(结构与 groups 独立, 前端按 viewMode 取用)
-                    "shows": self._shows_view,
-                    # 种子平铺视图同门控同版本回传(种子页数据源; 字段集 = SEED_ITEM 契约)
-                    "torrents": self._flat_view,
-                }
-                keys = VIEW_ARRAYS.get(view) if view else None
-                for k in keys or arrays:
-                    state[k] = arrays[k]
-        return state
 
     def _build_search_index(self) -> None:
         """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名]}), 单次限流拉取。
@@ -637,9 +545,9 @@ class WebviewMixin:
         """
         if self.client is None:
             # qB 断开中: 无文件 API 可用, 保持脏待连接恢复后重建(不能把空文件列表当成"已建完")
-            self._search_index_dirty = True
+            self.web.search_index_dirty = True
             return
-        prev = self._search_index if self._search_index is not None else {}
+        prev = self.web.search_index if self.web.search_index is not None else {}
         idx: dict = {}
         budget = SEARCH_INDEX_BUILD_BUDGET
         added = 0  # 本轮新增条目数(追剧视图文件兑底的重建触发依据)
@@ -657,13 +565,13 @@ class WebviewMixin:
                 entry = {"name": rec.name, "files": files}
             else:
                 # 预算用尽: 剩余种子本轮不进新字典(下次调用续建), 保持脏
-                self._search_index = idx
-                self._search_index_dirty = True
+                self.web.search_index = idx
+                self.web.search_index_dirty = True
                 self._trigger_shows_rebuild_if_pending(added)
                 return
             idx[h] = entry
-        self._search_index = idx
-        self._search_index_dirty = False
+        self.web.search_index = idx
+        self.web.search_index_dirty = False
         self._trigger_shows_rebuild_if_pending(added)
 
     def _trigger_shows_rebuild_if_pending(self, added: int) -> None:
@@ -671,9 +579,9 @@ class WebviewMixin:
         (新增条目)是文件列表就位的唯一信号, 此处置脏让下一轮重建用文件列表归位。
         本方法只在主循环线程调用(与 _group_view_dirty 的既有跨线程语义一致: 竞争
         最坏结果是多重建一次, 无正确性风险)。"""
-        if added and self._shows_pending:
-            self._shows_pending = False
-            self._group_view_dirty = True
+        if added and self.web.shows_pending:
+            self.web.mark_shows_pending(False)
+            self.web.mark_dirty()
 
     def search_torrents(self, q: str) -> dict:
         """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
@@ -718,7 +626,7 @@ class WebviewMixin:
                 seen.add(h)
                 results.append(_view(rec, "name"))
         # 文件列表匹配(依赖缓存索引)
-        idx = self._search_index
+        idx = self.web.search_index
         if idx is not None:
             for h, entry in idx.items():
                 if h in seen:
@@ -728,14 +636,10 @@ class WebviewMixin:
                     if rec is None:
                         continue
                     results.append(_view(rec, "file"))
-        building = self._search_index_dirty
+        building = self.web.search_index_dirty
         if building:
-            self.web_commands.put(("build_search_index", {}))
+            self.web.post_command("build_search_index")
         return {"results": results, "building": building}
-
-    def touch_web_client(self) -> None:
-        """WEB 请求心跳: 刷新 _web_last_seen, 让主循环在 Web 活跃窗口内持续重建分组视图。"""
-        self._web_last_seen = time.time()
 
     def _group_hashes(self, key: tuple) -> List[str]:
         return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]

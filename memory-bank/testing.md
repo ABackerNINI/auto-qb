@@ -6,12 +6,23 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1054 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1052 passed + 2 skipped** —— 2026-09-19 实测;
+# 基线: **1057 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1055 passed + 2 skipped** —— 2026-09-20 实测;
 # ❗两侧**收集数相同**(那 2 条在 Windows 上跑、在 Linux 上跳), 比较时别拿 "passed" 直接比:
-#   Windows 1054 passed == Linux 1052 passed + 2 skipped。跳的两条都是 Windows 专属 ——
+#   Windows 1057 passed == Linux 1055 passed + 2 skipped。跳的两条都是 Windows 专属 ——
 #   `test_sidefx.py::…`(AUMID 守卫: 非 Windows 无 winreg) 与 `test_ui.py::…`(注册表专属键)。
 #   改了基线就把**两侧都重测**, 只测一侧就更新会立刻产生漂移
 #   (本次就是把还停在 1049 的 Linux 数字补回来的)。
+# = 1055 + **主循环 × WebUI 解耦(docs/plans/26-09-20-0234-webui-decoupling-plan.html)** 新增 2 项:
+#   ① `test_qbmanager.py::test_qbmanager_source_has_no_web_state_fields` —— **静态防回潮守阵**:
+#      扫 `qbmanager.py` 源码不得再出现 19 个表现层字段名(`self._group_view` 等)。必要性在于
+#      兼容代理 `_WEB_STATE_ALIAS` 会把这类回潮**静默转发** ⇒ 代码照样能跑、diff 里看不出问题,
+#      只有扫描能抓住。红绿双验过(注入 `self._group_view = []` ⇒ 报 `['_group_view']`)。
+#   ② `test_qbmanager.py::test_web_state_alias_proxies_to_runtime` —— 代理**只转发不存值**守阵:
+#      旧字段名与 `self.web.<新名>` 必须读同一对象、写双向可见。若退化成"赋值进实例字典"就出现
+#      两份真相(主循环改 runtime 那份、Web 线程读 manager 那份 ⇒ 视图静默停在旧快照且不报错)。
+#   本次另改 3 处既有守阵的**目标**(不是判据): `_drain_web_commands` → `web.consume_commands`、
+#   回执 spy → `web.set_result`、`_log_cmd_timing` 的宿主 → `WebUIRuntime`; 自投递静态守卫的正则
+#   扩到同时认 `web_commands.put(` 与 `web.post_command(` 两种写法(否则重构后守卫直接失效)。
 # = 1053 + **节拍对齐门控(issues/26-09-19-1900-webui-poll-cadence-mismatch, 方案 B)** 新增 1 项:
 #   `test_qbmanager.py::test_view_rebuild_waits_for_client_consume`(上一版没被 /api/state 取走就不生产下一版:
 #   >3000 种子时服务端 3s 产 2 版而客户端只取 1 版 ⇒ 实测 20 周期 40 次 → **20 次(省 50%)**;
