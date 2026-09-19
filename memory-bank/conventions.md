@@ -132,6 +132,7 @@
 
 ## Git 约定 (观察自 git log)
 
+- **开工前先同步分支 (2026-09-19 用户指定)**: 会话第一步必为 `git pull --rebase <远端> develop` (**分支名必须写**, 只给远端名会只 fetch 不合并), `git status -sb` 确认不落后才动手; **禁止在落后的分支上改代码**; 拉取前先把工作区弄干净 (脏工作区 + rebase 触发 stash 会损坏对象库)。细则见 `AGENTS.md`「会话协议 · 开始」与「提交 / PR」—— 该规则共有 4 处入口 (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), **改规则必须一次改全**, 本文件只留指针不复述。
 - **🔴 绝对不要 push (2026-09-10)**： 除非用户显式单独说"push/推送/推送到远程", 否则 `git commit` 后保持本地, **不执行任何 `git push`** (gitee/github 均不推)。commit 与 push 分离, "提交"二字不暗含 push。
 - 分支: `develop` 开发, `master` 主干 (PR 目标)。
 - 提交信息: 中文单行, 动词开头描述行为 (如 "修复跳检动作删除种子导致该种子后续动作/任务报错"、"补充 cov 缺口测试: ...")。
