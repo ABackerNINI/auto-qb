@@ -1,6 +1,6 @@
 # 26-09-20-webui-decoupling — 主循环 × WebUI 解耦(门面 + 状态内聚)
 
-**Status:** In Progress (代码/测试/冒烟/文档已完, **未提交**; 剩用户真机走查 + 兼容层清理择机)
+**Status:** Completed (代码已提交并推送 Gitee `5691c6f`; 剩用户真机走查(用户侧) + 兼容层清理择机)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [docs/plans/26-09-20-0234-webui-decoupling-plan.html](../../docs/plans/26-09-20-0234-webui-decoupling-plan.html)
@@ -53,8 +53,8 @@
 
 | 子任务 | 状态 | 备注 |
 |---|---|---|
-| W1 `web_runtime.py`(451 行) | ✅ Done | 含状态、门面方法、命令编排、视图发布 |
-| W2 mixin 降为构建器 / 处理器 | ✅ Done | `web_view` 741→645; `web_commands` 623→545 |
+| W1 `web_runtime.py`(457 行) | ✅ Done | 含状态、门面方法、命令编排、视图发布 |
+| W2 mixin 降为构建器 / 处理器 | ✅ Done | `web_view` 741→645; `web_commands` 730→545 |
 | W3 主循环收敛 | ✅ Done | 4 条门面调用, 无 `web_active` 分支 |
 | W4 兼容层 + 守阵 | ✅ Done | 2 条新守阵, 红绿双验过 |
 | W5 知识库回写 | ✅ Done | 基线数字已更新为 1057 / 1055+2 |
@@ -114,7 +114,17 @@
 - 新增 2 条: 静态防回潮(红绿双验过)+ 代理同源(读同一对象 / 写双向可见)
 - **浏览器冒烟**: ok / error 双模式各 **48 项 0 失败**(3000 种子桩服务, 双 UI); 改动前 A/B 同数
   ⇒ 无回归。唯一 `[perf]` 提示(3000 目标撤下 3073ms)经 A/B 证明改动前即为 3072ms, 属大库轮询粒度
-- **未提交**(用户未下令; 提交 = commit + 推 Gitee, 见 AGENTS.md)
+- **03:40** — 提交并推送: 提交前 `git pull --rebase origin develop` 撞上上游 `03ed9ed`
+  (撤下加 via 路径标记 + 真值不一致时直接采纳) —— 该提交是**并行提交**(不在我方历史里), 在
+  `web_commands.py` 上冲突: 它给 `_flush_deferred_receipts` 加了真值计数 + 排查标记日志, 而该方法
+  本次已迁进 `web_runtime.flush_receipts`。解法: **取其意图落到迁移后位置** —— 计数与日志写进
+  `flush_receipts`, 上游重复出现的 `_defer_receipt` / `_affected_hashes` / `_log_cmd_timing` 三法
+  与迁移版逐字等价故丢弃上游副本。解冲突后重跑全量 **1057 passed**。
+  推送 `03ed9ed..5691c6f` → Gitee develop; 事后核对 HEAD == refs/heads/develop == `5691c6f`(ref 未被拦截层丢弃)。
+- ⚠ 顺带修正: 先前记录的规模数字有误(写的是 `web_commands` 623→545 / `qbmanager` 795→808 /
+  `web_runtime` +451), 实测基线 **730 / 816**, 迁移后 web_runtime **457** 行 —— 已在提交消息、
+  activeContext、本档案三处一并订正。教训: 规模数字要在**提交那一刻**按 `git show HEAD^:<file> | wc -l` 实测,
+  别沿用会话中途的量。
 
 ## 后续(择机)
 

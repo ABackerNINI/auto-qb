@@ -32,12 +32,12 @@
 
 ## 正在进行
 
-- **① 主循环 × WebUI 解耦(2026-09-20, 已实施未提交)**: 用户报"qbmanager 主循环结构复杂, 融合了 webui 逻辑"。
+- **① 主循环 × WebUI 解耦(2026-09-20, ✅ 已推送 Gitee `5691c6f`)**: 用户报"qbmanager 主循环结构复杂, 融合了 webui 逻辑"。
   诊断: 耦合是「状态与门控」耦合 —— 19 个表现层字段平铺在 `QbManager.__init__`, 主循环替表现层做
   "要不要重建 / 要不要补刷新"的决策(6 处调用 + 3 处 `web_active` 门控)。
-  **已按门面(Facade)+ 空对象 + 命令模式实施**: 新建 `web_runtime.WebUIRuntime`(451 行)收走全部状态与判据,
+  **已按门面(Facade)+ 空对象 + 命令模式实施**: 新建 `web_runtime.WebUIRuntime`(457 行)收走全部状态与判据,
   主循环只剩 `consume_commands / check_pending / flush_views / flush_receipts / advance_*` 几条语义调用;
-  `web_view.py` 741→645 降为纯构建器、 `web_commands.py` 623→545 降为命令处理器 + 命令表。
+  `web_view.py` 741→645 降为纯构建器、 `web_commands.py` 730→545 降为命令处理器 + 命令表。
   **基线 1055 → 1057 passed**(Windows) / Linux WSL **1055 + 2 skipped**(收集数一致), cov 92%。
   兼容层 `_WEB_STATE_ALIAS`(19 字段读写转发)+ 8 个入口转发方法保留给既有调用方, 由
   `test_qbmanager_source_has_no_web_state_fields`(静态防回潮, 红绿双验过) 与
@@ -45,7 +45,12 @@
   ✅ **浏览器冒烟已跑**: ok / error 双模式各 **48 项 0 失败**(3000 种子桩服务); 唯一 perf 告警
   「3000 目标撤下 3073ms」经 A/B(改动前 3072 / 3049ms)证明非本次引入, 属大库轮询粒度。
   计划 [docs/plans/26-09-20-0234-webui-decoupling-plan.html](../docs/plans/26-09-20-0234-webui-decoupling-plan.html);
-  档案 [tasks/26-09-20-webui-decoupling.md](tasks/26-09-20-webui-decoupling.md)。**未提交。**
+  档案 [tasks/26-09-20-webui-decoupling.md](tasks/26-09-20-webui-decoupling.md)。
+  **已提交并推送**(`5691c6f`)。推送前 `git pull --rebase` 与上游 `03ed9ed` 在 `web_commands.py` 上冲突:
+  上游给 `_flush_deferred_receipts` 加了真值计数 + 一行排查标记日志, 而该方法本次已迁进
+  `web_runtime.flush_receipts` ⇒ **取其意图(计数 + 日志)落到迁移后位置**, 不是丢弃(判据见 pitfalls
+  「rebase 冲突落在已被迁走的方法上」)。解冲突后重跑全量 **1057 passed**。
+  ⬜ **剩用户真机走查**(需真实 qB 数据; 见「待用户真机走查」)。
 
 - **② 上轮计划复核的收尾(只剩第 7 项) (2026-09-19)**: 复核报表
   [docs/plans/26-09-19-1745-webui-responsiveness-review.html](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)
@@ -146,6 +151,9 @@ uvicorn/h11 异常栈污染 `LOG.tracebacks`(加 `quiesce` 事件)、`--tick 1.5
 
 ## 待用户真机走查 (代码/测试均已完, 只差真实 qB 数据下的观感确认)
 
+- **主循环 × WebUI 解耦** (`5691c6f`, 2026-09-20) —— 纯结构性重构, 行为应**完全无感**; 重点确认
+  ① 各视图照常刷新、切页无空白 ② 右键命令(暂停/删除/汇报/限速…)照常生效且乐观态正常落回
+  ③ 关闭网页后主循环不再做视图重建(日志里应看不到 `[cmd] 回执(补刷新后)已写` 之外的 Web 开销)
 - **跟手性优化三波次** —— 右键菜单响应 / 切视图首帧 / 3000+ 种子滚动流畅度
 - **本轮新修的 4 处(建议顺路走查)** —— ① 刷新页面时若上次停在**追剧页**, 现在应正常显示(修复前是永久空白);
   ② 右键**复制磁力**在辅种页/追剧页应真能复制(修复前 100% 提示"没有 magnet 链接");

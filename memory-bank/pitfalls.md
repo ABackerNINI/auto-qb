@@ -1452,3 +1452,26 @@ PYTHONPATH=".../aqb_old/src" uv run python scripts/ui_harness.py --torrents 3000
   **正确做法: 不要重装** —— workspace 里已装的 1.62.0 配缓存里的 `chromium-1234` 就能跑
   (`NODE_PATH=…/workspace/node_modules node scripts/ui_smoke.cjs`)。
   若真要换版本, 装到**干净的新目录**再指 `NODE_PATH` 过去, 别让 npm 去删已有目录。
+
+### ⚠ rebase 冲突落在「已被你迁走」的方法上: 取上游的**意图**, 不是取它的**位置** (2026-09-20 实测)
+
+大重构期间 `git pull --rebase` 最容易撞上这种冲突: 上游在**旧位置**上改了你已经迁进新模块的方法,
+冲突块里于是同时出现「上游的旧实现(整段)+ 你的转发(一行)」。此时**不要按块的大小判断谁对**:
+
+```bash
+git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一步: 看上游相对我方基线到底加了几行
+```
+
+- 本次冲突块约 100 行, 但上面这条 diff 显示上游**只加了 5 行**(给 `_flush_deferred_receipts`
+  加真值计数 + 一行排查标记日志); 其余 95 行是「我迁走后、上游版本又把原方法带回来」。
+  凭块大小猜就会误判成"两边各写了一套, 得合并"。
+- 解法: 上游那 5 行的**意图**落到迁移后的新家(本次 = `web_runtime.flush_receipts`),
+  重复出现的等价方法(`_defer_receipt` / `_affected_hashes` / `_log_cmd_timing` 逐字等价)保留迁移版。
+  **上游的改动不能丢** —— 它是排查标记(日志里没有那行 = 服务端还在跑旧代码), 丢了等于静默回退。
+- `git add` 之后、`git rebase --continue` **之前**先跑一次全量测试(本次 1057 passed), 别等推上去才发现。
+- 事后按 AGENTS.md 核对 `HEAD == refs/heads/develop == packed-refs` —— amend 也算一次 ref 写入。
+
+**顺带(同一天踩到)**: 提交消息里的**规模数字要在提交那一刻实测**
+(`git show HEAD^:<file> | wc -l`), 别沿用会话中途量的 —— 上游合入会让基线行数变掉,
+本次就因此把 `web_commands` 的 730 记成 623、 `qbmanager` 的 816 记成 795, 提交后才发现,
+只能 amend(amend 又多一次 ref 写入风险)。

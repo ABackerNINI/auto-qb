@@ -255,6 +255,11 @@
 2. 全局限速曲线落地 (ee88bc8 → 20481f3) — SpeedCurveMixin + curves 纯逻辑模块 + qB5.0 transfer 端点适配 (f402eaf)
 3. 跳检稳健性 (5ab17c5, e5ea9e7) — 修复删除种子后访问属性/后续任务报错
 4. 覆盖率补齐 (6f60a5a) — config/qbapi/qbmanager/logging/cli/tracker/speed_curve 缺口
+5. 主循环 × WebUI 解耦 (5691c6f, 1057 passed) — `web_runtime.WebUIRuntime` 门面收走 19 个表现层状态字段
+   与全部节拍判据, 主循环只剩 6 条语义调用、不再有 `web_active` 门控; `web_view` 降为纯构建器、
+   `web_commands` 降为命令处理器 + 命令表。兼容层(`_WEB_STATE_ALIAS` + 8 个转发)让既有调用零改动,
+   由两条守阵看住防回潮。结构改动、行为等价: 冒烟 ok/error 双模式各 48 项 0 失败, 且「3000 目标撤下
+   3073ms」经 A/B(改动前 3072/3049ms)证明非本次引入
 
 ## 给 AI 的实现建议 (基于现有架构的延伸方向)
 
