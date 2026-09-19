@@ -61,6 +61,10 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 
 ## 提交 / PR
 
+- **协作开发统一走 Gitee 的 `develop` 分支 (2026-09-19 用户指定)**: 日常开发、提交、推送、拉齐都以
+  `origin/develop` (Gitee) 为唯一协作主线 —— 开工先 `git pull --rebase origin develop`, 交付以
+  Gitee 上有该提交为准。GitHub 只作镜像, **允许滞后**; 判断"某某改动是否已交付"只看 Gitee,
+  不要用 GitHub 的提交状态判断进度。
 - 日常开发在 `develop` 分支; 提交信息为中文一句话概述 (参照 `git log` 风格)。
 - **用户说"提交"= 只 `commit`, 不 `push`**; 需要推送时用户会明说。
 - **推送顺序与策略 (2026-09-19 用户指定)**:
