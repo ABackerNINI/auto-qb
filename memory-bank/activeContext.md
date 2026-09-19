@@ -8,7 +8,7 @@
 
 ## 正在进行
 
-- **WEB UI 操作跟手性优化 · 波次一已实施 (2026-09-19, 未提交, 待浏览器双 UI 冒烟)**: 计划见
+- **WEB UI 操作跟手性优化 · 波次一已入库 `10e06a8` (2026-09-19, Gitee + GitHub 均已推送; 待浏览器双 UI 冒烟)**: 计划见
   [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html),
   档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)。
   **已落地 7 项**: 分层节拍(`sync_interval=1.5s` 同步线 / `main_tick=2s` 任务线, tracker 预取与搜索索引**不跟快档**)、
