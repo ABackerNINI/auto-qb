@@ -2467,6 +2467,14 @@ const app = createApp({
     seasonLabel(season) {
       return season === null || season === undefined ? "日播 / 特别篇" : `第 ${season} 季`;
     },
+    /* 集成员 -> hash 列表: 后端 shows 视图的 members 是 **hash 数组**, 而 decoratedShows 会把它们
+     * 换成**成员对象**(带 hit 标记, 供行内渲染/筛选)。菜单与命令只认 hash —— 两种形态都要能取到,
+     * 否则对象被字符串化后变成 "[object Object]": 后端查不到该 hash ⇒ 404「种子不存在」,
+     * 整集/整剧的 开始/暂停/强制汇报/打开目标文件夹/删除 全线哑火(单种子菜单传的是 member.hash,
+     * 不受影响 —— 这正是"种子右键能打开、剧/集右键打不开"的差异来源)。 */
+    memberHashesOf(list) {
+      return (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean);
+    },
     /* 整集右键菜单: 目标 = 该集全部成员(多版本), 操作走单种子命令(与批量同语义) */
     openShowEpMenu(event, show, ep) {
       event.preventDefault();
@@ -2477,7 +2485,7 @@ const app = createApp({
         ...this._menuPos(event),
         key: null,
         hash: null,
-        episode: { hashes: ep.members.slice(), label: `${show.name} ${this.epLabel(ep.key)}`, scope: "ep" },
+        episode: { hashes: this.memberHashesOf(ep.members), label: `${show.name} ${this.epLabel(ep.key)}`, scope: "ep" },
       };
     },
     /* FX-13: 整剧右键菜单。追剧页的"剧"这一层此前只有左键展开、没有 @contextmenu ——
@@ -2491,7 +2499,7 @@ const app = createApp({
       const seen = new Set();
       for (const sn of show.seasons || []) {
         for (const e of sn.episodes || []) {
-          for (const h of e.members || []) {
+          for (const h of this.memberHashesOf(e.members)) {
             if (!seen.has(h)) {
               seen.add(h);
               hashes.push(h);
@@ -2607,7 +2615,7 @@ const app = createApp({
       const out = [];
       for (const sn of s.seasons || []) {
         for (const e of sn.episodes || []) {
-          for (const m of e.members || []) out.push(m.hash);
+          out.push(...this.memberHashesOf(e.members));
         }
       }
       return [...new Set(out)];
@@ -2619,7 +2627,7 @@ const app = createApp({
       const out = [];
       for (const sn of s.seasons || []) {
         for (const e of sn.episodes || []) {
-          out.push({ id: this.showEpRowId(s.key, sn.season, e.epKeyStr), hashes: (e.members || []).map((m) => m.hash) });
+          out.push({ id: this.showEpRowId(s.key, sn.season, e.epKeyStr), hashes: this.memberHashesOf(e.members) });
         }
       }
       return out;
@@ -2629,7 +2637,7 @@ const app = createApp({
       return this._selState(u ? u.hashes : []);
     },
     epSelState(e) {
-      return this._selState((e.members || []).map((m) => m.hash));
+      return this._selState(this.memberHashesOf(e.members));
     },
     /* 整单元切换: 全选中则整段取消, 否则整段加入(并清掉辅种组口径) */
     _toggleUnit(unit) {

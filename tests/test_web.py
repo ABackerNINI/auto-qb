@@ -8,7 +8,7 @@
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -433,6 +433,8 @@ STATIC_ROOT = os.path.join(
 
 # CSS 容器型 at-rule: "开块后下一行是嵌套规则"属正常写法, 不参与"漏闭合"判定
 _CSS_CONTAINER_AT = ("@media", "@supports", "@keyframes", "@container", "@layer", "@scope")
+# 追剧视图的"集成员"两种写法(e.members / ep.members) —— 取 hash 必须经 memberHashesOf 归一
+_EP_MEMBERS_RE = re.compile(r"\b(?:ep|e)\.members\b")
 
 
 def _scan_css_blocks(path, rel, problems):
@@ -499,6 +501,29 @@ def _scan_js_syntax_with_node(js_files, problems):
             problems.append(f"{rel} node --check 报语法错误: {detail[0] if detail else 'unknown'}")
 
 
+def _scan_episode_member_hashes(path, rel, problems):
+    """追剧视图"集成员 -> hash"守阵 (2026-09-19 实测事故)
+
+    后端 shows 视图的 `members` 是 **hash 数组**, 而前端 `decoratedShows` 会把它换成**成员对象**
+    (带 hit 标记, 供行内渲染/筛选)。菜单与命令只认 hash —— 一旦把对象当 hash 传出去, 拼进
+    URL/JSON 时字符串化成 `[object Object]` ⇒ 后端查不到该 hash ⇒ 404「种子不存在」:
+    整集/整剧的 开始/暂停/强制汇报/打开目标文件夹/删除 全线哑火(单种子菜单传的是 `member.hash`,
+    不受影响 —— "种子右键正常、剧/集右键失败"就是这形状)。故凡是"从集成员取 hash"的地方
+    一律走 `memberHashesOf`(两形态都收), 这里只做静态拦截。
+    """
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    for i, line in enumerate(lines, 1):
+        if not _EP_MEMBERS_RE.search(line):
+            continue
+        wants_hash = "hashes" in line or ".hash" in line or "for (const h of" in line
+        if wants_hash and "memberHashesOf(" not in line:
+            problems.append(
+                f"{rel}:{i} 集成员取 hash 未走 memberHashesOf"
+                "(members 在前端已是对象 -> 传出去会变成 [object Object], 后端 404「种子不存在」)"
+            )
+
+
 def _scan_frontend_assets():
     """扫描 web_ui/static 返回问题清单(空 = 健康)
 
@@ -509,7 +534,8 @@ def _scan_frontend_assets():
     3. JS 语法硬校验: 有 node 时跑 `node --check`(见 _scan_js_syntax_with_node);
     4. CSS 规则块漏闭合(浏览器会把其后规则整段当声明丢弃) —— 见 _scan_css_blocks;
     5. 模板 `<transition>` 不配对 / 把弹窗包进 `<transition>`(只渲染首子节点 -> 弹窗全丢);
-    6. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404)。
+    6. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404);
+    7. 追剧视图"集成员 -> hash"必须走 `memberHashesOf`(见 _scan_episode_member_hashes)。
     """
     problems = []
     js_files = []
@@ -528,6 +554,8 @@ def _scan_frontend_assets():
             if "/vendor/" not in f"/{rel}":
                 if name.endswith(".js"):
                     js_files.append((path, rel))
+                    if name == "app.js":
+                        _scan_episode_member_hashes(path, rel, problems)
                     for i, line in enumerate(lines):
                         if not re.match(r"^\s*\*(?!/)", line):
                             continue

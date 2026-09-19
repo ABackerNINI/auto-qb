@@ -712,3 +712,13 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   即可复现 CI 的全部平台差异(本次 15 秒出结果, 比推上去等 CI 快得多)。加 `-p 3.12`/`-p 3.13` 还能对上 CI 的矩阵版本。
 - **顺带**: 记账器里"断言会话累计越界数为 0"的写法(`test_sidefx_recorder_installed_and_records`)是**哨兵**而非
   单点用例 —— 别的用例污染了台账它就会红, 排查时先看它列出的越界项归属哪个用例, 别在它身上找原因。
+
+### 追剧视图 `members` 是**双形态**: hash 数组(后端) vs 成员对象(前端装饰后) (2026-09-19 实测)
+
+- **症状**: 追剧页**剧右键 / 集右键** → "打开目标文件夹" 弹 `打开目标文件夹失败: 种子不存在`; 而**种子右键**的同一项正常。同一菜单里的 开始/暂停/强制汇报/删除 其实也一起哑火(前三项报 `Not Found`, 删除因 `memberByHash.get(对象)` 全落空而**静默返回**), 只是用户先注意到文件夹那一项。
+- **根因**: `web_view._build_shows_view` 的集节点 `members` 是 **hash 字符串数组**, 而前端 `decoratedShows`(`shared/app.js:822`)会把它**换成成员对象**(`{...m, hit}`)供行内渲染/筛选。菜单里 `openShowEpMenu` 写的是 `hashes: ep.members.slice()`、`openShowMenu` 写的是 `for (const h of e.members)` —— **把对象当 hash 用**, 拼进 URL/JSON 时字符串化成 `[object Object]`, 后端 `_require_torrent` 查不到 ⇒ 404「种子不存在」。
+- **修法**: 新增 `memberHashesOf(list)`(`typeof m === "string" ? m : m.hash`, 过滤空值)统一取 hash, 菜单与选中态(`_showHashes` / `_epUnits` / `epSelState`)一律走它 —— 两形态都收, 该类误用不再可能。
+- **判别法**: 凡是"后端产出 hash 数组、前端 computed 再装饰成对象"的集合(当前只有追剧视图的 `ep.members`), **任何写进 URL / 命令载荷 / `memberByHash` 查找的地方都必须先归一成 hash**; 行内渲染(`v-for="m in e.members"`)才用对象形态。"同一动作在单种子上正常、在聚合行上失败"基本就是这个形状 —— 单种子菜单传的是 `member.hash`, 天然对。
+- **顺带**: `[object Object]` 不会在控制台报错, 后端只回 404, 前端只出一条 toast —— 这类"类型错位"故障**没有 JS 单测兜底**(本仓无 JS 测试运行器, `test_frontend_static_bundle_health` 只做语法/结构守阵), 只能靠真机走查; 改到前端派生链时优先做**逐层级**的手动走查(剧 → 集 → 种子)。
+- **验证手法(可复用)**: 本仓没有 JS 测试运行器, 但**能用 node 直接加载 `shared/app.js` 做真行为验证** —— 桩掉 `Vue.createApp`(把 options 接出来)/ `window` / `document` / `localStorage` 后 `eval(src)`, 再从 `opts.methods` + `opts.data()` 拼出一个 `this`(方法逐个 `bind`), 就能直接调 `openShowEpMenu`/`openShowMenu` 断言 `menu.episode.hashes`。**红验**用 `git show HEAD:<path>` 取旧版跑同一脚本(本次: 旧版 9 项挂 5 项, 含"载荷 hash = 对象"那一条; 新版 9/9 通过)。注意方法在 `opts.methods` 下, **不在** options 顶层。
+- **已固化**: `tests/test_web.py::test_frontend_static_bundle_health` 新增第 7 项 —— app.js 里凡是"集成员取 hash"的行(`e.members`/`ep.members` + `hashes`/`.hash`/`for (const h of`)必须含 `memberHashesOf(`, 否则报问题(对 HEAD 旧版实测报出全部 5 处)。
