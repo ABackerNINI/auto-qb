@@ -346,6 +346,20 @@ if (Date.now() - op.ts &gt; 3000) { delete this.pendingOps[hash]; return false; 
       补丁 0ms 就贴上了，但 <code>.show-row</code> 不绑 pending 标记（只有集行 <code>.ep-row</code> 绑），
       剧行折叠时用户看不到任何即时反馈。与 BUG-3 同类，属计划外，已另立 issue
       <a href="26-09-19-1959-webui-show-row-no-pending.html">26-09-19-1959-webui-show-row-no-pending</a>，本次未改。</p>
+
+    <h4>⑤ 口径澄清后的后续（2026-09-19 20:2x · 用户真机复测）</h4>
+    <div class="callout">
+      用户复测：<strong>「乐观 UI 生效，但从乐观 UI 中恢复正常状态需要 2-4 秒」</strong> ——
+      本条修的是「点击 → 变灰」，实测恒 0ms，<strong>这一段确实修好了</strong>；
+      用户现在抱怨的是<strong>「变灰 → 真值」</strong>，属另一段链路，已另立
+      <a href="26-09-19-2024-webui-truth-convergence.html">26-09-19-2024-webui-truth-convergence</a>。
+    </div>
+    <p>⚠ <strong>本条的改动在那一段上有反向效果</strong>：3s 兜底的 <code>ts</code> 改成「回执到达时重置」
+      （见上文 ②），而「真值匹配即清」<strong>从未实现</strong>（<code>pendingOps</code> 只有超时与失败两个出口）
+      ⇒ pending 从「点击起 3s」变成「回执起再 3s」，真机上恢复时间<strong>多了约 0.3~0.5s</strong>。
+      这不是设计错，而是<strong>兜底窗口在缺少真值出口时成了唯一出口</strong> —— 那条新 issue 的方案 A
+      （补上真值匹配）落地后，这个 ts 语义才是合理的，故本条的改法<strong>建议保留</strong>。
+      （该 issue 已于 2026-09-19 21:16 实施完成，见其「修复后补充」一节。）</p>
   </section>
 
   <footer>

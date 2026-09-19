@@ -55,6 +55,71 @@ const add = (ui, name, ok, detail) => {
  */
 const INST = "document.querySelector('#app')._vnode.component.proxy";
 
+/**
+ * 乐观态"生灭记录器"(2026-09-19 加, issue 26-09-19-2024 之后**必须**用它):
+ * 真值对齐修好之前, pending 要挂满 3s 兜底 ⇒ "等 120ms 再数一次 .is-pending"这种采样稳过;
+ * 修好之后 pending 只活 100~300ms, 事后再采样恒为 0 ⇒ 那些断言会**集体恒红**(不是回归, 是度量方式失效)。
+ * 故统一改为: 点击前装记录器 → 点击 → 事后问"它**曾经**出现过吗 / 什么时候消失的"。
+ */
+async function armPending(page, sel = ".is-pending") {
+  await page.evaluate(`(() => {
+    const vm = ${INST};
+    const SEL = ${JSON.stringify(sel)};
+    window.__p = { t0: null, appear: null, gone: null, peak: 0, peakT: null, sel: SEL };
+    const bump = () => {
+      const p = window.__p;
+      const n = Object.keys(vm.pendingOps || {}).length;
+      if (n > p.peak) { p.peak = n; p.peakT = p.t0 ? Math.round(performance.now() - p.t0) : null; }
+    };
+    if (window.__pmo) window.__pmo.disconnect();
+    window.__pmo = new MutationObserver(() => {
+      const p = window.__p;
+      const has = !!document.querySelector(p.sel);
+      if (p.appear === null && has) p.appear = performance.now();
+      if (p.appear !== null && p.gone === null && !has) p.gone = performance.now();
+      bump();
+    });
+    window.__pmo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], childList: true });
+    clearInterval(window.__ptimer);
+    window.__ptimer = setInterval(bump, 10);
+  })()`);
+}
+/** 时刻基准取菜单项的 click 事件(捕获阶段), 不用 Playwright 的 click 时刻(含鼠标开销) */
+async function armClick(page, handle) {
+  await handle.evaluate((el) => el.addEventListener("click", () => { window.__p.t0 = performance.now(); }, { capture: true, once: true }));
+}
+async function readPending(page) {
+  return page.evaluate(`(() => {
+    clearInterval(window.__ptimer);
+    const p = window.__p;
+    const r = (x) => ((p.t0 && x) ? Math.round(x - p.t0) : null);
+    return { appear: r(p.appear), gone: r(p.gone), peak: p.peak, peakT: p.peakT };
+  })()`);
+}
+/** 找一个"可暂停"的行(未被暂停过的)。找不到就把第一行**恢复**一次再用 ——
+ *  一轮冒烟会连续暂停几十个目标(批量 60 个), 后面的块很容易撞上"全是已暂停"。 */
+async function pausableRow(page, rowSel, resumeText) {
+  const pick = async () => {
+    for (const r of await page.$$(rowSel)) {
+      const cls = (await r.getAttribute("class")) || "";
+      if (!cls.includes("s-paused")) return r;
+    }
+    return null;
+  };
+  let row = await pick();
+  if (row || !resumeText) return row;
+  const first = (await page.$$(rowSel))[0];
+  if (!first) return null;
+  await first.click({ button: "right" });
+  await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+  for (const h of await page.$$(".ctx-item")) {
+    const t = ((await h.textContent()) || "").trim();
+    if (t.includes(resumeText)) { await h.click(); break; }
+  }
+  await page.waitForTimeout(1200);  // 等"恢复"的真值落回来
+  return pick();
+}
+
 /** 命令投递端点(给 P0-3「补丁先于 POST」那一条注入人为延迟用)。
  *  ❗Playwright 新版的路由谓词收到的是 URL 对象而不是字符串, 别直接当 string 用。 */
 const CMD_URL = (u) => {
@@ -232,41 +297,51 @@ async function smokeUi(browser, ui) {
     await page.waitForTimeout(300);
 
     // P0-3 乐观 UI: 右键 → 暂停 → 立刻出现 pending, 且最终不留假状态
-    await page.click(".torrent-row", { button: "right" });
-    await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
-    await page.screenshot({ path: path.join(SHOTS, `${ui}-4-ctxmenu.png`) });
-    const items = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
-    const handles = await page.$$(".ctx-item");
-    let clicked = false;
-    for (const h of handles) {
-      const t = (await h.textContent()) || "";
-      if (t.includes("暂停该种子") || t.includes("暂停整组") || t.trim() === "暂停") {
-        await h.click();
-        clicked = true;
-        break;
+    const row0 = await pausableRow(page, ".torrent-row", "开始该种子");
+    if (!row0) {
+      add(ui, "P0-3 右键菜单有暂停项", false, "找不到可暂停的种子行(且恢复失败)");
+    } else {
+      await row0.click({ button: "right" });
+      await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+      await page.screenshot({ path: path.join(SHOTS, `${ui}-4-ctxmenu.png`) });
+      const items = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+      const handles = await page.$$(".ctx-item");
+      let clicked = false;
+      for (const h of handles) {
+        const t = (await h.textContent()) || "";
+        if (t.includes("暂停该种子") || t.includes("暂停整组") || t.trim() === "暂停") {
+          await armPending(page);   // 记录器必须在点击**之前**装好
+          await armClick(page, h);
+          await h.click();
+          clicked = true;
+          break;
+        }
+      }
+      if (!clicked) {
+        add(ui, "P0-3 右键菜单有暂停项", false, `菜单项: ${items.slice(0, 8).join(" / ")}`);
+      } else {
+        await page.waitForTimeout(400);
+        const p = await readPending(page);
+        await page.screenshot({ path: path.join(SHOTS, `${ui}-5-pending.png`) });
+        if (EXPECT_CMD === "error") {
+          console.log(`      [info] error 模式: pending 出现过 ${p.appear !== null ? p.appear + "ms" : "否"}`);
+        } else {
+          /* 判"曾经出现过"而不是"此刻还有" —— 真值对齐修好后 pending 只活 100~300ms,
+           * 事后再数必然是 0(见 armPending 的注释)。 */
+          add(ui, "P0-3 点击后立即可见 pending(乐观)", p.appear !== null,
+            `点击 → 出现 ${p.appear === null ? "从未出现" : p.appear + "ms"}`);
+        }
       }
     }
-    if (!clicked) {
-      add(ui, "P0-3 右键菜单有暂停项", false, `菜单项: ${items.slice(0, 8).join(" / ")}`);
-    } else {
-      await page.waitForTimeout(120);
-      const pendingNow = await page.$$eval(".torrent-row.is-pending, .group-row.is-pending", (n) => n.length);
-      if (EXPECT_CMD === "error") {
-        // 桩服务的失败是**瞬间**回的, 乐观窗口可能在采样前就关闭了 —— 这里只记录不做判据
-        console.log(`      [info] error 模式: 采样到 ${pendingNow} 行 pending(回执太快时可能为 0)`);
-      } else {
-        add(ui, "P0-3 点击后立即可见 pending(乐观)", pendingNow > 0, `${pendingNow} 行半透明`);
-      }
-      await page.screenshot({ path: path.join(SHOTS, `${ui}-5-pending.png`) });
+    {
       /*
-       * 成功回执**不会立刻**清 pending: 乐观值要一直贴到"服务端数据与预期一致"或 3s 超时
-       * (见 app.js resolveOptimistic / isPending) —— 立刻清会出现"先变过去、下一轮又弹回来"。
-       * 所以这里等过 3s 的回落点再断言"不留假状态"; hang 模式同理(没有回执 -> 靠 3s 兜底)。
+       * 成功回执后 pending 会一直贴到"真值对齐"(或 3s 兜底) —— 立刻清会出现"先变过去、
+       * 下一轮又弹回来"。这里等到彻底干净再断言"不留假状态"; hang 模式靠 3s 兜底。
        */
       let pendingLater = -1, pendingOps = -1, waited = 0;
       while (waited < 8000) {
-        await page.waitForTimeout(500);
-        waited += 500;
+        await page.waitForTimeout(250);
+        waited += 250;
         pendingLater = await page.$$eval(".torrent-row.is-pending, .group-row.is-pending", (n) => n.length);
         pendingOps = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
         if (pendingLater === 0 && pendingOps === 0) break;
@@ -292,13 +367,8 @@ async function smokeUi(browser, ui) {
         await new Promise((r) => setTimeout(r, DELAY));
         await route.continue();
       });
-      // 挑一个**未暂停**的行(上一段刚暂停过一行, 再点它菜单里就是"开始"了)
-      const rows = await page.$$(".torrent-row");
-      let target = null;
-      for (const r of rows) {
-        const cls = (await r.getAttribute("class")) || "";
-        if (!cls.includes("s-paused")) { target = r; break; }
-      }
+      // 挑一个**未暂停**的行(pausableRow 会在全是已暂停时先"恢复"一个)
+      const target = await pausableRow(page, ".torrent-row", "开始该种子");
       if (!target) {
         add(ui, "P0-3 补丁先于 POST(慢投递不挡反馈)", false, "找不到未暂停的行");
       } else {
@@ -347,6 +417,92 @@ async function smokeUi(browser, ui) {
     }
 
     /*
+     * P0-3 真值对齐(issue 26-09-19-2024): 点击 → 乐观态**消失**必须够快。
+     * 与上面「补丁先于 POST」是**两段**: 上面管"变灰快不快", 这里管"恢复正常快不快"。
+     * 修之前: pendingOps 只有 3s 超时一个出口(真值到了也不清) + 回执后不刷新 ⇒ 实测 3.1~3.4s;
+     * 修之后: 回执后立刻拉真值(带退避重试) + 真值匹配即清 ⇒ 应 < 1s。
+     * ⚠ 前提是桩服务**真的改状态**(ui_harness.py::_apply_truth) —— 否则真值永不到,
+     *   这条断言只会测到"走满 3s 兜底", 跟没测一样(这正是本条缺陷当初溜过去的原因)。
+     */
+    {
+      const BUDGET = 1000;
+      /*
+       * ❗挑目标**之前**先与服务端真值对齐一次。否则会空过: 上面的块刚暂停过若干行, 桩服务
+       * 真值已经改了, 但前端要等下一轮轮询(2s)才在 DOM 上反映 —— 此时按"class 没有 s-paused"
+       * 挑出来的行其实**服务端已是 paused**, 点暂停后真值瞬间匹配 ⇒ pending 0~20ms 就清,
+       * 断言恒绿却什么都没测到(2026-09-19 实测就是这样: 19ms)。
+       */
+      await page.evaluate(`(() => { const vm = ${INST}; return vm.refresh && vm.refresh(); })()`);
+      await page.waitForTimeout(400);
+      const target2 = await pausableRow(page, ".torrent-row", "开始该种子");
+      if (!target2) {
+        add(ui, "P0-3 乐观态及时落回真值", false, "找不到未暂停的行");
+      } else {
+        const beforeKind = await target2.evaluate((el) => {
+          const c = el.className.split(" ").find((x) => x.startsWith("s-"));
+          return c || "(无)";
+        });
+        await target2.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        const hs = await page.$$(".ctx-item");
+        let clicked2 = false;
+        let clear = null;
+        for (const h of hs) {
+          const t = ((await h.textContent()) || "").trim();
+          if (!t.includes("暂停该种子") && t.trim() !== "暂停" && !t.includes("暂停整组")) continue;
+          await page.evaluate(`(() => {
+            window.__t = { t0: null, dom0: null, clear: null };
+            if (window.__mo3) window.__mo3.disconnect();
+            window.__mo3 = new MutationObserver(() => {
+              const m = window.__t;
+              if (m.dom0 === null && document.querySelector(".is-pending")) m.dom0 = performance.now();
+              if (m.dom0 !== null && m.clear === null && !document.querySelector(".is-pending")) m.clear = performance.now();
+            });
+            window.__mo3.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], childList: true });
+          })()`);
+          await h.evaluate((el) => el.addEventListener("click", () => { window.__t.t0 = performance.now(); }, { capture: true, once: true }));
+          await h.click();
+          clicked2 = true;
+          const deadline = Date.now() + 8000;
+          while (Date.now() < deadline) {
+            clear = await page.evaluate("(() => { const m = window.__t; return (m.t0 && m.clear) ? Math.round(m.clear - m.t0) : null; })()");
+            if (clear !== null) break;
+            await page.waitForTimeout(25);
+          }
+          break;
+        }
+        /*
+         * ❗**同时设下界**: 桩服务的真值是**回执后 +120ms** 才落的(_TRUTH_DELAY), 所以要等真值
+         * 就必须 ≥ 100ms 量级。若代码又退回"拿自己贴的补丁当真值比对"(2026-09-19 实测的坑:
+         * 28ms 就清, 断言全绿却什么都没测到), 下界会立刻把它打成红。
+         */
+        /* error 模式没有"等真值"这回事: 命令失败 ⇒ 立即回滚(实测 ~21ms)。给它套下界会恒红,
+         * 而"某种模式下恒红的断言"和"恒真的断言"一样没用 —— 失败路径由上面的
+         * 「失败后落回原状态 / 回滚干净」两条覆盖, 这里只要求"快"。 */
+        const FLOOR = EXPECT_CMD === "error" ? 0 : 80;
+        add(ui, `P0-3 乐观态及时落回真值(${FLOOR}~${BUDGET}ms)`,
+          clicked2 && clear !== null && clear >= FLOOR && clear < BUDGET,
+          `点击 → pending 消失 ${clear === null ? "始终未消失" : clear + "ms"}(须 ${FLOOR}~${BUDGET}ms` +
+          (FLOOR ? `: 早于 ${FLOOR}ms 说明没等真值、只是跟自己的补丁比上了)` : `, error 模式=失败立即回滚)`));
+        /*
+         * 光"pending 消失"不够 —— 回滚也会让它消失。**必须落回真值本身**:
+         * ok 模式行必须真的是暂停态(s-paused), 证明清 pending 的是"真值匹配"而不是"补丁撤了退回旧值"。
+         */
+        const cls2 = await target2.getAttribute("class");
+        if (EXPECT_CMD === "error") {
+          add(ui, "P0-3 失败后落回原状态(非假暂停)", !!cls2 && !cls2.includes("s-paused"),
+            `行 class: ${cls2}`);
+        } else {
+          /* 前置自证: 点击前必须**不是**暂停态 —— 否则"真值对齐"是白捡的(本来就是 paused)。 */
+          add(ui, "P0-3 落回的是真值(行确为 s-paused)",
+            !!cls2 && cls2.includes("s-paused") && !beforeKind.includes("s-paused"),
+            `${beforeKind} -> ${cls2}`);
+        }
+      }
+      await page.waitForTimeout(500);
+    }
+
+    /*
      * P0-4 批量合单: 选 N 个目标点暂停 ⇒ 必须只有 **1** 条 POST /api/torrents/bulk,
      * 且**零**条逐目标 /api/torrents/{hash}/pause。合单前这是 N 次 POST + N 条回执轮询 +
      * 后端 N 次串行 qB 调用(在主循环线程上, 期间界面"卡住")—— 这是"点批量后界面卡住"的真因。
@@ -370,9 +526,10 @@ async function smokeUi(browser, ui) {
       page.on("request", onReq);
       const btns = await page.$$(".bulk-inline .bulk-btn");
       let bulkClicked = false;
+      await armPending(page, ".torrent-row.is-pending, .group-row.is-pending");  // 点击**之前**装好
       for (const b of btns) {
         const t = (await b.textContent()) || "";
-        if (t.includes("暂停")) { await b.click(); bulkClicked = true; break; }
+        if (t.includes("暂停")) { await armClick(page, b); await b.click(); bulkClicked = true; break; }
       }
       await page.waitForTimeout(1500);
       page.off("request", onReq);
@@ -390,8 +547,10 @@ async function smokeUi(browser, ui) {
         add(ui, "P0-3 批量失败后回滚干净", pend === 0 && pendRows === 0,
           `pendingOps ${pend} / 残留行 ${pendRows} / 目标 ${picked}`);
       } else {
-        add(ui, "P0-3 批量乐观覆盖全部目标", pend >= Math.min(picked, N) * 0.8,
-          `pendingOps ${pend} / 目标 ${picked}`);
+        /* 用**峰值**而不是"此刻的数量": 真值对齐修好后 1500ms 早清干净了, 此刻必然是 0。 */
+        const p = await readPending(page);
+        add(ui, "P0-3 批量乐观覆盖全部目标", p.peak >= Math.min(picked, N) * 0.8,
+          `峰值 pendingOps ${p.peak}(@${p.peakT === null ? "-" : p.peakT + "ms"}) / 目标 ${picked}`);
       }
       // 清掉选择, 免得影响后面的视图切换断言
       await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
@@ -408,39 +567,44 @@ async function smokeUi(browser, ui) {
     await nav[0].click();  // 回分组
     await page.waitForTimeout(600);
     {
-      const idx = await page.evaluate(`(() => {
-        const rows = [...document.querySelectorAll('.group-row[data-table="group"]')];
-        return rows.findIndex((r) => !r.className.includes('s-paused'));
-      })()`);
-      const gHandles = await page.$$('.group-row[data-table="group"]');
-      if (idx < 0 || !gHandles[idx]) {
-        add(ui, "P0-3 整组乐观(组行 is-pending)", false, "找不到可暂停的组行");
+      /*
+       * ❗走 pausableRow(带"全暂停了就先恢复一行"的兜底), 不要只按 DOM class 挑:
+       * 行是**窗口化**的(只渲染 26 行), 而前面的块已经批量暂停 60 个种子 + 整剧暂停一整部剧,
+       * 窗口里的组行很容易**全是 s-paused** ⇒ 直接报"找不到可暂停的组行"
+       * (2026-09-19 与对方提交合流后实测: prism 过、atlas 挂 —— 只因两者窗口落点不同)。
+       */
+      const gTarget = await pausableRow(page, '.group-row[data-table="group"]', "开始整组");
+      if (!gTarget) {
+        add(ui, "P0-3 整组乐观(组行 is-pending)", false, "找不到可暂停的组行(且恢复失败)");
       } else {
-        const key = await gHandles[idx].evaluate((el) => el.dataset.key);
-        const before = await gHandles[idx].evaluate((el) => el.className);
-        await gHandles[idx].click({ button: "right" });
+        const key = await gTarget.evaluate((el) => el.dataset.key);
+        const before = await gTarget.evaluate((el) => el.className);
+        await gTarget.click({ button: "right" });
         await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
         const gItems = await page.$$(".ctx-item");
         let gClicked = false;
+        await armPending(page, ".group-row.is-pending");   // 必须在点击**之前**装好
         for (const h of gItems) {
           const t = (await h.textContent()) || "";
-          if (t.includes("暂停整组") || t.trim() === "暂停") { await h.click(); gClicked = true; break; }
+          if (t.includes("暂停整组") || t.trim() === "暂停") { await armClick(page, h); await h.click(); gClicked = true; break; }
         }
-        await page.waitForTimeout(150);
+        await page.waitForTimeout(900);
+        const p = await readPending(page);
         const after = await page.evaluate(
           `(() => { const el = document.querySelector('.group-row[data-table="group"][data-key=${JSON.stringify(key)}]'); return el ? el.className : null; })()`);
+        const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
+        const sCls = (c) => ((c || "").split(" ").find((x) => x.startsWith("s-")) || "");
         if (EXPECT_CMD === "error") {
-          // error 模式: 回执是**瞬间**回的, 乐观窗口可能在采样前就关了 ⇒ 改断言"回滚干净"
-          const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
-          const sCls = (c) => ((c || "").split(" ").find((x) => x.startsWith("s-")) || "");
           add(ui, "P0-3 整组乐观失败后回滚(组行)",
             gClicked && !!after && !after.includes("is-pending") && pend === 0 && sCls(after) === sCls(before),
             `${before} -> ${after} / pendingOps ${pend}`);
         } else {
-          add(ui, "P0-3 整组乐观(组行 is-pending)", gClicked && !!after && after.includes("is-pending"),
-            `${before} -> ${after}`);
+          /* 判"组行**曾经**出现过 pending" —— 真值对齐修好后组行 pending 只活 100~300ms,
+           * 点完再数一次必然是 0(不是回归, 是度量方式失效)。 */
+          add(ui, "P0-3 整组乐观(组行 is-pending)", gClicked && p.appear !== null,
+            `点击 → 组行出现 pending ${p.appear === null ? "从未出现" : p.appear + "ms"} / 消失 ${p.gone === null ? "-" : p.gone + "ms"}`);
         }
-        await page.waitForTimeout(3400);  // 等乐观回落(3s 兜底), 别把 pending 带进后面的断言
+        await page.waitForTimeout(600);  // 真值对齐后 pending 早清了, 留一点余量即可
       }
     }
 
@@ -538,11 +702,13 @@ async function smokeUi(browser, ui) {
         await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
         const eItems = await page.$$(".ctx-item");
         let eClicked = false;
+        await armPending(page, ".group-row.ep-row.is-pending");   // 点击**之前**装好
         for (const h of eItems) {
           const t = (await h.textContent()) || "";
-          if (t.includes("暂停整集") || t.includes("暂停整剧") || t.trim() === "暂停") { await h.click(); eClicked = true; break; }
+          if (t.includes("暂停整集") || t.includes("暂停整剧") || t.trim() === "暂停") { await armClick(page, h); await h.click(); eClicked = true; break; }
         }
-        await page.waitForTimeout(150);
+        await page.waitForTimeout(900);
+        const p = await readPending(page);
         const after = await page.$$eval(".group-row.ep-row", (ns) => (ns[0] ? ns[0].className : null));
         if (EXPECT_CMD === "error") {
           const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
@@ -551,10 +717,10 @@ async function smokeUi(browser, ui) {
             eClicked && !!after && !after.includes("is-pending") && pend === 0 && sCls(after) === sCls(before),
             `${before} -> ${after} / pendingOps ${pend}`);
         } else {
-          add(ui, "P0-3 整集乐观(集行 is-pending)", eClicked && !!after && after.includes("is-pending"),
-            `${before} -> ${after}`);
+          add(ui, "P0-3 整集乐观(集行 is-pending)", eClicked && p.appear !== null,
+            `点击 → 集行出现 pending ${p.appear === null ? "从未出现" : p.appear + "ms"} / 消失 ${p.gone === null ? "-" : p.gone + "ms"}`);
         }
-        await page.waitForTimeout(3400);
+        await page.waitForTimeout(600);
       }
     }
 

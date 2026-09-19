@@ -123,6 +123,24 @@
   `[perf] … POST xxxms`, 持续 >400ms 再动服务端。
   **顺带发现另立 issue(未修)**: [整剧操作在剧行上无 `is-pending`](issues/26-09-19-1959-webui-show-row-no-pending.html)
   —— 补丁 0ms 贴上但 `.show-row` 不绑 pending(剧行默认折叠), 与 BUG-3 同类的漏绑。
+- **真机复测反馈 · 「乐观后 2-4s 才恢复正常」(2026-09-19, 未提交)**: 上一条修的是「点击 → 变灰」,
+  用户实际报的是**第二段**「变灰 → 真值」([issue 26-09-19-2024](issues/26-09-19-2024-webui-truth-convergence.html))。
+  根因: `systemPatterns` 写的「真值匹配即清」**从未实现**(只有 3s 超时与失败回滚两个出口) + 回执后
+  **不刷新**、真值要等下一轮轮询(>3000 种子 3s)。**修法 A+B1**: `refresh()` 里 `_snapshotTruth()`
+  记本轮 payload 原始值 ⇒ `reapplyPending()` 比它、对齐即清; 回执成功后 `_pullTruthAfterCmd()`
+  立即 refresh + 200→400ms 退避重试(窗口 1.5s, 超时仍 3s 兜底)。**验收入库前必做的一步**:
+  给 `ui_harness.py` 加 `_apply_truth()`(pause/resume 真改 `tor.state` 并 `rebuild_views()`),
+  且**先回执后改状态**(+120ms)复刻真机"补刷新在回执之后"的错位 —— 否则任何"何时消失"的断言
+  都只测到"走满 3s"。❗**踩坑**: 第一版判定拿"行上的当前值"比 ⇒ **被自己的补丁骗了**
+  (`updated===false` 时行对象没被换掉), 22ms 就假清除, 连"落回的是真值(s-paused)"都照样 PASS
+  ⇒ 断言改为**带下界**(80~1000ms)才抓得住。**实测**: 清除 28ms(假) → **272ms**(真); 冒烟双 UI
+  **54 项 0 失败**(ok, 真值落回 259~267ms / 组行 239~248ms / 集行 316~319ms)、error **54 项 0 失败**
+  (失败立即回滚 21~22ms; 单 UI 各 27 项 —— 与「剧行 is-pending + 节拍对齐」两笔合流后重测);
+  单测 **1054 passed**(基线随新增守阵从 1053 上移); 红绿双验 22ms 红 / 263ms 绿。
+  ⚠ 合流时撞到一次**窗口化副作用**: 前面的块批量暂停 60 个种子 + 整剧暂停, 窗口内 26 行组行
+  **全是 s-paused** ⇒ 「整组乐观」报"找不到可暂停的组行"(prism 过、atlas 挂, 只因窗口落点不同)。
+  已把该块的选行改为 `pausableRow(…, "开始整组")`(带"全暂停了就先恢复一行"的兜底)。
+  **未走**: 方案 B2(把回执推迟到服务端补刷新之后)—— 它会让"已执行"提示晚 0.2~1s, 属产品取舍未拍板。
 - WEB UI 追剧页 剧/集右键「打开目标文件夹」报"种子不存在" (2026-09-19, 已入库 `c888fba`): 用户报追剧页**剧右键与集右键**失败, 种子右键正常。**真因**: 后端 shows 视图的 `members` 是 **hash 数组**, 前端 `decoratedShows` 把它换成**成员对象**, 而 `openShowEpMenu`/`openShowMenu` 直接把 members 当 hash 用 ⇒ 拼进 URL/JSON 时字符串化成 `[object Object]` ⇒ 后端 404。**同一根因还让整集/整剧的开始/暂停/强制汇报报 Not Found、删除静默无反应**(用户尚未察觉)。**修法**: `shared/app.js` 新增 `memberHashesOf(list)`(两种形态都收)统一取 hash, 菜单与选中态(`_showHashes`/`_epUnits`/`epSelState`)一律走它; 双 UI 共用该文件 ⇒ 一次修两处。**验证**: 用 node 桩掉 `Vue.createApp`/`window`/`document` 直接加载**真 app.js** 断言产出是字符串 hash —— 新版 9/9 通过, 旧版挂 5 项(**红绿双验**); 守阵固化进 `tests/test_web.py::test_frontend_static_bundle_health` 第 7 项; 端到端冒烟(桩服务 + 无头浏览器)同样红绿验证。基线 1041 不变。
 - WEB 跳过本地验证日志降为 INFO (2026-09-18, 已入库 `7ce54e9`): `web.py` 里"本机免密钥放行"提示原为 `logger.warning` ⇒ 改 `logger.info`(免鉴权是用户**显式开的配置**而非异常, WARNING 会经 notify 推送扰民); 变量 `_local_skip_warned` → `_local_skip_logged` 对齐; `test_web.py::test_skip_local_verify_loopback_bypass` 断言同步改为 INFO 级 + 断言不再产生 WARNING。
 - 导出 .torrent 中文名 500 已修 (2026-09-17, 已入库 `4de0953`): `/api/torrents/{hash}/export` 把种子名直拼进 `Content-Disposition`, 而 HTTP 头只能 latin-1 ⇒ 中文名触发 `UnicodeEncodeError` 500。修法: 新增 `web.content_disposition(filename, fallback, ext)` 双段头(`filename=` ASCII 回退 + `filename*=UTF-8''<百分号编码>`)并清洗控制字符; 测试 `test_content_disposition_encoding` + 导出端点非 ASCII 用例。

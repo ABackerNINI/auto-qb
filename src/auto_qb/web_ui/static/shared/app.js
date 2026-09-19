@@ -315,6 +315,9 @@ const app = createApp({
       cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行
       renderMs: 0,  // 单轮 refresh() 中"赋值 + 多选交集"的耗时(不含网络)
       pendingOps: {},  // P0-3 乐观 UI: hash -> { patch, prev, ts }, 见 isPending/applyOptimistic
+      /* 本轮 /api/state 的**真值快照**: hash -> { 补丁键: 服务端原始值 }。
+       * 判"真值是否已对齐"必须比这个, 不能比行上的当前值 —— 见 _snapshotTruth。 */
+      truthSnapshot: null,
       /* P0-3 组行乐观: 组 key -> { primary, ts }。与 pendingOps 同一套语义, 但**只存"结果"**
        * 不存 prev —— 组对象是 decoratedGroups 的**拷贝**(非响应式), 直接改 g.status 不会触发
        * 重渲染, 所以补丁走这个响应式覆盖表, 由 groupPrimary(g) 现问现用; 回滚 = 删掉覆盖,
@@ -1709,6 +1712,7 @@ const app = createApp({
           if (state.torrents !== undefined) this.torrents = state.torrents;  // 种子页平铺数组(SEED_ITEM)
           if (state.shows !== undefined) this.shows = state.shows;  // 追剧视图(R10)
           if (typeof state.rid === "number") this.lastRid = state.rid;
+          this._snapshotTruth(state);  // ❗必须在 reapplyPending **之前**: 快照要的是服务端原始值
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
           // 虚拟行 key(u-<hash>)不做存在性校验(搜索视图由 filteredGroups 重建)
           if (this.selectedCount) {
@@ -2362,10 +2366,76 @@ const app = createApp({
       }
     },
     reapplyPending() {
-      // 每轮 refresh 整表替换会盖掉乐观值, 这里把仍 pending 的补丁重新贴上
+      /* 每轮 refresh 整表替换会盖掉乐观值, 这里把仍 pending 的补丁重新贴上。
+       * ❗**真值已到就收工**(issue 26-09-19-2024-webui-truth-convergence): 原先这里只管贴,
+       * pendingOps 唯一的出口是 3s 兜底 ⇒ 真值早就到了、行还半透明挂着, 用户看到的就是
+       * "点了之后 2-4s 才恢复正常"。现在逐个比对**服务端真值快照** ⇒ 对齐就立即清掉。 */
       for (const h of Object.keys(this.pendingOps)) {
         if (!this.isPending(h)) continue;  // 顺带清掉已超时的
-        this._forEachRow(h, (row) => Object.assign(row, this.pendingOps[h].patch));
+        const op = this.pendingOps[h];
+        if (this._optimisticSettled(h, op)) {
+          // 真值已对齐: 不再贴补丁(贴上去也是同样的值, 但 is-pending 会一直挂着)
+          delete this.pendingOps[h];
+          continue;
+        }
+        this._forEachRow(h, (row) => Object.assign(row, op.patch));
+      }
+    },
+    /* 本轮 /api/state 的真值快照(只记仍 pending 的 hash)。
+     * ❗**必须比服务端原始值, 不能比行上的当前值**: 行在上一轮已经被贴过补丁了, 拿行上的值
+     *   跟补丁比 = 跟自己比 ⇒ 首轮必"匹配"、pending 立刻消失(2026-09-19 实测 28ms 就清了,
+     *   而桩服务真值 +120ms 才到 —— 断言全绿却什么都没测到)。
+     * ❗**拷值不拷引用**: 赋值后 `this.torrents` 与 payload 是同一批对象, 补丁随后就改到它们,
+     *   存引用等于没存。
+     * ❗只认 payload 里**真的带了**的 hash: 当前视图的 payload 可能不含它(如追剧视图只回
+     *   shows), 那时返回 false ⇒ 继续贴、交给 3s 兜底 —— 宁可慢收, 不可误判。 */
+    _snapshotTruth(state) {
+      const keys = Object.keys(this.pendingOps);
+      if (!keys.length) { this.truthSnapshot = null; return; }
+      const want = new Set(keys);
+      const m = new Map();
+      const take = (r) => {
+        if (!r || !want.has(r.hash) || m.has(r.hash)) return;
+        const op = this.pendingOps[r.hash];
+        if (!op) return;
+        const v = {};
+        for (const k of Object.keys(op.patch)) v[k] = r[k];
+        m.set(r.hash, v);
+      };
+      for (const r of state.torrents || []) take(r);
+      for (const r of state.singles || []) take(r);
+      for (const g of state.groups || []) for (const mm of g.members || []) take(mm);
+      this.truthSnapshot = m;
+    },
+    /* 乐观补丁是否已落回真值: 只比**补丁改过的那几个键**, 且只比服务端这一轮给的值。 */
+    _optimisticSettled(hash, op) {
+      const t = this.truthSnapshot && this.truthSnapshot.get(hash);
+      if (!t) return false;  // 本轮 payload 没带它的真值 -> 不算对齐(继续贴, 3s 兜底收尾)
+      for (const k of Object.keys(op.patch)) {
+        if (t[k] !== op.patch[k]) return false;
+      }
+      return true;
+    },
+    /* ---------------- 回执后立刻把真值拉回来(issue 26-09-19-2024) ----------------
+     * 真值原本只能等下一轮轮询(≤1000→1.5s / 1000~3000→2s / >3000→3s)才到 ⇒ 行一直半透明。
+     * 这里不等: 拿到 ok 回执就 refresh 一次。❗竞态: 服务端补刷新(P0-5)是在**回执之后**才跑的
+     * (见 mixins/web_commands.py), 所以第一次可能拿到补刷新前的旧快照(rid 未变) ⇒ 短退避重试,
+     * 直到 reapplyPending 判定"真值已对齐"或窗口用尽(窗口用尽后仍由 3s 兜底收尾, 行为不变)。
+     * 代价: 每次操作多 1~3 次 /api/state(用户触发型, 不在轮询路径上); 单轮按种子量 143~500ms。 */
+    async _pullTruthAfterCmd(hashes, budgetMs = 1500) {
+      const t0 = Date.now();
+      let delay = 0;
+      const list = hashes || [];
+      while (Date.now() - t0 < budgetMs) {
+        if (delay) await new Promise((r) => setTimeout(r, delay));
+        if (!list.some((h) => this.pendingOps[h])) return;  // 已清(真值对齐/回滚/超时)
+        try {
+          await this.refresh();
+        } catch (e) {
+          return;  // 网络/鉴权问题: 交给正常轮询, 不在这里死磕
+        }
+        if (!list.some((h) => this.pendingOps[h])) return;
+        delay = delay === 0 ? 200 : Math.min(400, delay * 2);
       }
     },
     /* 组行是否有成员在飞(模板绑 is-pending)。**组行的颜色本身不需要额外补丁** ——
@@ -2435,6 +2505,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
+          if (r.ok) await this._pullTruthAfterCmd(hashes);  // 不等下一轮轮询, 立刻把真值拉回来
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
           else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
         }
@@ -2941,6 +3012,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
+          if (r.ok) await this._pullTruthAfterCmd(hashes);
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
           else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
         } catch (e) {
@@ -3168,6 +3240,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
+          if (r.ok) await this._pullTruthAfterCmd(hashes);
           const n = groupKeys.length + memberHashes.length;
           if (r.ok) this.toast(`已执行: ${label}(${n} 个目标)`, "ok", 2500);
           else this.toast(`${label}失败: ${r.error}`, "error", 8000);
@@ -3408,6 +3481,7 @@ const app = createApp({
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
+          if (r.ok) await this._pullTruthAfterCmd(hashes);
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
           else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
         }

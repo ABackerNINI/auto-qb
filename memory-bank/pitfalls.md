@@ -910,6 +910,22 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   解法: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright-core@1.62.0`, 脚本里
   `require("playwright-core")` 优先。另外 **ESM 的 `import` 不认 `NODE_PATH`**, 所以冒烟脚本必须写成
   **CJS**(`require`), 否则找不到包。
+  **并发会话会让这条反复发作**(2026-09-19 实测): 别人在 workspace 里 `npm i` 会把顶层
+  `playwright-core` 在 1.62/1.63 之间来回换 ⇒ 同一个命令上一轮还好、下一轮就
+  `Executable doesn't exist …chromium_headless_shell-1243`(再下一轮可能又变回要 1234)。
+  **一次性兜底**(不用动别人的安装): 建一个目录, 把两个 revision 都 junction 到本机真实的
+  `chromium-1234`, 跑的时候带 `PLAYWRIGHT_BROWSERS_PATH=<该目录>` —— 客户端要哪个版本都能命中:
+  ```powershell
+  $b = "<仓内临时目录>"; $src = "$env:LOCALAPPDATA\ms-playwright"
+  New-Item -ItemType Junction -Path "$b\chromium_headless_shell-1243" -Target "$src\chromium_headless_shell-1234" -Force
+  New-Item -ItemType Junction -Path "$b\chromium-1243"               -Target "$src\chromium-1234" -Force
+  New-Item -ItemType Junction -Path "$b\chromium_headless_shell-1234" -Target "$src\chromium_headless_shell-1234" -Force
+  New-Item -ItemType Junction -Path "$b\chromium-1234"               -Target "$src\chromium-1234" -Force
+  ```
+  ❗同一端口上的旧桩服务要用 **PowerShell** 关(`Get-NetTCPConnection -LocalPort N -State Listen`
+  拿 OwningProcess 再 `Stop-Process`): `uv run python` 是父子进程, 按 `netstat` 的 PID 杀经常
+  杀不掉父进程 ⇒ 端口不释放 ⇒ 新桩服务 `bind` 失败(10048)而旧服务继续应答 ⇒ **你以为换了
+  `--cmd-result error`, 实际还在用 ok 模式的服务**, 冒烟结果与预期完全对不上。
 - **⚠ Vue 3.5.13 取根实例要绕一下**: `#app.__vue_app__._instance` 恒为 `null`(key 存在但
   `instance: false`)。可用的是 `document.querySelector('#app')._vnode.component.proxy`。踩过一次,
   别改回去。

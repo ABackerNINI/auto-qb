@@ -90,6 +90,53 @@ def _make_torrents(count: int, site_conf):
     return out
 
 
+# 桩服务"真改状态"用的目标状态(与后端 _state_kind 的口径一致: pausedDL -> kind=paused,
+# uploading -> seeding, downloading -> downloading) —— 前端乐观补丁写的就是这几个 kind。
+_PAUSED_STATE = "pausedDL"
+_RESUME_DONE = "uploading"
+_RESUME_TODO = "downloading"
+# ❗刻意让**回执先到、状态后改**(复刻真机竞态: 服务端 P0-5 补刷新在回执**之后**才跑,
+# 见 mixins/web_commands.py)。前端"回执后立刻拉真值"第一次会扑空(rid 还没变),
+# 必须靠退避重试才拿得到 —— 这段延迟就是为了让重试逻辑被测到(issue 26-09-19-2024)。
+_TRUTH_DELAY = 0.12
+
+
+def _target_hashes(mgr, cmd: str, body: dict):
+    """命令影响到的 hash 列表(桩里没有真实 qB, 只能按 payload 展开)"""
+    if cmd in ("pause_torrent", "resume_torrent"):
+        h = body.get("hash")
+        return [h] if h else []
+    if cmd in ("pause_group", "resume_group"):
+        return list(mgr.store.groups.get(body.get("key") or (), []))
+    if cmd == "bulk_torrents":
+        out = list(body.get("hashes") or [])
+        for k in body.get("keys") or []:
+            out.extend(mgr.store.groups.get(k, []))
+        return list(dict.fromkeys(out))
+    return []
+
+
+def _apply_truth(mgr, cmd: str, body: dict):
+    """把命令**真的**落到合成数据上 —— 否则真值永远不到, 乐观态只能靠 3s 兜底收尾,
+    于是任何「真值对齐」类断言都测不到东西(只会测到"走满 3s")。
+
+    这也是本桩此前最大的失真: 只回 ok 不改状态, 于是 issue 26-09-19-2024 那种
+    "真值到了也不清 pending"的缺陷在本地完全无法暴露。
+    """
+    act = body.get("action") if cmd == "bulk_torrents" else cmd.split("_", 1)[0]
+    if act not in ("pause", "resume"):
+        return
+    for h in _target_hashes(mgr, cmd, body):
+        tor = mgr.store.by_hash.get(h)
+        if tor is None:
+            continue
+        if act == "pause":
+            tor.state = _PAUSED_STATE
+        else:
+            tor.state = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
+    mgr.rebuild_views()  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+
+
 def _start_command_pump(mgr, mode: str):
     """兜底命令泵: 桩服务没有主循环, 命令没人消费 ⇒ 前端 waitCmd 会一直轮询到超时。
 
@@ -115,9 +162,16 @@ def _start_command_pump(mgr, mode: str):
             if not cmd_id:
                 continue
             if mode == "error":
+                # 失败**不改状态**: 前端必须回滚到原值(回滚干净由冒烟 error 模式断言)
                 mgr._web_results[cmd_id] = {"status": "error", "error": "桩服务注入的失败(用于验证乐观 UI 回滚)"}
             else:
                 mgr._web_results[cmd_id] = {"status": "ok", "wait_ms": 0, "exec_ms": 1}
+                # 先回执、后改状态(复刻真机补刷新的错位, 见 _TRUTH_DELAY 注释)
+                time.sleep(_TRUTH_DELAY)
+                try:
+                    _apply_truth(mgr, _cmd, body)  # ❗队列解出来的是 _cmd(与 cmd 区分开)
+                except Exception as e:  # 桩的健壮性优先: 同步失败也不能拖死命令泵
+                    print(f"[harness] 状态同步失败: {e}", file=sys.stderr)
 
     t = threading.Thread(target=_loop, name="harness-cmd-pump", daemon=True)
     t.start()

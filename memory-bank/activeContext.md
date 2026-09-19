@@ -52,6 +52,23 @@
      为真实数据预置)。⚠ **例外**: `/api/config/schema` 载荷含 dataclass(`Group`/`Field`/`Plugin`),
      直返会 `TypeError: Object of type Group is not JSON serializable` ⇒ 500, **必须保留 jsonable_encoder**,
      已回退并在端点留注释 —— 判据见 pitfalls 该条目。守阵清单扩到 8 条 URL(7 个端点)并红绿双验。**尚未提交。**
+  4. **[webui-truth-convergence](issues/26-09-19-2024-webui-truth-convergence.html)** (2026-09-19 真机复测新报,
+     **高**): 用户确认「乐观 UI 生效, 但**从乐观态恢复正常要 2-4s**」—— 与第 3 条是**两段链路**。
+     根因两条(均为代码事实): ①**「真值匹配即清」从未实现** —— `pendingOps` 只有「3s 超时」与「失败回滚」
+     两个 `delete` 出口(app.js:2315/2361), 真值到了也挂满窗口(systemPatterns 写的"真值匹配即清"是文档漂移);
+     ②**回执后前端不立即刷新**, 真值要等下一轮轮询(≤1000→1.5s / 1000~3000→2s / >3000→3s)。
+     受控实测: 回执端到端 **5~7ms**(排队 0 / 执行 1ms), 乐观态清除却 **3126 / 3449ms**。
+     ⚠ 第 3 条把 3s 兜底 ts 改成"回执起算", 在 ① 没修的前提下**让恢复时间多了约 0.3~0.5s** ——
+     这就是"修复未成功"的直接原因; ① 修好后该 ts 语义才合理, 建议保留。
+     ~~修法方向~~ → ✅ **已修未提交**(2026-09-19 21:16): 采用 A + B1(未走 B2, 它会让"已执行"提示晚
+     0.2~1s, 属产品取舍未拍板)。实现: `refresh()` 里 `_snapshotTruth()` 记本轮 payload 的原始值 →
+     `reapplyPending()` 比它、对齐即清; 回执成功后 `_pullTruthAfterCmd()` 立即 refresh + 200→400ms
+     退避重试(窗口 1.5s); 桩服务加 `_apply_truth()` 真改状态且**先回执后改**(+120ms)复刻真机错位。
+     ❗中途踩坑: 第一版判定拿"行上的当前值"比, **被自己的补丁骗了**(行上一轮已被贴补丁, 且
+     `updated===false` 时行对象没被换掉) ⇒ 22ms 就假清除; 连"落回的是真值"也照样 PASS。
+     **只有给断言设下界能抓住它**。实测: 修前清除 28ms(假) → 修后 **272ms**(真); 冒烟双 UI
+     **54 项 0 失败**(ok)/ error **54 项 0 失败**(与对方「剧行 is-pending + 节拍对齐」两笔合流后重测;
+     单 UI 各 27 项); 单测 **1054 passed**(基线随对方新增 1 条守阵从 1053 上移); 红绿双验(22ms 红 / 263ms 绿)。
   3. **[webui-optimistic-latency](issues/26-09-19-1939-webui-optimistic-latency.html)** —— ✅ **已修(本提交)**
      (2026-09-19): 真机走查报「乐观 UI 反应 2-4s」。受控测量(Playwright 给命令 POST 注入延迟)
      证明 POST 慢多少反馈就晚多少: 注入 2000ms 时补丁 **2012ms** 才贴(`actEpisode` 对照 0ms)。

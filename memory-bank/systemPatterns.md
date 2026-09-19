@@ -186,6 +186,15 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
   与 `server_state`, 分组/任务/事件/索引全不管 ⇒ 留下半刷新态); 整批命令 drain 完**只补一次**。
 - **乐观 UI 只做白名单(pause/resume)**: `pendingOps[hash] = {patch, prev, ts}`, 真值匹配即清,
   3s 兜底回落, **失败立即回滚**。
+  - ✅ **「真值匹配即清」已落地**(2026-09-19, [issue 26-09-19-2024](issues/26-09-19-2024-webui-truth-convergence.html)):
+    `refresh()` 拿到新数据时先 `_snapshotTruth()` 记下 pending hash 的**服务端原始值**,
+    `reapplyPending()` 比它 ⇒ 对齐就 `delete`。回执后 `_pullTruthAfterCmd()` 立刻 refresh
+    (不等轮询), 短退避 200→400ms 重试, 总窗口 1.5s, 超时仍由 3s 兜底收尾。
+    - ❗**必须比服务端快照, 不能比行上的当前值**: 行在上一轮已被贴过补丁, 拿它跟补丁比 = 跟自己比
+      ⇒ 首轮必"匹配"、pending 立刻消失(实测 22ms); 且 `updated === false`(rid 未变)时行对象
+      根本没被换掉, 这个假匹配更容易发生。快照**拷值不拷引用**(赋值后与 payload 是同一批对象)。
+    - ❗只认本轮 payload **真的带了**的 hash: 追剧视图 `view=show` 回 shows+groups+singles,
+      成员真值走 groups 取到; 若某 hash 不在本轮 payload 里 ⇒ 不算对齐, 继续贴、交给 3s 兜底。
   - ❗**补丁必须先于 POST 贴上**(4 条入口: `act` / `actTorrent` / `actEpisode` / bulk 一律如此)。
     放在 `await POST` 之后 = 把"点击即变"押在网络往返上 —— 受控测量(注入 2000ms POST 延迟):
     修前补丁 2012ms 才贴, 修后 0ms(issue 26-09-19-1939, 用户真机报"点了 2-4s 才变")。
