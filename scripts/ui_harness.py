@@ -185,7 +185,7 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
         threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
 
-def _start_command_pump(mgr, mode: str, revert_ms: int = 0):
+def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
     """兜底命令泵: 桩服务没有主循环, 命令没人消费 ⇒ 前端 waitCmd 会一直轮询到超时。
 
     这里不**执行**命令(合成数据没有真实 qB 可打), 只按 mode 直接写回执, 让前端的命令
@@ -213,7 +213,16 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0):
                 # 失败**不改状态**: 前端必须回滚到原值(回滚干净由冒烟 error 模式断言)
                 mgr._web_results[cmd_id] = {"status": "error", "error": "桩服务注入的失败(用于验证乐观 UI 回滚)"}
             else:
-                mgr._web_results[cmd_id] = {"status": "ok", "wait_ms": 0, "exec_ms": 1}
+                if wait_ms:
+                    # ❗模拟真机「主循环正忙着, 命令排在后面」: 回执与真值是**同一轮主循环**里
+                    # 出来的, 所以两者一起延后 —— 不是只延后回执。本地桩没有主循环, wait_ms 恒为 0,
+                    # 于是"命令投递到回执"这一段在本地从来测不到, 而真机上它恰恰是最长的那一段。
+                    time.sleep(wait_ms / 1000.0)
+                mgr._web_results[cmd_id] = {
+                    "status": "ok",
+                    "wait_ms": round(wait_ms, 1),   # 埋点口径与后端 _timing() 一致: 排队等主循环
+                    "exec_ms": 1,
+                }
                 # 先回执、后改状态(复刻真机补刷新的错位, 见 _TRUTH_DELAY 注释)
                 time.sleep(_TRUTH_DELAY)
                 try:
@@ -248,6 +257,12 @@ def main() -> int:
         " 0 = 不还原, 永久生效)。注意不是「真值生效后 N ms」—— 定时回弹会跑到前端观测之前"
         "(见 _revert_after_consume)",
     )
+    ap.add_argument(
+        "--cmd-wait-ms", type=int, default=0,
+        help="模拟真机「主循环正忙, 命令排在其后」: 回执与真值**一起**延后这么久(两者出自同一轮"
+        "主循环)。本地桩没有主循环, wait_ms 恒为 0 ⇒ 「命令投递→回执」这一段从来测不到, "
+        "而真机上它往往是最长的那一段。0 = 瞬时(默认)",
+    )
     ap.add_argument("--host", default="127.0.0.1", help="监听地址(**只接受回环**)")
     ap.add_argument("--port", type=int, default=8099)
     args = ap.parse_args()
@@ -280,7 +295,7 @@ def main() -> int:
             groups[(a.name, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
     mgr.rebuild_views()
-    _start_command_pump(mgr, args.cmd_result, args.state_revert_ms)
+    _start_command_pump(mgr, args.cmd_result, args.state_revert_ms, args.cmd_wait_ms)
 
     app = create_app(mgr)
     print(

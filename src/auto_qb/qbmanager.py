@@ -37,6 +37,7 @@ from .mixins import (
     WebCommandsMixin,
     WebviewMixin,
 )
+from .mixins.web_commands import CMD_SLOW_MS
 from .notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .qbclient import _new_client
@@ -369,6 +370,10 @@ class QbManager(
                         # 命令驱动(state_changed)的那一轮 force=True: 绕过"上一版是否被取走"门控,
                         # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
                         cmd_forced = bool(state_changed) and not dry_run
+                        # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
+                        # (前两段 排队/执行 由 web_commands._log_cmd_timing 落日志)。
+                        # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
+                        _t_line = time.time() if cmd_forced else 0.0
                         if sync_due and tick_due:
                             self._tick(dry_run, force=cmd_forced)
                             next_sync_at = time.time() + sync_interval
@@ -379,6 +384,15 @@ class QbManager(
                         elif tick_due:
                             self._task_line(dry_run, force=cmd_forced)
                             next_tick_at = time.time() + main_tick
+                        if _t_line:
+                            _resync_ms = round((time.time() - _t_line) * 1000, 1)
+                            if _resync_ms > CMD_SLOW_MS:
+                                logger.warning(
+                                    f"[cmd] 命令后补刷新 {_resync_ms}ms —— 真值要这一轮跑完才进快照,"
+                                    " 前端的乐观撤下再快也得等它(大库 /sync/maindata 往返 + 四视图重建)"
+                                )
+                            else:
+                                logger.info(f"[cmd] 命令后补刷新 {_resync_ms}ms")
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
                         if (sync_due or tick_due) and self._last_conn_ok is False:

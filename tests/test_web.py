@@ -3594,3 +3594,51 @@ def test_api_enqueue_wakes_main_loop(web_env):
     missing = posted - set(SELF_POSTED_COMMANDS)
     assert not missing, (f"自投递命令 {missing} 未登记进 SELF_POSTED_COMMANDS —— "
                          "遗漏会让主循环自激打满 CPU 并冲垮 qB")
+
+
+def test_cmd_timing_is_logged_without_browser(caplog):
+    """命令耗时必须落到**日志**(不是只在回执里回传) —— 真机排查"点了要等几秒"的主出口
+
+    2026-09-20: 用户连报四次「乐观 UI 生效但要 2-4s 才恢复正常」, 四轮修复全在前端找, 因为
+    ① 本地桩服务没有主循环 ⇒ wait_ms 恒为 0 ⇒ 「投递 → 回执」这一段从来没被测到;
+    ② 埋点只随回执回传, 要看就得开 F12 —— 真机上用户常常开不了/不愿开, 等于没有埋点。
+    故 `_log_cmd_timing` 直接落日志, 且**慢命令必须 WARNING**(否则淹没在 INFO 里捞不出来)。
+    """
+    import logging
+
+    from auto_qb.mixins.web_commands import CMD_SLOW_MS
+
+    class _T:
+        """只需要 _log_cmd_timing 用到的两个属性"""
+        _web_results = {}
+        _web_write_seq = 0
+
+        from auto_qb.mixins.web_commands import WebCommandsMixin as _M
+
+        _log_cmd_timing = _M._log_cmd_timing
+
+    t = _T()
+    # ① 慢 -> WARNING, 且带归因提示(排队/执行各自指向不同的后端原因)
+    with caplog.at_level(logging.DEBUG):
+        caplog.clear()
+        t._log_cmd_timing("pause_torrent", {"wait_ms": 1800.0, "exec_ms": 2.0})
+    recs = [r for r in caplog.records if "[cmd]" in r.getMessage()]
+    assert recs, "慢命令没有落日志 —— 真机无法排查"
+    assert recs[-1].levelno == logging.WARNING, f"慢命令应为 WARNING, 实际 {recs[-1].levelname}"
+    assert "1800" in recs[-1].getMessage()
+
+    # ② 快 -> INFO(有记录但不过载)
+    with caplog.at_level(logging.INFO):
+        caplog.clear()
+        t._log_cmd_timing("pause_torrent", {"wait_ms": 1.0, "exec_ms": 3.0})
+    recs = [r for r in caplog.records if "[cmd]" in r.getMessage()]
+    assert recs and recs[-1].levelno == logging.INFO
+
+    # ③ 自投递命令(建索引等)频次高 -> 压到 DEBUG, 不许进常规日志
+    with caplog.at_level(logging.DEBUG):
+        caplog.clear()
+        t._log_cmd_timing("build_search_index", {"wait_ms": 900.0, "exec_ms": 900.0})
+    recs = [r for r in caplog.records if "[cmd]" in r.getMessage()]
+    assert recs and recs[-1].levelno == logging.DEBUG, "自投递命令会刷屏, 必须压到 DEBUG"
+
+    assert CMD_SLOW_MS > 0

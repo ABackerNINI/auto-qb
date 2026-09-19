@@ -68,6 +68,10 @@ def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
 
     wait_ms = 出队时刻 - 投递时刻(命令排队等主循环的空档, P0-1 唤醒后应趋近 0)
     exec_ms = 执行完时刻 - 出队时刻(真正干活: 多数是 1 次 qB API 往返)
+
+    ❗这两段**只在回执里回传**, 要看就得开浏览器控制台 —— 真机上用户不一定开得了(嵌入式
+    WebView / 手机 / 不愿开 F12)。故 drain 侧同时落一行日志(见 _log_cmd_timing),
+    排查"点了要等几秒"时**不用控制台**。
     """
     if not queued_ts:
         return {}
@@ -75,6 +79,10 @@ def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
         "wait_ms": round((start_ts - queued_ts) * 1000, 1),
         "exec_ms": round((time.time() - start_ts) * 1000, 1),
     }
+
+
+# 慢命令告警阈值(ms): 超过就按 WARNING 落日志, 便于在日志里直接捞
+CMD_SLOW_MS = 300.0
 
 
 class WebCommandsMixin:
@@ -149,6 +157,8 @@ class WebCommandsMixin:
                         self._web_write_seq += 1
                     if cmd_id and not deferred:
                         self._set_web_result(cmd_id, "ok", timing=_timing(queued_ts, start_ts))
+                    if cmd_id:
+                        self._log_cmd_timing(cmd, _timing(queued_ts, start_ts))
                     # handler 已同步改完 qB 状态(未抛异常即成功) -> 记一笔, 整批结束后补刷新
                     if cmd in RESYNC_COMMANDS:
                         changed = True
@@ -177,6 +187,35 @@ class WebCommandsMixin:
         if timing:
             rec.update(timing)
         self._web_results[cmd_id] = rec
+
+    def _log_cmd_timing(self, cmd: str, timing: Optional[dict]) -> None:
+        """命令耗时落日志 —— 排查"点了要等几秒"的**主出口**(不依赖浏览器控制台)
+
+        2026-09-20: 用户连续四次报"乐观 UI 生效但要 2-4s 才恢复正常", 四轮修复全在前端找,
+        因为本地桩服务**没有主循环** ⇒ `wait_ms` 恒为 0 ⇒ "命令投递 → 回执"这一段从来没被测到。
+        而真机上用户往往开不了/不愿开 F12, 埋点只回传在回执里等于没有。故这里直接落到日志。
+
+        三段的读法(配合 qbmanager.run() 里补刷新那段日志):
+          排队 wait_ms 大 = 主循环正被长任务占住(搜索索引 500 条文件 API / 任务批 / tracker 预取);
+          执行 exec_ms 大 = qB API 本身慢(库大 / qB 忙 / 网络);
+          补刷新大       = 命令后的强制同步慢(大库 /sync/maindata 往返)。
+        """
+        if not timing:
+            return
+        w = timing.get("wait_ms")
+        e = timing.get("exec_ms")
+        msg = f"[cmd] {cmd}: 排队 {w}ms / 执行 {e}ms"
+        if cmd in SELF_POSTED_COMMANDS:
+            logger.debug(msg + "(自投递, 不唤醒主循环)")  # 自投递频次高, 不进常规日志
+            return
+        if (w or 0) > CMD_SLOW_MS or (e or 0) > CMD_SLOW_MS:
+            logger.warning(
+                msg + f" —— 超过 {CMD_SLOW_MS:.0f}ms:"
+                " 排队大=主循环被长任务占住(搜索索引/任务批/tracker 预取),"
+                " 执行大=qB API 慢; 前端再快也盖不住这一段(乐观 UI 只遮住回执之前的一半)"
+            )
+        else:
+            logger.info(msg)
 
     def _trackers_baseline(self, hashes: List[str]) -> dict:
         """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}
