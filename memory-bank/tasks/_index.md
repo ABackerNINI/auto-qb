@@ -26,6 +26,7 @@
 
 ## Completed
 
+- [26-09-19-memory-bank-session-git-rules-sync] 会话协议与 git 口径统一 (开工先拉分支 + 提交即推送) - 用户要求「记录进 AGENTS.md: 开始工作前先拉取远程分支, 避免在落后的分支上工作」。落地时发现同一条会话协议有 **4 处 always-on 入口** (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), 只改一处等于其它三条路径下规则不存在 ⇒ 四处全改, 并把 memory-bank SKILL 的「会话开始 (3 步)」扩为 4 步。过程中撞见 `conventions.md` 仍写「🔴 绝对不要 push」与 `AGENTS.md` 现行「提交 = commit + 自动推送」矛盾 ⇒ 先入池 issue `26-09-19-2359-memory-bank-push-rule-drift`(Open), 用户拍板方案 A 后改为 **入口文件单点定义 + 知识库只留指针**, issue 转 **Fixed**。共 7 笔提交, 闸门 `uv run pytest tests -q` **1054 passed** 全程未变。
 - [26-09-19-webui-cols-store-version-audit] WEB UI 列状态存储键 `autoqb_cols_v?` 版本沿革审计与口径回写 - 用 `git log -S` 逐键追溯列状态存储键的 4 次升版本(v1→v4, 集中在 2026-09-13 08:32 ~ 09-14 07:25), 确认 v4 之后 R10-09(`cb57bef`)已把政策反转为"列集变更一律不升版本"; 据此回写 `pitfalls.md`(2 处) / `systemPatterns.md` / `activeContext.md` 三条仍写着"加/减列**必须**升版本"的旧口径, 并补一条"不并发也会偶发的全量失败"判别法; 测试基线 1041 passed 不变。
 - [26-09-14-memory-bank-migration] 知识库 (Memory Bank) 建设与仓库治理 - `ai/` → `memory-bank/` 六核心文件迁移 + 跨 agent 入口统一 + 测试基线单点化 + worktree 同步 (2026-09-14 ~ 09-15)
 - [26-09-15-backend-file-split] 后端大文件拆分 - `qbmanager` / `schema` / `torrents` / `validation` 四包拆分, 纯移动零行为变化; 遗留: 既有测试顺序污染待排查 (2026-09-15)
