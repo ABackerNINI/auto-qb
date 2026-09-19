@@ -9,11 +9,12 @@ user-invocable: true
 本仓库用 Memory Bank 模式维护跨会话上下文: 知识库在 `memory-bank/`, 统一入口是根 `AGENTS.md`。
 本 skill 只负责**会话的两个端点**(开始 / 收尾)与**任务立档**; 领域知识(架构/规则/配置/约定…)由 `memory-bank/` 主题文档承担, 不要写进本 skill。
 
-## 会话开始 (3 步)
+## 会话开始 (4 步)
 
-1. 读 `memory-bank/activeContext.md` — 最后更新、进行中事项、下一步候选。
-2. 读 `memory-bank/README.md` 路由表, 按任务深入对应主题文档(动代码前必读 `pitfalls.md` 与 `conventions.md`)。
-3. 判断任务是否**已有 tasks/ 档案**: 有 → 读该档案续作并按"子任务状态表"推进; 无 → 按下方阈值决定是否立档。
+1. **先同步分支 (硬性)**: `git remote -v` 确认主线远端 (Gitee, `origin` 也可能是 GitHub 镜像) → `git pull --rebase <remote> develop` (**分支名必须写**, 只给远端名会只 fetch 不合并) → `git status -sb` 确认不落后再动手。**禁止在落后的分支上改代码**; 拉取前先把工作区弄干净 (先提交或移出改动) —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」: 脏工作区 + rebase 触发 stash 会顺着拦截层批量删掉 `.git/objects`。
+2. 读 `memory-bank/activeContext.md` — 最后更新、进行中事项、下一步候选。
+3. 读 `memory-bank/README.md` 路由表, 按任务深入对应主题文档(动代码前必读 `pitfalls.md` 与 `conventions.md`)。
+4. 判断任务是否**已有 tasks/ 档案**: 有 → 读该档案续作并按"子任务状态表"推进; 无 → 按下方阈值决定是否立档。
 
 ## 立档阈值 (可判定: 满足任一条**必须**立档)
 
