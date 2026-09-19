@@ -58,7 +58,8 @@
 - **23:59** 同一节紧邻的「🔴 绝对不要 push (2026-09-10)」与新规则矛盾被暴露 ⇒ 入池 `memory-bank/issues/26-09-19-2359-memory-bank-push-rule-drift.html`(Open, 5 处证据 + 根因 + A/B 两案 + 验收方式), `363458e`; Gitee ✅, GitHub 超时, 不重试。
 - **00:05** 用户拍板方案 A ⇒ `a786a1f`: `conventions.md` 五处改为「以 `AGENTS.md` 为单点定义」+ 历史沿革(09-10 越界事故与"推送须经授权"的教训**保留**, 标"已被上面取代, 别照抄"); `AGENTS.md:126` 补"本条为单点定义, 优先于 memory-bank 历史表述"直击根因。验证: 全文搜四个关键词, 残留命中只剩 `conventions.md:9` 沿革句与 `:137`「已作废」句; 两入口答案一致; 1054 passed。issue 转 **Fixed**(meta + 封面徽标两处一起改), `_index.md` 由 `gen_issues_index.py` 重建。Gitee ✅; GitHub `send-pack: unexpected disconnect`, 不重试。
 - **00:11** `4bb7f03`: `activeContext.md`「定案口径」补两条规则的指针(各会话开工第一件事读的是它)。守阵 8 passed。Gitee `a786a1f..4bb7f03` ✅; GitHub 21s 超时, 不重试。
-- **00:15** 立档本档案并重建 `tasks/_index.md`。
+- **00:15** 立档本档案并重建 `tasks/_index.md`。⚠ 立档时踩到一个守阵坑: 档案规范没写 `**Status:**` 的合法取值, 照其它档案的观感写成 `✅ 完成` ⇒ `test_memory_bank.py` 两条守阵同时红(缺合法状态行 + 索引分区不一致), 因为守阵正则只认 `In Progress|Pending|Completed|Abandoned`。改成 `Completed` 并重跑 `gen_tasks_index.py` 后才全绿。
+- **00:20** `a85bb9c`: 把上面这个坑补进 `.agents/skills/memory-bank/SKILL.md` 的档案规范(枚举 + 失效表现), 免得下次立档再猜。守阵 8 passed, 全量 1054 passed。Gitee `a2256b5..a85bb9c` ✅; GitHub 21s 超时, 不重试(镜像累计滞后 5 个)。
 
 ## 涉及文件清单
 
