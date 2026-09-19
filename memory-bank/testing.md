@@ -6,7 +6,12 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1054 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1049 passed + 2 skipped** —— 2026-09-19 实测;
+# 基线: **1054 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1052 passed + 2 skipped** —— 2026-09-19 实测;
+# ❗两侧**收集数相同**(那 2 条在 Windows 上跑、在 Linux 上跳), 比较时别拿 "passed" 直接比:
+#   Windows 1054 passed == Linux 1052 passed + 2 skipped。跳的两条都是 Windows 专属 ——
+#   `test_sidefx.py::…`(AUMID 守卫: 非 Windows 无 winreg) 与 `test_ui.py::…`(注册表专属键)。
+#   改了基线就把**两侧都重测**, 只测一侧就更新会立刻产生漂移
+#   (本次就是把还停在 1049 的 Linux 数字补回来的)。
 # = 1053 + **节拍对齐门控(issues/26-09-19-1900-webui-poll-cadence-mismatch, 方案 B)** 新增 1 项:
 #   `test_qbmanager.py::test_view_rebuild_waits_for_client_consume`(上一版没被 /api/state 取走就不生产下一版:
 #   >3000 种子时服务端 3s 产 2 版而客户端只取 1 版 ⇒ 实测 20 周期 40 次 → **20 次(省 50%)**;
