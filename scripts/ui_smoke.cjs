@@ -88,6 +88,18 @@ async function smokeUi(browser, ui) {
     if (EXPECT_N) add(ui, "种子总数与桩服务一致", tTotal === EXPECT_N, `${tTotal} vs ${EXPECT_N}`);
     const renderMs = await readInst(page, "vm.renderMs");
     add(ui, "单轮 renderMs 埋点可读", typeof renderMs === "number", `${renderMs}ms`);
+    /*
+     * 轮询分档(P1 之后的收尾一步): 间隔必须**按种子量**落在实测档位上 ——
+     *   ≤1000 → 1.5s | 1000~3000 → 2s | >3000 → 3s
+     * 档位来自实测单轮 refresh 耗时(1000:143ms / 3000:309ms / 5000:~400ms),
+     * 目的是把主线程占用率压在 ~15%。断言它, 免得"改了半天的渲染优化"被一个
+     * 写死的 1s 轮询重新拖垮。
+     */
+    if (EXPECT_N) {
+      const want = EXPECT_N > 3000 ? 3000 : EXPECT_N > 1000 ? 2000 : 1500;
+      const got = await readInst(page, "vm.currentPollMs()");
+      add(ui, "轮询间隔按种子量分档", got === want, `${EXPECT_N} 种子 → ${got}ms(期望 ${want}ms)`);
+    }
 
     /*
      * 强制全量重渲染 N 轮, 用 PerformanceObserver(longtask) 量"主线程被占住多久" ——

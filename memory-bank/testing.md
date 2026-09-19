@@ -67,7 +67,10 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
-> prism/atlas 双 UI 断言(当前 28 项 0 失败)并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
+> prism/atlas 双 UI 断言(当前 30 项 0 失败, 含"轮询间隔按种子量分档"与"滚动到底不塌陷")
+> 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
+> 顺带一提: 换 `--torrents N` 跑不同规模的库, 就能量出"单轮 refresh 耗时 × 种子数"曲线 ——
+> 前端轮询档位就是这么定的(1000:143ms / 3000:353ms / 5000:~550ms)。
 > 典型用法: 起服务 → `NODE_PATH=<workspace>/node_modules node scripts/ui_smoke.cjs` → 关服务。
 > 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、
 > 滚动总高与末行可达、主线程长任务。改前端任何一处渲染/交互逻辑后**应当跑它**。

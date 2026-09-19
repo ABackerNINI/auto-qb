@@ -285,9 +285,8 @@ const app = createApp({
       // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
       status: {},
-      pollSec: 2,  // 前端轮询间隔(秒)。⚠️ 服务端状态再快也要等下一轮轮询才可见 —— 后端所有
-      // "降低状态延迟"的优化都被这个值封顶。降它之前必须先完成 P1(按视图回传 + 行窗口化),
-      // 否则只是把"每轮全量回传 + 整树重渲染"的频率提上去, 在大库上会**加剧**不跟手。
+      // ⚠️ 轮询间隔不在这里 —— 见 computed.basePollMs(): 前端是服务端状态的**封顶**
+      // (后端数据再快也要等下一轮轮询才可见), P1 落地后改成按种子量分档。
       // P0-0 埋点(排查用, 不参与渲染): 单次命令端到端耗时与单轮视图赋值耗时
       cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行
       renderMs: 0,  // 单轮 refresh() 中"赋值 + 多选交集"的耗时(不含网络)
@@ -459,7 +458,7 @@ const app = createApp({
   },
   computed: {
     pollLabel() {
-      // 顶栏展示当前轮询间隔(自适应: 无变化/服务不可达时放慢)
+      // 顶栏展示当前轮询间隔(自适应: 按种子量分档 + 服务不可达时退避)
       return Math.round(this.currentPollMs() / 1000);
     },
     statusBadge() {
@@ -1626,14 +1625,30 @@ const app = createApp({
       if (document.hidden || !this.authOk) return;  // R10-01: 按鉴权模式判断(本机免鉴权下 token 为空)
       this.pollTimer = setTimeout(() => this.refresh(), this.currentPollMs());
     },
+    /* P1 落地后按种子量分档(2026-09-19)。档位是**实测**定的, 不是拍的 —— 用
+     * scripts/ui_harness.py + ui_smoke.cjs 的 A/B 量出"窗口化后单轮 refresh 的真实耗时":
+     *   1000 种子 143ms | 3000 种子 309ms | 5000 种子 396~501ms
+     * 再把每档的**主线程占用率**压到 ~15% 上下(单轮耗时 / 间隔), 于是:
+     *   ≤1000 → 1.5s(≈10%)  1000~3000 → 2s(≈15%)  >3000 → 3s(≈17%)
+     * 两个边界条件: ①**下界 1.5s = 服务端 sync_interval** —— 后端每 1.5s 才刷一次数据,
+     *   再快也只是多拿一次"版本未变"的空响应(此时响应体趋近于零, 但不产生新数据);
+     * ②**不是"无变化退避"** —— 那只按 rid 是否变化放慢, 会把行数据新鲜度直接卖掉(见下)。
+     */
+    basePollMs() {
+      const n = this.status && this.status.torrents;
+      if (typeof n !== "number") return 2000;  // 总量未知(首轮/异常): 取中间档, 不冒进
+      if (n > 3000) return 3000;
+      if (n > 1000) return 2000;
+      return 1500;  // 与服务端 sync_interval 对齐; 大库才往上让
+    },
     currentPollMs() {
       // 失败退避: 连续失败翻倍至上限 15s(减少服务不可达时的空转)
-      if (this.pollFails) return Math.min(15000, this.pollSec * 1000 * 2 ** this.pollFails);
-      // 恒定间隔, **不做"无变化退避"**: 曾按"视图版本未变"逐步放慢(2s→5s→10s), 但状态栏的
-      // 全局速度走 /api/stats(不受 rid 门控, 每轮都刷)⇒ 两个速度来源刷新频率被解耦,
+      if (this.pollFails) return Math.min(15000, this.basePollMs() * 2 ** this.pollFails);
+      // 恒定间隔(按种子量分档), **不做"无变化退避"**: 曾按"视图版本未变"逐步放慢(2s→5s→10s),
+      // 但状态栏的全局速度走 /api/stats(不受 rid 门控, 每轮都刷)⇒ 两个速度来源刷新频率被解耦,
       // 观感上变成"状态栏正常、种子行滞后"。版本未变时响应体已趋近于零(不回传 groups),
       // 退避省不下什么, 却直接牺牲行数据新鲜度 —— 收益与代价不对等, 故只保留失败退避。
-      return this.pollSec * 1000;
+      return this.basePollMs();
     },
     async refresh() {
       try {
