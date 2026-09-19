@@ -220,6 +220,7 @@ class SimQb:
         self._abort_done = False
         self._abort_until = 0.0
         self._materialized = 0
+        self.latency_ms = float(getattr(args, "latency_ms", 0) or 0)  # 每个请求的人为延迟(模拟真机负载)
         self.expected_removals: set[str] = set()  # B4 核账: 预期删除清单
         # ❗外部删除必须经 sync/maindata 的 torrents_removed 报出去, 否则 auto-qb 永远看不
         # 到"种子没了" —— 快照里残留幽灵种子, D1/D2/D5 会全测成绿的假象(曾硬编码 [])。
@@ -805,6 +806,12 @@ class Handler(BaseHTTPRequestHandler):
         if sim._abort:
             self.close_connection = True
             return
+        # 人为延迟(默认 0): 让假 qB 表现得像**真机上有负载的 qB**。
+        # 没有它, 本地每个请求 ~0.5ms ⇒ `_build_search_index` 一轮 500 次文件 API 只要 250ms,
+        # 主循环永远不饱和 ⇒ "命令排队 wait_ms" 恒为 0 ⇒ 真机上"点了要等 2-4s"这类缺陷
+        # **在本地永远复现不出来**(与「桩服务是瞬时的 ⇒ 顺序型缺陷测不出」同一类, 但在后端)。
+        if sim.latency_ms:
+            time.sleep(sim.latency_ms / 1000.0)
         route = self._route()
         params = self._params()
 
@@ -981,6 +988,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--delete-files", nargs="*", default=[], help="'K:G' 第 K 拍删第 G 个辅种组文件")
     p.add_argument(
         "--redeliver-removed", type=int, default=0, help="第 K 拍把已删 hash 重新投递一次(测幂等: 重复 torrents_removed 不得炸)"
+    )
+    p.add_argument(
+        "--latency-ms", type=float, default=0,
+        help="每个请求的人为延迟(模拟真机上有负载的 qB)。默认 0 —— 本地请求 ~0.5ms 时主循环永远"
+        "不饱和, '命令排队 wait_ms' 恒为 0, 真机上'点了要等 2-4s'这类缺陷复现不出来",
     )
     p.add_argument("--fs-materialize", type=int, default=-1, help="-1=全量(默认); 0=不建树")
     p.add_argument("--fs-file-size", type=int, default=4096)

@@ -558,6 +558,8 @@ def main(argv=None) -> int:
     p.add_argument("--web-poll", type=int, default=0, help="S7: N 个线程并发只读轮询 WEB UI(需 --web-port)")
     p.add_argument("--ramp", type=int, default=0, help="P2 渐进灌入: 每拍新增种子数; 0=首轮全量")
     p.add_argument("--fs-materialize", type=int, default=-1)
+    p.add_argument("--latency-ms", type=float, default=0,
+                   help="仿真 qB 每个请求的人为延迟(模拟真机负载; 见 sim_qb.py 同名参数)")
     p.add_argument("--keep-last", type=int, default=10)
     p.add_argument("--autoqb-args", default="", help="附加给 auto-qb 的参数")
     p.add_argument("--baseline", default="", help="固化阈值文件路径(默认 docs/plans/…baseline.json)")
