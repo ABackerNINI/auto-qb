@@ -150,7 +150,7 @@ config:
                   - "R"     # 添加"R"标签
 
     skip_checking_rules:
-        i_rule: # I盘: 有参考文件的种子跳检, 无参考文件的种子不校验, 校验成功后自动开始
+        i_rule: # I盘: 种子全量校验
             enabled: true
             interval: 30M
             cooldown: 5M
@@ -162,13 +162,31 @@ config:
                     basic_check: filelist
                     with_reference:
                         enabled: true
+                        mode: full-checking
+                        auto_start: false
+                    without_reference:
+                        enabled: true
+                        mode: full-checking
+                        auto_start: false
+        h_rule: # H盘: 有参考的跳检, 无参考的全量校验
+            enabled: true
+            interval: 30M
+            cooldown: 5M
+            conditions:
+              - path:
+                  - "regex:^H:/"
+            actions:
+              - checking:
+                    basic_check: filelist
+                    with_reference:
+                        enabled: true
                         mode: skip-checking
                         auto_start: false
                     without_reference:
-                        enabled: false   # 禁用
+                        enabled: true
                         mode: full-checking
                         auto_start: false
-        r_rule: # R盘: 种子全量校验, 校验成功后自动开始
+        r_rule: # R盘: 种子全量校验
             enabled: true
             interval: 5M
             cooldown: 5M
@@ -189,40 +207,22 @@ config:
                         auto_start: false
 
     hhan_checking_rules:
-        i_rule: # I盘: 有参考文件的种子全量校验, 无参考文件的种子不校验, 校验成功后自动开始
-            enabled: true
-            interval: 30M
-            cooldown: 5M
-            conditions: ''
-            actions:
-              - checking:
-                    basic_check: filelist
-                    with_reference:
-                        enabled: true
-                        mode: full-checking
-                        auto_start: true
-                    without_reference:
-                        enabled: false   # 禁用
-                        mode: full-checking
-                        auto_start: true
-        r_rule: # R盘: 全部全量校验, 校验成功后自动开始
+        rule: # 全量校验
             enabled: true
             interval: 5M
             cooldown: 5M
             conditions:
-              - path:
-                  - "regex:^R:/"
             actions:
               - checking:
                     basic_check: filelist
                     with_reference:
                         enabled: true
                         mode: full-checking
-                        auto_start: true
+                        auto_start: false
                     without_reference:
                         enabled: true
                         mode: full-checking
-                        auto_start: true
+                        auto_start: false
 
     trackers:
         HHan:
@@ -486,3 +486,4 @@ config:
             groups: []
             rules:
               - '@add_drive_letter_tag_rules'
+              - "@skip_checking_rules"
