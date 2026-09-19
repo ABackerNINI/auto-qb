@@ -2240,16 +2240,42 @@ const app = createApp({
      * "点了 2-4s 才有反应"(issue 26-09-19-1939-webui-optimistic-latency 就是这么报上来的)。
      * 埋点没有消费者就是死字段 —— 这两段一并写进 cmdStats, 由 waitCmd 的 [perf] 统一消费。 */
     _newCmdStats(action) {
+      const t0 = performance.now();
       this.cmdStats = {
         action: action || null,
-        patchMs: null,  // 点击 -> 乐观补丁贴上(补丁先于 POST, 正常 ~0ms)
-        postMs: null,   // 点击 -> 命令 POST 返回(真机大库可能秒级 —— 本埋点要的就是它)
+        t0,               // 点击时刻(供 settleMs 用; 埋点没有消费者就是死字段 —— 见 _markCmdSettle)
+        patchMs: null,    // 点击 -> 乐观补丁贴上(补丁先于 POST, 正常 ~0ms)
+        postMs: null,     // 点击 -> 命令 POST 返回(真机大库可能秒级 —— 本埋点要的就是它)
+        /* 点击 -> 补丁撤下、行恢复正常(**用户感知的那一半**)。
+         * ❗为什么必须单独埋这一段: 「贴上」早就修好了(受控 4~8ms), 而同一现象用户报了三次
+         * —— 前三次全都只埋了 patchMs/postMs, 于是"撤下慢"在日志里全绿、只能靠肉眼报。
+         * 修前这一段恒 3~4.5s(3s 常量兜底 + 等到下一次轮询), 修后 ~200~350ms。 */
+        settleMs: null,
+        targets: null,    // 本次命令的目标数(供 [perf] 阈值分档, 见 _markCmdSettle)
         totalMs: null,
         waitMs: null,
         execMs: null,
         cmdId: null,
       };
-      return performance.now();
+      return t0;
+    },
+    /* 撤下埋点: pendingOps 归零的那一刻记 settleMs。
+     * 调用点三处(覆盖 pendingOps 的全部出口): reapplyPending(真值对齐 / 兜底回滚后)、
+     * resolveOptimistic(失败回滚)。缺一处就会漏记。 */
+    _markCmdSettle() {
+      const c = this.cmdStats;
+      if (!c || c.settleMs != null || !c.t0) return;
+      if (Object.keys(this.pendingOps).length) return;
+      c.settleMs = Math.round(performance.now() - c.t0);
+      /* 阈值按目标数分档: 单目标/小批量 800ms; >100 目标 2500ms —— 整剧 800 个种子的**补丁本身**
+       * 就要 ~160ms, 按单目标阈值报会变成常驻噪音, 而常驻的报警没人看。
+       * ❗无回执(hang / 命令在途)时只记不报: 那时走的是 3s 兜底, 慢是设计如此, 报出来是噪音。 */
+      if (c.totalMs == null) return;
+      const budget = (c.targets || 0) > 100 ? 2500 : 800;
+      if (c.settleMs > budget) {
+        console.warn(`[perf] 命令 ${c.cmdId || "-"}${c.action ? "(" + c.action + ")" : ""}: 撤下 ${c.settleMs}ms` +
+          ` (${c.targets || "?"} 个目标, >${budget}ms 属异常 —— 真值已到却还灰着, 多半是 _optimisticSettled 没命中或 _pullTruthAfterCmd 没跑到)`);
+      }
     },
     _markCmdPatch(t0) {
       if (this.cmdStats && t0) this.cmdStats.patchMs = Math.round(performance.now() - t0);
@@ -2363,6 +2389,8 @@ const app = createApp({
           this.pendingOps[h] = { patch, prev, ts: now, action };
         });
       }
+      // 目标数供 settleMs 的 [perf] 阈值分档(见 _markCmdSettle)
+      if (this.cmdStats) this.cmdStats.targets = (hashes || []).length;
     },
     resolveOptimistic(hashes, ok) {
       for (const h of hashes || []) {
@@ -2380,6 +2408,7 @@ const app = createApp({
         this._forEachRow(h, (row) => Object.assign(row, op.prev));  // 失败: 回滚
         delete this.pendingOps[h];
       }
+      this._markCmdSettle();  // pendingOps 的出口之一(失败回滚)
     },
     reapplyPending() {
       /* 每轮 refresh 整表替换会盖掉乐观值, 这里把仍 pending 的补丁重新贴上。
@@ -2396,6 +2425,7 @@ const app = createApp({
         }
         this._forEachRow(h, (row) => Object.assign(row, op.patch));
       }
+      this._markCmdSettle();  // pendingOps 的出口之二(真值对齐后由上面 delete)
     },
     /* 本轮 /api/state 的真值快照(只记仍 pending 的 hash)。
      * ❗**必须比服务端原始值, 不能比行上的当前值**: 行在上一轮已经被贴过补丁了, 拿行上的值

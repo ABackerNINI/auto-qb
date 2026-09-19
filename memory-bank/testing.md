@@ -104,7 +104,7 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 >
 > ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
-> (`--torrents N --groups N --port P --cmd-result ok|error|hang`), `scripts/ui_smoke.cjs` 用 Playwright 跑
+> (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`), `scripts/ui_smoke.cjs` 用 Playwright 跑
 > prism/atlas 双 UI 断言(当前 **54 项 0 失败**(ok 模式)/ **54 项 0 失败**(`--expect-cmd error`, 回滚路径;
 > 单 UI 各 27 项)/ **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4 项),
 > 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
@@ -114,6 +114,15 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > **P0-3 补丁先于 POST**(注入 800ms 命令延迟仍要求 <400ms 出 pending, 见下)、
 > **P0-3 乐观态及时落回真值**(80~1000ms, **带下界**, 见下方"真值对齐"条目)、
 > **BUG-8 刷新后追剧页不空白**、**BUG-9 辅种页复制磁力可用**)
+> 另: 桩服务**会真的改状态**(2026-09-19 起, 否则"真值对齐"类断言只会测到"走满 3s", 跟没测一样),
+>   并靠 `--state-revert-ms`(默认 1500)自愈 —— 真值**被 `/api/state` 取走后**再等这么久还原成初始状态。
+>   没它的话长驻桩服务会跨轮累积: 跑过一次"整剧暂停"(合成数据里一剧 = 全部种子)之后, 下一轮冒烟
+>   **所有行都是 s-paused**, 4 条"挑一个未暂停的行"的断言集体假失败(与被测代码无关)。
+>   ❗回弹不能写成"生效后 N ms"的盲定时 —— 实测定时 4s 回弹把一次整组撤下拖到 4149ms
+>   (回弹跑到了前端观测之前, 把真值又改回去了)。
+> **命令埋点已补齐两段**: `patchMs`(点击→补丁贴上)与 **`settleMs`(点击→补丁撤下、行恢复正常)**。
+>   缺后者正是"同一现象连报三次"的原因 —— 前三次修复全只埋了"贴上", 日志全绿、只能靠用户肉眼报。
+>   `[perf]` 阈值按目标数分档(单目标 800ms / >100 目标 2500ms); 无回执(hang)只记不报(走 3s 兜底属设计)。
 > 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
 > 顺带一提: 换 `--torrents N` 跑不同规模的库, 就能量出"单轮 refresh 耗时 × 种子数"曲线 ——
 > 前端轮询档位就是这么定的(1000:143ms / 3000:353ms / 5000:~550ms)。

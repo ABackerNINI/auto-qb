@@ -570,6 +570,39 @@ def _scan_state_rank(path, rel, problems):
         )
 
 
+def _scan_pending_settle(path, rel, problems):
+    """乐观 UI「撤下」守阵(2026-09-19, 与主线 32f531d / 12657ee 同一族缺陷的第二道锁)
+
+    背景: 「点击 → 行恢复正常」曾实测 3785~5178ms, 根因是 pending 只有 3s 常量兜底一个出口 ——
+    systemPatterns 明写的「真值匹配即清」**从未实现过**; 而且这个兜底还只在 refresh() 里被顺带
+    求值 ⇒ 撤下 = 3000ms + 等到下一次 /api/state。真机连报三次同一现象, 前三次修复全只动"贴上",
+    因为没人量过"撤下"。
+
+    主线修法落地后有三处**极易被改回去/写反**的地方, 本守阵逐条钉住:
+      ① `_snapshotTruth(state)` 必须在 `reapplyPending()` **之前** —— 快照要的是服务端原始值;
+         挪到之后就变成"行上的补丁值 vs 补丁值", 恒真 ⇒ pending 一瞬间就清(实测 28ms),
+         而且冒烟里「落回的是真值」那条**照样 PASS**(补丁值还留在行上, 看着就像真值)。
+      ② 判定必须走 `_optimisticSettled`(比真值快照)而不是"拿行上的当前值比" —— 同上;
+      ③ 回执后必须调 `_pullTruthAfterCmd`, 否则真值只能等下一轮轮询(1.5/2/3s 分档)。
+    """
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+
+    i_snap = text.find("this._snapshotTruth(state)")
+    i_reap = text.find("this.reapplyPending()")
+    if i_snap < 0:
+        problems.append(f"{rel} 找不到 `this._snapshotTruth(state)` —— 判「真值是否对齐」没有服务端原始值可比")
+    elif i_reap >= 0 and i_snap > i_reap:
+        problems.append(
+            f"{rel} _snapshotTruth 写在 reapplyPending **之后** —— 快照到的是被补丁改过的行值,"
+            "判定恒真 ⇒ pending 立刻清、失败路径留假状态(红线)"
+        )
+    if "this._optimisticSettled(" not in text:
+        problems.append(f"{rel} 找不到 _optimisticSettled 的调用点 —— 真值对齐判定被绕过, 撤下退回 3s 兜底")
+    if "this._pullTruthAfterCmd(" not in text:
+        problems.append(f"{rel} 找不到 _pullTruthAfterCmd 的调用点 —— 回执后不拉真值, 撤下要等下一轮轮询")
+
+
 def _scan_frontend_assets():
     """扫描 web_ui/static 返回问题清单(空 = 健康)
 
@@ -583,7 +616,10 @@ def _scan_frontend_assets():
     6. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404);
     7. 追剧视图"集成员 -> hash"必须走 `memberHashesOf`(见 _scan_episode_member_hashes);
     8. `STATE_RANK` 必须与后端 `_SHOW_STATE_RANK` 逐项一致(见 _scan_state_rank) ——
-       两表分别决定"辅种页组行"与"追剧页集行"的颜色, 漂移的后果是同一批种子两页不同色。
+       两表分别决定"辅种页组行"与"追剧页集行"的颜色, 漂移的后果是同一批种子两页不同色;
+    9. 乐观 UI 的**撤下**路径: 真值快照必须早于补丁重贴、判定必须走 `_optimisticSettled`、
+       回执后必须调 `_pullTruthAfterCmd`(见 _scan_pending_settle) —— 任一被绕过, 撤下就退回
+       3s 常量兜底(真机连报三次的那条), 或判定恒真导致失败路径留假状态(红线)。
     """
     problems = []
     js_files = []
@@ -605,6 +641,7 @@ def _scan_frontend_assets():
                     if name == "app.js":
                         _scan_episode_member_hashes(path, rel, problems)
                         _scan_state_rank(path, rel, problems)
+                        _scan_pending_settle(path, rel, problems)
                     for i, line in enumerate(lines):
                         if not re.match(r"^\s*\*(?!/)", line):
                             continue

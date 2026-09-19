@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐观 UI「撤下」修复计划 — auto-qb</title>
+<style>
+  :root {
+    --paper: #f6f4ef;
+    --paper-2: #efebe3;
+    --ink: #1b1a17;
+    --ink-2: #4a463f;
+    --ink-3: #6f6a60;
+    --hair: #d8d2c6;
+    --hair-2: #e6e1d7;
+    --accent: #8a4a1f;
+    --accent-soft: #f0e2d6;
+    --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 40px; }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+
+  /* ---------- cover ---------- */
+  header { padding: 66px 0 38px; border-bottom: 1px solid var(--hair); }
+  h1 { font-size: 42px; font-weight: 600; letter-spacing: -.022em; line-height: 1.14; margin: 18px 0 14px; max-width: 24ch; }
+  .lede { font-size: 16px; color: var(--ink-2); max-width: 68ch; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px 34px; margin-top: 28px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  }
+  .meta-row span b { color: var(--ink-2); font-weight: 400; }
+
+  /* ---------- verdict strip ---------- */
+  .strip { display: flex; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
+  .strip .cell {
+    flex: 1 1 190px; padding: 20px 20px 18px 0; border-right: 1px solid var(--hair-2);
+  }
+  .strip .cell:last-child { border-right: 0; }
+  .strip .k { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; color: var(--ink-3); text-transform: uppercase; }
+  .strip .v { font-size: 27px; font-weight: 600; letter-spacing: -.02em; margin: 6px 0 3px; }
+  .strip .v small { font-size: 14px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
+  .strip .n { font-size: 12.5px; color: var(--ink-3); }
+
+  /* ---------- layout ---------- */
+  .body-grid { display: grid; grid-template-columns: 196px 1fr; gap: 56px; padding: 46px 0 90px; }
+  nav.toc { position: sticky; top: 28px; align-self: start; }
+  nav.toc .t { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  nav.toc a {
+    display: block; font-size: 13px; color: var(--ink-2); text-decoration: none;
+    padding: 4px 0 4px 11px; border-left: 1px solid var(--hair); line-height: 1.35;
+  }
+  nav.toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+  nav.toc a .num { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-right: 7px; }
+  main { min-width: 0; }
+
+  section { margin-bottom: 60px; scroll-margin-top: 24px; }
+  h2 {
+    font-size: 25px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2;
+    padding-bottom: 11px; border-bottom: 1px solid var(--hair); margin-bottom: 22px;
+  }
+  h2 .num { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 11px; letter-spacing: .06em; }
+  h3 { font-size: 16px; font-weight: 600; margin: 26px 0 9px; letter-spacing: -.005em; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--ink-2); }
+  p { max-width: 74ch; margin-bottom: 12px; color: var(--ink-2); }
+  p strong { color: var(--ink); font-weight: 600; }
+  ul, ol { max-width: 74ch; margin: 0 0 14px 20px; color: var(--ink-2); }
+  li { margin-bottom: 6px; }
+  code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--paper-2);
+    border: 1px solid var(--hair-2); padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--paper-2);
+    border: 1px solid var(--hair); border-left: 2px solid var(--accent);
+    padding: 12px 14px; overflow-x: auto; margin: 0 0 16px; color: var(--ink); border-radius: 2px;
+  }
+  pre code { background: none; border: 0; padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 18px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hair-2); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 400; border-bottom: 1px solid var(--hair);
+  }
+  td:first-child, th:first-child { padding-left: 0; }
+  td.num, th.num { font-family: var(--mono); white-space: nowrap; }
+  tr.tot td { border-top: 1px solid var(--hair); border-bottom: 0; font-weight: 600; }
+
+  .sev { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
+  .sev i { width: 8px; height: 8px; display: block; }
+  .sev-hi { color: #97331c; } .sev-hi i { background: #97331c; }
+  .sev-md { color: var(--accent); } .sev-md i { background: var(--accent); }
+  .sev-lo { color: var(--ink-3); } .sev-lo i { background: var(--ink-3); }
+  .sev-ok { color: #2f5a41; } .sev-ok i { background: #2f5a41; }
+
+  .finding { border-top: 1px solid var(--hair); padding-top: 18px; margin-top: 24px; }
+  .finding:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+  .finding-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .finding-head h3 { margin: 0; }
+  .finding-head .id { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); letter-spacing: .04em; }
+  .finding dl { display: grid; grid-template-columns: 88px 1fr; gap: 4px 16px; margin: 10px 0 0; font-size: 13.5px; }
+  .finding dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); padding-top: 3px; }
+  .finding dd { color: var(--ink-2); }
+  .finding dd strong { color: var(--ink); }
+
+  .note {
+    border-left: 2px solid var(--accent); background: var(--accent-soft);
+    padding: 13px 16px; margin: 16px 0; max-width: 74ch;
+  }
+  .note p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+  .note .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
+  @media (max-width: 1100px) {
+    .body-grid { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { position: static; margin-bottom: 34px; }
+    .cols2 { grid-template-columns: 1fr; }
+    .wrap { padding: 0 24px; }
+    h1 { font-size: 32px; }
+  }
+  footer { border-top: 1px solid var(--hair); padding: 22px 0 60px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">Fix plan &nbsp;·&nbsp; <b>26-09-19-2245</b> webui-optimistic-settle</div>
+    <h1>乐观 UI「撤下」修复计划</h1>
+    <p class="lede">真机反馈「乐观 UI 生效，但从乐观 UI 恢复正常要 2-4 秒」。受控实测确认：<b>贴上</b>这一段上一次已经修好（4-7 ms），慢的是<b>撤下</b>这一段 —— 灰窗（<code>is-pending</code>）恒定挂满 3 秒，再叠加最多一个轮询周期，实测 3.8 ~ 5.2 秒。根因是设计注释里承诺的「真值一致即清」这条出口<b>从来没有实现过</b>，而本地桩服务在结构上根本走不到这条路径 —— 所以前三次修复都绕着它走。</p>
+    <div class="note" style="max-width:none;margin-top:18px">
+      <span class="lbl">⚠ 本文档已存档：诊断成立，实现被主线方案取代</span>
+      <p>本计划写于本地分支落后主线 4 个提交时。拉齐后发现 <code>origin/develop</code> 上已有<b>同一问题的独立修复</b>：
+      <code>32f531d</code>（真值匹配即清 + 回执后拉真值 + 桩服务真改状态）与 <code>12657ee</code>（3s 兜底超时必须回滚
+      <code>op.prev</code>，否则补丁值永久留在行上 —— <b>这一处是本文档 §05 方案里没有的，按本文档实现会踩</b>）。
+      两者思路一致，主线的验证更完整（还含 hang 独占轮与「兜底后落回原状态」守阵），<b>故以主线为准</b>。</p>
+      <p style="margin-top:8px">本文档<b>保留作诊断记录</b>：§02 的实测时间线、§03 的根因定位、§04「为什么前三次都没修好」
+      均仍然成立且可复现。§05 的六步方案<b>未落地</b>（仅作为对照思路存档）。本文档真正落地的只有三处增量，
+      已重新实现在主线之上，见 <a href="#s10">§10</a>。</p>
+    </div>
+    <div class="meta-row">
+      <span>问题来源 <b>真机走查（第 3 次报同一现象）</b></span>
+      <span>相关提交 <b>10e06a8 · a8eb6e8 · fed62a8</b></span>
+      <span>分支 <b>develop</b></span>
+      <span>计划时间 <b>2026-09-19 22:45</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="strip">
+  <div class="wrap" style="display:flex;flex-wrap:wrap;width:100%">
+    <div class="cell" style="flex:1 1 190px;padding:20px 20px 18px 0">
+      <div class="k">贴上耗时（已修好）</div>
+      <div class="v">4–7 <small>ms</small></div>
+      <div class="n">点击 → .is-pending 出现，受控实测</div>
+    </div>
+    <div class="cell" style="flex:1 1 190px;padding:20px 0 18px 20px">
+      <div class="k">撤下耗时（本计划）</div>
+      <div class="v">3785–5178 <small>ms</small></div>
+      <div class="n">点击 → .is-pending 消失；目标 ≤ 800 ms</div>
+    </div>
+    <div class="cell" style="flex:1 1 190px;padding:20px 0 18px 20px">
+      <div class="k">根因条数</div>
+      <div class="v">3 <small>条叠加</small></div>
+      <div class="n">常量 3s + 只在轮询点求值 + 回执后不取真值</div>
+    </div>
+    <div class="cell" style="flex:1 1 190px;padding:20px 0 18px 20px">
+      <div class="k">本地可测性</div>
+      <div class="v">0 <small>条覆盖撤下</small></div>
+      <div class="n">桩服务不执行命令 ⇒ 真值永远不到</div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="body-grid">
+
+<nav class="toc">
+  <div class="t">目录</div>
+  <a href="#s1"><span class="num">01</span>结论先行</a>
+  <a href="#s2"><span class="num">02</span>实测时间线</a>
+  <a href="#s3"><span class="num">03</span>根因定位</a>
+  <a href="#s4"><span class="num">04</span>为什么前三次都没修好</a>
+  <a href="#s5"><span class="num">05</span>修复方案</a>
+  <a href="#s6"><span class="num">06</span>判据与红绿双验</a>
+  <a href="#s7"><span class="num">07</span>风险与不做的事</a>
+  <a href="#s8"><span class="num">08</span>验收口径与文档回写</a>
+  <a href="#s9"><span class="num">09</span>附录 · 复现证据</a>
+  <a href="#s10"><span class="num">10</span>实施回执</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="num">01</span>结论先行</h2>
+  <p><strong>上一次的修复是成功的，只是它修的是另一半。</strong>a8eb6e8 把 <code>applyOptimistic()</code> 提到 POST 之前，受控复测「点击 → 补丁贴上」= 4~7 ms（修前是 POST 慢多少就晚多少）。用户现在报的 2-4 秒，发生在<strong>补丁已经贴上之后</strong>：行确实立刻变成暂停色，但整行被 <code>.is-pending { opacity: .55 }</code> 压成半透明，要等约 3-4 秒才恢复到正常观感 —— 用户说的「恢复正常状态」就是这一下。</p>
+  <p>三条根因叠加，全部落在「撤下」这一半：</p>
+  <ol>
+    <li><strong>pending 只有一个出口：3 秒常量定时器。</strong><code>isPending()</code>（<code>app.js:2314-2322</code>）只判 <code>Date.now() - op.ts &gt; 3000</code>，从不与服务端真值比较。而设计注释（<code>app.js:2308-2313</code>）白纸黑字写的是「直到服务端数据与预期一致 <em>或</em> 3s 超时」—— 后半句实现了，前半句没有。于是真值 200 ms 就到了，灰窗照样挂 3 秒。</li>
+    <li><strong>这个定时器只在轮询点被顺带求值。</strong>唯一会去删过期 op 的地方是 <code>reapplyPending()</code>，它在 <code>refresh()</code> 里每轮调一次（<code>app.js:1726</code>）。3 秒到了没人察觉，要等下一次 <code>/api/state</code> 回包才被发现 ⇒ 再叠加 0 ~ pollMs（1.5 / 2 / 3 s，按种子量分档）。</li>
+    <li><strong>拿到成功回执后不主动取真值。</strong><code>act()</code> / <code>actTorrent()</code> / 批量分支收到 ok 回执后只弹 toast，不发 <code>refresh()</code>；真值只能等下一个轮询周期进前端。而服务端写回执（<code>web_commands.py:151</code>）发生在视图重建<em>之前</em>（drain → 写回执 → <code>_sync_line</code> → <code>rebuild_views</code>），所以「回执到了就立刻查」还会扑空一次 —— 这个时序差必须在方案里显式处理。</li>
+  </ol>
+  <p>实测公式：<code>撤下耗时 = 3000 ms + 等到下一次 /api/state 的时间</code>。800 种子（1.5 s 档）实测 3785 / 4047 / 4498 ms；3600 种子（3 s 档）实测 3898 / 4456 / 5178 ms —— 余数全部落在各自档位的 [0, pollMs] 区间内，吻合。</p>
+
+  <div class="note">
+    <span class="lbl">为什么必须先把桩服务修好</span>
+    <p>冒烟桩服务的命令泵（<code>scripts/ui_harness.py:93</code>）<strong>不执行命令，只写回执</strong>。本次实测直接暴露后果：探针问「服务端该种子的 kind 何时变成 paused」，<strong>15 秒内永远等不到</strong>。也就是说「真值一致即清」这条路径在任何本地测试里<strong>从未被跑到过</strong>；现在唯一能让它结束的机制就是那条 3 秒定时器。这与 pitfalls 已记录的两条坑是同一类（「桩服务是瞬时的 ⇒ 顺序型缺陷本地测不出来」、「桩对象缺 to_dict() ⇒ 整条链路从未被跑过」）。<strong>步骤 0 不改，后面每一步都无法验证。</strong></p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02</span>实测时间线</h2>
+  <p>用 Playwright 钩住菜单项的 click 事件（捕获阶段）与 <code>.is-pending</code> 的 MutationObserver，量「点击 → 灰窗消失」；同时从 Node 侧以 50 ms 步长直接问服务端 <code>/api/state</code>，量「真值可用」。桩服务真起在 8121（800 种子）与 8122（3600 种子）两个专用端口上（避 8099，见 pitfalls 的端口撞车坑）。</p>
+  <table>
+    <thead><tr><th>场景</th><th class="num">补丁贴上</th><th class="num">服务端真值可用</th><th class="num">灰窗消失（用户感知）</th><th>判读</th></tr></thead>
+    <tbody>
+      <tr><td>800 种子 · pause</td><td class="num">6 ms</td><td class="num">15 s 未到 ¹</td><td class="num">3785 ms</td><td>贴上正常；撤下 = 3 s + 0.8 s 余量</td></tr>
+      <tr><td>800 种子 · resume</td><td class="num">4 ms</td><td class="num">—</td><td class="num">4047 ms</td><td>同上</td></tr>
+      <tr><td>800 种子 · pause</td><td class="num">4 ms</td><td class="num">15 s 未到 ¹</td><td class="num">4498 ms</td><td>余数 ≈ 一整个 1.5 s 轮询周期</td></tr>
+      <tr><td>3600 种子 · pause</td><td class="num">7 ms</td><td class="num">15 s 未到 ¹</td><td class="num">5178 ms</td><td>3 s 档余数更大，符合公式</td></tr>
+      <tr><td>3600 种子 · resume</td><td class="num">6 ms</td><td class="num">—</td><td class="num">3898 ms</td><td>同上</td></tr>
+      <tr><td>3600 种子 · pause</td><td class="num">6 ms</td><td class="num">15 s 未到 ¹</td><td class="num">4456 ms</td><td>同上</td></tr>
+      <tr class="tot"><td>cmdStats（末条）</td><td class="num">patchMs 2</td><td class="num">postMs 16 / waitMs 0</td><td class="num">execMs 1</td><td>投递与执行都不是瓶颈，问题纯粹在撤下</td></tr>
+    </tbody>
+  </table>
+  <p>¹ 不是真机慢，是桩服务压根不执行命令（见上节 note）。这一列在本地恒为「未到」，恰恰说明<strong>本地目前测的只是 3 秒兜底路径</strong>。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03</span>根因定位</h2>
+
+  <div class="finding">
+    <div class="finding-head"><h3>根因 A · 出口只有常量定时器</h3><span class="id">app.js:2314-2322</span><span class="sev sev-hi"><i></i>主因</span></div>
+    <dl>
+      <dt>代码</dt><dd><code>isPending(hash)</code> 只做 <code>Date.now() - op.ts &gt; 3000</code> 判定后 <code>delete</code>；全文检索 <code>pendingOps</code> 的写入/删除点（2315-2321 / 2343 / 2349-2361 / 2366-2368）没有任何一处比较服务端真值。</dd>
+      <dt>设计 vs 实现</dt><dd>注释 2308-2313 承诺「直到服务端数据与预期一致 <strong>或</strong> 3s 超时」；只有后半句落地。<code>resolveOptimistic(hashes, true)</code>（2357 行）做的只是把 <code>op.ts</code> 重置到回执时刻，等于把灰窗<strong>从回执起重新数 3 秒</strong>。</dd>
+      <dt>后果</dt><dd>真值无论多快到达，灰窗恒定 3 秒。真机上用户看到的就是「立刻变了，但灰很久」。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><h3>根因 B · 定时器只在轮询点求值</h3><span class="id">app.js:1726 / 2364-2370</span><span class="sev sev-hi"><i></i>主因</span></div>
+    <dl>
+      <dt>代码</dt><dd><code>isPending()</code> 的「顺带清掉已超时的」注释写在 <code>reapplyPending()</code> 里，而后者<strong>只在 <code>refresh()</code> 中被调用一次</strong>。没有独立的定时器去触发清理，也没有 watcher。</dd>
+      <dt>后果</dt><dd>3 秒到期后不立即生效，要等下一次 <code>/api/state</code>（1.5 / 2 / 3 s 分档）才被发现 ⇒ 撤下耗时 = 3 s + [0, pollMs]。实测余数全部落在档位区间内（见 §02）。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><h3>根因 C · 成功回执后不主动取真值，且存在时序差</h3><span class="id">app.js:2410 / 3160 / 3395 · qbmanager.py:354-380</span><span class="sev sev-md"><i></i>叠加</span></div>
+    <dl>
+      <dt>代码</dt><dd>三个动作入口在 <code>resolveOptimistic(hashes, r.ok)</code> 后只弹 toast，不 <code>refresh()</code>。</dd>
+      <dt>时序差</dt><dd>服务端 <code>run()</code> 的顺序是 <code>_drain_web_commands()</code> →（handler 内）<code>_set_web_result()</code> → <code>_sync_line()</code> → <code>rebuild_views()</code>。<strong>回执先于真值发布</strong>，所以「收到回执就 <code>refresh()</code>」必然存在扑空窗口，方案必须带重试或条件等待。</dd>
+      <dt>后果</dt><dd>真值进入前端的最早时刻 = 下一个轮询点 —— 与根因 B 叠加，把「等真值」和「等求值」两笔账算在同一拍上。</dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><h3>根因 D · 本地测试结构上测不到撤下</h3><span class="id">scripts/ui_harness.py:93-119</span><span class="sev sev-md"><i></i>判据缺失</span></div>
+    <dl>
+      <dt>代码</dt><dd>命令泵 docstring 自称「ok = 正常完成（乐观值被真值取代）」，但实现只有 <code>mgr._web_results[cmd_id] = {"status": "ok", ...}</code> —— <strong>不执行、不改状态、不置脏</strong>；而 <code>mgr.rebuild_views()</code> 全程只在启动时调用过一次（<code>ui_harness.py:174</code>）。</dd>
+      <dt>后果</dt><dd>① 「乐观值被真值取代」从未发生，灰窗只能靠 3 s 兜底结束；② 冒烟断言只查「点击后 120 ms 内出现 pending」与「8 s 内最终归零」（500 ms 步长采样）—— 3.8 s 稳稳 PASS。<strong>这是判据缺失，不是代码缺失</strong>，也是同一现象能连报三次的直接原因。</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04</span>为什么前三次都没修好</h2>
+  <table>
+    <thead><tr><th class="num">次序</th><th>提交</th><th>改了什么</th><th>对「撤下」的影响</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><code>10e06a8</code></td><td>引入乐观 UI 本身（<code>pendingOps</code> / <code>isPending</code> / 3 s 兜底），解决「点了没反应」</td><td>建立了灰窗机制，也一并把「只靠 3 s 定时器」写死为唯一出口</td></tr>
+      <tr><td class="num">2</td><td><code>a8eb6e8</code></td><td>补丁提到 POST 之前；3 s 兜底改从回执起算</td><td><span class="sev sev-ok"><i></i>贴上从 2012 ms → 6 ms</span>，但撤下逻辑一行未动；「从回执起算」反而保证灰窗一定挂满 3 s</td></tr>
+      <tr><td class="num">3</td><td><code>fed62a8</code></td><td>剧行补绑 <code>is-pending</code>（折叠态下也能看到在飞）</td><td><strong>同向叠加</strong>：让更多行进入同一个 3 s 灰窗，撤下耗时不变</td></tr>
+    </tbody>
+  </table>
+  <p><strong>共性：三次全部只动「贴上」那一段，没有一次量过「撤下」。</strong>而用户感知的两次抱怨恰好落在这两段上 —— 第一次是「点了才变」（贴上慢），这次是「变了但灰很久」（撤下慢）。每次都在正确的方向上前进，所以现象一次比一次轻，但因为从头到尾没有「撤下耗时」这个数字，没人发现慢的已经换了一半。</p>
+  <div class="note">
+    <span class="lbl">教训（待入 pitfalls）</span>
+    <p>「乐观 UI 响应快不快」是<strong>两个</strong>指标，不是一个：<code>贴上耗时</code>（点击 → 补丁可见）与 <code>撤下耗时</code>（点击 → 补丁撤下、行恢复正常）。只埋了前者（a8eb6e8 的 <code>patchMs</code> / <code>postMs</code>），于是真机第二次报「2-4 秒」时日志全绿、无从下手 —— 与当时「cmdStats 只量回执段」那次是同一个错误的重演。</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05</span>修复方案</h2>
+  <p>六个步骤，按依赖顺序；<strong>步骤 0 不完成，后面每一步都无法验证</strong>。改动集中在 <code>src/auto_qb/web_ui/static/shared/app.js</code> 与 <code>scripts/ui_harness.py</code>，不动后端节拍、不动命令协议（备选方案见 §07）。</p>
+
+  <h3>步骤 0 · 让桩服务真的能改状态（先做，否则无从验证）</h3>
+  <ul>
+    <li><code>_start_command_pump()</code> 在写回执<strong>之外</strong>，按命令改合成种子的 <code>state</code>（<code>pause</code> → <code>pausedUP</code>/<code>pausedDL</code>；<code>resume</code> → <code>uploading</code>/<code>downloading</code>），然后置 <code>mgr._group_view_dirty = True</code>（<code>/api/state</code> 走 <code>ensure_group_state</code>，判脏即就地重建 ⇒ 下一轮请求必回传真值）。种子对象就是 <code>store.by_hash</code> 里的 <code>FakeTorrent</code>，<code>state_enum</code> 由 <code>.state</code> 动态算出 ⇒ 改字段即可，<strong>不要动 <code>FakeClient</code></strong>（它只记 <code>calls</code>，被大量既有断言依赖）。</li>
+    <li><code>error</code> 模式<strong>不改状态</strong>（命令没生效，就该走回滚路径）；<code>hang</code> 模式维持原样（验证 3 s 兜底）。</li>
+    <li>新增 <code>--state-delay-ms</code>（默认 ~150 ms）：回执立刻写，真值延迟一会儿才生效。<strong>这条是必须的</strong> —— 它模拟的正是服务端「回执先于真值」的真实时序（根因 C）。没有它，桩服务又是瞬时的，新引入的扑空竞态会再次变成「本地测不出来」。</li>
+    <li>自检：探针脚本应能读到「服务端真值可用 ≈ 150-250 ms」而不是「15 s 未到」。</li>
+  </ul>
+
+  <h3>步骤 1 · 加「真值一致」判定，并把 <code>reapplyPending</code> 升级为 <code>reconcilePending</code></h3>
+  <p>在 <code>refresh()</code> 整表赋值<strong>之后</strong>、补丁重贴<strong>之前</strong>做判定 —— 顺序写反就全废（见下方 note）。</p>
+<pre><code>_truthMatches(action, kind) {          // 白名单只有 pause / resume
+  if (action === "pause")  return kind === "paused";
+  if (action === "resume") return kind === "downloading" || kind === "seeding" || kind === "checking";
+  return false;                        // 其余动作没有 patch, 走不到这里
+},
+reconcilePending(fresh) {              // fresh = 本轮真正收到新数组的视图集合
+  for (const h of Object.keys(this.pendingOps)) {
+    const op = this.pendingOps[h];
+    const seen = this._forEachRow(h, fresh, (row) => {
+      if (this._truthMatches(op.action, row.kind)) op.__agree = true;
+    });
+    if (seen && op.__agree) { delete this.pendingOps[h]; continue; }  // 真值已到 ⇒ 交还真值
+    if (Date.now() - op.ts > (op.confirmed ? 6000 : 3000)) { delete this.pendingOps[h]; continue; }
+    this._forEachRow(h, fresh, (row) => Object.assign(row, op.patch));
+  }
+}</code></pre>
+  <ul>
+    <li><strong>只查本轮真正刷新的数组。</strong>P1-1 按视图回传（<code>view=torrent</code> 只回 <code>torrents</code>），其余数组里的行对象还是<em>上一轮被补丁改过</em>的旧对象；拿它判定会 100% 误判为「一致」。<code>refresh()</code> 里把本轮 <code>state.groups / singles / torrents / shows</code> 哪些键真的到了，收集成 <code>fresh</code> 传进来，<code>_forEachRow</code> 增加按 <code>fresh</code> 过滤的形参。</li>
+    <li><strong><code>state.updated === false</code> 那一轮不做判定</strong>，只重贴补丁（没新数据就无从比较）。</li>
+    <li><strong>不一致时保留补丁，不弹回。</strong>服务端可能在「点击 → 命令执行」之间插了一次周期性重建，那一版还没含本次命令；此时交还真值会造成「变过去 → 弹回来 → 再变过去」的抖动。保留补丁是安全的，代价只是多灰一拍。</li>
+  </ul>
+  <div class="note">
+    <span class="lbl">本方案最易写错的一行</span>
+    <p>判定必须在<strong>补丁重贴之前</strong>用服务端新值做。写在 <code>reapplyPending()</code> 之后的话，<code>row.kind</code> 已经被补丁改成 <code>paused</code> ⇒ 永远「一致」⇒ 灰窗确实变 0 ms，但<strong>失败路径会永久留下假状态</strong>（红线）。必须配红绿双验：把判定挪到重贴之后，冒烟的 error 模式断言必须变红。</p>
+  </div>
+
+  <h3>步骤 2 · 成功回执后主动追真值（消掉「等下一拍」）</h3>
+<pre><code>async settlePending() {                 // 只在「有 pending 且已收到 ok 回执」的极短窗口内跑
+  for (const gap of [0, 300, 800]) {
+    if (gap) await new Promise((r) => setTimeout(r, gap));
+    if (!Object.keys(this.pendingOps).length) break;      // 已收敛 ⇒ 立即停
+    await this.refresh();                                 // 扑空就按退避再试一次
+  }
+}</code></pre>
+  <ul>
+    <li>调用点：<code>act()</code> / <code>actTorrent()</code> / <code>actEpisode()</code> / 批量分支，在 <code>resolveOptimistic(hashes, true)</code> 之后。</li>
+    <li>首查 gap=0 覆盖「真值比回执早」；300 ms 那次覆盖根因 C 的时序差；800 ms 是给大库重建的余量。条件成立即停，稳态下最多 2-3 次额外 <code>refresh()</code>。</li>
+    <li><strong>不会堆叠定时器</strong>：<code>scheduleNext()</code> 内部先 <code>stopPolling()</code>（<code>app.js:1652-1656</code>），手工调 <code>refresh()</code> 是安全的。</li>
+    <li>成本：额外 refresh 只发生在用户显式命令之后。单轮实测 143 ms（1000 种子）/ 309 ms（3000）/ ~500 ms（5000），3 次上限在 1.1 s 内结束，属有界突发；需在 5000 种子档复测 <code>renderMs</code> 确认不越过既有阈值。</li>
+  </ul>
+
+  <h3>步骤 3 · 兜底分两档：已确认 / 未确认</h3>
+  <ul>
+    <li><code>resolveOptimistic(hashes, true)</code> 时给 op 打 <code>confirmed = true</code>。</li>
+    <li><strong>未确认</strong>（命令在途 / hang / 发送失败）：维持 3 s 回落真值 —— 「失败绝不留假状态」是红线，<strong>一个字都不动</strong>。</li>
+    <li><strong>已确认</strong>但真值迟迟不一致：放宽到 6 s 硬上限。理由是我们已经知道命令执行成功，此时弹回的必然是陈旧值；6 s ≈ 至少两轮完整轮询都没对上，说明确实是「真值与预期不同」（如 resume 后落到 <code>error</code>），该交还真值。</li>
+  </ul>
+
+  <h3>步骤 4 · 补埋点 <code>settleMs</code>（防止第四次）</h3>
+  <ul>
+    <li><code>_newCmdStats()</code> 记 <code>t0</code>；<code>pendingOps</code> 归零的那一刻写 <code>cmdStats.settleMs</code>。</li>
+    <li><code>[perf]</code> 阈值扩一条：<code>settleMs &gt; 800</code> 报警，文案写明是「撤下慢」而非「贴上慢」。呼应既有约定 —— 真机上「慢」必须能自己说话，不能只靠用户肉眼。</li>
+  </ul>
+
+  <h3>步骤 5 · 视觉配套（灰窗变短后才需要，先测再定）</h3>
+  <p><code>.is-pending</code> 现在是 <code>opacity: .55; transition: .18s</code>（<code>atlas/style.css:456</code> / <code>prism/css/views.css:147</code>）。灰窗从 3-4.5 s 缩到 ~0.3 s 后，180 ms 的双向过渡会变成「闪一下」。待步骤 1-3 落地后看观感再定：倾向于把淡出拉长到 .35 s（出现快、消失慢），而不是现在就改 —— <strong>别在时序没修好之前调视觉，那会把问题盖住。</strong></p>
+
+  <h3>步骤 6 · 静态守阵</h3>
+  <p><code>tests/test_web.py</code> 已有「从 <code>app.js</code> 正则抓符号做机械比对」的静态守阵族，加一条：<code>refresh()</code> 内不得再出现 <code>reapplyPending</code>（防止有人把一致性判定绕过、退回旧路径）。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06</span>判据与红绿双验</h2>
+  <table>
+    <thead><tr><th>判据</th><th>口径</th><th class="num">现状</th><th class="num">目标</th></tr></thead>
+    <tbody>
+      <tr><td>冒烟 · 撤下及时（新增，双 UI）</td><td>点击 → <code>.is-pending</code> 消失，桩服务 <code>--state-delay-ms 150</code></td><td class="num">3785–5178 ms</td><td class="num">≤ 800 ms</td></tr>
+      <tr><td>冒烟 · 贴上仍然即时（既有）</td><td>注入 800 ms POST 延迟后补丁仍 &lt; 400 ms</td><td class="num">4–7 ms</td><td class="num">不退化</td></tr>
+      <tr><td>冒烟 · 失败不留假状态（既有）</td><td><code>--cmd-result error</code> 下 <code>pendingOps</code> 归零且行 class 复原</td><td class="num">PASS</td><td class="num">PASS（红线）</td></tr>
+      <tr><td>冒烟 · hang 下 3 s 回落（既有）</td><td><code>--cmd-result hang</code>，无回执 ⇒ 3 s 回落真值</td><td class="num">PASS</td><td class="num">PASS（未确认档不变）</td></tr>
+      <tr><td>单测</td><td><code>uv run pytest tests -q --no-cov</code></td><td class="num">1054 passed</td><td class="num">不降 + 新增守阵</td></tr>
+      <tr><td>埋点</td><td>真机 <code>[perf]</code> 出现 <code>settle</code> 段</td><td class="num">无</td><td class="num">有，&gt;800 ms 报警</td></tr>
+    </tbody>
+  </table>
+  <p><strong>红绿双验（每条必做，缺一不算完）</strong></p>
+  <ol>
+    <li>把「真值一致」判定去掉 ⇒ 撤下断言应 FAIL（回到 ~3.8 s）。</li>
+    <li>把判定挪到 <code>reapplyPending()</code> 之后 ⇒ error 模式的「不留假状态」应 FAIL（这一步专门钉住 §05 那条 note）。</li>
+    <li>去掉 <code>settlePending()</code> ⇒ 撤下耗时应退化到「真值到达的下一个轮询点」，断言 FAIL 或贴近 800 ms 上界。</li>
+    <li>桩服务去掉 <code>--state-delay-ms</code> ⇒ 应当依然 PASS（证明 300 ms 重试确实覆盖了扑空窗口，而不是靠时序巧合）。</li>
+  </ol>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07</span>风险与不做的事</h2>
+  <table>
+    <thead><tr><th>项</th><th class="num">评级</th><th>说明与处置</th></tr></thead>
+    <tbody>
+      <tr><td>判定顺序写反 ⇒ 失败留假状态</td><td class="num"><span class="sev sev-hi"><i></i>高</span></td><td>唯一会突破既有红线的一条。处置：§05 note + 红绿双验第 2 条 + 静态守阵三重钉住</td></tr>
+      <tr><td>按视图回传造成的误判</td><td class="num"><span class="sev sev-md"><i></i>中</span></td><td>只查本轮 <code>fresh</code> 数组；非 fresh 一律不判定（宁可多灰一拍，不可误清）</td></tr>
+      <tr><td>大库额外 refresh 的 CPU 突发</td><td class="num"><span class="sev sev-md"><i></i>中</span></td><td>上限 3 次、条件成立即停、仅在用户显式命令后；5000 种子档复测 <code>renderMs</code></td></tr>
+      <tr><td>已确认档放宽到 6 s 可能延长错误显示</td><td class="num"><span class="sev sev-lo"><i></i>低</span></td><td>只在「命令成功但真值与预期不同」时出现（如 resume 后落 error）；6 s 硬上限封顶，且比现在的「3 s 弹回陈旧值」更正确</td></tr>
+      <tr><td>resume 的预期值不准</td><td class="num"><span class="sev sev-lo"><i></i>低</span></td><td><code>_optimisticPatch</code> 按 <code>progress ≥ 1</code> 猜 seeding/downloading；真值若先落到 <code>checking</code>，判定表已含 checking，视为一致</td></tr>
+    </tbody>
+  </table>
+  <p><strong>明确不做（避免范围膨胀）</strong></p>
+  <ul>
+    <li>不改后端节拍、不碰 <code>_web_pending_ver</code> 门控（那是 Open issue 26-09-19-2122 的另一件事）。</li>
+    <li>不引入 SSE / WebSocket 推送（<code>想法.md</code> 里有，但是独立议题；本方案先把现有轮询路径修干净）。</li>
+    <li>不改 <code>FakeClient</code>（牵动大量既有断言）；状态翻转只加在 harness 的命令泵里。</li>
+    <li>不动「失败 / 未确认不留假状态」的 3 s 语义。</li>
+  </ul>
+  <p><strong>备选（只在主方案实测仍有残留时才做）</strong>：让命令回执带上该命令执行后的视图版本号（<code>run()</code> 在 rebuild 之后回写 <code>_web_results[cmd_id]["rid"]</code>），前端据此等到 <code>state.rid ≥ 回执.rid</code> 再判定 —— 可以消掉「不一致但确实已刷新」这一类的等待（如 resume 后落 error 能立刻交还真值）。代价是动协议，故列为备选。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08</span>验收口径与文档回写</h2>
+  <ol>
+    <li><strong>验收数字</strong>：桩服务撤下耗时 <strong>3785–5178 ms → ≤ 800 ms</strong>（<code>--state-delay-ms 150</code> 下预期 200-400 ms）；贴上耗时保持 &lt; 50 ms；单测 1054 passed 不降；冒烟 50 → 52 项（新增「撤下及时」双 UI）。</li>
+    <li><strong>文档回写</strong>：
+      <ul>
+        <li><code>memory-bank/pitfalls.md</code> 新增两条 —— ①「乐观 UI 快不快是两个指标（贴上 / 撤下），只埋一半就会连报三次」；②「桩服务不执行命令 ⇒ 真值永不到 ⇒ 撤下路径从未被测」。<code>scripts/ui_harness.py</code> 命令泵 docstring 里那句「乐观值被真值取代」要改成实话。</li>
+        <li><code>memory-bank/testing.md</code>：冒烟项数与新断言口径。</li>
+        <li><code>memory-bank/issues/</code>：新建一条 <code>26-09-19-2245-webui-optimistic-settle</code> 记录「撤下」半程（根因与修法都与 1939 那条不同），并把 <code>26-09-19-1939-webui-optimistic-latency</code> 加一句交叉引用说明「只修了贴上，撤下另立」—— 那条维持 Fixed（贴上确实修好了），不要回退状态。</li>
+        <li><code>TODO.md</code> 与 <code>activeContext.md</code> 各记一行。</li>
+      </ul>
+    </li>
+    <li><strong>真机复测口径</strong>：用户点暂停后用控制台 <code>[perf]</code> 行读 <code>settle</code> 段；若仍 &gt; 800 ms，日志要能直接区分是「补丁慢 / POST 慢 / 真值没到 / 判定没命中」中的哪一段 —— 这才是本计划真正的产出：让下一次不必靠肉眼。</li>
+  </ol>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09</span>附录 · 复现证据</h2>
+  <p>探针脚本 <code>.workbuddy-ai/tmp/measure_pending.cjs</code>（dev-only，不入库），复跑方式：</p>
+<pre><code>uv run python scripts/ui_harness.py --torrents 800  --port 8121
+uv run python scripts/ui_harness.py --torrents 3600 --port 8122
+NODE_PATH=C:/Users/&lt;你&gt;/.workbuddy-ai/binaries/node/workspace/node_modules \
+  node .workbuddy-ai/tmp/measure_pending.cjs --base http://127.0.0.1:8121 --ui prism --rounds 3</code></pre>
+  <p>关键原始输出（800 种子 / 3600 种子各 3 轮）：</p>
+<pre><code>round 0 [pause] hash=00000000
+   补丁贴上(patchMs)   = 6ms
+   服务端真值可用      = 15s 内未到      <-- 桩服务不执行命令, 见步骤 0
+   变灰结束(clearMs)   = 3785ms
+round 2 [pause]
+   补丁贴上(patchMs)   = 4ms
+   变灰结束(clearMs)   = 4498ms
+3600 种子: 5178 / 3898 / 4456 ms
+cmdStats: {"action":"pause","patchMs":2,"postMs":16,"totalMs":2,"waitMs":0,"execMs":1}</code></pre>
+  <p>代码定位清单：<code>app.js:1726</code>（reapplyPending 调用点）、<code>2314-2322</code>（isPending 常量 3 s）、<code>2347-2363</code>（resolveOptimistic 重置 op.ts）、<code>2364-2370</code>（reapplyPending）、<code>2410 / 2932 / 3160 / 3395</code>（四个动作入口）、<code>1652-1656</code>（scheduleNext）、<code>2259</code>（waitCmd）；<code>qbmanager.py:354-380</code>（drain → 写回执 → 补刷新）、<code>mixins/web_commands.py:150-151</code>（写回执）、<code>mixins/web_view.py:588-605</code>（ensure_group_state 判脏即重建）；<code>scripts/ui_harness.py:93-119</code>（命令泵）、<code>174</code>（启动时唯一一次 rebuild_views）。</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10</span>实施回执(2026-09-19 完成)</h2>
+
+  <div class="note" style="max-width:none">
+    <span class="lbl">⚠ 本节前两段记录的是「被取代的那一版实现」</span>
+    <p>下面「实测结果 / 四条红绿双验 / 五处偏差」是我按本计划 §05 在本地实现并验证的一版
+    （<code>reconcilePending(fresh)</code> 路线）。拉齐主线后<b>该实现已整体丢弃</b>，未进入主线。
+    保留这些数字是因为：① 根因与量级独立于实现路线，可复现；② 「五处偏差」里的三条
+    （桩服务自愈回弹、固定采样断言失效、<code>[perf]</code> 阈值分档）与实现路线无关，已落地到主线。
+    <b>真正进主线的是下面「落地到主线的三处增量」。</b></p>
+  </div>
+
+  <h3>落地到主线的三处增量(在 32f531d / 12657ee 之上)</h3>
+  <ol>
+    <li><strong><code>settleMs</code> 埋点</strong>（<code>_newCmdStats</code> / <code>_markCmdSettle</code>）——
+      点击 → 补丁撤下、行恢复正常。这是本轮最该留下来的东西：<b>「乐观 UI 快不快」是两个指标，前三次修复
+      全只埋了「贴上」那一段</b>，于是同一现象连报三次而日志全绿。调用点覆盖 <code>pendingOps</code> 的全部出口
+      （真值对齐 / 兜底回滚 / 失败回滚），缺一处就漏记。<code>[perf]</code> 阈值按目标数分档（单目标 800ms、
+      &gt;100 目标 2500ms —— 整剧 800 个种子的补丁本身就要 ~160ms，按单目标报会变常驻噪音）；
+      <b>无回执（hang）时只记不报</b>，那时走 3s 兜底、慢是设计如此。</li>
+    <li><strong>桩服务 <code>--state-revert-ms</code> 自愈回弹</strong>（<code>_restore_state</code> /
+      <code>_revert_after_consume</code>）—— 主线让桩服务真改状态之后，长驻进程的状态会<b>跨轮累积</b>：
+      跑过一次「整剧暂停」（合成数据里一剧 = 全部种子）后，第二轮冒烟<b>所有行都是 s-paused</b>，
+      4 条「挑一个未暂停的行」的断言集体假失败。❗回弹必须是「真值<b>被 <code>/api/state</code> 取走之后</b>
+      再等 N ms」，不能是「生效后 N ms」的盲定时 —— 实测定时 4s 回弹把一次整组撤下拖到 4149ms
+      （回弹跑到了前端观测之前，把真值又改回去了）。判「已被取走」用 <code>_web_pending_ver</code> 被清空。
+      回弹记的是<b>最初</b>值，否则 pause→resume 连续两次会把种子还原成暂停态。</li>
+    <li><strong>静态守阵 <code>_scan_pending_settle</code></strong>（<code>tests/test_web.py</code>）——
+      钉住主线的三处易写反点：<code>_snapshotTruth(state)</code> 必须在 <code>reapplyPending()</code>
+      <b>之前</b>、判定必须走 <code>_optimisticSettled</code>、回执后必须调 <code>_pullTruthAfterCmd</code>。
+      红验已确认：把 <code>_snapshotTruth</code> 挪到 <code>reapplyPending()</code> 之后 ⇒ 守阵 FAIL
+      （「快照到的是被补丁改过的行值，判定恒真 ⇒ 失败路径留假状态」）。</li>
+  </ol>
+
+  <h3>增量落地后的验证(主线基准不退化)</h3>
+  <table>
+    <thead><tr><th>项目</th><th class="num">结果</th><th>口径</th></tr></thead>
+    <tbody>
+      <tr><td>单测</td><td class="num">1054 passed</td><td>主线基线不降（新增静态守阵 1 条）</td></tr>
+      <tr><td>冒烟 ok 模式</td><td class="num">54 项 0 失败</td><td>乐观态落回真值 249~273ms（须 80~1000ms）</td></tr>
+      <tr><td>冒烟 error 模式</td><td class="num">54 项 0 失败</td><td>失败回滚路径</td></tr>
+      <tr><td>冒烟 hang 模式</td><td class="num">8 项 0 失败</td><td>兜底 4360~4366ms，落回原状态 s-other</td></tr>
+      <tr><td>桩服务连跑两轮 ok</td><td class="num">54 / 54 项 0 失败</td><td>自愈回弹生效（回弹前第二轮必假失败）</td></tr>
+      <tr><td><code>[perf]</code> 噪音</td><td class="num">0 条「撤下」告警</td><td>三条模式均无超阈值</td></tr>
+    </tbody>
+  </table>
+
+  <h3>被取代那一版的实测结果(存档)</h3>
+  <table>
+    <thead><tr><th>指标</th><th class="num">修前</th><th class="num">修后</th><th>口径</th></tr></thead>
+    <tbody>
+      <tr><td>撤下耗时(800 种子 / 1.5s 档)</td><td class="num">3785–4498 ms</td><td class="num"><b>203–370 ms</b></td><td>点击 → <code>.is-pending</code> 消失</td></tr>
+      <tr><td>撤下耗时(3600 种子 / 3s 档)</td><td class="num">3898–5178 ms</td><td class="num"><b>516–668 ms</b></td><td>同上; 大库余量主要来自 300ms 重试 + 单轮 refresh 更慢</td></tr>
+      <tr><td>「真值到达后仍多灰」</td><td class="num">+3276 ms</td><td class="num">−87 ~ −171 ms</td><td>负数 = 真值到达前就已经清掉了(回执后立刻追到的那一轮命中)</td></tr>
+      <tr><td>贴上耗时(回归)</td><td class="num">4–7 ms</td><td class="num">4–8 ms</td><td>未退化</td></tr>
+      <tr class="tot"><td>用户感知</td><td class="num">2–4 s</td><td class="num">≈0.2–0.7 s</td><td>目标 ≤ 800 ms 达成</td></tr>
+    </tbody>
+  </table>
+
+  <h3>四条红绿双验(全部做过)</h3>
+  <ol>
+    <li>去掉「真值一致即清」 ⇒ 撤下断言 <b>FAIL 7279 ms</b>(回落到 6s 已确认兜底 + 轮询延迟)。</li>
+    <li>把一致判定挪到补丁重贴<b>之后</b> ⇒ <b>静态守阵 FAIL</b>("判定恒真 ⇒ 失败路径会永久留下假状态")。<span class="sev sev-md"><i></i>注</span>: 冒烟 error 模式<b>测不出</b>这一条 —— 失败路径是 <code>resolveOptimistic(false)</code> 显式回滚, 不经过一致判定; 所以这条只能靠静态守阵钉, 计划里"error 模式必须变红"的预期不成立, 已在此更正。</li>
+    <li>去掉 <code>settlePending()</code> ⇒ 撤下 <b>FAIL 901 ms</b>(退化成"等下一个轮询点"), 虽比修前轻, 但确实越线。</li>
+    <li>桩服务 <code>--state-delay-ms 0</code>(对照档) ⇒ <b>52 项 0 失败</b>, 撤下 54–74 ms —— 证明 300 ms 重试真能覆盖扑空窗口。</li>
+  </ol>
+
+  <h3>验证</h3>
+  <p>单测 <b>1054 passed</b>(基线不降, 新增静态守阵 1 条); 浏览器冒烟 <b>ok 模式 52 项 0 失败</b>(原 50 + 新增「撤下及时」双 UI)、<b>error 模式 50 项 0 失败</b>、<b>hang 模式 50 项 0 失败</b>。桩服务连跑两轮冒烟均 52/0(不再因状态累积而假失败)。</p>
+
+  <h3>与计划的五处偏差(都是实施中撞出来的)</h3>
+  <ol>
+    <li><strong>桩服务还得自愈回弹</strong>(计划没有): 命令泵真的改状态之后, 长驻桩服务的状态会<b>跨轮累积</b> —— 跑过一次"整剧暂停"(合成数据里一剧 = 全部 800 个种子)后, 第二轮冒烟<b>所有行都是 s-paused</b>, 4 条"挑一个未暂停的行"的断言全部假失败。加了 <code>--state-revert-ms</code>。<strong>回弹还不能是盲定时</strong>: 定时 4s 回弹实测把一次整组撤下拖到 4149 ms(真值被回弹改回去了), 改成<b>等真值被 <code>/api/state</code> 取走之后</b>再回弹(<code>_revert_after_consume</code>)。</li>
+    <li><strong>三条「pending 可见」断言改了写法</strong>: 原写法是"点一下 → 睡 120/150ms → 看有没有 <code>is-pending</code>"。修好撤下后窗口从常量 3s 变成<b>变量</b>(54 ms ~ 350 ms), 固定采样会因为它<b>比窗口还长</b>而假失败 —— 失败的原因恰恰是修复生效了。改为 MutationObserver 在点击<b>之前</b>就位、记录"是否出现过"。</li>
+    <li><strong>批量断言改取峰值</strong>: 同理, 原来 1500 ms 后取一次瞬时值, 现在窗口 ~350 ms ⇒ 恒读到 0。改成窗口内 20 ms 步长取 <code>pendingOps</code> 峰值(实测峰值 60 / 目标 60)。</li>
+    <li><strong><code>[perf]</code> 阈值按目标数分档</strong>: 单目标/小批量 800 ms, &gt;100 目标 2500 ms —— 整剧 800 个种子的<b>补丁本身</b>就要 ~160 ms, 按单目标阈值报会变成常驻噪音, 而常驻的报警没人看。</li>
+    <li><strong>步骤 5(视觉)未动</strong>: 实测窗口 200–350 ms, 配合 <code>opacity .55 / transition .18s</code> 呈一次柔和脉冲, 不闪。留给真机观感确认再定, 不在没有观感反馈时改 CSS。</li>
+  </ol>
+</section>
+
+</main>
+</div>
+</div>
+
+<footer>
+  <div class="wrap">auto-qb · docs/plans/26-09-19-2245-webui-optimistic-settle-plan.html · 数据来自 8121 / 8122 两个专用端口的真浏览器实测（800 / 3600 种子）</div>
+</footer>
+
+</body>
+</html>

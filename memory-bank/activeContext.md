@@ -4,7 +4,18 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-19 (**上轮复核的第 1、2 批缺陷修复 + 续查的热路径优化均已实施未提交** ——
+**最后更新**: 2026-09-19 (**已拉齐主线; 本轮「乐观 UI 撤下」的独立实现被主线取代, 只保留三处增量** ——
+  分支曾落后主线 4 个提交, 而 `origin/develop` 上已有同一问题的独立修复 `32f531d`(真值匹配即清 +
+  回执后拉真值 + 桩服务真改状态)与 `12657ee`(3s 兜底必须回滚 `op.prev`, 否则补丁值永久留行上
+  —— **这一处我那版没有, 属红线**)。已 stash 留档 + rebase, 只把主线没有的三处重新实现:
+  ① `settleMs` 埋点(「乐观 UI 快不快」的两个指标, 前三次只埋了"贴上" ⇒ 连报三次日志全绿);
+  ② 桩服务 `--state-revert-ms` 自愈回弹(**等真值被 /api/state 取走后**再回弹, 盲定时会跑到前端观测之前);
+  ③ 静态守阵 `_scan_pending_settle`(钉 `_snapshotTruth` 必须早于 `reapplyPending` 等三处, 红验已过)。
+  验证: 单测 **1054 passed**; 冒烟 **ok 54 / error 54 / hang 8 项 0 失败**; 桩服务连跑两轮均 54/0。
+  被取代的计划已加存档声明: [26-09-19-2245](../docs/plans/26-09-19-2245-webui-optimistic-settle-plan.html)。
+  **教训已入 pitfalls: 开工前先 `git fetch` 看 `[behind N]`**。
+
+  **上轮复核的第 1、2 批缺陷修复 + 续查的热路径优化均已实施未提交** ——
   第 1 批: 行窗口间距改运行时实测(棱镜占位总高 +2973 → **0**)、冒烟改同帧「窗口化 vs 全量」对照、
   两条写序号接线断言、回执/失效顺序调换、`sync_interval` 钳制、文档漂移、harness 限回环、`cmdStats` 接消费者;
   第 2 批: 组/集行乐观(BUG-3) + 修复过程中新发现的 **BUG-8 追剧页刷新后永久空白(高)** /

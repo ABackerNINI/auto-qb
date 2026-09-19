@@ -116,28 +116,76 @@ def _target_hashes(mgr, cmd: str, body: dict):
     return []
 
 
-def _apply_truth(mgr, cmd: str, body: dict):
+def _restore_state(mgr, hashes):
+    """把 _apply_truth 改过的种子还原成**最初**的 state
+
+    ❗为什么需要: 真机上"暂停"是永久的, 但桩服务是**长驻**的(起一次要跑很多轮冒烟, 红绿双验
+    更是同一进程反复跑)。状态一旦永久累积, 跑过一轮"整剧暂停"(合成数据里一剧 = 全部种子)之后,
+    下一轮冒烟里**所有行都是 s-paused** ⇒ 所有"挑一个未暂停的行"的断言全部假失败 —— 实测第二轮
+    就 4 条断言因此变红, 而它们跟被测代码毫无关系。
+    ❗记的是**最初**值(不是上一次命令后的值): pause→resume 连续两次操作同一批种子时, 若记
+    "上一次", 回弹会把它们还原成暂停态。
+    """
+    orig = getattr(mgr, "_harness_orig_state", None) or {}
+    touched = False
+    for h in hashes:
+        tor = mgr.store.by_hash.get(h)
+        if tor is None or h not in orig:
+            continue
+        tor.state = orig[h]
+        touched = True
+    if touched:
+        mgr.rebuild_views()
+
+
+def _revert_after_consume(mgr, hashes, wait_ms: int):
+    """等真值这一版**真的被 /api/state 取走**之后, 再等 wait_ms 回弹
+
+    ❗不能直接 `Timer(revert_ms)` 定时回弹: 回弹可能跑在前端看到真值**之前**(实测一次"整组暂停"
+    的撤下因此被拖到 4149ms —— 真值被回弹改回去了, 前端要等到下一次回弹才碰巧对上)。以
+    `_web_pending_ver` 判"这一版已被消费"(它在 `ensure_group_state` 里被清空), 再等一小段,
+    回弹就一定落在前端观测之后。
+    """
+    deadline = time.time() + 8.0
+    while time.time() < deadline and getattr(mgr, "_web_pending_ver", None) is not None:
+        time.sleep(0.05)
+    time.sleep(max(0, wait_ms) / 1000.0)
+    _restore_state(mgr, hashes)
+
+
+def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
     """把命令**真的**落到合成数据上 —— 否则真值永远不到, 乐观态只能靠 3s 兜底收尾,
     于是任何「真值对齐」类断言都测不到东西(只会测到"走满 3s")。
 
     这也是本桩此前最大的失真: 只回 ok 不改状态, 于是 issue 26-09-19-2024 那种
     "真值到了也不清 pending"的缺陷在本地完全无法暴露。
+
+    `revert_ms` > 0 时, 真值被前端取走后再等这么久把它还原(见 _revert_after_consume) ——
+    让长驻桩服务可以反复跑而不累积状态。
     """
     act = body.get("action") if cmd == "bulk_torrents" else cmd.split("_", 1)[0]
     if act not in ("pause", "resume"):
         return
-    for h in _target_hashes(mgr, cmd, body):
+    orig = getattr(mgr, "_harness_orig_state", None)
+    if orig is None:
+        orig = {}
+        mgr._harness_orig_state = orig
+    hashes = _target_hashes(mgr, cmd, body)
+    for h in hashes:
         tor = mgr.store.by_hash.get(h)
         if tor is None:
             continue
+        orig.setdefault(h, tor.state)  # 只记最初值(见 _restore_state)
         if act == "pause":
             tor.state = _PAUSED_STATE
         else:
             tor.state = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
     mgr.rebuild_views()  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+    if revert_ms > 0 and hashes:
+        threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
 
-def _start_command_pump(mgr, mode: str):
+def _start_command_pump(mgr, mode: str, revert_ms: int = 0):
     """兜底命令泵: 桩服务没有主循环, 命令没人消费 ⇒ 前端 waitCmd 会一直轮询到超时。
 
     这里不**执行**命令(合成数据没有真实 qB 可打), 只按 mode 直接写回执, 让前端的命令
@@ -169,7 +217,7 @@ def _start_command_pump(mgr, mode: str):
                 # 先回执、后改状态(复刻真机补刷新的错位, 见 _TRUTH_DELAY 注释)
                 time.sleep(_TRUTH_DELAY)
                 try:
-                    _apply_truth(mgr, _cmd, body)  # ❗队列解出来的是 _cmd(与 cmd 区分开)
+                    _apply_truth(mgr, _cmd, body, revert_ms)  # ❗队列解出来的是 _cmd(与 cmd 区分开)
                 except Exception as e:  # 桩的健壮性优先: 同步失败也不能拖死命令泵
                     print(f"[harness] 状态同步失败: {e}", file=sys.stderr)
 
@@ -194,6 +242,12 @@ def main() -> int:
     ap.add_argument("--groups", type=int, default=200, help="归组数量(每组 2 个种子)")
     ap.add_argument("--no-groups", action="store_true", help="不建分组(纯平铺)")
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
+    ap.add_argument(
+        "--state-revert-ms", type=int, default=1500,
+        help="真值**被 /api/state 取走后**再等多少 ms 还原成初始状态(默认 1500, 让长驻桩服务可反复跑;"
+        " 0 = 不还原, 永久生效)。注意不是「真值生效后 N ms」—— 定时回弹会跑到前端观测之前"
+        "(见 _revert_after_consume)",
+    )
     ap.add_argument("--host", default="127.0.0.1", help="监听地址(**只接受回环**)")
     ap.add_argument("--port", type=int, default=8099)
     args = ap.parse_args()
@@ -226,7 +280,7 @@ def main() -> int:
             groups[(a.name, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
     mgr.rebuild_views()
-    _start_command_pump(mgr, args.cmd_result)
+    _start_command_pump(mgr, args.cmd_result, args.state_revert_ms)
 
     app = create_app(mgr)
     print(
