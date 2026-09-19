@@ -22,7 +22,7 @@
 - test_notify_emit_exception_swallowed: emit 内部异常(如 getMessage 抛错)不外抛(handleError 兜底)
 - test_notify_close_twice_safe: close 幂等(重复调用/队列已空均不炸)
 - test_notify_fatal_channel_error_swallowed: notify_fatal 渠道构造异常 -> 静默(不外抛)
-- test_notify_legacy_shortcut_cleanup: legacy lnk 清理: 存在的旧快捷方式被删除(APPDATA 显式给定, 文件操作经 monkeypatch, 不动真实开始菜单)
+- test_notify_legacy_shortcut_cleanup: legacy lnk 清理: 存在的旧快捷方式被删除(APPDATA 显式给定, winreg 注入替身, 文件操作经 monkeypatch, 不动真实开始菜单)
 - test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知器命令(不启动真实进程), send 走失败分支返回 False
 - test_notify_fatal_enabled_does_not_launch_process: 通知**启用且全程不 mock** 走 `notify_fatal` 真实路径 ⇒ 一个进程都不启动(用户原始诉求"测试时弹出通知框"的最直接回归点)
 """
@@ -427,7 +427,35 @@ def test_notify_legacy_shortcut_cleanup(monkeypatch):
     不设的话路径清单为空、`os.path.exists` 根本不会被问到, `removed` 恒空、断言必失败。
     这是**环境依赖**(某些 CI/沙箱不设 APPDATA), 不是逻辑错误; 显式 setenv 后该用例也顺带
     真正覆盖了 `_legacy_shortcut_paths` 的路径拼接分支(此前在无 APPDATA 环境下等于空跑)。
+
+    `winreg` 也要**注入替身**: `PlatformChannel("win32")` 构造时会 `import winreg`, 而 Linux/macOS
+    **没有这个模块** —— `ModuleNotFoundError` 不属于 `_ensure_appid_registered` 捕获的 `OSError`,
+    会直接外抛(2026-09-19 Linux CI 实测失败)。注入替身后本用例在**任何平台**都跑得到
+    `_register_appid_registry` 的真实分支, 符合"平台相关测试不依赖运行环境"的约定。
     """
+    class _StubWinreg:
+        """`winreg` 替身: 键/值写入全部不落盘(测试不得动真实注册表)"""
+
+        HKEY_CURRENT_USER = 1
+        KEY_SET_VALUE = 2
+        REG_SZ = 1
+
+        class _Key:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        @staticmethod
+        def CreateKeyEx(key, sub_key, *a, **kw):
+            return _StubWinreg._Key()
+
+        @staticmethod
+        def SetValueEx(key, name, *a, **kw):
+            return None
+
+    monkeypatch.setitem(sys.modules, "winreg", _StubWinreg)
     removed = []
     monkeypatch.setenv("APPDATA", r"C:\Users\tester\AppData\Roaming")
     monkeypatch.setattr(notify_mod.os.path, "exists", lambda p: "AutoQB.lnk" in str(p) or "AutoQB.UI.lnk" in str(p))

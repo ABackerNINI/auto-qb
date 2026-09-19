@@ -626,18 +626,21 @@ def test_checking_skip_readd_unconfirmed_backs_up():
             self.torrents.pop("HASH123", None)  # add 成功但客户端里查不到
             return ret
 
-    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
-    mgr = make_mgr(cfg)
-    client = _NotAppearedClient()
-    mgr.client = client
-    t = make_target()
-    process_rule(mgr, client, t, dry_run=False)
+    with tempfile.TemporaryDirectory() as td:  # state_file 必须给真实路径: 留空会让 atomic_write 往 CWD 的父目录写临时文件
+        cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
+        cfg.state_file = os.path.join(td, "state.json")
+        mgr = make_mgr(cfg)
+        client = _NotAppearedClient()
+        mgr.client = client
+        t = make_target()
+        process_rule(mgr, client, t, dry_run=False)
 
-    assert any(c[0] == "add" for c in client.calls), f"前置: 应已发出重加: {client.calls}"
-    meta = mgr.state.get("skip_check_backup", {}).get("HASH123")
-    assert meta, f"未确认到种子也必须备份 .torrent: {mgr.state}"
-    assert os.path.exists(meta["path"]), f"备份文件应真实落盘: {meta}"
-    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未成功跳检不应记录跨日去重"
+        assert any(c[0] == "add" for c in client.calls), f"前置: 应已发出重加: {client.calls}"
+        # 断言必须在 td 内: 备份文件本身就落在临时目录里, 出了 with 目录已被清理
+        meta = mgr.state.get("skip_check_backup", {}).get("HASH123")
+        assert meta, f"未确认到种子也必须备份 .torrent: {mgr.state}"
+        assert os.path.exists(meta["path"]), f"备份文件应真实落盘: {meta}"
+        assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未成功跳检不应记录跨日去重"
 
 
 def test_checking_piecehashes_same():
@@ -1211,48 +1214,51 @@ def test_checking_full_checking_fail_retry():
 # ============================================================
 def test_checking_group_full_checking_serialized():
     """同组 full-checking 串行: A 提交后 B 让位等待(不提交 recheck); A 成功晋升参考 -> B 恢复走 with_reference 跳检"""
-    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
-    mgr = make_mgr(cfg, with_tq=True)
-    client = CheckingFakeClient()
-    mgr.client = client
-    a = make_target(hash="HA")
-    b = make_target(hash="HB")
-    seed_store(mgr, [a, b])
-    inject_group(mgr, "HA", "HB")
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    t0 = time.time()
-    ta = mgr._create_rule_task(rule, "HA")
-    tb = mgr._create_rule_task(rule, "HB")
-    ta.interval = 60.0
-    tb.interval = 60.0
-    # A 先执行: 提交 recheck(在途登记) + 让位; HA 进入校验态后 B 再执行
-    mgr.task_queue.add_task(ta, t0)
-    run_queue(mgr, t0)
-    seed_store(mgr, [make_target(hash="HA", state="checkingDL"), b])
-    mgr.task_queue.add_task(tb, t0 + 0.1)
-    run_queue(mgr, t0 + 0.1)
-    assert ("recheck", None) in client.calls, "A 应提交 recheck"
-    assert client.calls.count(("recheck", None)) == 1, f"B 不应提交 recheck: {client.calls}"
-    assert mgr.task_queue.active_check_hashes() == {"HA"}, "A 应登记在途(等待任务不占用登记)"
-    assert ta.resume_index == 1 and tb.resume_index == 1, "A/B 均应记录断点"
-    assert ta not in mgr.task_queue._fast and tb not in mgr.task_queue._fast, "A/B 均不重入队(等待恢复)"
-    # HA 校验中: A 轮询续延, B 等待任务续等(间距放大避开真实时钟重排的边界)
-    run_queue(mgr, t0 + 10.0)
-    assert tb.resume_index == 1, "HA 校验中 B 保持推迟"
-    # HA 校验成功 -> 晋升参考; B 等待任务发现组内已清 -> resume B 重走决策链
-    seed_store(mgr, [make_target(hash="HA", state="pausedUP", progress=1.0), b])
-    run_queue(mgr, t0 + 20.0)
-    assert mgr.store.verified_references == {"HA"}, "成功应晋升参考"
-    assert mgr.task_queue.active_check_hashes() == set(), "轮询消亡应释放在途登记"
-    # B 的恢复重走发生在等待任务 resume 之后(下一批到期): 命中 verified 参考 -> with_reference 跳检
-    run_queue(mgr, t0 + 90.0)
-    assert mgr.task_queue.active_check_hashes() == set(), "等待任务不登记在途"
-    run_queue(mgr, t0 + 150.0)
-    names = [c[0] for c in client.calls]
-    assert names.count("recheck") == 1, f"B 恢复后不应再提交 recheck: {client.calls}"
-    assert "export" in names and "delete" in names, f"B 应走跳检流程: {client.calls}"
-    add_call = [c for c in client.calls if c[0] == "add"][0]
-    assert add_call[1]["is_skip_checking"] is True, "B 应以跳检方式重加"
+    # state_file 必须给真实路径: 留空会让 atomic_write 往 CWD 的父目录写临时文件
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+        cfg.state_file = os.path.join(td, "state.json")
+        mgr = make_mgr(cfg, with_tq=True)
+        client = CheckingFakeClient()
+        mgr.client = client
+        a = make_target(hash="HA")
+        b = make_target(hash="HB")
+        seed_store(mgr, [a, b])
+        inject_group(mgr, "HA", "HB")
+        rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+        t0 = time.time()
+        ta = mgr._create_rule_task(rule, "HA")
+        tb = mgr._create_rule_task(rule, "HB")
+        ta.interval = 60.0
+        tb.interval = 60.0
+        # A 先执行: 提交 recheck(在途登记) + 让位; HA 进入校验态后 B 再执行
+        mgr.task_queue.add_task(ta, t0)
+        run_queue(mgr, t0)
+        seed_store(mgr, [make_target(hash="HA", state="checkingDL"), b])
+        mgr.task_queue.add_task(tb, t0 + 0.1)
+        run_queue(mgr, t0 + 0.1)
+        assert ("recheck", None) in client.calls, "A 应提交 recheck"
+        assert client.calls.count(("recheck", None)) == 1, f"B 不应提交 recheck: {client.calls}"
+        assert mgr.task_queue.active_check_hashes() == {"HA"}, "A 应登记在途(等待任务不占用登记)"
+        assert ta.resume_index == 1 and tb.resume_index == 1, "A/B 均应记录断点"
+        assert ta not in mgr.task_queue._fast and tb not in mgr.task_queue._fast, "A/B 均不重入队(等待恢复)"
+        # HA 校验中: A 轮询续延, B 等待任务续等(间距放大避开真实时钟重排的边界)
+        run_queue(mgr, t0 + 10.0)
+        assert tb.resume_index == 1, "HA 校验中 B 保持推迟"
+        # HA 校验成功 -> 晋升参考; B 等待任务发现组内已清 -> resume B 重走决策链
+        seed_store(mgr, [make_target(hash="HA", state="pausedUP", progress=1.0), b])
+        run_queue(mgr, t0 + 20.0)
+        assert mgr.store.verified_references == {"HA"}, "成功应晋升参考"
+        assert mgr.task_queue.active_check_hashes() == set(), "轮询消亡应释放在途登记"
+        # B 的恢复重走发生在等待任务 resume 之后(下一批到期): 命中 verified 参考 -> with_reference 跳检
+        run_queue(mgr, t0 + 90.0)
+        assert mgr.task_queue.active_check_hashes() == set(), "等待任务不登记在途"
+        run_queue(mgr, t0 + 150.0)
+        names = [c[0] for c in client.calls]
+        assert names.count("recheck") == 1, f"B 恢复后不应再提交 recheck: {client.calls}"
+        assert "export" in names and "delete" in names, f"B 应走跳检流程: {client.calls}"
+        add_call = [c for c in client.calls if c[0] == "add"][0]
+        assert add_call[1]["is_skip_checking"] is True, "B 应以跳检方式重加"
 
 
 def test_checking_group_skip_on_same_data_fail():

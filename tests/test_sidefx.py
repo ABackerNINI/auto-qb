@@ -10,6 +10,7 @@
 - test_sidefx_policy_allows_known_effects: 放行清单逐条 —— node 子进程 / autostart Run 键 / 临时目录删除与建链 / 回环监听
 - test_sidefx_policy_flags_unknown_effects: 越界判定逐条 —— 通知器进程 / AUMID 键 / 其它值名 / 非临时目录删除与建链 / 非回环监听
 - test_sidefx_recorder_installed_and_records: 会话夹具已安装且真在记账(删临时文件应留 FSDEL 记录)
+- test_sidefx_rmtree_dir_fd_entries_not_flagged: rmtree 的 dir_fd 相对条目不判越界(POSIX fd 版实现传纯文件名, 不补 dir_fd 会全误判)
 - test_sidefx_launch_entry_points_wrapped: `os.startfile`/`webbrowser.open` 已接进记账器(只验证包装关系, 不真调用 —— 那会真弹窗口)
 - test_sidefx_connect_entry_points_wrapped: `socket.connect`/`create_connection` 已接进记账器(只验证包装关系, 不真连外网)
 - test_sidefx_recorder_install_uninstall_restores: 装卸安全 —— uninstall 还原各入口, 不污染后续
@@ -82,6 +83,30 @@ def test_sidefx_recorder_installed_and_records(sidefx_recorder, tmp_path):
     new = sidefx_recorder.records[before:]
     assert any(kind == "FSDEL" and str(detail).endswith("x.txt") for kind, detail in new), f"未记录到删除: {new}"
     assert not any(kind == "FSDEL" for kind, _ in sidefx_recorder.violations), "临时目录内删除不应判越界"
+
+
+def test_sidefx_rmtree_dir_fd_entries_not_flagged(tmp_path):
+    """`shutil.rmtree` 删临时目录: 内部条目**一个都不判越界**(无论 Windows 还是 POSIX)
+
+    回归点(2026-09-19 Linux CI): POSIX 上 rmtree 走 fd 版实现(`_rmtree_safe_fd`), 删目录内
+    条目时传的是**纯文件名 + dir_fd**; Windows 不支持 dir_fd, 走的是拼接好绝对路径的另一支。
+    只记 `path` 的话 Linux 上会记到 `'state.json'`, realpath 后落在 CWD(仓库根) ⇒ 判越界。
+    那次 78 条越界里 76 条是这个假阳性, 表现就是"Windows 全绿 / Linux 全红"。
+    """
+    import shutil
+    target = tmp_path / "inner"
+    target.mkdir()
+    (target / "state.json").write_text("{}", encoding="utf-8")
+    recorder = sidefx.SideFxRecorder()
+    recorder.install()
+    try:
+        shutil.rmtree(target)
+        new = [r for r in recorder.records if r[0] == "FSDEL"]
+    finally:
+        recorder.uninstall()
+    assert new, f"rmtree 应被记账: {recorder.records}"
+    bad = [r for r in new if sidefx.is_violation(r)]
+    assert not bad, f"临时目录内删除不应判越界(注意 POSIX 的 dir_fd 形态): {bad}"
 
 
 def test_sidefx_launch_entry_points_wrapped():

@@ -681,3 +681,33 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **判别法**: **要回答"我有没有落后", 必须先 `git fetch`**, 再看 `git status -sb` 或 `git log --oneline HEAD..origin/develop`。裸 `git status` 只能回答"工作区干不干净", 回答不了"主线到哪了"。反向同样成立: 显示 `[ahead N]` 也不代表推得上去 —— 那是相对**当前上游**的, 上游若指向 GitHub 镜像就毫无意义(见 AGENTS.md「提交 / PR」节)。
 - **修法**: 推之前按 AGENTS.md 走 `git pull --rebase origin develop` 即可 —— `pull` 自带 fetch, 所以"先 fetch 看差集"与"直接 pull"只差在要不要先瞄一眼对方改了什么。
 - **与上面那条坑连起来看**: 一旦发现自己落后, **别在脏工作区上直接合并** —— 先提交弄干净, 再 pull/rebase(「非快进 + 脏 = 必炸」)。
+
+### 「Windows 全绿 / Linux 全红」: 本机跑通不等于 CI 跑通 (2026-09-19 Linux CI 实测, 三条同源)
+
+- **症状**: 本地(Windows)全量 1038 passed 越界 0, 推上去 GitHub Actions 的 `Test (Python 3.12/3.13)` 一次红 4 项:
+  ①`test_api_stats_endpoint` teardown 报 **78 条越界 FSDEL**(含 `'state.json'` / `'config.yml'` / `'raw.yml'` / `'movie.mkv'` 这类**裸文件名**);
+  ②`test_sidefx_recorder_installed_and_records` 断言"临时目录内删除不应判越界"失败;
+  ③`test_notify_legacy_shortcut_cleanup` `ModuleNotFoundError: No module named 'winreg'`;
+  ④`test_connect_recovery_logged` `assert mgr.connect() is True` → False。
+  ②是①的下游(它断言的是**会话累计**越界数, 不是自己那一条), 所以真根因只有三个。
+- **根因一(76/78 条)**: POSIX 的 `shutil.rmtree` 走 fd 版实现(`_rmtree_safe_fd`), 删目录内条目时传的是
+  **纯文件名 + `dir_fd`**; Windows 不支持 `dir_fd`, 走的是拼接好绝对路径的另一支。副作用记账器只记 `path`,
+  于是同一份 `TemporaryDirectory` 清理在 Windows 记成 `<temp>\xxx\state.json`(判临时目录内), 在 Linux 只记成
+  `'state.json'` → realpath 落到 CWD(仓库根) → 判越界。**修法**: 记账前用 `_with_dir_fd()` 把 `dir_fd` 补成
+  绝对路径(Linux 读 `/proc/self/fd/<fd>`, macOS 用 `fcntl.F_GETPATH`), 见 `tests/sidefx.py`。
+- **根因二(2/78 条)**: `utils.atomic_write("")` —— `abspath("")` 是 CWD, `dirname` 再取一级就成了 **CWD 的父目录**,
+  于是空路径不是"什么都不写", 而是往**仓库外面**丢 `.xxxxxxxx.tmp`, 随后 `os.replace(tmp, "")` 失败再删掉。
+  **这一条同时纠正了长期误判**: 之前本机偶尔出现的越界项 `D:\Projects\.brafjf1b.tmp` 一直被当成"IDE 临时文件
+  被工具删除"的环境噪声, 实际就是它(仓库在 `D:\Projects\auto-qb-clone1`, 父目录正好是 `D:\Projects`)。
+  **修法**: `atomic_write` 对空路径直接 `raise ValueError`(配置层已校验 `state_file` 非空, 走到这里就是调用方漏传);
+  两个 `test_checking.py` 用例补上临时目录里的 `cfg.state_file`。
+- **根因三/四(两条用例)**: ①`PlatformChannel("win32")` 内的 `import winreg` 在 Linux 抛 `ModuleNotFoundError`,
+  而 `_ensure_appid_registered` 只 catch `OSError` ⇒ 直接外抛; 用例改为 `monkeypatch.setitem(sys.modules, "winreg", 替身)`,
+  任何平台都跑得到真实分支。②`test_connect_recovery_logged` patch 的是 `qbmanager.Client`, 但 `connect()` 走的是
+  `qbclient._new_client` ⇒ patch 根本不生效, 真的去连 `127.0.0.1:16585`, **是否抛异常取决于机器环境**(CI 红、本地绿);
+  改成 patch 真正被调用的那个名字 `_new_client`, 与网络彻底解耦。
+- **判别法**: 凡是"记账器判越界 / 平台专属模块导入 / 真实 socket 连接"这三类, **本机绿不算绿**。要验 Linux 行为,
+  本机就能做: WSL(`wsl -- bash -c '...'`)里 `cp -r` 一份仓库(排除 `.venv`/`.git`)、`uv sync`、`uv run pytest tests -q`
+  即可复现 CI 的全部平台差异(本次 15 秒出结果, 比推上去等 CI 快得多)。加 `-p 3.12`/`-p 3.13` 还能对上 CI 的矩阵版本。
+- **顺带**: 记账器里"断言会话累计越界数为 0"的写法(`test_sidefx_recorder_installed_and_records`)是**哨兵**而非
+  单点用例 —— 别的用例污染了台账它就会红, 排查时先看它列出的越界项归属哪个用例, 别在它身上找原因。

@@ -59,7 +59,15 @@ def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
 
     keep_backup=True 时先把当前文件复制为 `<path>.bak`(仅在写盘前存在旧文件时), 用于
     兜住"新内容本身是错的"这类非截断型损坏。临时文件与失败清理都由本函数负责。
+
+    ❗空路径直接报错(不静默兜底): `abspath("")` 是 CWD, `dirname` 再取一级就成了 **CWD 的父目录**
+    —— 空路径不会"什么都不写", 而是把临时文件丢到仓库外面(实测: 在 `.../auto-qb-clone1` 下跑
+    测试会在 `.../` 留下 `.xxxxxxxx.tmp`), 随后 `os.replace(tmp, "")` 失败再把它删掉, 表现为
+    "偶发、无害"的噪音, 实为调用方漏传路径。配置层已校验 `state_file` 等非空(见 config/validation),
+    走到这里的空路径是编程错误, 应当早暴露。
     """
+    if not path:
+        raise ValueError("atomic_write: path 不能为空(空路径会把临时文件写到 CWD 的父目录)")
     directory = os.path.dirname(os.path.abspath(path)) or "."
     os.makedirs(directory, exist_ok=True)
     if keep_backup and os.path.exists(path):

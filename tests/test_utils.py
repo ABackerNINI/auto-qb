@@ -29,6 +29,7 @@
 - test_parse_speed_invalid: 非法速度格式 -> ValueError
 - test_add_long_path_prefix_non_windows: 非 Windows 原样返回
 - test_atomic_write_creates_file: 原子写生成目标文件且不残留临时文件
+- test_atomic_write_rejects_empty_path: 空路径直接 ValueError(否则临时文件落到 CWD 的父目录)
 - test_atomic_write_failure_keeps_old_content: 写盘回调抛异常时旧内容不变(直写 open("w") 会先 truncate 成半截文件), 临时文件被清理
 - test_atomic_write_keep_backup: keep_backup=True 写盘前复制 .bak; 无旧文件时不凭空造备份
 - test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
@@ -550,6 +551,19 @@ def test_atomic_write_failure_keeps_old_content(tmp_path):
         atomic_write(str(p), _boom)
     assert p.read_text(encoding="utf-8") == "OLD", "失败时旧内容必须完好"
     assert sorted(c.name for c in tmp_path.iterdir()) == ["state.json"], "失败的临时文件必须清理"
+
+
+def test_atomic_write_rejects_empty_path():
+    """空路径直接 ValueError: 否则临时文件会落到 **CWD 的父目录**(仓库外)
+
+    回归点(2026-09-19): `abspath("")` 是 CWD, 再 `dirname` 就是它的父目录 —— 空路径不会
+    "什么都不写", 而是往仓库外面丢 `.xxxxxxxx.tmp`, 然后 `os.replace(tmp, "")` 失败再删掉,
+    表现为"偶发、无害"的噪音(长期被误当成 IDE/工具产生的临时文件), 实为调用方漏传路径。
+    """
+    from auto_qb.utils import atomic_write
+
+    with pytest.raises(ValueError):
+        atomic_write("", lambda f: f.write("x"))
 
 
 def test_atomic_write_keep_backup(tmp_path):

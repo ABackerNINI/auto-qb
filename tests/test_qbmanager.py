@@ -377,13 +377,19 @@ def test_connect_throttle_repeated_failures():
 
 
 def test_connect_recovery_logged():
-    """连接恢复: 断开后重新连接成功记录'已重新连接'"""
+    """连接恢复: 断开后重新连接成功记录'已重新连接'
+
+    ❗必须 patch `_new_client`(不是 `Client`): `connect()` 走的是 `qbclient._new_client`,
+    patch `qbmanager.Client` 根本不生效 ⇒ 会真的去连 `127.0.0.1:16585`。那条路径是否抛异常
+    **取决于机器/网络环境**(2026-09-19 Linux CI 上 connect() 返回 False, Windows 本地却绿),
+    用例因此时好时坏。换成 patch 真正被调用的那个名字, 用例与网络彻底解耦。
+    """
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
         mgr._last_conn_ok = False  # 模拟此前断开
         fake = mock.Mock()
-        with mock.patch("auto_qb.qbmanager.Client", return_value=fake):
+        with mock.patch("auto_qb.qbmanager._new_client", return_value=fake):
             with mock.patch("auto_qb.qbmanager.logger") as mock_logger:
                 assert mgr.connect() is True
         assert mgr._last_conn_ok is True, "重连成功后状态应为已连接"

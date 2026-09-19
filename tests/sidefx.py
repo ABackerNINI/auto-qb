@@ -13,8 +13,8 @@ r"""测试期"真实系统副作用"**记账器与判定策略**(2026-09-18 普�
 | `POPEN` | `subprocess.Popen.__init__` | 可执行名 ∈ `ALLOWED_EXECUTABLES` |
 | `REG` | `winreg.CreateKeyEx` / `DeleteKey` | 键路径 ∈ `ALLOWED_REG_KEYS` |
 | `REGVAL` | `winreg.SetValueEx` / `DeleteValue` | 值名 ∈ `ALLOWED_REG_VALUES` |
-| `FSDEL` | `os.remove` / `unlink` / `rmdir` + `shutil.rmtree` | 路径落在临时目录 |
-| `SYMLINK` | `os.symlink` | 路径落在临时目录 |
+| `FSDEL` | `os.remove` / `unlink` / `rmdir` + `shutil.rmtree` | 路径落在临时目录(带 `dir_fd` 的先补齐为绝对路径) |
+| `SYMLINK` | `os.symlink` | 路径落在临时目录(同上) |
 | `BIND` | `socket.socket.bind` | 地址为回环 |
 | `CONNECT` | `socket.socket.connect` / `socket.create_connection` | 目标为回环(测试不得连外网) |
 | `LAUNCH` | `os.startfile` / `os.system` / `webbrowser.open` | **无** —— 一律越界 |
@@ -31,6 +31,12 @@ r"""测试期"真实系统副作用"**记账器与判定策略**(2026-09-18 普�
 **已知坑(普查时踩过, 已固化在 `is_temp_path`)**: 用 `tempfile.gettempdir()` 直接做
 `abspath` 前缀比对会被 Windows 扩展长度前缀 `\\?\` 绕过(`abspath` 不剥它) —— 那次把
 157 条"临时目录内的 pytest 自检清理"全误判成"仓库外删除"。
+
+**已知坑 2(2026-09-19 Linux CI 踩到, 已固化在 `_with_dir_fd`)**: POSIX 的 `shutil.rmtree` 走
+fd 版实现, 删目录内条目时传**纯文件名 + `dir_fd`**(Windows 无 `dir_fd`, 走拼接路径版)。
+只记 `path` 会记到 `'state.json'` 这种裸名字 ⇒ 被判成"临时目录外删除" ⇒ 一次 Linux CI
+78 条假阳性。守卫因此必须在记账前把 `dir_fd` 补成绝对路径, 否则**同一份测试在 Windows 全绿、
+在 Linux 全红**。
 """
 import os
 import shutil
@@ -69,6 +75,48 @@ def _norm_path(path: Any) -> str:
     except OSError:  # 路径不存在/不可读时退回原样, 判定交给调用方
         pass
     return os.path.normcase(s)
+
+
+def _path_of_fd(fd: Any) -> Optional[str]:
+    """文件描述符 -> 它指向的目录路径; 取不到返回 None
+
+    Linux 读 `/proc/self/fd/<fd>`; macOS 用 `fcntl.F_GETPATH`。两者都不可用时返回 None ——
+    此时调用方保留原始(相对)路径, 判定按"宁可误报"处理。
+    """
+    try:
+        target = os.readlink("/proc/self/fd/%d" % int(fd))
+    except (OSError, ValueError, TypeError, AttributeError):
+        target = None
+    if not target:
+        try:
+            import fcntl
+            raw = fcntl.fcntl(int(fd), getattr(fcntl, "F_GETPATH", 0), b"\x00" * 4096)  # 仅 macOS 有 F_GETPATH
+            target = raw.split(b"\x00", 1)[0].decode("utf-8", "replace")
+        except (OSError, ValueError, TypeError, AttributeError, ImportError):
+            target = None
+    if target and target.endswith(" (deleted)"):  # 目录已被删时 Linux 返回的形态, 剥掉后缀再拼接
+        target = target[:-len(" (deleted)")]
+    return target or None
+
+
+def _with_dir_fd(path: Any, kw: dict) -> Any:
+    """把 `dir_fd` 相对的路径补全为绝对路径(无 `dir_fd` 时原样返回)
+
+    ❗为什么必须补: POSIX 上 `shutil.rmtree` 走 fd 版实现(`_rmtree_safe_fd`), 删目录内条目时传的是
+    **纯文件名 + dir_fd** —— Windows 不支持 `dir_fd`, 走的是拼接好绝对路径的另一支。于是同一份
+    `TemporaryDirectory` 清理, 在 Windows 上记到 `<temp>\\xxx\\state.json`, 在 Linux 上只记到
+    `'state.json'`; 后者 realpath 后落在 CWD(仓库根目录), 被判成"临时目录外删除"。
+    2026-09-19 Linux CI 的 78 条越界里有 76 条是这个假阳性。
+    """
+    if not kw.get("dir_fd"):
+        return path
+    base = _path_of_fd(kw["dir_fd"])
+    if not base:
+        return path
+    try:
+        return os.path.join(base, str(path))
+    except (TypeError, ValueError):
+        return path
 
 
 def _temp_roots() -> List[str]:
@@ -267,7 +315,7 @@ class SideFxRecorder:
 
             def make_fs_del(orig=orig):
                 def wrapper(path, *a, **kw):
-                    recorder.records.append(("FSDEL", path))
+                    recorder.records.append(("FSDEL", _with_dir_fd(path, kw)))
                     return orig(path, *a, **kw)
 
                 return wrapper
@@ -277,7 +325,7 @@ class SideFxRecorder:
         orig_rmtree = shutil.rmtree
 
         def rmtree(path, *a, **kw):
-            recorder.records.append(("FSDEL", path))
+            recorder.records.append(("FSDEL", _with_dir_fd(path, kw)))
             return orig_rmtree(path, *a, **kw)
 
         patch(shutil, "rmtree", rmtree)
@@ -287,7 +335,7 @@ class SideFxRecorder:
         if orig_symlink is not None:
 
             def symlink(src, dst, *a, **kw):
-                recorder.records.append(("SYMLINK", dst))
+                recorder.records.append(("SYMLINK", _with_dir_fd(dst, kw)))
                 return orig_symlink(src, dst, *a, **kw)
 
             patch(os, "symlink", symlink)
