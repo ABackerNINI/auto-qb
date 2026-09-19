@@ -14,7 +14,7 @@
 ## 思考过程与决策
 
 - 选型 `pyproject.toml` (PEP 621 + hatchling) + `uv.lock` 全量锁 + PEP 735 依赖组; 12 个直接依赖**锁死**版本; entry point `auto-qb = auto_qb.cli:main`。
-- CI 切 `astral-sh/setup-uv@v10` (enable-cache) + `checkout@v6` + `setup-python@v7`。
+- CI 切 `astral-sh/setup-uv` (enable-cache) + `checkout@v6` + `setup-python@v7`。(2026-09-19 修正: setup-uv 无 `v10` 浮动标签, 已固定到 `bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0`, 见 pitfalls.md)
 - 先出调研报告 (`docs/plans/26-09-15-1150-dependency-lock-report.md`) 再实施。
 - venv 事故根因: 半截 `httptools` 残留 (缺 `__init__.py` + dist-info 损坏, 疑杀软/中断所致) 被当命名空间包导入成功, `uvicorn` `http=auto` 误选它 → 修 `web.py` 显式指定协议 + 7 个 worktree venv 全量重建。
 

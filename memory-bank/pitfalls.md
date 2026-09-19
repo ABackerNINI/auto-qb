@@ -666,3 +666,10 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **修法(唯一可靠)**: **合并前先把工作区弄干净** —— 先提交, 或把改动移出仓库再合并; 高风险 git 操作前整份备份 `.git`。
 - **事故后补救(已走通)**: ①被删对象基本都在 **Windows 回收站**, 按 `$I*` 里的原始路径还原即可。解析要点: `$I` 文件偏移 **16-24** 是删除时间(FILETIME, **UTC, 换算本地要 +8h**), 偏移 **28** 起是 UTF-16LE 的原始路径; 内容在同名 `$R*` 文件里。②**还原后必须先删掉被一起还原的陈旧 `*.lock`**(`index.lock` / `HEAD.lock` / `AUTO_MERGE.lock` / `packed-refs.lock` / `objects/maintenance.lock`), 否则任何 git 命令都报 `Unable to create '.git/index.lock': File exists`。③工作区文件若成片消失但在 `HEAD` 里仍在 → `git checkout -- <file>` 直接还原。④收尾 `git fsck --no-progress` 确认 **0 broken link**(dangling 无害)。
 - **判别法**: 准备在工具 shell 里跑 `merge` / `rebase` / `checkout` / `stash` 之前, 先看 `git status --short` —— **非空就先弄干净**。记不住细节就记这句: **非快进 + 脏 = 必炸**。另外本 worktree 每次 `git commit` 的 ref 更新也可能被同一层拦截静默丢弃(lock+rename 失效, git 拿到 0 返回码), 提交后必须核对 `HEAD` == 松散 ref == `packed-refs`。
+
+### GitHub Actions: `astral-sh/setup-uv` 没有浮动大版本标签, `@v10` 解析不了 (2026-09-19 实测)
+
+- **症状**: CI 的 `Test (Python 3.12)` 直接报错 `Unable to resolve action astral-sh/setup-uv@v10, unable to find version v10`, 作业在第一步就死, 一行测试都没跑。
+- **根因**: 该 action 从 v8 起只发**固定标签**(v8.0.0…v8.3.2 / v9.0.0 / v10.0.0 / v10.0.1 / v10.1.0), 仓库里**没有** `refs/tags/v10` 这种随大版本移动的浮动标签(对比 `actions/checkout`、`setup-python`、`upload-artifact` 都有 v1…v7 浮动标签, 所以同文件里写 `@v6` / `@v7` 是没问题的)。写 `@v10` 就是引用了一个不存在的 ref。
+- **修法**: 按上游 v10.1.0 README 的推荐写法**固定到 commit SHA** 并在行尾加版本注释 —— `uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0`(次选是直接写 `@v10.1.0`)。
+- **判别法**: 给第三方 action 升大版本前, 先 `curl -s https://api.github.com/repos/<owner>/<repo>/git/refs/tags | grep -o '"ref": "refs/tags/[^"]*"'` 确认目标 ref 真的存在, 别照着上一个大版本的写法顺推 —— "上一个大版本有浮动标签" 不代表下一个也有。
