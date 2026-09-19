@@ -480,6 +480,33 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 **可注入**(本项目 `NotifyHandler` 已支持传任意 channel)。同理适用于 `_register_appid_registry`(真写注册表 +
 清理开始菜单 `.lnk`)与 `autostart`(真写 HKCU Run) —— 这些已有逐用例的 monkeypatch, 新增测试务必照做。
 
+### FakeClient.torrents_add 总会登记种子: "重加后确认不到"不能靠"不预置"构造 (2026-09-19 实测)
+
+写 `test_checking_skip_readd_unconfirmed_backs_up`(跳检"重加已发出但轮询确认不到"分支)时踩到:
+以为"不预置 `client.torrents["HASH123"]`"就能让 `_poll_until(torrents_info)` 失败, 实测**走的是成功分支**
+(还写了 `skip_check_day`)。原因: `tests/helpers.py:223` 的 `FakeClient.torrents_add` **无条件**把
+`self.torrents["HASH123"]` 登记进去(这是它的正确语义: add 成功则种子存在)。
+
+**正确构造**: 子类化客户端, 在 `super().torrents_add(**kw)` 之后 `self.torrents.pop(hash, None)`,
+精确模拟"add 返回成功、但客户端里迟迟查不到该种子"。
+
+**通用教训**: 测试替身的"成功路径"往往**顺手把状态补全了**, 想测"成功之后的下一步失败",
+不能靠"不准备前置状态"(替身自己会补), 必须在**替身动作之后**动手脚。
+
+### 本机测试速度画像: 按文件差两个数量级, 别盲跑全量等 (2026-09-19 实测)
+
+**2026-09-19 二次实测修正 —— 下面第一段数字作废**: 那是**并发跑着多个 pytest 时**测的(CPU 争用),
+严重失真。空载单机实测: **全量 1036 条 ≈ 32 秒**(带 `--cov-branch`), `--no-cov` ≈ 25 秒;
+`test_web.py` 3 条 39s 的那次同样是并发污染 —— 全量里它根本不是瓶颈。**结论: 直接跑全量即可, 不必挑子集。**
+
+(已作废的旧数字, 留作对照: `test_rule_engine + test_qbmanager + test_state_matrix` 159 条 0.93s、
+`test_checking` 24 条 1.7s、`test_utils` 45 条 **156s**、`test_web` 9 条 **312s** —— 与空载实测差一个数量级,
+唯一解释就是并发争用。)
+
+**做法**: 改代码后跑**受影响文件 + `-k` 子集**做快速迭代(几秒出结果), 提交前跑一次全量(约 30 秒,
+完全等得起)。**绝对不要同时起两个 pytest** —— 见下一条。另: 别用 `| tail -N` 接 pytest ——
+会**缓冲到进程结束**才出任何输出, 期间完全看不到进度, 容易误判成"卡死"(曾据此白等 27 分钟并误杀进程)。
+
 ### 环境能力缺失 ≠ 代码缺陷: APPDATA 未设 / 沙箱把 symlink 落成真目录 (2026-09-18 实测)
 
 全量测试在本机(沙箱化 shell)曾有 **2 个稳定失败**, 排查后都是**环境能力**差异, 不是代码错 —— 记录判据与修法:
@@ -600,3 +627,23 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   6. **plugin**(`SkillExtensionLoader`, 每个已装插件的 `skills/`): `~/.workbuddy-ai/plugins/cache/workbuddy-builtin/*`(weixinpay 3 / tencent-docx 8 / tencent-docs-plugin 2 / sheetagent 2 / tencent-pptx 1)、`cache/codebuddy-plugins-official/*`(playwright-cli 1、find-skills 1 被项目级覆盖、document-skills 2)、`cache/cb_teams_marketplace/document-skills`(pdf、pdfkit-py)、以及应用内置 `H:\Programs\WorkBuddyAI\resources\app.asar.unpacked\resources\plugins\workbuddy-builtin\skills`(27 个 / 26 生效)。
   - 去重后共 **79** 条。注意应用内置 `builtin-plugins/*/skills` 与 `plugins/cache/` 下的同名副本重复, 后者先加载、前者全部落空 —— 排查"改了内置 skill 没生效"时先看是不是被 cache 副本挡了。
 - **Windows 操作坑**: 在本会话的 Git Bash 里 `cmd //c ...` 会被路径转换坑掉(参数里的 `\` 变 `/`, cmd 把 `/Projects` 当成命令行开关报"无效开关"), 且可能退化成交互式 cmd 而**静默不执行**。删 junction 用 Python `os.rmdir()`(等价于 RemoveDirectory, 只摘链接不碰目标), 别用 `cmd /c rmdir`。
+
+### 前后端契约不能只看后端载荷: 前端还有一层派生 (2026-09-19 实测, 架构审查 F1 误报)
+
+- **症状**: 审查时看到"前端按 `g.save_path` 过滤分组, 但后端组对象没有 `save_path` 字段", 判定"路径筛选必失效、列表变空"并列为 P1 待修 —— **实施阶段逐行复核才发现是误报**。
+- **根因**: 前端在 `decoratedGroups`(`shared/app.js:454`)里已经派生了 `save_path: (g.members[0] && g.members[0].save_path) || ""`, 而筛选的 `base` 来自 `sortedGroups` = `[...decoratedGroups].sort()`(`:429-431`), 筛选选项 `pathOptions`(`:468`)也取自同一派生集, 口径自洽。`app.js:2686` 的注释"原始组字典没有 save_path"正是这个设计的自述。
+- **判别法**: 判"前后端字段不一致"前, **必须沿前端的 computed 派生链追到实际消费点** —— 只看后端产出的对象与前端某一行的 `g.xxx` 就下结论, 会漏掉中间那层派生。反向也成立: 后端补字段前先确认前端是不是已经算了(否则就是重复计算)。
+- **教训**: 审查结论里凡是"必失效/必崩"这种强断言, 动手前先写一条能复现的用例或最小验证 —— 本条如果真按原方案改, 会在组对象上多一个前端已经算过的冗余字段。
+
+### 写"修复前必失败"的用例时, 先确认它真的会失败 (2026-09-19 实测)
+
+- **症状**: 给 Wave 1 的视图并发修复写回归用例, 直觉写法是"给四份视图打 build 号, 断言四份同号"。**有锁时绿、无锁时也绿** —— 因为无锁时若两个线程各自完整发布一轮, 最后发布者胜出, 四份数组仍自洽。跑红验实测输出 `NO_MISMATCH`, 这条用例是安慰剂。
+- **修法**: 改成**确定性**断言 —— 让重建卡在 builder 里不放行, 再把脏标记置 False, 于是"读取能否返回"只取决于有没有锁; 有锁被阻塞、把锁换成 `nullcontext()` 后立即返回。
+- **判别法**: 并发/时序类用例**必须做红验**(把修复临时还原, 确认用例失败)。红验做法: 优先用运行时 monkeypatch 还原旧实现(不碰工作区文件), 再跑同一断言; `lru_cache` 装饰的函数记得先 `cache_clear()`。
+- **另一半经验**: 纯语义类修复(如 `_bare_ok` 加 `n >= 1`、`max_tasks_per_tick` 加 `>= 1`)的红验可以直接打脚本验证"旧实现下断言不成立", 不必真的回滚文件 —— 但**必须做**, 否则无法区分"用例有效"与"用例恒真"。
+
+### 不要并发跑多个 pytest 进程 (2026-09-19 实测)
+
+- **症状**: 全量跑着的同时又起几个 pytest 子进程跑子集, 结果全量里多出 2 条失败、且覆盖率阶段 `INTERNALERROR`。单独重跑那 2 条全绿。
+- **根因**: ①`helpers.FakeQbServer` 会绑定本地端口, 并发抢端口/时序; ②`tests/sidefx.py` 的越界判定是**会话级**的 —— 任何进程删了越界文件都算到当前会话头上。
+- **判别法**: 全量跑完前不要开第二个 pytest。另: 带 `--cov-branch` 的全量在本机约 **32 秒**(空载), `--no-cov` 约 **25 秒** —— 文档里"约 12 秒"已过时(可能是早期用例更少时的数字)。

@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auto-qb · 架构审查与优化修复计划</title>
+<style>
+  :root{
+    --bg:#0f0f0f;
+    --bg-2:#141414;
+    --fg:#e9e9e6;
+    --fg-2:#b6b6b0;
+    --muted:#8a8a84;
+    --faint:#63635e;
+    --hair:rgba(255,255,255,.085);
+    --hair-2:rgba(255,255,255,.055);
+    --accent:#7fb2a8;
+    --p0:#d9736b;
+    --p1:#d8a55f;
+    --p2:#7c7c76;
+    --sans:"IBM Plex Sans","Source Han Sans SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"IBM Plex Mono","JetBrains Mono","Cascadia Mono",Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:15.5px;line-height:1.62;
+    font-weight:400;letter-spacing:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:0 40px}
+
+  /* ---------- cover ---------- */
+  .cover{padding:96px 0 64px;border-bottom:1px solid var(--hair)}
+  .kicker{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:30px;
+  }
+  h1{
+    font-size:52px;line-height:1.08;letter-spacing:-.022em;font-weight:600;
+    margin:0 0 22px;max-width:16ch;
+  }
+  .lede{font-size:18px;line-height:1.55;color:var(--fg-2);max-width:62ch;margin:0 0 44px}
+  .meta{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:0;border-top:1px solid var(--hair);padding-top:18px;
+  }
+  .meta div{padding-right:24px}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+  .meta dd{margin:0;font-family:var(--mono);font-size:13.5px;color:var(--fg-2)}
+
+  /* ---------- layout ---------- */
+  .cols{display:grid;grid-template-columns:236px minmax(0,1fr);gap:56px;padding:64px 0 0}
+  nav.toc{position:sticky;top:40px;align-self:start;max-height:calc(100vh - 80px);overflow-y:auto}
+  nav.toc .t{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--faint);padding-bottom:10px;border-bottom:1px solid var(--hair);margin-bottom:14px;
+  }
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 2px}
+  nav.toc a{
+    display:block;color:var(--muted);text-decoration:none;font-size:13px;
+    padding:5px 0 5px 14px;border-left:1px solid var(--hair-2);transition:color .15s,border-color .15s;
+  }
+  nav.toc a:hover{color:var(--fg);border-left-color:var(--accent)}
+  nav.toc a .n{font-family:var(--mono);font-size:11px;color:var(--faint);margin-right:8px}
+  nav.toc a.sub{padding-left:28px;font-size:12.5px}
+
+  main{min-width:0;padding-bottom:120px}
+  section{margin-bottom:76px;scroll-margin-top:32px}
+  h2{
+    font-size:27px;font-weight:600;letter-spacing:-.014em;line-height:1.2;
+    margin:0 0 6px;padding-bottom:14px;border-bottom:1px solid var(--hair);
+  }
+  h2 .num{font-family:var(--mono);font-size:13px;color:var(--faint);font-weight:400;margin-right:14px;letter-spacing:.06em}
+  h3{font-size:17.5px;font-weight:550;letter-spacing:-.008em;margin:38px 0 12px}
+  h4{font-size:14.5px;font-weight:550;margin:24px 0 8px;color:var(--fg-2)}
+  p{margin:0 0 15px;max-width:70ch}
+  .note{font-size:13.5px;color:var(--muted);max-width:70ch}
+  code{
+    font-family:var(--mono);font-size:12.5px;color:var(--fg-2);
+    background:var(--bg-2);border:1px solid var(--hair-2);
+    padding:1px 5px;border-radius:3px;white-space:nowrap;
+  }
+  a.lnk{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,178,168,.32)}
+  a.lnk:hover{border-bottom-color:var(--accent)}
+  ul,ol{max-width:70ch;padding-left:20px;margin:0 0 15px}
+  li{margin-bottom:7px}
+  li::marker{color:var(--faint)}
+
+  /* ---------- severity ---------- */
+  .sev{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+    border:1px solid var(--hair);padding:2px 7px;border-radius:2px;white-space:nowrap;
+  }
+  .sev.p0{color:var(--p0);border-color:rgba(217,115,107,.42)}
+  .sev.p1{color:var(--p1);border-color:rgba(216,165,95,.38)}
+  .sev.p2{color:var(--p2);border-color:var(--hair)}
+
+  /* ---------- finding blocks ---------- */
+  .find{border:1px solid var(--hair);border-top:2px solid var(--hair);padding:22px 26px 20px;margin:0 0 18px}
+  .find.p0{border-top-color:rgba(217,115,107,.55)}
+  .find.p1{border-top-color:rgba(216,165,95,.45)}
+  .find.p2{border-top-color:var(--hair)}
+  .find .head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .find .id{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em}
+  .find h3{margin:0;font-size:17px;font-weight:550;flex:1 1 62%;letter-spacing:-.008em}
+  .find .loc{
+    font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 14px;
+    padding-bottom:12px;border-bottom:1px solid var(--hair-2);word-break:break-all;
+  }
+  .find .loc b{color:var(--fg-2);font-weight:400}
+  .kv{display:grid;grid-template-columns:88px minmax(0,1fr);gap:6px 18px;margin:0;font-size:14px}
+  .kv dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);padding-top:4px}
+  .kv dd{margin:0;max-width:66ch}
+  .kv dd + dt{border-top:1px solid var(--hair-2);padding-top:12px}
+  .kv dd + dd{border-top:1px solid var(--hair-2);padding-top:12px}
+  .kv dt.retract{color:var(--p2,#8a8f98)}
+  .kv dd.retract{color:var(--dim,#9aa0a6);border-left:2px solid var(--hair-2);padding-left:12px}
+
+  /* ---------- tables ---------- */
+  .tbl{width:100%;border-collapse:collapse;margin:20px 0 8px;font-size:13.5px}
+  .tbl th{
+    text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--faint);font-weight:400;padding:0 14px 9px 0;border-bottom:1px solid var(--hair);
+  }
+  .tbl td{padding:11px 14px 11px 0;border-bottom:1px solid var(--hair-2);vertical-align:top;color:var(--fg-2)}
+  .tbl td:first-child{color:var(--fg)}
+  .tbl .m{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .tbl tr:last-child td{border-bottom:none}
+  caption{caption-side:top;text-align:left;font-size:12.5px;color:var(--faint);padding-bottom:10px}
+
+  /* ---------- wave ---------- */
+  .wave{border:1px solid var(--hair);padding:26px 28px;margin:0 0 22px;background:var(--bg-2)}
+  .wave .wh{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;flex-wrap:wrap}
+  .wave .wn{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+  .wave h3{margin:0;font-size:19px;font-weight:550;flex:1 1 auto}
+  .wave .goal{font-size:14.5px;color:var(--fg-2);margin:0 0 18px;max-width:70ch}
+  .wave .rows{border-top:1px solid var(--hair-2);padding-top:14px}
+  .wave .row{display:grid;grid-template-columns:74px minmax(0,1fr);gap:16px;padding:9px 0;border-bottom:1px solid var(--hair-2)}
+  .wave .row:last-child{border-bottom:none}
+  .wave .row .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding-top:3px}
+  .wave .row .v{font-size:14px;color:var(--fg-2);max-width:74ch}
+  .wave .row .v ul{margin:0;padding-left:18px;max-width:none}
+  .wave .row .v li{margin-bottom:4px}
+
+  .gate{border-left:1px solid var(--hair);padding-left:20px;margin-top:16px;font-size:13px;color:var(--muted);max-width:74ch}
+  .gate b{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:400;margin-bottom:6px}
+
+  .rule{height:1px;background:var(--hair);width:88px;margin:34px 0}
+
+  footer{border-top:1px solid var(--hair);padding:28px 0 60px;font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.8}
+  @media (max-width:1040px){
+    .cols{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static;max-height:none;margin-bottom:44px}
+    .wrap{padding:0 24px}
+    h1{font-size:38px}
+    .meta{grid-template-columns:repeat(2,1fr);gap:18px 0}
+    .kv{grid-template-columns:1fr;gap:2px}
+    .wave .row{grid-template-columns:1fr;gap:4px}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Auto-QB · Code Audit · 2026-09-19</div>
+  <h1>架构审查与优化修复计划</h1>
+  <p class="lede">
+    对 <code>src/</code> 12.5k 行 Python 与 14.6k 行前端做了一次四路并行审查 —— 架构、正确性、Web/安全、文档漂移。
+    结论是：数据层与主循环的设计是扎实的，真正的问题集中在<b>两个被实际打破的约定</b>（单写线程、QbApi Facade）和<b>一条性能链路</b>（视图重建）上。
+    本计划给出 4 条必修项、19 条应修项与 6 个修复波次。
+  </p>
+  <dl class="meta">
+    <div><dt>审查范围</dt><dd>60 .py + 15 前端文件</dd></div>
+    <div><dt>测试基线</dt><dd>1022 passed</dd></div>
+    <div><dt>问题总数</dt><dd>39 条 + 10 组漂移</dd></div>
+    <div><dt>修复波次</dt><dd>Wave 0 – 5</dd></div>
+  </dl>
+</header>
+
+<div class="cols">
+
+<nav class="toc">
+  <div class="t">目录</div>
+  <ol>
+    <li><a href="#s1"><span class="n">1</span>方法与证据口径</a></li>
+    <li><a href="#s2"><span class="n">2</span>结论摘要</a></li>
+    <li><a href="#s3"><span class="n">3</span>P0 · 必修</a></li>
+    <li><a href="#s4"><span class="n">4</span>P1 · 应修</a></li>
+    <li><a href="#s5"><span class="n">5</span>P2 · 可排期</a></li>
+    <li><a href="#s6"><span class="n">6</span>修复计划：六个波次</a></li>
+    <li><a href="#s7"><span class="n">7</span>文档漂移清单</a></li>
+    <li><a href="#s8"><span class="n">8</span>验证与回归策略</a></li>
+    <li><a href="#s9"><span class="n">9</span>范围外与待裁决</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ============ 1 ============ -->
+<section id="s1">
+  <h2><span class="num">01</span>方法与证据口径</h2>
+  <p>
+    四条审查线并行跑：核心架构与性能、业务正确性、Web/安全、文档漂移。每条线上的结论都回到源码逐行复核过 ——
+    本文件里出现的每个 <code>文件:行号</code> 都是实际读到的，不是推断。
+  </p>
+  <p>
+    严重度定得很克制：<b>P0</b> 指"已经在产生错误结果或必然在目标规模下崩"；<b>P1</b> 指"特定条件下出错，或维护性地雷"；
+    <b>P2</b> 是加固与清理。特别注意区分了"真 bug"与"看起来可疑但有上层保证"—— 后者单独列在第 9 节，不作为待办，避免把正确的代码改坏。
+  </p>
+  <div class="tbl">
+    <table>
+      <caption>复核方式与实测结果</caption>
+      <thead><tr><th>复核项</th><th>方法</th><th>实测结果</th></tr></thead>
+      <tbody>
+        <tr><td>视图脏判定</td><td class="m">torrents/view.py:9-20</td><td class="m">含 dlspeed/upspeed/uploaded/progress ⇒ 活跃种子恒脏</td></tr>
+        <tr><td>并发调用点</td><td class="m">web.py:201,207 → web_view.py:541</td><td class="m">Web 线程与主循环同调 rebuild_views，全项目视图侧无锁</td></tr>
+        <tr><td>条件/动作数量</td><td class="m">grep @register_condition</td><td class="m">16 条件 / 12 动作（文档多处写 15 / 11）</td></tr>
+        <tr><td>mixin 数量</td><td class="m">qbmanager.py:77-86</td><td class="m">8 个（memory-bank/README.md 写 6）</td></tr>
+        <tr><td>跳检备份分支</td><td class="m">skip_checking.py:176-182</td><td class="m">仅 except 分支备份，未确认分支不备份</td></tr>
+        <tr><td>落盘原子性</td><td class="m">rule_engine.py:59-64</td><td class="m">open("w") 直写，无 tmp+replace、无 .bak</td></tr>
+        <tr><td>任务数校验</td><td class="m">core.py:131 / taskqueue.py:187</td><td class="m">只校验类型；<code>&lt;=0</code> 被当作"不限量"</td></tr>
+        <tr><td>路径筛选字段</td><td class="m">web_view.py:236-257 vs app.js:560</td><td class="m">组对象无 save_path 字段 ⇒ 筛选必失效</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    测试基线取 <code>memory-bank/testing.md</code> 的 1022 passed（2026-09-19 收尾时已回写为 <b>1036</b>，见第 8 节）。
+    本次并行审查期间本机跑全量耗时显著高于该文档标注的"约 12 秒"，怀疑是我并发占用 CPU 所致，<b>未作为结论</b>
+    —— 第 8 节已复核确认：确为并发争用，空载实测 1036 条 ≈ 32 秒。
+  </p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="s2">
+  <h2><span class="num">02</span>结论摘要</h2>
+  <p>
+    这套代码的<b>底层是对的</b>：<code>/api/v2/sync/maindata</code> 的 rid 增量同步把"每 tick 全量拉种子"这个 PT 工具最大的成本点压到了 O(变化数)；
+    单一时间堆统一所有任务、只有两个动词；脏标记把分组与视图从轮询改成了事件驱动。这些不该动。
+  </p>
+  <p>
+    出问题的是<b>三条约定在压力下被绕过</b>。一是"只有主循环线程写共享状态"——Web 线程实际在重建视图；
+    二是"所有 qB 调用走 QbApi"——Web 层直接拿裸 client；三是"视图惰性重建"——脏判定把速度类字段算进去，
+    使惰性在活跃种子库上退化成每 tick 全量重建。三条互相放大：重建越频繁，并发撞车与 API 风暴的概率越高。
+  </p>
+  <div class="tbl">
+    <table>
+      <caption>问题分布</caption>
+      <thead><tr><th>类别</th><th>P0</th><th>P1</th><th>P2</th><th>核心判断</th></tr></thead>
+      <tbody>
+        <tr><td>并发与状态</td><td class="m">1</td><td class="m">—</td><td class="m">1</td><td>单写线程约定已被 Web 线程打破</td></tr>
+        <tr><td>性能</td><td class="m">1</td><td class="m">4</td><td class="m">3</td><td>视图重建链路是 N 增大时最先崩的地方</td></tr>
+        <tr><td>数据与正确性</td><td class="m">2</td><td class="m">1</td><td class="m">6</td><td>跳检丢备份 + 非原子写，都是"静默丢数据"</td></tr>
+        <tr><td>配置</td><td class="m">—</td><td class="m">3</td><td class="m">—</td><td>校验与落盘不是同一棵对象树</td></tr>
+        <tr><td>Web / 安全</td><td class="m">—</td><td class="m">3</td><td class="m">3</td><td>凭据泄漏面偏大；遍历/XSS/注入已挡住</td></tr>
+        <tr><td>架构</td><td class="m">—</td><td class="m">3</td><td class="m">1</td><td>God Object + Facade 旁路，边界靠注释维持</td></tr>
+        <tr><td>文档漂移</td><td class="m">—</td><td class="m">4</td><td class="m">6</td><td>数量类断言与命令是重灾区</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="s3">
+  <h2><span class="num">03</span>P0 · 必修</h2>
+  <p>四条都已在源码中确认。前两条是同一条链路的两端，建议一起修（Wave 1 – 2）。</p>
+
+  <div class="find p0">
+    <div class="head"><span class="sev p0">P0</span><h3>「单一写线程」不变量被 Web 线程打破</h3><span class="id">A1</span></div>
+    <div class="loc"><b>src/auto_qb/web.py:201,207</b> · <b>src/auto_qb/mixins/web_view.py:541-542</b> · <b>src/auto_qb/qbmanager.py:406-407</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>web.py</code> 的处理器是同步 <code>def</code>，FastAPI 会放进线程池；<code>ensure_group_view()</code> 在脏时直接调 <code>rebuild_views()</code>，而主循环 <code>_tick</code> 也调同一个方法。全项目只有 <code>notify.py:216</code> 与 <code>ui.py:48</code> 有锁，视图侧<b>没有任何锁</b>。</dd>
+      <dt>后果</dt><dd><code>_group_view_ver += 1</code> 是读-改-写，并发下丢失更新；四份视图可与版本号错位 —— 前端按版本号判定"一致"却拿到错位的数组。这正是上一轮"速度刷新滞后"的同源根因：那次修的是<b>重建范围不一致</b>，并发这一半没修。</dd>
+      <dt>触发</dt><dd>浏览器打开 + 主循环同时命中脏标记。种子越活跃，撞车概率越高。</dd>
+      <dt>方向</dt><dd>Web 线程改为只读<b>已发布的不可变快照</b>；"强制刷新"走命令队列投递给主循环。若短期不能改架构，至少用一把锁把"重建 + 版本号 + 四视图赋值"包成原子发布。</dd>
+    </dl>
+  </div>
+
+  <div class="find p0">
+    <div class="head"><span class="sev p0">P0</span><h3>视图脏判定含速度类字段 ⇒ 打开页面即每 tick 全量重建</h3><span class="id">B1</span></div>
+    <div class="loc"><b>src/auto_qb/torrents/view.py:9-20</b>（<code>_VIEW_FIELDS</code>）· <b>web_view.py:405</b>（<code>parse_release</code>）· <b>qbmanager.py:406</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>_VIEW_FIELDS</code> 含 <code>dlspeed / upspeed / uploaded / progress</code>，活跃种子几乎每轮都变 ⇒ <code>view_dirty()</code> 恒真 ⇒ 每 2s 重建 groups / singles / shows / flat 四份视图。其中 <code>_build_shows_view</code> 对<b>每个种子</b>跑一次 <code>tvshows.parse_release</code>（十余条正则，<b>无缓存</b>），<code>_build_flat_view</code> 每种子构造约 60 字段的 dict。</dd>
+      <dt>量级</dt><dd>N=2000 时约每 2s 做 8000 次 dict 构建 + 2000 次正则解析。<code>qbmanager.py:406</code> 的 <code>WEB_VIEW_TTL</code> 门控只在"网页关掉后"生效，页面开着就是全速重建。</dd>
+      <dt>连带</dt><dd>前端 <code>/api/state</code> 的 rid 版本门控因此<b>基本失效</b>——版本每轮都变，每轮都整表替换 DOM。修这条，前端那份 rid 优化才真正生效。</dd>
+      <dt>方向</dt><dd>① <code>parse_release</code> 按种子名加 LRU 缓存（名字不变则结果恒定）；② 速度/进度类字段拆到独立高频通道，不再触发整视图重建；③ 四份视图按类型拆分脏标记。</dd>
+    </dl>
+  </div>
+
+  <div class="find p0">
+    <div class="head"><span class="sev p0">P0</span><h3>跳检"已发出但未确认"时丢失 .torrent 备份</h3><span class="id">A2</span></div>
+    <div class="loc"><b>src/auto_qb/rules/actions/skip_checking.py:176-182</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>_backup_torrent</code> 只在 <code>torrents_add</code> <b>抛异常</b>时调用。若 add 成功但 <code>_poll_until</code> 三次（3 × 0.3s）确认不到种子，直接 <code>return fail</code> —— 不备份、不 <code>restore_torrent</code>。</dd>
+      <dt>后果</dt><dd>种子已从 qB 删除，<code>data</code> 字节只存在于内存随后丢弃 ⇒ 用户必须重新下载 .torrent；同时 store 无该记录，下轮 <code>restore_torrent</code> 不会执行，被误判为"已删除"。</dd>
+      <dt>触发</dt><dd>qB 重加快于 0.9s 时正常；大种子、磁盘忙、add 返回成功但随后被拒时命中。</dd>
+      <dt>方向</dt><dd><code>appeared</code> 为假的分支同样走 <code>_backup_torrent</code> 再返回 fail。</dd>
+    </dl>
+  </div>
+
+  <div class="find p0">
+    <div class="head"><span class="sev p0">P0</span><h3>state.json 与配置写盘均非原子</h3><span class="id">A3</span></div>
+    <div class="loc"><b>src/auto_qb/mixins/rule_engine.py:59-64</b>（<code>save_state</code>）· <b>src/auto_qb/config/writer.py:184-192</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>两者都是 <code>open(path, "w")</code> 后直接 dump —— 无 tmp + <code>os.replace</code>。写前文件已被 truncate。config 侧有 <code>backup_path</code> 落到 <code>data_dir</code> 的 .bak 可救，<b>state.json 没有任何备份</b>。</dd>
+      <dt>后果</dt><dd>写盘时被杀 / 磁盘满 / 序列化异常 ⇒ 半截文件。state 损坏意味着执行历史与 <code>skip_check_day</code> 全丢，重启后规则重放（同一天可能对同一种子重复跳检）。</dd>
+      <dt>方向</dt><dd>抽一个 <code>atomic_write()</code>（tmp 同目录 → <code>os.replace</code>），state 与 config 共用；state 再留一份 <code>.bak</code>。</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="s4">
+  <h2><span class="num">04</span>P1 · 应修</h2>
+
+  <h3>性能</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>搜索索引构建预算 500/tick，串行请求阻塞主循环</h3><span class="id">B2</span></div>
+    <div class="loc"><b>web_view.py:24</b> <code>SEARCH_INDEX_BUILD_BUDGET = 500</code> · <b>web_view.py:583-603</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>索引脏时每 tick <b>串行</b>拉取 <code>rec.files()</code> 最多 500 条并重建整个索引。首轮 N=5000 需要 10 个 tick，每个 tick 500 次串行 qB 请求全压在 2s 节流窗口内。</dd>
+      <dt>方向</dt><dd>预算降到 20–50，或改成<b>时间预算</b>（单 tick 索引构建 ≤ 150ms）而非条数。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>每 tick 多次全量 O(N) 拷贝</h3><span class="id">B3</span></div>
+    <div class="loc"><b>qbmanager.py:486</b> · <b>store.py:169</b> · <b>qbmanager.py:566</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>dict(self.store.by_hash)</code>、<code>dict(prev)</code>、<code>list(by_hash.values())</code> —— 即使只变了 1 个种子也整体复制主索引与状态快照。</dd>
+      <dt>方向</dt><dd>主索引增量轮改原地更新 + 版本号；<code>prev_records</code> 改为按 removed 惰性回捞。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>规则引用解析 O(refs × 规则数)，且每次事件重解析</h3><span class="id">B4</span></div>
+    <div class="loc"><b>mixins/rule_engine.py:110-115, 270-286</b> · <b>:226</b> · <b>:158</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>_resolve_refs</code> 线性扫 <code>enabled_rules</code>；事件分派每次重新解析；<code>_rules_by_trigger</code> 每次调用新建列表。量级 = 变化种子数 × 引用数 × 启用规则数。</dd>
+      <dt>方向</dt><dd>启动时预建 <code>tracker_conf → rules</code> 映射并缓存，仅在配置热重载时失效。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>qB HTTP 无超时、无重试</h3><span class="id">B7</span></div>
+    <div class="loc"><b>qbclient.py:45</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>构造 Client 未传 <code>timeout</code>。qB socket 挂起时主循环<b>与 Web 线程同时</b>无限阻塞，2s tick 与停止信号全部失效。</dd>
+      <dt>方向</dt><dd>显式设置连接/读超时（如 5s / 15s），并区分"超时重试"与"凭据失败不重试"。</dd>
+    </dl>
+  </div>
+
+  <h3>状态生命周期</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>exec_history 只增不删，且只在退出时落盘</h3><span class="id">C1</span></div>
+    <div class="loc"><b>mixins/rule_engine.py:69-77</b>（全项目无清理点，已 grep 确认）</div>
+    <dl class="kv">
+      <dt>现象</dt><dd>以 <code>f"{rule_name}:{hash}"</code> 为键写入，种子删除后条目永久残留，规则改名/删除后旧键同样残留。<code>save_state</code> 仅在退出时全量 dump。</dd>
+      <dt>后果</dt><dd>state.json 单调膨胀；文件越大退出越慢，崩溃时丢的历史越多。</dd>
+      <dt>方向</dt><dd>周期性裁剪（与存活种子 / 存活规则求交），并把"仅退出落盘"改成"每 N 轮或每 5 分钟落盘一次"。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>auto_categories / reannounce_ts / skip_check_day 同为按 hash 无界键</h3><span class="id">C2</span></div>
+    <div class="loc"><b>mixins/tags.py:98,111</b> · <b>rules/actions/basic.py:73,90</b> · <b>rules/actions/transfer.py:38,44</b> · <b>skip_checking.py:183</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>都以 <code>ctx.hash</code> 为键 setdefault 后写入，删除种子时无清理。</dd>
+      <dt>附带</dt><dd><code>auto_categories</code> 会让"曾自动设过分类"的记忆<b>跨重加永久生效</b>，直接影响 <code>can_update_previous</code> 判定 —— 这不只是体积问题。</dd>
+      <dt>方向</dt><dd>与 C1 共用同一套裁剪任务。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>重连无退避</h3><span class="id">H2</span></div>
+    <div class="loc"><b>qbmanager.py:270-277</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>APIConnectionError</code> 时置 <code>client=None</code> 并<b>立即</b> <code>connect()</code>，每 tick 重试一次，无指数退避/上限。qB 长时间宕机时每秒半次重连，每次都重建 Client（含 netrc / 代理解析）。</dd>
+      <dt>方向</dt><dd>退避到最慢 30s 一次，成功连接后立即重置。</dd>
+    </dl>
+  </div>
+
+  <h3>配置</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>max_tasks_per_tick 缺范围校验，0 / 负值反成"不限量"</h3><span class="id">D1</span></div>
+    <div class="loc"><b>config/validation/core.py:131-132</b> · <b>taskqueue.py:187</b> · <b>config/schema/groups.py:33</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>校验层只做 <code>_try(int, ...)</code>；schema 声明 <code>min=1</code> 但校验未实现。<code>_pop_due</code> 的判断是 <code>while (max_tasks &lt;= 0 or ...)</code> ⇒ <code>0</code> 与 <code>-5</code> 都走进"不限量"分支，<b>一轮弹出全部到期任务</b>。</dd>
+      <dt>后果</dt><dd>与配置语义完全相反，单 tick 可能执行上千任务导致卡顿与 API 风暴。</dd>
+      <dt>方向</dt><dd>校验加 <code>&gt;= 1</code>；<code>_pop_due</code> 显式区分"0 = 不执行"与"负值 = 非法"。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>配置写回：校验的对象与落盘的对象不是同一棵</h3><span class="id">D2</span></div>
+    <div class="loc"><b>config/writer.py:85-91</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>_validate_tree(tree)</code> 跑 <code>load_config</code> 之后，才由 <code>_fallback_restart_fields</code> 把 R 级字段（<code>state_file</code> / <code>data_dir</code>）改回旧值 ⇒ 最终写入的树<b>从未被校验过</b>。</dd>
+      <dt>方向</dt><dd>先回退再校验，或回退后二次校验。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>导出配置把所有数字写成带引号字符串，并丢掉全部注释</h3><span class="id">D3</span></div>
+    <div class="loc"><b>exporter.py:110-112</b> · <b>utils.py:63-80</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>yaml.BaseLoader</code> 读出的标量全是字符串，<code>convert_bool_in_dict</code> 只转布尔不转数字 ⇒ <code>60</code> 被导出成 <code>'60'</code>；<code>yaml.dump</code> 不保留注释。</dd>
+      <dt>后果</dt><dd>用户把导出结果覆盖回生产配置后可读性严重退化。</dd>
+      <dt>方向</dt><dd>导出走 <code>writer</code> 的 ruamel round-trip 路径，与写回共用同一套保留注释/类型的逻辑。</dd>
+    </dl>
+  </div>
+
+  <h3>Web / 安全</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>访问密钥以 WARNING 打印：进通知、进日志、可被 /api/log 回读</h3><span class="id">E1</span></div>
+    <div class="loc"><b>web.py:75</b> · <b>notify.py:209</b> · <b>web.py:716-732</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>logger.warning(f"WEB UI 访问密钥: {token}")</code>。notify 处理器级别取 <code>config.min_level</code>（默认 WARNING）⇒ 密钥被推到系统通知中心；同时落日志文件，而 <code>/api/log</code> 可读末 256KB。</dd>
+      <dt>后果</dt><dd>密钥泄漏到通知/磁盘/日志采集；拿到密钥即等于拿到删除种子与改配置的能力。</dd>
+      <dt>方向</dt><dd>降为 INFO 且<b>不打印密钥内容</b>，只提示密钥文件路径。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>skip_local_verify 只按 TCP peer 判 loopback，可被 DNS rebinding 绕过</h3><span class="id">E2</span></div>
+    <div class="loc"><b>web.py:79-83, 116</b> · <b>config.yml:33</b>（仓库自带配置明确开了 <code>true</code>）</div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>_is_loopback_host(request.client.host)</code> 取的是真实 socket peer，<b>不受 <code>X-Forwarded-For</code> / <code>Host</code> 头影响</b>（这点实现是对的）。但攻击者用自己的域名解析到 127.0.0.1 后，浏览器发来的请求 peer 就是 127.0.0.1 ⇒ 直接免鉴权。</dd>
+      <dt>可利用性</dt><dd>默认不可远端利用（<code>models.py:116-119</code> 默认 <code>host=127.0.0.1</code>、<code>skip_local_verify=False</code>）。但仓库自带的 <code>config.yml</code> 把它打开了，照此部署 + 本机浏览网页即完全暴露。</dd>
+      <dt>方向</dt><dd>保留开关，增加 <code>Host</code> 白名单与 <code>Origin</code> / <code>Sec-Fetch-Site</code> 校验。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>/api/config 明文返回整棵配置树（含 qB 密码与 tracker passkey）</h3><span class="id">E3</span></div>
+    <div class="loc"><b>web.py:767-772</b> · <b>config/writer.py:38-51</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd><code>read_tree</code> 用 <code>yaml.BaseLoader</code> 原样读出，<b>无任何脱敏</b>；qB 密码与 passkey 随 JSON 返回并常驻前端 Vue 状态。</dd>
+      <dt>方向</dt><dd>GET 时对 <code>password</code> / <code>passkey</code> / <code>token</code> 类字段返回掩码；写回时区分"未修改"。</dd>
+    </dl>
+  </div>
+
+  <h3>前后端一致性</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>辅种页「路径」筛选必失效</h3><span class="id">F1</span></div>
+    <div class="loc"><b>web_ui/static/shared/app.js:560</b> vs <b>web_view.py:236-257</b>（<code>_build_group_view</code>）</div>
+    <dl class="kv">
+      <dt>现象</dt><dd>前端按 <code>g.save_path</code> 过滤分组，但后端产出的<b>组对象没有 <code>save_path</code> 字段</b>（只有 <code>members</code> 里有）。同文件 586 / 1779 行对种子与成员用的是 <code>r.save_path</code> / <code>m.save_path</code>，那两处是有的。</dd>
+      <dt>后果</dt><dd>辅种页一旦选中任一路径筛选 ⇒ 分组全部被过滤 ⇒ 列表变空。</dd>
+      <dt>方向</dt><dd>组级补 <code>save_path</code>（取代表成员），或前端改成 <code>members.some(m =&gt; ...)</code>。</dd>
+      <dt class="retract">复核撤回</dt><dd class="retract">实施阶段逐行复核后<b>判定为误报，不改</b>：<code>filteredGroups</code>（app.js:560）的 <code>base</code> 来自 <code>sortedGroups</code>，而后者是 <code>[...this.decoratedGroups].sort()</code>（app.js:429-431）；<code>decoratedGroups</code> 已在 app.js:454 派生 <code>save_path: (g.members[0] &amp;&amp; g.members[0].save_path) || ""</code>，筛选选项 <code>pathOptions</code>（app.js:468）也取自同一派生集，口径一致。app.js:2686 的注释「原始组字典没有 save_path」正是这个设计的自述。原判断错在只看了后端组对象，没追前端派生链。</dd>
+    </dl>
+  </div>
+
+  <h3>架构</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>写操作把状态硬编码写进快照</h3><span class="id">G4</span></div>
+    <div class="loc"><b>qbapi.py:96</b> <code>state="stalledUP"</code> · <b>qbapi.py:100</b> <code>state="pausedUP"</code></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>暂停一个<b>正在下载</b>（<code>pausedDL</code>）的种子，快照被写成"已完成 + 上传"。</dd>
+      <dt>后果</dt><dd><code>is_complete</code> 判定错误，可能误触下载冲突 / 缺文件分组分支（<code>grouping.py:310</code> 一带）。</dd>
+      <dt>方向</dt><dd>不要猜状态，只置脏等下轮 sync 带回真实值。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>QbManager 是 God Object，mixin 靠私有成员隐式耦合</h3><span class="id">G1</span></div>
+    <div class="loc"><b>qbmanager.py:77-86</b>（8 个 mixin）· <b>qbmanager.py:114-162</b>（20+ 个 <code>self._*</code>）· 跨调点：<b>rule_engine.py:215</b>、<b>grouping.py:262</b>、<b>web_commands.py:191</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>宿主只声明类型注解桩，无接口约束；mixin 互相调用对方的私有方法（RuleEngine → Tracker、Grouping → Tags、WebCommands → Webview），还有反向写宿主队列的情况。</dd>
+      <dt>后果</dt><dd>任何 mixin 改名/改语义都无静态可检查；新增视图极易漏挂。</dd>
+      <dt>方向</dt><dd>先给这 3 处跨 mixin 调用加显式公开方法；中期为每类 mixin 定义 Protocol。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>QbApi Facade 被绕过</h3><span class="id">G2</span></div>
+    <div class="loc"><b>web.py:535-537</b>（<code>_require_client()</code> 返回裸 client）· <b>web.py:553,560,572</b> · <b>web_view.py:98</b> · <b>web_commands.py:109,163</b> · <b>qbmanager.py:521</b></div>
+    <dl class="kv">
+      <dt>现象</dt><dd>这些点既不走 store 惰性缓存，也不做写后快照同步 ⇒ 同一 hash 的 tracker 被重复拉取，缓存与快照两条不一致路径并存。而且这些调用发生在 Web 线程（与 A1 叠加）。</dd>
+      <dt>方向</dt><dd>封掉 <code>manager.client</code> 对外暴露，全部收敛到 QbApi。</dd>
+    </dl>
+  </div>
+
+  <h3>文档漂移</h3>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>数量类断言与代码不符（6 处）</h3><span class="id">I1</span></div>
+    <div class="loc"><b>modules.md:89</b> · <b>systemPatterns.md:22,144</b> · <b>productContext.md:35</b> · <b>projectbrief.md:13</b> · <b>modules.md:40</b></div>
+    <dl class="kv">
+      <dt>事实</dt><dd>代码实测 <b>16 条件 / 12 动作 / 8 mixin</b>。文档写 15 条件（5 处）、11 动作（3 处）、6 mixin（<code>memory-bank/README.md:38</code>）。<code>rule-system.md:63</code> 与 <code>systemPatterns.md:27</code> 是对的。</dd>
+      <dt>方向</dt><dd>统一改为实测值，并<b>把数量做成断言进 <code>tests/test_memory_bank.py</code></b>，杜绝再次漂移。</dd>
+    </dl>
+  </div>
+  <div class="find p1">
+    <div class="head"><span class="sev p1">P1</span><h3>memory-bank/README.md 给的命令跑不起来</h3><span class="id">I3</span></div>
+    <div class="loc"><b>memory-bank/README.md:53-59</b></div>
+    <dl class="kv">
+      <dt>事实</dt><dd><code>.venv</code> 目录<b>不存在</b>（<code>.gitignore</code> 只忽略它）；裸 <code>python src/auto-qb.py</code> 因缺依赖报 <code>ModuleNotFoundError</code>。<code>uv run</code> 路径实测可用，<code>uv run pytest tests --collect-only -q</code> = 1022，与 testing.md 基线一致。</dd>
+      <dt>方向</dt><dd>全部改 <code>uv run ...</code>，与 AGENTS.md、testing.md 对齐；顺带修掉"无包管理配置"这句过时表述。</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="s5">
+  <h2><span class="num">05</span>P2 · 可排期</h2>
+  <p>不阻塞发布，按波次顺手清掉。同一编号与第 3/4 节对应。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>编号</th><th>问题</th><th>位置</th><th>方向</th></tr></thead>
+      <tbody>
+        <tr><td class="m">B5</td><td>错误原因预取每 tick 全量扫描，且绕开惰性缓存直调 client</td><td class="m">web_view.py:126-144, :98</td><td class="m">维护"错误态种子"小集合增量处理</td></tr>
+        <tr><td class="m">B6</td><td>标签匹配热路径逐次 <code>MatchPattern.parse</code></td><td class="m">utils.py:298 · tags.py:47,82</td><td class="m">配置加载期预解析为对象</td></tr>
+        <tr><td class="m">B8</td><td>前端固定 2s 轮询无空闲退避 + 整表替换无虚拟滚动</td><td class="m">app.js:1489-1513</td><td class="m">页面空闲 N 分钟后降到 5–10s；数千行时考虑窗口化</td></tr>
+        <tr><td class="m">C3</td><td>通知去重表 <code>_dedup_at</code> 只写不清理</td><td class="m">notify.py:62-74</td><td class="m">按 TTL 淘汰</td></tr>
+        <tr><td class="m">G3</td><td>store 直接改写 record 私有缓存槽</td><td class="m">store.py:365,367,379</td><td class="m">record 上提供 <code>invalidate_tags/state()</code></td></tr>
+        <tr><td class="m">E4</td><td>无 CSRF 防护（缓解：凭证在 Authorization 头 + 无 CORS）</td><td class="m">web.py:140-146</td><td class="m">显式拒绝非 <code>application/json</code> 的写请求</td></tr>
+        <tr><td class="m">E5</td><td>目录浏览白名单根由种子 save_path 派生，根过宽时退化为整盘可列</td><td class="m">web.py:229-248</td><td class="m">根改为显式配置，或禁止文件系统根</td></tr>
+        <tr><td class="m">E6</td><td><code>decode_group_key</code> 未捕获异常，畸形 key 触发 500</td><td class="m">web.py:368-385 · utils.py:441</td><td class="m">包 try/except 转 400</td></tr>
+        <tr><td class="m">F2</td><td>搜索结果与分组成员字段口径不一致（seeding_time 未量化；缺 num_seeds 族）</td><td class="m">web_view.py:641 vs :213</td><td class="m">搜索复用同一套成员视图构造</td></tr>
+        <tr><td class="m">H1</td><td>连接失败通用分支无节流 ⇒ 凭据错误时 2s 一条 ERROR + 通知风暴</td><td class="m">qbmanager.py:202-205</td><td class="m">纳入同一套节流</td></tr>
+        <tr><td class="m">H3</td><td>异常静默吞掉，且吞后仍 REQUEUE ⇒ 故障被掩盖为"正常运行"</td><td class="m">qbmanager.py:523 · web.py:654,681 · taskqueue.py:198</td><td class="m">吞掉时至少计数并周期汇总告警</td></tr>
+        <tr><td class="m">H4</td><td>动作部分失败仍记录执行 ⇒ once/daily 窗口内不再重试</td><td class="m">rules/base.py:248-249</td><td class="m">全部动作非 failed 才记录</td></tr>
+        <tr><td class="m">H5</td><td><code>hr: satisfied</code> 条件在 conf 为 None 时抛 AttributeError 被吞</td><td class="m">rules/conditions.py:152</td><td class="m">补 <code>conf is None</code> 判定并加括号</td></tr>
+        <tr><td class="m">H6</td><td>quiet_hours 判在 throttle 之后 ⇒ 免打扰时段仍消耗配额</td><td class="m">notify.py:228-234</td><td class="m">quiet 判定前置</td></tr>
+        <tr><td class="m">H7</td><td>tvshows bare-number 形态放行集数 0</td><td class="m">tvshows.py:177, 209-212</td><td class="m"><code>_bare_ok</code> 增加 <code>n &gt;= 1</code></td></tr>
+        <tr><td class="m">H8</td><td>UI 线程改 manager 私有状态，与热重载竞态</td><td class="m">ui.py:454,467</td><td class="m">改走命令/事件</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="s6">
+  <h2><span class="num">06</span>修复计划：六个波次</h2>
+  <p>
+    波次按"依赖 + 风险"排序：先止血（安全与丢数据），再动并发不变量，然后才碰性能 ——
+    因为性能改动会动同一片视图代码，等并发模型定下来再改，避免返工。每波都可独立提交、独立回滚。
+  </p>
+  <div class="note" style="margin-bottom:18px">
+    <b>实施进度（2026-09-19，均已在 develop 工作区改完并跑通，尚未提交）</b> ——
+    已完成 <b>Wave 0</b>（E1 / E3 / A2 / A3）、<b>Wave 1</b> 的 A1（走"短期兜底"方案：一把 <code>_view_lock</code>
+    把"判脏 → 重建 → 读取"包进同一临界区）、<b>Wave 2</b> 的 B1 第①项（<code>parse_release</code> LRU 缓存）、
+    <b>Wave 3</b> 的 D1 / H2、<b>Wave 4</b> 的 G4 / H5 / H6 / H7 与 P2 的 C3 / E6。
+    共 16 条新增用例，全部做过<b>红绿验证</b>（把修复临时还原后确认用例失败）。
+    全量 1022 → <b>1038 passed</b>，剩余 1 failed + 1 error 均为 IDE 临时文件被 <code>genie-trash</code>
+    删除导致的 sidefx 会话守卫误报（单跑该文件即全绿）。
+    <b>H1 复核后部分撤回</b>：<code>APIConnectionError</code> 分支的"仅状态转换时记一次"早已实现，
+    并有 <code>test_ui.py::test_connect_failure_throttles_logging</code> 守着（凭据错误在 qbittorrentapi
+    里就是 <code>LoginFailed ⊂ APIConnectionError</code>，走的是那个分支）；只剩通用
+    <code>except Exception</code> 分支不节流，而那里本就该每次都记。
+    <b>F1 复核后撤回</b>（误报，见第 4 节）。Wave 1 的彻底方案（Web 线程只读不可变快照 + 命令化刷新）与
+    G2（封掉 <code>manager.client</code>）仍未做，需单独分支走查。
+  </div>
+
+  <div class="wave">
+    <div class="wh"><span class="wn">Wave 0</span><h3>止血：凭据与丢数据</h3><span class="sev p0">P0</span></div>
+    <p class="goal">不动任何架构，只改"会造成不可逆损失或凭据泄漏"的点。改动面小、风险低，应当天完成。</p>
+    <div class="rows">
+      <div class="row"><span class="k">E1</span><div class="v">密钥日志降为 INFO 且不打印内容（web.py:75）</div></div>
+      <div class="row"><span class="k">E3</span><div class="v"><code>/api/config</code> 对 password / passkey / token 类字段返回掩码</div></div>
+      <div class="row"><span class="k">A2</span><div class="v">跳检 <code>appeared</code> 为假的分支同样走 <code>_backup_torrent</code></div></div>
+      <div class="row"><span class="k">A3</span><div class="v">抽 <code>atomic_write()</code>（tmp + <code>os.replace</code>），state 与 config 共用；state 增加 .bak</div></div>
+    </div>
+    <div class="gate"><b>验收</b>新增测试断言：备份在两种失败路径下都产生；写盘中途被打断时旧文件仍可读。基线 1022 → +N。</div>
+  </div>
+
+  <div class="wave">
+    <div class="wh"><span class="wn">Wave 1</span><h3>并发不变量：Web 线程不再写共享状态</h3><span class="sev p0">P0</span></div>
+    <p class="goal">
+      这是本次审查最重要的结构性修复。目标是把 A1 连同 G2 一起收口：Web 线程只读已发布的不可变快照，
+      所有"需要刷新/需要发 API"的动作都走命令队列交给主循环。
+    </p>
+    <div class="rows">
+      <div class="row"><span class="k">A1</span><div class="v">
+        <ul>
+          <li>视图发布原子化：重建结果先落到局部变量，最后一次性整体替换（四视图 + 版本号）成一个不可变快照</li>
+          <li>Web 侧 <code>ensure_group_view</code> 改为只读；需要强制刷新时 <code>web_commands.put</code>，由主循环执行</li>
+          <li>短期兜底：至少用一把锁把"重建 + 赋值 + 版本号自增"包起来</li>
+        </ul>
+      </div></div>
+      <div class="row"><span class="k">G2</span><div class="v">封掉 <code>manager.client</code> 对外暴露；<code>web.py:553/560/572</code>、<code>web_view.py:98</code>、<code>web_commands.py:109/163</code> 改走 QbApi 命令</div></div>
+      <div class="row"><span class="k">测试</span><div class="v">新增并发回归：多线程同时调 <code>ensure_group_view</code> 与主循环 <code>_tick</code>，断言版本号严格单调、四视图同轮一致</div></div>
+    </div>
+    <div class="gate"><b>验收</b>并发压测用例在修复前必失败（红绿验证）；全量基线不降。<b>风险</b>改动面较大，建议单独分支 + 真机走查一轮再合。</div>
+  </div>
+
+  <div class="wave">
+    <div class="wh"><span class="wn">Wave 2</span><h3>性能：让"惰性重建"真正惰性</h3><span class="sev p0">P0</span></div>
+    <p class="goal">
+      依赖 Wave 1（同文件）。这条修完，前端的 rid 版本门控才会真正生效 —— 否则每轮版本都变，门控形同虚设。
+    </p>
+    <div class="rows">
+      <div class="row"><span class="k">B1</span><div class="v">
+        <ul>
+          <li><code>parse_release</code> 按种子名加 LRU 缓存（名字不变 ⇒ 结果恒定，收益立竿见影）</li>
+          <li>速度 / 进度类字段拆到独立高频通道，不再触发整视图重建</li>
+          <li>四份视图按类型拆分脏标记</li>
+        </ul>
+      </div></div>
+      <div class="row"><span class="k">B2</span><div class="v">搜索索引预算 500 → 20–50，或改为时间预算（≤150ms/tick）</div></div>
+      <div class="row"><span class="k">B5/B6</span><div class="v">错误原因改增量维护；MatchPattern 配置期预解析</div></div>
+      <div class="row"><span class="k">B3</span><div class="v">主索引增量轮改原地更新 + 版本号（收益中等，可放到本波末尾）</div></div>
+      <div class="row"><span class="k">B8</span><div class="v">前端补空闲退避（空闲 N 分钟后 5–10s）</div></div>
+    </div>
+    <div class="gate"><b>验收</b>新增性能回归测试：构造 N=2000 假种子跑若干 tick，断言单 tick 耗时 p95 与重建次数在阈值内（阈值以修复前实测为基线，不写死绝对值）。</div>
+  </div>
+
+  <div class="wave">
+    <div class="wh"><span class="wn">Wave 3</span><h3>状态生命周期与配置校验</h3><span class="sev p1">P1</span></div>
+    <p class="goal">把"只增不删"和"校验缺口"这两类慢性问题一次收干净。独立性强，可与 Wave 2 并行。</p>
+    <div class="rows">
+      <div class="row"><span class="k">C1/C2</span><div class="v">新增状态裁剪任务（与存活种子/存活规则求交，按天或按 N 轮触发）；state 改为周期落盘而非仅退出时</div></div>
+      <div class="row"><span class="k">C3</span><div class="v">通知去重表按 TTL 淘汰</div></div>
+      <div class="row"><span class="k">D1</span><div class="v"><code>max_tasks_per_tick</code> 加 <code>&gt;= 1</code> 校验；<code>_pop_due</code> 区分 0 与负值</div></div>
+      <div class="row"><span class="k">D2/D3</span><div class="v">配置写回"先回退再校验"；导出走 ruamel round-trip 路径保留类型与注释</div></div>
+      <div class="row"><span class="k">H1/H2</span><div class="v">连接错误节流 + 重连指数退避（上限 30s）</div></div>
+      <div class="row"><span class="k">H3</span><div class="v">把静默吞掉的异常改为计数 + 周期汇总，别再让故障显示为"正常运行"</div></div>
+    </div>
+    <div class="gate"><b>验收</b>裁剪任务幂等（重复执行不产生副作用，符合项目黄金法则 1）；裁剪后 <code>exec_history</code> 与存活种子集合一致。</div>
+  </div>
+
+  <div class="wave">
+    <div class="wh"><span class="wn">Wave 4</span><h3>语义正确性</h3><span class="sev p1">P1</span></div>
+    <p class="goal">改的是行为语义，每条都要单独写测试固化，避免"修好一个、带坏一个"。</p>
+    <div class="rows">
+      <div class="row"><span class="k">G4</span><div class="v">写操作不再硬编码 <code>state="pausedUP"</code> / <code>"stalledUP"</code>，改为置脏等下轮 sync</div></div>
+      <div class="row"><span class="k">F1</span><div class="v"><s>组级补 <code>save_path</code>（取代表成员）</s> —— <b>复核撤回</b>：前端 <code>decoratedGroups</code> 已派生该字段，筛选口径一致，属误报</div></div>
+      <div class="row"><span class="k">F2</span><div class="v">搜索结果复用成员视图构造，字段口径统一</div></div>
+      <div class="row"><span class="k">H4–H7</span><div class="v">部分失败不记执行；hr 条件补 None 判定；quiet 前置；集数 0 拦截</div></div>
+      <div class="row"><span class="k">E6</span><div class="v">畸形 group key 转 400</div></div>
+    </div>
+    <div class="gate"><b>验收</b>G4 需特别小心：<code>skip_checking.py:121</code> 的 <code>0&lt;progress&lt;1</code> 闸门是独立于该状态判断的第二道保护，改动后要确认双重保护仍成立。</div>
+  </div>
+
+  <div class="wave">
+    <div class="wh"><span class="wn">Wave 5</span><h3>文档回写与守卫固化</h3><span class="sev p1">P1</span></div>
+    <p class="goal">
+      代码事实变更后回写 memory-bank（项目收尾 DoD 第 3 条），并把这次发现的数量类漂移<b>做成断言</b>，
+      让下一次漂移在 CI 里就失败，而不是等人再审查一遍。
+    </p>
+    <div class="rows">
+      <div class="row"><span class="k">I1–I10</span><div class="v">见第 7 节清单，逐条回写</div></div>
+      <div class="row"><span class="k">守卫</span><div class="v">在 <code>tests/test_memory_bank.py</code> 增加断言：条件数 = 16、动作数 = 12、mixin 数 = 8；文档中出现"15 种条件"即失败</div></div>
+      <div class="row"><span class="k">复核</span><div class="v">全量测试耗时实测（与 testing.md 的"约 12 秒"核对，若确有偏差则更新该数字）</div></div>
+      <div class="row"><span class="k">收尾</span><div class="v">按 AGENTS.md 收尾 5 步：更新 activeContext → 立档 → 回写代码事实 → 记实测数字 → 追加 pitfalls</div></div>
+    </div>
+    <div class="gate"><b>验收</b>重跑 <code>scripts/gen_tasks_index.py</code> 重建索引；<code>uv run pytest tests -q</code> 通过。</div>
+  </div>
+
+  <div class="rule"></div>
+  <h4>波次之间的排序理由</h4>
+  <p class="note">
+    Wave 1 与 Wave 2 必须串行（同一片视图代码，且 2 依赖 1 定型后的并发模型）。Wave 3、4、5 之间互不依赖，
+    可与 Wave 2 并行推进。Wave 0 无依赖，随时可插队。
+  </p>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="s7">
+  <h2><span class="num">07</span>文档漂移清单</h2>
+  <p>漂移按"会不会误导 AI 或开发者做出错误修改"排序。I1–I3、I7 是 P1，其余 P2。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>编号</th><th>文档说什么</th><th>代码实际是什么</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td class="m">I1</td><td>15 种条件 × 12 动作（modules.md:89、systemPatterns.md:22/144、productContext.md:35、projectbrief.md:13、modules.md:40）</td><td class="m">16 条件 / 12 动作；另有 3 处写 11 动作</td><td class="m">统一为实测值 + 加断言</td></tr>
+        <tr><td class="m">I2</td><td>QbManager 由 6 个 mixin 组合（memory-bank/README.md:38）</td><td class="m">8 个（qbmanager.py:77-86）</td><td class="m">改 8</td></tr>
+        <tr><td class="m">I3</td><td><code>.venv/Scripts/python.exe</code> 与裸 <code>python src/auto-qb.py</code></td><td class="m">裸 python 缺依赖报 ModuleNotFoundError；<code>.venv</code> 由 <code>uv</code> 自动创建(未 sync 时不存在) —— 初查时它不在, 后经 <code>uv run</code> 触发同步后即存在</td><td class="m">统一写 <code>uv run</code>(未 sync 也不会踩空)</td></tr>
+        <tr><td class="m">I7</td><td>AGENTS.md:27 称 config.yml 是红线"禁止改动/提交"</td><td class="m"><code>git ls-files</code> 命中，最后改动 e78a570</td><td class="m">需用户裁决，见第 9 节</td></tr>
+        <tr><td class="m">I4</td><td>"无包管理配置（pip 装依赖即用）"（README.md:37）</td><td class="m">有 pyproject.toml + uv.lock + dev 依赖组</td><td class="m">更新表述</td></tr>
+        <tr><td class="m">I5</td><td><code>config.py</code> / <code>torrents.py</code> / <code>config/schema.py</code> / <code>config/validation.py</code> / <code>rules/actions.py</code></td><td class="m">均已转成包：<code>config/</code>、<code>torrents/</code>、<code>config/schema/</code>、<code>config/validation/</code>、<code>rules/actions/</code></td><td class="m">路径加斜杠或写包名</td></tr>
+        <tr><td class="m">I6</td><td>modules.md 的 33 个测试文件与逐文件行数</td><td class="m">37 个 test_*.py；行数列大面积过期（web.py 946 vs 380）</td><td class="m">重跑生成或删掉行数列</td></tr>
+        <tr><td class="m">I8</td><td>AGENTS.md 未说明技能目录靠脚本生成</td><td class="m">.gitignore 忽略 .codebuddy/；23 个技能只同步了 21 个</td><td class="m">补说明 + 重跑同步脚本</td></tr>
+        <tr><td class="m">I9</td><td>docs/plans 一律 HTML，出现 .md 即违规</td><td class="m">存在 dependency-lock-report.md（同名 .html 已在）</td><td class="m">转 HTML 或删除</td></tr>
+        <tr><td class="m">I10</td><td>失效引用</td><td class="m">ui-component-libraries 的 <code>../index.html</code> 不存在；docs/context7 引用 <code>web_commands.py</code> 实为 <code>mixins/web_commands.py</code>；naming-plan 引用 <code>static/app.js</code> 实为 <code>static/shared/</code></td><td class="m">逐条修</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    已核实<b>没有</b>漂移的：Markdown <code>[]()</code> 链接语法全仓无真实失效；<code>.agents/skills/memory-bank/SKILL.md</code> 真实存在，
+    <code>.codebuddy/skills/</code> 符号链接有效；<code>auto-qb-data/</code> 已在 .gitignore 且未被跟踪。
+  </p>
+</section>
+
+<!-- ============ 8 ============ -->
+<section id="s8">
+  <h2><span class="num">08</span>验证与回归策略</h2>
+  <h3>每波必过</h3>
+  <ul>
+    <li><code>uv run pytest tests -q</code> 全量通过，基线数字只增不减（起点 1022）</li>
+    <li>改过的 Python 文件先过 <code>yapf -i</code>（.style.yapf：facebook / 列宽 120），含 <code>tests/</code></li>
+    <li>新测试必须同步该文件头部 docstring 的"## 测试计划"清单（项目明文规定）</li>
+    <li>提交前 <code>git status --short</code> 确认暂存区不含 <code>想法.md</code> 与 <code>config.yml</code></li>
+  </ul>
+  <h3>两类测试要专门补</h3>
+  <ul>
+    <li><b>固化缺陷的用例</b>：每条 P0/P1 修复都要配一条"修复前必失败"的用例，并实际跑过红绿验证 —— 这是本项目既有的好习惯，保持</li>
+    <li><b>并发与性能回归</b>：当前测试全是单线程语义，覆盖不到 A1/B1 这类问题。建议新增一个"并发 + 规模"测试档，构造 N=2000 假种子，断言单 tick 耗时 p95 与视图重建次数</li>
+  </ul>
+  <h3>真机走查</h3>
+  <p>
+    项目处于 alpha，README 标 🚧 的功能需 <code>--dry-run</code> 观察。Wave 1 与 Wave 2 改变了刷新链路的时序，
+    合并前请在真机上确认：打开页面时种子速度是否实时、关掉页面后 CPU 是否回落、长时间挂机是否稳定。
+  </p>
+  <h3>待复核</h3>
+  <p>
+    <b>已复核（2026-09-19 二次实测）：确为并发争用，不是用例变慢。</b>
+    空载单机跑完 <code>uv run pytest tests -q</code>（含 <code>--cov-branch</code>）：<b>1036 passed ≈ 32 秒</b>，
+    <code>--no-cov</code> ≈ 25 秒。审查期间"全量要跑 1 小时""<code>test_web</code> 35s/条"两组数字都是在
+    多个 pytest 进程并发时测的，已作废并在 <code>memory-bank/pitfalls.md</code> 里标注。
+    <code>testing.md</code> 的耗时表述与测试基线（1022 → 1036）均已回写。
+  </p>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="s9">
+  <h2><span class="num">09</span>范围外与待裁决</h2>
+
+  <h3>确认安全、不要动</h3>
+  <p>
+    这几条在审查中一度"看起来可疑"，但有上层保证，<b>不要顺手改</b>：
+  </p>
+  <ul>
+    <li><b>路径遍历</b>：<code>/api/fs/dirs</code> 与 mkdir 已用 realpath + 逐条 <code>_within_roots</code> 正确挡住 <code>..</code>、软链接、盘符/UNC（web.py:241-248, 281）</li>
+    <li><b>XSS</b>：两套主题 + shared/*.js 全文检索<b>无</b> <code>innerHTML</code> / <code>v-html</code> / <code>insertAdjacentHTML</code>，Vue 默认转义，种子名与 tracker 报错原文安全</li>
+    <li><b>命令注入</b>：无 shell 拼接；<code>open_path</code> 用参数列表 + <code>os.startfile</code></li>
+    <li><b><code>data_dir: ""</code></b>：<code>validation/core.py:37</code> 的 <code>_strip_none</code> 递归剔除空串，键根本不会进入 cfg</li>
+    <li><b><code>check_hr_condition</code> 除零</b>：<code>torrents/record.py:289</code> 已判 <code>total_size == 0</code></li>
+    <li><b>任务队列堆操作</b>：O(log n)，合理；循环内无 <code>re.compile</code>，正则均为模块级预编译</li>
+  </ul>
+
+  <h3>需要你裁决的三件事</h3>
+  <ul>
+    <li><b>config.yml 是否在库内</b>：AGENTS.md 称其为红线，但它实际被跟踪且最近还有改动。要么明确"历史遗留、禁止再改"并加 <code>git update-index --skip-worktree</code>，要么承认它就是随库配置、把红线表述改掉。这属于生产配置，我不擅自处理</li>
+    <li><b>Wave 1 的改造幅度</b>：最小方案是加一把锁（当天可完成）；彻底方案是"Web 线程只读不可变快照 + 命令化刷新"（更正确但要单独分支走查）。取决于你想在这上面花多少时间</li>
+    <li><b>skip_local_verify 的默认值</b>：仓库自带 config.yml 开了 <code>true</code>。是否收紧为默认关闭 + 弹窗提示，需要你按使用场景定</li>
+  </ul>
+
+  <h3>本次不做</h3>
+  <p class="note">
+    想法.md 里的长期项（WebSocket 推送、多用户、设置页重构、插件系统、规则条件取反）不在本次范围内 ——
+    本计划只处理"已存在的功能有缺陷"。其中 WebSocket 推送与 B1/B8 同源，若后续要做，应先完成 Wave 1–2，
+    否则推送的是同一份每轮全量重建的数据，性能问题会原样保留。
+  </p>
+</section>
+
+</main>
+</div>
+
+<footer>
+  Auto-QB 架构审查与优化修复计划 · 2026-09-19 · 分支 develop @ ce738df<br>
+  审查范围：src/ 60 个 Python 文件（12,524 行）· web_ui 前端（14,628 行）· tests/ 1022 条用例<br>
+  证据口径：本文件所有 文件:行号 均经源码逐行复核；数量类结论经 grep / 运行时实测确认
+</footer>
+
+</div>
+</body>
+</html>
