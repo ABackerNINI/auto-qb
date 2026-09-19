@@ -1383,3 +1383,16 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
   `is-pending`"这类**固定采样**断言会因为它**比乐观窗口还长**而假失败 —— 失败原因恰恰是修复生效了
   (窗口从常量 3s 变成 100~350ms 的变量)。改成 MutationObserver 在点击**之前**就位、记录"是否出现过";
   批量那条改成窗口内取 `pendingOps` **峰值**(1500ms 后取瞬时值恒为 0)。
+
+### ⚠ 任务档案的 `**Status:**` 只能取 4 个英文单词 (2026-09-20 实测)
+
+- 立档时照其它档案的观感写 `**Status:** ✅ 完成` ⇒ `tests/test_memory_bank.py` **两条守阵同时红**: `test_task_file_naming_and_sections`(缺合法状态行) 与 `test_task_status_matches_index_section`(档案 Status 与索引分区不一致)。两条一起红很容易误判成"索引坏了", 实际只是取值不合法。
+- 原因: 守阵正则是 `\*\*Status:\*\* (In Progress|Pending|Completed|Abandoned)`; `scripts/gen_tasks_index.py` 也按这个值决定档案落在 `_index.md` 的哪个分区 —— **两者都不认**中文或前缀符号(`✅ 完成` / `已完成` 均非法)。
+- **判别法 / 修法**: 写成 `**Status:** Completed (…补充说明…)` —— 取值本身必须是那 4 个英文单词之一, 中文说明放括号里; 改完**必须重跑** `python scripts/gen_tasks_index.py`, 否则索引分区还是旧的(会再红一次)。
+
+### ⚠ `git commit -F - <<'MSG' … MSG && git push` 会让 push 静默不执行 (2026-09-20 实测)
+
+- 把 `&& git push` 写在 heredoc 结束符 `MSG` 的**同一行**时, bash 报 `warning: here-document at line N delimited by end-of-file (wanted 'MSG')`: 结束符没被识别, 命令体一直读到 EOF ⇒ `git commit` 靠 EOF 侥幸成功, **而后面的 `git push` 被当成 heredoc 内容, 根本没执行**。
+- 表现极具迷惑性: 终端只显示 `[develop xxxxx] …` 提交成功, 远端却没有任何新提交 —— 很容易被误读成"推送失败 / 网络问题", 去重试一个从没跑过的命令。
+- **修法**: commit 与 push 写成**两条独立命令**; heredoc 结束符单独占一行、行首无空格、后面不带任何内容。
+- **判别法**: 提交后照例 `git status -sb`, 看到 `[ahead N]` 就说明还没推 —— 不要只看 commit 的输出判断"已完成"。
