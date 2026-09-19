@@ -41,6 +41,33 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 - 测试命令 2026-09-17 实测通过; 命令与 `memory-bank/testing.md` 同源维护 (基线数字单点见该文件顶部)。
 - 新增测试必须同步该测试文件头部 docstring 的 "## 测试计划" 清单 (项目明文规定)。
 
+## 💡 CI 报错排查: 建议先在本机 WSL 复现 (推荐, 非强制)
+
+> GitHub Actions 跑 **Linux (ubuntu-latest, Python 3.12/3.13 矩阵)**, 而本机是 Windows ——
+> 存在一整类"**Windows 全绿 / Linux 全红**"的失败 (2026-09-19 实测: 一次 CI 红 4 项, 本地却 0 失败)。
+> 与其推上去等 CI 一轮, **建议先在本机 WSL 里复现再改** —— 15~22 秒出结果, 还能反复跑。
+> 这是**推荐做法不是硬性要求**: 情形明显、或改动不涉及平台行为时, 直接改直接推也可以。
+
+```bash
+# ① 首次: 建一份 Linux 沙箱(ext4 上跑, 别直接在 /mnt/d 的 drvfs 上跑 —— 符号链接/权限语义不一样)
+wsl -- bash -c 'cp -r /mnt/d/Projects/<仓库> ~/aqb && cd ~/aqb && rm -rf .venv __pycache__'
+#   (或更干净: 在仓库根 tar --exclude=./.venv --exclude=./.git ... | tar -xf - 到 ~/aqb)
+wsl -- bash -c 'curl -LsSf https://astral.sh/uv/install.sh -o ~/uv-install.sh && sh ~/uv-install.sh'  # 装 uv, 只需一次
+wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv sync && uv run pytest tests -q'
+
+# ② 之后每次改动: 只同步改过的文件再跑
+wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv run pytest tests -q'
+# 对上 CI 的矩阵版本: uv sync -p 3.12 / -p 3.13 再跑
+```
+
+- **判据**: 凡是涉及 ①副作用记账器判越界 ②平台专属模块 (`winreg` 等) ③真实 socket/子进程 的改动,
+  **"本机全量绿"不算数**, 必须在 Linux 上验一遍。典型三类坑与修法见 [pitfalls.md](memory-bank/pitfalls.md)
+  「Windows 全绿 / Linux 全红」条目 (POSIX `shutil.rmtree` 传纯文件名 + `dir_fd` / `atomic_write("")` 往仓库外
+  写临时文件 / 用例 patch 错名字导致真连网络)。
+- 沙箱是**可复用**的: `~/aqb` 一直留着, 改完 `cp` 同步改过的文件即可; 不必每次重建。
+- 推上去之后想确认 CI 结果时 (本机没装 `gh`), 用
+  `curl -s https://api.github.com/repos/ABackerNINI/auto-qb/actions/runs?per_page=6` 看 `head_sha` 与 `conclusion`。
+
 ## 知识库路由 (先查这里再动代码)
 
 | 任务 | 读 |
@@ -55,6 +82,7 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 | 命名/风格/约定 | [memory-bank/conventions.md](memory-bank/conventions.md) |
 | 技术栈/开发环境/约束 | [memory-bank/techContext.md](memory-bank/techContext.md) |
 | 写/跑测试 | [memory-bank/testing.md](memory-bank/testing.md) |
+| **CI 报错 / 平台差异复现** | 本文件「💡 CI 报错排查: 建议先在本机 WSL 复现」+ [pitfalls.md](memory-bank/pitfalls.md)「Windows 全绿 / Linux 全红」 |
 | 改代码前必读 (风险点/陷阱) | [memory-bank/pitfalls.md](memory-bank/pitfalls.md) |
 | XX 做了吗 / 计划怎么做 | [memory-bank/progress.md](memory-bank/progress.md) |
 | 跨会话任务档案 | [memory-bank/tasks/_index.md](memory-bank/tasks/_index.md) |
