@@ -6,18 +6,18 @@
 <title>依赖版本调研与锁定建议 — auto-qb</title>
 <style>
   :root {
-    --bg: #f7f9fa;
-    --ink: #151c21;
-    --ink-2: #45535c;
-    --ink-3: #7a8890;
-    --hair: #d5dde1;
-    --hair-soft: #e4eaed;
-    --accent: #0e6f7a;
+    --bg: #101418;
+    --ink: #e6ecef;
+    --ink-2: #a8b6bf;
+    --ink-3: #78858e;
+    --hair: #2b343b;
+    --hair-soft: #1e252b;
+    --accent: #4fb3bf;
     --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
     --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
   body {
     background: var(--bg);
     color: var(--ink);
@@ -87,7 +87,7 @@
   p.body { color: var(--ink-2); max-width: 74ch; margin-bottom: 14px; }
   p.body code, td code, li code {
     font-family: var(--mono); font-size: 0.92em; color: var(--ink);
-    background: #eef2f4; padding: 1px 5px; border-radius: 2px;
+    background: #171d22; padding: 1px 5px; border-radius: 2px;
   }
 
   /* ---------- tables ---------- */
@@ -124,7 +124,7 @@
   .callout p b { color: var(--ink); font-weight: 600; }
   pre {
     font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
-    background: #eef2f4; border: 1px solid var(--hair-soft);
+    background: #171d22; border: 1px solid var(--hair-soft);
     padding: 18px 22px; overflow-x: auto; margin: 18px 0;
   }
   pre .c { color: var(--ink-3); }
@@ -136,7 +136,7 @@
   .plans { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--hair); margin: 18px 0 8px; }
   .plan { padding: 20px 22px 22px; border-right: 1px solid var(--hair-soft); }
   .plan:last-child { border-right: none; }
-  .plan.reco { background: #eef4f5; }
+  .plan.reco { background: #16232a; }
   .plan .p-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
   .plan .p-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.07em; color: var(--ink-3); text-transform: uppercase; }
   .plan.reco .p-tag { color: var(--accent); }

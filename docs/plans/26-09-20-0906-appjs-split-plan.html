@@ -6,12 +6,13 @@
 <title>app.js 按域拆分 — 可行性分析与实施计划</title>
 <style>
   :root{
-    --paper:#fbfaf7; --ink:#1b1a17; --ink-dim:#5c5a54; --ink-faint:#8b8880;
-    --rule:#e2ded4; --rule-strong:#cfc9bc; --accent:#9a3412; --accent-soft:#fdf3ec;
+    --paper:#131211; --ink:#ebe8e2; --ink-dim:#a9a49a; --ink-faint:#7e7a72;
+    --rule:#302c26; --rule-strong:#454037; --accent:#e0885c; --accent-soft:#2a201a;
     --serif:"Songti SC","Source Han Serif SC","Noto Serif CJK SC",Georgia,"Times New Roman",serif;
     --sans:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",-apple-system,"Segoe UI",sans-serif;
     --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
   }
+  html { color-scheme: dark; }
   *{box-sizing:border-box}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
        font-size:16.5px;line-height:1.85;-webkit-font-smoothing:antialiased}
@@ -30,8 +31,8 @@
   ul,ol{margin:0 0 16px;padding-left:22px}
   li{margin:0 0 7px}
   strong{font-weight:600}
-  code{font-family:var(--mono);font-size:13px;background:#f3f1ea;padding:1px 5px;border-radius:2px}
-  pre{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:#f3f1ea;
+  code{font-family:var(--mono);font-size:13px;background:#1b1917;padding:1px 5px;border-radius:2px}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:#1b1917;
       border-left:2px solid var(--rule-strong);padding:14px 16px;overflow-x:auto;margin:0 0 18px}
   table{width:100%;border-collapse:collapse;font-family:var(--sans);font-size:13.5px;margin:6px 0 20px}
   th{text-align:left;font-weight:600;border-bottom:1px solid var(--ink);padding:8px 10px 7px 0;

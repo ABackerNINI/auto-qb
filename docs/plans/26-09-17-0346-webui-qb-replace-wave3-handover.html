@@ -6,26 +6,27 @@
 <title>WEBUI 替代 qB 界面 · 波次三 实施交接文档</title>
 <style>
   :root {
-    --bg: #fafbfc;
-    --panel: #f1f3f6;
-    --fg: #1b1f24;
-    --muted: #545d67;
-    --dim: #78808a;
-    --line: rgba(0, 0, 0, .11);
-    --line-strong: rgba(0, 0, 0, .26);
-    --accent: #2d5f8a;
-    --accent-soft: rgba(45, 95, 138, .09);
-    --ok: #2f6f43;
-    --warn: #8a6420;
-    --bad: #9d3b36;
+    --bg: #101519;
+    --panel: #171b20;
+    --fg: #e6eaee;
+    --muted: #a5aeb8;
+    --dim: #78808b;
+    --line: rgba(255, 255, 255, .11);
+    --line-strong: rgba(255, 255, 255, .24);
+    --accent: #6fa8d6;
+    --accent-soft: rgba(111, 168, 214, .12);
+    --ok: #58a87c;
+    --warn: #d1a05c;
+    --bad: #d9705f;
     --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
     --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
   }
+  html { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
     font: 15px/1.62 var(--sans); -webkit-font-smoothing: antialiased; }
   ::selection { background: var(--accent-soft); }
-  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(45,95,138,.32); }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(111,168,214,.32); }
   a:hover { border-bottom-color: var(--accent); }
   code { font-family: var(--mono); font-size: .84em; background: var(--panel);
     border: 1px solid var(--line); border-radius: 2px; padding: 1px 5px; white-space: nowrap; }
@@ -91,7 +92,7 @@
     max-width: 58em; font-size: 16px; color: var(--fg); }
   .tag { display: inline-block; font: 600 10.5px/1 var(--mono); letter-spacing: .1em;
     text-transform: uppercase; color: var(--accent); background: var(--accent-soft);
-    border: 1px solid rgba(45,95,138,.28); padding: 5px 8px; margin-right: 8px; }
+    border: 1px solid rgba(111,168,214,.28); padding: 5px 8px; margin-right: 8px; }
   .legend { font: 12px/1.5 var(--mono); color: var(--dim); margin: 0 0 6px; }
 
   footer { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line);

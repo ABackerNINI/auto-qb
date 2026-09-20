@@ -6,25 +6,25 @@
 <title>星图与棱镜 · auto-qb 两套 UI 命名与目录迁移计划</title>
 <style>
   :root {
-    --ink: #16181d;
-    --ink-2: #3a4149;
-    --muted: #5c6470;
-    --dim: #8a919c;
-    --hair: #d9dde3;
-    --hair-soft: rgba(22,24,29,.08);
-    --paper: #fcfcfd;
-    --page: #f4f5f7;
-    --block: #f3f5f8;
-    --accent: #2563eb;
-    --accent-ink: #1e40af;
-    --ok: #1a7f4e;
-    --warn: #b45309;
+    --ink: #e8eaee;
+    --ink-2: #b6bcc4;
+    --muted: #98a0ab;
+    --dim: #7d8590;
+    --hair: #2a2f36;
+    --hair-soft: rgba(255,255,255,.08);
+    --paper: #12151a;
+    --page: #0e1114;
+    --block: #171b20;
+    --accent: #6f9dfb;
+    --accent-ink: #9dbcfd;
+    --ok: #4ea87a;
+    --warn: #d99a4e;
     --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
     --font-body: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
     --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; color-scheme: dark; }
   body {
     background: var(--page);
     color: var(--ink);
@@ -102,7 +102,7 @@
     background: var(--block); border: 1px solid var(--hair-soft);
     padding: 1px 5px; border-radius: 3px;
   }
-  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,.3); }
+  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid rgba(111,157,251,.35); }
 
   /* ---------- tables ---------- */
   table { width: 100%; border-collapse: collapse; margin: 14px 0 6px; font-size: 13.5px; }
@@ -121,9 +121,9 @@
     letter-spacing: .06em; padding: 1px 7px; border: 1px solid var(--hair);
     color: var(--muted); border-radius: 3px; margin-right: 4px; white-space: nowrap;
   }
-  .tag.blue { color: var(--accent-ink); border-color: rgba(37,99,235,.35); }
-  .tag.green { color: var(--ok); border-color: rgba(26,127,78,.35); }
-  .tag.amber { color: var(--warn); border-color: rgba(180,83,9,.35); }
+  .tag.blue { color: var(--accent-ink); border-color: rgba(111,157,251,.35); }
+  .tag.green { color: var(--ok); border-color: rgba(78,168,122,.35); }
+  .tag.amber { color: var(--warn); border-color: rgba(217,154,78,.35); }
 
   /* ---------- identity plates ---------- */
   .plates { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 18px; }

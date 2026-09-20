@@ -6,20 +6,20 @@
 <title>WEB UI 响应性计划 · 实施评估报表 — auto-qb</title>
 <style>
   :root {
-    --paper: #f6f4ef;
-    --paper-2: #efebe3;
-    --ink: #1b1a17;
-    --ink-2: #4a463f;
-    --ink-3: #6f6a60;
-    --hair: #d8d2c6;
-    --hair-2: #e6e1d7;
-    --accent: #8a4a1f;
-    --accent-soft: #f0e2d6;
+    --paper: #131211;
+    --paper-2: #1a1815;
+    --ink: #eae7e1;
+    --ink-2: #b4aea3;
+    --ink-3: #8b8477;
+    --hair: #322e28;
+    --hair-2: #221f1b;
+    --accent: #d99a68;
+    --accent-soft: #2a211a;
     --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
     --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
   body {
     background: var(--paper);
     color: var(--ink);
@@ -103,10 +103,10 @@
 
   .sev { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
   .sev i { width: 8px; height: 8px; display: block; }
-  .sev-hi { color: #97331c; } .sev-hi i { background: #97331c; }
+  .sev-hi { color: #e8735c; } .sev-hi i { background: #e8735c; }
   .sev-md { color: var(--accent); } .sev-md i { background: var(--accent); }
   .sev-lo { color: var(--ink-3); } .sev-lo i { background: var(--ink-3); }
-  .sev-ok { color: #2f5a41; } .sev-ok i { background: #2f5a41; }
+  .sev-ok { color: #63ad8b; } .sev-ok i { background: #63ad8b; }
 
   .finding { border-top: 1px solid var(--hair); padding-top: 18px; margin-top: 24px; }
   .finding:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }

@@ -289,3 +289,12 @@
   已回写指针：AGENTS.md 提交节 + 环境硬约束 + 路由表、memory-bank/README.md 路由表、memory-bank skill 会话开始第 1 步。
   **通用性有限**（依赖本仓环境：工具 shell 拦截层 / Gitee+GitHub 双远端 / 9 worktree 并行），换项目先改 `_ship_config.py`。
   提交 `0c0bf1e`，用它自己的流水线提交（dogfooding），Gitee 与 GitHub 均推成功。
+
+- **HTML 文档统一 dark 主题（已实施，2026-09-20 13:00）**: 用户指定"产出的 HTML 一律 dark"，已写进
+  `AGENTS.md`「计划产出」节（深色底 + 浅色字 + `color-scheme: dark`，禁止浅底黑字）。存量同步：
+  `docs/plans/` 25 份中 9 份浅色计划文档（`26-09-15-1150 / 1241 / 1504 / 1534`、`26-09-16-1128`、
+  `26-09-17-0346`、`26-09-19-1745 / 2245`、`26-09-20-0906`）重写 `:root` 配色盘转深色（保色相、
+  只翻明度），另给 14 份原本就深色但缺声明的补了 `color-scheme: dark`；`memory-bank/issues/` 9 份
+  本就是深色、未动。`resources/`（设计观摩稿 + 设置页候选稿）按用户裁定**不在本次范围** —— 那批的
+  白底极简（kenya-hara / pentagram / muller-brockmann）是设计本体，转深会毁掉参考价值。
+  单测 **1059 passed**。
