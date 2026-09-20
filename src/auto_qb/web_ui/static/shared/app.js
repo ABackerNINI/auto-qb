@@ -626,6 +626,13 @@ const app = createApp({
       if (e.key === COLS_STORE_KEY) this.adoptColState();
     };
     window.addEventListener("storage", this._onColStore);
+    /* FX-28: 时间口径跨标签同步(F2) —— 与列偏好同一套机制(整份采用存储值), 但**独立监听**:
+     * 两个 key 的生命周期不同(列集合/列宽 vs 显示口径), 塞进同一个监听只会让判据互相纠缠。
+     * 写入方自己收不到 storage 事件 ⇒ 无需去重, 也不会自激。 */
+    this._onTimeFmtStore = (e) => {
+      if (e.key === TIME_FMT_STORE_KEY) this.adoptTimeFmt();
+    };
+    window.addEventListener("storage", this._onTimeFmtStore);
     // FX-27: 相对时间时钟(30s 一跳) —— 见 data.nowSec 注释; 不挂 visibilitychange:
     // 后台标签本来就不会重排渲染, 回到可见时 refresh() 一并刷新, 无需额外开关
     this._clockTimer = setInterval(() => {
@@ -636,6 +643,7 @@ const app = createApp({
       if (document.hidden) this.stopPolling();
       else {
         this.adoptColState();  // F3: 补漏 —— 标签被冻结 / storage 事件丢失时, 回到可见即对齐一次
+        this.adoptTimeFmt();   // 同上(FX-28): 时间口径也在回到可见时补对齐一次
         if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
       }
     });
@@ -709,6 +717,11 @@ const app = createApp({
     if (this._onColStore) {
       window.removeEventListener("storage", this._onColStore);
       this._onColStore = null;
+    }
+    // FX-28: 时间口径跨标签监听随组件销毁撤掉(同上, 防热重载后句柄堆叠)
+    if (this._onTimeFmtStore) {
+      window.removeEventListener("storage", this._onTimeFmtStore);
+      this._onTimeFmtStore = null;
     }
     // FX-27: 相对时间时钟随组件销毁撤销(同上, 防热重载后句柄堆叠)
     if (this._clockTimer) {

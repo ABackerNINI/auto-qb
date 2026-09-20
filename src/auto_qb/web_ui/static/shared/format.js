@@ -129,6 +129,12 @@ window.AQB_FORMAT = {
     cellTimeHint(ts, key) {
       return this.timeFmt[key] === "rel" ? this.fmtTs(ts) : this.fmtRelTime(ts);
     },
+    /* FX-28 跨标签同步(F2/F3, 与列偏好 adoptColState 同一套机制): 别的标签改了口径 → storage
+     * 事件触发本方法**整份采用**存储值; 标签被冻结 / storage 事件丢失 → 回到可见时补对齐一次。
+     * 整份采用而非逐列合并: 同一列的后写赢, 半合并反而会让两个标签各留一半旧值(列偏好踩过)。 */
+    adoptTimeFmt() {
+      this.timeFmt = loadTimeFmt();
+    },
     /* 数值色阶(TBL-03): value/denom 比值分两档底色 —— ratio<0.75 → tone-low(偏弱), >=0.75 → tone-high(接近满档);
      * value<=0 或分母缺失/<=0 返回空串(交给 zero/空白机制)。全局限速分母来自 /api/stats 的 statsServer
      * (懒加载, 未开过统计面板时为 null → 速度列自动无色阶, 属预期降级, 规则内自然兜住) */
