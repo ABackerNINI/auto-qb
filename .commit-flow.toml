@@ -36,3 +36,8 @@ note  = "任务档案改动: 索引需自洽"
 match = [".agents/skills/"]
 run   = ["python <改动的脚本> --help"]
 note  = "skill 改动: 冒烟跑一遍被改的脚本"
+
+[[gates]]
+match = ["AGENTS.md"]
+run   = ["python scripts/check_context_caps.py"]
+note  = "引导文件: 超 8000 字符 IDE 注入时尾部被静默截断(写了也看不到), 必须先精简"
