@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>规则条件表达式化 · 重构计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#101214; --fg:#e9e7e4; --dim:#9b9996; --faint:#6d6b69;
+    --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.06);
+    --accent:#d19a54; --accent-dim:rgba(209,154,84,.16);
+    --serif:"Songti SC","Source Han Serif SC","Noto Serif SC",Georgia,serif;
+    --sans:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono","Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 96px;display:grid;grid-template-columns:212px 1fr;gap:56px;}
+  /* ---------- TOC ---------- */
+  aside{position:sticky;top:0;align-self:start;padding:44px 0 0;max-height:100vh;overflow:auto;}
+  .toc-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;}
+  aside nav a{display:block;font-size:12.5px;color:var(--dim);text-decoration:none;padding:4px 0;border-left:1px solid transparent;padding-left:11px;margin-left:-1px;}
+  aside nav a:hover{color:var(--fg);border-left-color:var(--accent);}
+  aside nav a .n{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-right:8px;}
+  /* ---------- head ---------- */
+  header{padding:72px 0 0;}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);}
+  h1{font-family:var(--serif);font-weight:600;font-size:46px;line-height:1.12;letter-spacing:-.02em;margin:18px 0 0;}
+  .lede{font-size:16.5px;color:var(--dim);max-width:62ch;margin:22px 0 0;line-height:1.62;}
+  .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:26px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:26px;flex-wrap:wrap;}
+  /* ---------- sections ---------- */
+  main{padding-bottom:40px;}
+  section{padding:52px 0 0;}
+  h2{font-family:var(--serif);font-weight:600;font-size:25px;letter-spacing:-.01em;margin:0 0 4px;line-height:1.25;}
+  h2 .num{font-family:var(--mono);font-size:11px;color:var(--faint);display:block;letter-spacing:.14em;margin-bottom:9px;}
+  h3{font-size:14.5px;font-weight:560;margin:32px 0 10px;color:var(--fg);}
+  p{margin:12px 0;max-width:74ch;}
+  .sub{color:var(--dim);font-size:13.5px;max-width:70ch;}
+  ul,ol{max-width:74ch;padding-left:20px;}
+  li{margin:6px 0;}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--accent-dim);color:var(--fg);padding:1px 5px;border-radius:3px;}
+  pre{font-family:var(--mono);font-size:12.4px;line-height:1.72;background:#15181b;border:1px solid var(--line-soft);padding:18px 20px;overflow-x:auto;margin:18px 0;color:#dcd9d5;}
+  pre .c{color:#6f7b86}
+  pre .k{color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:13.2px;}
+  th{text-align:left;font-weight:520;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line);padding:8px 12px 8px 0;}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--fg);}
+  td.m{font-family:var(--mono);font-size:12.2px;white-space:nowrap;}
+  tr:last-child td{border-bottom:none}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;}
+  .rule{height:1px;background:var(--line);max-width:280px;margin:34px 0 0;}
+  .note{border-left:1px solid var(--accent);padding:2px 0 2px 16px;margin:20px 0;color:var(--dim);font-size:13.4px;max-width:70ch;}
+  .note b{color:var(--fg);font-weight:560}
+  .tag{font-family:var(--mono);font-size:10.5px;color:var(--accent);border:1px solid var(--accent-dim);padding:1px 6px;border-radius:2px;}
+  .tag.grey{color:var(--faint);border-color:var(--line)}
+  .tag.cost{color:#c98b6b;border-color:rgba(201,139,107,.2)}
+  footer{margin-top:60px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--faint);line-height:1.9;}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr;gap:0;padding:0 22px 60px}aside{display:none}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside>
+  <div class="toc-kicker">Contents</div>
+  <nav>
+    <a href="#s0"><span class="n">00</span>一句话结论</a>
+    <a href="#s1"><span class="n">01</span>现状与为什么</a>
+    <a href="#s2"><span class="n">02</span>目标 / 非目标</a>
+    <a href="#s3"><span class="n">03</span>语法</a>
+    <a href="#s4"><span class="n">04</span>取值面：字段 · 派生 · 额外值 · 函数</a>
+    <a href="#s5"><span class="n">05</span>类型与求值语义</a>
+    <a href="#s6"><span class="n">06</span>落点：模块与接线</a>
+    <a href="#s7"><span class="n">07</span>热路径与缓存</a>
+    <a href="#s8"><span class="n">08</span>兼容 · 迁移对照表</a>
+    <a href="#s9"><span class="n">09</span>分波实施与验收</a>
+    <a href="#s10"><span class="n">10</span>风险 · 待拍板</a>
+    <a href="#s11"><span class="n">11</span>动作要不要也进这套体系</a>
+  </nav>
+</aside>
+
+<main>
+<header>
+  <div class="kicker">Refactor Plan · rules.conditions</div>
+  <h1>把规则条件换成表达式</h1>
+  <p class="lede">让 <code>conditions</code> 从「16 个固定插件 + 隐式 AND」变成一行可自由组合的表达式：种子任意字段 + 额外值（当前时间、指定盘剩余空间…），支持算术、比较、逻辑、括号、成员与正则匹配。旧条件一律保留，生产配置零改动。</p>
+  <div class="meta">
+    <span>2026-09-20</span>
+    <span>auto-qb · src/auto_qb/rules/</span>
+    <span>基线 1062 passed（Windows，开工前复测）</span>
+    <span>v2 · 五条口径已拍板</span>
+    <span>状态：计划 · 未动代码</span>
+  </div>
+</header>
+
+<section id="s0">
+  <h2><span class="num">00 / TL;DR</span>一句话结论</h2>
+  <p>新增一个条件插件 <code>expr</code>（单值字符串），自研 tokenizer + Pratt 解析器 + AST 解释器，配置加载期解析并做静态检查（fail-fast，报错聚合），运行期按已编译 AST 求值。五条已拍板的口径：</p>
+  <ol>
+    <li><b>并存</b> —— 旧 16 个条件一个不删，生产 <code>config.yml</code> 不动；退役与否留到以后单独一轮。</li>
+    <li><b>作用域前缀</b> —— 标识符一律 <code>tor.*</code> / <code>tracker.*</code> / <code>sys.*</code>，后续可加 <code>group.*</code>（辅种组）而不动语法。</li>
+    <li><b>额外值按数据源可用性启用</b> —— 没数据源就禁用该名字（配置期判得出的配置期拒绝，运行期不可得的运行期报错），<b>绝不返回假 0</b>。</li>
+    <li><b>出错即停规则</b> —— 求值出错 = 不匹配 + 中断后续规则（比"只跳过本条"更保守，见 05）。</li>
+    <li><b>一层一个运算符，没有例外</b> —— 同一括号内出现第二个运算符（含 <code>not</code>、含同种连续）即报错，优先级意图一律用括号写明（见 03）。</li>
+  </ol>
+  <pre><span class="c"># 以前：三条条件只能 AND，写不出「剩余空间相对种子大小」这类判断</span>
+conditions:
+  - seedtime: "&gt;=3D"
+  - upload_ratio: "&gt;1.5"
+
+<span class="c"># 以后：一条写完（一层只能放一个运算符，多的用括号分层）</span>
+conditions:
+  - expr: '((tor.seeding_time &gt;= 3D) and (tor.ratio &gt; 1.5)) and (freespace(tor.save_path) &lt; 100GiB)'
+  - expr: '(tor.is_complete and tor.is_uploading) or (tor.hr_satisfied)'
+  - expr: '((sys.dow &lt;= 5) and ((sys.time_of_day &gt;= 22:30) or (sys.time_of_day &lt;= 7:00)))'
+  - expr: '("HR" in tor.tags) and (not (tor.category ~ "regex:^z"))'
+  - expr: '(sys.dl_speed &gt; 5MiB/s) and (tor.size &gt; 50GiB)'   <span class="c"># 全局速度：数据源可用才启用</span></pre>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01 /现状</span>现在是什么，为什么不够</h2>
+  <p>条件在 <code>src/auto_qb/rules/conditions.py</code>（294 行 / 16 个插件），每个插件是「一个字段 + 一个比较表达式」，规则层把所有条件做 AND（<code>Rule.matches</code>，<code>base.py:170</code>）。字段面是<b>手工挑选的 16 个</b>，而 <code>TorrentRecord</code> 上其实缓存了 qB 的 <b>70 个快照字段</b>（<code>torrents/compat.py:_SNAPSHOT_FIELDS</code>）—— 绝大部分规则用不到。</p>
+  <p>三个真实瓶颈：</p>
+  <ul>
+    <li><b>写不出复合条件。</b>「磁盘剩余 &lt; 100GiB 且 今日上传 &gt; 20GiB」里，前者是额外值、后者是种子增量，现有条件各自独立、只能 AND，无法参与运算 —— 想要「剩余空间 / 种子大小 &gt; 2」这种比例判断无处下笔。</li>
+    <li><b>字段是白名单。</b>想按 <code>availability</code> / <code>num_seeds</code> / <code>last_activity</code> / <code>eta</code> 判断，得先写一个新条件插件 + 校验 + schema + 前端元数据（4 处接线），而它们的数据早就在记录对象上。</li>
+    <li><b>组间/组内的或-与是特例语法。</b><code>tags</code> 用逗号、<code>state</code> 用 <code>&amp;</code>、列表是或 —— 三套写法各记一遍，还没有取反（<code>想法.md</code> 与 <code>activeContext</code> 的「规则系统：条件取反」长期挂在这里）。</li>
+  </ul>
+  <div class="note"><b>顺带解决：</b>条件取反（<code>not</code>）不再需要单独设计；<code>date_time</code> 的「每月几号 + 星期几 + 时段」三件套可以拆成普通比较；<code>freespace</code> 从「一条条件只能查一个路径」变成「路径可来自种子自身」。</div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02 /范围</span>目标与非目标</h2>
+  <div class="grid2">
+    <div>
+      <h3>要做</h3>
+      <ul>
+        <li>表达式语法：算术 <code>+ - * / %</code>、比较 <code>&gt; &lt; &gt;= &lt;= == !=</code>、逻辑 <code>and / or / not</code>、括号 <code>()</code>、成员 <code>in</code>、模式 <code>~</code></li>
+        <li>作用域前缀 <code>tor.*</code>（种子）/ <code>tracker.*</code>（站点配置）/ <code>sys.*</code>（环境与全局）+ 白名单函数</li>
+        <li>字面量带单位：<code>100GiB</code> / <code>24H</code> / <code>1MiB/s</code> / <code>22:30</code></li>
+        <li>配置期解析 + 静态检查（含<b>一层一个运算符</b>与<b>名字可用性</b>），报错与既有 <code>ConfigError</code> 聚合输出一致</li>
+        <li>出错即停规则的语义改造（<code>Rule.process</code> 一处）</li>
+        <li>schema / 配置编辑器 / 知识库接线；16 个旧条件的等价表达式对照与守阵测试</li>
+      </ul>
+    </div>
+    <div>
+      <h3>不做（本轮）</h3>
+      <ul>
+        <li>不删旧条件、不改 <code>config.yml</code>、不做自动迁移（红线文件，迁移另开一轮）</li>
+        <li>表达式里不放<b>动作</b>、不放副作用 —— 求值必须是纯读取，保证幂等（黄金法则 1）</li>
+        <li>不引入第三方表达式库，不用 <code>eval</code> / <code>ast</code> 执行</li>
+        <li>本轮不做 <code>group.*</code>（辅种组维度）—— 前缀体系已为它留好位置，语义另开一轮</li>
+        <li>不做变量赋值 / 自定义函数 / 跨种子引用 —— 语法留口子，语义不做</li>
+        <li>不重构 <code>actions</code>（本轮只动 <code>conditions</code>）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03 /语法</span>语法设计</h2>
+  <p>自研 <b>tokenizer + Pratt 递归下降解析器</b>（约 300 行，零新增依赖）。选它不是因为自研好玩，而是两件通用库给不了的事：<b>配置期静态检查</b>（标识符必须落在白名单，拼写错误在启动时报而不是运行时静默不匹配）和<b>受控取值面</b>（只能读种子字段与白名单函数，绝不碰到任意属性/方法）。</p>
+
+  <h3>优先级（低 → 高）</h3>
+  <pre><span class="c">or     := and  ( "or"  and )*                    <span class="c">短路</span>
+and    := not  ( "and" not )*                    <span class="c">短路</span>
+not    := "not" not | compare
+compare:= add  ( CMP add )?        CMP = &gt; &lt; &gt;= &lt;= == != =   <span class="c">不可链式: a &lt; b &lt; c 报错</span>
+add    := mul  ( ("+"|"-") mul )*
+mul    := unary( ("*"|"/"|"%") unary )*
+unary  := ("-"|"+") unary | post
+post   := prim ( "in" prim | "~" prim )?
+prim   := NUM | SIZE | TIME | SPEED | HHMM | BOOL | STR
+        | IDENT | IDENT "(" args ")" | "(" or ")"</span></pre>
+
+  <h3>命名空间（作用域前缀）</h3>
+  <p>标识符一律带前缀，<b>没有裸名</b>。前缀即作用域，后续加维度（<code>group.*</code>）不用动语法，也不用担心和种子字段撞名。</p>
+  <table>
+    <tr><th>前缀</th><th>作用域</th><th>例</th></tr>
+    <tr><td class="m">tor.*</td><td>当前种子：70 个快照字段 + 派生值</td><td class="m">tor.size · tor.ratio · tor.tags · tor.is_complete · tor.upload_today</td></tr>
+    <tr><td class="m">tracker.*</td><td>种子匹配到的站点配置</td><td class="m">tracker.name · tracker.groups</td></tr>
+    <tr><td class="m">sys.*</td><td>环境与全局（与种子无关）</td><td class="m">sys.now · sys.time_of_day · sys.dow · sys.torrent_count · sys.dl_speed</td></tr>
+    <tr><td class="m">group.*</td><td><span class="tag grey">本轮不做</span> 辅种组维度</td><td class="m">group.member_count（前缀已占位）</td></tr>
+    <tr><td class="m">（无前缀）</td><td>白名单函数，参数显式传</td><td class="m">freespace(path) · raw("field") · file_count()</td></tr>
+  </table>
+
+  <h3>字面量</h3>
+  <table>
+    <tr><th>写法</th><th>类型</th><th>解析</th><th>注</th></tr>
+    <tr><td class="m">100 / 1.5</td><td>int / float</td><td class="m">字面</td><td>裸数字无单位</td></tr>
+    <tr><td class="m">10GiB / 500MiB</td><td>int（字节）</td><td class="m">utils.parse_fsize</td><td>沿用 iB 单位惯例，写 10GB 报错</td></tr>
+    <tr><td class="m">24H / 30M / 7D</td><td>float（秒）</td><td class="m">utils.parse_time</td><td>与 interval/cooldown 同一口径</td></tr>
+    <tr><td class="m">1MiB/s</td><td>int（字节/秒）</td><td class="m">utils.parse_speed</td><td>与限速动作同一口径</td></tr>
+    <tr><td class="m">22:30</td><td>int（当日分钟 0–1439）</td><td class="m">utils.parse_hm</td><td>配 <code>time_of_day</code> 用，取代 <code>date_time.time</code></td></tr>
+    <tr><td class="m">"HR" / 'HR'</td><td>str</td><td class="m">—</td><td>单双引号都行</td></tr>
+    <tr><td class="m">true / false</td><td>bool</td><td class="m">—</td><td>布尔字面量</td></tr>
+  </table>
+
+  <h3>运算符</h3>
+  <table>
+    <tr><th>运算符</th><th>语义</th><th>要点</th></tr>
+    <tr><td class="m">+ - * / %</td><td>数值算术</td><td>仅数值；除零 → 运行期 <code>ExprError</code>；<code>%</code> 取模</td></tr>
+    <tr><td class="m">&gt; &lt; &gt;= &lt;=</td><td>数值/字符串有序比较</td><td>两侧同类型；类型不同 → 报错</td></tr>
+    <tr><td class="m">== !=</td><td>相等（<code>=</code> 视作 <code>==</code>）</td><td>跨类型 → 报错（不静默 False）</td></tr>
+    <tr><td class="m">and / or / not</td><td>布尔逻辑</td><td><b>短路</b>；操作数必须是 bool，非 bool 报错</td></tr>
+    <tr><td class="m">in</td><td>成员</td><td><code>"HR" in tags</code>、<code>"国内" in tracker_groups</code>、<code>state in ["uploading","forcedUP"]</code></td></tr>
+    <tr><td class="m">~</td><td>模式匹配</td><td>复用 <code>utils.MatchPattern</code>：<code>name ~ "regex:1080p"</code>、<code>category ~ "regex:^HR:ignore_case"</code>；无前缀 = 精确全等</td></tr>
+    <tr><td class="m">()</td><td>分组</td><td>任意嵌套；括号组对所在层是不透明黑盒（见下节）</td></tr>
+  </table>
+
+  <h3>一层一个运算符（防优先级误用 · 没有例外）</h3>
+  <p>优先级不靠记、靠括号写：<b>每个括号层级内最多出现一个运算符</b>。<code>not</code>、<code>&lt;</code>、<code>and</code>、<code>+</code>、<code>%</code>、<code>in</code>、<code>~</code> <b>统统是运算符，一律占一层</b> —— 不分种类、不设例外。于是同一个括号里根本不存在“谁先算”的问题，优先级误用在语法层面被消除。</p>
+  <ul>
+    <li>一层一个：出现第二个就报错。<b>连续同种也算第二个</b> —— <code>tor.a and tor.b and tor.c</code> 要写成 <code>(tor.a and tor.b) and tor.c</code>。</li>
+    <li><code>not</code> 同样占一层：<code>not tor.is_complete and tor.is_uploading</code> ✗ → <code>(not tor.is_complete) and (tor.is_uploading)</code>（消除辖域歧义）。</li>
+    <li>一元负号也算：<code>-tor.size &gt; 0</code> ✗ → <code>(-tor.size) &gt; 0</code>；数字字面量里的 <code>-5</code> 不算运算符。</li>
+    <li>括号组对其所在层是<b>不透明黑盒</b>：<code>(tor.a + tor.b) &gt; tor.c</code> 的外层只有 <code>&gt;</code>，合法。</li>
+    <li>函数参数各自独立成层：<code>min(tor.a + tor.b, tor.c * 2)</code> 内部各算一层。</li>
+  </ul>
+  <table>
+    <tr><th>写法</th><th>判定</th><th>改成</th></tr>
+    <tr><td class="m">tor.a and tor.b or tor.c</td><td>✗ 该层 2 个运算符</td><td class="m">(tor.a and tor.b) or tor.c</td></tr>
+    <tr><td class="m">tor.a and tor.b and tor.c</td><td>✗ 该层 2 个运算符（同种也拒）</td><td class="m">(tor.a and tor.b) and tor.c</td></tr>
+    <tr><td class="m">tor.ratio &gt; 1.5 and tor.seeding_time &gt; 3D</td><td>✗ 该层 2 个运算符</td><td class="m">(tor.ratio &gt; 1.5) and (tor.seeding_time &gt; 3D)</td></tr>
+    <tr><td class="m">tor.uploaded / tor.size &gt; 1.5</td><td>✗ 该层 2 个运算符</td><td class="m">(tor.uploaded / tor.size) &gt; 1.5</td></tr>
+    <tr><td class="m">tor.a + tor.b - tor.c</td><td>✗ 该层 2 个运算符</td><td class="m">(tor.a + tor.b) - tor.c</td></tr>
+    <tr><td class="m">not tor.is_complete and tor.is_uploading</td><td>✗ 该层 2 个运算符</td><td class="m">(not tor.is_complete) and (tor.is_uploading)</td></tr>
+    <tr><td class="m">tor.seeding_time &gt;= 3D</td><td>✓ 该层 1 个</td><td class="m">—</td></tr>
+    <tr><td class="m">(tor.a and tor.b) or (tor.c and tor.d)</td><td>✓ 外层 1 个、内层各 1 个</td><td class="m">—</td></tr>
+    <tr><td class="m">freespace(tor.save_path) &lt; 200GiB</td><td>✓ 函数调用是 primary</td><td class="m">—</td></tr>
+  </table>
+  <div class="note"><b>报错要能照着改：</b><code>规则 x.条件[0]: 同一括号内只能有一个运算符（当前 2 个：and、and）—— 请加括号分组，如 (tor.a and tor.b) and tor.c</code>。<br>判定退化为「每层运算符计数 &gt; 1 即报错」，<b>不需要策略表</b>（原定的 <code>_MIX_POLICY</code> 五种分组取消，<code>expr/policy.py</code> 不再存在）。<br><b>代价与出口：</b>表达式会变成“括号套括号”。若本意是「同种连续可以、只有异种才要括号」，把判定从「计数 &gt; 1」改成「出现多种」即可 —— 一行的事；当前按「没有例外」取最严写法。</div>
+
+  <div class="note"><b>YAML 引号（必须写进文档）：</b>表达式里出现 <code>*</code>（别名）、<code>&amp;</code>（锚点）、<code>#</code>（注释）、<code>{}[]</code>（流集合）、<code>: </code>（键值分隔）在 YAML 里都有语义 —— 表达式<b>一律用单引号或块标量</b>包裹：<code>- expr: &gt;-</code> 换行写，或 <code>- expr: 'a * b &gt; 100'</code>。<code>%</code> 只在行首有语义，<code>&gt;</code> 只在行首有语义（折叠），但别赌。</div>
+
+  <h3>示例</h3>
+  <pre><span class="c"># 磁盘快满时，优先砍掉大种子（比较与逻辑各自括号；函数调用是 primary）</span>
+- expr: '(freespace(tor.save_path) &lt; 200GiB) and (tor.size &gt; 50GiB)'
+
+<span class="c"># 上传够了就停：分享率达标 或 做种够久</span>
+- expr: '(tor.ratio &gt;= 2.0) or ((tor.seeding_time &gt;= 7D) and (tor.uploaded &gt; tor.size))'
+
+<span class="c"># 闲置种子：3 天没动静且没人在下载（idle 是派生值, 省掉一个减法）</span>
+- expr: '((tor.idle &gt; 3D) and (tor.num_leechs == 0)) and (not tor.is_checking)'
+
+<span class="c"># 只在工作日夜间、且不在 HR 考核中的种子上跑</span>
+- expr: '((sys.dow &lt;= 5) and ((sys.time_of_day &gt;= 23:00) or (sys.time_of_day &lt;= 7:00))) and (not tor.hr_condition_met)'
+
+<span class="c"># 现算分享率（一层一个运算符 -&gt; 括号）</span>
+- expr: '((tor.uploaded / tor.size) &gt; 1.5) and (tor.seeding_time &gt; 3D)'
+
+<span class="c"># 70 个字段之外的新字段（qB 新版前向兼容）也能读</span>
+- expr: 'raw("some_new_field") &gt; 0'</pre>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04 /取值面</span>字段 · 派生 · 额外值 · 函数</h2>
+  <p>取值面是<b>唯一的新事实源</b>，落在 <code>rules/expr/env.py</code> 一张表里：名字（含前缀）→ 取值器（属性直取 / 计算 / 全局 / 函数调用）+ 静态类型 + 是否昂贵 + <b>可用性判定器</b>。schema 暴露、前端提示、文档生成都从这张表派生，不各写一份。</p>
+
+  <h3>A. <code>tor.*</code> —— 种子字段（70 个快照字段）</h3>
+  <p>即 <code>TorrentRecord</code> 的快照字段，与 qB <code>TorrentDictionary</code> 同名，加前缀使用：<code>tor.hash</code> <code>tor.name</code> <code>tor.size</code> <code>tor.total_size</code> <code>tor.tags</code> <code>tor.category</code> <code>tor.state</code> <code>tor.downloaded</code> <code>tor.uploaded</code> <code>tor.dlspeed</code> <code>tor.upspeed</code> <code>tor.seeding_time</code> <code>tor.ratio</code> <code>tor.amount_left</code> <code>tor.completed</code> <code>tor.progress</code> <code>tor.dl_limit</code> <code>tor.up_limit</code> <code>tor.added_on</code> <code>tor.save_path</code> <code>tor.content_path</code> … 直至 <code>tor.has_tracker_error</code> 共 70 个。编译期按 <code>_SNAPSHOT_FIELDS</code> 校验，拼错在启动时报错。<br>⚠ <code>tor.tags</code> 取的是<b>集合</b>（<code>tags_set</code>）：<code>in</code> 直接可用，<code>~</code> 对集合的语义是「任一元素命中」；原始逗号串另给 <code>tor.tags_raw</code>。</p>
+
+  <h3>B. <code>tor.*</code> —— 派生值（数据已在种子上，但要算一下）</h3>
+  <table>
+    <tr><th>名字</th><th>类型</th><th>语义</th></tr>
+    <tr><td class="m">tor.is_downloading / is_uploading / is_complete / is_checking / is_stopped / is_paused / is_errored</td><td>bool</td><td><code>state_enum</code> 的类别属性（与 qB 官方语义一致，取代 <code>state</code> 条件）</td></tr>
+    <tr><td class="m">tor.progress_pct</td><td>float</td><td><code>progress * 100</code></td></tr>
+    <tr><td class="m">tor.tags_count</td><td>int</td><td>标签个数</td></tr>
+    <tr><td class="m">tor.hr_condition_met / tor.hr_satisfied</td><td>bool</td><td>取代 <code>hr</code> 条件三 mode；无 HR 配置 = <code>false</code>（有定义的缺省，<b>不报错</b>）</td></tr>
+    <tr><td class="m">tor.upload_today / upload_week / upload_month</td><td>int</td><td>取代三条增量条件（<code>manager.upload_delta</code>，自然日 / ISO 周 / 自然月）</td></tr>
+    <tr><td class="m">tor.age</td><td>float</td><td><code>now - added_on</code>（秒）</td></tr>
+    <tr><td class="m">tor.idle</td><td>float</td><td><code>now - last_activity</code>（秒）；<code>last_activity = -1</code>（从未传输）时按极大值处理，并只在首次告警一次</td></tr>
+  </table>
+
+  <h3>C. <code>tracker.*</code> —— 站点配置</h3>
+  <p><b>指的是哪个 tracker？</b> 一个种子在 qB 里可以有<b>多个 tracker URL</b>（外加 DHT / PeX / LSD 这些虚拟条目），但本程序的数据模型里，一个种子<b>只绑定一个站点配置</b> <code>TorrentRecord.tracker_conf</code>：主循环 <code>_refresh_torrents</code>（<code>qbmanager.py:684</code>）把种子的 tracker URL 列表交给 <code>_match_tracker_conf</code>，按 hostname 精确匹配 <code>config.trackers</code>，<b>命中多个配置时取第一个并打 ERROR 日志</b>，一个都没命中则为 <code>None</code>。<code>tracker.*</code> 说的就是它 —— 与旧 <code>trackers</code> 条件同源同口径。</p>
+  <table>
+    <tr><th>名字</th><th>类型</th><th>语义</th></tr>
+    <tr><td class="m">tracker.name</td><td>str</td><td><b>主站点</b>配置名；未匹配站点 = <code>"Unknown"</code>（合法值，不是错误）</td></tr>
+    <tr><td class="m">tracker.groups</td><td>list[str]</td><td>主站点声明的分组；未匹配站点 = 空列表（沿用「无 tracker_conf 恒不匹配」，不报错）</td></tr>
+    <tr><td class="m">tracker.names</td><td>set[str]</td><td><span class="tag cost">需 tracker 缓存</span> <b>该种子所有 tracker URL 各自命中的站点配置名集合</b> —— 给“一个种子挂了多个站”的用法；无命中 = 空集</td></tr>
+    <tr><td class="m">tracker.url</td><td>str</td><td>qB 报告的主 tracker URL（= <code>tor.tracker</code>）；无 = 空串</td></tr>
+  </table>
+  <div class="note"><b>用哪个？</b>绝大多数种子只挂一个站 —— 用 <code>tracker.name</code> / <code>tracker.groups</code>。只有「一拖多站」的种子才需要 <code>tracker.names</code>（此时 <code>tracker.name</code> 只是被选中的那一个，选谁取决于 <code>config.trackers</code> 的顺序，本身就不稳定 —— 这种种子在现有模型里已经会被 <code>_match_tracker_conf</code> 打 ERROR 日志）。</div>
+
+  <h3>D. <code>sys.*</code> —— 环境与全局</h3>
+  <p><b>D1 · 恒定可用</b>（只需配置期校验名字存在）：</p>
+  <table>
+    <tr><th>名字</th><th>类型</th><th>语义</th></tr>
+    <tr><td class="m">sys.now</td><td>float</td><td>当前 epoch 秒（每次求值取一次，同表达式内一致）</td></tr>
+    <tr><td class="m">sys.hour / sys.minute / sys.time_of_day</td><td>int</td><td>时 / 分 / 当日分钟数 0–1439（配 <code>22:30</code> 字面量）</td></tr>
+    <tr><td class="m">sys.dow / sys.dom</td><td>int</td><td>星期（1=周一，isoweekday）/ 每月几号</td></tr>
+    <tr><td class="m">sys.torrent_count / downloading_count / seeding_count</td><td>int</td><td>全局种子计数（读 <code>manager.store</code>，O(1)）</td></tr>
+  </table>
+  <p><b>D2 · 依赖数据源（按可用性启用/禁用）</b>：</p>
+  <table>
+    <tr><th>名字</th><th>数据源</th><th>启用判定</th></tr>
+    <tr><td class="m">sys.dl_speed / sys.up_speed</td><td>qB <code>store.server_state.dl_info_speed / up_info_speed</code>（随 sync 自动更新）</td><td>运行期 <code>server_state</code> 为 None（降级/断连）或键缺失 → <b>名字不可用 → 报错停规则</b></td></tr>
+    <tr><td class="m">sys.dl_limit / sys.up_limit</td><td><code>dl_rate_limit / up_rate_limit</code></td><td>同上</td></tr>
+    <tr><td class="m">sys.alt_speed_on</td><td><code>use_alt_speed_limits</code></td><td>同上</td></tr>
+    <tr><td class="m">sys.upload_today / sys.download_today / sys.upload_month</td><td>配置 <code>global_speed_limit_curve.traffic_source</code>（Traffic Monitor 的 history dat）</td><td><b>配置期判定</b>：未配置该数据源 → 这些名字<b>禁用</b>，用了即在 <code>load_config</code> 报「该值无数据源」；配置了才启用</td></tr>
+  </table>
+  <div class="note"><b>口径区分：</b><code>tor.upload_today</code> 是<b>单种子</b>增量（走 manager 快照，恒定可用）；<code>sys.upload_today</code> 是<b>全局</b>口径（走 dat 文件，需配置数据源）。两者不是一回事，命名上靠前缀区分。</div>
+
+  <h3>E. 函数（白名单，参数受控，无前缀）</h3>
+  <table>
+    <tr><th>函数</th><th>→</th><th>说明</th></tr>
+    <tr><td class="m">freespace(path)</td><td>int</td><td><span class="tag cost">系统调用</span> 该路径所在盘剩余字节；取代 <code>freespace</code> 条件，路径可来自 <code>tor.save_path</code>。不可用时报错（不静默 False）</td></tr>
+    <tr><td class="m">disk_total(path) / disk_used(path)</td><td>int</td><td><span class="tag cost">系统调用</span> 总容量 / 已用</td></tr>
+    <tr><td class="m">exists(path)</td><td>bool</td><td><span class="tag cost">文件系统</span> 路径是否存在</td></tr>
+    <tr><td class="m">file_count()</td><td>int</td><td><span class="tag cost">API 调用</span> 种子文件数（惰性拉取，务必配低频规则）</td></tr>
+    <tr><td class="m">raw("field")</td><td>any</td><td>读 <code>_raw</code> 前向兼容字段；<b>编译期不校验名字</b>（留给 qB 新版本），运行期缺失 → 报错</td></tr>
+    <tr><td class="m">len(x) abs(n) min(a,b) max(a,b) round(x)</td><td>int/float</td><td>纯函数，无副作用</td></tr>
+    <tr><td class="m">days(n) hours(n)</td><td>float</td><td>纯换算的语法糖（<code>tor.idle &gt; days(3)</code>）</td></tr>
+  </table>
+  <p class="sub">标注 <span class="tag cost">昂贵</span> 的取值都有 I/O 或 API 开销，必须走第 07 节的缓存，且靠 <code>and</code>/<code>or</code> 短路避免无谓调用。</p>
+
+  <h3>名字可用性：三态 + 门控（单点判定）</h3>
+  <ol>
+    <li><b>恒定可用</b> —— 配置期只校验名字存在：<code>tor.*</code>、<code>tracker.*</code>、<code>sys</code> 的时间与计数、全部函数。</li>
+    <li><b>配置期门控（禁用）</b> —— 值依赖某项配置才存在：当前只有 <code>sys.upload_today / sys.download_today / sys.upload_month</code>（依赖 <code>global_speed_limit_curve.traffic_source</code>）。<b>没配 = 名字禁用</b>，用了就在 <code>load_config</code> 报「该值无数据源」，不是等到运行时才炸。</li>
+    <li><b>运行期不可用（报错）</b> —— 数据源当时拿不到：<code>server_state</code> 为 None / 键缺失、磁盘不可读、<code>raw()</code> 字段不存在、除零、类型不符 → 抛 <code>ExprError</code> → 按 05 的「出错即停规则」处理。</li>
+  </ol>
+  <div class="note"><b>绝不降级成假值。</b><code>sys.dl_speed</code> 拿不到就是报错停规则，<b>不返回 0</b> —— 返回 0 会让「全局速度低于阈值」这类条件在数据源失效时<b>静默成真</b>，进而批量触发限速/停止动作（这正是「保守默认」要挡的那类事故）。<br>反过来，<b>「值不存在」≠「求值出错」</b>：未匹配站点的 <code>tracker.name</code> = <code>"Unknown"</code>、无 HR 配置时 <code>tor.hr_condition_met</code> = <code>false</code> —— 这些是<b>有定义的缺省</b>（与旧条件同语义），正常参与求值，不报错、不停规则。</div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05 /语义</span>类型与求值</h2>
+  <ul>
+    <li><b>类型</b>：<code>int / float / bool / str / list / None</code>。算术只对数值；<code>and/or/not</code> 只接受 bool（避免 <code>size and ratio</code> 这类歧义，报错比猜好）。</li>
+    <li><b>哨兵不翻译</b>：qB 的 <code>-1</code>（从未/未设）、<code>-2</code>（用全局默认）、<code>8640000</code>（无 ETA）原样透传。要判“从未传输”就写 <code>last_activity == -1</code> —— 自动翻译成 0 会让“从未”和“刚刚”混为一谈。</li>
+    <li><b>缺失值</b>：字段缺失/不可得 → 抛 <code>ExprError</code>，不返回 None 参与比较。</li>
+    <li><b>出错即停规则（已拍板）</b>：求值抛 <code>ExprError</code> → <code>Rule.process</code> 的条件分支（<code>base.py:196</code> 的 try/except）改为返回 <b><code>(False, True)</code></b> = 不匹配 + <b>中断后续规则</b>；日志 <b>ERROR</b> 级（规则名 + 表达式 + 种子 + 原因）。<b>故障优先于 <code>stop_following_rules_if</code></b>：即使该规则配了 <code>never</code>，出错也停 —— 判据都不可信的时候，让后面的规则继续对这个种子做动作才是真风险。</li>
+    <li><b>日志节流</b>：同一规则同一类错误 5 分钟内只报一次（其后转 DEBUG 并计数），避免「每 tick × 每种子」刷屏；换原因或恢复后重新报。（与连接异常日志节流同一套路。）</li>
+    <li><b>影响面</b>：改的是 <code>Rule.process</code> 里条件异常的那一处分支，<b>旧 16 个条件同样适用</b>（它们抛异常时也停后续规则）—— 比现状更保守，方向一致。绝不让主循环崩，也绝不静默为真。</li>
+    <li><b>纯函数 / 幂等</b>：求值只读，不改任何状态；同一 tick 内同一表达式对同一种子结果稳定（缓存保证，见 07）。</li>
+  </ul>
+  <h3>静态检查（配置期能查出来的，别留到运行时）</h3>
+  <ul>
+    <li>未知标识符（前缀写错 / 字段拼错）/ 未知函数 / 参数个数不符</li>
+    <li><b>一层一个运算符违例</b>（第 03 节），报错直接给出改写后的写法</li>
+    <li><b>名字可用性</b>：被数据源门控禁用的名字（如未配 <code>traffic_source</code> 时用了 <code>sys.upload_today</code>）</li>
+    <li>字面量参与的不可能类型：<code>tor.size &gt; "abc"</code>、<code>"a" + 1</code></li>
+    <li>比较链 <code>a &lt; b &lt; c</code>、括号不配对、单位非法（<code>10GB</code>）</li>
+    <li>错误<b>聚合</b>进既有 <code>errors</code> 列表（与 <code>_validate_plugin_entry</code> 同风格），一次性报全，不做“遇到第一个就 raise”</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06 /落点</span>模块与接线</h2>
+  <p>新增 <code>src/auto_qb/rules/expr/</code> 包（约 600 行），<code>conditions.py</code> 里只加一个薄插件（约 40 行）：</p>
+  <table>
+    <tr><th>文件</th><th>职责</th></tr>
+    <tr><td class="m">expr/lexer.py</td><td>tokenizer：数字/单位/字符串/标识符/运算符，~120 行</td></tr>
+    <tr><td class="m">expr/parser.py</td><td>Pratt 解析 → AST；常量折叠；静态检查，~180 行</td></tr>
+    <tr><td class="m">expr/env.py</td><td><b>取值面单一事实源</b>：名字（含前缀）→ (取值器, 类型, 昂贵标记, <b>可用性判定器</b>)，~180 行</td></tr>
+    <tr><td class="m">expr/eval.py</td><td>AST 解释器 + 短路 + 错误类型 <code>ExprError</code>，~120 行</td></tr>
+    <tr><td class="m">conditions.py</td><td><code>ExprCondition</code>：<code>__init__</code> 编译，<code>match(ctx)</code> 求值，~40 行</td></tr>
+  </table>
+
+  <h3>四处接线（漏一处 = 功能静默消失）</h3>
+  <ol>
+    <li><b>config 校验</b>：<code>config/validation/rules.py</code> 的 <code>_PLUGIN_SPEC_VALIDATORS["expr"] = _validate_expr_condition_spec</code>。⚠ 该文件已依赖 <code>rules</code>（<code>from ...rules import registry</code> 函数内延迟导入），新增 import 同样走<b>函数内延迟导入</b>，不要在顶层建环。</li>
+    <li><b>schema</b>：<code>config/schema/rules.py</code> 的 <code>CONDITION_PLUGINS</code> 加 <code>Plugin("expr", …)</code>；<code>config/schema/fields.py</code> 的 <code>SPEC_KINDS</code> 加 <code>"expr"</code>。<b>守阵</b> <code>test_config_schema.py</code> 断言 schema 插件集合 == <code>registry.CONDITIONS</code>，漏加会红。</li>
+    <li><b>前端</b>：<code>web_ui/static/shared/config_rules.js</code> 的 <code>cfgSpecItems</code>（kind 映射）与 <code>cfgPluginDefaultSpec</code>（新条目初值）各加 <code>expr</code> 分支，渲染为多行文本框（复用已有 <code>text</code> 控件）。校验靠后端保存/预览接口返回错误 —— 前端不做第二套解析器。<span class="tag grey">P2</span> 可加“试算”按钮打 <code>/api/config/preview</code>。</li>
+    <li><b>知识库</b>：<code>memory-bank/rule-system.md</code> 新增「表达式条件」章（语法 + 取值表 + YAML 引号坑）；<code>modules.md</code> 的 rules 表加 <code>expr/</code> 一行；<code>conventions.md</code> 补「新条件字段一律先进 <code>expr/env.py</code>，不再新增固定条件插件」。</li>
+  </ol>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07 /性能</span>热路径与缓存</h2>
+  <p>条件在每 tick 对「每个种子 × 每条命中规则」求值（<code>interval: 0S</code> 的规则就是每轮全跑），5000 种子 × 数十规则时是几万次/轮。三条硬约束：</p>
+  <ul>
+    <li><b>编译一次</b>：解析与标识符解析全在构造期完成，AST 节点直接持有取值器对象，运行期不做字符串查表、不重新解析。</li>
+    <li><b>必须短路</b>：<code>and</code>/<code>or</code> 在解释器里显式短路 —— 否则 <code>seeding_time &gt; 3D and freespace("R:/") &lt; 100GiB</code> 会给每个种子都来一次磁盘系统调用。</li>
+    <li><b>昂贵值按次缓存</b>：<code>RuleContext</code> 加惰性 <code>expr_cache: dict</code>（<code>field(default_factory=dict)</code>），键 = 函数名+参数 / 昂贵字段名，生命周期 = 一次 <code>process()</code>。同一次规则执行里 <code>freespace(save_path)</code> 出现三次只查一次。不做 manager 级跨规则缓存 —— 跨规则共享要引入失效时机问题，违反「单一写线程」的简洁假设；真有需要再单开一轮。</li>
+  </ul>
+  <p>验收方式：新增 <code>scripts/bench_expr.py</code>（与既有 <code>scripts/ui_harness.py</code> 同风格：合成 N 种子 × M 规则，测每轮条件求值耗时），<b>数字实测后填进本表</b>，不预设。时间断言不进单测（flaky），只做数量级守阵。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08 /兼容</span>迁移对照表</h2>
+  <p>旧 16 个条件<b>全部保留、行为不变</b>。下表是「想换成表达式时怎么写」，同时也是 W2 的守阵测试用例来源 —— 每个旧条件配一条等价表达式，在同一 <code>FakeTorrent</code> 上断言两边结果一致。</p>
+  <table>
+    <tr><th>旧条件</th><th>等价表达式</th></tr>
+    <tr><td class="m">path: /x</td><td class="m">(tor.save_path ~ "/x") or (tor.content_path ~ "/x")</td></tr>
+    <tr><td class="m">size: "&gt;=100MiB"</td><td class="m">tor.size &gt;= 100MiB</td></tr>
+    <tr><td class="m">tags: ["a,b", "c"]</td><td class="m">(("a" in tor.tags) and ("b" in tor.tags)) or ("c" in tor.tags)</td></tr>
+    <tr><td class="m">category: ["regex:^HR"]</td><td class="m">tor.category ~ "regex:^HR"</td></tr>
+    <tr><td class="m">trackers: ["HHan"]</td><td class="m">tracker.name ~ "HHan"</td></tr>
+    <tr><td class="m">tracker_group: ["国内"]</td><td class="m">"国内" in tracker.groups</td></tr>
+    <tr><td class="m">state: ["is_complete&amp;is_uploading"]</td><td class="m">tor.is_complete and tor.is_uploading</td></tr>
+    <tr><td class="m">hr: condition-met</td><td class="m">tor.hr_condition_met</td></tr>
+    <tr><td class="m">hr: satisfied</td><td class="m">tor.hr_satisfied</td></tr>
+    <tr><td class="m">hr: condition-not-met</td><td class="m">not tor.hr_condition_met</td></tr>
+    <tr><td class="m">date_time: {day_of_week: 1-5, time: "10:00-23:00"}</td><td class="m">((sys.dow &gt;= 1) and (sys.dow &lt;= 5)) and ((sys.time_of_day &gt;= 10:00) and (sys.time_of_day &lt;= 23:00))</td></tr>
+    <tr><td class="m">seedtime: "&lt;24H"</td><td class="m">tor.seeding_time &lt; 24H</td></tr>
+    <tr><td class="m">upload_ratio: "&gt;1.5"</td><td class="m">tor.ratio &gt; 1.5</td></tr>
+    <tr><td class="m">upload_size: "&gt;10GiB"</td><td class="m">tor.uploaded &gt; 10GiB</td></tr>
+    <tr><td class="m">upload_size_today / _this_week / _this_month</td><td class="m">tor.upload_today / tor.upload_week / tor.upload_month &gt; 10GiB</td></tr>
+    <tr><td class="m">freespace: {path: "R:/", amount: "&lt;100GiB"}</td><td class="m">freespace("R:/") &lt; 100GiB</td></tr>
+  </table>
+  <div class="note"><b>口径差异（要写进文档）：</b><code>path</code> 旧条件对精确串两侧做 <code>path_normalize</code>（统一斜杠）；表达式 <code>~</code> 无前缀时也是全等，但对斜杠不做规范化 —— 跨平台配置请用 <code>regex:</code> 显式写。另：<code>upload_size_today</code> 等旧条件对负增量取 <code>max(0, 增量)</code>，表达式里 <code>upload_today</code> 沿用同一实现。</div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09 /实施</span>分波与验收</h2>
+  <table>
+    <tr><th>波次</th><th>内容</th><th>验收判据</th></tr>
+    <tr><td class="m">W1<br><span class="tag grey">内核</span></td><td>lexer + parser + AST + 静态检查（不接规则系统）</td><td>新增 <code>tests/test_expr_parse.py</code>：字面量/括号/前缀命名空间/<b>一层一个运算符的红绿用例</b>（<code>a and b or c</code>、<code>a and b and c</code>、<code>a &gt; b and c &gt; d</code>、<code>a / b &gt; c</code>、<code>a + b - c</code>、<code>not a and b</code> 全须报错且给出改写提示；括号组对该层不透明的正例通过）/语法错·未知名·比较链·单位非法；现有 1062 不退化</td></tr>
+    <tr><td class="m">W2<br><span class="tag grey">求值</span></td><td>env 取值面 + 可用性门控 + eval + 缓存 + <code>ExprCondition</code> + <code>base.py</code> 出错即停</td><td><code>tests/test_expr_eval.py</code>：第 08 节 16 条等价断言逐个对拍；哨兵值照原样透传；除零 / 类型不符 / 数据源不可用 → <code>ExprError</code> 且 <code>process()</code> 返回 <b><code>(False, True)</code></b>（含 <code>stop_following_rules_if: never</code> 也停的用例）；未配 <code>traffic_source</code> 时 <code>sys.upload_today</code> 在 <code>load_config</code> 被拒；<code>freespace</code> 同表达式只查一次（打桩计数）</td></tr>
+    <tr><td class="m">W3<br><span class="tag grey">接线</span></td><td>config 校验 + schema + 前端 kind + 守阵</td><td>拼错的表达式在 <code>load_config</code> 报出可读错误（含规则名与列位置）；<code>test_config_schema</code> 一致性绿；配置编辑器能新建/编辑 <code>expr</code> 条目</td></tr>
+    <tr><td class="m">W4<br><span class="tag grey">文档+基准</span></td><td>知识库回写 + <code>scripts/bench_expr.py</code></td><td><code>rule-system.md</code> 新增章；基准数字填进本文档第 07 节；<code>yapf</code> 过；全量 <code>uv run pytest tests -q</code> 实测数字记 <code>testing.md</code></td></tr>
+  </table>
+  <p class="sub">W5（旧条件退役 + 自动迁移）<b>不在本轮</b>：涉及生产 <code>config.yml</code>，需单独拍板并先做备份与 dry-run 比对。</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10 /风险</span>已知坑与待拍板</h2>
+  <h3>已知坑</h3>
+  <ul>
+    <li><b>YAML 引号</b>是头号踩坑点（第 03 节注）。文档与 schema 的 <code>help</code> 都要写，placeholder 直接给带引号的示例。</li>
+    <li><b>静态检查别过度</b>：只查字面量与已知类型能判定的冲突，字段值类型（如 <code>tracker</code> 是 str 还是空）运行期才能定，误报会让用户改不动配置。</li>
+    <li><b><code>raw()</code> 是逃生舱也是漏洞</b>：编译期不校验名字，运行期缺失报错 —— 必须在文档里写明“仅用于 qB 新字段，稳定字段请用正式名”。</li>
+    <li><b>昂贵函数在 interval=0S 的规则上是地雷</b>：<code>file_count()</code> 每轮每种子一次 API。文档标注 + 考虑在静态检查里对“未配 <code>interval</code> 却用了昂贵函数”给 WARNING（不是错误）。</li>
+    <li><b>断点续跑不受影响</b>：<code>process()</code> 只在 fresh 时评估条件（<code>base.py:191</code>），表达式求值纯读取，不干扰 <code>resume_index</code> 语义。</li>
+    <li><b>括号会明显变多</b>：一层一个运算符的代价是 <code>((a &gt; b) and (c &gt; d)) and (e &gt; f)</code> 这种嵌套成为常态，连 <code>a and b and c</code> 都要拆。换来的是「读配置的人完全不用想优先级、写的人也无处写错」。判定只有一处（计数 &gt; 1），要放宽成「同种连续放行」是一行改动。</li>
+    <li><b>前缀让表达式变长</b>：<code>tor.seeding_time</code> 比 <code>seeding_time</code> 长 4 个字符，但换来了 <code>group.*</code> / <code>tracker.*</code> 的可扩展性，也让「这个值从哪来」一眼可见 —— 值得。</li>
+  </ul>
+  <h3>已拍板（2026-09-20，不再回退）</h3>
+  <ol>
+    <li><b>并存</b> —— 新增 <code>expr</code>，旧 16 个条件保留，生产 <code>config.yml</code> 不动。</li>
+    <li><b>前缀</b> —— <code>tor.*</code> / <code>tracker.*</code> / <code>sys.*</code>，<code>group.*</code> 留位后续做。</li>
+    <li><b>额外值按数据源启用</b> —— 没数据源 = 名字禁用（配置期可判即拒绝）；运行期不可得 = 报错，绝不返回假 0。</li>
+    <li><b>出错即停规则</b> —— <code>(False, True)</code>，故障优先于 <code>stop_following_rules_if</code>。</li>
+    <li><b>一层一个运算符，没有例外</b> —— <code>not</code> / <code>&lt;</code> / <code>and</code> / <code>+</code> / <code>%</code> 一律占一层，同层出现第二个（<b>同种连续也算</b>）即报错；判定 = 「每层运算符计数 &gt; 1」，无策略表。</li>
+  </ol>
+  <div class="note"><b>第 4 条的代价要写进文档：</b>一条规则的条件出错，<b>该种子这一轮后续规则全停</b>。这是刻意的保守取向（判据不可信时不许后面的规则继续动作），但它意味着「某条规则写错」的爆炸半径是整条规则链 —— 所以日志必须 ERROR 级 + 节流后仍可见，且文档里写明“条件报错会让后续规则一起停”。</div>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11 /延伸</span>动作要不要也进这套体系</h2>
+  <p>问题原形：<code>if (tor.size &gt;= 10GiB) { tor.stop() }</code> —— 把动作也写成表达式体系里的东西。<b>结论：能，但要分三档，代价差一个量级。</b>共同点是「条件那一半」完全复用本计划的 expr 内核（一层一个运算符照样生效）；分歧在动作那一半要吃下多少语义。</p>
+
+  <table>
+    <tr><th>档</th><th>内容</th><th>写法例</th><th>代价</th><th>建议</th></tr>
+    <tr><td class="m">L1</td><td><b>动作参数</b>表达式化</td><td class="m">add_tags: ["= tor.name + '-HR'"]</td><td>小 —— 复用 expr 内核，纯求值、无副作用</td><td><span class="tag">顺手做</span></td></tr>
+    <tr><td class="m">L2</td><td><b>动作区</b>支持 if / else</td><td class="m">if (tor.size &gt;= 10GiB) { stop() }</td><td>中 —— 语句层语法 + <b>断点路径化</b> + 校验 + UI 卡片多一层</td><td><span class="tag grey">单开一轮</span></td></tr>
+    <tr><td class="m">L3</td><td>动作全面脚本化</td><td class="m">tor.size &gt;= 10GiB ? tor.stop() : add_tags(["x"])</td><td>大 —— UI 从卡片变文本框、四态结果塞进表达式、断点语义重做</td><td><span class="tag grey">不建议</span></td></tr>
+  </table>
+
+  <h3>为什么不建议 L3（四个硬点）</h3>
+  <ol>
+    <li><b>动作返回的不是 bool。</b>动作结果是四态 <code>success / skipped / failed / pending</code>（<code>base.py</code> 的 <code>ActionResult</code>）；failed 要 break、pending 要断点 —— 这是<b>顺序控制流</b>，不是布尔逻辑。表达式体系里没有它的位置，<code>if (tor.stop())</code> 这句话本身就问不出来。</li>
+    <li><b>断点是扁平索引。</b>现在 <code>task.resume_index = i + 1</code>（<code>base.py:224</code>）就是「第几个动作」。动作一旦嵌套进 if/else，断点得变成节点路径，续跑时还要保证 if 条件<b>不重估</b>（与现状「续跑跳过条件评估」同口径）。可做，但等于重做断点契约 —— 风险正好压在最复杂那条路径上（full-checking pending 续跑）。</li>
+    <li><b>副作用必须关进笼子。</b>求值必须纯读取（幂等，黄金法则 1）。<code>tor.stop()</code> 一旦可以出现在条件位置就是灾难，得靠语法位置硬性禁止：动作只允许出现在动作区。</li>
+    <li><b>UI 会掉一半。</b>现在动作是可视化卡片，每个插件有自己的 spec 表单（<code>checking</code> 还是多层子表单，<code>config_rules.js</code> 按 schema 渲染）。脚本化 = 只能给一个文本框，图形化配置编辑器这个方向基本作废。</li>
+  </ol>
+
+  <h3>如果做 L2，具体怎么落地</h3>
+  <ul>
+    <li><b>语句层</b>：动作区是<b>语句列表</b>，语句 = 动作项 ｜ <code>if (expr) { 语句列表 }</code> ｜ <code>if (expr) { … } else { … }</code>。条件就是本计划的 expr。</li>
+    <li><b>动作形态建议保持不变</b>（<code>- stop: true</code> 这种单键字典项），if 只是把它<b>包起来</b>。这样 object 型 spec（<code>checking</code> / <code>move_to</code> / <code>add_category</code>）不用去设计关键字参数语法，改动面最小。</li>
+    <li><b>前缀</b>：<code>tor.stop()</code> 里的 <code>tor.</code> = 作用对象，与取值面的前缀语义一致（将来 <code>group.stop()</code> 同理）。若采用上一条「列表项」形态则不需要前缀 —— 列表项天然作用于当前种子。</li>
+    <li><b>断点</b>：<code>resume_index</code> 从 int 改<b>路径</b>（如 <code>(2, "then", 1)</code>），续跑按路径跳到该语句；if 条件在续跑时<b>不重估</b>（路径已含分支选择）。</li>
+    <li><b>伪动作</b>：<code>ignore_next_action_error</code> 在 AST 下改为语句级属性，或继续保留为伪语句（语义不变）。</li>
+    <li><b>校验与 UI</b>：<code>_validate_plugin_entry</code> 扩展为「语句校验」；schema 的动作卡片要能嵌一层 if 容器。</li>
+  </ul>
+  <div class="note"><b>建议：</b>本轮（W1–W4）只做<b>条件表达式</b>，可选顺手带上 <b>L1 动作参数</b>。L2 单开一轮，且严格限在「if/else 包住现有列表项」—— 那样断点改造是唯一的大头，动作本身的 spec 形态一个都不用动。</div>
+
+  <h3><span class="tag grey">候选 · 不进本轮</span> L1（动作参数表达式）明细</h3>
+  <p>与条件表达式<b>安全边界一致</b>：都是纯读取、都能在配置期静态检查、都不产生副作用。这是它可行的核心理由。三种形态，代价从小到大：</p>
+  <ul>
+    <li><b>L1-a 内插</b> —— 扩展现有 <code>utils.replace_vars</code>（今天只有 <code>${required_seeding_time}</code>，且只吃 <code>tracker_conf</code>，拿不到种子）到 <code>tor.*</code> / <code>tracker.*</code>。约十几行，是 L1 的既有雏形。</li>
+    <li><b>L1-b 整值</b> —— 参数以 <code>=</code> 开头则整串按 expr 求值，结果按目标类型校验。例 <code>upload_speed_limit: "= tor.size / (24 * 3600)"</code>。</li>
+    <li><b>L1-c 显式键</b> —— <code>{expr: "..."}</code>，无歧义但啰嗦，不推荐。</li>
+  </ul>
+  <p><b>两个必须先定口径的坑（与条件那一边不同）：</b></p>
+  <ol>
+    <li><b>求值时机 → 幂等。</b>条件在 <code>matches()</code> 里求值、断点续跑时<b>跳过</b>（<code>base.py:191</code> 的 fresh 判定）；动作参数在 <code>execute()</code> 内、<b>每次执行都算，含续跑那一次</b>。参数里若用了 <code>sys.now</code>，首次与续跑会算出不同值 —— 要么把首次结果随断点持久化，要么禁止动作参数用时变值。</li>
+    <li><b>出错语义。</b>条件出错 = 停规则（已拍板）；动作参数算不出来 → <b>建议动作 fail</b>（走 ignore_error / break 语义），<b>绝不静默回落成空串或默认值</b>（回落会让“移动到空路径”这类事真的发生）。</li>
+  </ol>
+  <p><b>成本结构与条件相反：</b>条件是「内核为主、接线是常数」；L1 复用同一套内核，成本几乎全在接线 —— 12 个动作 spec 形态各异（bool / list / object / speed / str），object 型（<code>add_category</code> / <code>move_to</code> / <code>checking</code>）还要逐字段开口。校验侧另需新增「参数期望类型」元数据，UI 才知道哪个框能填表达式。</p>
+  <div class="note"><b>排序（与 python 插件的关系）：</b>条件表达式 → 用一阵 → 再决定做 L1 还是直接支持 python 插件。插件一旦落地，「按种子大小算限速」这类需求会被更通用的方式吃掉，L1 的全量接线可能白做。<b>所以 L1 只做 L1-a + 1~2 个高频字段的整值表达式，12 个动作全接一遍等真实需求。</b></div>
+</section>
+
+<footer>
+  规则条件表达式化 · 重构计划 &nbsp;·&nbsp; 2026-09-20 &nbsp;·&nbsp; auto-qb<br>
+  关联：<code>src/auto_qb/rules/conditions.py</code> · <code>rules/base.py</code> · <code>config/validation/rules.py</code> · <code>config/schema/rules.py</code> · <code>memory-bank/rule-system.md</code><br>
+  本文件为计划，未改动任何源码与配置。
+</footer>
+</main>
+</div>
+</body>
+</html>
