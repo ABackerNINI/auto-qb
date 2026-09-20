@@ -1475,3 +1475,13 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
 (`git show HEAD^:<file> | wc -l`), 别沿用会话中途量的 —— 上游合入会让基线行数变掉,
 本次就因此把 `web_commands` 的 730 记成 623、 `qbmanager` 的 816 记成 795, 提交后才发现,
 只能 amend(amend 又多一次 ref 写入风险)。
+
+## 生成型脚本往 markdown 里写相对路径（2026-09-20，create-issue 索引改造时踩到）
+
+- **`Path.relative_to()` 不会生成 `..` 回跳**: 目标不是前缀时它直接抛 `ValueError`, 而"索引目录 ← skill 目录"
+  这类关系**必然**需要 `../../.agents/skills/create-issue` 这种回跳 —— 用 `os.path.relpath()`。
+  症状很隐蔽: 我捕获异常后返回空串, 结果索引 HEADER 里**链接静默消失**(只剩文字), 不报错也不红。
+- **进 markdown 链接的路径必须 `.as_posix()`**: Windows 下 `str(Path)` 带 `\`, 写进 `](../../x/y.md)`
+  会变成转义或直接失效; 本次索引里就出现过 `memory-bank\issues` 这种串。
+- 判据: 凡是"脚本生成 .md / .html 并内嵌路径"的场景(issues 索引、tasks 索引同款), 落盘前统一
+  `Path(...).as_posix()`, 并在真仓库里 `head` 一眼看渲染结果, 别只看退出码 0。

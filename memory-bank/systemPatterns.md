@@ -190,14 +190,14 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 - **乐观 UI 只做白名单(pause/resume)**: `pendingOps[hash] = {patch, prev, ts}`, 真值匹配即清,
   3s 兜底回落, **失败立即回滚**。
   - ✅ **3s 兜底会显式回滚到 `op.prev`**(2026-09-19,
-    [issue 26-09-19-2141](issues/26-09-19-2141-webui-pending-timeout-stale-patch.html)):
+    [issue 26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html)):
     `_expirePending()` 在每轮 `refresh()` 里先回滚超时的补丁再 `delete`, 与失败回滚同一写法。
     - ❗**光 `delete` 不叫"回落真值"**: 旧写法只删 pendingOps、注释称"下轮以服务端为准", 而 rid
       未变时服务端**不回传数组**、行对象不被替换 ⇒ 补丁值永久留在行上(命令没执行却一直显示已暂停,
       hang 模式实测 3.66s 后行仍是 `s-paused`)。**要回到真值就必须显式写回 `op.prev`。**
     - ❗`isPending()` 超时**只返回 false、不 delete**: 模板每帧都调它, 在渲染函数里改响应式数据有
       递归更新风险; 回滚统一交给 `_expirePending()`(代价: 过期条目最多多活一个轮询周期)。
-  - ✅ **「真值匹配即清」已落地**(2026-09-19, [issue 26-09-19-2024](issues/26-09-19-2024-webui-truth-convergence.html)):
+  - ✅ **「真值匹配即清」已落地**(2026-09-19, [issue 26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html)):
     `refresh()` 拿到新数据时先 `_snapshotTruth()` 记下 pending hash 的**服务端原始值**,
     `reapplyPending()` 比它 ⇒ 对齐就 `delete`。回执后 `_pullTruthAfterCmd()` 立刻 refresh
     (不等轮询), 短退避 200→400ms 重试, 总窗口 1.5s, 超时仍由 3s 兜底收尾。

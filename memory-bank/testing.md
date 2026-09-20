@@ -23,17 +23,7 @@
 #   本次另改 3 处既有守阵的**目标**(不是判据): `_drain_web_commands` → `web.consume_commands`、
 #   回执 spy → `web.set_result`、`_log_cmd_timing` 的宿主 → `WebUIRuntime`; 自投递静态守卫的正则
 #   扩到同时认 `web_commands.put(` 与 `web.post_command(` 两种写法(否则重构后守卫直接失效)。
-# = 1057 (2026-09-20 实测; 本轮 **app.js 拆分**未新增单测, 数量不变) —— 前端静态守阵
-#   `test_frontend_static_bundle_health` 新增第 10 项「拆分接线」(`_scan_mixin_wiring`): 片段文件必须
-#   ①被 prism/index.html 的 <script> 引用 ②被 app.js `app.mixin()`(`ce-field` 走 `app.component`)注入
-#   ③跨文件成员不得重名 —— 漏挂/漏注入 = 整块功能静默消失(控制台无报错), 重名 = Vue 合并时后者覆盖
-#   前者、被盖掉的实现永不执行。红验: 删掉一行 `app.mixin(window.AQB_HR);` 与在 hr.js 里复制一个
-#   `kindIcon`, 两项都被精确报出(分别指明"漏注入"与"与 decorate.js 重名")。
-#   同时把原「只扫 app.js」的第 7/8/9 项(集成员取 hash / `STATE_RANK` 对齐 / 乐观 UI 撤下三处顺序)
-#   改为按 **app.js 整包**扫描(按 HTML 加载顺序拼接 app.js + 15 个片段) —— 拆分后同一条不变量的代码
-#   可能分处两个文件, 只看一个文件必漏(实测拆完当场报「找不到 _optimisticSettled 调用点」,
-#   而它只是随 `act()` 搬进了 commands.js, 功能没丢)。
-# = 1053 + **节拍对齐门控(issues/26-09-19-1900-webui-poll-cadence-mismatch, 方案 B)** 新增 1 项:
+# = 1053 + **节拍对齐门控(issues/26-09-19-1900-bug-webui-poll-cadence-mismatch, 方案 B)** 新增 1 项:
 #   `test_qbmanager.py::test_view_rebuild_waits_for_client_consume`(上一版没被 /api/state 取走就不生产下一版:
 #   >3000 种子时服务端 3s 产 2 版而客户端只取 1 版 ⇒ 实测 20 周期 40 次 → **20 次(省 50%)**;
 #   同时钉住两个边界: **脏标记必须保留**(只是不生产, 不是丢弃变化) 与 **force=True 必须绕过** ——
@@ -182,7 +172,7 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 >   `--expect-cmd hang` ⇒ 只跑 `hangChecks()`(双 UI **8 项 0 失败**), 判据 = pending 立即出现 /
 >   3s 兜底清除 / **最终状态色 == 点击前**。
 >   ❗它判的是「失败/未知绝不留永久假状态」在无回执场景下还成不成立, ok / error 两轮**都碰不到**
->   —— [26-09-19-2141](issues/26-09-19-2141-webui-pending-timeout-stale-patch.html)(超时后补丁值
+>   —— [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html)(超时后补丁值
 >   永久留在行上)就是这么溜过三道关口的。hang 下前端 `waitCmd` 超时是 40s, 混进主轮会把一轮拖到
 >   十分钟, 故做成独立模式而不是主轮的一段。
 > ⚠ 跑测用仓外 `--basetemp` 时, **该目录必须不存在**: 已存在则 pytest 开跑前会删它, 而本机

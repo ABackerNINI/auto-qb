@@ -3,12 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="aqb-issue-slug" content="{{SLUG}}">
-<meta name="aqb-issue-stamp" content="{{STAMP}}">
-<meta name="aqb-issue-status" content="{{STATUS}}">
-<meta name="aqb-issue-title" content="{{TITLE}}">
-<meta name="aqb-issue-summary" content="{{SUMMARY}}">
-<title>{{TITLE}} · auto-qb 计划外问题</title>
+<meta name="issue-slug" content="{{SLUG}}">
+<meta name="issue-stamp" content="{{STAMP}}">
+<meta name="issue-type" content="{{TYPE}}">
+<meta name="issue-tier" content="{{TIER}}">
+<meta name="issue-status" content="{{STATUS}}">
+<meta name="issue-title" content="{{TITLE}}">
+<meta name="issue-summary" content="{{SUMMARY}}">
+<title>{{TITLE}} · {{TYPE}} · 计划外问题</title>
 <style>
   :root {
     --bg: #10151a;
@@ -50,9 +52,11 @@
   .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
   .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
   .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
   section { grid-column: 2; margin-top: 44px; }
   h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
   h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
   h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
   p { margin-bottom: 12px; max-width: 78ch; }
   ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
@@ -65,6 +69,7 @@
   th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
   .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
   .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
   footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
   a { color: var(--accent-ink); }
 </style>
@@ -76,24 +81,25 @@
     <div class="toc-label">目录</div>
     <a href="#s1"><span class="no">01</span>现象与发现场景</a>
     <a href="#s2"><span class="no">02</span>证据</a>
-    <a href="#s3"><span class="no">03</span>影响面与严重度</a>
-    <a href="#s4"><span class="no">04</span>根因（初步）</a>
-    <a href="#s5"><span class="no">05</span>建议修法</a>
-    <a href="#s6"><span class="no">06</span>涉及文件清单</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
     <a href="#s7"><span class="no">07</span>状态变更日志</a>
     <div class="toc-foot">
-      计划外问题 · 入池不改码<br>
-      规范见 .agents/skills/create-issue/SKILL.md
+      类型 {{TYPE}} · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
     </div>
   </nav>
 
   <header class="cover">
-    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <div class="kicker">{{PROJECT}}计划外问题（未修）· {{TYPE}}</div>
     <h1>{{TITLE}}</h1>
     <p class="lede">{{SUMMARY}}</p>
     <div class="meta-row">
-      <div class="item"><div class="k">编号</div><div class="v">{{STAMP}}-{{SLUG}}</div></div>
+      <div class="item"><div class="k">编号</div><div class="v">{{STAMP}}-{{TYPE}}-{{SLUG}}</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">{{DATE}}</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">{{TYPE}}</span></div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">{{STATUS}}</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">{{MODULE}}</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">{{REPORTER}}</div></div>
@@ -107,42 +113,39 @@
 
   <section id="s2">
     <h2><span class="no">02</span>证据</h2>
-    <p class="todo">TODO: 文件:行号、报错/日志原文、最小复现步骤。贴原文，不要转述。</p>
-<pre><code># 复现
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 复现 / 输出原文
 TODO</code></pre>
   </section>
 
   <section id="s3">
-    <h2><span class="no">03</span>影响面与严重度</h2>
+    <h2><span class="no">03</span>影响面</h2>
     <table>
       <tr><th>维度</th><th>结论</th></tr>
-      <tr><td>触发频率</td><td class="todo">TODO</td></tr>
-      <tr><td>影响范围</td><td class="todo">TODO（哪些视图/哪些站点/哪些配置开关下）</td></tr>
-      <tr><td>数据风险</td><td class="todo">TODO（是否可能误删/限速错配/状态写坏）</td></tr>
+      <tr><td>触发条件</td><td class="todo">TODO（什么配置/什么数据量下必现）</td></tr>
+      <tr><td>影响范围</td><td class="todo">TODO（哪些视图/哪些站点/哪些开关）</td></tr>
       <tr><td>严重度</td><td class="todo">TODO（低 / 中 / 高）</td></tr>
     </table>
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>根因（初步）</h2>
-    <p class="todo">TODO: 有结论写结论；没结论写“待查”，并列出已排除的假设。不要把猜测写成结论。</p>
-    <div class="callout">已排除：TODO</div>
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul class="todo">
+      <li>TODO: <code>文件:行号</code>（取证 {{DATE}}）· 符号名 · grep 关键词</li>
+    </ul>
   </section>
 
   <section id="s5">
-    <h2><span class="no">05</span>建议修法</h2>
-    <p class="todo">TODO: 方向 + 候选方案 + 各自代价 + 推荐。只写方案，不在本报告里实施。</p>
-    <h3>方案 A</h3>
-    <p class="todo">TODO</p>
-    <h3>方案 B</h3>
-    <p class="todo">TODO</p>
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查（已排除：TODO）</div>
   </section>
 
   <section id="s6">
-    <h2><span class="no">06</span>涉及文件清单</h2>
-    <ul class="todo">
-      <li>TODO: 预计会动的文件（供后续判断跨计划冲突）</li>
-    </ul>
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p class="todo">TODO / 待定</p>
   </section>
 
   <section id="s7">
@@ -150,12 +153,14 @@ TODO</code></pre>
     <ul>
       <li>{{DATE}} — 入池，状态 <strong>{{STATUS}}</strong>（计划外，未修）</li>
     </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
 
   <footer>
-    auto-qb · memory-bank/issues/{{STAMP}}-{{SLUG}}.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+    {{STAMP}}-{{TYPE}}-{{SLUG}}.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
   </footer>
 
 </div>

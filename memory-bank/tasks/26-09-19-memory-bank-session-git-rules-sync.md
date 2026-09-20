@@ -4,7 +4,7 @@
 **Started:** 2026-09-19
 **Owner:** 本 worktree 会话 (auto-qb-clone2, 单会话连续实施)
 **Plan doc:** (无 —— 用户指定规则 + 撞见的文档漂移, 未产出计划文档)
-**Summary:** 用户要求「记录进 AGENTS.md: 开始工作前先拉取远程分支, 避免在落后的分支上工作」。落地时发现同一条会话协议有 **4 处 always-on 入口** (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), 只改一处等于其它三条路径下规则不存在 ⇒ 四处全改, 并把 memory-bank SKILL 的「会话开始 (3 步)」扩为 4 步。过程中撞见 `conventions.md` 仍写「🔴 绝对不要 push」与 `AGENTS.md` 现行「提交 = commit + 自动推送」矛盾 ⇒ 先入池 issue `26-09-19-2359-memory-bank-push-rule-drift`(Open), 用户拍板方案 A 后改为 **入口文件单点定义 + 知识库只留指针**, issue 转 **Fixed**。共 7 笔提交, 闸门 `uv run pytest tests -q` **1054 passed** 全程未变。
+**Summary:** 用户要求「记录进 AGENTS.md: 开始工作前先拉取远程分支, 避免在落后的分支上工作」。落地时发现同一条会话协议有 **4 处 always-on 入口** (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), 只改一处等于其它三条路径下规则不存在 ⇒ 四处全改, 并把 memory-bank SKILL 的「会话开始 (3 步)」扩为 4 步。过程中撞见 `conventions.md` 仍写「🔴 绝对不要 push」与 `AGENTS.md` 现行「提交 = commit + 自动推送」矛盾 ⇒ 先入池 issue `26-09-19-2359-docs-memory-bank-push-rule-drift`(Open), 用户拍板方案 A 后改为 **入口文件单点定义 + 知识库只留指针**, issue 转 **Fixed**。共 7 笔提交, 闸门 `uv run pytest tests -q` **1054 passed** 全程未变。
 
 ## 原始请求
 
@@ -55,7 +55,7 @@
 - **23:50** `738fe0d`: 发现 SKILL.md 的「会话开始 (3 步)」仍是旧口径 ⇒ 扩为 4 步。核对 `HEAD` == `refs/heads/develop`; Gitee ✅, GitHub ✅(`fed62a8..738fe0d`)。
 - **23:55** `67b3828`: `.github/instructions/ai-lib.md` 是第 4 份入口, 同步。提交时主线被并发会话推进 2 个 ⇒ 先 commit(`0811ac5`)再 `git pull --rebase` 无冲突 → `67b3828`。Gitee ✅ GitHub ✅。
 - **23:58** `dc9a854`: `conventions.md`「Git 约定」补指针(不复述)。Gitee ✅ GitHub ✅。
-- **23:59** 同一节紧邻的「🔴 绝对不要 push (2026-09-10)」与新规则矛盾被暴露 ⇒ 入池 `memory-bank/issues/26-09-19-2359-memory-bank-push-rule-drift.html`(Open, 5 处证据 + 根因 + A/B 两案 + 验收方式), `363458e`; Gitee ✅, GitHub 超时, 不重试。
+- **23:59** 同一节紧邻的「🔴 绝对不要 push (2026-09-10)」与新规则矛盾被暴露 ⇒ 入池 `memory-bank/issues/26-09-19-2359-docs-memory-bank-push-rule-drift.html`(Open, 5 处证据 + 根因 + A/B 两案 + 验收方式), `363458e`; Gitee ✅, GitHub 超时, 不重试。
 - **00:05** 用户拍板方案 A ⇒ `a786a1f`: `conventions.md` 五处改为「以 `AGENTS.md` 为单点定义」+ 历史沿革(09-10 越界事故与"推送须经授权"的教训**保留**, 标"已被上面取代, 别照抄"); `AGENTS.md:126` 补"本条为单点定义, 优先于 memory-bank 历史表述"直击根因。验证: 全文搜四个关键词, 残留命中只剩 `conventions.md:9` 沿革句与 `:137`「已作废」句; 两入口答案一致; 1054 passed。issue 转 **Fixed**(meta + 封面徽标两处一起改), `_index.md` 由 `gen_issues_index.py` 重建。Gitee ✅; GitHub `send-pack: unexpected disconnect`, 不重试。
 - **00:11** `4bb7f03`: `activeContext.md`「定案口径」补两条规则的指针(各会话开工第一件事读的是它)。守阵 8 passed。Gitee `a786a1f..4bb7f03` ✅; GitHub 21s 超时, 不重试。
 - **00:15** 立档本档案并重建 `tasks/_index.md`。⚠ 立档时踩到一个守阵坑: 档案规范没写 `**Status:**` 的合法取值, 照其它档案的观感写成 `✅ 完成` ⇒ `test_memory_bank.py` 两条守阵同时红(缺合法状态行 + 索引分区不一致), 因为守阵正则只认 `In Progress|Pending|Completed|Abandoned`。改成 `Completed` 并重跑 `gen_tasks_index.py` 后才全绿。
@@ -71,7 +71,7 @@
 | `.github/instructions/ai-lib.md` | always-on 入口 4/4 |
 | `memory-bank/conventions.md` | 只留指针 (Git 约定 / 协作约定两节) |
 | `memory-bank/activeContext.md` | 只留指针 (定案口径节) |
-| `memory-bank/issues/26-09-19-2359-memory-bank-push-rule-drift.html` + `_index.md` | 漂移的 issue 报告 (Fixed) + 生成物索引 |
+| `memory-bank/issues/26-09-19-2359-docs-memory-bank-push-rule-drift.html` + `_index.md` | 漂移的 issue 报告 (Fixed) + 生成物索引 |
 
 不涉及: `src/` / `tests/` / `config.yml` / `auto-qb-data/` —— 全程纯文档, 未动一行代码。
 

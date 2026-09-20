@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="aqb-issue-slug" content="webui-poll-gate-no-net-saving">
-<meta name="aqb-issue-stamp" content="26-09-19-2122">
-<meta name="aqb-issue-status" content="Open">
-<meta name="aqb-issue-title" content="节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径">
-<meta name="aqb-issue-summary" content="节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档">
+<meta name="issue-slug" content="webui-poll-gate-no-net-saving">
+<meta name="issue-stamp" content="26-09-19-2122">
+<meta name="issue-status" content="Open">
+<meta name="issue-type" content="perf">
+<meta name="issue-tier" content="standard">
+<meta name="issue-title" content="节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径">
+<meta name="issue-summary" content="节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档">
 <title>节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径 · auto-qb 计划外问题</title>
 <style>
   :root {
@@ -50,6 +52,7 @@
   .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
   .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
   .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
   section { grid-column: 2; margin-top: 44px; }
   h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
   h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
@@ -95,6 +98,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-2122-webui-poll-gate-no-net-saving</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 21:22</div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>

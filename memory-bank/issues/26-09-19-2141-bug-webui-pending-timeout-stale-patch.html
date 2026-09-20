@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="aqb-issue-slug" content="webui-pending-timeout-stale-patch">
-<meta name="aqb-issue-stamp" content="26-09-19-2141">
-<meta name="aqb-issue-status" content="Fixed">
-<meta name="aqb-issue-title" content="3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立">
-<meta name="aqb-issue-summary" content="isPending() 超时只 delete pendingOps[hash], 注释称&#x27;下轮以服务端为准&#x27;; 但 rid 未变时服务端不回传数组、行对象不被替换 ⇒ 乐观补丁(kind=paused)留在行上不走。hang 模式实测: 3.66s 清 pending 后行仍 s-paused, 真值 s-downloading">
+<meta name="issue-slug" content="webui-pending-timeout-stale-patch">
+<meta name="issue-stamp" content="26-09-19-2141">
+<meta name="issue-status" content="Fixed">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-title" content="3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立">
+<meta name="issue-summary" content="isPending() 超时只 delete pendingOps[hash], 注释称&#x27;下轮以服务端为准&#x27;; 但 rid 未变时服务端不回传数组、行对象不被替换 ⇒ 乐观补丁(kind=paused)留在行上不走。hang 模式实测: 3.66s 清 pending 后行仍 s-paused, 真值 s-downloading">
 <title>3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立 · auto-qb 计划外问题</title>
 <style>
   :root {
@@ -50,6 +52,7 @@
   .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
   .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
   .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
   section { grid-column: 2; margin-top: 44px; }
   h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
   h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
@@ -95,6 +98,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-2141-webui-pending-timeout-stale-patch</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 21:41</div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>

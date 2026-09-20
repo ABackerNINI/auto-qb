@@ -107,7 +107,7 @@
   凭载荷大小直接开药方十有八九修错地方。同类端点(`/api/torrents/{hash}/files`、`/api/search` 等)同样的
   1 行改法**尚未做**(用户触发型、不在轮询路径上)。报表已追加 **§11**。
   **真机走查反馈 · 乐观 UI 反应 2-4s (2026-09-19, 已入库 `a8eb6e8`)**: 用户真机反馈「乐观 UI 已生效, 但反应
-  时间太长, 估计 2-4 秒」([issue 26-09-19-1939](issues/26-09-19-1939-webui-optimistic-latency.html))。
+  时间太长, 估计 2-4 秒」([issue 26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html))。
   **先量后改**: 桩服务回执是瞬时的, 本地复现不出来 —— 用 Playwright `page.route` 给命令 POST **注入人为
   延迟**, 钩住 `applyOptimistic` 量三个时刻(菜单项 click → 补丁贴上 → DOM `.is-pending`)。结果:
   注入 2000ms 时 `act()`(整组)补丁 **2012ms** / `actTorrent()`(单种子)**2004ms** 才贴, 而 `actEpisode()`
@@ -122,10 +122,10 @@
   (新增「P0-3 补丁先于 POST(注入 800ms 仍 <400ms)」, 实测 4~5ms; error 模式加「慢投递 + 失败回执后
   回滚干净」)。**未追**: 真机 POST 为何慢到秒级(长 tick / GIL / 线程池)—— UI 已不依赖它, 复测看
   `[perf] … POST xxxms`, 持续 >400ms 再动服务端。
-  **顺带发现另立 issue(未修)**: [整剧操作在剧行上无 `is-pending`](issues/26-09-19-1959-webui-show-row-no-pending.html)
+  **顺带发现另立 issue(未修)**: [整剧操作在剧行上无 `is-pending`](issues/26-09-19-1959-bug-webui-show-row-no-pending.html)
   —— 补丁 0ms 贴上但 `.show-row` 不绑 pending(剧行默认折叠), 与 BUG-3 同类的漏绑。
 - **真机复测反馈 · 「乐观后 2-4s 才恢复正常」(2026-09-19, 已入库 `32f531d`)**: 上一条修的是「点击 → 变灰」,
-  用户实际报的是**第二段**「变灰 → 真值」([issue 26-09-19-2024](issues/26-09-19-2024-webui-truth-convergence.html))。
+  用户实际报的是**第二段**「变灰 → 真值」([issue 26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html))。
   根因: `systemPatterns` 写的「真值匹配即清」**从未实现**(只有 3s 超时与失败回滚两个出口) + 回执后
   **不刷新**、真值要等下一轮轮询(>3000 种子 3s)。**修法 A+B1**: `refresh()` 里 `_snapshotTruth()`
   记本轮 payload 原始值 ⇒ `reapplyPending()` 比它、对齐即清; 回执成功后 `_pullTruthAfterCmd()`
@@ -268,3 +268,15 @@
 - **状态变化触发** (`on_torrent_state_enum_changed`): `store.state_snapshot` 已保存上一轮枚举状态, `_handle_state_transitions` 是现成的"状态转移检测"参考实现 (grouping 内部用); 事件分派用它对比上轮/本轮状态枚举筛选触发。
 - **删除触发** (`on_torrent_deleted`): 用 `store.refresh` 返回的 removed 及其删除前快照副本触发; 白名单只允许 `print_torrent_details` 只读留档。
 - **新流量源**: `curves.py` 保持无项目内依赖; 数据源解析独立成函数返回 `List[HistoryRow]` 即可复用 aggregate/curve_speed 全链路。
+
+### 工程化 / 知识库（2026-09-20）
+
+- **create-issue skill 类型化改造（已实施）**: 计划 [26-09-20-0941](../docs/plans/26-09-20-0941-issue-typing-plan.html)。
+  ① 8 类类型进文件名第二段 `<时间>-<type>-<slug>.html`（bug / perf / docs / test / refactor / feat / chore / question，
+  枚举单点在 `scripts/_common.py` 的 `TYPES`）；② 表单分两档 —— `light` 便签（现象一句话 + 位置，≤2 分钟）与
+  `standard` 标准（现象 / 证据 / 影响面 / 定位锚点，≤10 分钟），根因与建议修法一律降为可选、默认"待查"；
+  ③ 防过期五条（只记事实不记结论 / 行号标"当时"+ 符号 + grep 词 / 不为填单做分析 / 证据标取证时间 / 开工先复验）；
+  ④ 通用化 —— meta 去 `aqb-` 前缀改 `issue-*`，目录 `--dir`（不传按 memory-bank/issues → issues → docs/issues 探测）、
+  仓库根改 `.git` 向上探测（不再 `parents[4]`）、品牌 `--project` 可选注入、索引 HEADER 链接动态计算；
+  ⑤ 存量 8 份报告已迁移（bug 4 / perf 3 / docs 1），17 处外链同步，索引顶部有 Open 按类型计数表。
+  文件名与状态取值由生成器守卫（`--check` 可挂 CI）。单测 **1057 passed** 不变。

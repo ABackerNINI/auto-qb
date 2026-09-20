@@ -44,6 +44,8 @@
 
 其它惯用: `tq` = task_queue, `conf` = 配置对象, `ctx` = RuleContext, `task`/`origin` = 队列任务 (origin 指触发校验的规则任务), `tors` = TorrentDictionary 列表, `rec` = TorrentRecord, `handled`/`stop` = process 返回值, `_` 前缀 = QbManager 内部方法 (mixin 方法一律 `_` 开头)。
 
+**计划外问题报告文件名** (create-issue skill, 2026-09-20): `<YY-MM-DD-HHMM>-<type>-<slug>.html` —— type 在文件名第二段, 取值 `bug` / `perf` / `docs` / `test` / `refactor` / `feat` / `chore` / `question`(枚举单点定义在 `.agents/skills/create-issue/scripts/_common.py` 的 `TYPES`)。档位由类型定: 便签档 `light`(docs / refactor / chore / question / test 缺口)只写现象+位置, 标准档 `standard`(bug / perf / feat / test 失败)才取证; 根因与建议修法一律可选, 默认"待查"。
+
 ## 类型注解 (来自 .github/instructions/py-type-lint.instructions.md)
 
 1. 非必要不使用 `Any`。

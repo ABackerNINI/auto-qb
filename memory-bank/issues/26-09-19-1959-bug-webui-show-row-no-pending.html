@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="aqb-issue-slug" content="webui-show-row-no-pending">
-<meta name="aqb-issue-stamp" content="26-09-19-1959">
-<meta name="aqb-issue-status" content="Fixed">
-<meta name="aqb-issue-title" content="整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈">
-<meta name="aqb-issue-summary" content="剧行 .show-row 不绑 is-pending(只有集行 .ep-row 绑), 整剧暂停/开始时剧行折叠 ⇒ 补丁 0ms 也无可见反馈; 与 BUG-3 同类的漏绑">
+<meta name="issue-slug" content="webui-show-row-no-pending">
+<meta name="issue-stamp" content="26-09-19-1959">
+<meta name="issue-status" content="Fixed">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-title" content="整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈">
+<meta name="issue-summary" content="剧行 .show-row 不绑 is-pending(只有集行 .ep-row 绑), 整剧暂停/开始时剧行折叠 ⇒ 补丁 0ms 也无可见反馈; 与 BUG-3 同类的漏绑">
 <title>整剧(show 级)操作在剧行上没有 is-pending 标记: 补丁 0ms 贴上但用户看不到任何即时反馈 · auto-qb 计划外问题</title>
 <style>
   :root {
@@ -50,6 +52,7 @@
   .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
   .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
   .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
   section { grid-column: 2; margin-top: 44px; }
   h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
   h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
@@ -95,6 +98,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-1959-webui-show-row-no-pending</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 19:59</div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">受控测量（顺带发现，2026-09-19）</div></div>
     </div>
