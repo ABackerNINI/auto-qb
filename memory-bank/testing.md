@@ -107,17 +107,18 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 
 1. **每个测试文件头部 docstring 维护 "## 测试计划" 清单** — 项目明文规定: 新增测试必须同步更新对应文件的清单 (README 也强调)。
 2. 文件名与被测模块对应 (`test_actions.py` ↔ `rules/actions.py`); 一个模块可以有多个文件 (如 test_rules_core/test_rule_base/test_rule_engine 拆分)。
-3. 测试粒度小而多 (756 个), 名字用中文/英文短语描述场景。
+3. 测试粒度小而多 (**1058 条**, 2026-09-20 Windows 收集数; 基线 passed/skipped 见本文件顶部), 名字用中文/英文短语描述场景。
 4. **平台相关测试必须以 `monkeypatch` 固定平台** — GitHub Actions 跑在 Linux, 而本项目以 Windows 为运行环境。**判据是"本地全量绿"不算数**: 2026-09-19 Linux CI 一次红了 3 条, 全是"Windows 全绿 / Linux 全红"型 —— ①`shutil.rmtree` 在 POSIX 走 fd 版实现(传纯文件名 + `dir_fd`), 副作用记账器记到裸名字被判越界(76 条假阳性); ②`PlatformChannel("win32")` 里 `import winreg` 在 Linux 抛 `ModuleNotFoundError`, 而调用方只 catch `OSError`; ③`connect()` 真实连 `127.0.0.1:16585`, 是否抛异常取决于机器环境。修法与判别法见 [pitfalls.md](pitfalls.md)。验证 Linux 行为本机可用 WSL(见 pitfalls 同条)。纯 Windows 行为 (如长路径 `\\?\` 前缀) 的测试若直接断言, 在 Linux CI 上必失败 (2026-09-10 实测 3 例): `test_utils.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用 `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。规则: 测试主体行为的是"平台逻辑"而非"当前真实平台", 一律显式 monkeypatch, 不要依赖运行环境。
 5. **`test_web.py` 不只测 FastAPI 路由**: 除鉴权/API/命令入队/设置读写/`?rid=` 视图版本门控/**静态资源 no-cache 响应头**/**前端静态资源守阵**(`test_frontend_static_bundle_health`: 冲突标记残留、JS 注释孤儿续行、**装了 node 时跑 `node --check` 真语法校验**、CSS 规则块漏闭合、`<transition>` 吞弹窗、模板引用的静态资源是否存在 —— 这类问题会让整页只剩背景色或整块功能静默失效)外, 还覆盖 WEB 功能的 manager 侧 —— 搜索索引构建与搜索、`_drain_web_commands` 各命令执行(含未知命令/异常的容错)、`ensure_group_view`/`ensure_group_state` 脏重建与版本自增、`_state_kind` 状态分类、`build_group_view` 字段(含单种子大小/总大小/标签/分类/保存路径/**组级 added_on 取组内最大值/组级 hr_triggered 与 hr_pending 计数**)、**错误原因展示**(TASK015: `_error_reason` 的 missingFiles→"文件丢失" / error→tracker `msg` / 非错误→空串, `refresh_error_reasons` 的预算与 TTL 限额、虚拟 tracker 条目跳过、离开错误态清空缓存、qB 断连跳过且不清值)、**HR 展示字段**(`hr_tag`/`hr_tag_done` 文本 + `hr_triggered`/`hr_satisfied` 布尔 + `hr_req_time`/`hr_req_ratio` 阈值)、`apply_new_config` 分级应用。找 WEB 功能的测试先看这个文件。`test_speed_curve.py` 另覆盖 **`_traffic_view` 只读快照**的各分支(disabled/ok 含 periods 与 target+actual/dry_run 无 actual/manual 原因/stale 的两种原因码)。
 
 > ⚠ **前端渲染逻辑无法靠 pytest 覆盖**: 模板表达式错误(computed 当函数调用等)会让页面整块空白而测试全绿 —— 改前端必须做浏览器冒烟(假 qB + 临时 data_dir, 完事清理), 详见 [pitfalls.md](pitfalls.md)。**半个例外**: "整包 JS 语法损坏"(合并冲突残留、注释孤儿续行)与"模板引用缺失静态资源"属纯静态可判定, 已由 `test_frontend_static_bundle_health` 守阵(2026-09-17 实测白屏故障的防回归); 模板/表达式层面的错误仍只能靠真机页面看。
 >
-> ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")** ——
-> **Playwright 环境装在哪 / 为什么必须带 `NODE_PATH` / 换机器怎么自检**见
-> [techContext.md](techContext.md)「浏览器冒烟环境 (Playwright)」(2026-09-20 实测: 本机已装好, 无需安装):
+> ✅ **2026-09-19 起浏览器冒烟已脚本化, 不再"只能人工点"** ——
+> **两条轨道: 首选 `agent-browser`(1.3.0 起 Windows 可用, 2026-09-20 已实测), 它不可用才回退 Playwright
+> —— 本节下面讲的是回退轨道 `ui_smoke.cjs`。环境装在哪 / 为什么必须带 `NODE_PATH` / 换机器怎么自检**见
+> [techContext.md](techContext.md)「浏览器自动化环境(两条轨道)」:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
-> (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`), `scripts/ui_smoke.cjs` 用 Playwright 跑
+> (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`), `scripts/ui_smoke.cjs` 用 Playwright 跑(**回退轨道**)
 > prism/atlas 双 UI 断言(当前 **54 项 0 失败**(ok 模式)/ **54 项 0 失败**(`--expect-cmd error`, 回滚路径;
 > 单 UI 各 27 项)/ **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4 项),
 > 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
@@ -139,7 +140,7 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > 并**内置 A/B 基准**(同进程内关/开窗口化各跑 3 轮对比 refresh 与长任务)。
 > 顺带一提: 换 `--torrents N` 跑不同规模的库, 就能量出"单轮 refresh 耗时 × 种子数"曲线 ——
 > 前端轮询档位就是这么定的(1000:143ms / 3000:353ms / 5000:~550ms)。
-> 典型用法: 起服务 → `NODE_PATH=<workspace>/node_modules node scripts/ui_smoke.cjs` → 关服务。
+> 典型用法: 起桩服务 → 跑 `ui_smoke.cjs` → 关服务(**完整命令与 `NODE_PATH` 见 techContext 同节**, 此处不重复)。
 > 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、
 > 滚动总高与末行可达、主线程长任务、**批量动作是否真的合成一条请求**(靠 `page.on("request")`
 > 数 `/api/torrents/bulk` 与逐目标端点的次数 —— 这类"发了几次请求"的断言单测根本写不出来)。
@@ -181,8 +182,9 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 >   沙箱的删除拦截层会拉起回收站助手进程, 被 `tests/sidefx.py` 记成越界 POPEN ⇒ 全绿也会在
 >   某个用例的 teardown 报 ERROR(实测复用旧目录得 `1052 passed + 1 error`, 换全新路径即干净)。
 >   `COVERAGE_FILE` 同理要指到仓外(仓内 `.coverage` 会让覆盖率在启动时删仓内文件而中止)。
-> 版本与取实例的三条硬约束见 pitfalls(playwright-core 版本须与本机 chromium 对齐 / 必须 CJS /
-> Vue 根实例走 `#app._vnode.component.proxy`)。
+> 写冒烟脚本的三条硬约束: ①**必须 CJS**(不能 ESM); ②Vue 根实例走 `#app._vnode.component.proxy`
+> (`__vue_app__._instance` 恒空); ③`playwright-core` 版本须与本机 chromium 对齐 —— 环境侧细节见
+> [techContext.md](techContext.md)「轨道二」, 取实例与读数时机的坑另见 [pitfalls.md](pitfalls.md)。
 5.5 **`test_sync.py` 专测增量同步层**: `TorrentRecord.apply_delta`(只遍历 patch 字段/变化字段集/量化/双通道源/`_raw` 兜底/`state_enum` 缓存)、`TorrentStore.apply_sync`(首轮全量/增量只改变化记录/无变化零成本/增删/全量剪除/待报删除/降级/异常/`reset_sync`)、以及 QbManager 接线(增量轮不做 schema 校验、变化集与冲突脏组)。改 `torrents.py` 的同步层或 `_refresh_torrents` 时必须同步此文件。
 6. **`test_impact.py` 直接测分级表而非被测端**: 用真实 `Config()`(字段默认即全默认实例) 构造新旧配置做 diff, 分级表外字段用 `SimpleNamespace` 替身(验证“未列出默认 L2”); 含 `_diff_flat`/`_diff_trackers`/`max_level`/`restart_required_paths` 直测。**改分级表或新增配置项时必须同步此文件**(新增配置项未补表 -> 默认 L2, 分级错误会让热重载静默不生效或误要求重启)。
 7. **`test_memory_bank.py` 守知识库结构**(2026-09-17 新增, 不覆盖 src): `_index.md` 登记项 ↔ `tasks/TASK*.md` **双向一致** / 文件名 `TASKnnn-slug.md` / 五个必备章节齐全 / 档案 `**Status:**` 与索引分区一致 / 索引保留四个状态分区 / **档案 slug 唯一 + 索引同一 TASKID 只登记一次**(2026-09-18 补: 并行 worktree 各自立档会产出逐字节相同的重复档案与重复索引条目, 而 dict 式解析会静默覆盖, 双向一致与状态分区两个守卫都漏) / **`activeContext.md` 不得出现 `^- 2026-` 流水账纪要行** / skill 载体存在且 `AGENTS.md` 与 `copilot-instructions.md` 均声明立档阈值并指向 skill。改 `memory-bank/` 结构或会话协议时必须同步此文件 (红绿验证过: 幽灵任务与纪要回流两类违例都会失败)。
