@@ -57,6 +57,14 @@
 
 - **列设置被重置 = 多标签页整份覆盖 (2026-09-20, ✅ 已修并验证 → issue 置 `Fixed`; 未提交; 剩用户真机走查)**: 用户报"栏的顺序/显示/宽度经常被重置"。**根因实测确认**: 内存是**加载时读一次的快照**(`app.js:273 initialColState`) + `saveColState()` **整份写回** ⇒ **last-writer-wins**, 谁最后动一下存储就变成谁的快照, 先改的标签被静默吞掉(入池时猜的"写失败/读入洗净/自适应覆盖/v3→v4 迁移"**全部排除** —— 单标签六路径全保持, 只有第二个标签能复现)。修法: **F1** `saveColState(page)` 改 read-modify-write(以存储为底, 只覆盖本 page 四段; 6 处调用点传 page) + **F2** `storage` 事件 → `adoptColState()` 整份采用 + **F3** `visibilitychange` 回到可见补漏。**F1 单独不够** —— 用户两个标签改的通常是同一个表, page 级合并同表仍然后写赢。冒烟新增「列设置多标签页互不覆盖」⇒ ok/error 双模式各 **56 项 0 失败**; 红验(摘掉标签 2 的 storage 监听)确认守阵钉得住; 单测 **1062 passed** 未退化。后端零改动, **未升 `COLS_STORE_KEY`**。计划 [docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html](../docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html); 档案 [tasks/26-09-20-webui-column-prefs-reset.md](tasks/26-09-20-webui-column-prefs-reset.md); 报告 [issues/26-09-20-1800-bug-webui-column-prefs-reset.html](issues/26-09-20-1800-bug-webui-column-prefs-reset.html)。**真机走查**: 开两个标签各改一次列(隐藏 + 拖宽), 互相刷新确认都不丢。
 
+- **状态栏「今日流量」视觉重做 (2026-09-20, ✅ 已提交推送 `94c6857` → issue 26-09-20-1840 置 `Fixed`; 剩真机目视)**:
+  图标换真图标 `#i-traffic`(上下行箭头)并改**双色** —— 两条 path 内联 `stroke: var(--today-down/--today-up)`, 靠 CSS 变量穿越 `<use>`
+  影子树生效(外部选择器进不去); 数值去字面量 ↓/↑ 改用 `#i-arrow-down/up`; 历史入口图标弃粉改 lime(`--today-ico`);
+  `.sb-today .v-*` 抬到 `.sb-item.sb-today .v-*`(修棱镜掉白的层叠根因); "今日" 标签与 "连接/剩余" 同格式; 速度区每方向合成
+  `[方向图标] 速度 / 限速` **整组可点**按钮(状态栏不再单独给限速配图标)。⚠ **未做浏览器冒烟** —— `ui_harness.py` 桩不产 traffic
+  数据(`v-if="todayTraffic"` 不渲染), 环境也没装 playwright。
+  **真机走查**: ①双色是否分得清、箭头与数字 3px 间距是否合适 ②两套 UI / 五主题下 lime 历史图标是否协调 ③点速度区任一处都能弹限速浮层
+
 ## 定案口径 (别改回去; 完整判据见 [pitfalls.md](pitfalls.md))
 
 - **列偏好"升版本"**: 列集变更(加列/减列/重排)与存储结构扩展**一律不升版本**, 只有"旧缓存结构已无法被 `loadColState()` 正确解释"才升(如 v2 按列索引存), 且升版本必须同时挂 `LEGACY_COLS_KEYS` 迁移。当前键冻结在 `autoqb_cols_v4`, 无 v5 计划。历史计划 `docs/plans/26-09-15-1042-webui-optimization-plan-v3.html` 里"重排列集则升 v4→v5"是当时口径, 已被第十轮计划取代 —— 存档未改动, **别照抄**。
