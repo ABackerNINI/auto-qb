@@ -7,6 +7,10 @@
  * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COMMANDS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* 服务端扣住回执、等真值落地的上限(ms) —— 必须与后端 RECEIPT_WAIT_CAP_MS 一致。
+ * 判"端到端"时要把它算进宽限, 否则每次 resume 都是一条假警报(详见 _markCmdPost 处的注释)。 */
+const TRUTH_HOLD_BUDGET_MS = 1200;
+
 window.AQB_COMMANDS = {
   methods: {
     // 命令 => 中文动作名(用于投递成功/失败的提示文案)
@@ -103,11 +107,18 @@ window.AQB_COMMANDS = {
                * (真机大库长 tick / GIL 争用); waitMs 大 = 命令没被及时消费(P0-1 唤醒退化);
                * totalMs 大 = 轮询曲线或网络慢。 */
               const c = this.cmdStats;
-              if (c.waitMs > 100 || c.totalMs > 400 || (c.postMs || 0) > 400 || (c.patchMs || 0) > 50) {
+              /* ❗端到端的阈值要**加上等真值落地的宽限**(TRUTH_HOLD_BUDGET_MS): 服务端会扣住回执
+               * 最多这么久, 等 qB 把状态翻过来(见 WebUIRuntime.flush_receipts)—— 这段是**刻意**的,
+               * 不算异常。不加这段宽限, 每次 resume 都会打一条"端到端 544ms 属异常"的假警报,
+               * 而常驻的报警没人看(真机实测 2026-09-20: resume 端到端 544ms, 其中 284ms 是等真值)。
+               * 用户感知的那一半由 `撤下` 那条独立判据负责(>800ms 才报), 两边阈值不要混。 */
+              const e2eBudget = 400 + TRUTH_HOLD_BUDGET_MS;
+              if (c.waitMs > 100 || c.totalMs > e2eBudget || (c.postMs || 0) > 400 || (c.patchMs || 0) > 50) {
                 console.warn(
                   `[perf] 命令 ${cmdId}${c.action ? "(" + c.action + ")" : ""}: 补丁 ${c.patchMs}ms` +
                   ` / POST ${c.postMs}ms / 排队 ${c.waitMs}ms / 执行 ${c.execMs}ms` +
-                  ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>400 属异常)`
+                  ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>${e2eBudget}` +
+                  `属异常, 其中已含等真值落地的宽限 ${TRUTH_HOLD_BUDGET_MS}ms)`
                 );
               }
             }

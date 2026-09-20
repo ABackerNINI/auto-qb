@@ -372,6 +372,9 @@ class QbManager(
                     # dry_run 不补(只观察); 暂停时上面已 continue(暂停 = 完全旁观)。
                     sync_due = (now >= next_sync_at) or (state_changed and not dry_run)
                     tick_due = now >= next_tick_at
+                    # ❗必须在 try **之外**初始化: 兜底 flush 在 except 之后读它, 若异常发生在这行
+                    # 之前, 名字未绑定会抛 NameError —— 它在 try 外面, 会直接把主循环打挂。
+                    _flushed = False  # 本轮正常路径是否已落过回执(兜底据此跳过, 免得日志打两遍)
                     try:
                         # 命令驱动(state_changed)的那一轮 force=True: 绕过"上一版是否被取走"门控,
                         # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
@@ -398,6 +401,7 @@ class QbManager(
                         # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
                         # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
                         self.web.flush_receipts()
+                        _flushed = True
                         if _t_line:
                             self.web.resync_elapsed_ms(_t_line)
                         # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
@@ -425,9 +429,11 @@ class QbManager(
                             self.connect()
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
-                    # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉(幂等, 正常路径下是空操作)
-                    # —— 漏写会让前端 waitCmd 干等 40s, 界面一直半透明。
-                    self.web.flush_receipts()
+                    # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉 —— 漏写会让前端 waitCmd
+                    # 干等 40s, 界面一直半透明。❗**只在正常路径没跑到时才补**: 否则等真值的那些
+                    # 回执会在同一轮里被 flush 两次, 日志出现两行一模一样的"另 N 条等真值落地"。
+                    if not _flushed:
+                        self.web.flush_receipts()
                     # 等待到最近一条时间线到期, 或被命令唤醒(命令线近乎零延迟)
                     wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
                     if _wait_next(stop_event, self._wake_event, wait_for):

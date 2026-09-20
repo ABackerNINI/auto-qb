@@ -3803,3 +3803,49 @@ def test_receipt_waits_for_truth_to_land():
     rt.deferred_receipts["r2"]["ts"] = time.time() - (RECEIPT_WAIT_CAP_MS / 1000.0 + 1.0)
     rt.flush_receipts()
     assert rt.results["r2"]["status"] == "ok", "超过上限必须照发回执, 不能让前端干等"
+
+
+def test_truth_hold_budget_matches_backend():
+    """前端的"等真值落地宽限"必须与后端 RECEIPT_WAIT_CAP_MS 一致(否则判据漂移)
+
+    后端会**刻意**扣住回执最多 RECEIPT_WAIT_CAP_MS(等 qB 把状态翻过来), 这段不是异常;
+    前端判"端到端"时必须把它算进宽限, 否则每次 resume 都是一条假警报 —— 而常驻的报警没人看。
+    两边各写各的常数, 改一处忘另一处是必然的, 故用静态守阵钉住。
+    """
+    import re
+
+    from auto_qb.mixins.web_commands import RECEIPT_WAIT_CAP_MS
+
+    js = open(
+        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "web_ui", "static", "shared", "commands.js"),
+        encoding="utf-8",
+    ).read()
+    m = re.search(r"TRUTH_HOLD_BUDGET_MS\s*=\s*([\d.]+)", js)
+    assert m, "commands.js 里找不到 TRUTH_HOLD_BUDGET_MS —— 守阵失效(常数被改名?)"
+    assert float(m.group(1)) == float(RECEIPT_WAIT_CAP_MS), (
+        f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
+        "两边必须一致, 否则端到端判据要么假警报要么漏报"
+    )
+
+
+def test_truth_hold_budget_matches_backend():
+    """前端的"等真值落地宽限"必须与后端 RECEIPT_WAIT_CAP_MS 一致(否则判据漂移)
+
+    后端会**刻意**扣住回执最多 RECEIPT_WAIT_CAP_MS(等 qB 把状态翻过来), 这段不是异常;
+    前端判"端到端"时必须把它算进宽限, 否则每次 resume 都是一条假警报 —— 而常驻的报警没人看。
+    两边各写各的常数, 改一处忘另一处是必然的, 故用静态守阵钉住。
+    """
+    import re
+
+    from auto_qb.mixins.web_commands import RECEIPT_WAIT_CAP_MS
+
+    js = open(
+        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "web_ui", "static", "shared", "commands.js"),
+        encoding="utf-8",
+    ).read()
+    m = re.search(r"TRUTH_HOLD_BUDGET_MS\s*=\s*([\d.]+)", js)
+    assert m, "commands.js 里找不到 TRUTH_HOLD_BUDGET_MS —— 守阵失效(常数被改名?)"
+    assert float(m.group(1)) == float(RECEIPT_WAIT_CAP_MS), (
+        f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
+        "两边必须一致, 否则端到端判据要么假警报要么漏报"
+    )
