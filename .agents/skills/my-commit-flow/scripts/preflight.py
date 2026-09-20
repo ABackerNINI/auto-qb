@@ -23,19 +23,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import (  # noqa: E402
-    BRANCH,
     GATES,
     LINUX_CHECK_HINTS,
     MAIN_HOST_MARK,
+    MIRROR_HOST_MARK,
     RED_LINES,
-    resolve_main_remote,
+    REMOTE_MAIN_CANDIDATES,
     REMOTE_MIRROR,
     STAGED_PANIC,
     WARN_LINES,
+    resolve_branch,
+    resolve_main_remote,
+    resolve_mirror_remote,
 )
 
 PASS, WARN, STOP = "PASS", "WARN", "STOP"
-MAIN = resolve_main_remote()  # 运行期定主线远端名(gitee / origin)
+BRANCH = resolve_branch()  # 留空配置时跟当前分支
+MAIN, MAIN_URL = resolve_main_remote()  # 运行期按 URL 特征定主线远端
+MIRROR, _ = resolve_mirror_remote()
 
 
 def git(*args: str, check: bool = True) -> str:
@@ -87,23 +92,27 @@ def main(argv: list[str] | None = None) -> int:
                         help="commit 阶段: 落后主线只 WARN(本地提交可以, 推送前必须 rebase); push 阶段: STOP")
     args = parser.parse_args(argv)
 
+    if not git("rev-parse", "--is-inside-work-tree", check=False):
+        print("[STOP] 当前目录不在 git 工作树里 —— 检查 cwd 与仓库根探测(find_root)")
+        return 1
+
     rows: list[tuple[str, str, str]] = []  # (级别, 项, 说明)
     rem = remotes()
-    branch = git("rev-parse", "--abbrev-ref", "HEAD")
+    # 全新仓库(还没任何提交)时 `rev-parse HEAD` 会失败 —— 按空处理, 不当致命错误
+    branch = git("rev-parse", "--abbrev-ref", "HEAD", check=False) or "(无提交)"
     staged, unstaged = changed_files()
     changed = staged + unstaged
 
     # 1 分支
-    rows.append((PASS if branch == BRANCH else WARN, "分支", f"当前 {branch}(配置里是 {BRANCH})"))
+    rows.append((PASS if branch == BRANCH else WARN, "分支", f"当前 {branch}(探测/配置为 {BRANCH})"))
 
     # 2 主线远端
-    main_url = rem.get(MAIN, "")
-    if not main_url:
-        rows.append((STOP, "主线远端", f"找不到 {MAIN}; 先 `git remote -v` 确认 Gitee 挂在哪个远端名"))
-    elif MAIN_HOST_MARK not in main_url:
-        rows.append((STOP, "主线远端", f"{MAIN} = {main_url} 不是 {MAIN_HOST_MARK}; 照抄 origin 可能拉到滞后的 GitHub 镜像"))
+    if not MAIN:
+        rows.append((STOP, "主线远端",
+                     f"候选 {list(REMOTE_MAIN_CANDIDATES)} 里没有可用远端(或 URL 不含 {MAIN_HOST_MARK or '未配置特征'}); "
+                     "先 `git remote -v` 确认主线挂在哪个名字上"))
     else:
-        rows.append((PASS, "主线远端", f"{MAIN} = {main_url}"))
+        rows.append((PASS, "主线远端", f"{MAIN} = {MAIN_URL}"))
 
     # 3 上游
     try:
@@ -115,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
                  f"{upstream or '(未设置)'}(期望 {want_up}; 判 ahead/behind 看的是当前上游)"))
 
     # 4 落后 / 领先
-    if not args.no_fetch and main_url:
+    if not args.no_fetch and MAIN_URL:
         git("fetch", MAIN, BRANCH, check=False)
     try:
         counts = git("rev-list", "--left-right", "--count", f"{MAIN}/{BRANCH}...HEAD")
@@ -164,8 +173,9 @@ def main(argv: list[str] | None = None) -> int:
         rows.append((WARN, "平台差异", "改动命中平台相关关键词 —— Windows 全绿不算数, 建议 WSL 复现"))
 
     # 10 镜像远端
-    if REMOTE_MIRROR not in rem:
-        rows.append((WARN, "镜像远端", f"没有 {REMOTE_MIRROR} 远端; 需要时可 `git remote add {REMOTE_MIRROR} <url>`"))
+    if not MIRROR:
+        rows.append((WARN, "镜像远端",
+                     f"没找到镜像远端(按 URL 含 {MIRROR_HOST_MARK or REMOTE_MIRROR} 找的); 镜像允许滞后, 可不管"))
 
     width = max(len(r[1]) for r in rows)
     print("\n预检结果(PASS / WARN / STOP):\n")

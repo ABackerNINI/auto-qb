@@ -16,9 +16,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _ship_config import BRANCH, STAGED_PANIC  # noqa: E402
+from _ship_config import STAGED_PANIC, find_root, resolve_branch  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[4]  # .agents/skills/<name>/scripts/x.py → 仓库根
+BRANCH = resolve_branch()  # 留空配置时跟当前分支
+REPO = find_root()  # 向上找 .git, 不按 skill 安装深度反推
 FIX_HINT = """处置(按 pitfalls「分支 ref 被回退」条目):
   1. 先确认没有别的会话正在操作同一个 .git
   2. 留底:  git format-patch -1 <sha> --stdout > 备份.patch

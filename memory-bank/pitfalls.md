@@ -1535,3 +1535,12 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
   那只能是瞬时网络/连接复用问题, 不是远端名或凭据配错。
 - 处置: 主线(Gitee)**可以重试一次**; 这条只适用于主线 —— GitHub 镜像仍按旧规"尝试一次, 失败只报一次"。
 - 连带: 别把 `git push` 的瞬时失败误判成"远端名配错"去改 remote, 越改越乱。
+
+## skill 里的脚本路径要写 `<skill-dir>/scripts/...`，别写相对路径（2026-09-20）
+
+- 现象: my-commit-flow 的 SKILL.md 里写 `python scripts/preflight.py`, 执行时 AI **在仓库根的 `scripts/`
+  里找**(那里是项目的 `gen_tasks_index.py` / 模拟器等), 找不到才回头 —— 每轮都浪费一次试错。
+- 修法: SKILL.md 顶部声明「`<skill-dir>` = 本 skill 所在目录, **不是仓库根**」, 所有脚本一律
+  `<skill-dir>/scripts/<x>.py`; 脚本内部同理 —— 仓库根用 `find_root()` 向上找 `.git`,
+  **不要按 skill 安装深度反推 `parents[4]`**(换 `.codebuddy/skills/` 或用户级目录就错)。
+- 判据: skill 文档里出现裸 `scripts/xxx.py` 或 `../..` 这种相对路径 = 等着被找错目录。

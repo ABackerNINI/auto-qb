@@ -1,37 +1,35 @@
-"""my-commit-flow 的配置单点 —— 换机器 / 换项目只改这里。
+"""my-commit-flow 的配置与探测工具 —— 换项目时**尽量只改本文件**, 且多数项能自动探测。
 
-**通用性声明**: 本 skill 依赖本仓库的具体环境(Windows 工具 shell 的删除拦截层、Gitee 主线 +
-GitHub 镜像双远端、9 个 worktree 并行), 不是通用 git 工作流。拿到别的项目用之前, 先把本文件的
-远端名 / 分支 / 红线清单改对, 并确认那个环境没有「脏工作区 + 非快进合并 → 删 .git/objects」的拦截层。
+设计原则(可复用性):
+- **能探测的不写死**: 仓库根(向上找 `.git`)、分支(跟当前分支)、主线/镜像远端(按 URL 特征或候选名)、
+  代理(从 `git config` 读 per-URL 代理) —— 全部运行期探测, 代码里不写死任何 URL。
+- **写死的只有项目特有项**: `RED_LINES` / `WARN_LINES`(红线文件)、`GATES`(提交前闸门)、
+  `LINUX_CHECK_HINTS`(平台差异关键词)、镜像策略。换项目改这些。
+- **配置留空 = 用探测结果**: `BRANCH` / `MAIN_HOST_MARK` / `MIRROR_URL` 留空即自动。
+
+本 skill 依赖本仓环境(Windows 工具 shell 的删除拦截层、Gitee 主线 + GitHub 镜像、多 worktree 并行),
+不是通用 git 工作流; 拿到别的项目前至少过一遍 `RED_LINES` 与 `GATES`。
 """
 
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
+from urllib.parse import urlparse
 
-# 协作主线(判交付看它)与镜像(允许滞后)
-REMOTE_MAIN = "origin"  # 首选名(本 clone 里 origin 与 gitee 都指向 Gitee)
-# 主线远端候选, 按顺序取第一个"存在且指向 MAIN_HOST_MARK"的 —— 有的 clone 把 Gitee 挂成 `gitee`,
-# 有的仍叫 `origin`; 而历史 clone 的 `origin` 可能是 GitHub 镜像(照抄会拉到滞后的分支)
-REMOTE_MAIN_CANDIDATES = ("gitee", "origin")
-REMOTE_MIRROR = "github"  # GitHub 镜像; 不存在也不算 STOP, 只提示补 remote
-MAIN_HOST_MARK = "gitee.com"  # 判断某个远端名是否真是主线
-BRANCH = "develop"
+SCRIPTS_DIR = Path(__file__).resolve().parent
+SKILL_DIR = SCRIPTS_DIR.parent
 
+# ---------------------------------------------------------------- 可选覆盖项(留空 = 自动探测)
 
-def resolve_main_remote() -> str:
-    """主线远端名: 候选里第一个存在且指向 MAIN_HOST_MARK 的; 都不匹配则回退 REMOTE_MAIN。"""
-    urls: dict[str, str] = {}
-    proc = subprocess.run(["git", "remote", "-v"], capture_output=True, text=True, encoding="utf-8",
-                          errors="replace")
-    for line in proc.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 3 and parts[2] == "(push)":
-            urls[parts[0]] = parts[1]
-    for name in REMOTE_MAIN_CANDIDATES:
-        if MAIN_HOST_MARK in urls.get(name, ""):
-            return name
-    return REMOTE_MAIN
+BRANCH = ""  # 留空 = 跟当前分支; 填了就用填的(如 "main")
+MAIN_HOST_MARK = "gitee.com"  # 主线 URL 特征; 留空 = 不校验, 按候选名顺序取第一个存在的
+REMOTE_MAIN_CANDIDATES = ("gitee", "origin")  # 主线远端候选名(按序)
+MIRROR_HOST_MARK = "github.com"  # 镜像 URL 特征; 留空 = 只用 REMOTE_MIRROR 这个名字
+REMOTE_MIRROR = "github"  # 镜像远端名
+MIRROR_URL = ""  # 缺远端时提示用; 留空 = 只提示补远端、不给 URL
+
+# ---------------------------------------------------------------- 项目特有的写死项(换项目要改)
 
 # 红线: 出现即 STOP(不得进暂存清单)
 RED_LINES = (
@@ -41,25 +39,100 @@ RED_LINES = (
 # 高危: 出现需人工确认(可能是用户自己的在途改动)
 WARN_LINES = (
     "想法.md",
-    ".workbuddy-ai/",  # 项目数据目录, 一般不入库(.gitignore 已忽略, 出现即为异常)
+    ".workbuddy-ai/",  # 项目数据目录(.gitignore 已忽略, 出现即为异常)
 )
-
-# 闸门: 改动命中哪些文件 → 提交前必须跑什么(脚本只提示, 由执行者跑)
+# 闸门: 改动命中哪些文件 → 提交前必须跑什么(脚本只提示, 由执行者跑; <skill-dir> 见 SKILL.md)
 GATES: tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...] = (
-    (("src/", "tests/"), ("yapf -i <改过的 py 文件>", "uv run pytest tests -q"),
-     "Python 改动: 先格式化再跑全量测试"),
-    (("memory-bank/issues/",), ("python .agents/skills/create-issue/scripts/gen_issues_index.py --check",),
+    (("src/", "tests/"), ("yapf -i <改过的 py 文件>", "uv run pytest tests -q"), "Python 改动: 先格式化再跑全量测试"),
+    (("memory-bank/issues/", ),
+     ("python <skill-dir>/../create-issue/scripts/gen_issues_index.py --check", ),
      "issue 池改动: 索引是生成物, 必须 --check 通过"),
-    (("memory-bank/tasks/",), ("python scripts/gen_tasks_index.py --check",), "任务档案改动: 索引需自洽"),
-    ((".agents/skills/",), ("python <改动脚本> --help",), "skill 改动: 冒烟跑一遍被改的脚本"),
+    (("memory-bank/tasks/", ), ("python scripts/gen_tasks_index.py --check", ), "任务档案改动: 索引需自洽"),
+    ((".agents/skills/", ), ("python <改动的脚本> --help", ), "skill 改动: 冒烟跑一遍被改的脚本"),
 )
-
-# 平台差异: 命中这些关键词的改动, Windows 全绿不算数, 要去 Linux 复现
+# 平台差异: 命中这些关键词的改动, Windows 全绿不算数, 建议去 Linux 复现
 LINUX_CHECK_HINTS = ("winreg", "shutil.rmtree", "dir_fd", "socket", "subprocess", "os.open")
-
-# GitHub 镜像直连: 用 -c 覆盖为空即禁用全局 per-URL 代理
-MIRROR_PROXY_DISABLE_ARGS = ("-c", "http.https://github.com.proxy=")
-MIRROR_URL = "https://github.com/ABackerNINI/auto-qb.git"
-
-# 提交后若 staged 数量超过这个阈值 → 高度怀疑「分支 ref 被别的会话回退」(见 pitfalls)
+# 提交后若 staged 超过这个阈值 → 高度怀疑「分支 ref 被别的会话回退」(见 pitfalls)
 STAGED_PANIC = 200
+
+# ---------------------------------------------------------------- 探测工具
+
+
+def git(*args: str) -> str:
+    """跑 git 命令, 失败返回空串(调用方按"取不到"处理, 不要假装成功)。"""
+    proc = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def find_root(start: Path | None = None) -> Path:
+    """仓库根: 从 start(默认脚本目录)向上找 `.git`(目录或 worktree 的 .git 文件)。
+
+    不按 skill 的安装深度反推 —— 换目录结构(`.agents/skills/` / `.codebuddy/skills/` / 用户级)都能用。
+    """
+    cur = (start or SCRIPTS_DIR).resolve()
+    for parent in (cur, *cur.parents):
+        if (parent / ".git").exists():
+            return parent
+    return Path(__file__).resolve().parents[4]  # 兜底: 上四级
+
+
+def resolve_branch() -> str:
+    """分支: 配置优先, 否则跟当前分支。"""
+    if BRANCH:
+        return BRANCH
+    return git("rev-parse", "--abbrev-ref", "HEAD") or "main"
+
+
+def push_urls() -> dict[str, str]:
+    """远端名 → push URL。"""
+    out: dict[str, str] = {}
+    for line in git("remote", "-v").splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == "(push)":
+            out[parts[0]] = parts[1]
+    return out
+
+
+def resolve_main_remote() -> tuple[str, str]:
+    """主线远端 (名字, URL)。
+
+    判据: ① `MAIN_HOST_MARK` 非空 → 候选里第一个 URL 含该标记的; ② 留空 → 候选里第一个存在的;
+    ③ 都没有 → ("", "")。按 **URL 特征** 而不是按名字 —— 历史 clone 的 `origin` 可能是镜像。
+    """
+    urls = push_urls()
+    for name in REMOTE_MAIN_CANDIDATES:
+        url = urls.get(name, "")
+        if url and (not MAIN_HOST_MARK or MAIN_HOST_MARK in url):
+            return name, url
+    if not MAIN_HOST_MARK:  # 不校验 host 时, 候选里第一个存在的即可
+        for name in REMOTE_MAIN_CANDIDATES:
+            if name in urls:
+                return name, urls[name]
+    return "", ""
+
+
+def resolve_mirror_remote() -> tuple[str, str]:
+    """镜像远端 (名字, URL): 先按 `MIRROR_HOST_MARK` 找, 再退回 `REMOTE_MIRROR` 这个名字。"""
+    urls = push_urls()
+    if MIRROR_HOST_MARK:
+        for name, url in urls.items():
+            if MIRROR_HOST_MARK in url:
+                return name, url
+    return (REMOTE_MIRROR, urls[REMOTE_MIRROR]) if REMOTE_MIRROR in urls else ("", "")
+
+
+def proxy_disable_args(target_url: str) -> tuple[str, ...]:
+    """生成禁用 per-URL 代理的 `-c` 参数(**从 git config 读, 不写死 key 与端口**)。
+
+    读 `git config --get-regexp '^http\\..*\\.proxy$'`, 优先禁用与 target_url 同 host 的那条;
+    一条都没配 → 返回空(表示无需禁用)。
+    """
+    out = git("config", "--get-regexp", r"^http\..*\.proxy$")
+    keys = [line.split()[0] for line in out.splitlines() if line.strip()]
+    if not keys:
+        return ()
+    host = urlparse(target_url).netloc if target_url else ""
+    for key in keys:
+        if host and host in key:
+            return ("-c", f"{key}=")
+    return ("-c", f"{keys[0]}=")
