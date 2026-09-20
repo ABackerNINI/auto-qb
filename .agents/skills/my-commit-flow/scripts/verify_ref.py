@@ -1,7 +1,7 @@
 """提交后核对分支 ref —— 本 worktree 的 ref 更新可能被拦截层静默丢弃, **不要只看 commit 输出**。
 
-用法:
-    python .agents/skills/my-commit-flow/scripts/verify_ref.py [期望的 sha]
+用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
+    python <skill-dir>/scripts/verify_ref.py [期望的 sha]
 
 判据(三者必须一致):
     HEAD == refs/heads/<branch> == loose ref / packed-refs

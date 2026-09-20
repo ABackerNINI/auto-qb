@@ -1,7 +1,7 @@
 """按项目纪律提交 —— 逐路径暂存(禁 -A) + 提交 + 提交后立即核对 ref 三处。
 
-用法:
-    python .agents/skills/my-commit-flow/scripts/commit.py --message-file <文件> <路径> [<路径>...]
+用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
+    python <skill-dir>/scripts/commit.py --message-file <文件> <路径> [<路径>...]
         [--skip-preflight]   # 已跑过预检时用
 
 流程:
@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0:
         return rc
 
-    print("\n下一步: python .agents/skills/my-commit-flow/scripts/push.py")
+    print(f"\n下一步: python {SKILL_DIR.as_posix()}/scripts/push.py")
     return 0
 
 

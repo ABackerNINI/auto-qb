@@ -1,10 +1,10 @@
 """提交前预检 —— **只读**(外加一次安全的 fetch), 不改任何 git 状态。
 
-用法:
-    python .agents/skills/my-commit-flow/scripts/preflight.py [--no-fetch]
+用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
+    python <skill-dir>/scripts/preflight.py [--no-fetch]
 
 输出一张检查表(PASS / WARN / STOP):
-- 远端与上游是不是主线(Gitee)、分支对不对
+- 远端与上游是不是主线(按 `_ship_config.py` 探测, 不假定是 Gitee)、分支对不对
 - 落不落后主线(**push 前也要再跑一次**: `status -sb` 的 ahead/behind 是上次 fetch 的快照)
 - 工作区脏不脏(脏 + 需要 rebase = 红线区)
 - 改动清单里有没有红线 / 高危文件
@@ -35,6 +35,7 @@ from _ship_config import (  # noqa: E402
     resolve_branch,
     resolve_main_remote,
     resolve_mirror_remote,
+    main_matches_mark,
 )
 
 PASS, WARN, STOP = "PASS", "WARN", "STOP"
@@ -109,8 +110,11 @@ def main(argv: list[str] | None = None) -> int:
     # 2 主线远端
     if not MAIN:
         rows.append((STOP, "主线远端",
-                     f"候选 {list(REMOTE_MAIN_CANDIDATES)} 里没有可用远端(或 URL 不含 {MAIN_HOST_MARK or '未配置特征'}); "
-                     "先 `git remote -v` 确认主线挂在哪个名字上"))
+                     f"候选 {list(REMOTE_MAIN_CANDIDATES)} 里没有可用远端; 先 `git remote -v` 确认主线挂在哪个名字上"))
+    elif not main_matches_mark(MAIN_URL):
+        rows.append((WARN, "主线远端",
+                     f"{MAIN} = {MAIN_URL} 不含特征 {MAIN_HOST_MARK} —— 按候选顺序**回退**选了它; "
+                     "若这就是主线可忽略, 否则改 `_ship_config.py` 的 MAIN_HOST_MARK / 候选名"))
     else:
         rows.append((PASS, "主线远端", f"{MAIN} = {MAIN_URL}"))
 

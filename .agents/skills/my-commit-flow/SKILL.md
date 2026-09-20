@@ -11,9 +11,12 @@ user-invocable: true
 - 协作口径（Gitee 主线 / GitHub 镜像允许滞后）单点在 `AGENTS.md`「提交 / PR」，本 skill 不重复定义，只给步骤。
 - 事故判据（脏工作区 + 非快进合并、分支 ref 被回退）正文在 `pitfalls.md`，本 skill 只留判据与链接。
 
-> **路径约定（重要）**：下文 `<skill-dir>` = **本 skill 所在目录**（本仓库是 `.agents/skills/my-commit-flow`），
-> **不是仓库根**。脚本一律按 `<skill-dir>/scripts/<脚本>.py` 调用 —— 仓库根下那个 `scripts/` 是项目的
-> （`gen_tasks_index.py` / 模拟器等），别在那儿找本 skill 的脚本。
+> **路径约定（重要，别猜路径）**：下文 `<skill-dir>` = **加载本 skill 时它实际所在的目录** —— 因项目与
+> 安装方式而异，可能是 `<仓库>/.agents/skills/my-commit-flow`、`<仓库>/.codebuddy/skills/my-commit-flow`、
+> 用户级 `~/.workbuddy-ai/skills/my-commit-flow` 或任何别的位置，**本 skill 不假定也不该假定**。
+> 调用脚本前**先用 Glob 定位**（`**/my-commit-flow/scripts/*.py`）或看会话的技能列表，别照抄本文里的
+> 任何具体路径，更**不要在仓库根下找 `scripts/`** —— 根目录那个 `scripts/` 是项目的
+> （`gen_tasks_index.py` / 模拟器等），与本 skill 无关。
 
 ## 为什么需要它
 
@@ -62,8 +65,8 @@ user-invocable: true
 |---|---|---|
 | 仓库根 | 从脚本目录向上找 `.git`（目录或 worktree 的 `.git` 文件），不按 skill 安装深度反推 | — |
 | 分支 | 跟当前分支 | 配 `BRANCH`（如 `"main"`） |
-| 主线远端 | 候选名 `("gitee", "origin")` 里第一个 **URL 含 `gitee.com`** 的（按 URL 特征而非名字，避开"origin 其实是镜像"的坑） | 配 `MAIN_HOST_MARK` / `REMOTE_MAIN_CANDIDATES` |
-| 镜像远端 | 按 URL 含 `github.com` 找，找不到再退回 `REMOTE_MIRROR` 这个名字 | 配 `MIRROR_HOST_MARK` |
+| 主线远端 | 候选名 `("gitee", "origin", "github")` 里第一个 **URL 含 `gitee.com`** 的（按 URL 特征而非名字，避开"origin 其实是镜像"的坑）；谁都不匹配则**回退**到候选里第一个存在的 —— 只有 GitHub 的项目里 `github` 就是主线，别假定一定用 Gitee | 配 `MAIN_HOST_MARK` / `REMOTE_MAIN_CANDIDATES` |
+| 镜像远端 | 按 URL 含 `github.com` 找并**排除主线自己**，再退回 `REMOTE_MIRROR` 名字；只有 GitHub 的项目里没有镜像（正常，允许滞后） | 配 `MIRROR_HOST_MARK` |
 | 禁用代理的 `-c` | 从 `git config --get-regexp '^http\..*\.proxy$'` 读 key，**不写死 key 与端口**；没配代理就不加参数 | — |
 
 **写死的都是项目特有项（换项目必须改）**：`RED_LINES` / `WARN_LINES`（红线与高危文件）、`GATES`（提交前闸门，含 create-issue 的 `--check`）、`LINUX_CHECK_HINTS`（平台差异关键词）、镜像策略（允许滞后、只尝试一次）。
