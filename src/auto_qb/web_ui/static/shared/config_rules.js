@@ -156,7 +156,10 @@ window.CONFIG_RULES = {
       if (meta.spec_kind === "list") return [];
       if (meta.spec_kind === "bool") return "true";
       if (meta.spec_kind === "enum") return (meta.options && meta.options[0]) || "";
-      if (meta.spec_kind === "str" || meta.spec_kind === "speed") return meta.placeholder || "";
+      // expr = 单行表达式: 初值用占位示例(让新条目可直接通过后端校验)
+      if (meta.spec_kind === "str" || meta.spec_kind === "speed" || meta.spec_kind === "expr") {
+        return meta.placeholder || "";
+      }
       const spec = {};
       for (const f of meta.fields || []) {
         if (!f.required) continue;

@@ -12,6 +12,7 @@ from typing import Any, Tuple
 
 from .errors import ExprSyntaxError
 from .lexer import Token, tokenize
+from .types import check_op_types, check_unary_types, is_number, type_name
 
 # 中缀运算符("=" 归一化为 "=="; 一元 not/-/+ 不在其中)
 _BINOPS = (">=", "<=", "==", "!=", "=", ">", "<", "and", "or", "in", "~", "+", "-", "*", "/", "%")
@@ -133,7 +134,7 @@ class _Parser:
             if t.value == "not":
                 used = t.value
                 node = Unary("not", operand)
-            elif isinstance(operand, Lit) and _is_number(operand.value):
+            elif isinstance(operand, Lit) and is_number(operand.value):
                 # 一元 +/- 作用于数字字面量: 折叠为字面量(如 -5), 不算运算符
                 node = Lit(-operand.value if t.value == "-" else operand.value)
             else:
@@ -228,38 +229,23 @@ class _Parser:
 # ---------- 字面量类型静态检查 ----------
 
 
-def _is_number(value) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _type_name(value) -> str:
-    if _is_number(value):
-        return "数值"
-    if isinstance(value, bool):
-        return "布尔"
-    if isinstance(value, str):
-        return "字符串"
-    if isinstance(value, (list, tuple)):
-        return "列表"
-    return type(value).__name__
-
-
 def _check_literals(node) -> None:
     """字面量之间的类型冲突(两侧都能在编译期定值时才查; 含名字的一侧归 env)
 
     只查字面量, 是为了在**不依赖取值面**的前提下尽早发现明显的笔误
-    (如 '10GiB' > "abc"); 名字一侧的类型要等 env 提供静态类型。
+    (如 '10GiB' > "abc"); 名字一侧的类型由 env.validate 提供静态类型后检查。
+    类型规则与 env 共用 types.py, 两边不一致会出现"写字面量报错、写名字不报错"的割裂。
     """
     if isinstance(node, Binary):
         _check_literals(node.left)
         _check_literals(node.right)
         if isinstance(node.left, Lit) and isinstance(node.right, Lit):
-            _check_binary(node.op, node.left.value, node.right.value)
+            check_op_types(node.op, type_name(node.left.value), type_name(node.right.value))
         return
     if isinstance(node, Unary):
         _check_literals(node.operand)
         if isinstance(node.operand, Lit):
-            _check_unary(node.op, node.operand.value)
+            check_unary_types(node.op, type_name(node.operand.value))
         return
     if isinstance(node, Call):
         for arg in node.args:
@@ -268,33 +254,3 @@ def _check_literals(node) -> None:
     if isinstance(node, ListLit):
         for item in node.items:
             _check_literals(item)
-
-
-def _check_binary(op: str, left, right) -> None:
-    lt, rt = _type_name(left), _type_name(right)
-    if op in _ARITH_OPS:
-        if not (_is_number(left) and _is_number(right)):
-            raise ExprSyntaxError(f"'{op}' 两侧都必须是数值, 得到 {lt} 与 {rt}")
-    elif op in _ORDER_OPS:
-        ok = (_is_number(left) and _is_number(right)) or (isinstance(left, str) and isinstance(right, str))
-        if not ok:
-            raise ExprSyntaxError(f"'{op}' 两侧必须同为数值或同为字符串, 得到 {lt} 与 {rt}")
-    elif op in _EQ_OPS:
-        if lt != rt and not (_is_number(left) and _is_number(right)):
-            raise ExprSyntaxError(f"'{op}' 两侧类型不一致: {lt} 与 {rt}")
-    elif op in _LOGIC_OPS:
-        if not (isinstance(left, bool) and isinstance(right, bool)):
-            raise ExprSyntaxError(f"'{op}' 两侧都必须是布尔, 得到 {lt} 与 {rt}")
-    elif op == "in":
-        if not isinstance(right, (str, tuple, list)):
-            raise ExprSyntaxError(f"'in' 右侧必须是列表或字符串, 得到 {rt}")
-    elif op == "~":
-        if not (isinstance(left, str) and isinstance(right, str)):
-            raise ExprSyntaxError(f"'~' 两侧都必须是字符串(左侧为被匹配值, 右侧为模式), 得到 {lt} 与 {rt}")
-
-
-def _check_unary(op: str, operand) -> None:
-    if op == "not" and not isinstance(operand, bool):
-        raise ExprSyntaxError(f"'not' 的操作数必须是布尔, 得到 {_type_name(operand)}")
-    if op in ("-", "+") and not _is_number(operand):
-        raise ExprSyntaxError(f"'{op}' 的操作数必须是数值, 得到 {_type_name(operand)}")

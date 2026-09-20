@@ -1,9 +1,10 @@
 """rules 框架基础: 动作结果, 条件/动作基类, 规则上下文, Rule 插件"""
 import logging
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from qbittorrentapi import TorrentDictionary, Client
 
 from . import registry
@@ -14,6 +15,9 @@ from ..config import Config, ConfigError
 from ..qbapi import QbApi
 
 logger = logging.getLogger(__name__)
+
+# 条件求值出错日志的节流窗口(秒): 同规则同原因在此窗口内只报一次 ERROR
+_COND_ERR_THROTTLE = 300.0
 
 
 class ActionResult:
@@ -106,6 +110,10 @@ class RuleContext:
     _tracker_confs: Optional[List] = field(default=None)
     _files: Optional[List] = field(default=None)
 
+    # 表达式取值的昂贵值缓存(见 rules/expr/eval.py): 生命周期 = 本次规则执行,
+    # 保证同一轮内 freespace(path) 只查一次、sys.now 等时变值前后一致。
+    expr_cache: Dict[str, Any] = field(default_factory=dict)
+
     @property
     def api(self) -> QbApi | Client:
         """qB API Facade: manager.api 已绑定客户端时优先; 否则(外部传入种子/测试)退化到 client"""
@@ -136,6 +144,9 @@ class Rule:
         self.execute_once = str(spec.get("execute_once", "never"))
         self.cooldown = utils.parse_time(str(spec.get("cooldown", "0S")))
         self.stop_if = str(spec.get("stop_following_rules_if", "conditions-met"))
+        # 条件求值出错日志的节流状态(见 _log_condition_error)
+        self._cond_err_key: Optional[str] = None
+        self._cond_err_ts: float = 0.0
 
         self.conditions = []
         for cond_spec in spec.get("conditions") or []:
@@ -196,8 +207,11 @@ class Rule:
             try:
                 matched = self.matches(ctx)
             except Exception as e:
-                logger.warning(f"规则[{self.name}] {ctx.torrent.log_repr} | 条件匹配异常: {e}")
-                return False, False
+                # 出错即停规则(2026-09-20 拍板): 条件判据都不可信时, 让后面的规则继续对这个种子
+                # 做动作才是真风险 —— 故返回 stop=True, 且**优先于 stop_following_rules_if** 配置
+                # (即使该规则配了 never 也停)。故障半径是整条规则链, 所以日志是 ERROR 级。
+                self._log_condition_error(ctx, e)
+                return False, True
             if not matched:
                 return False, self.stop_if == "conditions-not-met"
             # 去重: execute_once / cooldown
@@ -249,6 +263,21 @@ class Rule:
             self.manager.record_execution(self.name, ctx.hash)
 
         return executed or ok_action, self._should_stop(failed)
+
+    def _log_condition_error(self, ctx: RuleContext, e: Exception) -> None:
+        """条件求值出错的日志(ERROR 级 + 同因节流, 避免每 tick × 每种子刷屏)
+
+        与连接异常日志节流同一套路: 同一规则同一类错误 5 分钟内只报一次, 其后转 DEBUG 计数;
+        换原因或冷却过后重新报。
+        """
+        now = time.time()
+        key = f"{type(e).__name__}:{e}"
+        if key != self._cond_err_key or now - self._cond_err_ts > _COND_ERR_THROTTLE:
+            logger.error(f"规则[{self.name}] {ctx.torrent.log_repr} | 条件求值出错, 停止后续规则: {e}")
+            self._cond_err_key = key
+            self._cond_err_ts = now
+        else:
+            logger.debug(f"规则[{self.name}] {ctx.torrent.log_repr} | 条件求值出错(已节流): {e}")
 
     def _should_stop(self, failed: bool) -> bool:
         """stop_following_rules_if 判定"""

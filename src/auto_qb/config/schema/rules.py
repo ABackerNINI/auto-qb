@@ -12,13 +12,7 @@ RULE_FIELDS: Tuple[Field, ...] = (
         options=TRIGGERS,
         help="何时检查该规则: interval = 按扫描间隔周期检查; 其余为事件触发(种子新增/删除/状态变化时立即检查一次)",
     ),
-    Field(
-        "interval",
-        "扫描间隔",
-        "time",
-        default="0S",
-        help="多久检查一次该规则(仅周期触发时生效); 0 = 每轮都检查; 以上一轮结束起算, 不会叠加"
-    ),
+    Field("interval", "扫描间隔", "time", default="0S", help="多久检查一次该规则(仅周期触发时生效); 0 = 每轮都检查; 以上一轮结束起算, 不会叠加"),
     Field(
         "execute_once",
         "执行一次",
@@ -73,7 +67,15 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
         item_kind="pattern",
         placeholder="regex:^HR"
     ),
-    Plugin("trackers", "站点", "condition", "list", "按「站点」页里配置的名字匹配(不是域名); 命中任意一个即满足", item_kind="pattern", placeholder="HHan"),
+    Plugin(
+        "trackers",
+        "站点",
+        "condition",
+        "list",
+        "按「站点」页里配置的名字匹配(不是域名); 命中任意一个即满足",
+        item_kind="pattern",
+        placeholder="HHan"
+    ),
     Plugin(
         "tracker_group",
         "站点分组",
@@ -111,6 +113,14 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
     Plugin("upload_size_today", "今日上传量", "condition", "str", "今天累计的上传量(按自然日统计, 重启也不丢)", placeholder=">10GiB"),
     Plugin("upload_size_this_week", "本周上传量", "condition", "str", "本周(周一起算)累计的上传量", placeholder=">10GiB"),
     Plugin("upload_size_this_month", "本月上传量", "condition", "str", "本月 1 号起累计的上传量", placeholder=">10GiB"),
+    Plugin(
+        "expr",
+        "表达式",
+        "condition",
+        "expr", "用一行表达式自由组合种子字段与额外值: 前缀 tor.*(种子) / tracker.*(站点) / sys.*(环境), "
+        "函数 freespace(路径) 等; 一层只能放一个运算符, 多的用括号分组(如 (tor.size &gt;= 10GiB) and (tor.ratio &gt; 1.5))",
+        placeholder="(tor.seeding_time &gt;= 3D) and (tor.ratio &gt; 1.5)"
+    ),
     Plugin(
         "freespace",
         "磁盘可用空间",
@@ -205,7 +215,15 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 risk="会以 <种子hash> <保存路径> 为参数执行该程序",
                 placeholder="C:/tools/check.bat",
             ),
-            Field("with_reference", "有参考种子", "object", default=None, optional=True, help="组内能找到已完成且可信的同内容种子(参考种子)时的处理方式", fields=CHECKING_SECTION_FIELDS),
+            Field(
+                "with_reference",
+                "有参考种子",
+                "object",
+                default=None,
+                optional=True,
+                help="组内能找到已完成且可信的同内容种子(参考种子)时的处理方式",
+                fields=CHECKING_SECTION_FIELDS
+            ),
             Field(
                 "without_reference",
                 "无参考种子",
@@ -225,7 +243,21 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "把种子的保存路径改为新目录(仅改 qB 里的记录, 不搬动磁盘上的文件)",
         fields=(Field("path", "目标路径", "path", default="", required=True, placeholder="R:/seeds"), )
     ),
-    Plugin("reannounce", "强制汇报", "action", "bool", "让 qB 立即向 tracker 汇报状态; 动作内置 10 分钟最小间隔, 未配去重时启动会告警", risk="频繁汇报会被站点判定为异常流量"),
-    Plugin("upload_speed_limit", "上传限速", "action", "speed", "限制该种子的上传速度; 0 = 不限速; 奇数 KiB/s(如 2001KiB/s)视为手动限速, 本程序不覆盖", placeholder="1000KiB/s"),
+    Plugin(
+        "reannounce",
+        "强制汇报",
+        "action",
+        "bool",
+        "让 qB 立即向 tracker 汇报状态; 动作内置 10 分钟最小间隔, 未配去重时启动会告警",
+        risk="频繁汇报会被站点判定为异常流量"
+    ),
+    Plugin(
+        "upload_speed_limit",
+        "上传限速",
+        "action",
+        "speed",
+        "限制该种子的上传速度; 0 = 不限速; 奇数 KiB/s(如 2001KiB/s)视为手动限速, 本程序不覆盖",
+        placeholder="1000KiB/s"
+    ),
     Plugin("download_speed_limit", "下载限速", "action", "speed", "限制该种子的下载速度; 0 = 不限速", placeholder="1000KiB/s"),
 )

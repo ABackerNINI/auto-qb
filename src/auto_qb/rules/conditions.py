@@ -1,10 +1,12 @@
 """内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
-upload_ratio, upload_size, upload_size_today/this_week/this_month, freespace"""
+upload_ratio, upload_size, upload_size_today/this_week/this_month, freespace, expr(表达式)"""
 import shutil
 from datetime import datetime
 
 from .. import utils
 from .base import BaseCondition, RuleContext
+from .expr import compile_expr, evaluate, validate
+from .expr.errors import ExprError
 from .registry import register_condition
 
 
@@ -252,6 +254,31 @@ class UploadSizeThisMonthCondition(_UploadDeltaCondition):
     """本月上传大小条件"""
     name = "upload_size_this_month"
     kind = "monthly"
+
+
+@register_condition
+class ExprCondition(BaseCondition):
+    """表达式条件: 一行表达式, 自由组合种子字段与额外值(当前时间 / 盘空间 / 全局计数…)
+
+    与旧条件**并存**: 旧条件行为不变, 本条件只是新增的一种写法(对照表见计划第 08 节)。
+    编译期解析 + 语义校验(名字/函数/参数/类型/结果必须是布尔), 运行期纯读取求值;
+    求值出错抛 ExprError, 由 Rule.process 兜成「不匹配 + 停后续规则」(见 base.py)。
+    """
+    name = "expr"
+
+    def __init__(self, spec):
+        self.text = str(spec)
+        self.expr = compile_expr(self.text)
+        validate(self.expr.root)
+
+    def match(self, ctx: RuleContext):
+        value = evaluate(self.expr.root, ctx)
+        if not isinstance(value, bool):  # 静态校验已挡, 运行期兜底(防止取值面类型与实际不一致)
+            raise ExprError(f"条件表达式的结果必须是布尔, 得到 {type(value).__name__}: {self.text}")
+        return value
+
+    def __repr__(self) -> str:
+        return f"ExprCondition({self.text})"
 
 
 @register_condition

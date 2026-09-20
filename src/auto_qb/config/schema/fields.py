@@ -52,7 +52,8 @@ SIZE_UNITS = ("B", "KiB", "MiB", "GiB", "TiB")
 SPEED_UNITS = ("B/s", "KiB/s", "MiB/s", "GiB/s")
 
 # 插件 spec 形态(Plugin.spec_kind), 前端据此选择控件
-SPEC_KINDS = frozenset({"str", "bool", "list", "object", "enum", "speed"})
+# expr = 单行表达式(规则条件 expr), 前端渲染为文本框, 校验由后端配置期解析给出
+SPEC_KINDS = frozenset({"str", "bool", "list", "object", "enum", "speed", "expr"})
 
 # 插件列表项编辑方式(Plugin.item_kind): str 普通串 | pattern 模式串 | tag_group 逗号分组 | state_group 状态组
 ITEM_KINDS = frozenset({"str", "pattern", "tag_group", "state_group"})

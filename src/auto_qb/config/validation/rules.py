@@ -149,6 +149,25 @@ def _validate_tags_condition_spec(value, where: str, errors: List[str]) -> None:
             _check_regex_patterns([p.strip() for p in g.split(",")], where, errors)
 
 
+def _validate_expr_condition_spec(value, where: str, errors: List[str]) -> None:
+    """expr 条件 spec 深度校验: 非空字符串 + **配置期**完成解析与语义校验
+
+    名字拼错 / 函数写错 / 类型不匹配 / 结果不是布尔, 全部在 load_config 阶段报出来 ——
+    否则运行期只会静默不匹配(日志里没有任何痕迹, 极难定位)。
+    rules 包反向依赖 config, 故延迟导入(与 registry 同处理)。
+    """
+    from ...rules.expr import compile_expr, validate
+    from ...rules.expr.errors import ExprError
+
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{where}: expr 条件需要一个非空字符串表达式")
+        return
+    try:
+        validate(compile_expr(value).root)
+    except ExprError as e:
+        errors.append(f"{where}: 表达式错误: {e}")
+
+
 def _validate_pattern_list_spec(value, where: str, errors: List[str]) -> None:
     """category/trackers 条件与 remove_tags 动作 spec 正则校验: 列表或单值, 每项 regex: 主体须可编译"""
     items = value if isinstance(value, list) else [value]
@@ -159,6 +178,7 @@ def _validate_pattern_list_spec(value, where: str, errors: List[str]) -> None:
 # 插件类(conditions/actions)假定配置正确, 不再自查
 _PLUGIN_SPEC_VALIDATORS = {
     "state": _validate_state_condition_spec,
+    "expr": _validate_expr_condition_spec,
     "checking": _validate_checking_action_spec,
     "tags": _validate_tags_condition_spec,
     "category": _validate_pattern_list_spec,

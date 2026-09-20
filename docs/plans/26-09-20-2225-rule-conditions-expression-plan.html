@@ -300,7 +300,7 @@ prim   := NUM | SIZE | TIME | SPEED | HHMM | BOOL | STR
     <tr><td class="m">sys.dl_speed / sys.up_speed</td><td>qB <code>store.server_state.dl_info_speed / up_info_speed</code>（随 sync 自动更新）</td><td>运行期 <code>server_state</code> 为 None（降级/断连）或键缺失 → <b>名字不可用 → 报错停规则</b></td></tr>
     <tr><td class="m">sys.dl_limit / sys.up_limit</td><td><code>dl_rate_limit / up_rate_limit</code></td><td>同上</td></tr>
     <tr><td class="m">sys.alt_speed_on</td><td><code>use_alt_speed_limits</code></td><td>同上</td></tr>
-    <tr><td class="m">sys.upload_today / sys.download_today / sys.upload_month</td><td>配置 <code>global_speed_limit_curve.traffic_source</code>（Traffic Monitor 的 history dat）</td><td><b>配置期判定</b>：未配置该数据源 → 这些名字<b>禁用</b>，用了即在 <code>load_config</code> 报「该值无数据源」；配置了才启用</td></tr>
+    <tr><td class="m">sys.upload_today / sys.download_today / sys.upload_month</td><td>配置 <code>global_speed_limit_curve.traffic_source</code>（Traffic Monitor 的 history dat）</td><td><span class="tag grey">W2 暂未实现</span> 需读 dat 文件（I/O + 聚合）+ <b>配置期门控</b>（未配置该数据源 → 名字禁用）；门控要在校验层拿到 config，属 W3 接线范围。当前求值机制的可用性判定已就位（server_state 组同款），补这三个只需加表项 + 门控</td></tr>
   </table>
   <div class="note"><b>口径区分：</b><code>tor.upload_today</code> 是<b>单种子</b>增量（走 manager 快照，恒定可用）；<code>sys.upload_today</code> 是<b>全局</b>口径（走 dat 文件，需配置数据源）。两者不是一回事，命名上靠前缀区分。</div>
 

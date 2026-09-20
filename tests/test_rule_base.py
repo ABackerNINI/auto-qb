@@ -10,7 +10,8 @@
 - test_rule_condition_not_met: 条件未满足 -> 不执行动作
 - test_rule_execute_once_dedup: execute_once=once 去重
 - test_rule_ignore_next_action_error: 忽略下一个动作错误
-- test_rule_condition_exception: 条件异常 -> 不执行
+- test_rule_condition_exception: 条件异常 -> 不执行且**停后续规则**(2026-09-20 拍板: 出错即停规则,
+  且故障优先于 stop_following_rules_if —— 配 never 也停)
 - test_rule_action_failed_stop: 动作失败且 stop 配置 -> 停止
 - test_rule_stop_if_never: stop_following_rules_if=never -> 不停止
 - test_rule_stop_if_all_actions_succeed: 全部动作成功 -> 停止
@@ -222,7 +223,11 @@ def test_rule_ignore_next_action_error():
 
 
 def test_rule_condition_exception():
-    """条件执行异常: 返回 (False, False) 不中断规则链"""
+    """条件执行异常: 返回 (False, True) —— 不执行动作, 且**停止后续规则**
+
+    2026-09-20 拍板「出错即停规则」: 判据都不可信时, 让后面的规则继续对这个种子做动作
+    才是真风险。故 stop=True, 且**故障优先于 stop_following_rules_if**(配 never 也停)。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = make_ctx(mgr, FakeTorrent(), FakeClient())
@@ -234,7 +239,12 @@ def test_rule_condition_exception():
         rule = Rule("g.test", {"actions": []}, mgr)
         rule.conditions = [Boom()]
         handled, stop = rule.process(ctx)
-        assert handled is False and stop is False
+        assert handled is False and stop is True
+
+        # 故障优先: 即使规则自己配了 never, 出错也停(stop_following_rules_if 管的是正常语义)
+        rule_never = Rule("g.test2", {"actions": [], "stop_following_rules_if": "never"}, mgr)
+        rule_never.conditions = [Boom()]
+        assert rule_never.process(ctx) == (False, True)
 
 
 def test_rule_multi_condition_and():
