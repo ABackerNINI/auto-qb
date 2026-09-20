@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>真实 qB 语料抓取 · 脱敏 · 离线回放 · 改造计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#101214; --fg:#e9e7e4; --dim:#9b9996; --faint:#6d6b69;
+    --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.06);
+    --accent:#d19a54; --accent-dim:rgba(209,154,84,.14);
+    --serif:"Songti SC","Source Han Serif SC","Noto Serif SC",Georgia,serif;
+    --sans:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono","Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 96px;display:grid;grid-template-columns:212px 1fr;gap:56px;}
+  aside{position:sticky;top:0;align-self:start;padding:44px 0 0;max-height:100vh;overflow:auto;}
+  .toc-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;}
+  aside nav a{display:block;font-size:12.5px;color:var(--dim);text-decoration:none;padding:4px 0;border-left:1px solid transparent;padding-left:11px;margin-left:-1px;}
+  aside nav a:hover{color:var(--fg);border-left-color:var(--accent);}
+  aside nav a .n{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-right:8px;}
+  header{padding:72px 0 0;}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);}
+  h1{font-family:var(--serif);font-weight:600;font-size:44px;line-height:1.12;letter-spacing:-.02em;margin:18px 0 0;}
+  .lede{font-size:16.5px;color:var(--dim);max-width:62ch;margin:22px 0 0;line-height:1.62;}
+  .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:26px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:26px;flex-wrap:wrap;}
+  main{padding-bottom:40px;}
+  section{padding:52px 0 0;}
+  h2{font-family:var(--serif);font-weight:600;font-size:25px;letter-spacing:-.01em;margin:0 0 4px;line-height:1.25;}
+  h2 .num{font-family:var(--mono);font-size:11px;color:var(--faint);display:block;letter-spacing:.14em;margin-bottom:9px;}
+  h3{font-size:14.5px;font-weight:560;margin:34px 0 10px;color:var(--fg);}
+  h4{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:500;margin:26px 0 8px;}
+  p{margin:12px 0;max-width:76ch;}
+  .sub{color:var(--dim);font-size:14px;}
+  ul,ol{margin:12px 0;padding-left:20px;max-width:76ch;}
+  li{margin:6px 0;}
+  li::marker{color:var(--faint);}
+  code{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.05);padding:1px 5px;border-radius:3px;color:var(--fg);}
+  pre{background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:4px;padding:14px 16px;overflow-x:auto;margin:14px 0;max-width:100%;}
+  pre code{background:none;padding:0;font-size:12px;line-height:1.6;color:var(--dim);}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;}
+  th{text-align:left;font-weight:560;color:var(--dim);font-size:12px;letter-spacing:.02em;padding:8px 12px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--fg);}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px;}
+  tbody tr:last-child td{border-bottom:none;}
+  .verdict{border:1px solid var(--accent);border-left-width:2px;padding:18px 22px;margin:20px 0;background:var(--accent-dim);max-width:80ch;}
+  .verdict .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;}
+  .verdict p{margin:8px 0 0;color:var(--fg);max-width:none;}
+  .note{border-left:1px solid var(--line);padding:2px 0 2px 16px;margin:16px 0;color:var(--dim);font-size:13.5px;max-width:76ch;}
+  .note .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:4px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;}
+  .fig{margin:26px 0;border:1px solid var(--line-soft);padding:22px 20px;}
+  .fig .cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:16px;}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:1px 7px;border:1px solid var(--line);border-radius:3px;color:var(--dim);margin-right:6px;}
+  .tag.hot{border-color:var(--accent);color:var(--accent);}
+  .tag.measured{border-color:rgba(209,154,84,.5);color:var(--accent);}
+  .w{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.06em;}
+  hr{display:none;}
+  .colophon{margin-top:64px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--faint);}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr;gap:0;padding:0 24px 64px;}aside{position:static;padding:24px 0 0;max-height:none;}header{padding-top:32px;}.grid2{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside>
+  <div class="toc-kicker">Contents</div>
+  <nav>
+    <a href="#s00"><span class="n">00</span>结论摘要</a>
+    <a href="#s01"><span class="n">01</span>sim_qb 的七类失真</a>
+    <a href="#s02"><span class="n">02</span>目标与非目标</a>
+    <a href="#s03"><span class="n">03</span>数据面：抓什么</a>
+    <a href="#s04"><span class="n">04</span>抓取器</a>
+    <a href="#s05"><span class="n">05</span>脱敏与等价类守恒</a>
+    <a href="#s06"><span class="n">06</span>语料格式与体量</a>
+    <a href="#s07"><span class="n">07</span>回放器改造</a>
+    <a href="#s08"><span class="n">08</span>时间轴录制 · 全量对齐</a>
+    <a href="#s09"><span class="n">09</span>判据改造</a>
+    <a href="#s10"><span class="n">10</span>风险与红线</a>
+    <a href="#s11"><span class="n">11</span>波次计划 W0–W6</a>
+    <a href="#s12"><span class="n">12</span>决策记录</a>
+  </nav>
+</aside>
+
+<main>
+<header>
+  <div class="kicker">Auto-QB · Simulation Rework · Plan</div>
+  <h1>真机语料抓取 · 脱敏 · 离线回放</h1>
+  <p class="lede">把 <code>sim_qb.py</code> 的种子来源从「人造合成」换成「真实 qB 抓取 + 脱敏 + 回放」。合成模式保留为对照档，不删除。本文给出数据面清单、脱敏约束、语料格式、回放器改造切口、波次计划，以及本机已实测的三项数字与必须由你在真机上补测的项。</p>
+  <div class="meta">
+    <span>2026-09-21 00:24 · v2 修订 03:30 · <strong>v3 拍板 03:33</strong></span>
+    <span>状态：<strong>已拍板</strong>（5 项决策已定）</span>
+    <span>波及：scripts/sim_qb.py · sim_run.py · sim_autoqb.py · 新 qb_capture.py / sim_fsmock.py · <strong>src/auto_qb/（仅 1 处纯函数抽取，已放行）</strong></span>
+  </div>
+
+  <div class="verdict" style="border-color:var(--accent);border-left-color:var(--accent);background:var(--accent-dim);margin-top:34px">
+    <div class="t">已拍板 · 2026-09-21 03:33</div>
+    <p>用户对 §12 的决策如下，本版已全部落进正文：</p>
+    <ol>
+      <li><strong>磁盘事实来源 = mock</strong>（默认档）⇒ §07 定案，`--fs-mode=mock` 为默认，`real` 保留为复核档。</li>
+      <li><strong>归组 key 公式抽成 <code>src/</code> 纯函数</strong> ⇒ <strong>唯一一处 <code>src/</code> 改动，用户已放行</strong>。范围与守卫见 §04 第 5 步。</li>
+      <li><strong>语料位置改为参数</strong> ⇒ 不写死任何推荐路径，全部走命令行（§12）。</li>
+      <li><strong>回放 root 目录也改为参数</strong> ⇒ <code>--root</code> 与 <code>--fs-root</code> 均显式传入（§07）。</li>
+      <li><strong>一并消化 issue <code>26-09-20-2145-test-sim-qb-maindata-snapshot-lag</code></strong> ⇒ 新增「流状态 vs 实况状态」模型（§07），判据与收尾动作见 §09 / §11 W5。</li>
+    </ol>
+    <p class="sub">v2 的修订说明（含 2 处 P0、6 处事实更正、11 处补强）见下方折叠区块。</p>
+  </div>
+
+  <div class="verdict" style="border-color:var(--line);border-left-color:var(--fg);background:rgba(255,255,255,.02);margin-top:18px">
+    <div class="t" style="color:var(--fg)">修订说明 · v2（2026-09-21 03:30）</div>
+    <p>本版按审查报告 <a href="26-09-21-0257-qb-corpus-capture-replay-plan-review.html" style="color:var(--accent)">26-09-21-0257</a> 修订。改动分四类，各节另有 <span class="tag hot">修订</span> 标记：</p>
+    <ul>
+      <li><strong>方向性改动（1 处）</strong> —— §07 的文件树物化由「稀疏文件 1:1」改为 <strong>进程内 FS mock</strong>（默认档），真文件树降为可选档 <code>--fs-mode=real</code>。理由：FS 入口收敛在 4 个调用点，mock 覆盖更全、更省事，且<strong>原 P0-1（稀疏创建序列写错会写满磁盘）随之消失</strong>。</li>
+      <li><strong>P0 修正（2 处）</strong> —— §07 记录稀疏文件的<strong>正确创建序列</strong>（留给 real 档用）；§09 给 <code>CORPUS.group_exact</code> <strong>钉死参考时刻</strong>。</li>
+      <li><strong>事实更正（6 处）</strong> —— <code>web.py</code> 行号（652 → 734/747）；写端点 <strong>24</strong>（非 30）、读端点 <strong>13</strong>（非 11）；<code>fsutil</code> 是进程派生不是系统调用；稀疏实占 <strong>0 字节</strong>（非 128 KiB）；「待走查 8 条」实为<strong>约 15 条</strong>。</li>
+      <li><strong>P1/P2 补强（11 处）</strong> —— piece hash 派生方式、窗口合并语义、脱敏等价类三处边界、归组公式来源、录流并行、端点覆盖清单、W6 收窄等。</li>
+    </ul>
+    <p class="sub">v1 未提交、未被引用为基线，故本版<strong>原地修订</strong>；审查报告仍保留 v1 原貌，两者互为对照。</p>
+  </div>
+</header>
+
+<section id="s00">
+  <h2><span class="num">00</span>结论摘要</h2>
+
+  <div class="verdict">
+    <div class="t">可行性判定</div>
+    <p><strong>可行，且是这三套测试资产里投入产出比最高的一项。</strong>判据有三条：①auto-qb 与 qB 的数据面是<strong>窄且封闭</strong>的 —— 只读端点 <strong>13 个</strong>、每 tick 真正的高频请求只有 <code>sync/maindata</code> 一次，其余按 hash 懒加载，全量抓一次即可覆盖；②语料体量实测可控（5000 种子 + 12 文件/种子 ≈ <strong>16.2 MB</strong> 未压缩，gzip 后约 1–2 MB），远小于"复制真实下载盘"的量级；③<strong>文件树根本不用物化</strong> —— auto-qb 碰磁盘的入口收敛在 <strong>4 个调用点</strong>，全部经 <code>os.path.*</code> / <code>shutil.disk_usage</code>，用一个按路径前缀限定的<strong>进程内 mock 层</strong>即可精确复现真机磁盘状态，且随 <code>t_seq</code> 变化（<span class="tag hot">v2 修订</span>，见 §07）。</p>
+  </div>
+
+  <p><strong>关于性能分析（第 08 节的核心改动）：</strong>不用 <code>--latency-ms</code> 常数近似 —— 它既不是真机那种随载荷变化的延迟（全量 205 ms / 增量 3.3 ms），也还原不了"变化在一个 tick 内部怎么分布"。改为两件事：<strong>①可配置高频采样</strong>（性能分析档 <code>--interval-ms 100</code>，日常档 2 s），回放时按录制时间轴推进，客户端拿到的就是真机真实的变化序列；<strong>②周期性抓全量做对齐校验，但只保留首尾两份</strong>（T0 复用快照、T1 结束时抓）：中间检查点只用来<strong>定位漂移落在哪个时间窗</strong>，比完即弃 —— 既然增量流完整，中间的全量都能由 <code>T0 ⊕ 增量流</code> 重建。首尾闭合 <code>T0 ⊕ stream == T1</code> 是语料可信度的底线，也顺带探测 auto-qb 自己的快照会不会漂。真实 RTT 一并录下，回放按录制序列注入。</p>
+
+  <p><strong>语料形态极简：一条原始流（首帧即 T0，末帧即 T1），外加流里没有的按 hash 元数据（files / trackers）。</strong>每帧是 qB 响应<strong>整帧原样落盘</strong> —— 种子增量、<code>server_state</code>、tags/categories 本来就在同一帧里 ⇒ 不另造稀疏格式，也<strong>不另存 <code>torrents</code> / <code>server_state</code> / <code>tags</code></strong>：种子状态<strong>只有一个来源</strong>。零语义转换即零失真，回放端退化成"按时间轴吐帧的播放器"。</p>
+
+  <p>真正的难点不在抓取，而在<strong>脱敏不能破坏分组等价类</strong>：auto-qb 的归组 key 是 <code>(归一化 save_path, 排序后的文件相对路径集合)</code>，且组内 <code>{路径: 大小}</code> 映射要逐项比对。一旦脱敏映射不是单射，或把路径长度/字符类别归一化掉，语料就会在回放时<strong>分出与真机完全不同的组</strong> —— 那这份语料比合成数据更危险，因为它看起来是真的。所以第 05 节的等价类守恒校验是本计划的<strong>头号验收项</strong>，必须先于回放器完成。</p>
+
+  <h3>本轮已实测（本机，非推算）</h3>
+  <table>
+    <thead><tr><th>项</th><th>实测值</th><th class="mono">结论</th></tr></thead>
+    <tbody>
+      <tr><td>稀疏文件（D 盘 NTFS）<br><span class="sub">100 文件 × 64 MiB 逻辑</span></td><td class="mono">正确写法 实占 0 B / 0.23 ms·文件</td><td><strong>只有</strong> <code>FSCTL_SET_SPARSE</code> → <code>SetEndOfFile</code> 是稀疏的；<code>os.truncate</code> / 朴素 <code>seek+write</code> / <code>createnew</code>+<code>setflag</code> <strong>三种写法全部满额分配</strong>。6 万文件 ≈ 14 s、≈ 12 MB</td></tr>
+      <tr><td>R 盘（虚拟盘）空间口径</td><td class="mono">shutil = GetDiskFreeSpaceExW = df</td><td><code>18,474,057,728</code> 三口径逐字节一致 —— <strong>无异常</strong>；可用空间随真实下载在 7–18 GB 间波动，无有效回收站（删除即释放）</td></tr>
+      <tr><td>语料体量（5000 种子 × 12 文件）</td><td class="mono">maindata 8.3 MB · files 7.3 MB · trackers 0.6 MB</td><td>合计 16.2 MB；maindata 单独 gzip 后 0.4 MB</td></tr>
+      <tr><td>现有仿真性能基线</td><td class="mono">全量 205–240 ms / 增量 3.3 ms</td><td>差 62 倍；首轮灌入 14.371 s（5000 种子，合成数据）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>必须由你在真机上补测（我没有你的 qB 凭据，<code>config.yml</code> 是红线）</h3>
+  <ul>
+    <li><span class="tag">P0</span><strong>全量抓取耗时</strong>：5000 种子 × (<code>files</code> + <code>trackers</code>) = 10 000 次请求，在真机 qB 上要多久、qB 自身是否被拖慢。</li>
+    <li><span class="tag">P0</span><strong>脱敏后分组守恒</strong>：抓完立刻用 auto-qb 自己的归组逻辑对算一遍，脱敏前后必须逐组一致（第 05 节）。</li>
+    <li><span class="tag">P1</span><strong>磁盘探测（<code>--probe-fs</code>）的负载与 temp path 覆盖</strong><span class="tag hot">修订</span>：初轮 6 万次 <code>stat</code>、之后每个检查点增量一轮，打在<strong>真实下载盘</strong>上；若 qB 配了 temp path，按 <code>save_path</code> 根本探测不到（会记成 <code>exists:false</code>，与真机不符）。<strong>建议第一次跑用 <code>--sample 200 --probe-fs=off</code></strong>，确认链路后再开。</li>
+    <li><span class="tag">P2</span><strong>R 盘持久性</strong><span class="tag hot">修订</span>：R 盘是 Arsenal Image Mounter 挂载的虚拟盘（<code>imdisk -l</code> 报 "No virtual disks"，故非 ImDisk 内存盘），<strong>是否为镜像文件后端（持久）请你确认</strong>。若易失，语料不能只留这一份。空间口径已实测无异常，无需再测。</li>
+    <li><span class="tag">P2</span><strong>real 档才需要的稀疏可用性</strong><span class="tag hot">修订</span>：仅当 <code>--fs-mode=real</code> 时才有意义 —— 需盘为 NTFS 且非压缩/去重卷。<strong>默认的 mock 档不受此项约束</strong>。</li>
+    <li><span class="tag">P0</span><strong>100 ms 采样对真机 qB 的负载</strong>：10 次/秒持续轮询，做种吞吐 / WebUI 响应是否被拖慢。<strong>判否即把 perf 档放宽到 250–500 ms</strong> —— 仍远细于 2 s 的 <code>main_tick</code>，性能分析所需的时间分辨率还在。</li>
+    <li><span class="tag">P1</span><strong>第二 sync session 拿全量会不会干扰增量流</strong>：<code>rid=0</code> 能否独立于正在递增的 rid 序列。若 qB 会重置共享序列，改用 <code>torrents/info</code> 做对齐基准（需声明字段差异白名单）。</li>
+    <li><span class="tag">P1</span><strong>全局限速两个来源的单位是否一致</strong>：<code>server_state</code> 的 <code>dl/up_rate_limit</code> vs 端点 <code>transfer/uploadLimit</code>（后者 auto-qb 也会调）。不一致则回放端要按各自口径回。</li>
+  </ul>
+</section>
+
+<section id="s01">
+  <h2><span class="num">01</span>sim_qb 的七类失真</h2>
+  <p class="sub">用户说的"很多问题"，落到代码上是下面七条。每条都对应 auto-qb 里一条<strong>从未被任何测试覆盖过</strong>的路径。</p>
+
+  <table>
+    <thead><tr><th style="width:15%">失真</th><th style="width:35%">合成端的现状</th><th>因此测不到的东西</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>① 恒单文件</td>
+        <td><code>rel = [f"{base}\\{base}.mkv"]</code> —— 每个种子永远只有 1 个文件</td>
+        <td>归组 key 退化成单元素集合：多文件种子的路径集合差异、<code>_size_mismatch</code> 的"部分文件不一致"分支、缺文件扫描在<strong>部分缺失</strong>时的行为，全都没被执行过</td>
+      </tr>
+      <tr>
+        <td>② 名称与路径形态单一</td>
+        <td><code>ShowNN.S01EEE.1080p.WEB-DL-GRPi</code>；无中文、无空格、无超长名、目录深度固定</td>
+        <td><code>add_long_path_prefix_for_win</code>（超 260 字符的 <code>\\?\</code> 分支）在仿真里永远不触发；中文/特殊字符路径的拼接与扫描同理</td>
+      </tr>
+      <tr>
+        <td>③ 状态分布是拍出来的</td>
+        <td>只有 stalledUP / uploading / pausedUP / error / missingFiles / downloading，且 downloading 固定占 1/97</td>
+        <td><code>checkingUP</code> / <code>queued</code> / <code>moving</code> / <code>forcedUP</code> / <code>pausedDL</code> / <code>stoppedDL</code> 等状态转移链；代表种选取（<code>is_complete or is_errored and not is_checking</code>）的边界</td>
+      </tr>
+      <tr>
+        <td>④ tags / category 恒空</td>
+        <td><code>"tags": ""</code>、<code>"category": ""</code></td>
+        <td>"已打过标签就不再打"、"<code>overwrite_category</code>"、"<code>remove_similar_tags</code>"、"<code>skip_checking_tag</code> 命中即跳过" 这几条分支零样本</td>
+      </tr>
+      <tr>
+        <td>⑤ 数值均匀分布</td>
+        <td><code>seeding_time</code> 0–200 h 均匀、<code>ratio</code> 随机递增、<code>uploaded</code> 均匀</td>
+        <td>规则命中率与真机完全不同 ⇒ 固化在基线里的 <code>S3.write_rate_per_min ≤ 6210.49</code> 是<strong>在这个分布上</strong>测出来的，外推到真机没有依据</td>
+      </tr>
+      <tr>
+        <td>⑥ 负载模型是人造的</td>
+        <td>每拍随机挑 10% 种子，改固定 8 个字段</td>
+        <td>真机增量是"少量种子持续小变 + 速度抖动 + tracker 周期刷新"，脏集合规模与字节量与合成轮不同 ⇒ <code>avg_bytes</code> / <code>changed_per_round</code> 失真，rid 语义的性能结论外推性差</td>
+      </tr>
+      <tr>
+        <td>⑦ tracker 与 peers 恒假</td>
+        <td>tracker 只有 3 个硬编码 URL（含 1 个未配置站点）；<code>availability</code> 恒 −1、<code>num_seeds/leechs</code> 恒 0、tracker 错误标志恒 False</td>
+        <td>多 tracker 种子、tracker 错误态原因预取、可用性判定相关的条件与列渲染</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">附带的维护成本</span>
+    合成端的"造数陷阱"已经攒了四条并进了 <code>pitfalls.md</code>：状态名必须合法（写 <code>"errored"</code> 会被解析成 UNKNOWN）、辅种组内成员必须共享<strong>完全相同</strong>的文件相对路径、未配置站点的种子不归组、手设限速必须造<strong>奇数</strong> KiB/s。每发现一类"合成数据不像真的"，就要改一次造数逻辑并重新固化全部性能基线 —— 这个循环本身就是改用真机语料的理由。
+  </div>
+</section>
+
+<section id="s02">
+  <h2><span class="num">02</span>目标与非目标</h2>
+
+  <div class="grid2">
+    <div>
+      <h4>目标</h4>
+      <ul>
+        <li><strong>G1</strong> 一份脚本把真机 qB 的数据面抓成可复现的语料（快照 + 时间轴录播，一次做完）：采样间隔可设置（性能分析档 100 ms），并周期性抓全量做对齐校验。</li>
+        <li><strong>G2</strong> 脱敏到"可以贴进 issue 也不泄露 PT 身份"，同时<strong>保持一切会影响程序行为的形态特征</strong>。</li>
+        <li><strong>G3</strong> <code>sim_qb.py</code> 支持 <code>--source=corpus:&lt;dir&gt;</code>，与合成档并存；现有 <code>sim_run.py</code> 的判据尽量不动。</li>
+        <li><strong>G4</strong> 新增"<strong>回放分组 == 真机分组</strong>"硬判据 —— 这是合成数据给不了的东西。</li>
+        <li><strong>G5</strong> 用真实语料把 <code>activeContext.md</code> 里那 8 条"待真机走查"先过一遍，减少往返。</li>
+      </ul>
+    </div>
+    <div>
+      <h4>非目标</h4>
+      <ul>
+        <li><strong>不新增 <code>src/</code> 行为</strong><span class="tag hot">v3 拍板</span>。语料回放是黑盒测试，与现有仿真同定位。<strong>唯一例外</strong>：归组 key 公式抽成纯函数（§04 第 5 步）—— 纯抽取、零行为变更，<strong>用户已放行</strong>，且是本计划唯一一处 <code>src/</code> 改动。</li>
+        <li>不抓文件内容，只抓元数据 + 文件树（路径 / 大小）。</li>
+        <li>不做"语料仓库化 / 多人共享" —— 语料只留本机，见第 10 节红线。</li>
+        <li>不追求 100% 复现真机<strong>传输层耗时</strong>：改用<strong>录制真实 RTT、回放按录制序列注入</strong>来逼近（<code>--latency-mode=recorded</code>），不用常数近似；回环与真机网络的残余差异在结论里显式标注，不假装它不存在。</li>
+        <li>不动 <code>config.yml</code>（红线）。抓取器只接受命令行凭据，或 <code>--from-config</code> 只读解析其 qB 段。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s03">
+  <h2><span class="num">03</span>数据面：auto-qb 到底吃了 qB 的什么</h2>
+  <p>抓取清单不是猜的，是从 <code>src/auto_qb/</code> 的实际调用点倒推出来的。这是语料能"喂得饱"的依据。</p>
+
+  <h3>读端点（抓取器要调的全部）</h3>
+  <table>
+    <thead><tr><th class="mono">端点</th><th style="width:22%">调用点</th><th style="width:20%">频次</th><th>抓不抓</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">sync/maindata</td><td>store.py:92 / qbapi.py:314</td><td>每 tick 1 次（rid 增量）</td><td><strong>抓</strong> — 种子全量 + server_state；录播时抓增量流</td></tr>
+      <tr><td class="mono">torrents/files</td><td>record.py:270 / qbapi.py:328</td><td><strong>每 hash 1 次</strong>（首轮全量）</td><td><strong>抓</strong> — 归组 key 与缺文件扫描的唯一来源</td></tr>
+      <tr><td class="mono">torrents/trackers</td><td>record.py:250 / qbapi.py:322</td><td><strong>每 hash 1 次</strong></td><td><strong>抓</strong> — 站点判定依据</td></tr>
+      <tr><td class="mono">torrents/tags · torrents/categories</td><td>store.py:266 / :274</td><td>低频</td><td>抓</td></tr>
+      <tr><td class="mono">transfer/uploadLimit · downloadLimit</td><td>qbapi.py:358-359</td><td>低频</td><td>抓（全局限速初值）</td></tr>
+      <tr><td class="mono">sync/torrentPeers</td><td>web.py:734 / :747 <span class="tag hot">修订</span></td><td>按需（WEB 详情抽屉）</td><td>抓（可 <code>--skip-peers</code>）<br>⚠ <strong>回放外壳当前无此路由</strong>（404），W3 需补实现</td></tr>
+      <tr><td class="mono">torrents/export · torrents/pieceHashes</td><td>rules/actions/skip_checking.py:65 · checking.py:147</td><td>按需</td><td>不抓，但<strong>回放端必须补实现</strong><span class="tag hot">修订</span>：<code>sim_qb</code> 当前<strong>没有这两个路由</strong>（落到 <code>unknown endpoint</code> 404）。piece hash 须由「排序后的（相对路径 + 大小）集合」<strong>确定性派生</strong>，否则同组候选互不相等 ⇒ 严格模式判据恒假（见 §09）</td></tr>
+      <tr><td class="mono">app/version · app/webapiVersion</td><td>qbittorrent-api 库内（写请求前额外查一次）</td><td>每次写请求前</td><td>抓（回放时固定返回，去掉这层额外往返的偏差）</td></tr>
+      <tr><td class="mono">auth/login</td><td>qbmanager.py:263</td><td>1 次</td><td>不抓（回放端照旧返回 <code>Ok.</code>）</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">写端点：<code>qbapi.py</code> 门面共 <strong>51</strong> 个方法（含读与辅助），其中写方向约 30 个；<strong>回放外壳 <code>sim_qb.WRITE_ENDPOINTS</code> 目前只建模 24 个</strong><span class="tag hot">修订</span> —— 差额里的写端点会 404，语料档的覆盖范围受此约束（见 §09 端点覆盖清单）。写端点全部是"auto-qb 发给 qB"的方向，抓取器一个都不调 —— <strong>抓取是纯只读的</strong>。</p>
+
+  <h3>字段集</h3>
+  <p>以 <code>torrents/compat.py</code> 的 <code>REQUIRED_TORRENT_FIELDS</code>（<code>_REQUIRED_SNAPSHOT_FIELDS</code> + <code>RE_ADD_FIELDS</code>）为硬下限，实际落盘用同文件里的 70 字段表 <code>_SNAPSHOT_FIELDS</code>。<strong>关键：抓取器要 import 这个常量做自检</strong> —— 将来加字段，抓取器自检先红，不会静默漏抓。</p>
+
+  <h3>三个决定语料"能不能用"的行为约束</h3>
+  <ul>
+    <li><strong>归组 key</strong>（<code>mixins/grouping.py:150</code>）：<code>key = (path_normalize(save_path), tuple(sorted(file_map.keys())))</code>，其中 <code>file_map = {path_normalize(f.name): f.size}</code>。<br>⇒ 脱敏后 <code>save_path</code> 的等价类、文件相对路径集合必须<strong>逐元素一致</strong>。</li>
+    <li><strong>组内大小一致性</strong>（<code>_size_mismatch</code>）：比较组内各成员 <code>{路径: 大小}</code> 的完整映射。<br>⇒ <strong>size 必须原样保留</strong>，或者全语料用同一缩放比（同组内成员缩放一致则判定仍成立）。</li>
+    <li><strong>缺文件扫描</strong>（<code>_check_missing_files</code>:237-251）：对代表种逐个文件 <code>os.path.exists</code> + <code>os.path.getsize != fsize</code>。<br>⇒ 回放端必须有<strong>大小精确匹配</strong>的真实文件，不能只给元信息。</li>
+  </ul>
+</section>
+
+<section id="s04">
+  <h2><span class="num">04</span>抓取器 <span class="mono" style="font-family:var(--mono);font-size:15px;color:var(--faint)">scripts/qb_capture.py</span></h2>
+
+  <pre><code># 一次做完（推荐）：抓快照 = T0 → 复用同一 sync session 录 N 分钟 → 正常录完抓 T1
+#   （中途检查点未对齐 ⇒ 立即停止，那份检查点全量作为末帧入盘，语料标 aborted）
+uv run python scripts/qb_capture.py capture \
+    --host 127.0.0.1 --port 16585 --user &lt;u&gt; --pass &lt;p&gt; \
+    --out R:/auto-qb-sim/corpus/2026-09-21-a \
+    --profile perf --interval-ms 100 --minutes 20 \
+    --full-every 600 --qps 20 --sanitize strict
+
+# 分两步跑（调试 / 续作用）
+uv run python scripts/qb_capture.py snapshot --out &lt;dir&gt; --qps 20      # 只出 T0 + files/trackers
+uv run python scripts/qb_capture.py record   --out &lt;dir&gt; --profile perf
+#   ⚠ 分两步时 session 已断、rid 无从续 ⇒ 两步之间的变化会丢；record 会重抓一次全量当新 T0
+#      并在 meta.json 记 gap=true。要"零缝隙"就用 capture 一次做完。
+
+# 只读解析 config.yml 的 qbittorrent 段（不写回、不进暂存）
+uv run python scripts/qb_capture.py capture --from-config config.yml --out &lt;dir&gt;</code></pre>
+
+  <h3>抓取流程（六步，逐步可中断可续）</h3>
+  <ol>
+    <li><strong>握手与版本</strong>：<code>auth/login</code> → <code>app/version</code> + <code>app/webapiVersion</code>。版本写进 <code>meta.json</code>，回放时按版本裁剪字段。</li>
+    <li><strong>全量 maindata</strong>：<code>sync/maindata(rid=0)</code>，拿 torrents map + server_state + categories/tags 的初值。</li>
+    <li><strong>每 hash 的 files / trackers</strong>：受 <code>--qps</code> 限速（默认 20 QPS），并发上限 4。失败只记 <code>warnings.jsonl</code>，不中断 —— 缺一个种子的 files 只影响它的归组，不影响语料可用性。</li>
+    <li><strong>磁盘探测</strong>（<code>--probe-fs</code>）：对每个种子的文件探测<strong>三件事</strong> —— <code>exists</code>、<code>size</code>（<code>getsize</code>）、以及<strong>磁盘上的真实后缀</strong>（下载中的文件在 qB 里是 <code>xxx.mkv.!qB</code>，见下方 note）。记成 <code>disk:{exists,size,suffix}</code>。<strong>结果分两处写</strong> —— ①<strong>初值</strong>进 <code>files.json</code>；②<strong>变化</strong>进流：每个全量检查点<strong>增量探测一次</strong>（只 stat 上一轮还存在的条目），差异作为该帧的 <code>fs_delta</code>。<br><strong>为什么值得</strong>：真机上本来就缺文件 / 大小对不上 / 还挂着 <code>.!qB</code> 的组，回放时<strong>按同一份表还原</strong>（<span class="tag hot">v2 修订</span>：由 §07 的 mock 层消费，不再物化真文件）；录制期间若真发生变化，回放端按 <code>t_seq</code> 施加 —— auto-qb 会在<strong>同样的时刻</strong>面对<strong>同样的磁盘状态</strong>，D4 从"人为注入"升级为"真机重演"，<code>group_stop_rate</code> / <code>lag_ticks</code> 原样可用。<br><span class="tag hot">v2 修订</span><strong>成本要控</strong>：初轮 6 万次 <code>stat</code>、之后每检查点增量一轮（20 min × 每 60 s = 20 轮），打在<strong>真实下载盘</strong>上；建议首跑 <code>--sample 200 --probe-fs=off</code>，确认链路后再开。</li>
+    <li><strong>真值归组</strong>：抓完立刻用 <code>auto_qb.mixins.grouping</code> 的同一套 key 公式算一遍真机分组，写入 <code>groups.json</code>。<strong>这是第 09 节 <code>CORPUS.group_exact</code> 的期望值，必须在脱敏前后各算一次。</strong>
+      <div class="note" style="margin:10px 0 0">
+        <span class="t">✅ 已拍板：公式抽成 <code>src/</code> 纯函数（唯一一处 <code>src/</code> 改动，用户已放行）</span>
+        <strong>问题</strong>：<code>_assign_to_group</code> 是 mixin 方法（<code>grouping.py:146</code>），依赖 <code>self.store</code> 的四个字段，<strong>脱离 manager + store 调不起来</strong>；而在 <code>scripts/</code> 里复制公式会引入漂移 —— 一旦副本与 <code>:150</code> 悄悄分叉，<code>group_exact</code> 就会拿"错误的期望"判"正确的实现"，稳定假红或假绿。<br>
+        <strong>定案</strong>：抽成模块级纯函数，作为归组 key 的<strong>单一事实源</strong>：
+        <pre><code># src/auto_qb/mixins/grouping.py（新增，纯函数无状态）
+def group_key_of(save_path: str, file_map: Mapping[str, int]):
+    """归组 key 的单一事实源。_assign_to_group 与抓取器共用。"""
+    return (utils.path_normalize(save_path), tuple(sorted(file_map.keys())))</code></pre>
+        <code>_assign_to_group</code> 内的 <code>key = (...)</code> 改为 <code>key = group_key_of(torrent.save_path, file_map)</code> ⇒ <strong>行为零变更</strong>。<br>
+        <strong>守卫（必做）</strong>：新增单测，用一份合成输入跑一遍真实 mixin，断言 <code>store.member_to_key[hash] == group_key_of(...)</code> —— 将来有人把公式改回内联、或改了内联忘了改纯函数，这条会红。<br>
+        <strong>范围声明</strong>：这是<strong>本计划唯一</strong>触碰 <code>src/</code> 的地方（纯抽取，零行为变更），需在提交信息里单独说明；除此之外仍然一行不改。
+      </div>
+      <p class="sub" style="margin-top:10px"><span class="tag hot">v2 修订</span><strong>参考时刻</strong> —— "抓完立刻"对应 <strong>T1 终态</strong>，而回放从 T0 开始、分组会变。求值时刻见 §09（定为<strong>首帧应用后、写动作前</strong>；若保留 T1 则须另出 <code>groups_t1.json</code>）。</p></li>
+    <li><strong>脱敏 + 落盘</strong>（第 05 节）：快照与增量流<strong>共用同一套映射字典</strong>，否则回放时流里的 hash / 名称与 T0 对不上；最后跑 <code>--self-test</code>：字段完整性、映射单射性、分组守恒、首尾闭合、体量统计。</li>
+  </ol>
+
+  <div class="note">
+    <span class="t">⚠ 录流必须与 files/trackers 抓取并行 <span class="tag hot">v2 修订</span></span>
+    第 2 步（全量 maindata）与录流开始之间夹着第 3 步：<strong>每 hash 的 files / trackers = 10 000 次请求</strong>，按 <code>--qps 20</code> 算是 <strong>≈ 8 分钟</strong>。这 8 分钟里 rid 会话不会丢数据（qB 累积变化），但<strong>首个增量帧会把这 8 分钟的全部变化压成一帧</strong>，<code>t_seq</code> 时间轴起点被推后 —— 原文说的"零缝隙"只在<strong>数据完整</strong>意义上成立，<strong>时间轴</strong>意义上不成立，而"变化在一个 tick 内怎么分布"恰恰是性能分析要的东西。<br>
+    修法（二选一）：①<strong>并行</strong> —— files / trackers 抓取走独立线程 + 独立 session，录流不被挡住（推荐）；②在 <code>meta.json</code> 记 <code>record_start_offset_ms</code>，回放端显式跳过这段。别让"零缝隙"变成读者以为已解决的模糊承诺。
+  </div>
+
+  <div class="note">
+    <span class="t">⚠ 磁盘上不只有"存在/不存在"两态</span>
+    <strong>① 大小也是判据</strong>：缺文件检测里 <code>os.path.getsize(full) != fsize</code> 同样判为缺失（<code>_check_missing_files</code>:244）—— 部分下载、文件被替换、填充中的文件都靠大小发现。所以探测必须带 <code>size</code>，回放时<strong>按探测值回给 auto-qb</strong>（<span class="tag hot">v2 修订</span>：mock 层直接回表里的值，无需"建出"任何文件）。<br>
+    <strong>② <code>.!qB</code> 后缀</strong>：qB 下载中的文件在磁盘上叫 <code>xxx.mkv.!qB</code>（可在设置里关掉）。缺文件检测拼的是 <code>save_path + 逻辑文件名</code>，所以带后缀的文件在它眼里<strong>就是"不存在"</strong> —— 这是真机的真实行为，回放必须还原，否则下载中的组会被误判成"文件齐全"。记后缀而不是记整个实际文件名：后缀不含敏感信息，且避免与脱敏后的文件名产生第二份映射。<br>
+    <strong>③ 已知的边界（W0 实测 / 后续）</strong>：若 qB 配了 <strong>temp path</strong>（下载中文件另存他处），按 save_path 根本探测不到 ⇒ 这类文件应记成 <code>exists:false, suffix:null</code> 并记 <code>warnings.jsonl</code>；若要完整覆盖，需从 <code>app/preferences</code> 读 temp_path 一并探测。
+  </div>
+
+  <div class="note">
+    <span class="t">录制期间新出现的种子：出现即 append</span>
+    流里出现第 0 帧（T0）中没有的 hash ⇒ <strong>当场抓它的 files / trackers，追加进 <code>files.json</code> / <code>trackers.json</code></strong>，<strong>不等到结束再补</strong> —— 事后补抓时种子可能已经变了甚至没了，还要多遍历一遍。<br>
+    补抓会让这一帧变长：<strong>没关系</strong> —— <code>dt_ms</code> 记的是<strong>实测</strong>间隔，回放按真实 <code>dt_ms</code> 推进，抖动天然被保留（这正是记实测 <code>dt_ms</code> 而不是假定等间隔的价值）。抓不到的记 <code>warnings.jsonl</code>；回放端对拿不到 files 的 hash 返回<strong>空列表</strong> —— 与 auto-qb 行为一致（<code>_assign_to_group</code> 在 <code>file_map</code> 为空时直接 return ⇒ 不归组），不是错误路径。
+  </div>
+
+  <div class="note">
+    <span class="t">真机负载</span>
+    10 000 次请求打在正在做种的 qB 上不是零成本。三道闸：<code>--qps</code> 限速（默认 20，可按真机反应调低）、<code>--sample N</code> 只抓前 N 个种子（先小规模验通路）、<code>--dry</code> 只打印将要发的请求数与预估耗时不发请求。<strong>建议第一次跑用 <code>--sample 200</code>。</strong>
+  </div>
+</section>
+
+<section id="s05">
+  <h2><span class="num">05</span>脱敏与等价类守恒</h2>
+  <p>严格档（唯一档位，不提供"原始"输出）：<strong>字段白名单 + 形态守恒的确定性伪名化</strong>。</p>
+
+  <h3>为什么必须"形态守恒"</h3>
+  <p>如果把种子名统一换成 <code>torrent-0001</code> 这样的短 ASCII 名，语料就丢掉了真机最容易出问题的那部分：长路径（&gt;260 字符）、中文与全角字符、多层目录、扩展名多样。<strong>脱敏要去掉的是"这是哪一部资源"，不是"这个字符串有多难对付"。</strong></p>
+
+  <h3>形态守恒的确定性替换（shape-preserving pseudonymization）</h3>
+  <ul>
+    <li>对每个字符按<strong>类别</strong>替换：CJK → CJK、拉丁字母 → 拉丁字母、数字 → 数字、标点/空格 → 同类。<strong>长度与层级结构 1:1 不变</strong>，目录分隔符原样保留。</li>
+    <li>替换值由 <code>HMAC-SHA256(salt, 原文上下文)</code> 的字节流驱动，同一输入永远同一输出（跨种子、跨字段一致 ⇒ 同组共享路径仍然共享）。</li>
+    <li><strong>单射性是硬约束</strong>：维护全局字典，出现碰撞（两个不同原文映射到同一伪名）立即<strong>中止并报错</strong>，不允许"加序号后缀"这类会破坏等长性的兜底。</li>
+    <li>盐：32 字节随机，<strong>只把前 8 位指纹写进 <code>meta.json</code>，盐本身不落盘</strong> ⇒ 两份语料之间无法关联。</li>
+  </ul>
+
+  <h4>等价类边界：<code>path_normalize</code> 只统一分隔符 <span class="tag hot">v2 修订</span></h4>
+  <p>归组 key 是 <code>(path_normalize(save_path), tuple(sorted(file_map.keys())))</code>（<code>grouping.py:150</code>）。实测 <code>utils.path_normalize</code> 的实现是<strong>"仅把 <code>\</code> 换成 <code>/</code> 并压缩重复斜杠"</strong> —— <strong>不做大小写归一，且刻意保留首尾斜杠</strong>（注释写明是为了区分 <code>c:/windows/</code> 与 <code>c:/windowsg</code>）。这三条推论必须写进脱敏实现：</p>
+  <ul>
+    <li><strong><code>save_path</code> 的重映射自身也必须单射</strong>，原文只对"伪名字典"要求零碰撞是不够的。qB 单实例可有多个盘上的种子，若 <code>R:\Download\TV</code> 与 <code>S:\Download\TV</code> 都映射成 <code>&lt;run&gt;/fs/Download/TV</code>，<strong>两个不同的组会被合并</strong> ⇒ 回放分组与真机不同。<br>修法：重映射路径带"原盘符的短令牌"（如 <code>&lt;run&gt;/fs/d0/…</code>），并把 <code>save_path</code> 映射一并纳入单射校验。</li>
+    <li><strong>尾斜杠的有无必须 1:1 保留</strong> —— 不能顺手 <code>rstrip('/')</code>。</li>
+    <li><strong>大小写形态必须 1:1 保留</strong> —— <code>path_normalize</code> 不做 casefold，所以形态守恒替换不能把字母统一转小写（否则原本不同的两个 key 可能被合并）。</li>
+    <li><code>hash · infohash_v1/v2 → 40 hex</code> 这条<strong>对 v2 是错的</strong>：v1 是 40 hex、<strong>v2 是 64 hex</strong>，形状要分别保持；<code>magnet_uri</code> 同步重写。</li>
+  </ul>
+
+  <h3>字段分档</h3>
+  <table>
+    <thead><tr><th style="width:26%">字段</th><th style="width:20%">处置</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">name</td><td>形态守恒替换</td><td>含真实资源名。必须保留长度/字符类别/扩展名</td></tr>
+      <tr><td class="mono">save_path · content_path · download_path · root_path</td><td>盘符与根目录重映射到 <code>&lt;run&gt;/fs/</code>，其余形态守恒</td><td>归组 key 的第一半；必须保持"同组同目录"</td></tr>
+      <tr><td class="mono">files[].name</td><td>形态守恒替换（与 name 同一字典）</td><td>归组 key 的第二半；<strong>单射性是分组守恒的前提</strong></td></tr>
+      <tr><td class="mono">files[].size</td><td><strong>原样保留</strong></td><td><code>_size_mismatch</code> + <code>getsize</code> 比对都依赖它；数值本身不敏感</td></tr>
+      <tr><td class="mono">hash · infohash_v1/v2</td><td>确定性假 hash（40 hex）</td><td>真 hash 可反查资源；替换后 <code>magnet_uri</code> 同步重写</td></tr>
+      <tr><td class="mono">tracker（含 trackers[].url）</td><td>域名 → <code>site-1.example</code> 形态，路径尾部保留</td><td>PT 站域名直接关联账号。保持"域名→种子数"分布与"一种子多 tracker"结构</td></tr>
+      <tr><td class="mono">tags · category</td><td>形态守恒替换</td><td>可能含站点名 / 私密标记</td></tr>
+      <tr><td class="mono">comment · created_by</td><td>清空</td><td>常含站点署名与内网信息</td></tr>
+      <tr><td class="mono">size / uploaded / downloaded / ratio / seeding_time / time_active / *_limit / added_on / last_activity / progress / availability / num_* / state / 各标志位</td><td><strong>原样保留</strong></td><td>规则条件、限速保护、状态机的输入，改了就不是真机数据了</td></tr>
+      <tr><td class="mono">server_state</td><td>保留（up_info_speed 等真值）</td><td>与首轮灌入成本相关</td></tr>
+    </tbody>
+  </table>
+
+  <h3>增量流必须过同一套映射</h3>
+  <p>脱敏不是只做快照 —— <strong>流里同样有 name / save_path / tracker / tags</strong>（新增种子、保存路径变更、站点变动都会出现在增量里）。规则：</p>
+  <ul>
+    <li>流与快照<strong>共用同一份映射字典、同一把盐</strong>，字典在录制过程中<strong>只增不减</strong>（新原文追加映射，已有的一律复用）⇒ 同一个 hash 在 T0、流、T1 里始终是同一个假值。</li>
+    <li>流里首次出现的新原文（新种子名、新 tracker 域名）即时纳入字典；若触发碰撞，同样<strong>中止录制</strong> —— 中途换盐会让前后半段的映射对不上，比不录更糟。</li>
+    <li><strong>数值一律不动</strong>：流里的 size / 速度 / 累计流量 / 时间 / 限速原样透传，与快照口径一致。</li>
+    <li>落盘前做一次<strong>流级自检</strong>：流中出现的每个 hash 都能在 <code>files.json</code> / <code>trackers.json</code> 里找到（新种子必须已当场 append，见第 04 节）；每个 tracker 域名都在站点映射表内。有漏即 FAIL。</li>
+  </ul>
+
+  <h3>头号验收：等价类守恒校验</h3>
+  <div class="fig">
+    <div class="cap">Sanitize must preserve the partition</div>
+    <svg viewBox="0 0 900 210" width="100%" height="210" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Consolas,monospace">
+      <g stroke="rgba(255,255,255,.16)" fill="none" stroke-width="1">
+        <rect x="20" y="34" width="240" height="150"/>
+        <rect x="330" y="34" width="240" height="150"/>
+        <rect x="640" y="34" width="240" height="150"/>
+      </g>
+      <g fill="#6d6b69" font-size="9.5" letter-spacing="1.2">
+        <text x="20" y="24">RAW（真机快照）</text>
+        <text x="330" y="24">SANITIZED（语料）</text>
+        <text x="640" y="24">REPLAY（回放归组）</text>
+      </g>
+      <g stroke="#d19a54" stroke-width="1" fill="none">
+        <path d="M260 90 C 300 90, 300 90, 330 90"/>
+        <path d="M570 90 C 610 90, 610 90, 640 90"/>
+        <path d="M260 150 C 300 150, 300 150, 330 150"/>
+        <path d="M570 150 C 610 150, 610 150, 640 150"/>
+      </g>
+      <g fill="none" stroke="rgba(255,255,255,.30)" stroke-width="1">
+        <circle cx="60" cy="76" r="9"/><circle cx="90" cy="76" r="9"/><circle cx="120" cy="76" r="9"/>
+        <circle cx="60" cy="120" r="9"/><circle cx="90" cy="120" r="9"/>
+        <circle cx="60" cy="160" r="9"/>
+        <circle cx="370" cy="76" r="9"/><circle cx="400" cy="76" r="9"/><circle cx="430" cy="76" r="9"/>
+        <circle cx="370" cy="120" r="9"/><circle cx="400" cy="120" r="9"/>
+        <circle cx="370" cy="160" r="9"/>
+        <circle cx="680" cy="76" r="9"/><circle cx="710" cy="76" r="9"/><circle cx="730" cy="76" r="9"/>
+        <circle cx="680" cy="120" r="9"/><circle cx="710" cy="120" r="9"/>
+        <circle cx="680" cy="160" r="9"/>
+      </g>
+      <g fill="#9b9996" font-size="9">
+        <text x="150" y="80">组 A · 3 成员</text>
+        <text x="150" y="124">组 B · 2 成员</text>
+        <text x="150" y="164">未归组</text>
+        <text x="460" y="80">组 A' · 3 成员</text>
+        <text x="460" y="124">组 B' · 2 成员</text>
+        <text x="460" y="164">未归组</text>
+        <text x="770" y="80">3</text>
+        <text x="770" y="124">2</text>
+        <text x="770" y="164">—</text>
+      </g>
+      <g fill="#d19a54" font-size="9.5" letter-spacing="1">
+        <text x="300" y="204">单射映射</text>
+        <text x="610" y="204">逐组对拍</text>
+      </g>
+    </svg>
+  </div>
+  <p>校验在第 04 节第 5 步做两次：脱敏<strong>前</strong>用真机数据在内存里算一次分组（<strong>不落盘</strong>，含真实种子名，比完即弃），脱敏<strong>后</strong>再算一次并落盘 <code>groups.json</code>。二者必须<strong>逐组逐成员一致</strong>（成员数、每组 hash 集合按映射后逐一对应）。不一致即中止抓取、不落盘 —— 与其留一份"看起来是真的"的错语料，不如没有。</p>
+</section>
+
+<section id="s06">
+  <h2><span class="num">06</span>语料格式与体量</h2>
+
+  <pre><code>&lt;corpus&gt;/
+├── meta.json            抓取时间 · qB 版本 · webapi 版本 · 盐指纹 · 脱敏参数 · 字段白名单版本
+│                        + app/preferences 基线（不在流里，只记一次）
+├── files.json           hash -> [{index,name,size,progress,priority,is_seed,availability,
+│                                 disk:{exists,size,suffix}}]   ← 抓取时刻的磁盘初值
+├── trackers.json        hash -> [{url,status,tier,num_peers,num_seeds,num_leeches,...}]
+│                        ↑ **这两个流里没有**（按需端点），必须单独存；录到新种子**当场 append**
+├── sync-stream.jsonl.gz ★**语料主干（唯一的时间序列文件）**：每帧一行 = qB 原始响应，整帧原样存
+│                        **首帧 = T0**（full_update=true 完整响应：种子全量 + server_state + tags + categories）
+│                        中间各帧 = 增量（+ 录制侧附加 {t_seq, t_wall, dt_ms, rtt_ms, fs_delta}）
+│                        **末帧必是一份全量**：ok 时 = T1（role=closure，闭合锚点）；
+│                        aborted 时 = 出问题的那个检查点（role=mismatch，附差异摘要，供 DEBUG）
+│                        ⚠ **没有"中间态帧"**：中间检查点一旦未对齐就**停止录制**（第 08 节）
+│                        ⚠ 回放端消费到末帧即结束，**不把末帧吐给客户端**（它是校验锚点，不是回放数据）
+│                        ⇒ 种子与全局状态**只有一个来源**；**文件树不预存**，由 files.json + 首帧
+│                          save_path 推导（按 (save_path, 相对路径) 去重即得全局树）
+├── groups.json          **真值分组**（抓取端用真机数据算出的"正确答案"）
+（无 alignment.jsonl）  检查点通过 → meta 累计统计; 未通过 → **停止录制**, 摘要写进 meta.abort_at
+（无 checkpoints/）     不留中间态 —— 见上行
+└── warnings.jsonl       抓取期的失败 / 跳过</code></pre>
+
+  <h3>旁产物只剩一个：groups.json</h3>
+  <table>
+    <thead><tr><th style="width:18%">产物</th><th style="width:26%">用途</th><th>能不能去掉 / 什么时候才出现</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">groups.json</td>
+        <td><code>CORPUS.group_exact</code> 的<strong>期望值</strong>：真机上到底该分成哪些组、每组几个成员</td>
+        <td><strong>不能去掉</strong>，而且<strong>必须由抓取端算</strong>。虽然回放端也能用同一套 key 公式现算，但那会变成"自己算的期望 vs 自己算的实际"⇒ 判据空转。它的价值恰恰在于"答案来自真机原始数据"，拿它去比对 <strong>auto-qb 回放时自己分出来的组</strong>，才能验出增量应用有没有出错</td>
+      </tr>
+      <tr>
+        <td class="mono">（已并入主干 + meta）</td>
+        <td>中间检查点的比对结果 —— 用于<strong>定位漂移落在哪个时间窗</strong></td>
+        <td>对齐 ⇒ 只在 <code>meta.json</code> 累加一行统计（共 N 次 / 失败 K 次）；<strong>未对齐 ⇒ 立即停止录制</strong>，差异摘要写进 <code>meta.abort_at</code>。首尾闭合完全不落盘 —— 流内自洽，随时可重算</td>
+      </tr>
+      <tr>
+        <td class="mono">（已并入主干）</td>
+        <td>比对失败时的<strong>现场快照</strong>，事后复盘"到底哪里不一样"</td>
+        <td><strong>已并入主干</strong> —— 那份检查点全量本来就在手上，未对齐时<strong>就地作为末帧写进流</strong>（<code>role=mismatch</code> + 差异摘要），不另开目录。它和 T1 是同一种帧，零转换；DEBUG 时看最后一帧即现场</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">⚠ 脱敏前的分组（比对基准）不落盘</span>
+    守恒校验要拿"脱敏<strong>前</strong>的真机分组"与"脱敏<strong>后</strong>的分组"对拍，而前者含真实种子名 ⇒ <strong>只在内存里比对，比完即弃</strong>。落盘的 <code>groups.json</code> 只含 <code>hash → group_id</code>（分组守恒只看 key 等价类，本来就不需要名字）。
+  </div>
+
+  <table>
+    <thead><tr><th>项</th><th class="mono">实测 / 估算</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><strong>T0（= 流的第 0 帧）</strong><br><span class="sub">含种子全量 + server_state + tags/categories</span></td><td class="mono">8.3 MB（gzip 0.4 MB）</td><td>本机实测。<strong>不单独落盘</strong> —— 它就是流的第一帧；回放端读首帧即得种子起点与全部全局初值</td></tr>
+      <tr><td>files（5000 × 12 文件）</td><td class="mono">7.3 MB</td><td>本机实测；真机每种子文件数可能更高，按 3 倍估 ≈ 22 MB</td></tr>
+      <tr><td>trackers</td><td class="mono">0.6 MB</td><td>本机实测</td></tr>
+      <tr><td><strong>快照合计</strong></td><td class="mono">~16 MB（真机可能 30–40 MB）</td><td>建议 <code>.json.gz</code> 落盘，回放时解压到内存</td></tr>
+      <tr><td>录播 20 分钟 @ 100 ms<br><span class="sub">（种子增量）</span></td><td class="mono">12 000 帧 × 2–10 KB ≈ 24–120 MB</td><td><strong>待真机实测</strong>（取决于变化密度）；<code>--record-max-bytes</code> 熔断 + <code>--minutes</code> 双闸</td></tr>
+      <tr><td>同上的 <code>server_state</code>（随帧原样）</td><td class="mono">≈ 600–900 B/帧 ⇒ 7–11 MB</td><td>不稀疏化（第 08 节）；高度重复 ⇒ <strong>gzip 后极小</strong>，落盘 <code>.jsonl.gz</code> 流式解压</td></tr>
+      <tr><td>全量锚点（首帧 T0 / 末帧 T1）</td><td class="mono">2 帧 × ≈ 8 MB</td><td>✅ 都在流里，<strong>不单独落盘</strong>。中间检查点<strong>抓而不存</strong>，比完即弃</td></tr>
+      <tr><td>中间检查点（内存比对）</td><td class="mono">0（抓而不存）</td><td>若全落：60 s 一次 × 20 min = 20 次 ≈ 160 MB —— <strong>没必要</strong>，中间全量可由 <code>首帧 ⊕ 增量帧</code> 重建；何况未对齐即停止录制，根本没有"留中间态"的场景</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s07">
+  <h2><span class="num">07</span>回放器改造</h2>
+
+  <h3>切口：只替换"造数层"</h3>
+  <p><code>sim_qb.py</code> 现有 1310 行里，真正与"数据从哪来"有关的只有 <code>_build_torrents()</code> / <code>_materialize()</code> / <code>pump()</code> 三处。HTTP 外壳、rid 语义、写端点记账、B1–B4 边界校验、<code>emit_config()</code>、<code>self_test()</code> 全部可原样复用。改造形态：</p>
+  <pre><code>sim_qb.py --source=synthetic            # 现状，保留为对照档（旧基线继续可比）
+sim_qb.py --source=corpus:&lt;dir&gt;         # 语料位置：显式传入，不写死
+          --root &lt;dir&gt;                   # 回放工作根：显式传入（默认仅兜底）
+          --fs-root &lt;dir&gt;                # mock 层根目录：显式传入，默认 &lt;root&gt;/runs/&lt;run-id&gt;/fs
+          --fs-mode=mock|real            # 磁盘事实来源（默认 mock，见下）
+          --maindata-lag-ms 1500         # 快照滞后模型（消化 issue 2145，见下）
+          --replay-speed=1               # 录播回放倍速（100 ms 档可用 2/4 加速）
+          --latency-mode=recorded        # recorded|p50|p95|const:N —— 用录到的真实 RTT</code></pre>
+  <p class="sub"><strong>路径全部参数化</strong><span class="tag hot">v3 拍板</span>：语料位置、回放工作根 <code>--root</code>、mock 根 <code>--fs-root</code> <strong>三者都不写死推荐值</strong>，由调用者显式传入（<code>--root</code> 的兜底默认值沿用现有 <code>DEFAULT_ROOT</code>，但<strong>不再是计划的推荐</strong>）。驱动器 <code>sim_run.py</code> 透传 <code>--source</code> / <code>--root</code> / <code>--fs-root</code> / <code>--fs-mode</code>。</p>
+
+  <h3>时间语义三档</h3>
+  <table>
+    <thead><tr><th style="width:18%">档位</th><th style="width:30%">行为</th><th>回答什么问题</th></tr></thead>
+    <tbody>
+      <tr><td><strong>静态回放</strong></td><td>首轮全量灌入，之后无变化</td><td>首轮灌入成本、分组正确性、缺文件检测、规则一次性命中 —— <strong>真机上八成行为都是首轮决定的</strong></td></tr>
+      <tr><td><strong>时间轴回放</strong>（第 08 节）</td><td>按录制时间轴推进游标，100 ms 粒度重放真实增量；延迟取录到的真实 RTT</td><td>稳态 tick 跟随、增量轮载荷、漂移、写速率 —— 性能结论的可信度全靠它。<strong>替代 <code>--latency-ms</code> 常数近似</strong></td></tr>
+      <tr><td><strong>语料 + 扰动</strong></td><td>真实语料为底，叠加现有 <code>--delete-*</code> / <code>--abort-*</code> / <code>--ramp</code> 注入</td><td>破坏性场景（D1–D5）继续可用，且样本是真的</td></tr>
+    </tbody>
+  </table>
+
+  <h3>磁盘事实的来源：mock 层（默认）替代文件树物化 <span class="tag hot">v2 修订</span></h3>
+  <p>原文推荐"稀疏文件 1:1 物化 6 万文件"。审查发现两件事：①按原文写的创建序列（<code>setflag</code> + <code>truncate</code>）<strong>会满额分配</strong> —— 实测在 R 盘上第一个 4 GiB 文件就占满、第二个文件直接 <code>ERROR_DISK_FULL</code>；②更重要的是 —— <strong>物化根本不是必需的</strong>。auto-qb 碰磁盘的入口收敛在 <strong>4 个调用点</strong>，全部经 <code>os.path.*</code> / <code>shutil.disk_usage</code>，用一个<strong>按路径前缀限定的进程内 mock 层</strong>就能精确复现，而且比真树更保真 —— 录制期磁盘状态变化时，真树要<strong>真的去删真实下载盘上的文件</strong>。</p>
+
+  <h4>FS 调用点清单（全量 grep <code>src/auto_qb/</code> 的实测结果）</h4>
+  <table>
+    <thead><tr><th class="mono" style="width:30%">调用点</th><th style="width:24%">用途</th><th>mock 必须覆盖</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">mixins/grouping.py:239 · :244</td><td>缺文件扫描（头号，D4）</td><td><code>os.path.exists</code> + <code>os.path.getsize</code></td></tr>
+      <tr><td class="mono">mixins/checking.py:26 · :29</td><td>跳检前完整性检查</td><td><code>os.path.exists</code> + <code>os.path.getsize</code></td></tr>
+      <tr><td class="mono">rules/expr/env.py:228</td><td>表达式取值函数 <code>exists(path)</code></td><td><code>os.path.exists</code> <span class="tag hot">原文漏列</span></td></tr>
+      <tr><td class="mono">rules/expr/env.py:219</td><td>表达式取值函数 <code>disk_used(path)</code></td><td><code>shutil.disk_usage</code> <span class="tag hot">原文漏列</span></td></tr>
+      <tr><td class="mono">web.py:390-412</td><td>WEB 目录浏览（roots 派生自 <code>save_path</code>）</td><td>可选；不覆盖则浏览到真 FS</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="t">必须<strong>不</strong>被拦到的路径</span>
+    auto-qb 自己的文件绝不能被 mock：<code>config/writer.py</code>（<code>config.yml</code>，红线）、<code>utils.py:73/86/458</code>（state 文件 / 原子写 / 备份）、<code>notify.py:138</code>、<code>web.py:68</code>（WEB 密钥）、<code>web.py:1018</code>（静态目录）、<code>qbclient.py:33</code>（<code>~/.netrc</code>）。⇒ mock <strong>必须按路径前缀限定</strong>：命中语料树才拦，其余原样委托真函数。
+  </div>
+
+  <h4>注入点已经存在：<code>scripts/sim_autoqb.py</code></h4>
+  <p>它本来就是"调用 auto-qb"的包装层（在 <code>scripts/</code>、不进 <code>src/</code>）：先装 <code>SIGBREAK</code> 处理器，再 <code>from auto_qb.cli import main</code>。mock <strong>装在这个 import 之前</strong>即可 —— <strong>mock 这一层不需要动 <code>src/</code></strong>（本计划唯一的 <code>src/</code> 改动是 §04 的归组纯函数，与此无关）。</p>
+  <pre><code># scripts/sim_autoqb.py（现有）+ 新增 scripts/sim_fsmock.py
+from sim_fsmock import install           # 1. 装 mock（读磁盘状态表 + 轮询播放器）
+install(root=args.fs_root,               #    ← 显式传入，不写死
+        player_url=args.player_url)      #    播放器地址同样传入
+from auto_qb.cli import main             # 2. 必须在 install 之后导入
+sys.exit(main())</code></pre>
+
+  <h4>三条硬条件（不满足就会出错）</h4>
+  <ol>
+    <li><strong>按路径前缀限定作用域</strong> —— 见上表下方的 note。默认放行，命中语料树才拦。</li>
+    <li><strong>大小写不敏感 + 剥 <code>\\?\</code> 前缀</strong> —— 传进来的路径是 <code>add_long_path_prefix_for_win(...)</code> 的产物（<code>\\?\D:\…</code> 形态），而 NTFS <strong>不区分大小写</strong>。若按原样精确匹配，会把存在的文件报成缺失 ⇒ <strong>D4 判据全假</strong>。key 必须先 <code>normcase</code> + 去 <code>\\?\</code> 前缀。</li>
+    <li><strong>时间源归播放器</strong> —— mock 在 auto-qb 进程里，<strong>不知道回放游标走到哪</strong>，而 <code>fs_delta</code> 要按 <code>t_seq</code> 施加。⇒ 让 mock 向播放器查"当前磁盘状态"（加 <code>GET /_fsmock/state</code> 端点，按 <code>t_seq</code> 缓存，约 1 次/秒），保持"<strong>播放器是唯一时间源</strong>"这条原则。</li>
+  </ol>
+
+  <h4>诚实边界：mock 丢掉什么，怎么补</h4>
+  <table>
+    <thead><tr><th style="width:38%">判据</th><th style="width:14%">mock</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>D4 缺文件检测（<code>exists=false</code>）</td><td class="mono" style="color:var(--accent)">更好</td><td>直接回表里的三态，不必造文件</td></tr>
+      <tr><td><code>_size_mismatch</code>（<code>getsize != fsize</code>）</td><td class="mono" style="color:var(--accent)">更好</td><td>同上，探测值原样回</td></tr>
+      <tr><td><code>.!qB</code> 后缀 ⇒"看起来不存在"</td><td class="mono" style="color:var(--accent)">更好</td><td>真树要真建带后缀的文件</td></tr>
+      <tr><td><strong>录制期磁盘变化（删 / 增 / 去后缀）</strong></td><td class="mono" style="color:var(--accent)">更好</td><td>真树要<strong>真的去删真实下载盘上的文件</strong> —— 这本身就是风险；mock 改一行表即可</td></tr>
+      <tr><td>长路径 <code>\\?\</code> 的<strong>字符串构造</strong></td><td class="mono">覆盖</td><td><code>add_long_path_prefix_for_win</code> 仍被调用</td></tr>
+      <tr><td>长路径的<strong>真机接受性</strong> / 中文与特殊字符的<strong>真 FS 编码行为</strong></td><td class="mono" style="color:var(--accent)">丢失</td><td>原文把"纳回覆盖"当收益，mock 会重新藏起来 ⇒ <strong>用 3–5 个文件的微型真机测试专门验这两条</strong>（1 秒跑完），不要为它建 6 万文件的树</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">⚠ 白盒代价：必须配静态守阵</span>
+    mock 让回放从原文宣称的"<strong>黑盒测试</strong>"变成<strong>白盒</strong> —— 它依赖"auto-qb 内部用 <code>os.path.exists</code>"这个实现细节。<strong>哪天有人把它改成 <code>pathlib.Path.exists()</code> 或 <code>os.stat</code>，mock 会静默失效、判据变假绿</strong>（最坏的一种失败）。<br>
+    必须配一条静态守阵：扫 <code>src/auto_qb/</code> 的 FS 调用点，断言 <strong>⊆ mock 覆盖集</strong>，并按项目纪律做<strong>红绿双验</strong>（改一处 FS 调用确认它会红）。见 §09。
+  </div>
+
+  <h4>保留 <code>--fs-mode=real</code> 档：稀疏文件的<strong>正确</strong>创建序列 <span class="tag hot">P0 修订</span></h4>
+  <p>real 档（真文件树）仍保留，用途是"用真机环境复核 mock 本身"。若要用它，创建序列必须写死 —— 原文的"<code>setflag</code> + <code>truncate</code>"<strong>是错的</strong>：</p>
+  <table>
+    <thead><tr><th style="width:48%">创建写法</th><th class="mono" style="width:18%">实占（100 文件 × 64 MiB）</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td><code>CreateFileW</code> → <code>DeviceIoControl(FSCTL_SET_SPARSE)</code> → <code>SetFilePointerEx</code> + <code>SetEndOfFile</code></td><td class="mono" style="color:var(--accent)">0 B / 文件</td><td><strong>唯一正确</strong>；0.23 ms/文件 ⇒ 6 万文件 ≈ 14 s</td></tr>
+      <tr><td>标记稀疏 + <code>os.truncate</code> <span class="tag">原文写法</span></td><td class="mono">6400 MiB</td><td><strong>满额分配</strong>，稀疏标志失效</td></tr>
+      <tr><td>朴素 <code>seek+write</code></td><td class="mono">6400 MiB</td><td>满额分配</td></tr>
+      <tr><td><code>fsutil file createnew</code> → <code>sparse setflag</code></td><td class="mono">先占 166 MB</td><td><code>setflag</code> <strong>不回收</strong>已分配的簇</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">另外：<code>fsutil</code> 是<strong>进程派生</strong>（不是系统调用），每文件一次 spawn 在 6 万文件规模上不可接受 —— 必须走 <code>ctypes</code> + <code>DeviceIoControl</code>。<code>--fs-mode=real</code> 的降级探测也应改成<strong>建树前先试建一个并校验分配量</strong>，而不是"第一个文件失败即降级"（中途切换会留下半稀疏半实占的混合树）。</p>
+
+  <h3>回放端状态模型：流状态 vs 实况状态 —— 一并消化 issue 2145 <span class="tag hot">v3 拍板</span></h3>
+
+  <div class="note" style="border-left-color:var(--accent)">
+    <span class="t">要消化的缺陷</span>
+    <code>memory-bank/issues/26-09-20-2145-test-sim-qb-maindata-snapshot-lag.html</code>：<strong>sim_qb 缺「<code>/sync/maindata</code> 快照滞后」模型</strong> —— 仿真端状态<strong>瞬时翻转</strong>，本地无法复现/验证「真值直查」的收益，掩盖一切"真值尚未落地"类缺陷。issue 提议"加 1.5 s 快照滞后模型"。
+  </div>
+
+  <p><strong>语料回放天然给了一半，但不够。</strong>流里的帧是<strong>真机响应</strong>，本身带着真机的快照节奏 —— 可回放期的<strong>写命令（auto-qb 发的 pause / tag / limit）不在录制流里</strong>（录制时没人发这些命令）。所以必须由回放端把命令效果叠加进去，而<strong>"叠在哪一层"正是滞后的来源</strong>。</p>
+
+  <h4>定案：两层状态</h4>
+  <table>
+    <thead><tr><th style="width:20%">层</th><th style="width:44%">组成</th><th>谁读它</th></tr></thead>
+    <tbody>
+      <tr><td><strong>流状态</strong><br><span class="sub">snapshot view</span></td><td>录制流累积到当前 <code>t_seq</code> 的结果（<strong>原样，不改</strong>）</td><td><code>sync/maindata</code>（<strong>滞后地</strong>带上 overlay）</td></tr>
+      <tr><td><strong>实况状态</strong><br><span class="sub">live view</span></td><td>流状态 <strong>⊕</strong> 本地写命令 overlay</td><td><code>torrents/info</code>（<strong>立即</strong>生效）</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>overlay 在命令<strong>被消费的那一刻</strong>立即进入实况状态；</li>
+    <li><code>sync/maindata</code> 只在<strong>下一次快照刷新点</strong>才带上 overlay ⇒ 滞后 <code>--maindata-lag-ms</code>（默认 <strong>1500</strong>，取自 issue 的观测值）；</li>
+    <li>于是「<strong><code>torrents/info</code> 比 <code>sync/maindata</code> 新</strong>」这条真机语义<strong>可在本地复现</strong> ⇒ 真值直查的收益可验证 ⇒ <strong>issue 2145 消化</strong>。</li>
+  </ul>
+
+  <h4>两条必须写明的口径</h4>
+  <ul>
+    <li><strong>滞后值是模型假设，不是实测。</strong>默认 1500 ms 来自 issue 里的观测，<strong>必须由 W0 校准</strong>：用户在自己 qB 的 WebUI 上做一次<strong>可逆操作</strong>（如暂停→恢复一个种子），同时跑抓取器，量 <code>maindata</code> 的反映延迟。校准不出就显式标注"假设值"，<strong>不许当成真机事实</strong>。</li>
+    <li><strong>overlay 只影响"auto-qb 自己发的命令"，不回写语料。</strong>语料保持"整帧原样存"的原则不变 —— overlay 是<strong>回放期的内存态</strong>。冲突规则：overlay 与流里同一字段冲突时<strong>以 overlay 为准</strong>（真机上命令效果也会覆盖快照）；流里出现该 hash 的 <code>torrents_removed</code> 则<strong>清掉它的 overlay</strong>。</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">⚠ 与「窗口合并」的先后顺序</span>
+    窗口内多帧先合并成"这一拍的状态"（见 §08），<strong>再把 overlay 按滞后规则叠上去</strong>。顺序反了会让滞后的边界落在错误的 <code>t_seq</code> 上 —— 实现时把这两步写成两个独立函数，别揉在一起。
+  </div>
+</section>
+
+<section id="s08">
+  <h2><span class="num">08</span>高精度时间轴录制 · 周期全量对齐</h2>
+  <p>快照回答"长什么样"，录播回答"怎么变"。性能分析还要第三个答案：<strong>变化发生在哪个时刻</strong>，以及"客户端靠增量累计建起来的视图"到底跟真机对没对上。所以录播不是"按 tick 采样"，而是<strong>可配置间隔的高频采样 + 周期性全量校验</strong> —— 这两条都是为了不再依赖 <code>--latency-ms</code> 那种常数近似。</p>
+
+  <h4>采样间隔：可设置，性能分析档默认 100 ms</h4>
+  <ul>
+    <li><code>--interval-ms</code>（默认 100）/ <code>--interval</code>（秒，等价写法）：两次 <code>sync/maindata</code> 之间的间隔。<strong>与 auto-qb 的 <code>main_tick</code> 无关</strong> —— 录制端采的是 qB 侧的真实变化，客户端多久来拉一次是另一回事。</li>
+    <li><strong>100 ms 的意义</strong>：auto-qb 每 2 s 拉一次，拿到的是"这 2 s 内的累积变化"。用 2 s 采样只能得到"每 2 s 变了多少"，用 100 ms 采样则能还原出<strong>变化在这 2 s 内部怎么分布</strong> —— 是持续小抖，还是某一瞬间的批量刷新（tracker 刷新、校验完成、一批种子同时转态）。合成数据给不出这个分布，<code>--latency-ms</code> 更给不出。</li>
+    <li>两档预设：<code>--profile=perf</code>（100 ms，性能分析专用）/ <code>--profile=normal</code>（2000 ms，对齐 <code>main_tick</code>，日常回归）。</li>
+    <li>代价：10 次/秒 × 20 分钟 = 12 000 次请求。增量请求本身约 3 ms，但高频轮询会持续占用 qB 的 sync controller —— <strong>对真机做种的影响必须实测</strong>（已列入 W0）。</li>
+  </ul>
+
+  <h4>全量对齐：只留首与尾，中间的抓而不存</h4>
+  <p><strong>语料里只保留两份全量，而且都在流里 —— 首帧（T0）与末帧（T1）。</strong>中间那些周期性全量<strong>仍然要抓</strong> —— 它们的用途是<strong>定位漂移发生在哪个时间窗</strong>，比对完即弃，不落盘。既然增量流是完整的，中间任意时刻的全量都能由 <code>T0 ⊕ 增量流</code> 重建出来，没有保存价值。</p>
+  <ul>
+    <li><strong>T0 就是流的第 0 帧</strong>：录播复用<strong>快照时的同一个 sync session 与 rid</strong> 继续递增 ⇒ 那次全量响应（<code>full_update=true</code>）本身就是 T0，其后各帧是紧接的增量，<strong>零缝隙</strong>。语料里不另存 <code>torrents.json</code> / <code>server_state.json</code> / <code>tags.json</code> / <code>categories.json</code> —— 种子与全局状态<strong>只有一个来源：流</strong>。</li>
+    <li><strong>T1 就是流的末帧</strong>：<strong>正常录完时</strong>（全程检查点对齐）用第二 session（<code>rid=0</code>）抓一次全量，<strong>原样追加为流的最后一帧</strong>（标记 <code>role:"closure"</code>）⇒ 语料里不再有独立的 T1 文件。它格式上与"流中自然出现的 <code>full_update=true</code> 帧"<strong>完全一致</strong>，零转换。回放端读到它就<strong>结束回放并做闭合比对</strong>，<strong>不吐给客户端</strong>（否则客户端会按全量轮重置一次 —— 语义正确但没必要）。若第二 session 会重置共享 rid 序列，全量基准改用 <code>torrents/info</code>（需声明已知字段差异白名单）。</li>
+    <li><strong>首尾闭合校验</strong>（最强判据）：<code>流首帧 ⊕ 中间全部增量帧 == 流末帧</code> 逐字段比对（全程都在流内，没有外部文件参与）。中间检查点回答"对不对"，首尾闭合回答"整条流有没有丢帧 / 有没有累积漂移" —— 两者互补，都要有。</li>
+    <li><strong>未对齐即停止录制 —— 不留中间态</strong>：任一检查点比对未通过 ⇒ <strong>立即停止采样，并把这份全量当场入盘</strong>。检查点<strong>本来就是抓一份全量来比对的</strong>，未通过时它已经在手里 —— 就地追加进流（<code>role="mismatch"</code>，附差异摘要），然后停止。不补抓 T1（闭合只对完整录完的语料有意义），也不另开目录 —— 它和 T1 是同一种帧，零转换。<br>于是<strong>末帧永远是一份全量</strong>：正常收尾是 T1，异常收尾是出问题的那个检查点 —— 形态整齐，DEBUG 时直接看最后一帧就是现场。<br>产物落盘但 <code>meta.status="aborted"</code>、<code>meta.abort_at={t_seq, 差异摘要}</code>，<strong>不写 <code>groups.json</code></strong>（真值分组已不可信，绝不能被拿去当判据答案），退出码非 0。<strong>没有"带病继续录"这回事</strong> —— 一段自己都说不清对不对的流，比没有流更危险。</li>
+    <li><strong>免费的全量</strong>：流里若出现自带 <code>full_update=true</code> 的帧（qB 主动要求重新全量同步，如 qB 重启 / 内部重置），它<strong>本身就是一份完整全量</strong> —— 直接拿来当检查点，省掉一次额外请求。可做成"优先吃免费帧，超过 <code>--full-every</code> 没出现才主动抓"。</li>
+    <li><strong>比对维度</strong>：hash 集合差（<code>missing_in_stream</code> / <code>extra_in_stream</code>）、逐字段值差（按字段计数 + 前 N 条样本）、总对齐率 <code>alignment_rate</code>。<strong>结果不另开文件</strong> —— 通过就只在 <code>meta.json</code> 累加一行统计（共 N 次 / 失败 K 次）；<strong>不通过则立即停止录制</strong>，差异摘要写进 <code>meta.abort_at</code>（见上一条）。</li>
+    <li><strong>这一步不只产出"语料质量报告"</strong>：auto-qb 与录制端用的是同一套"增量累计建全量"的逻辑。若增量语义里有坑（某些字段只在 <code>full_update</code> 里给、删除事件漏报、值被服务端覆盖），这里会先红 —— 等于提前探测 auto-qb 快照漂移这类缺陷。</li>
+  </ul>
+
+  <div class="fig">
+    <div class="cap">Sampling timeline · periodic full-sync checkpoints</div>
+    <svg viewBox="0 0 900 200" width="100%" height="200" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Consolas,monospace">
+      <line x1="40" y1="52" x2="856" y2="52" stroke="rgba(255,255,255,.14)" stroke-width="1" fill="none"/>
+      <line x1="41" y1="52" x2="856" y2="52" stroke="rgba(255,255,255,.38)" stroke-width="13" stroke-dasharray="1 23" fill="none"/>
+      <g fill="#d19a54">
+        <rect x="180" y="38" width="8" height="8" transform="rotate(45 184 42)"/>
+        <rect x="324" y="38" width="8" height="8" transform="rotate(45 328 42)"/>
+        <rect x="468" y="38" width="8" height="8" transform="rotate(45 472 42)"/>
+        <rect x="612" y="38" width="8" height="8" transform="rotate(45 616 42)"/>
+        <rect x="756" y="38" width="8" height="8" transform="rotate(45 760 42)"/>
+      </g>
+      <g fill="#6d6b69" font-size="9" letter-spacing="1">
+        <text x="40" y="26">sync/maindata 采样帧（--interval-ms，默认 100）</text>
+        <text x="170" y="76">全量检查点</text>
+        <text x="314" y="76">全量检查点</text>
+      </g>
+      <g stroke="rgba(255,255,255,.16)" fill="none" stroke-width="1">
+        <rect x="40" y="120" width="330" height="46"/>
+        <rect x="530" y="120" width="330" height="46"/>
+      </g>
+      <g stroke="#d19a54" stroke-width="1" fill="none">
+        <path d="M184 82 L184 116"/>
+        <path d="M760 82 L760 116"/>
+      </g>
+      <g fill="none" stroke="rgba(255,255,255,.30)" stroke-width="1">
+        <path d="M370 143 L520 143"/>
+        <path d="M370 137 L370 149"/>
+        <path d="M520 137 L520 149"/>
+      </g>
+      <g fill="#9b9996" font-size="10">
+        <text x="56" y="148">T0 ⊕ 增量流 → 重建视图</text>
+        <text x="546" y="148">周期全量（内存比对，不落盘）</text>
+      </g>
+      <g fill="#d19a54" font-size="9" letter-spacing="1">
+        <text x="392" y="132">逐字段比对</text>
+      </g>
+      <g fill="#6d6b69" font-size="9">
+        <text x="56" y="184">通过 → 继续录 + meta 统计　|　不通过 → 立即停止，该全量帧作末帧入盘（role=mismatch）　|　首末帧 → stream_closure</text>
+      </g>
+    </svg>
+  </div>
+
+  <h4>其它时变量：不另造格式，原样存进同一条流</h4>
+  <p>结论先行 —— <strong>不搞"全局状态单开一列 / 稀疏帧"那套</strong>。qB 一轮 <code>sync/maindata</code> 响应里本来就同时带着种子增量、<code>server_state</code>、tags / categories 增删，<strong>整帧原样落盘</strong>即可。语料就是三样东西：<code>T0 + 原始增量流 + T1</code>。</p>
+
+  <ul>
+    <li><strong>零语义转换 = 零失真风险</strong>：自己做 diff / 稀疏化，等于把"qB 的语义"翻译成"我方的语义"，多一层就多一处可能翻错。原样存，回放端与真机自动一致。</li>
+    <li><strong>merge 语义自动复刻</strong>：auto-qb 对 server_state 是 merge 累积（<code>store.py:111-118</code>）。原样把帧交给同一套处理逻辑即可，不必我们再去实现"只应用变化的键"。</li>
+    <li><strong>回放端退化成"按时间轴吐帧的播放器"</strong>：不用重建响应、不用自己维护脏集合 —— 实现复杂度大幅下降。</li>
+    <li><code>full_update=true</code> 的帧天然就是一份完整全量，原样存后可直接当检查点（即前一节的"免费全量"）。</li>
+  </ul>
+
+  <pre><code>{"t_seq":1234,"t_wall":"2026-09-21T01:20:03.412","dt_ms":100,"rtt_ms":3.1,  # 录制侧附加
+ "rid":87,"full_update":false,                        # ↓ 以下 qB 原始响应，原样不动
+ "torrents":{"&lt;hash&gt;":{"dlspeed":0,"upspeed":12345}},
+ "torrents_removed":[],
+ "categories":{}, "categories_removed":[],
+ "tags":[], "tags_removed":[],
+ "server_state":{"up_info_speed":987654,"dl_info_speed":0,"free_space_on_disk":2199023255552,
+                 "connection_status":"connected","dht_nodes":412,"up_rate_limit":0, ...}}</code></pre>
+
+  <table>
+    <thead><tr><th style="width:28%">数据</th><th style="width:26%">在原始响应里的位置</th><th>回放端怎么用</th></tr></thead>
+    <tbody>
+      <tr><td>种子级字段<br><span class="sub">dlspeed / upspeed / progress / state …</span></td><td><code>torrents</code>（增量）</td><td>原样吐给客户端，由 auto-qb 自己 merge 进记录</td></tr>
+      <tr><td><strong>全局状态 server_state</strong><br><span class="sub">速度 / 累计流量 / dht_nodes / connection_status / free_space_on_disk</span></td><td><code>server_state</code></td><td>回放端按 <strong>merge</strong> 累积到自己的 server_state（与 <code>store.py</code> 同款逻辑）</td></tr>
+      <tr><td>全局限速 <code>dl/up_rate_limit</code></td><td>在 server_state 内</td><td>不单列。⚠ 与端点 <code>transfer/*Limit</code> 的<strong>单位一致性待 W0 实测</strong>（真机若不一致，回放端按各自口径回）</td></tr>
+      <tr><td>tags / categories</td><td><code>tags</code> / <code>tags_removed</code> / <code>categories</code> / <code>categories_removed</code></td><td>回放端据此维护集合，用于回答 <code>torrents/tags</code> / <code>torrents/categories</code> 端点；<strong>初值取自第 0 帧</strong>（全局状态同理 —— 所以不另存 <code>tags.json</code>）</td></tr>
+      <tr><td><code>app/preferences</code></td><td>不在这条流里</td><td>静态，只在 <code>meta.json</code> 记一次基线</td></tr>
+      <tr><td><code>sync/torrentPeers</code></td><td>不在这条流里（按 hash 拉取）</td><td>默认不录，<code>--record-peers</code> 才录</td></tr>
+      <tr><td><strong>磁盘文件状态</strong><br><span class="sub">存在性 + 大小 + <code>.!qB</code> 后缀<br>qB 响应里<strong>没有</strong>，是我们额外探测的</span></td><td>不在原始响应里，且<strong>确实随时间变</strong>（被删 / 移回 / 下载中增长 / 完成后去掉后缀）</td><td>唯一需要"我们造"的时间序列：<strong>初值</strong>在 <code>files.json</code> 的 <code>disk:{exists,size,suffix}</code>（抓取时刻），<strong>变化</strong>走录制侧附加的 <code>fs_delta</code>（每个检查点增量探测一次）。回放端按 <code>t_seq</code> 施加 <span class="tag hot">v2 修订</span>：由 §07 的 <strong>mock 层</strong>消费（不再物化真文件）—— 不塞进 qB 原始响应部分，避免污染"原样存"的原则</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">⚠ server_state 是 merge，不是 replace</span>
+    <code>torrents/store.py:111-118</code>：<code>self.server_state = {**(self.server_state or {}), **dict(ss)}</code>。这条语义必须复刻 —— <strong>原样存的另一个好处就在这里</strong>：既然回放端拿到的是和真机一模一样的帧，用同一套 merge 逻辑处理就自动正确；反之若我们自作聪明做了"稀疏化"，某键在某帧缺失时的行为就要靠我们自己猜。
+  </div>
+
+  <div class="note">
+    <span class="t">两个口径要写进 howto</span>
+    ① <code>free_space_on_disk</code>：回放时给的是<strong>录制到的真机值</strong>，不是回放机的真实剩余空间 —— 别拿它当回放机的事实。<span class="tag hot">v2 修订</span>默认 mock 档下这条由 <code>shutil.disk_usage</code> 的 mock 统一接管（含 <code>rules/expr/env.py:219</code> 的 <code>disk_used(path)</code> 取值函数）；<code>--fs-mode=real</code> 下才是"环境本身不占盘"的问题。② <strong>键集漂移</strong>：qB 版本间 server_state 的键集会变，<code>meta.json</code> 记本次记录的键集，回放端对未知键<strong>原样透传</strong>而不是丢弃。
+  </div>
+
+  <p class="sub">体量：整包 <code>server_state</code> 约 600–900 B/帧 ⇒ 12 000 帧 ≈ <strong>7–11 MB</strong>；它高度重复，<strong>gzip 压缩比极佳</strong> ⇒ 落盘用 <code>.jsonl.gz</code>，回放时<strong>流式解压</strong>（一行一帧，无需整体进内存）。⚠ 真正的内存大头是回放端重建的种子视图：5000 种子 × 70 字段在 Python 里约 100–200 MB —— <strong>别对每帧做深拷贝</strong>。</p>
+
+  <h4>回放：按录制时间轴推进</h4>
+  <ul>
+    <li>sim 端内部持有"录制时间游标"：客户端每次来拉 <code>sync/maindata</code> 时，把游标推进到<strong>当前回放时刻</strong>，把这段时间内落过的采样帧合并成一次增量响应。<code>--interval-ms</code> 越小，客户端一次拉到的帧越多 —— 但每帧的内容都是真机的真实变化。</li>
+    <li><code>--replay-speed</code> 倍速。<strong>首帧即回放起点</strong>（种子与全局初值都在里面），<strong>末帧用于终态闭合校验</strong>（回放累积出的状态 vs 末帧，逐字段比）；中间检查点不进流，只喂给 <code>CORPUS.stream_alignment</code>。</li>
+    <li>rid 序列由回放端自行分配，但保留"rid 失配 → 走全量"可被触发的能力（S5 断连自愈场景依赖它）。</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">⚠ 窗口内多帧的<strong>合并语义</strong>必须定义 <span class="tag hot">v2 修订</span></span>
+    100 ms 采样 + 2 s 的 <code>main_tick</code> ⇒ 一次响应要合并约 <strong>20 帧</strong>。原文只说"合并成一次增量响应"，没定义怎么合 —— 而窗口内同一 hash <strong>先出现后删除</strong>（或先改再改回）时，朴素合并会把它当成"存在"；<code>torrents_removed</code> 也要<strong>按序净额化</strong>（先删后加 ⇒ 净额是"加"）。这正是 <code>store</code> 自己的语义，必须对齐 —— 否则 D 系列（删除 / 重复投递 / 幂等）判据会因<strong>合并错误</strong>而假红或假绿，且很难归因（看起来像 auto-qb 的 bug）。<br>
+    规则：<code>torrents</code> 逐 hash 后写覆盖；<code>torrents_removed</code> 与 <code>torrents</code> 做<strong>净额判定</strong>（以窗口末态为准）；<code>categories</code> / <code>tags</code> 同理；<code>server_state</code> 仍是 <strong>merge</strong>（与 <code>store.py:111-118</code> 同款）。<br>
+    <strong>守阵</strong>：构造"窗口内先增后删"的语料片段，断言回放端<strong>不吐该 hash</strong>。<br>
+    <span class="tag hot">v3</span><strong>与 overlay 的先后顺序</strong>：先合并窗口（本步）→ <strong>再</strong>按滞后规则叠加本地写命令 overlay（§07「流状态 vs 实况状态」）。顺序反了会让滞后边界落在错误的 <code>t_seq</code> 上 —— 实现时写成两个独立函数，别揉在一起。
+  </div>
+
+  <h4>延迟：录真实 RTT，替代常数近似</h4>
+  <ul>
+    <li>录制时记下每次请求的真实往返 <code>rtt_ms</code>（含 qB 自身处理时间）。回放时按 <code>--latency-mode=recorded|p50|p95|const:N</code> 注入 —— 比拍一个常数准确得多，尤其能还原"全量轮 205 ms / 增量轮 3.3 ms"这种<strong>随载荷变化</strong>的延迟曲线。</li>
+    <li><code>--latency-ms</code> 降级为 <code>const:N</code> 的一种写法，只在合成档或无 RTT 录制时使用。</li>
+    <li><strong>诚实边界</strong>：这仍补不上"本地回环 vs 真机网络"的传输层差异。高频采样 + RTT 录制解决的是<strong>数据面</strong>对齐（变化的内容与节奏），这也正是性能分析里真正会误导结论的部分；传输层差异应在结论里显式标注，而不是假装不存在。</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">已知局限</span>
+    录 20 分钟只覆盖 20 分钟里的真实变化；qB 的 tracker 周期刷新（30 min 级）大概率录不到 —— 长时间录制是时间成本，不是设计缺陷。100 ms 采样属于<strong>侵入式观测</strong>，录制期间不要同时做别的性能比对。<strong>建议第一次用 <code>--profile=normal --minutes 10</code> 验链路，确认有用再上 100 ms 档。</strong>
+  </div>
+</section>
+
+<section id="s09">
+  <h2><span class="num">09</span>判据改造</h2>
+  <p><code>sim_run.py</code> 的 checks 大部分只依赖"仿真端状态 + 写台账"，可原样复用。要改的是依赖<strong>人造结构</strong>的那几条，外加一组新判据。</p>
+
+  <table>
+    <thead><tr><th class="mono">check</th><th style="width:24%">现状</th><th>语料模式下的改法</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">D4.group_stop_rate</td><td>取"第 G 个辅种组" —— 合成端自己造的组</td><td>从 <code>groups.json</code> 取真值组；<strong>建议默认挑"真机上磁盘就有问题的组"</strong>（<code>disk.exists=false</code> 或 <code>disk.size != 逻辑大小</code> 的那些），那是天然样本，比人为删文件更真 —— 而且覆盖了"大小不符"这类真机上更常见的情况。若录制期间真发生了删除（<code>fs_delta</code> 非空），<strong>直接用它的 <code>t_seq</code> 当时间锚点</strong>，不必再靠 <code>--delete-files</code> 注入</td></tr>
+      <tr><td class="mono">S8.manual_limits_*</td><td>合成端按 <code>i%10==3</code> 造 30 个奇数 KiB/s 限速</td><td>从语料里统计真实 <code>is_manual_speed_limit</code>（奇数 KiB/s）的种子 —— 样本更真，判据更强</td></tr>
+      <tr><td class="mono">S1–S3 / SYNC / B4</td><td>阈值在合成数据下固化</td><td>旧基线另存 <code>synthetic.*</code> 前缀；语料档<strong>重新固化</strong>，两套不混用</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">⚠ 严格模式依赖 piece hash，不能"现场随机合成" <span class="tag hot">v2 修订</span></span>
+    <code>rules/actions/checking.py:145-154</code> 的<strong>严格模式</strong>是把候选与目标的 <strong>piece hash 列表逐项比对</strong>：<code>torrents_piece_hashes(cand.hash) == target</code>。真实世界里<strong>辅种组成员的 piece hash 必须相同</strong>（同文件、同大小、同分块）。<br>
+    ⇒ 若按 hash 各自随机合成，<strong>同组成员会互不相等 ⇒ 严格模式判据恒假</strong>（比不测更糟：会给出"没有候选通过"的错误结论）。<br>
+    <strong>修法</strong>：piece hash 由「<strong>排序后的（相对路径 + 大小）集合</strong>」确定性派生 —— 同组成员天然共享同一列表，与真机语义一致；<code>torrents/export</code> 返回一个最小合法 bencode 即可。两个端点当前在 <code>sim_qb</code> 里<strong>不存在</strong>（404），W3 需一并补上。
+  </div>
+
+  <h4>新增（语料档专属）</h4>
+  <table>
+    <thead><tr><th class="mono" style="width:34%">check</th><th>判据</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CORPUS.group_exact <span class="tag hot">头号</span></td><td>回放期 auto-qb 分出的组 == <code>groups.json</code> 的真值分组（逐组逐 hash）。这是<strong>合成数据给不了</strong>的判据：真机 5000 种子该分多少组、每组几个成员，现在是已知答案。<br><span class="tag hot">v2 修订</span><strong>参考时刻必须钉死</strong>：<code>groups.json</code> 若按"抓完算"则对应 <strong>T1 终态</strong>，而回放从 T0 开始、且分组<strong>会变</strong>（<code>_check_size_consistency</code> / <code>_check_missing_files</code> 暂停整组、规则删种子触发 <code>_leave_group</code>、中途新种子建新组）。<br>⇒ 定为：<strong>在首帧应用后、任何写动作发生前求值</strong>（与 T0 快照同构，语义最干净）；若要验终态，则同时产出 <code>groups_t0.json</code> / <code>groups_t1.json</code>，各在对应时刻比一次。<strong>两侧必须自洽</strong> —— 若选 T1，则 <code>groups.json</code> 里必须含录制期新出现的种子</td></tr>
+      <tr><td class="mono">CORPUS.fields_complete</td><td>语料字段集 ⊇ <code>_SNAPSHOT_FIELDS</code>（<strong>70</strong> 字段）<span class="tag hot">v2 修订</span>。原文写 <code>REQUIRED_TORRENT_FIELDS</code>（27 字段）作硬下限 —— 那样会<strong>漏掉 43 个扩展字段的丢失</strong>（<code>_SNAPSHOT_FIELDS = 必需 21 + 重加升格 6 + 扩展 43</code>）。改为与 70 字段表比对，缺失的扩展字段按 <code>WARN</code> 逐项列出</td></tr>
+      <tr><td class="mono">CORPUS.fs_state_match <span class="tag hot">新增</span></td><td><strong>mock 层回给 auto-qb 的三态 == <code>files.json</code> + <code>fs_delta</code> 的表</strong>（存在性 + 大小 + 后缀三项）。替代原文的 <code>CORPUS.fs_tree_match</code>（那是针对物化真树的；mock 档下"树"不存在，改验 mock 的答复）。<code>--fs-mode=real</code> 时仍可跑原判据</td></tr>
+      <tr><td class="mono">CORPUS.fs_mock_coverage <span class="tag hot">新增</span></td><td><strong>静态守阵</strong>（§07 白盒代价）：扫 <code>src/auto_qb/</code> 的 FS 调用点，断言 <strong>⊆ mock 覆盖集</strong>。防"哪天改用 <code>pathlib.Path.exists()</code> / <code>os.stat</code> 导致 mock 静默失效 ⇒ 假绿"。<strong>必须做红绿双验</strong>（改一处 FS 调用确认它变红）</td></tr>
+      <tr><td class="mono">CORPUS.endpoints_covered <span class="tag hot">新增</span></td><td>语料档<strong>已实现</strong>的端点集 ⊇ 语料里<strong>出现过</strong>的端点集。防"合成数据从未覆盖的路径"这个承诺落空 —— 现有外壳已知缺口：<code>sync/torrentPeers</code> / <code>torrents/export</code> / <code>torrents/pieceHashes</code> 三个路由<strong>根本不存在</strong>（404），写端点只建模 24 个</td></tr>
+      <tr><td class="mono">CORPUS.sanitize_stream_consistent</td><td>流中出现的每个 hash 都能在 <code>files.json</code> / <code>trackers.json</code> 里找到（新种子须已当场 append）、每个 tracker 域名都在站点映射表内 ⇒ 脱敏映射在"第 0 帧—增量帧—T1"全程一致（第 05 节）。抓取期不通过即不落盘</td></tr>
+      <tr><td class="mono">CORPUS.sanitize_injective</td><td>伪名映射零碰撞（抓取期校验，红则不落盘）</td></tr>
+      <tr><td class="mono">CORPUS.fs_tree_match <span class="tag hot">仅 real 档</span></td><td>物化后的文件树与 <strong>由 <code>files.json</code> 推导出的树</strong>逐项一致 —— <strong>存在性 + 大小 + 后缀</strong>三项都要对（<code>disk.exists=false</code> 的必须不存在；<code>size</code> 按探测值建；<code>suffix=".!qB"</code> 的必须带后缀）。否则 D4 的天然样本（缺文件 / 大小不符 / 下载中）就失真了。<br><span class="tag hot">v2 修订</span>默认 <code>--fs-mode=mock</code> 下无"树"可验，改跑 <code>CORPUS.fs_state_match</code></td></tr>
+      <tr><td class="mono">CORPUS.stream_closure <span class="tag hot">新增</span></td><td><strong>首尾闭合</strong>：<code>流首帧 ⊕ 中间全部增量帧 == 流末帧</code> 逐字段比对 —— <strong>流内自洽，不落盘</strong>（抓取期算一次、回放期再算一次）。<strong>种子与全局状态一起比</strong>（不是只比种子）—— 后者尤其要验 <code>server_state</code> 的 merge 累积有没有漂。不过则整条流不可用 ⇒ 直接判 FAIL，不是 WARN。这是语料可信度的<strong>底线</strong></td></tr>
+      <tr><td class="mono">CORPUS.stream_alignment <span class="tag hot">新增</span></td><td><strong>抓取期判据</strong>：全部中间检查点对齐 = PASS；任一未通过 = <strong>FAIL ⇒ 停止录制</strong>（那份检查点全量作末帧入盘，供 DEBUG），语料标 <code>aborted</code> 且不产出 <code>groups.json</code>。回放期只需确认 <code>meta.status == "ok"</code> —— <strong>可用语料必然全通过，不存在"带病回放"</strong>。它同时是"auto-qb 快照会不会漂"的早期信号</td></tr>
+      <tr><td class="mono">CORPUS.replay_timeline_aligned</td><td>回放推进的录制时刻与墙上时钟的偏差（100 ms 档下 sim 端自己掉拍会让时间轴失真 ⇒ 回放结论不可信）。超阈值记 WARN</td></tr>
+      <tr><td class="mono">CORPUS.replay_stream_consumed</td><td>录播模式下增量流被完整消费（否则回放提前结束却判 OK —— 空转陷阱）</td></tr>
+      <tr><td class="mono">CORPUS.maindata_lag_modeled <span class="tag hot">新增</span></td><td><strong>快照滞后模型生效</strong>（§07）：发一条写命令后，<code>torrents/info</code> 在 ≤1 tick 内反映；<code>sync/maindata</code> 在 <code>--maindata-lag-ms</code> <strong>之前不反映</strong>、之后才反映。<br><strong>红验</strong>：把 <code>--maindata-lag-ms 0</code> 跑一次，这条判据<strong>必须红</strong> —— 否则它没在测滞后，只是恒绿。<br>这条判据是 issue <code>26-09-20-2145</code> 的<strong>验收凭据</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">反向对照（必做）<span class="tag hot">v2 修订</span></span>
+    现有纪律要求"撤掉守卫跑一次确认它会报"。这里对应<strong>两条</strong>：<br>
+    ① <strong>故意把某个组的成员路径改掉一个字符，<code>CORPUS.group_exact</code> 必须红</strong>。否则这条判据可能是空壳。<br>
+    ② <strong>把 <code>grouping.py</code> 里的 <code>os.path.exists</code> 换成 <code>os.stat</code>（或 <code>pathlib</code>），<code>CORPUS.fs_mock_coverage</code> 必须红</strong>。否则那条守阵也是空壳 —— 而它守的正是 mock 最危险的失效模式（静默失效 ⇒ 假绿）。
+  </div>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10</span>风险与红线</h2>
+
+  <table>
+    <thead><tr><th style="width:16%">风险</th><th style="width:8%">等级</th><th>缓解</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>隐私泄露</strong><br>（语料含真实资源清单）</td><td class="mono" style="color:var(--accent)">P0</td>
+        <td>①只有 strict 一档，<strong>不提供原始输出</strong>；②盐不落盘；③<strong>语料位置改为参数</strong><span class="tag hot">v3 拍板</span> —— 由 <code>--out &lt;dir&gt;</code> / <code>--source=corpus:&lt;dir&gt;</code> 显式传入，<strong>不写死任何路径</strong>；调用方应选 <code>auto-qb-data/corpus/</code>（已 gitignore）或 B1 哨兵目录内的 <code>&lt;root&gt;/corpus/</code>。<strong>严禁提交</strong>，产物目录自带 <code>.gitignore</code> 与警示 README；④抓取器<strong>不修改、不提交 <code>config.yml</code></strong>（红线），只接受命令行凭据或 <code>--from-config</code> 只读解析；<strong>凭据绝不写入 <code>meta.json</code> / 语料 / <code>warnings.jsonl</code></strong><span class="tag hot">v2</span></td>
+      </tr>
+      <tr><td>真机抓取拖慢正在做种的 qB</td><td class="mono">P0</td><td><code>--qps</code> 限速 + <code>--sample</code> + <code>--dry</code> 预演；只调只读端点；首次跑 <code>--sample 200</code></td></tr>
+      <tr><td>脱敏破坏分组 ⇒ 语料"假真"</td><td class="mono">P0</td><td>第 05 节的守恒校验是<strong>阻断式</strong>的（不一致即不落盘），且必须<strong>先于</strong>回放器完成</td></tr>
+      <tr><td>qB 版本漂移导致字段缺失</td><td class="mono">P1</td><td><code>meta.json</code> 记版本；<code>CORPUS.fields_complete</code> 常驻判据；回放时未知字段原样透传而不是丢弃</td></tr>
+      <tr><td>稀疏文件在非 NTFS 盘失效<br><span class="sub">real 档 only</span></td><td class="mono">P2</td><td><span class="tag hot">v2 修订</span>默认 mock 档<strong>不受影响</strong>（不落文件）。<code>--fs-mode=real</code> 时才需处理：建树前<strong>先试建一个并校验分配量</strong>再决定，而不是"第一个文件失败即降级"（中途切换会留下半稀疏半实占的混合树）</td></tr>
+      <tr><td><strong>mock 层静默失效 ⇒ 假绿</strong><br><span class="sub">v2 新增</span></td><td class="mono" style="color:var(--accent)">P0</td><td>mock 是白盒，依赖"auto-qb 用 <code>os.path.exists</code>"这个实现细节。缓解：<code>CORPUS.fs_mock_coverage</code> 静态守阵（FS 调用点 ⊆ mock 覆盖集）+ <strong>红绿双验</strong>（见 §09）。这是 mock 方案唯一的高危点，必须有守卫</td></tr>
+      <tr><td>长路径 / 非法字符的真机行为未被覆盖<br><span class="sub">mock 档的诚实边界</span></td><td class="mono">P1</td><td><span class="tag hot">v2 修订</span>mock 覆盖<strong>字符串构造</strong>，不覆盖真 FS 的<strong>接受性与编码行为</strong>。缓解：<strong>3–5 个文件的微型真机测试</strong>专测这两条（不要为它建 6 万文件的树）；失败计入 <code>warnings.jsonl</code> 而非中断</td></tr>
+      <tr><td>流里出现第 0 帧之后新增的种子</td><td class="mono">P1</td><td><strong>出现即 append</strong>：当场抓 files / trackers 追加进 <code>files.json</code> / <code>trackers.json</code>（不等结束再补）。补抓拉长了这一帧 —— 由实测 <code>dt_ms</code> 记录，回放照实推进；抓不到的记 <code>warnings.jsonl</code>，回放端返回空文件列表（与 auto-qb"空 <code>file_map</code> 不归组"一致，非错误路径）</td></tr>
+      <tr><td>流与 files/trackers 元数据的脱敏映射不一致</td><td class="mono">P1</td><td>两者必须共用同一字典与同一把盐（第 05 节）。落盘前做<strong>流级自检</strong>，有漏即 FAIL 不落盘 —— 半段换盐比不录更糟</td></tr>
+      <tr><td><strong>100 ms 采样给真机 qB 加压</strong></td><td class="mono" style="color:var(--accent)">P0</td><td>属侵入式观测：<code>--qps</code> 限速改为按采样间隔天然限流（10 次/秒），另加 <code>--minutes</code> 硬上限；录制期间<strong>不做其它性能比对</strong>；W0 实测判否则放宽到 250–500 ms</td></tr>
+      <tr><td>回放耗时 ≠ 真机耗时</td><td class="mono">P2</td><td>改用<strong>录制真实 RTT + 按序列注入</strong>（<code>--latency-mode=recorded</code>），比常数近似更贴近随载荷变化的真实曲线；但回环与真机网络的传输层差异仍在 —— <strong>不要</strong>把语料档测出的绝对耗时当成真机承诺，结论里显式标注这一残余偏差</td></tr>
+      <tr><td>维护两套数据源</td><td class="mono">P2</td><td>合成档保留为对照（旧基线可比、无需真机即可跑），但<strong>不再往合成档添新造数陷阱</strong>；新判据只加在语料档</td></tr>
+      <tr><td><strong>语料只留一份 / 存放盘持久性未确认</strong><br><span class="sub">v3 新增</span></td><td class="mono">P1</td><td>位置已改为参数（调用方决定），但一份要"真机 + 20 分钟高频录制"才能产出的语料<strong>不该是单点</strong>。缓解：① 落盘后<strong>至少再拷一份</strong>到另一块盘；② 调用方优先选 <code>auto-qb-data/corpus/</code>（已 gitignore、非下载盘）；③ 若落到 R 盘这类虚拟盘，先确认它是镜像文件后端（持久）而非内存盘</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11</span>波次计划 W0–W6</h2>
+
+  <table>
+    <thead><tr><th style="width:6%">波次</th><th style="width:26%">内容</th><th>验收判据（不满足即停手）</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">W0</td><td><strong>可行性实测</strong><br>本机已做：稀疏文件正确序列 ✅ / R 盘空间口径 ✅ / 语料体量 ✅ / FS 调用点清单 ✅<br><span class="tag">待你跑</span>全量抓取耗时、脱敏后分组守恒、<strong>100 ms 采样的真机负载</strong>、第二 session 全量是否干扰增量流、<strong>磁盘探测负载 + temp path 覆盖</strong>、R 盘持久性确认<span class="tag hot">v3</span>、<strong><code>maindata</code> 快照滞后校准</strong>（你在自己 qB 的 WebUI 上做一次可逆操作，同时跑抓取器，量反映延迟）</td><td>各项待测出数；<strong>任一项判否 → 回到第 07 / 08 / 10 节改方案，不进 W1</strong>。原"R 盘稀疏可用性"<strong>已作废</strong>（默认 mock 档不落文件）。滞后校准失败不阻断 —— 显式标注"假设值 1500 ms"即可</td></tr>
+      <tr><td class="mono">W1</td><td><strong>抓取器</strong> <code>scripts/qb_capture.py</code>：<code>capture</code> 一次做完（T0 → 流 → T1），<code>snapshot</code> / <code>record</code> 仅作分步调试<br>+ <code>--interval-ms</code> / <code>--profile</code> / <code>--full-every</code> / RTT 记录<br>+ 语料 schema + <code>--self-test</code></td><td><code>--sample 200</code> 在真机上跑通；<code>--profile=normal --minutes 10</code> 录通且 <code>meta.json</code> 里检查点统计出数（共 N 次 / 失败 K 次）；<strong>流级自检</strong>（<code>CORPUS.sanitize_stream_consistent</code>）通过；<code>warnings.jsonl</code> 可解释；<code>meta.json</code> 字段齐全；<code>--dry</code> 预估与实际请求数一致</td></tr>
+      <tr><td class="mono">W2 <span class="tag hot">关键</span></td><td><strong>脱敏 + 等价类守恒校验</strong></td><td><strong>脱敏前后分组逐组一致</strong>；映射零碰撞；盐不落盘；产物目录带 <code>.gitignore</code>。<strong>未通过不进 W3</strong></td></tr>
+      <tr><td class="mono">W3</td><td><strong>回放器</strong> <code>sim_qb.py --source=corpus</code> + <code>--fs-mode=mock</code> + <code>sim_run.py</code> 透传<br><span class="tag hot">修订</span>+ <strong>FS mock 层</strong> <code>scripts/sim_fsmock.py</code> + 在 <code>sim_autoqb.py</code> 的 import 前注入<br>+ <strong>两层状态模型</strong>（流状态 / 实况状态 + <code>--maindata-lag-ms</code>）<span class="tag hot">v3</span><br>+ 补 <code>sync/torrentPeers</code> / <code>torrents/export</code> / <code>torrents/pieceHashes</code> 三个缺失路由<br>+ <strong><code>src/</code> 归组纯函数抽取</strong>（唯一一处 <code>src/</code> 改动，见 §04）</td><td>静态回放跑通；<code>CORPUS.fs_state_match</code> 绿；<strong><code>CORPUS.fs_mock_coverage</code> 绿 + 红验通过</strong>；<code>CORPUS.endpoints_covered</code> 绿；<strong><code>CORPUS.maindata_lag_modeled</code> 绿 + 把 <code>--maindata-lag-ms 0</code> 跑一次确认它变红</strong>；归组纯函数抽取后<strong>全量测试不退化</strong>（当前基线 <strong>1094 passed</strong>，Windows）；合成档回归命令 <code>--source=synthetic</code> 结果不变</td></tr>
+      <tr><td class="mono">W4</td><td><strong>时间轴回放</strong>（游标推进 + 倍速 + <code>--latency-mode</code>）<br>先用 normal 档（2 s）打通，再上 perf 档（100 ms）</td><td><code>CORPUS.replay_stream_consumed</code> 与 <code>replay_timeline_aligned</code> 绿；<strong>perf 档下 sim 端自身不掉拍</strong>（否则先降采样率）；录播档的稳态间隔/漂移出数，与合成档对比并<strong>记录差异原因</strong></td></tr>
+      <tr><td class="mono">W5</td><td><strong>判据改造 + 基线重固化</strong> + <code>docs/sim-client-test-howto.md</code> 增补"语料模式"一节<br>+ <strong>关闭 issue <code>26-09-20-2145-test-sim-qb-maindata-snapshot-lag</code></strong><span class="tag hot">v3 拍板</span></td><td><code>CORPUS.group_exact</code> 绿且<strong>反向对照红验通过</strong>；<code>CORPUS.maindata_lag_modeled</code> 绿且红验通过；<code>sim_baseline.py --merge</code> 生成语料档阈值；旧基线另存 <code>synthetic.*</code>。<br><strong>issue 关闭动作</strong>：改报告 HTML 的 <code>issue-status</code> 徽标 + <code>&lt;meta name="issue-status"&gt;</code> 两处为 <code>Fixed</code>，重跑 <code>gen_issues_index.py</code>，并在报告里补一段"如何被本计划覆盖"的结论（<strong>凭据 = <code>CORPUS.maindata_lag_modeled</code> 的红绿双验</strong>）</td></tr>
+      <tr><td class="mono">W6</td><td><strong>真机走查闭环（已收窄）</strong><span class="tag hot">修订</span><br>原写"把 <code>activeContext.md</code> 里 8 条待真机走查先过一遍"，实测该清单<strong>约 15 条</strong>，且<strong>绝大多数是前端观感项</strong>（右键菜单响应 / 3000+ 滚动流畅度 / 双色图标 / 五主题配色 / 列设置多标签页 / 今日流量目视…）—— <strong>回放 qB 数据面根本测不到</strong>。<br>改为只处理<strong>数据面相关</strong>的少数几条（如 <code>TASK015 错误种子原因</code>、<code>视图重建范围收口（速度是否随轮询刷新）</code>）</td><td>逐条给出"语料回放结论 + 是否仍需真机确认"；能用语料排除的从清单里迁出。<strong>其余明确标注"仍需真机目视"，不得计入闭环</strong> —— 否则会把"没闭环"记成"闭环了"</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">范围守恒</span>
+    本计划只动 <code>scripts/</code> 与 <code>docs/</code>，加上<strong>一处</strong> <code>src/</code> 改动<span class="tag hot">v3 拍板</span>：归组 key 公式抽成纯函数（§04 第 5 步，<strong>纯抽取、零行为变更、用户已放行</strong>）。<strong>除此之外一行 <code>src/</code> 都不改</strong> —— 回放中若撞见 auto-qb 的缺陷 → 按现有纪律入池 <code>memory-bank/issues/</code>，不在本计划内修。
+  </div>
+</section>
+
+<section id="s12">
+  <h2><span class="num">12</span>决策记录</h2>
+
+  <h3>已拍板（2026-09-21 03:33）</h3>
+  <table>
+    <thead><tr><th style="width:22%">决策</th><th style="width:16%">结论</th><th>落点与代价</th></tr></thead>
+    <tbody>
+      <tr><td><strong>磁盘事实来源</strong></td><td class="mono" style="color:var(--accent)">mock 为默认</td><td>§07 —— <code>--fs-mode=mock</code> 默认；<code>real</code> 仅作"用真机环境复核 mock 本身"。代价是<strong>变白盒</strong> ⇒ 必配 <code>CORPUS.fs_mock_coverage</code> 守阵 + 红绿双验，否则可能假绿</td></tr>
+      <tr><td><strong>归组 key 公式来源</strong></td><td class="mono" style="color:var(--accent)">抽成 <code>src/</code> 纯函数</td><td>§04 第 5 步 —— <strong>本计划唯一一处 <code>src/</code> 改动（用户已放行）</strong>：新增 <code>group_key_of(save_path, file_map)</code>，<code>_assign_to_group</code> 改调用它（零行为变更）+ 一条守阵单测（合成输入跑真实 mixin，断言 <code>store.member_to_key</code> == 纯函数输出）</td></tr>
+      <tr><td><strong>语料位置</strong></td><td class="mono" style="color:var(--accent)">改为参数</td><td>§07 —— <code>--source=corpus:&lt;dir&gt;</code> / <code>qb_capture.py --out &lt;dir&gt;</code>，<strong>不写死任何推荐路径</strong></td></tr>
+      <tr><td><strong>回放 root 目录</strong></td><td class="mono" style="color:var(--accent)">改为参数</td><td>§07 —— <code>--root</code> 与 <code>--fs-root</code> 均<strong>显式传入</strong>；现有 <code>DEFAULT_ROOT</code> 只作兜底，<strong>不再是计划的推荐</strong></td></tr>
+      <tr><td><strong>消化 issue 2145</strong></td><td class="mono" style="color:var(--accent)">一并消化</td><td>§07 新增「<strong>流状态 vs 实况状态</strong>」模型（<code>sync/maindata</code> 滞后 / <code>torrents/info</code> 立即）+ §09 <code>CORPUS.maindata_lag_modeled</code>（含红验）+ §11 W0 校准滞后 / W5 关闭 issue</td></tr>
+    </tbody>
+  </table>
+
+  <h3>沿用建议（未反对即按此执行，可随时改）</h3>
+  <ol>
+    <li><strong>采样与对齐的默认参数</strong>（§08）—— <code>--profile=perf</code> 档：<code>--interval-ms 100</code> / <code>--full-every 600</code>（≈60 s 一次全量），全量<strong>只留首尾两份</strong>，中间检查点抓而不存，<strong>未对齐即停止录制</strong>。若 W0 实测 100 ms 影响真机 ⇒ perf 档放宽到 250–500 ms（仍远细于 2 s 的 <code>main_tick</code>）。</li>
+    <li><strong>合成档保留</strong>为对照档（无需真机即可跑、旧基线可比），但不再为它添新造数陷阱。</li>
+    <li><strong>首次真机抓取规模</strong> —— <code>--sample 200 --probe-fs=off</code>（约 400 次请求，几十秒；先不开磁盘探测以隔离变量）。</li>
+  </ol>
+
+  <div class="note">
+    <span class="t">下一步</span>
+    ① 跑 W0 待测项（含 <strong><code>maindata</code> 滞后校准</strong>、100 ms 真机负载、脱敏后分组守恒）→ ② W1 写抓取器 <code>scripts/qb_capture.py</code>。<strong>W0 出数之前不写任何代码、不动任何文件</strong>（本计划文档自身的修订除外）。
+  </div>
+</section>
+
+<div class="colophon">
+  计划 · 真实 qB 语料抓取 · 脱敏 · 离线回放 · v1 2026-09-21 00:24 / v2 修订 03:30 / <strong>v3 拍板 03:33</strong> · 状态：<strong>已拍板，待 W0 出数</strong> · 5 项决策已定（mock 默认 / 归组纯函数抽 <code>src/</code> / 两个目录参数化 / 一并消化 issue 2145）· 下一步：W0 真机实测 → W1 抓取器
+</div>
+</main>
+</div>
+</body>
+</html>

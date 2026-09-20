@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审查报告 · 真机语料抓取 / 脱敏 / 离线回放 计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#111315; --fg:#e8e6e2; --dim:#9a9895; --faint:#6b6a68;
+    --line:rgba(255,255,255,.11); --line-soft:rgba(255,255,255,.055);
+    --accent:#6fa8a8; --accent-dim:rgba(111,168,168,.12);
+    --serif:"Songti SC","Source Han Serif SC","Noto Serif SC",Georgia,serif;
+    --sans:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono","Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 96px;display:grid;grid-template-columns:214px 1fr;gap:56px;}
+  aside{position:sticky;top:0;align-self:start;padding:44px 0 0;max-height:100vh;overflow:auto;}
+  .toc-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;}
+  aside nav a{display:block;font-size:12.5px;color:var(--dim);text-decoration:none;padding:4px 0 4px 11px;border-left:1px solid transparent;margin-left:-1px;}
+  aside nav a:hover{color:var(--fg);border-left-color:var(--accent);}
+  aside nav a .n{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-right:8px;}
+  header{padding:72px 0 0;}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);}
+  h1{font-family:var(--serif);font-weight:600;font-size:42px;line-height:1.12;letter-spacing:-.02em;margin:18px 0 0;}
+  .lede{font-size:16.5px;color:var(--dim);max-width:62ch;margin:22px 0 0;line-height:1.62;}
+  .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:26px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:26px;flex-wrap:wrap;}
+  main{padding-bottom:40px;}
+  section{padding:52px 0 0;}
+  h2{font-family:var(--serif);font-weight:600;font-size:25px;letter-spacing:-.01em;margin:0 0 4px;line-height:1.25;}
+  h2 .num{font-family:var(--mono);font-size:11px;color:var(--faint);display:block;letter-spacing:.14em;margin-bottom:9px;}
+  h3{font-size:14.5px;font-weight:560;margin:34px 0 10px;}
+  h4{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:500;margin:26px 0 8px;}
+  p{margin:12px 0;max-width:76ch;}
+  .sub{color:var(--dim);font-size:14px;}
+  ul,ol{margin:12px 0;padding-left:20px;max-width:76ch;}
+  li{margin:6px 0;}
+  li::marker{color:var(--faint);}
+  code{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.05);padding:1px 5px;border-radius:3px;color:var(--fg);}
+  pre{background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:4px;padding:14px 16px;overflow-x:auto;margin:14px 0;max-width:100%;}
+  pre code{background:none;padding:0;font-size:12px;line-height:1.6;color:var(--dim);}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;}
+  th{text-align:left;font-weight:560;color:var(--dim);font-size:12px;padding:8px 12px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--fg);}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px;}
+  tbody tr:last-child td{border-bottom:none;}
+  .verdict{border:1px solid var(--accent);border-left-width:2px;padding:18px 22px;margin:20px 0;background:var(--accent-dim);max-width:82ch;}
+  .verdict .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;}
+  .verdict p{margin:8px 0 0;color:var(--fg);max-width:none;}
+  .note{border-left:1px solid var(--line);padding:2px 0 2px 16px;margin:16px 0;color:var(--dim);font-size:13.5px;max-width:76ch;}
+  .note .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:4px;}
+  .finding{border-top:1px solid var(--line);padding:22px 0 4px;margin-top:26px;}
+  .finding:first-of-type{border-top:none;padding-top:6px;}
+  .sev{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;padding:1px 7px;border:1px solid var(--line);border-radius:3px;color:var(--dim);margin-right:9px;white-space:nowrap;}
+  .sev.p0{border-color:var(--accent);color:var(--accent);}
+  .sev.p1{border-color:rgba(255,255,255,.28);color:var(--fg);}
+  .ftitle{font-size:15.5px;font-weight:580;}
+  .ok{color:var(--accent);}
+  .bad{color:var(--fg);font-weight:560;}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:1px 7px;border:1px solid var(--line);border-radius:3px;color:var(--dim);margin-right:6px;}
+  hr{display:none;}
+  .colophon{margin-top:64px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--faint);}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr;gap:0;padding:0 24px 64px;}aside{position:static;padding:24px 0 0;max-height:none;}header{padding-top:32px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside>
+  <div class="toc-kicker">Contents</div>
+  <nav>
+    <a href="#s00"><span class="n">00</span>审查结论</a>
+    <a href="#s01"><span class="n">01</span>审查方法</a>
+    <a href="#s02"><span class="n">02</span>事实核对</a>
+    <a href="#s03"><span class="n">03</span>P0 阻断项</a>
+    <a href="#s04"><span class="n">04</span>P1 实质缺陷</a>
+    <a href="#s05"><span class="n">05</span>P2 需补齐</a>
+    <a href="#s06"><span class="n">06</span>与既有 issue 的关联</a>
+    <a href="#s07"><span class="n">07</span>计划立得住的判断</a>
+    <a href="#s08"><span class="n">08</span>待拍板项复核</a>
+  </nav>
+</aside>
+
+<main>
+<header>
+  <div class="kicker">Auto-QB · Plan Review</div>
+  <h1>审查报告：真机语料抓取 · 脱敏 · 离线回放</h1>
+  <p class="lede">对 <code>26-09-21-0024-qb-corpus-capture-replay-plan.html</code> 的逐项复核。结论：<strong>方向与主干设计成立，事实引用准确度罕见地高</strong>（抽查 15 处代码引用，14 处逐字对上；12 项数字全部复现）。但存在 <strong>2 处 P0 阻断项</strong>：稀疏文件的创建序列写错（字面实现会写满磁盘）、头号判据缺少参考时刻。<span class="sub">本报告含 <strong>1 处自我更正</strong> —— 原 P0-2「R 盘空间 API 互相矛盾」因测量时序错误被下调为 P2，见 §03 末。</span></p>
+  <div class="meta">
+    <span>2026-09-21 02:57</span>
+    <span>审查对象：待拍板</span>
+    <span>本机实测 5 组 · 代码引用核对 15 处 · 含 1 处自我更正</span>
+    <span>不碰 src/ · 不改计划原文</span>
+  </div>
+</header>
+
+<section id="s00">
+  <h2><span class="num">00</span>审查结论</h2>
+
+  <div class="verdict">
+    <div class="t">总判</div>
+    <p><strong>可以进入 W0，但必须先修 2 处 P0、改正 6 处事实错误。</strong>计划的骨架（语料=一条原始流 / 首帧 T0 / 末帧 T1 / 脱敏守恒为头号验收 / 未对齐即停）是这三套测试资产里最扎实的一份设计，不需要推翻。问题集中在<strong>「最后一公里」的实现细节</strong>：稀疏文件的创建序列、以及头号判据的参考时刻 —— 都不是"再想想"，而是不写死就会出错。</p>
+  </div>
+
+  <h3>两处 P0（不修则 W1 之后必返工）</h3>
+  <ul>
+    <li><strong>P0-1 稀疏文件的创建序列写错了。</strong>计划写「每文件 2 次系统调用（setflag + truncate）」，但 <code>truncate</code> 会让稀疏标志<strong>失效</strong>，实占整个逻辑大小。我按这句话的字面意思在 R 盘上跑，<strong>第一个 4 GiB 文件就实占 4 GiB，第二个文件直接 <code>ERROR_DISK_FULL</code></strong>。正确的写法（<code>FSCTL_SET_SPARSE</code> + <code>SetEndOfFile</code>）实占 <strong>0 字节</strong>、<strong>0.23 ms/文件</strong> —— 比计划声称的"128 KiB"还好，但必须写死。</li>
+    <li><strong>P0-2 头号判据 <code>CORPUS.group_exact</code> 没定义「在哪个时刻比」。</strong><code>groups.json</code> 按计划是「抓完立刻算」⇒ 对应 <strong>T1 终态</strong>；而回放从 <strong>T0</strong> 开始，且回放期 auto-qb 会因缺文件/大小不符暂停整组、按规则删除种子、新种子中途出现 —— 分组是<strong>动态的</strong>。参考时刻不钉死，这条判据要么空转、要么假红。</li>
+  </ul>
+
+  <h3>六处事实错误（数字/位置与代码不符）</h3>
+  <table>
+    <thead><tr><th style="width:30%">计划原文</th><th>实际</th></tr></thead>
+    <tbody>
+      <tr><td><code>sync/torrentPeers</code> 在 <code>web.py:652</code></td><td>实际在 <code>web.py:734</code>（路由）与 <code>:747</code>（调用）。652 行是 <code>set_file_priority</code> 的 payload 字典</td></tr>
+      <tr><td>「写端点 <strong>30</strong> 个（<code>qbapi.py</code> 门面）」</td><td><code>sim_qb.WRITE_ENDPOINTS</code> 实际 <strong>24</strong> 个；<code>qbapi.py</code> 共 51 个方法（含读与辅助）。两个口径要分开说</td></tr>
+      <tr><td>「只读端点 <strong>11</strong> 个」</td><td>§03 自己的表列了 <strong>13</strong> 个端点（9 行）。表对，数字不对</td></tr>
+      <tr><td>「每文件 <strong>2 次系统调用</strong>（setflag + truncate）」</td><td><code>fsutil</code> 是<strong>进程派生</strong>不是系统调用；且 <code>truncate</code> 会作废稀疏标志。见 P0-1</td></tr>
+      <tr><td>「稀疏 2 GiB → <strong>128 KiB</strong>」</td><td>正确写法的实占是 <strong>0 字节</strong>（仅 MFT 元数据）。128 KiB 既不可复现、也掩盖了"写错就满额"的风险</td></tr>
+      <tr><td>「<code>activeContext.md</code> 里那 <strong>8</strong> 条待真机走查」</td><td>实际约 <strong>15</strong> 条（且绝大多数是前端观感项，回放数据面测不到 —— 见 P2-5）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s01">
+  <h2><span class="num">01</span>审查方法</h2>
+  <p>不做印象式评审。分三步：</p>
+  <ol>
+    <li><strong>通读原文</strong>（742 行 / 79 KB），提取其中全部可验证断言：代码引用 15 处、数字 12 项、设计承诺若干。</li>
+    <li><strong>逐条回代码核对</strong>：<code>sed -n</code> 取被引用的确切行，比对原文；常量用 <code>uv run python</code> 导入后计数；基线数字回 <code>memory-bank/testing.md</code> 与 <code>docs/plans/*.baseline.json</code>。</li>
+    <li><strong>对「方案 A 稀疏文件」与「R 盘空间口径」做本机实测</strong> —— 前者是全计划唯一"必须真机才能否掉"的技术前提，也是我唯一不接受纸面结论的地方；后者是我初版结论出错的地方。<strong>五组对照，全部清理干净</strong>（含一次自我更正，见 §03 末）。</li>
+  </ol>
+  <div class="note">
+    <span class="t">审查边界</span>
+    只读 + 本机实测，<strong>未修改计划原文、未改 <code>src/</code>、未入池 issue、未提交</strong>。实测产生的临时文件已全部清除：R 盘<strong>无有效回收站</strong>（实测 <code>R:\$RECYCLE.BIN</code> 体积 <strong>0.00 MB</strong>），删除即释放；D 盘的删除被本机删除拦截层送进了回收站，已按 <code>$I</code> 元数据逐条定位并清掉属于本次实测的 8 条载荷。收尾状态：D 盘可用 <strong>225 GB</strong>（与起始一致）、回收站回到 <strong>2.7 GB</strong>（用户原有 4390 条未动）、R 盘 <strong>17.2 GB</strong> 可用。
+  </div>
+</section>
+
+<section id="s02">
+  <h2><span class="num">02</span>事实核对</h2>
+  <p>先说好的：这份计划的行号引用精度<strong>明显高于本项目此前的计划文档</strong>。15 处抽查里 14 处逐字对上，包括几个很容易记错的复合表达式。</p>
+
+  <h3>逐字对上（抽样）</h3>
+  <table>
+    <thead><tr><th class="mono" style="width:40%">计划引用</th><th>核对结果</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">mixins/grouping.py:150</td><td class="ok">✅ 归组 key 一字不差：<code>(utils.path_normalize(torrent.save_path), tuple(sorted(file_map.keys())))</code></td></tr>
+      <tr><td class="mono">grouping.py:237-251 / :244</td><td class="ok">✅ 缺文件扫描逐文件 <code>os.path.exists</code> + <code>os.path.getsize(full_path) != fsize</code></td></tr>
+      <tr><td class="mono">torrents/store.py:92</td><td class="ok">✅ <code>md = api.sync_maindata(rid=self.rid)</code></td></tr>
+      <tr><td class="mono">torrents/store.py:111-118</td><td class="ok">✅ <code>server_state</code> 是 merge 不是 replace（计划特别强调的那条语义确实存在）</td></tr>
+      <tr><td class="mono">store.py:266 / :274</td><td class="ok">✅ <code>torrents_tags</code> / <code>torrents_categories</code> 惰性缓存（计划标"低频"正确）</td></tr>
+      <tr><td class="mono">qbapi.py:314 / :322 / :328 / :358-359</td><td class="ok">✅ maindata / trackers / files / transfer 双限速，四处全对</td></tr>
+      <tr><td class="mono">torrents/record.py:250 / :270</td><td class="ok">✅ trackers / files 惰性加载点</td></tr>
+      <tr><td class="mono">skip_checking.py:65 · checking.py:147</td><td class="ok">✅ 行号对（完整路径是 <code>rules/actions/…</code>，计划未写前缀）</td></tr>
+      <tr><td class="mono">qbmanager.py:263</td><td class="ok">✅ <code>self.api.auth_log_in()</code></td></tr>
+      <tr><td class="mono">_SNAPSHOT_FIELDS「70 字段」</td><td class="ok">✅ 导入实测 <strong>70</strong>（必需 21 + 重加升格 6 + 扩展 43）；<code>REQUIRED_TORRENT_FIELDS</code> = 27</td></tr>
+      <tr><td class="mono">sim_qb.py「1300 行」</td><td class="ok">✅ 实测 1310 行</td></tr>
+      <tr><td class="mono">S3.write_rate_per_min ≤ 6210.49</td><td class="ok">✅ testing.md:295 与 baseline.json <code>thresholds</code> 双向对上</td></tr>
+      <tr><td class="mono">全量 205–240 ms / 增量 3.3 ms / 差 62 倍</td><td class="ok">✅ testing.md:281 原话</td></tr>
+      <tr><td class="mono">首轮灌入 14.4 s</td><td class="ok">✅ baseline.json <code>P1.first_round_s = 14.371</code></td></tr>
+      <tr><td class="mono">10 000 次 files+trackers 请求</td><td class="ok">✅ baseline trace：<code>torrents/trackers</code> 5009 + <code>torrents/files</code> 5000 = 10 009</td></tr>
+      <tr><td class="mono">app/webapiVersion「每次写请求前」</td><td class="ok">✅ trace 里 3583 次 == <code>writes_total</code> 3583，完全吻合</td></tr>
+      <tr><td class="mono">R:/auto-qb-sim 在 B1 哨兵目录内</td><td class="ok">✅ <code>R:\auto-qb-sim\.auto-qb-sim-root</code> 存在</td></tr>
+      <tr><td class="mono">auto-qb-data/ 已 gitignore</td><td class="ok">✅ <code>.gitignore:11</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>§01「七类失真」逐条复核</h3>
+  <p>这一节写得实，七条我都能在 <code>sim_qb.py</code> 里指到出处，没有一条是想象出来的：</p>
+  <table>
+    <thead><tr><th style="width:22%">失真</th><th>代码证据</th></tr></thead>
+    <tbody>
+      <tr><td>① 恒单文件</td><td class="ok">✅ <code>rel = [f"{shared}\\{shared}.mkv"]</code>（分组与非分组两条分支都是单文件）</td></tr>
+      <tr><td>② 名称形态单一</td><td class="ok">✅ <code>Show{show:02d}.S01E{ep:02d}.1080p.WEB-DL-GRP{i}</code>，无中文/空格/超长</td></tr>
+      <tr><td>③ 状态是拍出来的</td><td class="ok">✅ <code>STATES_ACTIVE = ("uploading","stalledUP")</code>；<code>i%500==7</code> missingFiles、<code>i%500==13</code> error、<code>i%97==5</code> downloading —— 与计划"downloading 固定占 1/97"一致</td></tr>
+      <tr><td>④ tags/category 恒空</td><td class="ok">✅ <code>make_torrent</code> 里写死 <code>"tags": ""</code> / <code>"category": ""</code></td></tr>
+      <tr><td>⑤ 数值均匀分布</td><td class="ok">✅ <code>seeding = rng.randrange(0, 200*3600)</code>、<code>up = rng.randrange(0, 50*1024**3)</code></td></tr>
+      <tr><td>⑥ 负载模型人造</td><td class="ok">✅ <code>--active 0.10</code> 每拍 <code>rng.sample</code>，patch <strong>正好 8 个字段</strong>（计划说"改固定 8 个字段"，数了一遍确实是 8）</td></tr>
+      <tr><td>⑦ tracker 恒假</td><td class="ok">✅ 3 个硬编码 URL，含 1 个未配置站点；<code>availability:-1</code> / <code>num_seeds:0</code> / <code>num_leechs:0</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">产物合规</span>
+    计划本身符合项目口径：单文件 HTML、放 <code>docs/plans/</code>、命名 <code>YY-MM-DD-HHMM-slug.html</code>、<code>color-scheme: dark</code> + 深底浅字、单一 accent。无违规。
+  </div>
+</section>
+
+<section id="s03">
+  <h2><span class="num">03</span>P0 阻断项</h2>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p0">P0-1</span>稀疏文件的创建序列写错了，字面实现会写满磁盘</div>
+    <p>计划 §07 方案 A 写「每文件 <strong>2 次系统调用</strong>（setflag + truncate）」，并在 §00 报「2 GiB 文件实际占 <strong>128 KiB</strong>」。这两句都靠不住：<code>fsutil</code> 不是系统调用而是进程派生；更要命的是 <strong><code>truncate</code> 会把刚设好的稀疏标志作废</strong> —— NTFS 必须让新扩展出来的区域"读到 0"，在非稀疏语义下就是实打实分配簇。</p>
+    <p>我在 D 盘（NTFS，225 GB 空闲）用 100 文件 × 64 MiB 逻辑做了四种写法对照：</p>
+    <table>
+      <thead><tr><th style="width:44%">创建写法</th><th class="mono" style="width:16%">实占</th><th class="mono" style="width:14%">每文件</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td><code>CreateFileW</code> → <code>DeviceIoControl(FSCTL_SET_SPARSE)</code> → <code>SetFilePointerEx</code> + <code>SetEndOfFile</code></td><td class="mono ok">0.0 MiB</td><td class="mono">0.23 ms</td><td class="ok">✅ 唯一正确；仅 MFT 开销（205 B/文件）</td></tr>
+        <tr><td>标记稀疏 + <code>os.truncate</code> <span class="tag">计划原文</span></td><td class="mono bad">6400 MiB</td><td class="mono">—</td><td class="bad">❌ 满额分配，稀疏标志失效</td></tr>
+        <tr><td>朴素 <code>seek+write</code></td><td class="mono bad">6400 MiB</td><td class="mono">0.72 ms</td><td class="bad">❌ 满额分配</td></tr>
+        <tr><td><code>fsutil file createnew</code> 256 MiB → <code>sparse setflag</code></td><td class="mono bad">先占 166 MB</td><td class="mono">—</td><td class="bad">❌ setflag <strong>不回收</strong>已分配的簇</td></tr>
+      </tbody>
+    </table>
+    <p><strong>在 R 盘上的实证后果：</strong>按计划字面写法跑，<strong>第一个 4 GiB 文件实占 4 GiB，第二个文件抛 <code>OSError: 112</code>（ERROR_DISK_FULL）</strong>，磁盘当场写满。这不是理论风险，是我刚刚亲手复现并清理掉的现场。</p>
+    <p><strong>修法：</strong>在 §07 方案 A 里把创建序列写成<strong>不可含糊的四步</strong>，并注明"禁止用 <code>os.truncate</code> / <code>open(...,'wb')</code> 扩展"：</p>
+    <pre><code>h = CreateFileW(path, GENERIC_WRITE, 0, None, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, None)
+DeviceIoControl(h, FSCTL_SET_SPARSE, None, 0, None, 0, byref(n), None)   # 必须先标记
+SetFilePointerEx(h, size, byref(pos), FILE_BEGIN); SetEndOfFile(h)      # 再置 EOF
+CloseHandle(h)</code></pre>
+    <p>按此实现，<strong>6 万文件 ≈ 14 s、占用 ≈ 12 MB</strong>（远优于计划所称的 128 KiB × 6 万 ≈ 7.9 GB —— 那个数字恰好超过 R 盘全部可用空间）。顺带：方案 A 的"回退到 B"也应改成<strong>先在建树前探测</strong>（试建一个稀疏文件并校验分配量），而不是"第一个文件失败即降级"—— 中途切换会留下半稀疏半实占的混合树。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">更正</span>原 P0-2「R 盘空间 API 互相矛盾」不成立 —— 已下调为 P2-6</div>
+    <p>本报告初版把「<code>shutil.disk_usage("R:/").free</code> = 0 而 <code>Get-PSDrive</code>/<code>df</code> 报 7.3 GB」判为三套 API 互相矛盾，并据此把 R 盘列为 P0。<strong>这个结论是错的，错在测量时序。</strong></p>
+    <ul>
+      <li>7.2–7.3 GB 是我<strong>写入之前</strong>测的（<code>Get-PSDrive</code> 7,735,275,520 B、<code>df</code> 7.3 G）—— 是当时的真值；</li>
+      <li><code>0</code> 是我用 4 GiB 满额文件<strong>把盘写满之后</strong>测的 —— 那一刻盘确实是满的，读数同样<strong>正确</strong>；</li>
+      <li>同刻复核（2026-09-21 03:0x）：<code>shutil.disk_usage('R:/').free</code> = <code>GetDiskFreeSpaceExW</code> = <code>df</code> = <strong>18,474,057,728</strong>，三口径逐字节相同。<strong>不存在矛盾。</strong></li>
+    </ul>
+    <p>把<strong>两个不同时刻</strong>的读数当成同一时刻的对照，是我的方法错误，与计划无关。更要紧的是：<strong>计划原文从未对 R 盘的空间 API 做过任何断言</strong>，这条"缺陷"完全是我引入的。R 盘相关的内容已改写为 §05 的 P2-6，只保留经得起复核的部分。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p0">P0-2</span>头号判据 <code>CORPUS.group_exact</code> 缺少参考时刻</div>
+    <p>计划把"脱敏前后分组逐组一致"定为头号验收项，判据本身是对的。但 <code>groups.json</code> 按 §04 第 5 步是「<strong>抓完立刻</strong>用同一套 key 公式算一遍」⇒ 对应 <strong>T1 终态</strong>。而回放从 <strong>T0</strong> 开始，回放期间分组是<strong>会变的</strong>：</p>
+    <ul>
+      <li><code>_check_size_consistency</code> 在归组时若发现组内 <code>{路径: 大小}</code> 不一致 ⇒ <strong>暂停整组</strong>；</li>
+      <li><code>_check_missing_files</code> 发现缺文件 ⇒ 整组暂停 + MISSING 标签；</li>
+      <li>规则动作可能<strong>删除种子</strong> ⇒ <code>_leave_group</code> 拆组；</li>
+      <li>流里中途<strong>新出现的种子</strong> ⇒ 新组产生（计划 §04 已明确"出现即 append"）。</li>
+    </ul>
+    <p>于是"回放期 auto-qb 分出的组 == <code>groups.json</code>"这句话，在 t=0 与 t=末尾会得到<strong>两个不同答案</strong>。不钉死时刻，这条判据不是空转就是假红 —— 而它恰恰是计划自称"合成数据给不了的东西"。</p>
+    <p><strong>修法：</strong>在 §09 明确"<code>group_exact</code> 在<strong>首帧应用后、任何写动作发生前</strong>求值"（此时与 T0 快照同构，语义最干净）；若确实想验终态，就同时产出 <code>groups_t0.json</code> / <code>groups_t1.json</code> 两份，各在对应时刻比一次。另外：<code>groups.json</code> 若按"抓完算"则含录制期新出现的种子，而 T0 时刻它们还不存在 —— 这一点必须与上面的选择自洽。</p>
+  </div>
+</section>
+
+<section id="s04">
+  <h2><span class="num">04</span>P1 实质缺陷</h2>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P1-1</span>「pieceHashes 不抓、现场合成」会让严格模式判据恒假</div>
+    <p>计划 §03 把 <code>torrents/export</code> / <code>torrents/pieceHashes</code> 判为「不抓（有 hash 可现场合成）」。但 <code>rules/actions/checking.py:145-154</code> 的<strong>严格模式</strong>是把候选与目标的 <strong>piece hash 列表逐项比对</strong>：</p>
+    <pre><code>target = ctx.api.torrents_piece_hashes(ctx.hash)
+...
+if ctx.api.torrents_piece_hashes(cand.hash) == target:   # 要求两个列表完全相同</code></pre>
+    <p>真实世界里辅种组成员的 piece hash <strong>必须相同</strong>（同文件、同大小、同分块）。若按 hash 各自随机合成，<strong>同组成员会互不相等</strong> ⇒ 严格模式判据恒假，比不测更糟（会给出"没有候选通过"的错误结论）。</p>
+    <p>另外 <code>sim_qb.py</code> 的路由表里<strong>根本没有这两个端点</strong>（只有 <code>sync/maindata</code> / <code>torrents/info|files|trackers|tags|categories</code> / <code>transfer/*</code> / <code>app/*</code> / <code>auth/login</code>），落到 <code>unknown endpoint: …</code> 404。所以这不是"抓不抓"的问题，而是<strong>回放外壳缺两个端点</strong>。</p>
+    <p><strong>修法：</strong>piece hash 由 <strong>（排序后的「相对路径 + 大小」集合）</strong> 确定性派生 —— 同组成员天然共享同一列表，与真机语义一致；<code>export</code> 可返回一个最小合法 bencode。并把"端点覆盖"写进 W3 的验收判据。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P1-2</span>回放端"合并窗口内多帧"的语义未定义</div>
+    <p>计划 §08 说回放时"把游标推进到当前回放时刻，<strong>把这段时间内落过的采样帧合并成一次增量响应</strong>"。100 ms 采样 + 2 s 的 <code>main_tick</code> ⇒ 一次响应要合并约 20 帧。窗口内若同一 hash <strong>先出现后删除</strong>（或先改再改回），朴素合并会把它当成"存在"；<code>torrents_removed</code> 也需要按序<strong>净额化</strong>（先删后加 ⇒ 净额是"加"）。</p>
+    <p>这正是 auto-qb <code>store</code> 自己的语义，必须对齐 —— 否则 D 系列（删除/重复投递/幂等）判据会因<strong>合并错误</strong>而假红或假绿，且很难归因（看起来像 auto-qb 的 bug）。</p>
+    <p><strong>修法：</strong>在 §08 补一小节"窗口合并规则"，逐类字段写明合并方式（<code>torrents</code> 逐 hash 后写覆盖；<code>*_removed</code> 与 <code>torrents</code> 的净额判定；<code>server_state</code> 仍是 merge）。并给一条守阵：构造"窗口内先增后删"的语料片段，断言回放端不吐该 hash。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P1-3</span>脱敏的等价类风险不止在「名字字典」</div>
+    <p>计划把单射性校验挂在"伪名字典"上（§05 硬约束）。但归组 key 的第一半是 <code>save_path</code>，而它的处置是「盘符与根目录重映射」—— <strong>这条映射自身也必须单射</strong>，计划没要求：</p>
+    <ul>
+      <li><strong>跨盘并组：</strong>qB 单实例可有多个盘上的种子。若 <code>R:\Download\TV</code> 与 <code>S:\Download\TV</code> 都映射成 <code>&lt;run&gt;/fs/Download/TV</code>，两组会被<strong>合并</strong> ⇒ 回放分组与真机不同。</li>
+      <li><strong>尾斜杠：</strong><code>utils.path_normalize</code> 的实现是"仅统一分隔符 + 压缩重复斜杠"，<strong>刻意保留首尾斜杠</strong>（注释里写明是为了区分 <code>c:/windows/</code> 与 <code>c:/windowsg</code>）。所以重映射必须<strong>原样保留尾斜杠的有无</strong>，不能顺手 <code>rstrip('/')</code>。</li>
+      <li><strong>大小写：</strong><code>path_normalize</code> <strong>不做大小写归一</strong> ⇒ 形态守恒替换必须保留大小写分布，不能统一转小写。</li>
+      <li><code>hash · infohash_v1/v2 → 40 hex</code>：v1 是 40 hex、<strong>v2 是 64 hex</strong>，一条"40 hex"规则会把 v2 的形状改掉。计划已提 <code>magnet_uri</code> 要同步重写，但 v2 的长度要单独处理。</li>
+    </ul>
+    <p><strong>修法：</strong>把 save_path 映射一并纳入单射校验；重映射路径带"原盘符的短令牌"（如 <code>&lt;run&gt;/fs/d0/…</code>）；在 §05 显式声明"尾斜杠与大小写形态 1:1 保留"。这些正是 <code>path_normalize</code> 的等价类边界，值得逐条写死。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P1-4</span>「不碰 <code>src/</code>」与「用 auto-qb 自己的归组公式算真值」互相打架</div>
+    <p>计划 §04 第 5 步要求抓取端"用 <code>auto_qb.mixins.grouping</code> 的<strong>同一套 key 公式</strong>算一遍真机分组"，§11 又写"只动 <code>scripts/</code> 与 <code>docs/</code>，不碰 <code>src/</code>"。这两条同时成立不了：</p>
+    <ul>
+      <li><code>_assign_to_group</code> 是 mixin 方法，签名是 <code>(self, torrent, file_map, dry_run)</code>，依赖 <code>self.store.groups / group_sizes / member_to_key / dirty_groups</code> —— <strong>脱离 manager + store 实例调不起来</strong>；</li>
+      <li>要"调起来"，得在抓取器里拼一个假的 store/manager，成本高且脆弱；</li>
+      <li>要"复制公式"，就引入了<strong>漂移风险</strong> —— 而这恰恰是整份计划最想消灭的东西（"期望值来自真机原始数据"）。</li>
+    </ul>
+    <p>更要命的是：如果抓取端复制了一份公式、而它与 <code>grouping.py:150</code> 悄悄漂移，<code>CORPUS.group_exact</code> 就会拿"错误的期望"去判"正确的实现"，结果是<strong>稳定假红</strong>或（更糟）稳定假绿。</p>
+    <p><strong>修法（三选一，需你拍板）：</strong>①把 key 公式抽成 <code>src/auto_qb/utils.py</code> 或 <code>grouping.py</code> 里的<strong>纯函数</strong>（<code>group_key_of(save_path, file_map)</code>），抓取端 import 它 —— 代价是动了 <code>src/</code>，需要你放行（属"范围守恒"例外）；②在 scripts 里复制公式，但<strong>必须配守阵</strong>：同一份合成输入同时喂给复制体与原公式，断言输出相等（这样漂移会立刻变红）；③抓取端不自己算，改为<strong>让 auto-qb 自己产出期望</strong>（例如用一次 dry-run 回放，导出它的分组）。</p>
+    <p>我倾向 <strong>①</strong>：抽纯函数是零行为变更的重构，且一次性消灭漂移面；但按本项目的范围纪律，这需要你明确点头。</p>
+  </div>
+</section>
+
+<section id="s05">
+  <h2><span class="num">05</span>P2 需补齐</h2>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P2-1</span>「零缝隙」在时间轴意义上不成立</div>
+    <p>计划说 T0 复用快照的同一 session，"其后各帧是紧接的增量，<strong>零缝隙</strong>"。但 §04 的流程里，第 2 步（全量 maindata）与开始录流之间还夹着第 3 步：<strong>每 hash 的 files / trackers = 10 000 次请求</strong>。按 <code>--qps 20</code> 算是 <strong>≈ 8 分钟</strong>。</p>
+    <p>这 8 分钟里 rid 会话不会丢数据（qB 会累积变化），所以"数据完整"意义上成立；但<strong>第一个增量帧会把这 8 分钟的全部变化压成一帧</strong>，<code>t_seq</code> 时间轴的起点被推后 8 分钟，"变化在 tick 内怎么分布"这件事在最关键的第一段上是失真的。</p>
+    <p><strong>修法：</strong>要么把 files/trackers 抓取与录流<strong>并行</strong>（独立线程 + 独立 session），要么在 <code>meta.json</code> 记 <code>record_start_offset_ms</code> 并在回放端显式跳过这段。别让"零缝隙"变成读者以为已经解决了的模糊承诺。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P2-2</span>采集期磁盘探测的成本与权限没进风险表</div>
+    <p>§10 风险表只写了「真机抓取拖慢正在做种的 qB」（HTTP 侧），<strong>没写文件系统探测</strong>。而 <code>--probe-fs</code> 的代价不小：初轮 6 万次 <code>stat</code>，之后每个检查点增量一轮（20 分钟 × 每 60 s = 20 轮）。更别说：</p>
+    <ul>
+      <li>计划自己把 <strong>temp path</strong>（下载中文件另存他处）列为"已知边界"—— 这类文件按 save_path 探测不到，会记成 <code>exists:false</code>，与真机语义不符；</li>
+      <li>目标盘若是网络盘 / 90% 满的虚拟盘（正是本机 R 盘的情形），stat 延迟会显著放大；</li>
+      <li>探测读的是<strong>真实下载盘</strong>，属于侵入式观测，风险等级应与"100 ms 采样"同级。</li>
+    </ul>
+    <p><strong>修法：</strong>把「磁盘探测负载 + temp path 覆盖」升为 <strong>W0 必测项</strong>，并给 <code>--probe-fs</code> 加 <code>--probe-sample</code> 限流与"只探存在项"的默认。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P2-3</span><code>config.yml</code> 口径自相矛盾，凭据泄漏面没封</div>
+    <p>§10 风险行写「<strong>抓取器不得读取</strong>/写入 <code>config.yml</code>（红线文件）」，紧接着同一句又给「或 <code>--from-config</code> <strong>只读解析</strong>」。两句话互斥。项目红线原文是"禁止改动/提交"，<strong>读是允许的</strong>，所以正确的表述应该是"不修改、不提交；允许只读解析"。</p>
+    <p>同时有一个没被点到的泄漏面：<code>config.yml</code> 里存着 <strong>qB 密码</strong>。抓取器若把"使用的配置来源"或凭据写进 <code>meta.json</code>，语料就带上了凭据。计划说了"盐不落盘"，但没说凭据。</p>
+    <p><strong>修法：</strong>改正 §10 措辞；在 §05 字段分档里加一条「<strong>凭据绝不进入语料 / meta.json / warnings.jsonl</strong>」，并让 <code>--self-test</code> 扫一遍语料目录做凭据串匹配。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P2-4</span>语料档会继承现有 HTTP 外壳的端点盲区</div>
+    <p>计划说"HTTP 外壳、rid 语义、写端点记账、B1–B4、<code>emit_config</code>、<code>self_test</code> 全部可原样复用" —— 这话对，但也意味着<strong>语料档覆盖不到 sim 未实现的端点</strong>。除了 P1-1 的两个，还有：</p>
+    <ul>
+      <li><code>sync/torrentPeers</code> —— <strong>sim 没有这个路由</strong>（会 404），而 <code>web.py:747</code> 的 WEB 详情抽屉会调它；计划 §03 把它列进"抓（可 <code>--skip-peers</code>）"，但没提回放端要补实现；</li>
+      <li><code>WRITE_ENDPOINTS</code> 只有 24 个，而 <code>qbapi.py</code> 门面有 51 个方法 —— 差额里的写端点会 404。</li>
+    </ul>
+    <p>所以"合成数据从未覆盖的路径会被语料覆盖"这句承诺，需要加上边界：<strong>覆盖范围 = 现有外壳已实现的端点集</strong>。W3 验收应加一条"逐端点清单核对：语料档覆盖的端点 ⊇ 语料里出现过的端点"。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P2-5</span>W6「闭环 8 条走查」是过度承诺</div>
+    <p>计划 G5 与 W6 承诺"用真实语料回放，把 <code>activeContext.md</code> 里那 8 条待真机走查先过一遍，减少往返"。两个问题：</p>
+    <ul>
+      <li>实际是 <strong>约 15 条</strong>，不是 8 条；</li>
+      <li>更关键的是<strong>构成</strong>：绝大多数是<strong>前端观感项</strong> —— 右键菜单响应、3000+ 种子滚动流畅度、追剧页三级右键、状态栏双色图标是否分得清、五主题下配色是否协调、列设置多标签页互不覆盖、今日流量目视…… <strong>这些要的是"人在浏览器里看"，回放 qB 数据面根本测不到。</strong></li>
+    </ul>
+    <p>真正与数据面相关、可能被语料回放覆盖的只有少数几条（如「TASK015 错误种子原因 —— 错误态状态列是否显示 tracker 原文」「视图重建范围收口 —— 速度是否随轮询刷新」）。</p>
+    <p><strong>修法：</strong>W6 收窄为"<strong>数据面相关的 N 条</strong>"并逐条列出，其余明确标注"仍需真机目视"。否则这条验收会把"没闭环"记成"闭环了"，比不写更危险。</p>
+  </div>
+
+  <div class="finding">
+    <div class="ftitle"><span class="sev p1">P2-6</span>语料落 R 盘：可用空间与持久性都没评估（原 P0-2 的更正版）</div>
+    <p>计划 §10 与 §12 推荐语料落 <code>R:/auto-qb-sim/corpus/&lt;日期-标签&gt;/</code>。这块盘经得起复核的事实是：</p>
+    <table>
+      <thead><tr><th style="width:26%">项</th><th>实测值（2026-09-21 03:0x）</th></tr></thead>
+      <tbody>
+        <tr><td>卷</td><td class="mono">卷标 <code>RAM</code> · 70 GB · NTFS · <code>Arsenal Virtual SCSI Disk Device</code>（Arsenal Image Mounter 挂载的虚拟盘）</td></tr>
+        <tr><td>占用</td><td class="mono">已用 53 GB，可用 <strong>17.2 GB</strong>（<code>/r/Download</code> 62 GB 是真实下载内容；同一块盘 20 分钟前曾只剩 <strong>7.2 GB</strong> —— <strong>可用空间随下载波动</strong>）</td></tr>
+        <tr><td>空间 API</td><td class="mono ok">✅ 三口径一致（<code>shutil.disk_usage</code> = <code>GetDiskFreeSpaceExW</code> = <code>df</code> = 18,474,057,728）—— 无异常</td></tr>
+        <tr><td>回收站</td><td class="mono ok">✅ 无有效回收站（<code>R:\$RECYCLE.BIN</code> = 0.00 MB），删除即释放，不存在"删了不还空间"的坑</td></tr>
+        <tr><td>哨兵</td><td class="mono ok">✅ <code>R:\auto-qb-sim\.auto-qb-sim-root</code> 存在，B1 边界成立</td></tr>
+      </tbody>
+    </table>
+    <p><strong>剩下两个真问题（都不是"不能用"，而是"没写"）：</strong></p>
+    <ul>
+      <li><strong>可用空间没进流程。</strong>R 盘同时是 qB 的真实下载盘（qBittorrent 正在运行），可用空间在 7–18 GB 之间波动。正确实现下物化树只占 ~12 MB、语料 ~50 MB，完全放得下；但计划没有任何"落盘前查一下可用空间"的步骤 —— 一旦实现退回满额分配（见 P0-1），就会直接撞上"下载盘写满"。<strong>加一条建树前的可用空间预检即可</strong>（这条建议仍然成立，只是理由变了）。</li>
+      <li><strong>持久性没确认。</strong>R 盘是虚拟盘，我实测 <strong>ImDisk 驱动虽在运行但名下没有任何虚拟盘</strong>（<code>imdisk -l</code> → "No virtual disks"），所以它不是 ImDisk 内存盘，而是 Arsenal Image Mounter 挂载的盘 —— 大概率是镜像文件后端（即持久）。<strong>但这需要你确认</strong>：若它是易失的，一份要真机 + 20 分钟高频录制才能产出的语料不该只留一份。</li>
+    </ul>
+    <p><strong>修法（弱建议）：</strong>语料改落 <code>auto-qb-data/corpus/</code>（D 盘，已 gitignore，224 GB 可用）—— 不是因为它更"正确"，而是语料是<strong>要长期留存的资产</strong>，放在随下载波动的盘上、且持久性待确认，不如放数据目录；物化树（可从 <code>files.json</code> 重建，非资产）留在 R 盘无所谓。</p>
+  </div>
+</section>
+
+<section id="s06">
+  <h2><span class="num">06</span>与既有 issue 的关联（计划未引用）</h2>
+  <p>issue 池里已有一条与本次改造<strong>同根因</strong>的记录，计划没有引用它 —— 补上能让收益显性化，也能避免重复造轮子：</p>
+  <table>
+    <thead><tr><th class="mono" style="width:32%">issue</th><th>与计划的交集</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">26-09-20-2145-test-<br>sim-qb-maindata-snapshot-lag</td>
+        <td>「sim_qb 缺 <code>/sync/maindata</code> 快照滞后模型，本地无法复现/验证真值直查的收益 —— 仿真端状态瞬时翻转，掩盖一切『真值尚未落地』类缺陷；需加 1.5 s 快照滞后模型」。<br><strong>这正是本计划的动机之一。</strong>真实 qB 的 <code>sync/maindata</code> 天然带滞后，语料回放能<strong>顺带</strong>把这条 issue 覆盖掉（不必再手工造"1.5 s 滞后模型"）。建议在 §00 或 §11 W3 明确写出"本计划同时消化该 issue"。</td>
+      </tr>
+      <tr>
+        <td class="mono">（同源，计划未提）</td>
+        <td>回放端若把 <code>torrents/info</code> 实现成"与 <code>sync/maindata</code> 同样实时"，则真机"直查比快照新"的收益在语料档<strong>复现不出来</strong>（<code>activeContext</code> 记着 P1 已把真值改为 <code>torrents/info</code> 直查）。要么在回放端显式建模"maindata 落后 N 秒"，要么在计划里声明"该项不在本计划覆盖范围"—— 两者都必须写明，不能留给读者猜。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s07">
+  <h2><span class="num">07</span>计划立得住的判断</h2>
+  <p>审查要对称。下面这些设计我认为<strong>不需要改</strong>，而且明显优于替代方案：</p>
+  <ul>
+    <li><strong>语料形态极简</strong>（一条原始流 / 首帧即 T0 / 末帧即 T1 / 整帧原样落盘）—— "零语义转换 = 零失真"落到了实处，顺带把 <code>torrents</code> / <code>server_state</code> / <code>tags</code> / <code>categories</code> 的"单一来源"问题一次性解决。这是本计划最漂亮的一处。</li>
+    <li><strong>不复刻 <code>server_state</code> 的 merge 语义，而是原样透传</strong> —— 理由（<code>store.py:111-118</code> 是 merge 不是 replace，自己稀疏化就要自己猜缺键行为）完全正确，我核对了代码。</li>
+    <li><strong>「未对齐即停止录制、不留中间态」+「不写 <code>groups.json</code>、退出码非 0」</strong> —— fail-fast 纪律到位。一段自己都说不清对不对的流确实比没有流更危险。</li>
+    <li><strong>等价类守恒作为头号验收、且是阻断式的</strong>（不一致即不落盘）—— 判断准确。合成数据永远给不了这个。</li>
+    <li><strong>反向对照</strong>（故意改一个字符，<code>group_exact</code> 必须红）—— 与本项目既有的"撤掉守卫跑一次确认它会报"纪律一致，说明作者懂判据空转这件事。</li>
+    <li><strong>诚实边界</strong>（传输层差异要在结论里显式标注、不假装不存在）—— 很少见，保留。</li>
+    <li><strong>保留合成档作对照</strong>（无需真机即可跑、旧基线可比）+ "不再为它添新造数陷阱" —— 这个取舍是对的。</li>
+    <li><strong>中间检查点"抓而不存"</strong> —— 由"增量流完整 ⇒ 中间全量可重建"推出的结论成立，省掉 160 MB 落盘。</li>
+  </ul>
+</section>
+
+<section id="s08">
+  <h2><span class="num">08</span>待拍板项复核</h2>
+  <table>
+    <thead><tr><th style="width:22%">待拍板项</th><th style="width:12%">我的意见</th><th>理由 / 要补的条件</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>① 采样与对齐默认参数<br><span class="sub">100 ms / full-every 600 / 只留首尾</span></td>
+        <td class="ok">同意</td>
+        <td>参数合理，且"判否即放宽到 250–500 ms"的退路已经留好。补一句：<code>--full-every</code> 的中间检查点用 <code>rid=0</code> 第二 session 若会重置共享序列，改 <code>torrents/info</code> 时<strong>必须声明字段差异白名单</strong>（否则闭合校验会因字段集不同而假红）。</td>
+      </tr>
+      <tr>
+        <td>② 文件树物化方案</td>
+        <td class="bad">同意 A，但要加条件</td>
+        <td>方向对，但<strong>必须先修 P0-1</strong>：把创建序列写成 <code>FSCTL_SET_SPARSE</code> + <code>SetEndOfFile</code> 并明令禁止 <code>os.truncate</code>。另外把"<code>--fs-mode=auto</code> 第一文件失败即降级"改成<strong>建树前探测</strong>（先试建一个稀疏文件并校验分配量），否则中途切换会留下混合树。</td>
+      </tr>
+      <tr>
+        <td>③ 语料落盘位置</td>
+        <td class="bad">建议改</td>
+        <td><strong>建议改落 <code>auto-qb-data/corpus/</code>（D 盘）</strong>，理由是 P2-6：语料是要长期留存的资产，而 R 盘是 qB 真实下载盘、可用空间在 7–18 GB 间波动、且持久性待你确认。<strong>不是</strong>"R 盘 API 有问题"（那是我初版的错误结论，已更正）。若你坚持 R 盘，只需加一条建树前可用空间预检，并确认该虚拟盘持久。</td>
+      </tr>
+      <tr>
+        <td>④ 合成档去留</td>
+        <td class="ok">同意保留</td>
+        <td>"无需真机即可跑、旧基线可比"的价值真实存在（本机 1310 行、4 条性能阈值都在用）。"不再添新造数陷阱"的口径也正确。</td>
+      </tr>
+      <tr>
+        <td>⑤ 首次抓取规模 <code>--sample 200</code></td>
+        <td class="ok">同意</td>
+        <td>约 400 次请求、几十秒，是合适的通路验证规模。建议<strong>同时</strong>跑一次 <code>--dry</code> 并比对"预估请求数 vs 实际"，这条已经在 W1 验收里了。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="t">建议的下一步</span>
+    先改 2 处 P0 + 6 处事实错误（都是文档级修改，不涉及代码），再按 §12 第 5 项开工 W1。另外 <strong>P1-4 需要你先拍一个板</strong>：归组 key 公式是"抽成 <code>src/</code> 纯函数"还是"复制 + 守阵"—— 这决定 W1 能不能只动 <code>scripts/</code>。P2-6 的持久性一问也请你确认（R 盘是否易失）。
+  </div>
+</section>
+
+<div class="colophon">
+  审查报告 · 真机语料抓取 / 脱敏 / 离线回放 计划 · 2026-09-21 02:57（03:15 修订：更正原 P0-2 的测量时序错误，下调为 P2-6）· 本机实测 5 组 + 代码引用核对 15 处 · 结论：方向成立，2 处 P0 需先修
+</div>
+</main>
+</div>
+</body>
+</html>

@@ -4,7 +4,9 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-20 (**最新: 列设置多标签页整份覆盖已修并验证, issue 26-09-20-1800 置 `Fixed`; 未提交, 剩真机走查** —— 见「待用户真机走查」末条。其前一条状态: 乐观 UI「撤下」已定案并推送 `4df80dc`; 剩真机复测确认) ——
+**最后更新**: 2026-09-21 (**最新: 真机语料抓取/脱敏/离线回放计划定稿 v3 —— 5 项决策已拍板, 等 W0 真机出数** ——
+  见「正在进行」首条。其前一条状态: 列设置多标签页整份覆盖已修并验证, issue 26-09-20-1800 置 `Fixed`;
+  乐观 UI「撤下」已定案并推送 `4df80dc`; 两者均剩真机走查确认) ——
   后端三段都很快(排队 0 / 执行 8.4 / 补刷新 88ms), 慢的是**前端撤下** —— 根因是**回执写在补刷新之前**,
   前端拿到回执立刻 refresh 取到的一定是旧快照。修法: 回执改到补刷新**之后**写并带真值
   (`WebUIRuntime.flush_receipts` + 前端 `_settleFromTruth`), 服务端等真值落地再发回执(上限 1200ms)。
@@ -13,6 +15,26 @@
   truth / stale / pull 中的哪一个(详见 pitfalls 末条)。
 
 ## 正在进行
+
+- **🆕 真机语料抓取 · 脱敏 · 离线回放 —— 计划已定稿 v3(已拍板, 等 W0 出数)**: 计划
+  [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html)
+  (v1→v3 原地修订) + 审查报告
+  [docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html](../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)。
+  **目标**: 把 `sim_qb.py` 的种子来源从"人造合成"换成"真实 qB 抓取 + 脱敏 + 回放"; 合成档保留为对照档。
+  **五项已拍板(2026-09-21 03:33)**: ①磁盘事实来源**默认 mock** —— 进程内 FS mock 注入 `sim_autoqb.py`
+  (在 `from auto_qb.cli import main` 之前), **不物化任何文件**; FS 入口实测只有 4 个调用点
+  (`grouping.py:239/244` · `checking.py:26/29` · `env.py:228` `exists` · `env.py:219` `disk_used`)
+  ②归组 key 公式**抽成 `src/` 纯函数** `group_key_of(save_path, file_map)` ——
+  **本计划唯一一处 `src/` 改动, 用户已放行**, 纯抽取零行为变更 + 配守阵单测
+  ③语料位置改**参数**(`--out` / `--source=corpus:<dir>`, 不写死) ④回放 root 也改参数
+  (`--root` / `--fs-root`) ⑤**一并消化 issue 26-09-20-2145** —— 新增「流状态 vs 实况状态」模型
+  (`sync/maindata` 滞后叠 overlay / `torrents/info` 立即 ⇒ "info 比 maindata 新"可在本地复现)。
+  **下一步 = W0 真机实测**: 全量抓取耗时 / 脱敏后分组守恒 / 100 ms 采样真机负载 /
+  第二 session 是否干扰增量流 / 磁盘探测负载 + temp path / `maindata` 滞后校准。
+  ⚠ **W0 出数前不写任何代码**。首次跑建议 `--sample 200 --probe-fs=off`。
+  **本轮实测(本机)**: 稀疏文件唯一正确写法 = `FSCTL_SET_SPARSE` + `SetEndOfFile`
+  (实占 **0 B**, **0.23 ms/文件**); 按原文的 `setflag + truncate` 写法会**满额分配**
+  —— 我实测把 R 盘写满过一次(详见 [pitfalls](pitfalls.md))。默认 mock 档下此问题已不存在。
 
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
   [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)
