@@ -176,14 +176,23 @@ def _ignored_dirs(root: Path) -> list[str]:
     return dirs[:8]
 
 
-def _detect_project(root: Path) -> tuple[list[dict], list[str]]:
-    """识别项目类型与工具链, 返回 (闸门初稿, 判据说明)。
+# 各技术栈的"跨平台风险关键词"(不是通用的 Python 词 —— JS 仓库用 Python 关键词等于没有)
+PLATFORM_HINTS: dict[str, list[str]] = {
+    "python": ["winreg", "dir_fd", "socket", "subprocess", "os.open", "shutil.rmtree"],
+    "node": ["child_process", "fs.rmSync", "spawnSync", "process.platform", "path.sep"],
+    "make": ["uname", "getconf"],
+}
+
+
+def _detect_project(root: Path) -> tuple[list[dict], list[str], list[str]]:
+    """识别项目类型与工具链, 返回 (闸门初稿, 判据说明, 平台关键词)。
 
     原则: **多证据才下判断, 判断不出就不猜** —— 猜错的闸门比没有闸门更危险(会让人以为该跑的跑过了)。
     判据随初稿写进注释, 便于一眼看出判错。
     """
     gates: list[dict] = []
     why: list[str] = []
+    kinds: list[str] = []
 
     has_py = bool(list(root.glob("*.py"))) or (root / "src").exists() or (root / "tests").exists()
     py_cfg = [
@@ -213,18 +222,27 @@ def _detect_project(root: Path) -> tuple[list[dict], list[str]]:
             run.insert(0, "ruff format <改过的 py 文件>")
             why.append("格式化 ruff(依据: ruff 配置)")
         gates.append({"match": ["src/", "tests/"], "run": run, "note": "Python 改动"})
+        kinds.append("python")
 
     if (root / "package.json").exists():
         gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动"})
         why.append("前端(依据: package.json)")
+        kinds.append("node")
 
     if (root / "Makefile").exists() and not gates:
         gates.append({"match": ["Makefile"], "run": ["make test"], "note": "有 Makefile"})
         why.append("Make(依据: Makefile, 且未识别到其它类型)")
+        kinds.append("make")
 
     if not gates:
         why.append("**未识别项目类型** —— 故意不猜, 请手写 [[gates]]")
-    return gates, why
+
+    hints: list[str] = []
+    for kind in kinds:
+        for hint in PLATFORM_HINTS.get(kind, []):
+            if hint not in hints:
+                hints.append(hint)
+    return gates, why, hints
 
 
 def render_template(root: Path) -> str:
@@ -234,7 +252,7 @@ def render_template(root: Path) -> str:
     main_mark = _host(urls[names[0]]) if names else ""
     mirror_mark = _host(urls[names[1]]) if len(names) > 1 else ""
     cands = _ignored_dirs(root)
-    gates, why = _detect_project(root)
+    gates, why, hints = _detect_project(root)
 
     def arr(items) -> str:
         return "[" + ", ".join(f'"{i}"' for i in items) + "]"
@@ -247,6 +265,7 @@ def render_template(root: Path) -> str:
         "",
         'branch = ""                    # 留空 = 跟当前分支',
         f"main_candidates = {arr(names or ['origin'])}",
+        "# ⚠ main_host_mark 取的是 `git remote -v` 里的**第一个**远端 —— 若它其实是镜像, 这里就填错了, 请核对",
         f'main_host_mark  = "{main_mark}"   # 主线 URL 特征; 留空 = 按候选名顺序取第一个存在的',
         f'mirror          = "{names[1] if len(names) > 1 else ""}"',
         f'mirror_host_mark = "{mirror_mark}"',
@@ -261,7 +280,8 @@ def render_template(root: Path) -> str:
         "# 出现需人工确认(例: 用户的在途改动 / 不该入库的项目数据)",
         "warn_lines = []",
         "",
-        f"platform_hints = {arr(KEY_DEFAULTS['platform_hints'])}",
+        (f"platform_hints = {arr(hints)}" if hints else
+         'platform_hints = []   # 未识别技术栈 → 未给关键词, 请按真实跨平台风险手写'),
         f"staged_panic = {KEY_DEFAULTS['staged_panic']}",
         "",
         "# 提交前闸门 —— 判据: " + "; ".join(why),
@@ -301,6 +321,7 @@ def draft_issues(cfg: dict) -> list[str]:
 
     - `confirmed` 仍为 false → 配置还是初稿, 未经确认
     - `red_lines` 为空 → 等于没有红线(「出现即 STOP」那层保护是关着的)
+    - `gates` 为空 → 提交前不会有任何机检(测试 / 生成器 --check 都不会被提醒)
     - 闸门命令里仍有 `<未填…>` → 命令没填实
 
     注意: 只认 `<未填` 前缀 —— `<改过的 py 文件>` 这类是**运行时替换**的正常写法, 不算未填。
@@ -310,6 +331,8 @@ def draft_issues(cfg: dict) -> list[str]:
         issues.append("配置仍是初稿(confirmed = false) —— 逐项确认后改为 true")
     if not cfg.get("red_lines"):
         issues.append("red_lines 为空 = 没有红线, 「出现即 STOP」那层保护是关着的")
+    if not cfg.get("gates"):
+        issues.append("未声明 [[gates]] = 提交前没有任何机检(测试 / 生成器 --check 都不会被提醒)")
     for gate in cfg.get("gates", []):
         for cmd in gate.get("run", []):
             if "<未填" in cmd:
