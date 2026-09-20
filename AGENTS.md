@@ -7,7 +7,7 @@
 
 > 完整规程(含任务档案模板)见 [.agents/skills/memory-bank/SKILL.md](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。
 
-- **开始**: **①先拉取远程分支** —— `git remote -v` 确认主线远端 (Gitee), 再 `git pull --rebase <remote> develop` (分支名**必须写**), 确认 `git status -sb` 不落后后再开工; **禁止在落后的分支上动手改代码** (2026-09-19 用户指定; 写命令见下方「提交 / PR · 开工先同步主线」) —— 拉取前先把工作区弄干净, 理由见「⚠️ 环境硬约束: Git 操作」。再 ②读 [memory-bank/activeContext.md](memory-bank/activeContext.md) (当前焦点) + [memory-bank/README.md](memory-bank/README.md) 路由表, 按任务选择深入文档; 已有 `tasks/` 档案的任务从档案续作。
+- **开始**: **①先拉取远程分支** —— `git remote -v` 确认主线远端 (Gitee), 再 `git pull --rebase <remote> develop` (分支名**必须写**), 确认 `git status -sb` 不落后后再开工; **禁止在落后的分支上动手改代码** (2026-09-19 用户指定; 命令与机检见 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md) 的 S1, 或直接跑 `python .agents/skills/my-commit-flow/scripts/preflight.py`) —— 拉取前先把工作区弄干净, 理由见「⚠️ 环境硬约束: Git 操作」。再 ②读 [memory-bank/activeContext.md](memory-bank/activeContext.md) (当前焦点) + [memory-bank/README.md](memory-bank/README.md) 路由表, 按任务选择深入文档; 已有 `tasks/` 档案的任务从档案续作。
 - **收尾 (5 步 DoD)**: ①更新 activeContext (已完成条目**迁出**到 `progress.md` / 主题文档, 不是追加流水账) ②命中阈值的任务在 `memory-bank/tasks/` 立档 (命名 `YY-MM-DD-<slug>.md`, **先按 slug 查重再建**) + 跑 `python scripts/gen_tasks_index.py` 重建索引 (不要手改 `_index.md`) ③代码事实变更回写 `memory-bank/` 对应文档与根 `README.md` (测试基线只改 `testing.md`) ④跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` ⑤新坑追加 `pitfalls.md`。
 - **立档阈值** (满足任一条**必须**立档): ①跨 ≥2 次会话; ②单会话 ≥5 轮指令或改动 ≥3 个源文件; ③出现"计划/方案/波次/第 N 轮/后续阶段"等长周期表述; ④需产出计划文档或交付报告。其余小修与答疑只记 activeContext。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`。发现文档漂移时以代码为准并回写文档。
@@ -111,52 +111,22 @@ wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv run pytest 
 - **安全矩阵 (2026-09-19 实测)**: 非快进合并 + 干净工作区 = 安全; 快进合并 + 脏工作区 = 安全; **非快进合并 + 脏工作区 = 必炸**。
 - **唯一可靠规避: 合并前先把工作区弄干净**(先提交, 或把改动移出去)。`merge.autoStash=false` **挡不住**(全局配置与 `-c` 均实测无效); 关沙箱、换系统 git、剔除 PATH 里的 safe-bin 同样无效 —— `rm` 是 **bash 函数**, 拦截层仍在。
 - 同理**避免**在工具 shell 里跑 `git stash` / `git rebase` / `git checkout`(脏工作区时)等会触发 stash 的操作; 高风险 git 操作请让用户在自己的普通终端执行。
-- **提交后必查 ref**: 本 worktree 每次 `git commit` 的 ref 更新都可能被拦截层静默丢弃, 必须核对 `HEAD` == `refs/heads/other/develop` == `packed-refs`, 必要时用 `.workbuddy-ai/fix-branch-ref.sh <sha>` 修复 —— **不要只看 commit 输出**。
+- **提交后必查 ref**: 本 worktree 每次 `git commit` 的 ref 更新都可能被拦截层静默丢弃, 必须核对 `HEAD` == `refs/heads/<branch>` == loose/packed-refs; 用 `.agents/skills/my-commit-flow/scripts/verify_ref.py` 核并按它打印的步骤修复(旧的 `.workbuddy-ai/fix-branch-ref.sh` 已不存在, 勿再引用) —— **不要只看 commit 输出**。
 - 高风险 git 操作前先整份备份 `.git`(`cp -a .git <备份路径>`)。
 - **本节是事故说明, 不重复步骤**: 把上述红线做成机检与停手点的, 是 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)(预检会自动查落后/脏工作区/红线文件/staged 暴增; rebase 与 push 仍由执行者按判据手动跑)。
 
 ## 提交 / PR
 
-> **本节只定口径**(主线 / 镜像 / 暂存纪律 / 幽灵 diff), **步骤与机检走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)**: 预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee → 尝试一次 GitHub 直连 → 查幽灵 diff。脚本在 `.agents/skills/my-commit-flow/scripts/`(`preflight.py` / `commit.py` / `verify_ref.py` / `push.py`)。
+> **步骤、命令与机检脚本一律走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)** —— 预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee → 尝试一次 GitHub 直连 → 查幽灵 diff(脚本: `preflight.py` / `commit.py` / `verify_ref.py` / `push.py`)。**本节只留口径与红线, 不重复命令**。
 
-- **协作主线**: 日常开发在 `develop` 分支, 且统一以 **Gitee 的 `develop`** 为准。**交付与否只看
-  Gitee 上有没有该提交**; GitHub 只作镜像, **允许滞后** —— 不要用 GitHub 的提交状态判断进度
-  (直连不稳定, 会误判成"改动没推上去")。
-- **开工必先同步主线 (硬要求, 与「会话协议 · 开始」同源), 但先确认 `origin` 指向哪** —— 历史 clone 的 `origin` 可能是 GitHub, 照抄
-  `origin` 会拉到滞后的镜像 (2026-09-19 实测: 某 clone `origin`=GitHub, `git pull` 一直"已是最新",
-  实际落后 Gitee 5 个提交):
-  ```bash
-  git remote -v                        # 先确认: origin 指向 gitee.com 才用下面的 origin 写法
-  git pull --rebase origin develop     # origin = Gitee 时
-  git pull --rebase gitee develop      # Gitee 挂在 `gitee` 这个远端名时 —— 分支名**必须写**
-  ```
-  - `git pull <remote>` 不带分支名时**只 fetch 不合并**当前分支 (对象拉下来了但 HEAD 不动, 仍显示
-    "已是最新"), 必须写成 `git pull <remote> <branch>`。
-  - 一劳永逸: 把 develop 的上游改到 Gitee, 之后裸 `git pull` / `git push` 都走主线 ——
-    `git branch --set-upstream-to=gitee/develop develop`。
-  - 判进度看 `git status -sb` 的 `ahead/behind` 是相对**当前上游**的: 上游若指向 GitHub, 显示的
-    "ahead N" 不代表比主线新。
-- **提交信息**: 中文, **一句话概述 + 详细描述** —— 首行一句话说清"改了什么 / 为什么"(参照
-  `git log` 风格, 如"修复 WEB UI 种子速度刷新滞后: …"), 空一行后写细节: 改动动机、关键取舍、
-  影响面、实测数字。单句能说清的小改只写首行。
-- **用户说"提交"= commit + 自动推送** (2026-09-19 用户指定), 一次流程走完 —— **触发词只认"提交 / 入库 / 推上去"这类显式指令; "继续 / 接着做 / ok / 你看着办"一律不算** (2026-09-20 用户指定): 没等到触发词就**只 commit 不 push**(或先问一句), 别把"做完"自动升级成"推上去"。**本条是"提交 / push"口径的单点定义, 优先于 `memory-bank/` 里的历史表述** (`conventions.md` 2026-09-10 的"绝对不要 push"已作废, 仅作沿革保留; 该冲突此前无解是因为两边都是文档, 「冲突裁决」链的 `代码 > memory-bank` 给不出方向):
-  1. `git push origin develop` —— 推 Gitee (稳定, 这是协作主线, 必须成功)。若该 clone 的 `origin`
-     指向 GitHub 则用 `git push gitee develop` (同上条: 先 `git remote -v` 确认);
-  2. 再**尝试一次** GitHub 直连:
-     ```bash
-     git -c http.https://github.com.proxy= push github develop
-     ```
-     全局 git config 给 github.com 配了 per-URL 代理 (`http.https://github.com.proxy=http://127.0.0.1:10808`),
-     用 `-c` 覆盖为空即**禁用代理走直连**。
-  3. **GitHub 直连失败不重试**: 直连本来就不稳定 (2026-09-19 实测两种形态: `Recv failure: Connection
-     was reset` 与 `Failed to connect to github.com:443 after 21025 ms`)。失败**只如实报告一次** ——
-     不重试、不换代理再试、不改走 SSH、不调超时反复试, 也不回滚或改写 Gitee 上已完成的推送。
-     远端只有 `origin` 时先补 `git remote add github https://github.com/ABackerNINI/auto-qb.git`。
-- 提交前: 全量测试通过; 用户可见行为变更需同步 `README.md` 与 `memory-bank/`。
-- **只暂存本次范围**: 逐路径写 `git add <文件...>`, 不用 `git add -A`; 暂存清单里不得混入用户自己的未提交改动 (`想法.md` 属高危, `config.yml` 是红线)。
-- **提交前先格式化**: 改过的 Python 文件先过 `yapf -i <file>` (含 `tests/`)。
-- **提交后必查"幽灵 diff"**: 格式化工具 / 编辑器在**提交之后**重排文件, 文件其实已入库但工作区又变脏 — 极易被误判成"没提交上"。发现后**把收尾差异补一次提交** (信息注明"格式化, 无行为变化"), 不要改写已入库的提交。
-- **判别"是否已提交"看 `git status --short` 两列, 别只看 `M`**:
-  - `M ` (M 在**第一列**) = 已暂存待提交; ` M` (M 在**第二列**) = **已提交过**、工作区又有新改动;
-  - 权威判据 (两者同时成立才算已提交): `git log --oneline -1 -- <文件>` 有记录 **且** `git diff --quiet -- <文件>` 退出码 0;
-  - 提交完成后 `git status --short` 只应剩下已知的、用户自己的改动 (如 `M 想法.md`) — 仍看到本次改动文件即为幽灵 diff。
+- **协作主线**: 日常开发在 `develop`, 统一以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee 上有没有该提交**。GitHub 只作镜像, **允许滞后** —— 不要用 GitHub 的提交状态判断进度(直连不稳定, 会误判成"改动没推上去")。
+- **用户说"提交" = commit + push**, 一次流程走完 —— **触发词只认"提交 / 入库 / 推上去"这类显式指令; "继续 / 接着做 / ok / 你看着办"一律不算** (2026-09-20 用户指定): 没等到触发词就**只 commit 不 push**(或先问一句)。**本条是"提交 / push"口径的单点定义, 优先于 `memory-bank/` 里的历史表述** (`conventions.md` 2026-09-10 的"绝对不要 push"已作废, 仅作沿革保留)。
+- **推送顺序固定**: 先推 Gitee(必须成功)→ 核对远端 ref == 本地 → 再**尝试一次** GitHub 直连; 直连失败**只如实报告一次** —— 不重试 / 不换代理 / 不改走 SSH / 不回滚改写 Gitee 上已完成的推送。
+- **提交信息**: 中文, **一句话概述 + 详细描述** —— 首行说清"改了什么 / 为什么"(参照 `git log` 风格), 空一行后写动机 / 取舍 / 影响面 / 实测数字; 单句能说清的小改只写首行。**数字必须提交那一刻实测**, 不沿用会话中途量的旧值。
+- **硬纪律(逐条都有机检, 命令见 skill)**:
+  - 远端先确认指向 Gitee(历史 clone 的 `origin` 可能是 GitHub 镜像);`git pull <remote>` **必须带分支名**, 不带只 fetch 不合并。
+  - **push 前再 fetch 一次** —— `git status -sb` 的 ahead/behind 是上次 fetch 的快照, 不会自己刷新。
+  - **只暂存本次范围**: 逐路径 `git add <文件...>`, 不用 `-A`; 清单里不得混入用户自己的未提交改动(`想法.md` 高危, `config.yml` 红线)。
+  - 提交前: 全量测试通过; 改过的 Python 先过 `yapf -i`; 用户可见行为变更同步 `README.md` 与 `memory-bank/`。
+  - **提交后必核 ref 三处**(`HEAD` == `refs/heads/<branch>` == loose/packed-refs), 不要只看 commit 输出 —— 见下节。
+  - **提交后必查幽灵 diff**: `git status --short` 看两列 —— `M `(第一列) = 待提交, ` M`(第二列) = 已提交过但工作区又脏。权威判据(两者同时成立才算已提交): `git log --oneline -1 -- <文件>` 有记录 **且** `git diff --quiet -- <文件>` 退出码 0。发现后补一次"格式化, 无行为变化"提交, 不要改写已入库的提交。
