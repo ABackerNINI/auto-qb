@@ -47,6 +47,8 @@
 
 ### web_ui/static/ 前端契约速查 (2026-09-17 第十一轮补)  |  第十轮版见本节末尾
 
+- **拆分(2026-09-20)**: `shared/app.js` 已从 **5045 行拆成 1001 行内核 + 15 个域片段文件**(293 个 methods / 71 个 computed 按域搬走, `data()`/`watch`/生命周期与 HTTP·鉴权·轮询·视图切换留在内核)。片段沿用 `config_editor.js` 的范式: `window.AQB_<域> = { methods: {...}, computed: {...} }`, 由 app.js 末尾 `app.mixin(window.AQB_<域>)` 注入**同一个** Vue 实例 —— 方法体里的 `this` 不变, 跨片段互调与拆分前完全等价。**两个硬约束**: ①片段在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 `window.AQB_*`); ②列模型常量(`TABLE_COLUMNS`/`MIN_COL_PX`/`STATE_RANK`/`ROW_WIN_*` 等)仍单点定义在 app.js 顶部, 片段按裸名引用(只在运行时求值, 与加载顺序无关, 但**常量定义不许再搬**)。域划分: `ui_feedback`(toast/确认框/菜单定位) `filters` `columns`(列宽列序列菜单 + 行窗口化) `format` `decorate`(状态聚合/共同标签分类) `hr` `sort` `menu`(表头菜单/右键/展开) `commands`(命令投递 + 乐观 UI) `add_torrent` `selection` `shows` `delete_flow` `drawer` `dialogs`(统计/管理/日志/限速/历史)。守阵 `test_frontend_static_bundle_health` 第 10 项钉住接线(漏挂 `<script>` / 漏 `app.mixin` / 跨片段成员重名 —— 后两者都是"pytest 全绿而功能静默消失")。
+
 - **分层**: `shared/app.js` 是唯一逻辑层(两套 UI 共用 `shared/app.js`); `atlas/`(星图)与 `prism/`(棱镜)只放模板与主题 CSS —— 逻辑类改动两套自动生效, 版式类需各自改模板/CSS。
 - **列模型**: `GROUP_COLUMNS`/`DETAIL_COLUMNS`/`TORRENT_COLUMNS`/`SHOW_COLUMNS` 是列头 / 单元格 / grid 模板 / 列选择器 / **列对齐**的唯一来源; 列宽按**列 key** 存 `autoqb_cols_v4`。保存路径只在**辅种表**(组级取首位成员值 = 路径筛选器同口径)与**种子页**保留, 明细表已删(组内成员路径本就一致)。
 - **排序键族(R11)**: 四个视图各自的键 `sortKey`/`torrentSortKey`/`showSortKey`/`detailSortKey`(明细表与三视图**正交**, 三视图的明细共用一套); `setSort(key, scope)` / `_sortKeys(scope)` / `_resetSort(scope)` 是唯一入口, **表头右键菜单的排序项也必须带 scope**(从 `m.page === "detail"` 推); 明细行序由 `sortedMembers(list)` 派生(空键 = 后端原序, 数组字段先 `join(",")` 再比)。

@@ -529,7 +529,86 @@ def _scan_js_syntax_with_node(js_files, problems):
             problems.append(f"{rel} node --check 报语法错误: {detail[0] if detail else 'unknown'}")
 
 
-def _scan_episode_member_hashes(path, rel, problems):
+def _app_bundle_files():
+    """app.js 及它按域拆分出的片段文件, 按 prism/index.html 的 <script> **加载顺序**返回 [(path, rel)]
+
+    (2026-09-20 app.js 拆分: 片段以 window.AQB_* 全局 mixin 注入 **同一个** Vue 实例, 逻辑上仍是一份
+     代码 —— 故"跨文件的不变量"必须按整包看: 只扫 app.js 会把搬走的那半漏掉。实测拆完当场报
+     「找不到 _optimisticSettled 调用点」, 而它只是挪到了 commands.js, 功能没丢。)
+     顺序取自 HTML 而非文件名排序 —— 片段必须排在 app.js **之前**(app.js 末尾要读 window.AQB_*)。
+    """
+    prism = os.path.join(STATIC_ROOT, "prism", "index.html")
+    with open(prism, encoding="utf-8") as f:
+        html = f.read()
+    out = []
+    for src in re.findall(r'<script src="(/shared/[^"]+\.js)"></script>', html):
+        if "/vendor/" in src:
+            continue
+        rel = src.lstrip("/")
+        out.append((os.path.join(STATIC_ROOT, rel), rel))
+    return out
+
+
+def _section_members(text, section):
+    """取片段文件 / app.js 里 `methods: {` 或 `computed: {` 块的成员名(4 空格缩进的 `name(` / `name:`)"""
+    names, in_block = [], False
+    for line in text.splitlines():
+        if not in_block:
+            if line.strip() == section + ": {":
+                in_block = True
+            continue
+        if line in ("  },", "  }"):
+            break
+        m = re.match(r"^    (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", line)
+        if m:
+            names.append(m.group(1))
+    return names
+
+
+def _scan_mixin_wiring(problems):
+    """拆分接线守阵(2026-09-20): 片段文件必须「HTML 引用了」且「app.js 注入了」, 且成员不得重名
+
+    拆成多文件后有两类**静默**故障形态(pytest 全绿 / 界面局部废掉):
+    ① 文件写了但漏加 <script> 或漏 app.mixin() —— 那一整块功能凭空消失, 控制台不报错
+       (Vue 直接把没注册的 mixin 当不存在);
+    ② 两个片段里出现同名成员 —— Vue 的 mixin 合并是**后者覆盖前者**, 不报错, 但被覆盖的那个
+       实现从此永不执行(表现为"点了没反应"或行为回到旧逻辑)。
+    """
+    bundle = _app_bundle_files()
+    refs = {rel for _p, rel in bundle}
+    for dirpath, _dirs, files in os.walk(os.path.join(STATIC_ROOT, "shared")):
+        if os.path.basename(dirpath) == "vendor":  # 第三方压缩产物, 不参与本仓库的片段约定
+            continue
+        for name in sorted(files):
+            if not name.endswith(".js"):
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            if rel in refs:
+                continue
+            problems.append(f"{rel} 未被 prism/index.html 的 <script> 引用(拆分片段漏挂 -> 整块功能静默消失)")
+
+    app_text = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    # mixin 与 component 两种注入都算已接线(ce-field 走 app.component)
+    registered = set(re.findall(r"app\.mixin\(window\.(\w+)\)", app_text))
+    registered |= set(re.findall(r"app\.component\(\s*\"[^\"]+\"\s*,\s*window\.(\w+)\)", app_text))
+    seen = {}
+    for path, rel in bundle:
+        text = open(path, encoding="utf-8").read()
+        for glob in re.findall(r"^window\.(\w+) = \{", text, re.M):
+            if glob not in registered:
+                problems.append(f"{rel} 定义了 window.{glob} 但 app.js 没有 app.mixin(window.{glob})(片段漏注入)")
+        for section in ("methods", "computed"):
+            for member in _section_members(text, section):
+                if member in seen:
+                    problems.append(
+                        f"{rel} 的 {section}.{member} 与 {seen[member]} 重名 —— Vue mixin 后者覆盖前者, "
+                        "被盖掉的实现永不执行且不报错"
+                    )
+                seen[member] = rel
+
+
+def _scan_episode_member_hashes(text, rel, problems):
     """追剧视图"集成员 -> hash"守阵 (2026-09-19 实测事故)
 
     后端 shows 视图的 `members` 是 **hash 数组**, 而前端 `decoratedShows` 会把它换成**成员对象**
@@ -539,8 +618,7 @@ def _scan_episode_member_hashes(path, rel, problems):
     不受影响 —— "种子右键正常、剧/集右键失败"就是这形状)。故凡是"从集成员取 hash"的地方
     一律走 `memberHashesOf`(两形态都收), 这里只做静态拦截。
     """
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().splitlines()
+    lines = text.splitlines()
     for i, line in enumerate(lines, 1):
         if not _EP_MEMBERS_RE.search(line):
             continue
@@ -552,7 +630,7 @@ def _scan_episode_member_hashes(path, rel, problems):
             )
 
 
-def _scan_state_rank(path, rel, problems):
+def _scan_state_rank(text, rel, problems):
     """状态优先级表守阵: 前端 `STATE_RANK` 必须与后端 `_SHOW_STATE_RANK` 逐项一致(2026-09-19)
 
     两表是**同一概念**("一组/一集种子该显示成什么状态")的两份实现:
@@ -565,8 +643,6 @@ def _scan_state_rank(path, rel, problems):
     """
     from auto_qb.mixins.web_view import _SHOW_STATE_RANK
 
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
     m = re.search(r"const STATE_RANK = \{([^}]*)\}", text)
     if not m:
         problems.append(f"{rel} 找不到 `const STATE_RANK = {{...}}`(状态优先级单点表, 见 isPending 一带注释)")
@@ -579,7 +655,7 @@ def _scan_state_rank(path, rel, problems):
         )
 
 
-def _scan_pending_settle(path, rel, problems):
+def _scan_pending_settle(text, rel, problems):
     """乐观 UI「撤下」守阵(2026-09-19, 与主线 32f531d / 12657ee 同一族缺陷的第二道锁)
 
     背景: 「点击 → 行恢复正常」曾实测 3785~5178ms, 根因是 pending 只有 3s 常量兜底一个出口 ——
@@ -594,9 +670,6 @@ def _scan_pending_settle(path, rel, problems):
       ② 判定必须走 `_optimisticSettled`(比真值快照)而不是"拿行上的当前值比" —— 同上;
       ③ 回执后必须调 `_pullTruthAfterCmd`, 否则真值只能等下一轮轮询(1.5/2/3s 分档)。
     """
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-
     i_snap = text.find("this._snapshotTruth(state)")
     i_reap = text.find("this.reapplyPending()")
     if i_snap < 0:
@@ -629,6 +702,11 @@ def _scan_frontend_assets():
     9. 乐观 UI 的**撤下**路径: 真值快照必须早于补丁重贴、判定必须走 `_optimisticSettled`、
        回执后必须调 `_pullTruthAfterCmd`(见 _scan_pending_settle) —— 任一被绕过, 撤下就退回
        3s 常量兜底(真机连报三次的那条), 或判定恒真导致失败路径留假状态(红线)。
+    10. 拆分接线: 片段文件必须被 HTML 引用 + 被 app.js `app.mixin()` 注入, 且成员不得重名
+       (见 _scan_mixin_wiring) —— 漏挂/漏注入 = 整块功能静默消失, 重名 = 被覆盖者永不执行。
+
+    ⚠ 7/8/9 三项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
+      拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测)。
     """
     problems = []
     js_files = []
@@ -647,10 +725,6 @@ def _scan_frontend_assets():
             if "/vendor/" not in f"/{rel}":
                 if name.endswith(".js"):
                     js_files.append((path, rel))
-                    if name == "app.js":
-                        _scan_episode_member_hashes(path, rel, problems)
-                        _scan_state_rank(path, rel, problems)
-                        _scan_pending_settle(path, rel, problems)
                     for i, line in enumerate(lines):
                         if not re.match(r"^\s*\*(?!/)", line):
                             continue
@@ -665,6 +739,15 @@ def _scan_frontend_assets():
                 if not os.path.exists(os.path.join(STATIC_ROOT, ref.lstrip("/"))):
                     problems.append(f"{rel} 引用不存在的静态资源 {ref}")
     _scan_js_syntax_with_node(js_files, problems)
+    # app.js 已按域拆分(2026-09-20): 跨文件不变量按**整包**(HTML 加载顺序拼接)扫描 ——
+    # 只看 app.js 会把搬进片段的那半漏掉, 只看片段又拿不到 app.js 里的表格常量与 refresh 主链。
+    bundle = _app_bundle_files()
+    bundle_text = "\n".join(open(p, encoding="utf-8").read() for p, _r in bundle)
+    rel = "shared/app.js(整包 %d 个文件)" % len(bundle)
+    _scan_episode_member_hashes(bundle_text, rel, problems)
+    _scan_state_rank(bundle_text, rel, problems)
+    _scan_pending_settle(bundle_text, rel, problems)
+    _scan_mixin_wiring(problems)
     return problems
 
 

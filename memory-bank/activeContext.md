@@ -53,6 +53,18 @@
   ⬜ **剩用户真机走查**(需真实 qB 数据; 见「待用户真机走查」)。
 
 - **② 上轮计划复核的收尾(只剩第 7 项) (2026-09-19)**: 复核报表
+
+- **③ app.js 按域拆分 (2026-09-20, 已完成, 随本提交推送)**: 计划见
+  [docs/plans/26-09-20-0906-appjs-split-plan.html](../docs/plans/26-09-20-0906-appjs-split-plan.html),
+  档案见 [tasks/26-09-20-webui-appjs-split.md](tasks/26-09-20-webui-appjs-split.md)。
+  5045 行 → **1001 行内核 + 15 个片段文件**(`window.AQB_*` 全局 mixin, 与 config_editor 同范式),
+  293 个 methods + 71 个 computed 按域搬走, 两套模板**零改动**。守阵新增第 10 项「拆分接线」
+  (漏挂 / 漏注入 / 重名, 已红验), 第 7/8/9 项改为按**整包**扫描; 1057 passed 不变, 冒烟 54 项 0 失败。
+  ⚠ 两个后续约束: ①片段必须在 HTML 里排在 app.js **之前**(app.js 末尾要读 `window.AQB_*`);
+  ②列模型常量(`TABLE_COLUMNS`/`STATE_RANK`/`ROW_WIN_*`)留在 app.js 顶部**不许再搬**(片段按裸名引用)。
+  变基提示: 上游 `03ed9ed`/`5691c6f` 给撤下路径加了 `via` 标记与「真值不一致时采纳真值」—— 这些
+  改动落在已被搬进 `commands.js` / `shows.js` 的方法上, **按意图迁移到新位置**(同 pitfalls
+  「rebase 冲突落在已被迁走的方法上」), 不是丢弃。
   [docs/plans/26-09-19-1745-webui-responsiveness-review.html](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)
   (评级 计划 A− / 实施 A− / BUG B / 安全 A− / 性能 B+ / 测试 B−), 报表已追加 **§10 复核修订与修复回执** +
   **§11 热路径白跑 85%**(FastAPI `jsonable_encoder`)。**第 1、2 批与 §11 均已实施未提交**
