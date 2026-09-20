@@ -151,6 +151,27 @@ const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真�
 const COLS_STORE_KEY = "autoqb_cols_v4";
 const LEGACY_COLS_KEYS = ["autoqb_cols_v3"];  // v2 为索引式覆盖, 不可迁移(见上)
 
+/* FX-28: 时间列显示口径(相对/绝对)持久化, **按列**独立而非全局 —— 用户可能想"添加于看绝对、
+ * 最近活动看相对", 一把切会互相打架。刻意**不**塞进 COLS_STORE_KEY: 那个键管的是列集合/列宽/
+ * 顺序(按 page 分段 + 跨标签合并), 显示口径是另一条生命周期, 混进去要多背一段 read-modify-write。
+ * 默认值 = 改造前的现状(添加于/完成于/最近动静原本就是绝对时间, 最近活动已改相对) —— 加开关不该
+ * 顺手改掉既有观感。⚠ 只收**时间点**列: 做种时长/活跃时间/ETA 是时长, 没有绝对/相对之分。 */
+const TIME_FMT_STORE_KEY = "autoqb_timefmt_v1";
+const TIME_FMT_KEYS = ["added_on", "last_activity", "completion_on", "latest"];
+const TIME_FMT_DEFAULT = { added_on: "abs", last_activity: "rel", completion_on: "abs", latest: "abs" };
+function loadTimeFmt() {
+  const out = Object.assign({}, TIME_FMT_DEFAULT);
+  try {
+    const raw = JSON.parse(localStorage.getItem(TIME_FMT_STORE_KEY) || "{}");
+    for (const k of TIME_FMT_KEYS) {
+      if (raw[k] === "rel" || raw[k] === "abs") out[k] = raw[k];
+    }
+  } catch (e) {
+    /* 无存储 / 坏数据: 回落默认(偏好类读取失败不该影响启动) */
+  }
+  return out;
+}
+
 /* 默认排序: 辅种组按组内**最近添加**时间降序(新补进来的种子最需要被看到);
  * 其它列点击 3 次回到这里(见 setSort 的三态语义)
  */
@@ -326,6 +347,14 @@ const app = createApp({
       // P0-0 埋点(排查用, 不参与渲染): 单次命令端到端耗时与单轮视图赋值耗时
       cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行
       renderMs: 0,  // 单轮 refresh() 中"赋值 + 多选交集"的耗时(不含网络)
+      /* FX-28: 各**时间点列**的显示口径 { 列key: "rel" | "abs" } —— 由该列表头右键菜单切换并持久化
+       * (见 TIME_FMT_STORE_KEY); 键集合 = TIME_FMT_KEYS, 未登记的列不受影响 */
+      timeFmt: loadTimeFmt(),
+      /* 相对时间时钟(FX-27): 只喂"最近活动"这类相对时间显示(fmtRelTime), 30s 一跳 ——
+       * 为什么必须有: 后端 last_activity 按分钟量化且只在**活动发生时**才变, 暂停的种子行对象
+       * 长期不变 ⇒ Vue 不重渲染 ⇒ 相对值会永久停在渲染那一刻("刚刚"挂一整天)。粒度只到分钟,
+       * 不必比 30s 更密(更密只会白付整表 patch, 与 P1-2 的窗口化成果相抵)。 */
+      nowSec: Math.floor(Date.now() / 1000),
       pendingOps: {},  // P0-3 乐观 UI: hash -> { patch, prev, ts }, 见 isPending/applyOptimistic
       /* 本轮 /api/state 的**真值快照**: hash -> { 补丁键: 服务端原始值 }。
        * 判"真值是否已对齐"必须比这个, 不能比行上的当前值 —— 见 _snapshotTruth。 */
@@ -597,6 +626,11 @@ const app = createApp({
       if (e.key === COLS_STORE_KEY) this.adoptColState();
     };
     window.addEventListener("storage", this._onColStore);
+    // FX-27: 相对时间时钟(30s 一跳) —— 见 data.nowSec 注释; 不挂 visibilitychange:
+    // 后台标签本来就不会重排渲染, 回到可见时 refresh() 一并刷新, 无需额外开关
+    this._clockTimer = setInterval(() => {
+      this.nowSec = Math.floor(Date.now() / 1000);
+    }, 30000);
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
@@ -675,6 +709,11 @@ const app = createApp({
     if (this._onColStore) {
       window.removeEventListener("storage", this._onColStore);
       this._onColStore = null;
+    }
+    // FX-27: 相对时间时钟随组件销毁撤销(同上, 防热重载后句柄堆叠)
+    if (this._clockTimer) {
+      clearInterval(this._clockTimer);
+      this._clockTimer = 0;
     }
     // P1-3: 顶栏尺寸观察器随组件销毁断开(ResizeObserver 不随元素消失自动停)
     if (this._headObs) {

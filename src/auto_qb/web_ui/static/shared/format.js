@@ -56,6 +56,24 @@ window.AQB_FORMAT = {
       if (!ts || ts < 0) return "";
       return this.fmtTime(ts);
     },
+    /* 相对时间(FX-27, "最近活动"列专用): 该列要回答的是"距今多久", 绝对时间点得读者自己做减法。
+     * 档位: 刚刚 / 分钟 / 小时 / 天 / 月 / 年 —— **一律相对, 不回落绝对日期**: 同一列里"有的
+     * 显示 3天前、有的显示 08-11 20:56"会让人以为没改干净(2026-09-20 用户实测反馈); 长跨度
+     * 的可读性损失由 title 上的绝对时间点补回(调用方挂 :title="fmtTs(...)" )。
+     * 哨兵与 fmtTs 同口径: -1/0 = 从未传输 → 空白(TBL-01)。
+     * ⚠ 时基必须读 this.nowSec(响应式秒计数, app.js 每 30s 一跳)而不是现取 Date.now():
+     *   后端 last_activity 按分钟量化且只在活动发生时才变 ⇒ 行对象不变时 Vue 不重渲染,
+     *   现取时间会让"刚刚"之类的相对值**永久停在渲染那一刻**。 */
+    fmtRelTime(ts) {
+      if (!ts || ts < 0) return "";
+      const sec = (this.nowSec || Math.floor(Date.now() / 1000)) - ts;
+      if (sec < 60) return "刚刚";                          // 含时钟偏差导致的未来时间戳
+      if (sec < 3600) return `${Math.floor(sec / 60)}分钟前`;
+      if (sec < 86400) return `${Math.floor(sec / 3600)}小时前`;
+      if (sec < 86400 * 30) return `${Math.floor(sec / 86400)}天前`;
+      if (sec < 86400 * 365) return `${Math.floor(sec / (86400 * 30))}个月前`;
+      return `${Math.floor(sec / (86400 * 365))}年前`;
+    },
     /* 种子限速(qB 原始 bytes/s; 0 = 不限速/跟随全局): 与限速曲线的 KiB/s 口径区分开 */
     fmtLimitBytes(v) {
       if (v === null || v === undefined) return "";  // 缺失: 空白(TBL-01)
@@ -68,7 +86,7 @@ window.AQB_FORMAT = {
       return total === null || total === undefined || total < 0 ? String(connected) : `${connected} (${total})`;
     },
     /* ---------------- 单元格口径单点化(FX-02/03/04) ----------------
-     * 以下三个函数是这三列口径的**唯一来源**: 明细表 / 种子页 / 追剧集明细各自引用它们,
+     * 以下函数是这些列口径的**唯一来源**: 明细表 / 种子页 / 追剧集明细各自引用它们,
      * 不再把表达式写在模板里(上一版同一口径在模板里各写三份, 改口径必须三处同改, 必漏)。
      * 返回值语义 = 单元格显示文本, 空串即"该状态不显示"; 刻意用空串而非 v-if 摘除节点 ——
      * 单元格仍在 grid 中占位, 列宽与表头不会错位。 */
@@ -89,6 +107,27 @@ window.AQB_FORMAT = {
     cellRatio(m) {
       if (!m.progress) return "";  // FX-04: 进度为 0(未开始/未下载)的种子不显示分享率
       return (m.ratio || 0).toFixed(2);
+    },
+    /* 可用性(FX-26): 两个"没有有效值"的来源都不显示 ——
+     * ① 负数: qB 拿不到 distributed_copies 时给 -1(未连上 tracker / 无 peer 数据), 旧版直接
+     *    toFixed 出 "-1.00" 看着像真数值; ② 暂停中的种子: 没连接就谈不上分布式副本数(与
+     *    FX-03 的做种/用户列同口径)。0 仍是有效值(确实零副本), 保留显示 */
+    cellAvailability(m) {
+      if (m.kind === "paused") return "";
+      const v = m.availability;
+      if (v === null || v === undefined || v < 0) return "";
+      return v.toFixed(2);
+    },
+    /* 时间点列(FX-28): 口径**按列**独立(见 data.timeFmt 与 TIME_FMT_KEYS), 由该列表头右键菜单切换;
+     * 所有时间点列一律走这两个函数, 模板里不得再直接调 fmtTime/fmtTs(否则那列就没有开关)。
+     * 两种口径互为悬停提示 —— 显示相对时 title 给绝对时间点, 显示绝对时 title 给"3天前",
+     * 这样长跨度(1个月前/1年前)也能一眼核对, 不必为可核对性在列内混两种格式。
+     * ⚠ 统一走 fmtTs(而非 fmtTime): 它挡住了 -1 哨兵(直接 fmtTime(-1) 会渲染出 1970 年的日期)。 */
+    cellTime(ts, key) {
+      return this.timeFmt[key] === "rel" ? this.fmtRelTime(ts) : this.fmtTs(ts);
+    },
+    cellTimeHint(ts, key) {
+      return this.timeFmt[key] === "rel" ? this.fmtTs(ts) : this.fmtRelTime(ts);
     },
     /* 数值色阶(TBL-03): value/denom 比值分两档底色 —— ratio<0.75 → tone-low(偏弱), >=0.75 → tone-high(接近满档);
      * value<=0 或分母缺失/<=0 返回空串(交给 zero/空白机制)。全局限速分母来自 /api/stats 的 statsServer

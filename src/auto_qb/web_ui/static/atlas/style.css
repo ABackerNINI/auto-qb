@@ -678,6 +678,8 @@ button { font-family: inherit; }
 /* ================= FX-15 次级菜单(flyout) =================
  * 一级只放 PT 日常高频动作; qB 通用能力进子面板。子面板锚在父项右缘, 靠右时向左翻(flip-x)。
  * 父项必须 position: relative —— 与"浮层缺定位祖先"是同一类坑(FX-18)。 */
+/* FX-28: 表头右键菜单里的"当前口径"勾标(与 .ctx-caret 同位置语言: 右缘对齐, 不挤占文案) */
+.ctx-item .ctx-tick { margin-left: auto; stroke-width: 2.4; }
 .ctx-item.has-sub { position: relative; }
 .ctx-item.has-sub .ctx-caret { margin-left: auto; color: var(--fg-dim); opacity: .7;
   transform: rotate(-90deg); transition: transform var(--dur) var(--ease); }

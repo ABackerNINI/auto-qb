@@ -111,7 +111,7 @@
 - **尺寸族**: 弹窗宽度取 `--modal-w-narrow/base/form/add`/`--modal-wide-w`(两套 UI 同值同族); 新增弹窗只选档,
   不写新数字(这正是此前"第 N 次调大"的成因)。
 - **单点口径原则(通用)**: 同一数据/口径在两个以上地方出现时, 收成 computed/method 单点(如 `speedLimitBytes`
-  限速取数、`cellSeedingTime/cellRatio/cellPeers` 单元格口径、`_deleteDetails` 删除详情行、`colAlignCss` 列对齐),
+  限速取数、`cellSeedingTime/cellRatio/cellPeers/cellAvailability/cellTime` 单元格口径、`_deleteDetails` 删除详情行、`colAlignCss` 列对齐),
   模板里只引用不重算。新增展示口径时先问"它是否已被别处实现"。
 
 ## 格式化 (yapf, .style.yapf)

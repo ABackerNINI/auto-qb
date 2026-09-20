@@ -54,6 +54,28 @@ window.AQB_MENU = {
       // 在右键处就地展开完整列选择器(复用 openColMenuAt 的视口钳位)
       this.openColMenuAt({ clientX: m.x, clientY: m.y }, m.page);
     },
+    /* FX-28: 时间点列(见 TIME_FMT_KEYS)的显示口径切换 —— 挂在**该列表头**右键菜单里,
+     * 因为"怎么显示"是这一列的属性而非全局设置。新增可切换列: 往 TIME_FMT_KEYS +
+     * TIME_FMT_DEFAULT 各加一条即可, 菜单与单元格按 key 自动生效。 */
+    headMenuTimeFmt(mode) {
+      const m = this.headMenu;
+      this.headMenu.visible = false;
+      if (!this.headTimeFmtAble()) return;
+      if (this.timeFmt[m.key] === mode) return;   // 点当前值: 静默关闭(不给"已切换"的假反馈)
+      this.timeFmt[m.key] = mode;                 // 整键替换属性(Vue 3 的响应式能接到)
+      try {
+        localStorage.setItem(TIME_FMT_STORE_KEY, JSON.stringify(this.timeFmt));
+      } catch (e) {
+        /* 隐私模式/配额满: 本轮仍生效, 只是刷新后回落默认 —— 偏好类写入失败不该打断操作 */
+      }
+      this.toast(mode === "rel"
+        ? `「${m.label}」改按相对时间显示(3天前)`
+        : `「${m.label}」改按绝对时间显示(09-20 21:25)`);
+    },
+    /* 该列是否支持口径切换(模板 v-if 用; 常量在 app.js, 模板读不到顶层 const) */
+    headTimeFmtAble() {
+      return TIME_FMT_KEYS.indexOf(this.headMenu.key) >= 0;
+    },
     /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
     /* 分组表横向滚动时同步表头位移(表头已脱离 .group-table 容器做纵向 sticky,
        横向滚动靠 JS 桥接避免列头与列体错位)。用 transform 而非 scrollLeft,

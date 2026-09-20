@@ -415,7 +415,7 @@
                 </div>
                 <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
                 <!-- TBL-06: 组级"最近添加"(后端 _build_group_view 透出) -->
-                <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(g.added_on) }}</div>
+                <div v-else-if="col.key === 'added_on'" class="g-stat" :title="cellTimeHint(g.added_on, 'added_on')">{{ cellTime(g.added_on, 'added_on') }}</div>
                 <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
                 <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">{{ g.save_path || '' }}</div>
               </template>
@@ -481,7 +481,7 @@
                     <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                   </span>
                   <!-- TBL-06: 添加于(_member_view 已透出); 保存路径列已移出明细表(见 GROUP_COLUMNS) -->
-                  <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
+                  <span v-else-if="col.key === 'added_on'" class="m-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</span>
                   <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                 </template>
               </div>
@@ -567,13 +567,15 @@
                 <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</div>
                 <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</div>
                 <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</div>
-                <div v-else-if="col.key === 'added_on'" class="g-stat">{{ fmtTime(m.added_on) }}</div>
+                <div v-else-if="col.key === 'added_on'" class="g-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</div>
                 <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</div>
                 <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ fmtSizeOrDash(m.amount_left) }}</div>
-                <div v-else-if="col.key === 'availability'" class="g-stat" :class="numTone(m.availability, 1)">{{ (m.availability || 0).toFixed(2) }}</div>
+                <!-- FX-26: 负数(-1 = qB 未知)与暂停中的种子不显示, 口径走 cellAvailability -->
+                <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !cellAvailability(m) }, numTone(m.availability, 1)]">{{ cellAvailability(m) }}</div>
                 <div v-else-if="col.key === 'time_active'" class="g-stat">{{ fmtDuration(m.time_active) }}</div>
-                <div v-else-if="col.key === 'last_activity'" class="g-stat">{{ fmtTs(m.last_activity) }}</div>
-                <div v-else-if="col.key === 'completion_on'" class="g-stat">{{ fmtTs(m.completion_on) }}</div>
+                <!-- FX-27/28: 相对时间(表头右键可切绝对); 另一种口径留作 title -->
+                <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="cellTimeHint(m.last_activity, 'last_activity')">{{ cellTime(m.last_activity, 'last_activity') }}</div>
+                <div v-else-if="col.key === 'completion_on'" class="g-stat" :title="cellTimeHint(m.completion_on, 'completion_on')">{{ cellTime(m.completion_on, 'completion_on') }}</div>
                 <div v-else-if="col.key === 'up_limit'" class="g-stat" :class="numTone(m.up_limit, m.up_limit)">{{ fmtLimitBytes(m.up_limit) }}</div>
                 <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
@@ -646,7 +648,8 @@
                   <div v-else-if="col.key === 'upspeed'" class="g-stat zero"></div>
                   <div v-else-if="col.key === 'uploaded'" class="g-stat zero"></div>
                   <div v-else-if="col.key === 'hr'" class="g-hr zero"></div>
-                  <div v-else-if="col.key === 'latest'" class="g-stat" :title="'剧内最近添加时间'">{{ fmtTime(s.latest) }}</div>
+                  <!-- FX-28: 口径可切(表头右键); 悬停给另一种口径, 无数据时退回列义说明 -->
+                  <div v-else-if="col.key === 'latest'" class="g-stat" :title="cellTimeHint(s.latest, 'latest') || '剧内最近添加时间'">{{ cellTime(s.latest, 'latest') }}</div>
                 </template>
               </div>
               <template v-if="isShowExpanded(s.key)">
@@ -704,7 +707,7 @@
                             <span class="hr-num">{{ e.hr_pending }}/{{ e.hr_triggered }}</span>
                           </template>
                         </div>
-                        <div v-else-if="col.key === 'latest'" class="g-stat">{{ fmtTime(e.added_on) }}</div>
+                        <div v-else-if="col.key === 'latest'" class="g-stat" :title="cellTimeHint(e.added_on, 'latest')">{{ cellTime(e.added_on, 'latest') }}</div>
                       </template>
                     </div>
                     <!-- 集明细: 该集全部版本(成员), 列与交互复用明细表 -->
@@ -766,7 +769,7 @@
                             <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                           </span>
                           <!-- TBL-06: 添加于(与明细表同列); 保存路径列已移出明细表 -->
-                          <span v-else-if="col.key === 'added_on'" class="m-stat">{{ fmtTime(m.added_on) }}</span>
+                          <span v-else-if="col.key === 'added_on'" class="m-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</span>
                           <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                         </template>
                       </div>
@@ -964,6 +967,18 @@
             </div>
             <div class="ctx-item" @click="headMenuSort(1)">
               <svg class="ico ico-sm ico-sort" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>按「{{ headMenu.label }}」升序
+            </div>
+          </template>
+          <!-- FX-28: 时间点列(见 TIME_FMT_KEYS)通用 —— 显示口径切换(勾 = 当前口径); 时长列不出现 -->
+          <template v-if="headTimeFmtAble()">
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="headMenuTimeFmt('rel')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-clock"></use></svg>相对时间(3分钟前)
+              <svg v-if="timeFmt[headMenu.key] === 'rel'" class="ico ico-sm col-tick ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+            </div>
+            <div class="ctx-item" @click="headMenuTimeFmt('abs')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-calendar"></use></svg>绝对时间(09-20 20:56)
+              <svg v-if="timeFmt[headMenu.key] === 'abs'" class="ico ico-sm col-tick ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
             </div>
           </template>
           <div class="ctx-sep"></div>
