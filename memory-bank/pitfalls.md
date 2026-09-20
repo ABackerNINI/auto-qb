@@ -1485,3 +1485,15 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
   会变成转义或直接失效; 本次索引里就出现过 `memory-bank\issues` 这种串。
 - 判据: 凡是"脚本生成 .md / .html 并内嵌路径"的场景(issues 索引、tasks 索引同款), 落盘前统一
   `Path(...).as_posix()`, 并在真仓库里 `head` 一眼看渲染结果, 别只看退出码 0。
+
+## push 前必须再 fetch 一次（2026-09-20，create-issue 改造推送被拒）
+
+- 症状: 开工初看过 `git status -sb`(无 ahead/behind)就以为"与主线一致", 20 分钟后 `git push origin develop`
+  被拒 —— 期间**另一个 worktree 推了 5 个提交**(app.js 按域拆分等), 远端已到 `4df80dc`。
+  `status -sb` 的 ahead/behind 是**上次 fetch 时的快照**, 不会自己刷新。
+- 判据: 只要距上次 fetch 超过几分钟、或本仓库有多个 worktree / 多 session 并行, **push 前先
+  `git fetch origin develop` 再 `git log --oneline develop..origin/develop`** 看一眼; 有落后就先 rebase。
+- 连带坑: 别的 worktree 若还装着**旧版 skill**, 它会按旧规则产出文件(本次就是旧版 create-issue 入池了一条
+  `aqb-issue-*` meta 的新 issue)。rebase 合并后必须**顺手把这类新产物迁移到新规则**, 否则生成器读不到字段
+  (标题/简述全空, 且不报错 —— 静默降级)。
+- 变基时 `-X theirs` 的含义与 merge 相反: rebase 下 theirs = 正在重放的"我的提交" ⇒ 冲突块取我这版。
