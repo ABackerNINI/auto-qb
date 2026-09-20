@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-statusbar-traffic-icon">
+<meta name="issue-stamp" content="26-09-20-1840">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Fixed">
+<meta name="issue-title" content="状态栏今日流量: 图标与数值同色且非真图标, 易被读成数值的一部分">
+<meta name="issue-summary" content="今日流量块图标(#i-chart)与 ↑/↓ 数值同色同排, 易误读为数值一部分; 棱镜侧同病且图标无颜色">
+<title>状态栏今日流量: 图标与数值同色且非真图标, 易被读成数值的一部分 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）· bug</div>
+    <h1>状态栏今日流量: 图标与数值同色且非真图标, 易被读成数值的一部分</h1>
+    <p class="lede">今日流量块图标(#i-chart)与 ↑/↓ 数值同色同排, 易误读为数值一部分; 棱镜侧同病且图标无颜色</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-20-1840-bug-webui-statusbar-traffic-icon</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 18:40</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">user</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><strong>用户目视反馈</strong>（2026-09-20 18:38，非测试/非命令触发）：日常使用 WEBUI 读状态栏时，星图界面底部状态栏「今日流量」块里，前面的图标与后面的数值<strong>同一个颜色</strong>，一眼扫过去图标容易被当成数值的一部分。</p>
+    <p>叠加因素：数值本身带字面量 <code>↓</code> / <code>↑</code> 前缀字符，与前面的图形图标在视觉上连成一串；而该图标用的是柱状图 <code>#i-chart</code>，本身不是「流量 / 上下行」语义的真图标。</p>
+    <p>棱镜（prism）界面同一处有<strong>同样的问题</strong>，且用户明确说棱镜侧图标<strong>没有颜色</strong>（视觉上更弱、更不像图标）。与平台、主题、配置无关。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 用户原话（2026-09-20 18:38，原文照贴）
+"WEBUI星图状态栏流量统计的图标与数字同色容易将图标识别为数值的一部分,
+ 图标应该改为真正的图标且与数字1有明显区分, 棱镜流量统计有同样的问题, 且无颜色"
+
+# 结构证据（取证 2026-09-20 18:40，src/auto_qb/web_ui/static/atlas/index.html:1488-1496）
+&lt;span class="sb-item sb-today" :title="todayTrafficTitle"&gt;
+  &lt;svg class="ico ico-sm ico-today" viewBox="0 0 16 16"&gt;&lt;use href="#i-chart"&gt;&lt;/use&gt;&lt;/svg&gt;
+  &lt;span class="lbl"&gt;今日&lt;/span&gt;
+  &lt;span class="val v-down"&gt;↓{{ fmtSize(todayTraffic.down) }}&lt;/span&gt;
+  &lt;span class="val v-up"&gt;↑{{ fmtSize(todayTraffic.up) }}&lt;/span&gt;
+
+# 配色证据（同色成立：图标与 ↑ 数值共用同一个颜色令牌）
+atlas/style.css:158        .ico-today { color: var(--today-up); }
+atlas/style.css:1871       .sb-today .v-up { color: var(--today-up, var(--teal, var(--accent))); }
+prism/css/base.css:39      .ico-today { color: var(--today-up); }
+prism/css/views.css:74     .sb-today .v-up { color: var(--today-up); }</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>状态栏渲染「今日流量」时必现（<code>todayTraffic</code> 非空，即 Traffic Monitor dat 有 day 数据）；与主题、平台、配置无关，纯视觉</td></tr>
+      <tr><td>影响范围</td><td>星图 <code>atlas</code> 与棱镜 <code>prism</code> 两套界面的底部状态栏 <code>footer.statusbar &gt; .sb-today</code>；棱镜侧另报图标无颜色。只读错，无功能损坏、无数据错误</td></tr>
+      <tr><td>严重度</td><td>低 —— 影响可读性与一眼读数（图标被误读为数值的一部分），不影响数据正确性</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/web_ui/static/atlas/index.html:1488-1496</code>（取证 2026-09-20 18:40）· <code>.sb-today</code> 今日流量块 · grep「sb-today」</li>
+      <li><code>src/auto_qb/web_ui/static/prism/index.html:1527-1535</code>（取证 2026-09-20 18:40）· 同结构 · grep「sb-today」</li>
+      <li><code>src/auto_qb/web_ui/static/atlas/style.css:158</code> · <code>.ico-today</code> 图标配色 · grep「ico-today」</li>
+      <li><code>src/auto_qb/web_ui/static/prism/css/base.css:39</code>（<code>:54 .ico-history</code> 同令牌）· grep「ico-today」</li>
+      <li><code>atlas/style.css:1870-1871</code> / <code>prism/css/views.css:73-74</code> · <code>.sb-today .v-down/.v-up</code> 数值配色 · grep「v-down」</li>
+      <li>图标库：grep「i-chart」（今日流量当前用的柱状图符号）；候选真图标可查同一 symbol 表的 <code>#i-download</code> / <code>#i-upload</code> / <code>#i-gauge</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已定位（复验 2026-09-20 18:44）：<strong>图标与 ↑ 数值共用同一颜色令牌</strong> —— <code>.ico-today</code> 取 <code>--today-up</code>，<code>.sb-today .v-up</code> 也取 <code>--today-up</code>，两侧（星图/棱镜）皆然，同色坐实；叠加图标用的是柱状图 <code>#i-chart</code>（13px 下笔画碎、更像"统计/历史"），于是被读成数值的一部分。<strong>棱镜"无颜色"未复现</strong>：CSS 上棱镜 <code>.ico-today</code> 同样解析到 <code>--today-up</code>（五个主题都定义了该令牌），未查到能让图标掉色的覆盖规则 —— 已排除：<strong>取值/数据错误</strong> —— 数值本身是对的（同状态栏的速度恒 0 问题已另案修掉，见 <code>26-09-20-1646-bug-webui-statusbar-speed-always-zero</code>，状态 Fixed）。本条只关配色与图标选型。棱镜「无颜色」的具体成因（颜色令牌未落到此元素 / 选择器未命中 / 主题缺定义）<strong>未查</strong>，认领时先复验再下结论。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>待定 —— 图标选型与配色口径需用户定调，这里只列方向：</p>
+    <ul>
+      <li>① 今日流量图标换成语义明确的<strong>真图标</strong>（上下行 / 双向箭头一类），不再用柱状图 <code>#i-chart</code>（它更像「统计/历史」，与「完整统计」按钮也撞符号）。</li>
+      <li>② 图标与数值<strong>配色解耦</strong>：图标走中性/faint 色或独立令牌，数值保留 down/up 语义色；同时考虑去掉数值里的字面量 <code>↓</code>/<code>↑</code>，方向语义交给图标承担，从根上消除「图标像数值一部分」。</li>
+      <li>③ 棱镜侧补齐配色，并确认两套皮肤（atlas / prism）在这一点上口径一致。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-20 18:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-20 18:44 — 用户指派认领。<strong>复验：18:44 仍复现</strong> —— 锚点重跑：
+        <code>atlas/index.html:1494</code> 与 <code>prism/index.html:1532</code> 的 <code>.sb-today</code> 仍 <code>&lt;use href="#i-chart"&gt;</code>，
+        两侧 <code>.ico-today</code> 仍取 <code>--today-up</code>（与 <code>.v-up</code> 同令牌）</li>
+      <li>2026-09-20 18:52 — 修复完成，状态 <strong>Fixed</strong>（修法与验证见下）</li>
+      <li>2026-09-20 19:00 — 用户反馈首版图标（左右双向箭头）<strong>语义错误</strong>；
+        已改为上下行箭头（左下 = 下载 / 右上 = 上传），两套 UI sprite 同步，状态仍 <strong>Fixed</strong></li>
+      <li>2026-09-20 19:05 — 用户追加：总图标改<strong>双色</strong>（与后面数值配色匹配），数值里的字面量 ↓/↑ <strong>换成真箭头图标</strong>；已实施</li>
+      <li>2026-09-20 20:04 — 用户追加：历史入口图标<strong>换成非粉色</strong>（lime）、速度与限速<strong>合成整组可点按钮</strong>且限速不再单配图标（见修法 ⑥⑦）；状态仍 <strong>Fixed</strong></li>
+      <li>2026-09-20 19:40 — 用户追加：棱镜侧<strong>数值与箭头图标仍是白色</strong>（层叠顺序根因，见修法 ④），
+        以及 “今日” 标签与 “连接” 格式不一致（修法 ⑤）；两项均已修，状态仍 <strong>Fixed</strong></li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验：2026-09-20 18:44 仍复现（锚点见上一条日志）。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法</strong>（走建议 ①②③，两套 UI 同步）：</p>
+    <ul>
+      <li>① 新增 sprite 符号 <code>#i-traffic</code>（<strong>上下行箭头</strong>：左箭向下 = 下载 / 右箭向上 = 上传，与右侧 ↓/↑ 数值同序），两侧 <code>.sb-today</code> 的图标改用它。<br>
+        <em>改道</em>：首版做成左右双向箭头，用户判「语义错误」（左右 = 传输/交换，不是上下行流量），19:00 改为上下行箭头；
+        19:05 再改为<strong>双色</strong>（两条 path 各自内联 <code>stroke: var(--today-down / --today-up)</code>，
+        与后面两个数值同族；颜色靠 CSS 变量穿越 <code>&lt;use&gt;</code> 影子树生效，外部选择器进不去）
+        <code>#i-chart</code> 保留给「完整统计 / 历史流量」语义，两处注释同步更新。</li>
+      <li>② 新增专用色位令牌 <code>--today-ico</code>（星图 <code>:root</code> 与棱镜五个主题各一份，取 <code>--pink</code> 族），
+        <code>.ico-today</code> 与 <code>.sb-hist .ico</code> 改取 <code>var(--today-ico, var(--pink))</code> ——
+        带兜底值，即便某主题漏定义也不会掉回继承色（顺带覆盖棱镜"无颜色"）。数值色 <code>--today-up/--today-down</code> 不动。</li>
+      <li>③ 数值里的字面量 <code>↓</code>/<code>↑</code> <strong>已移除</strong>（19:05 用户追加要求）：改用 <code>#i-arrow-down</code> / <code>#i-arrow-up</code> 真箭头图标，
+        图标继承 <code>.val</code> 字色（与各自数值同族），<code>.sb-today .val</code> 改 inline-flex + 3px 间距。</li>
+      <li>④ <strong>棱镜侧数值与箭头图标仍是白色的真因</strong>（19:40 用户追加反馈）：
+        <code>.sb-today .v-*</code> 与后面的 <code>.sb-item .val</code> 特异性同为 <code>(0,2,0)</code>，
+        后者靠<strong>书写顺序</strong>赢 → 掉回 <code>--fg</code>（白）。星图只是因为 <code>.sb-today .v-*</code>
+        写在后面才碰巧正确。改成 <code>.sb-item.sb-today .v-*</code>（<code>(0,3,0)</code>），两套同口径且与顺序解耦。</li>
+      <li>⑤ “今日” 标签与后面 “连接 / 剩余” 对齐（19:40）：<code>.sb-today</code> 不在 <code>.sb-stats</code> 里，
+        吃不到 <code>.sb-stats .lbl</code>，字号与亮度都跟邻居不一致；改写成
+        <code>.sb-stats .lbl, .sb-today .lbl { color: var(--fg-dim); font-size: 11.5px }</code>（两侧同步）。</li>
+      <li>⑥ 历史入口图标<strong>弃用粉色</strong>（20:04 用户追加）：<code>--today-ico</code> 改取 <code>--lime</code>
+        （星图 <code>:root</code> + 棱镜五主题各一份，兜底同步）—— 该令牌现在只喂组内历史按钮，总图标已走双色。</li>
+      <li>⑦ <strong>速度 / 限速合成整组按钮</strong>（20:04 用户追加）：每方向改为
+        <code>[方向图标] 速度 / 限速</code> 一个 <code>&lt;button class="sb-spd"&gt;</code>，
+        点图标 / 速度 / 限速任一处都触发 <code>openSpeedAt</code>（弹窗锚点取 <code>ev.currentTarget</code>，天然生效）；
+        <strong>不再单独给限速配图标</strong>（状态栏的仪表盘 <code>#i-gauge</code> 退役，右键菜单「限速…」等其它位置仍保留）；
+        随之删除已失活的 <code>.sb-pair</code> / <code>.sb-limit</code> 规则，"不限"只弱化限速值 <code>.sb-spd.off .lim</code>。</li>
+    </ul>
+    <p><strong>验证方式</strong>：静态核对（<code>#i-traffic</code> 定义与引用各 2 处、<code>--today-ico</code> 定义 6 处、
+      <code>.ico-today</code>/<code>.sb-hist .ico</code> 已无 <code>--today-up</code>）+ <code>uv run pytest tests -q --no-cov</code>
+      <strong>1061 passed + 1 已知 flaky</strong>（<code>test_qbmanager.py::test_run_loop_throttles_without_stop_event</code>，
+      节拍断言无容差、机器负载高时偶发假红，复跑通过，已另案 issues/26-09-20-0952；与本次前端改动无关）。</p>
+  </section>
+
+  <footer>
+    26-09-20-1840-bug-webui-statusbar-traffic-icon.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -33,6 +33,7 @@
 
 ## Fixed
 
+- [bug] [状态栏今日流量: 图标与数值同色且非真图标, 易被读成数值的一部分](26-09-20-1840-bug-webui-statusbar-traffic-icon.html) — 今日流量块图标(#i-chart)与 ↑/↓ 数值同色同排, 易误读为数值一部分; 棱镜侧同病且图标无颜色
 - [bug] [WebUI 列设置(顺序/显示/宽度)经常被重置](26-09-20-1800-bug-webui-column-prefs-reset.html) — 表格列的顺序/显隐/宽度偏好偶发丢失, 刷新后回到默认布局
 - [bug] [状态栏上传/下载速度不更新, 恒显示 0](26-09-20-1646-bug-webui-statusbar-speed-always-zero.html) — 状态栏速度由前端对 groups 求和(totalDl/totalUl), 真机有下载/上传时仍恒为 0
 - [docs] [conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾](26-09-19-2359-docs-memory-bank-push-rule-drift.html) — 知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送

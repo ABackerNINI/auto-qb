@@ -36,7 +36,7 @@ h1, h2, h3 { font-family: var(--font-display); }
 .ico-group { color: var(--violet); }
 .ico-store { color: var(--teal); }
 .ico-limit { color: var(--limit-hit); }
-.ico-today { color: var(--today-up); }
+.ico-today { color: var(--today-ico, var(--lime)); }   /* 今日流量组图标: 双色由 #i-traffic 内两条 path 各取 up/down 令牌, 这里只是兜底 */
 .ico-hr-pending { color: var(--hr-pending); }
 .ico-hr-done { color: var(--hr-done); }
 .ico-refresh { color: var(--blue); }

@@ -67,6 +67,12 @@
     <symbol id="i-sort" viewBox="0 0 16 16"><path d="M5 6.3 8 3.2l3 3.1"/><path d="M5 9.7 8 12.8l3-3.1"/></symbol>
     <symbol id="i-hash" viewBox="0 0 16 16"><path d="M6.5 2.6 5.1 13.4M10.9 2.6 9.5 13.4M2.8 5.9h10.4M2.6 10.1h10.4"/></symbol>
     <symbol id="i-chart" viewBox="0 0 16 16"><path d="M2.7 2.6v10.8h10.7"/><path d="M5.3 10.9 8 7.5l2 1.8 2.9-4.2"/></symbol>
+    <!-- 2026-09-20 新增: 今日流量专用图标 —— 上下行箭头(左箭向下 = 下载 / 右箭向上 = 上传), 与右侧数值同序。
+         双色: 左半取 --today-down / 右半取 --today-up, 与后面两个数值同族 —— 颜色写在 path 的内联 style 里,
+         靠 CSS 变量穿越 <use> 影子树生效(外部选择器进不去 use 内部);
+         此前复用柱状图 i-chart: 13px 下笔画碎, 且与 ↑ 数值同令牌, 会被读成数值的一部分;
+         i-chart 仍归「统计 / 历史」语义。 -->
+    <symbol id="i-traffic" viewBox="0 0 16 16"><path d="M5.4 3.2v9.6" style="stroke: var(--today-down, var(--indigo))"/><path d="M3.2 10.6 5.4 12.8l2.2-2.2" style="stroke: var(--today-down, var(--indigo))"/><path d="M10.6 12.8V3.2" style="stroke: var(--today-up, var(--teal))"/><path d="M8.4 5.4 10.6 3.2l2.2 2.2" style="stroke: var(--today-up, var(--teal))"/></symbol>
     <symbol id="i-layers" viewBox="0 0 16 16"><path d="M8 2.4l5.8 3L8 8.4 2.2 5.4z"/><path d="M2.2 8.7 8 11.7l5.8-3"/><path d="M2.2 11.4 8 14.4l5.8-3"/></symbol>
     <symbol id="i-x-circle" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.7"/><path d="M6.1 6.1l3.8 3.8M9.9 6.1l-3.8 3.8"/></symbol>
     <symbol id="i-check-circle" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.7"/><path d="M5.5 8.2 7.2 10l3.4-3.9"/></symbol>
@@ -87,7 +93,7 @@
     <symbol id="i-ellipsis" viewBox="0 0 16 16"><circle cx="3.7" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="12.3" cy="8" r="1.15" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-chevron-up" viewBox="0 0 16 16"><path d="M4.3 9.7 8 6l3.7 3.7"/></symbol>
     <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.2 9.3 6.4 13.5 7.7 9.3 9 8 13.2 6.7 9 2.5 7.7 6.7 6.4z"/></symbol>
-    <!-- 历史/多选图标(2026-09-15 优化新增): 历史流量入口(时钟+回溯箭头, 与今日流量的柱状图 i-chart 语义区分)与批量全选 -->
+    <!-- 历史/多选图标(2026-09-15 优化新增): 历史流量入口(时钟+回溯箭头, 与今日流量的上下行箭头 i-traffic 语义区分)与批量全选 -->
     <symbol id="i-history" viewBox="0 0 16 16"><path d="M2.9 8a5.1 5.1 0 1 0 1.5-3.6"/><path d="M2.6 2.7v2.9h2.9"/><path d="M8 5.2V8l2 1.4"/></symbol>
     <symbol id="i-select-all" viewBox="0 0 16 16"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2"/><path d="M5.5 8.2 7.3 10l3.4-3.9"/></symbol>
     <!-- 第八轮新增: 信息栏模式切换(侧栏/顶栏布局轮廓) -->
@@ -1523,12 +1529,13 @@
     <footer class="statusbar">
       <template v-if="todayTraffic">
         <!-- R10-05: 历史入口并入"今日流量"组(结构上成为子元素) —— 原先两者是兄弟节点,
-             中间那道竖线来自 .sb-today 自身的右边框, 读起来像两个不相干的块。 -->
+             中间那道竖线来自 .sb-today 自身的右边框, 读起来像两个不相干的块。
+            2026-09-20: 数值里的字面量 ↓/↑ 换成真箭头图标(i-arrow-down/up, 继承数值色), 组图标改双色。 -->
         <span class="sb-item sb-today" :title="todayTrafficTitle">
-          <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-traffic"></use></svg>
           <span class="lbl">今日</span>
-          <span class="val v-down">↓{{ fmtSize(todayTraffic.down) }}</span>
-          <span class="val v-up">↑{{ fmtSize(todayTraffic.up) }}</span>
+          <span class="val v-down"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>{{ fmtSize(todayTraffic.down) }}</span>
+          <span class="val v-up"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>{{ fmtSize(todayTraffic.up) }}</span>
           <button class="sb-hist" title="历史流量(按天/月/年)" @click.stop="openHistory()">
             <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
           </button>
@@ -1545,29 +1552,29 @@
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
       </button>
       <span class="sb-spacer"></span>
-      <!-- FX-08: 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」;
+      <!-- FX-08 → 2026-09-20 改版: 每方向合成一组「[方向图标] 速度 / 限速」, 整组就是一个按钮 ——
+           点图标 / 速度 / 限速任一处都能就近弹出限速浮层; 不再单独给限速配图标(仪表盘 i-gauge 退役),
+           分隔靠斜杠 "/" 与 title 补齐语义;
            "限制速度"是按钮, 点击只打开该方向预聚焦的浮层(独立的"限速"按钮退役)。
            R10-03: 三个文字标签去棹(同排已有图标 + 数值, 文字纯冗余), 完整语义由 title 补全。
            R10-04: 取值口径 = speedLimitBytes 单点(状态栏与速度染色分母同源)。 -->
-      <span class="sb-speed" title="全部组下载/上传速度合计, 与 qB 当前限速">
-        <span class="sb-pair" :title="'下载速度合计: ' + fmtSpeed(totalDl)">
+      <span class="sb-speed" title="全部组下载/上传速度合计与 qB 当前限速; 点击任一方向可修改该方向限速">
+        <button class="sb-spd" :class="{ off: sbLimits.down === '不限' }"
+                :title="'下载 ' + fmtSpeed(totalDl) + ' / 限速 ' + sbLimits.down + ' · 点击修改(就近弹出)'"
+                @click.stop="openSpeedAt($event, 'down')">
           <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
           <span class="val">{{ fmtSpeed(totalDl) }}</span>
-        </span>
-        <button class="sb-limit" :class="{ off: sbLimits.down === '不限' }"
-                :title="'下载限速: ' + sbLimits.down + ' · 点击修改(就近弹出)'" @click.stop="openSpeedAt($event, 'down')">
-          <svg class="ico ico-sm ico-limit" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-          <span class="val">{{ sbLimits.down }}</span>
+          <span class="slash">/</span>
+          <span class="lim">{{ sbLimits.down }}</span>
         </button>
         <span class="sb-sep"></span>
-        <span class="sb-pair" :title="'上传速度合计: ' + fmtSpeed(totalUl)">
+        <button class="sb-spd" :class="{ off: sbLimits.up === '不限' }"
+                :title="'上传 ' + fmtSpeed(totalUl) + ' / 限速 ' + sbLimits.up + ' · 点击修改(就近弹出)'"
+                @click.stop="openSpeedAt($event, 'up')">
           <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
           <span class="val">{{ fmtSpeed(totalUl) }}</span>
-        </span>
-        <button class="sb-limit" :class="{ off: sbLimits.up === '不限' }"
-                :title="'上传限速: ' + sbLimits.up + ' · 点击修改(就近弹出)'" @click.stop="openSpeedAt($event, 'up')">
-          <svg class="ico ico-sm ico-limit" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-          <span class="val">{{ sbLimits.up }}</span>
+          <span class="slash">/</span>
+          <span class="lim">{{ sbLimits.up }}</span>
         </button>
       </span>
     </footer>

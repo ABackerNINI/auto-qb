@@ -69,6 +69,7 @@
   --limit-actual: var(--blue);
   --today-up: var(--teal);
   --today-down: var(--indigo);
+  --today-ico: var(--lime);
 
   /* 描边与表面 */
   --border: #23395a;

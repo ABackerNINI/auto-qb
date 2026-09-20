@@ -89,6 +89,10 @@
   --limit-actual: var(--blue);
   --today-up: var(--teal);
   --today-down: var(--indigo);
+  /* 今日流量组的图标色位(2026-09-20): 现在只喂组内历史入口按钮(总图标已改双色);
+     取色须与 up/down 数值色不同族 —— 图标与数值同色时,
+     一眼扫过去图标会被当成数值的一部分(见 issues/26-09-20-1840) */
+  --today-ico: var(--lime);
 
   /* 表面工程: 玻璃底色(顶栏/吸底条) / 极淡分隔线 */
   --glass: rgba(19, 26, 38, .88);
@@ -155,7 +159,7 @@ button { font-family: inherit; }
 .ico-group { color: var(--violet); }
 .ico-store { color: var(--teal); }
 .ico-limit { color: var(--limit-hit); }
-.ico-today { color: var(--today-up); }
+.ico-today { color: var(--today-ico, var(--lime)); }    /* 今日流量组图标: 双色由 #i-traffic 内两条 path 各取 up/down 令牌, 这里只是兜底 */
 .ico-hr-pending { color: var(--hr-pending); }
 .ico-hr-done { color: var(--hr-done); }
 .ico-refresh { color: var(--blue); }
@@ -346,7 +350,8 @@ button { font-family: inherit; }
 .sb-speed { display: flex; align-items: center; gap: 16px; min-width: 0; overflow: hidden; }
 /* 左侧统计摘要: 指标项紧凑排列(标签灰 + 数值亮), 空间不足时整体裁切而不换行 */
 .sb-stats { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
-.sb-stats .lbl { color: var(--fg-dim); font-size: 11.5px; }
+/* "今日" 与 "连接/剩余" 的标签同格式(2026-09-20): 两条同族, 别再各写一套 */
+.sb-stats .lbl, .sb-today .lbl { color: var(--fg-dim); font-size: 11.5px; }
 .sb-empty { color: var(--fg-dim); font-size: 11.5px; }
 .sb-item { display: inline-flex; align-items: center; gap: 6px; }
 .sb-item .val { color: var(--fg); font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; }
@@ -1852,31 +1857,33 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * ② 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」, 组合内距离 < 组间距离。
  * ③ \"限制速度\"= 按钮(点击就近弹出浮层); 浮层无遮罩、锚在状态栏上缘, 横向由 JS 夹取到视口内。
  */
-.sb-pair { display: inline-flex; align-items: center; gap: 6px; }
 .sb-sep { width: 1px; height: 14px; background: var(--border); flex: 0 0 auto; }
-.sb-limit { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; margin-left: -2px;
+/* 2026-09-20: 「[方向图标] 速度 / 限速」合成按钮 —— 整组可点(点图标 / 速度 / 限速任一处都就近弹出限速浮层);
+ * 不再单独给限速配图标(仪表盘 i-gauge 退役); "不限"只弱化限速值, 方向图标保持语义色 */
+.sb-spd { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px;
   border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent;
   color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.sb-limit:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
-/* 限速仪表盘: 用"限速命中"语义色(与右键菜单的限速项同源), 不再继承暗淡的 --fg-dim;
- * "不限速"只弱化数值(.sb-limit.off .val), 图标保持可辨认 */
-.sb-limit .ico { color: var(--limit-hit); }
-.sb-limit:hover .ico { color: var(--accent-hi); }
-.sb-limit .val { color: var(--fg); font-weight: 600; font-size: 12px; font-variant-numeric: tabular-nums; }
-.sb-limit.off .val { color: var(--fg-dim); font-weight: 500; }
+.sb-spd:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
+.sb-spd .val { color: var(--fg); font-weight: 600; font-size: 12.5px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sb-spd .slash { color: var(--fg-dim); }
+.sb-spd .lim { color: var(--fg); font-weight: 600; font-size: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sb-spd.off .lim { color: var(--fg-dim); font-weight: 500; }
 /* R10-05: 历史入口已并入本组作子元素 -> 不再需要右边框与额外间距: 原先那道 1px 竖线
  * 正好在两者之间, 读作"两个不相干的块"(用户: "中间有隔断")。 */
-.sb-today .v-down { color: var(--today-down, var(--blue)); }
-.sb-today .v-up { color: var(--today-up, var(--teal, var(--accent))); }
+/* 2026-09-20: 抬高特异性, 不被后面的 `.sb-item .val` 靠顺序压制(棱镜侧就是这么变白的) */
+.sb-item.sb-today .v-down { color: var(--today-down, var(--blue)); }
+.sb-item.sb-today .v-up { color: var(--today-up, var(--teal, var(--accent))); }
+/* 2026-09-20: 数值自带方向箭头图标(取代字面量 ↓/↑) —— 图标继承 .val 的字色, 与数值同族 */
+.sb-today .val { display: inline-flex; align-items: center; gap: 3px; }
 /* R10-05: 历史入口(今日流量组的子元素) —— 轻量按钮, 与块内数值同排只留图标间距 */
 .sb-hist { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 1px 8px;
   border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1);
   color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .sb-hist:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
-/* 历史入口(2026-09-17): 按钮文字已移除, 只剩图标 -> 图标必须自己有色(与今日流量同族 today-up) */
-.sb-hist .ico { color: var(--today-up); }
+/* 历史入口(2026-09-17): 按钮文字已移除, 只剩图标 -> 图标必须自己有色(与今日流量图标同族 --today-ico) */
+.sb-hist .ico { color: var(--today-ico, var(--lime)); }
 .sb-hist:hover .ico { color: var(--accent-hi); }
 .speed-pop { position: fixed; z-index: 131; width: 380px; padding: 14px 16px 12px;
   bottom: calc(var(--statusbar-h, 34px) + 8px);

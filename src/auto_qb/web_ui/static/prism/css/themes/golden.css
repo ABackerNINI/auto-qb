@@ -62,6 +62,7 @@
   --limit-actual: var(--blue);
   --today-up: var(--teal);
   --today-down: var(--indigo);
+  --today-ico: var(--lime);
 
   --border: #e0d5bd;
   --border-strong: #c9b995;

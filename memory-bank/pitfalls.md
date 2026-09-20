@@ -1636,3 +1636,19 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
   `uv run python scripts/ui_harness.py --torrents 300 --port <空闲端口>`(合成种子**自带非零
   dlspeed/upspeed**), 然后 `curl "…/api/state?view=<X>"` 逐视图比对响应键与合计 ——
   一眼就能看出哪个键在某个视图下缺了。⚠ 8123 / 8099 常被别的 worktree 的桩服务占着, 起之前先扫端口。
+- **用 Python 文本模式改文件会把整份 CRLF 悄悄改成 LF**(2026-09-20 实测): 本仓库行尾**不统一**(索引里 index.html 等是 CRLF, style.css / views.css 是 LF)
+  (`core.autocrlf=true`), `io.open(p).read()` 走通用换行把 \r\n 读成 \n, 再 `write(newline="")`
+  落盘就只剩 LF —— `git diff` 仍只显示你改的那几行(索引存 LF, 归一化后看不出来), 但字节层面整份文件都被改了行尾。
+  修法: 改 html/css/md 一律**按字节读写**(`open(p,"rb")` + `bytes.replace`), 或写回时补
+  `.replace(b"\n", b"\r\n")`; 复核用 `b.count(b"\r\n")` —— git bash 里 `grep -c $'\r' file` 会给
+  假结果(实测计数等于总行数), 别信。
+- **SVG `<use>` 图标想做双色: 外部 CSS 选择器进不去影子树**(2026-09-20 实测): 本 UI 的图标是
+  sprite `<symbol>` + `<use href="#i-*">`, `.ico-today .down { stroke: ... }` 这类选择器**对 use 内部的 path 无效**;
+  能继承进去的只有 **CSS 自定义属性**。所以双色只能写成 symbol 内 path 的内联 `style="stroke: var(--token)"`,
+  靠 var() 在影子树里解析(令牌定义在 `:root`/主题上)。同理, 想按状态改图标局部颜色, 别指望加 class。
+- **「例外色」规则别靠书写顺序赢: 同特异性时后者压前者**(2026-09-20 实测): 状态栏今日流量的
+  `.sb-today .v-down { color: var(--today-down) }` 与后面的 `.sb-item .val { color: var(--fg) }` 特异性同为
+  (0,2,0), 谁写在后面谁生效 —— 棱镜 views.css 里前者在前 => 数值与数值里的箭头图标掉回白色,
+  星图 style.css 里前者在后 => 碰巧正确(同一份改动只坏一边, 极易误判成「棱镜主题缺令牌」)。
+  修法: 给例外规则抬特异性(`.sb-item.sb-today .v-down`, (0,3,0)), 与书写顺序解耦; 两套 UI 各写一份
+  CSS 时务必两边同步改。
