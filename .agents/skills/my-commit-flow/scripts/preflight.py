@@ -28,13 +28,14 @@ from _ship_config import (  # noqa: E402
     LINUX_CHECK_HINTS,
     MAIN_HOST_MARK,
     RED_LINES,
-    REMOTE_MAIN,
+    resolve_main_remote,
     REMOTE_MIRROR,
     STAGED_PANIC,
     WARN_LINES,
 )
 
 PASS, WARN, STOP = "PASS", "WARN", "STOP"
+MAIN = resolve_main_remote()  # 运行期定主线远端名(gitee / origin)
 
 
 def git(*args: str, check: bool = True) -> str:
@@ -96,28 +97,28 @@ def main(argv: list[str] | None = None) -> int:
     rows.append((PASS if branch == BRANCH else WARN, "分支", f"当前 {branch}(配置里是 {BRANCH})"))
 
     # 2 主线远端
-    main_url = rem.get(REMOTE_MAIN, "")
+    main_url = rem.get(MAIN, "")
     if not main_url:
-        rows.append((STOP, "主线远端", f"找不到 {REMOTE_MAIN}; 先 `git remote -v` 确认 Gitee 挂在哪个远端名"))
+        rows.append((STOP, "主线远端", f"找不到 {MAIN}; 先 `git remote -v` 确认 Gitee 挂在哪个远端名"))
     elif MAIN_HOST_MARK not in main_url:
-        rows.append((STOP, "主线远端", f"{REMOTE_MAIN} = {main_url} 不是 {MAIN_HOST_MARK}; 照抄 origin 可能拉到滞后的 GitHub 镜像"))
+        rows.append((STOP, "主线远端", f"{MAIN} = {main_url} 不是 {MAIN_HOST_MARK}; 照抄 origin 可能拉到滞后的 GitHub 镜像"))
     else:
-        rows.append((PASS, "主线远端", f"{REMOTE_MAIN} = {main_url}"))
+        rows.append((PASS, "主线远端", f"{MAIN} = {main_url}"))
 
     # 3 上游
     try:
         upstream = git("rev-parse", "--abbrev-ref", "@{u}")
     except RuntimeError:
         upstream = ""
-    want_up = f"{REMOTE_MAIN}/{BRANCH}"
+    want_up = f"{MAIN}/{BRANCH}"
     rows.append((PASS if upstream == want_up else WARN, "上游",
                  f"{upstream or '(未设置)'}(期望 {want_up}; 判 ahead/behind 看的是当前上游)"))
 
     # 4 落后 / 领先
     if not args.no_fetch and main_url:
-        git("fetch", REMOTE_MAIN, BRANCH, check=False)
+        git("fetch", MAIN, BRANCH, check=False)
     try:
-        counts = git("rev-list", "--left-right", "--count", f"{REMOTE_MAIN}/{BRANCH}...HEAD")
+        counts = git("rev-list", "--left-right", "--count", f"{MAIN}/{BRANCH}...HEAD")
         behind, ahead = (int(x) for x in counts.split())
     except (RuntimeError, ValueError):
         behind, ahead = -1, -1
@@ -131,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     elif behind == 0:
         rows.append((PASS, "落后主线", f"与主线齐平(本地领先 {ahead})"))
     else:
-        rows.append((WARN, "落后主线", "没能算出领先/落后, 手工 `git log --oneline HEAD..%s/%s`" % (REMOTE_MAIN, BRANCH)))
+        rows.append((WARN, "落后主线", "没能算出领先/落后, 手工 `git log --oneline HEAD..%s/%s`" % (MAIN, BRANCH)))
 
     # 5 工作区
     rows.append((WARN if unstaged else PASS, "工作区",

@@ -7,11 +7,31 @@ GitHub 镜像双远端、9 个 worktree 并行), 不是通用 git 工作流。�
 
 from __future__ import annotations
 
+import subprocess
+
 # 协作主线(判交付看它)与镜像(允许滞后)
-REMOTE_MAIN = "origin"  # Gitee; 该 clone 若把 Gitee 挂成 `gitee`, 改这里
+REMOTE_MAIN = "origin"  # 首选名(本 clone 里 origin 与 gitee 都指向 Gitee)
+# 主线远端候选, 按顺序取第一个"存在且指向 MAIN_HOST_MARK"的 —— 有的 clone 把 Gitee 挂成 `gitee`,
+# 有的仍叫 `origin`; 而历史 clone 的 `origin` 可能是 GitHub 镜像(照抄会拉到滞后的分支)
+REMOTE_MAIN_CANDIDATES = ("gitee", "origin")
 REMOTE_MIRROR = "github"  # GitHub 镜像; 不存在也不算 STOP, 只提示补 remote
-MAIN_HOST_MARK = "gitee.com"  # 判断 REMOTE_MAIN 是否真是主线
+MAIN_HOST_MARK = "gitee.com"  # 判断某个远端名是否真是主线
 BRANCH = "develop"
+
+
+def resolve_main_remote() -> str:
+    """主线远端名: 候选里第一个存在且指向 MAIN_HOST_MARK 的; 都不匹配则回退 REMOTE_MAIN。"""
+    urls: dict[str, str] = {}
+    proc = subprocess.run(["git", "remote", "-v"], capture_output=True, text=True, encoding="utf-8",
+                          errors="replace")
+    for line in proc.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == "(push)":
+            urls[parts[0]] = parts[1]
+    for name in REMOTE_MAIN_CANDIDATES:
+        if MAIN_HOST_MARK in urls.get(name, ""):
+            return name
+    return REMOTE_MAIN
 
 # 红线: 出现即 STOP(不得进暂存清单)
 RED_LINES = (
