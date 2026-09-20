@@ -89,7 +89,8 @@
 |------|------|------|----------|
 | `registry.py` | 30 | 注册表 | `CONDITIONS`/`ACTIONS` dict + `@register_condition`/`@register_action` 装饰器 + `create_condition/create_action`(直接按名索引, 名称合法性由 config.validate_config 保证) |
 | `base.py` | 274 | 框架基础 | `ActionResult`(success/failed/skipped/**pending**), `BaseCondition.match(ctx)`, `BaseAction.execute(ctx)→ActionResult`, `RuleContext`(惰性缓存 tracker/files; 变量替换/HR 判定已迁出至 utils.replace_vars 与 TorrentRecord.check_hr_*; `snapshot` 删除前快照副本, `torrent` 属性实时 store 优先、删除后回退 snapshot), `Rule`(解析 enabled/trigger/interval/execute_once/cooldown/stop_if/conditions/actions + `ignore_next_action_error` 处理; `process()` 断点续跑核心逻辑; `_dedup_allowed`) |
-| `conditions.py` | 294 | 15 种条件插件 | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [rule-system.md](rule-system.md) |
+| `conditions.py` | 294 | 16 种条件插件(含 `expr` 表达式条件) | spec 合法性由 config 校验阶段保证, 插件仅解析不自查; 详见 [rule-system.md](rule-system.md) |
+| `expr/` (包) | ~700/6 文件 | **表达式条件内核** | `errors.py`(编译期 `ExprSyntaxError` / 求值期 `ExprError` 两类) / `lexer.py`(字面量带单位) / `parser.py`(递归下降 + 一层一个运算符判定) / `types.py`(类型规则, parser 与 env **共用**) / `env.py`(**取值面单一事实源**: 名字 → 取值器 + 静态类型 + 昂贵标记 + 数据源门控 `GATED_NAMES`) / `eval.py`(求值: 短路 + `RuleContext.expr_cache` 缓存 + ExprError)。详见 [rule-system.md](rule-system.md) 与计划文档 |
 | `actions/` (包) | 906/6 文件 | 12 种动作插件 | `__init__`(34, 注册入口+公共名重导出, 兼容 `from auto_qb.rules.actions import X`), `basic`(130, 标签/分类/启停/打印详情 ×7), `transfer`(86, move_to/reannounce/单种限速), `checking`(192, `CheckAction` 决策链+参考筛选, 组合 `FullCheckingMixin`+`SkipCheckingMixin`), `full_checking`(225, full-checking 执行+组内校验串行化闸门 1.5/1.6+失败计数), `skip_checking`(239, 跳检四阶段+`_poll_until`); spec 正确性由 config 校验阶段保证; 详见 [rule-system.md](rule-system.md) |
 
 ## tests/ (33 文件 + helpers.py, 详见 testing.md)

@@ -121,7 +121,9 @@ window.CONFIG_RULES = {
       if (!meta) return [];
       const specPath = this.cfgSpecPath(groupKey, ruleName, listName, index);
       if (meta.spec_kind === "object") return this.cfgFlatten(meta.fields, specPath, 1, specPath);
-      const kind = meta.spec_kind === "list" ? (meta.item_kind === "pattern" ? "pattern_list" : "str_list") : meta.spec_kind;
+      const raw = meta.spec_kind === "list" ? (meta.item_kind === "pattern" ? "pattern_list" : "str_list") : meta.spec_kind;
+      // expr = 表达式: 用多行文本框(单行放不下), 校验交给后端配置期解析
+      const kind = raw === "expr" ? "text" : raw;
       return [
         {
           type: "field",

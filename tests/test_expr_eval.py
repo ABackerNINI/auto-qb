@@ -15,15 +15,19 @@
 - test_config_validation_rejects_bad_expr: config 校验把表达式错误聚合成可读报错
 - test_process_stops_on_condition_error: 求值出错 -> process 返回 (False, True)(出错即停规则)
 - test_legacy_condition_equivalence: 旧 16 个条件逐条对拍等价表达式(同一 FakeTorrent 结果一致)
+- test_traffic_values: 全局流量值(需 traffic_source 数据源)取值正确
+- test_traffic_unconfigured: 未配置数据源 -> ExprError(绝不返回 0)
+- test_config_gate_for_traffic_names: 用到无数据源名字 -> 配置期禁用(配了才放行)
 """
 import os
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
-from auto_qb.config.validation.rules import _validate_expr_condition_spec
+from auto_qb.config.models import GlobalSpeedLimitCurve
+from auto_qb.config.validation.rules import _validate_expr_condition_spec, _validate_rules
 from auto_qb.rules.base import Rule
 from auto_qb.rules.conditions import (
     CategoryCondition,
@@ -209,6 +213,47 @@ def test_process_stops_on_condition_error():
         # server_state 未同步 -> 求值报错 -> 出错即停规则
         rule = Rule("g.t", {"conditions": [{"expr": "sys.dl_speed > 1"}], "actions": []}, mgr)
         assert rule.process(ctx) == (False, True)
+
+
+def test_traffic_values():
+    """全局流量: 数据源(Traffic Monitor dat)配置后取值正确(单位 KB -> 字节)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _, ctx = _setup(td)
+        dat = os.path.join(td, "history_traffic.dat")
+        with open(dat, "w", encoding="utf-8") as f:
+            f.write("lines: 2\n")
+            f.write(f"{date.today():%Y/%m/%d} 1000/500\n")
+            f.write("2020/01/01 7/3\n")  # 非本日非本月 -> 不贡献
+        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(dat_path=dat, curves=[])
+        assert _val("sys.upload_today", ctx) == 1000 * 1024
+        assert _val("sys.download_today", ctx) == 500 * 1024
+        assert _val("sys.upload_month", ctx) == 1000 * 1024
+
+
+def test_traffic_unconfigured():
+    """未配置数据源 -> 报错(该名字禁用), 绝不静默返回 0"""
+    _, _, ctx = _setup()
+    for text in ("sys.upload_today", "sys.download_today", "sys.upload_month"):
+        with pytest.raises(ExprError, match="数据源未配置"):
+            _val(f"({text} > 1GiB)", ctx)
+
+
+def test_config_gate_for_traffic_names():
+    """配置期门控: 数据源没配 -> 用到该名字即报错; 配了 -> 放行(见 _expr_gate)"""
+    spec = {"g": {"r": {"conditions": [{"expr": "(sys.upload_today > 1GiB)"}], "actions": []}}}
+    with_source = {"global_speed_limit_curve": {"traffic_source": [{"traffic_monitor": {"dat_path": "/x"}}]}}
+
+    errors: list = []
+    _validate_rules(spec, errors, with_source)
+    assert errors == []
+
+    errors.clear()
+    _validate_rules(spec, errors, {})  # 没配 traffic_source
+    assert len(errors) == 1 and "无数据源" in errors[0]
+    # 不涉及被门控名字的表达式不受影响
+    errors.clear()
+    _validate_rules({"g": {"r": {"conditions": [{"expr": "(tor.size > 1GiB)"}], "actions": []}}}, errors, {})
+    assert errors == []
 
 
 def test_legacy_condition_equivalence(monkeypatch):

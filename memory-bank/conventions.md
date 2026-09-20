@@ -39,6 +39,7 @@
 ## 模块职责约定 (用户明示)
 
 - **所有配置校验集中在 config 校验阶段 fail-fast, 插件类不再自查** (2026-09-06): conditions/actions 等插件假定配置正确 (`_validate_plugin_entry` 保证名称已注册 + `_PLUGIN_SPEC_VALIDATORS` 做 spec 深度校验), 构造函数只解析、不加正确性检查 (曾把 state 属性名校验写进 StateCondition, 违背该原则已迁移)。对应测试放 test_config.py (load_config 级), 不在插件测试里构造非法 spec。
+- **新条件字段一律先进 `rules/expr/env.py`, 不再新增固定条件插件** (2026-09-20): 表达式条件 `expr` 落地后, 想按新的种子字段/额外值做判断, 在 `env.py` 的取值面加一个表项即可(名字 + 取值器 + 静态类型 + 昂贵标记), **不要**再走「新条件插件 + 校验 + schema + 前端」那套四处接线。旧 16 个条件冻结保留, 只修 bug 不加能力。取值面是单一事实源, schema/前端/文档都从它派生。
 
 ## 命名规范 (想法.md 明文规定, 代码严格遵守)
 

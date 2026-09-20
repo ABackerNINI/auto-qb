@@ -6,12 +6,13 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1077 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-20 实测;
-#   ↑ 1062 → 1077: 规则条件表达式 W1(`tests/test_expr_parse.py` 新增 15 条: 词法字面量/单位、一层一运算符
-#     红绿用例、前缀形态、函数调用、列表字面量、字面量类型冲突、AST 形状)。⚠ **Linux 侧未同步重测**
-#     (本轮只在 Windows 跑), 按本节上方纪律, 下次动基线时两侧一起补。
-#   ❗TOTAL 覆盖率 92%; 新增包 `src/auto_qb/rules/expr/`: errors 100% / lexer 92% / parser 88%
-#     (未覆盖行都是错误分支与"含名字的一侧"路径 —— 后者要等 W2 的 env 提供静态类型才有意义)。
+# 基线: **1094 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1062 → 1077(W1 `tests/test_expr_parse.py` +15: 词法字面量/单位、一层一运算符红绿用例、前缀形态、
+#     函数调用、列表字面量、字面量类型冲突、AST 形状)
+#     → 1094(W2/W3 `tests/test_expr_eval.py` +17: 取值面/求值/短路与缓存/运行期类型错误/静态语义校验/
+#     数据源不可用与**配置期门控**/全局流量取值/**旧 16 条件 + 2 条 = 18 条等价对拍**)。
+#   ⚠ **Linux 侧未同步重测**(这两轮只在 Windows 跑), 按本节上方纪律, 下次动基线时两侧一起补。
+#   ❗TOTAL 覆盖率 91%; `src/auto_qb/rules/expr/` 未覆盖行主要是错误分支与防御路径。
 # ❗两侧**收集数相同**(那 2 条在 Windows 上跑、在 Linux 上跳), 比较时别拿 "passed" 直接比:
 #   Windows 1057 passed == Linux 1055 passed + 2 skipped。跳的两条都是 Windows 专属 ——
 #   `test_sidefx.py::…`(AUMID 守卫: 非 Windows 无 winreg) 与 `test_ui.py::…`(注册表专属键)。

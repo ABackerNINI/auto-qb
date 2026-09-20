@@ -12,7 +12,7 @@ W1 只交付语法内核, 不接规则系统、不做取值。语法层静态检
 ③ 字面量单位合法(10GB -> 报错, 须 iB)、字面量之间的类型冲突
 名字是否存在 / 类型是否匹配 / 数据源可用性由 W2 的 env 负责(需要 AST 语义信息)。
 """
-from .env import NAME_TABLE, FUNC_TABLE, validate
+from .env import FUNC_TABLE, GATED_NAMES, NAME_TABLE, gated_names_in, validate
 from .errors import ExprError, ExprSyntaxError
 from .eval import evaluate
 from .lexer import Token, tokenize
@@ -36,6 +36,8 @@ __all__ = [
     "validate",
     "NAME_TABLE",
     "FUNC_TABLE",
+    "GATED_NAMES",
+    "gated_names_in",
     "ANY",
     "BOOL",
     "LIST",

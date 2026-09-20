@@ -30,7 +30,7 @@ process(ctx) -> (handled: bool, stop: bool)
 ```
 
 1. **断点续跑**: 若 `ctx.task.has_breakpoint` (resume_index 非空) → 从断点动作继续, **跳过条件评估与去重** (用于 full-checking pending 后的恢复); 断点只在正常完成时消费清零, 异常路径由 taskqueue 收尾默认重置兜底 (下轮从头)。
-2. **条件评估**: `matches()` = 所有条件 AND; 条件抛异常 → warning + 视为不匹配 (`handled=False, stop=False`)。
+2. **条件评估**: `matches()` = 所有条件 AND; **条件抛异常 → 出错即停规则** (2026-09-20 拍板): ERROR 级日志(含规则名/表达式/种子/原因, 同因 5 分钟节流) + 返回 `handled=False, stop=True` —— 判据都不可信时, 让后面的规则继续对这个种子做动作才是真风险。**故障优先于 `stop_following_rules_if`**(配 `never` 也停)。旧条件与 `expr` 同样适用。
 3. **去重**: `_dedup_allowed` (见下节) 不通过 → 不执行。
 4. **动作顺序执行**:
    - `ActionResult.ok` → `ok_action=True`, 记录日志继续。
@@ -60,7 +60,27 @@ process(ctx) -> (handled: bool, stop: bool)
 
 `ignore_next_action_error: true` 是伪动作: Rule 构造时解析, 给**下一个**动作设 `ignore_error=True`, 失败不 break 继续执行。
 
-## 16 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
+## 17 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
+
+> 第 17 种是 **`expr` 表达式条件**(2026-09 新增): 一条字符串自由组合种子字段与额外值, 语义覆盖下表全部旧条件。**旧 16 个条件保留不删**, 两种写法可混用(同一条规则里 `- expr: ...` 与其它条件仍是 AND 关系)。完整语法 / 取值表 / 迁移对照见 [计划文档](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html), 本节只留速查。
+
+### `expr` 速查
+
+```yaml
+conditions:
+  - expr: '(tor.seeding_time >= 3D) and (tor.ratio > 1.5)'          # 种子字段
+  - expr: '(freespace(tor.save_path) < 200GiB) and (tor.size > 50GiB)'  # 额外值(盘空间)
+  - expr: '(sys.dow <= 5) and ((sys.time_of_day >= 22:30) or (sys.time_of_day <= 7:00))'
+  - expr: '("HR" in tor.tags) and (not (tor.category ~ "regex:^z"))'
+```
+
+- **前缀**: `tor.*`(种子 70 个快照字段 + 派生) / `tracker.*`(主站点 = `tracker_conf`) / `sys.*`(时间/计数/qB 全局状态/全局流量)。函数无前缀: `freespace(path)`、`disk_total(path)`、`exists(path)`、`file_count()`、`raw("字段")`、`len/abs/min/max/round/days/hours`。
+- **一层一个运算符, 没有例外**: 同一括号内出现第二个运算符(含 `not`、含同种连续如 `a and b and c`)即报错并给出改写提示; 括号组对该层不透明 —— 因此没有优先级表可查, 也不会误读。
+- **字面量带单位**: `10GiB` / `24H` / `1MiB/s` / `22:30`(当日分钟, 配 `sys.time_of_day`)。单位解析复用 `utils`, 写 `10GB` 会报须用 iB。
+- **出错语义**: 名字拼错 / 函数写错 / 类型不符 / 结果不是布尔 → **配置期**即报错(fail-fast, 聚合进 `ConfigError`); 运行期数据源拿不到(如 `server_state` 未同步) → `ExprError` → 按上面的「出错即停规则」处理。**绝不降级成假值**: `sys.dl_speed` 拿不到就是报错, 不返回 0(返回 0 会让「全局速度低于阈值」在数据源失效时静默成真)。
+- **「值不存在」≠「求值出错」**: 未匹配站点 `tracker.name = "Unknown"`、无 HR 配置 `tor.hr_condition_met = false` 是有定义的缺省, 正常参与求值(与旧条件同语义)。
+- **数据源门控**: `sys.upload_today / sys.download_today / sys.upload_month` 需要配置 `global_speed_limit_curve.traffic_source`, **没配则该名字禁用**(配置期即拒绝使用)。
+- **⚠ YAML 引号**: 表达式里出现 `*`(别名)、`&`(锚点)、`#`(注释)、`{}[]`(流集合)、`: ` 都有 YAML 语义 —— 一律用单引号或块标量包裹。
 
 | 条件 | spec 示例 | 语义要点 |
 |------|-----------|----------|

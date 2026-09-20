@@ -159,7 +159,8 @@ def validate_config(data) -> List[str]:
     _validate_web(cfg.get("web"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
-    _validate_rules(rules_config, errors)
+    # data(=cfg) 传给规则校验: expr 条件的"数据源门控"要看全局配置(如 traffic_source 有没有配)
+    _validate_rules(rules_config, errors, cfg)
 
     gslc = cfg.get("global_speed_limit_curve")
     if gslc is not None:

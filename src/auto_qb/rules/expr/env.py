@@ -20,7 +20,7 @@ from dataclasses import dataclass, fields as dc_fields
 from datetime import datetime
 from typing import Any, Callable, Dict, Tuple
 
-from ... import utils
+from ... import curves, utils
 from ...torrents import TorrentRecord
 from ...torrents.compat import _SNAPSHOT_FIELDS
 from .errors import ExprError, ExprSyntaxError
@@ -175,6 +175,31 @@ def _tracker_names(ctx):
     return frozenset(c.name for c in confs)
 
 
+def _traffic(period: str, index: int):
+    """全局流量口径(数据源 = Traffic Monitor 的 history_traffic.dat)
+
+    ⚠ 未配置数据源 -> 报错(该名字被禁用), **不返回 0**: 返回 0 会让「今日上传已达标」
+    这类条件在没配数据源时静默成假、在配了但文件不可读时同样失真, 两头都不可接受。
+    读文件是 I/O -> 标昂贵(按 ctx 缓存), 建议只在低频规则里用。
+    """
+    def get(ctx):
+        conf = getattr(ctx.config, "global_speed_limit_curve", None)
+        dat_path = getattr(conf, "dat_path", "") if conf is not None else ""
+        if not dat_path or not getattr(conf, "enabled", True):
+            raise ExprError(
+                "数据源未配置: 该值需要配置 global_speed_limit_curve.traffic_source"
+                "(Traffic Monitor 的 history_traffic.dat)"
+            )
+        try:
+            with open(dat_path, "r", encoding="utf-8", errors="replace") as f:
+                rows, _bad = curves.parse_history_dat(f.read())
+        except OSError as e:
+            raise ExprError(f"数据源不可读: '{dat_path}': {e}") from e
+        return curves.aggregate(rows, period)[index]
+
+    return get
+
+
 def _freespace(ctx, args):
     path = str(args[0])
     try:
@@ -311,6 +336,16 @@ def _build_name_table() -> Dict[str, NameInfo]:
         "sys.downloading_count", NUM, _count(_pred_state("is_downloading")), expensive=True
     )
     table["sys.seeding_count"] = NameInfo("sys.seeding_count", NUM, _count(_pred_state("is_uploading")), expensive=True)
+    # 全局流量: 依赖配置的数据源(见 GATED_NAMES, 配置期即禁用)
+    table["sys.upload_today"] = NameInfo(
+        "sys.upload_today", NUM, _traffic("day", 0), expensive=True, help="全局今日上传(需 traffic_source)"
+    )
+    table["sys.download_today"] = NameInfo(
+        "sys.download_today", NUM, _traffic("day", 1), expensive=True, help="全局今日下载(需 traffic_source)"
+    )
+    table["sys.upload_month"] = NameInfo(
+        "sys.upload_month", NUM, _traffic("month", 0), expensive=True, help="全局本月上传(需 traffic_source)"
+    )
     # 依赖 qB server_state: 未同步即不可用(报错, 不返回假 0)
     for name, key, kind in (
         ("sys.dl_speed", "dl_info_speed", NUM),
@@ -391,3 +426,32 @@ def validate(node) -> None:
     kind = static_type(node)
     if kind != BOOL:
         raise ExprSyntaxError(f"条件表达式的结果必须是布尔, 得到 {label(kind)}")
+
+
+# ---------- 数据源门控(配置期禁用) ----------
+
+# 需要"配置了数据源"才可用的名字: 没配 = 该名字禁用(配置期即拒绝, 见 config/validation/rules.py)
+GATED_NAMES = frozenset({"sys.upload_today", "sys.download_today", "sys.upload_month"})
+
+
+def used_names(node) -> set:
+    """AST 中用到的取值名(供数据源门控与文档生成)"""
+    found = set()
+    if isinstance(node, Name):
+        found.add(node.name)
+    elif isinstance(node, Unary):
+        found |= used_names(node.operand)
+    elif isinstance(node, Binary):
+        found |= used_names(node.left) | used_names(node.right)
+    elif isinstance(node, Call):
+        for arg in node.args:
+            found |= used_names(arg)
+    elif isinstance(node, ListLit):
+        for item in node.items:
+            found |= used_names(item)
+    return found
+
+
+def gated_names_in(node) -> list:
+    """AST 里用到、但当前配置无数据源的名字(空 = 无问题)"""
+    return sorted(used_names(node) & GATED_NAMES)

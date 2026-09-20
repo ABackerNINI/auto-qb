@@ -17,13 +17,16 @@
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
   [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)
   (v3: 五条拍板口径 + §11 动作是否纳入的三档分析, L1 动作参数表达式记为候选排在 python 插件之后)。
-  **W1 已入库**: `src/auto_qb/rules/expr/`(`errors.py` / `lexer.py` / `parser.py`) + `tests/test_expr_parse.py` 15 条;
-  只做**语法内核**(一层一运算符判定 + 前缀形态 + 字面量类型冲突), **未接规则系统**、无新条件插件、行为零变化。
-  实测 1062 → **1077 passed**; Gitee + GitHub 均已推。
-  **下一步 W2**: `env.py`(取值面 + 可用性判定器) → `eval.py`(短路 + `ExprError`) → `ExprCondition` →
-  `RuleContext.expr_cache` → `base.py` 条件异常改返回 `(False, True)`(出错即停规则) → config 校验 / schema / 前端接线。
-  已知坑(已入记忆): 解析器的"一层一运算符"判定必须在消费二元运算符后**给 `used` 赋值**, 否则第二个
-  运算符会退化成笼统的「表达式结尾有多余内容」报错 —— 报错文案能不能照着改, 值得专门写测试钉住。
+  **W1 已入库 `93f1911`**(语法内核: errors/lexer/parser + 15 条测试, 未接规则系统)。
+  **W2 已入库 `a1841e9`**(取值面 env + 求值 eval + 类型规则 types + `ExprCondition` + `RuleContext.expr_cache` +
+  **`base.py` 出错即停规则 `(False, True)`** + 校验/schema/前端接线)。
+  **W3 收尾(本轮)**: `sys.upload_today/download_today/upload_month`(Traffic Monitor dat)+ **配置期数据源门控**
+  (`_expr_gate` → `_validate_rules(rules_config, errors, cfg)` → expr 单独分发, 门控跑在曲线段校验之前故须容忍
+  结构非法的 `traffic_source`)、前端 expr 渲染为多行文本框、知识库回写(rule-system.md 新增「表达式条件」章 +
+  出错即停语义、`modules.md` 加 `expr/` 行、`conventions.md` 立「新条件字段一律先进 env.py」)。
+  实测 1062 → **1094 passed**(Windows; Linux 侧未同步重测, 已在 testing.md 标注)。
+  已知坑: ①解析器"一层一运算符"判定必须在消费二元运算符后给 `used` 赋值, 否则退化成笼统报错;
+  ②语义校验(types.py)与运行期求值(eval.py)的报错文案不同源, 测试按文案匹配时容易写错预期。
 
 - **⓪b 乐观 UI「撤下」改造已完成并入库 (2026-09-21, 提交 `2094a36`)**:
   ✅ 真机实测撤下 **2947ms → 85ms**; 服务端侧只占 21ms, 其余 64ms 在浏览器主线程

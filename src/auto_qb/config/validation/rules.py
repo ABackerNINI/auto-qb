@@ -1,4 +1,5 @@
 """规则集 spec 校验: 键/取值域/conditions-actions 结构 + 插件 spec 深度校验分发"""
+from dataclasses import dataclass
 from typing import List
 
 from qbittorrentapi import TorrentState
@@ -48,7 +49,33 @@ def _check_rule_refs(refs: List[str], rules_config: dict, where: str, errors: Li
             errors.append(f"{where}: 引用的规则集不存在: @{r}")
 
 
-def _validate_rules(rules_config: dict, errors: List[str]) -> None:
+@dataclass(frozen=True)
+class _ExprGate:
+    """表达式取值的数据源门控上下文(配置期): 数据源没配 -> 相关名字禁用"""
+
+    traffic_configured: bool = False
+
+
+def _expr_gate(data) -> _ExprGate:
+    """从原始配置判断数据源是否配置(Traffic Monitor 的 history dat)
+
+    ⚠ 本函数跑在**曲线段校验之前**(validate_config 里规则段在前), 所以必须容忍结构非法的
+    traffic_source —— 结构错误由 _validate_global_speed_limit_curve 负责报错, 这里只尽力判
+    "配没配"; 判不出来就按"没配"处理(最保守: 相关名字禁用)。
+    """
+    curve = data.get("global_speed_limit_curve") if isinstance(data, dict) else None
+    if not isinstance(curve, dict):
+        return _ExprGate()
+    source = curve.get("traffic_source")
+    if not isinstance(source, list) or not source or not isinstance(source[0], dict):
+        return _ExprGate()
+    monitor = source[0].get("traffic_monitor")
+    if not isinstance(monitor, dict):
+        return _ExprGate()
+    return _ExprGate(traffic_configured=bool(str(monitor.get("dat_path", "")).strip()))
+
+
+def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
     """规则集 spec 校验: 键/取值域/conditions-actions 结构; 条件与动作名称经 registry 延迟导入校验
 
     已注册插件的 spec 深度校验也在此进行(_PLUGIN_SPEC_VALIDATORS, 如 state 的 is_* 属性、
@@ -57,6 +84,7 @@ def _validate_rules(rules_config: dict, errors: List[str]) -> None:
     (如 size 比较表达式的 int 解析)仍由 Rule 构造时的自然异常暴露(同为启动期 fail-fast)。
     """
     from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+    gate = _expr_gate(data)
 
     for group_name, group in rules_config.items():
         gwhere = f"config.{group_name}"
@@ -91,14 +119,14 @@ def _validate_rules(rules_config: dict, errors: List[str]) -> None:
                     errors.append(f"{where}.conditions: 必须是列表")
                 else:
                     for i, c in enumerate(conds):
-                        _validate_plugin_entry(c, f"{where}.conditions[{i}]", registry.CONDITIONS, "条件", errors)
+                        _validate_plugin_entry(c, f"{where}.conditions[{i}]", registry.CONDITIONS, "条件", errors, gate)
             acts = spec.get("actions")
             if acts is not None:
                 if not isinstance(acts, list):
                     errors.append(f"{where}.actions: 必须是列表")
                 else:
                     for i, a in enumerate(acts):
-                        _validate_plugin_entry(a, f"{where}.actions[{i}]", registry.ACTIONS, "动作", errors)
+                        _validate_plugin_entry(a, f"{where}.actions[{i}]", registry.ACTIONS, "动作", errors, gate)
             # 触发时机 × 动作兼容白名单: 某触发器下不适用动作在 config 阶段直接拒绝(见 04 规则系统)
             _validate_trigger_action_compat(spec, where, errors)
 
@@ -149,23 +177,34 @@ def _validate_tags_condition_spec(value, where: str, errors: List[str]) -> None:
             _check_regex_patterns([p.strip() for p in g.split(",")], where, errors)
 
 
-def _validate_expr_condition_spec(value, where: str, errors: List[str]) -> None:
+def _validate_expr_condition_spec(value, where: str, errors: List[str], gate=None) -> None:
     """expr 条件 spec 深度校验: 非空字符串 + **配置期**完成解析与语义校验
 
-    名字拼错 / 函数写错 / 类型不匹配 / 结果不是布尔, 全部在 load_config 阶段报出来 ——
-    否则运行期只会静默不匹配(日志里没有任何痕迹, 极难定位)。
+    - 名字拼错 / 函数写错 / 类型不匹配 / 结果不是布尔, 全部在 load_config 阶段报出来 ——
+      否则运行期只会静默不匹配(日志里没有任何痕迹, 极难定位)
+    - **数据源门控**: 用到需要数据源的名字(如 sys.upload_today 需要 traffic_source)而配置里
+      没配该数据源 -> 该名字禁用, 配置期即报错(见 env.GATED_NAMES)
     rules 包反向依赖 config, 故延迟导入(与 registry 同处理)。
     """
-    from ...rules.expr import compile_expr, validate
+    from ...rules.expr import compile_expr, gated_names_in, validate
     from ...rules.expr.errors import ExprError
 
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{where}: expr 条件需要一个非空字符串表达式")
         return
     try:
-        validate(compile_expr(value).root)
+        root = compile_expr(value).root
+        validate(root)
     except ExprError as e:
         errors.append(f"{where}: 表达式错误: {e}")
+        return
+    if gate is not None and not gate.traffic_configured:
+        gated = gated_names_in(root)
+        if gated:
+            errors.append(
+                f"{where}: 取值 {'、'.join(gated)} 无数据源 —— 需配置 global_speed_limit_curve.traffic_source"
+                "(Traffic Monitor 的 history_traffic.dat), 未配置时该值不可用"
+            )
 
 
 def _validate_pattern_list_spec(value, where: str, errors: List[str]) -> None:
@@ -178,7 +217,7 @@ def _validate_pattern_list_spec(value, where: str, errors: List[str]) -> None:
 # 插件类(conditions/actions)假定配置正确, 不再自查
 _PLUGIN_SPEC_VALIDATORS = {
     "state": _validate_state_condition_spec,
-    "expr": _validate_expr_condition_spec,
+    # expr 不走这里: 它需要数据源门控上下文, 由 _validate_plugin_entry 单独分发
     "checking": _validate_checking_action_spec,
     "tags": _validate_tags_condition_spec,
     "category": _validate_pattern_list_spec,
@@ -188,9 +227,12 @@ _PLUGIN_SPEC_VALIDATORS = {
 }
 
 
-def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: List[str]) -> None:
+def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: List[str], gate=None) -> None:
     """conditions/actions 列表项校验: 单键字典 + 名称已注册(多键/空值会被静默丢弃, 必须报错);
-    已注册名称再做 spec 深度校验(_PLUGIN_SPEC_VALIDATORS)"""
+    已注册名称再做 spec 深度校验(_PLUGIN_SPEC_VALIDATORS)
+
+    gate: 表达式取值的数据源门控上下文(仅 expr 条件用, 需要看配置里数据源是否配置)
+    """
     if not isinstance(entry, dict):
         errors.append(f"{where}: 必须是字典")
         return
@@ -205,6 +247,8 @@ def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: Li
         _try(parse_bool, entry[name], f"{where}.{name}", errors)
     elif name not in known:
         errors.append(f"{where}: 未知{kind} '{name}', 可用: {sorted(known)}")
+    elif name == "expr":  # 表达式需要额外的门控上下文, 不走统一的 3 参校验器
+        _validate_expr_condition_spec(entry[name], f"{where}.{name}", errors, gate)
     else:
         deep = _PLUGIN_SPEC_VALIDATORS.get(name)
         if deep:
