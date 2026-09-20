@@ -40,7 +40,7 @@ from .mixins.web_commands import (
     CMD_SLOW_MS,
     DEFERRED_RECEIPT_COMMANDS,
     REANNOUNCE_CONFIRM_TIMEOUT,
-    RECEIPT_WAIT_CAP_MS,
+    TRUTH_PUSH_CAP_MS,
     RESYNC_COMMANDS,
     SELF_POSTED_COMMANDS,
     _timing,
@@ -53,6 +53,16 @@ WEB_VIEW_TTL = 10.0
 # 回执保留窗口与容量上限: 前端轮询完即弃, 兜底防无界增长
 WEB_RESULT_TTL = 120.0
 WEB_RESULT_MAX = 64
+
+# 真值直查(torrents/info)的分批大小: hashes 是拼在 URL 里的,
+# 448 个 40 位 hash ≈ 18KB, 超多数服务端/代理的 URL 长度限制(被截断或 414) ⇒ 分批查。
+TRUTH_QUERY_CHUNK = 50
+
+# 单个 SSE 订阅者的事件队列上限: 超过就丢(慢消费者靠轮询补), 防无界增长
+EVENT_QUEUE_MAX = 200
+# SSE 空闲心跳间隔(秒): 必须 **< WEB_VIEW_TTL**, 否则连着的客户端会被判成不活跃
+# ⇒ 主循环停止组装视图 ⇒ 推送自己也没内容可发(自锁)。
+SSE_KEEPALIVE_S = 5.0
 
 
 class WebUIRuntime:
@@ -70,8 +80,8 @@ class WebUIRuntime:
         self.results: dict = {}
         # 强制汇报确认跟踪(cmd_id -> {deadline, items: {hash: {done, ok, err, baseline}}})
         self.reannounce_pending: dict = {}
-        # 补刷新后落地的回执(cmd_id -> {cmd, args, timing}); 见 defer_receipt
-        self.deferred_receipts: dict = {}
+        # 待推真值(cmd_id -> {cmd, args, ts}); 回执已即时发出, 这里只等真值落地再推事件
+        self.truth_pending: dict = {}
         # ---- 视图快照(Web 线程只读, 发布时整体替换) ----
         self.group_view: List[dict] = []
         self.singles_view: List[dict] = []  # 未归组单种子视图
@@ -103,6 +113,54 @@ class WebUIRuntime:
         # 的 status 恒回传 —— 不参与 VIEW_ARRAYS 视图分片、不受 rid 门控(状态栏是跨视图的常驻
         # 显示, 不能依赖任何一个"可能被裁掉"的数组, 见 issue 26-09-20-1646)
         self.speed_totals: dict = {"dlspeed": 0, "upspeed": 0}
+        # ---- 事件推送(SSE /api/events) ----
+        # 每个订阅者一个**有界**队列: 主循环侧只 put_nowait, 队列满就丢(推送是加速手段,
+        # 丢了只是退化成轮询, 不是错误)。❗主循环**绝不直接写 socket** —— 本项目头号教训:
+        # 搜索索引单次 500 条文件 API 曾占满主循环, 导致命令排队数秒。
+        self._subscribers: list = []
+        self._sub_lock = threading.Lock()
+        self.notify_dropped: int = 0
+
+    # ------------------------------------------------------------------ 事件推送
+
+    def subscribe(self):
+        """登记一个 SSE 订阅者, 返回它的事件队列(Web 线程调用)"""
+        q = queue.Queue(maxsize=EVENT_QUEUE_MAX)
+        with self._sub_lock:
+            self._subscribers.append(q)
+        # 订阅/退订都记一条 INFO: 排查"SSE 没连上 / 句柄堆叠"的第一手依据(重连时会成对出现)
+        logger.info(f"WEB SSE 订阅 +1(当前 {len(self._subscribers)})")
+        return q
+
+    def unsubscribe(self, q) -> None:
+        with self._sub_lock:
+            if q in self._subscribers:
+                self._subscribers.remove(q)
+                logger.info(f"WEB SSE 退订 -1(当前 {len(self._subscribers)})")
+
+    def subscriber_count(self) -> int:
+        with self._sub_lock:
+            return len(self._subscribers)
+
+    def notify(self, etype: str, payload: dict) -> int:
+        """广播一条事件; 返回送达的订阅者数
+
+        ❗必须**非阻塞**: 调用点可能在主循环线程(且 `_publish_locked` 还持有 view_lock)。
+        这里只做 put_nowait, 慢消费者丢事件(它下一轮轮询会补上)。
+        """
+        ev = {"type": etype, "payload": payload, "ts": time.time()}
+        hit = 0
+        with self._sub_lock:
+            subs = list(self._subscribers)
+        for q in subs:
+            try:
+                q.put_nowait(ev)
+                hit += 1
+            except queue.Full:
+                self.notify_dropped += 1
+            except Exception:
+                self.notify_dropped += 1
+        return hit
 
     # ------------------------------------------------------------------ 活跃门控
 
@@ -257,35 +315,37 @@ class WebUIRuntime:
         if self.search_index_dirty and self.is_active():
             self._host._build_search_index()
 
-    def flush_receipts(self) -> None:
-        """补刷新跑完后落回执, 并附上受影响种子的当前真值
+    def flush_truths(self) -> None:
+        """直查真值, 落地了就推 `truth` 事件; 未落地继续等(上限 TRUTH_PUSH_CAP_MS)
 
-        ❗**必须无条件调用**(哪怕本轮没跑补刷新 / dry_run): 漏调会让前端 waitCmd 干等 40s。
-        真值取 store.by_hash 的当前 kind —— 补刷新之后它就是服务端认为的最新状态。
+        ❗**必须无条件调用**(哪怕本轮没跑补刷新): 漏调会让前端一直挂着乐观值。
+        ❗超时**不推**: 推一个未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回。
+          那种情况交给前端超时回滚, 且必须有明确 toast(不能静默)。
         """
-        if not self.deferred_receipts:
+        if not self.truth_pending:
             return
-        pending, self.deferred_receipts = self.deferred_receipts, {}
+        pending, self.truth_pending = self.truth_pending, {}
         now = time.time()
-        n_truth = 0
+        n_push = 0
         n_wait = 0
         for cmd_id, item in pending.items():
             truth = self._affected_truth(item["cmd"], item["args"])
             landed = self._truth_landed(item["cmd"], item["args"], truth)
-            # 真值没落地就**再等一轮**(等 qB 翻状态), 但最多等 RECEIPT_WAIT_CAP_MS:
-            # 超时必须照发, 否则前端 waitCmd 会干等 —— 那种情况下真值由 3s 兜底/轮询收尾。
-            if not landed and (now - item.get("ts", now)) * 1000.0 < RECEIPT_WAIT_CAP_MS:
-                self.deferred_receipts[cmd_id] = item
+            if not landed and (now - item.get("ts", now)) * 1000.0 < TRUTH_PUSH_CAP_MS:
+                self.truth_pending[cmd_id] = item
                 n_wait += 1
                 continue
-            n_truth += len(truth or {})
-            self.set_result(cmd_id, "ok", timing=item["timing"], truth=truth)
-        # 排查标记: 日志里**没有这一行** = 服务端还在跑旧代码(回执在补刷新之前就写了),
-        # 前端只能走 via=pull 拉全量 —— 真机大库上就是"点了要 1.7~2s 才恢复正常"。
-        logger.info(
-            f"[cmd] 回执(补刷新后)已写 {len(pending) - n_wait} 条, 带真值 {n_truth} 个种子" +
-            (f"(另 {n_wait} 条等真值落地, 上限 {RECEIPT_WAIT_CAP_MS:.0f}ms)" if n_wait else "")
-        )
+            if not landed:
+                logger.warning(f"[cmd] 真值超时(>{TRUTH_PUSH_CAP_MS:.0f}ms)未落地, 放弃推送: {cmd_id}")
+                continue
+            self.notify("truth", {"cmd_id": cmd_id, "hashes": sorted(truth or {}), "truth": truth})
+            n_push += 1
+        if n_push:
+            logger.info(f"[cmd] 真值已推 {n_push} 条")
+        elif n_wait:
+            # 等待轮次只打 DEBUG: 真机实测一次命令要等 7~8 轮(每轮 ~200ms), 全打 INFO 会把日志
+            # 刷满 —— 而这段等待现在**完全不影响观感**(压暗早已结束), 不值得占 INFO。
+            logger.debug(f"[cmd] 真值未落地, 继续等 {n_wait} 条(上限 {TRUTH_PUSH_CAP_MS:.0f}ms)")
 
     def resync_elapsed_ms(self, t0: float) -> None:
         """命令后补刷新耗时落日志(计时口径见 qbmanager.run 的"命令驱动那一轮")
@@ -323,13 +383,26 @@ class WebUIRuntime:
         if truth:
             rec["truth"] = truth
         self.results[cmd_id] = rec
+        # 事件驱动(P2): 回执**主动推**给前端, 前端不必再轮询 /api/cmd/{id}。
+        # 轮询退避 0→150→300→500ms 的粒度是撤下延迟的一部分, 推送把它压到 ~1ms。
+        # ❗必须带上 cmd_id —— 前端按它匹配自己那条命令(多个命令可能同时在途)。
+        self.notify("cmd", {**rec, "cmd_id": cmd_id})
 
     def defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
-        """登记"等补刷新跑完再写"的回执(与 set_result 的区别只是时机)"""
-        self.deferred_receipts[cmd_id] = {
+        """回执**立即**写 + 真值登记为"稍后推"(2026-09-20 D2 定案)
+
+        ❗为什么不再"扣住回执等真值": 真机实测 qB 把状态翻过来要 **1258ms**, 而命令执行
+          只要 2.7ms —— 扣着回执等, 撤下就被 qB 钉死在 1.25s+(实测撤下 2947ms)。
+          拆成两步:
+            ① 回执立刻发(只表示"命令已执行"), 前端据此**结束压暗** ⇒ 撤下降到 10~20ms;
+            ② 真值继续直查, 落地了再推 `truth` 事件, 前端据此结束"值覆盖"。
+        ❗回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令**前**的旧值 ⇒ 弹回
+          (4df80dc 那条红线)。真值只走 `truth` 事件, 且只有落地了才推。
+        """
+        self.set_result(cmd_id, "ok", timing=timing)
+        self.truth_pending[cmd_id] = {
             "cmd": cmd,
             "args": dict(args or {}),
-            "timing": timing,
             "ts": time.time(),
         }
 
@@ -372,15 +445,34 @@ class WebUIRuntime:
         return []
 
     def _affected_truth(self, cmd: str, args: dict) -> Optional[dict]:
-        """受影响种子的当前真值({hash: {"kind": ...}})"""
-        truth = {}
+        """受影响种子的**当前真值**({hash: {"kind": ...}}) —— **直查 qB, 不读同步快照**
+
+        ❗为什么必须直查(2026-09-20 定案):
+          `store.by_hash` 来自 `/sync/maindata` **同步快照**, 按 qB 的节奏刷新 —— 真机实测命令后
+          要等 6 轮 / **1362ms** 才在上面看到新状态(而命令本身只要 8.4ms), 这个数与
+          `sync_interval = 1.5 # 与 qB 自带 WebUI(1500ms)同量级` 几乎重合 ⇒ 滞后来自快照刷新节奏。
+          拿快照当"命令后的真值"就会读到命令**前**的旧值 —— 这正是"撤下要等 3s"的根源。
+          改走 `torrents/info` 直查, 拿到的是 qB 的**实时**状态。
+
+        ❗取不到就返回 **None（不回落快照）**: 回落会把"读不到"伪装成"读到了旧值",
+          而旧值正是要消灭的东西。没有真值时前端保持乐观/等待, 语义更干净。
+        """
+        hashes = self._affected_hashes(cmd, args)
+        if not hashes:
+            return None
+        want = set(hashes)
+        truth: dict = {}
         try:
-            for h in self._affected_hashes(cmd, args):
-                rec = self._host.store.by_hash.get(h)
-                if rec is None:
-                    continue
-                truth[h] = {"kind": self._host._state_kind(rec)}
-        except Exception:
+            # 分批: hashes 拼在 URL 里, 448 个 hash ≈ 18KB 会超长度限制(被截断/414)
+            for i in range(0, len(hashes), TRUTH_QUERY_CHUNK):
+                chunk = hashes[i:i + TRUTH_QUERY_CHUNK]
+                for t in self._host.api.torrents_info(torrent_hashes=chunk) or []:
+                    # 真机是 TorrentDictionary(有 .get/.hash); 测试桩 FakeTorrent 只有属性
+                    h = getattr(t, "hash", None) or (t.get("hash") if hasattr(t, "get") else None)
+                    if h in want:
+                        truth[h] = {"kind": self._host._state_kind(t)}
+        except Exception as e:
+            logger.warning(f"[cmd] 真值直查失败(不回落同步快照): {e}")
             return None
         return truth or None
 
@@ -454,6 +546,9 @@ class WebUIRuntime:
         self.group_view_dirty = False
         # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
         self.pending_ver = self.group_view_ver
+        # 事件驱动(P2): 新版本**主动推**信号(只推版本号, 绝不推数据 —— 3000 种子一轮
+        # 全量要 63ms 序列化+网络+解析, 频繁推会把主线程打满)。前端据此触发一次 refresh。
+        self.notify("ver", {"ver": self.group_view_ver})
 
     def ensure_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则返回当前引用

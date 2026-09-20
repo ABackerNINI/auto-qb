@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="sim-qb-maindata-snapshot-lag">
+<meta name="issue-stamp" content="26-09-20-2145">
+<meta name="issue-type" content="test">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="sim_qb 缺「/sync/maindata 快照滞后」模型, 本地无法复现/验证真值直查的收益">
+<meta name="issue-summary" content="仿真端状态瞬时翻转, 掩盖一切&#x27;真值尚未落地&#x27;类缺陷; 需加 1.5s 快照滞后模型">
+<title>sim_qb 缺「/sync/maindata 快照滞后」模型, 本地无法复现/验证真值直查的收益 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>sim_qb 缺「/sync/maindata 快照滞后」模型, 本地无法复现/验证真值直查的收益</h1>
+    <p class="lede">仿真端状态瞬时翻转, 掩盖一切&#x27;真值尚未落地&#x27;类缺陷; 需加 1.5s 快照滞后模型</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-20-2145-test-sim-qb-maindata-snapshot-lag</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 21:45</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在查「乐观 UI 撤下慢」时要用 sim_qb 复现「真值尚未落地」这一类缺陷，结果<b>复现不出来</b>：sim_qb 收到 <code>torrents/pause</code> / <code>torrents/resume</code> 后<b>同步</b>就把 <code>state</code> 改掉了（<code>_set_state</code>，无延迟），于是 <code>/sync/maindata</code> 与 <code>torrents/info</code> <b>同一时刻</b>返回新状态。</p><p>而真机上两者<b>不同步</b>：真机日志显示命令执行只要 8.4 ms，但要等 6 轮（约 1362 ms）才在同步里看到新状态。因此<b>凡是需要「真值滞后」才能暴露的缺陷，仿真端一律测不出来</b> —— 包括本次计划要验证的「真值改走 <code>torrents/info</code> 直查是否更快」。</p><p>触发条件：任何用 <code>scripts/sim_qb.py</code> 做端到端验证、且被测项依赖状态传播时延的场景。与平台无关。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 真机日志（取证 2026-09-20 20:32）—— 命令立刻返回，真值要等 6 轮
+20:32:48,631 [cmd] resume_torrent: 排队 0.0ms / 执行 8.4ms
+20:32:48,711 [cmd] 回执(补刷新后)已写 0 条, 带真值 0 个种子(另 1 条等真值落地, 上限 1200ms)
+20:32:48,711 [cmd] 命令后补刷新 74.9ms
+   ... 同一行重复 5 次（约 215ms 一轮）
+20:32:49,993 [cmd] 回执(补刷新后)已写 1 条, 带真值 1 个种子        <- 1362ms 后才落地
+
+# sim_qb 侧（取证 2026-09-20 21:20）：状态瞬时翻转，没有滞后
+scripts/sim_qb.py:612-615
+  elif endpoint == "torrents/pause":
+      self._set_state(hashes, "pausedUP")
+  elif endpoint == "torrents/resume":
+      self._set_state(hashes, "stalledUP")     # <- 同步生效，无时延
+
+# 旁证：配置注释里 qB 自带的同步节奏（取证 2026-09-20 21:25）
+src/auto_qb/config/models.py:187
+  sync_interval: float = 1.5  # 种子状态同步间隔(秒) —— 与 qB 自带 WebUI(1500ms)同量级
+# 实测 1362ms 与该节奏几乎重合，强烈提示滞后来自 sync 快照刷新而非 qB 处理慢</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>用 sim_qb 验证任何依赖「状态传播时延」的行为时<b>必现</b>（不是偶发）</td></tr>
+      <tr><td>影响范围</td><td>sim_qb 的全部端到端验证；直接影响本次计划 P0「实测反应门槛」—— 没有这个模型，本地<b>无法</b>验证「<code>torrents/info</code> 直查比 sync 快照快」这一核心假设</td></tr>
+      <tr><td>严重度</td><td><b>中</b>（不导致线上故障，但会让一整类缺陷在仿真里<b>静默通过</b>，本次已因此白测两轮）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul class="todo">
+      <li><code>scripts/sim_qb.py:612-615</code>（取证 2026-09-20 21:45）· <code>SimQb.apply_write</code> / <code>_set_state</code> · grep: <code>torrents/resume</code></li>
+      <li><code>scripts/sim_qb.py:290</code>（取证 2026-09-20 21:45）· 初始状态构造 · grep: <code>state = "stalledUP"</code></li>
+      <li><code>src/auto_qb/web_runtime.py:367</code>（取证 2026-09-20 21:45）· <code>WebUIRuntime._affected_truth</code>（真值目前读 <code>store.by_hash</code>，即 sync 快照）· grep: <code>_affected_truth</code></li>
+      <li><code>src/auto_qb/config/models.py:187</code>（取证 2026-09-20 21:45）· <code>sync_interval</code> 注释中的 1500ms 节奏</li>
+      <li>临时可用的替代做法（未入库）：探针脚本用 <code>threading.Timer</code> 把状态变更延后 1400ms 生效，已在本地验证可复现「真值滞后」</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">不需要查 —— 这是仿真端<b>建模缺失</b>，不是产品缺陷：sim_qb 只实现了"状态会变"，没有实现"状态什么时候对同步可见"。（已排除：qB 处理慢 —— 真机 <code>exec_ms</code> 仅 8.4ms，滞后不在执行侧）</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>给 sim_qb 加一个可开关的<b>快照滞后模型</b>：<code>/sync/maindata</code> 按固定节奏（默认 1500ms，<code>--maindata-lag-ms</code> 可调）刷快照，而 <code>torrents/info</code> <b>实时</b>返回。这样：</p>
+    <ul>
+      <li><b>方案 A（推荐）</b>：给 <code>SimQb</code> 加一层"同步可见性"—— 写操作立即改 <code>self.torrents</code>，但 <code>sync_maindata</code> 只读一个按节奏刷新的快照副本。</li>
+      <li><b>方案 B（更省事）</b>：加 <code>--state-delay-ms</code>，把 <code>_set_state</code> 改成延后生效（临时脚本已验证可用）。缺点：它同时延迟了 <code>torrents/info</code>，因此<b>区分不出</b>"直查更快"这个关键假设 —— 只能复现滞后，不能验证方案。</li>
+    </ul>
+    <p><b>只有方案 A 能验证本次计划的核心假设</b>（直查 vs 快照谁先拿到真值）。代价：需改 <code>sync_maindata</code> 的数据源，约 1~2 小时，并需保证既有 sim_run 场景不受影响（默认 lag=0 时行为与现在完全一致）。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-20 21:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>认领后第一件事：用 <code>--maindata-lag-ms 0</code> 与 1500 各跑一次，确认 <code>/sync/maindata</code> 与 <code>torrents/info</code> 在 lag=0 时<b>同刻返回</b>、lag=1500 时<b>不同刻</b>，即模型生效。</p>
+    <h3>修复后补充</h3>
+    <p>修完补：实际修法 / 验证方式（lag=0 与 lag=1500 的对照输出）/ <code>sim_run.py</code> 既有场景的回归数字。</p>
+  </section>
+
+  <footer>
+    26-09-20-2145-test-sim-qb-maindata-snapshot-lag.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

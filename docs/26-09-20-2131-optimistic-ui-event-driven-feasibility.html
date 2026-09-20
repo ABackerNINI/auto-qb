@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>乐观 UI 撤下改为事件驱动 · 可行性报告 · auto-qb</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1113; --paper:#14171a;
+    --ink:#e7e9eb; --ink-2:#b3bac1; --ink-3:#7f878f;
+    --rule:rgba(255,255,255,.09); --rule-2:rgba(255,255,255,.05);
+    --accent:#d8a15a; --bad:#c85f4a; --good:#6f9f7a; --warn:#c9a24a;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas","Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 96px}
+  header{padding:64px 0 0;border-bottom:1px solid var(--rule)}
+  .logotype{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+            color:var(--ink-3);margin-bottom:28px}
+  .logotype span{color:var(--accent)}
+  h1{font-size:42px;line-height:1.12;letter-spacing:-.02em;font-weight:600;margin:0 0 18px;max-width:24ch}
+  .lede{font-size:17px;line-height:1.6;color:var(--ink-2);max-width:64ch;margin:0 0 30px}
+  .lede b{color:var(--ink);font-weight:550}
+  .meta{display:flex;flex-wrap:wrap;gap:0 40px;padding:18px 0 22px;border-top:1px solid var(--rule-2);margin-top:8px}
+  .meta div{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3)}
+  .meta div b{color:var(--ink-2);font-weight:400}
+  nav.toc{padding:34px 0 8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 32px}
+  nav.toc a{display:flex;gap:12px;align-items:baseline;text-decoration:none;color:var(--ink-2);
+            font-size:13.5px;padding:5px 0;border-bottom:1px solid transparent}
+  nav.toc a:hover{color:var(--accent);border-bottom-color:var(--rule)}
+  nav.toc i{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--ink-3);letter-spacing:.08em}
+  section{padding:56px 0 0;border-top:1px solid var(--rule);margin-top:56px}
+  section:first-of-type{border-top:none}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--accent);margin:0 0 12px}
+  h2{font-size:26px;line-height:1.25;letter-spacing:-.01em;font-weight:600;margin:0 0 16px}
+  h3{font-size:16.5px;font-weight:550;margin:34px 0 10px}
+  p{margin:0 0 14px;max-width:72ch}
+  .dim{color:var(--ink-3);font-size:13.5px}
+  code{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.05);
+       padding:1px 5px;border:1px solid var(--rule-2)}
+  a{color:var(--accent)}
+  .verdict{margin:30px 0 0;border:1px solid var(--rule);background:var(--paper);
+           display:grid;grid-template-columns:1fr 1fr 1fr}
+  .verdict > div{padding:24px 26px}
+  .verdict > div + div{border-left:1px solid var(--rule)}
+  .verdict h4{margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+              text-transform:uppercase;font-weight:400}
+  .verdict .ok h4{color:var(--good)} .verdict .warn h4{color:var(--warn)} .verdict .bad h4{color:var(--bad)}
+  .verdict p{margin:0;font-size:13.5px;color:var(--ink-2);max-width:none}
+  .verdict b{color:var(--ink);font-weight:550}
+  table{width:100%;border-collapse:collapse;margin:22px 0 8px;font-size:13.5px}
+  caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding-bottom:10px}
+  th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--rule-2);vertical-align:top}
+  thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--ink-3);font-weight:400;border-bottom:1px solid var(--rule);padding-bottom:8px}
+  td.n{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  tbody tr:hover{background:rgba(255,255,255,.022)}
+  .yes{color:var(--good)} .no{color:var(--bad);font-weight:550} .maybe{color:var(--warn)}
+  pre{margin:18px 0;border:1px solid var(--rule);background:var(--paper);padding:18px 20px;overflow-x:auto}
+  pre code{background:none;border:none;padding:0;font-size:12.5px;line-height:1.7;color:var(--ink-2);display:block}
+  pre code b{color:var(--ink);font-weight:550}
+  pre code .c{color:var(--ink-3)}
+  .note{margin:24px 0;padding:16px 20px;border:1px solid var(--rule);background:var(--paper);
+        font-size:13.5px;color:var(--ink-2);max-width:none}
+  .note b{color:var(--ink);font-weight:550}
+  .note .lbl{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+             text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+  ol.findings{margin:20px 0 0;padding:0;list-style:none;counter-reset:f}
+  ol.findings > li{counter-increment:f;position:relative;padding:0 0 0 46px;margin:0 0 26px;max-width:78ch}
+  ol.findings > li::before{content:counter(f,decimal-leading-zero);position:absolute;left:0;top:2px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent)}
+  ol.findings > li > b{display:block;font-weight:550;font-size:15.5px;margin-bottom:6px}
+  ul.plain{margin:14px 0;padding-left:20px;max-width:74ch}
+  ul.plain li{margin:0 0 8px;color:var(--ink-2);font-size:14px}
+  ul.plain li b{color:var(--ink);font-weight:550}
+  footer{margin-top:72px;padding-top:22px;border-top:1px solid var(--rule);
+         font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3);
+         display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  @media (max-width:900px){
+    .wrap{padding:0 22px 64px} h1{font-size:31px}
+    .verdict{grid-template-columns:1fr} .verdict > div + div{border-left:none;border-top:1px solid var(--rule)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logotype">auto&#8209;qb <span>/</span> 可行性分析 <span>/</span> 乐观 UI 撤下</div>
+  <h1>撤下改为事件驱动：可行性报告</h1>
+  <p class="lede">
+    目标由「让撤下变快」修正为：<b>让真值更快到</b> + <b>撤下依据真值</b> + <b>事件驱动，不依赖轮询</b>。
+    本报告先把真值从 qB 到「行恢复正常」的整条链路拆成可计时的段，分清<b>哪些是我们自己加的延迟（可省）</b>
+    与<b>哪些是外部系统的下界（省不掉）</b>，再给事件驱动的方案设计与风险。
+    <b>结论先说：方向可行，但「10 ms」能否达成取决于一个必须先做的判定实验。</b>
+  </p>
+  <div class="meta">
+    <div><b>日期</b> 2026-09-20 21:31</div>
+    <div><b>基线</b> f734710（已同步 develop）</div>
+    <div><b>代码状态</b> 本轮与上一轮改动<b>已全部撤销</b>，工作区干净</div>
+    <div><b>证据</b> 真机日志 20:32 + sim_qb 实测</div>
+  </div>
+
+  <nav class="toc">
+    <a href="#s1"><i>01</i> 结论摘要</a>
+    <a href="#s2"><i>02</i> 延迟链路拆解（可省 vs 下界）</a>
+    <a href="#s3"><i>03</i> 关键未知：判定实验 E1</a>
+    <a href="#s4"><i>04</i> 事件驱动方案设计</a>
+    <a href="#s5"><i>05</i> 通道选型：SSE vs WebSocket</a>
+    <a href="#s6"><i>06</i> 收益估算</a>
+    <a href="#s7"><i>07</i> 风险与对策</a>
+    <a href="#s8"><i>08</i> 分阶段实施</a>
+    <a href="#s9"><i>09</i> 未覆盖</a>
+  </nav>
+</header>
+
+<!-- 01 -->
+<section id="s1">
+  <p class="kicker">01 · 结论摘要</p>
+  <h2>可行，但有一个前置未知</h2>
+  <div class="verdict">
+    <div class="ok">
+      <h4>可行 · 明确可省</h4>
+      <p>
+        我们自己加在链路上的延迟合计 <b>约 1.5~2 s</b>：回执轮询退避（0/150/300/500 ms 粒度）、
+        <code>_pullTruthAfterCmd</code> 的 1500 ms 拉取预算、常规 <code>/api/state</code> 轮询
+        （1.5 / 2 / 3 s 分档）。事件驱动可以把这三段<b>整体去掉</b>，只留一次推送。
+      </p>
+    </div>
+    <div class="warn">
+      <h4>待定 · 决定 10 ms 能否达成</h4>
+      <p>
+        <b>qB 那一侧还有 ~1.36 s</b>。但这个数到底是「qB 内部真的慢」还是「我们从
+        <code>/sync/maindata</code> 快照读、快照 1.5 s 才更新一次」——<b>现在无法区分</b>。
+        两者的应对完全不同（见 E1）。
+      </p>
+    </div>
+    <div class="bad">
+      <h4>硬约束 · 与目标冲突处</h4>
+      <p>
+        「<b>撤下依据真值</b>」与「<b>10 ms</b>」在 <b>resume</b> 上<b>互斥</b>：真值本身要 1.36 s 才到，
+        依据真值撤下就不可能 10 ms。除非 E1 证实那是快照滞后（可绕开），
+        否则 <b>10 ms 只能对 pause 成立</b>，resume 的下界就是 qB。
+      </p>
+    </div>
+  </div>
+  <p style="margin-top:20px">
+    一句话：<b>先把 E1 做了（半天量级），再决定要不要投入事件驱动改造。</b>
+    若 E1 证实是快照滞后，那么「直查 + 推送」两条加起来就能把撤下压到几十毫秒，10 ms 目标可望可即；
+    若 E1 证实是 qB 内部慢，事件驱动仍然值得做（能省掉我们自己的 1.5~2 s），
+    但必须接受 resume 的下界 ~1.4 s。
+  </p>
+</section>
+
+<!-- 02 -->
+<section id="s2">
+  <p class="kicker">02 · 延迟链路拆解</p>
+  <h2>真值从 qB 到「行恢复正常」，一共几段</h2>
+  <p class="tight">
+    以真机 20:32 那条 resume 日志为骨架，把每一段单独计时并标注<b>归属</b>。
+    「可省」= 我们自己引入、架构上可以去掉；「下界」= 外部系统决定、改不动。
+  </p>
+  <table>
+    <caption>表 1 · 撤下链路分段（真机实测值 + 代码常数）</caption>
+    <thead><tr><th>段</th><th>实测 / 常数</th><th>归属</th><th>事件驱动后</th></tr></thead>
+    <tbody>
+      <tr><td>乐观补丁贴上</td><td class="n">0~10 ms</td><td>前端</td><td class="yes">不变（已达标）</td></tr>
+      <tr><td>命令投递 POST</td><td class="n">16 ms</td><td>网络</td><td class="yes">不变</td></tr>
+      <tr><td>主循环排队 <code>wait_ms</code></td><td class="n">0.0 ms</td><td>我们（已优化）</td><td class="yes">不变</td></tr>
+      <tr><td>qB 执行 <code>exec_ms</code></td><td class="n">8.4 ms</td><td class="no">qB（下界）</td><td class="no">省不掉</td></tr>
+      <tr><td>命令后补刷新（强制同步）</td><td class="n">74.9 ms</td><td>我们</td><td class="maybe">可省（改直查，见 E1）</td></tr>
+      <tr><td><b>等 qB 状态真正翻转</b></td><td class="n no"><b>1362 ms</b></td><td class="no"><b>qB（待判定，见 E1）</b></td><td class="no"><b>省不掉 or 可绕开</b></td></tr>
+      <tr><td>回执扣留等真值（<code>RECEIPT_WAIT_CAP_MS</code>）</td><td class="n">与上一行重叠</td><td>我们</td><td class="yes">可省（不再需要）</td></tr>
+      <tr><td><code>waitCmd</code> 回执轮询退避</td><td class="n">0 → 150 → 300 → 500 ms</td><td>我们</td><td class="yes">可省（改推送）</td></tr>
+      <tr><td><code>_pullTruthAfterCmd</code> 拉取预算</td><td class="n">0/200/400 ms，预算 1500 ms</td><td>我们</td><td class="yes">可省（改推送）</td></tr>
+      <tr><td>常规 <code>/api/state</code> 轮询间隔</td><td class="n">1.5 / 2 / 3 s（按库大小分档）</td><td>我们</td><td class="yes">可省（改推送）</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="lbl">怎么读这张表</span>
+    真机那条 <code>撤下 3026 ms</code> 大致 = 执行 8.4 + <b>qB 翻转 1362</b> + 回执轮询粒度 +
+    <b>拉取预算 1486</b>。其中<b>只有 1362 ms 是外部的</b>，剩下的约 1.6 s 全是我们自己的机制叠上去的。
+    事件驱动的目标是<b>把后者整体归零</b>。
+  </div>
+</section>
+
+<!-- 03 -->
+<section id="s3">
+  <p class="kicker">03 · 关键未知</p>
+  <h2>判定实验 E1：1362 ms 到底卡在哪一侧</h2>
+  <p>
+    这是整份报告<b>唯一必须先把答案拿到手</b>的问题，因为两条分支的应对完全不同：
+  </p>
+  <div class="verdict">
+    <div class="ok">
+      <h4>分支 A：是快照滞后</h4>
+      <p>
+        若 <code>torrents/info</code> <b>明显早于</b> <code>/sync/maindata</code> 翻状态 ⇒
+        那 1362 ms 是我们<b>从快照读</b>的代价（快照按 qB 的节奏更新，而
+        <code>sync_interval = 1.5 # 与 qB 自带 WebUI(1500ms)同量级</code> —— 实测 1362 ms
+        <b>几乎正好是这个节奏，这是很强的一条旁证</b>）。<br><br>
+        <b>应对</b>：真值改走 <code>torrents/info</code> 直查（<code>QbApi.torrents_info</code>
+        已存在，qbapi.py:306），只查命令影响的那几个种子 ⇒ 真值到达压到<b>几十毫秒</b>，
+        <b>10 ms 目标可望可即</b>。
+      </p>
+    </div>
+    <div class="bad">
+      <h4>分支 B：是 qB 内部慢</h4>
+      <p>
+        若两者<b>同一刻</b>翻 ⇒ 1362 ms 就是 qB 自己处理 resume 的时间（做 resume-data 校验、
+        连 tracker 等），我们改不到。<br><br>
+        <b>应对</b>：事件驱动<b>仍然值得做</b>（能省掉我们自己的 1.5~2 s），但必须接受
+        <b>resume 的下界 ≈ 1.4 s</b>；「撤下 10 ms」只能对 pause 成立（pause 的 qB 翻转待实测）。
+      </p>
+    </div>
+    <div class="warn">
+      <h4>怎么做（约半天）</h4>
+      <p>
+        在仿真端或真机上，resume 一个种子后<b>同时</b>以 ~50 ms 间隔轮询
+        <code>/api/v2/torrents/info?hashes=X</code> 与 <code>/api/v2/sync/maindata</code>，
+        记录两者各自的 <code>state</code> 翻转时刻，比较先后。<br><br>
+        <b>注意</b>：sim_qb 是瞬时翻转的，<b>测不出这个差异</b>，必须在真机做
+        （或先给仿真端加一个"maindata 快照按 1.5 s 更新、info 实时"的模型）。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 -->
+<section id="s4">
+  <p class="kicker">04 · 方案设计</p>
+  <h2>事件驱动：推什么、挂在哪、前端怎么改</h2>
+
+  <h3>推什么（三类事件，全部小载荷）</h3>
+  <table>
+    <caption>表 2 · 事件契约</caption>
+    <thead><tr><th>事件</th><th>替代现在的什么</th><th>载荷</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>cmd</code></td>
+        <td>前端轮询 <code>/api/cmd/{id}</code></td>
+        <td class="n">{cmd_id, status, error, wait_ms, exec_ms, truth}</td>
+      </tr>
+      <tr>
+        <td><code>truth</code></td>
+        <td><code>_pullTruthAfterCmd</code> 反复拉全量</td>
+        <td class="n">{hashes:[...], truth:{hash:{kind}}}</td>
+      </tr>
+      <tr>
+        <td><code>ver</code></td>
+        <td>常规 <code>/api/state</code> 轮询的触发信号</td>
+        <td class="n">{ver}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="dim">
+    关键决策：<b>只推「信号」和「命令影响到的那几个种子的真值」，绝不推全量状态</b>。
+    3000 种子库一轮全量是 63 ms 的序列化 + 网络 + JSON.parse，频繁推会把主线程打满 ——
+    那正好是这个项目踩过的坑（搜索索引 500 次文件 API 阻塞主循环）。
+  </p>
+
+  <h3>挂在哪（后端）</h3>
+  <ul class="plain">
+    <li><b><code>WebUIRuntime.set_result()</code> / <code>flush_receipts()</code></b> → 推 <code>cmd</code>（含 truth）。这正是现在写回执的地方，改成"写完顺便推"即可。</li>
+    <li><b><code>WebUIRuntime._publish_locked()</code></b> → 推 <code>ver</code>。它是<b>唯一</b>的视图发布入口（web_runtime.py:439），主循环侧、持 <code>view_lock</code>，语义上就是"产生了一版新状态"。</li>
+    <li><b>主循环 → Web 线程必须非阻塞</b>：主循环只往一个线程安全队列 <code>put</code> 事件，由 SSE 的生成器（跑在 Web 线程）取出发送。主循环<b>绝不能</b>直接写 socket —— 这条是硬约束，否则大库下命令会被推送拖住。</li>
+  </ul>
+
+  <h3>前端怎么改</h3>
+  <ul class="plain">
+    <li><code>waitCmd</code> 从「退避轮询 <code>/api/cmd/{id}</code>」改为<b>订阅 <code>cmd</code> 事件</b>（保留轮询作为断线兜底）。直接省掉 0/150/300/500 ms 的粒度。</li>
+    <li>撤下判定保持「<b>依据真值</b>」，但真值来源从"拉全量"改为"<code>cmd</code>/<code>truth</code> 事件里的真值"。</li>
+    <li><code>refresh()</code> 的链式 <code>setTimeout</code> 改为由 <code>ver</code> 事件驱动；<b>保留一个放宽后的兜底轮询</b>（断线、重连、首帧仍需要）。</li>
+    <li>现有 <code>rid</code> 门控语义要跟着改：<code>pending_ver</code> 现在是"这一版还没被 <code>/api/state</code> 取走"，推送场景下应改为"这一版已推送/已消费"。</li>
+  </ul>
+
+<pre><code><span class="c">// 后端：Web 线程侧的 SSE 生成器（示意，非最终代码）</span>
+async def events(request):
+    q = runtime.subscribe()                 <span class="c"># 拿到一个订阅队列</span>
+    try:
+        while True:
+            ev = await q.get()              <span class="c"># 主循环只 put，不碰 socket</span>
+            yield {"event": ev.type, "data": json.dumps(ev.payload)}
+    finally:
+        runtime.unsubscribe(q)
+
+<span class="c">// 主循环侧：非阻塞地“喊一声”</span>
+self.web.notify("cmd", {"cmd_id": ..., "status": "ok", "truth": truth})</code></pre>
+</section>
+
+<!-- 05 -->
+<section id="s5">
+  <p class="kicker">05 · 通道选型</p>
+  <h2>SSE 优于 WebSocket</h2>
+  <table>
+    <caption>表 3 · 通道对比（按本项目现状）</caption>
+    <thead><tr><th>维度</th><th>SSE（<code>StreamingResponse</code>）</th><th>WebSocket</th></tr></thead>
+    <tbody>
+      <tr><td>新依赖</td><td class="n yes">无（FastAPI / Starlette 原生）</td><td class="n no">需要 <code>websockets</code>（<b>当前未安装，已实测</b>）</td></tr>
+      <tr><td>方向</td><td class="n">服务端 → 客户端（<b>正是本需求</b>）</td><td class="n">双向（用不上）</td></tr>
+      <tr><td>断线重连</td><td class="n yes"><code>EventSource</code> 自带重连</td><td class="n">需自己实现</td></tr>
+      <tr><td>鉴权</td><td class="n maybe">不能带 header → 需 query token / cookie</td><td class="n">握手时可带 header</td></tr>
+      <tr><td>与现有 HTTP 中间件</td><td class="n yes">同一套路由/中间件/鉴权</td><td class="n">需单独处理</td></tr>
+      <tr><td>单测</td><td class="n yes">ASGI test client 可直接读流</td><td class="n">需 WS 测试客户端</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="lbl">建议</span>
+    <b>选 SSE。</b>本需求是单向推送，SSE 零新依赖、自带重连、能复用现有鉴权与中间件，
+    单测也最好写。WebSocket 多出来的双向能力用不上，却要多装一个依赖并单独处理鉴权。
+    <br><br>
+    ⚠ 两个 SSE 的实际坑：<b>① 反代缓冲</b> —— 若前端经过 nginx 之类，需要关掉响应缓冲
+    （<code>X-Accel-Buffering: no</code>）；<b>② EventSource 不能带 Authorization 头</b> ——
+    需要走 query token 或 cookie；本机 <code>skip_local_verify</code> 场景无碍，远程部署要单独设计。
+  </div>
+</section>
+
+<!-- 06 -->
+<section id="s6">
+  <p class="kicker">06 · 收益估算</p>
+  <h2>改造前后，理论上的数</h2>
+  <table>
+    <caption>表 4 · 撤下耗时预估（按 E1 的两个分支分别给）</caption>
+    <thead><tr><th>场景</th><th>现在</th><th>E1 = 分支 A（快照滞后）</th><th>E1 = 分支 B（qB 内部慢）</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>单种子 · 暂停</b></td><td class="n">90 ms（仿真）/ 真机待测</td>
+        <td class="n yes"><b>~20~40 ms</b>（直查 + 推送）</td>
+        <td class="n">≈ qB 暂停翻转时间 + ~10 ms（待实测）</td>
+      </tr>
+      <tr>
+        <td><b>单种子 · 开始</b></td><td class="n no">3026 ms（真机实测）</td>
+        <td class="n yes"><b>~30~60 ms</b></td>
+        <td class="n no"><b>~1.4 s（下界，改不动）</b></td>
+      </tr>
+      <tr>
+        <td><b>整剧 / 多选（bulk）</b></td><td class="n no">2100 ms 且 <code>via=pull</code></td>
+        <td class="n yes">~目标数 × 直查 + 推送</td>
+        <td class="n maybe">≈ qB 翻转 + 少量推送开销</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <b>无论 E1 落在哪一分支，事件驱动都能省掉我们自己加的 1.5~2 s</b> —— 这是确定的收益。
+    差别只在「省完之后剩下多少」：分支 A 剩下几十毫秒，分支 B 剩下 qB 的 1.4 s。
+  </p>
+</section>
+
+<!-- 07 -->
+<section id="s7">
+  <p class="kicker">07 · 风险与对策</p>
+  <h2>改这个要小心什么</h2>
+  <ol class="findings">
+    <li>
+      <b>主循环绝不能被推送阻塞</b>
+      这是本项目的头号教训（搜索索引 500 次文件 API 曾把主循环占满，导致命令排队数秒）。
+      对策：主循环只 <code>put</code> 到有界队列；队列满则丢弃/合并（推送是加速手段，丢了只是退化成轮询，不是错误）。
+    </li>
+    <li>
+      <b>大库下的事件风暴</b>
+      <code>_publish_locked()</code> 每轮同步都会自增版本号；3000 种子库下这很频繁。
+      对策：<code>ver</code> 事件做合并窗口（~100~200 ms 内的多次只推一次），并且只推版本号不推数据。
+    </li>
+    <li>
+      <b>推送不能取代兜底</b>
+      断线、重连、首帧、qB 断连期间都必须还能工作。对策：保留 <code>/api/state</code> 轮询作为兜底
+      （间隔可放宽），SSE 断开时自动退回；恢复后拉一次全量对齐。
+    </li>
+    <li>
+      <b>rid / <code>pending_ver</code> 语义要改</b>
+      现在它是"这一版还没被 <code>/api/state</code> 取走"，用来做节拍对齐（防止主循环空转生产）。
+      推送场景下消费方变了，必须同步改，否则要么主循环被误判为"没人消费"而停摆，要么失去背压。
+    </li>
+    <li>
+      <b>「撤下依据真值」的判据会被放大</b>
+      一旦真值来得快，<code>_optimisticSettled</code> 的"真值 == 预测值"严格相等就会立刻变成瓶颈 ——
+      resume 的预测值只有 <code>downloading</code>/<code>seeding</code> 两种，而落地态有 6 种
+      （<code>checking*</code>→checking、<code>missingFiles</code>→error、<code>allocating/moving/unknown</code>→other
+      永远不等）。<b>这一条必须在同一批改动里解决</b>，否则真值越快、卡在判据上的比例越高。
+    </li>
+    <li>
+      <b>可测性</b>
+      浏览器端已验证 <b>agent-browser 可用</b>（0.27.0 / Chrome 153 / Windows），
+      可以做端到端冒烟；SSE 单测可用 ASGI test client 直接读流，不需要新工具。
+    </li>
+  </ol>
+</section>
+
+<!-- 08 -->
+<section id="s8">
+  <p class="kicker">08 · 分阶段</p>
+  <h2>建议的推进顺序</h2>
+  <ul class="plain">
+    <li><b>P0 · 做 E1（约半天，阻塞后续）</b> —— 判定 1362 ms 是快照滞后还是 qB 内部慢。
+      这一分支决定「10 ms」是不是一个可达目标，也决定 P1 要不要做。<b>先做这个，别先写代码。</b></li>
+    <li><b>P1 · 真值改直查（仅当 E1 = A）</b> —— 命令执行后对受影响的少数种子走
+      <code>torrents/info</code> 直查，绕过 sync 快照节奏。改动面小（<code>_affected_truth</code> 附近），收益最大。</li>
+    <li><b>P2 · 回执改推送</b> —— <code>set_result</code>/<code>flush_receipts</code> 处推 <code>cmd</code> 事件，
+      前端 <code>waitCmd</code> 改订阅。省掉回执轮询的 0/150/300/500 ms 粒度。</li>
+    <li><b>P3 · 视图版本改推送</b> —— <code>_publish_locked</code> 推 <code>ver</code>，前端轮询放宽为兜底。省掉 1.5/2/3 s。</li>
+    <li><b>P4 · 收尾</b> —— 删除过渡机制（<code>_pullTruthAfterCmd</code> 退避预算、
+      <code>RECEIPT_WAIT_CAP_MS</code> 扣留等），避免留下死字段；同步知识库与守阵测试。</li>
+    <li><b>贯穿 · 撤下判据</b> —— 「真值 == 预测值」改成分动作判据（pause 要求暂停态；
+      resume 只要求不再是暂停态），与 P1/P2 同期做，否则会成为新的瓶颈。</li>
+  </ul>
+</section>
+
+<!-- 09 -->
+<section id="s9">
+  <p class="kicker">09 · 未覆盖</p>
+  <h2>本报告没有回答的</h2>
+  <ul class="plain">
+    <li><b>E1 的答案</b> —— 这是刻意留下的前置未知，需要真机实验。</li>
+    <li><b>pause 的 qB 翻转时间</b> —— 没有真机的暂停日志，无法判断 pause 是否也有 1.4 s 量级的下界。</li>
+    <li><b>远程部署 / 反代下的 SSE</b> —— 只考虑了本机与直连；反向代理的缓冲与超时需另外设计。</li>
+    <li><b>多实例 / 多用户</b> —— 当前是单实例锁（<code>state.lock</code>），推送的订阅管理按单实例设计。</li>
+    <li><b>SSE 与 <code>skip_local_verify</code> 的交互</b> —— 远程开启鉴权后，EventSource 无法带 header，
+      需要 query token 或 cookie 方案，本报告只标注了风险没给设计。</li>
+  </ul>
+</section>
+
+<footer>
+  <div>auto&#8209;qb · 乐观 UI 撤下改为事件驱动 · 可行性报告 · 2026-09-20 21:31</div>
+  <div>docs/26-09-20-2131-optimistic-ui-event-driven-feasibility.html</div>
+</footer>
+
+</div>
+</body>
+</html>

@@ -7,9 +7,14 @@
  * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COMMANDS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
-/* 服务端扣住回执、等真值落地的上限(ms) —— 必须与后端 RECEIPT_WAIT_CAP_MS 一致。
- * 判"端到端"时要把它算进宽限, 否则每次 resume 都是一条假警报(详见 _markCmdPost 处的注释)。 */
-const TRUTH_HOLD_BUDGET_MS = 1200;
+/* 「值覆盖」的保持上限(ms) —— 必须与后端 TRUTH_PUSH_CAP_MS 一致(静态守阵钉住)。
+ *
+ * 2026-09-20 D2 定案后, 一次命令有**两个**时刻:
+ *   ① 回执到达(命令已执行)  -> **结束压暗**(撤下, 10~20ms 级)
+ *   ② 真值事件到达(已落地)  -> **结束值覆盖**(行上换成真值, 真机实测 ~1.25s)
+ * 本常数管的是 ② 的兜底: 超时还没等到真值就回滚, 不留假状态。
+ * ❗它不再进"端到端"宽限 —— 回执不再被扣住等真值, 端到端就是命令执行时间。 */
+const TRUTH_HOLD_MS = 8000;
 
 window.AQB_COMMANDS = {
   methods: {
@@ -49,7 +54,13 @@ window.AQB_COMMANDS = {
     _markCmdSettle() {
       const c = this.cmdStats;
       if (!c || c.settleMs != null || !c.t0) return;
-      if (Object.keys(this.pendingOps).length) return;
+      /* ❗判据是"**没有行还在压暗**", 不是"pendingOps 清空": D2 之后回执到了就结束压暗,
+       * 但值覆盖会继续保留到真值事件到达, 那时 pendingOps 仍非空。
+       * 撤下 = 用户不再看到"在飞"态, 就该在这一刻记账。 */
+      for (const _h of Object.keys(this.pendingOps)) {
+        const _op = this.pendingOps[_h];
+        if (_op && _op.grey !== false) return;
+      }
       c.settleMs = Math.round(performance.now() - c.t0);
       /* 阈值按目标数分档: 单目标/小批量 800ms; >100 目标 2500ms —— 整剧 800 个种子的**补丁本身**
        * 就要 ~160ms, 按单目标阈值报会变成常驻噪音, 而常驻的报警没人看。
@@ -66,8 +77,12 @@ window.AQB_COMMANDS = {
        *   其它  = 兜底回滚 / 失败回滚。
        * 看到 pull 且后端日志里没有「回执(补刷新后)已写」 ⇒ 服务端还是旧代码, 先重启进程。 */
       const budget = (c.targets || 0) > 100 ? 2500 : 800;
+      /* 撤下这行要能**单独定位**慢在哪一段: 只给"回执/撤下"两个总数, 遇到本地 85ms 这种
+       * 数字没法归因(执行明明只有 2.8ms)。故把服务端的 POST / 排队 / 执行三段都带上 ——
+       * 一条命令一行, 不算刷屏。 */
       const head = `[perf] 命令 ${c.cmdId || "-"}${c.action ? "(" + c.action + ")" : ""}:` +
-        ` 贴上 ${c.patchMs}ms / 回执 ${c.totalMs}ms / 撤下 ${c.settleMs}ms` +
+        ` 贴上 ${c.patchMs}ms / POST ${c.postMs}ms / 排队 ${c.waitMs}ms / 执行 ${c.execMs}ms` +
+        ` / 回执 ${c.totalMs}ms / 事件 ${c.eventMs}ms / 撤下 ${c.settleMs}ms` +
         ` via=${c.settleVia || "?"} (${c.targets || "?"} 个目标)`;
       if (c.settleMs > budget) console.warn(head + ` —— 撤下 >${budget}ms 属异常`);
       else console.log(head);
@@ -92,13 +107,41 @@ window.AQB_COMMANDS = {
       const start = Date.now();
       const firstMs = opts.firstMs || 0;
       const capMs = opts.capMs || 500;
+      /* P2 事件驱动: SSE 连着时回执由 `cmd` 事件**推**过来, 不必等轮询退避的粒度
+       * (0→150→300→500ms)—— 那段粒度本身就是撤下延迟的一部分。
+       * ❗与轮询**赛跑**而不是替换: SSE 不可用/断了就自动退回原路径, 语义不变。 */
+      const evP = this._awaitCmd(cmdId, timeoutMs);
+      const stop = { v: false };
+      const pollP = this._pollCmd(cmdId, timeoutMs, firstMs, capMs, start, stop);
+      const got = await Promise.race([evP, pollP]);
+      stop.v = true;  // 让落败的轮询路径尽快收摊(它下一次循环会退出)
+      this._cancelCmdWait(cmdId);
+      if (!got) {
+        return { ok: false, error: `执行等待超时(${Math.round(timeoutMs / 1000)}s), 结果以程序日志为准` };
+      }
+      return this._cmdRecToResult(got, start, cmdId);
+    },
+    /* 原轮询路径, 抽出来供 waitCmd 与事件路径赛跑(SSE 不可用时的兜底) */
+    async _pollCmd(cmdId, timeoutMs, firstMs, capMs, start, stop) {
       let delay = firstMs;
-      while (Date.now() - start < timeoutMs) {
+      while (!stop.v && Date.now() - start < timeoutMs) {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         try {
           const r = await this.api(`/api/cmd/${cmdId}`);
           if (r.status === "ok" || r.status === "error") {
-            if (typeof r.wait_ms === "number") {
+            return r;  // 埋点与结果转换统一在 _cmdRecToResult 做(事件路径与轮询路径共用)
+          }
+        } catch (e) {
+          if (e.auth) throw e;  // 401 由统一收口处理(回登录)
+          // 网络抖动: 继续轮询(服务恢复后回执仍可取到)
+        }
+        delay = delay === 0 ? 150 : Math.min(capMs, delay * 2);
+      }
+      return null;
+    },
+    /* 回执 -> {ok, truth|error}, 并落埋点/[perf](事件路径与轮询路径共用, 保证两边观感一致) */
+    _cmdRecToResult(r, start, cmdId) {
+      if (typeof r.wait_ms === "number") {
               // 合并而非替换: 点击侧的两段(_newCmdStats 写入)不能在这里被冲掉
               this.cmdStats = {
                 ...(this.cmdStats || {}),
@@ -112,35 +155,74 @@ window.AQB_COMMANDS = {
                * patchMs 大 = 补丁没做到"点击即变"(被同步工作或 POST 挡住); postMs 大 = 命令投递慢
                * (真机大库长 tick / GIL 争用); waitMs 大 = 命令没被及时消费(P0-1 唤醒退化);
                * totalMs 大 = 轮询曲线或网络慢。 */
-              const c = this.cmdStats;
-              /* ❗端到端的阈值要**加上等真值落地的宽限**(TRUTH_HOLD_BUDGET_MS): 服务端会扣住回执
-               * 最多这么久, 等 qB 把状态翻过来(见 WebUIRuntime.flush_receipts)—— 这段是**刻意**的,
-               * 不算异常。不加这段宽限, 每次 resume 都会打一条"端到端 544ms 属异常"的假警报,
-               * 而常驻的报警没人看(真机实测 2026-09-20: resume 端到端 544ms, 其中 284ms 是等真值)。
-               * 用户感知的那一半由 `撤下` 那条独立判据负责(>800ms 才报), 两边阈值不要混。 */
-              const e2eBudget = 400 + TRUTH_HOLD_BUDGET_MS;
+            const c = this.cmdStats;
+              /* ❗端到端阈值**不再**加"等真值"的宽限 —— D2 之后回执不再被扣住等真值,
+               * 它就是命令执行时间(真机实测 pause 端到端应远小于旧值 1259ms)。
+               * 真值那一段现在由 `撤下` 之后的"值覆盖"独立负责, 不混进端到端。 */
+              const e2eBudget = 400;
               if (c.waitMs > 100 || c.totalMs > e2eBudget || (c.postMs || 0) > 400 || (c.patchMs || 0) > 50) {
                 console.warn(
                   `[perf] 命令 ${cmdId}${c.action ? "(" + c.action + ")" : ""}: 补丁 ${c.patchMs}ms` +
                   ` / POST ${c.postMs}ms / 排队 ${c.waitMs}ms / 执行 ${c.execMs}ms` +
-                  ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>${e2eBudget}` +
-                  `属异常, 其中已含等真值落地的宽限 ${TRUTH_HOLD_BUDGET_MS}ms)`
+                  ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>${e2eBudget}属异常)`
                 );
               }
-            }
-            // `truth` = 回执里附带的真值({hash: {kind}}, 服务端在补刷新**之后**才写回执, 见
-            // mixins/web_commands.py 的 _defer_receipt)。带上它前端就不必再拉一次全量 /api/state。
-            return r.status === "ok"
-              ? { ok: true, truth: r.truth || null }
-              : { ok: false, error: r.error || "执行失败" };
-          }
-        } catch (e) {
-          if (e.auth) throw e;  // 401 由统一收口处理(回登录)
-          // 网络抖动: 继续轮询(服务恢复后回执仍可取到)
-        }
-        delay = delay === 0 ? 150 : Math.min(capMs, delay * 2);
       }
-      return { ok: false, error: `执行等待超时(${Math.round(timeoutMs / 1000)}s), 结果以程序日志为准` };
+      // `truth` = 回执里附带的真值({hash: {kind}})。带上它前端就不必再拉一次全量 /api/state。
+      return r.status === "ok"
+        ? { ok: true, truth: r.truth || null }
+        : { ok: false, error: r.error || "执行失败" };
+    },
+    /* ---------------- P2 事件驱动: 订阅式等回执 ----------------
+     * 由 app.js 的 EventSource(/api/events)收 `cmd` 事件后回调这里兑现。
+     * ❗挂在实例上而不是 data 里: Map 不需要响应式, 放进 data 只是白白付代理开销。 */
+    _cmdWaiters: null,
+    _awaitCmd(cmdId, timeoutMs) {
+      if (!this._cmdWaiters) this._cmdWaiters = new Map();
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          if (this._cmdWaiters) this._cmdWaiters.delete(cmdId);
+          resolve(null);  // 超时 -> 交给轮询路径
+        }, timeoutMs);
+        this._cmdWaiters.set(cmdId, (rec) => {
+          clearTimeout(timer);
+          resolve(rec);
+        });
+      });
+    },
+    _cancelCmdWait(cmdId) {
+      if (!this._cmdWaiters) return;
+      const w = this._cmdWaiters.get(cmdId);
+      if (w) { this._cmdWaiters.delete(cmdId); w(null); }
+    },
+    onCmdEvent(rec) {
+      /* 埋点: 记下"事件**到达浏览器**"这一刻。
+       * 用途是把回执耗时 split 成两半 —— 真机实测 68ms 里执行只占 2.8ms, 剩下 46ms
+       * 到底是"服务端推得慢"还是"浏览器主线程忙、回调排队", 只看 totalMs 分不出来:
+       *   事件 ≈ 25ms 而回执 68ms  => 事件早就到了, 是前端主线程被占(大库渲染/JSON 解析)
+       *   事件 ≈ 65ms 而回执 68ms  => 是服务端推送链路慢(生成器唤醒 / uvicorn 写 socket) */
+      if (this.cmdStats && this.cmdStats.t0 && this.cmdStats.eventMs == null) {
+        this.cmdStats.eventMs = Math.round(performance.now() - this.cmdStats.t0);
+      }
+      const w = this._cmdWaiters && this._cmdWaiters.get(rec && rec.cmd_id);
+      if (w) w(rec);
+    },
+    /* D2: 真值事件 —— 服务端确认"命令已生效"后推来(见 WebUIRuntime.flush_truths)。
+     * 到这里才算真正收工: 把真值落到行上, 并结束值覆盖。
+     * ❗服务端**只在真值已落地时才推**(未落地宁可不推), 所以这里可以放心采纳真值 ——
+     *   "不采纳命令前的旧值"这条红线由服务端保证, 前端不必再自己判。 */
+    onTruthEvent(rec) {
+      const truth = rec && rec.truth;
+      if (!truth) return;
+      for (const h of Object.keys(truth)) {
+        const t = truth[h];
+        if (!t || !t.kind) continue;
+        // 真值直接落到行上(不等下一轮 refresh), 然后结束该种子的值覆盖
+        this._forEachRow(h, (row) => { row.kind = t.kind; });
+        delete this.pendingOps[h];
+      }
+      if (this.cmdStats) this.cmdStats.settleVia = "push";
+      this._markCmdSettle();
     },
     /* ---------------- P0-3 乐观 UI: 点击即变 ----------------
      * 只对"结果可预测"的动作做乐观(白名单: pause/resume); 强制汇报/重新校验/添加种子这类
@@ -151,6 +233,10 @@ window.AQB_COMMANDS = {
     isPending(hash) {
       const op = this.pendingOps[hash];
       if (!op) return false;
+      /* D2: 回执一到(grey=false)就不再"在飞" —— 压暗到此结束(撤下)。
+       * 但**值覆盖还要继续**(op.hold), 直到真值事件到达; 否则下一轮 refresh 会把
+       * 命令**前**的旧值打回行上 ⇒ 弹回。这里只管压暗, 不要和值覆盖混在一起。 */
+      if (op.grey === false) return false;
       /* ❗超时**只判 false、不在这里 delete**: 模板每帧都会调 isPending, 在渲染函数里改响应式
        * 数据(回滚字段)有递归更新风险; 真正的回滚交给 _expirePending()(每轮 refresh 一次)。
        * 另注: 光 delete 不叫"回落真值" —— 见 _expirePending 的注释(issue 26-09-19-2141)。 */
@@ -167,7 +253,12 @@ window.AQB_COMMANDS = {
       const now = Date.now();
       for (const h of Object.keys(this.pendingOps)) {
         const op = this.pendingOps[h];
-        if (!op || now - op.ts <= 3000) continue;
+        if (!op) continue;
+        /* 两种期限: hold(已收到回执, 在等真值事件)用 TRUTH_HOLD_MS —— 压暗早就结束了,
+         * 值还盖着没有观感代价, 放宽容错; 非 hold(还没收到回执 / 未知)仍按 3s 回滚,
+         * 保住"失败/未知绝不留假状态"这条。 */
+        const cap = op.hold ? TRUTH_HOLD_MS : 3000;
+        if (now - op.ts <= cap) continue;
         this._forEachRow(h, (row) => Object.assign(row, op.prev));
         delete this.pendingOps[h];
       }
@@ -192,7 +283,8 @@ window.AQB_COMMANDS = {
           const prev = {};
           for (const k of Object.keys(patch)) prev[k] = row[k];
           Object.assign(row, patch);
-          this.pendingOps[h] = { patch, prev, ts: now, action };
+          // grey = 压暗(回执到即结束) / hold = 值覆盖保持到真值事件(防弹回)
+          this.pendingOps[h] = { patch, prev, ts: now, action, grey: true, hold: false };
         });
       }
       // 目标数供 settleMs 的 [perf] 阈值分档(见 _markCmdSettle)
@@ -203,12 +295,17 @@ window.AQB_COMMANDS = {
         const op = this.pendingOps[h];
         if (!op) continue;
         if (ok) {
-          /* 成功: 保留到服务端数据一致或 3s 超时(见 isPending)。
-           * ❗3s 兜底**从回执到达重算**, 不再从点击算起: 补丁已提前到 POST 之前, 若仍按点击
-           * 起算, 慢 POST(真机 2-4s)会把整个兜底窗口在命令刚完成时就烧光 ⇒ 立刻弹回陈旧真值、
-           * 再等下一轮轮询才对上(抖动比单纯慢更难看)。**无回执(hang)时不重置** —— 3s 后照旧
-           * 回落真值, "失败/未知绝不留永久假状态"这条不变。 */
+          /* D2 成功: **压暗立即结束**(撤下 —— 用户感知的那一半), 值覆盖转入 hold 继续保留
+           * 到真值事件到达(onTruthEvent)。qB 翻状态真机实测要 ~1.25s, 等它就没有"点击即变"了;
+           * 不弹回由 hold 保证(真值到达前一直盖住行上的值), 不靠等真值。
+           * ❗兜底期限**从回执到达重算**且放宽到 TRUTH_HOLD_MS: 压暗已结束, 晚释放没有观感
+           * 代价。**无回执(hang)时不会走到这里** —— 那种情况仍按 3s 回滚, "失败/未知绝不
+           * 留永久假状态"这条不变。 */
+          op.grey = false;
+          op.hold = true;
           op.ts = Date.now();
+          /* 诊断: 撤下这一步是"回执到达"促成的(真值随后由 truth 事件送到, 会再标 push) */
+          if (this.cmdStats) this.cmdStats.settleVia = "receipt";
           continue;
         }
         this._forEachRow(h, (row) => Object.assign(row, op.prev));  // 失败: 回滚
@@ -222,8 +319,10 @@ window.AQB_COMMANDS = {
        * pendingOps 唯一的出口是 3s 兜底 ⇒ 真值早就到了、行还半透明挂着, 用户看到的就是
        * "点了之后 2-4s 才恢复正常"。现在逐个比对**服务端真值快照** ⇒ 对齐就立即清掉。 */
       for (const h of Object.keys(this.pendingOps)) {
-        if (!this.isPending(h)) continue;  // 顺带清掉已超时的
+        /* ❗不再跳过"已结束压暗"的 op: hold 期间必须继续盖住行上的值, 否则轮询带回的
+         * 命令**前**旧值会把行打回去(弹回)。压暗只是视觉, 与值覆盖无关(见 isPending)。 */
         const op = this.pendingOps[h];
+        if (!op) { delete this.pendingOps[h]; continue; }
         if (this._optimisticSettled(h, op)) {
           // 真值已对齐: 不再贴补丁(贴上去也是同样的值, 但 is-pending 会一直挂着)
           delete this.pendingOps[h];
@@ -394,10 +493,9 @@ window.AQB_COMMANDS = {
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           // 回执已带真值 ⇒ 就地撤下(与库大小解耦); 没对上才补拉一次(旧服务端 / 取不到真值)
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
-            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
-            await this._pullTruthAfterCmd(hashes);
-          }
+          /* D2: 真值不再走"回执里带 + 拉全量补"。回执**不带 truth**(带上未落地的真值 =
+           * 让前端采纳命令前的旧值 ⇒ 弹回), 真值由 `truth` 事件推送(见 onTruthEvent)。
+           * 这里删掉的 1500ms 拉取预算, 真机实测是撤下 2947ms 中的 1688ms 大头。 */
           if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
           else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
         }
@@ -445,10 +543,9 @@ window.AQB_COMMANDS = {
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
-            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
-            await this._pullTruthAfterCmd(hashes);
-          }
+          /* D2: 真值不再走"回执里带 + 拉全量补"。回执**不带 truth**(带上未落地的真值 =
+           * 让前端采纳命令前的旧值 ⇒ 弹回), 真值由 `truth` 事件推送(见 onTruthEvent)。
+           * 这里删掉的 1500ms 拉取预算, 真机实测是撤下 2947ms 中的 1688ms 大头。 */
           const n = groupKeys.length + memberHashes.length;
           if (r.ok) this.toast(`已执行: ${label}(${n} 个目标)`, "ok", 2500);
           else this.toast(`${label}失败: ${r.error}`, "error", 8000);
@@ -506,10 +603,9 @@ window.AQB_COMMANDS = {
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
-            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
-            await this._pullTruthAfterCmd(hashes);
-          }
+          /* D2: 真值不再走"回执里带 + 拉全量补"。回执**不带 truth**(带上未落地的真值 =
+           * 让前端采纳命令前的旧值 ⇒ 弹回), 真值由 `truth` 事件推送(见 onTruthEvent)。
+           * 这里删掉的 1500ms 拉取预算, 真机实测是撤下 2947ms 中的 1688ms 大头。 */
           if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
           else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
         }

@@ -1845,12 +1845,15 @@ def _make_grouped_manager(td):
     files = [_fake_file("movie.mkv", 100)]
     client.files_map["HA"] = files
     client.files_map["HB"] = files
-    seed_store(
-        mgr, [
-            FakeTorrent(hash="HA", name="Show", save_path=r"R:\Downloads"),
-            FakeTorrent(hash="HB", name="Show", save_path=r"R:\Downloads"),
-        ]
-    )
+    tors = [
+        FakeTorrent(hash="HA", name="Show", save_path=r"R:\Downloads"),
+        FakeTorrent(hash="HB", name="Show", save_path=r"R:\Downloads"),
+    ]
+    # ❗**同时**灌进 FakeClient: 真值改走 `torrents/info` 直查(不再读同步快照),
+    #   直查查的是 qB 客户端里的种子 —— 只 seed store 的话桩里查不到, 与真机不符。
+    for t in tors:
+        client.torrents[t.hash] = t
+    seed_store(mgr, tors)
     mgr._assign_new_torrent("HA")
     mgr._assign_new_torrent("HB")
     return mgr, client, mgr.store.member_to_key["HA"]
@@ -2183,17 +2186,17 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[11] == ("remove_trackers", ("HA", ["https://c/announce"]))
         assert client.calls[12] == ("file_priority", ("HA", [0, 1], 6))
         assert client.calls[13] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
-        # 改种子状态的命令(RESYNC)回执**推迟到补刷新之后** —— 这是 2026-09-20 的修复:
-        # 原写法在补刷新**之前**就写 ok ⇒ 前端"拿到回执立刻 refresh"取到的一定是旧快照,
-        # 第一次拉取 100% 扑空 ⇒ 大库上就是"点了要 2 秒才恢复正常"(真机撤下实测 1998ms)。
-        assert "c1" not in mgr._web_results, "recheck 属 RESYNC 命令, drain 阶段不应就写回执"
-        # run() 在补刷新之后无条件落回执(幂等; 漏调会让前端 waitCmd 干等 40s)
-        mgr._flush_deferred_receipts()
-        assert mgr._flush_deferred_receipts() is None, "重复 flush 必须是安全的空操作"
+        # ❗D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
+        #   扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。回执只表示"命令已执行"。
+        assert mgr._web_results["c1"]["status"] == "ok", "回执必须立即发, 不再等真值落地"
+        # 回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回(红线)
+        assert "truth" not in mgr._web_results["c1"], "回执不得带真值(真值改由 truth 事件推送)"
+        # 真值登记为待推, 由 run() 无条件 flush(幂等; 漏调会让前端一直挂着乐观值)
+        assert "c1" in mgr.web.truth_pending, "RESYNC 命令应登记待推真值"
+        mgr._flush_truths()
+        assert mgr._flush_truths() is None, "重复 flush 必须是安全的空操作"
         # 全部命令回执 ok
         assert all(mgr._web_results[f"c{i}"]["status"] == "ok" for i in range(1, 14)), mgr._web_results
-        # 回执附带真值: 前端据此就地撤下乐观态, 不必再拉一次全量 /api/state
-        assert mgr._web_results["c1"].get("truth"), "RESYNC 命令的回执应带真值({hash: {kind}})"
         # 限速/保存路径写后快照同步(QbApi update_torrent_fields)
         rec = mgr.store.get("HA")
         assert rec.up_limit == 1024 and rec.dl_limit == 2048 and rec.save_path == "R:/Moved"
@@ -3863,88 +3866,113 @@ def _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0):
     return mgr, tor
 
 
-def test_receipt_waits_for_truth_to_land():
-    """回执必须**等真值落地**再发(2026-09-20 真机回归: resume 后弹回「已暂停」)
+def test_receipt_sent_immediately_truth_pushed_later():
+    """回执**立即**发(不带真值), 真值落地后单独推(2026-09-20 D2 定案)
 
-    现象: 点开始 → 乐观做种 0.x 秒 → 弹回「已暂停」 → 约 2 秒后才真正变做种。
-    根因: `torrents/resume` 返回 200 时 qB 可能**还没翻状态**, 补刷新读到的仍是命令**前**的
-    paused; 回执带着这个旧真值发出去, 前端一采纳就把行改回暂停 —— 显示**错误状态**,
-    比多灰一会儿严重得多。故服务端先等真值落地; 超时(RECEIPT_WAIT_CAP_MS)必须照发,
-    否则前端 waitCmd 会干等。
+    旧做法: 扣住回执等真值落地再发, 且把真值塞在回执里。
+    真机实测(23:15 暂停种子): qB 执行只要 2.7ms、补刷新 2.9ms, 但真值要等 **1258ms** 才在
+    qB 侧出现(走直查也一样)⇒ 扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。
+
+    新做法两步:
+      ① 回执立刻发 —— 只表示"命令已执行", **不带 truth**(带上未落地的真值 = 让前端采纳
+         命令前的旧值 ⇒ 弹回, 那条红线不能破); 前端据此结束压暗 ⇒ 撤下降到 10~20ms。
+      ② 真值继续直查, 落地了再推 `truth` 事件; **超时不推**(宁可让前端超时回滚)。
     """
     import time
 
-    from auto_qb.mixins.web_commands import RECEIPT_WAIT_CAP_MS
+    from auto_qb.mixins.web_commands import TRUTH_PUSH_CAP_MS
 
     mgr, tor = _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0)
     rt = mgr.web
     h = tor.hash
+    pushed = []
+    rt.notify = lambda etype, payload: (pushed.append((etype, payload)), 0)[1]
 
-    # ① 真值没落地(qB 还没翻) -> 不发回执
+    # ① 回执立即到账, 且**不带 truth**
     rt.defer_receipt("r1", "resume_torrent", {"hash": h}, {"wait_ms": 0.0, "exec_ms": 1.0})
-    rt.flush_receipts()
-    assert "r1" not in rt.results, "真值没落地就发回执 ⇒ 前端会采纳命令前的旧值(弹回已暂停)"
-    assert "r1" in rt.deferred_receipts
+    assert rt.results["r1"]["status"] == "ok", "回执必须立即发(不再扣住等真值)"
+    assert "truth" not in rt.results["r1"], "回执带未落地的真值 ⇒ 前端采纳旧值 ⇒ 弹回"
+    assert "r1" in rt.truth_pending, "真值应登记为待推"
 
-    # ② 真值落地 -> 发回执, 且真值是**落地后**的值
+    # ② 真值没落地 -> 不推
+    rt.flush_truths()
+    assert not [p for p in pushed if p[0] == "truth"], "真值未落地不得推送"
+
+    # ③ 真值落地 -> 推 `truth` 事件, 内容是落地后的值
     tor.state = "uploading"
-    rt.flush_receipts()
-    assert rt.results["r1"]["status"] == "ok"
-    assert rt.results["r1"]["truth"][h]["kind"] == "seeding", rt.results["r1"]
+    rt.flush_truths()
+    ev = [p for p in pushed if p[0] == "truth"]
+    assert len(ev) == 1, ev
+    assert ev[0][1]["truth"][h]["kind"] == "seeding", ev[0][1]
+    assert "r1" not in rt.truth_pending, "推完应出队"
 
-    # ③ 暂停命令同理: 真值还是 downloading 时不能发
+    # ④ 超时兜底: 真值始终不落地则**放弃推送**(不是推一个可能是旧值的真值)
     rt.defer_receipt("r2", "pause_torrent", {"hash": h}, {"wait_ms": 0.0, "exec_ms": 1.0})
-    rt.flush_receipts()
-    assert "r2" not in rt.results, "pause 的真值没落地也不得发回执"
-
-    # ④ 超时兜底: 真值始终不落地也必须照发(否则前端 waitCmd 干等 40s)
-    tor.state = "downloading"
-    rt.deferred_receipts["r2"]["ts"] = time.time() - (RECEIPT_WAIT_CAP_MS / 1000.0 + 1.0)
-    rt.flush_receipts()
-    assert rt.results["r2"]["status"] == "ok", "超过上限必须照发回执, 不能让前端干等"
+    assert rt.results["r2"]["status"] == "ok"
+    rt.truth_pending["r2"]["ts"] = time.time() - (TRUTH_PUSH_CAP_MS / 1000.0 + 1.0)
+    before = len([p for p in pushed if p[0] == "truth"])
+    rt.flush_truths()
+    assert len([p for p in pushed if p[0] == "truth"]) == before, "真值超时未落地必须**不推**"
 
 
-def test_truth_hold_budget_matches_backend():
-    """前端的"等真值落地宽限"必须与后端 RECEIPT_WAIT_CAP_MS 一致(否则判据漂移)
+def test_affected_truth_reads_qb_directly_not_sync_snapshot():
+    """真值必须**直查 qB**(torrents/info), 不得读 /sync/maindata 同步快照
 
-    后端会**刻意**扣住回执最多 RECEIPT_WAIT_CAP_MS(等 qB 把状态翻过来), 这段不是异常;
-    前端判"端到端"时必须把它算进宽限, 否则每次 resume 都是一条假警报 —— 而常驻的报警没人看。
-    两边各写各的常数, 改一处忘另一处是必然的, 故用静态守阵钉住。
+    定案背景(2026-09-20): 同步快照按 qB 的节奏刷新 —— 真机实测命令后要等 6 轮 / **1362ms**
+    才在快照上看到新状态(命令本身只要 8.4ms), 这个数与
+    `sync_interval = 1.5 # 与 qB 自带 WebUI(1500ms)同量级` 几乎重合 ⇒ 滞后来自快照刷新。
+    拿快照当"命令后的真值"就会读到命令**前**的旧值 —— 这正是"撤下要等 3s"的根源。
+
+    判据: 故意让**快照**与** qB 客户端**不一致, 真值必须等于客户端那一侧。
+    ❗这条守阵要能挡住"改回读 store.by_hash": 那样 truth 会变成 paused, 断言立刻红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        # qB 客户端(直查看到的是它): 已经在做种 —— 命令已生效
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="n", state="uploading", progress=1.0)
+        # 同步快照(store): 还停在命令**前**的暂停态(复刻快照滞后)
+        seed_store(mgr, [FakeTorrent(hash="H1", name="n", state="pausedDL", progress=1.0)])
+
+        truth = mgr.web._affected_truth("resume_torrent", {"hash": "H1"})
+        assert truth == {
+            "H1": {
+                "kind": "seeding"
+            }
+        }, (f"真值应取 qB 直查结果(seeding), 实际 {truth} —— "
+            "若这里是 paused 说明又去读同步快照了")
+        # 反证: 快照那一侧确实还是 paused —— 证明本用例有判别力, 不是恒真
+        assert mgr.store.by_hash["H1"].state == "pausedDL"
+
+
+def test_truth_hold_matches_truth_push_cap():
+    """前端"值覆盖"的保持上限必须与后端真值推送上限一致(否则判据漂移)
+
+    ❗本条**同时**修掉一个既有缺陷: 原 `test_truth_hold_budget_matches_backend` 在文件里
+      同名定义了两次, Python 后者覆盖前者 ⇒ 前一条**从未执行**(已入池 issue
+      26-09-20-2212)。现在合并成一条, 且断言改名后的新常数 —— 守阵失效时会直接红,
+      不会像之前那样"看着有守阵其实没跑"。
+
+    新契约(D2): 前端 TRUTH_HOLD_MS = 后端 TRUTH_PUSH_CAP_MS。
+      前端: 值覆盖最多保持这么久, 超时回滚(不留假状态);
+      后端: 真值最多等这么久, 超时放弃推送(不推可能未落地的真值)。
+      两边是同一段窗口的两端, 不一致就会出现"前端先回滚、真值后到"的错配。
     """
     import re
 
-    from auto_qb.mixins.web_commands import RECEIPT_WAIT_CAP_MS
+    from auto_qb.mixins.web_commands import TRUTH_PUSH_CAP_MS
 
     js = open(
         os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "web_ui", "static", "shared", "commands.js"),
         encoding="utf-8",
     ).read()
-    m = re.search(r"TRUTH_HOLD_BUDGET_MS\s*=\s*([\d.]+)", js)
-    assert m, "commands.js 里找不到 TRUTH_HOLD_BUDGET_MS —— 守阵失效(常数被改名?)"
-    assert float(m.group(1)
-                ) == float(RECEIPT_WAIT_CAP_MS
-                          ), (f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
-                              "两边必须一致, 否则端到端判据要么假警报要么漏报")
-
-
-def test_truth_hold_budget_matches_backend():
-    """前端的"等真值落地宽限"必须与后端 RECEIPT_WAIT_CAP_MS 一致(否则判据漂移)
-
-    后端会**刻意**扣住回执最多 RECEIPT_WAIT_CAP_MS(等 qB 把状态翻过来), 这段不是异常;
-    前端判"端到端"时必须把它算进宽限, 否则每次 resume 都是一条假警报 —— 而常驻的报警没人看。
-    两边各写各的常数, 改一处忘另一处是必然的, 故用静态守阵钉住。
-    """
-    import re
-
-    from auto_qb.mixins.web_commands import RECEIPT_WAIT_CAP_MS
-
-    js = open(
-        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "web_ui", "static", "shared", "commands.js"),
-        encoding="utf-8",
-    ).read()
-    m = re.search(r"TRUTH_HOLD_BUDGET_MS\s*=\s*([\d.]+)", js)
-    assert m, "commands.js 里找不到 TRUTH_HOLD_BUDGET_MS —— 守阵失效(常数被改名?)"
-    assert float(m.group(1)
-                ) == float(RECEIPT_WAIT_CAP_MS
-                          ), (f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
-                              "两边必须一致, 否则端到端判据要么假警报要么漏报")
+    m = re.search(r"TRUTH_HOLD_MS\s*=\s*([\d.]+)", js)
+    assert m, "commands.js 里找不到 TRUTH_HOLD_MS —— 守阵失效(常数被改名?)"
+    assert float(
+        m.group(1)
+    ) == float(TRUTH_PUSH_CAP_MS
+              ), (f"前端值覆盖保持 {m.group(1)}ms != 后端真值推送上限 {TRUTH_PUSH_CAP_MS}ms —— "
+                  "两边必须一致, 否则会出现'前端先回滚、真值后到'的错配")

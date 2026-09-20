@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>乐观 UI「撤下」修复只覆盖了一半入口 · auto-qb 调查报告</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1113;
+    --paper:#14171a;
+    --ink:#e7e9eb;
+    --ink-2:#b3bac1;
+    --ink-3:#7f878f;
+    --rule:rgba(255,255,255,.09);
+    --rule-2:rgba(255,255,255,.05);
+    --accent:#d8a15a;
+    --bad:#c85f4a;
+    --good:#6f9f7a;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas","Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.62;font-weight:400;letter-spacing:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 96px}
+
+  /* ---------- 页眉 ---------- */
+  header{padding:64px 0 0;border-bottom:1px solid var(--rule)}
+  .logotype{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:28px;
+  }
+  .logotype span{color:var(--accent)}
+  h1{
+    font-size:44px;line-height:1.12;letter-spacing:-.02em;font-weight:600;
+    margin:0 0 18px;max-width:22ch;
+  }
+  .lede{
+    font-size:17px;line-height:1.6;color:var(--ink-2);max-width:62ch;margin:0 0 30px;
+  }
+  .lede b{color:var(--ink);font-weight:550}
+  .meta{
+    display:flex;flex-wrap:wrap;gap:0 40px;padding:18px 0 22px;
+    border-top:1px solid var(--rule-2);margin-top:8px;
+  }
+  .meta div{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3)}
+  .meta div b{color:var(--ink-2);font-weight:400}
+
+  /* ---------- 目录 ---------- */
+  nav.toc{padding:34px 0 8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 32px}
+  nav.toc a{
+    display:flex;gap:12px;align-items:baseline;text-decoration:none;color:var(--ink-2);
+    font-size:13.5px;padding:5px 0;border-bottom:1px solid transparent;
+  }
+  nav.toc a:hover{color:var(--accent);border-bottom-color:var(--rule)}
+  nav.toc i{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--ink-3);letter-spacing:.08em}
+
+  /* ---------- 章节 ---------- */
+  section{padding:56px 0 0;border-top:1px solid var(--rule);margin-top:56px}
+  section:first-of-type{border-top:none}
+  .kicker{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 12px;
+  }
+  h2{font-size:26px;line-height:1.25;letter-spacing:-.01em;font-weight:600;margin:0 0 16px}
+  h3{font-size:16.5px;font-weight:550;margin:34px 0 10px;letter-spacing:.005em}
+  p{margin:0 0 14px;max-width:70ch}
+  p.tight{max-width:58ch}
+  .dim{color:var(--ink-3);font-size:13.5px}
+  code{
+    font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.05);
+    padding:1px 5px;border:1px solid var(--rule-2);
+  }
+  a{color:var(--accent)}
+
+  /* ---------- 结论带 ---------- */
+  .verdict{
+    margin:34px 0 0;border:1px solid var(--rule);background:var(--paper);
+    display:grid;grid-template-columns:1fr 1fr;
+  }
+  .verdict > div{padding:26px 30px}
+  .verdict > div + div{border-left:1px solid var(--rule)}
+  .verdict h4{
+    margin:0 0 14px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;font-weight:400;
+  }
+  .verdict .ok h4{color:var(--good)}
+  .verdict .bad h4{color:var(--bad)}
+  .verdict ul{margin:0;padding-left:18px}
+  .verdict li{margin:0 0 7px;font-size:14px;color:var(--ink-2)}
+  .verdict li b{color:var(--ink);font-weight:550}
+
+  /* ---------- 数据表 ---------- */
+  table{width:100%;border-collapse:collapse;margin:22px 0 8px;font-size:13.5px}
+  caption{
+    caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding-bottom:10px;
+  }
+  th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--rule-2);vertical-align:top}
+  thead th{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:400;border-bottom:1px solid var(--rule);padding-bottom:8px;
+  }
+  td.n{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  tbody tr:hover{background:rgba(255,255,255,.022)}
+  .yes{color:var(--good)}
+  .no{color:var(--bad);font-weight:550}
+
+  /* ---------- 代码块 ---------- */
+  pre{
+    margin:18px 0;border:1px solid var(--rule);background:var(--paper);
+    padding:18px 20px;overflow-x:auto;
+  }
+  pre code{
+    background:none;border:none;padding:0;font-size:12.5px;line-height:1.7;color:var(--ink-2);
+    display:block;white-space:pre;
+  }
+  pre code b{color:var(--ink);font-weight:550}
+  pre code .c{color:var(--ink-3)}
+
+  /* ---------- 提示块 ---------- */
+  .note{
+    margin:24px 0;padding:16px 20px;border:1px solid var(--rule);background:var(--paper);
+    font-size:13.5px;color:var(--ink-2);
+  }
+  .note b{color:var(--ink);font-weight:550}
+  .note .lbl{
+    display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;
+  }
+
+  /* ---------- 列表 ---------- */
+  ol.findings{margin:20px 0 0;padding:0;list-style:none;counter-reset:f}
+  ol.findings > li{
+    counter-increment:f;position:relative;padding:0 0 0 46px;margin:0 0 26px;max-width:76ch;
+  }
+  ol.findings > li::before{
+    content:counter(f,decimal-leading-zero);position:absolute;left:0;top:2px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);
+  }
+  ol.findings > li > b{display:block;font-weight:550;font-size:15.5px;margin-bottom:6px}
+  ul.plain{margin:14px 0;padding-left:20px;max-width:72ch}
+  ul.plain li{margin:0 0 8px;color:var(--ink-2);font-size:14px}
+  ul.plain li b{color:var(--ink);font-weight:550}
+
+  footer{
+    margin-top:72px;padding-top:22px;border-top:1px solid var(--rule);
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3);
+    display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  }
+
+  @media (max-width:820px){
+    .wrap{padding:0 22px 64px}
+    h1{font-size:32px}
+    .verdict{grid-template-columns:1fr}
+    .verdict > div + div{border-left:none;border-top:1px solid var(--rule)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logotype">auto&#8209;qb <span>/</span> 缺陷调查 <span>/</span> 乐观 UI</div>
+  <h1>乐观 UI 的「撤下」修复只覆盖了一半入口</h1>
+  <p class="lede">
+    上一笔 <code>4df80dc</code> 把「回执改到补刷新之后写、并带上真值」落到了 <b>pause_torrent / resume_torrent /
+    pause_group / resume_group</b> 四条命令上。而 <b>bulk_torrents</b> 因为被列在
+    <code>DEFERRED_RECEIPT_COMMANDS</code> 里、回执由 handler 自己在补刷新<b>之前</b>立即写，
+    整条新链路被完整绕过 —— 它带的三类入口恰好是目标数最多的那三类：<b>多选批量、整集、整剧</b>。
+    更麻烦的是它连 <code>wait_ms</code> / <code>exec_ms</code> 都没有，导致 <code>[perf]</code>
+    一行都不打：这一半的问题在控制台里是<b>静默</b>的。
+  </p>
+  <div class="meta">
+    <div><b>调查日期</b> 2026-09-20 18:06</div>
+    <div><b>方法</b> 代码走查 + 命令级探针 + HTTP 层 A/B + 真浏览器实测</div>
+    <div><b>浏览器</b> agent-browser 0.27.0 / Chrome 153 headless</div>
+    <div><b>基线提交</b> 4df80dc（origin/develop）</div>
+  </div>
+
+  <nav class="toc">
+    <a href="#s0"><i>00</i> 真机实证（最硬的一条）</a>
+    <a href="#s1"><i>01</i> 结论</a>
+    <a href="#s2"><i>02</i> 入口 × 后端路径矩阵</a>
+    <a href="#s3"><i>03</i> 证据一：命令级探针</a>
+    <a href="#s4"><i>04</i> 证据二：HTTP 层 A/B</a>
+    <a href="#s5"><i>05</i> 证据三：浏览器实测</a>
+    <a href="#s6"><i>06</i> 证据四：为什么本地全绿</a>
+    <a href="#s7"><i>07</i> 次级发现</a>
+    <a href="#s8"><i>08</i> 已排除的假设</a>
+    <a href="#s9"><i>09</i> 修法方向</a>
+    <a href="#s10"><i>10</i> 未覆盖 / 待确认</a>
+    <a href="#s11"><i>11</i> 已修复与验证</a>
+  </nav>
+</header>
+
+<!-- ============ 00 ============ -->
+<section id="s0">
+  <p class="kicker">00 · 真机实证（2026-09-20 20:32）</p>
+  <h2>一条真机命令，把「一半」的分界改了</h2>
+  <p class="tight">
+    这段日志是本次调查最硬的一条证据：它打的是<b>「修好的那一半」的端点</b>（种子页右键 →
+    <code>/api/torrents/{hash}/resume</code>，回执确实带了真值），但观感仍然是「点了灰 3 秒」。
+  </p>
+<pre><code>20:32:48,631  WEB UI | 开始种子 11e127cf
+20:32:48,631  [cmd] resume_torrent: <b>排队 0.0ms / 执行 0.0ms</b>
+20:32:48,711  [cmd] 回执(补刷新后)已写 0 条, 带真值 0 个种子(<b>另 1 条等真值落地, 上限 1200ms</b>)
+20:32:48,711  [cmd] 命令后补刷新 <b>74.9ms</b>
+              <span class="c">… 同一行重复 5 次（约 215ms 一轮，都在等真值落地）</span>
+20:32:49,993  [cmd] 回执(补刷新后)已写 1 条, 带真值 1 个种子
+[perf] 命令 20d2f514f73a13d6(resume): 贴上 0ms / 回执 1540ms / <b>撤下 3026ms via=pull</b> (1 个目标)
+                                     —— 撤下 &gt;800ms 属异常</code></pre>
+
+  <h3>三个读数</h3>
+  <ol class="findings">
+    <li>
+      <b>后端三段都很快</b>
+      排队 0.0 / 执行 0.0 / 补刷新 74.9 ms —— 后端不是瓶颈，这轮不用再查主循环排队。
+    </li>
+    <li>
+      <b>真值落地用了 1362 ms，超过 1200 ms 上限</b>
+      48.631 → 49.993，共 6 轮「等真值落地」（<code>TRUTH_RETRY_S=0.2s</code> 的补刷新节奏，
+      实测约 215 ms/轮）。<b>1362 &gt; 1200</b> ⇒ 回执是踩着 <code>RECEIPT_WAIT_CAP_MS</code>
+      <b>超时照发</b>的，它带的真值<b>不保证已经落地</b>。
+    </li>
+    <li>
+      <b>前端 <code>via=pull</code>：撤下 3026 − 回执 1540 = 1486 ms ≈ 拉取预算 1500 ms</b>
+      <code>_settleFromTruth()</code> 没匹配上 ⇒ 退化成 <code>_pullTruthAfterCmd()</code> 反复拉全量
+      <code>/api/state</code>，几乎<b>把 1500 ms 预算走满</b>才收敛。
+      只差 14 ms —— 库再大一点（单轮刷新更慢）就会打满预算 ⇒ 落到 3 s 兜底 ⇒ <b>回滚弹回</b>。
+      表 5 那条「断崖」就在这条线的旁边。
+    </li>
+  </ol>
+
+  <div class="note">
+    <span class="lbl">这条日志把结论改了</span>
+    「一半」的分界<b>不在端点</b>，而在两个条件：<br>
+    <b>① 真值在 <code>RECEIPT_WAIT_CAP_MS</code> 内落地</b>　<b>② 落地后的真值符合该动作的撤下判据</b><br>
+    两个条件<b>任一</b>不满足 ⇒ <code>via=pull</code> ⇒ 额外约 1.5 s 拉取，撤下推到约 3 s。
+  </div>
+  <div class="note">
+    <span class="lbl">⚠ 一个我差点写错的推论（用户纠正后补测）</span>
+    我一度据此推出「<b>暂停已经好了、开始还没好</b>」—— 理由是 pause 的预测值恒为
+    <code>paused</code>、qB 暂停又几乎立刻生效。<b>这个推论只在仿真里成立，真机不成立</b>：<br><br>
+    上面那 1362 ms 大概率不是 resume 特有的，而是 <b>qB 状态传播到 <code>/sync/maindata</code> 的固有延迟</b>
+    （日志形态很典型：HTTP 立刻返回 200、执行 0.0 ms，但状态要过 6 轮才在同步里出现）。
+    这个延迟<b>对 pause 一样存在</b> ⇒ 旧上限 1200 ms 对暂停同样不够用 ⇒ 暂停一样会踩到超时照发。<br><br>
+    <b>用 sim_qb 加 1.4 s 传播延迟补测（修复后的代码）</b>：
+    <table style="margin:12px 0 4px">
+      <thead><tr><th>操作</th><th>行的状态时间线</th><th>[perf]</th></tr></thead>
+      <tbody>
+        <tr><td><b>暂停</b></td><td class="n">1ms s-seeding → 9ms s-paused+灰 → <b>1956ms s-paused</b></td><td class="n dim">未打印（轮询早于回执到达）</td></tr>
+        <tr><td><b>开始</b></td><td class="n">1ms s-paused → 7ms s-seeding+灰 → <b>1490ms s-seeding</b></td><td class="n">撤下 1484ms · <code>via=truth</code></td></tr>
+      </tbody>
+    </table>
+    两者<b>都不再弹回</b>，但耗时被 qB 的传播延迟（1.4 s）钉住 —— 这部分不是我们代码能省的。
+    所以真机上「暂停 / 开始都要 1.5~2 s」是<b>预期内</b>的，而您报的 2~4 s 应该是
+    「传播延迟 + 旧上限不够导致的额外拉取 + 兜底回滚」三层叠出来的。
+  </div>
+</section>
+
+<!-- ============ 01 ============ -->
+<section id="s1">
+  <p class="kicker">01 · 结论</p>
+  <h2>「一半」的边界画在 <code>bulk_torrents</code> 上</h2>
+  <p>
+    乐观 UI 有两条撤下路径：① 回执自带真值 → 前端就地撤下（<code>via=truth</code>，与库大小解耦）；
+    ② 回执没真值 → 前端退回 <code>_pullTruthAfterCmd()</code> 反复拉全量 <code>/api/state</code> 等真值落地
+    （<code>via=pull</code>，代价随库大小线性上升）。修复把六类用户入口里的<b>三类</b>搬到了 ①，
+    另外三类仍留在 ②。
+  </p>
+
+  <div class="verdict">
+    <div class="ok">
+      <h4>端点修好的一半 · 回执带真值</h4>
+      <ul>
+        <li><b>辅种页 · 整组右键</b> 暂停 / 开始</li>
+        <li><b>种子行右键</b> 暂停 / 开始</li>
+        <li><b>详情抽屉</b> 头部动作（复用单种子链路）</li>
+        <li>共 4 条后端命令：<code>pause/resume_torrent</code>、<code>pause/resume_group</code></li>
+        <li class="dim">⚠ 只是<b>端点</b>修好 —— 观感还要看 §00 的两个条件</li>
+      </ul>
+    </div>
+    <div class="bad">
+      <h4>没修的一半 · 恒为 via=pull</h4>
+      <ul>
+        <li><b>多选 · 批量按钮</b> 暂停 / 开始</li>
+        <li><b>追剧页 · 整集右键</b> 暂停 / 开始</li>
+        <li><b>追剧页 · 整剧右键</b> 暂停 / 开始</li>
+        <li>共 1 条后端命令：<code>bulk_torrents</code>（整剧动辄上百个目标）</li>
+        <li class="dim">回执连 <code>truth</code> 都没有，<b>无条件</b>退化到拉取路径</li>
+      </ul>
+    </div>
+  </div>
+
+  <p style="margin-top:20px">
+    <b>按端点划分只是第一层。</b>还有一条<b>贯穿两层</b>的判据（§00）：真值是否
+    <b>① 在 1200 ms 内落地</b> 且 <b>② 等于预测值</b>。两个条件任一不满足，哪怕是修好的端点也会
+    退化为 <code>via=pull</code>。真机实测 resume 两个都不满足 ⇒ 撤下 3026 ms。
+  </p>
+
+  <p style="margin-top:22px">
+    判定依据一行代码 —— <code>DEFERRED_RECEIPT_COMMANDS</code> 与 <code>RESYNC_COMMANDS</code> 的交集里，
+    只有 <code>bulk_torrents</code> 与 <code>add_torrents</code> 既「改种子状态」又「回执由 handler 自己写」，
+    因此永远进不了 <code>defer_receipt()</code>。
+  </p>
+<pre><code><span class="c">// src/auto_qb/mixins/web_commands.py:62</span>
+DEFERRED_RECEIPT_COMMANDS = frozenset({"reannounce_group", "reannounce_torrent",
+                                       <b>"bulk_torrents"</b>, "add_torrents"})
+
+<span class="c">// src/auto_qb/web_runtime.py:163-171  —— 进不了这个分支就永远没有 truth</span>
+if cmd_id and <b>not deferred</b>:
+    if cmd in RESYNC_COMMANDS:
+        self.<b>defer_receipt</b>(cmd_id, cmd, args, timing)   <span class="c"># ← bulk 走不到这里</span>
+    else:
+        self.set_result(cmd_id, "ok", timing=timing)</code></pre>
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="s2">
+  <p class="kicker">02 · 覆盖面</p>
+  <h2>入口 × 后端路径矩阵</h2>
+  <p class="tight">六个用户入口逐一追到后端命令与回执写法。后三行是缺口。</p>
+  <table>
+    <caption>表 1 · 前端入口 → 端点 → 后端命令 → 是否有真值</caption>
+    <thead>
+      <tr><th>用户入口</th><th>前端函数</th><th>端点</th><th>后端命令</th><th>defer_receipt</th><th>回执带真值</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>辅种页 · 整组右键 暂停/开始</td><td><code>act()</code></td>
+        <td><code>/api/groups/{key}/{action}</code></td><td><code>pause_group</code> / <code>resume_group</code></td>
+        <td class="n yes">是</td><td class="n yes">是</td>
+      </tr>
+      <tr>
+        <td>种子行右键 暂停/开始</td><td><code>actTorrent()</code></td>
+        <td><code>/api/torrents/{hash}/{action}</code></td><td><code>pause_torrent</code> / <code>resume_torrent</code></td>
+        <td class="n yes">是</td><td class="n yes">是</td>
+      </tr>
+      <tr>
+        <td>详情抽屉 · 头部动作</td><td><code>actTorrent()</code></td>
+        <td>同上</td><td>同上</td><td class="n yes">是</td><td class="n yes">是</td>
+      </tr>
+      <tr>
+        <td><b>多选 · 批量按钮</b></td><td><code>bulkAct()</code></td>
+        <td><code>/api/torrents/bulk</code></td><td><code>bulk_torrents</code></td>
+        <td class="n no">否</td><td class="n no">否</td>
+      </tr>
+      <tr>
+        <td><b>追剧页 · 整集右键</b></td><td><code>actEpisode()</code></td>
+        <td><code>/api/torrents/bulk</code></td><td><code>bulk_torrents</code></td>
+        <td class="n no">否</td><td class="n no">否</td>
+      </tr>
+      <tr>
+        <td><b>追剧页 · 整剧右键</b></td><td><code>actEpisode()</code></td>
+        <td><code>/api/torrents/bulk</code></td><td><code>bulk_torrents</code></td>
+        <td class="n no">否</td><td class="n no">否</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="dim">
+    前端三条 <code>bulk</code> 调用点：<code>commands.js:441</code>（多选）、<code>shows.js:103</code>（整集/整剧）、
+    <code>delete_flow.js:130</code>（删除，本就不做乐观，不受影响）。
+  </p>
+
+  <div class="note">
+    <span class="lbl">关于「种子页右键」的归属（易误判，单列）</span>
+    种子页（平铺视图）的行右键绑定是 <code>@contextmenu.prevent="openMemberMenu($event, m)"</code>
+    （atlas:530 / prism:556，两 UI 一致）⇒ <code>menu.hash</code> ⇒ <code>actTorrent()</code> ⇒
+    <code>POST /api/torrents/{hash}/{action}</code> —— <b>落在修好的那一半</b>。
+    实测旁证：种子页右键「暂停该种子」打出的是
+    <code>[perf] … 撤下 1503ms via=truth</code>，而 <code>via=truth</code> 只有拿到真值的端点才可能
+    出现（bulk 回执既无 <code>truth</code> 也无 <code>wait_ms</code>，一行都打不出来）。<br><br>
+    ⚠ 但「端点修好了」≠「观感修好了」：<b>§00 的真机日志就是反例</b> —— 同一条路径
+    （种子页右键「开始」）实测 <code>via=pull</code>、撤下 3026 ms。
+    端点只保证「回执带真值」，不保证「真值来得及落地且等于预测值」。
+  </div>
+</section>
+
+<!-- ============ 03 ============ -->
+<section id="s3">
+  <p class="kicker">03 · 证据一</p>
+  <h2>命令级探针：逐条命令走真实回执链路</h2>
+  <p class="tight">
+    直接构造真实 <code>QbManager</code>，把命令投进队列，跑真实的 <code>consume_commands()</code> +
+    <code>flush_receipts()</code>，看回执里到底有没有 <code>truth</code>。
+  </p>
+  <table>
+    <caption>表 2 · 命令级探针（合成数据，3 个种子 / 1 个组）</caption>
+    <thead>
+      <tr><th>命令</th><th>经 defer_receipt</th><th>回执</th><th>truth 内容</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>pause_torrent</code></td><td class="n yes">是</td><td class="n">ok</td><td class="n">1 个种子 · kind=paused</td></tr>
+      <tr><td><code>resume_torrent</code></td><td class="n yes">是</td><td class="n">扣住未发<span class="dim">（真值未落地，符合设计）</span></td><td class="n">—</td></tr>
+      <tr><td><code>pause_group</code></td><td class="n yes">是</td><td class="n">ok</td><td class="n">3 个种子 · kind=paused</td></tr>
+      <tr><td><code>resume_group</code></td><td class="n yes">是</td><td class="n">扣住未发</td><td class="n">—</td></tr>
+      <tr><td><b><code>bulk_torrents</code></b>（hashes 模式）</td><td class="n no">否</td><td class="n">ok（立即写）</td><td class="n no">无</td></tr>
+      <tr><td><b><code>bulk_torrents</code></b>（keys 组键模式）</td><td class="n no">否</td><td class="n">ok（立即写）</td><td class="n no">无</td></tr>
+    </tbody>
+  </table>
+  <p>
+    注意 <code>resume_*</code> 那两行「扣住未发」<b>是正确行为</b> —— 正是 <code>4df80dc</code> 新加的
+    <code>_truth_landed()</code> 在起作用（真值没落地就不发回执）。反过来说：<b>bulk 因为压根没进这条链路，
+    连「等真值落地」这一步都没有</b>，回执在补刷新之前就发出去了。
+  </p>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="s4">
+  <p class="kicker">04 · 证据二</p>
+  <h2>HTTP 层 A/B：同一服务、同一时刻</h2>
+  <p class="tight">
+    起一个跑<b>真实主循环</b>的探针服务（真实 <code>create_app</code> + 真实回执链路，
+    pause/resume 真的翻种子状态），然后用 HTTP 打四类命令，比较回执内容。
+  </p>
+  <table>
+    <caption>表 3 · HTTP 层 A/B（真实主循环，88 个种子）</caption>
+    <thead>
+      <tr><th>请求</th><th>回执取回</th><th>wait_ms / exec_ms</th><th>带真值</th><th>前端撤下路径</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>① <code>POST /api/torrents/{h}/pause</code></td><td class="n">723 ms</td><td class="n">0.1 / 2.4</td>
+        <td class="n yes">是（1 个种子）</td><td class="n yes">via=truth</td>
+      </tr>
+      <tr>
+        <td>② <b><code>POST /api/torrents/bulk</code></b> pause · 3 目标</td><td class="n">2 ms</td><td class="n no">无 / 无</td>
+        <td class="n no">否</td><td class="n no">via=pull</td>
+      </tr>
+      <tr>
+        <td>③ <b><code>POST /api/torrents/bulk</code></b> resume · 3 目标</td><td class="n">75 ms</td><td class="n no">无 / 无</td>
+        <td class="n no">否</td><td class="n no">via=pull</td>
+      </tr>
+      <tr>
+        <td>④ <code>POST /api/torrents/{h}/resume</code></td><td class="n">82 ms</td><td class="n">0.0 / 1.9</td>
+        <td class="n yes">是（kind=seeding）</td><td class="n yes">via=truth</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="lbl">顺带发现</span>
+    bulk 回执里 <b>连 <code>wait_ms</code> / <code>exec_ms</code> 都没有</b>。这不是小疏漏 ——
+    <code>waitCmd()</code> 只在 <code>typeof r.wait_ms === "number"</code> 时才写
+    <code>cmdStats.totalMs</code>，而 <code>_markCmdSettle()</code> 的第一句就是
+    <code>if (c.totalMs == null) return;</code> ⇒ <b>批量操作的 <code>[perf]</code> 永远不会打印</b>（下一节在浏览器里证实）。
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="s5">
+  <p class="kicker">05 · 证据三</p>
+  <h2>浏览器实测：一半有日志，一半没有</h2>
+  <p class="tight">
+    <code>agent-browser 0.27.0</code>（Chrome 153 headless，Windows x64）打开探针服务的星图 UI，
+    分别在<b>种子页</b>做单种子暂停、在<b>追剧页</b>做整剧暂停，抓控制台 <code>[perf]</code> 与
+    DOM 上 <code>.is-pending</code> 的挂起/消失时刻。
+  </p>
+  <table>
+    <caption>表 4 · 浏览器实测（同一浏览器会话、同一服务）</caption>
+    <thead>
+      <tr><th>操作</th><th>后端路径</th><th>贴上</th><th>撤下</th><th>控制台 [perf]</th><th>窗口内 /api/state</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>种子行右键 · 暂停该种子</td><td class="n">pause_torrent</td><td class="n">0 ms</td><td class="n">1503 ms</td>
+        <td class="n yes">有 · <code>via=truth</code></td><td class="n">3（正常轮询）</td>
+      </tr>
+      <tr>
+        <td><b>剧行右键 · 暂停整剧</b></td><td class="n">bulk_torrents</td><td class="n">7 ms</td><td class="n">1081 ms</td>
+        <td class="n no"><b>无（0 行）</b></td><td class="n">6（含补拉）</td>
+      </tr>
+    </tbody>
+  </table>
+
+<pre><code><span class="c"># 单种子：一行完整遥测，撤下只比回执晚 17ms</span>
+[perf] 命令 6221c4ca78a90a36(pause): 贴上 0ms / 回执 1486ms / 撤下 1503ms <b>via=truth</b> (1 个目标)
+
+<span class="c"># 整剧（bulk）：控制台为空 —— 慢也慢得没有声音</span>
+（无任何 [perf] 输出）</code></pre>
+
+  <div class="note">
+    <span class="lbl">读数口径</span>
+    探针服务的主循环节拍比真机慢，所以<b>回执 1486ms 这个绝对值不能直接当真机数字</b>。
+    可比的是「<b>撤下 − 回执</b>」这一段：修好的一半 <b>17 ms</b>（真值随回执回来，就地撤下）；
+    没修的一半 <b>≈ 1.0 s</b>（回执几十毫秒就到，剩下全部耗在反复拉全量等真值落地）。
+    真机基线（<code>4df80dc</code> 实测）：后端三段 排队 0 / 执行 8.4 / 补刷新 88.4 ms，
+    仿真端到端 暂停撤下 68~127 ms、开始撤下 60~63 ms，<code>via=truth</code>。
+  </div>
+
+  <h3>规模实测：3000 种子（sim_qb + 真子进程 + 真浏览器）</h3>
+  <p class="tight">
+    上面两组数字跑在 88 个种子的内存桩上，不能直接外推。这里换 sim_qb 起<b>真正的 3000 种子库</b>
+    重测两条路径（<code>status.torrents = 3000</code>；组 1813 / 单种子 851 / 剧 41）：
+  </p>
+  <table>
+    <caption>表 5 · 3000 种子库实测（sim_qb 环境，非真机）</caption>
+    <thead><tr><th>指标</th><th>修好的一半（单种子右键）</th><th>没修的一半（整剧右键 · bulk）</th></tr></thead>
+    <tbody>
+      <tr><td>乐观补丁贴上</td><td class="n">3 ms</td><td class="n">~398 ms <span class="dim">（整剧目标数大）</span></td></tr>
+      <tr><td>回执</td><td class="n">50 ms</td><td class="n">快（handler 立即写）</td></tr>
+      <tr><td><b>撤下</b></td><td class="n yes"><b>90 ms</b> · <code>via=truth</code></td><td class="n no"><b>~2100 ms</b> · <code>via=pull</code></td></tr>
+      <tr><td>控制台 <code>[perf]</code></td><td class="n yes">有</td><td class="n no"><b>无（0 行）</b></td></tr>
+      <tr><td>行保持半透明</td><td class="n">~57 ms</td><td class="n">~1.6 s</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <b>90 ms vs 2100 ms</b> —— 同一个 3000 种子库、同一套代码，差 <b>23 倍</b>。
+    而修好的那一半<b>与库大小解耦</b>（真值在回执里，撤下不再拉全量），所以库越大，两边差距越宽。
+  </p>
+  <div class="note">
+    <span class="lbl">顺带更正一个沿用已久的输入值</span>
+    项目里一直在用「3000 种子单轮 <code>/api/state</code> = 353 ms」，本次实测 <b>63 ms</b>
+    （5 次：64 / 60 / 61 / 62 / 70）—— 353 ms 是 <code>jsonable_encoder</code> 修复
+    （改走 <code>JSONResponse</code> 短路）<b>之前</b>的旧值，已严重偏高。
+    这意味着「1500 ms 拉取预算被打满」的风险比我原先推算的<b>低</b>（63 ms/轮够跑很多轮），
+    表 5 里那 2100 ms 主要耗在<b>等真值落地</b>，不是拉取轮次不够。
+  </div>
+  <p class="dim">
+    ⚠ 只测了 3000 这一档（每档要重启一次仿真环境）。整剧那 2100 ms 里还叠加了
+    <code>applyOptimistic</code> 的 O(目标数 × 数据集) 开销（已另立
+    <code>issue 26-09-20-1033</code>），与「bulk 缺真值」是两件事，修的时候会一起受益。
+  </p>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="s6">
+  <p class="kicker">06 · 证据四</p>
+  <h2>为什么本地 1058 单测 + 54 项冒烟全绿也测不到</h2>
+  <p>两道防线都绕开了这条链路，所以这个缺口不是「没测出」，而是「<b>压根没被测到</b>」。</p>
+
+  <h3>① 单测只覆盖了两条命令</h3>
+  <p class="tight">
+    <code>tests/test_web.py::test_receipt_waits_for_truth_to_land</code> 是 <code>4df80dc</code> 新增的守卫，
+    但它只 <code>defer_receipt("r1", "resume_torrent", …)</code> 与
+    <code>defer_receipt("r2", "pause_torrent", …)</code> —— 两条单种子命令。
+    <code>bulk_torrents</code> 一条都没进这个用例。
+  </p>
+
+  <h3>② 冒烟桩服务绕过了真实回执链路</h3>
+  <p class="tight">
+    <code>scripts/ui_harness.py</code> 的命令泵直接写 <code>mgr._web_results[cmd_id]</code>，
+    从不调用 <code>defer_receipt()</code> / <code>flush_receipts()</code>。
+    后果是<b>冒烟里所有命令的回执都没有 truth</b> —— 包括单种子和整组。
+    于是 54 项断言测的其实全是「pull 路径」，那个 247/248 ms 的"落回真值"通过线，
+    对本次缺口不具备任何判别力。
+  </p>
+<pre><code><span class="c">// scripts/ui_harness.py:225  —— 直接写结果表，绕过 defer_receipt / flush_receipts</span>
+mgr._web_results[cmd_id] = {"status": "ok", "wait_ms": …, "exec_ms": 1}</code></pre>
+</section>
+
+<!-- ============ 07 ============ -->
+<section id="s7">
+  <p class="kicker">07 · 次级发现</p>
+  <h2>三个连带问题</h2>
+  <ol class="findings">
+    <li>
+      <b>批量操作的遥测是静默的</b>
+      <code>_markCmdSettle()</code> 在 <code>cmdStats.totalMs == null</code> 时直接 return，
+      而 bulk 回执不带 <code>wait_ms</code> ⇒ <code>totalMs</code> 恒为 null ⇒ 一行 <code>[perf]</code> 都不打。
+      浏览器实测已证实。这意味着「批量操作慢」<b>既修不了也报不出来</b> —— 与当初
+      <code>issue 26-09-19-1939</code> 的教训（埋点没有消费者就是死字段）是同一类问题，只是这次连埋点都没写进去。
+    </li>
+    <li>
+      <b>回执仍在补刷新之前写</b>
+      <code>_cmd_bulk_torrents()</code> 在 <code>fn(self.api, known, delete_files)</code> 之后立刻
+      <code>_set_web_result(cmd_id, "ok")</code>，而补刷新（P0-5）要等本轮主循环稍后才跑。
+      前端拿到回执后第一次 <code>refresh()</code> <b>必然扑空</b>，只能靠 200/400 ms 退避重试。
+      这正是 <code>4df80dc</code> 在单种子/整组上修掉的那个时序，bulk 上原封不动。
+    </li>
+    <li>
+      <b>有弹回风险：1500 ms 预算 + 3 s 兜底回滚</b>
+      <code>_pullTruthAfterCmd()</code> 预算 1500 ms，退避 0 → 200 → 400 ms。大库单轮
+      <code>/api/state</code> 实测 143 ms（1000 种子）/ 353 ms（3000）/ ~550 ms（5000）——
+      按这个节奏，3000 种子库的预算只够跑满 2 轮（见表 5 推算）。
+      若真值在这个预算内没对上，<code>pendingOps</code> 会一直挂到 <code>_expirePending()</code>
+      的 3 s 兜底，而兜底是<b>回滚到 <code>op.prev</code>（操作前的值）</b>。
+      用户看到的就是「点了开始 → 乐观下载 → 3 秒后弹回已暂停 → 下一轮才变回来」，
+      与当初 <code>4df80dc</code> 要修的弹回是同一个观感，只是成因不同（这次不是采纳旧真值，是兜底回滚）。
+    </li>
+    <li>
+      <b>预测值只有 2 种，落地态有 6 种 —— 「开始」的弹回机制还在</b>
+      这条与 bulk 缺口<b>互相独立</b>，且对<b>所有页</b>（含种子页右键）都生效。
+      <code>_optimisticPatch("resume")</code> 只能猜两种：
+      <code>progress ≥ 1 ? seeding : downloading</code>。而服务端 <code>_state_kind()</code> 会归出六种：
+      <table style="margin:14px 0 6px">
+        <thead><tr><th>qB 落地态</th><th>kind</th><th>能匹配「开始」的预测值吗</th></tr></thead>
+        <tbody>
+          <tr><td class="n">downloading / stalledDL / queuedDL / forcedDL / metaDL</td><td class="n">downloading</td><td class="n yes">能</td></tr>
+          <tr><td class="n">uploading / stalledUP / queuedUP / forcedUP</td><td class="n">seeding</td><td class="n yes">能</td></tr>
+          <tr><td class="n"><b>checkingDL / checkingUP / checkingResumeData</b></td><td class="n">checking</td><td class="n no">不能</td></tr>
+          <tr><td class="n"><b>missingFiles</b></td><td class="n">error</td><td class="n no">不能</td></tr>
+          <tr><td class="n"><b>allocating / moving / unknown</b></td><td class="n">other</td><td class="n no">不能</td></tr>
+        </tbody>
+      </table>
+      落在后三行的任意一种，真值就<b>永远匹配不上</b>预测值 ⇒ <code>via=stale</code> ⇒
+      1500 ms 拉取预算打满 ⇒ 挂到 3 s 兜底 ⇒ <b>回滚到 <code>op.prev</code>（已暂停）</b> ⇒ 下一轮才显示真值。
+      qB 恢复种子时常常先跑一遍 resume-data 校验（<code>checkingResumeData</code>），
+      所以这不是边缘情况。<br>
+      <h3 style="margin-top:22px">已复现（sim_qb + 真 auto-qb 子进程 + 真浏览器）</h3>
+      <p class="tight">
+        用 <code>scripts/sim_qb.py</code> 起真 HTTP 仿真 qB，跑真 auto-qb 子进程，
+        agent-browser 上去点；<b>运行时</b>给 <code>SimQb.apply_write</code> 打补丁
+        （不改仓库源码），让 <code>torrents/resume</code> 落到 <code>checkingResumeData</code>。
+        同一个种子先「暂停」再「开始」，两次对比：
+      </p>
+      <table>
+        <caption>表 6 · 同一个种子、同一浏览器会话的 A/B（仿真环境）</caption>
+        <thead><tr><th>操作</th><th>行的状态时间线</th><th>[perf]</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>暂停该种子</b></td>
+            <td class="n">1ms s-seeding → 6ms s-paused+灰 → <b>20ms s-paused</b></td>
+            <td class="n yes">撤下 16ms · via=truth</td>
+          </tr>
+          <tr>
+            <td><b>开始该种子</b><br><span class="dim">（落地态被注入成 checkingResumeData）</span></td>
+            <td class="n">1ms s-paused → 5ms s-seeding+灰 → <b class="no">3382ms s-paused</b> ← 弹回</td>
+            <td class="n no">撤下 3379ms · via=pull</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <b>3382 ms 那一步就是「弹回已暂停」</b> —— 真值是 <code>checking</code>（已核对
+        <code>/api/state</code>），预测值是 <code>seeding</code>，永远匹配不上 ⇒
+        <code>via=pull</code> ⇒ 1500 ms 预算打满 ⇒ <code>_expirePending()</code> 的 3 s 兜底
+        <b>回滚到 <code>op.prev</code></b> ⇒ 行变回「已暂停」，要等下一轮轮询才显示真值。
+        <b>16 ms vs 3379 ms</b> —— 同一个种子、同一套代码，只差「暂停」和「开始」两个字。
+      </p>
+      <p class="dim">
+        复现脚本（临时，未入库）：<code>sim_probe.py</code> 起仿真端并打补丁 +
+        <code>scripts/sim_autoqb.py</code> 拉真子进程；仿真端工作根需先放哨兵
+        <code>.auto-qb-sim-root</code>，否则 <code>prepare_root</code> 的 B1 校验直接拒绝。
+      </p>
+      <span class="dim">反向不对称：<b>暂停</b>的预测值恒为 <code>paused</code>，而 pause 后 qB 几乎必然落到
+      pausedDL/pausedUP/stoppedDL ⇒ 稳。所以现象是「<b>暂停已经好了，开始还没好</b>」。</span>
+    </li>
+  </ol>
+</section>
+
+<!-- ============ 08 ============ -->
+<section id="s8">
+  <p class="kicker">08 · 已排除</p>
+  <h2>查过但排除的假设</h2>
+  <ul class="plain">
+    <li><b>「贴上」慢</b> —— 浏览器实测 <code>patchMs</code> 0~11 ms，
+      <code>4df80dc</code> 未回归。<code>a8eb6e8</code> 的修复仍有效。</li>
+    <li><b>整组 / 单种子撤下慢</b> —— <code>via=truth</code>，撤下 − 回执 = 17 ms，正常。</li>
+    <li><b>追剧页「按视图回传」导致真值快照为空</b> —— 查过 <code>VIEW_ARRAYS["show"]</code>
+      是 <code>("shows", "groups", "singles")</code>，<code>_snapshotTruth()</code> 扫的
+      <code>singles</code> / <code>groups</code> 都在里面，快照不会空。排除。</li>
+    <li><b>reannounce / delete / recheck 没接乐观</b> —— <code>_optimisticPatch()</code> 白名单只有
+      pause/resume，其余由「等待中」toast 承担，是设计如此，不是缺陷。</li>
+    <li><b class="no">（原列为已排除，经复核后撤销 —— 见 07 第 4 条）</b> resume 的预测值猜错。
+      初判「正常情况能匹配上、仅低频」是<b>错的</b>：<code>checkingDL</code> /
+      <code>checkingResumeData</code> / <code>missingFiles</code> 都是 resume 后的常见落地态，
+      而它们对应的 <code>kind</code> 与预测值<b>永远不可能相等</b>。</li>
+  </ul>
+</section>
+
+<!-- ============ 09 ============ -->
+<section id="s9">
+  <p class="kicker">09 · 修法方向</p>
+  <h2>建议（只给方向，本轮不改代码）</h2>
+  <ol class="findings">
+    <li>
+      <b>让 bulk 走同一条回执链路</b>
+      <code>_cmd_bulk_torrents()</code> 的成功分支不要再 <code>_set_web_result(cmd_id, "ok")</code>，
+      改为 <code>self.web.defer_receipt(cmd_id, "bulk_torrents", args, timing)</code>，
+      由 <code>flush_receipts()</code> 在补刷新之后统一写并附真值。
+      ⚠ 前置：<code>bulk_torrents</code> 现在在 <code>DEFERRED_RECEIPT_COMMANDS</code> 里，
+      而 <code>consume_commands()</code> 的判据是 <code>if cmd_id and not deferred</code> ——
+      必须先把 bulk 从该集合移除（或另立一个"延后但不自行写回执"的集合），否则改了也不生效。
+    </li>
+    <li>
+      <b>保留 bulk 的部分成功语义</b>
+      bulk 现在会在「有 hash 缺失 / 组不存在」时写 <b>error</b> 回执。改链路时要保证这条
+      error 路径<b>仍然立即写</b>（它不涉及真值，不能跟成功路径一起被扣住等补刷新）。
+    </li>
+    <li>
+      <b>补上 <code>wait_ms</code> / <code>exec_ms</code></b>
+      顺手让 bulk 回执带上 <code>timing</code>，<code>[perf]</code> 才能开口说话；
+      否则修完也还是没有回归判据。
+    </li>
+    <li>
+      <b>把 <code>RECEIPT_WAIT_CAP_MS</code> 抬到真机实测之上（或改成自适应）</b>
+      真机实测 resume 的真值落地耗时 <b>1362 ms &gt; 上限 1200 ms</b>（§00），
+      于是回执是<b>踩着超时照发</b>的 —— 服务端那段"等真值落地"白等了 6 轮，
+      最后还是把可能是旧值的真值发了出去。上限按 1200 ms 拍脑袋定的，真机不够用。
+      建议抬到 <b>2000 ms</b>（仍远小于前端 <code>waitCmd</code> 的 40 s 干等），
+      或按「上一轮补刷新耗时」自适应；同时把 <code>TRUTH_RETRY_S</code> 从 0.2 s 收紧到
+      ~0.1 s，让 6 轮 ~215 ms/轮的粒度变细。
+    </li>
+    <li>
+      <b>把「开始」的预测值从"猜种类"改成"退出暂停态即可"</b>
+      现判据要求真值<b>等于</b>预测值才撤下，对 resume 太苛刻。更贴切的语义是：
+      「只要真值<b>不再是 paused</b>，命令就生效了」—— 即撤下条件按动作分档，
+      pause 要求 <code>kind == "paused"</code>，resume 只要求 <code>kind != "paused"</code>
+      （checking / error / other 都算已生效，直接撤下并让真值显示出来）。
+      这样既不会采纳命令前的旧值（<code>4df80dc</code> 那条红线保住了），
+      也不会把「成功但落地态不是我猜的那种」误判成"还没落地"。
+    </li>
+    <li>
+      <b>补守卫测试</b>
+      把 <code>test_receipt_waits_for_truth_to_land</code> 扩到 <code>bulk_torrents</code>
+      （hashes 模式 + keys 模式），并加一条静态守阵钉住
+      「<code>RESYNC_COMMANDS</code> 与 <code>DEFERRED_RECEIPT_COMMANDS</code> 的交集必须为空」
+      —— 这类"某条命令悄悄滑出新机制"的回归，靠人肉 review 抓不住。
+    </li>
+    <li>
+      <b>修桩服务的保真度</b>
+      <code>scripts/ui_harness.py</code> 的命令泵改成走真实 <code>consume_commands()</code> +
+      <code>flush_receipts()</code>，否则浏览器冒烟永远只能测到 pull 路径，
+      下次再出同类缺口还是测不出来。
+    </li>
+  </ol>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="s10">
+  <p class="kicker">10 · 未覆盖</p>
+  <h2>待确认 / 本次没测到的</h2>
+  <ul class="plain">
+    <li><b>真机大库复测</b> —— 本次浏览器实测跑在 88 个种子的合成库上（探针服务的主循环会被
+      <code>connect()</code> 换掉 FakeClient，构造大库时踩了这个坑，未绕过）。
+      表 5 的规模曲线是<b>推算</b>，输入用了项目已有的实测单轮成本，但 3000+ 种子下 bulk 撤下的
+      绝对值、以及 1500 ms 预算会不会被打满触发 3 s 兜底弹回，<b>尚未实测</b> —— 是下一步最该补的一测。</li>
+    <li><b>整剧的真实规模</b> —— 探针数据里一「剧」只有 1 个成员，
+      真机上一剧上百集时 <code>applyOptimistic</code> 的 O(目标数 × 数据集) 开销会叠加进来
+      （该问题已另立 <code>issue 26-09-20-1033</code>，本轮未重开）。</li>
+    <li><b>只测了 3000 种子这一档</b> —— 1000 / 5000 档未测（每档要重启一次仿真环境）。
+      表 5 现在已是 sim_qb 实测值，但 1000/5000 的曲线仍缺。
+      另：整剧那 2100 ms 里混着 <code>applyOptimistic</code> 的 O(目标数 × 数据集) 开销
+      （<code>issue 26-09-20-1033</code>），本次没做拆分。</li>
+  </ul>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="s11">
+  <p class="kicker">11 · 已修复与验证（2026-09-20 20:50）</p>
+  <h2>改了三处，sim_qb 实测对比</h2>
+
+  <h3>改动清单</h3>
+  <ol class="findings">
+    <li>
+      <b>bulk 接进真值链路</b>（<code>mixins/web_commands.py</code> + <code>web_runtime.py</code>）
+      把「回执由 handler 自己写」的 <code>DEFERRED_RECEIPT_COMMANDS</code> 拆成两个语义清晰的集合：
+      <code>HANDLER_RECEIPT_COMMANDS</code>（reannounce / add，结果不依赖补刷新）
+      与 <code>CMD_ID_RECEIPT_COMMANDS</code>（= 前者 ∪ <code>bulk_torrents</code>，只决定要不要把
+      cmd_id 传给 handler）。
+      <code>_cmd_bulk_torrents</code> 的<b>成功</b>分支不再写 ok，交给 drain 侧
+      <code>defer_receipt</code>；<b>失败</b>（缺失计数 / 未知动作 / 空列表）仍由 handler 立即写 error
+      —— 这条不能动，它不依赖补刷新。
+    </li>
+    <li>
+      <b>撤下判据按动作分档</b>（<code>shared/commands.js</code>）
+      新增 <code>_truthMatches(op, t)</code> 并让 <code>_settleFromTruth</code> 与
+      <code>_optimisticSettled</code> <b>都</b>走它：pause 要求真值是暂停态，
+      <b>resume 只要求"不再是暂停态"</b>。不再要求真值等于预测值 —— 否则落地态是
+      checking / error / other 时永远撤不下。
+      <br><span class="dim">「不采纳命令前的旧值」这条红线没破：真值仍是 paused 时不撤下。</span>
+    </li>
+    <li>
+      <b>真值等待上限 1200 → 2000 ms</b>
+      真机实测 resume 的真值落地是 <b>1362 ms</b>，原上限不够用 ⇒ 回执踩着超时照发。
+      前端 <code>TRUTH_HOLD_BUDGET_MS</code> 同步抬高（两边有静态守阵钉住，不会漂移）。
+    </li>
+  </ol>
+
+  <h3>实测对比（sim_qb + 真 auto-qb 子进程 + 真浏览器，3000 种子）</h3>
+  <table>
+    <caption>表 7 · 修复前后对照</caption>
+    <thead><tr><th>场景</th><th>修复前</th><th>修复后</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>种子页右键「开始」</b><br><span class="dim">落地态 = checkingResumeData</span></td>
+        <td class="n no">撤下 3379 ms · <code>via=pull</code><br>3382 ms <b>弹回已暂停</b></td>
+        <td class="n yes">撤下 <b>74 ms</b> · <code>via=truth</code><br>1733 ms 自然显示「校验中」，<b>无弹回</b></td>
+      </tr>
+      <tr>
+        <td><b>追剧页「暂停整剧」</b>（448 目标）</td>
+        <td class="n no">撤下 ~2100 ms · <code>via=pull</code><br>控制台 <b>0 行</b> 遥测</td>
+        <td class="n yes">撤下 1902 ms · <b><code>via=truth</code></b><br>控制台 <b>有</b> <code>[perf]</code>（含 wait/exec 埋点）</td>
+      </tr>
+      <tr>
+        <td><b>种子页右键「暂停」</b></td>
+        <td class="n">撤下 90 ms · <code>via=truth</code><br><span class="dim">（仿真零延迟，见下方警告）</span></td>
+        <td class="n">仿真零延迟下不变；加 1.4 s 传播延迟后 1956 ms 落定、无弹回</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    整剧那一条绝对值只从 2100 → 1902 ms，看起来不多，但<b>性质变了</b>：撤下不再走"拉全量"
+    （<code>via=pull</code> → <code>via=truth</code>），因此<b>与库大小解耦</b>；遥测从 0 行恢复。
+    剩下的 1902 ms 里，411 ms 是 <code>applyOptimistic</code> 的 O(目标数 × 数据集)（另立
+    <code>issue 26-09-20-1033</code>），1399 ms 是等 448 个种子的真值全部落地 —— 后者是正确性代价，
+    不该省。
+  </p>
+  <div class="note">
+    <span class="lbl">⚠ 表 7 里 90 ms 那个数的适用范围（别拿它当真机结论）</span>
+    sim_qb 在收到 pause 的<b>瞬间</b>就把状态翻好，真值 0 延迟落地 —— 所以仿真里暂停必然是快的。
+    <b>真机的状态传播实测约 1.4 s</b>（§00），加上之后暂停也要 ~2 s（见 §00 的补测表）。
+    换句话说：<b>我没有真机的暂停数据</b>，「暂停正常」只是仿真零延迟下的结论。
+    <br><br>
+    <b>还需要一条真机的暂停日志</b>才能定死。请开 F12 点一次「暂停该种子」，看这两处：<br>
+    ① 服务端 <code>[cmd] 回执(补刷新后)已写 … (另 1 条等真值落地, 上限 2000ms)</code>
+    —— <b>重复了几轮</b>？还是直接就写了（= 真值立刻落地）？<br>
+    ② 前端 <code>[perf] … 撤下 __ms via=___</code> —— 是 <code>truth</code> 还是 <code>pull</code>？
+    <br><br>
+    另：等待期间行上的状态值<b>本来就是对的</b>（乐观值），只是被整行压暗了 ——
+    「看着没生效」有很大一部分来自这个压暗，而不是状态不对。把 <code>is-pending</code>
+    从「整行 opacity .55」改成不影响可读性的小标记，是待您拍板的另一个方向
+    （<code>想法.md</code> / 日志里已挂）。
+  </div>
+
+  <h3>测试</h3>
+  <ul class="plain">
+    <li>单测 <b>1062 → 1063 passed</b>：新增
+      <code>test_optimistic_commands_must_not_write_own_receipt</code> —— 钉死"做乐观 UI 的命令
+      一律不许在 handler 里自己写回执"，防止"某条命令悄悄滑出新机制"重演。</li>
+    <li>静态守阵扩了一条：<code>_settleFromTruth</code> 与 <code>_optimisticSettled</code>
+      <b>必须都</b>走 <code>_truthMatches</code>（少于 2 处即报错）—— 防止有人改回严格相等。</li>
+    <li>既有的 bulk 用例改为断言新契约：成功回执不得在补刷新之前写、必须走 defer_receipt、
+      flush 后带真值；<b>失败路径仍断言立即写</b>（那条不能退化）。</li>
+    <li>前端/后端两个真值宽限常数的一致性守阵自动通过了（两边一起改的）。</li>
+  </ul>
+</section>
+
+<footer>
+  <div>auto&#8209;qb · 乐观 UI 撤下缺口调查 · 2026-09-20 18:06<span style="opacity:.6">（§11 修复于 20:50）</span></div>
+  <div>docs/26-09-20-1806-optimistic-ui-half-fix-report.html</div>
+</footer>
+
+</div>
+</body>
+</html>

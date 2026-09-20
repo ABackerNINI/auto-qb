@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>真值改 torrents/info 直查 + 事件驱动 + 乐观 UI 简化 · auto-qb 计划</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f1113; --paper:#14171a;
+    --ink:#e7e9eb; --ink-2:#b3bac1; --ink-3:#7f878f;
+    --rule:rgba(255,255,255,.09); --rule-2:rgba(255,255,255,.05);
+    --accent:#d8a15a; --bad:#c85f4a; --good:#6f9f7a; --warn:#c9a24a;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas","Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px 96px}
+  header{padding:64px 0 0;border-bottom:1px solid var(--rule)}
+  .logotype{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+            color:var(--ink-3);margin-bottom:28px}
+  .logotype span{color:var(--accent)}
+  h1{font-size:42px;line-height:1.12;letter-spacing:-.02em;font-weight:600;margin:0 0 18px;max-width:26ch}
+  .lede{font-size:17px;line-height:1.6;color:var(--ink-2);max-width:66ch;margin:0 0 30px}
+  .lede b{color:var(--ink);font-weight:550}
+  .meta{display:flex;flex-wrap:wrap;gap:0 40px;padding:18px 0 22px;border-top:1px solid var(--rule-2);margin-top:8px}
+  .meta div{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3)}
+  .meta div b{color:var(--ink-2);font-weight:400}
+  nav.toc{padding:34px 0 8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 32px}
+  nav.toc a{display:flex;gap:12px;align-items:baseline;text-decoration:none;color:var(--ink-2);
+            font-size:13.5px;padding:5px 0;border-bottom:1px solid transparent}
+  nav.toc a:hover{color:var(--accent);border-bottom-color:var(--rule)}
+  nav.toc i{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--ink-3);letter-spacing:.08em}
+  section{padding:56px 0 0;border-top:1px solid var(--rule);margin-top:56px}
+  section:first-of-type{border-top:none}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--accent);margin:0 0 12px}
+  h2{font-size:26px;line-height:1.25;letter-spacing:-.01em;font-weight:600;margin:0 0 16px}
+  h3{font-size:16.5px;font-weight:550;margin:34px 0 10px}
+  p{margin:0 0 14px;max-width:72ch}
+  .dim{color:var(--ink-3);font-size:13.5px}
+  code{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.05);
+       padding:1px 5px;border:1px solid var(--rule-2)}
+  a{color:var(--accent)}
+  .directive{margin:30px 0 0;border:1px solid var(--rule);background:var(--paper)}
+  .directive > div{padding:22px 26px}
+  .directive > div + div{border-top:1px solid var(--rule)}
+  .directive h4{margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+                text-transform:uppercase;font-weight:400;color:var(--accent)}
+  .directive p{margin:0;font-size:14px;color:var(--ink-2);max-width:none}
+  .directive b{color:var(--ink);font-weight:550}
+  table{width:100%;border-collapse:collapse;margin:22px 0 8px;font-size:13.5px}
+  caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding-bottom:10px}
+  th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--rule-2);vertical-align:top}
+  thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--ink-3);font-weight:400;border-bottom:1px solid var(--rule);padding-bottom:8px}
+  td.n{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  tbody tr:hover{background:rgba(255,255,255,.022)}
+  .yes{color:var(--good)} .no{color:var(--bad);font-weight:550} .maybe{color:var(--warn)}
+  pre{margin:18px 0;border:1px solid var(--rule);background:var(--paper);padding:18px 20px;overflow-x:auto}
+  pre code{background:none;border:none;padding:0;font-size:12.5px;line-height:1.7;color:var(--ink-2);display:block}
+  pre code b{color:var(--ink);font-weight:550}
+  pre code .c{color:var(--ink-3)}
+  .note{margin:24px 0;padding:16px 20px;border:1px solid var(--rule);background:var(--paper);
+        font-size:13.5px;color:var(--ink-2);max-width:none}
+  .note b{color:var(--ink);font-weight:550}
+  .note .lbl{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+             text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+  ol.steps{margin:20px 0 0;padding:0;list-style:none;counter-reset:s}
+  ol.steps > li{counter-increment:s;position:relative;padding:0 0 0 52px;margin:0 0 26px;max-width:80ch}
+  ol.steps > li::before{content:"P" counter(s);position:absolute;left:0;top:2px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--accent)}
+  ol.steps > li > b{display:block;font-weight:550;font-size:15.5px;margin-bottom:6px}
+  ul.plain{margin:14px 0;padding-left:20px;max-width:76ch}
+  ul.plain li{margin:0 0 8px;color:var(--ink-2);font-size:14px}
+  ul.plain li b{color:var(--ink);font-weight:550}
+  ul.check{margin:14px 0;padding-left:22px;max-width:78ch}
+  ul.check li{margin:0 0 7px;color:var(--ink-2);font-size:14px;list-style:none;position:relative}
+  ul.check li::before{content:"×";position:absolute;left:-20px;color:var(--bad);font-family:var(--mono)}
+  ul.keep li::before{content:"✓";color:var(--good)}
+  footer{margin-top:72px;padding-top:22px;border-top:1px solid var(--rule);
+         font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3);
+         display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  @media (max-width:900px){ .wrap{padding:0 22px 64px} h1{font-size:31px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logotype">auto&#8209;qb <span>/</span> 实施计划 <span>/</span> 乐观 UI 与真值链路</div>
+  <h1>真值改 <code>torrents/info</code> 直查 + 事件驱动 + <b>乐观 UI 简化</b></h1>
+  <p class="lede">
+    目标态一句话：<b>界面显示的永远是 qB 的真值</b>，而且这个真值要快到<b>不需要任何预测</b>。
+    为此真值不再从 <code>/sync/maindata</code> 快照读（快照按 qB 节奏更新，实测滞后约 1.4 s），
+    改为命令后直查 <code>torrents/info</code>；传输不再靠轮询，改为事件推送；
+    <b>乐观 UI 保留，但把撤下那半边从 6 处机制简化成"等一个结果事件"</b>
+    （2026-09-20 22:12 修订：原方案是"≤10 ms 就整套移除"，改为保留 + 简化）。
+  </p>
+  <div class="meta">
+    <div><b>日期</b> 2026-09-20 21:39</div>
+    <div><b>基线</b> f734710（代码改动已全部撤销）</div>
+    <div><b>上游</b> <a href="../26-09-20-2131-optimistic-ui-event-driven-feasibility.html">可行性报告</a></div>
+    <div><b>状态</b> P1 已完成（1063 passed）；P2 待做；<b>P3 已改为"简化"，不再依赖 P0 门槛</b></div>
+    <div><b>修订</b> 22:12 乐观 UI 由"移除"改为"保留 + 简化"</div>
+  </div>
+
+  <nav class="toc">
+    <a href="#s0"><i>00</i> 三条硬指令</a>
+    <a href="#s1"><i>01</i> 判定门槛：先量，再决定删不删</a>
+    <a href="#s2"><i>02</i> 真值改直查</a>
+    <a href="#s3"><i>03</i> 事件驱动（承接可行性报告）</a>
+    <a href="#s4"><i>04</i> 简化乐观 UI：删什么留什么</a>
+    <a href="#s5"><i>05</i> 分阶段</a>
+    <a href="#s6"><i>06</i> 决策点</a>
+    <a href="#s7"><i>07</i> 风险</a>
+  </nav>
+</header>
+
+<!-- 00 -->
+<section id="s0">
+  <p class="kicker">00 · 目标态</p>
+  <h2>三条硬指令</h2>
+  <div class="directive">
+    <div>
+      <h4>① 真值来源</h4>
+      <p>
+        <b>不得从 <code>/sync/maindata</code> 读真值，改用 <code>torrents/info</code> 直查。</b>
+        依据：真机实测命令后「等真值落地」耗时 <b>1362 ms</b>，而配置注释写明
+        <code>sync_interval = 1.5 # 与 qB 自带 WebUI(1500ms)同量级</code> —— 两者几乎重合，
+        强烈提示<b>滞后来自 sync 快照的刷新节奏，而不是 qB 处理慢</b>。
+        <code>QbApi.torrents_info</code> 已存在（qbapi.py:306），无需新增依赖。
+      </p>
+    </div>
+    <div>
+      <h4>② 传输方式</h4>
+      <p>
+        <b>事件驱动（推送），不依赖轮询。</b>去掉回执轮询退避、
+        <code>_pullTruthAfterCmd</code> 的 1500 ms 拉取预算、常规 <code>/api/state</code> 轮询这三段
+        我们自己加的延迟（合计约 1.5~2 s）。通道选 <b>SSE</b>（FastAPI 原生、零新依赖、自带重连；
+        <code>websockets</code> 当前未安装）。
+      </p>
+    </div>
+    <div>
+      <h4>③ 乐观 UI 的去留（2026-09-20 22:12 修订）</h4>
+      <p>
+        <b>乐观 UI 保留，不取消</b> —— 但它当前这套模型<b>必须简化</b>：
+        现在的撤下链路有 6 处互相咬合的机制（真值快照 → 每轮比对 → 回执真值匹配 →
+        拉取退避预算 → 3 s 兜底回滚 → <code>via</code> 分档），任何一处判据写窄就出缺陷，
+        <b>近几轮追到的 bug 几乎全部来自这些机制本身，而不是来自"要不要乐观"。</b><br><br>
+        简化方向：<b>撤下只认「推送来的结果」一个事件</b> —— 成功就采纳真值、失败/超时就回滚，
+        中间的轮询比对与兜底分支<b>整体删掉</b>（详见 §04）。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- 01 -->
+<section id="s1">
+  <p class="kicker">01 · 判定门槛</p>
+  <h2>先量，再决定删不删</h2>
+  <p>
+    「反应速度」定义为<b>点击 → 界面显示 qB 真值</b>的端到端耗时。
+    只有这条数字落进门槛，才执行 §04 的删除。
+  </p>
+  <table>
+    <caption>表 1 · 端到端下界估算（按现有实测值推）</caption>
+    <thead><tr><th>段</th><th>数值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>命令唤醒 + 主循环 drain</td><td class="n">~0 ms</td><td><code>wake()</code> 已优化</td></tr>
+      <tr><td><b>qB 执行 pause/resume</b></td><td class="n no"><b>8.4 ms</b></td><td>真机实测，<b>这是硬下界</b></td></tr>
+      <tr><td><code>torrents/info</code> 直查往返</td><td class="n">? ms</td><td>本地 qB，单 hash 预计个位~十几 ms</td></tr>
+      <tr><td>SSE 推送</td><td class="n">~1 ms</td><td>本机回环</td></tr>
+      <tr><td>前端应用 + 渲染</td><td class="n">~5 ms</td><td>Vue 一行更新</td></tr>
+      <tr><td><b>合计（估）</b></td><td class="n maybe"><b>约 15~25 ms</b></td><td><b>10 ms 可能差一点</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="lbl">🔴 10 ms 门槛：真机实测后已判定不可达（2026-09-20 23:15）</span>
+    原先估的是「qB 单次调用 8.4ms + 直查 ≈ 10~15ms，可能差一点」。
+    <b>真机实测把这个估计彻底推翻了</b>：qB 执行只要 <b>2.7 ms</b>、补刷新 <b>2.9 ms</b>，
+    但<b>真值要等 ~1258 ms 才在 qB 侧出现</b>（走的是直查，不是快照）。<br><br>
+    所以「撤下依据真值」的下界是 <b>~1.25 s</b>，与 10 ms 差两个数量级 ——
+    <b>不是"差一点"，是根本不在同一尺度</b>。门槛问题因此<b>升级为架构决策（D2）</b>：
+    要么接受 ~1.25 s，要么让「撤下」不再等真值（回执即撤 + 真值后到再覆盖）。
+    <b>不要为了让数字好看去砍正确性。</b>
+  </div>
+  <h3>怎么量</h3>
+  <ul class="plain">
+    <li><b>真机</b>：F12 点一次暂停/开始，读 <code>[perf] … 贴上 / 回执 / 撤下</code> 三段 + 服务端 <code>[cmd]</code> 日志。</li>
+    <li><b>仿真</b>：sim_qb 目前是<b>瞬时翻转</b>的，测不出快照滞后 —— 必须先给它加一个模型：
+      <code>/sync/maindata</code> 按 1.5 s 节奏更新快照，<code>torrents/info</code> 实时返回。
+      这样本地就能复现并验证「直查 vs 快照」的差别。</li>
+    <li><b>直查耗时单独测</b>：对 1 / 10 / 448 个 hash 分别测一次 <code>torrents/info</code> 往返，
+      确认批量场景是否也进门槛（见 D3）。</li>
+  </ul>
+</section>
+
+<!-- 02 -->
+<section id="s2">
+  <p class="kicker">02 · 真值改直查</p>
+  <h2>命令后直接用 <code>torrents/info</code> 取真值</h2>
+  <h3>改动点</h3>
+  <ul class="plain">
+    <li><b><code>WebUIRuntime._affected_truth()</code></b>（web_runtime.py:367）—— 现在读
+      <code>host.store.by_hash</code>（sync 快照）。改为命令执行后<b>直查
+      <code>torrents/info</code></b>，只取受影响那几个 hash 的 <code>state</code>。</li>
+    <li><b>后端真值判定</b>：<code>_truth_landed()</code> 的语义随之改变 —— 不再是"等快照追上来"，
+      而是"qB 直查回来是什么就是什么"。若直查仍显示旧值，说明<b>qB 真的还没翻</b>，
+      那时才需要等一小会儿（但不应再等 1.4 s）。</li>
+    <li><b>回执里的 <code>truth</code></b>：来源从快照改为直查结果，语义不变（前端据此撤下）。</li>
+  </ul>
+  <h3>批量的坑（必须先测）</h3>
+  <div class="note">
+    <span class="lbl">⚠ 448 个目标时不要用 <code>hashes=</code> 拼 URL</span>
+    40 位 hash × 448 + 分隔符 ≈ <b>18 KB</b>，超过多数服务端/代理的 URL 长度限制，会被截断或 414。
+    可选做法：<b>①</b> 不带 <code>hashes</code> 拉一次全量后在本地过滤（单轮成本固定，大库约几十~百 ms）；
+    <b>②</b> 分批（每批 ~50）并发/串行查；
+    <b>③</b> 批量场景保留乐观 UI（见 D3）。<br><br>
+    <b>这直接决定"移除乐观 UI"能不能覆盖整剧/多选</b> —— 单种子几乎肯定可以，
+    整剧未必。建议把批量单独列为一个决策（D3）。
+  </div>
+<pre><code><span class="c">// 现在（读快照 —— 可能滞后 ~1.4s）</span>
+def _affected_truth(self, cmd, args):
+    for h in self._affected_hashes(cmd, args):
+        rec = self._host.store.by_hash.get(h)      <span class="c"># ← sync 快照</span>
+        truth[h] = {"kind": self._host._state_kind(rec)}
+
+<span class="c">// 目标（直查 —— qB 实时状态）</span>
+def _affected_truth(self, cmd, args):
+    hashes = self._affected_hashes(cmd, args)
+    if not hashes: return None
+    info = self._host.api.torrents_info(torrent_hashes=hashes)   <span class="c"># ← torrents/info</span>
+    ...</code></pre>
+</section>
+
+<!-- 03 -->
+<section id="s3">
+  <p class="kicker">03 · 事件驱动</p>
+  <h2>推送替代轮询（沿用可行性报告结论）</h2>
+  <table>
+    <caption>表 2 · 事件契约与挂点</caption>
+    <thead><tr><th>事件</th><th>替代现在的什么</th><th>挂点</th><th>载荷</th></tr></thead>
+    <tbody>
+      <tr><td><code>cmd</code></td><td>轮询 <code>/api/cmd/{id}</code></td>
+          <td class="n">set_result / flush_receipts</td><td class="n">{cmd_id, status, error, wait_ms, exec_ms, truth}</td></tr>
+      <tr><td><code>truth</code></td><td><code>_pullTruthAfterCmd</code> 拉全量</td>
+          <td class="n">直查拿到真值时</td><td class="n">{hashes:[…], truth:{hash:{kind}}}</td></tr>
+      <tr><td><code>ver</code></td><td>常规 <code>/api/state</code> 轮询</td>
+          <td class="n">_publish_locked（唯一发布入口）</td><td class="n">{ver}</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="lbl">硬约束</span>
+    <b>主循环只往有界队列 <code>put</code>，绝不直接写 socket。</b>
+    这是本项目的头号教训 —— 搜索索引单次 500 条文件 API 曾把主循环占满，导致命令排队数秒。
+    推送是加速手段，队列满了丢弃/合并即可（退化成轮询，不是错误）。
+  </div>
+</section>
+
+<!-- 04 -->
+<section id="s4">
+  <p class="kicker">04 · 简化乐观 UI（保留，不取消）</p>
+  <h2>把 6 处机制压成 1 个事件</h2>
+  <p>
+    <b>乐观 UI 保留</b>：点击即变这个体验要留着，大批量（整剧 448 目标）和 qB 慢/不可达时尤其需要。
+    要动的是它<b>撤下</b>那半边 —— 现在为了判断"能不能撤下"，前后接了 6 处互相咬合的机制：
+  </p>
+  <table>
+    <caption>表 3 · 现状：撤下链路上的 6 处机制（每处都能单独出错）</caption>
+    <thead><tr><th>#</th><th>机制</th><th>它负责什么</th><th>出过的 / 潜在的错</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="n"><code>_snapshotTruth</code></td><td>每轮刷新的服务端原始值快照</td><td>写在 <code>reapplyPending</code> 之后就恒真（原有守阵）</td></tr>
+      <tr><td class="n">2</td><td class="n"><code>_optimisticSettled</code></td><td>真值快照 vs 预测值比对</td><td><b>预测值 2 种 vs 落地态 6 种 ⇒ 永远不等 ⇒ 撤不下</b></td></tr>
+      <tr><td class="n">3</td><td class="n"><code>_settleFromTruth</code></td><td>用回执里的真值就地撤下</td><td>真值未落地时匹配不上，退化到拉取</td></tr>
+      <tr><td class="n">4</td><td class="n"><code>_pullTruthAfterCmd</code></td><td>退避拉全量直到对齐</td><td>1500 ms 预算被打满 ⇒ 慢</td></tr>
+      <tr><td class="n">5</td><td class="n"><code>_expirePending</code></td><td>3 s 兜底回滚</td><td><b>回滚到操作前的值 ⇒ 用户看到"弹回"</b></td></tr>
+      <tr><td class="n">6</td><td class="n"><code>via</code> 分档 / <code>settleMs</code></td><td>诊断与埋点</td><td>分档语义随机制变动，易失真</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <b>近几轮追到的 bug 几乎全部来自 2~5，而不是来自"要不要乐观"。</b>
+    所以不取消乐观 UI，而是把 2~5 <b>整体删掉</b>。
+  </p>
+
+  <h3>简化后的模型（只有两步）</h3>
+  <div class="directive">
+    <div>
+      <h4>贴上</h4>
+      <p><code>applyOptimistic</code> 照旧：按动作改预测值并压暗（<code>isPending</code> 保留）。
+         <b>这一步不变</b> —— 它简单、无分支、没出过问题。</p>
+    </div>
+    <div>
+      <h4>撤下</h4>
+      <p>只认<b>一个</b>输入：<b>推送来的命令结果</b>。
+         <code>ok</code> ⇒ 采纳随结果来的真值、结束压暗；
+         <code>error</code> ⇒ 回滚 <code>prev</code>；
+         <b>超时</b> ⇒ 回滚 <code>prev</code>（单一超时，不再有 3 s 兜底这种隐式分支）。<br>
+         <b>不再比对真值、不再拉全量、不再有条件回滚。</b></p>
+    </div>
+  </div>
+  <p style="margin-top:18px">
+    「不采纳命令前的旧值」这条红线怎么保：判据<b>上移到服务端</b> ——
+    真值现在来自 <code>torrents/info</code> 直查（P1 已完成），服务端能可靠判断"命令是否已生效"
+    （<code>_truth_landed</code>）；<b>未生效就不发 ok</b>，继续直查、生效了再推。
+    前端因此<b>不需要</b>再自己判"这个真值是不是旧的" —— 它拿到的必然是已生效的。
+  </p>
+
+  <h3>删除清单（前端 · <code>shared/commands.js</code> 为主）</h3>
+  <ul class="check">
+    <li><code>_snapshotTruth</code> / <code>_optimisticSettled</code> / <code>reapplyPending</code>
+        —— 每轮比对与重贴整套去掉</li>
+    <li><code>_settleFromTruth</code> —— 不再"判真值能不能撤下"，改为"收到结果即撤下"</li>
+    <li><code>_pullTruthAfterCmd</code> —— 1500 ms 拉取预算与退避去掉（真值由推送送）</li>
+    <li><code>_expirePending</code> 的 3 s 兜底 —— 改为<b>单一超时</b>（建议 8 s，见 D4）</li>
+    <li><code>settleVia</code> / <code>via</code> 分档 —— 或保留一个单一 <code>push</code> 标记，不再多档</li>
+    <li>后端「等真值落地再发回执」的<b>超时照发</b>分支 —— 改为"未生效就继续查"，不再有"发个可能旧的值"</li>
+    <li>静态守阵 <code>_scan_pending_settle</code> 里关于 <code>_optimisticSettled</code> 的条目</li>
+  </ul>
+
+  <h3>保留</h3>
+  <ul class="check keep">
+    <li><code>applyOptimistic</code> / <code>_optimisticPatch</code> / <code>resolveOptimistic</code> —— 乐观本体</li>
+    <li><code>isPending</code> / <code>isGroupPending</code> / <code>isEpPending</code> / <code>isShowPending</code>
+        与 CSS <code>.is-pending</code> —— "在飞"的视觉反馈</li>
+    <li><code>wait_ms</code> / <code>exec_ms</code> 服务端埋点与 <code>[cmd]</code> 日志</li>
+    <li><code>/api/state</code> 轮询 —— 作为<b>兜底</b>（首帧 / 断线 / SSE 不可用），间隔可放宽</li>
+    <li><code>RECEIPT_WAIT_CAP_MS</code> 的"上限"概念 —— 但语义从"超时照发"改为"超时判定为失败/未知"</li>
+  </ul>
+
+  <div class="note">
+    <span class="lbl">这一改的价值</span>
+    保留"点击即变"的体验，同时让"预测值 2 种 vs 落地态 6 种"、"1500 ms 预算打满"、
+    "3 s 兜底弹回"这三类缺陷<b>无处附着</b> —— 它们的载体（比对 / 预算 / 兜底）被删掉了。
+    同时前端从"每轮都要比一遍真值"变成"等一个事件"，<b>大库下的每帧开销也降了</b>。
+  </div>
+</section>
+
+<!-- 05 -->
+<section id="s5">
+  <p class="kicker">05 · 分阶段</p>
+  <h2>推进顺序</h2>
+  <ol class="steps">
+    <li>
+      <b>实测门槛（阻塞后续）</b>
+      真机量端到端；同时给 sim_qb 加「maindata 快照按 1.5 s 更新 / info 实时」模型，让本地可复现。
+      输出：反应速度数字 + 直查耗时（1 / 10 / 448 hash 三档）。<b>这一步没做完不要动代码。</b>
+    </li>
+    <li>
+      <b>真值改直查 ✅ 已完成（2026-09-20 21:55）</b>
+      <code>_affected_truth</code> 改走 <code>torrents/info</code>，带分批（<code>TRUTH_QUERY_CHUNK = 50</code>，
+      避免 448 个 hash ≈ 18 KB 的 URL 超限）；取不到<b>返回 None 而不回落快照</b>。
+      新增守阵 <code>test_affected_truth_reads_qb_directly_not_sync_snapshot</code>
+      （故意让快照与客户端不一致，真值必须等于客户端那一侧）。
+      单测 <b>1062 → 1063 passed</b>。<br>
+      <b>实测（sim_qb，零滞后）</b>：单种子暂停 撤下 <b>228 ms</b>（改前 90 ms）——
+      <b>在仿真里直查是纯开销</b>，因为它没有快照滞后可省。真机的收益要等 P0 实测确认。
+    </li>
+    <li>
+      <b>事件驱动 ✅ 已完成（2026-09-20 22:45）</b>
+      · 后端：<code>WebUIRuntime.subscribe/unsubscribe/notify</code>（有界队列 +
+        <code>put_nowait</code>，满则丢）+ <code>GET /api/events</code> SSE 端点。
+        推 <code>cmd</code>（<code>set_result</code> 处，带 <code>cmd_id</code>）与
+        <code>ver</code>（<code>_publish_locked</code> 处，只带版本号）。
+        <b>主循环只 put 队列，不碰 socket</b>；心跳 5s（必须 &lt; WEB_VIEW_TTL，否则自锁）。<br>
+      · 前端：<code>startEvents/stopEvents</code>（<code>startPolling</code> 里接、
+        <code>unmounted</code> 里断）；<code>waitCmd</code> 改为「推送与轮询<b>赛跑</b>」，
+        SSE 断了自动退回原轮询；<code>ver</code> 事件去抖 60ms 后触发一次 <code>refresh</code>。<br>
+      · 鉴权：<code>EventSource</code> 发不出 Authorization 头 ⇒ 服务端放行 <code>?token=</code> 兜底。<br>
+      <b>实测（sim_qb，独立 SSE 客户端，3 次）</b>：推送拿到回执 202/299/239 ms，
+        轮询 244/321/278 ms ⇒ <b>推送早 23~41 ms</b>（落点不同最多可省约 500 ms，
+        即原来 0→150→300→500 ms 的退避粒度）。单测 <b>1063 passed</b>。
+    </li>
+    <li>
+      <b>D2 已实施 ✅（2026-09-20 23:45）</b><br>
+        服务端：<code>defer_receipt</code> 改为<b>回执立即写</b>（<b>不带 truth</b>）+ 真值登记
+        <code>truth_pending</code>；<code>flush_receipts</code> → <code>flush_truths</code>
+        （直查 → 落地才推 <code>truth</code> 事件，<b>超时不推</b>）。
+        上限 <code>TRUTH_PUSH_CAP_MS = 8000</code>（原 RECEIPT_WAIT_CAP_MS 已废弃）。<br>
+        前端：<b>压暗</b>与<b>值覆盖</b>拆开 —— 回执到 ⇒ <code>op.grey=false</code>（撤下）；
+        真值事件到 ⇒ 写真值 + 删 pendingOps。删掉三处
+        <code>_settleFromTruth</code>/<code>_pullTruthAfterCmd</code>（1500ms 预算）。<br>
+        <b>实测①（sim_qb 注入 1250ms 真值延迟）</b>：
+        <code>贴上 0ms / 回执 2ms / 撤下 9ms</code>，行 <code>1ms→5ms+灰→13ms</code>。<br>
+        <b>实测②（真机 · 2026-09-20 23:53 暂停种子）✅</b>：
+<pre><code>[cmd] pause_torrent: 排队 0.1ms / 执行 2.8ms
+[cmd] 命令后补刷新 78.7ms
+（真值等待 7 轮, 每轮 ~200ms）-> [cmd] 真值已推 1 条   <span class="c">← 1624ms 后</span>
+[perf] pause: 贴上 0ms / 回执 70ms / <b>撤下 85ms via=receipt</b></code></pre>
+        <b>撤下 2947ms → 85ms（34.7 倍）</b>，且 <code>via=receipt</code> —— 走的是新路径；
+        真值 1624ms 后才到（qB 自身节奏，与上次 1258ms 一致），但<b>不再影响观感</b>，
+        因为压暗 85ms 就结束了、值覆盖一直撑到真值事件到达 ⇒ <b>不弹回</b>。
+        单测 <b>1063 passed</b>。<br>
+        <span class="dim">附：真值等待轮次改打 DEBUG（一次命令 7~8 条 INFO 会刷屏，而这段等待已不影响观感）。</span>
+      按 §04 清单删除（比对 / 拉取预算 / 3 s 兜底 / via 多档），只留"贴上 + 等结果"两步，
+      并同步清理测试与知识库。<b>不再以 P0 门槛为前提</b> —— 简化本身就是收益，
+      门槛数字只用来判断压暗还要不要（见 D2）。
+    </li>
+    <li>
+      <b>收尾</b>
+      删除过渡机制（避免死字段）、补新的守阵（例如"真值必须来自直查，不得读快照"）、
+      真机复测确认。
+    </li>
+  </ol>
+</section>
+
+<!-- 06 -->
+<section id="s6">
+  <p class="kicker">06 · 决策点</p>
+  <h2>需要你拍板的四处</h2>
+  <table>
+    <caption>表 3 · 决策点</caption>
+    <thead><tr><th>编号</th><th>问题</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="n">D1</td>
+        <td>「不得从 <code>/sync/maindata</code> 读」的<b>范围</b>：仅命令真值，还是连常规刷新也一并放弃增量同步？</td>
+        <td>先只改命令真值（改动小、收益确定）。常规刷新是否也改，等 P0 确认快照确实滞后 1.4 s 再决定 ——
+            若属实，整个界面的数据新鲜度都被拖着，那就值得改。</td>
+      </tr>
+      <tr>
+        <td class="n">D2<br><b>🔴 阻塞</b></td>
+        <td><b>撤下要不要继续"等真值"？</b>真机实测真值要 <b>~1.25 s</b> 才出现，
+            所以"等真值"就等于撤下 ~1.25 s；而回执本身只要几毫秒。</td>
+        <td><b>建议改为"回执即撤 + 真值后到再覆盖"：</b>
+            服务端<b>不再为等真值扣留回执</b>（现在扣到 1200 ms 上限才发，正是它把回执推到 1259 ms 的），
+            改成"执行完即发回执、真值稍后作为独立 <code>truth</code> 事件推送"。
+            撤下可降到 <b>10~20 ms</b>，且因为<b>从不采纳未落地的真值</b>，不会弹回。<br>
+            代价：真值到达前的 ~1.2 s 里行上显示预测值 —— 这正是乐观 UI 存在的意义。</td>
+      </tr>
+      <tr>
+        <td class="n">D3</td>
+        <td>批量（整剧 448 目标）能否也移除乐观 UI？<code>hashes=</code> 拼 URL 会超限。</td>
+        <td>先测三档直查耗时。若批量进不了门槛，<b>批量保留乐观 UI</b>（单种子移除），
+            并明确写进文档避免混淆。</td>
+      </tr>
+      <tr>
+        <td class="n">D4</td>
+        <td>简化后"未知"这一路的<b>单一超时</b>取多久？</td>
+        <td>建议 8 s：压暗已结束、真值由推送送，等待没有观感代价，放宽容错；
+            超时必须有明确 toast，<b>不能静默</b>（否则 qB 挂了用户不知道）。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 07 -->
+<section id="s7">
+  <p class="kicker">07 · 风险</p>
+  <h2>要小心的</h2>
+  <ul class="plain">
+    <li><b>qB 不可达时的观感退化</b> —— 没有乐观 UI 后，qB 慢/断连时点击会"没反应"。必须有超时与明确提示，否则比现在更难用。</li>
+    <li><b>⚠ 前端验证要防浏览器缓存</b> —— agent-browser 的 Chrome 会缓存
+        <code>/shared/*.js</code>：改了前端代码后页面可能仍在跑旧包（本次实测：页面里
+        <code>AQB_COMMANDS</code> 只有 2 个键，但服务端下发的文件是新的）。
+        验证前端改动前先确认页面跑的是新包，或改用不依赖浏览器的方式（如独立 SSE 客户端）。</li>
+    <li><b>批量直查的成本</b> —— 448 目标若走全量 <code>torrents/info</code>，单轮可能上百毫秒。要么分批，要么保留乐观 UI。</li>
+    <li><b>主循环不能被推送或直查阻塞</b> —— 直查是在主循环线程做的，448 目标分批时要考虑协作式让出（与搜索索引同样的教训）。</li>
+    <li><b>删除面比看起来大</b> —— 乐观 UI 渗透在前端方法、模板 class、CSS、静态守阵、冒烟断言、知识库多处；
+        建议 P3 单独一个提交，且删完必须全量测试 + 冒烟双 UI 都跑。</li>
+    <li><b>别为了数字做激进优化</b> —— 若实测 20 ms 而非 10 ms，接受它，别去砍正确性换毫秒。</li>
+    <li><b>直查只在"走 <code>defer_receipt</code>"的命令上生效</b> —— 本次改动后实测确认：
+      <code>bulk_torrents</code>（整剧/整集/多选）仍走"handler 自写回执"，<b>根本不会调用
+      <code>_affected_truth</code></b>，因此直查对它无效、遥测仍是 0 行。
+      <b>批量要在 P2 一并处理</b>（把它接入真值链路），否则单种子改好了而整剧没改。</li>
+    <li><b>⚠ 发现一个既有的死测试（本次未改，待你定夺）</b> ——
+      <code>tests/test_web.py</code> 里 <code>test_truth_hold_budget_matches_backend</code>
+      <b>同名定义了两次</b>（约 3910 / 3933 行）：Python 后者覆盖前者，
+      于是<b>第一条静态守阵实际从未被执行</b>。这是"看着有守阵、其实没跑"的典型，建议单独入池或修。</li>
+  </ul>
+</section>
+
+<footer>
+  <div>auto&#8209;qb · 真值直查 + 事件驱动 + 移除乐观 UI · 2026-09-20 21:39</div>
+  <div>docs/plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html</div>
+</footer>
+
+</div>
+</body>
+</html>

@@ -703,6 +703,7 @@ const app = createApp({
     },
   },
   unmounted() {
+    this.stopEvents();  // P2: 断开 SSE(否则热重载后句柄堆叠)
     // P1-2: 滚动/缩放监听随组件销毁撤掉(否则热重载后句柄堆叠, 滚动一次算 N 次)
     if (this._winListening) {
       window.removeEventListener("scroll", this._onWinScroll);
@@ -882,8 +883,49 @@ const app = createApp({
       // 仅"服务不可达"分支保留候选密钥; 401 已清空, 重试按钮不渲染
       if (this.pendingToken && !this.authPending) this.bootstrap(this.pendingToken);
     },
+    /* ---------------- P2 事件驱动(SSE /api/events) ----------------
+     * 目的: 把「命令回执」与「视图版本变更」从轮询改成推送 ——
+     *   前者省掉回执轮询的退避粒度(0→150→300→500ms), 后者省掉 1.5/2/3s 的定时触发。
+     * ❗轮询**保留**作为兜底: 断线 / 首帧 / 浏览器不支持 / 反代缓冲时自动退回, 语义不变。
+     * ⚠ EventSource 发不出 Authorization 头 ⇒ 密钥走 ?token=(服务端已放行, 见 web.py);
+     *   本机 skip_local_verify(默认)下不需要带密钥。
+     */
+    startEvents() {
+      if (this._es || typeof EventSource === "undefined") return;
+      const q = this.token ? `?token=${encodeURIComponent(this.token)}` : "";
+      let es = null;
+      try {
+        es = new EventSource(`/api/events${q}`);
+      } catch (e) {
+        return;  // 不支持就用轮询, 不报错(推送是加速手段, 不是必需)
+      }
+      this._es = es;
+      es.addEventListener("cmd", (e) => {
+        // 命令回执: 兑现 commands.js 里等待这条命令的 Promise(省掉轮询粒度)
+        try { this.onCmdEvent(JSON.parse((e && e.data) || "{}")); } catch (_) { /* 坏帧忽略 */ }
+      });
+      es.addEventListener("truth", (e) => {
+        // 真值事件: 服务端确认命令已生效后推来; 前端据此把行换成真值并结束值覆盖
+        // (见 commands.js onTruthEvent —— 服务端只在真值落地时才推, 所以可以放心采纳)
+        try { this.onTruthEvent(JSON.parse((e && e.data) || "{}")); } catch (_) { /* 坏帧忽略 */ }
+      });
+      es.addEventListener("ver", (e) => {
+        // 只带版本号、**不含数据** —— 收到后拉一次 /api/state。密集发布时去抖合并,
+        // 免得一轮 sync 触发 N 次全量拉取(3000 种子一轮 63ms, 打满主线程的坑踩过)。
+        if (this._verTimer) clearTimeout(this._verTimer);
+        this._verTimer = setTimeout(() => { this._verTimer = null; this.refresh(); }, 60);
+      });
+      es.onerror = () => {
+        // EventSource 自带重连(默认 3s); 这里不干预, 轮询兜底照旧在跑
+      };
+    },
+    stopEvents() {
+      if (this._verTimer) { clearTimeout(this._verTimer); this._verTimer = null; }
+      if (this._es) { this._es.close(); this._es = null; }
+    },
     startPolling() {
       this.stopPolling();
+      this.startEvents();  // P2: 先接上推送通道(失败也无害, 轮询仍在)
       this.loadSpeedMode();  // 限速托管状态(非轮询: 登录/重连时取一次, 卡内可手动刷新)
       // 状态栏常显统计(server_state)已随 /api/state.status.server 每轮回传 —— 登录首轮的
       // refresh() 即可填上, 不再需要为"限制速度/连接/剩余"单独补一次 /api/stats(FX-08 旧做法)。

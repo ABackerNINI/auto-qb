@@ -59,7 +59,7 @@ from .logging import setup_logging
 logger = logging.getLogger(__name__)
 
 # 等真值落地时的重新同步间隔(秒): resume 后 qB 要过一会儿才翻状态, 不能干等一个 sync_interval
-# (真机大库 2s)。只在有回执等待时生效, 由 RECEIPT_WAIT_CAP_MS 兜底不会无限空转。
+# (真机大库 2s)。只在有真值等待时生效, 由 TRUTH_PUSH_CAP_MS 兜底不会无限空转。
 TRUTH_RETRY_S = 0.2
 RECONNECT_MAX_INTERVAL = 30.0  # 重连退避上限(秒): qB 长时间宕机时最多每 30s 试一次
 STOP_POLL_INTERVAL = 0.5  # 停止信号轮询粒度(秒): 见 _wait_next —— 多事件等待的分段间隔
@@ -129,7 +129,7 @@ class QbManager(
         "_web_write_seq": "write_seq",
         "_web_results": "results",
         "_reannounce_pending": "reannounce_pending",
-        "_deferred_receipts": "deferred_receipts",
+        "_truth_pending": "truth_pending",
         "_group_view": "group_view",
         "_singles_view": "singles_view",
         "_flat_view": "flat_view",
@@ -378,10 +378,10 @@ class QbManager(
                     try:
                         # 命令驱动(state_changed)的那一轮 force=True: 绕过"上一版是否被取走"门控,
                         # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
-                        # 有回执在**等真值落地**(见 WebUIRuntime.flush_receipts): resume 后 qB
+                        # 有真值在**等落地**(见 WebUIRuntime.flush_truths): resume 后 qB
                         # 要过一会儿才翻状态, 紧跟着的那次补刷新读到的还是命令前的值。此时不能干等
                         # 下一个同步周期(真机大库 2s) —— 那正是用户看到的"点了要 2 秒才恢复正常"。
-                        _wait_truth = bool(getattr(self.web, "deferred_receipts", None))
+                        _wait_truth = bool(getattr(self.web, "truth_pending", None))
                         cmd_forced = (bool(state_changed) or _wait_truth) and not dry_run
                         # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
                         # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
@@ -400,13 +400,13 @@ class QbManager(
                         # ❗无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
                         # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
                         # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
-                        self.web.flush_receipts()
+                        self.web.flush_truths()
                         _flushed = True
                         if _t_line:
                             self.web.resync_elapsed_ms(_t_line)
                         # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
-                        # 有 RECEIPT_WAIT_CAP_MS 兜底, 不会无限空转。
-                        if _wait_truth and getattr(self.web, "deferred_receipts", None):
+                        # 有 TRUTH_PUSH_CAP_MS 兜底, 不会无限空转。
+                        if _wait_truth and getattr(self.web, "truth_pending", None):
                             next_sync_at = time.time() + TRUTH_RETRY_S
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
@@ -433,7 +433,7 @@ class QbManager(
                     # 干等 40s, 界面一直半透明。❗**只在正常路径没跑到时才补**: 否则等真值的那些
                     # 回执会在同一轮里被 flush 两次, 日志出现两行一模一样的"另 N 条等真值落地"。
                     if not _flushed:
-                        self.web.flush_receipts()
+                        self.web.flush_truths()
                     # 等待到最近一条时间线到期, 或被命令唤醒(命令线近乎零延迟)
                     wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
                     if _wait_next(stop_event, self._wake_event, wait_for):
@@ -806,8 +806,8 @@ class QbManager(
     def _check_reannounce_pending(self) -> None:
         self.web.check_pending()
 
-    def _flush_deferred_receipts(self) -> None:
-        self.web.flush_receipts()
+    def _flush_truths(self) -> None:
+        self.web.flush_truths()
 
     def _flush_views(self, force: bool = False) -> None:
         self.web.flush_views(force=force)

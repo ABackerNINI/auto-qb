@@ -7,8 +7,10 @@
 鉴权: 所有 /api/* 请求校验 Bearer 密钥; 密钥来自 config.web.token, 留空则随机生成并
 持久化到 <data_dir>/web.token(0600), 启动日志打印一次。默认仅监听 127.0.0.1。
 """
+import json
 import logging
 import os
+import queue
 import re
 import secrets
 import threading
@@ -18,10 +20,11 @@ from urllib.parse import quote
 
 import uvicorn
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .utils import decode_group_key, open_path, path_normalize
+from .web_runtime import SSE_KEEPALIVE_S
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +144,12 @@ def create_app(manager) -> FastAPI:
         # HTTP 头 OWS 裁剪成裸 "Bearer", 曾持续误报); 仅"携带了但错误"的密钥记一条不含密钥
         # 内容的 WARNING, 保留真实错密钥/探测信号。比较走 compare_digest 防时序侧信道。
         if not request.url.path.startswith("/api"):
+            return
+        # SSE(/api/events)用的是 EventSource, **发不出** Authorization 头 —— 允许把密钥放在
+        # 查询串 ?token= 上作为兜底。代价: 密钥可能出现在访问日志里; 本机 skip_local_verify
+        # 场景(默认)根本走不到这条路径。
+        qtok = request.query_params.get("token") or ""
+        if qtok and secrets.compare_digest(qtok, manager._web_token):
             return
         scheme = "Bearer "
         if not authorization.startswith(scheme):
@@ -269,6 +278,53 @@ def create_app(manager) -> FastAPI:
         manager.touch_web_client()
         # 同 /api/state: 返回裸 dict 会让 FastAPI 白跑一遍 jsonable_encoder(见那里的注释)
         return JSONResponse(content={"groups": manager.ensure_group_view()})
+
+    @app.get("/api/events")
+    def api_events():
+        """SSE 事件流(P2 事件驱动): 命令回执 / 视图版本变更**主动推**, 前端据此撤下与刷新
+
+        替代什么: ① 前端对 `/api/cmd/{id}` 的退避轮询(0→150→300→500ms 粒度);
+                  ② 对 `/api/state` 的定时轮询触发(1.5/2/3s 分档)。
+        ❗只推**信号与小真值**, 绝不推全量状态 —— 3000 种子一轮全量要 63ms(序列化+网络+
+          JSON.parse), 频繁推会把主线程打满(本项目踩过同类坑: 搜索索引阻塞主循环)。
+
+        ⚠ 两个前端侧注意: EventSource 发不出 Authorization 头(密钥走 ?token=, 见 require_token);
+          经过反代时要关掉响应缓冲(已带 X-Accel-Buffering: no)。
+        """
+        q = manager.web.subscribe()
+
+        def frame(etype, data):
+            """SSE 帧: `event: <type>\\ndata: <json>\\n\\n`(空行结束)"""
+            return "event: " + str(etype) + "\ndata: " + json.dumps(data, ensure_ascii=False) + "\n\n"
+
+        def gen():
+            try:
+                yield frame("hello", {"ok": True})
+                while True:
+                    try:
+                        ev = q.get(timeout=SSE_KEEPALIVE_S)
+                    except queue.Empty:
+                        # 心跳: 一是保活(防代理/浏览器掐连接), 二是把客户端标记为活跃
+                        # (间隔必须 < WEB_VIEW_TTL, 否则主循环停止组装视图 ⇒ 自锁)
+                        manager.touch_web_client()
+                        yield ": keepalive\n\n"
+                        continue
+                    manager.touch_web_client()
+                    yield frame(ev.get("type") or "msg", ev.get("payload") or {})
+            except GeneratorExit:
+                pass
+            finally:
+                manager.web.unsubscribe(q)
+
+        return StreamingResponse(
+            gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            },
+        )
 
     @app.get("/api/search")
     def api_search(q: str = ""):
