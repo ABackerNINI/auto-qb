@@ -40,6 +40,7 @@ from .mixins.web_commands import (
     CMD_SLOW_MS,
     DEFERRED_RECEIPT_COMMANDS,
     REANNOUNCE_CONFIRM_TIMEOUT,
+    RECEIPT_WAIT_CAP_MS,
     RESYNC_COMMANDS,
     SELF_POSTED_COMMANDS,
     _timing,
@@ -261,14 +262,26 @@ class WebUIRuntime:
         if not self.deferred_receipts:
             return
         pending, self.deferred_receipts = self.deferred_receipts, {}
+        now = time.time()
         n_truth = 0
+        n_wait = 0
         for cmd_id, item in pending.items():
             truth = self._affected_truth(item["cmd"], item["args"])
+            landed = self._truth_landed(item["cmd"], item["args"], truth)
+            # 真值没落地就**再等一轮**(等 qB 翻状态), 但最多等 RECEIPT_WAIT_CAP_MS:
+            # 超时必须照发, 否则前端 waitCmd 会干等 —— 那种情况下真值由 3s 兜底/轮询收尾。
+            if not landed and (now - item.get("ts", now)) * 1000.0 < RECEIPT_WAIT_CAP_MS:
+                self.deferred_receipts[cmd_id] = item
+                n_wait += 1
+                continue
             n_truth += len(truth or {})
             self.set_result(cmd_id, "ok", timing=item["timing"], truth=truth)
         # 排查标记: 日志里**没有这一行** = 服务端还在跑旧代码(回执在补刷新之前就写了),
         # 前端只能走 via=pull 拉全量 —— 真机大库上就是"点了要 1.7~2s 才恢复正常"。
-        logger.info(f"[cmd] 回执(补刷新后)已写 {len(pending)} 条, 带真值 {n_truth} 个种子")
+        logger.info(
+            f"[cmd] 回执(补刷新后)已写 {len(pending) - n_wait} 条, 带真值 {n_truth} 个种子"
+            + (f"(另 {n_wait} 条等真值落地, 上限 {RECEIPT_WAIT_CAP_MS:.0f}ms)" if n_wait else "")
+        )
 
     def resync_elapsed_ms(self, t0: float) -> None:
         """命令后补刷新耗时落日志(计时口径见 qbmanager.run 的"命令驱动那一轮")
@@ -309,7 +322,29 @@ class WebUIRuntime:
 
     def defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
         """登记"等补刷新跑完再写"的回执(与 set_result 的区别只是时机)"""
-        self.deferred_receipts[cmd_id] = {"cmd": cmd, "args": dict(args or {}), "timing": timing}
+        self.deferred_receipts[cmd_id] = {
+            "cmd": cmd, "args": dict(args or {}), "timing": timing, "ts": time.time(),
+        }
+
+    @staticmethod
+    def _truth_landed(cmd: str, args: dict, truth: Optional[dict]) -> bool:
+        """真值是否已**落地**(命令的效果是否已经在种子状态上体现)
+
+        ❗与"命令执行成功"是两回事: `torrents/resume` 返回 200 时 qB 可能还没翻状态,
+        补刷新读到的还是命令**前**的 paused。此时若把回执发出去, 回执里的真值就是旧值 ——
+        前端一旦采纳就会把行改回「已暂停」, 用户看到"乐观做种 → 弹回暂停 → 2 秒后变做种"
+        (2026-09-20 真机回归)。故这里在服务端**等真值落地**再发回执, 前端拿到的必然是自洽的。
+        """
+        if not truth:
+            return True  # 取不到真值就不等(退回前端拉一次的老路径)
+        act = args.get("action") if cmd == "bulk_torrents" else cmd.split("_", 1)[0]
+        for v in truth.values():
+            kind = (v or {}).get("kind")
+            if act == "pause" and kind != "paused":
+                return False
+            if act == "resume" and kind == "paused":
+                return False
+        return True
 
     def _affected_hashes(self, cmd: str, args: dict) -> List[str]:
         """命令影响了哪些种子(用于回执带真值); 取不到就返回空 —— 只影响能否省一次 refresh"""

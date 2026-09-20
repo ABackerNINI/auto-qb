@@ -83,6 +83,11 @@ def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
 # 慢命令告警阈值(ms): 超过就按 WARNING 落日志, 便于在日志里直接捞
 CMD_SLOW_MS = 300.0
 
+# 回执"等真值落地"的上限(ms): 命令执行成功但 qB 还没翻状态时, 回执推迟到真值落地再发,
+# 免得前端采纳到命令**前**的旧值(2026-09-20 真机: resume 后弹回「已暂停」)。
+# 超时必须照发 —— 否则前端 waitCmd 干等, 且真值由 3s 兜底/轮询收尾, 不会留假状态。
+RECEIPT_WAIT_CAP_MS = 1200.0
+
 
 class WebCommandsMixin:
     def _web_command_handlers(self) -> dict:

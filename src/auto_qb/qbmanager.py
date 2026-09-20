@@ -58,6 +58,9 @@ from .logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
+# 等真值落地时的重新同步间隔(秒): resume 后 qB 要过一会儿才翻状态, 不能干等一个 sync_interval
+# (真机大库 2s)。只在有回执等待时生效, 由 RECEIPT_WAIT_CAP_MS 兜底不会无限空转。
+TRUTH_RETRY_S = 0.2
 RECONNECT_MAX_INTERVAL = 30.0  # 重连退避上限(秒): qB 长时间宕机时最多每 30s 试一次
 STOP_POLL_INTERVAL = 0.5  # 停止信号轮询粒度(秒): 见 _wait_next —— 多事件等待的分段间隔
 
@@ -372,11 +375,15 @@ class QbManager(
                     try:
                         # 命令驱动(state_changed)的那一轮 force=True: 绕过"上一版是否被取走"门控,
                         # 否则用户操作后的真值可能要等客户端下一次轮询才进快照(与 P0-5 相悖)。
-                        cmd_forced = bool(state_changed) and not dry_run
+                        # 有回执在**等真值落地**(见 WebUIRuntime.flush_receipts): resume 后 qB
+                        # 要过一会儿才翻状态, 紧跟着的那次补刷新读到的还是命令前的值。此时不能干等
+                        # 下一个同步周期(真机大库 2s) —— 那正是用户看到的"点了要 2 秒才恢复正常"。
+                        _wait_truth = bool(getattr(self.web, "deferred_receipts", None))
+                        cmd_forced = (bool(state_changed) or _wait_truth) and not dry_run
                         # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
                         # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
                         # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
-                        _t_line = time.time() if cmd_forced else 0.0
+                        _t_line = time.time() if (state_changed and not dry_run) else 0.0
                         if sync_due and tick_due:
                             self._tick(dry_run, force=cmd_forced)
                             next_sync_at = time.time() + sync_interval
@@ -393,6 +400,10 @@ class QbManager(
                         self.web.flush_receipts()
                         if _t_line:
                             self.web.resync_elapsed_ms(_t_line)
+                        # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
+                        # 有 RECEIPT_WAIT_CAP_MS 兜底, 不会无限空转。
+                        if _wait_truth and getattr(self.web, "deferred_receipts", None):
+                            next_sync_at = time.time() + TRUTH_RETRY_S
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
                         if (sync_due or tick_due) and self._last_conn_ok is False:

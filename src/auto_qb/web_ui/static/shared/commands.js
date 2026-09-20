@@ -256,9 +256,15 @@ window.AQB_COMMANDS = {
      * 补刷新前的旧快照 ⇒ 第一次拉取 100% 扑空 ⇒ 要等 200ms 退避重试。真机实测(排队 0.0 /
      * 执行 8.4 / 补刷新 88.4ms, 前端撤下却 1998ms): 大库单轮 refresh 慢时, 这一次扑空就
      * 是用户看到的"点了要 2 秒才恢复正常"。回执带真值后, 撤下耗时与库大小解耦。
-     * ❗判定口径(2026-09-20 上游 f36a413 改): 真值**匹配**就撤; 真值**不一致时采纳真值**再撤
-     * (真值是权威, 再退避拉一次全量纯属白等); 只有回执里**没有**这个种子才留给
-     * _pullTruthAfterCmd / 3s 兜底。 */
+     * ❗判定口径: **只有真值匹配才撤**; 真值不一致 / 回执里没有这个种子, 一律保持乐观值继续等
+     * (交给 _pullTruthAfterCmd 或 3s 兜底)。
+     *
+     * ⚠ 这里踩过一次(2026-09-20 真机回归, 已撤回): 曾经"不一致就采纳真值", 理由是"真值是
+     * 补刷新之后读的、是权威值"。但 **resume 之后 qB 不会立刻翻状态** —— `torrents/resume` 返回
+     * 200 时种子可能还是 stopped, /sync/maindata 那一刻读到的仍是**命令前**的值(paused)。
+     * 于是采纳真值 = 把行改回「已暂停」, 用户看到: 乐观做种 0.x 秒 → 弹回已暂停 → 约 2 秒后
+     * 才真正变做种。**"权威"不等于"已落地"**, 与预测值不一致的真值绝大多数是还没落地的旧值。
+     * 保持乐观值继续等的代价只是多灰一会儿, 而采纳旧真值是**显示错误状态** —— 后者严重得多。 */
     _settleFromTruth(hashes, truth) {
       if (!truth) return false;
       let all = true;
@@ -270,16 +276,14 @@ window.AQB_COMMANDS = {
         let match = true;
         for (const k of Object.keys(op.patch)) if (t[k] !== op.patch[k]) match = false;
         if (match) { delete this.pendingOps[h]; continue; }
-        /* 不一致时**采纳真值**, 而不是再等: 真值是服务端补刷新**之后**从 qB 读的, 它就是权威值;
-         * 预测值算错其实很常见(resume 后 qB 立刻回报 stalledDL/checkingDL, 与前端按 progress
-         * 猜的 seeding/downloading 不一致)。此时再退避拉一次全量(大库 1.5s)纯属白等。 */
-        this._forEachRow(h, (row) => Object.assign(row, t));
-        delete this.pendingOps[h];
+        all = false;  // 真值还没落地(或预测值猜错): 保留乐观值, 不采纳、不撤下
       }
-      // 路径标记: 真机排查时 [perf] 会把它打出来, 一眼看出撤下走的是哪条路
+      // 路径标记: 真机排查时 [perf] 会把它打出来 —— stale = 真值尚未落地(不等于失败)
       if (all) {
         if (this.cmdStats) this.cmdStats.settleVia = "truth";
         this._markCmdSettle();
+      } else if (this.cmdStats) {
+        this.cmdStats.settleVia = "stale";
       }
       return all;
     },

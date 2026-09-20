@@ -3748,3 +3748,58 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     assert recs and recs[-1].levelno == logging.DEBUG, "自投递命令会刷屏, 必须压到 DEBUG"
 
     assert CMD_SLOW_MS > 0
+
+
+def _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0):
+    """一个只含单个种子的 QbManager(供回执时序类断言用)"""
+    import tempfile
+
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(os.path.join(tempfile.mkdtemp(), "state.json"))
+    tor = FakeTorrent(hash="b" * 40, name="t", state=state, progress=progress)
+    mgr.client = FakeClient()
+    mgr.client.torrents[tor.hash] = tor
+    seed_store(mgr, [tor])
+    return mgr, tor
+
+
+def test_receipt_waits_for_truth_to_land():
+    """回执必须**等真值落地**再发(2026-09-20 真机回归: resume 后弹回「已暂停」)
+
+    现象: 点开始 → 乐观做种 0.x 秒 → 弹回「已暂停」 → 约 2 秒后才真正变做种。
+    根因: `torrents/resume` 返回 200 时 qB 可能**还没翻状态**, 补刷新读到的仍是命令**前**的
+    paused; 回执带着这个旧真值发出去, 前端一采纳就把行改回暂停 —— 显示**错误状态**,
+    比多灰一会儿严重得多。故服务端先等真值落地; 超时(RECEIPT_WAIT_CAP_MS)必须照发,
+    否则前端 waitCmd 会干等。
+    """
+    import time
+
+    from auto_qb.mixins.web_commands import RECEIPT_WAIT_CAP_MS
+
+    mgr, tor = _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0)
+    rt = mgr.web
+    h = tor.hash
+
+    # ① 真值没落地(qB 还没翻) -> 不发回执
+    rt.defer_receipt("r1", "resume_torrent", {"hash": h}, {"wait_ms": 0.0, "exec_ms": 1.0})
+    rt.flush_receipts()
+    assert "r1" not in rt.results, "真值没落地就发回执 ⇒ 前端会采纳命令前的旧值(弹回已暂停)"
+    assert "r1" in rt.deferred_receipts
+
+    # ② 真值落地 -> 发回执, 且真值是**落地后**的值
+    tor.state = "uploading"
+    rt.flush_receipts()
+    assert rt.results["r1"]["status"] == "ok"
+    assert rt.results["r1"]["truth"][h]["kind"] == "seeding", rt.results["r1"]
+
+    # ③ 暂停命令同理: 真值还是 downloading 时不能发
+    rt.defer_receipt("r2", "pause_torrent", {"hash": h}, {"wait_ms": 0.0, "exec_ms": 1.0})
+    rt.flush_receipts()
+    assert "r2" not in rt.results, "pause 的真值没落地也不得发回执"
+
+    # ④ 超时兜底: 真值始终不落地也必须照发(否则前端 waitCmd 干等 40s)
+    tor.state = "downloading"
+    rt.deferred_receipts["r2"]["ts"] = time.time() - (RECEIPT_WAIT_CAP_MS / 1000.0 + 1.0)
+    rt.flush_receipts()
+    assert rt.results["r2"]["status"] == "ok", "超过上限必须照发回执, 不能让前端干等"
