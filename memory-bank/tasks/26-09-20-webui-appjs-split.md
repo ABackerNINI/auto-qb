@@ -1,6 +1,6 @@
 # 26-09-20-webui-appjs-split — WEB UI `shared/app.js` 按域拆分为内核 + 15 个片段文件
 
-**Status:** Completed (已实施并验证; **尚未提交**)
+**Status:** Completed (已入库 `afef7ce` 并推送 Gitee; GitHub 镜像允许滞后)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [docs/plans/26-09-20-0906-appjs-split-plan.html](../docs/plans/26-09-20-0906-appjs-split-plan.html)
@@ -44,11 +44,16 @@
 | 6 | 波次二: 搬 71 个 computed | ✅ 1629 → 1001 |
 | 7 | 知识库回写(modules / testing / progress / activeContext) | ✅ |
 | 8 | 计划文档 + 任务立档 + 索引重建 | ✅ |
-| 9 | 提交与推送 | ⬜ 未做(用户未要求) |
+| 9 | 提交与推送 | ✅ `afef7ce` → Gitee `develop` |
 
 ## 进度日志
 
-- **2026-09-20**: 基线(1055 passed / 冒烟 54 项 0 失败) → 波次一 → 守阵改造 + 红验 → 波次二 → 全量验证(1055 passed / 冒烟 54 项 0 失败 / node --check 18 个文件全过) → 知识库回写 → 立档。**未提交**。
+- **2026-09-20**: 基线(1055 passed / 冒烟 54 项 0 失败) → 波次一 → 守阵改造 + 红验 → 波次二 → 全量验证(1055 passed / 冒烟 54 项 0 失败 / node --check 18 个文件全过) → 知识库回写 → 立档(本地提交 `ab82d6c`)。
+- **2026-09-20 推送**: `git fetch` 发现 Gitee 已前进 3 个提交(`03ed9ed` / `5691c6f` / `f36a413`, 主循环 × WebUI 解耦 + 撤下 `via` 标记 + 知识库回写), 故 `git pull --rebase gitee develop`。**冲突 4 处**: `app.js`(整块"我的 1001 行 vs 上游 5045 行") + `activeContext.md` / `testing.md` / `tasks/_index.md`。
+  - `app.js` 取**我的拆分版**, 再把上游 7 处语义改动按意图落到**方法已迁往的新文件**: `settleVia: null` 与 `_markCmdSettle` 的 `via=` 日志 → `commands.js`; `_settleFromTruth`「真值不一致时采纳真值」重写 → `commands.js`; 4 处 `settleVia = "pull"` → `commands.js` ×3(`act` / `bulkAct` / `actTorrent`) + `shows.js` ×1(`actEpisode`)。判据同 pitfalls「rebase 冲突落在已被迁走的方法上」。
+  - 落点正确性**由冒烟背书**: 合并后再跑, `[perf]` 打出 `via=pull`(埋点在运行时确实走了新代码路径, 不只是文本搬对), 54 项 0 失败; 全量 **1057 passed**(上游新增 2 项, 我的改动未增减用例)。
+  - 解冲突后重跑 `gen_tasks_index.py`, 两个档案条目(`26-09-20-webui-decoupling` / `26-09-20-webui-appjs-split`)并列 Completed 段。
+  - 变基前整份备份 `.git`(58M → `.workbuddy-ai/tmp/git-backup-before-rebase`); 提交前后均核对 `HEAD == refs/heads/develop`。
 
 ## 决策与实施
 
@@ -75,6 +80,6 @@
 
 ## 遗留 / 注意
 
-- **尚未提交**(工作区改动: 新增 15 个片段文件 + 改 app.js / 两个 index.html / test_web.py + 知识库文档)。
+- **已提交并推送**: `afef7ce` → Gitee `develop`(GitHub 镜像允许滞后)。
 - 发现一处**既有文档漂移**: `testing.md` 顶部基线写 1054, 本机实测恒为 1055(本轮改动前后各测一次均如此)。按范围守恒未在本轮改基线, 只在 testing.md 里加注说明。
 - 后续若再加片段文件: ①写 `window.AQB_<域>` ②两个 index.html 都加 `<script>` 且排在 app.js 前 ③app.js 加 `app.mixin` —— 漏任何一步守阵会红。

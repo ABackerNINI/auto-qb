@@ -54,7 +54,7 @@
 
 - **② 上轮计划复核的收尾(只剩第 7 项) (2026-09-19)**: 复核报表
 
-- **③ app.js 按域拆分 (2026-09-20, 已完成, 随本提交推送)**: 计划见
+- **③ app.js 按域拆分 (2026-09-20, 已完成, 已入库 `afef7ce` 并推送 Gitee)**: 计划见
   [docs/plans/26-09-20-0906-appjs-split-plan.html](../docs/plans/26-09-20-0906-appjs-split-plan.html),
   档案见 [tasks/26-09-20-webui-appjs-split.md](tasks/26-09-20-webui-appjs-split.md)。
   5045 行 → **1001 行内核 + 15 个片段文件**(`window.AQB_*` 全局 mixin, 与 config_editor 同范式),
