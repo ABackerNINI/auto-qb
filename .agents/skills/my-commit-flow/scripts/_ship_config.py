@@ -57,9 +57,13 @@ class ConfigMissing(RuntimeError):
 
 
 def git(*args: str) -> str:
-    """跑 git 命令, 失败返回空串(调用方按"取不到"处理, 不要假装成功)。"""
+    """跑 git 命令, 失败返回空串(调用方按"取不到"处理, 不要假装成功)。
+
+    **只去掉末尾换行, 不能整段 strip()** —— 否则 `git status --porcelain` 首行的首列空格
+    (表示"无暂存改动")会被吃掉, 进而把路径首字符也带歪, 红线匹配会静默放行。
+    """
     proc = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return proc.stdout.strip() if proc.returncode == 0 else ""
+    return proc.stdout.rstrip("\n") if proc.returncode == 0 else ""
 
 
 def find_root(start: Path | None = None) -> Path:

@@ -1554,3 +1554,16 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
 - **根因**: 这不是"ref 更新被拦截层丢了", 而是 git 的正常行为 —— 被 pack 过的分支更新时只写 **loose ref**(它优先级高于 packed-refs), packed-refs 保留旧值直到下次 pack。脚本的三处比对把这条当成不一致。
 - **判别法**: 先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— 一致就说明提交**落稳了**, 只是 packed-refs 陈旧; 不一致才是真事故(按「分支 ref 被回退」条目处置)。
 - **修法**: 备份 `.git` 后跑 `git pack-refs --all`(packed-refs 按当前 ref 重写、loose 文件随之删除) ⇒ 三处恢复一致, `verify_ref.py` 转 PASS。不要靠 `git update-ref refs/heads/<branch> <sha>` 解决 —— 它只写 loose, packed-refs 不动, 脚本仍会红。
+
+## 解析固定列宽输出时, 别对整段做 strip()（2026-09-20，my-commit-flow 预检虚报 staged）
+
+- 现象: 预检报"已暂存 1 个"而 `git diff --cached` 是 0 个。根因: `git()` 里 `proc.stdout.strip()`
+  把 `git status --porcelain` **首行的首列空格**吃掉了 —— `' M .agents/x'` → `'M  .agents/x'`,
+  于是 xy 首列变 'M' 被判成已暂存; 更糟的是 `line[3:]` 连带把路径首字符也切掉
+  (`.agents/...` → `agents/...`)。
+- 后果不止虚报: 红线检查走 `changed = staged + unstaged`, 路径被污染后
+  `hit()` 的 `startswith` 与 `in` 都匹配不到红线模式 ⇒ **红线检查静默放行**(最危险的一半)。
+- 修法: 只去末尾换行 `proc.stdout.rstrip("\n")`; 解析处再兜底 `line[:2].ljust(2)`、
+  `line[3:]` 前先判长度。
+- 判据: 凡是"按列/按固定宽度切"的输出(`--porcelain`、`ls -l`、`git branch -vv` 等),
+  逐行处理时**不要整段 strip**, 只能 `rstrip("\n")`; 否则首行的前导空格一定会被吃掉。

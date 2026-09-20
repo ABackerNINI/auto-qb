@@ -44,10 +44,13 @@ PASS, WARN, STOP = "PASS", "WARN", "STOP"
 
 
 def git(*args: str, check: bool = True) -> str:
+    # **不能整段 strip()**: `git status --porcelain` 的首列空格表示"无暂存改动",
+    # 整段 strip 会把首行的这个空格吃掉 → ' M a/b' 变成 'M  a/b', 首列被误判成已暂存,
+    # 且 line[3:] 丢掉路径首字符(`.agents/...` → `agents/...`), 红线匹配会**静默放行**。
     proc = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失败: {proc.stderr.strip()}")
-    return proc.stdout.strip()
+    return proc.stdout.rstrip("\n")
 
 
 def remotes() -> dict[str, str]:
@@ -65,7 +68,10 @@ def changed_files() -> tuple[list[str], list[str]]:
     for line in git("status", "--porcelain").splitlines():
         if not line.strip():
             continue
-        xy, path = line[:2], line[3:].strip()
+        xy = line[:2].ljust(2)  # 短行兜底, 避免索引错位后再切错路径
+        path = line[3:].strip() if len(line) > 3 else ""
+        if not path:
+            continue
         if xy[0] not in (" ", "?"):
             staged.append(path)
         if xy[1] != " ":
