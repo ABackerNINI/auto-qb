@@ -7,8 +7,7 @@
   `LINUX_CHECK_HINTS`(平台差异关键词)、镜像策略。换项目改这些。
 - **配置留空 = 用探测结果**: `BRANCH` / `MAIN_HOST_MARK` / `MIRROR_URL` 留空即自动。
 
-本 skill 依赖本仓环境(Windows 工具 shell 的删除拦截层、Gitee 主线 + GitHub 镜像、多 worktree 并行),
-不是通用 git 工作流; 拿到别的项目前至少过一遍 `RED_LINES` 与 `GATES`。
+换项目时: 上面"自动探测"的部分直接可用; 只需过一遍下面"项目特有项"(红线文件、闸门、平台关键词)。
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ SKILL_DIR = SCRIPTS_DIR.parent
 
 BRANCH = ""  # 留空 = 跟当前分支; 填了就用填的(如 "main")
 MAIN_HOST_MARK = "gitee.com"  # 主线 URL 特征; 留空 = 不校验, 按候选名顺序取第一个存在的
-# 主线远端候选名(按序) —— **别假定项目一定用 Gitee**: 只有 GitHub 的项目里 github 就是主线
+# 主线远端候选名(按序) —— **别假定托管平台**: 单远端项目里那个远端就是主线
 REMOTE_MAIN_CANDIDATES = ("gitee", "origin", "github")
 MIRROR_HOST_MARK = "github.com"  # 镜像 URL 特征; 留空 = 只用 REMOTE_MIRROR 这个名字
 REMOTE_MIRROR = "github"  # 镜像远端名
@@ -51,7 +50,7 @@ GATES: tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...] = (
     (("memory-bank/tasks/", ), ("python scripts/gen_tasks_index.py --check", ), "任务档案改动: 索引需自洽"),
     ((".agents/skills/", ), ("python <改动的脚本> --help", ), "skill 改动: 冒烟跑一遍被改的脚本"),
 )
-# 平台差异: 命中这些关键词的改动, Windows 全绿不算数, 建议去 Linux 复现
+# 平台差异: 命中这些关键词的改动, 单平台跑绿不算数, 建议换平台复现
 LINUX_CHECK_HINTS = ("winreg", "shutil.rmtree", "dir_fd", "socket", "subprocess", "os.open")
 # 提交后若 staged 超过这个阈值 → 高度怀疑「分支 ref 被别的会话回退」(见 pitfalls)
 STAGED_PANIC = 200
@@ -99,7 +98,7 @@ def resolve_main_remote() -> tuple[str, str]:
 
     判据(按序): ① 候选里第一个 **URL 含 `MAIN_HOST_MARK`** 的 —— 按 URL 特征而不是按名字,
     因为历史 clone 的 `origin` 可能是镜像; ② 没配 mark 或谁都不匹配 → 候选里第一个**存在**的
-    (**回退**: 只有 GitHub 的项目里 github 就是主线, 别假定一定用 Gitee);
+    (**回退**: 只有单一远端的项目里, 那个远端就是主线);
     ③ 都没有 → ("", "")。调用方可用 `main_matches_mark()` 判断是否走了 ②, 是的话应 WARN 提示。
     """
     urls = push_urls()
@@ -120,8 +119,8 @@ def main_matches_mark(url: str) -> bool:
 
 
 def resolve_mirror_remote() -> tuple[str, str]:
-    """镜像远端 (名字, URL): 按 `MIRROR_HOST_MARK` 找 —— **排除主线自己**(只有 GitHub 的项目里
-    没有镜像, 不能把主线当镜像), 再退回 `REMOTE_MIRROR` 这个名字。"""
+    """镜像远端 (名字, URL): 按 `MIRROR_HOST_MARK` 找 —— **排除主线自己**(单一远端的项目没有镜像,
+    不能把主线当镜像), 再退回 `REMOTE_MIRROR` 这个名字。"""
     urls = push_urls()
     main_name, _ = resolve_main_remote()
     if MIRROR_HOST_MARK:

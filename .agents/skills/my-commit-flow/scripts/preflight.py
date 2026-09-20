@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 9 平台差异
     if any(h in " ".join(changed) for h in LINUX_CHECK_HINTS):
-        rows.append((WARN, "平台差异", "改动命中平台相关关键词 —— Windows 全绿不算数, 建议 WSL 复现"))
+        rows.append((WARN, "平台差异", "改动命中平台相关关键词 —— 单平台跑绿不算数, 建议在另一平台复现"))
 
     # 10 镜像远端
     if not MIRROR:

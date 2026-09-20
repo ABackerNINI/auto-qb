@@ -43,7 +43,7 @@ MIRROR, MIRROR_URL_NOW = resolve_mirror_remote()
 
 
 def remote_sha_with_retry(name: str, branch: str) -> str:
-    """取远端 ref —— **主线瞬时失败可重试一次**(见 pitfalls: Gitee 也会偶发 Recv failure)。
+    """取远端 ref —— **主线瞬时失败可重试一次**(网络抖动常见, 见项目 pitfalls 的对应条目)。
 
     取不到(空)与"取到了但不一致"必须区分: 前者是网络, 后者才是推送没落。
     """
@@ -68,7 +68,7 @@ def remotes() -> dict[str, str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skip-mirror", action="store_true", help="不尝试 GitHub 镜像")
+    parser.add_argument("--skip-mirror", action="store_true", help="不尝试镜像远端")
     args = parser.parse_args(argv)
 
     print("=== 推送前再 fetch 一次(status -sb 的 ahead/behind 是上次 fetch 的快照) ===")
@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
 
     head = git("rev-parse", "HEAD").stdout.strip()
     print(f"\n=== 推主线 {MAIN}/{BRANCH} ===")
-    # 主线瞬时 Recv failure 可重试一次(见 pitfalls「Gitee 主线也会偶发 Recv failure」);
+    # 主线瞬时连接失败(Recv failure / reset)可重试一次;
     # 镜像不重试(旧规: 尝试一次, 失败只报一次)
     for attempt in range(2):
         proc = git("push", MAIN, BRANCH)
