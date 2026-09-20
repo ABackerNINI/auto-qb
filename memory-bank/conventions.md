@@ -16,6 +16,12 @@
 - **列计划时务必不要修改文件**： 用户在"先列计划/先给方案"阶段, AI 只输出方案文本(可含代码片段作为示例), **不修改任何工作区文件**, 必须等用户明确"实施/开始/按计划做"等指令才动文件。
 - **更新代码/文档后同步更新知识库**： 每次功能新增/行为变更/重构完成后, 在同一次工作中同步更新 `memory-bank/` 知识库对应条目 (模块表 modules / 架构 systemPatterns / 规则系统 rule-system / 配置参考 config-reference / 陷阱 pitfalls / 路线图 progress / 测试基线 testing 与 README 速览), 不等用户单独提醒。
 - **git 提交信息需规范详细**： 提交信息需完整描述改动内容与原因 (做什么 + 为什么/影响), 不用模糊短语 (如仅"修复"/"更新"); 多个逻辑改动拆分为独立提交, 每个提交自包含可回溯。
+- **`skills/` 与 `instructions/` 是通用资产, 除显式指定外一律不改** (2026-09-20 用户指定):
+  - **范围**: `.agents/skills/`(项目级技能事实源, 由 `scripts/sync_agent_skills.py` junction 到 `.codebuddy/skills` 供 IDE 扫描)、`.codebuddy/skills/`(链接层, 改了会被脚本覆盖)、`.github/instructions/`(Copilot 通用指令)、`.github/agents/`(子 agent 定义), 以及用户级 `~/.workbuddy-ai/skills/`。
+  - **理由**: 这些是**跨项目复用**的通用技能/指令。往里写本仓库专属的事实(主线远端名、分支名、某个文件的字符上限、"该去读哪个配置文件")会让它们失真, 换个仓库就不可用。
+  - **判别法**: 动笔前先问「这一行是本仓库的**事实**, 还是**通用机制**?」—— 事实一律留在项目侧(项目脚本 / `.commit-flow.toml` / `memory-bank/` / `AGENTS.md`), skill 与 instructions 只承载机制。**连"为本仓库新增的读取机制"也不该进 skill。**
+  - **实例(同一天被纠正两次)**: 给"AGENTS.md 8000 字符上限"做提交闸门时, 先把 `{"AGENTS.md": 8000}` 硬编码进 skill 的 `_ship_config.py`; 改成"skill 去读外置 JSON"仍被否。最终闸门落在项目侧 —— 执行体 `scripts/check_context_caps.py`(上限写死), 触发挂 `.commit-flow.toml` 的 `[[gates]]`。
+  - **例外**: 用户显式点名要改某个 skill / instruction 时照做; 新增**全新**的通用 skill 不在此限(但仍不得夹带本项目专属值)。
 
 ## 函数设计原则 (用户明示)
 
