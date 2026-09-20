@@ -2,7 +2,11 @@
 
 为什么需要它
 ------------
-`agent-browser` 在 Windows 上不可用, 而本项目有一整类改动**单测根本测不到**:
+没有可用的浏览器自动化就跑不了这类验证, 而本项目有一整类改动**单测根本测不到**:
+(历史背景: 写本脚本时 `agent-browser` 插件还是 1.0.0, 它的 SessionStart hook 在 Windows 上
+直接判 `WINDIR` 打印"不支持 Windows"并退出, 连 CLI 都不装 ⇒ 当时只能自己搭。1.3.0 起该插件
+已支持 Windows x64; 但本脚本走的是 Playwright, 与它无关, 不因此改变做法。
+环境细节见 `memory-bank/techContext.md`「浏览器冒烟环境 (Playwright)」。)
 乐观 UI 的半透明与失败回滚、按视图回传后切视图、表头同步是否还在每帧强制布局、
 行窗口化后滚动是否跳动 —— 这些都属于"pytest 全绿但界面废掉"的故障形态(见
 `test_web.py::test_frontend_static_bundle_health` 的同类守阵思路: 静态能查的静态查,

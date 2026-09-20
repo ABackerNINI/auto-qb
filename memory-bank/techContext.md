@@ -19,6 +19,65 @@
 - 测试: `uv run pytest tests -q` (pytest.ini 自带 `--cov-branch` 分支覆盖率; CI 用 astral-sh/setup-uv 固定 commit SHA (v10.1.0) + uv sync —— 该 action 已不发布 `v10` 浮动大版本标签, 只能写 `@v10.1.0` 或 SHA, 写 `@v10` 会报 "unable to find version v10")
 - 历史: 2026-09-15 前用 pip 直装 .venv (无锁), requirements-dev.txt 已由 pyproject 取代 (随 e7fb8d9 删除)
 
+## 浏览器冒烟环境 (Playwright)
+
+> 浏览器驱动的**唯一**入口是 `scripts/ui_smoke.cjs`(配 `scripts/ui_harness.py` 桩服务)。**怎么用冒烟、共多少项、读数时机坑**见 [testing.md](testing.md)「浏览器冒烟已脚本化」; 本节只记**环境事实**(装在哪 / 怎么跑起来 / 怎么自检), 免得下次靠猜。
+
+**结论: 本机可直接用, 不需要安装** (2026-09-20 实测)。
+
+- **Node 侧已就绪** —— 注意它**不是项目依赖**, 装在 WorkBuddy 托管目录(不在仓库里, 也不在 `package.json` 里):
+  - 包: `playwright@1.63.0` 与 `playwright-core@1.62.0`, 位于
+    `C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules`
+  - 浏览器: `C:/Users/11059/AppData/Local/ms-playwright/` 下有 `chromium-1234` / `chromium-1243`
+    及对应 headless shell 与 ffmpeg; 实测走的是 `chromium-1234/chrome-win64/chrome.exe`,
+    Chromium 版本 **151.0.7922.34**
+- **Python 侧没装**: `.venv` 与 `uv.lock` 里都没有 playwright。想在 pytest 里直接驱动浏览器才需要
+  `uv add --dev playwright` + `uv run playwright install chromium` —— 那会改 `pyproject.toml` / `uv.lock`
+  (提交级改动, 动之前先问)。**当前不需要**: 冒烟是 Node 脚本, 与 Python 环境无关。
+
+### 跑起来的两条硬要求(都踩过)
+
+1. **必须带 `NODE_PATH`**, 否则 `require()` 找不到包:
+   ```bash
+   NODE_PATH="C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules" \
+     node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 3000
+   ```
+2. **优先 `playwright-core`, 而不是顶层 `playwright`** —— 脚本里就是 `try require("playwright-core")
+   catch require("playwright")`。原因: **版本要和已下载的 chromium 对齐**, core 1.62 ↔ `chromium-1234`,
+   而顶层 1.63 要 `chromium-1243`; 装了新包却没下对应浏览器时会报 `Executable doesn't exist`。
+
+### 与 `agent-browser` 的关系(2026-09-20 **重新核实**, 此前记错了)
+
+❗**"agent-browser 不支持 Windows"是 1.0.0 的旧结论, 不是产品限制**。核到的事实:
+
+- **会话里那句提示的来源**: 插件 `1.0.0` 带一个 `SessionStart` hook(`scripts/setup.sh`), 它一上来就判
+  `OSTYPE == msys/cygwin` 或 `WINDIR` 非空 ⇒ 打印「⚠️ agent-browser 目前不支持 Windows 系统」并 `exit 0`,
+  **连 CLI 都没装**(所以 PATH 上没有 `agent-browser`)。
+- **新版本支持 Windows**: 插件缓存里已经有 `1.3.0`
+  (`~/.workbuddy-ai/plugins/cache/codebuddy-plugins-official/agent-browser/1.3.0/`), 它的 `SKILL.md` 明写
+  supports **macOS / Linux / Windows x64**(目标环境 Windows 11 x64 + PowerShell + Node 18+), 另有
+  `references/windows-support.md`, 且**没有那个平台门控 hook**。
+- **当前启用的是旧版**: `~/.workbuddy-ai/plugins/installed_plugins.json` 里 `installPath` 指向 **1.0.0**
+  ⇒ 要真正启用 Windows 支持, 得先把插件**更新到 1.3.0**(应用侧动作, 在插件管理里做), 再
+  `npm install -g agent-browser` + `agent-browser install`(约 500 MB Chromium)。
+- **本机前提全部满足**: Windows 11 专业版 x64 (Build 26200) / PowerShell 5.1 / `node -e` 能实际执行
+  (v22.22.2) / npm 在 PATH —— 1.3.0 的 Windows 前提没有一条卡住。
+
+与本项目冒烟的关系: 冒烟走的是 **Playwright**(`scripts/ui_smoke.cjs`), 不依赖 agent-browser, 两者不冲突;
+`scripts/ui_harness.py` 头部那句「agent-browser 在 Windows 上不可用」是 1.0.0 时代写的, 现已过时
+(**未按范围守恒擅自改**, 要改单独说)。
+
+### 换机器 / 重装后怎么自检(一条命令)
+
+```bash
+NODE_PATH="C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules" \
+  node -e "require('playwright-core').chromium.launch().then(b=>{console.log(b.version());return b.close()})"
+```
+
+- 打印出 Chromium 版本号 ⇒ 环境可用
+- `Cannot find module 'playwright-core'` ⇒ 包没了(托管目录被清 / 路径变了)
+- `Executable doesn't exist` ⇒ 浏览器没下载, 跑 `npx playwright install chromium`
+
 ## 平台
 
 - **运行主平台 Windows**; GitHub Actions CI 在 Linux 上跑全量测试

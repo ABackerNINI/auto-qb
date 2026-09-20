@@ -113,7 +113,9 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 
 > ⚠ **前端渲染逻辑无法靠 pytest 覆盖**: 模板表达式错误(computed 当函数调用等)会让页面整块空白而测试全绿 —— 改前端必须做浏览器冒烟(假 qB + 临时 data_dir, 完事清理), 详见 [pitfalls.md](pitfalls.md)。**半个例外**: "整包 JS 语法损坏"(合并冲突残留、注释孤儿续行)与"模板引用缺失静态资源"属纯静态可判定, 已由 `test_frontend_static_bundle_health` 守阵(2026-09-17 实测白屏故障的防回归); 模板/表达式层面的错误仍只能靠真机页面看。
 >
-> ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")**:
+> ✅ **2026-09-19 起浏览器冒烟已脚本化(Windows 上可用, 不再"只能人工点")** ——
+> **Playwright 环境装在哪 / 为什么必须带 `NODE_PATH` / 换机器怎么自检**见
+> [techContext.md](techContext.md)「浏览器冒烟环境 (Playwright)」(2026-09-20 实测: 本机已装好, 无需安装):
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`), `scripts/ui_smoke.cjs` 用 Playwright 跑
 > prism/atlas 双 UI 断言(当前 **54 项 0 失败**(ok 模式)/ **54 项 0 失败**(`--expect-cmd error`, 回滚路径;
