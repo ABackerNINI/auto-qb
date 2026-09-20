@@ -39,7 +39,7 @@ window.AQB_COMMANDS = {
          * —— 前三次全都只埋了 patchMs/postMs, 于是"撤下慢"在日志里全绿、只能靠肉眼报。
          * 修前这一段恒 3~4.5s(3s 常量兜底 + 等到下一次轮询), 修后 ~200~350ms。 */
         settleMs: null,
-        settleVia: null,  // 撤下走的哪条路: truth(回执带真值) / pull(退回拉全量) / 回滚
+        settleVia: null,  // 撤下走的哪条路: receipt(回执到达即撤) / push(真值事件到达)
         targets: null,    // 本次命令的目标数(供 [perf] 阈值分档, 见 _markCmdSettle)
         totalMs: null,
         waitMs: null,
@@ -49,8 +49,10 @@ window.AQB_COMMANDS = {
       return t0;
     },
     /* 撤下埋点: pendingOps 归零的那一刻记 settleMs。
-     * 调用点三处(覆盖 pendingOps 的全部出口): reapplyPending(真值对齐 / 兜底回滚后)、
-     * resolveOptimistic(失败回滚)。缺一处就会漏记。 */
+     * 调用点两处(覆盖"压暗结束"的全部出口): resolveOptimistic(回执到达 / 失败回滚)、
+     * onTruthEvent(真值事件到达)。缺一处就会漏记。
+     * ❗注意 reapplyPending 里的 _optimisticSettled 也删 pendingOps, 但那时压暗早已结束、
+     *   settleMs 已记过, 所以不需要再调这里。 */
     _markCmdSettle() {
       const c = this.cmdStats;
       if (!c || c.settleMs != null || !c.t0) return;
@@ -70,12 +72,10 @@ window.AQB_COMMANDS = {
        * 但"没有报警"不等于"能看见数字"。
        * ❗无回执(hang / 命令在途)时**不打印**: 那时走 3s 兜底, 慢是设计如此, 报出来是噪音。 */
       if (c.totalMs == null) return;
-      /* `via` = 撤下走的是哪条路, 真机排查的第一判据:
-       *   truth = 回执自带真值、就地撤下(最快, 与库大小解耦; 需要服务端是"补刷新后才写回执"的新版);
-       *   pull  = 回执没带真值或真值没对上, 退回 _pullTruthAfterCmd 拉全量(大库就慢在这里);
-       *   stale = 真值尚未落地(等真值那一档), 保留乐观值继续等;
-       *   其它  = 兜底回滚 / 失败回滚。
-       * 看到 pull 且后端日志里没有「回执(补刷新后)已写」 ⇒ 服务端还是旧代码, 先重启进程。 */
+      /* `via` = 撤下走的是哪条路, 真机排查的第一判据(2026-09-21 简化为两档):
+       *   receipt = 回执到达即结束压暗(正常路径, 真机实测撤下 85ms);
+       *   push    = 真值事件到达(压暗早已结束, 这里只表示"值覆盖"也收工了)。
+       * 旧版还有 truth / pull / stale 三档, 随着"回执不再带真值 + 不再拉全量"已全部消失。 */
       const budget = (c.targets || 0) > 100 ? 2500 : 800;
       /* 撤下这行要能**单独定位**慢在哪一段: 只给"回执/撤下"两个总数, 遇到本地 85ms 这种
        * 数字没法归因(执行明明只有 2.8ms)。故把服务端的 POST / 排队 / 执行三段都带上 ——
@@ -366,64 +366,6 @@ window.AQB_COMMANDS = {
         if (t[k] !== op.patch[k]) return false;
       }
       return true;
-    },
-    /* 用回执里附带的真值直接撤下乐观态(不必再拉一次全量 /api/state)。
-     * 背景: 服务端原本**在补刷新之前**就写回执, 于是"拿到回执立刻 refresh"取到的一定是
-     * 补刷新前的旧快照 ⇒ 第一次拉取 100% 扑空 ⇒ 要等 200ms 退避重试。真机实测(排队 0.0 /
-     * 执行 8.4 / 补刷新 88.4ms, 前端撤下却 1998ms): 大库单轮 refresh 慢时, 这一次扑空就
-     * 是用户看到的"点了要 2 秒才恢复正常"。回执带真值后, 撤下耗时与库大小解耦。
-     * ❗判定口径: **只有真值匹配才撤**; 真值不一致 / 回执里没有这个种子, 一律保持乐观值继续等
-     * (交给 _pullTruthAfterCmd 或 3s 兜底)。
-     *
-     * ⚠ 这里踩过一次(2026-09-20 真机回归, 已撤回): 曾经"不一致就采纳真值", 理由是"真值是
-     * 补刷新之后读的、是权威值"。但 **resume 之后 qB 不会立刻翻状态** —— `torrents/resume` 返回
-     * 200 时种子可能还是 stopped, /sync/maindata 那一刻读到的仍是**命令前**的值(paused)。
-     * 于是采纳真值 = 把行改回「已暂停」, 用户看到: 乐观做种 0.x 秒 → 弹回已暂停 → 约 2 秒后
-     * 才真正变做种。**"权威"不等于"已落地"**, 与预测值不一致的真值绝大多数是还没落地的旧值。
-     * 保持乐观值继续等的代价只是多灰一会儿, 而采纳旧真值是**显示错误状态** —— 后者严重得多。 */
-    _settleFromTruth(hashes, truth) {
-      if (!truth) return false;
-      let all = true;
-      for (const h of hashes || []) {
-        const op = this.pendingOps[h];
-        if (!op) continue;
-        const t = truth[h];
-        if (!t) { all = false; continue; }  // 回执里没这个种子 -> 只能去拉一次
-        let match = true;
-        for (const k of Object.keys(op.patch)) if (t[k] !== op.patch[k]) match = false;
-        if (match) { delete this.pendingOps[h]; continue; }
-        all = false;  // 真值还没落地(或预测值猜错): 保留乐观值, 不采纳、不撤下
-      }
-      // 路径标记: 真机排查时 [perf] 会把它打出来 —— stale = 真值尚未落地(不等于失败)
-      if (all) {
-        if (this.cmdStats) this.cmdStats.settleVia = "truth";
-        this._markCmdSettle();
-      } else if (this.cmdStats) {
-        this.cmdStats.settleVia = "stale";
-      }
-      return all;
-    },
-    /* ---------------- 回执后立刻把真值拉回来(issue 26-09-19-2024) ----------------
-     * 真值原本只能等下一轮轮询(≤1000→1.5s / 1000~3000→2s / >3000→3s)才到 ⇒ 行一直半透明。
-     * 这里不等: 拿到 ok 回执就 refresh 一次。❗竞态: 服务端补刷新(P0-5)是在**回执之后**才跑的
-     * (见 mixins/web_commands.py), 所以第一次可能拿到补刷新前的旧快照(rid 未变) ⇒ 短退避重试,
-     * 直到 reapplyPending 判定"真值已对齐"或窗口用尽(窗口用尽后仍由 3s 兜底收尾, 行为不变)。
-     * 代价: 每次操作多 1~3 次 /api/state(用户触发型, 不在轮询路径上); 单轮按种子量 143~500ms。 */
-    async _pullTruthAfterCmd(hashes, budgetMs = 1500) {
-      const t0 = Date.now();
-      let delay = 0;
-      const list = hashes || [];
-      while (Date.now() - t0 < budgetMs) {
-        if (delay) await new Promise((r) => setTimeout(r, delay));
-        if (!list.some((h) => this.pendingOps[h])) return;  // 已清(真值对齐/回滚/超时)
-        try {
-          await this.refresh();
-        } catch (e) {
-          return;  // 网络/鉴权问题: 交给正常轮询, 不在这里死磕
-        }
-        if (!list.some((h) => this.pendingOps[h])) return;
-        delay = delay === 0 ? 200 : Math.min(400, delay * 2);
-      }
     },
     /* 组行是否有成员在飞(模板绑 is-pending)。**组行的颜色本身不需要额外补丁** ——
      * 组行状态色取自 decoratedGroups 的 status.primary, 而它是 _aggStatus(成员 kind) 算出来的

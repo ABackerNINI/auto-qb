@@ -107,10 +107,10 @@ window.AQB_SHOWS = {
           this._markCmdPost(t0);
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
-          if (r.ok && !this._settleFromTruth(hashes, r.truth)) {
-            if (this.cmdStats) this.cmdStats.settleVia = "pull";  // [perf] 会打出 via=pull
-            await this._pullTruthAfterCmd(hashes);
-          }
+          /* D2: 与 commands.js 三处保持一致 —— 真值由 `truth` 事件推送, 不再拉全量。
+           * ❗这里原先漏改, 追剧页集行还在走 1500ms 拉取预算, 撤下比种子页慢一大截。
+           * ❗只在成功时标 receipt: 失败那一路是回滚, 标它会把 [perf] 里的路径判据带偏。 */
+          if (r.ok && this.cmdStats) this.cmdStats.settleVia = "receipt";
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
           else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
         } catch (e) {

@@ -666,12 +666,18 @@ def _scan_pending_settle(text, rel, problems):
     求值 ⇒ 撤下 = 3000ms + 等到下一次 /api/state。真机连报三次同一现象, 前三次修复全只动"贴上",
     因为没人量过"撤下"。
 
-    主线修法落地后有三处**极易被改回去/写反**的地方, 本守阵逐条钉住:
+    主线修法落地后有两处**极易被改回去/写反**的地方, 本守阵逐条钉住:
       ① `_snapshotTruth(state)` 必须在 `reapplyPending()` **之前** —— 快照要的是服务端原始值;
          挪到之后就变成"行上的补丁值 vs 补丁值", 恒真 ⇒ pending 一瞬间就清(实测 28ms),
          而且冒烟里「落回的是真值」那条**照样 PASS**(补丁值还留在行上, 看着就像真值)。
-      ② 判定必须走 `_optimisticSettled`(比真值快照)而不是"拿行上的当前值比" —— 同上;
-      ③ 回执后必须调 `_pullTruthAfterCmd`, 否则真值只能等下一轮轮询(1.5/2/3s 分档)。
+      ② 判定必须走 `_optimisticSettled`(比真值快照)而不是"拿行上的当前值比" —— 同上。
+
+    ❗2026-09-21 P3 后①②**仍然保留, 且必须保留**: 真值现在主要由 `truth` 事件(SSE)推送,
+      但 **SSE 断线期间推的事件会丢**; 这时 `_optimisticSettled` 是唯一的安全网 —— 轮询带回的
+      `/api/state` 一旦已经含真值就提前收工, 不用干等到 TRUTH_HOLD_MS(8s)超时回滚。
+      没有它, SSE 一断就会出现"命令其实成功了, 8 秒后却回滚"的假失败。
+    ❗已删除的旧机制(勿复活): `_settleFromTruth`(回执带真值就地撤下)、
+      `_pullTruthAfterCmd`(回执后拉全量, 1500ms 预算) —— 真值改由事件推送后它们成了死代码。
     """
     i_snap = text.find("this._snapshotTruth(state)")
     i_reap = text.find("this.reapplyPending()")
@@ -683,9 +689,14 @@ def _scan_pending_settle(text, rel, problems):
             "判定恒真 ⇒ pending 立刻清、失败路径留假状态(红线)"
         )
     if "this._optimisticSettled(" not in text:
-        problems.append(f"{rel} 找不到 _optimisticSettled 的调用点 —— 真值对齐判定被绕过, 撤下退回 3s 兜底")
-    if "this._pullTruthAfterCmd(" not in text:
-        problems.append(f"{rel} 找不到 _pullTruthAfterCmd 的调用点 —— 回执后不拉真值, 撤下要等下一轮轮询")
+        problems.append(
+            f"{rel} 找不到 _optimisticSettled 的调用点 —— 它是 **SSE 断线时的安全网**: 没有它,"
+            "推送丢失就只能干等 TRUTH_HOLD_MS 超时回滚(命令其实成功 ⇒ 假失败)"
+        )
+    # 反向守阵: 已删的机制不许复活(它们是真值改推送后遗留的死代码)
+    for dead in ("_settleFromTruth", "_pullTruthAfterCmd"):
+        if dead in text:
+            problems.append(f"{rel} 残留已删机制 {dead} —— 真值已改由 truth 事件推送, 它只会拖慢撤下")
 
 
 def _scan_frontend_assets():

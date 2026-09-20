@@ -394,7 +394,17 @@ def _affected_truth(self, cmd, args):
         真值 1624ms 后才到（qB 自身节奏，与上次 1258ms 一致），但<b>不再影响观感</b>，
         因为压暗 85ms 就结束了、值覆盖一直撑到真值事件到达 ⇒ <b>不弹回</b>。
         单测 <b>1063 passed</b>。<br>
-        <span class="dim">附：真值等待轮次改打 DEBUG（一次命令 7~8 条 INFO 会刷屏，而这段等待已不影响观感）。</span>
+        <span class="dim">附：真值等待轮次改打 DEBUG（一次命令 7~8 条 INFO 会刷屏，而这段等待已不影响观感）。</span>        <br><b>P3 收尾清理 ✅（2026-09-21 01:10）</b>：<br>
+        · <b>删死代码</b>：<code>_settleFromTruth</code> + <code>_pullTruthAfterCmd</code>
+          （共 58 行）—— 真值改由 <code>truth</code> 事件推送后它们已无引用。<br>
+        · <b>⚠ 修了一个真遗漏</b>：<code>shows.js</code>（追剧页集行）此前<b>漏改</b>，
+          仍在跑 1500ms 拉取预算 —— 已改为与种子页一致的路径（<code>via=receipt</code>）。<br>
+        · <code>via</code> 分档从 5 档（truth/pull/stale/…）收到 2 档（<code>receipt</code>/<code>push</code>）。<br>
+        · <b>❗刻意保留</b> <code>_snapshotTruth</code>/<code>_optimisticSettled</code>/<code>reapplyPending</code>
+          —— 它们是 <b>SSE 断线时的安全网</b>：推送丢失时，轮询带回的 <code>/api/state</code>
+          一旦含真值就提前收工；否则只能干等 8s 超时回滚（命令其实成功 ⇒ 假失败）。
+          静态守阵已写明"勿删"并加了反向守阵（这两个死机制不许复活）。<br>
+        · 实测（sim 1250ms 延迟）：撤下 7ms、<code>via=receipt</code>；单测 <b>1092 passed</b>。
       按 §04 清单删除（比对 / 拉取预算 / 3 s 兜底 / via 多档），只留"贴上 + 等结果"两步，
       并同步清理测试与知识库。<b>不再以 P0 门槛为前提</b> —— 简化本身就是收益，
       门槛数字只用来判断压暗还要不要（见 D2）。
