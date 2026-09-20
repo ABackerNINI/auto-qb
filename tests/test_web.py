@@ -3881,12 +3881,19 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     assert recs[-1].levelno == logging.WARNING, f"慢命令应为 WARNING, 实际 {recs[-1].levelname}"
     assert "1800" in recs[-1].getMessage()
 
-    # ② 快 -> INFO(有记录但不过载)
-    with caplog.at_level(logging.INFO):
+    # ② 快 -> DEBUG(2026-09-21 改: 原本是 INFO, 但每条命令都打会把日志刷满;
+    #    常态耗时改由前端 `[perf]` 那一行承载, 服务端只在**异常慢**时升 WARNING)
+    with caplog.at_level(logging.DEBUG):
         caplog.clear()
         t._log_cmd_timing("pause_torrent", {"wait_ms": 1.0, "exec_ms": 3.0})
     recs = [r for r in caplog.records if "[cmd]" in r.getMessage()]
-    assert recs and recs[-1].levelno == logging.INFO
+    assert recs, "快命令也要有记录(否则排查时连 DEBUG 都捞不出来)"
+    assert recs[-1].levelno == logging.DEBUG, f"快命令应为 DEBUG(不占 INFO), 实际 {recs[-1].levelname}"
+    # 反过来钉住: 快命令**不得**是 INFO 及以上(否则又回到刷屏)
+    with caplog.at_level(logging.INFO):
+        caplog.clear()
+        t._log_cmd_timing("pause_torrent", {"wait_ms": 1.0, "exec_ms": 3.0})
+    assert not [r for r in caplog.records if "[cmd]" in r.getMessage()], "快命令不得进 INFO —— 每条命令都打会刷屏"
 
     # ③ 自投递命令(建索引等)频次高 -> 压到 DEBUG, 不许进常规日志
     with caplog.at_level(logging.DEBUG):

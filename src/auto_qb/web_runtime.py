@@ -129,14 +129,15 @@ class WebUIRuntime:
         with self._sub_lock:
             self._subscribers.append(q)
         # 订阅/退订都记一条 INFO: 排查"SSE 没连上 / 句柄堆叠"的第一手依据(重连时会成对出现)
-        logger.info(f"WEB SSE 订阅 +1(当前 {len(self._subscribers)})")
+        # DEBUG: 连接级事件, 重连时会成对刷屏。排查"没连上 / 句柄堆叠"时把日志级别调到 DEBUG 即可。
+        logger.debug(f"WEB SSE 订阅 +1(当前 {len(self._subscribers)})")
         return q
 
     def unsubscribe(self, q) -> None:
         with self._sub_lock:
             if q in self._subscribers:
                 self._subscribers.remove(q)
-                logger.info(f"WEB SSE 退订 -1(当前 {len(self._subscribers)})")
+                logger.debug(f"WEB SSE 退订 -1(当前 {len(self._subscribers)})")
 
     def subscriber_count(self) -> int:
         with self._sub_lock:
@@ -341,7 +342,9 @@ class WebUIRuntime:
             self.notify("truth", {"cmd_id": cmd_id, "hashes": sorted(truth or {}), "truth": truth})
             n_push += 1
         if n_push:
-            logger.info(f"[cmd] 真值已推 {n_push} 条")
+            # DEBUG: 一次命令一条, 常态下不必占 INFO —— 真值是否到达可从前端
+            # [perf] 的 `via=push` 看出, 排查埋点归前端一处, 后端不重复刷。
+            logger.debug(f"[cmd] 真值已推 {n_push} 条")
         elif n_wait:
             # 等待轮次只打 DEBUG: 真机实测一次命令要等 7~8 轮(每轮 ~200ms), 全打 INFO 会把日志
             # 刷满 —— 而这段等待现在**完全不影响观感**(压暗早已结束), 不值得占 INFO。
@@ -353,11 +356,14 @@ class WebUIRuntime:
         与 set_result 里的 wait_ms / exec_ms 合起来是"点下去到真值进快照"的三段归因。
         """
         ms = round((time.time() - t0) * 1000, 1)
+        # ❗正常耗时只打 DEBUG: 每条命令都会跑一次补刷新, 全打 INFO 会把日志刷满 ——
+        #   而现在真值走直查、撤下也不再等它, 它已经不在用户可见的延迟链路上。
+        #   只有**异常慢**才升到 WARNING(那时它确实会拖慢下一次视图数据的新鲜度)。
         if ms > CMD_SLOW_MS:
             logger.warning(f"[cmd] 命令后补刷新 {ms}ms —— 真值要这一轮跑完才进快照,"
                            " 前端的乐观撤下再快也得等它(大库 /sync/maindata 往返 + 四视图重建)")
         else:
-            logger.info(f"[cmd] 命令后补刷新 {ms}ms")
+            logger.debug(f"[cmd] 命令后补刷新 {ms}ms")
 
     # ------------------------------------------------------------------ 回执
 
@@ -499,7 +505,9 @@ class WebUIRuntime:
                 " 执行大=qB API 慢; 前端再快也盖不住这一段(乐观 UI 只遮住回执之前的一半)"
             )
         else:
-            logger.info(msg)
+            # ❗正常耗时只打 DEBUG: 每条命令都打, 全进 INFO 会把日志刷满 ——
+            #   常态下的耗时看前端 `[perf]` 那一行即可(五段更全), 异常慢才由上面升 WARNING。
+            logger.debug(msg)
 
     # ------------------------------------------------------------------ 命令投递(Web 线程)
 
