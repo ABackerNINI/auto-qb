@@ -4,6 +4,8 @@
 - **流程**内置(禁 `add -A` / ref 三处核对 / 推送顺序 / 幽灵 diff 判据) —— 任何仓库都一样。
 - **项目事实**外置: 红线文件、高危文件、提交前闸门、平台关键词 —— 全部来自 `<仓库根>/.commit-flow.toml`。
 - **没有配置就停下来引导生成**, 不静默回退到"猜一份默认" —— 猜错比停下来更贵。
+- **初稿必须被确认**: `--init` 生成的配置 `confirmed = false`, 且红线不靠推断 —— 由 `draft_issues()`
+  把"未确认 / 空红线 / 命令还是占位符"暴露出来, 防止照单全收。
 
 用法:
     cfg, src = load_config()                 # 缺配置抛 ConfigMissing(带引导文案)
@@ -28,6 +30,7 @@ CONFIG_NAME = ".commit-flow.toml"
 
 # 配置里**省略**这些键时的兜底(不是"没配置文件时的默认值" —— 没配置文件直接 STOP)
 KEY_DEFAULTS: dict = {
+    "confirmed": False,  # --init 生成初稿时为 false; 人工核对完应改为 true
     "branch": "",  # 留空 = 跟当前分支
     "main_host_mark": "",  # 留空 = 不按 URL 特征挑, 直接按候选名取第一个存在的
     "main_candidates": ["origin"],
@@ -151,54 +154,96 @@ def proxy_disable_args(target_url: str) -> tuple[str, ...]:
 
 # ------------------------------------------------------------------ 初稿生成(--init)
 
+# 被 gitignore 的目录里, 这些是构建/缓存产物 —— 不可能被 stage, 不该进候选(纯噪音)
+BUILD_NOISE = ("__pycache__", ".venv", "venv", "node_modules", "dist", "build", "coverage", "htmlcov",
+               ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", "site")
+
 
 def _host(url: str) -> str:
     return urlparse(url).netloc if url else ""
 
 
-def _detect_gates(root: Path) -> list[dict]:
-    """按项目特征猜闸门初稿 —— 只作起点, 生成后必须人工确认。"""
-    gates: list[dict] = []
-    if (root / "pyproject.toml").exists() or (root / "tests").exists():
-        gates.append({
-            "match": ["src/", "tests/"],
-            "run": ["<格式化命令, 例: yapf -i <改过的文件>>", "<测试命令, 例: uv run pytest tests -q>"],
-            "note": "Python 改动",
-        })
-    if (root / "package.json").exists():
-        gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动"})
-    if (root / "Makefile").exists():
-        gates.append({"match": ["Makefile"], "run": ["make test"], "note": "有 Makefile 时"})
-    return gates
-
-
-def _detect_lines(root: Path) -> tuple[list[str], list[str]]:
-    """高危初稿: 从 `.gitignore` 取被忽略的目录 —— 它们不该出现在暂存清单里。"""
+def _ignored_dirs(root: Path) -> list[str]:
+    """.gitignore 里的目录, 去掉构建/缓存噪音 —— 只留"像数据 / 本地状态"的候选。"""
     gi = root / ".gitignore"
-    warn: list[str] = []
+    dirs: list[str] = []
     if gi.exists():
         for line in gi.read_text(encoding="utf-8", errors="replace").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and line.endswith("/"):
-                warn.append(line)
-    return [], warn[:5]
+                if not any(n in line for n in BUILD_NOISE):
+                    dirs.append(line)
+    return dirs[:8]
+
+
+def _detect_project(root: Path) -> tuple[list[dict], list[str]]:
+    """识别项目类型与工具链, 返回 (闸门初稿, 判据说明)。
+
+    原则: **多证据才下判断, 判断不出就不猜** —— 猜错的闸门比没有闸门更危险(会让人以为该跑的跑过了)。
+    判据随初稿写进注释, 便于一眼看出判错。
+    """
+    gates: list[dict] = []
+    why: list[str] = []
+
+    has_py = bool(list(root.glob("*.py"))) or (root / "src").exists() or (root / "tests").exists()
+    py_cfg = [
+        f for f in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile")
+        if (root / f).exists()
+    ]
+    is_python = bool(py_cfg) and has_py
+
+    if is_python:
+        why.append("Python(依据: " + ", ".join(py_cfg) + " + 存在 .py 源码)")
+        if (root / "uv.lock").exists():
+            test, why_pack = "uv run pytest -q", "包管理器 uv(依据: uv.lock)"
+        elif (root / "poetry.lock").exists():
+            test, why_pack = "poetry run pytest -q", "包管理器 poetry(依据: poetry.lock)"
+        elif (root / "Pipfile.lock").exists():
+            test, why_pack = "pipenv run pytest -q", "包管理器 pipenv(依据: Pipfile.lock)"
+        else:
+            test, why_pack = "pytest -q", "未探测到包管理器 → 用裸 pytest"
+        why.append(why_pack)
+        run = [test]
+        if (root / ".style.yapf").exists():
+            run.insert(0, "yapf -i <改过的 py 文件>")
+            why.append("格式化 yapf(依据: .style.yapf)")
+        elif ((root / "ruff.toml").exists() or (root / ".ruff.toml").exists() or
+              ((root / "pyproject.toml").exists() and "[tool.ruff]" in
+               (root / "pyproject.toml").read_text(encoding="utf-8", errors="replace"))):
+            run.insert(0, "ruff format <改过的 py 文件>")
+            why.append("格式化 ruff(依据: ruff 配置)")
+        gates.append({"match": ["src/", "tests/"], "run": run, "note": "Python 改动"})
+
+    if (root / "package.json").exists():
+        gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动"})
+        why.append("前端(依据: package.json)")
+
+    if (root / "Makefile").exists() and not gates:
+        gates.append({"match": ["Makefile"], "run": ["make test"], "note": "有 Makefile"})
+        why.append("Make(依据: Makefile, 且未识别到其它类型)")
+
+    if not gates:
+        why.append("**未识别项目类型** —— 故意不猜, 请手写 [[gates]]")
+    return gates, why
 
 
 def render_template(root: Path) -> str:
-    """配置初稿文本(带注释, 需人工确认)。"""
+    """配置初稿文本(带注释与判据, **必须人工确认**)。"""
     urls = push_urls()
     names = list(urls)
     main_mark = _host(urls[names[0]]) if names else ""
     mirror_mark = _host(urls[names[1]]) if len(names) > 1 else ""
-    red, warn = _detect_lines(root)
-    gates = _detect_gates(root)
+    cands = _ignored_dirs(root)
+    gates, why = _detect_project(root)
 
     def arr(items) -> str:
         return "[" + ", ".join(f'"{i}"' for i in items) + "]"
 
     out = [
-        "# 提交流水线配置 —— 初稿由脚本生成, 请**逐项确认/修改**后再用",
-        "# 查看生效值与来源: python <skill-dir>/scripts/preflight.py --show-config",
+        "# 提交流水线配置 —— **初稿**(脚本按仓库特征生成, 未经确认)",
+        "# 逐项确认/修改后把 confirmed 改成 true; 看生效值: preflight.py --show-config",
+        "",
+        "confirmed = false",
         "",
         'branch = ""                    # 留空 = 跟当前分支',
         f"main_candidates = {arr(names or ['origin'])}",
@@ -206,14 +251,20 @@ def render_template(root: Path) -> str:
         f'mirror          = "{names[1] if len(names) > 1 else ""}"',
         f'mirror_host_mark = "{mirror_mark}"',
         "",
-        "# 出现即 STOP(例: 生产配置 / 运行时数据)",
-        f"red_lines = {arr(red)}",
-        "# 出现需人工确认(例: 用户的在途改动)",
-        f"warn_lines = {arr(warn)}",
+        "# 出现即 STOP —— **必须手填**: 生产配置 / 运行时数据 / 永不入 Git 的目录",
+        "# 下列候选来自 .gitignore(已滤掉构建缓存), 只作提示, 请自行增删:",
+    ]
+    out += [f"#   - {c}" for c in cands] if cands else ["#   (未找到候选 —— 请按仓库的治理规则手写)"]
+    out += [
+        "red_lines = []",
+        "",
+        "# 出现需人工确认(例: 用户的在途改动 / 不该入库的项目数据)",
+        "warn_lines = []",
         "",
         f"platform_hints = {arr(KEY_DEFAULTS['platform_hints'])}",
         f"staged_panic = {KEY_DEFAULTS['staged_panic']}",
         "",
+        "# 提交前闸门 —— 判据: " + "; ".join(why),
     ]
     for gate in gates:
         out += [
@@ -221,6 +272,15 @@ def render_template(root: Path) -> str:
             f"match = {arr(gate['match'])}",
             f"run   = {arr(gate['run'])}",
             f'note  = "{gate["note"]}"',
+            "",
+        ]
+    if not gates:
+        out += [
+            "# (未识别项目类型, 未生成任何闸门 —— 请照下面格式手写, 否则提交前不会有任何机检)",
+            "# [[gates]]",
+            '# match = ["src/"]',
+            '# run   = ["<未填: 测试命令>"]',
+            '# note  = "改动源码"',
             "",
         ]
     return "\n".join(out)
@@ -234,3 +294,24 @@ def init_config(root: Path | None = None, force: bool = False) -> Path:
         raise FileExistsError(f"已存在, 不覆盖: {path}")
     path.write_text(render_template(root), encoding="utf-8")
     return path
+
+
+def draft_issues(cfg: dict) -> list[str]:
+    """初稿体检: 让"照单全收"立刻可见。
+
+    - `confirmed` 仍为 false → 配置还是初稿, 未经确认
+    - `red_lines` 为空 → 等于没有红线(「出现即 STOP」那层保护是关着的)
+    - 闸门命令里仍有 `<未填…>` → 命令没填实
+
+    注意: 只认 `<未填` 前缀 —— `<改过的 py 文件>` 这类是**运行时替换**的正常写法, 不算未填。
+    """
+    issues: list[str] = []
+    if not cfg.get("confirmed"):
+        issues.append("配置仍是初稿(confirmed = false) —— 逐项确认后改为 true")
+    if not cfg.get("red_lines"):
+        issues.append("red_lines 为空 = 没有红线, 「出现即 STOP」那层保护是关着的")
+    for gate in cfg.get("gates", []):
+        for cmd in gate.get("run", []):
+            if "<未填" in cmd:
+                issues.append(f"闸门命令仍有未填项: {cmd}")
+    return issues

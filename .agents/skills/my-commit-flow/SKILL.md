@@ -19,7 +19,7 @@ user-invocable: true
 
 | 步 | 做什么 | 判据 / 不通过怎么办 |
 |---|---|---|
-| **S0 配置**（每仓库一次） | 确认 `<仓库根>/.commit-flow.toml` 存在 | **没有就停手**，跑 `preflight.py --init` 生成初稿 → **人工确认/修改** → `preflight.py --show-config` 核对生效值。本 skill 不内置项目配置，也不猜默认值 |
+| **S0 配置**（每仓库一次） | 确认 `<仓库根>/.commit-flow.toml` 存在且 `confirmed = true` | **没有就停手**，跑 `preflight.py --init` 生成初稿 → **人工确认/修改**（红线必须手填）→ 置 `confirmed = true`。本 skill 不内置项目配置，也不猜默认值；未确认 / 空红线 / 命令还是 `<未填…>` 都会被预检报出来 |
 | **S1 预检与同步** | `python <skill-dir>/scripts/preflight.py` | 一张表报出：配置来源 / 主线远端 / 上游 / 落后几个 / 工作区脏不脏 / 有没有红线文件 / 该跑哪些闸门。有 **STOP** 就先处理；**推送前再跑一次**（`status -sb` 的 ahead/behind 是上次 fetch 的快照，不会自己刷新） |
 | **S2 闸门** | 跑预检列出的命令（测试、生成器 `--check`、格式化…） | 红了不提交 |
 | **S3 暂存** | `python <skill-dir>/scripts/commit.py --message-file <文件> <路径...>` | **逐路径**，脚本直接拒绝 `-A` / `.` / `*`；红线文件（配置的 `red_lines`）直接拒交；高危文件（`warn_lines`）需人工确认 |
@@ -56,9 +56,14 @@ user-invocable: true
 **缺这个文件就停手并引导生成**（不猜默认值 —— 猜错比停下来更贵）：
 
 ```bash
-python <skill-dir>/scripts/preflight.py --init          # 按仓库特征生成初稿
-# 打开逐项确认/修改(尤其 red_lines 与 [[gates]])
+python <skill-dir>/scripts/preflight.py --init          # 按仓库特征生成初稿(confirmed = false)
+# 打开逐项确认/修改: red_lines 必须手填; [[gates]] 看注释里的"判据"是否判对; 然后 confirmed = true
 python <skill-dir>/scripts/preflight.py --show-config    # 看生效值与来源
+```
+
+**初稿不是成品**：`--init` 只做两件安全的事 —— 红线**只给候选不代填**（靠猜的红线会漏掉最要命的那条），
+闸门**多证据才下判断、判断不出就不猜**（猜错的闸门会让人以为该跑的跑过了）。判据写进注释便于核对。
+预检会把"未确认 / 空红线 / 命令仍含 `<未填…>`"逐条报出来，防止照单全收。
 python <skill-dir>/scripts/preflight.py --config <路径>  # 临时用另一份配置
 ```
 

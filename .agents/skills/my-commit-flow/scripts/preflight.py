@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import (  # noqa: E402
     CONFIG_NAME,
     ConfigMissing,
+    draft_issues,
     find_root,
     init_config,
     load_config,
@@ -137,8 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     staged, unstaged = changed_files()
     changed = staged + unstaged
 
-    # 1 配置
+    # 1 配置(含"初稿体检": 未确认 / 空红线 / 命令还是占位符)
     rows.append((PASS, "外置配置", str(src)))
+    for issue in draft_issues(cfg):
+        rows.append((WARN, "配置体检", issue))
 
     # 2 分支
     rows.append((PASS if branch == BRANCH else WARN, "分支", f"当前 {branch}(探测/配置为 {BRANCH})"))
