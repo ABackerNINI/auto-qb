@@ -67,7 +67,8 @@
 
 <p class="kv">
   <b>对象</b>　<code>src/auto_qb/web_ui/static/shared/app.js</code>(Vue 3 CDN, 无构建链; prism / atlas 两套 UI 共用)<br>
-  <b>结果</b>　<span class="done">已执行完成</span>　5045 行 → <b>1001 行内核 + 15 个片段文件</b>; 单测 1055 passed 不变, 浏览器冒烟 54 项 0 失败<br>
+  <b>结果</b>　<span class="done">已执行完成</span>　5045 行 → <b>1001 行内核 + 15 个片段文件</b>; 单测 1057 passed, 浏览器冒烟 54 项 0 失败<br>
+  <b>入库</b>　<code>afef7ce</code>(已推送 Gitee <code>develop</code>) + <code>c7a4fb2</code> 知识库回写<br>
   <b>档案</b>　<code>memory-bank/tasks/26-09-20-webui-appjs-split.md</code>
 </p>
 
@@ -183,12 +184,20 @@ app.mount("#app");</pre>
 
 <h2><span class="num">05</span>结果</h2>
 
-<p>行为等价性由冒烟背书: 拆分前后各跑一遍, <strong>54 项断言逐条一致、失败 0</strong>, 且 <code>无 console.error / pageerror</code>。单测 1055 passed 不变(本轮未新增用例)。</p>
+<p>行为等价性由冒烟背书: 拆分前后各跑一遍, <strong>54 项断言逐条一致、失败 0</strong>, 且 <code>无 console.error / pageerror</code>。本轮未新增单测。</p>
 
-<p>改动清单: 新增 15 个片段文件; 改 <code>app.js</code>、prism/atlas 两个 <code>index.html</code>、<code>tests/test_web.py</code>; 回写 <code>modules.md</code> / <code>testing.md</code> / <code>progress.md</code> / <code>activeContext.md</code> 并立档 <code>tasks/26-09-20-webui-appjs-split.md</code>。<strong>尚未提交。</strong></p>
+<p>改动清单: 新增 15 个片段文件; 改 <code>app.js</code>、prism/atlas 两个 <code>index.html</code>、<code>tests/test_web.py</code>; 回写 <code>modules.md</code> / <code>testing.md</code> / <code>progress.md</code> / <code>activeContext.md</code> 并立档 <code>tasks/26-09-20-webui-appjs-split.md</code>。已入库 <code>afef7ce</code> 并推送 Gitee。</p>
+
+<h3>推送时与上游撞车: 冲突落在"已被搬走的方法"上</h3>
+
+<p>准备推送时 <code>git fetch</code> 发现 Gitee 已前进 3 个提交(<code>03ed9ed</code> / <code>5691c6f</code> / <code>f36a413</code>: 主循环 × WebUI 解耦 + 给撤下路径加 <code>via</code> 标记 + 知识库回写)。变基时 <code>app.js</code> 撞出<strong>整块冲突</strong>——一边是我的 1001 行, 一边是上游的 5045 行。</p>
+
+<p>关键判断: 上游那 7 处改动, 改的<strong>正是我搬走的那几个方法</strong>(<code>_settleFromTruth</code> / <code>_markCmdSettle</code> / <code>act</code> / <code>bulkAct</code> / <code>actTorrent</code> / <code>actEpisode</code>)。所以解法不是"二选一", 而是: app.js 取我的拆分版, 再把上游的语义改动<strong>按意图落到方法迁移后的新位置</strong> —— <code>commands.js</code> 6 处、<code>shows.js</code> 1 处。</p>
+
+<p>落点对不对, 由冒烟实测背书: 合并后重跑, <code>[perf]</code> 里打出了 <code>撤下 3074ms via=pull</code> —— 埋点在<strong>运行时真的走了新代码路径</strong>, 证明不只是文本搬对了。最终 <strong>1057 passed</strong>(上游新增 2 项, 我的改动未增减用例)、冒烟 <strong>54 项 0 失败</strong>。</p>
 
 <div class="note">
-  <p><strong>顺带发现一处既有文档漂移(未在本轮改)</strong>: <code>testing.md</code> 顶部基线写 1054, 本机实测恒为 1055(改动前后各测一次均如此)。按范围守恒只在该文件加注说明, 未动基线数字。</p>
+  <p><strong>一条可复用的经验</strong>: 大规模搬代码式的重构, 变基冲突的解法不是"选我的还是选他的", 而是<strong>先认领结构(取重构后的布局), 再把对方的语义改动迁移到新位置</strong>, 并且必须用<strong>行为测试</strong>(这里是浏览器冒烟)而不是"看着对"来确认迁移到位。这条已写进档案 <code>tasks/26-09-20-webui-appjs-split.md</code>。</p>
 </div>
 
 <footer>
