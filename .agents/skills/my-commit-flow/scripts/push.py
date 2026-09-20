@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -35,6 +36,20 @@ def git(*args: str) -> subprocess.CompletedProcess:
 
 
 MAIN = resolve_main_remote()  # 运行期定主线远端名(gitee / origin)
+
+
+def remote_sha_with_retry(name: str, branch: str) -> str:
+    """取远端 ref —— **主线瞬时失败可重试一次**(见 pitfalls: Gitee 也会偶发 Recv failure)。
+
+    取不到(空)与"取到了但不一致"必须区分: 前者是网络, 后者才是推送没落。
+    """
+    for attempt in range(2):
+        proc = git("ls-remote", name, branch)
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.split()[0]
+        if attempt == 0:
+            time.sleep(1)
+    return ""
 
 
 def remotes() -> dict[str, str]:
@@ -62,15 +77,28 @@ def main(argv: list[str] | None = None) -> int:
 
     head = git("rev-parse", "HEAD").stdout.strip()
     print(f"\n=== 推主线 {MAIN}/{BRANCH} ===")
-    proc = git("push", MAIN, BRANCH)
+    # 主线瞬时 Recv failure 可重试一次(见 pitfalls「Gitee 主线也会偶发 Recv failure」);
+    # 镜像不重试(旧规: 尝试一次, 失败只报一次)
+    for attempt in range(2):
+        proc = git("push", MAIN, BRANCH)
+        if proc.returncode == 0:
+            break
+        if attempt == 0 and ("Recv failure" in proc.stderr or "Connection was reset" in proc.stderr):
+            print("  主线瞬时连接失败, 重试一次 …")
+            time.sleep(1)
     print((proc.stdout + proc.stderr).strip())
     if proc.returncode != 0:
         sys.stderr.write("主线推送失败 —— 镜像不再尝试, 先解决主线。\n")
         return 5
 
     print("\n=== 核对远端 ===")
-    remote = git("ls-remote", MAIN, BRANCH).stdout.split()
-    remote_sha = remote[0] if remote else ""
+    remote_sha = remote_sha_with_retry(MAIN, BRANCH)
+    if not remote_sha:
+        # 取不到 ≠ 推送失败: 别把网络抖动报成"不一致", 那会让执行者重复推或惊慌
+        print(f"  **取不到远端 ref**(ls-remote 两次都空/失败) —— 推送命令本身已成功, 请手工确认:")
+        print(f"     git ls-remote {MAIN} {BRANCH}   # 期望看到 {head}")
+        print(f"  {git('status', '-sb').stdout.splitlines()[0]}")
+        return 6
     ok = remote_sha == head
     print(f"  远端 {remote_sha}\n  本地 {head}  →  {'一致' if ok else '**不一致**'}")
     print(f"  {git('status', '-sb').stdout.splitlines()[0]}")
