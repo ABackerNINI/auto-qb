@@ -5,11 +5,6 @@ applyTo: 'memory-bank/**'
 
 > **Opt-in pattern.** This instruction creates and maintains a `memory-bank/` folder in the workspace root. Enable it only when you want persistent project documentation across AI sessions; otherwise the auxiliary files will accumulate in repos that don't need them.
 
-> ⚠️ **本文件的加载范围**: `applyTo: 'memory-bank/**'` 意味着只有**编辑 `memory-bank/` 下文件时**才会注入本文件。
-> 因此本文件只是"知识库内部结构规格"; **会话级触发(该不该立档 / 收尾 DoD)不在这里**, 而在 always-on 入口
-> (`AGENTS.md` + `.github/copilot-instructions.md`)与 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)。
-> 2026-09-17 复盘: 曾误以为本文件是"memory bank skill", 导致编辑 `src/` 时立档规则不可见 → 请勿再依赖本文件做触发。
-
 Coding standards, domain knowledge, and preferences that AI should follow.
 
 # Memory Bank
@@ -71,9 +66,12 @@ flowchart TD
    - Current status
    - Known issues
 
-7. `tasks/` folder
+7. `pitfalls.md`
+   - Pitfalls encountered
+
+8. `tasks/` folder
    - Contains individual markdown files for each task
-   - Each task has its own dedicated file with format `TASKID-taskname.md`
+   - Each task has its own dedicated file with format `YY-MM-DD-HHMM-taskname.md`
    - Includes task index file (`_index.md`) listing all tasks with their statuses
    - Preserves complete thought process and history for each task
 
