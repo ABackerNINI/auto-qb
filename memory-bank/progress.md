@@ -181,6 +181,7 @@
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - 单实例锁 (2026-09-05): 基于第三方 `filelock`, 锁文件 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`; 仅正常 `run()` 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 失败抛 `SingleInstanceLockError(AutoQbError)`, CLI 单点捕获 AutoQbError 体系干净退出 (退出码 1, stderr 无堆栈); 陈旧锁不接管 (OS 句柄随进程退出自动释放, 必要时手动删除)
 - 测试: 基线数字单点维护于 [testing.md](testing.md) 顶部 (2026-09-14 起, 此处不再手抄; ui.py GUI 本体真机冒烟)
+- WEB UI 两连 bug 修复 (2026-09-21, issue 26-09-21-0247): **辅种页点行展开后整表白屏** + **种子页次导航栏 `做种10 错误1` 整行消失**。根因两条: ①`columns.js` 里 `memberWin / memberPadTop / memberPadBottom` 三个**带参**函数被错放进 `computed:` 块 —— Vue 3 computed 是无参 getter, 模板里 `memberPadTop(g.members)` 触发 `this.memberWin` 当属性访问、返回 `{padTop:0,…}` 这个值、再 `(list)` 当函数调 → 整表白屏; ②`dialogs.js` 的 `distSegments` 只数 `this.groups[].members[].kind`, 在按视图裁剪(`view=torrent` 不回 groups)下两种场景 chips 全空(首进种子页 / 长期停在种子页)。修法 = 三个函数迁 `methods:` + `distSegments` 按 `viewMode` 分支取数(torrents 走 `torrents[].kind` / shows 走 `shows.list[].seasons[].episodes[].state` / groups 走 groups + singles)。两条**纯前端 mixin** bug 单测看不见, 新增两道静态守阵 `test_frontend_member_window_functions_live_in_methods` + `test_frontend_dist_segments_aggregates_per_view` 用正则钉死位置与分支结构; 真机桩服务冒烟(`scripts/ui_harness.py` + Playwright)11 步交互 0 报错。基线 1094 → **1098 passed**。详见 [pitfalls.md](pitfalls.md)「带参数的 computed 是另一条更隐蔽的雷」「跨视图的派生聚合必须按 viewMode 自取数」。
 
 ## 规划中 (🚧, 尚未实现)
 

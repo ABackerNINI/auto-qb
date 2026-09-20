@@ -77,6 +77,7 @@
 ### 模板与组件
 
 - **computed 在模板里是属性, 不能当函数调用**: `hasUnit()` / `unitParts().num` 在生产版 Vue 抛 `is not a function`, 结果是**整块区域不渲染**(设置页只剩分组标题 / 顶栏整条消失)而控制台常常无醒目提示。带参渲染辅助(如 `unitLabel(u)`)必须放 `methods` —— Vue 3 的 computed getter 被框架以组件代理为参数调用, 收到的 `u` 是 Proxy 而非遍历项, `String(proxy)` 抛 "Cannot convert object to primitive value"。
+- **带参数的 computed 是另一条更隐蔽的雷**(2026-09-21, issue 26-09-21-0247): 在 Options API `computed: {` 块里写 `memberWin(list) {…}`, Vue 仍把它当 getter 注册, 模板里 `memberPadTop(g.members)` 触发 `this.memberWin` 被当作属性访问 —— 框架**不会**把 `g.members` 传给 getter(只对 methods 传), 于是 getter 用未定义参数跑完返回一个对象 `{padTop:0,…}`, 然后 `(list)` 把它当函数调 → `this.memberWin is not a function` → 整表白屏(chips / 状态条 / 表头 / 行 全部消失)。坑在编译期不报、lint 阶段单控过、`pytest --passes` 也过 —— 只有能加载页面的脚本里才能复现。**带参的"计算"必须一律放 methods**(放 methods Vue 会把模板里的实参原样透传)。静态守阵见 `tests/test_web.py::test_frontend_member_window_functions_live_in_methods`(定位 `methods:` 与 `computed:` 块边界, 断言 `memberWin` / `memberPadTop` / `memberPadBottom` 定义行落在 methods 之内)。同坑曾因"没人走那条交互路径"长期潜伏, 真机一走就塌 —— 加新成员窗口函数时**先在两套 UI 都跑一遍展开/收起的冒烟**, 不能只看单测。
 - **computed / methods / data 三者不能同名**(共命名空间): 同名后调用方拿到的是属性, 抛错形态同上。
 - **模板里不允许下划线前缀标识符**: Vue 把 `_` 前缀当内部保留域, `{{ _bulkCountText() }}` 抛 `ReferenceError` 且整块渲染失败(控制台只有一行)。对外派生值去掉下划线前缀。
 - **SVG 属性大小写敏感**: 静态写 `viewBox` / `pathLength` 会被模板编译器小写成 `viewbox` ⇒ 浏览器忽略、内容溢出容器。必须 `v-bind="{ viewBox: ... }"` / `v-bind="{ pathLength: 1000 }"`。
@@ -132,6 +133,7 @@
 - **追剧视图 `members` 是双形态**(后端 hash 数组 / 前端 `decoratedShows` 装饰成成员对象): 任何写进 URL / 命令载荷 / `memberByHash` 查找的地方必须先 `memberHashesOf()` 归一成 hash, 否则字符串化成 `[object Object]` ⇒ 后端 404「种子不存在」(不报错, 只有一条 toast)。**"同一动作单种子正常、聚合行失败"基本就是这个形状**。守阵: `test_frontend_static_bundle_health` 第 7 项(集成员取 hash 的行必须含 `memberHashesOf(`)。
 - **P1-1 按视图回传: 前端赋值必须"键不存在则保留原引用"**(`if (state.groups !== undefined)`), 否则每次轮询把其它两个视图抹成空; 切视图时把 `lastRid` 置空强制取一次全量; 服务端 `view` 取保守默认(未知 / 缺省 ⇒ 全回)。
 - **每条视图的数组集必须覆盖"该视图渲染所需的全部数据源"**: 追剧页的 `shows[].members` 只是 hash, 前端要靠 `memberByHash`(groups + singles 拼)还原成员 ⇒ 只回 shows 会让整页**永久空白且不自愈**(lastRid 已记住, 之后每轮都是"版本未变不回传")。改 `VIEW_ARRAYS` 时逐个视图问"它渲染时还读哪些数组", 并**用刷新页面的方式验证**(切视图会掩盖问题)。
+- **跨视图的派生聚合(状态分布 `distSegments` / 状态 chip / 状态条)必须按 `viewMode` 自取数**(2026-09-21, issue 26-09-21-0247): 后端按视图裁剪(`VIEW_ARRAYS` 的设计本意), 旧版 `distSegments` 只数 `this.groups[].members[].kind` ⇒ 两种场景 chips 全空: ①localStorage 持久化 `autoqb.ui.view=torrents` 后首进种子页(`groups=[]` 首轮即空); ②在种子页停得久(轮询只刷 torrents, groups 永远空或冻结旧值)。表现「做种10 错误1」整行消失 —— 用户只会觉得"统计没了", 排查方向跑偏。修法 = `distSegments` 按 viewMode 分支: groups 走 groups + singles / torrents 走 `torrents[].kind` / shows 走 `shows.list[].seasons[].episodes[].state`(`shows` 是 `{list, unrecognized}` 不是数组, 第一脚就踩过)。判定口诀"凡跨视图呈现的派生值, 都问一次'它在另两个视图下还成立吗'"; 守阵见 `tests/test_web.py::test_frontend_dist_segments_aggregates_per_view`。
 - **⚠️ 跨视图的常驻消费者不能依赖按视图裁剪的阵列**(状态栏速度恒为 0, 同类第二次): 全局聚合一律**服务端算好放进 `status` 恒回传**(与 `traffic`/`server` 同口径), 不参与 `VIEW_ARRAYS` 分片、不参与 rid 门控。**不要**反过来把阵列加回 `VIEW_ARRAYS`(会废掉 P1-1 的体积优化)。每次增删 `VIEW_ARRAYS` 键、或新增常显 UI 元素时问一句"它的数据源会不会在某个视图下不回传"。
 - **rid 门控下"下轮以服务端为准"是不成立的**: `updated === false` 时前端不回传数组也不整表替换, 行对象保持原引用 ⇒ 任何"我不再写它了"的写法都会把值永久留在行上。乐观 UI 的兜底必须**显式回滚 `op.prev`**; 且回滚放在每轮 `refresh()` 里, **不要在渲染函数里改响应式字段**(`isPending()` 每帧被调用, 有递归更新风险)。
 - **"服务端的值"不等于"已落地的值"**: `torrents/resume` 返回 200 时 qB 还没翻状态, 紧跟着的补刷新读到的是**命令前**的旧值 ⇒ "权威值"其实是滞后一拍的旧值。判据: 与本地预测不一致的服务端值绝大多数是**还没落地**, 不是"预测猜错了"。修法 = 前端只在真值**匹配**时撤下(不一致保留乐观值继续等)+ 服务端发回执前等真值落地(上限 1200ms, 超时必须照发, 等待期间按 0.2s 快速补刷新)。**代价排序: 显示错误状态 >> 多等一会儿。**
@@ -240,11 +242,11 @@
 - **`git commit -F - <<'MSG' … MSG && git push` 会让 push 静默不执行**(结束符没被识别, 命令体读到 EOF, push 被当成 heredoc 内容)⇒ commit 与 push 写**两条独立命令**, 结束符单独占一行; 提交后看 `git status -sb` 的 `[ahead N]`。
 - **rebase 冲突落在"已被你迁走"的方法上: 取上游的**意图**, 不是它的**位置** —— 先 `git diff <我方基线> <上游> -- <冲突文件>` 看上游到底加了几行(冲突块 100 行可能只有 5 行是真改动, 其余是"你迁走后上游又把原方法带回来")。上游的改动不能丢(丢了等于静默回退)。`git add` 之后、`rebase --continue` **之前**先跑一次全量测试。另: rebase 下 `-X theirs` = 正在重放的"我的提交"(与 merge 相反)。
 - **合并冲突处理不要把 UTF-8 当 GBK 写入**(文档乱码且**不可逆**, 曾藏 3 天; 特征是私用区字符与 U+FFFD)。检测: 统计 GBK 误解码高频字密度。**恢复从 git 取原文**(逐父 `git show <parent>:<file>` 比对取唯一来源那一侧), 不要反解; 写回保持 CRLF 否则整文件 diff 炸开; 顺手做一次全文件链接存在性扫描。**验证编码一律用 Python 显式 UTF-8 读**(`open(p,"rb").read().decode("utf-8")` 不抛错且 `"\ufffd" not in text`)—— Git Bash 的 `sed/cut` 管道对**完好的** UTF-8 也会打印乱码, 不能据此下结论。
-- **用 Python 文本模式改文件会把整份 CRLF 悄悄改成 LF**(2026-09-20 实测): 本仓库行尾**不统一**(index.html 等是 CRLF, style.css / views.css 是 LF), `io.open(p).read()` 走通用换行把 
+- **用 Python 文本模式改文件会把整份 CRLF 悄悄改成 LF**(2026-09-20 实测): 本仓库行尾**不统一**(index.html 等是 CRLF, style.css / views.css 是 LF), `io.open(p).read()` 走通用换行把 
  读成 
 , 再 `write(newline="")` 落盘就只剩 LF —— `git diff` 仍只显示你改的那几行(索引存 LF, 归一化后看不出来), 但字节层面整份文件的行尾都被改了。修法: 改 html/css/md 一律**按字节读写**(`open(p,"rb")` + `bytes.replace`), 或写回时补 `.replace(b"
-", b"
-")`; 复核用 `b.count(b"
+", b"
+")`; 复核用 `b.count(b"
 ")` —— git bash 里 `grep -c $'' file` 会给假结果(实测计数等于总行数), 别信。
 - **`core.autocrlf=true` 下编辑会归一整文件行尾**(单文件 diff 从 23 行变 1431 行): 不是损坏, 但提交信息要写明"行尾归一"。
 - **多行文本替换在"多处同型块"上会错位吞行**(工具仍返回成功, 产出 `</p>note warn">` 这类语法垃圾): oldString 扩到含前后**不重复**的上下文; 改完做**标签配对计数**; 已损坏就 `git checkout -- <file>` 回滚重做, 不要就地缝补。

@@ -350,11 +350,29 @@ window.AQB_DIALOGS = {
       ];
       return items;
     },
-    /* 状态分布(纯前端聚合 members[].kind): 供顶栏下方堆叠条与可点击图例使用 */
+    /* 状态分布(按当前视图聚合): 旧版只读 this.groups, 种子页(groups 不被后端回传)
+     * 与首次进入种子页(localStorage 持久化 view=torrent, 首轮 groups=[])时统计全空,
+     * 「做种10 错误1」这一行消失 ⇒ 必须按 viewMode 各自取数:
+     *   groups  →  各组 members + singles(同一来源 _member_view, kind 字段一致)
+     *   torrents→  平铺数组(kind 字段同样由 _member_view 透出)
+     *   shows   →  剧集节点的聚合 state(后端 _build_show_view 已取 min kind)
+     * 顺序表与 kind 口径与 decorate.kindText 一致, 计数为 0 的类别被 filter 掉 */
     distSegments() {
       const order = ["seeding", "downloading", "checking", "paused", "error", "other"];
       const count = {};
-      for (const g of this.groups) for (const m of g.members) count[m.kind] = (count[m.kind] || 0) + 1;
+      const bump = (k) => { if (k) count[k] = (count[k] || 0) + 1; };
+      if (this.viewMode === "torrents") {
+        for (const t of this.torrents) bump(t.kind);
+      } else if (this.viewMode === "shows") {
+        for (const s of (this.shows && this.shows.list) || []) {
+          for (const season of (s.seasons || [])) {
+            for (const ep of (season.episodes || [])) bump(ep.state);
+          }
+        }
+      } else {
+        for (const g of this.groups) for (const m of (g.members || [])) bump(m.kind);
+        for (const r of this.singles) bump(r.kind);
+      }
       const total = order.reduce((n, k) => n + (count[k] || 0), 0);
       if (!total) return [];
       return order.filter((k) => count[k]).map((k) => ({

@@ -6,7 +6,17 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1094 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1098 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1094 → 1098(本批 +4: `tests/test_web.py` 新增两道前端静态守阵 —— `test_frontend_member_window_functions_live_in_methods`
+#     钉死"成员行窗口带参函数必须 methods 不得 computed"(防 Vue 3 getter 当属性调用导致整表白屏);
+#     `test_frontend_dist_segments_aggregates_per_view` 钉死"状态分布按 viewMode 分支取数"
+#     (防种子页 / 追剧页次导航统计全空)。两条都因 2026-09-21 一次两连 bug 落地 —— 修法均改两处前端 mixin,
+#     单测看不见, 必须静态钉)。
+#     实际: 1094 是当日已写好的 W3 收尾数字; 本批 +2(1096)→1098, 上一批 +2(1094→1096) 是领先
+#     origin/develop 的两个 commit 已加但 testing.md 未及时更新的测试(本批一并补齐基线)。
+#     (防种子页 / 追剧页次导航统计全空)。两条都因 2026-09-21 一次两连 bug 落地 —— 修法均改两处前端 mixin,
+#     单测看不见, 必须静态钉。
+#   ⚠ **Linux 侧未同步重测**(本批只在 Windows 跑), 按本节上方纪律, 下次动基线时两侧一起补。
 #   ↑ 1062 → 1077(W1 `tests/test_expr_parse.py` +15: 词法字面量/单位、一层一运算符红绿用例、前缀形态、
 #     函数调用、列表字面量、字面量类型冲突、AST 形状)
 #     → 1094(W2/W3 `tests/test_expr_eval.py` +17: 取值面/求值/短路与缓存/运行期类型错误/静态语义校验/

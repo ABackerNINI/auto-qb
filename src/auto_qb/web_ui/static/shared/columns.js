@@ -560,6 +560,21 @@ window.AQB_COLUMNS = {
       if (!d || d.page !== page) return {};
       return { left: d.x + "px" };
     },
+    /* 成员行(展开明细)窗口: 与 group/torrent 不同, 三个成员窗口都要按"当前展开单元"
+     * 的成员数组计算占位 —— 故**带参数**。Vue 3 computed 是无参 getter, 这里必须放
+     * methods(否则模板里 memberPadTop(g.members) 触发 this.memberWin 当 getter 调用,
+     * 拿到的是对象而不是函数 → "this.memberWin is not a function", 整表就地白屏)。
+     * 该 bug 由拆分前的同一段代码继承而来, 之前未塌是因为它走的是追剧页的成员行(整表
+     * 不白)还是其它原因未复现, 现在辅种页展开一行即 100% 触发, 必须正名。 */
+    memberWin(list) {
+      return this._rowWindow("member", list || [], null);
+    },
+    memberPadTop(list) {
+      return this.memberWin(list).padTop;
+    },
+    memberPadBottom(list) {
+      return this.memberWin(list).padBottom;
+    },
   },
   computed: {
     /* 列模板: computed 缓存(列宽/列显隐变化才变), 行渲染只取同一引用, 不再每行拼字符串 */
@@ -632,20 +647,6 @@ window.AQB_COLUMNS = {
     },
     groupPadBottom() {
       return this.groupWin.padBottom;
-    },
-    /* 成员行(展开明细): 行数 = **当前展开单元**的成员数。容器是 .detail(不是 .group-table),
-     * 用 ref=detailHead 的父元素定位; 成员数通常很小(阈值以下自动不开窗)。
-     * ❗参数是当前展开单元的成员数组, 由模板传入(分组页传 g.members, 追剧页传 e.members) ——
-     * 曾经写死读 expandedGroup, 而追剧页的展开态是 expandedShowEp(expandedKey 恒为 null)
-     * ⇒ 追剧页的成员窗口恒为空、占位恒为 0, 与模板注释"集成员行同样走窗口"相反(BUG-2)。 */
-    memberWin(list) {
-      return this._rowWindow("member", list || [], null);
-    },
-    memberPadTop(list) {
-      return this.memberWin(list).padTop;
-    },
-    memberPadBottom(list) {
-      return this.memberWin(list).padBottom;
     },
     /* 可见列(列选择器只改 colHidden; 顺序取 colOrder(表头拖动重排 TBL-05), 无自定义序时按列定义序) —— 表头/行/grid 模板共用 */
     visibleGroupCols() {

@@ -10,6 +10,8 @@
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
+- test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -811,6 +813,63 @@ def test_frontend_static_bundle_health():
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
+
+
+def test_frontend_member_window_functions_live_in_methods():
+    """成员行窗口三个函数(memberWin / memberPadTop / memberPadBottom)必须在 methods 块, 不能在 computed
+
+    现象与定性(issue 26-09-21-0247):
+    这三个函数**带参数**(`list`), Vue 3 computed 是无参 getter —— 模板里 `memberPadTop(g.members)`
+    调用时, Vue 把 `this.memberWin` 当 getter 触发, 拿到的是 `{padTop:0,…}` 这个**值**;
+    再 `(list)` 把它当函数调 → "this.memberWin is not a function" → 辅种页展开任一行即整表白屏
+    (chips / 状态条 / 表头 / 行 全部消失, 控制台报错)。同一份代码在拆分前(afef7ce^)
+    就在 computed, 之前未塌是因为没人走"辅种页展开"路径; 守不住就会再塌。
+
+    断言: 这三个名字的定义行必须在 `methods: {` 之后、`computed: {` 之前。
+    """
+    rel = "shared/columns.js"
+    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    m_methods = re.search(r"^\s*methods:\s*\{", text, re.M)
+    m_computed = re.search(r"^\s*computed:\s*\{", text, re.M)
+    assert m_methods, f"{rel} 找不到 methods 块(文件结构改了? 同步本守阵)"
+    assert m_computed, f"{rel} 找不到 computed 块(文件结构改了? 同步本守阵)"
+    methods_end = m_methods.end()
+    computed_start = m_computed.start()
+    assert methods_end < computed_start, f"{rel} methods 块不在 computed 之前(顺序倒了?)"
+    for name in ("memberWin", "memberPadTop", "memberPadBottom"):
+        m_def = re.search(rf"^\s*{name}\s*\(", text, re.M)
+        assert m_def, f"{rel} 找不到 {name}(... 定义(改名了? 同步本守阵)"
+        assert methods_end < m_def.start() < computed_start, (
+            f"{rel} {name}(...) 定义落在 computed 块里 —— Vue 3 computed 不能带参, "
+            f"模板里 memberPadTop(g.members) 会把 this.memberWin 当 getter 触发,"
+            f"拿到值再 (list) 当函数调 → 整表白屏(issue 26-09-21-0247)"
+        )
+
+
+def test_frontend_dist_segments_aggregates_per_view():
+    """状态分布 distSegments 必须按当前 viewMode 取数, 不能只数 this.groups
+
+    现象与定性(issue 26-09-21-0247):
+    后端按视图回传(P1-1, 见 mixins/web_view.VIEW_ARRAYS): view=torrent 只回 torrents,
+    view=group 只回 groups+singles。旧版 distSegments 只数 this.groups[].members[].kind,
+    于是两种场景 chips 全空:
+    ① localStorage 持久化 `autoqb.ui.view=torrents` 后首进种子页(首轮 groups=[]);
+    ② 在种子页停得久(轮询只刷 torrents, groups 永远是空/旧)。
+    表现是「做种10 错误1」整行消失。
+
+    断言: distSegments 实现里必须包含三个 viewMode 分支(torrents / shows / 其余即 groups)。
+    """
+    rel = "shared/dialogs.js"
+    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    m = re.search(r"distSegments\s*\(\)\s*\{(.*?)\n    \},", text, re.S)
+    assert m, f"{rel} 找不到 distSegments computed(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    for token, label in (
+        ('this.viewMode === "torrents"', "torrents 视图分支"),
+        ('this.viewMode === "shows"', "shows 视图分支"),
+        ("this.groups", "groups 视图分支(else 兜底, 直接读 this.groups)"),
+    ):
+        assert token in body, f"distSegments 缺少{label}({token!r}) —— 种子页/追剧页次导航统计会全空(issue 26-09-21-0247)"
 
 
 def test_frontend_statusbar_speed_reads_server_totals():
