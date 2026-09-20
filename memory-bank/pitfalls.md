@@ -1525,3 +1525,13 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
   **push 阶段才 STOP**。
 - 判据: 写"检查表型"脚本时, 每条检查都要问一句「这条在当前阶段真的一票否决吗?」。
   把"最终门禁"和"过程提示"混为一档, 是这类脚本最常见的失效方式。
+
+## Gitee 主线也会偶发 Recv failure，别一见 reset 就查配置（2026-09-20 实测）
+
+- 现象: 同一台机器、同一个 URL(`https://gitee.com/ABacker/auto-qb.git`), `git push --dry-run origin develop`
+  成功几秒后 `git push --dry-run gitee develop` 报
+  `fatal: unable to access '...': Recv failure: Connection was reset`; 重试一次即成功。
+- 判别: **先看是不是同一个 URL** —— 本 clone 里 `gitee` 与 `origin` 指向同一地址, URL 相同却一个通一个不通,
+  那只能是瞬时网络/连接复用问题, 不是远端名或凭据配错。
+- 处置: 主线(Gitee)**可以重试一次**; 这条只适用于主线 —— GitHub 镜像仍按旧规"尝试一次, 失败只报一次"。
+- 连带: 别把 `git push` 的瞬时失败误判成"远端名配错"去改 remote, 越改越乱。
