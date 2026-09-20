@@ -1,13 +1,13 @@
 # Conventions — 编码规范与项目约定
 
-> 📅 内容基线: 2026-09-05 @ `51374bd` (全库逐文件核实, 见本库 [README.md](README.md)); 文内带日期条目为增量更新, 最新易变状态见 [activeContext.md](activeContext.md)。
+> 文内带日期条目为增量更新; **若代码与本文冲突, 以代码为准并回写**; 最新易变状态见 [activeContext.md](activeContext.md)。
 
 ## 协作约定 (用户明示)
 
 - **必须全程使用中文**： 本项目中 AI 的所有交流、注释、文档、提交信息等一律使用中文, 除非用户显式要求使用其它语言。
 - **提交 / push 口径以 `AGENTS.md`「提交 / PR」为单点定义** (2026-09-19 用户重新指定): **用户说"提交" = commit + 自动推送** —— ①先 commit 让工作区干净 ②`git pull --rebase <远端> develop` ③推 Gitee 主线 (协作主线, 必须成功) ④再**尝试一次** GitHub 直连 (失败只如实报告一次, 不重试) ⑤提交后核对 `HEAD` == `refs/heads/<分支>`。本节只留指针, 不复述细则 (避免两处各自演化)。
-  - 历史沿革 (**2026-09-10 当时的口径, 已被上面取代, 别照抄**): 曾规定"🔴🔴 绝对不要 push, 用户说'提交'默认只指 commit"。起因是 2026-09-10 用户说"提交"后 AI 擅自连带 push 到 gitee(成功)与 github(网络失败)的越界实例。**保留下来的教训**: 推送必须由用户明确授权 —— 该授权在 2026-09-19 已改为默认包含在"提交"一词里, 不再是第二次指令。
-- **多 AI 在各自 git worktree 上并行工作** (2026-09-10)： 不同 AI 实例用独立 worktree + 专属分支隔离工作区 (当前实况: 主仓 `D:/Projects/auto-qb` 检出 `master`; `D:/Projects/auto-qb-trae` 检出 `agentTrae/develop`, `D:/Projects/auto-qb-zcode` 检出 `agentZCode/develop`, 分支名带 AI 标识如 `agentTrae/*`)。协作事项:
+  - 历史沿革**不在本文件复述**(2026-09-10 曾规定"绝对不要 push", 已作废) —— 口径与沿革的单点定义都在 `AGENTS.md`「提交 / PR」。
+- **多 AI 在各自 git worktree 上并行工作** (2026-09-10)： 不同 AI 实例用独立 worktree + 专属分支隔离工作区 (当前实况: 主仓 `D:/Projects/auto-qb` 检出 **`develop`**(协作主线); `D:/Projects/auto-qb-trae` 检出 `agentTrae/develop`, `D:/Projects/auto-qb-zcode` 检出 `agentZCode/develop`, 分支名带 AI 标识如 `agentTrae/*`)。协作事项:
   - **只在自己的 worktree 内改文件**, 不动主仓或其他 AI worktree 的工作区; 各 worktree 共享同一个 .git 对象库 (提交/分支互相可见), 但工作区文件互相隔离、互不影响。
   - **不自行 merge/rebase 其他 AI 的分支, 不主动 `git worktree remove` 或删除分支**: 分支汇合与 worktree 清理由用户统一协调; 任何合并前先确认自己工作区干净 (主工作区脏改动会导致 merge 失败, 有前科)。
   - 多 AI 并行可能改到同一文件: 提交前在自己 worktree 内跑全量测试保证自身改动自洽; 合并冲突交用户主导解决, 不擅自丢弃或覆盖他人改动。
@@ -136,9 +136,9 @@
 ## Git 约定 (观察自 git log)
 
 - **开工前先同步分支 (2026-09-19 用户指定)**: 会话第一步必为 `git pull --rebase <远端> develop` (**分支名必须写**, 只给远端名会只 fetch 不合并), `git status -sb` 确认不落后才动手; **禁止在落后的分支上改代码**; 拉取前先把工作区弄干净 (脏工作区 + rebase 触发 stash 会损坏对象库)。细则见 `AGENTS.md`「会话协议 · 开始」与「提交 / PR」—— 该规则共有 4 处入口 (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), **改规则必须一次改全**, 本文件只留指针不复述。
-- **push 口径单点定义在 `AGENTS.md`「提交 / PR」** (2026-09-19 起: "提交" = commit + 推送; 2026-09-10 的"🔴 绝对不要 push"已作废, 沿革见「协作约定」节)。本文件不复述, 免得第三次漂移。
-- 分支: `develop` 开发, `master` 主干 (PR 目标)。
-- 提交信息: 中文单行, 动词开头描述行为 (如 "修复跳检动作删除种子导致该种子后续动作/任务报错"、"补充 cov 缺口测试: ...")。
+- **push 口径单点定义在 `AGENTS.md`「提交 / PR」** (2026-09-19 起: "提交" = commit + 推送)。本文件不复述, 免得第三次漂移。
+- 分支: `develop` 开发 (协作主线, 统一以 Gitee 的 `develop` 为准), `master` 主干。
+- 提交信息: **格式单点定义在 `AGENTS.md`「提交 / PR」**(中文, 首行概述 + 空行 + 详细描述); 本文件不复述。
 - 格式化可单独成提交 ("格式化代码"/"格式化测试代码")。
 - 用户未要求时不主动 commit; 要求"提交"时按 `AGENTS.md` 一次走完 (含推送)。
 
@@ -148,11 +148,10 @@
 - 违规后果: AI 启动的实例会在真实数据上执行管理动作(打标签/清理标签/HR 打标/限速), 占用单实例锁致用户无法启动, 并可能误杀用户实例
 - **运行验证一律使用独立临时配置 + 独立 data_dir**(如 `C:/Temp/<名>/` 下自建 yml 与 data 目录, 用后清理)
 - 生产环境的启动/停止/验证**仅由用户本人执行**; AI 需要用户提供日志或观察结果
-- 2026-09-13 实例: AI 无参启动实例约半小时, 在真实数据上执行管理逻辑并占用单实例锁, 已道歉并清理(web.token 删除/锁残留删除); qB 侧标签变化请用户自查
 
 ## 其它工程约定
 
 - `pytest.ini` 的 addopts 自带 `--cov=src --cov-report=term-missing --cov-branch`: 直接 `pytest` 即带覆盖率。
-- `.gitignore` 覆盖: config 类 (test.yml/torrents.txt)、覆盖率、`.github/instructions/`; 运行时数据整目录 `auto-qb-data/` 忽略 (内含 `state.json` 状态、`state.lock`/`state.lock.meta.json` 单实例锁、`logs/auto-qb.log` 日志、`skip-check-backup/` 跳检备份)。**注意 `config.yml`/`minimal.yml` 受 git 跟踪且未忽略** —— config.yml 含真实站点凭据, 靠"勿改勿提交"约定保护 (见 08), 不是 gitignore。
+- `.gitignore` 覆盖: config 类 (test.yml/torrents.txt)、覆盖率 (`.coverage` / `.coverage.*`); 运行时数据整目录 `auto-qb-data/` 忽略 (内含 `state.json` 状态、`state.lock`/`state.lock.meta.json` 单实例锁、`logs/auto-qb.log` 日志、`skip-check-backup/` 跳检备份)。**注意 `config.yml`/`minimal.yml` 受 git 跟踪且未忽略** —— config.yml 含真实站点凭据, 靠"勿改勿提交"约定保护 (见 08), 不是 gitignore。
 - 包内 `logging.py` 与 stdlib 同名: 包内一律 `from .logging import setup_logging`, stdlib 用绝对 `import logging` (Python3 绝对导入默认, 无冲突, 但不要改成相对导入写法)。
 - Windows 兼容: 文件操作过 `utils.add_long_path_prefix_for_win` (支持 >260 字符路径); 路径正斜杠化。
