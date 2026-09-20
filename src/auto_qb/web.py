@@ -415,6 +415,45 @@ def create_app(manager) -> FastAPI:
             "dirs": dirs,
         }
 
+    @app.post("/api/expr/eval")
+    def api_expr_eval(body: dict = None):
+        """表达式**试算**(配置编辑器的「试算」按钮)
+
+        - 不给 hash: 只做编译 + 语义校验, 返回用到的取值名 —— 语法/名字拼写错的即时反馈
+          (否则要等保存时后端校验才知道)
+        - 给 hash: 用该种子求值, 返回布尔结果 + **中间值**(每个名字/函数取到了什么),
+          让人看清判断依据; 求值出错时返回错误(与运行期同口径: 数据源不可用等)
+        只读: 不碰任务队列与 state_file, 不违反单一写线程假设。
+        ⚠ 用到 tracker.names 时会走一次 qB tracker 查询(试算是手动触发的偶发请求, 可接受)。
+        """
+        b = body or {}
+        text = str(b.get("text") or "")
+        tor_hash = str(b.get("hash") or "").strip()
+        from .rules.base import RuleContext
+        from .rules.expr import env
+        from .rules.expr import compile_expr, validate
+        from .rules.expr.errors import ExprError
+        from .rules.expr.eval import evaluate, trace
+
+        try:
+            root = compile_expr(text).root
+            validate(root)
+        except ExprError as e:
+            return {"ok": False, "error": str(e)}
+        used = sorted(env.used_names(root))
+        if not tor_hash:
+            return {"ok": True, "used": used, "value": None, "trace": []}
+
+        rec = manager.store.get(tor_hash)
+        if rec is None:
+            return {"ok": False, "error": f"找不到种子: {tor_hash[:8]}", "used": used}
+        ctx = RuleContext(manager, getattr(manager, "client", None), manager.config, tor_hash, dry_run=True)
+        try:
+            value = evaluate(root, ctx)
+        except ExprError as e:
+            return {"ok": False, "error": str(e), "used": used}
+        return {"ok": True, "used": used, "value": bool(value), "trace": trace(root, ctx)}
+
     @app.post("/api/fs/mkdir")
     def api_fs_mkdir(body: dict = None):
         """在允许根内的目录下新建文件夹(目录浏览器的"新建"按钮)。

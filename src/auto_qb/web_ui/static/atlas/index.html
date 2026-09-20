@@ -2384,6 +2384,8 @@
             <span v-if="f.unit" class="ce-unit">{{ f.unit }}</span>
           </template>
 
+          <!-- 表达式(expr): 即时试算/校验(后端 /api/expr/eval), 免得等到保存才知道写错 -->
+          <button v-if="f.kind === 'expr'" class="ce-btn ghost small" @click="ce.cfgExprTry(path)">试算</button>
           <p v-if="f.help" class="ce-help">{{ f.help }}</p>
           <!-- 风险提示(RFB-02 件2): 统一注记 —— 色点 + 行内小字, 不再用盾牌徽标与大框 -->
           <p v-if="f.risk" class="ce-note warn">{{ f.risk }}</p>

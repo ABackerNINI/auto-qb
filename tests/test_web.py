@@ -6,6 +6,7 @@
 - test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志 **INFO 级**、**每进程只记一次**), 对外/远端仍强制鉴权
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
+- test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 —— 均为"pytest 全绿但界面废掉"的故障形态)
@@ -418,6 +419,40 @@ def test_api_status_and_groups(web_env):
     g = data["groups"][0]
     assert g["name"] == "Show" and g["count"] == 2 and g["upspeed"] == 2048
     assert [m["site"] for m in g["members"]] == ["HHan", "M-Team"]
+
+
+def test_api_expr_eval_endpoint(web_env):
+    """表达式试算端点 /api/expr/eval: 校验-only 与"按种子求值 + 中间值"两条路径
+
+    前端「试算」按钮靠它: 写错表达式不用等到保存才知道; 填了种子 hash 还能看到
+    每个取值到底取到了什么(中间值), 这是排查"条件为什么不匹配"最有用的一条信息。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    # 替身 store 默认 get() 恒 None: 塞一条合成种子进去(试算要读它的字段)
+    from auto_qb.torrents import TorrentRecord
+
+    rec = TorrentRecord(hash="h1", name="Show 1", size=5 * 1024**3, state="uploading")
+    mgr.store.get = lambda h: rec if h == "h1" else None
+    h = "h1"
+
+    ok = client.post("/api/expr/eval", json={"text": "(tor.size >= 1GiB)"}, headers=auth).json()
+    assert ok["ok"] is True and ok["used"] == ["tor.size"] and ok["value"] is None
+
+    bad = client.post("/api/expr/eval", json={"text": "tor.nope > 1"}, headers=auth).json()
+    assert bad["ok"] is False and "未知取值" in bad["error"]
+
+    val = client.post(
+        "/api/expr/eval", json={
+            "text": "(tor.size >= 1GiB) and (tor.name ~ \"Show\")",
+            "hash": h
+        }, headers=auth
+    ).json()
+    assert val["ok"] is True and isinstance(val["value"], bool)
+    assert [t["name"] for t in val["trace"]] == ["tor.size", "tor.name"]
+
+    missing = client.post("/api/expr/eval", json={"text": "(tor.size >= 1GiB)", "hash": "nope"}, headers=auth).json()
+    assert missing["ok"] is False and "找不到种子" in missing["error"]
 
 
 def test_static_assets_disable_heuristic_cache(web_env):

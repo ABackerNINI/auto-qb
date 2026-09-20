@@ -40,6 +40,45 @@ def evaluate(node, ctx) -> Any:
     raise ExprError(f"无法求值的节点: {node!r}")
 
 
+def trace(node, ctx) -> list:
+    """求值路径上的中间值(供 WEB 试算面板显示, 让人看清每个名字到底取到了什么)
+
+    返回 [{"kind": "name"/"call", "name": str, "value": Any}], 顺序即求值顺序。
+    值经 _jsonable 处理(JSON 安全: 集合转列表、inf 转字符串)。
+    """
+    items: list = []
+
+    def walk(n):
+        if isinstance(n, Name):
+            items.append({"kind": "name", "name": n.name, "value": _jsonable(evaluate(n, ctx))})
+        elif isinstance(n, Call):
+            items.append({"kind": "call", "name": n.name, "value": _jsonable(evaluate(n, ctx))})
+            for arg in n.args:
+                walk(arg)
+        elif isinstance(n, Unary):
+            walk(n.operand)
+        elif isinstance(n, Binary):
+            walk(n.left)
+            walk(n.right)
+        elif isinstance(n, ListLit):
+            for item in n.items:
+                walk(item)
+
+    walk(node)
+    return items
+
+
+def _jsonable(value):
+    """转 JSON 安全值: 集合/元组转列表, inf/nan 转字符串(避免 JSON 序列化报错)"""
+    if isinstance(value, (frozenset, set, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, float) and (value == float("inf") or value != value):
+        return str(value)
+    if isinstance(value, (int, float, bool, str)) or value is None:
+        return value
+    return str(value)
+
+
 def _cache(ctx) -> dict:
     cache = getattr(ctx, "expr_cache", None)
     if cache is None:

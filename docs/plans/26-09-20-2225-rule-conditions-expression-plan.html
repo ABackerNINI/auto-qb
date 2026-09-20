@@ -364,7 +364,7 @@ prim   := NUM | SIZE | TIME | SPEED | HHMM | BOOL | STR
   <ol>
     <li><b>config 校验</b>：<code>config/validation/rules.py</code> 的 <code>_PLUGIN_SPEC_VALIDATORS["expr"] = _validate_expr_condition_spec</code>。⚠ 该文件已依赖 <code>rules</code>（<code>from ...rules import registry</code> 函数内延迟导入），新增 import 同样走<b>函数内延迟导入</b>，不要在顶层建环。</li>
     <li><b>schema</b>：<code>config/schema/rules.py</code> 的 <code>CONDITION_PLUGINS</code> 加 <code>Plugin("expr", …)</code>；<code>config/schema/fields.py</code> 的 <code>SPEC_KINDS</code> 加 <code>"expr"</code>。<b>守阵</b> <code>test_config_schema.py</code> 断言 schema 插件集合 == <code>registry.CONDITIONS</code>，漏加会红。</li>
-    <li><b>前端</b>：<code>web_ui/static/shared/config_rules.js</code> 的 <code>cfgSpecItems</code>（kind 映射）与 <code>cfgPluginDefaultSpec</code>（新条目初值）各加 <code>expr</code> 分支，渲染为多行文本框（复用已有 <code>text</code> 控件）。校验靠后端保存/预览接口返回错误 —— 前端不做第二套解析器。<span class="tag grey">P2</span> 可加“试算”按钮打 <code>/api/config/preview</code>。</li>
+    <li><b>前端</b>：<code>web_ui/static/shared/config_rules.js</code> 的 <code>cfgSpecItems</code>（kind 映射）与 <code>cfgPluginDefaultSpec</code>（新条目初值）各加 <code>expr</code> 分支，渲染为多行文本框（复用已有 <code>text</code> 控件）。校验靠后端保存/预览接口返回错误 —— 前端不做第二套解析器。<b>已补「试算」按钮</b>：配置编辑器里表达式字段下方一个 <code>ce-btn ghost small</code>，点它调 <code>POST /api/expr/eval</code>（留空种子 hash = 只做编译+语义校验；填 hash = 用该种子求值并列出<b>中间值</b>），结果用 toast 显示 —— 写错不用等保存才知道。</li>
     <li><b>知识库</b>：<code>memory-bank/rule-system.md</code> 新增「表达式条件」章（语法 + 取值表 + YAML 引号坑）；<code>modules.md</code> 的 rules 表加 <code>expr/</code> 一行；<code>conventions.md</code> 补「新条件字段一律先进 <code>expr/env.py</code>，不再新增固定条件插件」。</li>
   </ol>
 </section>
@@ -377,7 +377,21 @@ prim   := NUM | SIZE | TIME | SPEED | HHMM | BOOL | STR
     <li><b>必须短路</b>：<code>and</code>/<code>or</code> 在解释器里显式短路 —— 否则 <code>seeding_time &gt; 3D and freespace("R:/") &lt; 100GiB</code> 会给每个种子都来一次磁盘系统调用。</li>
     <li><b>昂贵值按次缓存</b>：<code>RuleContext</code> 加惰性 <code>expr_cache: dict</code>（<code>field(default_factory=dict)</code>），键 = 函数名+参数 / 昂贵字段名，生命周期 = 一次 <code>process()</code>。同一次规则执行里 <code>freespace(save_path)</code> 出现三次只查一次。不做 manager 级跨规则缓存 —— 跨规则共享要引入失效时机问题，违反「单一写线程」的简洁假设；真有需要再单开一轮。</li>
   </ul>
-  <p>验收方式：新增 <code>scripts/bench_expr.py</code>（与既有 <code>scripts/ui_harness.py</code> 同风格：合成 N 种子 × M 规则，测每轮条件求值耗时），<b>数字实测后填进本表</b>，不预设。时间断言不进单测（flaky），只做数量级守阵。</p>
+  <h3>实测（2026-09-21，<code>uv run python scripts/bench_expr.py</code>）</h3>
+  <p class="sub">环境 Python 3.13.14 / Windows 11；合成种子（真 <code>TorrentRecord</code>）+ FakeClient，不连真实 qB。<code>freespace</code> 已打桩（否则测到的是磁盘）。</p>
+  <table>
+    <tr><th>项</th><th>3000 种子 × 20 规则</th><th>5000 种子 × 30 规则</th><th>说明</th></tr>
+    <tr><td class="m">编译（启动期一次）</td><td>20 条 0.59 ms（29.5 µs/条）</td><td>—</td><td>可忽略</td></tr>
+    <tr><td class="m">单次求值 · 单比较</td><td>0.8 µs</td><td>0.9 µs</td><td><code>tor.size &gt;= 10GiB</code></td></tr>
+    <tr><td class="m">单次求值 · 四层括号</td><td>3.1 µs</td><td>3.1 µs</td><td>等价 4 个旧条件</td></tr>
+    <tr><td class="m">单次求值 · 含盘空间</td><td>2.0 µs</td><td>2.0 µs</td><td>打桩后</td></tr>
+    <tr><td class="m">单次求值 · 含时间</td><td>3.5 µs</td><td>3.4 µs</td><td>sys.dow / time_of_day</td></tr>
+    <tr><td class="m">单次求值 · 含全局计数</td><td>9.4 µs</td><td>14.1 µs</td><td>随库增大（遍历全库）</td></tr>
+    <tr><td class="m">一轮总耗时</td><td><b>246 ms</b>（净 222 ms，3.7 µs/次）</td><td><b>758 ms</b>（净 702 ms，4.7 µs/次）</td><td>6 万 / 15 万次求值</td></tr>
+    <tr><td class="m">旧条件对照（4 插件）</td><td>34 ms（0.57 µs/次）</td><td>81 ms（0.54 µs/次）</td><td>表达式约为其 <b>6~8 倍</b></td></tr>
+  </table>
+  <p><b>结论</b>：单次 µs 级、编译可忽略；真正要多想的是一轮总量 —— 但上面是<b>最坏情况</b>（所有规则都 <code>interval: 0S</code>，每轮全跑）。常规配置下只有到期规则才求值，量级完全可接受。</p>
+  <div class="note"><b>基准跑出来的真问题（比数字重要）：</b><code>freespace</code> 打桩调用 **1.4 万 / 3.1 万次**，几乎等于含该档的求值次数 —— 因为生产<b>每条规则新建 ctx</b>，第 07 节的按次缓存只对<b>同一条规则内</b>多次出现有效，<b>跨规则不复用</b>。于是 <code>freespace()</code> 落在 <code>interval: 0S</code> 的规则里 = 每轮每种子一次磁盘调用（几千种子 = 每轮几千次系统调用）。<br>对策：① 文档写明「含 <code>freespace</code> / <code>file_count</code> / 全局计数的规则必须配 <code>interval</code>」；② 未来可选 manager 级 tick 缓存（需设计失效时机，本轮不做，避免引入第二个缓存生命周期）。</div>
 </section>
 
 <section id="s8">

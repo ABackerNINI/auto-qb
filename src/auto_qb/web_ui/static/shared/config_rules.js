@@ -151,6 +151,44 @@ window.CONFIG_RULES = {
         [pluginName]: this.cfgPluginDefaultSpec(pluginName),
       });
     },
+    /* 表达式「试算」(expr 条件的按钮): 调后端 /api/expr/eval
+     *
+     * 留空 hash = 只做编译 + 语义校验(语法/名字拼写错的即时反馈, 不用等保存);
+     * 填 hash = 用该种子求值并显示**中间值**(看清每个名字到底取到了什么)。
+     * 取消/关闭对话框一律不发请求(与项目其它确认/输入原语同口径)。 */
+    async cfgExprTry(path) {
+      const text = this.cfgText(path, "");
+      const input = await this.promptDialog("表达式试算", "", {
+        placeholder: "种子 hash(留空 = 只校验语法与取值名)",
+        okText: "试算",
+      });
+      if (input === null || input === undefined) return;
+      let data;
+      try {
+        data = await this.api("/api/expr/eval", {
+          method: "POST",
+          body: JSON.stringify({
+            text: text,
+            hash: String(input || "").trim()
+          }),
+        });
+      } catch (e) {
+        this.toast("试算失败: " + ((e && e.message) || e), "error");
+        return;
+      }
+      const used = (data.used || []).join("、") || "无";
+      if (!data.ok) {
+        this.toast("表达式有误: " + data.error, "error");
+        return;
+      }
+      if (data.value === null || data.value === undefined) {
+        this.toast("校验通过(用到取值: " + used + ")", "ok");
+        return;
+      }
+      const detail = (data.trace || []).map((t) => t.name + "=" + JSON.stringify(t.value)).join("; ");
+      this.toast("试算结果: " + data.value + (detail ? " [" + detail + "]" : ""), data.value ? "ok" : "info");
+    },
+
     /* 新增条目时的 spec 初始值: 必填字段用 schema 默认值/占位符填充, 让新条目可直接通过校验 */
     cfgPluginDefaultSpec(pluginName) {
       const meta = this.cfgPluginIndex[pluginName];
