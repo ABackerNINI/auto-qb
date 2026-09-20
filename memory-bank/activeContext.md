@@ -14,6 +14,17 @@
 
 ## 正在进行
 
+- **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
+  [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)
+  (v3: 五条拍板口径 + §11 动作是否纳入的三档分析, L1 动作参数表达式记为候选排在 python 插件之后)。
+  **W1 已入库**: `src/auto_qb/rules/expr/`(`errors.py` / `lexer.py` / `parser.py`) + `tests/test_expr_parse.py` 15 条;
+  只做**语法内核**(一层一运算符判定 + 前缀形态 + 字面量类型冲突), **未接规则系统**、无新条件插件、行为零变化。
+  实测 1062 → **1077 passed**; Gitee + GitHub 均已推。
+  **下一步 W2**: `env.py`(取值面 + 可用性判定器) → `eval.py`(短路 + `ExprError`) → `ExprCondition` →
+  `RuleContext.expr_cache` → `base.py` 条件异常改返回 `(False, True)`(出错即停规则) → config 校验 / schema / 前端接线。
+  已知坑(已入记忆): 解析器的"一层一运算符"判定必须在消费二元运算符后**给 `used` 赋值**, 否则第二个
+  运算符会退化成笼统的「表达式结尾有多余内容」报错 —— 报错文案能不能照着改, 值得专门写测试钉住。
+
 - **① 上轮计划复核的收尾(只剩第 7 项) (2026-09-19)**: 复核报表
 
 - **② WEB UI 操作跟手性优化 (2026-09-19)**: 三波次全部入库(`10e06a8` 分层节拍 + 命令唤醒 + 乐观 UI + 批量合单
