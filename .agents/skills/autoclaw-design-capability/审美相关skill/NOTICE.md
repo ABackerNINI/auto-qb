@@ -62,7 +62,6 @@
 design-skeletons/html-ppt-zhangzara-*/LICENSE  (约 30 个，Zara Zhang © 2026)
 design-skeletons/guizang-ppt/LICENSE
 design-skeletons/html-ppt/LICENSE
-design-skeletons/last30days/LICENSE
 skills/hatch-pet/LICENSE.txt
 ... 等
 ```

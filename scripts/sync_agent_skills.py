@@ -49,10 +49,10 @@ LINK_TARGETS = [
     REPO_ROOT / ".codebuddy" / "skills",
 ]
 
-# 体积型 / 重复的包: 单个目录内含 193 个嵌套 SKILL.md (设计预设), 挂载成本高。
+# 体积型包: 单个目录内含 193 个嵌套 SKILL.md (设计预设), 挂载成本高。
+# (原先还有一份完整副本 autoclaw-design-capability_noqa, 2026-09-20 已删除, 故不在此列。)
 EXCLUDED = {
-    "autoclaw-design-capability",  # 12MB, 193 个嵌套预设
-    "autoclaw-design-capability_noqa",  # 上一项的完整副本
+    "autoclaw-design-capability",  # 18MB, 193 个嵌套预设
 }
 
 

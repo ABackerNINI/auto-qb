@@ -33,7 +33,7 @@
 
 ---
 
-## 二、Design Skeletons · 现成骨架（83 个） 路由优先
+## 二、Design Skeletons · 现成骨架（82 个） 路由优先
 
 > 路径：`审美相关skill/design-skeletons/<name>/{SKILL.md, example.html}`
 > Skill workflow 强制要求**先 clone 骨架再改**，禁止从空白写。
@@ -173,7 +173,6 @@
 | `critique` | 文艺 / 编辑 | 设计评审 / 视觉审计 / 质量检查 |
 | `gamified-app` | 暗调 / 克制 | 习惯养成 / 教育产品 / 个人监督 App |
 | `x-research` | / | 实验性 |
-| `last30days` | / | 实验性 / 反应 / 舆情 |
 | `orbit-notion` | / | Notion 摘要 / 知识库简报 |
 
 ---

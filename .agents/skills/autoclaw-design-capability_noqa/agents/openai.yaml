@@ -1,8 +1,0 @@
-interface:
-  display_name: "AutoClaw Design Capability (No QA)"
-  short_description: "Direct UI/PPT design and redesign without clarification."
-  brand_color: "#2563EB"
-  default_prompt: "Use $autoclaw-design-capability_noQA to route and complete this UI/PPT design task directly with the matching AutoClaw rules and resources."
-
-policy:
-  allow_implicit_invocation: true

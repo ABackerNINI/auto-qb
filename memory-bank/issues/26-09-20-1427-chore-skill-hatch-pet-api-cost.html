@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="skill-hatch-pet-api-cost">
+<meta name="issue-stamp" content="26-09-20-1427">
+<meta name="issue-type" content="chore">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="hatch-pet 调付费 OpenAI 图像 API 且无成本提示">
+<meta name="issue-summary" content="hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险">
+<title>hatch-pet 调付费 OpenAI 图像 API 且无成本提示 · chore · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· chore</div>
+    <h1>hatch-pet 调付费 OpenAI 图像 API 且无成本提示</h1>
+    <p class="lede">hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-20-1427-chore-skill-hatch-pet-api-cost</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 14:27</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><code>hatch-pet</code> 生成图片时用 curl 子进程直连 <code>https://api.openai.com/v1/images/generations</code> 与 <code>/images/edits</code>，带 <code>Authorization: Bearer $OPENAI_API_KEY</code>，属<b>按次计费</b>接口；但 skill 正文没有任何费用提示或二次确认。agent 一旦路由到该骨架就会静默产生账单，缺 key 时直接 <code>SystemExit("OPENAI_API_KEY is not set")</code>。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>.agents/skills/autoclaw-design-capability/审美相关skill/skills/hatch-pet/scripts/generate_pet_images.py:88</code>、<code>:129</code>（取证 2026-09-20 14:27）· grep 关键词 <code>api.openai.com</code></li>
+      <li>同文件 <code>:232</code>（取证同）· grep 关键词 <code>OPENAI_API_KEY</code> —— <code>os.environ.get("OPENAI_API_KEY")</code></li>
+      <li>父包 <code>autoclaw-design-capability</code> 被 <code>scripts/sync_agent_skills.py</code> 的 <code>EXCLUDED</code> 排除，<b>当前不可达</b>（取证同）</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>二选一：①在 <code>hatch-pet/SKILL.md</code> 顶部加一行「本骨架调用付费 OpenAI 图像接口，执行前须取得用户明确同意」；②连同整个 <code>hatch-pet</code> 骨架一并剔除（它本就位于被排除的包内）。倾向 ②——该包从未被挂载，留着只有成本风险没有收益。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-20 14:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-09-20-1427-chore-skill-hatch-pet-api-cost.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

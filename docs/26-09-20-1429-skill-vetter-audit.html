@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>skill-vetter 全量审查报告 · .agents/skills（26 个技能）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --paper: #161d24;
+    --ink: #e4eaef;
+    --dim: #a8b6c3;
+    --faint: #71808d;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --ok: #7fc99a;
+    --ok-bg: #16261d;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --red: #e87b7b;
+    --red-bg: #2c1919;
+    --code-bg: #131a21;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.68; }
+  .sheet { max-width: 900px; margin: 0 auto; padding: 52px 40px 80px; }
+
+  header.cover { margin-bottom: 34px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 30px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.2; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .v { font-size: 13.5px; font-family: var(--mono); }
+
+  section { margin-top: 34px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h3 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 7px; color: var(--accent-ink); }
+  p { margin-bottom: 11px; max-width: 76ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 76ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 6px; padding: 13px 15px; overflow-x: auto; margin-bottom: 12px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.6; color: var(--dim); }
+  a { color: var(--accent-ink); }
+
+  .card { background: var(--paper); border: 1px solid var(--hair); border-radius: 8px; padding: 16px 18px; margin-bottom: 14px; }
+  .card.red { border-color: #4a2b2b; background: var(--red-bg); }
+  .card.ok { border-color: #24402f; background: var(--ok-bg); }
+  .card.warn { border-color: #4a3a2c; background: var(--warn-bg); }
+  .card h3 { margin-top: 0; }
+  .card.red h3 { color: var(--red); }
+  .card.ok h3 { color: var(--ok); }
+  .card.warn h3 { color: var(--warn); }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--hair); }
+  td.mono { font-family: var(--mono); font-size: 12.5px; color: var(--dim); }
+
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; }
+  .pill.low { background: var(--ok-bg); color: var(--ok); border: 1px solid #2f5139; }
+  .pill.mid { background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .pill.high { background: var(--red-bg); color: var(--red); border: 1px solid #4a2b2b; }
+  .pill.done { background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+
+  .hint { color: var(--faint); font-size: 13px; max-width: 76ch; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">Skill Vetting Report · auto-qb</div>
+    <h1>仓库 skills 全量安全审查</h1>
+    <p class="lede">用 skill-vetter 协议对 <code>.agents/skills</code> 下 26 个技能做逐文件审查：来源核验、代码红标扫描、权限范围评估、风险分级。审查后已就地处置红线代码与 12MB 重复副本。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">审查时间</div><div class="v">2026-09-20 14:29</div></div>
+      <div class="item"><div class="k">基线提交</div><div class="v">02af7d0 (develop)</div></div>
+      <div class="item"><div class="k">技能数</div><div class="v">26 → 25</div></div>
+      <div class="item"><div class="k">体积</div><div class="v">30MB → 17MB</div></div>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="no">01</span>审查范围与结构事实</h2>
+    <p>权威源只有 <code>.agents/skills</code>。另一处 <code>.codebuddy/skills</code> 是 <code>scripts/sync_agent_skills.py</code> 用目录联接生成的<b>镜像</b>，已 gitignore —— 审查以权威源为准。</p>
+    <p>该同步脚本维护一个 <code>EXCLUDED</code> 集合，被排除的技能<b>永远不会挂进 <code>.codebuddy/skills</code>，也就不会被 IDE 技能扫描器加载</b>。这一条决定了下面红线发现的真实可达性。</p>
+    <table>
+      <tr><th>目录</th><th>文件数</th><th>体积</th><th>是否被加载</th></tr>
+      <tr><td class="mono">autoclaw-design-capability</td><td>907</td><td>~17MB</td><td><span class="pill low">否 · 已排除</span></td></tr>
+      <tr><td class="mono">autoclaw-design-capability_noqa</td><td>907</td><td>~12MB</td><td><span class="pill low">否 · 已排除（本次已删）</span></td></tr>
+      <tr><td>其余 24 个自研 / 第三方技能</td><td>~210</td><td>~1MB</td><td><span class="pill mid">是 · 全部挂载</span></td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>唯一红线：Chrome 凭据解密链</h2>
+    <div class="card red">
+      <h3>🔴 命中「访问浏览器 cookie / 会话」—— 按协议属立即拒绝项</h3>
+      <p>位置：<code>autoclaw-design-capability/审美相关skill/design-skeletons/last30days/scripts/lib/chrome_cookies.py</code></p>
+      <p>这是一条完整的凭据窃取链，目的为取得 X/Twitter 会话 <code>auth_token</code> + <code>ct0</code>：</p>
+      <pre><code>读 ~/Library/Application Support/Google/Chrome/Default/Cookies
+  → security find-generic-password -w -s "Chrome Safe Storage"   (取 Keychain 主密钥)
+  → PBKDF2-HMAC-SHA1(salt="saltysalt", 1003 轮) 派生 16 字节 AES key
+  → openssl enc -aes-128-cbc -d -K &lt;key&gt; -iv "20"*16 -nopad   (解密单条 cookie)</code></pre>
+      <p>同目录还挂着 youtube / tiktok / instagram / reddit / pinterest / threads / github 抓取器、vendored 的 <code>bird-search</code>（X 客户端）、第二个 cookie 模块 <code>cookie_extract.py</code>，以及读取 <code>OPENROUTER_API_KEY</code>、<code>BRAVE_API_KEY</code>、<code>SERPER_API_KEY</code>、<code>EXA_API_KEY</code> 的配置向导。</p>
+      <p><b>风险被两层压制</b>：① 仅 macOS 可触发（Windows 上 <code>~/Library</code>、<code>security</code>、<code>openssl</code> 路径均不存在）；② 所在目录被同步脚本排除，运行时根本加载不到。属于「git 里的危险品」，不是「活动攻击面」。</p>
+      <p><b>处置</b>：整个 <code>last30days</code> 骨架（1016KB）已删除。<span class="pill done">已剔除</span></p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>自研技能：逐项验证结果</h2>
+    <p>9 个带脚本的技能逐一扫描（network / exec / 凭据 / 混淆 / 权限提升五类红标），结论：<b>零出站网络、无硬编码密钥、无 eval 或 base64 混淆、无 force-push</b>。</p>
+    <table>
+      <tr><th>技能</th><th>实际动作</th><th>网络</th><th>风险</th></tr>
+      <tr><td class="mono">my-commit-flow</td><td>git fetch/push，URL 全部运行期探测</td><td>仅 git 协议</td><td><span class="pill mid">中 · 会推远端</span></td></tr>
+      <tr><td class="mono">webapp-testing</td><td>起本地 dev server（shell=True），localhost 探活</td><td>仅 localhost</td><td><span class="pill mid">中 · 执行 shell</span></td></tr>
+      <tr><td class="mono">create-issue</td><td>写 HTML 报告 + 重建索引</td><td>无</td><td><span class="pill low">低</span></td></tr>
+      <tr><td class="mono">skill-creator</td><td>本地 zip 打包，无上传</td><td>无</td><td><span class="pill low">低</span></td></tr>
+      <tr><td class="mono">delivery-artifact / security-review / poka-yoke / docs-sync-audit / test-gap-audit</td><td>读仓库 + 生成文档</td><td>无</td><td><span class="pill low">低</span></td></tr>
+    </table>
+    <p class="hint">另 16 个技能为纯 Markdown，无可执行内容，按「文档类」归低风险；已对全部 <code>.md</code> 做过提示注入与身份文件访问扫描，无命中。</p>
+    <p>两处值得肯定的设计：<code>my-commit-flow/SKILL.md</code> <b>明令禁止</b> <code>--force</code>；<code>hyperframes</code> 的 npm 自装需显式 <code>BOOTSTRAP_CONFIRM_ENV=1</code> 或 TTY 确认，不是静默安装。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>三条次要发现（已入池）</h2>
+    <div class="card warn">
+      <h3>hatch-pet 调付费 OpenAI 图像 API</h3>
+      <p><code>generate_pet_images.py</code> 直连 <code>api.openai.com/v1/images/generations</code> 与 <code>/images/edits</code>，按次计费，skill 正文无费用提示。位于被排除的包内，当前不可达。</p>
+      <p>→ <a href="../memory-bank/issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html">26-09-20-1427-chore-skill-hatch-pet-api-cost</a></p>
+    </div>
+    <div class="card warn">
+      <h3>两个技能对写 USER.md 的口径相反</h3>
+      <p><code>aesthetic-preset-library/SKILL.md:600</code> 要求把选定 preset 写入 <code>USER.md</code>；<code>autoclaw/INTERACTIONS.md:255</code> 明令禁止回写。两者都会被挂载，<b>冲突可达</b>。</p>
+      <p>→ <a href="../memory-bank/issues/26-09-20-1427-docs-skill-user-md-write-conflict.html">26-09-20-1427-docs-skill-user-md-write-conflict</a></p>
+    </div>
+    <div class="card warn">
+      <h3>grill-me 是 2 行占位 stub</h3>
+      <p>仅 <code>agents/openai.yaml</code> + 7 行 <code>SKILL.md</code>（正文一句 <code>Call the Skill tool with "grilling".</code>），无实际流程却占一个技能位。</p>
+      <p>→ <a href="../memory-bank/issues/26-09-20-1427-chore-skill-grill-me-empty-stub.html">26-09-20-1427-chore-skill-grill-me-empty-stub</a></p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>本次改动清单</h2>
+    <table>
+      <tr><th>动作</th><th>对象</th><th>效果</th></tr>
+      <tr><td>删除</td><td class="mono">.agents/skills/autoclaw-design-capability_noqa</td><td>省 12MB（完整重复副本）</td></tr>
+      <tr><td>删除</td><td class="mono">.../design-skeletons/last30days</td><td>消除凭据解密链 + 抓取器</td></tr>
+      <tr><td>引用清理</td><td class="mono">sync_agent_skills.py · EXCLUDED</td><td>移除已删包名，注释记删除日期</td></tr>
+      <tr><td>引用清理</td><td class="mono">autoclaw/INDEX.md</td><td>删 last30days 行，骨架计数 83 → 82</td></tr>
+      <tr><td>引用清理</td><td class="mono">autoclaw/审美相关skill/NOTICE.md</td><td>删 last30days LICENSE 条目</td></tr>
+      <tr><td>知识库回写</td><td class="mono">memory-bank/pitfalls.md</td><td>更新技能挂载条目（213/193 计数与瘦身说明）</td></tr>
+      <tr><td>入池</td><td class="mono">memory-bank/issues/ × 3</td><td>三条次要发现，索引已重建</td></tr>
+    </table>
+    <p class="hint">复查结果：<code>find -name "chrome_cookies.py" -o -name "cookie_extract.py" -o -name "bird_x.py"</code> 全仓 0 命中；残留引用 <code>grep -rn last30days</code> 仅剩本报告中转述。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">06</span>结论</h2>
+    <div class="card ok">
+      <h3>不需要卸载任何已被加载的技能</h3>
+      <p>24 个会被挂载的技能全部通过审查：无凭据访问、无外泄通道、无静默安装。红线代码只存在于被排除的包内，且已物理删除。</p>
+      <p>剩余可选项：删除 <code>hatch-pet</code>（成本风险）、补或删 <code>grill-me</code>、统一 <code>USER.md</code> 写入口径 —— 三条均已入池待排期。</p>
+    </div>
+  </section>
+
+  <footer>
+    26-09-20-1429-skill-vetter-audit.html · dark 主题 · 由 skill-vetter 协议产出；审查基线 <code>develop @ 02af7d0</code>，工作区在审查前已同步至最新
+  </footer>
+
+</div>
+</body>
+</html>

@@ -612,8 +612,9 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 
 - **症状**: 把 `.agents/skills` 链接到 `.workbuddy-ai/skills` 之后, 会话的技能列表里一个项目级 skill 都没出现。
 - **根因**: 内置 CLI 运行时 `cli/dist/codebuddy.js` 的 `SkillLoader.loadSkills()` 只扫三类根 —— `PathUtils.getProjectSkillsDir()` = `<workspace>/.codebuddy/skills`、`getHomeSkillsDir()` = `$CODEBUDDY_CONFIG_DIR/skills`、`$CODEBUDDY_SESSION_SKILL_DIRS`(path.delimiter 分隔, 仅当次会话有效)。产品文档里写的 `.workbuddy-ai/skills` **这个 CLI 根本不读**(对该 bundle 全量 grep `workbuddy-ai`: 0 命中)。
-- **递归坑**: `scanSkillsDirectory()` 会**递归最深 5 层**收集每一个 `SKILL.md`, 不是只读顶层。整棵 `.agents/skills` 挂上去 = 213 条技能, 其中 193 条来自 `autoclaw-design-capability`(12MB 设计预设库)及其完整副本 `autoclaw-design-capability_noqa`; 按 name 去重后仍会全部注入系统提示, 严重挤占上下文。
-- **现状**: `scripts/sync_agent_skills.py` 只把 21 个顶层 skill 以目录联接(junction, 免管理员权限)挂到 **`.codebuddy/skills` 这一处**, 排除上述两个预设包; 幂等, `--prune` 清失效链接, `--dry-run` 预演。源目录 `.agents/skills` 仍是唯一事实源(已入库), 链接两边读写同一份文件。
+- **递归坑**: `scanSkillsDirectory()` 会**递归最深 5 层**收集每一个 `SKILL.md`, 不是只读顶层。整棵 `.agents/skills` 挂上去 = 213 条技能, 其中 193 条来自 `autoclaw-design-capability`(设计预设库); 按 name 去重后仍会全部注入系统提示, 严重挤占上下文。
+- **现状**: `scripts/sync_agent_skills.py` 只把 21 个顶层 skill 以目录联接(junction, 免管理员权限)挂到 **`.codebuddy/skills` 这一处**, 排除上述预设包; 幂等, `--prune` 清失效链接, `--dry-run` 预演。源目录 `.agents/skills` 仍是唯一事实源(已入库), 链接两边读写同一份文件。
+- **2026-09-20 瘦身**: 完整副本 `autoclaw-design-capability_noqa` 已删除(省 12MB); 预设包内 `design-skeletons/last30days`(含 `lib/chrome_cookies.py` —— 解密 Chrome cookie 取 X 会话 `auth_token`/`ct0` 的凭据代码, 仅 macOS 可触发)已整体剔除, `INDEX.md` 骨架计数随之 83→82。剩 25 个顶层 skill、17MB。
 - **不要再给 `.workbuddy-ai/skills` 留兼容链接** (2026-09-18 已移除): 该路径 CLI 不读, 留着只会多一处需要同步、且容易让人误判"链接在、为什么没生效"。`.workbuddy-ai/` 下现在只剩会话记忆目录 `memory/`。
 - **维护约束**: junction 不会自动跟随源目录增删 —— **在 `.agents/skills` 里增删 skill 后必须重跑该脚本**, 否则新 skill 不会出现在列表里。
 - **判别法**: 技能没出现, 先查两件事 —— ①链接是否建在 `.codebuddy/skills` 下(不是 `.workbuddy-ai/`); ②是否重启了会话(技能列表在会话启动时加载一次)。
