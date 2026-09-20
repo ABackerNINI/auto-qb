@@ -280,3 +280,12 @@
   仓库根改 `.git` 向上探测（不再 `parents[4]`）、品牌 `--project` 可选注入、索引 HEADER 链接动态计算；
   ⑤ 存量 8 份报告已迁移（bug 4 / perf 3 / docs 1），17 处外链同步，索引顶部有 Open 按类型计数表。
   文件名与状态取值由生成器守卫（`--check` 可挂 CI）。单测 **1057 passed** 不变。
+- **提交推送流水线 skill（已实施，2026-09-20）**: 提案 [26-09-20-1128](../docs/plans/26-09-20-1128-git-ship-skill-proposal.html)，
+  落地 `.agents/skills/my-commit-flow/`（七步：预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee 主线
+  → 尝试一次 GitHub 直连 → 查幽灵 diff）。脚本 `preflight.py`（只读预检）/ `commit.py`（逐路径 add + commit，
+  **拒 `-A` / `.` / `*` 与红线文件**）/ `verify_ref.py`（ref 三处一致）/ `push.py`（先 fetch → 推主线 → 核对远端
+  → 镜像直连只尝试一次），配置单点 `scripts/_ship_config.py`。
+  停手点：rebase / 混入他人在途改动 / staged > 200 / ref 不一致 / 镜像失败 / 闸门未过 —— 脚本只报不碰。
+  已回写指针：AGENTS.md 提交节 + 环境硬约束 + 路由表、memory-bank/README.md 路由表、memory-bank skill 会话开始第 1 步。
+  **通用性有限**（依赖本仓环境：工具 shell 拦截层 / Gitee+GitHub 双远端 / 9 worktree 并行），换项目先改 `_ship_config.py`。
+  提交 `0c0bf1e`，用它自己的流水线提交（dogfooding），Gitee 与 GitHub 均推成功。
