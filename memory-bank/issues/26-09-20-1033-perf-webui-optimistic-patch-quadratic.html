@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-optimistic-patch-quadratic">
+<meta name="issue-stamp" content="26-09-20-1033">
+<meta name="issue-type" content="perf">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="乐观补丁 applyOptimistic 是 O(目标数 × 数据集规模): 大库全选操作主线程卡顿约 2s">
+<meta name="issue-summary" content="applyOptimistic 逐 hash 全表线性扫描(_forEachRow), 3000 种子全选暂停实测补丁 2147ms 卡死主线程; 且 [perf] 补丁阈值恒 50ms 未按目标数分档(与 settleMs 分档不一致) ⇒ 大库常驻噪音、掩盖真问题">
+<title>乐观补丁 applyOptimistic 是 O(目标数 × 数据集规模): 大库全选操作主线程卡顿约 2s · perf · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 perf · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· perf</div>
+    <h1>乐观补丁 applyOptimistic 是 O(目标数 × 数据集规模): 大库全选操作主线程卡顿约 2s</h1>
+    <p class="lede">applyOptimistic 逐 hash 全表线性扫描(_forEachRow), 3000 种子全选暂停实测补丁 2147ms 卡死主线程; 且 [perf] 补丁阈值恒 50ms 未按目标数分档(与 settleMs 分档不一致) ⇒ 大库常驻噪音、掩盖真问题</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-20-1033-perf-webui-optimistic-patch-quadratic</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 10:33</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-09-20 复核「WEB UI 解耦」任务、重跑浏览器冒烟时撞见：3000 种子桩服务下 ok 模式<strong>每轮</strong>都打 1~2 条
+    <code>[perf]</code>，形态恒为「补丁 2s 级 / POST 稍晚于补丁 / 排队 0ms / 执行 1ms」：</p>
+<pre><code>[perf] 命令 4da5d00c0136d1ee(pause): 补丁 2033ms / POST 2090ms / 排队 0ms / 执行 1ms / 端到端 917ms
+[perf] 命令 545a5661bd5ee75c(pause): 补丁 2407ms / POST 2475ms / 排队 0ms / 执行 1ms / 端到端 534ms
+[perf] 命令 4da5d00c0136d1ee(pause): 撤下 3081ms via=pull (3000 个目标, &gt;2500ms 属异常)</code></pre>
+    <p>当时被记为「大库主线程抖动，未做 A/B，不入池」。本次受控实验证明<strong>不是抖动</strong>：补丁耗时按
+    O(目标数 × 数据集规模) 增长，与排队/执行/网络都无关（排队 0ms、执行 1ms）。触发条件就是「目标数 × 库大小」的乘积；与平台无关（纯前端同步 JS）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p><strong>① 受控探针（取证 2026-09-20 10:33，只调纯函数、不发请求、不触发重排）</strong>——
+    探针在页面内直接调 <code>applyOptimistic(hashes, "pause")</code> 并测同步耗时，测完 <code>resolveOptimistic(hashes,false)</code> 回滚；
+    脚本 <code>.workbuddy-ai/tmp/patch-probe.cjs</code>（dev-only，已 gitignore）：</p>
+<pre><code>[数据集300] 数据集规模 = 300 条
+  目标数  100 → 补丁     9.4 ms  (残留 pendingOps=0)
+  目标数  300 → 补丁    23.7 ms  (残留 pendingOps=0)
+
+[数据集3000] 数据集规模 = 3000 条
+  目标数  100 → 补丁      64 ms  (残留 pendingOps=0)
+  目标数  500 → 补丁   315.7 ms  (残留 pendingOps=0)
+  目标数 1500 → 补丁  1036.3 ms  (残留 pendingOps=0)
+  目标数 3000 → 补丁  2146.7 ms  (残留 pendingOps=0)</code></pre>
+    <p>单目标成本：数据集 300 时约 <strong>0.079 ms/目标</strong>，数据集 3000 时约 <strong>0.715 ms/目标</strong>
+    —— 数据集放大 10×，单目标成本放大约 9×（等比）⇒ 每个目标的成本与<strong>数据集规模</strong>成正比，不是常数。</p>
+    <p><strong>② 与冒烟实测对得上</strong>：纯函数 3000 目标 2146.7ms，冒烟里同一场景报 2033 / 2407ms（含点击与渲染开销），
+    同一量级 ⇒ 冒烟那 2s 就是补丁本身，不是网络、不是后端、不是渲染。</p>
+    <p><strong>③ 非本次改动引入</strong>：远端 <code>4df80dc</code>（改回执/真值落地）之前同场景实测 1693ms，之后 2033 / 2407ms —— 同量级；
+    且 <code>git log -S "_forEachRow"</code> 只出现在 <code>afef7ce</code>（app.js 拆分时搬入）与 <code>4df80dc</code>（仅上下文行），算法本身早于这两笔。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>库大（≥1000 条）+ 批量操作（全选 / 整组 / 整剧）。单目标与小库无感（毫秒级）；3000×3000 才到 2s 级。</td></tr>
+      <tr><td>影响范围</td><td>两套 UI（prism / atlas）共用 <code>shared/commands.js</code>；只命中乐观白名单 pause/resume 的批量路径（<code>act()</code> / <code>bulkAct()</code> / <code>actTorrent()</code>）；不涉及后端与规则层。</td></tr>
+      <tr><td>严重度</td><td><strong>中</strong>。无数据风险（补丁是前端覆盖表，失败/超时会回滚，见 <code>resolveOptimistic</code> / 3s 兜底）；但点击后主线程被同步占用 1~2s，期间 UI 无响应 —— 正是「点了没反应」那一类观感问题。附带问题：<code>patchMs</code> 的报警阈值恒 50ms，未按目标数分档 ⇒ 大库每次批量必报，属<strong>常驻噪音</strong>（项目自己的原则：常驻的报警没人看，反而掩盖真异常）。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/web_ui/static/shared/commands.js:168</code>（取证 2026-09-20 10:33）· 符号 <code>applyOptimistic(hashes, action)</code> · grep <code>applyOptimistic</code> —— 外层遍历每个目标 hash</li>
+      <li>同文件 <code>:163</code> · 符号 <code>_forEachRow(hash, fn)</code> · grep <code>_forEachRow</code> —— <strong>每个</strong> hash 都要线性扫 <code>this.torrents</code> + <code>this.singles</code> + 全部 <code>groups[].members</code> 三张表做 <code>r.hash === hash</code> 比较（注意语义：一个 hash 可能命中多行，改法必须保住这一点）</li>
+      <li>同文件 <code>:106</code> · grep <code>patchMs</code> —— <code>[perf]</code> 报警判定 <code>(c.patchMs || 0) &gt; 50</code>，未按目标数分档；对照 <code>:54</code> 的 <code>budget = (c.targets || 0) &gt; 100 ? 2500 : 800</code>（settleMs 是分档的，两处口径不一致）</li>
+      <li>调用侧：<code>act()</code> <code>:351</code> / <code>bulkAct()</code> <code>:408</code> / <code>actTorrent()</code> <code>:469</code> · grep <code>_markCmdPatch</code></li>
+      <li>预计涉及文件：<code>src/auto_qb/web_ui/static/shared/commands.js</code>（主）；方案 B 另涉 <code>src/auto_qb/web_view.py</code> 与前端视图结构；阈值改动另涉 <code>scripts/ui_smoke.cjs</code>（收集 [perf] 的那一段）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout"><strong>已定位（有实测支撑）</strong>：<code>applyOptimistic</code> 对每个目标 hash 调一次 <code>_forEachRow</code>，后者遍历三张全表做线性查找 ⇒
+    复杂度 <strong>O(目标数 × 数据集规模 × 3)</strong>。单目标时只是 3 次全表扫描（毫秒级，无感）；3000 目标 × 3000 条 ⇒ 约 2700 万次比较 + 3000 次响应式 <code>Object.assign</code>，实测 2146.7ms，与冒烟报的 2033/2407ms 同一量级。</div>
+    <p><strong>已排除的假设</strong>：① 不是网络/后端 —— 探针只调纯前端同步函数、不发请求，耗时同量级；② 不是渲染/重排 —— 探针不点击、不等 rAF，测的是函数同步返回；③ 不是 <code>4df80dc</code> 引入 —— 该提交之前同场景实测 1693ms。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向：把「逐 hash 全表查找」换成「一次建索引、再按 hash 命中」。</p>
+    <ul>
+      <li><strong>方案 A（推荐，改动最小）</strong>：在 <code>applyOptimistic</code> 入口先把三张表扫一遍建成 <code>hash -&gt; rows[]</code> 映射（O(数据集)），再按目标命中 ⇒ 复杂度降为 O(目标数 + 数据集)。代价：映射要覆盖 <code>torrents</code> / <code>singles</code> / <code>groups[].members</code>，且必须保持「一个 hash 可能命中多行」的现有语义（当前 <code>_forEachRow</code> 就是这个语义）。</li>
+      <li><strong>方案 B</strong>：视图构建时直接把行引用挂到可查结构（后端 <code>web_view.py</code> 出 hash→行 索引），前端不再查找。代价：改动面大，跨后端视图与前端结构。</li>
+      <li><strong>方案 C（只治标，建议与 A 同时做）</strong>：把 <code>patchMs</code> 的 <code>[perf]</code> 阈值按目标数分档（与 <code>settleMs</code> 的 <code>budget</code> 同款），消除大库常驻噪音；A 落地后若仍超阈值，那时才是真异常。</li>
+    </ul>
+    <p>本报告不实施任何修改（范围守恒：计划外问题只入池）。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-20 10:33 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验：2026-09-20 10:33（入池同日）<strong>仍复现</strong> —— 数据集 3000 / 目标 3000 → 补丁 2146.7ms（探针 <code>.workbuddy-ai/tmp/patch-probe.cjs</code>）。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-09-20-1033-perf-webui-optimistic-patch-quadratic.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
