@@ -54,17 +54,23 @@ window.AQB_COMMANDS = {
       /* 阈值按目标数分档: 单目标/小批量 800ms; >100 目标 2500ms —— 整剧 800 个种子的**补丁本身**
        * 就要 ~160ms, 按单目标阈值报会变成常驻噪音, 而常驻的报警没人看。
        * ❗无回执(hang / 命令在途)时只记不报: 那时走的是 3s 兜底, 慢是设计如此, 报出来是噪音。 */
+      /* ❗**无条件打印一行**: 真机上"点完再切到控制台敲命令取 cmdStats"根本做不到(没有那个空档),
+       * 而这正是**用户感知的那一半**, 每次都该看得见。超阈值才升级成 WARNING —— 常驻的报警没人看,
+       * 但"没有报警"不等于"能看见数字"。
+       * ❗无回执(hang / 命令在途)时**不打印**: 那时走 3s 兜底, 慢是设计如此, 报出来是噪音。 */
       if (c.totalMs == null) return;
+      /* `via` = 撤下走的是哪条路, 真机排查的第一判据:
+       *   truth = 回执自带真值、就地撤下(最快, 与库大小解耦; 需要服务端是"补刷新后才写回执"的新版);
+       *   pull  = 回执没带真值或真值没对上, 退回 _pullTruthAfterCmd 拉全量(大库就慢在这里);
+       *   stale = 真值尚未落地(等真值那一档), 保留乐观值继续等;
+       *   其它  = 兜底回滚 / 失败回滚。
+       * 看到 pull 且后端日志里没有「回执(补刷新后)已写」 ⇒ 服务端还是旧代码, 先重启进程。 */
       const budget = (c.targets || 0) > 100 ? 2500 : 800;
-      if (c.settleMs > budget) {
-        /* `via` = 撤下走的是哪条路, 真机排查的第一判据:
-         *   truth = 回执自带真值、就地撤下(最快, 与库大小解耦; 需要服务端是"补刷新后才写回执"的新版);
-         *   pull  = 回执没带真值或真值没对上, 退回 _pullTruthAfterCmd 拉全量(大库就慢在这里);
-         *   其它  = 兜底回滚 / 失败回滚。
-         * 看到 pull 且后端日志里没有「回执(补刷新后)已写」 ⇒ 服务端还是旧代码, 先重启进程。 */
-        console.warn(`[perf] 命令 ${c.cmdId || "-"}${c.action ? "(" + c.action + ")" : ""}: 撤下 ${c.settleMs}ms` +
-          ` via=${c.settleVia || "?"} (${c.targets || "?"} 个目标, >${budget}ms 属异常)`);
-      }
+      const head = `[perf] 命令 ${c.cmdId || "-"}${c.action ? "(" + c.action + ")" : ""}:` +
+        ` 贴上 ${c.patchMs}ms / 回执 ${c.totalMs}ms / 撤下 ${c.settleMs}ms` +
+        ` via=${c.settleVia || "?"} (${c.targets || "?"} 个目标)`;
+      if (c.settleMs > budget) console.warn(head + ` —— 撤下 >${budget}ms 属异常`);
+      else console.log(head);
     },
     _markCmdPatch(t0) {
       if (this.cmdStats && t0) this.cmdStats.patchMs = Math.round(performance.now() - t0);
