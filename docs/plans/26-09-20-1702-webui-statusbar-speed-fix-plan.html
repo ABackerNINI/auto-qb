@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 状态栏速度恒为 0 · 修复计划 · auto-qb</title>
+<style>
+  :root{
+    --bg:#0f0f0f;
+    --bg-2:#141414;
+    --fg:#eceae7;
+    --fg-2:#a8a5a0;
+    --fg-3:#6f6c67;
+    --rule:rgba(255,255,255,.10);
+    --rule-2:rgba(255,255,255,.06);
+    --accent:#c98f43;
+    --accent-dim:rgba(201,143,67,.16);
+    --ok:#7fb08a;
+    --bad:#c96a5a;
+    --sans:"Inter","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:15px;line-height:1.62;font-weight:400;letter-spacing:0;
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:0 40px}
+
+  .cover{padding:104px 0 64px;border-bottom:1px solid var(--rule)}
+  .kicker{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fg-3);margin:0 0 40px;
+  }
+  h1{font-size:52px;line-height:1.06;letter-spacing:-.022em;font-weight:590;margin:0 0 22px;max-width:19em}
+  .lede{font-size:17px;line-height:1.6;color:var(--fg-2);max-width:62ch;margin:0 0 44px}
+  .lede b{color:var(--fg);font-weight:510}
+  .meta{display:flex;flex-wrap:wrap;gap:0;margin:0;padding:0;list-style:none;border-top:1px solid var(--rule)}
+  .meta li{flex:1 1 160px;padding:14px 20px 14px 0;border-right:1px solid var(--rule-2)}
+  .meta li:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin:0 0 5px}
+  .meta dd{margin:0;font-size:13.5px;color:var(--fg)}
+  .meta dd.mono{font-family:var(--mono);font-size:12.5px}
+
+  .body-wrap{display:grid;grid-template-columns:212px 1fr;gap:56px;padding:56px 0 0;align-items:start}
+  nav.toc{position:sticky;top:40px}
+  nav.toc .t-h{
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-3);
+    margin:0 0 14px;
+  }
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin-bottom:7px}
+  nav.toc a{
+    display:block;color:var(--fg-2);text-decoration:none;font-size:13px;line-height:1.4;
+    padding-left:26px;position:relative;transition:color .12s;
+  }
+  nav.toc a::before{
+    content:counter(toc,decimal-leading-zero);position:absolute;left:0;top:1px;
+    font-family:var(--mono);font-size:10.5px;color:var(--fg-3);
+  }
+  nav.toc a:hover{color:var(--accent)}
+
+  article{max-width:780px}
+  section{margin:0 0 64px;scroll-margin-top:40px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin:0 0 8px}
+  .sec-num{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.06em;padding-top:6px}
+  h2{font-size:27px;line-height:1.2;letter-spacing:-.016em;font-weight:590;margin:0}
+  .sec-rule{height:1px;background:var(--rule);margin:0 0 26px}
+  h3{font-size:16.5px;font-weight:550;letter-spacing:-.008em;margin:36px 0 10px;color:var(--fg)}
+  h4{font-size:13.5px;font-weight:550;margin:24px 0 6px;color:var(--fg)}
+  p{margin:0 0 16px;max-width:70ch}
+  p+p{margin-top:-2px}
+  .muted{color:var(--fg-2)}
+  .small{font-size:13px;line-height:1.55}
+  code{
+    font-family:var(--mono);font-size:12.5px;color:var(--fg);
+    background:var(--bg-2);border:1px solid var(--rule-2);padding:1px 5px;
+  }
+  a.ref{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-dim)}
+  ul.tight{margin:0 0 16px;padding-left:18px;max-width:70ch}
+  ul.tight li{margin-bottom:7px}
+  ul.tight li::marker{color:var(--fg-3)}
+
+  pre{
+    background:var(--bg-2);border:1px solid var(--rule-2);padding:14px 16px;margin:10px 0 20px;
+    overflow-x:auto;
+  }
+  pre code{background:none;border:0;padding:0;font-size:12px;line-height:1.6;color:var(--fg-2);display:block}
+  pre code .k{color:var(--accent)}
+  pre code .g{color:var(--fg-3)}
+
+  .tbl{width:100%;border-collapse:collapse;margin:8px 0 22px;font-size:13px}
+  .tbl caption{
+    caption-side:top;text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--fg-3);padding-bottom:10px;
+  }
+  .tbl th{
+    text-align:left;font-weight:510;font-size:11.5px;letter-spacing:.03em;color:var(--fg-2);
+    border-bottom:1px solid var(--rule);padding:0 14px 9px 0;white-space:nowrap;
+  }
+  .tbl td{border-bottom:1px solid var(--rule-2);padding:11px 14px 11px 0;vertical-align:top;line-height:1.5}
+  .tbl td:last-child,.tbl th:last-child{padding-right:0}
+  .tbl .num{font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .tbl .p{white-space:nowrap;font-family:var(--mono);font-size:11.5px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:2px 6px;border:1px solid var(--rule);color:var(--fg-2)}
+  .tag.p0{color:var(--accent);border-color:rgba(201,143,67,.4);background:var(--accent-dim)}
+  .tag.p1{color:var(--fg);border-color:var(--rule)}
+  .tag.p2{color:var(--fg-3);border-color:var(--rule-2)}
+  .tag.no{color:var(--bad);border-color:rgba(201,106,90,.4)}
+  .dim{color:var(--fg-3)}
+
+  .chain{margin:6px 0 24px;border:1px solid var(--rule);background:var(--bg-2)}
+  .chain-row{
+    display:grid;grid-template-columns:34px 1fr 200px;gap:0;align-items:center;
+    border-bottom:1px solid var(--rule-2);padding:12px 16px;
+  }
+  .chain-row:last-child{border-bottom:0}
+  .chain-row .i{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+  .chain-row .t{font-size:13.5px;line-height:1.45}
+  .chain-row .t span{display:block;font-family:var(--mono);font-size:11px;color:var(--fg-3);margin-top:3px}
+  .chain-row .v{font-family:var(--mono);font-size:12px;text-align:right}
+  .chain-row.bad .v{color:var(--bad)}
+  .chain-row.ok .v{color:var(--ok)}
+
+  .item{border-top:1px solid var(--rule);padding:22px 0 26px}
+  .item:first-of-type{border-top:0}
+  .item-h{display:flex;align-items:baseline;gap:12px;margin:0 0 4px}
+  .item-h .id{font-family:var(--mono);font-size:11px;color:var(--fg-3);letter-spacing:.05em}
+  .item-h h4{margin:0;font-size:15.5px;letter-spacing:-.01em;font-weight:550}
+  .item-h .tag{margin-left:auto}
+  .item p{margin:8px 0 12px}
+  .kv{display:grid;grid-template-columns:74px 1fr;gap:0 16px;font-size:13px;margin:0}
+  .kv dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);padding:5px 0}
+  .kv dd{margin:0;padding:5px 0;color:var(--fg-2);line-height:1.55}
+  .kv dd b{color:var(--fg);font-weight:510}
+
+  .note{
+    border:1px solid var(--rule);background:var(--bg-2);padding:16px 18px;margin:20px 0 24px;
+    font-size:13.5px;color:var(--fg-2);
+  }
+  .note .nh{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+  .note p{margin:0 0 10px;max-width:66ch}
+  .note p:last-child{margin:0}
+
+  footer.colophon{border-top:1px solid var(--rule);margin-top:20px;padding:28px 0 72px;font-size:12px;color:var(--fg-3);font-family:var(--mono);letter-spacing:.02em}
+
+  @media (max-width:960px){
+    .body-wrap{grid-template-columns:1fr;gap:32px}
+    nav.toc{position:static}
+    .wrap{padding:0 24px}
+    h1{font-size:38px}
+    .chain-row{grid-template-columns:26px 1fr 96px}
+  }
+
+html { color-scheme: dark; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <p class="kicker">AUTO-QB · WEB UI · 缺陷修复计划</p>
+  <h1>WEBUI 状态栏速度恒为 0<br>修复计划</h1>
+  <p class="lede">状态栏的上传/下载速度<b>不是没算，是算错了地方</b>：它在前端对 <code>groups</code> 求和，而「按视图回传」在种子页<b>根本不回 groups</b>。
+    本计划把合计搬回服务端并<b>恒回传</b>，让状态栏不再依赖任何一个视图的数组是否回传。</p>
+  <ul class="meta">
+    <li><dt>日期</dt><dd class="mono">2026-09-20 17:02</dd></li>
+    <li><dt>来源</dt><dd>用户真机报，已认领</dd></li>
+    <li><dt>类型</dt><dd>bug · 状态显示</dd></li>
+    <li><dt>根因</dt><dd>已实测确认</dd></li>
+    <li><dt>关联</dt><dd><a class="ref" href="../../memory-bank/issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html">issue 26-09-20-1646</a></dd></li>
+    <li><dt>规模</dt><dd class="mono">4 处改动 + 3 条守阵</dd></li>
+  </ul>
+</header>
+
+<div class="body-wrap">
+
+  <nav class="toc">
+    <p class="t-h">目录</p>
+    <ol>
+      <li><a href="#s1">结论先行</a></li>
+      <li><a href="#s2">复验：怎么证实的</a></li>
+      <li><a href="#s3">根因链路</a></li>
+      <li><a href="#s4">候选修法与取舍</a></li>
+      <li><a href="#s5">实施项</a></li>
+      <li><a href="#s6">回归风险与红线</a></li>
+      <li><a href="#s7">验收口径</a></li>
+      <li><a href="#s8">待拍板</a></li>
+    </ol>
+  </nav>
+
+  <article>
+
+  <section id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>结论先行</h2></div>
+    <div class="sec-rule"></div>
+
+    <p><b>主因（恒为 0）</b>：状态栏数值 = 前端 <code>totalDl</code> / <code>totalUl</code>，两者都是对 <code>this.groups</code> 求和
+      （<code>shared/decorate.js:136-141</code>）。而 P1-1「按视图回传」把 <code>groups</code> 从种子页的响应里裁掉了 ——
+      <code>VIEW_ARRAYS["torrent"] = ("torrents",)</code>。种子页上 <code>groups</code> 键<b>一次都不会出现</b>，
+      前端按「键不存在则保留原引用」赋值，于是它永远停在初始值 <code>[]</code> ⇒ 合计恒为 0。</p>
+
+    <p><b>次因（严重偏低）</b>：合计只遍历 <code>groups</code>，漏掉未归组种子 <code>singles</code>。
+      同一文件里的 <code>totalTorrents()</code> 却写了 <code>groups + singles + torrents</code> 三份兜底 —— 两者口径不对称。
+      桩服务实测（50 组 + 200 未归组）：显示 <span class="dim">1.64 MiB/s</span>，真值 <span class="dim">14.5 MiB/s</span>，<b>少算 88.7%</b>。</p>
+
+    <p><b>修法</b>：服务端在 <code>/api/state</code> 的 <code>status</code> 块里恒回传 <code>totals = {dlspeed, upspeed}</code>
+      （对全量种子求和），与 <code>traffic</code> / <code>server</code> 同口径 —— <b>不参与视图分片、不参与 rid 门控</b>；
+      前端 <code>totalDl</code> / <code>totalUl</code> 改读 <code>status.totals</code>。一次修掉主因与次因。</p>
+
+    <div class="note">
+      <p class="nh">为什么不是"补回 groups"</p>
+      <p>把 <code>groups</code> 加进 <code>VIEW_ARRAYS["torrent"]</code> 能修好状态栏，但会<b>直接废掉 P1-1 的成果</b>：
+        种子页响应体从 4.52MB 回到 6.41MB（3000 种子实测），且现有守阵
+        <code>test_api_state_view_scoped_payload</code> 明确断言 <code>"groups" not in t</code>。
+        状态栏要的只是两个数字，不该为它回传一整张表。</p>
+    </div>
+  </section>
+
+  <section id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>复验：怎么证实的</h2></div>
+    <div class="sec-rule"></div>
+
+    <p>静态阅读只能给出假设，所以起真 <code>create_app</code> + 合成种子的桩服务直接量。
+      <span class="dim">（取证 2026-09-20 17:0x，合成种子自带非零 dlspeed/upspeed）</span></p>
+
+<pre><code><span class="g"># 起桩: 300 种子 / 150 组</span>
+uv run python scripts/ui_harness.py --torrents 300 --port 8177
+
+<span class="g"># A) 辅种页</span>
+curl -s "http://127.0.0.1:8177/api/state?view=group"
+keys: ['groups', 'rid', 'singles', 'status', 'updated']
+groups: 150  singles: 0
+totalDl(前端口径) = 15206400
+totalUl(前端口径) = 45926400
+
+<span class="g"># B) 种子页 —— 同一份数据的同一个进程</span>
+curl -s "http://127.0.0.1:8177/api/state?view=torrent"
+keys: ['rid', 'status', 'torrents', 'updated']
+groups present? False | torrents: 300
+全量真值 dlspeed 合计 = 15206400
+全量真值 upspeed 合计 = 45926400
+status.server 含 dl_info_speed? False   <span class="g"># 桩里 server_state = null</span></code></pre>
+
+    <p>响应里<b>根本没有 <code>groups</code> 键</b>，而真值是 15,206,400 —— 前端在种子页上能算出来的只有 0。复现成立。</p>
+
+<pre><code><span class="g"># 次因: 50 组 + 200 未归组</span>
+uv run python scripts/ui_harness.py --torrents 300 --groups 50 --port 8178
+curl -s "http://127.0.0.1:8178/api/state?view=group"
+groups: 50  singles: 200
+前端口径(仅 groups) dl/ul = 1723392 / 5068800
+全量真值(groups+singles) dl/ul = 15206400 / 45926400   <span class="g"># 少算 88.7% / 89.0%</span></code></pre>
+
+    <p class="small muted">补充一条推论：若用户是<b>先开辅种页再切种子页</b>，<code>groups</code> 会保留切换那一刻的旧数组 ——
+      此时状态栏不是 0，而是<b>冻结的旧值</b>（比 0 更隐蔽）。用户报「永远 0」说明首屏就在种子页
+      （<code>autoqb.ui.view</code> 落在 localStorage 里，下次打开直接进种子页）。</p>
+  </section>
+
+  <section id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>根因链路</h2></div>
+    <div class="sec-rule"></div>
+
+    <div class="chain">
+      <div class="chain-row ok">
+        <span class="i">1</span>
+        <span class="t">主循环重建四视图并发布<span>web_runtime._publish_locked · group_view / singles_view / flat_view / shows_view</span></span>
+        <span class="v">四份都在</span>
+      </div>
+      <div class="chain-row ok">
+        <span class="i">2</span>
+        <span class="t">前端带 <code>view</code> 参数轮询<span>app.js:866 · viewMode=torrents ⇒ view=torrent</span></span>
+        <span class="v">view=torrent</span>
+      </div>
+      <div class="chain-row bad">
+        <span class="i">3</span>
+        <span class="t">按视图裁剪：种子页只回 <code>torrents</code><span>web_view.VIEW_ARRAYS["torrent"] = ("torrents",)</span></span>
+        <span class="v">groups 被裁掉</span>
+      </div>
+      <div class="chain-row bad">
+        <span class="i">4</span>
+        <span class="t">前端「键不存在则保留原引用」<span>app.js:883 · if (state.groups !== undefined)</span></span>
+        <span class="v">groups 停在 []</span>
+      </div>
+      <div class="chain-row bad">
+        <span class="i">5</span>
+        <span class="t">状态栏对 <code>groups</code> 求和<span>decorate.js:136-141 · totalDl / totalUl</span></span>
+        <span class="v">0 B/s</span>
+      </div>
+    </div>
+
+    <p class="small muted">第 4 步本身<b>不是</b>缺陷 —— 「不抹空没回的视图」是 P1-1 的正确契约（否则切回别的视图要等一轮全量）。
+      缺陷出在第 5 步：状态栏是一个<b>跨视图的常驻显示</b>，却去依赖一个<b>按视图裁剪</b>的数组。
+      这与 2026-09-19 修掉的 BUG-8（追剧页因成员索引被裁而永久空白）是同一类错误，只是换了个消费者。</p>
+  </section>
+
+  <section id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>候选修法与取舍</h2></div>
+    <div class="sec-rule"></div>
+
+    <table class="tbl">
+      <caption>三个候选</caption>
+      <tr><th>候选</th><th>做法</th><th>代价</th><th>结论</th></tr>
+      <tr>
+        <td><b>A</b> 服务端算 totals</td>
+        <td><code>/api/state</code> 的 <code>status</code> 块加 <code>totals</code>（全量种子求和），前端改读它</td>
+        <td>每次视图重建多一趟 O(n)（5000 种子约 1–2 ms，1.5s 一次）</td>
+        <td><span class="tag p0">推荐</span></td>
+      </tr>
+      <tr>
+        <td>B 前端兜底求和</td>
+        <td><code>groups.length ? groups+singles : torrents</code> 求和</td>
+        <td>违反「派生值后端算」约定；且 groups 非空但陈旧时显示<b>错值</b>而非 0</td>
+        <td><span class="tag no">否决</span></td>
+      </tr>
+      <tr>
+        <td>C 读 qB 全局</td>
+        <td>状态栏直接用 <code>status.server.dl_info_speed</code></td>
+        <td>口径变成「qB 全局」（含未纳管种子），与现有 title「全部组合计」不同；桩实测 <code>server_state = null</code>，真机才有值</td>
+        <td><span class="tag p1">备选</span></td>
+      </tr>
+    </table>
+
+    <div class="note">
+      <p class="nh">候选 C 的真实风险</p>
+      <p><code>status.server</code> 来自 qB sync 的 <code>server_state</code>，<b>不是本工具自己算的</b>。
+        桩服务里它是 <code>null</code>（FakeClient 不提供），意味着走 C 的守阵在 CI 里<b>测不出真值</b>，只能测「不报错」。
+        而 A 的数据源是本工具的 <code>store</code>，合成种子可断言、可复现。故默认走 A。</p>
+    </div>
+  </section>
+
+  <section id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>实施项</h2></div>
+    <div class="sec-rule"></div>
+
+    <div class="item">
+      <div class="item-h"><span class="id">F1</span><h4>后端：新增速度合计构建器</h4><span class="tag p0">P0</span></div>
+      <dl class="kv">
+        <dt>文件</dt><dd><code>src/auto_qb/mixins/web_view.py</code> —— 新增 <code>_build_speed_totals()</code>，对 <code>self.store.by_hash.values()</code> 的 <code>dlspeed</code> / <code>upspeed</code> 求和，返回 <code>{"dlspeed": int, "upspeed": int}</code></dd>
+        <dt>为什么</dt><dd>显式契约（不依赖 <code>flat_view</code> 的 SEED_ITEM 字段集）；全量 = 组内成员 ∪ 未归组 ⇒ 一并修掉次因</dd>
+      </dl>
+    </div>
+
+    <div class="item">
+      <div class="item-h"><span class="id">F2</span><h4>运行时：随视图发布缓存</h4><span class="tag p0">P0</span></div>
+      <dl class="kv">
+        <dt>文件</dt><dd><code>src/auto_qb/web_runtime.py</code> —— <code>__init__</code> 加 <code>self.speed_totals = {"dlspeed": 0, "upspeed": 0}</code>；<code>_publish_locked()</code> 里与四视图同一临界区赋值</dd>
+        <dt>为什么</dt><dd>与行数据<b>同源同轮</b>（同一把 <code>view_lock</code>、同一份快照），且受节拍对齐保护：没人看就不生产下一版</dd>
+      </dl>
+    </div>
+
+    <div class="item">
+      <div class="item-h"><span class="id">F3</span><h4>端点：status 恒回传 totals</h4><span class="tag p0">P0</span></div>
+      <dl class="kv">
+        <dt>文件</dt><dd><code>src/auto_qb/web.py</code> —— <code>api_state</code> 的 <code>status</code> 块加 <code>"totals": manager.web.speed_totals</code></dd>
+        <dt>为什么</dt><dd><code>status</code> 与 <code>traffic</code> / <code>server</code> 同属「恒回传」口径，不受 <code>rid</code> 门控与视图分片影响 —— 这正是本 bug 的解药</dd>
+        <dt>不做的</dt><dd>不改 <code>status_snapshot()</code>（核心域快照，托盘 UI 也用，不该掺 WEB 聚合）；不加 <code>_WEB_STATE_ALIAS</code> 别名（新代码直接读 <code>manager.web</code>）</dd>
+      </dl>
+    </div>
+
+    <div class="item">
+      <div class="item-h"><span class="id">F4</span><h4>前端：状态栏改读 status.totals</h4><span class="tag p0">P0</span></div>
+      <dl class="kv">
+        <dt>文件</dt><dd><code>src/auto_qb/web_ui/static/shared/decorate.js</code> —— <code>totalDl</code> / <code>totalUl</code> 改读 <code>this.status.totals.*</code>；<code>prism</code> / <code>atlas</code> 两套模板的绑定<b>不动</b></dd>
+        <dt>为什么</dt><dd>绑定点 <code>{{ fmtSpeed(totalDl) }}</code> 保持不变 ⇒ 皮肤零改动，改一处两个 UI 同时生效</dd>
+      </dl>
+    </div>
+
+    <div class="item">
+      <div class="item-h"><span class="id">F5</span><h4>守阵：三条，各防一种失效</h4><span class="tag p0">P0</span></div>
+      <ul class="tight">
+        <li><b>端点守阵</b>（<code>tests/test_web.py</code>）：<code>view=torrent</code> 与 <code>rid</code> 命中（<code>updated=false</code>）两种情况下，<code>status.totals</code> 都必须在，且等于全量合计（<b>含未归组</b>）—— 防主因与次因复现。</li>
+        <li><b>静态防回潮</b>：<code>decorate.js</code> 的速度求和不得再出现 <code>this.groups.reduce</code> —— 防有人把 F4 改回去。</li>
+        <li><b>浏览器冒烟</b>（<code>scripts/ui_smoke.cjs</code>）：切到种子页后断言 <code>vm.totalDl === status.totals.dlspeed</code> 且 &gt; 0 —— 唯一能防「pytest 全绿但界面废掉」的一道。</li>
+      </ul>
+      <p class="small muted">冒烟断言刻意写成「等于服务端真值」而不是「不为 0」：切视图前若已取到过 groups，旧实现也会显示一个非零的<b>冻结值</b>，只断言非 0 会漏。</p>
+    </div>
+  </section>
+
+  <section id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>回归风险与红线</h2></div>
+    <div class="sec-rule"></div>
+
+    <table class="tbl">
+      <caption>风险登记</caption>
+      <tr><th>风险</th><th>判据</th><th>处置</th></tr>
+      <tr>
+        <td>每轮多一趟 O(n) 求和</td>
+        <td>5000 种子约 1–2 ms，视图重建 1.5s 一次</td>
+        <td>可接受；若实测超预期，改从已构建的 <code>flat_view</code> 求和（省一趟遍历，代价是耦合 SEED_ITEM 契约）</td>
+      </tr>
+      <tr>
+        <td>与节拍对齐相互作用</td>
+        <td><code>status</code> 不受 <code>pending_ver</code> 门控，返回的是<b>上一版</b>缓存值</td>
+        <td>符合预期（与 <code>traffic</code> / <code>server</code> 同口径）；已在守阵里覆盖 <code>updated=false</code> 场景</td>
+      </tr>
+      <tr>
+        <td>旧客户端 / 缓存的 JS</td>
+        <td>老 JS 读不到 <code>status.totals</code></td>
+        <td>前后端同版本发布；不做兼容兜底（项目惯例：不留死字段，见 <code>pollSec</code> 退役）</td>
+      </tr>
+      <tr>
+        <td class="p">红线</td>
+        <td colspan="2"><code>config.yml</code> / <code>auto-qb-data/</code> 不碰；<code>VIEW_ARRAYS</code> 不碰；<code>status_snapshot()</code> 不碰</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>验收口径</h2></div>
+    <div class="sec-rule"></div>
+
+<pre><code><span class="g"># 1) 单测基线（改动前先量一次）</span>
+uv run pytest tests -q --no-cov
+
+<span class="g"># 2) 起桩，两个视图各取一次，totals 必须一致且非零</span>
+uv run python scripts/ui_harness.py --torrents 300 --groups 50 --port 8099
+curl -s "http://127.0.0.1:8099/api/state?view=torrent" | python -c "import sys,json;print(json.load(sys.stdin)['status']['totals'])"
+curl -s "http://127.0.0.1:8099/api/state?view=group"   | python -c "import sys,json;print(json.load(sys.stdin)['status']['totals'])"
+<span class="g"># 预期: 两次都 = {'dlspeed': 15206400, 'upspeed': 45926400}（含未归组的那 200 条）</span>
+
+<span class="g"># 3) 浏览器冒烟（ok / error 两种模式都要跑）</span>
+NODE_PATH=.../workspace/node_modules node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 300
+
+<span class="g"># 4) 全量 + 格式化</span>
+uv run pytest tests -q
+yapf -i src/auto_qb/mixins/web_view.py src/auto_qb/web_runtime.py src/auto_qb/web.py</code></pre>
+
+    <p><b>通过判据</b>：① 三处命令的 <code>totals</code> 相等且等于 <code>groups + singles</code> 真值；② 冒烟 ok / error 双模式
+      <b>0 失败</b>（断言数 +1×2 UI）；③ 全量测试基线只增不减；④ 真机走查：种子页 / 辅种页 / 追剧页三个页签下状态栏数值一致且随传输变化。</p>
+  </section>
+
+  <section id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>待拍板</h2></div>
+    <div class="sec-rule"></div>
+
+    <div class="note">
+      <p class="nh">口径：本工具纳管的全部种子 vs qB 全局</p>
+      <p>本计划默认走 <b>A（本工具纳管的全部种子，含未归组）</b> —— 与状态栏现有 title「全部组下载/上传速度合计」语义最接近，
+        且数据源可测。</p>
+      <p>如果你想要的是 <b>qB 全局口径</b>（等于 qB 原生状态栏，包含本工具不管理的种子），那应该走候选 C，
+        F1/F2 可以整个省掉，只改 F4 一行。<b>说一声即可，其余部分不变。</b></p>
+    </div>
+
+    <p class="small muted">另：修完之后建议顺手确认 <code>/api/state</code> 在种子页下还有没有别的「跨视图消费者」被裁掉的阵列
+      饿到（本轮不动，只记录）—— 这是 VIEW_ARRAYS 裁剪机制第二次暴露同类问题了。</p>
+  </section>
+
+  </article>
+</div>
+
+<footer class="colophon">
+  26-09-20-1702-webui-statusbar-speed-fix-plan.html · auto-qb · 证据取自真 create_app + 合成种子桩服务（2026-09-20 17:0x）
+</footer>
+
+</div>
+</body>
+</html>

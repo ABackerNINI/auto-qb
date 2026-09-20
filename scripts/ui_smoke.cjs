@@ -237,6 +237,22 @@ async function smokeUi(browser, ui) {
     const renderMs = await readInst(page, "vm.renderMs");
     add(ui, "单轮 renderMs 埋点可读", typeof renderMs === "number", `${renderMs}ms`);
     /*
+     * 状态栏速度(issue 26-09-20-1646): 状态栏是**跨视图**的常驻显示, 旧实现在前端对
+     * `groups` 求和, 而 groups 按视图回传 —— 种子页根本不回它 ⇒ 恒显示 0(首屏即种子页)
+     * 或停在**冻结的旧值**(先开过辅种页再切过来, 这个形态比 0 更隐蔽)。
+     * ❗所以断言写成「等于服务端 status.totals 真值」而不是「≠ 0」: 只断言非 0 会被
+     * 冻结值蒙过去, 而这正是 pytest 侧看不见的那一段(数值显示在 DOM 里, 单测看不到)。
+     */
+    const wantDl = await readInst(page, "vm.status && vm.status.totals ? vm.status.totals.dlspeed : null");
+    const sbDl = await readInst(page, "vm.totalDl");
+    const sbText = await page.evaluate("(() => { const e = document.querySelector('.sb-speed .val'); return e ? e.textContent.trim() : null; })()");
+    add(
+      ui,
+      "状态栏速度 = 服务端 totals(种子页不回 groups 也要对)",
+      wantDl !== null && wantDl > 0 && sbDl === wantDl && !!sbText && sbText !== "0 B/s",
+      `totalDl=${sbDl} / status.totals.dlspeed=${wantDl} / DOM="${sbText}"`
+    );
+    /*
      * 轮询分档(P1 之后的收尾一步): 间隔必须**按种子量**落在实测档位上 ——
      *   ≤1000 → 1.5s | 1000~3000 → 2s | >3000 → 3s
      * 档位来自实测单轮 refresh 耗时(1000:143ms / 3000:309ms / 5000:~400ms),

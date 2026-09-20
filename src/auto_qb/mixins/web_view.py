@@ -345,6 +345,24 @@ class WebviewMixin:
         """
         return [self._seed_view(r) for r in self.store.by_hash.values()]
 
+    def _build_speed_totals(self) -> dict:
+        """全量种子的上传/下载速度合计(状态栏常显统计的数据源)
+
+        ❗为什么必须由**服务端**算: 状态栏是跨视图的常驻显示, 而四个视图数组是**按视图回传**
+        的(见 VIEW_ARRAYS) —— 种子页压根不回 groups。此前由前端对 groups 求和, 于是状态栏
+        在种子页恒为 0(issue 26-09-20-1646); 且那份求和还漏掉未归组种子(singles, 实测少算
+        88.7%)。改成服务端对 store 全量求和后前端只读一个标量, 与视图分片彻底解耦。
+
+        求和范围 = store.by_hash 全量(组内成员 ∪ 未归组), 与种子页平铺视图同源。
+        成本 O(n), 5000 种子约 1~2ms, 每轮视图重建一次。
+        """
+        dl = 0
+        ul = 0
+        for r in self.store.by_hash.values():
+            dl += r.dlspeed
+            ul += r.upspeed
+        return {"dlspeed": dl, "upspeed": ul}
+
     def _build_singles_view(self) -> List[dict]:
         """未归组种子的单种子视图数据(分组未启用/文件列表不可读的种子不在任何组里,
         只能从这里进入单种子视图; 搜索兜底路径不含全量)。与分组视图在同一脏窗口重建,

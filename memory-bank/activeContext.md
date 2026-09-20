@@ -47,6 +47,14 @@
 - **TASK013 / TASK012 / TASK011**(第九/十/十一轮修复) —— 逐轮走查反馈
 - **TASK014 UI 组件库 20 式** (`fae019a`) —— 挑选与按需迭代
 
+- **WEBUI 状态栏上传/下载速度恒为 0 (2026-09-20, ✅ 已修并验证 → issue 置 `Fixed`; 剩用户真机走查)**: 根因**已实测确认** —— 状态栏在前端对 `groups` 求和(`decorate.js:136-141`), 而 P1-1 按视图回传把 `groups` 从种子页裁掉了(`VIEW_ARRAYS["torrent"]=("torrents",)`, `web_view.py:48`) + 前端「键不存在保留原引用」(`app.js:883`) ⇒ 种子页上 `this.groups` 恒为 `[]` ⇒ 恒 0。次因: 合计漏 `singles`, 桩实测(50组+200未归组)**少算 88.7%**。复验方式: 起 `scripts/ui_harness.py --torrents 300` 直接 curl 两视图比对(种子页响应**无 groups 键**, 真值 15,206,400)。修法选定「服务端算 `status.totals` 恒回传 + 前端改读」(候选 C 用 `server.dl_info_speed` 因桩里 `server_state=null` 不可测, 仅备选)。计划 [docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html](../docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html); 档案 [tasks/26-09-20-webui-statusbar-speed.md](tasks/26-09-20-webui-statusbar-speed.md); 报告 [issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html](issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html)。⚠ 与 2026-09-19 的 BUG-8(追剧页成员索引被裁致永久空白)**同类**: 跨视图的常驻消费者去依赖按视图裁剪的阵列, 建议顺手排查还有没有第三个。
+  **已实施(未提交)**: F1 `_build_speed_totals()`(`web_view.py`) / F2 `speed_totals` 与四视图同临界区发布(`web_runtime.py`) /
+  F3 `status.totals` 恒回传(`web.py`, **并把 `ensure_group_state()` 提到 status 字典之前** —— 否则字典字面量先求值,
+  totals 慢一拍且首轮为 0) / F4 前端 `totalDl|totalUl` 改读 `status.totals`(`decorate.js`, 两套模板零改动)。
+  实测: 桩服务种子页 `totals={dl:15206400, ul:45926400}`(= groups+singles 真值; 修复前种子页无此键、合计仅 1723392);
+  单测 **1059 → 1062 passed**(Windows) / WSL **1057 → 1060 passed + 2 skipped**, +3 守阵(端点恒回传 / 静态防回潮红绿双验过 /
+  合计含未归组); 冒烟双 UI **54 项 0 失败**, DOM 实测 `14.50 MiB/s`。基线数字已回写 `testing.md`。
+
 ## 定案口径 (别改回去; 完整判据见 [pitfalls.md](pitfalls.md))
 
 - **列偏好"升版本"**: 列集变更(加列/减列/重排)与存储结构扩展**一律不升版本**, 只有"旧缓存结构已无法被 `loadColState()` 正确解释"才升(如 v2 按列索引存), 且升版本必须同时挂 `LEGACY_COLS_KEYS` 迁移。当前键冻结在 `autoqb_cols_v4`, 无 v5 计划。历史计划 `docs/plans/26-09-15-1042-webui-optimization-plan-v3.html` 里"重排列集则升 v4→v5"是当时口径, 已被第十轮计划取代 —— 存档未改动, **别照抄**。

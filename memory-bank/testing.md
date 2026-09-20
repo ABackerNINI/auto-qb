@@ -6,12 +6,15 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1057 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1055 passed + 2 skipped** —— 2026-09-20 实测;
+# 基线: **1062 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 1060 passed + 2 skipped** —— 2026-09-20 实测;
 # ❗两侧**收集数相同**(那 2 条在 Windows 上跑、在 Linux 上跳), 比较时别拿 "passed" 直接比:
 #   Windows 1057 passed == Linux 1055 passed + 2 skipped。跳的两条都是 Windows 专属 ——
 #   `test_sidefx.py::…`(AUMID 守卫: 非 Windows 无 winreg) 与 `test_ui.py::…`(注册表专属键)。
 #   改了基线就把**两侧都重测**, 只测一侧就更新会立刻产生漂移
 #   (本次就是把还停在 1049 的 Linux 数字补回来的)。
+#   ⚠ WSL 侧重测要 `cp -r` 一份**到 ~/ 下**(不要放 /tmp): 仓库副本落在临时目录里会让
+#     `test_sidefx.py::test_sidefx_is_temp_path` / `::test_sidefx_policy_flags_unknown_effects`
+#     两条**假红**(2026-09-20 实测: /tmp 副本 2 failed, 同代码挪到 ~/ 即 0 failed —— 不是回归)。
 # = 1055 + **主循环 × WebUI 解耦(docs/plans/26-09-20-0234-webui-decoupling-plan.html)** 新增 2 项:
 #   ① `test_qbmanager.py::test_qbmanager_source_has_no_web_state_fields` —— **静态防回潮守阵**:
 #      扫 `qbmanager.py` 源码不得再出现 19 个表现层字段名(`self._group_view` 等)。必要性在于
@@ -107,7 +110,7 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 
 1. **每个测试文件头部 docstring 维护 "## 测试计划" 清单** — 项目明文规定: 新增测试必须同步更新对应文件的清单 (README 也强调)。
 2. 文件名与被测模块对应 (`test_actions.py` ↔ `rules/actions.py`); 一个模块可以有多个文件 (如 test_rules_core/test_rule_base/test_rule_engine 拆分)。
-3. 测试粒度小而多 (**1058 条**, 2026-09-20 Windows 收集数; 基线 passed/skipped 见本文件顶部), 名字用中文/英文短语描述场景。
+3. 测试粒度小而多 (**1062 条**, 2026-09-20 Windows 收集数; 基线 passed/skipped 见本文件顶部), 名字用中文/英文短语描述场景。
 4. **平台相关测试必须以 `monkeypatch` 固定平台** — GitHub Actions 跑在 Linux, 而本项目以 Windows 为运行环境。**判据是"本地全量绿"不算数**: 2026-09-19 Linux CI 一次红了 3 条, 全是"Windows 全绿 / Linux 全红"型 —— ①`shutil.rmtree` 在 POSIX 走 fd 版实现(传纯文件名 + `dir_fd`), 副作用记账器记到裸名字被判越界(76 条假阳性); ②`PlatformChannel("win32")` 里 `import winreg` 在 Linux 抛 `ModuleNotFoundError`, 而调用方只 catch `OSError`; ③`connect()` 真实连 `127.0.0.1:16585`, 是否抛异常取决于机器环境。修法与判别法见 [pitfalls.md](pitfalls.md)。验证 Linux 行为本机可用 WSL(见 pitfalls 同条)。纯 Windows 行为 (如长路径 `\\?\` 前缀) 的测试若直接断言, 在 Linux CI 上必失败 (2026-09-10 实测 3 例): `test_utils.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用 `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。规则: 测试主体行为的是"平台逻辑"而非"当前真实平台", 一律显式 monkeypatch, 不要依赖运行环境。
 5. **`test_web.py` 不只测 FastAPI 路由**: 除鉴权/API/命令入队/设置读写/`?rid=` 视图版本门控/**静态资源 no-cache 响应头**/**前端静态资源守阵**(`test_frontend_static_bundle_health`: 冲突标记残留、JS 注释孤儿续行、**装了 node 时跑 `node --check` 真语法校验**、CSS 规则块漏闭合、`<transition>` 吞弹窗、模板引用的静态资源是否存在 —— 这类问题会让整页只剩背景色或整块功能静默失效)外, 还覆盖 WEB 功能的 manager 侧 —— 搜索索引构建与搜索、`_drain_web_commands` 各命令执行(含未知命令/异常的容错)、`ensure_group_view`/`ensure_group_state` 脏重建与版本自增、`_state_kind` 状态分类、`build_group_view` 字段(含单种子大小/总大小/标签/分类/保存路径/**组级 added_on 取组内最大值/组级 hr_triggered 与 hr_pending 计数**)、**错误原因展示**(TASK015: `_error_reason` 的 missingFiles→"文件丢失" / error→tracker `msg` / 非错误→空串, `refresh_error_reasons` 的预算与 TTL 限额、虚拟 tracker 条目跳过、离开错误态清空缓存、qB 断连跳过且不清值)、**HR 展示字段**(`hr_tag`/`hr_tag_done` 文本 + `hr_triggered`/`hr_satisfied` 布尔 + `hr_req_time`/`hr_req_ratio` 阈值)、`apply_new_config` 分级应用。找 WEB 功能的测试先看这个文件。`test_speed_curve.py` 另覆盖 **`_traffic_view` 只读快照**的各分支(disabled/ok 含 periods 与 target+actual/dry_run 无 actual/manual 原因/stale 的两种原因码)。
 

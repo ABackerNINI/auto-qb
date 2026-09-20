@@ -133,11 +133,19 @@ window.AQB_DECORATE = {
       if (this.torrents.length) return this.torrents.length;
       return this.groups.reduce((n, g) => n + g.count, 0) + this.singles.length;
     },
+    /* 状态栏速度合计: 只读服务端算好的标量(status.totals 随 status **恒回传**, 不参与
+     * 视图分片与 rid 门控)。
+     * ❗**不要改回对 groups 求和** —— groups 是按视图回传的(VIEW_ARRAYS: 种子页不回它),
+     * 而状态栏是跨视图的常驻显示: 求和会让种子页恒显示 0(首屏即种子页, groups 一直是 [])
+     * 或停在**冻结的旧值**(先开过辅种页再切过来), 且漏掉未归组单种子(singles, 实测
+     * 少算 88.7%)。见 issue 26-09-20-1646。 */
     totalDl() {
-      return this.groups.reduce((n, g) => n + g.dlspeed, 0);
+      const t = this.status && this.status.totals;
+      return t ? t.dlspeed : 0;
     },
     totalUl() {
-      return this.groups.reduce((n, g) => n + g.upspeed, 0);
+      const t = this.status && this.status.totals;
+      return t ? t.upspeed : 0;
     },
     /* 成员索引: groups ∪ singles = 全量种子(shows 明细只带 hash, 从这里取完整成员视图,
      * 避免响应体重复成员数据; bulkDelete 摘要计数同源于此) */

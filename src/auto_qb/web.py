@@ -223,6 +223,10 @@ def create_app(manager) -> FastAPI:
         """
         manager.touch_web_client()
         snap = manager.status_snapshot()
+        # ❗**先**取分组状态再拼 status: ensure_group_state 才是真正触发"视图发布"的地方
+        # (脏则重建四视图 + 速度合计)。若把它写在 status 字典之后(作为 `**` 展开项),
+        # 字典字面量会**先**求值 ⇒ 读到的是上一轮的旧值: 首次请求拿到全 0, 之后每轮慢一拍。
+        group_state = manager.ensure_group_state(rid, view or None)
         payload = {
             "status":
                 {
@@ -240,8 +244,14 @@ def create_app(manager) -> FastAPI:
                     # 刷新频率不同 ⇒ 出现"状态栏速度正常、种子行速度滞后"的错位观测;
                     # 合并后每轮只剩 1 条请求, 且两者同源同轮。
                     "server": manager.store.server_state,
+                    # 全量种子的上传/下载速度合计(状态栏常显统计): 与 traffic / server 同为
+                    # "恒回传"口径 —— ❗**不参与 VIEW_ARRAYS 视图分片、不受 rid 门控**。
+                    # 状态栏是跨视图的常驻显示, 一旦让它去读按视图裁剪的数组(旧实现对 groups
+                    # 求和), 种子页就会恒显示 0(issue 26-09-20-1646); 服务端算好标量再回传,
+                    # 前端只读这一个值, 彻底与视图分片解耦。
+                    "totals": manager.web.speed_totals,
                 },
-            **manager.ensure_group_state(rid, view or None),
+            **group_state,
         }
         # ⚡ 直接返回 JSONResponse, **不要**返回裸 dict: FastAPI 对普通返回值会先跑一遍
         # `jsonable_encoder` 递归遍历整个响应体 —— 实测 3000 种子 `view=torrent` 时它要
@@ -265,6 +275,7 @@ def create_app(manager) -> FastAPI:
         """按种子名/文件列表搜索种子(主循环构建的缓存索引, Web 线程只读; 索引脏时投递构建命令)"""
         manager.touch_web_client()
         return JSONResponse(content=manager.search_torrents(q))
+
 
 # 同 /api/state: 返回裸 dict 会让 FastAPI 白跑一遍 jsonable_encoder(见 api_state 注释)
 

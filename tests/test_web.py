@@ -69,6 +69,9 @@
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
 - test_api_state_skips_jsonable_encoder: 热路径(/api/state、/api/groups)必须返回 JSONResponse 而非裸 dict —— 否则 FastAPI 会白跑一遍 jsonable_encoder 递归遍历响应体(3000 种子实测 161ms, 占端点耗时 85%); 用计数替身钉死
 - test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
+- test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
+- test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
+- test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
@@ -762,6 +765,28 @@ def test_frontend_static_bundle_health():
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
+
+
+def test_frontend_statusbar_speed_reads_server_totals():
+    """状态栏速度必须读服务端标量 status.totals, 不得改回对 groups 求和(静态防回潮)
+
+    issue 26-09-20-1646: 旧实现是 `totalDl() { return this.groups.reduce(...) }` —— 而 groups
+    **按视图回传**(VIEW_ARRAYS: 种子页不回它), 于是状态栏在种子页恒为 0(首屏即种子页)或
+    停在**冻结的旧值**(先开过辅种页再切过来), 并且漏掉未归组 singles(实测少算 88.7%)。
+    Python 侧单测看不见这种"界面废掉", 只能静态钉住这两个 computed。
+    """
+    import re
+
+    text = open(os.path.join(STATIC_ROOT, "shared", "decorate.js"), encoding="utf-8").read()
+    for name in ("totalDl", "totalUl"):
+        m = re.search(rf"\n    {name}\(\) \{{(.*?)\n    \}},", text, re.S)
+        assert m, f"decorate.js 里找不到 computed {name}(改名或挪走了? 同步本守阵)"
+        body = m.group(1)
+        assert "this.groups" not in body, (
+            f"{name} 又在对 this.groups 求和: groups 是按视图回传的(种子页不回) "
+            f"⇒ 状态栏恒为 0 或停在旧值(issue 26-09-20-1646)"
+        )
+        assert "status.totals" in body, f"{name} 必须读服务端恒回传的 status.totals: {body.strip()}"
 
 
 def test_api_group_commands_enqueue(web_env):
@@ -2877,6 +2902,80 @@ def test_api_state_view_scoped_payload(web_env):
     assert same["updated"] is False and "torrents" not in same
 
 
+def test_build_speed_totals_covers_ungrouped(tmp_path):
+    """速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups
+
+    状态栏旧实现对前端 `groups` 求和: 既漏掉未归组的单种子(实测少算 88.7%),
+    又在种子页因 groups 不回传而恒为 0(issue 26-09-20-1646)。合计范围必须是
+    `store.by_hash` 全量 —— 与种子页平铺视图同源。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    # 组内两个(合计 dl 3000 / ul 5000) + 未归组一个(dl 7000 / ul 9000)
+    grouped = [
+        FakeTorrent(hash="HA", name="Show", save_path=r"R:/s", dlspeed=1000, upspeed=2000),
+        FakeTorrent(hash="HB", name="Show", save_path=r"R:/s", dlspeed=2000, upspeed=3000),
+    ]
+    single = FakeTorrent(hash="HC", name="Other", save_path=r"R:/t", dlspeed=7000, upspeed=9000)
+    seed_store(mgr, grouped + [single])
+    key = ("R:/s", ("a.mkv", ))
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+
+    totals = mgr._build_speed_totals()
+    assert totals == {"dlspeed": 10000, "upspeed": 14000}, (f"速度合计漏了未归组种子: {totals} —— 只算 groups 的话是 dl=3000 / ul=5000")
+    # 对照: 组视图自身的合计**不含**未归组(两者刻意不等, 正是本 bug 的成因)
+    assert mgr._build_group_view()[0]["dlspeed"] == 3000
+
+
+def test_api_state_speed_totals_survives_view_scoping():
+    """status.totals 恒回传: 种子页(不回 groups)/ 辅种页 / rid 命中三种情况下都在且等于全量
+
+    ❗这是 issue 26-09-20-1646(状态栏速度恒为 0)的防复现守阵。状态栏是**跨视图**的常驻
+    显示, 一旦它的数值来自按视图裁剪的数组, 就会在某个视图下恒 0 或停在冻结的旧值。
+    故 totals 必须与 traffic / server 同属"恒回传"口径: 不参与 VIEW_ARRAYS 分片、不受 rid 门控。
+    """
+    from fastapi.testclient import TestClient
+
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr._web_token = "t"
+        grouped = [
+            FakeTorrent(hash="HA", name="Show", save_path=r"R:/s", dlspeed=1000, upspeed=2000),
+            FakeTorrent(hash="HB", name="Show", save_path=r"R:/s", dlspeed=2000, upspeed=3000),
+        ]
+        seed_store(mgr, grouped + [FakeTorrent(hash="HC", name="Other", save_path=r"R:/t", dlspeed=7000, upspeed=9000)])
+        key = ("R:/s", ("a.mkv", ))
+        mgr.store.groups[key] = ["HA", "HB"]
+        mgr.store.member_to_key["HA"] = key
+        mgr.store.member_to_key["HB"] = key
+
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": "Bearer t"}
+        want = {"dlspeed": 10000, "upspeed": 14000}
+
+        # ① 种子页: groups 根本不回传 —— 但若 totals 也跟着没了, 状态栏就恒为 0
+        t = tc.get("/api/state?view=torrent", headers=auth).json()
+        assert "groups" not in t, "种子页按设计不回 groups(P1-1 体积优化)"
+        assert t["status"]["totals"] == want, f"种子页缺少/错误的 totals: {t['status'].get('totals')}"
+
+        # ② 辅种页: totals 与种子页**同源同值**(不能因视图不同而变)
+        g = tc.get("/api/state?view=group", headers=auth).json()
+        assert g["status"]["totals"] == want
+
+        # ③ rid 命中(updated=False, 任何数组都不回)时 totals 仍必须回传 —— 否则稳态下每轮都拿不到
+        ver = g["rid"]
+        same = tc.get(f"/api/state?rid={ver}&view=torrent", headers=auth).json()
+        assert same["updated"] is False
+        assert same["status"]["totals"] == want, "增量门控下 totals 被门控掉了: 稳态状态栏会不刷新"
+
+
 @pytest.mark.parametrize(
     "state, kind",
     [
@@ -3822,10 +3921,10 @@ def test_truth_hold_budget_matches_backend():
     ).read()
     m = re.search(r"TRUTH_HOLD_BUDGET_MS\s*=\s*([\d.]+)", js)
     assert m, "commands.js 里找不到 TRUTH_HOLD_BUDGET_MS —— 守阵失效(常数被改名?)"
-    assert float(m.group(1)) == float(RECEIPT_WAIT_CAP_MS), (
-        f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
-        "两边必须一致, 否则端到端判据要么假警报要么漏报"
-    )
+    assert float(m.group(1)
+                ) == float(RECEIPT_WAIT_CAP_MS
+                          ), (f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
+                              "两边必须一致, 否则端到端判据要么假警报要么漏报")
 
 
 def test_truth_hold_budget_matches_backend():
@@ -3845,7 +3944,7 @@ def test_truth_hold_budget_matches_backend():
     ).read()
     m = re.search(r"TRUTH_HOLD_BUDGET_MS\s*=\s*([\d.]+)", js)
     assert m, "commands.js 里找不到 TRUTH_HOLD_BUDGET_MS —— 守阵失效(常数被改名?)"
-    assert float(m.group(1)) == float(RECEIPT_WAIT_CAP_MS), (
-        f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
-        "两边必须一致, 否则端到端判据要么假警报要么漏报"
-    )
+    assert float(m.group(1)
+                ) == float(RECEIPT_WAIT_CAP_MS
+                          ), (f"前端宽限 {m.group(1)}ms != 后端上限 {RECEIPT_WAIT_CAP_MS}ms —— "
+                              "两边必须一致, 否则端到端判据要么假警报要么漏报")

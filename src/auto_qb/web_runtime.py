@@ -99,6 +99,10 @@ class WebUIRuntime:
         self.handle = None
         # 限速/流量只读快照(限速曲线任务整体替换, Web 线程只读); 未启用曲线时 state="disabled"
         self.traffic_view: dict = {"state": "disabled", "periods": [], "limit": {}}
+        # 全量种子上传/下载速度合计(状态栏常显统计): 与四视图**同一临界区**发布, 随 /api/state
+        # 的 status 恒回传 —— 不参与 VIEW_ARRAYS 视图分片、不受 rid 门控(状态栏是跨视图的常驻
+        # 显示, 不能依赖任何一个"可能被裁掉"的数组, 见 issue 26-09-20-1646)
+        self.speed_totals: dict = {"dlspeed": 0, "upspeed": 0}
 
     # ------------------------------------------------------------------ 活跃门控
 
@@ -279,8 +283,8 @@ class WebUIRuntime:
         # 排查标记: 日志里**没有这一行** = 服务端还在跑旧代码(回执在补刷新之前就写了),
         # 前端只能走 via=pull 拉全量 —— 真机大库上就是"点了要 1.7~2s 才恢复正常"。
         logger.info(
-            f"[cmd] 回执(补刷新后)已写 {len(pending) - n_wait} 条, 带真值 {n_truth} 个种子"
-            + (f"(另 {n_wait} 条等真值落地, 上限 {RECEIPT_WAIT_CAP_MS:.0f}ms)" if n_wait else "")
+            f"[cmd] 回执(补刷新后)已写 {len(pending) - n_wait} 条, 带真值 {n_truth} 个种子" +
+            (f"(另 {n_wait} 条等真值落地, 上限 {RECEIPT_WAIT_CAP_MS:.0f}ms)" if n_wait else "")
         )
 
     def resync_elapsed_ms(self, t0: float) -> None:
@@ -323,7 +327,10 @@ class WebUIRuntime:
     def defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
         """登记"等补刷新跑完再写"的回执(与 set_result 的区别只是时机)"""
         self.deferred_receipts[cmd_id] = {
-            "cmd": cmd, "args": dict(args or {}), "timing": timing, "ts": time.time(),
+            "cmd": cmd,
+            "args": dict(args or {}),
+            "timing": timing,
+            "ts": time.time(),
         }
 
     @staticmethod
@@ -441,6 +448,8 @@ class WebUIRuntime:
         self.singles_view = host._build_singles_view()
         self.shows_view = host._build_shows_view()
         self.flat_view = host._build_flat_view()
+        # 速度合计与四视图同一快照、同一临界区发布(状态栏据此与行数据同源同轮)
+        self.speed_totals = host._build_speed_totals()
         self.group_view_ver += 1
         self.group_view_dirty = False
         # 记下"这一版还没被任何 /api/state 请求取走" —— 主循环据此不再生产下一版(节拍对齐)
