@@ -104,7 +104,7 @@ python .agents/skills/create-issue/scripts/gen_issues_index.py         # 重建
 python .agents/skills/create-issue/scripts/gen_issues_index.py --check # 只比对(供守卫/CI 用)
 ```
 
-`_index.md` 是**生成物**(与 `tasks/_index.md` 同款): 按状态分区, 每行 = `类型 · 简述 · 报告链接`, 顶部有 Open 状态的按类型计数表。**不要手改它** —— 多个 worktree 并行时手改必然冲突, 冲突的解法是重跑脚本, 不是人工合并两版文本。
+`_index.md` 是**生成物**(与 `tasks/_index.md` 同款): 按状态分区, 每行 = `类型 · 简述 · 报告链接`, 顶部有 Open 状态的按类型计数表。**不要手改它** —— 多个工作区并行时手改必然冲突, 冲突的解法是重跑脚本, 不是人工合并两版文本。
 文件名合规(含合法 type)与状态取值由生成器守卫, 不合规直接报错退出。
 
 ## 修一条 issue 时

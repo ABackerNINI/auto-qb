@@ -248,9 +248,10 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - ~~`episodes.py` 集数标签格式不可自定义~~ — 已实现 (2026-09-05): `add_episode_tags` 段支持 `add_tag_single`/`add_tag_multi` 模板, `${episode_first}`/`${episode_last}` 占位; 仅集数连续时生成。
 - `config/loaders.py` `load_global_hr`/`load_tracker_hr` 上方仍留 `# TODO: optimize`。
 
-### ⚠️ 本仓是多 worktree + 多 agent 并行, 提交可能被别的会话顶掉 (2026-09-19 实测)
+### ⚠️ 多工作区并行时提交可能被别的会话顶掉 (2026-09-19 实测; **2026-09-20 起已改多 clone, 共享 `.git` 的跨会话争用不再成立, 但「提交后必查 ref」依然适用**)
 
-- **拓扑**: `D:/Projects/auto-qb-backend` 是 **worktree**(`.git` 是文件, 指向 `D:/Projects/auto-qb/.git/worktrees/auto-qb-backend`); 同仓还有 `auto-qb`(主仓, develop)、`-autoclaw`、`-trae`、`-zcode`、`-other`(含 be/fe 子 worktree)、`-frontend` 共 9 个 worktree, 共享同一个 `.git`。
+- **拓扑 (2026-09-19 当时)**: `D:/Projects/auto-qb-backend` 是 **worktree**(`.git` 是文件, 指向 `D:/Projects/auto-qb/.git/worktrees/auto-qb-backend`); 同仓还有 `auto-qb`(主仓, develop)、`-autoclaw`、`-trae`、`-zcode`、`-other`(含 be/fe 子 worktree)、`-frontend` 共 9 个 worktree, 共享同一个 `.git` —— 这正是"被别的会话顶掉"的前提。
+- **2026-09-20 变更**: 已弃用 worktree, 改为**多 clone**(每个工作区一份独立 `.git`; 历史 worktree 目录已打包存档于 `D:/Projects/_archive/auto-qb-worktrees-2026-09-20/`)。对象库独立后本条的**跨会话分支争用**不再发生, 但"ref 被拦截层静默丢弃"与用不用 worktree 无关, 每个 clone 提交后仍须核对 ref。
 - **事故**: `git commit` 打印 `[backend/develop 6e572af]` 看似成功, 几秒后 `git log -1` 却退回 `ed4cdd0`, `git status` 冒出 2133 个 staged。真相是**分支 ref 被别的会话回退/钉住**, 不是提交失败也不是有人动了文件:
   - `git update-ref refs/heads/backend/develop <sha>` → rc=0、reflog 有 "reset: moving to ..." 条目, 但 loose ref 文件随即消失, `for-each-ref` 仍读到旧值。
   - `git branch -f` → `fatal: cannot force update the branch 'backend/develop' used by worktree at 'D:/Projects/auto-qb-backend'`。
@@ -594,7 +595,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 ### 改文件名 / 移动文档后不查全仓引用 → 留下坏链, 且没有任何测试会报错 (2026-09-18 实测)
 
 - **症状**: 文档改完名, 引用方仍指向旧路径 —— 页面点开是 404、本地文件打不开。最坏的是**坏链不会让 pytest 失败**: `tests/test_memory_bank.py` 只查索引↔文件双向一致与必备章节, **不校验链接有效性**, 所以坏链可以长期静默存在, 直到有人点开才发现。
-- **根因**: ①只扫 markdown 链接语法 `[x](y)` 会漏掉两类引用 —— HTML 里的 `href="..."`、以及表格与正文里的**裸路径**(不带链接语法的 `docs/plans/xxx.md`); ②`git mv` 只搬内容, **不会改写任何文本引用**; ③其余 8 个 worktree 各有一份 `memory-bank/` 副本, 改名不同步。
+- **根因**: ①只扫 markdown 链接语法 `[x](y)` 会漏掉两类引用 —— HTML 里的 `href="..."`、以及表格与正文里的**裸路径**(不带链接语法的 `docs/plans/xxx.md`); ②`git mv` 只搬内容, **不会改写任何文本引用**; ③其余 8 个工作区 (当时是 worktree, 现为多 clone) 各有一份 `memory-bank/` 副本, 改名不同步。
 - **实测**: 2026-09-18 把 `docs/plans/26-09-17-0346-webui-qb-replace-wave3-handover.md` 转 HTML 时全仓 grep, 发现 `26-09-16-1128-webui-qb-replace-wave3-plan.html` 里写的是 `href="webui-qb-replace-wave3-handover.md"` —— **缺 `26-09-17-0346-` 日期前缀, 是个早就存在的坏链**; 本次改名若跳过查引用, 还会新造 8 处(`progress.md` 2 + `TASK002` 5 + 该 plan 1)。同源的上一批: `04d928b` 修掉 `modules.md` 与 TASK001~011 中 **34 处** `docs/*.html` 旧路径(当时"只扫 markdown 链接, 纯文本引用一直漏着"), 另修 `tasks/` 下 5 处 `../docs` 应为 `../../docs`; 那次靠人工复扫 170 条链接 + 107 条路径才收口。
 - **修法(改名三步, 缺一不可)**: ①改之前先全仓 grep 旧文件名统计引用数(含 `.html` / `.md` / `.py` / `.yml`, 排除 `uv.lock`); ②用 **Python 显式 UTF-8** 批量替换(不要 PowerShell 重定向, 见本文件编码坑); ③替换后再 grep 一次确认为 0。
 - **判别法**: 只要动 `docs/` 或 `memory-bank/` 下的文件名, 必须走这三步 —— **不要凭"我记得没人引用它"跳过**, 上面那个既有坏链就是这么来的。
@@ -666,7 +667,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **事故实例**: 2026-09-19 把 `backend/develop` 合进 `develop`(非快进)时工作区有 3 个脏文件 → 02:05:54~58 两秒内删掉 **319 个对象 + 全部 reflog + `hooks/*.sample` + `info/`**, 4 个分支尖端断链(`develop`/`other/develop`/`backend/develop`/`agentAutoClaw/develop`/`agentZCode/develop`)。同批的快进合并(`other/develop`)安然无恙。
 - **修法(唯一可靠)**: **合并前先把工作区弄干净** —— 先提交, 或把改动移出仓库再合并; 高风险 git 操作前整份备份 `.git`。
 - **事故后补救(已走通)**: ①被删对象基本都在 **Windows 回收站**, 按 `$I*` 里的原始路径还原即可。解析要点: `$I` 文件偏移 **16-24** 是删除时间(FILETIME, **UTC, 换算本地要 +8h**), 偏移 **28** 起是 UTF-16LE 的原始路径; 内容在同名 `$R*` 文件里。②**还原后必须先删掉被一起还原的陈旧 `*.lock`**(`index.lock` / `HEAD.lock` / `AUTO_MERGE.lock` / `packed-refs.lock` / `objects/maintenance.lock`), 否则任何 git 命令都报 `Unable to create '.git/index.lock': File exists`。③工作区文件若成片消失但在 `HEAD` 里仍在 → `git checkout -- <file>` 直接还原。④收尾 `git fsck --no-progress` 确认 **0 broken link**(dangling 无害)。
-- **判别法**: 准备在工具 shell 里跑 `merge` / `rebase` / `checkout` / `stash` 之前, 先看 `git status --short` —— **非空就先弄干净**。记不住细节就记这句: **非快进 + 脏 = 必炸**。另外本 worktree 每次 `git commit` 的 ref 更新也可能被同一层拦截静默丢弃(lock+rename 失效, git 拿到 0 返回码), 提交后必须核对 `HEAD` == 松散 ref == `packed-refs`。
+- **判别法**: 准备在工具 shell 里跑 `merge` / `rebase` / `checkout` / `stash` 之前, 先看 `git status --short` —— **非空就先弄干净**。记不住细节就记这句: **非快进 + 脏 = 必炸**。另外本 clone 每次 `git commit` 的 ref 更新也可能被同一层拦截静默丢弃(lock+rename 失效, git 拿到 0 返回码), 提交后必须核对 `HEAD` == 松散 ref == `packed-refs`。
 
 ### GitHub Actions: `astral-sh/setup-uv` 没有浮动大版本标签, `@v10` 解析不了 (2026-09-19 实测)
 
@@ -688,7 +689,7 @@ README.md 曾有的客观漂移已于 2026-09-05 修正: 任务队列描述 (双
 - **症状**: `git commit -m "…已入库 `044908d..c888fba`…"` 提交成功, 但 `git log -1 --format=%B` 里那一段**变成空字符串**(同时 shell 报 `044908d..c888fba: command not found`)—— 提交内容没错, **只有信息被吃掉一段**。
 - **根因**: `-m` 的双引号内, 反引号仍是 bash 的**命令替换**, 会被执行并替换为其输出(空)。本仓提交习惯用反引号包提交号/路径, 正中这个坑。
 - **判别法**: 提交信息里凡是出现反引号, `git log -1 --format=%B` 复核一遍; 或者直接**改用单引号包整条 `-m`**(单引号内不做替换), 或干脆不用反引号(写 `044908d..c888fba` 裸文本即可)。
-- **事后补救**: 已推送的提交**不要 amend + 强推**(develop 是协作主线, 多 worktree/多 agent 共用); 信息缺一段但可读就留着, 下次注意。教训也适用于其它"在 shell 里写中文长文本"的场合: 反引号、`$`、双引号都要先转义或换引号。
+- **事后补救**: 已推送的提交**不要 amend + 强推**(develop 是协作主线, 多 clone/多 agent 共用); 信息缺一段但可读就留着, 下次注意。教训也适用于其它"在 shell 里写中文长文本"的场合: 反引号、`$`、双引号都要先转义或换引号。
 
 ### 「Windows 全绿 / Linux 全红」: 本机跑通不等于 CI 跑通 (2026-09-19 Linux CI 实测, 三条同源)
 
@@ -1309,15 +1310,15 @@ $//' <文件>`), 随即判干净、合并放行。
 - **顺带的教训**: 本条当初估"方案 B 需要新契约", 落地时发现**不需要** —— 客户端本来就在每次轮询时发
   `rid`, "有没有人取走"用现有参数就能表达。**先确认信息是不是已经在协议里, 再下"需要新契约"的结论。**
 
-### 桩服务的默认端口会被**别的 worktree** 占着 —— 探针可能一直在测别人的代码 (2026-09-19 实测)
+### 桩服务的默认端口会被**别的工作区**占着 —— 探针可能一直在测别人的代码 (2026-09-19 实测; 2026-09-20 改多 clone 后**依然成立**)
 
 - **⚠ 症状(极具误导性)**: 冒烟/探针出现"两个 UI 结论不一致"(atlas 通过、prism 失败)、
   "明明改了却没生效"、"<code>vm.XXX is not a function</code>"。本轮就因为 `127.0.0.1:8099`
-  实际由**另一个 worktree 的桩服务**监听, 我的探针连上去一直在测<b>对方的代码</b> ——
+  实际由**另一个工作区 (clone) 的桩服务**监听, 我的探针连上去一直在测<b>对方的代码</b> ——
   于是我新加的 `isShowPending` 在浏览器里"不存在", 而磁盘上确实有。
-- **根因**: 本项目有 9 个 worktree, 大家都用 `ui_harness.py --port 8099`, 后起的那个 bind 失败
+- **根因**: 本项目同时有多个工作区并行 (2026-09-19 时是 9 个 worktree, 2026-09-20 起改为多个 clone —— **端口是机器级资源, 换工作区模式不解决问题**), 大家都用 `ui_harness.py --port 8099`, 后起的那个 bind 失败
   (10048)但**不一定**让调用方察觉 —— 你以为连的是自己的服务, 其实是别人的。
-- **判别法(务必先做)**: 起桩服务后先确认它服务的就是本 worktree 的文件:
+- **判别法(务必先做)**: 起桩服务后先确认它服务的就是本工作区的文件:
   ```bash
   curl -s http://127.0.0.1:<port>/shared/app.js | grep -c "<你刚加的符号>"
   ```
@@ -1417,7 +1418,7 @@ PYTHONPATH=".../aqb_old/src" uv run python scripts/ui_harness.py --torrents 3000
 
 ### ⚠ 起桩服务前先扫端口; `npm i playwright-core` 会被安全层拦下 (2026-09-20)
 
-- **端口**: 除已记录在案的 8099, **8123 也被别的 worktree 的桩服务占着**(现象是
+- **端口**: 除已记录在案的 8099, **8123 也被别的工作区 (clone) 的桩服务占着**(现象是
   `[Errno 10048]`, 且 harness 会先打印一行 `http://127.0.0.1:8123/…` 再崩, 具有迷惑性 ——
   看起来像"启动成功又退出")。起服务前先 `netstat -ano | grep ":<端口>"`, 或直接换 82xx/83xx 段。
 - **`npm i` 会撞上 safe-delete**: workspace 的 `node_modules/playwright-core` 已存在时, npm 要先删
@@ -1445,7 +1446,7 @@ PYTHONPATH=".../aqb_old/src" uv run python scripts/ui_harness.py --torrents 3000
 
 ### ⚠ 起桩服务前先扫端口; `npm i playwright-core` 会被安全层拦下 (2026-09-20)
 
-- **端口**: 除已记录在案的 8099, **8123 也被别的 worktree 的桩服务占着**(现象是
+- **端口**: 除已记录在案的 8099, **8123 也被别的工作区 (clone) 的桩服务占着**(现象是
   `[Errno 10048]`, 且 harness 会先打印一行 `http://127.0.0.1:8123/…` 再崩, 具有迷惑性 ——
   看起来像"启动成功又退出")。起服务前先 `netstat -ano | grep ":<端口>"`, 或直接换 82xx/83xx 段。
 - **`npm i` 会撞上 safe-delete**: workspace 的 `node_modules/playwright-core` 已存在时, npm 要先删
@@ -1490,11 +1491,11 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
 ## push 前必须再 fetch 一次（2026-09-20，create-issue 改造推送被拒）
 
 - 症状: 开工初看过 `git status -sb`(无 ahead/behind)就以为"与主线一致", 20 分钟后 `git push origin develop`
-  被拒 —— 期间**另一个 worktree 推了 5 个提交**(app.js 按域拆分等), 远端已到 `4df80dc`。
+  被拒 —— 期间**另一个工作区推了 5 个提交**(app.js 按域拆分等), 远端已到 `4df80dc`。
   `status -sb` 的 ahead/behind 是**上次 fetch 时的快照**, 不会自己刷新。
-- 判据: 只要距上次 fetch 超过几分钟、或本仓库有多个 worktree / 多 session 并行, **push 前先
+- 判据: 只要距上次 fetch 超过几分钟、或本仓库有多个 clone / 多 session 并行, **push 前先
   `git fetch origin develop` 再 `git log --oneline develop..origin/develop`** 看一眼; 有落后就先 rebase。
-- 连带坑: 别的 worktree 若还装着**旧版 skill**, 它会按旧规则产出文件(本次就是旧版 create-issue 入池了一条
+- 连带坑: 别的工作区若还装着**旧版 skill**, 它会按旧规则产出文件(本次就是旧版 create-issue 入池了一条
   `aqb-issue-*` meta 的新 issue)。rebase 合并后必须**顺手把这类新产物迁移到新规则**, 否则生成器读不到字段
   (标题/简述全空, 且不报错 —— 静默降级)。
 - 变基时 `-X theirs` 的含义与 merge 相反: rebase 下 theirs = 正在重放的"我的提交" ⇒ 冲突块取我这版。
@@ -1567,3 +1568,23 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
   `line[3:]` 前先判长度。
 - 判据: 凡是"按列/按固定宽度切"的输出(`--porcelain`、`ls -l`、`git branch -vv` 等),
   逐行处理时**不要整段 strip**, 只能 `rstrip("\n")`; 否则首行的前导空格一定会被吃掉。
+
+### ⚠️ 弃用 worktree 的三个操作坑: tar `-f D:/`、回收站 API、同一文件并发 Edit (2026-09-20 实测)
+
+背景: 2026-09-20 把 8 个 worktree 打包存档后移除, 改多 clone 模式, 一路踩到三个坑。
+
+- **① GNU tar 在 MSYS 下把 `-f D:/...` 当成远程主机**: `tar -czf D:/x.tar.gz ...` 报
+  `tar (child): Cannot connect to D: resolve failed` + `Cannot write: Broken pipe`, 且**退出码仍是 0**
+  (rc=0 却没有产物, 只看返回值会误判成功)。判别: 产出文件不存在就回看 stderr。
+  **修法**: 输出路径用 MSYS 形式 `/d/Projects/...`; 而 `git -C` 反过来只认 `D:/...`(用 `/d/...` 报
+  "cannot change to")—— **同一条命令里两种路径写法要分开用**。被占用的目录 (`.pytest_cache`) 会
+  `Permission denied`, 加 `--ignore-failed-read` 跳过并把清单写进日志。
+- **② 回收站 API 对个别目录报"这个系统不支持该功能"**: PowerShell
+  `[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p,'OnlyErrorDialogs','SendToRecycleBin')`
+  5 个目录成功、第 6 个 (`auto-qb-other`, 内含嵌套 worktree 与 junction) 抛
+  `这个系统不支持该功能`, 重试无效。**别用 `Add-Type`**(本环境被安全策略拦截:
+  "Add-Type compiles and loads .NET code at runtime")—— 直接调 `[Microsoft.VisualBasic.FileIO.FileSystem]`
+  即可, 无需 Add-Type。降级方案: 同盘 `mv` 到存档目录 (NTFS 同卷改名是瞬时的, 一样可还原)。
+- **③ 同一文件的多次 Edit 并发提交会互相覆盖**: 一条消息里对**同一个文件**发多个 Edit, 工具逐个报成功,
+  实际只有一部分落盘 (本次 4 条里丢了 2 条, 复核时才发现)。**修法**: 改同一文件时**逐条改、改完 grep 复核**,
+  别为了省轮次把针对同一文件的多次编辑塞进一批。

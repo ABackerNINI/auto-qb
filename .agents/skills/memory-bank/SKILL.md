@@ -42,7 +42,7 @@ user-invocable: true
 
 - 路径 `memory-bank/tasks/YY-MM-DD-<slug>.md` — **日期到天, 不带时分**; 日期取档案 `Added:` / `Started:`(创建日), 不是修改日。
 - `<slug>` 由**专题**决定, 不由序号决定: 组成为 `<领域>-<专题>`, 领域用固定枚举(不够用先扩枚举再建档): `webui` / `backend` / `rule` / `memory-bank` / `docs` / `test` / `deps` / `config`。
-- **立档第一步是查重, 不是取号**: 本 worktree `ls memory-bank/tasks/` **且** 跨 worktree `ls ../auto-qb-*/memory-bank/tasks/` 与 `.worktrees/*/memory-bank/tasks/`, 按 **slug 部分**比对(忽略日期前缀); 命中同名 → **追加不新建**。
+- **立档第一步是查重, 不是取号**: 本 clone `ls memory-bank/tasks/` **且** 跨工作区 `ls ../auto-qb-*/memory-bank/tasks/` (2026-09-20 起为**多 clone 模式**: 各工作区是平级目录、各有独立 `.git`, 已无 `../auto-qb-other/.worktrees/*` 这类嵌套子工作区), 按 **slug 部分**比对(忽略日期前缀); 命中同名 → **追加不新建**。
 - **slug 禁止出现**: 轮次(`round9` / `r10` / `第十轮`)、日期(已在文件名前缀)、会话序号、编号、分支名。轮次属于档案内"子任务状态表"的一行, 不属于文件名。
 - 不带时分是**特性**: 同一天同一专题必然撞到同一路径, 重复才能当场暴露(显式 add/add 冲突), 而不是静默变成两份。
 - 必备章节: 标题行 `# <文件名> — 名称`、状态行(`Status`/`Added`/`Updated`/`Summary`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。`**Summary:**` 是 `_index.md` 摘要的数据源。
@@ -58,5 +58,5 @@ user-invocable: true
 - ❌ 规则写成"跨会话的**大**任务要立档"这类不可判定措辞 → 无阈值 = 不执行。
 - ❌ 把维护规则只放在 `applyTo: 'memory-bank/**'` 的 instruction 里 → 编辑 `src/` 时该规则不在上下文, **决策点(该不该立档)与生效点错位**。
 - ❌ 基线数字手抄到 README/AGENTS/progress → 必然漂移; 只改 `testing.md`。
-- ❌ 用"全局单调序号"当档案主键(TASKnnn) → 9 个并行 worktree 各自发号必然撞号(2026-09-18 实测)。同理不要用"精确到分"的时间戳: 每次续作都算出新文件名, 永远"看起来是新的", 而且会让"忽略日期前缀的 slug 唯一性"守卫彻底失效。
+- ❌ 用"全局单调序号"当档案主键(TASKnnn) → 多个并行工作区(clone)各自发号必然撞号(2026-09-18 实测)。同理不要用"精确到分"的时间戳: 每次续作都算出新文件名, 永远"看起来是新的", 而且会让"忽略日期前缀的 slug 唯一性"守卫彻底失效。
 - ❌ 手改 `tasks/_index.md` → 它是生成物, 冲突的解决方式是重跑生成器, 不是人工合并两版文本。

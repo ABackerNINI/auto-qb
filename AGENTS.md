@@ -75,11 +75,11 @@ yapf -i src/auto_qb/**/*.py                            # 格式化 (.style.yapf:
 
 ## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有, 用户自己的普通终端无此问题)
 
-> 本仓库多个 worktree 共享同一个对象库 `D:/Projects/auto-qb/.git`, **任一处出事波及全部**, 备份要备份主 gitdir。
+> **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆**(各自完整的 `.git`, 如 `D:/Projects/auto-qb-xxx/.git`), 不再共享对象库 —— 一处对象库出事不再波及他人; 代价是每个 clone 要各自备份自己的 `.git`, 且跨 clone 同步一律走 Gitee `develop` 主线 (不直接在本地互 merge 别人的分支)。协作细则见 [conventions.md](memory-bank/conventions.md)「协作约定」。
 
 - **禁止在工具 shell 里跑「非快进合并 + 工作区脏」**: 记死一句 **非快进 + 脏 = 必炸** —— git 2.55 非快进合并时无条件调 `git stash create`, 工作区脏就真写对象, 而本环境的文件删除拦截层会顺着这次写入把 `.git/objects` 批量删进回收站, 表现为 `fatal: <oid> is not a valid object` 并导致对象库大面积损坏 (2026-09-19 事故, 详见 [pitfalls](memory-bank/pitfalls.md))。
 - **唯一可靠规避: 合并前先把工作区弄干净**(先提交, 或把改动移出去)。同理避免在工具 shell 里跑 `git stash` / `git rebase` / `git checkout`(脏工作区时)等会触发 stash 的操作; 高风险 git 操作请让用户在自己的普通终端执行。
-- **提交后必查 ref**: 本 worktree 每次 `git commit` 的 ref 更新都可能被拦截层静默丢弃, 必须核对 `HEAD` == `refs/heads/<branch>` == loose/packed-refs; 用 `.agents/skills/my-commit-flow/scripts/verify_ref.py` 核并按它打印的步骤修复 —— **不要只看 commit 输出**。
+- **提交后必查 ref**: 本 clone 每次 `git commit` 的 ref 更新都可能被拦截层静默丢弃, 必须核对 `HEAD` == `refs/heads/<branch>` == loose/packed-refs; 用 `.agents/skills/my-commit-flow/scripts/verify_ref.py` 核并按它打印的步骤修复 —— **不要只看 commit 输出**。
 - 高风险 git 操作前先整份备份 `.git`(`cp -a .git <备份路径>`)。
 - 机检与停手点一律走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)(预检自动查落后/脏工作区/红线文件/staged 暴增; rebase 与 push 仍由执行者按判据手动跑)。
 
