@@ -98,6 +98,7 @@ wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv run pytest 
 | **CI 报错 / 平台差异复现** | 本文件「💡 CI 报错排查: 建议先在本机 WSL 复现」+ [pitfalls.md](memory-bank/pitfalls.md)「Windows 全绿 / Linux 全红」 |
 | **撞见计划外问题: 该不该现在修** | [scope-guard skill](.agents/skills/scope-guard/SKILL.md) |
 | **建 issue 报告 / 改 issue 状态** | [create-issue skill](.agents/skills/create-issue/SKILL.md) + [issues/_index.md](memory-bank/issues/_index.md) (8 类类型 × 便签/标准两档) |
+| **提交 / 推送 (commit + push)** | [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md) (口径在本文件「提交 / PR」节) |
 | 改代码前必读 (风险点/陷阱) | [memory-bank/pitfalls.md](memory-bank/pitfalls.md) |
 | XX 做了吗 / 计划怎么做 | [memory-bank/progress.md](memory-bank/progress.md) |
 | 跨会话任务档案 | [memory-bank/tasks/_index.md](memory-bank/tasks/_index.md) |
@@ -112,8 +113,11 @@ wsl -- bash -c 'export PATH="$HOME/.local/bin:$PATH"; cd ~/aqb && uv run pytest 
 - 同理**避免**在工具 shell 里跑 `git stash` / `git rebase` / `git checkout`(脏工作区时)等会触发 stash 的操作; 高风险 git 操作请让用户在自己的普通终端执行。
 - **提交后必查 ref**: 本 worktree 每次 `git commit` 的 ref 更新都可能被拦截层静默丢弃, 必须核对 `HEAD` == `refs/heads/other/develop` == `packed-refs`, 必要时用 `.workbuddy-ai/fix-branch-ref.sh <sha>` 修复 —— **不要只看 commit 输出**。
 - 高风险 git 操作前先整份备份 `.git`(`cp -a .git <备份路径>`)。
+- **本节是事故说明, 不重复步骤**: 把上述红线做成机检与停手点的, 是 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)(预检会自动查落后/脏工作区/红线文件/staged 暴增; rebase 与 push 仍由执行者按判据手动跑)。
 
 ## 提交 / PR
+
+> **本节只定口径**(主线 / 镜像 / 暂存纪律 / 幽灵 diff), **步骤与机检走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)**: 预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee → 尝试一次 GitHub 直连 → 查幽灵 diff。脚本在 `.agents/skills/my-commit-flow/scripts/`(`preflight.py` / `commit.py` / `verify_ref.py` / `push.py`)。
 
 - **协作主线**: 日常开发在 `develop` 分支, 且统一以 **Gitee 的 `develop`** 为准。**交付与否只看
   Gitee 上有没有该提交**; GitHub 只作镜像, **允许滞后** —— 不要用 GitHub 的提交状态判断进度

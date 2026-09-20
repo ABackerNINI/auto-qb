@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>把提交流程固化成 skill · 提案</title>
+<style>
+  :root {
+    --bg: #0f1215;
+    --ink: #e9eef2;
+    --dim: #9dabb8;
+    --faint: #6b7885;
+    --hair: rgba(255,255,255,.09);
+    --hair-soft: rgba(255,255,255,.05);
+    --accent: #7fa8b5;
+    --code-bg: #161b20;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --display: "Segoe UI Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #23414a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2a333b; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1140px; margin: 0 auto; padding: 60px 40px 96px; display: grid; grid-template-columns: 208px 1fr; gap: 52px; }
+
+  nav.toc { position: sticky; top: 52px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: .09em; text-transform: uppercase; font-size: 10px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; padding-left: 14px; border-left: 1px solid var(--hair); color: var(--faint); font-size: 11px; line-height: 1.7; }
+
+  header.cover { grid-column: 2; }
+  .kicker { font-family: var(--display); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 40px; font-weight: 600; letter-spacing: -.022em; line-height: 1.14; margin-bottom: 14px; }
+  .lede { font-size: 16.5px; color: var(--dim); max-width: 60ch; margin-bottom: 26px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 30px; padding: 15px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .k { font-family: var(--display); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .v { font-family: var(--mono); font-size: 13px; }
+
+  section { grid-column: 2; margin-top: 46px; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: -.012em; margin-bottom: 14px; padding-bottom: 9px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 11px; letter-spacing: 0; }
+  h3 { font-size: 16px; font-weight: 600; margin: 26px 0 9px; }
+  p { margin-bottom: 12px; max-width: 76ch; }
+  ul, ol { margin: 0 0 13px 22px; max-width: 76ch; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 12.8px; background: var(--code-bg); padding: 1px 5px; border-radius: 2px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 3px; overflow-x: auto; margin-bottom: 14px; border: 1px solid var(--hair-soft); }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13.8px; }
+  th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  td.n { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .tok { font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--hair); padding: 0 6px; border-radius: 2px; color: var(--dim); }
+  .note { border-left: 1px solid var(--hair); padding: 2px 0 2px 16px; color: var(--dim); font-size: 14px; max-width: 74ch; margin-bottom: 14px; }
+  .ok { color: #8fb98f; }
+  .bad { color: #c98f6f; }
+  footer { grid-column: 2; margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>为什么：这次又飘了</a>
+    <a href="#s2"><span class="no">02</span>目标与非目标</a>
+    <a href="#s3"><span class="no">03</span>skill 形态与档位</a>
+    <a href="#s4"><span class="no">04</span>流水线七步</a>
+    <a href="#s5"><span class="no">05</span>脚本设计</a>
+    <a href="#s6"><span class="no">06</span>与既有文档的边界</a>
+    <a href="#s7"><span class="no">07</span>落地步骤</a>
+    <a href="#s8"><span class="no">08</span>验收：四个场景演练</a>
+    <a href="#s9"><span class="no">09</span>待你拍板</a>
+    <div class="toc-foot">
+      提案 · 未建 skill<br>
+      现状规则散在 3 处<br>
+      + 本次实测偏差 4 处
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">提案 · 提交推送流程</div>
+    <h1>把"提交"做成一条必经流水线</h1>
+    <p class="lede">提交规则目前散在 AGENTS.md「提交 / PR」整节、环境硬约束一节和 pitfalls 的三条事故记录里，靠 agent 每次自己想起来 —— 这次就漏了四处。提案把它们收成一个 skill：能机检的交给脚本，必须人判的写成停手点。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">日期</div><div class="v">2026-09-20 11:28</div></div>
+      <div class="item"><div class="k">状态</div><div class="v">待确认 · 未实施</div></div>
+      <div class="item"><div class="k">产出</div><div class="v">.agents/skills/&lt;name&gt;/</div></div>
+      <div class="item"><div class="k">依据</div><div class="v">AGENTS.md + pitfalls + 本次实测</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>为什么：这次又飘了</h2>
+    <p>今天这次提交（create-issue 类型化改造，3 个提交 `4c0d945` / `4c26c60` / `9af3e52`）虽然落地了，但对了一遍项目规则，<b>漏了四处</b>：</p>
+    <table>
+      <tr><th>规则（出处）</th><th>本次实际</th><th>后果</th></tr>
+      <tr><td>只暂存本次范围，逐路径 `git add`，不用 `add -A`（AGENTS.md 提交节）</td><td class="bad">两次 `git add -A`</td><td>幸好当时没有别人的在途改动；按 pitfalls 那条「2133 个 staged」的事故，`add -A` 正是把他人改动混进提交的动作</td></tr>
+      <tr><td>push 前先 fetch 看一眼（本次新入 pitfalls）</td><td class="bad">直接 push</td><td>被拒 —— 远端另有 5 个提交，临时 rebase 救场</td></tr>
+      <tr><td>Gitee 推完再尝试一次 GitHub 直连，失败只报一次（AGENTS.md）</td><td class="bad">没推 GitHub</td><td>镜像滞后（允许，但规则要求"尝试一次"）</td></tr>
+      <tr><td>提交后查幽灵 diff / 暂存清单逐项对账 / 改过的 py 过 yapf（AGENTS.md）</td><td class="bad">三项都没做</td><td>本次恰好没触发；下次可能把"已提交"误判成"没提交上"</td></tr>
+      <tr><td>提交后 ref 三处核对 · 高风险前备份 `.git` · 提交前跑全量测试</td><td class="ok">三项都做了</td><td>—</td></tr>
+    </table>
+    <div class="note">根因不是"不知道规则"，而是<b>规则没有被摆在执行路径上</b>：它们分散在三份文档里，执行时靠记忆想起，而提交是高频动作 —— 漏一条只是时间问题。历史代价已经付过两次：2026-09-19 非快进合并丢 318 个对象 + 全部 reflog；同期分支 ref 被别的会话回退，冒出 2133 个 staged。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>目标与非目标</h2>
+    <h3>目标</h3>
+    <ul>
+      <li>**一次"提交"指令 = 同一条流水线**：不管哪个 agent、哪个 worktree，步骤与判据一致。</li>
+      <li>**能机检的都机检**：远端是不是 Gitee、有没有落后、工作区脏不脏、暂存清单有没有红线文件、ref 三处是否一致 —— 这些不该靠肉眼。</li>
+      <li>**必须人判的写成停手点**：合并/变基、混入他人改动、ref 异常、GitHub 直连失败 —— 到点停下并报告，不自己发挥。</li>
+      <li>**规则单点定义**：口径留在 AGENTS.md，步骤留在 skill，事故判据留在 pitfalls，互相只留指针。</li>
+    </ul>
+    <h3>非目标</h3>
+    <ul>
+      <li>不改协作口径（Gitee 为主线、GitHub 镜像允许滞后、用户说"提交"= commit + push）。</li>
+      <li>不替代 scope-guard（该不该改）与 create-issue（要不要入池）—— 它们管的是改动内容，本 skill 管的是改动落地。</li>
+      <li>不自动写提交信息：动机与取舍要人/Agent 写，脚本只校验格式（中文首行 + 空行 + 细节、规模数字是否可疑）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>skill 形态与档位</h2>
+    <p>位置：`.agents/skills/&lt;name&gt;/`（与 scope-guard、create-issue 同层，自动被 `.codebuddy/skills/` 符号链接）。建议名 <span class="tok">git-ship</span>（备选：`commit-flow` / `submit-flow`）。`user-invocable: true`。description 沿用项目写法：</p>
+<pre><code>name: git-ship
+description: '提交推送流水线(用户说"提交"= commit + push): 认远端 → 同步 → 闸门 → 逐路径暂存
+  → 写提交信息 → 提交并核对 ref 三处 → 推 Gitee 并核对 → 尝试一次 GitHub 直连 → 查幽灵 diff。
+  USE FOR: 用户说"提交"/"推送"/"推上去"/"commit"; 收尾阶段要把改动落到主线时。
+  DO NOT USE FOR: 判断改不改(见 scope-guard)、要不要入池(见 create-issue)、纯答疑。
+  红线: 脏工作区不做非快进合并; 暂存清单里不得出现 config.yml / 想法.md / auto-qb-data/。'</code></pre>
+    <h3>自动化档位（三选一，见第 09 节）</h3>
+    <table>
+      <tr><th>档</th><th>做法</th><th>适用</th></tr>
+      <tr><td class="n">A 纯规范</td><td>只有 SKILL.md 步骤清单 + 判据，命令由 agent 手敲</td><td>最快落地，但仍靠自觉（本次偏差多数会复现）</td></tr>
+      <tr><td class="n">B 规范 + 只读预检（推荐）</td><td>加 `preflight.py` / `verify_ref.py` / `verify_push.py`，**只读不写 git 状态**，输出检查表与退出码</td><td>把"忘了看"变成"脚本报出来"，同时不触碰红线（脚本本身不合并、不 stash、不 push）</td></tr>
+      <tr><td class="n">C 半自动</td><td>脚本直接执行 fetch / rebase / commit / push，遇红线自动停手</td><td>省事，但脚本要处理 rebase 冲突与 ref 回退，**正是本环境最容易炸的地方**，暂不推荐</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>流水线七步</h2>
+    <table>
+      <tr><th>步</th><th>做什么</th><th>判据 / 不通过怎么办</th></tr>
+      <tr><td class="n">S0 认远端</td><td>`git remote -v` + `git rev-parse --abbrev-ref @{u}`</td><td>上游必须指向 gitee.com；不是就改用 `gitee` 远端名或改上游（**分支名必须写**，`git pull &lt;remote&gt;` 不带分支名只 fetch 不合并）</td></tr>
+      <tr><td class="n">S1 同步</td><td>`git fetch &lt;remote&gt; develop` → `git log --oneline develop..&lt;remote&gt;/develop`</td><td>落后就先 rebase；**工作区必须干净才 rebase**（脏 + 非快进合并 = 必炸）。脏 → 先按 S3 提交或把改动移出。**push 之前再 fetch 一次**（本次踩的坑）</td></tr>
+      <tr><td class="n">S2 闸门</td><td>按改动面选：Python → `yapf -i` + `uv run pytest tests -q`；动了生成器 → 对应 `--check`；涉及平台行为/副作用记账器 → WSL 复现</td><td>红了就停，不提交</td></tr>
+      <tr><td class="n">S3 暂存</td><td>逐路径 `git add &lt;文件&gt;`，**禁 `git add -A`**；清单逐项对账</td><td>出现 `config.yml` / `auto-qb-data/` / `想法.md`（用户的）→ 剔出并告知</td></tr>
+      <tr><td class="n">S4 信息</td><td>中文首行 + 空行 + 细节（动机/取舍/影响面/实测数字）</td><td>数字必须**提交那一刻实测**（`git show HEAD^:&lt;f&gt; | wc -l`），不沿用会话中途量的旧值</td></tr>
+      <tr><td class="n">S5 提交 + 核 ref</td><td>`git commit` 后核对 `HEAD` == `refs/heads/&lt;branch&gt;` == loose/packed-refs</td><td>不一致 → 按 pitfalls 处置（format-patch 留底 + 建锚点 ref），**不要用 `add -A` 去"解决"突然冒出的成百上千 staged** —— 那是别人的在途改动</td></tr>
+      <tr><td class="n">S6 推送</td><td>`git push origin develop` → 核对远端 ref == 本地 → 再尝试一次 GitHub 直连（`-c http.https://github.com.proxy=`）</td><td>Gitee 必须成功；GitHub 直连失败**只如实报一次**，不重试、不换代理、不改走 SSH</td></tr>
+      <tr><td class="n">S7 收尾</td><td>幽灵 diff 检查（`git status --short` 看两列：` M` = 已提交但工作区又脏）→ 有则补一次"格式化，无行为变化"提交；回写 activeContext / progress / pitfalls；报告提交号</td><td>权威判据：`git log --oneline -1 -- &lt;文件&gt;` 有记录 **且** `git diff --quiet -- &lt;文件&gt;` 退出码 0</td></tr>
+    </table>
+    <div class="note">高风险动作前（rebase / 批量提交 / 修 ref）先整份备份 `.git`：`cp -a .git &lt;备份路径&gt;`；本仓 9 个 worktree 共享同一对象库，出事波及全部。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>脚本设计（B 档，只读）</h2>
+    <table>
+      <tr><th>脚本</th><th>职责</th><th>输出 / 退出码</th></tr>
+      <tr><td class="n">`scripts/preflight.py`</td><td>S0–S3 的机检：远端与上游是不是 Gitee、落后几个提交、工作区脏不脏、分支名、暂存清单里有没有红线文件、改动面命中哪些闸门（py / 生成器 / 平台）</td><td>检查表（PASS/STOP 逐项）；有 STOP → 退出码 1</td></tr>
+      <tr><td class="n">`scripts/verify_ref.py`</td><td>S5 的三处 ref 一致性；额外提示"staged 数量异常激增"（ref 被回退的判别信号）</td><td>一致 → 0；不一致 → 打印修复命令（`git update-ref` / format-patch 留底）→ 2</td></tr>
+      <tr><td class="n">`scripts/verify_push.py`</td><td>S6 后：`git ls-remote &lt;remote&gt; develop` == `HEAD`；`git status -sb` 无 ahead；可选执行一次 GitHub 直连（`--mirror`）</td><td>一致 → 0；镜像失败单独报一次，不影响退出码</td></tr>
+      <tr><td class="n">（不提供）</td><td>**不**自动 commit / rebase / push / stash</td><td>红线区，交给执行者按 SKILL.md 判据手动跑</td></tr>
+    </table>
+    <p>三个脚本共用一份配置（远端名、分支、红线文件清单、闸门映射），放在 `scripts/_ship_config.py`，与 create-issue 的 `_common.py` 同思路；换项目只改配置。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>与既有文档的边界</h2>
+    <table>
+      <tr><th>现有位置</th><th>处理</th></tr>
+      <tr><td class="n">AGENTS.md「提交 / PR」整节</td><td>**口径留在原地**（Gitee 主线、GitHub 允许滞后、"提交"= commit+push、暂存纪律、幽灵 diff），末尾加一行指针 → 本 skill 的步骤；不复制正文，避免两处漂移</td></tr>
+      <tr><td class="n">AGENTS.md「⚠️ 环境硬约束: Git 操作」</td><td>保留（是全仓唯一的事故说明），skill 里引链接 + 只留"脏工作区不做非快进合并"这一条判据</td></tr>
+      <tr><td class="n">memory-bank skill 会话开始第 1 步（同步分支）</td><td>改为指针：同步细节见 `git-ship` 的 S1</td></tr>
+      <tr><td class="n">pitfalls 三条 git 事故</td><td>保留正文（含判别法与处置），skill 引链接</td></tr>
+      <tr><td class="n">memory-bank/README.md 路由表</td><td>加一行「提交 / 推送」→ git-ship skill</td></tr>
+    </table>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>落地步骤</h2>
+    <ol>
+      <li>建 `.agents/skills/&lt;name&gt;/SKILL.md`（七步 + 停手点 + 反模式）</li>
+      <li>建 `scripts/_ship_config.py` + 三个只读脚本（先 `preflight.py`，其余两个跟着）</li>
+      <li>在本仓库实跑一遍：用一次真实改动走完整条流水线，核对每步输出是否符合预期</li>
+      <li>回写 AGENTS.md（加指针两处）、memory-bank/README.md（加路由一行）、memory-bank skill（同步步骤改指针）</li>
+      <li>pitfalls 补一条：本次"push 前没再 fetch"已在册；再加"add -A 混入他人改动"的判别信号</li>
+      <li>提交 —— **用新 skill 提交它自己**（dogfooding），流程有洞当场发现</li>
+    </ol>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>验收：四个场景演练</h2>
+    <table>
+      <tr><th>场景</th><th>期望</th></tr>
+      <tr><td class="n">远端已落后（造 5 个远端提交，本地不 fetch）</td><td>`preflight.py` 报 STOP：落后 N 个提交，先 rebase —— 不再等到 push 被拒才发现</td></tr>
+      <tr><td class="n">暂存清单含 `想法.md` / `config.yml`</td><td>`preflight.py` 报 STOP 并点名文件；执行者剔出后再继续</td></tr>
+      <tr><td class="n">工作区脏 + 需要 rebase</td><td>skill 明确要求先归零（提交或移出），**不直接 rebase**</td></tr>
+      <tr><td class="n">提交后 ref 不一致（手工把分支 ref 改回上一个）</td><td>`verify_ref.py` 退出码 2 并给出修复命令；不出现"看着提交成功其实没落"的情况</td></tr>
+    </table>
+    <p>回归判据：走完一次真实提交后，AGENTS.md 里的每一条提交纪律都能对上一条已执行动作（可用检查表逐项打勾）。</p>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>待你拍板</h2>
+    <table>
+      <tr><th>议题</th><th>选项</th></tr>
+      <tr><td class="n">1 · 名字</td><td>`git-ship`（推荐，短且与"提交推送"绑定）/ `commit-flow` / `submit-flow`</td></tr>
+      <tr><td class="n">2 · 档位</td><td>B 规范 + 只读预检（推荐）/ A 纯规范（最快但靠自觉）/ C 半自动（省事但脚本要碰 rebase，风险高）</td></tr>
+      <tr><td class="n">3 · AGENTS.md「提交 / PR」正文</td><td>留在原地 + 加指针（推荐，口径单点）/ 搬进 skill、AGENTS.md 只留指针（更集中，但要改已稳定的一节）</td></tr>
+      <tr><td class="n">4 · GitHub 直连</td><td>每次提交都按规则尝试一次（符合现行口径）/ 只在用户说"也推 GitHub"时才推（少一次噪音）</td></tr>
+    </table>
+    <div class="note">另外：本次我用了两次 `git add -A`，与 AGENTS.md 的"逐路径暂存"冲突 —— 是否要在 skill 里把 `add -A` 列为显式禁令（当前只写了"不用 add -A"，没有 STOP 级判据），请一并定。</div>
+  </section>
+
+  <footer>
+    docs/plans/26-09-20-1128-git-ship-skill-proposal.html · 提案阶段，未建任何 skill 文件
+  </footer>
+
+</div>
+</body>
+</html>
