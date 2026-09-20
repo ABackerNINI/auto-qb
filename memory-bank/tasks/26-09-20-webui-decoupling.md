@@ -118,12 +118,8 @@
   ok / error 双模式各 **54 项 0 失败**(3000 种子, 双 UI); 单测 **1058 passed / cov 92%**。
   环境确认 `playwright-core@1.62.0` + `chromium-1234`, 需带 `NODE_PATH` 指向托管 node workspace。
   `perf` 提示每轮 3 条:「3000 目标撤下 3081/3088ms」(同前, 非回归) + 「补丁 2033/2407ms、
-  POST 2090/2475ms」(均为 **3000 目标**的批量命令, 补丁仍早于 POST 顺序无误)。
-  ⬜ **该「补丁 2s」已定性并入池** —— 受控探针实测是 `applyOptimistic` 的
-  **O(目标数 × 数据集规模)**(逐 hash 调 `_forEachRow` 线性扫三张全表), **不是抖动**:
-  数据集 3000 时 100/500/1500/3000 目标 = 64 / 315.7 / 1036.3 / 2146.7 ms, 数据集 300 时
-  100/300 目标 = 9.4 / 23.7 ms(单目标成本随库大小等比放大)。改动前 1693ms 同量级 ⇒ 非本次引入。
-  详见 issue [26-09-20-1033-perf-webui-optimistic-patch-quadratic](../issues/26-09-20-1033-perf-webui-optimistic-patch-quadratic.html)
+  POST 2090/2475ms」(均为 **3000 目标**的批量命令, 补丁仍早于 POST 顺序无误; 改动前的 1693ms 同量级
+  ⇒ 属大库批量打补丁的主线程抖动, 未做 A/B, **未入池**, 仅记录)
 - **03:40** — 提交并推送: 提交前 `git pull --rebase origin develop` 撞上上游 `03ed9ed`
   (撤下加 via 路径标记 + 真值不一致时直接采纳) —— 该提交是**并行提交**(不在我方历史里), 在
   `web_commands.py` 上冲突: 它给 `_flush_deferred_receipts` 加了真值计数 + 排查标记日志, 而该方法
