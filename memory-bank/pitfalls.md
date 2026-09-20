@@ -1543,3 +1543,13 @@ git diff <我方基线提交> <上游提交> -- <冲突文件>     # 关键一�
   `<skill-dir>/scripts/<x>.py`; 脚本内部同理 —— 仓库根用 `find_root()` 向上找 `.git`,
   **不要按 skill 安装深度反推 `parents[4]`**(换 `.codebuddy/skills/` 或用户级目录就错)。
 - 判据: skill 文档里出现裸 `scripts/xxx.py` 或 `../..` 这种相对路径 = 等着被找错目录。
+
+### ⚠️ 工具 shell 里 `git rebase --continue` 会被 VS Code 编辑器挂死 + packed-refs 陈旧导致核 ref 假红 (2026-09-20 实测)
+
+- **症状一**: `git rebase --continue` 卡住不动 (实测挂了 6 分钟才被手动杀掉), 而 `git status` 显示冲突已解、文件已 `git add`。
+- **根因**: 本机 `core.editor = "…\Microsoft VS Code\bin\code" --wait` —— rebase 继续时要打开编辑器让你确认提交信息, `--wait` 会一直等窗口关闭; AI 工具的 shell 里没有可交互的编辑器窗口 ⇒ 永久等待。
+- **修法**: 一律带 `GIT_EDITOR=true git rebase --continue` (或 `git -c core.editor=true …`), 提交信息沿用原提交, 不需要编辑时不要让编辑器介入。同理适用于 `git commit --amend` / `git merge` 等会开编辑器的场合。
+- **症状二**: 提交后 `verify_ref.py` 报 ref 不一致 —— `HEAD` == loose ref == 新 sha, 但 `packed-refs` 里还是**上一次 pack 时的旧值**。
+- **根因**: 这不是"ref 更新被拦截层丢了", 而是 git 的正常行为 —— 被 pack 过的分支更新时只写 **loose ref**(它优先级高于 packed-refs), packed-refs 保留旧值直到下次 pack。脚本的三处比对把这条当成不一致。
+- **判别法**: 先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— 一致就说明提交**落稳了**, 只是 packed-refs 陈旧; 不一致才是真事故(按「分支 ref 被回退」条目处置)。
+- **修法**: 备份 `.git` 后跑 `git pack-refs --all`(packed-refs 按当前 ref 重写、loose 文件随之删除) ⇒ 三处恢复一致, `verify_ref.py` 转 PASS。不要靠 `git update-ref refs/heads/<branch> <sha>` 解决 —— 它只写 loose, packed-refs 不动, 脚本仍会红。
