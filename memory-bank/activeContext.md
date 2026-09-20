@@ -4,7 +4,7 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-20 (**乐观 UI「撤下」已定案并推送 `4df80dc`; 剩真机复测确认**) ——
+**最后更新**: 2026-09-20 (**最新: 列设置多标签页整份覆盖已修并验证, issue 26-09-20-1800 置 `Fixed`; 未提交, 剩真机走查** —— 见「待用户真机走查」末条。其前一条状态: 乐观 UI「撤下」已定案并推送 `4df80dc`; 剩真机复测确认) ——
   后端三段都很快(排队 0 / 执行 8.4 / 补刷新 88ms), 慢的是**前端撤下** —— 根因是**回执写在补刷新之前**,
   前端拿到回执立刻 refresh 取到的一定是旧快照。修法: 回执改到补刷新**之后**写并带真值
   (`WebUIRuntime.flush_receipts` + 前端 `_settleFromTruth`), 服务端等真值落地再发回执(上限 1200ms)。
@@ -54,6 +54,8 @@
   实测: 桩服务种子页 `totals={dl:15206400, ul:45926400}`(= groups+singles 真值; 修复前种子页无此键、合计仅 1723392);
   单测 **1059 → 1062 passed**(Windows) / WSL **1057 → 1060 passed + 2 skipped**, +3 守阵(端点恒回传 / 静态防回潮红绿双验过 /
   合计含未归组); 冒烟双 UI **54 项 0 失败**, DOM 实测 `14.50 MiB/s`。基线数字已回写 `testing.md`。
+
+- **列设置被重置 = 多标签页整份覆盖 (2026-09-20, ✅ 已修并验证 → issue 置 `Fixed`; 未提交; 剩用户真机走查)**: 用户报"栏的顺序/显示/宽度经常被重置"。**根因实测确认**: 内存是**加载时读一次的快照**(`app.js:273 initialColState`) + `saveColState()` **整份写回** ⇒ **last-writer-wins**, 谁最后动一下存储就变成谁的快照, 先改的标签被静默吞掉(入池时猜的"写失败/读入洗净/自适应覆盖/v3→v4 迁移"**全部排除** —— 单标签六路径全保持, 只有第二个标签能复现)。修法: **F1** `saveColState(page)` 改 read-modify-write(以存储为底, 只覆盖本 page 四段; 6 处调用点传 page) + **F2** `storage` 事件 → `adoptColState()` 整份采用 + **F3** `visibilitychange` 回到可见补漏。**F1 单独不够** —— 用户两个标签改的通常是同一个表, page 级合并同表仍然后写赢。冒烟新增「列设置多标签页互不覆盖」⇒ ok/error 双模式各 **56 项 0 失败**; 红验(摘掉标签 2 的 storage 监听)确认守阵钉得住; 单测 **1062 passed** 未退化。后端零改动, **未升 `COLS_STORE_KEY`**。计划 [docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html](../docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html); 档案 [tasks/26-09-20-webui-column-prefs-reset.md](tasks/26-09-20-webui-column-prefs-reset.md); 报告 [issues/26-09-20-1800-bug-webui-column-prefs-reset.html](issues/26-09-20-1800-bug-webui-column-prefs-reset.html)。**真机走查**: 开两个标签各改一次列(隐藏 + 拖宽), 互相刷新确认都不丢。
 
 ## 定案口径 (别改回去; 完整判据见 [pitfalls.md](pitfalls.md))
 

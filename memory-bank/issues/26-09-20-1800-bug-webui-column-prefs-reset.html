@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-column-prefs-reset">
+<meta name="issue-stamp" content="26-09-20-1800">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Fixed">
+<meta name="issue-title" content="WebUI 列设置(顺序/显示/宽度)经常被重置">
+<meta name="issue-summary" content="表格列的顺序/显隐/宽度偏好偶发丢失, 刷新后回到默认布局">
+<title>WebUI 列设置(顺序/显示/宽度)经常被重置 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>WebUI 列设置(顺序/显示/宽度)经常被重置</h1>
+    <p class="lede">表格列的顺序/显隐/宽度偏好偶发丢失, 刷新后回到默认布局</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-20-1800-bug-webui-column-prefs-reset</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 18:00</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>用户在日常使用 WebUI 时反馈（2026-09-20 18:00 口述，<b>不是本次任务撞见、未复现</b>）：表格的<b>列顺序、列显隐、列宽</b>三类偏好会被重置回默认布局，不是每次都发生，而是"经常"。</p>
+    <ul>
+      <li>被重置的对象 = 列偏好三件套：<code>colOrder</code>（顺序）/ <code>colHidden</code>（显隐）/ <code>colWidths</code>（宽度），外加 <code>colManual</code>（该页是否手动调过宽度）标志；四个表格页各一份（<code>group / detail / torrent / show</code>）。</li>
+      <li><b>触发条件（2026-09-20 18:2x 用户确认）</b>：<b>同时开多个标签页</b>；单标签下"刷新 / 重开程序"<b>没问题</b>，换地址 / 换浏览器未测。用户平时用<b>固定地址</b>（书签 / 手输）打开 —— 基本排除"origin 隔离"那条已知限制。</li>
+      <li>是否与浏览器/平台相关：未知。存储走 <code>localStorage</code>，私隐模式、配额满、多标签页互相覆盖都可能参与。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<p>① 用户报告原文（取证 2026-09-20 18:00，口述）：</p>
+<pre><code>记录BUG: column设置经常被重置, 比如栏的顺序, 显示, 宽度等</code></pre>
+<p>② 读代码时记录到的原文（取证 2026-09-20 18:00，<code>src/auto_qb/web_ui/static/shared/</code>）—— 只是事实摘录，未做任何验证：</p>
+<pre><code>app.js:151  const COLS_STORE_KEY = "autoqb_cols_v4";
+app.js:152  const LEGACY_COLS_KEYS = ["autoqb_cols_v3"];
+
+app.js:246  if (keys.includes(k) &amp;&amp; /^\d+px$/.test(v)) clean[k] = v;   // 宽度洗净: 非 "&lt;num&gt;px" 形态直接丢弃
+app.js:253  out.hidden[page] = h.filter((k) =&gt; keys.includes(k) &amp;&amp; !(columnDef(page, k) || {}).locked);
+app.js:261  if (keys.includes(k) &amp;&amp; !seen.has(k)) { seen.add(k); clean.push(k); }  // 顺序洗净
+
+columns.js:309  materializeColumns() { for (const page of [...]) { if (this.colManual[page]) continue; ... this.colWidths = {...} } }
+columns.js:318  saveColState() { localStorage.setItem(COLS_STORE_KEY, JSON.stringify({widths, hidden, manual, order})) }</code></pre>
+<p>③ <b>已复现</b>（2026-09-20 18:2x，真浏览器 + <code>scripts/ui_harness.py</code> 桩服务，atlas 皮肤；脚本 <code>.workbuddy-ai/tmp/col_repro2.cjs</code>）。两个标签同址同 origin：</p>
+<pre><code>列选择器项数 = 67
+① 点掉「总上传」后: hidden={"group":["uploaded"]}
+① 刷新后:            hidden={"group":["uploaded"]}                       ✓ 保持
+② 新标签读到:        hidden={"group":["uploaded"]}                       （新标签读得到，存储是好的）
+② 旧标签再点掉「总大小」后, 它自己的内存: hidden={"group":["uploaded","total_size"]}
+② 另一个标签点掉「分类」后, localStorage:   hidden={"group":["uploaded","category"]}
+② 第一个标签刷新后:                        hidden={"group":["uploaded","category"]}
+✗ 被别的标签覆盖掉的隐藏列: ["total_size"]</code></pre>
+<p>④ <b>单标签下未复现</b>（脚本 <code>.workbuddy-ai/tmp/col_repro.cjs</code>，2026-09-20 18:1x）：列序 / 列宽在
+「刷新页面 · 切视图(种子页)再切回 · 窗口缩放来回 · 轮询 6s · 展开分组 · 二次刷新」六条路径上<b>全部保持</b>；
+唯一变化是切到种子页后 <code>widths.torrent</code> 被自适应实体化（非 manual 页的设计行为，不是重置）。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td><b>已确认</b>：<b>两个及以上标签页同时开着</b>，且<b>至少两个标签都做过列操作</b>（隐藏 / 调宽 / 拖序任一）。单标签不复现</td></tr>
+      <tr><td>影响范围</td><td>WebUI 四个表格页（group / detail / torrent / show）的列顺序、列显隐、列宽偏好；<b>不影响后端数据与业务逻辑</b>，只影响前端显示偏好</td></tr>
+      <tr><td>严重度</td><td>中 —— 不损数据、不报错，但高频且每次都要手工重排，直接伤日常使用体验</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>shared/app.js:151</code>（取证 2026-09-20 18:00）· <code>COLS_STORE_KEY = "autoqb_cols_v4"</code> · grep <code>COLS_STORE_KEY</code></li>
+      <li><code>shared/app.js:152</code> · <code>LEGACY_COLS_KEYS = ["autoqb_cols_v3"]</code> · grep <code>LEGACY_COLS_KEYS</code></li>
+      <li><code>shared/app.js:220</code> · <code>readColStateRaw()</code> —— 当前键缺失/损坏时依次回退旧键，命中即回写当前键（迁移路径）· grep <code>readColStateRaw</code></li>
+      <li><code>shared/app.js:235</code> · <code>loadColState()</code> —— 洗净逻辑集中处：宽度 <code>/^\d+px$/</code>(246)、hidden 过滤 locked 列(253)、order 去重(255-264) · grep <code>loadColState</code></li>
+      <li><code>shared/app.js:273</code> · <code>initialColState = loadColState()</code> —— 模块级<b>只读一次</b>，是 <code>data()</code> 初值来源 · grep <code>initialColState</code></li>
+      <li><code>shared/columns.js:318</code> · <code>saveColState()</code> —— 写 <code>{widths, hidden, manual, order}</code>；写失败静默忽略 · 调用点 columns.js:344 / 353 / 363 / 404 / 435 / 466</li>
+      <li><code>shared/columns.js:309</code> · <code>materializeColumns()</code> —— 对 <code>colManual[page]</code> 为假的页面按渲染宽度<b>重写</b> <code>colWidths</code> · 调用点 app.js:585 / 590 / 635 / 985，columns.js:345 / 354 / 361 / 467</li>
+      <li><code>shared/columns.js:330</code> · <code>toggleColumn()</code>（显隐切换入口）· grep <code>colHidden</code> / <code>colVisible</code></li>
+      <li>列顺序交互入口：grep <code>colOrder</code> / <code>_orderedKeys</code>（columns.js · app.js）；列定义单点：grep <code>TABLE_COLUMNS</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout"><b>已确认</b>（2026-09-20 18:2x 真浏览器复现）：<b>多标签页整份覆盖（last-writer-wins，无跨标签同步）</b>。<br>
+      已排除：假设 2（读入被洗净）、3（自适应覆盖）、4（v3→v4 迁移）—— 单标签六条路径全保持，且新标签能读到最新存储；假设 1 的"写失败"也排除（<code>localStorage</code> 有值且被正确读出）。</div>
+    <p>机制（<b>不是猜测，是实测</b>）：</p>
+    <ol>
+      <li>每个标签在<b>页面加载时</b>把存储读进内存（<code>app.js:273 initialColState</code>），之后内存就是一份<b>独立快照</b>。</li>
+      <li><code>saveColState()</code>（columns.js:318）写的是<b>整份</b> <code>{widths, hidden, manual, order}</code>，不是"我改的那一段"。</li>
+      <li>于是：<b>哪个标签最后动一下，整份存储就变成它的快照</b> —— 先改的那个标签的改动被静默吞掉。这是"后写赢"，不是随机。</li>
+      <li>同一个标签内改同一个表必然命中：用户在 A 标签调好列 → 去 B 标签（A 改动前就开着）顺手点一次列 → A 的设置全没。</li>
+    </ol>
+    <p><b>次生问题（同一根因的另一面）</b>：另一个标签的改动不会反映到当前标签，用户会以为"改了没生效"，再改一次 → 又是一次整份覆盖。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p><b>方向已定</b>（详细计划见 <code>docs/plans/</code> 本轮计划文档；本报告不实施）：</p>
+    <ol>
+      <li><b>F1 写入改 read-modify-write</b>：<code>saveColState()</code> 写前先读回存储，以存储为底、只覆盖<b>本次操作涉及的那一个 page</b> 的 <code>widths/hidden/manual/order</code> 四段，其余段取存储最新值（6 处调用点都能给出 page）。挡住“两个标签几乎同时写”的竞态。</li>
+      <li><b>F2 监听 <code>storage</code> 事件做跨标签同步</b>（<b>关键</b>）：别的标签写了 <code>COLS_STORE_KEY</code> → 当前标签<b>整份采用存储值</b> + <code>$nextTick(materializeColumns)</code>。<br>
+        ❗ 只做 F1 <b>不够</b>：用户两个标签里改的通常<b>就是同一个表</b>（辅种页），F1 的 page 级合并在同表冲突时仍然“后写赢”；只有让每个标签的内存态保持新鲜（F2），后续写入才不会再吞掉别人的改动。</li>
+      <li><b>F3 visibilitychange 补漏</b>：已有监听的 <code>!document.hidden</code> 分支加一次 adopt —— 覆盖“标签被冻结 / 事件丢失”。</li>
+      <li><b>F4 冒烟</b>：<code>scripts/ui_smoke.cjs</code> 加一条“双标签各自改列互不吞”（复用本次复现脚本的双页流程）。</li>
+      <li><b>不做</b>：服务端化（用户已明确只存浏览器）、冲突提示弹窗（过度设计）。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-20 18:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-20 18:33 — 用户指派认领，状态 <strong>In Progress</strong>；已复现并定位根因（多标签整份覆盖）</li>
+      <li>2026-09-20 18:5x — 已修并验证，状态 <strong>Fixed</strong>（F1 写入合并 + F2 storage 同步 + F3 可见性补漏 + 冒烟守阵）</li>
+    </ul>
+    <h3>复验</h3>
+    <p><strong>复验：2026-09-20 18:2x 仍复现</strong> —— 真浏览器 + <code>ui_harness</code> 桩服务（atlas，300 种子），
+      两个同 origin 标签：A 隐藏「总上传」→ B 隐藏「分类」→ A 刷新后只剩 <code>["uploaded","category"]</code>，
+      A 自己后来隐藏的「总大小」被吞掉。对照：单标签六条路径（刷新 / 切视图 / 缩放 / 轮询 6s / 展开 / 二次刷新）<b>全部保持</b>。
+      锚点仍在同一位置（<code>columns.js:318 saveColState</code>、<code>app.js:273 initialColState</code>）。</p>
+    <h3>修复后补充（2026-09-20 18:5x）</h3>
+    <p><b>实际修法</b>（与「建议修法」一致，未改道）：</p>
+    <ul>
+      <li><code>shared/columns.js:326</code> <code>saveColState(page)</code> —— 写前 <code>readColStateRaw()</code> 读回存储，以存储为底、只覆盖本次涉及的 page 的 <code>widths/hidden/manual/order</code>；6 处调用点全部传入 page。</li>
+      <li><code>shared/columns.js</code> 新增 <code>adoptColState()</code> —— 重读 + 洗净后整份替换内存四段 + <code>$nextTick(materializeColumns)</code>。</li>
+      <li><code>shared/app.js</code> <code>mounted</code> 注册 <code>storage</code> 监听（<code>e.key === COLS_STORE_KEY</code> → adopt），<code>unmounted</code> 摘除；<code>visibilitychange</code> 的“回到可见”分支补一次 adopt。</li>
+      <li><code>scripts/ui_smoke.cjs</code> 新增冒烟项「列设置多标签页互不覆盖」。</li>
+      <li><b>后端零改动；<code>COLS_STORE_KEY</code> 未升版本</b>（升版本 = 清空用户偏好）。</li>
+    </ul>
+    <p><b>验证方式与实测数字</b>：</p>
+    <ul>
+      <li>修复后重跑同一复现脚本：<code>hidden.group = ["uploaded","total_size","category"]</code> —— <b>两个标签的改动都在</b>（修复前是 <code>["uploaded","category"]</code>）。</li>
+      <li>单标签回归六条路径（刷新 / 切视图 / 缩放 / 轮询 6s / 展开 / 二次刷新）与修复前一致，<b>无回归</b>。</li>
+      <li>冒烟 atlas：<b>28 项 0 失败</b>（含新增项 <code>hidden.group = ["uploaded","total_size"]</code>）。</li>
+      <li><b>红验</b>：临时摘掉第二个标签的 <code>storage</code> 监听（等价修复前）→ 标签 1 只剩 <code>["total_size"]</code>，缺陷如期复现 ⇒ 守阵真的钉得住。</li>
+      <li><code>uv run pytest tests -q</code>：<b>1062 passed</b>（与修复前一致，未退化）。</li>
+      <li><b>三类偏好交叉实测</b>（2026-09-20 18:5x, Playwright 真浏览器 + 桩服务）—— 标签 1 隐藏「总上传」+ 拖宽 name 列，标签 2 拖序；**不刷新时**标签 2 已读到标签 1 的改动（`storage` 同步工作），**双方刷新后**隐藏/宽度/顺序/手动标记四段<b>完全一致</b> ⇒ <code>hidden.group = ["uploaded"]</code>、<code>widths.group.name = "210px"</code>、<code>order.group</code> 含 <code>size</code> 在前。脚本 <code>.workbuddy-ai/tmp/col_repro4.cjs</code>，截图同目录。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-09-20-1800-bug-webui-column-prefs-reset.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

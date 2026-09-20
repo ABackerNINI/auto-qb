@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>列设置被重置 · 多标签页同步修复计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --code-bg: #171e26; --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 56px 40px 96px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 12px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 68ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 8px; }
+  .meta-row .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 40px; }
+  h2 { font-family: var(--display); font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 6px; }
+  p { margin-bottom: 11px; max-width: 76ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 76ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 13px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 76ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 76ch; }
+  .verdict { font-family: var(--display); font-size: 15px; color: var(--accent-ink); }
+  footer { margin-top: 52px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="kicker">修复计划 · issue 26-09-20-1800 · bug</div>
+  <h1>列设置被重置：多标签页整份覆盖</h1>
+  <p class="lede">根因已实测确认，不是"存储没写进去"，也不是"读入被洗净" —— 是<b>每个标签各持一份加载时的快照，谁最后动一下，整份存储就变成谁的</b>。修法是让标签之间同步，而不是加版本或加校验。</p>
+  <div class="meta-row">
+    <div><div class="k">Issue</div><div class="v">26-09-20-1800-bug-webui-column-prefs-reset</div></div>
+    <div><div class="k">状态</div><div class="v">In Progress（用户指派）</div></div>
+    <div><div class="k">涉及</div><div class="v">shared/columns.js · shared/app.js</div></div>
+    <div><div class="k">后端改动</div><div class="v">无</div></div>
+    <div><div class="k">计划时间</div><div class="v">2026-09-20 18:36</div></div>
+  </div>
+
+  <section>
+    <h2><span class="no">01</span>复现与证据</h2>
+    <p>真浏览器（Playwright + chromium）+ <code>scripts/ui_harness.py</code> 桩服务（300 种子，atlas 皮肤，同 origin 两个标签）。脚本：<code>.workbuddy-ai/tmp/col_repro.cjs</code> / <code>col_repro2.cjs</code>（临时，不入仓）。</p>
+<pre><code>列选择器项数 = 67
+① 点掉「总上传」后: hidden={"group":["uploaded"]}
+① 刷新后:            hidden={"group":["uploaded"]}                  ✓ 保持（存储是好的）
+② 新标签读到:        hidden={"group":["uploaded"]}                  ✓ 新标签读得到最新值
+② 旧标签再点掉「总大小」后（它自己的内存）: {"uploaded","total_size"}
+② 另一个标签点掉「分类」后 localStorage:    {"uploaded","category"}
+② 第一个标签刷新后:                        {"uploaded","category"}
+✗ 被别的标签覆盖掉的隐藏列: ["total_size"]</code></pre>
+    <p>对照组 —— <b>单标签</b>下六条路径全部保持，未复现重置：刷新页面 / 切视图（种子页）再切回 / 窗口缩放来回 / 轮询 6s / 展开分组 / 二次刷新。唯一变化是切到种子页后 <code>widths.torrent</code> 被自适应实体化（非 <code>manual</code> 页的设计行为）。</p>
+    <p>用户侧确认（18:2x）：<b>同时开多个标签页</b>；单标签刷新 / 重开程序没事；平时用固定地址打开 —— 排除"localhost / 127.0.0.1 的 origin 隔离"那条已知限制。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>根因</h2>
+    <ol>
+      <li>页面加载时把存储读进内存一次：<code>app.js:273 initialColState = loadColState()</code>，之后每个标签的内存就是一份<b>独立快照</b>，此后不再回读。</li>
+      <li><code>saveColState()</code>（<code>columns.js:318</code>）写的是<b>整份</b> <code>{widths, hidden, manual, order}</code>，而不是"我刚改的那一段"。</li>
+      <li>于是 <b>last-writer-wins</b>：哪个标签最后动一下，整份存储就变成它的快照，先改的标签的改动被静默吞掉 —— 不报错、不提示。</li>
+      <li>次生现象：别的标签的改动不会反映到当前标签，用户以为"改了没生效"，于是再改一次 ⇒ 又是一次整份覆盖。这是它能"经常"发生的原因。</li>
+    </ol>
+    <div class="callout warn"><b>为什么"写入时按 page 合并"单独不够</b>：用户在两个标签里调的通常<b>就是同一个表</b>（辅种页 group）。按 page 粒度的合并只在"改的是不同表"时才有效；同表冲突时仍然后写赢。必须让每个标签的内存态保持新鲜（F2），否则写入合并不解决主要场景。</div>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>修法</h2>
+    <h3>F1 · 写入改 read-modify-write（竞态兜底）</h3>
+    <p><code>saveColState(page)</code>：写前用 <code>readColStateRaw()</code> 读回存储，以存储为底，只覆盖<b>本次操作涉及的那个 page</b> 的四段，其余 page 段取存储最新值；存储缺失/损坏时退化为当前的整份写。6 处调用点都能给出 page：<code>toggleColumn</code> / <code>resetAllColumnWidths</code> / <code>fitColumnsToWindow</code> / <code>startResize</code>(up) / <code>autoFitColumn</code> / <code>applyColOrder</code>。</p>
+    <h3>F2 · 监听 storage 事件做跨标签同步（关键）</h3>
+    <p>在 <code>mounted()</code> 注册 <code>window.addEventListener("storage", e =&gt; { if (e.key !== COLS_STORE_KEY) return; adoptColState(); })</code>。<code>storage</code> 事件<b>只在其它标签触发</b>（写入方自己不收），天然无需判"是不是我写的"。<code>adoptColState()</code> 重新走一遍读 + 洗净，整体替换内存四段，再 <code>$nextTick(materializeColumns)</code> 让宽度按新状态重算。</p>
+    <h3>F3 · visibilitychange 补漏</h3>
+    <p>已有监听里 <code>!document.hidden</code> 分支加一次 adopt：覆盖"标签被浏览器冻结 / 事件丢失 / 后台很久才切回来"。</p>
+    <h3>F4 · 冒烟</h3>
+    <p><code>scripts/ui_smoke.cjs</code> 加一条"双标签各自改列互不吞"（复用本次复现脚本的双页流程，同 context 两个 page）。</p>
+    <h3>F5 · 静态守阵（可选）</h3>
+    <p><code>tests/test_web.py</code> 静态扫描：<code>columns.js</code> 必须出现 <code>addEventListener("storage"</code> 与 <code>readColStateRaw()</code> 在 <code>saveColState</code> 内被调用 —— 防回潮（与既有"静态防回潮"守阵同思路）。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>候选方案与取舍</h2>
+    <table>
+      <tr><th>方案</th><th>做法</th><th>代价 / 结论</th></tr>
+      <tr><td>A 只做写入合并</td><td>F1</td><td>改一处，但<b>同表冲突仍丢</b>（主场景）⇒ 不单独采纳</td></tr>
+      <tr><td>B 只做事件同步</td><td>F2+F3</td><td>能解决主场景；两个标签同毫秒写仍有极小竞态 ⇒ 配 F1</td></tr>
+      <tr><td class="verdict">C = A+B（采纳）</td><td>F1+F2+F3</td><td>约 40 行，无新依赖，无后端改动</td></tr>
+      <tr><td>D 服务端持久化</td><td>列偏好存服务端</td><td>用户已明确"只存浏览器"，<b>否决</b></td></tr>
+      <tr><td>E 冲突提示弹窗</td><td>检测到冲突弹确认</td><td>过度设计；同步后无冲突可提示 ⇒ 不做</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>影响面与风险</h2>
+    <ul>
+      <li><b>影响面</b>：仅前端列偏好（顺序 / 显隐 / 宽度）的读写路径；不动列模型、不动后端、不动存储结构 ⇒ <code>COLS_STORE_KEY</code> <b>不升版本</b>（升版本 = 清空用户偏好，见 pitfalls R10-09）。</li>
+      <li><b>重渲染抖动</b>：adopt 后走 <code>materializeColumns</code>，非 manual 页会按容器宽度重算 —— 与切视图/缩放的既有行为一致，不是新抖动；manual 页不受影响。</li>
+      <li><b>丢未落库的自适应宽度</b>：adopt 采用存储值，会丢掉本标签"尚未保存的 materialize 结果"。这些值本就不该进存储（见 <code>materializeColumns</code> 的设计），可接受。</li>
+      <li><b>storage 事件只在其它标签触发</b>：写入方自己收不到 ⇒ 无需去重，也不会自激循环。</li>
+      <li><b>两套皮肤</b>：atlas / prism 共用 <code>shared/</code>，一处改动两边生效，无需分别处理。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">06</span>验证</h2>
+    <ol>
+      <li><b>复现脚本转验收</b>：把 <code>col_repro2.cjs</code> 的双标签流程搬进 <code>scripts/ui_smoke.cjs</code>（或作为独立冒烟项），断言"两个标签各自隐藏一列后，两边刷新都还在"。</li>
+      <li><b>单标签回归</b>：重跑 <code>col_repro.cjs</code> 六条路径，必须仍全部保持。</li>
+      <li><b>Python 侧</b>：<code>uv run pytest tests -q</code>，基线 1059 passed（Windows）不得退化。</li>
+      <li><b>真机</b>：两个标签各改一次列（隐藏 + 拖宽），互相刷新确认都不丢 —— 这一步只能用户做（需要真实 qB 数据）。</li>
+    </ol>
+  </section>
+
+  <footer>
+    26-09-20-1836-webui-column-prefs-sync-plan.html · 入池 issue 26-09-20-1800（In Progress）· 后端零改动 · 不升 COLS_STORE_KEY
+  </footer>
+
+</div>
+</body>
+</html>

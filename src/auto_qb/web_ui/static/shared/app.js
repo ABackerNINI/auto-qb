@@ -589,10 +589,21 @@ const app = createApp({
       this._syncHeadHeight();
       this.materializeColumns();
     });
+    /* 跨标签同步(F2, issue 26-09-20-1800): 别的标签改了列 -> 本标签整份采用存储值。
+     * 内存是"页面加载时的快照", 若不同步, 本标签下一次 saveColState 会用旧快照整份覆盖,
+     * 把别的标签的改动静默吞掉(用户感知 = "列设置被重置")。
+     * storage 事件**只在其它标签**触发(写入方自己收不到) ⇒ 无需去重, 也不会自激。 */
+    this._onColStore = (e) => {
+      if (e.key === COLS_STORE_KEY) this.adoptColState();
+    };
+    window.addEventListener("storage", this._onColStore);
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) this.stopPolling();
-      else if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
+      else {
+        this.adoptColState();  // F3: 补漏 —— 标签被冻结 / storage 事件丢失时, 回到可见即对齐一次
+        if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
+      }
     });
     // 全局右键屏蔽(CTX-03): 除顶部导航栏(header.topbar, atlas/prism 两套 UI 共用类名)与输入类
     // 元素(input/textarea/contenteditable, 保留复制粘贴的原生菜单)外, 一律阻止原生右键菜单;
@@ -659,6 +670,11 @@ const app = createApp({
     if (this._winRaf) {
       cancelAnimationFrame(this._winRaf);
       this._winRaf = 0;
+    }
+    // 跨标签同步(F2): storage 监听随组件销毁撤掉(否则热重载后句柄堆叠, 一次改动 adopt 多次)
+    if (this._onColStore) {
+      window.removeEventListener("storage", this._onColStore);
+      this._onColStore = null;
     }
     // P1-3: 顶栏尺寸观察器随组件销毁断开(ResizeObserver 不随元素消失自动停)
     if (this._headObs) {

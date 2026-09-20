@@ -840,6 +840,34 @@ async function smokeUi(browser, ui) {
     add(ui, "顶栏三视图按钮存在", false, `nav.tabs button = ${nav.length}`);
   }
 
+  /* 列设置多标签页同步(issue 26-09-20-1800): 两个标签各改一次列, 谁也不许吞掉谁。
+   * 旧实现: 每个标签各持"页面加载时的快照" + saveColState 整份写回 ⇒ **last-writer-wins**,
+   * 先改的那个标签的改动被静默吞掉 —— 用户在真机上的说法是"列设置经常被重置"。
+   * 判据: 标签 2 必须在**标签 1 改动之前**就已加载(否则读到的是最新存储, 验不出问题)。 */
+  try {
+    const p2 = await ctx.newPage();
+    await p2.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
+    await p2.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    const hideCol = async (pg, idx) => {
+      await pg.click(".col-picker button.table-tool");
+      await pg.waitForSelector(".col-menu .col-menu-item", { timeout: 5000 });
+      const items = await pg.$$(".col-menu .col-menu-item");
+      await items[idx].click();
+      await pg.waitForTimeout(400);
+      await pg.keyboard.press("Escape");
+      await pg.waitForTimeout(200);
+    };
+    await hideCol(page, 3);            // 标签 1 先改
+    await page.waitForTimeout(600);    // 等 storage 事件把改动推给标签 2
+    await hideCol(p2, 5);              // 标签 2(旧快照)再改
+    await page.waitForTimeout(600);
+    const got = await page.evaluate(`JSON.stringify(${INST}.colHidden.group || [])`);
+    add(ui, "列设置多标签页互不覆盖", JSON.parse(got).length >= 2, `hidden.group = ${got}`);
+    await p2.close();
+  } catch (e) {
+    add(ui, "列设置多标签页互不覆盖", false, e.message);
+  }
+
   const perfWarns = warns.filter((w) => w.includes("[perf]"));
   if (perfWarns.length) console.log(`      [perf] ${perfWarns.length} 条: ${perfWarns.slice(0, 3).join(" | ")}`);
   add(ui, "无 console.error / pageerror", errors.length === 0, errors.slice(0, 3).join(" | ") || "干净");

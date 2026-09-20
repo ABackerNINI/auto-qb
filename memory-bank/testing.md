@@ -122,8 +122,9 @@ uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
 > [techContext.md](techContext.md)「浏览器自动化环境(两条轨道)」:
 > `scripts/ui_harness.py` 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
 > (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`), `scripts/ui_smoke.cjs` 用 Playwright 跑(**回退轨道**)
-> prism/atlas 双 UI 断言(当前 **54 项 0 失败**(ok 模式)/ **54 项 0 失败**(`--expect-cmd error`, 回滚路径;
-> 单 UI 各 27 项)/ **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4 项),
+> prism/atlas 双 UI 断言(当前 **56 项 0 失败**(ok 模式)/ **56 项 0 失败**(`--expect-cmd error`, 回滚路径;
+> 单 UI 各 28 项; 2026-09-20 各 +1 = 「列设置多标签页互不覆盖」, issue 26-09-20-1800)/
+> **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4 项),
 > 含"轮询间隔按种子量分档"、"滚动到底不塌陷"、
 > **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 2026-09-19 加, 见下方读数时机坑)、
 > **P0-4 批量合单数请求**、**P0-3 整组/整集/整剧乐观**(组行 / 集行 / **剧行**各自的 `is-pending`

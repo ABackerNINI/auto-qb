@@ -62,7 +62,7 @@
 - **选择模型**: 唯一权威 = `selGroups`(辅种 key) 与 `selMembers`(成员 hash), **两者互斥**(FX-11); 所有视图的"已选"一律读派生 computed `selHashSet`(FX-12, 组选择展开为成员闭包), 半选态 = `.partial` 类。
 - **删除链单点**: 四个入口(`delGroup`/`delTorrent`/`delEpisode`/`bulkDelete`)只负责组织 targets(标题/文案/计数), 统一走 `_deleteFlow`(确认 → `_reannounceAll` 汇报前置 → bulk 单命令 + 等聚合回执 → clearSelection); **详情行由 `_deleteDetails(keys, hashes)` 从目标集合派生**(R10-16, 四入口同构), 入口不再自传 details。
 - **鑑权模式单点(R10-01)**: `authMode`(`local` = 本机免鉴权 / `token` = 密钥流程) + computed `authOk`; `api()` / `scheduleNext()` / `visibilitychange` 三处守卫均读 `authOk`, **不得**再写 `!this.token`; `_request` 在 token 为空时不发 `Authorization` 头。
-- **列偏好持久化(R10-09)**: 只存浏览器; 读入口单点 `readColStateRaw()`(当前键 `autoqb_cols_v4` 缺失/损坏时回退 `LEGACY_COLS_KEYS`) —— **新增列不升版本**(按列 key 存, 新列只是"无记录"), 升版本会清空用户偏好。
+- **列偏好持久化(R10-09)**: 只存浏览器; 读入口单点 `readColStateRaw()`(当前键 `autoqb_cols_v4` 缺失/损坏时回退 `LEGACY_COLS_KEYS`) —— **新增列不升版本**(按列 key 存, 新列只是"无记录"), 升版本会清空用户偏好。**写侧两个约束(2026-09-20, issue 26-09-20-1800)**: ①`saveColState(page)` 必须 **read-modify-write**(以存储为底, 只覆盖本 page 四段), 不能整份写回 —— 否则多标签下后写赢、先改的标签被静默吞掉; ②`app.js` 的 `storage` 监听 + `columns.js::adoptColState()` 负责跨标签同步(事件只在**其它**标签触发, 无需去重), `visibilitychange` 回到可见再补一次。守阵 = `ui_smoke.cjs`「列设置多标签页互不覆盖」。
 - **弹窗尺寸令牌族(R10-12)**: `--modal-w-narrow/base/form/add` + `--modal-wide-w`(超宽; 两套 UI 同值同族)。新增弹窗只选档, 不写新数字。**添加种子窗口的保存路径独占一整行**(`.add-dialog-grid` 为 2 列 + `.add-dialog-pathfield` 跨列) —— 路径是最长的输入, 与分类/标签并三列时只能看到开头一截。
 - **浮层锚定契约**(FX-18): 绝对定位浮层的容器必须有 `position: relative`; 自绘候选面板一律走 `.pop-menu` 家族; 原生 `<datalist>` 已退役。
 - **无遮罩浮层**: `.speed-pop`(限速)必须是状态栏的**兄弟节点**(`.statusbar` 有 `overflow: hidden`, 嵌进去会被裁掉), 只由 JS 写 `left` 并夹取到视口内; **限额浮层只有这一个载体**(旧 `.modal.speed-dialog` 已删, R10-04)。

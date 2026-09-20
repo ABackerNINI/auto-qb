@@ -315,14 +315,43 @@ window.AQB_COLUMNS = {
         if (widths) this.colWidths = { ...this.colWidths, [page]: widths };
       }
     },
-    saveColState() {
+    /* 写列状态(page = 本次改动涉及的表; 不传则整份写, 仅兜底用)。
+     *
+     * ❗**必须读回存储再写**(issue 26-09-20-1800): 内存是"页面加载时的快照", 整份写回会让
+     *   "最后动的那个标签"赢 —— 别的标签的改动被静默吞掉, 用户看到的就是"列设置被重置"。
+     *   故以**存储为底**, 只覆盖本次涉及的那个 page 的四段; 其余 page 段一律取存储最新值。
+     *   (单独靠这招不够: 两个标签改**同一个表**时仍然后写赢 —— 真正的解法是 F2 的 storage 同步,
+     *   让每个标签的内存保持新鲜; 这里挡的是"同一毫秒两边都写"的竞态。)
+     */
+    saveColState(page) {
+      const payload = { widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder };
+      if (page) {
+        const raw = readColStateRaw();  // 缺失/损坏时保持整份写(与改动前一致)
+        if (raw && typeof raw === "object") {
+          for (const seg of ["widths", "hidden", "manual", "order"]) {
+            const base = raw[seg] && typeof raw[seg] === "object" ? { ...raw[seg] } : {};
+            base[page] = payload[seg][page];
+            payload[seg] = base;
+          }
+        }
+      }
       // 写失败(私隐模式/配额满)不得影响功能: 本次会话内的调整仍在内存里生效
       try {
-        localStorage.setItem(
-          COLS_STORE_KEY,
-          JSON.stringify({ widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder })
-        );
+        localStorage.setItem(COLS_STORE_KEY, JSON.stringify(payload));
       } catch { /* 忽略: 仅失去跨会话记忆 */ }
+    },
+    /* 跨标签同步(F2): 别的标签改了列 -> 本标签**整份采用**存储值(与"刷新一次"等价)。
+     * 不做逐列合并 —— 那需要给每段加"谁更新"的时间戳语义, 代价远大于收益;
+     * 整份采用的行为可预测, 且后续 materializeColumns 会按当前容器宽度重算非 manual 页。
+     * ❗调用方只能是 storage 事件(它**只在其它标签**触发, 写入方自己收不到, 故无需去重)
+     *   与 visibilitychange 的"回到可见"分支(补漏: 标签被冻结 / 事件丢失)。 */
+    adoptColState() {
+      const next = loadColState();
+      this.colWidths = next.widths;
+      this.colHidden = next.hidden;
+      this.colManual = next.manual;
+      this.colOrder = next.order;
+      this.$nextTick(() => this.materializeColumns());
     },
     colVisible(page, key) {
       return !(this.colHidden[page] || []).includes(key);
@@ -341,7 +370,7 @@ window.AQB_COLUMNS = {
           this.colWidths = { ...this.colWidths, [page]: widths };
         }
       }
-      this.saveColState();
+      this.saveColState(page);
       this.$nextTick(() => this.materializeColumns());
     },
     resetAllColumnWidths(page) {
@@ -350,7 +379,7 @@ window.AQB_COLUMNS = {
       for (const c of TABLE_COLUMNS[page]) delete widths[c.key];
       this.colWidths = { ...this.colWidths, [page]: widths };
       this.colManual = { ...this.colManual, [page]: false };
-      this.saveColState();
+      this.saveColState(page);
       this.$nextTick(() => this.materializeColumns());
     },
     fitColumnsToWindow(page) {
@@ -360,7 +389,7 @@ window.AQB_COLUMNS = {
       this.$nextTick(() => {
         this.materializeColumns();
         this.colManual = { ...this.colManual, [page]: true };
-        this.saveColState();
+        this.saveColState(page);
       });
     },
 
@@ -401,7 +430,7 @@ window.AQB_COLUMNS = {
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
         this.colManual = { ...this.colManual, [page]: true };  // 手动调过 -> 不再随窗口自适应
-        this.saveColState();
+        this.saveColState(page);
         if (!dragged) return;  // 未拖动 = 纯点击 resizer, 不拦 click(保持原行为)
         // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort —— capture 阶段拦掉即停
         const swallow = (ev) => {
@@ -432,7 +461,7 @@ window.AQB_COLUMNS = {
       const widths = this._renderedWidths(headEl, page) || {};
       this.colWidths = { ...this.colWidths, [page]: { ...widths, [key]: `${width}px` } };
       this.colManual = { ...this.colManual, [page]: true };
-      this.saveColState();
+      this.saveColState(page);
     },
 
     /* ------------------------------------------------ 列序(表头拖动重排 TBL-05) */
@@ -463,7 +492,7 @@ window.AQB_COLUMNS = {
       }
       if (!inserted) full.push(key);  // 边界在末个可见列之后
       this.colOrder = { ...this.colOrder, [page]: full };
-      this.saveColState();
+      this.saveColState(page);
       this.$nextTick(() => this.materializeColumns());
     },
 
