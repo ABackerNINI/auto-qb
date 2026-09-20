@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>修改计划 · 乐观补丁改为 hash 索引查找（消除 O(目标数 × 数据集规模)）</title>
+<style>
+  :root{
+    --bg:#0f0f0f; --fg:#f0f0f0; --fg-mute:#a3a3a0; --fg-dim:#6f6f6b;
+    --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.06);
+    --accent:#EF9F27; --surface:#161615;
+    --sans:"IBM Plex Sans","Source Han Sans SC","PingFang SC","Microsoft YaHei",-apple-system,sans-serif;
+    --mono:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+       font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px 96px}
+  header{padding:88px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+          color:var(--accent);margin:0 0 20px}
+  h1{font-size:40px;line-height:1.12;letter-spacing:-.02em;font-weight:590;margin:0 0 18px;max-width:22ch}
+  .lede{font-size:17px;color:var(--fg-mute);max-width:62ch;margin:0 0 32px;line-height:1.6}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;font-family:var(--mono);font-size:12px;color:var(--fg-dim);
+        padding-top:24px;border-top:1px solid var(--line-soft)}
+  .meta b{display:block;color:var(--fg-mute);font-weight:400;margin-bottom:3px}
+  .cols{display:grid;grid-template-columns:212px minmax(0,1fr);gap:48px;margin-top:56px}
+  nav.toc{position:sticky;top:32px;align-self:start;font-family:var(--mono);font-size:12px}
+  nav.toc p{color:var(--fg-dim);letter-spacing:.1em;text-transform:uppercase;font-size:10px;margin:0 0 12px}
+  nav.toc a{display:block;color:var(--fg-mute);text-decoration:none;padding:5px 0 5px 12px;
+            border-left:1px solid var(--line);line-height:1.4}
+  nav.toc a:hover{color:var(--fg);border-left-color:var(--accent)}
+  main{max-width:760px}
+  section{padding-top:44px;margin-top:8px}
+  section:first-child{padding-top:0;margin-top:0}
+  .no{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em;display:block;margin-bottom:8px}
+  h2{font-size:24px;font-weight:590;letter-spacing:-.01em;line-height:1.25;margin:0 0 16px}
+  h3{font-size:16px;font-weight:550;margin:28px 0 10px}
+  p{margin:0 0 14px}
+  ul{margin:0 0 14px;padding-left:20px}
+  li{margin-bottom:7px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface);padding:1px 5px;
+       border:1px solid var(--line-soft);border-radius:3px;color:#e8e6e1}
+  pre{background:var(--surface);border:1px solid var(--line-soft);border-radius:4px;
+      padding:16px 18px;overflow-x:auto;margin:0 0 18px}
+  pre code{background:none;border:none;padding:0;font-size:12.5px;line-height:1.65;color:#dcd9d3}
+  table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:13.5px}
+  th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{font-weight:550;color:var(--fg-mute);font-size:12px;letter-spacing:.04em;
+     border-bottom:1px solid var(--line)}
+  td.num{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  .rule{height:1px;background:var(--line);margin:40px 0 0}
+  .note{border-left:1px solid var(--accent);padding-left:16px;color:var(--fg-mute);margin:0 0 18px;font-size:14px}
+  .mono-s{font-family:var(--mono);font-size:12px;color:var(--fg-dim)}
+  footer{margin-top:72px;padding-top:20px;border-top:1px solid var(--line);
+         font-family:var(--mono);font-size:11px;color:var(--fg-dim);line-height:1.7}
+  @media (max-width:900px){.cols{grid-template-columns:1fr;gap:0}nav.toc{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">修改计划 · WEB UI 乐观补丁</p>
+  <h1>把逐 hash 的全表扫描换成一次建成的 hash 索引</h1>
+  <p class="lede">大库批量操作时，<code>applyOptimistic</code> 对每个目标 hash 线性扫三张全表，复杂度是 O(目标数 × 数据集规模)。3000 种子全选暂停实测补丁 1.8–2.1 秒，且同样的代价在 <code>reapplyPending</code> 里<b>每轮 refresh 都要再付一次</b>。本计划按 issue 建议的方案 A 改造：入口建一次索引，四个调用点共用。</p>
+  <div class="meta">
+    <div><b>日期</b>2026-09-20 10:39</div>
+    <div><b>认领 issue</b>26-09-20-1033-perf-webui-optimistic-patch-quadratic</div>
+    <div><b>涉及文件</b>shared/commands.js（唯一）</div>
+    <div><b>基线</b>1058 passed / cov 92%</div>
+    <div><b>冒烟基线</b>ok、error 双模式各 54 项 0 失败</div>
+  </div>
+</header>
+
+<div class="cols">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s1">01 结论先行</a>
+  <a href="#s2">02 实测证据</a>
+  <a href="#s3">03 现状代码地图</a>
+  <a href="#s4">04 改造设计</a>
+  <a href="#s5">05 分波次实施</a>
+  <a href="#s6">06 验收口径</a>
+  <a href="#s7">07 红线与不做的事</a>
+  <a href="#s8">08 备选与后续</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <span class="no">01</span>
+  <h2>结论先行</h2>
+  <p>改动集中在一个文件、一个 helper：<code>shared/commands.js</code> 里新增一次建索引的私有方法，把四个「逐 hash 扫全表」的调用点换成按 hash 命中。行为逐条等价，不引入新契约。</p>
+  <p>预估收益（数据集 3000 / 目标 3000，本机实测）：补丁 <b>1810 ms → 约 9.5 ms</b>；<code>reapplyPending</code> 单轮 <b>1588 ms → 约 10 ms</b>。索引本身只要 2.1 ms。</p>
+  <p class="note">为什么现在才动它：这条耗时长被记成「大库抖动」，是因为 <code>[perf]</code> 只报一个「补丁 2033ms」的数字，看不出是算法复杂度还是偶发卡顿。本次用受控探针把它定性后才认领 —— 见下节证据。</p>
+</section>
+
+<section id="s2">
+  <span class="no">02</span>
+  <h2>实测证据</h2>
+  <p>探针在页面内直接调用同步函数，<b>不发请求、不触发重排</b>，测完回滚（脚本 <code>.workbuddy-ai/tmp/patch-probe.cjs</code> / <code>patch-probe2.cjs</code>，dev-only 已 gitignore）。</p>
+  <h3>成本构成（数据集 3000 条 / 目标 3000 个）</h3>
+  <table>
+    <tr><th>环节</th><th>实测</th><th>说明</th></tr>
+    <tr><td>A 现状 <code>applyOptimistic</code></td><td class="num">1810.1 ms</td><td>逐 hash 调 <code>_forEachRow</code> 扫三张全表</td></tr>
+    <tr><td>B 建索引（扫三张表一次）</td><td class="num">2.1 ms</td><td>O(数据集)，一次性</td></tr>
+    <tr><td>C 用索引打补丁（同语义）</td><td class="num">7.4 ms</td><td>O(目标数)，含 3000 次响应式写入</td></tr>
+    <tr><td>B + C 合计</td><td class="num">9.5 ms</td><td>相对 A 加速 <b>190×</b></td></tr>
+    <tr><td>D <code>reapplyPending</code> 单轮</td><td class="num">1588.2 ms</td><td><b>每轮 refresh 都要付一次</b>，直到 pending 落回真值</td></tr>
+  </table>
+  <h3>增长曲线（证明是二次，不是抖动）</h3>
+  <table>
+    <tr><th>数据集</th><th>100 目标</th><th>300 目标</th><th>500 目标</th><th>1500 目标</th><th>3000 目标</th></tr>
+    <tr><td>300 条</td><td class="num">9.4 ms</td><td class="num">23.7 ms</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>3000 条</td><td class="num">64 ms</td><td class="num">—</td><td class="num">315.7 ms</td><td class="num">1036.3 ms</td><td class="num">2146.7 ms</td></tr>
+  </table>
+  <p>单目标成本 0.079 ms（300 条库）→ 0.715 ms（3000 条库）：库大 10×，单目标成本约 9×，等比放大 ⇒ 成本与<b>数据集规模</b>成正比，不是常数。</p>
+  <h3>已排除的假设</h3>
+  <ul>
+    <li>不是网络 / 后端 —— 探针不发请求；冒烟里排队 0 ms、执行 1 ms。</li>
+    <li>不是渲染 / 重排 —— 探针不点击、不等 rAF，测的是函数同步返回。</li>
+    <li>不是 <code>4df80dc</code> 引入 —— 该提交之前同场景实测 1693 ms；<code>_forEachRow</code> 是 <code>afef7ce</code>（app.js 拆分）搬进来的旧代码。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <span class="no">03</span>
+  <h2>现状代码地图</h2>
+  <p><code>_forEachRow(hash, fn)</code> 遍历 <code>torrents</code> → <code>singles</code> → <code>groups[].members</code> 三张表，命中即回调。四个调用点全部是「外层逐 hash、内层全表扫」的嵌套结构（行号取证 2026-09-20 10:33）：</p>
+  <table>
+    <tr><th>调用点</th><th>行号</th><th>频次</th><th>代价</th></tr>
+    <tr><td><code>applyOptimistic</code> 贴补丁</td><td class="num">172</td><td>每次点击 1 次</td><td>O(目标 × 数据集)</td></tr>
+    <tr><td><code>resolveOptimistic</code> 失败回滚</td><td class="num">197</td><td>每次失败 1 次</td><td>O(目标 × 数据集)</td></tr>
+    <tr><td><code>_expirePending</code> 3s 兜底回滚</td><td class="num">154</td><td>每轮 refresh（仅超时项）</td><td>O(超时项 × 数据集)</td></tr>
+    <tr><td><code>reapplyPending</code> 刷新后重贴</td><td class="num">215</td><td><b>每轮 refresh</b>（全部 pending）</td><td>O(pending × 数据集)</td></tr>
+  </table>
+  <p>调用侧：<code>act()</code> :364 / <code>bulkAct()</code> :421 / <code>actTorrent()</code> :478，三处都是「先 <code>applyOptimistic</code> 再 POST」，顺序与本计划无关，不动。</p>
+  <h3>必须保住的语义</h3>
+  <ul>
+    <li><b>一个 hash 可能命中多行</b>：平铺数组、singles、组成员里可能出现同一 hash 的多个行对象（甚至同一对象被两个数组引用）。改造后必须对每个命中行都执行回调，<b>不能只取第一行</b>。</li>
+    <li><b>迭代顺序不变</b>：torrents → singles → groups[].members。同一 hash 命中多行时，<code>prev</code> 快照与 <code>pendingOps[h]</code> 的写入以最后一次为准 —— 顺序变了结果就变了。</li>
+    <li><b>取不到行即不做</b>：视图缺行时（如追剧视图 payload 只回 shows）现状是扫不到就不做事。索引取不到同样不做，行为一致。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <span class="no">04</span>
+  <h2>改造设计</h2>
+  <h3>新增：一次建索引</h3>
+<pre><code>_buildRowIndex() {
+  const idx = new Map();
+  const push = (r) =&gt; {
+    if (!r || !r.hash) return;
+    let a = idx.get(r.hash);
+    if (!a) idx.set(r.hash, (a = []));
+    a.push(r);                      // 同一 hash 多行: 保留, 顺序即遍历顺序
+  };
+  for (const r of this.torrents || []) push(r);
+  for (const r of this.singles || []) push(r);
+  for (const g of this.groups || []) for (const m of g.members || []) push(m);
+  return idx;
+}</code></pre>
+  <h3>四个调用点改为「一次建索引 + 按 hash 命中」</h3>
+  <ul>
+    <li><code>applyOptimistic</code>：入口建一次 <code>idx</code>，逐 <code>h</code> 取 <code>idx.get(h)</code>；原回调体（<code>_optimisticPatch</code> → <code>prev</code> 快照 → <code>Object.assign</code> → 写 <code>pendingOps[h]</code>）<b>逐字保留</b>。</li>
+    <li><code>resolveOptimistic</code> 失败分支：同上，<code>Object.assign(row, op.prev)</code> 逐字保留。</li>
+    <li><code>_expirePending</code>：循环外建一次索引（现在是每个超时 hash 扫一次全表）。</li>
+    <li><code>reapplyPending</code>：循环外建一次索引 —— <b>收益最大的一处</b>，单轮 1588 ms → 约 10 ms。</li>
+  </ul>
+  <h3>失效策略：一律现场建，不缓存</h3>
+  <p>每轮 refresh 会整表替换行对象，索引<b>不能跨轮缓存</b>。实测建索引只要 2.1 ms，远低于收益，因此 W1 起一律「每次调用现场建」。跨轮缓存（按版本号 / rid 失效）<b>不在本次计划内</b>，理由见第 07 节。</p>
+  <h3>顺带：让 <code>[perf]</code> 别再常驻报警</h3>
+  <p><code>commands.js:106</code> 的判定是 <code>(c.patchMs || 0) &gt; 50</code> —— 阈值恒定；而同文件 :54 的 <code>settleMs</code> 是按目标数分档的（<code>&gt;100 目标 → 2500 ms</code>）。两处口径不一致，导致大库批量必报、变成没人看的噪音。改法：<code>patchMs</code> 沿用同一张分档表。</p>
+</section>
+
+<section id="s5">
+  <span class="no">05</span>
+  <h2>分波次实施</h2>
+  <table>
+    <tr><th>波次</th><th>内容</th><th>出口判据</th></tr>
+    <tr><td>W1</td><td>新增 <code>_buildRowIndex()</code>，改 <code>applyOptimistic</code>（最小一处）</td><td>探针 A 段 ≤ 30 ms；冒烟 ok 模式 54 项 0 失败</td></tr>
+    <tr><td>W2</td><td>改 <code>reapplyPending</code>、<code>_expirePending</code>、<code>resolveOptimistic</code></td><td>探针 D 段 ≤ 30 ms；error 模式 54 项 0 失败（回滚路径）</td></tr>
+    <tr><td>W3</td><td><code>patchMs</code> 阈值按目标数分档</td><td>3000 目标场景下不再出现「补丁 2s」的 <code>[perf]</code> 条目</td></tr>
+    <tr><td>W4</td><td>红绿双验：故意把索引改成「只取第一行」</td><td>冒烟「整组 / 整集乐观」项<b>必须变红</b>（证明多行语义有守阵）</td></tr>
+    <tr><td>W5</td><td>知识库回写：issue 转 Fixed + 基线数字 + 探针脚本归档说明</td><td><code>tests/test_memory_bank.py</code> 绿</td></tr>
+  </table>
+  <p>每波结束各跑一次全量单测；W1/W2 各跑一次双模式冒烟。</p>
+</section>
+
+<section id="s6">
+  <span class="no">06</span>
+  <h2>验收口径</h2>
+  <table>
+    <tr><th>项</th><th>判据</th></tr>
+    <tr><td>单测</td><td><code>uv run pytest tests -q</code> ≥ <b>1058 passed</b>，cov 92%；前端静态守阵 <code>test_frontend_static_bundle_health</code> 扫 commands.js 的既有规则全过</td></tr>
+    <tr><td>探针复测</td><td>数据集 3000 / 目标 3000：A 段 ≤ 30 ms（预估 9.5）、D 段 ≤ 30 ms</td></tr>
+    <tr><td>浏览器冒烟</td><td>ok / error 双模式各 <b>54 项 0 失败</b>（3000 种子桩服务）</td></tr>
+    <tr><td>perf 条目</td><td>不再出现「补丁 &gt; 2000 ms」；「撤下 ~3 s via=pull」属既有大库轮询粒度，不因本次变化而要求消失</td></tr>
+    <tr><td>行为等价</td><td>乐观 UI 的三条既有结论不变：补丁早于 POST、失败立即回滚、真值对齐才撤下</td></tr>
+  </table>
+</section>
+
+<section id="s7">
+  <span class="no">07</span>
+  <h2>红线与不做的事</h2>
+  <ul>
+    <li><b>不动后端</b>：本问题纯前端，<code>web_view.py</code> / <code>web_runtime.py</code> / <code>web_commands.py</code> 一行不改。</li>
+    <li><b>不动语义</b>：<code>_snapshotTruth</code>、<code>_optimisticSettled</code>、3s 兜底、<code>settleVia</code> 标记、<code>isPending</code> 一律不动 —— 它们各自对应一条已修的 issue（2024 / 2141 / 1939）。</li>
+    <li><b>不做跨轮缓存</b>：整表替换下行对象 identity 会变，缓存一旦失效判断漏一处就是「补丁贴到旧行上」，比慢更危险。要做得配显式失效 + 守阵，属独立改动。</li>
+    <li><b>不合并 pendingOps 写入</b>：<code>this.pendingOps[h] = ...</code> 的 3000 次响应式写入已在 C 段 7.4 ms 内，不是瓶颈，不动。</li>
+    <li><b>不改 <code>reapplyPending</code> 的调用时机</b>：只换查找方式，不换它每轮都跑这件事。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <span class="no">08</span>
+  <h2>备选与后续</h2>
+  <ul>
+    <li><b>方案 B（视图层给行引用）</b>：后端构建视图时直接出 hash → 行 的索引，前端不再扫表。改动跨前后端，收益上限更高，但风险面大得多 —— 本次不选。</li>
+    <li><b>整组 / 整剧的批量粒度</b>：即便查找降到 O(1)，3000 目标仍有 3000 次响应式写入与一次 bulk 命令往返。若真机仍嫌慢，下一步该看的是「大库批量是否要分片」，属另一条线。</li>
+    <li><b>探针脚本</b>：<code>.workbuddy-ai/tmp/patch-probe*.cjs</code> 目前是临时产物。若希望它成为可复用的回归工具，应搬进 <code>scripts/</code> 并接进冒烟 —— 不在本次计划内，需要时另立任务。</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<footer>
+  修改计划 · 认领 issue 26-09-20-1033-perf-webui-optimistic-patch-quadratic · 2026-09-20 10:39<br>
+  所有数字均为本机实测（桩服务 3000 种子 / Playwright chromium 151），非估算；未测到的项一律写「—」
+</footer>
+
+</div>
+</body>
+</html>
