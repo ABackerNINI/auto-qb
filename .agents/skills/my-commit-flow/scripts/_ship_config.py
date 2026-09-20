@@ -1,13 +1,14 @@
-"""my-commit-flow 的配置与探测工具 —— 换项目时**尽量只改本文件**, 且多数项能自动探测。
+"""提交流水线的**外置配置**加载器 —— 项目特有项不在代码里内置, 强制逐仓库显式声明。
 
-设计原则(可复用性):
-- **能探测的不写死**: 仓库根(向上找 `.git`)、分支(跟当前分支)、主线/镜像远端(按 URL 特征或候选名)、
-  代理(从 `git config` 读 per-URL 代理) —— 全部运行期探测, 代码里不写死任何 URL。
-- **写死的只有项目特有项**: `RED_LINES` / `WARN_LINES`(红线文件)、`GATES`(提交前闸门)、
-  `LINUX_CHECK_HINTS`(平台差异关键词)、镜像策略。换项目改这些。
-- **配置留空 = 用探测结果**: `BRANCH` / `MAIN_HOST_MARK` / `MIRROR_URL` 留空即自动。
+设计(与可复用性直接相关):
+- **流程**内置(禁 `add -A` / ref 三处核对 / 推送顺序 / 幽灵 diff 判据) —— 任何仓库都一样。
+- **项目事实**外置: 红线文件、高危文件、提交前闸门、平台关键词 —— 全部来自 `<仓库根>/.commit-flow.toml`。
+- **没有配置就停下来引导生成**, 不静默回退到"猜一份默认" —— 猜错比停下来更贵。
 
-换项目时: 上面"自动探测"的部分直接可用; 只需过一遍下面"项目特有项"(红线文件、闸门、平台关键词)。
+用法:
+    cfg, src = load_config()                 # 缺配置抛 ConfigMissing(带引导文案)
+    path = init_config(root)                 # 生成初稿(按仓库特征猜, 需人工确认)
+    python <skill-dir>/scripts/preflight.py --init | --show-config
 """
 
 from __future__ import annotations
@@ -16,46 +17,40 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:  # pragma: no cover
+    tomllib = None  # type: ignore[assignment]
+
 SCRIPTS_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPTS_DIR.parent
+CONFIG_NAME = ".commit-flow.toml"
 
-# ---------------------------------------------------------------- 可选覆盖项(留空 = 自动探测)
+# 配置里**省略**这些键时的兜底(不是"没配置文件时的默认值" —— 没配置文件直接 STOP)
+KEY_DEFAULTS: dict = {
+    "branch": "",  # 留空 = 跟当前分支
+    "main_host_mark": "",  # 留空 = 不按 URL 特征挑, 直接按候选名取第一个存在的
+    "main_candidates": ["origin"],
+    "mirror_host_mark": "",
+    "mirror": "",
+    "red_lines": [],
+    "warn_lines": [],
+    "gates": [],
+    "platform_hints": ["winreg", "dir_fd", "socket", "subprocess"],
+    "staged_panic": 200,
+}
 
-BRANCH = ""  # 留空 = 跟当前分支; 填了就用填的(如 "main")
-MAIN_HOST_MARK = "gitee.com"  # 主线 URL 特征; 留空 = 不校验, 按候选名顺序取第一个存在的
-# 主线远端候选名(按序) —— **别假定托管平台**: 单远端项目里那个远端就是主线
-REMOTE_MAIN_CANDIDATES = ("gitee", "origin", "github")
-MIRROR_HOST_MARK = "github.com"  # 镜像 URL 特征; 留空 = 只用 REMOTE_MIRROR 这个名字
-REMOTE_MIRROR = "github"  # 镜像远端名
-MIRROR_URL = ""  # 缺远端时提示用; 留空 = 只提示补远端、不给 URL
 
-# ---------------------------------------------------------------- 项目特有的写死项(换项目要改)
+class ConfigMissing(RuntimeError):
+    """仓库里没有外置配置 —— 调用方应打印本异常文案并停手。"""
 
-# 红线: 出现即 STOP(不得进暂存清单)
-RED_LINES = (
-    "config.yml",  # 用户真实生产配置, 非示例
-    "auto-qb-data/",  # 运行时数据(state.json / 锁 / 日志 / 跳检备份)
-)
-# 高危: 出现需人工确认(可能是用户自己的在途改动)
-WARN_LINES = (
-    "想法.md",
-    ".workbuddy-ai/",  # 项目数据目录(.gitignore 已忽略, 出现即为异常)
-)
-# 闸门: 改动命中哪些文件 → 提交前必须跑什么(脚本只提示, 由执行者跑; <skill-dir> 见 SKILL.md)
-GATES: tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...] = (
-    (("src/", "tests/"), ("yapf -i <改过的 py 文件>", "uv run pytest tests -q"), "Python 改动: 先格式化再跑全量测试"),
-    (("memory-bank/issues/", ),
-     ("python <create-issue skill>/scripts/gen_issues_index.py --check", ),  # 不假定与它同目录
-     "issue 池改动: 索引是生成物, 必须 --check 通过"),
-    (("memory-bank/tasks/", ), ("python scripts/gen_tasks_index.py --check", ), "任务档案改动: 索引需自洽"),
-    ((".agents/skills/", ), ("python <改动的脚本> --help", ), "skill 改动: 冒烟跑一遍被改的脚本"),
-)
-# 平台差异: 命中这些关键词的改动, 单平台跑绿不算数, 建议换平台复现
-LINUX_CHECK_HINTS = ("winreg", "shutil.rmtree", "dir_fd", "socket", "subprocess", "os.open")
-# 提交后若 staged 超过这个阈值 → 高度怀疑「分支 ref 被别的会话回退」(见 pitfalls)
-STAGED_PANIC = 200
-
-# ---------------------------------------------------------------- 探测工具
+    def __init__(self, root: Path) -> None:
+        super().__init__(
+            f"[STOP] 缺少外置配置: {root / CONFIG_NAME}\n"
+            "本 skill 不在代码里内置项目配置(红线文件 / 闸门命令 …), 必须逐仓库显式声明。\n"
+            "生成初稿后**人工确认**再继续:\n"
+            "    python <skill-dir>/scripts/preflight.py --init\n"
+            "    python <skill-dir>/scripts/preflight.py --show-config   # 看生效值与来源")
 
 
 def git(*args: str) -> str:
@@ -65,10 +60,7 @@ def git(*args: str) -> str:
 
 
 def find_root(start: Path | None = None) -> Path:
-    """仓库根: 从 start(默认脚本目录)向上找 `.git`(目录或 worktree 的 .git 文件)。
-
-    不按 skill 的安装深度反推 —— 换目录结构(`.agents/skills/` / `.codebuddy/skills/` / 用户级)都能用。
-    """
+    """仓库根: 从 start(默认脚本目录)向上找 `.git`(目录或 worktree 的 .git 文件)。"""
     cur = (start or SCRIPTS_DIR).resolve()
     for parent in (cur, *cur.parents):
         if (parent / ".git").exists():
@@ -76,11 +68,20 @@ def find_root(start: Path | None = None) -> Path:
     return Path(__file__).resolve().parents[4]  # 兜底: 上四级
 
 
-def resolve_branch() -> str:
-    """分支: 配置优先, 否则跟当前分支。"""
-    if BRANCH:
-        return BRANCH
-    return git("rev-parse", "--abbrev-ref", "HEAD") or "main"
+def load_config(root: Path | None = None, explicit: str | None = None) -> tuple[dict, Path]:
+    """加载外置配置, 返回 (配置, 来源路径); 找不到 → 抛 `ConfigMissing`。"""
+    if tomllib is None:
+        raise RuntimeError("需要 Python 3.11+ 的 tomllib 才能读取 .commit-flow.toml")
+    path = Path(explicit).expanduser().resolve() if explicit else (root or find_root()) / CONFIG_NAME
+    if not path.exists():
+        raise ConfigMissing(path.parent)
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    cfg = dict(KEY_DEFAULTS)
+    cfg.update({k: v for k, v in data.items() if k in KEY_DEFAULTS})
+    return cfg, path
+
+
+# ------------------------------------------------------------------ 远端探测(配置驱动)
 
 
 def push_urls() -> dict[str, str]:
@@ -93,51 +94,50 @@ def push_urls() -> dict[str, str]:
     return out
 
 
-def resolve_main_remote() -> tuple[str, str]:
-    """主线远端 (名字, URL)。
+def resolve_branch(cfg: dict) -> str:
+    """分支: 配置优先, 否则跟当前分支。"""
+    return cfg.get("branch") or git("rev-parse", "--abbrev-ref", "HEAD") or "main"
 
-    判据(按序): ① 候选里第一个 **URL 含 `MAIN_HOST_MARK`** 的 —— 按 URL 特征而不是按名字,
-    因为历史 clone 的 `origin` 可能是镜像; ② 没配 mark 或谁都不匹配 → 候选里第一个**存在**的
-    (**回退**: 只有单一远端的项目里, 那个远端就是主线);
-    ③ 都没有 → ("", "")。调用方可用 `main_matches_mark()` 判断是否走了 ②, 是的话应 WARN 提示。
-    """
+
+def resolve_main_remote(cfg: dict) -> tuple[str, str]:
+    """主线远端 (名字, URL): 候选名里第一个 URL 含 `main_host_mark` 的; 都不匹配则回退到候选里
+    第一个存在的(单远端项目里那个远端就是主线)。按 **URL 特征** 而不是按名字。"""
     urls = push_urls()
-    if MAIN_HOST_MARK:
-        for name in REMOTE_MAIN_CANDIDATES:
+    mark = cfg.get("main_host_mark", "")
+    if mark:
+        for name in cfg.get("main_candidates", []):
             url = urls.get(name, "")
-            if url and MAIN_HOST_MARK in url:
+            if url and mark in url:
                 return name, url
-    for name in REMOTE_MAIN_CANDIDATES:  # 回退: 按顺序取第一个存在的
+    for name in cfg.get("main_candidates", []):
         if name in urls:
             return name, urls[name]
     return "", ""
 
 
-def main_matches_mark(url: str) -> bool:
-    """主线 URL 是否命中 `MAIN_HOST_MARK`(没配 mark 时视为命中) —— 用于提示"是不是走了回退"。"""
-    return not MAIN_HOST_MARK or MAIN_HOST_MARK in url
+def main_matches_mark(cfg: dict, url: str) -> bool:
+    """主线 URL 是否命中 `main_host_mark`(没配 mark 时视为命中) —— 用于提示"是不是走了回退"。"""
+    mark = cfg.get("main_host_mark", "")
+    return not mark or mark in url
 
 
-def resolve_mirror_remote() -> tuple[str, str]:
-    """镜像远端 (名字, URL): 按 `MIRROR_HOST_MARK` 找 —— **排除主线自己**(单一远端的项目没有镜像,
-    不能把主线当镜像), 再退回 `REMOTE_MIRROR` 这个名字。"""
+def resolve_mirror_remote(cfg: dict) -> tuple[str, str]:
+    """镜像远端 (名字, URL): 按 `mirror_host_mark` 找并**排除主线自己**; 再退回 `mirror` 这个名字。"""
     urls = push_urls()
-    main_name, _ = resolve_main_remote()
-    if MIRROR_HOST_MARK:
+    main_name, _ = resolve_main_remote(cfg)
+    mark = cfg.get("mirror_host_mark", "")
+    if mark:
         for name, url in urls.items():
-            if name != main_name and MIRROR_HOST_MARK in url:
+            if name != main_name and mark in url:
                 return name, url
-    if REMOTE_MIRROR in urls and REMOTE_MIRROR != main_name:
-        return REMOTE_MIRROR, urls[REMOTE_MIRROR]
+    name = cfg.get("mirror", "")
+    if name and name in urls and name != main_name:
+        return name, urls[name]
     return "", ""
 
 
 def proxy_disable_args(target_url: str) -> tuple[str, ...]:
-    """生成禁用 per-URL 代理的 `-c` 参数(**从 git config 读, 不写死 key 与端口**)。
-
-    读 `git config --get-regexp '^http\\..*\\.proxy$'`, 优先禁用与 target_url 同 host 的那条;
-    一条都没配 → 返回空(表示无需禁用)。
-    """
+    """生成禁用 per-URL 代理的 `-c` 参数(**从 git config 读, 不写死 key 与端口**)。"""
     out = git("config", "--get-regexp", r"^http\..*\.proxy$")
     keys = [line.split()[0] for line in out.splitlines() if line.strip()]
     if not keys:
@@ -147,3 +147,90 @@ def proxy_disable_args(target_url: str) -> tuple[str, ...]:
         if host and host in key:
             return ("-c", f"{key}=")
     return ("-c", f"{keys[0]}=")
+
+
+# ------------------------------------------------------------------ 初稿生成(--init)
+
+
+def _host(url: str) -> str:
+    return urlparse(url).netloc if url else ""
+
+
+def _detect_gates(root: Path) -> list[dict]:
+    """按项目特征猜闸门初稿 —— 只作起点, 生成后必须人工确认。"""
+    gates: list[dict] = []
+    if (root / "pyproject.toml").exists() or (root / "tests").exists():
+        gates.append({
+            "match": ["src/", "tests/"],
+            "run": ["<格式化命令, 例: yapf -i <改过的文件>>", "<测试命令, 例: uv run pytest tests -q>"],
+            "note": "Python 改动",
+        })
+    if (root / "package.json").exists():
+        gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动"})
+    if (root / "Makefile").exists():
+        gates.append({"match": ["Makefile"], "run": ["make test"], "note": "有 Makefile 时"})
+    return gates
+
+
+def _detect_lines(root: Path) -> tuple[list[str], list[str]]:
+    """高危初稿: 从 `.gitignore` 取被忽略的目录 —— 它们不该出现在暂存清单里。"""
+    gi = root / ".gitignore"
+    warn: list[str] = []
+    if gi.exists():
+        for line in gi.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and line.endswith("/"):
+                warn.append(line)
+    return [], warn[:5]
+
+
+def render_template(root: Path) -> str:
+    """配置初稿文本(带注释, 需人工确认)。"""
+    urls = push_urls()
+    names = list(urls)
+    main_mark = _host(urls[names[0]]) if names else ""
+    mirror_mark = _host(urls[names[1]]) if len(names) > 1 else ""
+    red, warn = _detect_lines(root)
+    gates = _detect_gates(root)
+
+    def arr(items) -> str:
+        return "[" + ", ".join(f'"{i}"' for i in items) + "]"
+
+    out = [
+        "# 提交流水线配置 —— 初稿由脚本生成, 请**逐项确认/修改**后再用",
+        "# 查看生效值与来源: python <skill-dir>/scripts/preflight.py --show-config",
+        "",
+        'branch = ""                    # 留空 = 跟当前分支',
+        f"main_candidates = {arr(names or ['origin'])}",
+        f'main_host_mark  = "{main_mark}"   # 主线 URL 特征; 留空 = 按候选名顺序取第一个存在的',
+        f'mirror          = "{names[1] if len(names) > 1 else ""}"',
+        f'mirror_host_mark = "{mirror_mark}"',
+        "",
+        "# 出现即 STOP(例: 生产配置 / 运行时数据)",
+        f"red_lines = {arr(red)}",
+        "# 出现需人工确认(例: 用户的在途改动)",
+        f"warn_lines = {arr(warn)}",
+        "",
+        f"platform_hints = {arr(KEY_DEFAULTS['platform_hints'])}",
+        f"staged_panic = {KEY_DEFAULTS['staged_panic']}",
+        "",
+    ]
+    for gate in gates:
+        out += [
+            "[[gates]]",
+            f"match = {arr(gate['match'])}",
+            f"run   = {arr(gate['run'])}",
+            f'note  = "{gate["note"]}"',
+            "",
+        ]
+    return "\n".join(out)
+
+
+def init_config(root: Path | None = None, force: bool = False) -> Path:
+    """写配置初稿; 已存在则报错(不覆盖), 除非 force。"""
+    root = root or find_root()
+    path = root / CONFIG_NAME
+    if path.exists() and not force:
+        raise FileExistsError(f"已存在, 不覆盖: {path}")
+    path.write_text(render_template(root), encoding="utf-8")
+    return path

@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _ship_config import RED_LINES  # noqa: E402
+from _ship_config import ConfigMissing, load_config  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
@@ -37,7 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("paths", nargs="+", help="要暂存的文件路径(逐路径写, 禁 -A / . / *)")
     parser.add_argument("--message-file", required=True, help="提交消息文件(UTF-8)")
     parser.add_argument("--skip-preflight", action="store_true", help="跳过预检(已跑过时用)")
+    parser.add_argument("--config", default=None, help="指定配置文件(默认 <仓库根>/.commit-flow.toml)")
     args = parser.parse_args(argv)
+
+    try:  # 外置配置缺失 → 停手引导, 不猜默认值
+        cfg, _src = load_config(explicit=args.config)
+    except ConfigMissing as exc:
+        print(exc)
+        return 1
+    RED_LINES = cfg["red_lines"]
 
     bulk = [p for p in args.paths if p in BULK]
     if bulk:

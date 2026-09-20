@@ -1,0 +1,36 @@
+# 提交流水线配置(my-commit-flow) —— 初稿由 preflight.py --init 生成, 已人工确认/修正
+# 生效值与来源: python <skill-dir>/scripts/preflight.py --show-config
+
+branch = ""                       # 留空 = 跟当前分支
+main_candidates = ["gitee", "origin", "github"]
+main_host_mark  = "gitee.com"     # 按 URL 特征挑主线(历史 clone 的 origin 可能是 GitHub 镜像)
+mirror          = "github"
+mirror_host_mark = "github.com"
+
+# 出现即 STOP: 生产配置 / 运行时数据(见 AGENTS.md 红线节)
+red_lines = ["config.yml", "auto-qb-data/"]
+# 出现需人工确认: 用户自己的在途改动 / 不该入库的项目数据
+warn_lines = ["想法.md", ".workbuddy-ai/"]
+
+platform_hints = ["winreg", "dir_fd", "socket", "subprocess"]
+staged_panic = 200
+
+[[gates]]
+match = ["src/", "tests/"]
+run   = ["yapf -i <改过的 py 文件>", "uv run pytest tests -q"]
+note  = "Python 改动: 先格式化再跑全量测试"
+
+[[gates]]
+match = ["memory-bank/issues/"]
+run   = ["python <create-issue skill>/scripts/gen_issues_index.py --check"]
+note  = "issue 池改动: 索引是生成物, 必须 --check 通过"
+
+[[gates]]
+match = ["memory-bank/tasks/"]
+run   = ["python scripts/gen_tasks_index.py --check"]
+note  = "任务档案改动: 索引需自洽"
+
+[[gates]]
+match = [".agents/skills/"]
+run   = ["python <改动的脚本> --help"]
+note  = "skill 改动: 冒烟跑一遍被改的脚本"

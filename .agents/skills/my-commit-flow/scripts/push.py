@@ -25,7 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import (  # noqa: E402
-    MIRROR_URL,
+    KEY_DEFAULTS,
+    load_config,
     proxy_disable_args,
     resolve_branch,
     resolve_main_remote,
@@ -37,9 +38,22 @@ def git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
-BRANCH = resolve_branch()  # 留空配置时跟当前分支
-MAIN, MAIN_URL = resolve_main_remote()  # 按 URL 特征探测, 不写死
-MIRROR, MIRROR_URL_NOW = resolve_mirror_remote()
+def resolve(cfg: dict):
+    """(分支, 主线名, 主线 URL, 镜像名, 镜像 URL)"""
+    branch = resolve_branch(cfg)
+    main, main_url = resolve_main_remote(cfg)
+    mirror, mirror_url = resolve_mirror_remote(cfg)
+    return branch, main, main_url, mirror, mirror_url
+
+
+# 缺配置时先记下错误, 到 main 里打印引导再退出 —— 别在 import 阶段抛栈
+try:
+    _CFG, _SRC = load_config()
+    _ERR = None
+except Exception as exc:  # ConfigMissing / tomllib 缺失
+    _CFG, _SRC, _ERR = dict(KEY_DEFAULTS), None, str(exc)
+
+BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW = resolve(_CFG)
 
 
 def remote_sha_with_retry(name: str, branch: str) -> str:
@@ -69,7 +83,17 @@ def remotes() -> dict[str, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-mirror", action="store_true", help="不尝试镜像远端")
+    parser.add_argument("--config", default=None, help="指定配置文件(默认 <仓库根>/.commit-flow.toml)")
     args = parser.parse_args(argv)
+
+    global BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW, _ERR
+    if args.config:  # 允许临时换一份配置
+        _CFG2, _ = load_config(explicit=args.config)
+        BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW = resolve(_CFG2)
+        _ERR = None
+    if _ERR:
+        print(_ERR)
+        return 1
 
     print("=== 推送前再 fetch 一次(status -sb 的 ahead/behind 是上次 fetch 的快照) ===")
     git("fetch", MAIN, BRANCH)
