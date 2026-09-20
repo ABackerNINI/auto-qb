@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-20-1033">
 <meta name="issue-type" content="perf">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Open">
 <meta name="issue-title" content="乐观补丁 applyOptimistic 是 O(目标数 × 数据集规模): 大库全选操作主线程卡顿约 2s">
 <meta name="issue-summary" content="applyOptimistic 逐 hash 全表线性扫描(_forEachRow), 3000 种子全选暂停实测补丁 2147ms 卡死主线程; 且 [perf] 补丁阈值恒 50ms 未按目标数分档(与 settleMs 分档不一致) ⇒ 大库常驻噪音、掩盖真问题">
 <title>乐观补丁 applyOptimistic 是 O(目标数 × 数据集规模): 大库全选操作主线程卡顿约 2s · perf · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-20-1033-perf-webui-optimistic-patch-quadratic</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 10:33</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -186,7 +186,6 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-20 10:33 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-      <li>2026-09-20 10:39 — <strong>Open → In Progress</strong>：由「WEB UI 解耦」的后续复核认领，按方案 A（入口建 hash 索引）实施；计划见 <a href="../../docs/plans/26-09-20-1039-webui-optimistic-patch-index-plan.html">26-09-20-1039-webui-optimistic-patch-index-plan.html</a></li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-09-20 10:33（入池同日）<strong>仍复现</strong> —— 数据集 3000 / 目标 3000 → 补丁 2146.7ms（探针 <code>.workbuddy-ai/tmp/patch-probe.cjs</code>）。</p>
