@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="backend-state-save-only-on-exit">
+<meta name="issue-stamp" content="26-09-21-1347">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="后端状态仅优雅退出时落盘, 非优雅终止丢失整个运行期状态">
+<meta name="issue-summary" content="save_state 仅优雅退出可达, 强杀/断电/关机丢 exec_history/skip_check_day/recheck_fails/上传基线">
+<title>后端状态仅优雅退出时落盘, 非优雅终止丢失整个运行期状态 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>后端状态仅优雅退出时落盘, 非优雅终止丢失整个运行期状态</h1>
+    <p class="lede">save_state 仅优雅退出可达, 强杀/断电/关机丢 exec_history/skip_check_day/recheck_fails/上传基线</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-21-1347-bug-backend-state-save-only-on-exit</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 13:47</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-09-21 后端崩溃安全性专项调查（静态读码 + 全库落盘点枚举，报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F1）。</p>
+    <p><strong>触发条件与平台、配置均无关</strong>：任何「非优雅终止」都命中 —— <code>taskkill /F</code>、原生崩溃/OOM、断电、系统关机/注销、直接关闭控制台窗口（Windows 的 CTRL_CLOSE_EVENT 不进入 Python 异常语义）。唯一优雅路径是 Ctrl+C（KeyboardInterrupt）与托盘「退出」（stop_event）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 全库 save_state 调用点（递归 grep "save_state\(" over src，取证 2026-09-21 @ 239082c）
+qbmanager.py:448:     self.save_state()        # run() 的 finally —— 仅优雅退出可达
+skip_checking.py:238: manager.save_state()     # 跳检备份路径（唯一例外）
+
+# 退出路径枚举（递归 grep "atexit|import signal|SIGINT|SIGTERM|SetConsoleCtrlHandler|os.kill|TerminateProcess"）
+（零命中 —— 进程没有注册任何 OS 信号处理器）
+
+# qbmanager.py:447-451  finally 链（落盘动作所在，仅异常/停止信号沿 Python 语义展开时执行）
+finally:
+    if self.web.handle is not None:
+        self.web.handle.stop()
+    if not dry_run:
+        self.save_state()
+    if self._lock is not None:
+        self._lock.release()</code></pre>
+    <p>知识库交叉引用：memory-bank/systemPatterns.md「状态持久化」明确记载 <em>save_state(): 仅程序退出时调用（减少磁盘写入）</em> —— 属知情取舍，非疏忽。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>非优雅终止（taskkill /F / 原生崩溃 / OOM / 断电 / 关机 / 注销 / 关闭控制台窗口）；Ctrl+C 与托盘退出不受影响</td></tr>
+      <tr><td>影响范围</td><td>state.json 全部键：exec_history（execute_once/cooldown 去重）、skip_check_day（同日跳检去重）、recheck_fails（校验失败冷却）、upload_snapshots（周期上传基线）、auto_categories、reannounce_ts。state.json <strong>文件本身无损坏风险</strong>（atomic_write 保证全旧或全新）</td></tr>
+      <tr><td>严重度</td><td>高 —— 丢失量 = 整个运行期；重放有实际代价：skip_check_day 丢失 ⇒ 同日可重复跳检（PT 本地统计再丢一次）、reannounce_ts 丢失 ⇒ 可立即再 announce；其余重放多为幂等 API 重复调用（动作插件普遍先查状态再写）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/qbmanager.py:448</code>（取证 2026-09-21 13:47 @ 239082c）· QbManager.run 的 finally · grep <code>self.save_state()</code></li>
+      <li><code>src/auto_qb/mixins/rule_engine.py:59</code>（同上）· RuleEngineMixin.save_state · grep <code>def save_state</code></li>
+      <li>退出路径枚举：递归 grep <code>atexit|import signal|SIGINT|SIGTERM|SetConsoleCtrlHandler</code>（零命中）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">save_state 的调用时机被刻意收敛到「仅优雅退出」以规避写放大（知识库明示的取舍）。写本身可靠（tmp + fsync + os.replace + .bak），但「优雅退出」只覆盖 KeyboardInterrupt 与 stop_event 两条路径 —— Windows 上 CTRL_CLOSE_EVENT / 关机 / taskkill /F 不产生 Python 异常，finally 永不执行。已排除：原子写缺陷（写入半截 —— 不成立，atomic_write 可靠）；filelock 死锁残留（不成立，句柄随进程死亡由 OS 释放）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向：把丢失窗口缩小到可接受量级，不追求零丢失。</p>
+    <ul>
+      <li><strong>候选 A（推荐）</strong>：状态变更后 debounce 周期落盘（60–300s）。本项目状态真实变更频率为小时~天级，写放大代价近乎零；.bak 管线保持不变。</li>
+      <li><strong>候选 B</strong>：低频关键键（skip_check_day / recheck_fails）变更即落盘 —— 这两个键的重放代价最实在，且变更天然低频。</li>
+      <li><strong>候选 C（可选叠加）</strong>：Windows 注册 SetConsoleCtrlHandler（CTRL_CLOSE_EVENT / CTRL_SHUTDOWN_EVENT 有数秒清理窗口），落盘后退出。</li>
+      <li>验收：补守阵「模拟脏退出后重启，exec_history 保留量符合新策略」。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-21 13:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-09-21-1347-bug-backend-state-save-only-on-exit.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

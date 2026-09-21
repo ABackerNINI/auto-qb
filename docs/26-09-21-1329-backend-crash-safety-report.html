@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>后端崩溃安全性调查报告 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1112;
+    --bg-raise: #14171a;
+    --bg-code: #161a1c;
+    --fg: #e4e5e1;
+    --fg-dim: #a9ada8;
+    --fg-mute: #7d827d;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #71b3a4;
+    --hi-high: #e0564f;
+    --hi-med: #d9a13c;
+    --hi-low: #9aa09c;
+    --ok: #69b89d;
+    --sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: "Cascadia Mono", Consolas, "Sarasa Mono SC", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.7;
+    font-weight: 400;
+  }
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(113,179,164,.35); }
+  a:hover { border-bottom-color: var(--accent); }
+  code, .mono {
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--bg-code);
+    border: 1px solid var(--hairline);
+    padding: .08em .38em;
+    border-radius: 2px;
+    word-break: break-all;
+  }
+  .panmono {
+    font-family: var(--mono);
+    font-size: .86em;
+    color: var(--fg-dim);
+  }
+  p { max-width: 72ch; }
+  .rule { border: 0; border-top: 1px solid var(--hairline); margin: 0; }
+
+  /* ---------- 封面 ---------- */
+  header.cover { padding: 72px 0 40px; }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1.display {
+    font-size: 44px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    margin: 18px 0 10px;
+    max-width: 20em;
+  }
+  .cover .sub { color: var(--fg-dim); font-size: 17px; max-width: 60ch; margin: 0 0 34px; }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 44px;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    padding: 14px 0;
+    font-size: 13px;
+    color: var(--fg-dim);
+  }
+  .meta-row b { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-mute); font-weight: 600; margin-bottom: 2px; }
+  .meta-row span { font-family: var(--mono); font-size: 13px; color: var(--fg); }
+
+  /* ---------- 结论速览 ---------- */
+  .verdict { padding: 34px 0 10px; }
+  .verdict p.lede { font-size: 17px; max-width: 70ch; color: var(--fg); }
+  .verdict p.lede strong { color: var(--fg); font-weight: 600; }
+
+  /* ---------- 目录 ---------- */
+  .bodygrid { display: grid; grid-template-columns: 218px 1fr; gap: 56px; align-items: start; padding-bottom: 90px; }
+  nav.toc {
+    position: sticky;
+    top: 28px;
+    font-size: 13px;
+    border-left: 1px solid var(--hairline);
+    padding-left: 18px;
+  }
+  nav.toc .toc-head { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 12px; }
+  nav.toc a { display: block; color: var(--fg-dim); border: 0; padding: 4.5px 0; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .n { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-right: 8px; }
+
+  main section { padding-top: 10px; margin-bottom: 58px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--hairline-strong); padding-bottom: 10px; margin-bottom: 22px; }
+  .sec-head .no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .sec-head h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  h3 { font-size: 18.5px; font-weight: 600; margin: 34px 0 10px; }
+  h4 { font-size: 15.5px; font-weight: 600; margin: 24px 0 8px; color: var(--fg); }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0 8px; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--fg-mute);
+    border-bottom: 1px solid var(--hairline-strong);
+    padding: 8px 12px 8px 0;
+    white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--hairline); padding: 9px 12px 9px 0; vertical-align: top; }
+  tr:last-child td { border-bottom: 1px solid var(--hairline-strong); }
+  td .mono, td code { font-size: .88em; }
+  .tbl-note { font-size: 12.5px; color: var(--fg-mute); margin: 4px 0 0; max-width: 78ch; }
+
+  /* ---------- 等级徽标 ---------- */
+  .sev {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    border: 1px solid;
+    padding: 2px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .sev.high { color: var(--hi-high); border-color: rgba(224,86,79,.5); }
+  .sev.medhigh { color: var(--hi-med); border-color: rgba(217,161,60,.5); }
+  .sev.med { color: var(--hi-med); border-color: rgba(217,161,60,.35); }
+  .sev.low { color: var(--hi-low); border-color: rgba(154,160,156,.4); }
+  .sev.ok { color: var(--ok); border-color: rgba(105,184,157,.45); }
+
+  /* ---------- 证据块 ---------- */
+  .evidence {
+    font-family: var(--mono);
+    font-size: 12.8px;
+    line-height: 1.65;
+    background: var(--bg-code);
+    border: 1px solid var(--hairline);
+    padding: 14px 18px;
+    margin: 14px 0;
+    color: var(--fg-dim);
+    overflow-x: auto;
+  }
+  .evidence .file { color: var(--fg); }
+  .evidence .cm { color: var(--fg-mute); }
+
+  .finding { margin-bottom: 46px; }
+  .finding-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .finding-head .fid { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .finding-head h3 { margin: 0; }
+
+  ul.tight { margin: 8px 0; padding-left: 1.4em; }
+  ul.tight li { margin: 5px 0; }
+  ol.tight { margin: 8px 0; padding-left: 1.5em; }
+  ol.tight li { margin: 6px 0; }
+
+  .callout {
+    border: 1px solid var(--hairline);
+    border-left: 1px solid var(--hairline-strong);
+    background: var(--bg-raise);
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: var(--fg-dim);
+    max-width: 80ch;
+  }
+  .callout b { color: var(--fg); }
+
+  /* ---------- Colophon ---------- */
+  footer.colophon { border-top: 1px solid var(--hairline-strong); padding: 26px 0 70px; font-size: 12.5px; color: var(--fg-mute); }
+  footer.colophon .mono { font-size: 12px; }
+
+  @media (max-width: 960px) {
+    .bodygrid { grid-template-columns: 1fr; gap: 24px; }
+    nav.toc { position: static; border-left: 0; padding-left: 0; border-top: 1px solid var(--hairline); padding-top: 16px; }
+    .layout { padding: 0 22px; }
+    h1.display { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<header class="cover">
+  <div class="kicker">Technical Investigation · Crash &amp; Abrupt-Shutdown Safety</div>
+  <h1 class="display">auto-qb 后端崩溃安全性调查报告</h1>
+  <p class="sub">进程被强杀、断电、异常崩溃与优雅关闭四类终止路径下，持久化状态、单实例锁、外部副作用与自愈能力的逐文件核查。</p>
+  <div class="meta-row">
+    <div><b>日期</b><span>2026-09-21</span></div>
+    <div><b>代码基线</b><span>develop @ 239082c</span></div>
+    <div><b>调查方式</b><span>静态读码 + 全库落盘点枚举</span></div>
+    <div><b>范围</b><span>src/auto_qb 全部后端模块</span></div>
+  </div>
+</header>
+
+<div class="verdict">
+  <p class="lede"><strong>总评：架构对崩溃的「自愈面」做得很足，真正的暴露面集中在 state_file 的「仅优雅退出时落盘」策略，以及它的两个放大器。</strong>任务队列、种子快照、分组索引、校验参考全部是纯内存态且启动时从 qB 全量重建 —— 这些崩了会自己长回来。不会长回来的是 <code>state.json</code> 里那 9 类去重/冷却/基线状态：它只在优雅退出那一刻写盘，强杀、断电、关机、控制台窗口直接关闭都会丢掉整个运行期累计；而配置热重载的 L2 分支甚至不需要崩溃，一次普通的「保存设置」就会把同一批状态回滚到磁盘旧版。最尖锐的单点是跳检动作「删除 → 重加」之间约 0.5–5.5 秒的无备份窗口 —— 崩在这条缝里，种子从 qB 消失且没有任何恢复凭据。</p>
+  <p class="lede">共确认 5 项发现（2 高 / 1 中高 / 1 中 / 1 低），全部有明确代码证据与低代价修法；另核实了 10 项已经做对的防护。除 F2 是<strong>确定性触发</strong>外，其余均需要「非优雅终止 + 恰逢窗口」两个条件叠加。</p>
+</div>
+
+<hr class="rule">
+
+<div class="bodygrid">
+<nav class="toc">
+  <div class="toc-head">Contents</div>
+  <a href="#s1"><span class="n">01</span>调查范围与方法</a>
+  <a href="#s2"><span class="n">02</span>数据资产与落盘点</a>
+  <a href="#s3"><span class="n">03</span>崩溃场景推演</a>
+  <a href="#s4"><span class="n">04</span>发现 F1–F5</a>
+  <a href="#s5"><span class="n">05</span>已有防护清单</a>
+  <a href="#s6"><span class="n">06</span>修复建议与优先级</a>
+  <a href="#s7"><span class="n">07</span>测试覆盖缺口</a>
+</nav>
+
+<main>
+
+<!-- ================= 01 ================= -->
+<section id="s1">
+  <div class="sec-head"><span class="no">01</span><h2>调查范围与方法</h2></div>
+  <p>本次调查回答一个问题：<strong>auto-qb 后端进程在任意时刻被终止（无论优雅与否），会留下什么烂摊子，重启后能不能自己收拾好。</strong>核查面包括：持久化写入的时机与原子性、单实例锁的陈旧语义、对 qB 的外部副作用在中途被打断后的收敛性、信号与退出路径覆盖、以及崩溃后重启的自愈行为。</p>
+  <ul class="tight">
+    <li><strong>静态读码</strong>：全量通读核心链路 20 个文件（主循环 / 状态持久化 / 任务队列 / 数据层 / 规则框架 / 跳检与校验动作 / Web 命令层 / 配置写盘 / 托盘 / 锁 / 入口）。</li>
+    <li><strong>落盘点枚举</strong>：全库递归 grep <code>save_state</code> / <code>_load_state</code> / <code>atomic_write</code> / 直接 <code>open(..., "w")</code>，确认每一处磁盘写入的原子性与调用时机。</li>
+    <li><strong>退出路径枚举</strong>：递归 grep <code>atexit</code> / <code>signal</code> / <code>SIGTERM</code> / <code>SetConsoleCtrlHandler</code> —— <strong>结果为零</strong>，进程没有任何 OS 信号处理器。</li>
+    <li><strong>边界</strong>：未做动态故障注入（kill -9 / 断电实测）；结论基于代码语义推演 + 既有单测与知识库（systemPatterns / pitfalls）交叉验证。基线 <code>239082c</code>，落后 <code>origin/develop</code> 1 个提交（仅知识库文档改动，不影响后端代码事实）。</li>
+  </ul>
+</section>
+
+<!-- ================= 02 ================= -->
+<section id="s2">
+  <div class="sec-head"><span class="no">02</span><h2>数据资产与落盘点</h2></div>
+  <p>后端真正持久化的自有数据只有三样：<code>state.json</code>（状态）、<code>config.yml</code>（配置，含 Web UI 写回）、以及跳检失败时的 <code>skip-check-backup/*.torrent</code> 备份。其余一切（任务队列、种子快照、分组、校验参考、Web 回执）都是内存态，靠「启动首轮全量同步」从 qB 重建 —— 这是整个安全模型的根基。</p>
+
+  <h3>2.1 state.json 的键与「崩溃丢失后果」</h3>
+  <table>
+    <thead><tr><th>键</th><th>写入方</th><th>用途</th><th>崩溃丢失后的后果</th><th>方向</th></tr></thead>
+    <tbody>
+      <tr><td><code>exec_history</code></td><td class="mono">record_execution</td><td>execute_once / daily / hourly 与 cooldown 的去重依据</td><td>重启后规则对已处理种子重放（是否产生副作用取决于动作幂等性与条件所依赖的 qB 持久标记）</td><td>多数无害，见 F1</td></tr>
+      <tr><td><code>skip_check_day</code></td><td class="mono">跳检闸门</td><td>跨规则「同日只跳检一次」去重</td><td>同日可重复跳检 → 本地统计（上传量/做种时长）再丢一次</td><td>有实际代价</td></tr>
+      <tr><td><code>recheck_fails</code></td><td class="mono">full-checking</td><td>当日校验失败冷却（上限 3 次，防坏文件死循环）</td><td>坏种子当日最多再校验 3 次</td><td>轻微</td></tr>
+      <tr><td><code>upload_snapshots</code></td><td class="mono">begin_round</td><td>今日/周/月上传量基线</td><td>基线重建为当前值 → 此前上传不计入周期条件</td><td>保守（条件更难满足）</td></tr>
+      <tr><td><code>auto_categories</code></td><td class="mono">add_category</td><td>记录「分类是自动设的」，决定能否覆盖</td><td>已有分类被当作用户设置 → 不再覆盖</td><td>保守</td></tr>
+      <tr><td><code>reannounce_ts</code></td><td class="mono">reannounce 动作</td><td>同种子两次强制汇报最小间隔 600s</td><td>重启后可立即再 announce 一次</td><td>轻微（站点侧可见）</td></tr>
+      <tr><td><code>skip_check_backup</code></td><td class="mono">_backup_torrent</td><td>跳检重加失败的 .torrent 备份元数据</td><td>备份文件沦为孤儿（无元数据指引）</td><td>已即时落盘缓解</td></tr>
+      <tr><td><code>speed_limit_curve</code></td><td class="mono">曲线任务</td><td>当日曲线计算结果（调试用）</td><td>无影响（每轮重算）</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">规律：除跳检与 reannounce 外，丢失后果都落在「保守方向」—— 条件更难满足而不是更易误动作。这是动作插件普遍「先查状态再写」带来的红利。</p>
+
+  <h3>2.2 全部落盘点与原子性</h3>
+  <table>
+    <thead><tr><th>写入点</th><th>时机</th><th>原子性</th><th>评价</th></tr></thead>
+    <tbody>
+      <tr><td><code>state.json</code>（save_state）</td><td><strong>仅优雅退出</strong>（run 的 finally）＋跳检备份路径即时补写</td><td class="mono">tmp + fsync + os.replace + .bak</td><td>写入本身可靠；<strong>时机是全部问题所在</strong>（F1）</td></tr>
+      <tr><td><code>config.yml</code>（Web UI 保存）</td><td>用户保存设置</td><td>校验走临时文件 → 备份 → <code>atomic_write</code> round-trip</td><td>四步管线，后端最稳的一条写路径</td></tr>
+      <tr><td><code>skip-check-backup/&lt;hash&gt;.torrent</code></td><td>重加失败时</td><td>直接 <code>open("wb")</code></td><td>非原子但低频，损坏可重下载；时机问题见 F3</td></tr>
+      <tr><td><code>web.token</code></td><td>首次生成</td><td>直接 <code>os.open(O_TRUNC)</code></td><td>非原子（F5）</td></tr>
+      <tr><td><code>&lt;lock&gt;.meta.json</code> / <code>ui.port</code></td><td>持锁 / IPC 启动</td><td>直接写</td><td>辅助诊断文件，损坏无实害</td></tr>
+      <tr><td>日志（RotatingFileHandler）</td><td>持续</td><td>append + 标准库轮转</td><td>崩溃安全</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= 03 ================= -->
+<section id="s3">
+  <div class="sec-head"><span class="no">03</span><h2>崩溃场景推演</h2></div>
+  <p>把「任意时刻终止」拆成十类具体场景，逐类核对最终状态。关键分野：<strong>Python 在 Windows 上只有 Ctrl+C（CTRL_C_EVENT）会被转成 KeyboardInterrupt 走优雅路径</strong>；控制台窗口直接关闭（CTRL_CLOSE_EVENT）、注销、关机、<code>taskkill /F</code>、断电、原生崩溃都不经过任何 Python 异常 —— <code>finally</code> 不执行，<code>save_state</code> 不发生。</p>
+  <table>
+    <thead><tr><th>#</th><th>场景</th><th>state.json</th><th>qB 侧 / 恢复行为</th><th>残留风险</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Ctrl+C（控制台）</td><td class="mono ok">优雅落盘</td><td>finally：停 Web → save_state → 释放锁</td><td>—</td></tr>
+      <tr><td>2</td><td>托盘「退出」</td><td class="mono ok">优雅落盘</td><td>stop_event 唤醒主循环，≤0.5s 退出；<span class="mono">join(5s)</span> 超时则放弃（F6）</td><td>低</td></tr>
+      <tr><td>3</td><td><span class="mono">taskkill /F</span> / 原生崩溃 / OOM</td><td class="mono high">不落盘</td><td>重启全量重建内存态</td><td>F1：运行期去重/基线全丢</td></tr>
+      <tr><td>4</td><td>控制台窗口直接关闭 / 注销 / 关机</td><td class="mono high">不落盘</td><td>同上</td><td>F1（关机场景托盘模式同样无豁免）</td></tr>
+      <tr><td>5</td><td>断电</td><td class="mono high">不落盘</td><td>文件系统层：<code>atomic_write</code> 保证不会出现半截文件（要么旧要么新）</td><td>F1 + 可能残留孤儿 <span class="mono">*.tmp</span></td></tr>
+      <tr><td>6</td><td>运行期未捕获异常</td><td class="mono ok">优雅落盘</td><td>主循环 <code>except Exception</code> 捕获继续跑；AutoQbError 穿透 → 干净退出 + finally 落盘 + <span class="mono">notify_fatal</span></td><td>—</td></tr>
+      <tr><td>7</td><td>Web UI 保存配置</td><td class="mono medhigh">L2 重载回滚</td><td>校验 → 备份 → 原子写 → 热重载</td><td><strong>F2：确定性丢弃内存态，无需崩溃</strong></td></tr>
+      <tr><td>8</td><td>state.json 损坏（磁盘/手改/历史遗留半截）</td><td class="mono med">静默清空</td><td><code>_load_state</code> 吞掉 JSONDecodeError 返回 <code>{}</code>，无日志</td><td>F4：.bak 存在但从不用于恢复</td></tr>
+      <tr><td>9</td><td>qB 宕机 / 重启</td><td class="mono ok">不受影响</td><td>断连节流 + 指数退避重连；rid 归零强制全量自愈</td><td>—</td></tr>
+      <tr><td>10</td><td>跳检执行中途崩溃</td><td class="mono high">视窗口而定</td><td>「删除→重加」缝隙内崩溃：种子从 qB 消失、无备份、无恢复标记</td><td>F3：最尖锐单点</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= 04 ================= -->
+<section id="s4">
+  <div class="sec-head"><span class="no">04</span><h2>发现 F1–F5</h2></div>
+
+  <div class="finding">
+    <div class="finding-head"><span class="fid">F1</span><h3>状态仅优雅退出时落盘，非优雅终止丢失整个运行期状态</h3><span class="sev high">高</span></div>
+    <p><code>save_state()</code> 全库只有两个调用点：主循环 <code>finally</code>（仅优雅退出可达）与跳检备份路径。进程没有注册任何信号处理器，因此「强杀 / 断电 / 关机 / 关闭控制台窗口」这一整类终止都拿不到落盘机会 —— 丢的不是几秒增量，而是<strong>本次进程启动以来的全部</strong>去重记录、冷却计数与上传基线（02 节后果表）。</p>
+    <div class="evidence"><span class="file">src/auto_qb/qbmanager.py:447-451</span> — run() finally
+      <br><span class="cm"># finally: 停 Web → save_state → 释放锁；三个动作都只在异常/停止信号沿 Python 异常语义展开时执行</span><br>finally:<br>&nbsp;&nbsp;&nbsp;&nbsp;if self.web.handle is not None: self.web.handle.stop()<br>&nbsp;&nbsp;&nbsp;&nbsp;if not dry_run: self.save_state()<br>&nbsp;&nbsp;&nbsp;&nbsp;if self._lock is not None: self._lock.release()
+      <br><br><span class="file">全库 save_state 调用点（grep）</span><br>qbmanager.py:448&nbsp;&nbsp;·&nbsp;&nbsp;skip_checking.py:238&nbsp;&nbsp;&nbsp;<span class="cm"># 仅此两处</span>
+      <br><br><span class="file">atexit / signal / SetConsoleCtrlHandler（递归 grep）</span><br><span class="cm"># 零命中 —— 无任何 OS 级退出兜底</span></div>
+    <p><strong>重放的实际代价有多大：</strong>动作插件普遍先查状态再写（加标签先过滤已有、设限速先比对现值、启停先看状态），所以 <code>exec_history</code> 丢失引发的重放大多只是多几次幂等 API 调用。已知有真实代价的重放只有两类：<code>skip_check_day</code> 丢失 → 同日重复跳检（本地统计再丢一次）；<code>reannounce_ts</code> 丢失 → 向站点多发一次 announce。「仅退出落盘」是注释里写明的写入放大规避（<em>减少磁盘写入</em>），属于<strong>知情取舍</strong>而非疏忽 —— 但以本项目状态变更的真实频率（规则命中/跳检/校验失败，小时级到天级），周期性落盘的写放大代价几乎为零。</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><span class="fid">F2</span><h3>热重载 L2 分支重读磁盘 state，把运行期内存态整份回滚 —— 确定性触发，无需崩溃</h3><span class="sev high">高</span></div>
+    <p>L2 级配置变更（<code>rules_config</code> / <code>interval</code> / <code>delete_tags*</code> / <code>global_speed_limit_curve</code> / tracker 的 <code>domains|rules|groups</code>，且<strong>未列出的新配置项默认 L2</strong>）会重建任务队列与规则。这一分支在重建前执行了 <code>self.state = self._load_state()</code>：由于 state 平时根本不落盘，磁盘上永远是「上次退出时」的旧版本 —— 这一行等于<strong>把本次运行累计的全部状态主动丢弃</strong>，与 F1 同量级，但由一次普通的「在 Web UI 改规则并保存」确定性地触发。而 <code>state_file</code> 本身是 R 级（改动需重启进程），运行期磁盘 state 不可能因合法途径变新，这次重读没有任何正向价值。</p>
+    <div class="evidence"><span class="file">src/auto_qb/qbmanager.py:498-507</span> — apply_new_config L2 分支
+      <br>if "L2" in levels:<br>&nbsp;&nbsp;&nbsp;&nbsp;self.task_queue = TaskQueue()<br>&nbsp;&nbsp;&nbsp;&nbsp;self.store.reset_runtime()<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>self.state = self._load_state()</b>&nbsp;&nbsp;<span class="cm"># ← 磁盘旧版覆盖内存态；exec_history/skip_check_day/recheck_fails 自启动以来的增量全丢</span><br>&nbsp;&nbsp;&nbsp;&nbsp;self._load_rules()
+      <br><br><span class="file">src/auto_qb/config/impact.py:36-37</span><br><span class="cm"># 分级用表驱动: 未列出的配置项默认 L2(保守——重建保证生效)</span></div>
+    <p><strong>触发链：</strong>Web UI 保存设置 → <code>PUT /api/config</code> → <code>reload_config</code> 命令 → 主循环 <code>apply_new_config</code> → L2 分支。改一条规则的间隔就是一次 L2。</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><span class="fid">F3</span><h3>跳检「删除 → 重加」之间存在无备份崩溃窗口，重启后无任何恢复凭据</h3><span class="sev medhigh">中高</span></div>
+    <p>跳检流程是四阶段：导出 .torrent（<strong>仅进内存</strong>）→ 删除种子（保留文件）→ 轮询确认消失（10 × 0.5s）→ 以跳过校验方式重加。备份机制存在且设计得很好（落盘 + 元数据 + <strong>立即 save_state</strong>），但它只在「重加失败」的两条路径上触发 —— <strong>删除已生效、重加还没被 qB 接受</strong>的缝隙内崩溃，.torrent 字节随进程消失，种子不在 qB 里，文件还在磁盘上，重启后程序对此毫无记忆。用户只能回站点重新下载种子文件。</p>
+    <div class="evidence"><span class="file">src/auto_qb/rules/actions/skip_checking.py</span> — 关键时序
+      <br>L105-112&nbsp;&nbsp;data = ctx.api.torrents_export(...)          <span class="cm"># 字节只在内存</span>
+      <br>L160-180&nbsp;&nbsp;_skip_delete: torrents_delete → _poll_until(10 × 0.5s)  <span class="cm"># 删除已不可逆，备份尚未发生</span>
+      <br>L182-216&nbsp;&nbsp;_skip_readd: torrents_add(is_skip_checking=True)
+      <br>&nbsp;&nbsp;&nbsp;&nbsp;失败两支 → _backup_torrent(...)           <span class="cm"># 只有这两支有备份</span>
+      <br><br><span class="file">_backup_torrent L222-238</span><br>&nbsp;&nbsp;&nbsp;&nbsp;manager.save_state()&nbsp;&nbsp;<span class="cm"># 元数据立即落盘 —— 正确的模式，可惜时机晚了一步</span></div>
+    <p><strong>窗口宽度：</strong>从 <code>torrents_delete</code> 发出到 <code>torrents_add</code> 被 qB 接受约 0.5–5.5 秒（被确认轮询主导）。单次跳检崩在缝里的概率小，但跳检是周期性批量行为，长期运行下不可忽略。修复方向明确：把「失败才备份」改成「<strong>删除前就备份</strong>」，重加确认成功后再清理 —— 备份管线（含立即落盘）现成，只是挪一个调用时机。</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><span class="fid">F4</span><h3>state.json 损坏时静默清空；.bak 备份写了却从不用于恢复</h3><span class="sev med">中</span></div>
+    <p><code>_load_state</code> 对 <code>JSONDecodeError</code> 静默返回空字典，连一条 WARNING 都没有。原子写已经挡住了「写一半」这个主因（崩溃中的写入只会留下完整的旧文件），但磁盘级损坏、外部工具改写、或旧版本遗留的半截文件仍会走到这条路 —— 后果与 F1 相同（去重全丢、规则重放），却连排查线索都没有。更可惜的是 <code>atomic_write(keep_backup=True)</code> 每次都维护 <code>state.json.bak</code>（上一代内容），而<strong>全库没有任何代码读它</strong> —— 恢复凭据一直在盘上，只是没人捡。附带一个小瑕疵：崩溃若发生在 <code>mkstemp</code> 与 <code>os.replace</code> 之间，会残留 <code>state.json.*.tmp</code> 孤儿文件，启动时没有清理。</p>
+    <div class="evidence"><span class="file">src/auto_qb/mixins/rule_engine.py:49-57</span>
+      <br>def _load_state(self) -&gt; dict:<br>&nbsp;&nbsp;&nbsp;&nbsp;try:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with open(self.state_file, "r", encoding="utf-8") as f:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;data = json.load(f)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if isinstance(data, dict): return data<br>&nbsp;&nbsp;&nbsp;&nbsp;except (FileNotFoundError, <b>json.JSONDecodeError</b>):<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pass&nbsp;&nbsp;<span class="cm"># ← 静默：无日志、无 .bak 回退</span><br>&nbsp;&nbsp;&nbsp;&nbsp;return {}</div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><span class="fid">F5</span><h3>web.token 生成是非原子写</h3><span class="sev low">低</span></div>
+    <p><code>ensure_web_token</code> 用 <code>os.open(O_TRUNC)</code> 直写密钥文件。写到一半被杀会留下半截 token：空文件可自愈（下次启动重新生成），但<strong>非空半截</strong>会被当作有效密钥持久化，导致鉴权静默漂移（浏览器已存密钥失效，用户需打开 <code>web.token</code> 手工对账）。项目里已有 <code>atomic_write</code>，换成它是一行改动。其余辅助文件（锁 meta、ui.port）损坏无实害，不另立条目。</p>
+    <div class="evidence"><span class="file">src/auto_qb/web.py:73-75</span><br>fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | <b>os.O_TRUNC</b>, 0o600)<br>with os.fdopen(fd, "w", encoding="ascii") as f: f.write(token)</div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head"><span class="fid">F6</span><h3>托盘模式：优雅退出超 5 秒即放弃落盘（并入 F1 的崩溃类清单）</h3><span class="sev low">低</span></div>
+    <p>托盘模式把主循环放进 <code>daemon=True</code> 线程，退出时 <code>join(timeout=5)</code>：若主循环正卡在一次长 qB 调用或长 tick，5 秒内没能走到 <code>finally</code>，线程被放弃，本次运行状态不落盘（原子写保证文件完整性不受损，损失等同于 F1 的单次运行期丢失）。另外 Windows 注销/关机对托盘进程同样不给优雅机会 —— 与 F1 同类，单列仅作提醒。正常路径（托盘菜单退出）实测 ≤0.5s 内退出，风险很低。</p>
+    <div class="evidence"><span class="file">src/auto_qb/ui.py:466-478</span><br>self._manager_thread = threading.Thread(target=self.manager.run, ..., <b>daemon=True</b>)<br>...<br>self._manager_thread.join(<b>timeout=5</b>)</div>
+  </div>
+</section>
+
+<!-- ================= 05 ================= -->
+<section id="s5">
+  <div class="sec-head"><span class="no">05</span><h2>已有防护清单（做对了的部分）</h2></div>
+  <p>以下机制经逐条核实有效，是这套后端在崩溃面上真正的承重结构 —— 改动相关代码时不应破坏。</p>
+  <table>
+    <thead><tr><th>防护</th><th>位置</th><th>覆盖了什么</th></tr></thead>
+    <tbody>
+      <tr><td>状态原子写：同目录 tmp → fsync → <span class="mono">os.replace</span> + 上一代 .bak</td><td class="mono">utils.py:47-88</td><td>写盘途中被杀/磁盘满/序列化异常，state.json 要么全旧要么全新，杜绝半截文件</td></tr>
+      <tr><td>配置写盘四步管线：临时文件校验 → R 级回退 → 备份 → 原子 round-trip</td><td class="mono">config/writer.py</td><td>非法配置永不落盘；配置中断不损毁生产配置</td></tr>
+      <tr><td>单一写线程纪律（主循环独占队列与 state_file，全程无锁）</td><td class="mono">taskqueue.py / qbmanager.py</td><td>从结构上排除状态文件的多线程竞态写</td></tr>
+      <tr><td>单实例锁基于 filelock，句柄随进程死亡由 OS 释放</td><td class="mono">locking.py</td><td>崩溃不产生死锁残留；无 PID 强杀逻辑的边界风险</td></tr>
+      <tr><td>内存态 + 启动全量重建（任务队列/快照/分组/校验参考）</td><td class="mono">torrents/store.py</td><td>最核心的自愈面：崩溃后一切从 qB 现状长回来，不依赖本地记忆</td></tr>
+      <tr><td>增量同步自愈：未知异常 rid 归零、断连重置、端点缺失降级全量</td><td class="mono">torrents/store.py apply_sync</td><td>qB 重启/漏 tick/旧版本 qB 都退化为一次全量，不丢数据</td></tr>
+      <tr><td>断连节流 + 指数退避重连（上限 30s）；主循环异常捕获内联</td><td class="mono">qbmanager.py</td><td>qB 宕机不刷屏、不打挂主循环；单任务异常不扩散</td></tr>
+      <tr><td>条件求值出错即停整条规则链（优先于 stop 配置）</td><td class="mono">rules/base.py</td><td>判据不可信时宁可不动作 —— 故障方向保守</td></tr>
+      <tr><td>动作先查后写（标签/分类/限速/启停均幂等）</td><td class="mono">rules/actions/basic.py, transfer.py</td><td>崩溃重放的代价被压到「多几次幂等 API 调用」</td></tr>
+      <tr><td>reannounce 运行时硬限频 600s + 未配去重的启动期静态告警</td><td class="mono">transfer.py:39-56</td><td>防高频触发被 tracker 封号，独立于用户配置兜底</td></tr>
+      <tr><td>跳检闸门：部分下载禁止跳检、跨规则同日去重、删除确认后重加、重加失败备份 + 元数据立即落盘</td><td class="mono">skip_checking.py</td><td>把高危动作的失败面压缩到「删除→重加」一条缝（F3）</td></tr>
+      <tr><td>校验失败冷却（3 次/日）防坏文件 recheck 死循环；<span class="mono">upload_delta</span> 下限 0</td><td class="mono">full_checking.py / rule_engine.py</td><td>异常输入的损耗有上界；重加/客户端重启导致的负数被钳制</td></tr>
+      <tr><td><span class="mono">record_execution</span> 在动作执行<strong>之后</strong>写</td><td class="mono">rules/base.py:271-273</td><td>崩溃后重放而非永久跳过 —— 两害取其轻的正确取舍</td></tr>
+      <tr><td>致命错误退出补发系统通知（best-effort）+ 版本字段 fail-fast（缺字段宁可崩）</td><td class="mono">cli.py / qbmanager.py</td><td>静默零值比崩溃更危险的反向设计</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= 06 ================= -->
+<section id="s6">
+  <div class="sec-head"><span class="no">06</span><h2>修复建议与优先级</h2></div>
+  <table>
+    <thead><tr><th>优先级</th><th>项</th><th>改法</th><th>代价</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">P0</span></td><td>F2 热重载回滚</td><td>删除 L2 分支的 <code>self.state = self._load_state()</code>（state_file 为 R 级，运行期磁盘 state 不可能合法变新；若确需重读，先 <code>save_state()</code> 再读）</td><td>一行</td></tr>
+      <tr><td><span class="sev high">P0</span></td><td>F3 跳检备份时机</td><td>阶段 2 导出成功后即调 <code>_backup_torrent</code>（管线现成，含立即 save_state），重加确认成功后删除备份文件与元数据</td><td>小</td></tr>
+      <tr><td><span class="sev medhigh">P1</span></td><td>F1 落盘时机</td><td>状态变更后 debounce 周期落盘（如 60–300s），或对低频关键键（<code>skip_check_day</code> / <code>recheck_fails</code>）变更即落盘；可选：Windows 注册 SetConsoleCtrlHandler，给关机/关窗一个数秒的落盘窗口</td><td>小–中</td></tr>
+      <tr><td><span class="sev med">P1</span></td><td>F4 损坏恢复</td><td><code>_load_state</code> 对 JSONDecodeError 记 WARNING 并尝试 <code>state.json.bak</code> 回退；启动时清理孤儿 <code>*.tmp</code></td><td>小</td></tr>
+      <tr><td><span class="sev low">P2</span></td><td>F5 token 原子写</td><td><code>ensure_web_token</code> 改走 <code>utils.atomic_write</code></td><td>一行</td></tr>
+      <tr><td><span class="sev low">P2</span></td><td>F6 托盘退出窗口</td><td>退出链先 <code>stop_event.set()</code> 再 join，把 join 超时从 5s 提到 10s；或 join 超时后主动补一次 <code>save_state</code>（需评估跨线程写 state 的纪律冲突，倾向前者）</td><td>小</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><b>取舍提醒：</b>F1 的「仅退出落盘」是注释里写明的写入放大规避。若采纳周期落盘，建议频率以「状态真实变更频率」为准（本项目为小时–天级），不必跟随 tick；同时保留 .bak 管线不变。</div>
+</section>
+
+<!-- ================= 07 ================= -->
+<section id="s7">
+  <div class="sec-head"><span class="no">07</span><h2>测试覆盖缺口</h2></div>
+  <p>现有守阵已覆盖：原子写基础行为与空路径拒绝、<code>run</code> 退出必存状态且为合法 JSON、CLI 捕获 KeyboardInterrupt、配置 .bak 生成与「项目根不散落备份」、save_state 异常吞掉。本次发现的五个点上，以下场景<strong>没有</strong>守阵，修复时应同步补齐：</p>
+  <ul class="tight">
+    <li><strong>L2 热重载保态</strong>：热重载后断言 <code>exec_history</code> / <code>skip_check_day</code> 保留 —— 对现行为做红验必然变红，是 F2 修复的验收凭据。</li>
+    <li><strong>state 损坏恢复</strong>：写入半截 JSON 后启动，断言 WARNING + .bak 回退（F4）。</li>
+    <li><strong>跳检备份顺序</strong>：静态或行为断言「备份文件先于 <code>torrents_delete</code> 存在」（F3；真实崩溃窗口无法在单测模拟，锁顺序即可）。</li>
+    <li><strong>token 写入原子性</strong>：改走 atomic_write 后断言无 O_TRUNC 直写残留（F5，可并入静态扫描）。</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<footer class="colophon">
+  <div>调查方式：静态读码 + 全库落盘点/退出路径枚举，未做动态故障注入。代码基线 <span class="mono">develop @ 239082c</span>（2026-09-21，落后 origin/develop 1 个提交，仅知识库文档）。行号以该基线为准，后续提交可能漂移。</div>
+  <div style="margin-top:8px">关联知识库：memory-bank/systemPatterns.md（主循环与线程模型）· memory-bank/pitfalls.md（原子写引入前的历史半截文件事故）· AGENTS.md 黄金法则 1–5（幂等/保守默认/状态持久化/单一写线程）。</div>
+</footer>
+
+</div>
+</body>
+</html>
