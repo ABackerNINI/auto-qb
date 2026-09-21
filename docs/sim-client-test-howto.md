@@ -3,6 +3,11 @@
 > **给谁看**：需要跑 / 判读 / 回溯这套测试的人与 AI。
 > **做什么**：用一个**独立 HTTP 仿真服务端**冒充 qBittorrent，让**真实的 auto-qb 子进程**连上来跑，
 > 在 5000 种子规模下测**安全**与**性能**。auto-qb 源码零改动、不进 CI、手动跑。
+>
+> ⚠ **有两个数据源**（2026-09-21 起，见第 7 节）：
+> · **合成档**（`--source=synthetic`，默认）—— 造数，规模可控，是大部分场景的对照基准；
+> · **语料档**（`--source=corpus:<dir>`）—— **真机抓下来的 qB 数据离线回放**，专治合成数据的七类失真。
+> 两档的**阈值不混用**（`corpus.*` vs 裸 id），判读前先确认自己跑的是哪一档。
 > **完整计划与全部实测数字**：[plans/26-09-19-1433-sim-client-5000-plan.html](plans/26-09-19-1433-sim-client-5000-plan.html)
 > **已知缺陷与待办**：根目录 [`TODO.md`](../TODO.md)
 
@@ -11,7 +16,7 @@
 ## 1. 一句话心智模型
 
 ```
-scripts/sim_run.py  ──起──>  scripts/sim_qb.py（假 qB，回环随机端口）
+scripts/sim_run.py  ──起──>  scripts/sim_qb.py（假 qB，回环随机端口）──造数层──> 合成档 | 语料回放
                     ──拉起─>  python -m auto_qb <本次生成的 config.yml>（真进程，经 sim_autoqb.py 包装）
                     ──收尾─>  统计层 summary.json/txt  +  完整层四路流水
 ```
@@ -30,7 +35,8 @@ scripts/sim_run.py  ──起──>  scripts/sim_qb.py（假 qB，回环随机�
 | 依赖 | `uv sync`（仿真端只用标准库；子进程用项目 venv） |
 | 工作根 | 默认 `R:\auto-qb-sim`，环境变量 `AUTOQB_SIM_ROOT` 可覆盖 |
 | ⚠ R 盘 | **R 盘就是真实下载盘**。工作根必须含哨兵 `.auto-qb-sim-root`、不得是盘根目录或真实下载目录，否则**拒绝启动**（B1）。R 盘不存在时自动回退系统临时目录并记 `ROOT_FALLBACK` WARN，不硬崩。 |
-| 文件树 | 每个种子物化 1 个 4 KiB 占位文件（辅种组共享）；5000 种子约 4400 文件 / 17 MB，建树数秒 |
+| 文件树 | **合成档**：每个种子物化 1 个 4 KiB 占位文件（辅种组共享）；5000 种子约 4400 文件 / 17 MB，建树数秒。<br>**语料档：默认 `--fs-mode=mock`，一个文件都不物化**（磁盘状态由 mock 表回，见 7.2）—— 想真的物化用 `--fs-mode=real` |
+| 工作根（语料档） | 语料**保存位置只由 `--out` 决定**，与仿真工作根无关；R 盘的易失性不影响语料 |
 | 端口 | 仿真端随机端口；auto-qb 自带 WEB UI 需显式 `--web-port`（另开一个，别撞 qB 的 16585） |
 
 ---
@@ -44,7 +50,9 @@ scripts/sim_run.py  ──起──>  scripts/sim_qb.py（假 qB，回环随机�
 | `scripts/sim_qb.py` | 仿真服务端。可独立运行供人工观察（`--self-test` 跑 8 项自检） |
 | `scripts/sim_run.py` | **驱动器**：建树 → 生成配置 → 起服务 → 拉起 auto-qb → 注入场景 → 出两层日志 → 判 verdict |
 | `scripts/sim_autoqb.py` | auto-qb 子进程启动包装（装 SIGBREAK 处理器）。**必须经它启动**，否则拿不到 `state.json` |
-| `scripts/sim_baseline.py` | 一键跑 P1–P7 并固化阈值到 `plans/…baseline.json` |
+| `scripts/sim_baseline.py` | 一键跑 P1–P7 并固化阈值到 `plans/…baseline.json`；语料档用 `--corpus <dir>`（写 `corpus.*`） |
+| `scripts/qb_capture.py` | **语料抓取器**（连真机 qB，只读）。`capture` 抓语料 / `self-test` 离线自检（不连 qB） |
+| `scripts/sim_fsmock.py` | **进程内 FS mock**：拦 `os.path.exists` / `getsize` / `shutil.disk_usage`，让语料档回放**不物化任何文件**（7.2） |
 
 ### 3.2 最小示例
 
@@ -86,7 +94,12 @@ uv run python scripts/sim_run.py --scenario D5 --n 200 --duration 60 --interval 
 uv run python scripts/sim_baseline.py                     # 全量 P1–P7（约 8 分钟）
 uv run python scripts/sim_baseline.py --only P1,P3 --merge # 只跑部分并合并进已有基线
 uv run python scripts/sim_baseline.py --dry                # 只打印将执行的命令
+uv run python scripts/sim_baseline.py --corpus <语料目录> --merge   # 语料档阈值（写 corpus.*，见 7.4）
 ```
+
+> ⚠ `--source=corpus:<dir>` 时上面「安全 / 破坏性」那些**场景注入参数不生效**
+> （`--delete-*` / `--abort-*` / `--ramp` 都是合成档的造数/注入手段；语料档的变化来自录制流本身）。
+> 语料档要造破坏性场景，得先抓到含该现象的语料，或用 `--fs-mode=real` 物化后手动改磁盘。
 
 ### 3.4 关键参数
 
@@ -102,9 +115,13 @@ uv run python scripts/sim_baseline.py --dry                # 只打印将执行�
 | `--abort-after/--abort-duration` | 第 N 秒断连 / 断多久（0 = 断到结束）。恢复时会把 rid 断层，逼客户端走全量自愈 |
 | `--two-phase` / `--with-rules` | 连跑两轮 auto-qb 共用 `state_file` / 注入一条 `execute_once=once` 的规则（跨进程幂等的判据载体） |
 | `--ramp N` | 渐进灌入：每拍新增 N 个种子（0 = 首轮全量） |
-| `--baseline` / `--no-baseline` | 指定/禁用固化阈值文件 |
+| `--baseline` / `--no-baseline` | 指定/禁用固化阈值文件（语料档走 `corpus.*` 前缀，见 7.4） |
 | `--stress` | 标记压力档：漂移等只观测不判红 |
 | `--keep-last N` | 只保留最近 N 次运行目录（**默认 10，回溯前注意别被清理**） |
+| `--source=corpus:<dir>` | **切到语料档**（默认 `synthetic`）。切过去后上面 `--n` / `--beat` / `--mode` / `--seed` **全部失效**（造数参数只属合成档） |
+| `--fs-mode` / `--fs-root` | 磁盘事实来源 `mock`（默认）/ `real`，与 mock 根目录（默认 `<run>/fs`） |
+| `--command-latency-ms` / `--maindata-lag-ms` | 两层状态模型的滞后（默认 750 / 0，均为 W0 真机实测，见 7.2） |
+| `--replay-speed` / `--latency-mode` | 录播倍速（`0` = 静态回放）/ 延迟注入方式 `recorded`\|`p50`\|`p95`\|`const` |
 
 ### 3.5 产物目录
 
@@ -114,10 +131,15 @@ R:\auto-qb-sim\runs\<时间戳-场景ID>\
 ├── trace.jsonl                   # 完整层①：每个 HTTP 请求（ts / 端点 / 参数 / 响应字节）
 ├── writes.jsonl                  # 完整层②：写端点台账（ts / endpoint / params）
 ├── sim-events.jsonl              # 完整层③：仿真端注入事件（删种子 / 删文件 / 断连 / ramp）
-├── fs-before.txt / fs-after.txt  # 完整层④：文件树快照（相对路径 + 大小）
+├── fs-before.txt / fs-after.txt  # 完整层④：文件树快照（相对路径 + 大小）—— ⚠ 语料档 mock 模式下恒为空
 ├── autoqb.log                    # auto-qb 子进程输出全文（已含 traceback）
 ├── config.yml                    # 本次运行生成的配置（可直接复现）
+├── fs-state.json                 # 仅语料档：FS mock 的初始磁盘状态表（mock 启动即用，消除首轮竞态）
 └── data\                         # auto-qb 的 state.json / 锁 / web.token / 程序日志
+
+# 语料档的 summary.json 另多两个键（见 7.3）
+#   summary.replay  = 帧消费 / 时间轴 / 倍速 / 游标滞后
+#   summary.corpus  = 语料路径 / 种子数 / 组数 / fs_mode / 两个滞后
 ```
 
 ---
@@ -162,6 +184,10 @@ BASELINE S3.write_rate_per_min        value=4777.3 <= —
 | `SYNC.full_rounds` 超阈值 | rid 语义失效，退化成每轮全量（每轮多 200 ms） | 检查 rid 是否走 POST body |
 | `SYNC.drift_max_s` 超阈值 | 主循环掉拍 | 先排除是灌入期 / WEB 轮询 / 压力档（这些另记 `P2.drift_max_s` 观测） |
 | `P1.first_round_s` 超阈值 | 首轮灌入变慢 | 看 trace 里 `torrents/files` / `trackers` 的请求数与耗时 |
+| `CORPUS.group_exact` > 0 | **头号**：真值分组与 auto-qb 自己分出的组不一致（逐组逐 hash） | 先确认开了 `--web-port`；再看是不是 7.5 里那条「权威映射漏掉大站点 → 种子不参与归组」 |
+| `CORPUS.fs_state_match` > 0 | FS mock 回的三态与语料表对不上 | mock **静默失效** ⇒ D4 全绿也是假的；查 mock 有没有装上（7.5） |
+| `CORPUS.replay_stream_consumed` = 0 | 录播流没被完整消费 | 「回放提前结束却判 OK」= 空转；加大 `--duration` 或调 `--replay-speed` |
+| `CORPUS.endpoints_covered` > 0 | 语料里出现过、外壳没实现的端点 | 补 `sim_qb.IMPLEMENTED_ENDPOINTS` 之外的路由（事实来源就是那个常量） |
 
 ### 4.3 判定顺序（建议）
 
@@ -174,6 +200,9 @@ BASELINE S3.write_rate_per_min        value=4777.3 <= —
 
 它是**唯一的非空观测通道**：auto-qb 快照里到底还有几个种子，只能问 `/api/status`（读的是 `len(store.by_hash)`）。
 不开它就拿不到 `D1.snapshot_*`，那两条会退化成 BASELINE —— **D1 的判据随之空转**。
+
+**语料档下它还是头号判据的入口**：`CORPUS.group_exact` 要靠 `GET /api/state?rid=-1&view=group` 取 auto-qb
+**实际**分出的组（7.3）。不开 ⇒ 该判据只能记 BASELINE（不会假装绿）。
 
 ---
 
@@ -210,6 +239,7 @@ for l in open(r'R:\auto-qb-sim\runs\<run>\writes.jsonl',encoding='utf-8'):
 
 **B. 「误删文件」** —— `B4.fs_unexpected_removals > 0`
 1. `diff fs-before.txt fs-after.txt`，拿到缺失的相对路径；
+   ⚠ **语料档 mock 模式下这两个文件恒为空**（一个文件都没物化），此时看 `summary.fs` 与 `CORPUS.fs_state_match`；
 2. 反查这些文件属于哪些种子（路径在 `<run>/fs/` 下，目录名即 save_path）；
 3. 在 `writes.jsonl` 里找 `torrents/delete` 且 `deleteFiles=true` 的记录，比对 hashes；
 4. 若不是 `torrents/delete` 造成的，去看 `torrents/setLocation` / 缺文件扫描相关日志。
@@ -257,7 +287,10 @@ uv run python scripts/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
 3. **溯** —— 有 FAIL 才翻完整层：按 5.1 用 `sim-events.jsonl` 当时间锚点，按 5.2 选剧本。
 4. **改** —— 只改 `scripts/` 或造数逻辑；改完**重跑同一条命令**确认 verdict 翻转。
 5. **记** —— 新坑写进 `memory-bank/pitfalls.md`；新缺陷/待办写进 `TODO.md`；
-   阈值变化跑 `scripts/sim_baseline.py --merge` 重新固化。
+   阈值变化跑 `scripts/sim_baseline.py --merge` 重新固化（**语料档另跑 `--corpus <dir>`**，两套不混用）。
+
+**语料档额外一步**：跑完先看 `CORPUS.group_exact` 是不是 0 —— 它是**头号判据**，比其余判据更值得先确认。
+它绿了才说明"抓取 → 脱敏 → 回放 → auto-qb 自己归组"整条链路是忠实的。
 
 **给结论时请带上**：场景命令、`verdict`、红了的 check id 与值、产物目录路径。
 只说「测试通过了」没有意义 —— 要说清**哪些判据真的测到了东西**。
