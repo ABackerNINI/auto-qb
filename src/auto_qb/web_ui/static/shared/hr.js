@@ -71,14 +71,17 @@ window.AQB_HR = {
     },
   },
   computed: {
-    /* H&R 两档计数(只消费后端算好的组级计数, 前端不重算模板/阈值, 见 pitfalls):
-     * 达标 = 触发过 HR 且已全部满足; 未达标 = 仍有成员未满足; 无 HR 组不匹配任何档 */
+    /* H&R 两档计数(只消费后端算好的组级/成员级布尔, 前端不重算模板/阈值, 见 pitfalls):
+     * 达标 = 触发过 HR 且已全部满足; 未达标 = 仍有成员未满足; 无 HR 行不匹配任何档。
+     * ❗取数面走 `facetRows`(**单点**, 见 filters.js): 组视图按组计数、种子页按种子计数 ——
+     *   原先一律遍历 decoratedGroups ⇒ 种子页(按视图分片不回 groups)恒得 0/0(issue 见 filters.js)。 */
     hrOptions() {
       let done = 0;
       let pending = 0;
-      for (const g of this.decoratedGroups) {
-        if (!g.hr_triggered) continue;
-        if (g.hr_pending > 0) pending += 1;
+      for (const r of this.facetRows) {
+        const bucket = r.members ? this._hrBucket(r) : this._hrBucketMember(r);
+        if (!bucket) continue;
+        if (bucket === "未达标") pending += 1;
         else done += 1;
       }
       return [{ value: "达标", count: done }, { value: "未达标", count: pending }];

@@ -10,20 +10,29 @@
 window.AQB_FILTERS = {
   methods: {
     /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
-    /* 成员值 -> 选项(带计数, 按出现组数降序): 标签/分类/站点三个筛选器共用
-     * 计数口径 = "包含该值的组数"(与保存路径筛选一致), 而非成员总数 —— 筛选针对的是组。
-     */
-    _memberValueOptions(pick) {
+    /* 一行的候选值(标签/分类/站点/路径) —— 组行取**全体成员值**, 种子行取自身。
+     * 组内同一值只算一次(计数口径见 _facetOptions: 组视图 = 含该值的**组数**, 不是成员总数)。
+     * 空值(未设分类/站点)不计入选项 —— 与改造前 `_memberValueOptions` 的口径一致。 */
+    _facetPick(row, kind) {
+      const rows = row.members || [row];
+      const out = [];
+      for (const r of rows) {
+        if (kind === "tag") out.push(...(r.tags || []));
+        else if (kind === "category" && r.category) out.push(r.category);
+        else if (kind === "site" && r.site) out.push(r.site);
+        else if (kind === "path") out.push(r.save_path || "");
+      }
+      return out;
+    },
+    /* 选项(带计数, 按出现行数降序, 同数按值排序): 四个筛选器共用一份实现 */
+    _facetOptions(kind) {
       const counts = new Map();
-      for (const g of this.groups) {
+      for (const row of this.facetRows) {
         const seen = new Set();
-        for (const m of g.members) {
-          for (const v of pick(m)) {
-            if (!seen.has(v)) {
-              seen.add(v);
-              counts.set(v, (counts.get(v) || 0) + 1);
-            }
-          }
+        for (const v of this._facetPick(row, kind)) {
+          if (seen.has(v)) continue;
+          seen.add(v);
+          counts.set(v, (counts.get(v) || 0) + 1);
         }
       }
       return [...counts.entries()]
@@ -71,37 +80,49 @@ window.AQB_FILTERS = {
     },
   },
   computed: {
-    /* 保存路径筛选选项(按组数排序) —— 与标签/分类/站点同形, 供统一的 filterDefs 直接取用 */
-    pathOptions() {
-      const counts = new Map();
-      for (const g of this.decoratedGroups) counts.set(g.save_path, (counts.get(g.save_path) || 0) + 1);
-      return [...counts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
+    /* 筛选器选项的取数面(**单点**): 必须与当前视图真正在筛的那一行集合一致 ——
+     * 组视图 / 追剧视图按**组**(计数 = 含该值的组数), 种子页按**种子**(计数 = 含该值的种子数)。
+     *
+     * ❗不能一律按组算: 种子页按视图分片**不回 groups**(`VIEW_ARRAYS["torrent"] = ("torrents",)`),
+     *   而筛选弹层的选项原先只遍历 groups ⇒ 四个筛选器恒空、弹层显示"暂无数据"
+     *   (2026-09-21 用户报「种子页筛选器无数据」)。
+     * ❗也不能一律按种子算: 组视图同理不回 torrents, 且组级筛选的语义是"含该值的组"。
+     * · 追剧视图回传 groups(VIEW_ARRAYS), 明细成员就在组里 ⇒ 与组视图同源, 不必单列一支。
+     * · 种子页平铺数组还没到时回落组视图口径(首轮/旧服务端): 那时两处都是空, 不会给出错的计数。 */
+    facetRows() {
+      if (this.viewMode === "torrents" && this.torrents.length) return this.torrents;
+      return this.decoratedGroups;
     },
     filtersActive() {
       return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length || this.categoryFilter.length ||
         this.siteFilter.length || this.hrFilter.length || (this.searchQuery || "").trim());
     },
     /* 四个筛选器的定义(模板只遍历这一份, 不再手写四块相同结构)
-     * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径 = 组数
+     * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径见 facetRows
      */
     filterDefs() {
       return [
         { kind: "tag", label: "标签", icon: "i-tag", options: this.tagOptions, selected: this.tagFilter, field: "tagFilter" },
         { kind: "category", label: "分类", icon: "i-folder", options: this.categoryOptions, selected: this.categoryFilter, field: "categoryFilter" },
         { kind: "site", label: "站点", icon: "i-globe", options: this.siteOptions, selected: this.siteFilter, field: "siteFilter" },
-        // H&R 筛选(R07): 固定两档, 计数口径 = 组数(与其它筛选器一致); 分组/单种子两视图共用同一份筛选状态
+        // H&R 筛选(R07): 固定两档, 计数口径与其它筛选器同一份(见 hr.js hrOptions); 三个视图共用同一条筛选状态
         { kind: "hr", label: "H&R", icon: "i-hr", options: this.hrOptions, selected: this.hrFilter, field: "hrFilter" },
         { kind: "path", label: "路径", icon: "i-folder-open", options: this.pathOptions, selected: this.pathFilter, field: "pathFilter" },
       ];
     },
+    /* 标签/分类/站点/路径四个筛选器的选项 —— 一律走 _facetOptions(单点), 不各自遍历集合:
+     * 分头遍历正是"种子页筛选器无数据"的成因(见 facetRows)。 */
     tagOptions() {
-      return this._memberValueOptions((m) => m.tags || []);
+      return this._facetOptions("tag");
     },
     categoryOptions() {
-      return this._memberValueOptions((m) => (m.category ? [m.category] : []));
+      return this._facetOptions("category");
     },
     siteOptions() {
-      return this._memberValueOptions((m) => (m.site ? [m.site] : []));
+      return this._facetOptions("site");
+    },
+    pathOptions() {
+      return this._facetOptions("path");
     },
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)

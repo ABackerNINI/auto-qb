@@ -751,6 +751,71 @@ def _scan_pending_settle(text, rel, problems):
             problems.append(f"{rel} 残留已删机制 {dead} —— 真值已改由 truth 事件推送, 它只会拖慢撤下")
 
 
+def _computed_body(text, name):
+    """取 computed 成员 `<name>() { ... }` 的函数体(按缩进配平到同缩进或更浅的 `},`/`}`)
+
+    只做"这段实现里有没有出现某个调用"这类**存在性**判定(见 _scan_filter_facets),
+    故不需要真解析: 从定义行开始收集, 遇到缩进不大于定义行的 `}` 即停。
+    """
+    m = re.search(rf"^\s*{name}\(\)\s*\{{", text, re.M)
+    if not m:
+        return None
+    indent = len(m.group(0)) - len(m.group(0).lstrip())
+    out = []
+    for line in text[m.end():].splitlines():
+        if line.strip() in ("}", "},") and len(line) - len(line.lstrip()) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def _strip_js_comments(text):
+    """去掉 JS 的块注释与行注释 —— 供**存在性**守阵使用, 避免被注释骗过
+
+    ❗这是本项目踩过的坑(memory-bank/testing.md 列偏好守阵那条): 只查"字符串出现了没有",
+    注释里正写着那个名字 ⇒ 真被注释掉的代码照样判过。故存在性判定一律先剥注释。
+    行注释只认"前面不是冒号"的 `//`(避开 `https://` 这类字面量), 不做完整词法分析 ——
+    本函数只服务"某标识符在这段实现里有没有被调用", 不需要精确到字符串内部。
+    """
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    out = []
+    for line in text.splitlines():
+        m = re.search(r"(?<!:)//", line)
+        out.append(line[:m.start()] if m else line)
+    return "\n".join(out)
+
+
+def _scan_filter_facets(text, rel, problems):
+    """筛选器选项"取数面"守阵(2026-09-21, 用户报「种子页筛选器无数据」)
+
+    选项必须走**单点取数面** `facetRows`(filters.js): 组视图/追剧视图按组(计数=含该值的组数),
+    种子页按种子(计数=含该值的种子数)。四个筛选器(标签/分类/站点/路径)原先各自遍历 `groups`
+    计算, 而种子页按视图分片**不回 groups**(`VIEW_ARRAYS["torrent"] = ("torrents",)`) ⇒
+    四个弹层恒空、只剩"暂无数据"(H&R 是固定两档, 表现为 0/0 —— 更隐蔽)。
+    这类"跨视图的常驻消费者去依赖按视图裁剪的阵列"本项目**已犯三次**:
+    状态栏速度(issue 26-09-20-1646) / 追剧页成员索引(BUG-8) / 本次筛选器,
+    故机械钉住: 每个选项 computed 必须出现单点调用, 且按组算的旧实现不得复活。
+    """
+    text = _strip_js_comments(text)  # 注释里出现这些名字不算数(见 _strip_js_comments)
+    if not re.search(r"^\s*facetRows\(\)\s*\{", text, re.M):
+        problems.append(f"{rel} 找不到 facetRows() —— 筛选器选项的取数面单点(见 filters.js 注释)")
+    for name in ("tagOptions", "categoryOptions", "siteOptions", "pathOptions"):
+        body = _computed_body(text, name)
+        if body is None:
+            problems.append(f"{rel} 找不到 computed.{name}(改名前请同步本守阵)")
+        elif "_facetOptions(" not in body:
+            problems.append(
+                f"{rel} computed.{name} 没走 _facetOptions 单点 —— 各自遍历集合会在种子页"
+                "(按视图分片不回 groups)算出空选项, 弹层只剩\"暂无数据\""
+            )
+    body = _computed_body(text, "hrOptions")
+    if body is not None and "facetRows" not in body:
+        problems.append(f"{rel} computed.hrOptions 没走 facetRows 单点 —— 种子页不回 groups ⇒ H&R 两档恒 0/0")
+    if "_memberValueOptions" in text:
+        problems.append(f"{rel} 残留 _memberValueOptions —— 选项一律走 facetRows/_facetOptions 单点"
+                        "(按组算的第二条口径正是本次故障的成因)")
+
+
 def _scan_frontend_assets():
     """扫描 web_ui/static 返回问题清单(空 = 健康)
 
@@ -771,8 +836,10 @@ def _scan_frontend_assets():
        3s 常量兜底(真机连报三次的那条), 或判定恒真导致失败路径留假状态(红线)。
     10. 拆分接线: 片段文件必须被 HTML 引用 + 被 app.js `app.mixin()` 注入, 且成员不得重名
        (见 _scan_mixin_wiring) —— 漏挂/漏注入 = 整块功能静默消失, 重名 = 被覆盖者永不执行。
+    11. 筛选器选项必须走 `facetRows` 单点取数面(见 _scan_filter_facets) —— 各自遍历 `groups`
+       会在种子页(按视图分片不回数组)算出空选项, 弹层只剩"暂无数据"。
 
-    ⚠ 7/8/9 三项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
+    ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测)。
     """
     problems = []
@@ -814,6 +881,7 @@ def _scan_frontend_assets():
     _scan_episode_member_hashes(bundle_text, rel, problems)
     _scan_state_rank(bundle_text, rel, problems)
     _scan_pending_settle(bundle_text, rel, problems)
+    _scan_filter_facets(bundle_text, rel, problems)
     _scan_mixin_wiring(problems)
     return problems
 

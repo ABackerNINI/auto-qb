@@ -208,18 +208,35 @@ window.AQB_COMMANDS = {
       if (w) w(rec);
     },
     /* D2: 真值事件 —— 服务端确认"命令已生效"后推来(见 WebUIRuntime.flush_truths)。
-     * 到这里才算真正收工: 把真值落到行上, 并结束值覆盖。
-     * ❗服务端**只在真值已落地时才推**(未落地宁可不推), 所以这里可以放心采纳真值 ——
-     *   "不采纳命令前的旧值"这条红线由服务端保证, 前端不必再自己判。 */
+     * 到这里把真值落到行上, 但**不结束值覆盖** —— 覆盖的终点是"服务端**快照**同意"
+     * (_optimisticSettled) 或 hold 超时兜底, 不是"真值到达"。
+     *
+     * ❗为什么不能在这里 `delete pendingOps[h]`(2026-09-21 用户报「整组暂停后 灰→绿→灰」):
+     *   真值走 `torrents/info` **直查**, 比我们自己的 `/sync/maindata` **快照**新 —— 快照要等主循环
+     *   下一次 sync(≤ sync_interval = 1.5s)才带上同一个状态。此刻把覆盖撤掉, 这 1.5s 内任何一次
+     *   **视图发布**(任何种子任何字段变化都会让 rid 前进、整表重发)都会带着"命令前"的 kind 覆盖行
+     *   对象 ⇒ 行被打回命令前的颜色(整组暂停闪回做种绿), 直到快照追上才再变灰。
+     *   覆盖留着, 那一轮只会被 reapplyPending 用真值重新贴回去(观感: 一直是灰的)。
+     * ❗真值**同时改 patch 与 prev**: patch 的值 = 已落地的真值(resume 的"落地态 6 种 vs 预测 2 种"
+     *   由此收敛, 不再依赖"预测 == 真值"这种严格相等), prev 的值 = **最后已知真值** ——
+     *   兜底回滚必须回这里: 回命令前的旧值等于把一个已暂停的种子显示成做种中。
+     */
     onTruthEvent(rec) {
       const truth = rec && rec.truth;
       if (!truth) return;
+      const now = Date.now();
       for (const h of Object.keys(truth)) {
         const t = truth[h];
         if (!t || !t.kind) continue;
-        // 真值直接落到行上(不等下一轮 refresh), 然后结束该种子的值覆盖
+        const op = this.pendingOps[h];
+        if (op) {
+          op.patch = { ...op.patch, kind: t.kind };
+          op.prev = { ...op.prev, kind: t.kind };
+          op.hold = true;   // 覆盖保持到"快照同意"(见上; 压暗早已由回执结束)
+          op.ts = now;      // 兜底期限从真值落地起算(D2: 压暗已结束, 晚释放没有观感代价)
+        }
+        // 真值直接落到行上(不等下一轮 refresh)
         this._forEachRow(h, (row) => { row.kind = t.kind; });
-        delete this.pendingOps[h];
       }
       if (this.cmdStats) this.cmdStats.settleVia = "push";
       this._markCmdSettle();

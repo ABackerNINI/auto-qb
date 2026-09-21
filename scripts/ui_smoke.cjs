@@ -253,6 +253,42 @@ async function smokeUi(browser, ui) {
       `totalDl=${sbDl} / status.totals.dlspeed=${wantDl} / DOM="${sbText}"`
     );
     /*
+     * 种子页筛选器必须有数据(2026-09-21 用户报「种子页筛选器无数据」):
+     * 筛选弹层的选项原先一律遍历 `groups` 计算, 而种子页按视图分片**不回 groups**
+     * (`VIEW_ARRAYS["torrent"]` 只有 torrents) ⇒ 标签/分类/站点/路径四个恒空, 弹层只剩
+     * "暂无数据"(H&R 是固定两档, 会显示成 0/0)。与状态栏速度(上一条)同一类成因:
+     * 跨视图的消费者去依赖按视图裁剪的阵列。
+     * 判据两层, 缺一不可: ①选项非空 + 弹层 DOM 真渲染出项 ②计数 = **种子数**(该视图的行口径)。
+     * 只判非空会放过"仍按组算"的错误口径 —— 先开过辅种页再切过来时 groups 还在, 按组也能算出非零。
+     */
+    {
+      const f = await page.evaluate(`(() => {
+        const vm = ${INST};
+        const tag = vm.tagOptions[0];
+        return {
+          groups: vm.groups.length, torrents: vm.torrents.length,
+          empty: vm.filterDefs.filter((x) => !x.options.length).map((x) => x.kind).join(","),
+          first: tag ? tag.value : null,
+          count: tag ? tag.count : -1,
+          truth: tag ? vm.torrents.filter((r) => (r.tags || []).includes(tag.value)).length : -1,
+        };
+      })()`);
+      const btns = await page.$$(".filter-btn");
+      await btns[0].click();  // 标签筛选弹层: 用户看到"暂无数据"的地方
+      await page.waitForTimeout(300);
+      const dom = await page.evaluate(`(() => ({
+        items: document.querySelectorAll(".pop-menu .pop-item").length,
+        empty: !!document.querySelector(".pop-menu .pop-empty"),
+      }))()`);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(150);
+      add(ui, "种子页筛选器有数据(计数=种子数)",
+        f.empty === "" && f.count === f.truth && dom.items > 0 && !dom.empty,
+        `取数面 groups=${f.groups}/torrents=${f.torrents} 空筛选器=[${f.empty}] ` +
+        `首个标签 ${f.first}=${f.count}(实际 ${f.truth}) 弹层项=${dom.items} 空提示=${dom.empty}`);
+    }
+
+    /*
      * 轮询分档(P1 之后的收尾一步): 间隔必须**按种子量**落在实测档位上 ——
      *   ≤1000 → 1.5s | 1000~3000 → 2s | >3000 → 3s
      * 档位来自实测单轮 refresh 耗时(1000:143ms / 3000:309ms / 5000:~400ms),
@@ -694,6 +730,53 @@ async function smokeUi(browser, ui) {
         }
         await page.waitForTimeout(600);  // 真值对齐后 pending 早清了, 留一点余量即可
       }
+    }
+
+    /*
+     * 「真值到达」≠「值覆盖结束」(2026-09-21 用户报「整组暂停后 灰→绿→灰」):
+     * 真值走 `torrents/info` **直查**, 比我们自己的 `/sync/maindata` **快照**新 —— 快照要等主循环
+     * 下一次 sync(≤ sync_interval = 1.5s)才带上同一个状态。若真值事件一到这里就把 pendingOps 删掉,
+     * 这 1.5s 内任何一次**视图发布**(任何种子任何字段变化都会让 rid 前进、整表重发)都会带着
+     * **命令前**的 kind 覆盖行对象 ⇒ 行被打回命令前的颜色(暂停组闪回做种绿), 快照追上再变灰。
+     * 判据: 造一次"陈旧快照"(成员 kind 改回命令前)喂给 refresh 的同一套内部调用 ——
+     * 行色**必须不变**、覆盖**必须还在**; 随后"快照同意"的那一版必须收工(覆盖不能永久挂着,
+     * 那是另一个 bug: 假状态永不消退)。刻意直调 vm.applyOptimistic/resolveOptimistic/onTruthEvent
+     * (不经右键菜单): 本条测的是"时序", 菜单与点击时序已在上面 P0-3 块里覆盖过。
+     */
+    {
+      const t = await page.evaluate(`(() => {
+        const vm = ${INST};
+        // 挑一个"成员状态一致且非暂停"的组(前面几块已暂停过大量行)
+        const g = vm.decoratedGroups.find((x) => x.members.length && x.members.every((m) => m.kind !== "paused"));
+        if (!g) return { err: "找不到可暂停的组" };
+        const hashes = g.members.map((m) => m.hash);
+        const key = g.key;
+        const before = vm.decoratedGroups.find((x) => x.key === key).status.primary;
+        vm.applyOptimistic(hashes, "pause");
+        const afterPatch = vm.decoratedGroups.find((x) => x.key === key).status.primary;
+        vm.resolveOptimistic(hashes, true);   // 回执到达(结束压暗, 转入值覆盖)
+        const truth = {};
+        for (const h of hashes) truth[h] = { kind: "paused" };
+        vm.onTruthEvent({ cmd_id: "smoke", truth });   // 真值事件(服务端直查)
+        const held = Object.keys(vm.pendingOps || {}).length;
+        // 陈旧快照: 服务端这一版仍是命令前的 kind, 且 rid 前进(真机窗口最多 1.5s)
+        for (const gg of vm.groups) for (const m of gg.members) if (hashes.includes(m.hash)) m.kind = before;
+        vm._snapshotTruth({ groups: vm.groups, singles: [], torrents: [] });   // refresh() 的同一顺序
+        vm.reapplyPending();
+        const afterStale = vm.decoratedGroups.find((x) => x.key === key).status.primary;
+        // 快照追上: 这一版真的带上了 paused -> 覆盖必须收工(不留假状态)
+        for (const gg of vm.groups) for (const m of gg.members) if (hashes.includes(m.hash)) m.kind = "paused";
+        vm._snapshotTruth({ groups: vm.groups, singles: [], torrents: [] });
+        vm.reapplyPending();
+        const released = Object.keys(vm.pendingOps || {}).length;
+        // 复原: 本条没真发命令, 前后端都没变, 行上的补丁要撤干净(免污染后续断言)
+        for (const h of hashes) { vm._forEachRow(h, (r) => { r.kind = before; }); delete vm.pendingOps[h]; }
+        return { key, before, afterPatch, held, afterStale, released };
+      })()`);
+      add(ui, "真值事件后不被陈旧快照打回(值覆盖保持到快照同意)",
+        !t.err && t.afterPatch === "paused" && t.afterStale === "paused" && t.held > 0 && t.released === 0,
+        t.err || `${t.before} →补丁 ${t.afterPatch} →陈旧快照 ${t.afterStale} →快照同意后释放 ${t.released} ` +
+        `(覆盖保持=${t.held} 条)`);
     }
 
     /*
