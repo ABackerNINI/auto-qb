@@ -15,7 +15,7 @@
 - **改完先留在工作区, 不自行提交**： AI 完成代码/文档改动后留在工作区由用户逐项审核; 用户说"提交"后才提交 —— 届时按 `AGENTS.md` 一次走完 (commit + 推 Gitee + 尝试 GitHub)。AI 不主动 `git commit` / `git push` 这一点不变, 变的是"提交"这两个字**包含**推送。
 - **列计划时务必不要修改文件**： 用户在"先列计划/先给方案"阶段, AI 只输出方案文本(可含代码片段作为示例), **不修改任何工作区文件**, 必须等用户明确"实施/开始/按计划做"等指令才动文件。
 - **更新代码/文档后同步更新知识库**： 每次功能新增/行为变更/重构完成后, 在同一次工作中同步更新 `memory-bank/` 知识库对应条目 (模块表 modules / 架构 systemPatterns / 规则系统 rule-system / 配置参考 config-reference / 陷阱 pitfalls / 路线图 progress / 测试基线 testing 与 README 速览), 不等用户单独提醒。
-- **git 提交信息需规范详细**： 提交信息需完整描述改动内容与原因 (做什么 + 为什么/影响), 不用模糊短语 (如仅"修复"/"更新"); 多个逻辑改动拆分为独立提交, 每个提交自包含可回溯。
+- **git 提交信息需规范详细**： 提交信息需完整描述改动内容与原因 (做什么 + 为什么/影响), 不用模糊短语 (如仅"修复"/"更新"); 多个逻辑改动拆分为独立提交, 每个提交自包含可回溯。**2026-09-22 起首行带一个 gitmoji 标意图** (格式见 `AGENTS.md`「提交 / PR」, emoji 全表见 `gitmoji skill` 的 `references/gitmoji-reference.md`)。
 - **`skills/` 与 `instructions/` 是通用资产, 除显式指定外一律不改** (2026-09-20 用户指定):
   - **范围**: `.agents/skills/`(项目级技能事实源, 由 `scripts/sync_agent_skills.py` junction 到 `.codebuddy/skills` 供 IDE 扫描)、`.codebuddy/skills/`(链接层, 改了会被脚本覆盖)、`.github/instructions/`(Copilot 通用指令)、`.github/agents/`(子 agent 定义), 以及用户级 `~/.workbuddy-ai/skills/`。
   - **理由**: 这些是**跨项目复用**的通用技能/指令。往里写本仓库专属的事实(主线远端名、分支名、某个文件的字符上限、"该去读哪个配置文件")会让它们失真, 换个仓库就不可用。
@@ -165,7 +165,7 @@
 - **开工前先同步分支 (2026-09-19 用户指定)**: 会话第一步必为 `git pull --rebase <远端> develop` (**分支名必须写**, 只给远端名会只 fetch 不合并), `git status -sb` 确认不落后才动手; **禁止在落后的分支上改代码**; 拉取前先把工作区弄干净 (脏工作区 + rebase 触发 stash 会损坏对象库)。细则见 `AGENTS.md`「会话协议 · 开始」与「提交 / PR」—— 该规则共有 4 处入口 (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), **改规则必须一次改全**, 本文件只留指针不复述。
 - **push 口径单点定义在 `AGENTS.md`「提交 / PR」** (2026-09-19 起: "提交" = commit + 推送)。本文件不复述, 免得第三次漂移。
 - 分支: `develop` 开发 (协作主线, 统一以 Gitee 的 `develop` 为准), `master` 主干。
-- 提交信息: **格式单点定义在 `AGENTS.md`「提交 / PR」**(中文, 首行概述 + 空行 + 详细描述); 本文件不复述。
+- 提交信息: **格式单点定义在 `AGENTS.md`「提交 / PR」**(2026-09-22 起为 **gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>` + 空行 + 详细描述); 本文件不复述。选 emoji 走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md)。
 - 格式化可单独成提交 ("格式化代码"/"格式化测试代码")。
 - 用户未要求时不主动 commit; 要求"提交"时按 `AGENTS.md` 一次走完 (含推送)。
 

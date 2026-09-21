@@ -63,6 +63,7 @@ yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: fa
 | **撞见计划外问题: 该不该现在修** | [scope-guard skill](.agents/skills/scope-guard/SKILL.md) |
 | **建 issue 报告 / 改 issue 状态** | [create-issue skill](.agents/skills/create-issue/SKILL.md) + [issues/_index.md](memory-bank/issues/_index.md) |
 | **提交 / 推送 (commit + push)** | [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md) |
+| **写提交信息 / 选 emoji** | [gitmoji skill](.agents/skills/gitmoji/SKILL.md) (75 个 emoji 全表: `references/gitmoji-reference.md`) |
 | 改代码前必读 (风险点/陷阱) | [memory-bank/pitfalls.md](memory-bank/pitfalls.md) |
 | XX 做了吗 / 计划怎么做 | [memory-bank/progress.md](memory-bank/progress.md) |
 | 跨会话任务档案 | [memory-bank/tasks/_index.md](memory-bank/tasks/_index.md) |
@@ -92,5 +93,5 @@ yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: fa
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令, "继续 / 接着做 / ok / 你看着办"一律不算** —— 没等到就只 commit 不 push (或先问)。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。
 - **推送顺序固定**: 先推 Gitee (必须成功) → 核远端 ref == 本地 → 再**尝试一次** GitHub 直连; 失败**只如实报告一次**, 不重试 / 不换代理 / 不改走 SSH / 不回滚改写 Gitee 已完成的推送。
-- **提交信息**: 中文, **一句话概述 + 详细描述** —— 首行说清"改了什么 / 为什么", 空一行后写动机 / 取舍 / 影响面 / 实测数字; 小改只写首行。**数字必须是提交那一刻实测的**。
+- **提交信息 = gitmoji + 中文** (2026-09-22 改口径): 首行 `<gitmoji> <中文一句话概述>` —— 一个 emoji 标意图, 紧跟**中文**概述说清"改了什么 / 为什么"; 空一行后写动机 / 取舍 / 影响面 / 实测数字; 小改只写首行。**数字必须是提交那一刻实测的**。**一个提交只用一个 emoji**, 选哪个走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md) (具体优先于笼统: 小修 🩹 而非 🐛、改错别字 ✏️、移动文件 🚚)。
 - **红线与闸门清单外置在 `.commit-flow.toml`** (skill 强制读取, 缺了就停手引导生成; 本节不列清单)。
