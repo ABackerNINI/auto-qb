@@ -344,3 +344,11 @@
   本就是深色、未动。`resources/`（设计观摩稿 + 设置页候选稿）按用户裁定**不在本次范围** —— 那批的
   白底极简（kenya-hara / pentagram / muller-brockmann）是设计本体，转深会毁掉参考价值。
   单测 **1059 passed**。
+
+- **提交信息改 gitmoji + 中文口径（已实施，2026-09-22）**: 来源 `github/awesome-copilot` 的 `skills/gitmoji/`
+  （MIT），落地 `.agents/skills/gitmoji/`（`SKILL.md` + `references/gitmoji-reference.md`，官方 75 个 emoji 全表，
+  与上游逐字一致，仅多 `user-invocable: true` 一行对齐本仓库写法）。口径单点定义在 `AGENTS.md`「提交 / PR」：
+  首行 `<gitmoji> <中文一句话概述>`，空一行后写动机 / 取舍 / 影响面 / 实测数字，**一个提交只用一个 emoji**
+  （具体优先于笼统：小修 🩹 而非 🐛）；路由表新增「写提交信息 / 选 emoji」行；`conventions.md` 两处同步为指针。
+  **未动 `.agents/skills/my-commit-flow/`** —— 通用资产不写项目事实，其 S4 与 gitmoji 前缀兼容。
+  闸门实测 `check_context_caps.py` → AGENTS.md 7112/8000（余量 888）。提交 `f093d22`，Gitee 与 GitHub 均推成功。
