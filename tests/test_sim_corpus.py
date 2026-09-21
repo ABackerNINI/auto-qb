@@ -6,6 +6,7 @@
 ## 测试计划(每个测试函数一条)
 - test_fsmock_intercepts_corpus_paths: 语料树内的路径走表(三态), 树外原样委托真函数
 - test_fsmock_long_path_prefix_and_case: 剥 \\\\?\\ 前缀 + 大小写不敏感(NTFS 语义) —— 不这么做会把存在的文件报成缺失
+- test_fsmock_case_folding_does_not_follow_platform: **防回潮** —— 折叠必须固定走 NTFS 语义, 不得跟随 `os.path`(运行时把 os 换成 posixpath 判, 不靠文本扫描)
 - test_fsmock_unknown_path_in_scope_is_missing: 命中语料树但表里没有 -> 报"不存在"并计数(暴露探测不完整, 不伪装成真缺失)
 - test_fsmock_disk_usage_uses_recorded_free_space: shutil.disk_usage 回录制到的可用空间(不是回放机的)
 - test_fs_mock_coverage_static_guard: **静态守阵** —— 语料相关的 FS 探测点必须仍是被 mock 覆盖的那三个函数
@@ -23,8 +24,10 @@ import gzip
 import importlib.util
 import json
 import os
+import posixpath
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -81,6 +84,27 @@ def test_fsmock_long_path_prefix_and_case():
     assert m.exists(r"\\?\X:\corpus-fs\d0\A\Movie.MKV") is True, "必须剥 \\\\?\\ 前缀"
     assert m.exists(r"x:\CORPUS-FS\d0\a\movie.mkv") is True, "必须大小写不敏感"
     assert m.exists(r"X:/corpus-fs/d0/a/movie.mkv") is True, "分隔符必须归一"
+
+
+def test_fsmock_case_folding_does_not_follow_platform(monkeypatch):
+    """大小写折叠必须**固定走 NTFS 语义**, 不能跟随运行平台(2026-09-22 Linux CI 红了这条)。
+
+    ❗为什么不用文本扫描当判据: `os.path.normcase` 这串字**就写在 `_key()` 的 docstring 里**
+    (作为反例警告), 文本扫描会被注释骗过 —— 冒烟里 `_scan_filter_facets` 先剥注释就是同一个坑。
+    故改为**运行时判定**: 把模块里的 `os` 换成 `path=posixpath` 的替身。折叠若真跟随 `os.path`,
+    结果立刻退化成大小写敏感 ⇒ 红; 走 `ntpath.normcase` 则不受影响 ⇒ 绿。
+    这一换**精确等价**于"旧代码跑在 Linux"(Linux 下 `os.path is posixpath`), 所以本机就能
+    抓住只在 CI 上现形的失败, 不必等推上去。
+    """
+    s = r"x:\CORPUS-FS\d0\a\movie.mkv"
+    want = s.replace("/", "\\").lower()  # 纯字符串的 NTFS 折叠(与平台无关的期望式)
+    assert fsmock._key(s) == want, f"_key 必须做大小写折叠: {fsmock._key(s)!r} != {want!r}"
+
+    monkeypatch.setattr(fsmock, "os", types.SimpleNamespace(path=posixpath))
+    assert fsmock._key(s) == want, (
+        "大小写折叠跟随了 os.path —— 在 Linux(os.path is posixpath, "
+        "normcase 是恒等函数)上会退化成大小写敏感 ⇒ D4 判据全假"
+    )
 
 
 def test_fsmock_unknown_path_in_scope_is_missing():

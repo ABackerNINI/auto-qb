@@ -6,7 +6,17 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1142 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1143 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1142 → 1143(**+1**; 2026-09-22 GitHub CI 红了 `test_fsmock_long_path_prefix_and_case`
+#     —— `scripts/sim_fsmock.py::_key` 用 `os.path.normcase` 做大小写折叠, 而它在 Linux 是
+#     **`posixpath.normcase`(恒等函数)** ⇒ 折叠静默失效 ⇒ 把存在的文件报成缺失 ⇒ D4 判据全假。
+#     该 mock 模拟的是 **NTFS 语义**(语料抓自 Windows 真机) ⇒ 归一必须**固定**, 改显式 `ntpath.normcase`。
+#     新增防回潮守阵 `test_fsmock_case_folding_does_not_follow_platform`(+1): **运行时**把模块里的
+#     `os` 换成 `path=posixpath` 再判结果 —— 这一换精确等价于"旧代码跑在 Linux", 于是**本机就能**
+#     抓住只在 CI 现形的失败。❗刻意**不用文本扫描**: `os.path.normcase` 这串字就写在 `_key` 的
+#     docstring 里当反例, 扫描会被注释骗过(与冒烟 `_scan_filter_facets` 先剥注释同一个坑)。
+#     红绿双验: 还原成 `os.path.normcase` ⇒ 本机(Windows)上该守阵**立刻红**, 而既有的
+#     `test_fsmock_long_path_prefix_and_case` 仍然绿 —— 后者正是"只在 Linux 现形"的原因)。
 #   ↑ 1142 → 1142(**不变**; 2026-09-21 二次: 种子页筛选器取数面 + 真值覆盖时序修复只**加断言**,
 #     未新增用例 —— `test_frontend_static_bundle_health` 内新增扫描器 `_scan_filter_facets`
 #     (筛选器选项必须走 `facetRows`/`_facetOptions` 单点; 旧按组实现 `_memberValueOptions` 复活即红),

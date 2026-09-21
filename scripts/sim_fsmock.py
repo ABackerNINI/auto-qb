@@ -30,6 +30,7 @@ auto-qb 碰磁盘的入口收敛在 4 个调用点, 全部经 `os.path.*` / `shu
 from __future__ import annotations
 
 import json
+import ntpath  # ❗见 _key(): 归一必须固定走 NTFS 语义, 不能用平台相关的 os.path.normcase
 import os
 import shutil
 import threading
@@ -51,10 +52,16 @@ MockCoverage = {
 
 
 def _key(p: str) -> str:
-    """路径归一成查表用的 key: 剥 `\\\\?\\` 前缀 + 反斜杠转正斜杠 + normcase
+    """路径归一成查表用的 key: 剥 `\\\\?\\` 前缀 + 反斜杠归一 + **NTFS** 大小写折叠
 
-    不做 realpath/abspath —— mock 表是按语料里的 save_path 拼出来的, 走 realpath 会因
-    本机不存在该盘符而产出意外结果(而且这里要的正是"按字符串查表", 不是"问操作系统")。
+    ❶ ❗**必须用 `ntpath.normcase`, 不能用 `os.path.normcase`**(2026-09-22 Linux CI 红了这条):
+      `os.path` 在 Windows 是 `ntpath`、在 Linux 是 `posixpath`, 而 **`posixpath.normcase` 是恒等函数**
+      (POSIX 路径本来区分大小写) ⇒ 同一份代码在 Linux 上退化成**大小写敏感**匹配 ⇒
+      把存在的文件报成缺失 ⇒ D4 判据全假(最坏的一种失败: 判据绿得发亮却什么都没测到)。
+      本 mock 模拟的是 **NTFS 语义**(语料抓自 Windows 真机), 归一规则必须**固定**, 不能跟随
+      运行平台 —— 故显式用 `ntpath`(纯字符串模块, 两平台都能 import 且语义一致)。
+    ❷ 不做 realpath/abspath —— mock 表是按语料里的 save_path 拼出来的, 走 realpath 会因
+      本机不存在该盘符而产出意外结果(而且这里要的正是"按字符串查表", 不是"问操作系统")。
     """
     if not p:
         return p
@@ -63,7 +70,7 @@ def _key(p: str) -> str:
         s = s[4:]
     elif s.startswith("\\\\?\\UNC\\"):
         s = "\\\\" + s[8:]
-    return os.path.normcase(s.replace("/", "\\"))
+    return ntpath.normcase(s.replace("/", "\\"))
 
 
 class FsMock:

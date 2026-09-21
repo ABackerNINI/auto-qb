@@ -15,7 +15,15 @@
   **断言量错了对象**, 不是代码回归: 旧断言拿 DOM `.is-pending` 去卡"≥80ms 才证明等了真值",
   而 D2 之后压暗由**回执**结束 ⇒ 17~21ms, 必然撞下界。已拆成两条各量各的对象 ——
   值覆盖量 `pendingOps` 归零(80~1000ms)、压暗量 DOM(<250ms, 400 会让"压暗不结束"擦线过关),
-  两条均过红绿双验。详见 [testing.md](testing.md)「浏览器冒烟」。
+  两条均过红绿双验。详见 [testing.md](testing.md)「浏览器冒烟」。**已入库 `870df04`**(Gitee + GitHub 均推上)。
+  🆕 **2026-09-22 其二: GitHub CI 红了 `test_fsmock_long_path_prefix_and_case`(未提交)** ——
+  `scripts/sim_fsmock.py::_key` 用 `os.path.normcase` 做大小写折叠, 而它在 Linux 是
+  **`posixpath.normcase`(恒等函数)** ⇒ 折叠静默失效 ⇒ 把存在的文件报成缺失 ⇒ **D4 判据全假**。
+  该 mock 模拟的是 **NTFS 语义**(语料抓自 Windows 真机) ⇒ 归一必须固定, 已改显式 `ntpath.normcase`;
+  并新增防回潮守阵 `test_fsmock_case_folding_does_not_follow_platform`(**运行时**把模块的 `os`
+  换成 `posixpath` 判 —— 精确等价于"跑在 Linux", 于是**本机就能**抓到只在 CI 现形的失败;
+  刻意不用文本扫描, 因 `os.path.normcase` 就写在 `_key` 的 docstring 里当反例)。
+  单测 **1143 passed**(+1 守阵); 守阵红验过(还原旧写法 ⇒ **本机立刻红**, 而原测试仍绿)。
   详见 [tasks/26-09-21-webui-filter-data-and-color-flicker.md](tasks/26-09-21-webui-filter-data-and-color-flicker.md)
   与 [progress.md](progress.md)「已实现」首条) ——
   其前一条状态: 列设置双轨模型重设计已入库 `e5c31d1`(意图/生效分轨 + v5 按页子树 + 单一持久化漏斗), 剩真机走查;
