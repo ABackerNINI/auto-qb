@@ -547,9 +547,28 @@ async function smokeUi(browser, ui) {
      * 修之后: 回执后立刻拉真值(带退避重试) + 真值匹配即清 ⇒ 应 < 1s。
      * ⚠ 前提是桩服务**真的改状态**(ui_harness.py::_apply_truth) —— 否则真值永不到,
      *   这条断言只会测到"走满 3s 兜底", 跟没测一样(这正是本条缺陷当初溜过去的原因)。
+     *
+     * ❗**这里量的是两段, 不是一段**(2026-09-22 修订 —— 此前双 UI 各 1 条恒红, 根因是量错了对象):
+     * D2(`0c18fcd`)之后乐观态拆成了两条独立的时间线, 而旧断言把两者混成一个:
+     *   ① 压暗(`.is-pending`)—— 回执到达即结束, 设计值就是十几~几十 ms(真机实测撤下 85ms);
+     *   ② 值覆盖(`pendingOps`)—— 压暗结束后继续盖住行值, 直到"服务端快照同意"才释放,
+     *      这才是"等真值"的那一段(桩里真值 +120ms 落 ⇒ 再经 ver 去抖 + 一轮 refresh ⇒ 实测 350~400ms)。
+     * 旧断言拿 DOM 上的 `.is-pending` 消失去卡"≥80ms 才证明等了真值" ⇒ ① 只有 17~22ms,
+     * **必然**低于下界 ⇒ 双 UI 恒红, 而代码一直是对的。
+     * ⇒ 现在 ① 量 DOM、上界 250ms(回归形态: 压暗不随回执结束 ⇒ 挂到值覆盖释放才消失 ≈350ms;
+     *    再坏一层撤下退化回 D2 前的 ~3s 也一样红);
+     *    ② 量 `pendingOps` 归零、仍卡 80~1000ms(回归形态: 走满 3s 兜底, 或回执即释放 ⇒ <80ms)。
      */
     {
-      const BUDGET = 1000;
+      const BUDGET = 1000;        // ② 值覆盖释放的上界(3s 兜底是它的回归形态)
+      /* ① 的上界 —— ❗**不是**拍脑袋的 400: 压暗若没随回执结束, DOM 上的 `.is-pending` 会一直挂到
+       * **值覆盖释放**(pendingOps 清空)才消失, 而桩里那一段实测 ~350ms(真值 120ms + ver 去抖 60ms
+       * + 一轮 refresh ~140ms)。上界取 400 的话"压暗不结束"会**擦线过关**(实测 349/374ms),
+       * 故压到 250: 正常路径 ~20ms(12 倍余量), 退化路径 ~350ms(必红)。
+       * ⚠ 该间隔随库规模浮动(refresh 越慢退化值越大), 小库下退化值会更靠近 250; --torrents 3000 是定阈值时的口径。 */
+      const GREY_BUDGET = 250;
+      /* ② 的采样间隔: pendingOps 是**响应式对象、DOM 上看不见**, 没有 MutationObserver 可用,
+       * 只能定时采样。4ms 远小于最短窗口(error 模式回滚 ~21ms), 不至于漏采整个起落。 */
       /*
        * ❗挑目标**之前**先与服务端真值对齐一次。否则会空过: 上面的块刚暂停过若干行, 桩服务
        * 真值已经改了, 但前端要等下一轮轮询(2s)才在 DOM 上反映 —— 此时按"class 没有 s-paused"
@@ -558,9 +577,14 @@ async function smokeUi(browser, ui) {
        */
       await page.evaluate(`(() => { const vm = ${INST}; return vm.refresh && vm.refresh(); })()`);
       await page.waitForTimeout(400);
+      /* error 模式没有"等真值"这回事: 命令失败 ⇒ 立即回滚(实测 ~21ms)。给它套下界会恒红,
+       * 而"某种模式下恒红的断言"和"恒真的断言"一样没用 —— 失败路径由上面的
+       * 「失败后落回原状态 / 回滚干净」两条覆盖, 这里只要求"快"。 */
+      const FLOOR = EXPECT_CMD === "error" ? 0 : 80;
       const target2 = await pausableRow(page, ".torrent-row", "开始该种子");
       if (!target2) {
-        add(ui, "P0-3 乐观态及时落回真值", false, "找不到未暂停的行");
+        add(ui, `P0-3 值覆盖及时落回真值(${FLOOR}~${BUDGET}ms)`, false, "找不到未暂停的行");
+        add(ui, `P0-3 压暗在回执后及时撤下(<${GREY_BUDGET}ms)`, false, "找不到未暂停的行");
       } else {
         const beforeKind = await target2.evaluate((el) => {
           const c = el.className.split(" ").find((x) => x.startsWith("s-"));
@@ -575,7 +599,8 @@ async function smokeUi(browser, ui) {
           const t = ((await h.textContent()) || "").trim();
           if (!t.includes("暂停该种子") && t.trim() !== "暂停" && !t.includes("暂停整组")) continue;
           await page.evaluate(`(() => {
-            window.__t = { t0: null, dom0: null, clear: null };
+            const vm = ${INST};
+            window.__t = { t0: null, dom0: null, clear: null, opsUp: null, opsDown: null };
             if (window.__mo3) window.__mo3.disconnect();
             window.__mo3 = new MutationObserver(() => {
               const m = window.__t;
@@ -583,31 +608,51 @@ async function smokeUi(browser, ui) {
               if (m.dom0 !== null && m.clear === null && !document.querySelector(".is-pending")) m.clear = performance.now();
             });
             window.__mo3.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], childList: true });
+            /* ② 值覆盖的起落: 0 -> N 记 opsUp, N -> 0 记 opsDown。 */
+            clearInterval(window.__ti3);
+            window.__ti3 = setInterval(() => {
+              const m = window.__t;
+              const n = Object.keys(vm.pendingOps || {}).length;
+              if (m.opsUp === null) { if (n > 0) m.opsUp = performance.now(); return; }
+              if (m.opsDown === null && n === 0) m.opsDown = performance.now();
+            }, 4);
           })()`);
           await h.evaluate((el) => el.addEventListener("click", () => { window.__t.t0 = performance.now(); }, { capture: true, once: true }));
           await h.click();
           clicked2 = true;
           const deadline = Date.now() + 8000;
           while (Date.now() < deadline) {
-            clear = await page.evaluate("(() => { const m = window.__t; return (m.t0 && m.clear) ? Math.round(m.clear - m.t0) : null; })()");
+            clear = await page.evaluate("(() => { const m = window.__t; return (m.t0 && m.opsDown) ? Math.round(m.opsDown - m.t0) : null; })()");
             if (clear !== null) break;
             await page.waitForTimeout(25);
           }
           break;
         }
+        const tm = await page.evaluate(`(() => {
+          clearInterval(window.__ti3);
+          const m = window.__t;
+          const f = (x) => ((m.t0 && x !== null) ? Math.round(x - m.t0) : null);
+          return { clear: f(m.clear), opsUp: f(m.opsUp), opsDown: f(m.opsDown) };
+        })()`);
         /*
          * ❗**同时设下界**: 桩服务的真值是**回执后 +120ms** 才落的(_TRUTH_DELAY), 所以要等真值
          * 就必须 ≥ 100ms 量级。若代码又退回"拿自己贴的补丁当真值比对"(2026-09-19 实测的坑:
          * 28ms 就清, 断言全绿却什么都没测到), 下界会立刻把它打成红。
          */
-        /* error 模式没有"等真值"这回事: 命令失败 ⇒ 立即回滚(实测 ~21ms)。给它套下界会恒红,
-         * 而"某种模式下恒红的断言"和"恒真的断言"一样没用 —— 失败路径由上面的
-         * 「失败后落回原状态 / 回滚干净」两条覆盖, 这里只要求"快"。 */
-        const FLOOR = EXPECT_CMD === "error" ? 0 : 80;
-        add(ui, `P0-3 乐观态及时落回真值(${FLOOR}~${BUDGET}ms)`,
-          clicked2 && clear !== null && clear >= FLOOR && clear < BUDGET,
-          `点击 → pending 消失 ${clear === null ? "始终未消失" : clear + "ms"}(须 ${FLOOR}~${BUDGET}ms` +
-          (FLOOR ? `: 早于 ${FLOOR}ms 说明没等真值、只是跟自己的补丁比上了)` : `, error 模式=失败立即回滚)`));
+        add(ui, `P0-3 值覆盖及时落回真值(${FLOOR}~${BUDGET}ms)`,
+          clicked2 && tm.opsDown !== null && tm.opsDown >= FLOOR && tm.opsDown < BUDGET,
+          `点击 → pendingOps 归零 ${tm.opsDown === null ? "始终未归零" : tm.opsDown + "ms"}(须 ${FLOOR}~${BUDGET}ms` +
+          (FLOOR ? `, 早于 ${FLOOR}ms 说明没等真值、只是跟自己的补丁比上了)` : `, error 模式=失败立即回滚)`) +
+          ` / 覆盖起于 ${tm.opsUp === null ? "未采到" : tm.opsUp + "ms"}`);
+        /*
+         * ① 压暗(DOM `.is-pending`)单独成条: 它是**用户感知的那一半**(D2 前撤下 2947ms,
+         * 修后真机 85ms / 桩里十几 ms)。上面那条改量 pendingOps 之后, 它就没人管了 ——
+         * 不补一条等于把"撤下慢"这个真实回归形态放走。
+         * ❗不下界: D2 之后压暗本来就由回执结束, 十几 ms 是设计使然(给它套下界就是上面那条恒红的翻版)。
+         */
+        add(ui, `P0-3 压暗在回执后及时撤下(<${GREY_BUDGET}ms)`,
+          clicked2 && tm.clear !== null && tm.clear < GREY_BUDGET,
+          `点击 → is-pending 消失 ${tm.clear === null ? "始终未消失" : tm.clear + "ms"}(须 <${GREY_BUDGET}ms)`);
         /*
          * 光"pending 消失"不够 —— 回滚也会让它消失。**必须落回真值本身**:
          * ok 模式行必须真的是暂停态(s-paused), 证明清 pending 的是"真值匹配"而不是"补丁撤了退回旧值"。
