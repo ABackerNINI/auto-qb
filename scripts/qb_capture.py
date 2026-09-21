@@ -58,6 +58,11 @@ from auto_qb.torrents.compat import _SNAPSHOT_FIELDS, REQUIRED_TORRENT_FIELDS  #
 
 logger = logging.getLogger("qb_capture")
 
+# auto-qb **自己的**标签字面量(与站点标签不同: 它们是程序常量、不是用户数据)。
+# 语料会把它们一并伪名化, 故必须在 meta 里记下"字面量 -> 伪名", 回放端生成的 config 才能落在
+# 同一个伪名空间(否则 missing_tag / skip_checking_tag 与语料里的伪名标签对不上, 行为与真机不一致)。
+KNOWN_TAG_LITERALS = ("MISSING", "zSkipChecked")
+
 CORPUS_VERSION = 1
 # 语料里所有「回放工作根」相关路径用这个占位符, 由回放端按 --fs-root 替换(计划 §12: 目录参数化, 不写死)
 FSROOT_PLACEHOLDER = "<FSROOT>"
@@ -906,7 +911,10 @@ class Capture:
         #   `san.name(path_normalize(...))`, 保证与 files.json 的 name 逐字一致(回放端要按它对表)。
         if self.disk_map:
             self.disk_map = {
-                san.infohash(h): {san.name(utils.path_normalize(rel)): v for rel, v in d.items()}
+                san.infohash(h): {
+                    san.name(utils.path_normalize(rel)): v
+                    for rel, v in d.items()
+                }
                 for h, d in self.disk_map.items()
             }
         if self.peers_map:
@@ -960,6 +968,52 @@ class Capture:
         return out
 
     # ---------- 落盘 ----------
+    def _sanitize_mapping(self) -> dict:
+        """脱敏后的「tracker 域名 ↔ 站点标签」与「auto-qb 自有标签字面量」映射
+
+        为什么必须记下来: 语料里的域名已换成 `site-N.example`、标签已伪名化, 而回放端生成的 config
+        必须落在**同一个伪名空间**里, 否则:
+          · tracker 规则按真域名写 ⇒ 站点匹配全落空 ⇒ `tracker_name` 解析不出来、依赖站点的规则空转;
+          · `missing_tag` / `skip_checking_tag` 按真字面量写 ⇒ 与语料里的伪名标签对不上 ⇒
+            跳检 / 缺文件的行为跟真机不一致(该跳的没跳、该打的标签打不上) —— 判据全绿也是假的。
+
+        ⚠ **只记已脱敏的两侧**(伪域名 ↔ 伪标签)。站点标签的伪名**绝不**反向对应到真实站名
+        —— 那等于把站点名原样写进语料。`MISSING` / `zSkipChecked` 是 auto-qb 自己的常量、非用户数据,
+        记它们的伪名不构成泄露(这是本映射能成立的前提)。
+        """
+        san = self.sanitizer
+        out: dict = {"tracker_tags": {}, "known_tags": {}}
+        # 1) auto-qb 自有标签字面量 -> 伪名(只在真机上真出现过才记, 免得凭空造出不存在的标签)
+        # ❗self.tags 里存的是**已脱敏**的伪名; 拿原始字面量 "MISSING" 去比对永远对不上。
+        #   必须用反查表把伪名还原成原标签再比(san._revs[kind] = {伪名: 原文}, 同模块内取用)。
+        revs = san._revs.get("tag") or {}
+        raw_seen = {revs.get(t, t) for t in seen}
+        for lit in KNOWN_TAG_LITERALS:
+            if lit in raw_seen:
+                out["known_tags"][lit] = san.text(lit)
+        # 2) tracker 域名 -> 站点标签(两侧都是伪名)。源是用户 config 的 trackers 段(权威),
+        #    比"从数据里统计哪个标签最专有"可靠 —— 后者在站点混用标签时会挑错。
+        cfg_path = getattr(getattr(self, "args", None), "from_config", "") or ""
+        if cfg_path and os.path.isfile(cfg_path):
+            try:
+                import yaml
+                data = yaml.safe_load(open(cfg_path, encoding="utf-8").read()) or {}
+                trackers = (data.get("config") or {}).get("trackers") or data.get("trackers") or {}
+                for _name, spec in (trackers or {}).items():
+                    if not isinstance(spec, dict):
+                        continue
+                    for d in spec.get("domains") or []:
+                        mm = re.match(
+                            r"^[a-zA-Z][a-zA-Z0-9+.-]*://([^/]+)",
+                            san.tracker_url(f"https://{d}/announce") or ""
+                        )
+                        if not mm:
+                            continue
+                        out["tracker_tags"][mm.group(1)] = [san.text(t) for t in (spec.get("tags") or [])]
+            except Exception:  # noqa: BLE001  映射是增益信息, 取不到就退回统计派生
+                pass
+        return out
+
     def write_corpus(self) -> None:
         self.out.mkdir(parents=True, exist_ok=True)
         # 首帧是 T0, 末帧必是全量
@@ -991,6 +1045,7 @@ class Capture:
                 "hashes_with_files": len(self.files_map),
                 "hashes_with_trackers": len(self.trackers_map),
                 "total_files": sum(len(v) for v in self.files_map.values()),
+                "sanitize_map": self._sanitize_mapping(),
                 "checkpoints_total": len(self.checkpoints),
                 "checkpoints_failed": len(self.checkpoints) - n_ok,
                 "warnings": len(self.warnings),

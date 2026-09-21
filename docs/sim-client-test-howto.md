@@ -329,4 +329,8 @@ uv run python scripts/sim_baseline.py --corpus <语料目录> --merge   # 固化
   "自己算的期望 vs 自己算的实际"，判据空转。
 - **FS mock 的时间源是播放器**（`GET /_fsmock/state` 按秒拉），不是 mock 自己的时钟。
 - mock 只拦**语料树内**的路径；树外（`config.yml` / `state.json` / WEB 密钥）原样委托真函数 —— 否则会拦坏红线文件。
-- 语料里的域名已脱敏成 `site-N.example`、标签已伪名化 ⇒ 生成的 config 的 `trackers:` 段是**按语料派生**的。
+- 语料里的域名已脱敏成 `site-N.example`、标签已伪名化 ⇒ 生成的 config 的 `trackers:` 段是**按语料派生**的
+  (权威映射来自 meta 的 `sanitize_map.tracker_tags`, 覆盖不到的域名退回统计派生; 自有标签字面量
+  `MISSING` / `zSkipChecked` 也换成对应伪名)。⚠ 这两者**都不能单独可信** ——
+  只信权威映射会漏掉大站点, 那些种子会被"未匹配 tracker 配置"跳过、**连带不参与归组**,
+  头号判据 `group_exact` 直接从 0 变 34。

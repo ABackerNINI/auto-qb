@@ -344,6 +344,7 @@ def test_corpus_tracker_section_picks_specific_tag():
     """站点标签取"对该 host 最专有"的 —— 通用标签(散布全库)不能被选中"""
     class FakeSim:
         corpus_mode = True
+        corpus = None  # 没有语料 -> 必须退回统计派生
         torrents = {
             "h1": {
                 "tags": "SiteA, Common",
@@ -740,3 +741,26 @@ def test_group_exact_diff_red_on_missing_group():
     actual = [{"a", "b"}]
     missing, extra = simrun.group_exact_diff(truth, actual)
     assert len(missing) == 1 and not extra
+
+
+# --------------------------------------------------------------------------- 脱敏映射(W3 补: tracker / tag)
+def test_known_tag_literals_are_mapped_after_sanitization():
+    """auto-qb 自有标签字面量(MISSING / zSkipChecked)被伪名化后, 必须能在 meta 里查到"字面量 -> 伪名"
+
+    ❗踩过的坑: 标签集合里存的是**已脱敏**的伪名, 拿原始字面量去 `in` 判断永远为假 ⇒ 映射恒为空
+    ⇒ 回放端生成的 config 用的还是真字面量 ⇒ 跳检 / 缺文件行为与真机不一致(判据全绿也是假的)。
+    所以必须用反查表把伪名还原成原文再比。
+    """
+    cap = _load("qb_capture")
+    san = cap.Sanitizer(b"\x00" * 32)
+    pseudo = {san.text(t) for t in ("MISSING", "zSkipChecked", "PTFans")}
+    # 伪名不是原文(确实被脱敏了)
+    assert "MISSING" not in pseudo and "zSkipChecked" not in pseudo
+    # 反查表能把伪名还原成原文 —— 这是"只在真机上真出现过才记"这条判据能成立的前提
+    revs = san._revs.get("tag") or {}
+    raw_seen = {revs.get(t, t) for t in pseudo}
+    assert raw_seen == {"MISSING", "zSkipChecked", "PTFans"}
+    mapped = {lit: san.text(lit) for lit in cap.KNOWN_TAG_LITERALS if lit in raw_seen}
+    assert mapped == {"MISSING": san.text("MISSING"), "zSkipChecked": san.text("zSkipChecked")}
+    # 确定性: 同一字面量跨实例(同盐)必须同一伪名
+    assert cap.Sanitizer(b"\x00" * 32).text("MISSING") == san.text("MISSING")

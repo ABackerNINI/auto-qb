@@ -6,7 +6,14 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1137 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1138 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1137 → 1138(tracker / tag 脱敏映射 +1: `tests/test_sim_corpus.py` ——
+#     auto-qb 自有标签字面量 MISSING / zSkipChecked 被伪名化后, 必须能反查回原文才能记进 meta 的
+#     `sanitize_map.known_tags`。❗踩过的坑: 标签集合里存的是**已脱敏**的伪名, 拿原始字面量去 `in`
+#     判断**永远为假** ⇒ 映射恒空 ⇒ 回放 config 仍写真字面量 ⇒ 跳检/缺文件行为与真机不一致。)
+#   ⚠ 该批次还修掉一个**会让头号判据假绿**的坑: 只信"权威"的 tracker→tag 映射会漏掉语料里最大的
+#     站点(35 个种子) ⇒ 那些种子被"未匹配 tracker 配置"跳过、**连带不参与归组** ⇒ group_exact 0 → 34。
+#     改成"权威优先 + 统计兜底 + 只输出语料里真出现过的域名"后才回到 0(详见 pitfalls)。
 #   ↑ 1133 → 1137(语料判据批次 W5 +4: `tests/test_sim_corpus.py` 续 —— 头号判据 `CORPUS.group_exact`
 #     的比对内核 `group_exact_diff` 及三道红验: **成员串组(组数仍相同)、一组被拆成两组、真值组没被分出**
 #     —— 只比"组数"会放过串组, 那正是"增量应用出错"的样子)。

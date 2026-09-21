@@ -1708,7 +1708,7 @@ config:
     max_tasks_per_tick: {max_tasks}
     state_file: "{state_file}"
     remove_similar_tags: false
-    skip_checking_tag: zSkipChecked
+    skip_checking_tag: {skip_checking_tag}
     hr:
         add_tag: ""
         add_category: "!!HR${{required_seeding_time}}!!"
@@ -1718,7 +1718,7 @@ config:
         overwrite_category_for_satisfied: false
     grouping:
         enabled: true
-        missing_tag: MISSING
+        missing_tag: {missing_tag}
         check_missing_files: true
     qbittorrent:
         host: "{host}"
@@ -1784,7 +1784,7 @@ _GENERIC_TAG_HINTS = ("MISSING", "zSkipChecked", "辅种", "R")
 
 
 def corpus_tracker_section(sim: SimQb) -> str:
-    """按语料里的真实数据派生 tracker 段(计划 §12 / W3)。
+    """按语料里的真实数据派生 tracker 段(计划 §12 / W3)
 
     为什么必须派生: 语料里的 tracker 域名已被脱敏成 `site-N.example`、标签也已伪名化。
     若沿用合成档写死的 `ptfans.cc` / `hhanclub`, auto-qb 的站点匹配会全部落空 ⇒
@@ -1794,7 +1794,14 @@ def corpus_tracker_section(sim: SimQb) -> str:
     真机上站点标签几乎只出现在本站的种子上(score→1), 而通用标签(MISSING / zSkipChecked / 辅种)
     散布在全库(score 很小)。⇒ 不能按"出现最多"挑, 那会被通用标签抢走。
     (⚠ 标签在语料里已伪名化, 所以**不能**用原始字面量 "MISSING" 之类去排除 —— 只能靠这个统计判据。)
+
+    ⚠ 首选 `meta.sanitize_map.tracker_tags`: 抓取端拿用户 config 的 trackers 段算出来的**权威**
+    伪域名 ↔ 伪标签映射; 取不到才退回上面的统计派生。两者都只产出**已脱敏**的两侧。
     """
+    # ❗`or {}`: 老语料 / 无映射时 `.get()` 返回 None, 后面再 .get() 会直接 AttributeError
+    _corpus = getattr(sim, "corpus", None)
+    smap = ((_corpus.meta.get("sanitize_map") or {}) if _corpus else {}) or {}
+    auth = smap.get("tracker_tags") or {}
     host_tags: dict[str, dict[str, int]] = {}
     tag_global: dict[str, int] = {}
     for h, t in sim.torrents.items():
@@ -1812,28 +1819,43 @@ def corpus_tracker_section(sim: SimQb) -> str:
             for tag in tags:
                 slot[tag] = slot.get(tag, 0) + 1
 
-    lines = []
-    for host in sorted(host_tags):
+    # ---- 输出: 权威映射优先, 覆盖不到的域名退回统计派生, 且只输出语料里真出现过的域名 ----
+    # ❗**不能只信权威映射**: 用户 config 的 `domains:` 字面量与 tracker URL 的 **host 不一定相等**
+    #   (auto-qb 的站点匹配是**后缀**匹配, 而这里按 host 精确对表)。实测该映射漏掉了语料里最大的
+    #   站点(35 个种子) ⇒ 那些种子因"未匹配 tracker 配置"被 `continue` 跳过(qbmanager.py:685-690),
+    #   **连带不参与归组** ⇒ 头号判据 group_exact 从 0 变成 34(真值 63 组只分出 29 组)。
+    # ❗也**不能只信统计**: 站点混用标签时统计会挑错。故**两者合并**: 有权威就用, 没有才统计。
+    stat_tag: dict[str, str] = {}
+    for host in host_tags:
         counts = host_tags[host]
         best, best_score = None, -1.0
         for tag, n in sorted(counts.items()):
             score = n / max(tag_global.get(tag, 1), 1)
             if score > best_score or (score == best_score and best is not None and n > counts.get(best, 0)):
                 best, best_score = tag, score
-        if best is None:
-            best = host.replace(".", "_").replace("-", "_")
+        if best:
+            stat_tag[host] = best
+    if not stat_tag and not auth:
+        return SYNTHETIC_TRACKERS.format(rules="")
+    lines = []
+    for host in sorted(stat_tag):
+        tag = None
+        if host in auth:
+            cand = [t for t in (auth[host] or []) if t]
+            if cand:
+                tag = cand[0]
+        if tag is None:
+            tag = stat_tag[host]
         key = host.replace(".", "_").replace("-", "_")
         lines.append(
             f"""        {key}:
             domains:
                 - {host}
             tags:
-                - {best}
+                - {tag}
 """
         )
-    if not lines:
-        return SYNTHETIC_TRACKERS.format(rules="")
-    return "".join(lines)
+    return "".join(lines) if lines else SYNTHETIC_TRACKERS.format(rules="")
 
 
 def emit_config(
@@ -1856,6 +1878,11 @@ def emit_config(
         trackers = corpus_tracker_section(sim)
     else:
         trackers = SYNTHETIC_TRACKERS.format(rules=TRACKER_RULES_TMPL if with_rules else "")
+    # 语料档: auto-qb 自有标签字面量(MISSING / zSkipChecked)在语料里**已被伪名化**,
+    # 必须换成对应伪名 —— 否则跳检/缺文件的行为与真机不一致(该跳的没跳, 判据全绿也是假的)。
+    known = {}
+    if getattr(sim, "corpus_mode", False) and sim.corpus is not None:
+        known = (sim.corpus.meta.get("sanitize_map") or {}).get("known_tags") or {}
     with open(p, "w", encoding="utf-8") as f:
         f.write(
             CONFIG_TMPL.format(
@@ -1871,6 +1898,8 @@ def emit_config(
                 web=WEB_TMPL.format(web_port=web_port) if web_port else "",
                 rules=RULES_TMPL if with_rules else "",
                 trackers=trackers,
+                skip_checking_tag=known.get("zSkipChecked", "zSkipChecked"),
+                missing_tag=known.get("MISSING", "MISSING"),
             )
         )
     return p
