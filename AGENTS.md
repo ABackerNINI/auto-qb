@@ -7,7 +7,7 @@
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先拉远程** —— `git pull --rebase <remote> develop` (分支名**必须写**), `git status -sb` 不落后再开工; **禁止在落后分支上改代码** (机检: `python .agents/skills/my-commit-flow/scripts/preflight.py`)。拉取前先把工作区弄干净, 理由见下节。②读 [activeContext.md](memory-bank/activeContext.md) (当前焦点); 该读哪份文档看本文件「知识库路由」表 (**单点**); 已有 `tasks/` 档案的从档案续作。
+- **开始**: ①**先拉远程** —— `git pull --rebase <remote> develop` (分支名**必须写**), `git status -sb` 不落后再开工; **禁止在落后分支上改代码** (机检: `python .agents/skills/my-commit-flow/scripts/preflight.py`)。拉取前先把工作区弄干净, 理由见下节。②读 [activeContext.md](memory-bank/activeContext.md) (当前焦点); 该读哪份文档看本文件「知识库路由」表 (**单点**); 已有 `tasks/` 档案的从档案续作。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext (已完成条目**迁出**到 progress.md) / 达阈值则立档 + `python scripts/gen_tasks_index.py` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` / 新坑追加 `pitfalls.md`。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
@@ -75,6 +75,24 @@ yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: fa
 - **唯一可靠规避: 合并前先把工作区弄干净** (先提交, 或把改动移出去)。同理避免在工具 shell 跑 `git stash` / `git rebase` / `git checkout` (脏工作区时); 高风险 git 操作请让用户在自己的终端执行, 操作前先 `cp -a .git <备份路径>`。
 - **提交后必查 ref**: ref 更新可能被拦截层静默丢弃 —— 必须核对 `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `my-commit-flow/scripts/verify_ref.py` 并按它打印的步骤修。**不要只看 commit 输出**。
 - 机检与停手点一律走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md) (预检自动查落后 / 脏工作区 / 红线文件 / staged 暴增; rebase 与 push 仍由执行者按判据手动跑)。
+
+## 🔴 跨仓库操作: 绝对禁止 (需显式强授权)
+
+> **本条是跨仓库操作的单点定义** (2026-09-21 用户指定)。工作区模式是**多 clone 并行**, 每个 clone 是一份**独立克隆** (各有自己的 `.git`)。
+> **除当前这一个工作 clone 外, 对其它 clone 的任何写操作一律绝对禁止** —— 包括但不限于: 改文件、`git apply`、复制/覆盖文件、在它里面跑任何 git 命令。
+
+- **授权指令只认一个词: `授权`**, 且必须由用户**显式**说出。以下**一律不算授权**:
+  「继续 / 接着做 / ok / 你看着办 / 提交 / 修复 / 同步一下 / 帮我弄好」。
+  ⚠️ **「提交」只授权 commit + push 到远端, 不授权动别的 clone** —— 两者不要混为一谈。
+- **未授权时的正确做法: 停下来问, 不要自己动手。** 典型场景: 发现"改动在那个 clone 上不生效"
+  (比如用户的服务跑在另一个 clone 上) ⇒ 该如实报告并交由用户决定 —— 让用户自己 `pull`, 或等用户说出「授权」。
+  **不能因为"不改就修不好"就自己 `git apply` / 复制文件过去。**
+- **跨工作区同步一律走 Gitee `develop`** (与 [conventions.md](memory-bank/conventions.md)「协作约定」一致):
+  只动自己这个 clone → 提交推送 → 让对方 clone 自己拉取。**没有第二种路径。**
+- **为什么是硬禁止** (2026-09-21 事故实证, 不是推演): 一次未经授权的跨仓库同步, 连带在对方 clone 里跑了
+  `git pull --rebase` ⇒ 工具 shell 的 rebase 毁掉它的 `.git` (refs 目录消失 + 对象丢失), 又因 rebase 被中断、
+  工作区被 checkout 到中间状态, 事后留下 **13 个文件 / 648 行的残缺状态**需要清理; 而同样的修复走 Gitee
+  只需一次提交。⇒ **代价不对称**: 走 Gitee 是零成本, 越界操作是"修一个问题、制造两个事故"。
 
 ## 提交 / PR
 
