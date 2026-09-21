@@ -362,6 +362,14 @@
   - **事故恢复**: 恢复成本取决于有没有 `cp -a .git` 备份。本次两次都靠 rebase 前的备份 30 秒复原
     (`HEAD` 与全部 10 个文件对象逐一 `cat-file -s` 校验通过)。**所以"高风险 git 操作前先备份 .git"这条不是形式主义。**
   - 事故后补救: ①被删对象基本都在**回收站**(`$I` 偏移 16-24 是 FILETIME **UTC**, 偏移 28 起是 UTF-16LE 原始路径; 内容在同名 `$R`); ②**还原后必须先删掉被一起还原的陈旧 `*.lock`**(`index.lock`/`HEAD.lock`/`AUTO_MERGE.lock`/`packed-refs.lock`/`objects/maintenance.lock`), 否则任何 git 命令都报 `Unable to create '.git/index.lock'`; ③工作区文件成片消失但 HEAD 里还在 ⇒ `git checkout -- <file>`; ④收尾 `git fsck --no-progress` 确认 0 broken link。
+- **单提交重放的更省事版(2026-09-22 实测)**: 当"我只有 1 个提交要重放、远端只多 1 个提交"时, 上一条的
+  `reset --mixed` + 手工合文件可以再简化 —— 全程不碰 merge / rebase 机制:
+  ① `cp -a .git <备份>`; ② **只读判冲突**(不动工作区): `git merge-tree --write-tree --merge-base=<merge-base>
+  <远端 tip> <我的 HEAD>` —— 返回**单个 tree oid 且 exit 0 即无冲突**; ③ `git log -1 --format=%B HEAD > msg` +
+  `git commit-tree <该 tree> -p <远端 tip> -F msg` 得到重放后的提交; ④ `git reset --hard <新提交>`(工作区已干净时
+  安全, 不走 stash); ⑤ `verify_ref.py` 核三处 → push。本次: 远端 `870df04` + 我的 `75c95ea` → `17e3217`,
+  5 个文件 28 行改动一字不差。⚠ 前提**工作区必须干净** —— 有用户在途改动(如 `想法.md`)时先 `git diff -- <file> > x.patch`
+  再 `git apply -R x.patch` 让它干净, 重放完 `git apply x.patch` 还原, **别用 stash**。
 - **提交后必查 ref 三处: `HEAD` == `refs/heads/<branch>` == packed-refs**(用 `my-commit-flow/scripts/verify_ref.py`)。只看 commit 输出会被骗。
   - **「分支 ref 被回退」判别法**: 提交后 `git status` 突然冒出成百上千 staged ⇒ **先别急着 stage/commit**, 用 `git write-tree` 对比 `git rev-parse <刚才的提交>^{tree}` —— 一致说明工作区 / 索引完好, 只是分支指针被回退了, **改动一个字都没丢**。处置: `git format-patch -1 <sha> --stdout > 备份.patch` + `git update-ref refs/heads/tmp-xxx <sha>` 建锚点防 GC, 再 `git reset --soft <sha>`。**不要**用 `git add -A` 去"解决"那批 staged。
   - **packed-refs 陈旧会导致核 ref 假红**: 被 pack 过的分支更新时只写 **loose ref**(优先级更高), packed-refs 保留旧值直到下次 pack。判别: 先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— 一致即落稳。修法: 备份 `.git` 后 `git pack-refs --all`(不要靠 `update-ref`, 它只写 loose)。
