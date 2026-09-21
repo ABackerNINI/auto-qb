@@ -27,6 +27,7 @@
 """
 import logging
 import os
+from collections.abc import Mapping
 from typing import Any, Dict, Optional
 from qbittorrentapi import Client
 
@@ -35,6 +36,17 @@ from .. import utils
 from ..torrents import TorrentStore, TorrentRecord
 
 logger = logging.getLogger(__name__)
+
+
+def group_key_of(save_path: str, file_map: Mapping[str, int]):
+    """归组 key 的单一事实源: (规范化 save_path, 排序后的文件相对路径元组)
+
+    与 _assign_to_group 共用。抽成模块级纯函数是为了让 scripts/ 侧的语料抓取器
+    (真值分组 / 等价类守恒校验) import 同一份公式, 避免复制副本与 :150 悄悄分叉 ——
+    否则 CORPUS.group_exact 会拿"错误的期望"判"正确的实现"(稳定假红或假绿)。
+    纯函数, 无状态, 不读 self; 行为与抽取前完全一致。
+    """
+    return (utils.path_normalize(save_path), tuple(sorted(file_map.keys())))
 
 
 class GroupingMixin:
@@ -147,7 +159,7 @@ class GroupingMixin:
         """将种子按文件列表归入分组(幂等): 先移出旧组再加入新组; 维护成员索引; 归组后检查大小一致性"""
         if not file_map:
             return
-        key = (utils.path_normalize(torrent.save_path), tuple(sorted(file_map.keys())))
+        key = group_key_of(torrent.save_path, file_map)
         self._leave_group(torrent.hash)  # 幂等: 移出旧组(可能因 save_path 变化被重归组), 不触发扫描
         self.store.groups.setdefault(key, []).append(torrent.hash)
         self.store.group_sizes.setdefault(key, {})[torrent.hash] = file_map

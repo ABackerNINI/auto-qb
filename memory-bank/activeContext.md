@@ -16,7 +16,7 @@
 
 ## 正在进行
 
-- **🆕 真机语料抓取 · 脱敏 · 离线回放 —— 计划已定稿 v3(已拍板, 等 W0 出数)**: 计划
+- **🆕 真机语料抓取 · 脱敏 · 离线回放 —— W0 已出数, W1/W2 已完成(未提交), 下一步 W3**: 计划
   [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html)
   (v1→v3 原地修订) + 审查报告
   [docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html](../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)。
@@ -27,14 +27,39 @@
   ②归组 key 公式**抽成 `src/` 纯函数** `group_key_of(save_path, file_map)` ——
   **本计划唯一一处 `src/` 改动, 用户已放行**, 纯抽取零行为变更 + 配守阵单测
   ③语料位置改**参数**(`--out` / `--source=corpus:<dir>`, 不写死) ④回放 root 也改参数
-  (`--root` / `--fs-root`) ⑤**一并消化 issue 26-09-20-2145** —— 新增「流状态 vs 实况状态」模型
-  (`sync/maindata` 滞后叠 overlay / `torrents/info` 立即 ⇒ "info 比 maindata 新"可在本地复现)。
-  **下一步 = W0 真机实测**: 全量抓取耗时 / 脱敏后分组守恒 / 100 ms 采样真机负载 /
-  第二 session 是否干扰增量流 / 磁盘探测负载 + temp path / `maindata` 滞后校准。
-  ⚠ **W0 出数前不写任何代码**。首次跑建议 `--sample 200 --probe-fs=off`。
-  **本轮实测(本机)**: 稀疏文件唯一正确写法 = `FSCTL_SET_SPARSE` + `SetEndOfFile`
-  (实占 **0 B**, **0.23 ms/文件**); 按原文的 `setflag + truncate` 写法会**满额分配**
-  —— 我实测把 R 盘写满过一次(详见 [pitfalls](pitfalls.md))。默认 mock 档下此问题已不存在。
+  (`--root` / `--fs-root`) ⑤**一并消化 issue 26-09-20-2145**。
+
+  ### W0 真机实测已出数(2026-09-21 04:0x, 真机 = 本机 127.0.0.1:16585, qB v5.2.3 / webapi 2.15.1 / 87 种子)
+  - **全量抓取耗时**: 174 请求(files+trackers) 顺序 **207 ms**(1.19 ms/请求, p95 3.91); 并发 4 → 151 ms;
+    `maindata(rid=0)` 15.6 ms / 0.20 MB。⇒ 真机上"10 000 次请求 ≈ 8 分钟"的担忧**不成立**(按此速率 5000 种子约 10 s)。
+  - **第二 session 不干扰增量流** ✅: 不同 session 各自持有**独立 rid 序列**(3 轮验证: B 打 `rid=0` 后
+    A 的后续请求仍是增量、rid 单调)。**同一 session 内**用过时 rid 才会退化成全量 ⇒ T1 走独立 session 的方案安全。
+  - **100 ms 采样对真机负载: 判否不成立** ✅ —— 实测 10.00 req/s, rtt mean 1.14 ms / p95 2.20 / max 2.86,
+    **0 次 > 100 ms**; 做种吞吐无退化。⇒ perf 档 100 ms **保留**, 不必退到 250–500 ms。
+  - **磁盘探测**: 11457 文件 / **1303 ms**(0.114 ms/文件); `temp_path_enabled=False` ⇒ temp path 覆盖问题本机**不适用**。
+  - **真实缺文件样本极充足**: exists 1784 / **missing 9673**(全部在 R: 盘、progress=0 的 stoppedDL 等);
+    `.!qB` 后缀 **2 个**(真实下载中文件)。⇒ D4 天然样本不用人为注入。
+  - **归组规模**: 87 种子 → **63 组**(54 单成员 + 9 多成员, 最大 12 成员), 组内 {路径:大小} 冲突 0。
+  - **全局限速两来源单位一致** ✅: `transfer/uploadLimit == server_state.up_rate_limit`(1048576 / 5242880)。
+  - **`maindata` 滞后校准**: 命令后 maindata 反映延迟 mean **733 ms** / median 751(131–1414, n=12),
+    与 issue 2145 观测的 1362 ms 同量级; **但 Δ(maindata − torrents/info) = +1 ms ⇒ 两者同步**。
+    ⇒ issue 2145 那条"info 比 maindata 新"的**前提在真机上不成立**; 真实滞后是 qB 命令处理延迟(两端共享)。
+    W3 的模型据此改成两个独立旋钮(见 pitfalls 与任务档案), 并保留计划要求的红验。
+  - **待用户确认**: R 盘(Arsenal Image Mounter 虚拟盘)是否镜像文件后端(持久)。
+
+  ### W1/W2 已实施(本轮, 未提交)
+  - 新增 `scripts/qb_capture.py`(capture / snapshot / record / self-test)+ `tests/test_qb_capture.py`(12 条)。
+  - `src/auto_qb/mixins/grouping.py` 抽出 `group_key_of()`(唯一 src 改动)+ `tests/test_grouping.py` 守阵 1 条。
+  - 端到端真机跑通: 6 项自检**全 PASS**(字段完整性 / 映射单射 / **分组守恒** / 首尾闭合 / 流级脱敏一致 / 无凭据泄漏),
+    `status=ok`, 检查点 3–4/4 对齐率 **1.0000**, warnings 0; 语料已确认**真脱敏**(名字/路径/tags/tracker 均伪名化)。
+  - **反向对照(红验)已做且通过**: ①大小写被归一 ⇒ 守恒判据必红 ②多成员组改一个成员路径一个字符 ⇒ 必红。
+    (第一次写这两条时**判据是空壳**, 红验把它抓出来了 —— 见 pitfalls。)
+  - 测试基线 1098 → **1111 passed**(+13, 0 退化)。
+
+  **下一步 = W3**: `sim_qb.py --source=corpus:<dir>` + `--fs-mode=mock` + 新增 `scripts/sim_fsmock.py`
+  (注入 `sim_autoqb.py`) + 补 `sync/torrentPeers` / `torrents/export` / `torrents/pieceHashes` 三个缺失路由
+  + 两层状态模型(`--maindata-lag-ms` / `--command-latency-ms`) + `sim_run.py` 透传。
+  ⚠ W2 验收已过(守恒 + 零碰撞 + 盐不落盘 + 产物带 .gitignore), 可以进 W3。
 
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
   [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)

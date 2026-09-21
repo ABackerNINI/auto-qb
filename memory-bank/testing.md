@@ -6,7 +6,17 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1098 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1111 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1098 → 1111(语料抓取批次 +13: `tests/test_qb_capture.py` +12 —— 脱敏等长/保形/保扩展名/
+#     单射与确定性/短标签碰撞重派生/真实标签集零碰撞/路径三条等价类边界/v1v2 infohash 形状/
+#     分组守恒绿 + **两道红验**(大小写被归一必须红、多成员组改一个成员路径必须红)/流累积器语义
+#     (server_state merge、torrents 后写覆盖、*_removed 净额)/抖动与结构字段的判定口径;
+#     `tests/test_grouping.py` +1 —— `test_group_key_of_is_single_source_of_truth` 钉死
+#     "归组 key 纯函数 == 真实 mixin 输出"(防内联公式与纯函数分叉)。
+#     范围: 语料计划 `docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html` 的 W1/W2。
+#     ⚠ 该批**新增一个 scripts/ 文件** (`scripts/qb_capture.py`), 不覆盖 src/ —— 除 §04 那一处纯函数抽取外
+#     src/ 一行未改, 故既有 1098 条全部原样通过(无退化)。
+#   ⚠ **Linux 侧未同步重测**(本批只在 Windows 跑), 按本节上方纪律, 下次动基线时两侧一起补。
 #   ↑ 1094 → 1098(本批 +4: `tests/test_web.py` 新增两道前端静态守阵 —— `test_frontend_member_window_functions_live_in_methods`
 #     钉死"成员行窗口带参函数必须 methods 不得 computed"(防 Vue 3 getter 当属性调用导致整表白屏);
 #     `test_frontend_dist_segments_aggregates_per_view` 钉死"状态分布按 viewMode 分支取数"

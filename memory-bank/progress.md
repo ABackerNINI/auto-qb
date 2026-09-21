@@ -194,6 +194,28 @@
 
 (以下 WEB UI 核心已于 2026-09-13 实现, 见 productContext.md/modules.md; **2026-09-14 已补图形化配置编辑** —— 设置页每项配置均可增删改, 含站点/规则集(16 条件 + 12 动作)/限速曲线的结构化编辑与只读 YAML 预览, 直接编辑模式已移除; 剩余: WebSocket 推送/多用户)
 
+### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W2 已实施, W3–W6 未开工**)
+
+> 计划 [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) · 任务档案 [tasks/26-09-21-qb-corpus-capture-replay.md](tasks/26-09-21-qb-corpus-capture-replay.md)
+
+把 `scripts/sim_qb.py` 的种子来源从"人造合成"换成"真机 qB 抓取 + 脱敏 + 离线回放"; 合成档保留为对照。
+语料 = **一条原始流**(首帧即 T0 / 末帧必是一份全量)+ 流里没有的按 hash 元数据(files / trackers)+ 真值分组(groups.json)。
+
+- ✅ **W0 真机实测已出数(7 项)**: 全量抓取 174 请求 **207 ms**; 第二 session **不干扰**增量流(各自独立 rid);
+  100 ms 采样负载**判否不成立**(rtt max 2.86 ms, 0 次超 100 ms)⇒ perf 档保留; 磁盘探测 11457 文件 1303 ms;
+  全局限速两来源单位一致。**真实语料画像**: 87 种子 → 63 组, 11457 文件里 9673 缺(全在 R: 盘)⇒ D4 天然样本充足。
+  ⚠ **一处推翻计划前提**: 命令后 `maindata` 反映延迟 mean 733 ms, 但 **Δ(info − maindata) = +1 ms** ⇒
+  issue 2145 那条"info 比 maindata 新"在真机上**不成立**, 真实滞后是 qB 命令处理延迟(两端共享)。
+  处置: 拆成 `--command-latency-ms`(默认 750)+ `--maindata-lag-ms`(默认 0)两个旋钮, 默认档忠实复现真机,
+  同时保留计划要求的红验。❓ R 盘(虚拟盘)持久性待用户确认。
+- ✅ **W1/W2 已落地**: 新增 `scripts/qb_capture.py`(capture / snapshot / record / self-test)+ `tests/test_qb_capture.py`(12 条);
+  `src/auto_qb/mixins/grouping.py` 抽出 `group_key_of()`(**本计划唯一一处 src/ 改动**, 纯抽取零行为变更 + 守阵 1 条)。
+  真机端到端跑通, **6 项自检全 PASS**(字段完整性 / 映射单射 / **分组守恒** / 首尾闭合 / 流级脱敏一致 / 无凭据泄漏),
+  检查点对齐率 1.0000, warnings 0; 语料确认**真脱敏**(名字/路径/tags/tracker 均伪名化, 路径用 `<FSROOT>` 占位符)。
+  **反向对照(红验)通过**; 测试基线 1098 → **1111 passed**。
+- ⬜ **W3–W6 未开工**: 回放器 `--source=corpus` + FS mock + 三个缺失路由 + 两层状态模型 / 时间轴回放 /
+  `CORPUS.*` 判据 + 基线重固化 / 真机走查闭环(已收窄)。
+
 ### 规则系统
 - 条件取反 (`!` / 非 logic) — `:ignore_case` 支持已完成 (2026-09-12, 见 08 TODO 段)
 - tracker 分组 (规则按组筛选)

@@ -50,6 +50,7 @@
 - test_download_conflict_missing_done_excluded: mixed 冲突排除带 MISSING 标签的完成成员(重下补救); 无标签照旧触发
 - test_download_conflict_multi_dl_with_missing_tag: multi-dl 不受 MISSING 标签豁免仍拦截
 - test_missing_scan_dedup_within_round: 同组同轮多触发源只扫一次(轮内去重), 跨轮清空后可再扫
+- test_group_key_of_is_single_source_of_truth: 归组 key 纯函数 group_key_of 与真实 mixin 输出一致(语料计划 §04 守阵)
 """
 import os
 import tempfile
@@ -1142,3 +1143,45 @@ def test_missing_scan_dedup_within_round():
         client.calls.clear()
         mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
         assert client.calls.count(("stop", None)) == 1, "跨轮应重新扫描"
+
+
+def test_group_key_of_is_single_source_of_truth():
+    """归组 key 纯函数与真实 mixin 输出一致(守阵: 内联公式与纯函数分叉即红)
+
+    范围: 语料计划 26-09-21-0024 §04 第 5 步 —— 抽 group_key_of 是为了让 scripts/ 侧抓取器
+    import 同一份公式; 若将来有人把 _assign_to_group 改回内联、或改了内联忘了改纯函数,
+    这条会红(否则 CORPUS.group_exact 会拿"错误的期望"判"正确的实现")。
+    """
+    from auto_qb.mixins.grouping import group_key_of
+
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)
+        client = FakeClient()
+        mgr.client = client
+
+        # 覆盖等价类边界: 反斜杠/正斜杠混用、重复斜杠、尾斜杠有无、大小写、多文件、中文
+        cases = [
+            ("H1", r"R:/Downloads/TV", [("a.mkv", 100)]),
+            ("H2", "R:/Downloads//TV", [("a.mkv", 100)]),  # 规范化后与 H1 同 key(重复斜杠压缩)
+            ("H3", r"R:/Downloads/TV/", [("a.mkv", 100)]),  # 尾斜杠保留 -> 与 H1 不同组
+            ("H4", r"r:/downloads/tv", [("a.mkv", 100)]),  # 大小写不归一 -> 与 H1 不同组
+            ("H5", r"R:/Downloads/TV", [("b.mkv", 1), ("a.mkv", 2)]),  # 路径集合不同
+            ("H6", r"R:/Downloads/TV", [("中文 名.mkv", 3)]),
+        ]
+        for h, sp, files in cases:
+            client.torrents[h] = FakeTorrent(hash=h, name=h, state="stalledUP", save_path=sp)
+            client.files_map[h] = [_fake_file(n, s) for n, s in files]
+        mgr._refresh_torrents()
+
+        for h, sp, files in cases:
+            fmap = {n: s for n, s in files}
+            assert mgr.store.member_to_key[h] == group_key_of(
+                sp, fmap
+            ), (f"{h}: mixin 与纯函数分叉 -> mixin={mgr.store.member_to_key[h]} "
+                f"pure={group_key_of(sp, fmap)}")
+
+        # 纯函数本身: 规范化后同 key 的成员确实落在同一组
+        assert mgr.store.member_to_key["H1"] == mgr.store.member_to_key["H2"], "重复斜杠应被压缩为同组"
+        assert mgr.store.member_to_key["H1"] != mgr.store.member_to_key["H3"], "尾斜杠必须 1:1 保留(不同组)"
+        assert mgr.store.member_to_key["H1"] != mgr.store.member_to_key["H4"], "大小写形态必须保留(不同组)"
