@@ -190,6 +190,13 @@
 
 ### 副作用与测试环境
 
+- **`--basetemp` 换了目录会让 4 条 sidefx 用例假红** (2026-09-22 实测): 默认临时目录 `H:\Temp\pytest-of-11059\`
+  出现 `PermissionError: 拒绝访问 'pytest-current'`(陈旧 symlink, 删不掉) ⇒ 全量 pytest 直接起不来。
+  换 basetemp 时**必须仍在 `tempfile.gettempdir()`(本机 `H:\Temp`)之下** —— `test_sidefx_is_temp_path`
+  断言 `sidefx.is_temp_path(tmp_path)`, 挪到 `C:\Users\...\AppData\Local\Temp` 会挂 4 条
+  (`is_temp_path` / `policy_allows_known_effects` / `recorder_installed_and_records` /
+  `rmtree_dir_fd_entries_not_flagged`)+ 1 条 ERROR, 看着像真失败, 实为临时目录搬家的假红。
+  正确姿势: `uv run pytest tests -q --no-cov --basetemp "H:/Temp/<新目录>"` → 1142 passed(与基线一致)。
 - **测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底**(收尾有越界项即让本次 pytest 失败)。七类: `POPEN` / `LAUNCH` / `REG` / `REGVAL` / `FSDEL` / `SYMLINK` / `BIND` / `CONNECT`, 回环与临时目录放行。要点:
   - **`POPEN`/`LAUNCH` 放行清单为空** ⇒ 测试里出现 `subprocess` / `os.system` / `os.startfile` / `webbrowser.open` 会被判越界。典型症状是"**单独跑绿、全量跑 ERROR**"(报错出现在收尾而非断言处)。守卫要改成**进程内**加载脚本模块, 零子进程。
   - **唯一曾被漏掉的真问题是 AUMID 注册表键**(构造 `PlatformChannel("win32")` 时真写 HKCU 且**不清理**; autostart 的 Run 键自清理)。conftest 的两道会话级守卫细节: 让写入**静默成功而不是抛异常**(源码只 catch OSError, 抛异常会让 appid 回退打乱断言), 且 `CreateKeyEx` 的替身**必须支持 `with` 语句**。`StubRegKey` 放在 `sidefx.py` 而不是 conftest —— 用"替身类型识别"避免两个夹具的安装顺序影响判定。
