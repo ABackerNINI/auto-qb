@@ -35,8 +35,11 @@ _TRACKER_ERROR_STATUSES = frozenset(
 # 虚拟 tracker 条目(DHT/PeX/LSD, 非真实站点): 与强制汇报确认同一口径, 不参与报错文本提取
 _VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")
 
-# 集节点聚合状态优先级: 错误 > 下载 > 校验 > 暂停 > 做种 > 其它(前端按 state 着色)
-_SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "paused": 3, "seeding": 4, "other": 5}
+# 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 其它(前端按 state 着色)
+# ❗做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
+#   取 paused 会让整个做种中的行变成灰的(2026-09-21 用户报"辅种页状态色错误")。
+#   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_web.py 静态守阵机械比对。
+_SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "other": 5}
 
 # P1-1 按视图回传: 每个视图实际要用的数组。四视图共享同一版本号(rid), 所以"只回一部分"
 # 不会让别的视图停在旧数据上 —— 前端切视图时会把 lastRid 置空强制取一次全量。

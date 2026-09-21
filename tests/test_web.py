@@ -694,6 +694,16 @@ def _scan_state_rank(text, rel, problems):
             f"{rel} STATE_RANK 与后端 _SHOW_STATE_RANK 不一致"
             f"(前端 {front} / 后端 {_SHOW_STATE_RANK}) —— 同一批种子会在辅种页与追剧页显示成不同颜色"
         )
+    # 顺序语义(2026-09-21): 做种必须排在**暂停之前** —— 组内"部分暂停部分做种中"取**做种色**。
+    # 上面的逐项比对只能保证"两页同色", 保证不了"同成哪个色": 2026-09-19 的 BUG-7 把前端表整体
+    # 对齐后端时, 顺手把 {paused,seeding} 也翻成 paused ⇒ 辅种页做种中的组整行变灰(用户报
+    # "辅种页状态色错误, 以前是对的")。两表一起改才不会重蹈覆辙, 故此处单独钉住顺序。
+    if front and front.get("seeding", 9) >= front.get("paused", -1):
+        problems.append(
+            f"{rel} STATE_RANK 把 paused 排在 seeding 之前或同级(前端 {front}) —— "
+            "组/集内\"部分暂停部分做种中\"会取暂停色(灰), 用户口径是取**做种色**(绿); "
+            "见 app.js STATE_RANK 注释与 memory-bank/pitfalls.md"
+        )
 
 
 def _scan_pending_settle(text, rel, problems):
@@ -751,6 +761,7 @@ def _scan_frontend_assets():
     7. 追剧视图"集成员 -> hash"必须走 `memberHashesOf`(见 _scan_episode_member_hashes);
     8. `STATE_RANK` 必须与后端 `_SHOW_STATE_RANK` 逐项一致(见 _scan_state_rank) ——
        两表分别决定"辅种页组行"与"追剧页集行"的颜色, 漂移的后果是同一批种子两页不同色;
+       该项同时钉住**顺序语义**: seeding 必须排在 paused 之前(混合态取做种色, 2026-09-21 用户口径);
     9. 乐观 UI 的**撤下**路径: 真值快照必须早于补丁重贴、判定必须走 `_optimisticSettled`、
        回执后必须调 `_pullTruthAfterCmd`(见 _scan_pending_settle) —— 任一被绕过, 撤下就退回
        3s 常量兜底(真机连报三次的那条), 或判定恒真导致失败路径留假状态(红线)。

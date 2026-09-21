@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>辅种组状态 → 种子状态 对应表 · auto-qb</title>
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c;
+    --c-seeding:#178a5c; --c-blue:#1a76ad; --c-error:#bc4438; --c-paused:#52708c;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+  a{color:inherit}
+
+  /* ── masthead ── */
+  .mast{padding:64px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:33px;line-height:1.15;letter-spacing:-.022em;font-weight:600;margin:0 0 14px;max-width:24ch}
+  .lede{font-size:15.5px;line-height:1.7;color:var(--ink-2);max-width:70ch;margin:0 0 22px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);margin:0;line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  /* ── layout ── */
+  .layout{display:grid;grid-template-columns:198px minmax(0,1fr);gap:58px;align-items:start;padding:44px 0 100px}
+  .toc{position:sticky;top:26px;font-size:12.5px;line-height:1.5}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc ol{list-style:none;margin:0;padding:0}
+  .toc li{margin:0 0 9px}
+  .toc a{color:var(--ink-2);text-decoration:none;display:block}
+  .toc a:hover{color:var(--ink)}
+  .toc .n{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-right:8px}
+  @media (max-width:1080px){.layout{grid-template-columns:1fr;gap:26px}.toc{position:static}}
+
+  /* ── headings ── */
+  h2{font-size:19px;font-weight:600;letter-spacing:-.012em;margin:54px 0 0}
+  h2:first-child{margin-top:0}
+  h2 .num{font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--accent);margin-right:11px;letter-spacing:.06em}
+  .rule{height:1px;background:var(--line-2);margin:11px 0 18px}
+  h3{font-size:14.5px;font-weight:600;margin:30px 0 6px;color:var(--ink)}
+  h3 .h3m{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-weight:400;margin-left:9px}
+  p{margin:0 0 13px;max-width:74ch}
+  .sub{color:var(--ink-2)}
+
+  /* ── tldr ── */
+  .tldr{border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);padding:20px 0 18px;margin:26px 0 8px}
+  .tldr .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .tldr ul{margin:0;padding-left:18px}
+  .tldr li{margin:0 0 8px;max-width:78ch}
+  .tldr li:last-child{margin-bottom:0}
+
+  /* ── tables ── */
+  .tw{overflow-x:auto;margin:16px 0 6px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+  td.wrapcell,th.wrapcell{white-space:normal;min-width:20ch}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:400;border-bottom-color:var(--line-2)}
+  tbody tr:last-child td{border-bottom-color:var(--line-2)}
+  .m{font-family:var(--mono);font-size:12.5px}
+  .m.sm{font-size:12px;color:var(--ink-2)}
+  .dim{color:var(--ink-3)}
+  td .sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:7px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+  .cls{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+  caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:11px;color:var(--ink-3);padding:0 0 8px}
+
+  /* ── chain ── */
+  .chain{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:20px 0 10px;border:1px solid var(--line-2)}
+  .chain div{flex:1 1 0;min-width:132px;padding:12px 14px;border-right:1px solid var(--line)}
+  .chain div:last-child{border-right:0}
+  .chain .k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 7px}
+  .chain .v{font-family:var(--mono);font-size:12.5px;color:var(--ink);line-height:1.45;word-break:break-all}
+  .chain .v i{font-style:normal;color:var(--ink-3)}
+
+  /* ── code ── */
+  pre{background:var(--surface);border:1px solid var(--line);padding:15px 17px;margin:14px 0 6px;overflow-x:auto;
+      font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+  code{font-family:var(--mono);font-size:.9em;color:var(--ink)}
+
+  /* ── notes ── */
+  .fix{font-family:var(--mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(200,164,92,.42);padding:1px 6px;border-radius:3px;white-space:nowrap;margin-left:8px}
+  .pts{list-style:none;margin:16px 0 0;padding:0;counter-reset:p}
+  .pts>li{counter-increment:p;padding:14px 0 13px;border-bottom:1px solid var(--line);max-width:84ch}
+  .pts>li:first-child{border-top:1px solid var(--line)}
+  .pts>li::before{content:counter(p,decimal-leading-zero);font-family:var(--mono);font-size:11px;color:var(--accent);margin-right:14px}
+  .pts b{font-weight:600}
+  .pts .tag{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:8px}
+
+  /* ── colophon ── */
+  .colo{border-top:1px solid var(--line-2);padding:22px 0 70px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);line-height:1.9}
+  .colo span{margin-right:22px}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker">auto-qb · web ui reference</p>
+    <h1>辅种组状态 → 种子状态 对应表</h1>
+    <p class="lede">回答一个问题:辅种页那一行的颜色,到底由谁决定。22 个 qB 原始状态怎么归成 6 类,6 类又怎么合成 1 个组色,以及哪些地方<b>不</b>跟随组色 —— 全部按代码逐条列出。</p>
+    <p class="meta">
+      <span><b>适用</b> prism(棱镜) / atlas(星图) 双 UI</span><br>
+      <span><b>代码基线</b> develop @ 36fe61c(含 2026-09-21 状态优先级修正)</span><br>
+      <span><b>出处</b> 每条事实标注 <span class="m">file:line</span>,见 §9</span>
+    </p>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <p>目录</p>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span>结论速览</a></li>
+      <li><a href="#s2"><span class="n">02</span>组色从哪来</a></li>
+      <li><a href="#s3"><span class="n">03</span>成员级:22 → 6</a></li>
+      <li><a href="#s4"><span class="n">04</span>组级:6 → 1</a></li>
+      <li><a href="#s5"><span class="n">05</span>组合实例</a></li>
+      <li><a href="#s6"><span class="n">06</span>颜色与作用范围</a></li>
+      <li><a href="#s7"><span class="n">07</span>口径与易错点</a></li>
+      <li><a href="#s8"><span class="n">08</span>自检手法</a></li>
+      <li><a href="#s9"><span class="n">09</span>出处索引</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ══════════ 01 ══════════ -->
+    <h2 id="s1"><span class="num">01</span>结论速览</h2>
+    <div class="rule"></div>
+    <div class="tldr">
+      <p class="lbl">四条先记住</p>
+      <ul>
+        <li>组行颜色 = 组内成员 <span class="m">kind</span> 里 <b>rank 最小</b>的那一个。**不是多数票**,1 个做种 + 3 个暂停也取做种色。</li>
+        <li>rank 顺序:<span class="m">error</span> &lt; <span class="m">downloading</span> &lt; <span class="m">checking</span> &lt; <span class="m">seeding</span> &lt; <span class="m">paused</span> &lt; <span class="m">other</span>。<span class="fix">2026-09-21 修正</span></li>
+        <li>辅种表<b>没有状态列</b> —— 组状态<b>只由颜色</b>表达,所以颜色错了没有任何文字可以兜底。</li>
+        <li>只有 6 个 <span class="m">kind</span>,但它们由 <b>22 个</b> qB 原始状态折叠而来。</li>
+      </ul>
+    </div>
+
+    <!-- ══════════ 02 ══════════ -->
+    <h2 id="s2"><span class="num">02</span>组色从哪来</h2>
+    <div class="rule"></div>
+    <p>六个环节,每一环都是单点。任一环改了顺序或分类,组色就变。</p>
+    <div class="chain">
+      <div><p class="k">1 · qB 原始状态</p><p class="v">state 字符串<br><i>"stalledUP"</i></p></div>
+      <div><p class="k">2 · 枚举</p><p class="v">TorrentState<br><i>状态标志位</i></p></div>
+      <div><p class="k">3 · 分类</p><p class="v">_state_kind()<br><i>22 → 6</i></p></div>
+      <div><p class="k">4 · 聚合</p><p class="v">_aggStatus()<br><i>取 rank 最小</i></p></div>
+      <div><p class="k">5 · 类名</p><p class="v">s-&lt;primary&gt;<br><i>s-seeding</i></p></div>
+      <div><p class="k">6 · 着色</p><p class="v">CSS 令牌<br><i>--green</i></p></div>
+    </div>
+    <p class="sub" style="margin-top:14px">后端另有一条同源链路:追剧页的集状态由后端 <span class="m">_SHOW_STATE_RANK</span> 直接算好放进 <span class="m">e.state</span>(§7 第 7 条)。两张表必须逐项一致,由静态守阵机械比对。</p>
+
+    <!-- ══════════ 03 ══════════ -->
+    <h2 id="s3"><span class="num">03</span>成员级:22 个 qB 状态 → 6 类</h2>
+    <div class="rule"></div>
+    <p>判定是一条 <b>有序</b>的 if 链,顺序即优先级:<span class="m">errored → checking → stopped → downloading → uploading → other</span>。先命中的赢,后面的不再看。</p>
+
+    <h3>3.1 完整映射<span class="h3m">22 / 22</span></h3>
+    <div class="tw">
+      <table>
+        <caption>qB 原始状态 → kind → 界面文案与颜色</caption>
+        <thead><tr><th>qB state</th><th>命中标志</th><th>kind</th><th>状态列文案</th><th>行色</th></tr></thead>
+        <tbody>
+          <tr><td class="m">error</td><td class="m sm">errored</td><td class="m">error</td><td>错误 <span class="dim">或 tracker 报错原文</span></td><td><i class="sw" style="background:var(--c-error)"></i><span class="m sm">--error</span></td></tr>
+          <tr><td class="m">missingFiles</td><td class="m sm">errored</td><td class="m">error</td><td>文件丢失</td><td><i class="sw" style="background:var(--c-error)"></i><span class="m sm">--error</span></td></tr>
+          <tr><td class="m">checkingUP</td><td class="m sm">checking + uploading</td><td class="m">checking</td><td>校验中</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">checkingDL</td><td class="m sm">checking + downloading</td><td class="m">checking</td><td>校验中</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">checkingResumeData</td><td class="m sm">checking</td><td class="m">checking</td><td>校验中</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">pausedUP</td><td class="m sm">stopped</td><td class="m">paused</td><td>已暂停</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+          <tr><td class="m">stoppedUP</td><td class="m sm">stopped</td><td class="m">paused</td><td>已暂停</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+          <tr><td class="m">pausedDL</td><td class="m sm">stopped + downloading</td><td class="m">paused</td><td>已暂停</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+          <tr><td class="m">stoppedDL</td><td class="m sm">stopped + downloading</td><td class="m">paused</td><td>已暂停</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+          <tr><td class="m">downloading</td><td class="m sm">downloading</td><td class="m">downloading</td><td>下载</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">metaDL</td><td class="m sm">downloading</td><td class="m">downloading</td><td>下载</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">forcedMetaDL</td><td class="m sm">downloading</td><td class="m">downloading</td><td>下载</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">forcedDL</td><td class="m sm">downloading</td><td class="m">downloading</td><td>下载</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">queuedDL</td><td class="m sm">downloading</td><td class="m">downloading</td><td>下载</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">stalledDL</td><td class="m sm">downloading</td><td class="m">downloading</td><td>下载</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td></tr>
+          <tr><td class="m">uploading</td><td class="m sm">uploading</td><td class="m">seeding</td><td>做种</td><td><i class="sw" style="background:var(--c-seeding)"></i><span class="m sm">--green</span></td></tr>
+          <tr><td class="m">forcedUP</td><td class="m sm">uploading</td><td class="m">seeding</td><td>做种</td><td><i class="sw" style="background:var(--c-seeding)"></i><span class="m sm">--green</span></td></tr>
+          <tr><td class="m">queuedUP</td><td class="m sm">uploading</td><td class="m">seeding</td><td>做种</td><td><i class="sw" style="background:var(--c-seeding)"></i><span class="m sm">--green</span></td></tr>
+          <tr><td class="m">stalledUP</td><td class="m sm">uploading</td><td class="m">seeding</td><td>做种</td><td><i class="sw" style="background:var(--c-seeding)"></i><span class="m sm">--green</span></td></tr>
+          <tr><td class="m">allocating</td><td class="m sm dim">—</td><td class="m">other</td><td>其他</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+          <tr><td class="m">moving</td><td class="m sm dim">—</td><td class="m">other</td><td>其他</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+          <tr><td class="m">unknown</td><td class="m sm dim">—</td><td class="m">other</td><td>其他</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:12px">分布:<span class="m">error 2 · checking 3 · paused 4 · downloading 6 · seeding 4 · other 3</span> = 22。注意 <span class="m">paused / other</span> 两支共用同一个灰令牌 <span class="m">--paused</span>,视觉上不可区分。</p>
+
+    <h3>3.2 为什么顺序不能换<span class="h3m">4 个状态命中多个标志</span></h3>
+    <p>只有这 4 个状态同时命中两个标志位,顺序写反就会改变分类结果:</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>state</th><th>同时命中</th><th>实际取</th><th>若顺序写反会变成</th></tr></thead>
+        <tbody>
+          <tr><td class="m">checkingUP</td><td class="m sm">checking + uploading</td><td class="m">checking</td><td class="m dim">seeding ✗</td></tr>
+          <tr><td class="m">checkingDL</td><td class="m sm">checking + downloading</td><td class="m">checking</td><td class="m dim">downloading ✗</td></tr>
+          <tr><td class="m">pausedDL</td><td class="m sm">stopped + downloading</td><td class="m">paused</td><td class="m dim">downloading ✗</td></tr>
+          <tr><td class="m">stoppedDL</td><td class="m sm">stopped + downloading</td><td class="m">paused</td><td class="m dim">downloading ✗</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:12px">所以 <span class="m">_state_kind</span> 里 <span class="m">is_stopped</span> 必须排在 <span class="m">is_downloading / is_uploading</span> 之前 —— 暂停的种子同时"像在下载/像在做种"。</p>
+
+    <!-- ══════════ 04 ══════════ -->
+    <h2 id="s4"><span class="num">04</span>组级:6 类怎么合成 1 个组色</h2>
+    <div class="rule"></div>
+    <p>组状态 = 组内所有成员 <span class="m">kind</span> 里 <b>rank 数值最小</b>的那一个。语义是"<b>先报需要处理的,再报在跑的,最后报已完成的</b>"。</p>
+
+    <h3>4.1 rank 表<span class="h3m">数值越小越优先</span></h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>rank</th><th>kind</th><th>组行 class</th><th>组行色</th><th>聚合文案用的字</th></tr></thead>
+        <tbody>
+          <tr><td class="m">0</td><td class="m">error</td><td class="cls">s-error</td><td><i class="sw" style="background:var(--c-error)"></i><span class="m sm">--error</span></td><td>错误</td></tr>
+          <tr><td class="m">1</td><td class="m">downloading</td><td class="cls">s-downloading</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td><td>下载</td></tr>
+          <tr><td class="m">2</td><td class="m">checking</td><td class="cls">s-checking</td><td><i class="sw" style="background:var(--c-blue)"></i><span class="m sm">--blue</span></td><td>校验中</td></tr>
+          <tr><td class="m">3</td><td class="m">seeding</td><td class="cls">s-seeding</td><td><i class="sw" style="background:var(--c-seeding)"></i><span class="m sm">--green</span></td><td>做种</td></tr>
+          <tr><td class="m">4</td><td class="m">paused</td><td class="cls">s-paused</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td><td>已暂停</td></tr>
+          <tr><td class="m">5</td><td class="m">other</td><td class="cls">s-other</td><td><i class="sw" style="background:var(--c-paused)"></i><span class="m sm">--paused</span></td><td>其他</td></tr>
+          <tr><td class="m dim">9</td><td class="m dim">表外 kind</td><td class="cls dim">s-&lt;kind&gt;</td><td class="dim">—</td><td class="dim">原样透出</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>4.2 等价决策清单<span class="h3m">互斥 · 从上往下第一个命中的即答案</span></h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>条件(组内成员 kind 集合)</th><th>组行取</th><th>行色</th></tr></thead>
+        <tbody>
+          <tr><td class="m">1</td><td class="wrapcell">只要有一个 <span class="m">error</span></td><td class="m">error</td><td><i class="sw" style="background:var(--c-error)"></i>红</td></tr>
+          <tr><td class="m">2</td><td class="wrapcell">无 error,且至少一个 <span class="m">downloading</span></td><td class="m">downloading</td><td><i class="sw" style="background:var(--c-blue)"></i>蓝</td></tr>
+          <tr><td class="m">3</td><td class="wrapcell">无以上,且至少一个 <span class="m">checking</span></td><td class="m">checking</td><td><i class="sw" style="background:var(--c-blue)"></i>蓝</td></tr>
+          <tr><td class="m">4</td><td class="wrapcell">无以上,且至少一个 <span class="m">seeding</span></td><td class="m">seeding</td><td><i class="sw" style="background:var(--c-seeding)"></i>绿</td></tr>
+          <tr><td class="m">5</td><td class="wrapcell">无以上,且至少一个 <span class="m">paused</span></td><td class="m">paused</td><td><i class="sw" style="background:var(--c-paused)"></i>灰</td></tr>
+          <tr><td class="m">6</td><td class="wrapcell">全部成员都是 <span class="m">other</span>(或组为空)</td><td class="m">other</td><td><i class="sw" style="background:var(--c-paused)"></i>灰</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>4.3 第 3 / 第 4 条的先后<span class="fix">2026-09-21 修正</span></h3>
+    <p>2026-09-19 为消除"同一概念两张表"把前端表整体对齐后端时,<span class="m">paused</span> 被提到了 <span class="m">seeding</span> 之前 —— 于是"部分暂停、部分做种中"的组由绿变灰(回归提交 <span class="m">04cbc8e</span>)。现两张表一起改回<b>做种优先</b>,理由:组内"个别站点被暂停"是常态,取 <span class="m">paused</span> 会把整个在做种的组刷成灰。</p>
+    <p class="sub"><b>代价与边界</b>:追剧页集行用的是后端那张表,所以两页同步变绿。若只想改辅种页,就得拆成两张表并放弃"两页同色"这条不变量 —— 当前选择是保持两页一致。</p>
+
+    <!-- ══════════ 05 ══════════ -->
+    <h2 id="s5"><span class="num">05</span>组合实例</h2>
+    <div class="rule"></div>
+    <p>同一组内的成员状态组合 → 组行最终取谁。**注意第 2、3 行:少数派可以决定组色。**</p>
+    <div class="tw">
+      <table>
+        <caption>以 4 站组为例</caption>
+        <thead><tr><th>组内构成</th><th>组行 class</th><th>组行色</th><th>为什么</th></tr></thead>
+        <tbody>
+          <tr><td class="m">4 做种</td><td class="cls">s-seeding</td><td><i class="sw" style="background:var(--c-seeding)"></i>绿</td><td class="sub">全绿,唯一取值</td></tr>
+          <tr><td class="m">3 做种 + 1 暂停</td><td class="cls">s-seeding</td><td><i class="sw" style="background:var(--c-seeding)"></i>绿</td><td class="sub">rank 3 &lt; 4,做种赢<span class="fix">本次修正点</span></td></tr>
+          <tr><td class="m">1 做种 + 3 暂停</td><td class="cls">s-seeding</td><td><i class="sw" style="background:var(--c-seeding)"></i>绿</td><td class="sub">同上 —— <b>不看数量</b>,组色仍是绿的</td></tr>
+          <tr><td class="m">4 暂停</td><td class="cls">s-paused</td><td><i class="sw" style="background:var(--c-paused)"></i>灰</td><td class="sub">没有 seeding 才落到 paused</td></tr>
+          <tr><td class="m">3 做种 + 1 下载中</td><td class="cls">s-downloading</td><td><i class="sw" style="background:var(--c-blue)"></i>蓝</td><td class="sub">downloading rank 1,压过一切在跑的</td></tr>
+          <tr><td class="m">3 做种 + 1 校验中</td><td class="cls">s-checking</td><td><i class="sw" style="background:var(--c-blue)"></i>蓝</td><td class="sub">checking rank 2 &lt; seeding 3</td></tr>
+          <tr><td class="m">1 校验中 + 3 暂停</td><td class="cls">s-checking</td><td><i class="sw" style="background:var(--c-blue)"></i>蓝</td><td class="sub">checking 压过 paused</td></tr>
+          <tr><td class="m">3 做种 + 1 错误</td><td class="cls">s-error</td><td><i class="sw" style="background:var(--c-error)"></i>红</td><td class="sub">error rank 0,一票否决</td></tr>
+          <tr><td class="m">1 错误 + 3 暂停</td><td class="cls">s-error</td><td><i class="sw" style="background:var(--c-error)"></i>红</td><td class="sub">同上</td></tr>
+          <tr><td class="m">4 其他(moving)</td><td class="cls">s-other</td><td><i class="sw" style="background:var(--c-paused)"></i>灰</td><td class="sub">没有任何已知标志位</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ══════════ 06 ══════════ -->
+    <h2 id="s6"><span class="num">06</span>颜色与作用范围</h2>
+    <div class="rule"></div>
+    <p>组色是 <b>CSS 令牌</b>不是固定色值 —— 5 套主题各有一组,同一语义换主题换色值。下表列出全部 5 套。</p>
+
+    <h3>6.1 令牌 × 主题<span class="h3m">prism/css/themes/*.css</span></h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>kind</th><th>令牌</th><th>frost</th><th>galaxy</th><th>golden</th><th>ocean</th><th>orbit</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="m">seeding</td><td class="m sm">--green</td>
+            <td><i class="sw" style="background:#178a5c"></i><span class="m sm">#178a5c</span></td>
+            <td><i class="sw" style="background:#5fd6a8"></i><span class="m sm">#5fd6a8</span></td>
+            <td><i class="sw" style="background:#2e7d4f"></i><span class="m sm">#2e7d4f</span></td>
+            <td><i class="sw" style="background:#3fd699"></i><span class="m sm">#3fd699</span></td>
+            <td><i class="sw" style="background:#42d689"></i><span class="m sm">#42d689</span></td>
+          </tr>
+          <tr>
+            <td class="m">downloading</td><td class="m sm">--blue</td>
+            <td><i class="sw" style="background:#1a76ad"></i><span class="m sm">#1a76ad</span></td>
+            <td><i class="sw" style="background:#6fb1ef"></i><span class="m sm">#6fb1ef</span></td>
+            <td><i class="sw" style="background:#2a6a96"></i><span class="m sm">#2a6a96</span></td>
+            <td><i class="sw" style="background:#4cc3f7"></i><span class="m sm">#4cc3f7</span></td>
+            <td><i class="sw" style="background:#41b6e8"></i><span class="m sm">#41b6e8</span></td>
+          </tr>
+          <tr>
+            <td class="m">checking</td><td class="m sm">--blue</td>
+            <td colspan="5" class="dim wrapcell">与 downloading 共用 <span class="m">--blue</span>(同色,靠状态列文字区分)</td>
+          </tr>
+          <tr>
+            <td class="m">error</td><td class="m sm">--error</td>
+            <td><i class="sw" style="background:#bc4438"></i><span class="m sm">#bc4438</span></td>
+            <td><i class="sw" style="background:#f08080"></i><span class="m sm">#f08080</span></td>
+            <td><i class="sw" style="background:#b04a3a"></i><span class="m sm">#b04a3a</span></td>
+            <td><i class="sw" style="background:#f3766f"></i><span class="m sm">#f3766f</span></td>
+            <td><i class="sw" style="background:#ef6f63"></i><span class="m sm">#ef6f63</span></td>
+          </tr>
+          <tr>
+            <td class="m">paused</td><td class="m sm">--paused<br><span class="dim">= --fg-muted</span></td>
+            <td><i class="sw" style="background:#52708c"></i><span class="m sm">#52708c</span></td>
+            <td><i class="sw" style="background:#a89dc7"></i><span class="m sm">#a89dc7</span></td>
+            <td><i class="sw" style="background:#79684f"></i><span class="m sm">#79684f</span></td>
+            <td><i class="sw" style="background:#9cadc6"></i><span class="m sm">#9cadc6</span></td>
+            <td><i class="sw" style="background:#93b1a1"></i><span class="m sm">#93b1a1</span></td>
+          </tr>
+          <tr>
+            <td class="m">other</td><td class="m sm">--paused</td>
+            <td colspan="5" class="dim wrapcell">与 paused 同令牌 —— <b>视觉上无法区分</b>,只能靠状态列文字</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6.2 哪些元素跟随组色<span class="h3m">辅种表组行</span></h3>
+    <p>组行只有<b>文字</b>被着色(没有背景块)。范围由 <span class="m">.group-row.s-&lt;kind&gt;</span> 一组选择器决定:</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>位置</th><th>选择器</th><th>是否跟随组色</th><th>备注</th></tr></thead>
+        <tbody>
+          <tr><td>名称</td><td class="m sm">.g-name-text</td><td class="m">是</td><td class="sub">最显眼的着色点</td></tr>
+          <tr><td>数值列(下载/上传/总上传/大小/总大小/添加于)</td><td class="m sm">.g-stat:not(.zero)</td><td class="m">是</td><td class="sub"><b>值为 0 的不着色</b>,保持灰</td></tr>
+          <tr><td>保存路径</td><td class="m sm">.g-save-path</td><td class="m">是</td><td class="sub">—</td></tr>
+          <tr><td>站数</td><td class="m sm">.g-count</td><td class="m">是</td><td class="sub">—</td></tr>
+          <tr><td>站点芯片</td><td class="m sm">.site-chip.&lt;kind&gt;</td><td class="m dim">否</td><td class="sub"><b>逐成员各自着色</b> —— 表达"组内哪个站在什么状态"</td></tr>
+          <tr><td>标签 / 分类芯片</td><td class="m sm">.tag-chip / .cat-chip</td><td class="m">是(有例外)</td><td class="sub">HR 芯片(<span class="m">hr-pending / hr-done</span>)自带语义,被排除;<span class="m">paused / other</span> 保持中性</td></tr>
+          <tr><td>数值色阶</td><td class="m sm">.g-stat.tone-low / .tone-high</td><td class="m dim">覆盖</td><td class="sub">接近满档/偏弱时改用 <span class="m">--accent-hi / --fg-muted</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6.3 展开明细的成员行<span class="h3m">同一套色,类名不同</span></h3>
+    <p>成员行的类名是 <span class="m">member-row &lt;kind&gt;</span>(<b>没有</b> <span class="m">s-</span> 前缀),着色规则是另一组:</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>位置</th><th>选择器</th><th>是否跟随成员色</th></tr></thead>
+        <tbody>
+          <tr><td>站点列的圆点</td><td class="m sm">.member-row.&lt;kind&gt; .m-site .dot</td><td class="m">是(默认 <span class="m">--fg-dim</span>)</td></tr>
+          <tr><td>状态列(圆点 + 文字)</td><td class="m sm">.member-row.&lt;kind&gt; .m-state</td><td class="m">是,圆点用 <span class="m">currentColor</span></td></tr>
+          <tr><td>数值列(做种/用户/下载/上传/总上传/大小)</td><td class="m sm">.m-stat:not(.zero)</td><td class="m">是</td></tr>
+          <tr><td>进度条数值</td><td class="m sm">.m-progress .val</td><td class="m">是</td></tr>
+          <tr><td>Hash</td><td class="m sm">.m-hash</td><td class="m">是</td></tr>
+          <tr><td>做种时长</td><td class="m sm">.m-pair.m-dur</td><td class="m dim">否 —— 恒 <span class="m">--teal</span></td></tr>
+          <tr><td>分享率</td><td class="m sm">.m-pair.m-ratio</td><td class="m dim">否 —— 恒 <span class="m">--violet</span></td></tr>
+          <tr><td>校验中的状态圆点</td><td class="m sm">.member-row.checking .m-state .dot</td><td class="m">是 + 呼吸动画</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:12px">做种时长/分享率两列是**专属色系**(与其它纯数值列区分),所以它们<b>不</b>跟随行状态色 —— 排查"某列颜色不对"时先看是不是这两列。</p>
+
+    <!-- ══════════ 07 ══════════ -->
+    <h2 id="s7"><span class="num">07</span>口径与易错点</h2>
+    <div class="rule"></div>
+    <ol class="pts">
+      <li><b>多数票无效。</b>组色取 rank 最小,与数量无关 —— 1 做种 + 3 暂停仍然是<span class="m">s-seeding</span>绿。看到"大部分站点已暂停却是绿的"属设计如此,不是 bug。</li>
+      <li><b>组表没有状态列。</b>组状态<b>只由颜色</b>承载;聚合文案(<span class="m">做种 3 · 已暂停 1</span>)虽然算出来了,但当前模板里没有消费者。所以颜色错 = 用户完全看不到真实状态。<span class="tag">本次 bug 之所以刺眼,根因在此</span></li>
+      <li><b>站点芯片不跟随组色。</b>它是<b>成员级</b>信息(组内不同站点状态可不同),强行统一会把这一层信息抹平 —— 所以"组行是绿的、其中一个芯片是灰的"是正确的。</li>
+      <li><b>乐观 UI 期间组色会先变。</b>点击暂停/开始后,前端先按预测的成员 <span class="m">kind</span> 重算组色并挂 <span class="m">is-pending</span>,约 100~300ms 后以真值收敛;发送失败则回滚。这段时间的组色是"预测"不是"事实"。</li>
+      <li><b>值为 0 的单元格不着色。</b><span class="m">:not(.zero)</span> 是有意的 —— 否则一整行绿色里混着 0,分不清哪些是真数据。</li>
+      <li><b>组内其它标记与状态色无关。</b>标签/分类的 <span class="m">±</span>(不一致)、大小列的 <span class="m">sizeMismatch</span> 警告、H&amp;R 列的图标各有自己的语义色,不要拿它们判断组状态。</li>
+      <li><b>追剧页集行用的是后端那张表。</b><span class="m">epState(e)</span> 在<b>稳态</b>下直接返回后端算好的 <span class="m">e.state</span>(后端 <span class="m">min(kinds, key=rank)</span>),只有"成员在飞"时才按前端表现算。所以改顺序必须<b>两处一起改</b>,否则两页不同色 + 乐观 UI 颜色弹回。两表一致性由静态守阵机械比对。</li>
+    </ol>
+
+    <!-- ══════════ 08 ══════════ -->
+    <h2 id="s8"><span class="num">08</span>自检手法</h2>
+    <div class="rule"></div>
+    <p>怀疑某一行颜色不对时,在页面控制台里直接问 Vue 实例要答案 —— 不用猜,也不用截图比对。</p>
+<pre><b>// 1. 看某一组算出来的 primary 与聚合文案(取前 5 组)</b>
+const vm = document.querySelector('#app')._vnode.component.proxy;
+vm.decoratedGroups.slice(0, 5).map(g =&gt; ({
+  name: g.name,
+  primary: g.status.primary,      <b>// → 决定 s-&lt;primary&gt;</b>
+  summary: g.status.text,         <b>// → "做种 3 · 已暂停 1"</b>
+  kinds:   g.members.map(m =&gt; m.kind),
+}));
+
+<b>// 2. 看某一行真实渲染出的 class 与颜色(最权威)</b>
+const el = document.querySelector('.group-row[data-table="group"]');
+el.className;                                     <b>// "group-row s-seeding"</b>
+getComputedStyle(el.querySelector('.g-name-text')).color;   <b>// 绿/灰</b>
+
+<b>// 3. 只看某一行的成员构成(找"混合态"样本)</b>
+vm.decoratedGroups.filter(g =&gt; new Set(g.members.map(m =&gt; m.kind)).size &gt; 1)
+  .map(g =&gt; [g.name, g.status.primary, g.status.text]);</pre>
+    <p class="sub" style="margin-top:14px"><b>注意</b>:组表是<b>窗口化 + 客户端排序</b>的(默认按"添加于"降序,只渲染视口附近约 26 行)。所以用 <span class="m">querySelector</span> 找一行时,该行可能压根没渲染 —— 先 <span class="m">scrollIntoView</span> 或按 <span class="m">data-key</span> 定位,别把"没渲染"读成"没生效"。</p>
+
+    <!-- ══════════ 09 ══════════ -->
+    <h2 id="s9"><span class="num">09</span>出处索引</h2>
+    <div class="rule"></div>
+    <p>本文所有事实的来源,可按行号逐条复核。</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>事实</th><th>文件</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td class="wrapcell">22 个 qB 状态 → kind 的判定链</td><td class="m sm">src/auto_qb/mixins/web_view.py</td><td class="m sm">_state_kind · L75</td></tr>
+          <tr><td class="wrapcell">后端状态优先级表</td><td class="m sm">src/auto_qb/mixins/web_view.py</td><td class="m sm">_SHOW_STATE_RANK · L42</td></tr>
+          <tr><td class="wrapcell">错误状态的具体原因(文件丢失 / tracker 原文)</td><td class="m sm">src/auto_qb/mixins/web_view.py</td><td class="m sm">_error_reason · L95</td></tr>
+          <tr><td class="wrapcell">集状态 = 组内 rank 最小</td><td class="m sm">src/auto_qb/mixins/web_view.py</td><td class="m sm">L503</td></tr>
+          <tr><td class="wrapcell">前端状态优先级表</td><td class="m sm">src/auto_qb/web_ui/static/shared/app.js</td><td class="m sm">STATE_RANK · L322</td></tr>
+          <tr><td class="wrapcell">组状态聚合(primary + 聚合文案)</td><td class="m sm">src/auto_qb/web_ui/static/shared/decorate.js</td><td class="m sm">_aggStatus · L22</td></tr>
+          <tr><td class="wrapcell">集状态聚合(乐观态用)</td><td class="m sm">src/auto_qb/web_ui/static/shared/decorate.js</td><td class="m sm">_aggKind · L37</td></tr>
+          <tr><td class="wrapcell">kind → 文案</td><td class="m sm">src/auto_qb/web_ui/static/shared/decorate.js</td><td class="m sm">kindText · L76</td></tr>
+          <tr><td class="wrapcell">集行状态色取值</td><td class="m sm">src/auto_qb/web_ui/static/shared/commands.js</td><td class="m sm">epState · L405</td></tr>
+          <tr><td class="wrapcell">组行 class 绑定</td><td class="m sm">src/auto_qb/web_ui/static/prism/index.html</td><td class="m sm">L395</td></tr>
+          <tr><td class="wrapcell">成员行 class 绑定</td><td class="m sm">src/auto_qb/web_ui/static/prism/index.html</td><td class="m sm">L473</td></tr>
+          <tr><td class="wrapcell">组行着色选择器</td><td class="m sm">src/auto_qb/web_ui/static/prism/css/views.css</td><td class="m sm">L826 起</td></tr>
+          <tr><td class="wrapcell">成员行着色选择器</td><td class="m sm">src/auto_qb/web_ui/static/prism/css/views.css</td><td class="m sm">L845 起</td></tr>
+          <tr><td class="wrapcell">站点芯片 / 状态列圆点着色</td><td class="m sm">src/auto_qb/web_ui/static/prism/css/views.css</td><td class="m sm">L187 · L246–256</td></tr>
+          <tr><td class="wrapcell">图例 / 筛选 chip 的 k- 类</td><td class="m sm">src/auto_qb/web_ui/static/prism/css/components.css</td><td class="m sm">L167–172</td></tr>
+          <tr><td class="wrapcell">5 套主题的状态色令牌</td><td class="m sm">src/auto_qb/web_ui/static/prism/css/themes/*.css</td><td class="m sm">frost / galaxy / golden / ocean / orbit</td></tr>
+          <tr><td class="wrapcell">组表 / 明细表列模型(组表无状态列)</td><td class="m sm">src/auto_qb/web_ui/static/shared/app.js</td><td class="m sm">L32 / L54</td></tr>
+          <tr><td class="wrapcell">两表一致性 + 顺序语义守阵</td><td class="m sm">tests/test_web.py</td><td class="m sm">_scan_state_rank</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:16px">注:atlas(星图) 与 prism(棱镜) 共用同一套 JS 与等价 CSS,类名与令牌一致,行号按 prism 列出。</p>
+
+  </main>
+</div>
+
+<div class="wrap">
+  <p class="colo">
+    <span>auto-qb · 辅种组状态对应表</span>
+    <span>代码基线 develop @ 36fe61c</span>
+    <span>生成 2026-09-21</span><br>
+    所有色值、选择器、行号均取自生成时刻的代码;若与界面不符,以代码为准并回写本表。
+  </p>
+</div>
+
+</body>
+</html>

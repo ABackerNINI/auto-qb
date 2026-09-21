@@ -309,13 +309,17 @@ function initialViewMode() {
  * (`e.state`) 是后端按那张表算好后回传的, 而辅种页的组状态 (`decoratedGroups.status.primary`)
  * 是前端按这张表算的。两张表一旦不一致, **同一批种子在两个页面会显示成不同颜色**;
  * 更糟的是乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
- * 两表一致性由 `tests/test_web.py::test_frontend_state_rank_matches_backend` 机械守卫(改一边必须改另一边)。
+ * 两表一致性由 `tests/test_web.py::_scan_state_rank`(test_frontend_static_bundle_health 第 8 项)
+ * 机械守卫(改一边必须改另一边), 该项同时钉住"做种排在暂停之前"的顺序语义。
  *
- * 曾用顺序 ["error","checking","downloading","seeding","paused","other"] —— 与后端差两处:
- * {downloading,checking} 组后端取 downloading、前端取 checking; {paused,seeding} 组后端取 paused、
- * 前端取 seeding(BUG-7)。统一到后端表 = 语义变成"先报需要处理的, 再报在跑的, 最后报已完成的"。
+ * 语义 = "先报需要处理的, 再报在跑的, 最后报已完成的"; 但 **seeding 必须排在 paused 之前** ——
+ * 组内"部分暂停部分做种中"是常态(整组只有个别站点被暂停), 取 paused 会把整个做种中的组刷成灰的。
+ * 曾用顺序 ["error","checking","downloading","seeding","paused","other"] 与后端差两处:
+ * {downloading,checking}(后端取 downloading —— 保留) 与 {paused,seeding}(前端取 seeding —— 恢复)。
+ * ❗2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused ⇒
+ * 辅种页"部分暂停部分做种中"的组由绿变灰(2026-09-21 用户报"以前是对的"), 本次两表一起改回做种优先。
  */
-const STATE_RANK = { error: 0, downloading: 1, checking: 2, paused: 3, seeding: 4, other: 5 };
+const STATE_RANK = { error: 0, downloading: 1, checking: 2, seeding: 3, paused: 4, other: 5 };
 // 表里没有的 kind 排到最后(与后端 `_SHOW_STATE_RANK.get(k, 9)` 同口径)
 const STATE_RANK_LAST = 9;
 
