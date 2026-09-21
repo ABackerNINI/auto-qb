@@ -11,6 +11,7 @@
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
+- test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
 - test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
@@ -844,6 +845,64 @@ def test_frontend_member_window_functions_live_in_methods():
             f"模板里 memberPadTop(g.members) 会把 this.memberWin 当 getter 触发,"
             f"拿到值再 (list) 当函数调 → 整表白屏(issue 26-09-21-0247)"
         )
+
+
+def _computed_member_names(lines):
+    """取一个片段文件里所有 `computed: {` 块的成员名(块缩进 + 2 的成员行)
+
+    比 `_section_members` 多两件事: ①**所有** computed 块都要取(组件里的 computed 也在内,
+    不只看顶层 mixin); ②终止行按**块的缩进**判定 —— 用 `line.strip() in ("},", "}")`
+    会被深层嵌套的 `},`(如 `return {...};` 之后那一行)提前关掉块, 从而漏掉后面的成员。
+    """
+    out, in_block, indent = set(), False, 0
+    for line in lines:
+        if not in_block:
+            if line.strip() == "computed: {":
+                in_block = True
+                indent = len(line) - len(line.lstrip())
+            continue
+        if line.rstrip() in (" " * indent + "},", " " * indent + "}"):
+            in_block = False
+            continue
+        m = re.match(r"^\s{%d}(?:async\s+)?([A-Za-z_$][\w$]*)\s*[(:]" % (indent + 2), line)
+        if m:
+            out.add(m.group(1))
+    return out
+
+
+def test_frontend_computed_not_invoked_as_function():
+    """computed 成员不许以 `this.X()` 形式调用 —— 拿到的是 getter 的**值**, 不是函数
+
+    现象与定性(2026-09-21, 经典设置页「数值 + 单位」字段):
+    `unitParts` 是 computed(返回 `{num, unit}`), 而 `setUnitNum` 里写成了
+    `this.unitParts().unit` —— 这是把 getter 的**返回值**当函数调用 ⇒ `TypeError:
+    this.unitParts is not a function` ⇒ **一改数字框就整页白屏**(设置页整段消失)。
+    此前没人发现是因为: ① 模板里 `unitParts.num` 是对的(只错在 JS 方法里);
+    ② 只有真的去改"主循环间隔 / 轮转大小"这类带单位的值才会触发。
+
+    为什么必须机检: 这类错误**只在真浏览器里跑特定交互**才现形, `node --check` 查不出来
+    (语法完全合法), 静态守阵里也天然看不见; 与 `test_frontend_member_window_functions_live_in_methods`
+    是同一族("computed 看起来对, 实际废掉"), 但那一条守的是"带参函数放错了块",
+    这一条守的是"无参 computed 被当成函数调" —— 两个方向都要钉。
+
+    断言: 任一片段文件里, 出现在 `computed: {` 块中的成员名, 不得在该文件中以 `this.<名>(` 出现。
+    """
+    problems = []
+    for path, rel in _app_bundle_files():
+        text = open(path, encoding="utf-8").read()
+        lines = text.splitlines()
+        for name in sorted(_computed_member_names(lines)):
+            for m in re.finditer(r"this\.%s\(" % re.escape(name), text):
+                ln = text[:m.start()].count("\n") + 1
+                stripped = lines[ln - 1].strip()
+                # 注释行里引用这个写法(说明"别这么写")不算违规, 否则守阵会逼人删文档
+                if stripped.startswith(("*", "//", "#")):
+                    continue
+                problems.append(
+                    f"{rel}:{ln} `{name}` 是 computed 却以 this.{name}() 调用"
+                    "(拿到的是 getter 的值, 再 () 会 TypeError ⇒ 触发该路径的界面整段白屏)"
+                )
+    assert not problems, "computed 被当函数调用: " + "; ".join(problems)
 
 
 def test_frontend_dist_segments_aggregates_per_view():

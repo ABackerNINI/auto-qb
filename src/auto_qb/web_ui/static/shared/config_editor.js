@@ -1151,12 +1151,18 @@ window.CE_FIELD_COMPONENT = {
     listRemove(i) {
       this.ce.cfgItemRemove(this.path, i);
     },
-    /* 数值 + 单位: 只改其中一半时保留另一半的当前值(避免"改单位把数字清空") */
+    /* 数值 + 单位: 只改其中一半时保留另一半的当前值(避免"改单位把数字清空")
+     *
+     * ⚠ `unitParts` 是 **computed**(无参 getter), 只能 `this.unitParts.unit` 取属性;
+     *    写成 `this.unitParts()` 是把 getter 的**返回值**({num, unit} 对象)当函数调用
+     *    ⇒ TypeError ⇒ 经典设置页一改"数值 + 单位"字段的数字就整页白屏
+     *    (2026-09-21 实测修复; 静态守阵见 tests/test_web.py
+     *     `test_frontend_computed_not_invoked_as_function`)。 */
     setUnitNum(value) {
-      this.ce.cfgSetUnit(this.path, value, this.unitParts().unit);
+      this.ce.cfgSetUnit(this.path, value, this.unitParts.unit);
     },
     setUnitName(unit) {
-      this.ce.cfgSetUnit(this.path, this.unitParts().num, unit);
+      this.ce.cfgSetUnit(this.path, this.unitParts.num, unit);
     },
     /* 规则引用: 从下拉选一条 => 追加一条引用, 并把下拉复位回占位项 */
     refPick(event) {
