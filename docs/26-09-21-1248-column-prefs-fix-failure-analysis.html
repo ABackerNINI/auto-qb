@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>列设置重置 · 历次修复复盘与失败原因分析</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d;
+    --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --ok: #7fc99a; --ok-bg: #16241d; --bad: #e2836e; --bad-bg: #2a1d19;
+    --warn: #e2a86e; --warn-bg: #2a2119;
+    --code-bg: #171e26; --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1120px; margin: 0 auto; padding: 56px 40px 80px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 74ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 30px; padding: 15px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 8px; }
+  .meta-row .k { font-family: var(--display); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 82ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 82ch; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 82ch; }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.ok { border-left-color: var(--ok); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: .05em; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid #2c4a38; }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); border: 1px solid #4a322c; }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 82ch; }
+  footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="kicker">修复复盘 · column 设置重置</div>
+  <h1>列设置重置：历次修复复盘，以及为什么这次还是失败</h1>
+  <p class="lede">四轮修复，每一轮都只封住了当时找到的那一条通道。最新一轮（<code>11382ed</code>）在实验环境全绿、真机仍然复现 —— 不是修复无效，而是<b>它把成败 100% 押在了 F2 跨标签同步上</b>，而真机真正的关键变量（origin 是否一致）从未被验过；同时还有一条<b>与多标签无关</b>的落盘时机缺陷一直敞着。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">分析时间</div><div class="v">2026-09-21 12:48</div></div>
+    <div class="item"><div class="k">主线 HEAD</div><div class="v">3470516</div></div>
+    <div class="item"><div class="k">原始 issue</div><div class="v">26-09-20-1800</div></div>
+    <div class="item"><div class="k">最新修复</div><div class="v">11382ed</div></div>
+    <div class="item"><div class="k">验证方式</div><div class="v">真浏览器实证</div></div>
+  </div>
+
+  <section>
+    <h2><span class="no">01</span>一句话结论</h2>
+    <div class="callout">
+      <b>修复没有白做，但也没有做完。</b>实测确认：同源多标签下的<b>显隐、列序、以及用户手动拖过的宽度</b>，现在确实互不吞了（S1/S2/S3 全绿）。<br>
+      仍然会丢的是两类：<b>① 用户没拖过宽的页（<code>colManual=false</code>）的宽度</b> —— 落盘时机错位导致存储里长期是空/旧值（实测内存 12 键 / 存储 0 键）；<b>② origin 不一致的两个"标签"</b> —— localStorage 完全隔离（已实测确认，<code>127.0.0.1</code> 与 <code>localhost</code> 互不可见），F1/F2/F3 全都够不着。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>历次修复记录（四轮）</h2>
+    <table>
+      <tr><th>轮次</th><th>时间 / 提交</th><th>做了什么</th><th>对"重置"的实际作用</th></tr>
+      <tr>
+        <td>①</td>
+        <td>09-14 07:25<br><code>479f52c</code></td>
+        <td>新增 H&amp;R / 分享率两列，<b>升存储键 v3 → v4</b></td>
+        <td><span class="tag bad">反向</span> 换键 = 旧键不再读取，用户手调的宽/隐/序<b>一次性清零</b>。这是"重置"最早的<b>机制性来源</b>，而且是修复动作自己造成的</td>
+      </tr>
+      <tr>
+        <td>②</td>
+        <td>09-17 13:09<br><code>cb57bef</code> (R10-09)</td>
+        <td>政策反转：列集变更<b>一律不升版本</b>，改由 <code>loadColState()</code> 按当前列 key 求交集洗净兼容</td>
+        <td><span class="tag ok">封住</span> 消掉了"升版本清零"这条通道；此后 09-15/09-16/09-17 四次加列减列<b>都没再升版本</b></td>
+      </tr>
+      <tr>
+        <td>③</td>
+        <td>09-19<br><code>ccedce8</code> / <code>8d68300</code></td>
+        <td>存储键版本沿革审计（<code>git log -S</code> 逐键追溯）+ 三处旧口径文档回写</td>
+        <td><span class="tag warn">无关</span> 只读审计，<b>不改任何运行时行为</b></td>
+      </tr>
+      <tr>
+        <td>④</td>
+        <td>09-20 19:03<br><code>11382ed</code></td>
+        <td>F1 <code>saveColState(page)</code> 改 read-modify-write；F2 <code>storage</code> 事件 → <code>adoptColState()</code>；F3 <code>visibilitychange</code> 补漏；冒烟新增守阵</td>
+        <td><span class="tag warn">部分</span> 实验环境全绿（冒烟 56 项 0 失败、红验通过），<b>真机仍复现</b> —— 见 04/05 节</td>
+      </tr>
+    </table>
+    <p class="hint">共同模式：每一轮都是"用户报一次 → 找到一条根因 → 修掉它"，而<b>"列设置重置"从来不是一个单因问题</b>。四轮下来封住了两条（升版本、多标签整份覆盖），至少还有两条敞着。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>本次实证：环境与方法</h2>
+    <p>不靠读代码猜，也不沿用上一轮的结论。用真浏览器重跑一遍，并把上一轮<b>没覆盖的场景</b>补进去。</p>
+    <ul>
+      <li>环境：<code>scripts/ui_harness.py --torrents 600</code>（600 种子 / 200 组，真实 <code>create_app</code> + FakeClient）+ Playwright-Core chromium-1243，prism 皮肤，双标签同 context。</li>
+      <li>脚本：<code>.workbuddy-ai/tmp/col_audit.cjs</code>（S1–S5）、<code>col_audit2.cjs</code>（V1–V3），gitignored 区不入仓。</li>
+      <li>手势全部走真实 DOM 点击（列选择器 / resizer 拖拽），不直接改内存 —— 直接调方法会绕过"用户到底能不能触发"这一层。</li>
+    </ul>
+    <table>
+      <tr><th>场景</th><th>操作</th><th>实测结果</th><th>判定</th></tr>
+      <tr><td>S1 基线</td><td>双标签各隐藏一列</td><td>存储 <code>hidden.group = ["uploaded","total_size"]</code>，A/B 内存一致</td><td><span class="tag ok">修复生效</span></td></tr>
+      <tr><td>S2 刷新</td><td>A、B 各自刷新</td><td>两边都保住 <code>["uploaded","total_size"]</code></td><td><span class="tag ok">保住</span></td></tr>
+      <tr><td>S3 已拖宽度</td><td>A 拖宽 name→229px（<code>manual=true</code>），B 再隐藏一列</td><td>229px 仍在，未被 B 吃掉</td><td><span class="tag ok">保住</span></td></tr>
+      <tr><td>S4 异宽窗口</td><td><code>manual=false</code> 的页，B 窗口改 1000px 后操作</td><td>存储宽度键数 <b>11 → 10</b>，隐藏列的宽度记录消失</td><td><span class="tag bad">丢失</span></td></tr>
+      <tr><td>V1 落盘时机</td><td>隐藏一列后对比内存与存储</td><td>内存 <code>widths.group</code> <b>12 个键</b>，存储 <code>widths.group</code> = <b>undefined</b></td><td><span class="tag bad">漂移</span></td></tr>
+      <tr><td>V3 manual 保护</td><td>手动设 333px 后 隐藏 → 再显示</td><td>内存与存储都仍是 333px</td><td><span class="tag ok">保住</span></td></tr>
+      <tr><td>M1 <b>脆弱档</b></td><td><code>manual=false</code>（只调显隐、没拖过宽）改一次显隐</td><td>内存 <b>12 键</b>，存储 <b>0 键</b></td><td><span class="tag bad">存储没拿到值</span></td></tr>
+      <tr><td>M2 滞后一拍</td><td>设置页往返后再改一次显隐</td><td>内存 11 键，存储 12 键 —— <b>存的是上一拍</b></td><td><span class="tag bad">滞后一拍</span></td></tr>
+      <tr><td>P1–P5 高频路径</td><td>进设置页 / 切视图 / 改显隐 / 刷新（<code>manual=true</code>）</td><td>310px 全程不动，显隐保住</td><td><span class="tag ok">稳定</span></td></tr>
+      <tr><td>T1 origin 隔离</td><td>同 context 双 page：<code>127.0.0.1</code> vs <code>localhost</code>（对照组均为 127.0.0.1）</td><td>对照组 ✓ 共享；实验组 q2 读到<b>(空)</b>，且互不影响</td><td><span class="tag bad">机制确认</span></td></tr>
+      <tr><td>T2 方案对症</td><td>运行时按"先 materialize 后 save"执行一次</td><td>存储 width 键数 <b>0 → 13</b>，与内存一致</td><td><span class="tag ok">建议 2 对症</span></td></tr>
+    </table>
+    <div class="callout bad">
+      <b>M1/M2 是本次最硬的证据。</b><code>manual=true</code>（用户拖过宽）的页<b>完全稳定</b>；<code>manual=false</code>（用户只调过显隐/列序）的页，存储里的 widths 长期是<b>空值或上一拍的旧值</b> —— 它不是稳定的用户偏好，而是"某个标签在某时刻的渲染快照"。这条与 04 节是同一件事的两种观测。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>失败原因 A：落盘时机错位（与多标签无关，单标签也会丢）</h2>
+    <div class="callout bad">
+      <b>这是本轮实证最有价值的发现。</b><code>materializeColumns()</code> 只改内存、<b>从不写存储</b>；而 6 个 <code>saveColState()</code> 调用点里有 <b>3 个是"先存、再算"</b> —— 落盘的是实体化<b>之前</b>的内存值。
+    </div>
+    <p>实测 V1：隐藏一列之后，内存 <code>colWidths.group</code> 有 12 个键，而 <code>localStorage</code> 里 <code>widths.group</code> 是 <code>undefined</code>。存储与内存<b>长期漂移</b>，谁下一次落盘，谁就把自己那份（可能是空值/旧值）写进去。</p>
+    <pre><code>// columns.js —— 顺序不一致的 6 个调用点
+373  toggleColumn          : saveColState(page)  → $nextTick(materializeColumns)   ❌ 先存后算
+382  resetAllColumnWidths  : saveColState(page)  → $nextTick(materializeColumns)   ❌ 先存后算
+495  applyColOrder         : saveColState(page)  → $nextTick(materializeColumns)   ❌ 先存后算
+
+392  fitColumnsToWindow    : materializeColumns → manual=true → saveColState(page)  ✅ 先算后存
+433  startResize (up)      : 拖拽中已改 colWidths → manual=true → saveColState(page) ✅ 先算后存
+464  autoFitColumn         : 改 colWidths → manual=true → saveColState(page)         ✅ 先算后存</code></pre>
+    <p><b>用户侧表现</b>：只调过显隐 / 拖过列序、<b>没拖过宽度</b>的页，<code>colManual</code> 一直为 false ⇒ 存储里的 widths 段长期是空或旧值 ⇒ 任何一次刷新都重新自适应 ⇒ 用户感觉"宽度时不时就回到默认"。这条通道<b>单标签也会发生</b>，第四轮修复完全没碰它。</p>
+    <p><b>次生：隐藏列的宽度记录被抹除。</b><code>_renderedWidths()</code> 只记录<b>可见列</b>的渲染宽度 ⇒ 隐藏列的 px 从内存、进而从存储中消失（S4 实测 11→10）⇒ 再显示时该列只能拿 <code>templateMinPx</code> 兜底。用户看到的就是"这列宽度被重置了"。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>失败原因 B：修复把成败全押在 F2 上，而真机的关键变量没被覆盖</h2>
+    <p>F1 是 <b>page 级整段替换</b>，不是逐项合并 —— 这一点代码注释自己承认了：</p>
+    <pre><code>// columns.js:322-324（原注释）
+ *   (单独靠这招不够: 两个标签改**同一个表**时仍然后写赢 —— 真正的解法是 F2 的 storage 同步,
+ *    让每个标签的内存保持新鲜; 这里挡的是"同一毫秒两边都写"的竞态。)</code></pre>
+    <p>也就是说：<b>F2 一旦不生效，F1 就退化成"同 page 后写赢"，等于没修。</b>而 F2 只在"同浏览器进程 + 同 origin + 事件未被节流"三个条件同时成立时才可靠。</p>
+    <h3>B1 · origin 隔离 <span class="tag bad">已实测确认</span></h3>
+    <div class="callout bad">
+      用户说过"平时用<b>固定地址</b>打开"。但"固定地址"不等于"同一个 origin"。实测（同一 context、同一服务，仅主机名不同）：<br>
+      <b>对照组</b>（两 page 均为 <code>127.0.0.1:8099</code>）→ p2 读到 <code>hidden.group = ["size"]</code> <span class="tag ok">共享</span>，证明实验方法有效；<br>
+      <b>实验组</b>（<code>127.0.0.1</code> vs <code>localhost</code>）→ q2 读到 <b>(空)</b> <span class="tag bad">完全隔离</span>，且 q2 自己改列也<b>不影响</b> q1。
+    </div>
+    <p>即：<code>127.0.0.1</code> / <code>localhost</code> / 换过端口的地址，在 localStorage 眼里是<b>互不相通的站点</b>，各存各的、<b>永不同步</b>。用户在 A 地址调好的列，从 B 地址打开时看到的是"B 自己的旧偏好" —— 主观感受就是"又被重置了"，而且<b>F1/F2/F3 全都够不着</b>（不是时序问题，是两个世界）。</p>
+    <p>项目自己的知识库早就记了这条限制（<code>activeContext.md</code>「第十轮两处已知限制 ①」）。第四轮修复<b>既没有处理它，也没有实测排除它</b> —— issue 报告里只写了一句"基本排除"。本轮把它从"待取证"变成了<b>已确认的机制</b>。</p>
+    <p class="hint">⚠ 过程中先跑了一版无效实验：给两个标签各建一个 <code>browser.newContext()</code>，而 Playwright 的 context 本身就隔离 localStorage —— 那样验出来的是"context 隔离"，与主机名无关。加对照组后重做才得到有效结论。<b>没有对照组的隔离实验不能采信。</b></p>
+    <h3>B2 · F3 补漏有盲区</h3>
+    <p><code>visibilitychange</code> 的 adopt 只在"<b>隐藏 → 可见</b>"时触发。用户把两个窗口<b>并排</b>摆放时两个都可见 ⇒ F3 <b>永不触发</b>，防线只剩 F2 一条。后台标签被浏览器冻结/丢弃时同理。</p>
+    <h3>B3 · 冒烟守阵验不出这些</h3>
+    <p><code>scripts/ui_smoke.cjs:843-868</code> 的断言是：<b>标签 1 内存的 <code>colHidden.group</code> ≥ 2 项</b>，两个标签固定 <code>waitForTimeout(600)</code>。它在本机可靠环境下<b>必然绿</b>，但验不出：origin 隔离、后台节流、异宽窗口、以及 04 节的落盘漂移。<b>守阵绿 ≠ 通道封住。</b></p>
+  </section>
+
+  <section>
+    <h2><span class="no">06</span>为什么"实验全绿、真机仍红"</h2>
+    <table>
+      <tr><th>维度</th><th>复现环境（本轮 / 上一轮）</th><th>真机</th></tr>
+      <tr><td>origin</td><td>两标签同为 <code>127.0.0.1:8099</code>，必然共享</td><td>书签 / 手输 / 重启后端口变更 ⇒ <b>可能不同</b></td></tr>
+      <tr><td>标签活跃度</td><td>Playwright 驱动，全程活跃</td><td>后台标签被节流 / 冻结 / 丢弃</td></tr>
+      <tr><td>视口</td><td>固定 1600×900</td><td>多窗口异宽，materialize 出不同 px</td></tr>
+      <tr><td>操作序列</td><td>脚本化的"各改一次"</td><td>小时级、混合操作（显隐 + 拖宽 + 拖序穿插）</td></tr>
+      <tr><td>前置假设</td><td>已认定"就是多标签"</td><td>用户顺着提问答"是"，<b>属引导性确认，未独立验证</b></td></tr>
+    </table>
+    <p class="hint">⚠ 最后一行值得单独记一笔：上一轮是<b>先复现出多标签、再拿"是不是多标签"去问用户</b>，用户顺着答了。这条回答只能证明"用户确实也开多标签"，<b>不能证明重置只发生在多标签下</b>。而 04 节那条缺陷恰恰是单标签也会发生的。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">07</span>最近几次 WebUI 提交：关联性核查</h2>
+    <p>逐提交核验了 <code>11382ed</code> 之后的所有 WebUI 改动，结论是：<b>都没有引入或加剧列设置重置</b>。但有一条<b>间接放大</b>值得记下。</p>
+    <table>
+      <tr><th>提交</th><th>内容</th><th>与列偏好的关系</th><th>判定</th></tr>
+      <tr>
+        <td><code>8e2eadf</code></td>
+        <td>辅种页展开白屏修复：<code>memberWin/memberPadTop/memberPadBottom</code> 从 <code>computed</code> 迁到 <code>methods</code>（直改了 columns.js）</td>
+        <td>逐项核验：9 个列方法（<code>saveColState</code> / <code>adoptColState</code> / <code>materializeColumns</code> / <code>toggleColumn</code> / <code>applyColOrder</code> / <code>startResize</code> / <code>autoFitColumn</code> / <code>fitColumnsToWindow</code> / <code>resetAllColumnWidths</code>）<b>全部仍在 methods 块内</b>，结构完好</td>
+        <td><span class="tag ok">无关</span></td>
+      </tr>
+      <tr>
+        <td><code>01fd595</code></td>
+        <td>Console Hub 新版设置页</td>
+        <td>与 columns.js 的<b>方法名交集为空</b>（无 mixin 覆盖）；对 index.html 的新增行<b>未触及</b> <code>col-picker</code> / <code>group-head</code> / <code>resizer</code> / <code>col-menu</code>（0 行）</td>
+        <td><span class="tag ok">无关</span></td>
+      </tr>
+      <tr>
+        <td><code>3470516</code></td>
+        <td>设置页"数值+单位"白屏（<code>unitParts</code> 被当函数调用）</td>
+        <td>改的是 <code>config_editor.js</code>，与列状态链路无交集</td>
+        <td><span class="tag ok">无关</span></td>
+      </tr>
+      <tr>
+        <td><code>7548e51</code><br><code>067bffd</code></td>
+        <td>时间列相对/绝对口径 + 其跨标签同步</td>
+        <td>持久化键 <code>autoqb_timefmt_v1</code> 是<b>刻意独立</b>的（提交信息明写"不塞进 <code>COLS_STORE_KEY</code>"），且 storage 监听<b>独立注册</b>，不会误触发列 adopt</td>
+        <td><span class="tag ok">无关</span></td>
+      </tr>
+      <tr>
+        <td>列定义</td>
+        <td>是否加列/减列/改列 key</td>
+        <td>精确比对 <code>11382ed</code> 与 HEAD：<b>34 个列 key，无新增、无消失</b>（早先一次 grep 把注释里的 <code>{ 列key: "rel" | "abs" }</code> 误当成新增列，已排除）⇒ 不存在"列集变化导致洗净丢弃"</td>
+        <td><span class="tag ok">无关</span></td>
+      </tr>
+    </table>
+    <h3>唯一的相关项：白屏 bug 放大了观感</h3>
+    <div class="callout">
+      <code>8e2eadf</code> 与 <code>3470516</code> 修的都是<b>整表 / 整页白屏</b>。在这两个 bug 存在的窗口期（恰好覆盖用户报"重置"的时间段），用户一旦触发白屏就只能刷新 —— 而由于 04 节的落盘错位，刷新后读到的存储是<b>上一拍的旧值</b>，用户的观感就是"我刚改的列宽没了"。<br>
+      <b>它们不是重置的成因，而是让重置更容易被看见的放大器</b>；这两个 bug 现已修复。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">08</span>修复已实施（B1 排除后）</h2>
+    <p>用户确认：<b>地址一直是 <code>http://127.0.0.1:38080/atlas/</b></code>，未换过主机名与端口 ⇒ <b>B1 排除</b>，根因锁定在落盘错位。随后在用户<b>真实运行的实例</b>上完整复现并修复。</p>
+    <h3>真机复现（用户真实服务 atlas / 38080，A 窗 1600px、B 窗 1200px）</h3>
+    <pre><code>R2  A 只改显隐(不拖宽)      内存 229px / 12 键   存储 0 键          ✗
+R3  B(更窄) 也只改一次显隐   存储变成 210px                          ✗ 换主人
+R4  A 刷新                  229px -> 210px                          ✗ 宽度变成 B 窗口算的
+    (显隐保住 ["size","category"] ✓ · 拖过宽的页 300px 全程安全 ✓)</code></pre>
+    <p><b>只有宽度跳变，显隐与列序不丢</b> —— 与用户"栏的顺序、显示、宽度经常被重置"的描述吻合：宽度是唯一受伤的那一项。</p>
+    <h3>修法（写侧 + 读侧，各 1 行）</h3>
+    <pre><code>// ① shared/columns.js :: saveColState(page) —— 写侧: 非手动页不落 px
+if (!this.colManual[page]) payload.widths = { ...payload.widths, [page]: {} };
+
+// ② shared/app.js :: loadColState() —— 读侧: 非手动页不读 px(与 ① 成对)
+if (!out.manual[page]) out.widths[page] = {};</code></pre>
+    <div class="callout">
+      <b>② 不是可选项。</b>只改写侧的话，浏览器里<b>已经存在的污染 px</b>（修复前被别的窗口写进去的）仍会被读出来，刷新后看到的还是旧值 —— 修复会"看起来没生效"。读侧一并清空，改完刷新即见效。
+    </div>
+    <p><code>manual=false</code> 时 <code>colWidths[page]</code> 是 <code>materializeColumns</code> 按<b>当前窗口</b>算出的自适应快照，<b>不是用户偏好</b>。落盘会 ① 把弹性模板固化成固定 px，该页不再随窗口自适应；② 被别的窗口算出的值整段覆盖。不落盘 ⇒ 保持弹性、各窗口各算各的；想固定宽度就拖一下（拖即置 <code>manual=true</code>，此后受保护）。</p>
+    <div class="callout">
+      <b>⚠ 光把"先存后算"改成"先算后存"是不够的</b> —— 顺序改了，存储拿到的仍是"最后操作的那个窗口算出的值"，照样换主人。真正的根治点是<b>不落不该落的 px</b>。
+    </div>
+    <h3>验证</h3>
+    <ul>
+      <li>弹性页<b>正常填满容器</b>（表头 1576 / 容器 1576），没有塌掉或溢出。</li>
+      <li>A 刷新后不再继承 B 的 210px；<code>manual=true</code> 的页 336px 跨标签不丢。</li>
+      <li>新增守阵 <code>tests/test_web.py::test_frontend_save_col_state_skips_widths_for_auto_pages</code>（已同步测试计划清单）。</li>
+      <li><b>红验通过</b>：把那行整行注释掉 → 守阵如期 FAIL ⇒ 真钉得住。</li>
+      <li>全量 <b>1134 passed</b>，0 失败（两个 clone 各自复跑一致）。</li>
+      <li><b>真实服务复验</b>（127.0.0.1:38080/atlas）：污染 210px → 重算 231px 且填满容器；manual=true 的 336px 跨操作保住 ✓</li>
+      <li>官方冒烟 <code>scripts/ui_smoke.cjs --ui both</code>：<b>52 项，失败 2 项</b> —— 两项均为「P0-3 乐观态及时落回真值(80~1000ms)」，是 <code>8e2eadf</code> 那批<b>已记录的既有议题</b>（属"乐观 UI 撤下"，与列偏好无关）。关键项「列设置多标签页互不覆盖」<b>PASS</b> ⇒ 本次改动未破坏既有跨标签同步。</li>
+      <li>知识库已回写：<code>pitfalls.md</code>（持久化前先分清"用户偏好"与"派生快照"）、<code>testing.md</code>（基线 1133 → 1134）、issue 补「二次修复」小节。</li>
+    </ul>
+    <h3>已落到你正在跑的服务上</h3>
+    <ul>
+      <li>定位：监听 38080 的进程工作目录是 <code>D:\Projects\auto-qb</code>，且为 <b>editable install</b>（<code>.pth</code> 指向 <code>...\auto-qb\src</code>）⇒ <b>改 src 立即生效，无需重启服务</b>。</li>
+      <li>该 clone 在 <code>ec368fb</code>，比本 clone 新 5 个提交 ⇒ <b>不能复制文件</b>（会倒退代码），改用 <code>git diff</code> 生成补丁 + <code>git apply</code>，三个文件全部应用成功。</li>
+      <li><b>线上已确认生效</b>：<code>curl 127.0.0.1:38080/shared/columns.js</code> 与 <code>/shared/app.js</code> 均含新代码 ⇒ <b>刷新浏览器即可</b>。</li>
+      <li>两个 clone <b>均未提交</b>（未下"提交"指令）。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">09</span>下一步建议（按性价比排序）</h2>
+    <ol>
+      <li><b>先做一个 10 秒自查，别先改码</b>：B1 的机制<b>已实测确认存在</b>（同 context 下 <code>127.0.0.1</code> 与 <code>localhost</code> 完全隔离），剩下只需确认你是否踩到它 —— 在"又重置了"的那一刻，比对两次打开的地址栏字符串（主机名 + 端口）是否<b>完全一致</b>。不一致则一切跨标签同步都是徒劳，先统一入口地址；一致则问题落在 04 节的落盘错位上。</li>
+      <li><b>统一 save / materialize 顺序（本轮证据最硬，优先做）</b>：把 3 处"先存后算"（columns.js:373 / 382 / 495）收敛为"先 materialize 后 save"，或让 <code>materializeColumns()</code> 在 <code>colManual</code> 为假时也落盘。直接关掉 04 节那条通道 —— M1 的"内存 12 键 / 存储 0 键"就是它造成的。</li>
+      <li><b>隐藏列宽度保留</b>：<code>_renderedWidths()</code> 只取可见列是抹除的根因，改为"以已有 <code>colWidths[page]</code> 为底、只覆盖可见列"，隐藏列的 px 就不会丢。</li>
+      <li><b>F1 升级</b>：从 page 级整段替换改为逐列/逐段时间戳合并，让 F2 失效时也不至于整段吞掉 —— 代价是要给存储结构加"谁更新"的语义，需权衡是否值得。</li>
+      <li><b>守阵补档</b>：冒烟加两档 —— ① 两个标签用<b>不同视口</b>；② 一个标签走 <code>page.evaluate</code> 模拟后台冻结后恢复。现有的 600ms 固定等待不足以钉住真机时序。</li>
+      <li><b>origin 自诊断（可选）</b>：把当前 origin 一并写进存储，加载时比对不一致则在界面上提示一次，把"看不见的隔离"变成可见。</li>
+    </ol>
+  </section>
+
+  <footer>
+    26-09-21-1248-column-prefs-fix-failure-analysis.html · 由"修复失败复盘"请求生成<br>
+    关联：issue <code>memory-bank/issues/26-09-20-1800-bug-webui-column-prefs-reset.html</code> ·
+    计划 <code>docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html</code> ·
+    档案 <code>memory-bank/tasks/26-09-20-webui-column-prefs-reset.md</code> ·
+    修复提交 <code>11382ed</code>
+  </footer>
+
+</div>
+</body>
+</html>

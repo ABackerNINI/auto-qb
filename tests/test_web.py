@@ -13,6 +13,7 @@
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
 - test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
+- test_frontend_save_col_state_skips_widths_for_auto_pages: saveColState 必须有 colManual 判断 —— 未手动调过宽的页不得把"按当前窗口算出的自适应 px"落盘, 否则会被别的窗口算出的值整段覆盖(列宽反复跳变, issue 26-09-20-1800)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -940,6 +941,44 @@ def test_frontend_dist_segments_aggregates_per_view():
         ("this.groups", "groups 视图分支(else 兜底, 直接读 this.groups)"),
     ):
         assert token in body, f"distSegments 缺少{label}({token!r}) —— 种子页/追剧页次导航统计会全空(issue 26-09-21-0247)"
+
+
+def test_frontend_save_col_state_skips_widths_for_auto_pages():
+    """未手动调过宽的页, 不得把"按当前窗口算出的自适应 px"落盘
+
+    现象与定性(issue 26-09-20-1800 的延续, 2026-09-21 在用户真实实例上复现):
+    `colManual[page]` 为假时, `colWidths[page]` 是 `materializeColumns` 按**当前窗口**
+    算出来的自适应快照, **不是用户偏好**。旧实现照样把它写进存储, 两个后果:
+      ① 弹性模板被固化成固定 px, 该页从此不再随窗口自适应(与设计语义相反);
+      ② 谁最后操作, 存储就变成**谁那个窗口**算出的 px —— 真机实测(atlas 真实实例,
+         A 窗 1600px / B 窗 1200px): A 的 name 列 229px, B 动一下列, A 刷新就变 210px。
+        用户看到的正是"列宽经常被重置"; 而**显隐与列序不受影响**(F1/F2 有效),
+        所以症状只落在宽度上 —— 这也是本条之前四轮修复都没逮到的原因。
+
+    修法: manual 为假的页一律把 `widths[page]` 写成空 `{}`, 保持弹性模板、各窗口各算各的;
+    想固定宽度就拖一下(拖拽即置 manual=true, 此后受保护 —— 实测 336px 跨标签不丢)。
+
+    为什么必须机检: 这是"四轮修复都没修完"的那一类 —— 单测全绿、冒烟全绿、真机才现形,
+    而且改动只有一行, 极易在后续重构里被顺手删掉。
+
+    断言: saveColState 实现里必须有 colManual 判断。
+    """
+    rel = "shared/columns.js"
+    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    m = re.search(r"saveColState\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", text, re.S)
+    assert m, f"{rel} 找不到 saveColState(page)(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    # ❗只看**代码行**: 注释里提到 colManual 是在解释"为什么这么写", 把它算进来会让守阵
+    #   形同虚设 —— 实测过: 把那一行整行注释掉, 只查字符串存在性的守阵照样通过。
+    code_lines = [ln.strip() for ln in body.splitlines() if not ln.strip().startswith(("*", "//", "#"))]
+    assert any("colManual" in ln for ln in code_lines), (
+        "saveColState 的**代码**里缺少 colManual 判断(注释里提到不算) —— "
+        "未手动调过宽的页会把自适应 px 落盘, 被别的窗口算出的值整段覆盖"
+        "(列宽反复跳变, issue 26-09-20-1800)"
+    )
+    assert any("payload.widths" in ln for ln in code_lines), (
+        "saveColState 的**代码**里找不到 payload.widths(结构变了? 同步本守阵)"
+    )
 
 
 def test_frontend_statusbar_speed_reads_server_totals():

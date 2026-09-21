@@ -322,10 +322,20 @@ window.AQB_COLUMNS = {
      *   故以**存储为底**, 只覆盖本次涉及的那个 page 的四段; 其余 page 段一律取存储最新值。
      *   (单独靠这招不够: 两个标签改**同一个表**时仍然后写赢 —— 真正的解法是 F2 的 storage 同步,
      *   让每个标签的内存保持新鲜; 这里挡的是"同一毫秒两边都写"的竞态。)
+     *
+     * ❗**未手动调过宽的页不落 px**(2026-09-21 真机复现: 列宽反复跳变, 见 issue 26-09-20-1800)。
+     *   `colManual[page]` 为假时, `colWidths[page]` 是 `materializeColumns` 按**当前窗口**算出的
+     *   自适应快照, **不是用户偏好**。把它落盘有两个后果:
+     *     ① 弹性模板被固化成固定 px, 该页从此不再随窗口自适应(与设计语义相反);
+     *     ② 谁最后操作, 存储就变成**谁那个窗口**算出的 px —— 真机实测: A 窗口 229px,
+     *        B 窗口(更窄)动一下列, A 刷新就变 210px, 用户看到的正是"列宽被重置"。
+     *   故 manual 为假的页一律写空, 让它保持弹性模板、各窗口各算各的; 想固定宽度就拖一下
+     *   (拖拽即置 manual=true, 此后该页受保护, 跨标签也不丢)。
      */
     saveColState(page) {
       const payload = { widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder };
       if (page) {
+        if (!this.colManual[page]) payload.widths = { ...payload.widths, [page]: {} };
         const raw = readColStateRaw();  // 缺失/损坏时保持整份写(与改动前一致)
         if (raw && typeof raw === "object") {
           for (const seg of ["widths", "hidden", "manual", "order"]) {

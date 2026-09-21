@@ -284,6 +284,11 @@ function loadColState() {
         if (clean.length) out.order[page] = clean;
       }
       out.manual[page] = !!(raw.manual || {})[page];
+      /* 非手动页**不读** px(issue 26-09-20-1800): 与 saveColState 的"非手动页不落 px"成对。
+       * 存储里若还留着 px(修复前被别的窗口写进去的), 照读会让本窗口沿用**别人窗口**算出的
+       * 尺寸 —— 用户看到的就是"列宽被重置/莫名其妙变了"。这里一律清空, 该页始终走弹性模板、
+       * 按**当前**窗口自适应; manual=true 的页(用户真拖过宽)照读, 不受影响。 */
+      if (!out.manual[page]) out.widths[page] = {};
     }
     return out;
   } catch {

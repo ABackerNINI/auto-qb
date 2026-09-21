@@ -206,7 +206,26 @@ columns.js:318  saveColState() { localStorage.setItem(COLS_STORE_KEY, JSON.strin
       <li>2026-09-20 18:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-09-20 18:33 — 用户指派认领，状态 <strong>In Progress</strong>；已复现并定位根因（多标签整份覆盖）</li>
       <li>2026-09-20 18:5x — 已修并验证，状态 <strong>Fixed</strong>（F1 写入合并 + F2 storage 同步 + F3 可见性补漏 + 冒烟守阵）</li>
+      <li>2026-09-21 12:4x — <strong>用户反馈仍复现</strong>。复盘四轮沿革后实测确认：F1/F2/F3 对<b>显隐与列序</b>确实有效，但<b>宽度</b>另有通道 —— 见下方「二次修复」</li>
+      <li>2026-09-21 13:xx — <strong>二次修复</strong>（写侧 + 读侧各 1 行 + 静态守阵），已在用户<b>真实实例</b>（127.0.0.1:38080/atlas）验证；两个 clone 均未提交</li>
     </ul>
+
+    <h3>二次修复（2026-09-21，宽度段）</h3>
+    <p><b>为什么第一次没修干净</b>：第一次修的是"多标签整份覆盖"，它治好了显隐与列序。但<b>宽度</b>还有一条独立通道 —— <code>colManual[page]</code> 为假时，<code>colWidths[page]</code> 是 <code>materializeColumns</code> 按<b>当前窗口</b>算出的自适应快照，<b>不是用户偏好</b>，却照样被落盘 ⇒ 谁最后操作，存储就变成谁那个窗口算出的 px。</p>
+    <pre><code>真机实测(用户真实实例 38080/atlas, A 窗 1600 / B 窗 1200):
+R2  A 只改显隐(不拖宽)   内存 229px / 12 键   存储 0 键
+R3  B 也只改一次显隐     存储变 210px
+R4  A 刷新              229px -> 210px        ← 宽度变成 B 窗口算的
+    (显隐保住 ✓ · 拖过宽的页 300px 全程安全 ✓)</code></pre>
+    <p><b>修法</b>（两处成对，缺一不可）：</p>
+    <pre><code>// ① shared/columns.js :: saveColState(page) —— 写侧: 非手动页不落 px
+if (!this.colManual[page]) payload.widths = { ...payload.widths, [page]: {} };
+
+// ② shared/app.js :: loadColState() —— 读侧: 非手动页不读 px
+if (!out.manual[page]) out.widths[page] = {};</code></pre>
+    <p>② <b>不是可选项</b>：只改写侧的话，浏览器里已存在的污染 px 仍会被读出来，刷新后还是旧值，修复会"看起来没生效"。⚠ 光把"先存后算"改成"先算后存"<b>不够</b> —— 顺序改了存储拿到的仍是最后操作那个窗口的值。</p>
+    <p><b>验证</b>：污染 210px → 刷新后按当前窗口重算 231px 且填满容器（表头 1576 / 容器 1576）；manual=true 的 336px 跨操作保住；守阵经<b>红验</b>（整行注释掉必须 FAIL）；全量 <b>1134 passed</b>；冒烟 52 项失败 2 项，均为既有议题「P0-3 乐观态及时落回真值」（与列偏好无关）。</p>
+    <p><b>落地</b>：用户服务为 editable install（<code>.pth</code> 指向 <code>D:\Projects\auto-qb\src</code>）⇒ 改 src 立即生效，无需重启；已用 <code>git diff | git apply</code> 同步（两 clone 版本不同，不能复制文件）。</p>
     <h3>复验</h3>
     <p><strong>复验：2026-09-20 18:2x 仍复现</strong> —— 真浏览器 + <code>ui_harness</code> 桩服务（atlas，300 种子），
       两个同 origin 标签：A 隐藏「总上传」→ B 隐藏「分类」→ A 刷新后只剩 <code>["uploaded","category"]</code>，
