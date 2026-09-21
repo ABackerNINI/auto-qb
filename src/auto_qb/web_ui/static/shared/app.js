@@ -1119,5 +1119,7 @@ app.mixin(window.AQB_DRAWER);
 app.mixin(window.AQB_DIALOGS);
 app.mixin(window.CONFIG_EDITOR);
 app.mixin(window.CONFIG_RULES);
+app.mixin(window.CONFIG_HUB);
 app.component("ce-field", window.CE_FIELD_COMPONENT);
+app.component("hub-field", window.HUB_FIELD_COMPONENT);
 app.mount("#app");

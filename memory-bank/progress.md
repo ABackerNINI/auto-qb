@@ -4,6 +4,13 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI 设置页 **新版(Console Hub)** 落地 (2026-09-21, 与经典页并存): 样张 `resources/settings-page-templates/05-console-hub.html` 的原样复刻 —— 首页卡片总览(分段 LED 三态 + 等宽读数 + 按配置项名搜索直跳) → 二级页「块 → 行」两层级 + 行尾 `?` 就近说明浮窗; 站点/规则/限速/日志 四个专段。
+  · **不替换经典页**: 两套共用同一棵 YAML 树与全部 `cfg*` 读写(零重复编辑逻辑), 由 `localStorage autoqb.settings.hub` 切换, 入口为经典页页头「新版界面」与新版页的「经典界面」。
+  · 新增 `shared/config_hub.js`(`window.CONFIG_HUB` mixin + `window.HUB_FIELD_COMPONENT`, 后者继承 `ce-field` 全部读写仅换模板) + `shared/console_hub.css`(626 行, 两套 UI 共用)。
+  · **版式硬知识**(写进 CSS 头部注释, 别改回去): 派生变量必须声明在使用 `--tone` 的那一层元素上(写进 `:root` 会被固化 → danger 档描边青/发光青); 发光用负 spread(正 spread 让边缘更亮, 实测 76% vs 18%); 切角与发光是死敌,`clip-path` 会整圈裁掉 `box-shadow`, 故切角只留大面。
+  · 验证: 无浏览器环境下的替代手段 —— 用 vendored Vue 编译器 + 假 DOM(含浏览器实体解码器)把 hub 主区 / `tpl-hub-field` / 两套 UI 整页 `#app` 全部编译通过; 再用 `scripts/ui_harness.py` + playwright-core / chromium-1243 真机截图(prism/atlas 各 4 张), 0 console 错误。单测 **1098 passed** 不退化。
+  · ⚠ 计划外发现(未修): 经典页 `setUnitNum` 调 `this.unitParts()` 而 `unitParts` 是 computed 拿到对象非函数 → 改「数值+单位」字段的数字会 throw; 新版已直接调 `ce.cfgSetUnit(path, num, unit)` 绕开, 经典页带病。
+
 > 注意区分: 下表部分功能作者在 README 中标注 🚧 = "已实现但未严格测试(实盘验证)", 如规则引擎的条件/动作/checking/去重语义等 — 有单测但作者尚不认为经过严格验证; 此类 🚧 ≠ 未实现, 勿移除 (语义详见 pitfalls.md)。
 - WEB UI 前端 `app.js` 按域拆分 (2026-09-20): 单个 **5045 行**的 `shared/app.js` 拆成 **1001 行内核 + 15 个域片段**(ui_feedback / filters / columns / format / decorate / hr / sort / menu / commands / add_torrent / selection / shows / delete_flow / drawer / dialogs), 293 个 methods 与 71 个 computed 按域搬走。机制沿用仓库既有范式(`window.AQB_*` 全局 mixin, app.js 末尾 `app.mixin` 注入), **未引入构建链与 ES module**, Vue 实例与两套模板**零改动**。验证: 静态守阵新增第 10 项「拆分接线」(漏挂 `<script>` / 漏 `app.mixin` / 跨片段重名, 已红验), 第 7/8/9 项改为按**整包**扫描; 单测 `1055 passed` 不变; 浏览器冒烟拆分前后各跑一遍均 **54 项 0 失败**。
 - WEB UI 轮询节拍错配修复 (2026-09-19, 已按方案 B 实施): `sync_interval`(1.5s) 与前端分档轮询 (1.5/2/3s) 在 >3000 种子时错配, 约一半 `rebuild_views` 无人消费 —— 新增 `_web_pending_ver` 记"已发布但还没被取走的版本号", `_flush_views()` 只在没欠账时重建, 实测 20 周期 **40 → 20 次 (省 50%)**; 方案 B **不需要新契约**(客户端轮询本来就带 `rid`, "有没有人取走"现有参数即可表达)。两个边界由 `test_view_rebuild_waits_for_client_consume` 钉住: 脏标记必须保留、`force=True`(命令改状态)必须绕过。详见 [issue](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html)。

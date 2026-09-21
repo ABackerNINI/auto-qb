@@ -6,6 +6,7 @@
   <title>auto-qb · 辅种管理 · 星图</title>
   <link rel="icon" type="image/png" href="/shared/icon.png">
   <link rel="stylesheet" href="/atlas/style.css">
+  <link rel="stylesheet" href="/shared/console_hub.css">
 </head>
 <body>
   <!-- 图标 sprite: use 引用, 无外部图标库依赖(继承 .ico 的 stroke/fill) -->
@@ -1008,7 +1009,7 @@
       </div>
 
       <!-- 设置页: 图形化配置(每项均可增删改, 无直接编辑 YAML 模式) -->
-      <main v-if="page==='settings'" class="ce-page">
+      <main v-if="page==='settings' && !hub.mode" class="ce-page">
         <div v-if="cfg.loading" class="ce-placeholder loading">正在加载配置…</div>
         <div v-else-if="!cfg.schema" class="ce-placeholder">
           <p class="error">{{ cfg.error || '配置加载失败' }}</p>
@@ -1051,6 +1052,10 @@
                   <button class="ce-btn ghost small" :disabled="cfg.previewBusy" @click="cfgTogglePreview()">
                     <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-external"></use></svg>
                     {{ cfg.previewOpen ? '收起 YAML' : (cfg.previewBusy ? '生成中…' : 'YAML 预览') }}
+                  </button>
+                  <!-- 新版设置页入口(Console Hub 样张): 两套并存期间由这里来回切, 选择存本地 -->
+                  <button class="ce-btn ghost small" title="切到新版设置页(卡片总览 + 就近说明浮窗)" @click="hubSetMode(true)">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>新版界面
                   </button>
                 </div>
               </header>
@@ -1493,6 +1498,431 @@
               {{ cfg.saving ? '保存中…' : '保存并热重载' }}
             </button>
           </footer>
+        </template>
+      </main>
+
+      <!-- ================================================================
+           设置页 · 新版(Console Hub): 首页卡片总览 → 二级页分区, 说明走就近浮窗。
+           与上面经典页**共用同一棵配置树和同一套 cfg* 读写**, 只是版式与说明的呈现不同;
+           两套并存期间由页头的「新版界面 / 经典界面」互相切换(选择存 localStorage)。
+           ================================================================ -->
+      <main v-if="page==='settings' && hub.mode" class="ce-page hub-page">
+        <div v-if="cfg.loading" class="ce-placeholder loading">正在加载配置…</div>
+        <div v-else-if="!cfg.schema" class="ce-placeholder">
+          <p class="error">{{ cfg.error || '配置加载失败' }}</p>
+          <button class="hb-btn" @click="cfgLoad()">重试</button>
+        </div>
+        <template v-else>
+          <div class="hb-wrap">
+
+            <!-- ============ 首页: 卡片总览 ============ -->
+            <div class="hb-view" :class="{ on: hub.view === 'hub' }">
+              <header class="hb-hd">
+                <div>
+                  <h1>设置</h1>
+                  <p class="hd-sub">{{ hubStats.groups }} 个分区 · 共 {{ hubStats.fields }} 项 ·
+                    <span :class="{ on: hubStats.dirty }">{{ hubStats.dirty ? '有改动还没保存' : '已与磁盘同步' }}</span>
+                  </p>
+                </div>
+                <div class="hd-search">
+                  <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+                  <input class="hb-input" v-model="hub.query" placeholder="搜索配置项，比如「端口」">
+                </div>
+              </header>
+
+              <!-- 搜索命中: 按配置项名直跳, 不用记它在哪个分区 -->
+              <div v-if="hubHits.length" class="hb-blk hb-cut">
+                <div class="hb-blk-hd">
+                  <span class="bh-t">搜索结果</span>
+                  <span class="bh-n">点一下直接跳到那一行</span>
+                </div>
+                <button v-for="h in hubHits" :key="h.key" class="hb-row hb-row-hit" @click="hubJump(h)">
+                  <span class="hb-lb">{{ h.label }}</span>
+                  <span class="hb-ct"><span class="hb-dim">{{ h.groupLabel }}</span></span>
+                  <span></span>
+                </button>
+              </div>
+
+              <div v-if="hubRiskList.length" class="hb-attn">
+                <svg class="hb-ico lg at-ico" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13z"/><path d="M8 6.5v3M8 11.6v.6"/></svg>
+                <div class="at-body">
+                  <b>有 {{ hubRiskList.length }} 项建议你看一下</b>
+                  <p>{{ hubRiskList[0].groupLabel }} · {{ hubRiskList[0].label }}：{{ hubRiskList[0].risk }}</p>
+                </div>
+                <button class="hb-btn ghost at-go" @click="hubGo(hubRiskList[0].group)">去看 →</button>
+              </div>
+
+              <div class="hb-grid">
+                <button v-for="c in hubCards" :key="c.key" class="hb-card" @click="hubGo(c.key)">
+                  <div class="hb-card-top">
+                    <span class="hb-card-ico hb-cut" :class="{ off: c.led === 'off' }">
+                      <svg class="hb-ico lg" viewBox="0 0 16 16"><use :href="'#' + c.icon"></use></svg>
+                    </span>
+                    <div class="hb-card-t">{{ c.title }}</div>
+                  </div>
+                  <p class="hb-card-d">{{ c.desc }}</p>
+                  <div class="hb-card-f">
+                    <span class="hb-led" :class="c.led"></span>
+                    <span class="cf-v">{{ c.readout }}</span>
+                    <span v-for="b in c.badges" :key="b.text" class="hb-badge" :class="b.cls">{{ b.text }}</span>
+                  </div>
+                </button>
+              </div>
+
+              <div class="hb-pills" style="margin-top:18px">
+                <button class="hb-pill" @click="hubSetMode(false)">切回经典界面</button>
+              </div>
+            </div>
+
+            <!-- ============ 二级页: 一个分区只做一件事 ============ -->
+            <div class="hb-view" :class="{ on: hub.view !== 'hub' }">
+              <nav class="hb-crumb">
+                <button @click="hubBack()">设置</button>
+                <span class="cb-sep">/</span>
+                <span class="cb-now">{{ hubNow.title }}</span>
+              </nav>
+
+              <header class="hb-sec">
+                <span class="hb-sec-mark hb-cut">
+                  <svg class="hb-ico lg" viewBox="0 0 16 16"><use :href="'#' + hubNow.icon"></use></svg>
+                </span>
+                <div>
+                  <h1>{{ hubNow.title }}</h1>
+                  <p class="sh-lede">{{ hubNow.lede }}</p>
+                </div>
+                <span class="sh-r">
+                  <button class="hb-btn ghost sm" @click="hubSetMode(false)">经典界面</button>
+                </span>
+              </header>
+
+              <!-- 站点: 二级页内用切角小标签切换, 不再做左右主从两栏 -->
+              <template v-if="hub.view === 'trackers'">
+                <div class="hb-pills">
+                  <button v-for="name in cfgTrackerNames()" :key="name" class="hb-pill"
+                          :class="{ on: cfg.trackerKey === name }" @click="cfg.trackerKey = name">
+                    {{ name }}<span class="p-n">{{ hubCount(cfgTracker(name)) }}</span>
+                  </button>
+                  <button class="hb-pill" @click="hubAddTracker()">＋ 新增站点</button>
+                </div>
+                <div v-if="cfg.trackerKey" class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">{{ cfg.trackerKey }}</span>
+                    <span class="bh-r">
+                      <button class="hb-btn sm" @click="cfgTrackerRename(cfg.trackerKey)">重命名</button>
+                      <button class="hb-btn danger sm" @click="cfgTrackerRemove(cfg.trackerKey)">删除</button>
+                    </span>
+                  </div>
+                  <hub-field v-for="item in cfgTrackerItems()" :key="hubKey(item.path)" :item="item"></hub-field>
+                </div>
+                <div v-else class="hb-blk hb-cut">
+                  <div class="hb-blk-hd"><span class="bh-n">暂无站点配置, 点上面「＋ 新增站点」添加一个</span></div>
+                </div>
+              </template>
+
+              <!-- 规则: 「条件 → 动作」两栏卡片 -->
+              <template v-else-if="hub.view === 'rules'">
+                <div class="hb-pills">
+                  <button v-for="g in cfgRuleGroupNames()" :key="g" class="hb-pill"
+                          :class="{ on: cfg.ruleGroupKey === g }" @click="cfg.ruleGroupKey = g">
+                    {{ g }}<span class="p-n">{{ cfgRuleNames(g).length }}</span>
+                  </button>
+                  <button class="hb-pill" @click="hubAddRuleGroup()">＋ 新增规则集</button>
+                </div>
+                <template v-if="cfg.ruleGroupKey">
+                  <div class="hb-blk hb-cut">
+                    <div class="hb-blk-hd">
+                      <span class="bh-t">{{ cfg.ruleGroupKey }}</span>
+                      <span class="bh-n">{{ cfgRuleNames(cfg.ruleGroupKey).length }} 条</span>
+                      <span class="bh-r">
+                        <button class="hb-btn sm" @click="hubAddRule(cfg.ruleGroupKey)">＋ 新增规则</button>
+                        <button class="hb-btn danger sm" @click="cfgRuleRemoveGroup(cfg.ruleGroupKey)">删除规则集</button>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div v-for="rn in cfgRuleNames(cfg.ruleGroupKey)" :key="rn" class="hb-rule hb-cut">
+                    <div class="hb-rule-hd">
+                      <span class="rh-n">{{ rn }}</span>
+                      <span class="rh-s">{{ cfgRuleSummary(cfg.ruleGroupKey, rn) }}</span>
+                      <span class="rh-r">
+                        <span v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="hb-badge risk">含风险动作</span>
+                        <label class="hb-switch" title="启用/停用该规则">
+                          <input type="checkbox" :checked="cfgRuleEnabled(cfg.ruleGroupKey, rn)"
+                                 @change="cfgRuleSetEnabled(cfg.ruleGroupKey, rn, $event.target.checked)">
+                          <span class="hb-sw-track"></span>
+                        </label>
+                        <button class="hb-btn sm" @click="cfgRuleRename(cfg.ruleGroupKey, rn)">重命名</button>
+                        <button class="hb-btn danger sm" @click="cfgRuleRemove(cfg.ruleGroupKey, rn)">删除</button>
+                      </span>
+                    </div>
+                    <div class="hb-rule-flow">
+                      <div class="hb-flow-grp">
+                        <div class="hb-flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div>
+                        <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'conditions')" :key="i" class="hb-step">
+                          <div class="hb-step-bar">
+                            <span class="st-n">{{ i + 1 }}</span>
+                            <span class="st-t">{{ hubPluginText(entry) }}</span>
+                            <span class="st-r">
+                              <button class="hb-btn ghost sm" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, -1)">↑</button>
+                              <button class="hb-btn ghost sm" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, 1)">↓</button>
+                              <button class="hb-btn danger sm" title="删除该条件" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">✕</button>
+                            </span>
+                          </div>
+                          <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'conditions', i)"
+                                     :key="hubKey(item.path)" :item="item"></hub-field>
+                        </div>
+                        <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'conditions').length" class="hb-hp">
+                          没配条件 = 这条规则总是执行
+                        </p>
+                        <select class="hb-select" :value="''" @change="hubPickPlugin(cfg.ruleGroupKey, rn, 'conditions', $event)">
+                          <option value="">＋ 添加条件…</option>
+                          <option v-for="p in cfgConditionOptions()" :key="p.name" :value="p.name">{{ p.label }}</option>
+                        </select>
+                      </div>
+                      <div class="hb-flow-grp">
+                        <div class="hb-flow-grp-hd">动作<span class="fg-hint">按顺序执行</span></div>
+                        <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'actions')" :key="i"
+                             class="hb-step" :class="hubStepClass(entry)">
+                          <div class="hb-step-bar">
+                            <span class="st-n">{{ i + 1 }}</span>
+                            <span class="st-t">{{ hubPluginText(entry) }}</span>
+                            <span class="st-r">
+                              <button class="hb-btn ghost sm" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
+                              <button class="hb-btn ghost sm" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
+                              <button class="hb-btn danger sm" title="删除该动作" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
+                            </span>
+                          </div>
+                          <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
+                                     :key="hubKey(item.path)" :item="item"></hub-field>
+                        </div>
+                        <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'actions').length" class="hb-hp">
+                          未配置动作 = 规则只做条件判断, 不会执行任何操作
+                        </p>
+                        <select class="hb-select" :value="''" @change="hubPickPlugin(cfg.ruleGroupKey, rn, 'actions', $event)">
+                          <option value="">＋ 添加动作…</option>
+                          <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="hb-rule-foot">
+                      <p class="hb-hp risk" style="margin:0">{{ cfgRuleRisk(cfg.ruleGroupKey, rn) }}</p>
+                    </div>
+                  </div>
+                </template>
+              </template>
+
+              <!-- 限速: 阶梯图 + 档位(每一档是「流量低于 X → 限速 Y」一个整体) -->
+              <template v-else-if="hub.view === 'speed'">
+                <div v-if="!cfgCurveEnabled()" class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-n">未启用。启用后读取 Traffic Monitor 数据, 按累计流量自动分档设置 qB 全局限速(0 = 该档不限速)。</span>
+                  </div>
+                  <div style="padding:12px 14px">
+                    <button class="hb-btn primary" @click="cfgCurveEnable()">启用限速曲线</button>
+                  </div>
+                </div>
+                <template v-else>
+                  <div class="hb-blk hb-cut">
+                    <div class="hb-blk-hd">
+                      <span class="bh-t">曲线设置</span>
+                      <span class="bh-r">
+                        <span class="hb-dim">多条曲线同时命中时取最严限速</span>
+                        <button class="hb-btn sm" @click="cfgCurveAddPeriod()">＋ 添加曲线</button>
+                      </span>
+                    </div>
+                    <hub-field v-for="item in cfgCurveItems()" :key="hubKey(item.path)" :item="item"></hub-field>
+                  </div>
+
+                  <div v-for="(c, i) in cfgCurveList()" :key="i" class="hb-curve hb-cut">
+                    <div class="hb-curve-hd">
+                      <span class="bh-t">第 {{ i + 1 }} 条曲线</span>
+                      <span class="hb-badge on">{{ cfgCurvePeriod(i).period || '—' }}</span>
+                      <input class="hb-input hb-mono" style="width:110px" :value="cfgCurvePeriod(i).period || ''"
+                             placeholder="DAY / MONTH / 7D"
+                             @input="cfgSetPath(cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
+                      <span class="hb-dim">上传 {{ cfgCurvePoints(i, 'upload_curve').length }} 档 ·
+                        下载 {{ cfgCurvePoints(i, 'download_curve').length }} 档</span>
+                      <span style="margin-left:auto">
+                        <button class="hb-btn danger sm" @click="cfgCurveRemovePeriod(i)">删除曲线</button>
+                      </span>
+                    </div>
+                    <div class="hb-curve-bd">
+                      <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir">
+                        <div class="hb-flow-grp-hd" style="margin-top:6px">
+                          {{ dir === 'upload_curve' ? '上传档位' : '下载档位' }}
+                          <span class="fg-hint">
+                            {{ cfgCurvePoints(i, dir).length ? cfgCurvePoints(i, dir).length + ' 档' : '未配置 = 不管理该方向' }}
+                          </span>
+                        </div>
+                        <div v-if="cfgCurveChartOf(i, dir)" class="ce-chart hb-chart"
+                             @mousemove="cfgChartHover($event, i, dir)" @mouseleave="cfgChartLeave()">
+                          <template v-for="ch in [cfgCurveChartOf(i, dir)]" :key="'ch' + i + dir">
+                            <svg class="ce-chart-svg" v-bind="{ viewBox: ch.viewBox }">
+                              <g class="ce-grid-lines">
+                                <line v-for="(tk, k) in ch.yTicks" :key="'gy' + k"
+                                      :x1="ch.padL" :x2="ch.w - ch.padR" :y1="tk.pos" :y2="tk.pos"></line>
+                              </g>
+                              <path class="ce-chart-area" :d="ch.area"></path>
+                              <line v-for="(tl, j) in ch.tierLines" :key="'tk' + j" class="ce-chart-tick"
+                                    :x1="tl.x" :x2="tl.x" :y1="ch.padT" :y2="ch.baseY"></line>
+                              <path class="ce-chart-line" :d="ch.line"></path>
+                              <g v-if="cfgChartHovered(i, dir)">
+                                <line class="ce-chart-cross" :x1="cfg.chartHover.x" :x2="cfg.chartHover.x"
+                                      :y1="ch.padT" :y2="ch.baseY"></line>
+                                <line class="ce-chart-cross" :x1="ch.padL" :x2="ch.w - ch.padR"
+                                      :y1="cfg.chartHover.y" :y2="cfg.chartHover.y"></line>
+                                <circle class="ce-chart-dot" :cx="cfg.chartHover.x" :cy="cfg.chartHover.y" r="4"></circle>
+                              </g>
+                              <g class="ce-axis-labels">
+                                <text v-for="(tk, k) in ch.yTicks" :key="'ly' + k"
+                                      :x="ch.padL - 7" :y="tk.pos + 3.5" text-anchor="end">{{ tk.label }}</text>
+                                <text v-for="(tk, k) in ch.xTicks" :key="'lx' + k"
+                                      :x="tk.pos" :y="ch.h - 10" text-anchor="middle">{{ tk.label }}</text>
+                              </g>
+                            </svg>
+                            <div v-if="cfgChartHovered(i, dir)" class="ce-chart-tip"
+                                 :class="{ flip: cfg.chartHover.leftPct > 62 }"
+                                 :style="{ left: cfg.chartHover.leftPct + '%', top: cfg.chartHover.topPct + '%' }">
+                              <b>第 {{ cfg.chartHover.index }} 档</b>
+                              <span>累计流量 {{ cfg.chartHover.tLabel }}</span>
+                              <span>限速 {{ cfg.chartHover.sLabel }}</span>
+                            </div>
+                            <div class="ce-chart-legend">
+                              <span class="ce-lg-x">横轴: 累计流量(每档等宽)</span>
+                              <span class="ce-lg-y">纵轴: 限速</span>
+                              <span class="ce-lg-note">{{ ch.note }}</span>
+                            </div>
+                          </template>
+                        </div>
+                        <p v-if="cfgCurveInvalid(i, dir)" class="hb-hp risk">
+                          {{ cfgCurveInvalid(i, dir) }} 个档位无法解析(需形如 10GiB / 6MiB/s), 保存时后端会拒绝
+                        </p>
+                        <div class="hb-tiers">
+                          <div class="hb-tier-head">
+                            <span>档</span><span>累计流量低于</span><span></span><span>限速设为</span><span></span>
+                          </div>
+                          <div v-for="(p, j) in cfgCurvePoints(i, dir)" :key="j" class="hb-tier">
+                            <span class="t-n">{{ j + 1 }}</span>
+                            <input class="hb-input hb-mono" :value="cfgCurveThreshold(i, dir, j)" placeholder="10GiB"
+                                   @input="cfgCurvePointSet(i, dir, j, $event.target.value)">
+                            <span class="t-arrow" aria-hidden="true">→</span>
+                            <input class="hb-input hb-mono" :value="cfgCurveSpeed(i, dir, j)" placeholder="6MiB/s"
+                                   @input="cfgCurvePointSet(i, dir, j, undefined, $event.target.value)">
+                            <button class="hb-btn ghost sm" title="删除该档位" @click="cfgCurvePointRemove(i, dir, j)">✕</button>
+                          </div>
+                        </div>
+                        <button class="hb-btn sm hb-tier-add" @click="cfgCurvePointAdd(i, dir)">＋ 添加档位</button>
+                      </div>
+                      <p class="hb-hp" style="margin-top:10px">
+                        读法：累计流量<b>还没到</b>左边那个值时，限速就按右边那个值。填 0 = 这一档不限速；最后一档会一直生效到周期结束。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="hb-blk hb-cut">
+                    <div class="hb-blk-hd"><span class="bh-r" style="margin-left:0">
+                      <button class="hb-btn danger" @click="cfgCurveDisable()">关闭并移除曲线配置</button>
+                    </span></div>
+                  </div>
+                </template>
+              </template>
+
+              <!-- 运行日志(W4 迁入): 等级/行数变更与刷新均手动触发, 不自动轮询 -->
+              <template v-else-if="hub.view === '__logs'">
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">运行日志</span>
+                    <span class="bh-n">{{ logs.file || '日志文件未配置(config.logging.file)' }}</span>
+                    <span class="bh-r">
+                      <select class="hb-select" v-model="logs.level" @change="loadLogs()">
+                        <option value="">全部级别</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                      </select>
+                      <select class="hb-select" v-model.number="logs.num" @change="loadLogs()">
+                        <option :value="200">200 行</option>
+                        <option :value="300">300 行</option>
+                        <option :value="500">500 行</option>
+                        <option :value="1000">1000 行</option>
+                        <option :value="2000">2000 行</option>
+                      </select>
+                      <button class="hb-btn ghost sm" :disabled="logs.loading" @click="loadLogs()">刷新</button>
+                    </span>
+                  </div>
+                  <div style="padding:12px 14px">
+                    <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
+                    <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 普通分区: 块 → 行(取代旧页的五种折叠容器) -->
+              <template v-else>
+                <div v-for="b in hubBlocks" :key="b.key" class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">{{ b.label }}</span>
+                    <span v-if="b.help" class="bh-n">{{ b.help }}</span>
+                    <span class="bh-r">
+                      <label v-if="b.section" class="hb-switch" title="控制该配置段是否写入配置文件">
+                        <input type="checkbox" :checked="cfgExists(b.item.path)"
+                               @change="cfgToggleSection(b.item.path, b.item.field, $event.target.checked)">
+                        <span class="hb-sw-track"></span>
+                      </label>
+                    </span>
+                  </div>
+                  <template v-if="!b.section || cfgExists(b.item.path)">
+                    <hub-field v-for="row in b.rows" :key="hubKey(row.path)" :item="row"></hub-field>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="hb-actbar">
+            <span class="ab-st">
+              <span class="hb-led" :class="cfgDirty ? 'warn' : 'ok'"></span>
+              {{ cfgDirty ? '有改动还没保存' : '已与磁盘同步' }}
+            </span>
+            <span class="ab-r">
+              <button class="hb-btn ghost" @click="cfgDiscard()">放弃改动</button>
+              <button class="hb-btn primary" :disabled="cfg.saving || !cfgDirty" @click="cfgSave()">
+                {{ cfg.saving ? '保存中…' : '保存并应用' }}
+              </button>
+            </span>
+          </div>
+
+          <!-- 就近说明浮窗: 面板(切角) + 箭头(独立元素, 否则会被面板的 clip-path 裁掉) -->
+          <div class="hb-pop hb-cut" :class="{ on: !!hub.help }" ref="hubPop" role="dialog" aria-label="配置项说明"
+               :style="{ left: hub.pop.left + 'px', top: hub.pop.top + 'px' }">
+            <template v-if="hub.help">
+              <div class="hb-pop-hd">
+                <h2>{{ hub.help.t }}<span class="pk">{{ hub.help.k }}</span></h2>
+                <button class="pop-x" aria-label="关闭" @click="hubCloseHelp()">✕</button>
+              </div>
+              <div v-if="hub.help.tags.length" class="hb-pop-tags">
+                <span v-for="t in hub.help.tags" :key="t" class="hb-badge on">{{ t }}</span>
+              </div>
+              <div class="hb-pop-sec"><h3>它是什么</h3><p>{{ hub.help.what }}</p></div>
+              <div class="hb-pop-sec"><h3>默认值</h3><div class="hb-pop-val">{{ hub.help.def }}</div></div>
+              <div v-if="hub.help.when.length" class="hb-pop-sec">
+                <h3>什么时候需要改</h3>
+                <ul><li v-for="(w, i) in hub.help.when" :key="i">{{ w }}</li></ul>
+              </div>
+              <div v-if="hub.help.risk" class="hb-pop-sec">
+                <h3>注意</h3>
+                <div class="hb-pop-risk"><b>风险 · </b>{{ hub.help.risk }}</div>
+              </div>
+              <div v-if="hub.help.rel.length" class="hb-pop-sec">
+                <h3>容易和它搞混的</h3>
+                <div class="hb-pop-rel">
+                  <span v-for="(r, i) in hub.help.rel" :key="i">{{ r[0] }}<i>{{ r[1] }}</i></span>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div class="hb-pop-arrow" :class="{ on: !!hub.help, left: hub.arrow.place === 'left', right: hub.arrow.place === 'right' }"
+               ref="hubArrow" :style="{ left: hub.arrow.left + 'px', top: hub.arrow.top + 'px' }"></div>
         </template>
       </main>
 
@@ -2394,9 +2824,93 @@
     </div>
   </script>
 
+  <script type="text/x-template" id="tpl-hub-field">
+    <div v-if="visible" class="hb-row" :class="[ce.hubRowClass(item), { bare: isBare, 'hb-inactive': greyed }]"
+         :data-hb-key="ce.hubKey(path)">
+      <div v-if="!isBare" class="hb-lb">
+        {{ f.label }}<span v-if="f.required" class="lb-req">*</span>
+        <span v-if="isDefault()" class="hb-badge">默认</span>
+      </div>
+      <div class="hb-ct">
+        <label v-if="f.kind === 'bool'" class="hb-switch" :class="ce.hubToneOf(item)">
+          <input type="checkbox" :checked="boolValue()" @change="setBool($event.target.checked)">
+          <span class="hb-sw-track"></span>
+          <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
+        </label>
+
+        <select v-else-if="f.kind === 'enum'" class="hb-select" :class="ce.hubToneOf(item)"
+                :value="textValue()" @change="set($event.target.value)">
+          <option v-if="!f.required" value="">(未配置)</option>
+          <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+        </select>
+
+        <div v-else-if="isList" class="hb-list">
+          <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
+            <input class="hb-input" :class="{ 'hb-mono': ce.hubMonoOf(item) }" :value="it"
+                   :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
+            <button class="hb-btn ghost sm" title="删除该项" @click="listRemove(i)">✕</button>
+          </div>
+          <button class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
+        </div>
+
+        <div v-else-if="f.kind === 'rules_ref'" class="hb-list">
+          <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
+            <input class="hb-input hb-mono" :value="it" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
+                   @input="listSet(i, $event.target.value)">
+            <button class="hb-btn ghost sm" title="删除该引用" @click="listRemove(i)">✕</button>
+          </div>
+          <select class="hb-select" :value="''" @change="refPick($event)">
+            <option value="">从已有规则集/规则中选择…</option>
+            <optgroup v-for="g in ce.ceRefOptions()" :key="g.group" :label="g.group">
+              <option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div v-else-if="f.kind === 'keyed_list'" class="hb-checks">
+          <label v-for="o in f.options" :key="o" class="hb-check">
+            <input type="checkbox" :checked="checkedKey(o)" @change="toggleKey(o)">
+            <span>{{ o }}</span>
+          </label>
+        </div>
+
+        <!-- 数值 + 单位: 写回仍是单个字符串(30M / 10MiB), 与磁盘同构; 合法性由后端夹紧 -->
+        <div v-else-if="hasUnit" class="hb-unit">
+          <input class="hb-input hb-mono hb-w-sm" type="text" :value="unitParts.num"
+                 :placeholder="f.placeholder || ''"
+                 @input="ce.cfgSetUnit(path, $event.target.value, unitParts.unit)">
+          <select class="hb-select" :value="unitParts.unit" @change="ce.cfgSetUnit(path, unitParts.num, $event.target.value)">
+            <option v-for="u in unitOptions" :key="u" :value="u">{{ unitLabel(u) }}</option>
+          </select>
+        </div>
+
+        <template v-else>
+          <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
+                 :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
+                 :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" @input="set($event.target.value)">
+          <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>
+        </template>
+
+        <button v-if="f.kind === 'expr'" class="hb-btn ghost sm" @click="ce.cfgExprTry(path)">试算</button>
+
+        <!-- 布尔型从属项: 父字段的内联额外开关(比单独占一张子卡更符合从属语义) -->
+        <label v-for="inl in item.inline" :key="inl.field.key" class="hb-switch"
+               :title="inl.field.risk || inl.field.help || ''">
+          <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
+          <span class="hb-sw-track"></span>
+          <span class="hb-sw-text">{{ inl.field.label }}</span>
+        </label>
+      </div>
+
+      <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
+              :aria-label="f.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
+    </div>
+  </script>
+
   <script src="/shared/vendor/vue.global.prod.js"></script>
   <script src="/shared/config_editor.js"></script>
   <script src="/shared/config_rules.js"></script>
+  <script src="/shared/config_hub.js"></script>
   <script src="/shared/ui_feedback.js"></script>
   <script src="/shared/filters.js"></script>
   <script src="/shared/columns.js"></script>
