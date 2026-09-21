@@ -9,7 +9,7 @@
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
 - test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
@@ -751,6 +751,7 @@ def _scan_pending_settle(text, rel, problems):
             problems.append(f"{rel} 残留已删机制 {dead} —— 真值已改由 truth 事件推送, 它只会拖慢撤下")
 
 
+
 def _computed_body(text, name):
     """取 computed 成员 `<name>() { ... }` 的函数体(按缩进配平到同缩进或更浅的 `},`/`}`)
 
@@ -815,6 +816,52 @@ def _scan_filter_facets(text, rel, problems):
         problems.append(f"{rel} 残留 _memberValueOptions —— 选项一律走 facetRows/_facetOptions 单点"
                         "(按组算的第二条口径正是本次故障的成因)")
 
+# 挂件级类名白名单 —— 只盯这些; 组件层类名(`.ico` / `.row` / `.cell` 等)不进, 否则满屏误报。
+# 添加新挂件类时请同步这里。
+_PAGE_HOOK_CLASSES = ("hub-page", "ce-page", "layout")
+
+
+def _scan_page_class_wiring(problems):
+    """挂件类名配对: HTML 的 `<main class="X ...">` 里出现的挂件类名必须在 CSS 里有规则
+
+    现象(2026-09-21, 用户报"输入框缺发光 + 排版竖着"):
+    CSS 里 `.hb-page`(前缀化时手滑)定义 `--tone` 等, 而 HTML 上是 `class="ce-page hub-page"` ——
+    `.hb-page` 选择器**永远不命中**任何元素 ⇒ `--tone` 从未定义 ⇒ 所有 `var(--tone)` 派生值
+    替换时判为无效 ⇒ 描边回退、发光整条消失、等宽字体也不生效(剩下字体 fallback)。
+    静悄悄地废掉一整块视觉,**没有运行时报错**, 靠真浏览器量 computedStyle 才看得出来。
+
+    为防止再犯: 每张 index.html 的 `<main class="...">` 里出现的挂件类名, 都必须能在某份
+    CSS(shared/* 或同目录的 *.css)里找到对应的选择器规则。
+    """
+    css_text = ""
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith(".css"):
+                continue
+            if "/vendor/" in f"/{dirpath}/{name}":
+                continue
+            css_text += open(os.path.join(dirpath, name), encoding="utf-8").read() + "\n"
+    selectors = set(re.findall(r"^\s*\.([A-Za-z_][\w-]*)\s*[\{,]", css_text, re.M))
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith(".html"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), STATIC_ROOT).replace(os.sep, "/")
+            if "/vendor/" in f"/{rel}":
+                continue
+            text = open(os.path.join(dirpath, name), encoding="utf-8").read()
+            for m in re.finditer(r"<\s*main\b[^>]*\bclass=\"([^\"]+)\"", text):
+                for cls in m.group(1).split():
+                    if cls not in _PAGE_HOOK_CLASSES:
+                        continue
+                    if cls not in selectors:
+                        problems.append(
+                            f"{rel} `<main class=\"...{cls}...\">` 在所有 CSS 里都找不到 `{cls}` "
+                            f"的选择器规则 —— 该挂件类上的令牌/变量定义永不生效, 派生样式全部失效"
+                            f"(参考 2026-09-21 把 .hb-page 错写成 .hub-page 之外的类名, 整页无发光)"
+                        )
+
+
 
 def _scan_frontend_assets():
     """扫描 web_ui/static 返回问题清单(空 = 健康)
@@ -836,8 +883,16 @@ def _scan_frontend_assets():
        3s 常量兜底(真机连报三次的那条), 或判定恒真导致失败路径留假状态(红线)。
     10. 拆分接线: 片段文件必须被 HTML 引用 + 被 app.js `app.mixin()` 注入, 且成员不得重名
        (见 _scan_mixin_wiring) —— 漏挂/漏注入 = 整块功能静默消失, 重名 = 被覆盖者永不执行。
+
     11. 筛选器选项必须走 `facetRows` 单点取数面(见 _scan_filter_facets) —— 各自遍历 `groups`
        会在种子页(按视图分片不回数组)算出空选项, 弹层只剩"暂无数据"。
+    12. 页面"挂件类名"必须配对存在 CSS 规则: HTML 的 `<main class="...hub-page...">` / `ce-page` /
+       `layout` 这类挂件类名, 都必须在对应 CSS(shared/console_hub.css / prism/views.css /
+       atlas/style.css)里有规则, 否则**整段页面没样式**(实测: 把 `.hub-page` 错写成 `.hb-page`
+       后 `--tone` 从未定义, 所有 `var(--tone)` 派生的描边/发光/语义色全部失效, 还以为"页面正常"
+       只是"缺发光"; 真浏览器量 computedStyle 才看得出来)。
+       (见 _scan_page_class_wiring)
+
 
     ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测)。
@@ -883,6 +938,7 @@ def _scan_frontend_assets():
     _scan_pending_settle(bundle_text, rel, problems)
     _scan_filter_facets(bundle_text, rel, problems)
     _scan_mixin_wiring(problems)
+    _scan_page_class_wiring(problems)
     return problems
 
 

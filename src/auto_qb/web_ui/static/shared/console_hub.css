@@ -6,7 +6,7 @@
  *   ① 类名统一加 `hb-` 前缀 —— 原样张用的 .card / .row / .blk / .pill / .pop 与表格页
  *      既有类名撞车(.row 在种子表里是行), 不前缀化会两边互相污染。视觉零差异。
  *   ② 颜色全部走主题令牌 —— 不写死 Ash Thorp 的暖炭/暖橙(那是"皮肤", 与版式是两件事),
- *      由 css/themes/*.css 决定; atlas 侧没有 --font-mono / --font-display, 故在 .hb-page
+ *      由 css/themes/*.css 决定; atlas 侧没有 --font-mono / --font-display, 故在 .hub-page
  *      上做一次带兜底的改名(--hb-font-*), 两套 UI 通用。
  *
  * ⚠⚠ 三条不许改回去的硬知识(样张第 8 节「踩过的坑」, 全是用像素扫出来的):
@@ -25,15 +25,20 @@
  * (常规 accent / 重要 warn / 危险 error), 描边与发光必然同色。
  */
 
-/* ---- 字体兜底: prism 的 tokens.css 有 --font-display/--font-mono, atlas 没有 ---- */
-.hb-page {
+/* ---- 字体兜底: prism 的 tokens.css 有 --font-display/--font-mono, atlas 没有 ----
+ *
+ * ⚠ 选择器必须与模板里 main 的类名一致(HTML 上是 `class="ce-page hub-page"`)。
+ *   曾写成 `.hub-page`(前缀化时手滑) ⇒ `--tone` 从未定义 ⇒ 所有 `var(--tone)` 派生值
+ *   在替换时判为无效 ⇒ **描边回退成 --border、发光整条消失、等宽字体也不生效**
+ *   (2026-09-21 用户报"输入框缺失发光"的根因; 静态检查查不到, 只能靠真浏览器量)。 */
+.hub-page {
   --hb-font-display: var(--font-display, "Segoe UI", "Microsoft YaHei", sans-serif);
   --hb-font-mono: var(--font-mono, "Cascadia Code", "Consolas", ui-monospace, monospace);
   /* --tone = 「这个对象是什么性质」的唯一开关, 同时驱动描边色与整组发光色 */
   --tone: var(--accent);
 }
-/* 底部要让两层: 固定动作条(--statusbar-h 之上) + 状态栏本身, 否则最后一块被压在动作条下 */
-.hub-page { padding-bottom: calc(24px + var(--statusbar-h, 34px) + 62px); }
+/* 内边距交给 .hb-wrap 统一给(与样张 .wrap 同一组值), 否则会和 .ce-page 自带的内边距叠成两份 */
+.hub-page { padding: 0; }
 
 /* 切角: 只用在「有边界的实体」(块 / 规则卡 / 曲线卡 / 分区图标 / 浮窗), 不用在控件与行上 */
 .hb-cut {
@@ -234,7 +239,17 @@
 /* ==========================================================================
    首页(Hub): 抬头 + 警示条 + 卡片网格
    ========================================================================== */
-.hb-wrap { max-width: 1120px; margin: 0 auto; }
+/* ⚠ `width: 100%` 必须写: 本页挂在 `.ce-page`(flex column)下, flex item 用了
+ *   `margin: 0 auto` 之后 `align-self: stretch` 就不再拉伸(规范: auto 外边距优先),
+ *   宽度会退化成 fit-content ⇒ 实测只 484px ⇒ 卡片网格 `auto-fill minmax(272px)` 只排得下
+ *   **1 列**(表现为"竖着排")。样张里 .wrap 是 block 子元素所以没这个问题。
+ *   底部还要让两层: 固定动作条 + 状态栏(否则最后一块被压在动作条下)。 */
+.hb-wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px clamp(16px, 3vw, 32px) calc(40px + var(--statusbar-h, 34px) + 62px);
+}
 .hb-view { display: none; }
 .hb-view.on { display: block; animation: hb-in .18s var(--ease-out); }
 @keyframes hb-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
