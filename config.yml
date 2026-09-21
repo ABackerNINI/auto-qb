@@ -28,9 +28,9 @@ config:
         enabled: true        # 默认关闭(保守默认)
         host: "127.0.0.1"
         port: 38080
+        skip_local_verify: true
 
     # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
-        skip_local_verify: true
     notify:
         enabled: true              # 启用主动通知
         min_level: WARNING         # 通知最低日志级别: INFO / WARNING / ERROR
