@@ -1,6 +1,6 @@
 # 26-09-21-qb-corpus-capture-replay — 真机 qB 语料抓取 / 脱敏 / 离线回放
 
-**Status:** In Progress (W0–W3 已实施并验证; W4–W6 未开工)
+**Status:** In Progress (W0–W4 已实施并验证; W5–W6 未开工)
 **Started:** 2026-09-21
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) + [审查报告](../../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)
@@ -125,7 +125,7 @@
 | W1 | 抓取器 `scripts/qb_capture.py` | ✅ 真机跑通 + 6 项自检全 PASS |
 | W2 | 脱敏 + 等价类守恒校验 | ✅ 守恒绿 + 2 道红验通过 + 盐不落盘 + 产物带 .gitignore |
 | W3 | 回放器 + FS mock + 三个缺失路由 + 两层状态模型 | ✅ 静态回放端到端跑通(verdict OK) |
-| W4 | 时间轴回放(游标 + 倍速 + 窗口合并语义) | ⬜ 未开工(窗口合并语义已实现并测试, 游标推进未接) |
+| W4 | 时间轴回放(游标 + 倍速 + 窗口合并语义) | ✅ 端到端跑通, 4 条 CORPUS.* 判据全 PASS |
 | W5 | `CORPUS.*` 判据 + 基线重固化 + 文档 + 关闭 issue 2145 | ⬜ 未开工 |
 | W6 | 真机走查闭环(已收窄为数据面几条) | ⬜ 未开工 |
 
@@ -170,7 +170,17 @@
   + `sim_run.py` 透传与 FS mock 环境变量注入 + `CorpusSource` / `merge_window` / `piece_hashes_of` /
   `corpus_tracker_section`。端到端: `sim_run.py --source=corpus:<dir>` → **verdict OK**,
   87 种子 / 15 帧 / 63 组 / 0 物化文件, 17 轮 sync(1 全量)、漂移 0.578s、0 traceback。
-- **下一步**: W4 —— 时间轴回放(把 `merge_window` 接到回放游标上, 按 `--replay-speed` 推进 + `--latency-mode` 注入录到的 rtt)。
+- **W4 已实施**: 录播游标(帧的**可交付时刻** = 各帧实测 `dt_ms` 的累积和, 按墙钟 × `--replay-speed` 推进)
+  + 窗口合并(把窗口内的采样帧合成一拍)+ `--latency-mode`(recorded 用录到的真实 rtt / p50 / p95 / const:N)
+  + `fs_delta` 按 t_seq 叠到 mock 磁盘状态 + 4 条 `CORPUS.*` 运行期判据。
+  **端到端(3× 倍速)**: 14/14 帧吐完、窗口 4 次、游标滞后 1402 ms(预算 9144 ms)、
+  `replay_stream_consumed` / `replay_timeline_aligned` / `fs_state_match` / `endpoints_covered` **全 PASS**;
+  合成档自检仍全通过。测试 1128 → **1133 passed**。
+  ⚠ 游标滞后**天然受客户端轮询间隔 × 倍速限制**(客户端每 1.5 s 拉一次、游标却连续推进), 故阈值按
+  `轮询间隔 × 倍速 × 2 裕度` 算 —— 拍常数会在换倍速 / 换轮询档时变成假红或假绿。
+- **下一步**: W5 —— `CORPUS.group_exact`(头号判据, 走 auto-qb 的 `GET /api/state` 取它实际分的组, 与
+  groups.json 逐组逐 hash 比 + 反向对照红验)+ `maindata_lag_modeled` 红绿双验 + `sim_baseline.py --merge`
+  重固化(旧基线另存 `synthetic.*`)+ `docs/sim-client-test-howto.md` 增补语料模式 + 关闭 issue 26-09-20-2145。
 
 ## 待办 / 未决
 

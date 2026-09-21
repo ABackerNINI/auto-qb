@@ -518,6 +518,52 @@ def build_checks(
             )
             lag = round((last - ev_ts) / max(args.tick, 0.1), 2) if (ev_ts and last) else None
             add("D4.group_stop_lag_ticks", lag, "<=", 3, "从文件消失到整组停完经过的 tick 数")
+
+    # ---------------- CORPUS.*: 语料档专属判据(计划 §09) ----------------
+    # 合成档没有"语料"这个概念, 这些判据只在 --source=corpus:<dir> 时出现
+    if getattr(sim, "corpus_mode", False):
+        rs = sim.replay_stats
+        # 录播必须把流**完整消费**掉 —— 否则"回放提前结束却判 OK"是空转陷阱
+        consumed = 1 if rs.get("frames_consumed", 0) >= len(sim.replay_data) else 0
+        add(
+            "CORPUS.replay_stream_consumed", consumed, "==", 1,
+            f"已消费 {rs.get('frames_consumed', 0)}/{len(sim.replay_data)} 帧"
+            f"(结束标记 {rs.get('ended')})"
+        )
+        # 回放推进的录制时刻与墙上时钟的偏差(计划 §09 replay_timeline_aligned)。
+        # ❗这个滞后**天然受客户端轮询间隔 × 倍速限制**: 客户端每 1.5 s 来拉一次, 游标却连续推进,
+        # 所以"已交付位置"最多落后一个轮询间隔(折算到录制时间就是 interval × speed)。故阈值按它算,
+        # 而不是拍一个常数 —— 拍常数会在换倍速/换轮询档时变成假红或假绿。
+        # 真掉拍的信号是"落后**超过**一个轮询间隔", 那说明 sim 端自己没跟上。
+        poll_ms = max(sync.get("avg_interval_s") or 0.0, 0.0) * 1000.0
+        budget = round(max(poll_ms * max(sim.replay_speed, 1e-9) * 2.0, 500.0), 1)
+        add(
+            "CORPUS.replay_timeline_aligned", round(rs.get("max_drift_ms", 0.0), 1), "<=", budget,
+            f"回放游标相对已交付位置的滞后(ms); 预算 = 客户端轮询间隔 {poll_ms:.0f}ms × 倍速 "
+            f"{sim.replay_speed} × 2 裕度 = {budget:.0f}ms"
+        )
+        # mock 层回给 auto-qb 的三态必须 == 语料表(files.json + fs_delta)。
+        # 这是 mock 方案的核心断言: mock 若静默失效, D4 全绿也是假的。
+        if sim.corpus is not None:
+            want = sim.corpus.disk_table()
+            for k, v in sim._disk_override.items():
+                want[k] = v
+            got = sim.fsmock_state()["files"]
+            mismatch = sum(
+                1 for k, v in want.items() if (k not in got) or bool(got[k].get("exists")) != bool(v.get("exists")) or
+                (v.get("exists") and got[k].get("size") != v.get("size"))
+            )
+            add(
+                "CORPUS.fs_state_match", mismatch, "==", 0, f"mock 三态与语料表逐条一致(共 {len(want)} 条; exists/missing="
+                f"{sum(1 for v in want.values() if v.get('exists'))}/"
+                f"{sum(1 for v in want.values() if not v.get('exists'))})"
+            )
+        # 端点覆盖: 外壳**已实现**的端点集 ⊇ 语料里**出现过**的端点集。
+        # 防"合成数据从未覆盖的路径"这个承诺落空(计划 §03: 现有外壳已知缺口在 W3 补齐)。
+        seen = set(sim.stats["endpoint_hits"])
+        implemented = set(sim_qb.IMPLEMENTED_ENDPOINTS)
+        uncovered = sorted(seen - implemented)
+        add("CORPUS.endpoints_covered", len(uncovered), "==", 0, f"语料里出现过但外壳未实现的端点: {uncovered[:5]}")
     return c
 
 
@@ -752,6 +798,22 @@ def main(argv=None) -> int:
         "run_dir": sim.run_dir,
         "root": args.root,
     }
+    if getattr(sim, "corpus_mode", False):
+        rs = dict(sim.replay_stats)
+        rs["replayable_frames"] = len(sim.replay_data)
+        rs["consumed_frames"] = sim.replay_pos
+        rs["timeline_ms"] = sim.replay_total_ms
+        rs["speed"] = sim.replay_speed
+        rs["latency_mode"] = args.latency_mode
+        summary["replay"] = rs
+        summary["corpus"] = {
+            "source": args.source,
+            "torrents": len(sim.torrents),
+            "groups": len(sim.groups),
+            "fs_mode": sim.fs_mode,
+            "cmd_latency_ms": args.command_latency_ms,
+            "maindata_lag_ms": args.maindata_lag_ms,
+        }
     with open(os.path.join(sim.run_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
@@ -775,6 +837,13 @@ def main(argv=None) -> int:
         f"log: lines={logscan['lines']} tracebacks={logscan['tracebacks']} "
         f"critical={logscan['critical']} error={logscan['error']}"
     ]
+    if getattr(sim, "corpus_mode", False):
+        rs = summary["replay"]
+        lines.append(
+            f"replay: 帧 {rs['consumed_frames']}/{rs['replayable_frames']} 时间轴 {rs['timeline_ms'] / 1000:.1f}s "
+            f"speed={rs['speed']} latency={rs['latency_mode']} 窗口 {rs['windows']} "
+            f"游标滞后 {rs['max_drift_ms']:.0f}ms 已吐完={rs['ended']}"
+        )
     if sim.violations:
         lines += ["", "violations:"] + [f"  {v}" for v in sim.violations]
     txt = "\n".join(lines)

@@ -502,3 +502,204 @@ def test_corpus_sync_full_then_increment(tmp_path):
     inc = sim.sync_maindata(full["rid"])
     assert inc["full_update"] is False
     assert inc["torrents"] == {}, "无变化时增量轮不带种子"
+
+
+# --------------------------------------------------------------------------- 时间轴回放(W4)
+def _write_timeline_corpus(tmp_path: Path) -> Path:
+    """4 帧: T0 + 2 条带 dt_ms 的增量 + 末帧 closure; 第 2 条增量带 fs_delta"""
+    d = tmp_path / "tl"
+    d.mkdir(parents=True, exist_ok=True)
+    h1, h2 = "a" * 40, "b" * 40
+    t0 = {
+        "t_seq": 0,
+        "role": "t0",
+        "full_update": True,
+        "rid": 1,
+        "dt_ms": 0,
+        "rtt_ms": 10.0,
+        "torrents":
+            {
+                h1:
+                    {
+                        "name": "N1",
+                        "save_path": "<FSROOT>/d0/x",
+                        "state": "stalledUP",
+                        "tags": "",
+                        "category": "",
+                        "size": 10
+                    }
+            },
+        "server_state": {
+            "free_space_on_disk": 123,
+            "up_info_speed": 0
+        },
+        "tags": [],
+        "categories": {}
+    }
+    i1 = {
+        "t_seq": 1,
+        "role": "inc",
+        "full_update": False,
+        "rid": 2,
+        "dt_ms": 1000.0,
+        "rtt_ms": 3.0,
+        "torrents": {
+            h1: {
+                "upspeed": 111
+            }
+        },
+        "server_state": {
+            "up_info_speed": 111
+        }
+    }
+    i2 = {
+        "t_seq": 2,
+        "role": "inc",
+        "full_update": False,
+        "rid": 3,
+        "dt_ms": 1000.0,
+        "rtt_ms": 5.0,
+        "torrents":
+            {
+                h1: {
+                    "upspeed": 222
+                },
+                h2:
+                    {
+                        "name": "N2",
+                        "save_path": "<FSROOT>/d0/y",
+                        "state": "stalledUP",
+                        "tags": "",
+                        "category": "",
+                        "size": 20
+                    }
+            },
+        "torrents_removed": [],
+        "server_state": {
+            "up_info_speed": 222
+        },
+        "fs_delta": {
+            h1: {
+                "x/f.mkv": {
+                    "exists": True,
+                    "size": 10
+                }
+            }
+        }
+    }
+    cl = {
+        "t_seq": 3,
+        "role": "closure",
+        "full_update": True,
+        "rid": 9,
+        "dt_ms": 0,
+        "rtt_ms": 10.0,
+        "torrents":
+            {
+                h1:
+                    {
+                        "name": "N1",
+                        "save_path": "<FSROOT>/d0/x",
+                        "state": "stalledUP",
+                        "tags": "",
+                        "category": "",
+                        "size": 10,
+                        "upspeed": 222
+                    },
+                h2:
+                    {
+                        "name": "N2",
+                        "save_path": "<FSROOT>/d0/y",
+                        "state": "stalledUP",
+                        "tags": "",
+                        "category": "",
+                        "size": 20
+                    }
+            },
+        "server_state": {
+            "free_space_on_disk": 123,
+            "up_info_speed": 222
+        },
+        "tags": [],
+        "categories": {}
+    }
+    with gzip.open(d / "sync-stream.jsonl.gz", "wt", encoding="utf-8") as f:
+        for fr in (t0, i1, i2, cl):
+            f.write(json.dumps(fr, ensure_ascii=False) + "\n")
+    with gzip.open(d / "files.json.gz", "wt", encoding="utf-8") as f:
+        json.dump({h1: [{"name": "x/f.mkv", "size": 10}], h2: [{"name": "y/g.mkv", "size": 20}]}, f)
+    with gzip.open(d / "trackers.json.gz", "wt", encoding="utf-8") as f:
+        json.dump({h1: [], h2: []}, f)
+    with gzip.open(d / "disk.json.gz", "wt", encoding="utf-8") as f:
+        json.dump({h1: {"x/f.mkv": {"exists": False, "size": None}}, h2: {}}, f)
+    with gzip.open(d / "groups.json.gz", "wt", encoding="utf-8") as f:
+        json.dump({"groups": []}, f)
+    (d / "meta.json").write_text(json.dumps({"status": "ok", "frames": 4}), encoding="utf-8")
+    return d
+
+
+def _make_tl_sim(tmp_path, speed: float = 0.0):
+    d = _write_timeline_corpus(tmp_path)
+    args = simqb.build_parser().parse_args(
+        ["--source=corpus:%s" % d, "--root",
+         str(tmp_path / "root"), "--replay-speed",
+         str(speed)]
+    )
+    args.root = str(tmp_path / "root")
+    args.run_dir = simqb.make_run_dir(args.root, "tl")
+    return simqb.SimQb(args)
+
+
+def test_timeline_excludes_closure_frame(tmp_path):
+    """末帧是校验锚点, **不得**进可回放集合(吐了客户端会按全量轮重置一次)"""
+    sim = _make_tl_sim(tmp_path)
+    assert len(sim.replay_data) == 3, "T0 + 2 增量 可回放; closure 必须被排除"
+    assert all(f.get("role") != "closure" for f in sim.replay_data)
+    assert sim.replay_total_ms == 2000.0, "时间轴 = 各帧实测 dt_ms 之和"
+
+
+def test_timeline_advances_and_merges_window(tmp_path):
+    """游标推进: 消费窗口内的帧并**合并成一拍**; 后写覆盖 + server_state merge"""
+    sim = _make_tl_sim(tmp_path, speed=0.0)
+    h1 = "a" * 40
+    # 游标 0: T0 那一帧(dt=0)应当被消费, 但不带任何变化
+    sim.consume_replay(0)
+    assert sim.replay_pos == 1
+    # 推进到 1000ms: 消费第 2 帧
+    sim.consume_replay(1000)
+    assert sim.replay_pos == 2
+    assert sim.torrents[h1]["upspeed"] == 111
+    assert sim._corpus_ss["up_info_speed"] == 111, "server_state 必须 merge"
+    # 推进到 2500ms: 第 3 帧也要进来(合并成一拍)
+    sim.consume_replay(2500)
+    assert sim.replay_pos == 3
+    assert sim.torrents[h1]["upspeed"] == 222, "窗口内后写覆盖"
+    assert "b" * 40 in sim.torrents, "该帧新增的种子必须进状态"
+    assert sim.replay_stats["windows"] == 3
+    # 游标推到时间轴之后: 不重复消费
+    sim.consume_replay(999999)
+    assert sim.replay_pos == 3
+    assert sim.replay_stats["ended"] is True
+
+
+def test_timeline_applies_fs_delta(tmp_path):
+    """录制期真发生过的磁盘变化必须按 t_seq 重演(不是"回放时文件都齐全")"""
+    sim = _make_tl_sim(tmp_path, speed=0.0)
+    h1 = "a" * 40
+    key = sim.fs_root.replace("\\", "/") + "/d0/x/x/f.mkv"  # 解析后的 save_path + 相对路径
+    # 初值: disk.json 说它不存在
+    assert sim.fsmock_state()["files"][key]["exists"] is False
+    sim.consume_replay(2500)
+    assert sim.fsmock_state()["files"][key]["exists"] is True, "fs_delta 必须叠到磁盘状态上"
+    assert sim.fsmock_state()["files"][key]["size"] == 10
+
+
+def test_replay_latency_modes(tmp_path):
+    """--latency-mode: recorded 用录到的真实 rtt; const 用 --latency-ms"""
+    sim = _make_tl_sim(tmp_path, speed=0.0)
+    sim.consume_replay(2500)
+    assert sim._last_rtt_ms > 0
+    assert sim.replay_latency_ms() == sim._last_rtt_ms, "recorded 模式用录到的 rtt"
+    sim.args.latency_mode = "const"
+    sim.latency_ms = 7.0
+    assert sim.replay_latency_ms() == 7.0, "const 模式用 --latency-ms"

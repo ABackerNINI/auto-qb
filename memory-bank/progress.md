@@ -194,7 +194,7 @@
 
 (以下 WEB UI 核心已于 2026-09-13 实现, 见 productContext.md/modules.md; **2026-09-14 已补图形化配置编辑** —— 设置页每项配置均可增删改, 含站点/规则集(16 条件 + 12 动作)/限速曲线的结构化编辑与只读 YAML 预览, 直接编辑模式已移除; 剩余: WebSocket 推送/多用户)
 
-### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W3 已实施, W4–W6 未开工**)
+### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W4 已实施, W5–W6 未开工**)
 
 > 计划 [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) · 任务档案 [tasks/26-09-21-qb-corpus-capture-replay.md](tasks/26-09-21-qb-corpus-capture-replay.md)
 
@@ -220,7 +220,11 @@
   守阵: `CORPUS.fs_mock_coverage` 静态守阵 + 红验、两层状态模型红验。测试 1111 → **1128 passed**。
   顺带修掉两个真 bug: ①`disk.json.gz` 内层相对路径未脱敏(隐私 P0)②`disk_table()` 没读 disk.json
   ⇒ 抹掉 9673 个缺失样本(D4 假绿)。
-- ⬜ **W4–W6 未开工**: 时间轴回放(游标 + 倍速 + rtt 注入) / `CORPUS.*` 判据 + 基线重固化 / 真机走查闭环(已收窄)。
+- ✅ **W4 已落地**: 录播游标(可交付时刻 = 各帧 `dt_ms` 累积和, 按墙钟 × `--replay-speed` 推进)+ 窗口合并
+  + `--latency-mode`(recorded / p50 / p95 / const)+ `fs_delta` 按 t_seq 叠到 mock 磁盘状态。端到端 3× 倍速:
+  14/14 帧吐完、游标滞后 1402 ms(预算 9144 ms); 4 条 `CORPUS.*` 判据全 PASS。测试 1128 → **1133 passed**。
+- ⬜ **W5–W6 未开工**: `CORPUS.group_exact`(头号)+ `maindata_lag_modeled` 红绿双验 + 基线重固化 +
+  文档 + 关闭 issue 2145 / 真机走查闭环(已收窄)。
 
 ### 规则系统
 - 条件取反 (`!` / 非 logic) — `:ignore_case` 支持已完成 (2026-09-12, 见 08 TODO 段)

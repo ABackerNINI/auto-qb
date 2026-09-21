@@ -76,9 +76,20 @@
     (第一次写这两条时**判据是空壳**, 红验把它抓出来了 —— 见 pitfalls。)
   - 测试基线 1098 → **1111 passed**(+13, 0 退化)。
 
-  **下一步 = W4**(W3 见上): 时间轴回放 —— 把 `merge_window` 接到回放游标上
-  (按 `--replay-speed` 推进 + `--latency-mode` 注入录到的 rtt)。W5/W6 未开工。
-  ⚠ W3 验收已过(静态回放端到端 verdict OK + 两道守阵红验通过), 可以进 W4。
+  ### W4 已实施(本轮)
+  - 录播游标(帧的**可交付时刻** = 各帧实测 `dt_ms` 的累积和, 按墙钟 × `--replay-speed` 推进)
+    + 窗口合并成一拍 + `--latency-mode`(recorded 用录到的真实 rtt / p50 / p95 / const:N)
+    + `fs_delta` 按 t_seq 叠到 mock 磁盘状态 + 4 条 `CORPUS.*` 运行期判据。
+  - **端到端(3× 倍速)**: 14/14 帧吐完、窗口 4 次、游标滞后 1402 ms(预算 9144 ms);
+    `replay_stream_consumed` / `replay_timeline_aligned` / `fs_state_match` / `endpoints_covered` **全 PASS**;
+    合成档自检仍全通过。测试 1128 → **1133 passed**。
+  - ⚠ 游标滞后**天然受客户端轮询间隔 × 倍速限制**(客户端每 1.5 s 拉一次、游标却连续推进),
+    故阈值按 `轮询间隔 × 倍速 × 2 裕度` 算 —— 拍常数会在换倍速 / 换轮询档时变成假红或假绿。
+  - **W3 已推送**: `dacc991` → Gitee + GitHub。
+
+  **下一步 = W5**: `CORPUS.group_exact`(头号判据 —— 走 auto-qb `GET /api/state` 取它实际分的组,
+  与 groups.json 逐组逐 hash 比 + 反向对照红验)+ `maindata_lag_modeled` 红绿双验
+  + 基线重固化(旧基线另存 `synthetic.*`)+ 文档 + 关闭 issue 2145。**W6 未开工**。
 
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
   [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)

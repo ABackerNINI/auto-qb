@@ -6,7 +6,14 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1128 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1133 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1128 → 1133(语料时间轴回放批次 W4 +5: `tests/test_sim_corpus.py` 续 —— 末帧 closure 必须排除出可回放集合、
+#     游标推进与窗口合并(后写覆盖 / server_state merge / 新增种子进状态)、fs_delta 按 t_seq 叠到磁盘状态、
+#     `--latency-mode` 的 recorded 与 const 两条分支)。
+#     另有 4 条 **CORPUS.*** 运行期判据落地在 `scripts/sim_run.py`(语料档专属, 合成档不出现):
+#     replay_stream_consumed / replay_timeline_aligned(阈值按「轮询间隔 × 倍速 × 2 裕度」算, 不拍常数)/
+#     fs_state_match / endpoints_covered —— 端到端 4 条全 PASS。
+#   ⚠ 该批改 `scripts/` 三个文件 + `tests/` 一个文件, src/ 零改动; 既有 1128 条全部原样通过。
 #   ↑ 1111 → 1128(语料回放批次 W3 +17: `tests/test_sim_corpus.py` —— FS mock 的拦截/作用域/长路径前缀与大小写/
 #     未知路径计数/disk_usage 用录制值; **静态守阵 CORPUS.fs_mock_coverage + 红验**(把探测换成 pathlib 必须红);
 #     窗口合并净额(先增后删 / 先删后加 / server_state merge / tags 按序末事件); piece hash 按内容集合派生

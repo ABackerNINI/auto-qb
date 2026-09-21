@@ -80,6 +80,32 @@ RISK_ENDPOINTS = frozenset(
     }
 )
 
+# 外壳**已实现**的端点集(读 + 写)。判据 CORPUS.endpoints_covered 拿它比对"语料里出现过的端点":
+# 语料档的覆盖范围 = 现有外壳已实现的端点集 —— 把这条写出来, 才不会让"合成数据从未覆盖的路径
+# 会被语料覆盖"这句承诺落空(计划 §03: sync/torrentPeers / torrents/export / torrents/pieceHashes
+# 三个路由原本根本不存在, 落到 unknown endpoint 404, W3 已补齐)。
+IMPLEMENTED_ENDPOINTS = frozenset(
+    {
+        "auth/login",
+        "app/version",
+        "app/webapiVersion",
+        "app/preferences",
+        "sync/maindata",
+        "sync/torrentPeers",
+        "torrents/info",
+        "torrents/files",
+        "torrents/trackers",
+        "torrents/tags",
+        "torrents/categories",
+        "torrents/pieceHashes",
+        "torrents/export",
+        "transfer/info",
+        "transfer/uploadLimit",
+        "transfer/downloadLimit",
+        "_fsmock/state",
+    }
+) | WRITE_ENDPOINTS
+
 # 变异字段: 全部落在 _VIEW_FIELDS 内, 必然驱动视图置脏(有意的, WEB UI 是已知昂贵路径)
 MUTATE_FIELDS = ("upspeed", "dlspeed", "uploaded", "seeding_time", "ratio", "state", "last_activity", "time_active")
 
@@ -513,15 +539,130 @@ class SimQb:
         self._corpus_ss = dict(t0.get("server_state") or {})
         # 真值分组(groups.json) —— D4 取"真机上磁盘就有问题的组"时的样本来源
         self.groups = [list(g.get("members") or []) for g in (self.corpus.groups.get("groups") or [])]
+        # ---- 录播时间轴(计划 §08) ----
+        # 帧自带**实测 dt_ms**, 累积成时间轴; 回放按墙钟 × 倍速推进游标。
+        # ❗末帧(closure/mismatch)是校验锚点, **不吐给客户端**(吐了客户端会按全量轮重置一次)。
+        allf = self.corpus.frames
+        self.replay_data = allf[:-1] if (allf and allf[-1].get("role") in ("closure", "mismatch")) else list(allf)
+        # 帧的"可交付时刻" = 它**完成**时的累积时间(sum(dt))。用完成时刻而不是开始时刻:
+        # dt_ms 记的是"距上一帧的实测间隔", 所以第 i 帧在 sum(dt[0..i]) 时才拿到手。
+        self.replay_times: list[float] = []
+        acc = 0.0
+        for f in self.replay_data:
+            acc += float(f.get("dt_ms") or 0)
+            self.replay_times.append(acc)
+        self.replay_total_ms = acc
+        self.replay_pos = 0
+        self.replay_speed = float(getattr(self.args, "replay_speed", 1.0) or 0.0)
         self.replay_started = time.time()
+        self._disk_override: dict[str, dict] = {}
+        self._last_rtt_ms = 0.0
+        self.replay_stats = {
+            "windows": 0,
+            "frames_consumed": 0,
+            "consumed_until_ms": 0.0,
+            "max_drift_ms": 0.0,
+            "ended": False,
+            "rtt_samples": []
+        }
         self._ordered = list(self.torrents.values())
         self._visible = len(self._ordered)
         print(
-            f"[corpus] {path}: {len(self.torrents)} 种子 / {len(self.corpus.frames)} 帧 / "
-            f"{len(self.groups)} 组 / fs-mode={self.fs_mode} / "
+            f"[corpus] {path}: {len(self.torrents)} 种子 / {len(self.corpus.frames)} 帧"
+            f"(可回放 {len(self.replay_data)}, 时间轴 {self.replay_total_ms / 1000:.1f}s) / "
+            f"{len(self.groups)} 组 / fs-mode={self.fs_mode} / replay-speed={self.replay_speed} "
+            f"latency={getattr(self.args, 'latency_mode', 'recorded')} / "
             f"cmd-latency={self.cmd_latency_s * 1000:.0f}ms md-lag={self.md_lag_s * 1000:.0f}ms",
             file=sys.stderr
         )
+
+    # ---------- 录播游标(计划 §08) ----------
+
+    def replay_cursor_ms(self) -> float:
+        """回放游标(录制时间轴上的毫秒位置) = 墙钟已过 × 倍速。speed<=0 => 静态回放(不推进)"""
+        if self.replay_speed <= 0:
+            return 0.0
+        return (time.time() - self.replay_started) * 1000.0 * self.replay_speed
+
+    def _apply_fs_delta(self, frame: dict) -> None:
+        """把该帧的 fs_delta 叠到磁盘状态上 —— 录制期真发生过的删/增/去后缀在这里重演"""
+        delta = frame.get("fs_delta")
+        if not isinstance(delta, dict):
+            return
+        for h, rels in delta.items():
+            sp = (self.torrents.get(h) or {}).get("save_path", "")
+            for rel, rec in (rels or {}).items():
+                full = (sp.rstrip("/") + "/" + str(rel).lstrip("/")) if sp else str(rel)
+                self._disk_override[full] = {"exists": bool(rec.get("exists")), "size": rec.get("size")}
+
+    def consume_replay(self, cursor_ms: float | None = None) -> dict:
+        """把游标推进到 cursor_ms, 把这段时间内落过的采样帧**合并成一拍**(计划 §08)。
+
+        ⚠ 顺序: 先合并窗口(本函数) → 再由 `_snapshot_view` 叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
+        """
+        if cursor_ms is None:
+            cursor_ms = self.replay_cursor_ms()
+        win: list[dict] = []
+        while self.replay_pos < len(self.replay_data) and self.replay_times[self.replay_pos] <= cursor_ms:
+            f = self.replay_data[self.replay_pos]
+            win.append(f)
+            self._apply_fs_delta(f)
+            self.replay_pos += 1
+        if not win:
+            # 流已吐完: 记录"超出末帧多久"(判据 replay_stream_consumed / replay_timeline_aligned 用)
+            if self.replay_pos >= len(self.replay_data):
+                self.replay_stats["ended"] = True
+                self.replay_stats["overrun_ms"] = cursor_ms - self.replay_total_ms
+            return {}
+        merged = merge_window(win)
+        self.replay_stats["windows"] += 1
+        self.replay_stats["frames_consumed"] += len(win)
+        self.replay_stats["consumed_until_ms"] = self.replay_times[self.replay_pos - 1]
+        drift = cursor_ms - self.replay_stats["consumed_until_ms"]
+        self.replay_stats["max_drift_ms"] = max(self.replay_stats["max_drift_ms"], drift)
+        rtts = [float(f.get("rtt_ms") or 0) for f in win]
+        self.replay_stats["rtt_samples"].extend(rtts)
+        self._last_rtt_ms = sum(rtts) / len(rtts)
+
+        for h, patch in (merged.get("torrents") or {}).items():
+            self.torrents.setdefault(h, {}).update(patch)
+            self.dirty.setdefault(h, {}).update(patch)
+        for h in merged.get("torrents_removed") or []:
+            self.torrents.pop(h, None)
+            self.removed.append(h)
+        for t in merged.get("tags") or []:
+            self.tags.add(t)
+        for t in merged.get("tags_removed") or []:
+            self.tags.discard(t)
+        for k, v in (merged.get("categories") or {}).items():
+            self.categories.add(k)
+        for k in merged.get("categories_removed") or []:
+            self.categories.discard(k)
+        ss = merged.get("server_state") or {}
+        if ss:
+            self._corpus_ss = {**self._corpus_ss, **ss}
+        return merged
+
+    def replay_latency_ms(self) -> float:
+        """按 --latency-mode 注入延迟: recorded(用录到的真实 rtt) / p50 / p95 / const:N
+
+        计划 §07: 不用 `--latency-ms` 常数近似 —— 它既不是真机那种随载荷变化的延迟
+        (全量 205 ms / 增量 3.3 ms), 也还原不了"变化在一个 tick 内部怎么分布"。
+        """
+        mode = getattr(self.args, "latency_mode", "recorded") or "recorded"
+        if mode == "const":
+            return self.latency_ms
+        samples = sorted(self.replay_stats.get("rtt_samples") or [])
+        if mode == "p50" and samples:
+            return samples[len(samples) // 2]
+        if mode == "p95" and samples:
+            return samples[min(len(samples) - 1, int(len(samples) * 0.95))]
+        return self._last_rtt_ms
+
+    def sleep_replay_latency(self) -> None:
+        ms = self.replay_latency_ms()
+        if ms > 0:
+            time.sleep(ms / 1000.0)
 
     # ---------- 两层状态(流状态 vs 实况状态) ----------
 
@@ -885,7 +1026,10 @@ class SimQb:
         """
         with self.lock:
             self.stats["sync_rounds"] += 1
-            self._promote_overlays()  # 跨过 md 滞后线的 overlay 字段先进脏集合, 否则增量轮不带它们
+            # ⚠ 顺序: 先合并窗口(§08) → 再叠 overlay 的可见性(§07)。
+            # 反了会让滞后边界落在错误的 t_seq 上 —— 故刻意写成两个独立调用, 不揉在一起。
+            self.consume_replay()
+            self._promote_overlays()
             if rid != self.rid:
                 out = {
                     "rid": self.rid,
@@ -922,6 +1066,9 @@ class SimQb:
         """
         if self.corpus_mode and self.corpus:
             files = self.corpus.disk_table()
+            # 录制期的磁盘变化(fs_delta)按 t_seq 重演 —— 覆盖在初值之上
+            for k, v in self._disk_override.items():
+                files[k] = v
         else:
             files = {}
             for h, t in self.torrents.items():
@@ -1137,6 +1284,21 @@ class SimQb:
             "root": self.args.root,
             "run_dir": self.run_dir,
         }
+        if self.corpus_mode:
+            rs = dict(self.replay_stats)
+            rs["replayable_frames"] = len(self.replay_data)
+            rs["consumed_frames"] = self.replay_pos
+            rs["stream_consumed"] = self.replay_pos >= len(self.replay_data)
+            rs["timeline_ms"] = self.replay_total_ms
+            rs["speed"] = self.replay_speed
+            rs["latency_mode"] = getattr(self.args, "latency_mode", "recorded")
+            s["replay"] = rs
+            s["corpus"] = {
+                "path": getattr(self.args, "source", ""),
+                "torrents": len(self.torrents),
+                "groups": len(self.groups),
+                "fs_mode": self.fs_mode
+            }
         if extra:
             s.update(extra)
         s["verdict"] = "FAIL" if self.violations else "OK"
@@ -1263,6 +1425,9 @@ class Handler(BaseHTTPRequestHandler):
 
         # 读端点
         if route == "sync/maindata":
+            # 录播档: 按 --latency-mode 注入延迟(recorded = 用录到的真实 rtt), 替代 --latency-ms 常数近似
+            if sim.corpus_mode:
+                sim.sleep_replay_latency()
             out = sim.sync_maindata(int(params.get("rid") or 0))
             b = json.dumps(out).encode("utf-8")
             self.send_response(200)
