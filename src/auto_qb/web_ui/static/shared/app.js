@@ -134,22 +134,27 @@ const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
 const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真拖拽", 释放时拦掉冒泡到 .h-cell 的 click(避免误触排序)
 /* 列状态持久化(决策 D3 = **只存浏览器**, 不上服务端):
- * {widths:{page:{列key:"120px"}}, hidden:{page:[列key]}, manual:{page:bool}, order:{page:[列key]}}
- * v2(按列索引的稀疏覆盖) -> v3(**按列 key** + 自适应策略变更) -> v4(新增 H&R/分享率列)。
+ * v5 = { v:5, origin, pages:{ page:{ hidden:[列key], order:[列key], w:{列key:"120px"} | null } } }
+ * —— **存储只存用户意图**(hidden/order/w); 生效宽度是按当前窗口现算的派生值, **绝不落盘**(唯一铁律)。
+ * w: null = 全自动页(各窗口各算各的); w 非空 = 用户固化过整页宽度。manual 标志位删除(w 非空即固化)。
+ * v2(按列索引的稀疏覆盖) -> v3(**按列 key**) -> v4(加列) -> v5(意图/生效分轨, 挂 v4/v3 迁移)。
  *
  * R10-09 修订两条:
  * ① **不再靠"升版本"应对列集变更** —— 宽/隐/序一律按**列 key** 存, 新增列在旧缓存里只是
  *    "没有记录"(回退 tpl 默认宽), 不会错配; 历史上 v3->v4 升版本反而把用户手调的宽/隐/序
  *    清零, 正是"时不时被重置"的机制性来源。故本轮列模型增 `align` **不升版本**。
  * ② 保留旧键迁移: 当前键缺失/损坏时依次读 LEGACY_COLS_KEYS, 命中即按列 key 求交集洗净后
- *    立刻回写当前键 —— 升级/换键都不再清空偏好。v2 是**按列索引**式, 索引在支持隐藏列后
- *    会漂移, 无法可靠迁移 -> 刻意不读。
+ *    内存迁移为 v5(不立即回写, 首次意图动作经 persistPage 落盘)。v2 是**按列索引**式,
+ *    索引在支持隐藏列后会漂移, 无法可靠迁移 -> 刻意不读。
  *
  * 不被重置的保证: _logout()/换密钥只清 `autoqb_token`, 全仓尤 `localStorage.clear()`。
  * 仍存在的限制(已写入 pitfalls): localStorage 按 **origin** 隔离 —— localhost 与 127.0.0.1
  * 或换端口 = 不同站点, 各有自己的偏好(用户已明确要求只存浏览器, 不接受服务端化)。 */
-const COLS_STORE_KEY = "autoqb_cols_v4";
-const LEGACY_COLS_KEYS = ["autoqb_cols_v3"];  // v2 为索引式覆盖, 不可迁移(见上)
+const COLS_STORE_KEY = "autoqb_cols_v5";
+const LEGACY_COLS_KEYS = ["autoqb_cols_v4", "autoqb_cols_v3"];  // v2 为索引式覆盖, 不可迁移(见上)
+/* W4 origin 提示(plan 26-09-21-1551): 本 origin 首次出现"空列存储"时提示一次 —— 换地址/端口
+ * 即另一个独立存储, 这是客户端唯一可观测的隔离信号(别的 origin 的存储读不到, 指纹跨站比对不可达)。 */
+const COLS_ORIGIN_HINT_KEY = "autoqb_cols_origin_hint_v1";
 
 /* FX-28: 时间列显示口径(相对/绝对)持久化, **按列**独立而非全局 —— 用户可能想"添加于看绝对、
  * 最近活动看相对", 一把切会互相打架。刻意**不**塞进 COLS_STORE_KEY: 那个键管的是列集合/列宽/
@@ -220,7 +225,8 @@ const ROW_WIN_GAP_FALLBACK = 0;
  * 设置页里的"配置分组"是 schema 分组(无关语义), 不适用本常量。 */
 const L10N_GROUP = "辅种";
 
-const emptyColState = () => ({ widths: {}, hidden: {}, manual: {}, order: {} });
+const TABLE_PAGES = ["group", "detail", "torrent", "show"];
+const emptyColState = () => ({ hidden: {}, order: {}, w: {} });  // 运行时意图态: w[page] = null | {列key: "Npx"}
 
 function columnKeys(page) {
   return TABLE_COLUMNS[page].map((c) => c.key);
@@ -236,17 +242,39 @@ function templateMinPx(tpl) {
   return m ? Math.round(parseFloat(m[1])) : MIN_COL_PX;
 }
 
-/* 读列状态原始对象: 当前键优先; 缺失/损坏时回退旧键(跨版本迁移), 迁移命中即回写当前键。
- * 单点收口在这里 —— loadColState 只管洗净与兜底, 不关心键从哪来。 */
+/* 旧版载荷(v4/v3 四段式) -> v5 按页子树(内存迁移, plan 26-09-21-1551 §3.3):
+ * hidden/order 原样带过(洗净交给 loadColState); w 只保留**固化页**(manual 标志为真)的宽度段,
+ * 非固化页一律 null —— 旧模型往非固化页写的 px 是"别的窗口算出的自适应快照"(历史污染),
+ * 迁移即清零, 正是用户要的"从头算"。 */
+function migrateLegacyToV5(raw) {
+  const pages = {};
+  for (const page of TABLE_PAGES) {
+    const fixed = !!((raw.manual || {})[page]);
+    const widths = (raw.widths || {})[page];
+    pages[page] = {
+      hidden: Array.isArray((raw.hidden || {})[page]) ? raw.hidden[page].slice() : [],
+      order: Array.isArray((raw.order || {})[page]) ? raw.order[page].slice() : [],
+      w: fixed && widths && typeof widths === "object" ? { ...widths } : null,
+    };
+  }
+  return { v: 5, origin: "", pages };
+}
+
+/* v5 载荷归一化: pages 段缺失/损坏时回空(新增 page 属向后兼容扩展, 缺该 page 即空)。 */
+function normalizeV5(raw) {
+  const pages = raw.pages && typeof raw.pages === "object" ? raw.pages : {};
+  return { v: 5, origin: typeof raw.origin === "string" ? raw.origin : "", pages };
+}
+
+/* 读列状态(归一化为 v5 形态): 当前键优先; 缺失/损坏时读旧键做**内存迁移** —— 不立即回写,
+ * 首次意图动作经 persistPage(唯一写入口)落 v5; 期间每次加载重迁移, 成本可忽略。
+ * 单点收口: loadColState 只管洗净, persistPage 只管写。 */
 function readColStateRaw() {
   for (const key of [COLS_STORE_KEY, ...LEGACY_COLS_KEYS]) {
     try {
       const raw = JSON.parse(localStorage.getItem(key));
       if (raw && typeof raw === "object") {
-        if (key !== COLS_STORE_KEY) {
-          try { localStorage.setItem(COLS_STORE_KEY, JSON.stringify(raw)); } catch { /* 私隐模式: 本次会话内仍生效 */ }
-        }
-        return raw;
+        return key === COLS_STORE_KEY ? normalizeV5(raw) : migrateLegacyToV5(raw);
       }
     } catch { /* 该键缺失/损坏: 继续尝试旧键 */ }
   }
@@ -258,22 +286,24 @@ function loadColState() {
     const raw = readColStateRaw();
     if (!raw || typeof raw !== "object") return emptyColState();
     const out = emptyColState();
-    for (const page of ["group", "detail", "torrent", "show"]) {
+    for (const page of TABLE_PAGES) {
       const keys = columnKeys(page);
-      const w = (raw.widths || {})[page];
+      const src = (raw.pages || {})[page] || {};
+      const w = src.w;
       if (w && typeof w === "object") {
+        // 意图宽度白名单: 只收合法列 key 的 "<num>px"(非法/残留键丢弃); 洗完全空 = 全自动页
         const clean = {};
         for (const [k, v] of Object.entries(w)) {
           if (keys.includes(k) && /^\d+px$/.test(v)) clean[k] = v;
         }
-        if (Object.keys(clean).length) out.widths[page] = clean;
+        if (Object.keys(clean).length) out.w[page] = clean;
       }
-      const h = (raw.hidden || {})[page];
+      const h = src.hidden;
       if (Array.isArray(h)) {
         // locked 列即使被写进存储也忽略(列定义变更后可能残留)
         out.hidden[page] = h.filter((k) => keys.includes(k) && !(columnDef(page, k) || {}).locked);
       }
-      const o = (raw.order || {})[page];
+      const o = src.order;
       if (Array.isArray(o)) {
         // 列序(TBL-05): 只收合法列 key 并去重; 缺失列(新增列)由 _visibleCols/_orderedKeys 按定义序补尾
         const seen = new Set();
@@ -283,12 +313,6 @@ function loadColState() {
         }
         if (clean.length) out.order[page] = clean;
       }
-      out.manual[page] = !!(raw.manual || {})[page];
-      /* 非手动页**不读** px(issue 26-09-20-1800): 与 saveColState 的"非手动页不落 px"成对。
-       * 存储里若还留着 px(修复前被别的窗口写进去的), 照读会让本窗口沿用**别人窗口**算出的
-       * 尺寸 —— 用户看到的就是"列宽被重置/莫名其妙变了"。这里一律清空, 该页始终走弹性模板、
-       * 按**当前**窗口自适应; manual=true 的页(用户真拖过宽)照读, 不受影响。 */
-      if (!out.manual[page]) out.widths[page] = {};
     }
     return out;
   } catch {
@@ -297,6 +321,12 @@ function loadColState() {
 }
 
 const initialColState = loadColState();  // 模块级只读一次(data() 的初值来源)
+/* 生效宽度初值: 固化页取意图(首帧即正确), 全自动页空(等 recomputeEffective 按当前窗口现算)。 */
+const initialEffectiveWidths = (() => {
+  const out = {};
+  for (const page of TABLE_PAGES) out[page] = initialColState.w[page] ? { ...initialColState.w[page] } : {};
+  return out;
+})();
 
 /* 视图/信息栏模式初值(持久化用户偏好; 异常时回退默认) */
 function initialViewMode() {
@@ -408,11 +438,11 @@ const app = createApp({
       },
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
-      // 列状态(定义见文件顶部列模型; 列宽按**列 key** 记忆, 隐藏列由列选择器管理)
-      colWidths: initialColState.widths,  // {page: {列key: "120px"}}
-      colHidden: initialColState.hidden,  // {page: [列key]}
-      colManual: initialColState.manual,  // {page: bool}: 是否手动调过列宽(调过则不再随窗口自适应)
-      colOrder: initialColState.order,    // {page: [列key]}: 列顺序(TBL-05 表头拖动重排; 空 = 定义顺序)
+      // 列状态双轨(plan 26-09-21-1551): 意图态(唯一持久化对象)与生效态(易变, 绝不落盘)分开
+      colHidden: initialColState.hidden,  // 意图: {page: [列key]}
+      colOrder: initialColState.order,    // 意图: {page: [列key]} (TBL-05 表头拖动重排; 空 = 定义顺序)
+      colW: initialColState.w,            // 意图: {page: null | {列key: "Npx"}} —— null/缺失 = 全自动页
+      colWidths: initialEffectiveWidths,  // 生效: 固化页 = 意图, 全自动页 = recomputeEffective 现算
       colMenuOpen: false,                 // 列选择器弹层开关
       colMenuAt: null,                    // 列选择器 fixed 锚点(表头右键路径 {x,y,mh}; null = 按钮路径走 CSS 定位)
       colDrag: null,                      // 表头拖动重排进行中(TBL-05): {page, key, idx, x} — idx=可视列插入边界, x=指示线位置
@@ -613,23 +643,27 @@ const app = createApp({
       else if (this.expandedShowEp) this.expandedShowEp = null;  // 兜底: 收起追剧集展开
       else if (this.expandedShows.length) this.expandedShows = [];  // 兜底: 收起追剧剧展开
     });
-    // 列宽: 未手动调过时"实体化"为当前渲染 px(见 materializeColumns); 窗口变化后重新实体化,
-    // 保持"填满容器 + 自适应"的观感; 手动调过则冻结(拖一列不再影响其它列)
+    // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
+    // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
     let resizeTimer = null;
     window.addEventListener("resize", () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         this._syncHeadHeight();
-        this.materializeColumns();
+        this.recomputeEffective();
       }, 120);
     });
     this.$nextTick(() => {
       this._syncHeadHeight();
-      this.materializeColumns();
+      this.recomputeEffective();
     });
+    /* W4(origin 提示, plan 26-09-21-1551): localStorage 按 origin 隔离, 换地址/端口 = 另一个
+     * 独立存储。客户端唯一能观测到的信号是"本 origin 从没有任何列偏好"(空存储) —— 指纹跨站
+     * 比对不可达(别的 origin 的存储读不到)。命中即提示一次, 把看不见的隔离变成可见。 */
+    if (!readColStateRaw()) this._showColsOriginHint();
     /* 跨标签同步(F2, issue 26-09-20-1800): 别的标签改了列 -> 本标签整份采用存储值。
-     * 内存是"页面加载时的快照", 若不同步, 本标签下一次 saveColState 会用旧快照整份覆盖,
-     * 把别的标签的改动静默吞掉(用户感知 = "列设置被重置")。
+     * 若不同步, 本标签下一次 persistPage 会以旧底整段覆盖该页, 把别的标签的改动静默吞掉
+     * (用户感知 = "列设置被重置")。双轨模型下采纳的是意图, 采纳永远安全。
      * storage 事件**只在其它标签**触发(写入方自己收不到) ⇒ 无需去重, 也不会自激。 */
     this._onColStore = (e) => {
       if (e.key === COLS_STORE_KEY) this.adoptColState();
@@ -694,7 +728,7 @@ const app = createApp({
     page() {
       this.$nextTick(() => {
         this._syncHeadHeight();
-        this.materializeColumns();
+        this.recomputeEffective();
       });
     },
     // CTX-02: 任一浮层菜单关闭 -> 撤掉触发源强调(浮层可以多种方式关闭: Esc/点空白/执行动作)
@@ -1101,7 +1135,7 @@ const app = createApp({
       this.expandedShowEp = null;
       this.$nextTick(() => {
         this._syncHeadHeight();
-        this.materializeColumns();
+        this.recomputeEffective();
       });
       // 立刻取一次新视图的数据, 不等下轮轮询(否则首次切到某视图要空/旧 ≤2s)。
       // scheduleNext 内部先 stopPolling 再排下一次, 所以这里不会造成双份轮询。

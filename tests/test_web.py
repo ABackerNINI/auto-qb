@@ -13,7 +13,10 @@
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
 - test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
-- test_frontend_save_col_state_skips_widths_for_auto_pages: saveColState 必须有 colManual 判断 —— 未手动调过宽的页不得把"按当前窗口算出的自适应 px"落盘, 否则会被别的窗口算出的值整段覆盖(列宽反复跳变, issue 26-09-20-1800)
+- test_frontend_cols_store_single_setitem_site: COLS_STORE_KEY 的 setItem 全仓恰好一处(persistPage 内) —— 散写回潮即红
+- test_frontend_persist_page_takes_intent_only: persistPage 只收意图态(colHidden/colOrder/colW), 生效宽度 colWidths 不得进持久化路径(双轨模型铁律, plan 26-09-21-1551)
+- test_frontend_col_manual_flag_not_revived: 反向守阵 —— manual 标志位(colManual)不得复活(v5 下 w 非空即固化页)
+- test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -943,42 +946,81 @@ def test_frontend_dist_segments_aggregates_per_view():
         assert token in body, f"distSegments 缺少{label}({token!r}) —— 种子页/追剧页次导航统计会全空(issue 26-09-21-0247)"
 
 
-def test_frontend_save_col_state_skips_widths_for_auto_pages():
-    """未手动调过宽的页, 不得把"按当前窗口算出的自适应 px"落盘
+def test_frontend_cols_store_single_setitem_site():
+    """全仓前端对 COLS_STORE_KEY 的 setItem 必须恰好一处(persistPage 内) —— 唯一持久化漏斗
 
-    现象与定性(issue 26-09-20-1800 的延续, 2026-09-21 在用户真实实例上复现):
-    `colManual[page]` 为假时, `colWidths[page]` 是 `materializeColumns` 按**当前窗口**
-    算出来的自适应快照, **不是用户偏好**。旧实现照样把它写进存储, 两个后果:
-      ① 弹性模板被固化成固定 px, 该页从此不再随窗口自适应(与设计语义相反);
-      ② 谁最后操作, 存储就变成**谁那个窗口**算出的 px —— 真机实测(atlas 真实实例,
-         A 窗 1600px / B 窗 1200px): A 的 name 列 229px, B 动一下列, A 刷新就变 210px。
-        用户看到的正是"列宽经常被重置"; 而**显隐与列序不受影响**(F1/F2 有效),
-        所以症状只落在宽度上 —— 这也是本条之前四轮修复都没逮到的原因。
+    plan 26-09-21-1551: 旧模型 6 个落盘点各自决定写入时机, "先存后算/先算后存"选错 3 处,
+    内存/存储长期漂移(失败分析实测: 内存 12 键 / 存储 0 键)。新模型只有一个漏斗,
+    散写回潮 = 本守阵红。
+    """
+    hits = []
+    for name in ("shared/columns.js", "shared/app.js"):
+        text = open(os.path.join(STATIC_ROOT, name), encoding="utf-8").read()
+        for i, ln in enumerate(text.splitlines(), 1):
+            code = ln.split("//")[0]
+            if "localStorage.setItem(COLS_STORE_KEY" in code:
+                hits.append(f"{name}:{i}")
+    assert len(hits) == 1 and hits[0].startswith("shared/columns.js"), (
+        f"COLS_STORE_KEY 的 setItem 必须只存在于 columns.js 的 persistPage 内, 实测: {hits}"
+    )
+    cols = open(os.path.join(STATIC_ROOT, "shared/columns.js"), encoding="utf-8").read()
+    m = re.search(r"persistPage\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", cols, re.S)
+    assert m, "columns.js 找不到 persistPage(page)(改名或挪走了? 同步本守阵)"
+    assert "localStorage.setItem(COLS_STORE_KEY" in m.group(1), "setItem 不在 persistPage 内? 同步本守阵"
 
-    修法: manual 为假的页一律把 `widths[page]` 写成空 `{}`, 保持弹性模板、各窗口各算各的;
-    想固定宽度就拖一下(拖拽即置 manual=true, 此后受保护 —— 实测 336px 跨标签不丢)。
 
-    为什么必须机检: 这是"四轮修复都没修完"的那一类 —— 单测全绿、冒烟全绿、真机才现形,
-    而且改动只有一行, 极易在后续重构里被顺手删掉。
+def test_frontend_persist_page_takes_intent_only():
+    """persistPage 只收意图态(colHidden/colOrder/colW), 生效宽度 colWidths 不得出现在其代码里
 
-    断言: saveColState 实现里必须有 colManual 判断。
+    "派生值没有资格落盘"是双轨模型唯一铁律(plan 26-09-21-1551)。旧模型 colWidths 混装
+    意图与"按窗口算出的自适应 px", 靠 manual 标志在读写两侧过滤, 任何一侧失配即复发
+    (issue 26-09-20-1800, 四轮修复未绝根)。取代旧守阵 test_frontend_save_col_state_skips_widths_for_auto_pages。
     """
     rel = "shared/columns.js"
     text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
-    m = re.search(r"saveColState\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", text, re.S)
-    assert m, f"{rel} 找不到 saveColState(page)(改名或挪走了? 同步本守阵)"
+    m = re.search(r"persistPage\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", text, re.S)
+    assert m, f"{rel} 找不到 persistPage(page)(改名或挪走了? 同步本守阵)"
     body = m.group(1)
-    # ❗只看**代码行**: 注释里提到 colManual 是在解释"为什么这么写", 把它算进来会让守阵
-    #   形同虚设 —— 实测过: 把那一行整行注释掉, 只查字符串存在性的守阵照样通过。
+    # ❗只看**代码行**(同旧守阵教训: 注释里提到不算)
     code_lines = [ln.strip() for ln in body.splitlines() if not ln.strip().startswith(("*", "//", "#"))]
-    assert any("colManual" in ln for ln in code_lines), (
-        "saveColState 的**代码**里缺少 colManual 判断(注释里提到不算) —— "
-        "未手动调过宽的页会把自适应 px 落盘, 被别的窗口算出的值整段覆盖"
-        "(列宽反复跳变, issue 26-09-20-1800)"
-    )
-    assert any("payload.widths" in ln for ln in code_lines), (
-        "saveColState 的**代码**里找不到 payload.widths(结构变了? 同步本守阵)"
-    )
+    assert not any("colWidths" in ln for ln in code_lines
+                  ), ("persistPage 的**代码**里出现 colWidths(生效态/派生值) —— 派生值落盘会让"
+                      "'列宽被别的窗口改写'原样复发(plan 26-09-21-1551 铁律)")
+    assert any("this.colW" in ln for ln in code_lines), ("persistPage 的**代码**里必须写意图态 this.colW(结构变了? 同步本守阵)")
+
+
+def test_frontend_col_manual_flag_not_revived():
+    """反向守阵: manual 标志位不得复活 —— 双轨模型下 w 非空即固化页, 标志位是旧模型的失配源
+
+    v4 模型靠 manual:{page:bool} 门控"现算能不能覆盖 / 持久化要不要过滤", 读写两侧必须
+    永远成对同步, 任何一侧失配 = "列设置被重置"复发(issue 26-09-20-1800 全史)。
+    v5 删除该标志; 连注释里也不得出现该标识, 防止有人照着历史注释"顺手加回来"。
+    """
+    for name in ("shared/columns.js", "shared/app.js"):
+        text = open(os.path.join(STATIC_ROOT, name), encoding="utf-8").read()
+        assert "colManual" not in text, (
+            f"{name} 出现 colManual —— manual 标志位在双轨模型(v5)下已删除, "
+            "不得复活(w 非空即固化页); 如确需重引, 先重审 plan 26-09-21-1551"
+        )
+
+
+def test_frontend_cols_legacy_keys_have_migration():
+    """LEGACY_COLS_KEYS 键链必须伴随迁移函数 —— 升版必挂迁移(定案口径)
+
+    v3->v4 升版没挂迁移, 用户手调的宽/隐/序一次性清零(四轮修复复盘第①轮, "时不时被重置"
+    的机制性来源)。v5 挂 migrateLegacyToV5; 本守阵钉住键链与迁移的耦合。
+    """
+    rel = "shared/app.js"
+    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    m = re.search(r"const LEGACY_COLS_KEYS = \[(.*?)\];", text, re.S)
+    assert m, f"{rel} 找不到 LEGACY_COLS_KEYS"
+    keys = re.findall(r'"([^"]+)"', m.group(1))
+    assert keys == [
+        "autoqb_cols_v4", "autoqb_cols_v3"
+    ], (f"LEGACY_COLS_KEYS 变更了({keys}) —— 升版/换键必须同步 migrateLegacyToV5 与迁移测试"
+        "(plan 26-09-21-1551; v3->v4 清零事故的机检)")
+    assert "function migrateLegacyToV5" in text, "LEGACY_COLS_KEYS 非空但找不到 migrateLegacyToV5(迁移函数)"
+    assert "migrateLegacyToV5(raw)" in text, "readColStateRaw 未使用 migrateLegacyToV5(旧键不会被迁移)"
 
 
 def test_frontend_statusbar_speed_reads_server_totals():

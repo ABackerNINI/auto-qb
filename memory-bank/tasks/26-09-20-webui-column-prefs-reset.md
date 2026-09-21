@@ -58,3 +58,17 @@
   **红验**（摘掉标签 2 的 storage 监听）⇒ 缺陷如期复现 ⇒ 守阵钉得住；`pytest` **1062 passed**（未退化）。
   知识库回写：`pitfalls.md`（R10-09 条目加 ③ 多标签整份覆盖 + 判别法）、`modules.md`（列偏好写侧两约束）、
   `testing.md`（冒烟 54→56）。issue 置 `Fixed` 并重建索引。**未提交**（用户未下触发词）。
+- **09-21 12:48** 用户反馈仍复现 ⇒ 失败分析(`docs/26-09-21-1248-column-prefs-fix-failure-analysis.html`)实测:
+  显隐/列序已稳, 宽度另有通道(非手动页自适应 px 落盘/跨窗口互写)→ 二次修复入库 `6c1b7f4`;
+  "隐藏列宽被抹"与结构脆弱性仍敞着。
+- **09-21 15:51** 用户定性"修复了很多次, 急需重新设计, 简化模型, 从根本上杜绝" ⇒ 双轨模型重设计计划
+  `docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html`(意图/生效分轨 + v5 按页子树 +
+  单一持久化漏斗), 待拍板 D1/D2/D3。
+- **09-21 16:09** 用户"按推荐实施"(D1 升 v5+迁移 / D2 fit=回全自动 / D3 origin 空存储提示) ⇒
+  W1 数据层(`app.js`: v5 键链 + `migrateLegacyToV5` 内存迁移 + 意图态 colHidden/colOrder/colW + origin 提示挂点)
+  与 W2 交互层(`columns.js`: 唯一漏斗 `persistPage` + `recomputeEffective` + 六意图动作以 merge 保隐藏列宽
+  + manual 标志删除)完成; W3 守阵 1 换 4(红验 4/4)+ 冒烟新增 4 场景; W4 提示已做(运行时注入 DOM, 模板零改动)。
+- **09-21 22:4x** 验证收口: 全量 `uv run pytest tests -q` **1142 passed**(39.88s, Windows); 冒烟双 UI
+  **64 项失败 2 项**(均为既有「P0-3 乐观态落回真值」, 与列偏好无关), 新 4 场景(异视口互不吞+F3 /
+  全自动页不落px / 隐藏列保宽 / v4→v5 迁移)双 UI 全 PASS。知识库回写: pitfalls(双轨铁律 + 指纹不可达)/
+  modules(列偏好持久化改写)/issue 状态日志。**未提交**(待用户触发词)。

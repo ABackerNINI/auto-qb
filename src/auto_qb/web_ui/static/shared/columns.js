@@ -302,66 +302,78 @@ window.AQB_COLUMNS = {
       const w = this.memberWin(list);
       return w.active ? rows.slice(w.start, w.end) : rows;
     },
-    /* 把默认模板"实体化"为 px:
-     * - 未手动调过 -> 每次窗口变化后重新实体化(保留"填满容器 + 自适应"的观感)
-     * - 手动调过   -> 跳过(冻结, 拖一列不再动其它列)
+    /* 生效宽度现算(双轨模型的"生效轨", plan 26-09-21-1551 §3.1):
+     * - 全自动页(colW 为空) -> 每次窗口变化后按当前渲染实测(保留"填满容器 + 自适应"的观感)
+     * - 固化页(colW 非空)   -> 用意图值(冻结, 拖一列不再动其它列)
+     * ❗只写易变态 colWidths, **绝不落盘** —— persistPage 只收意图(colHidden/colOrder/colW),
+     *   "派生值没有资格落盘"是双轨模型唯一铁律(守阵 test_frontend_persist_page_takes_intent_only)。
      */
-    materializeColumns() {
+    recomputeEffective() {
       for (const page of ["group", "detail", "torrent", "show"]) {
-        if (this.colManual[page]) continue;
+        if (this.colW[page]) {
+          this.colWidths = { ...this.colWidths, [page]: { ...this.colW[page] } };
+          continue;
+        }
         const headEl = this._headEl(page);
         if (!headEl) continue;
         const widths = this._renderedWidths(headEl, page);
         if (widths) this.colWidths = { ...this.colWidths, [page]: widths };
       }
     },
-    /* 写列状态(page = 本次改动涉及的表; 不传则整份写, 仅兜底用)。
-     *
-     * ❗**必须读回存储再写**(issue 26-09-20-1800): 内存是"页面加载时的快照", 整份写回会让
-     *   "最后动的那个标签"赢 —— 别的标签的改动被静默吞掉, 用户看到的就是"列设置被重置"。
-     *   故以**存储为底**, 只覆盖本次涉及的那个 page 的四段; 其余 page 段一律取存储最新值。
-     *   (单独靠这招不够: 两个标签改**同一个表**时仍然后写赢 —— 真正的解法是 F2 的 storage 同步,
-     *   让每个标签的内存保持新鲜; 这里挡的是"同一毫秒两边都写"的竞态。)
-     *
-     * ❗**未手动调过宽的页不落 px**(2026-09-21 真机复现: 列宽反复跳变, 见 issue 26-09-20-1800)。
-     *   `colManual[page]` 为假时, `colWidths[page]` 是 `materializeColumns` 按**当前窗口**算出的
-     *   自适应快照, **不是用户偏好**。把它落盘有两个后果:
-     *     ① 弹性模板被固化成固定 px, 该页从此不再随窗口自适应(与设计语义相反);
-     *     ② 谁最后操作, 存储就变成**谁那个窗口**算出的 px —— 真机实测: A 窗口 229px,
-     *        B 窗口(更窄)动一下列, A 刷新就变 210px, 用户看到的正是"列宽被重置"。
-     *   故 manual 为假的页一律写空, 让它保持弹性模板、各窗口各算各的; 想固定宽度就拖一下
-     *   (拖拽即置 manual=true, 此后该页受保护, 跨标签也不丢)。
-     */
-    saveColState(page) {
-      const payload = { widths: this.colWidths, hidden: this.colHidden, manual: this.colManual, order: this.colOrder };
-      if (page) {
-        if (!this.colManual[page]) payload.widths = { ...payload.widths, [page]: {} };
-        const raw = readColStateRaw();  // 缺失/损坏时保持整份写(与改动前一致)
-        if (raw && typeof raw === "object") {
-          for (const seg of ["widths", "hidden", "manual", "order"]) {
-            const base = raw[seg] && typeof raw[seg] === "object" ? { ...raw[seg] } : {};
-            base[page] = payload[seg][page];
-            payload[seg] = base;
-          }
-        }
-      }
+
+    /* W4 origin 提示(plan 26-09-21-1551): 本 origin 首次出现"空列存储"时弹一次(点击关闭/15s 自灭)。
+     * 运行时注入 DOM, 两套模板零改动。 */
+    _showColsOriginHint() {
+      if (this._colsOriginHintShown) return;
+      this._colsOriginHintShown = true;
+      try {
+        if (localStorage.getItem(COLS_ORIGIN_HINT_KEY)) return;
+        localStorage.setItem(COLS_ORIGIN_HINT_KEY, "1");
+      } catch { /* 私隐模式: 写失败也继续弹, 本会话内由 _colsOriginHintShown 挡住 */ }
+      const el = document.createElement("div");
+      el.textContent = "列偏好按浏览器站点隔离存储: 换地址/端口(如 localhost ↔ 127.0.0.1)会各自从头记忆, 建议固定用同一地址打开。";
+      el.title = "点击关闭";
+      el.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;"
+        + "background:#1c252d;color:#e4eaef;border:1px solid #26313a;border-left:3px solid #5cc0cf;"
+        + "padding:10px 16px;font:13px/1.5 'Segoe UI','Microsoft YaHei',sans-serif;"
+        + "max-width:min(560px,90vw);cursor:pointer;border-radius:4px;";
+      el.addEventListener("click", () => el.remove());
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 15000);
+    },
+
+    /* 唯一持久化漏斗(plan 26-09-21-1551 §3.4): 全仓对 COLS_STORE_KEY 的 setItem **只允许这一处**
+     * (静态守阵钉住)。写 v5 按页子树: 以存储为底(RMW, 防"同一毫秒两边写"), 只覆盖本次涉及的
+     * page, 其余 page 取存储最新值。❗只收意图态(colHidden/colOrder/colW) —— 生效宽度 colWidths
+     * 是按窗口现算的派生值, 到不了这里; 旧模型"先存后算/先算后存"的顺序约束在本模型下不存在
+     * (派生根本不在持久化路径上)。 */
+    persistPage(page) {
+      const prev = readColStateRaw();
+      const base = prev && prev.pages && typeof prev.pages === "object"
+        ? { v: 5, origin: location.origin, pages: { ...prev.pages } }
+        : { v: 5, origin: location.origin, pages: {} };
+      base.pages[page] = {
+        hidden: this.colHidden[page] || [],
+        order: this.colOrder[page] || [],
+        w: this.colW[page] || null,
+      };
       // 写失败(私隐模式/配额满)不得影响功能: 本次会话内的调整仍在内存里生效
       try {
-        localStorage.setItem(COLS_STORE_KEY, JSON.stringify(payload));
+        localStorage.setItem(COLS_STORE_KEY, JSON.stringify(base));
       } catch { /* 忽略: 仅失去跨会话记忆 */ }
     },
-    /* 跨标签同步(F2): 别的标签改了列 -> 本标签**整份采用**存储值(与"刷新一次"等价)。
-     * 不做逐列合并 —— 那需要给每段加"谁更新"的时间戳语义, 代价远大于收益;
-     * 整份采用的行为可预测, 且后续 materializeColumns 会按当前容器宽度重算非 manual 页。
+    /* 跨标签同步(F2): 别的标签改了列 -> 本标签**整份采用**存储里的意图(与"刷新一次"等价)。
+     * 双轨模型下采纳永远安全: 采纳的是纯意图, 生效宽度随后由 recomputeEffective 按本窗口现算,
+     * 不存在"采纳了别的窗口算出的 px"这回事。不做逐列合并 —— 那需要给每段加"谁更新"的时间戳
+     * 语义, 代价远大于收益(同页同秒并发仍最后写赢, 固有且可接受)。
      * ❗调用方只能是 storage 事件(它**只在其它标签**触发, 写入方自己收不到, 故无需去重)
      *   与 visibilitychange 的"回到可见"分支(补漏: 标签被冻结 / 事件丢失)。 */
     adoptColState() {
       const next = loadColState();
-      this.colWidths = next.widths;
       this.colHidden = next.hidden;
-      this.colManual = next.manual;
       this.colOrder = next.order;
-      this.$nextTick(() => this.materializeColumns());
+      this.colW = next.w;
+      this.$nextTick(() => this.recomputeEffective());
     },
     colVisible(page, key) {
       return !(this.colHidden[page] || []).includes(key);
@@ -372,35 +384,32 @@ window.AQB_COLUMNS = {
       const cur = this.colHidden[page] || [];
       const hidden = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
       this.colHidden = { ...this.colHidden, [page]: hidden };
-      // 已手动调过: 新显示的列需要一个 px 宽度才能维持"只改一列"的策略
-      if (this.colManual[page] && !hidden.includes(key)) {
-        const widths = { ...(this.colWidths[page] || {}) };
-        if (!widths[key]) {
-          widths[key] = templateMinPx(col.tpl) + "px";
-          this.colWidths = { ...this.colWidths, [page]: widths };
+      // 固化页: 新显示的列需要一个 px 宽度才能维持"只改一列"的策略(全自动页交给现算)
+      if (this.colW[page] && !hidden.includes(key)) {
+        const w = { ...(this.colW[page] || {}) };
+        if (!w[key]) {
+          w[key] = templateMinPx(col.tpl) + "px";
+          this.colW = { ...this.colW, [page]: w };
         }
       }
-      this.saveColState(page);
-      this.$nextTick(() => this.materializeColumns());
+      this.persistPage(page);
+      this.$nextTick(() => this.recomputeEffective());
     },
     resetAllColumnWidths(page) {
-      // 恢复默认列宽: 清空 px 覆盖与手动标记 -> 回到默认弹性模板并重新实体化
-      const widths = { ...(this.colWidths[page] || {}) };
-      for (const c of TABLE_COLUMNS[page]) delete widths[c.key];
-      this.colWidths = { ...this.colWidths, [page]: widths };
-      this.colManual = { ...this.colManual, [page]: false };
-      this.saveColState(page);
-      this.$nextTick(() => this.materializeColumns());
+      // 恢复默认列宽: 清空意图宽度(w=null) -> 回全自动, 该页重新随窗口自适应
+      this.colW = { ...this.colW, [page]: null };
+      this.colWidths = { ...this.colWidths, [page]: {} };  // 立即回弹性模板, 下一帧按新渲染实测
+      this.persistPage(page);
+      this.$nextTick(() => this.recomputeEffective());
     },
     fitColumnsToWindow(page) {
-      // 适应窗口宽度: 先回到默认弹性模板(它会重新填满容器), 下一帧固化 —— 等价按比例缩放填满
+      // 适应窗口宽度(2026-09-21 D2 拍板): 回**全自动** —— 清空意图宽度与生效覆盖, 让默认弹性
+      // 模板重新填满容器, 且此后继续随窗口自适应。旧实现把"当前窗口算出的快照"固化为偏好,
+      // 正是"派生值当意图"的残留(换窗口即过拟合); 想固定某一列 -> 拖它(见 startResize)。
+      this.colW = { ...this.colW, [page]: null };
       this.colWidths = { ...this.colWidths, [page]: {} };
-      this.colManual = { ...this.colManual, [page]: false };
-      this.$nextTick(() => {
-        this.materializeColumns();
-        this.colManual = { ...this.colManual, [page]: true };
-        this.saveColState(page);
-      });
+      this.persistPage(page);
+      this.$nextTick(() => this.recomputeEffective());
     },
 
     /* 列宽拖拽: 拖某列**只改该列**
@@ -427,6 +436,7 @@ window.AQB_COLUMNS = {
       const neighbor = event.shiftKey ? vis[idx + 1] : null;
       const startNeighbor = neighbor ? parseFloat(widths[neighbor.key]) : 0;
       let dragged = false;  // 位移超过 RESIZE_DRAG_THRESHOLD 即置真, up 时用于决定是否拦 click
+      let lastWidths = null;  // 拖拽中的最新整页 px(up 时升格为意图)
       const move = (e) => {
         if (!dragged && Math.abs(e.clientX - startX) > RESIZE_DRAG_THRESHOLD) dragged = true;
         const w = Math.max(MIN_COL_PX, Math.round(startVal + e.clientX - startX));
@@ -434,13 +444,18 @@ window.AQB_COLUMNS = {
         if (neighbor) {
           next[neighbor.key] = `${Math.max(MIN_COL_PX, Math.round(startNeighbor - (w - startVal)))}px`;
         }
-        this.colWidths = { ...this.colWidths, [page]: next };
+        this.colWidths = { ...this.colWidths, [page]: next };  // 只动生效态, 意图在 up 时一次性升格
+        lastWidths = next;
       };
       const up = () => {
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
-        this.colManual = { ...this.colManual, [page]: true };  // 手动调过 -> 不再随窗口自适应
-        this.saveColState(page);
+        // 意图升格: 以既有 colW 为底 merge(❗隐藏列的 px 在这里保住 —— 渲染快照只含可见列,
+        // 旧实现整段替换正是"隐藏列宽度被抹"的根因), 再叠本次拖拽终值; 整页自此固化
+        const intent = { ...(this.colW[page] || {}), ...widths, ...(lastWidths || {}) };
+        this.colW = { ...this.colW, [page]: intent };
+        this.persistPage(page);
+        this.$nextTick(() => this.recomputeEffective());
         if (!dragged) return;  // 未拖动 = 纯点击 resizer, 不拦 click(保持原行为)
         // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort —— capture 阶段拦掉即停
         const swallow = (ev) => {
@@ -469,9 +484,11 @@ window.AQB_COLUMNS = {
       }
       const width = Math.min(MAX_FIT_PX, Math.max(MIN_COL_PX, Math.ceil(max) + 18));
       const widths = this._renderedWidths(headEl, page) || {};
-      this.colWidths = { ...this.colWidths, [page]: { ...widths, [key]: `${width}px` } };
-      this.colManual = { ...this.colManual, [page]: true };
-      this.saveColState(page);
+      // 意图升格: 以既有 colW 为底 merge(隐藏列 px 保住, 同 startResize), 再叠可见列冻结 + 本列适配备
+      const intent = { ...(this.colW[page] || {}), ...widths, [key]: `${width}px` };
+      this.colW = { ...this.colW, [page]: intent };
+      this.colWidths = { ...this.colWidths, [page]: { ...intent } };  // 同步生效态, 免一帧跳变
+      this.persistPage(page);
     },
 
     /* ------------------------------------------------ 列序(表头拖动重排 TBL-05) */
@@ -487,7 +504,7 @@ window.AQB_COLUMNS = {
 
     /* 落点换算: dropIdx 是**可视列空间**的插入边界(表头只渲染可见列), 存储的 colOrder 是
      * **全序列**(含隐藏列) —— 移除自身后按"第 b 个可见列之前"折算插入点, 隐藏列的相对
-     * 次序不动(之后取消隐藏时插回原相对位)。落库后下一帧 materializeColumns 重实体化宽度。 */
+     * 次序不动(之后取消隐藏时插回原相对位)。落库后下一帧 recomputeEffective 重算生效宽度。 */
     applyColOrder(page, key, dropIdx) {
       const full = this._orderedKeys(page);
       const vis = full.filter((k) => this.colVisible(page, k));
@@ -502,8 +519,8 @@ window.AQB_COLUMNS = {
       }
       if (!inserted) full.push(key);  // 边界在末个可见列之后
       this.colOrder = { ...this.colOrder, [page]: full };
-      this.saveColState(page);
-      this.$nextTick(() => this.materializeColumns());
+      this.persistPage(page);
+      this.$nextTick(() => this.recomputeEffective());
     },
 
     /* 表头拖动重排手势: mousedown 阈值方案(与列宽拖拽 startResize 同款) —— 不用 HTML5

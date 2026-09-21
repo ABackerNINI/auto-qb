@@ -208,6 +208,7 @@ columns.js:318  saveColState() { localStorage.setItem(COLS_STORE_KEY, JSON.strin
       <li>2026-09-20 18:5x — 已修并验证，状态 <strong>Fixed</strong>（F1 写入合并 + F2 storage 同步 + F3 可见性补漏 + 冒烟守阵）</li>
       <li>2026-09-21 12:4x — <strong>用户反馈仍复现</strong>。复盘四轮沿革后实测确认：F1/F2/F3 对<b>显隐与列序</b>确实有效，但<b>宽度</b>另有通道 —— 见下方「二次修复」</li>
       <li>2026-09-21 13:xx — <strong>二次修复</strong>（写侧 + 读侧各 1 行 + 静态守阵），已在用户<b>真实实例</b>（127.0.0.1:38080/atlas）验证；两个 clone 均未提交</li>
+      <li>2026-09-21 16:09 — 用户拍板"按推荐实施"<strong>双轨重设计</strong>(plan 26-09-21-1551; D1 升 v5+迁移 / D2 fit=回全自动 / D3 origin 空存储提示)。W1 数据层(<code>app.js</code>: v5 键链 + migrateLegacyToV5 内存迁移 + 意图态 colHidden/colOrder/colW)与 W2 交互层(<code>columns.js</code>: 唯一漏斗 persistPage + recomputeEffective + 六意图动作 merge 保隐藏列宽, manual 标志删除)完成; W3 守阵 1 换 4(红验 4/4)+ 冒烟新增 4 场景; W4 提示已做(运行时注入 DOM, 模板零改动)。<strong>未提交</strong>(待用户触发词)</li>
     </ul>
 
     <h3>二次修复（2026-09-21，宽度段）</h3>

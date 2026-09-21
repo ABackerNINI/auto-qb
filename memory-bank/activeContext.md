@@ -4,10 +4,10 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-21 (**最新: 辅种页「部分暂停部分做种中」状态色已修 —— 回归由 `04cbc8e` 引入,
-  两张状态优先级表一起改回"做种优先"(`seeding:3 / paused:4`), 守阵 `_scan_state_rank` 补顺序断言,
-  单测全绿, **未提交**; 详见 [progress.md](progress.md)「已实现」首条**) ——
-  其前一条状态: 真机语料抓取/脱敏/离线回放计划定稿 v3 —— 5 项决策已拍板, 等 W0 真机出数, 见「正在进行」首条;
+**最后更新**: 2026-09-21 (**最新: 列设置双轨模型重设计已实施完毕(未提交) —— 意图/生效分轨 + v5 按页子树
+  + 唯一持久化漏斗 persistPage, manual 标志删除; 守阵 1 换 4(红验 4/4), 冒烟新增 4 场景双 UI 全 PASS,
+  全量 1142 passed; 剩用户真机走查**, 见「正在进行」首条) ——
+  其前一条状态: 列设置双轨重设计计划(15:51)出稿并拍板;
   再往前: 列设置多标签页整份覆盖已修并验证, issue 26-09-20-1800 置 `Fixed`;
   乐观 UI「撤下」已定案并推送 `4df80dc`; 两者均剩真机走查确认) ——
   后端三段都很快(排队 0 / 执行 8.4 / 补刷新 88ms), 慢的是**前端撤下** —— 根因是**回执写在补刷新之前**,
@@ -19,7 +19,22 @@
 
 ## 正在进行
 
-- **🆕 真机语料抓取 · 脱敏 · 离线回放 —— W0 已出数, W1/W2 已完成(未提交), 下一步 W3**: 计划
+- **🆕 列设置重置 · 双轨模型重设计 —— 已实施完毕(未提交), 剩真机走查**: 用户定性"修复了很多次,
+  急需重新设计, 简化模型, 从根本上杜绝"; 计划
+  [docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html](../docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html),
+  D1(升 v5+迁移)/D2(fit=回全自动)/D3(origin 空存储提示)已按推荐全部落地。
+  **新模型**: 存储只存意图(`colHidden/colOrder/colW`, `w=null`=全自动页), 生效宽度 `colWidths` 由
+  `recomputeEffective()` 按窗口现算**绝不落盘**; 唯一漏斗 `persistPage(page)`(全仓唯一 setItem,
+  v5 按页子树 RMW); `migrateLegacyToV5` 内存迁移(v4 固化页保宽 / 非固化页污染 px 清零); manual 标志删除;
+  六个意图动作统一走漏斗, 拖宽/双击自适应以 merge 保隐藏列 px(封掉 S4 的 11→10 通道)。
+  **验证**: 静态守阵 1 换 4(唯一 setItem / 只收意图 / 标志位不得复活 / 键链必挂迁移), 红验 4/4;
+  冒烟双 UI 64 项失败 2 项(均既有「P0-3 乐观态落回真值」, 与列偏好无关), 新 4 场景(异视口互不吞+F3 /
+  全自动页不落px / 隐藏列保宽 / v4→v5 迁移)双 UI 全 PASS; 全量 **1142 passed**(39.88s, Windows)。
+  **真机走查清单**: ①固定地址双标签各改列宽/显隐互刷不丢 ②固化页隐藏一列→拖宽→再显示 px 原样回来
+  ③"适应窗口"=回全自动(继续随窗口自适应, 不再固化快照 —— 行为变化点) ④换地址打开出 origin 提示(一次)。
+  ⚠ 用户实例是 `D:\Projects\auto-qb` 的 editable install —— **本 clone 未提交前不会同步过去**, 需提交推送后拉取。
+
+- **真机语料抓取 · 脱敏 · 离线回放 —— W0 已出数, W1/W2 已完成(未提交), 下一步 W3**: 计划
   [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html)
   (v1→v3 原地修订) + 审查报告
   [docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html](../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)。
@@ -316,7 +331,10 @@
   单测 **1059 → 1062 passed**(Windows) / WSL **1057 → 1060 passed + 2 skipped**, +3 守阵(端点恒回传 / 静态防回潮红绿双验过 /
   合计含未归组); 冒烟双 UI **54 项 0 失败**, DOM 实测 `14.50 MiB/s`。基线数字已回写 `testing.md`。
 
-- **列设置被重置 = 多标签页整份覆盖 (2026-09-20, ✅ 已修并验证 → issue 置 `Fixed`; 未提交; 剩用户真机走查)**: 用户报"栏的顺序/显示/宽度经常被重置"。**根因实测确认**: 内存是**加载时读一次的快照**(`app.js:273 initialColState`) + `saveColState()` **整份写回** ⇒ **last-writer-wins**, 谁最后动一下存储就变成谁的快照, 先改的标签被静默吞掉(入池时猜的"写失败/读入洗净/自适应覆盖/v3→v4 迁移"**全部排除** —— 单标签六路径全保持, 只有第二个标签能复现)。修法: **F1** `saveColState(page)` 改 read-modify-write(以存储为底, 只覆盖本 page 四段; 6 处调用点传 page) + **F2** `storage` 事件 → `adoptColState()` 整份采用 + **F3** `visibilitychange` 回到可见补漏。**F1 单独不够** —— 用户两个标签改的通常是同一个表, page 级合并同表仍然后写赢。冒烟新增「列设置多标签页互不覆盖」⇒ ok/error 双模式各 **56 项 0 失败**; 红验(摘掉标签 2 的 storage 监听)确认守阵钉得住; 单测 **1062 passed** 未退化。后端零改动, **未升 `COLS_STORE_KEY`**。计划 [docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html](../docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html); 档案 [tasks/26-09-20-webui-column-prefs-reset.md](tasks/26-09-20-webui-column-prefs-reset.md); 报告 [issues/26-09-20-1800-bug-webui-column-prefs-reset.html](issues/26-09-20-1800-bug-webui-column-prefs-reset.html)。**真机走查**: 开两个标签各改一次列(隐藏 + 拖宽), 互相刷新确认都不丢。
+- **列设置被重置 = 多标签页整份覆盖 (2026-09-20/21, ✅ 两次修复均已入库 `11382ed`+`6c1b7f4` → issue 置 `Fixed`; 剩用户真机走查; 双轨重设计计划已出待拍板)**: 用户报"栏的顺序/显示/宽度经常被重置"。**根因实测确认**: 内存是**加载时读一次的快照**(`app.js:273 initialColState`) + `saveColState()` **整份写回** ⇒ **last-writer-wins**, 谁最后动一下存储就变成谁的快照, 先改的标签被静默吞掉(入池时猜的"写失败/读入洗净/自适应覆盖/v3→v4 迁移"**全部排除** —— 单标签六路径全保持, 只有第二个标签能复现)。修法: **F1** `saveColState(page)` 改 read-modify-write(以存储为底, 只覆盖本 page 四段; 6 处调用点传 page) + **F2** `storage` 事件 → `adoptColState()` 整份采用 + **F3** `visibilitychange` 回到可见补漏。**F1 单独不够** —— 用户两个标签改的通常是同一个表, page 级合并同表仍然后写赢。冒烟新增「列设置多标签页互不覆盖」⇒ ok/error 双模式各 **56 项 0 失败**; 红验(摘掉标签 2 的 storage 监听)确认守阵钉得住; 单测 **1062 passed** 未退化。后端零改动, **未升 `COLS_STORE_KEY`**。计划 [docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html](../docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html); 档案 [tasks/26-09-20-webui-column-prefs-reset.md](tasks/26-09-20-webui-column-prefs-reset.md); 报告 [issues/26-09-20-1800-bug-webui-column-prefs-reset.html](issues/26-09-20-1800-bug-webui-column-prefs-reset.html)。**真机走查**: 开两个标签各改一次列(隐藏 + 拖宽), 互相刷新确认都不丢。⚠ 09-21 用户反馈仍复现 →
+  失败分析 [docs/26-09-21-1248-column-prefs-fix-failure-analysis.html](../docs/26-09-21-1248-column-prefs-fix-failure-analysis.html)
+  实测确认宽度另有通道(非手动页自适应 px 落盘/跨窗口互写)已二次修复入库 `6c1b7f4`; 仍敞着
+  "隐藏列宽被抹"与结构脆弱性 → **双轨模型重设计计划已出**(见「正在进行」首条), 待拍板后实施。
 
 - **状态栏「今日流量」视觉重做 (2026-09-20, ✅ 已提交推送 `94c6857` → issue 26-09-20-1840 置 `Fixed`; 剩真机目视)**:
   图标换真图标 `#i-traffic`(上下行箭头)并改**双色** —— 两条 path 内联 `stroke: var(--today-down/--today-up)`, 靠 CSS 变量穿越 `<use>`
@@ -363,7 +381,7 @@
 
 ## 定案口径 (别改回去; 完整判据见 [pitfalls.md](pitfalls.md))
 
-- **列偏好"升版本"**: 列集变更(加列/减列/重排)与存储结构扩展**一律不升版本**, 只有"旧缓存结构已无法被 `loadColState()` 正确解释"才升(如 v2 按列索引存), 且升版本必须同时挂 `LEGACY_COLS_KEYS` 迁移。当前键冻结在 `autoqb_cols_v4`, 无 v5 计划。历史计划 `docs/plans/26-09-15-1042-webui-optimization-plan-v3.html` 里"重排列集则升 v4→v5"是当时口径, 已被第十轮计划取代 —— 存档未改动, **别照抄**。
+- **列偏好"升版本"**: 列集变更(加列/减列/重排)与存储结构扩展**一律不升版本**, 只有"旧缓存结构已无法被 `loadColState()` 正确解释"才升(如 v2 按列索引存), 且升版本必须同时挂 `LEGACY_COLS_KEYS` 迁移。**2026-09-21 双轨重设计(plan 26-09-21-1551, D1 拍板)已升 v5**(`autoqb_cols_v5`, 意图/生效分轨, 挂 v4/v3 迁移) —— 这正是该判据的合法使用, 原"无 v5 计划"口径同时作废。历史计划 `docs/plans/26-09-15-1042-webui-optimization-plan-v3.html` 里"重排列集则升 v4→v5"是当时口径, 已被第十轮计划取代 —— 存档未改动, **别照抄**。
 - **第十轮两处已知限制**(非待办): ① 列偏好受 localStorage **origin 隔离** 影响(`localhost` 与 `127.0.0.1`/换端口 = 不同站点各存一份) —— 用户明确要求只存浏览器, 不做服务端化; ② 目录浏览器只能浏览**已有保存路径及其子目录**(安全边界), 全新位置需在输入框手填。
 - **第十一轮定案**: 行/表头一律 `fit-content; min-width: 100%`(**底色跟内容**), **行内单元格必须 `min-width: 0`**(否则 nowrap 文本把行顶宽 ⇒ 列没溢出却常驻横滚条); 曾用"行定宽 100%"治假滚动条, 会让**溢出段没有底色**(用户实测"滚动后右边无背景条"), 已回退。
 - **开工先拉分支 + 提交即推送 (2026-09-19/20 用户指定, 别照抄旧文档)**: 两条规则的**单点定义都在 `AGENTS.md`**(「会话协议 · 开始」与「提交 / PR」), 本文件只留指针: ①会话第一步必为 `git pull --rebase <远端> develop` (**分支名必须写**), 确认不落后才动手, **禁止在落后分支上改代码**; 拉取前先弄干净工作区 (脏工作区 + rebase 触发 stash 会损坏对象库)。②用户说"提交" = **commit + 自动推送** (先 commit → rebase → 推 Gitee → 尝试一次 GitHub 直连, 失败不重试)。⚠ `conventions.md` 里 2026-09-10 的"🔴 绝对不要 push"**已作废**, 只作历史沿革保留 —— 按它做会漏推, 而交付只看 Gitee 有没有该提交。**同一条协作规则不在知识库复述全文, 只留指针**; 该规则共 4 处入口 (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), 改规则要一次改全。

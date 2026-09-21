@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>列设置重置 · 双轨模型重设计计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d;
+    --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --ok: #7fc99a; --ok-bg: #16241d; --bad: #e2836e; --bad-bg: #2a1d19;
+    --warn: #e2a86e; --warn-bg: #2a2119;
+    --code-bg: #171e26; --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.ok { border-left-color: var(--ok); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.05em; white-space: nowrap; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid #2c4a38; }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); border: 1px solid #4a322c; }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 80ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>一句话结论</a>
+    <a href="#s2"><span class="no">02</span>病灶: 病在模型, 不在 bug</a>
+    <a href="#s3"><span class="no">03</span>重设计: 双轨模型</a>
+    <a href="#s4"><span class="no">04</span>历史缺陷消除对照</a>
+    <a href="#s5"><span class="no">05</span>方案取舍</a>
+    <a href="#s6"><span class="no">06</span>实施波次</a>
+    <a href="#s7"><span class="no">07</span>验证与验收</a>
+    <a href="#s8"><span class="no">08</span>风险与回退</a>
+    <a href="#s9"><span class="no">09</span>待拍板决策</a>
+    <div class="toc-foot">
+      原始 issue 26-09-20-1800<br>
+      前置: 26-09-21-1248 失败分析<br>
+      状态: 待拍板, 未动码
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">重设计计划 · WEB UI 列偏好</div>
+    <h1>列设置重置: 双轨模型重设计计划</h1>
+    <p class="lede">六轮修复封住的是一条条"通道", 底下的模型始终没变 —— 同一个字段混装"用户意图"与"窗口派生值", 靠一个标志位加读写两侧成对过滤撑着, 任何一处失配就复发。本计划把两者拆成两条轨道: <b>存储只存用户意图, 生效宽度永远现算</b>, 持久化收敛到单一漏斗, 让每一类历史缺陷失去存在的结构位。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">计划时间</div><div class="v">2026-09-21 15:51</div></div>
+      <div class="item"><div class="k">基线 HEAD</div><div class="v">9f1ba5d (develop, 已拉取)</div></div>
+      <div class="item"><div class="k">二次修复</div><div class="v">6c1b7f4 已入库</div></div>
+      <div class="item"><div class="k">改动面</div><div class="v">app.js + columns.js + tests + ui_smoke</div></div>
+      <div class="item"><div class="k">后端</div><div class="v">零改动</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>一句话结论</h2>
+    <div class="callout">
+      修复没有白做, 但修补模式已到收益上限。六轮下来, 同一类"被重置"报告反复回来 —— 因为每一轮都是"用户报一次 → 找到一条根因 → 封一条通道", 而<b>通道数目由模型决定, 模型不变通道就封不完</b>。本计划不再打第7个补丁, 改为换模型: 意图与生效分轨、单一持久化漏斗、按页子树读写。预计改动集中在 <code>app.js</code> / <code>columns.js</code> 两个文件 (约 300~400 行), 模板与后端零改动。
+    </div>
+    <h3>六轮修复后的现状判定 (基线 9f1ba5d)</h3>
+    <table>
+      <tr><th>#</th><th>通道</th><th>状态</th><th>依据</th></tr>
+      <tr><td>1</td><td>升版本清零 (v3→v4)</td><td><span class="tag ok">已封</span></td><td>09-17 政策反转: 列集变更不升版, <code>loadColState()</code> 按列 key 求交洗净</td></tr>
+      <tr><td>2</td><td>多标签整份覆盖 (last-writer-wins)</td><td><span class="tag ok">已封</span></td><td><code>11382ed</code>: F1 按页 RMW + F2 storage 采纳 + F3 可见性补漏</td></tr>
+      <tr><td>3</td><td>自适应 px 落盘 / 跨窗口互写</td><td><span class="tag ok">已封</span></td><td><code>6c1b7f4</code>: 非 manual 页写侧不落 px + 读侧不读 px (成对)</td></tr>
+      <tr><td>4</td><td>隐藏列宽度被抹除</td><td><span class="tag bad">敞着</span></td><td><code>_renderedWidths()</code> 只读可见列, <code>startResize</code> / <code>autoFitColumn</code> 却以它<b>整段替换</b> <code>colWidths[page]</code> → 隐藏列 px 从内存与存储中消失 (失败分析 S4 实测 11→10 键)</td></tr>
+      <tr><td>5</td><td>fit-to-window 把"当前窗口快照"固化为偏好</td><td><span class="tag warn">设计如此</span></td><td><code>fitColumnsToWindow</code> 实体化后置 <code>manual=true</code> 并落盘 —— 换窗口即过拟合; 属决策点 (D2)</td></tr>
+      <tr><td>6</td><td>origin 隔离 (127.0.0.1 / localhost / 换端口)</td><td><span class="tag warn">固有限制</span></td><td>失败分析 T1 已实测确认为机制; 本用户固定地址已排除 (B1), 但机制永远存在</td></tr>
+      <tr><td>7</td><td>结构脆弱性 (再改一处就复发)</td><td><span class="tag bad">敞着</span></td><td>读写两侧过滤必须永远成对同步; 6 个落盘点各自维护调用顺序; materialize 写入的字段与持久化字段同源 —— 本轮重设计的直接动因</td></tr>
+    </table>
+    <p class="hint">用户原话: "column 设置丢失问题很严重, 修复了很多次, 急需重新设计, 简化模型, 从根本上杜绝"。#1~#3 证明补丁有效, #4/#7 证明补丁不完备 —— 两者合起来就是"换模型"的完整理由。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>病灶: 病在模型, 不在 bug</h2>
+    <p>把六轮修复逐个回看, 所有缺陷都从同一组结构裂缝里长出来。现在的列状态是<b>一个响应式字段 + 一个标志位 + 六个落盘点</b>:</p>
+    <pre><code>// 现状 (app.js + columns.js, 取证 2026-09-21)
+colWidths: { page: { 列key: "120px" } }   // ← 混装: 既有用户拖出来的 px, 又有 materialize 按窗口算出的 px
+colManual: { page: bool }                 // ← 标志位: 决定 materialize 能不能覆盖、save 要不要过滤
+colHidden / colOrder                      // ← 这两段是真意图, 没病
+
+// 6 个落盘点的调用顺序各有主张:
+toggleColumn          : 改内存 → save → $nextTick(materialize)   // 先存后算
+resetAllColumnWidths  : 改内存 → save → $nextTick(materialize)   // 先存后算
+applyColOrder         : 改内存 → save → $nextTick(materialize)   // 先存后算
+fitColumnsToWindow    : materialize → manual=true → save          // 先算后存 (且把窗口快照固化成偏好)
+startResize (up)      : 拖拽中已改内存 → manual=true → save        // 先算后存
+autoFitColumn         : 改内存 → manual=true → save               // 先算后存</code></pre>
+
+    <h3>裂缝一: 混装 —— 两种生命周期共用一个字段</h3>
+    <p><code>colWidths[page]</code> 里同时住着"用户拖出来的宽度"(意图, 该持久化) 和 "materialize 按当前窗口算出来的宽度"(派生, 不该持久化)。因为同字段, 读写两侧都必须靠 <code>colManual</code> 过滤, 且两侧规则必须<b>永远成对同步</b> —— <code>6c1b7f4</code> 的修法本质就是一对过滤 ("<code>if (!this.colManual[page]) payload.widths = …[page] = {}</code>" + 读侧 "<code>if (!out.manual[page]) out.widths[page] = {}</code>")。失败分析的教训已经写进 pitfalls: <b>持久化前先分清"用户偏好"与"派生快照"</b> —— 但现状只是把教训做成了过滤器, 字段还是混的, 过滤器错一处或未来改动绕开它, 问题原样回来。</p>
+
+    <h3>裂缝二: 散写 —— 持久化没有单一入口</h3>
+    <p>6 个落盘点各自决定"何时把内存写进存储", 于是出现"先存后算/先算后存"两种顺序、3 处选错 (失败分析 04 节: 内存 12 键 / 存储 0 键的漂移就是它)。每一个新交互入口都是一次重新选对顺序的机会 —— 这类 bug 不是写错, 是<b>结构允许写错</b>。</p>
+
+    <h3>裂缝三: 快照内存 —— 加载时读一次, 之后各写各的</h3>
+    <p><code>initialColState = loadColState()</code> 模块级只读一次, 内存从此是独立快照; 整份写回 ⇒ last-writer-wins。<code>11382ed</code> 用 F1(按页 RMW) + F2(storage 采纳) + F3(可见性补漏) 三层补丁压住, 但这是"在快照模型上模拟共享", 不是共享本身。</p>
+
+    <div class="callout bad">
+      <b>共同模式:</b> 三个裂缝都不存在于"意图 / 生效分离 + 单一漏斗"的模型里。第 7 轮再打补丁, 大概率只是封住 #4, 然后等 #8。
+    </div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>重设计: 双轨模型</h2>
+    <div class="callout ok">
+      <b>核心不变量 (全计划只有这一条铁律):</b> 存储只存用户意图 (hidden / order / w); 生效宽度永远是现算的派生值 —— <b>派生值没有资格落盘</b>。
+    </div>
+
+    <h3>3.1 两条轨道</h3>
+    <table>
+      <tr><th></th><th>意图态 (唯一持久化对象)</th><th>生效态 (易变, 绝不落盘)</th></tr>
+      <tr><td>内容</td><td><code>colHidden[page]</code> / <code>colOrder[page]</code> / <code>colW[page]</code> (<code>null</code> 或 <code>{列key: "Npx"}</code>)</td><td><code>colWidths[page]</code> —— 保留现名现签名, 供 <code>_gridTemplate</code> / 拖拽冻结读</td></tr>
+      <tr><td>谁写</td><td>只有用户意图动作 (显隐 / 拖序 / 拖宽 / 双击自适应 / 重置 / 适应窗口)</td><td><code>recomputeEffective()</code> (原 materializeColumns 改名收窄): 自动页按当前窗口现算, 固化页 = <code>colW[page]</code> 原样</td></tr>
+      <tr><td>何时写存储</td><td>意图动作后立刻经漏斗落盘</td><td><b>永不</b></td></tr>
+      <tr><td>字段关系</td><td colspan="2"><code>colWidths[page] = colW[page] || recompute(当前窗口)</code> —— 生效态由意图态 + 窗口推导, 单向</td></tr>
+    </table>
+    <p><code>colManual</code> 标志位<b>删除</b> —— <code>colW[page] != null</code> 就是"固化页"的唯一判据, 少一个需要同步的状态, 也少一对读写过滤器。</p>
+
+    <h3>3.2 存储 schema v5 (按页一棵子树)</h3>
+    <pre><code>// autoqb_cols_v5
+{
+  "v": 5,
+  "pages": {
+    "group":  { "hidden": ["uploaded"], "order": ["name", "size", …], "w": { "name": "229px" } },
+    "detail": { "hidden": [], "order": [], "w": null },   // w = null ⇒ 全自动页, 存储里根本没有 px
+    "torrent": { … }, "show": { … }
+  }
+}</code></pre>
+    <ul>
+      <li><code>w: null</code> = 全自动页; <code>w: {...}</code> = 用户固化页 —— 与今天 <code>manual=true</code> 的用户可见行为<b>完全一致</b> (拖一次 = 整页固化), 不改交互, 只改数据归属。</li>
+      <li>按页子树 ⇒ F1 的 RMW 从"四段各按 page 合并"简化成"只写一棵子树", 采纳 (adopt) 也变成整段替换一棵已知安全的子树。</li>
+      <li>旧键链: <code>LEGACY_COLS_KEYS = ["autoqb_cols_v4", "autoqb_cols_v3"]</code>, 命中即迁移回写 v5。v2 仍刻意不迁 (索引式, 无法可靠对应, 口径不变)。</li>
+    </ul>
+
+    <h3>3.3 迁移 (v4 → v5, 一次性, 保偏好)</h3>
+    <pre><code>for page in [group, detail, torrent, show]:
+  hidden[page] = clean(v4.hidden[page])          # 洗净规则原样保留: 非法 key 丢弃 / locked 列不收
+  order[page]  = clean(v4.order[page])           # 去重 + 非法 key 丢弃
+  w[page]      = v4.manual[page] ? clean(v4.widths[page]) : null
+                   # manual=true 的页: 宽度是真用户偏好, 整段保留
+                   # manual=false 的页: 存的是历史污染 px (6c1b7f4 前被别的窗口写入), 一律弃 —— 正是用户要的"清掉"</code></pre>
+    <p class="hint">注: 定案口径当前是"键冻结在 v4, 无 v5 计划"。本计划正是那个 v5 计划 —— 升版依据是定案口径自己写的条件 ("旧缓存结构已无法被新 loader 正确解释才升"; 本次 widths 语义从"混装"变为"仅意图", 恰属此类), 且按口径要求同步挂迁移与守阵。见决策点 D1。</p>
+
+    <h3>3.4 单一持久化漏斗</h3>
+    <pre><code>// 唯一写入口; 全仓对 COLS_STORE_KEY 的 setItem 只允许出现这一处 (静态守阵钉住)
+persistPage(page) {
+  const base = readColStateRaw() || emptyV5();      // 以存储为底 (RMW, 防"同一毫秒两边写")
+  base.pages[page] = {
+    hidden: this.colHidden[page] || [],
+    order:  this.colOrder[page] || [],
+    w:      this.colW[page] || null,                // 派生值到不了这里 —— 想写也写不进
+  };
+  try { localStorage.setItem(COLS_STORE_KEY, JSON.stringify(base)); } catch { /* 私隐模式: 会话内仍生效 */ }
+}
+
+// 六个意图动作统一收口: 改意图 → persistPage(page) → nextTick(recomputeEffective)
+// recomputeEffective 只改 colWidths (易变), 不在持久化路径上 ⇒ "先存后算/先算后存"不再是可错的选项</code></pre>
+
+    <h3>3.5 隐藏列保宽 (封掉 #4)</h3>
+    <p>固化页上, 拖宽 / 双击自适应改为<b>以 <code>colW[page]</code> 为底 merge</b>, 只覆盖可见列的实测值, 不再整段替换:</p>
+    <pre><code>// startResize 起手 / autoFitColumn 落笔 (现状: widths = _renderedWidths(...)  ← 隐藏列在这里被抹)
+const merged = { ...(this.colW[page] || {}), ...visibleRendered, [key]: `${w}px` };</code></pre>
+
+    <h3>3.6 跨标签同步 (F2/F3 保留, 且变得天然安全)</h3>
+    <ul>
+      <li>storage 事件 + visibilitychange 补漏两道机制原样保留 (现架构已验证有效, 不推倒)。</li>
+      <li>质变在<b>采纳的内容</b>: 采纳的是纯意图 (hidden/order/w), 本地生效宽度自算 —— 不存在"采纳了别的窗口算出的 px"这回事, <code>adoptColState</code> 从"必须小心"变成"随便采"。</li>
+      <li>残余窗口: 同页并发编辑仍最后写赢 (两个标签同秒改同一张表)。<b>维持既有决策</b>: 不做时间戳合并 —— 为一个亚秒级竞态给三段数据加"谁更新"语义, 代价远大于收益 (失败分析 09 节同口径)。</li>
+    </ul>
+
+    <h3>3.7 明确不动的东西</h3>
+    <ul>
+      <li>两套 UI 的模板 / CSS: <code>colWidths</code> 消费签名不变, <b>零改动</b>。</li>
+      <li><code>autoqb_timefmt_v1</code> 独立键: 生命周期不同, 维持分离 (既有正确决策)。</li>
+      <li>后端 / 列定义 / 对齐注入 / 行窗口化: 零改动。</li>
+      <li>origin 隔离: 客户端模型无解, 本计划只做<b>可见化诊断</b> (D3), 不做服务端化 (见 05)。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>历史缺陷消除对照</h2>
+    <table>
+      <tr><th>历史缺陷</th><th>旧模型的结构位</th><th>双轨模型下为何不可能</th></tr>
+      <tr><td>升版本清零 (第①轮)</td><td>修复动作用"换键"表达</td><td>升版唯一入口 + 迁移强制挂钩 (守阵: 升版必须带迁移测试)</td></tr>
+      <tr><td>多标签整份覆盖 (第④轮)</td><td>加载快照 + 四段整份写回</td><td>按页子树 RMW + 采纳纯意图; 采纳永远安全, 无需"小心"</td></tr>
+      <tr><td>自适应 px 落盘 (第⑤轮)</td><td>意图与派生同字段, 靠读写过滤器</td><td>派生值进不了存储 —— <code>persistPage</code> 只收 <code>colW/hidden/order</code>, 无过滤器可错</td></tr>
+      <tr><td>内存/存储漂移 (先存后算 3 处)</td><td>持久化散布 6 点, 顺序各定</td><td>唯一漏斗 + 派生不在持久化路径上, 顺序约束整个消失</td></tr>
+      <tr><td>隐藏列宽度被抹 (#4, 仍敞着)</td><td><code>_renderedWidths</code> 整段替换</td><td><code>colW</code> 只被意图动作以 merge 方式修改, 渲染读它但永不写它</td></tr>
+      <tr><td>再改一处就复发 (#7)</td><td>三处成对过滤 + 顺序约束 + 标志位</td><td>不变量只有一条 ("派生不落盘"), 且能用静态守阵机检 (全仓唯一 setItem / 存储无派生 px / manual 键不得复活)</td></tr>
+    </table>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>方案取舍</h2>
+    <table>
+      <tr><th>候选</th><th>思路</th><th>判定</th></tr>
+      <tr>
+        <td><b>A. 双轨模型 + 单一漏斗</b><br>(本计划, 推荐)</td>
+        <td>意图/生效分轨, v5 按页子树, 唯一持久化入口</td>
+        <td><span class="tag ok">采纳</span> 改动面最小 (两文件), 每类历史缺陷对应的结构位被物理移除, 用户可见行为不变 (除 D2 一项)</td>
+      </tr>
+      <tr>
+        <td>B. 时间戳合并 (CRDT 味)</td>
+        <td>每段带 updated_at, 采纳时逐段比新</td>
+        <td><span class="tag bad">拒绝</span> 为亚秒级同页竞态给三段数据加"谁更新"语义, 存储膨胀、清洗复杂化; 既有决策已明确否掉, 维持</td>
+      </tr>
+      <tr>
+        <td>C. 服务端化</td>
+        <td>列偏好存后端 (按用户/浏览器标识), 根治 origin 隔离</td>
+        <td><span class="tag bad">拒绝</span> 用户 2026-09-20 已明确"只存浏览器, 不做服务端化"; 且失败分析实证本用户固定地址, origin 非实际病因。仅作为 D3 诊断提示的对象留档</td>
+      </tr>
+      <tr>
+        <td>D. 维持现模型, 继续打补丁</td>
+        <td>只修 #4 (隐藏列保宽 merge)</td>
+        <td><span class="tag warn">不推荐</span> 一天能修完, 但 #7 (结构脆弱性) 原样保留 —— 第 8 次修复只是时间问题。可作为 A 的降级回退路径 (见 08)</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>实施波次</h2>
+    <table>
+      <tr><th>波次</th><th>内容</th><th>文件</th><th>预估</th></tr>
+      <tr>
+        <td><b>W0 拍板</b></td>
+        <td>D1/D2/D3 三决策定案 (09 节); 拍板前不写码</td>
+        <td>—</td><td>—</td>
+      </tr>
+      <tr>
+        <td><b>W1 数据层</b></td>
+        <td>v5 schema + <code>readColStateRaw</code> 键链 (v5→v4→v3) + <code>migrateV4toV5</code> + <code>loadColState</code> 改写 (洗净规则原样迁入) + <code>persistPage</code> 漏斗 + <code>emptyColState</code> v5 形态 + data 字段 (<code>colManual</code> → <code>colW</code>)</td>
+        <td><code>app.js</code></td><td>0.5~1 天</td>
+      </tr>
+      <tr>
+        <td><b>W2 交互层</b></td>
+        <td>六个意图动作改走漏斗; <code>materializeColumns</code> → <code>recomputeEffective</code> (只写易变态); <code>startResize</code>/<code>autoFitColumn</code> 改 merge 保宽; <code>adoptColState</code> 简化; <code>fitColumnsToWindow</code> 按 D2 结论调整</td>
+        <td><code>columns.js</code></td><td>0.5 天</td>
+      </tr>
+      <tr>
+        <td><b>W3 验证阵</b></td>
+        <td>守阵升级 + 冒烟扩档 (07 节清单); 全量回归</td>
+        <td><code>tests/test_web.py</code> / <code>scripts/ui_smoke.cjs</code></td><td>0.5~1 天</td>
+      </tr>
+      <tr>
+        <td><b>W4 origin 提示</b> (按 D3)</td>
+        <td>v5 内写 origin 指纹, 加载不一致时一次性提示"不同地址的列偏好互不相通 (浏览器按站点隔离)"</td>
+        <td><code>app.js</code></td><td>≤2 小时</td>
+      </tr>
+      <tr>
+        <td><b>W5 收尾</b></td>
+        <td>知识库回写 (pitfalls 双轨铁律 / conventions v5 口径 / activeContext / issue 26-09-20-1800 状态日志 / 任务档案) + 真机走查 (用户实例 editable install, 刷新即生效)</td>
+        <td><code>memory-bank/</code></td><td>1 小时 + 走查</td>
+      </tr>
+    </table>
+    <div class="callout">
+      <b>红线 (贯穿所有波次):</b> 不动后端 / 模板 / <code>config.yml</code> / <code>auto-qb-data/</code>; 升 v5 必须带迁移 (无迁移不上库); 每条新守阵先红验再入库; 提交 / 推送只等显式指令。
+    </div>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>验证与验收</h2>
+    <h3>7.1 守阵 (每条先红验)</h3>
+    <table>
+      <tr><th>层</th><th>守阵</th><th>钉住什么</th></tr>
+      <tr><td>静态</td><td>全仓对 <code>COLS_STORE_KEY</code> 的 <code>setItem</code> <b>恰好一处</b> (persistPage 内)</td><td>散写回潮</td></tr>
+      <tr><td>静态</td><td><code>persistPage</code> 代码里不存在 <code>colWidths</code> (易变态字段名不得出现在持久化路径)</td><td>派生值落盘</td></tr>
+      <tr><td>静态</td><td>反向守阵: <code>colManual</code> / 存储层 <code>manual</code> 键不得复活</td><td>标志位旧模型回潮</td></tr>
+      <tr><td>静态</td><td><code>LEGACY_COLS_KEYS</code> 变更必须伴随迁移测试 (键链与迁移测试引用互相校验)</td><td>升版不带迁移</td></tr>
+      <tr><td>单测</td><td>v4→v5 迁移: manual 页保宽 / 非 manual 页 w=null / hidden·order 保留 / 非法键洗净 / locked 不收</td><td>迁移丢偏好</td></tr>
+      <tr><td>单测</td><td><code>loadColState</code> v5: <code>w=null</code> 页返回空宽 / px 白名单 <code>/^\d+px$/</code> / order 去重补尾</td><td>读入洗净</td></tr>
+      <tr><td>改写</td><td>现 <code>test_frontend_save_col_state_skips_widths_for_auto_pages</code> (test_web.py:950) 改写为 v5 形态: 断言 persistPage 收 <code>colW</code> 而非 <code>colWidths</code></td><td>旧守阵随旧模型作废, 必须同步</td></tr>
+    </table>
+    <h3>7.2 冒烟扩档 (ui_smoke.cjs, 真 DOM 手势)</h3>
+    <table>
+      <tr><th>场景</th><th>操作</th><th>断言</th></tr>
+      <tr><td>双标签异视口</td><td>A(1600px) 拖宽 + B(1000px) 隐藏列, 交替两轮</td><td>双方改动都保住; 存储里 <code>w=null</code> 页<b>没有任何 px 键</b></td></tr>
+      <tr><td>后台冻结恢复</td><td>标签 B <code>page.evaluate</code> 模拟冻结 → A 改列 → B 恢复可见</td><td>B 对齐 A 的改动 (F3 补漏仍有效)</td></tr>
+      <tr><td>隐藏列保宽</td><td>固化页隐藏一列 → 拖宽另一列 → 再显示</td><td>隐藏列的 px 原样回来 (现 HEAD 上此场景必红)</td></tr>
+      <tr><td>全自动页无 px</td><td>w=null 页刷新 / 缩放 / 切视图六路径</td><td>存储恒无该页 px; 现场重算填满容器</td></tr>
+      <tr><td>迁移演练</td><td>预置 v4 载荷 (含 manual 混合态 + 污染 px) → 加载</td><td>偏好按 3.3 迁移; 污染 px 清零</td></tr>
+    </table>
+    <p>既有冒烟项「列设置多标签页互不覆盖」(ui_smoke.cjs:843) 原样保留作回归锚点。</p>
+    <h3>7.3 验收 DoD</h3>
+    <ul>
+      <li>7.1 / 7.2 全绿且各自红验过; 全量 <code>uv run pytest tests -q</code> 不低于现基线 (testing.md 顶部数字), 冒烟双 UI 除既有乐观态 2 项外 0 失败。</li>
+      <li>失败分析的复现矩阵 (S1~S5 / M1~M2 / P1~P5 / R2~R4) 在新模型下全部重跑为绿。</li>
+      <li>真机走查清单 (双标签异宽窗口 + 刷新 + 缩放 + 隐藏再显示) 由用户确认, issue 26-09-20-1800 状态日志收口。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>风险与回退</h2>
+    <table>
+      <tr><th>风险</th><th>缓解</th></tr>
+      <tr><td>升 v5 = 一次性变更, 迁移写坏即全量丢偏好</td><td>迁移单测 + 冒烟迁移演练先行; v4 原键<b>保留不删</b> (只读迁移, 回退 = 指回旧键); 迁移前用户实例先备份 localStorage 导出</td></tr>
+      <tr><td><code>colManual</code> 删除牵动既有守阵与注释口径</td><td>守阵同步改写列入 W3 清单; pitfalls 里"偏好 vs 快照"教训条目更新指向新不变量</td></tr>
+      <tr><td>D2 若采纳 (fit = 回全自动), 用户可见行为变化</td><td>单列出来在走查清单里明示; 不接受则按备选语义实施 (固化快照), 不影响模型本身</td></tr>
+      <tr><td>editable install 用户实例改动立即可见</td><td>W3 全绿后才让用户刷新走查; 走查前先在本 clone + 真浏览器自测一轮</td></tr>
+      <tr><td>整体回退</td><td>波次独立成提交; 回退 = revert 对应提交; 极端情况降级为候选 D (只修 #4), 双轨改造延后</td></tr>
+    </table>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>待拍板决策</h2>
+    <table>
+      <tr><th>#</th><th>决策</th><th>推荐</th><th>备选</th></tr>
+      <tr>
+        <td><b>D1</b></td>
+        <td>是否升 v5 并挂迁移 (推翻"键冻结 v4 / 无 v5 计划"旧口径)</td>
+        <td><b>升。</b>widths 语义从"混装"改为"仅意图", 属定案口径自己定义的升版条件; 不升则 manual 标志 + 成对过滤永远背着</td>
+        <td>不升键, 在 v4 上继续 (候选 D 路线)</td>
+      </tr>
+      <tr>
+        <td><b>D2</b></td>
+        <td><code>fitColumnsToWindow</code> 语义: 适应窗口后是否仍把当前 px 固化为偏好</td>
+        <td><b>改为"回全自动"</b> (w=null + 现场重算): 名实相符, 不再固化窗口快照, 该页继续随窗口自适应; 想固定仍可拖</td>
+        <td>维持现状 (固化快照 = 偏好); 行为不变但保留一条"窗口值晋级偏好"的小通道</td>
+      </tr>
+      <tr>
+        <td><b>D3</b></td>
+        <td>origin 指纹 + 一次性提示 (W4)</td>
+        <td><b>做。</b>纯诊断、零行为影响, 把"看不见的隔离"变成可见 —— 失败分析 09 节建议⑥</td>
+        <td>不做, 只在 pitfalls 留档</td>
+      </tr>
+    </table>
+    <div class="callout">
+      三项都拍板后按 W1→W5 开工; 任何一项改选备选都不阻塞其余波次。
+    </div>
+  </section>
+
+  <footer>
+    docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html · 2026-09-21 15:51 · 基线 9f1ba5d<br>
+    关联: issue <code>memory-bank/issues/26-09-20-1800-bug-webui-column-prefs-reset.html</code> ·
+    失败分析 <code>docs/26-09-21-1248-column-prefs-fix-failure-analysis.html</code> ·
+    前计划 <code>docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html</code> ·
+    档案 <code>memory-bank/tasks/26-09-20-webui-column-prefs-reset.md</code>
+  </footer>
+
+</div>
+</body>
+</html>

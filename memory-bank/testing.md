@@ -6,7 +6,7 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1139 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1142 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
 #   ↑ 1138 → 1139(列偏好第二次修复 +1: `tests/test_web.py::test_frontend_save_col_state_skips_widths_for_auto_pages`
 #     钉死"未手动调过宽的页不得把自适应 px 落盘"; 与 `app.js::loadColState` 的"非手动页不读 px"成对,
 #     防列宽被**别的窗口**算出的值整段覆盖(issue 26-09-20-1800 第二次修复)。

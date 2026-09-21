@@ -868,6 +868,140 @@ async function smokeUi(browser, ui) {
     add(ui, "列设置多标签页互不覆盖", false, e.message);
   }
 
+  /* ---------- 双轨模型守阵(plan 26-09-21-1551 §7.2) ----------
+   * 旧模型六轮修复各自封通道; 新模型把"意图/生效分轨 + 单一漏斗"钉在真浏览器手势上。 */
+  const colHide = async (pg, idx) => {
+    await pg.click(".col-picker button.table-tool");
+    await pg.waitForSelector(".col-menu .col-menu-item", { timeout: 5000 });
+    const items = await pg.$$(".col-menu .col-menu-item");
+    await items[idx].click();
+    await pg.waitForTimeout(400);
+    await pg.keyboard.press("Escape");
+    await pg.waitForTimeout(200);
+  };
+  const dragCol = async (pg) => {
+    const h = await pg.$(".group-head .h-cell:nth-child(2) .resizer");
+    const bb = await h.boundingBox();
+    await pg.mouse.move(bb.x + 5, bb.y + bb.height / 2);
+    await pg.mouse.down();
+    await pg.mouse.move(bb.x + 65, bb.y + bb.height / 2, { steps: 6 });
+    await pg.mouse.up();
+    await pg.waitForTimeout(300);
+  };
+  const colState = (pg) => pg.evaluate(`(() => { const vm = ${INST}; return JSON.stringify({ w: vm.colW, h: vm.colHidden }); })()`);
+  const clearCols = (pg) => pg.evaluate(() => { localStorage.removeItem("autoqb_cols_v5"); localStorage.removeItem("autoqb_cols_v4"); });
+
+  // 守阵 1: 异视口双窗互不吞 + F3 冻结恢复 —— A(1600) 拖宽固化, B(1000) 隐藏列, 互相采纳;
+  // 旧模型此处 B 窗口算出的 px 会写进存储, A 刷新即被改写(失败分析 R2~R4 真机实测)。
+  try {
+    const pa = await ctx.newPage();
+    await pa.setViewportSize({ width: 1600, height: 900 });
+    await pa.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
+    await clearCols(pa);
+    await pa.reload({ waitUntil: "domcontentloaded" });
+    await pa.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    const pb = await ctx.newPage();
+    await pb.setViewportSize({ width: 1000, height: 700 });
+    await pb.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
+    await pb.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    await dragCol(pa);            // A 拖宽 -> group 固化(colW 非空)
+    await colHide(pb, 5);         // B(更窄窗口)隐藏一列
+    await pa.waitForTimeout(600); // 等 storage 事件把 B 的改动推给 A
+    const ra = JSON.parse(await colState(pa));
+    const okMerge = Object.keys(ra.w.group || {}).length > 0 && (ra.h.group || []).length >= 1;
+    await colHide(pa, 3);         // A 再改一次
+    // F3 补漏: 模拟 B 被冻结后恢复可见(hidden -> visible 各派发一次)
+    await pb.evaluate(`Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));`);
+    await pb.waitForTimeout(500);
+    const rb = JSON.parse(await colState(pb));
+    const okF3 = (rb.h.group || []).length >= 2;
+    await pa.reload({ waitUntil: "domcontentloaded" });   // 刷新后两者都必须还在
+    await pa.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    const ra2 = JSON.parse(await colState(pa));
+    const okReload = Object.keys(ra2.w.group || {}).length > 0 && (ra2.h.group || []).length >= 2;
+    add(ui, "列设置·异视口双窗互不吞+F3", okMerge && okF3 && okReload,
+      `A=${JSON.stringify(ra)} B=${JSON.stringify(rb)} 重载=${JSON.stringify(ra2)}`);
+    await pa.close();
+    await pb.close();
+  } catch (e) {
+    add(ui, "列设置·异视口双窗互不吞+F3", false, e.message);
+  }
+
+  // 守阵 2: 全自动页的派生 px 绝不落盘 —— 意图动作后存储里 w 必须是 null(铁律的行为面)
+  try {
+    const pt = await ctx.newPage();
+    await pt.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
+    await pt.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    await pt.evaluate(`${INST}.toggleColumn("torrent", "size")`);
+    await pt.waitForTimeout(300);
+    const blob = JSON.parse(await pt.evaluate(`localStorage.getItem("autoqb_cols_v5") || "{}"`));
+    const tw = blob.pages && blob.pages.torrent ? blob.pages.torrent.w : undefined;
+    const okNull = tw === null;
+    await pt.evaluate(`${INST}.toggleColumn("torrent", "size")`);   // 还原显隐
+    add(ui, "列设置·全自动页不落px", okNull, `pages.torrent.w = ${JSON.stringify(tw)}`);
+    await pt.close();
+  } catch (e) {
+    add(ui, "列设置·全自动页不落px", false, e.message);
+  }
+
+  // 守阵 3: 隐藏列宽度保留 —— 固化页 隐藏一列 -> 再拖宽 -> 重新显示, 该列 px 必须原样回来
+  // (旧模型 _renderedWidths 只含可见列却整段替换, 失败分析 S4 实测 11→10 键)
+  try {
+    const ph = await ctx.newPage();
+    await ph.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
+    await clearCols(ph);
+    await ph.reload({ waitUntil: "domcontentloaded" });
+    await ph.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    await dragCol(ph);   // 固化 group
+    const s1 = JSON.parse(await colState(ph));
+    await ph.evaluate(`${INST}.toggleColumn("group", ${INST}._visibleCols("group")[2].key)`);
+    await ph.waitForTimeout(200);
+    const s2 = JSON.parse(await colState(ph));
+    const k = (s2.h.group || [])[0];
+    await dragCol(ph);   // 再拖宽(旧模型此处抹掉隐藏列 px)
+    await ph.evaluate(`(() => { ${INST}.toggleColumn("group", ${JSON.stringify(k)}); })()`);
+    await ph.waitForTimeout(300);
+    const s3 = JSON.parse(await colState(ph));
+    const okKeep = !!(k && s1.w.group && s1.w.group[k] && s3.w.group && s3.w.group[k] === s1.w.group[k]);
+    add(ui, "列设置·隐藏列宽度保留", okKeep, `key=${k} 前=${JSON.stringify(s1.w.group && s1.w.group[k])} 后=${JSON.stringify(s3.w.group && s3.w.group[k])}`);
+    await ph.close();
+  } catch (e) {
+    add(ui, "列设置·隐藏列宽度保留", false, e.message);
+  }
+
+  // 守阵 4: v4→v5 迁移 —— 固化页宽度保留 / 非固化页污染 px 清零 / 隐序保留; 首次意图动作落 v5
+  try {
+    const pm = await ctx.newPage();
+    await pm.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
+    await pm.evaluate(() => {
+      localStorage.removeItem("autoqb_cols_v5");
+      localStorage.setItem("autoqb_cols_v4", JSON.stringify({
+        widths: { group: { uploaded: "300px" }, torrent: { name: "222px" } },
+        hidden: { group: ["category"] },
+        manual: { group: true, torrent: false },
+        order: {},
+      }));
+    });
+    await pm.reload({ waitUntil: "domcontentloaded" });
+    await pm.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
+    const m1 = JSON.parse(await pm.evaluate(`(() => { const vm = ${INST}; return JSON.stringify({ wg: vm.colW.group || null, hg: vm.colHidden.group || [], wt: vm.colW.torrent || null }); })()`));
+    const okLoad = !!(m1.wg && m1.wg.uploaded === "300px" && (m1.hg || []).includes("category") && !m1.wt);
+    await pm.evaluate(`${INST}.toggleColumn("group", "total_size")`);   // 一次意图动作 -> 落 v5
+    await pm.waitForTimeout(300);
+    const blob = JSON.parse(await pm.evaluate(`localStorage.getItem("autoqb_cols_v5") || "{}"`));
+    const g = blob.pages && blob.pages.group;
+    const okV5 = !!(blob.v === 5 && g && g.w && g.w.uploaded === "300px" && (g.hidden || []).includes("category")
+      && (!blob.pages.torrent || blob.pages.torrent.w === null));
+    add(ui, "列设置·v4→v5迁移", okLoad && okV5, `load=${JSON.stringify(m1)}`);
+    await pm.close();
+  } catch (e) {
+    add(ui, "列设置·v4→v5迁移", false, e.message);
+  }
+
+
   const perfWarns = warns.filter((w) => w.includes("[perf]"));
   if (perfWarns.length) console.log(`      [perf] ${perfWarns.length} 条: ${perfWarns.slice(0, 3).join(" | ")}`);
   add(ui, "无 console.error / pageerror", errors.length === 0, errors.slice(0, 3).join(" | ") || "干净");
