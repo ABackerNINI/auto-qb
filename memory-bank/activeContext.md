@@ -90,9 +90,22 @@
     故阈值按 `轮询间隔 × 倍速 × 2 裕度` 算 —— 拍常数会在换倍速 / 换轮询档时变成假红或假绿。
   - **W3 已推送**: `dacc991` → Gitee + GitHub。
 
-  **下一步 = W5**: `CORPUS.group_exact`(头号判据 —— 走 auto-qb `GET /api/state` 取它实际分的组,
-  与 groups.json 逐组逐 hash 比 + 反向对照红验)+ `maindata_lag_modeled` 红绿双验
-  + 基线重固化(旧基线另存 `synthetic.*`)+ 文档 + 关闭 issue 2145。**W6 未开工**。
+  ### W5 已实施(本轮)
+  - **头号判据 `CORPUS.group_exact`**: 走 auto-qb 自己的 `GET /api/state?rid=-1&view=group` 取它**实际**分的组,
+    与 `groups.json` 真值分组**逐组逐 hash** 比。**实测 真值 63 组 / auto-qb 实际 63 组、未分出 0、多分出 0**
+    (静态与 3× 时间轴两种档位都绿)。⚠ 需开 `--web-port`, 否则 BASELINE; 从 sim 侧重算会变空转判据。
+    **三道反向对照红验**: 成员串组(组数仍相同)/ 一组被拆成两组 / 真值组没被分出 —— 只比组数会放过串组。
+  - `CORPUS.maindata_lag_modeled`: 两个滞后都为 0 时判据必须转红 —— issue 26-09-20-2145 的验收凭据。
+  - **基线两套分离**: `sim_baseline.py --corpus <dir> --merge` 写 `corpus.*` 阈值; `sim_run` 在语料档
+    **只查 `corpus.` 前缀、不回落裸 id**; 合成档基线另存 `…synthetic.json`。
+    实测差得很远(`corpus.P1.first_round_s` 2.91 vs 22.68)⇒ 混用必然假红/假绿。
+    ⚠ `CORPUS.replay_timeline_aligned` 刻意**不固化**(按"轮询间隔 × 倍速 × 2 裕度"动态算)。
+  - 文档: `docs/sim-client-test-howto.md` 新增第 7 节「语料模式」。
+  - **issue 26-09-20-2145 已置 Fixed**(徽标 + meta 两处, 补"如何被覆盖"段含 W0 口径修正, 索引已进 Fixed 区)。
+  - 测试 1133 → **1137 passed**。
+
+  **下一步 = W6**: 真机走查闭环(已收窄为数据面几条: TASK015 错误种子原因 / 视图重建范围收口),
+  其余明确标注"仍需真机目视", 不得计入闭环。
 
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
   [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)

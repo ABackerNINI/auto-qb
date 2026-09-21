@@ -261,3 +261,72 @@ uv run python scripts/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
 
 **给结论时请带上**：场景命令、`verdict`、红了的 check id 与值、产物目录路径。
 只说「测试通过了」没有意义 —— 要说清**哪些判据真的测到了东西**。
+
+---
+
+## 7. 语料模式（真实 qB 数据回放）
+
+合成档（`--source=synthetic`，默认）的七类失真见计划
+`plans/26-09-21-0024-qb-corpus-capture-replay-plan.html` 第 01 节：恒单文件、名称形态单一、
+状态分布是拍出来的、tags/category 恒空、数值均匀分布、负载模型是人造的、tracker 与 peers 恒假。
+**语料模式把这些换成真机抓下来的数据**（抓取 → 脱敏 → 离线回放），合成档保留为对照档。
+
+### 7.1 抓一份语料
+
+```bash
+uv run python scripts/qb_capture.py capture --from-config config.yml \
+    --out auto-qb-data/corpus/<日期-标签> --profile normal --minutes 10 \
+    --full-every 600 --probe-fs on                      # 首次真机跑建议 --sample 200 --probe-fs off
+uv run python scripts/qb_capture.py self-test --out <语料目录>   # 离线自检(不连 qB)
+```
+
+语料 = 一条原始流（首帧即 T0 / 末帧必是一份全量）+ 流里没有的按 hash 元数据（`files/trackers`）+ 真值分组（`groups.json`）。
+**每帧是 qB 响应整帧原样落盘** ⇒ 零语义转换 = 零失真。`status=aborted` 的语料**拒绝回放**（那时真值分组已不可信）。
+
+### 7.2 回放
+
+```bash
+# 静态回放(不推进游标, 与 T0 同构 —— 分组比对最干净):  --replay-speed 0
+uv run python scripts/sim_run.py --scenario C1 --source=corpus:<语料目录> \
+    --replay-speed 0 --web-port 8099 --duration 25
+
+# 时间轴回放(按录制时间轴推进, 3 倍速)
+uv run python scripts/sim_run.py --scenario C2 --source=corpus:<语料目录> \
+    --replay-speed 3 --web-port 8098 --duration 25
+```
+
+关键参数：`--source=corpus:<dir>` / `--fs-mode=mock`（默认，**不物化任何文件**）/ `--fs-root` /
+`--command-latency-ms`（默认 750 = W0 真机实测）/ `--maindata-lag-ms`（默认 0 = W0 实测）
+/ `--replay-speed` / `--latency-mode`（recorded 用录到的真实 rtt）。
+
+### 7.3 语料档专属判据 `CORPUS.*`
+
+| id | 判什么 | 备注 |
+|---|---|---|
+| `group_exact` | **头号**：真值分组 == auto-qb 回放时**自己**分出的组，逐组**逐 hash** | ⚠ 必须开 `--web-port`（走 `GET /api/state?rid=-1&view=group` 取实际分组）；否则 BASELINE |
+| `fs_state_match` | mock 回给 auto-qb 的三态 == 语料表 | mock 若静默失效，D4 全绿也是假的 |
+| `endpoints_covered` | 外壳已实现端点 ⊇ 语料里出现过的端点 | 事实来源 `sim_qb.IMPLEMENTED_ENDPOINTS` |
+| `replay_stream_consumed` | 流必须被**完整消费** | 否则"回放提前结束却判 OK"是空转；静态档不判 |
+| `replay_timeline_aligned` | 回放游标相对已交付位置的滞后 | 阈值按**轮询间隔 × 倍速 × 2 裕度**动态算，不固化成常数 |
+| `maindata_lag_modeled` | 滞后模型确实用上了 | 两个滞后都为 0 时判据应转红（红验见 `tests/test_sim_corpus.py`） |
+
+另有抓取侧的 `fields_complete` / `sanitize_injective` / `group_conservation` / `stream_closure` /
+`sanitize_stream_consistent` / `no_credentials` 六项，跑 `qb_capture.py` 时自检。
+
+### 7.4 两套阈值不混用
+
+`plans/…baseline.json` 里 `corpus.*` 是语料档阈值，裸 id 是合成档阈值；
+`sim_run` 在语料档**只查 `corpus.` 前缀，不回落到裸 id**（合成阈值拿去判语料会同时产生假红与假绿）。
+
+```bash
+uv run python scripts/sim_baseline.py --corpus <语料目录> --merge   # 固化语料档阈值
+# 首次固化会把既有合成档基线另存为 …synthetic.json
+```
+
+### 7.5 语料模式的坑
+
+- **不开 `--web-port` 就拿不到 `group_exact`** —— 它要 auto-qb 自己的 WEB 端点；从 sim 侧重算会变成
+  "自己算的期望 vs 自己算的实际"，判据空转。
+- **FS mock 的时间源是播放器**（`GET /_fsmock/state` 按秒拉），不是 mock 自己的时钟。
+- mock 只拦**语料树内**的路径；树外（`config.yml` / `state.json` / WEB 密钥）原样委托真函数 —— 否则会拦坏红线文件。
+- 语料里的域名已脱敏成 `site-N.example`、标签已伪名化 ⇒ 生成的 config 的 `trackers:` 段是**按语料派生**的。

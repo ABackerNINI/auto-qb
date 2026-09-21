@@ -1,6 +1,6 @@
 # 26-09-21-qb-corpus-capture-replay — 真机 qB 语料抓取 / 脱敏 / 离线回放
 
-**Status:** In Progress (W0–W4 已实施并验证; W5–W6 未开工)
+**Status:** In Progress (W0–W5 已实施并验证; W6 未开工)
 **Started:** 2026-09-21
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) + [审查报告](../../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)
@@ -126,7 +126,7 @@
 | W2 | 脱敏 + 等价类守恒校验 | ✅ 守恒绿 + 2 道红验通过 + 盐不落盘 + 产物带 .gitignore |
 | W3 | 回放器 + FS mock + 三个缺失路由 + 两层状态模型 | ✅ 静态回放端到端跑通(verdict OK) |
 | W4 | 时间轴回放(游标 + 倍速 + 窗口合并语义) | ✅ 端到端跑通, 4 条 CORPUS.* 判据全 PASS |
-| W5 | `CORPUS.*` 判据 + 基线重固化 + 文档 + 关闭 issue 2145 | ⬜ 未开工 |
+| W5 | `CORPUS.*` 判据 + 基线重固化 + 文档 + 关闭 issue 2145 | ✅ 6 条 CORPUS.* 全 PASS; 两套阈值已分离; issue 2145 置 Fixed |
 | W6 | 真机走查闭环(已收窄为数据面几条) | ⬜ 未开工 |
 
 ## W3 实施结果
@@ -178,9 +178,23 @@
   合成档自检仍全通过。测试 1128 → **1133 passed**。
   ⚠ 游标滞后**天然受客户端轮询间隔 × 倍速限制**(客户端每 1.5 s 拉一次、游标却连续推进), 故阈值按
   `轮询间隔 × 倍速 × 2 裕度` 算 —— 拍常数会在换倍速 / 换轮询档时变成假红或假绿。
-- **下一步**: W5 —— `CORPUS.group_exact`(头号判据, 走 auto-qb 的 `GET /api/state` 取它实际分的组, 与
-  groups.json 逐组逐 hash 比 + 反向对照红验)+ `maindata_lag_modeled` 红绿双验 + `sim_baseline.py --merge`
-  重固化(旧基线另存 `synthetic.*`)+ `docs/sim-client-test-howto.md` 增补语料模式 + 关闭 issue 26-09-20-2145。
+- **W5 已实施**:
+  - **头号判据 `CORPUS.group_exact`**: 走 auto-qb 自己的 `GET /api/state?rid=-1&view=group` 取它**实际**分的组,
+    与 `groups.json` 真值分组**逐组逐 hash** 比(比对内核 `sim_run.group_exact_diff`)。
+    ⚠ 必须开 `--web-port`(否则 BASELINE); 从 sim 侧重算会变成"自己算的期望 vs 自己算的实际", 判据空转。
+    **实测: 真值 63 组 / auto-qb 实际 63 组, 未分出 0、多分出 0 ⇒ PASS**(静态与 3× 时间轴两种档位都绿)。
+    **反向对照红验**(`tests/test_sim_corpus.py`): 成员串组(组数仍相同)、一组被拆成两组、真值组没被分出
+    —— 三道都要红。**只比"组数"会放过串组**, 而那正是"增量应用出错"的样子。
+  - **`CORPUS.maindata_lag_modeled`**: 两个滞后都为 0 时判据必须转红(否则只是恒绿)。这是 issue 2145 的验收凭据。
+  - **基线重固化**: `sim_baseline.py --corpus <dir> --merge` → 写 `corpus.*` 阈值; `sim_run` 在语料档
+    **只查 `corpus.` 前缀、不回落裸 id**; 首次固化时合成档基线另存 `…synthetic.json`。
+    实测两套差得很远(`corpus.P1.first_round_s` 2.91 vs 22.68)⇒ 混用必然假红/假绿。
+    ⚠ `CORPUS.replay_timeline_aligned` **刻意不进固化表**: 预算按"轮询间隔 × 倍速 × 2 裕度"动态算。
+  - **文档**: `docs/sim-client-test-howto.md` 新增第 7 节「语料模式」(抓语料 / 回放 / 6 条判据表 / 两套阈值 / 坑)。
+  - **关闭 issue 26-09-20-2145**: 报告 HTML 的封面徽标与 `<meta name="issue-status">` 两处置 `Fixed`,
+    补「如何被覆盖」段(含 W0 实测推翻原假设的说明), 重跑索引 ⇒ 已进 Fixed 分区。单测 1133 → **1137 passed**。
+- **下一步**: W6 —— 真机走查闭环(已收窄为数据面几条: TASK015 错误种子原因 / 视图重建范围收口),
+  其余明确标注"仍需真机目视", 不得计入闭环。
 
 ## 待办 / 未决
 

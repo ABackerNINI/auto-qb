@@ -6,7 +6,16 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1133 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1137 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1133 → 1137(语料判据批次 W5 +4: `tests/test_sim_corpus.py` 续 —— 头号判据 `CORPUS.group_exact`
+#     的比对内核 `group_exact_diff` 及三道红验: **成员串组(组数仍相同)、一组被拆成两组、真值组没被分出**
+#     —— 只比"组数"会放过串组, 那正是"增量应用出错"的样子)。
+#     另有 2 条运行期判据落地: `CORPUS.group_exact`(需 --web-port, 走 auto-qb `GET /api/state?view=group`
+#     取**它自己**分的组, 不在 sim 侧重算 —— 重算会变"自己算的期望 vs 自己算的实际", 判据空转)
+#     + `CORPUS.maindata_lag_modeled`(issue 26-09-20-2145 的验收凭据)。
+#   ⚠ 阈值**两套不混用**(计划 §09): `plans/…baseline.json` 里 `corpus.*` 是语料档阈值、裸 id 是合成档;
+#     `sim_run` 在语料档只查 `corpus.` 前缀、**不回落裸 id**。首次固化时合成档基线另存 `…synthetic.json`。
+#     实测两套差得很远(corpus.P1.first_round_s 2.91 vs 22.68), 混用必然假红/假绿。
 #   ↑ 1128 → 1133(语料时间轴回放批次 W4 +5: `tests/test_sim_corpus.py` 续 —— 末帧 closure 必须排除出可回放集合、
 #     游标推进与窗口合并(后写覆盖 / server_state merge / 新增种子进状态)、fs_delta 按 t_seq 叠到磁盘状态、
 #     `--latency-mode` 的 recorded 与 const 两条分支)。

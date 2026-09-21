@@ -234,6 +234,46 @@ def poll_web(
         stop_ev.wait(interval)
 
 
+def group_exact_diff(truth: list[set], actual: list[set]) -> tuple[list[set], list[set]]:
+    """头号判据的比对内核: 真值分组 vs auto-qb 实际分组, 逐组**逐 hash** 比
+
+    返回 (真值有但 auto-qb 没分出来的组, auto-qb 多分出来的组)。两边都空 = 完全一致。
+    ❗必须逐 hash 比成员集合, 不能只比"组数" —— 组数相同但成员被串了组是完全可能的,
+    而那正是"增量应用出错"的表现形式(同组文件列表被拆开 / 不同组被并起来)。
+    """
+    actual_sets = [set(x) for x in actual]
+    truth_sets = [set(x) for x in truth]
+    missing = [t for t in truth_sets if t not in actual_sets]
+    extra = [a for a in actual_sets if a not in truth_sets]
+    return missing, extra
+
+
+def fetch_web_groups(web_port: int) -> list[set[str]] | None:
+    """取 auto-qb **实际**分出来的组(每组一个 hash 集合) —— 头号判据的"实际"侧
+
+    ❗必须走 auto-qb 自己的端点 `GET /api/state?rid=-1&view=group`(groups[].members[].hash),
+    不能在 sim 侧用同一套公式重算 —— 那会变成"自己算的期望 vs 自己算的实际", 判据空转。
+    groups.json 的价值恰恰在于"答案来自真机原始数据", 拿它去比 auto-qb 回放时**自己**分出来的组,
+    才能验出增量应用有没有出错。
+    """
+    if not web_port:
+        return None
+    url = f"http://127.0.0.1:{web_port}/api/state?rid=-1&view=group"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            payload = json.loads(r.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    out = []
+    for g in payload.get("groups") or []:
+        if not isinstance(g, dict):
+            continue
+        hs = {m.get("hash") for m in (g.get("members") or []) if isinstance(m, dict) and m.get("hash")}
+        if hs:
+            out.append(hs)
+    return out or None
+
+
 def exec_history_size(run_dir: str) -> int:
     """state.json 里 exec_history 的条目数(D5 跨进程幂等的判据载体)
 
@@ -309,7 +349,14 @@ def build_checks(
 
     def add(cid, value, op, threshold, note=""):
         if threshold is None:
-            threshold = THRESH.get(cid)  # 未显式给 -> 查 W4 固化表; 仍无 -> BASELINE
+            # 未显式给 -> 查固化表。**语料档与合成档两套阈值不混用**(计划 §09):
+            # 合成档的阈值是在合成数据上固化出来的, 拿去判语料档会同时产生假红与假绿。
+            # 故语料档先查 `corpus.<id>`, 查不到就记 BASELINE(等 W5 用 --corpus 固化),
+            # **不回落到合成档的裸 id**。
+            if getattr(sim, "corpus_mode", False):
+                threshold = THRESH.get("corpus." + cid)
+            else:
+                threshold = THRESH.get(cid)
         if value is None or threshold is None:
             result = BASELINE  # 未观测到 / 阈值未固化 -> 都不算失败
         elif op == "==":
@@ -523,13 +570,17 @@ def build_checks(
     # 合成档没有"语料"这个概念, 这些判据只在 --source=corpus:<dir> 时出现
     if getattr(sim, "corpus_mode", False):
         rs = sim.replay_stats
-        # 录播必须把流**完整消费**掉 —— 否则"回放提前结束却判 OK"是空转陷阱
-        consumed = 1 if rs.get("frames_consumed", 0) >= len(sim.replay_data) else 0
-        add(
-            "CORPUS.replay_stream_consumed", consumed, "==", 1,
-            f"已消费 {rs.get('frames_consumed', 0)}/{len(sim.replay_data)} 帧"
-            f"(结束标记 {rs.get('ended')})"
-        )
+        # 录播必须把流**完整消费**掉 —— 否则"回放提前结束却判 OK"是空转陷阱。
+        # ⚠ 静态档(--replay-speed 0)不推进游标, 本就没有"流被吐完"这回事 ⇒ 只在录播档判。
+        if sim.replay_speed <= 0:
+            add("CORPUS.replay_stream_consumed", None, "==", None, "静态回放(不推进游标): 无“流被吐完”可判 -> BASELINE")
+        else:
+            consumed = 1 if rs.get("frames_consumed", 0) >= len(sim.replay_data) else 0
+            add(
+                "CORPUS.replay_stream_consumed", consumed, "==", 1,
+                f"已消费 {rs.get('frames_consumed', 0)}/{len(sim.replay_data)} 帧"
+                f"(结束标记 {rs.get('ended')})"
+            )
         # 回放推进的录制时刻与墙上时钟的偏差(计划 §09 replay_timeline_aligned)。
         # ❗这个滞后**天然受客户端轮询间隔 × 倍速限制**: 客户端每 1.5 s 来拉一次, 游标却连续推进,
         # 所以"已交付位置"最多落后一个轮询间隔(折算到录制时间就是 interval × speed)。故阈值按它算,
@@ -564,6 +615,33 @@ def build_checks(
         implemented = set(sim_qb.IMPLEMENTED_ENDPOINTS)
         uncovered = sorted(seen - implemented)
         add("CORPUS.endpoints_covered", len(uncovered), "==", 0, f"语料里出现过但外壳未实现的端点: {uncovered[:5]}")
+        # ---------------- CORPUS.group_exact —— 头号判据(计划 §09) ----------------
+        # 真值分组(groups.json, 抓取端用真机数据算出) == auto-qb 回放时**自己**分出的组。
+        # ⚠ 参考时刻: 计划定在"首帧应用后、任何写动作发生前"(与 T0 快照同构, 语义最干净)。
+        #   时间轴回放会让状态推进, 故**静态回放(--replay-speed 0)下这条最干净**; 录播档下若
+        #   auto-qb 自己动过(缺文件暂停整组 / 规则删种触发拆组), 分组本就会变 —— 那是真实现象
+        #   而不是判据失效, 故只在"取不到实际分组"时记 BASELINE。
+        truth = [set(g.get("members") or []) for g in (sim.corpus.groups.get("groups") or [])]
+        truth = [t for t in truth if t]
+        actual = getattr(sim, "_web_groups", None)
+        if not truth or actual is None:
+            add("CORPUS.group_exact", None, "==", None, "真值分组为空 或 未取到 auto-qb 实际分组(需 --web-port); 未观测到 -> BASELINE")
+        else:
+            # ❗逐组逐 hash 比: 只比组数会放过"组数相同但成员串了组"这种真正的错误
+            missing, extra = group_exact_diff(truth, actual)
+            add(
+                "CORPUS.group_exact",
+                len(missing) + len(extra), "==", 0, f"真值 {len(truth)} 组 / auto-qb 实际 {len(actual)} 组; "
+                f"未分出 {len(missing)} 组、多分出 {len(extra)} 组"
+            )
+        # ---------------- CORPUS.maindata_lag_modeled —— 滞后模型生效(issue 2145 的验收凭据) ----------------
+        # 模型在 W3 已落地; 这条判据确认"本轮确实用上了滞后模型"。红验在 tests/test_sim_corpus.py
+        # (把 --maindata-lag-ms 设 0 => 两端同刻可见 => 判据必须转红)。
+        add(
+            "CORPUS.maindata_lag_modeled", 1 if (args.command_latency_ms > 0 or args.maindata_lag_ms > 0) else 0, "==",
+            1, f"cmd-latency={args.command_latency_ms}ms md-lag={args.maindata_lag_ms}ms; "
+            f"两者都为 0 时判据应转红(见 tests 的红验)"
+        )
     return c
 
 
@@ -660,6 +738,19 @@ def main(argv=None) -> int:
         threading.Thread(target=observe_web, args=(args.web_port, snaps, obs_stop, 1.0, quiesce), daemon=True).start()
         for _ in range(max(0, args.web_poll)):  # S7 并发只读轮询
             threading.Thread(target=poll_web, args=(args.web_port, polls, obs_stop, 0.5, quiesce), daemon=True).start()
+    # 语料档: 周期性抓 auto-qb **实际**分出的组, 供头号判据 CORPUS.group_exact 与真值分组比对。
+    # ❗必须在 auto-qb **还活着**的时候起 —— 收尾阶段再取只会拿到 None(WEB UI 已随进程退出)。
+    if getattr(sim, "corpus_mode", False):
+        sim._web_groups = None
+
+        def _group_watcher(stop_ev):
+            while not stop_ev.is_set():
+                got = fetch_web_groups(args.web_port)
+                if got:
+                    sim._web_groups = got
+                stop_ev.wait(2.0)
+
+        threading.Thread(target=_group_watcher, args=(obs_stop, ), daemon=True).start()
     if args.web_delete:
         grouped: set[str] = set()
         for g in sim.groups:

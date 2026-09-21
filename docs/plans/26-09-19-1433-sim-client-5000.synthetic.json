@@ -1,17 +1,15 @@
 {
   "_": {
-    "说明": "仿真测试性能基线。thresholds 里 `corpus.*` 是**语料档**阈值(本脚本 --corpus 固化), 裸 id 是合成档阈值; sim_run 在语料档只查 `corpus.` 前缀, 两套不混用(计划 §09)。首次固化时旧合成档基线另存 *.synthetic.json。",
-    "生成时间": "2026-09-21 12:10:06",
-    "语料": "H:\\Temp\\corpus-v2"
+    "说明": "仿真测试性能基线(W4 固化)。thresholds 由实测值×余量系数推出, sim_run.py 启动时读取; 不存在时统计层对应项记 BASELINE(不算 FAIL)。",
+    "生成时间": "2026-09-19 18:20:15",
+    "生成命令": "uv run python scripts/sim_baseline.py",
+    "机器": "Windows 本机 / R 盘 / 回环 HTTP"
   },
   "thresholds": {
     "P1.first_round_s": 22.68,
     "S3.write_rate_per_min": 6210.49,
     "S7.p95_ms": 1218.4,
-    "SYNC.drift_max_s": 1.0,
-    "corpus.P1.first_round_s": 2.91,
-    "corpus.S3.write_rate_per_min": 12.48,
-    "corpus.SYNC.drift_max_s": 1.0
+    "SYNC.drift_max_s": 1.0
   },
   "scenarios": {
     "P1": {
@@ -166,26 +164,6 @@
       "writes_per_min": 0.0,
       "web_p95_ms": 1278.8,
       "run_dir": "R:\\auto-qb-sim\\runs\\20260919-181330-P6x"
-    },
-    "corpus": {
-      "runs": [
-        {
-          "verdict": "OK",
-          "first_round_s": 1.942,
-          "writes_per_min": 9.6,
-          "drift_max_s": 0.474,
-          "replay_drift_ms": 0.0,
-          "run_dir": "H:/Temp/simroot-baseline\\runs\\20260921-120912-C1"
-        },
-        {
-          "verdict": "OK",
-          "first_round_s": 1.91,
-          "writes_per_min": 9.6,
-          "drift_max_s": 0.488,
-          "replay_drift_ms": 2299.4,
-          "run_dir": "H:/Temp/simroot-baseline\\runs\\20260921-120939-C2"
-        }
-      ]
     }
   }
 }

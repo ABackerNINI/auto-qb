@@ -195,7 +195,7 @@
 
 (以下 WEB UI 核心已于 2026-09-13 实现, 见 productContext.md/modules.md; **2026-09-14 已补图形化配置编辑** —— 设置页每项配置均可增删改, 含站点/规则集(16 条件 + 12 动作)/限速曲线的结构化编辑与只读 YAML 预览, 直接编辑模式已移除; 剩余: WebSocket 推送/多用户)
 
-### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W4 已实施, W5–W6 未开工**)
+### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W5 已实施, W6 未开工**)
 
 > 计划 [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) · 任务档案 [tasks/26-09-21-qb-corpus-capture-replay.md](tasks/26-09-21-qb-corpus-capture-replay.md)
 
@@ -224,8 +224,12 @@
 - ✅ **W4 已落地**: 录播游标(可交付时刻 = 各帧 `dt_ms` 累积和, 按墙钟 × `--replay-speed` 推进)+ 窗口合并
   + `--latency-mode`(recorded / p50 / p95 / const)+ `fs_delta` 按 t_seq 叠到 mock 磁盘状态。端到端 3× 倍速:
   14/14 帧吐完、游标滞后 1402 ms(预算 9144 ms); 4 条 `CORPUS.*` 判据全 PASS。测试 1128 → **1133 passed**。
-- ⬜ **W5–W6 未开工**: `CORPUS.group_exact`(头号)+ `maindata_lag_modeled` 红绿双验 + 基线重固化 +
-  文档 + 关闭 issue 2145 / 真机走查闭环(已收窄)。
+- ✅ **W5 已落地**: 头号判据 `CORPUS.group_exact`(走 auto-qb `GET /api/state?view=group` 取它**实际**分的组,
+  与真值分组逐组逐 hash 比 —— **实测 63/63 组、未分出 0、多分出 0**, 静态与 3× 时间轴都绿;
+  三道反向对照红验: 串组 / 拆组 / 缺组), `CORPUS.maindata_lag_modeled`(滞后全 0 则转红),
+  基线两套分离(`corpus.*` vs 裸 id, 合成档另存 `…synthetic.json`)+ `sim_baseline.py --corpus`,
+  `docs/sim-client-test-howto.md` 第 7 节, **issue 26-09-20-2145 置 Fixed**。测试 1133 → **1137 passed**。
+- ⬜ **W6 未开工**: 真机走查闭环(已收窄为数据面几条), 其余明确标注"仍需真机目视"。
 
 ### 规则系统
 - 条件取反 (`!` / 非 logic) — `:ignore_case` 支持已完成 (2026-09-12, 见 08 TODO 段)

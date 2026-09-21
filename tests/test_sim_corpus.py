@@ -703,3 +703,40 @@ def test_replay_latency_modes(tmp_path):
     sim.args.latency_mode = "const"
     sim.latency_ms = 7.0
     assert sim.replay_latency_ms() == 7.0, "const 模式用 --latency-ms"
+
+
+# --------------------------------------------------------------------------- 头号判据 CORPUS.group_exact
+def test_group_exact_diff_green(tmp_path=None):
+    """顺序无关: 只要成员集合逐组一致就是绿"""
+    simrun = _load("sim_run")
+    truth = [{"a", "b"}, {"c"}, {"d", "e"}]
+    actual = [{"d", "e"}, {"a", "b"}, {"c"}]
+    missing, extra = simrun.group_exact_diff(truth, actual)
+    assert not missing and not extra
+
+
+def test_group_exact_diff_red_on_member_swap():
+    """**红验**: 成员被串了组 —— 组数**仍然相同**, 只比组数会漏掉(这正是增量应用出错的样子)"""
+    simrun = _load("sim_run")
+    truth = [{"a", "b"}, {"c", "d"}]
+    actual = [{"a", "c"}, {"b", "d"}]
+    missing, extra = simrun.group_exact_diff(truth, actual)
+    assert len(missing) == 2 and len(extra) == 2, "串组必须同时报 missing 与 extra"
+
+
+def test_group_exact_diff_red_on_split_group():
+    """**红验**: 一个真值组被拆成两组 => 必须红"""
+    simrun = _load("sim_run")
+    truth = [{"a", "b"}]
+    actual = [{"a"}, {"b"}]
+    missing, extra = simrun.group_exact_diff(truth, actual)
+    assert missing and extra
+
+
+def test_group_exact_diff_red_on_missing_group():
+    """**红验**: 真值组没被分出来 => 必须红"""
+    simrun = _load("sim_run")
+    truth = [{"a", "b"}, {"c", "d"}]
+    actual = [{"a", "b"}]
+    missing, extra = simrun.group_exact_diff(truth, actual)
+    assert len(missing) == 1 and not extra

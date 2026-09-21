@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-20-2145">
 <meta name="issue-type" content="test">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Fixed">
 <meta name="issue-title" content="sim_qb 缺「/sync/maindata 快照滞后」模型, 本地无法复现/验证真值直查的收益">
 <meta name="issue-summary" content="仿真端状态瞬时翻转, 掩盖一切&#x27;真值尚未落地&#x27;类缺陷; 需加 1.5s 快照滞后模型">
 <title>sim_qb 缺「/sync/maindata 快照滞后」模型, 本地无法复现/验证真值直查的收益 · test · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-20-2145-test-sim-qb-maindata-snapshot-lag</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 21:45</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -177,11 +177,34 @@ src/auto_qb/config/models.py:187
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-20 21:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-21 — 状态 <strong>Fixed</strong>：滞后模型已落地（语料计划 26-09-21-0024 的 W3，
+        一并消化本 issue）。⚠ 但**模型口径按真机实测改过**，见下方「如何被覆盖」。</li>
     </ul>
     <h3>复验</h3>
     <p>认领后第一件事：用 <code>--maindata-lag-ms 0</code> 与 1500 各跑一次，确认 <code>/sync/maindata</code> 与 <code>torrents/info</code> 在 lag=0 时<b>同刻返回</b>、lag=1500 时<b>不同刻</b>，即模型生效。</p>
+    <h3>如何被覆盖（本 issue 的关闭凭据）</h3>
+    <p><b>模型</b>：<code>sim_qb</code> 语料档新增「流状态 vs 实况状态」两层 —— 命令效果进 <code>overlay</code>，
+      <code>torrents/info</code>（实况）与 <code>/sync/maindata</code>（快照）按各自的可见时刻叠上去。
+      顺序固定为「先合并窗口 → 再叠 overlay」，写成两个独立调用，不揉在一起。</p>
+    <p><b>⚠ 一个必须写明的口径修正</b>：本报告当时的假设是「真机 <code>torrents/info</code> 比
+      <code>/sync/maindata</code> 新」。W0 真机实测（qB v5.2.3，12 次采样）否掉了它 ——
+      Δ(torrents/info − sync/maindata) = <b>+1 ms</b>，即<b>两端同步</b>；那个约 730 ms 的滞后是
+      <b>qB 命令处理延迟，两端共享</b>（与本报告观测到的 1362 ms 同一现象）。
+      若照原假设实现（默认 1500），默认档会<b>高估</b>"真值直查"的收益。</p>
+    <p>故拆成两个旋钮：<code>--command-latency-ms</code>（默认 <b>750</b> = W0 实测 mean 733 / median 751，
+      对<b>两个端点</b>都延后）+ <code>--maindata-lag-ms</code>（默认 <b>0</b> = W0 实测，maindata 相对 info 的
+      <b>额外</b>滞后）。默认档忠实复现真机；把 <code>--maindata-lag-ms</code> 调大即可做「直查更快」的受控实验。</p>
+    <p><b>红绿双验（关闭凭据）</b>：<code>CORPUS.maindata_lag_modeled</code> —— 两个滞后都为 0 时判据必须转红
+      （否则它没在测滞后，只是恒绿）。单测见 <code>tests/test_sim_corpus.py</code>：
+      <code>test_two_layer_state_info_newer_than_maindata</code>（绿：<code>md-lag=200</code> 时 info 先可见、
+      maindata 后可见）<code>test_two_layer_state_red_without_lag</code>（红验：滞后全 0 时两端同刻可见）。
+      另有 <code>test_two_layer_state_*</code> 断言命令<b>不得直接改流状态</b>（base 只由录制流推进）。</p>
+    <p><b>运行期实测</b>：语料档端到端 <code>verdict OK</code>，
+      <code>CORPUS.maindata_lag_modeled=1 PASS</code>（cmd-latency=750ms / md-lag=0ms）。</p>
     <h3>修复后补充</h3>
-    <p>修完补：实际修法 / 验证方式（lag=0 与 lag=1500 的对照输出）/ <code>sim_run.py</code> 既有场景的回归数字。</p>
+    <p>实际修法与验证方式见上「如何被覆盖」。<code>sim_run.py</code> 既有（合成档）场景的回归：
+      全量单测 1133 → <b>1137 passed</b>，合成档自检与 <code>--source=synthetic</code> 场景行为不变
+      （合成档无 overlay，两端本就同刻，未受影响）。</p>
   </section>
 
   <footer>
