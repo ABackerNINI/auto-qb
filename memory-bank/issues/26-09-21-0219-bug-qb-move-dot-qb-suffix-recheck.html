@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="qb-move-dot-qb-suffix-recheck">
+<meta name="issue-stamp" content="26-09-21-0219">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查">
+<meta name="issue-summary" content="qB 移动种子时偶发追加 .!qB 后缀, 触发重新校验并误判缺文件">
+<title>qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查</h1>
+    <p class="lede">qB 移动种子时偶发追加 .!qB 后缀, 触发重新校验并误判缺文件</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 02:19</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">grouping(缺文件扫描) / rules.actions.transfer</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">用户现场反馈</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>用户在实际运行中反馈:<strong>qBittorrent 移动已完成的种子时, 有概率把磁盘上的文件临时改名为 <code>&lt;原名&gt;.!qB</code></strong>(qB 搬运过程中对未完成/被占用文件加的临时后缀, 搬运结束后才改回原名)。移动动作本身同时会让种子进入「重新校验」流程。</p>
+    <p>在这个窗口内, 本程序的<strong>缺文件磁盘扫描</strong>拿缓存的文件名去 <code>os.path.exists</code>, 磁盘上此时是 <code>xxx.mkv.!qB</code>, 原名的 <code>xxx.mkv</code> 不存在 → 判定「文件缺失」→ 整组暂停 + 打 MISSING 标签(严重时还会连锁触发重新校验动作)。<strong>文件其实存在, 只是带后缀 —— 属于误判。</strong></p>
+    <p>触发条件(均为推测, 未复现验证): 大文件 / 跨盘移动 / Windows 文件被占用(qB 侧 rename 未完成)时概率更高; 与 <code>grouping.check_missing_files</code> 开启直接相关。发现方式: 用户现场反馈, 非测试复现。</p>
+    <p class="hint">补充线索: 移动后 <code>save_path</code> 变化与状态转移会在同一轮分别触发扫描(<code>_handle_save_path_changes</code> + <code>_handle_state_transitions</code>), 组内去重只保证同轮扫一次, 但扫描时机可能正落在 qB 改名窗口内。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p><strong>暂无日志 / 报错原文</strong> —— 本条来自用户 2026-09-21 的现场口述, 未留日志, 也未做复现。认领后第一件事应是补证据: 打开 DEBUG 日志跑一次移动, 抓下面两类输出。</p>
+<pre><code># 取证 2026-09-21 02:19 · 现象描述(用户口述, 非日志原文)
+qB 移动已完成的种子 -> 文件被临时改名为 "原名.!qB"
+                    -> 触发重新校验
+                    -> 本程序判定缺文件 -> 整组暂停 + MISSING 标签
+
+# 期望抓到的日志(grep 关键词, 位置见 04 定位锚点):
+#   "辅种组 | 文件缺失: '<...>/xxx.mkv'"                  <- 会是误判, 磁盘上实为 xxx.mkv.!qB
+#   "辅种组(N个) | 文件丢失, 暂停整组并添加标签 'MISSING'"
+# 旁证: 同一路径下 ls 应能看到 "xxx.mkv.!qB"</code></pre>
+    <p class="hint">⚠ 未复现 = 未证实。后缀成因(qB 自己加 / 移动被打断残留 / 别的机制)目前只能算假设, 不要当结论往下推。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td><code>grouping.enabled</code> + <code>grouping.check_missing_files</code> 开启, 且发生种子移动(<code>move_to</code> 动作 / Web UI 移动 / 外部移动); 文件越大 / 跨盘 / Windows 占用时概率越高。<strong>概率性, 非必现。</strong></td></tr>
+      <tr><td>影响范围</td><td>被误判的<strong>整个辅种组</strong>(不只出问题那一个种子): 全组 <code>torrents_stop</code> 暂停 + 打 <code>missing_tag</code>; 后续轮次会按「已知缺文件」口径放行重下(multi-dl 拦截语义随之改变); 叠加一次无谓的重新校验(大文件 I/O 开销)。</td></tr>
+      <tr><td>严重度</td><td>中偏高 —— 不丢数据, 但会误停健康做种并污染 MISSING 标签, 且误判状态需人工发现才能回滚。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/mixins/grouping.py:211</code>（取证 2026-09-21 02:19）· <code>GroupingMixin._check_missing_files</code> · grep <code>_check_missing_files</code> / <code>文件缺失</code> —— <strong>误判第一现场</strong>: 用缓存的 <code>sizes[rep.hash]</code> 文件名拼 <code>os.path.join(rep.save_path, fname)</code> 后 <code>os.path.exists</code> + <code>getsize</code> 比对; 带 <code>.!qB</code> 后缀时原路径不存在即判 missing。</li>
+      <li><code>src/auto_qb/mixins/grouping.py:65</code>（同上）· <code>_handle_save_path_changes</code> · grep <code>_handle_save_path_changes</code> —— 移动后 save_path 变化触发的扫描入口。</li>
+      <li><code>src/auto_qb/mixins/grouping.py:105</code>（同上）· <code>_handle_state_transitions</code> · grep <code>_handle_state_transitions</code> —— 状态转移(进入 errored / 校验中)触发的扫描入口。</li>
+      <li><code>src/auto_qb/mixins/grouping.py:196</code>（同上）· <code>_valid_for_representative</code> · grep <code>_valid_for_representative</code> —— 代表种筛选(已完成/errored 且未在校验)。</li>
+      <li><code>src/auto_qb/rules/actions/transfer.py:22</code>（同上）· <code>MoveToAction.execute</code> / <code>torrents_set_location</code> · grep <code>move_to</code> —— 本程序发起移动的出口。</li>
+      <li><code>src/auto_qb/mixins/checking.py:16</code>（同上）· <code>check_filelist</code> · grep <code>check_filelist</code> —— 文件存在+大小一致性检查(checking 决策链与缺文件扫描复用), 同一后缀问题可能在这里复现。</li>
+      <li><code>src/auto_qb/config/models.py:85</code>（同上）· <code>check_missing_files</code> · grep <code>check_missing_files</code> —— 总开关, 关闭可绕过但会失去缺文件保护。</li>
+      <li><code>src/auto_qb/web_ui/static/shared/drawer.js:158</code>（同上）· 移动对话框 · grep <code>ico-move</code> / <code>location</code> —— Web UI 手动移动入口(同样会触发)。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查（已排除：无 —— 未做取证，未跑复现）。<br>
+      待验证的假设（<strong>不是结论</strong>）：磁盘扫描的「文件名 → 路径」比对没有考虑 qB 搬运期的 <code>.!qB</code> 临时后缀，也没有对「同名 + 后缀」的过渡态做任何容忍 / 重试 / 等待，于是把过渡态读成永久缺失。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ol>
+      <li><strong>过渡态容忍（首选方向）</strong>: 缺文件扫描命中「原路径不存在」时, 先探测 <code>原路径 + ".!qB"</code> 是否存在; 存在则视为「正在搬运 / 过渡态」, <strong>本轮不判 missing</strong>(跳过或延后一轮再看), 不暂停、不打标签。代价: 真正被 qB 长期残留后缀的极少数情况会被放过一轮。</li>
+      <li><strong>移动后冷却</strong>: 检测到 <code>save_path</code> 变化(移动)后, 该组在 N 轮内不做缺文件判定, 等 qB 搬运与重校验落定。代价: 需要新的按组冷却状态; 真实缺文件会晚 N 轮才报。</li>
+      <li><strong>校验中一律不判</strong>: 把「种子处于 checking / 刚触发 recheck」直接排除出代表种与判定范围(现逻辑只排除 <code>is_checking</code> 的代表种, 未覆盖组内其他成员与过渡态)。代价: 覆盖不全, 建议与 1 搭配。</li>
+    </ol>
+    <p class="hint">无论走哪条, 先补一次带 DEBUG 日志的移动复现, 确认后缀确由 qB 产生、且扫描确实落在改名窗口内 —— 没复现就修容易改错地方(<code>checking.py</code> 与 <code>grouping.py</code> 两条链路都可能踩)。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-21 02:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
