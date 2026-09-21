@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>auto-qb 项目审计调查报告 · 2026-09-21</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1011;
+    --fg: #ecebe8;
+    --muted: #9a9a94;
+    --faint: #6f6f6a;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #4fb6a8;
+    --p1: #e07a6a;
+    --p2: #d9b25f;
+    --p3: #8fa3ad;
+    --code-bg: #151719;
+    --mono: "Cascadia Mono", "Consolas", "Sarasa Mono SC", monospace;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --disp: "Trebuchet MS", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .canvas { max-width: 1140px; margin: 0 auto; padding: 48px 32px 80px; }
+  .layout { display: grid; grid-template-columns: 208px 1fr; gap: 48px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; font-size: 12.5px; }
+  nav.toc .toc-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--faint); text-transform: uppercase; margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--muted); text-decoration: none; padding: 5px 0; border-left: 1px solid transparent; padding-left: 12px; margin-left: -13px; }
+  nav.toc a:hover { color: var(--fg); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); color: var(--faint); margin-right: 8px; }
+  main { min-width: 0; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-family: var(--disp); font-size: 42px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.12; margin-bottom: 18px; }
+  .meta-row { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 2.0; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); padding: 10px 0; margin-bottom: 28px; }
+  .meta-row b { color: var(--fg); font-weight: 500; }
+  .lede { font-size: 16.5px; line-height: 1.7; color: var(--fg); max-width: 72ch; margin-bottom: 12px; }
+  .lede .rate { font-family: var(--mono); color: var(--accent); }
+  h2 { font-family: var(--disp); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 56px 0 6px; padding-top: 18px; border-top: 1px solid var(--hairline-strong); }
+  h2 .sec-no { font-family: var(--mono); font-size: 13px; color: var(--faint); font-weight: 400; margin-right: 14px; letter-spacing: 0; }
+  h3 { font-family: var(--sans); font-size: 16px; font-weight: 600; margin: 30px 0 10px; }
+  p { max-width: 74ch; margin-bottom: 12px; color: var(--fg); }
+  .muted { color: var(--muted); }
+  .faint { color: var(--faint); }
+  small.src { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0 22px; font-size: 13.5px; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); text-align: left; font-weight: 400; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hairline-strong); }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  .grade-row { display: flex; gap: 0; border-top: 1px solid var(--hairline-strong); border-bottom: 1px solid var(--hairline-strong); margin: 22px 0 26px; }
+  .grade-cell { flex: 1; padding: 16px 18px; border-right: 1px solid var(--hairline); }
+  .grade-cell:last-child { border-right: none; }
+  .grade-cell .dim { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .grade-cell .g { font-family: var(--disp); font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin: 4px 0 2px; }
+  .grade-cell .g.overall { color: var(--accent); }
+  .grade-cell .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .finding { border-top: 1px solid var(--hairline); padding: 18px 0 20px; }
+  .finding:first-of-type { border-top: 1px solid var(--hairline-strong); }
+  .f-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .f-id { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+  .f-sev { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; }
+  .f-sev.s1 { color: var(--p1); } .f-sev.s2 { color: var(--p2); } .f-sev.s3 { color: var(--p3); }
+  .f-title { font-size: 15.5px; font-weight: 600; }
+  .f-meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-bottom: 8px; }
+  .f-meta .loc { color: var(--muted); }
+  .finding p, .finding li { font-size: 13.8px; }
+  .finding ul { margin: 0 0 10px 18px; }
+  pre { font-family: var(--mono); font-size: 12px; line-height: 1.55; background: var(--code-bg); border: 1px solid var(--hairline); padding: 12px 14px; overflow-x: auto; color: #c9d1d3; margin: 10px 0 12px; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--code-bg); padding: 1px 5px; border: 1px solid var(--hairline); }
+  pre code { border: none; padding: 0; background: none; }
+  .ok-tag { display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--accent); border: 1px solid var(--hairline); padding: 2px 8px; margin-right: 8px; }
+  .hl-item { border-top: 1px solid var(--hairline); padding: 14px 0; }
+  .hl-item:first-of-type { border-top: 1px solid var(--hairline-strong); }
+  .hl-item .t { font-weight: 600; font-size: 14.5px; margin-bottom: 3px; }
+  .hl-item .d { font-size: 13.5px; color: var(--muted); }
+  .roadmap td:first-child { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+  .foot { margin-top: 64px; border-top: 1px solid var(--hairline-strong); padding-top: 20px; font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 2; }
+  .pangiu { }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav.toc { position: static; display: none; } }
+</style>
+</head>
+<body>
+<div class="canvas">
+<div class="layout">
+<nav class="toc">
+  <div class="toc-title">Contents</div>
+  <a href="#s0"><span class="no">00</span>核心结论与总评</a>
+  <a href="#s1"><span class="no">01</span>方法与执行过程</a>
+  <a href="#s2"><span class="no">02</span>安全与可靠性</a>
+  <a href="#s3"><span class="no">03</span>性能与资源</a>
+  <a href="#s4"><span class="no">04</span>架构与质量</a>
+  <a href="#s5"><span class="no">05</span>修复路线图</a>
+  <a href="#s6"><span class="no">06</span>亮点</a>
+  <a href="#s7"><span class="no">07</span>覆盖缺口与局限</a>
+</nav>
+<main>
+
+<div class="kicker">Engineering Audit · auto-qb · 2026-09-21</div>
+<h1>auto-qb 项目审计调查报告</h1>
+<div class="meta-row">
+  基线 <b>develop @ 01fd595</b>（== origin/develop）&nbsp;·&nbsp; 规模 <b>src/auto_qb ≈ 14,000 行 / 48 文件</b>&nbsp;·&nbsp; tests <b>≈ 22,000 行 / 42 文件</b><br>
+  范围 <b>安全 · 可靠性 · 性能 · 资源 · 架构 · 质量</b>&nbsp;·&nbsp; 方法 <b>三路子代理调查 + 监督者复核补位</b>&nbsp;·&nbsp; 执行 <b>AutoClaw Agent 集群</b>
+</div>
+
+<p class="lede">总体评级 <span class="rate">B</span>。这个项目的安全设计成熟度和工程纪律明显高于同类个人工具：鉴权与路径边界做在标准之上，测试自带系统副作用台账（1,918 条记录 0 越界），性能优化有实测文化。失分集中在四处：一个 926 行的巨型函数、两处条件性安全取舍（passkey 进日志、skip_local_verify 下的 CSRF 面）、表现层对核心域私有方法的渗漏、以及文档 / 版本 / CI 的维护漂移。本次审计发现 <span class="rate">17 项问题（P1 × 1，P2 × 8，P3 × 8），无 P0</span>，另有 8 项核查通过或亮点。</p>
+
+<h2 id="s0"><span class="sec-no">00</span>核心结论与总评</h2>
+
+<div class="grade-row">
+  <div class="grade-cell"><div class="dim">Overall</div><div class="g overall">B</div><div class="note">安全垫足够厚，债务集中在已知位置</div></div>
+  <div class="grade-cell"><div class="dim">Security</div><div class="g">B+</div><div class="note">鉴权 / 路径边界成熟；两个条件性取舍</div></div>
+  <div class="grade-cell"><div class="dim">Reliability</div><div class="g">B+</div><div class="note">原子写 / 守卫到位；崩溃丢窗口属声明固有</div></div>
+  <div class="grade-cell"><div class="dim">Performance</div><div class="g">B+</div><div class="note">实测文化强；大库视图重建是遗留大头</div></div>
+  <div class="grade-cell"><div class="dim">Architecture</div><div class="g">B</div><div class="note">分层清晰；巨型函数与渗漏拉低上限</div></div>
+</div>
+
+<h3>最需要先看的三件事</h3>
+<table>
+  <tr><th style="width:70px">级别</th><th>问题</th><th style="width:34%">为什么现在就该管</th></tr>
+  <tr><td class="num" style="color:var(--p1)">P1</td><td><code>web.py create_app</code> 单函数 926 行（web.py:121）</td><td>鉴权、全部 API 端点、静态挂载、中间件挤在一个函数里——每次改 Web 功能都在最高危的文件里做最危险的合并</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2</td><td>tracker URL（含 passkey）全文进日志（web_commands.py:381/389）</td><td>私站 announce URL 内嵌 passkey，已写入轮转日志并可经 /api/log 读回；日志备份 / 同机进程 / 云同步都是泄露面</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2</td><td>skip_local_verify 开启后无 Origin/Host 校验（web.py:125-145）</td><td>本机浏览器里任意网页可跨站驱动删除 / 暂停 / 限速（写动作已发生）；默认关闭限制了暴露面，但开关一开就是洞</td></tr>
+</table>
+
+<h3>严重级别 × 维度分布</h3>
+<table>
+  <tr><th>维度</th><th>P1</th><th>P2</th><th>P3</th><th>核查通过 / 亮点</th><th>执行方</th></tr>
+  <tr><td>安全与可靠性</td><td class="num">0</td><td class="num">3</td><td class="num">4</td><td class="num">4</td><td>调查 Agent + 监督者补证</td></tr>
+  <tr><td>性能与资源</td><td class="num">0</td><td class="num">1</td><td class="num">2</td><td class="num">4</td><td>监督者结构性补位</td></tr>
+  <tr><td>架构与质量</td><td class="num">1</td><td class="num">4</td><td class="num">2</td><td class="num">2</td><td>半成品实测 + 监督者定向验证</td></tr>
+  <tr><td><b>合计</b></td><td class="num"><b>1</b></td><td class="num"><b>8</b></td><td class="num"><b>8</b></td><td class="num"><b>10</b></td><td></td></tr>
+</table>
+
+<h2 id="s1"><span class="sec-no">01</span>方法与执行过程</h2>
+
+<p>按用户指令采用「三路调查 Agent + 监督者」分工：监督者只做结构分析、派单、复核与汇总，不参与细节调查；三个 Agent 分别负责 <b>安全与可靠性</b>（凭据 / 注入 / Web 鉴权 / 线程安全 / 状态持久化）、<b>性能与资源</b>（主循环节拍 / 增量同步 / 视图重建 / 内存驻留）、<b>架构与质量</b>（分层耦合 / 测试 / 文档一致性 / 可观测性）。</p>
+
+<p class="muted">执行实况需要如实记录：本次 8 次子代理派发（安全 ×3、架构 ×3、性能 ×2）无一完整跑完，全部毁于模型服务基础设施故障（长会话 5–14 分钟后「lost context」或秒级请求失败，无一次与任务内容相关）。有效的 salvage 有三份：安全 Agent 的「先写盘后补内容」策略留下近 10KB 半成品报告（5 个检查点完成 4.5 个）；架构 Agent 的首轮运行留下实测数字（pytest 基线、函数规模、注解覆盖率）与一份 20KB import 依赖图；性能 Agent 两次均在产出前夭折。最终交付 = 半成品 + 监督者逐条交叉复核（每条发现核到 文件:行号）+ 监督者定向补证三项（passkey 泄露线索、yaml/notify 注入面、Facade 渗漏）。</p>
+
+<p class="muted">置信口径：所有发现均给 文件:行号 证据；性能数字凡标「项目实测」者来自项目知识库（memory-bank/activeContext.md）既有测量、本次未独立复测；凡标「推演」者为代码阅读推断。监督者补证或推翻原结论之处在对应条目注明。</p>
+
+<h2 id="s2"><span class="sec-no">02</span>安全与可靠性</h2>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S1-01</span><span class="f-sev s2">P2</span><span class="f-title">skip_local_verify 开启后缺 Origin/Host 校验 → 本机跨站 CSRF / DNS rebinding</span><span class="faint">置信度 中高</span></div>
+  <div class="f-meta"><span class="loc">web.py:125-145（本机放行分支）· web.py:1033-1043（middleware 仅加 Cache-Control）· config/models.py:119（默认 False）</span></div>
+  <p>开关打开时 loopback 连接完全免 token，且不校验 Origin/Referer/Host。用户浏览器里任意网页可对 <code>http://127.0.0.1:port/api/*</code> 发跨站简单请求——不触发预检，删除 / 暂停 / 改限速等<b>写动作照常入队执行</b>（攻击者读不到响应）。无 Host 校验同时意味着 DNS rebinding 可让攻击页面同源读全量数据。</p>
+  <pre><code># web.py:134-138
+if manager.config.web.skip_local_verify and _is_loopback_host(request.client.host ...):
+    ...  # 全文件无 Origin/Referer/Host 校验；无 CORS 中间件、无 CSRF token</code></pre>
+  <p><b>修复建议</b>：开启该开关时校验 <code>Host</code> ∈ {127.0.0.1, localhost, 配置 host}（直接废掉 DNS rebinding），写端点再校验 <code>Origin</code> 为空或同源。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S1-05</span><span class="f-sev s2">P2</span><span class="f-title">tracker URL（含 passkey）全文写入日志，且可经 /api/log 读回</span><span class="faint">置信度 高 · 监督者补证确认</span></div>
+  <div class="f-meta"><span class="loc">mixins/web_commands.py:381、:389（URL 全文入日志）· web.py:893-894（/api/log）· web.py:78（自认知晓密钥份量的注释）</span></div>
+  <p>Web UI 编辑 / 移除 tracker 时把完整 URL 写进 INFO 日志。私站 announce URL 普遍内嵌 passkey（<code>…/announce.php?passkey=…</code>），于是密钥落入轮转日志文件（含 5 份备份）——同机其它进程、日志备份、云同步都是泄露面；/api/log 的消费者虽已持 token（边际风险有限），但日志<b>落盘</b>这件事本身构成泄露面。调查 Agent 中断前抓到该线索，由监督者补证坐实并修正其摘要中「未发现泄露证据」的中间结论。</p>
+  <pre><code># web_commands.py:381
+logger.info(f"WEB UI | 种子 {hash[:8]} 编辑 tracker: {orig_url} -> {new_url}")
+# web_commands.py:389
+logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {url}")</code></pre>
+  <p><b>修复建议</b>：日志输出前对 URL 做 query 脱敏（剥 passkey/token/uuid 类参数，保留 path），单点包一个 <code>sanitize_tracker_url()</code> 即可覆盖两处。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S3-01</span><span class="f-sev s2">P2</span><span class="f-title">state.json 仅在退出时落盘——硬杀 / 断电丢全部去重历史</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">qbmanager.py:443-450（run() 的 finally，全仓唯一常规调用点）· rules/actions/skip_checking.py:238（跳检例外）</span></div>
+  <p><code>save_state()</code> 只挂在主循环 finally：正常退出 / Ctrl+C 能落盘，但 <code>taskkill /F</code>、断电、原生崩溃时 finally 不执行——自上次退出以来所有 <code>record_execution</code> 去重记录丢失，重启后「每天一次 / 每小时一次」窗口失忆，通知与动作类规则重放一遍。跳检去重已单独即时落盘，兜住了最疼的场景。注意：这与黄金法则 3「程序退出时才落盘」的<b>声明一致</b>，属声明的固有丢失面，不是实现违背。</p>
+  <p><b>修复建议</b>：周期性节流落盘（如每 5 分钟或每次 record_execution 后 debounce），复用现成 atomic_write，成本可控。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S1-02</span><span class="f-sev s3">P3</span><span class="f-title">SSE 用 ?token= 查询串兜底鉴权，密钥可进中间层日志</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">web.py:147-154</span></div>
+  <p>EventSource 发不出 Authorization 头，密钥允许走 URL 查询串。泄露面在反向代理 / 隧道场景的访问日志（本项目自身 uvicorn 已压到 warning、无 access log）；浏览器历史基本不涉及（EventSource 不是导航）。比较用 <code>secrets.compare_digest</code>，无时序侧信道。代码注释已自知该取舍。</p>
+  <p><b>修复建议</b>：远程访问场景可改一次性短时 ticket（POST 换 ticket → EventSource 带 ticket），或前端改 fetch + ReadableStream 消费 SSE。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S1-03</span><span class="f-sev s3">P3</span><span class="f-title">/api/config/public 免鉴权暴露「是否处于免鉴权模式」</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">web.py:126-128（显式放行）· web.py:172-175</span></div>
+  <p>登录前可探测本实例是否处于 skip_local_verify 模式——本身不含机密，但等于向潜在攻击者广播「CSRF 面（S1-01）是否开着」。可接受；若收紧，对该端点限 loopback 即可。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S1-04</span><span class="f-sev s3">P3</span><span class="f-title">反代部署在本机时，XFF 头可致本机免鉴权误判</span><span class="faint">置信度 低</span></div>
+  <div class="f-meta"><span class="loc">web.py:84-89（_is_loopback_host）· web.py:1106-1110（uvicorn.Config 未显式关 proxy_headers）</span></div>
+  <p>uvicorn 默认 <code>proxy_headers=True</code> 且信任来自 127.0.0.1 的 X-Forwarded-For。若用户把 auto-qb 反代部署在本机（nginx 监听 loopback 转发外部流量），外部请求经代理到达时 XFF 被采信，<code>request.client.host</code> 可能变为攻击者指定的 127.0.0.1 → 命中本机免鉴权。直接连接（无反代）不受影响：非本机源不采信 XFF，套接字地址不可伪造。</p>
+  <p><b>修复建议</b>：uvicorn.Config 显式 <code>proxy_headers=False</code>（项目自身直连监听，无需反代头），或在文档警告反代场景必须关 skip_local_verify。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">S3-03</span><span class="f-sev s3">P3</span><span class="f-title">results / truth_pending 的跨线程安全依赖「单写者 + GIL」隐式约定</span><span class="faint">置信度 中</span></div>
+  <div class="f-meta"><span class="loc">web_runtime.py:103（view_lock）· :126-155（SSE 订阅）· :514-604（命令与视图）</span></div>
+  <p>核查结论：四视图 + 版本号在同一临界区发布与读取，无撕裂读；SSE 订阅队列独立小锁、无锁序倒置；commands 为线程安全队列。但 <code>results</code> / <code>truth_pending</code> / <code>write_seq</code> 是主循环单写者、Web 线程无锁读——依赖 CPython GIL 的字典读原子性，实践安全但属隐式约定（换解释器或将来出现第二个写者就露馅）。潜在争用：Web 线程持 view_lock 重建全视图时会堵住主循环 publish——是性能争用不是死锁，且有节拍对齐缓解。</p>
+  <p><b>修复建议</b>：在读路径显式注释「单写者 + GIL」假设，防将来被无意破坏。</p>
+</div>
+
+<h3>核查通过（安全侧亮点）</h3>
+<div class="hl-item"><div class="t"><span class="ok-tag">PASS</span>文件系统端点三层防御</div><div class="d">允许根只由服务端快照派生 + realpath 判域 + 逐条子目录防符号链接逃逸；mkdir 单层名校验、幂等、同名文件 409；open-path 只收服务端派生标识、明确拒绝任意路径（web.py:364-528）。边界条件全写在 docstring 里，是全项目安全设计最好的部分。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">PASS</span>state.json 写盘原子性</div><div class="d">atomic_write = 同目录临时文件 → fsync → os.replace（Windows 原子替换），可选保留 .bak（utils.py:53-70、rule_engine.py:59-71）。半截文件 / 磁盘满 / 序列化异常都不会损坏现状。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">PASS</span>反序列化与通知注入面</div><div class="d">YAML 全程 BaseLoader（loaders.py:263、writer.py:53）——无任意对象构造风险，标量全字符串语义与 round-trip 设计自洽；Windows toast 走 PowerShell -EncodedCommand + base64 + XML escape（notify.py:152-162），文本零注入。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">PASS</span>鉴权基线</div><div class="d">全局 Depends(require_token) 覆盖 /api/*，compare_digest 防时序；免鉴权判定基于套接字对端地址而非可伪造头——直接连接下 X-Forwarded-For 不可用于越权。</div></div>
+
+<h2 id="s3"><span class="sec-no">03</span>性能与资源</h2>
+
+<p class="muted">执行口径：本维度由监督者结构性补位（性能 Agent 两次派发均毁于基础设施故障）。以下基于代码结构验证 + 项目知识库既有实测（已标注来源），<b>未做独立压测</b>；推演项已标注。</p>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">P-F1</span><span class="f-sev s2">P2</span><span class="f-title">大库下四视图全量重建是单轮成本大头，追剧视图最重</span><span class="faint">置信度 高（有项目实测）</span></div>
+  <div class="f-meta"><span class="loc">mixins/web_view.py:412 _build_shows_view（140 行全量聚合）· web_runtime.py _publish_locked（唯一重建入口）</span></div>
+  <p>四个视图构建器均为全量重建（按 by_hash 重新聚合），有 rid 门控与活跃窗口门控，但一旦脏了就是整棵重建。项目实测（memory-bank/activeContext.md，2026-09-19，本次未复测）：单轮视图回传 1000 / 3000 / 5000 种子 = <b>143 / 353 / ~550ms</b>；前端大库渲染占主线程 10–17%。已有缓解：轮询按种子量分档（≤1000 → 1.5s / &gt;3000 → 3s）、行窗口化、视图分片回传。剩余痛点集中在追剧视图的全量聚合与浏览器主线程渲染。</p>
+  <p><b>优化建议</b>：追剧视图改增量（只重算 dirty 剧 / 季键），成本中等；前端虚拟滚动已在（ROW_WIN_*），下一步是避免每轮 decoratedGroups 全量重算。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">P-F2</span><span class="f-sev s3">P3</span><span class="f-title">真值直查按 50 hash 分批，大库批量命令的 qB 侧等待是物理下界</span><span class="faint">置信度 高（项目实测）</span></div>
+  <div class="f-meta"><span class="loc">web_runtime.py:59 TRUTH_QUERY_CHUNK=50 · :473-475（分批 torrents_info）</span></div>
+  <p>批量 448 个 hash ≈ 9 次 torrents_info 往返。项目实测（2026-09-20/21）：qB 自身状态翻转要 1.3–1.6s（直查也绕不开），服务端链路已压到 21ms、端到端撤下 2947→85ms（via=receipt）。<b>结论：WebUI 命令链路已无自加延迟，剩余延迟是 qB 的</b>——这条记录在案，防止将来误判回归方向。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">P-F3</span><span class="f-sev s3">P3</span><span class="f-title">SSE 事件队列有界（200）满则丢，依赖轮询兜底</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">web_runtime.py EVENT_QUEUE_MAX=200 · put_nowait 满则丢</span></div>
+  <p>推送风暴（如批量命令 + ver 事件并发）时事件会被静默丢弃；设计上前端轮询与 SSE 赛跑、断线回退轮询，所以丢失不致卡死，但表现为「该推送的更新迟一拍」。可接受；若要收紧，丢弃时计数并周期性记一条 DEBUG 即可观测。</p>
+</div>
+
+<h3>结构与度量（核查通过项）</h3>
+<div class="hl-item"><div class="t"><span class="ok-tag">GOOD</span>增量同步骑在 qB rid 机制上</div><div class="d">apply_sync 只处理变化种子 / 变化字段，端点不可用才降级全量且只告警一次（store.py:81-100）——这是「几乎不给 qB 增加负担」声明的实现根基。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">GOOD</span>主循环空转回归有守卫注释</div><div class="d">2026-09-14 曾因 and 短路导致 2800 tick/s 空转（CPU 打满 + qB 请求放大 5500 倍），修复后在 _wait_next 留下完整回归背景注释与语义锁定（qbmanager.py:72-83）——用文档防回潮的范例。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">GOOD</span>运行期磁盘 IO ≈ 0</div><div class="d">state 仅退出落盘（+ 跳检例外），运行期零状态写盘；日志 5 备份轮转。代价即 S3-01 的崩溃丢窗口，属于同一枚硬币。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">GOOD</span>内存驻留推演无失控点</div><div class="d">TorrentRecord slots 约 70 字段 + _raw，5000 种子推演数十 MB 量级（推断，未实测）；SSE 队列有界、搜索索引按预算增量、tracker 错误预取有 TTL——未发现无界增长结构。</div></div>
+
+<h2 id="s4"><span class="sec-no">04</span>架构与质量</h2>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F1</span><span class="f-sev s1">P1</span><span class="f-title">create_app 单函数 926 行——全项目最大函数坐在最高危文件里</span><span class="faint">置信度 高（AST 实测）</span></div>
+  <div class="f-meta"><span class="loc">web.py:121 create_app（926 行）· 次大：qbmanager.run 154 行 · web_view._build_shows_view 140 行 · 全库 ≥80 行函数共 9 个</span></div>
+  <p>鉴权依赖、全部 API 端点、静态挂载、中间件、uvicorn 启停全部内联在一个工厂函数里。web.py 同时是本项目唯一对外暴露面（web.py 1,143 行，占 src 约 8%）：安全关键逻辑与业务端点纠缠，diff 审查困难，合并冲突高频——它与 S1-01/S1-02/S1-05 三个发现全部发生在同一个文件里并非巧合。</p>
+  <p><b>修复建议</b>：按域拆 Router（torrents / groups / config / fs / events / auth），create_app 收成 &lt;150 行的组装壳；鉴权依赖与安全头中间件独立成模块。这是本报告唯一 P1。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F5</span><span class="f-sev s2">P2</span><span class="f-title">表现层经 self._host 回调核心域私有方法，无 Protocol 约束</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">web_runtime.py:317 self._host._build_search_index() · :479 self._host._state_kind() · :312 refresh_error_reasons()</span></div>
+  <p>2026-09-20 的解耦把表现层状态迁入 WebUIRuntime 门面，方向正确；但门面仍直接调用宿主 QbManager 的<b>私有</b>方法，接口面靠约定不靠类型。表现为：宿主重命名私有方法时门面静默炸（无静态检查），依赖方向声明（表现层 → 核心域单向）只对了一半。</p>
+  <p><b>修复建议</b>：定义一个 <code>HostCapabilities</code> Protocol（写能力 / 视图构建器 / wake），宿主显式实现，门面只认 Protocol——迁移成本低，收益是类型检查与边界文档二合一。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F2</span><span class="f-sev s2">P2</span><span class="f-title">版本号双源且互相矛盾：__version__ 0.2.0 vs pyproject 0.1.0</span><span class="faint">置信度 高（监督者实读确认）</span></div>
+  <div class="f-meta"><span class="loc">src/auto_qb/__init__.py（__version__ = "0.2.0"）· pyproject.toml（version = "0.1.0"）</span></div>
+  <p>Web UI 顶栏透出的版本号来自 <code>__init__.__version__</code>（web.py _app_version），打包元数据来自 pyproject——两者已差一个 minor。将来做发布 / issue 定位时会出现「用户报的版本对不上任何 tag」。</p>
+  <p><b>修复建议</b>：pyproject 单源 + <code>__init__</code> 动态读取（importlib.metadata），或 hatchling 钩子注入，二选一，删掉手写双份。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F3</span><span class="f-sev s2">P2</span><span class="f-title">文档漂移已成系统性：README 用例数、modules.md 行数快照多处失真</span><span class="faint">置信度 高（实测对照）</span></div>
+  <div class="f-meta"><span class="loc">README.md「995 个用例」vs 实测 1098 · memory-bank/modules.md 快照（2026-09-05）vs 现状</span></div>
+  <table>
+    <tr><th>文件</th><th>modules.md 快照</th><th>实测</th><th>漂移</th></tr>
+    <tr><td class="num">web.py</td><td class="num">~380</td><td class="num">1,143</td><td class="num" style="color:var(--p2)">+201%</td></tr>
+    <tr><td class="num">qbapi.py</td><td class="num">217</td><td class="num">372</td><td class="num">+71%</td></tr>
+    <tr><td class="num">utils.py</td><td class="num">334</td><td class="num">487</td><td class="num">+46%</td></tr>
+    <tr><td class="num">web_runtime.py</td><td class="num">451</td><td class="num">604</td><td class="num">+34%</td></tr>
+    <tr><td class="num">cli.py</td><td class="num">90</td><td class="num">122</td><td class="num">+36%</td></tr>
+    <tr><td class="num">tests/</td><td class="num">33 文件</td><td class="num">42 文件</td><td class="num">+9 文件</td></tr>
+  </table>
+  <p>项目有 test_memory_bank.py 守卫知识库结构，但不覆盖数字类事实（用例数 / 行数），于是「文档说一回事、代码是另一回事」静默累积。modules.md 是新人（和 AI 协作者）的导航地图，漂移会直接误导定位。</p>
+  <p><b>修复建议</b>：行数类描述改为「量级 + 截止日期」口径；把「pytest 用例数」写进 testing.md 时用守阵断言（读收集到的用例数与文档声明比对），或干脆从文档中删除易腐数字。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F4</span><span class="f-sev s2">P2</span><span class="f-title">CI 只跑 ubuntu——主力部署平台 Windows 不在矩阵里</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">.github/workflows/ci.yml（runs-on: ubuntu-latest，python 3.12/3.13，coverage 上传）</span></div>
+  <p>项目的 pitfalls 里明确记载过「Windows 全绿 / Linux 全红」的平台差异史（路径分隔符、编码、文件锁行为），而用户实际生产环境是 Windows 桌面（托盘 / 注册表自启 / WinRT 通知全是 Windows 专属路径）。CI 的 ubuntu-only 矩阵拦不住 Windows 回归，这些代码路径只有手动跑测试时才被执行。</p>
+  <p><b>修复建议</b>：matrix 加 <code>windows-latest</code>（tests 全绿是常态，24 秒的套件在 Windows 上也就 1–2 分钟）；托盘 / 通知相关测试若依赖 GUI 可标记 skip 条件。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F6</span><span class="f-sev s3">P3</span><span class="f-title">类型注解覆盖 43%，无 mypy / pyright 配置</span><span class="faint">置信度 高（AST 实测）</span></div>
+  <div class="f-meta"><span class="loc">全库 749 个 def：完整注解 321（43%）· 部分 308（41%）· 无 120（16%）· pyproject 无 mypy/pyright 段</span></div>
+  <p>核心数据层（torrents/、config/）注解质量较好，缺口集中在 mixins 与 web 层。以这个项目的纪律水平，补渐进式类型检查（先 core 后边缘，allowlist 递减）是顺手的事。</p>
+</div>
+
+<div class="finding">
+  <div class="f-head"><span class="f-id">A-F7</span><span class="f-sev s3">P3</span><span class="f-title">新增一个配置键需触碰 4–5 个文件，防漏靠守卫而非结构</span><span class="faint">置信度 高</span></div>
+  <div class="f-meta"><span class="loc">config/models.py（默认值）· config/loaders.py（解析）· config/validation/（校验 + KNOWN 键）· config/schema/（UI 元数据）· config/impact.py（如需特判分级）</span></div>
+  <p>fail-fast 校验与 UI 元数据天然是两套视角，双写不可避免；项目用 test_config_schema.py 守卫（键集合 vs KNOWN_*、插件表 vs registry、kind 形态一致性）闭环了防漏。代价是每次加键的机械成本与文档同步成本——属可接受的取舍，记录在案即可。</p>
+</div>
+
+<h3>核查通过（架构侧亮点）</h3>
+<div class="hl-item"><div class="t"><span class="ok-tag">GOOD</span>依赖方向单向无环成立</div><div class="d">rules/ 不 import qbmanager（base.py:14 仅注释行，RuleContext.manager 刻意为 Any）；torrents/compat 仅依赖 stdlib + errors；view.py 零项目依赖——modules.md 声明的依赖图与代码一致（import 图全量验证，20KB 输出存工作台）。</div></div>
+<div class="hl-item"><div class="t"><span class="ok-tag">GOOD</span>测试基线实测与副作用台账</div><div class="d"><b>1098 passed / 24.46s</b>（uv run pytest tests -q --no-cov，2026-09-21 实测）；tests/sidefx.py 守卫记录全部真实系统副作用 1,918 条、越界 0 条（POPEN 20 / REG 3 / FSDEL 1349 / SYMLINK 136 / BIND 198 / CONNECT 212）——测试套件自带「越界即报」的系统副作用审计，这在个人项目里极为罕见。</div></div>
+
+<h2 id="s5"><span class="sec-no">05</span>修复路线图</h2>
+
+<table class="roadmap">
+  <tr><th style="width:64px">优先级</th><th>动作</th><th style="width:36%">理由 / 验收口径</th></tr>
+  <tr><td class="num" style="color:var(--p1)">P1</td><td>拆分 create_app：按域拆 Router，create_app 收成组装壳；鉴权依赖与安全头中间件独立模块</td><td>唯一 P1；拆完 S1-01/S1-02/S1-05 的修改变成局部改动。验收：create_app &lt; 150 行，测试全绿</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-1</td><td>tracker URL 日志脱敏（sanitize_tracker_url 单点包住 web_commands.py 两处）</td><td>passkey 落盘泄露面；验收：日志 grep 不到 passkey=</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-2</td><td>skip_local_verify 开启时校验 Origin/Host（web.py 放行分支）</td><td>关掉 S1-01 的 CSRF / DNS rebinding 面；验收：跨站 fetch 被 403</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-3</td><td>state.json 周期性节流落盘（复用 atomic_write）</td><td>崩溃丢窗口从「全部」缩到「最近 N 分钟」；验收：kill -9 后重放损失可量化</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-4</td><td>版本单源化（pyproject 唯一来源，__init__ 动态读）</td><td>A-F2；验收：pyproject 与顶栏版本一致</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-5</td><td>CI 加 windows-latest 矩阵</td><td>A-F4；验收：双平台绿灯成为合并门槛</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-6</td><td>文档漂移清扫 + 易腐数字退场（或守阵化）</td><td>A-F3；验收：README / modules.md 与实测零矛盾</td></tr>
+  <tr><td class="num" style="color:var(--p2)">P2-7</td><td>HostCapabilities Protocol 化门面接口</td><td>A-F5；验收：web_runtime 不再出现 self._host._ 私有调用</td></tr>
+  <tr><td class="num" style="color:var(--p3)">P3</td><td>uvicorn proxy_headers=False · SSE ticket 化 · config/public 限 loopback · mypy 渐进接入 · results 单写者假设注释 · 追剧视图增量重建探索 · mkdir 保留名过滤 · state GIL 注释</td><td>低风险改进，随相关模块改动顺路做</td></tr>
+</table>
+
+<h2 id="s6"><span class="sec-no">06</span>亮点</h2>
+<div class="hl-item"><div class="t">测试自带系统副作用台账</div><div class="d">tests/sidefx.py 把测试期间的真实进程 / 注册表 / 文件删除 / symlink / 网络行为全部记账并断言越界为零——把「测试不该碰生产」从纪律变成了可执行断言。</div></div>
+<div class="hl-item"><div class="t">守阵（防回潮）测试文化</div><div class="d">test_memory_bank.py 守知识库结构、test_config_schema.py 守配置双写、test_qbmanager_source_has_no_web_state_fields 守解耦边界、_wait_next 空转回归写成注释锁——用测试与文档把「已付过学费的坑」钉死。</div></div>
+<div class="hl-item"><div class="t">性能实测文化</div><div class="d">主循环、视图回传、真值链路都有带日期的实测数字沉淀在知识库，且结论被真机复核修正过（如「暂停本来就快」被推翻）——本次审计直接复用了这套数据作为基线。</div></div>
+<div class="hl-item"><div class="t">安全边界文档化</div><div class="d">fs 端点的每个边界条件都写在 docstring 里（白名单派生 / realpath 判域 / symlink 防逃逸 / 单层名校验），web.py:78 对密钥份量有自知注释——安全设计是「写给人看的」，不是藏着的。</div></div>
+<div class="hl-item"><div class="t">原子写与降级路径</div><div class="d">state 原子写含 fsync + .bak；sync 降级只告警一次；连「空路径把 tmp 写到 CWD」这种坑都有注释与早暴露——故障路径的完成度与主路径相同。</div></div>
+
+<h2 id="s7"><span class="sec-no">07</span>覆盖缺口与局限</h2>
+<p class="muted">如实列出本次未覆盖或深度受限的面：</p>
+<ul class="muted" style="margin-left:20px; margin-bottom:14px">
+  <li>8 次子代理派发均毁于模型服务基础设施故障（长会话 5–14 分钟中断 / 秒级失败），无一与任务内容相关；安全维度由「Agent 半成品 + 监督者补证」合成，性能维度由监督者结构性补位（未独立压测），架构维度由「半成品实测 + 定向验证」合成。</li>
+  <li>未深查：notify / ui / autostart 模块全量审计（仅验证了 notify 注入面）；前端 15 个片段文件逐个审读（仅架构层评价）；expr 表达式内核求值开销；ReDoS 定量分析（定性为自伤型、P3）。</li>
+  <li>性能数字凡标「项目实测」者引用自项目知识库（activeContext.md 2026-09-19/20/21 条目），本次未复测；标注「推演」者为代码阅读推断。</li>
+  <li>本报告为静态审计（读代码 + 跑测试基线），未连接真实 qB / PT 站，未做模糊测试或动态渗透。</li>
+</ul>
+
+<div class="foot">
+  auto-qb project audit · 2026-09-21 · 基线 develop @ 01fd595<br>
+  方法：三路调查 Agent（安全与可靠性 / 性能与资源 / 架构与质量）+ 监督者复核补位 · AutoClaw Agent 集群<br>
+  工作台留档：.cluster/audit-20260921/（plan.md · structure.md · subagent_01.md · subagent_03.partial-r1.md · review.md · tmp-importgraph.out）
+</div>
+
+</main>
+</div>
+</div>
+</body>
+</html>
