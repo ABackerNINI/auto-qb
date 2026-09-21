@@ -83,6 +83,22 @@
 - **带参数的 computed 是另一条更隐蔽的雷**(2026-09-21, issue 26-09-21-0247): 在 Options API `computed: {` 块里写 `memberWin(list) {…}`, Vue 仍把它当 getter 注册, 模板里 `memberPadTop(g.members)` 触发 `this.memberWin` 被当作属性访问 —— 框架**不会**把 `g.members` 传给 getter(只对 methods 传), 于是 getter 用未定义参数跑完返回一个对象 `{padTop:0,…}`, 然后 `(list)` 把它当函数调 → `this.memberWin is not a function` → 整表白屏(chips / 状态条 / 表头 / 行 全部消失)。坑在编译期不报、lint 阶段单控过、`pytest --passes` 也过 —— 只有能加载页面的脚本里才能复现。**带参的"计算"必须一律放 methods**(放 methods Vue 会把模板里的实参原样透传)。静态守阵见 `tests/test_web.py::test_frontend_member_window_functions_live_in_methods`(定位 `methods:` 与 `computed:` 块边界, 断言 `memberWin` / `memberPadTop` / `memberPadBottom` 定义行落在 methods 之内)。同坑曾因"没人走那条交互路径"长期潜伏, 真机一走就塌 —— 加新成员窗口函数时**先在两套 UI 都跑一遍展开/收起的冒烟**, 不能只看单测。
 - **computed / methods / data 三者不能同名**(共命名空间): 同名后调用方拿到的是属性, 抛错形态同上。
 - **模板里不允许下划线前缀标识符**: Vue 把 `_` 前缀当内部保留域, `{{ _bulkCountText() }}` 抛 `ReferenceError` 且整块渲染失败(控制台只有一行)。对外派生值去掉下划线前缀。
+- **挂件类名错配 ⇒ 整页静默废掉**(2026-09-21 实测, 用户报「输入框缺发光 + 排版竖着」, 真因是这条):
+  CSS 里写 `.hb-page`、HTML 上是 `class="ce-page hub-page"` ⇒ `.hb-page` 选择器**永远不命中任何元素**
+  ⇒ 其上定义的 `--tone` / `--glow` / `--glow-soft` / `--hb-font-mono` 等令牌**从未定义**
+  ⇒ 所有 `var(--tone)` 派生值替换时判为无效 ⇒ **描边回退、发光整条消失、等宽字体也不生效**
+  (剩下字体 fallback 救命, 所以看着还像那么回事)。
+  同一波里 `.hb-wrap` 漏写 `width: 100%` 也踩了一脚: 它是 `.ce-page`(flex column)下的 flex item,
+  用了 `margin: 0 auto` 之后 `align-self: stretch` 就不再拉伸(规范里 auto 外边距优先)
+  ⇒ 宽度退化成 fit-content ⇒ 实测只 **484px** ⇒ 卡片网格 `auto-fill minmax(272px)` 只排得下 1 列,
+  **表现为「竖着排」**。两层毛病叠一起, 读起来就是"版式没做对"。
+  **关键**: 这类错误**没有运行时报错**, 靠真浏览器量 computedStyle / boundingBox 才看得出来,
+  静态检查天然看不见 ⇒ 必须机检。
+  **守阵** `tests/test_web.py` 的 `_scan_page_class_wiring`(挂在 `test_frontend_static_bundle_health`
+  第 11 项): 扫每张 index.html 的 `<main class="...">` 里出现的挂件类名(白名单
+  `_PAGE_HOOK_CLASSES` = hub-page / ce-page / layout), 若在任何 CSS(shared/* + 各 *.css)里都找不到
+  对应 `.X {` 规则就红; 已把 `.hub-page` 临时改回 `.hb-page` **红验**过(两套 UI 同时报警)。
+  新增挂件类时同步更新白名单。
 - **SVG 属性大小写敏感**: 静态写 `viewBox` / `pathLength` 会被模板编译器小写成 `viewbox` ⇒ 浏览器忽略、内容溢出容器。必须 `v-bind="{ viewBox: ... }"` / `v-bind="{ pathLength: 1000 }"`。
 - **内联 SVG 只有 `width:100%; height:auto` 会退化成 150px**(无固有尺寸的替换元素) → CSS 显式 `aspect-ratio: <viewBox 宽高比>`。
 - **图标一律走 index.html 的 sprite**(`<use href="#i-*">`, 无外部图标库 / 网络依赖): 新增图标只在 sprite 加一个 `<symbol>`; 各 symbol 的 viewBox 可以不同(按 symbol 自身映射, 使用处不必改)。
