@@ -331,6 +331,11 @@
     第二次加了 `GIT_SEQUENCE_EDITOR=:` + `GIT_EDITOR=:` + `-c rebase.autosquash=false` 仍以 **SIGTERM** 收场,
     `.git` 只剩 `COMMIT_EDITMSG` 与 `FETCH_HEAD`。
   - **判别法**: 只要 rebase 报 `could not mark as interactive`, **立刻停手, 别重试**。
+  - **2026-09-22 第三次实测(形态不同)**: `git rebase FETCH_HEAD` 报 `fatal: unable to read tree <刚提交的 sha>`,
+    随后 `HEAD` 变 `bad object`、`git status` 直接 `fatal` —— 现场是 **`.git/objects/<新提交前两位>/` 整个目录不存在**
+    (本次 `objects/83/`), 而 `refs/heads/develop` 内容与 `.git/rebase-merge/` 都还在 ⇒ 拦截层删的是"刚写入的
+    **对象**", 与 09-21 那两次(删 `refs/heads/` 整目录)**不是同一种形态**。⇒ 判别法要放宽:
+    **只要 rebase 后 HEAD 读不出来, 就是对象被删了, 别再试第二条 rebase 命令**。
   - **本 shell 的可用替代(线性历史, 不碰 merge / rebase 机制)**: ① 先 `cp -a .git <备份>`;
     ② `git reset --mixed <远端 tip>`(HEAD 落到远端、索引随远端, 工作区不动);
     ③ `git checkout -- <远端那次提交新增或改过、而本地工作区还是旧版的文件>` —— **不做这步会把别人的新增
@@ -339,6 +344,14 @@
   - **通用教训**: 与上一条是同一个模式 —— 本工具 shell 里**任何会走 git 内部临时目录 / stash 机制的
     历史整合操作(merge / rebase / stash)都可能被删除拦截层顺手清掉 `.git`**。
     `fetch` / `add` / `commit` / `reset` / `push` 实测安全; 涉及历史整合的优先让用户在自己终端做。
+  - ❗**与 `my-commit-flow` skill 的建议冲突时, 以本机事实为准**(2026-09-22 第三次就是照 skill 踩的):
+    skill 的《最常见组合》节写"落后 + 脏 ⇒ **先提交 → rebase → 推送**", 这条对**普通环境**是对的, 但
+    **本环境下 rebase 这一步必炸**(见上) —— skill 是**跨项目通用资产**, conventions 规定不得往里写
+    本仓库事实, 所以这个冲突永远不会在 skill 里被提示 ⇒ **执行者自己要在跑 rebase 前先看本条**。
+    **本环境可用顺序(2026-09-22 实测全程零 rebase)**: ① `cp -a .git <备份>`; ② 把改动文件复制出仓外;
+    ③ `git checkout -- <改动文件>` 让工作区干净; ④ `git merge --ff-only <远端 sha>` **快进**到远端;
+    ⑤ 把改动施回(与远端同改的文件手工合并, 其余直接覆盖); ⑥ 闸门 → 提交 → 推送(快进)。
+    ⇒ 关键是把"**先同步远端、后提交**", 这样推送时本地领先而远端未变, 根本不需要历史整合。
   - **事故恢复**: 恢复成本取决于有没有 `cp -a .git` 备份。本次两次都靠 rebase 前的备份 30 秒复原
     (`HEAD` 与全部 10 个文件对象逐一 `cat-file -s` 校验通过)。**所以"高风险 git 操作前先备份 .git"这条不是形式主义。**
   - 事故后补救: ①被删对象基本都在**回收站**(`$I` 偏移 16-24 是 FILETIME **UTC**, 偏移 28 起是 UTF-16LE 原始路径; 内容在同名 `$R`); ②**还原后必须先删掉被一起还原的陈旧 `*.lock`**(`index.lock`/`HEAD.lock`/`AUTO_MERGE.lock`/`packed-refs.lock`/`objects/maintenance.lock`), 否则任何 git 命令都报 `Unable to create '.git/index.lock'`; ③工作区文件成片消失但 HEAD 里还在 ⇒ `git checkout -- <file>`; ④收尾 `git fsck --no-progress` 确认 0 broken link。

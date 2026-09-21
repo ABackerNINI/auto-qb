@@ -73,7 +73,8 @@ yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: fa
 > **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆** (各自完整的 `.git`), 不再共享对象库 —— 一处出事不波及他人; 代价是每个 clone 各自备份自己的 `.git`, 跨 clone 同步一律走 Gitee `develop` (不直接在本地互 merge 别人的分支)。协作细则见 [conventions.md](memory-bank/conventions.md)「协作约定」。
 
 - **禁止在工具 shell 跑「非快进合并 + 工作区脏」**: 记死 **非快进 + 脏 = 必炸** —— git 2.55 非快进合并时无条件调 `git stash create`, 工作区脏就真写对象, 删除拦截层顺着这次写入把 `.git/objects` 批量删进回收站, 表现为 `fatal: <oid> is not a valid object` 并导致对象库大面积损坏 (2026-09-19 事故, 详见 [pitfalls](memory-bank/pitfalls.md))。
-- **唯一可靠规避: 合并前先把工作区弄干净** (先提交, 或把改动移出去)。同理避免在工具 shell 跑 `git stash` / `git rebase` / `git checkout` (脏工作区时); 高风险 git 操作请让用户在自己的终端执行, 操作前先 `cp -a .git <备份路径>`。
+- **唯一可靠规避: 合并前先把工作区弄干净** (先提交, 或把改动移出去)。同理避免在工具 shell 跑 `git stash` / `git checkout` (脏工作区时) —— **`git rebase` 不看脏不脏, 一律禁用** (见下条); 高风险 git 操作请让用户在自己的终端执行, 操作前先 `cp -a .git <备份路径>`。
+- 🔴 **AI 工具 shell 禁用 `git rebase`** (WorkBuddy / WorkBuddy-AI / CodeBuddy, 2026-09-22 起): 已炸 3 次, 且**工作区干净也照炸** —— 拦截层删掉刚写入的对象 ⇒ `bad object HEAD`。落后主线改走「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。详见 [pitfalls](memory-bank/pitfalls.md)「`git rebase` 在本工具 shell 里同样会毁 `.git`」条; 与 my-commit-flow skill 的「先提交 → rebase → 推送」冲突时**以本条为准** (skill 是通用资产, 不写本仓库事实)。
 - **提交后必查 ref**: ref 更新可能被拦截层静默丢弃 —— 必须核对 `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `my-commit-flow/scripts/verify_ref.py` 并按它打印的步骤修。**不要只看 commit 输出**。
 - 机检与停手点一律走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md) (预检自动查落后 / 脏工作区 / 红线文件 / staged 暴增; rebase 与 push 仍由执行者按判据手动跑)。
 
