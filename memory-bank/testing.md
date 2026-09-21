@@ -6,7 +6,13 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1111 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+# 基线: **1128 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-21 实测;
+#   ↑ 1111 → 1128(语料回放批次 W3 +17: `tests/test_sim_corpus.py` —— FS mock 的拦截/作用域/长路径前缀与大小写/
+#     未知路径计数/disk_usage 用录制值; **静态守阵 CORPUS.fs_mock_coverage + 红验**(把探测换成 pathlib 必须红);
+#     窗口合并净额(先增后删 / 先删后加 / server_state merge / tags 按序末事件); piece hash 按内容集合派生
+#     (同组共享 ⇒ 严格模式判据不恒假); 两层状态模型(**info 先可见 / maindata 后可见 + 无滞后时的红验**);
+#     <FSROOT> 占位符解析; aborted 语料必须拒绝回放; 站点标签取"最专有"者)。
+#   ⚠ 该批改 `scripts/` 四个文件 + `src/` **零改动**(归组纯函数那处已在上一批入库), 既有 1111 条全部原样通过。
 #   ↑ 1098 → 1111(语料抓取批次 +13: `tests/test_qb_capture.py` +12 —— 脱敏等长/保形/保扩展名/
 #     单射与确定性/短标签碰撞重派生/真实标签集零碰撞/路径三条等价类边界/v1v2 infohash 形状/
 #     分组守恒绿 + **两道红验**(大小写被归一必须红、多成员组改一个成员路径必须红)/流累积器语义

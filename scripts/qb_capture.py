@@ -900,9 +900,15 @@ class Capture:
             san.infohash(h): [dict(t, url=san.tracker_url(t.get("url", ""))) for t in v]
             for h, v in self.trackers_map.items()
         }
-        # 磁盘探测表同样按假 hash 重键(否则语料里残留真实 hash)
+        # 磁盘探测表同样按假 hash 重键, 且**内层相对路径也要伪名化**
+        # ❗只重外层 hash 是不够的: 内层 key 是真实文件名, 会把真机资源名原样漏进语料
+        #   (实测漏过一次: disk.json.gz 里全是未脱敏的中文资源名)。故内层走与 files 同一套
+        #   `san.name(path_normalize(...))`, 保证与 files.json 的 name 逐字一致(回放端要按它对表)。
         if self.disk_map:
-            self.disk_map = {san.infohash(h): v for h, v in self.disk_map.items()}
+            self.disk_map = {
+                san.infohash(h): {san.name(utils.path_normalize(rel)): v for rel, v in d.items()}
+                for h, d in self.disk_map.items()
+            }
         if self.peers_map:
             self.peers_map = {san.infohash(h): v for h, v in self.peers_map.items()}
 
@@ -1167,11 +1173,23 @@ class Capture:
         # 5. 流级脱敏一致性: 流中每个 hash 都能在 files/trackers 找到; tracker 域名都在映射表内
         stream_hashes = {h for f in stream for h in (f.get("torrents") or {})}
         unknown_files = sorted(stream_hashes - set(self.files_map))
+        # ❗磁盘表的内层相对路径必须与 files 的 name 逐字一致 —— 它是最容易漏脱敏的一处
+        # (外层 hash 换了, 内层还是真实文件名, 且藏在 .gz 里, 凭据扫描扫不到)
+        disk_orphans = []
+        if self.disk_map:
+            for h, d in self.disk_map.items():
+                names = {utils.path_normalize(f["name"]) for f in (self.files_map.get(h) or [])}
+                for rel in d:
+                    if rel not in names:
+                        disk_orphans.append(f"{h[:12]}:{rel[:40]}")
+                        break
         res["sanitize_stream_consistent"] = {
-            "ok": not unknown_files,
+            "ok": not unknown_files and not disk_orphans,
             "hashes_in_stream": len(stream_hashes),
             "missing_files_entry": unknown_files[:5],
             "missing_files_count": len(unknown_files),
+            "disk_rel_not_in_files": disk_orphans[:5],
+            "disk_rel_orphan_count": len(disk_orphans),
         }
         # 6. 凭据泄漏扫描(计划 §05 / P2-3): 明文产物里不得出现用户名/密码/真实路径前缀
         creds = [c for c in (self.args.password, self.args.user) if c]

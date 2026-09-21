@@ -47,7 +47,27 @@
     W3 的模型据此改成两个独立旋钮(见 pitfalls 与任务档案), 并保留计划要求的红验。
   - **待用户确认**: R 盘(Arsenal Image Mounter 虚拟盘)是否镜像文件后端(持久)。
 
-  ### W1/W2 已实施(本轮, 未提交)
+  ### W3 已实施(本轮)
+  - 新增 `scripts/sim_fsmock.py`(进程内 FS mock: 拦 `os.path.exists`/`os.path.getsize`/`shutil.disk_usage`,
+    **按路径前缀限定**、剥 `\\?\` + 大小写不敏感、时间源归播放器)+ `tests/test_sim_corpus.py`(17 条)。
+  - `sim_qb.py` 语料档: `--source=corpus:<dir>` / `--fs-mode` / `--fs-root` / `--command-latency-ms` /
+    `--maindata-lag-ms` / `--replay-speed` / `--latency-mode`; 补齐 `sync/torrentPeers` / `torrents/export` /
+    `torrents/pieceHashes` / `_fsmock/state` 四个路由; `CorpusSource` / `merge_window` / `piece_hashes_of` /
+    `corpus_tracker_section`(按语料派生 tracker 段, 否则站点匹配全落空)。
+  - `sim_run.py` 透传 + 用**环境变量**注入 FS mock(不占 argv)。`sim_autoqb.py` 在 `import auto_qb.cli` **之前**装 mock。
+  - **端到端**: `sim_run.py --source=corpus:<dir>` → **verdict OK**(87 种子 / 15 帧 / 63 组 / 0 物化文件,
+    17 轮 sync、漂移 0.578s、0 traceback); mock 表 = 1239 exists / 9441 missing(与 W0 真机一致)。
+  - 守阵: **`CORPUS.fs_mock_coverage` 静态守阵 + 红验**(换 pathlib 必红)、**两层状态模型红验**(滞后全 0 ⇒ 两端同刻)。
+  - **修掉两个真 bug**: ①`disk.json.gz` 内层相对路径从未脱敏(隐私 P0, 真实资源名漏进语料)
+    ②`disk_table()` 没读 disk.json ⇒ 退化成"全部存在", 抹掉 9673 个缺失样本(D4 假绿)。
+  - 测试 1111 → **1128 passed**(+17, 0 退化); 合成档对照未被破坏。
+  - ⚠ 一处越界已按 scope-guard"阻塞"例外处理: `sim_qb.main()` 的 `prune_runs(root,…)` 用了未定义的 `root`
+    (自 `1703abf` 起既有, 只影响独立运行的收尾清理), 挡在 W3 验收路径上故改成 `args.root` —— **如不认同, 回退这一个词**。
+
+  **下一步 = W4**: 时间轴回放 —— 把 `merge_window` 接到回放游标上(按 `--replay-speed` 推进 + `--latency-mode` 注入录到的 rtt)。
+  **W5/W6 未开工**。
+
+  ### W1/W2 已实施(上一批, 已入库)
   - 新增 `scripts/qb_capture.py`(capture / snapshot / record / self-test)+ `tests/test_qb_capture.py`(12 条)。
   - `src/auto_qb/mixins/grouping.py` 抽出 `group_key_of()`(唯一 src 改动)+ `tests/test_grouping.py` 守阵 1 条。
   - 端到端真机跑通: 6 项自检**全 PASS**(字段完整性 / 映射单射 / **分组守恒** / 首尾闭合 / 流级脱敏一致 / 无凭据泄漏),
@@ -56,10 +76,9 @@
     (第一次写这两条时**判据是空壳**, 红验把它抓出来了 —— 见 pitfalls。)
   - 测试基线 1098 → **1111 passed**(+13, 0 退化)。
 
-  **下一步 = W3**: `sim_qb.py --source=corpus:<dir>` + `--fs-mode=mock` + 新增 `scripts/sim_fsmock.py`
-  (注入 `sim_autoqb.py`) + 补 `sync/torrentPeers` / `torrents/export` / `torrents/pieceHashes` 三个缺失路由
-  + 两层状态模型(`--maindata-lag-ms` / `--command-latency-ms`) + `sim_run.py` 透传。
-  ⚠ W2 验收已过(守恒 + 零碰撞 + 盐不落盘 + 产物带 .gitignore), 可以进 W3。
+  **下一步 = W4**(W3 见上): 时间轴回放 —— 把 `merge_window` 接到回放游标上
+  (按 `--replay-speed` 推进 + `--latency-mode` 注入录到的 rtt)。W5/W6 未开工。
+  ⚠ W3 验收已过(静态回放端到端 verdict OK + 两道守阵红验通过), 可以进 W4。
 
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
   [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)

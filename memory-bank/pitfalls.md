@@ -251,11 +251,41 @@
   分区结构不变 ⇒ 判据照样绿, 于是红验自己成了假证据。必须改**多成员组**里的成员。
   (这两条是同一个教训: **判据第一次写出来是空壳, 是红验把它抓出来的** —— 见"反向对照必做"。)
 - **`--probe-fs` 这类 `on/off` 字符串参数不能直接 `if args.x`**: `"off"` 是**真值** ⇒ 默认档会静默打开磁盘探测。
+- **脱敏要连"藏在 .gz 里的第二层 key"一起做**: `disk.json` 的外层 hash 换了、**内层相对路径还是真实文件名**
+  ⇒ 真机资源名原样漏进语料, 而"凭据串扫描"与"hash 一致性自检"**都发现不了**(一个扫明文、一个只看 hash)。
+  判别法: 凡是"以文件名/路径为 key"的旁产物, 都要单独问一句"它的 key 过映射了吗"。
+  ⇒ 并加一条结构性自检: **旁产物里的每个 rel 都必须能在主产物里找到同名条目**(语料 W3 已加)。
+- **窗口合并必须按序推进, 不能做集合净额**: 先增后删与先删后加结果完全不同。
+  `torrents` 要"逐 hash 后写覆盖 + 删除即刻生效"; `torrents_removed` 只在"删了且末态确实不在"时报
+  (先删后加不得报, 否则客户端会误删); `tags`/`categories` 同理按**最后一次事件**为准。
+  写成 `adds - removes` 那种集合运算, 会把"窗口内加了又删"的标签既不算 add 也不算 removed ⇒ 该删的没删掉。
+- **`getattr(args, "x", 默认值)` 的默认值只在属性缺失时生效**: argparse 给了 `default=""` 时属性**存在且为空串**,
+  `getattr` 直接返回 `""`, 那个"默认值"永远不会用上。⇒ 用 `args.x or 默认值` 显式兜底。
+- **Bash heredoc 往 Python 里写"反斜杠转义"会被路径归一化层改成正斜杠**(本工具环境实测):
+  写 `\n` 进文件, 落盘可能变成 `/n` 或 `//n`, 生成物里就出现字面量 `\n`。
+  **规避: 多行内容用三引号 + 真实换行**(`f"""..."""`), 完全不用转义序列; 或用编辑工具逐行改, 别走 heredoc。
 
 ## ⚠️ Git / 提交推送纪律
 
 - **❗「非快进合并 + 工作区脏」会删掉整个 `.git` 对象库**(重大事故): git 2.55 在**非快进合并**时**无条件**调 `git stash create`, 工作区脏就要真写 stash 对象, 而工具环境的删除拦截层会顺着这次写入把 `.git/objects/**` **批量删进回收站**(git 原生 unlink 绝不会走回收站)。实测矩阵: 非快进 + 干净 = 安全; 非快进 + 脏 = **必炸**(关沙箱 / 换 git / `merge.autoStash=false` 都无效); 快进 + 脏 = 安全。
   - **唯一可靠规避: 合并前先把工作区弄干净**(先提交, 或把改动移出仓库); 高风险 git 操作前 `cp -a .git <备份>`。**记不住细节就记这句: 非快进 + 脏 = 必炸。**
+- **❗❗ `git rebase` 在本工具 shell 里同样会毁 `.git`, 而且「干净工作区」也照毁**(2026-09-21 实测, 连续两次):
+  - **根因**: 本机 git config 里有 **`rebase.autosquash=true`** ⇒ 每次 rebase 都被当成**交互式** rebase 起
+    sequencer, 而 `core.editor` 指向 `code --wait` ⇒ 第一次报 `error: could not mark as interactive:
+    No such file or directory`, 事后 `.git/refs/heads/` 整个目录 + `.git/logs/` 被删、当前提交对象也没了;
+    第二次加了 `GIT_SEQUENCE_EDITOR=:` + `GIT_EDITOR=:` + `-c rebase.autosquash=false` 仍以 **SIGTERM** 收场,
+    `.git` 只剩 `COMMIT_EDITMSG` 与 `FETCH_HEAD`。
+  - **判别法**: 只要 rebase 报 `could not mark as interactive`, **立刻停手, 别重试**。
+  - **本 shell 的可用替代(线性历史, 不碰 merge / rebase 机制)**: ① 先 `cp -a .git <备份>`;
+    ② `git reset --mixed <远端 tip>`(HEAD 落到远端、索引随远端, 工作区不动);
+    ③ `git checkout -- <远端那次提交新增或改过、而本地工作区还是旧版的文件>` —— **不做这步会把别人的新增
+    当成"删除"提交进去**; ④ 手工把双方对同一文件的编辑合并; ⑤ `git commit`(父即远端 tip)⇒ 可快进推送。
+    ⚠ `reset --soft` **不能用**: 索引会保持"我的整棵树", 相对新 base 会把别人新增的文件算成删除。
+  - **通用教训**: 与上一条是同一个模式 —— 本工具 shell 里**任何会走 git 内部临时目录 / stash 机制的
+    历史整合操作(merge / rebase / stash)都可能被删除拦截层顺手清掉 `.git`**。
+    `fetch` / `add` / `commit` / `reset` / `push` 实测安全; 涉及历史整合的优先让用户在自己终端做。
+  - **事故恢复**: 恢复成本取决于有没有 `cp -a .git` 备份。本次两次都靠 rebase 前的备份 30 秒复原
+    (`HEAD` 与全部 10 个文件对象逐一 `cat-file -s` 校验通过)。**所以"高风险 git 操作前先备份 .git"这条不是形式主义。**
   - 事故后补救: ①被删对象基本都在**回收站**(`$I` 偏移 16-24 是 FILETIME **UTC**, 偏移 28 起是 UTF-16LE 原始路径; 内容在同名 `$R`); ②**还原后必须先删掉被一起还原的陈旧 `*.lock`**(`index.lock`/`HEAD.lock`/`AUTO_MERGE.lock`/`packed-refs.lock`/`objects/maintenance.lock`), 否则任何 git 命令都报 `Unable to create '.git/index.lock'`; ③工作区文件成片消失但 HEAD 里还在 ⇒ `git checkout -- <file>`; ④收尾 `git fsck --no-progress` 确认 0 broken link。
 - **提交后必查 ref 三处: `HEAD` == `refs/heads/<branch>` == packed-refs**(用 `my-commit-flow/scripts/verify_ref.py`)。只看 commit 输出会被骗。
   - **「分支 ref 被回退」判别法**: 提交后 `git status` 突然冒出成百上千 staged ⇒ **先别急着 stage/commit**, 用 `git write-tree` 对比 `git rev-parse <刚才的提交>^{tree}` —— 一致说明工作区 / 索引完好, 只是分支指针被回退了, **改动一个字都没丢**。处置: `git format-patch -1 <sha> --stdout > 备份.patch` + `git update-ref refs/heads/tmp-xxx <sha>` 建锚点防 GC, 再 `git reset --soft <sha>`。**不要**用 `git add -A` 去"解决"那批 staged。
@@ -279,7 +309,8 @@
 , 再 `write(newline="")` 落盘就只剩 LF —— `git diff` 仍只显示你改的那几行(索引存 LF, 归一化后看不出来), 但字节层面整份文件的行尾都被改了。修法: 改 html/css/md 一律**按字节读写**(`open(p,"rb")` + `bytes.replace`), 或写回时补 `.replace(b"
 ", b"
 ")`; 复核用 `b.count(b"
-")` —— git bash 里 `grep -c $'' file` 会给假结果(实测计数等于总行数), 别信。
+")` —— git bash 里 `grep -c $'
+' file` 会给假结果(实测计数等于总行数), 别信。
 - **`core.autocrlf=true` 下编辑会归一整文件行尾**(单文件 diff 从 23 行变 1431 行): 不是损坏, 但提交信息要写明"行尾归一"。
 - **多行文本替换在"多处同型块"上会错位吞行**(工具仍返回成功, 产出 `</p>note warn">` 这类语法垃圾): oldString 扩到含前后**不重复**的上下文; 改完做**标签配对计数**; 已损坏就 `git checkout -- <file>` 回滚重做, 不要就地缝补。
 - **双 UI 镜像首选"以一方模板为基线重建"再回填专有部分**(实测 86% 同构), 重建后做静态 class 覆盖检查。`keep/*` 孤儿标签是**留档**不是待合并分支; 判这类线要不要合: `git merge-base --is-ancestor <关键重构提交> <旧线>` —— 不含关键重构就应**重放**; 重放提交时必须**逐文件核验**, 判定"跳过"的要写明理由并登记缺口(整文件跳过会造成"CSS 已入库但模板没切"的两不管缺口)。

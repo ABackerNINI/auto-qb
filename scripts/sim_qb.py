@@ -20,6 +20,8 @@
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import random
@@ -197,6 +199,220 @@ def make_torrent(
     }
 
 
+# ---------- 语料回放 (计划 26-09-21-0024 §06/§07/§08) ----------
+#
+# 语料 = 一条原始流(首帧即 T0 / 末帧必是一份全量) + 流里没有的按 hash 元数据(files/trackers)
+#        + 真值分组(groups.json)。回放端退化成"按时间轴吐帧的播放器": 每帧都是 qB 响应整帧原样,
+#        不重建响应、不自己维护脏集合 ⇒ 零语义转换 = 零失真。
+
+FSROOT_PLACEHOLDER = "<FSROOT>"
+
+
+def resolve_fsroot(text, fs_root: str) -> str:
+    """把语料里的 `<FSROOT>` 占位符换成真实的 --fs-root(计划 §12: 目录参数化, 不写死路径)"""
+    if not isinstance(text, str) or FSROOT_PLACEHOLDER not in text:
+        return text
+    return text.replace(FSROOT_PLACEHOLDER, fs_root.replace("\\", "/"))
+
+
+def piece_hashes_of(rel_sizes: list[tuple[str, int]], pieces: int = 8) -> list[str]:
+    """由「排序后的(相对路径 + 大小)集合」**确定性派生** piece hash(计划 §09 修订)。
+
+    为什么不能按 hash 各自随机合成: `rules/actions/checking.py:145-154` 的严格模式是把候选与目标的
+    piece hash 列表**逐项比对**; 真实世界里辅种组成员的 piece hash 必须相同(同文件、同大小、同分块)。
+    若各自随机, 同组成员会互不相等 ⇒ 严格模式判据**恒假**(比不测更糟: 会给出"没有候选通过"的错误结论)。
+    按内容集合派生则同组成员天然共享同一列表, 与真机语义一致。
+    """
+    seed = repr(sorted(rel_sizes)).encode("utf-8")
+    out = []
+    for i in range(pieces):
+        h = hashlib.sha1(seed + i.to_bytes(4, "big")).hexdigest()
+        out.append(h[:40])
+    return out
+
+
+def minimal_bencode(name: str, size: int) -> bytes:
+    """torrents/export 的最小合法 bencode(单文件 info dict + announce)"""
+    info = f"d6:lengthi{size}e4:name{len(name)}:{name}12:piece lengthi262144ee".encode("utf-8")
+    return b"d8:announce26:http://site-1.example/ann4:info" + info + b"e"
+
+
+def merge_window(frames: list[dict]) -> dict:
+    """把窗口内的多帧合并成"这一拍的状态"(计划 §08 窗口合并语义)。
+
+    ❗语义必须与 store 自己对齐, 否则 D 系列(删除 / 重复投递 / 幂等)判据会因**合并错误**而假红或假绿,
+    且极难归因(看起来像 auto-qb 的 bug)。规则:
+      · torrents          —— 逐 hash **后写覆盖**(窗口内先改再改回, 取末值)
+      · torrents_removed  —— 与 torrents 做**净额判定**(以窗口末态为准: 先删后加 => 净额是"加")
+      · categories/tags   —— 同理(增删净额)
+      · server_state      —— 仍是 **merge**(与 store.py:111-118 同款)
+    """
+    out: dict = {
+        "torrents": {},
+        "torrents_removed": [],
+        "tags": [],
+        "tags_removed": [],
+        "categories": {},
+        "categories_removed": [],
+        "server_state": {}
+    }
+    if not frames:
+        return out
+    # ❗必须**按序**推进, 不能只做集合运算: 先增后删与先删后加的结果完全不同
+    state: dict[str, dict] = {}
+    removed_seq: list[str] = []
+    tag_add: list[str] = []
+    tag_del: list[str] = []
+    cat_set: dict = {}
+    cat_del: list[str] = []
+    for f in frames:
+        if f.get("full_update"):
+            # 全量轮 = 基线重置: 之前的增删序列不再有参考意义(客户端会整包替换)
+            state = {h: dict(v) for h, v in (f.get("torrents") or {}).items()}
+            removed_seq = []
+            tag_add, tag_del = [], []
+            cat_set, cat_del = dict(f.get("categories") or {}), []
+        else:
+            for h, patch in (f.get("torrents") or {}).items():
+                state[h] = {**state.get(h, {}), **patch}
+            for h in f.get("torrents_removed") or []:
+                state.pop(h, None)  # 按序: 删除即刻生效, 之后若再被新增会重新进 state
+                removed_seq.append(h)
+            tag_add.extend(f.get("tags") or [])
+            tag_del.extend(f.get("tags_removed") or [])
+            cat_set.update(f.get("categories") or {})
+            cat_del.extend(f.get("categories_removed") or [])
+        ss = f.get("server_state")
+        if isinstance(ss, dict):
+            out["server_state"] = {**out["server_state"], **ss}
+    out["torrents"] = state
+    # 净额: 只在"删了且末态确实不在"时才报 removed(先删后加 => 不报, 否则客户端会误删)
+    out["torrents_removed"] = [h for h in dict.fromkeys(removed_seq) if h not in state]
+    # tags/categories 同样按序: **最后一次事件为准**(先加后删 => 报 removed; 先删后加 => 报 add)。
+    # 不这么做的话"窗口内加了又删"的标签会既不报 add 也不报 removed, 而客户端可能本来就持有它
+    # => 该删的没删掉(欠报比过报危险: 过报一个 removed 对客户端只是 discard 不存在的键, 无副作用)。
+    out["tags"] = [t for t, ev in _last_event(frames, "tags", "tags_removed").items() if ev == "add"]
+    out["tags_removed"] = [t for t, ev in _last_event(frames, "tags", "tags_removed").items() if ev == "del"]
+    cat_last = _last_event(frames, "categories", "categories_removed")
+    out["categories"] = {k: cat_set.get(k, {}) for k, ev in cat_last.items() if ev == "add"}
+    out["categories_removed"] = [k for k, ev in cat_last.items() if ev == "del"]
+    return out
+
+
+def _last_event(frames: list[dict], add_key: str, del_key: str) -> dict[str, str]:
+    """窗口内每个 tag/category 的**最后一次事件**(add/del); 全量轮重置基线"""
+    last: dict[str, str] = {}
+    for f in frames:
+        if f.get("full_update"):
+            last = {k: "add" for k in (f.get(add_key) or [])}
+            continue
+        if add_key == "categories":
+            for k in (f.get(add_key) or {}):
+                last[k] = "add"
+        else:
+            for k in (f.get(add_key) or []):
+                last[k] = "add"
+        for k in (f.get(del_key) or []):
+            last[k] = "del"
+    return last
+
+
+class CorpusSource:
+    """加载一个语料目录(计划 §06 的格式)。只读, 不改语料。"""
+    def __init__(self, path: str, fs_root: str):
+        self.path = path
+        self.fs_root = fs_root.replace("\\", "/")
+        meta_p = os.path.join(path, "meta.json")
+        if not os.path.isfile(meta_p):
+            raise SystemExit(f"[FATAL] 语料目录里没有 meta.json: {path}")
+        with open(meta_p, encoding="utf-8") as f:
+            self.meta = json.load(f)
+        if self.meta.get("status") == "aborted":
+            raise SystemExit(
+                f"[FATAL] 该语料 status=aborted(检查点未对齐), 按计划 §08 不可回放 —— "
+                f"abort_at={self.meta.get('abort_at')}"
+            )
+        self.frames = self._read_jsonl_gz("sync-stream.jsonl.gz")
+        if not self.frames:
+            raise SystemExit(f"[FATAL] 语料流为空: {path}")
+        self.files = self._read_json_gz("files.json.gz") or {}
+        self.trackers = self._read_json_gz("trackers.json.gz") or {}
+        self.disk = self._read_json_gz("disk.json.gz") or {}
+        self.peers = self._read_json_gz("peers.json.gz") or {}
+        self.groups = self._read_json_gz("groups.json.gz") or {}
+        self._resolve_fsroot()
+
+    # ---- IO ----
+    def _read_json_gz(self, name: str):
+        p = os.path.join(self.path, name)
+        if not os.path.isfile(p):
+            return None
+        with gzip.open(p, "rt", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _read_jsonl_gz(self, name: str) -> list[dict]:
+        p = os.path.join(self.path, name)
+        if not os.path.isfile(p):
+            return []
+        out = []
+        with gzip.open(p, "rt", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    out.append(json.loads(line))
+        return out
+
+    def _resolve_fsroot(self) -> None:
+        """把语料里的 <FSROOT> 占位符解析成真实的 --fs-root(只改内存副本, 不动语料文件)"""
+        fr = self.fs_root
+        for f in self.frames:
+            for tv in (f.get("torrents") or {}).values():
+                for k in ("save_path", "content_path", "download_path", "root_path"):
+                    if tv.get(k):
+                        tv[k] = resolve_fsroot(tv[k], fr)
+
+    # ---- 便捷访问 ----
+    @property
+    def t0(self) -> dict:
+        return self.frames[0]
+
+    @property
+    def closure(self) -> dict | None:
+        last = self.frames[-1]
+        return last if last.get("role") in ("closure", "mismatch") else None
+
+    def files_of(self, h: str) -> list:
+        return self.files.get(h) or []
+
+    def trackers_of(self, h: str) -> list:
+        return self.trackers.get(h) or []
+
+    def disk_table(self) -> dict:
+        """拼出 mock 用的磁盘状态表: {全路径: {exists,size}}。
+
+        ❗**必须以 disk.json.gz 为准**(抓取时刻的磁盘三态), 不能拿 files.json 的"逻辑大小"当"存在"。
+        两者是不同的东西: files.json 是 qB 报的文件清单(逻辑上该有哪些文件、多大),
+        disk.json 是抓取时**磁盘上真实是什么样**(存在性 + 实际大小 + `.!qB` 后缀)。
+        W0 真机实测: 11457 个文件里 **9673 个不存在**(R 盘上 progress=0 的 stoppedDL 等) ——
+        若这里退化成"全部存在", D4 的天然样本会全部消失, 缺文件检测永远不触发(假绿)。
+        """
+        table: dict = {}
+        save_paths = {h: (tv.get("save_path") or "") for h, tv in (self.t0.get("torrents") or {}).items()}
+        for h, fl in self.files.items():
+            sp = save_paths.get(h, "")
+            for f in fl:
+                rel = str(f.get("name", "")).replace("\\", "/")
+                full = (sp.rstrip("/") + "/" + rel.lstrip("/")) if sp else rel
+                rec = (self.disk.get(h) or {}).get(rel)
+                if isinstance(rec, dict):
+                    # suffix=".!qB" 时 exists 已是 false —— auto-qb 拼的是**逻辑名**, 带后缀的文件在它眼里
+                    # 就是"不存在"; 这正是真机行为, 回放必须还原, 否则下载中的组会被误判成"文件齐全"。
+                    table[full] = {"exists": bool(rec.get("exists")), "size": rec.get("size")}
+                else:
+                    table[full] = {"exists": True, "size": f.get("size")}
+        return table
+
+
 # ---------- 仿真主体 ----------
 
 
@@ -233,12 +449,121 @@ class SimQb:
         self._ev_lock = threading.Lock()
 
         self.run_dir = args.run_dir
-        self.fs_root = os.path.join(self.run_dir, "fs")
+        # 磁盘事实来源(计划 §07): 语料档默认 <root>/runs/<run-id>/fs, 可用 --fs-root 显式覆盖;
+        # mock 档不物化任何文件, 合成档沿用 <run>/fs 真建树。
+        self.fs_root = getattr(args, "fs_root", "") or os.path.join(self.run_dir, "fs")
         os.makedirs(self.fs_root, exist_ok=True)
 
-        self._build_torrents()
-        self._materialize()
+        src = getattr(args, "source", "synthetic") or "synthetic"
+        self.corpus_mode = src.startswith("corpus:")
+        self.corpus = None
+        # getattr 的默认值只在属性**缺失**时生效, 而 argparse 给的默认是空串 -> 必须显式兜底
+        self.fs_mode = args.fs_mode or ("mock" if self.corpus_mode else "real")
+        # 两层状态模型(计划 §07, 按 W0 真机实测修订):
+        #   --command-latency-ms 命令效果对**两个端点**都延后(真机实测 ~733 ms, 两端共享)
+        #   --maindata-lag-ms    maindata 相对 torrents/info 的**额外**滞后(真机实测 ≈0)
+        # 计划原文假设"info 比 maindata 新", W0 实测 Δ=+1 ms 推翻了它; 拆成两个旋钮后
+        # 默认档忠实复现真机, 而把 --maindata-lag-ms 调大即可做"直查更快"的受控实验(红验落点)。
+        self.cmd_latency_s = float(getattr(args, "command_latency_ms", 0) or 0) / 1000.0
+        self.md_lag_s = float(getattr(args, "maindata_lag_ms", 0) or 0) / 1000.0
+        self.overlay: dict[str, dict] = {}  # hash -> {field: (value, t_info, t_md)}
+        self.overlay_promoted: set[str] = set()
+        self._md_emitted: dict[tuple, bool] = {}  # (hash, field) 是否已随增量轮报出去过
+
+        if self.corpus_mode:
+            self._load_corpus(src.split(":", 1)[1])
+            self._write_fsmock_state()
+        else:
+            self._build_torrents()
+            self._materialize()
         self._snapshot("fs-before.txt")
+
+    def _write_fsmock_state(self) -> None:
+        """把初始磁盘状态落成文件, 供 FS mock **启动即用**(消除"首轮早于首次轮询"的竞态)。
+
+        时间源仍归播放器: 这个文件只是初值, 之后 mock 按秒拉 `GET /_fsmock/state` 覆盖它
+        (计划 §07 硬条件③)。不给初值的话, auto-qb 的首轮会在空表上跑 —— 所有文件都被当成缺失。
+        """
+        p = os.path.join(self.run_dir, "fs-state.json")
+        try:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(self.fsmock_state(), f, ensure_ascii=False)
+            self.fsmock_state_file = p
+        except OSError as e:  # pragma: no cover
+            self.fsmock_state_file = ""
+            print(f"[WARN] 写 fs-state.json 失败: {e}", file=sys.stderr)
+
+    # ---------- 语料加载 ----------
+
+    def _load_corpus(self, path: str):
+        """从语料加载种子与元数据 —— 计划 §07 的切口: 只替换"造数层", HTTP 外壳/rid 语义/写端点记账全复用"""
+        self.corpus = CorpusSource(path, self.fs_root)
+        t0 = self.corpus.t0
+        self.torrents = {}
+        for h, tv in (t0.get("torrents") or {}).items():
+            t = dict(tv)
+            fl = self.corpus.files_of(h)
+            t["_rel_files"] = [f.get("name", "") for f in fl]
+            t["_file_size"] = (fl[0].get("size") if fl else 0)
+            t["_files_raw"] = fl
+            t["_trackers_raw"] = self.corpus.trackers_of(h)
+            self.torrents[h] = t
+        self.tags = set(t0.get("tags") or [])
+        self.categories = set((t0.get("categories") or {}).keys())
+        self._corpus_ss = dict(t0.get("server_state") or {})
+        # 真值分组(groups.json) —— D4 取"真机上磁盘就有问题的组"时的样本来源
+        self.groups = [list(g.get("members") or []) for g in (self.corpus.groups.get("groups") or [])]
+        self.replay_started = time.time()
+        self._ordered = list(self.torrents.values())
+        self._visible = len(self._ordered)
+        print(
+            f"[corpus] {path}: {len(self.torrents)} 种子 / {len(self.corpus.frames)} 帧 / "
+            f"{len(self.groups)} 组 / fs-mode={self.fs_mode} / "
+            f"cmd-latency={self.cmd_latency_s * 1000:.0f}ms md-lag={self.md_lag_s * 1000:.0f}ms",
+            file=sys.stderr
+        )
+
+    # ---------- 两层状态(流状态 vs 实况状态) ----------
+
+    def _visible_fields(self, h: str, now: float, layer: str) -> dict:
+        ov = self.overlay.get(h)
+        if not ov:
+            return {}
+        idx = 1 if layer == "info" else 2
+        return {f: tup[0] for f, tup in ov.items() if tup[idx] <= now}
+
+    def _live(self, h: str, now: float | None = None) -> dict:
+        """实况状态 = 流状态 ⊕ 已到期的 overlay(立即生效侧)"""
+        t = self.torrents.get(h)
+        if t is None:
+            return {}
+        out = self._public(t)
+        out.update(self._visible_fields(h, now if now is not None else time.time(), "info"))
+        return out
+
+    def _snapshot_view(self, h: str, now: float | None = None) -> dict:
+        """流状态(snapshot view) = 流状态 ⊕ 已过 md 滞后线的 overlay"""
+        t = self.torrents.get(h)
+        if t is None:
+            return {}
+        out = self._public(t)
+        out.update(self._visible_fields(h, now if now is not None else time.time(), "maindata"))
+        return out
+
+    def _promote_overlays(self) -> None:
+        """把刚跨过 maindata 可见线的 overlay 字段登记进脏集合 —— 否则增量轮永远不带它们"""
+        now = time.time()
+        for h, ov in self.overlay.items():
+            due = {f: tup[0] for f, tup in ov.items() if tup[2] <= now}
+            if not due:
+                continue
+            prev = {f for f in due if self._md_emitted.get((h, f), False)}
+            fresh = {f: v for f, v in due.items() if f not in prev}
+            if fresh:
+                self.dirty.setdefault(h, {}).update(fresh)
+                for f in fresh:
+                    self._md_emitted[(h, f)] = True
+                self.overlay_promoted.add(h)
 
     # ---------- 构建 ----------
 
@@ -517,6 +842,8 @@ class SimQb:
     # ---------- sync/maindata ----------
 
     def sync_maindata(self, rid: int) -> dict:
+        if self.corpus_mode:
+            return self._sync_corpus(rid)
         with self.lock:
             self.stats["sync_rounds"] += 1
             if rid != self.rid:
@@ -550,10 +877,78 @@ class SimQb:
                 self.removed.clear()
             return out
 
+    def _sync_corpus(self, rid: int) -> dict:
+        """语料档的 sync/maindata —— 流状态视图(计划 §07 两层状态)。
+
+        ⚠ 顺序: 先合并窗口(§08) → **再**按滞后规则叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
+        静态回放时流不推进(帧已全量加载, 由 W4 的游标按时间轴吐), 所以这里只处理 overlay。
+        """
+        with self.lock:
+            self.stats["sync_rounds"] += 1
+            self._promote_overlays()  # 跨过 md 滞后线的 overlay 字段先进脏集合, 否则增量轮不带它们
+            if rid != self.rid:
+                out = {
+                    "rid": self.rid,
+                    "full_update": True,
+                    "torrents": {
+                        h: self._snapshot_view(h)
+                        for h in self.torrents
+                    },
+                    "torrents_removed": [],
+                    "server_state": self.server_state(),
+                }
+                self.stats["sync_full_rounds"] += 1
+            else:
+                out = {
+                    "rid": self.rid + 1,
+                    "full_update": False,
+                    "torrents": {
+                        h: dict(p)
+                        for h, p in self.dirty.items()
+                    },
+                    "torrents_removed": list(self.removed),
+                    "server_state": self.server_state(),
+                }
+                self.rid += 1
+            self.dirty.clear()
+            self.removed.clear()
+            return out
+
+    def fsmock_state(self) -> dict:
+        """给 FS mock 的"当前磁盘状态"(计划 §07 硬条件③: 时间源归播放器)。
+
+        语料档 = files.json 的 disk 初值(按 t_seq 变化的部分由 W4 的 fs_delta 叠加);
+        合成档 = 真树现算(只在 --fs-mode=mock 时才会被拉)。
+        """
+        if self.corpus_mode and self.corpus:
+            files = self.corpus.disk_table()
+        else:
+            files = {}
+            for h, t in self.torrents.items():
+                for rel in (t.get("_rel_files") or []):
+                    full = os.path.join(t.get("save_path", ""), rel.replace("/", os.sep))
+                    try:
+                        files[full] = {"exists": os.path.exists(full), "size": os.path.getsize(full)}
+                    except OSError:
+                        files[full] = {"exists": False, "size": None}
+        ss = self.server_state() or {}
+        free = int(ss.get("free_space_on_disk") or 0)
+        return {
+            "files": files,
+            "free_space": free,
+            "total_space": int(ss.get("total_space") or 0) or max(free, 1),
+            "t_seq": getattr(self, "replay_cursor", 0)
+        }
+
     def _public(self, t: dict) -> dict:
         return {k: v for k, v in t.items() if not k.startswith("_")}
 
     def server_state(self) -> dict:
+        if self.corpus_mode:
+            # 语料档: 全局状态**只有一个来源** —— 流的首帧(计划 §06/§08)。
+            # 原样透传而不是自己稀疏化: qB 的 server_state 是 merge 语义(store.py:111-118),
+            # 自己挑键就要自己猜"某键缺失时该怎么办"。
+            return dict(getattr(self, "_corpus_ss", {}) or {})
         up = sum(t["upspeed"] for t in self.torrents.values())
         return {
             "all_time_dl": 0,
@@ -582,6 +977,36 @@ class SimQb:
             f.write(json.dumps({"ts": time.time(), "endpoint": endpoint, "params": params}, ensure_ascii=False) + "\n")
         if self.args.read_only:
             return
+        if self.corpus_mode:
+            self._apply_write_corpus(endpoint, params)
+            return
+        self._apply_write_state(endpoint, params)
+
+    def _apply_write_corpus(self, endpoint: str, params: dict) -> None:
+        """语料档的写端点: 命令效果先进 **overlay**, 由两层状态模型决定何时对两个端点可见(计划 §07)。
+
+        为什么不能直接改 self.torrents: `self.torrents` 是**流状态**(只由录制流推进), 而
+        auto-qb 自己发的命令不在录制流里。若直接改它, "info 比 maindata 新"就无从表达 ——
+        那正是 issue 26-09-20-2145 要复现的东西。
+        """
+        hashes = self._parse_hashes(params.get("hashes"))
+        before = {h: dict(self.torrents[h]) for h in hashes if h in self.torrents}
+        self._apply_write_state(endpoint, params)
+        now = time.time()
+        t_info = now + self.cmd_latency_s
+        t_md = t_info + self.md_lag_s
+        for h, b in before.items():
+            after = self.torrents.get(h)
+            if after is None:
+                continue
+            diff = {k: v for k, v in after.items() if not k.startswith("_") and b.get(k) != v}
+            if diff:
+                slot = self.overlay.setdefault(h, {})
+                for k, v in diff.items():
+                    slot[k] = (v, t_info, t_md)
+            self.torrents[h] = b  # 回滚: base 只由录制流推进
+
+    def _apply_write_state(self, endpoint: str, params: dict) -> None:
         hashes = self._parse_hashes(params.get("hashes"))
         if endpoint == "torrents/addTags":
             self._tag(hashes, params.get("tags", ""), add=True)
@@ -849,9 +1274,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "torrents/info":
             self._trace(route, params, 200, 0)
+            # 语料档: 走**实况状态**(流状态 ⊕ 已到期 overlay)。它与 sync/maindata 的差异正是
+            # issue 26-09-20-2145 要复现的"真值尚未落地"。合成档沿用原样(无 overlay)。
+            if sim.corpus_mode:
+                return self._json([sim._live(h) for h in sim.torrents])
             return self._json([sim._public(t) for t in sim.torrents.values()])
         if route == "torrents/files":
             t = sim.torrents.get(params.get("hash"))
+            if sim.corpus_mode:
+                # 语料档: 用**录下来的** files —— 归组 key 与缺文件扫描的唯一来源, 不再现场合成
+                out = [dict(f) for f in (t.get("_files_raw") or [])] if t else []
+                self._trace(route, params, 200, 0)
+                return self._json(out)
             out = (
                 [
                     {
@@ -868,6 +1302,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(out)
         if route == "torrents/trackers":
             t = sim.torrents.get(params.get("hash"))
+            if sim.corpus_mode:
+                out = [dict(x) for x in (t.get("_trackers_raw") or [])] if t else []
+                self._trace(route, params, 200, 0)
+                return self._json(out)
             out = (
                 [
                     {
@@ -884,6 +1322,44 @@ class Handler(BaseHTTPRequestHandler):
             )
             self._trace(route, params, 200, 0)
             return self._json(out)
+        # ---- 计划 §09 补齐的三个路由: 语料档必须实现, 否则 auto-qb 走到的路径会 404 ----
+        if route == "sync/torrentPeers":
+            h = params.get("hash")
+            peers = (sim.corpus.peers.get(h, []) if (sim.corpus_mode and sim.corpus) else [])
+            self._trace(route, params, 200, 0)
+            return self._json({"rid": 0, "peers": {str(i): p for i, p in enumerate(peers)}, "peers_removed": {}})
+        if route == "torrents/pieceHashes":
+            # ! 严格模式(rules/actions/checking.py:145-154)把候选与目标的 piece hash **逐项比对**;
+            # 按内容集合(排序后的 相对路径+大小)确定性派生, 同组成员天然共享同一列表, 与真机语义一致。
+            # 若按 hash 各自随机, 同组成员互不相等 => 严格模式判据恒假(比不测更糟)。
+            t = sim.torrents.get(params.get("hash"))
+            if t is None:
+                self._trace(route, params, 200, 0)
+                return self._json([])
+            pairs = [(str(f.get("name", "")), int(f.get("size") or 0)) for f in (t.get("_files_raw") or [])]
+            if not pairs:
+                pairs = [(r, int(t.get("_file_size") or 0)) for r in (t.get("_rel_files") or [])]
+            out = piece_hashes_of(pairs)
+            self._trace(route, params, 200, 0)
+            return self._json(out)
+        if route == "torrents/export":
+            t = sim.torrents.get(params.get("hash"))
+            if t is None:
+                self._trace(route, params, 404, 0)
+                return self._json({"error": "torrent not found"}, status=404)
+            blob = minimal_bencode(str(t.get("name", "x")), int(t.get("size") or 0))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-bittorrent")
+            self.send_header("Content-Length", str(len(blob)))
+            self.end_headers()
+            self.wfile.write(blob)
+            self._trace(route, params, 200, len(blob))
+            return
+        if route == "_fsmock/state":
+            # FS mock 的时间源(计划 §07 硬条件③): 由播放器给出"当前磁盘状态", mock 按秒拉取
+            payload = sim.fsmock_state()
+            self._trace(route, params, 200, 0)
+            return self._json(payload)
         if route == "torrents/tags":
             self._trace(route, params, 200, 0)
             return self._json(sorted(sim.tags))
@@ -990,7 +1466,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--redeliver-removed", type=int, default=0, help="第 K 拍把已删 hash 重新投递一次(测幂等: 重复 torrents_removed 不得炸)"
     )
     p.add_argument(
-        "--latency-ms", type=float, default=0,
+        "--latency-ms",
+        type=float,
+        default=0,
         help="每个请求的人为延迟(模拟真机上有负载的 qB)。默认 0 —— 本地请求 ~0.5ms 时主循环永远"
         "不饱和, '命令排队 wait_ms' 恒为 0, 真机上'点了要等 2-4s'这类缺陷复现不出来",
     )
@@ -998,6 +1476,40 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fs-file-size", type=int, default=4096)
     p.add_argument("--keep-last", type=int, default=10)
     p.add_argument("--emit-config", action="store_true", help="在 run 目录生成匹配的 config.yml")
+    # ---- 语料回放(计划 26-09-21-0024 §07/§12: 语料位置与回放 root 全部参数化, 不写死) ----
+    p.add_argument(
+        "--source",
+        default="synthetic",
+        help="synthetic(默认, 保留为对照档) | corpus:<dir>(语料目录; 位置显式传入, 不写死)",
+    )
+    p.add_argument(
+        "--fs-mode",
+        choices=("mock", "real"),
+        default="",
+        help="磁盘事实来源: mock(默认, 进程内 FS mock, 不物化任何文件) | real(真建文件树, 仅用于复核 mock)",
+    )
+    p.add_argument("--fs-root", default="", help="mock 层根目录; 默认 <root>/runs/<run-id>/fs")
+    p.add_argument(
+        "--command-latency-ms",
+        type=float,
+        default=750.0,
+        help="命令效果对**两个端点**都延后的毫秒数。默认 750 = W0 真机实测(mean 733 / median 751, n=12); "
+        "真机实测 Δ(torrents/info − sync/maindata) = +1 ms, 即滞后是 qB 命令处理延迟、两端共享",
+    )
+    p.add_argument(
+        "--maindata-lag-ms",
+        type=float,
+        default=0.0,
+        help="sync/maindata 相对 torrents/info 的**额外**滞后(默认 0 = W0 实测)。"
+        "计划原文默认 1500 并假设 info 更快, W0 实测推翻了该前提; 调大它可做'直查更快'的受控实验(红验落点)",
+    )
+    p.add_argument("--replay-speed", type=float, default=1.0, help="录播回放倍速(W4)")
+    p.add_argument(
+        "--latency-mode",
+        choices=("recorded", "p50", "p95", "const"),
+        default="recorded",
+        help="延迟注入方式: recorded(默认, 用录到的真实 rtt) | p50/p95 | const:N(--latency-ms)",
+    )
     p.add_argument("--self-test", action="store_true", help="跑内置自检(真实 qbittorrent-api 往返)")
     return p
 
@@ -1053,16 +1565,7 @@ config:
         file: "{log_file}"
         max_bytes: 50MiB
 {web}{rules}    trackers:
-        ptfans_cc:
-            domains:
-                - ptfans.cc
-            tags:
-                - PTFans
-{tracker_rules}        hhanclub:
-            domains:
-                - tracker.hhanclub.net
-            tags:
-                - HHan
+{trackers}
 """
 
 WEB_TMPL = """    web:
@@ -1099,6 +1602,74 @@ TRACKER_RULES_TMPL = """            rules:
                 - "@sim_once_rules.rule"
 """
 
+SYNTHETIC_TRACKERS = """        ptfans_cc:
+            domains:
+                - ptfans.cc
+            tags:
+                - PTFans
+{rules}        hhanclub:
+            domains:
+                - tracker.hhanclub.net
+            tags:
+                - HHan
+"""
+
+# 非站点标签(自动生成的通用标签), 派生"站点标签"时要排除掉
+_GENERIC_TAG_HINTS = ("MISSING", "zSkipChecked", "辅种", "R")
+
+
+def corpus_tracker_section(sim: SimQb) -> str:
+    """按语料里的真实数据派生 tracker 段(计划 §12 / W3)。
+
+    为什么必须派生: 语料里的 tracker 域名已被脱敏成 `site-N.example`、标签也已伪名化。
+    若沿用合成档写死的 `ptfans.cc` / `hhanclub`, auto-qb 的站点匹配会全部落空 ⇒
+    `tracker_name` 解析不出来 ⇒ 依赖站点的规则与日志全是空转。
+
+    站点标签的推断 —— 取"**对该 host 最专有**"的那个标签: score = 该站出现次数 / 全局出现次数。
+    真机上站点标签几乎只出现在本站的种子上(score→1), 而通用标签(MISSING / zSkipChecked / 辅种)
+    散布在全库(score 很小)。⇒ 不能按"出现最多"挑, 那会被通用标签抢走。
+    (⚠ 标签在语料里已伪名化, 所以**不能**用原始字面量 "MISSING" 之类去排除 —— 只能靠这个统计判据。)
+    """
+    host_tags: dict[str, dict[str, int]] = {}
+    tag_global: dict[str, int] = {}
+    for h, t in sim.torrents.items():
+        tags = [x.strip() for x in str(t.get("tags") or "").split(",") if x.strip()]
+        for tag in tags:
+            tag_global[tag] = tag_global.get(tag, 0) + 1
+        for tr in (t.get("_trackers_raw") or []):
+            url = str(tr.get("url") or "")
+            if "://" not in url:
+                continue
+            host = url.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0]
+            if not host:
+                continue
+            slot = host_tags.setdefault(host, {})
+            for tag in tags:
+                slot[tag] = slot.get(tag, 0) + 1
+
+    lines = []
+    for host in sorted(host_tags):
+        counts = host_tags[host]
+        best, best_score = None, -1.0
+        for tag, n in sorted(counts.items()):
+            score = n / max(tag_global.get(tag, 1), 1)
+            if score > best_score or (score == best_score and best is not None and n > counts.get(best, 0)):
+                best, best_score = tag, score
+        if best is None:
+            best = host.replace(".", "_").replace("-", "_")
+        key = host.replace(".", "_").replace("-", "_")
+        lines.append(
+            f"""        {key}:
+            domains:
+                - {host}
+            tags:
+                - {best}
+"""
+        )
+    if not lines:
+        return SYNTHETIC_TRACKERS.format(rules="")
+    return "".join(lines)
+
 
 def emit_config(
     run_dir: str, sim: SimQb, port: int, web_port: int = 0, with_rules: bool = False, interval: int = 60
@@ -1115,6 +1686,11 @@ def emit_config(
     data_dir = os.path.join(run_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     p = os.path.join(run_dir, "config.yml")
+    # 语料档: tracker 段必须按语料里的实际域名/标签派生(域已脱敏成 site-N.example), 否则站点匹配全落空
+    if getattr(sim, "corpus_mode", False):
+        trackers = corpus_tracker_section(sim)
+    else:
+        trackers = SYNTHETIC_TRACKERS.format(rules=TRACKER_RULES_TMPL if with_rules else "")
     with open(p, "w", encoding="utf-8") as f:
         f.write(
             CONFIG_TMPL.format(
@@ -1129,7 +1705,7 @@ def emit_config(
                 log_file=os.path.join(data_dir, "autoqb.log").replace("\\", "/"),
                 web=WEB_TMPL.format(web_port=web_port) if web_port else "",
                 rules=RULES_TMPL if with_rules else "",
-                tracker_rules=TRACKER_RULES_TMPL if with_rules else ""
+                trackers=trackers,
             )
         )
     return p
@@ -1217,7 +1793,7 @@ def main(argv=None) -> int:
         with open(os.path.join(args.run_dir, "summary.json"), "w", encoding="utf-8") as f:
             json.dump(s, f, ensure_ascii=False, indent=2)
         print(json.dumps(s, ensure_ascii=False, indent=2))
-        pruned = prune_runs(root, args.keep_last)
+        pruned = prune_runs(args.root, args.keep_last)
         if pruned:
             print(f"[sim] 清理旧运行目录 {pruned} 个")
     return 0

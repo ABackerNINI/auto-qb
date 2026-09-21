@@ -558,10 +558,19 @@ def main(argv=None) -> int:
     p.add_argument("--web-poll", type=int, default=0, help="S7: N 个线程并发只读轮询 WEB UI(需 --web-port)")
     p.add_argument("--ramp", type=int, default=0, help="P2 渐进灌入: 每拍新增种子数; 0=首轮全量")
     p.add_argument("--fs-materialize", type=int, default=-1)
-    p.add_argument("--latency-ms", type=float, default=0,
-                   help="仿真 qB 每个请求的人为延迟(模拟真机负载; 见 sim_qb.py 同名参数)")
+    p.add_argument("--latency-ms", type=float, default=0, help="仿真 qB 每个请求的人为延迟(模拟真机负载; 见 sim_qb.py 同名参数)")
     p.add_argument("--keep-last", type=int, default=10)
     p.add_argument("--autoqb-args", default="", help="附加给 auto-qb 的参数")
+    # ---- 语料回放透传(计划 §07/§12: 语料位置与回放 root 全部显式传入, 不写死) ----
+    p.add_argument("--source", default="synthetic", help="synthetic(默认, 对照档) | corpus:<dir>(语料目录)")
+    p.add_argument("--fs-root", default="", help="mock 层根目录; 默认 <root>/runs/<run-id>/fs")
+    p.add_argument("--fs-mode", choices=("mock", "real"), default="", help="磁盘事实来源; 默认语料档 mock / 合成档 real")
+    p.add_argument("--command-latency-ms", type=float, default=750.0, help="命令效果对两个端点都延后的毫秒数(默认 750 = W0 真机实测)")
+    p.add_argument(
+        "--maindata-lag-ms", type=float, default=0.0, help="sync/maindata 相对 torrents/info 的额外滞后(默认 0 = W0 实测)"
+    )
+    p.add_argument("--replay-speed", type=float, default=1.0, help="录播回放倍速(W4)")
+    p.add_argument("--latency-mode", choices=("recorded", "p50", "p95", "const"), default="recorded")
     p.add_argument("--baseline", default="", help="固化阈值文件路径(默认 docs/plans/…baseline.json)")
     p.add_argument("--no-baseline", action="store_true", help="不读固化阈值(全部记 BASELINE)")
     p.add_argument("--stress", action="store_true", help="标记为压力档: 漂移等只观测不判红(否则会盖住真实稳态回归)")
@@ -636,6 +645,20 @@ def main(argv=None) -> int:
         cmd += args.autoqb_args.split()
     log_path = os.path.join(sim.run_dir, "autoqb.log")
     print(f"[run] auto-qb: {' '.join(cmd[1:])}")
+    # 语料档 + mock: 把 FS mock 通过**环境变量**注入 auto-qb 子进程(不占 argv, 免得动到它的参数解析)。
+    # 时间源归播放器: mock 按秒拉 GET /api/v2/_fsmock/state, 保持"播放器是唯一时间源"。
+    child_env = dict(os.environ)
+    if getattr(sim, "corpus_mode", False) and sim.fs_mode == "mock":
+        child_env["AUTOQB_FSMOCK_ROOT"] = sim.fs_root
+        child_env["AUTOQB_FSMOCK_PLAYER"] = f"http://{args.host}:{port}/api/v2/_fsmock/state"
+        # 初值文件: 消除"auto-qb 首轮早于 mock 首次轮询"的竞态(否则首轮在空表上跑 => 全部文件当成缺失)
+        state_file = getattr(sim, "fsmock_state_file", "")
+        if state_file and os.path.isfile(state_file):
+            child_env["AUTOQB_FSMOCK_STATE"] = state_file
+        print(
+            f"[run] FS mock: root={sim.fs_root} player={child_env['AUTOQB_FSMOCK_PLAYER']} "
+            f"init={os.path.basename(state_file) if state_file else '(无)'}"
+        )
     t0 = time.time()
     # Windows: 需要独立进程组才能发 CTRL_BREAK(否则只能硬 kill, 拿不到 state_file)
     flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
@@ -650,7 +673,9 @@ def main(argv=None) -> int:
         with open(log_path, mode, encoding="utf-8", errors="replace") as lf:
             if i:
                 lf.write(f"\n===== phase {i + 1} (新进程, 复用 state_file) =====\n")
-            proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, text=True, creationflags=flags)
+            proc = subprocess.Popen(
+                cmd, stdout=lf, stderr=subprocess.STDOUT, text=True, creationflags=flags, env=child_env
+            )
             if web_th and i == 0:
                 web_th.start()
             try:

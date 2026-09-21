@@ -1,6 +1,6 @@
 # 26-09-21-qb-corpus-capture-replay — 真机 qB 语料抓取 / 脱敏 / 离线回放
 
-**Status:** In Progress (W0–W2 已实施并验证; W3–W6 未开工; 尚未提交)
+**Status:** In Progress (W0–W3 已实施并验证; W4–W6 未开工)
 **Started:** 2026-09-21
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) + [审查报告](../../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)
@@ -124,10 +124,38 @@
 | W0 | 可行性实测(7 项) | ✅ 6 项出数, R 盘持久性待用户确认 |
 | W1 | 抓取器 `scripts/qb_capture.py` | ✅ 真机跑通 + 6 项自检全 PASS |
 | W2 | 脱敏 + 等价类守恒校验 | ✅ 守恒绿 + 2 道红验通过 + 盐不落盘 + 产物带 .gitignore |
-| W3 | 回放器 + FS mock + 三个缺失路由 + 两层状态模型 | ⬜ 未开工 |
-| W4 | 时间轴回放(游标 + 倍速 + 窗口合并语义) | ⬜ 未开工 |
+| W3 | 回放器 + FS mock + 三个缺失路由 + 两层状态模型 | ✅ 静态回放端到端跑通(verdict OK) |
+| W4 | 时间轴回放(游标 + 倍速 + 窗口合并语义) | ⬜ 未开工(窗口合并语义已实现并测试, 游标推进未接) |
 | W5 | `CORPUS.*` 判据 + 基线重固化 + 文档 + 关闭 issue 2145 | ⬜ 未开工 |
 | W6 | 真机走查闭环(已收窄为数据面几条) | ⬜ 未开工 |
+
+## W3 实施结果
+
+- 新增 `scripts/sim_fsmock.py`: 进程内 FS mock, 拦 `os.path.exists` / `os.path.getsize` / `shutil.disk_usage`。
+  三条硬条件都落实了 —— ①**按路径前缀限定**(树外原样委托真函数, 绝不 mock 到 config.yml / state.json / WEB 密钥)
+  ②**剥 `\\?\` 前缀 + 大小写不敏感**(否则会把存在的文件报成缺失 ⇒ D4 判据全假)
+  ③**时间源归播放器**(`GET /_fsmock/state` 按秒拉取)。注入走**环境变量**(`AUTOQB_FSMOCK_ROOT/STATE/PLAYER`),
+  不占 argv, 故 auto-qb 的参数解析零改动。
+- 新增 `tests/test_sim_corpus.py`(17 条), 含计划 §09 要求的 **`CORPUS.fs_mock_coverage` 静态守阵 + 红验**
+  (把探测换成 pathlib ⇒ 守阵必须红)与 **两层状态模型的红验**(两个滞后都设 0 ⇒ 两端同刻可见)。
+- `sim_qb.py` 语料档: 只替换"造数层", HTTP 外壳 / rid 语义 / 写端点记账 / B1–B4 边界校验全部复用。
+- 测试 1111 → **1128 passed**(+17, 0 退化); 合成档自检仍全通过(对照档未被破坏)。
+
+### W3 期间抓到的两个真 bug(都已修 + 已加守阵)
+
+1. **`disk.json.gz` 的内层相对路径从未脱敏** —— 外层 hash 换了, 内层还是**真实文件名**, 且藏在 .gz 里
+   ⇒ 凭据扫描与 `sanitize_stream_consistent` 都没发现, 语料把真机资源名原样漏了出去(隐私 P0)。
+   修法: 内层走与 files 同一套 `san.name(path_normalize(...))`; 并给自检加一条
+   "disk 的每个 rel 都必须在 files 的 name 里"(语料 v2 复核: 11457 条 / 0 孤儿 / 真实中文名 0 条)。
+2. **`disk_table()` 没读 disk.json** —— 退化成"全部存在"(10680/10680), W0 实测的 9673 个缺失全被抹掉
+   ⇒ D4 天然样本消失、缺文件检测永远不触发(假绿)。修法: 以 disk.json 为准; 复核后 mock 表 = 1239 exists / 9441 missing。
+
+### 范围说明(一处越界, 已按 skill 的"阻塞"例外处理)
+
+`sim_qb.main()` 里 `prune_runs(root, ...)` 的 `root` **未定义**(自 `1703abf` 起就存在, 只影响
+"不带 `--self-test` 的独立运行"的收尾清理), 会让每次独立运行的退出抛 traceback。
+按 scope-guard 判据这属"相邻模块既有 bug ⇒ 应入池"; 但它挡在 W3 验收("静态回放跑通")的必经路径上,
+故按 skill 的**例外 1(阻塞)**改成 `args.root` 并在此点名。**如认为不该动, 回退这一个词即可。**
 
 ## 进度日志
 
@@ -136,8 +164,13 @@
   ⚠ 拦截层再次**删掉了 `refs/remotes/gitee/*`**(已知坑), 用 `git update-ref` 写回后**又被删** ⇒
   同步本身以 `HEAD == 36fe61c` 为准(与远端一致), `[gone]` 标记只是显示问题。
   → W0 实测(7 项) → `group_key_of` 抽取 + 守阵 → W1 抓取器 → W2 脱敏与守恒 → 自检 + 红验 → 全量测试 1111 passed。
-- **下一步**: W3 —— `sim_qb.py --source=corpus:<dir>` + `--fs-mode=mock` + `scripts/sim_fsmock.py`
-  + 补 `sync/torrentPeers` / `torrents/export` / `torrents/pieceHashes` + 两层状态模型 + `sim_run.py` 透传。
+- **W3 已实施**: `scripts/sim_fsmock.py`(进程内 FS mock)+ `sim_qb.py` 语料档(`--source=corpus:<dir>` /
+  `--fs-mode` / `--fs-root` / `--command-latency-ms` / `--maindata-lag-ms` / `--replay-speed` / `--latency-mode`)
+  + 补齐 `sync/torrentPeers` / `torrents/export` / `torrents/pieceHashes` / `_fsmock/state` 四个路由
+  + `sim_run.py` 透传与 FS mock 环境变量注入 + `CorpusSource` / `merge_window` / `piece_hashes_of` /
+  `corpus_tracker_section`。端到端: `sim_run.py --source=corpus:<dir>` → **verdict OK**,
+  87 种子 / 15 帧 / 63 组 / 0 物化文件, 17 轮 sync(1 全量)、漂移 0.578s、0 traceback。
+- **下一步**: W4 —— 时间轴回放(把 `merge_window` 接到回放游标上, 按 `--replay-speed` 推进 + `--latency-mode` 注入录到的 rtt)。
 
 ## 待办 / 未决
 

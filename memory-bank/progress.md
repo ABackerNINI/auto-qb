@@ -194,7 +194,7 @@
 
 (以下 WEB UI 核心已于 2026-09-13 实现, 见 productContext.md/modules.md; **2026-09-14 已补图形化配置编辑** —— 设置页每项配置均可增删改, 含站点/规则集(16 条件 + 12 动作)/限速曲线的结构化编辑与只读 YAML 预览, 直接编辑模式已移除; 剩余: WebSocket 推送/多用户)
 
-### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W2 已实施, W3–W6 未开工**)
+### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W3 已实施, W4–W6 未开工**)
 
 > 计划 [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) · 任务档案 [tasks/26-09-21-qb-corpus-capture-replay.md](tasks/26-09-21-qb-corpus-capture-replay.md)
 
@@ -213,8 +213,14 @@
   真机端到端跑通, **6 项自检全 PASS**(字段完整性 / 映射单射 / **分组守恒** / 首尾闭合 / 流级脱敏一致 / 无凭据泄漏),
   检查点对齐率 1.0000, warnings 0; 语料确认**真脱敏**(名字/路径/tags/tracker 均伪名化, 路径用 `<FSROOT>` 占位符)。
   **反向对照(红验)通过**; 测试基线 1098 → **1111 passed**。
-- ⬜ **W3–W6 未开工**: 回放器 `--source=corpus` + FS mock + 三个缺失路由 + 两层状态模型 / 时间轴回放 /
-  `CORPUS.*` 判据 + 基线重固化 / 真机走查闭环(已收窄)。
+- ✅ **W3 已落地**: `scripts/sim_fsmock.py`(进程内 FS mock: 按路径前缀限定 / 剥 `\\?\` + 大小写不敏感 /
+  时间源归播放器)+ `sim_qb.py` 语料档(`--source=corpus:<dir>` 等 7 个新参数)+ 补齐
+  `sync/torrentPeers` / `torrents/export` / `torrents/pieceHashes` / `_fsmock/state` 四个路由
+  + `sim_run.py` 透传与环境变量注入。**端到端 `verdict OK`**(87 种子 / 63 组 / 0 物化文件, 漂移 0.578s, 0 traceback)。
+  守阵: `CORPUS.fs_mock_coverage` 静态守阵 + 红验、两层状态模型红验。测试 1111 → **1128 passed**。
+  顺带修掉两个真 bug: ①`disk.json.gz` 内层相对路径未脱敏(隐私 P0)②`disk_table()` 没读 disk.json
+  ⇒ 抹掉 9673 个缺失样本(D4 假绿)。
+- ⬜ **W4–W6 未开工**: 时间轴回放(游标 + 倍速 + rtt 注入) / `CORPUS.*` 判据 + 基线重固化 / 真机走查闭环(已收窄)。
 
 ### 规则系统
 - 条件取反 (`!` / 非 logic) — `:ignore_case` 支持已完成 (2026-09-12, 见 08 TODO 段)
