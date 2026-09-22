@@ -6,6 +6,14 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
+# ⚠ **工具 shell 里跑之前必须设 `TMPDIR`**(已固定, 见 techContext.md「临时目录 / 备份盘约定」):
+#      TMPDIR="R:/Temp/auto-qb/tests"        ← 默认就用这个(实测 1143 passed in 59.48s)
+#   原因: 工具 shell 的 TMPDIR 默认指向 `H:\Temp`, pytest 会在**会话结束的清理阶段**抛
+#   `PermissionError [WinError 5] … pytest-current`(**测试本身是过的**, 崩在符号链接的 resolve/readlink) ⇒
+#   退出码非 0、提交闸门误判红。改 H 盘权限**无效**; 只改 TMP/TEMP 也无效(Python tempfile 先读 TMPDIR);
+#   只加 --basetemp 也不行(测试里直接用 tempfile 的仍落 H: ⇒ 4 failed + 1 error)。细节见 pitfalls.md。
+#   备选: `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但约定统一走 R 盘。
+#   提交闸门(`auto = true`)跑的就是 `--no-cov` 这一档, 覆盖率基线另算。
 # 基线: **1152 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
 #   ↑ 1149 → 1152(**+3**; 2026-09-22 issue 26-09-21-1347「跳检备份先于删除」守阵:
 #     `test_checking_skip_backup_precedes_delete_and_cleared_on_success`(在客户端的 torrents_delete

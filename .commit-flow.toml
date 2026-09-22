@@ -16,28 +16,68 @@ warn_lines = ["想法.md", ".workbuddy-ai/"]
 
 platform_hints = ["winreg", "dir_fd", "socket", "subprocess"]
 staged_panic = 200
+each_limit = 99                 # <each:GLOB> 的展开条数上限(超了说明提交范围该拆)
+
+# ---------------------------------------------------------------------------
+# 闸门: auto = true → 预检**真的执行**它(红了即 STOP, 退出码 1); 不标/标 false → 只打印。
+# 命令里的占位符由预检展开, 展开不了即 STOP(不降级成打印 —— 那会让人以为跑过了):
+#   <root>            仓库根绝对路径
+#   <skill-dir:NAME>  skill 目录(项目级 → 用户级)
+#   <changed:GLOB>    本次改动里匹配的文件 → 拼成一条命令
+#   <each:GLOB>       按匹配文件把这条 run 复制成多条命令(条数上限 each_limit)
+# 未知键 / timeout 非法 → STOP: 闸门很贵, 拼错键让它静默失效比报错坏得多。
+# ---------------------------------------------------------------------------
 
 [[gates]]
 match = ["src/", "tests/"]
-run   = ["yapf -i <改过的 py 文件>", "uv run pytest tests -q"]
-note  = "Python 改动: 先格式化再跑全量测试"
+run   = ["yapf -i <changed:*.py>"]
+auto  = true
+timeout = 120
+note  = "格式化: 只碰本次改过的 py 文件(预检从改动清单取, 逐个调用)"
+
+[[gates]]
+match = ["src/", "tests/"]
+run   = ["uv run pytest tests -q --no-cov"]
+auto  = true
+timeout = 900
+note  = "全量测试(跳覆盖率报表): 脚本自动跑, 红了即 STOP"
 
 [[gates]]
 match = ["memory-bank/issues/"]
-run   = ["python <create-issue skill>/scripts/gen_issues_index.py --check"]
-note  = "issue 池改动: 索引是生成物, 必须 --check 通过"
+run   = ["python <skill-dir:create-issue>/scripts/gen_issues_index.py --check"]
+auto  = true
+timeout = 60
+note  = "issue 索引: skill 路径由预检定位, 找不到即 STOP"
 
 [[gates]]
 match = ["memory-bank/tasks/"]
 run   = ["python scripts/gen_tasks_index.py --check"]
-note  = "任务档案改动: 索引需自洽"
+auto  = true
+timeout = 60
+note  = "任务档案索引: 索引是生成物, 必须自洽"
 
 [[gates]]
 match = [".agents/skills/"]
-run   = ["python <改动的脚本> --help"]
-note  = "skill 改动: 冒烟跑一遍被改的脚本"
+run   = ["python <each:.agents/skills/**/scripts/*.py> --help"]
+auto  = true
+timeout = 300
+note  = "skill 脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多条)"
+
+[[gates]]
+# 空串 = 每次提交都命中 (hit 用 startswith/子串匹配, 空串匹配一切路径)。
+# 为什么需要"每次"而不是只匹配 .agents/skills/: 从远端 pull 进来的 skill 改动在
+# 本地不产生 diff (HEAD 已经跟着往前走了), 按路径匹配永远命中不了 —— 只能靠每次
+# 提交跑一次幂等同步来兜, 接受的代价是"落后到下一次提交"(不值得为它给每个
+# clone 手动配 core.hooksPath)。
+match = [""]
+run   = ["python scripts/sync_agent_skills.py"]
+auto  = true
+timeout = 60
+note  = "skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"
 
 [[gates]]
 match = ["AGENTS.md"]
 run   = ["python scripts/check_context_caps.py"]
+auto  = true
+timeout = 60
 note  = "引导文件: 超 8000 字符 IDE 注入时尾部被静默截断(写了也看不到), 必须先精简"

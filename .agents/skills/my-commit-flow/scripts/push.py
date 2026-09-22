@@ -1,10 +1,13 @@
 """推送 —— **顺序固定**: 先推主线远端(必须成功), 再尝试一次镜像直连(失败只报一次)。
 
 用法:
-    python <skill-dir>/scripts/push.py [--skip-mirror]
+    python <skill-dir>/scripts/push.py [--skip-mirror] [--skip-preflight]
 
 流程:
-  1. 先 `git fetch` 再看是否落后 —— 落后就 STOP(不自动 rebase, 那是红线区)
+  0. **先跑一次预检(`--phase push --no-auto`)** —— 原先是让人在推送前手动跑一遍, 现收进脚本:
+     本脚本自己会 fetch + 判落后, 但**不查**工作区脏 / 上游 / 红线又被改出来 / 镜像远端是否存在,
+     这四项靠预检补上。闸门不重复跑(它们刚在提交前跑过, 且会改工作区), 故固定 `--no-auto`。
+  1. 再 `git fetch` 看是否落后 —— 落后就 STOP(不自动 rebase, 那是红线区)
   2. `git push <main> <branch>`; 失败原样输出并退出(主线瞬时 reset 可重试一次)
   3. 核对远端 ref == 本地 HEAD(`git ls-remote`);`git status -sb` 不应再有 ahead
   4. 镜像: `git <禁用 per-URL 代理的 -c> push <mirror> <branch>` —— **只尝试一次**,
@@ -12,7 +15,7 @@
 
 主线 / 镜像 / 分支 / 代理 **全部运行期探测**(见 `_ship_config.py`), 不写死任何 URL。
 
-退出码: 0 主线推送成功(镜像失败不影响) · 1 落后主线 · 5 主线推送失败 · 6 核对取不到远端 ref
+退出码: 0 主线推送成功(镜像失败不影响) · 1 落后主线 / 预检有 STOP · 5 主线推送失败 · 6 核对取不到远端 ref
 """
 
 from __future__ import annotations
@@ -83,6 +86,7 @@ def remotes() -> dict[str, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-mirror", action="store_true", help="不尝试镜像远端")
+    parser.add_argument("--skip-preflight", action="store_true", help="跳过推送前的预检(与 commit.py 同名开关对齐)")
     parser.add_argument("--config", default=None, help="指定配置文件(默认 <仓库根>/.commit-flow.toml)")
     args = parser.parse_args(argv)
 
@@ -94,6 +98,16 @@ def main(argv: list[str] | None = None) -> int:
     if _ERR:
         print(_ERR)
         return 1
+
+    if not args.skip_preflight:
+        from preflight import main as preflight_main  # noqa: E402
+
+        print("=== 预检(--phase push --no-auto: 闸门已在提交前跑过, 这里只核状态) ===")
+        # 保留手动那一遍的价值(脏 / 上游 / 红线 / 镜像), 但不再重复跑闸门 ——
+        # 闸门会改工作区, 而且刚在 commit 阶段跑过, 这里再跑一遍只会把全量测试做两遍。
+        if preflight_main(["--phase", "push", "--no-auto"]) != 0:
+            sys.stderr.write("预检有 STOP, 未推送。\n")
+            return 1
 
     print("=== 推送前再 fetch 一次(status -sb 的 ahead/behind 是上次 fetch 的快照) ===")
     git("fetch", MAIN, BRANCH)

@@ -326,6 +326,25 @@
 - **Bash heredoc 往 Python 里写"反斜杠转义"会被路径归一化层改成正斜杠**(本工具环境实测):
   写 `\n` 进文件, 落盘可能变成 `/n` 或 `//n`, 生成物里就出现字面量 `\n`。
   **规避: 多行内容用三引号 + 真实换行**(`f"""..."""`), 完全不用转义序列; 或用编辑工具逐行改, 别走 heredoc。
+- **❗工具 shell 的 `TMPDIR` 指向 `H:\Temp`, pytest 会在会话结束时崩(但测试其实全过)** (2026-09-22 实测):
+  - **现象**: `uv run pytest tests -q` 打完所有点(如 `[100%]`)之后抛 `PermissionError [WinError 5] … pytest-current`,
+    **退出码非 0** ⇒ 提交闸门会判红。**注意测试本身是过的**, 崩在 `pytest_sessionfinish` →
+    `cleanup_dead_symlinks()` 对 `pytest-current` 这个**符号链接**做 `.resolve().exists()`。
+  - **改 `H:\Temp` 的目录权限无效**(用户改过, 仍然红)。更精细的实测: 该链接 `stat(follow_symlinks=False)`
+    **成功**(mode `0o120777` = 符号链接)、`readlink` **失败**、`os.rmdir`/`os.unlink` **失败** —— 即"能列不能读、
+    也删不掉"; 关沙箱跑同样如此, 所以**不是工具沙箱**, 是那个盘上的重解析点读取被拒。
+  - **只改 `TMP` / `TEMP` 无效** —— Python 的 `tempfile` 先读 `TMPDIR`。
+  - **只加 `--basetemp <C 盘路径>` 也不行**: pytest 的 tmp_path 走了 C 盘, 但测试里直接用 `tempfile` 的仍落
+    `H:\Temp` ⇒ 实测 **4 failed + 1 error**(含 `test_sidefx_rmtree_dir_fd_*` 这类 dir_fd 用例)。
+  - **可用解(两档, 都实测过)**: 跑之前把 `TMPDIR` 指到一个**不靠重解析点**的盘 ——
+    · `TMPDIR="C:/Users/11059/AppData/Local/Temp"` → **1143 passed in 37.69s**(最快)
+    · `TMPDIR="R:/Temp"` → **1143 passed in 58.85s / 63.29s**(两次均全过; R 盘不支持符号链接 ——
+      `os.symlink` 能建但 `readlink` 报 `WinError 4390 不是一个重解析点`, 反倒**绕开了**上面的崩溃,
+      因为 pytest 的 `cleanup_dead_symlinks` 没东西可读)。
+    用户自己的终端 `TMPDIR` 在 C 盘, 没有这个问题。
+    ⇒ 在工具 shell 里跑全量测试前**先设 `TMPDIR`**; 看到这个 `PermissionError` 先怀疑临时目录, 别当成代码回归。
+    📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
+    完整约定见 [techContext.md](techContext.md)「临时目录 / 备份盘约定」。
 
 ## ⚠️ Git / 提交推送纪律
 

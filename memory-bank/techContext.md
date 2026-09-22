@@ -19,6 +19,24 @@
 - 测试: `uv run pytest tests -q` (pytest.ini 自带 `--cov-branch` 分支覆盖率; CI 用 astral-sh/setup-uv 固定 commit SHA (v10.1.0) + uv sync —— 该 action 已不发布 `v10` 浮动大版本标签, 只能写 `@v10.1.0` 或 SHA, 写 `@v10` 会报 "unable to find version v10")
 - 历史: 2026-09-15 前用 pip 直装 .venv (无锁), requirements-dev.txt 已由 pyproject 取代 (随 e7fb8d9 删除)
 
+## 临时目录 / 备份盘约定 (2026-09-22 定)
+
+**一切"用完就扔"的东西一律放 `R:/Temp/auto-qb/<用途>/`**, 不要再散落到 `C:/Temp` 或默认的 `H:\Temp`:
+
+| 用途 | 固定路径 |
+|---|---|
+| 测试临时目录 | `R:/Temp/auto-qb/tests` —— 跑测试前 `TMPDIR=R:/Temp/auto-qb/tests`(实测 **1143 passed in 59.48s**) |
+| 运行验证的独立配置 + data_dir | `R:/Temp/auto-qb/run-<名>/`(用后清理; 禁止用生产 `config.yml` / `auto-qb-data/`) |
+| `.git` 备份(高风险 git 操作前 `cp -a .git`) | `R:/Temp/auto-qb/git-backup-<YYYY-MM-DD>`(`.git` 仅 17M, 备份成本可忽略) |
+| 打包 / 抓取 / 归档前的一次性大产物 | `R:/Temp/auto-qb/<名>/` |
+
+- **为什么是 R 盘**: 工具 shell 的 `TMPDIR` 默认指向 `H:\Temp`, 那里**符号链接读取被拒**, pytest 会在会话结束的清理阶段崩(测试其实全过, 但退出码非 0 ⇒ 提交闸门误判红), 详见 [pitfalls.md](pitfalls.md)。R 盘是普通固定盘(70GB, 2026-09-22 实测剩 8.6GB), 且**不支持符号链接**(`os.symlink` 能建, `readlink` 报 `WinError 4390 不是一个重解析点`) —— 恰恰绕开了这一类问题。
+- **注意**:
+  - R 盘是**临时盘**: 需要长期留存的归档仍进 `D:/Projects/_archive/`, 别放这儿。
+  - 依赖符号链接的工具 / 用例**不要**放 R 盘(它建不出真正的重解析点)。
+  - 写之前先 `mkdir -p`; 空间只剩个位数 GB 时先清旧的 `run-*` / `git-backup-*`。
+  - 备选: C 盘 `C:/Users/11059/AppData/Local/Temp` 也可用(1143 passed in 37.69s, 最快), 但按本约定统一走 R 盘, 免得一处一个样。
+
 ## 浏览器自动化环境(两条轨道 · 2026-09-20 实测)
 
 > **选用政策: 优先 `agent-browser`; 它不可用才回退 Playwright 冒烟。**

@@ -21,7 +21,7 @@ user-invocable: true
 |---|---|---|
 | **S0 配置**（每仓库一次） | 确认 `<仓库根>/.commit-flow.toml` 存在且 `confirmed = true` | **没有就停手**，跑 `preflight.py --init` 生成初稿 → **人工确认/修改**（红线必须手填）→ 置 `confirmed = true`。本 skill 不内置项目配置，也不猜默认值；未确认 / 空红线 / 命令还是 `<未填…>` 都会被预检报出来 |
 | **S1 预检与同步** | `python <skill-dir>/scripts/preflight.py` | 一张表报出：配置来源 / 主线远端 / 上游 / 落后几个 / 工作区脏不脏 / 有没有红线文件 / 该跑哪些闸门。有 **STOP** 就先处理（**唯一例外**：「落后 + 脏」要先提交，见下节）；**推送前再跑一次**（`status -sb` 的 ahead/behind 是上次 fetch 的快照，不会自己刷新） |
-| **S2 闸门** | 跑预检列出的命令（测试、生成器 `--check`、格式化…） | 红了不提交 |
+| **S2 闸门** | 预检**已经跑掉** `auto = true` 的那些（测试 / 生成器 `--check` / 格式化 / skill 同步），结果直接写在检查表里；没标 `auto` 的照单跑 | 红了不提交 —— STOP 由预检给出，不用自己判退出码 |
 | **S3 暂存** | `python <skill-dir>/scripts/commit.py --message-file <文件> <路径...>` | **逐路径**，脚本直接拒绝 `-A` / `.` / `*`；红线文件（配置的 `red_lines`）直接拒交；高危文件（`warn_lines`）需人工确认。**暂存前先把收尾做完**（项目若有知识库 / 文档 DoD，先回写再一起暂存 —— 见下节） |
 | **S4 信息** | 自己写 | 首行一句话说清"改了什么 / 为什么"，空一行后写动机 / 取舍 / 影响面 / 实测数字。**数字必须提交那一刻实测**，不沿用会话中途量的旧值。回写随主提交时 emoji 取**主导意图**，不另起一条 |
 | **S5 提交并核 ref** | `commit.py` 提交完自动调 `verify_ref.py` | `HEAD` == `refs/heads/<branch>` == loose/packed-refs 三处一致；不一致按脚本给的处置步骤走，**不要只看 commit 输出** |
@@ -69,10 +69,10 @@ user-invocable: true
 
 | 脚本 | 职责 | 退出码 |
 |---|---|---|
-| `<skill-dir>/scripts/preflight.py` | 只读预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / 脏 / 红线 / 闸门 / staged 异常；`--init` 生成配置初稿、`--show-config` 看生效值 | 0 可继续 · 1 有 STOP（缺配置亦为 1） |
-| `<skill-dir>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
+| `<skill-dir>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑 | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
+| `<skill-dir>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref（内部先跑一次 `--phase commit` 预检，闸门在这一步真跑） | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
 | `<skill-dir>/scripts/verify_ref.py [sha]` | ref 三处一致核对 | 0 一致 · 2 不一致 · 3 staged 暴增 |
-| `<skill-dir>/scripts/push.py [--skip-mirror]` | fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 · 5 主线失败 · 6 取不到远端 ref |
+| `<skill-dir>/scripts/push.py [--skip-mirror] [--skip-preflight]` | 内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |
 
 ## 配置（外置，强制）与自动探测
 
@@ -93,6 +93,51 @@ python <skill-dir>/scripts/preflight.py --show-config    # 看生效值与来源
 （Python / Node / Make 各不相同），未识别则留空让人手写。
 python <skill-dir>/scripts/preflight.py --config <路径>  # 临时用另一份配置
 ```
+
+### 闸门字段：auto / timeout / each_limit
+
+| 字段 | 默认 | 含义 |
+|---|---|---|
+| `auto` | `false` | `true` = 预检**真的执行**它（红了即 STOP）；`false` = 只打印给人 |
+| `timeout` | `600` | 单条命令超时秒数；超时按失败计（不让卡死的命令挂住预检） |
+| `each_limit` | `99` | `<each:>` 展开条数上限（顶层键；超了说明提交范围该拆） |
+
+**未知键 / `timeout` 非法一律 STOP**（不是 WARN）：闸门可能很贵（全量测试 / 格式化 / 索引自洽），
+一个拼错的键让它**静默失效**，比它直接报错坏得多 —— 报错会立刻被发现，静默失效会让人以为
+"该跑的跑过了"，而且 WARN 会被淹没在十来行的检查表里。付的价钱：新增配置键必须先加进
+`KEY_DEFAULTS` / `GATE_KEYS`，否则一写就挡住提交。
+
+### 占位符（由预检展开，展开不了即 STOP，不降级成打印）
+
+| 占位符 | 展开为 |
+|---|---|
+| `<root>` | 仓库根绝对路径 |
+| `<skill-dir:NAME>` | skill 目录（`.agents/skills` → `.codebuddy/skills` → 用户级），**找不到即 STOP** |
+| `<changed:GLOB>` | 本次改动里匹配的文件 → 拼成**一条**命令（排除已删除的） |
+| `<each:GLOB>` | 按匹配文件把这条 `run` **复制成多条**命令，每条替换一个文件；条数上限 `each_limit` |
+
+自造占位符（如 `<改过的 py 文件>`）不会被猜 —— 残留的尖括号直接报 STOP。
+
+### 闸门在流水线里跑几次
+
+预检有三个触发点，闸门实际**只跑两次**：
+
+```
+S1/S2 手动 preflight                      → 真跑 ①   ← 必须在回写知识库 / 文档之前
+   ── 回写知识库 / 文档 ──
+S3 commit.py 内部（--phase commit）        → 真跑 ②
+S6 push.py 内部（--phase push --no-auto）  → 不跑闸门，只核状态
+```
+
+① 必须在**改文档之前**：测试里带着文档 / 知识库守卫（会读 `memory-bank/`），放到回写之后跑
+会因为文档改到一半或索引未重建而红，而且**分不清红的是代码还是文档**。两次回答的是两个不同问题
+（"代码过不过" / "连文档一起过不过"），合并会掩盖一半 —— 单次成本用 `--no-cov` 压住。
+
+**两条纪律**：
+
+- 格式化类闸门必须在逐路径暂存**之前**：格式化会让已 staged 的文件与 index 不一致，
+  必须重新 `add`（S2 在 S3 前天然安全，但不能靠顺序巧合）。
+- 测试必须在回写知识库 / 文档**之前**跑一次。
 
 **运行期自动探测**（受配置里的 mark 与候选名驱动，换项目直接能用）：
 
@@ -120,4 +165,8 @@ python <skill-dir>/scripts/preflight.py --config <路径>  # 临时用另一份�
 - ❌ 把项目红线写进 skill 代码 —— 那是项目事实，该进 `.commit-flow.toml`。
 - ❌ 缺配置时"先猜一份默认继续提交" —— 猜错会放过红线文件，也会漏掉闸门。
 - ❌ 看到「落后主线」的 STOP 就先去 rebase —— 工作区脏时那是最危险的一步；先提交再 rebase。
+- ❌ 闸门只打印、不标 `auto` —— 执行权留在记忆里，等于没装闸门；命令固定就标 `auto = true`。
+- ❌ 自造占位符（`<改过的 py 文件>`）指望脚本猜 —— 只认 `<root>` / `<skill-dir:NAME>` /
+  `<changed:GLOB>` / `<each:GLOB>`，其余残留尖括号直接 STOP。
+- ❌ 把格式化 / 测试放到回写知识库之后再跑 —— 测试带文档守卫，那会分不清红的是代码还是文档。
 - ❌ 用 `git stash` 把工作区"弄干净"再去 rebase —— 本环境下 stash 有毁库风险，用提交或移出改动。

@@ -41,19 +41,34 @@ KEY_DEFAULTS: dict = {
     "gates": [],
     "platform_hints": ["winreg", "dir_fd", "socket", "subprocess"],
     "staged_panic": 200,
+    "each_limit": 99,  # <each:GLOB> 的展开条数上限; 超了说明提交范围该拆, 不该静默跑下去
 }
+
+# 一个 [[gates]] 条目允许出现的键。出现在配置里的其它键一律 STOP ——
+# gate 级原样透传、不做键过滤, `auto` 拼成 `auto_run` 会**静默**退回 "只打印":
+# 你以为闸门自动跑了, 其实一条没跑, 输出里连痕迹都没有。见 draft_issues 的注释。
+GATE_KEYS = {"match", "run", "note", "auto", "timeout"}
+
+# <skill-dir:NAME> 的候选位置 —— 按此顺序找, 第一个存在的即命中。
+# 项目级在前(同一份 skill 的 .codebuddy 版本是 .agents 的 junction), 用户级兜底。
+SKILL_DIR_CANDIDATES = (
+    ".agents/skills/{name}",
+    ".codebuddy/skills/{name}",
+    "~/.workbuddy-ai/skills/{name}",
+    "~/.codebuddy/skills/{name}",
+)
 
 
 class ConfigMissing(RuntimeError):
     """仓库里没有外置配置 —— 调用方应打印本异常文案并停手。"""
-
     def __init__(self, root: Path) -> None:
         super().__init__(
             f"[STOP] 缺少外置配置: {root / CONFIG_NAME}\n"
             "本 skill 不在代码里内置项目配置(红线文件 / 闸门命令 …), 必须逐仓库显式声明。\n"
             "生成初稿后**人工确认**再继续:\n"
             "    python <skill-dir>/scripts/preflight.py --init\n"
-            "    python <skill-dir>/scripts/preflight.py --show-config   # 看生效值与来源")
+            "    python <skill-dir>/scripts/preflight.py --show-config   # 看生效值与来源"
+        )
 
 
 def git(*args: str) -> str:
@@ -86,6 +101,22 @@ def load_config(root: Path | None = None, explicit: str | None = None) -> tuple[
     cfg = dict(KEY_DEFAULTS)
     cfg.update({k: v for k, v in data.items() if k in KEY_DEFAULTS})
     return cfg, path
+
+
+def find_skill_dir(name: str, root: Path | None = None) -> Path | None:
+    """定位 skill 目录: 项目级 → 用户级, 第一个存在的即命中; 都找不到返回 None(由调用方转 STOP)。
+
+    `<skill-dir:NAME>` 占位符靠它解析。**不猜**: 找不到就交给调用方停手, 而不是降级成"打印给人" ——
+    降级意味着"看起来跑过了", 那比报错坏得多。
+    """
+    base = root or find_root()
+    for tpl in SKILL_DIR_CANDIDATES:
+        cand = Path(tpl.format(name=name)).expanduser()
+        if not cand.is_absolute():
+            cand = base / cand
+        if cand.is_dir():
+            return cand
+    return None
 
 
 # ------------------------------------------------------------------ 远端探测(配置驱动)
@@ -159,8 +190,10 @@ def proxy_disable_args(target_url: str) -> tuple[str, ...]:
 # ------------------------------------------------------------------ 初稿生成(--init)
 
 # 被 gitignore 的目录里, 这些是构建/缓存产物 —— 不可能被 stage, 不该进候选(纯噪音)
-BUILD_NOISE = ("__pycache__", ".venv", "venv", "node_modules", "dist", "build", "coverage", "htmlcov",
-               ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", "site")
+BUILD_NOISE = (
+    "__pycache__", ".venv", "venv", "node_modules", "dist", "build", "coverage", "htmlcov", ".pytest_cache",
+    ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", "site"
+)
 
 
 def _host(url: str) -> str:
@@ -200,8 +233,7 @@ def _detect_project(root: Path) -> tuple[list[dict], list[str], list[str]]:
 
     has_py = bool(list(root.glob("*.py"))) or (root / "src").exists() or (root / "tests").exists()
     py_cfg = [
-        f for f in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile")
-        if (root / f).exists()
+        f for f in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile") if (root / f).exists()
     ]
     is_python = bool(py_cfg) and has_py
 
@@ -218,23 +250,26 @@ def _detect_project(root: Path) -> tuple[list[dict], list[str], list[str]]:
         why.append(why_pack)
         run = [test]
         if (root / ".style.yapf").exists():
-            run.insert(0, "yapf -i <改过的 py 文件>")
+            run.insert(0, "yapf -i <changed:*.py>")
             why.append("格式化 yapf(依据: .style.yapf)")
-        elif ((root / "ruff.toml").exists() or (root / ".ruff.toml").exists() or
-              ((root / "pyproject.toml").exists() and "[tool.ruff]" in
-               (root / "pyproject.toml").read_text(encoding="utf-8", errors="replace"))):
-            run.insert(0, "ruff format <改过的 py 文件>")
+        elif (
+            (root / "ruff.toml").exists() or (root / ".ruff.toml").exists() or (
+                (root / "pyproject.toml").exists() and
+                "[tool.ruff]" in (root / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
+            )
+        ):
+            run.insert(0, "ruff format <changed:*.py>")
             why.append("格式化 ruff(依据: ruff 配置)")
-        gates.append({"match": ["src/", "tests/"], "run": run, "note": "Python 改动"})
+        gates.append({"match": ["src/", "tests/"], "run": run, "note": "Python 改动", "auto": True})
         kinds.append("python")
 
     if (root / "package.json").exists():
-        gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动"})
+        gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动", "auto": True})
         why.append("前端(依据: package.json)")
         kinds.append("node")
 
     if (root / "Makefile").exists() and not gates:
-        gates.append({"match": ["Makefile"], "run": ["make test"], "note": "有 Makefile"})
+        gates.append({"match": ["Makefile"], "run": ["make test"], "note": "有 Makefile", "auto": True})
         why.append("Make(依据: Makefile, 且未识别到其它类型)")
         kinds.append("make")
 
@@ -284,8 +319,7 @@ def render_template(root: Path) -> str:
         "# 出现需人工确认(例: 用户的在途改动 / 不该入库的项目数据)",
         "warn_lines = []",
         "",
-        (f"platform_hints = {arr(hints)}" if hints else
-         'platform_hints = []   # 未识别技术栈 → 未给关键词, 请按真实跨平台风险手写'),
+        (f"platform_hints = {arr(hints)}" if hints else 'platform_hints = []   # 未识别技术栈 → 未给关键词, 请按真实跨平台风险手写'),
         f"staged_panic = {KEY_DEFAULTS['staged_panic']}",
         "",
         "# 提交前闸门 —— 判据: " + "; ".join(why),
@@ -295,15 +329,23 @@ def render_template(root: Path) -> str:
             "[[gates]]",
             f"match = {arr(gate['match'])}",
             f"run   = {arr(gate['run'])}",
+            f"auto  = {str(gate.get('auto', False)).lower()}   # true = 预检真的执行它(会改工作区), false = 只打印",
             f'note  = "{gate["note"]}"',
             "",
         ]
+    out += [
+        "# 占位符(由预检展开, 展开不了即 STOP): <root> · <skill-dir:NAME> · <changed:GLOB> · <each:GLOB>",
+        "#   <changed:GLOB> 本次改动里匹配的文件 → 拼成一条命令(排除已删除的)",
+        "#   <each:GLOB>    按匹配文件把这条 run 复制成多条命令, 每条替换一个文件; 条数上限 each_limit",
+        "",
+    ]
     if not gates:
         out += [
             "# (未识别项目类型, 未生成任何闸门 —— 请照下面格式手写, 否则提交前不会有任何机检)",
             "# [[gates]]",
             '# match = ["src/"]',
             '# run   = ["<未填: 测试命令>"]',
+            '# auto  = true',
             '# note  = "改动源码"',
             "",
         ]
@@ -342,3 +384,42 @@ def draft_issues(cfg: dict) -> list[str]:
             if "<未填" in cmd:
                 issues.append(f"闸门命令仍有未填项: {cmd}")
     return issues
+
+
+def config_problems(cfg: dict, path: Path | None = None) -> list[tuple[str, str]]:
+    """分级体检, 返回 [(级别, 说明)], 级别为 "WARN" / "STOP"。
+
+    与 `draft_issues()` 的分工: 后者只报"初稿还没确认"这类 WARN; 本函数额外报**配置写错** ——
+    未知键 / `timeout` 非法一律 **STOP**。
+
+    为什么是 STOP 不是 WARN: 闸门可能很贵(全量测试 / 格式化 / 索引自洽), 一个拼错的键让它
+    **静默失效**, 比它直接报错坏得多 —— 报错会立刻被发现, 静默失效会让人以为"该跑的跑过了";
+    而且 WARN 会被淹没在十来行的检查表里, 只有 STOP 会被处理。
+
+    付的价钱: 以后新增配置键必须先加进 KEY_DEFAULTS / GATE_KEYS, 否则一写就挡住提交 —— 接受。
+    """
+    problems: list[tuple[str, str]] = []
+    for issue in draft_issues(cfg):
+        problems.append(("WARN", issue))
+
+    # 顶层未知键: load_config 会把白名单外的键**静默丢掉**, 只有回读原文才看得见
+    src = Path(path) if path else (find_root() / CONFIG_NAME)
+    raw: dict = {}
+    if src.exists() and tomllib is not None:
+        try:
+            raw = tomllib.loads(src.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:  # 读不了就如实说, 不假装没问题
+            problems.append(("WARN", f"配置读取异常, 已跳过顶层键校验: {exc}"))
+    for key in sorted(set(raw) - set(KEY_DEFAULTS)):
+        problems.append(("STOP", f"顶层未知键: {key}"
+                         f"(允许: {', '.join(sorted(KEY_DEFAULTS))})"))
+
+    for gate in cfg.get("gates", []):
+        note = gate.get("note", "(无 note)")
+        for key in sorted(set(gate) - GATE_KEYS):
+            problems.append(("STOP", f"gate「{note}」出现未知键: {key}"
+                             f"(允许: {', '.join(sorted(GATE_KEYS))})"))
+        timeout = gate.get("timeout", 600)
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
+            problems.append(("STOP", f"gate「{note}」的 timeout 非法: {timeout!r}(正整数秒)"))
+    return problems

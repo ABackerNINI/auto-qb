@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>闸门自动运行 · my-commit-flow 修改方案</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f0f0f; --fg:#ececec; --muted:#8f8f8f; --faint:#6a6a6a;
+    --hair:rgba(255,255,255,.09); --surface:rgba(255,255,255,.03);
+    --accent:#c9a05a;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono","JetBrains Mono",Consolas,"Noto Sans Mono CJK SC",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg)}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;font-weight:400;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1160px;margin:0 auto;padding:88px 40px 120px;
+        display:grid;grid-template-columns:212px minmax(0,1fr);gap:64px}
+  header{grid-column:1 / -1;max-width:760px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--faint);margin:0 0 22px}
+  h1{font-size:44px;line-height:1.12;letter-spacing:-.02em;font-weight:600;margin:0 0 20px}
+  .lede{font-size:17px;line-height:1.6;color:#c9c9c9;margin:0 0 28px;max-width:640px}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;font-family:var(--mono);font-size:11.5px;
+        color:var(--faint);letter-spacing:.02em;padding-top:18px;border-top:1px solid var(--hair)}
+  .meta span b{font-weight:400;color:var(--muted)}
+  nav.toc{position:sticky;top:56px;align-self:start;font-family:var(--mono);font-size:12px}
+  nav.toc p{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 9px;color:var(--faint)}
+  nav.toc a{color:var(--muted);text-decoration:none;border:0}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .n{color:var(--faint);margin-right:8px}
+  main{max-width:760px;min-width:0}
+  section{margin:0 0 74px;scroll-margin-top:56px}
+  h2{font-size:23px;font-weight:600;letter-spacing:-.01em;line-height:1.25;margin:0 0 6px}
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.08em;
+        display:block;margin-bottom:12px;font-weight:400}
+  .rule{height:1px;background:var(--hair);width:88px;margin:20px 0 26px}
+  h3{font-size:15.5px;font-weight:600;margin:34px 0 10px;letter-spacing:-.005em}
+  p{margin:0 0 16px}
+  p,li{max-width:68ch}
+  ul,ol{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 8px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface);
+       border:1px solid var(--hair);border-radius:3px;padding:1px 5px;color:#dedede}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.62;background:var(--surface);
+      border:1px solid var(--hair);border-radius:3px;padding:16px 18px;overflow-x:auto;
+      margin:0 0 20px;color:#d6d6d6;white-space:pre}
+  pre .c{color:var(--faint)}
+  pre .a{color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin:6px 0 22px;font-size:13.5px}
+  th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+     text-transform:uppercase;color:var(--faint);font-weight:400;
+     padding:0 14px 9px 0;border-bottom:1px solid var(--hair)}
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--hair);vertical-align:top;color:#dcdcdc}
+  td:first-child{color:var(--fg)}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px}
+  .yes{color:var(--accent)}
+  .no{color:var(--muted)}
+  .note{border-left:1px solid var(--hair);padding:2px 0 2px 18px;margin:0 0 22px;
+        color:var(--muted);font-size:13.5px;line-height:1.6}
+  figure{margin:26px 0 30px}
+  figcaption{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:12px;letter-spacing:.02em}
+  svg{display:block;max-width:100%}
+  .btn{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--muted);
+       border:1px solid var(--hair);border-radius:3px;padding:3px 8px}
+  footer{grid-column:1 / -1;border-top:1px solid var(--hair);padding-top:22px;
+         font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.02em;max-width:760px}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(201,160,90,.35)}
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr;gap:0;padding:56px 24px 80px}
+    nav.toc{position:static;margin-bottom:48px}
+    h1{font-size:34px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">修改方案 · my-commit-flow · 2026-09-22</p>
+  <h1>让固定闸门真的跑起来</h1>
+  <p class="lede">现在预检只把闸门命令<em>打印</em>出来，跑不跑、红没红，全靠执行提交的人记得。
+     本方案让闸门<strong>由脚本执行、红了即 STOP</strong>：命令里需要“本次改过的文件”“某个 skill 的路径”这类
+     运行期才知道的信息，用占位符声明，由预检展开成真实命令；展开不了的才停下来。
+     只有<em>需要人读输出做判断</em>的才打印给人 —— 那已经不是闸门，是提醒。</p>
+  <div class="meta">
+    <span><b>改动面</b> 3 个脚本 + 1 份配置 + 1 份 skill 文档</span>
+    <span><b>依据</b> .commit-flow.toml · preflight.py · _ship_config.py · SKILL.md</span>
+    <span><b>状态</b> 待确认</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <p>目录</p>
+  <ol>
+    <li><span class="n">01</span><a href="#s1">问题：打印≠执行</a></li>
+    <li><span class="n">02</span><a href="#s2">四条设计原则</a></li>
+    <li><span class="n">03</span><a href="#s3">机制：auto 字段与校验</a></li>
+    <li><span class="n">04</span><a href="#s4">本仓库闸门分类</a></li>
+    <li><span class="n">05</span><a href="#s5">改动清单</a></li>
+    <li><span class="n">06</span><a href="#s6">配置改造示例</a></li>
+    <li><span class="n">07</span><a href="#s7">预检输出改造</a></li>
+    <li><span class="n">08</span><a href="#s8">风险与未决</a></li>
+    <li><span class="n">09</span><a href="#s9">验证步骤</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="n">01</span>问题：打印出来的闸门靠不住</h2>
+  <div class="rule"></div>
+  <p>当前预检第 9 步只做一件事：把命中的闸门拼成一行 WARN，再在表尾列出命令。它不执行任何一条。</p>
+  <pre><span class="c"># preflight.py 现状（212–236 行）</span>
+gates = gates_for(changed, cfg[<span class="a">"gates"</span>])
+<span class="c">if gates:
+    rows.append((WARN, "提交前闸门", "; ".join(note for note, _ in gates)))</span>
+<span class="c">...</span>
+<span class="c">if gates:
+    print("\n该跑的闸门命令:")
+    for _, cmds in gates:
+        for cmd in cmds:
+            print(f"  - {cmd}")</span></pre>
+  <p>这个设计漏掉的三件事，恰好都是“AI 会犯错”的地方：</p>
+  <ul>
+    <li><strong>漏跑</strong> —— 列表混在一张十来行的检查表里，WARN 又不挡退出码，跳过毫无阻力。</li>
+    <li><strong>漏判</strong> —— 跑了但没看退出码，或者在输出里扫一眼“没报错”就当过。</li>
+    <li><strong>假性“不能自动”</strong> —— <code>&lt;改过的 py 文件&gt;</code>、<code>&lt;create-issue skill&gt;</code> 这类占位符
+        被当成“脚本没法补全”，于是整条闸门退回打印。但预检<strong>已经掌握</strong>这些信息：改动清单来自
+        <code>git status --porcelain</code>，skill 目录可以按名字搜到。缺的只是展开机制，不是能力 ——
+        把它归进“人来做”，等于白扔脚本已经知道的东西。</li>
+  </ul>
+  <p class="note">结论：闸门的价值在于“红了不让提交”，而不是“提醒你该跑了”。只要执行权在记忆里，闸门就等于没装。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="n">02</span>六条设计原则</h2>
+  <div class="rule"></div>
+  <ul>
+    <li><strong>能自动的一律自动。</strong>命令固定、退出码可判的，脚本直接跑，红了进 STOP、退出码 1 —— 不给“记得跑”留机会。</li>
+    <li><strong>不能自动的才打印。</strong>含占位符、需要人挑文件或需要人读输出的，仍只列命令，语义保持 WARN。</li>
+    <li><strong>自动与否是配置事实，不是代码猜测。</strong>由 <code>auto</code> 字段显式声明；脚本不去猜“这条能不能跑”，
+        猜错就是静默执行了一条本该由人确认的命令。</li>
+    <li><strong>先展开，再执行；展开不了就停。</strong>占位符名拼错、skill 目录搜不到 → 报 STOP，
+        <strong>不降级成打印</strong> —— 降级意味着“看起来跑过了”。</li>
+    <li><strong>占位符只描述“运行期才知道的信息”，不描述逻辑。</strong>它不能做条件判断、不能挑 subset，
+        越界的表达就该写成自己的脚本，塞进占位符只会让配置变成一门没人懂的语言。</li>
+    <li><strong>配置写错就停，不带着错继续。</strong>闸门可能很贵（测试、格式化、索引自洽），
+        一个拼错的键让它静默失效，比它报错<strong>坏得多</strong> ——
+        报错会被立刻发现，静默失效会让人以为“该跑的跑过了”。
+        所以未知键、非法值是 <strong>STOP</strong>，不是 WARN。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="n">03</span>机制：给闸门加 auto 字段</h2>
+  <div class="rule"></div>
+
+  <h3>字段语义</h3>
+  <table>
+    <tr><th style="width:96px">字段</th><th style="width:86px">默认</th><th>含义</th></tr>
+    <tr><td class="mono">auto</td><td class="mono">false</td><td><code>true</code> = 命中即由预检执行；<code>false</code> = 只打印给人（现状行为）</td></tr>
+    <tr><td class="mono">timeout</td><td class="mono">600</td><td>单条命令超时秒数；超时按失败计（STOP）—— 不让一条卡死的命令把预检挂住</td></tr>
+    <tr><td class="mono">match<br>run<br>note</td><td class="mono">—</td><td>不变</td></tr>
+    <tr><td class="mono">each_limit<div class="mono" style="color:#6a6a6a">（顶层键）</div></td><td class="mono">99</td>
+        <td><code>&lt;each:&gt;</code> 展开条数上限。可配、随 <code>--show-config</code> 显示 ——
+            它是"一次提交改了多少个文件"这个尺度的显式护栏，超了说明提交范围该拆，不该静默跑下去</td></tr>
+  </table>
+
+  <h3>执行语义</h3>
+  <ul>
+    <li>执行顺序：<strong>先展开占位符，再执行</strong>，整体在预检第 9 步、<strong>打印检查表之前</strong>跑完 —— 结果要能进那张表。</li>
+    <li>执行方式：<code>subprocess.run(cmd, shell=True, cwd=仓库根, timeout=gate.timeout)</code>。
+        Windows 下 <code>uv run</code> / <code>python</code> 都依赖 shell 解析，不能走 argv 列表。</li>
+    <li>结果落表：每条自动命令一行 <code>[PASS]</code> / <code>[STOP]</code>（命令 + 退出码 + 耗时）；全绿则汇总成一行 PASS。</li>
+    <li>输出：成功只留一行摘要；失败打印末 20 行，够定位即可 —— 全量输出会把检查表冲掉。</li>
+    <li>退出码：任一自动闸门失败 → STOP → 退出码 1，与现有“有 STOP 就返回 1”一致。</li>
+  </ul>
+
+  <h3>在流水线里跑几次（时间线）</h3>
+  <p>翻了 <code>commit.py</code> / <code>push.py</code> 的源码，预检在一条流水线里共有 <strong>3 个触发点</strong>
+     —— <code>commit.py</code> 内部自己也调了一次：</p>
+  <pre>S1/S2 手动 preflight（--phase push 默认）              → 自动闸门跑 <span class="a">①</span>
+   ── 回写知识库 / 文档（改 memory-bank/ 与 docs/）──
+S3 commit.py 内部 preflight_main(["--phase","commit"])  → 自动闸门跑 <span class="a">②</span>
+S6 push.py <span class="a">内部自动</span>（--phase push --no-auto）              → 不跑闸门，只核状态
+<span class="c">（手动那次取消 —— 见下）</span></pre>
+  <p>定下的分工：<strong>① 与 ② 都真跑，pytest 每周期跑两次</strong>；S6 那次<strong>取消手动、收进
+     <code>push.py</code></strong> 并固定 <code>--no-auto</code>。</p>
+  <ul>
+    <li><strong>① 必须真跑，而且必须在改文档之前。</strong>项目测试里带着<strong>文档 / 知识库结构守卫</strong>
+        —— 实测 <code>tests/test_memory_bank.py</code> 直接读 <code>memory-bank/</code>，
+        <code>test_web.py</code> / <code>test_torrents.py</code> 也涉及文档。
+        放到回写文档<strong>之后</strong>才跑，会因为文档改到一半、索引尚未重建而报红，
+        而且<strong>分不清红的是代码还是文档</strong>。先在改文档之前跑一次，就把“代码本身是绿的”锁定了，
+        之后文档引起的红一眼可辨 —— 也顺带避免文档漂移被误判成代码问题。</li>
+    <li><strong>② 必须真跑</strong>：回写之后工作区状态变了，提交进去的是“代码 + 文档”一起，
+        提交那一刻必须再验一次。它由 <code>commit.py</code> 内部触发（硬编码、不带 <code>--no-auto</code>），
+        红了就中止提交（<code>commit.py</code> 已按 <code>rc != 0</code> 退出）。</li>
+    <li><strong>取消 S6 的手动预检，改由 <code>push.py</code> 内部自动跑（<code>--phase push --no-auto</code>）。</strong>
+        手动那次有一半是重复的 —— <code>push.py</code> 自己已经 <code>fetch</code> 并判落后
+        （落后即退出码 1）。但<strong>它不查的几项不能丢</strong>：工作区脏不脏、分支 / 上游对不对、
+        红线文件有没有又被改出来、镜像远端在不在。尤其本方案下<strong>自动闸门会改工作区</strong>
+        （yapf 重写文件、sync 建 junction），推送前那次“脏”检查正好能抓出
+        “闸门产生的改动没被一起提交”。所以做法是<strong>收进去，不是取消</strong> ——
+        和 <code>commit.py</code> 内嵌预检的做法对齐，也不再靠人记得手动跑一遍。</li>
+  </ul>
+  <p class="note">两次是<strong>刻意接受</strong>的，不是没优化掉：两次回答的是两个不同的问题
+     （“代码本身过不过” / “连文档一起提交过不过”），合并成一次反而会掩盖其中一半。
+     单次成本用 <code>--no-cov</code> 压住。这条分工要写进 skill，不能靠人记得。</p>
+
+  <h3>占位符：把“运行期才知道的信息”交给脚本</h3>
+  <table>
+    <tr><th style="width:172px">占位符</th><th>展开为</th><th style="width:112px">展开失败</th></tr>
+    <tr><td class="mono">&lt;root&gt;</td><td>仓库根绝对路径</td><td class="no">—</td></tr>
+    <tr><td class="mono">&lt;skill-dir:NAME&gt;</td><td>skill 目录：依次找 <code>&lt;root&gt;/.agents/skills/NAME</code>、
+        <code>&lt;root&gt;/.codebuddy/skills/NAME</code>、用户级 skills 目录；
+        <strong>第一个存在的即命中</strong>（本仓库 <code>.codebuddy/skills</code> 是指向
+        <code>.agents/skills</code> 的 junction，二者同一份）</td><td class="yes">STOP</td></tr>
+    <tr><td class="mono">&lt;changed:GLOB&gt;</td><td>本次改动里匹配 GLOB 的文件，拼成<strong>一条</strong>命令（路径逐个加引号）</td><td class="mono">跳过 + 记一行</td></tr>
+    <tr><td class="mono">&lt;each:GLOB&gt;</td><td>按匹配文件把这条 <code>run</code> <strong>复制成多条命令</strong>，每条替换一个文件；
+        条数上限 = 顶层 <code>each_limit</code>（默认 <strong>99</strong>，可配、可在 <code>--show-config</code> 里看到），
+        超过即 STOP</td><td class="mono">跳过 + 记一行</td></tr>
+  </table>
+  <p>改动清单的取法（<code>changed</code> = staged + unstaged + 未跟踪，预检已有）：</p>
+  <pre>{ git diff --name-only --diff-filter=ACM -- <span class="a">'*.py'</span>;
+  git diff --cached --name-only --diff-filter=ACM -- <span class="a">'*.py'</span>;
+  git ls-files --others --exclude-standard -- <span class="a">'*.py'</span>; } | sort -u</pre>
+  <p class="note"><code>--diff-filter=ACM</code> 是必须的：<code>D</code>（已删除）状态的文件磁盘上不存在，
+      喂给 <code>yapf -i</code> 会直接失败。<code>&lt;each:&gt;</code> 存在的理由之一是
+      <strong>Windows 命令行 8191 字符上限</strong> —— 改动多时不能拼成一条巨长命令，只能逐个调用。</p>
+
+  <h3>校验（fail-fast，进 <code>draft_issues()</code>）</h3>
+  <ul>
+    <li>顺序是<strong>先展开后校验</strong>：先跑占位符展开，展开后命令里仍残留 <code>&lt;…&gt;</code>
+        → 报“占位符未识别 / 无法展开”（STOP 级）。<strong>不是“见到尖括号就 STOP”</strong> ——
+        那样合法的占位符写法会被自己拦下来。</li>
+    <li><code>&lt;skill-dir:NAME&gt;</code> 在所有候选位置都搜不到 → STOP，不猜、不降级成打印。</li>
+    <li><code>auto = true</code> 但命令展开失败 → STOP（同上，不降级）。</li>
+    <li><code>timeout</code> ≤ 0 或非整数 → STOP，不静默取默认。</li>
+    <li><strong>未知键 → STOP。</strong>顶层键必须在 <code>KEY_DEFAULTS</code> 白名单内；
+        gate 键必须在 <code>{match, run, note, auto, timeout}</code> 内。
+        报错要点名：键名 + 所在 gate 的 <code>note</code>（顶层则标“顶层”）+ 允许键清单。<strong>不是 WARN</strong> ——
+        见第 02 节原则 6：闸门很贵，静默失效比报错坏得多。</li>
+    <li>未知字段仍按现状忽略 —— 但 <code>auto</code> 拼错成 <code>auto_run</code> 会静默退化成“只打印”，
+        这条只能靠 <code>--show-config</code> 人工看；见第 08 节待定项。</li>
+  </ul>
+
+  <h3>新增命令行开关</h3>
+  <p><code>--no-auto</code>：只列不跑。用途是“只想看预检表”或推送前那次复跑不想再等一遍全量测试。</p>
+
+  <figure>
+    <svg viewBox="0 0 660 150" width="100%" role="img" aria-label="闸门分流：命中的闸门按 auto 字段分为自动执行与打印给人工两类">
+      <g fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1">
+        <rect x="8" y="52" width="132" height="46"/>
+        <rect x="228" y="18" width="176" height="46"/>
+        <rect x="228" y="92" width="176" height="46"/>
+        <rect x="492" y="18" width="160" height="46"/>
+        <rect x="492" y="92" width="160" height="46"/>
+      </g>
+      <g fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1">
+        <path d="M140 75 L206 75 L206 41 L226 41"/>
+        <path d="M140 75 L206 75 L206 115 L226 115"/>
+        <path d="M404 41 L490 41"/>
+        <path d="M404 115 L490 115"/>
+      </g>
+      <g fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1" marker-end="url(#ah)">
+        <path d="M226 41 L228 41"/>
+        <path d="M488 41 L490 41"/>
+        <path d="M488 115 L490 115"/>
+      </g>
+      <defs>
+        <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M1 1 L7 4 L1 7" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>
+        </marker>
+      </defs>
+      <text x="74" y="78" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12.5">闸门命中</text>
+      <text x="316" y="38" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12.5">auto = true</text>
+      <text x="316" y="58" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">命令固定</text>
+      <text x="316" y="112" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12.5">auto = false</text>
+      <text x="316" y="132" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">含占位符</text>
+      <text x="572" y="38" text-anchor="middle" fill="#c9a05a" font-family="ui-monospace,Consolas,monospace" font-size="12.5">脚本执行</text>
+      <text x="572" y="58" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">红 → STOP</text>
+      <text x="572" y="112" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12.5">打印给人</text>
+      <text x="572" y="132" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">WARN</text>
+    </svg>
+    <figcaption>分流点只有一个：配置里显式写的 auto 字段。</figcaption>
+  </figure>
+</section>
+
+<section id="s4">
+  <h2><span class="n">04</span>本仓库现有闸门怎么分</h2>
+  <div class="rule"></div>
+  <p>加上占位符之后，结论翻过来了：<strong>7 条命令全部可自动</strong>。
+     原先被认为“只能靠人”的三条，缺的都不是能力，而是展开机制。</p>
+  <table>
+    <tr><th style="width:150px">闸门（match）</th><th>命令</th><th style="width:52px">自动</th><th style="width:104px">展开来源</th></tr>
+    <tr><td class="mono">src/ tests/</td><td class="mono">yapf -i &lt;changed:*.py&gt;</td><td class="yes">是</td><td class="mono">改动清单</td></tr>
+    <tr><td class="mono">src/ tests/</td><td class="mono">uv run pytest tests -q --no-cov</td><td class="yes">是</td><td class="mono">—</td></tr>
+    <tr><td class="mono">memory-bank/issues/</td><td class="mono">python &lt;skill-dir:create-issue&gt;/scripts/gen_issues_index.py --check</td><td class="yes">是</td><td class="mono">skill 搜索</td></tr>
+    <tr><td class="mono">memory-bank/tasks/</td><td class="mono">python scripts/gen_tasks_index.py --check</td><td class="yes">是</td><td class="mono">—</td></tr>
+    <tr><td class="mono">.agents/skills/</td><td class="mono">python &lt;each:.agents/skills/**/scripts/*.py&gt; --help</td><td class="yes">是</td><td class="mono">改动清单 + 逐条</td></tr>
+    <tr><td class="mono">""（新增 · 每次命中）</td><td class="mono">python scripts/sync_agent_skills.py</td><td class="yes">是</td><td class="mono">—</td></tr>
+    <tr><td class="mono">AGENTS.md</td><td class="mono">python scripts/check_context_caps.py</td><td class="yes">是</td><td class="mono">—</td></tr>
+  </table>
+  <p>三条原先“需人”的怎么落的：</p>
+  <ul>
+    <li><strong>yapf</strong> —— <code>&lt;changed:*.py&gt;</code> 从改动清单取（含未跟踪的新文件），
+        排除 <code>D</code> 状态；逐个文件调用以绕开命令行长度上限。</li>
+    <li><strong>issues 索引</strong> —— <code>&lt;skill-dir:create-issue&gt;</code> 实测命中
+        <code>.agents/skills/create-issue</code>（<code>.codebuddy/skills/create-issue</code> 是同一份的 junction）。</li>
+    <li><strong>脚本冒烟</strong> —— <code>&lt;each:…&gt;</code> 把一条 <code>run</code> 按匹配到的脚本复制成多条
+        <code>python X --help</code>。GLOB 走 <code>pathlib.rglob</code> 语义（<code>**</code> 跨目录）。</li>
+  </ul>
+  <p class="note">于是“人工闸门”这个分类在本仓库被清空 —— 打印路径只剩 <code>--no-auto</code>
+     和配置里显式标 <code>auto = false</code> 时出现。这不是过度自动化：闸门存在的意义就是不让步，
+     需要人判断的东西本来就不该伪装成闸门。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="n">05</span>改动清单</h2>
+  <div class="rule"></div>
+  <table>
+    <tr><th style="width:210px">文件</th><th>改什么</th></tr>
+    <tr>
+      <td class="mono">_ship_config.py</td>
+      <td>⓪ 新增 <code>GATE_KEYS = {match, run, note, auto, timeout}</code> 白名单与
+          <code>config_problems(cfg) -&gt; list[(level, msg)]</code>：未知键（顶层 / gate 级）走 <strong>STOP</strong>，
+          初稿体检类走 WARN；替代现有 <code>draft_issues()</code>（只被 <code>preflight.py</code> 一处调用，改签名无外部影响）；
+          ① <code>KEY_DEFAULTS</code> 加 <code>auto = false</code>、<code>timeout = 600</code>、顶层
+          <code>each_limit = 99</code>（保守默认：不标就不执行）；
+          ② 校验改为<strong>先展开后判残留</strong>（展开后仍有 <code>&lt;…&gt;</code>、
+             skill 目录搜不到、<code>timeout</code> 非法、<code>&lt;each:&gt;</code> 超 <code>each_limit</code> → STOP）；
+          ③ <code>render_template()</code> 初稿每个 gate 都带上 <code>auto</code> 与注释：
+             探测出的测试命令标 <code>true</code>，格式化命令写成
+             <code>yapf -i &lt;changed:*.py&gt;</code> 并同样标 <code>true</code>，
+             注释写明“auto = true 会被真的执行，且会改工作区”。</td>
+    </tr>
+    <tr>
+      <td class="mono">preflight.py</td>
+      <td>① 新增 <code>expand_placeholders(cmd, ctx)</code>：展开 <code>&lt;root&gt;</code> /
+          <code>&lt;skill-dir:NAME&gt;</code> / <code>&lt;changed:GLOB&gt;</code> / <code>&lt;each:GLOB&gt;</code>，
+          返回 1~N 条真实命令，展开不了抛错；
+          ② 新增 <code>find_skill_dir(name)</code>：按 03 节的顺序搜 skill 目录，搜不到返回空（由调用方转 STOP）；
+          ③ 新增 <code>run_auto_gates(gates, root)</code>：先展开、再 shell 执行 + 超时 + 收集 (命令, rc, 耗时, 末 20 行)；
+          ④ 第 9 步改为“展开 → 跑自动闸门 → 结果进表 → 剩下的仍打印”；
+          ⑤ 加 <code>--no-auto</code>；
+          ⑥ 模块 docstring 与用法注释改口径（不再是“只读”）。</td>
+    </tr>
+    <tr>
+      <td class="mono">push.py</td>
+      <td>① <strong>内嵌预检</strong>：推送动作之前先跑
+          <code>preflight_main(["--phase", "push", "--no-auto"])</code>，非 0 即中止推送 ——
+          取消 S6 的手动那一步，同时保住它原本在查的那几项（脏 / 上游 / 红线 / 镜像）；
+          ② 新增 <code>--skip-preflight</code> 逃生开关，与 <code>commit.py</code> 的同名开关对齐。
+          <br><small>副作用：<code>fetch</code> 会变成两次（预检一次 + push.py 自己一次）——
+          幂等、无新对象时开销可忽略，不为此重构。</small></td>
+    </tr>
+    <tr>
+      <td class="mono">SKILL.md</td>
+      <td>① S2 那一行改写成“闸门由预检执行：占位符自动展开，红了即 STOP；<code>--no-auto</code> 时只列不跑”；
+          ② 脚本表里 preflight 的“只读预检”改成“预检 + 自动闸门（会写工作区）”；
+          ③ 配置章节补 <code>auto</code> / <code>timeout</code> 字段说明，并<strong>整张占位符表</strong>搬进去；
+          ④ 反模式补一条“手写 <code>&lt;改过的 py 文件&gt;</code> 这类自造占位符，指望脚本猜” ——
+             只认 03 节那四个，其余报 STOP；
+          ⑤ 写死两条纪律：<strong>格式化类闸门必须在逐路径暂存之前</strong>（见第 08 节第 7 条）；
+             <strong>测试必须在回写知识库 / 文档<em>之前</em>跑一次</strong>，回写之后提交前再跑一次（见 03 节时间线）。</td>
+    </tr>
+    <tr>
+      <td class="mono">.commit-flow.toml</td>
+      <td>按第 06 节拆分并补 <code>auto</code>；同步闸门标 <code>true</code>。</td>
+    </tr>
+  </table>
+</section>
+
+<section id="s6">
+  <h2><span class="n">06</span>配置改造示例</h2>
+  <div class="rule"></div>
+  <h3>现在（两条命令挤在一个 gate 里，格式化靠人挑文件）</h3>
+  <pre>[[gates]]
+match = [<span class="a">"src/"</span>, <span class="a">"tests/"</span>]
+run   = [<span class="a">"yapf -i &lt;改过的 py 文件&gt;"</span>, <span class="a">"uv run pytest tests -q"</span>]
+note  = <span class="a">"Python 改动: 先格式化再跑全量测试"</span></pre>
+  <h3>改成（拆开 + 占位符 + auto）</h3>
+  <pre><span class="c"># 格式化: 脚本从改动清单取文件, 逐个调用(绕开命令行长度上限)</span>
+[[gates]]
+match = [<span class="a">"src/"</span>, <span class="a">"tests/"</span>]
+run   = [<span class="a">"yapf -i &lt;changed:*.py&gt;"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">120</span>
+note  = <span class="a">"格式化: 只碰本次改过的 py 文件"</span>
+
+[[gates]]
+match = [<span class="a">"src/"</span>, <span class="a">"tests/"</span>]
+run   = [<span class="a">"uv run pytest tests -q --no-cov"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">900</span>
+note  = <span class="a">"全量测试(跳覆盖率报表): 脚本自动跑, 红了即 STOP"</span>
+
+[[gates]]
+match = [<span class="a">"memory-bank/issues/"</span>]
+run   = [<span class="a">"python &lt;skill-dir:create-issue&gt;/scripts/gen_issues_index.py --check"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">60</span>
+note  = <span class="a">"issue 索引: skill 路径由预检定位, 找不到即 STOP"</span>
+
+[[gates]]
+match = [<span class="a">"memory-bank/tasks/"</span>]
+run   = [<span class="a">"python scripts/gen_tasks_index.py --check"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">60</span>
+note  = <span class="a">"任务档案索引: 索引是生成物, 必须自洽"</span>
+
+<span class="c"># 冒烟: &lt;each:&gt; 按匹配到的脚本把这条复制成多条 python X --help</span>
+[[gates]]
+match = [<span class="a">".agents/skills/"</span>]
+run   = [<span class="a">"python &lt;each:.agents/skills/**/scripts/*.py&gt; --help"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">300</span>
+note  = <span class="a">"skill 脚本冒烟: 改了哪个跑哪个"</span>
+
+<span class="c"># 同步: 空串 = 每次提交都命中(拉取来的 skill 改动不产生 diff)</span>
+[[gates]]
+match = [<span class="a">""</span>]
+run   = [<span class="a">"python scripts/sync_agent_skills.py"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">60</span>
+note  = <span class="a">"skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"</span>
+
+[[gates]]
+match = [<span class="a">"AGENTS.md"</span>]
+run   = [<span class="a">"python scripts/check_context_caps.py"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">60</span>
+note  = <span class="a">"引导文件: 超 8000 字符 IDE 注入时尾部被静默截断"</span></pre>
+  <p class="note">代价：gate 数 5 → 7，每条多两个字段。收益是<strong>“哪些命令真的会被执行、拿什么文件执行”
+     在配置里一眼可见</strong> —— 这两样现在都只存在于执行者的记忆里。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="n">07</span>预检输出改造</h2>
+  <div class="rule"></div>
+  <h3>现在</h3>
+  <pre>  [WARN] 提交前闸门      Python 改动: 先格式化再跑全量测试
+
+该跑的闸门命令:
+  - yapf -i &lt;改过的 py 文件&gt;
+  - uv run pytest tests -q
+
+无 STOP；1 项 WARN 需人工确认 —— 可以继续。</pre>
+  <h3>改后</h3>
+  <pre>  [PASS] 自动闸门        5 条全过 (yapf 1.1s / pytest 42.3s / gen_issues_index 0.5s
+                                  / gen_tasks_index 0.4s / sync 0.2s)
+
+无 STOP —— 可以继续。</pre>
+  <p>失败时打印<strong>展开后的真实命令</strong> —— 否则看到的还是占位符，没法定位：</p>
+  <pre>  [STOP] 自动闸门        python .agents/skills/create-issue/scripts/gen_issues_index.py --check → rc=1 (0.5s)
+      展开自: python &lt;skill-dir:create-issue&gt;/scripts/gen_issues_index.py --check
+      _index.md 缺登记: 26-09-22-0800-xxx
+      ...（末 20 行）
+
+1 项 STOP —— 处理完再提交。</pre>
+  <p>展开失败（占位符拼错 / skill 找不到）时，<strong>不降级成打印</strong>：</p>
+  <pre>  [STOP] 自动闸门        无法展开: &lt;skill-dir:create-issues&gt; (已试 .agents/skills/ · .codebuddy/skills/ · 用户级)
+
+1 项 STOP —— 处理完再提交。</pre>
+  <p>配置写错（未知键）时<strong>点名到具体那一条 gate</strong>，让人一眼改对：</p>
+  <pre>  [STOP] 配置体检        gate「全量测试(跳覆盖率报表)」出现未知键: auto_run
+                          允许键: match / run / note / auto / timeout
+
+1 项 STOP —— 处理完再提交。</pre>
+  <p class="note">耗时是真实数字，取自命令实际墙钟时间 —— 不预置、不估算。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="n">08</span>风险与未决</h2>
+  <div class="rule"></div>
+  <ol>
+    <li><strong>全量 pytest 的耗时。</strong>基线 1143 passed（2026-09-22 Windows 实测）。
+        自动跑意味着每次预检都要等它 —— <strong>已定：用 <code>--no-cov</code></strong>（跳过覆盖率报表；
+        覆盖率数字仍由 <code>memory-bank/testing.md</code> 基线那一跑负责，不是闸门的事）。</li>
+    <li><strong>闸门会被跑多次。</strong>三个触发点里定下跑两次（改文档前 + 提交前）；第三处（S6）收进
+        <code>push.py</code> 并固定 <code>--no-auto</code>，所以不会变成三次。<strong>已定：接受两次</strong>，
+        单次成本用 <code>--no-cov</code> 压住。<strong>代价要写进 skill</strong>：改文档之前必须先跑一次测试，
+        否则文档守卫（<code>tests/test_memory_bank.py</code> 等）会让结果与代码状态混在一起。</li>
+    <li><strong><code>shell=True</code> 的可信级别。</strong>命令来自仓库内自己的配置文件，可信度等同 Makefile；
+        不用白名单（会锁死跨项目复用）。但 cfg 读的是仓库根文件，被人改过就等于被执行 —— 与“改 Makefile 就能执行任意命令”同级，写进 skill 说明。</li>
+    <li><strong>preflight 的“只读”口径要改。</strong>docstring、SKILL.md、AGENTS.md 里都写着“只读预检”，
+        自动闸门会写工作区（sync 建 junction）。三处口径需同步改，否则文档漂移。</li>
+    <li><strong>没有机械守卫。</strong><code>tests/</code> 里现在没有任何用例覆盖 preflight / _ship_config（全库 1143 个用例也不含它们）。
+        自带一份（<strong>已定：放 skill 目录</strong>，详见本节末尾「决议」第 3 条）——
+        放进项目 <code>tests/</code> 会把跨项目资产和本仓库耦合。</li>
+    <li><strong>字段拼错会静默退化（改前的最大风险）。</strong><code>auto</code> 写成 <code>auto_run</code> 时，
+        gate 级<strong>不做键过滤</strong>，<code>gate.get("auto", False)</code> 取到默认 <code>false</code>，
+        闸门退回“只打印”且输出无任何痕迹。
+        <strong>已定：未知键一律 STOP</strong>，顶层与 gate 级同标准 —— 见下方「未知键」决议。
+        代价是<strong>新增键必须先加白名单</strong>才能用（否则配置一写就挡住提交）——
+        这是 fail-fast 应付的价钱，接受。</li>
+    <li><strong>格式化与暂存的相互作用。</strong><code>yapf -i</code> 会改工作区：若文件此前已 <code>add</code> 过，
+        格式化后 index 与工作区不一致。现在顺序（S2 闸门 → S3 暂存）天然安全，且 <code>commit.py</code> 是逐路径
+        <code>git add</code> 会重新收录 —— 但这条要<strong>写进 skill</strong>，不能靠顺序巧合，
+        否则哪天有人把暂存挪到闸门前面就会静默提交旧内容。</li>
+    <li><strong><code>&lt;each:&gt;</code> 展开的规模没有上限。</strong>一次改 30 个 skill 脚本就是 30 条命令。
+        可接受，但要在输出里显示实际条数，别让“预检怎么变慢了”变成一个谜。
+        <strong>已定：上限 99</strong>（顶层 <code>each_limit</code>，可配、可 <code>--show-config</code> 显示），
+        超过即 STOP 并提示拆分提交范围。</li>
+    <li><strong>展开用的是预检那一刻的改动清单。</strong>自动闸门自己产生的新改动（yapf 重写文件、
+        sync 建 junction）<strong>不回流进清单</strong> —— 这是刻意的，否则会自我触发成循环。</li>
+  </ol>
+
+  <h3>决议（2026-09-22 定稿）</h3>
+  <ol>
+    <li><strong>测试命令用 <code>--no-cov</code>。</strong>项目 <code>pytest.ini</code> 的 <code>addopts</code> 自带
+        <code>--cov=src</code>，闸门那一跑不需要覆盖率报表；覆盖率基线数字归
+        <code>memory-bank/testing.md</code> 维护，与闸门无关。</li>
+    <li><strong>执行时间点：改文档之前那次（S1/S2）+ <code>commit.py</code> 内部那次（S3）都真跑；
+        S6 的手动预检<strong>取消</strong>，收进 <code>push.py</code> 内部自动跑（<code>--phase push --no-auto</code>）。</strong>
+        即 <strong>pytest 每周期跑两次，接受</strong> ——
+        两次回答的是“代码过不过”与“连文档一起过不过”两个不同问题，合并会掩盖一半；
+        且第一次必须在改文档之前（文档守卫会让后跑的结果不可信）。不引入 <code>phase</code> 字段。</li>
+    <li><strong>self-test 放 skill 目录</strong>：<code>.agents/skills/my-commit-flow/scripts/test_preflight.py</code>，
+        与被测脚本同目录。不进项目 <code>tests/</code> 的理由：这份 skill 是<strong>跨项目资产</strong>，
+        绑进本仓库 <code>tests/</code> 会把两边耦合起来。实测 <code>pytest.ini</code> 里
+        <code>testpaths = tests</code>，项目那 1143 个用例<strong>不会</strong>收集到它 —— 也不该收集，
+        它依赖的是 skill 自己的脚本而不是 <code>src/</code>。
+        跑法：<code>python &lt;skill-dir&gt;/scripts/test_preflight.py</code>（stdlib <code>unittest</code>，零依赖）。
+        覆盖点：四种占位符展开与展开失败、gate 分类、未知键校验、超时 / 失败 → 退出码 1、
+        <code>each_limit</code> 超限、<code>--no-auto</code> 确实不执行。</li>
+    <li><strong>“未知键”分两层</strong> ——
+        <br>① <strong>顶层</strong>：<code>load_config</code> 里 <code>cfg.update({k: v for k, v in data.items()
+        if k in KEY_DEFAULTS})</code> —— 不在 <code>KEY_DEFAULTS</code> 里的键被<strong>静默丢弃</strong>，
+        把 <code>staged_panic</code> 拼成 <code>staged_panicc</code> 不会有任何提示。
+        <br>② <strong>gate 级</strong>（真正的危险）：<code>gates</code> 是原样透传的 dict 列表，<strong>不做键过滤</strong>，
+        于是 <code>auto_run = true</code> / <code>autoo = true</code> 不会报错 ——
+        <code>gate.get("auto", False)</code> 取到默认 <code>false</code>，闸门<strong>静默退回“只打印”</strong>：
+        你以为自动化了，其实一条都没跑，且输出里没有任何痕迹。
+        <br><strong>处理：未知键一律 STOP（退出码 1），不是 WARN。</strong>
+        gate 允许键固定为 <code>match</code> / <code>run</code> / <code>note</code> / <code>auto</code> /
+        <code>timeout</code>；顶层键必须在 <code>KEY_DEFAULTS</code> 白名单内。
+        报错信息要点名<strong>键名 + 所在 gate 的 note（顶层则标“顶层”）+ 允许键清单</strong>，让人一眼改对。
+        <br>为什么不是 WARN：闸门可能很贵（全量测试 / 格式化 / 索引自洽），拼错一个键让它静默失效，
+        结果是“以为该跑的跑过了” —— 这比报错坏得多。WARN 会被淹没在十来行的检查表里，
+        STOP 才会被处理。<strong>付的价钱</strong>：以后新增配置键必须先加进白名单，否则一写就挡住提交。</li>
+    <li><strong><code>&lt;each:&gt;</code> 上限 99</strong>：顶层键 <code>each_limit</code>，可在
+        <code>--show-config</code> 看到、可覆盖；超限 → STOP 并提示拆分提交范围。</li>
+  </ol>
+</section>
+
+<section id="s9">
+  <h2><span class="n">09</span>验证步骤</h2>
+  <div class="rule"></div>
+  <ol>
+    <li><strong>分类正确</strong>：<code>preflight.py --show-config</code>，确认 7 条 gate 的 <code>auto</code>
+        生效值、以及顶层 <code>each_limit = 99</code> 与配置一致。</li>
+    <li><strong>自动执行</strong>：改一个 <code>tests/</code> 下的文件后跑预检，看表里出现 <code>[PASS] 自动闸门</code> 与实际耗时。</li>
+    <li><strong>红了会 STOP</strong>：临时造一个失败用例（或把某条命令换成 <code>false</code>），确认预检退出码为 1 且打印末 20 行 —— 这条是本次改造的核心，必须实测。</li>
+    <li><strong>超时会 STOP</strong>：把某条 <code>timeout</code> 临时设成 1，确认按失败处理而不是挂住。</li>
+    <li><strong>展开失败会 STOP</strong>：把 <code>&lt;skill-dir:create-issue&gt;</code> 故意拼成
+        <code>create-issues</code>，确认预检报“无法展开”并停手，<strong>而不是降级成打印</strong> —— 这条是第 02 节原则 4 的落地。</li>
+    <li><strong><code>&lt;changed:*.py&gt;</code> 真的会取到文件</strong>：故意写一个不合规缩进的 py 改动，
+        跑预检后确认该文件被 <code>yapf</code> 改写（用 <code>git diff</code> 看）。</li>
+    <li><strong><code>&lt;each:&gt;</code> 展开成多条</strong>：一次改两个 skill 脚本，确认输出里出现两条
+        <code>python … --help</code>，且条数与实际匹配数一致。</li>
+    <li><strong>格式化与暂存一致</strong>：先把某 py 文件 <code>git add</code>，再跑预检（yapf 会改写它），
+        然后走 S3 暂存 + 提交 —— 确认入库的是<strong>格式化后</strong>的内容（第 08 节第 7 条）。</li>
+    <li><strong>开关有效</strong>：<code>--no-auto</code> 下只列不跑，退出码不受闸门影响。</li>
+    <li><strong>未知键会挡住提交</strong>：把某条 gate 的 <code>auto</code> 写成 <code>auto_run</code>，
+        确认预检报 <strong>STOP</strong>、退出码 1、并点名该 gate 与键名（而不是静默退回“只打印”）；
+        顶层键同样试一次（如 <code>staged_panicc</code>）。</li>
+    <li><strong><code>each_limit</code> 拦得住</strong>：临时把 <code>each_limit</code> 设成 1、同时改两个 skill 脚本，
+        确认预检 STOP 并提示拆分提交范围。</li>
+    <li><strong>self-test 跑通</strong>：<code>python &lt;skill-dir&gt;/scripts/test_preflight.py</code> 全绿；
+        并确认项目 <code>uv run pytest</code>（<code>testpaths = tests</code>）<strong>不会</strong>收集到它。</li>
+    <li><strong>回归</strong>：一次真实提交走完整流水线（S1/S2 真跑 → 回写文档 → S3 提交触发第二次真跑 →
+        S6 不再手动、由 <code>push.py</code> 内部自动核状态 → 推送），确认 pytest <strong>恰好跑两次</strong>、
+        不是三次，且自动闸门没干扰 S3 的逐路径暂存（sync 产物在 <code>.codebuddy/</code>，已 gitignore）。</li>
+    <li><strong>push.py 内嵌生效</strong>：故意留一个未暂存的改动再推送，确认 <code>push.py</code>
+        <strong>自己</strong>报出“工作区脏”并中止（而不是等 S7 才发现的幽灵 diff）；
+        <code>--skip-preflight</code> 能跳过这一层。</li>
+  </ol>
+  <p class="note">本方案只改 my-commit-flow 与配置，不动 <code>src/</code>、不动现有测试。
+     第 04 节的分类表与第 08 节的三个待定项确认后再动代码。</p>
+</section>
+
+</main>
+
+<footer>
+  修改方案 · my-commit-flow 闸门自动运行 · 2026-09-22 · 依据：<span class="btn">.commit-flow.toml</span>
+  <span class="btn">preflight.py</span> <span class="btn">_ship_config.py</span> <span class="btn">SKILL.md</span>
+</footer>
+
+</div>
+</body>
+</html>
