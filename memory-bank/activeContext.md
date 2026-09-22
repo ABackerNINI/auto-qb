@@ -21,7 +21,9 @@
   implemented-tooling · roadmap · known-bugs · evolution · suggestions, 另把 4 条超长叙事移
   `progress/attachments/`(单条 10,225 字符, 逐条都超 cap)。**W5 `systemPatterns/` + `modules/`**: 两文件(31,678 / 30,324 字符)→ **8 + 7 个主题文件 + 存根**,
   顺带纠正「任务队列」名下的 WEB UI 三节归属。
-  全量 **1170 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」「W5」) ——
+  **W6 `conventions/` + `config-reference/` + `rule-system/`**: 三文件 → **4 + 2 + 3 个主题文件 + 存根**,
+  `checking` 单独成篇并与 pitfalls 互指。至此**计划里 8 份超标顶层文档全部拆完**。
+  全量 **1170 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」「W5」「W6」) ——
   其前一条状态: W3 `testing/` 已完成并入库(`c90b0fb`) ——
 
 ## 正在进行
@@ -55,7 +57,7 @@
   [pitfalls/web-ui/columns-persist.md](pitfalls/web-ui/columns-persist.md)。
 - **行宽口径 / 表头吸顶 / 列对齐**(第十一轮定案) → [pitfalls/web-ui/layout-css.md](pitfalls/web-ui/layout-css.md)。
 - **开工先拉分支 + 提交即推送 / 跨仓库操作** → 单点在根 [AGENTS.md](../AGENTS.md)
-  (「会话协议 · 开始」与「提交 / PR」与「🔴 跨仓库操作」); 细则在 [conventions.md](conventions.md)「协作约定」。
+  (「会话协议 · 开始」与「提交 / PR」与「🔴 跨仓库操作」); 细则在 [conventions/collaboration.md](conventions/collaboration.md)「协作约定」。
 - **工作区模式: 多 clone 并行 (2026-09-20 用户拍板, **git worktree 已弃用**)**: 每个 AI 实例一份**完整克隆**(各自独立 `.git`), 跨工作区同步一律走 Gitee `develop`; 单点在 `AGENTS.md`「环境硬约束」与 `conventions.md`「协作约定」。原 8 个 worktree 目录已打包存档到 `D:/Projects/_archive/auto-qb-worktrees-2026-09-20/`(含 `MANIFEST.md` 与 `sha256.txt`), 目录已移除(5 个进回收站, `auto-qb-other` 因回收站报"不支持该功能"改移到存档区 `_removed-dirs/`), 8 个本地分支已删除 —— 删除前已核验全部 `ahead=0`, 无独有提交。新布局为 `D:/Projects/auto-qb`(主) + `auto-qb-clone1` / `auto-qb-clone2` / `auto-qb-long-seeding`。
 - **`想法.md`**: 工作区**干净**(最后一次入库 `3bface9`)。它属于红线文件(与 `config.yml` / `auto-qb-data/` 同级),
   提交前照例用 `git status --short` 确认一遍是否又有改动, 不进暂存区。

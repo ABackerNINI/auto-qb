@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W5 已完成 (pitfalls 7 类 + testing 9 + progress 11 + systemPatterns 8 + modules 7 + checklists, 10 条结构性守卫), 续做 W6 conventions+config-reference+rule-system
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W6 已完成 —— **8 份超标文档全部拆完**(9 个目录 / 40 主题文件), 10 条结构性守卫, 续做 W7 tasks 消肿
 
 ## 原始请求
 
@@ -112,7 +112,7 @@
 | W3 | `testing/` (9 文件 + 存根; `baseline.md` 成唯一手改处) | Complete | 2026-09-22 | 守恒: 真丢失 4 处已补; 1169 passed 不变 |
 | W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Complete | 2026-09-22 | 40,553 → 4,783 字符; progress 51,717 → 11 文件; 1170 passed (+1) |
 | W5 | `systemPatterns/` + `modules/` (8 + 7 主题文件) | Complete | 2026-09-22 | 守恒 596/743 token 全中; 顺带纠正 WEB UI 三节归属 |
-| W6 | `conventions/` + `config-reference/` + `rule-system/` (≈5+3+4) | Not Started | — | |
+| W6 | `conventions/` + `config-reference/` + `rule-system/` (4+2+3 主题文件) | Complete | 2026-09-22 | 守恒 232/226/282 token; 8 份超标文档至此全拆完 |
 | W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Not Started | — | |
 | W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | 候选见下「W8 候选清单」 |
 
@@ -177,6 +177,32 @@
   (heredoc / 反斜杠转义); 改用**脚本文件** + 显式 UTF-8 即好。⇒ 该坑的适用范围要写宽: 不只 heredoc,
   `python -c` 的双引号串同样中招。
 - **实测**: 全量 **1170 passed + 1 skipped**, sidefx 越界 0; `check_kb_structure.py` 全过。
+
+### 2026-09-22 (W6 `conventions/` + `config-reference/` + `rule-system/` 目录化)
+- **`conventions.md`(15,283 字符 / 202 行 / 20 节)→ 4 个主题文件**: collaboration(协作约定 + 跨仓库红线 +
+  生产配置禁令)· code-style(函数设计 / 可测试性 / 模块职责 / 命名 / 类型注解 / 性能 / 注释 / 日志 / 格式化 /
+  dataclass / 其它工程约定)· process(dry_run / 幂等 / Git / 闸门)· webui(菜单分层 / 令牌分工 / HTML dark 主题)。
+  ⚠ 原先 18 节挤一份, **单节最大 5,458 都合规, 但一次要读 15 KB** —— 这正是"检索键错位"的典型。
+- **`config-reference.md`(11,779 / 142)→ 2 个**: loading-and-write(加载 / 写回 / fail-fast 校验)· keys(全部键 +
+  trackers + 曲线 + 规则集段 + 变量语法 + 运行时文件 + 测试样例)。
+- **`rule-system.md`(15,964 / 205)→ 3 个**: rules-and-triggers · conditions-and-actions(含 `expr` 速查)·
+  **checking 单独成篇** —— 高风险动作独立, 并与 [../pitfalls/backend/high-risk-ops.md](../pitfalls/backend/high-risk-ops.md) **互指**。
+- **做法**: 三个源文件的章节与目标文件同样**几乎 1:1** ⇒ 全部**按行区间原样抽取**;
+  `code-style.md` 由 **11 个不连续区间**拼成(20 节里散落的风格类小节归拢到一处)。
+- **守恒核对**: conventions **232 个 token 全中**、config-reference **226 个全中**、rule-system **282 个里 1 个** ——
+  唯一那个是源引言里的 `config/validation.py`, 而它**2026-09-15 已由单文件转包**(见
+  [../modules/core-config.md](../modules/core-config.md) 的 `config/validation/ (包)`), 故我在目标文件里写成
+  `config/validation/` —— 属**有意纠正的过期写法**, 不是丢失。
+- ❗**第二次踩同一个坑**: 与 W5 一样, 三个源文件的**引言块**(抽取时被存根取代)里含全库性事实 ——
+  ①`内容基线 2026-09-05 @ 51374bd`(config-reference / rule-system)②rule-system 的**代码模块清单**
+  (`rules/base.py` / `conditions.py` / `actions/` / `registry.py` / `mixins/rule_engine.py` / `config/loaders.py` …)
+  ③conventions 的「以代码为准并回写」通用声明 —— 均已补进各目录的第一个主题文件。
+  ⇒ **五步配方该加一条**: 抽取类迁移前先**单独把"标题 + 引言"列出来核对** —— 两次都栽在区间之外。
+- **实测**: 全量 **1170 passed + 1 skipped**(与 W4/W5 持平 —— 本波未增删用例), sidefx 越界 0;
+  `check_kb_structure.py` 全过; `AGENTS.md` 预算仍 PASS。
+- **里程碑**: 计划 §04 点名的 **8 份超标顶层文档至此全部拆完**(pitfalls / testing / progress / activeContext /
+  systemPatterns / modules / conventions / config-reference / rule-system —— 其中 activeContext 是瘦身不拆)。
+  剩 W7(`tasks/` 档案消肿)与 W8(机检化 + 回归演练 + instructions 漂移修复)。
 
 ### 2026-09-22 (W5 `systemPatterns/` + `modules/` 目录化)
 - **`systemPatterns.md`(31,678 字符 / 308 行)→ 8 个主题文件**: overview · main-loop · data-layer · taskqueue ·

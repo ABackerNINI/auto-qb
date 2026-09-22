@@ -21,7 +21,7 @@
 ## 产出口径
 
 - **计划文档**: 用 `delivery-artifact` skill, 放 `docs/plans/`; **一律单文件 HTML** (出现 `.md` 即违规)。
-- **HTML 一律 dark 主题**: 深色底 + 浅色字 + 样式里写 `color-scheme: dark`, **禁止浅底黑字**; 配色规格与文件命名见 [conventions.md](memory-bank/conventions.md)「HTML 文档一律 dark 主题」。
+- **HTML 一律 dark 主题**: 深色底 + 浅色字 + 样式里写 `color-scheme: dark`, **禁止浅底黑字**; 配色规格与文件命名见 [conventions/webui.md](memory-bank/conventions/webui.md)「HTML 文档一律 dark 主题」。
 
 ## 黄金法则 (来自设计原则, 违反即破坏设计)
 
@@ -56,7 +56,7 @@ yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: fa
 
 ## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有)
 
-> **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions.md](memory-bank/conventions.md)「协作约定」。
+> **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「协作约定」。
 > **完整禁令与事故判据单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
 - 🔴 **禁用 `git rebase`** (已炸 3 次, 工作区干净也照炸) 与 **`git stash`**; **非快进合并 + 工作区脏 = 必炸** (拦截层会顺着这次写入批量删 `.git/objects`)。落后主线改走「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。
@@ -66,7 +66,7 @@ yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: fa
 
 ## 🔴 跨仓库操作: 绝对禁止 (需显式强授权)
 
-> **完整定义(含事故实证与止损纪律)见 [conventions.md](memory-bank/conventions.md)「🔴 跨仓库操作」节**; 本节只留红线。
+> **完整定义(含事故实证与止损纪律)见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「🔴 跨仓库操作」节**; 本节只留红线。
 
 - **除当前工作 clone 外, 对其它 clone 的任何写操作一律绝对禁止** —— 改文件 / `git apply` / 复制覆盖 / 跑 git 命令。
 - **授权指令只认 `授权`**, 须用户**显式**说出; **「提交」不算** —— 它只授权 commit + push 到远端。

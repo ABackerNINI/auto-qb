@@ -6,7 +6,11 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
-- ↑ 1170 → 1170(**不变**; 2026-09-22 同任务 **W5 `systemPatterns/` + `modules/` 目录化**:
+- ↑ 1170 → 1170(**不变**; 2026-09-22 同任务 **W6 `conventions/` + `config-reference/` + `rule-system/` 目录化**:
+  只动文档, 未增删用例。三文件(15,283 / 11,779 / 15,964 字符)→ **4 + 2 + 3 个主题文件 + 存根**;
+  `checking` 高风险动作按计划**单独成篇**并与 [../pitfalls/backend/high-risk-ops.md](../pitfalls/backend/high-risk-ops.md) 互指。
+  全量 1170 passed + 1 skipped, sidefx 越界 0)。
+ + `modules/` 目录化**:
   只动文档, 未增删用例。`systemPatterns.md`(31,678 字符)→ **8 个主题文件**, `modules.md`(30,324 字符)→ **7 个**,
   两处源文件各留 ≤1 KB 存根。⚠ 顺带**纠正一处归属错误**: 原先「WEB UI 线程模型 / 前端渲染与响应性 /
   图形化配置编辑」三节(合计约 21 KB)挂在「任务队列」名下, 它们属于 **WEB UI 运行时**, 不属于队列。

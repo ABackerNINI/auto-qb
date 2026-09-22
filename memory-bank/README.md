@@ -12,11 +12,11 @@
 |---|---|
 | **改代码前扫陷阱 / 跑 git 命令前** | [pitfalls/_index.md](pitfalls/_index.md) —— 7 类 (git · web-ui · backend · testing · ops · kb · docs) |
 | 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 基线数字单点在 [testing/baseline.md](testing/baseline.md) |
-| 查配置键 | [config-reference.md](config-reference.md) |
-| 规则 / 条件 / 动作 | [rule-system.md](rule-system.md) |
+| 查配置键 | [config-reference/_index.md](config-reference/_index.md) |
+| 规则 / 条件 / 动作 | [rule-system/_index.md](rule-system/_index.md) |
 | 架构 / 主循环 / 数据层 / 任务队列 / WEB 运行时 | [systemPatterns/_index.md](systemPatterns/_index.md) |
 | 找功能位置 / 加新模块 | [modules/_index.md](modules/_index.md) —— 「在哪里改」速查在 [overview.md](modules/overview.md) |
-| 命名 / 风格 / 协作约定 | [conventions.md](conventions.md) |
+| 命名 / 风格 / 协作约定 | [conventions/_index.md](conventions/_index.md) |
 | 项目是什么 / 领域知识 | [productContext.md](productContext.md) · [projectbrief.md](projectbrief.md) |
 | 技术栈 / 环境 / 约束 | [techContext.md](techContext.md) |
 | 已实现 / 规划中 | [progress/_index.md](progress/_index.md) |
