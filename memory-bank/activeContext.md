@@ -35,6 +35,11 @@
 
 ## 正在进行
 
+- **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 本地待提交)**:
+  ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
+  (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;
+  ② 应用户要求卡片静息即发软光(`--glow-soft` 提到静息态), hover / 聚焦升全光(`--glow`), 数值沿用配方不自造。
+  全量 1176 passed + 1 skipped。坑已记 [pitfalls/web-ui/layout-css.md](pitfalls/web-ui/layout-css.md)。
 - **🆕 memory-bank 目录化重构 —— W0–W3 已入库, 下一步 W4 `activeContext` + `progress/`** —— 起因是全库超预算:
   13 份顶层文档里 8 份超标, 「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故
   全写在同一节)。方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 +

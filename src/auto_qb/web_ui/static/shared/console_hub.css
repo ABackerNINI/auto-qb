@@ -294,11 +294,14 @@
   border: 1px solid var(--border);
   background-image: linear-gradient(135deg, var(--surface-1), transparent 46%);
   cursor: pointer;
+  /* 静息即微光(2026-09-22 用户要求: 外层选项常亮): 样张原版只在 hover 发光,
+   * 这里把配方里的 --glow-soft 提到静息态, hover / 聚焦升到 --glow; 数值一律沿用配方, 不自造 */
+  box-shadow: var(--glow-soft);
   transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
       box-shadow var(--dur) var(--ease);
 }
-.hb-card:hover { border-color: var(--tone); transform: translateY(-2px); box-shadow: var(--glow-soft); }
-.hb-card:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; box-shadow: var(--glow-soft); }
+.hb-card:hover { border-color: var(--tone); transform: translateY(-2px); box-shadow: var(--glow); }
+.hb-card:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; box-shadow: var(--glow); }
 .hb-card-top { display: flex; align-items: flex-start; gap: 11px; }
 .hb-card-ico {
   flex: none;
@@ -413,6 +416,8 @@
   border: 0;
   border-top: 1px solid var(--hairline);
   cursor: pointer;
+  /* <button> 的文字色不继承 body(UA 默认 buttontext, 系统浅色 = 纯黑), 不显式声明则暗色主题下整行黑字 */
+  color: var(--fg);
 }
 .hb-blk > .hb-row-hit:first-of-type { border-top: 0; }
 .hb-row-hit:hover { background: var(--surface-1); }
@@ -432,8 +437,9 @@
 /* 搜索跳转后的落点提示 */
 .hb-row.flash { animation: hb-flash 1.4s var(--ease); }
 @keyframes hb-flash { 0%, 100% { background: transparent; } 18% { background: var(--accent-soft); } }
-/* 卡片是 <button>: 复位浏览器默认字体, 否则字号/字体会跟页面不一致 */
-.hb-card { font: inherit; }
+/* 卡片是 <button>: 复位浏览器默认字体与文字色, 否则字号/字体会跟页面不一致,
+ * 文字色回退成 UA 的 buttontext(系统浅色 = 纯黑) —— 暗色主题下卡片标题黑到看不清 */
+.hb-card { font: inherit; color: var(--fg); }
 
 /* ==========================================================================
    就近说明浮窗: 面板 + 箭头(箭头必须是独立兄弟元素, 否则会被面板的 clip-path 裁掉)
