@@ -13,7 +13,7 @@
   生成器统一落 memory-bank skill 的 `scripts/`; 分 W0–W8 九波, **待确认后开工** →
   [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
   [档案](tasks/26-09-22-memory-bank-dir-refactor.md)(**已入库**, 本轮提交)) ——
-  其前一条状态: 🆕 issue 26-09-21-1347「state.json 损坏时静默清空, .bak 备份从不用于恢复」已修并验证(未提交)** —— 用户指派认领; 复验 @ `d5a5520` 仍复现。修法: `_load_state` 拆出 `_read_state_file` 三态(dict / `None`=首启静默 / `_CORRUPT`=损坏含非法 UTF-8, `OSError` 不吞) → 损坏记 WARNING 且回退 `<state_file>.bak`(记 INFO), 备份不可用才 `{}` + 再告警; **新增自愈写回** `_write_back_recovered`(刻意不带 `keep_backup`, 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`); 备份后缀单点化 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。守阵 4 条(含"自愈写回失败只告警不抛")+ `test_utils` 断言改按常量; 红验(运行期打回旧实现)证明新守阵必红。全量 **1156 passed + 1 skipped**(基线 1152), sidefx 越界 0; issue 已置 `Fixed` + 索引已重建。详见「正在进行」首条) ——
+  其前一条状态: 🆕 issue 26-09-21-1347「state.json 损坏时静默清空, .bak 备份从不用于恢复」已修并验证, **已入库 `e11df80`**(Gitee + GitHub 均推上)** —— 用户指派认领; 复验 @ `d5a5520` 仍复现。修法: `_load_state` 拆出 `_read_state_file` 三态(dict / `None`=首启静默 / `_CORRUPT`=损坏含非法 UTF-8, `OSError` 不吞) → 损坏记 WARNING 且回退 `<state_file>.bak`(记 INFO), 备份不可用才 `{}` + 再告警; **新增自愈写回** `_write_back_recovered`(刻意不带 `keep_backup`, 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`); 备份后缀单点化 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。守阵 4 条(含"自愈写回失败只告警不抛")+ `test_utils` 断言改按常量; 红验(运行期打回旧实现)证明新守阵必红。全量 **1156 passed + 1 skipped**(基线 1152), sidefx 越界 0; issue 已置 `Fixed` + 索引已重建。详见「正在进行」首条) ——
   其前一条: issue 26-09-21-1347「跳检备份先于删除」已修并验证, 已入库 `a5faf35`(Gitee + GitHub 均推上) ——
   备份原先只挂在重加的两条失败分支上, 而删除是第一个不可逆步骤 ⇒ 「删除已生效 → 重加未被接受」
   缝隙内崩溃会什么都不剩; 现改为导出后立刻备份 + 重加成功后 `_clear_backup` 清理(删除未生效也清),
@@ -61,7 +61,7 @@
   [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
   [档案](tasks/26-09-22-memory-bank-dir-refactor.md)(已入库, 本轮提交)
 
-- **🆕 state.json 损坏静默清空 + .bak 从不用于恢复 —— 已修并验证(未提交, 见本文件顶部「最后更新」首条)**: issue
+- **🆕 state.json 损坏静默清空 + .bak 从不用于恢复 —— 已修并验证, 已入库 `e11df80`(见本文件顶部「最后更新」首条)**: issue
   [26-09-21-1347-bug-state-load-corrupt-silent-reset.html](issues/26-09-21-1347-bug-state-load-corrupt-silent-reset.html)
   已置 `Fixed`(索引已重建)。⚠ **本 issue 报告里标「可选, 低优先」的孤儿 `state.json.*.tmp` 启动清理未做** ——
   按范围守恒不在本次修复内, 要修请另开一条或显式指派。

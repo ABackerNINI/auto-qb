@@ -348,6 +348,12 @@
 
 ## ⚠️ Git / 提交推送纪律
 
+- **提交闸门(`preflight.py` / `commit.py`)在工具 shell 的默认 `TMPDIR` 下必红**(2026-09-22 实测): 闸门跑的是
+  `uv run pytest tests -q --no-cov`, 而工具 shell 的 `TMPDIR` 默认指向 `H:\Temp` ⇒ **测试本身全过**, 崩在**会话结束**
+  的临时目录清理(`PermissionError [WinError 5] … pytest-current`), 退出码非 0 ⇒ 预检判 `rc=1` 给 STOP。
+  **判别法**: 闸门报红但失败输出里只有 `pytest-current` 的 PermissionError、没有任何 `FAILED`/`assert` ⇒ 是环境问题不是回归。
+  **修法**: 跑预检/提交**前**加 `TMPDIR="R:/Temp/auto-qb/tests"`(与 testing.md「运行」那节同一个约定);
+  ❌ 不要为此去改 `.commit-flow.toml` 的闸门命令(项目事实该外置, 但 TMPDIR 是环境事实, 换台机器路径就变)。
 - **❗「非快进合并 + 工作区脏」会删掉整个 `.git` 对象库**(重大事故): git 2.55 在**非快进合并**时**无条件**调 `git stash create`, 工作区脏就要真写 stash 对象, 而工具环境的删除拦截层会顺着这次写入把 `.git/objects/**` **批量删进回收站**(git 原生 unlink 绝不会走回收站)。实测矩阵: 非快进 + 干净 = 安全; 非快进 + 脏 = **必炸**(关沙箱 / 换 git / `merge.autoStash=false` 都无效); 快进 + 脏 = 安全。
   - **唯一可靠规避: 合并前先把工作区弄干净**(先提交, 或把改动移出仓库); 高风险 git 操作前 `cp -a .git <备份>`。**记不住细节就记这句: 非快进 + 脏 = 必炸。**
 - **❗❗ `git rebase` 在本工具 shell 里同样会毁 `.git`, 而且「干净工作区」也照毁**(2026-09-21 实测, 连续两次):
