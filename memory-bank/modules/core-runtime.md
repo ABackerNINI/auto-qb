@@ -1,0 +1,21 @@
+# 核心模块 · 运行时主干
+
+> 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/`(除注明)。
+
+> 摘要: 入口 / 主协调者 / 表现层门面 / 客户端 / 队列 / Facade / 锁 / 工具 / 日志 / 错误根。
+> 触发: cli, qbmanager, web_runtime, qbclient, taskqueue, qbapi, locking, utils, logging, errors
+
+## 核心模块
+
+| 文件 | 行数 | 职责 | 关键内容 |
+|------|------|------|----------|
+| `cli.py` | 90 | argparse 入口 | `--export-yaml/-e`, `--only-missing`, `--dry-run/-n`, `--export-torrents_info`; 导出模式不进主循环; **单点捕获 `AutoQbError` 体系**(ConfigError 输出 `配置错误: ...` 前缀, 锁/qB 兼容等其它 AutoQbError 直接输出消息; 均无堆栈, 退出码 1; 非 AutoQbError 异常照常抛出); 运行期致命错误退出前 best-effort 补发通知 (`notify_fatal`); `--tray` 托盘模式入口(与导出模式互斥; 双开唤起失败回退常规锁错误); 入口 `sys.exit(main())` 使退出码生效 |
+| `qbmanager.py` | 808 | 核心域主协调者(2026-09-15 拆分 1118 → 647 行; **2026-09-20 表现层解耦后 795 → 808 行**: 迁出 19 个 Web 状态字段与全部节拍判据, 换回一层兼容代理 + 8 个转发方法) | `QbManager`(8 mixin 组合 + `self.web` 门面): `run`(两条时间线: 同步线 `sync_interval` / 任务线 `main_tick`; 每轮经 `_wait_next` 阻塞到最近一条线, 或被 `wake()` 唤醒走命令线)/`_sync_line`+`_task_line`+`_tick`/`_refresh_torrents`(走 `store.apply_sync` 增量)/`connect`(连接异常日志节流 `_last_conn_ok` 状态机; 客户端经 `_new_client` 构造, 已拆至 qbclient.py)/`_create_global_tasks`/`_create_torrent_tasks`/`_handle_maintenance`/`apply_new_config`+`_apply_web_config`(配置热重载)/`status_snapshot`(Web+托盘共用); **主循环不再持有/判断任何表现层状态** —— 只调 `self.web` 的 `consume_commands`/`check_pending`/`flush_views`/`flush_receipts`/`advance_error_reasons`/`advance_search_index`, 判据全在 [web_runtime.py](#web_runtimepy); 兼容层 `_WEB_STATE_ALIAS`(旧字段名 ↔ `self.web` 的读写转发)+ 8 个入口转发(`_drain_web_commands` 等)供既有调用方, 由 `test_qbmanager_source_has_no_web_state_fields` 防回潮 |
+| `web_runtime.py` | 451 | **WEB 表现层门面** `WebUIRuntime`(2026-09-20 新增, 从 qbmanager / mixins 收拢) | 持有全部表现层状态: 四份视图快照(`group_view`/`singles_view`/`shows_view`/`flat_view`)+ 版本号 `group_view_ver` + 脏标记 + `pending_ver`(节拍对齐) + 活跃心跳 `last_seen` + `view_lock` + 搜索索引 + 回执 `results`/`deferred_receipts`/`reannounce_pending` + 命令队列 `commands` + 写序号 `write_seq` + `token`/`handle`/`traffic_view`; 主循环接口 `consume_commands`(命令表分发 + 回执 + 写序号 + 自投递不唤醒)/`check_pending`/`flush_views(force)`(活跃窗口 + 已取走门控)/`flush_receipts`/`advance_error_reasons`/`advance_search_index`/`resync_elapsed_ms`; Web 线程接口 `post_command`(生成 cmd_id + 入队 + 唤醒)/`ensure_view`/`ensure_state(rid, view)`/`touch`/`is_active`; 单向通知 `mark_dirty`/`mark_search_index_dirty`/`mark_shows_pending`; **逆向只回调宿主的写能力与视图构建器**(`_cmd_*` / `_build_*_view` / `wake`) |
+| `qbclient.py` | 41 | qB 客户端构造(2026-09-15 拆分) | `_LOCAL_HOSTS`/`_is_local_qb`/`LocalQbClient`(本地地址强制 Session 关闭 requests `trust_env`)/`_new_client`; test_local_qb_service 直接导入 |
+| `taskqueue.py` | 207 | 单任务队列 | 生命周期只有 `add_task`(入队; check 自动登记 `_active_checks` 在途, 重复返回 False)/`run_due`(到期执行+收尾: True 重入队 / False 消亡释放) 两个动词; `Task.reset()` 显式重置断点; 无 defer/resume 挂起态 —— 推迟执行由子任务按情况重新入队; `active_check_hashes`(组内校验串行化依赖) |
+| `qbapi.py` | 217 | qB API Facade | `QbApi`: store 必传, 写后同步快照, 读走缓存, `sync_maindata(rid)` 增量同步透传, `get/set_global_speed_limits`(qB5.0 transfer 端点) |
+| `errors.py` (包级) | 13 | `AutoQbError` 致命错误根: CLI 单点捕获(stderr 干净 + 退出码 1); 子类并列: `ConfigError`(config)/`SingleInstanceLockError`(locking)/`QbCompatError`(torrents) |
+| `locking.py` | 112 | 单实例锁 | `SingleInstanceLock`(基于第三方 `filelock` + 伴生 `<lock>.meta.json` 记录 PID/启动时间/配置路径); `SingleInstanceLockError(AutoQbError)` 走 CLI 退出码 1; 仅正常 run 模式持锁, `--export-yaml` 等只读模式通过 `no_lock=True` 跳过; 锁文件路径 `<state_file 去扩展名>.lock` (避免与 state 文件同目录同名冲突) |
+| `utils.py` | 334 | 通用工具 | `parse_time/parse_fsize/parse_speed/parse_bool/parse_compare/compare/parse_hr_condition`; `MatchPattern.parse`(regex:/:ignore_case 语法解析唯一入口)+ `match_value`(单值多模式匹配核心); `match_tag_patterns`/`match_path_patterns` 为薄包装; `path_normalize`; `match_tracker_confs`(hostname 精确匹配); `add_long_path_prefix_for_win`; `extract_tracker_hostnames`; `fmt_speed`; `replace_vars`(规则变量替换); `timer` 装饰器 |
+| `logging.py` | 47 | 日志配置 | `setup_logging`: 控制台 + RotatingFileHandler(5 备份), **两者均跟随配置 level**; root 跟随配置拦第三方 DEBUG, `auto_qb` logger 放开 DEBUG, `qbittorrentapi` 封顶 INFO(排除请求噪音), `urllib3` 封顶 ERROR(排除断连期间连接重试的 Retry WARNING 刷屏)。注意与 stdlib logging 同名, 包内相对导入 |

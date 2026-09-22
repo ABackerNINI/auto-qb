@@ -14,8 +14,8 @@
 | 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 基线数字单点在 [testing/baseline.md](testing/baseline.md) |
 | 查配置键 | [config-reference.md](config-reference.md) |
 | 规则 / 条件 / 动作 | [rule-system.md](rule-system.md) |
-| 架构 / 主循环 / 数据层 / 任务队列 | [systemPatterns.md](systemPatterns.md) |
-| 找功能位置 / 加新模块 | [modules.md](modules.md) |
+| 架构 / 主循环 / 数据层 / 任务队列 / WEB 运行时 | [systemPatterns/_index.md](systemPatterns/_index.md) |
+| 找功能位置 / 加新模块 | [modules/_index.md](modules/_index.md) —— 「在哪里改」速查在 [overview.md](modules/overview.md) |
 | 命名 / 风格 / 协作约定 | [conventions.md](conventions.md) |
 | 项目是什么 / 领域知识 | [productContext.md](productContext.md) · [projectbrief.md](projectbrief.md) |
 | 技术栈 / 环境 / 约束 | [techContext.md](techContext.md) |
@@ -39,7 +39,7 @@
 - **项目**: `auto-qb` — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具 (标签/分类/HR 管理、辅种分组与缺文件检查、自定义规则引擎、tracker 级限速、全局限速曲线)。
 - **形态**: 单机长驻 Python 程序, 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
 - **核心设计**: `QbManager` 由 6 个 mixin 组合; 所有工作统一为带内置 interval 的任务进单一时间优先堆; `TorrentStore.apply_sync` 走 qB `/sync/maindata` rid 增量同步, `TorrentRecord` 是种子数据的唯一所有者; `QbApi` Facade 写后同步快照; **主循环单线程, 是唯一修改队列与 state_file 的线程**。
-- **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字单点维护于 [testing.md](testing.md) 顶部, 勿在他处手抄。
+- **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字单点维护于 [testing/baseline.md](testing/baseline.md), 勿在他处手抄。
 - **文档**: 根 `README.md`(用户视角)与 `想法.md`(设计草稿)是上游文档; 本库是代码实况的核对版。
 
 ## 黄金法则与命令

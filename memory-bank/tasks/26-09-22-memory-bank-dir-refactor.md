@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W4 已完成 (pitfalls 7 类 + testing 9 文件 + progress 11 文件 + checklists, 10 条结构性守卫), 续做 W5 systemPatterns+modules
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W5 已完成 (pitfalls 7 类 + testing 9 + progress 11 + systemPatterns 8 + modules 7 + checklists, 10 条结构性守卫), 续做 W6 conventions+config-reference+rule-system
 
 ## 原始请求
 
@@ -111,7 +111,7 @@
 | W2 | `pitfalls/` 两级指针 (7 类 + 35 主题文件 + 存根 + 接线) | Complete | 2026-09-22 | 守恒: 真丢失 0 (973 token 核对); 1169 passed 不变 |
 | W3 | `testing/` (9 文件 + 存根; `baseline.md` 成唯一手改处) | Complete | 2026-09-22 | 守恒: 真丢失 4 处已补; 1169 passed 不变 |
 | W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Complete | 2026-09-22 | 40,553 → 4,783 字符; progress 51,717 → 11 文件; 1170 passed (+1) |
-| W5 | `systemPatterns/` + `modules/` (≈8 + ≈7) | Not Started | — | |
+| W5 | `systemPatterns/` + `modules/` (8 + 7 主题文件) | Complete | 2026-09-22 | 守恒 596/743 token 全中; 顺带纠正 WEB UI 三节归属 |
 | W6 | `conventions/` + `config-reference/` + `rule-system/` (≈5+3+4) | Not Started | — | |
 | W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Not Started | — | |
 | W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | 候选见下「W8 候选清单」 |
@@ -177,6 +177,27 @@
   (heredoc / 反斜杠转义); 改用**脚本文件** + 显式 UTF-8 即好。⇒ 该坑的适用范围要写宽: 不只 heredoc,
   `python -c` 的双引号串同样中招。
 - **实测**: 全量 **1170 passed + 1 skipped**, sidefx 越界 0; `check_kb_structure.py` 全过。
+
+### 2026-09-22 (W5 `systemPatterns/` + `modules/` 目录化)
+- **`systemPatterns.md`(31,678 字符 / 308 行)→ 8 个主题文件**: overview · main-loop · data-layer · taskqueue ·
+  web-runtime · web-responsiveness · web-config-editor · client-and-state。
+  ⚠ **顺带纠正一处归属错误**: 原先「WEB UI 线程模型」(`###` 挂在「任务队列」下)「WEB UI 前端渲染与响应性」
+  「WEB UI 图形化配置编辑」三节合计约 **21 KB** 挂在**任务队列**名下 —— 它们属于 **WEB UI 运行时**, 不属于队列。
+  拆开即纠错, 这本来就是本波的动因之一。
+- **`modules.md`(30,324 字符 / 126 行)→ 7 个主题文件**: overview(包入口 + 「在哪里改」速查) ·
+  core-config · core-runtime · core-domain(核心模块 30 行表按包切三份)· webui-static-contract · mixins ·
+  rules-and-deps。
+- **⚠ 两处按实测偏离计划**: 计划让「组件总览」与「包入口 + 在哪里改速查」**并入 `_index.md`** ——
+  但我们的 `_index.md` 是**生成物**(只渲染三行头元数据), 放不了手写正文 ⇒ 各起一个 `overview.md`。
+- **做法**: 两个源文件的章节与目标文件**几乎 1:1**, 故**全部按行区间原样抽取**(不通读、不重写)——
+  `taskqueue.md` 与 `data-layer.md` / `client-and-state.md` 各由 2–3 个不连续区间拼成;
+  三处原为 `###` 的 WEB UI 小节在目标文件里**提升为 `##`**。只有「核心模块」30 行表按包切三份要人工判归属。
+- **守恒核对**: systemPatterns **596 个 token 全中**、modules **743 个全中(missing = 0)**;
+  唯一查出的缺口是**两个源文件的引言块**(抽取时被存根取代)里的两条全库性事实 ——
+  ①`内容基线 2026-09-05 @ 51374bd` ②`行数为 2026-09-05 快照, 路径相对 src/auto_qb/` —— 已补进各 `overview.md`
+  与 modules 的四份带表文件。⇒ **教训: "按行区间抽取"容易漏掉区间之外的引言/元信息, 核对时要把它们单列。**
+- **实测**: 全量 **1170 passed + 1 skipped**(与 W4 持平 —— 本波未增删用例), sidefx 越界 0;
+  `check_kb_structure.py` 全过。
 
 ### W8 候选清单(两处 skill 缺口, 2026-09-22 记)
 

@@ -1,6 +1,6 @@
 # Tech Context — 技术栈与开发环境
 
-> Memory Bank 核心文件之一: 使用的技术、开发环境、技术约束与依赖。测试命令与基线详见 [testing.md](testing.md); 约束背后的"为什么"见 [systemPatterns.md](systemPatterns.md) 与 [pitfalls.md](pitfalls.md)。
+> Memory Bank 核心文件之一: 使用的技术、开发环境、技术约束与依赖。测试命令与基线详见 [testing/_index.md](testing/_index.md); 约束背后的"为什么"见 [systemPatterns/_index.md](systemPatterns/_index.md) 与 [pitfalls.md](pitfalls.md)。
 
 ## 技术栈
 
@@ -30,7 +30,7 @@
 | `.git` 备份(高风险 git 操作前 `cp -a .git`) | `R:/Temp/auto-qb/git-backup-<YYYY-MM-DD>`(`.git` 仅 17M, 备份成本可忽略) |
 | 打包 / 抓取 / 归档前的一次性大产物 | `R:/Temp/auto-qb/<名>/` |
 
-- **为什么是 R 盘**: 工具 shell 的 `TMPDIR` 默认指向 `H:\Temp`, 那里**符号链接读取被拒**, pytest 会在会话结束的清理阶段崩(测试其实全过, 但退出码非 0 ⇒ 提交闸门误判红), 详见 [pitfalls.md](pitfalls.md)。R 盘是普通固定盘(70GB, 2026-09-22 实测剩 8.6GB), 且**不支持符号链接**(`os.symlink` 能建, `readlink` 报 `WinError 4390 不是一个重解析点`) —— 恰恰绕开了这一类问题。
+- **为什么是 R 盘**: 工具 shell 的 `TMPDIR` 默认指向 `H:\Temp`, 那里**符号链接读取被拒**, pytest 会在会话结束的清理阶段崩(测试其实全过, 但退出码非 0 ⇒ 提交闸门误判红), 详见 [pitfalls/testing/tmpdir.md](pitfalls/testing/tmpdir.md)。R 盘是普通固定盘(70GB, 2026-09-22 实测剩 8.6GB), 且**不支持符号链接**(`os.symlink` 能建, `readlink` 报 `WinError 4390 不是一个重解析点`) —— 恰恰绕开了这一类问题。
 - **注意**:
   - R 盘是**临时盘**: 需要长期留存的归档仍进 `D:/Projects/_archive/`, 别放这儿。
   - 依赖符号链接的工具 / 用例**不要**放 R 盘(它建不出真正的重解析点)。
@@ -47,13 +47,13 @@
 ## 平台
 
 - **运行主平台 Windows**; GitHub Actions CI 在 Linux 上跑全量测试
-- 平台相关测试必须 `monkeypatch` 固定 `sys.platform`, 不依赖运行环境 (见 [testing.md](testing.md))
+- 平台相关测试必须 `monkeypatch` 固定 `sys.platform`, 不依赖运行环境 (见 [testing/_index.md](testing/_index.md))
 - Windows 磁盘文件检查走 `utils.add_long_path_prefix_for_win` (`\\?\` 长路径前缀)
 
 ## 关键技术约束
 
 - **单一写线程**: 只有主循环线程修改任务队列结构与 state_file
 - **状态落盘时机**: 跨轮次状态统一进 state_file, 程序退出时才写盘
-- **qB 5.0+ API 语义**: sync/maindata 增量响应、`transfer_*` 限速端点、`TorrentState` 枚举判定 (细节见 [pitfalls.md](pitfalls.md))
+- **qB 5.0+ API 语义**: sync/maindata 增量响应、`transfer_*` 限速端点、`TorrentState` 枚举判定 (细节见 [pitfalls/backend/qb-api.md](pitfalls/backend/qb-api.md))
 - **fail-fast**: 配置全量校验后代码假定配置正确, 不做防御性检查
 - **本地 qB 网络**: `qbmanager._new_client()` 对本地地址强制 `trust_env=False` (LocalQbClient), 远程域名保留默认

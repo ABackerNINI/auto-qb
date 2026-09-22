@@ -19,8 +19,9 @@
   `progress.md` 51,717 字符 / 367 行 → **`progress/` 9 个文件 + ≤1 KB 存根**:
   implemented-webui · implemented-webui-perf · implemented-core · implemented-rules · implemented-testing ·
   implemented-tooling · roadmap · known-bugs · evolution · suggestions, 另把 4 条超长叙事移
-  `progress/attachments/`(单条 10,225 字符, 逐条都超 cap)。全量 **1170 passed + 1 skipped**(+1: 本波启用 `test_kb_active_context_within_cap`)。
-  详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」) ——
+  `progress/attachments/`(单条 10,225 字符, 逐条都超 cap)。**W5 `systemPatterns/` + `modules/`**: 两文件(31,678 / 30,324 字符)→ **8 + 7 个主题文件 + 存根**,
+  顺带纠正「任务队列」名下的 WEB UI 三节归属。
+  全量 **1170 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」「W5」) ——
   其前一条状态: W3 `testing/` 已完成并入库(`c90b0fb`) ——
 
 ## 正在进行
