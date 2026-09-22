@@ -15,6 +15,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows GBK 控制台兑底(与 commit.py 同根): 打印含 emoji/非常用字符时 GBK 编不出来会
+# UnicodeEncodeError, 核对结果被打印中断。强制 stdout/stderr 走 UTF-8, 编不出时降级 replace。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import KEY_DEFAULTS, find_root, load_config, resolve_branch  # noqa: E402
 
@@ -54,6 +60,12 @@ def loose_ref(branch: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # 闸门自检契约(.commit-flow.toml): `verify_ref.py --help` 期望 rc=0; 手工解析下
+    # 不拦的话 --help 会被当成期望 sha, 退出码 2 让闸门假红(实测 2026-09-22)。
+    if "--help" in argv or "-h" in argv:
+        print(__doc__.strip())
+        return 0
     expect = argv[0] if argv else ""
     head = git("rev-parse", "HEAD")
     branch_ref = git("rev-parse", f"refs/heads/{BRANCH}")

@@ -22,3 +22,14 @@
 - **触发**: 写提交信息里的"改了 N 行 / N 个文件"。
 - **判别**: 上游合入会让基线行数变掉 ⇒ 沿用会话中途量的数字必然不准。
 - **处置**: 当场实测(`git show HEAD^:<file> | wc -l` 这类), 不沿用旧值。
+
+### 流水线脚本在 GBK 控制台打印 emoji 直接崩 (2026-09-22 已修)
+
+- **触发**: gitmoji 提交信息 / 闸门与远端输出含 emoji, 走 my-commit-flow 脚本 print。
+- **判别**: `UnicodeEncodeError: 'gbk' codec can't encode character '\U0001f41b'` —— 崩在打印层,
+  但 git 操作(如 commit)可能**已成功**; 别被退出码骗, 先跑 `verify_ref.py` 核实再决定重不重跑。
+- **处置**: 四个 CLI 入口脚本(commit/preflight/push/verify_ref)入口已统一
+  `sys.stdout/stderr.reconfigure(encoding="utf-8", errors="replace")`; 新增打印外部输出的
+  CLI 脚本照抄这三行(库模块不动全局 stdout)。顺带补了 verify_ref 的 `--help` 契约:
+  闸门 `verify_ref.py --help` 期望 rc=0, 手工解析参数时必须显式拦下 —— 否则 --help 被当
+  期望 sha → 退出码 2 → 闸门假红(实测 2026-09-22)。
