@@ -35,11 +35,15 @@
 
 ## 正在进行
 
-- **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 本地待提交)**:
+- **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 已入库 `c31ee0d`, Gitee + GitHub 镜像均已推)**:
   ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
   (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;
   ② 应用户要求卡片静息即发软光(`--glow-soft` 提到静息态), hover / 聚焦升全光(`--glow`), 数值沿用配方不自造。
   全量 1176 passed + 1 skipped。坑已记 [pitfalls/web-ui/layout-css.md](pitfalls/web-ui/layout-css.md)。
+- **🆕 设置页伪警示已定性并入池, 暂不施行 (2026-09-22)**: 首页警示条由『已配置且 schema 带 risk 文案』驱动,
+  恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略(升级失效键无提示)。
+  方向已与用户讨论: 撤伪警示 + 后端 unknown-key 收集 → warnings 分级 → 警示条渲染 warnings。
+  详见 [issues/26-09-22-2002-bug-webui-config-health-warning.html](issues/26-09-22-2002-bug-webui-config-health-warning.html)(Open)。
 - **🆕 memory-bank 目录化重构 —— W0–W3 已入库, 下一步 W4 `activeContext` + `progress/`** —— 起因是全库超预算:
   13 份顶层文档里 8 份超标, 「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故
   全写在同一节)。方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 +

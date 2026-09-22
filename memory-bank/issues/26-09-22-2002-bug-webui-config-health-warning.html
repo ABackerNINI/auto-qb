@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-config-health-warning">
+<meta name="issue-stamp" content="26-09-22-2002">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示">
+<meta name="issue-summary" content="首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示">
+<title>设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示</h1>
+    <p class="lede">首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-22-2002-bug-webui-config-health-warning</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-22 20:02</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>用户使用新版设置页(Console Hub)时报告:「有 8 项建议你看一下」并没有链接上有用的建议, 且只能查看第 1 项。追问设计依据后确认:警示条警示的是「风险配置本身」(schema 静态文案复述), 而非「用户配置的问题」(配置健康 / 升级导致的配置失效)—— 属伪警示。与平台 / 具体配置无关, WebUI 层缺陷 + 后端能力缺口。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">代码原文均取证于 2026-09-22 20:02。</p>
+<pre><code># ① 警示条触发条件与配置健康无关 —— 配置完全正常也恒亮, 内容恒定
+#    config_hub.js · hubCollectRisk
+if (it.field && it.field.risk && this.cfgExists(it.path)) {
+
+# ② 「有 8 项」是硬截断上限, 数量不保真
+#    config_hub.js · hubRiskList 末行
+return out.slice(0, 8);
+
+# ③ 模板只渲染第 1 项, 其余无任何查看入口(prism/atlas 两套同构)
+#    index.html · .hb-attn
+&lt;p&gt;{{ hubRiskList[0].groupLabel }} · {{ hubRiskList[0].label }}：{{ hubRiskList[0].risk }}&lt;/p&gt;
+&lt;button class="hb-btn ghost at-go" @click="hubGo(hubRiskList[0].group)"&gt;去看 →&lt;/button&gt;
+
+# ④ 「去看 →」调 hubGo: 只切分区页 + scrollTo(top:0), 不定位行 / 不高亮 / 不开说明
+#    对照: 搜索命中已有精确跳转 hubJump(focusKey + scrollIntoView + .flash 高亮),
+#    但 risk 项收集时未带定位键(key), 想复用也接不上
+
+# ⑤ 升级失效键无感知: load_config 按已知键逐个取值, schema 不认识的键静默忽略
+#    config/loaders.py · load_config —— 无任何 unknown-key 收集; validate_config 只聚合 errors
+#    /api/config GET/PUT 响应(web.py)无 warnings 字段</code></pre>
+    <p>补充事实: 同一段 risk 文案在设置行内已有两处表达(风险行左侧色条 <code>hb-row.risk</code> /「?」说明浮窗「风险」段), 首页警示条再复述一遍为零新信息。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>必现 —— 配置过任意一个带 risk 文案的项(如 web.host / qbittorrent.password)警示条即恒亮; 升级场景(配置键改名 / 删除)下失效项全程无提示</td></tr>
+      <tr><td>影响范围</td><td>新版设置页首页警示条(星图 atlas / 棱镜 prism 两套同构); 后端配置加载层(失效键静默忽略)</td></tr>
+      <tr><td>严重度</td><td>中 —— 不丢数据不崩溃, 但无效警示长期骚扰用户; 升级后配置静默失效意味着「保守默认被无声绕过」, 是真实风险面</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/web_ui/static/shared/config_hub.js</code> · <code>hubRiskList</code>(当时约 163–178 行)· grep <code>slice(0, 8)</code>(取证 2026-09-22 20:02)</li>
+      <li><code>src/auto_qb/web_ui/static/shared/config_hub.js</code> · <code>hubCollectRisk</code>(当时约 409–421 行)· grep <code>cfgExists(it.path)</code></li>
+      <li><code>src/auto_qb/web_ui/static/shared/config_hub.js</code> · <code>hubGo</code>(当时约 251–263 行)· grep <code>hubGo(key)</code>; 对照组 <code>hubJump</code>(当时约 265–271 行)· grep <code>scrollIntoView</code></li>
+      <li><code>src/auto_qb/web_ui/static/prism/index.html</code>(当时约 1587–1593 行)/ <code>atlas/index.html</code> 同构段 · grep <code>hb-attn</code></li>
+      <li><code>src/auto_qb/config/loaders.py</code> · <code>load_config</code>(当时 259 行起)· grep <code>_get(cfg</code></li>
+      <li><code>src/auto_qb/web.py</code> · <code>api_config_get</code>(当时 948 行)/ <code>api_config_put</code>(当时 965 行)· grep <code>api/config</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已核实(2026-09-22): 警示数据源选错 —— 把 schema 的 risk 静态文案当警示内容(触发条件 =「已配置」), 而警示应状态驱动(有问题才出现, 处理后消失)。<br>已排除: ①「健康数据源存在但没接上」—— 后端不存在任何配置健康 / 失效键检测出口(validate_config 只聚合 errors, 无 warnings 分级); ②「配置非法态需要警示」—— 启动 fail-fast + 保存 PUT 400 已闭合, 不存在带非法配置运行的状态。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向已与用户讨论(2026-09-22), 细节未拍板, <strong>暂不施行</strong>:</p>
+    <ol>
+      <li><strong>撤掉首页伪警示条</strong> —— 「哪些分区有风险项」已由分区卡 LED warn 态(<code>hubLedOf</code>)表达, 全局条属重复。</li>
+      <li><strong>后端补真警示数据源(核心)</strong>: load_config(或校验层)收集 tree 中 schema 不认识的键(含 <code>*_rules</code> 段内、<code>trackers</code> 段内未知子键)→ 新增 <strong>warnings 分级</strong>(不进 errors —— 未知键不拦启动, 守「保守默认」黄金法则)→ <code>/api/config</code> GET/PUT 响应带出。</li>
+      <li><strong>警示条改渲染 warnings</strong>: 条件性出现(无则整条消失), 每条给去向, 复用 <code>hubJump</code> 精确落点(需给规则卡头补 <code>data-hb-key</code>, 两套 HTML 成对改)。</li>
+      <li>二档(可选, 未拍板是否同批): 危险取值组合检查(web.host 对外暴露 + 密钥未设等); 手改 config.yml 热重载失败状态透出。</li>
+    </ol>
+    <p class="hint">未决点: 失效键要不要配「一键清理该行」按钮; 第 4 点是否同批做。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-22 20:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-09-22-2002-bug-webui-config-health-warning.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
