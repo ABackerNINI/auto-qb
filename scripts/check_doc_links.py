@@ -15,6 +15,7 @@
 - 允许"锚点"后缀(`path.md#sec`)—— 只校验 `path.md` 是否存在。
 - **历史留档例外**: `docs/plans/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
   按存根策略本就允许指向旧路径)。
+- 默认扫 `memory-bank/` 与 `.github/`(后者是规则载体, 也有链接); `--all` 再加 `docs/` 与根级 md。
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ CODE_RE = re.compile(r"`[^`\n]*`")
 # 跳过: 绝对 URL / 邮件 / 纯锚点
 SKIP_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:|#)")
 
-SCAN_DIRS = ("memory-bank", )
+SCAN_DIRS = ("memory-bank", ".github")
 EXTRA_DIRS = ("docs", )
 
 

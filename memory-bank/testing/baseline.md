@@ -6,7 +6,7 @@
 
 ## 当前基线
 
-**1175 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7542 语句 / 623 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测(目录化重构 W1–W8 与 tracker 脱敏守阵合流后; **数字取自最终树实测**) 
+**1176 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7542 语句 / 623 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测(目录化重构 W1–W8 与 tracker 脱敏守阵合流后; **数字取自最终树实测**) 
 
 > ⚠ **只测一侧就更新会立刻产生漂移** —— 改了基线就把 Windows 与 Linux 两侧**都重测**再落数字。
 > 两侧**收集数相同**但 passed 可能不同(Windows 专属用例在 Linux 上 skip), 比较时别拿 passed 直接比。

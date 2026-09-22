@@ -28,6 +28,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_kb_active_context_within_cap: `activeContext.md` ≤12 KB (易变层硬顶)
 - test_kb_task_archives_within_cap: `tasks/*.md` ≤24 KB (超了移 `tasks/attachments/`)
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
+- test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致
 - test_kb_scripts_import_cleanly: skill 的 4 个脚本都能 import
 """
 
@@ -258,6 +259,34 @@ def test_kb_task_archives_within_cap() -> None:
     """
     problems, _warns = _kb_checker().check_caps(ROOT, MB, ("task", ))
     assert not problems, "\n".join(problems)
+
+
+def test_memory_bank_instructions_match_current_structure() -> None:
+    """`applyTo: memory-bank/**` 的规则载体必须与**当前结构**一致。
+
+    为什么值得单独钉: 它只在**编辑 `memory-bank/` 时**注入 —— 不重写的话, 目录化重构后的新结构
+    在改库那一刻**根本不在上下文里**, 于是又会按旧的 8 文件结构去写。2026-09-22 重写前的旧版
+    还在教「read ALL memory bank files at the start of every task」—— 那正是本库膨胀到 50 万字符的原因。
+    """
+    path = ROOT / ".github" / "instructions" / "memory-bank.instructions.md"
+    assert path.is_file(), "缺少 memory-bank.instructions.md"
+    text = path.read_text(encoding="utf-8")
+
+    # 不能直接查 "read ALL memory bank files": 本文件**引用了这句当反例**并标注废弃,
+    # 子串必然存在 —— 第一版守卫就是这么自己把自己判红的(与「os.path.normcase 写在
+    # docstring 里当反例」是同一类坑)。改查旧版**祈使句的独有尾巴**。
+    assert "this is not optional" not in text, ("旧版反模式的祈使句回潮了: 必须改成「先索引、后 grep、禁止整读」")
+    assert "已废弃" in text, "引用旧反模式时必须同时标注它已废弃"
+    for needle in (
+        "applyTo: 'memory-bank/**'",  # 仍是规则载体
+        "先索引、后 grep、禁止整读",  # 检索纪律
+        "生成物",  # _index.md 不许手改
+        ".agents/skills/memory-bank/SKILL.md",  # 指向完整规程
+        "## 原始请求",  # 五个必备章节(守卫按行首标题比)
+        "## 进度日志",
+        "activeContext.md",
+    ):
+        assert needle in text, f"memory-bank.instructions.md 缺少 `{needle}`"
 
 
 def test_doc_links_are_not_broken() -> None:

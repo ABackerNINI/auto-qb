@@ -6,6 +6,15 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 1175 → 1176(**+1**; 2026-09-22 同任务 **W8 收尾 · 重写 `memory-bank.instructions.md`**:
+  新增 `test_memory_bank_instructions_match_current_structure`。
+  为什么值得单独钉: 该文件 `applyTo: memory-bank/**`, **只在编辑 memory-bank 时注入** ——
+  不重写的话, 目录化重构后的新结构在改库那一刻**根本不在上下文里**, 于是又会按旧的 8 文件结构去写。
+  旧版(12,073 字符)还在教「read ALL memory bank files at the start of every task」——
+  那正是本库涨到 50 万字符、「必读」退化成「不读」的直接原因。重写后 **4,830 字符**,
+  改为「先索引、后 grep、禁止整读」+ 当前目录树 + 三行头 + cap 分级表 + 档案五必备章节(标注按行首标题比)。
+  另把 `.github/` 纳入 `check_doc_links.py` 的扫描面(规则载体也有链接, 之前扫不到)。
+  全量 1176 passed + 1 skipped, sidefx 越界 0)。
 - ↑ 1174 → 1175(**+1**; 2026-09-22 同任务 **W8 机检化 + 回归演练**:
   新增 `test_doc_links_are_not_broken`(全库相对链接存在性, 检查器 `scripts/check_doc_links.py`,
   **进程内 import**)。⚠ 它首跑就抓出 **73 处坏链**, 全是目录化搬家导致的**相对深度错位**
