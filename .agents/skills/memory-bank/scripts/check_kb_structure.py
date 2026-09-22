@@ -48,7 +48,7 @@ from _common import (  # noqa: E402
 )
 
 # 默认参与 cap 检查的角色 (易变层与任务档案在迁移完成后才纳入 —— 见 `--all`)
-DEFAULT_ROLES = ("index", "index-auto", "pitfall", "evergreen", "reference", "log", "agents")
+DEFAULT_ROLES = ("index", "index-auto", "pitfall", "evergreen", "reference", "log", "volatile", "agents")
 ALL_ROLES = DEFAULT_ROLES + ("volatile", "task")
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")

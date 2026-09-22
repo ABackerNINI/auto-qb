@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W3 已完成 (pitfalls 7 类 / 35 文件 + testing 9 文件 + 新增 guards.md, 9 条结构性守卫), 续做 W4 activeContext+progress
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W6 已完成 —— **8 份超标文档全部拆完**(9 个目录 / 40 主题文件), 10 条结构性守卫, 续做 W7 tasks 消肿
 
 ## 原始请求
 
@@ -110,11 +110,11 @@
 | W1 | 基础设施: 脚本落位 + 通用生成器 + cap 策略 + 9 条守卫 | Complete | 2026-09-22 | 全量 1169 passed + 1 skipped (+9) |
 | W2 | `pitfalls/` 两级指针 (7 类 + 35 主题文件 + 存根 + 接线) | Complete | 2026-09-22 | 守恒: 真丢失 0 (973 token 核对); 1169 passed 不变 |
 | W3 | `testing/` (9 文件 + 存根; `baseline.md` 成唯一手改处) | Complete | 2026-09-22 | 守恒: 真丢失 4 处已补; 1169 passed 不变 |
-| W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Not Started | — | |
-| W5 | `systemPatterns/` + `modules/` (≈8 + ≈7) | Not Started | — | |
-| W6 | `conventions/` + `config-reference/` + `rule-system/` (≈5+3+4) | Not Started | — | |
+| W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Complete | 2026-09-22 | 40,553 → 4,783 字符; progress 51,717 → 11 文件; 1170 passed (+1) |
+| W5 | `systemPatterns/` + `modules/` (8 + 7 主题文件) | Complete | 2026-09-22 | 守恒 596/743 token 全中; 顺带纠正 WEB UI 三节归属 |
+| W6 | `conventions/` + `config-reference/` + `rule-system/` (4+2+3 主题文件) | Complete | 2026-09-22 | 守恒 232/226/282 token; 8 份超标文档至此全拆完 |
 | W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Not Started | — | |
-| W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | |
+| W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | 候选见下「W8 候选清单」 |
 
 ## 进度日志
 
@@ -146,6 +146,92 @@
   「入口链不随库体量变长」。
 - 定案: `systemPatterns` 的 WEB UI 三节 (21,406 字符) 本就挂错在「任务队列」名下, 拆开即纠错;
   modules 的「在哪里改」速查并入 `_index.md`; `tasks/attachments/` 不破坏索引守卫 (不递归)。
+
+### 2026-09-22 (W4 `activeContext` 瘦身 + `progress/` 拆分)
+- **`activeContext.md` 40,553 → 4,783 字符**(cap 12,000): 原「正在进行」15 条里 **13 条已完成**,
+  按既有纪律「沉淀到 progress/ 或主题文档后**删除**」处置 —— 但**只删真的在别处有记载的**:
+  5 条(平台语义守阵 / 列设置双轨 / 规则表达式化 / skills 安全审查 / 知识库瘦身)**搬进 `progress/implemented-*.md`**,
+  其余在主题文档已有记载(语料→roadmap 小节、乐观 UI→implemented-webui-perf、冒烟→testing/smoke.md、
+  仿真→testing/sim-5000.md)。「待用户真机走查」整段(约 15 KB)迁 `checklists/manual-walkthrough.md`;
+  「定案口径」逐条归位到 `pitfalls/web-ui/` 与 `AGENTS.md` 后改为指针(「多 clone 并行」那条的存档细节
+  原句搬回 —— token 核对查出换成指针时丢了 `MANIFEST.md` / `sha256.txt` 等)。**只留 2 条未完成**:
+  本次目录化重构本身 + 「上轮计划复核的收尾」。
+- **`progress.md` 51,717 字符 / 367 行 → `progress/` 11 个文件 + ≤1 KB 存根**: 已实现 48 条按域拆 6 份
+  (implemented-webui · implemented-webui-perf · implemented-core · implemented-rules · implemented-testing ·
+  implemented-tooling), 其余 5 份(roadmap / known-bugs / evolution / suggestions + `_about`)。
+  ⚠ **两处按实测调整计划**: ①implemented 拆 **6** 份(计划 5)—— `implemented-webui.md` 一度 12,883 字符,
+  超 cap, 按「跟手性/性能/状态色」与「界面/视图」再分一刀; ②4 条超长叙事(单条最大 **10,225** 字符,
+  逐条都超 cap)移 `progress/attachments/webui-longform.md`, 原位留首行 + 指针(首行本就带结论 / sha / 实测数字)。
+- **新增 `checklists/`**(`_about.md` + `manual-walkthrough.md`)—— 走查清单是**清单**, 读的时机是
+  「做走查时」而不是「每次会话开始」, 故从易变层移出。
+- **启用 `test_kb_active_context_within_cap`**(10 条知识库守卫): 它是 W1 就写好、**按波次未启用**的那条;
+  本波把 `activeContext.md` 压到 cap 之下才纳入 `check_kb_structure` 的默认角色集。
+  ⇒ 全量 **1169 → 1170 passed + 1 skipped**。
+- **守恒核对**: `progress.md → progress/` **928 个 token 全部命中(missing = 0)** —— 条目是原样搬运, 所以干净。
+  `activeContext.md → memory-bank/` 657 个 token 里 93 个"找不到", 逐条判后 **5 处真丢失已补**
+  (state.json 条目未沉淀 / 真机语料条目未沉淀 / 乐观 UI 条目未沉淀 / 多 clone 存档细节 / 顶部滚动链),
+  余 7 个是**顶部「最后更新」滚动链里的 commit sha** —— 那条按设计每轮替换, 已在文件头写明
+  「它是滚动状态不是档案, 回查请看 tasks/ 档案的进度日志」, 不再当丢失。
+- **踩坑记录**: 用 `python -c "..."` 往测试文件里插含**反引号 + `\n`** 的代码, 被 bash 当命令替换吃掉反引号、
+  `\n` 被路径归一化层写成 `/n` ⇒ 文件语法错误。**正是 W2 刚迁进 `pitfalls/git/editing-traps.md` 的那条坑**
+  (heredoc / 反斜杠转义); 改用**脚本文件** + 显式 UTF-8 即好。⇒ 该坑的适用范围要写宽: 不只 heredoc,
+  `python -c` 的双引号串同样中招。
+- **实测**: 全量 **1170 passed + 1 skipped**, sidefx 越界 0; `check_kb_structure.py` 全过。
+
+### 2026-09-22 (W6 `conventions/` + `config-reference/` + `rule-system/` 目录化)
+- **`conventions.md`(15,283 字符 / 202 行 / 20 节)→ 4 个主题文件**: collaboration(协作约定 + 跨仓库红线 +
+  生产配置禁令)· code-style(函数设计 / 可测试性 / 模块职责 / 命名 / 类型注解 / 性能 / 注释 / 日志 / 格式化 /
+  dataclass / 其它工程约定)· process(dry_run / 幂等 / Git / 闸门)· webui(菜单分层 / 令牌分工 / HTML dark 主题)。
+  ⚠ 原先 18 节挤一份, **单节最大 5,458 都合规, 但一次要读 15 KB** —— 这正是"检索键错位"的典型。
+- **`config-reference.md`(11,779 / 142)→ 2 个**: loading-and-write(加载 / 写回 / fail-fast 校验)· keys(全部键 +
+  trackers + 曲线 + 规则集段 + 变量语法 + 运行时文件 + 测试样例)。
+- **`rule-system.md`(15,964 / 205)→ 3 个**: rules-and-triggers · conditions-and-actions(含 `expr` 速查)·
+  **checking 单独成篇** —— 高风险动作独立, 并与 [../pitfalls/backend/high-risk-ops.md](../pitfalls/backend/high-risk-ops.md) **互指**。
+- **做法**: 三个源文件的章节与目标文件同样**几乎 1:1** ⇒ 全部**按行区间原样抽取**;
+  `code-style.md` 由 **11 个不连续区间**拼成(20 节里散落的风格类小节归拢到一处)。
+- **守恒核对**: conventions **232 个 token 全中**、config-reference **226 个全中**、rule-system **282 个里 1 个** ——
+  唯一那个是源引言里的 `config/validation.py`, 而它**2026-09-15 已由单文件转包**(见
+  [../modules/core-config.md](../modules/core-config.md) 的 `config/validation/ (包)`), 故我在目标文件里写成
+  `config/validation/` —— 属**有意纠正的过期写法**, 不是丢失。
+- ❗**第二次踩同一个坑**: 与 W5 一样, 三个源文件的**引言块**(抽取时被存根取代)里含全库性事实 ——
+  ①`内容基线 2026-09-05 @ 51374bd`(config-reference / rule-system)②rule-system 的**代码模块清单**
+  (`rules/base.py` / `conditions.py` / `actions/` / `registry.py` / `mixins/rule_engine.py` / `config/loaders.py` …)
+  ③conventions 的「以代码为准并回写」通用声明 —— 均已补进各目录的第一个主题文件。
+  ⇒ **五步配方该加一条**: 抽取类迁移前先**单独把"标题 + 引言"列出来核对** —— 两次都栽在区间之外。
+- **实测**: 全量 **1170 passed + 1 skipped**(与 W4/W5 持平 —— 本波未增删用例), sidefx 越界 0;
+  `check_kb_structure.py` 全过; `AGENTS.md` 预算仍 PASS。
+- **里程碑**: 计划 §04 点名的 **8 份超标顶层文档至此全部拆完**(pitfalls / testing / progress / activeContext /
+  systemPatterns / modules / conventions / config-reference / rule-system —— 其中 activeContext 是瘦身不拆)。
+  剩 W7(`tasks/` 档案消肿)与 W8(机检化 + 回归演练 + instructions 漂移修复)。
+
+### 2026-09-22 (W5 `systemPatterns/` + `modules/` 目录化)
+- **`systemPatterns.md`(31,678 字符 / 308 行)→ 8 个主题文件**: overview · main-loop · data-layer · taskqueue ·
+  web-runtime · web-responsiveness · web-config-editor · client-and-state。
+  ⚠ **顺带纠正一处归属错误**: 原先「WEB UI 线程模型」(`###` 挂在「任务队列」下)「WEB UI 前端渲染与响应性」
+  「WEB UI 图形化配置编辑」三节合计约 **21 KB** 挂在**任务队列**名下 —— 它们属于 **WEB UI 运行时**, 不属于队列。
+  拆开即纠错, 这本来就是本波的动因之一。
+- **`modules.md`(30,324 字符 / 126 行)→ 7 个主题文件**: overview(包入口 + 「在哪里改」速查) ·
+  core-config · core-runtime · core-domain(核心模块 30 行表按包切三份)· webui-static-contract · mixins ·
+  rules-and-deps。
+- **⚠ 两处按实测偏离计划**: 计划让「组件总览」与「包入口 + 在哪里改速查」**并入 `_index.md`** ——
+  但我们的 `_index.md` 是**生成物**(只渲染三行头元数据), 放不了手写正文 ⇒ 各起一个 `overview.md`。
+- **做法**: 两个源文件的章节与目标文件**几乎 1:1**, 故**全部按行区间原样抽取**(不通读、不重写)——
+  `taskqueue.md` 与 `data-layer.md` / `client-and-state.md` 各由 2–3 个不连续区间拼成;
+  三处原为 `###` 的 WEB UI 小节在目标文件里**提升为 `##`**。只有「核心模块」30 行表按包切三份要人工判归属。
+- **守恒核对**: systemPatterns **596 个 token 全中**、modules **743 个全中(missing = 0)**;
+  唯一查出的缺口是**两个源文件的引言块**(抽取时被存根取代)里的两条全库性事实 ——
+  ①`内容基线 2026-09-05 @ 51374bd` ②`行数为 2026-09-05 快照, 路径相对 src/auto_qb/` —— 已补进各 `overview.md`
+  与 modules 的四份带表文件。⇒ **教训: "按行区间抽取"容易漏掉区间之外的引言/元信息, 核对时要把它们单列。**
+- **实测**: 全量 **1170 passed + 1 skipped**(与 W4 持平 —— 本波未增删用例), sidefx 越界 0;
+  `check_kb_structure.py` 全过。
+
+### W8 候选清单(两处 skill 缺口, 2026-09-22 记)
+
+1. **`<each:GLOB>` 闸门只展开"已跟踪的改动文件"** ⇒ **新增(untracked)**的 skill 脚本拿不到 `--help` 冒烟
+   (W1 新增 4 个 memory-bank 脚本时实测: 闸门只跑了 1 条 `create-issue` 的)。修点在 `preflight.py` 的改动清单。
+2. **`test_preflight.py` 的 `undefined_names` 静态检查只覆盖 my-commit-flow 自己的 5 个脚本**,
+   memory-bank skill 的 4 个脚本不在内(与"改名漏改的未定义名只在冷门分支炸"同一类风险)。
+3. `run.md` 的 TMPDIR 一档还留着与「用 `--basetemp=H:/Temp/<新目录>`」**互相冲突**的旧建议(既有漂移)。
 
 ### 2026-09-22 (W3 `testing/` 目录化)
 - **产出**: `testing.md`(6,706 字符 / 489 行)→ **9 个主题文件 + ≤1 KB 存根**(存根实测 **322 字符**):

@@ -23,7 +23,7 @@
 
 ## 当前阶段
 
-**alpha 🚧** — 功能已实现并有完整测试 (基线见 [testing.md](testing.md)), 但尚未经过大规模实机验证; README 标注 🚧 的功能请先用 `--dry-run` 观察再上生产。
+**alpha 🚧** — 功能已实现并有完整测试 (基线见 [testing/_index.md](testing/_index.md)), 但尚未经过大规模实机验证; README 标注 🚧 的功能请先用 `--dry-run` 观察再上生产。
 
 ## 上游文档 (权威关系)
 

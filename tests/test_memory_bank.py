@@ -25,6 +25,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_kb_topic_files_have_metadata / test_kb_files_respect_caps / test_kb_class_names_and_topic_filenames: 三行头元数据 / cap 分级 / 类名与文件名
 - test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
+- test_kb_active_context_within_cap: `activeContext.md` ≤12 KB (易变层硬顶)
 - test_kb_scripts_import_cleanly: skill 的 4 个脚本都能 import
 """
 
@@ -233,6 +234,15 @@ def test_kb_stubs_are_valid() -> None:
 def test_kb_pitfall_entries_have_required_fields() -> None:
     """pitfalls 条目含 触发 / 判别 / 处置 三必填字段 (`- **触发**: …`)。"""
     problems = _kb_checker().check_pitfall_entries(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_active_context_within_cap() -> None:
+    """`activeContext.md` ≤12 KB —— 易变层硬顶: 超了就是内容该外迁的信号, 不是「这次先写着」。
+
+    2026-09-17 那次复盘(纪要回流成流水账, 文件膨胀 10 倍)从教训变成机制, 靠的就是这条。
+    """
+    problems = _kb_checker().check_active_context_cap(ROOT, MB)
     assert not problems, "\n".join(problems)
 
 

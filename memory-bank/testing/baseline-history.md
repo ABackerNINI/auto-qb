@@ -6,13 +6,21 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
-- ↑ 1169 → 1172(**+3**; 2026-09-22 issue 26-09-21-1408「tracker URL 含凭据全文写入日志」守阵:
-  `test_sanitize_tracker_url` / `test_sanitize_tracker_url_unparseable`(脱敏只留主地址 `scheme://host[:port]`,
-  任意命名的凭据参数都覆盖; 降级占位 + urlparse 抛错不冒泡) / `test_cmd_trackers_log_sanitized`
-  (端到端: 真跑编辑/移除 tracker 命令, 断言日志里密钥全文与参数名均不在、主地址在 —— 断言不写死参数名,
-  防退回黑名单思路)。红验通过: 打回"内插 URL 原文" ⇒ 该守阵立即红。**本条数字在合并 W3 之后实测**
-  (与 W3 同批落远端, 曾各自报 1169 / 1163, 合流后为 1172)。
-- ↑ 1169 → 1169(**不变**; 2026-09-22 同任务 **W3 `testing/` 目录化**: 只动文档与 skill 脚本, 未增删用例 ——
+- ↑ 1170 → 1170(**不变**; 2026-09-22 同任务 **W6 `conventions/` + `config-reference/` + `rule-system/` 目录化**:
+  只动文档, 未增删用例。三文件(15,283 / 11,779 / 15,964 字符)→ **4 + 2 + 3 个主题文件 + 存根**;
+  `checking` 高风险动作按计划**单独成篇**并与 [../pitfalls/backend/high-risk-ops.md](../pitfalls/backend/high-risk-ops.md) 互指。
+  全量 1170 passed + 1 skipped, sidefx 越界 0)。
+ + `modules/` 目录化**:
+  只动文档, 未增删用例。`systemPatterns.md`(31,678 字符)→ **8 个主题文件**, `modules.md`(30,324 字符)→ **7 个**,
+  两处源文件各留 ≤1 KB 存根。⚠ 顺带**纠正一处归属错误**: 原先「WEB UI 线程模型 / 前端渲染与响应性 /
+  图形化配置编辑」三节(合计约 21 KB)挂在「任务队列」名下, 它们属于 **WEB UI 运行时**, 不属于队列。
+  全量 1170 passed + 1 skipped, sidefx 越界 0)。
+ + `progress/` 拆分**:
+  `test_kb_active_context_within_cap` 是 W1 就写好但**按波次未启用**的那条 —— 本波把 `activeContext.md`
+  压到 12 KB 硬顶之下(实测 **4,783** 字符), 才把它纳入 `check_kb_structure` 的默认角色集(`volatile`)。
+  ⇒ **守阵按波次"激活"**是这套重构的一条设计: 检查器先写全, 目录/内容没到位时空转通过, 一落地就生效。
+  全量 1170 passed + 1 skipped, sidefx 越界 0)。
+: 只动文档与 skill 脚本, 未增删用例 ——
   `testing.md`(6,706 字符 / 489 行)拆成 **9 个主题文件 + 存根**; **基线数字的单点从 `testing.md` 顶部
   迁到 [baseline.md](baseline.md)**, 变更流水原样外迁到本文件; `techContext.md` 的浏览器自动化两条轨道
   迁入 [browser-env.md](browser-env.md)(techContext 6,706 → 3,542 字符)。全量 1169 passed + 1 skipped, sidefx 越界 0)。
