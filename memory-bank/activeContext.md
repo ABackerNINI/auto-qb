@@ -11,26 +11,18 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 20:29 (**my-commit-flow 脚本 GBK 控制台打印 emoji 崩溃已修, 待提交** ——
-  gitmoji 提交输出在 GBK 控制台编不出 U+1F41B, commit.py 崩在 print(提交实际已成功, 靠 verify_ref
-  识破); 四个 CLI 入口脚本统一入口 reconfigure(UTF-8 + replace), verify_ref 顺带补 `--help` 契约
-  (闸门假红); 坑记在 [pitfalls/git/message.md](pitfalls/git/message.md)。验证: 复现环境炸→修后不炸,
-  test_preflight 27 passed, verify_ref 真跑 PASS。上轮: issue 26-09-21-1347 状态周期落盘已入库
-  (ffb7440 + 合并 c02f5b7)。)
-  其前一条状态: 2026-09-22 19:50 (**issue 26-09-21-1347「后端状态仅优雅退出时落盘」已实施并入库** ——
-  新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
-  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘; 红验通过(修复打回 → 3 条守阵全红);
-  issue 状态 Fixed。→ [计划](../docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html))
-  其前一条状态: 2026-09-22 19:43 (**issue 26-09-21-1347 热重载 L2 state 回滚 已修复** ——
-  `apply_new_config` L2 分支删除 `self.state = self._load_state()`(运行期重读 = 把
-  exec_history/skip_check_day/recheck_fails 等内存态回滚; docstring 本就承诺「保留执行历史」)。
-  守阵 `test_apply_new_config_l2_preserves_runtime_state` 先红验(1 failed, state 被换成磁盘旧版)后转绿;
-  与上条周期落盘案同日先后入库, 合流后全量以 [baseline.md](testing/baseline.md) 为准。issue Fixed + 索引重建;
-  client-and-state.md「热重载 L2 各一次」旧表述已更正;
-  计划: docs/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html)
-  其前一条状态: memory-bank 目录化重构 W0–W8 已全部入库(详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)) ——
-
+**最后更新**: 2026-09-22 20:3x (**本轮: web.py→web/ 包拆分入库 · issue 26-09-21-1408 置 Fixed** ——
+  `create_app` 926 行 → `web/` 包 16 文件(factory 组装壳 26 行, 守阵钉 ≤150), 8 域 Router;
+  零行为变更: 既有用例零改动 + 金清单 60 条/组装壳守阵双红验; 冒烟双 UI ok/error 70 项 0 失败。
+  上轮 20:29 的 my-commit-flow GBK 修复已在本分支上游合入, 本次 commit.py 同坑已不复现——以
+  `PYTHONIOENCODING=utf-8` 兜底。详见计划 docs/plans/26-09-22-1857-web-create-app-split-plan.html)
 ## 正在进行
+
+- **web.py→web/ 包拆分 —— 已入库(本条随提交走)**: 零行为变更纯结构重构; 守阵 2 条红验
+  (金清单 60 条 / 组装壳 ≤150); 全量 1188 passed + 1 skipped; 冒烟 70×2 全绿。三条安全
+  发现(S1-01/02/05)可在 auth.py/events.py/system.py 局部落刀(上游已修 S1-05 脱敏, 见
+  44c1a0f)。剩: push 后真机无需走查(行为零变更, 冒烟已覆盖)。
+
 
 - **🆕 后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
   `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;

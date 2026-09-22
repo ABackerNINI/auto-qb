@@ -5,6 +5,12 @@
 
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
+- ↑ 1186 → 1188(**+2**; 2026-09-22 **web.py→web/ 包拆分 · issue 26-09-21-1408**(plan 26-09-22-1857):
+  新增守阵 `test_web_route_manifest_frozen`(60 条 (method,path) 金清单集合比对; ❗本仓 FastAPI 的
+  `include_router` 走 `_IncludedRouter` 懒解析, 清点须下钻 `original_router.routes` —— 首版因此假红)
+  + `test_create_app_is_thin_assembly`(create_app ≤150 行且无内联 `@app.*`, 红=拆分前 926 行双红)。
+  既有用例零改动(1 处管线性: open_path patch 目标 → `auto_qb.web.common.open_path`); 冒烟双 UI
+  ok/error 两模式 70 项 0 失败。全量 1188 passed + 1 skipped, sidefx 越界 0)。
 
 - ↑ 1185 → 1186(**+1**; 2026-09-22 issue 26-09-21-1347 **热重载 L2 state 回滚修复**:
   新增守阵 `test_apply_new_config_l2_preserves_runtime_state`(L2 热重载不得重读磁盘 state
