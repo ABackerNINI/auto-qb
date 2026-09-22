@@ -68,7 +68,10 @@
   会让那次 `os.replace` 失败 ⇒ 状态白丢一次更新), 只认 `<state_file>.<随机>.tmp` 这一个形状(`.bak` 是恢复
   凭据、别人的 `*.tmp` 与空随机段一概不碰), `no_lock=True` 的只读模式不调用; 守阵 4 条(含**接线守阵**:
   源码里必须出现在 `acquire()` 之后且落在 `if not no_lock` 内 + 幂等断言)。全量 **1160 passed + 1 skipped**。
-  ⚠ **本批改动(源码 3 文件 + 测试 1 文件 + 知识库 4 文件)尚未提交**。
+  ✅ **本批改动(源码 3 文件 + 测试 1 文件 + 知识库 5 文件)已入库 `f261de7`**(Gitee + GitHub 均推上)。
+  🧪 端到端复核(真实 `QbManager(..., no_lock=False)` 构造路径): 损坏 → 内存 state == `.bak` / 主文件被自愈
+  写回 / 孤儿 tmp 被清理 / `.bak` 未被损坏内容盖掉 —— 四件事全成立(脚本在 `H:/Temp/e2e_state_recovery_check.py`,
+  未进仓库)。
 
 - **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
   普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;
