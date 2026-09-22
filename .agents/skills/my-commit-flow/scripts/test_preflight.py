@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import preflight  # noqa: E402
-from _ship_config import config_problems, load_config  # noqa: E402
+from _ship_config import config_problems, find_root, load_config  # noqa: E402
 
 PY = sys.executable
 
@@ -217,10 +217,28 @@ def undefined_names(path: Path) -> set[str]:
 
 class StaticNameTest(unittest.TestCase):
     SCRIPTS = ["_ship_config.py", "preflight.py", "push.py", "commit.py", "verify_ref.py"]
+    # memory-bank skill 的脚本同属"改了就可能留下未定义名"的资产, 一并纳入
+    # (2026-09-22 目录化重构新增了 4 个; 之前只扫本 skill 自己那 5 个)。
+    OTHER_SCRIPTS = (
+        ".agents/skills/memory-bank/scripts/_common.py",
+        ".agents/skills/memory-bank/scripts/gen_tasks_index.py",
+        ".agents/skills/memory-bank/scripts/gen_kb_index.py",
+        ".agents/skills/memory-bank/scripts/check_kb_structure.py",
+    )
+
+    def test_no_undefined_names_in_other_skill_scripts(self) -> None:
+        root = find_root()
+        missing = [rel for rel in self.OTHER_SCRIPTS if not (root / rel).is_file()]
+        self.assertFalse(missing, f"清单里的脚本不存在(改名了? 同步本清单): {missing}")
+        bad = [f"{rel}: {', '.join(sorted(undefined_names(root / rel)))}" for rel in self.OTHER_SCRIPTS]
+        bad = [b for b in bad if not b.endswith(": ")]
+        self.assertFalse(bad, "memory-bank skill 脚本里有未定义名:\n" + "\n".join(bad))
 
     def test_no_undefined_names_in_scripts(self) -> None:
-        bad = [f"{name}: {', '.join(sorted(undefined_names(Path(__file__).resolve().parent / name)))}"
-               for name in self.SCRIPTS]
+        bad = [
+            f"{name}: {', '.join(sorted(undefined_names(Path(__file__).resolve().parent / name)))}"
+            for name in self.SCRIPTS
+        ]
         bad = [line for line in bad if not line.endswith(": ")]
         self.assertEqual(bad, [], "存在未定义的名字(拼写错 / 改名漏改), 会在冷门分支上 NameError")
 

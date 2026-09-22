@@ -76,9 +76,13 @@ def remotes() -> dict[str, str]:
 
 
 def changed_files() -> tuple[list[str], list[str]]:
-    """返回 (staged, unstaged) 文件清单(按 `git status --porcelain` 的两列判读)。"""
+    """返回 (staged, unstaged) 文件清单(按 `git status --porcelain` 的两列判读)。
+
+    ❗必须带 `-uall`: 默认模式下**未跟踪目录只报一条 `?? <dir>/`**, 于是 `<each:GLOB>` 之类
+    按文件的展开**匹配不到新加的文件** —— 新增 skill 脚本拿不到 `--help` 冒烟, 且是静默的。
+    """
     staged, unstaged = [], []
-    for line in git("status", "--porcelain").splitlines():
+    for line in git("status", "--porcelain", "-uall").splitlines():
         if not line.strip():
             continue
         xy = line[:2].ljust(2)  # 短行兜底, 避免索引错位后再切错路径

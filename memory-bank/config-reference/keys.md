@@ -63,7 +63,7 @@ global_speed_limit_curve:
 
 ## 规则集段 (`*_rules`)
 
-见 [rule-system.md](rule-system.md)。规则级键: `enabled`/`interval`/`trigger`/`execute_once`/`cooldown`/`conditions`/`actions`/`stop_following_rules_if`。`trigger` 默认 `interval` (周期轮询), 事件 trigger 见 04 触发时机表与 09 规划。
+见 [rule-system.md](../rule-system.md)。规则级键: `enabled`/`interval`/`trigger`/`execute_once`/`cooldown`/`conditions`/`actions`/`stop_following_rules_if`。`trigger` 默认 `interval` (周期轮询), 事件 trigger 见 04 触发时机表与 09 规划。
 
 ## 变量与匹配语法速查
 

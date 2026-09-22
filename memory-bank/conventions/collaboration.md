@@ -41,7 +41,7 @@
 - **跨工作区同步一律走 Gitee `develop`**: 只动自己这个 clone → 提交推送 → 让对方 clone 自己拉取。**没有第二种路径。**
 - **为什么是硬禁止**(2026-09-21 事故实证, 不是推演): 一次未经授权的跨仓库同步, 连带在对方 clone 里跑了
   `git pull --rebase` ⇒ 工具 shell 的 rebase 毁掉它的 `.git`(refs 目录消失 + 对象丢失,
-  详见 [pitfalls](pitfalls.md)「`git rebase` 会毁 `.git`」条); 又因 rebase 被 SIGTERM 中断、
+  详见 [pitfalls](../pitfalls.md)「`git rebase` 会毁 `.git`」条); 又因 rebase 被 SIGTERM 中断、
   工作区被 checkout 到中间状态, 事后留下 **13 个文件 / 648 行的残缺状态**需要清理。
   而同样的修复走 Gitee 只需一次提交。⇒ **代价不对称**: 走 Gitee 是零成本, 越界操作是"修一个问题、制造两个事故"。
 - **配套纪律(越界已发生时的止损)**: rebase 中断后**工作区不可信**, 不要想当然用 `reset --mixed` 保留它 ——
@@ -51,5 +51,5 @@
 
 - **🔴 绝对禁止以生产 `config.yml` 或生产 `auto-qb-data/` 启动程序**(含间接形式: 无参数启动 = 默认加载生产 config.yml)
 - 违规后果: AI 启动的实例会在真实数据上执行管理动作(打标签/清理标签/HR 打标/限速), 占用单实例锁致用户无法启动, 并可能误杀用户实例
-- **运行验证一律使用独立临时配置 + 独立 data_dir**(在 `R:/Temp/auto-qb/run-<名>/` 下自建 yml 与 data 目录, 用后清理 —— 临时目录统一走 R 盘, 见 [techContext.md](techContext.md)「临时目录 / 备份盘约定」)
+- **运行验证一律使用独立临时配置 + 独立 data_dir**(在 `R:/Temp/auto-qb/run-<名>/` 下自建 yml 与 data 目录, 用后清理 —— 临时目录统一走 R 盘, 见 [techContext.md](../techContext.md)「临时目录 / 备份盘约定」)
 - 生产环境的启动/停止/验证**仅由用户本人执行**; AI 需要用户提供日志或观察结果

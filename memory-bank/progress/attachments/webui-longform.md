@@ -14,7 +14,7 @@
 - 种子页筛选器无数据 + 辅种组暂停后状态色闪烁修复 (2026-09-21): 用户一次报两个 WEB UI 缺陷, 两个都**先复现再改**。
   · **① 种子页筛选器无数据**: 筛选弹层选项(标签/分类/站点/路径)原先一律遍历 `groups` 计算, 而种子页按视图分片**不回 `groups`**(`VIEW_ARRAYS["torrent"]=("torrents",)`) ⇒ 四个弹层恒空、只剩"暂无数据"(H&R 是固定两档, 表现为 0/0, 更隐蔽)。**这是"跨视图的常驻消费者依赖按视图裁剪的阵列"的第三次**(前两次: 状态栏速度 issue 26-09-20-1646 / 追剧页成员索引 BUG-8)。修法 = **取数面单点** `facetRows`(种子页=`torrents`, 其余=`decoratedGroups`) + `_facetOptions(kind)`; 计数口径随行走(**组视图=含该值的组数, 种子页=含该值的种子数**), 旧的 `_memberValueOptions`(按组算的第二条口径)删除并由守阵钉住不许复活。实测(桩 300 种子): 组视图计数不变(150 组), 种子页标签/分类/站点/路径 3/3/1/1 条且与 `vm.torrents` 现数的真值逐项相等(HHan 150 / seed-3D 150 / low-ratio 148 / 站点 300 / 路径 300), 点选 HHan 行数 300 → 150。
   · **② 辅种组暂停整组后颜色 灰→绿→灰**: 真值走 `torrents/info` **直查**, 比我们自己的 `/sync/maindata` **快照**新 ≤ `sync_interval`(1.5s); `onTruthEvent` 一到就 `delete pendingOps[h]`(撤掉"值覆盖") ⇒ 这 1.5s 内任何一次**视图发布**(任何种子任何字段变化都会让 rid 前进、整表重发)都带着**命令前**的 kind 覆盖行对象 ⇒ 行被打回命令前的做种绿, 快照追上再变灰。修法 = 真值事件**只改覆盖的值**(`op.patch`/`op.prev` 都写成已落地真值, resume 的"落地态 6 种 vs 预测 2 种"顺带收敛), **不结束覆盖** —— 收尾判据保持"服务端快照同意"(`_optimisticSettled`)或 8s 兜底; `prev` 一起改是必须的(兜底回滚要回"最后已知真值", 回命令前的旧值 = 把已暂停的种子显示成做种中)。
-  · **验证**: 两个缺陷都做了确定性复现(桩服务 + Playwright; ②用"逐步喂时序 + `page.route` 注入陈旧 payload"复现, 手法已写进 pitfalls)。**新增守阵**: 冒烟两条(种子页筛选器计数=种子数 / 真值事件后不被陈旧快照打回, 各 UI +1)+ 静态守阵 `tests/test_web.py::_scan_filter_facets`(5 种注入违例红验, 含"把调用注释掉"); **冒烟断言也做了红验**(撤掉 `commands.js` 的修复重跑 ⇒ 报"陈旧快照 seeding / 覆盖保持=0 条")。单测 **1142 passed**(基线不变, 只加断言); 冒烟 ok 68/2 / error 68/0 / hang 8/0 —— ok 模式那 2 项是**既有失败**(`P0-3 乐观态及时落回真值` 的 80ms 下界已随 D2 过时, 本次定性并留待定夺, 详见 testing.md 与 pitfalls)。档案 [tasks/26-09-21-webui-filter-data-and-color-flicker.md](tasks/26-09-21-webui-filter-data-and-color-flicker.md)。
+  · **验证**: 两个缺陷都做了确定性复现(桩服务 + Playwright; ②用"逐步喂时序 + `page.route` 注入陈旧 payload"复现, 手法已写进 pitfalls)。**新增守阵**: 冒烟两条(种子页筛选器计数=种子数 / 真值事件后不被陈旧快照打回, 各 UI +1)+ 静态守阵 `tests/test_web.py::_scan_filter_facets`(5 种注入违例红验, 含"把调用注释掉"); **冒烟断言也做了红验**(撤掉 `commands.js` 的修复重跑 ⇒ 报"陈旧快照 seeding / 覆盖保持=0 条")。单测 **1142 passed**(基线不变, 只加断言); 冒烟 ok 68/2 / error 68/0 / hang 8/0 —— ok 模式那 2 项是**既有失败**(`P0-3 乐观态及时落回真值` 的 80ms 下界已随 D2 过时, 本次定性并留待定夺, 详见 testing.md 与 pitfalls)。档案 [tasks/26-09-21-webui-filter-data-and-color-flicker.md](../../tasks/26-09-21-webui-filter-data-and-color-flicker.md)。
 
 
 ---
@@ -31,7 +31,7 @@
   服务端 `sync_interval`**(再快只是多拿一次"版本未变"的空响应)。`pollSec` 字段退役改 `basePollMs()`;
   冒烟新增分档断言 ⇒ 30 项 0 失败, 三档逐个实测通过。
   **2026-09-19 对抗性复核 (计划本身 + 实施情况, 重点 BUG/安全/性能)**: 报表
-  [docs/plans/26-09-19-1745-webui-responsiveness-review.html](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)。
+  [docs/plans/26-09-19-1745-webui-responsiveness-review.html](../../../docs/plans/26-09-19-1745-webui-responsiveness-review.html)。
   评级 计划 A− / 实施 A− / BUG B / 安全 A− / 性能 B+ / 测试 B−。**架构判断成立且实测坐实**:
   命令延迟 `wait_ms=0` / 首查即命中 / 端到端 2.7~34ms; 行窗口化 A/B 同进程 3 轮 —— refresh
   1384→244ms(prism) / 1569→246ms(atlas), `getBoundingClientRect` 9000→106, DOM 行 3000→26。
@@ -66,7 +66,7 @@
   整个局域网, 实测非回环一律拒绝启动)。⑧**`cmdStats` 接上消费者**(超阈值打 `[perf]`, 此前只写不读的死字段)。
   ⑨顺带把 `memberWin` 改方法并接收成员数组, 修掉追剧页成员窗口是**死路径**的问题(原写死读 `expandedGroup`)。
   **基线 1049 → 1051 passed / cov 92%**。
-  剩: 真机走查(真实 qB 数据下的观感) + 复核缺陷修复第 2 批(组行乐观 / 响应体裁剪 / 节拍对齐)。计划 [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../docs/plans/26-09-19-1241-webui-responsiveness-plan.html); 档案 [tasks/26-09-19-webui-responsiveness.md](tasks/26-09-19-webui-responsiveness.md)
+  剩: 真机走查(真实 qB 数据下的观感) + 复核缺陷修复第 2 批(组行乐观 / 响应体裁剪 / 节拍对齐)。计划 [docs/plans/26-09-19-1241-webui-responsiveness-plan.html](../../../docs/plans/26-09-19-1241-webui-responsiveness-plan.html); 档案 [tasks/26-09-19-webui-responsiveness.md](../../tasks/26-09-19-webui-responsiveness.md)
   **复核缺陷修复 · 第 2 批 (报表 5 + 修复过程中新发现的 3 个缺陷, 已实施未提交)**: 开工先做了一次
   **真浏览器实证**, 结果推翻了报表自己的一条判断 —— 组行颜色**本来就是乐观变化的**(实测
   `s-checking → s-paused`, 因为它取自 `_aggStatus(成员 kind)` 的 computed, 而 `applyOptimistic` 改的正是
@@ -94,7 +94,7 @@
   + 静态守阵第 8 项比对两张状态表 + 改写 `test_api_state_view_scoped_payload` 口径, 两条守阵**红绿双验**);
   冒烟 **36 → 46 项 0 失败**(ok 模式) / **44 项 0 失败**(error 模式回滚路径, 该模式此前必红所以没人跑)。
   未做: 报表 §08 第 6 项(响应体裁剪, 牵动 SEED_ITEM 契约)与第 7 项(节拍对齐, 需先定方向)。报表已追加
-  [§10 复核修订与修复回执](../docs/plans/26-09-19-1745-webui-responsiveness-review.html)(含对 BUG-3 证据②的更正)。
+  [§10 复核修订与修复回执](../../../docs/plans/26-09-19-1745-webui-responsiveness-review.html)(含对 BUG-3 证据②的更正)。
   **续查 · 热路径白跑 85%: FastAPI `jsonable_encoder` (同日, 已实施未提交)**: 动手做第 6 项前先把
   「一轮 refresh 到底花在哪」量清楚 —— 量完发现**第 6 项要修的地方修错了**。四步定位(每步独立否决一个方向):
   ① **字节构成**: 3000 种子/74 字段里占比最大的 `magnet_uri` 仅 **6.3%**, 要覆盖 80% 字节需要 **52/74** 个字段
@@ -122,7 +122,7 @@
   凭载荷大小直接开药方十有八九修错地方。同类端点(`/api/torrents/{hash}/files`、`/api/search` 等)同样的
   1 行改法**尚未做**(用户触发型、不在轮询路径上)。报表已追加 **§11**。
   **真机走查反馈 · 乐观 UI 反应 2-4s (2026-09-19, 已入库 `a8eb6e8`)**: 用户真机反馈「乐观 UI 已生效, 但反应
-  时间太长, 估计 2-4 秒」([issue 26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html))。
+  时间太长, 估计 2-4 秒」([issue 26-09-19-1939](../../issues/26-09-19-1939-perf-webui-optimistic-latency.html))。
   **先量后改**: 桩服务回执是瞬时的, 本地复现不出来 —— 用 Playwright `page.route` 给命令 POST **注入人为
   延迟**, 钩住 `applyOptimistic` 量三个时刻(菜单项 click → 补丁贴上 → DOM `.is-pending`)。结果:
   注入 2000ms 时 `act()`(整组)补丁 **2012ms** / `actTorrent()`(单种子)**2004ms** 才贴, 而 `actEpisode()`
@@ -137,7 +137,7 @@
   (新增「P0-3 补丁先于 POST(注入 800ms 仍 <400ms)」, 实测 4~5ms; error 模式加「慢投递 + 失败回执后
   回滚干净」)。**未追**: 真机 POST 为何慢到秒级(长 tick / GIL / 线程池)—— UI 已不依赖它, 复测看
   `[perf] … POST xxxms`, 持续 >400ms 再动服务端。
-  **顺带发现另立 issue(未修)**: [整剧操作在剧行上无 `is-pending`](issues/26-09-19-1959-bug-webui-show-row-no-pending.html)
+  **顺带发现另立 issue(未修)**: [整剧操作在剧行上无 `is-pending`](../../issues/26-09-19-1959-bug-webui-show-row-no-pending.html)
   —— 补丁 0ms 贴上但 `.show-row` 不绑 pending(剧行默认折叠), 与 BUG-3 同类的漏绑。
 
 
@@ -146,7 +146,7 @@
 ## 原「已实现」第 9 条
 
 - **真机复测反馈 · 「乐观后 2-4s 才恢复正常」(2026-09-19, 已入库 `32f531d`)**: 上一条修的是「点击 → 变灰」,
-  用户实际报的是**第二段**「变灰 → 真值」([issue 26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html))。
+  用户实际报的是**第二段**「变灰 → 真值」([issue 26-09-19-2024](../../issues/26-09-19-2024-bug-webui-truth-convergence.html))。
   根因: `systemPatterns` 写的「真值匹配即清」**从未实现**(只有 3s 超时与失败回滚两个出口) + 回执后
   **不刷新**、真值要等下一轮轮询(>3000 种子 3s)。**修法 A+B1**: `refresh()` 里 `_snapshotTruth()`
   记本轮 payload 原始值 ⇒ `reapplyPending()` 比它、对齐即清; 回执成功后 `_pullTruthAfterCmd()`
@@ -169,4 +169,4 @@
 
 ## 原「已实现」第 27 条
 
-- WEB UI 替代 qB 界面 · 波次三 (2026-09-17 收口完成): 32 工作项 (FIX7/TBL8/DLG4/CTX3/SPD4/NAV3/RFB2/PRS1) 全部落地, **星图(atlas)与棱镜(prism)双 UI 同构**。后端: peers 端点修复(`sync_torrent_peers`)/`/api/paths` 已知目录聚合/bulk 组键模式/成员与单种透出 num_seeds·num_leechs·num_complete·num_incomplete/SPD-01 末档 clamp 回归锁定/SPD-03 `global_speed_limit_curve.enabled` 全管线(models+validation+loaders+设置页开关)。前端: 表格层(空值留白与"不限速"文案退役、状态底与七列三档数值色阶、去名称状态图标、列拖动重排+右键列选择器、补列、全宽布局、rail 退役改底部状态栏、批量段并入筛选行)、弹窗(删除确认框加宽+计数语义、添加种子改版与位置选择)、右键(彩色图标集/触发源强调/原生右键屏蔽)、限速(预览末档压缩、点击弹窗修改)、导航 IA(分组/种子/追剧升一级导航、设置右移、统计入状态栏、日志并入设置页、动态 logo)、详情抽屉纯展示重构、设置页重构(栅格令牌化/宽度放开/文案用户化/风险注记统一)。计划 [docs/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html](../docs/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html) + 派工契约 `.cluster/webui-w3/` + 交接 [docs/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html](../docs/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html); 基线 971→**988 passed**; 待人工: 浏览器 CDP 双 UI 走查 + 真机 dry-run。- tracker 分组·站点 groups 字段 + tracker_group 条件 (2026-09-15): 站点段新增可选 groups(字符串列表, 配置层声明不写种子, 组名自由命名无需预定义), 规则条件新增 tracker_group(镜像 TrackersCondition, 或关系, regex:/ignore_case, 无 tracker_conf 恒 False); 校验经 _check_str_list(非列表/纯空白项报错; 空串项被 _strip_none 统一视为未配置剔除, 项目既有约定), spec 校验走 _validate_pattern_list_spec; schema 双登记(TRACKER_FIELDS str_list + CONDITION_PLUGINS, 守卫自动 15→16); 热重载 groups=LEVEL_L2(S0 核实: record.tracker_conf 仅 added 流程绑定一次, L2 reset_runtime 置空重匹配才见新值, 与 domains/rules 同级; L0 会读到旧 conf 对象); Web UI 设置页借 str_list 控件零前端改动即可编辑保存; 测试 +4(test_conditions 条件 2 + test_config 校验/加载 2, helpers.FakeTracker 加 groups 参数), 基线 884 passed; 真机 dry-run 冒烟通过(119 种子同步/规则加载/决策链, 动作被 dry_run 抑制); 计划 docs/plans/26-09-15-1504-tracker-group-plan.html(D1=方案 B 站点字段/D2=tracker_group 已拍板); 后续阶段 2/3 前端: 设置页 groups 下拉快捷追加 + 辅种管理页按组筛选; README(5 处 15→16 种)/docs/configuration.md(示例+条件表)/memory-bank(rule-system 16 条件+config-reference+testing 基线)/想法.md 回写; 已随本提交入库
+- WEB UI 替代 qB 界面 · 波次三 (2026-09-17 收口完成): 32 工作项 (FIX7/TBL8/DLG4/CTX3/SPD4/NAV3/RFB2/PRS1) 全部落地, **星图(atlas)与棱镜(prism)双 UI 同构**。后端: peers 端点修复(`sync_torrent_peers`)/`/api/paths` 已知目录聚合/bulk 组键模式/成员与单种透出 num_seeds·num_leechs·num_complete·num_incomplete/SPD-01 末档 clamp 回归锁定/SPD-03 `global_speed_limit_curve.enabled` 全管线(models+validation+loaders+设置页开关)。前端: 表格层(空值留白与"不限速"文案退役、状态底与七列三档数值色阶、去名称状态图标、列拖动重排+右键列选择器、补列、全宽布局、rail 退役改底部状态栏、批量段并入筛选行)、弹窗(删除确认框加宽+计数语义、添加种子改版与位置选择)、右键(彩色图标集/触发源强调/原生右键屏蔽)、限速(预览末档压缩、点击弹窗修改)、导航 IA(分组/种子/追剧升一级导航、设置右移、统计入状态栏、日志并入设置页、动态 logo)、详情抽屉纯展示重构、设置页重构(栅格令牌化/宽度放开/文案用户化/风险注记统一)。计划 [docs/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html](../../../docs/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html) + 派工契约 `.cluster/webui-w3/` + 交接 [docs/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html](../../../docs/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html); 基线 971→**988 passed**; 待人工: 浏览器 CDP 双 UI 走查 + 真机 dry-run。- tracker 分组·站点 groups 字段 + tracker_group 条件 (2026-09-15): 站点段新增可选 groups(字符串列表, 配置层声明不写种子, 组名自由命名无需预定义), 规则条件新增 tracker_group(镜像 TrackersCondition, 或关系, regex:/ignore_case, 无 tracker_conf 恒 False); 校验经 _check_str_list(非列表/纯空白项报错; 空串项被 _strip_none 统一视为未配置剔除, 项目既有约定), spec 校验走 _validate_pattern_list_spec; schema 双登记(TRACKER_FIELDS str_list + CONDITION_PLUGINS, 守卫自动 15→16); 热重载 groups=LEVEL_L2(S0 核实: record.tracker_conf 仅 added 流程绑定一次, L2 reset_runtime 置空重匹配才见新值, 与 domains/rules 同级; L0 会读到旧 conf 对象); Web UI 设置页借 str_list 控件零前端改动即可编辑保存; 测试 +4(test_conditions 条件 2 + test_config 校验/加载 2, helpers.FakeTracker 加 groups 参数), 基线 884 passed; 真机 dry-run 冒烟通过(119 种子同步/规则加载/决策链, 动作被 dry_run 抑制); 计划 docs/plans/26-09-15-1504-tracker-group-plan.html(D1=方案 B 站点字段/D2=tracker_group 已拍板); 后续阶段 2/3 前端: 设置页 groups 下拉快捷追加 + 辅种管理页按组筛选; README(5 处 15→16 种)/docs/configuration.md(示例+条件表)/memory-bank(rule-system 16 条件+config-reference+testing 基线)/想法.md 回写; 已随本提交入库

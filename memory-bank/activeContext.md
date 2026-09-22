@@ -15,7 +15,7 @@
   本文件 **40,553 → 约 6 KB**(原「正在进行」15 条里 13 条已完成, 按纪律**沉淀后删除**:
   5 条搬进 `progress/implemented-*.md`、其余在主题文档已有记载; 「待用户真机走查」整段迁
   [checklists/manual-walkthrough.md](checklists/manual-walkthrough.md); 「定案口径」逐条归位到
-  [pitfalls/web-ui/](../pitfalls/web-ui/_index.md) 与 `AGENTS.md` 后改为指针)。
+  [pitfalls/web-ui/](pitfalls/web-ui/_index.md) 与 `AGENTS.md` 后改为指针)。
   `progress.md` 51,717 字符 / 367 行 → **`progress/` 9 个文件 + ≤1 KB 存根**:
   implemented-webui · implemented-webui-perf · implemented-core · implemented-rules · implemented-testing ·
   implemented-tooling · roadmap · known-bugs · evolution · suggestions, 另把 4 条超长叙事移
@@ -26,7 +26,11 @@
   **W7 `tasks/` 消肿**: 只动实测超标的两份(计划称 4 份 >20 KB 是旧数)——
   最大档案 26,871 → 21,881 字符, 另把一份超 8 KB 的纪要段外迁 `tasks/attachments/`;
   并把 `task` 角色纳入默认检查(**`check_caps` 全部角色至此都被默认检查**)。
-  全量 **1171 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」「W5」「W6」「W7」) ——
+  **W8 机检化**: 新增 `scripts/check_doc_links.py`(相对链接存在性)+ 闸门 + 守卫 ——
+  **首跑抓出 73 处坏链**(全是搬家导致的相对深度错位), 修完 192 个文件 **0 处坏链**;
+  另补两个 skill 缺口(`<each:GLOB>` 漏未跟踪文件 / 未定义名检查不覆盖 memory-bank 脚本)。
+  三次检索演练: **README 起 2 跳命中**(pitfalls 两级为 3 跳), 入口链最大 **16,300 字符**(预算量级 22,500)。
+  全量 **1175 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」–「W8」) ——
   其前一条状态: W3 `testing/` 已完成并入库(`c90b0fb`) ——
 
 ## 正在进行

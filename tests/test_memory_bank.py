@@ -27,6 +27,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
 - test_kb_active_context_within_cap: `activeContext.md` ≤12 KB (易变层硬顶)
 - test_kb_task_archives_within_cap: `tasks/*.md` ≤24 KB (超了移 `tasks/attachments/`)
+- test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
 - test_kb_scripts_import_cleanly: skill 的 4 个脚本都能 import
 """
 
@@ -254,6 +255,24 @@ def test_kb_task_archives_within_cap() -> None:
     """
     problems, _warns = _kb_checker().check_caps(ROOT, MB, ("task", ))
     assert not problems, "\n".join(problems)
+
+
+def test_doc_links_are_not_broken() -> None:
+    """全库**相对链接存在性** —— 改名 / 搬家后的坏链不会让任何测试失败, 只能机检。
+
+    知识库目录化重构一次新增/改写了 400+ 处相对链接; 这条守卫把"改文件名后必须查全仓引用"
+    从人工扫变成可自动跑的判据(实测首跑就抓出 73 处坏链, 全是搬家导致的相对深度错位)。
+    检查器在 `scripts/check_doc_links.py`, **进程内 import**(本项目测试禁止起子进程)。
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_doc_links", ROOT / "scripts" / "check_doc_links.py")
+    assert spec and spec.loader, "缺少 scripts/check_doc_links.py"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    broken = module.scan_all(ROOT)
+    assert not broken, "相对链接坏链:\n" + "\n".join(f"  {p}:{n} → {t}" for p, n, t in broken)
 
 
 def test_kb_scripts_import_cleanly() -> None:

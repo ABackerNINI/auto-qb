@@ -21,7 +21,7 @@
 - **开工前先同步分支 (2026-09-19 用户指定)**: 会话第一步必为 `git pull --rebase <远端> develop` (**分支名必须写**, 只给远端名会只 fetch 不合并), `git status -sb` 确认不落后才动手; **禁止在落后的分支上改代码**; 拉取前先把工作区弄干净 (脏工作区 + rebase 触发 stash 会损坏对象库)。细则见 `AGENTS.md`「会话协议 · 开始」与「提交 / PR」—— 该规则共有 4 处入口 (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), **改规则必须一次改全**, 本文件只留指针不复述。
 - **push 口径单点定义在 `AGENTS.md`「提交 / PR」** (2026-09-19 起: "提交" = commit + 推送)。本文件不复述, 免得第三次漂移。
 - 分支: `develop` 开发 (协作主线, 统一以 Gitee 的 `develop` 为准), `master` 主干。
-- 提交信息: **格式单点定义在 `AGENTS.md`「提交 / PR」**(2026-09-22 起为 **gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>` + 空行 + 详细描述); 本文件不复述。选 emoji 走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md)。
+- 提交信息: **格式单点定义在 `AGENTS.md`「提交 / PR」**(2026-09-22 起为 **gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>` + 空行 + 详细描述); 本文件不复述。选 emoji 走 [gitmoji skill](../../.agents/skills/gitmoji/SKILL.md)。
 - 格式化可单独成提交 ("格式化代码"/"格式化测试代码")。
 - 用户未要求时不主动 commit; 要求"提交"时按 `AGENTS.md` 一次走完 (含推送)。
 

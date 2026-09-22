@@ -9,7 +9,7 @@
 
 ### 真机 qB 语料抓取 / 脱敏 / 离线回放 (2026-09-21, **W0–W5 已实施, W6 未开工**)
 
-> 计划 [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) · 任务档案 [tasks/26-09-21-qb-corpus-capture-replay.md](tasks/26-09-21-qb-corpus-capture-replay.md)
+> 计划 [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) · 任务档案 [tasks/26-09-21-qb-corpus-capture-replay.md](../tasks/26-09-21-qb-corpus-capture-replay.md)
 
 把 `scripts/sim_qb.py` 的种子来源从"人造合成"换成"真机 qB 抓取 + 脱敏 + 离线回放"; 合成档保留为对照。
 语料 = **一条原始流**(首帧即 T0 / 末帧必是一份全量)+ 流里没有的按 hash 元数据(files / trackers)+ 真值分组(groups.json)。

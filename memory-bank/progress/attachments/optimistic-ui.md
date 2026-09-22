@@ -9,12 +9,12 @@
 - **⓪b 乐观 UI「撤下」改造已完成并入库 (2026-09-21, 提交 `2094a36`)**:
   ✅ 真机实测撤下 **2947ms → 85ms**; 服务端侧只占 21ms, 其余 64ms 在浏览器主线程
   (大库渲染, 属前端性能议题)。下列条目按时间留档, 含中途的方案修订过程。
-  - **调查报告** [docs/26-09-20-1806-optimistic-ui-half-fix-report.html](../docs/26-09-20-1806-optimistic-ui-half-fix-report.html)
+  - **调查报告** [docs/26-09-20-1806-optimistic-ui-half-fix-report.html](../../../docs/26-09-20-1806-optimistic-ui-half-fix-report.html)
     —— 根因与实测留档(bulk 缺真值 / 撤下判据过严 / 真值落地 1362ms)。
-  - **可行性报告** [docs/26-09-20-2131-optimistic-ui-event-driven-feasibility.html](../docs/26-09-20-2131-optimistic-ui-event-driven-feasibility.html)
+  - **可行性报告** [docs/26-09-20-2131-optimistic-ui-event-driven-feasibility.html](../../../docs/26-09-20-2131-optimistic-ui-event-driven-feasibility.html)
     （延迟链路拆解 / 通道选型 / 风险）。
   - **⭐ 实施计划（当前以此为准）**
-    [docs/plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html](../docs/plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html)
+    [docs/plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html](../../../docs/plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html)
     —— **三条硬指令**: ① 真值**不得从 `/sync/maindata` 读**, 改 **`torrents/info` 直查**
     (`QbApi.torrents_info` 已在 qbapi.py:306); ② **事件驱动(SSE), 不依赖轮询**;
     ③ **端到端反应 ≤10ms ⇒ 移除整套乐观 UI**。

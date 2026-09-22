@@ -62,6 +62,13 @@ timeout = 60
 note  = "知识库索引: 两个生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条)"
 
 [[gates]]
+match = ["memory-bank/", "docs/", "AGENTS.md"]
+run   = ["python scripts/check_doc_links.py --quiet"]
+auto  = true
+timeout = 60
+note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试失败, 只能机检"
+
+[[gates]]
 match = [".agents/skills/"]
 run   = ["python <each:.agents/skills/**/scripts/*.py> --help"]
 auto  = true

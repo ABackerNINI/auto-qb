@@ -7,9 +7,9 @@
 > 按「超了就外迁」整条移到这里, **内容逐字未改**。
 
 - **真机语料抓取 · 脱敏 · 离线回放 —— W0 已出数, W1/W2 已完成(未提交), 下一步 W3**: 计划
-  [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html)
+  [docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../../../docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html)
   (v1→v3 原地修订) + 审查报告
-  [docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html](../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)。
+  [docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html](../../../docs/plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)。
   **目标**: 把 `sim_qb.py` 的种子来源从"人造合成"换成"真实 qB 抓取 + 脱敏 + 回放"; 合成档保留为对照档。
   **五项已拍板(2026-09-21 03:33)**: ①磁盘事实来源**默认 mock** —— 进程内 FS mock 注入 `sim_autoqb.py`
   (在 `from auto_qb.cli import main` 之前), **不物化任何文件**; FS 入口实测只有 4 个调用点

@@ -12,7 +12,7 @@
 
 ### 工程化 / 知识库（2026-09-20）
 
-- **create-issue skill 类型化改造（已实施）**: 计划 [26-09-20-0941](../docs/plans/26-09-20-0941-issue-typing-plan.html)。
+- **create-issue skill 类型化改造（已实施）**: 计划 [26-09-20-0941](../../docs/plans/26-09-20-0941-issue-typing-plan.html)。
   ① 8 类类型进文件名第二段 `<时间>-<type>-<slug>.html`（bug / perf / docs / test / refactor / feat / chore / question，
   枚举单点在 `scripts/_common.py` 的 `TYPES`）；② 表单分两档 —— `light` 便签（现象一句话 + 位置，≤2 分钟）与
   `standard` 标准（现象 / 证据 / 影响面 / 定位锚点，≤10 分钟），根因与建议修法一律降为可选、默认"待查"；
@@ -21,7 +21,7 @@
   仓库根改 `.git` 向上探测（不再 `parents[4]`）、品牌 `--project` 可选注入、索引 HEADER 链接动态计算；
   ⑤ 存量 8 份报告已迁移（bug 4 / perf 3 / docs 1），17 处外链同步，索引顶部有 Open 按类型计数表。
   文件名与状态取值由生成器守卫（`--check` 可挂 CI）。单测 **1057 passed** 不变。
-- **提交推送流水线 skill（已实施，2026-09-20）**: 提案 [26-09-20-1128](../docs/plans/26-09-20-1128-git-ship-skill-proposal.html)，
+- **提交推送流水线 skill（已实施，2026-09-20）**: 提案 [26-09-20-1128](../../docs/plans/26-09-20-1128-git-ship-skill-proposal.html)，
   落地 `.agents/skills/my-commit-flow/`（七步：预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee 主线
   → 尝试一次 GitHub 直连 → 查幽灵 diff）。脚本 `preflight.py`（只读预检）/ `commit.py`（逐路径 add + commit，
   **拒 `-A` / `.` / `*` 与红线文件**）/ `verify_ref.py`（ref 三处一致）/ `push.py`（先 fetch → 推主线 → 核对远端

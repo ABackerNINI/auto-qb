@@ -11,7 +11,7 @@
 - 全局限速曲线: Traffic Monitor 数据源, DAY/MONTH/ND 聚合, 全程分档覆盖, 取最严 (2026-09 最近的大功能, commit ee88bc8..20481f3)
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)
 - **⓪ 规则条件表达式化 (2026-09-20/21, W1 已提交 `93f1911`)**: 计划
-  [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)
+  [docs/plans/26-09-20-2225-rule-conditions-expression-plan.html](../../docs/plans/26-09-20-2225-rule-conditions-expression-plan.html)
   (v3: 五条拍板口径 + §11 动作是否纳入的三档分析, L1 动作参数表达式记为候选排在 python 插件之后)。
   **W1 已入库 `93f1911`**(语法内核: errors/lexer/parser + 15 条测试, 未接规则系统)。
   **W2 已入库 `a1841e9`**(取值面 env + 求值 eval + 类型规则 types + `ExprCondition` + `RuleContext.expr_cache` +
