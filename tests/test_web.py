@@ -287,7 +287,7 @@ def _make_web_manager(tmp_path, config_text):
 
     def _ensure_group_state(rid, view=None):
         # 与真实实现同形: 默认回全部; P1-1 带 view 时只回该视图的数组
-        from auto_qb.mixins.web_view import VIEW_ARRAYS
+        from auto_qb.webui.views import VIEW_ARRAYS
 
         updated = rid != mgr._group_view_ver
         state = {"rid": mgr._group_view_ver, "updated": updated}
@@ -692,7 +692,7 @@ def _scan_state_rank(text, rel, problems):
     实测曾漂移两处({downloading,checking} 与 {paused,seeding} 两组取值相反), 人眼不可能发现,
     故机械比对(改一边必须改另一边 —— 这正是本守阵要逼出来的动作)。
     """
-    from auto_qb.mixins.web_view import _SHOW_STATE_RANK
+    from auto_qb.webui.views import _SHOW_STATE_RANK
 
     m = re.search(r"const STATE_RANK = \{([^}]*)\}", text)
     if not m:
@@ -1577,7 +1577,7 @@ def test_refresh_error_reasons_budget_and_ttl(tmp_path, monkeypatch):
 
     错误种子成片时(整组文件丢失)不能一轮打满 tracker 请求 —— 与搜索索引同一限流哲学。
     """
-    from auto_qb.mixins import web_view
+    from auto_qb.webui import views as web_view
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
     monkeypatch.setattr(web_view, "ERROR_REASON_BUDGET", 1)
@@ -1891,7 +1891,7 @@ def test_build_search_index_incremental_and_evict():
 
 def test_build_search_index_budget_resumes(monkeypatch):
     """_build_search_index 限流: 单次最多拉预算条, 未拉完保持脏, 下次调用续建至完成"""
-    from auto_qb.mixins import web_view
+    from auto_qb.webui import views as web_view
     from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
 
     monkeypatch.setattr(web_view, "SEARCH_INDEX_BUILD_BUDGET", 1)
@@ -4251,7 +4251,7 @@ def test_api_enqueue_wakes_main_loop(web_env):
     """
     import re
 
-    from auto_qb.mixins.web_commands import SELF_POSTED_COMMANDS
+    from auto_qb.webui.commands import SELF_POSTED_COMMANDS
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
@@ -4260,9 +4260,8 @@ def test_api_enqueue_wakes_main_loop(web_env):
     assert len(mgr._wake_calls) == 1, f"用户命令投递后应唤醒主循环, 实际 {len(mgr._wake_calls)} 次"
 
     # 静态反向守卫: Web 侧所有 self-posted 的 cmd 名都必须登记, 否则下次新增就会自激
-    src = open(
-        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "mixins", "web_view.py"), encoding="utf-8"
-    ).read()
+    src = open(os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "views.py"),
+               encoding="utf-8").read()
     # 两种投递写法都要认(2026-09-20 起统一走门面的 post_command; 旧写法保留匹配以防回退)
     posted = set(re.findall(r'web_commands\.put\(\(\s*"([^"]+)"', src)
                 ) | set(re.findall(r'web\.post_command\(\s*"([^"]+)"', src))
@@ -4282,7 +4281,7 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     """
     import logging
 
-    from auto_qb.mixins.web_commands import CMD_SLOW_MS
+    from auto_qb.webui.commands import CMD_SLOW_MS
     from auto_qb.webui import WebUIRuntime
 
     class _T:
@@ -4354,7 +4353,7 @@ def test_receipt_sent_immediately_truth_pushed_later():
     """
     import time
 
-    from auto_qb.mixins.web_commands import TRUTH_PUSH_CAP_MS
+    from auto_qb.webui.commands import TRUTH_PUSH_CAP_MS
 
     mgr, tor = _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0)
     rt = mgr.web
@@ -4437,7 +4436,7 @@ def test_truth_hold_matches_truth_push_cap():
     """
     import re
 
-    from auto_qb.mixins.web_commands import TRUTH_PUSH_CAP_MS
+    from auto_qb.webui.commands import TRUTH_PUSH_CAP_MS
 
     js = open(
         os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "static", "shared", "commands.js"),
@@ -4459,7 +4458,7 @@ def test_cmd_trackers_log_sanitized(caplog):
     所以只钉死"密钥全文一行都进不了日志 + 主地址仍在(够排查是哪个站)"。
     日志会落盘(含轮转备份)且能经 /api/log 读回, 泄露面比"读一次"大得多。
     """
-    from auto_qb.mixins.web_commands import WebCommandsMixin
+    from auto_qb.webui.commands import WebCommandsMixin
     from helpers import FakeClient
 
     class _Cmds(WebCommandsMixin):
@@ -4469,11 +4468,11 @@ def test_cmd_trackers_log_sanitized(caplog):
 
     m = _Cmds()
     secret = "https://pt.example.com/announce?passkey=SUPERSECRET123"
-    caplog.set_level(logging.INFO, logger="auto_qb.mixins.web_commands")
+    caplog.set_level(logging.INFO, logger="auto_qb.webui.commands")
     caplog.clear()
     m._cmd_edit_tracker(hash="HA", orig_url=secret, new_url="https://other.example.com/announce?authkey=XYZ")
     m._cmd_remove_tracker(hash="HA", url=secret)
-    text = "\n".join(r.getMessage() for r in caplog.records if r.name == "auto_qb.mixins.web_commands")
+    text = "\n".join(r.getMessage() for r in caplog.records if r.name == "auto_qb.webui.commands")
     assert "SUPERSECRET123" not in text, "passkey 全文进了日志"
     assert "XYZ" not in text, "换名的凭据(authkey)同样不能进日志"
     assert "passkey" not in text and "authkey" not in text, "query 整段都应丢弃, 不该残留参数名"

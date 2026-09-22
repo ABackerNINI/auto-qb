@@ -6,8 +6,6 @@
 - GroupingMixin      种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - TrackerMixin       tracker 配置匹配/tracker 级单种限速
 - SpeedCurveMixin    全局限速曲线: Traffic Monitor 流量数据 -> qB 全局速度限制
-- WebviewMixin       WEB 视图组装(分组视图/单种子视图/搜索索引/状态回传)
-- WebCommandsMixin   WEB 控制命令消费/回执/汇报确认跟踪
 """
 from .checking import CheckingMixin
 from .grouping import GroupingMixin
@@ -15,8 +13,6 @@ from .rule_engine import RuleEngineMixin
 from .tags import TagsMixin
 from .tracker import TrackerMixin
 from .speed_curve import SpeedCurveMixin
-from .web_view import WebviewMixin
-from .web_commands import WebCommandsMixin
 
 __all__ = [
     "RuleEngineMixin",
@@ -25,6 +21,4 @@ __all__ = [
     "GroupingMixin",
     "TrackerMixin",
     "SpeedCurveMixin",
-    "WebviewMixin",
-    "WebCommandsMixin",
 ]

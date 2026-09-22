@@ -15,8 +15,8 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - mixins.tracker      TrackerMixin     tracker 配置匹配/单种限速
 - mixins.speed_curve  SpeedCurveMixin  全局限速曲线(Traffic Monitor 流量聚合 -> qB 全局限速)
-- mixins.web_view     WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
-- mixins.web_commands WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
+- webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
+- webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排)
 - qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
 """
@@ -38,9 +38,9 @@ from .mixins import (
     SpeedCurveMixin,
     TagsMixin,
     TrackerMixin,
-    WebCommandsMixin,
-    WebviewMixin,
 )
+from .webui.commands import WebCommandsMixin
+from .webui.views import WebviewMixin
 from .notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .qbclient import _new_client

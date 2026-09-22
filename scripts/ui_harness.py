@@ -100,7 +100,7 @@ _PAUSED_STATE = "pausedDL"
 _RESUME_DONE = "uploading"
 _RESUME_TODO = "downloading"
 # ❗刻意让**回执先到、状态后改**(复刻真机竞态: 服务端 P0-5 补刷新在回执**之后**才跑,
-# 见 mixins/web_commands.py)。前端"回执后立刻拉真值"第一次会扑空(rid 还没变),
+# 见 webui/commands.py)。前端"回执后立刻拉真值"第一次会扑空(rid 还没变),
 # 必须靠退避重试才拿得到 —— 这段延迟就是为了让重试逻辑被测到(issue 26-09-19-2024)。
 _TRUTH_DELAY = 0.12
 
