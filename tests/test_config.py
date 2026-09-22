@@ -37,6 +37,7 @@
 - test_validate_hr_value_errors: 站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔)
 - test_validate_tracker_groups: 站点 groups 非列表/空串项报错(fail-fast)
 - test_load_tracker_groups: groups 解析回填 TrackerConfig, 未配置默认空列表
+- test_validate_state_save_interval: state_save_interval 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
 """
 import logging
 import os
@@ -424,6 +425,22 @@ def test_validate_max_tasks_per_tick_range():
             assert "config.max_tasks_per_tick: 须 >= 1" in err, err
         # 合法值与非整数不得被误伤(非整数的格式错误由 _try 记录)
         assert "config.max_tasks_per_tick" not in _load_errors(td, "config:\n  max_tasks_per_tick: 20\n")
+
+
+def test_validate_state_save_interval():
+    """state_save_interval: 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)"""
+    with tempfile.TemporaryDirectory() as td:
+        # 合法: 0=关闭 / 下限值 / 常规值 / 带单位换算
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 0S\n")
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 30S\n")
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 120S\n")
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 2M\n")
+        # 低于下限 -> 拒绝(下限 30s 防误配置写放大, issue 26-09-21-1347 拍板)
+        err = _load_errors(td, "config:\n  state_save_interval: 29S\n")
+        assert "config.state_save_interval: 须为 0(关闭)或 >= 30S(防误配置写放大): 29S" in err, err
+        # 坏格式(裸数字无单位)/负数 -> 格式报错
+        assert "config.state_save_interval: 无效时间格式" in _load_errors(td, "config:\n  state_save_interval: 120\n")
+        assert "config.state_save_interval: 无效时间格式" in _load_errors(td, "config:\n  state_save_interval: -5S\n")
 
 
 def test_validate_rule_spec():

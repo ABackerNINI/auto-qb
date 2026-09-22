@@ -101,6 +101,7 @@
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
+- test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
 - test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
@@ -3476,6 +3477,62 @@ def test_apply_new_config_levels(monkeypatch):
         res = _apply([ConfigChange("state_file", "R", "a", "b")])
         assert res["restart_required"] == ["state_file"]
         assert res["levels"] == []
+
+
+def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
+    """守阵(2026-09-22, issue 26-09-21-1347): L2 热重载不得重读磁盘 state 回滚运行期内存态
+
+    state 平时不落盘(仅优雅退出/跳检重加落盘), 磁盘上的 state.json 永远是「上次退出」
+    的旧版 —— L2 分支若 _load_state() 会把本次运行累计的 exec_history/skip_check_day/
+    recheck_fails 等整体回滚到旧版, Web UI 改规则保存即确定性触发。断言用「对象同一性
+    + 内容保留」双断言, 不 mock _load_state 本身(避免耦合实现符号)。
+    """
+    from auto_qb.config.impact import ConfigChange
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        # 运行期内存态: 模拟本次运行累计的去重/冷却记录(构造后注入, 与磁盘无关)
+        runtime = {
+            "exec_history": {
+                "r1:abc": {
+                    "ts": 1.0,
+                    "date": "2026-09-22",
+                    "hour": 19
+                }
+            },
+            "skip_check_day": {
+                "abc": "2026-09-22"
+            },
+            "recheck_fails": {
+                "abc": {
+                    "count": 2
+                }
+            },
+        }
+        mgr.state.update(runtime)
+        state_before = mgr.state
+        # 磁盘上是「上次退出版本」的旧版(内容与内存不同)
+        with open(os.path.join(td, "state.json"), "w", encoding="utf-8") as f:
+            json.dump({"stale_marker": True}, f)
+        # 替身: 与分级测试同款(只验证 L2 分支行为, 变更判定由 impact 单测覆盖)
+        mgr._setup_logging = mock.MagicMock()
+        mgr._load_rules = mock.MagicMock()
+        mgr._create_global_tasks = mock.MagicMock()
+        mgr.connect = mock.MagicMock(return_value=True)
+        monkeypatch.setattr(
+            "auto_qb.config.impact.diff_config_impacts", lambda old, new: [ConfigChange("interval", "L2", 1, 2)]
+        )
+
+        queue_before = mgr.task_queue
+        res = mgr.apply_new_config(mock.MagicMock(name="new_config"))
+
+        assert res["levels"] == ["L2"]
+        assert mgr.task_queue is not queue_before, "L2 仍应重建任务队列(本守阵只钉 state 语义)"
+        assert mgr.state is state_before, "L2 热重载不得替换 state 对象(重读磁盘 = 回滚运行期内存态)"
+        assert mgr.state["exec_history"] == runtime["exec_history"], "执行历史不得被磁盘旧版回滚"
+        assert mgr.state["skip_check_day"] == runtime["skip_check_day"], "跨日跳检去重不得被回滚"
+        assert mgr.state["recheck_fails"] == runtime["recheck_fails"], "校验失败冷却不得被回滚"
 
 
 def test_stop_web_server_releases_port_for_restart(tmp_path):

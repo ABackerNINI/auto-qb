@@ -17,7 +17,7 @@
 - **触发**: 本地有未提交改动, 想同步上游。
 - **判别**: **卡点** —— `git diff --stat` 为空但 `git status` 仍显示 ` M` 且工作区文件比 blob 大 ⇒
   **是行尾不是内容**。
-- **处置**: ①`git diff > 备份.patch` + 原文件另存 ②只对被改的跟踪文件 `git restore --source=HEAD -- <文件>`
+- **处置**: ①`git diff --output=备份.patch`(❗别用 `>`, 见文末新坑) + 原文件另存 ②只对被改的跟踪文件 `git restore --source=HEAD -- <文件>`
   ③`git merge --ff-only origin/develop` ④`git apply --3way --ignore-whitespace 备份.patch`
   ⑤`.md` 的冲突基本是"两边各追加一段", **取并集**(`tasks/_index.md` 是生成物, 直接重跑
   `python .agents/skills/memory-bank/scripts/gen_tasks_index.py`)⑥`git add` 标记已解决后 `git reset` 变回未暂存。
@@ -31,3 +31,9 @@
 - **处置**: 以一方为基线重建再回填专有部分; 重建后做**静态 class 覆盖检查**。
   ⚠ 重放提交时必须**逐文件核验**, 判定"跳过"的要写明理由并**登记缺口** ——
   整文件跳过会造成"CSS 已入库但模板没切"的两不管缺口(见 `web-ui/template-render.md`)。
+
+### ❗PowerShell 里 `git diff > x.patch` 会把补丁按控制台编码转码, 中文内容不可逆损坏
+
+- **触发**: 按本文件旧版「同步上游」流程第 ① 步照抄 `git diff > 备份.patch`(2026-09-22 实测, 工具 shell)。
+- **判别**: PowerShell 的 `>` 是先解码再编码 —— git 的 UTF-8 字节被按控制台编码(本机 GBK)解码后写 UTF-16: 中文行变 mojibake 且出现 `?` 替换符(不可逆), 部分行被并进相邻行, 9 个 `diff --git` 头只剩 5 个; `git apply` 报 `corrupt patch` / `No valid patches in input`。本次错误在施回前被 `git apply` 拦下 —— 若直接施回会把 mojibake 写进工作区; 即便把 UTF-16 转回 UTF-8 也救不回内容。
+- **处置**: 出仓补丁一律用 git 自带输出参数 `git diff --output=<路径> [<路径>...]`(字节原样, 不经控制台编码); 高风险同步前照例 `cp -a .git` 备份。本次靠会话内编辑记录逐文件重建, 重建后用 `git diff --stat` 与改前数字逐项对账(8 files, +82/-43)确认无缺漏后再提交。

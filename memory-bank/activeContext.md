@@ -11,57 +11,40 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 (**最新: config 取值范围收紧已实施, 本地待提交** —— issue `26-09-22-1937`
-  从入池 → 用户指派逐键分析(40+ 配置路径, 缺口 5 / 建议收紧 11 / 其余已良好) → 用户指派实施三连;
-  `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值;
-  全量 1177 passed + 1 skipped。其前一条状态: memory-bank 目录化重构 W4-W8 已完成并入库) ——
-  本文件 **40,553 → 约 6 KB**(原「正在进行」15 条里 13 条已完成, 按纪律**沉淀后删除**:
-  5 条搬进 `progress/implemented-*.md`、其余在主题文档已有记载; 「待用户真机走查」整段迁
-  [checklists/manual-walkthrough.md](checklists/manual-walkthrough.md); 「定案口径」逐条归位到
-  [pitfalls/web-ui/](pitfalls/web-ui/_index.md) 与 `AGENTS.md` 后改为指针)。
-  `progress.md` 51,717 字符 / 367 行 → **`progress/` 9 个文件 + ≤1 KB 存根**:
-  implemented-webui · implemented-webui-perf · implemented-core · implemented-rules · implemented-testing ·
-  implemented-tooling · roadmap · known-bugs · evolution · suggestions, 另把 4 条超长叙事移
-  `progress/attachments/`(单条 10,225 字符, 逐条都超 cap)。**W5 `systemPatterns/` + `modules/`**: 两文件(31,678 / 30,324 字符)→ **8 + 7 个主题文件 + 存根**,
-  顺带纠正「任务队列」名下的 WEB UI 三节归属。
-  **W6 `conventions/` + `config-reference/` + `rule-system/`**: 三文件 → **4 + 2 + 3 个主题文件 + 存根**,
-  至此**计划里 8 份超标顶层文档全部拆完**。
-  **W7 `tasks/` 消肿**: 只动实测超标的两份(计划称 4 份 >20 KB 是旧数)——
-  最大档案 26,871 → 21,881 字符, 另把一份超 8 KB 的纪要段外迁 `tasks/attachments/`;
-  并把 `task` 角色纳入默认检查(**`check_caps` 全部角色至此都被默认检查**)。
-  **W8 机检化**: 新增 `scripts/check_doc_links.py`(相对链接存在性)+ 闸门 + 守卫 ——
-  **首跑抓出 73 处坏链**(全是搬家导致的相对深度错位), 修完 192 个文件 **0 处坏链**;
-  另补两个 skill 缺口(`<each:GLOB>` 漏未跟踪文件 / 未定义名检查不覆盖 memory-bank 脚本)。
-  三次检索演练: **README 起 2 跳命中**(pitfalls 两级为 3 跳), 入口链最大 **16,300 字符**(预算量级 22,500)。
-  全量 **1175 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」–「W8」) ——
-  其前一条状态: W3 `testing/` 已完成并入库(`c90b0fb`) ——
+**最后更新**: 2026-09-22 20:37 (**两案合流入库: config 取值范围收紧(issue 26-09-22-1937) × 后端状态周期落盘(issue 26-09-21-1347)** ——
+  收紧案: `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值,
+  全部数值/时间键补上下限(详清单见 [issue 报告](issues/26-09-22-1937-bug-config-value-range-validation.html));
+  落盘案: 新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
+  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘。
+  其前一条状态: 2026-09-22 19:43 (**热重载 L2 state 回滚已修复** —— 删除 L2 分支重读磁盘 state;
+  client-and-state.md「热重载 L2 各一次」旧表述已更正) ——
+  其前一条: memory-bank 目录化重构 W0-W8 已全部入库(详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)) ——
 
 ## 正在进行
 
-- **config 取值范围收紧 (2026-09-22, 本地待提交)**: issue [26-09-22-1937-bug-config-value-range-validation](issues/26-09-22-1937-bug-config-value-range-validation.html) 已置 Fixed。
+- **config 取值范围收紧 (2026-09-22, 随合并入库)**: issue [26-09-22-1937-bug-config-value-range-validation](issues/26-09-22-1937-bug-config-value-range-validation.html) 已置 Fixed。
   收紧清单: `interval` 1s-1D / `main_tick` 0.5s-1H / `sync_interval` 1s-10M / `max_tasks_per_tick` 1-500 /
   `log.max_bytes` 1MiB-1GiB(0=RotatingFileHandler 从不轮转) / 站点 hr `required_share_ratio` [0,100] 拦 nan/inf /
   `hr.condition` 百分比 (0,100] 与下载量 >0(`utils.parse_hr_condition` 解析单点拦) / `notify.max_per_hour` ≤100 /
   `dedup_window` ≤24H(0=不去重仍合法) / 规则 `interval` 显式 0 拦 —— **缺省 0S=每 tick 级别是既有行为未动**,
   是否收紧属行为变更待拍板。机制文档已回写 [config-reference/loading-and-write.md](config-reference/loading-and-write.md)
-  「校验范围 · 取值范围」条; 基线 1176→1177 已记 [testing/baseline.md](testing/baseline.md)。
-- **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 本地待提交)**:
+  「校验范围 · 取值范围」条。
+- **后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
+  `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;
+  红验通过(修复打回 → 3 条守阵全红); issue 已标 Fixed
+  → [计划](../docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html)
+- **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 已入库 `c31ee0d`, Gitee + GitHub 镜像均已推)**:
   ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
   (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;
   ② 应用户要求卡片静息即发软光(`--glow-soft` 提到静息态), hover / 聚焦升全光(`--glow`), 数值沿用配方不自造。
   全量 1176 passed + 1 skipped。坑已记 [pitfalls/web-ui/layout-css.md](pitfalls/web-ui/layout-css.md)。
-- **🆕 memory-bank 目录化重构 —— W0–W3 已入库, 下一步 W4 `activeContext` + `progress/`** —— 起因是全库超预算:
-  13 份顶层文档里 8 份超标, 「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故
-  全写在同一节)。方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 +
-  决策点接线; 8 份拆 9 个目录(约 45 主题文件), 各留 ≤1 KB 存根保住 400+ 处既有引用; `activeContext` 不拆
-  但硬顶 12 KB。**已落地**: 脚本族统一在 memory-bank skill 的 `scripts/`(`_common.py` / `gen_tasks_index.py` /
-  `gen_kb_index.py` / `check_kb_structure.py`), 9 条结构性守卫 + `<skill-dir:memory-bank>` 整目录闸门。
-  **已入库**: W0 基线冻结(`kb-baseline/` 清单) · W1 基础设施(脚本族 + 9 条守卫 + 闸门) ·
-  W2 `pitfalls/`(7 类 / 35 文件) · W3 `testing/`(9 文件 + 存根 + `guards.md`)。
-  **W4 起** 按波推进(W4 activeContext+progress → W5 systemPatterns+modules →
-  W6 conventions+config-reference+rule-system → W7 tasks 消肿 → W8 机检化与演练), 每波独立可停可提交 →
-  [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
-  [档案](tasks/26-09-22-memory-bank-dir-refactor.md)
+- **🆕 设置页伪警示已定性并入池, 暂不施行 (2026-09-22)**: 首页警示条由『已配置且 schema 带 risk 文案』驱动,
+  恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略(升级失效键无提示)。
+  方向已与用户讨论: 撤伪警示 + 后端 unknown-key 收集 → warnings 分级 → 警示条渲染 warnings。
+  详见 [issues/26-09-22-2002-bug-webui-config-health-warning.html](issues/26-09-22-2002-bug-webui-config-health-warning.html)(Open)。
+- **memory-bank 目录化重构 W0–W8 已全部入库**(2026-09-22) —— 方案、逐波实测与检索演练见
+  [档案](tasks/26-09-22-memory-bank-dir-refactor.md) ·
+  [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html)
 
 - **① 上轮计划复核的收尾(只剩第 7 项) (2026-09-19)**: 复核报表
 

@@ -15,8 +15,25 @@ GROUPS: Tuple[Group, ...] = (
                 "object",
                 help="auto-qb 通过 qB 的 Web UI 连接并管理种子(需在 qB 中开启 Web UI)",
                 fields=(
-                    Field("host", "主机", "str", default="127.0.0.1", required=True, placeholder="127.0.0.1", help="qB 所在机器的 IP; 本机运行保持 127.0.0.1"),
-                    Field("port", "端口", "int", default="8080", required=True, min=1, max=65535, help="qB Web UI 的端口(qB 设置 → Web UI 里可查)"),
+                    Field(
+                        "host",
+                        "主机",
+                        "str",
+                        default="127.0.0.1",
+                        required=True,
+                        placeholder="127.0.0.1",
+                        help="qB 所在机器的 IP; 本机运行保持 127.0.0.1"
+                    ),
+                    Field(
+                        "port",
+                        "端口",
+                        "int",
+                        default="8080",
+                        required=True,
+                        min=1,
+                        max=65535,
+                        help="qB Web UI 的端口(qB 设置 → Web UI 里可查)"
+                    ),
                     Field("username", "用户名", "str", default="", help="qB Web UI 的登录用户名"),
                     Field("password", "密码", "password", default="", help="qB Web UI 的登录密码"),
                 )
@@ -38,6 +55,17 @@ GROUPS: Tuple[Group, ...] = (
                     "只刷新种子状态/速度的节拍; 比主循环更密(默认 1.5 秒, 与 qB 自带 WebUI 的 1500ms 同量级), "
                     "但不跑任务、不预取 tracker、不建搜索索引 —— 那些仍按主循环间隔, 避免 qB 请求被放大。 "
                     "大于主循环间隔时按主循环间隔生效"
+                ),
+            ),
+            Field(
+                "state_save_interval",
+                "状态周期落盘间隔",
+                "time",
+                default="120S",
+                help=(
+                    "运行状态(state.json)的周期落盘间隔: 崩溃/强杀/断电等非优雅终止时最多丢这么多秒的运行期状态, "
+                    "优雅退出仍立即落盘。0 = 关闭(仅优雅退出时落盘, 旧行为); 下限 30 秒 —— "
+                    "状态变更频率是小时~天级, 更激进的间隔只会放大磁盘写入"
                 ),
             ),
             Field(
@@ -63,7 +91,14 @@ GROUPS: Tuple[Group, ...] = (
                 help="运行状态、日志、跳检备份等文件的存放目录(相对程序目录或绝对路径)",
                 risk="修改后需重启进程才生效",
             ),
-            Field("state_file", "状态文件", "path", default="", help="运行状态存档(重启后接着上次进度继续); 留空 = <data_dir>/state.json", risk="修改后需重启进程才生效"),
+            Field(
+                "state_file",
+                "状态文件",
+                "path",
+                default="",
+                help="运行状态存档(重启后接着上次进度继续); 留空 = <data_dir>/state.json",
+                risk="修改后需重启进程才生效"
+            ),
         ),
         icon="i-settings",
     ),
@@ -127,8 +162,22 @@ GROUPS: Tuple[Group, ...] = (
                         help="保持 127.0.0.1 = 仅本机可访问",
                         risk="改成 0.0.0.0 会把可暂停/删除种子的管理界面暴露给局域网其他设备",
                     ),
-                    Field("port", "监听端口", "int", default="8080", min=1, max=65535, help="Web UI 的端口; 若与 qB Web UI 相同请改开一个"),
-                    Field("token", "访问密钥", "password", default="", help="登录 Web UI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志只提示文件路径, 密钥内容不打印)"),
+                    Field(
+                        "port",
+                        "监听端口",
+                        "int",
+                        default="8080",
+                        min=1,
+                        max=65535,
+                        help="Web UI 的端口; 若与 qB Web UI 相同请改开一个"
+                    ),
+                    Field(
+                        "token",
+                        "访问密钥",
+                        "password",
+                        default="",
+                        help="登录 Web UI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志只提示文件路径, 密钥内容不打印)"
+                    ),
                     Field(
                         "skip_local_verify",
                         "跳过本地验证",

@@ -53,7 +53,10 @@
 - test_checking_group_no_infer_when_sizes_differ: 组内文件映射不一致 -> 不推断, B 照常校验
 - test_checking_group_wait_external_entry_skip: 组内校验中且无任务驱动 -> skip
 - test_checking_group_wait_timeout_force_resume: 等待超时强制恢复重判(防在途登记泄漏活锁)
+- test_checking_skip_day_flushed_immediately: 跳检完成标记即时落盘(崩溃后不重复跳检)
+- test_recheck_fail_flushed_immediately: recheck 失败冷却计数即时落盘(防死循环闸门不因崩溃失效)
 """
+import json
 import os
 import tempfile
 import time
@@ -65,7 +68,7 @@ from unittest.mock import patch
 from auto_qb.config import Config
 from auto_qb.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
-from auto_qb.rules.actions.full_checking import _recheck_fail_count
+from auto_qb.rules.actions.full_checking import _bump_recheck_fail, _recheck_fail_count
 from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
@@ -1436,3 +1439,36 @@ def test_checking_group_wait_timeout_force_resume():
         run_queue(mgr, t0 + 60.5)  # 下一批到期: B 重走决策链 -> 仍在校验 -> 再次让位
     assert tb.resume_index == 1 and tb not in mgr.task_queue._fast, "超时强制恢复后应重走决策链并再次推迟"
     assert client.calls.count(("recheck", None)) == 0, f"B 全程不应提交 recheck: {client.calls}"
+
+
+def test_checking_skip_day_flushed_immediately():
+    """跳检完成标记即时落盘: 流程走完后磁盘上的 state.json 已含 skip_check_day
+
+    skip_check_day 是同日跳检去重的唯一凭据 —— 只靠退出/周期落盘的话, 跳检后崩溃会重复
+    跳检(PT 本地统计再丢一次)。注意 _clear_backup 在备份元数据为空时提前 return 不落盘,
+    这里钉住的是 _skip_readd 里显式的那次 save_state(issue 26-09-21-1347)。
+    """
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "pausedUP"}
+    t = make_target()
+    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert handled and mgr.state["skip_check_day"]["HASH123"], "前置: 跳检应完成并记录"
+    with open(mgr.state_file, "r", encoding="utf-8") as f:
+        on_disk = json.load(f)
+    assert on_disk.get("skip_check_day", {}).get("HASH123"), "跳检完成标记必须已写上盘(不等退出/周期)"
+
+
+def test_recheck_fail_flushed_immediately():
+    """recheck 失败冷却计数即时落盘: bump 后磁盘上已有 recheck_fails
+
+    计数只活在内存的话, 崩溃后对同一损坏文件会多试 recheck(当日上限的防死循环闸门失效
+    一次)。直接驱动生产写点 _bump_recheck_fail 断言盘上内容。
+    """
+    mgr = make_mgr(make_check_cfg())
+    assert _bump_recheck_fail(mgr, "HASH123") == 1
+    with open(mgr.state_file, "r", encoding="utf-8") as f:
+        on_disk = json.load(f)
+    assert on_disk.get("recheck_fails", {}).get("HASH123", {}).get("count") == 1, "冷却计数必须已写上盘"

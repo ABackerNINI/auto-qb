@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-21-1347">
 <meta name="issue-type" content="bug">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Fixed">
 <meta name="issue-title" content="后端状态仅优雅退出时落盘, 非优雅终止丢失整个运行期状态">
 <meta name="issue-summary" content="save_state 仅优雅退出可达, 强杀/断电/关机丢 exec_history/skip_check_day/recheck_fails/上传基线">
 <title>后端状态仅优雅退出时落盘, 非优雅终止丢失整个运行期状态 · bug · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1347-bug-backend-state-save-only-on-exit</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 13:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -175,11 +175,55 @@ finally:
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 13:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-22 19:26 — 用户指派实施，状态 <strong>In Progress</strong>（复验 @ 4c8b90e 仍复现）</li>
+      <li>2026-09-22 19:50 — 已修并验证，状态 <strong>Fixed</strong>（全量 1185 passed + 1 skipped；<strong>未提交</strong>，等用户明确「提交」指令）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-09-22 19:26 @ 4c8b90e <strong>仍复现</strong> —— save_state 常规可达点仍只有 run() 的
+    finally（qbmanager.py:450）与 skip_checking 备份路径两处（:252/:277），OS 信号处理器仍零命中。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong> —— 采纳候选 A(周期落盘) + 候选 B(关键键即时落盘)；候选 C
+    (SetConsoleCtrlHandler)<strong>未采纳</strong>：它覆盖不了 taskkill /F / OOM / 断电这个主威胁面
+    （Windows 关控制台的 CTRL_CLOSE_EVENT 也不进 Python 异常语义），只救得到其中一种情况，复杂度不值。
+    另按用户拍板新增<strong>配置端 30s 下限</strong>（建议里没有）：</p>
+    <ol>
+      <li><strong>新配置键 <code>state_save_interval</code></strong>（默认 120s，0 = 关闭回到旧行为）：
+        五处注册（models / loaders / schema / validation / impact=L0 热重载即时生效）；
+        校验为「合法时间格式且为 0 或 ≥ 30s」—— 下限防误配置写放大（<code>STATE_SAVE_INTERVAL_MIN</code>）。</li>
+      <li><strong>主循环周期落盘</strong>：<code>RuleEngineMixin._maybe_flush_state</code>，挂在 run()
+        正常路径 <code>flush_truths()</code> 之后、<code>if not dry_run</code> 门内；到期点在 run() 加载状态后
+        重置（启动即到期会造成无意义重写）；暂停分支不经过（暂停期无变更）；单一写线程约束不变。</li>
+      <li><strong>关键键即时落盘</strong>：<code>skip_checking.py</code> 跳检完成标记（skip_check_day）后显式
+        save —— 不能指望 <code>_clear_backup</code> 顺带落（备份元数据为空时它提前 return，不经过 save_state）；
+        <code>full_checking._bump_recheck_fail</code> 尾部 save（上界 3 次/日/种）。
+        <code>exec_history</code> 刻意不即时（初轮爆发式写入放大写盘，重放多为幂等，交给周期兑底）。</li>
+      <li><strong>不做写点级 dirty 插桩</strong>（否决候选之一）：state 写点散在 7 个文件约 12 处，
+        逐点插桩必漏（与「.bak 没人读」同一形态）；周期兑底对未来新增写点自动生效。</li>
+    </ol>
+    <p><strong>验证方式</strong> —— 新增 9 条守阵（均已同步各测试文件头部测试计划清单）：</p>
+    <ul>
+      <li><code>test_maybe_flush_state_periodic</code> / <code>test_maybe_flush_state_disabled_zero</code> ——
+        到期触发顺延 / interval=0 逃生口恒不落。</li>
+      <li><code>test_dirty_exit_keeps_exec_history_after_periodic_flush</code>（验收阵）——
+        记录执行历史 → 周期落盘触发 → 实例被弃（不走 finally，等价 taskkill /F）→ 新实例加载，exec_history 在盘上；
+        对照阵 <code>test_dirty_exit_interval_zero_loses_runtime_state</code> 钉住 0 = 旧行为。</li>
+      <li><code>test_checking_skip_day_flushed_immediately</code> / <code>test_recheck_fail_flushed_immediately</code>
+        —— 两个写点落盘后直接读磁盘断言（不等退出/周期）。</li>
+      <li><code>test_validate_state_save_interval</code> —— 0/30S/120S/2M 合法；29S 报「须为 0(关闭)或 ≥ 30S」；
+        裸数字/负数报格式错误。</li>
+      <li><code>test_state_save_interval_is_l0</code> —— L0 分级（热重载即时生效）。</li>
+      <li><code>test_periodic_flush_is_wired_in_run_loop</code> —— 接线守阵：钩子必须在 run() 的
+        not dry_run 门内、到期点必须在加载状态后重置。</li>
+    </ul>
+    <p><strong>红验</strong>（不改仓库源码，运行期打回）：把 <code>QbManager._maybe_flush_state</code> 与
+    <code>RuleEngineMixin.save_state</code> 打回 no-op 后，3 条行为守阵全红
+    （KeyError = exec_history 不在 / FileNotFoundError = state.json 从未写盘）；还原后全绿。</p>
+    <p><strong>测试数字</strong>：全量 <strong>1185 passed + 1 skipped</strong>（Windows 本地 --no-cov；
+    改动前基线 1176，+9 守阵）—— <code>TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q --no-cov</code>；
+    副作用台账越界 0。<strong>未提交</strong> —— 等用户明确「提交」指令。</p>
+    <p><strong>知识库回写</strong>：AGENTS.md 黄金法则 3 改口径；behavior-core「仅退出落盘」条目改写；
+    client-and-state 状态持久化段；config-reference keys.md 登记新键；testing/baseline.md 1176 → 1185；
+    speed_curve.py 注释同步。计划文档见 <code>docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html</code>。</p>
   </section>
 
   <footer>

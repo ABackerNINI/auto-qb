@@ -27,7 +27,7 @@
 
 1. **幂等性**: 重复执行不得有副作用; "每天一次"等窗口语义靠 state_file 去重 (`record_execution`), 不依赖循环频率。
 2. **保守默认**: 高风险动作 (跳检/强制汇报/删除种子/覆盖限速) 默认关闭, 只对显式配置范围生效。
-3. **状态持久化**: 跨轮次状态统一进 state_file, 程序退出时才落盘。
+3. **状态持久化**: 跨轮次状态统一进 state_file; 优雅退出立即落盘 + 运行期按 state_save_interval 周期落盘(配置端下限 30s, 0=关), 非优雅终止丢失窗口 ≤ 间隔。
 4. **fail-fast**: 配置在 `config.validate_config` 全量校验并聚合报错; 之后的代码假定配置正确。**新配置键必须加进 validate_config 并同步 `config/schema.py`** (守卫测试会查)。
 5. **单一写线程**: 只有主循环线程改任务队列结构与 state_file; 不引入绕开该假设的并发代码。
 6. **范围守恒**: 计划外的代码/文档缺陷**一行都不改** —— 入池 `memory-bank/issues/` (命名 / 8 类类型 / 档位 / `_index.md` 登记见 [create-issue skill](.agents/skills/create-issue/SKILL.md)); **入池不为填单做代码分析**。该不该现在修见 [scope-guard skill](.agents/skills/scope-guard/SKILL.md)。

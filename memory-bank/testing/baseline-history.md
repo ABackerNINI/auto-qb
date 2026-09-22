@@ -6,13 +6,30 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
-- ↑ 1176 → 1177(**+1**; 2026-09-22 **config 取值范围收紧实施**(issue 26-09-22-1937):
+- ↑ 1186 → 1187 collected(**净 +1 用例**; 2026-09-22 **两案合流**: config 取值范围收紧(issue 26-09-22-1937, 本侧 +1 守阵)
+  × 状态周期落盘 + 热重载修复(对侧 +10), 真 merge 合流双方同日改动; core.py 冲突块手工合流(双方意图全保留)。
+  合并树稳态 1186 passed + 1 skipped(throttle 守阵单跑恒绿, 文件级/全量跑因 sleep 精度容差偶发假红,
+  已入池 26-09-22-2052, 稳态数字取自 deselect 该用例的全量); TOTAL 91% 7600 语句)
+- ↑ 1176 → 1177(**+1**; 2026-09-22 **config 取值范围收紧实施**(issue 26-09-22-1937, 合流前单树实测):
   新增 `test_validate_value_ranges`(聚合验证 interval/main_tick/sync_interval 上下界、max_tasks_per_tick 上界、
   log.max_bytes 轮转区间、required_share_ratio 拦 nan/inf/负数、hr.condition 百分比与下载量边界、
   notify 上界、规则 interval 正时间); test_parse_hr_condition 补 4 条边界断言。
   助手层: 新增 `_try_number`(isfinite 拦 nan/inf)、`_try_time` 增 min_s/max_s、`_try` 返回解析值。
   全量 1177 passed + 1 skipped, sidefx 越界 0。首次全量曾现 test_run_loop_throttles_without_stop_event
   假失败(时序抖动: 单跑与复跑均绿, 与本次改动无关))
+- ↑ 1185 → 1186(**+1**; 2026-09-22 issue 26-09-21-1347 **热重载 L2 state 回滚修复**:
+  新增守阵 `test_apply_new_config_l2_preserves_runtime_state`(L2 热重载不得重读磁盘 state
+  回滚运行期内存态; 修前红验必红 —— 实测 mgr.state 被换成磁盘旧版 `{'stale_marker': True}` →
+  1 failed; 删 qbmanager.py:503 一行后转绿)。合流前单树实测: 语句 7542→7541(删 1 条已覆盖语句),
+  miss ±1 的逐次抖动判为 server 线程路径的度量噪声; 覆盖率口径以本次实测为准。
+  全量 1186 passed + 1 skipped, sidefx 越界 0)。
+- ↑ 1176 → 1185(**+9**; 2026-09-22 **状态周期落盘 · issue 26-09-21-1347**:
+  新键 `state_save_interval`(默认 120s / 配置端下限 30s 防误配置写放大 / 0=关闭) +
+  主循环周期落盘钩子 + `skip_check_day`/`recheck_fails` 写点即时落盘。守阵 9 条:
+  周期触发/关闭逃生口/脏退出验收阵与 interval=0 对照/跳检标记即时落盘/冷却计数即时落盘/
+  配置校验/L0 分级/主循环接线。红验: 运行期把 `_maybe_flush_state` 与 `save_state` 打回 no-op,
+  3 条行为守阵全红(KeyError/FileNotFoundError = 状态从未上盘); 还原全绿。
+  全量 1185 passed + 1 skipped, sidefx 越界 0)。
 - ↑ 1175 → 1176(**+1**; 2026-09-22 同任务 **W8 收尾 · 重写 `memory-bank.instructions.md`**:
   新增 `test_memory_bank_instructions_match_current_structure`。
   为什么值得单独钉: 该文件 `applyTo: memory-bank/**`, **只在编辑 memory-bank 时注入** ——
