@@ -412,6 +412,9 @@ def main(argv: list[str] | None = None) -> int:
     for level, item, detail in rows:
         print(f"  [{level:4}] {item.ljust(width)}  {detail}")
 
+    if cfg.get("pitfalls_index"):
+        print(f"\n决策点指针(改代码 / 跑 git 前先读): {cfg['pitfalls_index']}")
+
     if manual:
         print("\n该跑的闸门命令(已展开占位符):")
         for cmd in manual:

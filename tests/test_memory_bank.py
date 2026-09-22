@@ -15,22 +15,31 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_task_file_naming_and_sections: 文件名符合 `YY-MM-DD-<slug>.md`(兼容旧 `TASKnnn-<slug>.md`), 且五个必备章节齐全
 - test_task_status_matches_index_section: 档案 `**Status:**` 与索引所在分区一致
 - test_index_has_all_status_sections: 索引保留四个状态分区标题
-- test_index_is_regenerated: `_index.md` == `scripts/gen_tasks_index.py` 的生成结果
+- test_index_is_regenerated: `_index.md` == memory-bank skill 的 `gen_tasks_index.py` 生成结果
 - test_active_context_has_no_rolled_up_session_log: `activeContext.md` 不出现 `^- 2026-` 流水账纪要行
 - test_session_protocol_is_exposed_in_always_on_entries: skill 载体存在且含阈值/DoD, AGENTS 与 copilot-instructions 均声明阈值并指向 skill
+
+知识库目录化守卫 (检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 进程内 import):
+
+- test_kb_index_is_regenerated / test_kb_index_and_files_are_bijective: 索引 == 生成结果; 索引与目录双向一致
+- test_kb_topic_files_have_metadata / test_kb_files_respect_caps / test_kb_class_names_and_topic_filenames: 三行头元数据 / cap 分级 / 类名与文件名
+- test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
+- test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
+- test_kb_scripts_import_cleanly: skill 的 4 个脚本都能 import
 """
 
 from __future__ import annotations
 
-import importlib.util
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MB = ROOT / "memory-bank"
 TASKS = MB / "tasks"
 INDEX = TASKS / "_index.md"
-GEN = ROOT / "scripts" / "gen_tasks_index.py"
+SKILL_SCRIPTS = ROOT / ".agents" / "skills" / "memory-bank" / "scripts"
+GEN = SKILL_SCRIPTS / "gen_tasks_index.py"
 SKILL = ROOT / ".agents" / "skills" / "memory-bank" / "SKILL.md"
 
 STATUSES = ("In Progress", "Pending", "Completed", "Abandoned")
@@ -96,8 +105,7 @@ def test_task_file_naming_and_sections() -> None:
     assert files, "tasks/ 下没有任何任务档案"
 
     for path in files:
-        assert FILE_RE.match(path.name), (
-            f"任务文件名不符合 YY-MM-DD-<slug>.md (slug 为英文小写连字符): {path.name}")
+        assert FILE_RE.match(path.name), (f"任务文件名不符合 YY-MM-DD-<slug>.md (slug 为英文小写连字符): {path.name}")
         text = path.read_text(encoding="utf-8")
         assert STATUS_RE.search(text), f"{path.name} 缺少合法的 `**Status:**` 行"
         for section in REQUIRED_SECTIONS:
@@ -109,10 +117,10 @@ def test_task_status_matches_index_section() -> None:
     for path in _task_files():
         match = STATUS_RE.search(path.read_text(encoding="utf-8"))
         assert match, f"{path.name} 缺少 `**Status:**`"
-        assert sections[path.stem] == match.group(1), (
-            f"{path.name} 档案 Status={match.group(1)} 与索引分区 "
-            f"`## {sections[path.stem]}` 不一致"
-        )
+        assert sections[
+            path.stem
+        ] == match.group(1), (f"{path.name} 档案 Status={match.group(1)} 与索引分区 "
+                              f"`## {sections[path.stem]}` 不一致")
 
 
 def test_index_has_all_status_sections() -> None:
@@ -128,16 +136,16 @@ def test_index_is_regenerated() -> None:
     **不跑子进程**: 本项目测试禁止启动外部进程 (`tests/sidefx.py` 的 POPEN 记账会判越界),
     所以这里在进程内 import 生成器并比对渲染结果, 语义与 `--check` 一致。
     """
-    assert GEN.exists(), "缺少 scripts/gen_tasks_index.py (索引将无法重建)"
-    spec = importlib.util.spec_from_file_location("gen_tasks_index", GEN)
-    assert spec and spec.loader, "无法加载 scripts/gen_tasks_index.py"
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    assert GEN.exists(), "缺少 memory-bank skill 的 scripts/gen_tasks_index.py (索引将无法重建)"
+    assert SKILL_SCRIPTS.is_dir(), "缺少 memory-bank skill 的 scripts/ (生成器将无法加载)"
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import gen_tasks_index
 
-    rendered = module.render(module.collect())
+    rendered = gen_tasks_index.build(ROOT, MB)
     current = INDEX.read_text(encoding="utf-8")
 
-    assert current == rendered, "请运行 `python scripts/gen_tasks_index.py` 重建索引"
+    assert current == rendered, "请运行 `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 重建索引"
 
 
 def test_active_context_has_no_rolled_up_session_log() -> None:
@@ -157,3 +165,82 @@ def test_session_protocol_is_exposed_in_always_on_entries() -> None:
         text = entry.read_text(encoding="utf-8")
         assert "立档阈值" in text, f"{entry.name} 未声明立档阈值"
         assert ".agents/skills/memory-bank/SKILL.md" in text, f"{entry.name} 未指向 memory-bank skill"
+
+
+# ---------------------------------------------------------------------------
+# 知识库目录化守卫 (2026-09-22, 任务 26-09-22-memory-bank-dir-refactor)
+#
+# 检查器实现在 memory-bank skill 的 `scripts/check_kb_structure.py`, 这里**在进程内 import** 它 ——
+# 本项目测试禁止起子进程 (`tests/sidefx.py` 的 POPEN 记账会判越界), 与 gen_tasks_index 同做法。
+# cap 与类枚举常量单点定义在 skill 的 `_common.py`, 守卫 import 它, 不手抄。
+#
+# 这些守卫是**结构性**的: 目录还没建时它们空转通过, 一旦某个 `<文档>/` 落地就自动开始生效。
+# 两个例外按波次启用 —— `activeContext.md` 的 12 KB 硬顶 (W4) 与 `tasks/*.md` 的 24 KB
+# (W7) 都在 `check_caps` 的默认角色集之外, 迁移完成后再纳入。
+# ---------------------------------------------------------------------------
+
+
+def _kb_checker():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import check_kb_structure
+
+    return check_kb_structure
+
+
+def test_kb_index_is_regenerated() -> None:
+    """每个索引目录的 `_index.md` == 生成结果 (索引是生成物, 冲突靠重跑, 不手改)。"""
+    problems = _kb_checker().check_index_regenerated(ROOT, MB)
+    assert not problems, ("请运行 `python .agents/skills/memory-bank/scripts/gen_kb_index.py` 重建:\n" + "\n".join(problems))
+
+
+def test_kb_index_and_files_are_bijective() -> None:
+    """索引 ↔ 目录内容双向一致: 有文件没登记、登记了没文件, 都红。"""
+    problems = _kb_checker().check_bijection(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_topic_files_have_metadata() -> None:
+    """每个主题文件与 `_about.md` 都含三行头元数据 —— 生成器的数据源, 缺了索引行就是空的。"""
+    problems = _kb_checker().check_metadata(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_files_respect_caps() -> None:
+    """每个文件 ≤ 其角色的 cap (角色策略单点在 skill 的 `_common.CAP_POLICY`)。"""
+    problems, _warns = _kb_checker().check_caps(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_class_names_and_topic_filenames() -> None:
+    """类名 ∈ 固定枚举; 主题文件名匹配 `^[a-z0-9]+(-[a-z0-9]+)*\\.md$`。"""
+    problems = _kb_checker().check_names(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_no_orphan_index_dirs() -> None:
+    """每个顶层 `_index.md` 都被 memory-bank/README.md 引用 (新增目录忘了登记就红)。"""
+    problems = _kb_checker().check_orphan_indexes(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_stubs_are_valid() -> None:
+    """被拆文档的原路径必须是 ≤1 KB 存根 (含「已迁至」、不含正文) —— 护住 400+ 处历史引用。"""
+    problems = _kb_checker().check_stubs(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_pitfall_entries_have_required_fields() -> None:
+    """pitfalls 条目含 触发 / 判别 / 处置 三必填字段 (`- **触发**: …`)。"""
+    problems = _kb_checker().check_pitfall_entries(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_scripts_import_cleanly() -> None:
+    """skill 的 4 个脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    for name in ("_common", "gen_tasks_index", "gen_kb_index", "check_kb_structure"):
+        path = SKILL_SCRIPTS / f"{name}.py"
+        assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
+        __import__(name)

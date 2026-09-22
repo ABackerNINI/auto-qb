@@ -1,9 +1,9 @@
 # 26-09-22-memory-bank-dir-refactor — 知识库目录化重构 (分类 + 二级指针)
 
-**Status:** Pending
+**Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; 计划已产出, 待确认后按 W0–W8 分波实施
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W3 已完成 (pitfalls 7 类 / 35 文件 + testing 9 文件 + 新增 guards.md, 9 条结构性守卫), 续做 W4 activeContext+progress
 
 ## 原始请求
 
@@ -68,6 +68,16 @@
    (索引守卫按 `tasks/*.md` 不递归, 天然兼容); ⑦路由分两层: `AGENTS.md` 粗路由(≤6.5 KB, 现 7,653) +
    `memory-bank/README.md` 库内细路由(≤3 KB, 守卫保证无孤儿目录)。
 
+### 决策补记 (2026-09-22 W1 实测后修正)
+
+11. **索引 cap 拆出 `index-auto` 档 (12 KB)**: 计划 §03 把"索引"一律定 3,000 字符, 但 `tasks/_index.md`
+    实测 **10,790**、`issues/_index.md` **6,937** 字符 —— 它们是**自动生成、一行一条、行数随条目数增长**的,
+    套 3,000 必然常红且没有可行的收缩路径(缩摘要就是丢信息)。故单列 `index-auto` 12 KB:
+    仍有守卫防无限膨胀, 但不假装它们是一屏索引。手写的 `<文档>/_index.md` 与 `memory-bank/README.md`
+    仍守 3,000。
+12. **W7 范围按实测收窄**: 计划称 `tasks/` 有 4 份 >20 KB; 实测只有 `26-09-19-webui-responsiveness.md`
+    (27,260 字符)超 24 KB 档 ⇒ W7 只需处理这一份 + 复核各档案的「历史会话纪要」段 ≤8,000。
+
 详见 [docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html](../../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) (11 节: 问题 / 备选对比 / 判据 G1–G6 / 目标结构 / 格式规范 / 三条入口 / 机械后果 / 迁移映射 / 分波 / 守恒验收 / 风险与验证)。
 
 ## 实现计划
@@ -82,7 +92,9 @@
 - **W4** `activeContext.md` 瘦身 (≤12 KB + cap 守卫) + `progress/` (5+4 份 + 存根); 走查清单迁 `checklists/`。
 - **W5** `systemPatterns/` (≈8) + `modules/` (≈7) + 存根; 纠正「任务队列」名下的 WEB UI 内容归属。
 - **W6** `conventions/` (≈5) + `config-reference/` (≈3) + `rule-system/` (≈4) + 存根; `checking` 单独成篇。
-- **W7** `tasks/` 档案消肿: 超 24 KB 的 4 份把纪要段 / 分波明细移 `tasks/attachments/`。
+- **W7** `tasks/` 档案消肿: 超 24 KB 的档案把「历史会话纪要」段移 `tasks/attachments/`
+  (**实测 2026-09-22: 只有 `26-09-19-webui-responsiveness.md` 27,260 字符 > 24,000** ——
+  计划里"4 份 >20 KB"是旧数, 已按 W0 实测修正)。
 - **W8** 机检化 + 回归演练 (检索演练 ×3) + 重写 `memory-bank.instructions.md` 的旧结构与旧命名。
 
 ## 子任务状态表
@@ -94,13 +106,15 @@
 | 0.3 | 立档 + 重建 tasks 索引 + 更新 activeContext | Complete | 2026-09-22 | 本轮不做 commit/push |
 | 0.4 | 计划增补: 脚本统一落 memory-bank skill 的 `scripts/` | Complete | 2026-09-22 | 含 `gen_tasks_index.py` 迁入与 11 处引用改写清单 (计划 §07) |
 | 0.5 | 计划增补: 全库逐文档落位 + 五步配方 + cap 分级 | Complete | 2026-09-22 | 8 份超标文档 → 9 目录 / ≈45 主题文件 + 8 存根; 波次扩为 W0–W8 (计划 §03/§04/§05/§06) |
-| W0 | 基线冻结与守恒清单 | Not Started | — | 待用户确认后开工 |
-| W1 | pitfalls 目录化 (含守卫 / 闸门 / 接线) | Not Started | — | 收益最大, 须一次做完并尽快推送 |
-| W2 | testing.md 拆分 | Not Started | — | |
-| W3 | activeContext 瘦身 + progress 拆分 | Not Started | — | |
-| W4 | modules / systemPatterns / conventions 按 cap 处置 | Not Started | — | |
-| W5 | 文本坑 → 守阵 (5 候选) | Not Started | — | 治本波; 复发 ≥2 的条目优先 |
-| W6 | 回归 + 演练 + instructions 漂移修复 | Not Started | — | |
+| W0 | 基线冻结 (42 份 / 508,487 字符 / 352 段 / 1,613 条目) | Complete | 2026-09-22 | 清单在 `.workbuddy-ai/tmp/kb-baseline/` (gitignore) |
+| W1 | 基础设施: 脚本落位 + 通用生成器 + cap 策略 + 9 条守卫 | Complete | 2026-09-22 | 全量 1169 passed + 1 skipped (+9) |
+| W2 | `pitfalls/` 两级指针 (7 类 + 35 主题文件 + 存根 + 接线) | Complete | 2026-09-22 | 守恒: 真丢失 0 (973 token 核对); 1169 passed 不变 |
+| W3 | `testing/` (9 文件 + 存根; `baseline.md` 成唯一手改处) | Complete | 2026-09-22 | 守恒: 真丢失 4 处已补; 1169 passed 不变 |
+| W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Not Started | — | |
+| W5 | `systemPatterns/` + `modules/` (≈8 + ≈7) | Not Started | — | |
+| W6 | `conventions/` + `config-reference/` + `rule-system/` (≈5+3+4) | Not Started | — | |
+| W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Not Started | — | |
+| W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | |
 
 ## 进度日志
 
@@ -132,6 +146,88 @@
   「入口链不随库体量变长」。
 - 定案: `systemPatterns` 的 WEB UI 三节 (21,406 字符) 本就挂错在「任务队列」名下, 拆开即纠错;
   modules 的「在哪里改」速查并入 `_index.md`; `tasks/attachments/` 不破坏索引守卫 (不递归)。
+
+### 2026-09-22 (W3 `testing/` 目录化)
+- **产出**: `testing.md`(6,706 字符 / 489 行)→ **9 个主题文件 + ≤1 KB 存根**(存根实测 **322 字符**):
+  `run` · `baseline` · `baseline-history` · `file-conventions` · **`guards`(新增)** · `helpers` · `sim-5000` ·
+  `smoke` · `browser-env`。另从 `techContext.md` 剥出浏览器自动化两条轨道(techContext **6,706 → 3,542 字符**)。
+- **新增 `guards.md`**: 把散落各处的机械守阵收成一张表(**守阵名 / 钉住的结论 / 红验方式**), 五组共 70+ 条 ——
+  知识库结构(16) · 前端 WEB UI(14) · 主循环与命令链路(11) · 后端高风险与状态持久化(14) · 仿真语料与平台语义(15)。
+  这是本波唯一**新写**的内容(其余是重组 + 字段化), 也是"能变成红的就从文本搬进守阵"这条主线的目录。
+- **基线数字单点迁移**: 从 `testing.md` 顶部迁到 `testing/baseline.md`(其它文档一律引用它);
+  **逐次增量的 222 行流水用脚本原样外迁**到 `testing/baseline-history.md` —— 手抄等于把"守恒"变成
+  "我保证没抄错"; 抽取时只把 bash 注释标记(`#` / `#   `)转成 markdown 列表缩进, **内容逐字未改**。
+- **守恒核对**: 674 个硬事实 token 里 26 个"找不到", 逐条判后**真丢失 4 处**已补回 ——
+  ①覆盖率逐模块明细 ②档案命名的两种形态(`YY-MM-DD-<slug>.md` + 兼容 `TASKnnn-<slug>.md`)
+  ③主犯那条的具体修法(`auto_qb.cli.notify_fatal`)④副作用台账规模(1742 条 / 越界 0)。
+  其余 12 个是**故意压缩的过期数字**(如 `1062 条` 改指 `baseline.md` 单点)或正则跨反引号的假阳性。
+- **⚠ 按实测新增 `log` 角色(cap 24 KB)**: `baseline-history.md` 实测 **18,749 字符**, 是 **append-only**
+  流水、按设计就会一直长 ⇒ 套"常青主题 10 KB"必常红且**没有可行的收缩路径**(删历史就是丢"数字怎么来的")。
+  与任务档案同档 24 KB, 并已把 `log` 加进 `check_kb_structure` 的默认角色集。
+- **接线**: `memory-bank/README.md` 细路由改指 `testing/_index.md`(并点明基线单点在 `testing/baseline.md`)。
+- **实测**: 全量 **1169 passed + 1 skipped**(与 W1/W2 持平 —— 本波未增删用例), sidefx 越界 0;
+  `check_kb_structure.py` 全过; `testing/` 合计 57,439 字符。
+- **残留(非阻塞)**: `run.md` 的 TMPDIR 一档还留着 testing.md 里那条与"用 `--basetemp=H:/Temp/<新目录>`"
+  **互相冲突**的旧建议(既有漂移, 本轮只按 W1 记的候选保留), 归入 W8。
+
+### 2026-09-22 (W2 `pitfalls/` 目录化)
+- **产出**: 旧 `pitfalls.md`(64,491 字符 / 255 条) → **7 类 / 35 个主题文件 / 236 条字段化条目**;
+  最大文件 `web-ui/contract-api.md` **5,582 字符**(cap 6,000); `pitfalls/` 合计 99,510 字符(含 8 个生成物索引 + 8 个 `_about.md`)。
+- **条目格式**: `### <一句话结论>` + `触发` / `判别` / `处置` **三必填**, `守阵` / `复发` 选填 ——
+  由守卫 `check_pitfall_entries` 机械校验。原句照搬 + 压叙事, 规则 / 判别法 / 实测数字一个不删。
+- **类切分**: git(6 文件) / web-ui(8) / backend(5) / testing(8) / ops(1) / kb(6) / docs(1)。
+  ⚠ 两处相对计划调整: ①web-ui 8 份(计划 7)②testing 8 份(计划 8) —— web-ui 因 `contract-api.md` 条目多而拆出
+  `overlays.md`, 属 cap 驱动的必要拆分。
+- **守恒核对(方法换了, 必须记)**: 本轮是**字段化重写**(触发/判别/处置 + 压叙事), **不是逐字搬家** ⇒
+  计划 §10 的"规范化行文本 md5 比对"**不适用**(原句被重新分配, md5 必然大面积假红)。
+  改用**硬事实 token 覆盖**: 抽旧版每条目的反引号标识符 / 路径 / 带单位数字, 逐个在新树里找 ——
+  **973 个 token, 17 个"找不到", 逐条人工判后全部是正则跨反引号的假阳性**(如 `), 容器给` / `。**ESM 的`),
+  **真丢失 0**。⚠ 该法**真查出** 2 条被我漏掉的条目(「Markdown 表格被自动格式化器改坏」/
+  「Bash heredoc 反斜杠转义被路径归一化层改成正斜杠」), 已补进 `git/editing-traps.md`;
+  另补回 3 处被压掉的标识符(`hasUnit()` / `decoratedShows` / 被取代的旧守阵名)。
+  ⇒ **教训: token 核对能抓"整条丢失", 但抓不到"条目内的叙述性规则丢失"; 它是必要不充分的代理判据。**
+- **接线**: ①`AGENTS.md` **7,580 → 6,117 / 8,000**(粗路由改成指向 `memory-bank/README.md` 细路由 +
+  三条动作级提示; 「跨仓库操作」「提交 / PR」「命令」三节精简为指针)②`memory-bank/README.md` 重建
+  **库内细路由表**(任务 → 入口, 含 `pitfalls/_index.md`)③skill 收尾 **DoD ⑤** 改为"按动作写进
+  `pitfalls/<类>/<主题>.md` + 重跑 `gen_kb_index.py`", 并新增**复发闭环**(踩到已记的坑 ⇒ `复发` +1 +
+  档案里写"为什么没命中")④`.commit-flow.toml` 增 `pitfalls_index` 决策点指针, 预检表尾打印
+  (为支持该键, `_ship_config.KEY_DEFAULTS` 与 `preflight.py` 各加一处; `test_preflight.py` 26 项全过)。
+- **守卫**: 9 条从"空转"变成**真跑**; `check_kb_structure.py --quiet` 全部通过。
+- **实测**: 全量 **1169 passed + 1 skipped**(与 W1 持平 —— 本轮未增删用例), sidefx 越界 0。
+- **残留(非阻塞)**: 11 个主题文件落在 1.5 KB **建议下限**之下(计划 §03 明示该下限**只 WARN 不红**,
+  且 `ops/` `docs/` 是单文件类无从合并); 已把 `--quiet` 修为**同时抑制 WARN**(原实现只抑制 PASS)。
+
+### 2026-09-22 (W0 基线冻结 + W1 基础设施)
+- **W0**: 按五步配方第 1 步量全库 —— 13 份顶层文档 + `tasks/*.md` + `AGENTS.md` 共 **42 份 / 508,487 字符 /
+  352 段 / 1,613 条目**; 段级与条目级 `(md5, 字节, 段名)` 清单落 `.workbuddy-ai/tmp/kb-baseline/`(gitignore),
+  比对工具 `.workbuddy-ai/tmp/kb_baseline.py --verify`。**不动任何文档。**
+  ⚠ 计划 §01 的体积数字是旧测量, 实测已全面变小: pitfalls 63,430(计划 62,362 基本持平) / progress 51,292
+  (计划 80,704) / testing 39,988(61,468) / activeContext 37,636(55,990) / systemPatterns 31,370(49,328) /
+  modules 30,198(44,192); `tasks/` 只有 **1** 份 >24 KB(计划称 4 份 >20 KB)。结论不变(仍全部超标), 但 W7 的
+  工作量比计划小得多。
+- **W1**: ①`gen_tasks_index.py` 从仓根 `scripts/` 迁进 memory-bank skill 的 `scripts/`(仓根文件删除),
+  路径走 `find_root()` 向上找 `.git`(不按 skill 安装深度反推), 新增 `--root` / `--mb-dir`;
+  ②新增 `_common.py`(`find_root` / `CAP_POLICY` / `PITFALL_CLASSES` / 三行头 `read_meta` / `role_of`) —
+  cap 与类枚举的**单点**; ③新增通用 `gen_kb_index.py`(任意目录 → `_index.md`; 有子目录出类指针, 无则出文件指针;
+  **索引目录自发现** = 含 `_about.md` 的目录, 故 `tasks/` `issues/` 天然不在内);
+  ④新增 `check_kb_structure.py`(9 条检查, 供守卫进程内 import);
+  ⑤11 个活文档引用改写(AGENTS / README / copilot-instructions / memory-bank.instructions / SKILL / pitfalls×2 /
+  progress / create-issue 的 docstring / tests 守卫 / `.commit-flow.toml`), 历史计划与 issue 报告一行未动;
+  ⑥闸门由 `memory-bank/tasks/` 一条改为 `memory-bank/` 整目录一条, 命令走 `<skill-dir:memory-bank>` 占位符
+  (实测 `preflight --show-config` 已展开)。
+- **守卫 9 条**(`tests/test_memory_bank.py`, 8 → 17 passed): 索引 == 生成结果 / 索引↔目录双向一致 /
+  三行头元数据 / cap 策略 / 类名与文件名 / 无孤儿索引 / 存根合法 / pitfalls 条目三字段 / 4 脚本可 import。
+  它们是**结构性**的 —— 目录未建时空转通过, 某个 `<文档>/` 一落地就自动生效, 故 W1 只增不减。
+- **实测**: 全量 **1169 passed + 1 skipped**(基线 1160, +9), 覆盖率 TOTAL 90% / 7523 语句 / 623 未覆盖;
+  `check_kb_structure.py --all` 正好只报两条**按波次待办**的项(`activeContext.md` 12 KB 硬顶 → W4;
+  `tasks/26-09-19-webui-responsiveness.md` 24 KB → W7), 即 `check_caps` 默认角色集之外的两档。
+- **两处按实测修正计划**(见「决策」补记): ①索引 cap 拆出 `index-auto` 12 KB 档; ②W7 只 1 份超标。
+- **环境**: 跑全量时踩到已记录的 `H:\Temp\pytest-of-11059\pytest-current` 损坏 reparse point
+  (会话收尾 `cleanup_dead_symlinks` 抛 `PermissionError` ⇒ **退出码 1, 测试本身全过**)。该条目 `readlink` /
+  `rmdir` / `icacls` 全被拒(用户态不可修), 处置: 把整个 pytest 临时根 `rename` 成
+  `H:\Temp\pytest-of-11059-broken`(**未删除任何东西**) ⇒ 默认路径恢复可用。后续按 testing.md 的约定
+  改用 `TMPDIR=R:/Temp/auto-qb/tests`。⚠ testing.md 里「用 `--basetemp=H:/Temp/<新目录>`」与顶部「设 TMPDIR」
+  两条建议互相冲突(前者会触发 `tests/sidefx.py` 的临时目录判定失效), 属既有漂移, **本轮未动**, 记入 W8 候选。
 
 ### 2026-09-22 (提交与推送)
 - 本轮四处改动: 计划文档 + 本档案 + `tasks/_index.md` + `activeContext.md`。

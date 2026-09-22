@@ -189,7 +189,7 @@ The format is flexible - focus on capturing valuable insights that help me work 
 
 The `tasks/` folder contains individual markdown files for each task, along with an index file:
 
-- `tasks/_index.md` - Master list of all tasks, **generated** - do not edit by hand, rebuild it with `python scripts/gen_tasks_index.py` (a guard test fails if it drifts from the generator output)
+- `tasks/_index.md` - Master list of all tasks, **generated** - do not edit by hand, rebuild it with `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` (a guard test fails if it drifts from the generator output)
 - `tasks/YY-MM-DD-<slug>.md` - Individual files for each task (e.g., `26-09-18-webui-error-reason.md`). **The name is derived from the topic, never from a serial number**: date to the day (no time), then an `<area>-<topic>` slug (area enum: `webui` / `backend` / `rule` / `memory-bank` / `docs` / `test` / `deps` / `config`). Two clones picking up the same topic on the same day therefore collide on the same path and the duplicate surfaces immediately, instead of silently becoming two files. **Check for an existing slug before creating a file** - never "take the next number".
 
 ### Task Index Structure
