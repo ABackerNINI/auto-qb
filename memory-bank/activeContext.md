@@ -11,7 +11,17 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 20:55 (**三案合流入库: config 取值范围收紧(26-09-22-1937) × 后端状态周期落盘(26-09-21-1347) × web.py→web/ 包拆分** ——
+**最后更新**: 2026-09-22 21:58 (**开工同步规则修正已改待提交 + 第 5 项开工自检已实施: ① `pull --rebase` → `fetch` + `ls-remote` + `merge --ff-only`** ——
+  根因: 09-22 07:38 rebase 禁令落地时漏改 ①, 规则文本与禁令互斥致"静默改写/跳过"; 规则入口 4 处一次改全:
+  根 [AGENTS.md](../AGENTS.md)「会话协议 · 开始」(锚点改"首个执行动作前" + 问答轮豁免 + 判据改 ls-remote + 树脏停下报告) +
+  [collaboration.md](conventions/collaboration.md) L12/L16 + copilot-instructions.md + SKILL.md 会话开始第 1 步 + ai-lib.md;
+  preflight.py 落后判据改 ls-remote 现查(不再依赖 refs/remotes) + 建议文案去 rebase。
+  第 5 项: `preflight.py --check-started` 开工自检(只读: ls-remote 对比 HEAD + 工作区状态, 不 fetch 不写任何 git 状态;
+  分类器 classify_sync 纯函数 + 自测 7 例; AGENTS.md 机检句与 SKILL.md 机检钩子已引用, 结果贴进回复)。
+  验证: skill 自测 34 passed / 全量 1189 passed + 1 skipped / preflight 端到端 exit 0 / --check-started 真跑 exit 0
+  (同步 PASS 齐平 @5ef10ba, 工作区 WARN=本轮 8 个未暂存改动) / 上限 6568/8000。
+  同步: 本 clone 已 fetch + merge --ff-only 至 `5ef10ba` 与远端齐平。10 文件待提交(含本档案与重建的 _index.md)。
+  其前一条状态: 2026-09-22 20:55 (**三案合流入库: config 取值范围收紧(26-09-22-1937) × 后端状态周期落盘(26-09-21-1347) × web.py→web/ 包拆分** ——
   收紧案: `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值,
   全部数值/时间键补上下限(详清单见 [issue 报告](issues/26-09-22-1937-bug-config-value-range-validation.html));
   落盘案: 新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
@@ -20,8 +30,6 @@
   其前一条状态: 2026-09-22 20:38 (**issue 26-09-21-0219「qB 移动 .!qB 后缀误判缺文件」已认领, 计划 v1 待用户过目** ——
   方案: 缺文件扫描过渡态容忍(原名缺失时探测 `.!qB` 孪生, 整轮不判) + 连续 3 次上限兜底残留;
   不加配置键, check_filelist 仅加诊断日志。→ [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html))
-  其前一条状态: 2026-09-22 19:43 (**热重载 L2 state 回滚已修复** —— 删除 L2 分支重读磁盘 state;
-  client-and-state.md「热重载 L2 各一次」旧表述已更正) ——
 
 ## 正在进行
 
@@ -70,7 +78,7 @@
 - **列偏好"升版本" / 双轨模型 / localStorage 两种重置 / 已知限制** →
   [pitfalls/web-ui/columns-persist.md](pitfalls/web-ui/columns-persist.md)。
 - **行宽口径 / 表头吸顶 / 列对齐**(第十一轮定案) → [pitfalls/web-ui/layout-css.md](pitfalls/web-ui/layout-css.md)。
-- **开工先拉分支 + 提交即推送 / 跨仓库操作** → 单点在根 [AGENTS.md](../AGENTS.md)
+- **开工先同步(fetch+ls-remote+ff-only) + 提交即推送 / 跨仓库操作** → 单点在根 [AGENTS.md](../AGENTS.md)
   (「会话协议 · 开始」与「提交 / PR」与「🔴 跨仓库操作」); 细则在 [conventions/collaboration.md](conventions/collaboration.md)「协作约定」。
 - **工作区模式: 多 clone 并行 (2026-09-20 用户拍板, **git worktree 已弃用**)**: 每个 AI 实例一份**完整克隆**(各自独立 `.git`), 跨工作区同步一律走 Gitee `develop`; 单点在 `AGENTS.md`「环境硬约束」与 `conventions.md`「协作约定」。原 8 个 worktree 目录已打包存档到 `D:/Projects/_archive/auto-qb-worktrees-2026-09-20/`(含 `MANIFEST.md` 与 `sha256.txt`), 目录已移除(5 个进回收站, `auto-qb-other` 因回收站报"不支持该功能"改移到存档区 `_removed-dirs/`), 8 个本地分支已删除 —— 删除前已核验全部 `ahead=0`, 无独有提交。新布局为 `D:/Projects/auto-qb`(主) + `auto-qb-clone1` / `auto-qb-clone2` / `auto-qb-long-seeding`。
 - **`想法.md`**: 工作区**干净**(最后一次入库 `3bface9`)。它属于红线文件(与 `config.yml` / `auto-qb-data/` 同级),

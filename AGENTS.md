@@ -14,7 +14,7 @@
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先拉远程** —— `git pull --rebase <remote> develop` (分支名**必须写**), `git status -sb` 不落后再开工; **禁止在落后分支上改代码** (机检: `python .agents/skills/my-commit-flow/scripts/preflight.py`)。拉取前先把工作区弄干净, 理由见下节。②读 [activeContext.md](memory-bank/activeContext.md) (当前焦点); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理** (`stash` 被禁); 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `python .agents/skills/my-commit-flow/scripts/preflight.py --check-started` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②读 [activeContext.md](memory-bank/activeContext.md) (当前焦点); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext (已完成条目**迁出**到 progress) / 达阈值则立档 + `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `gen_kb_index.py`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 

@@ -11,8 +11,8 @@ user-invocable: true
 
 ## 会话开始 (4 步)
 
-1. **先同步分支 (硬性)**: `git remote -v` 确认主线远端 (Gitee, `origin` 也可能是 GitHub 镜像) → `git pull --rebase <remote> develop` (**分支名必须写**, 只给远端名会只 fetch 不合并) → `git status -sb` 确认不落后再动手。**禁止在落后的分支上改代码**; 拉取前先把工作区弄干净 (先提交或移出改动) —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」: 脏工作区 + rebase 触发 stash 会顺着拦截层批量删掉 `.git/objects`。
-   - **想省事就跑机检**: `python .agents/skills/my-commit-flow/scripts/preflight.py` —— 一张表报出远端是不是主线 / 落后几个 / 工作区脏不脏 / 有没有红线文件; 提交与推送的完整步骤见 [my-commit-flow skill](../my-commit-flow/SKILL.md)。
+1. **先同步分支 (硬性; 问答/只读轮次跳过, 首个执行动作前必须完成)**: `git remote -v` 确认主线远端 → `git fetch <主线远端> <分支>` (远端与分支名**必须写**) → `git ls-remote <主线远端> <分支>` 对比本地 HEAD 确认不落后 (`status -sb` 是快照, 会给假绿灯) → 纯落后且工作区干净才 `git merge --ff-only FETCH_HEAD`。**禁止在落后的分支上改代码**; 树脏 → 停下报告, 禁止自行清理 —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」: 非快进合并 + 脏工作区会触发 stash, 顺着拦截层批量删掉 `.git/objects` (rebase / stash 在工具 shell 里一律禁用)。
+   - **想省事就跑机检**: 开工自检 `python .agents/skills/my-commit-flow/scripts/preflight.py --check-started` (只读, 结果贴进回复) —— 报同步状态与工作区脏不脏; 提交/推送前跑完整 `preflight.py` (远端是不是主线 / 落后几个 / 红线文件 / 自动闸门); 完整步骤见 [my-commit-flow skill](../my-commit-flow/SKILL.md)。
 2. 读 `memory-bank/activeContext.md` — 最后更新、进行中事项、下一步候选。
 3. 按任务深入对应主题文档 —— **读哪份看根 `AGENTS.md`「知识库路由」表(路由单点)**; 动代码前必读 `pitfalls.md` 与 `conventions.md`。
 4. 判断任务是否**已有 tasks/ 档案**: 有 → 读该档案续作并按"子任务状态表"推进; 无 → 按下方阈值决定是否立档。

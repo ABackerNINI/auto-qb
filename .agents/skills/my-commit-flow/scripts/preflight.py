@@ -1,7 +1,7 @@
 """提交前预检 —— 不改任何 git 状态, 但**会执行 `auto = true` 的闸门**(可能改工作区)。
 
 用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
-    python <skill-dir>/scripts/preflight.py [--no-fetch] [--no-auto]
+    python <skill-dir>/scripts/preflight.py [--no-fetch] [--no-auto] [--check-started]
     python <skill-dir>/scripts/preflight.py --init           # 生成外置配置初稿(需人工确认)
     python <skill-dir>/scripts/preflight.py --show-config     # 打印生效配置与来源
 
@@ -19,13 +19,14 @@
 
 输出一张检查表(PASS / WARN / STOP):
 - 远端与上游是不是主线(按配置探测)、分支对不对
-- 落不落后主线(**push 前也要再跑一次**: `status -sb` 的 ahead/behind 是上次 fetch 的快照)
-- 工作区脏不脏(脏 + 需要 rebase = 红线区)
+- 落不落后主线(**push 前也要再跑一次**; 判据 = fetch 后与远端真值对比本地 HEAD, `status -sb` 的 ahead/behind 是快照不可信)
+- 开工自检(`--check-started`): **只读** —— ls-remote 对比本地 HEAD + 工作区状态, 不 fetch、不写任何 git 状态, 与其余检查互斥; 结果贴进会话回复
+- 工作区脏不脏(脏 + 需要历史整合 = 红线区)
 - 改动清单里有没有红线 / 高危文件
 - 闸门: `auto = true` 的直接跑(红了即 STOP), 其余列出来给人跑
 - 是否需要换平台复现
 
-有 STOP → 退出码 1; 只有 WARN → 0(需人工确认后继续)。
+有 STOP → 退出码 1; 只有 WARN → 0(需人工确认后继续)。开工自检(`--check-started`)的退出码: 0 = 同步齐平可开工; 1 = 需先处理(落后 / 分叉 / 无法验证)。
 """
 
 from __future__ import annotations
@@ -71,6 +72,33 @@ def git(*args: str, check: bool = True) -> str:
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失败: {proc.stderr.strip()}")
     return proc.stdout.rstrip("\n")
+
+
+def classify_sync(remote_sha: str, head_sha: str, counts: tuple[int, int] | None) -> tuple[str, str]:
+    """把开工同步状态分类成 (级别, 说明) —— 纯函数(便于自测), 不碰 git。
+
+    - `remote_sha` 为空 = 远端真值拿不到(离线 / 远端不存在) → WARN, 如实说"无法验证"
+    - `head_sha` 为空 = 空仓库 → 跳过对比
+    - `counts` 为 None = 本地没有远端 tip 的对象(从未 fetch) → WARN"先 fetch 再重跑"
+    """
+    if not remote_sha:
+        return WARN, "拿不到远端真值(离线或远端不存在) —— 无法验证同步状态, 开工前请人工确认"
+    if not head_sha:
+        return WARN, "本地没有任何提交(空仓库) —— 跳过对比"
+    if remote_sha == head_sha:
+        return PASS, f"与主线齐平({remote_sha[:8]}) —— 可开工"
+    if counts is None:
+        return WARN, f"远端在 {remote_sha[:8]}, 本地没有它的对象(从未 fetch?) —— 先 fetch 主线分支再重跑本自检"
+    behind, ahead = counts
+    if behind == 0:
+        return PASS, f"本地领先 {ahead} 个提交(未推送), 远端无新提交 —— 可开工, 推送即快进"
+    if ahead == 0:
+        return WARN, (
+            f"落后 {behind} 个提交 —— 开工前先同步: `git fetch <主线> <分支>` + "
+            "`git merge --ff-only FETCH_HEAD`(树脏先停下报告)"
+        )
+    return WARN, (f"已分叉(本地独有 {ahead} / 远端新 {behind}) —— 可直接开工, "
+                  "提交时先同步远端再合流(树脏先停下报告)")
 
 
 def remotes() -> dict[str, str]:
@@ -276,10 +304,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-fetch", action="store_true", help="跳过 fetch(离线时用)")
     parser.add_argument("--no-auto", action="store_true", help="只列闸门命令、不执行(推送前的复跑用它 —— 闸门刚在提交前跑过)")
     parser.add_argument(
+        "--check-started",
+        action="store_true",
+        help="会话开工自检(只读): ls-remote 对比本地 HEAD + 工作区状态; 不 fetch、不写任何 git 状态, 与其余检查互斥"
+    )
+    parser.add_argument(
         "--phase",
         choices=("commit", "push"),
         default="push",
-        help="commit 阶段: 落后主线只 WARN(本地提交可以, 推送前必须 rebase); push 阶段: STOP"
+        help="commit 阶段: 落后主线只 WARN(本地提交可以, 推送前必须先同步合流); push 阶段: STOP"
     )
     parser.add_argument("--config", default=None, help=f"指定配置文件(默认 <仓库根>/{CONFIG_NAME})")
     parser.add_argument("--init", action="store_true", help="生成外置配置初稿(按仓库特征猜, 需人工确认)")
@@ -322,6 +355,44 @@ def main(argv: list[str] | None = None) -> int:
     branch = git("rev-parse", "--abbrev-ref", "HEAD", check=False) or "(无提交)"
     staged, unstaged = changed_files()
     changed = staged + unstaged
+
+    # ---- 开工自检(--check-started): **只读** —— 连 fetch 都不做, 不写任何 ref/对象 ----
+    # 目的: 把「开工先同步」从注意力约束变成可执行机检 —— 结果贴进会话回复, 跳过会留可见空洞。
+    # 判据: ls-remote 现查远端真值, 不读 refs/remotes(部分工具 shell 里它的写入会被静默丢弃)。
+    if args.check_started:
+        head_sha = git("rev-parse", "HEAD", check=False)
+        remote_sha = ""
+        if MAIN_URL:
+            ls_out = git("ls-remote", MAIN, BRANCH, check=False)
+            for line in ls_out.splitlines():
+                parts = line.split()
+                if len(parts) == 2 and parts[1] == f"refs/heads/{BRANCH}":
+                    remote_sha = parts[0]
+                    break
+        counts = None
+        if remote_sha and head_sha and remote_sha != head_sha:
+            try:
+                raw = git("rev-list", "--left-right", "--count", f"{remote_sha}...HEAD")
+                nums = raw.split()
+                counts = (int(nums[0]), int(nums[1]))
+            except (RuntimeError, ValueError, IndexError):
+                counts = None
+        level, msg = classify_sync(remote_sha, head_sha, counts)
+        dirty = bool(staged or unstaged)
+        rows_cs = [
+            (level, "同步状态", msg),
+            (
+                WARN if dirty else PASS, "工作区", f"未暂存 {len(unstaged)} / 已暂存 {len(staged)}" +
+                (" —— 树脏: 只能 fetch + `merge --ff-only` 或先停下报告" if dirty else "")
+            ),
+        ]
+        width = max(len(r[1]) for r in rows_cs)
+        print("\n开工自检(--check-started, 全程只读):\n")
+        for lv, item, detail in rows_cs:
+            print(f"  [{lv:4}] {item.ljust(width)}  {detail}")
+        print(f"\n远端基准: {MAIN or '(无主线远端)'}/{BRANCH} @ {remote_sha[:8] or '(拿不到)'}; 退出码 0=可开工, 1=需先处理")
+        return 0 if level == PASS else 1
+
     # 占位符只喂**磁盘上还在**的文件: D(已删除)状态的文件被 git 记着但已不在盘上,
     # 交给 yapf 之类的命令会直接失败。
     present = [p for p in changed if (ROOT / p).exists()]
@@ -358,19 +429,32 @@ def main(argv: list[str] | None = None) -> int:
         (PASS if upstream == want_up else WARN, "上游", f"{upstream or '(未设置)'}(期望 {want_up}; 判 ahead/behind 看的是当前上游)")
     )
 
-    # 5 落后 / 领先
-    if not args.no_fetch and MAIN_URL:
-        git("fetch", MAIN, BRANCH, check=False)
+    # 5 落后 / 领先 —— 判据 = 远端真值(ls-remote)对比本地 HEAD; 不依赖 refs/remotes
+    # (部分工具 shell 里 refs/remotes/* 的写入会被静默丢弃, `status -sb` 的 ahead/behind
+    # 也是上次 fetch 的快照 —— 都可能给假绿灯; ls-remote 是每次现查的网络真值)。
+    remote_sha = ""
+    if MAIN_URL and not args.no_fetch:
+        ls_out = git("ls-remote", MAIN, BRANCH, check=False)
+        for line in ls_out.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1] == f"refs/heads/{BRANCH}":
+                remote_sha = parts[0]
+                break
+        if remote_sha:
+            git("fetch", MAIN, BRANCH, check=False)
     try:
-        counts = git("rev-list", "--left-right", "--count", f"{MAIN}/{BRANCH}...HEAD")
+        if remote_sha:
+            counts = git("rev-list", "--left-right", "--count", f"{remote_sha}...HEAD")
+        else:
+            counts = git("rev-list", "--left-right", "--count", f"{MAIN}/{BRANCH}...HEAD")
         behind, ahead = (int(x) for x in counts.split())
     except (RuntimeError, ValueError):
         behind, ahead = -1, -1
     if behind > 0:
         if args.phase == "commit":
-            rows.append((WARN, "落后主线", f"落后 {behind} 个提交 —— 本地提交可以, 但**推送前必须先 rebase**(工作区要干净)"))
+            rows.append((WARN, "落后主线", f"落后 {behind} 个提交 —— 本地提交可以, 但**推送前必须先同步合流**(工作区要干净)"))
         else:
-            rows.append((STOP, "落后主线", f"落后 {behind} 个提交 —— 先 rebase(**工作区必须干净**); 别等 push 被拒才发现"))
+            rows.append((STOP, "落后主线", f"落后 {behind} 个提交 —— 先同步合流(**工作区必须干净**); 别等 push 被拒才发现"))
     elif behind == 0:
         rows.append((PASS, "落后主线", f"与主线齐平(本地领先 {ahead})"))
     else:
