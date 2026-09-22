@@ -6,6 +6,7 @@
 ## 测试计划(每个测试函数一条)
 - test_no_changes: 配置相同 -> 空变更列表
 - test_l0_scalar_change: L0 运行时动态读取项(main_tick) -> 单条 L0 且携带新旧值
+- test_state_save_interval_is_l0: state_save_interval 周期落盘间隔是 L0(主循环每轮现读, 热重载即时生效)
 - test_l1_section_change: L1 轻量应用段(logging/notify/qbittorrent/web) -> 整段单条 L1
 - test_l2_default_section: 未在级别表声明的段默认 L2(保守: 重建保证生效)
 - test_r_level_paths: R 级段(state_file/data_dir, 进程身份) -> R
@@ -58,6 +59,13 @@ def test_l0_scalar_change():
     c = changes[0]
     assert (c.path, c.level) == ("main_tick", LEVEL_L0)
     assert c.old == 2.0 and c.new == 5.0
+
+
+def test_state_save_interval_is_l0():
+    """state_save_interval 是 L0: 主循环每轮现读, 热重载改值下一轮即生效"""
+    old, new = Config(), Config()
+    new.state_save_interval = 60.0
+    assert [(c.path, c.level) for c in diff_config_impacts(old, new)] == [("state_save_interval", LEVEL_L0)]
 
 
 def test_l1_section_change():

@@ -145,6 +145,24 @@ class RuleEngineMixin:
         except OSError as e:
             logger.warning(f"保存状态文件失败: {e}")
 
+    def _maybe_flush_state(self, now: float):
+        """周期落盘(仅主循环线程调用): 把非优雅终止的状态丢失窗口压到 state_save_interval 以内
+
+        save_state 原本仅优雅退出可达 —— taskkill /F / 原生崩溃 / 断电不产生 Python 异常,
+        run() 的 finally 永不执行, 整个运行期的执行历史与去重记录全丢(issue 26-09-21-1347)。
+        主循环每轮到期检查一次: 间隔读 state_save_interval(0 = 关闭, 回到仅退出落盘的旧行为;
+        配置端下限 30s 防误配置写放大), 状态真实变更频率为小时~天级, 分钟级小文件写盘的
+        写放大可忽略(生产实测 state.json ~37KB)。
+        刻意不做写点级 dirty 插桩: state 写点散在多个 mixin/动作文件, 逐点插桩必漏,
+        周期兜底对未来新增写点同样生效。单一写线程约束不变 —— 本方法只在主循环线程跑。
+        """
+        interval = self.config.state_save_interval
+        if interval <= 0:
+            return
+        if now >= self._next_state_flush_at:
+            self.save_state()
+            self._next_state_flush_at = now + interval
+
     def record_execution(self, rule_name: str, hash: str):
         """记录规则执行历史(execute_once/cooldown 去重依据); 仅主循环线程调用, 线程安全"""
         now = datetime.now()

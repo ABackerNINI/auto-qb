@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>运行期状态周期落盘 · 修复「非优雅终止丢失整个运行期状态」</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f0f0f; --fg:#ececec; --muted:#8f8f8f; --faint:#6a6a6a;
+    --hair:rgba(255,255,255,.09); --surface:rgba(255,255,255,.03);
+    --accent:#7fb5a0;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono","JetBrains Mono",Consolas,"Noto Sans Mono CJK SC",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg)}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;font-weight:400;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1160px;margin:0 auto;padding:88px 40px 120px;
+        display:grid;grid-template-columns:212px minmax(0,1fr);gap:64px}
+  header{grid-column:1 / -1;max-width:760px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--faint);margin:0 0 22px}
+  h1{font-size:42px;line-height:1.14;letter-spacing:-.02em;font-weight:600;margin:0 0 20px}
+  .lede{font-size:17px;line-height:1.6;color:#c9c9c9;margin:0 0 28px;max-width:680px}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;font-family:var(--mono);font-size:11.5px;
+        color:var(--faint);letter-spacing:.02em;padding-top:18px;border-top:1px solid var(--hair)}
+  .meta span b{font-weight:400;color:var(--muted)}
+  nav.toc{position:sticky;top:56px;align-self:start;font-family:var(--mono);font-size:12px}
+  nav.toc p{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 9px;color:var(--faint)}
+  nav.toc a{color:var(--muted);text-decoration:none;border:0}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .n{color:var(--faint);margin-right:8px}
+  main{max-width:760px;min-width:0}
+  section{margin:0 0 74px;scroll-margin-top:56px}
+  h2{font-size:23px;font-weight:600;letter-spacing:-.01em;line-height:1.25;margin:0 0 6px}
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.08em;
+        display:block;margin-bottom:12px;font-weight:400}
+  .rule{height:1px;background:var(--hair);width:88px;margin:20px 0 26px}
+  h3{font-size:15.5px;font-weight:600;margin:34px 0 10px;letter-spacing:-.005em}
+  p{margin:0 0 16px}
+  p,li{max-width:68ch}
+  ul,ol{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 8px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface);
+       border:1px solid var(--hair);border-radius:3px;padding:1px 5px;color:#dedede}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.62;background:var(--surface);
+      border:1px solid var(--hair);border-radius:3px;padding:16px 18px;overflow-x:auto;
+      margin:0 0 20px;color:#d6d6d6;white-space:pre}
+  pre .c{color:var(--faint)}
+  pre .a{color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin:6px 0 22px;font-size:13.5px}
+  th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+     text-transform:uppercase;color:var(--faint);font-weight:400;
+     padding:0 14px 9px 0;border-bottom:1px solid var(--hair)}
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--hair);vertical-align:top;color:#dcdcdc}
+  td:first-child{color:var(--fg)}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px}
+  .yes{color:var(--accent)}
+  .no{color:var(--muted)}
+  .note{border-left:1px solid var(--hair);padding:2px 0 2px 18px;margin:0 0 22px;
+        color:var(--muted);font-size:13.5px;line-height:1.6}
+  footer{grid-column:1 / -1;border-top:1px solid var(--hair);padding-top:22px;
+         font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.02em;max-width:760px}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,181,160,.35)}
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr;gap:0;padding:56px 24px 80px}
+    nav.toc{position:static;margin-bottom:48px}
+    h1{font-size:34px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">修改计划 · backend · issue 26-09-21-1347 · 2026-09-22</p>
+  <h1>让运行期状态活过一次崩溃</h1>
+  <p class="lede">现状是 <code>save_state()</code> 只有优雅退出这一条路可达：<code>taskkill /F</code>、原生崩溃、OOM、
+     断电、关机、直接关掉控制台窗口，都会丢掉<strong>整个运行期</strong>的规则执行历史与各类去重记录。
+     本方案把丢失窗口压缩到一个可配置的常量（默认 120 秒）：主循环周期性落盘为主，
+     两个重放代价最高的键即时落盘为辅。生产实测 <code>state.json</code> 仅 37.5 KB，
+     周期落盘的写放大在 120s 档约 54 MB/天 —— 当年「仅退出时落盘」要规避的写放大，在今天这个体量下已经不成立。</p>
+  <div class="meta">
+    <span><b>改动面</b> 新配置键 1 个（5 处注册）· 主循环 flush 钩子 1 处 · 2 个动作文件各加 1 次即时落盘 · 守阵约 6 条</span>
+    <span><b>依据</b> issue 26-09-21-1347 · 代码取证 @ 4c8b90e · 生产 state.json 实测 37,545 B（2026-09-22）</span>
+    <span><b>状态</b> 待拍板（未动代码）· 拍板点见 <a href="#s9">§09</a></span>
+  </div>
+</header>
+
+<nav class="toc">
+  <p>目录</p>
+  <ol>
+    <li><span class="n">01</span><a href="#s1">问题与代码事实</a></li>
+    <li><span class="n">02</span><a href="#s2">目标与非目标</a></li>
+    <li><span class="n">03</span><a href="#s3">方案：周期落盘为主 + 关键键即时为辅</a></li>
+    <li><span class="n">04</span><a href="#s4">否决的备选</a></li>
+    <li><span class="n">05</span><a href="#s5">配置键规格：state_save_interval</a></li>
+    <li><span class="n">06</span><a href="#s6">写放大量化</a></li>
+    <li><span class="n">07</span><a href="#s7">测试计划</a></li>
+    <li><span class="n">08</span><a href="#s8">实施步骤与知识库回写</a></li>
+    <li><span class="n">09</span><a href="#s9">风险与拍板点</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="n">01</span>问题与代码事实</h2>
+  <div class="rule"></div>
+
+  <p>issue <code>26-09-21-1347-bug-backend-state-save-only-on-exit</code>（Open）的结论在当前 HEAD
+     （<code>4c8b90e</code>，2026-09-22 复核）仍然成立。全库落盘点只有两类：</p>
+
+  <table>
+    <tr><th>落盘点</th><th class="mono">位置（@ 4c8b90e）</th><th>可达条件</th></tr>
+    <tr>
+      <td>退出落盘</td>
+      <td class="mono">qbmanager.py:450（run() 的 finally）</td>
+      <td>仅 Python 异常语义展开时：Ctrl+C（KeyboardInterrupt）、托盘/命令的 <code>stop_event</code>。
+          Windows 上 <code>CTRL_CLOSE_EVENT</code> / 关机 / <code>taskkill /F</code> 不产生 Python 异常，
+          finally 永不执行</td>
+    </tr>
+    <tr>
+      <td>跳检备份即时落盘</td>
+      <td class="mono">skip_checking.py:252（_clear_backup）/ :277（_backup_torrent）</td>
+      <td>仅跳检备份路径 —— 崩溃安全专项里唯一开过的口子（备份凭据不能只活在内存）</td>
+    </tr>
+  </table>
+
+  <p>退出路径枚举（递归 grep <code>atexit|import signal|SIGINT|SIGTERM|SetConsoleCtrlHandler</code>）为
+     <strong>零命中</strong> —— 进程没有注册任何 OS 信号处理器，所以非优雅终止没有任何兜底。</p>
+
+  <h3>丢失的是什么</h3>
+  <p><code>state.json</code> 的全部键。按重放代价排序：</p>
+
+  <table>
+    <tr><th>state 键</th><th>用途（去重依据）</th><th>丢失后重放代价</th></tr>
+    <tr><td class="mono">skip_check_day</td><td>同日跳检去重（跨规则）</td><td><strong>最实在</strong>：同日可重复跳检，PT 本地统计再丢一次</td></tr>
+    <tr><td class="mono">exec_history</td><td>execute_once / cooldown 去重</td><td>规则动作重放；动作普遍先查状态再写，多为幂等 API 重复调用</td></tr>
+    <tr><td class="mono">recheck_fails</td><td>校验失败冷却（3 次/日上限）</td><td>冗余 recheck（防损坏文件死循环的闸门失效一次）</td></tr>
+    <tr><td class="mono">reannounce_ts</td><td>reannounce 频控</td><td>可立即再 announce</td></tr>
+    <tr><td class="mono">upload_snapshots</td><td>周期上传量基线</td><td>upload_size_* 条件基线归零重建</td></tr>
+    <tr><td class="mono">auto_categories</td><td>自动分类过的种子记录</td><td>可能对同一批种子重复自动分类</td></tr>
+    <tr><td class="mono">skip_check_backup</td><td>跳检恢复凭据</td><td>该键已有即时落盘（上表），不受影响</td></tr>
+  </table>
+
+  <h3>已经排除与已经修掉的</h3>
+  <ul>
+    <li><strong>原子写缺陷</strong>——不成立。<code>utils.atomic_write</code>（tmp + fsync + <code>os.replace</code> + .bak）保证文件要么全旧要么全新，本 issue 只丢「新变更」，文件本身无损坏风险。</li>
+    <li><strong>损坏恢复管线</strong>——姊妹 issue <code>state-load-corrupt-silent-reset</code> 已于 2026-09-22 修复入库（<code>e11df80</code>）：损坏回退 .bak、自愈写回、孤儿 tmp 清理。本方案叠加在其上：周期落盘让 .bak 与自愈的「新鲜度」从「上次优雅退出」变成「最多 N 秒前」。</li>
+    <li><strong>filelock 死锁残留</strong>——不成立，句柄随进程死亡由 OS 释放。</li>
+  </ul>
+
+  <div class="note">这是<strong>知情取舍的推翻</strong>，不是修疏忽：<code>pitfalls/backend/behavior-core.md</code> 明文记载
+     「state_file 仅退出时落盘 = 已知取舍，需要更稳的持久化要先推翻这条设计」。本计划就是那次推翻，
+     由 issue 发起；落地时黄金法则 3 与相关知识库条目要同步改口径（见 §08）。</div>
+</section>
+
+<section id="s2">
+  <h2><span class="n">02</span>目标与非目标</h2>
+  <div class="rule"></div>
+
+  <h3>目标</h3>
+  <ul>
+    <li>非优雅终止时，state 丢失窗口 ≤ <code>state_save_interval</code>（默认 120s；计入主循环节拍，实际 ≤ interval + 1 个 tick）。</li>
+    <li>重放代价最高的 <code>skip_check_day</code> 窗口 → 0（跳检完成标记即时落盘）。</li>
+    <li>零新线程、零新锁：flush 只发生在主循环线程，单一写线程约束原样保持。</li>
+    <li>dry-run 不产生任何磁盘写入（与现有退出路径 <code>if not dry_run</code> 口径一致）。</li>
+  </ul>
+
+  <h3>非目标</h3>
+  <ul>
+    <li><strong>不追求零丢失</strong>——断电瞬间最后 ≤ interval 的变更仍会丢；这是「缩小窗口」不是「消除窗口」。</li>
+    <li><strong>不修托盘 join 超时</strong>（<code>26-09-21-1347-bug-tray-join-timeout-abandons-save</code>，Open）——但本方案让它从「丢全部」降级为「丢 ≤ interval」，两个 issue 是缓解关系不是依赖关系。</li>
+    <li><strong>不修热重载 L2 回滚</strong>（<code>26-09-21-1347-bug-backend-hot-reload-l2-state-rollback</code>，Open）——同理，L2 分支重读磁盘的回滚半径从「整个运行期」缩到 ≤ interval。</li>
+    <li><strong>不做 exec_history 剪枝</strong>——该键目前无界增长（生产 37.5 KB 尚无压力），另行观察，不入本计划。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="n">03</span>方案：周期落盘为主 + 关键键即时为辅</h2>
+  <div class="rule"></div>
+
+  <h3>A · 主循环周期落盘（候选 A，主机制）</h3>
+  <p>在 <code>run()</code> 主循环的正常路径（暂停分支之后、<code>flush_truths()</code> 一带）加一个到期检查。
+     主循环节拍是 sync 线 1.5s / tick 线 2s，循环永远不会睡过 2s，所以到期后 ≤ 1 个 tick 内必然执行：</p>
+
+<pre><span class="c"># qbmanager.py · run() 主循环内（正常路径，暂停分支不经过这里 —— 暂停期无状态变更）</span>
+self.web.flush_truths()
+<span class="a">if not dry_run:</span>
+<span class="a">    self._maybe_flush_state(time.time())</span>
+
+<span class="c"># mixins/rule_engine.py · RuleEngineMixin 新增</span>
+def _maybe_flush_state(self, now: float) -> None:
+    <span class="c">"""周期落盘：间隔由 state_save_interval 控制（0 = 关闭，回到仅退出落盘的旧行为）。
+
+    仅主循环线程调用（单一写线程约束不变）；save_state 自带原子写与 OSError 兜底。
+    """</span>
+    interval = self.config.state_save_interval
+    if interval &lt;= 0:
+        return
+    if now &gt;= self._next_state_flush_at:
+        self.save_state()
+        self._next_state_flush_at = now + interval</pre>
+
+  <ul>
+    <li>计时器在 <code>run()</code> 里 <code>self.state = self._load_state()</code> 之后初始化为
+        <code>time.time() + interval</code> —— 启动时刚从磁盘加载过，立刻 flush 是无意义的重写。</li>
+    <li>间隔每轮从 <code>self.config</code> 现读，与 <code>main_tick</code> 同口径，热重载 L0 即时生效。</li>
+    <li>不引入 dirty 标记：state 是普通 dict，写点散在 ~10 处（见 §04），逐点插桩必漏；
+        周期兜底对「未来新增的写点」也自动生效。</li>
+  </ul>
+
+  <h3>B · 关键键即时落盘（候选 B，辅助）</h3>
+  <p>两个重放代价最实在的键，在写点就地落盘。两处变更频率天然低（跳检是小时~天级事件；
+     recheck 失败有 3 次/日/种上限），且 <code>skip_checking</code> 里已有两处即时落盘先例，口径一致：</p>
+
+  <table>
+    <tr><th>写点</th><th class="mono">位置（@ 4c8b90e）</th><th>改法</th></tr>
+    <tr>
+      <td class="mono">skip_check_day</td>
+      <td class="mono">skip_checking.py:207（_skip_readd 尾部，跳检完成标记）</td>
+      <td>标记写完后 <code>ctx.manager.save_state()</code>。注意 <code>_clear_backup</code> 的落盘在
+          <code>meta</code> 为空时提前返回<strong>不会执行</strong>，所以这里要显式落，不能指望顺带</td>
+    </tr>
+    <tr>
+      <td class="mono">recheck_fails</td>
+      <td class="mono">full_checking.py:_bump_recheck_fail（函数尾部）</td>
+      <td>累加后 <code>manager.save_state()</code>。放在函数内单点覆盖全部调用方；
+          频率上界 = 3 次/日/种</td>
+    </tr>
+  </table>
+
+  <p><code>exec_history</code>（<code>record_execution</code>）<strong>不</strong>即时落盘：它在规则命中时逐条写，
+     初轮可能一秒几十条，即时落盘会把写放大放大几个量级；其重放代价多为幂等调用，交给周期落盘即可。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="n">04</span>否决的备选</h2>
+  <div class="rule"></div>
+
+  <table>
+    <tr><th>备选</th><th>否决理由</th></tr>
+    <tr>
+      <td>全部 ~12 个 state 写点插 dirty 标记</td>
+      <td>写点散在 rule_engine / tags / basic / full_checking / skip_checking / transfer / speed_curve 七个文件；
+          未来每个新写点都必须记得插桩 —— 与「.bak 写出去没人读」是同一类漏接形态（刚修完的 issue 就是前车）。
+          周期兜底不需要任何插桩</td>
+    </tr>
+    <tr>
+      <td>state 换成代理 dict，赋值自动置脏</td>
+      <td>嵌套结构（<code>exec_history</code> / <code>upload_snapshots.baseline</code>）的深层变异拦截要做到可靠，
+          复杂度远超收益；还改动了 <code>self.state</code> 的类型契约</td>
+    </tr>
+    <tr>
+      <td>OS 信号处理器 + atexit（CTRL_CLOSE_EVENT / SIGTERM）</td>
+      <td>覆盖不了真正的威胁面：taskkill /F、OOM、断电根本不给清理窗口；Windows 关控制台的
+          CTRL_CLOSE_EVENT 不进入 Python 异常语义。能给的几秒清理窗只救得到其中一种情况，
+          复杂度却进入信号处理这一高风险领域 —— 不值得</td>
+    </tr>
+    <tr>
+      <td>每 tick（2s）无条件落盘</td>
+      <td>43,200 次/天，fsync 开销无意义；状态变更频率本来就是小时~天级</td>
+    </tr>
+  </table>
+</section>
+
+<section id="s5">
+  <h2><span class="n">05</span>配置键规格：state_save_interval</h2>
+  <div class="rule"></div>
+
+  <p>新键 <code>state_save_interval</code>（状态周期落盘间隔），默认 <strong>120s</strong>，<strong>0 = 关闭</strong>
+     （回到「仅优雅退出落盘」的旧行为，作为逃生口）。按黄金法则 4，新键必须走完全部注册点：</p>
+
+  <table>
+    <tr><th class="mono">注册点</th><th>内容</th></tr>
+    <tr><td class="mono">config/models.py</td><td><code>state_save_interval: float = 120.0</code> 字段 + 缺省注释（挂在 main_tick / sync_interval 旁）</td></tr>
+    <tr><td class="mono">config/loaders.py</td><td><code>_get(cfg, "state_save_interval", d.state_save_interval, parse_time)</code>（口径见拍板点 ②）</td></tr>
+    <tr><td class="mono">config/schema/groups.py</td><td>Field 登记（与 main_tick 同组），WebUI 设置页可见可编辑</td></tr>
+    <tr><td class="mono">config/validation/core.py</td><td>加入已知键列表 + 校验规则：数值合法、<strong>≥ 0</strong>（负数聚合报错；0 合法=关闭）</td></tr>
+    <tr><td class="mono">config/impact.py</td><td><code>"state_save_interval": LEVEL_L0</code> —— 主循环每轮现读，热重载即时生效，无需重启</td></tr>
+  </table>
+
+  <div class="note">⚠ 实现时须确认 <code>_try_time</code> 的 <code>positive=False</code> 分支是否放行 0
+     （现有调用全是 <code>positive=True</code> 的「&gt;0」语义，main_tick 用它防 0 忙循环）。
+     若不放行，补一个「≥0 且 0=关闭」的分支 —— fail-fast 口径：负数/非数报错，0 放行。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="n">06</span>写放大量化</h2>
+  <div class="rule"></div>
+
+  <p>生产实测（主 clone <code>auto-qb-data/</code>，2026-09-22）：<code>state.json</code> = <strong>37,545 B</strong>，
+     .bak 同尺寸。每次 flush 的磁盘写入 ≈ 2 × 文件尺寸（临时文件写 + .bak 复制），约 75 KB。
+     当年「仅退出时落盘」规避的写放大，按这个体量折算：</p>
+
+  <table>
+    <tr><th>间隔</th><th>落盘次数/天</th><th>写入量/天（含 .bak）</th><th>断电丢失窗口</th></tr>
+    <tr><td class="mono">60s</td><td class="mono">1,440</td><td class="mono">≈ 108 MB</td><td class="mono">≤ 1 min</td></tr>
+    <tr><td class="mono"><strong>120s（建议默认）</strong></td><td class="mono">720</td><td class="mono">≈ 54 MB</td><td class="mono">≤ 2 min</td></tr>
+    <tr><td class="mono">300s</td><td class="mono">288</td><td class="mono">≈ 22 MB</td><td class="mono">≤ 5 min</td></tr>
+  </table>
+
+  <p>即便是 5000 种子 × 多规则的大库，<code>exec_history</code> 撑到 1 MB 量级，120s 档也在 1.5 GB/天以内，
+     SSD 无感；真担心还有两道闸：调大 interval，或 0 直接关回旧行为。主要成本是 fsync，
+     频率已压到「分钟级一次小文件」，不再有优化价值。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="n">07</span>测试计划</h2>
+  <div class="rule"></div>
+
+  <p>新增守阵（同步进对应 tests 文件头部「测试计划」清单）：</p>
+
+  <table>
+    <tr><th>#</th><th>守阵</th><th>钉住什么</th></tr>
+    <tr><td class="mono">1</td><td class="mono">test_maybe_flush_state_due / not_due / disabled</td><td>到期触发、间隔内不重复、<code>interval&lt;=0</code> 恒不落（旧行为逃生口不被误改）</td></tr>
+    <tr><td class="mono">2</td><td class="mono">test_run_loop_periodic_flush</td><td>主循环跑 N 轮（fake 时钟 / monkeypatch），save_state 按 interval 边界触发；dry_run 全程零写盘</td></tr>
+    <tr><td class="mono">3</td><td class="mono">test_dirty_exit_keeps_exec_history（验收阵）</td><td><strong>issue 验收原文</strong>：执行规则记 exec_history → 周期落盘触发后模拟脏退出（不走 finally）→ 新 manager 重载，exec_history 保留符合新策略；<code>interval=0</code> 对照组丢失</td></tr>
+    <tr><td class="mono">4</td><td class="mono">test_skip_check_day_flushed_immediately</td><td>跳检完成后，磁盘上的 state.json 已含 skip_check_day（tmp_path 实测文件内容）</td></tr>
+    <tr><td class="mono">5</td><td class="mono">test_recheck_fail_flushed_immediately</td><td>bump 后磁盘已含 recheck_fails</td></tr>
+    <tr><td class="mono">6</td><td class="mono">test_config_state_save_interval</td><td>默认 120 / 0 合法 / 负数与非数聚合报错；schema 守卫自动覆盖新键同步</td></tr>
+  </table>
+
+  <p><strong>红验</strong>：还原 <code>run()</code> 钩子 → 守阵 2、3 红；还原 <code>:207</code> 即时落盘 → 守阵 4 红。
+     按惯例不改仓库源码、运行期打回旧实现跑同场景。</p>
+
+  <p class="note">跑全量照例 <code>TMPDIR="R:/Temp/auto-qb/tests"</code>；基线数字以当天实测记入
+     <code>testing.md</code>（当前基线 1160 passed + 1 skipped）。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="n">08</span>实施步骤与知识库回写</h2>
+  <div class="rule"></div>
+
+  <ol>
+    <li>认领 issue（状态 → In Progress，补一行复验：@ 4c8b90e 仍复现）。</li>
+    <li>配置键 <code>state_save_interval</code> 五处注册 + 校验（§05）。</li>
+    <li><code>RuleEngineMixin</code> 加 <code>_maybe_flush_state</code> 与计时器字段；<code>run()</code> 接钩子（含 dry_run / 暂停 / 计时器初始化语义）。</li>
+    <li><code>skip_checking.py:207</code> 与 <code>full_checking.py:_bump_recheck_fail</code> 即时落盘（§03-B）。</li>
+    <li>守阵 6 条 + 红验 + 全量测试。</li>
+    <li>收尾回写：
+      <ul>
+        <li><strong>AGENTS.md 黄金法则 3</strong>：「程序退出时才落盘」→「优雅退出 + 周期落盘（默认 120s，0=关）」；</li>
+        <li><code>pitfalls/backend/behavior-core.md</code>「state_file 仅退出时落盘」条目改写（原「已知取舍」作废，注明被本 issue 推翻）；</li>
+        <li><code>systemPatterns/client-and-state.md</code> 状态持久化段补周期落盘语义；</li>
+        <li><code>speed_curve.py:186</code> 注释「落盘由程序退出时统一 save_state」同步修正；</li>
+        <li>config-reference 登记新键；testing.md 记基线；issue 状态 → Fixed + 「修复后补充」。</li>
+      </ul></li>
+    <li>提交走 my-commit-flow —— 等用户明确说「提交」。</li>
+  </ol>
+</section>
+
+<section id="s9">
+  <h2><span class="n">09</span>风险与拍板点</h2>
+  <div class="rule"></div>
+
+  <h3>风险与缓解</h3>
+  <table>
+    <tr><th>风险</th><th>评估</th></tr>
+    <tr><td>写放大</td><td class="yes">实测 37.5 KB，120s 档 ≈ 54 MB/天 —— 可忽略；interval 可调 + 0 关闭双兜底</td></tr>
+    <tr><td>flush 瞬间恰逢崩溃</td><td class="yes">原子写 + .bak + 孤儿 tmp 清理均已就位（e11df80），最坏丢这一次 flush 本身</td></tr>
+    <tr><td>与热重载 L2 的交互</td><td class="yes">L2 重读磁盘的回滚半径反而从「整个运行期」缩到 ≤ interval；无新增风险</td></tr>
+    <tr><td>未来新增 state 写点漏「即时落盘」</td><td class="yes">周期兜底自动覆盖，最多丢 interval —— 这正是选周期方案而非全量插桩的原因</td></tr>
+    <tr><td>单一写线程</td><td class="yes">钩子只在主循环线程；两个即时落盘点都在既有主线程动作路径内（与先例同径）</td></tr>
+  </table>
+
+  <h3>拍板点（实施前需要确认）</h3>
+  <table>
+    <tr><th>#</th><th>决策</th><th>建议</th><th>备选</th></tr>
+    <tr><td class="mono">①</td><td>默认间隔</td><td class="yes"><strong>120s</strong>（issue 建议 60–300s 区间的中位）</td><td>60s（窗口更小，写翻倍）/ 300s</td></tr>
+    <tr><td class="mono">②</td><td>键值口径</td><td class="yes"><strong>时间串</strong>（"120s"，与 main_tick / sync_interval 的 parse_time 口径一致）</td><td>纯秒数（float）</td></tr>
+    <tr><td class="mono">③</td><td>候选 B 批次</td><td class="yes"><strong>与 A 同批</strong>（净改动 ≤ 6 行 + 2 条守阵，拆开反而多一轮验证）</td><td>拆两个 PR，A 先行</td></tr>
+  </table>
+
+  <p>三个点都按建议走的话，净改动面：1 个配置键（5 处注册）、1 个 mixin 方法 + 1 处主循环钩子、
+     2 个动作文件各 1 行即时落盘、约 6 条守阵、6 处知识库回写。</p>
+</section>
+
+</main>
+
+<footer>
+  26-09-22-1912 · 依据 issue 26-09-21-1347 与 2026-09-22 代码取证（HEAD 4c8b90e）成文 · 未动任何代码
+</footer>
+
+</div>
+</body>
+</html>
