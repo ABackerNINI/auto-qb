@@ -12,7 +12,13 @@ RULE_FIELDS: Tuple[Field, ...] = (
         options=TRIGGERS,
         help="何时检查该规则: interval = 按扫描间隔周期检查; 其余为事件触发(种子新增/删除/状态变化时立即检查一次)",
     ),
-    Field("interval", "扫描间隔", "time", default="0S", help="多久检查一次该规则(仅周期触发时生效); 0 = 每轮都检查; 以上一轮结束起算, 不会叠加"),
+    Field(
+        "interval",
+        "扫描间隔",
+        "time",
+        default="0S",
+        help="多久检查一次该规则(仅周期触发时生效); 留空 = 每 tick 级别(队列归一化为 1s); 显式配置最短 1S; 以上一轮结束起算, 不会叠加"
+    ),
     Field(
         "execute_once",
         "执行一次",

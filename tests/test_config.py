@@ -19,6 +19,7 @@
 - test_validate_required_missing: 缺 domains / 站点 hr 缺 required_seeding_time 报错
 - test_validate_bad_formats: 非法格式聚合(main_tick/port/log.level/限速/布尔)
 - test_validate_max_tasks_per_tick_range: max_tasks_per_tick 非正值报错(0/负值被 TaskQueue 当"不限量", 与配置语义相反)
+- test_validate_value_ranges: 取值范围收紧聚合(interval/main_tick/sync_interval 上下界, max_tasks_per_tick 上界, log.max_bytes 轮转区间, required_share_ratio 有限性与范围, hr.condition 边界, notify 上界, 规则 interval 正时间)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
 - test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键)
@@ -1084,3 +1085,79 @@ def test_validate_root_config_not_dict():
         text = "config: 123\n"
         err = _load_errors(td, text)
         assert "config: 必须是字典" in err, err
+
+
+def test_validate_value_ranges():
+    """取值范围收紧聚合: 防止"格式合法但危险"的值进入运行时
+
+    - config.interval: 0 会经 TaskQueue._norm_interval 归一化成 1s(全部种子级任务每秒跑)
+    - log.max_bytes: 0 在 RotatingFileHandler 语义 = 从不轮转(单文件无限增长)
+    - required_share_ratio: 负数/nan/inf 会静默破坏 HR 判定语义(nan 比较恒 False)
+    - hr.condition: "0%"/负数立即满足、">100%"永不触发, 均与配置意图相反
+    - 规则 interval: 显式 0 同样归一化成每秒全量跑; cooldown=0 是文档化的"不冷却"语义, 不拦
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- config.interval: 上下界(1s-1D), 边界值合法
+        assert "config.interval: 须 >= 1s" in _load_errors(td, "config:\n  interval: 0S\n")
+        assert "config.interval: 须 <= 86400s" in _load_errors(td, "config:\n  interval: 2D\n")
+        assert _load_errors(td, "config:\n  interval: 1S\n") == ""
+        assert _load_errors(td, "config:\n  interval: 1D\n") == ""
+        # --- main_tick / sync_interval: 高频下限与失效上限
+        assert "config.main_tick: 须 >= 0.5s" in _load_errors(td, "config:\n  main_tick: 0.1S\n")
+        assert "config.main_tick: 须 <= 3600s" in _load_errors(td, "config:\n  main_tick: 2H\n")
+        assert _load_errors(td, "config:\n  main_tick: 30M\n") == ""
+        assert "config.sync_interval: 须 >= 1s" in _load_errors(td, "config:\n  sync_interval: 0.5S\n")
+        assert _load_errors(td, "config:\n  sync_interval: 10M\n") == ""
+        # --- max_tasks_per_tick 上界(下界已有独立测试)
+        assert "config.max_tasks_per_tick: 须 <= 500" in _load_errors(td, "config:\n  max_tasks_per_tick: 501\n")
+        assert _load_errors(td, "config:\n  max_tasks_per_tick: 500\n") == ""
+        # --- log.max_bytes: 0B/过小/过大都拦, 默认值合法(裸数字无单位是格式错误, 不进范围检查)
+        err = _load_errors(td, "config:\n  log:\n    max_bytes: 0B\n")
+        assert "config.log.max_bytes: 须在 1MiB-1GiB 范围内" in err, err
+        assert "config.log.max_bytes" in _load_errors(td, "config:\n  log:\n    max_bytes: 512KiB\n")
+        assert "config.log.max_bytes" in _load_errors(td, "config:\n  log:\n    max_bytes: 2GiB\n")
+        assert _load_errors(td, "config:\n  log:\n    max_bytes: 10MiB\n") == ""
+
+        def _hr_ratio(value):
+            return _load_errors(
+                td,
+                "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n"
+                "        required_seeding_time: 3D\n        required_share_ratio: %s\n" % value,
+            )
+
+        # --- required_share_ratio: nan/inf/负数/超上界, 边界 0(不要求)与 100 合法
+        assert "须为有限数字" in _hr_ratio("nan")
+        assert "须为有限数字" in _hr_ratio("inf")
+        assert "须 >= 0" in _hr_ratio("-1")
+        assert "须 <= 100" in _hr_ratio("101")
+        assert _hr_ratio("0") == ""
+        assert _hr_ratio("100") == ""
+
+        def _hr_cond(value):
+            return _load_errors(
+                td,
+                "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n"
+                "        required_seeding_time: 3D\n        condition: %s\n" % value,
+            )
+
+        # --- hr.condition: 百分比 (0,100] / 下载量 >0, 边界合法
+        assert "HR 百分比条件须 (0, 100]" in _hr_cond("0%")
+        assert "HR 百分比条件须 (0, 100]" in _hr_cond("200%")
+        assert "HR 百分比条件须 (0, 100]" in _hr_cond("-5%")
+        assert "HR 下载量条件须 > 0" in _hr_cond("0MiB")
+        assert _hr_cond("80%") == ""
+        assert _hr_cond("100%") == ""
+        assert _hr_cond("10MiB") == ""
+        # --- notify: max_per_hour 上界; dedup_window 上限(0=不去重仍合法)
+        assert "config.notify.max_per_hour: 须 <= 100" in _load_errors(td, "config:\n  notify:\n    max_per_hour: 101\n")
+        assert _load_errors(td, "config:\n  notify:\n    max_per_hour: 100\n") == ""
+        assert "config.notify.dedup_window: 须 <= 86400s" in _load_errors(
+            td, "config:\n  notify:\n    dedup_window: 25H\n"
+        )
+        assert _load_errors(td, "config:\n  notify:\n    dedup_window: 0S\n") == ""
+        # --- 规则 interval: 显式 0 拦(队列归一化成 1s); cooldown=0 是"不冷却"语义, 不拦
+        assert "config.rr_rules.r1.interval: 必须为正时间" in _load_errors(
+            td, "config:\n  rr_rules:\n    r1:\n      interval: 0S\n"
+        )
+        assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      interval: 5S\n") == ""
+        assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      cooldown: 0S\n") == ""

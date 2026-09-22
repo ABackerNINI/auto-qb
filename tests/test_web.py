@@ -107,6 +107,8 @@
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857): 60 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 """
 import base64
 import json
@@ -2080,7 +2082,9 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     # web_env 的 store 是轻量 namespace(get 恒 None), 这里按真实 Store.get 语义接上 by_hash
     mgr.store.get = lambda h: mgr.store.by_hash.get(h)
     post = lambda body: client.post("/api/open-path", json=body, headers=auth)  # noqa: E731
-    with mock.patch("auto_qb.web.open_path") as spy:
+    # patch 地址 = auto_qb.web.common.open_path(web.py 拆 web/ 包后模块地址稳定化;
+    # 原地址 auto_qb.web.open_path 随模块拆分失效 —— 管线性改动, plan 26-09-22-1857 W1)
+    with mock.patch("auto_qb.web.common.open_path") as spy:
         # ① 目录型 content_path -> 取自身(非选中语义)
         r = post({"kind": "torrent", "hash": "HA"})
         assert r.status_code == 200 and r.json() == {"opened": norm(d_content), "select": False}, r.text
@@ -4474,3 +4478,120 @@ def test_cmd_trackers_log_sanitized(caplog):
     assert "XYZ" not in text, "换名的凭据(authkey)同样不能进日志"
     assert "passkey" not in text and "authkey" not in text, "query 整段都应丢弃, 不该残留参数名"
     assert "pt.example.com" in text and "other.example.com" in text, "主地址要保留(否则没法排查是哪个站)"
+# ---- W0 结构守阵(plan 26-09-22-1857: web.py create_app 拆分 web/ 包, 先行落阵再动刀) ----
+
+# 从拆分前的 web.py 用 AST 提取的全部路由(取证 2026-09-22, develop @ 975e146):
+# 57 个 /api 端点 + 3 个 UI 重定向(/, /newui, /newui/{rest:path})。拆分全程必须逐条保持。
+_GOLDEN_ROUTES = {
+    ("GET", "/"),
+    ("GET", "/api/categories"),
+    ("POST", "/api/categories"),
+    ("POST", "/api/categories/edit"),
+    ("POST", "/api/categories/remove"),
+    ("GET", "/api/cmd/{cmd_id}"),
+    ("GET", "/api/config"),
+    ("PUT", "/api/config"),
+    ("POST", "/api/config/preview"),
+    ("GET", "/api/config/public"),
+    ("GET", "/api/config/schema"),
+    ("GET", "/api/events"),
+    ("POST", "/api/expr/eval"),
+    ("GET", "/api/fs/dirs"),
+    ("POST", "/api/fs/mkdir"),
+    ("GET", "/api/groups"),
+    ("POST", "/api/groups/{key}/delete"),
+    ("POST", "/api/groups/{key}/pause"),
+    ("POST", "/api/groups/{key}/reannounce"),
+    ("POST", "/api/groups/{key}/resume"),
+    ("GET", "/api/log"),
+    ("POST", "/api/open-path"),
+    ("GET", "/api/paths"),
+    ("GET", "/api/search"),
+    ("GET", "/api/speed/mode"),
+    ("POST", "/api/speed/override"),
+    ("GET", "/api/state"),
+    ("GET", "/api/stats"),
+    ("GET", "/api/status"),
+    ("GET", "/api/tags"),
+    ("POST", "/api/tags"),
+    ("POST", "/api/tags/remove"),
+    ("POST", "/api/torrents/add"),
+    ("POST", "/api/torrents/bulk"),
+    ("GET", "/api/torrents/{hash}"),
+    ("POST", "/api/torrents/{hash}/auto-tmm"),
+    ("POST", "/api/torrents/{hash}/delete"),
+    ("GET", "/api/torrents/{hash}/export"),
+    ("GET", "/api/torrents/{hash}/files"),
+    ("POST", "/api/torrents/{hash}/files/priority"),
+    ("POST", "/api/torrents/{hash}/force-start"),
+    ("POST", "/api/torrents/{hash}/limits"),
+    ("POST", "/api/torrents/{hash}/location"),
+    ("POST", "/api/torrents/{hash}/pause"),
+    ("GET", "/api/torrents/{hash}/peers"),
+    ("POST", "/api/torrents/{hash}/queue"),
+    ("POST", "/api/torrents/{hash}/reannounce"),
+    ("POST", "/api/torrents/{hash}/recheck"),
+    ("POST", "/api/torrents/{hash}/rename"),
+    ("POST", "/api/torrents/{hash}/rename-fs"),
+    ("POST", "/api/torrents/{hash}/resume"),
+    ("POST", "/api/torrents/{hash}/share-limits"),
+    ("POST", "/api/torrents/{hash}/super-seeding"),
+    ("GET", "/api/torrents/{hash}/trackers"),
+    ("POST", "/api/torrents/{hash}/trackers/add"),
+    ("POST", "/api/torrents/{hash}/trackers/edit"),
+    ("POST", "/api/torrents/{hash}/trackers/remove"),
+    ("GET", "/api/traffic/history"),
+    ("GET", "/newui"),
+    ("GET", "/newui/{rest:path}"),
+}
+
+
+def _iter_api_routes(routes):
+    """展平 include_router 的注册结果: 本环境 FastAPI 把路由包在 _IncludedRouter 里,
+    不再展开为平铺 APIRoute —— 按域 Router 拆分后必须递归下钻才能清点到全部路由。"""
+    from fastapi.routing import APIRoute
+
+    for r in routes:
+        if isinstance(r, APIRoute):
+            yield r
+            continue
+        for attr in ("original_router", "router"):
+            sub = getattr(r, attr, None)
+            if sub is not None and hasattr(sub, "routes"):
+                yield from _iter_api_routes(sub.routes)
+                break
+
+
+def test_web_route_manifest_frozen(web_env):
+    """路由金清单守阵: 60 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+
+    集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
+    一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、
+    /add 与 /{hash} 靠方法区分); 各 router 内部相对顺序保持源码顺序。
+    HEAD 是 Starlette 对 GET 路由的自动补集, 比对时剔除。
+    """
+    from starlette.routing import Mount
+
+    mgr, client = web_env
+    app = client.app
+    found = {(next(iter(r.methods - {"HEAD"})), r.path) for r in _iter_api_routes(app.routes)}
+    assert found == _GOLDEN_ROUTES, (
+        f"路由清单漂移: 多出 {sorted(found - _GOLDEN_ROUTES)}, 丢失 {sorted(_GOLDEN_ROUTES - found)}"
+    )
+    assert any(isinstance(r, Mount) for r in app.routes), "静态挂载(StaticFiles)不得丢失"
+
+
+def test_create_app_is_thin_assembly():
+    """组装壳守阵(W6, plan 26-09-22-1857): create_app 源 ≤150 行且不含内联路由装饰器
+
+    本 issue 的病根是工厂函数无约束生长(926 行); 行数上限 + 装饰器检查双闸防回潮。
+    红验: 同一断言跑拆分前的 create_app(926 行, 含 @app.*)必红(见计划 §06 W6)。
+    """
+    import inspect
+
+    from auto_qb.web import create_app
+
+    src = inspect.getsource(create_app)
+    n = len(src.splitlines())
+    assert n <= 150, f"create_app 长回 {n} 行(上限 150) —— 端点请进 routes/ 对应域模块, 别再塞回工厂"
+    assert "@app." not in src, "组装壳里不得出现内联路由装饰器 —— 端点一律放 routes/ 模块"

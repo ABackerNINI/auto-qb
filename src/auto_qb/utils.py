@@ -5,6 +5,7 @@
 """
 import base64
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -177,13 +178,21 @@ def parse_hr_condition(cond_str) -> tuple:
     """解析HR触发条件字符串 -> ('dlratio', ratio) 或 ('dlsize', bytes)
 
     示例: "80%" -> ('dlratio', 0.8), "10MiB" -> ('dlsize', 字节); 缺省默认80%
+    边界在解析单点拦下(校验层经 _try 复用): 百分比须 (0, 100] —— "0%"/负数会让条件立即满足
+    (种子一入站就打 HR 标), ">100%" 永不触发, 均与配置意图相反; 下载量须 > 0("0MiB" 同样立即满足)
     """
     cond_str = str(cond_str).strip()
     if not cond_str:
         return ("dlratio", 0.8)  # 默认80%触发
     if cond_str.endswith("%"):  # 百分比, 如 "70%"
-        return ("dlratio", float(cond_str[:-1]) / 100.0)
-    return ("dlsize", parse_fsize(cond_str))  # 下载量绝对值, 如 "10MiB"
+        ratio = float(cond_str[:-1]) / 100.0
+        if not math.isfinite(ratio) or not 0 < ratio <= 1:
+            raise ValueError(f"HR 百分比条件须 (0, 100]: {cond_str}")
+        return ("dlratio", ratio)
+    size = parse_fsize(cond_str)  # 下载量绝对值, 如 "10MiB"
+    if size <= 0:
+        raise ValueError(f"HR 下载量条件须 > 0: {cond_str}")
+    return ("dlsize", size)
 
 
 def is_windows() -> bool:

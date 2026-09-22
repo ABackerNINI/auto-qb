@@ -11,20 +11,37 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 20:38 (**issue 26-09-21-0219「qB 移动 .!qB 后缀误判缺文件」已认领, 计划 v1 待用户过目** ——
+**最后更新**: 2026-09-22 20:55 (**三案合流入库: config 取值范围收紧(26-09-22-1937) × 后端状态周期落盘(26-09-21-1347) × web.py→web/ 包拆分** ——
+  收紧案: `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值,
+  全部数值/时间键补上下限(详清单见 [issue 报告](issues/26-09-22-1937-bug-config-value-range-validation.html));
+  落盘案: 新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
+  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘;
+  拆分案: `create_app` 926 行 → `web/` 包 16 文件 8 域 Router, 零行为变更(守阵 2 条红验 + 冒烟 70×2 全绿)。
+  其前一条状态: 2026-09-22 20:38 (**issue 26-09-21-0219「qB 移动 .!qB 后缀误判缺文件」已认领, 计划 v1 待用户过目** ——
   方案: 缺文件扫描过渡态容忍(原名缺失时探测 `.!qB` 孪生, 整轮不判) + 连续 3 次上限兜底残留;
   不加配置键, check_filelist 仅加诊断日志。→ [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html))
-  其前一条状态: 2026-09-22 19:50 (**issue 26-09-21-1347「后端状态仅优雅退出时落盘」已实施并入库** ——
-  新键 `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;
-  全量 1185 passed + 1 skipped, 红验通过; issue Fixed。→ [计划](../docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html))
+  其前一条状态: 2026-09-22 19:43 (**热重载 L2 state 回滚已修复** —— 删除 L2 分支重读磁盘 state;
+  client-and-state.md「热重载 L2 各一次」旧表述已更正) ——
 
 ## 正在进行
 
 - **🆕 qB 移动 .!qB 误判缺文件 (issue 26-09-21-0219) 已认领, 计划待过目 (2026-09-22)**: 过渡态容忍 + 连续 3 次上限;
   [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html); 用户确认后实施, issue 已置 In Progress
-- **🆕 后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
+- **config 取值范围收紧 (2026-09-22, 随合并入库)**: issue [26-09-22-1937-bug-config-value-range-validation](issues/26-09-22-1937-bug-config-value-range-validation.html) 已置 Fixed。
+  收紧清单: `interval` 1s-1D / `main_tick` 0.5s-1H / `sync_interval` 1s-10M / `max_tasks_per_tick` 1-500 /
+  `log.max_bytes` 1MiB-1GiB(0=RotatingFileHandler 从不轮转) / 站点 hr `required_share_ratio` [0,100] 拦 nan/inf /
+  `hr.condition` 百分比 (0,100] 与下载量 >0(`utils.parse_hr_condition` 解析单点拦) / `notify.max_per_hour` ≤100 /
+  `dedup_window` ≤24H(0=不去重仍合法) / 规则 `interval` 显式 0 拦 —— **缺省 0S=每 tick 级别是既有行为未动**,
+  是否收紧属行为变更待拍板。机制文档已回写 [config-reference/loading-and-write.md](config-reference/loading-and-write.md)
+  「校验范围 · 取值范围」条。
+- **web.py→web/ 包拆分 —— 已入库(本条随提交走)**: 零行为变更纯结构重构; 守阵 2 条红验
+  (金清单 60 条 / 组装壳 ≤150); 全量 1188 passed + 1 skipped; 冒烟 70×2 全绿。三条安全
+  发现(S1-01/02/05)可在 auth.py/events.py/system.py 局部落刀(上游已修 S1-05 脱敏, 见
+  44c1a0f)。剩: push 后真机无需走查(行为零变更, 冒烟已覆盖)。
+- **后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
   `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;
-  全量 1185 passed + 1 skipped, 红验通过; issue 已标 Fixed
+  红验通过(修复打回 → 3 条守阵全红); issue 已标 Fixed
+  → [计划](../docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html)
 - **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 已入库 `c31ee0d`, Gitee + GitHub 镜像均已推)**:
   ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
   (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;
@@ -72,5 +89,5 @@
 
 ## 历史归档 (已迁出本文件)
 
-2026-09-14 ~ 2026-09-19 的全部会话纪要已按专题迁移到 [tasks/](tasks/_index.md) 各档案的「历史会话纪要 (原文归档)」段(原文未删改), 或已沉淀进 [progress/](progress/_index.md) 的「已实现」段。
+2026-09-14 ~ 2026-09-19 的全部会话纪要已按专题迁移到 [tasks/](tasks/_index.md) 各档案的「历史会话纪要 (原文归档)」段(原文未删改), 或已沉淀进 [progress/_index.md](progress/_index.md) 的「已实现」段。
 需要回查历史请走 `tasks/_index.md` 定位专题档案; 本文件只保留**当前焦点**。

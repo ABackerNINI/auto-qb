@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="web-create-app-split">
+<meta name="plan-stamp" content="26-09-22-1857">
+<meta name="plan-status" content="已拍板·实施完毕(已入库 2026-09-22)">
+<title>web.py create_app 拆分计划 · 926 行工厂函数 → web/ 包 + 按域 Router</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fd694;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 64ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  td .m { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 80ch; }
+  .num { font-family: var(--mono); }
+  .kv b { color: var(--ink); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>一句话结论</a>
+    <a href="#s2"><span class="no">02</span>现状盘点(复验)</a>
+    <a href="#s3"><span class="no">03</span>目标形态: web/ 包</a>
+    <a href="#s4"><span class="no">04</span>关键设计决策</a>
+    <a href="#s5"><span class="no">05</span>方案取舍</a>
+    <a href="#s6"><span class="no">06</span>实施波次</a>
+    <a href="#s7"><span class="no">07</span>验证与验收</a>
+    <a href="#s8"><span class="no">08</span>风险与回退</a>
+    <a href="#s9"><span class="no">09</span>决策与实施记录</a>
+    <div class="toc-foot">
+      关联 issue: 26-09-21-1408-refactor-web-create-app-monolith<br>
+      本计划只做拆分, 不修三条安全项
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">实施计划 · refactor · 已拍板·实施完毕(已入库 2026-09-22)</div>
+    <h1>web.py create_app 拆分计划: 926 行工厂函数 → web/ 包 + 按域 Router</h1>
+    <p class="lede">行为零变更的纯结构重构: 鉴权独立成模块, 57 个端点按 8 个域拆 APIRouter, create_app 收成 &lt;150 行组装壳; tests/test_web.py 115 条用例零改动全绿是硬验收判据。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-22-1857-web-create-app-split-plan</div></div>
+      <div class="item"><div class="k">制定时间</div><div class="v">2026-09-22 18:57</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">已拍板·实施完毕(已入库 2026-09-22)</span></div></div>
+      <div class="item"><div class="k">基线</div><div class="v">develop @ 975e146</div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui (仅 src/auto_qb/web)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>一句话结论</h2>
+    <p><code>create_app</code> 926 行的问题不是"行数多", 而是<b>鉴权、路由、缓存、装配、静态挂载五类职责共用一个闭包作用域</b>: 任何 Web 改动都在这一个作用域里叠加, 安全审查面 = 整个函数。本计划把它拆成 <code>web/</code> 包(15 个文件, 沿用项目 2026-09-15 <code>config.py→config/</code>、<code>torrents.py→torrents/</code> 两次单文件转包的成熟先例), <code>create_app</code> 收成只做"建 app + 挂依赖 + include 路由 + 挂静态"的组装壳(预估 ~80 行)。</p>
+    <p><b>三条硬边界</b>: ① 纯移动不改行为 —— 57 个 API 端点 + 3 个重定向 + 1 个中间件的语义、鉴权、日志命名空间全部原样; ② <code>tests/test_web.py</code> 115 条用例<b>零改动</b>全绿; ③ 不顺手修任何安全项 —— 三条安全 issue(S1-01/S1-02/S1-05)在拆分完成后各自变成局部改动, 这是本重构的直接收益, 不是本次范围。</p>
+    <p class="hint">外部消费面已核实仅 3 处(qbmanager.py 两处函数内导入 / tests / scripts/ui_harness.py), 经 <code>__init__.py</code> 门面全量 re-export 后调用方零改动。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状盘点(复验 2026-09-22)</h2>
+    <p>issue 复验要求"认领后先重跑锚点"。已在基线 <span class="num">develop @ 975e146</span> 用 AST 脚本重测(<code>.openclaw/tmp/analyze_web.py</code>, 临时取证脚本不入库):</p>
+    <div class="callout">
+      <b>锚点仍准确</b>: <code>src/auto_qb/web.py</code> 全文件 <span class="num">1,143</span> 行; <code>create_app</code> 占 <span class="num">L121–L1046 = 926 行</span>, 与入池数字(取证 2026-09-21 14:08 @ 01fd595)逐字一致 —— 入池后该文件无改动。
+    </div>
+    <h3>2.1 create_app 内部结构(AST 实测)</h3>
+    <table>
+      <tr><th>构成</th><th>数量 / 规模</th><th>说明</th></tr>
+      <tr><td>鉴权依赖 <code>require_token</code></td><td>38 行</td><td>闭包 <code>manager</code> + <code>nonlocal _local_skip_logged</code>(免鉴权提示只记一次); 免鉴权放行 <code>/api/config/public</code>、loopback 跳验、非 <code>/api</code> 路径、SSE <code>?token=</code> 兜底, <code>compare_digest</code> 防时序侧信道</td></tr>
+      <tr><td>API 端点</td><td><b>57 个</b></td><td>GET 31 / POST 24 / PUT 1(另有 3 个 include_in_schema=False 重定向)</td></tr>
+      <tr><td>中间件 + 静态挂载</td><td>1 + 1</td><td><code>_static_no_cache</code>(非 /api 加 no-cache) + <code>StaticFiles</code> 根挂载 + <code>/</code>、<code>/newui/*</code> 重定向, 30 行</td></tr>
+      <tr><td>共享闭包件</td><td>7 个</td><td><code>_cached_read</code>(带写序号失效的 RO 缓存, 6 个调用点) / <code>_enqueue</code> / <code>_require_torrent</code> / <code>_require_client</code> / fs 白名单三件套(<code>_browse_roots</code>/<code>_fs_real</code>/<code>_within_roots</code>)</td></tr>
+      <tr><td>每 app 实例状态</td><td>3 处</td><td><code>_local_skip_logged</code> / <code>_ro_cache</code>+<code>_ro_lock</code>+<code>RO_CACHE_TTL</code> —— 拆分后必须保持<b>每 app 一份</b>, 不得变模块级全局(测试会多次 create_app)</td></tr>
+    </table>
+    <h3>2.2 端点域分布(57 个)</h3>
+    <table>
+      <tr><th>域</th><th>端点</th><th>数</th></tr>
+      <tr><td>状态聚合读</td><td class="m">GET /api/status · /api/state · /api/groups · /api/search · /api/stats · /api/traffic/history</td><td>6</td></tr>
+      <tr><td>事件 SSE</td><td class="m">GET /api/events</td><td>1</td></tr>
+      <tr><td>组命令</td><td class="m">POST /api/groups/{key}/pause|resume|reannounce|delete</td><td>4</td></tr>
+      <tr><td>种子写命令</td><td class="m">POST /api/torrents/{hash}/×18(pause/resume/reannounce/delete/recheck/super-seeding/force-start/limits/share-limits/location/rename/queue/auto-tmm/trackers add·edit·remove/files priority/rename-fs) + /api/torrents/bulk + /api/torrents/add</td><td>20</td></tr>
+      <tr><td>种子详情读</td><td class="m">GET /api/torrents/{hash}(+trackers/files/peers/export) = 5; categories/tags CRUD = 7; speed mode/override = 2</td><td>14</td></tr>
+      <tr><td>文件系统</td><td class="m">GET /api/paths · /api/fs/dirs; POST /api/fs/mkdir · /api/open-path</td><td>4</td></tr>
+      <tr><td>配置族</td><td class="m">GET /api/config/public|/schema|/ · PUT /api/config · POST /api/config/preview · POST /api/expr/eval</td><td>6</td></tr>
+      <tr><td>系统诊断</td><td class="m">GET /api/log · GET /api/cmd/{cmd_id}</td><td>2</td></tr>
+    </table>
+    <h3>2.3 依赖面(拆分必须原样保持)</h3>
+    <ul>
+      <li><b>manager 引用面</b>(含 6 个私有属性, <b>不顺手"修复"</b>): <code class="num">_group_view / _hr_view_fields / _traffic_view / _web_results / _web_token / _web_write_seq</code> + 公开面 <code class="num">api / client / config / config_path / ensure_group_state / ensure_group_view / search_torrents / state_file / status_snapshot / store / touch_web_client / web / web_commands</code>。私有面收敛是另一条 issue(26-09-21-1408-refactor-web-runtime-host-protocol)的事。</li>
+      <li><b>外部消费方</b>: <code>qbmanager.py:318/522</code>(函数内导入 <code>start/stop_web_server</code>、<code>ensure_web_token</code>); <code>tests/test_web.py</code>(<code>create_app/ensure_web_token/content_disposition/start/stop</code>); <code>scripts/ui_harness.py</code>(<code>create_app</code>)。</li>
+      <li><b>测试钉死的行为</b>: <code>caplog</code> 断言 logger 名<b>必须是 <code>"auto_qb.web"</code></b>(test_api_requires_token / test_skip_local_verify_loopback_bypass); <code>ensure_web_token</code> 落盘路径与幂等; 鉴权 401 语义与"错密钥恰好一条 WARNING"。</li>
+      <li><b>载重注释随代码平移</b>: /api/state 的 jsonable_encoder 直返依据、SSE keepalive &lt; WEB_VIEW_TTL、fs 白名单四条安全边界、config 写盘 round-trip + R 级回退 —— 这些注释是踩坑记录, 不是装饰。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>目标形态: web/ 包</h2>
+    <pre><code>src/auto_qb/web/                # web.py → 包; 对外 import 路径不变
+  __init__.py            (~20)  门面: re-export create_app / ensure_web_token /
+                                start_web_server / stop_web_server / WebServerHandle /
+                                content_disposition / WEB_*_TIMEOUT —— 调用方零改动
+  factory.py             (~80)  create_app 组装壳: FastAPI(...) + 全局鉴权依赖 +
+                                8 个 include_router(固定顺序) + mount_static_ui + return
+  auth.py                (~70)  make_require_token(manager) 工厂(闭包保住"只记一次"标志)
+                                + _is_loopback_host; logger 显式取名 "auto_qb.web"
+  context.py             (~90)  WebContext(manager 引用 + enqueue + RoCache + require_torrent
+                                + require_client); docstring 写明线程模型不变式
+  common.py              (~90)  纯工具: content_disposition / group_key_param /
+                                app_version(保持函数内延迟导入) / ensure_web_token
+  lifecycle.py          (~120)  WebServerHandle / _run_server / _wait_until_started /
+                                start_web_server / stop_web_server(整段平移)
+  static_ui.py           (~50)  重定向×2 + StaticFiles 挂载 + no-cache 中间件
+  routes/
+    __init__.py          (~25)  注册表(模块顺序 = 现源码顺序)
+    state.py            (~130)  状态聚合读 6 端点(JSONResponse 直返注释随迁)
+    events.py            (~55)  /api/events SSE(keepalive/subscribe 语义原样)
+    groups.py            (~30)  组命令 4 端点
+    torrent_cmds.py     (~170)  种子写命令 20 端点(含 bulk)
+    torrent_detail.py   (~200)  详情读 14 端点(含 categories/tags/speed/export)
+    fs.py               (~150)  fs 4 端点 + 白名单三件套(安全边界单点)
+    config.py           (~160)  配置族 6 端点 + _config_backup_path
+    system.py            (~45)  log + cmd/{cmd_id}</code></pre>
+    <p class="hint">行数为平移后估算(总计 ~1,470 行, 比现文件 +28% —— 拆分不减总行数, 减的是单函数规模与审查面); 实测以落库为准。模式先例: <code>config/</code>(687→763 行/5 文件)、<code>torrents/</code>(725→816 行/5 文件), 均为"调用方零改动 + <code>__init__</code> 全量重导出"。</p>
+    <h3>3.1 路由挂接模式</h3>
+    <p>每个 routes 模块暴露 <code>build_router(ctx: WebContext) -> APIRouter</code>; factory 按固定顺序 <code>app.include_router(...)</code>。<b>鉴权不落到任何 router 上</b> —— 仍由 factory 里 <code>FastAPI(dependencies=[Depends(require_token)])</code> 单点全局生效, 与现状逐字等价, 杜绝"某个 router 忘挂依赖"这类漂移。端点函数体逐字平移, 仅两处机械改写: <code>@app.get(...)</code> → <code>@router.get(...)</code>、闭包变量 <code>manager</code>/<code>_cached_read</code>/<code>_enqueue</code> → <code>ctx.manager</code>/<code>ctx.cached_read</code>/<code>ctx.enqueue</code>。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>关键设计决策</h2>
+    <table>
+      <tr><th>#</th><th>决策</th><th>理由 / 不变量</th></tr>
+      <tr><td>K1</td><td><code>web.py → web/ 包</code>, <code>__init__</code> 门面全量 re-export</td><td>项目已有两次同类转换先例; <code>from auto_qb.web import X</code> 与 <code>from .web import X</code> 对包同样成立, qbmanager/tests/ui_harness 零改动</td></tr>
+      <tr><td>K2</td><td>鉴权 = <code>auth.make_require_token(manager)</code> 闭包工厂</td><td><code>_local_skip_logged</code>("只记一次")天然 per-app 实例, 与现状等价; 测试对同一 mgr 多次 create_app 的语义不变</td></tr>
+      <tr><td>K3</td><td>日志命名空间钉死 <code>"auto_qb.web"</code></td><td>web/ 下<b>所有子模块</b>显式 <code>logging.getLogger("auto_qb.web")</code>, 不用 <code>__name__</code>(否则变 <code>auto_qb.web.auth</code>, caplog 按 <code>r.name == "auto_qb.web"</code> 过滤的 3 条测试必红)。拆分后如需分模块定级, 再单独立项</td></tr>
+      <tr><td>K4</td><td>RO 缓存 = <code>context.RoCache</code> 实例, factory 每 app new 一份</td><td>缓存键含 <code>manager._web_write_seq</code>(写失效)的语义逐字保留; 保持 getattr 兜底(stub manager 可能没有该属性)</td></tr>
+      <tr><td>K5</td><td>路由注册顺序 = 现源码顺序, 金清单守阵钉死</td><td>今日无同形路径冲突(<code>/api/torrents/bulk</code>、<code>/add</code> 与 <code>/{hash}</code> 靠方法区分), 但顺序保持是零成本保险</td></tr>
+      <tr><td>K6</td><td><code>static_ui.mount_static_ui(app)</code> 在 factory 最后调用</td><td><code>app.mount("/")</code> 必须在全部 /api 路由之后; no-cache 中间件注册次序随迁, 非 /api 语义不变</td></tr>
+    </table>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>方案取舍</h2>
+    <table>
+      <tr><th>取舍点</th><th>选定</th><th>放弃项与原因</th></tr>
+      <tr><td>文件组织</td><td><code>web/</code> 包 + 门面</td><td>web.py 留单文件 + <code>web_*.py</code> 兄弟模块 —— 顶层命名空间被 15 个文件污染, 且无先例; 一把梭大爆炸无中间可验点</td></tr>
+      <tr><td>routes 组织</td><td><code>routes/</code> 子包</td><td>包内平铺 15 文件 —— 基础件(auth/context/common/lifecycle)与端点混在一层, 找东西靠命名约定; 子包一眼分层</td></tr>
+      <tr><td>路由形态</td><td><code>build_router(ctx) -> APIRouter</code></td><td><code>register_routes(app, ctx)</code> 直接装饰 —— 少一层但丢 router 分组; <code>app.state</code> + 模块级 router —— 隐式全局, 与本项目显式传依赖风格相悖, 且 stub manager 场景更脆</td></tr>
+      <tr><td>与安全修复的先后</td><td><b>先拆后修</b></td><td>先修后拆 = 在 926 行函数里继续叠三层刀(CSRF 中间件/SSE ticket/日志脱敏), 拆分 diff 与修复 diff 互相污染。拆完的落点: S1-01 CSRF → <code>auth.py</code>; S1-02 SSE token → <code>auth.py</code>+<code>routes/events.py</code>; S1-05 passkey 脱敏 → <code>routes/system.py</code>(api_log)</td></tr>
+      <tr><td>波次粒度</td><td>6 波, 每波可独立提交/回退</td><td>一次 PR 全量平移 —— 1,100+ 行 diff 没人能审; 单端点逐个搬 —— 57 次提交噪音</td></tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>实施波次</h2>
+    <p>每波 DoD 统一为: <code>uv run pytest tests -q</code> 全绿 + 金清单守阵绿 + <code>git diff --stat</code> 只含本波声明文件。提交与否按仓库口径(用户显式说"提交"), 波次≠提交次数但一一对应最干净。</p>
+    <table>
+      <tr><th>波</th><th>内容</th><th>create_app 剩余</th><th>验证重点</th></tr>
+      <tr><td>W0</td><td><b>守阵先行(不改产品代码)</b>: ① 从现网 app 提取 60 条 (method, path) 金清单, 硬编码进 <code>tests/test_web.py</code> 新守阵 <code>test_web_route_manifest_frozen</code>(现网即绿); ② 记录全量基线数字</td><td>926</td><td>守阵在未拆分代码上绿; 红验: 手工删清单中任一路由必红</td></tr>
+      <tr><td>W1</td><td><b>骨架转换 + 非路由件平移</b>: web.py → web/ 包(__init__ 门面 / common / lifecycle / auth / context); factory.py 暂时内联全部端点(整体平移)</td><td>~810</td><td>外部导入零改动; caplog 3 条鉴权测试绿; _app_version 延迟导入不破</td></tr>
+      <tr><td>W2</td><td><b>读路径三件</b>: routes/state.py + routes/events.py + routes/system.py</td><td>~600</td><td>JSONResponse 直返热点(state/groups/search)逐字平移; SSE keepalive 与 touch 语义; /api/log 与 /api/cmd</td></tr>
+      <tr><td>W3</td><td><b>命令族</b>: routes/torrent_cmds.py + routes/groups.py</td><td>~420</td><td>24 个 <code>_enqueue</code> 端点机械平移; <code>group_key_param</code> 换 ctx 引用后 400 语义不变</td></tr>
+      <tr><td>W4</td><td><b>详情与文件系统</b>: routes/torrent_detail.py + routes/fs.py</td><td>~250</td><td>RoCache 6 调用点(ctx.cached_read); fs 白名单三件套单点; open-path 服务端派生路径红线注释随迁</td></tr>
+      <tr><td>W5</td><td><b>配置族 + 静态</b>: routes/config.py + static_ui.py; create_app 收壳完成</td><td><b>~80</b></td><td>config 写盘 round-trip/unmask/R 级回退注释随迁; config/schema 保留 jsonable_encoder(历史 500 坑); mount "/" 最后</td></tr>
+      <tr><td>W6</td><td><b>收尾守阵 + 知识库回写</b>: ① <code>test_create_app_is_thin_assembly</code>(create_app 源 ≤150 行且不含内联 <code>@app.</code> 路由; 红验 = 同断言跑拆分前源码 926&gt;150 必红); ② testing.md 记基线; ③ modules.md web.py 行改写为 web/ 包结构(该行现写 ~380 行, 已严重漂移, 借本次一并改准); ④ issue 报告补"实际修法/验证/测试数字", 状态 Open → Fixed(随提交走)</td><td>~80</td><td>守阵红绿双验; 冒烟双 UI 全绿</td></tr>
+    </table>
+    <p class="hint">W2–W5 顺序刻意"先读后写、配置最后": 读路径测试覆盖最厚, 用来先趟平 router 模式; config 族(掩码还原/写盘/热重载投递)与静态挂载是最精細的两段, 放在模式熟练后。若中途发现某端点隐藏闭包依赖, 就地停下核实语义后再搬, 不硬翻。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>验证与验收</h2>
+    <table>
+      <tr><th>判据</th><th>口径</th></tr>
+      <tr><td><b>测试零改动</b></td><td><code>git diff tests/test_web.py</code> 在 W1–W5 必须为空(W0/W6 只追加守阵, 不改既有行); 115 条既有用例全绿 —— 这是"行为零变更"的硬判据</td></tr>
+      <tr><td><b>全量单测</b></td><td><code>uv run pytest tests -q</code> 不退化, 数字以 W0 实测为基线记入 testing.md(当前 activeContext 顶为 1,143 passed)</td></tr>
+      <tr><td><b>金清单守阵</b></td><td>60 条 (method, path) 逐一比对; 路由总数、鉴权依赖、挂载次序全部钉死</td></tr>
+      <tr><td><b>结构守阵</b></td><td>create_app 源 ≤150 行 + 无内联路由装饰器(防"长回来" —— 本 issue 的病根就是无约束生长)</td></tr>
+      <tr><td><b>浏览器冒烟</b></td><td><code>scripts/ui_harness.py</code>(生产 create_app + FakeClient)+ <code>scripts/ui_smoke.cjs</code> 双 UI ok/error 两模式全绿 —— 端到端覆盖鉴权/轮询/SSE/静态</td></tr>
+      <tr><td><b>收尾 DoD</b></td><td>activeContext 更新 / tasks 立档(命中阈值) / modules.md·testing.md 回写随主提交</td></tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>风险与回退</h2>
+    <table>
+      <tr><th>风险</th><th>概率</th><th>缓解</th><th>回退</th></tr>
+      <tr><td>logger 名漂移破坏 caplog 断言与 notify 过滤</td><td>高(极易踩)</td><td>K3: 子模块一律显式 <code>getLogger("auto_qb.web")</code>; W1 即跑 3 条鉴权 caplog 测试</td><td>单波 revert</td></tr>
+      <tr><td>闭包态(_local_skip_logged / _ro_cache)误变模块级全局</td><td>中</td><td>K2/K4: 工厂闭包 + per-app 实例; 既有"只记一次""缓存写失效"测试即判据</td><td>单波 revert</td></tr>
+      <tr><td>路由顺序/通配吞噬变化</td><td>低</td><td>K5 + 金清单守阵(含 60 条逐一比对)</td><td>单波 revert</td></tr>
+      <tr><td>config/schema 直返 JSONResponse 复活 500 坑(dataclass 序列化)</td><td>低</td><td>逐字平移 + 该端点既有测试; 注释随迁</td><td>单波 revert</td></tr>
+      <tr><td>循环导入(<code>auto_qb/__init__</code> ↔ web)</td><td>低</td><td><code>_app_version</code> 保持函数内延迟导入; 门面 <code>__init__</code> 不顶层碰 <code>__version__</code>; qbmanager 本就是函数内导入</td><td>W1 内解决, 不出波</td></tr>
+      <tr><td>git 工具壳约束(脏工作区 rebase 危险)</td><td>—</td><td>每波开工前工作区干净; 高危 git 操作交用户终端; 提交走 my-commit-flow(含核 ref 三处)</td><td>—</td></tr>
+    </table>
+    <p>整体回退: W1 是最大回退单元(包转换), 其后各波独立 revert 互不牵连 —— 文件级移动保证 <code>git revert</code> 干净。</p>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>决策与实施记录</h2>
+    <table>
+      <tr><th>#</th><th>决策</th><th>推荐</th></tr>
+      <tr><td>D1</td><td>web.py → web/ 包(门面 re-export) vs 留单文件加兄弟模块</td><td><b>web/ 包</b>(先例一致、调用方零改动)</td></tr>
+      <tr><td>D2</td><td>8 个 routes 模块的域划分(§03 清单)</td><td><b>按表</b>; 若嫌 torrent_detail 200 行偏大可再拆 categories/tags 出去, 待定</td></tr>
+      <tr><td>D3</td><td>守阵落点: 追加进 test_web.py(复用 web_env fixture) vs 新文件 test_web_structure.py</td><td><b>追加 test_web.py</b>(fixture 复用, 且其头部测试计划清单一并更新)</td></tr>
+      <tr><td>D4</td><td>拆分与三条安全 issue 的先后</td><td><b>先拆后修</b>(§05); 拆分期间三条 issue 维持 Open 不动</td></tr>
+    </table>
+    <p class="hint"><b>实施记录(2026-09-22 晚, D1-D4 全按推荐执行)</b>: W0-W6 全部落地 —— 金清单守阵 60 条(集合比对) + 组装壳守阵(≤150 行 + 无内联 @app.*)双红验; factory.py <b>26 行</b>, 包 16 文件 ~1,200 行(原 1,143); 全量 <b>1,145 passed</b>(基线 1,144 + 守阵 1), 冒烟双 UI ok/error 两模式 <b>70 项 0 失败</b>; 既有 115 条用例零改动(1 处管线性: open_path patch 目标移至 auto_qb.web.common.open_path)。与计划的偏差: ①金清单为集合比对 —— 新版 FastAPI 把 include_router 的路由包进 _IncludedRouter 懒解析, 无法平铺清点(无同形冲突已核); ②config_backup_path 落 common.py 而非 routes/config.py; ③波次由参数化生成器逐波执行, 未单独成 commit。旧 web.py 已由用户手动删除(2026-09-22 20:2x); issue 26-09-21-1408 已随本提交置 Fixed。</p>
+  </section>
+
+  <footer>
+    26-09-22-1857-web-create-app-split-plan.html · 关联 issue 26-09-21-1408-refactor-web-create-app-monolith (Open) · 复验基线 develop @ 975e146 · 证据: AST 取证脚本 .openclaw/tmp/analyze_web.py
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="config-value-range-validation">
+<meta name="issue-stamp" content="26-09-22-1937">
+<meta name="issue-type" content="bug">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Fixed">
+<meta name="issue-title" content="config 校验缺少取值范围约束, 可配出合法格式但危险的值">
+<meta name="issue-summary" content="validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧">
+<title>config 校验缺少取值范围约束, 可配出合法格式但危险的值 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.gap { background: #3a1c1c; color: #ef9090; border-color: #5a2c2c; }
+  .badge.tight { background: var(--warn-bg); color: var(--warn); border-color: #4a3a2c; }
+  .badge.ok { background: #16281c; color: #8fce9f; border-color: #2b4a35; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s6b"><span class="no">07</span>逐键取值范围分析</a>
+    <a href="#s7"><span class="no">08</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（已修）· bug</div>
+    <h1>config 校验缺少取值范围约束, 可配出合法格式但危险的值</h1>
+    <p class="lede">validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-22-1937-bug-config-value-range-validation</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-22 19:37</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>复盘 config 校验体系时发现：<code>validate_config</code> 是 <strong>fail-fast 全量校验</strong>，但拦截的对象集中在「错误」上 —— 格式解析失败（<code>_try</code>/<code>_try_time</code>）、未知键（<code>_check_unknown_keys</code>）、类型不符（<code>_check_str_list</code>）；对「格式合法但取值不合理」的值缺少上下限/合理区间约束。数值与时间类配置多数只查下界甚至不查，能配出格式完全合法、运行时却有问题的值（如超长时间、超大并发、0 或负值视实现而定）。本 issue 的后续工作是<strong>逐项分析各配置的合理取值范围并收紧</strong>，不预设哪些值一定要限。</p>
+    <p>与平台/环境无关，纯校验层缺口；触发与具体配置写法相关（例如把时间配成极大值、把计数类配成极大值）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">证据 1：校验助手清单（<code>src/auto_qb/config/validation/core.py</code> 头部，取证 2026-09-22 19:36）—— 只有五类助手，<strong>没有通用的数值范围（min/max）助手</strong>：</p>
+<pre><code>_check_unknown_keys   # 未知键
+_try                  # 复用 utils.parse_* 校验格式, 失败记错误
+_try_time             # 时间格式; positive=True 时要求 > 0
+_check_str_list       # 字符串列表
+_check_regex_patterns # regex: 前缀模式可编译</code></pre>
+    <p class="hint">证据 2：顶层三键校验现状（<code>git grep "main_tick\|max_tasks_per_tick" -- src/auto_qb/config/validation/</code>，取证 2026-09-22 19:38）—— 下界有查、上界无查：</p>
+<pre><code># src/auto_qb/config/validation/core.py:130-142
+if "main_tick" in cfg:
+    _try_time(cfg["main_tick"], "config.main_tick", errors, positive=True)
+if "sync_interval" in cfg:
+    _try_time(cfg["sync_interval"], "config.sync_interval", errors, positive=True)
+if "max_tasks_per_tick" in cfg:
+    _try(int, cfg["max_tasks_per_tick"], "config.max_tasks_per_tick(须为整数)", errors)
+...
+    if int(cfg["max_tasks_per_tick"]) &lt; 1:
+        errors.append("config.max_tasks_per_tick: 须 &gt;= 1")</code></pre>
+    <p class="hint">即 <code>main_tick: 9999d</code> 或 <code>max_tasks_per_tick: 100000</code> 这类值能通过校验。其余段落（sections.py / curves.py / rules.py）的数值类配置取值范围未逐项清点 —— 属于本 issue 待做的工作，不在入池阶段分析。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>配置文件里写了格式合法但取值极端的数值/时间（上下限缺失的键；当前至少 <code>main_tick</code>/<code>sync_interval</code>/<code>max_tasks_per_tick</code> 无上界，其余段落待清点）</td></tr>
+      <tr><td>影响范围</td><td>主循环节奏 / 任务批量 / 全局限速曲线等所有数值与时间类配置的行为；跑在 <code>--dry-run</code> 与实跑两种模式下</td></tr>
+      <tr><td>严重度</td><td>中（配置正确时无影响；配错值时校验层不拦，风险后移到运行时。真实生产配置改动频率低，实际触发概率低）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/config/validation/core.py:92</code>（取证 2026-09-22 19:36）· 符号 <code>validate_config</code> · grep <code>def validate_config</code> —— 全量校验入口，各段校验器延迟导入</li>
+      <li><code>src/auto_qb/config/validation/core.py:44-92</code>（取证 2026-09-22 19:36）· 符号 <code>_try / _try_time / _check_str_list / _check_regex_patterns</code> · grep <code>def _check_</code> —— 助手清单，无数值范围助手</li>
+      <li><code>src/auto_qb/config/validation/core.py:130-142</code>（取证 2026-09-22 19:38）· 符号 <code>validate_config</code> 内顶层键段 · grep <code>max_tasks_per_tick</code> —— 下界有查/上界无查的实例</li>
+      <li>各段校验器：<code>src/auto_qb/config/validation/sections.py</code>、<code>curves.py</code>、<code>rules.py</code> —— 待逐项清点数值/时间类键的取值约束现状</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已定位（2026-09-22 逐键分析后收敛为三类助手级缺口，见 07 节逐键清单）：</div>
+    <ol>
+      <li><strong><code>_try_time</code> 的 positive 形参未用满</strong>：仅 main_tick / sync_interval / 曲线 interval 三处启用；<code>config.interval</code>（core.py:146）与规则 <code>interval</code>/<code>cooldown</code>（rules.py:102-104）漏用，0 值可配。所有时间键均无上界。</li>
+      <li><strong><code>_try(int/float, ...)</code> 只查可解析</strong>：无 min/max，更不拦 <code>nan</code>/<code>inf</code>（float("nan") 可解析通过）。max_tasks_per_tick 的 ≥1 是全库唯一一处手写范围检查。</li>
+      <li><strong>领域解析器边界语义无人接住</strong>：<code>parse_hr_condition</code> 允许 0%/负数/&gt;100%；<code>parse_fsize</code> 允许 0（log.max_bytes=0 = RotatingFileHandler 从不轮转）。</li>
+    </ol>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向（07 节逐键分析后的具体化；均不在本报告实施）：</p>
+    <ol>
+      <li><strong>助手层</strong>：<code>validation/core.py</code> 增加 <code>_try_number(value, where, errors, *, integer=False, min=None, max=None)</code>（内部用 <code>math.isfinite</code> 拦 nan/inf），<code>_try_time</code> 增加可选 <code>max</code> 形参；沿用聚合报错风格。逐键手写（max_tasks_per_tick 先例）作为最小改动的备选。</li>
+      <li><strong>收紧清单</strong>：按 07 节红/黄标行逐键落地。上界取值原则走保守默认（黄金法则 2）：只拦「明显危险」或「与键语义明确失配」的值（0 高频、负数、nan/inf、0 字节日志轮转），拿不准的不拦。</li>
+      <li><strong>跨段冲突检查</strong>（web.port 与 qbittorrent.port 撞端口）机制不同（需段间可见），单独立项不并入本 issue。</li>
+      <li>每收一批键同步补 <code>tests/</code> 校验用例与 schema help 文案（新键进 validate_config 的守卫已有先例）。</li>
+    </ol>
+  </section>
+
+  <section id="s6b">
+    <h2><span class="no">07</span>逐键取值范围分析 <span class="opt">（2026-09-22 用户指派，取证 19:43-19:51）</span></h2>
+    <p>覆盖全部配置路径（顶层 19 键 + 各段子键 + 规则 spec + 曲线段）。徽标：<span class="badge gap">缺口</span> = 建议必须收紧（明确副作用/语义失配）；<span class="badge tight">建议收紧</span> = 有副作用但触发条件苛刻或影响小；<span class="badge ok">已良好</span> = 现有校验已覆盖范围/枚举，无需动。分析维度：运行副作用（qB API / CPU）、文件读写、安全、语义可达性。</p>
+    <div class="callout">三条横向结论：① <strong>副作用类缺口集中在「0 可配」</strong>——队列层 <code>_norm_interval</code> 把 <code>&lt;=0</code> 归一化为 1s 兜了底，但把语义错误转成了高频风暴（每秒全量任务/规则决策链）；② <strong>文件读写链路本身健壮</strong>（atomic_write + 自动建目录 + 路径空串兜底），唯一缺口是 <code>log.max_bytes=0</code> 不轮转直至磁盘写满；③ <strong>web 段安全默认全保守</strong>（enabled=False / 127.0.0.1 / token 随机 / skip_local_verify=False），暴露面建议用配置期 WARNING 提示而非硬禁，唯一「配置驱动的外部执行」是 checking 自定义校验程序路径。</div>
+    <h3>config 顶层运行参数</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>main_tick</code></td><td>2s</td><td>正时间(&gt;0)</td><td>下限 0.5s、上限 1H —— 下限防 tick 风暴（qbmanager 回归注释自证曾 2800 tick/s 打满 CPU）；上限防功能停摆、重连退避基准失真</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>sync_interval</code></td><td>1.5s</td><td>正时间(&gt;0)</td><td>下限 1s、上限 10M —— 每次刷新是一次 qB /sync/maindata 请求，下限防 API 风暴（与 qB WebUI 1500ms 同量级是设计基准）；过大 → 快照过期、任务据旧状态误判</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>max_tasks_per_tick</code></td><td>20</td><td>&gt;=1（手写）</td><td>上限 ~500 —— 校验注释自证 TaskQueue 把 &lt;=0 当「不限量」，过大 = 单 tick 上千任务 → 卡顿 + API 风暴；上界现缺失</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>interval</code></td><td>60s</td><td>仅格式解析</td><td><strong>下限 1S、上限 1D</strong> —— positive 未查：0 可配，TaskQueue 归一化 &lt;=0 → 1s（taskqueue.py:69），全部种子级内置任务每秒执行；上限防内置功能名存实亡</td><td><span class="badge gap">缺口</span></td></tr>
+      <tr><td><code>data_dir</code> / <code>state_file</code></td><td>auto-qb-data 及其派生</td><td>空串被 _strip_none 剔除走默认；state_file 非空已查</td><td>保持 —— 写入走 atomic_write（临时文件+fsync+原子替换），父目录自动创建；相对路径基于 CWD 属既有行为</td><td><span class="badge ok">已良好</span></td></tr>
+    </table>
+    <h3>log 段</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>log.level</code> / <code>log.file</code> / <code>log.format</code></td><td>INFO / 派生 / 格式串</td><td>level 枚举已查；file 空串剔除走默认</td><td>保持</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>log.max_bytes</code></td><td>10MiB</td><td>仅 parse_fsize</td><td><strong>下限 1MiB（至少 &gt;0）、上限 1GiB</strong> —— 0 在 RotatingFileHandler 语义 = 从不轮转 → 日志无限增长直至磁盘写满；上限防轮转失去意义</td><td><span class="badge gap">缺口</span></td></tr>
+    </table>
+    <h3>qbittorrent 与 web 段（web 为安全重点）</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>qbittorrent.port</code></td><td>8080</td><td>1-65535</td><td>保持 —— 全库范围校验范本</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>qbittorrent.host</code> / <code>username</code> / <code>password</code></td><td>127.0.0.1 / 空</td><td>无</td><td>保持宽松 —— 凭据不设范围；host 仅拼接 base_url，空串由 _strip_none 兑底</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>web.enabled</code></td><td>False</td><td>bool</td><td>保持 —— 保守默认 ✓</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>web.host</code></td><td>127.0.0.1</td><td>非空字符串</td><td>保持宽松 + 配置期对 0.0.0.0/:: 出 WARNING —— models 注释自证：对外暴露可删除种子的管理接口；不建议硬禁（反向代理场景合法）</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>web.port</code></td><td>8080</td><td>1-65535</td><td>保持；与 qbittorrent.port 的冲突检测属跨段机制，单独立项</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>web.token</code> / <code>web.skip_local_verify</code></td><td>空 / False</td><td>字符串 / bool</td><td>保持 —— 空串随机生成并持久化已是安全默认；skip_local_verify 仅 loopback 免鉴权，文档已警示，不建议硬禁</td><td><span class="badge ok">已良好</span></td></tr>
+    </table>
+    <h3>notify 段</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>notify.enabled</code> / <code>min_level</code> / <code>quiet_hours</code> / <code>channels</code></td><td>False / WARNING / 空 / platform</td><td>枚举与 HH:MM-HH:MM 边界均已查（parse_hm 拦 24 点后）</td><td>保持 —— quiet_hours 跨午夜与分钟边界为范本</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>notify.max_per_hour</code></td><td>20</td><td>正整数(&gt;0)</td><td>上限 ~100 —— 防风暴参数自身无上界，配 10^6 失去防风暴意义；副作用轻</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>notify.dedup_window</code></td><td>10M</td><td>仅格式（0=不去重合法）</td><td>上限 24H —— 过大 → 相同前缀的真实 ERROR 被长期压制（掩盖故障）</td><td><span class="badge tight">收紧</span></td></tr>
+    </table>
+    <h3>hr 段（全局输出设置 + 站点 HR 参数）</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>add_tag</code> / <code>add_category</code> / <code>overwrite_*</code>（全局与站点输出字段）</td><td>空 / False</td><td>字符串与 bool 已查；空=不添加（_strip_none 兑底）</td><td>保持</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>hr.required_seeding_time</code>（站点必填）</td><td>—</td><td>仅格式（可 0）</td><td>保持 &gt;=0，但建议 =0 且未配 required_share_ratio 时配置期 WARNING —— 两者都空 → HR 恒触发，种子一入站就打 HR 标签（误触发副作用）</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>hr.required_share_ratio</code></td><td>0=不要求</td><td>仅 float()</td><td><strong>[0, 100] 且拦 nan/inf</strong> —— 现状负数→立即满足（误打标）、nan→比较恒 False 永不满足、inf 同；float("nan") 能通过 _try</td><td><span class="badge gap">缺口</span></td></tr>
+      <tr><td><code>hr.extra_seeding_time</code></td><td>0S</td><td>仅格式</td><td>保持 —— 0 合法（无额外要求）</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>hr.condition</code></td><td>80%</td><td>仅格式</td><td><strong>百分比 (0,100]、dlsize &gt;0</strong> —— "0%"/负数→触发条件立即满足（一入站就打标）；"200%"→永不触发与用户预期相反</td><td><span class="badge gap">缺口</span></td></tr>
+    </table>
+    <h3>tracker 段（每站点）</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>trackers.*.domains</code></td><td>必填</td><td>非空字符串列表</td><td>保持宽松 —— 域名做 tracker URL host 后缀匹配，收紧格式会挡合法用法</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>trackers.*.tags</code> / <code>groups</code></td><td>空</td><td>字符串列表</td><td>保持</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>trackers.*.remove_tags</code></td><td>空</td><td>列表 + regex 可编译</td><td>保持；备注：灾难性回溯正则（ReDoS）无防护，但匹配面仅限配置标签池，低风险</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>trackers.*.upload/download_speed_limit</code></td><td>0=不限速</td><td>仅 parse_speed</td><td>保持 —— 0 语义合法；上界不设（极大值无害，单位封顶 GiB/s）</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>trackers.*.remove_similar_tags</code> / <code>rules</code></td><td>False / 空</td><td>bool 与 @引用已查</td><td>保持</td><td><span class="badge ok">已良好</span></td></tr>
+    </table>
+    <h3>规则集（*_rules）</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>trigger</code> / <code>execute_once</code> / <code>stop_following_rules_if</code> / <code>enabled</code></td><td>interval 等</td><td>枚举已查</td><td>保持 —— 枚举校验范本</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>*_rules.*.interval</code></td><td>—</td><td>仅格式</td><td><strong>&gt;0（建议 &gt;= main_tick）</strong> —— 0 → 队列归一化 1s，规则决策链每秒全量跑（qB API + CPU）</td><td><span class="badge gap">缺口</span></td></tr>
+      <tr><td><code>*_rules.*.cooldown</code></td><td>—</td><td>仅格式</td><td>下限 1S 或文档化 0=无冷却语义 —— 0 现状合法，条件满足时每轮都执行动作</td><td><span class="badge tight">收紧</span></td></tr>
+      <tr><td><code>expr</code> 条件</td><td>—</td><td>配置期编译+类型检查+数据源门控</td><td>保持 —— 配置期 fail-fast 范本</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>checking.custom_basic_check_program_path</code></td><td>custom 时必填</td><td>非空字符串</td><td>保持非空即可；安全备注：任意可执行路径 = 运行期执行外部程序，配置层无法限制定义域，须用户自担路径可信</td><td><span class="badge tight">收紧</span></td></tr>
+    </table>
+    <h3>global_speed_limit_curve 段</h3>
+    <table>
+      <tr><th style="width:24%">键</th><th style="width:10%">默认</th><th style="width:20%">现状校验</th><th>建议范围与理由</th><th style="width:9%">档</th></tr>
+      <tr><td><code>interval</code> / <code>enabled</code></td><td>回退主 interval / True</td><td>正时间(&gt;0) / bool</td><td>保持 —— positive 已启用</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>traffic_source</code> / <code>traffic_monitor.dat_path</code></td><td>必填</td><td>单源 + 非空</td><td>保持 —— 读外部 dat 属预期功能；路径任意</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td><code>curves[].period</code></td><td>—</td><td>day/month/N&gt;=1（normalize_period，curves.py:33）</td><td>保持 —— N 不设上界：滚动窗口计算量受 dat 行数自然约束</td><td><span class="badge ok">已良好</span></td></tr>
+      <tr><td>曲线阈值 / 档位速度</td><td>—</td><td>阈值 &gt;0 且严格递增；速度 &gt;=0（0=该档不限速）</td><td>保持 —— 曲线段是数值范围校验最完整的段（范本）</td><td><span class="badge ok">已良好</span></td></tr>
+    </table>
+    <h3>汇总</h3>
+    <p><span class="badge gap">缺口 5</span> <code>config.interval</code>、<code>log.max_bytes</code>、<code>required_share_ratio</code>、<code>hr.condition</code>、<code>rules.interval</code>&nbsp;&nbsp;<span class="badge tight">建议收紧 11</span> main_tick / sync_interval / max_tasks_per_tick 上界、web.host 警示、web.port 冲突、max_per_hour、dedup_window、required_seeding_time=0 警示、remove_tags ReDoS 备注、rules.cooldown、checking 程序路径备注&nbsp;&nbsp;<span class="badge ok">已良好 其余</span></p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">08</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-22 19:37 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-22 19:52 — 用户指派逐键分析，报告补全全部配置键的取值范围清单（07 节），根因收敛为三类助手级缺口（05 节）；状态仍 <strong>Open</strong></li>
+      <li>2026-09-22 19:57 — 用户指派实施（认领），状态 <strong>In Progress</strong>。复验：先同步远程（快进 c31ee0d），锚点 core.py:146 / sections.py:140 / rules.py:104 仍复现</li>
+      <li>2026-09-22 20:17 — 修完，状态 <strong>Fixed</strong>。验证：全量 <code>uv run pytest tests -q</code>（TMPDIR 已设）<strong>1177 passed + 1 skipped, sidefx 越界 0</strong>（基线 1176→1177）；新增 <code>test_validate_value_ranges</code> 聚合验证全部收紧点 + <code>test_parse_hr_condition</code> 补 4 条边界断言。实际修法见下方「修复后补充」</li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验：2026-09-22 19:57 仍复现（快进同步后重跑锚点：core.py:146 <code>interval</code> 无范围、sections.py:140 <code>_try(float,...)</code>、rules.py:102-104 interval/cooldown 共用无 positive —— 均在）。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法</strong>（最小 diff，保留既有错误消息兼容）：</p>
+    <ul>
+      <li><code>validation/core.py</code>：新增 <code>_try_number(value, where, errors, *, integer, min, max)</code>（<code>math.isfinite</code> 拦 nan/inf + 闭区间）；<code>_try_time</code> 增 <code>min_s/max_s</code> 形参；<code>_try</code> 成功时返回解析值（供 log.max_bytes 续做范围检查）；<code>interval</code> min_s=1/max_s=86400、<code>main_tick</code> min_s=0.5/max_s=3600、<code>sync_interval</code> min_s=1/max_s=600、<code>max_tasks_per_tick</code> 加 ≤500（elif，保留原 <code>须 &gt;= 1</code> 消息）。</li>
+      <li><code>validation/sections.py</code>：<code>log.max_bytes</code> 范围 1MiB-1GiB；<code>notify.max_per_hour</code> 加 ≤100；<code>notify.dedup_window</code> 加 max_s=86400（0=不去重仍合法）；<code>required_share_ratio</code> 换 <code>_try_number(min=0, max=100)</code>。</li>
+      <li><code>validation/rules.py</code>：规则 <code>interval</code> 拆出加 <code>positive=True</code>（显式 0 拦）；<code>cooldown</code> 不动（0=不冷却是 schema 文档化语义）。</li>
+      <li><code>utils.py</code>：<code>parse_hr_condition</code> 加边界（百分比 (0,100] 拦 nan；下载量 &gt;0），在解析单点拦下、校验层经 <code>_try</code> 复用。</li>
+      <li><code>config/schema/rules.py</code>：规则 interval help 同步（"0 = 每轮都检查" → "留空 = 每 tick 级别(队列归一化为 1s); 显式配置最短 1S"）。</li>
+    </ul>
+    <p><strong>改道说明</strong>（与 06 节建议修法的差异）：① 上界全部取保守值，<code>required_seeding_time=0</code> 与 <code>web.host=0.0.0.0</code> 的配置期 <strong>WARNING 未实施</strong> —— 校验体系当前只有 error 通道（聚合后 fail-fast），引入 warning 机制属新能力，与跨段冲突检测一并单独立项；② 规则 <code>interval</code> 缺省 <code>0S</code>（每 tick 级别）是运行时既有行为（<code>TaskQueue._norm_interval</code> 归一化 1s），本轮只拦显式 0，缺省行为是否收紧属行为变更待拍板；③ <code>rules.cooldown</code> 的 0 语义 schema 已有文档（"0 = 不冷却"），无需补。</p>
+    <p><strong>验证方式与测试数字</strong>：新增 <code>test_validate_value_ranges</code>（聚合验证全部收紧点：上下界报错 + 边界值合法 + nan/inf 拦截 + 裸数字无单位走格式错误不进范围检查）+ <code>test_parse_hr_condition</code> 补 0%/200%/-5%/0MiB 四条边界断言；全量 <strong>1177 passed + 1 skipped</strong>（基线 1176→1177，覆盖率 TOTAL 91%）。首次全量曾现 <code>test_run_loop_throttles_without_stop_event</code> 假失败（时序抖动：单跑与复跑均绿，该测试用 main_tick=0.05 运行时赋值不走配置校验，与本次改动无关）。</p>
+  </section>
+
+  <footer>
+    26-09-22-1937-bug-config-value-range-validation.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

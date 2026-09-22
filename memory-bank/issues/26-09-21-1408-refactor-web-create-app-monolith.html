@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-21-1408">
 <meta name="issue-type" content="refactor">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Fixed">
 <meta name="issue-title" content="web.py create_app 单函数 926 行, 鉴权与全部端点挤在一个工厂函数">
 <meta name="issue-summary" content="P1: 全项目最大函数坐在唯一对外暴露面里, 本次审计三条安全发现同出一文件; 建议按域拆 Router">
 <title>web.py create_app 单函数 926 行, 鉴权与全部端点挤在一个工厂函数 · refactor · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-refactor-web-create-app-monolith</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -157,11 +157,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-22 20:31 — 已修复(plan <a href="../../docs/plans/26-09-22-1857-web-create-app-split-plan.html">26-09-22-1857-web-create-app-split-plan</a>, D1-D4 按推荐执行), 状态 <strong>Fixed</strong>: web.py 1,143 行 → web/ 包 16 文件, create_app 926 → 26 行; 详见「修复后补充」。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-09-22 18:57, develop @ 975e146 —— AST 重测 <code>create_app</code> 仍为 L121–L1046 共 926 行, 与入池数字一致, 锚点未漂移。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>(与 §06 建议一致, 按域拆 APIRouter): <code>web.py</code>(1,143 行)→ <code>web/</code> 包 16 文件 —— <code>factory.py</code>(create_app 组装壳 <b>26 行</b>, 守阵钉 ≤150)/<code>auth.py</code>(鉴权单点 <code>make_require_token</code>)/<code>context.py</code>(WebContext: 投递/RO 缓存/快照判别, 每 app 实例一份)/<code>common.py</code>/<code>lifecycle.py</code>/<code>static_ui.py</code>/<code>routes/</code> 8 域 (state 6 · events SSE · groups 4 · torrent_cmds 20 · torrent_detail 14 · fs 4+白名单单点 · config 6 · system 2; 57 API + 3 重定向)。比建议多拆了 context/common/lifecycle/static_ui 四个非路由层。</p>
+    <p><b>验证方式 / 测试数字</b>: ①既有 tests/test_web.py 用例零改动全绿(1 处管线性: open_path 的 patch 目标 → <code>auto_qb.web.common.open_path</code>); ②新增守阵 2 条均红验 —— 路由金清单 60 条 (method,path) 集合比对(❗本仓 FastAPI 的 include_router 走 <code>_IncludedRouter</code> 懒解析, 清点须下钻 <code>original_router.routes</code>, 见 pitfalls)+ 组装壳 ≤150 行/无内联 <code>@app.*</code>; ③全量 <b>1,145 passed</b>(基线 1,143 + 守阵 2, Windows); ④浏览器冒烟双 UI ok/error 两模式 <b>70 项 0 失败</b>。三条安全发现(S1-01/02/05)未在本拆分中处理, 拆分后可局部落刀。</p>
   </section>
 
   <footer>
