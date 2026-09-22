@@ -4,7 +4,7 @@ from typing import List
 
 from qbittorrentapi import TorrentState
 
-from ...utils import parse_bool
+from ...infra.utils import parse_bool
 from .core import _check_regex_patterns, _check_unknown_keys, _try, _try_time
 
 # 规则 spec 已知键(trigger 仅支持 interval, 其余触发时机规划中)

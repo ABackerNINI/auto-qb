@@ -12,7 +12,7 @@ from qbittorrentapi import Client
 from ..config import Config
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ..rules import Rule, RuleContext
-from .. import utils
+from ..infra import utils
 from ..torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)

@@ -41,7 +41,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from auto_qb import utils
+from auto_qb.infra import utils
 from auto_qb.rules.conditions import (
     _in_range,
     CategoryCondition,

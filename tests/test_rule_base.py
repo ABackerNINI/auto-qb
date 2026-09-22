@@ -42,7 +42,7 @@ from auto_qb.config import TrackerConfig
 from auto_qb.rules.base import ActionResult, BaseAction, Rule, RuleContext
 from auto_qb.rules.conditions import SizeCondition
 from auto_qb.rules.actions import AddTagsAction
-from auto_qb import utils
+from auto_qb.infra import utils
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
 
 

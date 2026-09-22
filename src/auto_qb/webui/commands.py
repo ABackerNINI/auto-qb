@@ -14,7 +14,7 @@ import time
 from typing import List, Optional
 
 from ..config import Config
-from ..utils import sanitize_tracker_url
+from ..infra.utils import sanitize_tracker_url
 
 logger = logging.getLogger(__name__)
 

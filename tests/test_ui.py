@@ -26,9 +26,9 @@ import time
 
 import pytest
 
-from auto_qb import autostart, notify as notify_mod
+from auto_qb.infra import autostart, notify as notify_mod
 from auto_qb.config import NotifyConfig
-from auto_qb.notify import NotifyHandler, PlatformChannel
+from auto_qb.infra.notify import NotifyHandler, PlatformChannel
 from auto_qb.qbmanager import QbManager
 from auto_qb.tray import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from auto_qb.config import QbittorrentConfig
@@ -249,7 +249,7 @@ def test_autostart_macos_plist(monkeypatch, tmp_path):
 
 def test_run_autoqb_error_propagates(tmp_path):
     """AutoQbError 致命错误穿透主循环(不落入"主循环异常"继续跑)"""
-    from auto_qb.errors import AutoQbError
+    from auto_qb.infra.errors import AutoQbError
 
     mgr = _make_ready_manager(tmp_path)
     mgr.config.main_tick = 0.02

@@ -44,7 +44,7 @@ from unittest import mock
 
 import pytest
 
-from auto_qb import utils
+from auto_qb.infra import utils
 from auto_qb.mixins import rule_engine
 from auto_qb.rules.base import Rule
 from auto_qb.taskqueue import FINISHED, REQUEUE, Task

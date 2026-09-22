@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, List, Tuple
 
-from ... import utils
+from ...infra import utils
 from .errors import ExprSyntaxError
 
 # 运算符(两字符优先匹配)

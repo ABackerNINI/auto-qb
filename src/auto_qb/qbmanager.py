@@ -29,8 +29,8 @@ from typing import List, Optional
 from qbittorrentapi import APIConnectionError, Client
 
 from .config import Config, WebConfig, load_config
-from .errors import AutoQbError
-from .locking import SingleInstanceLock
+from .infra.errors import AutoQbError
+from .infra.locking import SingleInstanceLock
 from .mixins import (
     CheckingMixin,
     GroupingMixin,
@@ -41,7 +41,7 @@ from .mixins import (
 )
 from .webui.commands import WebCommandsMixin
 from .webui.views import WebviewMixin
-from .notify import NotifyHandler, setup_notify
+from .infra.notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .qbclient import _new_client
 from .rules import Rule
@@ -53,8 +53,8 @@ from .torrents import (
     TorrentStore,
     missing_torrent_fields,
 )
-from . import utils
-from .logging import setup_logging
+from .infra import utils
+from .infra.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 

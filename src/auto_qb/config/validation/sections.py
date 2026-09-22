@@ -2,7 +2,7 @@
 import logging
 from typing import List
 
-from ...utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed
+from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed
 from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _try, _try_number, _try_time
 from .rules import _check_rule_refs
 

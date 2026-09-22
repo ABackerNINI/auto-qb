@@ -13,8 +13,8 @@ import time
 import pytest
 
 from auto_qb.config import ConfigError
-from auto_qb.errors import AutoQbError
-from auto_qb.locking import SingleInstanceLock, SingleInstanceLockError
+from auto_qb.infra.errors import AutoQbError
+from auto_qb.infra.locking import SingleInstanceLock, SingleInstanceLockError
 from auto_qb.qbmanager import QbManager
 from helpers import FakeConfig
 

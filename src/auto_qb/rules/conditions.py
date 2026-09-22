@@ -3,7 +3,7 @@ upload_ratio, upload_size, upload_size_today/this_week/this_month, freespace, ex
 import shutil
 from datetime import datetime
 
-from .. import utils
+from ..infra import utils
 from .base import BaseCondition, RuleContext
 from .expr import compile_expr, evaluate, validate
 from .expr.errors import ExprError

@@ -15,7 +15,7 @@ import os
 import tempfile
 from logging.handlers import RotatingFileHandler
 
-from auto_qb.logging import setup_logging
+from auto_qb.infra.logging import setup_logging
 
 _WARNING = logging.WARNING  # 30
 

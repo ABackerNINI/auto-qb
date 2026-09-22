@@ -53,7 +53,7 @@ import requests
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 from auto_qb.mixins.grouping import group_key_of  # noqa: E402
-from auto_qb import utils  # noqa: E402
+from auto_qb.infra import utils  # noqa: E402
 from auto_qb.torrents.compat import _SNAPSHOT_FIELDS, REQUIRED_TORRENT_FIELDS  # noqa: E402
 
 logger = logging.getLogger("qb_capture")

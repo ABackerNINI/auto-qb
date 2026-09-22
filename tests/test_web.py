@@ -126,7 +126,7 @@ from unittest import mock
 import pytest
 
 from auto_qb import __version__
-from auto_qb.utils import decode_group_key, encode_group_key
+from auto_qb.infra.utils import decode_group_key, encode_group_key
 from auto_qb.webui import create_app
 
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))

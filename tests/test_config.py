@@ -55,7 +55,7 @@ from auto_qb.config import (
     load_config,
     load_tracker_hr,
 )
-from auto_qb.errors import AutoQbError
+from auto_qb.infra.errors import AutoQbError
 
 
 def _write_config(td, **extra_cfg):

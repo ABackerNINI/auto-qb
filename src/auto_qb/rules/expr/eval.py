@@ -11,7 +11,7 @@
 """
 from typing import Any
 
-from ... import utils
+from ...infra import utils
 from . import env
 from .errors import ExprError
 from .parser import Binary, Call, ListLit, Lit, Name, Unary

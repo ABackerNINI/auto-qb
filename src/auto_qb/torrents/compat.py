@@ -13,7 +13,7 @@ record/store 之外的独立关注点 —— 版本漂移检查(REQUIRED_TORRENT
 from collections.abc import Mapping
 from typing import List
 
-from ..errors import AutoQbError
+from ..infra.errors import AutoQbError
 
 # 版本校验必需的快照字段(缺失即静默零值 -> 规则基于假数据决策, 比崩溃更危险, 启动期一并校验)
 _REQUIRED_SNAPSHOT_FIELDS = (

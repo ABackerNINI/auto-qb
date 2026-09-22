@@ -2,7 +2,7 @@
 import logging
 from typing import List
 
-from ... import utils
+from ...infra import utils
 from ..base import ActionResult, BaseAction, RuleContext
 from ..registry import register_action
 

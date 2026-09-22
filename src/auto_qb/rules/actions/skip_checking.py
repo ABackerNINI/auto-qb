@@ -11,7 +11,7 @@ import time
 from datetime import date
 from typing import Optional
 
-from ... import utils
+from ...infra import utils
 from ...torrents import TorrentRecord
 from ..base import ActionResult, RuleContext
 

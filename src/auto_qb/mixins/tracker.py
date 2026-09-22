@@ -8,7 +8,7 @@ from qbittorrentapi import Client
 
 from ..config import TrackerConfig, Config
 from ..torrents import TorrentRecord
-from .. import utils
+from ..infra import utils
 
 logger = logging.getLogger(__name__)
 

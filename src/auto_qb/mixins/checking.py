@@ -5,7 +5,7 @@ import logging
 import os
 
 from ..torrents import TorrentRecord
-from .. import utils
+from ..infra import utils
 
 logger = logging.getLogger(__name__)
 

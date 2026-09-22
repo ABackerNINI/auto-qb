@@ -32,7 +32,7 @@ from typing import Any, Dict, Optional
 from qbittorrentapi import Client
 
 from ..config import Config
-from .. import utils
+from ..infra import utils
 from ..torrents import TorrentStore, TorrentRecord
 
 logger = logging.getLogger(__name__)

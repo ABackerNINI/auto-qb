@@ -21,9 +21,9 @@ import time
 import webbrowser
 from collections import deque
 
-from .. import autostart, utils
-from ..errors import AutoQbError
-from ..notify import WINDOWS_TOAST_APPID, setup_notify
+from ..infra import autostart, utils
+from ..infra.errors import AutoQbError
+from ..infra.notify import WINDOWS_TOAST_APPID, setup_notify
 from ..qbmanager import QbManager
 
 logger = logging.getLogger(__name__)

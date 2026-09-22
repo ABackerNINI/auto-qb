@@ -5,7 +5,7 @@ SkipCheckingMixin(跳检四阶段)提供, 本模块只做配置解析与决策�
 """
 import logging
 
-from ... import utils
+from ...infra import utils
 from ..base import ActionResult, BaseAction, RuleContext
 from .full_checking import FullCheckingMixin
 from ..registry import register_action
@@ -135,8 +135,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
 
         # 候选即排除带标种子(避免 piecehashes 模式对其发无意义的 API 请求)
         candidates = [
-            c for c in ctx.manager._group_reference_candidates(members)
-            if c.hash != ctx.hash and not _is_tagged(c)
+            c for c in ctx.manager._group_reference_candidates(members) if c.hash != ctx.hash and not _is_tagged(c)
         ]
         refs = []
         if self.basic_check == "filelist":

@@ -57,7 +57,7 @@ import pytest
 from qbittorrentapi import APIConnectionError, Client
 
 from auto_qb.config import QbittorrentConfig
-from auto_qb.errors import AutoQbError
+from auto_qb.infra.errors import AutoQbError
 from auto_qb.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
 from auto_qb.qbmanager import RECONNECT_MAX_INTERVAL, QbManager, _throttle
 from auto_qb.torrents import QbCompatError

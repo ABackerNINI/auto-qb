@@ -141,7 +141,7 @@ def test_main_config_error_clean_exit(capsys):
 
 def test_main_lock_error_clean_exit(capsys):
     """SingleInstanceLockError(构造期锁竞争, AutoQbError 但非 ConfigError): 干净退出返回 1, 无堆栈不加配置前缀"""
-    from auto_qb.locking import SingleInstanceLockError
+    from auto_qb.infra.locking import SingleInstanceLockError
     err_msg = "另一实例已持有锁 auto-qb-data/state.lock (PID 123); auto-qb 仅允许同一配置一个运行实例"
     with _patch_argv("auto-qb", "config.yml"), \
             mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError(err_msg)):
@@ -212,7 +212,7 @@ def test_main_tray_mode_calls_run_tray():
 
 def test_main_tray_second_instance_wakes_running():
     """--tray 双开: 锁被占且 ui.port 可达 -> 唤起已运行实例, 本实例静默退出 0"""
-    from auto_qb.locking import SingleInstanceLockError
+    from auto_qb.infra.locking import SingleInstanceLockError
     with _patch_argv("auto-qb", "config.yml", "--tray"), \
             mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError("另一实例已持有锁")), \
             mock.patch("auto_qb.cli.load_config") as m_lc, \
@@ -227,7 +227,7 @@ def test_main_tray_second_instance_wakes_running():
 
 def test_main_tray_second_instance_wake_fail_returns_1(capsys):
     """--tray 双开但唤起失败(端口文件缺失/首实例非托盘) -> 走常规锁错误, 退出码 1"""
-    from auto_qb.locking import SingleInstanceLockError
+    from auto_qb.infra.locking import SingleInstanceLockError
     with _patch_argv("auto-qb", "config.yml", "--tray"), \
             mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError("另一实例已持有锁")), \
             mock.patch("auto_qb.cli.load_config") as m_lc, \

@@ -25,7 +25,7 @@ from datetime import datetime
 from typing import Callable, List, Optional
 
 from . import utils
-from .config import NotifyConfig
+from ..config import NotifyConfig
 
 logger = logging.getLogger(__name__)
 

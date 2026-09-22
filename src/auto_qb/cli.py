@@ -5,10 +5,10 @@ import os
 import sys
 
 from .config import DEFAULT_CONFIG_FILE, ConfigError, load_config
-from .errors import AutoQbError
+from .infra.errors import AutoQbError
 from .exporter import export_yaml_template
-from .locking import SingleInstanceLockError
-from .notify import notify_fatal
+from .infra.locking import SingleInstanceLockError
+from .infra.notify import notify_fatal
 from .qbmanager import QbManager
 
 

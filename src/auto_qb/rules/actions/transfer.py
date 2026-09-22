@@ -1,7 +1,7 @@
 """传输相关动作: move_to, reannounce, upload_speed_limit, download_speed_limit"""
 import time
 
-from ... import utils
+from ...infra import utils
 from ..base import ActionResult, BaseAction, RuleContext
 from ..registry import register_action
 

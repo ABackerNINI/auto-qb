@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 from fastapi import HTTPException
 
-from ...utils import decode_group_key, open_path  # noqa: F401  (open_path 供 open-path 端点经 common.open_path 调用 —— patch 地址稳定, test_api_open_path_endpoint 钉此处)
+from ...infra.utils import decode_group_key, open_path  # noqa: F401  (open_path 供 open-path 端点经 common.open_path 调用 —— patch 地址稳定, test_api_open_path_endpoint 钉此处)
 
 logger = logging.getLogger("auto_qb.web")
 

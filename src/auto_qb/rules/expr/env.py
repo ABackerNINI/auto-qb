@@ -20,7 +20,8 @@ from dataclasses import dataclass, fields as dc_fields
 from datetime import datetime
 from typing import Any, Callable, Dict, Tuple
 
-from ... import curves, utils
+from ... import curves
+from ...infra import utils
 from ...torrents import TorrentRecord
 from ...torrents.compat import _SNAPSHOT_FIELDS
 from .errors import ExprError, ExprSyntaxError

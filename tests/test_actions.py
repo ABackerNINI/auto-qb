@@ -506,7 +506,7 @@ def test_skip_checking_auto_start_error():
 
 def test_speed_limit_fmt_bytes():
     """限速动作: 小值(<1KiB) 格式化为 B/s(与 utils.fmt_speed 一致)"""
-    from auto_qb import utils
+    from auto_qb.infra import utils
     assert utils.fmt_speed(512) == "512 B/s"
     assert utils.fmt_speed(2048) == "2.00 KiB/s"
     assert utils.fmt_speed(0) == "0 B/s"

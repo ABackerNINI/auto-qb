@@ -239,7 +239,7 @@ def _dump_roundtrip(config_path: str, tree: Dict[str, Any]) -> None:
     走 utils.atomic_write: 配置文件是生产资产, 直写会在中断时留下半截 YAML(热重载随即读到
     半写状态)。写盘前已由 write_tree 做过 .bak 备份, 故此处不再重复备份。
     """
-    from .. import utils
+    from ..infra import utils
 
     ry = _build_yaml()
     doc = _build_doc(config_path, tree)

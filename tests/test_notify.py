@@ -5,7 +5,7 @@
 - test_notify_throttle_dedup: 同键去重窗口内丢弃, 窗口外放行; dedup_window=0 不去重
 - test_notify_handler_level_filter: 低于 min_level 的日志不通知(经 logger 全链路)
 - test_notify_handler_dispatch: WARNING/ERROR 日志入队并由后台线程派发, ERROR 标记 urgent
-- test_notify_handler_self_loop_guard: auto_qb.notify 来源的记录被忽略(防自环)
+- test_notify_handler_self_loop_guard: auto_qb.infra.notify 来源的记录被忽略(防自环)
 - test_notify_handler_quiet_hours: 免打扰时段(含跨午夜)跳过发送, 时段外照常
 - test_notify_quiet_hours_does_not_consume_quota: 免打扰判定在节流**之前**, 免打扰期间不消耗每小时配额/不刷新去重窗口
 - test_notify_throttle_dedup_table_evicted: 去重表按窗口淘汰(长跑进程里唯一的无界增长点)
@@ -35,9 +35,9 @@ from datetime import datetime
 
 import pytest
 
-from auto_qb import notify as notify_mod
+from auto_qb.infra import notify as notify_mod
 from auto_qb.config import NotifyConfig
-from auto_qb.notify import (
+from auto_qb.infra.notify import (
     NOTIFY_LOGGER_PREFIX,
     NotifyHandler,
     NotifyThrottle,
@@ -349,7 +349,7 @@ def test_setup_notify_attaches_and_unsupported(monkeypatch):
         logging.getLogger("auto_qb").removeHandler(handler)
         handler.close()
 
-    from auto_qb.errors import AutoQbError
+    from auto_qb.infra.errors import AutoQbError
 
     monkeypatch.setattr(sys, "platform", "sunos")
     with pytest.raises(AutoQbError):

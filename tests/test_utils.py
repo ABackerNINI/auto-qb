@@ -55,7 +55,7 @@ import tempfile
 from types import SimpleNamespace
 from unittest import mock
 
-from auto_qb import utils
+from auto_qb.infra import utils
 from auto_qb.mixins.checking import CheckingMixin
 from helpers import FakeClient, FakeTorrent
 
@@ -401,7 +401,7 @@ def test_extract_tracker_hostnames_invalid_url(monkeypatch):
     def boom(url):
         raise ValueError("bad url")
 
-    monkeypatch.setattr("auto_qb.utils.urlparse", boom)
+    monkeypatch.setattr("auto_qb.infra.utils.urlparse", boom)
     assert utils.extract_tracker_hostnames([{"url": "https://x.com/a"}]) == set()
 
 
@@ -410,7 +410,7 @@ def test_match_tracker_confs_invalid_url(monkeypatch):
     def boom(url):
         raise ValueError("bad url")
 
-    monkeypatch.setattr("auto_qb.utils.urlparse", boom)
+    monkeypatch.setattr("auto_qb.infra.utils.urlparse", boom)
     confs = {"HHan": SimpleNamespace(name="HHan", domains=["tracker.hhanclub.net"])}
     assert utils.match_tracker_confs(confs, ["https://tracker.hhanclub.net/announce.php"]) == []
 
@@ -440,7 +440,7 @@ def test_timer_us():
 
 def test_is_manual_speed_limit():
     """奇数 KiB/s 视为用户手动设置: 0/偶数不命中; 三处保护共用此实现"""
-    from auto_qb.utils import is_manual_speed_limit
+    from auto_qb.infra.utils import is_manual_speed_limit
 
     assert is_manual_speed_limit(2001 * 1024) is True
     assert is_manual_speed_limit(2000 * 1024) is False
@@ -450,7 +450,7 @@ def test_is_manual_speed_limit():
 
 def test_replace_vars():
     """replace_vars: ${required_seeding_time} -> tracker hr 原始值(_raw str); 无 hr 留原文"""
-    from auto_qb.utils import replace_vars
+    from auto_qb.infra.utils import replace_vars
     from helpers import _hr_rule
 
     class _Conf:
@@ -537,7 +537,7 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
 
 def test_atomic_write_creates_file(tmp_path):
     """原子写: 内容落到目标路径, 且同目录不残留临时文件"""
-    from auto_qb.utils import atomic_write
+    from auto_qb.infra.utils import atomic_write
 
     p = tmp_path / "state.json"
     atomic_write(str(p), lambda f: f.write('{"a": 1}'))
@@ -551,7 +551,7 @@ def test_atomic_write_failure_keeps_old_content(tmp_path):
     直接 `open(path, "w")` 会先 truncate: 写盘途中被杀/磁盘满/序列化异常都会留下**半截文件**,
     而 state.json 没有备份 ⇒ 执行历史与去重记录全丢, 重启后规则重放。
     """
-    from auto_qb.utils import atomic_write
+    from auto_qb.infra.utils import atomic_write
 
     def _boom(_f):
         raise RuntimeError("simulated write failure")
@@ -571,7 +571,7 @@ def test_atomic_write_rejects_empty_path():
     "什么都不写", 而是往仓库外面丢 `.xxxxxxxx.tmp`, 然后 `os.replace(tmp, "")` 失败再删掉,
     表现为"偶发、无害"的噪音(长期被误当成 IDE/工具产生的临时文件), 实为调用方漏传路径。
     """
-    from auto_qb.utils import atomic_write
+    from auto_qb.infra.utils import atomic_write
 
     with pytest.raises(ValueError):
         atomic_write("", lambda f: f.write("x"))
@@ -584,7 +584,7 @@ def test_atomic_write_keep_backup(tmp_path):
     共用的单点常量, 一旦有人在 atomic_write 里改回字面量, 这条就红 —— 否则两边命名漂移,
     备份写出去没人按同名读回来(issue 26-09-21-1347)。
     """
-    from auto_qb.utils import atomic_write
+    from auto_qb.infra.utils import atomic_write
 
     p = tmp_path / "state.json"
     bak = tmp_path / ("state.json" + utils.BACKUP_SUFFIX)
@@ -602,7 +602,7 @@ def test_sanitize_tracker_url():
     凭据参数名不统一(passkey 只是其一, 还有 authkey/token/uid 等任意命名), 所以**不按参数名
     过滤**而是整段丢弃 —— 否则每出现一个新站的新参数名就漏一次(issue 26-09-21-1408)。
     """
-    from auto_qb.utils import sanitize_tracker_url
+    from auto_qb.infra.utils import sanitize_tracker_url
 
     # 常见私站形态: 密钥在 query 里
     assert sanitize_tracker_url("https://pt.example.com/announce?passkey=abc123def456") == "https://pt.example.com"
@@ -626,11 +626,11 @@ def test_sanitize_tracker_url_unparseable():
 
     调用方全在日志路径上(qB 写操作之后), 脱敏失败只能降级成占位, 不能把业务动作打断。
     """
-    from auto_qb.utils import SANITIZE_FALLBACK, sanitize_tracker_url
+    from auto_qb.infra.utils import SANITIZE_FALLBACK, sanitize_tracker_url
 
     for bad in ("", "   ", None, 123, "/announce?passkey=abc", "?", object()):
         assert sanitize_tracker_url(bad) == SANITIZE_FALLBACK, f"{bad!r} 应降级为占位串"
 
     # urlparse 自身抛异常(畸形输入)也不能冒泡出去 —— 脱敏在日志路径上, 炸了就打断 qB 写操作
-    with mock.patch("auto_qb.utils.urlparse", side_effect=ValueError("boom")):
+    with mock.patch("auto_qb.infra.utils.urlparse", side_effect=ValueError("boom")):
         assert sanitize_tracker_url("https://pt.example.com/announce?passkey=abc") == SANITIZE_FALLBACK

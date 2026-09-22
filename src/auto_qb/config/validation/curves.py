@@ -2,7 +2,7 @@
 from typing import List
 
 from ... import curves
-from ...utils import parse_bool, parse_fsize, parse_speed
+from ...infra.utils import parse_bool, parse_fsize, parse_speed
 from .core import _try, _try_time
 
 

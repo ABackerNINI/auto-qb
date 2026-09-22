@@ -1,6 +1,6 @@
 """配置错误异常: 文件读取失败/YAML 解析失败/校验失败/启动期规则 spec 错误的统一载体"""
 
-from ..errors import AutoQbError
+from ..infra.errors import AutoQbError
 
 
 class ConfigError(AutoQbError):

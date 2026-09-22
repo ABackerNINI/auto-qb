@@ -178,7 +178,7 @@ class WebviewMixin:
         前端只做展示比较, 不得在 JS 里重算模板或阈值(否则自定义标签格式/阈值会立即失效)。
         未配置 HR 站点返回全空值(前端据此整列显示"—"), 不做 None 防御(早暴露配置匹配错误)。
         """
-        from .. import utils as _utils
+        from ..infra import utils as _utils
 
         conf = rec.tracker_conf
         hr = conf.hr if conf is not None else None
@@ -246,7 +246,7 @@ class WebviewMixin:
 
     def _build_group_view(self) -> List[dict]:
         """从 store 分组索引组装分组视图快照(主循环每 tick 重建, Web 线程只读引用)"""
-        from .. import utils as _utils
+        from ..infra import utils as _utils
 
         view = []
         for key, members in self.store.groups.items():

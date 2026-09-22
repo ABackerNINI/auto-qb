@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from qbittorrentapi import TorrentDictionary, Client
 
 from . import registry
-from .. import utils
+from ..infra import utils
 from ..torrents import TorrentRecord
 from ..config import Config, ConfigError
 # from ..qbmanager import QbManager
