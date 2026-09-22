@@ -6,7 +6,18 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
-- ↑ 1170 → 1170(**不变**; 2026-09-22 同任务 **W6 `conventions/` + `config-reference/` + `rule-system/` 目录化**:
+- ↑ 1173 → 1174(**+1**; 2026-09-22 同任务 **W7 `tasks/` 档案消肿** —— 与远端合流后实测):
+  ⚠ 本波提交时远端已领先 6 个提交(另一个 clone 的 tracker URL 脱敏 + 两次基线更新), 推送被拒(non-fast-forward)。
+  **按纪律没跑 rebase**(本 shell 里必炸), 走 `format-patch` → `reset --hard` → `apply --3way` 重放;
+  唯一冲突是 `baseline.md`(远端 1173 vs 本地 1171), 取远端为底, **在最终树上重跑全量**得 1174。
+  ⇒ 教训: **跨 clone 的基线数字必须以"最终树实测"为准**, 两边各自的 +N 不能直接相加(远端那 1173 已含它自己的 +2)。
+- ↑ 1170 → 1171(**+1**; 2026-09-22 同任务 **W7 `tasks/` 档案消肿**(本 clone 侧):
+  新增 `test_kb_task_archives_within_cap` —— 本波把 `task` 角色纳入 `check_kb_structure` 默认角色集
+  ⇒ **`check_caps` 的全部角色至此都被默认检查**(W1 故意留在门外的 `volatile` 在 W4 纳入, `task` 在本波纳入),
+  这是「守卫按波次激活」这条设计的收口。
+  实测: 最大档案 26,871 → **21,881 字符**(cap 24,000); 另把 `26-09-15-webui-qb-replacement.md` 的
+  9,413 字符纪要段(超 8,000 子上限)外迁。全量 1171 passed + 1 skipped, sidefx 越界 0)。
+ + `config-reference/` + `rule-system/` 目录化**:
   只动文档, 未增删用例。三文件(15,283 / 11,779 / 15,964 字符)→ **4 + 2 + 3 个主题文件 + 存根**;
   `checking` 高风险动作按计划**单独成篇**并与 [../pitfalls/backend/high-risk-ops.md](../pitfalls/backend/high-risk-ops.md) 互指。
   全量 1170 passed + 1 skipped, sidefx 越界 0)。

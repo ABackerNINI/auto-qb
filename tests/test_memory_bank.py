@@ -26,6 +26,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
 - test_kb_active_context_within_cap: `activeContext.md` ≤12 KB (易变层硬顶)
+- test_kb_task_archives_within_cap: `tasks/*.md` ≤24 KB (超了移 `tasks/attachments/`)
 - test_kb_scripts_import_cleanly: skill 的 4 个脚本都能 import
 """
 
@@ -243,6 +244,15 @@ def test_kb_active_context_within_cap() -> None:
     2026-09-17 那次复盘(纪要回流成流水账, 文件膨胀 10 倍)从教训变成机制, 靠的就是这条。
     """
     problems = _kb_checker().check_active_context_cap(ROOT, MB)
+    assert not problems, "\n".join(problems)
+
+
+def test_kb_task_archives_within_cap() -> None:
+    """任务档案 ≤24 KB(其中「历史会话纪要」段 ≤8 KB) —— 超了把纪要段 / 较早日志移 `tasks/attachments/`。
+
+    `attachments/` 是**子目录**而不是平铺: 索引守卫按 `tasks/*.md` 扫描**不递归**, 故附件天然不被当档案。
+    """
+    problems, _warns = _kb_checker().check_caps(ROOT, MB, ("task", ))
     assert not problems, "\n".join(problems)
 
 

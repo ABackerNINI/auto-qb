@@ -22,8 +22,11 @@
   `progress/attachments/`(单条 10,225 字符, 逐条都超 cap)。**W5 `systemPatterns/` + `modules/`**: 两文件(31,678 / 30,324 字符)→ **8 + 7 个主题文件 + 存根**,
   顺带纠正「任务队列」名下的 WEB UI 三节归属。
   **W6 `conventions/` + `config-reference/` + `rule-system/`**: 三文件 → **4 + 2 + 3 个主题文件 + 存根**,
-  `checking` 单独成篇并与 pitfalls 互指。至此**计划里 8 份超标顶层文档全部拆完**。
-  全量 **1170 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」「W5」「W6」) ——
+  至此**计划里 8 份超标顶层文档全部拆完**。
+  **W7 `tasks/` 消肿**: 只动实测超标的两份(计划称 4 份 >20 KB 是旧数)——
+  最大档案 26,871 → 21,881 字符, 另把一份超 8 KB 的纪要段外迁 `tasks/attachments/`;
+  并把 `task` 角色纳入默认检查(**`check_caps` 全部角色至此都被默认检查**)。
+  全量 **1171 passed + 1 skipped**。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W4」「W5」「W6」「W7」) ——
   其前一条状态: W3 `testing/` 已完成并入库(`c90b0fb`) ——
 
 ## 正在进行

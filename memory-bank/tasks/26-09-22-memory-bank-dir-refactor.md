@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W6 已完成 —— **8 份超标文档全部拆完**(9 个目录 / 40 主题文件), 10 条结构性守卫, 续做 W7 tasks 消肿
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W7 已完成 —— 8 份超标文档全拆完 (9 目录 / 40 主题文件) + tasks 消肿, 11 条结构性守卫, 续做 W8 机检化与演练
 
 ## 原始请求
 
@@ -113,7 +113,7 @@
 | W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Complete | 2026-09-22 | 40,553 → 4,783 字符; progress 51,717 → 11 文件; 1170 passed (+1) |
 | W5 | `systemPatterns/` + `modules/` (8 + 7 主题文件) | Complete | 2026-09-22 | 守恒 596/743 token 全中; 顺带纠正 WEB UI 三节归属 |
 | W6 | `conventions/` + `config-reference/` + `rule-system/` (4+2+3 主题文件) | Complete | 2026-09-22 | 守恒 232/226/282 token; 8 份超标文档至此全拆完 |
-| W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Not Started | — | |
+| W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Complete | 2026-09-22 | 最大 26,871 → 21,881; +1 守阵 (task 角色入默认集) |
 | W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | 候选见下「W8 候选清单」 |
 
 ## 进度日志
@@ -224,6 +224,27 @@
   与 modules 的四份带表文件。⇒ **教训: "按行区间抽取"容易漏掉区间之外的引言/元信息, 核对时要把它们单列。**
 - **实测**: 全量 **1170 passed + 1 skipped**(与 W4 持平 —— 本波未增删用例), sidefx 越界 0;
   `check_kb_structure.py` 全过。
+
+### 2026-09-22 (W7 `tasks/` 档案消肿)
+- **实测与计划的差距**: 计划称「`tasks/` 有 4 份 >20 KB」—— W0 实测只有 **1 份** > 24 KB
+  (`26-09-19-webui-responsiveness.md` 26,871), 且它**没有**「历史会话纪要」段(体量在 `## 进度日志` 18,522);
+  而纪要段最大的一份(`26-09-15-webui-qb-replacement.md` 9,413)总量只有 12,769、并不超 24 KB, 但**超了 8,000 的子上限**。
+  ⇒ 按**实测**而不是按计划的假设动手:
+  ①`26-09-15-webui-qb-replacement.md` 的纪要段整段外迁 → `attachments/webui-qb-replacement-sessions.md`(9,674),
+     档案 12,769 → **3,494**;
+  ②`26-09-19-webui-responsiveness.md` 把**较早的**进度日志外迁 → `attachments/webui-responsiveness-log.md`(5,696),
+     档案 26,871 → **21,881**。**最大档案 21,881 < 24,000**。
+- **`attachments/` 放子目录而不是平铺**是刻意的: 索引守卫按 `tasks/*.md` 扫描**不递归**, 故附件天然不被当档案 ——
+  这也是 `EXCLUDED_DIRS` 里有 `attachments` 的原因(防将来误给它加 `_about.md`)。
+- **启用 `task` 角色**(守卫 10 → 11 条): 至此 **`check_caps` 的全部角色都被默认检查** ——
+  W1 时故意留在门外的两档(`volatile` 在 W4 纳入, `task` 在本波纳入)已全部激活,
+  这是「检查器先写全, 按波次激活」这条设计的**收口**。
+- **踩坑并记档**: 步骤 ② 拼接时 `pre`(进度日志之前的全文)不含 `## 进度日志` 标题, 直接 `pre + rest` 把**标题丢了**
+  ⇒ `test_task_file_naming_and_sections` 报缺必备章节。**教训: 按区间切片后重组, 边界处的标题/分隔行要单独确认**
+  (与 W5/W6 两次"引言块漏抽"同源 —— 都是**区间之外**的元信息)。
+- **实测**: 全量 **1170 → 1171 passed + 1 skipped**(+1 守阵), sidefx 越界 0; `check_kb_structure.py` 全过。
+- ⚠ **注意**: 本任务自己的档案 `26-09-22-memory-bank-dir-refactor.md` 已 **21,482 字符**, 每波都在长;
+  再写两波就会逼近 24,000 ⇒ W8 收尾时把它较早的进度日志也外迁。
 
 ### W8 候选清单(两处 skill 缺口, 2026-09-22 记)
 
