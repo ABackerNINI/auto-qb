@@ -8,7 +8,7 @@ import json
 import queue
 from fastapi.responses import StreamingResponse
 
-from ...web_runtime import SSE_KEEPALIVE_S
+from ...runtime import SSE_KEEPALIVE_S
 
 from fastapi import APIRouter
 from ..context import WebContext

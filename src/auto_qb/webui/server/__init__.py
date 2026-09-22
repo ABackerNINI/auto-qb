@@ -7,10 +7,10 @@
 鉴权: 所有 /api/* 请求校验 Bearer 密钥; 密钥来自 config.web.token, 留空则随机生成并
 持久化到 <data_dir>/web.token(0600), 启动日志打印一次。默认仅监听 127.0.0.1。
 
-由 web.py 拆分而来(plan 26-09-22-1857): factory=create_app 组装壳 / auth=鉴权单点 /
+由 web.py 拆分而来（plan 26-09-22-1857）： factory=create_app 组装壳 / auth=鉴权单点 /
 context=路由共享件 / common=纯工具 / lifecycle=uvicorn 启停 / static_ui=静态挂载 /
-routes/=按域 APIRouter。本 __init__ 门面 re-export, 对外导入路径与拆分前完全一致
-(qbmanager.py / tests/test_web.py / scripts/ui_harness.py 零改动)。
+routes/=按域 APIRouter。2026-09-22 方案 C W1 整体平移为 webui/server/（plan 26-09-22-2112），
+对外导入点统一走 auto_qb.webui 门面；包内上游引用随包深 +1 层（..→... / ...→....）。
 
 ❗日志命名空间(K3): 本包**所有子模块**一律显式 ``logging.getLogger("auto_qb.web")``,
   不用 __name__ —— tests/test_web.py 多处按 ``r.name == "auto_qb.web"`` 断言 caplog

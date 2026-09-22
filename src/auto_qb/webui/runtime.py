@@ -36,7 +36,7 @@ import threading
 import time
 from typing import List, Optional
 
-from .mixins.web_commands import (
+from ..mixins.web_commands import (
     CMD_SLOW_MS,
     DEFERRED_RECEIPT_COMMANDS,
     REANNOUNCE_CONFIRM_TIMEOUT,
@@ -577,7 +577,7 @@ class WebUIRuntime:
         **按视图回传**: view 指定当前视图时只回传该视图需要的数组(见 VIEW_ARRAYS), 响应体
         降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次全量。
         """
-        from .mixins.web_view import VIEW_ARRAYS
+        from ..mixins.web_view import VIEW_ARRAYS
 
         with self.view_lock:
             if self.group_view_dirty:

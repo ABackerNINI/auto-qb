@@ -9,7 +9,7 @@ import os
 from typing import List
 from fastapi import HTTPException
 
-from ...utils import path_normalize
+from ....utils import path_normalize
 from .. import common
 from ..common import group_key_param as _group_key_param
 

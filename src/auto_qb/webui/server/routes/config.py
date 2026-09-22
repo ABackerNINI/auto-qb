@@ -36,11 +36,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         b = body or {}
         text = str(b.get("text") or "")
         tor_hash = str(b.get("hash") or "").strip()
-        from ...rules.base import RuleContext
-        from ...rules.expr import env
-        from ...rules.expr import compile_expr, validate
-        from ...rules.expr.errors import ExprError
-        from ...rules.expr.eval import evaluate, trace
+        from ....rules.base import RuleContext
+        from ....rules.expr import env
+        from ....rules.expr import compile_expr, validate
+        from ....rules.expr.errors import ExprError
+        from ....rules.expr.eval import evaluate, trace
 
         try:
             root = compile_expr(text).root
@@ -64,8 +64,8 @@ def build_router(ctx: WebContext) -> APIRouter:
     @router.get("/api/config/schema")
     def api_config_schema():
         """配置表单元数据(分组/字段/控件/帮助) + 热重载级别(唯一来源: config.impact)"""
-        from ...config import schema as config_schema
-        from ...config.impact import SECTION_LEVELS, TRACKER_FIELD_LEVELS
+        from ....config import schema as config_schema
+        from ....config.impact import SECTION_LEVELS, TRACKER_FIELD_LEVELS
 
         payload = config_schema.schema_payload()
         # 级别表由 impact 单一维护(与热重载实际分级同源), API 层只做合并
@@ -84,7 +84,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         进浏览器内存、截图与日志即为凭据泄漏。保存时 PUT 会用磁盘旧值还原哨兵 —— 掩码只影响
         展示, 不会把密码写死成占位串。
         """
-        from ...config.writer import MASK_SENTINEL, mask_tree, read_tree
+        from ....config.writer import MASK_SENTINEL, mask_tree, read_tree
 
         return {
             "tree": mask_tree(read_tree(manager.config_path)),
@@ -100,9 +100,9 @@ def build_router(ctx: WebContext) -> APIRouter:
         校验失败不触碰磁盘; R 级字段(state_file/data_dir)保留旧值, 其余立即生效。
         提交树里的掩码哨兵先按磁盘旧值还原(见 api_config_get), 未修改的密码保持原值。
         """
-        from ...config.errors import ConfigError
-        from ...config.loaders import load_config
-        from ...config.writer import read_tree, unmask_tree, write_tree
+        from ....config.errors import ConfigError
+        from ....config.loaders import load_config
+        from ....config.writer import read_tree, unmask_tree, write_tree
 
         tree = (body or {}).get("tree")
         if not isinstance(tree, dict):
@@ -130,8 +130,8 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         与 PUT 同口径: 先还原掩码哨兵, 否则预览里会显示一串占位符(与实际写入结果不符)。
         """
-        from ...config.errors import ConfigError
-        from ...config.writer import preview_tree, read_tree, unmask_tree
+        from ....config.errors import ConfigError
+        from ....config.writer import preview_tree, read_tree, unmask_tree
 
         tree = (body or {}).get("tree")
         if not isinstance(tree, dict):

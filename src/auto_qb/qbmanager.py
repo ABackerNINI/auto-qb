@@ -46,7 +46,7 @@ from .qbapi import QbApi
 from .qbclient import _new_client
 from .rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
-from .web_runtime import WebUIRuntime
+from .webui import WebUIRuntime
 from .torrents import (
     QbCompatError,
     TorrentRecord,
@@ -319,7 +319,7 @@ class QbManager(
         # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
         # WEB UI: 启用后伴随启动(浏览器访问, 辅种管理/设置); 密钥随机生成并持久化
         if not dry_run and self.config.web.enabled:
-            from .web import start_web_server
+            from .webui import start_web_server
 
             # 密钥由 start_web_server 内部确定(显式配置或随机生成持久化到 data_dir/web.token)
             self.web.handle = start_web_server(self)
@@ -531,7 +531,7 @@ class QbManager(
         - 变化时: 按目标态启停; 重启必须"先停旧服务并等其线程退出"再启新服务
           (uvicorn 的 should_exit 是异步生效的, 直接重启会与新服务竞抢端口 -> WinError 10048)
         """
-        from .web import ensure_web_token, start_web_server, stop_web_server
+        from .webui import ensure_web_token, start_web_server, stop_web_server
 
         enabled = bool(self.config.web.enabled)
         want = (enabled, self.config.web.host, self.config.web.port)

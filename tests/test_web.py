@@ -127,7 +127,7 @@ import pytest
 
 from auto_qb import __version__
 from auto_qb.utils import decode_group_key, encode_group_key
-from auto_qb.web import create_app
+from auto_qb.webui import create_app
 
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
 
@@ -274,7 +274,7 @@ def _make_web_manager(tmp_path, config_text):
 
     # 命令投递经表现层门面(WebUIRuntime.post_command): 替身挂一个, 并与上面那个
     # web_commands 共用同一队列 —— 端点测试直投命令的断言才仍然成立
-    from auto_qb.web_runtime import WebUIRuntime
+    from auto_qb.webui import WebUIRuntime
 
     mgr.web = WebUIRuntime(mgr)
     mgr.web.commands = mgr.web_commands
@@ -314,7 +314,7 @@ def web_env(tmp_path):
     """带 TestClient 的 WEB 环境(manager 替身 + 密钥已生成)"""
     from fastapi.testclient import TestClient
 
-    from auto_qb.web import create_app, ensure_web_token
+    from auto_qb.webui import create_app, ensure_web_token
 
     mgr = _make_web_manager(
         tmp_path, "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
@@ -380,7 +380,7 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     """
     from fastapi.testclient import TestClient
 
-    from auto_qb.web import create_app
+    from auto_qb.webui import create_app
 
     mgr = web_env[0]
     # 用独立 loopback 客户端 + 开启开关
@@ -411,7 +411,7 @@ def test_skip_local_verify_default_off(web_env):
     """默认关闭(保守): 本机连接也不免鉴权, 无密钥仍 401"""
     from fastapi.testclient import TestClient
 
-    from auto_qb.web import create_app
+    from auto_qb.webui import create_app
 
     mgr = web_env[0]
     assert mgr.config.web.skip_local_verify is False  # 默认 false
@@ -507,7 +507,7 @@ def test_ui_root_and_legacy_newui_redirect(web_env):
 
 
 STATIC_ROOT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "web_ui", "static"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static"
 )
 
 # CSS 容器型 at-rule: "开块后下一行是嵌套规则"属正常写法, 不参与"漏闭合"判定
@@ -869,7 +869,7 @@ def _scan_page_class_wiring(problems):
 
 
 def _scan_frontend_assets():
-    """扫描 web_ui/static 返回问题清单(空 = 健康)
+    """扫描 webui/static 返回问题清单(空 = 健康)
 
     检查项(均为"整页白屏 / 整块功能静默失效"级故障, 且 Python 侧测试天然看不见):
     1. 合并冲突标记残留(`<<<<<<<` / `>>>>>>>` / 单独一行 `=======`) —— 语法错误;
@@ -1350,7 +1350,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
     config.min_level(默认 WARNING) ⇒ 密钥被推到系统通知; 落日志文件后已登录者可经
     /api/log 读回。拿到密钥即等于拿到改配置/删种子的能力。改为只提示文件路径。
     """
-    from auto_qb.web import ensure_web_token
+    from auto_qb.webui import ensure_web_token
 
     mgr = _make_web_manager(
         tmp_path, "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
@@ -2084,7 +2084,7 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     post = lambda body: client.post("/api/open-path", json=body, headers=auth)  # noqa: E731
     # patch 地址 = auto_qb.web.common.open_path(web.py 拆 web/ 包后模块地址稳定化;
     # 原地址 auto_qb.web.open_path 随模块拆分失效 —— 管线性改动, plan 26-09-22-1857 W1)
-    with mock.patch("auto_qb.web.common.open_path") as spy:
+    with mock.patch("auto_qb.webui.server.common.open_path") as spy:
         # ① 目录型 content_path -> 取自身(非选中语义)
         r = post({"kind": "torrent", "hash": "HA"})
         assert r.status_code == 200 and r.json() == {"opened": norm(d_content), "select": False}, r.text
@@ -3459,8 +3459,8 @@ def test_apply_new_config_levels(monkeypatch):
             calls.append(("start", m))
             return "新句柄"
 
-        monkeypatch.setattr("auto_qb.web.stop_web_server", _fake_stop)
-        monkeypatch.setattr("auto_qb.web.start_web_server", _fake_start)
+        monkeypatch.setattr("auto_qb.webui.stop_web_server", _fake_stop)
+        monkeypatch.setattr("auto_qb.webui.start_web_server", _fake_start)
         res = _apply([ConfigChange("web.port", "L1", 38080, 38081)])
         assert res["levels"] == ["L1"]
         mgr._setup_logging.assert_called_once()
@@ -3546,7 +3546,7 @@ def test_stop_web_server_releases_port_for_restart(tmp_path):
     新服务 bind 报 `[Errno 10048] 通常每个套接字地址只允许使用一次`, 保存配置后 WEB UI 失联。
     本测试用真实 uvicorn 复现该时序: 停止后同端口必须能再次监听。
     """
-    from auto_qb.web import start_web_server, stop_web_server
+    from auto_qb.webui import start_web_server, stop_web_server
 
     cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
     port = _free_port()
@@ -3583,12 +3583,12 @@ def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):
         mgr.config.web = _web_stub(port=8080, token="新密钥")
         old_handle = mock.MagicMock()
         mgr._web_handle = old_handle
-        monkeypatch.setattr("auto_qb.web.start_web_server", mock.MagicMock())
-        monkeypatch.setattr("auto_qb.web.stop_web_server", mock.MagicMock())
+        monkeypatch.setattr("auto_qb.webui.start_web_server", mock.MagicMock())
+        monkeypatch.setattr("auto_qb.webui.stop_web_server", mock.MagicMock())
 
         mgr._apply_web_config(_web_stub(port=8080, token="旧密钥"))
 
-        from auto_qb.web import start_web_server, stop_web_server
+        from auto_qb.webui import start_web_server, stop_web_server
 
         start_web_server.assert_not_called()
         stop_web_server.assert_not_called()
@@ -3604,7 +3604,7 @@ def test_start_web_server_reports_failure_when_port_taken(tmp_path, caplog):
     """
     import socket
 
-    from auto_qb.web import start_web_server, stop_web_server
+    from auto_qb.webui import start_web_server, stop_web_server
 
     cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
     with socket.socket() as holder:  # 占住端口(不 listen 也可; bind 后即不可再绑)
@@ -3813,7 +3813,7 @@ def test_content_disposition_encoding():
 
     覆盖清洗(引号/路径符/控制字符 -> 防头注入)、ASCII/非 ASCII 混合名的回退、ext 后缀。
     """
-    from auto_qb.web import content_disposition
+    from auto_qb.webui import content_disposition
 
     # 全非 ASCII: 回退名取 fallback, 原名保留在 filename*
     cd = content_disposition("中文种子", "HASH", "torrent")
@@ -3873,8 +3873,8 @@ def test_apply_web_config_toggle_enabled(monkeypatch):
         mgr = make_manager(os.path.join(td, "state.json"))
         started = mock.MagicMock(return_value="新句柄")
         stopped = mock.MagicMock()
-        monkeypatch.setattr("auto_qb.web.start_web_server", started)
-        monkeypatch.setattr("auto_qb.web.stop_web_server", stopped)
+        monkeypatch.setattr("auto_qb.webui.start_web_server", started)
+        monkeypatch.setattr("auto_qb.webui.stop_web_server", stopped)
 
         # 关 -> 开(旧句柄为 None, 原先该场景完全不生效)
         mgr.config.web = _web_stub(enabled=True, port=8080)
@@ -4283,7 +4283,7 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     import logging
 
     from auto_qb.mixins.web_commands import CMD_SLOW_MS
-    from auto_qb.web_runtime import WebUIRuntime
+    from auto_qb.webui import WebUIRuntime
 
     class _T:
         """只需要 _log_cmd_timing 用到的两个属性"""
@@ -4440,7 +4440,7 @@ def test_truth_hold_matches_truth_push_cap():
     from auto_qb.mixins.web_commands import TRUTH_PUSH_CAP_MS
 
     js = open(
-        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "web_ui", "static", "shared", "commands.js"),
+        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "static", "shared", "commands.js"),
         encoding="utf-8",
     ).read()
     m = re.search(r"TRUTH_HOLD_MS\s*=\s*([\d.]+)", js)
@@ -4478,6 +4478,8 @@ def test_cmd_trackers_log_sanitized(caplog):
     assert "XYZ" not in text, "换名的凭据(authkey)同样不能进日志"
     assert "passkey" not in text and "authkey" not in text, "query 整段都应丢弃, 不该残留参数名"
     assert "pt.example.com" in text and "other.example.com" in text, "主地址要保留(否则没法排查是哪个站)"
+
+
 # ---- W0 结构守阵(plan 26-09-22-1857: web.py create_app 拆分 web/ 包, 先行落阵再动刀) ----
 
 # 从拆分前的 web.py 用 AST 提取的全部路由(取证 2026-09-22, develop @ 975e146):
@@ -4589,7 +4591,7 @@ def test_create_app_is_thin_assembly():
     """
     import inspect
 
-    from auto_qb.web import create_app
+    from auto_qb.webui import create_app
 
     src = inspect.getsource(create_app)
     n = len(src.splitlines())

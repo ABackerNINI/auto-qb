@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 def mount_static_ui(app: FastAPI) -> None:
     # 静态前端(UI 目录化: atlas=星图(旧) / prism=棱镜(新) / shared=公共逻辑层; 目录即 URL,
     # 新增 UI = static/<名字>/ 一个目录, 无需后端改动)
-    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web_ui", "static")
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
     if os.path.isdir(static_dir):
 
         @app.get("/", include_in_schema=False)

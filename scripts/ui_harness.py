@@ -12,7 +12,7 @@
 `test_web.py::test_frontend_static_bundle_health` 的同类守阵思路: 静态能查的静态查,
 查不了的只能真跑浏览器)。
 
-本脚本用**真实的** `auto_qb.web.create_app` 起服务(端点/鉴权/静态挂载全是生产代码),
+本脚本用**真实的** `auto_qb.webui.create_app` 起服务(端点/鉴权/静态挂载全是生产代码),
 只把 manager 换成"灌了合成种子的真实 QbManager + FakeClient" —— 因此前端拿到的
 响应体与真机同构(字段集/版本号/rid 门控均一致), 只是数据是人造的。
 
@@ -51,7 +51,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 from auto_qb.config import WebConfig  # noqa: E402
-from auto_qb.web import create_app  # noqa: E402
+from auto_qb.webui import create_app  # noqa: E402
 from tests.helpers import FakeClient, FakeTorrent, make_manager, seed_store  # noqa: E402
 
 _STATES = ["stalledUP", "uploading", "downloading", "pausedUP", "pausedDL", "stalledDL", "checkingUP", "errored"]
@@ -224,7 +224,7 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
                     time.sleep(wait_ms / 1000.0)
                 mgr._web_results[cmd_id] = {
                     "status": "ok",
-                    "wait_ms": round(wait_ms, 1),   # 埋点口径与后端 _timing() 一致: 排队等主循环
+                    "wait_ms": round(wait_ms, 1),  # 埋点口径与后端 _timing() 一致: 排队等主循环
                     "exec_ms": 1,
                 }
                 # 先回执、后改状态(复刻真机补刷新的错位, 见 _TRUTH_DELAY 注释)
@@ -256,13 +256,17 @@ def main() -> int:
     ap.add_argument("--no-groups", action="store_true", help="不建分组(纯平铺)")
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
-        "--state-revert-ms", type=int, default=1500,
+        "--state-revert-ms",
+        type=int,
+        default=1500,
         help="真值**被 /api/state 取走后**再等多少 ms 还原成初始状态(默认 1500, 让长驻桩服务可反复跑;"
         " 0 = 不还原, 永久生效)。注意不是「真值生效后 N ms」—— 定时回弹会跑到前端观测之前"
         "(见 _revert_after_consume)",
     )
     ap.add_argument(
-        "--cmd-wait-ms", type=int, default=0,
+        "--cmd-wait-ms",
+        type=int,
+        default=0,
         help="模拟真机「主循环正忙, 命令排在其后」: 回执与真值**一起**延后这么久(两者出自同一轮"
         "主循环)。本地桩没有主循环, wait_ms 恒为 0 ⇒ 「命令投递→回执」这一段从来测不到, "
         "而真机上它往往是最长的那一段。0 = 瞬时(默认)",
@@ -273,9 +277,11 @@ def main() -> int:
 
     # ❗本服务故意免鉴权(skip_local_verify), 绑到非回环等于把 WEB UI 交给整个局域网。
     if not _is_loopback(args.host):
-        print(f"[harness] 拒绝启动: --host 只接受回环地址(127.0.0.0/8 / ::1 / localhost), 收到 {args.host!r}\n"
-              "          该服务免鉴权, 绑非回环会把它暴露给同网段的任何人。",
-              file=sys.stderr)
+        print(
+            f"[harness] 拒绝启动: --host 只接受回环地址(127.0.0.0/8 / ::1 / localhost), 收到 {args.host!r}\n"
+            "          该服务免鉴权, 绑非回环会把它暴露给同网段的任何人。",
+            file=sys.stderr
+        )
         return 2
 
     tmp = tempfile.mkdtemp(prefix="aqb-harness-")
