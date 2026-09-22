@@ -9,6 +9,10 @@ main_host_mark  = "gitee.com"     # 按 URL 特征挑主线(历史 clone 的 ori
 mirror          = "github"
 mirror_host_mark = "github.com"
 
+# 决策点指针: 预检在检查表末尾打印它 —— 把「改代码 / 跑 git 前该读哪份陷阱索引」
+# 摆到提交那一刻眼前(库里的约束不接到决策点上就等于没写)。留空 = 不打印。
+pitfalls_index = "memory-bank/pitfalls/git/_index.md"
+
 # 出现即 STOP: 生产配置 / 运行时数据(见 AGENTS.md 红线节)
 red_lines = ["config.yml", "auto-qb-data/"]
 # 出现需人工确认: 用户自己的在途改动 / 不该入库的项目数据

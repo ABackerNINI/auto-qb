@@ -324,7 +324,8 @@ def main() -> int:
         elif not args.quiet:
             print(f"  [ OK ] {name}")
     for line in warns:
-        print(f"  [WARN] {line}")
+        if not args.quiet:
+            print(f"  [WARN] {line}")
     print(f"\n共 {total} 项不通过。" if total else "\n全部通过。")
     return 1 if total else 0
 

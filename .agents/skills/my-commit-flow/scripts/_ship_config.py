@@ -41,6 +41,9 @@ KEY_DEFAULTS: dict = {
     "gates": [],
     "platform_hints": ["winreg", "dir_fd", "socket", "subprocess"],
     "staged_panic": 200,
+    # 决策点指针: 预检在检查表末尾打印它。用来把「改代码 / 跑 git 前该读哪份陷阱索引」
+    # 摆到执行者眼前 —— 库里的约束不接到决策点上就等于没写。留空 = 不打印。
+    "pitfalls_index": "",
     "each_limit": 99,  # <each:GLOB> 的展开条数上限; 超了说明提交范围该拆, 不该静默跑下去
 }
 

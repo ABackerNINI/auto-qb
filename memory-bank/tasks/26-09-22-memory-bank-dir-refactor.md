@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0 基线冻结 + W1 基础设施已完成 (9 条结构性守卫, 1169 passed), 续做 W2 pitfalls/
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0 基线冻结 + W1 基础设施 + W2 pitfalls/ 已完成 (7 类 / 35 文件, 9 条结构性守卫), 续做 W3 testing/
 
 ## 原始请求
 
@@ -108,7 +108,7 @@
 | 0.5 | 计划增补: 全库逐文档落位 + 五步配方 + cap 分级 | Complete | 2026-09-22 | 8 份超标文档 → 9 目录 / ≈45 主题文件 + 8 存根; 波次扩为 W0–W8 (计划 §03/§04/§05/§06) |
 | W0 | 基线冻结 (42 份 / 508,487 字符 / 352 段 / 1,613 条目) | Complete | 2026-09-22 | 清单在 `.workbuddy-ai/tmp/kb-baseline/` (gitignore) |
 | W1 | 基础设施: 脚本落位 + 通用生成器 + cap 策略 + 9 条守卫 | Complete | 2026-09-22 | 全量 1169 passed + 1 skipped (+9) |
-| W2 | `pitfalls/` 两级指针 (7 类 + ≈30 主题文件 + 存根 + 接线) | Not Started | — | 收益最大, 须一次做完并尽快推送 |
+| W2 | `pitfalls/` 两级指针 (7 类 + 35 主题文件 + 存根 + 接线) | Complete | 2026-09-22 | 守恒: 真丢失 0 (973 token 核对); 1169 passed 不变 |
 | W3 | `testing/` (≈9 文件 + 存根; `baseline.md` 成唯一手改处) | Not Started | — | |
 | W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Not Started | — | |
 | W5 | `systemPatterns/` + `modules/` (≈8 + ≈7) | Not Started | — | |
@@ -146,6 +146,33 @@
   「入口链不随库体量变长」。
 - 定案: `systemPatterns` 的 WEB UI 三节 (21,406 字符) 本就挂错在「任务队列」名下, 拆开即纠错;
   modules 的「在哪里改」速查并入 `_index.md`; `tasks/attachments/` 不破坏索引守卫 (不递归)。
+
+### 2026-09-22 (W2 `pitfalls/` 目录化)
+- **产出**: 旧 `pitfalls.md`(64,491 字符 / 255 条) → **7 类 / 35 个主题文件 / 236 条字段化条目**;
+  最大文件 `web-ui/contract-api.md` **5,582 字符**(cap 6,000); `pitfalls/` 合计 99,510 字符(含 8 个生成物索引 + 8 个 `_about.md`)。
+- **条目格式**: `### <一句话结论>` + `触发` / `判别` / `处置` **三必填**, `守阵` / `复发` 选填 ——
+  由守卫 `check_pitfall_entries` 机械校验。原句照搬 + 压叙事, 规则 / 判别法 / 实测数字一个不删。
+- **类切分**: git(6 文件) / web-ui(8) / backend(5) / testing(8) / ops(1) / kb(6) / docs(1)。
+  ⚠ 两处相对计划调整: ①web-ui 8 份(计划 7)②testing 8 份(计划 8) —— web-ui 因 `contract-api.md` 条目多而拆出
+  `overlays.md`, 属 cap 驱动的必要拆分。
+- **守恒核对(方法换了, 必须记)**: 本轮是**字段化重写**(触发/判别/处置 + 压叙事), **不是逐字搬家** ⇒
+  计划 §10 的"规范化行文本 md5 比对"**不适用**(原句被重新分配, md5 必然大面积假红)。
+  改用**硬事实 token 覆盖**: 抽旧版每条目的反引号标识符 / 路径 / 带单位数字, 逐个在新树里找 ——
+  **973 个 token, 17 个"找不到", 逐条人工判后全部是正则跨反引号的假阳性**(如 `), 容器给` / `。**ESM 的`),
+  **真丢失 0**。⚠ 该法**真查出** 2 条被我漏掉的条目(「Markdown 表格被自动格式化器改坏」/
+  「Bash heredoc 反斜杠转义被路径归一化层改成正斜杠」), 已补进 `git/editing-traps.md`;
+  另补回 3 处被压掉的标识符(`hasUnit()` / `decoratedShows` / 被取代的旧守阵名)。
+  ⇒ **教训: token 核对能抓"整条丢失", 但抓不到"条目内的叙述性规则丢失"; 它是必要不充分的代理判据。**
+- **接线**: ①`AGENTS.md` **7,580 → 6,117 / 8,000**(粗路由改成指向 `memory-bank/README.md` 细路由 +
+  三条动作级提示; 「跨仓库操作」「提交 / PR」「命令」三节精简为指针)②`memory-bank/README.md` 重建
+  **库内细路由表**(任务 → 入口, 含 `pitfalls/_index.md`)③skill 收尾 **DoD ⑤** 改为"按动作写进
+  `pitfalls/<类>/<主题>.md` + 重跑 `gen_kb_index.py`", 并新增**复发闭环**(踩到已记的坑 ⇒ `复发` +1 +
+  档案里写"为什么没命中")④`.commit-flow.toml` 增 `pitfalls_index` 决策点指针, 预检表尾打印
+  (为支持该键, `_ship_config.KEY_DEFAULTS` 与 `preflight.py` 各加一处; `test_preflight.py` 26 项全过)。
+- **守卫**: 9 条从"空转"变成**真跑**; `check_kb_structure.py --quiet` 全部通过。
+- **实测**: 全量 **1169 passed + 1 skipped**(与 W1 持平 —— 本轮未增删用例), sidefx 越界 0。
+- **残留(非阻塞)**: 11 个主题文件落在 1.5 KB **建议下限**之下(计划 §03 明示该下限**只 WARN 不红**,
+  且 `ops/` `docs/` 是单文件类无从合并); 已把 `--quiet` 修为**同时抑制 WARN**(原实现只抑制 PASS)。
 
 ### 2026-09-22 (W0 基线冻结 + W1 基础设施)
 - **W0**: 按五步配方第 1 步量全库 —— 13 份顶层文档 + `tasks/*.md` + `AGENTS.md` 共 **42 份 / 508,487 字符 /

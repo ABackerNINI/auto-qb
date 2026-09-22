@@ -15,6 +15,10 @@
 #   备选: `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但约定统一走 R 盘。
 #   提交闸门(`auto = true`)跑的就是 `--no-cov` 这一档, 覆盖率基线另算。
 # 基线: **1169 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7523 语句 / 623 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1169 → 1169(**不变**; 2026-09-22 同任务 **W2 `pitfalls/` 目录化**: 只动文档与 skill 脚本, 未增删用例 ——
+#     但 9 条知识库守卫从「目录未建时空转」变成**真跑**(索引 == 生成结果 / 索引↔目录双向一致 / 三行头元数据 /
+#     cap 策略 / 类名与文件名 / 无孤儿索引 / 存根合法 / pitfalls 条目三字段 / 4 脚本可 import)。
+#     全量 1169 passed + 1 skipped, sidefx 越界 0)。
 #   ↑ 1160 → 1169(**+9**; 2026-09-22 任务 26-09-22-memory-bank-dir-refactor **W1 基础设施**:
 #     知识库目录化守卫 9 条, 检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 守卫**进程内 import**
 #     (本项目测试禁止起子进程): `test_kb_index_is_regenerated` / `test_kb_index_and_files_are_bijective`
