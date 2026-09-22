@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>qB 移动已完成种子误判缺文件 · .!qB 过渡态容忍修复计划</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a6b3bf;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #211b13;
+    --code-bg: #171e26;
+    --mark: #141c24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  .badge.open { background: var(--warn-bg); color: var(--warn); border-color: #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border: 1px solid var(--hair-soft); overflow-x: auto; margin-bottom: 14px; max-width: 86ch; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border: 1px solid var(--hair); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 86ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  .steps { counter-reset: step; list-style: none; margin-left: 0; }
+  .steps li { counter-increment: step; position: relative; padding-left: 40px; margin-bottom: 10px; max-width: 78ch; }
+  .steps li::before { content: counter(step, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>背景与结论</a>
+    <a href="#s2"><span class="no">02</span>误判链路（已核实）</a>
+    <a href="#s3"><span class="no">03</span>方案设计</a>
+    <a href="#s4"><span class="no">04</span>落选方案与备选</a>
+    <a href="#s5"><span class="no">05</span>测试计划</a>
+    <a href="#s6"><span class="no">06</span>风险与边界</a>
+    <a href="#s7"><span class="no">07</span>实施顺序</a>
+    <a href="#s8"><span class="no">08</span>验收标准</a>
+    <div class="toc-foot">
+      关联 issue：26-09-21-0219<br>
+      bug · standard 档 · In Progress<br>
+      认领依据：用户 2026-09-22 指派
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">实施计划 · bug 修复 · docs/plans</div>
+    <h1>qB 移动已完成种子误判缺文件<br>—— .!qB 过渡态容忍修复计划</h1>
+    <p class="lede">qBittorrent 移动已完成种子时偶发把磁盘文件临时改名为 <code>&lt;原名&gt;.!qB</code>，缺文件磁盘扫描在这个改名窗口内拿原名做存在性判定，把过渡态读成永久缺失，导致整组误暂停并打 MISSING 标签。本计划在扫描汇聚点加过渡态容忍，并用连续次数上限兜住残留场景。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">计划编号</div><div class="v">26-09-22-2038</div></div>
+      <div class="item"><div class="k">关联 issue</div><div class="v"><a href="../../memory-bank/issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html">26-09-21-0219</a></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge open">待用户过目后实施</span></div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ 676f761</div></div>
+      <div class="item"><div class="k">取证时间</div><div class="v">2026-09-22 20:38（命令取）</div></div>
+      <div class="item"><div class="k">涉及文件</div><div class="v">utils.py · torrents.py · grouping.py · checking.py · tests/test_grouping.py</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>背景与结论</h2>
+    <p><strong>现象</strong>（来自 <a href="../../memory-bank/issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html">issue 26-09-21-0219</a>，用户 2026-09-21 现场口述）：qB 移动已完成的种子时，有概率把磁盘文件临时改名为 <code>原名.!qB</code>；移动伴随重新校验。窗口期内本程序的缺文件磁盘扫描用缓存的文件名拼原路径做 <code>os.path.exists</code>，原名不存在 → 判「文件缺失」→ 整组 <code>torrents_stop</code> 暂停 + MISSING 标签。文件其实存在，只是带后缀 —— 误判。</p>
+    <p><strong>后果</strong>：误停健康做种的整个辅种组；MISSING 标签污染后续 multi-dl/mixed 冲突语义（带标完成成员不再计入「已完成」，放行重下），需人工发现才能回滚；另叠加一次无谓重校验的大文件 I/O。</p>
+    <div class="callout">
+      <strong>核心结论</strong>：在三类触发源的唯一汇聚点 <code>_check_missing_files</code> 做「过渡态容忍」—— 原路径不存在时先探测同名 <code>.!qB</code> 孪生文件，存在则本轮整轮放弃判定（不暂停、不打标）；同时记录每组连续命中次数，连续 3 次未消除按真实缺失处理，兜住 qB 残留后缀的极少数场景。不加新配置键；<code>check_filelist</code> 只加诊断日志不改行为。
+    </div>
+    <p class="hint">前提事实：issue 标注「未复现 = 未证实」，后缀成因是假设。本方案对「成因」保持中立 —— 只对「原名缺失且 .!qB 孪生存在」这一可观测状态做容忍，无论后缀由 qB 哪个内部机制产生都覆盖。取证要求保留在 §07。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>误判链路（已按 676f761 逐环核实）</h2>
+    <table>
+      <tr><th>步骤</th><th>发生什么</th><th>代码事实（取证 2026-09-22 20:38）</th></tr>
+      <tr><td>① 移动发起</td><td>move_to 规则或 Web UI 移动对话框 → qB <code>torrents_set_location</code>；qB 侧搬运伴随重新校验（issue 记录的现场行为）</td><td><code>MoveToAction.execute</code>（rules/actions/transfer.py），本程序只发 API，不动</td></tr>
+      <tr><td>② qB 改名窗口</td><td>磁盘文件短暂呈 <code>原名.!qB</code></td><td>qB 内部行为，成因未证实（issue §05 维持假设定性）</td></tr>
+      <tr><td>③ 同轮触发扫描</td><td>save_path 变化或进入 errored 触发缺文件扫描</td><td><code>_handle_save_path_changes</code> / <code>_handle_state_transitions</code>（mixins/grouping.py），事件驱动</td></tr>
+      <tr><td>④ 误判第一现场</td><td>原名 <code>os.path.exists</code> 为 False → 判缺失</td><td><code>_check_missing_files</code>（mixins/grouping.py），用缓存 <code>sizes[rep.hash]</code> 拼路径</td></tr>
+      <tr><td>⑤ 连锁污染</td><td>整组暂停 + MISSING 标签</td><td><code>torrents_stop</code> + <code>_add_tags</code>；标签改变 <code>_check_download_conflicts</code> 的 mixed 语义</td></tr>
+    </table>
+    <h3>为什么单点修在 _check_missing_files</h3>
+    <ul>
+      <li><strong>唯一汇聚点</strong>：删除事件 / save_path 变化 / 状态转移三类触发源最终都进这一个函数 —— 一处覆盖全部链路，不用分别打补丁。</li>
+      <li><strong>代表种筛选恰好放进窗口</strong>：2026-09-12 放宽后 errored 成员可当代表种（<code>_valid_for_representative</code> = complete/errored 且非 checking），而「重校验发现文件缺失 → errored」正是误判主触发 —— 代表种的 save_path 与缓存映射在窗口内都指向被改名的物理目录。</li>
+      <li><strong>扫描是事件驱动的</strong>：轮内去重靠 <code>_missing_scanned_keys</code>（qbmanager.py:218 定义、:663 每轮清空）。「本轮跳过」的实际语义是「跳过这次触发事件」，下一个事件到来才再判 —— 这直接决定 §03 必须配「连续次数上限」。</li>
+      <li><strong>checking 链路危害有限</strong>：<code>check_filelist</code> 被 CheckAction 决策链 4 用作跳检前置检查，失败走 <code>ActionResult.skip</code>、并不发送 recheck；<code>torrents_recheck</code> 只在前置检查通过后才发送（rules/actions/checking.py + full_checking.py）。所以该链路最坏后果是「跳检白跳一次」，不值得改行为，加日志即可。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>方案设计</h2>
+    <h3>3.1 修改点总览</h3>
+    <table>
+      <tr><th>#</th><th>位置</th><th>改动</th><th>行为变化</th></tr>
+      <tr><td>1</td><td><code>src/auto_qb/utils.py</code></td><td>新增纯函数 <code>has_qb_incomplete_twin(path)</code> 与单点常量 <code>QB_INCOMPLETE_SUFFIX = ".!qB"</code></td><td>无（新函数）</td></tr>
+      <tr><td>2</td><td><code>mixins/grouping.py</code> · <code>_check_missing_files</code></td><td>原路径不存在时先探测孪生；命中 → 记 warning，本轮整轮放弃判定，组计数 +1</td><td>误判窗口内不再整组误停</td></tr>
+      <tr><td>3</td><td><code>torrents.py</code> · <code>TorrentStore</code></td><td>新增会话级内存计数 <code>transitional_missing_skips: Dict[str, int]</code>（组 key → 连续次数），不落盘</td><td>无（新字段）</td></tr>
+      <tr><td>4</td><td><code>mixins/grouping.py</code> · 同函数</td><td>连续 ≥ <code>TRANSITIONAL_SKIP_LIMIT = 3</code> 次未消除 → 按真实缺失走原暂停+MISSING 分支；判定正常结束则清零该组计数</td><td>残留后缀不被无限放过</td></tr>
+      <tr><td>5</td><td><code>mixins/checking.py</code> · <code>check_filelist</code></td><td>缺失且孪生存在时，错误文案追加「（疑似 qB .!qB 过渡态）」</td><td>仅日志文案，返回语义不变</td></tr>
+    </table>
+    <h3>3.2 _check_missing_files 改造（示意）</h3>
+<pre><code>missing = False
+transitional = False
+for fname, fsize in sizes.get(rep.hash, {}).items():
+    full_path = utils.add_long_path_prefix_for_win(
+        os.path.normpath(os.path.join(rep.save_path, fname)))
+    if not os.path.exists(full_path):
+        if utils.has_qb_incomplete_twin(full_path):   # 原名缺失时才探测, 健康路径零新增 stat
+            transitional = True                        # 改名窗口: 整轮放弃, 单文件结论不可靠
+            break
+        logger.warning(f"辅种组 | 文件缺失: '{full_path}'")
+        missing = True
+        break
+    ...                                                # 大小不一致 / OSError 分支不动
+if transitional:
+    n = self.store.transitional_missing_skips.get(key, 0) + 1
+    self.store.transitional_missing_skips[key] = n
+    if n &lt; TRANSITIONAL_SKIP_LIMIT:
+        logger.warning(f"辅种组 | 疑似 qB 搬运过渡态(.!qB), 本轮不判缺文件"
+                       f"(第{n}次): 代表种 {rep.log_repr}")
+        return                                         # 不暂停、不打标
+    logger.warning(f"辅种组 | 过渡态(.!qB)连续 {n} 次未消除, 按真实缺失处理")
+    missing = True                                     # 落入下方原有整组暂停 + MISSING 分支
+else:
+    self.store.transitional_missing_skips.pop(key, None)  # 正常判定(含真实缺失): 清零重计
+if missing:
+    ...                                                # 原有逻辑一字不动</code></pre>
+    <h3>3.3 语义细节</h3>
+    <ul>
+      <li><strong>整轮放弃，不是单文件 continue</strong>：目录正处于改名窗口，部分文件在、部分带后缀，任何部分结论都不可靠；放弃整轮等下一个事件是最稳语义。</li>
+      <li><strong>大小不一致 / OSError 分支不动</strong>：<code>.!qB</code> 问题的表象是「原名不存在」；原名存在但大小不符是另一种真实异常，与窗口无关，保持原判定。</li>
+      <li><strong>计数放 store、不落盘</strong>：软信号，重启归零的丢失方向是「更早恢复判定」—— 保守方向，可接受；沿用 <code>verified_references</code> 仅内存的先例，docstring 写明取舍。注意它与 <code>_missing_scanned_keys</code>（轮清）不同，<strong>跨轮存活</strong>，不能在 qbmanager.py:663 的轮清点清空。</li>
+      <li><strong>LIMIT = 3 的依据</strong>：三个触发源在移动场景常同轮命中同一组（轮内去重后只扫一次），连续 3 次独立事件都撞上窗口，大概率是残留而非窗口。常量不进配置 —— 触发条件本身已足够窄（原名缺失 <em>且</em> 孪生存在），默认开启符合最小惊讶；真需要开关再走 <code>validate_config</code> + <code>schema.py</code> 同步流程（黄金法则 4 的联动成本现在不必付）。</li>
+      <li><strong>后缀单点定义</strong>：<code>.!qB</code> 字符串只在 utils.py 出现一次，grouping 与 checking 共用，避免散落副本悄悄分叉。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>落选方案与备选</h2>
+    <table>
+      <tr><th>维度</th><th>本计划：过渡态容忍 + 连续上限</th><th>落选：移动后按组冷却 N 轮（issue 建议修法 2）</th></tr>
+      <tr><td>修复面</td><td>单点改在扫描汇聚处，三类触发链路一次覆盖</td><td>需在 save_path 变化路径上新增按组冷却状态并逐处接入</td></tr>
+      <tr><td>状态需求</td><td>会话级内存计数，不落盘</td><td>跨轮状态 → 按黄金法则 3 应进 state_file，新增持久化键</td></tr>
+      <tr><td>真实缺文件延迟</td><td>仅窗口内推迟；无孪生即正常判定</td><td>移动后固定晚报 N 轮</td></tr>
+      <tr><td>时序假设</td><td>无（只看可观测状态）</td><td>N 的取值本质是对 qB 窗口时长的猜测</td></tr>
+      <tr><td>升级条件</td><td>——</td><td>现场数据显示 .!qB 窗口远超 3 次事件间隔时，再升级为冷却案（届时本计划档案保留备选地位）</td></tr>
+    </table>
+    <p class="hint">issue 建议修法 3（「校验中一律不判」）已被现有代码部分覆盖：代表种筛选排除 <code>is_checking</code>，MOVING 状态天然不在 complete/errored 集合内（docstring 已注明）。剩余缺口正是「checking 结束后的 errored 窗口」，由本计划主体覆盖，无需重复改 <code>_valid_for_representative</code>。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>测试计划（tests/test_grouping.py 增量）</h2>
+    <table>
+      <tr><th>#</th><th>用例</th><th>断言</th><th>红验预期</th></tr>
+      <tr><td>T1</td><td><code>test_check_missing_files_qb_transitional_suffix_skips</code></td><td>原名不存在、<code>&lt;原名&gt;.!qB</code> 存在 → 无 <code>torrents_stop</code>、无 <code>add_tags</code></td><td>当前代码红（误停全组+打标），修复后绿</td></tr>
+      <tr><td>T2</td><td><code>test_check_missing_files_transitional_skip_limit_reaches_missing</code></td><td>同组连续 3 次过渡态 → 第 3 次照常暂停+MISSING，日志含「未消除」</td><td>现码红（每次都误停但无上限语义），修复后绿</td></tr>
+      <tr><td>T3</td><td><code>test_check_missing_files_transitional_counter_resets_on_clean</code></td><td>过渡态跳过后一次正常判定 → 计数清零，之后需重新连续 3 次</td><td>修复后绿</td></tr>
+      <tr><td>T4</td><td><code>test_check_missing_files_real_missing_no_twin</code></td><td>原名缺失且无孪生 → 照旧判缺失（回归保护）</td><td>现码即绿，修复后仍绿</td></tr>
+      <tr><td>T5</td><td><code>test_check_missing_files_dry_run_transitional</code></td><td>dry-run 下过渡态命中零副作用</td><td>修复后绿</td></tr>
+      <tr><td>T6</td><td>check_filelist 文案断言</td><td>孪生存在时返回消息含 <code>.!qB</code> 提示，返回语义仍为非 None</td><td>修复后绿</td></tr>
+    </table>
+    <ul>
+      <li>沿用现有 tmp_path 造盘手法与 <code>make_mgr</code> 类辅助（tests/helpers.py）。</li>
+      <li><strong>每个新测试同步该文件头部 docstring 的「测试计划」清单</strong>（AGENTS.md 硬要求，机械守卫检查）。</li>
+      <li>红验流程沿用近期惯例：先提交守阵跑红（T1 在现码上应红，证明用例真咬住缺陷），修复后转绿，红验记录写进 issue 的「修复后补充」。</li>
+      <li>全量回归：<code>TMPDIR="R:/Temp/auto-qb/tests"</code> + <code>uv run pytest tests -q</code>，实测数字记入 <code>memory-bank/testing.md</code>；当前全量基线以 <code>memory-bank/testing/baseline.md</code> 为准（2026-09-22 合流后 1185 passed + 1 skipped 口径）。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>风险与边界</h2>
+    <table>
+      <tr><th>风险</th><th>判据</th><th>兜底</th></tr>
+      <tr><td>qB 长期残留 .!qB，组被永久放过</td><td>同组连续 ≥3 次过渡态命中</td><td>上限触发后按真实缺失暂停+打标（T2 守住）</td></tr>
+      <tr><td>真缺失恰逢窗口被推迟</td><td>窗口通常短于事件间隔</td><td>下一个事件再判；连续上限保证不会无限推迟</td></tr>
+      <tr><td>共享物理文件的组：一成员移动，全组判定被推迟一轮</td><td>轮内去重已保证同组单次扫描</td><td>事件驱动下轮再扫，无放大</td></tr>
+      <tr><td>代码漂移导致锚点失准</td><td>行号只是加速项</td><td>一律按符号 + grep 重新定位（本计划行号取证 2026-09-22 20:38）</td></tr>
+    </table>
+    <h3>明确不做</h3>
+    <ul>
+      <li>不动 <code>MoveToAction</code>，不做移动后主动等待 —— qB 侧行为本程序控制不了，时序等待是猜测。</li>
+      <li>不采用冷却案（§04 备选地位，升级条件已写明）。</li>
+      <li>不加新配置键（理由见 §3.3）。</li>
+      <li>不动 <code>_valid_for_representative</code>（MOVING 已天然排除）。</li>
+      <li>不碰红线文件：<code>config.yml</code> / <code>auto-qb-data/</code> / <code>想法.md</code>。</li>
+      <li>不做 Web UI 改动 —— Web UI 移动走同一条 qB API，容忍逻辑在后端扫描处，天然覆盖。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>实施顺序</h2>
+    <ol class="steps">
+      <li><strong>写守阵 T1–T6</strong>，先跑红验（T1/T2 应红），同步 test_grouping.py 头部 docstring 的测试计划清单。</li>
+      <li><strong>utils.py</strong>：<code>QB_INCOMPLETE_SUFFIX</code> + <code>has_qb_incomplete_twin</code>；<strong>torrents.py</strong>：<code>TorrentStore</code> 加 <code>transitional_missing_skips</code>（含不落盘取舍注释）。</li>
+      <li><strong>grouping.py</strong>：按 §3.2 改造 <code>_check_missing_files</code>，加 <code>TRANSITIONAL_SKIP_LIMIT = 3</code>；跑 T1–T5 转绿。</li>
+      <li><strong>checking.py</strong>：<code>check_filelist</code> 文案加「疑似 .!qB 过渡态」；T6 绿。</li>
+      <li><code>yapf -i</code> 格式化全部改动文件（facebook 风格，列宽 120）。</li>
+      <li><strong>全量回归</strong>：先 <code>TMPDIR="R:/Temp/auto-qb/tests"</code>，再 <code>uv run pytest tests -q</code>，实测数字记入 testing.md。</li>
+      <li><strong>取证动作</strong>：开 DEBUG 跑一次受控移动（真机），确认容忍分支日志形态；无法复现时保留「现场再发生即自证」的日志锚（grep「疑似 qB 搬运过渡态」）。</li>
+      <li><strong>issue 收尾</strong>：置 Fixed，回填实际修法 / 验证方式 / 测试数字；重跑 <code>gen_issues_index.py</code>。</li>
+      <li><strong>会话收尾 DoD</strong>：activeContext 已完成条目迁 progress、代码事实变更回写 memory-bank 主题文档、新坑（如有）按动作写 pitfalls 并重建索引。</li>
+      <li><strong>等用户显式说「提交」</strong>：走 my-commit-flow（gitmoji 🐛 + 中文提交信息，数字用提交那一刻实测值；先 Gitee 后 GitHub 一次）。</li>
+    </ol>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>验收标准</h2>
+    <ul>
+      <li>全量 <code>uv run pytest tests -q</code> 绿，实测数字入档；T1/T2 红验记录在案（红 → 修复 → 绿）。</li>
+      <li>issue 26-09-21-0219 状态 Fixed，实际修法与本计划比对：不一致处保留建议原文并说明改道原因。</li>
+      <li>锚点复验：全部改动按符号 + grep 定位，合并/实施后 <code>git grep</code> 复跑通过。</li>
+      <li><code>git status --short</code> 确认红线文件零改动（config.yml / auto-qb-data/ / 想法.md 不在变更集）。</li>
+      <li>现场可自证：容忍分支与上限分支各有可 grep 的 warning 日志，真机下次发生即可对日志定案。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html · 基线 develop @ 676f761（2026-09-22 20:38 快进同步）· 取证均为命令实测，行号仅加速项<br>
+    认领链：用户 2026-09-22 指派「认领 issue」→ issue 置 In Progress → 本计划为其认领凭据，实施待用户过目本计划后开始
+  </footer>
+
+</div>
+</body>
+</html>
