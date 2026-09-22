@@ -300,6 +300,7 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 
 - `_load_state()`: JSON 读入 `self.state` (构造时 + run 时 + 热重载 L2 各一次); `save_state()`: **仅程序退出时**调用 (减少磁盘写入)。
 - **损坏回退 (2026-09-22, issue 26-09-21-1347)**: `_load_state` 经 `_read_state_file` 判**三态** —— `dict` 可用 / `None` 文件不存在(首启, **静默**) / `_CORRUPT` 存在但非法 JSON、非 dict、非法 UTF-8(**损坏**)。损坏时记 WARNING(损坏文件**原样保留、不删**)并回退 `<state_file>.bak`(`save_state` 的 `keep_backup` 每次写盘前复制的上一代内容), 读到合法 dict 即用以 INFO 记「用了备份」, 并**自愈写回主文件**(刻意不带 `keep_backup`: 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`, 把唯一一份好备份盖掉); 备份也不可用才返回 `{}` 并再告警说清后果。`OSError`(权限等)**故意不吞** —— 那是环境问题不是内容问题。备份后缀单点常量 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。
+- **启动清场(同上 issue 的附带发现)**: `_cleanup_orphan_tmp()` 在 `QbManager.__init__` **持锁之后**调用, 清理 `<state_file>.<随机>.tmp`(崩溃落在 `mkstemp` 与 `os.replace` 之间的遗留, `atomic_write` 只清自己的异常路径)。**持锁才清**是硬前提(没锁 = 有别的实例在写); 只认这一个形状, `.bak` 与别人的 `.tmp` 不碰; `no_lock=True` 的只读模式不调用。
 - `record_execution(rule_name, hash)`: 写 `state["exec_history"]["{rule}:{hash}"] = {ts, date, hour}` — execute_once/cooldown 去重依据。
 - `begin_round(torrents)`: 维护 `state["upload_snapshots"][daily/weekly/monthly] = {key, baseline{hash: uploaded}}` — upload_size_today/week/month 条件的基线; 周期切换时清空重建。
 - `upload_delta(torrent, kind)`: `max(0, uploaded - baseline)` (下限 0, 防种子重加/客户端重启归零导致负数)。

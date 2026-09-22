@@ -12,6 +12,10 @@
 - test_load_state_corrupt_without_backup_warns: 主文件损坏且备份不可用 -> 空状态 + 两条 WARNING(损坏/备份不可用)留痕
 - test_load_state_missing_file_is_silent: 首启(文件不存在)不告警 —— 与"损坏"区分
 - test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 只告警不抛
+- test_cleanup_orphan_tmp_removes_only_state_leftovers: 启动清理只删 `<state_file>.<随机>.tmp`; .bak / 别人的 .tmp / 空随机段不碰
+- test_cleanup_orphan_tmp_missing_dir_is_nonfatal: 状态目录不可列 -> 只告警不抛
+- test_cleanup_orphan_tmp_delete_failure_is_nonfatal: 单个文件删不掉(被占用) -> 只告警并继续清其余, 不抛
+- test_cleanup_orphan_tmp_is_wired_after_lock: 接线守阵: 清理必须挂在 `self._lock.acquire()` 之后(未持锁时别的实例可能正在写)
 - test_save_state_error_swallowed: 保存状态错误被吞掉
 - test_record_and_get_exec_record: 执行记录写入与读取
 - test_begin_round_and_upload_delta: 本轮开始与上传增量
@@ -155,6 +159,91 @@ def test_load_state_recovered_writeback_failure_is_nonfatal():
             got = mgr._load_state()
         assert got == {"exec_history": {"r:h": {"ts": 1.0}}}, "写回失败不能把已恢复出的状态也搭进去"
         assert any("写回" in c[0][0] for c in warn.call_args_list), "写回失败要留痕"
+
+
+def test_cleanup_orphan_tmp_removes_only_state_leftovers():
+    """启动清理只认 `<state_file>.<随机>.tmp`; `.bak` / 别人的 `.tmp` / 空随机段一律不碰
+
+    `.bak` 那条是关键反例 —— 它是恢复凭据(见 test_load_state_corrupt_falls_back_to_bak),
+    清理一旦放宽成"同目录所有 .tmp/-like 文件", 就会把唯一的退路删掉。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        orphans = [os.path.join(td, "state.json.ab12cd34.tmp"), os.path.join(td, "state.json.zz99.tmp")]
+        keeps = [
+            os.path.join(td, "state.json.bak"),  # 恢复凭据
+            os.path.join(td, "web.token.tmp"),  # 别人的临时文件
+            os.path.join(td, "state.json..tmp"),  # 空随机段: 不是 mkstemp 的产物
+        ]
+        for p in orphans + keeps:
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        mgr._cleanup_orphan_tmp()
+        for p in orphans:
+            assert not os.path.exists(p), f"孤儿临时文件应被清理: {p}"
+        for p in keeps:
+            assert os.path.exists(p), f"不该被清理: {p}"
+        # 幂等: 再跑一次(已无孤儿)不得误伤任何保留项
+        mgr._cleanup_orphan_tmp()
+        for p in keeps:
+            assert os.path.exists(p), f"二次清理后不该消失: {p}"
+
+
+def test_cleanup_orphan_tmp_missing_dir_is_nonfatal():
+    """状态目录列不出来 -> 只告警不抛(启动清场不该成为新的启动失败点)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        # 目录"列不出来"用打桩模拟: 真造一个不可列目录跨平台不可靠(Windows 上 chmod 无效)
+        with mock.patch.object(rule_engine.os, "listdir", side_effect=OSError("denied")), \
+             mock.patch.object(rule_engine.logger, "warning") as warn:
+            mgr._cleanup_orphan_tmp()  # 不应抛
+        assert warn.call_count == 1
+
+
+def test_cleanup_orphan_tmp_delete_failure_is_nonfatal():
+    """单个文件删不掉(被占用) -> 只告警并**继续清其余**, 不抛
+
+    钉的是循环内 `os.remove` 的异常分支: 它若向外抛, 一个被占用的文件就能让启动清场整段失效
+    (顺带把后面的删除也一起带走)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        locked = os.path.join(td, "state.json.aaaa.tmp")
+        other = os.path.join(td, "state.json.bbbb.tmp")
+        for p in (locked, other):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        real_remove = os.remove
+
+        def flaky(path):
+            if path == locked:
+                raise OSError("locked")
+            real_remove(path)
+
+        with mock.patch.object(rule_engine.os, "remove", side_effect=flaky), \
+             mock.patch.object(rule_engine.logger, "warning") as warn:
+            mgr._cleanup_orphan_tmp()  # 不应抛
+        assert os.path.exists(locked)
+        assert not os.path.exists(other), "一个删不掉不该挡住其余"
+        assert any("删除孤儿临时文件失败" in c[0][0] for c in warn.call_args_list)
+
+
+def test_cleanup_orphan_tmp_is_wired_after_lock():
+    """接线守阵: 清理必须挂在 `self._lock.acquire()` 之后, 且在 `no_lock` 分支内
+
+    **持锁才清**是这个方法的安全前提: 没拿到锁说明有别的实例在跑, 它的临时文件正在使用中,
+    删掉等于破坏别人的写盘(而且 atomic_write 的 os.replace 会失败 ⇒ 状态丢一次更新)。
+    只读模式(`--export-yaml` 等 no_lock=True)也不该有这次磁盘副作用。
+    """
+    import inspect
+
+    from auto_qb.qbmanager import QbManager
+
+    src = inspect.getsource(QbManager.__init__)
+    i_lock = src.find("self._lock.acquire()")
+    i_clean = src.find("_cleanup_orphan_tmp")
+    assert i_lock >= 0 and i_clean > i_lock, "清理必须在 acquire() 之后"
+    assert "if not no_lock" in src[:i_clean], "清理必须只在持锁(非 no_lock)分支内"
 
 
 def test_save_state_error_swallowed():

@@ -219,6 +219,8 @@ class QbManager(
         if not no_lock:
             self._lock = SingleInstanceLock(self.state_file)
             self._lock.acquire()
+            # 持锁后才清: 锁住了说明没有别的实例在写, 状态目录里的 <state_file>.*.tmp 全是上次崩溃的遗留
+            self._cleanup_orphan_tmp()
 
     @property
     def client(self) -> Optional[Client]:

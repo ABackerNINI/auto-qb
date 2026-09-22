@@ -4,6 +4,7 @@
 """
 import json
 import logging
+import os
 from datetime import date, datetime
 from typing import Any, List, Optional
 from qbittorrentapi import Client
@@ -98,6 +99,36 @@ class RuleEngineMixin:
             utils.atomic_write(self.state_file, lambda f: json.dump(data, f, ensure_ascii=False, indent=2))
         except OSError as e:
             logger.warning(f"把备份状态写回 {self.state_file} 失败(不阻断启动, 下次落盘会再试): {e}")
+
+    def _cleanup_orphan_tmp(self) -> None:
+        """清理 atomic_write 遗留的孤儿临时文件 `<state_file>.<随机>.tmp`
+
+        atomic_write 只清**自己**的异常路径; 崩溃落在 mkstemp 与 os.replace 之间时临时文件就留在盘上,
+        启动又没人清 ⇒ 每崩一次留一个, 久了状态目录里堆一片。
+        **判据 = 持锁后才清**: 持锁 ⇒ 没有别的实例在写, 同目录里任何匹配文件都是上次崩溃的遗留;
+        未持锁的只读模式(`--export-yaml` 等)根本不调用本方法(见 `QbManager.__init__`)。
+        只认 `<state_file>.<随机>.tmp` 这一个形状 —— `.bak` 与别人的 `.tmp` 一概不碰; 删除失败只告警。
+        """
+        directory = os.path.dirname(os.path.abspath(self.state_file))
+        prefix = os.path.basename(self.state_file) + "."
+        suffix = utils.TMP_SUFFIX
+        try:
+            names = os.listdir(directory)
+        except OSError as e:
+            logger.warning(f"无法列出状态目录(跳过孤儿临时文件清理): {directory} - {e}")
+            return
+        removed = 0
+        for name in names:
+            # 空随机段(如 `state.json..tmp`)不是 mkstemp 的产物 —— 不碰, 免得误删别人的文件
+            if not (name.startswith(prefix) and name.endswith(suffix)) or len(name) <= len(prefix) + len(suffix):
+                continue
+            try:
+                os.remove(os.path.join(directory, name))
+                removed += 1
+            except OSError as e:
+                logger.warning(f"删除孤儿临时文件失败(跳过): {name} - {e}")
+        if removed:
+            logger.info(f"清理 {removed} 个孤儿临时文件: {prefix}*{suffix}")
 
     def save_state(self):
         """落盘状态文件: 原子写(tmp + os.replace)并保留一份 .bak

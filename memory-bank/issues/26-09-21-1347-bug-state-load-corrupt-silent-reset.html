@@ -176,6 +176,7 @@ def _load_state(self) -&gt; dict:
       <li>2026-09-21 13:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-09-22 12:50 — 用户指派认领，状态 <strong>In Progress</strong>（@ d5a5520）</li>
       <li>2026-09-22 13:10 — 已修并验证，状态 <strong>Fixed</strong>（全量 1156 passed + 1 skipped；已入库 <code>e11df80</code>，Gitee 主线 + GitHub 镜像均推上）</li>
+      <li>2026-09-22 14:20 — 附带发现（孤儿 <code>state.json.*.tmp</code> 启动清理）一并修完，全量 1160 passed + 1 skipped</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-09-22 12:50 @ d5a5520 <strong>仍复现</strong> —— <code>src/auto_qb/mixins/rule_engine.py</code> 的
@@ -215,7 +216,7 @@ def _load_state(self) -&gt; dict:
     </ul>
     <p><strong>配套改动</strong>：<code>tests/test_utils.py::test_atomic_write_keep_backup</code> 的备份路径断言改按
     <code>path + utils.BACKUP_SUFFIX</code>（不写字面量）—— 一旦有人在 <code>atomic_write</code> 里改回字面量，这条就红。</p>
-    <p><strong>测试数字</strong>：全量 <strong>1156 passed + 1 skipped</strong>（Windows 本地；改动前基线 1152）
+    <p><strong>测试数字</strong>：全量 <strong>1160 passed + 1 skipped</strong>（含附带发现的 4 条守阵）（Windows 本地；改动前基线 1152）
     —— 用 <code>TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q --no-cov</code>（默认 <code>H:\Temp</code> 下
     pytest 清理阶段会 <code>PermissionError … pytest-current</code>，见 pitfalls / testing.md）。<code>tests/sidefx.py</code>
     副作用台账 <strong>越界 0</strong>。</p>
@@ -223,9 +224,20 @@ def _load_state(self) -&gt; dict:
     <code>RuleEngineMixin._load_state</code> 打回修复前实现（<code>H:/Temp/redverify_state_bak.py</code>）后跑同一场景 ——
     旧实现返回 <code>{}</code>（静默清空）且主文件仍是 <code>{not json</code>（不自愈）⇒
     <code>test_load_state_corrupt_falls_back_to_bak</code> 的两条断言<strong>必然红</strong>。</p>
-    <p><strong>知识库回写</strong>：<code>testing.md</code> 基线 1152 → 1156；<code>activeContext.md</code> 当前焦点新增本条。</p>
-    <p><strong>未做（本 issue 报告里标「可选，低优先」）</strong>：启动时清理 <code>state.json.*.tmp</code> 孤儿文件 ——
-    按范围守恒不在本次修复内，仍在「现象」与「建议修法」里留着原文；要修请另开一条或显式指派。</p>
+    <p><strong>知识库回写</strong>：<code>testing.md</code> 基线 1152 → 1160；<code>activeContext.md</code> 当前焦点新增本条。</p>
+    <p><strong>附带发现（报告「现象」里的第二条，原标「可选，低优先」）—— 已一并修完</strong>：新增
+    <code>_cleanup_orphan_tmp()</code>，在 <code>QbManager.__init__</code> 里<strong>持锁之后</strong>调用，清理
+    <code>&lt;state_file&gt;.&lt;随机&gt;.tmp</code>。两条硬判据：</p>
+    <ul>
+      <li><strong>持锁才清</strong> —— 拿到单实例锁才说明没有别的实例在写；否则删掉的可能是别人正在用的临时文件
+        （<code>atomic_write</code> 随后 <code>os.replace</code> 失败 ⇒ 状态白丢一次更新）。只读模式
+        （<code>--export-yaml</code> 等 <code>no_lock=True</code>）因此<strong>不做</strong>这次磁盘副作用。</li>
+      <li><strong>只认这一个形状</strong> —— <code>.bak</code>（恢复凭据）、别人的 <code>*.tmp</code>、
+        空随机段的 <code>state.json..tmp</code> 一概不碰。放宽成"同目录所有 <code>.tmp</code>"会把唯一的退路删掉。</li>
+    </ul>
+    <p>守阵 4 条：只删孤儿 / 目录不可列只告警不抛 / 单个删不掉继续清其余 / <strong>接线守阵</strong>（源码里
+    <code>_cleanup_orphan_tmp</code> 必须出现在 <code>self._lock.acquire()</code> 之后且落在 <code>if not no_lock</code>
+    分支内 —— 这条防的是后来者把它挪到持锁之前或挪出分支）；并断言<strong>二次调用幂等</strong>。</p>
   </section>
 
   <footer>

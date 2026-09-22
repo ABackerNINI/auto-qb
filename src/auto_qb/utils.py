@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 # 防两侧命名漂移: 备份写出去却没人按同名读回来, 恢复分支就永远走不到(issue 26-09-21-1347)。
 BACKUP_SUFFIX = ".bak"
 
+# atomic_write 的临时文件后缀(写侧与启动清理侧共用同一常量, 理由同 BACKUP_SUFFIX)
+TMP_SUFFIX = ".tmp"
+
 # 匹配语法常量(用户配置的统一匹配语法, 解析唯一入口见 MatchPattern)
 REGEX_PREFIX = "regex:"
 IGNORE_CASE_SUFFIX = ":ignore_case"
@@ -79,7 +82,7 @@ def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
             shutil.copy2(path, path + BACKUP_SUFFIX)
         except OSError as e:
             logger.warning(f"备份 {path} 失败(继续写盘): {e}")
-    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=TMP_SUFFIX)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             write_fn(f)

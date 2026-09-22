@@ -14,8 +14,8 @@
 #   只加 --basetemp 也不行(测试里直接用 tempfile 的仍落 H: ⇒ 4 failed + 1 error)。细节见 pitfalls.md。
 #   备选: `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但约定统一走 R 盘。
 #   提交闸门(`auto = true`)跑的就是 `--no-cov` 这一档, 覆盖率基线另算。
-# 基线: **1156 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
-#   ↑ 1152 → 1156(**+4**; 2026-09-22 issue 26-09-21-1347「state.json 损坏静默清空」守阵:
+# 基线: **1160 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1152 → 1160(**+8**, 两批; 2026-09-22 issue 26-09-21-1347「state.json 损坏静默清空」守阵:
 #     `test_load_state_corrupt_falls_back_to_bak`(主文件损坏 -> 回退 .bak **并自愈写回主文件**;
 #       ❗自愈那条必须钉: 不写回的话下次 save_state 的 keep_backup 会把损坏内容复制成新的 .bak,
 #      唯一一份好备份被盖掉, 恢复等于白做 —— 红验(打回旧实现)下本用例必红) /
@@ -23,6 +23,13 @@
 #     `test_load_state_missing_file_is_silent`(首启不得告警 —— 反向钉住"损坏 vs 首启"分开处置) /
 #     `test_load_state_recovered_writeback_failure_is_nonfatal`(自愈写回失败只告警、不抛 ——
 #      钉 `_write_back_recovered` 的异常分支: 它若把异常放出去, "有备份可恢复"反而比"没备份"更糟)。
+#     第二批 = 附带发现「孤儿 <state_file>.*.tmp 启动清理」(`_cleanup_orphan_tmp`, 持锁后才清):
+#     `test_cleanup_orphan_tmp_removes_only_state_leftovers`(只删 `<state_file>.<随机>.tmp`;
+#      **`.bak` 是关键反例** —— 清理一旦放宽成"同目录所有 .tmp", 就把唯一的恢复凭据删了; 并断言二次调用幂等) /
+#     `test_cleanup_orphan_tmp_missing_dir_is_nonfatal`(目录列不出只告警; 用打桩模拟, Windows 上 chmod 造不出) /
+#     `test_cleanup_orphan_tmp_delete_failure_is_nonfatal`(一个删不掉不得挡住其余) /
+#     `test_cleanup_orphan_tmp_is_wired_after_lock`(**接线守阵**: 源码里必须挂在 `self._lock.acquire()`
+#      之后且落在 `if not no_lock` 分支内 —— 防后来者把它挪到持锁之前)。
 #     另 `test_utils.py::test_atomic_write_keep_backup` 的备份路径断言改按 `path + utils.BACKUP_SUFFIX`(不写字面量)。
 #   ↑ 1149 → 1152(**+3**; 2026-09-22 issue 26-09-21-1347「跳检备份先于删除」守阵:
 #     `test_checking_skip_backup_precedes_delete_and_cleared_on_success`(在客户端的 torrents_delete
