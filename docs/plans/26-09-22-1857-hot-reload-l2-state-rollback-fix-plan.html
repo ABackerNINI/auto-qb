@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="fix-plan">
+<meta name="issue-id" content="26-09-21-1347-bug-backend-hot-reload-l2-state-rollback">
+<meta name="plan-stamp" content="26-09-22-1857">
+<title>修复计划 · 热重载 L2 分支重读磁盘 state, 运行期内存态被回滚</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --accent-dim: #2b4048;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fce9a;
+    --ok-bg: #1b2a1f;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 37px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--accent-dim); color: var(--accent-ink); border: 1px solid var(--accent-dim); }
+  .badge.warm { background: var(--warn-bg); color: var(--warn); border-color: #4a3a2c; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); border-color: #2c4030; }
+  section { grid-column: 2; margin-top: 48px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 24px 0 8px; }
+  h3 .tag { font-family: var(--mono); font-size: 11.5px; color: var(--accent-ink); margin-right: 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; max-width: 100%; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .path, code.path { font-family: var(--mono); font-size: 12.5px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 80ch; }
+  .tworow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .panel { border: 1px solid var(--hair); padding: 14px 16px; background: var(--mark); }
+  .panel .pt { font-family: var(--display); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  .panel .pt.good { color: var(--ok); }
+  .panel .pt.bad { color: var(--warn); }
+  .panel p, .panel ul { font-size: 13.5px; margin-bottom: 0; }
+  .panel ul { margin-left: 18px; }
+  .steps { counter-reset: step; margin: 0 0 14px; max-width: 80ch; }
+  .steps .step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--hair-soft); }
+  .steps .step:last-child { border-bottom: none; }
+  .steps .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); padding-top: 2px; }
+  .steps .st { font-weight: 600; margin-bottom: 3px; }
+  .steps .sd { font-size: 13.5px; color: var(--dim); }
+  .steps .sd code { font-size: 12px; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+  @media (max-width: 900px) { .sheet { grid-template-columns: 1fr; padding: 32px 20px 60px; } nav.toc { position: static; } header.cover, section, footer { grid-column: 1; } .tworow { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>问题与触发链</a>
+    <a href="#s2"><span class="no">02</span>证据与根因</a>
+    <a href="#s3"><span class="no">03</span>修法</a>
+    <a href="#s4"><span class="no">04</span>候选方案与取舍</a>
+    <a href="#s5"><span class="no">05</span>影响与风险</a>
+    <a href="#s6"><span class="no">06</span>验证与验收</a>
+    <div class="toc-foot">
+      issue <span style="font-family:var(--mono)">26-09-21-1347</span><br>
+      bug · 档位 standard<br>
+      规模估计: S(一行 + 一测)<br>
+      取证 commit <span style="font-family:var(--mono)">4c8b90e</span>
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">修复计划 · issue 26-09-21-1347 · bug</div>
+    <h1>热重载 L2 分支重读磁盘 state, 运行期内存态被回滚到上次退出版本</h1>
+    <p class="lede">删掉 <code>apply_new_config</code> L2 分支里的 <code>self.state = self._load_state()</code> 一行, 配一个「L2 热重载保留运行期状态」守阵(先红验后转绿), 同步更正一处把该行为当正常语义记载的知识库文档。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">issue</div><div class="v">26-09-21-1347-bug-backend-hot-reload-l2-state-rollback</div></div>
+      <div class="item"><div class="k">计划时间</div><div class="v">2026-09-22 18:57</div></div>
+      <div class="item"><div class="k">规模</div><div class="v"><span class="badge">S · 一行修复 + 一条守阵</span></div></div>
+      <div class="item"><div class="k">方案</div><div class="v"><span class="badge ok">候选 A(删行) — issue 内已推荐, 本计划复核后采纳</span></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>问题与触发链</h2>
+    <p>Web UI「保存设置」提交任何含 <strong>L2 级</strong>变更的配置(rules_config 改任何规则 / interval / delete_tags* / global_speed_limit_curve / trackers.X.domains|rules|groups, 以及 impact.py 未列出的新配置项)时, 主循环热重载走 L2 分支, 其中 <code>self.state = self._load_state()</code> 把<strong>磁盘上「上次优雅退出时」的旧 state</strong> 整体替换进内存 —— 本次运行累计的全部运行期状态被静默回滚。</p>
+    <p>触发链(每步均已核对现行代码, 取证 2026-09-22 @ <code>4c8b90e</code>):</p>
+<pre><code>Web UI 保存设置 → PUT /api/config (web.py)
+  → config/writer.py 校验写盘 → 命令队列投递 reload_config
+  → web_commands.py:487  _cmd_reload_config → self.apply_new_config(config)
+  → qbmanager.py:499-509  L2 分支:
+      self.task_queue = TaskQueue()
+      self.store.reset_runtime()
+      self.state = self._load_state()      # qbmanager.py:503 ← 问题行
+      self._load_rules() ...</code></pre>
+    <p>每次命中必现, 与平台/数据量无关, 无需崩溃; Web UI 改规则保存即常态触发。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据与根因</h2>
+
+    <h3><span class="tag">2.1</span>代码自相矛盾: 文档串承诺「保留执行历史」, 问题行把它清掉</h3>
+    <p><code>apply_new_config</code> 自己的 docstring(qbmanager.py:472)写着 L2 「重建任务队列与规则 + 全部记录重匹配 tracker(<strong>保留 store 记录/分组/执行历史</strong>)」。执行历史 <code>exec_history</code> 就存在 <code>self.state</code> 里 —— 而 503 行恰恰用磁盘旧版整体替换了 <code>self.state</code>。docstring 是对的, 代码违反了它: 这一行是语义 bug, 不是有意设计。</p>
+
+    <h3><span class="tag">2.2</span>磁盘 state 不可能比内存新: 重读没有任何正向价值</h3>
+    <p>全库 <code>save_state()</code> 落盘点只有三处(qbmanager.py:449-450 主循环退出 finally 且 <code>not dry_run</code> 才落; skip_checking.py:252 / 277 跳检「删除→重加」路径落): 平时 state <strong>不落盘</strong> ⇒ 磁盘上的 state.json 永远停在「上次优雅退出」的版本。且 <code>state_file</code>/​<code>data_dir</code> 是 R 级(热重载拒绝应用, impact.py), 配置热重载不可能合法地更新磁盘 state —— 运行期这次重读<strong>只能拿旧数据覆盖新数据</strong>, 没有任何正向收益。</p>
+
+    <h3><span class="tag">2.3</span>被回滚的运行期状态清单(全部 key 均已 grep 核对)</h3>
+    <table>
+      <tr><th>state 键</th><th>写入方(取证行号 @ 4c8b90e)</th><th>被回滚的实际后果</th></tr>
+      <tr><td><code>exec_history</code></td><td class="path">rule_engine.py:151 record_execution</td><td>execute_once / cooldown 去重失效 ⇒ 规则重放</td></tr>
+      <tr><td><code>skip_check_day</code></td><td class="path">skip_checking.py:137, 207</td><td>跨日跳检去重失效 ⇒ 同日可重复跳检(PT 本地统计再丢一次)</td></tr>
+      <tr><td><code>recheck_fails</code></td><td class="path">full_checking.py:30, 38, 86, 96</td><td>坏种子校验失败冷却丢失 ⇒ 当日最多再校验 3 次</td></tr>
+      <tr><td><code>reannounce_ts</code></td><td class="path">transfer.py:38</td><td>再汇报节流丢失 ⇒ 过早 reannounce 风险</td></tr>
+      <tr><td><code>upload_snapshots</code></td><td class="path">rule_engine.py:163 begin_round</td><td>日/周/月上传基线丢失 ⇒ upload_delta 计算失真(HR 规则受影响)</td></tr>
+      <tr><td><code>speed_limit_curve</code></td><td class="path">speed_curve.py:187</td><td>当日限速曲线命中记录丢失</td></tr>
+      <tr><td><code>auto_categories</code></td><td class="path">tags.py:98</td><td>自动分类记忆丢失</td></tr>
+      <tr><td><code>skip_check_backup</code></td><td class="path">skip_checking.py:243</td><td>跳检备份凭据指针回滚 ⇒ 可能指向已被清理的备份条目</td></tr>
+    </table>
+    <p class="hint">任务队列重建与 <code>store.reset_runtime()</code>(清分组索引/视图缓存, 种子记录保留)是 L2 的预期行为, 不在修复范围。</p>
+
+    <h3><span class="tag">2.4</span>根因</h3>
+    <div class="callout">根因即 qbmanager.py:503 这一行本身: 它是从 run() 启动路径(qbmanager.py:334)照搬来的「启动时从磁盘加载」语义, 被误复制进了运行期的 L2 热重载分支。与「state 平时不落盘、仅退出落盘」组合后, 语义变成「回滚到上次退出版本」。已排除: L0/L1 分支不触碰 state; 热重载路径上没有任何先行 save_state; 磁盘 state 在运行期不可能因合法途径变新(见 2.2)。</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>修法</h2>
+    <p>三步: 守阵先红验(F2) → 删一行(F1) → 文档回写与收尾(F3)。顺序刻意把测试放在修码前 —— 红验输出就是本 issue 的验收凭据(issue §06 的约定)。</p>
+
+    <h3><span class="tag">F1</span>删除问题行</h3>
+    <p><code>qbmanager.py:503</code> 的 <code>self.state = self._load_state()</code> 整行删除。L2 重建只需要任务队列与规则; state 与配置变更无关, 内存态原样保留即正确语义。同时核对 L2 分支留有的日志文案与 docstring 是否需要微调(docstring 472 行本就承诺「保留执行历史」, 删行后承诺兑现, 不需要改)。</p>
+
+    <h3><span class="tag">F2</span>守阵测试: L2 热重载保留运行期状态</h3>
+    <p>放 <code>tests/test_web.py</code>、紧邻既有 <code>test_apply_new_config_levels</code>(约 3410 行), 复用同一套替身模式(<code>make_manager</code> + monkeypatch <code>diff_config_impacts</code> + mock <code>_load_rules</code>/<code>_create_global_tasks</code>/<code>connect</code>):</p>
+    <ol>
+      <li>构造 manager 后, 直接往 <code>mgr.state</code> 注入运行期条目(<code>exec_history</code> / <code>skip_check_day</code> / <code>recheck_fails</code> 各一条), 并保留注入前 dict 引用 <code>state_before</code>;</li>
+      <li>向磁盘 state_file 手工写入一份<strong>内容不同的旧版</strong> state.json(如 <code>{"stale": true}</code>)—— 模拟「上次退出」的版本;</li>
+      <li>以一条 L2 变更触发 <code>apply_new_config</code>;</li>
+      <li>断言 <code>mgr.state is state_before</code>(对象未被替换)且注入的三组运行期条目原样还在。</li>
+    </ol>
+    <p><strong>红验</strong>: 在 F1 之前跑, 现行代码会把 <code>mgr.state</code> 替换成磁盘旧版 ⇒ 断言必红, 输出留痕; <strong>转绿</strong>: F1 之后同测试通过。用「对象同一性 + 内容保留」双断言, 不 monkeypatch <code>_load_state</code> 本身(避免把测试耦合在实现符号上)。</p>
+    <p class="hint">⚠ 按 AGENTS.md 约定: 新增测试必须同步 <code>tests/test_web.py</code> 文件头 docstring 的「测试计划」清单(热重载小节加一行)。</p>
+
+    <h3><span class="tag">F3</span>文档回写与 issue 收尾</h3>
+    <ul>
+      <li><strong>memory-bank/systemPatterns/client-and-state.md:25</strong>: 现记载「_load_state(): JSON 读入 self.state (构造时 + run 时 + <strong>热重载 L2 各一次</strong>)」—— 把这一行为当正常语义写进了知识库。改为「构造时 + run 时各一次」, 并补一句「L2 热重载不重读 state(2026-09-22 修, 内存态即真相; 磁盘版只是上次退出的快照)」。</li>
+      <li><strong>issue 报告</strong>: 认领时先补「复验」行(重跑锚点确认 503 行仍在), 状态 Open → In Progress; 修完写「实际修法 / 验证方式 / 测试数字」, 状态 → Fixed。两处状态(<code>&lt;meta name="issue-status"&gt;</code> + 封面徽标)一起改, 然后重跑 <code>.agents/skills/create-issue/scripts/gen_issues_index.py</code>。</li>
+      <li><strong>会话收尾</strong>(按 memory-bank skill DoD): activeContext 滚动更新; 全量测试实测数字记入 testing.md; 本任务为 S 级一行修, 预计不触发立档阈值, 收尾时按 skill 四条件再判一次。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>候选方案与取舍</h2>
+    <table>
+      <tr><th>候选</th><th>做法</th><th>结论</th></tr>
+      <tr>
+        <td><strong>A · 删行</strong><br><span class="hint">(issue 推荐, 本计划采纳)</span></td>
+        <td>删除 qbmanager.py:503, L2 不再触碰 state</td>
+        <td><span class="badge ok">采纳</span> 语义正确(与「重启进程」行为一致: 历史跨重启保留, 热重载理应同样保留); 改动最小; 无副作用。黄金法则「保守默认」也支持: 重置运行期状态属于高风险动作, 不该是隐式默认。</td>
+      </tr>
+      <tr>
+        <td><strong>B · 先存再读</strong></td>
+        <td>L2 分支改为 <code>save_state()</code> 后再 <code>_load_state()</code></td>
+        <td><span class="badge warm">不采纳</span> net 效果等于把内存 dict 经 JSON 往返一趟再原样读回 —— 纯粹的磁盘空转, 还多出一个写盘窗口; 且它修不好语义: 「重读」这个动作本身没有正向价值(2.2)。</td>
+      </tr>
+      <tr>
+        <td><strong>C · 合并保留</strong></td>
+        <td>重读磁盘后与内存态 deep-merge</td>
+        <td><span class="badge warm">不采纳</span> 为不存在的需求引入 merge 策略(键冲突取谁? 删除的键要不要复活?), 复杂度与风险全无回报。</td>
+      </tr>
+    </table>
+    <p>与姊妹 issue 的关系: <code>26-09-21-1347-bug-backend-state-save-only-on-exit</code>(运行期完全不落盘)是独立问题 —— 即使将来加了周期性落盘, 本条的「重读=回滚」语义错误依然成立, 候选 A 不受其修法影响; 两案互不阻塞, 本计划不扩scope 去顺手修它(scope-guard)。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>影响与风险</h2>
+    <div class="tworow">
+      <div class="panel">
+        <div class="pt good">正面影响</div>
+        <ul>
+          <li>Web UI 改规则/interval/曲线/tracker domains 等保存后, 跳检去重、校验冷却、执行历史、上传基线不再丢失</li>
+          <li>dry-run 模式同样受益: 退出时不落盘(449 行), 磁盘版更陈旧, 现行 L2 回滚在 dry-run 下更严重</li>
+          <li>热重载路径不再可能触发 _load_state 的损坏恢复分支(告警 + .bak 自愈写回), 减少运行期噪音</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="pt bad">风险与对策</div>
+        <ul>
+          <li><strong>有人依赖重置吗?</strong> 分析: exec_history 键为 <code>rule_name:hash</code>, 改规则条件不会(也不应)清历史 —— 与进程重启语义一致(重启后历史同样保留); 未发现任何依赖重置的调用方。若未来确需「改规则即重跑」, 应做成显式配置项, 不靠隐式回滚</li>
+          <li><strong>state dict 换成原地保留</strong>, 是否有组件持有旧引用? grep 全库: 所有访问都经 <code>self.state</code>/<code>manager.state</code> 属性现读, 无缓存引用, 删行后该疑虑(换对象导致旧引用悬挂)直接消失</li>
+          <li>改动面极小(一行 + 一测 + 文档), 无并发/时序敏感点; L2 其余重建步骤不动</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>验证与验收</h2>
+    <div class="steps">
+      <div class="step"><div class="no">S1</div><div>
+        <div class="st">认领 + 复验</div>
+        <div class="sd">重跑锚点(grep <code>self.state = self._load_state()</code> 确认仍在 L2 分支)→ issue 补「复验」行, 状态 In Progress, 重跑 issues 索引脚本。</div>
+      </div></div>
+      <div class="step"><div class="no">S2</div><div>
+        <div class="st">红验</div>
+        <div class="sd">写 F2 守阵 + 同步 test_web.py 头部测试计划清单 → 只跑该测试, 确认对现行代码<strong>必红</strong>, 红验输出留痕(issue「修复后补充」段)。</div>
+      </div></div>
+      <div class="step"><div class="no">S3</div><div>
+        <div class="st">修复转绿</div>
+        <div class="sd">删 qbmanager.py:503 一行 → 守阵转绿。</div>
+      </div></div>
+      <div class="step"><div class="no">S4</div><div>
+        <div class="st">全量回归</div>
+        <div class="sd"><code>uv run pytest tests -q</code>(先设 <code>TMPDIR=R:/Temp/auto-qb/tests</code>, 见 pitfalls/testing/tmpdir.md)。基线 <strong>1175 passed + 1 skipped</strong>(2026-09-22 activeContext), 预期 <strong>1176 + 1</strong>, 以实测为准并记入 testing.md。</div>
+      </div></div>
+      <div class="step"><div class="no">S5</div><div>
+        <div class="st">收尾</div>
+        <div class="sd">issue 状态 Fixed + 实际修法/测试数字; 重跑 <code>gen_issues_index.py</code>(Open bug 7 → 6); client-and-state.md 回写(见 F3); activeContext 滚动; 按立档阈值四条件再判一次。</div>
+      </div></div>
+    </div>
+
+    <h3><span class="tag">验收标准</span></h3>
+    <ul>
+      <li><span class="badge ok">AC-1</span> F2 守阵红验凭据留痕(修前红、修后绿, 同一条测试)</li>
+      <li><span class="badge ok">AC-2</span> 全量测试无回归, 实测数字(预期 1176 passed + 1 skipped)记入 testing.md</li>
+      <li><span class="badge ok">AC-3</span> issue 26-09-21-1347 状态 Fixed, 索引重建后 Open bug 计数 6</li>
+      <li><span class="badge ok">AC-4</span> client-and-state.md 不再记载「热重载 L2 重读 state」为正常行为, 反向记载修复口径</li>
+      <li><span class="badge ok">AC-5</span> 除 qbmanager.py 删行、tests/test_web.py 加测、memory-bank 三处文档外无其它文件改动(scope 守恒)</li>
+    </ul>
+
+    <h3><span class="tag">提交口径</span></h3>
+    <p class="hint">gitmoji 🐛 + 中文一句话概述; 首行如「🐛 修热重载 L2 分支重读磁盘 state 导致运行期内存态回滚」; 正文带动机(docstring 承诺 vs 代码违背)、修法取舍(A/B/C)、红验→绿验凭据与全量实测数字。走 my-commit-flow 全流程; 用户明说「提交」才入库。</p>
+  </section>
+
+  <footer>
+    docs/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html · 取证 2026-09-22 18:57 @ commit 4c8b90e · 代码会漂移, 锚点以「符号名 + grep 关键词」为准, 行号只是加速项
+  </footer>
+
+</div>
+</body>
+</html>

@@ -509,7 +509,8 @@ class QbManager(
             logger.warning("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
             self.task_queue = TaskQueue()
             self.store.reset_runtime()
-            self.state = self._load_state()
+            # 不重读磁盘 state: state 平时不落盘, 磁盘上只有上次退出的旧版, 重读 = 回滚
+            # 运行期内存态(exec_history/skip_check_day 等)。内存态即真相(issue 26-09-21-1347)。
             self._load_rules()
             self._create_global_tasks()
             self._suppress_events = True
