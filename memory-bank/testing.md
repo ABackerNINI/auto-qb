@@ -14,7 +14,11 @@
 #   只加 --basetemp 也不行(测试里直接用 tempfile 的仍落 H: ⇒ 4 failed + 1 error)。细节见 pitfalls.md。
 #   备选: `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但约定统一走 R 盘。
 #   提交闸门(`auto = true`)跑的就是 `--no-cov` 这一档, 覆盖率基线另算。
-# 基线: **1160 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1163 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7542 语句 / 623 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1160 → 1163(**+3**, 2026-09-22 issue 26-09-21-1408「tracker URL 含 passkey 全文写日志」守阵:
+#     `test_sanitize_tracker_url` / `test_sanitize_tracker_url_unparseable`(脱敏只留主地址,
+#     任意命名的凭据参数都覆盖; 降级占位 + urlparse 抛错不冒泡) /
+#     `test_cmd_trackers_log_sanitized`(端到端: 真跑编辑/移除命令, 断言日志里密钥全文与参数名均不在、主地址在));
 #   ↑ 1152 → 1160(**+8**, 两批; 2026-09-22 issue 26-09-21-1347「state.json 损坏静默清空」守阵:
 #     `test_load_state_corrupt_falls_back_to_bak`(主文件损坏 -> 回退 .bak **并自愈写回主文件**;
 #       ❗自愈那条必须钉: 不写回的话下次 save_state 的 keep_backup 会把损坏内容复制成新的 .bak,

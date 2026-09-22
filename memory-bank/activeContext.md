@@ -73,6 +73,19 @@
   写回 / 孤儿 tmp 被清理 / `.bak` 未被损坏内容盖掉 —— 四件事全成立(脚本在 `H:/Temp/e2e_state_recovery_check.py`,
   未进仓库)。
 
+- **🆕 tracker URL 含 passkey 全文写入日志 —— 已修并验证(未提交)**: issue
+  [26-09-21-1408-bug-web-tracker-url-passkey-log.html](issues/26-09-21-1408-bug-web-tracker-url-passkey-log.html)
+  用户指派认领, 复验 @ 2026-09-22 15:35 锚点仍在(`web_commands.py:381/389` 仍原样内插 URL 原文;
+  全库扫 URL 内插日志点也只有这两处)。修法: 新增 `utils.sanitize_tracker_url()` 单点脱敏,
+  **只留主地址** `scheme://host[:port]`, path/query/fragment 整段丢弃 + 剥 userinfo ——
+  刻意**不按参数名黑名单**剥(用户口径: 部分 PT 站凭据不是 passkey, 可能是其它任意名称,
+  黑名单每漏一个名字就漏一个站); 入参异常一律返回占位串 `<invalid-url>`, 绝不抛异常
+  (调用方在 qB 写操作之后的日志路径上)。守阵 3 条(`test_utils` 2 + `test_web` 1 端到端:
+  真跑命令后断言密钥全文与参数名都不在日志文本里、主地址在 —— 断言不写死参数名, 防退回黑名单思路)。
+  全量 **1163 passed + 1 skipped**, 覆盖率 90%。issue 已置 `Fixed` + 索引已重建;
+  `conventions.md`「日志规范」已加「凭据脱敏」条(日志落盘 + `/api/log` 读回 + 通知联动直推系统通知)。
+  **未提交** —— 等用户显式「提交」指令。
+
 - **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
   普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;
   `add_long_path_prefix_for_win` 非 Windows 原样返回; autostart 有 win32/darwin/linux 三支); `tests/`

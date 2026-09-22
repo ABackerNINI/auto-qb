@@ -273,6 +273,41 @@ def extract_tracker_hostnames(trackers_info: list) -> set:
     return hosts
 
 
+# sanitize_tracker_url 解析失败时的占位串(与成功返回值同形状: 一眼能看出"这里本该有个地址")
+SANITIZE_FALLBACK = "<invalid-url>"
+
+
+def sanitize_tracker_url(url) -> str:
+    """把 tracker URL 脱敏成"主地址": 只留 scheme://host[:port], 丢弃 path / query / fragment
+
+    设计取舍(issue 26-09-21-1408): 私站 announce URL 的凭据参数**名不统一** —— passkey 只是最常见
+    的一种, 实际还有 authkey / token / key / uid / secret 等任意命名, 按参数名黑名单剥离必然漏网
+    (漏一个名字就等于漏一个站)。所以这里**不猜参数名**, 直接把 path 与 query 整段丢掉:
+    排查只需要"哪个站"的信息(主地址已足够), 而任何形态、任何命名的凭据都在被丢弃的那一段里。
+
+    - 凭据也可能藏在 userinfo 里(`http://user:pass@host/announce`), 故 netloc 只取 `@` 之后的部分。
+    - 入参异常(空 / 非字符串 / 无法解析)一律返回 SANITIZE_FALLBACK, **绝不抛异常** —— 调用方都在
+      日志路径上, 脱敏失败不该把业务动作(qB 写操作)打断。
+    """
+    if not isinstance(url, str):
+        return SANITIZE_FALLBACK
+    raw = url.strip()
+    if not raw:
+        return SANITIZE_FALLBACK
+    try:
+        parts = urlparse(raw)
+    except Exception:
+        return SANITIZE_FALLBACK
+    # scheme 缺失时 urlparse 把 host 落进 path, 取首段兜底; 带 `@` 时取其后半(去 userinfo)
+    netloc = (parts.netloc or "").rsplit("@", 1)[-1]
+    if not netloc and parts.path:
+        netloc = parts.path.split("/", 1)[0].rsplit("@", 1)[-1].split("?")[0]
+    if not netloc:
+        return SANITIZE_FALLBACK
+    scheme = parts.scheme.lower()
+    return f"{scheme}://{netloc.lower()}" if scheme else netloc.lower()
+
+
 def match_tracker_confs(trackers: dict, urls: list):
     """按 hostname 精确匹配 tracker 配置(含子域名), 返回所有匹配的 TrackerConfig"""
     hosts = set()

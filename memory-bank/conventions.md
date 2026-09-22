@@ -105,6 +105,7 @@
 - **ActionResult.message = 纯详情** (不含动词与 log_repr, 例: `['HHan', 'seed-3D']`), 动作名由管线日志统一携带
 - **等级**: DEBUG=例行检查 + skipped 动作; INFO=动作成功/状态变化; WARNING=回退/风险/数据异常; ERROR=未预期异常 (`exc_info=True` 保留, 运行期 bug 需要堆栈; 配置错误走 ConfigError 无堆栈)
 - **全中文**; 默认 `log.format` 含 `%(name)s` (来源模块): `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
+- **凭据脱敏** (2026-09-22, issue 26-09-21-1408): 任何**可能内嵌凭据的 URL**(首当其冲是 tracker announce URL)进日志前必须过 `utils.sanitize_tracker_url()`, 只留主地址 `scheme://host[:port]`; **不按参数名黑名单剥** —— 私站凭据参数名是任意的(passkey 只是最常见的一种, 还有 authkey/token/uid 等), 黑名单每漏一个名字就漏一个站, 所以 path/query/fragment 整段丢弃。日志会落盘(含轮转备份)、可经 `/api/log` 读回, 且经通知联动(下条)直推系统通知, 泄露面远不止"读一次"
 - **通知联动** (2026-09-12): `notify.enabled` 时 NotifyHandler 挂在 `auto_qb` logger 上, 达到 `notify.min_level` 的日志自动推送平台原生通知 —— 因此**日志级别/骨架即通知语义**, 新增 WARNING/ERROR 日志点无需单独接入通知; 免打扰时段与节流在 notify.py 过滤, 消息内容直接复用日志消息(遵守本骨架); `--tray` 模式下 UiLogHandler 同样直挂 `auto_qb` logger, 窗口日志视图实时跟随本骨架输出
 
 ## WEB UI 菜单/入口分层原则 (2026-09-17 用户明确要求记入)

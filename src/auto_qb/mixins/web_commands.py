@@ -14,6 +14,7 @@ import time
 from typing import List, Optional
 
 from ..config import Config
+from ..utils import sanitize_tracker_url
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +379,11 @@ class WebCommandsMixin:
         if not orig_url or not new_url:
             raise ValueError("orig_url/new_url 均不能为空")
         self.api.torrents_edit_tracker(torrent_hash=hash, original_url=orig_url, new_url=new_url)
-        logger.info(f"WEB UI | 种子 {hash[:8]} 编辑 tracker: {orig_url} -> {new_url}")
+        # 只用脱敏后的主地址: announce URL 的 query 里常内嵌 passkey 等凭据, 落盘日志即泄露面
+        logger.info(
+            f"WEB UI | 种子 {hash[:8]} 编辑 tracker: "
+            f"{sanitize_tracker_url(orig_url)} -> {sanitize_tracker_url(new_url)}"
+        )
 
     def _cmd_remove_tracker(self, hash: str, url: str = ""):
         if self.store.get(hash) is None:
@@ -386,7 +391,7 @@ class WebCommandsMixin:
         if not url:
             raise ValueError("url 不能为空")
         self.api.torrents_remove_trackers(torrent_hash=hash, urls=[url])
-        logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {url}")
+        logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {sanitize_tracker_url(url)}")
 
     # qB 文件优先级合法值(0=不下载, 1=普通, 6=高, 7=最大)
     _FILE_PRIORITIES = frozenset((0, 1, 6, 7))

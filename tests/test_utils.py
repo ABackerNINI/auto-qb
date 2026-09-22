@@ -45,6 +45,8 @@
 - test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
 - test_parse_bool_invalid: 非法布尔值 -> ValueError
 - test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
+- test_sanitize_tracker_url: tracker URL 脱敏只留主地址(query/path/fragment 整段丢, 任意凭据参数名都覆盖; udp 端口/userinfo 处理)
+- test_sanitize_tracker_url_unparseable: 空/非字符串/解析不出 host -> 占位串且不抛异常(日志路径不得打断业务)
 """
 import os
 import pytest
@@ -583,3 +585,43 @@ def test_atomic_write_keep_backup(tmp_path):
     atomic_write(str(p), lambda f: f.write("NEWER"), keep_backup=True)
     assert bak.read_text(encoding="utf-8") == "NEW"
     assert p.read_text(encoding="utf-8") == "NEWER"
+
+
+def test_sanitize_tracker_url():
+    """sanitize_tracker_url: 只留主地址(scheme://host[:port]), path/query/fragment 整段丢弃
+
+    凭据参数名不统一(passkey 只是其一, 还有 authkey/token/uid 等任意命名), 所以**不按参数名
+    过滤**而是整段丢弃 —— 否则每出现一个新站的新参数名就漏一次(issue 26-09-21-1408)。
+    """
+    from auto_qb.utils import sanitize_tracker_url
+
+    # 常见私站形态: 密钥在 query 里
+    assert sanitize_tracker_url("https://pt.example.com/announce?passkey=abc123def456") == "https://pt.example.com"
+    # 换任何参数名同样脱敏(不猜名字, 全丢)
+    assert sanitize_tracker_url("https://pt.example.com/announce?authkey=zzz&uid=7") == "https://pt.example.com"
+    assert sanitize_tracker_url("https://pt.example.com/announce/xyz?token=q") == "https://pt.example.com"
+    # 端口保留(定位站点用), path/fragment 丢
+    assert sanitize_tracker_url("https://pt.example.com:8443/announce/abc#frag") == "https://pt.example.com:8443"
+    # udp tracker: 端口是主地址的一部分, 必须留
+    assert sanitize_tracker_url("udp://tracker.opentrackr.org:1337/announce") == "udp://tracker.opentrackr.org:1337"
+    # userinfo 凭据(http://user:pass@host)一并丢弃
+    assert sanitize_tracker_url("http://user:sec@pt.example.com/announce") == "http://pt.example.com"
+    # 无 scheme: urlparse 把 host 落进 path, 取首段兜底(仍不带 path 其余部分)
+    assert sanitize_tracker_url("pt.example.com/announce?passkey=abc") == "pt.example.com"
+    # 裸主地址原样(小写化)
+    assert sanitize_tracker_url("HTTPS://PT.Example.COM") == "https://pt.example.com"
+
+
+def test_sanitize_tracker_url_unparseable():
+    """sanitize_tracker_url: 空/非字符串/解析不出 host -> 占位串, 且不抛异常
+
+    调用方全在日志路径上(qB 写操作之后), 脱敏失败只能降级成占位, 不能把业务动作打断。
+    """
+    from auto_qb.utils import SANITIZE_FALLBACK, sanitize_tracker_url
+
+    for bad in ("", "   ", None, 123, "/announce?passkey=abc", "?", object()):
+        assert sanitize_tracker_url(bad) == SANITIZE_FALLBACK, f"{bad!r} 应降级为占位串"
+
+    # urlparse 自身抛异常(畸形输入)也不能冒泡出去 —— 脱敏在日志路径上, 炸了就打断 qB 写操作
+    with mock.patch("auto_qb.utils.urlparse", side_effect=ValueError("boom")):
+        assert sanitize_tracker_url("https://pt.example.com/announce?passkey=abc") == SANITIZE_FALLBACK

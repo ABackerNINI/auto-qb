@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-21-1408">
 <meta name="issue-type" content="bug">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Fixed">
 <meta name="issue-title" content="tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回">
 <meta name="issue-summary" content="P2: 私站 announce URL 内嵌 passkey, 轮转日志备份/同机进程是泄露面; 建议单点 sanitize_tracker_url 脱敏">
 <title>tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回 · bug · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-bug-web-tracker-url-passkey-log</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -151,17 +151,24 @@ logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {url}")
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p>单点 <code>sanitize_tracker_url()</code> 剥 query 中 passkey/token/key/uuid 类参数（保留 path），包住两处日志调用；验收：日志 grep 不到 <code>passkey=</code>。</p>
+    <div class="callout"><b>实际修法已改道（2026-09-22 用户口径）</b>：不按参数名剥，而是<b>只保留主地址</b> <code>scheme://host[:port]</code>，path / query / fragment 整段丢弃。理由：部分 PT 站的凭据参数<b>不是 passkey，可能是其它任意名称</b>（authkey / token / uid / secret …），参数名黑名单每漏一个名字就漏一个站；而排查只需要「哪个站」的信息，主地址已足够。建议原文保留以存改道原因。</div>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-22 15:35 — 用户指派认领，状态 <strong>In Progress</strong>；复验锚点仍在（见下）</li>
+      <li>2026-09-22 15:36 — 修复完成，状态 <strong>Fixed</strong>（实际修法 / 验证见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-09-22 15:35 复验：<b>仍复现</b> —— <code>web_commands.py:381/389</code> 两处仍原样内插 URL 原文（<code>grep 编辑 tracker|移除 tracker</code> 命中两行，与入池时一致）。全库再扫一遍 URL 内插日志点（<code>logger.*{...url...}</code>）也只有这两处，无第三处漏网。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：新增 <code>utils.sanitize_tracker_url()</code>（单点，<code>utils.py</code>），脱敏为「主地址」<code>scheme://host[:port]</code> —— path / query / fragment 整段丢弃，userinfo（<code>user:pass@</code>）也剥掉；无 scheme 时取 path 首段兜底；入参异常（空 / 非字符串 / urlparse 抛错）一律返回占位串 <code>&lt;invalid-url&gt;</code>，<b>绝不抛异常</b>（调用方在 qB 写操作之后的日志路径上）。两处日志调用改为经它输出。</p>
+    <p><b>验证方式</b>：① <code>tests/test_utils.py</code> 两个用例覆盖 passkey / 换名凭据(authkey,token) / 端口 / udp / userinfo / 无 scheme / 降级占位 / urlparse 抛错不冒泡；② <code>tests/test_web.py::test_cmd_trackers_log_sanitized</code> 端到端守阵 —— 真跑 <code>_cmd_edit_tracker</code> / <code>_cmd_remove_tracker</code>，断言日志文本里密钥全文与参数名都 <code>not in</code>，主地址 <code>in</code>（断言刻意不写死参数名，防后来者又退回黑名单思路）。</p>
+    <p><b>测试数字</b>：全量 <code>uv run pytest tests -q</code> → <b>1163 passed, 1 skipped</b>，覆盖率 TOTAL <b>90%</b>（基线 1160 → 1163，本次 +3；基线数字以 testing.md 为准）。<code>src/auto_qb/utils.py</code> 覆盖 98%。</p>
+    <p><b>红验</b>（2026-09-22）：把编辑分支的日志临时打回「内插 URL 原文」，<code>test_cmd_trackers_log_sanitized</code> 立即红 —— 报错直接指到 <code>…/announce?passkey=SUPERSECRET123</code>，证明守阵真的咬得住，不是摆设；随后已还原，3 条守阵复跑全绿。</p>
+    <p><b>连带回写</b>：<code>memory-bank/conventions.md</code>「日志规范」新增「凭据脱敏」条 —— 日志会落盘（含轮转备份）+ 经 <code>/api/log</code> 读回 + 经通知联动直推系统通知，故任何可能内嵌凭据的 URL 进日志前必须过本函数。</p>
   </section>
 
   <footer>

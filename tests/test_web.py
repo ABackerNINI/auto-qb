@@ -105,6 +105,7 @@
 - test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
+- test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
 """
 import base64
 import json
@@ -753,7 +754,6 @@ def _scan_pending_settle(text, rel, problems):
             problems.append(f"{rel} 残留已删机制 {dead} —— 真值已改由 truth 事件推送, 它只会拖慢撤下")
 
 
-
 def _computed_body(text, name):
     """取 computed 成员 `<name>() { ... }` 的函数体(按缩进配平到同缩进或更浅的 `},`/`}`)
 
@@ -818,6 +818,7 @@ def _scan_filter_facets(text, rel, problems):
         problems.append(f"{rel} 残留 _memberValueOptions —— 选项一律走 facetRows/_facetOptions 单点"
                         "(按组算的第二条口径正是本次故障的成因)")
 
+
 # 挂件级类名白名单 —— 只盯这些; 组件层类名(`.ico` / `.row` / `.cell` 等)不进, 否则满屏误报。
 # 添加新挂件类时请同步这里。
 _PAGE_HOOK_CLASSES = ("hub-page", "ce-page", "layout")
@@ -862,7 +863,6 @@ def _scan_page_class_wiring(problems):
                             f"的选择器规则 —— 该挂件类上的令牌/变量定义永不生效, 派生样式全部失效"
                             f"(参考 2026-09-21 把 .hb-page 错写成 .hub-page 之外的类名, 整页无发光)"
                         )
-
 
 
 def _scan_frontend_assets():
@@ -4389,3 +4389,31 @@ def test_truth_hold_matches_truth_push_cap():
     ) == float(TRUTH_PUSH_CAP_MS
               ), (f"前端值覆盖保持 {m.group(1)}ms != 后端真值推送上限 {TRUTH_PUSH_CAP_MS}ms —— "
                   "两边必须一致, 否则会出现'前端先回滚、真值后到'的错配")
+
+
+def test_cmd_trackers_log_sanitized(caplog):
+    """tracker 编辑/移除的日志只写脱敏主地址, 不含凭据全文(issue 26-09-21-1408)
+
+    断言口径刻意**不写死参数名**: 私站凭据参数名是任意的(passkey 只是最常见的一种),
+    所以只钉死"密钥全文一行都进不了日志 + 主地址仍在(够排查是哪个站)"。
+    日志会落盘(含轮转备份)且能经 /api/log 读回, 泄露面比"读一次"大得多。
+    """
+    from auto_qb.mixins.web_commands import WebCommandsMixin
+    from helpers import FakeClient
+
+    class _Cmds(WebCommandsMixin):
+        def __init__(self):
+            self.api = FakeClient()
+            self.store = {"HA": object()}
+
+    m = _Cmds()
+    secret = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    caplog.set_level(logging.INFO, logger="auto_qb.mixins.web_commands")
+    caplog.clear()
+    m._cmd_edit_tracker(hash="HA", orig_url=secret, new_url="https://other.example.com/announce?authkey=XYZ")
+    m._cmd_remove_tracker(hash="HA", url=secret)
+    text = "\n".join(r.getMessage() for r in caplog.records if r.name == "auto_qb.mixins.web_commands")
+    assert "SUPERSECRET123" not in text, "passkey 全文进了日志"
+    assert "XYZ" not in text, "换名的凭据(authkey)同样不能进日志"
+    assert "passkey" not in text and "authkey" not in text, "query 整段都应丢弃, 不该残留参数名"
+    assert "pt.example.com" in text and "other.example.com" in text, "主地址要保留(否则没法排查是哪个站)"
