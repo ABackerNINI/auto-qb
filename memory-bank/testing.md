@@ -14,7 +14,16 @@
 #   只加 --basetemp 也不行(测试里直接用 tempfile 的仍落 H: ⇒ 4 failed + 1 error)。细节见 pitfalls.md。
 #   备选: `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但约定统一走 R 盘。
 #   提交闸门(`auto = true`)跑的就是 `--no-cov` 这一档, 覆盖率基线另算。
-# 基线: **1152 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1156 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1152 → 1156(**+4**; 2026-09-22 issue 26-09-21-1347「state.json 损坏静默清空」守阵:
+#     `test_load_state_corrupt_falls_back_to_bak`(主文件损坏 -> 回退 .bak **并自愈写回主文件**;
+#       ❗自愈那条必须钉: 不写回的话下次 save_state 的 keep_backup 会把损坏内容复制成新的 .bak,
+#      唯一一份好备份被盖掉, 恢复等于白做 —— 红验(打回旧实现)下本用例必红) /
+#     `test_load_state_corrupt_without_backup_warns`(备份也不可用 -> 仍空状态但留两条 WARNING) /
+#     `test_load_state_missing_file_is_silent`(首启不得告警 —— 反向钉住"损坏 vs 首启"分开处置) /
+#     `test_load_state_recovered_writeback_failure_is_nonfatal`(自愈写回失败只告警、不抛 ——
+#      钉 `_write_back_recovered` 的异常分支: 它若把异常放出去, "有备份可恢复"反而比"没备份"更糟)。
+#     另 `test_utils.py::test_atomic_write_keep_backup` 的备份路径断言改按 `path + utils.BACKUP_SUFFIX`(不写字面量)。
 #   ↑ 1149 → 1152(**+3**; 2026-09-22 issue 26-09-21-1347「跳检备份先于删除」守阵:
 #     `test_checking_skip_backup_precedes_delete_and_cleared_on_success`(在客户端的 torrents_delete
 #     里快照备份文件是否存在 —— 只查最终结果无法区分"之前写的"还是"之后补的")、

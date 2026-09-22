@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-21-1347">
 <meta name="issue-type" content="bug">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Fixed">
 <meta name="issue-title" content="state.json 损坏时静默清空, .bak 备份从不用于恢复">
 <meta name="issue-summary" content="_load_state 吞 JSONDecodeError 静默返回 {}; atomic_write 维护的 .bak 全库无读取方">
 <title>state.json 损坏时静默清空, .bak 备份从不用于恢复 · bug · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1347-bug-state-load-corrupt-silent-reset</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 13:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -174,11 +174,58 @@ def _load_state(self) -&gt; dict:
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 13:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-22 12:50 — 用户指派认领，状态 <strong>In Progress</strong>（@ d5a5520）</li>
+      <li>2026-09-22 13:10 — 已修并验证，状态 <strong>Fixed</strong>（全量 1156 passed + 1 skipped）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-09-22 12:50 @ d5a5520 <strong>仍复现</strong> —— <code>src/auto_qb/mixins/rule_engine.py</code> 的
+    <code>_load_state</code> 仍是 <code>except (FileNotFoundError, json.JSONDecodeError): pass</code>（把「损坏」与
+    「首启」同等对待），<code>grep "\.bak" src/</code> 只有 <code>utils.atomic_write</code> 的写侧与 config/writer 的
+    配置备份，<strong>state 的 <code>.bak</code> 依然零读取方</strong>；孤儿 <code>state.json.*.tmp</code> 仍无清理逻辑。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（与建议一致，多两处收口）</strong> —— <code>src/auto_qb/mixins/rule_engine.py</code>：</p>
+    <ol>
+      <li><strong>拆读写</strong>：新增 <code>_read_state_file(path)</code> 返回三态 —— <code>dict</code>（可用）／
+        <code>None</code>（不存在＝首启，静默）／哨兵 <code>_CORRUPT</code>（存在但非法 JSON、非 dict、非法 UTF-8）。
+        <strong>两态必须分开</strong>：这正是「损坏被当成首启」的根因。<code>UnicodeDecodeError</code> 一并算损坏 ——
+        位翻转可能先坏编码而不是坏 JSON 语法。<code>OSError</code>（权限等）<strong>不在此吞</strong>：那不是内容问题，
+        静默只会掩盖运行环境故障。</li>
+      <li><strong>回退</strong>：<code>_load_state</code> 见 <code>_CORRUPT</code> 先记 WARNING（含路径，损坏文件
+        <strong>原样保留、不删</strong>），再读 <code>state_file + utils.BACKUP_SUFFIX</code>；读到合法 dict 即用并记
+        INFO「已用备份恢复（N 个键）」。备份也不可用才返回 <code>{}</code>，并再记一条 WARNING 说清后果
+        （执行历史与跨日去重丢失 ⇒ 同一天可能重复跳检）。</li>
+      <li><strong>自愈写回（建议里没有，但不写等于白恢复）</strong>：<code>_write_back_recovered()</code> 把恢复出的内容
+        写回主文件，且<strong>刻意不带 <code>keep_backup</code></strong> —— 否则下次 <code>save_state</code> 会把损坏的
+        主文件复制成新的 <code>.bak</code>，把唯一一份好备份盖掉。写回失败只告警、不阻断启动（内存里已是恢复出的状态）。</li>
+      <li><strong>命名单点化</strong>：<code>utils.BACKUP_SUFFIX = ".bak"</code>，写侧 <code>atomic_write</code> 与读侧
+        回退共用同一常量 —— 两侧各写字面量时漂移不会被任何测试发现（备份写出去没人按同名读回来，正是本 issue 的形态）。</li>
+    </ol>
+    <p><strong>验证方式</strong>：新增 3 条守阵（<code>tests/test_rule_engine.py</code>，已同步该文件头部测试计划清单）：</p>
+    <ul>
+      <li><code>test_load_state_corrupt_falls_back_to_bak</code> —— 两版 <code>save_state</code> 造出真实
+        <code>.bak</code>（不手搓备份文件），再把主文件写成 <code>{not json</code>；断言返回值 == .bak 内容、
+        WARNING 含「损坏」、INFO 含「备份」，并断言<strong>主文件已被修好且 .bak 仍是那份好备份</strong>（钉住第 3 条自愈）。</li>
+      <li><code>test_load_state_corrupt_without_backup_warns</code> —— 无备份时仍是 <code>{}</code>（不阻塞启动），
+        但必须留下「损坏」+「备份不可用」两条 WARNING（修复前是完全静默）。</li>
+      <li><code>test_load_state_missing_file_is_silent</code> —— 首启（文件不存在）<strong>不得告警</strong>，反向钉住
+        「损坏 vs 首启」的分开处置，防止后来者图省事把 WARNING 挪到公共路径上刷屏。</li>
+      <li><code>test_load_state_recovered_writeback_failure_is_nonfatal</code> —— 自愈写回抛 <code>OSError</code>（磁盘满/只读）
+        时<strong>仍要返回备份恢复出的状态、只告警不抛</strong>：这条专门钉 <code>_write_back_recovered</code> 的异常分支 ——
+        它若把异常放出去，「有备份可恢复」反而比「没备份」更糟（启动直接崩），与修复意图正好相反。</li>
+    </ul>
+    <p><strong>配套改动</strong>：<code>tests/test_utils.py::test_atomic_write_keep_backup</code> 的备份路径断言改按
+    <code>path + utils.BACKUP_SUFFIX</code>（不写字面量）—— 一旦有人在 <code>atomic_write</code> 里改回字面量，这条就红。</p>
+    <p><strong>测试数字</strong>：全量 <strong>1156 passed + 1 skipped</strong>（Windows 本地；改动前基线 1152）
+    —— 用 <code>TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q --no-cov</code>（默认 <code>H:\Temp</code> 下
+    pytest 清理阶段会 <code>PermissionError … pytest-current</code>，见 pitfalls / testing.md）。<code>tests/sidefx.py</code>
+    副作用台账 <strong>越界 0</strong>。</p>
+    <p><strong>红验（守阵必须证明「去掉修复它就红」）</strong>：不改仓库源码，运行期把
+    <code>RuleEngineMixin._load_state</code> 打回修复前实现（<code>H:/Temp/redverify_state_bak.py</code>）后跑同一场景 ——
+    旧实现返回 <code>{}</code>（静默清空）且主文件仍是 <code>{not json</code>（不自愈）⇒
+    <code>test_load_state_corrupt_falls_back_to_bak</code> 的两条断言<strong>必然红</strong>。</p>
+    <p><strong>知识库回写</strong>：<code>testing.md</code> 基线 1152 → 1156；<code>activeContext.md</code> 当前焦点新增本条。</p>
+    <p><strong>未做（本 issue 报告里标「可选，低优先」）</strong>：启动时清理 <code>state.json.*.tmp</code> 孤儿文件 ——
+    按范围守恒不在本次修复内，仍在「现象」与「建议修法」里留着原文；要修请另开一条或显式指派。</p>
   </section>
 
   <footer>

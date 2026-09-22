@@ -4,7 +4,8 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-22 (**最新: issue 26-09-21-1347「跳检备份先于删除」已修并验证, 已入库 `a5faf35`(Gitee + GitHub 均推上)** ——
+**最后更新**: 2026-09-22 (**🆕 最新: issue 26-09-21-1347「state.json 损坏时静默清空, .bak 备份从不用于恢复」已修并验证(未提交)** —— 用户指派认领; 复验 @ `d5a5520` 仍复现。修法: `_load_state` 拆出 `_read_state_file` 三态(dict / `None`=首启静默 / `_CORRUPT`=损坏含非法 UTF-8, `OSError` 不吞) → 损坏记 WARNING 且回退 `<state_file>.bak`(记 INFO), 备份不可用才 `{}` + 再告警; **新增自愈写回** `_write_back_recovered`(刻意不带 `keep_backup`, 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`); 备份后缀单点化 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。守阵 4 条(含"自愈写回失败只告警不抛")+ `test_utils` 断言改按常量; 红验(运行期打回旧实现)证明新守阵必红。全量 **1156 passed + 1 skipped**(基线 1152), sidefx 越界 0; issue 已置 `Fixed` + 索引已重建。详见「正在进行」首条) ——
+  其前一条: issue 26-09-21-1347「跳检备份先于删除」已修并验证, 已入库 `a5faf35`(Gitee + GitHub 均推上) ——
   备份原先只挂在重加的两条失败分支上, 而删除是第一个不可逆步骤 ⇒ 「删除已生效 → 重加未被接受」
   缝隙内崩溃会什么都不剩; 现改为导出后立刻备份 + 重加成功后 `_clear_backup` 清理(删除未生效也清),
   备份写不进就不删除。守阵 3 条, 全量 **1149 → 1152 passed + 1 skipped**(并入上游 `1421ca9` 后的新树实测);
@@ -39,6 +40,11 @@
   乐观 UI「撤下」已定案并推送 `4df80dc`, 两者均剩真机走查确认。
 
 ## 正在进行
+
+- **🆕 state.json 损坏静默清空 + .bak 从不用于恢复 —— 已修并验证(未提交, 见本文件顶部「最后更新」首条)**: issue
+  [26-09-21-1347-bug-state-load-corrupt-silent-reset.html](issues/26-09-21-1347-bug-state-load-corrupt-silent-reset.html)
+  已置 `Fixed`(索引已重建)。⚠ **本 issue 报告里标「可选, 低优先」的孤儿 `state.json.*.tmp` 启动清理未做** ——
+  按范围守恒不在本次修复内, 要修请另开一条或显式指派。
 
 - **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
   普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;

@@ -16,6 +16,9 @@ from ..torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)
 
+# 哨兵: 状态文件"存在但内容不可用"(与"文件不存在"区分 —— 后者是首启, 属正常, 不该告警)
+_CORRUPT = object()
+
 
 class RuleEngineMixin:
     """规则引擎: 规则加载/状态持久化/种子级规则任务"""
@@ -46,15 +49,55 @@ class RuleEngineMixin:
         if self.rules:
             logger.info(f"加载规则 {len(self.rules)} 条(启用 {len(self.enabled_rules)} 条)")
 
-    def _load_state(self) -> dict:
+    def _read_state_file(self, path: str):
+        """读单个状态文件: dict(可用) / None(不存在) / _CORRUPT(存在但内容不是合法 dict)
+
+        None 与 _CORRUPT 必须分开: 前者是首启(静默开始), 后者是损坏(要告警 + 回退备份),
+        混为一谈正是"损坏时静默清空"的根因。UnicodeDecodeError 同样算损坏 —— 位翻转可能
+        先坏掉编码而不是 JSON 语法。OSError(权限等)不在此吞: 那不是内容问题, 静默会掩盖
+        真正的运行环境故障。
+        """
         try:
-            with open(self.state_file, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+        except FileNotFoundError:
+            return None
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return _CORRUPT
+        return data if isinstance(data, dict) else _CORRUPT
+
+    def _load_state(self) -> dict:
+        """加载状态; 主文件损坏时回退 `<state_file>.bak`(由 atomic_write 的 keep_backup 维护)
+
+        - 主文件不存在: 首启, 静默返回 {}
+        - 主文件损坏: 记 WARNING(损坏文件原样保留、不删) → 读到合法 .bak 即用(INFO 记录
+          "用了备份"), 并把恢复出的内容**写回主文件**(自愈): 否则下次 save_state 会把损坏
+          内容复制成新的 .bak, 把唯一一份好备份盖掉 —— 那等于这次恢复白做
+        - 备份也不可用: 返回 {}(与修复前一致, 不阻塞启动, 但一路告警留痕)
+        """
+        data = self._read_state_file(self.state_file)
+        if data is not _CORRUPT:
+            return data if isinstance(data, dict) else {}
+
+        bak_path = self.state_file + utils.BACKUP_SUFFIX
+        logger.warning(f"状态文件损坏, 无法解析(原样保留待查, 不删除): {self.state_file}")
+        bak = self._read_state_file(bak_path)
+        if isinstance(bak, dict):
+            logger.info(f"已用备份恢复状态: {bak_path}({len(bak)} 个键) —— 执行历史与跨日去重以备份为准")
+            self._write_back_recovered(bak)
+            return bak
+        logger.warning(f"备份 {bak_path} 也不可用 -> 状态从空开始: 规则执行历史与跨日去重记录会丢失(同一天可能重复跳检)")
         return {}
+
+    def _write_back_recovered(self, data: dict) -> None:
+        """把从备份恢复出的状态写回主文件(**不带** keep_backup: 免得把损坏内容复制成新的 .bak)
+
+        自愈失败只告警、不阻断启动: 内存里已是恢复出的状态, 下次正常落盘同样能修好主文件。
+        """
+        try:
+            utils.atomic_write(self.state_file, lambda f: json.dump(data, f, ensure_ascii=False, indent=2))
+        except OSError as e:
+            logger.warning(f"把备份状态写回 {self.state_file} 失败(不阻断启动, 下次落盘会再试): {e}")
 
     def save_state(self):
         """落盘状态文件: 原子写(tmp + os.replace)并保留一份 .bak

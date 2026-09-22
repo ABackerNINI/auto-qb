@@ -567,13 +567,19 @@ def test_atomic_write_rejects_empty_path():
 
 
 def test_atomic_write_keep_backup(tmp_path):
-    """keep_backup=True: 写盘前把当前文件复制为 .bak; 无旧文件时不凭空造备份"""
+    """keep_backup=True: 写盘前把当前文件复制为 .bak; 无旧文件时不凭空造备份
+
+    备份路径一律按 `path + utils.BACKUP_SUFFIX` 断言(不写字面量): 后缀是写侧与 state 恢复侧
+    共用的单点常量, 一旦有人在 atomic_write 里改回字面量, 这条就红 —— 否则两边命名漂移,
+    备份写出去没人按同名读回来(issue 26-09-21-1347)。
+    """
     from auto_qb.utils import atomic_write
 
     p = tmp_path / "state.json"
+    bak = tmp_path / ("state.json" + utils.BACKUP_SUFFIX)
     atomic_write(str(p), lambda f: f.write("NEW"), keep_backup=True)
-    assert not (tmp_path / "state.json.bak").exists(), "无旧文件不应产生备份"
+    assert not bak.exists(), "无旧文件不应产生备份"
 
     atomic_write(str(p), lambda f: f.write("NEWER"), keep_backup=True)
-    assert (tmp_path / "state.json.bak").read_text(encoding="utf-8") == "NEW"
+    assert bak.read_text(encoding="utf-8") == "NEW"
     assert p.read_text(encoding="utf-8") == "NEWER"

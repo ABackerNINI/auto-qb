@@ -6,8 +6,12 @@
 
 ## 测试计划(每个测试函数一条)
 - test_load_rules_from_config: 从配置加载规则
-- test_load_state_missing_or_broken: 状态文件缺失或损坏 -> 空状态
+- test_load_state_missing_or_broken: 状态文件缺失或损坏(且无备份) -> 空状态
 - test_load_state_valid: 有效状态加载
+- test_load_state_corrupt_falls_back_to_bak: 主文件损坏 -> 用 .bak 恢复并自愈写回主文件(备份不被损坏内容盖掉)
+- test_load_state_corrupt_without_backup_warns: 主文件损坏且备份不可用 -> 空状态 + 两条 WARNING(损坏/备份不可用)留痕
+- test_load_state_missing_file_is_silent: 首启(文件不存在)不告警 —— 与"损坏"区分
+- test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 只告警不抛
 - test_save_state_error_swallowed: 保存状态错误被吞掉
 - test_record_and_get_exec_record: 执行记录写入与读取
 - test_begin_round_and_upload_delta: 本轮开始与上传增量
@@ -31,6 +35,8 @@ from unittest import mock
 
 import pytest
 
+from auto_qb import utils
+from auto_qb.mixins import rule_engine
 from auto_qb.rules.base import Rule
 from auto_qb.taskqueue import FINISHED, REQUEUE, Task
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
@@ -73,6 +79,82 @@ def test_load_state_valid():
             json.dump({"exec_history": {"k": 1}}, f)
         mgr = make_manager(state_file)
         assert mgr._load_state() == {"exec_history": {"k": 1}}
+
+
+def test_load_state_corrupt_falls_back_to_bak():
+    """主文件损坏 -> 用 .bak 恢复, 并把恢复出的内容写回主文件(自愈)
+
+    写回是关键: 不写回的话, 下一次 save_state 的 keep_backup 会把损坏的主文件复制成新的
+    .bak —— 唯一一份好备份被盖掉, 这次恢复等于白做。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        mgr = make_manager(state_file)
+        first = {"exec_history": {"r:h": {"ts": 1.0}}}
+        mgr.state = dict(first)
+        mgr.save_state()  # 第一版: state.json=first, 无 .bak(无旧文件不凭空造)
+        mgr.state = {"exec_history": {"r:h": {"ts": 2.0}}, "skip_check_day": "2026-09-21"}
+        mgr.save_state()  # 第二版: .bak=first, state.json=second
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == first
+
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 模拟磁盘/外部改写造成的损坏
+        with mock.patch.object(rule_engine.logger, "warning") as warn, \
+             mock.patch.object(rule_engine.logger, "info") as info:
+            got = mgr._load_state()
+
+        assert got == first, "损坏时应回退到 .bak 的内容, 而不是静默清空"
+        assert any("损坏" in c[0][0] for c in warn.call_args_list), "损坏必须留 WARNING(此前是完全静默)"
+        assert any("备份" in c[0][0] for c in info.call_args_list), "用了备份要记 INFO 便于事后核对"
+        # 自愈: 主文件已修好, 且 .bak 仍是那份好备份(没被损坏内容盖掉)
+        assert json.loads(open(state_file, encoding="utf-8").read()) == first
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == first
+
+
+def test_load_state_corrupt_without_backup_warns():
+    """主文件损坏且备份不可用 -> 仍是空状态(不阻塞启动), 但两条 WARNING 留痕"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        with mock.patch.object(rule_engine.logger, "warning") as warn:
+            assert mgr._load_state() == {}
+        msgs = [c[0][0] for c in warn.call_args_list]
+        assert any("损坏" in m for m in msgs), "损坏必须有告警(修复前静默清空, 无任何线索)"
+        assert any("备份" in m and "不可用" in m for m in msgs), "备份也不可用时必须说清后果"
+
+
+def test_load_state_missing_file_is_silent():
+    """首启(文件不存在)属正常, 不得告警 —— 与"损坏"必须分开处置"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "nope.json"))
+        with mock.patch.object(rule_engine.logger, "warning") as warn:
+            assert mgr._load_state() == {}
+        assert warn.call_count == 0, "首次启动不该报 WARNING"
+
+
+def test_load_state_recovered_writeback_failure_is_nonfatal():
+    """自愈写回失败(磁盘满/只读)不得影响本次启动 —— 内存里已是备份恢复出的状态, 只告警
+
+    这条专门钉 `_write_back_recovered` 的异常分支: 它一旦把异常放出去, "有备份可恢复"的场景
+    反而比"没备份"更糟(启动直接崩), 与本次修复的意图正好相反。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.state = {"exec_history": {"r:h": {"ts": 1.0}}}
+        mgr.save_state()
+        mgr.state = {"exec_history": {"r:h": {"ts": 2.0}}}
+        mgr.save_state()
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        with mock.patch.object(rule_engine.utils, "atomic_write", side_effect=OSError("disk full")), \
+             mock.patch.object(rule_engine.logger, "warning") as warn:
+            got = mgr._load_state()
+        assert got == {"exec_history": {"r:h": {"ts": 1.0}}}, "写回失败不能把已恢复出的状态也搭进去"
+        assert any("写回" in c[0][0] for c in warn.call_args_list), "写回失败要留痕"
 
 
 def test_save_state_error_swallowed():

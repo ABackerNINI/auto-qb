@@ -22,6 +22,10 @@ from typing import List
 
 logger = logging.getLogger(__name__)
 
+# atomic_write(keep_backup=True) 的备份后缀 —— 写侧与回退侧(state 恢复)共用同一常量,
+# 防两侧命名漂移: 备份写出去却没人按同名读回来, 恢复分支就永远走不到(issue 26-09-21-1347)。
+BACKUP_SUFFIX = ".bak"
+
 # 匹配语法常量(用户配置的统一匹配语法, 解析唯一入口见 MatchPattern)
 REGEX_PREFIX = "regex:"
 IGNORE_CASE_SUFFIX = ":ignore_case"
@@ -72,7 +76,7 @@ def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
     os.makedirs(directory, exist_ok=True)
     if keep_backup and os.path.exists(path):
         try:
-            shutil.copy2(path, path + ".bak")
+            shutil.copy2(path, path + BACKUP_SUFFIX)
         except OSError as e:
             logger.warning(f"备份 {path} 失败(继续写盘): {e}")
     fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
