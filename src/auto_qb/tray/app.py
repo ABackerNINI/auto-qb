@@ -21,15 +21,15 @@ import time
 import webbrowser
 from collections import deque
 
-from . import autostart, utils
-from .errors import AutoQbError
-from .notify import WINDOWS_TOAST_APPID, setup_notify
-from .qbmanager import QbManager
+from .. import autostart, utils
+from ..errors import AutoQbError
+from ..notify import WINDOWS_TOAST_APPID, setup_notify
+from ..qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
 
-ICON_PNG = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
-ICON_ICO = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+ICON_PNG = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.png")
+ICON_ICO = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.ico")
 UI_PORT_FILE_NAME = "ui.port"
 POLL_MS = 100
 LOG_VIEW_LINES = 200
@@ -219,7 +219,7 @@ class TrayUi:
             self.root.iconphoto(False, self._icon_tk)
         self.root.protocol("WM_DELETE_WINDOW", self._hide_window)
 
-        from . import __version__
+        from .. import __version__
 
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(3, weight=1)

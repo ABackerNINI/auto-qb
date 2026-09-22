@@ -30,7 +30,7 @@ from auto_qb import autostart, notify as notify_mod
 from auto_qb.config import NotifyConfig
 from auto_qb.notify import NotifyHandler, PlatformChannel
 from auto_qb.qbmanager import QbManager
-from auto_qb.ui import ShowIpcServer, TrayUi, UiLogHandler, send_show
+from auto_qb.tray import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from auto_qb.config import QbittorrentConfig
 from helpers import FakeClient, FakeConfig, FakeQbServer, FakeTorrent, make_manager, seed_store
 

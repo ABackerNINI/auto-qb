@@ -85,7 +85,7 @@ def main():
 
         # 托盘常驻模式: 第二实例(锁被占)尝试唤起已运行实例的窗口后静默退出
         if args.tray:
-            from .ui import run_tray  # 延迟导入: GUI 栈仅托盘模式加载(无显示环境不影响其它模式)
+            from .tray import run_tray  # 延迟导入: GUI 栈仅托盘模式加载(无显示环境不影响其它模式)
 
             return run_tray(manager, args.dry_run)
 
@@ -98,7 +98,7 @@ def main():
         # 此时 manager 未构造成功, 重新读配置以定位端口文件(state_file 同目录); 唤起失败走常规锁错误提示
         if args.tray and isinstance(e, SingleInstanceLockError):
             try:
-                from .ui import UI_PORT_FILE_NAME, send_show
+                from .tray import UI_PORT_FILE_NAME, send_show
 
                 state_file = load_config(args.config).state_file
                 if send_show(os.path.join(os.path.dirname(state_file), UI_PORT_FILE_NAME)):

@@ -202,7 +202,7 @@ def test_main_tray_mode_calls_run_tray():
     manager = mock.MagicMock()
     with _patch_argv("auto-qb", "config.yml", "--tray"), \
             mock.patch("auto_qb.cli.QbManager", return_value=manager), \
-            mock.patch("auto_qb.ui.run_tray", return_value=0) as m_tray:
+            mock.patch("auto_qb.tray.run_tray", return_value=0) as m_tray:
         from auto_qb.cli import main
         ret = main()
     assert ret == 0
@@ -216,7 +216,7 @@ def test_main_tray_second_instance_wakes_running():
     with _patch_argv("auto-qb", "config.yml", "--tray"), \
             mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError("另一实例已持有锁")), \
             mock.patch("auto_qb.cli.load_config") as m_lc, \
-            mock.patch("auto_qb.ui.send_show", return_value=True) as m_send:
+            mock.patch("auto_qb.tray.send_show", return_value=True) as m_send:
         m_lc.return_value = mock.MagicMock(state_file="D:/x/state.json")
         from auto_qb.cli import main
         ret = main()
@@ -231,7 +231,7 @@ def test_main_tray_second_instance_wake_fail_returns_1(capsys):
     with _patch_argv("auto-qb", "config.yml", "--tray"), \
             mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError("另一实例已持有锁")), \
             mock.patch("auto_qb.cli.load_config") as m_lc, \
-            mock.patch("auto_qb.ui.send_show", return_value=False):
+            mock.patch("auto_qb.tray.send_show", return_value=False):
         m_lc.return_value = mock.MagicMock(state_file="D:/x/state.json")
         from auto_qb.cli import main
         ret = main()
