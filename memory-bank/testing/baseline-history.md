@@ -6,6 +6,12 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 1185 → 1186(**+1**; 2026-09-22 issue 26-09-21-1347 **热重载 L2 state 回滚修复**:
+  新增守阵 `test_apply_new_config_l2_preserves_runtime_state`(L2 热重载不得重读磁盘 state
+  回滚运行期内存态; 修前红验必红 —— 实测 mgr.state 被换成磁盘旧版 `{'stale_marker': True}` →
+  1 failed; 删 qbmanager.py:503 一行后转绿)。合流前单树实测: 语句 7542→7541(删 1 条已覆盖语句),
+  miss ±1 的逐次抖动判为 server 线程路径的度量噪声; 覆盖率口径以本次实测为准。
+  全量 1186 passed + 1 skipped, sidefx 越界 0)。
 - ↑ 1176 → 1185(**+9**; 2026-09-22 **状态周期落盘 · issue 26-09-21-1347**:
   新键 `state_save_interval`(默认 120s / 配置端下限 30s 防误配置写放大 / 0=关闭) +
   主循环周期落盘钩子 + `skip_check_day`/`recheck_fails` 写点即时落盘。守阵 9 条:
