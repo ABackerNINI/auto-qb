@@ -45,8 +45,10 @@
   **已入库 `84f92dd`**(Gitee + GitHub 均推上)。
   ✅ 后续(未提交): B2 段已从 `sim_qb.py --self-test` **下沉**进 `tests/`(该自检要真起 HTTP + 真装
   qbittorrentapi, CI 从不执行)⇒ 全量 **1147 passed + 1 skipped**。
-  ⚠ 仍未做: `--self-test` 里的 **B3 / D4** 两段同上理由也该下沉(未动, 待用户定);
-  `web.py::_within_roots` 的大小写守阵**只能在 Linux 上真跑**(本机 skip), 由 CI 验。
+  ✅ 其四(**未提交**): `--self-test` 里的 **B3 / D4** 两段也已下沉(B3 钉两侧 / D4 走合成档),
+  全量 **1149 passed + 1 skipped**;`--self-test` 现只剩"真机往返"类自检(全量/增量/files 与磁盘一致)。
+  ⚠ 剩余: `web.py::_within_roots` 的大小写守阵**只能在 Linux 上真跑**(本机 skip), 由 CI 验
+  (上一批 `84f92dd` 的 CI run 72 = success ⇒ 已在 ubuntu 上真跑并通过)。
 
 - **🆕 列设置重置 · 双轨模型重设计 —— 已实施完毕(未提交), 剩真机走查**: 用户定性"修复了很多次,
   急需重新设计, 简化模型, 从根本上杜绝"; 计划

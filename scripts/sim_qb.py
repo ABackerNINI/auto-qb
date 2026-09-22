@@ -2046,21 +2046,11 @@ def self_test(sim: SimQb, srv: SimServer, port: int) -> int:
     # B2 逃逸: 已**下沉**进 tests/test_sim_corpus.py::test_safe_delete_rejects_path_outside_fs_root
     # (本自检要真起 HTTP + 真装 qbittorrentapi, CI 从不执行 ⇒ 交给 pytest 验, 覆盖两平台)
 
-    # B3 数量上限
-    try:
-        sim.safe_delete_files(sim.file_paths_of(sim.torrents[h0]), 0)
-        print("[自检] B3 数量上限      : 未拦截 ✗")
-        ok = False
-    except BoundaryViolation:
-        print("[自检] B3 数量上限      : 已拦截 ✓")
-
-    # 删除文件(D4 注入)后, 磁盘上确实消失
-    if sim.groups:
-        before = len(sim._walk())
-        sim.delete_group_files(0)
-        after = len(sim._walk())
-        print(f"[自检] D4 删组文件      : {before} -> {after} ✓")
-        ok &= after < before
+    # B3 数量上限 / D4 删组文件: 均已**下沉**进 tests/test_sim_corpus.py ——
+    #   test_safe_delete_rejects_bulk_over_declared(B3, 钉"超 2 倍要拒"与"恰好 2 倍不拒"两侧)
+    #   test_delete_group_files_removes_them_from_disk(D4, 走**合成档**: 语料档 mock 模式磁盘上
+    #   没文件, `_walk()` 前后都是 0 ⇒ 判据恒假, 故该用例显式断言 before > 0)
+    # 本自检要真起 HTTP + 真装 qbittorrentapi, CI 从不执行 ⇒ 交给 pytest 验, 覆盖两平台。
 
     srv.shutdown()
     print("[自检] " + ("全部通过 ✓" if ok else "存在失败 ✗"))

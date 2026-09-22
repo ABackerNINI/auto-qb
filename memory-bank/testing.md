@@ -6,7 +6,14 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1147 passed + 1 skipped (Windows 本地) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1149 passed + 1 skipped (Windows 本地) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1147 → 1149(**+2**; 2026-09-22 其四: B3 / D4 两段也从 `--self-test` 下沉 ——
+#     `test_safe_delete_rejects_bulk_over_declared`(B3 数量上限, **钉两侧**: 超 declared*2 要拒、
+#     恰好 2 倍不拒 —— 只钉一侧会被"更严格"或"更宽松"两头骗过) /
+#     `test_delete_group_files_removes_them_from_disk`(D4 删组文件, ❗必须走**合成档**:
+#     语料档是 `fs-mode=mock`, 磁盘上没文件 ⇒ `_walk()` 前后都是 0 ⇒ 判据**恒假**;
+#     故用例显式断言 `before > 0`, 把"没物化"变成红而不是绿)。
+#     红验各一次: B3 阈值改成 *99 ⇒ `DID NOT RAISE`; D4 改成"假装删了" ⇒ `assert 0 > 0`。
 #   ↑ 1146 → 1147(**+1**; 2026-09-22 其三: B2 段从 `sim_qb.py --self-test` **下沉**进
 #     `tests/test_sim_corpus.py::test_safe_delete_rejects_path_outside_fs_root` —— 原自检要真起 HTTP
 #     **且**真装 qbittorrentapi(没装就整段 return 0), **CI 从不执行** ⇒ 下沉后进两平台 CI。

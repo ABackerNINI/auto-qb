@@ -11,6 +11,8 @@
 - test_sim_is_within_linux_equivalent: Linux 等价(`os`->posixpath + sep '/')下同一组断言仍成立
 - test_sim_is_within_red_on_fold_without_sep: **红验** —— 只换 ntpath 折叠、分隔符不动 => 真子路径被误拒(证明上条不恒绿)
 - test_safe_delete_rejects_path_outside_fs_root: B2 逃逸(从 `sim_qb.py --self-test` **下沉**, 进 CI)—— 树外删除目标被拒 + 文件没被真删 + 记进 violations
+- test_safe_delete_rejects_bulk_over_declared: B3 数量上限(下沉)—— 钉**两侧**: 超 declared*2 要拒, 恰好 2 倍不拒(只钉一侧会被"更严格"或"更宽松"两头骗过)
+- test_delete_group_files_removes_them_from_disk: D4 删组文件(下沉)—— 走**合成档**(语料档 mock 模式磁盘上没文件 ⇒ `_walk()` 恒 0 ⇒ 判据恒假), 删完磁盘真少文件 + 组内恰好一个成员进 error
 - test_fsmock_unknown_path_in_scope_is_missing: 命中语料树但表里没有 -> 报"不存在"并计数(暴露探测不完整, 不伪装成真缺失)
 - test_fsmock_disk_usage_uses_recorded_free_space: shutil.disk_usage 回录制到的可用空间(不是回放机的)
 - test_fs_mock_coverage_static_guard: **静态守阵** —— 语料相关的 FS 探测点必须仍是被 mock 覆盖的那三个函数
@@ -175,6 +177,55 @@ def test_safe_delete_rejects_path_outside_fs_root(tmp_path):
         sim.safe_delete_files([outside], 1)
     assert os.path.exists(outside), "拒绝后文件必须还在 —— 拒绝≠删除"
     assert any("B2" in v for v in sim.violations), f"必须记进 violations(否则越界无从审计): {sim.violations}"
+
+
+def test_safe_delete_rejects_bulk_over_declared(tmp_path):
+    """B3 数量上限(从 `--self-test` 下沉): 单次删除条数 > declared*2 必须拒绝, 且**恰好 2 倍不拒**
+
+    钉两侧是因为只钉一侧判据会失真: 只钉"超了要拒" ⇒ 有人把阈值改成 1 倍(更严格)也绿;
+    只钉"2 倍不拒" ⇒ 有人改成 10 倍(形同虚设)也绿。
+    """
+    sim = _make_sim(tmp_path, cmd_latency_ms=0, md_lag_ms=0)
+    h0 = next(iter(sim.torrents))
+    paths = sim.file_paths_of(sim.torrents[h0])
+    assert paths, "该种子必须带文件列表, 否则 B3 判据无从触发(恒绿)"
+    with pytest.raises(simqb.BoundaryViolation):
+        sim.safe_delete_files(paths * 3, 1)  # 3 > 1*2 ⇒ 必须拒
+    assert any("B3" in v for v in sim.violations), f"必须记进 violations: {sim.violations}"
+    # 反向: 恰好 declared*2 条 ⇒ 不该触发 B3(放行; 文件不存在时各自被吞, 不抛)
+    sim.safe_delete_files(paths * 2, 1)
+
+
+def test_delete_group_files_removes_them_from_disk(tmp_path):
+    """D4 删组文件(从 `--self-test` 下沉): 删完磁盘上**确实少文件**, 且组内一个成员进 `error`
+
+    ❗必须用**合成档**: 语料档是 `fs-mode=mock`, 磁盘上根本没有文件 ⇒ `_walk()` 前后都是 0
+    ⇒ "删完更少"永远不成立 ⇒ 判据**恒假**(比不测更糟)。这是下沉时最容易踩的坑, 故显式断言
+    `before > 0` 把"没物化"变成红而不是绿。
+    """
+    sim = _make_synthetic_sim(tmp_path, n=40)
+    assert sim.groups, "合成档必须造出辅种组"
+    before = len(sim._walk())
+    assert before > 0, "合成档必须真物化文件 —— 否则 D4 判据恒假(语料档 mock 模式下就是 0)"
+    n = sim.delete_group_files(0)
+    after = len(sim._walk())
+    assert n > 0, "必须真删掉了文件"
+    assert after < before, f"磁盘上该文件必须消失: {before} -> {after}"
+    # 组内**一个**成员进 error(qB 状态名必须是 "error"; 写成 "errored" 会被解析成 UNKNOWN)
+    members = [h for h in sim.groups[0] if h in sim.torrents]
+    assert sum(1 for h in members if sim.torrents[h]["state"] == "error") == 1, "只该有一个成员进 error"
+
+
+def _make_synthetic_sim(tmp_path, n: int = 40):
+    """合成档 SimQb(默认**物化**文件) —— D4 这类"磁盘上真少了文件"的判据只能用它
+
+    与 `_make_sim`(语料档, fs-mode=mock, 不物化)成对: 两者路径语义相同(都是宿主真实目录),
+    差别只在磁盘上有没有真文件。
+    """
+    args = simqb.build_parser().parse_args(["--source=synthetic", "--n", str(n), "--root", str(tmp_path / "root")])
+    args.root = str(tmp_path / "root")
+    args.run_dir = simqb.make_run_dir(args.root, "syn")
+    return simqb.SimQb(args)
 
 
 def test_fsmock_unknown_path_in_scope_is_missing():
