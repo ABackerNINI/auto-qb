@@ -96,6 +96,7 @@ user-invocable: true
 | 参考速查 (`config-reference/` · `rule-system/`) | 12,000 |
 | 易变层 (`activeContext.md`, 会话开始必读) | 12,000 |
 | 任务档案 (`tasks/*.md`, 其中「历史会话纪要」段 ≤8,000) | 24,000 |
+| append-only 历史流水 (`*-history.md`) | 24,000 |
 | `AGENTS.md` (IDE 注入硬上限, 由项目脚本 `scripts/check_context_caps.py` 管) | 8,000 |
 
 下限建议 1.5 KB **只 WARN**: 主题文件过小会让「读三个文件」取代「读一节」, 反而更贵。
