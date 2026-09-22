@@ -45,9 +45,9 @@ from unittest import mock
 import pytest
 
 from auto_qb.infra import utils
-from auto_qb.mixins import rule_engine
+from auto_qb.core.mixins import rule_engine
 from auto_qb.rules.base import Rule
-from auto_qb.taskqueue import FINISHED, REQUEUE, Task
+from auto_qb.core.taskqueue import FINISHED, REQUEUE, Task
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
 
@@ -242,7 +242,7 @@ def test_cleanup_orphan_tmp_is_wired_after_lock():
     """
     import inspect
 
-    from auto_qb.qbmanager import QbManager
+    from auto_qb.core.qbmanager import QbManager
 
     src = inspect.getsource(QbManager.__init__)
     i_lock = src.find("self._lock.acquire()")

@@ -60,7 +60,7 @@ from unittest import mock
 import pytest
 
 from auto_qb.config import GroupingConfig
-from auto_qb.qbmanager import QbManager
+from auto_qb.core.qbmanager import QbManager
 from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
 
 
@@ -1152,7 +1152,7 @@ def test_group_key_of_is_single_source_of_truth():
     import 同一份公式; 若将来有人把 _assign_to_group 改回内联、或改了内联忘了改纯函数,
     这条会红(否则 CORPUS.group_exact 会拿"错误的期望"判"正确的实现")。
     """
-    from auto_qb.mixins.grouping import group_key_of
+    from auto_qb.core.mixins.grouping import group_key_of
 
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")

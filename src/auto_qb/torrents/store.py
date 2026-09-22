@@ -10,7 +10,7 @@ from .record import TorrentRecord
 from .view import _VIEW_FIELD_SET
 
 if TYPE_CHECKING:  # 仅用于类型标注, 避免与 qbapi 形成运行期循环导入
-    from ..qbapi import QbApi
+    from ..core.qbapi import QbApi
 
 logger = logging.getLogger(__name__)
 

@@ -66,10 +66,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from auto_qb.config import Config
-from auto_qb.qbmanager import QbManager
+from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import _bump_recheck_fail, _recheck_fail_count
-from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
+from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
 

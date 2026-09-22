@@ -51,15 +51,15 @@ import threading
 import time
 from unittest import mock
 
-from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
+from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 import pytest
 
 from qbittorrentapi import APIConnectionError, Client
 
 from auto_qb.config import QbittorrentConfig
 from auto_qb.infra.errors import AutoQbError
-from auto_qb.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
-from auto_qb.qbmanager import RECONNECT_MAX_INTERVAL, QbManager, _throttle
+from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbManager, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
@@ -85,7 +85,7 @@ def test_connect_failure():
     """连接失败返回 False 且 client 保持 None"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        with mock.patch("auto_qb.qbmanager._new_client", side_effect=Exception("conn refused")):
+        with mock.patch("auto_qb.core.qbmanager._new_client", side_effect=Exception("conn refused")):
             assert mgr.connect() is False
         assert mgr.client is None
 
@@ -95,7 +95,7 @@ def test_connect_success():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         fake = mock.Mock()
-        with mock.patch("auto_qb.qbmanager._new_client", return_value=fake) as new_client:
+        with mock.patch("auto_qb.core.qbmanager._new_client", return_value=fake) as new_client:
             assert mgr.connect() is True
         new_client.assert_called_once_with(mgr.config.qbittorrent)
         fake.auth_log_in.assert_called_once()
@@ -152,7 +152,7 @@ def test_new_client_remote_keeps_default_trust_env():
 
 def test_throttle_sleeps_without_stop_event():
     """非托管模式(stop_event=None): 真实阻塞 main_tick 秒且返回 False(不当作停止信号)"""
-    with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
+    with mock.patch("auto_qb.core.qbmanager.time.sleep") as fake_sleep:
         assert _throttle(None, 2.0) is False
     fake_sleep.assert_called_once_with(2.0)
 
@@ -203,7 +203,7 @@ def test_run_loop_managed_never_sleeps():
         mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
         stop_event = threading.Event()
-        with mock.patch("auto_qb.qbmanager.time.sleep") as fake_sleep:
+        with mock.patch("auto_qb.core.qbmanager.time.sleep") as fake_sleep:
             mgr.run(dry_run=True, stop_event=stop_event)
         fake_sleep.assert_not_called()
         assert mgr._tick.call_count == 2
@@ -421,7 +421,7 @@ def test_reconnect_backoff_and_reset():
         def _monotonic():
             return clock["t"]
 
-        with mock.patch("auto_qb.qbmanager.time.monotonic", _monotonic):
+        with mock.patch("auto_qb.core.qbmanager.time.monotonic", _monotonic):
             assert mgr._reconnect_due(tick) is True, "首次应立即重试"
             assert mgr._reconnect_at == pytest.approx(1000.0 + tick)
             # 未到点: 不重试
@@ -439,7 +439,7 @@ def test_reconnect_backoff_and_reset():
                 f"退避应封顶 {RECONNECT_MAX_INTERVAL}s: {mgr._reconnect_interval}"
             )
             # 连接成功(走真实 connect)后归零: 下次断开从最短间隔重新开始
-            with mock.patch("auto_qb.qbmanager._new_client", return_value=mock.Mock()):
+            with mock.patch("auto_qb.core.qbmanager._new_client", return_value=mock.Mock()):
                 assert mgr.connect() is True
             assert mgr._reconnect_interval == 0.0 and mgr._reconnect_at == 0.0
             assert mgr._reconnect_due(tick) is True, "归零后应能立即重试"
@@ -452,7 +452,7 @@ def test_run_main_loop():
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
         mgr._tick = mock.Mock(side_effect=[RuntimeError("boom"), KeyboardInterrupt()])
-        with mock.patch("auto_qb.qbmanager.time.sleep"):
+        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         assert mgr._tick.call_count == 2, "异常应被捕获继续循环, KeyboardInterrupt 退出"
         assert os.path.exists(state_file), "finally 应保存状态"
@@ -527,7 +527,7 @@ def test_run_save_state_on_exit():
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
         mgr._tick = mock.Mock(side_effect=KeyboardInterrupt())
-        with mock.patch("auto_qb.qbmanager.time.sleep"):
+        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         with open(state_file, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -541,7 +541,7 @@ def test_run_dry_run_no_save():
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
         mgr._tick = mock.Mock(side_effect=KeyboardInterrupt())
-        with mock.patch("auto_qb.qbmanager.time.sleep"):
+        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
             mgr.run(dry_run=True)
         assert not os.path.exists(state_file), "dry_run 不应写状态文件"
 
@@ -554,7 +554,7 @@ def test_periodic_flush_is_wired_in_run_loop():
     """
     import inspect
 
-    from auto_qb.qbmanager import QbManager
+    from auto_qb.core.qbmanager import QbManager
 
     src = inspect.getsource(QbManager.run)
     i_hook = src.find("_maybe_flush_state")
@@ -571,7 +571,7 @@ def test_tick_refresh_error_continues():
         mgr.connect = mock.Mock(return_value=True)
         # 第一次抛普通异常(被内层 except Exception 捕获), 第二次抛 KeyboardInterrupt(退出循环)
         mgr._refresh_torrents = mock.Mock(side_effect=[RuntimeError("refresh boom"), KeyboardInterrupt()])
-        with mock.patch("auto_qb.qbmanager.time.sleep"):
+        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         assert mgr._refresh_torrents.call_count == 2, "第一次异常应被捕获, 第二次 tick 继续执行"
 
@@ -588,8 +588,8 @@ def test_connect_throttle_repeated_failures():
                          APIConnectionError("conn down"),
                          KeyboardInterrupt()]
         )
-        with mock.patch("auto_qb.qbmanager.logger") as mock_logger:
-            with mock.patch("auto_qb.qbmanager.time.sleep"):
+        with mock.patch("auto_qb.core.qbmanager.logger") as mock_logger:
+            with mock.patch("auto_qb.core.qbmanager.time.sleep"):
                 mgr.run(dry_run=False)
         errors = [c for c in mock_logger.error.call_args_list]
         assert len(errors) == 1, f"连接失败应只记录一条(节流), 实际 {len(errors)}: {errors}"
@@ -612,8 +612,8 @@ def test_connect_recovery_logged():
         mgr = make_manager(state_file)
         mgr._last_conn_ok = False  # 模拟此前断开
         fake = mock.Mock()
-        with mock.patch("auto_qb.qbmanager._new_client", return_value=fake):
-            with mock.patch("auto_qb.qbmanager.logger") as mock_logger:
+        with mock.patch("auto_qb.core.qbmanager._new_client", return_value=fake):
+            with mock.patch("auto_qb.core.qbmanager.logger") as mock_logger:
                 assert mgr.connect() is True
         assert mgr._last_conn_ok is True, "重连成功后状态应为已连接"
         infos = [c for c in mock_logger.info.call_args_list]
@@ -848,7 +848,9 @@ def test_qbmanager_source_has_no_web_state_fields():
     """
     import re
 
-    src = open(os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "qbmanager.py"), encoding="utf-8").read()
+    src = open(
+        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "core", "qbmanager.py"), encoding="utf-8"
+    ).read()
     assert QbManager._WEB_STATE_ALIAS, "别名表为空 —— 兼容代理被拆掉了? 同步更新本守阵"
     hits = [old for old in QbManager._WEB_STATE_ALIAS if re.search(rf"self\.{re.escape(old)}\b", src)]
     assert not hits, (

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from qbittorrentapi import Client
 
-from .config import QbittorrentConfig
+from ..config import QbittorrentConfig
 
 # 本地 qB 地址(关闭 requests trust_env: 环境代理与 ~/.netrc 解析对本机连接无意义)
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))

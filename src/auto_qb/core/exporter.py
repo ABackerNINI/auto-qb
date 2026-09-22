@@ -9,8 +9,8 @@ import re
 
 import yaml
 
-from .config import UNLIMITED_SPEED, _strip_none
-from .infra.utils import convert_bool_in_dict, extract_tracker_hostnames
+from ..config import UNLIMITED_SPEED, _strip_none
+from ..infra.utils import convert_bool_in_dict, extract_tracker_hostnames
 
 logger = logging.getLogger(__name__)
 

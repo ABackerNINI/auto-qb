@@ -6,9 +6,9 @@ import logging
 from typing import Optional
 from qbittorrentapi import Client
 
-from ..config import TrackerConfig, Config
-from ..torrents import TorrentRecord
-from ..infra import utils
+from ...config import TrackerConfig, Config
+from ...torrents import TorrentRecord
+from ...infra import utils
 
 logger = logging.getLogger(__name__)
 

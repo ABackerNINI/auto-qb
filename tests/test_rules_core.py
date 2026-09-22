@@ -21,7 +21,7 @@ import os
 import tempfile
 import time
 
-from auto_qb.qbmanager import QbManager
+from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import AddCategoryAction
 from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_ctx, make_manager, seed_store
 
@@ -212,7 +212,7 @@ def test_tracker_rules_ref():
 
 def test_rule_interval():
     """规则 interval 调度(每条规则一个种子级任务, 到期才执行, interval=0 归一化为每 tick)"""
-    from auto_qb.taskqueue import TaskQueue
+    from auto_qb.core.taskqueue import TaskQueue
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         cfg = FakeConfig()

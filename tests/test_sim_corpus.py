@@ -249,11 +249,11 @@ def test_fsmock_disk_usage_uses_recorded_free_space():
 # 语料相关的 FS 探测点必须是**被 mock 覆盖的那三个函数**; 换成 pathlib / os.stat 会让 mock 静默失效
 # => 判据变假绿(最坏的一种失败)。故这里把"期望的探测点"钉死。
 _EXPECTED_PROBES = {
-    "mixins/grouping.py": {
+    "core/mixins/grouping.py": {
         "os.path.exists": 1,
         "os.path.getsize": 1
     },
-    "mixins/checking.py": {
+    "core/mixins/checking.py": {
         "os.path.exists": 1,
         "os.path.getsize": 1
     },
@@ -312,7 +312,7 @@ def test_fs_mock_coverage_red_on_pathlib(tmp_path):
     # 正确形态: 只有 shutil.disk_usage 次数不匹配会红, 这里先只看 violations
     assert not scan_fs_probes(tmp_path)["violations"]
     # 换成 pathlib: 必须被 violations 抓住
-    (tmp_path / "auto_qb" / "mixins" /
+    (tmp_path / "auto_qb" / "core" / "mixins" /
      "grouping.py").write_text("from pathlib import Path\nPath('x').exists()\n", encoding="utf-8")
     res = scan_fs_probes(tmp_path)
     assert res["violations"], "换成 pathlib 后守阵必须变红(否则 mock 静默失效 => 假绿)"

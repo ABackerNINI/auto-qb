@@ -12,7 +12,7 @@ from ..infra import utils
 from ..torrents import TorrentRecord
 from ..config import Config, ConfigError
 # from ..qbmanager import QbManager
-from ..qbapi import QbApi
+from ..core.qbapi import QbApi
 
 logger = logging.getLogger(__name__)
 

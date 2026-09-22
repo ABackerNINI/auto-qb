@@ -31,9 +31,9 @@ from collections.abc import Mapping
 from typing import Any, Dict, Optional
 from qbittorrentapi import Client
 
-from ..config import Config
-from ..infra import utils
-from ..torrents import TorrentStore, TorrentRecord
+from ...config import Config
+from ...infra import utils
+from ...torrents import TorrentStore, TorrentRecord
 
 logger = logging.getLogger(__name__)
 

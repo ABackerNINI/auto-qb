@@ -1,7 +1,7 @@
 """全局限速曲线段校验(结构最复杂: traffic_source/curves/阶梯点)"""
 from typing import List
 
-from ... import curves
+from ...core import curves
 from ...infra.utils import parse_bool, parse_fsize, parse_speed
 from .core import _try, _try_time
 

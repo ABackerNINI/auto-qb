@@ -22,7 +22,7 @@ from typing import Any, List, Optional, Union
 
 from qbittorrentapi import Client
 
-from .torrents import TorrentStore
+from ..torrents import TorrentStore
 
 logger = logging.getLogger(__name__)
 

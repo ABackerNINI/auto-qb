@@ -10,7 +10,7 @@ import time
 from datetime import date
 from typing import Optional
 
-from ...taskqueue import FINISHED, REQUEUE, Task
+from ...core.taskqueue import FINISHED, REQUEUE, Task
 from ..base import ActionResult, RuleContext
 
 logger = logging.getLogger(__name__)

@@ -6,11 +6,11 @@ import logging
 from typing import List, Optional
 from qbittorrentapi import Client, TorrentDictionary
 
-from ..config import HRRule, Config
+from ...config import HRRule, Config
 from ..qbapi import QbApi
 from .. import episodes
-from ..infra import utils
-from ..torrents import TorrentRecord
+from ...infra import utils
+from ...torrents import TorrentRecord
 from ..taskqueue import FINISHED, REQUEUE
 
 logger = logging.getLogger(__name__)

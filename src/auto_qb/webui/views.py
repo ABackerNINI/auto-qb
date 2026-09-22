@@ -435,7 +435,7 @@ class WebviewMixin:
           集: {key: ["ep",n]|["range",a,b]|["pack"]|["date",iso], count, state,
                速度/上传/size(代表版本)/progress(最差版本)/HR 计数/sites/members(hash)/added_on}
         """
-        from .. import tvshows
+        from ..core import tvshows
 
         index = self.web.search_index or {}
         shows: Dict[str, dict] = {}

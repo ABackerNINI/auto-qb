@@ -21,7 +21,7 @@ from auto_qb.config import (
     QbittorrentConfig,
     WebConfig,
 )  # noqa: E402
-from auto_qb.qbmanager import QbManager  # noqa: E402
+from auto_qb.core.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, _VIEW_FIELDS, _VIEW_QUANTUM, view_field_value  # noqa: E402
 

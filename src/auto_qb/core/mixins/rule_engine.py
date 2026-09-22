@@ -9,11 +9,11 @@ from datetime import date, datetime
 from typing import Any, List, Optional
 from qbittorrentapi import Client
 
-from ..config import Config
+from ...config import Config
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
-from ..rules import Rule, RuleContext
-from ..infra import utils
-from ..torrents import TorrentRecord
+from ...rules import Rule, RuleContext
+from ...infra import utils
+from ...torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)
 

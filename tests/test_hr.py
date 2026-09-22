@@ -16,7 +16,7 @@
 import os
 import tempfile
 
-from auto_qb.qbmanager import QbManager
+from auto_qb.core.qbmanager import QbManager
 from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
 
 

@@ -100,7 +100,7 @@ def test_match_tracker_conf_multi_match_error_log():
             "HHanTracker": _conf("HHanTracker", ["tracker.hhanclub.net"]),
         }
         tor = FakeTorrent(hash="H1")
-        lg = logging.getLogger("auto_qb.mixins.tracker")
+        lg = logging.getLogger("auto_qb.core.mixins.tracker")
         buf = io.StringIO()
         handler = logging.StreamHandler(buf)
         handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))

@@ -19,7 +19,7 @@ import tempfile
 
 from auto_qb.config import ConfigError, load_config
 from auto_qb.rules import Rule, RuleContext
-from auto_qb.taskqueue import FINISHED, PENDING, Task, TaskQueue
+from auto_qb.core.taskqueue import FINISHED, PENDING, Task, TaskQueue
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
 
 
@@ -150,10 +150,16 @@ def test_rule_event_not_self_cycled():
 def test_mixed_events():
     """混用: 同一种子新增时既触发 on_torrent_added, 又触发 on_torrent_state_enum_changed"""
     with tempfile.TemporaryDirectory() as td:
-        mgr = _event_mgr({
-            "r_add": _ev("on_torrent_added", [{"add_tags": ["add-tag"]}]),
-            "r_state": _ev("on_torrent_state_enum_changed", [{"add_tags": ["state-tag"]}]),
-        })
+        mgr = _event_mgr(
+            {
+                "r_add": _ev("on_torrent_added", [{
+                    "add_tags": ["add-tag"]
+                }]),
+                "r_state": _ev("on_torrent_state_enum_changed", [{
+                    "add_tags": ["state-tag"]
+                }]),
+            }
+        )
         tor = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
         client = _refresh(mgr, [tor])  # 首轮: 仅 added 触发, 无状态变化
         assert ("add_tags", ["add-tag"]) in client.calls, f"新增应触发: {client.calls}"
@@ -232,13 +238,24 @@ def test_dry_run():
 # ============================================================
 def _check_cfg(action, execute_once="never"):
     """构造 checking 动作配置(spec 单键 dict)"""
-    return [{
-        "checking": {
-            "basic_check": "filelist",
-            "with_reference": {"enabled": True, "mode": "full-checking", "auto_start": True},
-            "without_reference": {"enabled": True, "mode": "full-checking", "auto_start": True},
+    return [
+        {
+            "checking":
+                {
+                    "basic_check": "filelist",
+                    "with_reference": {
+                        "enabled": True,
+                        "mode": "full-checking",
+                        "auto_start": True
+                    },
+                    "without_reference": {
+                        "enabled": True,
+                        "mode": "full-checking",
+                        "auto_start": True
+                    },
+                }
         }
-    }] + action
+    ] + action
 
 
 def _pause_target(hash="H1", progress=0.5, tags="需校验", name="T", state="pausedDL"):

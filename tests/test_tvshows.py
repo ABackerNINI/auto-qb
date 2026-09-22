@@ -23,8 +23,8 @@
 """
 import pytest
 
-from auto_qb import tvshows
-from auto_qb.tvshows import (
+from auto_qb.core import tvshows
+from auto_qb.core.tvshows import (
     KIND_DATE,
     KIND_EPISODE,
     KIND_SEASON_PACK,
@@ -156,7 +156,7 @@ class TestBareNumber:
 
     def test_bracket_paren_form(self):
         r = p("Show Name (07) [1080p]")
-        assert (r.ep_start,) == (7,)
+        assert (r.ep_start, ) == (7, )
 
     def test_bare_excludes_resolution_and_year(self):
         assert p("[Group] Show - 1080 [1080p]").kind == KIND_UNKNOWN
@@ -240,9 +240,9 @@ class TestUnknown:
     @pytest.mark.parametrize(
         "name",
         [
-            "Some.Movie.2023.1080p.BluRay.x265",   # 电影: 无集数/季标记(年份不是日期, 缺月日)
-            "Some.Movie.2019.2160p",               # 同上
-            "Oceans.11.2001.1080p.BluRay",         # 裸尾随数字不识别
+            "Some.Movie.2023.1080p.BluRay.x265",  # 电影: 无集数/季标记(年份不是日期, 缺月日)
+            "Some.Movie.2019.2160p",  # 同上
+            "Oceans.11.2001.1080p.BluRay",  # 裸尾随数字不识别
         ],
     )
     def test_unknown(self, name):
@@ -262,7 +262,7 @@ class TestEpisodeKey:
     def test_key_forms(self):
         assert p("Show S01E05").episode_key == ("ep", 5)
         assert p("Show S01E05-E08").episode_key == ("range", 5, 8)
-        assert p("Show.Name.S01.Complete").episode_key == ("pack",)
+        assert p("Show.Name.S01.Complete").episode_key == ("pack", )
         assert p("Show.Name.2026.09.15.1080p").episode_key == ("date", "2026-09-15")
 
 

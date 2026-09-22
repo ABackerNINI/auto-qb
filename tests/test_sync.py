@@ -56,7 +56,7 @@ import pytest
 
 from qbittorrentapi import TorrentState
 
-from auto_qb.qbapi import QbApi
+from auto_qb.core.qbapi import QbApi
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentRecord, TorrentStore, missing_torrent_fields
 
 from helpers import FakeClient, FakeTorrent, make_manager

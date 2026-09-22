@@ -56,7 +56,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from auto_qb.infra import utils
-from auto_qb.mixins.checking import CheckingMixin
+from auto_qb.core.mixins.checking import CheckingMixin
 from helpers import FakeClient, FakeTorrent
 
 

@@ -8,7 +8,7 @@ from typing import List, Optional
 
 import yaml
 
-from .. import curves
+from ..core import curves
 from ..infra.utils import MatchPattern, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .errors import ConfigError
 from .models import (

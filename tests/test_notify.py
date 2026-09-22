@@ -125,7 +125,7 @@ def test_notify_handler_dispatch():
     """ERROR 日志派发并标记 urgent; 消息内容为原始日志消息"""
     handler, channel = _make_handler()
     record = logging.LogRecord(
-        name="auto_qb.mixins.grouping",
+        name="auto_qb.core.mixins.grouping",
         level=logging.ERROR,
         pathname="p",
         lineno=1,

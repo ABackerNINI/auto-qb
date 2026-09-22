@@ -52,7 +52,7 @@ import requests
 # ---- 仓库内导入 (src/ 归组纯函数是唯一被本计划放行的 src/ 改动, 见 §04 第 5 步) ----
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO / "src"))
-from auto_qb.mixins.grouping import group_key_of  # noqa: E402
+from auto_qb.core.mixins.grouping import group_key_of  # noqa: E402
 from auto_qb.infra import utils  # noqa: E402
 from auto_qb.torrents.compat import _SNAPSHOT_FIELDS, REQUIRED_TORRENT_FIELDS  # noqa: E402
 

@@ -6,10 +6,10 @@ import sys
 
 from .config import DEFAULT_CONFIG_FILE, ConfigError, load_config
 from .infra.errors import AutoQbError
-from .exporter import export_yaml_template
+from .core.exporter import export_yaml_template
 from .infra.locking import SingleInstanceLockError
 from .infra.notify import notify_fatal
-from .qbmanager import QbManager
+from .core.qbmanager import QbManager
 
 
 def export_yaml(manager: QbManager, args):

@@ -24,7 +24,7 @@ from collections import deque
 from ..infra import autostart, utils
 from ..infra.errors import AutoQbError
 from ..infra.notify import WINDOWS_TOAST_APPID, setup_notify
-from ..qbmanager import QbManager
+from ..core.qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
 

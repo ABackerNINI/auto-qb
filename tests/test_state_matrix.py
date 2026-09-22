@@ -23,7 +23,7 @@ import tempfile
 import pytest
 
 from auto_qb.config import GroupingConfig
-from auto_qb.qbmanager import QbManager
+from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.conditions import StateCondition
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 

@@ -27,7 +27,7 @@ _ASCII_ALNUM_RE = re.compile(r"[A-Za-z0-9]")
 def app_version() -> str:
     """包版本号(供前端顶栏展示)。
 
-    必须函数内延迟导入: `auto_qb/__init__.py` 先 `from .qbmanager import QbManager` 再赋值
+    必须函数内延迟导入: `auto_qb/__init__.py` 先 `from .core.qbmanager import QbManager` 再赋值
     `__version__`, 模块顶层导入版本号会在包初始化未完成时抛 ImportError。
     """
     from auto_qb import __version__

@@ -45,11 +45,11 @@ from datetime import date, timedelta
 import pytest
 import yaml
 
-from auto_qb import curves
+from auto_qb.core import curves
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
 from auto_qb.config import ConfigError
-from auto_qb.mixins.speed_curve import _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
-from auto_qb.taskqueue import Task
+from auto_qb.core.mixins.speed_curve import _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
+from auto_qb.core.taskqueue import Task
 from helpers import FakeClient, make_manager
 
 GIB = 1024**3
@@ -849,7 +849,7 @@ def test_speed_curve_success_logs_period_stats(tmp_path):
         _pc("30D", up=_points([(50, 4)])),
     )
     mgr, client = _make_mgr(tmp_path, gslc)
-    lg = logging.getLogger("auto_qb.mixins.speed_curve")
+    lg = logging.getLogger("auto_qb.core.mixins.speed_curve")
     buf = io.StringIO()
     handler = logging.StreamHandler(buf)
     handler.setLevel(logging.INFO)

@@ -10,8 +10,8 @@
 import os
 import tempfile
 
-from auto_qb.qbmanager import QbManager
-from auto_qb.taskqueue import Task
+from auto_qb.core.qbmanager import QbManager
+from auto_qb.core.taskqueue import Task
 from helpers import FakeClient, FakeConfig, FakeTorrent
 
 

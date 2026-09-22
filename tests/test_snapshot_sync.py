@@ -16,7 +16,7 @@ import os
 import tempfile
 from unittest import mock
 
-from auto_qb.qbapi import QbApi
+from auto_qb.core.qbapi import QbApi
 from auto_qb.rules import RuleContext
 
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store

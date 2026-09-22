@@ -18,7 +18,7 @@ import tempfile
 
 import yaml
 
-from auto_qb import exporter
+from auto_qb.core import exporter
 from auto_qb.config import TrackerConfig
 from helpers import FakeClient, FakeConfig, FakeTorrent
 

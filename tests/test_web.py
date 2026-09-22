@@ -270,7 +270,7 @@ def _make_web_manager(tmp_path, config_text):
         wake=lambda: wake_calls.append(1),
     )
     # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
-    from auto_qb.qbmanager import QbManager
+    from auto_qb.core.qbmanager import QbManager
 
     # 命令投递经表现层门面(WebUIRuntime.post_command): 替身挂一个, 并与上面那个
     # web_commands 共用同一队列 —— 端点测试直投命令的断言才仍然成立
@@ -2969,7 +2969,7 @@ def test_reannounce_confirm_group_aggregate():
 
 def test_confirm_reannounce_result_matrix():
     """_confirm_reannounce_result 判定矩阵: updating/重置/变 working=成功; not working+msg=失败; 其余 None"""
-    from auto_qb.qbmanager import QbManager
+    from auto_qb.core.qbmanager import QbManager
 
     base = {"u": (1, 10_000)}
 
@@ -3406,7 +3406,7 @@ def test_api_state_speed_totals_survives_view_scoping():
 )
 def test_state_kind_maps_states(state, kind):
     """_state_kind: 状态语义分类(前端着色) —— 暂停态优先于下载/做种, errored/checking 最前"""
-    from auto_qb.qbmanager import QbManager
+    from auto_qb.core.qbmanager import QbManager
     from helpers import FakeTorrent
 
     assert QbManager._state_kind(FakeTorrent(hash="H", name="t", state=state)) == kind
@@ -3417,7 +3417,7 @@ def test_apply_new_config_levels(monkeypatch):
     L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用"""
     import logging as std_logging
 
-    from auto_qb import qbmanager as qbm
+    from auto_qb.core import qbmanager as qbm
     from auto_qb.config.impact import ConfigChange
     from helpers import make_manager
 

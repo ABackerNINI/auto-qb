@@ -13,8 +13,8 @@ import tempfile
 from types import SimpleNamespace
 
 from auto_qb.config import AddEpisodeTagsConfig
-from auto_qb.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
-from auto_qb.qbmanager import QbManager
+from auto_qb.core.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
+from auto_qb.core.qbmanager import QbManager
 from helpers import FakeClient, FakeConfig, FakeTorrent
 
 
@@ -168,7 +168,9 @@ def test_episode_tags_non_continuous_skipped():
 
         mgr._refresh_torrents()
 
-        episode_calls = [tags for name, tags in client.calls if name == "add_tags" and any(t.startswith("zE") for t in tags)]
+        episode_calls = [
+            tags for name, tags in client.calls if name == "add_tags" and any(t.startswith("zE") for t in tags)
+        ]
         assert not episode_calls, f"非连续集数不应加标签: {client.calls}"
 
 
@@ -214,5 +216,7 @@ def test_episode_tags_disabled():
         mgr._refresh_torrents()
 
         assert client.files_calls == 0, f"关闭时不应拉文件列表: {client.files_calls}"
-        episode_calls = [tags for name, tags in client.calls if name == "add_tags" and any(t.startswith("zE") for t in tags)]
+        episode_calls = [
+            tags for name, tags in client.calls if name == "add_tags" and any(t.startswith("zE") for t in tags)
+        ]
         assert not episode_calls, f"不应加集数标签: {client.calls}"

@@ -18,7 +18,7 @@
 """
 import time
 
-from auto_qb.taskqueue import FINISHED, PENDING, REQUEUE, RUNNING, Task, TaskQueue
+from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, RUNNING, Task, TaskQueue
 
 
 def test_task_queue_schedule():
