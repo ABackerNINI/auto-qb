@@ -431,6 +431,13 @@
 - **skill 里的脚本路径要写 `<skill-dir>/scripts/...`**, 别写相对路径 —— AI 会在仓库根的 `scripts/` 里找。脚本内部找仓库根用 `find_root()` 向上找 `.git`, **不要按 skill 安装深度反推 `parents[n]`**。
 - **项目级 skills 挂在 `<workspace>/.codebuddy/skills`**(内置 CLI 只扫这一处; 产品文档里的 `.workbuddy-ai/skills` **它根本不读**)。装载器**递归最深 5 层**收集每一个 `SKILL.md` ⇒ 把整棵技能树挂上去会注入数百条、严重挤占上下文。现状: `scripts/sync_agent_skills.py` 只挂顶层 skill(排除设计预设包), 幂等; **在源目录增删 skill 后必须重跑该脚本**, 否则新 skill 不出现。技能没出现先查两件事: 链接是否在 `.codebuddy/skills` 下、是否重启了会话(技能列表启动时加载一次)。
 - **生成型脚本往 markdown / html 里写路径**: `Path.relative_to()` **不会生成 `..` 回跳**(非前缀直接抛 `ValueError`, 捕获后返回空串 ⇒ 链接静默消失)⇒ 用 `os.path.relpath()`; 进链接前必须 `.as_posix()`(Windows 的 `str(Path)` 带 `\`)。落盘前统一转换并在真仓库里 `head` 一眼, 别只看退出码 0。
+- **❗脚本里"改名漏改"留下的未定义名, 只在冷门分支上炸**(2026-09-22 真机踩到): `push.py` 把
+  `MIRROR_URL_NOW` 写成 `MIRROR_URL`(后者从未定义), 而那行只在**"没找到镜像远端"**时才走 ——
+  主线推送会先把流程带过去, 于是这个 NameError 一直潜伏到真机碰上那个分支才暴露。
+  ⇒ 这类 bug 靠跑一遍抓不到(正常路径不经过), 只能**静态查**: `my-commit-flow` 的
+  `scripts/test_preflight.py` 已加 `undefined_names()` 检查(ast 扫 5 个脚本的 Load/Store 名,
+  闭包可见性也算对), 附带两个自证用例(能抓到 `MIRROR_URL`、不被闭包变量误报)。
+  改 skill 脚本后跑一次 `python <skill-dir>/scripts/test_preflight.py` 即可。
 - **预检 / 检查表型脚本的 STOP 级别要按阶段区分**: 一刀切 STOP 会挡住安全动作(如 commit 阶段"落后主线"只应 WARN, push 阶段才 STOP), 逼执行者 `--skip-preflight` 绕过 ⇒ 护栏形同虚设。判据: 每条检查都问一句"这条在当前阶段真的一票否决吗"。
 - **解析固定列宽输出时不要对整段 `strip()`**: `git status --porcelain` 首行的**首列空格**被吃掉 ⇒ `' M x'` 变 `'M  x'` 被判成已暂存, 且 `line[3:]` 连带把路径首字符切掉 ⇒ **红线检查静默放行**。只用 `rstrip("\n")`, 解析处再兜底 `line[:2].ljust(2)`。
 

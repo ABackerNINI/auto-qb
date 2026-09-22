@@ -150,7 +150,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\n=== 尝试一次镜像直连({MIRROR or '未找到镜像远端'}) ===")
     if not MIRROR:
-        hint = f"git remote add <名字> {MIRROR_URL}" if MIRROR_URL else "补一个镜像远端即可(镜像允许滞后)"
+        # 注意变量名是 MIRROR_URL_NOW(解析出的镜像 URL); 早年这里写成 MIRROR_URL,
+        # 而它从未定义 —— 只有走到"没找到镜像远端"这个分支才会 NameError(主线推送失败时
+        # 提前返回, 平时碰不到)。改回正确名字, 并由 test_preflight.py 的静态检查兜住。
+        hint = f"git remote add <名字> {MIRROR_URL_NOW}" if MIRROR_URL_NOW else "补一个镜像远端即可(镜像允许滞后)"
         print(f"  没找到镜像远端; 需要时: {hint}")
         return 0 if ok else 5
     # 代理禁用参数从 git config 读, 不写死 key/端口; 没配代理则为空

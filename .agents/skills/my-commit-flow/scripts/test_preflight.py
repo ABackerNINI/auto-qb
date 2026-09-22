@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import ast
+import builtins
 import subprocess
 import sys
 import tempfile
@@ -157,6 +159,88 @@ class RunAutoGatesTest(unittest.TestCase):
         gates = [{"match": [""], "run": ["x"], "auto": True}]
         self.assertEqual(len(preflight.gates_for(["src/a.py"], gates)), 1)
         self.assertEqual(preflight.gates_for(["src/a.py"], [{"match": ["docs/"], "run": ["x"]}]), [])
+
+
+SPECIALS = {"__name__", "__file__", "__doc__", "__package__", "__spec__", "__loader__", "__builtins__", "__debug__"}
+
+
+def _bound(node: ast.AST) -> set[str]:
+    """某个作用域里**被绑定**的名字 —— 赋值 / 参数 / for / with / except / 推导 / 嵌套定义 / import。"""
+    names: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            names.add(n.id)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(n.name)
+        elif isinstance(n, ast.arg):
+            names.add(n.arg)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for alias in n.names:
+                names.add((alias.asname or alias.name).split(".")[0])
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            names.add(n.name)
+        elif isinstance(n, ast.Global):
+            names.update(n.names)
+        elif isinstance(n, ast.alias):
+            names.add((n.asname or n.name).split(".")[0])
+    return names
+
+
+def _loaded(node: ast.AST) -> set[str]:
+    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+
+
+def undefined_names(path: Path) -> set[str]:
+    """静态找出"用了但从未定义"的名字 —— 冷门分支里的 NameError 只有靠这个才抓得到。
+
+    push.py 曾把 `MIRROR_URL_NOW` 写成 `MIRROR_URL`: 那个分支只有"没找到镜像远端"时才走,
+    平时主线推送失败会提前 return, 于是这个未定义名在真机上潜伏到被人踩到为止。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    module_bound = _bound(tree) | set(dir(builtins)) | SPECIALS
+    bad: set[str] = set()
+
+    def walk(node: ast.AST, inherited: set[str]) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                own = _bound(child)
+                scope = inherited | own
+                bad.update(_loaded(child) - scope)
+                walk(child, scope)  # 闭包: 外层绑定的名字对内层可见
+            else:
+                walk(child, inherited)
+
+    bad.update(_loaded(tree) - module_bound)
+    walk(tree, module_bound)
+    return bad
+
+
+class StaticNameTest(unittest.TestCase):
+    SCRIPTS = ["_ship_config.py", "preflight.py", "push.py", "commit.py", "verify_ref.py"]
+
+    def test_no_undefined_names_in_scripts(self) -> None:
+        bad = [f"{name}: {', '.join(sorted(undefined_names(Path(__file__).resolve().parent / name)))}"
+               for name in self.SCRIPTS]
+        bad = [line for line in bad if not line.endswith(": ")]
+        self.assertEqual(bad, [], "存在未定义的名字(拼写错 / 改名漏改), 会在冷门分支上 NameError")
+
+    def test_checker_actually_catches_undefined_names(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as fh:
+            fh.write("def f():\n    return MIRROR_URL\n")
+            tmp = Path(fh.name)
+        try:
+            self.assertEqual(undefined_names(tmp), {"MIRROR_URL"})
+        finally:
+            tmp.unlink()
+
+    def test_checker_is_not_fooled_by_closure(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as fh:
+            fh.write("def outer():\n    x = 1\n    def inner():\n        return x\n    return inner\n")
+            tmp = Path(fh.name)
+        try:
+            self.assertEqual(undefined_names(tmp), set())  # 闭包变量不算未定义
+        finally:
+            tmp.unlink()
 
 
 class ConfigProblemsTest(unittest.TestCase):
