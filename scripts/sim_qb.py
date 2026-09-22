@@ -2043,17 +2043,8 @@ def self_test(sim: SimQb, srv: SimServer, port: int) -> int:
     print(f"[自检] files 与磁盘一致 : {exists} ({p})")
     ok &= exists
 
-    # B2 逃逸: 目标在 fs_root 之外必须被拒
-    outside = os.path.join(os.path.dirname(sim.fs_root), "outside.txt")
-    with open(outside, "w") as f:
-        f.write("x")
-    try:
-        sim.safe_delete_files([outside], 1)
-        print("[自检] B2 逃逸拦截      : 未拦截 ✗")
-        ok = False
-    except BoundaryViolation:
-        print("[自检] B2 逃逸拦截      : 已拦截 ✓")
-    os.remove(outside)
+    # B2 逃逸: 已**下沉**进 tests/test_sim_corpus.py::test_safe_delete_rejects_path_outside_fs_root
+    # (本自检要真起 HTTP + 真装 qbittorrentapi, CI 从不执行 ⇒ 交给 pytest 验, 覆盖两平台)
 
     # B3 数量上限
     try:

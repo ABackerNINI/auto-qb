@@ -10,6 +10,7 @@
 - test_sim_is_within_host_semantics: B2 逃逸判定在**宿主语义**下成立(真子路径/根自身/树外兄弟), 两平台各真跑一次
 - test_sim_is_within_linux_equivalent: Linux 等价(`os`->posixpath + sep '/')下同一组断言仍成立
 - test_sim_is_within_red_on_fold_without_sep: **红验** —— 只换 ntpath 折叠、分隔符不动 => 真子路径被误拒(证明上条不恒绿)
+- test_safe_delete_rejects_path_outside_fs_root: B2 逃逸(从 `sim_qb.py --self-test` **下沉**, 进 CI)—— 树外删除目标被拒 + 文件没被真删 + 记进 violations
 - test_fsmock_unknown_path_in_scope_is_missing: 命中语料树但表里没有 -> 报"不存在"并计数(暴露探测不完整, 不伪装成真缺失)
 - test_fsmock_disk_usage_uses_recorded_free_space: shutil.disk_usage 回录制到的可用空间(不是回放机的)
 - test_fs_mock_coverage_static_guard: **静态守阵** —— 语料相关的 FS 探测点必须仍是被 mock 覆盖的那三个函数
@@ -155,6 +156,25 @@ def test_sim_is_within_red_on_fold_without_sep(monkeypatch):
 
     monkeypatch.setattr(simqb, "_norm", _norm_ntpath_only)
     assert simqb.is_within("/run/fs/d0/x.mkv", "/run/fs") is False, ("只换 normcase 会把真子路径判成逃逸 ⇒ 折叠与分隔符必须同源(改一个就必红)")
+
+
+def test_safe_delete_rejects_path_outside_fs_root(tmp_path):
+    """B2 逃逸: `safe_delete_files` 对落在 fs_root 之外的目标必须拒绝(从 `--self-test` 下沉, 进 CI)
+
+    ❗为什么要下沉: 这一段原本只在 `python scripts/sim_qb.py --self-test` 里跑 —— 要真起 HTTP 服务
+    **且**真装 qbittorrentapi(没装就整段 `return 0` 跳过), **CI 从不执行** ⇒ 平台语义回归抓不到
+    (pitfalls「Windows 全绿 / Linux 全红」❗⑤ 的根因就是这个盲区)。这里改成直接打方法, 不起服务。
+    比原自检多钉两条: ① 拒绝时**文件没被真删**(别把"拒了"做成"删了") ② **记进 violations**
+    (否则"拒了但没记账"看不出来 —— 记账是 sim_run 判定越界的依据)。
+    """
+    sim = _make_sim(tmp_path, cmd_latency_ms=0, md_lag_ms=0)
+    outside = os.path.join(os.path.dirname(sim.fs_root), "outside.txt")
+    with open(outside, "w", encoding="utf-8") as f:
+        f.write("x")
+    with pytest.raises(simqb.BoundaryViolation):
+        sim.safe_delete_files([outside], 1)
+    assert os.path.exists(outside), "拒绝后文件必须还在 —— 拒绝≠删除"
+    assert any("B2" in v for v in sim.violations), f"必须记进 violations(否则越界无从审计): {sim.violations}"
 
 
 def test_fsmock_unknown_path_in_scope_is_missing():

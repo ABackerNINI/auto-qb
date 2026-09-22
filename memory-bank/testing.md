@@ -6,7 +6,12 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1146 passed + 1 skipped (Windows 本地) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1147 passed + 1 skipped (Windows 本地) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1146 → 1147(**+1**; 2026-09-22 其三: B2 段从 `sim_qb.py --self-test` **下沉**进
+#     `tests/test_sim_corpus.py::test_safe_delete_rejects_path_outside_fs_root` —— 原自检要真起 HTTP
+#     **且**真装 qbittorrentapi(没装就整段 return 0), **CI 从不执行** ⇒ 下沉后进两平台 CI。
+#     比原自检多钉两条: 拒绝时**文件没被真删** + **记进 violations**(否则"拒了但没记账"看不出来)。
+#     红验: 把 `is_within` 改成恒 True ⇒ 该用例 `DID NOT RAISE BoundaryViolation` 立刻红(4 failed)。
 #   ↑ 1143 → 1146(**+3 跑 +1 跳**; 2026-09-22 其二: 平台语义守阵补齐 ——
 #     ① `tests/test_sim_corpus.py` +3: `test_sim_is_within_host_semantics`(B2 逃逸判定在**宿主语义**下
 #       成立, 用 tmp_path ⇒ win32 与 linux **两边各真跑一次**) / `test_sim_is_within_linux_equivalent`

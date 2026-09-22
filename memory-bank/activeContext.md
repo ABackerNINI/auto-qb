@@ -42,8 +42,11 @@
   sim_qb 的 `fs_root` 是 `os.makedirs` 出来的**宿主真实目录**(语料档 `<FSROOT>` 也解析到它) ⇒
   路径是**宿主形态** ⇒ 必须跟随宿主 FS, **不能统一到 `ntpath`**(只换 normcase 会混分隔符 ⇒ 全线误拒,
   已实测: 真子路径 `True→False`)。`src/` 与 sim_qb 的平台分支**一行未动**。
-  ⚠ 待办(未做): 把 `--self-test` 的 B2 段下沉进 `tests/`; `web.py::_within_roots` 的大小写守阵
-  **只能在 Linux 上真跑**(本机 skip), 由 CI 验。
+  **已入库 `84f92dd`**(Gitee + GitHub 均推上)。
+  ✅ 后续(未提交): B2 段已从 `sim_qb.py --self-test` **下沉**进 `tests/`(该自检要真起 HTTP + 真装
+  qbittorrentapi, CI 从不执行)⇒ 全量 **1147 passed + 1 skipped**。
+  ⚠ 仍未做: `--self-test` 里的 **B3 / D4** 两段同上理由也该下沉(未动, 待用户定);
+  `web.py::_within_roots` 的大小写守阵**只能在 Linux 上真跑**(本机 skip), 由 CI 验。
 
 - **🆕 列设置重置 · 双轨模型重设计 —— 已实施完毕(未提交), 剩真机走查**: 用户定性"修复了很多次,
   急需重新设计, 简化模型, 从根本上杜绝"; 计划
