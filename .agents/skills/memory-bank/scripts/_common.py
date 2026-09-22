@@ -36,6 +36,9 @@ CAP_POLICY: dict[str, int] = {
     "reference": 12000,  # 参考速查 (config-reference / rule-system) —— 查表不是通读
     "volatile": 12000,  # 易变层 (activeContext.md) —— 会话开始必读, 硬顶
     "task": 24000,  # 任务档案
+    # append-only 历史流水 (如 `testing/baseline-history.md`) —— **只增不改**, 每次改动追一条。
+    # 与任务档案同档: 它按设计就会一直长, 给一个"涨到多少该轮转"的上限, 而不是假装它是一屏文档。
+    "log": 24000,
     "agents": 8000,  # 项目引导 (AGENTS.md; 项目脚本 scripts/check_context_caps.py 另有一份权威值)
 }
 
@@ -201,6 +204,8 @@ def role_of(rel: str) -> str:
         return "volatile"
     if rel.startswith("memory-bank/tasks/"):
         return "task"
+    if rel.endswith("-history.md"):
+        return "log"
     if "/pitfalls/" in rel:
         return "pitfall"
     if rel.startswith(("memory-bank/config-reference/", "memory-bank/rule-system/")) or rel in (

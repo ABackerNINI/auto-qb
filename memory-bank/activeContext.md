@@ -4,7 +4,22 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-22 (**最新: memory-bank 目录化重构 W2 `pitfalls/` 已完成并入库** ——
+**最后更新**: 2026-09-22 (**最新: memory-bank 目录化重构 W3 `testing/` 已完成并入库** ——
+  `testing.md` 6,706 字符 / 489 行 → **9 个主题文件 + ≤1 KB 存根**: run · baseline · baseline-history ·
+  file-conventions · **guards(新增)** · helpers · sim-5000 · smoke · browser-env;
+  `techContext.md` 的浏览器自动化两条轨道迁入 `browser-env.md`(techContext 6,706 → **3,542** 字符)。
+  **基线数字的单点**从 `testing.md` 顶部迁到 `testing/baseline.md`(其它文档一律引用它);
+  逐次增量的 222 行流水**脚本抽取原样外迁**到 `testing/baseline-history.md`(只把 bash 注释标记转成
+  markdown 缩进, 内容逐字未改 —— 手抄等于把"守恒"变成"我保证没抄错")。
+  **新增 `guards.md`**: 把散落各处的机械守阵收成一张表(守阵名 / 钉住的结论 / 红验方式), 按
+  知识库结构 · 前端 · 主循环 · 后端高风险 · 仿真语料五组共 **70+ 条**。
+  **守恒**: 674 个硬事实 token 里 26 个"找不到", 逐条判后**真丢失 4 处**(覆盖率逐模块明细 /
+  档案两种命名形态 / 主犯那条的具体修法 `auto_qb.cli.notify_fatal` / 台账规模 1742 条), 已补回;
+  其余 12 个是**故意压缩的过期数字**(1062 条 → 改指 baseline 单点)或正则跨反引号假阳性。
+  ⚠ 按实测**新增 `log` 角色**(cap 24 KB): `baseline-history.md` 实测 18,749 字符, 是 **append-only**
+  流水、按设计就会一直长, 套 10 KB 常青档必常红且没有可行收缩路径。
+  全量 **1169 passed + 1 skipped**(不变)。详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W3」) ——
+  其前一条状态: W2 `pitfalls/` 已完成并入库(`39157db`) ——
   旧 `pitfalls.md` 64,491 字符 / 255 条 → **7 类目录 / 35 个主题文件 / 236 条字段化条目**, 最大文件 5,582 字符
   (cap 6,000), 原路径留 ≤1 KB 存根; 生成物 `pitfalls/_index.md` + 7 个类索引由通用生成器产出。
   条目统一 `触发` / `判别` / `处置` 三必填字段(`守阵` / `复发` 选填)。
@@ -74,14 +89,15 @@
 
 ## 正在进行
 
-- **🆕 memory-bank 目录化重构 —— W0–W2 已入库, 下一步 W3 `testing/`** —— 起因是全库超预算:
+- **🆕 memory-bank 目录化重构 —— W0–W3 已入库, 下一步 W4 `activeContext` + `progress/`** —— 起因是全库超预算:
   13 份顶层文档里 8 份超标, 「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故
   全写在同一节)。方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 +
   决策点接线; 8 份拆 9 个目录(约 45 主题文件), 各留 ≤1 KB 存根保住 400+ 处既有引用; `activeContext` 不拆
   但硬顶 12 KB。**已落地**: 脚本族统一在 memory-bank skill 的 `scripts/`(`_common.py` / `gen_tasks_index.py` /
   `gen_kb_index.py` / `check_kb_structure.py`), 9 条结构性守卫 + `<skill-dir:memory-bank>` 整目录闸门。
-  **已入库**: W0 基线冻结(`kb-baseline/` 清单) · W1 基础设施(脚本族 + 9 条守卫 + 闸门) · W2 `pitfalls/`(7 类 / 35 文件)。
-  **W3 起** 按波推进(W3 testing → W4 activeContext+progress → W5 systemPatterns+modules →
+  **已入库**: W0 基线冻结(`kb-baseline/` 清单) · W1 基础设施(脚本族 + 9 条守卫 + 闸门) ·
+  W2 `pitfalls/`(7 类 / 35 文件) · W3 `testing/`(9 文件 + 存根 + `guards.md`)。
+  **W4 起** 按波推进(W4 activeContext+progress → W5 systemPatterns+modules →
   W6 conventions+config-reference+rule-system → W7 tasks 消肿 → W8 机检化与演练), 每波独立可停可提交 →
   [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
   [档案](tasks/26-09-22-memory-bank-dir-refactor.md)

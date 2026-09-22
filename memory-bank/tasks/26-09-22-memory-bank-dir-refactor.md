@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0 基线冻结 + W1 基础设施 + W2 pitfalls/ 已完成 (7 类 / 35 文件, 9 条结构性守卫), 续做 W3 testing/
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W3 已完成 (pitfalls 7 类 / 35 文件 + testing 9 文件 + 新增 guards.md, 9 条结构性守卫), 续做 W4 activeContext+progress
 
 ## 原始请求
 
@@ -109,7 +109,7 @@
 | W0 | 基线冻结 (42 份 / 508,487 字符 / 352 段 / 1,613 条目) | Complete | 2026-09-22 | 清单在 `.workbuddy-ai/tmp/kb-baseline/` (gitignore) |
 | W1 | 基础设施: 脚本落位 + 通用生成器 + cap 策略 + 9 条守卫 | Complete | 2026-09-22 | 全量 1169 passed + 1 skipped (+9) |
 | W2 | `pitfalls/` 两级指针 (7 类 + 35 主题文件 + 存根 + 接线) | Complete | 2026-09-22 | 守恒: 真丢失 0 (973 token 核对); 1169 passed 不变 |
-| W3 | `testing/` (≈9 文件 + 存根; `baseline.md` 成唯一手改处) | Not Started | — | |
+| W3 | `testing/` (9 文件 + 存根; `baseline.md` 成唯一手改处) | Complete | 2026-09-22 | 守恒: 真丢失 4 处已补; 1169 passed 不变 |
 | W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Not Started | — | |
 | W5 | `systemPatterns/` + `modules/` (≈8 + ≈7) | Not Started | — | |
 | W6 | `conventions/` + `config-reference/` + `rule-system/` (≈5+3+4) | Not Started | — | |
@@ -146,6 +146,29 @@
   「入口链不随库体量变长」。
 - 定案: `systemPatterns` 的 WEB UI 三节 (21,406 字符) 本就挂错在「任务队列」名下, 拆开即纠错;
   modules 的「在哪里改」速查并入 `_index.md`; `tasks/attachments/` 不破坏索引守卫 (不递归)。
+
+### 2026-09-22 (W3 `testing/` 目录化)
+- **产出**: `testing.md`(6,706 字符 / 489 行)→ **9 个主题文件 + ≤1 KB 存根**(存根实测 **322 字符**):
+  `run` · `baseline` · `baseline-history` · `file-conventions` · **`guards`(新增)** · `helpers` · `sim-5000` ·
+  `smoke` · `browser-env`。另从 `techContext.md` 剥出浏览器自动化两条轨道(techContext **6,706 → 3,542 字符**)。
+- **新增 `guards.md`**: 把散落各处的机械守阵收成一张表(**守阵名 / 钉住的结论 / 红验方式**), 五组共 70+ 条 ——
+  知识库结构(16) · 前端 WEB UI(14) · 主循环与命令链路(11) · 后端高风险与状态持久化(14) · 仿真语料与平台语义(15)。
+  这是本波唯一**新写**的内容(其余是重组 + 字段化), 也是"能变成红的就从文本搬进守阵"这条主线的目录。
+- **基线数字单点迁移**: 从 `testing.md` 顶部迁到 `testing/baseline.md`(其它文档一律引用它);
+  **逐次增量的 222 行流水用脚本原样外迁**到 `testing/baseline-history.md` —— 手抄等于把"守恒"变成
+  "我保证没抄错"; 抽取时只把 bash 注释标记(`#` / `#   `)转成 markdown 列表缩进, **内容逐字未改**。
+- **守恒核对**: 674 个硬事实 token 里 26 个"找不到", 逐条判后**真丢失 4 处**已补回 ——
+  ①覆盖率逐模块明细 ②档案命名的两种形态(`YY-MM-DD-<slug>.md` + 兼容 `TASKnnn-<slug>.md`)
+  ③主犯那条的具体修法(`auto_qb.cli.notify_fatal`)④副作用台账规模(1742 条 / 越界 0)。
+  其余 12 个是**故意压缩的过期数字**(如 `1062 条` 改指 `baseline.md` 单点)或正则跨反引号的假阳性。
+- **⚠ 按实测新增 `log` 角色(cap 24 KB)**: `baseline-history.md` 实测 **18,749 字符**, 是 **append-only**
+  流水、按设计就会一直长 ⇒ 套"常青主题 10 KB"必常红且**没有可行的收缩路径**(删历史就是丢"数字怎么来的")。
+  与任务档案同档 24 KB, 并已把 `log` 加进 `check_kb_structure` 的默认角色集。
+- **接线**: `memory-bank/README.md` 细路由改指 `testing/_index.md`(并点明基线单点在 `testing/baseline.md`)。
+- **实测**: 全量 **1169 passed + 1 skipped**(与 W1/W2 持平 —— 本波未增删用例), sidefx 越界 0;
+  `check_kb_structure.py` 全过; `testing/` 合计 57,439 字符。
+- **残留(非阻塞)**: `run.md` 的 TMPDIR 一档还留着 testing.md 里那条与"用 `--basetemp=H:/Temp/<新目录>`"
+  **互相冲突**的旧建议(既有漂移, 本轮只按 W1 记的候选保留), 归入 W8。
 
 ### 2026-09-22 (W2 `pitfalls/` 目录化)
 - **产出**: 旧 `pitfalls.md`(64,491 字符 / 255 条) → **7 类 / 35 个主题文件 / 236 条字段化条目**;
