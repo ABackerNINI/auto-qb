@@ -14,6 +14,12 @@
 **最后更新**: 2026-09-22 23:44 (**README 按用户视角重写: 亮点前置 + 删实现细节 + 删 Web UI 详情章(九轮)** ——
   全文砍配置键名/机制枚举/工程数字/平台实现; Web UI 亮点 6 条居功能特性首小节; 密钥说明与 0.0.0.0 安全警告并入快速开始;
   开发测试节去贡献者规范, 头部加写作约定注释。27KB→13.5KB, check_doc_links 机检过。
+  其前一条状态: 2026-09-22 23:47 (**软件版本管理方案已出, 待拍板** —— git 健在, 空白在软件版本/发布层:
+  本地与 gitee 0 tag / 无 CHANGELOG / 双源漂移 pyproject "0.1.0" vs __init__:18 "0.2.0";
+  [方案](../docs/plans/26-09-22-2318-version-management-plan.html) 推荐 0.x 语义化 + __init__ 单源(hatchling regex)
+  + 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag, 3 决策点待拍板, 阶段 0 不涉码;
+  [档案](tasks/26-09-22-deps-version-management.md); 合流按「先同步远端、后提交」零 merge 提交,
+  合流后树全量 1189 passed + 1 skipped in 27.63s。
   其前一条状态: 2026-09-22 23:1x (**方案 C 目录分层归拢 W1-W4b 已全部入库, W5 文档回写进行中** ——
   plan [docs/plans/26-09-22-2112-src-layout-restructure-plan.html](../docs/plans/26-09-22-2112-src-layout-restructure-plan.html):
   W1 web/ + web_ui/ + web_runtime → webui/{server,static,runtime} (37d33bc);
@@ -27,6 +33,10 @@
 
 ## 正在进行
 
+- **🆕 软件版本管理方案 (2026-09-22, 待拍板)**: 「版本管理」立项 —— git 健在, 空白在软件版本/发布层
+  (0 tag / 无 CHANGELOG / 双源漂移 0.1.0 vs 0.2.0); [方案](../docs/plans/26-09-22-2318-version-management-plan.html)
+  推荐 0.x 语义化 + __init__ 单源 + 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag;
+  3 个决策点待拍板, 阶段 0 不涉码 → [档案](tasks/26-09-22-deps-version-management.md)
 - **🆕 跨组文件交叉检测 (2026-09-22, 已入池待认领)**: 分组键不拦跨组文件交叉(部分重叠文件列表 /
   大小写不同文件名 / junction·symlink 别名路径), 现有三条防线(组内大小一致性 / 同组下载冲突 /
   缺文件扫描)全以同组为边界; 建议方向: 全局物理路径映射检测 + 警告暂停, 细节开工拍板
@@ -92,7 +102,7 @@
 - WEB UI: 窗口日志等级可选; 星图侧补齐第九轮的纯版式项(棱镜已做: FX-05/06/09/17~25)
 - 规则系统: 条件取反 (`!`/非 logic); 重新梳理 ignore_next_action_error / stop_following_rules_if
 - tracker 分组前端增强 (阶段 2/3, 2026-09-15 拍板后续): 设置页 groups 下拉快捷追加 (rules_ref 风格); 辅种管理页按组筛选 (web_view 透出 conf.groups + app.js filterDefs)
-- 其它: 切分大文件; 种子未变动时不触发内置维护任务; 版本管理; 命中限速曲线强调显示; 插件系统
+- 其它: 切分大文件; 种子未变动时不触发内置维护任务; 命中限速曲线强调显示; 插件系统
 - 🚧 实机验证: README 标注 🚧 的功能 (alpha 阶段), 生产使用前先 `--dry-run` 观察
 
 ## 历史归档 (已迁出本文件)

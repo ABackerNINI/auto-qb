@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a6b3bf;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #211b13;
+    --bad: #d98a8a;
+    --code-bg: #171e26;
+    --mark: #141c24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  .badge.open { background: var(--warn-bg); color: var(--warn); border-color: #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border: 1px solid var(--hair-soft); overflow-x: auto; margin-bottom: 14px; max-width: 86ch; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .verdict-yes { color: var(--accent-ink); font-weight: 600; }
+  td .verdict-no { color: var(--bad); }
+  .callout { background: var(--mark); border: 1px solid var(--hair); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 86ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  .steps { counter-reset: step; list-style: none; margin-left: 0; }
+  .steps li { counter-increment: step; position: relative; padding-left: 40px; margin-bottom: 10px; max-width: 78ch; }
+  .steps li::before { content: counter(step, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>背景与结论</a>
+    <a href="#s2"><span class="no">02</span>现状盘点（已核实）</a>
+    <a href="#s3"><span class="no">03</span>目标与约束</a>
+    <a href="#s4"><span class="no">04</span>版本号方案对比</a>
+    <a href="#s5"><span class="no">05</span>版本号载体对比</a>
+    <a href="#s6"><span class="no">06</span>发版流程与 CHANGELOG</a>
+    <a href="#s7"><span class="no">07</span>落地路线（三阶段）</a>
+    <a href="#s8"><span class="no">08</span>风险与对策</a>
+    <a href="#s9"><span class="no">09</span>待拍板决策点</a>
+    <div class="toc-foot">
+      触发来源：<a href="https://gitee.com/ABacker/auto-qb/blob/develop/想法.md">想法.md</a> L281「版本管理」<br>
+      立档：<a href="../../memory-bank/tasks/26-09-22-deps-version-management.md">26-09-22-deps-version-management</a><br>
+      状态：方案待拍板，未动代码
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">选型方案 · 版本管理 · docs/plans</div>
+    <h1>auto-qb 软件版本管理方案<br>—— 版本号 · Tag · CHANGELOG · 发版流程</h1>
+    <p class="lede">「当前项目没有版本管理」经逐项核实，指的不是 git（版本控制本体健在且健康），而是<strong>软件版本号与发布管理</strong>这一层：零 tag、零 CHANGELOG、零发版流程，且版本号双源（pyproject vs 包内 <code>__version__</code>）已经漂移。本文档对比四类候选方案，给出推荐组合与分阶段落地路线。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">方案编号</div><div class="v">26-09-22-2318</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge open">待拍板 · 未动代码</span></div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ d4dea8b（已合流主线 9 提交）</div></div>
+      <div class="item"><div class="k">取证时间</div><div class="v">2026-09-22 23:10–23:47（命令取）</div></div>
+      <div class="item"><div class="k">涉及范围</div><div class="v">pyproject.toml · src/auto_qb/__init__.py · CHANGELOG.md（新）· git tag</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>背景与结论</h2>
+    <p><strong>前提核实</strong>（2026-09-22 23:10 实测）：git 仓库健在——develop @ <code>d4dea8b</code> 与 gitee/develop 齐平（<code>preflight.py --check-started</code> PASS；本轮内自 49eacb8 快进合流主线 9 提交，含 src 布局归拢）、工作区干净、双远端齐全（gitee 主 + github 镜像）、多 clone 协作模式 2026-09-20 已定案运行。因此「没有版本管理」在本项目语境下的准确含义是 <code>想法.md</code> L281 待办「版本管理」所指的<strong>软件版本号与发布管理</strong>，不是版本控制工具本身。</p>
+    <div class="callout">
+      <strong>核心结论</strong>：推荐组合 = <strong>0.x 语义化版本</strong>（0.2.0 → 0.3.0 功能批次 / 0.2.1 修复）+ <strong><code>__init__.py</code> 单源</strong>（pyproject 走 hatchling regex 动态接线，消灭双源）+ <strong>手工三步发版</strong>（bump → commit → tag + 双远端 push，判定只看 ls-remote）+ <strong>Keep a Changelog</strong>（条目按既有 gitmoji 提交归类）+ <strong>立即打 <code>v0.2.0</code> 基线 tag</strong>。三个待拍板决策点见 §09；阶段 0 全程不涉码。
+    </div>
+    <table>
+      <tr><th>层</th><th>推荐</th><th>一句话理由</th></tr>
+      <tr><td>版本号格式</td><td class="verdict-yes">0.x 语义化</td><td>Beta 阶段惯例：0.x 即「不稳定但可用」，破坏性变更升 minor，语义对使用者诚实</td></tr>
+      <tr><td>版本号权威出处</td><td class="verdict-yes">src/auto_qb/__init__.py 单源</td><td>显示路径（托盘 / WEB UI）零改动，运行时零新增依赖，构建元数据自动跟随</td></tr>
+      <tr><td>发版动作</td><td class="verdict-yes">手工三步 + ls-remote 判定</td><td>与既有提交推送纪律同构，零新依赖；脚本化留作演进</td></tr>
+      <tr><td>变更记录</td><td class="verdict-yes">Keep a Changelog + gitmoji 映射</td><td>不改提交规范的前提下，把已有 gitmoji 历史低成本转成用户可读的变更记录</td></tr>
+    </table>
+    <p class="hint">若本方案的原意确为「版本控制工具选型」：§02 现状盘点即答案——git 已是唯一合理解（托管、AI 工具链、多 clone 工作流全部锁定其上），不存在重选问题；本文档余下部分全部针对软件版本/发布层。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状盘点（已核实）</h2>
+    <h3>2.1 健全面：版本控制本体</h3>
+    <table>
+      <tr><th>事实</th><th>现值（取证 2026-09-22 23:10–23:18）</th></tr>
+      <tr><td>分支状态</td><td>develop @ <code>49eacb8</code>，与 gitee/develop 齐平（preflight <code>--check-started</code> PASS），工作区净</td></tr>
+      <tr><td>远端</td><td><code>gitee</code> = 主线（判定口径）；<code>github</code> = 镜像（允许滞后）；<code>origin</code> = gitee 别名</td></tr>
+      <tr><td>仓库本体</td><td>.git 239 文件 / 16.5 MB，多 clone 工作流（auto-qb 主 + clone1 + clone2 + long-seeding）运行中</td></tr>
+    </table>
+    <h3>2.2 空白面：软件版本 / 发布层</h3>
+    <table>
+      <tr><th>事实</th><th>现值</th><th>影响</th></tr>
+      <tr><td>git tag</td><td>本地 <strong>0 个</strong>；gitee 远端 <strong>0 个</strong>（<code>ls-remote --tags</code> 空）；github 代理拒连未核（报告一次不重试）</td><td>没有可回溯的发布点，回滚只能靠记 SHA</td></tr>
+      <tr><td>pyproject 版本</td><td><code>version = "0.1.0"</code>（静态）</td><td>自 uv 现代化后未随功能演进</td></tr>
+      <tr><td>包内版本</td><td><code>__version__ = "0.2.0"</code>（<code>src/auto_qb/__init__.py:18</code>）</td><td><strong>与 pyproject 已漂移</strong>：界面显示 0.2.0，安装元数据是 0.1.0</td></tr>
+      <tr><td>版本消费点</td><td><code>tray/app.py:236</code> 托盘标题显示 <code>v{__version__}</code>；<code>webui/server/common.py:31</code> 懒加载读取（注释写明顶层导入会在包初始化期炸 ImportError）</td><td>显示路径已经存在且工作正常，方案必须保住它</td></tr>
+      <tr><td>CHANGELOG</td><td>无</td><td>「这次更新了什么」只能翻 git log</td></tr>
+      <tr><td>发版流程 / bump 约定</td><td>无</td><td>版本号改动无触发时机、无核对步骤</td></tr>
+      <tr><td>README 版本提及</td><td>无（grep 0.1.0 / 版本号 = 0 命中）</td><td>使用者无从得知当前运行的是哪一版</td></tr>
+      <tr><td>成熟度自述</td><td>classifiers = <code>Development Status :: 4 - Beta</code>；README 功能标注 🚧 alpha</td><td>版本号方案需与「不稳定但可用」的阶段语义匹配</td></tr>
+    </table>
+    <p class="hint">注：主线于本轮内合入 src 布局归拢（<code>d4dea8b</code>：ui.py→tray/app.py、web/→webui/server/、web_runtime.py→webui/runtime.py 等，零行为变更），本节与全文路径已按新布局标注。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>目标与约束</h2>
+    <ol>
+      <li><strong>单点事实源</strong>：版本号只允许一个权威出处——与 config/schema 单点、testing.md 基线单点同款项目哲学；双源漂移已经实际发生过（§2.2），不再是理论风险。</li>
+      <li><strong>兼容 gitmoji + 中文提交规范</strong>：任何自动化不得以改成 conventional commits 为前提。</li>
+      <li><strong>兼容双远端纪律</strong>：Gitee 为主线、判定只看 <code>ls-remote</code>；GitHub 镜像允许滞后，失败只报告一次不重试。</li>
+      <li><strong>兼容工具 shell git 禁令</strong>：发版流程禁用 merge / rebase / stash；每一步都能被 <code>ls-remote</code> / <code>show-ref</code> 当场核验（本 shell 有 ref 静默丢弃先例）。</li>
+      <li><strong>多 clone 感知</strong>：<code>git fetch &lt;remote&gt; &lt;分支&gt;</code> 不带 tag，四个 clone 的 tag 同步需要显式 <code>fetch --tags</code> 约定。</li>
+      <li><strong>阶段语义</strong>：Beta + README 🚧 alpha 功能——版本号要能表达「不稳定但可用」，且给未来 1.0 留出里程碑语义。</li>
+      <li><strong>最小改动</strong>：不引入构建期 git 依赖（无 tag 时构建失败的面）、不新增常驻工具、不改运行时代码路径。</li>
+    </ol>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>版本号方案对比</h2>
+    <table>
+      <tr><th>方案</th><th>形态示例</th><th>变更时机</th><th>优点</th><th>缺点</th><th>判定</th></tr>
+      <tr>
+        <td>A. 0.x 语义化</td>
+        <td><code>0.2.0</code> → <code>0.3.0</code>（功能批次）/ <code>0.2.1</code>（修复）</td>
+        <td>人为判定</td>
+        <td>0.x = 「不稳定但可用」是社区惯例，与 Beta 自述一致；兼容 SemVer 工具链与依赖判断；单人可判</td>
+        <td>需要记得 bump——靠发版流程（§06）兜住</td>
+        <td class="verdict-yes">★ 推荐</td>
+      </tr>
+      <tr>
+        <td>B. 正式 SemVer（1.x 起步）</td>
+        <td><code>1.0.0</code></td>
+        <td>同上</td>
+        <td>兼容承诺明确，用户可放心自动升级</td>
+        <td>Beta 期破坏性变更频繁会持续刷大版本；1.0 语义被透支</td>
+        <td>1.0 留作里程碑</td>
+      </tr>
+      <tr>
+        <td>C. CalVer</td>
+        <td><code>2026.9.0</code></td>
+        <td>日期驱动</td>
+        <td>新旧一目了然；零决策成本</td>
+        <td>对「能不能安全升级」零表达；单人工具的发布间隔不规律，日期语义弱</td>
+        <td>备选（保留）</td>
+      </tr>
+      <tr>
+        <td>D. 短哈希滚动</td>
+        <td><code>0.2.0+49eacb8</code></td>
+        <td>每次构建</td>
+        <td>零维护；溯源精确到提交</td>
+        <td>无里程碑语义、不可比较、不能当对外版本</td>
+        <td>仅作本地构建后缀</td>
+      </tr>
+    </table>
+    <p><strong>推荐 A</strong>，并为 1.0 设可判定的触发条件（三条全中再提 1.0）：① README 🚧 项清空；② 生产连续 2–4 周无数据风险事故；③ 配置 schema 冻结走完一个周期。在此之前 minor = 功能批次、patch = 修复，破坏性变更也走 minor（0.x 语义允许）。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>版本号载体对比</h2>
+    <table>
+      <tr><th>方案</th><th>机制</th><th>优点</th><th>缺点</th><th>判定</th></tr>
+      <tr>
+        <td>V1. pyproject 静态 + 运行时读元数据</td>
+        <td>版本写 pyproject；代码 <code>importlib.metadata.version("auto-qb")</code></td>
+        <td>惯例位置；打包元数据单源</td>
+        <td>运行时依赖「项目已安装」；直接 <code>python src/auto-qb.py</code> 场景要兜底；包初始化次序曾有坑（<code>web/common.py:31</code> 注释实证）</td>
+        <td>可行</td>
+      </tr>
+      <tr>
+        <td>V2. <code>__init__</code> 单源 + hatchling 动态</td>
+        <td>pyproject 声明 <code>dynamic = ["version"]</code>，构建时用 regex 从 <code>src/auto_qb/__init__.py</code> 提取</td>
+        <td>显示路径零改动（ui.py / web 照旧 import）；运行时零新增依赖；bump = 改一行；构建元数据自动一致，双源<strong>结构性消失</strong></td>
+        <td>pyproject 不再静态可读版本（构建时推导）；接线后需 <code>uv sync</code> 刷新 uv.lock 内记录</td>
+        <td class="verdict-yes">★ 推荐</td>
+      </tr>
+      <tr>
+        <td>V3. tag 驱动（setuptools-scm / hatch-vcs）</td>
+        <td>构建期从 git tag 推导，开发构建自动 <code>.devN</code></td>
+        <td>零手改；溯源最精确</td>
+        <td>构建期需要 git 仓库与 tag 纪律；无 tag 构建即失败；与本 shell 的 git 怪癖叠加后排查链最长</td>
+        <td>未来选项</td>
+      </tr>
+      <tr>
+        <td>V4. 双写（现状）</td>
+        <td>pyproject 与 <code>__init__</code> 各写一份</td>
+        <td>—</td>
+        <td><strong>漂移已实证</strong>：0.1.0 vs 0.2.0；违反单点事实源</td>
+        <td class="verdict-no">✗ 否决</td>
+      </tr>
+    </table>
+    <h3>5.1 V2 接线示意（阶段 1 实施，本方案不动代码）</h3>
+<pre><code>[project]
+name = "auto-qb"
+dynamic = ["version"]              # 移除静态 version = "0.1.0"
+...
+[tool.hatch.version]
+source = "regex"
+path = "src/auto_qb/__init__.py"   # __version__ = "0.2.0" 成为唯一权威出处</code></pre>
+    <p class="hint">配套守阵（阶段 1 一并落）：测试断言 <code>auto_qb.__version__</code> 匹配 SemVer 正则（<code>^\d+\.\d+\.\d+$</code>）；可选加一条 uv.lock 内记录与 <code>__version__</code> 一致性校验。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>发版流程与 CHANGELOG</h2>
+    <h3>6.1 发版流程对比</h3>
+    <table>
+      <tr><th>方案</th><th>流程</th><th>与既有约束的咬合</th><th>判定</th></tr>
+      <tr>
+        <td>T1. 手工三步</td>
+        <td>① bump <code>__version__</code> + 写 CHANGELOG 段 → ② gitmoji commit → ③ tag + 双远端 push + ls-remote 核对</td>
+        <td>与现有「提交即推送、判定只看 ls-remote」纪律完全同构；零新依赖</td>
+        <td class="verdict-yes">★ 起步推荐</td>
+      </tr>
+      <tr>
+        <td>T2. release 脚本</td>
+        <td><code>scripts/release.py</code>：前置校验（工作区净 / 测试绿 / 与远端齐平）→ bump → changelog 草稿 → tag → push + 核对</td>
+        <td>把 T1 的四条纪律固化成机检，防呆</td>
+        <td>演进方向（阶段 2）</td>
+      </tr>
+      <tr>
+        <td>T3. 自动定版（python-semantic-release 等）</td>
+        <td>解析 conventional commits 自动决定版本号</td>
+        <td><strong>要求改提交格式</strong>，与 gitmoji + 中文提交规范冲突</td>
+        <td class="verdict-no">✗ 否决</td>
+      </tr>
+      <tr>
+        <td>T4. git-cliff 配套</td>
+        <td>git log → CHANGELOG 草稿；regex 自定义解析器可按 gitmoji 归类（git-cliff.org，2026-09-22 检索确认在维护）</td>
+        <td>不要求改提交规范，只消费既有历史；多一个 CLI 工具</td>
+        <td>可选（阶段 2）</td>
+      </tr>
+    </table>
+    <h3>6.2 T1 的发版三步（命令级）</h3>
+<pre><code># ① bump：src/auto_qb/__init__.py 的 __version__ 改一行 + CHANGELOG.md 补本版段
+# ② commit（gitmoji 规范），随主提交走 my-commit-flow 预检
+git tag -a v0.3.0 -m "auto-qb v0.3.0"
+git tag -l v0* ; git show-ref --tags          # 本 shell ref 写入有静默丢弃先例, 当场核对
+# ③ 推送与判定
+git push gitee develop v0.3.0                 # 显式 ref, 与分支推送同纪律
+git ls-remote --tags gitee                    # 「推没推上」只看这里
+git push github develop v0.3.0                # 镜像; 失败只报告一次, 不重试</code></pre>
+    <h3>6.3 CHANGELOG 规范</h3>
+    <ul>
+      <li>格式：Keep a Changelog；文件 <code>CHANGELOG.md</code>；顶部 <code>## [Unreleased]</code> 滚动段，发版时改名 <code>## [X.Y.Z] - 日期</code>。</li>
+      <li>分类沿用既有 gitmoji 提交映射（内容引用，不是装饰）：</li>
+    </ul>
+    <table>
+      <tr><th>提交里的 gitmoji</th><th>CHANGELOG 段</th><th>默认</th></tr>
+      <tr><td>✨</td><td>Added（新功能）</td><td>入册</td></tr>
+      <tr><td>🐛</td><td>Fixed（修复）</td><td>入册</td></tr>
+      <tr><td>⚡️</td><td>Changed（性能 / 行为变化）</td><td>入册</td></tr>
+      <tr><td>♻️</td><td>并入 Changed（仅当有可感知行为差异）</td><td>默认省略</td></tr>
+      <tr><td>📝 ✅ 🔧 🎨 💚 等</td><td>文档 / 测试 / 内部杂务</td><td>默认不入册</td></tr>
+    </table>
+    <p class="hint">草稿低成本取法：<code>git log v上一版..HEAD --oneline</code> 按 emoji 归类后再人工润色；历史无 tag 区间用提交哈希区间代替。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>落地路线（三阶段）</h2>
+    <h3>阶段 0 —— 不涉码，拍板后即可做</h3>
+    <ol class="steps">
+      <li>建 <code>CHANGELOG.md</code>：Unreleased 空段 + <code>[0.2.0] - 2026-09-22</code> 一句基线说明（「首个版本基线；此前为开发期，历史见 git log」）。</li>
+      <li>打基线 tag：<code>git tag -a v0.2.0</code> @ <code>49eacb8</code>（当前工作区净且与远端齐平，是干净基线点）；打完 <code>show-ref --tags</code> 当场核对。</li>
+      <li>推送与判定：<code>git push gitee develop v0.2.0</code> → <code>git ls-remote --tags gitee</code> 核对；github 镜像尝试一次，失败只报告一次。</li>
+      <li>约定回写：发版三步 + <code>fetch --tags</code> 多 clone 约定写入 <code>conventions/collaboration.md</code>（AGENTS.md 只留指针，注意 8000 字符上限）。</li>
+    </ol>
+    <h3>阶段 1 —— 涉码，单独立项走认领流程</h3>
+    <ol class="steps" start="5">
+      <li>pyproject 改 <code>dynamic = ["version"]</code> + <code>[tool.hatch.version]</code> regex 接线（§5.1）；接线后 <code>uv sync</code> 刷新 uv.lock。</li>
+      <li>版本守阵：SemVer 正则断言 + （可选）lock 一致性校验；守阵先红验后合入。</li>
+      <li><code>cli.py</code> 增加 <code>--version</code> 输出（<code>importlib.metadata</code> 优先、<code>__version__</code> 兜底）。</li>
+    </ol>
+    <h3>阶段 2 —— 按需演进（不排期）</h3>
+    <ol class="steps" start="8">
+      <li><code>scripts/release.py</code>：前置校验 + bump + 草稿 + tag + push 一条龙。</li>
+      <li>git-cliff 半自动 changelog；Gitee / GitHub Release 页面发布。</li>
+    </ol>
+    <p class="hint">阶段划分的意义：阶段 0 四步只动文档与 git ref，无回归面，拍板即做；阶段 1 触碰打包配置与 CLI，按仓库惯例走 issue 认领 + 红绿验证；阶段 2 纯增益，等发版频率上来再投入。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>风险与对策</h2>
+    <table>
+      <tr><th>风险</th><th>判据</th><th>对策</th></tr>
+      <tr><td>tag 推了本地、没推上远端</td><td><code>ls-remote --tags gitee</code> 为空</td><td>push 一律显式 ref + 推后必核（与分支推送同一判定口径）</td></tr>
+      <tr><td>版本号双源再次漂移</td><td>守阵红（正则 / 一致性）</td><td>阶段 1 的 V2 单源让漂移<strong>结构性消失</strong>；接线前的过渡期靠发版三步纪律</td></tr>
+      <tr><td>其它 clone 看不到新 tag</td><td>别的 clone <code>git tag -l</code> 查无</td><td><code>git fetch gitee --tags</code> 显式同步约定，写入 collaboration.md（<code>fetch &lt;remote&gt; &lt;分支&gt;</code> 不带 tag）</td></tr>
+      <tr><td>0.x 被当稳定版误用</td><td>—</td><td>CHANGELOG 首行写明 0.x 语义；classifiers Beta 不动；1.0 判据明确（§04）</td></tr>
+      <tr><td>github 镜像 tag 滞后</td><td>github <code>ls-remote</code> 失败 / 落后</td><td>沿用「GitHub 允许滞后」既有口径；失败只报告一次</td></tr>
+      <tr><td>bump 被忘记、Unreleased 长期空</td><td>Unreleased 段跨越多个功能批次</td><td>功能批次合流的收尾检查里加一句「需要 bump / 发版吗」；阶段 2 脚本化后由机检兜底</td></tr>
+    </table>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>待拍板决策点</h2>
+    <table>
+      <tr><th>#</th><th>决策</th><th>选项</th><th>推荐与理由</th></tr>
+      <tr>
+        <td>①</td>
+        <td>基线 tag 时机</td>
+        <td>a. 现在打 <code>v0.2.0</code>；b. 等阶段 1 接线后一起</td>
+        <td><strong>a</strong>——当前工作区净且与远端齐平，是干净的基线点；tag 只标 ref，不受后续接线影响</td>
+      </tr>
+      <tr>
+        <td>②</td>
+        <td>版本号权威出处</td>
+        <td>a. V2 <code>__init__</code> 单源（hatch regex）；b. V1 pyproject 静态 + importlib</td>
+        <td><strong>a</strong>——显示路径零改动、运行时零依赖、双源结构性消失；V1 在直接脚本运行与包初始化次序上有已知坑</td>
+      </tr>
+      <tr>
+        <td>③</td>
+        <td>CHANGELOG 档位</td>
+        <td>a. 手工（git log 草稿 + 归类）；b. git-cliff 半自动</td>
+        <td><strong>a</strong> 起步——单人项目发版频率低，手工成本可控；b 留作阶段 2</td>
+      </tr>
+    </table>
+    <div class="callout warn">
+      <strong>拍板后动作</strong>：三项确认 → 阶段 0 四步（不涉码，随下一笔「提交」走 my-commit-flow）→ 阶段 1 入池 issue 认领实施。本文档全程未改任何代码与生产文件。
+    </div>
+  </section>
+
+  <footer>
+    方案编号 26-09-22-2318 · 基线 develop @ d4dea8b · 取证 2026-09-22 23:10–23:47（命令实测）· 立档 <a href="../../memory-bank/tasks/26-09-22-deps-version-management.md">memory-bank/tasks/26-09-22-deps-version-management.md</a>
+  </footer>
+
+</div>
+</body>
+</html>
