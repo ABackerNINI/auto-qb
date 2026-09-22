@@ -11,7 +11,11 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 21:58 (**开工同步规则修正已改待提交 + 第 5 项开工自检已实施: ① `pull --rebase` → `fetch` + `ls-remote` + `merge --ff-only`** ——
+**最后更新**: 2026-09-22 22:19 (**根 README + docs/configuration.md 文档同步最新代码事实** ——
+  补 `sync_interval`/`state_save_interval` 两键与取值范围注记(26-09-22-1937 收紧的用户侧补全)、curve `enabled`/`interval`
+  可选、规则 interval 缺省语义、hr 范围、state_file 说明; README 用例数 995→1190、基线行 949→1188 passed + 1 skipped、
+  指针改 testing/baseline.md、补状态周期落盘说明。仅文档, 未跑全量(基线不变)。
+  其前一条状态: 2026-09-22 21:58 (**开工同步规则修正已改待提交 + 第 5 项开工自检已实施: ① `pull --rebase` → `fetch` + `ls-remote` + `merge --ff-only`** ——
   根因: 09-22 07:38 rebase 禁令落地时漏改 ①, 规则文本与禁令互斥致"静默改写/跳过"; 规则入口 4 处一次改全:
   根 [AGENTS.md](../AGENTS.md)「会话协议 · 开始」(锚点改"首个执行动作前" + 问答轮豁免 + 判据改 ls-remote + 树脏停下报告) +
   [collaboration.md](conventions/collaboration.md) L12/L16 + copilot-instructions.md + SKILL.md 会话开始第 1 步 + ai-lib.md;
@@ -33,6 +37,8 @@
 
 ## 正在进行
 
+- **README + configuration.md 文档同步 (2026-09-22, 本轮完成)**: 漂移审计 + 用户侧补全(见「最后更新」); docs_drift 机检无断链。
+  范围外残留待拍板: memory-bank keys.md 运行时文件表仍有 `web.py` 字样; AGENTS.md「testing.md 顶部」旧指针(存根可跳转, 危害低)
 - **🆕 qB 移动 .!qB 误判缺文件 (issue 26-09-21-0219) 已认领, 计划待过目 (2026-09-22)**: 过渡态容忍 + 连续 3 次上限;
   [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html); 用户确认后实施, issue 已置 In Progress
 - **config 取值范围收紧 (2026-09-22, 随合并入库)**: issue [26-09-22-1937-bug-config-value-range-validation](issues/26-09-22-1937-bug-config-value-range-validation.html) 已置 Fixed。
