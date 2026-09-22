@@ -11,7 +11,15 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 23:44 (**README 按用户视角重写: 亮点前置 + 删实现细节 + 删 Web UI 详情章(九轮)** ——
+**最后更新**: 2026-09-22 23:59 (**产出 activeContext 多 clone 冲突治理计划并立档, 待拍板实施** ——
+  根因: 多 clone 并行下 activeContext.md 为全体收尾必写热点, 「最后更新」滚动栈每会话重写头部同段,
+  并行状态塞进串行媒介 → develop 汇合高频冲突, 且本环境合并即高危(禁 rebase/stash; W1–W3 合并事故唯一冲突文件即 memory-bank/testing.md);
+  五案对比后推荐 A(按 clone 拆文件)+B(生成式聚合索引)+D(merge-tree 只读预检), W1–W4 波次且 W1–W3 须连续入库
+  → [计划](../docs/plans/26-09-22-2350-activecontext-conflict-plan.html) +
+  [档案](tasks/26-09-22-memory-bank-activecontext-conflict.md)(Pending)。
+  仅文档, 未改代码; 本轮合流两次落后(bc54156 / 7452f52)走「先同步远端、后提交」零 merge 提交;
+  干净代码态全量 1189 passed + 1 skipped(32.9s)。
+  其前一条状态: 2026-09-22 23:44 (**README 按用户视角重写: 亮点前置 + 删实现细节 + 删 Web UI 详情章(九轮)** ——
   全文砍配置键名/机制枚举/工程数字/平台实现; Web UI 亮点 6 条居功能特性首小节; 密钥说明与 0.0.0.0 安全警告并入快速开始;
   开发测试节去贡献者规范, 头部加写作约定注释。27KB→13.5KB, check_doc_links 机检过。
   其前一条状态: 2026-09-22 23:47 (**软件版本管理方案已出, 待拍板** —— git 健在, 空白在软件版本/发布层:
@@ -33,6 +41,11 @@
 
 ## 正在进行
 
+- **🆕 activeContext 多 clone 冲突治理 (2026-09-22, 计划已产出待拍板)**: 根因 = 并行会话状态塞进单文件串行媒介
+  (全体收尾必写 + 「最后更新」滚动栈同段重写); 推荐按 clone 拆文件 + 生成式聚合索引 + merge-tree 预检,
+  W1–W4 波次待实施, W1–W3 须连续入库
+  → [计划](../docs/plans/26-09-22-2350-activecontext-conflict-plan.html) ·
+  [档案](tasks/26-09-22-memory-bank-activecontext-conflict.md)(Pending)
 - **🆕 软件版本管理方案 (2026-09-22, 待拍板)**: 「版本管理」立项 —— git 健在, 空白在软件版本/发布层
   (0 tag / 无 CHANGELOG / 双源漂移 0.1.0 vs 0.2.0); [方案](../docs/plans/26-09-22-2318-version-management-plan.html)
   推荐 0.x 语义化 + __init__ 单源 + 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag;

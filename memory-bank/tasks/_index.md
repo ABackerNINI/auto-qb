@@ -26,7 +26,7 @@
 
 ## Pending
 
-(暂无 — 下一步候选见 [../activeContext.md](../activeContext.md) 的"下一步候选"段)
+- [26-09-22-memory-bank-activecontext-conflict] activeContext 多 clone 冲突治理 - activeContext.md 全体收尾必写 + 「最后更新」滚动栈同段重写 → develop 汇合高频冲突; 解法 = 按 clone 拆文件 + 生成式聚合索引 + merge-tree 只读预检, W1–W4 待拍板。
 
 ## Completed
 
