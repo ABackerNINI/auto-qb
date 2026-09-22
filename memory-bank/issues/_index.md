@@ -17,12 +17,13 @@
 | bug | 5 |
 | perf | 2 |
 | docs | 2 |
-| test | 3 |
+| test | 4 |
 | refactor | 2 |
 | chore | 4 |
 
 ## Open
 
+- [test] [FakeConfig 类级共享 grouping 实例被 test_web 实例改写, test_refresh_removed_grouping_disabled 顺序敏感](26-09-22-2311-test-fakeconfig-shared-state-order-pollution.html) — FakeConfig.grouping 为类级共享实例, test_web 两处在实例上改 enabled=True 后残留全局, test_qbmanager 该用例在 test_web 先跑的自定义顺序下必红（全量字母序不触发, 与方案 C 目录迁移无关）
 - [test] [throttle 守阵 elapsed 容差无 sleep 精度余量, 文件级/全量跑偶发假红](26-09-22-2052-test-throttle-test-sleep-tolerance.html) — test_run_loop_throttles_without_stop_event 的 mock 场景断言 elapsed >= 0.05, Windows sleep(50ms) 实测可 46ms(定时器精度), 文件级跑时前序测试改变定时器状态即红; 单跑恒绿
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [bug] [WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers](26-09-21-1408-bug-web-auth-hardening-minors.html) — SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判
