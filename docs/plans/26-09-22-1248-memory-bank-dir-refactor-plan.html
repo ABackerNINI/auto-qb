@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知识库目录化重构 · memory-bank 全库分类 + 二级指针方案</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f0f0f; --fg:#ececec; --muted:#8f8f8f; --faint:#6a6a6a;
+    --hair:rgba(255,255,255,.09); --surface:rgba(255,255,255,.03);
+    --accent:#7fb5a0;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono","JetBrains Mono",Consolas,"Noto Sans Mono CJK SC",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg)}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;font-weight:400;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1160px;margin:0 auto;padding:88px 40px 120px;
+        display:grid;grid-template-columns:212px minmax(0,1fr);gap:64px}
+  header{grid-column:1 / -1;max-width:760px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--faint);margin:0 0 22px}
+  h1{font-size:44px;line-height:1.12;letter-spacing:-.02em;font-weight:600;margin:0 0 20px}
+  .lede{font-size:17px;line-height:1.6;color:#c9c9c9;margin:0 0 28px;max-width:660px}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;font-family:var(--mono);font-size:11.5px;
+        color:var(--faint);letter-spacing:.02em;padding-top:18px;border-top:1px solid var(--hair)}
+  .meta span b{font-weight:400;color:var(--muted)}
+  nav.toc{position:sticky;top:56px;align-self:start;font-family:var(--mono);font-size:12px}
+  nav.toc p{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 9px;color:var(--faint)}
+  nav.toc a{color:var(--muted);text-decoration:none;border:0}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .n{color:var(--faint);margin-right:8px}
+  main{max-width:760px;min-width:0}
+  section{margin:0 0 74px;scroll-margin-top:56px}
+  h2{font-size:23px;font-weight:600;letter-spacing:-.01em;line-height:1.25;margin:0 0 6px}
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.08em;
+        display:block;margin-bottom:12px;font-weight:400}
+  .rule{height:1px;background:var(--hair);width:88px;margin:20px 0 26px}
+  h3{font-size:15.5px;font-weight:600;margin:34px 0 10px;letter-spacing:-.005em}
+  p{margin:0 0 16px}
+  p,li{max-width:68ch}
+  ul,ol{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 8px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface);
+       border:1px solid var(--hair);border-radius:3px;padding:1px 5px;color:#dedede}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.62;background:var(--surface);
+      border:1px solid var(--hair);border-radius:3px;padding:16px 18px;overflow-x:auto;
+      margin:0 0 20px;color:#d6d6d6;white-space:pre}
+  pre .c{color:var(--faint)}
+  pre .a{color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin:6px 0 22px;font-size:13.5px}
+  th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+     text-transform:uppercase;color:var(--faint);font-weight:400;
+     padding:0 14px 9px 0;border-bottom:1px solid var(--hair)}
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--hair);vertical-align:top;color:#dcdcdc}
+  td:first-child{color:var(--fg)}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px}
+  .yes{color:var(--accent)}
+  .no{color:var(--muted)}
+  .note{border-left:1px solid var(--hair);padding:2px 0 2px 18px;margin:0 0 22px;
+        color:var(--muted);font-size:13.5px;line-height:1.6}
+  figure{margin:26px 0 30px}
+  figcaption{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:12px;letter-spacing:.02em}
+  svg{display:block;max-width:100%}
+  .btn{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--muted);
+       border:1px solid var(--hair);border-radius:3px;padding:3px 8px}
+  footer{grid-column:1 / -1;border-top:1px solid var(--hair);padding-top:22px;
+         font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.02em;max-width:760px}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,181,160,.35)}
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr;gap:0;padding:56px 24px 80px}
+    nav.toc{position:static;margin-bottom:48px}
+    h1{font-size:34px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">重构方案 · memory-bank 全库 · 2026-09-22</p>
+  <h1>把知识库拆成读得动的文件</h1>
+  <p class="lede">不只是 <code>pitfalls.md</code>：库里 <strong>13 份顶层文档有 8 份超出单次阅读预算</strong>
+     （<code>progress.md</code> 80,704 字符、<code>pitfalls.md</code> 62,362、<code>testing.md</code> 61,468、
+     <code>activeContext.md</code> 55,990、<code>systemPatterns.md</code> 49,328……），于是「必读」变成「不读」。
+     本方案给出一套<strong>可复用的五步配方</strong>与<strong>全库 cap 分级</strong>：每份超标文档拆成
+     <code>&lt;文档&gt;/_index.md</code> + 若干主题文件，索引由同一个通用生成器产出、结构由同一组守卫守、
+     旧路径一律留 ≤1 KB 存根。</p>
+  <div class="meta">
+    <span><b>改动面</b> 8 份超标文档 → 9 个目录 / 约 45 个主题文件 + 8 个存根 + 1 通用生成器 + 2 检查脚本</span>
+    <span><b>依据</b> 13 份文档实测体积 · 各文档引用面统计 · test_memory_bank.py · .commit-flow.toml</span>
+    <span><b>状态</b> 待确认（未动代码）· 2026-09-22 增补: 脚本落 skill · 全库逐文档落位</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <p>目录</p>
+  <ol>
+    <li><span class="n">01</span><a href="#s1">问题：不止 pitfalls</a></li>
+    <li><span class="n">02</span><a href="#s2">为什么是分类 + 二级指针</a></li>
+    <li><span class="n">03</span><a href="#s3">统一配方：五步 + 元数据 + cap</a></li>
+    <li><span class="n">04</span><a href="#s4">全库落位总览</a></li>
+    <li><span class="n">05</span><a href="#s5">逐文档落位（一）</a></li>
+    <li><span class="n">06</span><a href="#s6">逐文档落位（二）</a></li>
+    <li><span class="n">07</span><a href="#s7">三条入口接线</a></li>
+    <li><span class="n">08</span><a href="#s8">机械后果：生成器 / 守卫 / 闸门</a></li>
+    <li><span class="n">09</span><a href="#s9">分波实施</a></li>
+    <li><span class="n">10</span><a href="#s10">守恒与验收</a></li>
+    <li><span class="n">11</span><a href="#s11">风险、取舍与验证步骤</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="n">01</span>问题：不止 pitfalls，是全库超预算</h2>
+  <div class="rule"></div>
+  <p>先说结论：知识库的<strong>内容</strong>质量不差，坏的是<strong>载体形态</strong>。以下每个数字都是本次会话实测的。</p>
+  <table>
+    <tr><th style="width:186px">文档</th><th class="mono" style="width:76px">字符</th>
+        <th class="mono" style="width:56px">行</th><th>最大的单节 / 事实后果</th></tr>
+    <tr><td class="mono">progress.md</td><td class="mono">80,704</td><td class="mono">361</td>
+        <td>「已实现」一节 <strong>62,353</strong>（47 条）—— 按功能查已不可能</td></tr>
+    <tr><td class="mono">pitfalls.md</td><td class="mono">62,362</td><td class="mono">449</td>
+        <td>前端 <strong>37,202</strong>（76 条）/ 测试 33,390（74 条）—— 已记的坑被反复重踩</td></tr>
+    <tr><td class="mono">testing.md</td><td class="mono">61,468</td><td class="mono">458</td>
+        <td>「运行」<strong>29,880</strong>（含顶部 38 行基线变更流水）/ 文件约定 21,323</td></tr>
+    <tr><td class="mono">activeContext.md</td><td class="mono">55,990</td><td class="mono">447</td>
+        <td>自称「只放易变状态」，实际膨胀 10 倍：正在进行 31,518 + 走查 15,002</td></tr>
+    <tr><td class="mono">systemPatterns.md</td><td class="mono">49,328</td><td class="mono">305</td>
+        <td>任务队列一节 <strong>23,127</strong>，其中 WEB UI 三节共 21,406 —— 主题已经串了</td></tr>
+    <tr><td class="mono">modules.md</td><td class="mono">44,192</td><td class="mono">125</td>
+        <td>「核心模块」一张表 <strong>23,531</strong>/30 行 + 前端契约速查 9,463</td></tr>
+    <tr><td class="mono">conventions.md</td><td class="mono">26,070</td><td class="mono">201</td>
+        <td>18 节挤一份：单节最大 5,458 都合规，但一次要读 26 KB</td></tr>
+    <tr><td class="mono">rule-system.md</td><td class="mono">23,607</td><td class="mono">204</td>
+        <td><code>checking</code> 动作 <strong>8,087</strong> + <code>expr</code> 速查 5,162</td></tr>
+    <tr><td class="mono">config-reference.md</td><td class="mono">17,421</td><td class="mono">141</td>
+        <td>单节最大 4,327 都合规，但「查一个键」要读 17 KB</td></tr>
+    <tr><td class="mono">techContext.md</td><td class="mono">9,633</td><td class="mono">116</td>
+        <td>浏览器自动化两条轨道 4,078 —— 只有做冒烟时才需要</td></tr>
+    <tr><td class="mono">productContext.md</td><td class="mono">8,443</td><td class="mono">77</td>
+        <td>接近上限，暂不拆</td></tr>
+    <tr><td class="mono">tasks/*.md（28 份）</td><td class="mono">305,097</td><td class="mono">—</td>
+        <td>最大 <strong>44,927</strong>；4 份 &gt;20 KB；「历史会话纪要」段合计 35,256</td></tr>
+  </table>
+
+  <h3>四个失效机制（全库通用，不止 pitfalls）</h3>
+  <ul>
+    <li><strong>体量决定了它不被读。</strong>「必读」清单里放着 60~80 KB 的文件，最优行为必然是跳过 ——
+        这不是纪律问题，是预算问题。</li>
+    <li><strong>检索键错位。</strong>作者按<em>主题</em>组织（「任务队列」「已实现」），使用者按<em>动作</em>检索
+        （我要加一列 / 我要跑测试 / 我要查一个配置键）。没有「动作 → 文件」的映射，找不到就等于不存在。</li>
+    <li><strong>主题已经串了。</strong><code>systemPatterns</code> 的「任务队列」节里塞着三节 WEB UI 内容
+        （21,406 字符）；<code>modules</code> 的模块表混着前端契约 —— 说明「按主题切分」这件事本身没被执行。</li>
+    <li><strong>零机械后果。</strong><code>tasks/</code> 有 8 条守卫、<code>issues/</code> 有生成器 + 闸门，
+        其余文档<strong>一条守卫都没有</strong>：写超了、写了没人知道、写了不照做，都没有代价。</li>
+  </ul>
+
+  <h3>两条反向实证</h3>
+  <p>「提交后必查 ref 三处」有 <code>verify_ref.py</code> 兜底、「脚本改名漏改的未定义名」有
+     <code>test_preflight.py</code> 的 ast 静态检查兜底 —— 这两条此后一次都没再犯。反过来，写在文件里、
+     只靠人记的 <code>git rebase</code> 禁令在工具 shell 里出了<strong>三次事故</strong>（09-21 两次、09-22 一次），
+     第三次正是照通用 skill 踩的。</p>
+  <p class="note">所以目标不是「拆文件」本身：<strong>能变成红的，从文本搬进守阵；搬不动的，
+     必须在做那个动作的决策点可见。</strong></p>
+</section>
+
+<section id="s2">
+  <h2><span class="n">02</span>为什么是「分类 + 二级指针」</h2>
+  <div class="rule"></div>
+  <p>把 400+ KB 的知识库重新编排，至少有四种排法。逐个排除之后落在「分类 + 指针」上。</p>
+  <table>
+    <tr><th style="width:150px">方案</th><th>检索键</th><th style="width:160px">为什么不选</th></tr>
+    <tr><td>保持单文件 + 顶部 TOC</td><td>章节名</td>
+        <td class="no">体量没降。TOC 只解决「跳到哪」，不解决「读得起」</td></tr>
+    <tr><td>按日期 / changelog 归档</td><td>时间</td>
+        <td class="no">使用者的键是「我正在做的动作」，不是「上次改动是哪天」</td></tr>
+    <tr><td>每节一个文件（平铺，像 issues/）</td><td>文件名 / grep</td>
+        <td class="no">几百个文件、无归类；「看一类」退化成打开 30 次；目录列表本身就不可读</td></tr>
+    <tr><td>分类 + 指针（本方案）</td><td>动作 → 索引 → 文件</td>
+        <td class="yes">采用：目录与索引承担「按动作定位」，主题文件小到读得起，索引是生成物、可守</td></tr>
+  </table>
+  <p>指针有两条硬要求（写进第 03 节规范）：</p>
+  <ul>
+    <li><strong>索引一屏可读</strong>（≤ 3 KB）—— 会话开始读得起，才有资格叫「入口」。</li>
+    <li><strong>每条指针含触发词</strong>（「推送」「加列」「写测试」「查配置键」这类动作词）——
+        能用 <code>grep</code> 命中，才可能在没读索引时被找到。</li>
+  </ul>
+  <p class="note"><strong>层级由规模决定，不强制两级。</strong><code>pitfalls/</code> 有 7 个类、250+ 条目，
+     所以是「L1 全库指针 → 类索引 → 主题文件」；<code>testing/</code> 只有一个层次，
+     就是「<code>_index.md</code> → 主题文件」。同一个生成器两种都能出。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="n">03</span>统一配方：五步 + 元数据 + cap 分级</h2>
+  <div class="rule"></div>
+  <p>这部分是<strong>可复用的规程</strong> —— 任何一份超标文档、包括将来新增的，都按同样五步处理。
+     第 05、06 节只是把它逐份实例化。</p>
+
+  <h3>五步配方</h3>
+  <ol>
+    <li><strong>量</strong>：按 <code>##</code> / <code>###</code> 切段统计字符数，对照本节的 cap 分级定目标文件数；
+        同时统计该文档的引用处数（决定存根的必要性）。</li>
+    <li><strong>建</strong>：建 <code>&lt;文档&gt;/</code> 目录；每个主题文件头部写元数据（见下）；
+        原句<strong>照搬</strong>，不重写内容 —— 只做三件事：按动作补 <code>触发</code>、长叙事压成一句「为什么」、
+        散落的实测数字与守阵名收进字段。</li>
+    <li><strong>生成</strong>：跑生成器产出 <code>_index.md</code>（不许手写）；原文档位置留 ≤1 KB 存根
+        （一句话说明「已迁至 <code>&lt;目录&gt;/_index.md</code>」）。</li>
+    <li><strong>接线</strong>：更新路由（<code>memory-bank/README.md</code> 细路由 + AGENTS.md 粗路由）、
+        改活文档里的互引、把 skill / DoD 里的路径改成新目标。</li>
+    <li><strong>守恒核对</strong>：迁移前的条目/段落清单（md5 + 字节）与迁移后逐条比对，
+        <strong>missing 必须为 0</strong>；守卫与闸门转绿。</li>
+  </ol>
+
+  <h3>主题文件的头部元数据（生成器的数据源）</h3>
+  <pre># &lt;标题&gt;                                  <span class="c">← 索引行用它</span>
+&gt; 摘要: 一句话说清「这文件治什么病」           <span class="c">← 索引行用它</span>
+&gt; 触发: 推送, 同步, ref 核对                 <span class="c">← 动作词, 供 grep 与路由</span>
+
+<span class="c">正文…（叙述型文档就是原来的段落；pitfalls 类是字段化条目: 触发 / 判别 / 处置 / 守阵 / 复发）</span></pre>
+  <p>条目型与叙述型共用同一套元数据 —— 这是「全库一套机制」的关键：<strong>新增一个主题文件 = 写三行头 + 跑生成器</strong>，
+     不需要新脚本、不需要改守卫。</p>
+
+  <h3>cap 分级（首个匹配生效，口径同 <code>check_context_caps.py</code>：按字符数）</h3>
+  <table>
+    <tr><th style="width:224px">角色</th><th class="mono" style="width:92px">上限</th><th>理由</th></tr>
+    <tr><td>索引（<code>**/_index.md</code>）</td><td class="mono">3,000</td>
+        <td>必须一屏可读；它随库增长只增行数、不增厚度</td></tr>
+    <tr><td>触发式条目集（<code>pitfalls/*</code>）</td><td class="mono">6,000</td>
+        <td>读法是「扫描找一条」，比通读更贵，所以比一般主题更严</td></tr>
+    <tr><td>常青主题文档（叙述型）</td><td class="mono">10,000</td>
+        <td>≈4k token，一次通读可接受；<code>systemPatterns</code> / <code>modules</code> 的目标档</td></tr>
+    <tr><td>参考速查（<code>config-reference</code> / <code>rule-system</code>）</td><td class="mono">12,000</td>
+        <td>它们是「查表」不是通读，允许更厚</td></tr>
+    <tr><td>易变层（<code>activeContext.md</code>）</td><td class="mono">12,000</td>
+        <td>会话开始必读，必须硬顶住；超了就是内容该外迁的信号</td></tr>
+    <tr><td>任务档案（<code>tasks/*.md</code>）</td><td class="mono">24,000</td>
+        <td>含「历史会话纪要」段 ≤8,000；超了移 <code>tasks/attachments/</code></td></tr>
+    <tr><td>项目引导（<code>AGENTS.md</code>）</td><td class="mono">8,000</td>
+        <td>IDE 注入硬上限 —— 仍由项目脚本管（项目专属值不进 skill）</td></tr>
+  </table>
+  <p class="note">另设<strong>下限建议 1.5 KB</strong>（只 WARN 不红）：主题文件过小会让「读三个文件」取代「读一节」，
+      反而更贵；命中时提示并入邻文件。</p>
+
+  <h3>存根规则（保护历史引用）</h3>
+  <ul>
+    <li>被拆的文档一律在原路径留 <strong>≤1 KB 存根</strong>：一句话 + 指向 <code>&lt;目录&gt;/_index.md</code>。
+        理由见第 08 节引用面统计 —— <code>testing.md</code> 被引 132 处、<code>pitfalls.md</code> 113 处，
+        其中大量在历史计划 HTML、issue 报告与任务档案里，那些<strong>一行都不改</strong>。</li>
+    <li><strong>活文档指向目标文件，不指向存根</strong>（AGENTS.md / instruction / skill / 主题文档互引 / 源码注释），
+        否则每次读都多一跳。</li>
+    <li>存根本身也被守：≤1 KB、含「已迁至」、不含正文或条目。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <h2><span class="n">04</span>全库落位总览</h2>
+  <div class="rule"></div>
+  <p>13 份顶层文档 → 4 份保留单文件 + 8 份拆成目录（各留存根）+ <code>tasks</code> 档案消肿。
+     库内新增 9 个目录，主题文件合计约 45 份，全部 ≤ 各自 cap。</p>
+  <pre>memory-bank/
+├─ projectbrief.md        <span class="c">保留 (纲领, 小)</span>
+├─ productContext.md      <span class="c">保留 (8.4 KB, 达标)</span>
+├─ techContext.md         <span class="c">保留 (拆出浏览器自动化后 ≈5.5 KB)</span>
+├─ activeContext.md       <span class="c">保留但硬顶: 56 KB → ≤12 KB (易变层, 不拆)</span>
+├─ README.md              <span class="c">库内路由单点 (细路由表) ≤3 KB</span>
+├─ pitfalls.md / testing.md / progress.md / systemPatterns.md /   <span class="c">← 存根 ≤1 KB</span>
+├─ modules.md / conventions.md / config-reference.md / rule-system.md
+│
+├─ pitfalls/          <span class="c">7 类 · 两级指针 · 6 KB/文件        (_index.md + 7 类目录)</span>
+├─ testing/           <span class="c">_index.md + run · baseline · baseline-history ·</span>
+│                     <span class="c">file-conventions · guards · helpers · sim-5000 · browser-env  (≈9)</span>
+├─ progress/          <span class="c">_index.md + implemented-{webui,core,rules,testing,tooling} ·</span>
+│                     <span class="c">roadmap · known-bugs · evolution · suggestions           (≈10)</span>
+├─ systemPatterns/    <span class="c">_index.md + main-loop · data-layer · taskqueue · web-runtime ·</span>
+│                     <span class="c">web-responsiveness · web-config-editor · client-and-state   (≈8)</span>
+├─ modules/           <span class="c">_index.md(含"在哪里改"速查) + core-config · core-runtime ·</span>
+│                     <span class="c">core-domain · webui-static-contract · mixins · rules-and-deps (≈7)</span>
+├─ conventions/       <span class="c">_index.md + collaboration · code-style · process · webui  (≈5)</span>
+├─ config-reference/  <span class="c">_index.md + loading-and-write · keys                    (≈3)</span>
+├─ rule-system/       <span class="c">_index.md + rules-and-triggers · conditions-and-actions ·</span>
+│                     <span class="c">checking                                               (≈4)</span>
+├─ checklists/        <span class="c">manual-walkthrough.md (真机走查清单, 从 activeContext 迁出)</span>
+├─ tasks/             <span class="c">档案 + 新增 attachments/ (超 24 KB 档案的纪要与分波明细)</span>
+└─ issues/            <span class="c">不动 (已是一文件一 issue + 生成索引)</span></pre>
+  <p>「保留单文件」的四份不是例外，而是<strong>守同一个 cap</strong>：<code>activeContext.md</code> 顶 12 KB 硬上限，
+     超了就必须外迁内容 —— 这一条把「易变层不许膨胀」从纪律变成机制。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="n">05</span>逐文档落位（一）：pitfalls · testing · activeContext · progress</h2>
+  <div class="rule"></div>
+  <p>这四份是「每次都读」的文档，优先做。每份按第 03 节五步配方执行，下面是现状 → 目标映射。</p>
+
+  <h3>pitfalls.md — 62,362 字符 / 253 条</h3>
+  <table>
+    <tr><th style="width:200px">现状</th><th class="mono" style="width:68px">字节</th>
+        <th class="mono" style="width:42px">条</th><th>目标</th></tr>
+    <tr><td class="mono">🔴 生产文件红线</td><td class="mono">482</td><td class="mono">3</td><td class="mono">ops/prod-files.md</td></tr>
+    <tr><td class="mono">高风险业务操作</td><td class="mono">2,728</td><td class="mono">8</td><td class="mono">backend/high-risk-ops.md</td></tr>
+    <tr><td class="mono">平台 / API 兼容陷阱</td><td class="mono">6,727</td><td class="mono">17</td><td class="mono">backend/qb-api.md + platform-fs.md</td></tr>
+    <tr><td class="mono">行为细节（易误判为 bug）</td><td class="mono">7,026</td><td class="mono">23</td><td class="mono">backend/behavior-core.md + web-ui/contract-api.md</td></tr>
+    <tr><td class="mono">并发 / 状态机约束</td><td class="mono">1,332</td><td class="mono">6</td><td class="mono">backend/concurrency.md</td></tr>
+    <tr><td class="mono">前端 · 模板与组件</td><td class="mono">7,944</td><td class="mono">17</td><td class="mono">web-ui/vue-reactivity.md + template-render.md</td></tr>
+    <tr><td class="mono">前端 · 样式 / 布局 / 表格</td><td class="mono">9,525</td><td class="mono">22</td><td class="mono">web-ui/layout-css.md + columns-persist.md</td></tr>
+    <tr><td class="mono">前端 · 浮层与交互</td><td class="mono">2,102</td><td class="mono">8</td><td class="mono">并入 web-ui/template-render.md</td></tr>
+    <tr><td class="mono">前端 · 前后端数据契约</td><td class="mono">11,655</td><td class="mono">16</td><td class="mono">web-ui/contract-api.md + search-views.md</td></tr>
+    <tr><td class="mono">前端 · 性能与刷新节奏</td><td class="mono">5,938</td><td class="mono">13</td><td class="mono">web-ui/perf-cadence.md</td></tr>
+    <tr><td class="mono">测试 · 副作用与测试环境</td><td class="mono">12,242</td><td class="mono">23</td><td class="mono">testing/side-effects.md + tmpdir.md + patching.md</td></tr>
+    <tr><td class="mono">测试 · 断言有效性</td><td class="mono">3,213</td><td class="mono">8</td><td class="mono">testing/assertions.md</td></tr>
+    <tr><td class="mono">测试 · 浏览器冒烟</td><td class="mono">4,050</td><td class="mono">10</td><td class="mono">testing/smoke.md</td></tr>
+    <tr><td class="mono">测试 · 桩与仿真保真度</td><td class="mono">4,945</td><td class="mono">13</td><td class="mono">testing/stubs-sim.md</td></tr>
+    <tr><td class="mono">测试 · 真机语料 / 脱敏</td><td class="mono">8,894</td><td class="mono">20</td><td class="mono">testing/corpus-capture.md + corpus-fs-mock.md</td></tr>
+    <tr><td class="mono">Git / 提交推送纪律</td><td class="mono">13,517</td><td class="mono">31</td>
+        <td class="mono">git/ 6 文件（history-integration · push · refs · sync-pull · message · editing-traps）</td></tr>
+    <tr><td class="mono">知识库与协作纪律</td><td class="mono">5,130</td><td class="mono">12</td>
+        <td class="mono">kb/ 6 文件（request-boundary · discipline · tasks-archive · refs-rename · skills-loading · scripts）</td></tr>
+    <tr><td class="mono">文档与代码的一致性</td><td class="mono">1,140</td><td class="mono">3</td>
+        <td class="mono">docs/drift.md（HTML 产出口径留 conventions）</td></tr>
+  </table>
+  <p class="note">条目一律字段化（<code>触发</code> / <code>判别</code> / <code>处置</code> 必填，
+     <code>守阵</code> / <code>复发</code> 选填）；规则、判别法与实测数字一个都不能少。</p>
+
+  <h3>testing.md — 61,468 字符 / 458 行</h3>
+  <table>
+    <tr><th style="width:206px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">## 运行（L5–229）</td><td class="mono">29,880</td>
+        <td class="mono">切三份：run.md（怎么跑 / TMPDIR / pytest.ini / 耗时画像）·
+            baseline.md（<strong>当前</strong>数字，唯一手改处）·
+            baseline-history.md（顶部 38 行变更流水原样外迁）</td></tr>
+    <tr><td class="mono">## 测试文件约定（L230–352）</td><td class="mono">21,323</td>
+        <td class="mono">file-conventions.md（逐条约定）· guards.md（<strong>新增</strong>：汇总散落各处的守阵清单，
+            一条 = 守阵名 + 钉住的结论 + 红验方式）</td></tr>
+    <tr><td class="mono">## tests/helpers.py 基础设施</td><td class="mono">5,656</td>
+        <td class="mono">helpers.md（单文件达标，原样搬家 + 元数据）</td></tr>
+    <tr><td class="mono">## 5000 种子仿真测试</td><td class="mono">4,387</td>
+        <td class="mono">sim-5000.md（含固化基线 / 关键数字 / 判据约定）</td></tr>
+    <tr><td class="mono">techContext 的浏览器自动化</td><td class="mono">4,078</td>
+        <td class="mono">browser-env.md（<strong>从 techContext 迁入</strong>：它只在做冒烟时才需要）</td></tr>
+  </table>
+  <p class="note">基线数字的<strong>单点规则不变</strong>：只改 <code>testing/baseline.md</code>，
+     其它文档一律引用不手抄；覆盖率与耗时数字同样单点。<code>testing.md</code> 本身降为存根。</p>
+
+  <h3>activeContext.md — 55,990 字符（不拆，硬瘦身到 ≤12 KB）</h3>
+  <table>
+    <tr><th style="width:206px">现状</th><th class="mono" style="width:70px">字节</th><th>处置</th></tr>
+    <tr><td class="mono">正在进行</td><td class="mono">31,518</td>
+        <td>已完成的部分迁 <code>tasks/</code> 档案与 <code>progress/</code>；
+            本文件只留「在手上、未完成」的 3~5 条（每条 ≤8 行 + 指针）</td></tr>
+    <tr><td class="mono">待用户真机走查</td><td class="mono">15,002</td>
+        <td class="mono">迁 <code>checklists/manual-walkthrough.md</code> —— 它是<strong>清单</strong>（逐项勾选），
+            读的时机是「做真机走查时」，不是「每次会话开始」</td></tr>
+    <tr><td class="mono">定案口径（别改回去）</td><td class="mono">3,399</td>
+        <td>逐条归位：属「改了会咬人」的进对应 <code>pitfalls/&lt;类&gt;/</code> 条目；
+            属方向性的进 <code>progress/roadmap.md</code> 的「已定案口径」小节；本文件只留一行指针</td></tr>
+    <tr><td class="mono">下一步候选 / 历史归档</td><td class="mono">1,426</td>
+        <td>留下（这是易变层的本职）</td></tr>
+  </table>
+  <p class="note">瘦身后加 cap 守卫（12 KB 硬顶）——<strong>超了就是内容该外迁的信号</strong>，
+     而不是「这次先写着」。这条把 2026-09-17 那次复盘（纪要回流成流水账）从教训变成机制。</p>
+
+  <h3>progress.md — 80,704 字符 / 361 行</h3>
+  <table>
+    <tr><th style="width:206px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">已实现（47 条）</td><td class="mono">62,353</td>
+        <td class="mono">implemented-webui.md（18 条）· implemented-core.md（客户端 / 主循环 / 状态 13 条）·
+            implemented-rules.md（规则 + 配置 5 条）· implemented-testing.md（测试 / 语料 8 条）·
+            implemented-tooling.md（CI / 依赖 / 知识库 3 条）—— 每份 ≤10 KB</td></tr>
+    <tr><td class="mono">规划中</td><td class="mono">10,421</td>
+        <td class="mono">roadmap.md（含「已定案口径」小节，接 activeContext 的迁移）</td></tr>
+    <tr><td class="mono">已知 BUG</td><td class="mono">1,000</td><td class="mono">known-bugs.md</td></tr>
+    <tr><td class="mono">近期演进脉络</td><td class="mono">655</td><td class="mono">evolution.md</td></tr>
+    <tr><td class="mono">给 AI 的实现建议</td><td class="mono">5,986</td><td class="mono">suggestions.md</td></tr>
+  </table>
+</section>
+
+<section id="s6">
+  <h2><span class="n">06</span>逐文档落位（二）：架构 · 模块 · 规范 · 参考 · 归档</h2>
+  <div class="rule"></div>
+
+  <h3>systemPatterns.md — 49,328 字符 / 305 行</h3>
+  <table>
+    <tr><th style="width:226px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">组件总览</td><td class="mono">2,730</td>
+        <td class="mono">并入 <code>_index.md</code>（总览本就是索引的活）</td></tr>
+    <tr><td class="mono">主循环 + 每轮数据流</td><td class="mono">9,674</td><td class="mono">main-loop.md</td></tr>
+    <tr><td class="mono">增量同步 + 变化集 + 数据层</td><td class="mono">7,407</td>
+        <td class="mono">data-layer.md（TorrentStore / 变化集 / rid 语义一处说清）</td></tr>
+    <tr><td class="mono">任务队列 + 线程模型 + 两动词 + 异步校验</td><td class="mono">4,595</td>
+        <td class="mono">taskqueue.md（「唯一写线程」约束在这里，不散到别处）</td></tr>
+    <tr><td class="mono">WEB UI 线程模型</td><td class="mono">10,149</td><td class="mono">web-runtime.md</td></tr>
+    <tr><td class="mono">WEB UI 前端渲染与响应性</td><td class="mono">5,640</td><td class="mono">web-responsiveness.md</td></tr>
+    <tr><td class="mono">WEB UI 图形化配置编辑</td><td class="mono">5,617</td><td class="mono">web-config-editor.md</td></tr>
+    <tr><td class="mono">启动期兼容校验 + QbApi Facade + 状态持久化</td><td class="mono">3,265</td>
+        <td class="mono">client-and-state.md（三个小主题合成一份）</td></tr>
+  </table>
+  <p class="note">这三节 WEB UI 内容现在挂在「任务队列」名下（合计 21,406 字符）—— 拆开本身就是纠错：
+     它们属于 WEB UI 运行时，不属于队列。</p>
+
+  <h3>modules.md — 44,192 字符 / 125 行</h3>
+  <table>
+    <tr><th style="width:226px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">核心模块（30 行表）</td><td class="mono">23,531</td>
+        <td class="mono">按包切三份：core-config.md（<code>config/</code> 7 行）·
+            core-runtime.md（qbmanager / web_runtime / qbclient / taskqueue / qbapi / locking / utils / logging / errors）·
+            core-domain.md（torrents / web / ui / curves / episodes / tvshows / exporter / notify / autostart）</td></tr>
+    <tr><td class="mono">web_ui/static 前端契约速查</td><td class="mono">9,463</td>
+        <td class="mono">webui-static-contract.md（单独一份：它讲的是前端资产，不是 Python 模块）</td></tr>
+    <tr><td class="mono">mixins/</td><td class="mono">4,988</td><td class="mono">mixins.md</td></tr>
+    <tr><td class="mono">rules/ + tests/ + 依赖方向</td><td class="mono">4,574</td>
+        <td class="mono">rules-and-deps.md（含 tests 对应关系与单向依赖图）</td></tr>
+    <tr><td class="mono">包入口 + 「在哪里改」速查</td><td class="mono">1,322</td>
+        <td class="mono">并入 <code>_index.md</code> —— 「在哪里改」速查正是索引该干的事</td></tr>
+  </table>
+
+  <h3>conventions.md — 26,070 字符 / 201 行</h3>
+  <table>
+    <tr><th style="width:226px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">协作约定 + 跨仓库红线 + 生产配置禁令</td><td class="mono">8,517</td><td class="mono">collaboration.md</td></tr>
+    <tr><td class="mono">函数设计 / 可测试性 / 模块职责 / 命名 / 类型注解 / 注释 / 日志 / 格式化 / dataclass / 性能</td><td class="mono">7,600</td>
+        <td class="mono">code-style.md</td></tr>
+    <tr><td class="mono">dry_run / 幂等 / 提交闸门 / Git 约定</td><td class="mono">3,562</td><td class="mono">process.md</td></tr>
+    <tr><td class="mono">WEB UI 菜单分层 / 令牌分工 / HTML dark 主题</td><td class="mono">4,015</td>
+        <td class="mono">webui.md（前端产出口径与令牌规则的唯一出处）</td></tr>
+  </table>
+
+  <h3>config-reference.md — 17,421 字符 / rule-system.md — 23,607 字符</h3>
+  <table>
+    <tr><th style="width:226px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">config: 加载机制 + 写回 + fail-fast 校验</td><td class="mono">8,183</td>
+        <td class="mono">config-reference/loading-and-write.md</td></tr>
+    <tr><td class="mono">config: 全部键 + trackers + 限速曲线 + 语法速查 + 运行时文件</td><td class="mono">8,266</td>
+        <td class="mono">config-reference/keys.md（查表档，12 KB 上限内）</td></tr>
+    <tr><td class="mono">规则定义 / 触发 / process 语义 / 去重 / ActionResult</td><td class="mono">5,899</td>
+        <td class="mono">rule-system/rules-and-triggers.md</td></tr>
+    <tr><td class="mono">17 条件 + expr 速查 + 12 动作 + 状态映射 + 变量替换</td><td class="mono">9,022</td>
+        <td class="mono">rule-system/conditions-and-actions.md</td></tr>
+    <tr><td class="mono"><code>checking</code> 动作（含跳检七道防护）</td><td class="mono">8,087</td>
+        <td class="mono">rule-system/checking.md（高风险动作单独成篇，与 <code>pitfalls/backend/high-risk-ops.md</code> 互指）</td></tr>
+  </table>
+
+  <h3>techContext.md — 9,633 字符 / tasks 档案 — 28 份 / 305,097 字符</h3>
+  <table>
+    <tr><th style="width:226px">现状</th><th class="mono" style="width:70px">字节</th><th>目标</th></tr>
+    <tr><td class="mono">浏览器自动化两条轨道</td><td class="mono">4,078</td>
+        <td class="mono">迁 <code>testing/browser-env.md</code>；techContext 留 ≈5.5 KB
+            （技术栈 / 环境 / 临时目录 / 平台 / 约束）</td></tr>
+    <tr><td class="mono">档案 &gt;24 KB（4 份，最大 44,927）</td><td class="mono">≈116,000</td>
+        <td class="mono">①<code>## 历史会话纪要</code> 段移 <code>tasks/attachments/&lt;slug&gt;.md</code>
+            （合计 35,256）；②仍超者按子任务 / 波次拆附件（如 <code>webui-responsiveness</code> 的 P0/P1 明细）；
+            ③主档案保留状态 / 决策 / 子任务表 / 进度日志</td></tr>
+  </table>
+  <p class="note">守卫天然兼容：索引守卫按 <code>tasks/*.md</code> 扫描（不递归），
+     <code>tasks/attachments/</code> 不会被当成档案，因此<strong>不需要改守卫</strong> ——
+     这是把附件放进子目录而不是平铺的原因。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="n">07</span>三条入口接线</h2>
+  <div class="rule"></div>
+  <p>拆完文件不等于会被读到。要让约束在<strong>做那个动作之前</strong>进入上下文，三个消费者各接一条线。</p>
+
+  <figure>
+    <svg viewBox="0 0 660 196" width="100%" role="img"
+         aria-label="入口链：AGENTS.md 粗路由到 README 细路由，再经各文档索引到主题文件">
+      <g fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1">
+        <rect x="4" y="52" width="128" height="44"/>
+        <rect x="182" y="52" width="140" height="44"/>
+        <rect x="372" y="18" width="140" height="44"/>
+        <rect x="372" y="86" width="140" height="44"/>
+        <rect x="536" y="52" width="118" height="44"/>
+      </g>
+      <defs>
+        <marker id="ah2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M1 1 L7 4 L1 7" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1" marker-end="url(#ah2)">
+        <path d="M132 74 L180 74"/>
+        <path d="M322 74 L348 74 L348 40 L370 40"/>
+        <path d="M322 74 L348 74 L348 108 L370 108"/>
+        <path d="M512 40 L524 40 L524 74 L534 74"/>
+        <path d="M512 108 L524 108 L524 74"/>
+      </g>
+      <text x="68" y="70" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12">AGENTS.md</text>
+      <text x="68" y="88" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">粗路由 ≤6.5 KB</text>
+      <text x="252" y="70" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12">README.md</text>
+      <text x="252" y="88" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">库内细路由 ≤3 KB</text>
+      <text x="442" y="36" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12">各文档 _index.md</text>
+      <text x="442" y="54" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">≤3 KB · 生成物</text>
+      <text x="442" y="104" text-anchor="middle" fill="#ececec" font-family="ui-monospace,Consolas,monospace" font-size="12">activeContext.md</text>
+      <text x="442" y="122" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">易变层 ≤12 KB</text>
+      <text x="595" y="70" text-anchor="middle" fill="#7fb5a0" font-family="ui-monospace,Consolas,monospace" font-size="12">主题文件</text>
+      <text x="595" y="88" text-anchor="middle" fill="#8f8f8f" font-family="ui-monospace,Consolas,monospace" font-size="11">≤6/10/12 KB</text>
+    </svg>
+    <figcaption>入口开销 ≤ 6.5 + 3 + 3（或 12）KB，<strong>与库体量解耦</strong>：再加 30 个主题文件，链路不变长。</figcaption>
+  </figure>
+
+  <h3>（a）决策点：AGENTS.md 粗路由 + README 细路由</h3>
+  <ul>
+    <li><strong>AGENTS.md 只放粗路由</strong>（现 7,653/8,000 字符，余量 347，塞不下 9 个目录的路由）：
+        「按任务读哪份文档 → 见 <code>memory-bank/README.md</code>」+ 三行动作级提示
+        （改代码前读对应 <code>_index.md</code>；跑 git 前读 <code>pitfalls/git/_index.md</code>；
+        写测试前读 <code>testing/_index.md</code>）。同时精简「跨仓库操作」「提交 / PR」「命令」三节，
+        目标 ≤6,500 字符（留约 19% 余量）。</li>
+    <li><strong>README.md 承担库内细路由</strong>（≤3 KB）：一张「任务 → 目录 → 入口索引」表 + 生成物说明。
+        守卫保证<strong>每个 <code>_index.md</code> 都被 README 引用</strong>（无孤儿目录）——
+        新增目录忘了登记就红。</li>
+    <li><strong>skill 侧不写仓库事实</strong>：走已有的配置外置路径 —— <code>.commit-flow.toml</code> 增
+        <code>pitfalls_index = "memory-bank/pitfalls/git/_index.md"</code>，预检在表尾打印该指针；
+        create-issue / memory-bank skill 各指 <code>kb/_index.md</code>。</li>
+    <li><strong>最贵的三条在决策点内联一行结论 + 指针</strong>：rebase 禁用、非快进 + 脏 = 必炸、
+        判「推没推上」只看 <code>ls-remote</code> —— 写在 skill 的《最常见组合》与「停手点」段落里。
+        单点定义仍在 KB，不复制全文。</li>
+  </ul>
+
+  <h3>（b）入库：memory-bank skill 收尾 DoD ⑤</h3>
+  <ul>
+    <li>现在：「新坑追加 <code>pitfalls.md</code>」→ 改成：「按<strong>动作</strong>选类，写进
+        <code>pitfalls/&lt;类&gt;/&lt;主题&gt;.md</code>（补三行头元数据）；没有合适的类先扩枚举；
+        然后跑 skill 的 <code>scripts/gen_kb_index.py</code> 重建索引」。同一规则适用于其它目录
+        （新增 <code>testing/</code> 主题同样跑生成器）。</li>
+    <li>新增闭环纪律：若这一轮<strong>踩到了已记的坑</strong>，把该条 <code>**复发**</code> 加一，
+        并在任务档案里写一句<strong>为什么没命中</strong>（路由没到 / 文件没读 / 读了没照做）。
+        反复重踩于是变成可排序的数字，也是「下沉为守阵」的优先级依据。</li>
+    <li>拆文档也算入库动作：<strong>任何一次把内容写进 memory-bank，先看目标文件的 cap</strong>；
+        超了就要么拆文件、要么外迁 —— 这是「库不会重新长胖」的收口。</li>
+  </ul>
+
+  <h3>（c）检索：先索引，后 grep，禁止整读</h3>
+  <pre>memory-bank/README.md              <span class="c">按任务选目录</span>
+  → testing/_index.md              <span class="c">按动作选主题 (一句话 + 触发词)</span>
+    → testing/tmpdir.md            <span class="c">读一个 ≤10 KB 的文件</span>
+
+不确定关键词时: grep -rn "TMPDIR" memory-bank/          <span class="c">grep 是三条线共用的兜底</span></pre>
+  <p class="note">「禁止整读某个目录」不是格式洁癖，是预算纪律：目录整体仍是几十 KB 量级，
+     整读行为一旦回来，这次重构就白做了。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="n">08</span>机械后果：通用生成器 / 守卫 / 闸门</h2>
+  <div class="rule"></div>
+
+  <h3>脚本落位：统一进 memory-bank skill</h3>
+  <p>索引生成器与结构检查脚本<strong>不放仓库根 <code>scripts/</code></strong>，统一落在
+     <code>.agents/skills/memory-bank/scripts/</code>：它们实现的是 Memory Bank <em>模式</em>本身
+     （生成物索引、目录指针、cap 策略），不是本项目的业务脚本 —— 放 skill 才能跨 clone / 跨项目共用一份，
+     也避免各项目各写一版慢慢分叉。<code>gen_tasks_index.py</code> 同时<strong>迁入</strong>该目录。</p>
+  <pre>.agents/skills/memory-bank/
+├─ SKILL.md                    <span class="c">← 会话协议 + 五步配方; 文档里的路径一律写 &lt;skill-dir&gt;/scripts/...</span>
+└─ scripts/
+   ├─ _common.py               <span class="c">find_root() · CAP_POLICY · 首部元数据读取 (各脚本共用)</span>
+   ├─ gen_tasks_index.py       <span class="c">迁入 (原 scripts/gen_tasks_index.py) —— 状态分区专用</span>
+   ├─ gen_kb_index.py          <span class="c">新 · 通用: 任意目录 → _index.md (有子目录出类指针, 无则出文件指针)</span>
+   └─ check_kb_structure.py    <span class="c">新 · 通用: cap 策略 / 元数据 / 双向一致 / 无孤儿 (供守卫 import)</span></pre>
+  <p>三条纪律（都是 KB 里已记过的坑，迁移时必须照做）：</p>
+  <ul>
+    <li><strong>找仓库根用 <code>find_root()</code> 向上找 <code>.git</code></strong>，不按 skill 安装深度反推
+        <code>parents[n]</code> —— <code>create-issue/scripts/_common.py</code> 已是这个写法，直接复用同款；
+        并允许 <code>--root</code> 覆盖。</li>
+    <li><strong>skill 文档里的路径写 <code>&lt;skill-dir&gt;/scripts/…</code></strong>，不写相对路径 ——
+        否则执行者会去仓库根 <code>scripts/</code> 里找（已踩过）。</li>
+    <li><strong>项目专属值不进 skill</strong>：<code>AGENTS.md</code> 的 8000 上限仍留在项目脚本
+        <code>scripts/check_context_caps.py</code>；skill 里只放<em>模式默认值</em>（第 03 节的 cap 分级），
+        需要按项目覆盖时用 <code>--max-chars</code>；将来真需要外置配置再走 <code>.memory-bank.toml</code>。</li>
+  </ul>
+  <p class="note">新增文件随 <code>.codebuddy/skills/memory-bank</code> 的 junction 立即生效（实测该目录是指向
+     <code>.agents/skills/memory-bank</code> 的 junction），不必重跑 <code>sync_agent_skills.py</code> ——
+     那条闸门只管 skill 的增删。新脚本还会被既有的
+     <code>&lt;each:.agents/skills/**/scripts/*.py&gt; --help</code> 冒烟闸门自动覆盖。</p>
+
+  <h3>通用生成器 <code>gen_kb_index.py</code></h3>
+  <p>一套代码覆盖全库：给任意目录，扫其中 <code>*.md</code>（排除 <code>_</code> 开头）读三行头元数据 →
+     渲染 <code>_index.md</code>；若目录下还有子目录，则为每个子目录渲染一行「类指针」（读其
+     <code>_about.md</code>）。<code>pitfalls/</code> 的两级与 <code>testing/</code> 的一级，
+     是同一个实现的两种输入。</p>
+  <pre><span class="c"># 数据源（手写的只有这些）</span>
+testing/tmpdir.md       →  # 标题 / &gt; 摘要: ... / &gt; 触发: ...
+testing/_index.md       →  <span class="a">生成物</span>: 每个主题一行指针
+pitfalls/git/_about.md  →  类元数据 (一句话 + 触发条件)
+pitfalls/_index.md      →  <span class="a">生成物</span>: 每个类一行指针
+
+<span class="c"># 用法</span>
+python &lt;skill-dir&gt;/scripts/gen_kb_index.py            <span class="c">重建全库所有 _index.md</span>
+python &lt;skill-dir&gt;/scripts/gen_kb_index.py --check    <span class="c">只比对 (闸门与守卫用)</span></pre>
+
+  <h3>结构检查 <code>check_kb_structure.py</code> + 守卫（<code>tests/test_memory_bank.py</code> 增 9 条）</h3>
+  <p>守卫测试<strong>在进程内 import</strong> 检查器（本仓库测试禁止起子进程，<code>sidefx.py</code> 会记账越界），
+     与 <code>gen_tasks_index.py</code> 现做法一致；cap 与类枚举常量单点定义在 skill 的 <code>_common.py</code>，
+     守卫 import 它，<strong>不手抄</strong>。</p>
+  <ol>
+    <li>每个目录的 <code>_index.md</code> == 生成结果（全库一次校验）</li>
+    <li>索引 ↔ 目录内容<strong>双向一致</strong>：有文件没登记、登记了没文件，都红</li>
+    <li>每个主题文件含头部元数据（<code># 标题</code> + <code>&gt; 摘要:</code> + <code>&gt; 触发:</code>）</li>
+    <li>每个文件 ≤ 其角色的 cap（第 03 节策略表，首个匹配生效；下限 1.5 KB 只 WARN）</li>
+    <li>类名 ∈ 固定枚举；文件名匹配 <code>^[a-z0-9]+(-[a-z0-9]+)*\.md$</code></li>
+    <li>每个 <code>_index.md</code> 都被 <code>memory-bank/README.md</code> 引用（<strong>无孤儿目录</strong>）</li>
+    <li>存根（<code>pitfalls.md</code> / <code>testing.md</code> / …）≤1 KB、含「已迁至」、不含正文或条目</li>
+    <li><code>activeContext.md</code> ≤12 KB（易变层硬顶）</li>
+    <li><code>pitfalls/</code> 条目含 触发 / 判别 / 处置 三字段（沿用既有约定）</li>
+  </ol>
+  <p>扩类 / 扩目录规则（写进 skill）：新增一个类或目录，要<strong>同时</strong>改三处 ——
+     枚举（若属枚举范畴）、<code>README.md</code> 细路由、该目录的 <code>_about.md</code> / 元数据；少一处就红。</p>
+
+  <h3>闸门（<code>.commit-flow.toml</code>）</h3>
+  <pre><span class="c"># 脚本迁进 skill 后路径走 &lt;skill-dir:NAME&gt; 占位符 (预检已支持, 先例是 create-issue 的 issue 索引闸门)</span>
+[[gates]]
+match = [<span class="a">"memory-bank/"</span>]
+run   = [<span class="a">"python &lt;skill-dir:memory-bank&gt;/scripts/gen_tasks_index.py --check"</span>,
+         <span class="a">"python &lt;skill-dir:memory-bank&gt;/scripts/gen_kb_index.py --check"</span>]
+auto  = <span class="c">true</span>
+timeout = <span class="c">60</span>
+note  = <span class="a">"知识库索引: 两个生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条)"</span></pre>
+  <p class="note">W8 还会补一个<strong>相对链接存在性</strong>扫描（<code>scripts/check_doc_links.py</code>）——
+      这条坑在 KB 里记了很久（改名后坏链不会让任何测试失败），本方案会新增大量链接，正好一批机检化。</p>
+
+  <h3>引用面（决定存根策略）</h3>
+  <table>
+    <tr><th style="width:186px">文档 / 脚本</th><th class="mono" style="width:86px">引用处数</th><th>处置</th></tr>
+    <tr><td class="mono">testing.md</td><td class="mono">132</td><td>留存根；活文档互引改指 <code>testing/</code> 下的目标文件</td></tr>
+    <tr><td class="mono">activeContext.md</td><td class="mono">119</td><td>文件仍在原路径（只瘦身），无需存根</td></tr>
+    <tr><td class="mono">pitfalls.md</td><td class="mono">113</td><td>留存根（48 个文件引用，含 12 份历史计划 HTML）</td></tr>
+    <tr><td class="mono">conventions.md</td><td class="mono">75</td><td>留存根</td></tr>
+    <tr><td class="mono">modules.md</td><td class="mono">50</td><td>留存根</td></tr>
+    <tr><td class="mono">progress.md</td><td class="mono">46</td><td>留存根</td></tr>
+    <tr><td class="mono">systemPatterns.md</td><td class="mono">32</td><td>留存根</td></tr>
+    <tr><td class="mono">rule-system.md</td><td class="mono">21</td><td>留存根</td></tr>
+    <tr><td class="mono">config-reference.md</td><td class="mono">8</td><td>留存根</td></tr>
+    <tr><td class="mono">gen_tasks_index.py</td><td class="mono">36</td>
+        <td>迁 skill；改写活文档 11 个文件（含 AGENTS.md / 闸门 / tests 守卫 / 三处提示串），历史 5 处不动</td></tr>
+  </table>
+  <p class="note">改写手法按 KB 里那条纪律走：改前 grep 统计处数 → 用 <strong>Python 显式 UTF-8</strong>
+     批量替换 → 替换后再 grep 确认为 0（活文档口径）。</p>
+</section>
+
+<section id="s9">
+  <h2><span class="n">09</span>分波实施</h2>
+  <div class="rule"></div>
+  <p>九波，每波独立可停、可单独提交。排序依据是「被误读的代价 × 查阅频率」：
+     每次改代码要用的先做，历史归档最后做。</p>
+  <table>
+    <tr><th style="width:56px">波次</th><th style="width:190px">做什么</th><th>产出与验收</th></tr>
+    <tr><td class="mono">W0</td><td>基线冻结（不动文档）</td>
+        <td>按五步配方第 1 步量全部 13 份文档的段级字节与条目数；dump 成
+            <code>(md5, 字节, 段名)</code> 清单到 <code>.workbuddy-ai/tmp/</code>（gitignore）作为守恒核对底本</td></tr>
+    <tr><td class="mono">W1</td><td><strong>基础设施</strong>：脚本落位 + 通用生成器 + cap 策略</td>
+        <td><code>gen_tasks_index.py</code> 迁进 skill；新增 <code>_common.py</code> / <code>gen_kb_index.py</code> /
+            <code>check_kb_structure.py</code>；改写 11 个活文档引用；闸门改 <code>&lt;skill-dir:memory-bank&gt;</code>
+            整目录一条。<strong>先做这一波</strong>：后面每一波都靠它出索引、守 cap</td></tr>
+    <tr><td class="mono">W2</td><td><code>pitfalls/</code>（两级指针）</td>
+        <td>7 类目录 + 约 30 主题文件 + 存根 + 接线（AGENTS.md / skill DoD / 预检指针）；
+            条目守恒 missing = 0；守卫含第 2/5/9 条</td></tr>
+    <tr><td class="mono">W3</td><td><code>testing/</code>（含基线流水外迁）</td>
+        <td>≈9 文件 + 存根；<code>baseline.md</code> 成为唯一手改处；新增 <code>guards.md</code> 守阵清单；
+            <code>techContext</code> 的浏览器自动化迁入 <code>browser-env.md</code></td></tr>
+    <tr><td class="mono">W4</td><td><code>activeContext</code> 瘦身 + <code>progress/</code></td>
+        <td>activeContext ≤12 KB 并加 cap 守卫；走查清单迁 <code>checklists/</code>；定案口径逐条归位；
+            progress 拆 5+4 份 + 存根</td></tr>
+    <tr><td class="mono">W5</td><td><code>systemPatterns/</code> + <code>modules/</code></td>
+        <td>≈8 + ≈7 文件 + 存根；顺带纠正「任务队列」名下的 WEB UI 内容归属；
+            modules 的「在哪里改」速查并入 <code>_index.md</code></td></tr>
+    <tr><td class="mono">W6</td><td><code>conventions/</code> + <code>config-reference/</code> + <code>rule-system/</code></td>
+        <td>≈5 + 3 + 4 文件 + 存根；<code>checking</code> 单独成篇并与 <code>pitfalls/backend/high-risk-ops.md</code> 互指</td></tr>
+    <tr><td class="mono">W7</td><td><code>tasks/</code> 档案消肿</td>
+        <td>超 24 KB 的 4 份把纪要段 / 分波明细移 <code>tasks/attachments/</code>；主档案保留状态与决策；
+            索引守卫无需改动（不递归）</td></tr>
+    <tr><td class="mono">W8</td><td>机检化 + 回归演练</td>
+        <td>候选：相对链接存在性 / 提交前 <code>.git/rebase-merge</code> 残留 / 改名后引用残留 /
+            推送后「未提交」标记回扫；三次检索演练记录跳数与字节；全量 pytest 绿；
+            顺带重写 <code>memory-bank.instructions.md</code> 的旧结构与旧命名</td></tr>
+  </table>
+  <p class="note">W2–W7 是<strong>同一个配方重复六次</strong>，不是六个不同项目：每一波都走
+     「量 → 建 → 生成 → 接线 → 守恒核对」。因此可以随时停在任一波：已完成的波各自独立可用，
+     未完成的文档继续以原形态工作（存根只在对应波落地后才出现）。</p>
+</section>
+
+<section id="s10">
+  <h2><span class="n">10</span>守恒与验收</h2>
+  <div class="rule"></div>
+  <ol>
+    <li><strong>逐文档条目守恒（防迁移丢内容）</strong>：W0 清单按规范化后的行文本 md5 比对 ——
+        <strong>missing 必须为 0</strong>；extra 允许（索引行、元数据行、分流判据不算条目）。
+        每份文档的核对结果（原 N 条命中多少）写进任务档案。</li>
+    <li><strong>结构守卫全绿</strong>（9 条），且三条关键项各有一次「故意写错 ⇒ 红」红验：
+        cap 超限 / 删主题文件 / 文件缺元数据。</li>
+    <li><strong>cap 全库达标</strong>：<code>check_kb_structure.py</code> 报 0 超标；
+        项目侧 <code>python scripts/check_context_caps.py --strict</code> PASS，AGENTS.md 精简后 ≤6,500 字符。</li>
+    <li><strong>脚本落位</strong>：两个 <code>--check</code> 从 skill 路径跑通（<code>--help</code> 由既有冒烟闸门覆盖）；
+        <code>preflight.py --show-config</code> 显示 <code>&lt;skill-dir:memory-bank&gt;</code> 已展开为真实命令；
+        活文档里旧路径 <code>scripts/gen_tasks_index.py</code> 残留为 0。</li>
+    <li><strong>检索演练 ×3</strong>（改前端 / 跑测试 / 查配置键）：从 README 粗路由出发 ≤2 跳命中目标条目，
+        且<strong>不整读任何超过该角色 cap 的文件</strong>；实测的「跳数 / 文件数 / 读了多少字节」记进档案。
+        这是 G1 与 G3 的唯一有效证据。</li>
+    <li><strong>入口链不随库体量变长</strong>：演练时额外记录入口链（AGENTS.md → README → 索引 → 文件）的
+        累计字节，确认在 6.5 + 3 + 3 + 10 KB 的量级。</li>
+    <li><strong>引用完整</strong>：每个存根 1 跳到达对应 <code>_index.md</code>；迁移前统计的旧锚链接
+        （如 <code>pitfalls.md#…</code>）在活文档中为 0。</li>
+    <li><strong>回归</strong>：<code>uv run pytest tests -q</code> 绿。基线 <strong>1152 passed + 1 skipped</strong>
+        （2026-09-22 实测）；只动文档与守卫，数字应保持不变 —— 若因新增守卫而增加，
+        按纪律只改 <code>testing/baseline.md</code> 并把增量写进本轮结论。</li>
+  </ol>
+</section>
+
+<section id="s11">
+  <h2><span class="n">11</span>风险、取舍与验证步骤</h2>
+  <div class="rule"></div>
+
+  <h3>风险与取舍</h3>
+  <ol>
+    <li><strong>引用面很大。</strong>被拆的 8 份文档合计被引 400+ 处（<code>testing.md</code> 132、
+        <code>pitfalls.md</code> 113 …），其中大量在历史计划 HTML、issue 报告与任务档案里。
+        策略：<strong>活文档改指向目标文件，历史只靠存根</strong>。存根 ≤1 KB 且被守卫盯住，
+        属于低成本的兼容层，不是技术债。</li>
+    <li><strong>多 clone 撞车。</strong>这是结构性改动（新增目录 + 大量文件搬迁），
+        每波都要在一个 clone 里一次做完并尽快推送；动手前 <code>git fetch</code> 确认不落后。
+        冲突形态是 add/delete —— 处置是「以新结构为准，把对方的增量按动作归位」，不要合并旧文件。</li>
+    <li><strong>拆分过度。</strong>主题文件过小会让「读三个文件」取代「读一节」。
+        故设 1.5 KB 下限建议（WARN 不红）；演练若显示要 3 跳才命中，改的是索引指针措辞，
+        不是再加一层。</li>
+    <li><strong>索引自己也会漂。</strong>所有 <code>_index.md</code> 都是生成物，漂移由
+        「生成器 + <code>--check</code> 闸门 + 守卫」三件套按住 —— 与 <code>tasks/_index.md</code> 同款，
+        冲突处置也相同（重跑，不手改）。</li>
+    <li><strong>「搬了家」不等于「被读到」。</strong>本方案最容易自我欺骗的一点：目录化只降低阅读成本，
+        真正让约束生效的是第 07 节的接线与 W8 的机检化。若只做 W2–W7 而不做接线，
+        一年后仍会重踩 —— 验收判据里的「检索演练」与「复发计数」就是为这条设的。</li>
+    <li><strong>移动 <code>gen_tasks_index.py</code> 自身的风险面。</strong>它现在是<em>提交闸门的一部分</em>，
+        迁移必须与引用改写<strong>同一次提交</strong>落地 —— 中途失败会让闸门指向不存在的路径。
+        顺序：写新脚本 + 改引用 → 手动跑 skill 路径的 <code>--check</code> → 删旧文件 → 跑预检验证展开。
+        代价是其它 clone 在 pull 后旧引用立即失效，这正是要一次改全的理由。</li>
+    <li><strong>顺带修的漂移：<code>.github/instructions/memory-bank.instructions.md</code></strong>
+        还在教旧的 8 文件结构，并把任务命名写成 <code>YY-MM-DD-HHMM-taskname.md</code>
+        （现规范是 <code>YY-MM-DD-&lt;slug&gt;.md</code>）。它是 <code>applyTo: memory-bank/**</code>
+        的规则载体 —— 不重写，新结构在编辑 memory-bank 时就不可见。列入 W8。</li>
+    <li><strong>波次即提交边界。</strong>九波若合成一两次提交，一旦某波校对出错，
+        回滚会连带把已好的波一起退掉。故每波一次提交，提交信息写明该波守恒核对的实测数字。</li>
+  </ol>
+
+  <h3>验证步骤（可执行清单）</h3>
+  <ol>
+    <li>生成器幂等：连跑两次 <code>gen_kb_index.py</code> 无 diff；<code>--check</code> 退出码 0；
+        <code>gen_tasks_index.py --check</code> 同样绿。</li>
+    <li>守卫会红（三条红验）：给某主题文件塞内容让它超 cap → 红；删一个主题文件 → 双向一致红；
+        去掉某文件的 <code>&gt; 触发:</code> 行 → 元数据守卫红；各自复原。</li>
+    <li>存根有效：8 个存根都 ≤1 KB、含「已迁至」，点开 1 跳到达对应 <code>_index.md</code>；
+        <code>git grep -c</code> 旧路径计数不下降。</li>
+    <li>AGENTS.md 预算：<code>check_context_caps.py --strict</code> PASS，且余量 ≥ 1,000 字符。</li>
+    <li>细路由完整：<code>memory-bank/README.md</code> 覆盖全部 <code>_index.md</code>（无孤儿守卫绿）；
+        故意漏登记一个新目录 → 红。</li>
+    <li>闸门接入：单独改一个主题文件、故意不重跑生成器 → 预检该 gate STOP。</li>
+    <li>检索演练 ×3，记录跳数 / 文件数 / 字节数 / 入口链累计字节。</li>
+    <li>引用残留：迁移前统计旧锚链接处数，迁移后活文档为 0。</li>
+    <li>入库演练：临时造一条假坑与一个假主题文件，各走完 DoD ⑤（选目录 → 写三行头 → 跑生成器 →
+        闸门绿 → 删除）；同时给某条已有坑 <code>复发 +1</code>，确认 W8 候选清单能按它排序。</li>
+    <li>全量回归：<code>uv run pytest tests -q</code> 绿，数字与基线一致（或按第 10 节第 8 条记录增量）。</li>
+    <li>历史不回改：<code>git diff --stat</code> 里 <code>docs/plans/</code> 只有本次新增的这一份；
+        <code>memory-bank/tasks/</code> 的既有档案正文只在 W7 那波被动过，且只是纪要段外迁。</li>
+  </ol>
+  <p class="note">本方案不改 <code>src/</code> 业务逻辑、不改业务测试；仅 3 处源码注释里的 KB 路径会随对应波次更新。
+      第 04 节的全库落位与第 03 节的 cap 分级确认后再开工。</p>
+</section>
+
+</main>
+
+<footer>
+  重构方案 · memory-bank 全库分类 + 二级指针 · 2026-09-22 · 依据：<span class="btn">13 份文档实测体积</span>
+  <span class="btn">引用面统计</span> <span class="btn">test_memory_bank.py</span>
+  <span class="btn">.commit-flow.toml</span> <span class="btn">create-issue/_common.py</span>
+</footer>
+
+</div>
+</body>
+</html>

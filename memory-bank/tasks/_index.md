@@ -23,7 +23,7 @@
 
 ## Pending
 
-(暂无 — 下一步候选见 [../activeContext.md](../activeContext.md) 的"下一步候选"段)
+- [26-09-22-memory-bank-dir-refactor] 知识库目录化重构 (分类 + 二级指针) - 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; 计划已产出, 待确认后按 W0–W8 分波实施
 
 ## Completed
 

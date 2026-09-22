@@ -4,7 +4,16 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-22 (**🆕 最新: issue 26-09-21-1347「state.json 损坏时静默清空, .bak 备份从不用于恢复」已修并验证(未提交)** —— 用户指派认领; 复验 @ `d5a5520` 仍复现。修法: `_load_state` 拆出 `_read_state_file` 三态(dict / `None`=首启静默 / `_CORRUPT`=损坏含非法 UTF-8, `OSError` 不吞) → 损坏记 WARNING 且回退 `<state_file>.bak`(记 INFO), 备份不可用才 `{}` + 再告警; **新增自愈写回** `_write_back_recovered`(刻意不带 `keep_backup`, 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`); 备份后缀单点化 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。守阵 4 条(含"自愈写回失败只告警不抛")+ `test_utils` 断言改按常量; 红验(运行期打回旧实现)证明新守阵必红。全量 **1156 passed + 1 skipped**(基线 1152), sidefx 越界 0; issue 已置 `Fixed` + 索引已重建。详见「正在进行」首条) ——
+**最后更新**: 2026-09-22 (**最新: memory-bank 目录化重构「计划」已产出, 并立档回写** ——
+  [pitfalls.md](pitfalls.md) 现 62,362 字符 / 253 条, 但超标的是全库: 13 份顶层文档里 8 份超预算
+  (progress 80,704 / testing 61,468 / activeContext 55,990 / systemPatterns 49,328 / modules 44,192 …),
+  整读约 2.7 万 token ⇒ 事实上不被读, 已记的坑被反复重踩(工具 shell 里 `rebase` 三次事故全写在同一节);
+  方案: 五步配方 + 分类目录与生成物索引 + cap 分级(索引 3 KB / pitfalls 6 KB / 常青主题 10 KB /
+  参考与易变层 12 KB / 任务档案 24 KB) + 守卫 9 条 + 决策点接线, 被拆文档留 ≤1 KB 存根;
+  生成器统一落 memory-bank skill 的 `scripts/`; 分 W0–W8 九波, **待确认后开工** →
+  [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
+  [档案](tasks/26-09-22-memory-bank-dir-refactor.md)(**已入库**, 本轮提交)) ——
+  其前一条状态: 🆕 issue 26-09-21-1347「state.json 损坏时静默清空, .bak 备份从不用于恢复」已修并验证(未提交)** —— 用户指派认领; 复验 @ `d5a5520` 仍复现。修法: `_load_state` 拆出 `_read_state_file` 三态(dict / `None`=首启静默 / `_CORRUPT`=损坏含非法 UTF-8, `OSError` 不吞) → 损坏记 WARNING 且回退 `<state_file>.bak`(记 INFO), 备份不可用才 `{}` + 再告警; **新增自愈写回** `_write_back_recovered`(刻意不带 `keep_backup`, 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`); 备份后缀单点化 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。守阵 4 条(含"自愈写回失败只告警不抛")+ `test_utils` 断言改按常量; 红验(运行期打回旧实现)证明新守阵必红。全量 **1156 passed + 1 skipped**(基线 1152), sidefx 越界 0; issue 已置 `Fixed` + 索引已重建。详见「正在进行」首条) ——
   其前一条: issue 26-09-21-1347「跳检备份先于删除」已修并验证, 已入库 `a5faf35`(Gitee + GitHub 均推上) ——
   备份原先只挂在重加的两条失败分支上, 而删除是第一个不可逆步骤 ⇒ 「删除已生效 → 重加未被接受」
   缝隙内崩溃会什么都不剩; 现改为导出后立刻备份 + 重加成功后 `_clear_backup` 清理(删除未生效也清),
@@ -40,6 +49,17 @@
   乐观 UI「撤下」已定案并推送 `4df80dc`, 两者均剩真机走查确认。
 
 ## 正在进行
+
+- **🆕 memory-bank 目录化重构(仅计划, 未开工)** —— 起因是全库超预算: 13 份顶层文档里 8 份超标
+  (progress 80,704 字符 / pitfalls 62,362 / testing 61,468 / activeContext 55,990 / systemPatterns 49,328 /
+  modules 44,192, 另 conventions / rule-system / config-reference 亦然; tasks/ 28 份共 305,097 字符),
+  「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故全写在同一节)。
+  方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 + 决策点接线;
+  8 份拆 9 个目录(约 45 主题文件), 各留 ≤1 KB 存根保住 400+ 处既有引用; `activeContext` 不拆但硬顶 12 KB;
+  生成器统一落 memory-bank skill 的 `scripts/`(`gen_tasks_index.py` 一并迁入 + 通用 `gen_kb_index.py`);
+  分 W0–W8 九波, 每波独立可停可提交。待确认全库落位与 cap 分级后开工 →
+  [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
+  [档案](tasks/26-09-22-memory-bank-dir-refactor.md)(已入库, 本轮提交)
 
 - **🆕 state.json 损坏静默清空 + .bak 从不用于恢复 —— 已修并验证(未提交, 见本文件顶部「最后更新」首条)**: issue
   [26-09-21-1347-bug-state-load-corrupt-silent-reset.html](issues/26-09-21-1347-bug-state-load-corrupt-silent-reset.html)
