@@ -6,7 +6,7 @@
     python <skill>/scripts/gen_issues_index.py --root D:/tmp/x --dir issues   指定仓库根与 issues 目录
 
 数据源是各报告 HTML 的 meta 标签(issue-status / -stamp / -summary / -title / -type), 与
-`scripts/gen_tasks_index.py` 同思路: 索引降级为生成物, 多个 worktree 并行时冲突的解法是
+memory-bank skill 的 `scripts/gen_tasks_index.py` 同思路: 索引降级为生成物, 多个 worktree 并行时冲突的解法是
 重跑脚本, 不是人工合并两版文本。
 
 索引按状态分区, 每行 = **类型 · 简述 · 报告链接**; 顶部另有 Open 状态的按类型计数表。
@@ -26,13 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import (  # noqa: E402
-    FILE_RE,
-    STATUSES,
-    TYPES,
-    dir_of,
-    find_root,
-    rel_skill,
-    resolve_issues_dir,
+    FILE_RE, STATUSES, TYPES, dir_of, find_root, rel_skill, resolve_issues_dir,
 )
 
 META_RE = {
@@ -137,8 +131,9 @@ def build(root: Path, issues_dir: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="只比对, 不写文件")
-    parser.add_argument("--dir", default=None,
-                        help="issues 目录(相对仓库根); 不传则按 memory-bank/issues → issues → docs/issues 探测")
+    parser.add_argument(
+        "--dir", default=None, help="issues 目录(相对仓库根); 不传则按 memory-bank/issues → issues → docs/issues 探测"
+    )
     parser.add_argument("--root", type=Path, default=None, help="仓库根(默认向上探测 .git)")
     args = parser.parse_args(argv)
 

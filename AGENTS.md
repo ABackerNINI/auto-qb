@@ -8,7 +8,7 @@
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
 - **开始**: ①**先拉远程** —— `git pull --rebase <remote> develop` (分支名**必须写**), `git status -sb` 不落后再开工; **禁止在落后分支上改代码** (机检: `python .agents/skills/my-commit-flow/scripts/preflight.py`)。拉取前先把工作区弄干净, 理由见下节。②读 [activeContext.md](memory-bank/activeContext.md) (当前焦点); 该读哪份文档看本文件「知识库路由」表 (**单点**); 已有 `tasks/` 档案的从档案续作。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
-- **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext (已完成条目**迁出**到 progress.md) / 达阈值则立档 + `python scripts/gen_tasks_index.py` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` / 新坑追加 `pitfalls.md`。
+- **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext (已完成条目**迁出**到 progress.md) / 达阈值则立档 + `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` / 新坑追加 `pitfalls.md`。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
 ## 产出口径

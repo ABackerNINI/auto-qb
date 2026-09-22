@@ -50,11 +50,12 @@ timeout = 60
 note  = "issue 索引: skill 路径由预检定位, 找不到即 STOP"
 
 [[gates]]
-match = ["memory-bank/tasks/"]
-run   = ["python scripts/gen_tasks_index.py --check"]
+match = ["memory-bank/"]
+run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
+         "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check"]
 auto  = true
 timeout = 60
-note  = "任务档案索引: 索引是生成物, 必须自洽"
+note  = "知识库索引: 两个生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条)"
 
 [[gates]]
 match = [".agents/skills/"]

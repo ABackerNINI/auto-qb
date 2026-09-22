@@ -6,7 +6,7 @@
 
 ## 库内索引 (两个生成物, 冲突时重跑脚本而不是手改)
 
-- [tasks/_index.md](tasks/_index.md) —— 跨会话任务档案 (立档 / 查档), 由 `python scripts/gen_tasks_index.py` 生成
+- [tasks/_index.md](tasks/_index.md) —— 跨会话任务档案 (立档 / 查档), 由 `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 生成
 - [issues/_index.md](issues/_index.md) —— 计划外问题池 (8 类类型 × 便签 / 标准两档), 由 create-issue skill 的生成器重建
 
 ## 一分钟速览

@@ -4,7 +4,20 @@
 > 稳定事实在 projectbrief / productContext / systemPatterns / techContext 与各主题文档; 计划与完成状态在 [progress.md](progress.md); 本文件只放**易变的会话级状态**。
 > 维护纪律 (完整规程见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md)): ①每次会话收尾更新本文件, 已完成条目沉淀到 [progress.md](progress.md) 或主题文档后**删除** — 本文件只放易变状态; ②命中立档阈值的任务在 [tasks/](tasks/_index.md) 立档并同步索引; ③**禁止**在本文件追加长流水账纪要 (会淹没真正的当前焦点)。
 
-**最后更新**: 2026-09-22 (**最新: memory-bank 目录化重构「计划」已产出, 并立档回写** ——
+**最后更新**: 2026-09-22 (**最新: memory-bank 目录化重构 W0+W1 已完成并入库** ——
+  **W0 基线冻结**: 实测 **42 份文档 / 508,487 字符 / 352 段 / 1,613 条目**, 清单落
+  `.workbuddy-ai/tmp/kb-baseline/`(gitignore) 作守恒核对底本 —— 顺带纠正了计划里的旧数字
+  (实际 pitfalls 63,430 / progress 51,292 / testing 39,988 / activeContext 37,636, 都比计划所记小;
+  `tasks/` 只有 1 份 >24 KB)。
+  **W1 基础设施**: ①`gen_tasks_index.py` 从仓根迁进 memory-bank skill 的 `scripts/`, 新增 `_common.py`
+  (`find_root` / `CAP_POLICY` / 类枚举 / 三行头读取) + 通用 `gen_kb_index.py` + `check_kb_structure.py`;
+  ②9 条**结构性**守卫(目录未建时空转、落地即生效, 检查器进程内 import); ③11 个活文档引用改写、仓根旧脚本删除;
+  ④闸门改 `<skill-dir:memory-bank>` 整目录一条。全量 **1169 passed + 1 skipped**(基线 1160, +9 守卫)。
+  ⚠ 实测两处 cap 不适用: `tasks/_index.md` 10,790 / `issues/_index.md` 6,937 字符(自动生成、行数随条目增长)
+  ⇒ 单列 `index-auto` 12 KB 档, 不假装它们是一屏索引(计划原写"索引一律 3 KB", 已按实测修正)。
+  详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)「W1」·
+  [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html)) ——
+  其前一条状态: memory-bank 目录化重构「计划」已产出并立档回写 ——
   [pitfalls.md](pitfalls.md) 现 62,362 字符 / 253 条, 但超标的是全库: 13 份顶层文档里 8 份超预算
   (progress 80,704 / testing 61,468 / activeContext 55,990 / systemPatterns 49,328 / modules 44,192 …),
   整读约 2.7 万 token ⇒ 事实上不被读, 已记的坑被反复重踩(工具 shell 里 `rebase` 三次事故全写在同一节);
@@ -50,16 +63,16 @@
 
 ## 正在进行
 
-- **🆕 memory-bank 目录化重构(仅计划, 未开工)** —— 起因是全库超预算: 13 份顶层文档里 8 份超标
-  (progress 80,704 字符 / pitfalls 62,362 / testing 61,468 / activeContext 55,990 / systemPatterns 49,328 /
-  modules 44,192, 另 conventions / rule-system / config-reference 亦然; tasks/ 28 份共 305,097 字符),
-  「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故全写在同一节)。
-  方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 + 决策点接线;
-  8 份拆 9 个目录(约 45 主题文件), 各留 ≤1 KB 存根保住 400+ 处既有引用; `activeContext` 不拆但硬顶 12 KB;
-  生成器统一落 memory-bank skill 的 `scripts/`(`gen_tasks_index.py` 一并迁入 + 通用 `gen_kb_index.py`);
-  分 W0–W8 九波, 每波独立可停可提交。待确认全库落位与 cap 分级后开工 →
+- **🆕 memory-bank 目录化重构 —— W0+W1 已入库, 下一步 W2 `pitfalls/`** —— 起因是全库超预算:
+  13 份顶层文档里 8 份超标, 「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故
+  全写在同一节)。方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 +
+  决策点接线; 8 份拆 9 个目录(约 45 主题文件), 各留 ≤1 KB 存根保住 400+ 处既有引用; `activeContext` 不拆
+  但硬顶 12 KB。**已落地**: 脚本族统一在 memory-bank skill 的 `scripts/`(`_common.py` / `gen_tasks_index.py` /
+  `gen_kb_index.py` / `check_kb_structure.py`), 9 条结构性守卫 + `<skill-dir:memory-bank>` 整目录闸门。
+  **W2 起** 按波推进(W2 pitfalls 7 类 → W3 testing → W4 activeContext+progress → W5 systemPatterns+modules →
+  W6 conventions+config-reference+rule-system → W7 tasks 消肿 → W8 机检化与演练), 每波独立可停可提交 →
   [计划](../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) ·
-  [档案](tasks/26-09-22-memory-bank-dir-refactor.md)(已入库, 本轮提交)
+  [档案](tasks/26-09-22-memory-bank-dir-refactor.md)
 
 - **🆕 state.json 损坏静默清空 + .bak 从不用于恢复 —— 已修并验证, 已入库 `e11df80`(见本文件顶部「最后更新」首条)**: issue
   [26-09-21-1347-bug-state-load-corrupt-silent-reset.html](issues/26-09-21-1347-bug-state-load-corrupt-silent-reset.html)

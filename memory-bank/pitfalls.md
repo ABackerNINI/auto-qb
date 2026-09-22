@@ -345,6 +345,14 @@
     ⇒ 在工具 shell 里跑全量测试前**先设 `TMPDIR`**; 看到这个 `PermissionError` 先怀疑临时目录, 别当成代码回归。
     📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
     完整约定见 [techContext.md](techContext.md)「临时目录 / 备份盘约定」。
+  - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复了** ——
+    `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` **成功**
+    (改名只作用于**目录项**, 不需要能读那个重解析点), 之后在**默认 TMPDIR** 下跑
+    `uv run pytest tests -q --no-cov` 实测 **exit=0 / 1169 passed + 1 skipped**。
+    ⇒ 死链本身 `readlink` / `os.rmdir` / `os.unlink` / `icacls` **全被拒**(用户态修不掉),
+    但**可以连它的父目录一起搬走**, 新根由 pytest 自动重建。
+    ⚠ 同根的 `garbage-*` 一堆目录会一并搬走 —— 那是 pytest 自己的清理残渣, 无害;
+    ⚠ 这是**环境修复不是仓库改动**, 换机器 / 换用户不适用 ⇒ 仍按上面的约定**优先设 `TMPDIR`**。
 
 ## ⚠️ Git / 提交推送纪律
 
@@ -413,7 +421,7 @@
   ```
   **必须先验证 `PYTHONPATH` 真的覆盖了 editable install**, 否则是拿新代码比新代码。
 - **`git status -sb` 的 ahead/behind 是上次 fetch 时的快照**, 不会自己刷新 ⇒ **push 前先 `git fetch`**(多 clone / 多 session 并行时几分钟内就可能落后)。**分支落后主线时先 fetch 再动手**, 否则会把别人已修好的问题重做一遍; 真有重叠: ①`stash push -u` 留档 ②rebase 到主线 ③只把**主线没有的增量**重做 ④被取代的计划文档**必须加存档声明**。协作主线是 Gitee 的 `develop`, **不要用 GitHub 镜像判断进度**。
-- **同步上游(未提交改动 + 行尾导致快进合并被拒)的安全流程**: ①`git diff > 备份.patch` + 原文件另存 ②只对被改的跟踪文件 `git restore --source=HEAD -- <文件>` ③`git merge --ff-only origin/develop` ④`git apply --3way --ignore-whitespace 备份.patch` ⑤`.md` 的冲突基本是"两边各追加一段", **取并集**(`tasks/_index.md` 是生成物, 直接重跑 `scripts/gen_tasks_index.py`)⑥`git add` 标记已解决后 `git reset` 变回未暂存。卡点: `git diff --stat` 为空但 `git status` 仍显示 ` M` 且工作区文件比 blob 大 ⇒ **是行尾不是内容**, 把文件强制成纯 LF 即可(别急着 stash)。
+- **同步上游(未提交改动 + 行尾导致快进合并被拒)的安全流程**: ①`git diff > 备份.patch` + 原文件另存 ②只对被改的跟踪文件 `git restore --source=HEAD -- <文件>` ③`git merge --ff-only origin/develop` ④`git apply --3way --ignore-whitespace 备份.patch` ⑤`.md` 的冲突基本是"两边各追加一段", **取并集**(`tasks/_index.md` 是生成物, 直接重跑 `python .agents/skills/memory-bank/scripts/gen_tasks_index.py`)⑥`git add` 标记已解决后 `git reset` 变回未暂存。卡点: `git diff --stat` 为空但 `git status` 仍显示 ` M` 且工作区文件比 blob 大 ⇒ **是行尾不是内容**, 把文件强制成纯 LF 即可(别急着 stash)。
 - **Gitee 主线会间歇性 `Recv failure`**(同一 URL 上一个通一个不通 = 链路层, 不是远端名 / 凭据配错; 实测连测 5 次只成功 2 次, 失败与成功交替)。处置: 主线**可重试一次**(GitHub 镜像仍"尝试一次, 失败只报一次")。⚠ **命令报失败 ≠ 没推上** ⇒ **判定"推没推上"的唯一依据是 `git ls-remote <远端> <分支>`**(它自己也会瞬时失败, 重试 2~3 次再下结论); `git push --dry-run` **不能**用来判断(只做 ref 协商, 不发包, 永远"成功")。
 - **提交信息里的反引号会被 bash 当命令替换**(双引号内也替换 ⇒ 那一段变成空, 同时报 `command not found`)⇒ 用**单引号**包整条 `-m` 或干脆不用反引号; 提交后 `git log -1 --format=%B` 复核。已推送的提交不要 amend + 强推。
 - **`git commit -F - <<'MSG' … MSG && git push` 会让 push 静默不执行**(结束符没被识别, 命令体读到 EOF, push 被当成 heredoc 内容)⇒ commit 与 push 写**两条独立命令**, 结束符单独占一行; 提交后看 `git status -sb` 的 `[ahead N]`。
@@ -437,7 +445,7 @@
 
 - **把「问答」当「执行任务」是红线**(用户指定): 开工先判这一轮是**问答 / 只读**还是**执行任务**。用户只是问("能不能 X""是什么""怎么看""有没有")⇒ **只在回复里作答**; 想延伸排查(跑测试 / 冒烟 / 探针 / 实验)**先问**。❗**"继续 / continue / 接着做 / 你看着办"不构成授权** —— 只表示"把你手上这一步做完"。四类动作必须**逐项**显式确认: ①新建文件(计划文档 / 任务档案 / 报告)②入池 issue ③认领 issue ④commit / push。
 - **纪律"反复强调但从不执行"时按顺序查四条**(缺任一都会衰减): ①**载体**(skill / instruction 文件真的在吗)②**规则暴露点是否落在决策点**(写在只对 `memory-bank/**` 生效的 instruction 里, 而"该不该立档"的决策发生在编辑 `src/` 的时刻 ⇒ 规则不在上下文里)③**阈值是否可判定**("大任务要立档"无阈值 ⇒ 默认不立档)④**有没有机械后果**(现由 `tests/test_memory_bank.py` 双向校验索引 ↔ 文件 / 命名 / 状态分区 / 必备章节)。
-- **任务档案的 `**Status:**` 只能取 4 个英文单词**(`In Progress` / `Pending` / `Completed` / `Abandoned`); 写成 `✅ 完成` 会让两条守阵同时红(容易误判成"索引坏了")。正确写法 `Completed (…中文说明…)`, 改完**必须重跑** `python scripts/gen_tasks_index.py`。**立档前先按 slug 查重**(并行分支各自立档会造成重复档案 + 重复索引条目, 而 `_indexed_sections()` 是 dict, 同 ID 重复登记会静默覆盖)。
+- **任务档案的 `**Status:**` 只能取 4 个英文单词**(`In Progress` / `Pending` / `Completed` / `Abandoned`); 写成 `✅ 完成` 会让两条守阵同时红(容易误判成"索引坏了")。正确写法 `Completed (…中文说明…)`, 改完**必须重跑** `python .agents/skills/memory-bank/scripts/gen_tasks_index.py`。**立档前先按 slug 查重**(并行分支各自立档会造成重复档案 + 重复索引条目, 而 `_indexed_sections()` 是 dict, 同 ID 重复登记会静默覆盖)。
 - **改文件名 / 移动文档后必须查全仓引用**(三步缺一不可): ①改之前全仓 grep 旧文件名统计引用数(含 `.html` / `.md` / `.py` / `.yml`, **HTML 的 `href=` 与正文里的裸路径也算**)②用 **Python 显式 UTF-8** 批量替换 ③替换后再 grep 确认为 0。**坏链不会让任何测试失败**, 只能靠人工扫。已知守卫缺口(建议未做): 加一个相对链接存在性扫描测试。
 - **推送之后回扫一遍"未提交 / 尚未提交"**, 把自己这一轮的改成**「已入库 `<sha>`」**(带提交号可核验)。⚠ **只改自己这一轮的** —— 并发会话的条目同样会失效, 但按 scope-guard 不要顺手替别人改(rebase 必然撞车)。基线数字同理: 改了测试就两侧都重测再落。
 - **埋点 / 验收口径必须有人消费**(见上"性能与刷新节奏"条目); 同理适用于计划里的每条验收标准。

@@ -14,7 +14,18 @@
 #   只加 --basetemp 也不行(测试里直接用 tempfile 的仍落 H: ⇒ 4 failed + 1 error)。细节见 pitfalls.md。
 #   备选: `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但约定统一走 R 盘。
 #   提交闸门(`auto = true`)跑的就是 `--no-cov` 这一档, 覆盖率基线另算。
-# 基线: **1160 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1169 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7523 语句 / 623 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1160 → 1169(**+9**; 2026-09-22 任务 26-09-22-memory-bank-dir-refactor **W1 基础设施**:
+#     知识库目录化守卫 9 条, 检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 守卫**进程内 import**
+#     (本项目测试禁止起子进程): `test_kb_index_is_regenerated` / `test_kb_index_and_files_are_bijective`
+#     (索引 == 生成结果; 索引 ↔ 目录双向一致)、`test_kb_topic_files_have_metadata` /
+#     `test_kb_files_respect_caps` / `test_kb_class_names_and_topic_filenames` (三行头元数据 / cap 分级 /
+#     类名与文件名)、`test_kb_no_orphan_index_dirs` / `test_kb_stubs_are_valid` (顶层索引都被 README 引用 /
+#     被拆文档留合法存根)、`test_kb_pitfall_entries_have_required_fields`、`test_kb_scripts_import_cleanly`。
+#     ⚠ 这 9 条是**结构性**的: 目录还没建时**空转通过**, 某个 `<文档>/` 一落地就自动生效 —— 故 W1 只增不减、
+#     既有用例零改动。两个例外按波次启用: `activeContext.md` 的 12 KB 硬顶(W4)与 `tasks/*.md` 的 24 KB(W7)
+#     仍在 `check_caps` 默认角色集之外 ⇒ 实测 `check_kb_structure.py --all` 现在**正好只报这两条**。
+#     另 `scripts/gen_tasks_index.py` 迁入 skill 的 `scripts/`(仓根该文件已删), 守卫改在进程内 import 它。
 #   ↑ 1152 → 1160(**+8**, 两批; 2026-09-22 issue 26-09-21-1347「state.json 损坏静默清空」守阵:
 #     `test_load_state_corrupt_falls_back_to_bak`(主文件损坏 -> 回退 .bak **并自愈写回主文件**;
 #       ❗自愈那条必须钉: 不写回的话下次 save_state 的 keep_backup 会把损坏内容复制成新的 .bak,
