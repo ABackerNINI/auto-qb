@@ -2,7 +2,8 @@
 
 包含: 轮询 helper(_poll_until)与跳检全部阶段 —— 前置闸门(_skip_gates)、
 删除确认(_skip_delete)、重加恢复(_skip_readd)、布局推断(_infer_content_layout)、
-失败备份(_backup_torrent)。风险控制详见 _execute_skip_checking docstring。
+删除前备份(_backup_torrent)与成功后清理(_clear_backup)。风险控制详见
+_execute_skip_checking docstring。
 """
 import logging
 import os
@@ -47,7 +48,9 @@ class SkipCheckingMixin:
         - 重加属性直传(0/负值有语义) + contentLayout 推断(布局错位不自愈)
         - 重加成功恢复删除前快照记录(tracker_conf/惰性缓存保留, 否则永久未匹配)
         - 无参考种子跳检: 高风险(仅基础文件存在与大小对比, 内容错误会传垃圾数据), 警告但允许
-        - 重加失败时 .torrent 落盘备份并记录元数据(立即落盘), 提示手动恢复
+        - 删除前先落盘 .torrent 备份并记录元数据(立即落盘): 删除是第一个不可逆步骤, 备份必须
+          先于它 —— 否则缝隙内崩溃时种子已从客户端移除、data 只在内存、state 无在途标记;
+          重加确认成功后清理该备份(文件 + 元数据), 删除未生效时同样清理(种子没丢)
         - 删除种子会清空该种子本地统计, 属固有风险, 需规则显式配置
         - 跳检成功后打 skip_checking_tag 标签(标签名 = 全局 config.skip_checking_tag,
           默认 zSkipChecked, 运行时经 ctx 读取, 不按规则覆盖): 标记未经
@@ -75,6 +78,15 @@ class SkipCheckingMixin:
         # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);
         # 删除后 store 记录已移除, 必须在此之前完成
         content_layout = self._infer_content_layout(torrent, ctx.client)
+
+        # 备份先于删除(崩溃安全): 删除是整条链上第一个不可逆步骤。备份若挂在重加的失败路径上,
+        # 那么「删除已生效 → 重加未被 qB 接受」这一缝隙(含删除确认轮询的约 5s)内崩溃/强杀,
+        # 种子从客户端消失、data 只存在于内存、state 无在途标记 —— 重启后无任何恢复凭据
+        # (issue 26-09-21-1347)。备份写不进去就不删除: 此时放弃跳检没有任何损失。
+        try:
+            self._backup_torrent(ctx.manager, torrent, data)
+        except Exception as e:
+            return ActionResult.fail(f"跳检备份 .torrent 失败(未删除, 无损失): {e}")
 
         # ---- 阶段 3: 执行 (删除 → 确认消失 → 重加 → 确认出现 → 恢复快照) ----
         failed = self._skip_delete(ctx, torrent)
@@ -142,6 +154,9 @@ class SkipCheckingMixin:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
         gone = _poll_until(lambda: not ctx.api.torrents_info(torrent_hashes=ctx.hash), attempts=10, interval=0.5)
         if not gone:
+            # 种子没删掉(删除未生效) —— 删除前的备份也就没了意义, 清掉: 留着只剩一个孤儿
+            # .torrent 文件 + 一条"待恢复"的误导性元数据(state 会指引用户去恢复一个还在的种子)
+            self._clear_backup(ctx.manager, ctx.hash)
             return ActionResult.fail("删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)")
         return None
 
@@ -175,20 +190,23 @@ class SkipCheckingMixin:
                 is_stopped=True,
             )
         except Exception as e:
+            # 备份在删除前已落盘(此处再调一次是幂等的覆盖写, 只为让失败信息带上备份路径)
             backup = self._backup_torrent(ctx.manager, torrent, data)
             return ActionResult.fail(f"重加种子失败: {e}; 种子已从客户端移除(文件保留), "
                                      f".torrent 已备份: {backup}, 请手动重加")
         appeared = _poll_until(lambda: ctx.api.torrents_info(torrent_hashes=ctx.hash), attempts=3, interval=0.3)
         if not appeared:
-            # 种子已从客户端移除, 而 data 字节只存在于内存 —— 这一支若直接返回, .torrent 就永久
-            # 丢了(用户得回站点重新下载), 且 store 无记录、下轮不会执行 restore_torrent, 会被
-            # 误判为"用户主动删除"。故与 add 抛异常那一支一致: 先备份再失败。
+            # 种子已从客户端移除, 备份已在删除前落盘 —— 保留它(不清), 用户凭
+            # skip-check-backup/<hash>.torrent + state 元数据可手动恢复; store 此刻也无记录,
+            # 下轮不会执行 restore_torrent, 该种子会被误判为"用户主动删除"。
             backup = self._backup_torrent(ctx.manager, torrent, data)
             return ActionResult.fail(f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "
                                      f"种子已从客户端移除(文件保留), .torrent 已备份: {backup}")
         ctx.manager.store.restore_torrent(torrent)
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
         ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()
+        # 种子已回到客户端: 删除前那份备份完成使命, 清掉(否则每次跳检都留一个孤儿文件)
+        self._clear_backup(ctx.manager, ctx.hash)
         return None
 
     def _infer_content_layout(self, torrent, client) -> Optional[str]:
@@ -215,12 +233,33 @@ class SkipCheckingMixin:
             return "Original"
         return None
 
+    def _clear_backup(self, manager, hash: str) -> None:
+        """跳检未真正移除种子时清掉删除前的备份(文件 + 元数据), 元数据立即落盘
+
+        与 _backup_torrent 成对: 备份是"删除前的保险", 只在种子确实没回到客户端时才有意义。
+        重加确认成功(种子已回)或删除未生效(种子没丢)时留着它只剩副作用 —— 一个孤儿
+        .torrent 文件 + 一条指向"待恢复"的误导性元数据。清理失败只记 warning(跳检本身已完成)。
+        """
+        meta = manager.state.get("skip_check_backup", {}).pop(hash, None)
+        if not meta:
+            return
+        path = meta.get("path") or ""
+        if path:
+            try:
+                os.remove(path)
+            except OSError as e:
+                logger.warning(f"清理跳检备份失败({path}): {e}")
+        manager.save_state()  # 元数据已改: 立即落盘, 否则崩溃后仍指向已删除的备份文件
+
     def _backup_torrent(self, manager, torrent, data: bytes) -> str:
-        """重加失败时把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径
+        """删除前把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径
 
         用删除前捕获的 torrent 记录(删除后 store 记录已移除, ctx.torrent 为 None)。
         元数据立即落盘(非常规路径, 不适用"仅退出时落盘"的写放大规避): 备份后程序一旦
         崩溃, 没有 state 里的元数据指引, 用户不知道 .torrent 备份的存在与原始保存路径。
+
+        调用时机是崩溃安全的关键: 必须**先于** torrents_delete(第一个不可逆步骤), 而不是
+        挂在重加的失败路径上 —— 重加前那几秒缝隙内崩溃, 谁也来不及备份(issue 26-09-21-1347)。
         """
         backup_dir = os.path.join(os.path.dirname(manager.state_file) or ".", "skip-check-backup")
         os.makedirs(backup_dir, exist_ok=True)

@@ -31,6 +31,9 @@
 - test_checking_skip_guard_file_size_mismatch: 跳检前置文件大小不符
 - test_checking_skip_guard_add_fail_backup: 重加标签失败回退
 - test_checking_skip_readd_unconfirmed_backs_up: 重加已发出但轮询确认不到种子 -> 同样备份 .torrent(否则种子已从客户端移除、data 只存内存随即丢弃)
+- test_checking_skip_backup_precedes_delete_and_cleared_on_success: 备份先于删除落盘(崩溃窗口), 重加确认成功后清理备份文件与元数据
+- test_checking_skip_delete_unconfirmed_clears_backup: 删除未生效(种子仍在) -> 放弃跳检并清掉删除前的备份(不留孤儿文件与误导性元数据)
+- test_checking_skip_backup_failure_aborts_before_delete: 备份写不进去 -> 不删除(无损失)直接 fail
 - test_checking_skip_dedup_same_day: 同日跳检去重
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_recheck_fail_cooldown: 校验连续失败达上限 -> 当日不再重试(防 recheck 死循环)
@@ -54,6 +57,7 @@
 import os
 import tempfile
 import time
+import uuid
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -140,8 +144,18 @@ def make_check_cfg(
     return cfg
 
 
+# 跳检会在删除前**真实落盘** .torrent 备份、重加成功后**真实删除**它(issue 26-09-21-1347 的
+# 崩溃窗口修复) —— 于是每条走跳检的用例都有真实文件系统副作用, state_file 必须落在临时目录
+# (留空会写到 CWD=仓库根: 既污染仓库, 又会被 tests/sidefx.py 判成越界删除)。未显式指定
+# state_file 的用例在这里自动领一份唯一文件名(唯一 = 同一用例内多个 manager 不会互相读到
+# 对方落盘的 state)。
+_TMP_STATE_DIR = tempfile.TemporaryDirectory(prefix="autoqb-checking-state-")
+
+
 def make_mgr(cfg, with_tq=False):
-    """构造 QbManager(可选任务队列)"""
+    """构造 QbManager(可选任务队列); 未指定 state_file 时自动分配一份临时 state 文件"""
+    if not cfg.state_file:
+        cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
     mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
     mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     if with_tq:
@@ -641,6 +655,84 @@ def test_checking_skip_readd_unconfirmed_backs_up():
         assert meta, f"未确认到种子也必须备份 .torrent: {mgr.state}"
         assert os.path.exists(meta["path"]), f"备份文件应真实落盘: {meta}"
         assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未成功跳检不应记录跨日去重"
+
+
+def test_checking_skip_backup_precedes_delete_and_cleared_on_success():
+    """测试: 备份**先于**删除落盘(崩溃安全), 重加确认成功后清理备份文件与元数据
+
+    跳检的删除是链上第一个不可逆步骤: 备份若只挂在重加的失败路径上, 那么「删除已生效 →
+    重加未被 qB 接受」这个缝隙(含删除确认轮询的约 5s)内崩溃/强杀, 种子从客户端消失、
+    .torrent 只在内存、state 无在途标记 —— 重启后无任何恢复凭据(issue 26-09-21-1347)。
+    故顺序必须是 备份 → 删除 → 重加 → 清理。
+
+    断言"先于删除"的办法: 在客户端的 torrents_delete 里快照一次备份文件的存在性 —— 这正是
+    崩溃窗口的起点, 只查最终结果(跳检成功)无法区分备份是之前写的还是之后补的。
+    """
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "pausedUP"}
+    t = make_target()
+
+    seen = {}
+    orig_delete = client.torrents_delete
+
+    def spy_delete(torrent_hashes=None, delete_files=False):
+        meta = mgr.state.get("skip_check_backup", {}).get("HASH123")
+        seen["meta"] = meta
+        seen["file_at_delete"] = bool(meta) and os.path.exists(meta["path"])
+        return orig_delete(torrent_hashes=torrent_hashes, delete_files=delete_files)
+
+    client.torrents_delete = spy_delete
+    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert handled, "前置: 跳检应完成"
+    assert seen.get("file_at_delete"), f"备份必须先于删除落盘(否则缝隙内崩溃无凭据): {seen}"
+    assert not mgr.state.get("skip_check_backup"), f"重加成功后应清理备份元数据: {mgr.state}"
+    assert not os.path.exists(seen["meta"]["path"]), "重加成功后应删除备份文件(不留孤儿)"
+
+
+def test_checking_skip_delete_unconfirmed_clears_backup():
+    """测试: 删除未生效(种子仍在客户端) -> 放弃跳检并清掉删除前的备份
+
+    种子没删掉时那份备份已无意义: 留着只剩一个孤儿 .torrent 文件 + 一条"待恢复"的误导性
+    元数据(state 会指引用户去恢复一个其实还在做种的种子)。
+    """
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "pausedUP"}  # 删除后仍在 -> 确认消失必然失败
+    t = make_target()
+
+    def noop_delete(torrent_hashes=None, delete_files=False):
+        client.calls.append(("delete", delete_files))  # 只记调用, 不真删
+
+    client.torrents_delete = noop_delete
+    with patch("auto_qb.rules.actions.skip_checking.time.sleep"):  # 10 × 0.5s 确认轮询
+        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert handled, "放弃跳检以 fail 返回(fail 视为已处理)"
+    assert not any(c[0] == "add" for c in client.calls), f"未确认消失前不得重加: {client.calls}"
+    backup_file = os.path.join(os.path.dirname(mgr.state_file), "skip-check-backup", "HASH123.torrent")
+    assert not os.path.exists(backup_file), "种子没丢 -> 备份应被清理"
+    assert not mgr.state.get("skip_check_backup"), f"不应留下误导性备份元数据: {mgr.state}"
+
+
+def test_checking_skip_backup_failure_aborts_before_delete():
+    """测试: 备份写不进去 -> 不删除(无损失), 直接 fail —— 备份是删除的前置条件"""
+    from auto_qb.rules.actions.skip_checking import SkipCheckingMixin
+
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    client.torrents["HASH123"] = {"state": "pausedUP"}
+    t = make_target()
+    with patch.object(SkipCheckingMixin, "_backup_torrent", side_effect=OSError("disk full")):
+        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert handled
+    assert [c[0] for c in client.calls] == ["export"], f"备份失败不得删除/重加: {client.calls}"
+    assert not mgr.state.get("skip_check_backup"), "备份失败不应留下元数据"
 
 
 def test_checking_piecehashes_same():

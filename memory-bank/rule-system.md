@@ -173,8 +173,10 @@ if (current_limit / 1024) % 2 == 1:   # 当前限速为奇数 KiB/s
 **阶段 3 执行**:
 - `torrents_delete(delete_files=False)` 删除种子 (失败 → fail, 无损失)
 - `_poll_until` 确认种子已从客户端消失 (10×0.5s); 未消失 → 放弃 (重加会撞"种子已存在", 种子仍在无损失)
-- `torrents_add(is_skip_checking=True, is_stopped=True)` 重加, 保留 save_path/category/tags/up_limit/dl_limit + 6 属性**直传** (0/负值有语义, 不得 `or None` 吞掉) + contentLayout; 失败 → .torrent 落盘 `skip-check-backup/` + 元数据**立即落盘** → fail 提示手动恢复
-- `_poll_until` 确认新种子出现 (3×0.3s), 未出现 → fail
+- 删除**之前** `.torrent` 落盘 `skip-check-backup/` + 元数据**立即落盘** (崩溃安全: 删除是第一个不可逆步骤, 备份挂在重加失败路径上时, 「删除已生效 → 重加未被接受」缝隙内崩溃会什么都不剩 —— issue 26-09-21-1347 已修); 备份写不进去则**不删除**直接 fail (无损失)
+- `torrents_add(is_skip_checking=True, is_stopped=True)` 重加, 保留 save_path/category/tags/up_limit/dl_limit + 6 属性**直传** (0/负值有语义, 不得 `or None` 吞掉) + contentLayout; 失败 → 保留备份 → fail 提示手动恢复
+- `_poll_until` 确认新种子出现 (3×0.3s), 未出现 → fail (保留备份)
+- 重加确认成功 → `_clear_backup` 清掉备份文件 + 元数据 (立即落盘); 删除未生效 (种子仍在) 同样清理
 - **`store.restore_torrent(torrent)` 恢复删除前快照记录** (tracker_conf/惰性缓存保留): `remove_torrent` 保留 `_known_hashes`, 重加的同 hash 种子不进 added 列表, 不恢复则永久未匹配 (生产 BUG 2026-09-06 已修)
 - 记录 `skip_check_day[hash]=today` (跨规则同日去重写入)
 

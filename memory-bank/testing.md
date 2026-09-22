@@ -6,7 +6,14 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1149 passed + 1 skipped (Windows 本地) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1152 passed + 1 skipped (Windows 本地, 覆盖率 TOTAL 90%, 7480 语句 / 622 未覆盖) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1149 → 1152(**+3**; 2026-09-22 issue 26-09-21-1347「跳检备份先于删除」守阵:
+#     `test_checking_skip_backup_precedes_delete_and_cleared_on_success`(在客户端的 torrents_delete
+#     里快照备份文件是否存在 —— 只查最终结果无法区分"之前写的"还是"之后补的")、
+#     `test_checking_skip_delete_unconfirmed_clears_backup`(删除未生效 -> 清备份, 不留孤儿)、
+#     `test_checking_skip_backup_failure_aborts_before_delete`(备份写不进 -> 不删除)。
+#     ⚠ 顺带把 `test_checking.py::make_mgr` 改成**未指定 state_file 时自动发一份临时 state 文件**:
+#     跳检现在每次都真实落盘/删除备份, 留空会写到 CWD=仓库根(污染仓库 + 被 tests/sidefx.py 判越界删除)。
 #   ↑ 1147 → 1149(**+2**; 2026-09-22 其四: B3 / D4 两段也从 `--self-test` 下沉 ——
 #     `test_safe_delete_rejects_bulk_over_declared`(B3 数量上限, **钉两侧**: 超 declared*2 要拒、
 #     恰好 2 倍不拒 —— 只钉一侧会被"更严格"或"更宽松"两头骗过) /

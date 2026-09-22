@@ -4,6 +4,7 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- 跳检备份时机修复 · issue 26-09-21-1347 (2026-09-22, 已置 `Fixed`): `.torrent` 备份原先只在**重加的两条失败分支**上落盘, 而删除是跳检链上第一个不可逆步骤 ⇒ 「删除已生效 → 重加未被 qB 接受」这个约 0.5~5.5s 的缝隙内崩溃/强杀, 种子从客户端消失、`data` 只在内存、state 无在途标记, 重启后无任何恢复凭据(需人工回站点重下 .torrent)。**修法 = 只挪调用时机**: 阶段 2 导出成功后立刻走现成的 `_backup_torrent`(落盘 + 元数据 + 立即 `save_state`), 并新增配对的 `_clear_backup` —— 重加确认成功后清理(文件 + 元数据)、删除未生效(种子仍在)也清理, 只有重加失败/崩溃才留下备份; 备份写不进去则**不删除**直接 fail(无损失)。**守阵 3 条**: ①在客户端的 `torrents_delete` 里快照备份文件是否存在(只查最终结果无法区分"之前写的"还是"之后补的") ②删除未生效 → 备份必须被清掉 ③备份失败 → 不得发出 delete。⚠ 顺带把 `test_checking.py::make_mgr` 改成**未指定 state_file 时自动发一份临时 state 文件** —— 跳检现在每次都真实落盘/删除备份, 留空会写到 CWD=仓库根(污染仓库 + 被 `tests/sidefx.py` 判成越界删除)。全量 **1142 → 1145 passed**; 知识库: `rule-system.md` / `config-reference.md` / `systemPatterns.md` / `docs/configuration.md` 已回写"备份先于删除"。报告 [issues/26-09-21-1347-bug-skip-checking-readd-no-backup-window.html](issues/26-09-21-1347-bug-skip-checking-readd-no-backup-window.html)。
 - WEB UI 设置页 **新版(Console Hub)** 落地 (2026-09-21, 与经典页并存): 样张 `resources/settings-page-templates/05-console-hub.html` 的原样复刻 —— 首页卡片总览(分段 LED 三态 + 等宽读数 + 按配置项名搜索直跳) → 二级页「块 → 行」两层级 + 行尾 `?` 就近说明浮窗; 站点/规则/限速/日志 四个专段。
   · **不替换经典页**: 两套共用同一棵 YAML 树与全部 `cfg*` 读写(零重复编辑逻辑), 由 `localStorage autoqb.settings.hub` 切换, 入口为经典页页头「新版界面」与新版页的「经典界面」。
   · 新增 `shared/config_hub.js`(`window.CONFIG_HUB` mixin + `window.HUB_FIELD_COMPONENT`, 后者继承 `ce-field` 全部读写仅换模板) + `shared/console_hub.css`(626 行, 两套 UI 共用)。
