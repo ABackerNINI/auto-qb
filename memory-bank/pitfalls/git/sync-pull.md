@@ -22,6 +22,8 @@
   ⑤`.md` 的冲突基本是"两边各追加一段", **取并集**(`tasks/_index.md` 是生成物, 直接重跑
   `python .agents/skills/memory-bank/scripts/gen_tasks_index.py`)⑥`git add` 标记已解决后 `git reset` 变回未暂存。
   行尾那条的处置: 把文件强制成纯 LF 即可(**别急着 stash**)。
+  (2026-09-22 复发 1 次, 新增更快的处置: **restore 到 HEAD 后仍可能有行尾幽灵 M, ff 仍被拒** ——
+  `git add <file>` + `git reset -q -- <file>` 刷新索引视图即可 ff, 实测有效; 内容真有改动时仍走上面的补丁流程。)
 
 ### 双 UI 镜像线: 首选"以一方模板为基线重建"再回填专有部分
 

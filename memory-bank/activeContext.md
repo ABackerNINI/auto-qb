@@ -11,36 +11,34 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 23:59 (**产出 activeContext 多 clone 冲突治理计划并立档, 待拍板实施** ——
-  根因: 多 clone 并行下 activeContext.md 为全体收尾必写热点, 「最后更新」滚动栈每会话重写头部同段,
-  并行状态塞进串行媒介 → develop 汇合高频冲突, 且本环境合并即高危(禁 rebase/stash; W1–W3 合并事故唯一冲突文件即 memory-bank/testing.md);
-  五案对比后推荐 A(按 clone 拆文件)+B(生成式聚合索引)+D(merge-tree 只读预检), W1–W4 波次且 W1–W3 须连续入库
-  → [计划](../docs/plans/26-09-22-2350-activecontext-conflict-plan.html) +
-  [档案](tasks/26-09-22-memory-bank-activecontext-conflict.md)(Pending)。
-  仅文档, 未改代码; 本轮合流两次落后(bc54156 / 7452f52)走「先同步远端、后提交」零 merge 提交;
-  干净代码态全量 1189 passed + 1 skipped(32.9s)。
-  其前一条状态: 2026-09-22 23:44 (**README 按用户视角重写: 亮点前置 + 删实现细节 + 删 Web UI 详情章(九轮)** ——
-  全文砍配置键名/机制枚举/工程数字/平台实现; Web UI 亮点 6 条居功能特性首小节; 密钥说明与 0.0.0.0 安全警告并入快速开始;
-  开发测试节去贡献者规范, 头部加写作约定注释。27KB→13.5KB, check_doc_links 机检过。
-  其前一条状态: 2026-09-22 23:47 (**软件版本管理方案已出, 待拍板** —— git 健在, 空白在软件版本/发布层:
-  本地与 gitee 0 tag / 无 CHANGELOG / 双源漂移 pyproject "0.1.0" vs __init__:18 "0.2.0";
-  [方案](../docs/plans/26-09-22-2318-version-management-plan.html) 推荐 0.x 语义化 + __init__ 单源(hatchling regex)
-  + 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag, 3 决策点待拍板, 阶段 0 不涉码;
-  [档案](tasks/26-09-22-deps-version-management.md); 合流按「先同步远端、后提交」零 merge 提交,
-  合流后树全量 1189 passed + 1 skipped in 27.63s。
-  其前一条状态: 2026-09-22 23:1x (**方案 C 目录分层归拢 W1-W4b 已全部入库, W5 文档回写进行中** ——
-  plan [docs/plans/26-09-22-2112-src-layout-restructure-plan.html](../docs/plans/26-09-22-2112-src-layout-restructure-plan.html):
-  W1 web/ + web_ui/ + web_runtime → webui/{server,static,runtime} (37d33bc);
-  W2 ui.py → tray/app.py (b459a26); W3 mixins/web_view+web_commands → webui/views+commands (9a428b1);
-  W4a 6 个基础设施 → infra/ (934da15); W4b 8 平铺+mixins/ → core/ (43593a9);
-  全部零行为变更, 全量 1189 passed + 1 skipped, ref 三处一致 (推送随本轮);
-  坑实录已记 [pitfalls/git/package-move-imports.md](pitfalls/git/package-move-imports.md);
-  其前一条状态: 2026-09-22 22:38 (**入池 feat issue: 跨组文件交叉紧急处置** ——
-  分组键不拦跨组交叉, 静默不可逆数据覆盖风险, 已入池 26-09-22-2221 (Open); 仅 issues 池文档, 未改代码。
-  (更早状态回查 tasks/_index.md 各档案的进度日志段。)
+**最后更新**: 2026-09-23 00:15 (**部分种子 HR 在线核实: 计划 v1.1 + BTSchool 实验脚本 scripts/ + --auto-cookie 全自动通道** ——
+  计划 v1.1: HR 页八字段确认入模 (HR 编号/名称/上传量/下载量/分享率/还需做种/完成/剩余达标),
+  (站点, tid) 主键跨站隔离 + infohash 回填 + hr_downloaded 防重下永久层
+  → [计划](../docs/plans/26-09-22-2204-partial-hr-site-verify-plan.html) ·
+  [档案](tasks/26-09-22-backend-partial-hr-verify.md);
+  本 clone fetch + merge --ff-only 同步两次 (49eacb8 → 2c5eaa5, 途经行尾幽灵 M 用 add+reset 刷新);
+  实验脚本 --auto-cookie 全自动 CDP 通道实测通过 (无头拉起→CDP 抓取→干净报错→清理零残留), 仅剩首次人工登录;
+  selftest 11/11 + 离线样张解析 1 行全字段正确 + 全量 1189 passed + 1 skipped (TOTAL 91%)。
+  其前一条状态: 2026-09-22 23:59 (**产出 activeContext 多 clone 冲突治理计划并立档, 待拍板实施** ——
+  根因: 多 clone 并行下 activeContext.md 为全体收尾必写热点; 推荐按 clone 拆文件 + 生成式聚合索引 + merge-tree 预检,
+  W1–W4 波次 → [计划](../docs/plans/26-09-22-2350-activecontext-conflict-plan.html) +
+  [档案](tasks/26-09-22-memory-bank-activecontext-conflict.md)(Pending)。仅文档, 未改代码。)
+  其前一条状态: 2026-09-22 23:47 (**软件版本管理方案已出, 待拍板** —— 0.x 语义化 + __init__ 单源 + 手工三步发版 +
+  Keep a Changelog + v0.2.0 基线 tag, 3 决策点 → [档案](tasks/26-09-22-deps-version-management.md)。)
+  其前一条状态: 2026-09-22 23:44 (**README 按用户视角重写** —— 亮点前置 + 删实现细节, 27KB→13.5KB, 机检过。)
+  其前一条状态: 2026-09-22 23:1x (**方案 C 目录分层归拢 W1-W4b 入库** —— webui/{server,static,runtime} / tray/ /
+  infra/ / core/ 四波零行为变更, 全量 1189 passed; 坑实录 [pitfalls/git/package-move-imports.md](pitfalls/git/package-move-imports.md)。)
+  其前一条状态: 2026-09-22 22:38 (**入池 feat issue: 跨组文件交叉紧急处置** —— 分组键不拦跨组交叉,
+  已入池 26-09-22-2221 (Open); 仅 issues 池文档。)
+  其前一条状态: 2026-09-22 22:19 / 21:58 (**README+configuration.md 文档同步 / 开工同步规则修正** ——
+  详单见入库提交 a61d0f4 / e50755d。)
 
 ## 正在进行
 
+- **🆕 部分种子 HR 在线核实 (2026-09-22)**: 计划 v1.1 待拍板 (开放问题 4 条: 首批站点 / 频度默认 /
+  unknown_policy / cookie 分期; 字段与防重下已确认入模); BTSchool 实验脚本已产出 (--auto-cookie
+  全自动 CDP 通道实测通过, 在线待首次登录验证);
+  [计划](../docs/plans/26-09-22-2204-partial-hr-site-verify-plan.html) · [档案](tasks/26-09-22-backend-partial-hr-verify.md)
 - **🆕 activeContext 多 clone 冲突治理 (2026-09-22, 计划已产出待拍板)**: 根因 = 并行会话状态塞进单文件串行媒介
   (全体收尾必写 + 「最后更新」滚动栈同段重写); 推荐按 clone 拆文件 + 生成式聚合索引 + merge-tree 预检,
   W1–W4 波次待实施, W1–W3 须连续入库

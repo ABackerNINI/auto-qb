@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>部分种子 HR 的在线核实 — 可行性分析与实施计划</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101418;
+    --paper: #151b21;
+    --ink: #dfe6ec;
+    --muted: #93a0ac;
+    --faint: #6b7783;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --accent: #5eb6c2;
+    --accent-dim: rgba(94, 182, 194, .13);
+    --code-bg: #0c1014;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: "Cascadia Mono", Consolas, "Sarasa Mono SC", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .canvas { max-width: 1180px; margin: 0 auto; padding: 0 32px 96px; }
+
+  /* ---------- 封面 ---------- */
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 42px; font-weight: 600; letter-spacing: -0.02em;
+    line-height: 1.15; max-width: 30em;
+  }
+  .dek {
+    margin-top: 18px; font-size: 16.5px; color: var(--muted);
+    max-width: 44rem; line-height: 1.65;
+  }
+  .meta-row {
+    margin-top: 32px; display: flex; flex-wrap: wrap; gap: 28px;
+    font-family: var(--mono); font-size: 12px; color: var(--faint);
+  }
+  .meta-row b { display: block; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: .06em; margin-bottom: 2px; }
+
+  /* ---------- 布局: 粘性目录 + 正文 ---------- */
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 56px; padding-top: 40px; }
+  aside nav { position: sticky; top: 32px; }
+  aside .toc-title {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 14px;
+  }
+  aside a {
+    display: block; color: var(--muted); text-decoration: none;
+    font-size: 13px; line-height: 1.5; padding: 4px 0 4px 14px;
+    border-left: 1px solid var(--line);
+  }
+  aside a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  main { min-width: 0; }
+
+  /* ---------- 章节 ---------- */
+  section { padding: 44px 0 8px; }
+  section + section { border-top: 1px solid var(--line); }
+  .sec-no {
+    font-family: var(--mono); font-size: 11px; color: var(--accent);
+    letter-spacing: .08em; margin-bottom: 8px;
+  }
+  h2 { font-size: 23px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 20px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  p { max-width: 42rem; margin-bottom: 12px; color: var(--ink); }
+  p.wide { max-width: none; }
+  .muted { color: var(--muted); }
+  small { font-size: 12.5px; }
+  ul, ol { max-width: 42rem; padding-left: 1.4em; margin-bottom: 12px; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--faint); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { font-weight: 560; color: #eef3f7; }
+  code {
+    font-family: var(--mono); font-size: .88em; background: var(--code-bg);
+    border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line);
+    padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; max-width: 46rem;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.65; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    text-align: left; padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  td {
+    font-size: 13.5px; line-height: 1.6; padding: 10px 12px 10px 0;
+    border-bottom: 1px solid var(--line); vertical-align: top;
+  }
+  td:first-child { color: #eef3f7; }
+  .ok { color: var(--accent); }
+  .no { color: #c98a7a; }
+
+  /* ---------- 结论块 / 提示块 ---------- */
+  .verdict {
+    border: 1px solid var(--line-strong); padding: 22px 26px;
+    margin: 8px 0 20px; max-width: 46rem;
+    border-left: 2px solid var(--accent);
+  }
+  .verdict .vt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+  }
+  .verdict p { margin-bottom: 8px; }
+  .verdict p:last-child { margin-bottom: 0; }
+  .note {
+    border: 1px solid var(--line); background: var(--paper);
+    padding: 16px 20px; margin: 14px 0 20px; max-width: 46rem;
+    font-size: 13.5px; color: var(--muted);
+  }
+  .note b { color: var(--ink); font-weight: 560; }
+
+  /* ---------- 数据流图 ---------- */
+  figure { margin: 20px 0 24px; }
+  figure svg { width: 100%; max-width: 880px; height: auto; display: block; }
+  figcaption { font-size: 12.5px; color: var(--faint); margin-top: 10px; max-width: 46rem; }
+
+  /* ---------- 里程碑 ---------- */
+  .mile { border-left: 1px solid var(--line-strong); margin: 20px 0 8px 8px; padding-left: 0; }
+  .mile .step { position: relative; padding: 0 0 30px 30px; }
+  .mile .step:last-child { padding-bottom: 6px; }
+  .mile .dot {
+    position: absolute; left: -11px; top: 0;
+    width: 21px; height: 21px; background: var(--bg);
+    border: 1px solid var(--line-strong); color: var(--accent);
+    font-family: var(--mono); font-size: 10.5px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mile .mt { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .mile .mt span { font-family: var(--mono); font-size: 11.5px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+  .mile .mb { font-size: 13.5px; color: var(--muted); max-width: 42rem; }
+  .mile .mb b { color: var(--ink); font-weight: 560; }
+
+  /* ---------- 脚注 / 尾注 ---------- */
+  .fn { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .fn p { font-size: 12px; color: var(--faint); max-width: none; margin-bottom: 4px; }
+  .colophon {
+    margin-top: 56px; border-top: 1px solid var(--line-strong); padding-top: 18px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.8;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    aside nav { position: static; margin-bottom: 24px; }
+    h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <!-- ============ 封面 ============ -->
+  <header class="cover">
+    <div class="kicker">auto-qb · 工程计划 · v1.1 待拍板</div>
+    <h1>部分种子 HR 的在线核实</h1>
+    <p class="dek">对「部分种子 HR」站点: 抓取 HR 种子统计页, 下载列表中的 .torrent 计算 infohash, 与本地做种库对账, 建立按 infohash 的 HR 索引 —— 全程限速、可配置、后台执行、复用浏览器 cookie。本文是可行性分析与分阶段实施计划。</p>
+    <div class="meta-row">
+      <div><b>日期</b>2026-09-22 22:04 · v1.1 修订 22:32</div>
+      <div><b>状态</b>待拍板 (开放问题 5 条)</div>
+      <div><b>影响面</b>站点对接层 · TorrentRecord · state_file</div>
+      <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- ============ 目录 ============ -->
+    <aside>
+      <nav>
+        <div class="toc-title">目录</div>
+        <a href="#s1">1 背景与现状模型</a>
+        <a href="#s2">2 可行性结论</a>
+        <a href="#s3">3 需求 → 技术含义</a>
+        <a href="#s4">4 HR 名单获取</a>
+        <a href="#s5">5 种子下载与对账</a>
+        <a href="#s6">6 Cookie 分层方案</a>
+        <a href="#s7">7 频控与配置设计</a>
+        <a href="#s8">8 后台执行与线程模型</a>
+        <a href="#s9">9 判定语义收口</a>
+        <a href="#s10">10 风险清单</a>
+        <a href="#s11">11 分阶段实施</a>
+        <a href="#s12">12 测试与验收</a>
+        <a href="#s13">13 开放问题</a>
+      </nav>
+    </aside>
+
+    <main>
+
+    <!-- ============ 1 背景 ============ -->
+    <section id="s1">
+      <div class="sec-no">§ 1</div>
+      <h2>背景与现状模型</h2>
+      <p>现有 HR 能力是<strong>站点级静态配置</strong>: <code>trackers.&lt;site&gt;.hr</code> 一旦配置 (<code>required_seeding_time</code> 必填, 另有 <code>required_share_ratio</code> / <code>extra_seeding_time</code> / <code>condition</code>), 该站点的<strong>所有</strong>种子一律按 HR 管束。判定逻辑收口在 <code>TorrentRecord</code> 的两个方法上:</p>
+      <ul>
+        <li><code>check_hr_condition()</code> — 是否「触发」HR (下载比例 / 下载量达到 <code>condition</code>, 或下载满); 兼作<strong>辅种排除</strong>依据;</li>
+        <li><code>check_hr_satisfied()</code> — 触发之后, 做种时长达标或分享率达标即视为满足。</li>
+      </ul>
+      <p>全部消费点都经这两个方法, 共四处: maintenance 打 HR 标签/分类 (<code>mixins/tags.py</code> <code>_add_hr_tag_or_category</code>)、WEB UI 的 HR 展示字段 (<code>mixins/web_view.py</code> <code>_hr_view_fields</code>)、规则条件 <code>hr</code> (<code>rules/conditions.py</code>, modes <code>condition-met / condition-not-met / satisfied</code>)、表达式变量 <code>tor.hr_condition_met</code> / <code>tor.hr_satisfied</code> (<code>rules/expr/env.py</code>)。</p>
+      <h3>问题: 部分种子 HR 站点上的两难</h3>
+      <p>部分站点实行<strong>部分种子 HR 策略</strong>: 同一站点的种子只有一部分受 HR 约束, 且下载时站点不提供可机读的逐种标记, 只有「HR 种子统计页」(通常列出当前账号下受 HR 约束的种子清单)。静态模型在这种站点上只有两个坏选项:</p>
+      <ul>
+        <li><strong>全站按 HR</strong> — 过度保护: 全部种子不辅种、全部打 HR 标签, 辅种价值被抹掉;</li>
+        <li><strong>不配 hr</strong> — 漏管: 真正触发 HR 的种子可能被规则正常删除或停做, 带来账号处分风险。</li>
+      </ul>
+      <p class="muted">本计划的目标: 让这类站点的 HR 身份逐种子在线核实, 其余站点行为完全不变。</p>
+    </section>
+
+    <!-- ============ 2 结论 ============ -->
+    <section id="s2">
+      <div class="sec-no">§ 2</div>
+      <h2>可行性结论</h2>
+      <div class="verdict">
+        <div class="vt">总评 · 可行</div>
+        <p><strong>技术路线成立</strong>: 抓取 → 下载 → 算 infohash → 对账 → 建索引, 每一步都落在项目既有架构里, 不需要引入新线程模型或新存储。</p>
+        <p><strong>判定收口是最大的红利</strong>: 四个消费点全部经 <code>TorrentRecord</code> 两个方法, 只改一处收口, 上层零改动。</p>
+        <p><strong>cookie 是最大的不确定项</strong>: 「直接复用日常浏览器 cookie」在 2026 年的 Chrome/Edge 上有硬性技术墙 (App-Bound Encryption + Chrome 136 CDP 限制, 见 §6, 均已核实), 需要分层方案与用户配合。</p>
+        <p><strong>账号安全是最大的运营风险</strong>: 访问频度必须默认极保守 + 全可配 + 熔断, 这恰是本需求的原始诉求, 设计上优先满足 (§7)。</p>
+      </div>
+      <div class="note"><b>边界判据</b> — 若某个站点其实提供了逐种 HR 标记 (详情页/搜索页图标) 或 JSON 接口, 则不需要本计划的「下载种子对比」重路线, adapter 直接读更便宜的来源即可。adapter 接口按「返回 HR 种子列表」抽象, 把这条路留开 (§4), M0 调研优先确认。</div>
+    </section>
+
+    <!-- ============ 3 需求映射 ============ -->
+    <section id="s3">
+      <div class="sec-no">§ 3</div>
+      <h2>需求 → 技术含义映射</h2>
+      <table>
+        <thead><tr><th style="width:26%">原始需求</th><th>技术含义</th><th style="width:26%">落点</th></tr></thead>
+        <tbody>
+          <tr><td>部分种子无法本地判别是否 HR, 需上站点查询</td><td>新增「站点在线核实」能力: 登录态抓取 HR 统计页 + 解析种子列表</td><td>站点 adapter (新模块族)</td></tr>
+          <tr><td>把种子下载下来对比</td><td>下载列表内 .torrent → 计算 infohash v1/v2 → 与 qB 做种库对账 → 按 infohash 建 HR 索引</td><td>bencode/infohash 模块 + <code>state.hr_index</code></td></tr>
+          <tr><td>下载速度不能太快</td><td>相邻两次 .torrent 下载强制最小间隔 + 抖动 + 失败退避</td><td>频控器 (§7)</td></tr>
+          <tr><td>次数需限制, 可配置</td><td>小时/天两级配额 + 单次刷新翻页上限, 全部配置键进校验</td><td>频控器 + validate_config</td></tr>
+          <tr><td>访问站点尽量在后台进行</td><td>不弹浏览器、不阻塞 2s 主循环; 取数移出主线程, 结果回主线程落盘</td><td>取数线程 + 令牌授权 (§8)</td></tr>
+          <tr><td>复用当前浏览器的 cookie</td><td>分层 cookie 方案: 手工导入起步 → 专用 profile + CDP 自动化; 日常浏览器直读已被技术墙挡死</td><td>§6 分层方案</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 4 HR 名单获取 ============ -->
+    <section id="s4">
+      <div class="sec-no">§ 4</div>
+      <h2>HR 名单获取 (统计页抓取)</h2>
+      <p>HR 统计页是账号维度的「我的 HR」清单, 天然就是需要核实的范围, <strong>不需要全站扫描</strong> —— 这是整个方案成本可控的前提。页面行字段 (2026-09-22 经用户确认的常见形态):</p>
+      <table>
+        <thead><tr><th style="width:30%">页面字段</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>HR 编号 (种子编号, tid)</td><td><strong>站点内唯一 id</strong>: 去重、下载 URL、索引主键都落在 (站点, tid) 上; <strong>跨站点绝不混用</strong></td></tr>
+          <tr><td>种子名称</td><td>展示与人工核对; 与本地种子的匹配仍以 infohash 为准 (名称不可靠)</td></tr>
+          <tr><td>上传量 / 下载量 / 分享率</td><td>站点侧权威流量快照: 展示与交叉核对用; 决策仍以 qB 本地实时值为准</td></tr>
+          <tr><td>还需做种时间</td><td>距要求做种时长还差多少: 进度参照 + WEB UI 展示</td></tr>
+          <tr><td>完成时间</td><td>语义 M0 与数值格式一并确认 (达标完成或下载完成); 已完成条目保留身份记录, 不从索引删除</td></tr>
+          <tr><td>剩余达标时间</td><td>距达标/超期的时间余量: 展示与将来规则条件的扩展点</td></tr>
+        </tbody>
+      </table>
+      <h3>Adapter 抽象</h3>
+      <p>每站点一个 adapter, 接口统一为「给定登录态 + 分页游标, 返回结构化 HR 种子列表」: <code>{torrent_id, name, listed_ts, hr_requirement?}</code> + 是否还有下一页。解析实现按站点隔离:</p>
+      <ul>
+        <li><strong>解析器选型</strong>: 首选标准库 <code>html.parser</code> 子类 (零新依赖, 行为可测); 仅当页面结构复杂到 stdlib 不堪用时, M0 再评估引入轻量解析器 (如 selectolax)。</li>
+        <li><strong>更便宜的来源优先</strong>: 若站点有 JSON 接口或逐种标记, adapter 换实现不换接口, 并跳过 §5 的 .torrent 下载成本。</li>
+      </ul>
+      <h3>改版防护</h3>
+      <p>解析结果做<strong>最小字段校验</strong>: HTTP 200 但解析出 0 条记录、或必填字段缺失率超阈 → 判定「页面可能改版」, 该站熔断 + WARNING (自动进 notify), <strong>绝不把空结果当真入库</strong> (空结果的错误语义是「该账号没有 HR 种子」, 二者必须可区分)。每站点样本 HTML 脱敏后进测试 fixture, 改版即测试红。</p>
+    </section>
+
+    <!-- ============ 5 种子下载与对账 ============ -->
+    <section id="s5">
+      <div class="sec-no">§ 5</div>
+      <h2>种子下载与 infohash 对账</h2>
+      <h3>下载</h3>
+      <p>HR 页列出的种子按站点 <code>torrent_url_pattern</code> 拼下载链接 (典型如 <code>download.php?id={id}</code>, PT 站通常还需 passkey 参数, 属配置的一部分)。请求带 cookie 与一致的 UA (§6)。文件落 <code>&lt;data_dir&gt;/hr-check/</code> (运行时数据目录, 已在 gitignore 范围内), 算完 infohash 即完成使命, 保留策略可配 (默认保留最近一份供排查)。</p>
+      <h3>infohash 计算 — 一个必须做对的细节</h3>
+      <p>v1 infohash = <code>sha1</code> over info dict 的 <strong>bencode 原始字节切片</strong>, v2 = <code>sha256</code> 同理。实现上不能「decode 再 re-encode」—— 重编码的键序/整数表示可能与原文件不一致, 算出的 infohash 就错了。正确姿势: 自写极小 bencode 解析器时<strong>同步记录 info dict 在原文件中的字节偏移</strong>, 对原切片做哈希。解析器预计 60 行上下, 纯函数, 强测试覆盖 (往返 + 已知 infohash 向量 + 畸形输入拒绝)。替代方案是引入 <code>bencodepy</code>, 代价是多一个依赖, M0 拍板; 倾向自写, 符合项目零依赖风格。</p>
+      <h3>与 qB 做种库对账</h3>
+      <ul>
+        <li>v1 种子: qB 的 <code>hash</code> 即 v1 infohash, <code>TorrentStore</code> 现有字段直接可对;</li>
+        <li>v2-only 种子: qB (≥ 4.4) 的 <code>hash</code> 字段本身即 v2 infohash, 同样直接可对;</li>
+        <li>hybrid 种子: 双算双配; <code>infohash_v2</code> 是否已在快照字段里, M0 核对 <code>_SNAPSHOT_FIELDS</code>, 不在则评估增量成本。</li>
+      </ul>
+      <h3>state 模型: (站点, tid) 为主键, infohash 是回填属性</h3>
+      <p><strong>种子编号 (tid) 站点内唯一, 跨站点不混用</strong>; 同一内容 (同一 infohash) 辅种到多个站点时, 各站 HR 身份彼此独立 —— 索引一律以 (站点, tid) 为主键, infohash 在下载算出后一次性回填:</p>
+<pre><code>hr_index[site][tid] = {              # 页面行的站点侧事实, 每次页面刷新只更新字段 (不触发下载)
+  tid, name,                         # HR 编号 + 种子名称
+  uploaded, downloaded, ratio,       # 站点侧流量 (观察/展示用, 决策不替代 qB 本地实时值)
+  need_seed_time, done_ts, remain,   # 还需做种时间 / 完成时间 / 剩余达标时间
+  infohash: "…",                     # 首次下载算出后回填, 之后不再下载
+  first_seen, last_seen              # 生命周期 (配合 index_retention 淘汰)
+}
+hr_downloaded[site][tid] = {ts, infohash, name}   # 已下载记录: 「永不重下」的持久凭据
+hr_dl_fails[site][tid] = {count, last_ts}         # 下载失败记账, 达上限后冷却</code></pre>
+      <p><strong>防重复下载三层</strong>: ① <code>hr_downloaded</code> 是廉价永久层 (每条仅 tid + infohash + ts + name) —— 页面条目后来消失、翻页遗漏、快照超期淘汰, 只要 (站点, tid) 在里面就<strong>绝不重下</strong>; ② <code>hr_index</code> 中已有 infohash 的条目, 刷新只更新页面字段; ③ 下载失败按 <code>max_download_retries</code> (默认 3) 计数, 达上限冷却, 不死循环烧配额。淘汰 (<code>index_retention</code>) 只作用于页面快照字段的陈旧条目, <strong>不触碰</strong> <code>hr_downloaded</code>。</p>
+      <p>判定反查: <code>TorrentRecord</code> 按 (站点, infohash) 查命中 —— infohash → tid 的反向映射在主循环加载 state 时于内存重建 (state 只存 tid 主键, 不存双份)。索引不只服务当前库: <strong>已做种种子命中 → 受 HR 管束; 辅种候选命中 → 排除辅种</strong>; 未命中走 <code>unknown_policy</code> (§9)。</p>
+    </section>
+
+    <!-- ============ 6 Cookie ============ -->
+    <section id="s6">
+      <div class="sec-no">§ 6</div>
+      <h2>Cookie 分层方案 (核心难点)</h2>
+      <p>「复用当前浏览器的 cookie」这个诉求, 在 2026 年的 Windows / Chromium 生态里有两条<strong>已核实的技术墙</strong>:</p>
+      <div class="note">
+        <b>事实 1 · App-Bound Encryption</b> — Chrome 自 v127 (2024-08) 起在 Windows 上将 cookie 解密密钥绑定到浏览器进程 (经 IElevator COM 服务授权), 其他进程从 cookie 库里拿到的只有密文; 传统的 DPAPI 用户级解密路线自此失效, 取证工业 (ElcomSoft, 2026-01) 与攻击面研究 (SpecterOps, 2025-08) 双侧确认。现存的「绕过」手法 (进程注入 / hollowing 冒充浏览器) 属窃密木马技术, 本项目<strong>不做</strong>。<span class="muted">[脚注 1]</span>
+      </div>
+      <div class="note">
+        <b>事实 2 · Chrome 136 的 CDP 限制</b> — Chrome 136 (2025-05) 起 <code>--remote-debugging-port</code> 在<strong>默认</strong> user-data-dir 上被直接忽略 (chromedriver v136 报错原文: 「DevTools remote debugging requires a non-default data directory」)。即: 经 CDP 附着日常浏览器读 cookie 的通道已死, 必须使用独立 <code>--user-data-dir</code>。<span class="muted">[脚注 2]</span>
+      </div>
+      <table>
+        <thead><tr><th style="width:17%">方案</th><th style="width:30%">原理</th><th>优点</th><th>缺点 / 约束</th><th style="width:13%">结论</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>A 手工导入</td><td>站点配置里直接填 cookie 串 (或 cookie 文件路径)</td>
+            <td>零依赖、零配合成本、最稳; M1 即可用</td><td>cookie 到期需手动更新</td>
+            <td class="ok">M1 落地</td>
+          </tr>
+          <tr>
+            <td>B 专用 profile + CDP</td><td>引导用户以独立 <code>--user-data-dir</code> 启动浏览器并登录 PT 站一次; auto-qb 经 DevTools 协议 (<code>Storage.getCookies</code>) 读取该 profile 的 cookie</td>
+            <td>一次登录长期复用; cookie 由浏览器自己解密, 是合法通道; Cloudflare 挑战可在该 profile 里人工过</td>
+            <td>需用户配合启动/登录; 是「专用浏览器」而非日常浏览器本体 (Chrome 136 限制所迫)</td>
+            <td class="ok">M4 落地 (推荐目标形态)</td>
+          </tr>
+          <tr>
+            <td>C 浏览器扩展</td><td>小扩展经 <code>chrome.cookies</code> API 把 PT 站 cookie 推给本地端点</td>
+            <td>真正复用日常浏览器</td><td>需开发、安装、维护扩展; 授权面更大</td><td class="muted">备选, 不排期</td>
+          </tr>
+          <tr>
+            <td>D 直读 cookie 库</td><td>读 Chrome/Edge cookie 文件并解密</td>
+            <td>—</td><td>Chrome/Edge 被 ABE 挡死 (事实 1), 绕过属恶意技术, <strong>不做</strong>; Firefox 的 cookies.sqlite 为明文 SQLite, 运行中复制文件后可读 —— 若用户日常用 Firefox 可作为 B 的平替, M0 验证</td>
+            <td class="no">否决 (Firefox 待验证)</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>配套细节</h3>
+      <ul>
+        <li><strong>UA 一致性</strong>: 默认使用与 cookie 同源的浏览器 UA, 避免浏览器 cookie + Python 默认 UA 的指纹不一致引起站点风控注意; 可按站点配置。</li>
+        <li><strong>passkey</strong>: 下载链接通常带 passkey 参数, 与 cookie 无关, 属站点配置的一部分。</li>
+        <li><strong>登录态检测与降级</strong>: 响应跳登录页 / 401 / 403 / Cloudflare 挑战页特征 → 判 cookie 失效或被挑战, 该站熔断 + WARNING 通知用户处理, <strong>不重试轰炸</strong>。方案 B 的 profile 平时不需要打开, 仅 (重新) 登录时人工使用, 自动化运行期间全程无窗口。</li>
+      </ul>
+    </section>
+
+    <!-- ============ 7 频控 ============ -->
+    <section id="s7">
+      <div class="sec-no">§ 7</div>
+      <h2>频控与配置设计</h2>
+      <p>原则对齐项目黄金法则: <strong>幂等</strong> (配额窗口进 state_file, 重启不重置, 重放不重复下载)、<strong>保守默认</strong> (总开关默认关, 配额默认紧)、<strong>fail-fast</strong> (所有新键进 <code>validate_config</code> 并同步 <code>config/schema/</code>, 带上下限 —— 呼应 26-09-22 刚入库的取值范围收紧案)。</p>
+      <h3>配置草案</h3>
+<pre><code>hr_check:                            # 全局 (新增顶层键, 默认整段缺省 = 功能关闭)
+  enabled: false                     # 总开关, 默认关 (黄金法则 2)
+  min_torrent_interval: "90S"        # 相邻两次 .torrent 下载最小间隔 (站点侧观感的核心)
+  max_torrents_per_hour: 20          # 小时配额 (全站合计)
+  max_torrents_per_day: 100          # 日配额 (全站合计)
+  request_timeout: "20S"             # 单请求超时 (connect 5s 固定, read 用本值)
+  failure_threshold: 3               # 连续失败 N 次 → 熔断
+  failure_cooldown: "12H"            # 熔断冷却时长
+  fetch_window: ""                   # 可选 "HH:MM-HH:MM", 仅该时段访问站点 (跨午夜, 同 notify 语义)
+  unknown_policy: hr                 # 索引未覆盖的种子按 hr (保守) | not-hr
+  index_retention: "30D"             # 页面快照条目保留时长 (已下载记录 hr_downloaded 不淘汰)
+  max_download_retries: 3            # 单个 .torrent 下载失败重试上限, 达到后冷却 (防烧配额)
+
+trackers:
+  &lt;site&gt;:
+    hr_check:                        # 站点级 (与既有 trackers.&lt;site&gt;.hr 并存)
+      mode: partial                  # all = 现状全站 HR | partial = 在线核实 | off
+      hr_page_url: "https://…/hr.php"
+      torrent_url_pattern: "https://…/download.php?id={id}&amp;passkey=…"
+      cookie: ""                     # 方案 A; 或 cookie_file 指向文件
+      user_agent: ""                 # 缺省 = 常见浏览器 UA
+      refresh_interval: "12H"        # HR 页抓取周期
+      max_pages_per_refresh: 5       # 单次刷新最多翻页数 (翻页本身也限频)</code></pre>
+      <h3>频控执行要点</h3>
+      <table>
+        <thead><tr><th style="width:24%">机制</th><th>设计</th></tr></thead>
+        <tbody>
+          <tr><td>间隔 + 抖动</td><td><code>min_torrent_interval</code> 基础上 ±25% 抖动, 避免机器人式节拍; HR 页翻页共用同一间隔但可独立更慢</td></tr>
+          <tr><td>两级配额</td><td>小时/天配额窗口记 state (<code>hour_window</code> / <code>day_counts</code>), 到顶即静默等下一窗口, 不报错</td></tr>
+          <tr><td>失败退避与熔断</td><td>429/5xx 按 Retry-After 或指数退避; 连续失败达阈值 → 该站熔断至 <code>failure_cooldown</code>, 期间零请求</td></tr>
+          <tr><td>去重</td><td>只下载「页面上有、索引里没有」的种子 id (state 去重); 页面刷新本身受 <code>refresh_interval</code> 限制</td></tr>
+          <tr><td>站点隔离</td><td>频控按站点独立计数; 一个站点熔断不占用、不拖累其它站点</td></tr>
+          <tr><td>落盘时机</td><td>频控写点与 <code>skip_check_day</code> 同级对待: 写点即时落盘 (重放代价最高), 其余靠周期落盘兜底</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 8 线程模型 ============ -->
+    <section id="s8">
+      <div class="sec-no">§ 8</div>
+      <h2>后台执行与线程模型</h2>
+      <p>硬约束 (taskqueue 既有约定): <strong>主循环线程是唯一修改任务队列与 state_file 的线程, 全程无锁; 任何新功能必须维持这个假设。</strong>站点请求耗时不可控 (1s ~ 超时 20s), 与 2s tick 放在一起必须二选一:</p>
+      <table>
+        <thead><tr><th style="width:20%">方案</th><th>做法</th><th style="width:34%">评价</th></tr></thead>
+        <tbody>
+          <tr><td>甲 · 主循环内联</td><td>全局任务 handler 里直接发 HTTP, 单轮预算 1 个请求 + 短超时</td><td>实现最简; 代价: 最坏情况该 tick 停 ~20s, 2s 节拍的系统会有可感卡顿, 同步线一起被拖住</td></tr>
+          <tr><td>乙 · 取数线程 + 令牌 (推荐)</td><td>常驻 fetcher 线程<strong>只做 HTTP + 解析</strong>; 主循环按频控发「许可令牌」(command queue), fetcher 回吐结果 (result queue); 主循环 hr_check 任务每 tick 收结果 → 写 state → 按频控决定是否发新令牌</td><td>真后台, 主循环零阻塞; 先例充分 (Web 线程 <code>post_command</code> / <code>consume_commands</code> 同款模式); fetcher 永不触碰 store / 队列 / state_file, 单一写线程假设完好</td></tr>
+        </tbody>
+      </table>
+      <figure>
+        <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+          <defs>
+            <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#6b7783"/>
+            </marker>
+          </defs>
+          <!-- 泳道背景 -->
+          <rect x="10" y="18" width="860" height="128" fill="none" stroke="rgba(255,255,255,.09)"/>
+          <rect x="10" y="172" width="860" height="120" fill="none" stroke="rgba(255,255,255,.09)"/>
+          <text x="24" y="40" fill="#6b7783" font-size="11">主循环线程 (唯一写者 · 每 tick)</text>
+          <text x="24" y="194" fill="#6b7783" font-size="11">取数线程 (fetcher · 只做 HTTP + 解析, 不触碰 store / 队列 / state)</text>
+          <!-- 主循环侧 -->
+          <rect x="30" y="54" width="180" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="120" y="82" fill="#dfe6ec" font-size="12" text-anchor="middle">hr_check 全局任务</text>
+          <text x="120" y="102" fill="#93a0ac" font-size="10.5" text-anchor="middle">收结果 / 发令牌 / 熔断</text>
+          <rect x="300" y="54" width="190" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="395" y="82" fill="#dfe6ec" font-size="12" text-anchor="middle">state_file</text>
+          <text x="395" y="102" fill="#93a0ac" font-size="10.5" text-anchor="middle">hr_index · 配额窗口 · 熔断</text>
+          <rect x="580" y="54" width="260" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="710" y="76" fill="#dfe6ec" font-size="12" text-anchor="middle">TorrentStore / qB 对账</text>
+          <text x="710" y="96" fill="#93a0ac" font-size="10.5" text-anchor="middle">四个 HR 消费点读同一收口</text>
+          <line x1="210" y1="76" x2="296" y2="76" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <line x1="490" y1="76" x2="576" y2="76" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <line x1="120" y1="124" x2="120" y2="216" stroke="#5eb6c2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr)"/>
+          <text x="130" y="176" fill="#5eb6c2" font-size="10.5">① 许可令牌 (按频控发放)</text>
+          <line x1="300" y1="230" x2="214" y2="230" stroke="#5eb6c2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr)"/>
+          <text x="240" y="250" fill="#5eb6c2" font-size="10.5" text-anchor="middle">② 解析结果</text>
+          <!-- fetcher 侧 -->
+          <rect x="30" y="206" width="180" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="120" y="234" fill="#dfe6ec" font-size="12" text-anchor="middle">fetcher 线程</text>
+          <text x="120" y="254" fill="#93a0ac" font-size="10.5" text-anchor="middle">httpx 同步客户端</text>
+          <line x1="214" y1="240" x2="420" y2="240" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <rect x="424" y="206" width="180" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="514" y="234" fill="#dfe6ec" font-size="12" text-anchor="middle">PT 站点</text>
+          <text x="514" y="254" fill="#93a0ac" font-size="10.5" text-anchor="middle">HR 统计页 / download.php</text>
+          <line x1="608" y1="240" x2="700" y2="240" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <rect x="704" y="206" width="140" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="774" y="234" fill="#dfe6ec" font-size="12" text-anchor="middle">.torrent → infohash</text>
+          <text x="774" y="254" fill="#93a0ac" font-size="10.5" text-anchor="middle">data_dir/hr-check/</text>
+          <line x1="774" y1="206" x2="774" y2="150" stroke="none"/>
+          <path d="M 774 206 L 774 160 L 710 160 L 710 128" fill="none" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+        </svg>
+        <figcaption>数据流: 主循环每 tick 消费 fetcher 结果并按频控发放许可令牌; 站点请求与 .torrent 解析全部发生在取数线程; 只有主循环写 state_file 与对账。dry-run 语义 = 主循环不发令牌、不写 state, 仅输出既有索引的对账预览。</figcaption>
+      </figure>
+      <p class="muted">补充: 取数线程内的解析 (bencode / HTML) 同样是纯 CPU 短任务, 放线程内可让主循环完全免于站点页面大小的波动。</p>
+    </section>
+
+    <!-- ============ 9 判定收口 ============ -->
+    <section id="s9">
+      <div class="sec-no">§ 9</div>
+      <h2>判定语义收口</h2>
+      <p><code>TorrentRecord</code> 新增「HR 身份解析」: 站点 <code>hr_check.mode = partial</code> 时, 先按 infohash 查 <code>state.hr_index[site]</code> 决定该种子是否受 HR 管束, 再进入既有 <code>check_hr_condition</code> / <code>check_hr_satisfied</code> 逻辑; 站点 <code>mode = all</code> 保持现状, <code>off</code> 则完全不按 HR 对待。</p>
+      <table>
+        <thead><tr><th style="width:34%">情形</th><th>判定</th></tr></thead>
+        <tbody>
+          <tr><td>索引命中 (页面列出过)</td><td>受 HR 管束, 参数用站点 hr 配置; 若 HR 页本身给出要求做种时长/分享率且 M0 确认可抓, 则<strong>逐种覆盖</strong>站点配置, 语义更准</td></tr>
+          <tr><td>索引未命中</td><td>按 <code>unknown_policy</code> (默认 <code>hr</code> 保守: 宁可多保护) —— 首次成功刷新之前整站按 HR, 行为与现状「全站 HR」一致, 无回退风险</td></tr>
+          <tr><td>索引过期 (超 <code>refresh_interval</code> × 2 未刷新)</td><td>视为未覆盖, 回落 <code>unknown_policy</code>; 恢复刷新后自动收敛</td></tr>
+          <tr><td>功能关闭 / 非 partial 站点</td><td>完全走现状逻辑, 行为零变化</td></tr>
+        </tbody>
+      </table>
+      <p>四个消费点 (打标 / 视图 / 规则条件 / 表达式) 与辅种排除<strong>全部零改动</strong> —— 它们本来就只调 <code>TorrentRecord</code> 两个方法。这是本方案在现有架构里改造面最小的根本原因。另注意 <code>check_hr_condition</code> 现有的「下载满即触发」兜底与「downloaded=0 纯辅种不触发」边界在 partial 站点下语义不变: 索引只回答「是否受管束」, 触发时机仍由下载量决定。</p>
+      <p>查询键是<strong>(站点, infohash)</strong>: 同一内容辅种到多个站点时, 各站 HR 身份彼此独立 (tid 同理不跨站混用) —— 站点维度来自种子既有的 <code>tracker_conf</code> 匹配, 无需新机制。页面给的进度字段 (还需做种时间 / 剩余达标时间 / 分享率) 是站点侧的定期快照, <strong>判定仍以 qB 本地实时值为准</strong> (与现有语义一致); 两套值天然互补 —— 本地值实时但会被重加清零, 站点值滞后但跨重加连续, 差异本身就是排查信息。</p>
+      <div class="note"><b>索引的反应式本性</b> — HR 页列出的是「当前账号已下载且受 HR 约束」的种子, 所以索引天然滞后: 刚下载的种子要等下一次页面刷新才现身。默认 <code>unknown_policy=hr</code> 正是为这段滞后兜底; 若用户接受把未核实种子当非 HR, 可配 <code>not-hr</code>, 但需自担漏管风险 (配置项描述里写明)。</div>
+    </section>
+
+    <!-- ============ 10 风险 ============ -->
+    <section id="s10">
+      <div class="sec-no">§ 10</div>
+      <h2>风险清单</h2>
+      <table>
+        <thead><tr><th style="width:22%">风险</th><th style="width:20%">影响</th><th>缓解</th></tr></thead>
+        <tbody>
+          <tr><td>访问频度不当 → 站点封号</td><td>账号</td><td>默认极保守配额 (90S 间隔 / 20 每时 / 100 每天) + 抖动 + 熔断 + fetch_window; dry-run 先行; 全部可配置收紧</td></tr>
+          <tr><td>cookie 失效 / 2FA / 被登出</td><td>抓取静默失败</td><td>登录态特征检测 (跳登录页 / 401 / 403) → 熔断 + WARNING 通知, 不重试轰炸</td></tr>
+          <tr><td>页面改版 → 解析崩坏</td><td>脏数据 / 空判断</td><td>最小字段校验; 「200 但 0 条」判改版告警, 不入库; adapter 隔离 + 脱敏 fixture 测试</td></tr>
+          <tr><td>Cloudflare 挑战</td><td>纯 HTTP 被挡</td><td>识别挑战页特征 → 停该站并提示走方案 B 的 profile 人工过; 不做自动对抗</td></tr>
+          <tr><td>v2 / hybrid infohash 错配</td><td>漏判</td><td>v1/v2 双算; 用原始字节切片算哈希 (§5); M0 核对 store 的 infohash_v2 字段可得性</td></tr>
+          <tr><td>误判方向: 误删 HR 种 vs 过度保护</td><td>账号 / 辅种收益</td><td><code>unknown_policy</code> 默认 <code>hr</code> (宁多保护); 索引过期回落保守侧; 删除类决策只认「确认受管束」才放宽</td></tr>
+          <tr><td>.torrent 下载的站点观感 (次数/流量)</td><td>账号</td><td>已下载记录 (<code>hr_downloaded</code>) 保证一种只下一次 + 失败重试上限冷却 + 配额硬顶; 文件落 data_dir 运行时区, 不进仓库</td></tr>
+          <tr><td>同内容跨站点误配</td><td>误判</td><td>索引与反查一律带站点维度 ((站点, tid) 主键 / (站点, infohash) 反查), tid 与 infohash 均不跨站混用</td></tr>
+          <tr><td>state_file 无界增长</td><td>运行时</td><td><code>index_retention</code> 只淘汰页面快照条目; 永久层 (<code>hr_downloaded</code>) 每条仅数十字节; 条目数超限告警</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 11 里程碑 ============ -->
+    <section id="s11">
+      <div class="sec-no">§ 11</div>
+      <h2>分阶段实施</h2>
+      <div class="mile">
+        <div class="step">
+          <div class="dot">M0</div>
+          <div class="mt">调研与拍板 <span>0.5 会话 · 依赖: 开放问题 5 条拍板</span></div>
+          <div class="mb">选定 1–2 个目标站点; 人工取 HR 统计页样本 HTML (脱敏进 fixture); 确认下载 URL / passkey 形态、各站字段完整度与数值格式 (页面行八字段已由用户确认, 待确认「完成时间」语义与时间/流量单位)、有无 JSON 或逐种标记; 拍板 bencode 自写 vs bencodepy、解析器选型、cookie 首发方案。<b>产出: 决策记录进任务档案。</b></div>
+        </div>
+        <div class="step">
+          <div class="dot">M1</div>
+          <div class="mt">核心管道 (dry-run) <span>1–2 会话</span></div>
+          <div class="mb">bencode + infohash 模块 (纯函数 + 测试向量); adapter 接口 + 首站实现; 抓取 → 下载 → 对账 → <code>state.hr_index</code> ((站点, tid) 主键 + infohash 回填 + <code>hr_downloaded</code> 已下载层); 全局任务接入 (<code>_create_global_tasks</code> 同款); dry-run 全链路报告 (命中 / 未命中 / 新增), <b>不联动任何 qB 动作</b>。测试: fixture 解析、infohash 向量、频控窗口 (fake clock)、state 幂等。</div>
+        </div>
+        <div class="step">
+          <div class="dot">M2</div>
+          <div class="mt">频控与后台化 <span>1 会话</span></div>
+          <div class="mb">取数线程 + 令牌授权落地 (§8 方案乙); min_interval / 小时 / 天配额 / 抖动 / 退避 / 熔断 / fetch_window; 断点续抓 (重启不重复下载、窗口不重置); notify 接入 (失效 / 熔断 / 改版三类事件)。</div>
+        </div>
+        <div class="step">
+          <div class="dot">M3</div>
+          <div class="mt">判定联动 <span>1 会话</span></div>
+          <div class="mb"><code>TorrentRecord</code> 收口改造 (§9); 四消费点 + 辅种排除回归; <code>unknown_policy</code> 生效; WEB UI 的 HR 展示补「来源: 站点核实 / 静态配置」标注 (可选)。真机 <code>--dry-run</code> 走查。</div>
+        </div>
+        <div class="step">
+          <div class="dot">M4</div>
+          <div class="mt">Cookie 自动化 <span>1 会话 · 可选先做 Firefox 路线</span></div>
+          <div class="mb">专用 profile + CDP 读 cookie (DevTools 协议, httpx 直连 HTTP/WS); 用户引导文档 (如何启动、登录、放哪); Firefox cookies.sqlite 路线视 M0 验证结果决定做否。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 12 测试与验收 ============ -->
+    <section id="s12">
+      <div class="sec-no">§ 12</div>
+      <h2>测试与验收</h2>
+      <h3>新增测试</h3>
+      <ul>
+        <li><strong>bencode/infohash</strong>: 往返编码、已知 infohash 向量 (真实种子样本)、原始字节切片 vs 重编码的差异用例 (钉死 §5 的坑)、畸形输入拒绝;</li>
+        <li><strong>adapter 解析</strong>: 脱敏页面 fixture (正常 / 改版 0 条 / 缺字段 / 登录页跳转 / CF 挑战页五类样本);</li>
+        <li><strong>频控器</strong>: fake clock 下间隔 / 小时 / 天配额 / 抖动边界 / 熔断进入与退出 / 站点隔离;</li>
+        <li><strong>state 幂等与防重下</strong>: 重启重放不重复下载、窗口不重置; <code>unknown_policy</code> 两态; 索引过期回落; 已下载记录幂等 (页面条目消失再出现不重下); 失败重试达上限冷却; (站点, tid) 主键与 (站点, infohash) 反查; 同 infohash 跨站点身份独立;</li>
+        <li><strong>dry-run 零副作用守阵</strong>: dry-run 下不发令牌、不写 state、不发站点请求;</li>
+        <li><strong>线程边界</strong>: fetcher 线程不触碰 store/队列/state 的静态守卫 (仿既有守阵风格)。</li>
+      </ul>
+      <h3>验收标准</h3>
+      <ul>
+        <li>全量 <code>uv run pytest tests -q</code> 通过 (基线单点 <code>memory-bank/testing/baseline.md</code>, 当前 1190 collected 稳态 1188 passed + 1 skipped + 1 deselected, TOTAL 91%), 新模块覆盖率不低于均值;</li>
+        <li><code>--dry-run</code> 全链路: 零站点请求、零 state 写入、报告可读;</li>
+        <li>限速实测: 日志时间戳间隔 ≥ <code>min_torrent_interval</code> (含抖动下限);</li>
+        <li>断网 / 坏 cookie / 页面改版三条失败路径: 不 crash、不写脏 state、熔断与通知按预期;</li>
+        <li>重启后: 配额窗口与已下载集合保持, 无重复下载。</li>
+      </ul>
+    </section>
+
+    <!-- ============ 13 开放问题 ============ -->
+    <section id="s13">
+      <div class="sec-no">§ 13</div>
+      <h2>开放问题 (待拍板)</h2>
+      <p class="muted">已解决 (2026-09-22 用户确认): HR 统计页行字段 = HR 编号 / 种子名称 / 上传量 / 下载量 / 分享率 / 还需做种时间 / 完成时间 / 剩余达标时间, tid 站点内唯一、跨站不混用 —— 已纳入 §4 / §5 / §9; 原开放问题「页面是否给出要求值」不再开放。</p>
+      <ol>
+        <li><strong>首批站点</strong>: 先接哪 1–2 个站? (决定 adapter 顺序与 fixture 来源)</li>
+        <li><strong>频度默认值</strong>: 90S 间隔 / 每小时 20 个 / 每天 100 个的默认配额是否符合你对目标站点容忍度的判断? (只会更紧, 不会更松)</li>
+        <li><strong>unknown_policy 默认值</strong>: 未核实种子默认按 HR 保守处理 (首刷前整站按 HR, 等同现状) —— 是否接受? 若要默认 <code>not-hr</code> 需明确自担漏管风险。</li>
+        <li><strong>cookie 首发路径</strong>: M1 先用手工导入 (配置里填 cookie), M4 再做专用 profile + CDP 自动化 —— 分期是否可接受? 若日常浏览器是 Firefox, 可把 cookies.sqlite 路线提前验证。</li>
+        <li><strong>进度字段的用途边界</strong>: 还需做种时间 / 剩余达标时间本期只做「展示 + 交叉核对」, 不进判定; 是否要顺带透出到 WEB UI HR 列或规则条件 (如剩余达标时间阈值)? 默认: 本期不做, 列为后续扩展。</li>
+      </ol>
+      <div class="fn">
+        <p>[1] The Hacker News, «Google Chrome Adds App-Bound Encryption to Protect Cookies», 2024-08-01 (thehackernews.com); SpecterOps, «Dough No! Revisiting Cookie Theft», 2025-08-27 (specterops.io); ElcomSoft blog, «Browser Forensics in 2026: App-Bound Encryption…», 2026-01-13 (blog.elcomsoft.com)。</p>
+        <p>[2] chromedriver v136 报错 «DevTools remote debugging requires a non-default data directory» (autoitscript.com 论坛, 2025-05-06); «Chrome DevTools MCP Setup 2026» (heyuan110.com, 2026-03-17); GitHub issue «remote-debugging-port is blocked on the default user-data-dir» (github.com, 2026-08)。</p>
+      </div>
+    </section>
+
+    <div class="colophon">
+      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v1.1 — 2026-09-22 22:04 (v1.1 修订 22:32: HR 页八字段入模 / (站点, tid) 主键与跨站隔离 / 防重复下载三层) · auto-qb-clone5<br>
+      依据: memory-bank 路由 (config-reference / systemPatterns / modules) 与源码锚点 (TorrentRecord · mixins/tags · mixins/web_view · rules/conditions · rules/expr/env · qbmanager._create_global_tasks); 外部事实两条已核实见脚注。
+    </div>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
