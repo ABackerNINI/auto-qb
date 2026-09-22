@@ -10,7 +10,8 @@
     python -m unittest discover -s <skill-dir>/scripts -p "test_*.py"
 
 覆盖: 占位符展开(四种 + 展开失败) / 闸门分类与执行(红 → STOP、--no-auto 不执行) /
-      配置体检(未知键与 timeout 非法 → STOP) / each_limit 上限。
+      配置体检(未知键与 timeout 非法 → STOP) / each_limit 上限 /
+      开工自检分类 classify_sync(齐平 / 落后 / 分叉 / 本地领先 / 离线 / 空仓库 / 远端对象缺失)。
 """
 
 from __future__ import annotations
@@ -159,6 +160,48 @@ class RunAutoGatesTest(unittest.TestCase):
         gates = [{"match": [""], "run": ["x"], "auto": True}]
         self.assertEqual(len(preflight.gates_for(["src/a.py"], gates)), 1)
         self.assertEqual(preflight.gates_for(["src/a.py"], [{"match": ["docs/"], "run": ["x"]}]), [])
+
+
+class ClassifySyncTest(unittest.TestCase):
+    """classify_sync 是 --check-started 的判定核心(纯函数) —— 七种状态一个不落。"""
+
+    R, H = "ff" * 20, "ab" * 20
+
+    def test_offline_is_warn_not_lockout(self):
+        level, msg = preflight.classify_sync("", self.H, None)
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("无法验证", msg)
+
+    def test_empty_repo_skips_compare(self):
+        level, msg = preflight.classify_sync(self.R, "", None)
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("空仓库", msg)
+
+    def test_in_sync_is_pass(self):
+        level, msg = preflight.classify_sync(self.R, self.R, None)
+        self.assertEqual(level, preflight.PASS)
+        self.assertIn("齐平", msg)
+
+    def test_behind_tells_how_to_sync(self):
+        level, msg = preflight.classify_sync(self.R, self.H, (3, 0))
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("落后 3", msg)
+        self.assertIn("--ff-only", msg)
+
+    def test_ahead_only_is_pass(self):
+        level, msg = preflight.classify_sync(self.R, self.H, (0, 2))
+        self.assertEqual(level, preflight.PASS)
+        self.assertIn("本地领先 2", msg)
+
+    def test_diverged_is_warn(self):
+        level, msg = preflight.classify_sync(self.R, self.H, (1, 2))
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("已分叉", msg)
+
+    def test_remote_object_missing_tells_refetch(self):
+        level, msg = preflight.classify_sync(self.R, self.H, None)
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("先 fetch", msg)
 
 
 SPECIALS = {"__name__", "__file__", "__doc__", "__package__", "__spec__", "__loader__", "__builtins__", "__debug__"}

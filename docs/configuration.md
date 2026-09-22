@@ -14,12 +14,12 @@ Web UI 表单与 YAML 键一一对应；两种方式可混用——Web UI 保存
 
 ## 通用约定与注意事项
 
-- 启动时全量检查配置（未知配置项 / 必填项 / 格式 / 规则引用），所有错误一次列全，不会带病运行；显式留空的配置项视为未配置、使用默认值
+- 启动时全量检查配置（未知配置项 / 必填项 / 格式 / 取值范围 / 规则引用），所有错误一次列全，不会带病运行；显式留空的配置项视为未配置、使用默认值
 - 标签 / 分类 / 路径匹配支持正则（`regex:` 前缀）与忽略大小写（`:ignore_case` 后缀）
 - Windows 路径请用 `/` 作分隔符（`\` 在正则中是转义符）；路径匹配默认区分大小写
 - 速度单位：`B/s` 或 `[KMG]iB/s`；文件大小单位：`B` 或 `[KMGT]iB`；时间单位：`S` 秒 / `M` 分 / `H` 时 / `D` 天（均不区分大小写）
 - 以横杠"-"开头的配置可以同时有多个
-- **运行时数据目录** `data_dir`（默认 `auto-qb-data/`）：状态文件、单实例锁、日志、跳检备份默认都存放在其下，多实例运行请为每个实例指定不同目录
+- **运行时数据目录** `data_dir`（默认 `auto-qb-data/`）：状态文件、单实例锁、日志、跳检备份默认都存放在其下，多实例运行请为每个实例指定不同目录；状态文件路径也可用 `state_file` 显式指定（优先于 data_dir 派生）
 
 ## 完整配置示例
 
@@ -36,19 +36,23 @@ config:
     # 运行时数据主目录: 状态/单实例锁/日志/跳检备份默认均存其下; 默认 auto-qb-data, 多实例请用不同路径
     data_dir: "auto-qb-data"
 
-    # 主循环检查间隔
+    # 主循环任务线检查间隔(0.5S~1H)
     main_tick: 2S
-    # 每个循环最大执行任务数(默认 20), 种子数多可适当增加
+    # 种子状态同步线间隔: 只拉 qB 增量刷新快照/事件, 不跑任务(1S~10M; 默认 1.5S, 与 qB 自带 WebUI 同量级)
+    sync_interval: 1.5S
+    # 状态周期落盘间隔: 断电/强杀等非优雅终止时最多丢失该窗口内的状态(默认 120S; 须 >= 30S, 0 = 关闭)
+    state_save_interval: 120S
+    # 每个循环最大执行任务数(1~500, 默认 20), 种子数多可适当增加
     max_tasks_per_tick: 50
 
-    # 内置任务检查间隔(从上一轮处理结束开始计时，不叠加)
+    # 内置任务检查间隔(1S~1D; 从上一轮处理结束开始计时，不叠加)
     interval: 60S
 
     # 日志设置(留空则默认落盘到 <data_dir>/logs/auto-qb.log)
     log:
         file: ""                 # 日志文件路径，默认 <data_dir>/logs/auto-qb.log
         level: INFO              # 日志等级
-        max_bytes: 10MiB         # 日志轮转大小
+        max_bytes: 10MiB         # 日志轮转大小(1MiB~1GiB)
         format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" # 日志格式
 
     # Web UI: 辅种管理 + 图形化配置编辑(默认关闭; 推荐的日常配置方式)
@@ -64,8 +68,9 @@ config:
         enabled: true              # 启用主动通知
         min_level: WARNING         # 通知最低日志级别: INFO / WARNING / ERROR
         quiet_hours: "23:00-08:00" # 免打扰时段(支持跨午夜)，时段内跳过发送；留空不启用
-        max_per_hour: 20           # 每小时通知上限，超出丢弃(防风暴)
-        dedup_window: 10M          # 相同通知的去重窗口，0 表示不去重
+        max_per_hour: 20           # 每小时通知上限(正整数且 ≤100)，超出丢弃(防风暴)
+        dedup_window: 10M          # 相同通知的去重窗口(≤24H)，0 表示不去重
+        # channels: [platform]     # 通知渠道，v1 仅平台原生通知(缺省即启用)
 
     # 删除种子类似(单词相同大小写不同)的标签
     remove_similar_tags: true
@@ -130,9 +135,9 @@ config:
             download_speed_limit: 10MiB/s          # 单种下载限速，0 指无限制
             hr:                                    # HR 规则(可覆盖全局设置)
                 required_seeding_time: 3D          # 要求做种时间
-                required_share_ratio: 2.0          # 要求分享率
+                required_share_ratio: 2.0          # 要求分享率(0~100)
                 extra_seeding_time: 12H            # 额外做种时间防止意外
-                condition: 80%                     # 触发 HR 的下载比例；也可用绝对值，如 10MiB
+                condition: 80%                     # 触发 HR 的下载比例(0 < 比例 ≤ 100)；也可用绝对量(须 >0)，如 10MiB
             # rules:                               # tracker 引用规则(完整示例见[#规则系统])
             #     - "@example_rules"               # 引用整个规则集
             #     - "@example_rules.rule1"         # 引用具体规则
@@ -150,7 +155,8 @@ config:
 ---
 config:
     global_speed_limit_curve:
-        interval: 10M
+        enabled: true            # 功能总开关(缺省 true); false = 整体停用
+        interval: 10M            # 曲线任务执行间隔(缺省回退主 interval)
         traffic_source:
             - traffic_monitor: # Traffic Monitor: 流量监控软件，可记录每天使用流量
                 dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat" # 路径若需使用\，则请使用\\
@@ -286,6 +292,8 @@ config:
 | `on_torrent_added`               | ✅ 已实现  | 新种子添加时事件触发；checking 等异步动作经 rule-event 断点续跑       |
 | `on_torrent_state_enum_changed`  | ✅ 已实现  | 种子 qB 状态枚举发生变化时事件触发                                   |
 | `on_torrent_deleted`             | ✅ 已实现  | 种子删除时触发（现场为删除前快照）；仅允许 `print_torrent_details`    |
+
+`interval` 触发的规则未显式配置 `interval` 时，默认每个主循环 tick 检查一次（等价 `0S`，既有行为）；显式配置时必须 > 0。
 
 ### 筛选条件（16 种）
 
