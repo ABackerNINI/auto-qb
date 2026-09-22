@@ -42,6 +42,7 @@ def _bump_recheck_fail(manager, hash: str) -> int:
         rec["date"] = today
         rec["count"] = 0
     rec["count"] += 1
+    manager.save_state()  # 冷却计数即时落盘: 丢了会对同一损坏文件多试 recheck(当日上限闸门失效一次); 上界 3 次/日/种, 频率天然低
     return rec["count"]
 
 

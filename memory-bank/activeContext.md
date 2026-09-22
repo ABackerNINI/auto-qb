@@ -11,18 +11,24 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 19:43 (**最新: issue 26-09-21-1347 热重载 L2 state 回滚 已修复** ——
-  `apply_new_config` L2 分支删除 `self.state = self._load_state()`(磁盘上只有上次退出旧版,
-  运行期重读 = 把 exec_history/skip_check_day/recheck_fails 等内存态回滚; docstring 本就承诺
-  「保留执行历史」, 删行后承诺兑现)。守阵 `test_apply_new_config_l2_preserves_runtime_state`
-  先红验(修前 1 failed, state 被换成磁盘旧版)后转绿; 全量 **1177 passed + 1 skipped**
-  (基线 1176 + 1 新守阵), TOTAL 90% 持平, sidefx 越界 0。issue 已 Fixed + 索引重建(Open bug 7→6);
-  client-and-state.md「热重载 L2 各一次」旧表述已更正; 基线单点已回写 testing/baseline.md。
-  计划: docs/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html。**未提交** —— 待用户明说「提交」。
+**最后更新**: 2026-09-22 19:50 (**issue 26-09-21-1347「后端状态仅优雅退出时落盘」已实施并入库** ——
+  新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
+  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘; 红验通过(修复打回 → 3 条守阵全红);
+  issue 状态 Fixed。→ [计划](../docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html))
+  其前一条状态: 2026-09-22 19:43 (**issue 26-09-21-1347 热重载 L2 state 回滚 已修复** ——
+  `apply_new_config` L2 分支删除 `self.state = self._load_state()`(运行期重读 = 把
+  exec_history/skip_check_day/recheck_fails 等内存态回滚; docstring 本就承诺「保留执行历史」)。
+  守阵 `test_apply_new_config_l2_preserves_runtime_state` 先红验(1 failed, state 被换成磁盘旧版)后转绿;
+  与上条周期落盘案同日先后入库, 合流后全量以 [baseline.md](testing/baseline.md) 为准。issue Fixed + 索引重建;
+  client-and-state.md「热重载 L2 各一次」旧表述已更正;
+  计划: docs/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html)
   其前一条状态: memory-bank 目录化重构 W0–W8 已全部入库(详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)) ——
 
 ## 正在进行
 
+- **🆕 后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
+  `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;
+  全量 1185 passed + 1 skipped, 红验通过; issue 已标 Fixed
 - **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 本地待提交)**:
   ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
   (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;

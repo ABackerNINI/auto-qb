@@ -31,10 +31,15 @@
 - test_rules_for_torrent_all_refs: 引用整个规则集 -> 绑定全部启用规则
 - test_rules_for_torrent_unresolved_refs: 引用规则不存在 -> 无绑定
 - test_rules_for_torrent_ignores_non_ref: tracker rules 非 @ 项(旧 ignore 标志)被忽略
+- test_maybe_flush_state_periodic: 周期落盘到期触发/间隔内不重复(状态丢失窗口压到 interval 内)
+- test_maybe_flush_state_disabled_zero: state_save_interval=0(关闭)恒不落盘 —— 旧行为逃生口
+- test_dirty_exit_keeps_exec_history_after_periodic_flush: 验收阵: 模拟脏退出(不走 finally), 周期落盘已把 exec_history 写上盘
+- test_dirty_exit_interval_zero_loses_runtime_state: 对照: 关闭周期落盘时脏退出丢运行期状态(0 = 旧行为)
 """
 import json
 import os
 import tempfile
+import time
 from unittest import mock
 
 import pytest
@@ -253,6 +258,63 @@ def test_save_state_error_swallowed():
         mgr.state = {"a": 1}
         with mock.patch("builtins.open", side_effect=OSError("disk full")):
             mgr.save_state()  # 不应抛异常
+
+
+def test_maybe_flush_state_periodic():
+    """周期落盘: 到期触发一次并顺延到下个周期; 间隔内不重复(丢失窗口 = interval + 1 tick)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.state_save_interval = 120.0
+        mgr._next_state_flush_at = 1000.0
+        with mock.patch.object(mgr, "save_state") as m_save:
+            mgr._maybe_flush_state(999.0)
+            assert m_save.call_count == 0, "未到期不落盘"
+            mgr._maybe_flush_state(1000.0)
+            assert m_save.call_count == 1, "到期落盘"
+            mgr._maybe_flush_state(1119.0)
+            assert m_save.call_count == 1, "间隔内不重复"
+            mgr._maybe_flush_state(1120.0)
+            assert m_save.call_count == 2, "新周期到期再落盘"
+
+
+def test_maybe_flush_state_disabled_zero():
+    """state_save_interval=0(关闭)恒不落盘 —— 旧行为(仅优雅退出落盘)的逃生口不被误改"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.state_save_interval = 0.0
+        mgr._next_state_flush_at = 0.0
+        with mock.patch.object(mgr, "save_state") as m_save:
+            mgr._maybe_flush_state(10**12)
+            assert m_save.call_count == 0, "关闭时即使远超任何到期点也不落盘"
+
+
+def test_dirty_exit_keeps_exec_history_after_periodic_flush():
+    """验收阵(issue 26-09-21-1347): 模拟脏退出 —— 记录执行历史 → 周期落盘触发 → 实例被弃
+
+    (不走 finally, 等价 taskkill /F) → 新实例重启加载, exec_history 必须已在盘上。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "state.json")
+        mgr = make_manager(path)
+        mgr.config.state_save_interval = 30.0
+        mgr._next_state_flush_at = 0.0  # 立即到期
+        mgr.record_execution("example_rules.add_site_tag", "HASH1")
+        mgr._maybe_flush_state(time.time())  # 真实写盘(非 mock)
+        mgr2 = make_manager(path)  # 新实例 = 重启; 旧实例的 finally 从未执行
+        assert mgr2.state["exec_history"]["example_rules.add_site_tag:HASH1"], "周期落盘后脏退出不得丢执行历史"
+
+
+def test_dirty_exit_interval_zero_loses_runtime_state():
+    """对照: interval=0(关闭周期落盘)时同样的脏退出丢运行期状态 —— 钉住 0 的语义 = 旧行为"""
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "state.json")
+        mgr = make_manager(path)
+        mgr.config.state_save_interval = 0.0
+        mgr._next_state_flush_at = 0.0
+        mgr.record_execution("example_rules.add_site_tag", "HASH1")
+        mgr._maybe_flush_state(time.time())  # 关闭: no-op
+        mgr2 = make_manager(path)
+        assert "exec_history" not in mgr2.state, "关闭周期落盘时运行期状态不上盘(旧行为)"
 
 
 def test_record_and_get_exec_record():

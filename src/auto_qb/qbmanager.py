@@ -181,6 +181,8 @@ class QbManager(
         # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)
         os.makedirs(os.path.dirname(self.state_file) or ".", exist_ok=True)
         self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
+        # 周期落盘计时器(见 RuleEngineMixin._maybe_flush_state): run() 加载状态后重置为首个到期点
+        self._next_state_flush_at: float = 0.0
         # 规则结构初始化(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
@@ -332,7 +334,8 @@ class QbManager(
                     return
                 logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
             self.state = self._load_state()
-            # 规则加载 + 全局任务创建仅运行模式需要(--export-yaml 等只导出模式在构造后直接退出, 跳过)
+            # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
+            self._next_state_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
             self._load_rules()
             self._create_global_tasks()
 
@@ -406,6 +409,12 @@ class QbManager(
                         _flushed = True
                         if _t_line:
                             self.web.resync_elapsed_ms(_t_line)
+                        # 周期落盘(非优雅终止的状态丢失窗口, issue 26-09-21-1347): 到期则写盘一次。
+                        # save_state 原本仅优雅退出可达 —— taskkill/断电/崩溃不走 finally, 运行期
+                        # 状态全丢; 间隔 state_save_interval(0=关闭), dry-run 不落盘(与退出路径
+                        # `if not dry_run` 口径一致), 暂停分支已在上面 continue(暂停期无变更)。
+                        if not dry_run:
+                            self._maybe_flush_state(time.time())
                         # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
                         # 有 TRUTH_PUSH_CAP_MS 兜底, 不会无限空转。
                         if _wait_truth and getattr(self.web, "truth_pending", None):
@@ -464,7 +473,7 @@ class QbManager(
     def apply_new_config(self, config: Config) -> dict:
         """应用新配置(热重载, 主循环线程经命令队列调用): 按变更影响分级执行
 
-        - L0 即时生效(仅替换 Config 对象): main_tick/max_tasks_per_tick/remove_similar_tags/
+        - L0 即时生效(仅替换 Config 对象): main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/
           skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
           limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
         - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器

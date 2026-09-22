@@ -9,6 +9,7 @@ KNOWN_CONFIG_KEYS = {
     "qbittorrent",
     "main_tick",
     "sync_interval",
+    "state_save_interval",
     "max_tasks_per_tick",
     "interval",
     "data_dir",
@@ -64,6 +65,24 @@ def _try_time(value, where: str, errors: List[str], positive: bool = False) -> N
         return
     if positive and seconds <= 0:
         errors.append(f"{where}: 必须为正时间: {value}")
+
+
+# state_save_interval 下限: 状态的真实变更频率是小时~天级, 更激进的间隔只会白白放大磁盘
+# 写入, 换不来等比例的有效丢失窗口(issue 26-09-21-1347 拍板: 防误配置写放大)。0 = 关闭
+# 周期落盘, 不受限。
+STATE_SAVE_INTERVAL_MIN = 30.0
+
+
+def _validate_state_save_interval(value, errors: List[str]) -> None:
+    """state_save_interval: 合法时间格式, 且为 0(=关闭)或 >= 30s(防误配置写放大)"""
+    where = "config.state_save_interval"
+    try:
+        seconds = parse_time(value)
+    except ValueError as e:
+        errors.append(f"{where}: {e}")
+        return
+    if seconds != 0 and seconds < STATE_SAVE_INTERVAL_MIN:
+        errors.append(f"{where}: 须为 0(关闭)或 >= {STATE_SAVE_INTERVAL_MIN:g}S(防误配置写放大): {value}")
 
 
 def _check_str_list(value, where: str, errors: List[str]) -> bool:
@@ -131,6 +150,8 @@ def validate_config(data) -> List[str]:
         _try_time(cfg["main_tick"], "config.main_tick", errors, positive=True)
     if "sync_interval" in cfg:
         _try_time(cfg["sync_interval"], "config.sync_interval", errors, positive=True)
+    if "state_save_interval" in cfg:
+        _validate_state_save_interval(cfg["state_save_interval"], errors)
     if "max_tasks_per_tick" in cfg:
         _try(int, cfg["max_tasks_per_tick"], "config.max_tasks_per_tick(须为整数)", errors)
         # 范围必须显式校验: TaskQueue._pop_due 把 `max_tasks <= 0` 当作"不限量"(内部语义),

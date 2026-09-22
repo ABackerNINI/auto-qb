@@ -183,7 +183,7 @@ class SpeedCurveMixin:
         return REQUEUE
 
     def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
-        """记录当日曲线计算结果到 state(供调试; 落盘由程序退出时统一 save_state)"""
+        """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)"""
         self.state.setdefault("speed_limit_curve", {})[today.isoformat()] = {
             "upload_kib": upload_kib,
             "download_kib": download_kib,

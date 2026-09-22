@@ -619,10 +619,7 @@ class FakeTorrent:
         与真实现一致: 惰性缓存槽(下划线开头)与 tracker_conf 不进导出(后者是配置对象, 不可 JSON 化)。
         """
         skip = {"tor", "tracker_conf"}
-        return {
-            k: v for k, v in vars(self).items()
-            if not k.startswith("_") and k not in skip and not callable(v)
-        }
+        return {k: v for k, v in vars(self).items() if not k.startswith("_") and k not in skip and not callable(v)}
 
     @property
     def state_enum(self):
@@ -789,6 +786,7 @@ class FakeConfig:
     interval = 60  # QbManager 主刷新任务 interval(测试不触发 refresh)
     main_tick = 1.0
     sync_interval = 1.5  # 同步线节拍(状态刷新); 与 Config 默认一致
+    state_save_interval = 120.0  # 状态周期落盘间隔(秒); 与 Config 默认一致(0=关闭周期落盘)
     max_tasks_per_tick = 20
     logging = LoggingConfig(
         level="WARNING", file="", max_bytes="10MiB", format="%(asctime)s [%(levelname)s] %(message)s"
