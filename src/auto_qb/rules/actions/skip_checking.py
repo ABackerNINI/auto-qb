@@ -205,6 +205,11 @@ class SkipCheckingMixin:
         ctx.manager.store.restore_torrent(torrent)
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何规则的 checking 都不再跳检)
         ctx.manager.state.setdefault("skip_check_day", {})[ctx.hash] = date.today().isoformat()
+        # 去重标记即时落盘: 这是"今天已跳检过"的唯一凭据, 只靠退出/周期落盘的话, 跳检后
+        # 崩溃会重复跳检(PT 本地统计再丢一次)。跳检是天级低频事件, 即时写一次代价可忽略 ——
+        # 与备份路径的即时落盘同口径(issue 26-09-21-1347)。注意不能指望下面的 _clear_backup
+        # 顺带落盘: 备份元数据为空时它提前 return, 不经过 save_state。
+        ctx.manager.save_state()
         # 种子已回到客户端: 删除前那份备份完成使命, 清掉(否则每次跳检都留一个孤儿文件)
         self._clear_backup(ctx.manager, ctx.hash)
         return None

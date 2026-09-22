@@ -29,6 +29,7 @@
 - test_handle_maintenance_tor_missing: 种子不存在 -> False(任务消亡)
 - test_run_save_state_on_exit: run 退出后保存状态文件且为有效 JSON dict
 - test_run_dry_run_no_save: dry_run=True 退出后不写状态文件
+- test_periodic_flush_is_wired_in_run_loop: 接线守阵——周期落盘必须挂在主循环(not dry_run 门内), run() 加载状态后重置到期点
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
@@ -543,6 +544,23 @@ def test_run_dry_run_no_save():
         with mock.patch("auto_qb.qbmanager.time.sleep"):
             mgr.run(dry_run=True)
         assert not os.path.exists(state_file), "dry_run 不应写状态文件"
+
+
+def test_periodic_flush_is_wired_in_run_loop():
+    """接线守阵: 周期落盘必须挂在主循环正常路径(not dry_run 门内), 到期点在加载状态后重置
+
+    _maybe_flush_state 只在主循环线程调用是单一写线程约束的一部分; dry_run 门保证观察
+    模式零磁盘写入(与退出路径 `if not dry_run` 口径一致); 启动即到期会造成无意义重写。
+    """
+    import inspect
+
+    from auto_qb.qbmanager import QbManager
+
+    src = inspect.getsource(QbManager.run)
+    i_hook = src.find("_maybe_flush_state")
+    assert i_hook >= 0, "run() 必须接线周期落盘"
+    assert "not dry_run" in src[max(0, i_hook - 200):i_hook], "周期落盘必须在 not dry_run 门内(dry-run 零磁盘写入)"
+    assert "self._next_state_flush_at = time.time()" in src, "run() 加载状态后必须重置周期落盘到期点"
 
 
 def test_tick_refresh_error_continues():

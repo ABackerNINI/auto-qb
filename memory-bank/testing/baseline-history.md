@@ -6,6 +6,13 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 1176 → 1185(**+9**; 2026-09-22 **状态周期落盘 · issue 26-09-21-1347**:
+  新键 `state_save_interval`(默认 120s / 配置端下限 30s 防误配置写放大 / 0=关闭) +
+  主循环周期落盘钩子 + `skip_check_day`/`recheck_fails` 写点即时落盘。守阵 9 条:
+  周期触发/关闭逃生口/脏退出验收阵与 interval=0 对照/跳检标记即时落盘/冷却计数即时落盘/
+  配置校验/L0 分级/主循环接线。红验: 运行期把 `_maybe_flush_state` 与 `save_state` 打回 no-op,
+  3 条行为守阵全红(KeyError/FileNotFoundError = 状态从未上盘); 还原全绿。
+  全量 1185 passed + 1 skipped, sidefx 越界 0)。
 - ↑ 1175 → 1176(**+1**; 2026-09-22 同任务 **W8 收尾 · 重写 `memory-bank.instructions.md`**:
   新增 `test_memory_bank_instructions_match_current_structure`。
   为什么值得单独钉: 该文件 `applyTo: memory-bank/**`, **只在编辑 memory-bank 时注入** ——

@@ -2,7 +2,7 @@
 
 级别模型(热重载分层应用, 见 memory-bank/modules.md 与计划):
 - L0 即时生效: 运行时每轮/每次执行时动态读取, 替换 Config 对象字段即生效
-  (main_tick/max_tasks_per_tick/remove_similar_tags/skip_checking_tag/grouping.*/add_episode_tags.*/)
+  (main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/skip_checking_tag/grouping.*/add_episode_tags.*/)
 - L1 轻量应用: 需毫秒级副动作(logging 重挂/通知 handler 重挂/qbittorrent 重连/web 重启)
 - L2 结构重建: 读取时机在创建/绑定时固化(规则/任务/tracker 匹配), 需重建任务队列与规则
   并对全部记录重匹配 tracker(store 记录/分组/执行历史保留)
@@ -25,6 +25,7 @@ SECTION_LEVELS = {
     # L0: 运行时动态读取
     "main_tick": LEVEL_L0,
     "sync_interval": LEVEL_L0,  # 主循环每轮读取的同步节拍阈值, 改值下一轮即生效
+    "state_save_interval": LEVEL_L0,  # 主循环每轮到期检查时读取, 改值下一轮即生效
     "max_tasks_per_tick": LEVEL_L0,
     "remove_similar_tags": LEVEL_L0,
     "skip_checking_tag": LEVEL_L0,

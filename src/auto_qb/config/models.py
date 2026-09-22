@@ -187,6 +187,8 @@ class Config:
     sync_interval: float = 1.5  # 种子状态同步间隔(秒): 只刷新快照, 不跑任务 —— 与 qB 自带 WebUI(1500ms)同量级
     max_tasks_per_tick: int = 20
 
+    state_save_interval: float = 120.0  # 状态周期落盘间隔(秒): 非优雅终止时的状态丢失窗口; 0=关闭(仅优雅退出落盘); 下限 30s 防误配置写放大
+
     interval: float = 60.0  # 默认任务间隔: 种子列表刷新/种子级内置功能任务的默认 interval, 秒
 
     data_dir: str = "auto-qb-data"  # 运行时数据主目录: state/锁/日志/跳检备份默认均派生其下(显式配 state_file/log.file 优先)
