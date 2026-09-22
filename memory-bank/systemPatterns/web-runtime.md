@@ -1,6 +1,7 @@
 # WEB UI 线程模型
 
 > 摘要: `web.py` 的线程模型 —— 主循环与 Web 线程的边界与协作。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: WEB UI 线程, web.py, 线程模型, 主循环解耦
 
 ## WEB UI 线程模型 (web.py, 2026-09-13)

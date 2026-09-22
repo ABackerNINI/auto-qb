@@ -1,6 +1,7 @@
 # 主循环与每轮数据流
 
 > 摘要: 主循环 `qbmanager.py` 的节拍、分层与每轮 `_refresh_torrents` 的数据流。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: 主循环, tick, 节拍, 数据流, refresh_torrents, 分层
 
 ## 主循环 (qbmanager.py)

@@ -1,6 +1,7 @@
 # WEB UI 图形化配置编辑
 
 > 摘要: `web.py` + `config/schema.py` + `config/writer.py` 三件套的分工。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: 图形化配置, 设置页, schema, writer, 配置树
 
 ## WEB UI 图形化配置编辑 (web.py + config/schema.py + config/writer.py, 2026-09-14)

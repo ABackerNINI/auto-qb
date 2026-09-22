@@ -1,6 +1,7 @@
 # rules/ + tests/ + 依赖方向
 
 > 摘要: 规则插件框架、测试对应关系与单向依赖图。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: rules, 插件框架, tests, 依赖方向, 单向, 无环
 
 ## rules/ (插件框架)

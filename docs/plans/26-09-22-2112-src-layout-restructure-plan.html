@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>src/auto_qb 目录结构优化 · 分层归拢计划（方案 C 定稿）</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0f0f0f; --fg:#ececec; --muted:#8f8f8f; --faint:#6a6a6a;
+    --hair:rgba(255,255,255,.09); --surface:rgba(255,255,255,.03);
+    --accent:#7fb5a0;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono","JetBrains Mono",Consolas,"Noto Sans Mono CJK SC",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg)}
+  body{font-family:var(--sans);font-size:15px;line-height:1.65;font-weight:400;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1160px;margin:0 auto;padding:88px 40px 120px;
+        display:grid;grid-template-columns:212px minmax(0,1fr);gap:64px}
+  header{grid-column:1 / -1;max-width:780px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--faint);margin:0 0 22px}
+  h1{font-size:40px;line-height:1.14;letter-spacing:-.02em;font-weight:600;margin:0 0 20px}
+  .lede{font-size:17px;line-height:1.6;color:#c9c9c9;margin:0 0 28px;max-width:700px}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;font-family:var(--mono);font-size:11.5px;
+        color:var(--faint);letter-spacing:.02em;padding-top:18px;border-top:1px solid var(--hair)}
+  .meta span b{font-weight:400;color:var(--muted)}
+  nav.toc{position:sticky;top:56px;align-self:start;font-family:var(--mono);font-size:12px}
+  nav.toc p{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 9px;color:var(--faint)}
+  nav.toc a{color:var(--muted);text-decoration:none;border:0}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .n{color:var(--faint);margin-right:8px}
+  main{max-width:780px;min-width:0}
+  section{margin:0 0 74px;scroll-margin-top:56px}
+  h2{font-size:23px;font-weight:600;letter-spacing:-.01em;line-height:1.25;margin:0 0 6px}
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.08em;
+        display:block;margin-bottom:12px;font-weight:400}
+  .rule{height:1px;background:var(--hair);width:88px;margin:20px 0 26px}
+  h3{font-size:15.5px;font-weight:600;margin:34px 0 10px;letter-spacing:-.005em}
+  p{margin:0 0 16px}
+  p,li{max-width:70ch}
+  ul,ol{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 8px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface);
+       border:1px solid var(--hair);border-radius:3px;padding:1px 5px;color:#dedede}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.62;background:var(--surface);
+      border:1px solid var(--hair);border-radius:3px;padding:16px 18px;overflow-x:auto;
+      margin:0 0 20px;color:#d6d6d6;white-space:pre}
+  pre .c{color:var(--faint)}
+  pre .a{color:var(--accent)}
+  pre .d{color:#c98f8f}
+  table{width:100%;border-collapse:collapse;margin:6px 0 22px;font-size:13.5px}
+  th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+     text-transform:uppercase;color:var(--faint);font-weight:400;
+     padding:0 14px 9px 0;border-bottom:1px solid var(--hair)}
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--hair);vertical-align:top;color:#dcdcdc}
+  td:first-child{color:var(--fg)}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px}
+  .yes{color:var(--accent)}
+  .no{color:var(--muted)}
+  .note{border-left:1px solid var(--hair);padding:2px 0 2px 18px;margin:0 0 22px;
+        color:var(--muted);font-size:13.5px;line-height:1.6}
+  footer{grid-column:1 / -1;border-top:1px solid var(--hair);padding-top:22px;
+         font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.02em;max-width:780px}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,181,160,.35)}
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr;gap:0;padding:56px 24px 80px}
+    nav.toc{position:static;margin-bottom:48px}
+    h1{font-size:32px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">修改计划 · architecture · 2026-09-22 · v2 定稿</p>
+  <h1>分层归拢 —— src/auto_qb 目录结构优化</h1>
+  <p class="lede">现状是: WEB 表现层的 Python 代码散布在 <strong>5 处</strong> —— 托盘 UI (<code>ui.py</code>)、表现层门面
+     (<code>web_runtime.py</code>) 直接躺在根目录; WEB 视图构建器与命令处理器 (<code>web_view.py</code> 645 行 +
+     <code>web_commands.py</code> 545 行) 寄生在核心域的 <code>mixins/</code> 包里; HTTP 后端叫 <code>web/</code>、
+     前端资产叫 <code>web_ui/</code>, 一字之差。根目录 17 个平铺 .py 里, 入口、核心域、基础设施、表现层四类混排。
+     <strong>已拍板方案 C（全面分层）</strong>：建 <code>core/</code> 与 <code>webui/</code> 等<strong>同级分层包</strong>，
+     根目录只留入口与自治域包，后续新增层（TUI、插件宿主等）各有明确的落位。
+     全程<strong>零行为变更</strong>，分 6 波推进，每波全量测试兜底、独立提交、可单独叫停。</p>
+  <div class="meta">
+    <span><b>改动面</b> 6 波 · git mv 78 个文件 + 新增 4 个包 __init__ · src 内 import 更新 ≈30 个文件 · tests 更新 ≈40 个文件（脚本化批量）</span>
+    <span><b>依据</b> 代码取证 @ 93c0155（2026-09-22 21:00–21:30 实测，引用计数由 src/ 与 tests/ 全量 grep 实得）</span>
+    <span><b>状态</b> 方案 C 已拍板并已实施 W1-W4b（2026-09-22 入库 37d33bc→43593a9, 未推送）· W5 回写进行中</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <p>目录</p>
+  <ol>
+    <li><span class="n">01</span><a href="#s1">现状盘点：混杂在哪</a></li>
+    <li><span class="n">02</span><a href="#s2">目标与非目标</a></li>
+    <li><span class="n">03</span><a href="#s3">方案对比与拍板</a></li>
+    <li><span class="n">04</span><a href="#s4">目标结构、落位规则与依赖方向</a></li>
+    <li><span class="n">05</span><a href="#s5">分波实施</a></li>
+    <li><span class="n">06</span><a href="#s6">守阵盘点与风险</a></li>
+    <li><span class="n">07</span><a href="#s7">验证与验收</a></li>
+    <li><span class="n">08</span><a href="#s8">拍板记录</a></li>
+    <li><span class="n">09</span><a href="#s9">本次不做</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="n">01</span>现状盘点：混杂在哪</h2>
+  <div class="rule"></div>
+
+  <p>包内共 <code>82 个 .py</code>（含 <code>__init__</code>/<code>__main__</code>）+ 前端资产 <code>35 个文件 ≈ 1.29 MB</code>。
+     config / rules / torrents 三个域包结构清晰，<strong>问题集中在两处</strong>：表现层 Python 代码散布，与根目录平铺。</p>
+
+  <h3>混杂点一：WEB 表现层散布在 5 处</h3>
+  <table>
+    <tr><th>#</th><th>现状位置</th><th class="mono">体量（实测）</th><th>内容</th><th>性质</th></tr>
+    <tr><td>1</td><td class="mono">ui.py（根目录）</td><td class="mono">≈530 行 / 22.7 KB</td><td>托盘常驻 UI（CustomTkinter + pystray + 单实例 IPC）</td><td>桌面表现层</td></tr>
+    <tr><td>2</td><td class="mono">web_runtime.py（根目录）</td><td class="mono">≈605 行 / 33.2 KB</td><td>WEB 表现层门面 <code>WebUIRuntime</code>（视图快照/命令队列/节拍判据）</td><td>WEB 表现层</td></tr>
+    <tr><td>3</td><td class="mono">mixins/web_view.py</td><td class="mono">645 行</td><td>四视图构建器 + 错误原因 + 搜索索引</td><td>WEB 表现层，寄生于核心 mixin 包</td></tr>
+    <tr><td>4</td><td class="mono">mixins/web_commands.py</td><td class="mono">545 行</td><td>全部 <code>_cmd_*</code> 命令处理器与命令表</td><td>同上</td></tr>
+    <tr><td>5</td><td class="mono">web/ 包 + web_ui/static/</td><td class="mono">16 文件 ≈67 KB + 35 文件 ≈1.29 MB</td><td>FastAPI 路由 / 前端资产（atlas·prism·shared）</td><td>已是包，但 <code>web</code> vs <code>web_ui</code> 一字之差</td></tr>
+  </table>
+
+  <p>后果具体到日常：找「前端在哪儿」要看三遍目录（<code>web/</code>？<code>web_ui/</code>？<code>mixins/</code>?）；
+     给 WEB 加一个命令处理器要动 <code>mixins/web_commands.py</code>，而它是核心类 <code>QbManager</code> 的方法切片，
+     与标签、分组、限速这些真正的核心域 mixin 混在同一个包里，包语义已经名不副实。</p>
+
+  <h3>混杂点二：根目录 17 个平铺 .py 四类混排</h3>
+  <table>
+    <tr><th>类别</th><th>文件</th><th class="mono">src 内引用（实测）</th><th class="mono">tests 引用（实测）</th></tr>
+    <tr><td>入口</td><td class="mono">cli.py（__init__/__main__ 保留）</td><td class="mono">—</td><td class="mono">—</td></tr>
+    <tr><td>核心域主干</td><td class="mono">qbmanager(47.6KB) · taskqueue · qbapi · qbclient</td><td class="mono">5 / 4 / 4 / 1</td><td class="mono">18 / 9 / 8 / 2</td></tr>
+    <tr><td>核心域领域</td><td class="mono">curves · episodes · tvshows · exporter</td><td class="mono">2 / 0 / 0 / 1</td><td class="mono">4 / 4 / 1 / 1</td></tr>
+    <tr><td>基础设施</td><td class="mono">errors(16) · utils(11) · notify(3) · locking(2) · logging(1) · autostart(1)</td><td class="mono">见左</td><td class="mono">utils 10 · notify 10 · autostart 4 · locking 2</td></tr>
+    <tr><td class="yes">表现层</td><td class="mono">ui · web_runtime</td><td class="mono">1 / 0</td><td class="mono">2 / 1</td></tr>
+  </table>
+  <p class="note">数字 = grep 到的 import 该模块的文件数（2026-09-22 对 src/auto_qb 全部 .py 与 44 个测试文件实得，模块间有重叠）。
+     <code>errors</code> 被 16 个文件引用（含 config/rules/torrents 全部子包）—— 它是全包错误根，搬动时是纯机械替换，
+     但量最大，批量脚本不可少。表现层引用面最小 —— 与「先搬表现层、后收 core/infra」的波次顺序互为印证。</p>
+
+  <h3>既有先例：本项目已跑通过三次同类重构</h3>
+  <p><code>torrents.py → torrents/</code> 包（09-15）、<code>web.py → web/</code> 16 文件拆包（09-22，零行为变更，
+     金清单 60 条守阵）、<code>app.js → 1001 行内核 + 15 域片段</code>（09-20）。方法论成熟：
+     <strong>git mv 平移 → 门面 re-export 过渡 → 守阵钉死 → 全量回归 → 单波单提交</strong>。本计划完全沿用。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="n">02</span>目标与非目标</h2>
+  <div class="rule"></div>
+
+  <h3>目标</h3>
+  <ul>
+    <li><strong>一眼分清前后端</strong>：WEB 全家（路由 + 运行时 + 视图构建 + 命令处理 + 静态前端）住进 <code>webui/</code>；桌面托盘住进 <code>tray/</code>；与 <code>core/</code> <strong>同级并列</strong>。</li>
+    <li><strong>根目录语义分层</strong>：17 个平铺 .py → 1 个（cli）；入口 / 配置 / 核心域 / 基础设施 / 表现层五类各归其位。</li>
+    <li><strong>为后续加层留位</strong>：新增表现层（如 TUI、插件宿主）= 顶层新建一个同级包，不再往核心域里塞（落位规则见 §04）。</li>
+    <li><strong>mixin 包语义归正</strong>：<code>mixins/</code> 只剩真正的核心域切片（6 个），表现层切片迁出。</li>
+    <li><strong>零行为变更</strong>：57 个 API 端点、静态 URL（<code>/atlas/</code> <code>/prism/</code>）、日志命名空间、线程模型全部不变。</li>
+  </ul>
+
+  <h3>非目标</h3>
+  <ul>
+    <li>不动 <code>config/</code> <code>rules/</code> <code>torrents/</code> 三个域包的<strong>内部</strong>结构 —— 它们已经是好的；是否收进 <code>core/</code> 属后置另案（§09）。</li>
+    <li>不动 <code>tests/</code> 44 文件平铺 —— 另立主题，避免一次改动混两类语义。</li>
+    <li>不动 <code>mixins/</code> 剩余 6 个核心 mixin 的拆分方式（God Object 治理另案）。</li>
+    <li>不下线 atlas 旧 UI、不借机改任何实现细节。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="n">03</span>方案对比与拍板</h2>
+  <div class="rule"></div>
+
+  <table>
+    <tr><th></th><th>A · 最小就近</th><th>B · 表现层归拢</th><th class="yes">C · 全面分层（已拍板）</th></tr>
+    <tr>
+      <td>动作</td>
+      <td>仅 <code>web_ui/static</code> 并入 <code>web/</code></td>
+      <td>建 <code>webui/</code> 收拢 runtime + server + static + 2 个表现层 mixin；建 <code>tray/</code> 收托盘</td>
+      <td>B 之上再建 <code>core/</code> + <code>infra/</code>，根目录平铺全收</td>
+    </tr>
+    <tr>
+      <td>解决的混杂</td>
+      <td class="no">只解决 web/web_ui 命名，mixins 寄生与根目录混排原样</td>
+      <td class="yes">表现层 5 处 → 2 包</td>
+      <td class="yes">B + 根目录语义分层（17 平铺 → 1），core 与 webui 同级，后续加层有落位</td>
+    </tr>
+    <tr>
+      <td>引用面</td>
+      <td class="mono">tests ≈2 个文件</td>
+      <td class="mono">tests ≈5 个文件</td>
+      <td class="mono">tests ≈40 个文件 + src ≈30 个文件（脚本化批量替换，机械但量大）</td>
+    </tr>
+    <tr>
+      <td>波次</td>
+      <td>1 波</td>
+      <td class="mono">3 波 + 收尾</td>
+      <td class="mono">6 波（B 的波次是 C 的前三波，无返工）</td>
+    </tr>
+  </table>
+
+  <div class="note"><strong>拍板（2026-09-22 21:27，用户）</strong>：选 C —— 「清晰明了，core 与 webui 同级，
+     也方便后续添加其它层」。C 的额外成本（W4 引用面 40+ 测试文件）已接受，换来根目录语义分层与扩展位。
+     波次顺序沿用「先表现层（便宜、直击主诉）、后 core/infra（量大、机械）」，每波之间可叫停。</div>
+</section>
+
+<section id="s4">
+  <h2><span class="n">04</span>目标结构、落位规则与依赖方向</h2>
+  <div class="rule"></div>
+
+<pre><span class="c">src/auto_qb/</span>
+├── __init__.py  __main__.py  cli.py        <span class="c">入口层（不动；cli 仍被 pyproject.scripts 钉住）</span>
+├── assets/                                 <span class="c">图标（不动；tray 与 autostart 共用）</span>
+├── config/                                 <span class="c">配置层（横切，内部不动）</span>
+├── rules/                                  <span class="c">规则域包（自治域，内部不动）</span>
+├── torrents/                               <span class="c">种子数据域包（自治域，内部不动）</span>
+├── <span class="a">core/</span>                                   <span class="a">★ 新：核心域</span>
+│   ├── qbmanager.py  taskqueue.py          <span class="d">← 根目录平铺</span>
+│   ├── qbapi.py  qbclient.py               <span class="d">← 根目录平铺</span>
+│   ├── curves.py  episodes.py              <span class="d">← 根目录平铺</span>
+│   ├── tvshows.py  exporter.py             <span class="d">← 根目录平铺</span>
+│   └── mixins/                             <span class="d">← mixins/（6 个核心切片；web_view/web_commands 已先期迁出）</span>
+├── <span class="a">infra/</span>                                  <span class="a">★ 新：基础设施</span>
+│   └── errors.py  locking.py  logging.py   <span class="d">← 根目录平铺</span>
+│       utils.py  notify.py  autostart.py   <span class="d">← 根目录平铺</span>
+├── <span class="a">webui/</span>                                  <span class="a">★ 新：WEB 表现层全家</span>
+│   ├── __init__.py                         <span class="c">门面 re-export（start_web_server 等 8 符号 + WebUIRuntime）</span>
+│   ├── runtime.py                          <span class="d">← web_runtime.py</span>
+│   ├── views.py                            <span class="d">← mixins/web_view.py（WebviewMixin 不改名）</span>
+│   ├── commands.py                         <span class="d">← mixins/web_commands.py</span>
+│   ├── server/                             <span class="d">← web/ 包 16 文件整体平移（factory/auth/context/routes/…）</span>
+│   │   └── static_ui.py                    <span class="c">挂载路径改为包内 static/</span>
+│   └── static/                             <span class="d">← web_ui/static/ 35 文件整体平移（atlas/prism/shared）</span>
+└── <span class="a">tray/</span>                                   <span class="a">★ 新：桌面托盘表现层</span>
+    ├── __init__.py                         <span class="c">re-export run_tray</span>
+    └── app.py                              <span class="d">← ui.py</span></pre>
+
+  <h3>落位规则（重构后「新代码放哪」有单点答案）</h3>
+  <table>
+    <tr><th>要加的东西</th><th>去处</th></tr>
+    <tr><td>WEB 之外的其它界面（TUI、插件宿主页、系统托盘扩展）</td><td>与 <code>webui/</code> <code>tray/</code> <strong>同级新建表现层包</strong> —— 这就是「方便后续添加其它层」的落点</td></tr>
+    <tr><td>核心域功能（主循环、任务、限速、集数、导出…）</td><td class="mono">core/</td></tr>
+    <tr><td>大而自治的领域（如未来的插件系统）</td><td>仿 <code>rules/</code> <code>torrents/</code> 先例，与 core 同级建自治域包</td></tr>
+    <tr><td>通用工具 / 平台集成（解析、锁、日志、通知、自启）</td><td class="mono">infra/</td></tr>
+    <tr><td>配置键 / 规则条件 / 规则动作</td><td class="mono">config/ · rules/（既有流程不变，见 modules/overview.md 速查）</td></tr>
+  </table>
+
+  <h3>依赖方向（迁移后全部单向，不新增环）</h3>
+  <table>
+    <tr><th>边</th><th>方向</th><th>说明</th></tr>
+    <tr><td>入口 → 一切</td><td class="mono">cli → 所有层</td><td>唯一组装点；GUI 栈延迟导入语义不变</td></tr>
+    <tr><td>表现层 → 核心域</td><td class="mono">webui/tray → core</td><td>经 <code>self.web</code> 门面 + mixin 组合（既有裁定，单向）；表现层状态在 runtime，快照只读</td></tr>
+    <tr><td>核心域 → 下游</td><td class="mono">core → config / infra / torrents / rules</td><td>既有事实平移</td></tr>
+    <tr><td>域包 → 核心域（既有反向引用）</td><td class="mono">rules → core（qbmanager/qbapi）· config → core（curves）· torrents → core（qbapi）</td><td>既有事实显式化，import 路径更新而已，不新增</td></tr>
+    <tr><td>infra 横向纪律</td><td class="mono">infra 不 import core/表现层；唯一例外 notify → config（读 NotifyConfig，既有事实依赖，实施时发现并显式化）</td><td>只被依赖；违者守阵拦截（W5 可加一条 import 纪律守阵）</td></tr>
+  </table>
+
+  <p class="note">无循环导入的关键事实（已核实）：views.py / commands.py 是 mixin，只依赖宿主 <code>self.*</code>，
+     不 import 核心模块；<code>webui/server/</code> 对上游的引用全部是 <code>...config</code> <code>...rules</code> <code>...utils</code>
+     等三层相对导入，平移到 <code>webui/server/</code> 后深度不变，唯一跨包上行 <code>routes/events.py → web_runtime</code>
+     变包内引用。同迁核心的 <code>qbmanager ↔ mixins/taskqueue/qbapi/qbclient</code> 相对导入深度不变，零改动。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="n">05</span>分波实施（每波：git mv 平移 → import 修正 → 守阵同步 → 全量回归 → 独立提交）</h2>
+  <div class="rule"></div>
+
+  <h3>W0 · 基线与盘点（只读，半小时）</h3>
+  <ul>
+    <li>跑全量 <code>uv run pytest tests -q</code>（TMPDIR 先设 <code>R:/Temp/auto-qb/tests</code>），记录基线数字（对照 <code>memory-bank/testing/baseline.md</code>，上轮实绩 1188 passed + 1 skipped）。</li>
+    <li>复核 §06 守阵清单在当前 HEAD 的实际行号/断言；把 §05 各波「src 内 import 更新」落成文件级清单（grep 输出存档）。</li>
+  </ul>
+
+  <h3>W1 · webui/ 归拢（主波：web + web_ui + web_runtime）</h3>
+  <table>
+    <tr><th>动作</th><th>细节</th></tr>
+    <tr><td class="mono">git mv web → webui/server</td><td>16 文件整体平移，包内相对导入零改动</td></tr>
+    <tr><td class="mono">git mv web_ui/static → webui/static</td><td>35 文件平移；web_ui/ 空壳删除</td></tr>
+    <tr><td class="mono">git mv web_runtime.py → webui/runtime.py</td><td>移入后 <code>from .mixins.web_commands import …</code> 暂保持（W3 再收）</td></tr>
+    <tr><td>新 webui/__init__.py</td><td>承接原 web/__init__ 的门面 re-export（8 符号）+ <code>WebUIRuntime</code>；<strong>logger 命名空间冻结为 <code>auto_qb.web</code> 不随包改名</strong>（caplog 守阵按名断言，K3）</td></tr>
+    <tr><td>server/static_ui.py 挂载路径</td><td><code>dirname(dirname(__file__))</code> + <code>"web_ui","static"</code> → + <code>"static"</code>（单行）</td></tr>
+    <tr><td>server/routes/events.py</td><td><code>from ...web_runtime import SSE_KEEPALIVE_S</code> → <code>from ..runtime import …</code>（单行）</td></tr>
+    <tr><td>qbmanager.py</td><td><code>from .web import …</code> ×2 → <code>from .webui import …</code>；<code>from .web_runtime import WebUIRuntime</code> → <code>from .webui import WebUIRuntime</code>（W4b 再随 qbmanager 上调一层）</td></tr>
+    <tr><td>tests + scripts</td><td>test_web.py（import + 守阵路径 <code>web_ui/static</code> → <code>webui/static</code>）；scripts/ui_harness.py、dev_webui.py 的 import；sim_fsmock.py / ui_harness.py 注释顺手更正</td></tr>
+  </table>
+  <p><strong>验证</strong>：全量 pytest；<code>dev_webui.py</code> 起服务手查 <code>/</code>→307 <code>/atlas/</code>、<code>/prism/</code> 主题切换、任一 API、静态 no-cache 头；ui_smoke.cjs 4 场景。</p>
+
+  <h3>W2 · tray/ 归拢（小波）</h3>
+  <ul>
+    <li><code>git mv ui.py → tray/app.py</code>；新 <code>tray/__init__.py</code> re-export <code>run_tray</code>。</li>
+    <li>app.py 内 ICON 路径：<code>dirname(__file__)/assets/…</code> → 上跳一级（单行）。</li>
+    <li>cli.py：<code>from .ui import run_tray</code> → <code>from .tray import run_tray</code>（延迟导入语义不变）。</li>
+    <li>tests/test_ui.py import 更新。</li>
+  </ul>
+
+  <h3>W3 · 表现层 mixin 迁出</h3>
+  <ul>
+    <li><code>git mv mixins/web_view.py → webui/views.py</code>；<code>git mv mixins/web_commands.py → webui/commands.py</code>（类名不改）。</li>
+    <li>mixins/__init__.py 导出 8 → 6；qbmanager 组合行拆两处 import（<code>from .webui.views import WebviewMixin</code> 等）；webui/runtime.py 的常量引用改包内 <code>from .commands import …</code>。</li>
+    <li>tests 里 mixins.web_view / mixins.web_commands 各 1 文件更新。</li>
+    <li>确认依赖单向：qbmanager → webui（与 self.web 门面同向）；views/commands 不 import 核心模块。</li>
+  </ul>
+
+  <h3>W4a · infra/ 收拢（先 infra 后 core，core 的下游引用一次到位）</h3>
+  <table>
+    <tr><th>动作</th><th>细节</th></tr>
+    <tr><td class="mono">git mv 6 文件 → infra/</td><td>errors · locking · logging · utils · notify · autostart；新 infra/__init__.py</td></tr>
+    <tr><td>src 内 import 批量更新</td><td>grep 实得：errors <strong>16 文件</strong>（config/rules/torrents 全部子包 + cli/qbmanager/tray/infra 内部）· utils <strong>11 文件</strong>（config/loaders + validation×4 + webui/server×2 + …）· notify 3 · locking 2 · logging 1 · autostart 1 —— 重叠去重 ≈20 个文件，脚本化 <code>.x → .infra.x</code> 替换后逐个目检</td></tr>
+    <tr><td>tests ≈24 个文件</td><td>utils 10 · notify 10 · autostart 4 · locking 2（有重叠），批量替换</td></tr>
+    <tr><td>logging 同名注意</td><td><code>infra/logging.py</code> 沿用现语义（setup_logging）；包内引用从 <code>from .logging import</code> 改 <code>from .infra.logging import</code> —— Py3 绝对导入下不与 stdlib 冲突，行为零变更</td></tr>
+  </table>
+
+  <h3>W4b · core/ 收拢（收尾大波）</h3>
+  <table>
+    <tr><th>动作</th><th>细节</th></tr>
+    <tr><td class="mono">git mv 8 平铺 + mixins/ → core/</td><td>qbmanager · taskqueue · qbapi · qbclient · curves · episodes · tvshows · exporter + mixins/（6 切片）；新 core/__init__.py</td></tr>
+    <tr><td>同迁模块间零改动</td><td>qbmanager → mixins/taskqueue/qbapi/qbclient 的相对导入深度不变；W3 后 qbmanager 的 <code>.webui.views/commands</code> 上调一层为 <code>..webui.*</code></td></tr>
+    <tr><td>跨包引用更新（grep 实得）</td><td>根 <code>__init__.py</code> 的 <code>QbManager</code> 导出 · cli.py（qbmanager/exporter）· tray/app.py（qbmanager）· rules/base.py（qbmanager/qbapi）· torrents/store.py（qbapi）· config/validation（curves ×2）· webui/server/common.py（qbmanager，类型提示）</td></tr>
+    <tr><td>tests ≈40 个文件</td><td>qbmanager 18 · taskqueue 9 · qbapi 8 · curves 4 · episodes 4 · qbclient 2 · tvshows 1 · exporter 1（有重叠）；<strong>test_qbmanager.py 源码文本守阵路径</strong>改 <code>core/qbmanager.py</code></td></tr>
+    <tr><td>scripts 注释</td><td>sim_qb.py（qbmanager.py:685）/ sim_fsmock.py（mixins/grouping.py）路径引用顺手更正</td></tr>
+  </table>
+
+  <h3>W5 · 收尾回写（会话协议 DoD）</h3>
+  <ul>
+    <li>memory-bank 回写：<code>modules/</code> 6 份路径表（overview / core-runtime / core-domain / mixins / rules-and-deps / webui-static-contract）、<code>systemPatterns/</code> 各篇路径、根 <code>README.md</code> 目录结构段、<code>__init__.py</code> 模块结构 docstring、<code>conventions/collaboration.md</code> 若涉路径；重跑 <code>gen_kb_index.py</code> / <code>gen_tasks_index.py</code>。</li>
+    <li>新坑（若有）写 <code>pitfalls/&lt;类&gt;/&lt;主题&gt;.md</code> 并重跑索引；任务按立档阈值进 <code>tasks/</code>（6 波重构建议立档）。</li>
+    <li>每波一个 commit（<code>git mv</code> 保历史），信息按 gitmoji + 中文规范，实测数字入正文；推送按既定顺序 Gitee → 核 ref → GitHub 尝试一次。</li>
+    <li>可选加固：加一条 import 纪律守阵（infra 不得 import core/表现层/config；表现层不得 import 主循环内部），钉住 §04 的依赖方向表。</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="n">06</span>守阵盘点与风险</h2>
+  <div class="rule"></div>
+
+  <h3>已盘点的硬编码与守阵（2026-09-22 实测）</h3>
+  <table>
+    <tr><th>位置</th><th>内容</th><th>哪波动</th></tr>
+    <tr><td class="mono">tests/test_web.py</td><td>守阵钉 <code>src/auto_qb/web_ui/static</code> 绝对拼接路径；金清单 60 条 (method,path)</td><td class="mono">W1（路径一行 + import）</td></tr>
+    <tr><td class="mono">tests/test_qbmanager.py</td><td>源码文本守阵：<code>open("…/src/auto_qb/qbmanager.py")</code> 防表现层字段回潮</td><td class="mono">W4b（路径 → core/qbmanager.py）</td></tr>
+    <tr><td class="mono">web/routes/events.py</td><td>跨包引用 <code>...web_runtime</code>（全包唯一一处跨包上行）</td><td class="mono">W1（单行）</td></tr>
+    <tr><td class="mono">web/static_ui.py</td><td>相对路径拼 <code>../web_ui/static</code></td><td class="mono">W1（单行）</td></tr>
+    <tr><td class="mono">web/__init__.py 的 K3</td><td>包内 logger 一律显式 <code>getLogger("auto_qb.web")</code>，caplog 按 <code>r.name</code> 断言</td><td class="no">logger 名冻结不变 → 零改动</td></tr>
+    <tr><td class="mono">errors 的 16 处引用</td><td>config/rules/torrents 子包全部 <code>from ..errors import AutoQbError</code></td><td class="mono">W4a 批量（含 config/errors.py 的基类继承行）</td></tr>
+    <tr><td class="mono">rules/base.py</td><td>反向引用 <code>qbmanager</code>/<code>qbapi</code>（既有事实）</td><td class="mono">W4b（→ <code>..core.*</code>）</td></tr>
+    <tr><td class="mono">scripts/ui_harness.py · sim_fsmock.py · sim_qb.py</td><td>import 与注释引用（mixins/web_commands、qbmanager.py:685 等）</td><td class="mono">W1/W3/W4b 顺手更正</td></tr>
+    <tr><td class="mono">tests/test_frontend_static_bundle_health</td><td>钉 shared 片段接线（script 标签 + app.mixin）</td><td class="no">static 目录整体平移、文件名不变 → 零改动</td></tr>
+    <tr><td class="mono">pyproject.toml</td><td><code>packages = ["src/auto_qb"]</code> 包级声明；<code>auto-qb = "auto_qb.cli:main"</code></td><td class="no">包内移动零影响</td></tr>
+  </table>
+
+  <h3>风险与对策</h3>
+  <table>
+    <tr><th>风险</th><th>判据</th><th>对策</th></tr>
+    <tr><td>静态挂载路径错 → 前端白屏</td><td>手查 / 与 /prism/ 返回 307/200</td><td>W1 验证清单含静态四连查；no-cache 头仍在</td></tr>
+    <tr><td>循环导入</td><td>启动即炸</td><td>依赖方向已核实单向（§04）；W1 冒烟在 import 完成后立即暴露；每波结束跑 <code>import auto_qb</code> 全家冒烟</td></tr>
+    <tr><td>logger 名漂移 → caplog 守阵红</td><td>test_web 多条 <code>r.name == "auto_qb.web"</code></td><td>logger 名与包名解耦，冻结 <code>auto_qb.web</code>；计划明文禁止顺手改名</td></tr>
+    <tr><td>W4 批量替换漏网 / 误替换</td><td>全量 pytest 红</td><td>替换脚本只认 <code>from .X import</code> / <code>from ..X import</code> 固定形态，替换后 diff 逐文件目检；W0 清单做核对表</td></tr>
+    <tr><td>git 历史断档</td><td>git log 跟不到旧文件</td><td>一律 <code>git mv</code>，每波单独提交，不与内容改动混装</td></tr>
+    <tr><td>守阵红被误当回归</td><td>红验指向路径而非行为</td><td>守阵更新与移动同波提交，commit 信息注明「守阵路径同步」</td></tr>
+  </table>
+</section>
+
+<section id="s7">
+  <h2><span class="n">07</span>验证与验收</h2>
+  <div class="rule"></div>
+
+  <table>
+    <tr><th>层</th><th>验证项</th><th>通过标准</th></tr>
+    <tr><td>单元/集成</td><td class="mono">uv run pytest tests -q</td><td>与 W0 基线一致（上轮实绩 1188 passed + 1 skipped；以 baseline.md 为准），零新增失败；每波必跑</td></tr>
+    <tr><td>导入面</td><td class="mono">uv run python -c "import auto_qb; import auto_qb.core; import auto_qb.infra; import auto_qb.webui; import auto_qb.tray"</td><td>无循环导入告警；根 __init__ 公开导出面（Config/QbManager/load_config/__version__）不变</td></tr>
+    <tr><td>静态守阵</td><td>test_qbmanager 文本守阵 / 金清单 60 条 / 组装壳 ≤150 行 / bundle health</td><td>全绿（或「路径同步后绿」，commit 注明）</td></tr>
+    <tr><td>WEB 冒烟</td><td>dev_webui.py 起服：/ → 307 /atlas/；/prism/ 主题切换；任一 /api 端点；静态响应 no-cache 头</td><td>四项全过</td></tr>
+    <tr><td>前端冒烟</td><td class="mono">scripts/ui_smoke.cjs</td><td>4 场景全过</td></tr>
+    <tr><td>托盘冒烟</td><td class="mono">--tray 起真机：窗口/托盘菜单/日志视图/单实例唤起/开机自启开关</td><td>真机走查清单勾选（行为零变更，重点核对图标资源路径与 autostart 命令拼装）</td></tr>
+  </table>
+</section>
+
+<section id="s8">
+  <h2><span class="n">08</span>拍板记录</h2>
+  <div class="rule"></div>
+
+  <table>
+    <tr><th>#</th><th>决策</th><th>结论</th></tr>
+    <tr>
+      <td class="mono">D1</td>
+      <td>范围：A / B / C</td>
+      <td class="yes"><strong>✅ C（2026-09-22 21:27 用户拍板）</strong>：「清晰明了，core 与 webui 同级，也方便后续添加其它层」。W4 深分层转正入本期。</td>
+    </tr>
+    <tr>
+      <td class="mono">D2</td>
+      <td>W3 表现层 mixin 是否迁出 mixins/</td>
+      <td class="yes"><strong>✅ 迁（随 C 确定）</strong>：它是「前端代码寄生在后端包」的最大单体（1190 行）；迁移仅 import 路径变化，类名与组合方式不动。</td>
+    </tr>
+    <tr>
+      <td class="mono">D3</td>
+      <td>WEB 包名与同级结构</td>
+      <td class="yes"><strong>✅ webui/（随 C 确定）</strong>：core 与 webui 同级；与知识库既有术语（webui-static-contract、WEB UI）一致。</td>
+    </tr>
+    <tr>
+      <td class="mono">D4</td>
+      <td>旧导入路径留不留兼容 shim</td>
+      <td><strong>按推荐执行：不留</strong>（沿用 web.py 拆包先例：门面 re-export 只在包边界做一层，调用方直接改）。仓内调用方已全部盘点，一次改完不欠债。</td>
+    </tr>
+    <tr>
+      <td class="mono">D5</td>
+      <td>rules/torrents/config 是否收进 core/</td>
+      <td><strong>本期不收</strong>：三者作为自治域包与 core 同级并列（有先例、内部清晰）；未来若收进 core/ 属纯移动，后置另案（§09）。</td>
+    </tr>
+  </table>
+</section>
+
+<section id="s9">
+  <h2><span class="n">09</span>本次不做</h2>
+  <div class="rule"></div>
+  <ul>
+    <li>tests/ 目录重组（44 文件平铺与镜像分组是独立主题，混做会污染本次「纯结构」的回滚边界）。</li>
+    <li>config/ rules/ torrents/ 收进 core/ 的「再收拢」（D5 已裁定后置另案）及其内部结构调整。</li>
+    <li>mixins 剩余 6 个核心切片的再拆分（God Object 治理另案）。</li>
+    <li>atlas 旧 UI 下线与 /newui 兼容重定向的撤离（有既定观察期）。</li>
+    <li>__pycache__ 清理、行尾治理等仓库卫生项（顺手项一律不入本计划提交）。</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  src/auto_qb 分层归拢计划（方案 C 定稿） · 2026-09-22 · 代码取证 @ 93c0155 · 状态：已拍板，待开工<br>
+  v2（2026-09-22 21:27）—— 拍板 C：core 与 webui 同级；W4a/W4b 转正并补齐 src 侧实测清单（errors 16 / utils 11 等）；
+  新增 §04 落位规则与依赖方向表、§08 拍板记录（D1-D5）。v1（21:12）为初版三方案对比。
+  v2.1（2026-09-22 23:1x）—— 实施实录：W1-W4b 全部入库（37d33bc / b459a26 / 9a428b1 / 934da15 / 43593a9，
+  其间并入 gitee 落后 2 提交），全部零行为变更、全量 1189+1 绿、ref 三处一致、未推送；
+  §04 infra 纪律修正（notify→config 既有依赖显式化）；实施坑实录沉淀
+  memory-bank/pitfalls/git/package-move-imports.md；tests 侧既有顺序污染（FakeConfig 类级共享
+grouping 被 test_web 实例改写）已定位待入池裁决。
+</footer>
+
+</div>
+</body>
+</html>

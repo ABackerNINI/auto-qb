@@ -3,6 +3,7 @@
 > 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/`(除注明)。
 
 > 摘要: 配置层: 模型 / 校验 / 解析 / 写回 / UI 元数据 / 影响分级。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: config, 配置, 模型, 校验, 解析, 写回, schema, impact
 
 ## 核心模块

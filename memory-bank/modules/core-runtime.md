@@ -3,6 +3,7 @@
 > 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/`(除注明)。
 
 > 摘要: 入口 / 主协调者 / 表现层门面 / 客户端 / 队列 / Facade / 锁 / 工具 / 日志 / 错误根。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: cli, qbmanager, web_runtime, qbclient, taskqueue, qbapi, locking, utils, logging, errors
 
 ## 核心模块

@@ -1,6 +1,7 @@
 # 客户端 / QbApi / 状态持久化
 
 > 摘要: 启动期兼容校验、`QbApi` Facade 与状态持久化 —— 三个小主题合成一份。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: QbApi, Facade, 兼容校验, 状态持久化, state_file, RuleEngineMixin
 
 ## 启动期版本兼容校验 (2026-09-06, 2026-09-13 调整)

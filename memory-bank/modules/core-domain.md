@@ -3,6 +3,7 @@
 > 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/`(除注明)。
 
 > 摘要: 种子数据层 / 通知 / 托盘 / 自启 / WEB 后端与前端 / 曲线 / 集数 / 剧集 / 导出。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: torrents, notify, ui, autostart, web, static, curves, episodes, tvshows, exporter
 
 ## 核心模块

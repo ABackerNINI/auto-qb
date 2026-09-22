@@ -11,12 +11,14 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 20:55 (**三案合流入库: config 取值范围收紧(26-09-22-1937) × 后端状态周期落盘(26-09-21-1347) × web.py→web/ 包拆分** ——
-  收紧案: `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值,
-  全部数值/时间键补上下限(详清单见 [issue 报告](issues/26-09-22-1937-bug-config-value-range-validation.html));
-  落盘案: 新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
-  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘;
-  拆分案: `create_app` 926 行 → `web/` 包 16 文件 8 域 Router, 零行为变更(守阵 2 条红验 + 冒烟 70×2 全绿)。
+**最后更新**: 2026-09-22 23:1x (**方案 C 目录分层归拢 W1-W4b 已全部入库, W5 文档回写进行中** ——
+  plan [docs/plans/26-09-22-2112-src-layout-restructure-plan.html](../docs/plans/26-09-22-2112-src-layout-restructure-plan.html):
+  W1 web/ + web_ui/ + web_runtime → webui/{server,static,runtime} (37d33bc);
+  W2 ui.py → tray/app.py (b459a26); W3 mixins/web_view+web_commands → webui/views+commands (9a428b1);
+  W4a 6 个基础设施 → infra/ (934da15); W4b 8 平铺+mixins/ → core/ (43593a9);
+  全部零行为变更, 全量 1189 passed + 1 skipped, ref 三处一致, **未推送**(等用户说"提交");
+  坑实录已记 [pitfalls/git/package-move-imports.md](pitfalls/git/package-move-imports.md);
+  其前一条状态: 2026-09-22 20:55 三案合流入库)
   其前一条状态: 2026-09-22 20:38 (**issue 26-09-21-0219「qB 移动 .!qB 后缀误判缺文件」已认领, 计划 v1 待用户过目** ——
   方案: 缺文件扫描过渡态容忍(原名缺失时探测 `.!qB` 孪生, 整轮不判) + 连续 3 次上限兜底残留;
   不加配置键, check_filelist 仅加诊断日志。→ [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html))

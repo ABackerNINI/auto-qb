@@ -1,6 +1,7 @@
 # web_ui/static 前端契约速查
 
 > 摘要: 前端资产(模板 / 逻辑层 / 样式 / 图标)的契约与目录约定。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: 前端契约, static, 模板, shared, atlas, prism, 图标
 
 ## web_ui/static/ 前端契约速查 (2026-09-17 第十一轮补)  |  第十轮版见本节末尾

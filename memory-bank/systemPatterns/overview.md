@@ -4,6 +4,7 @@
 > 文内带日期的条目为**增量更新**, 最新易变状态见 [activeContext.md](../activeContext.md)。
 
 > 摘要: 有哪些组件、谁负责什么 —— 进本目录前先读这一份。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: 组件, 总览, 架构, 有哪些模块, 谁负责什么
 
 ## 组件总览

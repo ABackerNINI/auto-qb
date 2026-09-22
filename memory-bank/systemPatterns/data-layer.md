@@ -1,6 +1,7 @@
 # 数据层 (TorrentStore / 增量同步)
 
 > 摘要: `torrents.py` 的增量同步、变化集与 `TorrentStore` —— rid 语义一处说清。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: 数据层, store, 增量同步, maindata, rid, 变化集, apply_sync
 
 ## 增量同步 (torrents.py, 2026-09-13)

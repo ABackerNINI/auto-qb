@@ -1,6 +1,7 @@
 # WEB UI 前端渲染与响应性
 
 > 摘要: 按视图回传、窗口化、节拍对齐、命令唤醒 —— 响应性那一整波的设计。
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: 响应性, 跟手性, 按视图回传, 窗口化, 节拍, 命令唤醒, P0, P1
 
 ## WEB UI 前端渲染与响应性 (2026-09-19, P0/P1 波次)
