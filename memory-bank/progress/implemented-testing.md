@@ -1,0 +1,29 @@
+# 已实现 · 测试与仿真
+
+> 摘要: 摘要: 测试基座与副作用治理的落地记录; 语料回放线见 [roadmap.md](roadmap.md) 的对应小节。
+> 触发: 做过没有, 测试, 副作用, 守阵, 基线
+
+## 已实现 (✅, 有单测覆盖)
+
+- 副作用普查能力固化进测试 (2026-09-18): 那次普查用的探针是临时脚本(在 `%TEMP%`, 随会话消失), 于是把它固化成常驻守卫 —— 新增 `tests/sidefx.py`(记账器: patch `subprocess.Popen` / `winreg.*` / `os.remove|unlink|rmdir` + `shutil.rmtree` / `os.symlink` / `socket.bind` / `os.startfile`·`os.system`·`webbrowser.open` / `socket.connect`·`create_connection` 七类入口**只记账不阻断**; 放行清单 + `is_violation` 判定) + `tests/conftest.py` 第三道会话级 autouse 夹具(**收尾有越界项即让本次 pytest 失败**, 报告含分类计数与逐条明细) + `tests/test_sidefx.py` 策略单测 10 项。**放行清单**: `node` 子进程 / autostart 的 Run 键与 `auto-qb` 值 / 临时目录内删除与建链 / 回环监听 —— 其余一律越界。**已做反向验证**: 注入一条越界记录后 pytest 退出码 1 并打出明细台账(确认守卫不是摆设), 验证文件用完即删。**细节**: ①`StubRegKey` 放在 `sidefx.py` 而非 conftest, 让记账器能识别"被 AUMID 守卫拦下的调用" ⇒ 两个夹具**安装顺序无关**(否则 AUMID 键一会儿被判越界一会儿不判); ②`is_temp_path` 显式剥掉 Windows `\\?\` 前缀(普查 157 条假阳性的根因, 已有单测锁定); ③模块 docstring 用 raw 字符串以免 `\` 触发 `SyntaxWarning`。**实测 1018 passed / 0 failed**(基线 1007 + 11); 手法与放行清单详见 [pitfalls.md](pitfalls.md) 与 [testing.md](testing.md) 约定 10
+- 测试期真实系统副作用普查 (2026-09-18): 通知只是**已知的一种**副作用, 于是写探针把**所有**真实副作用记下来逐类判定 —— patch `subprocess.Popen` / `winreg.*` / `os.remove|unlink|rmdir` + `shutil.rmtree` / `os.symlink` / `socket.bind` 五类入口, 输出**写文件**(写 stderr 会被 pytest 按用例捕获丢弃 ⇒ 假阴性), 跑全量后按类别 `sort | uniq -c` 归类。**结论(全量 1007 项)**: 外部进程 **0**(通知夹具生效); **唯一真问题 = AUMID 注册表键** —— `PlatformChannel("win32")` 构造时会真写 `HKCU\Software\Classes\AppUserModelId\AutoQB.UI` 且**写完不清理**(与 autostart 的 Run 键不同, 后者在 `finally` 里 `disable()` 自清理), 触发用例 `test_notify_legacy_shortcut_cleanup`(同一个文件里另两个构造 win32 渠道的用例都显式 patch 了注册环节 —— 正是"逐用例 patch 容易漏"的实证); 其余全部干净 —— 文件删除 157 条**全在** `C:\TEMP\pytest-of-*`(仓库内 0、仓库外 0)、建符号链接 117 条全是 pytest 自己的 `pytest-current` 与逃逸用例(全在临时目录)、网络监听 161 条全为 `127.0.0.1` 随机端口(`FakeQbServer`)+ 2 条同端口重启复现且自清理。**处置**: `tests/conftest.py` 加**第二道会话级守卫**, 只把 **AUMID 前缀**的 `CreateKeyEx`/`SetValueEx` 变成空操作 —— 静默成功**不抛异常**(`_ensure_appid_registered()` 只 catch `OSError`, 抛异常会让 `channel._appid` 回退成 `WINDOWS_TOAST_APPID_FALLBACK` 打乱既有断言), 替身需支持 `with` 语句; 其余注册表写入放行 ⇒ autostart 的 Run 键测试行为完全不变。**复核**: 全量注册表台账只剩 Run 键(写 + 删), **AUMID 归零**; 1007 passed / 0 failed。**手法坑**: 用 `tempfile.gettempdir()` 做 `abspath` 前缀过滤"临时目录"会被 Windows 长路径前缀 `\\?\` 绕过 ⇒ 157 条"仓库外删除"全是假阳性。手法与结论详见 [pitfalls.md](pitfalls.md)
+- 测试期禁止真实系统通知 (2026-09-18): 用户报"测试时会弹出系统通知框"。**主犯**: `test_cli.py::test_main_qb_compat_error_clean_exit` 把 `manager` 设成 `MagicMock` ⇒ `cli.py` 致命退出路径的 `notify_fatal(msg, manager.config.notify)` 拿到**恒真 MagicMock**, 守卫 `if not config or not config.enabled` 放行 ⇒ 真的构造 `PlatformChannel()` 发一条 Windows toast(**诊断探针实测抓到, 标题 `auto-qb 已停止`**)。**从犯**: 测试里写 `PlatformChannel("linux")` 只是换后端, `NotifyHandler` 后台 daemon 线程照样真跑 `notify-send`(装了通知器的机器/CI 上就是真弹)。**两层处置**: ①根源 —— 该用例 mock `auto_qb.cli.notify_fatal` 并断言调用(顺带覆盖"致命退出补发通知"); ②安全网 —— 新增 `tests/conftest.py` 会话级 autouse 夹具, 把通知器命令名(`notify-send`/`osascript`/`powershell`/`pwsh`)拦在 `subprocess.run` 之前(抛 `OSError` = "机器上没装通知器"), `send()` 仍返回 False; 命令**构造**与 `node --check` 等非通知器子进程不受影响。**实测**: 全量真实 send **4 → 0**(win32 1 → 0); 基线 1006 → **1007 passed**(+`test_notify_real_send_blocked_under_pytest`)。**方法论坑(差点误判)**: 探针输出写 stderr 会被 pytest 按用例捕获、通过的用例直接丢弃 ⇒ 统计得 0 的**假阴性**, 必须写**文件**; 且统计一律用 **ASCII 标记**(中文串 grep 会误报 0); **已入库 `7ae21a1`**
+- 测试环境假失败清理 (2026-09-18): 全量测试在本机曾有 **2 个稳定失败**, 排查确认都是**环境能力**差异、生产代码无问题。① `test_notify.py::test_notify_legacy_shortcut_cleanup` —— `PlatformChannel._legacy_shortcut_paths()` 在 `APPDATA` 未设时直接返回 `[]`, 用例里 `os.path.exists` 的 monkeypatch 因此从未被问到, `removed` 恒空 ⇒ 补 `monkeypatch.setenv("APPDATA", ...)`(顺带真正覆盖了路径拼接分支, 此前等于空跑); ② `test_web.py::test_api_fs_dirs_endpoint` 第⑤条"符号链接逃逸" —— 本机 `os.symlink(dir, link, target_is_directory=True)` **返回成功却落成真实目录**(实测 `islink=False` / `lstat mode=0o40777`), 根本不存在逃逸链接, 断言无意义 ⇒ 建链后补一道 `os.path.islink()` 判定再断言(与用例原有"Windows 无权限建链 -> 跳过"同口径; 真机能建真链接时照常断言, 覆盖率不减); ③ 顺带修噪声: `.gitignore` 补 `.coverage.*`(原 `.coverage` 是**精确名**不含通配, 覆盖率并行数据 `.coverage.<host>.<pid>.<rand>` 会漏进 `git status`); ④ `test_notify.py` 头部测试计划清单补齐 4 项漏登记(`test_notify_emit_exception_swallowed` / `test_notify_close_twice_safe` / `test_notify_fatal_channel_error_swallowed` / `test_notify_legacy_shortcut_cleanup`)。**实测 1007 passed / 0 failed**(修前 1006 passed + 1 failed); 判据("单跑通过+全量失败" ⇒ 先查环境, 排除环境前不动 `src/`)入 [pitfalls.md](pitfalls.md); **已入库 `7ae21a1`**
+- 测试: 基线数字单点维护于 [testing.md](testing.md) 顶部 (2026-09-14 起, 此处不再手抄; ui.py GUI 本体真机冒烟)
+- **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
+  普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;
+  `add_long_path_prefix_for_win` 非 Windows 原样返回; autostart 有 win32/darwin/linux 三支); `tests/`
+  已在 Linux CI 全绿(Windows 行为一律 `monkeypatch.setattr(sys,"platform","win32")` 在 Linux 上测)。
+  **真差距是 B2 逃逸判定 `sim_qb.is_within` 没有 pytest 覆盖** —— 只有 `sim_qb.py --self-test`(CI 不跑)。
+  已补 3+1 条守阵(见 [testing.md](testing.md) 基线 1143→1146), 并**收回**一条错误建议:
+  sim_qb 的 `fs_root` 是 `os.makedirs` 出来的**宿主真实目录**(语料档 `<FSROOT>` 也解析到它) ⇒
+  路径是**宿主形态** ⇒ 必须跟随宿主 FS, **不能统一到 `ntpath`**(只换 normcase 会混分隔符 ⇒ 全线误拒,
+  已实测: 真子路径 `True→False`)。`src/` 与 sim_qb 的平台分支**一行未动**。
+  **已入库 `84f92dd`**(Gitee + GitHub 均推上)。
+  ✅ 后续(未提交): B2 段已从 `sim_qb.py --self-test` **下沉**进 `tests/`(该自检要真起 HTTP + 真装
+  qbittorrentapi, CI 从不执行)⇒ 全量 **1147 passed + 1 skipped**。
+  ✅ 其四(**未提交**): `--self-test` 里的 **B3 / D4** 两段也已下沉(B3 钉两侧 / D4 走合成档),
+  全量 **1149 passed + 1 skipped**;`--self-test` 现只剩"真机往返"类自检(全量/增量/files 与磁盘一致)。
+  ⚠ 剩余: `web.py::_within_roots` 的大小写守阵**只能在 Linux 上真跑**(本机 skip), 由 CI 验
+  (上一批 `84f92dd` 的 CI run 72 = success ⇒ 已在 ubuntu 上真跑并通过)。
+- **真机语料抓取 / 脱敏 / 离线回放 (W0–W6)** —— **详述已外迁**: [attachments/corpus-capture-replay.md](attachments/corpus-capture-replay.md)

@@ -6,7 +6,12 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
-- ↑ 1169 → 1169(**不变**; 2026-09-22 同任务 **W3 `testing/` 目录化**: 只动文档与 skill 脚本, 未增删用例 ——
+- ↑ 1169 → 1170(**+1**; 2026-09-22 同任务 **W4 `activeContext` 瘦身 + `progress/` 拆分**:
+  `test_kb_active_context_within_cap` 是 W1 就写好但**按波次未启用**的那条 —— 本波把 `activeContext.md`
+  压到 12 KB 硬顶之下(实测 **4,783** 字符), 才把它纳入 `check_kb_structure` 的默认角色集(`volatile`)。
+  ⇒ **守阵按波次"激活"**是这套重构的一条设计: 检查器先写全, 目录/内容没到位时空转通过, 一落地就生效。
+  全量 1170 passed + 1 skipped, sidefx 越界 0)。
+: 只动文档与 skill 脚本, 未增删用例 ——
   `testing.md`(6,706 字符 / 489 行)拆成 **9 个主题文件 + 存根**; **基线数字的单点从 `testing.md` 顶部
   迁到 [baseline.md](baseline.md)**, 变更流水原样外迁到本文件; `techContext.md` 的浏览器自动化两条轨道
   迁入 [browser-env.md](browser-env.md)(techContext 6,706 → 3,542 字符)。全量 1169 passed + 1 skipped, sidefx 越界 0)。

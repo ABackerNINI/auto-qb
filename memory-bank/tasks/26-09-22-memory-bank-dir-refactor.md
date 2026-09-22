@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W3 已完成 (pitfalls 7 类 / 35 文件 + testing 9 文件 + 新增 guards.md, 9 条结构性守卫), 续做 W4 activeContext+progress
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; W0–W4 已完成 (pitfalls 7 类 + testing 9 文件 + progress 11 文件 + checklists, 10 条结构性守卫), 续做 W5 systemPatterns+modules
 
 ## 原始请求
 
@@ -110,11 +110,11 @@
 | W1 | 基础设施: 脚本落位 + 通用生成器 + cap 策略 + 9 条守卫 | Complete | 2026-09-22 | 全量 1169 passed + 1 skipped (+9) |
 | W2 | `pitfalls/` 两级指针 (7 类 + 35 主题文件 + 存根 + 接线) | Complete | 2026-09-22 | 守恒: 真丢失 0 (973 token 核对); 1169 passed 不变 |
 | W3 | `testing/` (9 文件 + 存根; `baseline.md` 成唯一手改处) | Complete | 2026-09-22 | 守恒: 真丢失 4 处已补; 1169 passed 不变 |
-| W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Not Started | — | |
+| W4 | `activeContext` 瘦身 (≤12 KB + cap 守卫) + `progress/` | Complete | 2026-09-22 | 40,553 → 4,783 字符; progress 51,717 → 11 文件; 1170 passed (+1) |
 | W5 | `systemPatterns/` + `modules/` (≈8 + ≈7) | Not Started | — | |
 | W6 | `conventions/` + `config-reference/` + `rule-system/` (≈5+3+4) | Not Started | — | |
 | W7 | `tasks/` 档案消肿 (超 24 KB 的移 `attachments/`) | Not Started | — | |
-| W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | |
+| W8 | 机检化 + 回归演练 ×3 + instructions 漂移修复 | Not Started | — | 候选见下「W8 候选清单」 |
 
 ## 进度日志
 
@@ -146,6 +146,45 @@
   「入口链不随库体量变长」。
 - 定案: `systemPatterns` 的 WEB UI 三节 (21,406 字符) 本就挂错在「任务队列」名下, 拆开即纠错;
   modules 的「在哪里改」速查并入 `_index.md`; `tasks/attachments/` 不破坏索引守卫 (不递归)。
+
+### 2026-09-22 (W4 `activeContext` 瘦身 + `progress/` 拆分)
+- **`activeContext.md` 40,553 → 4,783 字符**(cap 12,000): 原「正在进行」15 条里 **13 条已完成**,
+  按既有纪律「沉淀到 progress/ 或主题文档后**删除**」处置 —— 但**只删真的在别处有记载的**:
+  5 条(平台语义守阵 / 列设置双轨 / 规则表达式化 / skills 安全审查 / 知识库瘦身)**搬进 `progress/implemented-*.md`**,
+  其余在主题文档已有记载(语料→roadmap 小节、乐观 UI→implemented-webui-perf、冒烟→testing/smoke.md、
+  仿真→testing/sim-5000.md)。「待用户真机走查」整段(约 15 KB)迁 `checklists/manual-walkthrough.md`;
+  「定案口径」逐条归位到 `pitfalls/web-ui/` 与 `AGENTS.md` 后改为指针(「多 clone 并行」那条的存档细节
+  原句搬回 —— token 核对查出换成指针时丢了 `MANIFEST.md` / `sha256.txt` 等)。**只留 2 条未完成**:
+  本次目录化重构本身 + 「上轮计划复核的收尾」。
+- **`progress.md` 51,717 字符 / 367 行 → `progress/` 11 个文件 + ≤1 KB 存根**: 已实现 48 条按域拆 6 份
+  (implemented-webui · implemented-webui-perf · implemented-core · implemented-rules · implemented-testing ·
+  implemented-tooling), 其余 5 份(roadmap / known-bugs / evolution / suggestions + `_about`)。
+  ⚠ **两处按实测调整计划**: ①implemented 拆 **6** 份(计划 5)—— `implemented-webui.md` 一度 12,883 字符,
+  超 cap, 按「跟手性/性能/状态色」与「界面/视图」再分一刀; ②4 条超长叙事(单条最大 **10,225** 字符,
+  逐条都超 cap)移 `progress/attachments/webui-longform.md`, 原位留首行 + 指针(首行本就带结论 / sha / 实测数字)。
+- **新增 `checklists/`**(`_about.md` + `manual-walkthrough.md`)—— 走查清单是**清单**, 读的时机是
+  「做走查时」而不是「每次会话开始」, 故从易变层移出。
+- **启用 `test_kb_active_context_within_cap`**(10 条知识库守卫): 它是 W1 就写好、**按波次未启用**的那条;
+  本波把 `activeContext.md` 压到 cap 之下才纳入 `check_kb_structure` 的默认角色集。
+  ⇒ 全量 **1169 → 1170 passed + 1 skipped**。
+- **守恒核对**: `progress.md → progress/` **928 个 token 全部命中(missing = 0)** —— 条目是原样搬运, 所以干净。
+  `activeContext.md → memory-bank/` 657 个 token 里 93 个"找不到", 逐条判后 **5 处真丢失已补**
+  (state.json 条目未沉淀 / 真机语料条目未沉淀 / 乐观 UI 条目未沉淀 / 多 clone 存档细节 / 顶部滚动链),
+  余 7 个是**顶部「最后更新」滚动链里的 commit sha** —— 那条按设计每轮替换, 已在文件头写明
+  「它是滚动状态不是档案, 回查请看 tasks/ 档案的进度日志」, 不再当丢失。
+- **踩坑记录**: 用 `python -c "..."` 往测试文件里插含**反引号 + `\n`** 的代码, 被 bash 当命令替换吃掉反引号、
+  `\n` 被路径归一化层写成 `/n` ⇒ 文件语法错误。**正是 W2 刚迁进 `pitfalls/git/editing-traps.md` 的那条坑**
+  (heredoc / 反斜杠转义); 改用**脚本文件** + 显式 UTF-8 即好。⇒ 该坑的适用范围要写宽: 不只 heredoc,
+  `python -c` 的双引号串同样中招。
+- **实测**: 全量 **1170 passed + 1 skipped**, sidefx 越界 0; `check_kb_structure.py` 全过。
+
+### W8 候选清单(两处 skill 缺口, 2026-09-22 记)
+
+1. **`<each:GLOB>` 闸门只展开"已跟踪的改动文件"** ⇒ **新增(untracked)**的 skill 脚本拿不到 `--help` 冒烟
+   (W1 新增 4 个 memory-bank 脚本时实测: 闸门只跑了 1 条 `create-issue` 的)。修点在 `preflight.py` 的改动清单。
+2. **`test_preflight.py` 的 `undefined_names` 静态检查只覆盖 my-commit-flow 自己的 5 个脚本**,
+   memory-bank skill 的 4 个脚本不在内(与"改名漏改的未定义名只在冷门分支炸"同一类风险)。
+3. `run.md` 的 TMPDIR 一档还留着与「用 `--basetemp=H:/Temp/<新目录>`」**互相冲突**的旧建议(既有漂移)。
 
 ### 2026-09-22 (W3 `testing/` 目录化)
 - **产出**: `testing.md`(6,706 字符 / 489 行)→ **9 个主题文件 + ≤1 KB 存根**(存根实测 **322 字符**):
