@@ -11,7 +11,12 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 22:19 (**根 README + docs/configuration.md 文档同步最新代码事实** ——
+**最后更新**: 2026-09-22 22:38 (**入池 feat issue: 跨组文件交叉紧急处置** ——
+  用户提出不同组文件交叉需紧急处置、防新种子下载覆盖已下载/已完成文件; 查证: 分组键
+  (save_path+文件列表)结构上不拦跨组交叉, `_check_download_conflicts` 仅覆盖同组, 全代码无跨组检查
+  → 入池 [26-09-22-2221-feat-cross-group-file-conflict](issues/26-09-22-2221-feat-cross-group-file-conflict.html)
+  (Open, 严重度高: 静默不可逆数据覆盖)。仅 issues 池文档, 未改代码; 全量 1189 passed + 1 skipped。
+  其前一条状态: 2026-09-22 22:19 (**根 README + docs/configuration.md 文档同步最新代码事实** ——
   补 `sync_interval`/`state_save_interval` 两键与取值范围注记(26-09-22-1937 收紧的用户侧补全)、curve `enabled`/`interval`
   可选、规则 interval 缺省语义、hr 范围、state_file 说明; README 用例数 995→1190、基线行 949→1188 passed + 1 skipped、
   指针改 testing/baseline.md、补状态周期落盘说明。仅文档, 未跑全量(基线不变)。
@@ -37,6 +42,10 @@
 
 ## 正在进行
 
+- **🆕 跨组文件交叉检测 (2026-09-22, 已入池待认领)**: 分组键不拦跨组文件交叉(部分重叠文件列表 /
+  大小写不同文件名 / junction·symlink 别名路径), 现有三条防线(组内大小一致性 / 同组下载冲突 /
+  缺文件扫描)全以同组为边界; 建议方向: 全局物理路径映射检测 + 警告暂停, 细节开工拍板
+  → [issue 报告](issues/26-09-22-2221-feat-cross-group-file-conflict.html)(Open)。
 - **README + configuration.md 文档同步 (2026-09-22, 本轮完成)**: 漂移审计 + 用户侧补全(见「最后更新」); docs_drift 机检无断链。
   范围外残留待拍板: memory-bank keys.md 运行时文件表仍有 `web.py` 字样; AGENTS.md「testing.md 顶部」旧指针(存根可跳转, 危害低)
 - **🆕 qB 移动 .!qB 误判缺文件 (issue 26-09-21-0219) 已认领, 计划待过目 (2026-09-22)**: 过渡态容忍 + 连续 3 次上限;
