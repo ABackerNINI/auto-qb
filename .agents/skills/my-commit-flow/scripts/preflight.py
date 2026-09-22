@@ -38,6 +38,13 @@ import sys
 import time
 from pathlib import Path
 
+# Windows GBK 控制台兑底(与 commit.py 同根): 闸门/ git 输出含 emoji 时, GBK 编不出来会让
+# print 直接 UnicodeEncodeError, 已跑完的检查表/闸门结果被打印中断, 退出码失真。
+# 强制 stdout/stderr 走 UTF-8, 编不出时降级 replace 显示。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import (  # noqa: E402
     CONFIG_NAME,

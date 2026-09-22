@@ -22,6 +22,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows GBK 控制台兑底: git 输出含 emoji(gitmoji 提交首行)时, GBK 编不出来会让 print
+# 直接 UnicodeEncodeError —— 提交明明已成功, 脚本却崩在打印、退出码非 0, 执行者会被骗去
+# 重跑(实测 2026-09-22: 🐛 首行提交崩在 `print(proc.stdout.strip())`)。强制 stdout/stderr
+# 走 UTF-8, 编不出时降级 replace 显示, 不再让输出编码中断流程。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import ConfigMissing, load_config  # noqa: E402
 
@@ -81,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  + {path}")
 
     staged = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True,
-                            encoding="utf-8").stdout.split()
+                            encoding="utf-8", errors="replace").stdout.split()
     print(f"\n暂存清单({len(staged)} 个):")
     for path in staged:
         print(f"  - {path}")

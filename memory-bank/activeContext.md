@@ -11,11 +11,12 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 20:37 (**两案合流入库: config 取值范围收紧(issue 26-09-22-1937) × 后端状态周期落盘(issue 26-09-21-1347)** ——
+**最后更新**: 2026-09-22 20:55 (**三案合流入库: config 取值范围收紧(26-09-22-1937) × 后端状态周期落盘(26-09-21-1347) × web.py→web/ 包拆分** ——
   收紧案: `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值,
   全部数值/时间键补上下限(详清单见 [issue 报告](issues/26-09-22-1937-bug-config-value-range-validation.html));
   落盘案: 新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
-  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘。
+  (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘;
+  拆分案: `create_app` 926 行 → `web/` 包 16 文件 8 域 Router, 零行为变更(守阵 2 条红验 + 冒烟 70×2 全绿)。
   其前一条状态: 2026-09-22 19:43 (**热重载 L2 state 回滚已修复** —— 删除 L2 分支重读磁盘 state;
   client-and-state.md「热重载 L2 各一次」旧表述已更正) ——
   其前一条: memory-bank 目录化重构 W0-W8 已全部入库(详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)) ——
@@ -29,6 +30,10 @@
   `dedup_window` ≤24H(0=不去重仍合法) / 规则 `interval` 显式 0 拦 —— **缺省 0S=每 tick 级别是既有行为未动**,
   是否收紧属行为变更待拍板。机制文档已回写 [config-reference/loading-and-write.md](config-reference/loading-and-write.md)
   「校验范围 · 取值范围」条。
+- **web.py→web/ 包拆分 —— 已入库(本条随提交走)**: 零行为变更纯结构重构; 守阵 2 条红验
+  (金清单 60 条 / 组装壳 ≤150); 全量 1188 passed + 1 skipped; 冒烟 70×2 全绿。三条安全
+  发现(S1-01/02/05)可在 auth.py/events.py/system.py 局部落刀(上游已修 S1-05 脱敏, 见
+  44c1a0f)。剩: push 后真机无需走查(行为零变更, 冒烟已覆盖)。
 - **后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
   `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;
   红验通过(修复打回 → 3 条守阵全红); issue 已标 Fixed

@@ -5,11 +5,18 @@
 
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
+- ↑ 1186 → 1188(**+2**; 2026-09-22 **web.py→web/ 包拆分 · issue 26-09-21-1408**(plan 26-09-22-1857):
+  新增守阵 `test_web_route_manifest_frozen`(60 条 (method,path) 金清单集合比对; ❗本仓 FastAPI 的
+  `include_router` 走 `_IncludedRouter` 懒解析, 清点须下钻 `original_router.routes` —— 首版因此假红)
+  + `test_create_app_is_thin_assembly`(create_app ≤150 行且无内联 `@app.*`, 红=拆分前 926 行双红)。
+  既有用例零改动(1 处管线性: open_path patch 目标 → `auto_qb.web.common.open_path`); 冒烟双 UI
+  ok/error 两模式 70 项 0 失败。全量 1188 passed + 1 skipped, sidefx 越界 0)。
 
-- ↑ 1186 → 1187 collected(**净 +1 用例**; 2026-09-22 **两案合流**: config 取值范围收紧(issue 26-09-22-1937, 本侧 +1 守阵)
-  × 状态周期落盘 + 热重载修复(对侧 +10), 真 merge 合流双方同日改动; core.py 冲突块手工合流(双方意图全保留)。
-  合并树稳态 1186 passed + 1 skipped(throttle 守阵单跑恒绿, 文件级/全量跑因 sleep 精度容差偶发假红,
-  已入池 26-09-22-2052, 稳态数字取自 deselect 该用例的全量); TOTAL 91% 7600 语句)
+- ↑ 1188 → 1190 collected(**净 +2 用例**; 2026-09-22 **两案合流(2d4720b) + web 拆分合入**两次 merge 先后入库:
+  config 取值范围收紧(issue 26-09-22-1937, 本侧 +1 守阵)
+  × 状态周期落盘 + 热重载修复(对侧), core.py 冲突块手工合流(双方意图全保留); 
+  合并树实测 deselect throttle 全量 1188 passed + 1 skipped + 1 deselected(throttle 文件级/全量跑因
+  sleep 精度容差偶发假红, 已入池 26-09-22-2052); TOTAL 91% 7600 语句)
 - ↑ 1176 → 1177(**+1**; 2026-09-22 **config 取值范围收紧实施**(issue 26-09-22-1937, 合流前单树实测):
   新增 `test_validate_value_ranges`(聚合验证 interval/main_tick/sync_interval 上下界、max_tasks_per_tick 上界、
   log.max_bytes 轮转区间、required_share_ratio 拦 nan/inf/负数、hr.condition 百分比与下载量边界、
