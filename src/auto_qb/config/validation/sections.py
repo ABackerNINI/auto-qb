@@ -3,7 +3,7 @@ import logging
 from typing import List
 
 from ...utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed
-from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _try, _try_time
+from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _try, _try_number, _try_time
 from .rules import _check_rule_refs
 
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
@@ -71,7 +71,11 @@ def _validate_log(spec, errors: List[str]) -> None:
         if not isinstance(level, int):
             errors.append(f"config.log.level: 非法日志等级 '{spec['level']}', 可选: DEBUG/INFO/WARNING/ERROR/CRITICAL")
     if "max_bytes" in spec:
-        _try(parse_fsize, spec["max_bytes"], "config.log.max_bytes", errors)
+        n = _try(parse_fsize, spec["max_bytes"], "config.log.max_bytes", errors)
+        # 0 在 RotatingFileHandler 语义 = 从不轮转(单文件无限增长直至磁盘写满);
+        # 过小(<1MiB)则每条日志都可能触发轮转(IO 放大); 上界防轮转失去意义
+        if n is not None and not 1024**2 <= n <= 1024**3:
+            errors.append(f"config.log.max_bytes: 须在 1MiB-1GiB 范围内: {spec['max_bytes']}")
 
 
 def _validate_qbittorrent(spec, errors: List[str]) -> None:
@@ -137,7 +141,8 @@ def _validate_tracker_hr(spec, where: str, errors: List[str]) -> None:
     if "extra_seeding_time" in spec:
         _try_time(spec["extra_seeding_time"], f"{where}.extra_seeding_time", errors)
     if "required_share_ratio" in spec:
-        _try(float, spec["required_share_ratio"], f"{where}.required_share_ratio(须为数字)", errors)
+        # [0, 100] 且拦 nan/inf: 负数→立即满足(误打标)、nan→比较恒 False 永不满足(静默失效)
+        _try_number(spec["required_share_ratio"], f"{where}.required_share_ratio(须为数字)", errors, min=0, max=100)
     if "condition" in spec:
         _try(parse_hr_condition, spec["condition"], f"{where}.condition(如 80% 或 10MiB)", errors)
     for key in ("overwrite_category", "overwrite_category_for_satisfied"):
@@ -235,8 +240,11 @@ def _validate_notify(spec, errors: List[str]) -> None:
         else:
             if n <= 0:
                 errors.append("config.notify.max_per_hour: 必须为正整数")
+            elif n > 100:
+                errors.append("config.notify.max_per_hour: 须 <= 100")  # 防风暴参数自身无上界则失去意义
     if "dedup_window" in spec:
-        _try_time(spec["dedup_window"], "config.notify.dedup_window", errors)
+        # 0 = 不去重(合法); 上限 24H: 过大 → 相同前缀的真实 ERROR 被长期压制(掩盖故障)
+        _try_time(spec["dedup_window"], "config.notify.dedup_window", errors, max_s=86400)
     if "channels" in spec:
         ch = spec["channels"]
         if not isinstance(ch, list) or not ch:

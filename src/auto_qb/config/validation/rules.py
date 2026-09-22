@@ -99,9 +99,11 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
             _check_unknown_keys(spec, RULE_KNOWN_KEYS, where, errors)
             if "enabled" in spec:
                 _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
-            for key in ("interval", "cooldown"):
-                if key in spec:
-                    _try_time(spec[key], f"{where}.{key}", errors)
+            if "interval" in spec:
+                # 0 会被 TaskQueue._norm_interval 归一化成 1s → 规则决策链每秒全量跑(qB API + CPU)
+                _try_time(spec["interval"], f"{where}.interval", errors, positive=True)
+            if "cooldown" in spec:
+                _try_time(spec["cooldown"], f"{where}.cooldown", errors)
             if "execute_once" in spec and spec["execute_once"] not in EXECUTE_ONCE_VALUES:
                 errors.append(
                     f"{where}: execute_once 取值非法: '{spec['execute_once']}', 可选: {'/'.join(EXECUTE_ONCE_VALUES)}"

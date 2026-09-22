@@ -1,7 +1,7 @@
 # 编辑与工具陷阱 (git / 文本)
 
-> 摘要: 工具 shell 里改文件的七类静默事故 —— 编辑器挂死、stash 毁库、行尾被归一、编码写坏、多行替换错位、同文件多次 Edit。
-> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 编码, 乱码, 多行替换, Edit, junction
+> 摘要: 工具 shell 里改文件的九类静默事故 —— 编辑器挂死、stash 毁库、行尾被归一、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除。
+> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
@@ -78,3 +78,18 @@
 - **处置**: 改同一文件时**逐条改、改完 grep 复核**。
   ⚠ 删 junction 用 Python `os.rmdir()` —— 别用 `cmd /c rmdir`: 本会话 Git Bash 里 `cmd //c` 会被路径转换坑掉
   且**可能静默不执行**。
+
+### edit 工具的 oldText 在 CRLF 文件上匹配失败, 且报错与落盘可能不一致
+
+- **触发**: 对 git checkout 出来的 CRLF 文件(memory-bank 大部分 md/html)用 edit 工具, oldText 含换行(默认 LF)。
+- **判别**: 返回 `Could not find the exact text ... (must match exactly)`; 更阴的是**报错后落盘内容与 newText 不完全一致**
+  (2026-09-22 实测 baseline-history.md: 多段追加后连报两次匹配失败, 最终文件内容与两次提供文本都对不上)。
+- **处置**: 对 CRLF 文件**优先用单行锚**(避开跨行匹配); 改完**必须 grep 复核实际落盘内容**, 别信返回消息;
+  多段插入可走 PowerShell `Add-Content`/按字节读写(见上文条目)。
+
+### PowerShell 里 `python -c "..."` 的内层双引号会被剥掉
+
+- **触发**: 在工具 shell(PowerShell)里写 `python -c "print(f"{x}")"` 这类内层双引号代码。
+- **判别**: Python 报 SyntaxError 且源码片段里引号消失(如 `rsrc/auto_qb/...` —— `r"..."` 的引号没了), 或**静默无输出退出 0**。
+- **处置**: 单行短代码改用**读文件/写临时文件**绕开(或单引号包外层 + 内层全用双引号且不再嵌套);
+  更稳的做法是把探查脚本写到 `.openclaw/tmp/` 下再 `python <file>`; 多行逻辑禁止硬塞 `python -c`。

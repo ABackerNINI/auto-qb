@@ -86,6 +86,15 @@ def test_parse_hr_condition():
     assert utils.parse_hr_condition("10MiB") == ("dlsize", 10 * 1024**2)
     assert utils.parse_hr_condition("") == ("dlratio", 0.8)  # 空 = 默认 80%
     assert utils.parse_hr_condition("100%") == ("dlratio", 1.0)
+    # 边界在解析单点拦下(校验层经 _try 复用): "0%"/负数/超 100% 立即满足或永不触发, 均与配置意图相反
+    with pytest.raises(ValueError):
+        utils.parse_hr_condition("0%")
+    with pytest.raises(ValueError):
+        utils.parse_hr_condition("200%")
+    with pytest.raises(ValueError):
+        utils.parse_hr_condition("-5%")
+    with pytest.raises(ValueError):
+        utils.parse_hr_condition("0MiB")  # 下载量 0 同样立即满足
 
 
 def test_parse_bool():

@@ -11,7 +11,10 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 (**最新: memory-bank 目录化重构 W4 `activeContext` 瘦身 + `progress/` 拆分 已完成并入库** ——
+**最后更新**: 2026-09-22 (**最新: config 取值范围收紧已实施, 本地待提交** —— issue `26-09-22-1937`
+  从入池 → 用户指派逐键分析(40+ 配置路径, 缺口 5 / 建议收紧 11 / 其余已良好) → 用户指派实施三连;
+  `validate_config` 新增 `_try_number`(isfinite 拦 nan/inf)/`_try_time(min_s,max_s)`/`_try` 返回解析值;
+  全量 1177 passed + 1 skipped。其前一条状态: memory-bank 目录化重构 W4-W8 已完成并入库) ——
   本文件 **40,553 → 约 6 KB**(原「正在进行」15 条里 13 条已完成, 按纪律**沉淀后删除**:
   5 条搬进 `progress/implemented-*.md`、其余在主题文档已有记载; 「待用户真机走查」整段迁
   [checklists/manual-walkthrough.md](checklists/manual-walkthrough.md); 「定案口径」逐条归位到
@@ -35,6 +38,13 @@
 
 ## 正在进行
 
+- **config 取值范围收紧 (2026-09-22, 本地待提交)**: issue [26-09-22-1937-bug-config-value-range-validation](issues/26-09-22-1937-bug-config-value-range-validation.html) 已置 Fixed。
+  收紧清单: `interval` 1s-1D / `main_tick` 0.5s-1H / `sync_interval` 1s-10M / `max_tasks_per_tick` 1-500 /
+  `log.max_bytes` 1MiB-1GiB(0=RotatingFileHandler 从不轮转) / 站点 hr `required_share_ratio` [0,100] 拦 nan/inf /
+  `hr.condition` 百分比 (0,100] 与下载量 >0(`utils.parse_hr_condition` 解析单点拦) / `notify.max_per_hour` ≤100 /
+  `dedup_window` ≤24H(0=不去重仍合法) / 规则 `interval` 显式 0 拦 —— **缺省 0S=每 tick 级别是既有行为未动**,
+  是否收紧属行为变更待拍板。机制文档已回写 [config-reference/loading-and-write.md](config-reference/loading-and-write.md)
+  「校验范围 · 取值范围」条; 基线 1176→1177 已记 [testing/baseline.md](testing/baseline.md)。
 - **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 本地待提交)**:
   ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
   (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;

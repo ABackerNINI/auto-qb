@@ -50,6 +50,7 @@
 
 ## Fixed
 
+- [bug] [config 校验缺少取值范围约束, 可配出合法格式但危险的值](26-09-22-1937-bug-config-value-range-validation.html) — validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧
 - [bug] [tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回](26-09-21-1408-bug-web-tracker-url-passkey-log.html) — P2: 私站 announce URL 内嵌 passkey, 轮转日志备份/同机进程是泄露面; 建议单点 sanitize_tracker_url 脱敏
 - [bug] [跳检「删除→重加」之间存在无备份崩溃窗口, 崩溃后种子无恢复凭据](26-09-21-1347-bug-skip-checking-readd-no-backup-window.html) — 删除确认后重加前崩溃: .torrent 仅在内存、备份只在重加失败路径, 重启后无任何恢复标记
 - [bug] [state.json 损坏时静默清空, .bak 备份从不用于恢复](26-09-21-1347-bug-state-load-corrupt-silent-reset.html) — _load_state 吞 JSONDecodeError 静默返回 {}; atomic_write 维护的 .bak 全库无读取方

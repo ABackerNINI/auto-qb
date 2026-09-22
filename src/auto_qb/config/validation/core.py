@@ -1,4 +1,5 @@
 """validation 核心: 通用校验助手 + validate_config 入口(各段校验器延迟导入防环)"""
+import math
 import re
 from typing import List
 
@@ -47,16 +48,42 @@ def _check_unknown_keys(spec: dict, known: set, where: str, errors: List[str]) -
         errors.append(f"{where}: 未知键 {sorted(unknown)}, 可用键: {sorted(known)}")
 
 
-def _try(parse_fn, value, where: str, errors: List[str]) -> None:
-    """用解析函数校验值格式(复用 utils.parse_* 单一事实来源), 失败记录错误"""
+def _try(parse_fn, value, where: str, errors: List[str]):
+    """用解析函数校验值格式(复用 utils.parse_* 单一事实来源), 失败记录错误;
+    成功时返回解析值, 供调用方续做范围检查(如 log.max_bytes 的轮转区间)"""
     try:
-        parse_fn(value)
+        return parse_fn(value)
     except ValueError as e:
         errors.append(f"{where}: {e}")
+        return None
 
 
-def _try_time(value, where: str, errors: List[str], positive: bool = False) -> None:
-    """时间格式校验; positive=True 时要求 > 0(如 main_tick, 防止 0 忙循环)"""
+def _try_number(value, where: str, errors: List[str], *, integer: bool = False, min=None, max=None) -> None:
+    """数值校验: 可解析(可选整数) + 有限(拦 nan/inf) + 可选闭区间 [min, max]
+
+    float('nan')/'inf' 能通过 float() 解析, 但作为阈值比较恒 False/恒 True ——
+    显式配置的判定语义被静默破坏, 必须在配置期拦下(fail-fast)。
+    消息格式与 _try 对齐: 解析失败复用原异常文本(调用方的 where 已含人话提示后缀)。
+    """
+    try:
+        n = int(value) if integer else float(value)
+    except (TypeError, ValueError) as e:
+        errors.append(f"{where}: {e}")
+        return
+    if not math.isfinite(n):
+        errors.append(f"{where}: 须为有限数字(不得为 nan/inf): {value}")
+        return
+    if min is not None and n < min:
+        errors.append(f"{where}: 须 >= {min:g}")
+    elif max is not None and n > max:
+        errors.append(f"{where}: 须 <= {max:g}")
+
+
+def _try_time(
+    value, where: str, errors: List[str], positive: bool = False, min_s: float = None, max_s: float = None
+) -> None:
+    """时间格式校验; positive=True 时要求 > 0(如 main_tick, 防止 0 忙循环);
+    min_s/max_s 为含端点的秒数区间(与 positive 独立, 拦 0/过小高频与过大失效值)"""
     try:
         seconds = parse_time(value)
     except ValueError as e:
@@ -64,6 +91,10 @@ def _try_time(value, where: str, errors: List[str], positive: bool = False) -> N
         return
     if positive and seconds <= 0:
         errors.append(f"{where}: 必须为正时间: {value}")
+    if min_s is not None and seconds < min_s:
+        errors.append(f"{where}: 须 >= {min_s:g}s")
+    if max_s is not None and seconds > max_s:
+        errors.append(f"{where}: 须 <= {max_s:g}s")
 
 
 def _check_str_list(value, where: str, errors: List[str]) -> bool:
@@ -128,22 +159,28 @@ def validate_config(data) -> List[str]:
     rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules")}
     _check_unknown_keys(cfg, KNOWN_CONFIG_KEYS | set(rules_config), "config", errors)
     if "main_tick" in cfg:
-        _try_time(cfg["main_tick"], "config.main_tick", errors, positive=True)
+        # 下限 0.5s: tick 含同步/任务调度开销, 过小 = CPU 风暴(回归注释自证曾 2800 tick/s); 上限 1H: 过大等于功能停摆
+        _try_time(cfg["main_tick"], "config.main_tick", errors, positive=True, min_s=0.5, max_s=3600)
     if "sync_interval" in cfg:
-        _try_time(cfg["sync_interval"], "config.sync_interval", errors, positive=True)
+        # 每次刷新是一次 qB /sync/maindata 请求: 下限防 API 风暴(与 qB WebUI 1500ms 同量级); 上限防快照过期误判
+        _try_time(cfg["sync_interval"], "config.sync_interval", errors, positive=True, min_s=1, max_s=600)
     if "max_tasks_per_tick" in cfg:
         _try(int, cfg["max_tasks_per_tick"], "config.max_tasks_per_tick(须为整数)", errors)
         # 范围必须显式校验: TaskQueue._pop_due 把 `max_tasks <= 0` 当作"不限量"(内部语义),
         # 若配置放行 0/负值, "每轮最多执行 N 个任务"就变成**一轮弹出全部到期任务** —— 与配置
         # 语义完全相反(单 tick 可能执行上千任务 ⇒ 卡顿 + API 风暴)。schema 声明的 min=1
-        # 只作用于前端控件, 不进校验, 故这里必须补。
+        # 只作用于前端控件, 不进校验, 故这里必须补。上界同理: 过大 = 单 tick 上千任务。
         try:
             if int(cfg["max_tasks_per_tick"]) < 1:
                 errors.append("config.max_tasks_per_tick: 须 >= 1")
+            elif int(cfg["max_tasks_per_tick"]) > 500:
+                errors.append("config.max_tasks_per_tick: 须 <= 500")
         except (TypeError, ValueError):
             pass  # 格式错误已由上面的 _try 记录, 不重复报错
     if "interval" in cfg:
-        _try_time(cfg["interval"], "config.interval", errors)
+        # 默认任务间隔: 0 会经 TaskQueue._norm_interval 归一化成 1s(全部种子级任务每秒执行);
+        # 上限 1D 防内置功能名存实亡
+        _try_time(cfg["interval"], "config.interval", errors, min_s=1, max_s=86400)
     if "state_file" in cfg and not str(cfg["state_file"]).strip():
         errors.append("config.state_file: 不能为空")
     if "remove_similar_tags" in cfg:

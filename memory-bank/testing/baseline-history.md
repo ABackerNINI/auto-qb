@@ -6,6 +6,13 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 1176 → 1177(**+1**; 2026-09-22 **config 取值范围收紧实施**(issue 26-09-22-1937):
+  新增 `test_validate_value_ranges`(聚合验证 interval/main_tick/sync_interval 上下界、max_tasks_per_tick 上界、
+  log.max_bytes 轮转区间、required_share_ratio 拦 nan/inf/负数、hr.condition 百分比与下载量边界、
+  notify 上界、规则 interval 正时间); test_parse_hr_condition 补 4 条边界断言。
+  助手层: 新增 `_try_number`(isfinite 拦 nan/inf)、`_try_time` 增 min_s/max_s、`_try` 返回解析值。
+  全量 1177 passed + 1 skipped, sidefx 越界 0。首次全量曾现 test_run_loop_throttles_without_stop_event
+  假失败(时序抖动: 单跑与复跑均绿, 与本次改动无关))
 - ↑ 1175 → 1176(**+1**; 2026-09-22 同任务 **W8 收尾 · 重写 `memory-bank.instructions.md`**:
   新增 `test_memory_bank_instructions_match_current_structure`。
   为什么值得单独钉: 该文件 `applyTo: memory-bank/**`, **只在编辑 memory-bank 时注入** ——
