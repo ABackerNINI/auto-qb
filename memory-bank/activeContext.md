@@ -11,10 +11,10 @@
 > ⚠ 下面的「最后更新」是**滚动状态**(每轮会话替换上一轮), **不是档案** —— 要回查「某次改动何时入库 / 带哪个 sha」,
 > 请看 [tasks/_index.md](tasks/_index.md) 各档案的「进度日志」段或 [progress/_index.md](progress/_index.md)。
 
-**最后更新**: 2026-09-22 19:50 (**issue 26-09-21-1347「后端状态仅优雅退出时落盘」已按计划实施完毕, 待提交** ——
+**最后更新**: 2026-09-22 19:50 (**issue 26-09-21-1347「后端状态仅优雅退出时落盘」已实施并入库** ——
   新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
   (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘; 全量 1185 passed + 1 skipped,
-  红验通过(修复打回 → 3 条守阵全红); issue 状态 Fixed; **未 commit**, 等用户明确「提交」。
+  红验通过(修复打回 → 3 条守阵全红); issue 状态 Fixed。
   → [计划](../docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html))
   其前一条状态: 2026-09-22 (memory-bank 目录化重构 W4 `activeContext` 瘦身 + `progress/` 拆分 已完成并入库 ——
   本文件 **40,553 → 约 6 KB**(原「正在进行」15 条里 13 条已完成, 按纪律**沉淀后删除**:
@@ -40,9 +40,14 @@
 
 ## 正在进行
 
-- **🆕 后端状态周期落盘 —— 已实施, 待提交 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
+- **🆕 后端状态周期落盘 —— 已实施并入库 (2026-09-22)**: issue 26-09-21-1347 修复完成 —— 新键
   `state_save_interval`(默认 120s/下限 30s/0=关) + 主循环周期落盘 + skip_check_day/recheck_fails 即时落盘;
-  全量 1185 passed + 1 skipped, 红验通过; issue 已标 Fixed; **未 commit**, 等用户明确「提交」
+  全量 1185 passed + 1 skipped, 红验通过; issue 已标 Fixed
+- **设置页 Console Hub 卡片标题暗色下发黑已修 + 卡片静息发光 (2026-09-22, 本地待提交)**:
+  ① `.hb-card` / `.hb-row-hit` 是 `<button>` 且未显式设 `color`, 文字色回退 UA 默认 `buttontext`
+  (系统浅色 = 纯黑), 已在 `shared/console_hub.css` 补 `color: var(--fg)`;
+  ② 应用户要求卡片静息即发软光(`--glow-soft` 提到静息态), hover / 聚焦升全光(`--glow`), 数值沿用配方不自造。
+  全量 1176 passed + 1 skipped。坑已记 [pitfalls/web-ui/layout-css.md](pitfalls/web-ui/layout-css.md)。
 - **🆕 memory-bank 目录化重构 —— W0–W3 已入库, 下一步 W4 `activeContext` + `progress/`** —— 起因是全库超预算:
   13 份顶层文档里 8 份超标, 「必读」退化成「不读」, 已记录的坑被反复重踩(工具 shell 的 `rebase` 三次事故
   全写在同一节)。方案 = 统一五步配方 + 分类目录与生成物索引 + 三行头元数据 + cap 分级 + 9 条结构守卫 +
