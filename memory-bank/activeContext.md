@@ -17,12 +17,16 @@
   落盘案: 新键 `state_save_interval`(默认 120s, 配置端下限 30s 防误配置写放大, 0=关闭) + 主循环周期落盘
   (`_maybe_flush_state`) + `skip_check_day`/`recheck_fails` 写点即时落盘;
   拆分案: `create_app` 926 行 → `web/` 包 16 文件 8 域 Router, 零行为变更(守阵 2 条红验 + 冒烟 70×2 全绿)。
+  其前一条状态: 2026-09-22 20:38 (**issue 26-09-21-0219「qB 移动 .!qB 后缀误判缺文件」已认领, 计划 v1 待用户过目** ——
+  方案: 缺文件扫描过渡态容忍(原名缺失时探测 `.!qB` 孪生, 整轮不判) + 连续 3 次上限兜底残留;
+  不加配置键, check_filelist 仅加诊断日志。→ [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html))
   其前一条状态: 2026-09-22 19:43 (**热重载 L2 state 回滚已修复** —— 删除 L2 分支重读磁盘 state;
   client-and-state.md「热重载 L2 各一次」旧表述已更正) ——
-  其前一条: memory-bank 目录化重构 W0-W8 已全部入库(详见 [档案](tasks/26-09-22-memory-bank-dir-refactor.md)) ——
 
 ## 正在进行
 
+- **🆕 qB 移动 .!qB 误判缺文件 (issue 26-09-21-0219) 已认领, 计划待过目 (2026-09-22)**: 过渡态容忍 + 连续 3 次上限;
+  [计划](../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html); 用户确认后实施, issue 已置 In Progress
 - **config 取值范围收紧 (2026-09-22, 随合并入库)**: issue [26-09-22-1937-bug-config-value-range-validation](issues/26-09-22-1937-bug-config-value-range-validation.html) 已置 Fixed。
   收紧清单: `interval` 1s-1D / `main_tick` 0.5s-1H / `sync_interval` 1s-10M / `max_tasks_per_tick` 1-500 /
   `log.max_bytes` 1MiB-1GiB(0=RotatingFileHandler 从不轮转) / 站点 hr `required_share_ratio` [0,100] 拦 nan/inf /
@@ -85,5 +89,5 @@
 
 ## 历史归档 (已迁出本文件)
 
-2026-09-14 ~ 2026-09-19 的全部会话纪要已按专题迁移到 [tasks/](tasks/_index.md) 各档案的「历史会话纪要 (原文归档)」段(原文未删改), 或已沉淀进 [progress/](progress/_index.md) 的「已实现」段。
+2026-09-14 ~ 2026-09-19 的全部会话纪要已按专题迁移到 [tasks/](tasks/_index.md) 各档案的「历史会话纪要 (原文归档)」段(原文未删改), 或已沉淀进 [progress/_index.md](progress/_index.md) 的「已实现」段。
 需要回查历史请走 `tasks/_index.md` 定位专题档案; 本文件只保留**当前焦点**。

@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-09-21-0219">
 <meta name="issue-type" content="bug">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查">
 <meta name="issue-summary" content="qB 移动种子时偶发追加 .!qB 后缀, 触发重新校验并误判缺文件">
 <title>qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查 · bug · 计划外问题</title>
@@ -100,7 +100,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 02:19</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">grouping(缺文件扫描) / rules.actions.transfer</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">用户现场反馈</div></div>
     </div>
@@ -177,9 +177,10 @@ qB 移动已完成的种子 -> 文件被临时改名为 "原名.!qB"
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 02:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-22 20:38 — 认领（用户指派；计划：<a href="../../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html">.!qB 过渡态容忍修复计划</a>），状态 <strong>In Progress</strong>。方案取建议修法 1 为主体 + 连续 3 次上限兜底残留（修法 2 降为备选，修法 3 已被现有代码部分覆盖）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-09-22 20:38 —— 快进同步 676f761 后重跑锚点：<code>_check_missing_files</code> / <code>_handle_save_path_changes</code> / <code>_handle_state_transitions</code> / <code>_valid_for_representative</code> / <code>check_filelist</code> / <code>MoveToAction</code> 符号全部仍在，误判链路逻辑成立；现象未本地复现（无真机 qB），后缀成因维持「假设」定性，取证要求保留在计划 §07。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
