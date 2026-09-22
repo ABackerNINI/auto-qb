@@ -6,6 +6,12 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 1176 → 1177(**+1**; 2026-09-22 issue 26-09-21-1347 **热重载 L2 state 回滚修复**:
+  新增守阵 `test_apply_new_config_l2_preserves_runtime_state`(L2 热重载不得重读磁盘 state
+  回滚运行期内存态; 修前红验必红 —— 实测 mgr.state 被换成磁盘旧版 `{'stale_marker': True}` →
+  1 failed; 删 qbmanager.py:503 一行后转绿)。覆盖率 TOTAL 90% 持平, 语句 7542→7541(删行);
+  miss 623→624 与删行方向不符(删的是已覆盖语句), ±1 判为 server 线程路径的逐次度量噪声,
+  以实测为准。全量 1177 passed + 1 skipped, sidefx 越界 0)。
 - ↑ 1175 → 1176(**+1**; 2026-09-22 同任务 **W8 收尾 · 重写 `memory-bank.instructions.md`**:
   新增 `test_memory_bank_instructions_match_current_structure`。
   为什么值得单独钉: 该文件 `applyTo: memory-bank/**`, **只在编辑 memory-bank 时注入** ——
