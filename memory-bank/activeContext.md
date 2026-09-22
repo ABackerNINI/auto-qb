@@ -114,7 +114,7 @@
   写回 / 孤儿 tmp 被清理 / `.bak` 未被损坏内容盖掉 —— 四件事全成立(脚本在 `H:/Temp/e2e_state_recovery_check.py`,
   未进仓库)。
 
-- **🆕 tracker URL 含 passkey 全文写入日志 —— 已修并验证(未提交)**: issue
+- **🆕 tracker URL 含 passkey 全文写入日志 —— 已修并验证(已提交, 与远端 W1–W3 合流后推送)**: issue
   [26-09-21-1408-bug-web-tracker-url-passkey-log.html](issues/26-09-21-1408-bug-web-tracker-url-passkey-log.html)
   用户指派认领, 复验 @ 2026-09-22 15:35 锚点仍在(`web_commands.py:381/389` 仍原样内插 URL 原文;
   全库扫 URL 内插日志点也只有这两处)。修法: 新增 `utils.sanitize_tracker_url()` 单点脱敏,
@@ -123,9 +123,13 @@
   黑名单每漏一个名字就漏一个站); 入参异常一律返回占位串 `<invalid-url>`, 绝不抛异常
   (调用方在 qB 写操作之后的日志路径上)。守阵 3 条(`test_utils` 2 + `test_web` 1 端到端:
   真跑命令后断言密钥全文与参数名都不在日志文本里、主地址在 —— 断言不写死参数名, 防退回黑名单思路)。
-  全量 **1163 passed + 1 skipped**, 覆盖率 90%。issue 已置 `Fixed` + 索引已重建;
+  全量 **1163 passed + 1 skipped**(提交时实测), 覆盖率 90%; 与远端目录化重构 W1–W3(+9 守卫)
+  合流后重测 **1172 passed + 1 skipped**(基线单点已按重构后的 `testing/baseline.md` 更新)。
+  issue 已置 `Fixed` + 索引已重建;
   `conventions.md`「日志规范」已加「凭据脱敏」条(日志落盘 + `/api/log` 读回 + 通知联动直推系统通知)。
-  **未提交** —— 等用户显式「提交」指令。
+  ⚠ 合流踩坑: 本地 `origin/develop` 远端跟踪 ref 被静默写丢(停留在 `01fd595`), 预检算不出领先/落后
+  ⇒ 提交时看着"齐平"、推送才被拒; 非快进合并又让 `scripts/` 12 个文件在检出阶段整体丢失
+  (HEAD 与索引都在, 只是工作区没了) —— 已 `git restore --worktree` 还原。判据见 pitfalls。
 
 - **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
   普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;

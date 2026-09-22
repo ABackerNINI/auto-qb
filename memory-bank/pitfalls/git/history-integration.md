@@ -89,3 +89,16 @@
   (`index.lock`/`HEAD.lock`/`AUTO_MERGE.lock`/`packed-refs.lock`/`objects/maintenance.lock`),
   否则任何 git 命令都报 `Unable to create '.git/index.lock'`; ③工作区文件成片消失但 HEAD 里还在 ⇒
   `git checkout -- <file>`; ④收尾 `git fsck --no-progress` 确认 0 broken link。
+
+### 非快进合并后, **合并未触及**的文件也可能整片从工作区消失(HEAD 与索引都还在)
+
+- **触发**: 工具 shell 里跑非快进合并合流两个分叉, 合并看起来只报 1 个冲突, 解决完提交后跑测试。
+- **判别**: 2026-09-22 合并目录化重构 W1–W3 实例: `git merge` 只报 `memory-bank/testing.md` 一处冲突,
+  提交后 `git status --short` 却冒出 **12 条 ` D`** —— `scripts/` 整个目录在工作区没了;
+  而 `git ls-tree HEAD scripts/` = 12、`git ls-files scripts` 也在 ⇒ **丢失只在工作区**, 提交与索引完好。
+  症状是 pytest **收集阶段**就崩(`FileNotFoundError: scripts/sim_fsmock.py`, 2 errors 全库一条都跑不了),
+  极易被误读成"上游把文件删了"而去改测试 —— 别改, 上游没删。
+- **处置**: ①先判哪一侧丢: `git ls-tree HEAD <dir>` 与 `git ls-files <dir>` 都在 ⇒ 只是工作区丢了;
+  ②`git restore --worktree -- <dir>` 从索引还原(**不动 HEAD、不动索引**, 比 `checkout --` 更窄);
+  ③`git status --short` 应为空 → 重跑全量测试确认。
+  **教训**: 合并收尾不能只看"冲突几个" —— 未触及文件也会在检出阶段被清掉, 必看 `git status` 行数。

@@ -6,6 +6,12 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 1169 → 1172(**+3**; 2026-09-22 issue 26-09-21-1408「tracker URL 含凭据全文写入日志」守阵:
+  `test_sanitize_tracker_url` / `test_sanitize_tracker_url_unparseable`(脱敏只留主地址 `scheme://host[:port]`,
+  任意命名的凭据参数都覆盖; 降级占位 + urlparse 抛错不冒泡) / `test_cmd_trackers_log_sanitized`
+  (端到端: 真跑编辑/移除 tracker 命令, 断言日志里密钥全文与参数名均不在、主地址在 —— 断言不写死参数名,
+  防退回黑名单思路)。红验通过: 打回"内插 URL 原文" ⇒ 该守阵立即红。**本条数字在合并 W3 之后实测**
+  (与 W3 同批落远端, 曾各自报 1169 / 1163, 合流后为 1172)。
 - ↑ 1169 → 1169(**不变**; 2026-09-22 同任务 **W3 `testing/` 目录化**: 只动文档与 skill 脚本, 未增删用例 ——
   `testing.md`(6,706 字符 / 489 行)拆成 **9 个主题文件 + 存根**; **基线数字的单点从 `testing.md` 顶部
   迁到 [baseline.md](baseline.md)**, 变更流水原样外迁到本文件; `techContext.md` 的浏览器自动化两条轨道

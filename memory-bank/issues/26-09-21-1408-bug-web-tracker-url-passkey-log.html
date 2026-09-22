@@ -166,7 +166,7 @@ logger.info(f"WEB UI | 种子 {hash[:8]} 移除 tracker: {url}")
     <h3>修复后补充</h3>
     <p><b>实际修法</b>：新增 <code>utils.sanitize_tracker_url()</code>（单点，<code>utils.py</code>），脱敏为「主地址」<code>scheme://host[:port]</code> —— path / query / fragment 整段丢弃，userinfo（<code>user:pass@</code>）也剥掉；无 scheme 时取 path 首段兜底；入参异常（空 / 非字符串 / urlparse 抛错）一律返回占位串 <code>&lt;invalid-url&gt;</code>，<b>绝不抛异常</b>（调用方在 qB 写操作之后的日志路径上）。两处日志调用改为经它输出。</p>
     <p><b>验证方式</b>：① <code>tests/test_utils.py</code> 两个用例覆盖 passkey / 换名凭据(authkey,token) / 端口 / udp / userinfo / 无 scheme / 降级占位 / urlparse 抛错不冒泡；② <code>tests/test_web.py::test_cmd_trackers_log_sanitized</code> 端到端守阵 —— 真跑 <code>_cmd_edit_tracker</code> / <code>_cmd_remove_tracker</code>，断言日志文本里密钥全文与参数名都 <code>not in</code>，主地址 <code>in</code>（断言刻意不写死参数名，防后来者又退回黑名单思路）。</p>
-    <p><b>测试数字</b>：全量 <code>uv run pytest tests -q</code> → <b>1163 passed, 1 skipped</b>，覆盖率 TOTAL <b>90%</b>（基线 1160 → 1163，本次 +3；基线数字以 testing.md 为准）。<code>src/auto_qb/utils.py</code> 覆盖 98%。</p>
+    <p><b>测试数字</b>：全量 <code>uv run pytest tests -q</code> → <b>1163 passed, 1 skipped</b>，覆盖率 TOTAL <b>90%</b>（基线 1160 → 1163，本次 +3；基线数字单点在 2026-09-22 目录化重构后已迁至 <code>memory-bank/testing/baseline.md</code>；与远端 W1–W3 的 +9 守卫合流后重测为 <b>1172 passed + 1 skipped</b>）。<code>src/auto_qb/utils.py</code> 覆盖 98%。</p>
     <p><b>红验</b>（2026-09-22）：把编辑分支的日志临时打回「内插 URL 原文」，<code>test_cmd_trackers_log_sanitized</code> 立即红 —— 报错直接指到 <code>…/announce?passkey=SUPERSECRET123</code>，证明守阵真的咬得住，不是摆设；随后已还原，3 条守阵复跑全绿。</p>
     <p><b>连带回写</b>：<code>memory-bank/conventions.md</code>「日志规范」新增「凭据脱敏」条 —— 日志会落盘（含轮转备份）+ 经 <code>/api/log</code> 读回 + 经通知联动直推系统通知，故任何可能内嵌凭据的 URL 进日志前必须过本函数。</p>
   </section>
