@@ -51,6 +51,7 @@
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
+- test_api_fs_dirs_case_sibling_is_outside_whitelist: **仅 Linux** —— 大小写兄弟目录(/x/Media 与 /x/media)必须判为越界, 白名单归一不得做 NTFS 式折叠(折叠 => 越界放行, fail-open)
 - test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
@@ -112,6 +113,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -2172,6 +2174,30 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     # ⑦ 鉴权 + 只读无副作用
     assert client.get("/api/fs/dirs").status_code == 401
     assert mgr.web_commands.empty()
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="只有大小写敏感的 FS(ext4)上两个名字才是两个目录; NTFS 上是同一个, 断言无意义")
+def test_api_fs_dirs_case_sibling_is_outside_whitelist(web_env, tmp_path):
+    """**大小写兄弟目录必须判为越界** —— `web._fs_real` 不得做 NTFS 式大小写折叠
+
+    生产代码跑在**本机真实磁盘**上: Linux 下 `/x/Media` 与 `/x/media` 是两个**不同**目录。若把归一
+    换成 `ntpath.normcase`(折叠大小写 + `/`->`\\`), 后者会被判成"在白名单内" ⇒ **越界放行**
+    (fail-open, 安全方向反了)。`os.path.normcase` 在 Linux 是恒等函数, 恰恰是所需语义 —— 钉死它。
+    ⚠ 本条只能在 Linux 上真跑(NTFS 上根本建不出"仅大小写不同"的两个目录), 由 CI 验。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    root = tmp_path / "Media"
+    root.mkdir()
+    sibling = tmp_path / "media"  # 仅大小写不同
+    sibling.mkdir()
+    # 前置校验: 这两者**确实是两个目录**(否则下面的 403 断言说明不了任何事)
+    (root / "inside.txt").write_bytes(b"x")
+    assert not (sibling / "inside.txt").exists(), "大小写兄弟必须是另一个目录, 否则本条断言无意义"
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    r = client.get("/api/fs/dirs", headers=auth, params={"path": norm(sibling)})
+    assert r.status_code == 403, f"大小写兄弟目录不得被折叠进白名单(折叠 => 越界放行): {r.status_code}"
 
 
 def test_api_fs_mkdir_endpoint(web_env, tmp_path):

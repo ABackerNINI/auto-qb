@@ -6,7 +6,17 @@
 
 ```bash
 # 依赖统一 uv 管理 (pyproject.toml + uv.lock, 2026-09-15 起); 首次/依赖变更后先 `uv sync`
-# 基线: **1143 passed (Windows 本地, 0 skipped) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+# 基线: **1146 passed + 1 skipped (Windows 本地) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测;
+#   ↑ 1143 → 1146(**+3 跑 +1 跳**; 2026-09-22 其二: 平台语义守阵补齐 ——
+#     ① `tests/test_sim_corpus.py` +3: `test_sim_is_within_host_semantics`(B2 逃逸判定在**宿主语义**下
+#       成立, 用 tmp_path ⇒ win32 与 linux **两边各真跑一次**) / `test_sim_is_within_linux_equivalent`
+#       (把 `os` 换成 `posixpath`+`sep='/'` ⇒ 本机复现 Linux 语义) / `test_sim_is_within_red_on_fold_without_sep`
+#       (**红验**: 只把 `_norm` 换成 `ntpath.normcase`、分隔符不动 ⇒ 真子路径被误拒 ⇒ 上一条立刻红,
+#       实测 1 failed)。钉死的是「sim_qb 的 fs_root 是 `os.makedirs` 出来的**宿主真实目录**,
+#       save_path 由它拼出 ⇒ 判定必须跟随宿主 FS, **不能统一到 ntpath**」这条结论。
+#     ② `tests/test_web.py` +1(**仅 Linux 跑**, win32 上 skip): `test_api_fs_dirs_case_sibling_is_outside_whitelist`
+#       —— 大小写兄弟目录(`/x/Media` vs `/x/media`)必须判为越界; 若 `_fs_real` 做 NTFS 式折叠则
+#       **越界放行**(fail-open)。⚠ NTFS 上建不出"仅大小写不同"的两个目录 ⇒ 本机(Windows)只能 skip, 由 CI 验。
 #   ↑ 1142 → 1143(**+1**; 2026-09-22 GitHub CI 红了 `test_fsmock_long_path_prefix_and_case`
 #     —— `scripts/sim_fsmock.py::_key` 用 `os.path.normcase` 做大小写折叠, 而它在 Linux 是
 #     **`posixpath.normcase`(恒等函数)** ⇒ 折叠静默失效 ⇒ 把存在的文件报成缺失 ⇒ D4 判据全假。

@@ -7,6 +7,9 @@
 - test_fsmock_intercepts_corpus_paths: 语料树内的路径走表(三态), 树外原样委托真函数
 - test_fsmock_long_path_prefix_and_case: 剥 \\\\?\\ 前缀 + 大小写不敏感(NTFS 语义) —— 不这么做会把存在的文件报成缺失
 - test_fsmock_case_folding_does_not_follow_platform: **防回潮** —— 折叠必须固定走 NTFS 语义, 不得跟随 `os.path`(运行时把 os 换成 posixpath 判, 不靠文本扫描)
+- test_sim_is_within_host_semantics: B2 逃逸判定在**宿主语义**下成立(真子路径/根自身/树外兄弟), 两平台各真跑一次
+- test_sim_is_within_linux_equivalent: Linux 等价(`os`->posixpath + sep '/')下同一组断言仍成立
+- test_sim_is_within_red_on_fold_without_sep: **红验** —— 只换 ntpath 折叠、分隔符不动 => 真子路径被误拒(证明上条不恒绿)
 - test_fsmock_unknown_path_in_scope_is_missing: 命中语料树但表里没有 -> 报"不存在"并计数(暴露探测不完整, 不伪装成真缺失)
 - test_fsmock_disk_usage_uses_recorded_free_space: shutil.disk_usage 回录制到的可用空间(不是回放机的)
 - test_fs_mock_coverage_static_guard: **静态守阵** —— 语料相关的 FS 探测点必须仍是被 mock 覆盖的那三个函数
@@ -23,6 +26,7 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import json
+import ntpath
 import os
 import posixpath
 import sys
@@ -105,6 +109,52 @@ def test_fsmock_case_folding_does_not_follow_platform(monkeypatch):
         "大小写折叠跟随了 os.path —— 在 Linux(os.path is posixpath, "
         "normcase 是恒等函数)上会退化成大小写敏感 ⇒ D4 判据全假"
     )
+
+
+# --------------------------------------------------------------------------- B2 逃逸判定: 宿主语义
+# sim_qb 的 fs_root 是 `os.path.join(run_dir, "fs")` 且 os.makedirs 真建的**宿主目录**
+# (语料档走 resolve_fsroot: "<FSROOT>" -> 同一个 fs_root), save_path 一律由它拼出 ⇒
+# 路径是**宿主形态**, 不是 Windows 假路径 ⇒ 判定必须跟随宿主 FS 语义(不能统一到 ntpath)。
+def test_sim_is_within_host_semantics(tmp_path):
+    """B2 逃逸判定在**宿主语义**下必须成立 —— 本机 win32 / CI linux, 两边各真跑一次
+
+    用 tmp_path 而不是写死盘符路径, 就是为了让它**两平台都能真跑**(而不是靠 monkeypatch 演算)。
+    """
+    root = tmp_path / "fs"
+    (root / "d0").mkdir(parents=True)
+    child = root / "d0" / "x.mkv"
+    sibling = tmp_path / "other" / "x.mkv"  # 兄弟目录: 名字以 root 为前缀但不是其子
+    assert simqb.is_within(str(child), str(root)) is True, "真子路径必须判为在界内"
+    assert simqb.is_within(str(root), str(root)) is True, "根自身算界内"
+    assert simqb.is_within(str(sibling), str(root)) is False, "树外兄弟目录必须判为逃逸"
+
+
+def test_sim_is_within_linux_equivalent(monkeypatch):
+    """Linux 等价: `os` -> (posixpath, sep '/') ⇒ 本机(win32)就能复现 CI 的语义
+
+    与 test_fsmock_case_folding_does_not_follow_platform 同款手法: 不必等推上去才知道 Linux 红不红。
+    """
+    monkeypatch.setattr(simqb, "os", types.SimpleNamespace(path=posixpath, sep="/"))
+    assert simqb.is_within("/run/fs/d0/x.mkv", "/run/fs") is True
+    assert simqb.is_within("/run/other/x.mkv", "/run/fs") is False
+
+
+def test_sim_is_within_red_on_fold_without_sep(monkeypatch):
+    """**红验**: 只把折叠换成 ntpath、分隔符不动 ⇒ Linux 上**真子路径被误拒**
+
+    含义: 「统一到 ntpath」不是单点改动 —— **折叠与分隔符必须同源**。只换一半会混分隔符
+    (`r="\\run\\fs"` 再拼 `"/"`) ⇒ B2 把**所有**路径判成逃逸 ⇒ sim 每个写入撞 BoundaryViolation。
+    本条证明上一条守阵**能区分两态**, 不是恒绿。
+    """
+    monkeypatch.setattr(simqb, "os", types.SimpleNamespace(path=posixpath, sep="/"))
+
+    def _norm_ntpath_only(p):
+        if p.startswith("\\\\?\\"):
+            p = p[4:]
+        return ntpath.normcase(posixpath.realpath(posixpath.abspath(p)))
+
+    monkeypatch.setattr(simqb, "_norm", _norm_ntpath_only)
+    assert simqb.is_within("/run/fs/d0/x.mkv", "/run/fs") is False, ("只换 normcase 会把真子路径判成逃逸 ⇒ 折叠与分隔符必须同源(改一个就必红)")
 
 
 def test_fsmock_unknown_path_in_scope_is_missing():

@@ -33,6 +33,18 @@
 
 ## 正在进行
 
+- **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
+  普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;
+  `add_long_path_prefix_for_win` 非 Windows 原样返回; autostart 有 win32/darwin/linux 三支); `tests/`
+  已在 Linux CI 全绿(Windows 行为一律 `monkeypatch.setattr(sys,"platform","win32")` 在 Linux 上测)。
+  **真差距是 B2 逃逸判定 `sim_qb.is_within` 没有 pytest 覆盖** —— 只有 `sim_qb.py --self-test`(CI 不跑)。
+  已补 3+1 条守阵(见 [testing.md](testing.md) 基线 1143→1146), 并**收回**一条错误建议:
+  sim_qb 的 `fs_root` 是 `os.makedirs` 出来的**宿主真实目录**(语料档 `<FSROOT>` 也解析到它) ⇒
+  路径是**宿主形态** ⇒ 必须跟随宿主 FS, **不能统一到 `ntpath`**(只换 normcase 会混分隔符 ⇒ 全线误拒,
+  已实测: 真子路径 `True→False`)。`src/` 与 sim_qb 的平台分支**一行未动**。
+  ⚠ 待办(未做): 把 `--self-test` 的 B2 段下沉进 `tests/`; `web.py::_within_roots` 的大小写守阵
+  **只能在 Linux 上真跑**(本机 skip), 由 CI 验。
+
 - **🆕 列设置重置 · 双轨模型重设计 —— 已实施完毕(未提交), 剩真机走查**: 用户定性"修复了很多次,
   急需重新设计, 简化模型, 从根本上杜绝"; 计划
   [docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html](../docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html),
