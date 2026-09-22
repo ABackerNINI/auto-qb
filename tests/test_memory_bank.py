@@ -112,7 +112,10 @@ def test_task_file_naming_and_sections() -> None:
         text = path.read_text(encoding="utf-8")
         assert STATUS_RE.search(text), f"{path.name} 缺少合法的 `**Status:**` 行"
         for section in REQUIRED_SECTIONS:
-            assert section in text, f"{path.name} 缺少必备章节 `{section}`"
+            # ❗必须锚到**行首标题**: `section in text` 会被正文里的字面量骗过 ——
+            # 本档案的日志里正好写了"把 `## 进度日志` 标题丢了"这句, 于是缺章节也判绿(2026-09-22 实测)。
+            assert re.search(rf"^{re.escape(section)}\s*$", text,
+                             re.M), (f"{path.name} 缺少必备章节 `{section}`(须是行首的 `## ` 标题, 正文里提到不算)")
 
 
 def test_task_status_matches_index_section() -> None:
