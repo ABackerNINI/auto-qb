@@ -75,6 +75,17 @@
   ⇒ 在工具 shell 里跑全量测试前**先设 `TMPDIR`**; 看到这个 `PermissionError` **先怀疑临时目录, 别当成代码回归**。
   📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
   完整约定见 [../../techContext.md](../../techContext.md)「临时目录 / 备份盘约定」。
+  📌 **2026-09-23 把它写进了闸门命令(真正的收口)**: `.commit-flow.toml` 里那条 pytest 闸门改成
+  `set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov` —— 以前**靠调用者记得导出**,
+  从工具 shell 跑 `preflight.py` / `commit.py` 忘导出就假红。
+  ⚠ 该写法是 **cmd.exe** 的: 预检用 `subprocess.run(shell=True)`, Windows 上解析到 COMSPEC → cmd.exe,
+  POSIX 的 `TMPDIR=x cmd` 前缀**不生效**(实测 rc=1); 且**引号不能省** ——
+  `set VAR=value && cmd` 会把 `&&` 前的空格并进 value(实测变成 `'R:/Temp/auto-qb/tests '`, 带尾随空格)。
+- **复发**: 1 —— 2026-09-23 走提交流水线时, 预检的 pytest 闸门**没带 TMPDIR**, 又抛
+  `PermissionError [WinError 5] … pytest-current`(rc=1)⇒ STOP。
+  **为什么没命中**: 本轮**读过本文件**、也知道要设 TMPDIR, 但只给**自己手工跑**的测试带了,
+  没意识到**闸门命令是配置里的另一条执行路径** —— 坑里记的是"跑测试时要设", 没写"闸门也是跑测试"。
+  ⇒ 收口方式即上面那条配置改动: **改配置比改记忆可靠**。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复了** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` **成功**
   (改名只作用于**目录项**, 不需要能读那个重解析点), 之后在**默认 TMPDIR** 下跑

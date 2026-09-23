@@ -48,6 +48,7 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 (`tests/test_sidefx.py`), 改清单时同步。
 """
 import os
+import re
 import subprocess
 
 import pytest
@@ -76,9 +77,50 @@ def _guard_run(cmd, *args, **kwargs):
 # AUMID 键的空操作替身由 sidefx 提供 —— 记账器据此识别"被守卫拦下的调用", 两个夹具谁先安装都不影响判定
 _StubRegKey = sidefx.StubRegKey
 
+# 并行(xdist)下各 worker 回传的台账原文(串行跑时恒为空 —— 那时台账在 sidefx.LAST_REPORT)
+_WORKER_REPORTS = []
+
+# 台账首行形如「副作用台账: 共 2036 条, 越界 0 条」
+_SIDEFX_HEAD = re.compile(r"共 (\d+) 条, 越界 (\d+) 条")
+
+
+def pytest_testnodedown(node, error):
+    """xdist 钩子: 收各 worker 回传的副作用台账(串行跑时不会被调用; xdist 未装时本钩子不被注册)"""
+    report = (getattr(node, "workeroutput", None) or {}).get("sidefx_report")
+    if report:
+        _WORKER_REPORTS.append(report)
+
 
 def pytest_terminal_summary(terminalreporter):
-    """把副作用台账打进收尾总结 —— 没有越界时守卫是静默的, 不打印就没人知道它在工作"""
+    """把副作用台账打进收尾总结 —— 没有越界时守卫是静默的, 不打印就没人知道它在工作
+
+    ❗并行(xdist)下每个 worker 各跑一个会话, 而**终端总结只在控制器上产出** ⇒ worker 的台账若不回传,
+    「越界 0 条」这行在日常输出里会**静默消失**(拦截仍在: 越界时 worker 自己的会话夹具已让本次运行失败,
+    见 `sidefx_recorder` —— 丢的只是**可见性**)。回传走 xdist 的 `workeroutput`:
+    worker 侧写进 `config.workeroutput`, 控制器侧在 `pytest_testnodedown` 里从 `node.workeroutput` 收。
+    串行跑时 `pytest_testnodedown` 不会被调用, 走下面的原路径。
+    """
+    if _WORKER_REPORTS:
+        # 汇总成一行 —— 逐 worker 打 8 行会把收尾刷屏, 而这行的用处正是"扫一眼确认越界 0";
+        # 但**只要有越界就把该 worker 的全文打出来**, 否则真出事时反而看不到细节。
+        total = violations = 0
+        offending = []
+        for i, rep in enumerate(_WORKER_REPORTS, 1):
+            m = _SIDEFX_HEAD.search(rep)
+            if not m:
+                continue
+            total += int(m.group(1))
+            bad = int(m.group(2))
+            violations += bad
+            if bad:
+                offending.append((i, rep))
+        terminalreporter.write_sep("=", "测试期真实系统副作用台账 (守卫见 tests/sidefx.py)")
+        terminalreporter.write_line(f"副作用台账({len(_WORKER_REPORTS)} 个并行 worker 汇总): 共 {total} 条, 越界 {violations} 条")
+        for i, rep in offending:
+            terminalreporter.write_line(f"--- worker {i} 有越界 ---")
+            for line in rep.splitlines():
+                terminalreporter.write_line(line)
+        return
     report = sidefx.LAST_REPORT
     if not report:
         return
@@ -88,7 +130,7 @@ def pytest_terminal_summary(terminalreporter):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def sidefx_recorder():
+def sidefx_recorder(request):
     """会话级: 全程记录真实系统副作用; 收尾时如有越界项**让本次运行失败**(详见模块 docstring ③)
 
     测试可请求本夹具取用记账器(如断言"某个操作没有产生副作用")。
@@ -102,6 +144,10 @@ def sidefx_recorder():
         recorder.uninstall()
         sidefx.SESSION = None
         sidefx.LAST_REPORT = recorder.report()  # 交给 pytest_terminal_summary 打印
+        # 并行时把台账回传给控制器 —— 否则终端总结(只在控制器上产出)看不到它, 「越界 0 条」会静默消失
+        workeroutput = getattr(request.config, "workeroutput", None)
+        if workeroutput is not None:
+            workeroutput["sidefx_report"] = sidefx.LAST_REPORT
         violations = recorder.violations
         if violations:
             raise AssertionError(

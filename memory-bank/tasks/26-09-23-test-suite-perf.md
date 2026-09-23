@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-23
 **Updated:** 2026-09-23
-**Summary:** 归因: 本机**每次文件操作收固定开销**(初始 写 20ms / 删 43ms; 与数据量无关、三盘一致), 全量一次建 577 个临时目录 ⇒ 耗时由它支配。代码侧修掉三处: ①sidefx 收尾 4.7~9.0s → 1.04s ②前端 JS 语法守阵 7.4s → 0.38s(语义 8/8 对齐 `node --check`)③三处临时目录泄漏 → 残留 1 个。**大头在环境**: 用户两次调整系统层排除项后, 四类操作全部 <1ms(`mkdir` 0.13 / 写 0.21 / `remove` 0.16 / `rmdir` 0.14ms)⇒ 全量 **75s → 19.6s(3.8×)**, 并行 `-n 4` **5.0s(15×)** 且波动极小 ⇒ 并行结论**翻转为建议采用**。**沙箱假设已实测排除**。C 方案实测**被推翻, 未实施**。**未提交**。
+**Summary:** 全量测试耗时 **75s → 默认并行 7.6s**。根因是**环境**: 本机每次文件操作曾收固定开销(写 20ms / 删 43ms, 与数据量无关、三盘一致), 一次全量建 577 个临时目录; 用户两次调整系统层排除项后四类操作全部 <1ms ⇒ 串行 19.4s。代码侧另修三处框架开销: sidefx 收尾 4.7~9.0s → 1.04s、JS 语法守阵 7.4s → 0.38s(语义 8/8 对齐 `node --check`)、三处临时目录泄漏。**已上并行**: 加 `pytest-xdist` + `pytest.ini` 的 `addopts = -n 4`(默认), 并补 `workeroutput` 台账回传(并行下「越界 0」不再消失)。代码侧改动已提交推送 `1bde85d`; 并行部分待提交。C 方案实测被推翻, 未实施。
 
 ## 原始请求
 
@@ -99,10 +99,11 @@ PowerShell 的 `Get-MpComputerStatus` / `Get-MpPreference` 也无输出 ⇒ **�
 | G | 跑闸门 + 回写基线 | Complete | 2026-09-23 | 最终树闸门 **1191 passed + 1 skipped / TOTAL 91% / 72.71s**, 越界 0; 耗时基线已改**区间**口径 |
 | I | 白名单后复测 + 逐操作分解 | Complete | 2026-09-23 | 建 0.64 / 写 0.58 / `remove` 14.6 / `rmdir` 52.7ms; **沙箱外复测没变快** ⇒ 拦截在沙箱之外 |
 | J | 临时目录 churn 量化 | Complete | 2026-09-23 | 577 个目录 × 45.5ms = **26.2s**, 占全量 **44%**(当前最大单项) |
-| K | 并行评估(xdist) | Complete | 2026-09-23 | 最终: `-n 4` **5.00 / 5.06s** vs 串行 19.6s(约 4×), 波动极小; 守卫拦截仍在、**台账不打印** |
+| K | 并行评估(xdist) | Complete | 2026-09-23 | 最终: `-n 4` **5.00 / 5.06s** vs 串行 19.6s(约 4×), 波动极小 |
 | M | 设置调整后复测(第三轮) | Complete | 2026-09-23 | 四类操作全部 **<1ms**; 串行 **19.37~20.16s**; 沙箱假设彻底排除 |
-| L | 是否落地并行 / 改闸门 | Pending | 2026-09-23 | **结论已翻转为"建议采用 `-n 4`"**; 需用户拍板: 加 `pytest-xdist` 依赖、闸门是否换并行、是否补台账聚合 |
-| H | 提交 / 推送 | Pending | 2026-09-23 | 用户**尚未说「提交」** |
+| L | 落地并行(`-n 4` 设为默认) | Complete | 2026-09-23 | 加 `pytest-xdist==3.8.0` + `pytest.ini` 加 `-n 4` + conftest 补台账回传; 默认 **7.6s**(串行 `-n 0` 21s) |
+| N | 提交并推送 | Complete | 2026-09-23 | `1bde85d`; Gitee 与 GitHub `develop` 均一致; 无幽灵 diff |
+| O | 闸门命令自带 `TMPDIR` | Pending | 2026-09-23 | **遗留**: `.commit-flow.toml` 的闸门不设 `TMPDIR`, 忘导出即**假红**(本轮已复现); 属配置改动, 待拍板 |
 
 ## 进度日志
 
@@ -216,3 +217,34 @@ PowerShell 的 `Get-MpComputerStatus` / `Get-MpPreference` 也无输出 ⇒ **�
 - **未改仓库**: 仍未加 `pytest-xdist` 依赖、未改 `.commit-flow.toml`(等用户拍板)。
   文档已按末态更新: `perf-measurement.md` 第 1 条重写为"已治好 + 定位三步"、`parallel-run.md` 整篇重写、
   `baseline.md` / `baseline-history.md` / `run.md` / `tmpdir.md` 同步。
+
+### 2026-09-23 (第四轮: 提交 + 上并行)
+
+用户: 「先提交然后上并行」。
+
+**① 提交**: `1bde85d` ⚡️「全量测试耗时 75s → 19s: 修三处框架开销 + 修临时目录泄漏, 并回写知识库」
+—— 15 个路径(4 份 `tests/` + 11 份 `memory-bank/`), 走 my-commit-flow 七步: 预检 → 闸门 7 条全过 →
+逐路径暂存 → 提交并核 ref 三处一致 → 推 Gitee → 尝试一次 GitHub 镜像 → 查幽灵 diff(空)。
+**Gitee 与 GitHub 的 `develop` 都是 `1bde85d`**(`ls-remote` 核对), 本地 HEAD 一致。
+
+- ⚠ **踩到已记的坑**: 预检第一次跑闸门**红了** —— `uv run pytest tests -q --no-cov` 没带 `TMPDIR`,
+  落回 `H:\Temp`, 撞上那个损坏的 `pytest-of-11059\pytest-current` reparse point(`PermissionError [WinError 5]`)。
+  即 [../pitfalls/testing/tmpdir.md](../pitfalls/testing/tmpdir.md) 里那条**假红**。
+  处置: 带 `TMPDIR="R:/Temp/auto-qb/tests"` 重跑预检即全绿。
+  ⇒ **遗留**: `.commit-flow.toml` 的闸门命令**自己不设 TMPDIR**, 依赖调用者导出 —— 从工具 shell 跑
+  `preflight.py` / `commit.py` 而忘了导出就会**假红**。本轮未改(属配置改动, 待拍板)。
+
+**② 上并行(已落地)**:
+- `pyproject.toml` dev 组加 **`pytest-xdist==3.8.0`**; `uv sync` 更新 `uv.lock`(带出 execnet 2.1.2)。
+- `pytest.ini` 的 `addopts` 加 **`-n 4`** ⇒ **并行成为默认**; 注释里写明串行逃生口 `-n 0` 与两条注意。
+- **`tests/conftest.py` 补台账回传**(并行下唯一真问题): worker 侧把台账写进 `config.workeroutput`,
+  控制器侧用 xdist 钩子 `pytest_testnodedown` 从 `node.workeroutput` 收, 在 `pytest_terminal_summary` 里
+  **汇总成一行**: `副作用台账(4 个并行 worker 汇总): 共 2034 条, 越界 0 条`。
+  **有越界时**把该 worker 的全文打出来(比串行更好: 能看出是哪个 worker)。
+- **实测**: 默认(并行, 带覆盖率)**7.61 / 7.79 / 8.87s**; 串行 `-n 0` **21.15 / 21.56s**;
+  `-n 4 --no-cov` 5.00 / 5.06 / 5.17s。全部 `1191 passed + 1 skipped`。
+- **守卫验证(注入法, 两次)**: 用 `pa_violate.py` 往仓库根注入一条越界删除 ——
+  串行与 `-n 4` **都**报 `AssertionError: 测试期出现 1 条越界的真实系统副作用`(拦截没丢);
+  且汇总行正确打出「越界 4 条」+ 四个 `--- worker N 有越界 ---`(可读性也回来了)。
+- **覆盖率口径**: 并行 `7729 / 623 / 2636 / **219**` vs 串行 `623 / **218**`, TOTAL 都是 91%
+  ⇒ **分支 partial 多 1, 语句数一致**(早先记的"623 vs 622"有误, 已改正)。

@@ -45,6 +45,9 @@ auto-qb = "auto_qb.cli:main"
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
+    # 并行跑测试: 全量 19.4s → 5.0s(`-n 4`)。见 pytest.ini 的 addopts 与
+    # memory-bank/pitfalls/testing/parallel-run.md (含 sidefx 台账在并行下的回传机制)。
+    "pytest-xdist==3.8.0",
 ]
 
 [build-system]

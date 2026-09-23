@@ -33,16 +33,17 @@ TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q
 
 ## 环境纪律
 
-- **并发跑 pytest**: 既有说法"`FakeQbServer` 绑固定端口所以不能并行"**事实有误**
-  (它用 `("127.0.0.1", 0)`, 端口由内核分配)。系统层排除项调好之后, `-n 4` 全量 **5.0s**(串行 19.6s, 约 4×)
-  且**波动极小**, 建议作本地快车道; 但 sidefx 台账在并行下**不打印**(拦截仍在, 只是看不见)、
-  覆盖率与串行差 1 个单位 ⇒ 当**闸门**用之前先补控制器侧台账聚合。
-  取舍、样本与判据见 [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
+- **并行是默认**(`pytest.ini` 的 `addopts = -n 4`, 需 dev 依赖 `pytest-xdist`): 全量带覆盖率
+  **7.6s**(串行 `-n 0` 是 21s)。**单文件排查用 `-n 0`** —— 并行会慢在 worker 启动上。
+  sidefx 台账已用 `workeroutput` 回传汇总(收尾打「(4 个并行 worker 汇总) … 越界 0 条」),
+  所以「越界 0」这行不会消失; 覆盖率分支 partial 与串行差 1(219 vs 218)。
+  ⚠ 既有说法"`FakeQbServer` 绑固定端口所以不能并行"**事实有误**(它用 `("127.0.0.1", 0)`)。
+  样本与判据见 [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
 - 测试**基本全部使用 Fake, 不连真实 qBittorrent**(随时可全量运行)。唯一例外是
   `test_local_qb_service.py` 与 `test_ui.py::test_connect_failure_throttles_logging`(走 `FakeQbServer`)。
 - **耗时画像**: **当前数字以 [baseline.md](baseline.md) 为准, 本节只记量级与成因**(避免两处各自漂移)。
-  2026-09-23 末态: 串行空载约 **19.6s**, 并行 `-n 4` 约 **5.0s**(同日更早是 61s / 75s 量级)。
-  Linux(WSL, ext4) 约 **12s** 量级(旧测)。
+  2026-09-23 末态: **默认并行(`-n 4`)带覆盖率约 7.6s**; 串行 `-n 0` 约 **21s**
+  (同日更早是 61s / 75s 量级)。Linux(WSL, ext4) 约 **12s** 量级(旧测)。
   ⚠ **单次数字没有意义, 报耗时必须带区间** —— 逐次实测集只在 [baseline.md](baseline.md) 里枚举一处。
   ❗**耗时曾被"每次文件操作的固定开销"支配**(不是 Python / 覆盖率): 初始态每次操作收
   **20ms(写)/ 43ms(删)** 的固定过路费(与数据量无关, 三块盘一致), 全量一次建 577 个临时目录 ⇒ 约 26s。
