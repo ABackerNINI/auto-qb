@@ -99,12 +99,15 @@ auto-qb 常驻后台运行,实时跟随 qBittorrent 的状态,自动帮你打理
 
 ### 1. 安装
 
-```bash
+```text
 # 下载 / 克隆源码后,进入项目目录
-uv sync    # 一次装齐全部依赖(含托盘 / Web UI / 测试)
+commands run env.sync    # 一次装齐全部依赖(含托盘 / Web UI / 测试)
 ```
 
-依赖全部锁定在锁文件里,重复执行 `uv sync` 结果可复现,无需其他安装步骤。
+> `commands run <task>` 是本仓库命令的统一调用面: `<task>` 对应 `.commands/` 包里的一条命令
+> (真实命令与环境前缀都在包里, 不在这里抄)。不知道有哪些就 `list` 逐级看 —— 用法见 AGENTS.md。
+
+依赖全部锁定在锁文件里,重复执行 `commands run env.sync` 结果可复现,无需其他安装步骤。
 
 ### 2. 配置
 
@@ -158,7 +161,7 @@ uv run auto-qb my-config.yml
 uv run auto-qb --tray
 ```
 
-> `uv run python src/auto-qb.py` 是等价的旧式写法,两者任选。
+> 上面是用户可见的入口; `commands run dev.run -- config.yml` 走的是同一份源码入口,两者等价。
 
 ## 命令行参数
 
@@ -221,12 +224,12 @@ uv run auto-qb --tray --dry-run   # 托盘模式同样支持试运行
 
 想参与开发或验证行为?测试全部使用替身,不连真实 qBittorrent,可随时全量运行:
 
-```bash
-uv sync                                  # 同步依赖(含开发/测试依赖)
+```text
+commands run env.sync                              # 同步依赖(含开发/测试依赖)
 
-uv run pytest tests -q                   # 全量测试
-uv run pytest tests -q --no-cov          # 快速迭代时跳过覆盖率报表
-uv run pytest tests/test_grouping.py -q  # 只跑单个测试文件
+commands run test.full                             # 全量测试
+commands run test.quick                            # 快速迭代时跳过覆盖率报表
+commands run test.one -- tests/test_grouping.py    # 只跑单个测试文件
 ```
 
 ## 免责声明与许可证

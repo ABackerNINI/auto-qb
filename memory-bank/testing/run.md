@@ -6,29 +6,25 @@
 ## 命令
 
 ```bash
-uv sync                                     # 依赖统一 uv 管理 (pyproject.toml + uv.lock); 首次 / 依赖变更后
-uv run pytest tests -q                      # 全量 (pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch)
-uv run pytest tests -q --no-cov             # 快速迭代; 提交闸门 (auto = true) 跑的就是这一档, 覆盖率基线另算
-uv run pytest tests/test_grouping.py -q     # 单文件
-uv run pytest tests/test_checking.py -q -k "skip"   # 按关键词
+commands run env.sync                       # 依赖统一 uv 管理 (pyproject.toml + uv.lock); 首次 / 依赖变更后
+commands run test.full                      # 全量 (pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch)
+commands run test.quick                     # 快速迭代; 提交闸门 (auto = true) 跑的就是这一档, 覆盖率基线另算
+commands run test.one -- tests/test_grouping.py          # 单文件
+commands run test.one -- tests/test_checking.py -k skip  # 按关键词
 ```
 
 - **当前基线数字(唯一手改处)** → [baseline.md](baseline.md); **逐次增量流水** → [baseline-history.md](baseline-history.md)。
-- `pytest.ini`: `pythonpath = src`(uv sync 也会把项目 editable 装入 venv, 双保险), `testpaths = tests`, addopts 含覆盖率。
+- `pytest.ini`: `pythonpath = src`(env.sync 也会把项目 editable 装入 venv, 双保险), `testpaths = tests`, addopts 含覆盖率。
 
-## ⚠️ 工具 shell 里跑之前必须设 `TMPDIR`
+## ⚠️ `TMPDIR` 已内置在 task 里 —— 不要再手工加前缀
 
-```bash
-TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q
-```
-
-- **原因**: 工具 shell 的 `TMPDIR` 默认指向 `H:\Temp`, pytest 会在**会话结束的清理阶段**抛
+- **历史**: 工具 shell 的 `TMPDIR` 默认指向 `H:\Temp`, pytest 会在**会话结束的清理阶段**抛
   `PermissionError [WinError 5] … pytest-current`(**测试本身是过的**, 崩在符号链接的 `resolve` / `readlink`)⇒
-  **退出码非 0**、提交闸门误判红。
-- 改 H 盘权限**无效**; 只改 `TMP` / `TEMP` 也无效(Python 的 `tempfile` **先读 `TMPDIR`**);
-  只加 `--basetemp` 也不行(测试里直接用 `tempfile` 的仍落 H: ⇒ 4 failed + 1 error)。
-- 备选是 `C:/Users/11059/AppData/Local/Temp`(更快), 但按约定**统一走 R 盘**。
-  ⚠ 换盘**省不了多少** —— 本机文件操作的固定开销在 R: / D: / C: 上完全一致, 见下「耗时画像」。
+  **退出码非 0**、提交闸门误判红。改 H 盘权限**无效**; 只改 `TMP` / `TEMP` 也无效(Python 的
+  `tempfile` **先读 `TMPDIR`**); 只加 `--basetemp` 也不行(测试里直接用 `tempfile` 的仍落 H:)。
+- **现在**: 前缀写在 `.commands/test/` 这个包里(`test.full` / `test.quick` / `test.one`),
+  调用者**看不见也不用管** —— 这正是把命令收进包的价值: 不该靠每个人记得导出。
+- ⚠ 手工加 POSIX 前缀 `TMPDIR=… cmd` 在本 shell **不生效**(实测 rc=1), 别再这么写。
 - 完整判据与"治本解"见 [../pitfalls/testing/tmpdir.md](../pitfalls/testing/tmpdir.md)。
 
 ## 环境纪律
@@ -63,13 +59,13 @@ TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q
 
 ## WSL 侧复现(平台差异)
 
-- **不要复用 Windows 建的 `.venv`**: 项目在 `/mnt/d/...`、`.venv` 是 Windows 侧 `uv sync` 建的
-  (`Lib/` + `Scripts/`)时, WSL 的 uv 会判定环境不兼容并试图删掉重建 ⇒
+- **不要复用 Windows 建的 `.venv`**: 项目在 `/mnt/d/...`、`.venv` 是 Windows 侧 `commands run env.sync`
+  建的(`Lib/` + `Scripts/`)时, WSL 的 uv 会判定环境不兼容并试图删掉重建 ⇒
   `error: failed to remove directory .venv/Lib: Input/output error (os error 5)`,
   而且可能把 Windows 侧的 venv 弄坏。
-- **解法**: 给 WSL **单独指定环境目录** ——
-  `UV_PROJECT_ENVIRONMENT=/tmp/aqb-venv uv sync && UV_PROJECT_ENVIRONMENT=/tmp/aqb-venv uv run pytest tests -q`
-  (首次 sync 约几十秒, 之后 `/tmp` 里的环境可复用)。
+- **解法**: 给 WSL **单独指定环境目录** —— 先 `export UV_PROJECT_ENVIRONMENT=/tmp/aqb-venv`,
+  再 `commands run env.sync` 与 `commands run test.full`
+  (首次同步约几十秒, 之后 `/tmp` 里的环境可复用)。
 - ⚠ **仓库副本要 `cp -r` 到 `~/` 下**(不要放 `/tmp`): 副本落在临时目录里会让 `test_sidefx.py` 的两条
   `is_temp_path` 类用例**假红**(实测 /tmp 副本 2 failed, 同代码挪到 `~/` 即 0 failed —— **不是回归**)。
 

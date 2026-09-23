@@ -6,7 +6,7 @@
 ### 提交闸门(`preflight.py` / `commit.py`)在工具 shell 的默认 `TMPDIR` 下必红
 
 - **触发**: 跑预检 / 提交 / 推送。
-- **判别**: 闸门跑的是 `uv run pytest tests -q --no-cov`, 而工具 shell 的 `TMPDIR` 默认指向 `H:\Temp` ⇒
+- **判别**: 闸门跑的是 `commands run test.quick`, 而工具 shell 的 `TMPDIR` 默认指向 `H:\Temp` ⇒
   **测试本身全过**, 崩在**会话结束**的临时目录清理(`PermissionError [WinError 5] … pytest-current`),
   退出码非 0 ⇒ 预检判 `rc=1` 给 STOP。
   **判别法**: 闸门报红但失败输出里只有 `pytest-current` 的 PermissionError、没有任何 `FAILED`/`assert` ⇒ 是环境问题不是回归。

@@ -1,6 +1,6 @@
 # 文档形态总览 (按专题)
 
-> **本文件是生成物, 不要手改** —— 由 `python .agents/skills/memory-bank/scripts/gen_doc_map.py` 扫描四形态 (plans / reports / issues / tasks) 的
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描四形态 (plans / reports / issues / tasks) 的
 > `doc-topic` / `**Topics:**` 与各自状态生成; 新增制品或改状态后重跑即可, 合并冲突也只需重跑。
 > **一行一专题**: 该专题名下的 issue / 计划 / 报告 / 档案与各自状态 —— 「一件事的全部材料」的唯一入口。
 > 协议与决策树见 [conventions/doc-forms.md](conventions/doc-forms.md); 各形态索引见
@@ -37,15 +37,16 @@
 - **webui-decoupling** (2) — 计划 [26-09-20-0234](plans/26-09-20-0234-webui-decoupling-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-decoupling.md) `Done`
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 
-## 单件专题 (仅登记, 49 个)
+## 单件专题 (仅登记, 51 个)
 
-- appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commit-gate-auto-run · config-value-range-validation
-- cross-group-file-conflict · dependency-lock · docs-readme-modules-drift · docs-restructure · duplicate-test-name-shadowed-guard
-- fakeconfig-shared-state-order-pollution · git-ship-skill-proposal · hot-reload-l2-state-rollback-fix · issue-typing · memory-bank-migration
-- memory-bank-task-id · memory-bank-trigger-fix · rule-conditions-expression · seed-group-status · skill-user-md-write-conflict · skill-vetter
-- skip-checking-readd-no-backup-window · src-layout-restructure · state-load-corrupt-silent-reset · test-sidefx-guard · test-suite-perf
-- tracker-url-source-sanitize · tray-join-timeout-abandons-save · type-annotations-mypy · web-runtime-host-protocol · web-tracker-url-passkey-log
-- webui-appjs-split · webui-cols-store-version · webui-component-libraries · webui-config-health-warning · webui-error-reason
-- webui-filter-data-and-color-flicker · webui-fix-plan-round10 · webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11 · webui-fix-round9
-- webui-hot-endpoints-jsonable-encoder · webui-naming · webui-polish-and-redesign · webui-redesign · webui-speed-refresh-fix
+- appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-unified-command-surface · commands-unified-surface
+- commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock · docs-readme-modules-drift · docs-restructure
+- duplicate-test-name-shadowed-guard · fakeconfig-shared-state-order-pollution · git-ship-skill-proposal · hot-reload-l2-state-rollback-fix
+- issue-typing · memory-bank-migration · memory-bank-task-id · memory-bank-trigger-fix · rule-conditions-expression · seed-group-status
+- skill-user-md-write-conflict · skill-vetter · skip-checking-readd-no-backup-window · src-layout-restructure · state-load-corrupt-silent-reset
+- test-sidefx-guard · test-suite-perf · tracker-url-source-sanitize · tray-join-timeout-abandons-save · type-annotations-mypy
+- web-runtime-host-protocol · web-tracker-url-passkey-log · webui-appjs-split · webui-cols-store-version · webui-component-libraries
+- webui-config-health-warning · webui-error-reason · webui-filter-data-and-color-flicker · webui-fix-plan-round10 · webui-fix-plan-round9
+- webui-fix-round10 · webui-fix-round11 · webui-fix-round9 · webui-hot-endpoints-jsonable-encoder · webui-naming · webui-polish-and-redesign
+- webui-redesign · webui-speed-refresh-fix
 - webui-view-rebuild

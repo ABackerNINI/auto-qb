@@ -1,7 +1,7 @@
 """提交后核对分支 ref —— 某些环境下 ref 更新会静默丢失(提交命令照样打印成功), **不要只看 commit 输出**。
 
-用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
-    python <skill-dir>/scripts/verify_ref.py [期望的 sha]
+用法(**不要写死包的安装路径**, `<包>` = 本包目录(`<仓库根>/.commands/my-commit-flow`)):
+    python <包>/scripts/verify_ref.py [期望的 sha]
 
 判据(三者必须一致):
     HEAD == refs/heads/<branch> == loose ref / packed-refs
@@ -61,7 +61,7 @@ def loose_ref(branch: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    # 闸门自检契约(.commit-flow.toml): `verify_ref.py --help` 期望 rc=0; 手工解析下
+    # 闸门自检契约(.my-commit-flow.toml): `verify_ref.py --help` 期望 rc=0; 手工解析下
     # 不拦的话 --help 会被当成期望 sha, 退出码 2 让闸门假红(实测 2026-09-22)。
     if "--help" in argv or "-h" in argv:
         print(__doc__.strip())

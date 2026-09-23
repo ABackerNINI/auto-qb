@@ -1,8 +1,11 @@
 """提交流水线的**外置配置**加载器 —— 项目特有项不在代码里内置, 强制逐仓库显式声明。
 
+本文件属于 `my-commit-flow` **包**: 整包复制即可带走, 连配置一起。
+
 设计(与可复用性直接相关):
 - **流程**内置(禁 `add -A` / ref 三处核对 / 推送顺序 / 幽灵 diff 判据) —— 任何仓库都一样。
-- **项目事实**外置: 红线文件、高危文件、提交前闸门、平台关键词 —— 全部来自 `<仓库根>/.commit-flow.toml`。
+- **项目事实**外置: 红线文件、高危文件、提交前闸门、平台关键词 —— 全部来自
+  **本包目录**下的 `.my-commit-flow.toml`(由引擎注入 `COMMAND_FLOW_PACK_DIR`, 找不到时退回脚本所在目录的上一级)。
 - **没有配置就停下来引导生成**, 不静默回退到"猜一份默认" —— 猜错比停下来更贵。
 - **初稿必须被确认**: `--init` 生成的配置 `confirmed = false`, 且红线不靠推断 —— 由 `draft_issues()`
   把"未确认 / 空红线 / 命令还是占位符"暴露出来, 防止照单全收。
@@ -10,11 +13,12 @@
 用法:
     cfg, src = load_config()                 # 缺配置抛 ConfigMissing(带引导文案)
     path = init_config(root)                 # 生成初稿(按仓库特征猜, 需人工确认)
-    python <skill-dir>/scripts/preflight.py --init | --show-config
+    python <包>/scripts/preflight.py --init | --show-config
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
@@ -26,7 +30,19 @@ except ModuleNotFoundError:  # pragma: no cover
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPTS_DIR.parent
-CONFIG_NAME = ".commit-flow.toml"
+CONFIG_NAME = ".my-commit-flow.toml"
+PACK_ENV = "COMMAND_FLOW_PACK_DIR"  # 由调用方(命令引擎)注入; 手工跑时退回脚本所在目录的上一级
+
+
+def pack_dir() -> Path:
+    """本包目录 —— 配置就在这里找。
+
+    引擎调包脚本时会注入 `COMMAND_FLOW_PACK_DIR`; 直接手工跑时没有它,
+    退回"脚本目录的上一级"(即 `<包>/scripts` → `<包>/`)。
+    """
+    env = os.environ.get(PACK_ENV, "").strip()
+    return Path(env).resolve() if env else SCRIPTS_DIR.parent
+
 
 # 配置里**省略**这些键时的兜底(不是"没配置文件时的默认值" —— 没配置文件直接 STOP)
 KEY_DEFAULTS: dict = {
@@ -67,10 +83,10 @@ class ConfigMissing(RuntimeError):
     def __init__(self, root: Path) -> None:
         super().__init__(
             f"[STOP] 缺少外置配置: {root / CONFIG_NAME}\n"
-            "本 skill 不在代码里内置项目配置(红线文件 / 闸门命令 …), 必须逐仓库显式声明。\n"
+            "本包不在代码里内置项目配置(红线文件 / 闸门命令 …), 必须逐仓库显式声明。\n"
             "生成初稿后**人工确认**再继续:\n"
-            "    python <skill-dir>/scripts/preflight.py --init\n"
-            "    python <skill-dir>/scripts/preflight.py --show-config   # 看生效值与来源"
+            f"    python {SCRIPTS_DIR / 'preflight.py'} --init\n"
+            f"    python {SCRIPTS_DIR / 'preflight.py'} --show-config   # 看生效值与来源"
         )
 
 
@@ -90,14 +106,17 @@ def find_root(start: Path | None = None) -> Path:
     for parent in (cur, *cur.parents):
         if (parent / ".git").exists():
             return parent
-    return Path(__file__).resolve().parents[4]  # 兜底: 上四级
+    return pack_dir().parents[1]  # 兜底: <root>/.commands/<包> 的上两级
 
 
 def load_config(root: Path | None = None, explicit: str | None = None) -> tuple[dict, Path]:
-    """加载外置配置, 返回 (配置, 来源路径); 找不到 → 抛 `ConfigMissing`。"""
+    """加载外置配置, 返回 (配置, 来源路径); 找不到 → 抛 `ConfigMissing`。
+
+    配置在**包内**, 不在仓库根 —— 包是复用单位, 整包复制时配置跟着一起走。
+    """
     if tomllib is None:
-        raise RuntimeError("需要 Python 3.11+ 的 tomllib 才能读取 .commit-flow.toml")
-    path = Path(explicit).expanduser().resolve() if explicit else (root or find_root()) / CONFIG_NAME
+        raise RuntimeError(f"需要 Python 3.11+ 的 tomllib 才能读取 {CONFIG_NAME}")
+    path = Path(explicit).expanduser().resolve() if explicit else pack_dir() / CONFIG_NAME
     if not path.exists():
         raise ConfigMissing(path.parent)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -358,7 +377,7 @@ def render_template(root: Path) -> str:
 def init_config(root: Path | None = None, force: bool = False) -> Path:
     """写配置初稿; 已存在则报错(不覆盖), 除非 force。"""
     root = root or find_root()
-    path = root / CONFIG_NAME
+    path = pack_dir() / CONFIG_NAME
     if path.exists() and not force:
         raise FileExistsError(f"已存在, 不覆盖: {path}")
     path.write_text(render_template(root), encoding="utf-8")
@@ -406,7 +425,7 @@ def config_problems(cfg: dict, path: Path | None = None) -> list[tuple[str, str]
         problems.append(("WARN", issue))
 
     # 顶层未知键: load_config 会把白名单外的键**静默丢掉**, 只有回读原文才看得见
-    src = Path(path) if path else (find_root() / CONFIG_NAME)
+    src = Path(path) if path else (pack_dir() / CONFIG_NAME)
     raw: dict = {}
     if src.exists() and tomllib is not None:
         try:

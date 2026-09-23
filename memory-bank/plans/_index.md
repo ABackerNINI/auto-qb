@@ -1,6 +1,6 @@
 # 计划 Index
 
-> **本文件是生成物, 不要手改** —— 由 `python .agents/skills/memory-bank/scripts/gen_docs_index.py` 扫描 `plans/*.html` 的 `doc-*` meta 生成;
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描 `plans/*.html` 的 `doc-*` meta 生成;
 > 新增制品或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = `[时间戳] 标题 — 专题`(分区即状态); 状态取值: `In Progress` / `Open` / `Done` / `Dropped` / `Superseded`。
 > 状态写在制品 `<head>` 的 `<meta name="doc-status">` 一行(单处); 协议与决策树见
@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-09-23-2008] [commands — 项目命令统一调用面 · 工程方案](26-09-23-2008-commands-plan.html) — `commands-unified-command-surface`
 - [26-09-22-2350] [activeContext 多 clone 冲突治理 — 工程方案](26-09-22-2350-activecontext-conflict-plan.html) — `memory-bank-activecontext-conflict`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
 - [26-09-22-2038] [qB 移动已完成种子误判缺文件 · .!qB 过渡态容忍修复计划](26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) — `backend-qb-move-dot-qb`

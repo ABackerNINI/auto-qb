@@ -6,7 +6,7 @@
 (本项目 `pytest.ini` 的 `testpaths = tests` 也不会收集到它 —— 正合预期。)
 
 跑法:
-    python <skill-dir>/scripts/test_preflight.py
+    python <包>/scripts/test_preflight.py
     python -m unittest discover -s <skill-dir>/scripts -p "test_*.py"
 
 覆盖: 占位符展开(四种 + 展开失败) / 闸门分类与执行(红 → STOP、--no-auto 不执行) /
@@ -307,7 +307,7 @@ class StaticNameTest(unittest.TestCase):
 class ConfigProblemsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmp.name) / ".commit-flow.toml"
+        self.path = Path(self.tmp.name) / ".my-commit-flow.toml"
 
     def tearDown(self) -> None:
         self.tmp.cleanup()

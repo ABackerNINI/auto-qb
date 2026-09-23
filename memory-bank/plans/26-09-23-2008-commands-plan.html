@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="commands-unified-command-surface">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-23-2008">
+<meta name="doc-updated" content="26-09-23-2008">
+<title>commands — 项目命令统一调用面 · 工程方案</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #121413;
+    --paper: #171a18;
+    --ink: #e2e4e1;
+    --ink-dim: #a9ada8;
+    --ink-faint: #747972;
+    --line: rgba(255,255,255,.09);
+    --line-strong: rgba(255,255,255,.18);
+    --accent: #e3b341;
+    --accent-dim: rgba(227,179,65,.13);
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.6;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+  .canvas { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+  a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+  a:hover { border-bottom-color: var(--accent); }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 1px 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 18px 22px;
+    overflow-x: auto;
+    color: var(--ink-dim);
+  }
+  pre b { color: var(--ink); font-weight: 510; }
+  pre .hl { color: var(--accent); }
+  pre .cm { color: var(--ink-faint); }
+  /* ---------- 封面 ---------- */
+  .cover { padding: 84px 0 56px; border-bottom: 1px solid var(--line-strong); }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .kicker::before {
+    content: "";
+    display: inline-block;
+    width: 22px; height: 1px;
+    background: var(--accent);
+    vertical-align: middle;
+    margin-right: 10px;
+  }
+  .cover h1 {
+    font-size: 44px;
+    line-height: 1.12;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 22px 0 18px;
+    max-width: 820px;
+  }
+  .cover .lede {
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+    max-width: 700px;
+  }
+  .cover .lede strong { color: var(--ink); font-weight: 510; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 0 44px;
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .meta-row .cell { font-size: 13px; color: var(--ink-faint); }
+  .meta-row .cell b { display: block; font-family: var(--mono); font-size: 12.5px; font-weight: 400; color: var(--ink-dim); margin-top: 3px; letter-spacing: 0.02em; }
+  /* ---------- 布局: sticky TOC ---------- */
+  .layout { display: grid; grid-template-columns: 208px 1fr; gap: 56px; padding: 56px 0 0; }
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 13px; }
+  nav.toc .toc-head { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc ol { list-style: none; }
+  nav.toc li { margin: 0 0 2px; }
+  nav.toc a { display: block; padding: 5px 0 5px 14px; border-bottom: none; border-left: 1px solid var(--line); color: var(--ink-dim); }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  nav.toc a .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 8px; }
+  main { min-width: 0; padding-bottom: 40px; }
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 72px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 26px; }
+  .sec-head .folio { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.04em; }
+  .sec-head h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+  h3 { font-size: 18.5px; font-weight: 600; margin: 34px 0 12px; line-height: 1.3; }
+  p { max-width: 68ch; margin: 0 0 14px; }
+  p.dim { color: var(--ink-dim); }
+  .note {
+    border-left: 2px solid var(--line-strong);
+    padding: 2px 0 2px 18px;
+    margin: 20px 0;
+    color: var(--ink-dim);
+    font-size: 14.5px;
+    max-width: 66ch;
+  }
+  .note .tag { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.06em; color: var(--ink-faint); display: block; margin-bottom: 4px; }
+  .note.hot { border-left-color: var(--accent); }
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 8px; font-size: 14px; }
+  th {
+    text-align: left;
+    font-family: var(--mono); font-size: 11.5px; font-weight: 400;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--line-strong);
+    padding: 8px 14px 8px 0;
+    white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--line); padding: 10px 14px 10px 0; vertical-align: top; line-height: 1.55; }
+  td:first-child { white-space: nowrap; }
+  td .sub { display: block; font-size: 12.5px; color: var(--ink-faint); margin-top: 2px; }
+  .tag-hot, .tag-cold, .tag-mid {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em;
+    border: 1px solid var(--line-strong); padding: 1px 7px; color: var(--ink-dim); white-space: nowrap;
+  }
+  .tag-hot { border-color: rgba(227,179,65,.55); color: var(--accent); }
+  /* ---------- 波次 ---------- */
+  .wave { border: 1px solid var(--line); background: var(--paper); padding: 20px 24px 16px; margin: 0 0 18px; max-width: 860px; }
+  .wave .w-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .wave .w-no { font-family: var(--mono); font-size: 12.5px; color: var(--accent); letter-spacing: 0.05em; }
+  .wave .w-title { font-size: 16.5px; font-weight: 600; }
+  .wave .w-optional { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); border: 1px solid var(--line); padding: 1px 7px; margin-left: auto; }
+  .wave p { font-size: 14px; color: var(--ink-dim); margin-bottom: 8px; }
+  .wave ul { margin: 0 0 8px 18px; font-size: 14px; color: var(--ink-dim); }
+  ul.tight { margin: 0 0 14px 18px; font-size: 14.5px; }
+  ul.tight li { margin: 0 0 7px; }
+  .wave li { margin-bottom: 4px; }
+  .wave .verify { font-size: 13px; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 10px; margin-top: 12px; }
+  .wave .verify .vk { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-faint); margin-right: 10px; }
+  /* ---------- 对比卡 ---------- */
+  .opt { border-top: 1px solid var(--line); padding: 18px 0 6px; max-width: 860px; }
+  .opt:first-of-type { border-top: 1px solid var(--line-strong); }
+  .opt .o-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+  .opt .o-no { font-family: var(--mono); font-size: 13px; color: var(--ink-faint); }
+  .opt .o-title { font-size: 16px; font-weight: 600; }
+  .opt .o-badge { font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; border: 1px solid rgba(227,179,65,.55); color: var(--accent); padding: 1px 8px; margin-left: auto; white-space: nowrap; }
+  .opt .o-badge.plain { border-color: var(--line); color: var(--ink-faint); }
+  .opt p { font-size: 14px; color: var(--ink-dim); }
+  /* ---------- 链路 SVG ---------- */
+  .flow { margin: 22px 0 6px; }
+  .flow svg { width: 100%; height: auto; display: block; }
+  /* ---------- 验收清单 ---------- */
+  ul.accept { list-style: none; max-width: 820px; }
+  ul.accept li { border-bottom: 1px solid var(--line); padding: 11px 0; display: flex; gap: 16px; font-size: 14.5px; }
+  ul.accept li:last-child { border-bottom: none; }
+  ul.accept .a-no { font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); white-space: nowrap; padding-top: 2px; }
+  /* ---------- colophon ---------- */
+  .colophon { border-top: 1px solid var(--line-strong); margin-top: 20px; padding: 26px 0 70px; }
+  .colophon .kicker { margin-bottom: 16px; }
+  .colophon dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 24px; font-size: 13.5px; max-width: 680px; }
+  .colophon dt { color: var(--ink-faint); }
+  .colophon dd { color: var(--ink-dim); }
+  @media (max-width: 920px) {
+    .layout { grid-template-columns: 1fr; gap: 24px; }
+    nav.toc { position: static; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+    nav.toc ol { display: flex; flex-wrap: wrap; gap: 2px 18px; }
+    nav.toc a { border-left: none; padding-left: 0; }
+    .cover h1 { font-size: 34px; }
+    .canvas { padding: 0 22px; }
+    td:first-child { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas">
+
+  <!-- ============ 封面 ============ -->
+  <header class="cover">
+    <div class="kicker">Auto-QB · Agent 基建 · 工程方案</div>
+    <h1>commands — 项目命令统一调用面</h1>
+    <p class="lede">
+      项目命令的现状不是"没有规范"，而是<strong>同一事实有多份副本、写法互不相同</strong>：以一条测试命令为例，
+      仓库里有 8 处副本、5 种写法，其中只有 1 种在本工具 shell 里真正生效 —— 而它恰好是"看起来最不正常"的那条。
+      本方案的设计初衷是三条：<strong>减少出错</strong>（把命令固定下来，不让执行者再拼）、
+      <strong>隐藏复杂细节</strong>（环境前缀、远端名、顺序约束都不进执行者的视野）、
+      <strong>降低 token 消耗</strong>（不必为了找一条命令去读整份文档）。
+      做法是把 skill 缩成<strong>纯引擎</strong>（零项目事实、零领域逻辑）—— 它只认识「包」与「命令」，
+      连"提交"这件事都不知道；包是<strong>黑盒</strong>，配置自持。
+      配置层<strong>只留一种形态 —— 包</strong>：每包一个 <code>config.toml</code> 作接口面，引擎自动扫描，
+      想加命令只有"放进某个包"这一条路可走。
+      提交流水线（my-commit-flow）就是这么活的 —— 从 skill 降为一个可整包复制的包，自己的配置原样带着走。
+      路由不写死在 skill 里，而是<strong>按当前任务逐级查出来</strong>（高频命令标常显直接浮出），好让每个仓库加自己的路由而不必改 skill；
+      并教 agent 遇到可复用的有价值命令时<strong>自动收录</strong>进包，再用一条<strong>反漂移闸门</strong>让文档里的手抄命令直接判红。
+    </p>
+    <div class="meta-row">
+      <div class="cell">日期<b>2026-09-23 21:57</b></div>
+      <div class="cell">状态<b>已实施 W1–W5 · v1.7</b></div>
+      <div class="cell">同步基线<b>19fa6ee @ gitee/develop（开工已 ff-only 快进）</b></div>
+      <div class="cell">任务档案<b>见 tasks/26-09-23-commands-unified-surface.md</b></div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ============ TOC ============ -->
+    <nav class="toc">
+      <div class="toc-head">目录</div>
+      <ol>
+        <li><a href="#s1"><span class="no">01</span>问题定义与证据</a></li>
+        <li><a href="#s2"><span class="no">02</span>初衷 · 目标 · 错误模式</a></li>
+        <li><a href="#s3"><span class="no">03</span>解法空间 A–C</a></li>
+        <li><a href="#s4"><span class="no">04</span>推荐方案</a></li>
+        <li><a href="#s5"><span class="no">05</span>逐级路由</a></li>
+        <li><a href="#s6"><span class="no">06</span>配置的自生长</a></li>
+        <li><a href="#s7"><span class="no">07</span>实施波次 W1–W5</a></li>
+        <li><a href="#s8"><span class="no">08</span>风险与边界</a></li>
+        <li><a href="#s9"><span class="no">09</span>验收标准</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+    <!-- ============ 01 问题定义 ============ -->
+    <section id="s1">
+      <div class="sec-head"><span class="folio">01</span><h2>问题定义与现场证据</h2></div>
+      <p>要执行一个项目动作（跑测试、同步分支、重建索引、起 WEB UI），执行者得先去某份文档里把命令抄出来。
+      问题是<strong>同一命令被抄进了很多份文档，且每一份的写法都不一样</strong> —— 于是"用哪一份"变成了一个需要判断的问题，
+      而判断依据（哪种写法在本 shell 生效）并不写在命令旁边。</p>
+
+      <div class="flow">
+      <svg viewBox="0 0 1100 130" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+        <defs>
+          <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+          </marker>
+        </defs>
+        <g stroke="rgba(255,255,255,.22)" fill="none" stroke-width="1">
+          <rect x="2"    y="34" width="196" height="58"/>
+          <rect x="226"  y="34" width="196" height="58"/>
+          <rect x="450"  y="34" width="196" height="58"/>
+          <rect x="674"  y="34" width="216" height="58" stroke="rgba(227,179,65,.75)"/>
+          <rect x="918"  y="34" width="180" height="58"/>
+          <line x1="198" y1="63" x2="220" y2="63" marker-end="url(#arr)"/>
+          <line x1="422" y1="63" x2="444" y2="63" marker-end="url(#arr)"/>
+          <line x1="646" y1="63" x2="668" y2="63" marker-end="url(#arr)"/>
+          <line x1="890" y1="63" x2="912" y2="63" marker-end="url(#arr)"/>
+        </g>
+        <g font-size="12" fill="#a9ada8">
+          <text x="100" y="57" text-anchor="middle" fill="#e2e4e1">命令写进文档</text>
+          <text x="100" y="76" text-anchor="middle">8 处副本 · 5 种写法</text>
+          <text x="324" y="57" text-anchor="middle" fill="#e2e4e1">下次照着跑</text>
+          <text x="324" y="76" text-anchor="middle">挑了"最像标准"的那条</text>
+          <text x="548" y="57" text-anchor="middle" fill="#e2e4e1">前缀不生效</text>
+          <text x="548" y="76" text-anchor="middle">rc=1, 且没有任何提示</text>
+          <text x="782" y="57" text-anchor="middle" fill="#e3b341">拿到假红</text>
+          <text x="782" y="76" text-anchor="middle">测试其实全过</text>
+          <text x="1008" y="57" text-anchor="middle" fill="#e2e4e1">误判成回归</text>
+          <text x="1008" y="76" text-anchor="middle">白排查一轮</text>
+        </g>
+        <g font-size="11" fill="#747972">
+          <text x="2" y="18">失效链路 —— 抄错的那一条恰好是"看起来最正常"的那条，错误在拿到假红时才可见</text>
+          <text x="674" y="116" fill="rgba(227,179,65,.8)">← 危害在这里才暴露</text>
+        </g>
+      </svg>
+      </div>
+
+      <h3>证据一：一条命令，8 处副本、5 种写法</h3>
+      <p class="dim">以 <code>uv run pytest tests -q</code> 为例。5 种写法里有 4 种不满足项目自己的约定，而其中 POSIX 前缀那一条
+      是<strong>唯一看起来"正常"的</strong> —— 它是多数人凭直觉会写出来的形式。</p>
+      <table>
+        <thead><tr><th>位置</th><th>写法</th><th>判定</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>AGENTS.md<span class="sub">README.md · memory-bank/SKILL.md · .github/copilot-instructions.md · ci.yml</span></td>
+            <td><code>uv run pytest tests -q</code></td>
+            <td><span class="tag-cold">缺 TMPDIR</span></td>
+          </tr>
+          <tr>
+            <td>memory-bank/testing/run.md</td>
+            <td><code>TMPDIR="R:/Temp/auto-qb/tests" uv run pytest</code></td>
+            <td><span class="tag-hot">POSIX 前缀，实测 rc=1</span></td>
+          </tr>
+          <tr>
+            <td>.commit-flow.toml（闸门）</td>
+            <td><code>set "TMPDIR=R:/Temp/auto-qb/tests" &amp;&amp; uv run pytest tests -q --no-cov</code></td>
+            <td><span class="tag-mid">唯一生效</span></td>
+          </tr>
+          <tr>
+            <td>pitfalls/testing/tmpdir.md</td>
+            <td><code>TMP=H:/… TEMP=H:/… uv run pytest</code></td>
+            <td><span class="tag-cold">第三种变量组合</span></td>
+          </tr>
+          <tr>
+            <td>.workbuddy-ai/memory/2026-09-21.md</td>
+            <td><code>TMPDIR=D:/tmp_pytest uv run pytest</code></td>
+            <td><span class="tag-cold">第四个目录</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="dim">同样的发散还有 git 同步：<code>AGENTS.md</code> 写 <code>git fetch gitee develop</code> + <code>merge --ff-only</code>，
+      <code>memory-bank/SKILL.md</code> 写 <code>git fetch &lt;主线远端&gt; &lt;分支&gt;</code>，而
+      <code>my-commit-flow/SKILL.md</code> 的「最常见组合」一节教的是 <strong>提交 → rebase → 推送</strong> ——
+      与 <code>AGENTS.md</code> 的 rebase 禁令<strong>直接冲突</strong>。</p>
+
+      <h3>证据二：危害已经实际发生</h3>
+      <p class="dim"><code>pitfalls/testing/tmpdir.md</code> 里该条 <strong>复发 +1</strong>，记录的未命中原因是
+      "读了文件、也知道要设 TMPDIR，但只给自己手工跑的测试带了，没意识到<strong>闸门是配置里的另一条执行路径</strong>"。
+      处置结论是「<strong>改配置比改记忆可靠</strong>」。本方案正是把这条结论从"一个闸门"推广到"全部命令"。</p>
+
+      <div class="note hot">
+        <span class="tag">现有防线评估</span>
+        <code>.commit-flow.toml</code> 已经证明「外置配置 + 机检闸门 + 缺配置就停手」这条路走得通，且它把测试命令收口得很好
+        —— 但那一条只覆盖<strong>提交这一个动作</strong>。其它命令（开工同步、知识库索引、dev 服务、文档机检）至今没有归属，
+        仍然靠每份文档各自抄一遍。
+      </div>
+    </section>
+
+    <!-- ============ 02 初衷 / 目标 / 错误模式 ============ -->
+    <section id="s2">
+      <div class="sec-head"><span class="folio">02</span><h2>初衷 · 目标 · 错误模式</h2></div>
+
+      <h3>三条设计初衷（约束级，不是口号）</h3>
+      <table>
+        <thead><tr><th>初衷</th><th>具体含义</th><th>落成什么机制</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>减少出错</td>
+            <td>执行者不再有"写错的机会"—— 命令固定、参数固定、顺序固定</td>
+            <td>命令单点定义 + <code>requires</code> 检查命令 + 反漂移闸门</td>
+          </tr>
+          <tr>
+            <td>隐藏复杂细节</td>
+            <td>环境前缀、远端名、代理参数、顺序约束<strong>不进执行者的视野</strong>；它只管"调哪个"</td>
+            <td>细节沉到包里；<code>run</code> 默认不 dump 命令</td>
+          </tr>
+          <tr>
+            <td>降低 token 消耗</td>
+            <td>不必为了找一条命令去读整份文档；不必让命令本体在上下文里来回搬运</td>
+            <td>包式配置 + 路由生成 + 信息预算（见本节末）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>目标</h3>
+      <table>
+        <thead><tr><th>#</th><th>目标</th><th>判据</th></tr></thead>
+        <tbody>
+          <tr><td>G1</td><td>agent 侧只认 task id</td><td>SKILL.md 里不出现任何可直接执行的命令；执行时不需要拼参数、不需要回忆前缀写法</td></tr>
+          <tr><td>G2</td><td>命令本体单点定义</td><td>改一处即全局生效；文档里只剩 <code>commands run &lt;task&gt;</code></td></tr>
+          <tr><td>G3</td><td>支持超出单行的复杂命令</td><td>task 可指向项目自带脚本，不必把逻辑压成一行 TOML 字符串</td></tr>
+          <tr><td>G4</td><td>my-commit-flow 降为配置</td><td>它不再是 skill，而是 <code>.commands/my-commit-flow/</code> 一个包；<strong>引擎里不认识"提交"</strong></td></tr>
+          <tr><td>G5</td><td>反漂移</td><td>文档里手抄的命令被机检判红，而不是靠人记得别抄</td></tr>
+          <tr><td>G6</td><td>降低 token 消耗</td><td>执行一个动作的上下文成本从"读整份文档找命令"降到"<strong>当前层级一行</strong> + 一次调用"；预算随层级收敛，不随命令总数增长</td></tr>
+          <tr><td>G7</td><td>命令集能自己长大</td><td>agent 遇到可复用的有价值命令时<strong>按协议自动收录</strong>，不必等人下指令（见 §06）</td></tr>
+          <tr><td>G8</td><td>路由可随配置生长</td><td>新增路由<strong>只改包</strong> —— 查询式路由没有生成物要重跑；<code>SKILL.md</code> 与 skill 体积恒定，仓库特有路由不污染通用 skill（见 §05）</td></tr>
+        </tbody>
+      </table>
+
+      <h3>非目标</h3>
+      <table>
+        <thead><tr><th>#</th><th>非目标</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td>N1</td><td>不做通用任务编排 / 构建系统</td><td>不重造 make / npm scripts；只收"本项目会话里反复要跑"的命令</td></tr>
+          <tr><td>N2</td><td>不替代 CI</td><td><code>.github/workflows/ci.yml</code> 保留原样，它是另一条独立执行路径</td></tr>
+          <tr><td>N3</td><td>不收一次性调试命令</td><td>见 §06 收录判据：三条任一命中才收</td></tr>
+          <tr><td>N4</td><td>不改动生产红线文件</td><td><code>config.yml</code> / <code>auto-qb-data/</code> 仍是红线，只在新包配置里继承这条声明</td></tr>
+        </tbody>
+      </table>
+
+      <h3>初衷一：减少出错 —— 错误模式与对应防线</h3>
+      <p class="dim">"减少出错"要落成具体机制，就得先列出<strong>到底会怎么错</strong>。下表每一行都是本项目已实际发生或已记录的失败形态，
+      第三列是本方案给出的防线 —— 注意防线<strong>不在人的记忆里，而在命令本身或机检里</strong>。</p>
+      <table>
+        <thead><tr><th>错误模式</th><th>现场形态</th><th>本方案的防线</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>抄错写法</td>
+            <td>POSIX 前缀 <code>TMPDIR=… cmd</code> 看起来最正常，在本 shell 实测 rc=1</td>
+            <td>命令只有一处定义，且 <code>note</code> 写明"为什么必须这样写"</td>
+          </tr>
+          <tr>
+            <td>漏环境前缀</td>
+            <td>直接 <code>uv run pytest</code> → 收尾抛 <code>PermissionError … pytest-current</code>，<strong>测试其实全过</strong></td>
+            <td>前缀内置在 task 里，调用者<strong>看不见也不用管</strong></td>
+          </tr>
+          <tr>
+            <td>顺序错</td>
+            <td>测试放在回写知识库之后 → 分不清红的是代码还是文档；格式化放在暂存之后 → index 与工作区不一致</td>
+            <td><code>requires</code> 检查命令 + 流程内置在脚本里</td>
+          </tr>
+          <tr>
+            <td>用错远端</td>
+            <td>历史 clone 的 <code>origin</code> 可能是 GitHub 镜像，按名字取会推错</td>
+            <td>从 <code>config.toml</code> 的 <code>main_host_mark</code> 按 <strong>URL 特征</strong>探测，不按名字</td>
+          </tr>
+          <tr>
+            <td>忘同步就开工</td>
+            <td>在落后分支上改代码，提交时才撞车</td>
+            <td><code>sync.start</code> 机检，落后即 STOP；结果可贴进会话回复，跳过会留可见空洞</td>
+          </tr>
+          <tr>
+            <td>用了不生效的写法却无人发现</td>
+            <td>无任何信号 —— 直到某次拿到假红</td>
+            <td>反漂移闸门（§07 W4）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>初衷三：降低 token 消耗 —— 信息预算</h3>
+      <p class="dim">省 token 不能靠"写得简洁"，要靠<strong>把信息放在正确的层级、并规定谁在什么时候才读它</strong>。
+      本方案给四层各定一个预算：</p>
+      <table>
+        <thead><tr><th>层</th><th>放什么</th><th>什么时候读</th><th>预算</th></tr></thead>
+        <tbody>
+          <tr><td><code>SKILL.md</code></td><td>四个子命令 + 引导 + 收录协议</td><td>每次加载 skill 时</td><td><span class="tag-hot">恒定大小，不含路由与命令</span></td></tr>
+          <tr><td><code>list</code> 输出</td><td><strong>只出当前层级</strong>：包 + 常显命令，或某级的子包</td><td>要执行动作时</td><td>不出命令本体，也<strong>不铺平</strong></td></tr>
+          <tr><td><code>run</code> 输出</td><td>结果摘要与关键行</td><td>常规路径<strong>只走这一层</strong></td><td>不 dump 完整命令</td></tr>
+          <tr><td>包内文件</td><td><code>config.toml</code>（接口面）+ 包私有配置（如 my-commit-flow 的 <code>.my-commit-flow.toml</code>）</td><td>引擎<strong>只读前者</strong>；后者由包脚本自读</td><td>人不读 —— 排障才 <code>show</code></td></tr>
+          <tr><td><code>show</code> / <code>note</code> / pitfalls</td><td>展开后的命令、环境陷阱判据、原理</td><td>排障、自证、迁移时才读</td><td>低频，可放宽</td></tr>
+        </tbody>
+      </table>
+      <div class="note hot">
+        <span class="tag">风险自适应的详略</span>
+        「不 dump 命令」不能一刀切 —— 高风险动作恰恰最需要先自证。规则是：
+        <strong>带 <code>requires</code> 或标 <code>risky = true</code> 的 task，<code>run</code> 先打印将要执行的命令再执行</strong>；
+        其余 task 只回结果。这样"自证"的成本只花在真正需要它的地方（<code>my-commit-flow.commit</code> 这类），
+        而高频低风险的 <code>test.full</code> / <code>kb.index</code> 不付这份钱。
+      </div>
+    </section>
+
+    <!-- ============ 03 解法空间 ============ -->
+    <section id="s3">
+      <div class="sec-head"><span class="folio">03</span><h2>解法空间 A–C</h2></div>
+
+      <div class="opt">
+        <div class="o-head"><span class="o-no">A</span><span class="o-title">单文件配置：<code>.command-flow.toml</code></span><span class="o-badge plain">未采用</span></div>
+        <p>照搬 <code>.commit-flow.toml</code> 的形态，一个根级 TOML 装下全部 task。优点是简单、与既有习惯一致。
+        缺点致命：<strong>复杂命令只能压成超长单行字符串</strong> —— 现有那条 pytest 闸门已经是 <code>set "…" &amp;&amp; …</code> 的形态，
+        再复杂一点（多步、带条件、要解析输出）就没法写了；也没有地方安放项目自带的包装脚本。</p>
+      </div>
+
+      <div class="opt">
+        <div class="o-head"><span class="o-no">B</span><span class="o-title">独立目录：<code>&lt;仓库根&gt;/.commands/</code></span><span class="o-badge">采用</span></div>
+        <p>配置层<strong>只放包</strong>：每个包一个 <code>config.toml</code> 作接口面，包内其余文件（私有配置、脚本）引擎一概不读；
+        引擎自动扫描 <code>.commands/*/config.toml</code>。四条收益：①命令按包拆分，单文件不会长成几百行；
+        ②复杂命令有正规去处，不必压成一行；③<strong>包就是复用单位，且是黑盒</strong> —— 整包复制到别的仓库即可用，连它自己的配置一起带走；④引擎保持零项目事实、零领域逻辑，可移植。</p>
+      </div>
+
+      <div class="opt">
+        <div class="o-head"><span class="o-no">C</span><span class="o-title">纯脚本化：每条命令一个脚本</span><span class="o-badge plain">未采用</span></div>
+        <p>最灵活，但<strong>每加一条命令都要写代码</strong>：改一个超时、加一个 task，都得走"写 Python → 提交"的循环，
+        而 agent 无法自助。收益（灵活）远小于代价（把配置问题变成开发问题）。</p>
+      </div>
+
+      <div class="note">
+        <span class="tag">取舍要点</span>
+        B 与 C 的差别不是"要不要脚本"，而是<strong>脚本是常规路径还是兜底路径</strong>。B 让绝大多数 task 停留在包的声明式配置里
+        （改超时、加 task 都是改 TOML），只在命令确实复杂时才落到脚本 —— 这与 <code>.commit-flow.toml</code> 把闸门写成
+        声明式 <code>[[gates]]</code>、把真正复杂的流程（合流预判、ref 三处核对）交给脚本的做法同源。
+        <br><br>
+        <strong>B 里的"命令包"是关键一格</strong>：它让"成套的复杂命令"既能复用、又<strong>不落进引擎</strong> ——
+        my-commit-flow 的四个脚本正需要这个位置，否则就只能塞进 skill（把领域逻辑带进引擎，即 v1.0 的错误）。
+      </div>
+    </section>
+
+    <!-- ============ 04 推荐方案 ============ -->
+    <section id="s4">
+      <div class="sec-head"><span class="folio">04</span><h2>推荐方案：纯引擎 + 配置层</h2></div>
+
+      <h3>三层职责</h3>
+      <div class="flow">
+      <svg viewBox="0 0 1100 212" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+        <rect x="2" y="24" width="1096" height="172" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+        <text x="18" y="16" font-size="11" fill="#747972">分层 —— 引擎只做机制（可移植），一切命令都在包里（逐仓库一份）</text>
+        <g stroke="rgba(255,255,255,.22)" fill="none" stroke-width="1">
+          <rect x="26" y="52" width="1048" height="38"/>
+          <rect x="26" y="98" width="1048" height="38"/>
+          <rect x="26" y="144" width="1048" height="38" stroke="rgba(227,179,65,.75)"/>
+        </g>
+        <g font-size="12">
+          <text x="44" y="76" fill="#e2e4e1">① 调用面 — agent 只认 task id</text>
+          <text x="380" y="76" fill="#747972">只需知道"何时调哪个"，命令怎么拼不归它管</text>
+          <text x="44" y="122" fill="#e2e4e1">② 引擎 — commands skill</text>
+          <text x="380" y="122" fill="#747972">加载 / 校验 / 展开 / 执行 / 报 STOP · 零项目事实、零领域逻辑</text>
+          <text x="44" y="168" fill="#e3b341">③ 配置层 — &lt;仓库根&gt;/.commands/</text>
+          <text x="380" y="168" fill="#747972">只放包：每包一个 config.toml，顶级自动扫描、子包由上级注册</text>
+        </g>
+      </svg>
+      </div>
+      <p class="dim">这条边界是 <code>my-commit-flow</code> 已经验证过的：流程（禁 <code>add -A</code>、ref 三处核对、推送顺序）写死在代码里，
+      项目事实（红线文件、闸门命令、远端名）一律外置，<strong>缺配置就停手、不猜默认值</strong>。本方案把同一套骨架从"提交"扩到"全部命令"，
+      并把边界推到底：<strong>引擎里连"提交"这件事都不知道</strong> —— 它只认识「包」与「命令」；my-commit-flow 是个<strong>黑盒</strong>：自带配置、自己的脚本自己读，引擎连"它有配置"都不需要知道。</p>
+
+      <div class="note hot">
+        <span class="tag">与 v1.0 的关键修正：my-commit-flow 不是"被吸收"，而是"降为一个黑盒包"</span>
+        v1.0 打算把 <code>preflight/commit/verify_ref/push</code> 迁进 skill 的 <code>scripts/</code> ——
+        那等于<strong>把领域逻辑写进了引擎</strong>：引擎从此认识"提交"这件事，也就有了项目味、不再可移植。
+        修正后的归属是：它成为<strong>一份自持配置的黑盒包</strong> <code>.commands/my-commit-flow/</code> ——
+        原配置改名 <code>.my-commit-flow.toml</code> 原样搬进去，由引擎自动扫描到。
+        这正是"当作 commands 的配置存在"的落地方式。
+      </div>
+
+      <h3>目录结构</h3>
+      <pre>
+<span class="cm"># ── 引擎：可移植。只认识「包」与「命令」—— 不认识任何领域概念 ──</span>
+<b>.agents/skills/commands/</b>
+├── SKILL.md                    <span class="cm"># 恒定大小：四个子命令 + 引导 + 收录协议</span>
+│                               <span class="cm"># ⚠ 不含路由表本体、不含任何命令、不含项目事实</span>
+└── scripts/
+    ├── run.py                  <span class="cm"># dispatcher: run / list / show / add</span>
+    ├── _config.py              <span class="cm"># 扫描包树 + 校验 + 占位符展开</span>
+    └── _tree.py                <span class="cm"># 层级视图：按 包 → 子包 → 命令 逐级列</span>
+                                <span class="hl"># ⚠ 引擎里 grep 不到 gate / red_line / commit / ship 任何一个词</span>
+
+<span class="cm"># ── 配置层：只放包。顶级包自动扫描 = .commands/*/config.toml ──</span>
+<b>&lt;仓库根&gt;/.commands/</b>
+├── <span class="hl">test/</span>                       <span class="cm"># 顶级包：一个包 = 一个职责</span>
+│   └── config.toml             <span class="cm"># [pack] + [tasks.*]（+ 可选 [packs] 注册子包）</span>
+├── <span class="hl">kb/</span>                         <span class="cm"># 知识库：索引 / 会话切片</span>
+│   └── config.toml
+├── <span class="hl">dev/</span>                        <span class="cm"># 开发服务：WEB UI / 仿真 / 浏览器冒烟</span>
+│   └── config.toml
+├── <span class="hl">env/</span>                        <span class="cm"># 环境：uv sync / 自检</span>
+│   └── config.toml
+├── <span class="hl">doc/</span>                        <span class="cm"># 文档机检：链接 / 上下文上限</span>
+│   └── config.toml
+└── <span class="hl">my-commit-flow/</span>             <span class="cm"># ← 那个 skill 退场后以包形态继续存在</span>
+    ├── config.toml             <span class="cm"># 接口面：注册子包 + 声明本包 task</span>
+    ├── <span class="hl">.my-commit-flow.toml</span>    <span class="cm"># ← 原 .commit-flow.toml 原样搬入：闸门 / 红线 / 远端</span>
+    ├── README.md               <span class="cm"># 纪律与原理（排障 / 迁移时才读）</span>
+    ├── scripts/                <span class="cm"># preflight / commit / verify_ref / push / _ship_config</span>
+    │                           <span class="hl">#   ← 它们自己读 .my-commit-flow.toml</span>
+    └── <span class="hl">ship/</span>                     <span class="cm"># 子包：在上级 config 的 [packs] 里注册</span>
+        └── config.toml
+      </pre>
+      <p class="dim"><strong>没有 core 包</strong> —— 一个包一个职责，拆开之后没有任何东西还需要一个"约定名的杂项包"。
+      <strong>也没有路由表文件</strong> —— 路由不落盘，改为运行时逐级查询（见 §05）。</p>
+
+      <h3>层级：子包</h3>
+      <p class="dim">二级 / 多级不是靠"命令上的分组字段"，而是<strong>包本身可以嵌套</strong> —— 包是复用单位，
+      那么"一组成套的包"自然就该是一个子包。</p>
+      <table>
+        <thead><tr><th>概念</th><th>是什么</th><th>怎么声明</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>顶级包<span class="sub">一级</span></td>
+            <td>一级视图就是"有哪些包、各自管什么事"</td>
+            <td><strong>不需要注册</strong> —— <code>.commands/*/config.toml</code> 存在即被发现</td>
+          </tr>
+          <tr>
+            <td>子包<span class="sub">二级 / 多级</span></td>
+            <td>包内的包，深度不限；子包自己也是完整的包（可再嵌套）</td>
+            <td>在<strong>上级 config</strong> 的 <code>[packs.&lt;名&gt;]</code> 里注册</td>
+          </tr>
+          <tr>
+            <td><code>enabled</code></td>
+            <td>显示 / 禁用。禁用的包不参与视图与执行，<code>list --all</code> 会标出它</td>
+            <td>顶级包写在自己的 <code>[pack]</code>；子包写在<strong>上级的注册表</strong>里</td>
+          </tr>
+          <tr>
+            <td>常显<span class="sub">pin</span></td>
+            <td>标了 <code>pin = true</code> 的命令<strong>浮到父级列表</strong>，不必进入所属包就能看到</td>
+            <td>task 的 <code>pin</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note hot">
+        <span class="tag">为什么子包要"注册"而不是也自动扫描</span>
+        ①上级对下级要有<strong>控制权</strong>（启不启用），自动扫描给不了；
+        ②注册表本身就是"<strong>这个包由哪些子包组成</strong>"的清单，一眼可见；
+        ③<code>enabled</code> 只有一处声明（子包不自己写）—— 避免两处事实源各说各话。
+      </div>
+
+      <h3>扫描与冲突规则</h3>
+      <table>
+        <thead><tr><th>规则</th><th>内容</th><th>为什么这么定</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>顶级扫描</td>
+            <td><code>.commands/</code> 下的<strong>一级</strong>子目录，只认 <code>&lt;包&gt;/config.toml</code></td>
+            <td>不做递归 —— 往下走必须经过上级的注册表，否则"谁控制谁"就没了</td>
+          </tr>
+          <tr>
+            <td>子包路径</td>
+            <td><code>&lt;父包目录&gt;/&lt;子包名&gt;/config.toml</code>，名字由父的 <code>[packs]</code> 给</td>
+            <td>路径由注册表决定，不是靠目录名猜</td>
+          </tr>
+          <tr>
+            <td>包名</td>
+            <td>取目录名；<code>[pack].name</code> 与目录名不一致即 STOP</td>
+            <td>两处名字各写一份，迟早会漂移</td>
+          </tr>
+          <tr>
+            <td>包已确认</td>
+            <td><code>[pack].confirmed</code> 缺失或为 false → STOP</td>
+            <td>包是复用单位，拷一个包过来往往没核对过 —— 这条挡住"照单全收"</td>
+          </tr>
+          <tr>
+            <td>task id 冲突</td>
+            <td><strong>全树唯一</strong>；两个包声明同名 task → STOP，不静默覆盖</td>
+            <td><code>run &lt;id&gt;</code> 要能全局直达，重名会让"调的是哪个"不可知</td>
+          </tr>
+          <tr>
+            <td>包的粒度</td>
+            <td>一个包 = 一个职责；判据是"这些命令是否总因同一个原因被一起想起"</td>
+            <td>拆得动才复用得动：整包复制 / 整包删除</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>一个包 = 一个黑盒</h3>
+      <table>
+        <thead><tr><th>层</th><th>引擎知道什么</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>&lt;包&gt;/config.toml</code><span class="sub">接口面</span></td>
+            <td>引擎<strong>唯一读的文件</strong>：这个包叫什么、管什么事、有哪些子包、提供哪些 task</td>
+          </tr>
+          <tr>
+            <td>包里其它一切<span class="sub">如 <code>.my-commit-flow.toml</code> / <code>README.md</code></span></td>
+            <td><strong>包私有</strong> —— 引擎不读、不扫描、<strong>不知道它们存在</strong></td>
+          </tr>
+          <tr>
+            <td>包脚本</td>
+            <td>引擎只知道"有个脚本要跑"，并注入 <code>COMMAND_FLOW_PACK_DIR</code> 告知本包目录；
+            脚本自己去找自己的私有配置</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note hot">
+        <span class="tag">所以 my-commit-flow 的配置一行都不用改</span>
+        它原来那份 <code>.commit-flow.toml</code> <strong>改名成 <code>.my-commit-flow.toml</code> 原样搬进包里</strong> ——
+        <code>[[gates]]</code> / <code>red_lines</code> / 远端探测 / <code>staged_panic</code> 全留着，
+        它的 <code>_ship_config.py</code> 照旧读它。<strong>没有任何东西被"融入"引擎的配置</strong>：
+        引擎不解析、不校验、甚至不知道这个文件存在。
+        <br><br>
+        由此推出的归属调整：<strong>开工同步（<code>sync</code>）也归本包</strong> ——
+        它是 git 协作领域的事，且 AGENTS.md 里的开工自检本来就指向 my-commit-flow 的
+        <code>preflight.py --check-started</code>。这样远端名只在<strong>一处</strong>声明，不会两边各写一份。
+      </div>
+
+      <h3>引擎 schema 的边界判据</h3>
+      <div class="note hot">
+        <span class="tag">判据（一句话）</span>
+        引擎认识的键，必须对<strong>任何仓库、任何命令</strong>都成立。只要某个键的含义依赖"我们在做什么事"
+        （提交 / 同步 / 测试 / 发布），它就<strong>属于包，不属于引擎</strong>。
+      </div>
+      <table>
+        <thead><tr><th>键 / 文件</th><th>含义依赖"做什么"吗</th><th>归属</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>[pack]</code><span class="sub">name / when / enabled / version / origin / scripts_dir / confirmed</span></td>
+            <td>否 —— 只描述包自己（<code>when</code> 是"这个包管什么事"，用于按任务选包）</td>
+            <td>引擎 schema</td>
+          </tr>
+          <tr>
+            <td><code>[packs.&lt;名&gt;]</code><span class="sub">enabled</span></td>
+            <td>否 —— 只描述"本包由哪些子包组成、是否启用"</td>
+            <td>引擎 schema</td>
+          </tr>
+          <tr>
+            <td><code>[tasks.&lt;id&gt;]</code><span class="sub">run / script / args / when / note / timeout / requires / risky / pin</span></td>
+            <td>否 —— 只描述"怎么跑一条命令"与"是否常显"</td>
+            <td>引擎 schema</td>
+          </tr>
+          <tr>
+            <td><code>[[gates]]</code></td>
+            <td><strong>是</strong> —— "提交前跑什么"</td>
+            <td><span class="tag-hot">my-commit-flow 包私有</span></td>
+          </tr>
+          <tr>
+            <td><code>red_lines</code> / <code>warn_lines</code></td>
+            <td><strong>是</strong> —— "不得进暂存清单"</td>
+            <td><span class="tag-hot">my-commit-flow 包私有</span></td>
+          </tr>
+          <tr>
+            <td>远端寻址<span class="sub">main_candidates / main_host_mark / mirror*</span></td>
+            <td><strong>是</strong> —— "往哪推 / 从哪拉"</td>
+            <td><span class="tag-hot">my-commit-flow 包私有</span>（原样留在它自己的配置里）</td>
+          </tr>
+          <tr>
+            <td>开工同步 <code>sync</code></td>
+            <td><strong>是</strong> —— git 协作领域</td>
+            <td><span class="tag-hot">my-commit-flow 包</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="dim"><strong>引擎 schema 只有三块</strong>：<code>[pack]</code> / <code>[packs.*]</code> / <code>[tasks.*]</code>
+      —— 三块都只描述"包与命令的结构"，与"做什么"无关。
+      占位符只剩三个通用的：<code>&lt;root&gt;</code> / <code>&lt;skill-dir:NAME&gt;</code> / <code>&lt;args&gt;</code>
+      （"哪些文件改过"是 git 概念，由包脚本自己算）。</p>
+
+      <h3>配置草案</h3>
+      <pre>
+<span class="cm"># ── .commands/test/config.toml —— 顶级包：只装测试这件事 ──</span>
+[pack]
+name      = "test"
+when      = "验证代码：全量 / 快速 / 单文件"
+confirmed = true
+
+[tasks."test.full"]
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q']
+timeout = 900
+pin     = true          <span class="hl"># 常显：浮到一级视图</span>
+when    = "改完代码要验一遍"
+note    = <span class="hl">"必须 cmd.exe 写法 —— 本 shell 的 POSIX 前缀不生效 (rc=1)"</span>
+
+[tasks."test.one"]
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest &lt;args&gt; -q -n 0']
+timeout = 900
+when    = "排查单个文件（单文件用 -n 0，并行会慢在 worker 启动上）"
+
+<span class="cm"># ── .commands/kb/config.toml ───────────────────────────</span>
+[pack]
+name      = "kb"
+when      = "知识库：索引重建 / 会话切片"
+confirmed = true
+
+[tasks."kb.index"]
+run   = ["python &lt;skill-dir:memory-bank&gt;/scripts/gen_tasks_index.py",
+         "python &lt;skill-dir:memory-bank&gt;/scripts/gen_kb_index.py"]
+pin   = true
+when  = "收尾回写知识库后重建索引"
+
+<span class="cm"># ── .commands/my-commit-flow/config.toml —— 顶级包 + 注册子包 ──</span>
+[pack]
+name        = "my-commit-flow"
+when        = "git 协作：开工同步 / 提交 / 推送"
+origin      = "my-commit-flow"  <span class="hl"># 从 skill 降为包，名字不变</span>
+version     = "1.0.0"
+confirmed   = true
+scripts_dir = "scripts"
+
+<span class="hl">[packs.ship]                     # 注册子包（启用状态只在这里声明）</span>
+enabled = true
+
+[tasks."my-commit-flow.sync"]
+script = "preflight.py"
+args   = ["--check-started"]
+pin    = true                   <span class="hl"># 常显：开工那一刻就要看到它</span>
+when   = "会话开工的第一个执行动作之前"
+
+<span class="cm"># ── .commands/my-commit-flow/ship/config.toml —— 子包 ───</span>
+[pack]
+name = "ship"
+when = "提交与推送（闸门 / 暂存 / 核 ref / 推主线）"
+
+[tasks."ship.commit"]
+script = "commit.py"            <span class="cm"># 相对**本包**的 scripts/</span>
+pin    = true                   <span class="hl"># 常显：浮到 list my-commit-flow 这一级</span>
+when   = "用户显式说\"提交\"（commit + push 一次走完）"
+risky  = true                   <span class="cm"># 高风险 → run 先打印将要执行的命令</span>
+
+[tasks."ship.push"]
+script = "push.py"
+when   = "提交之后推主线，再尝试一次镜像"
+risky  = true
+
+<span class="cm"># ── .commands/my-commit-flow/.my-commit-flow.toml ─────</span>
+<span class="hl"># 原 .commit-flow.toml，改名后**原样搬入** —— 内容一行未改；引擎不读它</span>
+confirmed = true
+branch = ""
+main_candidates = ["gitee", "origin", "github"]
+main_host_mark  = "gitee.com"
+mirror = "github"
+mirror_host_mark = "github.com"
+pitfalls_index = "memory-bank/pitfalls/git/_index.md"
+red_lines = ["config.yml", "auto-qb-data/"]
+warn_lines = ["想法.md", ".workbuddy-ai/"]
+platform_hints = ["winreg", "dir_fd", "socket", "subprocess"]
+staged_panic = 200
+each_limit = 99
+
+[[gates]]
+match = ["src/", "tests/"]
+run   = ["yapf -i &lt;changed:*.py&gt;"]        <span class="cm"># 这些占位符由 my-commit-flow 的脚本展开</span>
+auto  = true
+timeout = 120
+note  = "格式化: 只碰本次改过的 py 文件"
+
+[[gates]]
+match = ["src/", "tests/"]
+run   = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov']
+auto  = true
+timeout = 900
+note  = "全量测试: 自带 TMPDIR(否则收尾崩成假红), 脚本自动跑, 红了即 STOP"
+      </pre>
+
+      <div class="note hot">
+        <span class="tag">v1.7：拆掉 core，层级改用子包</span>
+        两处修正。①<strong>core 拆掉</strong> —— 它装了 test / kb / dev / env / doc 五件事，
+        违背"一个包一个职责"；拆成五个顶级包后 core 直接消失（v1.5 之后它已不承载任何仓库事实）。
+        ②<strong>层级从"命令上的分组字段"改为"包嵌套"</strong> —— 包既然是复用单位，
+        "一组成套的包"自然就该是一个子包；子包由上级注册，<code>enabled</code> 只有一处声明。
+        另：skill 与配置目录同步改名（<code>my-command-flow</code> → <code>commands</code>，
+        <code>.commands/</code> → <code>.commands/</code>）—— 它做的是命令的登记与分发，不是流程编排。
+      </div>
+
+      <h3>四个子命令</h3>
+      <table>
+        <thead><tr><th>子命令</th><th>作用</th><th>为什么必须有</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>run &lt;task&gt;</code></td>
+            <td>先校验前置条件，再执行；超时按失败计。<strong>常规路径只用它</strong></td>
+            <td>执行路径唯一，<code>requires</code> 不满足即 STOP；默认只回结果摘要，不 dump 命令（省 token + 隐藏细节）</td>
+          </tr>
+          <tr>
+            <td><code>list</code></td>
+            <td><strong>逐级列出当前层级</strong>：一级是包与常显命令，下钻到组、再到命令；<code>--all</code> 才全量</td>
+            <td>agent 靠它按当前任务逐级定位；<strong>不出命令本体，也不铺平</strong>（见 §05）</td>
+          </tr>
+          <tr>
+            <td><code>show &lt;task&gt;</code></td>
+            <td>打印<strong>展开占位符后</strong>的真实命令，不执行</td>
+            <td>排障与自证用（低频）。没有它，agent 在需要核对时仍得靠猜 —— 只是把猜的对象从命令换成了 task id</td>
+          </tr>
+          <tr>
+            <td><code>add</code></td>
+            <td>把一条命令收录进配置（默认 dry-run，<code>--write</code> 才落盘）</td>
+            <td><strong>本方案的自生长入口</strong> —— 让命令集能自己长大，而不是等人维护（见 §06）</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <span class="tag">详略策略（省 token 与减少出错在这里折中）</span>
+        <code>run</code> 默认不打印命令，但 <strong>带 <code>requires</code> 或 <code>risky = true</code> 的 task 例外</strong>：
+        它先打印将要执行的命令再执行。<code>show</code> 与 <code>note</code> 的完整内容只在排障时读，
+        原理与陷阱判据留在 <code>memory-bank/pitfalls/</code>，由 <code>note</code> 字段指针过去 ——
+        与既有 <code>pitfalls_index</code>「把约束接到决策点上」的做法同源。
+      </div>
+
+      <div class="note hot">
+        <span class="tag">不降级原则（沿用 my-commit-flow 的既有裁决）</span>
+        <strong>引擎 schema 违规</strong>（类型错 / <code>timeout</code> 非法）/ 占位符展不开 / <code>requires</code> 的命令非 0 / 包级 <code>confirmed = false</code> —— 一律 <strong>STOP（退出码 1）</strong>；<strong>未知顶层键是 WARN 不是 STOP</strong>（它可能正是包私有配置，见上节），
+        不静默退回"只打印给人"。理由与 <code>_ship_config.py</code> 里写的一致：<strong>静默失效比报错坏得多</strong> ——
+        报错会立刻被发现，静默失效会让人以为"该跑的跑过了"，而且 WARN 会被淹没在十几行检查表里。
+        代价是新增配置键必须先加进白名单，否则一写就挡住执行 —— 接受。
+      </div>
+    </section>
+
+    <!-- ============ 05 逐级路由 ============ -->
+    <section id="s5">
+      <div class="sec-head"><span class="folio">05</span><h2>逐级路由：按任务下钻</h2></div>
+      <p>把路由铺成一张平表，命令一多就必然臃肿 —— 而且它把"提交时才用的命令"和"改完代码就要用的命令"
+      混在同一张表里，<strong>不同任务适合的命令本来就不该并排</strong>。执行者要的从来不是"看完全部命令"，
+      而是"<strong>当前这件事该调哪个</strong>"。</p>
+      <p>所以路由<strong>不落盘、不铺平</strong>：改为运行时逐级查询，命令按任务域分隔在包里，高频的标常显。</p>
+
+      <h3>视图（逐级）</h3>
+      <div class="flow">
+      <svg viewBox="0 0 1100 184" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+        <defs>
+          <marker id="arr3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+          </marker>
+        </defs>
+        <g stroke="rgba(255,255,255,.22)" fill="none" stroke-width="1">
+          <rect x="2" y="30" width="360" height="112"/>
+          <rect x="410" y="30" width="300" height="112"/>
+          <rect x="758" y="30" width="340" height="112" stroke="rgba(227,179,65,.75)"/>
+          <line x1="366" y1="86" x2="404" y2="86" marker-end="url(#arr3)"/>
+          <line x1="714" y1="86" x2="752" y2="86" marker-end="url(#arr3)"/>
+        </g>
+        <g font-size="12">
+          <text x="20" y="54" fill="#e2e4e1">list</text>
+          <text x="66" y="54" fill="#747972">一级：有哪些包</text>
+          <text x="20" y="78" fill="#a9ada8">test</text>
+          <text x="70" y="78" fill="#747972">验证代码</text>
+          <text x="160" y="78" fill="#e3b341">★ test.full</text>
+          <text x="20" y="100" fill="#a9ada8">kb</text>
+          <text x="70" y="100" fill="#747972">知识库</text>
+          <text x="160" y="100" fill="#e3b341">★ kb.index</text>
+          <text x="20" y="122" fill="#a9ada8">dev / env / doc</text>
+          <text x="20" y="138" fill="#a9ada8">my-commit-flow</text>
+          <text x="180" y="138" fill="#e3b341">★ sync</text>
+
+          <text x="428" y="54" fill="#e2e4e1">list my-commit-flow</text>
+          <text x="428" y="78" fill="#e3b341">★ sync</text>
+          <text x="492" y="78" fill="#a9ada8">会话开工的第一个动作</text>
+          <text x="428" y="100" fill="#a9ada8">ship/</text>
+          <text x="492" y="100" fill="#747972">子包：提交与推送</text>
+
+          <text x="776" y="54" fill="#e2e4e1">list my-commit-flow/ship</text>
+          <text x="776" y="78" fill="#e3b341">★ commit</text>
+          <text x="864" y="78" fill="#a9ada8">用户说「提交」</text>
+          <text x="776" y="100" fill="#a9ada8">push</text>
+          <text x="864" y="100" fill="#747972">提交后推主线</text>
+          <text x="776" y="122" fill="#a9ada8">verify-ref</text>
+          <text x="864" y="122" fill="#747972">ref 三处核对</text>
+        </g>
+        <text x="2" y="170" font-size="11" fill="#747972">★ = pin（常显）：浮到父级列表 —— 一级只出"包 + 常显"，所以命令再多也不臃肿</text>
+      </svg>
+      </div>
+
+      <h3>引导（写进 SKILL.md，agent 侧唯一要看的东西）</h3>
+      <ul class="tight">
+        <li><strong>要执行动作</strong> → <code>list</code>：看有哪些包、各自管什么事，以及各包的常显命令</li>
+        <li><strong>按当前任务选包</strong> → <code>list &lt;包&gt;</code>：看这个包的本级命令与子包</li>
+        <li><strong>还没定位</strong> → 继续下钻 <code>list &lt;包&gt;/&lt;子包&gt;</code>（深度不限）</li>
+        <li><strong>已经知道 id</strong> → 直接 <code>run &lt;id&gt;</code>，跳过前面所有步骤</li>
+        <li><strong>排障 / 迁移</strong> → <code>list --all</code>：一次性列出全树（含被 <code>enabled = false</code> 禁用的，标出来）</li>
+      </ul>
+      <div class="note hot">
+        <span class="tag">"不臃肿"靠的是分层，不是靠写得短</span>
+        一级输出里<strong>只有包与常显命令</strong>，所以命令总数从 10 条长到 200 条，
+        一级视图仍然是"几个包 + 几条常显"。<code>list --all</code> 是兜底，不是入口 ——
+        它存在的意义只是排障，一旦被当成常规入口，臃肿就会从那张表搬到这里。
+      </div>
+
+      <h3>为什么去掉路由表文件</h3>
+      <table>
+        <thead><tr><th></th><th>生成的路由表（v1.5）</th><th>逐级查询（本方案）</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>规模</td>
+            <td>必须把所有命令<strong>铺平</strong>在一份文件里 ⇒ 必然臃肿</td>
+            <td>只出当前层级 ⇒ 与命令总数<strong>无关</strong></td>
+          </tr>
+          <tr>
+            <td>新鲜度</td>
+            <td>是副本，会与包脱节，需要 <code>--check</code> 闸门兜</td>
+            <td>实时读包，<strong>不可能过期</strong>，也不需要那条闸门</td>
+          </tr>
+          <tr>
+            <td>任务相关性</td>
+            <td>不同任务的命令混在一张表里，要自己筛</td>
+            <td>按任务域<strong>天然分隔</strong>（包 → 子包）</td>
+          </tr>
+          <tr>
+            <td>代价</td>
+            <td>多一份要维护的生成物 + 一条闸门 + 一个子命令</td>
+            <td>少一个"可 diff / 可静态引用"的视图 ⇒ 由 <code>list --all</code> 兜底</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <span class="tag">与 G8「路由可随配置生长」的关系</span>
+        目标不变，机制换了：v1.5 靠"生成器 + 闸门"保证路由跟得上配置；
+        本方案<strong>把路由变成查询而非副本</strong>，于是"跟得上"不再需要机制去保证 —— 它天然成立。
+      </div>
+    </section>
+    <!-- ============ 06 自生长 ============ -->
+    <section id="s6">
+      <div class="sec-head"><span class="folio">06</span><h2>配置的自生长：收录协议</h2></div>
+      <p>如果只是把现有命令搬进配置，那这套东西仍是一份<strong>等人维护的清单</strong> —— 遇到新命令照样没人收，
+      几周后又退回"命令散落各处"。所以 <code>SKILL.md</code> 里必须写清一条协议：
+      <strong>agent 遇到可复用的有价值命令时，自己把它收录进配置。</strong>
+      这是本方案与"又一份命令文档"的分水岭 —— 前者会自己长大，后者只会变旧。</p>
+
+      <h3>什么时候该收录（三条任一命中）</h3>
+      <table>
+        <thead><tr><th>#</th><th>判据</th><th>怎么判</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>重复</td>
+            <td>同一条命令在本会话（或近几轮）出现<strong>第二次</strong> —— 第二次出现就是"它会再出现"的最强信号</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>难拼</td>
+            <td>拼装它需要 ≥2 个环境前缀 / 参数，或<strong>得先查文档才知道怎么写</strong> —— 查文档这一步本身就是成本</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>易错</td>
+            <td>存在"看起来正常但不生效"的写法（如 POSIX 前缀）—— 这类错误没有提示，只有假红</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>命令的归宿（收录前先选对包）</h3>
+      <table>
+        <thead><tr><th>情况</th><th>归宿</th><th>放哪个包</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>会话固定流程的一环 / 反复要跑</td>
+            <td>写进包的 <code>config.toml</code> 的 <code>[tasks.*]</code> —— 改超时或加 task 都只是改 TOML</td>
+            <td>本仓库特有 → 按职责归到 <code>test</code> / <code>kb</code> / <code>dev</code> / <code>env</code> / <code>doc</code></td>
+          </tr>
+          <tr>
+            <td>逻辑复杂：多步、要解析输出、要条件分支</td>
+            <td>落到该包的 <code>scripts/</code>，task 用 <code>script =</code> 指过去</td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <td>成套的、别的仓库也用得上</td>
+            <td>同上，但<strong>单独成包</strong> —— 包是复用单位，整包复制即可带走</td>
+            <td>新建包（如 <code>my-commit-flow</code>）</td>
+          </tr>
+          <tr>
+            <td>只跑一次 / 纯调试</td>
+            <td><strong>不收录</strong> —— 直接在对话里跑。配置保持瘦，是它能被信任的前提</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>收录动作</h3>
+      <pre>
+<span class="cm"># 默认 dry-run：只打印将要写入的 TOML 片段与落点文件，不落盘</span>
+run.py add --id test.one --pack test \
+  --run  'set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest &lt;args&gt; -q -n 0' \
+  --when "排查单个文件（单文件用 -n 0，并行会慢在 worker 启动上）" \
+  --note <span class="hl">"必须 cmd.exe 写法 —— 本 shell 的 POSIX 前缀不生效 (rc=1)"</span>
+
+<span class="cm"># 核对落点与片段无误后再落盘；落盘后自动做两件事：</span>
+<span class="cm">#   ① show 自证展开正确  ② 它立刻出现在 list 的对应层级里（查询式, 无需重跑生成物）</span>
+run.py add ... --write
+
+<span class="cm"># --pin 只在"每次会话都要用"时才给（如 test.full / 开工同步）；滥用等于把平面表搬回一级</span>
+<span class="cm"># 落盘即入库改动 ⇒ 会走提交闸门（反漂移闸门也在那里），天然有复核点</span>
+      </pre>
+
+      <h3>为什么 <code>--when</code> 与 <code>--note</code> 是必填</h3>
+      <ul class="tight">
+        <li><code>--when</code> 是<strong>下次能被发现的唯一线索</strong>。缺了它，这条 task 在 <code>list</code> 里只剩一个 id，
+        agent 下次遇到同样场景也认不出来 —— <strong>等于没收录</strong>。</li>
+        <li><code>--note</code> 是<strong>环境陷阱的判据</strong>。缺了它，下次有人（含 agent）"顺手把命令写正常点"，
+        就退回那个不生效的 POSIX 写法 —— §01 那 5 种写法正是这么长出来的。</li>
+      </ul>
+      <div class="note hot">
+        <span class="tag">两条必填字段其实是同一件事</span>
+        它们把"这条命令为什么长这样"从<strong>执行者的记忆</strong>搬到了<strong>包里</strong>。
+        这正是 §01 那条复发坑的结论 —— <strong>改配置比改记忆可靠</strong>。
+      </div>
+
+      <h3>防滥用（避免配置变成垃圾桶）</h3>
+      <table>
+        <thead><tr><th>机制</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>add</code> 默认 dry-run</td>
+            <td>落盘前先看到"写进哪个文件、写成什么样"，避免手滑污染配置</td>
+          </tr>
+          <tr>
+            <td>强制 <code>--when</code> 非空</td>
+            <td>说不出"何时用"就说明这条命令还没有场景 —— 那它不该被收</td>
+          </tr>
+          <tr>
+            <td><code>--id</code> 已存在则<strong>拒绝覆盖</strong></td>
+            <td>改既有命令必须走 <code>edit</code>，避免 agent 在不知情时改写已有语义（那是另一类出错）</td>
+          </tr>
+          <tr>
+            <td>配置是入库文件</td>
+            <td>收录 = 一次代码改动 ⇒ 过提交闸门 ⇒ 天然有复核点，且改动可追溯</td>
+          </tr>
+          <tr>
+            <td>三条判据同时是上限</td>
+            <td>收录是<strong>有判据的动作</strong>，不是"看到就收"。不满足判据的收录在复核时会被打回</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 07 实施波次 ============ -->
+    <section id="s7">
+      <div class="sec-head"><span class="folio">07</span><h2>实施波次 W1–W5</h2></div>
+
+      <div class="wave">
+        <div class="w-head"><span class="w-no">W1</span><span class="w-title">引擎骨架 + 包树扫描 + 五个顶级包</span></div>
+        <p>落地引擎三件：<code>_config.py</code>（扫描 <code>.commands/*/config.toml</code> / 合并 / 校验 / 占位符展开）、
+        <code>_tree.py</code>（层级视图：包 → 子包 → 命令）、
+        <code>run.py</code>（<code>run</code> / <code>list</code> / <code>show</code> / <code>add</code>）。
+        <strong>没有 <code>_gates.py</code></strong> —— 闸门归 my-commit-flow 包。
+        写五个顶级包 <code>.commands/{test,kb,dev,env,doc}/config.toml</code>（<code>[pack]</code> + <code>[tasks.*]</code>），
+        并写出 <code>SKILL.md</code> 首版 —— <strong>四个子命令 + 引导 + 收录协议，不含路由表本体</strong>。</p>
+        <ul>
+          <li><strong>引擎 schema 边界</strong>：只有 <code>[pack]</code> / <code>[packs.*]</code> / <code>[tasks.*]</code> 三块；包内其它文件引擎<strong>不读、不扫描、不知道存在</strong></li>
+          <li><strong>扫描规则</strong>：顶级包自动扫 <code>.commands/*/config.toml</code>；子包由上级 <code>[packs.&lt;名&gt;]</code> 注册（路径 <code>&lt;父&gt;/&lt;名&gt;/config.toml</code>）；<code>[pack].name</code> 与目录名不一致即 STOP；task id 全树冲突即 STOP</li>
+          <li>占位符只留三个通用的：<code>&lt;root&gt;</code> / <code>&lt;skill-dir:NAME&gt;</code> / <code>&lt;args&gt;</code>；残留尖括号直接 STOP（<code>&lt;changed:GLOB&gt;</code> / <code>&lt;each:GLOB&gt;</code> 属闸门专用，随闸门一起移出引擎）</li>
+          <li><code>run</code> 默认只回结果摘要；带 <code>requires</code> / <code>risky</code> 的 task 先打印命令再执行（风险自适应详略）</li>
+          <li><code>add</code> 默认 dry-run，<code>--write</code> 才落盘；<code>--when</code> 空即拒绝；<code>--pack</code> 指向不存在的包即拒绝；落盘后自动 <code>show</code> 自证</li>
+          <li>脚本必须支持 <code>--help</code> —— 既有闸门 <code>&lt;each:.agents/skills/**/scripts/*.py&gt; --help</code> 会冒烟它</li>
+          <li>新 skill 由 <code>scripts/sync_agent_skills.py</code> 幂等挂到 <code>.codebuddy/skills</code>（该脚本已挂在每次提交的闸门里）</li>
+        </ul>
+        <div class="verify"><span class="vk">VERIFY</span><code>list</code> 只出一级（包 + 常显命令）；<code>list my-commit-flow</code> 出子包、<code>list my-commit-flow/ship</code> 出命令，逐级可下钻；<code>list --all</code> 才全量；<code>show test.full</code> 与现 <code>.commit-flow.toml</code> 闸门逐字一致；<code>add</code> 一条 task 走完 dry-run → <code>--write</code> → 自证</div>
+      </div>
+
+      <div class="wave">
+        <div class="w-head"><span class="w-no">W2</span><span class="w-title">补齐五个包 + 验证包可插拔</span></div>
+        <p>把知识库索引、会话切片补进 <code>kb/config.toml</code>，WEB UI、仿真、浏览器冒烟补进 <code>dev/config.toml</code>；
+        需要多步或带参数解析的落到该包的 <code>scripts/</code>。</p>
+        <ul>
+          <li>用"<strong>临时加一个包 → 跑通 → 整包删掉</strong>"验证包确实是可插拔单位：删除后引擎照常 <code>list</code> / <code>run</code>，不留悬挂引用</li>
+          <li>同时验证<strong>包的黑盒性</strong>：往包里塞一份引擎不认识的私有配置，引擎照常工作、不因它报错，也读不到它</li>
+        </ul>
+        <div class="verify"><span class="vk">VERIFY</span><code>run kb.index</code> 与手工跑 <code>gen_tasks_index.py</code> + <code>gen_kb_index.py</code> 结果一致（幂等，跑两次无 diff）；临时包删除后引擎无异常</div>
+      </div>
+
+      <div class="wave">
+        <div class="w-head"><span class="w-no">W3</span><span class="w-title">my-commit-flow 成包，退役 .commit-flow.toml</span></div>
+        <p>新建 <code>.commands/my-commit-flow/</code>：<code>config.toml</code> 只写接口面（<code>[pack]</code> + <code>[tasks."my-commit-flow.*"]</code>）；
+        <strong>原 <code>.commit-flow.toml</code> 改名 <code>.my-commit-flow.toml</code> 原样搬入</strong>，内容一行不改；
+        四个脚本与 <code>_ship_config.py</code> 一起迁入包内 <code>scripts/</code>（它们照旧读自己的配置）；
+        <code>README.md</code> 承接旧 SKILL.md 的纪律与原理。</p>
+        <ul>
+          <li><strong>注意这既不是"吸收进引擎"、也不是"融入 commands 的配置"</strong>：包是黑盒，引擎只读它的 <code>config.toml</code>，包私有配置它一无所知</li>
+          <li>迁移后逐条比对：<strong>闸门一条不少、红线一条不漏</strong>，生效值可对照 <code>--show-config</code></li>
+          <li>顺带修掉 §01 记的那条 <strong>rebase 冲突</strong>（旧 skill 教"提交 → rebase → 推送"，与 <code>AGENTS.md</code> 的 rebase 禁令相撞）</li>
+          <li><strong>开工同步 <code>sync.*</code> 一并归入本包</strong>（git 协作领域；远端名只在一处声明，避免两边各写一份）</li>
+          <li>引用点清点：<code>AGENTS.md</code> / <code>memory-bank/SKILL.md</code> / <code>pitfalls/testing/tmpdir.md</code> 等处的路径与命令名</li>
+        </ul>
+        <div class="verify"><span class="vk">VERIFY</span>旧配置与 <code>my-commit-flow.*</code> 的检查表逐行等价；删除 <code>.commit-flow.toml</code> 后全链路仍绿；把整个包移走，引擎照常工作（<strong>且引擎里 grep 不到 <code>gate</code> / <code>red_line</code> / <code>commit</code> / <code>ship</code></strong>）</div>
+      </div>
+
+      <div class="wave">
+        <div class="w-head"><span class="w-no">W4</span><span class="w-title">反漂移闸门 + 文档收口</span><span class="w-optional">成败点</span></div>
+        <p><strong>这一步不做，整个方案就只是第 9 处副本。</strong>新增一条机检：扫描 <code>AGENTS.md</code> / <code>README.md</code> /
+        <code>memory-bank/**</code> / <code>.github/**</code> 里的命令块，凡是能在包里匹配到既有 task 的命令，
+        必须写成 <code>commands run &lt;task&gt;</code> 形式，直接手抄即判红。</p>
+        <ul>
+          <li>匹配按"命令骨架"而非逐字：忽略引号风格 / 空格 / 路径差异，只看关键 token 序列 —— 否则改个空格就绕过</li>
+          <li>豁免白名单要显式：<code>ci.yml</code>（另一条执行路径）、<code>docs/plans/**</code> 与 issue 报告（历史快照，不回改）</li>
+          <li>随后把 §01 那 8 处副本逐处改成 task id 引用，并订正 <code>memory-bank/testing/run.md</code> 里那条 POSIX 写法</li>
+          <li>不再需要"路由生成物自洽"的闸门（路由已不落盘）；改为检查<strong>包树完整性</strong>：子包注册指向的目录存在、task id 全树唯一、<code>pin</code> 数量在阈值内</li>
+          <li><strong>把"收录协议"接到决策点上</strong>：<code>AGENTS.md</code> 与 <code>memory-bank/SKILL.md</code> 各留一个指针
+          （与既有 <code>pitfalls_index</code> 同源做法）—— <strong>库里的约束不接到决策点上就等于没写</strong></li>
+          <li>校准 SKILL.md 里收录协议的措辞：写<strong>可判定的触发条件</strong>（出现第二次 / 需查文档 / 有陷阱写法），
+          不写"有价值的命令请收录"这类无法执行的话</li>
+        </ul>
+        <div class="verify"><span class="vk">VERIFY</span>故意在文档里手抄一条命令 → 必须判红；改成 task id → 转绿。另：一次真实会话里，agent 遇到重复命令时<strong>自发</strong>调了 <code>add</code></div>
+      </div>
+
+      <div class="wave">
+        <div class="w-head"><span class="w-no">W5</span><span class="w-title">旧 skill 退场 + 引擎纯净度复验</span></div>
+        <p>删除 <code>.agents/skills/my-commit-flow/</code>（连带 <code>.codebuddy/skills</code> 下的链接），
+        确认它的能力已全部以 <code>my-commit-flow</code> 包形态存在。</p>
+        <ul>
+          <li><strong>引擎纯净度机检</strong>：在引擎目录里 grep 项目词（<code>提交</code> / <code>测试</code> / <code>知识库</code> /
+          <code>gate</code> / <code>red_line</code> / <code>commit</code> / <code>ship</code> / <code>gitee</code> / <code>TMPDIR</code>）必须<strong>为空</strong> —— 这是"零领域逻辑"的机检判据，
+          否则 v1.0 / v1.3 / v1.4 的错误（领域逻辑或领域配置混进引擎）会悄悄回流</li>
+          <li><code>grep -rn "my-commit-flow" .</code> 的残留只允许是"已迁移"性质的说明</li>
+        </ul>
+        <div class="verify"><span class="vk">VERIFY</span>引擎纯净度 grep 为空；说"提交"仍能走通全链路；把 <code>my-commit-flow/</code> 整包删掉，引擎仍能 <code>list</code> / <code>run</code> 其它 task</div>
+      </div>
+    </section>
+
+    <!-- ============ 08 风险 ============ -->
+    <section id="s8">
+      <div class="sec-head"><span class="folio">08</span><h2>风险与边界</h2></div>
+      <table>
+        <thead><tr><th>风险</th><th>成因</th><th>对策</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>配置漂移<span class="sub">本方案最大的失败模式</span></td>
+            <td>新 skill 上线后，文档里仍有人（含 agent）手抄命令 → 变成第 9 处副本</td>
+            <td>W4 的反漂移闸门；<strong>它是本方案的必要条件，不是加分项</strong></td>
+          </tr>
+          <tr>
+            <td>过渡期双配置</td>
+            <td>W1–W2 期间提交闸门仍靠 <code>.commit-flow.toml</code>，而包内的 <code>.my-commit-flow.toml</code> 已就位 —— 两处可能各自演化</td>
+            <td>过渡期新包<strong>只声明不启用</strong>闸门（或干脆先不写）；W3 一次迁完并删旧文件，闸门始终只有一处生效</td>
+          </tr>
+          <tr>
+            <td>命令写在包外<span class="sub">包形态的新失效模式</span></td>
+            <td>有人（含 agent）把命令塞进 <code>.commands/</code> 顶层的散文件或别处 —— 引擎扫不到，<strong>静默失效</strong></td>
+            <td><code>add</code> 只能落到包里（<code>--pack</code> 不存在即拒绝），是唯一的收录入口；W4 的文档收口让手抄形态判红</td>
+          </tr>
+          <tr>
+            <td>层级过深 / 常显滥用</td>
+            <td>组套得太深会让人下钻到迷路；<code>pin</code> 滥用则等于把平面表搬回一级视图</td>
+            <td>两条纪律：<strong>组不超过两级</strong>；<code>pin</code> 只给"每次会话都要用"的命令 —— 由 W4 的层级完整性检查兜住</td>
+          </tr>
+          <tr>
+            <td>引擎被领域逻辑污染<span class="sub">v1.0 的原错误</span></td>
+            <td>"顺手把 my-commit-flow 的实现放进引擎"最省事，一旦开了头，引擎就有了项目味、不再可移植。<strong>配置也是同一类越界</strong>：v1.4 曾把闸门与红线写进包的 <code>config.toml</code>，等于让 commands 的配置面承载 commit-flow 的领域</td>
+            <td>W5 的<strong>引擎纯净度机检</strong>：引擎目录 grep 项目词必须为空；判据写进 <code>AGENTS.md</code></td>
+          </tr>
+          <tr>
+            <td>过度设计</td>
+            <td>把只跑一次的命令也收进来 → 配置膨胀、维护成本超过收益</td>
+            <td><strong>收录判据</strong>（三条任一命中才收）：①同一命令在仓库出现 ≥2 处 ②带环境前缀陷阱（如 TMPDIR） ③属会话固定流程的一环</td>
+          </tr>
+          <tr>
+            <td>迁移期提交流程断档</td>
+            <td>W3 删旧配置时若闸门漏迁，提交前就没有机检了</td>
+            <td>删除前逐行比对两侧检查表；旧配置的 <code>confirmed</code> / 红线 / 闸门条数作为迁移 checklist</td>
+          </tr>
+          <tr>
+            <td>自生长失控<span class="sub">配置变成垃圾桶</span></td>
+            <td>"自动收录"若无判据，会把一次性调试命令也收进来 → 配置膨胀、信噪比下降，最后没人愿意读</td>
+            <td>三条收录判据 + <code>--when</code> 必填 + <code>--id</code> 拒绝覆盖 + 落盘走提交复核（见 §06 防滥用）</td>
+          </tr>
+          <tr>
+            <td>脚本冒烟闸门误伤</td>
+            <td>新脚本若没有 <code>--help</code>，既有闸门会判红</td>
+            <td>W1 起所有新脚本用 argparse 提供 <code>--help</code>，并在 W1 的 verify 里先跑一遍</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <span class="tag">边界</span>
+        本方案<strong>不引入新的 git 操作</strong>，也不放宽任何既有红线 —— 它只改变"命令从哪里取"。
+        <code>requires</code> 里的检查命令（如 <code>git diff --quiet</code>）是<strong>把既有纪律变成机检</strong>，不是新增约束。
+        跨仓库操作的红线（需显式「授权」）与提交口径（"提交" = commit + push）全部保持不变。
+      </div>
+    </section>
+
+    <!-- ============ 09 验收 ============ -->
+    <section id="s9">
+      <div class="sec-head"><span class="folio">09</span><h2>验收标准</h2></div>
+      <ul class="accept">
+        <li><span class="a-no">A1</span><span><code>SKILL.md</code> 里不存在任何可直接执行的命令，<strong>也不含路由表本体</strong> —— 只有四个子命令的用法、引导与收录协议；路由由 <code>list</code> 逐级提供（与 §05 一致）。</span></li>
+        <li><span class="a-no">A2</span><span>同一条命令在仓库里只有<strong>一处</strong>定义（某个包里）；<code>grep</code> 全仓不再出现手抄形态。</span></li>
+        <li><span class="a-no">A3</span><span><code>run.py show &lt;task&gt;</code> 能打印展开后的真实命令，且与配置逐字一致。</span></li>
+        <li><span class="a-no">A4</span><span>包写错（未知键 / 非法超时 / 残留占位符 / 包级 <code>confirmed = false</code>）一律 STOP，退出码 1，不静默降级。</span></li>
+        <li><span class="a-no">A5</span><span>反漂移闸门生效：文档里手抄一条已收录命令 → 判红；改成 task id → 转绿。</span></li>
+        <li><span class="a-no">A6</span><span><code>my-commit-flow.*</code> 全链路等价于原 skill：闸门条数与红线条目逐条对齐，全量测试通过。</span></li>
+        <li><span class="a-no">A7</span><span><code>.commit-flow.toml</code> 删除后无悬挂引用；<code>my-commit-flow</code> 目录已删除，其能力以 <code>my-commit-flow</code> 包形态存在（含它自己那份 <code>.my-commit-flow.toml</code>）。</span></li>
+        <li><span class="a-no">A8</span><span>全量测试基线不退化（<code>test.full</code> 实测数字与 <code>memory-bank/testing/baseline.md</code> 对齐，无回归）。</span></li>
+        <li><span class="a-no">A9</span><span><strong>token 预算达标</strong>：<code>SKILL.md</code> 有硬上限且不含任何可直接执行的命令；常规 <code>run</code> 不 dump 完整命令；只有带 <code>requires</code> / <code>risky</code> 的 task 才先打印命令。</span></li>
+        <li><span class="a-no">A10</span><span><strong>收录入口安全</strong>：<code>add</code> 默认 dry-run；<code>--when</code> 为空即拒绝；<code>--pack</code> 指向不存在的包即拒绝；<code>--id</code> 已存在时拒绝覆盖；落盘后自动 <code>show</code> 自证。</span></li>
+        <li><span class="a-no">A11</span><span><strong>自生长真的发生</strong>：在一次真实会话里，agent 遇到重复出现的命令时<strong>自发</strong>调用了 <code>add</code>，且未等人下指令 —— 这是 G7 的唯一有效判据。</span></li>
+        <li><span class="a-no">A12</span><span><strong>细节确实被隐藏</strong>：执行 <code>test.full</code> / <code>my-commit-flow.push</code> 的全过程中，上下文里不出现 TMPDIR 前缀、远端名、代理参数等实现细节。</span></li>
+        <li><span class="a-no">A13</span><span><strong>引擎零领域逻辑</strong>：引擎目录 grep 项目词（<code>提交</code> / <code>测试</code> / <code>知识库</code> / <code>gate</code> / <code>red_line</code> / <code>commit</code> / <code>ship</code> / <code>gitee</code> / <code>TMPDIR</code>）为空；把 <code>my-commit-flow/</code> 整包移走后引擎仍能 <code>list</code> / <code>run</code> 其它 task。</span></li>
+        <li><span class="a-no">A14</span><span><strong>逐级路由可用</strong>：<code>list</code> 只出当前层级，能按 包 → 子包 → 命令 逐级下钻，<code>pin</code> 的命令浮到父级列表；新增命令只改包、<strong>无需重跑任何生成物</strong>，<code>SKILL.md</code> 与 skill 体积不变。</span></li>
+        <li><span class="a-no">A15</span><span><strong>配置层只有一种形态</strong>：<code>.commands/</code> 下全部条目都是包（没有生成物、没有散落文件）；包名与目录名不一致、或两个包声明同名 task，均 STOP。</span></li>
+        <li><span class="a-no">A16</span><span><strong>引擎 schema 只有两块</strong>：<code>[pack]</code> / <code>[tasks.*]</code>；占位符只有 <code>&lt;root&gt;</code> / <code>&lt;skill-dir:NAME&gt;</code> / <code>&lt;args&gt;</code>；引擎代码与文档里<strong>不出现 <code>gates</code> / <code>red_lines</code> / <code>main_candidates</code> / <code>commit</code> / <code>ship</code></strong> 等任何领域词；闸门与红线只存在于 <code>my-commit-flow</code> 包内的 <code>.my-commit-flow.toml</code>，由包脚本自读。</span></li>
+      </ul>
+    </section>
+
+    </main>
+  </div>
+
+  <!-- ============ colophon ============ -->
+  <div class="colophon">
+    <div class="kicker">Colophon</div>
+    <dl>
+      <dt>方案</dt><dd>commands · 纯引擎 + 包式配置层</dd>
+      <dt>边界</dt><dd>引擎 schema 只有 <code>[pack]</code> / <code>[packs.*]</code> / <code>[tasks.*]</code>，零领域逻辑；包是黑盒，<code>my-commit-flow</code> 自带 <code>.my-commit-flow.toml</code>，引擎不读</dd>
+      <dt>设计初衷</dt><dd>减少出错 · 隐藏复杂细节 · 降低 token 消耗</dd>
+      <dt>路由</dt><dd>逐级查询（包 → 子包 → 命令）+ <code>pin</code> 常显；不落盘，故不会过期、也不会臃肿</dd>
+      <dt>自生长</dt><dd>收录协议（<code>run.py add</code>）+ 三条收录判据 + <code>--when</code> 必填 —— 命令集自己长大</dd>
+      <dt>前置依赖</dt><dd>无新增依赖；沿用 uv / pytest / yapf 既有工具链</dd>
+      <dt>改动面</dt><dd>新增引擎与 <code>.commands/</code>（五个顶级包）；<code>my-commit-flow</code> 从 skill 降为同名包后退场（<code>.commit-flow.toml</code> 改名 <code>.my-commit-flow.toml</code> 原样搬入）；文档命令块收口</dd>
+      <dt>不做</dt><dd>通用任务编排 · CI 替代 · 一次性调试命令</dd>
+      <dt>成败点</dt><dd>W4 反漂移闸门（不做则退化为"第 9 处副本"）· W1 收录协议与逐级视图（不做则仍需人维护、或又长成一张平表）</dd>
+      <dt>作者</dt><dd>AutoClaw</dd>
+    </dl>
+  </div>
+
+</div>
+
+</body>
+</html>

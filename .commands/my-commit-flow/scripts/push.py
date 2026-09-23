@@ -1,7 +1,7 @@
 """推送 —— **顺序固定**: 先推主线远端(必须成功), 再尝试一次镜像直连(失败只报一次)。
 
 用法:
-    python <skill-dir>/scripts/push.py [--skip-mirror] [--skip-preflight]
+    python <包>/scripts/push.py [--skip-mirror] [--skip-preflight]
 
 流程:
   0. **先跑一次预检(`--phase push --no-auto`)** —— 原先是让人在推送前手动跑一遍, 现收进脚本:
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-mirror", action="store_true", help="不尝试镜像远端")
     parser.add_argument("--skip-preflight", action="store_true", help="跳过推送前的预检(与 commit.py 同名开关对齐)")
-    parser.add_argument("--config", default=None, help="指定配置文件(默认 <仓库根>/.commit-flow.toml)")
+    parser.add_argument("--config", default=None, help="指定配置文件(默认 <包>/.my-commit-flow.toml)")
     args = parser.parse_args(argv)
 
     global BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW, _ERR

@@ -1,0 +1,25 @@
+[pack]
+name      = "kb"
+when      = "知识库：索引重建 / 会话切片 / 只校验不写"
+confirmed = true
+
+[tasks."kb.index"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py",
+           "python <skill-dir:memory-bank>/scripts/gen_kb_index.py"]
+timeout = 120
+pin     = true
+when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
+
+[tasks."kb.active"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py"]
+timeout = 60
+when    = "看会话滚动状态（在办专题切片，按最后活动倒序）"
+note    = "只打印不写文件；加 --check 变成只校验"
+
+[tasks."kb.check"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
+           "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
+           "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check"]
+timeout = 120
+when    = "改完知识库先自查，或提交前确认索引自洽"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红"

@@ -1,7 +1,7 @@
 """按项目纪律提交 —— 逐路径暂存(禁 -A) + 提交 + 提交后立即核对 ref 三处。
 
-用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
-    python <skill-dir>/scripts/commit.py --message-file <文件> <路径> [<路径>...]
+用法(**不要写死包的安装路径**, `<包>` = 本包目录(`<仓库根>/.commands/my-commit-flow`)):
+    python <包>/scripts/commit.py --message-file <文件> <路径> [<路径>...]
         [--skip-preflight]   # 已跑过预检时用
 
 流程:
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("paths", nargs="+", help="要暂存的文件路径(逐路径写, 禁 -A / . / *)")
     parser.add_argument("--message-file", required=True, help="提交消息文件(UTF-8)")
     parser.add_argument("--skip-preflight", action="store_true", help="跳过预检(已跑过时用)")
-    parser.add_argument("--config", default=None, help="指定配置文件(默认 <仓库根>/.commit-flow.toml)")
+    parser.add_argument("--config", default=None, help="指定配置文件(默认 <包>/.my-commit-flow.toml)")
     args = parser.parse_args(argv)
 
     try:  # 外置配置缺失 → 停手引导, 不猜默认值
@@ -88,8 +88,9 @@ def main(argv: list[str] | None = None) -> int:
             return 5
         print(f"  + {path}")
 
-    staged = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True,
-                            encoding="utf-8", errors="replace").stdout.split()
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, encoding="utf-8", errors="replace"
+    ).stdout.split()
     print(f"\n暂存清单({len(staged)} 个):")
     for path in staged:
         print(f"  - {path}")

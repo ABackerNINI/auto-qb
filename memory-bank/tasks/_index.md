@@ -1,6 +1,6 @@
 # Tasks Index
 
-> **本文件是生成物, 不要手改** —— 由 `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 扫描 `tasks/*.md` 的 `Status` / `Summary` / 标题生成; 新增或改状态后跑它重建即可, 合并冲突也只需重跑。
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描 `tasks/*.md` 的 `Status` / `Summary` / 标题生成; 新增或改状态后跑它重建即可, 合并冲突也只需重跑。
 > 档案命名 `YY-MM-DD-<slug>.md`(见 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)); 旧编号保留在各档案的 `**Legacy-ID:**` 字段, 供历史文档回溯。
 > 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 24 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在档案里): 这样索引大小由**档案数**决定, 不随摘要写得多长而膨胀 —— 否则迟早撞 `index-auto` cap, 而靠"外迁老档案"化解会打坏外部引用。
@@ -29,6 +29,7 @@
 
 ## Open
 
+- [26-09-23-commands-unified-surface] 项目命令统一调用面 (纯引擎 + 包式配置层) - 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell…
 - [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实 (抓 HR 统计页 + 下载 .torrent 算 infohash 对账建索引) 的可行性分析与实施计划 v1.1 待拍板 (v…
 
 ## Done

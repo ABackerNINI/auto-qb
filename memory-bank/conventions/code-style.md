@@ -71,7 +71,7 @@
 
 ## 格式化 (yapf, .style.yapf)
 - based_on_style=facebook, indent=4, column_limit=**120**, spaces_before_comment=2, split_before_logical_operator=false, allow_split_before_default_or_named_assigns=false
-- 提交前对改动文件跑 `yapf -i <file>` (git 历史有独立的"格式化代码"提交)
+- 提交前对改动文件跑 `commands run dev.fmt -- <file>` (git 历史有独立的"格式化代码"提交)
 
 ## dataclass / 架构模式约定
 

@@ -1,7 +1,7 @@
 # AGENTS.md
 
 > 所有 AI 编码代理的统一入口 (Copilot / Codex / Cursor / Gemini CLI / Claude Code / ZCode / Trae 通用)。完整知识库在 `memory-bank/` (Memory Bank 模式) — 本文件只放**路由与硬约束**; 不要凭印象回答项目问题, 按路由深入后再动代码。
-> ⚠ **本文件有 8000 字符硬上限** —— IDE 注入时超出即被 `slice` 掉, 尾部内容模型根本看不到。改完用 `python scripts/check_context_caps.py` 自查 (已挂 `.commit-flow.toml` 的 `[[gates]]`, 改动本文件时预检会自动提示)。
+> ⚠ **本文件有 8000 字符硬上限** —— IDE 注入时超出即被 `slice` 掉, 尾部内容模型根本看不到。改完用 `commands run doc.caps` 自查 (已挂 `my-commit-flow` 包的闸门, 改动本文件时预检会自动提示)。
 
 ## 知识库路由 (两层: 本文件粗路由 → `memory-bank/README.md` 细路由)
 
@@ -14,8 +14,8 @@
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理** (`stash` 被禁); 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `python .agents/skills/my-commit-flow/scripts/preflight.py --check-started` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②看会话滚动状态: `python .agents/skills/memory-bank/scripts/gen_active_recent.py` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
-- **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `uv run pytest tests -q` 并把实测数字记进 `testing.md` / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `gen_kb_index.py`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
+- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理** (`stash` 被禁); 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `commands run my-commit-flow.sync` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并把实测数字记进 `testing.md` / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
 ## 产出口径
@@ -44,15 +44,22 @@
 
 ## 命令
 
-```bash
-uv run pytest tests -q                              # 全量测试 (基线数字见 memory-bank/testing.md 顶部)
-uv run pytest tests -q --no-cov                     # 快速迭代, 跳过覆盖率报表
-uv run python src/auto-qb.py config.yml --dry-run   # 运行 (需真实 qB; 一律先 --dry-run 观察)
-yapf -i src/auto_qb/**/*.py                         # 格式化 (.style.yapf: facebook 风格, 列宽 120)
+**命令一律经 `commands` 引擎调, 不在文档里抄** —— `commands run <task>` 里的 `<task>` 是包里的一条命令
+(映射表在 [.commands/](.commands/) 各包的 `config.toml`, 引擎是 [commands skill](.agents/skills/commands/SKILL.md))。
+不知道调哪个就 `list` 逐级下钻(一级只出包 + 常显命令)。遇到**反复要跑 / 难拼 / 有陷阱写法**的命令,
+按 SKILL.md 的收录协议自己 `add` 进包 —— 命令集靠这个长大, 不是靠人维护。
+
+```text
+commands run test.full    # 全量测试 (基线数字见 memory-bank/testing.md 顶部)
+commands run test.quick   # 快速迭代, 跳过覆盖率报表
+commands run dev.run -- config.yml --dry-run   # 真机跑主程序 (需真实 qB; 一律先 --dry-run)
+commands run dev.fmt -- <改过的 .py>           # 格式化 (.style.yapf: facebook, 列宽 120)
+commands run env.sync     # 首次 / 依赖变更后同步依赖
 ```
 
-- 依赖统一走 `uv` (`pyproject.toml` + `uv.lock`); 首次/依赖变更后 `uv sync`。
-- ⚠ 工具 shell 里跑全量前先设 `TMPDIR="R:/Temp/auto-qb/tests"`, 否则会话收尾会崩 (测试其实全过) —— 见 [pitfalls/testing/tmpdir.md](memory-bank/pitfalls/testing/tmpdir.md)。
+- 依赖统一走 `uv` (`pyproject.toml` + `uv.lock`)。
+- ⚠ `TMPDIR` 已内置在 `test.*` 里, **不要再手工加前缀** —— POSIX 的 `TMPDIR=x cmd` 在本 shell 不生效
+  (实测 rc=1), 加了还会盖掉包里那个正确的值。判据见 [pitfalls/testing/tmpdir.md](memory-bank/pitfalls/testing/tmpdir.md)。
 - 新增测试必须同步该文件头部 docstring 的 "## 测试计划" 清单。
 
 ## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有)

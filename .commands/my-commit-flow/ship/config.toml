@@ -1,0 +1,21 @@
+[pack]
+name      = "ship"
+when      = "提交与推送（闸门 / 暂存 / 核 ref / 推主线）"
+confirmed = true
+
+# 本包没有 scripts_dir → 继承父包的 `.commands/my-commit-flow/scripts`。
+# 触发口径（不变）：用户显式说"提交 / 入库 / 推上去"这类词才算；
+# "继续 / 接着做 / ok / 你看着办"一律不算。
+
+[tasks."ship.commit"]
+script = "commit.py"
+pin    = true
+risky  = true
+when   = "用户显式说「提交」：逐路径暂存 + 提交 + 自动核 ref"
+note   = "参数经 <args> 传: -- <--message-file 文件> <路径...>; 直接拒绝 -A / . / *; 红线文件直接拒交"
+
+[tasks."ship.push"]
+script = "push.py"
+risky  = true
+when   = "提交之后推主线（必须成功）→ 核对远端 ref → 尝试一次镜像"
+note   = "镜像失败只报一次：不重试 / 不换代理 / 不改走 SSH / 不回滚主线"

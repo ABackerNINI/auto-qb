@@ -6,7 +6,7 @@
 **已迁至 [activeContext/](activeContext/_about.md)** —— 会话滚动状态按 `YY-MM-DD-HHMM-<slug>.md`
 切片存放, 各 clone 只写 / 更新自己的文件。**勿在本文件追加会话状态。**
 
-读法: `python <skill-dir>/scripts/gen_active_recent.py` —— 全量按「最后活动」倒序输出一行摘要 +
+读法: `commands run kb.active` —— 全量按「最后活动」倒序输出一行摘要 +
 陈旧标记, 不写任何文件。
 
 长青职能各有归属, 不在这里维护:

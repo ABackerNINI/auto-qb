@@ -166,16 +166,13 @@ def char_count(path: Path) -> int:
 
 
 def gen_cmd(root: Path, script: str) -> str:
-    """脚本的仓库相对命令路径 —— 生成的索引头里写它, 读者可直接复制执行。
+    """生成物头部里该写的**重建方式** —— 写 task id, 不写命令本体。
 
-    取不到相对路径 (跨盘安装) 时退回 `<skill-dir>/scripts/...` 写法。
+    命令只有一处定义(在 `.commands/kb/` 这个包里); 生成物、文档里再抄一份就是副本,
+    而"哪一份才是生效的那份"并不写在命令旁边 —— 见 `scripts/check_command_drift.py`
+    (那条机检会把手抄形态直接判红)。
     """
-    path = SCRIPTS_DIR / script
-    try:
-        rel = path.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:
-        return f"<skill-dir>/scripts/{script}"
-    return f"python {rel}"
+    return "commands run kb.index"
 
 
 # --------------------------------------------------------------------------- 元数据

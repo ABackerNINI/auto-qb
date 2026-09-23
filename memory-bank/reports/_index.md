@@ -1,6 +1,6 @@
 # 报告 Index
 
-> **本文件是生成物, 不要手改** —— 由 `python .agents/skills/memory-bank/scripts/gen_docs_index.py` 扫描 `reports/*.html` 的 `doc-*` meta 生成;
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描 `reports/*.html` 的 `doc-*` meta 生成;
 > 新增制品或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = `[时间戳] 标题 — 专题`(分区即状态); 状态取值: `In Progress` / `Open` / `Done` / `Dropped` / `Superseded`。
 > 状态写在制品 `<head>` 的 `<meta name="doc-status">` 一行(单处); 协议与决策树见

@@ -95,7 +95,7 @@
 ### 验证手法(可复用, 比静态阅读快)
 
 - **触发**: 怀疑"某个键在某个视图下缺了"。
-- **判别**: 起 `uv run python scripts/ui_harness.py --torrents 300 --port <空闲端口>`
+- **判别**: 起 `commands run dev.harness -- --torrents 300 --port <空闲端口>`
   (合成种子自带非零 `dlspeed`/`upspeed`), 再 `curl "…/api/state?view=<X>"` **逐视图比对响应键与合计**。
 - **处置**: 一眼看出哪个键在某个视图下缺了。
 

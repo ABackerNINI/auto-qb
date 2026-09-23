@@ -1,0 +1,22 @@
+[pack]
+name      = "doc"
+when      = "文档机检：坏链 / 注入上限 / 命令漂移"
+confirmed = true
+
+[tasks."doc.links"]
+run     = ["python scripts/check_doc_links.py --quiet"]
+timeout = 180
+when    = "改名 / 搬家后查相对链接坏没坏"
+note    = "坏链不会让任何用例失败，只能机检；--quiet 只报问题"
+
+[tasks."doc.caps"]
+run     = ["python scripts/check_context_caps.py"]
+timeout = 120
+when    = "改了 AGENTS.md 等引导文件后自查"
+note    = "超 8000 字符 IDE 注入时尾部会被静默截断 —— 写了也看不到"
+
+[tasks."doc.drift"]
+run     = ["python scripts/check_command_drift.py"]
+timeout = 180
+when    = "文档里有没有人（含 agent）手抄了已收录的命令"
+note    = "命令只应在包里定义一份；文档里要写就写 task id"

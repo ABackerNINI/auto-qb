@@ -1,0 +1,31 @@
+[pack]
+name        = "my-commit-flow"
+when        = "git 协作：开工同步 / 提交 / 推送"
+origin      = "my-commit-flow"  # 从 skill 降为包，名字不变
+version     = "1.0.0"
+confirmed   = true
+scripts_dir = "scripts"
+
+# 子包由**上级注册**（路径 <父>/<名>/config.toml），启用状态只在这里声明一处。
+# 包是黑盒：本包自己的 `.my-commit-flow.toml`（闸门 / 红线 / 远端）引擎不读、不知道它存在，
+# 由包内脚本自读 —— 引擎里连"提交"这件事都不认识。
+[packs.ship]
+enabled = true
+
+[tasks."my-commit-flow.sync"]
+script = "preflight.py"
+args   = ["--check-started"]
+pin    = true
+when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前"
+note   = "只读。落后即 STOP —— 禁止在落后分支上改代码。结果贴进回复"
+
+[tasks."my-commit-flow.preflight"]
+script  = "preflight.py"
+timeout = 900
+when    = "提交前完整预检（含真的跑 auto = true 的闸门）"
+note    = "闸门很贵（全量测试 / 索引自洽），有 STOP 先处理"
+
+[tasks."my-commit-flow.verify-ref"]
+script = "verify_ref.py"
+when   = "提交后核对 ref 三处一致（HEAD / refs/heads / packed-refs）"
+note   = "不要只看 commit 输出 —— ref 更新可能没落稳"

@@ -1,0 +1,32 @@
+[pack]
+name      = "test"
+when      = "验证代码：全量 / 快速 / 单文件"
+confirmed = true
+
+# ❗命令**必须自带 TMPDIR**：工具 shell 的 TMPDIR 默认是 `H:\Temp`，那个盘上符号链接读取被拒，
+#   pytest 会在收尾的 `cleanup_dead_symlinks` 上抛 `PermissionError [WinError 5] … pytest-current`
+#   —— 用例其实全过，只是退出码非 0 ⇒ **假红**（已实际踩到）。约定见 memory-bank/testing/tmpdir.md。
+# ⚠ 写法是 **cmd.exe** 的：引擎用 `subprocess.run(shell=True)`，Windows 上解析到 COMSPEC → cmd.exe，
+#   所以 POSIX 的 `TMPDIR=x cmd` 前缀**不生效**（实测 rc=1）。用 TOML **字面串**（单引号）写，
+#   免得为内层双引号转义。
+# ⚠ **引号不能省**：`set VAR=value && cmd` 会把 `&&` 前的空格并进 value —— 实测 TMPDIR 变成
+#   `'R:/Temp/auto-qb/tests '`（带尾随空格）；`set "VAR=value" && cmd` 才是干净的。
+
+[tasks."test.full"]
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q']
+timeout = 900
+pin     = true
+when    = "改完代码要验一遍（带覆盖率；提交闸门跑的是 test.quick）"
+note    = "必须 cmd.exe 写法 + 引号不能省，理由见本文件顶部"
+
+[tasks."test.quick"]
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov']
+timeout = 900
+when    = "只要结论、不要覆盖率报表（快约 7s；提交闸门用这条）"
+note    = "同上必须 cmd.exe 写法；--no-cov 只跳报表，不影响通过与否"
+
+[tasks."test.one"]
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest <args> -q -n 0']
+timeout = 900
+when    = "排查单个文件 / 用 -k 筛一组用例"
+note    = "<args> 填文件路径或 -k 表达式；单文件用 -n 0（并行会慢在 worker 启动上）"

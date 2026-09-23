@@ -12,8 +12,8 @@ user-invocable: true
 ## 会话开始 (4 步)
 
 1. **先同步分支 (硬性; 问答/只读轮次跳过, 首个执行动作前必须完成)**: `git remote -v` 确认主线远端 → `git fetch <主线远端> <分支>` (远端与分支名**必须写**) → `git ls-remote <主线远端> <分支>` 对比本地 HEAD 确认不落后 (`status -sb` 是快照, 会给假绿灯) → 纯落后且工作区干净才 `git merge --ff-only FETCH_HEAD`。**禁止在落后的分支上改代码**; 树脏 → 停下报告, 禁止自行清理 —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」: 非快进合并 + 脏工作区会触发 stash, 顺着拦截层批量删掉 `.git/objects` (rebase / stash 在工具 shell 里一律禁用)。
-   - **想省事就跑机检**: 开工自检 `python .agents/skills/my-commit-flow/scripts/preflight.py --check-started` (只读, 结果贴进回复) —— 报同步状态与工作区脏不脏; 提交/推送前跑完整 `preflight.py` (远端是不是主线 / 落后几个 / 红线文件 / 自动闸门); 完整步骤见 [my-commit-flow skill](../my-commit-flow/SKILL.md)。
-2. 看会话滚动状态: 跑 `python <skill-dir>/scripts/gen_active_recent.py` —— 扫 `memory-bank/activeContext/`
+   - **想省事就跑机检**: 开工自检 `commands run my-commit-flow.sync` (只读, 结果贴进回复) —— 报同步状态与工作区脏不脏; 提交/推送前跑完整 `commands run my-commit-flow.preflight` (远端是不是主线 / 落后几个 / 红线文件 / 自动闸门); 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。
+2. 看会话滚动状态: 跑 `commands run kb.active` —— 扫 `memory-bank/activeContext/`
    的时间戳切片, 按「最后活动」倒序输出一行摘要 + 陈旧标记; 若报「尚无该目录」说明还没目录化 (W1 未落地),
    按现行单文件 `activeContext.md` 读。
    - ⚠ **activeContext 不含长青职能**: 「下一步」看 `想法.md` + `progress/roadmap.md`, 定案口径看根
@@ -41,13 +41,16 @@ user-invocable: true
    「最后活动」与「正在进行」, 不是新建文件 (新建只在换专题时)。已完成条目沉淀到 `progress.md`
    或主题文档后**从切片删除**; 切片超过 14 天没动 → 蒸馏进 `progress/` 或任务档案后删除。
    它是易变层, 不是流水账。
-2. **tasks/**: 命中阈值 → 按"任务档案规范"定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后跑 `python <skill-dir>/scripts/gen_tasks_index.py` 重建索引 —— **不要手改 `tasks/_index.md`**。
+2. **tasks/**: 命中阈值 → 按"任务档案规范"定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后跑 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。
 3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只改** `testing.md` 顶部(单点事实源, 其它文档一律引用不手抄)。
-4. **闸门**: 跑 `uv run pytest tests -q`, 把实测数字记进 `testing.md` 与本次结论。
-5. **新坑**: 遇到非显然的失败 / 陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`** ——
+4. **闸门**: 跑 `commands run test.full`, 把实测数字记进 `testing.md` 与本次结论。
+5. **收录命令(不用等人下指令)**: 遇到**反复要跑 / 难拼(要查文档才知道怎么写) / 有"看起来正常但不生效"写法**的命令 →
+   自己 `add` 进 `.commands/` 下对应的包, 别在文档里抄一份(手抄会被 `commands run doc.drift` 判红)。
+   收录协议与三条判据见 [commands skill](../commands/SKILL.md)「收录协议」—— **库里的约束不接到决策点上就等于没写**。
+6. **新坑**: 遇到非显然的失败 / 陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`** ——
    补三行头元数据(`# 标题` / `> 摘要:` / `> 触发:`), 条目写 `触发` / `判别` / `处置` **三必填**
    字段(`守阵` / `复发` 选填); 没有合适的类**先扩枚举**(见「扩类 / 扩目录」);
-   写完跑 `python <skill-dir>/scripts/gen_kb_index.py` 重建索引。
+   写完跑 `commands run kb.index` 重建索引。
    - **复发闭环**: 若这一轮踩到了**已记的坑**, 把该条 `复发` 计数 **+1**, 并在任务档案里写一句
      **为什么没命中**(路由没到 / 文件没读 / 读了没照做)。反复重踩于是变成**可排序的数字**,
      也是「下沉为守阵」的优先级依据。

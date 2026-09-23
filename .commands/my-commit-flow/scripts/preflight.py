@@ -1,9 +1,9 @@
 """提交前预检 —— 不改任何 git 状态, 但**会执行 `auto = true` 的闸门**(可能改工作区)。
 
-用法(**不要写死 skill 的安装路径**, `<skill-dir>` = 加载本 skill 时它实际所在的目录):
-    python <skill-dir>/scripts/preflight.py [--no-fetch] [--no-auto] [--check-started]
-    python <skill-dir>/scripts/preflight.py --init           # 生成外置配置初稿(需人工确认)
-    python <skill-dir>/scripts/preflight.py --show-config     # 打印生效配置与来源
+用法(**不要写死包的安装路径**, `<包>` = 本包目录(`<仓库根>/.commands/my-commit-flow`)):
+    python <包>/scripts/preflight.py [--no-fetch] [--no-auto] [--check-started]
+    python <包>/scripts/preflight.py --init           # 生成外置配置初稿(需人工确认)
+    python <包>/scripts/preflight.py --show-config     # 打印生效配置与来源
 
 ⚠ **不再是"只读"**: `auto = true` 的闸门会被真的执行(测试 / 格式化 / 索引 --check / skill 同步),
 可能改写工作区文件。只想看检查表时用 `--no-auto`。
@@ -14,7 +14,7 @@
     <changed:GLOB>      本次改动里匹配的文件 → 拼成一条命令
     <each:GLOB>         按匹配文件把这条 run 复制成多条命令(条数上限 each_limit)
 
-**先有配置才预检**: 项目特有项(红线 / 闸门 …)一律来自 `<仓库根>/.commit-flow.toml`;
+**先有配置才预检**: 项目特有项(红线 / 闸门 …)一律来自 `<包>/.my-commit-flow.toml`;
 没有配置文件 → 打印引导并停手, 不猜默认值。
 
 输出一张检查表(PASS / WARN / STOP):
@@ -155,6 +155,10 @@ def changed_files() -> tuple[list[str], list[str]]:
         path = line[3:].strip() if len(line) > 3 else ""
         if not path:
             continue
+        # 重命名在 porcelain 里是 `R  old -> new` —— 取**新**路径, 否则改动清单里
+        # 会出现 "old -> new" 这种不存在的路径, `<changed:>` / `<each:>` 静默匹配不到。
+        if " -> " in path:
+            path = path.split(" -> ")[-1].strip()
         if xy[0] not in (" ", "?"):
             staged.append(path)
         if xy[1] != " ":

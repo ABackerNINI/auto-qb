@@ -1,14 +1,12 @@
----
-name: my-commit-flow
-description: '提交推送流水线(用户说"提交" = commit + push): 预检与同步 → 闸门 → 逐路径暂存 → 提交并核对 ref 三处 → 推主线 → 尝试一次镜像 → 查幽灵 diff。USE FOR: 用户说"提交"/"推送"/"推上去"/"commit"; 收尾要把改动落到主线时。DO NOT USE FOR: 判断改不改(见 scope-guard skill)、要不要入池(见 create-issue skill)、纯答疑。仓库根 / 分支 / 主线远端 / 镜像 / 代理均运行期探测; 项目特有项(红线文件、提交前闸门)**强制外置**在 <仓库根>/.commit-flow.toml, 缺失即停手并引导生成。'
-user-invocable: true
----
-
 # 提交推送流水线
+
+> **本包是 `my-commit-flow` skill 退役后的形态**：流程与纪律全在这里，配置（`.my-commit-flow.toml`）也在这里 ——
+> 整包复制即可带走。它现在由 `commands` 引擎按 task id 调用（`ship.commit` / `ship.push` / `my-commit-flow.sync`），
+> 引擎对"提交"这件事一无所知。本文件是**纪律与原理**，排障 / 迁移时才读；日常只要 task id。
 
 用户说"提交" = **commit + 推送**，一次走完。把散落各处的提交纪律收成一条必经路径：**能机检的交给脚本，必须人判的写成停手点**。
 
-> **路径约定**：`<skill-dir>` = 本 skill 所在的目录。安装位置因项目而异 —— **先用 Glob 定位**
+> **路径约定**：`<包>` = 本包目录（`<仓库根>/.commands/my-commit-flow`）。**先用 Glob 定位**
 > （`**/my-commit-flow/scripts/*.py`），别照抄路径，也别在仓库根的 `scripts/` 里找。
 
 ## 为什么需要它
@@ -19,15 +17,15 @@ user-invocable: true
 
 | 步 | 做什么 | 判据 / 不通过怎么办 |
 |---|---|---|
-| **S0 配置**（每仓库一次） | 确认 `<仓库根>/.commit-flow.toml` 存在且 `confirmed = true` | **没有就停手**，跑 `preflight.py --init` 生成初稿 → **人工确认/修改**（红线必须手填）→ 置 `confirmed = true`。本 skill 不内置项目配置，也不猜默认值；未确认 / 空红线 / 命令还是 `<未填…>` 都会被预检报出来 |
-| **S1 预检与同步** | `python <skill-dir>/scripts/preflight.py` | 一张表报出：配置来源 / 主线远端 / 上游 / 落后几个 / **合流预判撞不撞** / 工作区脏不脏 / 有没有红线文件 / 该跑哪些闸门。
+| **S0 配置**（每仓库一次） | 确认 `<包>/.my-commit-flow.toml` 存在且 `confirmed = true` | **没有就停手**，跑 `preflight.py --init` 生成初稿 → **人工确认/修改**（红线必须手填）→ 置 `confirmed = true`。本包不内置项目配置，也不猜默认值；未确认 / 空红线 / 命令还是 `<未填…>` 都会被预检报出来 |
+| **S1 预检与同步** | `python <包>/scripts/preflight.py` | 一张表报出：配置来源 / 主线远端 / 上游 / 落后几个 / **合流预判撞不撞** / 工作区脏不脏 / 有没有红线文件 / 该跑哪些闸门。
 落后或分叉时会额外跑一次 `git merge-tree --write-tree HEAD <远端 tip>`（**只读**：只在对象库里算合并树，不写工作区 / ref / index）报「撞 / 不撞」——
 把冲突从「push 被拒才发现」提前到「提交前就知道」，好提前决定要不要留改动备份；**push 阶段预判到撞 = STOP**。有 **STOP** 就先处理（**唯一例外**：「落后 + 脏」要先提交，见下节）；**推送前再跑一次**（`status -sb` 的 ahead/behind 是上次 fetch 的快照，不会自己刷新） |
 | **S2 闸门** | 预检**已经跑掉** `auto = true` 的那些（测试 / 生成器 `--check` / 格式化 / skill 同步），结果直接写在检查表里；没标 `auto` 的照单跑 | 红了不提交 —— STOP 由预检给出，不用自己判退出码 |
-| **S3 暂存** | `python <skill-dir>/scripts/commit.py --message-file <文件> <路径...>` | **逐路径**，脚本直接拒绝 `-A` / `.` / `*`；红线文件（配置的 `red_lines`）直接拒交；高危文件（`warn_lines`）需人工确认。**暂存前先把收尾做完**（项目若有知识库 / 文档 DoD，先回写再一起暂存 —— 见下节） |
+| **S3 暂存** | `python <包>/scripts/commit.py --message-file <文件> <路径...>` | **逐路径**，脚本直接拒绝 `-A` / `.` / `*`；红线文件（配置的 `red_lines`）直接拒交；高危文件（`warn_lines`）需人工确认。**暂存前先把收尾做完**（项目若有知识库 / 文档 DoD，先回写再一起暂存 —— 见下节） |
 | **S4 信息** | 自己写 | 首行一句话说清"改了什么 / 为什么"，空一行后写动机 / 取舍 / 影响面 / 实测数字。**数字必须提交那一刻实测**，不沿用会话中途量的旧值。回写随主提交时 emoji 取**主导意图**，不另起一条 |
 | **S5 提交并核 ref** | `commit.py` 提交完自动调 `verify_ref.py` | `HEAD` == `refs/heads/<branch>` == loose/packed-refs 三处一致；不一致按脚本给的处置步骤走，**不要只看 commit 输出** |
-| **S6 推送** | `python <skill-dir>/scripts/push.py` | **顺序固定**：先推主线（必须成功）→ 核对远端 ref == 本地 → 再**尝试一次**镜像。镜像失败**只报一次**：不重试、不换代理、不改走 SSH、不回滚主线 |
+| **S6 推送** | `python <包>/scripts/push.py` | **顺序固定**：先推主线（必须成功）→ 核对远端 ref == 本地 → 再**尝试一次**镜像。镜像失败**只报一次**：不重试、不换代理、不改走 SSH、不回滚主线 |
 | **S7 收尾** | 查幽灵 diff | `git status --short` 看两列：`M `(第一列) = 待提交，` M`(第二列) = 已提交过但工作区又脏。权威判据：`git log --oneline -1 -- <文件>` 有记录 **且** `git diff --quiet -- <文件>` 退出码 0。补一次提交，不要改写已入库的提交 |
 
 脏工作区不 rebase / 不 merge（先提交或移出改动）；高风险操作前先备份 `.git`。
@@ -35,18 +33,32 @@ user-invocable: true
 ## ⚠️ 最常见也最容易卡住的组合：落后主线 + 工作区脏
 
 预检这时会同时给「落后 N 个提交（STOP）」和「工作区脏（WARN）」。**别以为要先解决 STOP 才能提交 ——
-恰恰相反，此时唯一安全的路是"先提交"**，因为 rebase 要求工作区干净，而让它干净的安全方式就是提交
+恰恰相反，此时唯一安全的路是"先提交"**，让树变干净是后续一切操作的前提
 （不能用 stash：本环境下 stash 与拦截层叠加有毁库风险）。
 
-**正确顺序**：
+> ❗**本工具 shell 禁用 `git rebase`**（不看工作区脏不脏 —— 已炸三次，见 `memory-bank/pitfalls/git/_index.md`）。
+> 本包的历史版本曾教"提交 → `git pull --rebase` → 推送"，那是**错的**，已订正。
+
+**正确顺序**（落后 + 树脏）：
 
 ```
-1. commit.py 照常提交（它在预检时用 --phase commit，落后只报 WARN，不会挡住提交）
-2. 工作区变干净 → 现在才 git pull --rebase <主线> <分支>
+1. commit.py 照常提交（它内部用 --phase commit 预检，落后只报 WARN，不会挡住提交）
+2. 树变干净 → git fetch <主线> <分支> && git merge --ff-only FETCH_HEAD   ← 快进，不是 rebase
 3. 再跑一次 preflight.py（确认不落后了）→ push.py
 ```
 
-也就是说：**提交 → rebase → 推送**，而不是"rebase → 提交 → 推送"。后者在脏工作区下正是要避免的操作。
+**已经分叉**（本地有远端没有的提交，快进不了）时别硬合，走这条替代路径：
+
+```
+git branch <temp> HEAD              # 挂住改动
+git reset --hard <分叉点>
+git merge --ff-only <远端 sha>
+git format-patch -1 <temp> | git apply --3way
+# 重跑闸门 → 重新提交
+```
+
+判"落后 / 领先"一律用 `git ls-remote <远端> <分支>` 对比本地 HEAD —— 本环境里
+`refs/remotes/*` 的写入会被静默丢弃，`git status -sb` 的 ahead/behind 是上次 fetch 的快照，会给假绿灯。
 
 ## 提交前先收尾（回写 / 文档 DoD 一并暂存）
 
@@ -59,7 +71,7 @@ user-invocable: true
 
 ## 停手点（脚本只报，不替你判断）
 
-0. **缺外置配置** —— 生成并确认 `.commit-flow.toml` 后再动。
+0. **缺外置配置** —— 生成并确认 `.my-commit-flow.toml` 后再动。
 1. **需要 rebase / merge** —— 脚本只报"落后 N 个提交"就退出；**若同时工作区脏，先按上一节"先提交"再 rebase**。
 2. **改动里混有他人 / 用户在途改动** —— 高危清单见配置的 `warn_lines`。
 3. **staged 数量暴增**（阈值见配置）—— 大概率是分支 ref 被回退，**不要**用 `add -A` 或全量提交去"解决"。
@@ -71,21 +83,21 @@ user-invocable: true
 
 | 脚本 | 职责 | 退出码 |
 |---|---|---|
-| `<skill-dir>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / **合流预判(`merge-tree`, 只读)** / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑 | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
-| `<skill-dir>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref（内部先跑一次 `--phase commit` 预检，闸门在这一步真跑） | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
-| `<skill-dir>/scripts/verify_ref.py [sha]` | ref 三处一致核对 | 0 一致 · 2 不一致 · 3 staged 暴增 |
-| `<skill-dir>/scripts/push.py [--skip-mirror] [--skip-preflight]` | 内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |
+| `<包>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / **合流预判(`merge-tree`, 只读)** / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑 | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
+| `<包>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref（内部先跑一次 `--phase commit` 预检，闸门在这一步真跑） | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
+| `<包>/scripts/verify_ref.py [sha]` | ref 三处一致核对 | 0 一致 · 2 不一致 · 3 staged 暴增 |
+| `<包>/scripts/push.py [--skip-mirror] [--skip-preflight]` | 内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |
 
 ## 配置（外置，强制）与自动探测
 
-**项目特有项一律外置**在 `<仓库根>/.commit-flow.toml`（可用 `--config` 临时换一份）：红线文件 `red_lines`、
+**项目特有项一律外置**在 `<包>/.my-commit-flow.toml`（可用 `--config` 临时换一份）：红线文件 `red_lines`、
 高危文件 `warn_lines`、提交前闸门 `[[gates]]`、平台关键词 `platform_hints`、`staged_panic`。
 **缺这个文件就停手并引导生成**（不猜默认值 —— 猜错比停下来更贵）：
 
 ```bash
-python <skill-dir>/scripts/preflight.py --init          # 按仓库特征生成初稿(confirmed = false)
+python <包>/scripts/preflight.py --init          # 按仓库特征生成初稿(confirmed = false)
 # 打开逐项确认/修改: red_lines 必须手填; [[gates]] 看注释里的"判据"是否判对; 然后 confirmed = true
-python <skill-dir>/scripts/preflight.py --show-config    # 看生效值与来源
+python <包>/scripts/preflight.py --show-config    # 看生效值与来源
 ```
 
 **初稿不是成品**：`--init` 只做两件安全的事 —— 红线**只给候选不代填**（靠猜的红线会漏掉最要命的那条），
@@ -93,7 +105,7 @@ python <skill-dir>/scripts/preflight.py --show-config    # 看生效值与来源
 预检会把「未确认 / 空红线 / 空 gates / 命令仍含 `<未填…>`」逐条报出来，防止照单全收
 （空 `gates` 意味着提交前没有任何机检，零依赖仓库最容易踩）。平台关键词按识别出的技术栈给
 （Python / Node / Make 各不相同），未识别则留空让人手写。
-python <skill-dir>/scripts/preflight.py --config <路径>  # 临时用另一份配置
+python <包>/scripts/preflight.py --config <路径>  # 临时用另一份配置
 ```
 
 ### 闸门字段：auto / timeout / each_limit
@@ -157,14 +169,14 @@ S6 push.py 内部（--phase push --no-auto）  → 不跑闸门，只核状态
 
 - ❌ `git add -A` / `git add .` —— 会把他人或用户的在途改动混进提交；脚本已直接拒绝。
 - ❌ 只看 `git commit` 的输出就当成功 —— ref 更新可能没落稳，必须核三处。
-- ❌ 脏工作区直接 rebase / merge —— 触发 stash 的合并路径在本环境下有毁库风险。
+- ❌ 脏工作区直接 rebase / merge —— 触发 stash 的合并路径在本环境下有毁库风险；**rebase 一律禁用**，快进用 `merge --ff-only`。
 - ❌ 用几分钟前的 `git status -sb` 判断"与主线一致" —— 那是上次 fetch 的快照。
 - ❌ push 被拒后立刻 `--force` —— 先看清远端多了什么。
 - ❌ 镜像失败就重试 / 换代理 / 改走 SSH —— 规则是尝试一次、失败只报一次。
 - ❌ 提交消息里沿用会话中途量的规模数字 —— 必须在提交那一刻实测。
 - ❌ 推送完才回写知识库 / 文档 —— 已推送不能 amend 强推，只能再补一笔；回写要在暂存前做完并一起交。
 - ❌ 把"已提交但工作区又脏"误判成"没提交上" —— 看 `status --short` 的两列，别只看 `M`。
-- ❌ 把项目红线写进 skill 代码 —— 那是项目事实，该进 `.commit-flow.toml`。
+- ❌ 把项目红线写进包的代码 —— 那是项目事实，该进 `.my-commit-flow.toml`。
 - ❌ 缺配置时"先猜一份默认继续提交" —— 猜错会放过红线文件，也会漏掉闸门。
 - ❌ 看到「落后主线」的 STOP 就先去 rebase —— 工作区脏时那是最危险的一步；先提交再 rebase。
 - ❌ 闸门只打印、不标 `auto` —— 执行权留在记忆里，等于没装闸门；命令固定就标 `auto = true`。

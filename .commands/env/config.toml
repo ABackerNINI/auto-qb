@@ -1,0 +1,16 @@
+[pack]
+name      = "env"
+when      = "环境：依赖同步 / 版本核对"
+confirmed = true
+
+[tasks."env.sync"]
+run     = ["uv sync"]
+timeout = 900
+when    = "首次开工，或 pyproject.toml / uv.lock 变更后"
+note    = "依赖统一走 uv（pyproject.toml + uv.lock）；不要用 pip 直装，会绕过锁"
+
+[tasks."env.version"]
+run     = ["uv run python -c \"import auto_qb; print(auto_qb.__version__)\""]
+timeout = 120
+when    = "确认当前装的是哪个版本（发版 / 排查时用）"
+note    = "__version__ 单源在 src/auto_qb/__init__.py"

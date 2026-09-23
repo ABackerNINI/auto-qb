@@ -19,17 +19,18 @@
 | 项目是什么 / 领域知识 | [productContext.md](productContext.md) · [projectbrief.md](projectbrief.md) |
 | 技术栈 / 环境 / 约束 | [techContext.md](techContext.md) |
 | 已实现 / 规划中 | [progress/_index.md](progress/_index.md) |
-| **现在做到哪 / 上次做到哪** | [activeContext/](activeContext/_about.md) —— 会话切片; 读法跑 `gen_active_recent.py` |
+| **现在做到哪 / 上次做到哪** | [activeContext/](activeContext/_about.md) —— 会话滚动状态切片; 读法 `commands run kb.active` |
 | **下一步做什么** | `想法.md`(设计草稿待办) + [progress/roadmap.md](progress/roadmap.md)(规划中) |
 | **真机走查清单** | [checklists/_index.md](checklists/_index.md) —— 做走查时逐条勾 |
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
 | **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · [_doc-map.md](_doc-map.md) |
+| **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
 
 ## 生成物 (冲突时**重跑脚本**, 不要手改)
 
-- 各目录的 `_index.md` —— `python .agents/skills/memory-bank/scripts/gen_kb_index.py` 扫主题文件的三行头元数据生成
-- [tasks/_index.md](tasks/_index.md) —— `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 扫档案 `Status` / `Summary` 生成
+- 各目录的 `_index.md` —— `commands run kb.index` 扫主题文件的三行头元数据生成
+- [tasks/_index.md](tasks/_index.md) —— `commands run kb.index` 扫档案 `Status` / `Summary` 生成
 - [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
 - [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) / [_doc-map.md](_doc-map.md) —— `gen_docs_index.py` / `gen_doc_map.py`(专题视图)
 - 新增目录 / 超 cap / 流水触顶的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。

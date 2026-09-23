@@ -41,19 +41,13 @@ note  = "格式化: 只碰本次改过的 py 文件(预检从改动清单取, �
 
 [[gates]]
 match = ["src/", "tests/"]
-# ❗命令**必须自带 TMPDIR**: 工具 shell 的 TMPDIR 默认是 `H:\Temp`, 而那个盘上符号链接读取被拒,
-#   pytest 会在会话收尾的 `cleanup_dead_symlinks` 上抛 `PermissionError [WinError 5] … pytest-current`
-#   —— **测试其实全过**, 只是退出码非 0 ⇒ 闸门**假红**(2026-09-23 实际踩到一次)。
-#   约定见 memory-bank/testing/tmpdir.md。
-# ⚠ 写法是 **cmd.exe** 的: 预检用 `subprocess.run(shell=True)`, Windows 上解析到 COMSPEC → cmd.exe,
-#   所以 POSIX 的 `TMPDIR=x cmd` 前缀**不生效**(实测 rc=1)。用 TOML 的**字面串**(单引号)写,
-#   免得为内层双引号转义。
-# ⚠ **引号不能省**: `set VAR=value && cmd` 会把 `&&` 前的空格并进 value —— 实测 TMPDIR 变成
-#   `'R:/Temp/auto-qb/tests '`(带尾随空格); `set "VAR=value" && cmd` 才是干净的。
-run   = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov']
+# ❗不在这里抄命令 —— 走 `commands` 引擎的 `test.quick`。命令只有一处定义(在 `.commands/test/`),
+#   抄一份到这里就是第 N+1 处副本, 而"哪份才是生效的那份"不写在命令旁边(见 commands SKILL.md 初衷)。
+#   TMPDIR / cmd.exe 写法 / 引号这些陷阱跟着 task 走, 由包自持, 这里看不见也不需要看见。
+run   = ["python <skill-dir:commands>/scripts/run.py run test.quick"]
 auto  = true
 timeout = 900
-note  = "全量测试(跳覆盖率报表): 自带 TMPDIR(否则 H:\\Temp 会让收尾崩成假红), 脚本自动跑, 红了即 STOP"
+note  = "全量测试(跳覆盖率报表): 经 commands 引擎跑 test.quick, 红了即 STOP"
 
 [[gates]]
 match = ["memory-bank/issues/"]
@@ -87,11 +81,14 @@ timeout = 60
 note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试失败, 只能机检"
 
 [[gates]]
-match = [".agents/skills/"]
-run   = ["python <each:.agents/skills/**/scripts/*.py> --help"]
+# 两处都扫: `.agents/skills/`(仍是通用 skill 的家) 与 `.commands/`(包内脚本 ——
+# my-commit-flow 的脚本就从前者迁到了后者)。
+match = [".agents/skills/", ".commands/"]
+run   = ["python <each:.agents/skills/**/scripts/*.py> --help",
+         "python <each:.commands/**/scripts/*.py> --help"]
 auto  = true
 timeout = 300
-note  = "skill 脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多条)"
+note  = "脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多条)"
 
 [[gates]]
 # 空串 = 每次提交都命中 (hit 用 startswith/子串匹配, 空串匹配一切路径)。
@@ -111,3 +108,13 @@ run   = ["python scripts/check_context_caps.py"]
 auto  = true
 timeout = 60
 note  = "引导文件: 超 8000 字符 IDE 注入时尾部被静默截断(写了也看不到), 必须先精简"
+
+[[gates]]
+# 空串 = 每次提交都跑: 手抄可能出现在**任何**文档里, 按路径匹配必然漏。
+# 这条是整套 commands 设计的成败点 —— 没有它, 包里的单点定义会被文档里的副本慢慢架空,
+# 最后退化成"第 N+1 处副本"。
+match = [""]
+run   = ["python scripts/check_command_drift.py"]
+auto  = true
+timeout = 180
+note  = "命令漂移: 文档里手抄已收录的命令 → 判红(必须写成 commands run <task>)"

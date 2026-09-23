@@ -1,0 +1,34 @@
+[pack]
+name      = "dev"
+when      = "开发期服务：WEB UI / 假 qB / 浏览器冒烟"
+confirmed = true
+
+[tasks."dev.webui"]
+run     = ["uv run python scripts/dev_webui.py <args>"]
+timeout = 3600
+when    = "连真机 qBittorrent，关掉自动任务只开 WEB UI"
+note    = "前台长跑，Ctrl-C 停；常用 --qb-port / --web-port / --no-open（--help 看全量）"
+
+[tasks."dev.sim"]
+run     = ["uv run python scripts/sim_qb.py <args>"]
+timeout = 3600
+when    = "起假 qBittorrent WebUI 客户端做仿真（--self-test 自检）"
+note    = "同样前台长跑；参数很多，先 --help"
+
+[tasks."dev.run"]
+run     = ["uv run python src/auto-qb.py <args>"]
+timeout = 3600
+when    = "真机跑主程序（<args> 先给 config.yml 与 --dry-run）"
+note    = "需真实 qBittorrent; 一律先 --dry-run 观察, 确认无误再去掉"
+
+[tasks."dev.fmt"]
+run     = ["yapf -i <args>"]
+timeout = 300
+when    = "格式化改过的 py 文件（.style.yapf: facebook 风格, 列宽 120）"
+note    = "<args> 传文件路径; 提交闸门只碰本次改过的, 别整仓跑 —— 会带出无关重排"
+
+[tasks."dev.harness"]
+run     = ["uv run python scripts/ui_harness.py <args>"]
+timeout = 900
+when    = "浏览器冒烟（真浏览器跑前端断言合集）"
+note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi"
