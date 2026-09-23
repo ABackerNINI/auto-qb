@@ -11,7 +11,8 @@
 
 覆盖: 占位符展开(四种 + 展开失败) / 闸门分类与执行(红 → STOP、--no-auto 不执行) /
       配置体检(未知键与 timeout 非法 → STOP) / each_limit 上限 /
-      开工自检分类 classify_sync(齐平 / 落后 / 分叉 / 本地领先 / 离线 / 空仓库 / 远端对象缺失)。
+      开工自检分类 classify_sync(齐平 / 落后 / 分叉 / 本地领先 / 离线 / 空仓库 / 远端对象缺失) /
+      合流预判 classify_merge_probe 返回三元组 / 落后判据禁读 refs/remotes 快照(会被静默丢弃)。
 """
 
 from __future__ import annotations
@@ -202,6 +203,48 @@ class ClassifySyncTest(unittest.TestCase):
         level, msg = preflight.classify_sync(self.R, self.H, None)
         self.assertEqual(level, preflight.WARN)
         self.assertIn("先 fetch", msg)
+
+
+class ClassifyMergeProbeTest(unittest.TestCase):
+    """classify_merge_probe 必须返回 (级别, 项, 说明) 三元组 —— 曾因返回二元组让检查表
+    打印时 ValueError: not enough values to unpack (expected 3, got 2)。"""
+    def test_no_probe_is_warn(self):
+        level, item, detail = preflight.classify_merge_probe(None, "push")
+        self.assertEqual((level, item), (preflight.WARN, "合流预判"))
+        self.assertIn("无法预判", detail)
+
+    def test_clean_merge_is_pass(self):
+        level, item, detail = preflight.classify_merge_probe(0, "push")
+        self.assertEqual((level, item), (preflight.PASS, "合流预判"))
+        self.assertIn("不撞", detail)
+
+    def test_conflict_in_push_phase_is_stop(self):
+        level, item, detail = preflight.classify_merge_probe(1, "push")
+        self.assertEqual((level, item), (preflight.STOP, "合流预判"))
+        self.assertIn("会撞", detail)
+
+    def test_conflict_in_commit_phase_is_warn(self):
+        level, item, _ = preflight.classify_merge_probe(1, "commit")
+        self.assertEqual((level, item), (preflight.WARN, "合流预判"))
+
+
+class NoTrackingRefAheadBehindTest(unittest.TestCase):
+    """落后/领先判据一律走 ls-remote 现查的远端真值 —— 本工具 shell 里 refs/remotes/* 的
+    写入会被静默丢弃, 跟踪 ref 是陈年快照, 曾据此报出假"落后 5"。"""
+
+    SCRIPTS = ("preflight.py", "push.py")
+
+    def test_ahead_behind_never_reads_tracking_ref(self) -> None:
+        here = Path(__file__).resolve().parent
+        for name in self.SCRIPTS:
+            for i, line in enumerate((here / name).read_text(encoding="utf-8").splitlines(), 1):
+                if "--left-right" in line:
+                    self.assertNotIn(
+                        "{MAIN}/{BRANCH}",
+                        line,
+                        f"{name}:{i} 在用 refs/remotes 快照算 ahead/behind —— 该写入会被静默丢弃, "
+                        "判据必须是 ls-remote 拿到的远端 tip 对比本地 HEAD",
+                    )
 
 
 SPECIALS = {"__name__", "__file__", "__doc__", "__package__", "__spec__", "__loader__", "__builtins__", "__debug__"}

@@ -7,7 +7,8 @@
   0. **先跑一次预检(`--phase push --no-auto`)** —— 原先是让人在推送前手动跑一遍, 现收进脚本:
      本脚本自己会 fetch + 判落后, 但**不查**工作区脏 / 上游 / 红线又被改出来 / 镜像远端是否存在,
      这四项靠预检补上。闸门不重复跑(它们刚在提交前跑过, 且会改工作区), 故固定 `--no-auto`。
-  1. 再 `git fetch` 看是否落后 —— 落后就 STOP(不自动 rebase, 那是红线区)
+  1. 再 `git fetch` + `ls-remote` 看是否落后 —— 落后就 STOP(不自动 rebase, 那是红线区);
+     判据 = ls-remote 现查的远端 tip 对比本地 HEAD, **不读 refs/remotes**(其写入在本环境会被静默丢弃)
   2. `git push <main> <branch>`; 失败原样输出并退出(主线瞬时 reset 可重试一次)
   3. 核对远端 ref == 本地 HEAD(`git ls-remote`);`git status -sb` 不应再有 ahead
   4. 镜像: `git <禁用 per-URL 代理的 -c> push <mirror> <branch>` —— **只尝试一次**,
@@ -15,7 +16,7 @@
 
 主线 / 镜像 / 分支 / 代理 **全部运行期探测**(见 `_ship_config.py`), 不写死任何 URL。
 
-退出码: 0 主线推送成功(镜像失败不影响) · 1 落后主线 / 预检有 STOP · 5 主线推送失败 · 6 核对取不到远端 ref
+退出码: 0 主线推送成功(镜像失败不影响) · 1 落后远端 / 取不到远端真值无法判落后 / 预检有 STOP · 5 主线推送失败 · 6 推送后核对取不到远端 ref
 """
 
 from __future__ import annotations
@@ -116,13 +117,23 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write("预检有 STOP, 未推送。\n")
             return 1
 
-    print("=== 推送前再 fetch 一次(status -sb 的 ahead/behind 是上次 fetch 的快照) ===")
-    git("fetch", MAIN, BRANCH)
-    behind_ahead = git("rev-list", "--left-right", "--count", f"{MAIN}/{BRANCH}...HEAD").stdout.split()
-    if len(behind_ahead) == 2 and int(behind_ahead[0]) > 0:
-        sys.stderr.write(f"落后主线 {behind_ahead[0]} 个提交 —— 先 rebase(工作区必须干净), 不推。\n")
+    print("=== 推送前再核一次远端真值(判据 = ls-remote 现查; refs/remotes/* 的写入在本环境会被静默丢弃, 快照会给假\"落后\") ===")
+    git("fetch", MAIN, BRANCH)  # 只为把远端 tip 的对象拉进对象库; refs/remotes/* 写没写成功不重要, 判据不读它
+    remote_tip = remote_sha_with_retry(MAIN, BRANCH)
+    if not remote_tip:
+        sys.stderr.write(
+            f"取不到远端真值(ls-remote 两次都空/失败) —— 无法判断是否落后, 不推。\n"
+            f"联网后重试; 或手工核对 `git ls-remote {MAIN} {BRANCH}` 对比本地 HEAD。\n"
+        )
         return 1
-    print(f"  与主线齐平(本地领先 {behind_ahead[1] if len(behind_ahead) == 2 else '?'} 个)")
+    behind_ahead = git("rev-list", "--left-right", "--count", f"{remote_tip}...HEAD").stdout.split()
+    if len(behind_ahead) != 2:
+        sys.stderr.write(f"本地没有远端 tip({remote_tip[:8]})的对象(fetch 失败?) —— 无法判断是否落后, 不推。\n")
+        return 1
+    if int(behind_ahead[0]) > 0:
+        sys.stderr.write(f"落后远端 {behind_ahead[0]} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净; 禁 rebase), 不推。\n")
+        return 1
+    print(f"  远端 {remote_tip[:8]}: 齐平(本地领先 {behind_ahead[1]} 个)")
 
     head = git("rev-parse", "HEAD").stdout.strip()
     print(f"\n=== 推主线 {MAIN}/{BRANCH} ===")
@@ -146,11 +157,9 @@ def main(argv: list[str] | None = None) -> int:
         # 取不到 ≠ 推送失败: 别把网络抖动报成"不一致", 那会让执行者重复推或惊慌
         print(f"  **取不到远端 ref**(ls-remote 两次都空/失败) —— 推送命令本身已成功, 请手工确认:")
         print(f"     git ls-remote {MAIN} {BRANCH}   # 期望看到 {head}")
-        print(f"  {git('status', '-sb').stdout.splitlines()[0]}")
         return 6
     ok = remote_sha == head
     print(f"  远端 {remote_sha}\n  本地 {head}  →  {'一致' if ok else '**不一致**'}")
-    print(f"  {git('status', '-sb').stdout.splitlines()[0]}")
 
     if args.skip_mirror:
         return 0 if ok else 5

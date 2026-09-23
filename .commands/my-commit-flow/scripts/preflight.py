@@ -88,18 +88,25 @@ def git_rc(*args: str) -> int:
     return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace").returncode
 
 
-def classify_merge_probe(rc: int | None, phase: str) -> tuple[str, str]:
-    """合流预判结果 → (级别, 说明) —— 纯函数(便于自测), 不碰 git。
+def classify_merge_probe(rc: int | None, phase: str) -> tuple[str, str, str]:
+    """合流预判结果 → (级别, 项, 说明) —— 纯函数(便于自测), 不碰 git。
 
     `rc` 来自 `git merge-tree --write-tree HEAD <远端 tip>`: 0 = 可干净合流, 非 0 = 有冲突。
     `rc is None` = 没预判(拿不到远端 tip 的对象, 如 `--no-fetch`) → 如实说无法预判。
+    返回**三元组**(级别 / 项 / 说明)直接进检查表 —— 曾因返回二元组在打印 rows 解包时
+    ValueError: not enough values to unpack (expected 3, got 2)。
     """
     if rc is None:
-        return WARN, "无法预判合流冲突(本地没有远端 tip 的对象 —— 先 fetch 主线分支, 或别用 `--no-fetch`)"
+        return (
+            WARN,
+            "合流预判",
+            "无法预判合流冲突(本地没有远端 tip 的对象 —— 先 fetch 主线分支, 或别用 `--no-fetch`)",
+        )
     if rc == 0:
-        return PASS, "预判**不撞**: 同步后可直接合流(`merge-tree --write-tree` 退出码 0)"
+        return PASS, "合流预判", "预判**不撞**: 同步后可直接合流(`merge-tree --write-tree` 退出码 0)"
     return (
         STOP if phase == "push" else WARN,
+        "合流预判",
         "预判**会撞**: 合流需人工解冲突 —— 本环境「非快进合并 + 脏工作区 = 必炸」, "
         "推送前务必先把工作区弄干净并留好改动备份(树脏就先停下报告)",
     )
@@ -470,9 +477,9 @@ def main(argv: list[str] | None = None) -> int:
         (PASS if upstream == want_up else WARN, "上游", f"{upstream or '(未设置)'}(期望 {want_up}; 判 ahead/behind 看的是当前上游)")
     )
 
-    # 5 落后 / 领先 —— 判据 = 远端真值(ls-remote)对比本地 HEAD; 不依赖 refs/remotes
-    # (部分工具 shell 里 refs/remotes/* 的写入会被静默丢弃, `status -sb` 的 ahead/behind
-    # 也是上次 fetch 的快照 —— 都可能给假绿灯; ls-remote 是每次现查的网络真值)。
+    # 5 落后 / 领先 —— 判据 = 远端真值(ls-remote)对比本地 HEAD; **绝不读 refs/remotes**
+    # (部分工具 shell 里 refs/remotes/* 的写入会被静默丢弃, 跟踪 ref 是陈年快照, 给过假"落后 5";
+    # `status -sb` 的 ahead/behind 同理)。拿不到远端真值就如实说"无法验证", 不拿快照凑数。
     remote_sha = ""
     if MAIN_URL and not args.no_fetch:
         ls_out = git("ls-remote", MAIN, BRANCH, check=False)
@@ -483,14 +490,12 @@ def main(argv: list[str] | None = None) -> int:
                 break
         if remote_sha:
             git("fetch", MAIN, BRANCH, check=False)
-    try:
-        if remote_sha:
-            counts = git("rev-list", "--left-right", "--count", f"{remote_sha}...HEAD")
-        else:
-            counts = git("rev-list", "--left-right", "--count", f"{MAIN}/{BRANCH}...HEAD")
-        behind, ahead = (int(x) for x in counts.split())
-    except (RuntimeError, ValueError):
-        behind, ahead = -1, -1
+    behind, ahead = -1, -1
+    if remote_sha:
+        try:
+            behind, ahead = (int(x) for x in git("rev-list", "--left-right", "--count", f"{remote_sha}...HEAD").split())
+        except (RuntimeError, ValueError):
+            pass  # 本地没有远端 tip 的对象(fetch 失败?) —— 保持 -1, 下面如实报"没能算出"
     if behind > 0:
         if args.phase == "commit":
             rows.append((WARN, "落后主线", f"落后 {behind} 个提交 —— 本地提交可以, 但**推送前必须先同步合流**(工作区要干净)"))
@@ -498,15 +503,25 @@ def main(argv: list[str] | None = None) -> int:
             rows.append((STOP, "落后主线", f"落后 {behind} 个提交 —— 先同步合流(**工作区必须干净**); 别等 push 被拒才发现"))
         # 合流预判(只读): 把「撞不撞」提前到提交前 —— 本环境非快进合并 + 脏工作区 = 必炸,
         # 提前知道才好决定"先留备份 / 先弄干净工作区"。merge-tree 只在对象库里算合并树, 不写工作区/ref/index。
+        # 对象不在库里(如 fetch 失败)时按"无法预判"处理 —— merge-tree 非 0 还有"对象缺失"这种失败模式,
+        # 不加对象守卫会把"拉不到对象"误报成"会撞"的 STOP。
+        has_remote_obj = remote_sha and git_rc("cat-file", "-e", f"{remote_sha}^{{commit}}") == 0
         rows.append(
             classify_merge_probe(
-                git_rc("merge-tree", "--write-tree", "HEAD", remote_sha) if remote_sha else None, args.phase
+                git_rc("merge-tree", "--write-tree", "HEAD", remote_sha) if has_remote_obj else None, args.phase
             )
         )
     elif behind == 0:
         rows.append((PASS, "落后主线", f"与主线齐平(本地领先 {ahead})"))
     else:
-        rows.append((WARN, "落后主线", f"没能算出领先/落后, 手工 `git log --oneline HEAD..{MAIN}/{BRANCH}`"))
+        rows.append(
+            (
+                WARN,
+                "落后主线",
+                f"拿不到远端真值(离线 / --no-fetch / ls-remote 失败), 无法算领先/落后 —— 联网后重跑, "
+                f"或手工对比 `git ls-remote {MAIN} {BRANCH}` 与本地 HEAD(别看 refs/remotes 快照)",
+            )
+        )
 
     # 6 工作区
     rows.append(
