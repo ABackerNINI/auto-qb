@@ -3,8 +3,7 @@
 > 面向 AI 助手的项目知识库。目标: 让 AI 在不重读全部源码的前提下, 快速建立对项目的准确心智模型, 并安全地修改代码。
 > **若代码与本文冲突, 以代码为准并回写更新本文。**
 > **入口链**: 根 [AGENTS.md](../AGENTS.md)(粗路由) → **本文件**(库内细路由) → 各 `_index.md` → 主题文件。
-> ⚠ **检索纪律: 先索引、后 grep、禁止整读** —— 任一目录整体仍是几十 KB 量级, 整读一次这次目录化就白做了。
-> 不确定关键词时 `grep -rn "<词>" memory-bank/` 是兜底(每个主题文件头部都写了 `触发:` 动作词)。
+> ⚠ **检索纪律: 先索引、后 grep、禁止整读**; 不确定关键词时 `grep -rn "<词>" memory-bank/` 兜底(主题文件头都写了 `触发:` 动作词)。
 
 ## 库内细路由 (我要做的事 → 读哪份)
 
@@ -31,10 +30,9 @@
 - 各目录的 `_index.md` —— `python .agents/skills/memory-bank/scripts/gen_kb_index.py` 扫主题文件的三行头元数据生成
 - [tasks/_index.md](tasks/_index.md) —— `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 扫档案 `Status` / `Summary` 生成
 - [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
-- 新增一个目录 = 建目录 + 写 `_about.md`(标题 / 一句话 / 触发) + 写主题文件(三行头) + **重跑生成器**;
-  ⚠ 单条内容超 cap 时**先外迁再登记**(如 `progress/attachments/` 放超长叙事、`tasks/attachments/` 放档案纪要段);
-  再在**本文件的细路由表里登记**一行 —— 少一处结构守卫就红。
-  `*-history.md` 这类 `log` 流水触顶**轮转不删**(按 `_common.LOG_ROTATE_KEEP` 切约 1/3, 详见 skill)。
+- 新增一个目录 = 建目录 + 写 `_about.md` + 主题文件(三行头) + **重跑生成器** + **在细路由表登记**一行(少一处守卫就红);
+  ⚠ 超 cap **先外迁再登记**(`progress/attachments/` 放超长叙事 · `tasks/attachments/` 放档案纪要段);
+  `*-history.md` 这类 `log` 流水触顶**轮转不删**(按 `_common.LOG_ROTATE_KEEP` 切约 1/3)。
 
 ## 一分钟速览
 
@@ -43,5 +41,6 @@
 - **核心设计**: 所有工作统一为带 interval 的任务进单一时间优先堆; 增量同步 + `TorrentRecord` 独占种子数据; **主循环单线程, 是唯一改队列与 state_file 的线程**(详见 [systemPatterns/](systemPatterns/_index.md))。
 - **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字单点维护于 [testing/baseline.md](testing/baseline.md), 勿在他处手抄。
 - **文档**: 根 `README.md`(用户视角)与 `想法.md`(设计草稿)是上游文档; 本库是代码实况的核对版。
+- **制品形态**: 记一件事之前先读 [conventions/doc-forms.md](conventions/doc-forms.md) —— 四工位决策树与协议单点。
 
 > **黄金法则与常用命令: 单点定义在根 [AGENTS.md](../AGENTS.md)** —— 本文件不复述。

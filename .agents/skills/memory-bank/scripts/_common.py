@@ -114,7 +114,9 @@ STUB_CANDIDATES = (
 # 有独立生成器、不走 gen_kb_index 的目录 (放进 `EXCLUDED_DIRS` 后不会被当成「索引目录」)
 # `activeContext` 用 `gen_active_recent.py`(打印而非生成): 若让它自发现, gen_kb_index 会造出一个
 # 随切片数增长的 `_index.md`, 终将撞 index 档 —— 而时间戳文件名本身已是索引, 不需要它。
-EXCLUDED_DIRS = ("tasks", "issues", "attachments", "activeContext")
+# `plans` / `reports`(2026-09-23 由 docs/ 迁入)用 `gen_docs_index.py`: 内容是 HTML 制品,
+# 由 `doc-*` meta 与生成器维护, 没有三行头元数据可扫。
+EXCLUDED_DIRS = ("tasks", "issues", "attachments", "activeContext", "plans", "reports")
 
 # --------------------------------------------------------------------------- 探测
 
@@ -221,7 +223,8 @@ def role_of(rel: str) -> str:
     rel = rel.replace("\\", "/")
     if rel == "AGENTS.md":
         return "agents"
-    if rel in ("memory-bank/tasks/_index.md", "memory-bank/issues/_index.md"):
+    if rel in ("memory-bank/tasks/_index.md", "memory-bank/issues/_index.md", "memory-bank/plans/_index.md",
+               "memory-bank/reports/_index.md", "memory-bank/_doc-map.md"):
         return "index-auto"
     if rel.endswith(INDEX_NAME) or rel == "memory-bank/README.md":
         return "index"
