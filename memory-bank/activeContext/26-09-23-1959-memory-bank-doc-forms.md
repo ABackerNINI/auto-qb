@@ -1,7 +1,7 @@
 # 文档形态统一 (plans/reports 入库 + 四形态协议)
-> 摘要: 四形态 (根报告 / plans / issues / tasks) 职责重叠、登记方式各异; 已拍板 plans + reports 收进 `memory-bank/`, 收敛为「四工位 + 一套协议」。**按波次实施: W0 协议 · W1 迁入库 · W2 补 meta/统一状态词 · W3 生成器与双视图 · W4 守卫与闸门已提交** —— 47 份计划 + 8 份报告在 `memory-bank/plans|reports/`; 51 份计划/报告带 `doc-*` meta; 39 issues + 35 档案统一 5 词状态 + 主键; **双视图** (`plans|reports/_index.md` + `_doc-map.md`, 27 个跨形态簇); **10 条新守卫 `tests/test_docs_forms.py`** (5 条已红验) + memory-bank 闸门加两个生成器 `--check`; 基线 **1202 collected: 1201 passed + 1 skipped**。勘察要点: 计划与报告**零 meta / 零索引 / 零守卫**; 同一专题最多 5 份 (column-prefs / optimistic-ui); 决定**存量 51 份不改名**、状态词统一 5 词、主键 `doc-topic` + `_doc-map.md` 专题视图。
+> 摘要: 四形态 (根报告 / plans / issues / tasks) 职责重叠、登记方式各异; 已拍板 plans + reports 收进 `memory-bank/`, 收敛为「四工位 + 一套协议」。**全部落地 (W0–W5 收官)**: 47 份计划 + 8 份报告在 `memory-bank/plans|reports/`; 51 份带 `doc-*` meta; 39 issues + 35 档案统一 5 词状态 + 主键; **双视图** (`plans|reports/_index.md` + `_doc-map.md`, 27 个跨形态簇); **10 条守卫** (5 条红验) + 闸门加两个生成器; 基线 **1202 collected: 1201 passed + 1 skipped**; 活规则载体 `docs/plans` 残留 0 处。勘察要点: 计划与报告**零 meta / 零索引 / 零守卫**; 同一专题最多 5 份 (column-prefs / optimistic-ui); 决定**存量 51 份不改名**、状态词统一 5 词、主键 `doc-topic` + `_doc-map.md` 专题视图。
 > 触发: 文档形态, 四形态, docs/plans, reports, 入库, 计划归档, 报告归档, doc-topic, doc-map, 状态词统一, 立档, 索引守卫, 重复文档
-> 最后活动: 2026-09-24 00:25
+> 最后活动: 2026-09-24 00:28
 
 ## 状态
 
@@ -27,8 +27,8 @@
 
 ## 待办(下一步从这里接)
 
-1. **W5 回写收口**: AGENTS.md 产出口径 (计划路径 `memory-bank/plans/`) · memory-bank skill 立档阈值 #4 的 `docs/*.html, DELIVERY/` 表述 · create-issue skill 措辞 · TODO.md 路径 · `.github/instructions/memory-bank.instructions.md` 结构描述 · `.codebuddy` 镜像由闸门自动同步
-2. 已提交: `dc9e832` · `75bb0ca` · `b96d0cf` · `68bcbde` · `41c636b`; 每波次单独提交 + 推 Gitee (GitHub 镜像直连不通, 只报一次)
+1. **本专题已收官** —— 后续若发现新件缺 meta / 命名不合协议, `tests/test_docs_forms.py` 会当场红; 生成物漂移重跑对应脚本
+2. 已提交: `dc9e832` · `75bb0ca` · `b96d0cf` · `68bcbde` · `41c636b` · `6acb031`; 每波次单独提交 + 推 Gitee (GitHub 镜像直连不通, 只报一次)
 
 ## 单点指针
 

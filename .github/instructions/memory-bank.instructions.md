@@ -31,6 +31,8 @@ memory-bank/
   activeContext.md       # ≤1 KB 存根; 滚动状态在下面那个目录里 (勿往存根写状态)
   activeContext/         # 会话切片 YY-MM-DD-HHMM-<slug>.md; 有独立阅读器, 不生成 _index.md
   <专题>/                # _about.md(手写) + _index.md(生成物) + <主题>.md(三行头)
+  plans/  reports/       # HTML 制品 (计划 / 报告): doc-* meta + 自己的生成器; 无 _about.md
+  _doc-map.md            # 生成物: 跨形态专题视图 (一行一专题, 四形态材料挂在一行)
   tasks/                 # 档案 YY-MM-DD-<slug>.md + attachments/ (有独立生成器)
   issues/  checklists/
 ```
@@ -48,8 +50,11 @@ memory-bank/
 python .agents/skills/memory-bank/scripts/gen_tasks_index.py            # 改了档案 Status / Summary
 python .agents/skills/memory-bank/scripts/gen_kb_index.py               # 改了任何主题文件的三行头
 python .agents/skills/memory-bank/scripts/gen_active_recent.py --check  # 改了会话切片
+python .agents/skills/memory-bank/scripts/gen_docs_index.py --check     # 改了 plans/ reports/ 的制品或 meta
+python .agents/skills/memory-bank/scripts/gen_doc_map.py --check        # 改了任何 topic 主键
 python .agents/skills/memory-bank/scripts/check_kb_structure.py         # 结构 / cap / 双向一致 / 存根 / 条目字段
 python scripts/check_doc_links.py                                       # 相对链接存在性
 ```
 
-五条都已挂 `.commit-flow.toml` 的 `[[gates]]`, 提交时会自动跑; 会话级 5 步 DoD 见 skill。
+七条都已挂 `.commit-flow.toml` 的 `[[gates]]`, 提交时会自动跑; 会话级 5 步 DoD 见 skill。
+制品目录另有守卫 `tests/test_docs_forms.py`(命名 / meta / 状态词 / dark / 索引自洽 / 认领链)。

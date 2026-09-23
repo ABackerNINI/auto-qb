@@ -28,7 +28,7 @@
 - **deps-env-modernization** (2) — 报告 [26-09-15-1150](reports/26-09-15-1150-report-dependency-lock.html) `Done` · 档案 [26-09-15](tasks/26-09-15-deps-env-modernization.md) `Done`
 - **memory-bank-activecontext-conflict** (2) — 计划 [26-09-22-2350](plans/26-09-22-2350-activecontext-conflict-plan.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-memory-bank-activecontext-conflict.md) `In Progress`
 - **memory-bank-dir-refactor** (2) — 计划 [26-09-22-1248](plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) `Done` · 档案 [26-09-22](tasks/26-09-22-memory-bank-dir-refactor.md) `In Progress`
-- **memory-bank-doc-forms** (2) — 计划 [26-09-23-1959](plans/26-09-23-1959-memory-bank-doc-forms-plan.html) `Open` · 档案 [26-09-23](tasks/26-09-23-memory-bank-doc-forms.md) `Open`
+- **memory-bank-doc-forms** (2) — 计划 [26-09-23-1959](plans/26-09-23-1959-memory-bank-doc-forms-plan.html) `Done` · 档案 [26-09-23](tasks/26-09-23-memory-bank-doc-forms.md) `Done`
 - **skill-hygiene** (2) — issue [26-09-20-1427](issues/26-09-20-1427-chore-skill-grill-me-empty-stub.html) `Open` · issue [26-09-20-1427](issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html) `Open`
 - **test-timing-tolerance** (2) — issue [26-09-20-0952](issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) `Open` · issue [26-09-22-2052](issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html) `Open`
 - **tracker-group** (2) — 计划 [26-09-15-1504](plans/26-09-15-1504-tracker-group-plan.html) `Done` · 档案 [26-09-15](tasks/26-09-15-rule-tracker-groups.md) `Done`

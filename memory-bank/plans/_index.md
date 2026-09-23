@@ -16,11 +16,11 @@
 
 ## Open
 
-- [26-09-23-1959] [文档形态统一 — 计划与报告入库 · 工程方案](26-09-23-1959-memory-bank-doc-forms-plan.html) — `memory-bank-doc-forms`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
 ## Done
 
+- [26-09-23-1959] [文档形态统一 — 计划与报告入库 · 工程方案](26-09-23-1959-memory-bank-doc-forms-plan.html) — `memory-bank-doc-forms`
 - [26-09-22-2112] [src/auto_qb 目录结构优化 · 分层归拢计划（方案 C 定稿）](26-09-22-2112-src-layout-restructure-plan.html) — `src-layout-restructure`
 - [26-09-22-1912] [运行期状态周期落盘 · 修复「非优雅终止丢失整个运行期状态」](26-09-22-1912-backend-state-periodic-flush-plan.html) — `backend-state-persistence`
 - [26-09-22-1857] [修复计划 · 热重载 L2 分支重读磁盘 state, 运行期内存态被回滚](26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html) — `hot-reload-l2-state-rollback-fix`
