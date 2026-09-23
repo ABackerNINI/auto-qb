@@ -16,7 +16,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_task_status_matches_index_section: 档案 `**Status:**` 与索引所在分区一致
 - test_index_has_all_status_sections: 索引保留四个状态分区标题
 - test_index_is_regenerated: `_index.md` == memory-bank skill 的 `gen_tasks_index.py` 生成结果
-- test_active_context_has_no_rolled_up_session_log: `activeContext.md` 不出现 `^- 2026-` 流水账纪要行
+- test_active_context_has_no_rolled_up_session_log: 流水账只许住在 `activeContext/` 切片里, `activeContext.md` 本体不得出现 `^- 2026-` 行
 - test_session_protocol_is_exposed_in_always_on_entries: skill 载体存在且含阈值/DoD, AGENTS 与 copilot-instructions 均声明阈值并指向 skill
 
 知识库目录化守卫 (检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 进程内 import):
@@ -25,11 +25,13 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_kb_topic_files_have_metadata / test_kb_files_respect_caps / test_kb_class_names_and_topic_filenames: 三行头元数据 / cap 分级 / 类名与文件名
 - test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
-- test_kb_active_context_within_cap: `activeContext.md` ≤12 KB (易变层硬顶)
+- test_kb_active_context_within_cap: `activeContext.md` 是 ≤1 KB 合法存根 (2026-09-23 起滚动状态已迁 `activeContext/`)
+- test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 / 每个 ≤ 切片 cap / 总数 ≤ 阈值
 - test_kb_task_archives_within_cap: `tasks/*.md` ≤24 KB (超了移 `tasks/attachments/`)
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
-- test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致
-- test_kb_scripts_import_cleanly: skill 的 4 个脚本都能 import
+- test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
+- test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
+- test_kb_scripts_import_cleanly: skill 的 5 个脚本都能 import
 """
 
 from __future__ import annotations
@@ -47,6 +49,9 @@ GEN = SKILL_SCRIPTS / "gen_tasks_index.py"
 SKILL = ROOT / ".agents" / "skills" / "memory-bank" / "SKILL.md"
 
 STATUSES = ("In Progress", "Pending", "Completed", "Abandoned")
+
+# `memory-bank/activeContext/` 切片数上限 —— 切片无界增长是这个方案的已知代价, 给个可判定的收口线
+SLICE_COUNT_LIMIT = 40
 REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现计划", "## 子任务状态表", "## 进度日志")
 
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
@@ -156,10 +161,18 @@ def test_index_is_regenerated() -> None:
 
 
 def test_active_context_has_no_rolled_up_session_log() -> None:
+    """滚动状态只许住在 `activeContext/` 切片里 —— `activeContext.md` 本体不得再出现流水账行。
+
+    2026-09-23 语义重定义: 切片**本来就是**流水账(每专题一条时间线), 所以「禁止流水账」这条
+    只对 `activeContext.md` 成立 —— 在切片化之后, 原判据(查 `^- 2026-`)会变成**恒绿**
+    (存根里不可能有这种行), 恒绿的守卫等于没守。切片侧的膨胀风险改由
+    `test_kb_active_context_slices_are_valid` 的 cap 与条数阈值接管。
+    """
     text = (MB / "activeContext.md").read_text(encoding="utf-8")
     leaked = [line[:60] for line in text.splitlines() if re.match(r"^- 2026-\d\d-\d\d:", line)]
 
-    assert not leaked, f"activeContext.md 出现流水账纪要行 (应迁入 tasks/ 档案对应专题): {leaked}"
+    assert not leaked, f"activeContext.md 出现流水账纪要行 (应写进 activeContext/ 切片): {leaked}"
+    assert (MB / "activeContext").is_dir(), "activeContext/ 切片目录缺失 —— 滚动状态没有归宿"
 
 
 def test_session_protocol_is_exposed_in_always_on_entries() -> None:
@@ -244,12 +257,33 @@ def test_kb_pitfall_entries_have_required_fields() -> None:
 
 
 def test_kb_active_context_within_cap() -> None:
-    """`activeContext.md` ≤12 KB —— 易变层硬顶: 超了就是内容该外迁的信号, 不是「这次先写着」。
+    """`activeContext.md` 必须是**合法存根**(≤1 KB + 含「已迁至」+ 无正文), 不是一份被硬顶卡住的正文。
 
-    2026-09-17 那次复盘(纪要回流成流水账, 文件膨胀 10 倍)从教训变成机制, 靠的就是这条。
+    2026-09-23 目录化后语义变了: 旧的 12 KB「易变层硬顶」已失去对象 —— 滚动状态搬进
+    `activeContext/` 切片, 原路径只留指针。所以改判存根合法性(与 `check_stubs` 同源);
+    那个 12 KB 数字不再是这一层的问题, 切片各自的 cap 见下一条。
     """
-    problems = _kb_checker().check_active_context_cap(ROOT, MB)
+    ok, why = _kb_checker().is_stub(MB / "activeContext.md")
+    assert ok, f"activeContext.md 不是合法存根: {why}"
+
+
+def test_kb_active_context_slices_are_valid() -> None:
+    """切片命名定宽 / 三行头齐 / 每个 ≤ 切片 cap / 总数 ≤ 阈值 —— 防目录无界膨胀。
+
+    切片是「每会话重写文件头同一段」的替代物: 冲突在结构上消掉了, 代价是文件数不再有界
+    (初稿按 clone 拆是 4+N 个)。所以把「该归档了」变成可判定的数字, 而不是靠自觉。
+    """
+    checker = _kb_checker()
+    import gen_active_recent
+
+    slice_dir = MB / "activeContext"
+    assert slice_dir.is_dir(), "缺少 memory-bank/activeContext/ 切片目录"
+    rows, problems = gen_active_recent.collect(slice_dir, ROOT)
     assert not problems, "\n".join(problems)
+    assert checker.role_of("memory-bank/activeContext/x.md") == "slice", "切片路径未被 _common.role_of 认成 slice 角色"
+    assert rows, "切片目录是空的 —— 滚动状态没有归宿"
+    assert len(rows
+              ) <= SLICE_COUNT_LIMIT, (f"切片数 {len(rows)} > {SLICE_COUNT_LIMIT} —— 把 14 天未动的切片蒸馏进 progress/ 或任务档案后删除")
 
 
 def test_kb_task_archives_within_cap() -> None:
@@ -267,6 +301,13 @@ def test_memory_bank_instructions_match_current_structure() -> None:
     为什么值得单独钉: 它只在**编辑 `memory-bank/` 时**注入 —— 不重写的话, 目录化重构后的新结构
     在改库那一刻**根本不在上下文里**, 于是又会按旧的 8 文件结构去写。2026-09-22 重写前的旧版
     还在教「read ALL memory bank files at the start of every task」—— 那正是本库膨胀到 50 万字符的原因。
+
+    2026-09-23 瘦身: 4,213 → 2,486 字符(106 → 55 行)。删掉的四节(cap 分级表 / 三行头模板 / pitfalls 字段 /
+    任务档案格式)**都在 skill 与 `_common.py` 有单点**, 而其中 cap 表是**数值型重复** —— 守卫只钉
+    token 不钉数值, 改了源不会红。所以针列表同步换掉了 `## 原始请求` / `## 进度日志`(那是 skill
+    里「任务档案规范」的内容), 换成 `CAP_POLICY`(证明它指向机器单点而不是自己抄一张表)。
+    ⚠ **不要退回成"纯指针"**: 本文件是**自动注入**, 而 skill 是**按需触发**加载 —— 纯指针会让
+    规则从「可见」退化成「可触达」, 而这三条铁律对应的失败模式恰恰是"少做一个动作"。
     """
     path = ROOT / ".github" / "instructions" / "memory-bank.instructions.md"
     assert path.is_file(), "缺少 memory-bank.instructions.md"
@@ -278,15 +319,40 @@ def test_memory_bank_instructions_match_current_structure() -> None:
     assert "this is not optional" not in text, ("旧版反模式的祈使句回潮了: 必须改成「先索引、后 grep、禁止整读」")
     assert "已废弃" in text, "引用旧反模式时必须同时标注它已废弃"
     for needle in (
-        "applyTo: 'memory-bank/**'",  # 仍是规则载体
-        "先索引、后 grep、禁止整读",  # 检索纪律
+        "applyTo: 'memory-bank/**'",  # 仍是规则载体(机制本身, 不能外迁)
+        "先索引、后 grep、禁止整读",  # 检索纪律: 最贵的失败模式, 必须在手边
         "生成物",  # _index.md 不许手改
         ".agents/skills/memory-bank/SKILL.md",  # 指向完整规程
-        "## 原始请求",  # 五个必备章节(守卫按行首标题比)
-        "## 进度日志",
+        "CAP_POLICY",  # cap 的机器单点 —— 2026-09-23 瘦身: 不再在这里抄一张会漂移的表
         "activeContext.md",
+        "gen_active_recent.py",
     ):
         assert needle in text, f"memory-bank.instructions.md 缺少 `{needle}`"
+
+
+def test_skill_cap_table_matches_cap_policy() -> None:
+    """SKILL.md 的 cap 表必须与 `_common.CAP_POLICY` 的**数值集合**一致 —— 手抄的表会静默漂移。
+
+    2026-09-23 加这条的现场: 给 `CAP_POLICY` 加 `slice = 6,000` 时, SKILL.md 与
+    `.github/instructions/memory-bank.instructions.md` 里**两张** cap 表都是手工同步的,
+    而当时没有任何守卫盯数值 —— 改了源、忘了表, 全绿。瘦身后那张重复表已删, 剩这一张被钉住。
+
+    ⚠ 只比**数值多集合 + 行数**: 能判红「改了源没改表」与「少写一行」, **判不出**「两行数值互换角色」
+    —— 后者只能靠人读表, 这里不假装守得住。
+    """
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    text = SKILL.read_text(encoding="utf-8")
+    nums = [int(n.replace(",", "")) for n in re.findall(r"^\|[^|\n]*\|\s*([\d,]+)\s*\|\s*$", text, re.MULTILINE)]
+
+    assert nums, "SKILL.md 里找不到 cap 表 —— 改结构时把这张表弄丢了?"
+    assert len(nums) == len(_common.CAP_POLICY
+                           ), (f"SKILL.md cap 表 {len(nums)} 行 != `_common.CAP_POLICY` {len(_common.CAP_POLICY)} 条")
+    assert sorted(nums) == sorted(
+        _common.CAP_POLICY.values()
+    ), (f"SKILL.md cap 表与 `_common.CAP_POLICY` 漂移:\n  表: {sorted(nums)}\n  源: {sorted(_common.CAP_POLICY.values())}")
 
 
 def test_doc_links_are_not_broken() -> None:
@@ -308,10 +374,10 @@ def test_doc_links_are_not_broken() -> None:
 
 
 def test_kb_scripts_import_cleanly() -> None:
-    """skill 的 4 个脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
+    """skill 的 5 个脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
     if str(SKILL_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SKILL_SCRIPTS))
-    for name in ("_common", "gen_tasks_index", "gen_kb_index", "check_kb_structure"):
+    for name in ("_common", "gen_tasks_index", "gen_kb_index", "check_kb_structure", "gen_active_recent"):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
         __import__(name)

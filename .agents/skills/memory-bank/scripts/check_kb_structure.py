@@ -28,6 +28,7 @@ from _common import (  # noqa: E402
     CAP_POLICY,
     EXCLUDED_DIRS,
     INDEX_NAME,
+    LOG_ROTATE_KEEP,
     PITFALL_CLASSES,
     REQUIRED_FIELDS,
     STUB_CANDIDATES,
@@ -153,7 +154,15 @@ def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> 
         size = char_count(path)
         cap = CAP_POLICY[role]
         if size > cap:
-            problems.append(f"{rel} 超 cap: {size:,} > {cap:,} 字符 (角色 {role})")
+            # 报错即给修法: `log` 是 append-only, 超了不是"该删", 而是"该轮转" —— 把切到哪、搬到哪写进消息
+            hint = ""
+            if role == "log":
+                hint = (
+                    f"\n    → 它是 append-only 流水, 按设计会一直长: 从**最老一端**切到 ≤ "
+                    f"{int(cap * LOG_ROTATE_KEEP):,} 字符 (保留 ~{LOG_ROTATE_KEEP:.0%}), 外迁同目录 `attachments/` "
+                    "并原位留一行指针; 别只搬最老一条 —— 那样下次追加立刻再触顶"
+                )
+            problems.append(f"{rel} 超 cap: {size:,} > {cap:,} 字符 (角色 {role}){hint}")
         elif is_topic_file(path) and size < CAP_MIN_WARN:
             warns.append(f"{rel} 过小: {size:,} < {CAP_MIN_WARN:,} 字符 —— 考虑并入邻文件")
     return problems, warns

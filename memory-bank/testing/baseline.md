@@ -6,7 +6,9 @@
 
 ## 当前基线
 
-**1190 collected: 1188 passed + 1 skipped + 1 deselected(throttle 守阵单跑恒绿; 全量含它则 1189 passed + 1 skipped 稳态) / Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)** —— 2026-09-22 实测(三案合流: config 取值范围收紧(issue 26-09-22-1937, +1) × 状态周期落盘 + 热重载修复(对侧) × web 拆分(对侧 +2); TOTAL 91%, 7600 语句 / 626 未覆盖)。
+**1192 collected: 1191 passed + 1 skipped / Windows** —— 2026-09-23 实测
+(activeContext 切片化 +1 守卫; 同日 `tasks/_index.md` 改索引渲染口径后又消掉一条既有红);
+TOTAL 91%, 139.07s。Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 ⚠ throttle 守阵(`test_run_loop_throttles_without_stop_event`)文件级/全量跑偶发假红(Windows sleep(50ms) 精度 46ms < 0.05 下限, 容差无余量), 单跑恒绿 —— 已入池 [issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html](../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html), 稳态数字取自 deselect 该用例的全量。
 
 > ⚠ **只测一侧就更新会立刻产生漂移** —— 改了基线就把 Windows 与 Linux 两侧**都重测**再落数字。

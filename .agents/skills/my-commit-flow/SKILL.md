@@ -20,7 +20,9 @@ user-invocable: true
 | 步 | 做什么 | 判据 / 不通过怎么办 |
 |---|---|---|
 | **S0 配置**（每仓库一次） | 确认 `<仓库根>/.commit-flow.toml` 存在且 `confirmed = true` | **没有就停手**，跑 `preflight.py --init` 生成初稿 → **人工确认/修改**（红线必须手填）→ 置 `confirmed = true`。本 skill 不内置项目配置，也不猜默认值；未确认 / 空红线 / 命令还是 `<未填…>` 都会被预检报出来 |
-| **S1 预检与同步** | `python <skill-dir>/scripts/preflight.py` | 一张表报出：配置来源 / 主线远端 / 上游 / 落后几个 / 工作区脏不脏 / 有没有红线文件 / 该跑哪些闸门。有 **STOP** 就先处理（**唯一例外**：「落后 + 脏」要先提交，见下节）；**推送前再跑一次**（`status -sb` 的 ahead/behind 是上次 fetch 的快照，不会自己刷新） |
+| **S1 预检与同步** | `python <skill-dir>/scripts/preflight.py` | 一张表报出：配置来源 / 主线远端 / 上游 / 落后几个 / **合流预判撞不撞** / 工作区脏不脏 / 有没有红线文件 / 该跑哪些闸门。
+落后或分叉时会额外跑一次 `git merge-tree --write-tree HEAD <远端 tip>`（**只读**：只在对象库里算合并树，不写工作区 / ref / index）报「撞 / 不撞」——
+把冲突从「push 被拒才发现」提前到「提交前就知道」，好提前决定要不要留改动备份；**push 阶段预判到撞 = STOP**。有 **STOP** 就先处理（**唯一例外**：「落后 + 脏」要先提交，见下节）；**推送前再跑一次**（`status -sb` 的 ahead/behind 是上次 fetch 的快照，不会自己刷新） |
 | **S2 闸门** | 预检**已经跑掉** `auto = true` 的那些（测试 / 生成器 `--check` / 格式化 / skill 同步），结果直接写在检查表里；没标 `auto` 的照单跑 | 红了不提交 —— STOP 由预检给出，不用自己判退出码 |
 | **S3 暂存** | `python <skill-dir>/scripts/commit.py --message-file <文件> <路径...>` | **逐路径**，脚本直接拒绝 `-A` / `.` / `*`；红线文件（配置的 `red_lines`）直接拒交；高危文件（`warn_lines`）需人工确认。**暂存前先把收尾做完**（项目若有知识库 / 文档 DoD，先回写再一起暂存 —— 见下节） |
 | **S4 信息** | 自己写 | 首行一句话说清"改了什么 / 为什么"，空一行后写动机 / 取舍 / 影响面 / 实测数字。**数字必须提交那一刻实测**，不沿用会话中途量的旧值。回写随主提交时 emoji 取**主导意图**，不另起一条 |
@@ -69,7 +71,7 @@ user-invocable: true
 
 | 脚本 | 职责 | 退出码 |
 |---|---|---|
-| `<skill-dir>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑 | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
+| `<skill-dir>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / **合流预判(`merge-tree`, 只读)** / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑 | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
 | `<skill-dir>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref（内部先跑一次 `--phase commit` 预检，闸门在这一步真跑） | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
 | `<skill-dir>/scripts/verify_ref.py [sha]` | ref 三处一致核对 | 0 一致 · 2 不一致 · 3 staged 暴增 |
 | `<skill-dir>/scripts/push.py [--skip-mirror] [--skip-preflight]` | 内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |

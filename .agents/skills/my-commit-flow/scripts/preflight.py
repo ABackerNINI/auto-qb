@@ -20,7 +20,12 @@
 输出一张检查表(PASS / WARN / STOP):
 - 远端与上游是不是主线(按配置探测)、分支对不对
 - 落不落后主线(**push 前也要再跑一次**; 判据 = fetch 后与远端真值对比本地 HEAD, `status -sb` 的 ahead/behind 是快照不可信)
-- 开工自检(`--check-started`): **只读** —— ls-remote 对比本地 HEAD + 工作区状态, 不 fetch、不写任何 git 状态, 与其余检查互斥; 结果贴进会话回复
+- **合流预判(只读)**: 落后 / 分叉时跑 `git merge-tree --write-tree HEAD <远端 tip>` 报「撞 / 不撞」——
+  把冲突从「push 被拒才发现」提前到「提交前就知道」。它只在对象库里算合并树, **不写工作区 / ref / index**;
+  拿不到远端 tip 的对象(如 `--no-fetch`)时如实说"无法预判", 不假装。**push 阶段预判到冲突 = STOP**
+  (本环境「非快进合并 + 脏工作区 = 必炸」, 得先留备份并把工作区弄干净)
+- 开工自检(`--check-started`): **只读** —— ls-remote 对比本地 HEAD + 工作区状态, 不 fetch、不写任何 git 状态, 与其余检查互斥; 结果贴进会话回复。
+  落后且**本地已有远端 tip 对象**时, 额外附一行合流预判(仍是只读); 没有对象就省略, 不为凑一行去 fetch
 - 工作区脏不脏(脏 + 需要历史整合 = 红线区)
 - 改动清单里有没有红线 / 高危文件
 - 闸门: `auto = true` 的直接跑(红了即 STOP), 其余列出来给人跑
@@ -72,6 +77,32 @@ def git(*args: str, check: bool = True) -> str:
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失败: {proc.stderr.strip()}")
     return proc.stdout.rstrip("\n")
+
+
+def git_rc(*args: str) -> int:
+    """只关心**退出码**的 git 调用(如 `merge-tree --write-tree`: 0 = 可干净合流, 非 0 = 有冲突)。
+
+    与 `git()` 分开是必要的: 那个函数 `check=False` 时只回 stdout, 而退出码正是这里的信号;
+    `cat-file -e` 同理(成功时 stdout 为空, 用它判断"对象在不在"会永远为假)。
+    """
+    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace").returncode
+
+
+def classify_merge_probe(rc: int | None, phase: str) -> tuple[str, str]:
+    """合流预判结果 → (级别, 说明) —— 纯函数(便于自测), 不碰 git。
+
+    `rc` 来自 `git merge-tree --write-tree HEAD <远端 tip>`: 0 = 可干净合流, 非 0 = 有冲突。
+    `rc is None` = 没预判(拿不到远端 tip 的对象, 如 `--no-fetch`) → 如实说无法预判。
+    """
+    if rc is None:
+        return WARN, "无法预判合流冲突(本地没有远端 tip 的对象 —— 先 fetch 主线分支, 或别用 `--no-fetch`)"
+    if rc == 0:
+        return PASS, "预判**不撞**: 同步后可直接合流(`merge-tree --write-tree` 退出码 0)"
+    return (
+        STOP if phase == "push" else WARN,
+        "预判**会撞**: 合流需人工解冲突 —— 本环境「非快进合并 + 脏工作区 = 必炸」, "
+        "推送前务必先把工作区弄干净并留好改动备份(树脏就先停下报告)",
+    )
 
 
 def classify_sync(remote_sha: str, head_sha: str, counts: tuple[int, int] | None) -> tuple[str, str]:
@@ -381,6 +412,12 @@ def main(argv: list[str] | None = None) -> int:
         dirty = bool(staged or unstaged)
         rows_cs = [
             (level, "同步状态", msg),
+            # 合流预判: 只在**落后**且**本地已有远端 tip 对象**时做 —— 那是只读的;
+            # 没有对象就省略, 不为了凑一行去 fetch(开工自检承诺"不 fetch、不写任何 git 状态")。
+            *(
+                [classify_merge_probe(git_rc("merge-tree", "--write-tree", "HEAD", remote_sha), "commit")]
+                if counts and counts[0] > 0 and git_rc("cat-file", "-e", f"{remote_sha}^{{commit}}") == 0 else []
+            ),
             (
                 WARN if dirty else PASS, "工作区", f"未暂存 {len(unstaged)} / 已暂存 {len(staged)}" +
                 (" —— 树脏: 只能 fetch + `merge --ff-only` 或先停下报告" if dirty else "")
@@ -455,6 +492,13 @@ def main(argv: list[str] | None = None) -> int:
             rows.append((WARN, "落后主线", f"落后 {behind} 个提交 —— 本地提交可以, 但**推送前必须先同步合流**(工作区要干净)"))
         else:
             rows.append((STOP, "落后主线", f"落后 {behind} 个提交 —— 先同步合流(**工作区必须干净**); 别等 push 被拒才发现"))
+        # 合流预判(只读): 把「撞不撞」提前到提交前 —— 本环境非快进合并 + 脏工作区 = 必炸,
+        # 提前知道才好决定"先留备份 / 先弄干净工作区"。merge-tree 只在对象库里算合并树, 不写工作区/ref/index。
+        rows.append(
+            classify_merge_probe(
+                git_rc("merge-tree", "--write-tree", "HEAD", remote_sha) if remote_sha else None, args.phase
+            )
+        )
     elif behind == 0:
         rows.append((PASS, "落后主线", f"与主线齐平(本地领先 {ahead})"))
     else:

@@ -35,15 +35,27 @@ CAP_POLICY: dict[str, int] = {
     "evergreen": 10000,  # 常青主题 (叙述型) —— ≈4k token, 一次通读可接受
     "reference": 12000,  # 参考速查 (config-reference / rule-system) —— 查表不是通读
     "volatile": 12000,  # 易变层 (activeContext.md) —— 会话开始必读, 硬顶
+    # 目录化后原位置只留 ≤1 KB 存根, 到时这一档要降到 1,000 —— 见计划 W1, 别提前改 (会让现有文件当场报红)
+    "slice": 6000,  # activeContext/ 会话切片 —— per-会话 / per-专题, 天然比整份易变层小
     "task": 24000,  # 任务档案
     # append-only 历史流水 (如 `testing/baseline-history.md`) —— **只增不改**, 每次改动追一条。
     # 与任务档案同档: 它按设计就会一直长, 给一个"涨到多少该轮转"的上限, 而不是假装它是一屏文档。
+    # 轮转策略见下方 `LOG_ROTATE_KEEP` —— 触顶后按它切, 不要只搬"最老的一条"。
     "log": 24000,
     "agents": 8000,  # 项目引导 (AGENTS.md; 项目脚本 scripts/check_context_caps.py 另有一份权威值)
 }
 
 # 下限建议: **只 WARN** —— 主题文件过小会让「读三个文件」取代「读一节」, 反而更贵
 CAP_MIN_WARN = 1500
+
+# append-only 流水 (`log` 角色, 如 `*-history.md`) 触顶后的轮转策略:
+# **一次切掉约 1/3, 让文件落回 ~2/3 容量** —— 留出足够的追加余量。
+# ❌ 只搬"最老的一条"是错的: 最老条目大小不受控, 可能只有几百字符, 下次追加立刻又触顶;
+#    2026-09-23 实测 `testing/baseline-history.md` 触顶时只剩 170 字符余量 —— 也就是说**任何**一次
+#    追加都会越线, 而按"搬一条"处置等于每次新增都要迁移一次。
+# 落点: 同目录 `attachments/`(`iter_topic_files` 是非递归 glob + 该目录在 EXCLUDED_DIRS 里 ⇒ 不计 cap),
+# 原位留一行指针; 搬运用脚本按原换行风格切分原样写回, 不手抄。
+LOG_ROTATE_KEEP = 2 / 3
 
 # 任务档案的「历史会话纪要」段上限; 超了移 `tasks/attachments/`
 TASK_LOG_CAP = 8000
@@ -55,6 +67,17 @@ PITFALL_CLASSES = ("git", "web-ui", "backend", "testing", "ops", "kb", "docs")
 
 # 主题文件名: 小写英文与数字, 短横线分段 (与 create-issue 的 SLUG_RE 同款)
 TOPIC_FILE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+
+# activeContext 会话切片文件名: 定宽 `YY-MM-DD-HHMM-<slug>` —— 前缀定宽才能保证**字典序 == 时间序**
+# (写成 `26-9-3-34` 立刻乱序)。⚠ 与 tasks/ 档案「不带时分、同天同专题必撞同路径」的故意设计
+# **意图相反**: 那边靠撞名暴露重复, 这边靠带时分避撞名 —— 所以两者必须分目录, 别混。
+SLICE_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+
+# 切片头部的「最后活动」字段 —— 阅读器的排序键; 缺失则回退文件名时间戳 (= 创建时间)
+LAST_ACTIVE_RE = re.compile(r"^>\s*最后活动:\s*(\S.*?)\s*$", re.MULTILINE)
+
+# 会话滚动状态切片所在目录 (目录化后 `memory-bank/activeContext/`)
+SLICE_DIR = "activeContext"
 
 # 索引/元数据文件名: `_` 开头, 不参与「主题文件」计数
 INDEX_NAME = "_index.md"
@@ -85,11 +108,13 @@ STUB_CANDIDATES = (
     "conventions.md",
     "config-reference.md",
     "rule-system.md",
+    "activeContext.md",  # 2026-09-23: 滚动状态迁 activeContext/ 切片目录, 原路径降级为存根
 )
 
 # 有独立生成器、不走 gen_kb_index 的目录 (放进 `EXCLUDED_DIRS` 后不会被当成「索引目录」)
-EXCLUDED_DIRS = ("tasks", "issues", "attachments")
-
+# `activeContext` 用 `gen_active_recent.py`(打印而非生成): 若让它自发现, gen_kb_index 会造出一个
+# 随切片数增长的 `_index.md`, 终将撞 index 档 —— 而时间戳文件名本身已是索引, 不需要它。
+EXCLUDED_DIRS = ("tasks", "issues", "attachments", "activeContext")
 
 # --------------------------------------------------------------------------- 探测
 
@@ -202,6 +227,8 @@ def role_of(rel: str) -> str:
         return "index"
     if rel == "memory-bank/activeContext.md":
         return "volatile"
+    if rel.startswith(f"memory-bank/{SLICE_DIR}/"):
+        return "slice"
     if rel.startswith("memory-bank/tasks/"):
         return "task"
     if rel.endswith("-history.md"):

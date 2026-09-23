@@ -35,8 +35,14 @@ UPDATED_RE = re.compile(r"\*\*Updated:\*\*\s*(\d{4}-\d{2}-\d{2})")
 ADDED_RE = re.compile(r"\*\*(?:Added|Started):\*\*\s*(\d{4}-\d{2}-\d{2})")
 
 EMPTY_HINT = {
-    "Pending": "(暂无 — 下一步候选见 [../activeContext.md](../activeContext.md) 的\"下一步候选\"段)",
+    "Pending": "(暂无 — 下一步候选见 `想法.md` 待办与 [../progress/roadmap.md](../progress/roadmap.md))",
 }
+
+# 索引行里摘要的截断长度。**这是索引不膨胀的关键**: 摘要全文只增不减, 若整条打进索引,
+# 索引大小就由「摘要写得多长」决定而不是由「有几个档案」决定 —— 2026-09-23 实测 33 个档案
+# 平均 350 字符/行、索引 12,299 撞 `index-auto` cap, 而条目数本身远没到上限。
+# 截断后索引 ≈ 626 + 33×~120, 同样 12,000 的 cap 能容纳 ~90 个档案; 摘要全文点开档案就有, 无信息损失。
+SUMMARY_MAX = 80
 
 
 def build_header(root: Path) -> str:
@@ -46,7 +52,8 @@ def build_header(root: Path) -> str:
 > **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描 `tasks/*.md` 的 `Status` / `Summary` / 标题生成; 新增或改状态后跑它重建即可, 合并冲突也只需重跑。
 > 档案命名 `YY-MM-DD-<slug>.md`(见 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)); 旧编号保留在各档案的 `**Legacy-ID:**` 字段, 供历史文档回溯。
 > 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 24 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
-> 日常短周期工作只记 [../activeContext.md](../activeContext.md); 完成项沉淀进 [../progress.md](../progress.md)。
+> 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在档案里): 这样索引大小由**档案数**决定, 不随摘要写得多长而膨胀 —— 否则迟早撞 `index-auto` cap, 而靠"外迁老档案"化解会打坏外部引用。
+> 日常短周期工作只记 [../activeContext/](../activeContext/_about.md) 的会话切片; 完成项沉淀进 [../progress.md](../progress.md)。
 > 机械守卫: `tests/test_memory_bank.py`(索引 == 生成结果 / slug 唯一 / 命名规范 / 状态分区 / 必备章节)。
 """
 
@@ -93,7 +100,10 @@ def render(items: list[dict], header: str) -> str:
         for item in sorted(group, key=_sort_key, reverse=True):
             line = f"- [{item['slug']}] {item['title']}"
             if item["summary"]:
-                line += f" - {item['summary']}"
+                summary = item["summary"]
+                if len(summary) > SUMMARY_MAX:
+                    summary = summary[:SUMMARY_MAX].rstrip() + "…"
+                line += f" - {summary}"
             out.append(line)
         out.append("")
     return "\n".join(out)

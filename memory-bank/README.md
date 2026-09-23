@@ -20,7 +20,8 @@
 | 项目是什么 / 领域知识 | [productContext.md](productContext.md) · [projectbrief.md](projectbrief.md) |
 | 技术栈 / 环境 / 约束 | [techContext.md](techContext.md) |
 | 已实现 / 规划中 | [progress/_index.md](progress/_index.md) |
-| **现在做到哪 / 下一步** | [activeContext.md](activeContext.md)(易变层, ≤12 KB) |
+| **现在做到哪 / 上次做到哪** | [activeContext/](activeContext/_about.md) —— 会话滚动状态切片; 读法 `python <skill-dir>/scripts/gen_active_recent.py` |
+| **下一步做什么** | `想法.md`(设计草稿待办) + [progress/roadmap.md](progress/roadmap.md)(规划中) |
 | **真机走查清单** | [checklists/_index.md](checklists/_index.md) —— 做走查时逐条勾 |
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
@@ -33,15 +34,14 @@
 - 新增一个目录 = 建目录 + 写 `_about.md`(标题 / 一句话 / 触发) + 写主题文件(三行头) + **重跑生成器**;
   ⚠ 单条内容超 cap 时**先外迁再登记**(如 `progress/attachments/` 放超长叙事、`tasks/attachments/` 放档案纪要段);
   再在**本文件的细路由表里登记**一行 —— 少一处结构守卫就红。
+  `*-history.md` 这类 `log` 流水触顶**轮转不删**(按 `_common.LOG_ROTATE_KEEP` 切约 1/3, 详见 skill)。
 
 ## 一分钟速览
 
 - **项目**: `auto-qb` — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具 (标签/分类/HR 管理、辅种分组与缺文件检查、自定义规则引擎、tracker 级限速、全局限速曲线)。
 - **形态**: 单机长驻 Python 程序, 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
-- **核心设计**: `QbManager` 由 6 个 mixin 组合; 所有工作统一为带内置 interval 的任务进单一时间优先堆; `TorrentStore.apply_sync` 走 qB `/sync/maindata` rid 增量同步, `TorrentRecord` 是种子数据的唯一所有者; `QbApi` Facade 写后同步快照; **主循环单线程, 是唯一修改队列与 state_file 的线程**。
+- **核心设计**: 所有工作统一为带 interval 的任务进单一时间优先堆; 增量同步 + `TorrentRecord` 独占种子数据; **主循环单线程, 是唯一改队列与 state_file 的线程**(详见 [systemPatterns/](systemPatterns/_index.md))。
 - **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字单点维护于 [testing/baseline.md](testing/baseline.md), 勿在他处手抄。
 - **文档**: 根 `README.md`(用户视角)与 `想法.md`(设计草稿)是上游文档; 本库是代码实况的核对版。
 
-## 黄金法则与命令
-
-> **改代码的黄金法则**(幂等 / 保守默认 / 状态持久化 / fail-fast / 单一写线程 / 范围守恒 / 请求边界)**与常用命令, 单点定义在根 [AGENTS.md](../AGENTS.md)**; 本文件不复述。
+> **黄金法则与常用命令: 单点定义在根 [AGENTS.md](../AGENTS.md)** —— 本文件不复述。

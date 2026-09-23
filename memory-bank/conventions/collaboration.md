@@ -16,6 +16,13 @@
   - **同步与汇合一律走远端主线**: 开工 (问答/只读轮次除外; **首个执行动作前**) 按 `AGENTS.md`「会话协议 · 开始」同步 —— `git fetch gitee develop` + `ls-remote` 对比本地 HEAD, 纯落后且工作区干净才 `merge --ff-only FETCH_HEAD`; 交付按 `AGENTS.md`「提交 / PR」推 Gitee `develop`。**不自行 merge/rebase 其他 AI 的分支, 不擅自删除分支**, 分支汇合与旧工作区清理由用户统一协调; 任何合并前先确认自己工作区干净 (脏工作区会导致 merge 失败, 有前科)。
   - 多 AI 并行可能改到同一文件: 提交前在自己 clone 内跑全量测试保证自身改动自洽; 合并冲突交用户主导解决, 不擅自丢弃或覆盖他人改动。
   - 未被要求时**不主动 commit**; 被要求"提交"时按 `AGENTS.md`「提交 / PR」一次走完 (含推送), 不再把 commit 与 push 当成两次指令。
+- **会话滚动状态按专题切片, 不写单文件** (2026-09-23 起): 状态写进
+  `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md` —— **每个 clone 只写 / 更新自己的切片**
+  (同一专题跨会话沿用同一个 slug, 换专题才新建文件); **不要再往 `activeContext.md` 写状态**,
+  它已降级为 ≤1 KB 存根。读法 `python <agent skill-dir>/scripts/gen_active_recent.py`
+  (全量按「最后活动」倒序 + 陈旧标记, 只打印不写文件); 切片 >14 天未动且已完成 → 蒸馏进
+  `progress/` 或任务档案后删除。多 clone 下「全体收尾写同一段」是最热的合并冲突源, 切片把
+  「重写头部」变成「追加自己的文件」, 这是它存在的唯一理由。
 - **改完先留在工作区, 不自行提交**： AI 完成代码/文档改动后留在工作区由用户逐项审核; 用户说"提交"后才提交 —— 届时按 `AGENTS.md` 一次走完 (commit + 推 Gitee + 尝试 GitHub)。AI 不主动 `git commit` / `git push` 这一点不变, 变的是"提交"这两个字**包含**推送。
 - **列计划时务必不要修改文件**： 用户在"先列计划/先给方案"阶段, AI 只输出方案文本(可含代码片段作为示例), **不修改任何工作区文件**, 必须等用户明确"实施/开始/按计划做"等指令才动文件。
 - **更新代码/文档后同步更新知识库**： 每次功能新增/行为变更/重构完成后, 在同一次工作中同步更新 `memory-bank/` 知识库对应条目 (模块表 modules / 架构 systemPatterns / 规则系统 rule-system / 配置参考 config-reference / 陷阱 pitfalls / 路线图 progress / 测试基线 testing 与 README 速览), 不等用户单独提醒。

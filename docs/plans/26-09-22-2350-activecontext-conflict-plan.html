@@ -148,6 +148,8 @@
   .wave .w-optional { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); border: 1px solid var(--line); padding: 1px 7px; margin-left: auto; }
   .wave p { font-size: 14px; color: var(--ink-dim); margin-bottom: 8px; }
   .wave ul { margin: 0 0 8px 18px; font-size: 14px; color: var(--ink-dim); }
+  ul.tight { margin: 0 0 14px 18px; font-size: 14.5px; }
+  ul.tight li { margin: 0 0 7px; }
   .wave li { margin-bottom: 4px; }
   .wave .verify { font-size: 13px; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 10px; margin-top: 12px; }
   .wave .verify .vk { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-faint); margin-right: 10px; }
@@ -195,12 +197,13 @@
     <h1>activeContext 多 clone 冲突治理</h1>
     <p class="lede">
       冲突的根因不是 agent 手滑，而是<strong>把并行会话状态塞进了单文件这一串行媒介</strong>：
-      每个收尾 DoD 都必写、最热写点又集中在文件头同一段。本方案把写点按 clone 拆开、
-      把全局视图降级为生成物、再用只读预检兜底 —— 让冲突在结构上不可能发生，而不是更小心地合并。
+      每个收尾 DoD 都必写、最热写点又集中在文件头同一段。本方案把「每会话重写头部同一段」改成
+      「新增 / 更新自己的时间戳切片」，把长青职能交还各自的真实归属，再用只读预检兜底 ——
+      让冲突在结构上不可能发生，而不是更小心地合并。
     </p>
     <div class="meta-row">
       <div class="cell">日期<b>2026-09-22 23:50</b></div>
-      <div class="cell">状态<b>待拍板 · 未实施</b></div>
+      <div class="cell">状态<b>已实施 W1–W4（2026-09-23）· v1.1</b></div>
       <div class="cell">基线（本轮实测）<b>1189 passed + 1 skipped @ d4dea8b</b></div>
       <div class="cell">任务档案<b>tasks/26-09-22-memory-bank-activecontext-conflict</b></div>
     </div>
@@ -215,7 +218,7 @@
         <li><a href="#s1"><span class="no">01</span>问题定义</a></li>
         <li><a href="#s2"><span class="no">02</span>根因分析</a></li>
         <li><a href="#s3"><span class="no">03</span>解法空间 A–E</a></li>
-        <li><a href="#s4"><span class="no">04</span>推荐方案</a></li>
+        <li><a href="#s4"><span class="no">04</span>推荐方案：时间戳切片</a></li>
         <li><a href="#s5"><span class="no">05</span>实施计划</a></li>
         <li><a href="#s6"><span class="no">06</span>风险与边界</a></li>
         <li><a href="#s7"><span class="no">07</span>验收标准</a></li>
@@ -357,7 +360,8 @@
       <table>
         <thead><tr><th>方案</th><th>冲突消除程度</th><th>改造成本</th><th>主要代价 / 风险</th></tr></thead>
         <tbody>
-          <tr><td>A 拆文件</td><td>结构性消除</td><td>中：目录 + 生成脚本 + 守卫 + 文档接线，一次到位</td><td>需约定 clone-id；全局视图依赖生成物</td></tr>
+          <tr><td>A 拆文件（按 clone）</td><td>结构性消除</td><td>中：目录 + 生成脚本 + 守卫 + 文档接线，一次到位</td><td>需约定 clone-id；全局视图依赖生成物</td></tr>
+          <tr><td><strong>A′ 时间戳切片</strong>（本计划采用）</td><td>结构性消除，且写形态从「重写头部」变「追加切片」</td><td>中：目录 + 阅读脚本 + 守卫 + 文档接线</td><td>文件数无界，靠归档阈值收口；命名须定宽前缀</td></tr>
           <tr><td>B 生成式聚合</td><td>解法退化为「重跑」</td><td>低～中（可并入 A）</td><td>单独用只解决「解得快」，不解决「撞不撞」</td></tr>
           <tr><td>C 同文件分段</td><td>降低，不消除</td><td>低</td><td>头部共享区仍最热；膨胀压力不变</td></tr>
           <tr><td>D git 兜底</td><td>不消除，提前暴露</td><td>低</td><td>预检后仍要走合流；rerere 只对同形冲突有效</td></tr>
@@ -368,22 +372,43 @@
 
     <!-- ============ 04 推荐方案 ============ -->
     <section id="s4">
-      <div class="sec-head"><span class="folio">04</span><h2>推荐方案：A + B + D</h2></div>
-      <p><strong>A 拆文件消灭冲突源，B 生成索引兜住「别人在干嘛」的可读性，D 做最后保险。</strong>目标结构：</p>
+      <div class="sec-head"><span class="folio">04</span><h2>推荐方案：A′ 时间戳切片 + D</h2></div>
+      <p><strong>A′ 把「每会话重写头部同一段」改成「新增 / 更新自己的切片」，D 做只读预检兜底。</strong>
+      v1.1 相对初稿（A + B + D）有三处修订，均于 2026-09-23 与用户确议：
+      <strong>取消 <code>global.md</code>、取消 <code>_index.md</code>、取消「取最近 N 条」截断</strong>。目标结构：</p>
 <pre>
 memory-bank/
 ├─ activeContext.md          <span class="hl">← ≤ 1 KB 存根</span>: 一句话 + 「已迁至」指针（照目录化五步配方）
 └─ activeContext/
    ├─ _about.md              <span class="hl">← 三行头元数据</span>, 目录自发现入口
-   ├─ _index.md              <span class="hl">← 生成物</span>: 各 clone 最后更新时间 + 一行状态
-   ├─ global.md              全局焦点: 里程碑 / 定案指针 / 下一步候选 —— 低频共享
-   ├─ clone-main.md          auto-qb 主 clone 的会话滚动状态
-   ├─ clone-1.md
-   ├─ clone-2.md             本 clone
-   └─ clone-long-seeding.md
+   ├─ 26-09-23-0034-partial-hr-verify.md      会话切片: 创建时间 + 专题 slug
+   ├─ 26-09-22-2350-activecontext-conflict.md
+   └─ 26-09-22-2038-qb-move-dot-qb.md
 </pre>
-      <p class="dim">clone-id 直接沿用现有工作区目录名（auto-qb / clone1 / clone2 / long-seeding），不发明新机制；
-      文件名即 clone 标识，合作规则只有一条：<strong>每个 clone 永远只写自己的文件</strong>。</p>
+
+      <h3>三处修订（为什么不按初稿做）</h3>
+      <ul class="tight">
+        <li><strong>不要 <code>global.md</code></strong> —— 「定案口径 / 下一步候选 / 待走查 / 历史归档」四段长青内容
+          <em>各自都有真实归属</em>（根 <code>AGENTS.md</code> · <code>conventions/collaboration.md</code> ·
+          <code>pitfalls/web-ui/*</code> · <code>想法.md</code> + <code>progress/roadmap.md</code> ·
+          <code>checklists/manual-walkthrough.md</code> · <code>tasks/</code> 档案纪要段），留在这里只是副本 —— 双份必然漂移。
+          实测该文件 13,070 字节里长青段占 <strong>3,516 字节（27%）</strong>。
+          ⇒ 剥掉后 activeContext 只剩「会话滚动状态」一种性质，不需要任何共享层。</li>
+        <li><strong>不要 <code>_index.md</code></strong> —— 时间戳文件名自带时间与主题，<code>ls</code> 本身就是索引。
+          ⚠ 代价：本目录<em>不能</em>放 <code>_about.md</code> 之外的自发现标记 —— 一旦 <code>gen_kb_index.py</code>
+          把它识别成索引目录，就会自动生成一个随切片数增长的 <code>_index.md</code>，终将撞 3,000 字符的 index 档。
+          故 W2 必须把 <code>activeContext</code> 加进 <code>_common.EXCLUDED_DIRS</code>。</li>
+        <li><strong>不要「取最近 N 条」</strong> —— 条数不是稳定的时间尺度：活跃期一天十条会把半天挤出去，
+          安静期三条可能跨一个月；更糟的是截断会漏掉「创建早但仍在推进」的切片。
+          ⇒ 改为<strong>全量按「最后活动」倒序输出 + 陈旧标记</strong>，目录规模靠<strong>归档阈值</strong>控制（建议 14 天）。</li>
+        <li><strong>也不产出任何缓存文件</strong>（没有 <code>_recent.md</code>）—— 缓存会过期：
+          一个看着可读、实际是上次运行快照的文件，比「没跑脚本」更危险。阅读脚本直接打印到 stdout。</li>
+      </ul>
+
+      <h3>切片命名：定宽时间前缀 + 专题 slug</h3>
+      <p><code>YY-MM-DD-HHMM-&lt;slug&gt;.md</code>。前缀<strong>定宽</strong>才能保证字典序 == 时间序（<code>26-9-3-34</code> 立刻乱序）。
+      <strong>不带 clone 标记</strong>：同分钟同名 add/add 概率极低，撞了改个 slug 重来；「我上次做到哪」靠
+      <strong>slug 复用</strong>检索 —— 这给出的是<strong>专题维度的时间线</strong>，比 clone 维度分区信息价值更高。</p>
 
       <h3>协议变化（开始 / 收尾两端点）</h3>
       <table>
@@ -392,17 +417,23 @@ memory-bank/
           <tr>
             <td>会话开始 · 第 2 步</td>
             <td>读 <code>activeContext.md</code>（最后更新、正在进行、下一步候选）</td>
-            <td>读 <code>global.md</code> + 自己的 <code>clone-*.md</code> + 扫 <code>_index.md</code> 知道别人进展</td>
+            <td>跑 <code>gen_active_recent.py</code> 看切片摘要（全量倒序 + 陈旧标记）；「下一步」改看
+              <code>想法.md</code> + <code>progress/roadmap.md</code>，定案口径改看根 <code>AGENTS.md</code> / <code>conventions/</code></td>
           </tr>
           <tr>
             <td>收尾 DoD · 第 1 步</td>
             <td>更新「最后更新」滚动栈 +「正在进行」</td>
-            <td>只写自己的 <code>clone-*.md</code>（滚动栈原样迁入自己文件）；全局事项变更才动 <code>global.md</code></td>
+            <td>写 / 更新自己的切片 —— <strong>同一专题沿用同一 slug，只刷新「最后活动」</strong>；换专题才新建文件</td>
+          </tr>
+          <tr>
+            <td>「我上次做到哪」</td>
+            <td>（不成问题：单文件里就是最新状态）</td>
+            <td>按 <strong>slug 复用</strong>检索 —— 同专题的切片自然串成时间线，不需要 clone 标记</td>
           </tr>
           <tr>
             <td>冲突处置</td>
             <td>用户主导手工合并（collaboration.md 现行口径）</td>
-            <td>clone 文件层结构性消除；global 低频段万一相撞仍按现行约定交用户主导</td>
+            <td>切片层结构性消除（不同文件 = 三方合并无冲突）；仅≤1 KB 存根与 <code>_about.md</code> 是低频共享点</td>
           </tr>
         </tbody>
       </table>
@@ -410,7 +441,9 @@ memory-bank/
       <div class="note">
         <span class="tag">与既有机制的关系</span>
         tasks/ 档案「不带时分、同天同专题必撞同路径」是<strong>故意设计</strong>的 add/add 查重信号（SKILL.md 明文），
-        本方案不碰它；issues 认领状态继续以 Gitee 为单一事实源，不进 activeContext —— 拆分只治理「会话滚动状态」这一层。
+        而切片<strong>故意带时分</strong>以避撞名 —— 两者命名意图<strong>相反</strong>，所以必须分目录，
+        也别把 SKILL.md 那条「不要用精确到分的时间戳」的反模式套到切片上（该条已就地限定为只针对 tasks/ 档案主键）。
+        issues 认领状态继续以 Gitee 为单一事实源，不进 activeContext —— 切片只承载「会话滚动状态」这一层。
       </div>
     </section>
 
@@ -418,49 +451,89 @@ memory-bank/
     <section id="s5">
       <div class="sec-head"><span class="folio">05</span><h2>实施计划</h2></div>
       <p>四个波次。<strong>W1–W3 必须连续入库</strong>（同一批提交、分笔连续推送）：拆分落地而协议未切换的中间态一旦跨过同步窗口，
-      另一 clone 会按旧协议继续写存根文件 —— 波次间隔要压在一个同步周期内。W4 独立可选。</p>
+      另一 clone 会按旧协议继续写存根文件 —— 波次间隔要压在一个同步周期内。W4 独立可选。<br>
+      <strong>W2 / W3 已先行落地（2026-09-23）</strong>：阅读脚本与 skill 协议先行改好是安全的 ——
+      脚本在目录不存在时只打印提示、退出码 0（不堵闸门），skill 里也写明「尚无该目录就按现行单文件读」。
+      <strong>W1–W4 均已落地（2026-09-23）</strong>，验收项 AC-1…AC-7 逐条实测通过（见 §07）。</p>
 
       <div class="wave">
-        <div class="w-head"><span class="w-no">W1</span><span class="w-title">结构拆分</span></div>
-        <p>建目录与文件，原位置留存根：</p>
+        <div class="w-head"><span class="w-no">W1</span><span class="w-title">结构拆分（剥离长青）</span><span class="w-optional">已落地 09-23</span></div>
+        <p>建目录、把滚动状态切成切片、原位置留存根：</p>
         <ul>
-          <li>建 <code>memory-bank/activeContext/</code>：<code>_about.md</code>（三行头）、<code>global.md</code>（迁入定案口径 / 下一步候选 / 待走查指针）、<code>clone-*.md</code> × 4（迁入各 clone 滚动状态，现存「最后更新」栈归入 <code>clone-2.md</code>）</li>
-          <li>原 <code>activeContext.md</code> 替换为 ≤ 1 KB 存根（一句话 + 指针），头部引言的历史教训一段并入 <code>_about.md</code>（原文照搬不重写）</li>
-          <li><code>_common.py</code> 的 <code>CAP_POLICY</code> 加档：per-clone 会话状态 6,000（单 clone 状态天然更小）、global 6,000</li>
-          <li><code>check_kb_structure.py</code> 纳入新目录（含 <code>_about.md</code> 即自发现；volatile 角色改挂到目录内文件）</li>
+          <li>建 <code>memory-bank/activeContext/</code>：<code>_about.md</code>（三行头 + 四条切片约定）</li>
+          <li>现存「最后更新」栈与「正在进行」<strong>按专题</strong>拆成切片 <code>YY-MM-DD-HHMM-&lt;slug&gt;.md</code>
+            （文件名时间取该专题首次出现的时间；同专题合并成一个文件，不逐会话拆）</li>
+          <li>长青四段<strong>不迁进目录</strong>：定案口径 / 下一步候选 / 待走查 / 历史归档在别处都有事实源
+            （根 <code>AGENTS.md</code> · <code>conventions/</code> · <code>pitfalls/</code> · <code>想法.md</code> ·
+            <code>progress/roadmap.md</code> · <code>checklists/</code> · <code>tasks/</code> 纪要段）—— 这里只删副本，不搬运</li>
+          <li>原 <code>activeContext.md</code> 替换为 ≤ 1 KB 存根（一句话 + 指针，写明「勿在本文件追加会话状态」）；
+            头部引言的历史教训一段并入 <code>_about.md</code>（原文照搬不重写）</li>
+          <li>存根降档：W1 落地后把 <code>role_of</code> 里 <code>memory-bank/activeContext.md</code> 从 12,000 降到 1,000
+            （切片档 6,000 已就位，<strong>别提前改</strong> —— 会让现有 13 KB 文件当场报红）</li>
+          <li><code>check_kb_structure.py</code> 纳入新目录：切片命名正则 + 三行头 + cap</li>
         </ul>
-        <div class="verify"><span class="vk">验证</span><code>check_kb_structure.py</code> 绿；cap 双检（存根 + 新文件）通过</div>
+        <div class="verify"><span class="vk">验证</span><code>check_kb_structure.py</code> 绿；cap 双检（存根 ≤1 KB + 每切片 ≤6 KB）通过；
+          守恒核对：迁移前条目清单 vs 迁移后，<code>missing = 0</code></div>
       </div>
 
       <div class="wave">
-        <div class="w-head"><span class="w-no">W2</span><span class="w-title">聚合生成与守卫</span></div>
-        <p>把「别人在干嘛」做成生成物：</p>
+        <div class="w-head"><span class="w-no">W2</span><span class="w-title">阅读脚本与守卫</span><span class="w-optional">部分已落地 09-23</span></div>
+        <p>把「最近在做什么」做成一次命令输出（<strong>不写文件</strong>）：</p>
         <ul>
-          <li>新脚本 <code>gen_active_index.py</code>：扫 <code>activeContext/clone-*.md</code> 头部「最后更新」行 + 「正在进行」条目计数，生成 <code>_index.md</code>（带 <code>--check</code>，接进闸门）</li>
-          <li><code>tests/test_memory_bank.py</code> 补守卫：索引 ↔ 文件双向一致、每 clone 文件存在且在 cap 内、存根存在且 ≤ 1 KB</li>
+          <li>✅ 新脚本 <code>gen_active_recent.py</code> —— 落在 <strong>memory-bank skill 的 <code>scripts/</code></strong>
+            （与 <code>gen_tasks_index</code> / <code>gen_kb_index</code> 同层：<code>activeContext</code> 是 memory-bank 的
+            通用概念，不是本项目事实；本项目事实如 AGENTS.md 8000 上限仍留在项目侧 <code>scripts/</code>）。
+            行为：全量按「最后活动」倒序 + 陈旧标记；<code>--check</code> 校验命名 / 元数据 / cap；
+            目录不存在 → 打印提示、退出码 0（不堵闸门）</li>
+          <li>✅ <code>_common.py</code>：<code>SLICE_FILE_RE</code>（定宽前缀）/ <code>LAST_ACTIVE_RE</code> /
+            <code>SLICE_DIR</code> / <code>CAP_POLICY["slice"] = 6,000</code> / <code>role_of</code> 分支</li>
+          <li>⬜ <code>_common.EXCLUDED_DIRS</code> 加 <code>activeContext</code> —— 否则 <code>gen_kb_index.py</code>
+            会自发现并生成一个随切片数增长的 <code>_index.md</code>，终将撞 index 档</li>
+          <li>⬜ <code>tests/test_memory_bank.py</code>：命名合规、每切片 ≤ cap、存根存在且 ≤ 1 KB；
+            <strong><code>test_kb_active_context_within_cap</code> 改判据</strong>；
+            <strong><code>test_active_context_has_no_rolled_up_session_log</code> 语义重定义</strong>
+            （切片本就是流水账，原样留着会恒红 —— 改为「单切片 ≤ cap」+「未归档切片数 ≤ 阈值」）</li>
+          <li>⬜ <code>.commit-flow.toml</code> 的 <code>[[gates]]</code>（<code>match = ["memory-bank/activeContext/"]</code>）
+            挂 <code>gen_active_recent.py --check</code></li>
         </ul>
-        <div class="verify"><span class="vk">验证</span><code>uv run pytest tests -q</code> 全量绿（守卫在列）</div>
+        <div class="verify"><span class="vk">验证</span><code>uv run pytest tests -q</code> 全量绿（守卫在列）；
+          脚本在本仓库跑出「尚无 activeContext/ 目录」且退出码 0</div>
       </div>
 
       <div class="wave">
-        <div class="w-head"><span class="w-no">W3</span><span class="w-title">协议接线</span></div>
+        <div class="w-head"><span class="w-no">W3</span><span class="w-title">协议接线</span><span class="w-optional">已落地 09-23</span></div>
         <p>让所有 agent 的入口指向新结构：</p>
         <ul>
-          <li><code>SKILL.md</code>：会话开始第 2 步、收尾 DoD 第 1 步、反模式补「仍在旧单文件上写滚动状态」一条</li>
-          <li>根 <code>AGENTS.md</code>：会话协议「开始 / 收尾」两处的文件引用同步（8000 字符硬顶内措辞）</li>
-          <li><code>collaboration.md</code>「协作约定」补一行拆分口径；<code>memory-bank/README.md</code> 细路由更新</li>
+          <li>✅ <code>SKILL.md</code>：会话开始第 2 步（跑阅读脚本 + 长青职能的去处）、收尾 DoD 第 1 步（写切片 + slug 复用）、
+            cap 表加切片档、脚本表加一行、新增「会话切片」小节（命名 / 读法 / 无 N / 无缓存）、
+            反模式补 4 条并把「不要用精确到分的时间戳」就地限定为只针对 tasks/ 档案主键</li>
+          <li>✅ 根 <code>AGENTS.md</code>：会话协议「开始」第 2 步改指切片 + 收尾 DoD 措辞（实测 6,684/8,000 字符）</li>
+          <li>✅ <code>memory-bank/README.md</code> 细路由拆成两行：「现在做到哪 / 上次做到哪」→ <code>activeContext/</code>，
+            「下一步做什么」→ <code>想法.md</code> + <code>progress/roadmap.md</code></li>
+          <li>✅ <code>collaboration.md</code>「协作约定」补切片口径（每个 clone 只写 / 更新自己的切片）</li>
+          <li>✅ <b>三个常驻规则载体</b>（计划外但必需）：<code>.github/copilot-instructions.md</code>、
+            <code>.github/instructions/ai-lib.md</code>、<code>.github/instructions/memory-bank.instructions.md</code>
+            —— 它们原本都教「读 <code>activeContext.md</code> 并往里写状态」。不改就是**决策点与生效点错位**
+            （库里已记过的反模式：规则只在 <code>memory-bank/**</code> 生效，编辑 <code>src/</code> 时它不在上下文）</li>
         </ul>
         <div class="verify"><span class="vk">验证</span><code>check_doc_links.py</code> 绿 + <code>check_context_caps.py</code> 绿（AGENTS.md ≤ 8000）</div>
       </div>
 
       <div class="wave">
-        <div class="w-head"><span class="w-no">W4</span><span class="w-title">预检加固</span><span class="w-optional">可选</span></div>
+        <div class="w-head"><span class="w-no">W4</span><span class="w-title">预检加固</span><span class="w-optional">已落地 09-23</span></div>
         <p>把 D 路线落进机检：</p>
         <ul>
-          <li><code>preflight.py</code> 增 <code>git merge-tree --write-tree</code> 只读预判：推送前报「撞 / 不撞」，配方即 pitfalls/git/history-integration.md 既有步骤</li>
-          <li>各 clone 本机开 <code>git config rerere.enabled true</code>（人工解法自动复用；仅保险性质）</li>
+          <li>✅ <code>preflight.py</code> 增 <code>git merge-tree --write-tree</code> 只读预判：落后 / 分叉时报「撞 / 不撞」。
+            新增纯函数 <code>classify_merge_probe(rc, phase)</code> + 只取退出码的 <code>git_rc()</code>；
+            <strong>push 阶段预判到撞 = STOP</strong>（本环境「非快进合并 + 脏工作区 = 必炸」，得先留备份）；
+            拿不到远端对象（<code>--no-fetch</code>）时如实说"无法预判"，不假装。
+            <code>--check-started</code> 只在**本地已有远端 tip 对象**时附这一行 —— 不为凑一行去 fetch，保住"只读"承诺</li>
+          <li>✅ 本 clone 已开 <code>git config rerere.enabled true</code>（人工解法自动复用；仅保险性质）。
+            ⚠ 其余 clone 需各自开 —— 跨 clone 操作属红线，不由本会话代办</li>
         </ul>
-        <div class="verify"><span class="vk">验证</span><code>preflight.py --check-started</code> 输出新增一行，只读、不写任何 git 状态</div>
+        <div class="verify"><span class="vk">验证</span>真实仓库实测：<code>merge-tree HEAD HEAD~1</code> → rc 0（祖先，无冲突）；
+          <code>--check-started</code> 退出码 0 且跑前跑后 <strong>HEAD 与工作区指纹均未变</strong>（只读成立）；
+          纯函数四分支 rc∈{None,0,1}×phase∈{commit,push} 输出 WARN/PASS/WARN/STOP 符合预期</div>
       </div>
     </section>
 
@@ -479,16 +552,25 @@ memory-bank/
             <td>不受影响 —— 那是 tasks/ 路径层的故意设计，与 activeContext 拆分无关；计划明确不触碰</td>
           </tr>
           <tr>
-            <td>弃用 clone 的陈旧文件堆积</td>
-            <td><code>_index.md</code> 展示各文件最后更新时间，一眼识别失活 clone；退役时在 global.md 标注即可，无需删档</td>
+            <td>切片数量无界增长</td>
+            <td>初稿是 4+N 个（有界），切片方案不再有界。对策：<strong>归档阈值 14 天</strong> —— 切片 14 天未动且已完成
+              → 蒸馏进 <code>progress/</code> 或任务档案后删除；阅读脚本每次输出「M 个待归档」，把收口这件事摆到眼前</td>
           </tr>
           <tr>
-            <td>global.md 低频段仍可能相撞</td>
-            <td>频率低一个量级（里程碑级更新）；真撞了按现行「用户主导解决」约定处置，成本可接受</td>
+            <td>长青内容剥离后无处可寻</td>
+            <td>「下一步」/ 定案口径不再出现在 activeContext。对策：README 细路由拆行显式指向 <code>想法.md</code> +
+              <code>progress/roadmap.md</code> 与根 <code>AGENTS.md</code>；阅读脚本输出末尾固定附一行去处提示</td>
           </tr>
           <tr>
-            <td>生成脚本成为新单点</td>
-            <td>与 gen_tasks_index / gen_kb_index 同构（共用 <code>_common.py</code>），无新依赖；脚本挂 <code>--check</code> 进既有闸门，静默失效会被预检暴露</td>
+            <td>阅读脚本「没跑」是静默失效</td>
+            <td>与生成物不同：生成物失效是「过期」（<code>--check</code> 抓得住），脚本失效是「没跑」（无人知晓）。
+              对策：写进会话开始第 2 步（不是可选项）；<code>--check</code> 挂闸门兜住命名 / cap；
+              最后兜底是文件名本身 —— 时间戳 + slug，<code>ls</code> 即索引</td>
+          </tr>
+          <tr>
+            <td>同分钟同名 add/add</td>
+            <td>概率极低（4 个 clone 同一分钟起同一个 slug）；撞了 push 即被拒，处置是后提交者改个 slug 重来，不是灾难。
+              <strong>不为此在文件名里加 clone 标记</strong> —— 那会把「专题时间线」降级成「clone 分区」</td>
           </tr>
         </tbody>
       </table>
@@ -497,12 +579,26 @@ memory-bank/
     <!-- ============ 07 验收标准 ============ -->
     <section id="s7">
       <div class="sec-head"><span class="folio">07</span><h2>验收标准（可判定）</h2></div>
+      <p class="dim">2026-09-23 逐条实测 —— 全部通过（AC-1…AC-7）。</p>
       <ul class="accept">
-        <li><span class="a-no">AC-1</span><span><code>check_kb_structure.py</code> 通过：新目录纳入 cap / 元数据 / 双向一致检查，存根 ≤ 1 KB</span></li>
-        <li><span class="a-no">AC-2</span><span><code>uv run pytest tests -q</code> 全量绿，且 <code>test_memory_bank.py</code> 含新守卫（索引一致、per-clone cap、存根存在）</span></li>
-        <li><span class="a-no">AC-3</span><span>冲突演练：模拟两个 clone 各改自己的 <code>clone-*.md</code> 后合流，<code>git merge-tree --write-tree</code> 退出码 0（无冲突）；对照组（旧结构同段改动）应报冲突</span></li>
-        <li><span class="a-no">AC-4</span><span><code>check_doc_links.py</code> 与 <code>check_context_caps.py</code> 绿；SKILL.md / AGENTS.md / collaboration.md / README 路由四处指针一致</span></li>
-        <li><span class="a-no">AC-5</span><span>（若实施 W4）<code>preflight.py --check-started</code> 报出 merge-tree 预判行，且全程只读</span></li>
+        <li><span class="a-no">AC-1</span><span><code>check_kb_structure.py</code> 绿：新目录纳入（切片命名正则 + 三行头 + cap）；
+          存根 ≤ 1 KB 且<strong>每切片 ≤ 6 KB</strong></span></li>
+        <li><span class="a-no">AC-2</span><span><code>uv run pytest tests -q</code> 全量绿；<code>test_memory_bank.py</code> 含新守卫
+          （命名合规、切片 cap、存根存在），且<strong>两条旧守卫判据已改写</strong> ——
+          <code>test_kb_active_context_within_cap</code>（改存根 + 切片双判据）与
+          <code>test_active_context_has_no_rolled_up_session_log</code>（切片本就是流水账，语义重定义）都不恒红也不恒绿</span></li>
+        <li><span class="a-no">AC-3</span><span>冲突演练（临时仓库，不碰本仓 git 状态）：① 两个 clone 各写自己的切片 →
+          <code>merge-tree</code> 退出码 <b>0</b>（无冲突）✓；② 对照组同改旧单文件头部同一段 → 退出码 <b>1</b>
+          （<code>CONFLICT (add/add)</code>）✓；③ 残余风险同分钟同名 add/add → 退出码 <b>1</b>（已知低概率，如实暴露）✓</span></li>
+        <li><span class="a-no">AC-4</span><span>阅读脚本三种行为都对：本仓库（目录未建）→ 打印提示 + 退出码 0；
+          探针目录含坏命名 → <code>--check</code> 退出码 1；正常目录 → <strong>全量按「最后活动」倒序</strong>且含陈旧标记</span></li>
+        <li><span class="a-no">AC-5</span><span><code>gen_kb_index.py --check</code> 绿 —— 证明 <code>activeContext</code>
+          已被 <code>EXCLUDED_DIRS</code> 排除，<strong>没有</strong>被自动生成一个 <code>_index.md</code></span></li>
+        <li><span class="a-no">AC-6</span><span><code>check_doc_links.py</code> 与 <code>check_context_caps.py</code> 绿；
+          SKILL.md / AGENTS.md / collaboration.md / README 四处指针一致</span></li>
+        <li><span class="a-no">AC-7</span><span>（W4）<code>preflight.py</code> 合流预判：纯函数四分支输出 WARN / PASS / WARN / STOP 符合预期；
+          真实仓库 <code>merge-tree HEAD HEAD~1</code> → rc 0；<code>--check-started</code> 退出码 0 且
+          <b>跑前跑后 HEAD 与工作区指纹均未变</b>（只读成立）✓</span></li>
       </ul>
     </section>
 
@@ -510,7 +606,10 @@ memory-bank/
     <footer class="colophon">
       <div class="kicker">Colophon</div>
       <dl>
-        <dt>产出</dt><dd>auto-qb-clone2 会话 · delivery-artifact / Native · 冷峻技术方向</dd>
+        <dt>产出</dt><dd>auto-qb-clone2 会话 · delivery-artifact / Native · 冷峻技术方向；v1.1 修订于 auto-qb-clone1 会话（2026-09-23）</dd>
+        <dt>v1.1 修订</dt><dd>取消 global.md / 取消 _index.md / 取消「取最近 N 条」与 _recent.md 缓存；阅读脚本落在 memory-bank skill 的 scripts/</dd>
+        <dt>实施结果</dt><dd>2026-09-23 W1–W4 落地：activeContext/ 9 张切片 + 624 字符存根；全量 <b>1191 passed + 1 skipped / 0 failed</b> / 91% / 139.07s；结构检查 9/9 全绿。
+          连带清掉一条既有红（tasks/_index.md 超 cap —— 改用索引渲染截断而非轮转，见 §05 与 pitfalls/kb/cap-counting.md）；AC-1…AC-7 逐条实测通过</dd>
         <dt>代码基线</dt><dd>d4dea8b（本轮开工 ff-only 同步，快进 9 提交）</dd>
         <dt>测试基线</dt><dd>1189 passed + 1 skipped · 32.9s · 覆盖率 91%（本轮实测）</dd>
         <dt>引用档案</dt><dd>pitfalls/git/history-integration.md · pitfalls/git/editing-traps.md · conventions/collaboration.md · memory-bank SKILL.md</dd>
