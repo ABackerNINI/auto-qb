@@ -75,7 +75,7 @@
   ⇒ 在工具 shell 里跑全量测试前**先设 `TMPDIR`**; 看到这个 `PermissionError` **先怀疑临时目录, 别当成代码回归**。
   📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
   完整约定见 [../../techContext.md](../../techContext.md)「临时目录 / 备份盘约定」。
-  📌 **2026-09-23 把它写进了闸门命令(真正的收口)**: `.commit-flow.toml` 里那条 pytest 闸门改成
+  📌 **2026-09-23 把它写进了闸门命令(真正的收口)**: `.commands/my-commit-flow/.my-commit-flow.toml` 里那条 pytest 闸门改成
   `set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov` —— 以前**靠调用者记得导出**,
   从工具 shell 跑 `preflight.py` / `commit.py` 忘导出就假红。
   ⚠ 该写法是 **cmd.exe** 的: 预检用 `subprocess.run(shell=True)`, Windows 上解析到 COMSPEC → cmd.exe,
@@ -94,3 +94,13 @@
   但**可以连它的父目录一起搬走**, 新根由 pytest 自动重建。
   ⚠ 同根的 `garbage-*` 一堆目录会一并搬走 —— 那是 pytest 自己的清理残渣, 无害;
   ⚠ 这是**环境修复不是仓库改动**, 换机器 / 换用户不适用 ⇒ 仍按上面的约定**优先设 `TMPDIR`**。
+
+### ❗在工具**沙箱内**跑全量会假红: 沙箱拒写 `R:\Temp`, `TMPDIR` 等于没设
+
+- **触发**: 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的命令, 2026-09-24 实测。
+- **判别**: 点号全打完、**一条都没失败**(实测 `1201 passed, 1 skipped`), 却在收尾 `cleanup_dead_symlinks`
+  抛 `PermissionError [WinError 5] … pytest-current`; 输出里另有 `TRAE Sandbox Error: hit restricted` +
+  `Not allow operate files: R:\Temp\auto-qb\tests\…`。链路: 沙箱拒写 R 盘 ⇒ `TMPDIR` 也建不了目录 ⇒
+  pytest 回落 `H:\Temp`(重解析点读不了, 见上条)。⚠ 与上条成因**不同** —— 这条是**沙箱拦截**, 关沙箱即消失。
+- **处置**: 跑全量时**关沙箱**, **不是改命令**(命令是对的, 改了反而失去 TMPDIR 收口)。
+  ⚠ 沙箱内的 `preflight` 命中 pytest 闸门时同样假红 —— 闸门继承调用方的沙箱。

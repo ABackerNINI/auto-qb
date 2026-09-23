@@ -14,7 +14,7 @@
 | [docs](docs/_index.md) | 文档与代码冲突时的裁决顺序、`🚧` 标注的语义、哪些历史记录不必再查。 | 文档漂移, 回写, 冲突裁决, 🚧 标注, 历史记录 |
 | [git](git/_index.md) | 本工具 shell 里 git 的硬约束与事故判据 —— 历史整合(merge/rebase/stash)会毁 `.git`, ref 会被静默丢弃, 推送结果只看 `ls-remote`。 | git, 提交, 推送, rebase, merge, 落后主线, ref, 改名, 行尾, 提交信息 |
 | [kb](kb/_index.md) | 请求边界(问答 vs 执行任务)、纪律为什么会失效、任务档案状态与回扫、改名查引用、skill 装载与脚本路径。 | 知识库, 立档, 会话协议, 请求边界, 改名, 引用, skill, 脚本路径, 纪律 |
-| [ops](ops/_index.md) | 不许碰的生产文件(`config.yml` / `auto-qb-data/`) —— 已在 `.commit-flow.toml` 的 `red_lines` 里, 提交时会被直接拒交。 | 改配置示例, 提交前扫红线, 整理仓库, 统一格式, 运行时数据 |
+| [ops](ops/_index.md) | 不许碰的生产文件(`config.yml` / `auto-qb-data/`) —— 已在 `.commands/my-commit-flow/.my-commit-flow.toml` 的 `red_lines` 里, 提交时会被直接拒交。 | 改配置示例, 提交前扫红线, 整理仓库, 统一格式, 运行时数据 |
 | [testing](testing/_index.md) | 跑全量与临时目录、平台差异与打桩、断言有效性(恒真/恒红/量错对象)、浏览器冒烟、桩与仿真保真度、真机语料。 | 测试, pytest, 跑全量, 临时目录, TMPDIR, 断言, 红验, 冒烟, 仿真, 语料, 脱敏 |
 | [web-ui](web-ui/_index.md) | 前端改动的一整套判据 —— Vue 语义静默白屏、版式口径、列状态双轨模型、前后端数据契约、视图裁剪与刷新节奏。 | 前端, WEB UI, 模板, CSS, 列设置, 视图, 轮询, 真值, 乐观 UI, 冒烟 |
 

@@ -2,8 +2,8 @@
 
 **Status:** Open
 **Added:** 2026-09-23
-**Updated:** 2026-09-23
-**Summary:** 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell 实测 rc=1), 而"该抄哪一份"没有任何提示 ⇒ 直到某次拿到假红才暴露。方案: skill 缩成**纯引擎**(只认识「包」与「命令」, 连"提交"都不知道), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒**(私有配置引擎不读), 路由**不落盘**改为逐级查询 + `pin` 常显, 并配一条反漂移闸门让文档里的手抄形态直接判红。**W1–W5 已全部实施并提交**
+**Updated:** 2026-09-24
+**Summary:** 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell 实测 rc=1), 而"该抄哪一份"没有任何提示 ⇒ 直到某次拿到假红才暴露。方案: skill 缩成**纯引擎**(只认识「包」与「命令」, 连"提交"都不知道), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒**(私有配置引擎不读), 路由**不落盘**改为逐级查询 + `pin` 常显, 并配一条反漂移闸门让文档里的手抄形态直接判红。**W1–W5 已全部实施并提交**; 2026-09-24 优化轮补齐三处遗留 (SKILL.md 两种记法 + 恒定大小硬上限 / `pin` 数量守卫 / 格式化闸门去双写)。
 **Topics:** commands-unified-surface
 
 ## 原始请求
@@ -131,6 +131,7 @@ v1.4 把闸门与红线写进包的 `config.toml`(= 领域配置进 command-flow
 | W3 | `my-commit-flow` 成包, 退役 `.commit-flow.toml`, 修 rebase 冲突与 porcelain 重命名解析 | Done |
 | W4 | 反漂移闸门 + 文档收口 (63 → 0); 收录协议接到两个决策点 | Done |
 | W5 | 旧 skill 退场 + 引擎纯净度机检 (grep 为 0) | Done |
+| 优化轮 | SKILL.md 两种记法 + description 175 字符; `pin` 数量守卫; 格式化闸门去双写; SKILL.md 恒定大小硬上限 | Done |
 
 ## 进度日志
 
@@ -141,12 +142,50 @@ v1.4 把闸门与红线写进包的 `config.toml`(= 领域配置进 command-flow
   `## 进度日志` 三个必备章节; ② `memory-bank.instructions.md` 里的 `gen_active_recent.py` 字面量被
   task id 替换后, 守卫 `test_memory_bank_instructions_match_current_structure` 找不到该 token ——
   已改成"+ 脚本名"并列写法(token 在, 但不成可执行的命令骨架, 漂移闸门仍绿)。
+- 2026-09-24 01:58: 优化轮(依据计划 HTML 逐条对照, 只动 skill 与配置层)。四处改动:
+  ① `SKILL.md` 新增「两种记法」段(文档记法 `commands run <task>` vs 真实入口
+  `python <skill-dir:commands>/scripts/run.py <子命令>`)—— 这是档案「遗留」里那条"记法不是可粘贴命令"的收口;
+  description 226 → **175 字符**(skill-creator 要求 <200)。
+  ② 引擎补 `MAX_PIN_PER_LEVEL = 8` 守卫(`_config._pin_warnings`): 一层视图浮出的常显命令超限即 WARN ——
+  计划 W4 说"改为检查包树完整性: 子包目录存在 / task id 全树唯一 / **pin 数量在阈值内**", 前两条引擎早已
+  STOP, 只有这条从没落地。
+  ③ `.my-commit-flow.toml` 格式化闸门从 `yapf -i <changed:*.py>` 改为
+  `run.py run dev.fmt -- <changed:*.py>` —— 原来 `yapf -i` 在 `dev.fmt` 与闸门各有一份(第 N+1 处副本);
+  改动清单仍由预检算(它是"本次改了哪些文件"的权威), 经 `<args>` 传给 task。
+  ④ `check_context_caps.py` 的 `CONTEXT_CAPS` 加 `.agents/skills/commands/SKILL.md: 4200`, 闸门 `match` 同步
+  加上 `.agents/skills/commands/` —— 落实 A9 的"SKILL.md 有硬上限", 此前只有设计意图没有机检。
+  顺手: `run.py cmd_add` 去掉了重复的 `load_tree()`(改用 `_tree.resolve` 统一查包)。
+  实测: 全量 **1201 passed + 1 skipped**(与 [testing/baseline.md](../testing/baseline.md) 基线一致, 无回归);
+  漂移闸门 0 处; `doc.caps` 报 `SKILL.md 2986/4200`; 引擎纯净度 grep 仍为空; 预检 5 条自动闸门全过;
+  `test_preflight.py` 34 项全过。
+- 踩到的坑(新记一条, 已写进 [pitfalls/testing/tmpdir.md](../pitfalls/testing/tmpdir.md)): 在工具**沙箱内**跑
+  `test.full` 假红 —— 沙箱拒写 `R:\Temp` ⇒ task 自带的 `TMPDIR` 等于没设 ⇒ pytest 回落 `H:\Temp` ⇒
+  收尾 `cleanup_dead_symlinks` 抛 `PermissionError`, **用例其实全过**。关沙箱即绿, 命令本身不用改。
+- 踩到的守卫红(1 条, 已修): 往 `tmpdir.md` 补新坑后该文件 `6,060 > 6,000`(角色 pitfall)⇒
+  `test_kb_files_respect_cap` 红。**为什么没命中**: `pitfalls/kb/cap-counting.md` 已记了 cap 相关判据,
+  但记的是"怎么数"(CRLF 口径)与"撞了怎么轮转", **没有"追加前先看余量"这一步** ——
+  已在该文件补一条同名小节; 处置是把新写的那段压到 ~700 字符(不动别人的判据), 压完复绿。
+- 2026-09-24 02:0x: 用户点头把 **W3 遗留的文档漂移**并入本轮修完 —— `AGENTS.md` 3 处死链
+  (指向已删除的 skill 与已搬走的 `.commit-flow.toml`)改指 `.commands/my-commit-flow/README.md` /
+  `.my-commit-flow.toml`; `pitfalls/ops/_about.md`(连带生成索引)/ `pitfalls/ops/prod-files.md` /
+  `pitfalls/git/push.md` / `pitfalls/testing/tmpdir.md` / `conventions/collaboration.md` /
+  `conventions/process.md` 的旧名一并订正(顺带修 `process.md` 的"23 用例"→ 34)。
+  `tmpdir.md` 已贴 cap, 为腾地方把本轮新写的那节又压了一遍。冻结快照(`plans/*.html`)、
+  档案纪要(`tasks/*.md`)、叙述性文档(`progress/suggestions.md`)与别的专题的切片**刻意没动**。
+  实测: `doc.caps` 报 `AGENTS.md 6999/8000`; 漂移 0 处; 全量 **1201 passed + 1 skipped**。
 
 ## 遗留 / 下一步
 
 - **A11 未判**: 需要一次真实会话里 agent 自发收录才算数。
-- **记法问题**: 文档里的 `commands run <task>` 是记法, 不是可直接粘贴的 shell 命令(真实入口是
-  `python <skill-dir:commands>/scripts/run.py <子命令>`)。含 task id 的代码块已把 ```bash 改成 ```text,
-  但"能不能让 `commands` 变成真能敲的命令"值得再想(暂未做 —— 不想为一个入口引入跨平台 shim)。
-- **闸门仍有一处双写**: `.my-commit-flow.toml` 的 `run.py run test.quick` 是**引用**不是副本, 可接受;
-  但格式化闸门 `yapf -i <changed:*.py>` 尚未收进 `dev.fmt`(`<changed:>` 是闸门专用占位符, 引擎不认), 暂留。
+- **记法问题**: 已在 SKILL.md 写成「两种记法」段(2026-09-24); 仍然**不做**跨平台 shim ——
+  `commands` 只是给人看的短记法, 真敲时展开成 `python <skill-dir:commands>/scripts/run.py <子命令>`。
+- ~~**闸门仍有一处双写**: 格式化闸门 `yapf -i <changed:*.py>` 尚未收进 `dev.fmt`~~ ——
+  2026-09-24 已收口: 闸门改成 `run.py run dev.fmt -- <changed:*.py>`, 改动清单仍由预检算, `yapf` 只剩一处定义。
+  (`.my-commit-flow.toml` 的 `run.py run test.quick` 本来就是**引用**不是副本, 保持。)
+- **W3 遗留的文档漂移**: 2026-09-24 用户点头**并入本轮修完** —— `AGENTS.md` 3 处死链改指
+  `.commands/my-commit-flow/README.md` / `.my-commit-flow.toml`; 6 份 pitfalls/conventions 文档的旧名订正。
+  刻意没动 `plans/*.html` 与 `tasks/*.md`(冻结快照 / 纪要)、`progress/suggestions.md`(叙述)、
+  别的专题的 activeContext 切片(按「各 clone 只写自己的切片」约定)。
+  ⚠ 顺带记一条**机检缺口**(仍未修, 属计划外): `check_doc_links.py` 默认只扫 `memory-bank/` 与 `.github/`
+  (根级 md 要 `--all` 才扫), 所以 `AGENTS.md` 这类引导文件的死链一直**没有守卫** ——
+  这次那 3 处死链就是它漏掉的。

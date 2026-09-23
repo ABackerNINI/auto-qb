@@ -101,7 +101,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         # "何时用"是下次能被发现的唯一线索 —— 说不出场景就说明这条还不该被收
         print("[STOP] --when 不能为空: 缺了它, 这条命令在 list 里只剩一个 id, 等于没收录")
         return STOP
-    pack = C.load_tree().packs.get(args.pack) if "/" not in args.pack else T.resolve(tree, args.pack)
+    pack = T.resolve(tree, args.pack)
     if pack is None:
         print(f"[STOP] 没有这个包: {args.pack}(命令只能落进已有的包; 用 list 看有哪些包)")
         return STOP

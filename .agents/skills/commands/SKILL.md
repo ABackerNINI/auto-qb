@@ -1,6 +1,6 @@
 ---
 name: commands
-description: '项目命令的统一调用面: agent 侧只认 task id, 命令本体在 <仓库根>/.commands/ 的包里单点定义。USE FOR: 要执行任何项目动作时 —— 先 list 逐级定位, 再 run; 已经知道 id 就直接 run。DO NOT USE FOR: 一次性调试命令(直接在对话里跑)、判断该不该做(见 scope-guard skill)。引擎零项目事实: 它只认识「包」与「命令」, 具体做什么、命令长什么样, 一律由包自持。'
+description: '项目命令的统一调用面: agent 只认 task id, 命令本体在 <仓库根>/.commands/ 的包里单点定义。USE FOR: 要执行任何项目动作 —— 先 list 逐级定位再 run, 已知 id 直接 run。DO NOT USE FOR: 一次性调试命令(直接在对话里跑)、判断该不该做(见 scope-guard skill)。'
 user-invocable: true
 ---
 
@@ -11,6 +11,15 @@ user-invocable: true
 
 > **路径约定**：`<skill-dir>` = 本 skill 所在的目录。安装位置因项目而异 —— **先用 Glob 定位**
 > （`**/commands/scripts/run.py`），别照抄路径。
+
+## 两种记法（都是记法, 不是可直接粘贴的命令）
+
+- **文档记法** `commands run <task>` —— 文档与回复里一律用它：短, 且不含任何实现细节。
+- **真实入口** `python <skill-dir:commands>/scripts/run.py <子命令> [参数]` —— 真要用 shell 敲时,
+  把 `commands` 换成这一串, 后面的子命令与参数原样接上。
+
+两种都**不是**让你去抄命令本体：命令只在包里定义一处, 文档里再抄一份就是反漂移闸门要判红的形态。
+`<skill-dir:commands>` 是占位符, 敲之前先按上面的路径约定展开成真实路径。
 
 ## 引擎不认识"我们在做什么事"
 
@@ -29,7 +38,6 @@ user-invocable: true
 | `show <task>` | 打印展开占位符后的真实命令, 不执行 | 排障 / 自证 |
 | `add` | 收录一条命令进包（默认 dry-run, `--write` 才落盘） | 见下面收录协议 |
 
-调用形式：`python <skill-dir:commands>/scripts/run.py <子命令> [参数]`。
 `run` 默认只回结果摘要, 不 dump 命令 —— 省 token, 也把环境前缀这类细节留在包里；
 **带 `requires` 或标 `risky = true` 的例外**, 它先打印将要执行什么再执行（高风险恰恰最需要先自证）。
 
@@ -44,7 +52,7 @@ user-invocable: true
 `★` = 常显：标了 `pin = true` 的命令**浮到父级列表**, 不必进到所属包就能看到。
 一级视图里只有包与常显命令, 所以命令总数从十条长到两百条, 一级视图都不会臃肿 ——
 **不臃肿靠的是分层, 不是靠写得短**。`list --all` 是兜底不是入口：一旦被当成常规入口,
-臃肿就从那张平表搬到这里。
+臃肿就从那张平表搬到这里。同理 `pin` 只给"每次会话都要用"的命令, 滥用等于把平表搬回一级。
 
 ## 收录协议（本 skill 会自己长大）
 
@@ -59,15 +67,14 @@ user-invocable: true
 收录动作：
 
 ```
-run.py add --id <id> --pack <包> --run '<命令>' --when '<何时用>' --note '<为什么必须这么写>'
-run.py add ... --write          # 核对落点与片段后才落盘; 落盘后自动 show 自证
+add --id <id> --pack <包> --run '<命令>' --when '<何时用>' --note '<为什么必须这么写>'
+add ... --write          # 核对落点与片段后才落盘; 落盘后自动 show 自证
 ```
 
 - `--when` 与 `--note` **必填**：前者是下次能被发现的唯一线索（缺了它这条只剩一个 id, 等于没收录）；
   后者是环境陷阱的判据（缺了它, 下次有人"顺手把命令写正常点"就退回那个不生效的写法）。
   两条其实是同一件事：把"这条为什么长这样"从执行者的记忆搬到包里。
 - `--id` 已存在则**拒绝覆盖**（改既有命令请直接编辑包的 `config.toml`）；`--pack` 不存在则拒绝。
-- `--pin` 只在"每次会话都要用"时才给 —— 滥用等于把平面表搬回一级视图。
 - 逻辑复杂（多步 / 要解析输出 / 要条件分支）就落到包的 `scripts/`, task 用 `script =` 指过去。
 
 ## 停手点

@@ -12,8 +12,8 @@ note    = "坏链不会让任何用例失败，只能机检；--quiet 只报问�
 [tasks."doc.caps"]
 run     = ["python scripts/check_context_caps.py"]
 timeout = 120
-when    = "改了 AGENTS.md 等引导文件后自查"
-note    = "超 8000 字符 IDE 注入时尾部会被静默截断 —— 写了也看不到"
+when    = "改了 AGENTS.md 或 commands 的 SKILL.md 后自查"
+note    = "AGENTS.md 超 8000 字符注入时尾部被静默截断(写了也看不到); SKILL.md 有恒定大小硬上限"
 
 [tasks."doc.drift"]
 run     = ["python scripts/check_command_drift.py"]

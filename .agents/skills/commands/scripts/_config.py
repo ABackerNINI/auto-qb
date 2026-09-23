@@ -37,6 +37,7 @@ TASK_KEYS = {"run", "script", "args", "when", "note", "timeout", "requires", "ri
 
 DEFAULT_TIMEOUT = 600
 MAX_DEPTH = 8  # 层级上限: 套得太深会让人下钻到迷路
+MAX_PIN_PER_LEVEL = 8  # 一层视图里能浮出的常显命令上限 —— pin 是稀缺资源(见 _pin_warnings)
 
 # `<skill-dir:NAME>` 的候选位置 —— 按此顺序找, 第一个存在的即命中。
 SKILL_DIR_CANDIDATES = (
@@ -164,7 +165,28 @@ def load_tree(root: Path | None = None) -> Tree:
         tree.packs[pack.name] = pack
     if not tree.packs:
         raise ConfigError(f"[STOP] {base} 下没有任何包")
+    tree.warnings.extend(_pin_warnings(tree))
     return tree
+
+
+def _pin_warnings(tree: Tree) -> list[str]:
+    """每层视图里浮出的常显命令过多 → WARN。
+
+    视图规则: 一层 = 本级包自己的命令 + **各子包标了 pin 的命令**(浮一级)。所以 pin 一多,
+    这一层就变回一张平表 —— 与"不臃肿靠分层"的初衷相抵。这是纪律问题不是结构错误, 故 WARN 不 STOP。
+    """
+    out: list[str] = []
+    stack: list[tuple[str, dict[str, Pack]]] = [("(一级)", tree.packs)]
+    while stack:
+        where, subs = stack.pop()
+        pinned = [t.id for sub in subs.values() if sub.enabled for t in sub.tasks.values() if t.pin]
+        if len(pinned) > MAX_PIN_PER_LEVEL:
+            out.append(
+                f"{where} 视图浮出 {len(pinned)} 条常显命令(上限 {MAX_PIN_PER_LEVEL}): "
+                "pin 只给「每次会话都要用」的命令 —— 滥用等于把平表搬回一级"
+            )
+        stack += [(pack.path, pack.subs) for pack in subs.values() if pack.subs]
+    return out
 
 
 def _load_pack(cfg_path: Path, pack_dir: Path, tree: Tree, parent: Pack | None, enabled: bool, depth: int) -> Pack:

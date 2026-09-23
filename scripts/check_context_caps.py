@@ -31,11 +31,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # 上下文字符上限 —— 直接写死(本脚本是项目脚本, 不是通用 skill)。
 # key = 仓库根相对路径, value = 最大**字符**数(不是字节)。
-# 依据: IDE 注入项目引导文件时 MAX_GUIDANCE_CHARS = 8000, 超出部分被 slice 掉; 引导文件按
-# GUIDANCE_FILES = [CODEBUDDY.md, .codebuddy/CODEBUDDY.md, AGENTS.md] 首个存在即停 ——
-# 本仓库前两个都不存在, 项目引导实际走 AGENTS.md, 所以只卡这一个。**改这里前先确认 IDE 常量没变。**
+# AGENTS.md 的依据: IDE 注入项目引导文件时 MAX_GUIDANCE_CHARS = 8000, 超出部分被 slice 掉;
+# 引导文件按 GUIDANCE_FILES = [CODEBUDDY.md, .codebuddy/CODEBUDDY.md, AGENTS.md] 首个存在即停 ——
+# 本仓库前两个都不存在, 项目引导实际走 AGENTS.md。**改这里前先确认 IDE 常量没变。**
+# commands 的 SKILL.md 依据不同: 它不走 IDE 注入, 而是**每次加载 skill 都要进上下文** ——
+# 它本该是"恒定大小"的文档, 没有硬上限就会被自己慢慢撑大, "省 token"的初衷先被它吃掉。
 CONTEXT_CAPS: dict[str, int] = {
     "AGENTS.md": 8000,
+    ".agents/skills/commands/SKILL.md": 4200,
 }
 
 PASS, WARN, STOP = "PASS", "WARN", "STOP"

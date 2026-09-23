@@ -70,7 +70,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 - 🔴 **禁用 `git rebase`** (已炸 3 次, 工作区干净也照炸) 与 **`git stash`**; **非快进合并 + 工作区脏 = 必炸** (拦截层会顺着这次写入批量删 `.git/objects`)。落后主线改走「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。
 - **提交后必查 ref 三处**: `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `my-commit-flow/scripts/verify_ref.py` 并按它打印的步骤修。**不要只看 commit 输出**。
 - **判"推没推上"只看 `git ls-remote <远端> <分支>`** —— 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃, 且 `git push --dry-run` 永远"成功"。
-- 机检与停手点一律走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)。
+- 机检与停手点一律走 [my-commit-flow 包](.commands/my-commit-flow/README.md)。
 
 ## 🔴 跨仓库操作: 绝对禁止 (需显式强授权)
 
@@ -83,11 +83,11 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤、命令与机检脚本一律走 [my-commit-flow skill](.agents/skills/my-commit-flow/SKILL.md)** —— 预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee → 尝试一次 GitHub 直连 → 查幽灵 diff。**本节只留口径, 不重复命令**。
+> **步骤、命令与机检脚本一律走 [my-commit-flow 包](.commands/my-commit-flow/README.md)** —— 预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee → 尝试一次 GitHub 直连 → 查幽灵 diff。**本节只留口径, 不重复命令**。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。
 - **推送顺序固定**: 先推 Gitee (必须成功) → 核远端 ref == 本地 → 再**尝试一次** GitHub 直连; 失败**只如实报告一次**, 不重试 / 不换代理 / 不改走 SSH / 不回滚改写 Gitee 已完成的推送。
 - **提交信息 = gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>`, 空一行后写动机 / 取舍 / 影响面 / 实测数字; 小改只写首行。**数字必须是提交那一刻实测的**。选哪个 emoji 走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md)。
 - **提交前先收尾**: 收到"提交"先按「会话协议 · 收尾」跑完, 回写文件**随主提交一并暂存** —— 不推完再补一笔 (已推送的提交不能 amend + 强推)。
-- **红线与闸门清单外置在 `.commit-flow.toml`** (skill 强制读取, 缺了就停手引导生成)。
+- **红线与闸门清单外置在 `.commands/my-commit-flow/.my-commit-flow.toml`** (包脚本强制读取, 缺了就停手引导生成)。

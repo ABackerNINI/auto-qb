@@ -34,10 +34,12 @@ each_limit = 99                 # <each:GLOB> 的展开条数上限(超了说明
 
 [[gates]]
 match = ["src/", "tests/"]
-run   = ["yapf -i <changed:*.py>"]
+# ❗不在这里抄命令 —— 走 `commands` 引擎的 `dev.fmt`(yapf 只在包里定义一处)。
+#   改动清单由预检算(它才是"本次改了哪些文件"的权威), 经 `<changed:>` 展开后当 `<args>` 传给 task。
+run   = ["python <skill-dir:commands>/scripts/run.py run dev.fmt -- <changed:*.py>"]
 auto  = true
 timeout = 120
-note  = "格式化: 只碰本次改过的 py 文件(预检从改动清单取, 逐个调用)"
+note  = "格式化: 只碰本次改过的 py 文件(经 commands 引擎调 dev.fmt)"
 
 [[gates]]
 match = ["src/", "tests/"]
@@ -103,11 +105,13 @@ timeout = 60
 note  = "skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"
 
 [[gates]]
-match = ["AGENTS.md"]
+# 两处都要盯: AGENTS.md 是项目引导(超 8000 字符注入时被截断), commands 的 SKILL.md 是
+# 每次加载 skill 都要读的恒定大小文件 —— 它一臃肿, 省 token 的初衷就没了。
+match = ["AGENTS.md", ".agents/skills/commands/"]
 run   = ["python scripts/check_context_caps.py"]
 auto  = true
 timeout = 60
-note  = "引导文件: 超 8000 字符 IDE 注入时尾部被静默截断(写了也看不到), 必须先精简"
+note  = "上下文字符上限: 引导文件被静默截断 / skill 文档超硬上限 —— 都要先精简"
 
 [[gates]]
 # 空串 = 每次提交都跑: 手抄可能出现在**任何**文档里, 按路径匹配必然漏。

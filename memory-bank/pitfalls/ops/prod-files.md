@@ -9,7 +9,7 @@
 
 - **触发**: 想"顺手"改配置 / 提交前扫红线 / 要加一个示例配置。
 - **判别**: 文件里出现**真实 PT 域名、tracker 规则、qB 凭据引用** ⇒ 这是生产配置, 不是示例。
-- **处置**: 改示例一律用 `minimal.yml` / `test_yamls/`; `config.yml` 已登记在 `.commit-flow.toml` 的 `red_lines`,
+- **处置**: 改示例一律用 `minimal.yml` / `test_yamls/`; `config.yml` 已登记在 `.commands/my-commit-flow/.my-commit-flow.toml` 的 `red_lines`,
   预检与 `commit.py` 都会**直接拒交**(不用靠记性)。
 
 ### `auto-qb-data/` 是运行时数据, 不要格式化 / 重排

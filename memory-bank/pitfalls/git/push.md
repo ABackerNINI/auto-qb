@@ -11,7 +11,7 @@
   退出码非 0 ⇒ 预检判 `rc=1` 给 STOP。
   **判别法**: 闸门报红但失败输出里只有 `pytest-current` 的 PermissionError、没有任何 `FAILED`/`assert` ⇒ 是环境问题不是回归。
 - **处置**: 跑预检/提交**前**加 `TMPDIR="R:/Temp/auto-qb/tests"`(与 `testing.md`「运行」那节同一个约定);
-  ❌ 不要为此去改 `.commit-flow.toml` 的闸门命令(项目事实该外置, 但 TMPDIR 是环境事实, 换台机器路径就变)。
+  ❌ 不要为此去改 `.commands/my-commit-flow/.my-commit-flow.toml` 的闸门命令(项目事实该外置, 但 TMPDIR 是环境事实, 换台机器路径就变)。
 
 ### Gitee 主线会间歇性 `Recv failure` —— 判"推没推上"只看 `ls-remote`
 
