@@ -258,9 +258,13 @@ button { font-family: inherit; }
 .badge.warn.pending .dot { animation: dot-pulse 1.4s ease-in-out infinite; }
 @keyframes dot-pulse { 50% { opacity: .25; } }
 
-/* 状态分布条: 前端按 members[].kind 聚合(纯展示 + 点击筛选, 无后端参与) */
+/* 状态分布条: 前端按 members[].kind 聚合(纯展示 + 点击筛选, 无后端参与)
+ * FX-09(atlas 补齐): 锁定筛选行高度 —— 批量段(FIX-06 起并入本行)出现/消失时不得推动
+ * 下方表格与吸顶表头(--head-h 由 ResizeObserver 实测 .sticky-head, 行高一变即整页跳动)。
+ * min-height = 7px*2 内边距 + 27px 内容高(批量段) + 1px 下边框(box-sizing: border-box 下
+ * 边框计入 min-height, 少写会在有批量段时被内容撑高 1px, 与 prism 侧实测口径一致) */
 .status-strip { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center;
-  gap: 10px 12px; padding: 7px 18px;
+  gap: 10px 12px; padding: 7px 18px; min-height: 42px;
   background: rgba(17, 23, 34, .72); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
 .dist-bar { display: flex; flex: 0 1 240px; height: 6px; border-radius: 999px; overflow: hidden; background: var(--surface-2); }
 .dist-bar > span { height: 100%; background: currentColor; transition: width .35s var(--ease); }
@@ -1365,16 +1369,19 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* 批量操作段(FIX-06): 并入筛选行(.status-strip)行首 —— 不再是独立吸顶条, 无独立 top/
  * z-index/margin; 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高, 不再跳动)。
- * 段内 flex-wrap 兜窄屏溢出; 出入场仍走 name="bulk" transition(滑入+淡入) */
-.bulk-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px;
-  padding: 3px 10px 3px 9px; border: 1px solid var(--accent-line); border-radius: var(--radius);
+ * 段内 flex-wrap 兜窄屏溢出; 出入场仍走 name="bulk" transition(滑入+淡入)
+ * FX-09(atlas 补齐, 与 prism 同口径): 高度必须锁死且 ≤ 27px(与 .dist-chip 自然高齐平) ——
+ * 靠"自然高度不超"实现同排不改变行高, 只压按钮 padding 不够: 段自身的 padding+border
+ * 也会超出, 所以段与按钮两处都锁死。 */
+.bulk-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; height: 27px;
+  padding: 0 10px 0 9px; border: 1px solid var(--accent-line); border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card); }
-.bulk-inline .bulk-count { font-size: 12.5px; color: var(--fg-muted); white-space: nowrap; }
+.bulk-inline .bulk-count { font-size: 12.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
 .bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
-.bulk-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+.bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 10px; border-radius: 999px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
-  font-size: 12px; cursor: pointer;
+  font-size: 12px; line-height: 1; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .bulk-btn:hover { background: var(--surface-2); color: var(--fg); }
 .bulk-btn .ico-play { color: var(--green); }
