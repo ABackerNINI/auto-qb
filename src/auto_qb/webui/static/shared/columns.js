@@ -321,17 +321,34 @@ window.AQB_COLUMNS = {
       }
     },
 
-    /* W4 origin 提示(plan 26-09-21-1551): 本 origin 首次出现"空列存储"时弹一次(点击关闭/15s 自灭)。
-     * 运行时注入 DOM, 两套模板零改动。 */
+    /* 空存储提示(W4 origin 隔离 + W5 浏览器"关闭时清除站点数据"): 本 origin 没有列偏好记录时弹一次
+     * (点击关闭 / 15s 自灭)。运行时注入 DOM, 两套模板零改动。
+     *
+     * ❗为什么只陈述"本地址没有偏好记录"、不做精确判定(2026-09-24 取证): 站点级"关闭窗口时清除
+     * Cookie 和站点数据"(Chromium cookie 例外 setting=4 = SESSION_ONLY)会在关浏览器时把该 host 的
+     * Cookie 与 localStorage **一起**清掉 ⇒ "被清过"与"首次访问"在客户端**完全同形**: 任何能当跨会话
+     * 记忆用的东西(包括本函数的"已提示"标记)都躺在被清掉的那份数据里, 没有服务端就无法区分。
+     * 故这里给"事实 + 两种成因 + 自查路径", 不下结论(取证: Edge/Chrome 的 cookie 例外里都有
+     * `127.0.0.1,*` setting=4, 于是"浏览器重启后偏好全回默认"被当成应用 bug 追了多轮)。 */
     _showColsOriginHint() {
       if (this._colsOriginHintShown) return;
       this._colsOriginHintShown = true;
+      // 同一次标签会话只弹一次: 清站点数据的环境下 localStorage 里的"已提示"标记也一起没了,
+      // 只靠它会在每次关浏览器重开后都弹; sessionStorage 随标签关闭失效, 正好只兜"同一次会话"。
+      try {
+        if (sessionStorage.getItem(COLS_ORIGIN_HINT_KEY)) return;
+        sessionStorage.setItem(COLS_ORIGIN_HINT_KEY, "1");
+      } catch { /* 私隐模式等: 退回下面 localStorage 那层标记 */ }
       try {
         if (localStorage.getItem(COLS_ORIGIN_HINT_KEY)) return;
         localStorage.setItem(COLS_ORIGIN_HINT_KEY, "1");
       } catch { /* 私隐模式: 写失败也继续弹, 本会话内由 _colsOriginHintShown 挡住 */ }
       const el = document.createElement("div");
-      el.textContent = "列偏好按浏览器站点隔离存储: 换地址/端口(如 localhost ↔ 127.0.0.1)会各自从头记忆, 建议固定用同一地址打开。";
+      el.textContent = "本地址还没有列偏好记录。常见成因: ① 偏好按站点隔离存储, 换地址/端口"
+        + "(127.0.0.1 ↔ localhost、38080 ↔ 38081)各存一份; ② 浏览器在本地址上开了"
+        + "「关闭窗口时清除 Cookie 和站点数据」→ 每次关掉浏览器偏好都会回默认"
+        + "(Edge 可在 edge://settings/content/all 里查该地址)。可固定用同一地址, "
+        + "或改用 http://localhost:<端口> 打开。";
       el.title = "点击关闭";
       el.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;"
         + "background:#1c252d;color:#e4eaef;border:1px solid #26313a;border-left:3px solid #5cc0cf;"

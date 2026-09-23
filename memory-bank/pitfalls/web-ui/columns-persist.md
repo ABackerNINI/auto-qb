@@ -1,7 +1,7 @@
 # 列状态持久化 (列宽 / 显隐 / 列序)
 
-> 摘要: 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案, 前四轮修复都栽在把意图与派生混在一个字段里。
-> 触发: 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths
+> 摘要: 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。
+> 触发: 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY
 
 ### 列宽模型 = 列定义**单一来源** + 按列 **key** 存 + 拖动前先**固化全部可见列**为 px
 
@@ -21,17 +21,44 @@
 - **处置**: 升版本必须把旧键挂进 `LEGACY_COLS_KEYS` 迁移(v2 索引式**不可迁移, 刻意不挂**)。
   当前键 `autoqb_cols_v5`(2026-09-21 双轨重设计升版, 挂 v4/v3 迁移 —— 结构重新解释属本判据的**合法升版**, plan 26-09-21-1551)。
 
-### localStorage 的两种"重置"要分清
+### localStorage 的三种"重置"要分清
 
 - **触发**: 用户报"列偏好被重置"。
 - **判别**: ①**origin 隔离**(`scheme://host:port`)—— `localhost` 与 `127.0.0.1`、换端口各存一份,
   **客户端无法消除**(用户明确只存浏览器, 不做服务端化);
   ②**多标签页整份覆盖** —— 内存是页面加载时读一次的快照而 `saveColState()` 写整份 ⇒ **last-writer-wins**,
-  先改的那个标签的改动被静默吞掉。
+  先改的那个标签的改动被静默吞掉;
+  ③**浏览器站点级"关闭窗口时清除 Cookie 和站点数据"** —— 关浏览器时把该 **host 全部端口**的
+  Cookie 与 localStorage **一起**清掉, 表现为"重启浏览器后偏好全回默认"(见下条 ❗, 2026-09-24 取证)。
 - **处置**: **报"偏好被重置"先问"几个标签页"**。
   ②的修法 = 写入改 **read-modify-write**(只覆盖本次涉及的 page)+ 监听 `storage` 事件跨标签 adopt +
   `visibilitychange` 补一次(**只做 page 级合并不够**, 两个标签通常改同一个表)。
   ⚠ 换密钥 / 登出只清 `autoqb_token`, **全仓无 `localStorage.clear()`**。
+  ③的处置 = 删掉那条浏览器例外, 或改用 `localhost` 打开 —— 见下条。
+
+### ❗"关浏览器后偏好全回默认"先查浏览器**站点级**"关闭窗口时清除 Cookie 和站点数据"
+
+- **触发**: 用户报"浏览器重启后 localStorage 被重置"(列偏好/视图/主题**一起**回默认), 而同一会话内刷新正常。
+- **判别**: 这是**浏览器设置, 不是应用 bug** —— 应用侧无处可清: 全仓无 `localStorage.clear()`,
+  列状态唯一写入口 `persistPage` 只在用户操作时调用, 启动路径只读不写(2026-09-24 逐条核对)。
+  Chromium 的 `content_settings.exceptions.cookies` 里一条 `<host>,*` + `setting=4`
+  (= `CONTENT_SETTING_SESSION_ONLY`, 界面文案"关闭窗口时清除 Cookie 和站点数据")会让该 host 的
+  **所有端口**在关浏览器时把 Cookie 与**站点数据(localStorage/IndexedDB…)一起清掉**。
+  **本机取证**(2026-09-24): 用户 Edge 与 Chrome 的 `Default/Preferences` 里都有 `127.0.0.1,*` `setting=4`
+  (Edge 设于 2023-12, Chrome 设于 2018) ⇒ `127.0.0.1:38080` 与 `:38081` 的偏好**一起**在关浏览器后消失,
+  与"应用每次把设置重置"完全同形, 于是被当成应用 bug 追了多轮。
+  ⚠ 三个容易走偏的点: ①它与**全局**开关 `profile.clear_browsing_data_on_shutdown` 不是一回事
+  (全局没开, 站点级例外照样生效); ②"其它网站没事"不矛盾 —— 例外按 host 匹配, 别的站是别的 host;
+  ③**客户端无法自检**: 该例外把 Cookie 与 localStorage 一起清, "被清过"与"首次访问"在客户端完全同形
+  (任何能当跨会话记忆的东西都躺在被清的那份数据里), 没有服务端就区分不了。
+- **处置**: ①删掉该例外(Edge/Chrome 按站点页 `edge://settings/content/all?searchSubpage=<host>` →
+  点开该地址 → Cookie 和站点数据 → 允许); 老版本 UI 可能**不展示**这类老条目, 那就**关掉浏览器**后
+  从 `Default/Preferences` 里删掉 `exceptions.cookies` 那一条 —— 实测 `protection.macs` 与
+  `Secure Preferences` 都不含 `content_settings`, **无 MAC 保护**, 可直接改(先备份);
+  ②或改用 `localhost` 打开(host 不同 ⇒ 无此例外; 服务监听 `127.0.0.1` 时 `localhost` 照样通, 实测 200);
+  ③应用侧只做"陈述 + 排查路径"的提示(`columns.js::_showColsOriginHint`: "本地址还没有列偏好记录" +
+  两条成因 + 自查路径), **别写成结论**; 去重标记除 localStorage 外必须再用 `sessionStorage` 兜一层,
+  否则在清站点数据的环境下每次开浏览器都弹。
 
 ### ❗持久化前先分清"用户偏好"与"派生快照"
 

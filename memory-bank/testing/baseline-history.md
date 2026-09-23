@@ -6,6 +6,14 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 收集数 **1202 → 1203**(+1; 2026-09-24 **浏览器站点级"关闭时清除站点数据"取证 + 空存储提示加固**):
+  新增 `test_frontend_cols_empty_hint_names_browser_clear_cause` —— 钉住"空存储提示"必须同时点名
+  ①origin 隔离(换地址/端口) ②浏览器站点级「关闭窗口时清除 Cookie 和站点数据」(Chromium cookie
+  例外 `setting=4` = SESSION_ONLY, 会连 localStorage 一起清), 给出自查路径, 并要求用 sessionStorage
+  做"同一次会话只弹一次"的兜底(清站点数据的环境下 localStorage 里的去重标记也会一起没)。
+  全量 **1202 passed + 1 skipped** / TOTAL 91%(7729 语句 / 623 未覆盖 / 2636 分支; 串行实测) / 越界 0。
+  取证原文与机理见 [pitfalls/web-ui/columns-persist.md](../pitfalls/web-ui/columns-persist.md)。
+
 - ↑ 收集数**不变**(**1192**; 2026-09-23 **全量测试耗时归因与优化**, 见 [tasks/26-09-23-test-suite-perf.md](../tasks/26-09-23-test-suite-perf.md)):
   **未增删用例**, 只做三处实测优化 + 补一份坑档 —— ①`tests/sidefx.py` 的 `report()` 把 `violations`
   提到循环外(原写法每种 kind 重算一次 = 8 次 × 约 1600 条路径 × `os.path.realpath`)⇒ 收尾 teardown
