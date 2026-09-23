@@ -1,12 +1,12 @@
 # 26-09-20-webui-column-prefs-reset — WebUI 列设置（顺序/显隐/宽度）被多标签页整份覆盖
 
-**Status:** Done (2026-09-20 18:5x 实施并验证完毕; 未提交 —— 用户未下触发词; 剩用户真机走查)
+**Status:** Done (2026-09-20 实施 → 09-21 双轨重设计 → **09-24 补齐真因**: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据", 与应用无关; 剩用户真机走查)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话)
 **Plan doc:** `memory-bank/plans/26-09-20-1836-webui-column-prefs-sync-plan.html`
 **Issue:** `memory-bank/issues/26-09-20-1800-bug-webui-column-prefs-reset.html`
 **Legacy-ID:** 无
-**Summary:** 真浏览器复现并定位：列偏好丢失**不是**存储没写进去、也不是读入被洗净，而是每个标签各持一份"加载时的快照"，`saveColState()` 又写整份 ⇒ last-writer-wins，先改的标签被静默吞掉。修法 F1 写入改 read-modify-write + F2 监听 `storage` 事件跨标签同步 + F3 visibilitychange 补漏；后端零改动，不升 `COLS_STORE_KEY`。
+**Summary:** 真浏览器复现并定位：列偏好丢失**不是**存储没写进去、也不是读入被洗净，而是每个标签各持一份"加载时的快照"，`saveColState()` 又写整份 ⇒ last-writer-wins，先改的标签被静默吞掉。修法 F1 写入改 read-modify-write + F2 监听 `storage` 事件跨标签同步 + F3 visibilitychange 补漏；后端零改动，不升 `COLS_STORE_KEY`。09-24 补齐真因: 浏览器站点级「关闭窗口时清除 Cookie 和站点数据」(cookie 例外 `setting=4`/SESSION_ONLY)会连 localStorage 一起清 —— 与应用无关。
 **Topics:** webui-column-prefs
 
 ## 原始请求
@@ -43,7 +43,7 @@
 | 4 | F1/F2/F3 实施 | ✅ | `shared/columns.js`(saveColState 改 read-modify-write + 新增 adoptColState) + `shared/app.js`(storage 监听 / visibilitychange 补漏 / unmounted 摘除) |
 | 5 | 冒烟 + 单测 | ✅ | 新增「列设置多标签页互不覆盖」; ok 模式 56 项 0 失败 / error 模式 56 项 0 失败; `pytest` 1062 passed |
 | 6 | 红验(守阵灵敏度) | ✅ | 摘掉第二个标签的 storage 监听 ⇒ 缺陷如期复现(`["total_size"]`) |
-| 7 | 真机走查 | ⏳ | 需真实 qB: 两个标签各改一次列, 互相刷新确认都不丢 |
+| 7 | 真机走查 | ⏳ | 需真实 qB: 两个标签各改一次列, 互相刷新确认都不丢。**09-24 追加前提**: 先确认浏览器没有站点级"关闭窗口时清除 Cookie 和站点数据"例外, 否则任何走查都会被它在关浏览器时清空(见 pitfalls/web-ui/columns-persist.md) |
 
 ## 进度日志
 
@@ -73,3 +73,19 @@
   **64 项失败 2 项**(均为既有「P0-3 乐观态落回真值」, 与列偏好无关), 新 4 场景(异视口互不吞+F3 /
   全自动页不落px / 隐藏列保宽 / v4→v5 迁移)双 UI 全 PASS。知识库回写: pitfalls(双轨铁律 + 指纹不可达)/
   modules(列偏好持久化改写)/issue 状态日志。**未提交**(待用户触发词)。
+- **09-24 04:0x** 用户把"浏览器重启后localStorage重置"写进 `想法.md` KNOWN BUGS 并要求修复 ⇒ **真因不在应用**:
+  逐条核对(全仓无 `localStorage.clear()` / 唯一写入口 `persistPage` 只在用户操作时调 / 启动路径只读不写)
+  后转去翻浏览器配置, 取证到 **Edge 与 Chrome 的 `Default/Preferences` 里各有一条**
+  `content_settings.exceptions.cookies` = `127.0.0.1,*` `setting=4`(= `SESSION_ONLY`, 界面文案
+  "关闭窗口时清除 Cookie 和站点数据"; Edge 设于 2023-12-11, Chrome 设于 2018) ⇒ 关浏览器时该 **host
+  全部端口**的 Cookie 与 localStorage 一起被清, 于是 `127.0.0.1:38080`(auto-qb) 与 `:38081`(long-seeding)
+  的偏好**一起**消失 —— 与"应用每次重置设置"完全同形, 也是前四轮修复从未覆盖的通道(会话内刷新正常、
+  其它网站正常、全局 `clear_browsing_data_on_shutdown` 未开, 三条现象都与它自洽)。
+  **处置**: ①删掉 Edge 那条例外(改前备份 `Preferences.bak-autoqb-20260924`; 实测 `protection.macs` 与
+  `Secure Preferences` 都不含 `content_settings` ⇒ **无 MAC 保护**, 可直接改) —— **Chrome 那条待用户退出
+  Chrome 后处理**; ②`columns.js::_showColsOriginHint` 文案改为"事实 + 两条成因 + 自查路径", 并补
+  `sessionStorage` 会话级去重(清站点数据环境下 localStorage 里的去重标记也会一起没, 否则每次开浏览器都弹);
+  ③新增守阵 `test_frontend_cols_empty_hint_names_browser_clear_cause`; ④知识库回写:
+  `pitfalls/web-ui/columns-persist.md` 新增 ❗ 条("两种重置"改"三种")+ `想法.md` 该条补结论 +
+  `testing/baseline.md` **1203 collected**。实测: 全量 **1202 passed + 1 skipped**(原 1201+1, 未退化),
+  真浏览器(本 clone 桩服务 8200)验证提示条渲染与文案逐字一致。

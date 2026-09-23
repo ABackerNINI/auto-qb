@@ -17,6 +17,7 @@
 - test_frontend_persist_page_takes_intent_only: persistPage 只收意图态(colHidden/colOrder/colW), 生效宽度 colWidths 不得进持久化路径(双轨模型铁律, plan 26-09-21-1551)
 - test_frontend_col_manual_flag_not_revived: 反向守阵 —— manual 标志位(colManual)不得复活(v5 下 w 非空即固化页)
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
+- test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -891,6 +892,64 @@ def _scan_page_class_wiring(problems):
                         )
 
 
+# PERF-01(2026-09-24): 这两类元素**不许**再挂 backdrop-filter —— 它们要么是全屏遮罩, 要么是
+# 常驻吸顶/吸底条, 都处在别的遮罩的 backdrop 里; 一旦两块毛玻璃叠在一起, Chromium 每帧都要
+# 回读并重复模糊整个视口(星图"点状态栏历史流量卡顿"的实测根因)。
+# 注: 抽屉遮罩 `.drawer-mask` 不在此列 —— 它是**当时唯一在用的**遮罩, 底下已无第二块毛玻璃,
+# 两套 UI 同款且棱镜侧实测无卡顿; 一并摘掉会单边改动棱镜外观, 超出本次范围(见 scope-guard)。
+_PERF_BACKDROP_BANNED = ("modal-mask", "topbar", "status-strip", "statusbar", "ce-actions")
+
+
+def _scan_backdrop_filter(problems):
+    """毛玻璃守阵: 全屏遮罩 / 吸顶吸底条不得带 backdrop-filter, 且星图与棱镜的数量必须对齐
+
+    现象(2026-09-24, 用户报"星图卡顿, 点状态栏历史流量尤其明显; 棱镜无此问题"):
+    星图 atlas/style.css 一度挂了 5 处 backdrop-filter —— 顶栏 blur(12px) / 状态分布条 blur(10px) /
+    弹层遮罩 blur(3px) / 配置页吸底条 blur(10px) / 抽屉遮罩 blur(2px); 棱镜侧只有抽屉遮罩一处。
+    点开"历史流量"时, .modal-mask(全屏 fixed + blur)的 backdrop 里正压着顶栏与状态分布条这两块
+    毛玻璃 —— **嵌套毛玻璃**迫使每帧回读 + 重复模糊整个视口, 而弹层内的 hist-draw 描边动画
+    还在主线程逐帧重绘, 两者叠成肉眼可见的卡顿。棱镜 .modal-mask 从来没加过 backdrop-filter,
+    所以无此症状。
+
+    两层断言(缺一不可):
+    ①**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS);
+    ②**数量**: 星图与棱镜各自的声明数必须相等 —— 防"只在星图侧加回来"这类单边改动
+      (shared/console_hub.css 是共用层, 两边同担, 不计入各自计数)。
+    扫描前先剥 `/* ... */`, 否则本文件里解释这段历史的注释会被当成真实声明(实测会误报)。
+    """
+    counts = {"atlas": 0, "prism": 0}
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith(".css") or "/vendor/" in f"/{dirpath}/{name}":
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            text = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
+            sel = ""
+            for line in text.splitlines():
+                if "{" in line:
+                    sel = (sel + " " + line.split("{", 1)[0]).strip()
+                if re.search(r"backdrop-filter\s*:", line):
+                    if rel.startswith("atlas/"):
+                        counts["atlas"] += 1
+                    elif rel.startswith("prism/"):
+                        counts["prism"] += 1
+                    for bad in _PERF_BACKDROP_BANNED:
+                        if re.search(r"\.%s\b" % re.escape(bad), sel):
+                            problems.append(
+                                f"{rel} `{sel or '(未识别选择器)'}` 上出现 backdrop-filter —— "
+                                f"{bad} 是全屏遮罩或常驻吸顶/吸底条, 加毛玻璃会与弹层遮罩叠成嵌套模糊"
+                                f"(每帧回读 + 重复模糊整个视口; 星图 2026-09-24 卡顿根因, 见 PERF-01)"
+                            )
+                if "}" in line:
+                    sel = ""
+    if counts["atlas"] != counts["prism"]:
+        problems.append(
+            f"两套 UI 的 backdrop-filter 声明数不对齐: 星图 {counts['atlas']} 处 / 棱镜 {counts['prism']} 处 —— "
+            f"单边加毛玻璃会让星图重新变卡(棱镜 .modal-mask 从不带 backdrop-filter, 见 PERF-01)"
+        )
+
+
 def _scan_frontend_assets():
     """扫描 webui/static 返回问题清单(空 = 健康)
 
@@ -920,6 +979,11 @@ def _scan_frontend_assets():
        后 `--tone` 从未定义, 所有 `var(--tone)` 派生的描边/发光/语义色全部失效, 还以为"页面正常"
        只是"缺发光"; 真浏览器量 computedStyle 才看得出来)。
        (见 _scan_page_class_wiring)
+
+    13. 毛玻璃(backdrop-filter)不得挂在全屏遮罩 / 吸顶吸底条上, 且星图与棱镜的声明数必须相等
+       (见 _scan_backdrop_filter) —— 嵌套毛玻璃会让"点状态栏历史流量"这类开弹层的动作明显卡顿,
+       且**只在星图侧复现**(棱镜 .modal-mask 从不带 backdrop-filter), 属于"两边都能跑、一边更卡"
+       的差异, 肉眼走查看不出来, 只能靠计数兜底。
 
 
     ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
@@ -967,6 +1031,7 @@ def _scan_frontend_assets():
     _scan_filter_facets(bundle_text, rel, problems)
     _scan_mixin_wiring(problems)
     _scan_page_class_wiring(problems)
+    _scan_backdrop_filter(problems)
     return problems
 
 
@@ -1173,6 +1238,29 @@ def test_frontend_cols_legacy_keys_have_migration():
         "(plan 26-09-21-1551; v3->v4 清零事故的机检)")
     assert "function migrateLegacyToV5" in text, "LEGACY_COLS_KEYS 非空但找不到 migrateLegacyToV5(迁移函数)"
     assert "migrateLegacyToV5(raw)" in text, "readColStateRaw 未使用 migrateLegacyToV5(旧键不会被迁移)"
+
+
+def test_frontend_cols_empty_hint_names_browser_clear_cause():
+    """空存储提示必须点出"浏览器站点级关闭时清除站点数据"这条通道 + 自查路径 + 会话级去重
+
+    2026-09-24 取证(真因, 非应用 bug): 用户 Edge/Chrome 的 `content_settings.exceptions.cookies`
+    里都有 `127.0.0.1,*` setting=4(Chromium `CONTENT_SETTING_SESSION_ONLY`, 界面文案 = "关闭窗口时
+    清除 Cookie 和站点数据") ⇒ 关浏览器时该 host 的 Cookie 与 localStorage **一起**被清, 于是
+    "浏览器重启后偏好全回默认"。旧提示只写了 origin 隔离(换地址/端口), 把排查方向带偏了好几轮。
+    另一层: 清站点数据的环境下 localStorage 里的"已提示"标记也一起没了 ⇒ 没有 sessionStorage
+    兜底就会每次关浏览器重开都弹。
+    """
+    text = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    m = re.search(r"_showColsOriginHint\(\)\s*\{(.*?)\n    \},", text, re.S)
+    assert m, "columns.js 找不到 _showColsOriginHint(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "关闭窗口时清除" in body, (
+        "空存储提示没提浏览器站点级『关闭窗口时清除 Cookie 和站点数据』—— 用户会把整站数据被清"
+        "误判成应用 bug(2026-09-24 取证: Edge/Chrome 的 cookie 例外 127.0.0.1,* setting=4)"
+    )
+    assert "edge://settings/content/all" in body, "提示必须给出可自查的浏览器设置路径(否则用户无从下手)"
+    assert "sessionStorage" in body, "缺少 sessionStorage 兜底 ⇒ 清站点数据的环境下每次开浏览器都弹"
+    assert "localStorage.setItem(COLS_ORIGIN_HINT_KEY" in body, "普通场景的跨会话去重标记(只弹一次)被删了"
 
 
 def test_frontend_statusbar_speed_reads_server_totals():
