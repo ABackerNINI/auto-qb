@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-22 方案 C 目录归拢（plan docs/plans/26-09-22-2112）W1 波验证时首次踩中：用自定义顺序
+    <p>2026-09-22 方案 C 目录归拢（plan memory-bank/plans/26-09-22-2112）W1 波验证时首次踩中：用自定义顺序
        <code>uv run pytest tests/test_web.py tests/test_qbmanager.py tests/test_ui.py -q --no-cov</code> 跑子集,
        <code>test_qbmanager.py::test_refresh_removed_grouping_disabled</code> 必红（<code>assert mgr.config.grouping.enabled is False</code>
        实际 True）。单跑该文件/全量（字母序 test_qbmanager 在 test_web 之前）均绿 —— 与目录迁移无关, 是既有测试债:

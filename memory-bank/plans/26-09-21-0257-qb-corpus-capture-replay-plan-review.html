@@ -130,7 +130,7 @@
   <p>不做印象式评审。分三步：</p>
   <ol>
     <li><strong>通读原文</strong>（742 行 / 79 KB），提取其中全部可验证断言：代码引用 15 处、数字 12 项、设计承诺若干。</li>
-    <li><strong>逐条回代码核对</strong>：<code>sed -n</code> 取被引用的确切行，比对原文；常量用 <code>uv run python</code> 导入后计数；基线数字回 <code>memory-bank/testing.md</code> 与 <code>docs/plans/*.baseline.json</code>。</li>
+    <li><strong>逐条回代码核对</strong>：<code>sed -n</code> 取被引用的确切行，比对原文；常量用 <code>uv run python</code> 导入后计数；基线数字回 <code>memory-bank/testing.md</code> 与 <code>memory-bank/plans/*.baseline.json</code>。</li>
     <li><strong>对「方案 A 稀疏文件」与「R 盘空间口径」做本机实测</strong> —— 前者是全计划唯一"必须真机才能否掉"的技术前提，也是我唯一不接受纸面结论的地方；后者是我初版结论出错的地方。<strong>五组对照，全部清理干净</strong>（含一次自我更正，见 §03 末）。</li>
   </ol>
   <div class="note">
@@ -185,7 +185,7 @@
 
   <div class="note">
     <span class="t">产物合规</span>
-    计划本身符合项目口径：单文件 HTML、放 <code>docs/plans/</code>、命名 <code>YY-MM-DD-HHMM-slug.html</code>、<code>color-scheme: dark</code> + 深底浅字、单一 accent。无违规。
+    计划本身符合项目口径：单文件 HTML、放 <code>memory-bank/plans/</code>、命名 <code>YY-MM-DD-HHMM-slug.html</code>、<code>color-scheme: dark</code> + 深底浅字、单一 accent。无违规。
   </div>
 </section>
 

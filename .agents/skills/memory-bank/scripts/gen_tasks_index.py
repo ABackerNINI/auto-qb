@@ -6,7 +6,7 @@
     python <skill-dir>/scripts/gen_tasks_index.py --check  只比对, 不一致则退出码 1(供守卫调用)
     python <skill-dir>/scripts/gen_tasks_index.py --root <dir> --mb-dir <dir>   # 覆盖探测
 
-设计要点(见 docs/plans/26-09-18-1928-memory-bank-task-id-plan.html):
+设计要点(见 memory-bank/plans/26-09-18-1928-memory-bank-task-id-plan.html):
 - 索引从"人人手改的源文件"降级为生成物, 合并冲突的解决方式变成"任一方重跑一次脚本"。
 - 分区内按 `**Updated:**`(缺失则 `**Added:**` / `**Started:**`)**倒序** —— 活跃度信号来自更新时间,
   不来自文件名的创建日期, 避免"老但仍在进行的任务沉底"。

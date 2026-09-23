@@ -9,5 +9,5 @@
 方案推荐 0.x 语义化 + `__init__` 单源 + 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag；
 3 个决策点待拍板，阶段 0 不涉码。
 
-- [方案](../../docs/plans/26-09-22-2318-version-management-plan.html)
+- [方案](../plans/26-09-22-2318-version-management-plan.html)
 - [档案](../tasks/26-09-22-deps-version-management.md)

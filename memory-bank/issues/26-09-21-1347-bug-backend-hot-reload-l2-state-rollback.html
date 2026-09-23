@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F2）。</p>
+    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F2）。</p>
     <p><strong>触发条件：Web UI「保存设置」提交含 L2 级变更的配置</strong> —— rules_config（改任何规则）、interval、delete_tags*、global_speed_limit_curve、trackers.X.domains|rules|groups；且 config/impact.py 对未列出的新配置项默认 L2。保存 → <code>PUT /api/config</code> → <code>reload_config</code> 命令 → 主循环 <code>apply_new_config</code> → L2 分支。<strong>与平台/数据量无关，每次命中必现，无需崩溃。</strong></p>
   </section>
 
@@ -178,12 +178,12 @@ web.py PUT /api/config → _enqueue("reload_config", ...)
     </ul>
     <h3>复验</h3>
     <ul>
-      <li>2026-09-22 19:10 — 复验: <code>self.state = self._load_state()</code> 仍在 <code>apply_new_config</code> L2 分支（qbmanager.py:503 @ 4c8b90e），全量 save_state 落盘点不变（qbmanager.py:449-450 / skip_checking.py:252, 277），证据未漂移。修复计划: <code>docs/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html</code>（采纳候选 A 删行 + 红验守阵）。状态 <strong>Open → In Progress</strong>。</li>
+      <li>2026-09-22 19:10 — 复验: <code>self.state = self._load_state()</code> 仍在 <code>apply_new_config</code> L2 分支（qbmanager.py:503 @ 4c8b90e），全量 save_state 落盘点不变（qbmanager.py:449-450 / skip_checking.py:252, 277），证据未漂移。修复计划: <code>memory-bank/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html</code>（采纳候选 A 删行 + 红验守阵）。状态 <strong>Open → In Progress</strong>。</li>
       <li>2026-09-22 19:25 — <strong>修复完成</strong>：候选 A 删行落地，守阵红验→转绿，全量 1177 passed + 1 skipped（sidefx 越界 0）。状态 <strong>In Progress → Fixed</strong>（详见上方「修复后补充」）。</li>
     </ul>
     <h3>修复后补充</h3>
     <ul>
-      <li><strong>实际修法</strong>（2026-09-22，即建议修法候选 A，无改道）：删除 <code>apply_new_config</code> L2 分支的 <code>self.state = self._load_state()</code>（qbmanager.py:503 @ 4c8b90e）一行，补两行注释说明「内存态即真相」；L2 其余重建步骤与 docstring（本就承诺「保留执行历史」，删行后承诺兑现）不动。修复计划: <code>docs/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html</code>。</li>
+      <li><strong>实际修法</strong>（2026-09-22，即建议修法候选 A，无改道）：删除 <code>apply_new_config</code> L2 分支的 <code>self.state = self._load_state()</code>（qbmanager.py:503 @ 4c8b90e）一行，补两行注释说明「内存态即真相」；L2 其余重建步骤与 docstring（本就承诺「保留执行历史」，删行后承诺兑现）不动。修复计划: <code>memory-bank/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html</code>。</li>
       <li><strong>验证方式</strong>：新增守阵 <code>tests/test_web.py::test_apply_new_config_l2_preserves_runtime_state</code>（注入运行期内存态 + 磁盘写旧版 → 触发 L2 → 断言 state 对象同一性与内容保留）。<strong>红验</strong>（修前）: 断言实测 <code>mgr.state</code> 被换成磁盘旧版 <code>{'stale_marker': True}</code> → <strong>1 failed</strong>（1.73s），回滚行为坐实；<strong>转绿</strong>（删行后）: 该守阵与既有 <code>test_apply_new_config_levels</code> 同跑 <strong>2 passed</strong>。</li>
       <li><strong>测试数字</strong>：全量 <code>uv run pytest tests -q</code>（TMPDIR=R:/Temp/auto-qb/tests）实测 <strong>1177 passed + 1 skipped, 2 warnings in 45.60s</strong>（基线 1176 + 1 新守阵，增量吻合），覆盖率 TOTAL 90% 持平（语句 7542→7541，删行），sidefx 越界 0。基线已回写 <code>memory-bank/testing/baseline.md</code>。</li>
       <li><strong>文档回写</strong>：<code>memory-bank/systemPatterns/client-and-state.md</code> 的「热重载 L2 各一次」表述已更正为「L2 热重载不重读 state」。</li>

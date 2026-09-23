@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F6）。</p>
+    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F6）。</p>
     <p><strong>触发条件：--tray 模式用户点托盘「退出」时，主循环线程恰在一次长 qB 调用或长 tick 中，5 秒内没走到 run() 的 finally。</strong>主循环线程是 daemon，join 超时后随进程终止，本次状态不落盘。另：Windows 注销/关机对托盘进程同样不给优雅机会（与 F1 同类，本条只覆盖托盘自身的退出链）。</p>
   </section>
 

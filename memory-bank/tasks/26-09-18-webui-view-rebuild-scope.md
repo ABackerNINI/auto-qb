@@ -3,7 +3,7 @@
 **Status:** In Progress (代码/测试/文档已完, **未提交**; 剩用户真机走查)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
-**Plan doc:** [docs/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html](../../docs/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html)
+**Plan doc:** [memory-bank/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html](../plans/26-09-18-1743-webui-speed-refresh-fix-plan.html)
 **Legacy-ID:** TASK017
 **Summary:** 真因: 主循环 `_tick` 只重建 `_group_view` 却清掉共享脏标记 ⇒ singles/shows/flat 被饿死(版本号照常自增 ⇒ 前端换上陈旧数组), 状态栏因取 groups 求和反而正常; 同源: 置脏在 grouping 门控内 ⇒ 分组关闭时标记被吞。修法: 唯一入口 `rebuild_views()` + 置脏移出门控 + 前端取消 idle 退避并把 `server_state` 并入 `/api/state`; **1021 passed / 0 failed** (基线 1018, 红绿验证); **未提交** (剩用户真机走查)
 
@@ -68,7 +68,7 @@
 
 ## 进度日志
 
-- 2026-09-18 17:43 — 诊断完成并交付修复计划 `docs/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html`。
+- 2026-09-18 17:43 — 诊断完成并交付修复计划 `memory-bank/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html`。
 - 2026-09-18 19:2x — 用户下令实施; P0/P1 改动完成, `node --check` 通过。
 - 2026-09-18 19:3x — P2 测试完成: 改写 `test_tick_rebuilds_all_views_when_changed` /
   `test_tick_rebuilds_views_when_grouping_disabled`; 新增 `test_flat_view_refreshed_by_main_loop_tick` /

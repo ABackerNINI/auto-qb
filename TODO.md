@@ -72,7 +72,7 @@ uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
 恢复后 sync 轮次回到常态、`sync_full_rounds` 出现第二次(全量自愈)、`LOG.tracebacks == 0`。
 
 **证据**:
-`docs/plans/26-09-19-1433-sim-client-5000-plan.html` 第 09 节;
+`memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html` 第 09 节;
 `memory-bank/pitfalls.md`「仿真驱动器: 又四类"测假"陷阱 + 一个真缺陷」第 ⑨ 条;
 运行产物 `R:\auto-qb-sim\runs\20260919-165128-S5\`。
 
@@ -115,7 +115,7 @@ uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
 ## 待办 (按波次)
 
 仿真测试计划(`TASK018`)的剩余波次, 详见
-[docs/plans/26-09-19-1433-sim-client-5000-plan.html](docs/plans/26-09-19-1433-sim-client-5000-plan.html)。
+[memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html](memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html)。
 
 - **W3 安全矩阵** — ✅ 已跑完。S1/S2 每次运行都判(全绿)、S3 已由 W4 固化阈值、
   S4 由 D5 两相运行覆盖、**S5 = BUG-01(实测 FAIL, 待修)**、S6/S7/S8 ✅ 全绿。
@@ -123,7 +123,7 @@ uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
   - [x] **S7 WEB 并发只读**: 并发轮询 500 次, 4xx/5xx = 0, p95 见 PERF-01。
   - [x] **S8 限速保护**: 30 个奇数 KiB/s 手设限速**一个没被改写**, `setUploadLimit` 命中 0。
 - **W4 性能矩阵** — ✅ 已跑齐 P1–P7 并固化阈值到
-  `docs/plans/26-09-19-1433-sim-client-5000.baseline.json`(`sim_run.py` 启动时自动读取;
+  `memory-bank/plans/26-09-19-1433-sim-client-5000.baseline.json`(`sim_run.py` 启动时自动读取;
   不存在时相关项记 BASELINE)。当前阈值:
   `P1.first_round_s ≤ 22.68` / `S3.write_rate_per_min ≤ 6210.49` / `S7.p95_ms ≤ 1218.4` /
   `SYNC.drift_max_s ≤ 1.0`(纯主循环; 灌入期与带 WEB 轮询的漂移另记 `P2.drift_max_s` 观测)。

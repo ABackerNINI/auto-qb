@@ -176,7 +176,7 @@ html { color-scheme: dark; }
     <tr><td>C</td><td><b>目录分区</b> <code>&lt;branch&gt;/&lt;slug&gt;.md</code></td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td>主线合并后目录爆炸</td></tr>
     <tr><td>D</td><td><b>ULID / 精确到分</b> <code>20260918-1928-&lt;slug&gt;.md</code></td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td>可读性差, 无法口述</td></tr>
     <tr><td>E</td><td><b>B + 索引生成化</b></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td>原推荐, 已被 I 取代</td></tr>
-    <tr><td>F</td><td><b>纯时间戳</b> 与 <code>docs/plans/</code> 完全统一</td><td class="yes">✓</td><td class="no">✗ 更糟</td><td class="no">✗</td><td class="yes">✓</td><td>不推荐, 见 §4</td></tr>
+    <tr><td>F</td><td><b>纯时间戳</b> 与 <code>memory-bank/plans/</code> 完全统一</td><td class="yes">✓</td><td class="no">✗ 更糟</td><td class="no">✗</td><td class="yes">✓</td><td>不推荐, 见 §4</td></tr>
     <tr><td class="pick">I</td><td><b>日期 + slug</b> <code>YY-MM-DD-&lt;slug&gt;.md</code></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="pick">推荐</td></tr>
   </table>
 </section>
@@ -196,7 +196,7 @@ html { color-scheme: dark; }
   <h3>为什么不直接用 F(与 plans 完全统一的时间戳)</h3>
   <p><code>AGENTS.md:15</code> 规定计划文档命名为 <code>26-09-17-0906-improve-webui-plan</code>。判据是: <b>主键必须等于「决定这个东西唯一性的是什么」。</b></p>
   <table>
-    <tr><th></th><th>计划文档 docs/plans/</th><th>任务档案 memory-bank/tasks/</th></tr>
+    <tr><th></th><th>计划文档 memory-bank/plans/</th><th>任务档案 memory-bank/tasks/</th></tr>
     <tr><td>是什么</td><td>一次决策的产物, 写完不再改</td><td>一条持续演进的功能线</td></tr>
     <tr><td>版本语义</td><td>round9 / round10 是<b>两份不同</b>计划, 都要留</td><td>同一专题<b>只有一份</b>, 跨会话追加</td></tr>
     <tr><td>唯一性由</td><td>产出<b>时刻</b></td><td><b>专题</b></td></tr>
@@ -253,7 +253,7 @@ html { color-scheme: dark; }
 **Updated:** 2026-09-18
 **Summary:** 一句话, 供 _index.md 生成
 **Owner:** 分支 / 会话归属 (合并时判定谁的版本更新)
-**Plan doc:** docs/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html
+**Plan doc:** memory-bank/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html
 **Legacy-ID:** TASK015</pre>
   <p class="sub"><code>**Plan doc:**</code> 是 plan 与 task 的天然连接点 —— plan 带分钟时间戳、task 用日期 + slug, 靠字段互指, 不靠文件名耦合。(TASK017 已在用这个字段, 验证可行。)</p>
 
@@ -323,7 +323,7 @@ html { color-scheme: dark; }
     <tr><td>两份 <code>SKILL.md</code></td><td>规范段改写 —— <b><code>.agents/</code> 与 <code>.codebuddy/</code> 是内容相同的两份拷贝(非软链)</b>, 必须同时改, 否则必然漂移; 建议阶段 4 收敛为单一载体</td></tr>
     <tr><td><code>AGENTS.md</code> / <code>copilot-instructions.md</code></td><td>立档阈值条目补"先按 slug 查重"; 计划产出条目补 HTML 格式约束</td></tr>
     <tr><td><code>memory-bank/</code> 各文档</td><td>约 24 处 <code>TASKnnn</code> 引用; 靠 Legacy-ID 映射可解析, 阶段 4 选择性替换</td></tr>
-    <tr><td><code>docs/plans/*.html</code></td><td>6 处 <code>TASKnnn</code> 引用(历史文档, 建议不动)</td></tr>
+    <tr><td><code>memory-bank/plans/*.html</code></td><td>6 处 <code>TASKnnn</code> 引用(历史文档, 建议不动)</td></tr>
     <tr><td>其余 8 个 worktree</td><td>阶段 4 各自 rebase 后重跑守卫</td></tr>
   </table>
 
@@ -352,7 +352,7 @@ html { color-scheme: dark; }
 </section>
 
 <footer>
-  计划文档 · 2026-09-18 19:28 创建 / 19:56 修订 · 命名遵循 <code>docs/plans/YY-MM-DD-HHMM-&lt;slug&gt;-plan.html</code><br>
+  计划文档 · 2026-09-18 19:28 创建 / 19:56 修订 · 命名遵循 <code>memory-bank/plans/YY-MM-DD-HHMM-&lt;slug&gt;-plan.html</code><br>
   相关: <code>.agents/skills/memory-bank/SKILL.md</code> · <code>memory-bank/pitfalls.md:339</code> · <code>tests/test_memory_bank.py</code>
 </footer>
 

@@ -228,7 +228,7 @@ _REQUIRED_SNAPSHOT_FIELDS = (
         数据源与刷新链路都是好的，问题只出在「种子页不回这个数组」。</p>
       <p>推论：若先开辅种页再切种子页，<code>groups</code> 会保留切换那一刻的旧数组 ⇒ 状态栏显示<strong>冻结值</strong>而非 0
         （比 0 更隐蔽）。用户报「永远 0」说明首屏就在种子页（<code>autoqb.ui.view</code> 存 localStorage）。</p>
-      <p>修复计划：<a href="../../docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html">docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html</a>
+      <p>修复计划：<a href="../plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html">memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html</a>
         ；任务档案：<a href="../tasks/26-09-20-webui-statusbar-speed.md">tasks/26-09-20-webui-statusbar-speed.md</a>。</p>
     </div>
   </section>
@@ -237,7 +237,7 @@ _REQUIRED_SNAPSHOT_FIELDS = (
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p class="hint">本节为入池时的候选清单（保留原文）。<strong>已选定 A</strong>，详细方案与实施项见
-      <a href="../../docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html">修复计划</a>；
+      <a href="../plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html">修复计划</a>；
       若用户改要「qB 全局」口径，则走候选 C，F1/F2 整体省掉。</p>
     <p><strong>先把口径拍板，再动手。</strong>状态栏到底该显示「本工具纳管种子的速度合计」还是「qB 全局速度」，两者在存在未纳管种子时不相等，修之前需要用户定一句。</p>
     <ul>

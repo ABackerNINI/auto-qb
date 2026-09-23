@@ -2,7 +2,7 @@
 
 一次运行 = 依次跑 SCENARIOS 里每个场景(每个都是一次完整的 sim_run), 收集统计层
 `summary.json` 的关键数字, 按"实测值 × 余量系数"推出建议阈值, 写入:
-    docs/plans/26-09-19-1433-sim-client-5000.baseline.json
+    memory-bank/plans/26-09-19-1433-sim-client-5000.baseline.json
 
 之后 `sim_run.py` 启动时会自动读这个文件填阈值 —— 未固化时统计层记 BASELINE(不算 FAIL),
 固化后同一批指标就成了硬判据, 回归时能真正变红。
@@ -24,7 +24,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-BASELINE_PATH = os.path.join(REPO, "docs", "plans", "26-09-19-1433-sim-client-5000.baseline.json")
+BASELINE_PATH = os.path.join(REPO, "memory-bank", "plans", "26-09-19-1433-sim-client-5000.baseline.json")
 
 # 场景 -> (sim_run 参数, 采集哪些指标, 阈值余量系数)
 # 余量系数只用于"越小越好"的指标; 越大越好的(如 D4 停止率)不在这里固化。

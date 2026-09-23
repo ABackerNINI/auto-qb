@@ -13,7 +13,7 @@
 - 只查**相对**链接(跳过 `http(s)://` / `mailto:` / 纯锚点 `#x`)。
 - 目标存在即通过; 不存在则报"坏链"。
 - 允许"锚点"后缀(`path.md#sec`)—— 只校验 `path.md` 是否存在。
-- **历史留档例外**: `docs/plans/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
+- **历史留档例外**: `memory-bank/plans/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
   按存根策略本就允许指向旧路径)。
 - 默认扫 `memory-bank/` 与 `.github/`(后者是规则载体, 也有链接); `--all` 再加 `docs/` 与根级 md。
 """

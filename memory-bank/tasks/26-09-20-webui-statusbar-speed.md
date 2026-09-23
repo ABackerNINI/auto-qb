@@ -5,7 +5,7 @@
 **Updated:** 2026-09-20
 **Owner:** 主线
 **Issue:** [issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html](../issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html)
-**Plan doc:** [docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html](../../docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html)
+**Plan doc:** [memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html](../plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html)
 **Summary:** 用户真机报「WEBUI 状态栏上传/下载速度不更新，永远显示 0」。入池后用户指派认领，先做复验与深入分析：根因是**状态栏在前端对 `groups` 求和，而 P1-1「按视图回传」在种子页不回 `groups`**（`VIEW_ARRAYS["torrent"] = ("torrents",)`）⇒ `this.groups` 永远停在初始 `[]` ⇒ 合计恒 0；次因是合计只遍历 `groups`，漏掉未归组 `singles`（桩实测少算 88.7%）。已用真 `create_app` + 合成种子桩服务复现（种子页响应里**没有 `groups` 键**，真值 15,206,400）。修复计划已产出（4 处改动 + 3 条守阵），**尚未动代码**。
 
 ## 原始请求
@@ -52,7 +52,7 @@
 |---|---|---|
 | 复验（现象仍复现 + 锚点有效） | 桩服务 `view=torrent` 响应无 `groups` 键，真值非零 | ✅ 完成（2026-09-20 17:0x） |
 | 深入分析（根因定位到符号级） | 链路 5 步全部落地到文件:行号 | ✅ 完成 |
-| 修复计划产出 | `docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html` | ✅ 完成 |
+| 修复计划产出 | `memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html` | ✅ 完成 |
 | 实施 F1–F4 | 三处 curl 的 `totals` 相等且等于 `groups+singles` 真值 | ✅ 完成 |
 | 守阵 F5-1 / F5-2 / F5-3 | 全量测试基线只增不减；冒烟 0 失败 | ✅ 完成（数字见下） |
 | 真机走查 | 三个页签下状态栏数值一致且随传输变化 | ⬜ **待用户**（真实 qB 数据） |
@@ -66,7 +66,7 @@
   - 再起桩 `--groups 50`（50 组 + 200 未归组）：前端口径 1,723,392 / 5,068,800 vs 真值 15,206,400 / 45,926,400 ⇒ **少算 88.7% / 89.0%**（次因）。
   - 桩里 `status.server` 为 `null`（FakeClient 不提供 `server_state`）⇒ 候选 C 在 CI 内不可测，列为备选。
   - 根因定位：`VIEW_ARRAYS["torrent"] = ("torrents",)`（`mixins/web_view.py:48`）+ `app.js:883` 的「键不存在保留原引用」+ `decorate.js:136-141` 的 `totalDl/totalUl`。与 2026-09-19 的 BUG-8（追剧页成员索引被裁导致永久空白）同类。
-- **2026-09-20 17:02** — 产出修复计划 `docs/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html`（dark 单文件 HTML，8 节）。**按范围守恒未动任何代码**，等用户确认后实施。
+- **2026-09-20 17:02** — 产出修复计划 `memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html`（dark 单文件 HTML，8 节）。**按范围守恒未动任何代码**，等用户确认后实施。
 - **2026-09-20 17:2x** — 用户「实施」⇒ 落地 F1~F4 + 三条守阵，实测数字：
   - **桩服务**（`--torrents 300 --groups 50`）：`view=torrent` 的 `status.totals = {"dlspeed": 15206400, "upspeed": 45926400}`，与 `view=group` 一致，等于 `groups + singles` 真值（修复前种子页无此键、合计仅 1,723,392）。
   - **单测**：Windows **1059 → 1062 passed**（+3 新守阵）；WSL **1057 → 1060 passed + 2 skipped**（两侧收集数一致）。

@@ -36,7 +36,7 @@ BASELINE = "BASELINE"
 
 # W4 固化后的阈值表: sim_baseline.py 生成, 键 = check id。文件不存在则全记 BASELINE。
 BASELINE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "plans",
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory-bank", "plans",
     "26-09-19-1433-sim-client-5000.baseline.json"
 )
 
@@ -695,7 +695,7 @@ def main(argv=None) -> int:
     )
     p.add_argument("--replay-speed", type=float, default=1.0, help="录播回放倍速(W4)")
     p.add_argument("--latency-mode", choices=("recorded", "p50", "p95", "const"), default="recorded")
-    p.add_argument("--baseline", default="", help="固化阈值文件路径(默认 docs/plans/…baseline.json)")
+    p.add_argument("--baseline", default="", help="固化阈值文件路径(默认 memory-bank/plans/…baseline.json)")
     p.add_argument("--no-baseline", action="store_true", help="不读固化阈值(全部记 BASELINE)")
     p.add_argument("--stress", action="store_true", help="标记为压力档: 漂移等只观测不判红(否则会盖住真实稳态回归)")
     args = p.parse_args(argv)

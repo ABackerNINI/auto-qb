@@ -32,4 +32,4 @@
 - **未知键 / `timeout` 非法 → STOP**: 闸门很贵, 拼错键让它静默失效比报错坏得多。代价: 新增配置键必须先加进 `KEY_DEFAULTS` / `GATE_KEYS`。
 - **测试跑两次, 不是一次**: ① 改完代码、**回写知识库之前** ② `commit.py` 内部提交前。第一次必须在回写之前 —— 测试带文档守卫(会读 `memory-bank/`), 回写后跑会分不清红的是代码还是文档。S6 推送前由 `push.py` 内嵌 `--no-auto` 只核状态(脏 / 上游 / 红线 / 镜像), 不跑闸门。
 - **格式化类闸门必须在逐路径暂存之前**: 格式化会让已 staged 文件与 index 不一致, 必须重新 `add`。
-- 字段与占位符的**机制**见 `my-commit-flow` skill 与其 `scripts/test_preflight.py`(23 用例); 本仓库的**取值**在 `.commit-flow.toml`; 设计取舍见 `docs/plans/26-09-22-0812-commit-gate-auto-run-plan.html`。
+- 字段与占位符的**机制**见 `my-commit-flow` skill 与其 `scripts/test_preflight.py`(23 用例); 本仓库的**取值**在 `.commit-flow.toml`; 设计取舍见 `memory-bank/plans/26-09-22-0812-commit-gate-auto-run-plan.html`。

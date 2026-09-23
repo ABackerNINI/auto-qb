@@ -1,6 +1,6 @@
 """规则条件表达式: 词法 / 语法 / 编译(W1 内核)
 
-分层(与 docs/plans/26-09-20-2225-rule-conditions-expression-plan.html 一致):
+分层(与 memory-bank/plans/26-09-20-2225-rule-conditions-expression-plan.html 一致):
 - lexer.py  字符串 -> Token 列表(字面量单位解析复用 utils, 与配置其它处同口径)
 - parser.py Token -> AST, 编译期完成**语法层**静态检查
 - env.py    取值面(名字 -> 取值器 + 类型 + 可用性)与语义校验 —— W2

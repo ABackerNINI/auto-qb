@@ -242,7 +242,7 @@
   (server_state merge、torrents 后写覆盖、*_removed 净额)/抖动与结构字段的判定口径;
   `tests/test_grouping.py` +1 —— `test_group_key_of_is_single_source_of_truth` 钉死
   "归组 key 纯函数 == 真实 mixin 输出"(防内联公式与纯函数分叉)。
-  范围: 语料计划 `docs/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html` 的 W1/W2。
+  范围: 语料计划 `memory-bank/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html` 的 W1/W2。
   ⚠ 该批**新增一个 scripts/ 文件** (`scripts/qb_capture.py`), 不覆盖 src/ —— 除 §04 那一处纯函数抽取外
   src/ 一行未改, 故既有 1098 条全部原样通过(无退化)。
   ⚠ **Linux 侧未同步重测**(本批只在 Windows 跑), 按本节上方纪律, 下次动基线时两侧一起补。

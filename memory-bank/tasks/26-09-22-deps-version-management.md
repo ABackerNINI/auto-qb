@@ -19,7 +19,7 @@
 
 ## 实现计划
 
-- 方案文档：[docs/plans/26-09-22-2318-version-management-plan.html](../../docs/plans/26-09-22-2318-version-management-plan.html)（现状盘点 / 目标约束 / 版本号·载体·流程三层对比 / 三阶段落地 / 风险 / 3 个决策点）。
+- 方案文档：[memory-bank/plans/26-09-22-2318-version-management-plan.html](../plans/26-09-22-2318-version-management-plan.html)（现状盘点 / 目标约束 / 版本号·载体·流程三层对比 / 三阶段落地 / 风险 / 3 个决策点）。
 - **阶段 0（不涉码，拍板即可做）**：① 建 CHANGELOG.md（Keep a Changelog 骨架 + [0.2.0] 基线段）② tag v0.2.0 @ 49eacb8 + show-ref 核对 ③ push gitee 显式 ref + `ls-remote --tags` 判定，github 尝试一次 ④ 发版三步与 `fetch --tags` 约定回写 conventions/collaboration.md。
 - **阶段 1（涉码，单独立项走认领流程）**：pyproject `dynamic = ["version"]` + `[tool.hatch.version]` regex 接线；SemVer 正则守阵（红验后合入）；`cli.py` 加 `--version`；（可选）uv.lock 版本一致性守阵。
 - **阶段 2（按需，不排期）**：`scripts/release.py` 前置校验 + 一条龙；git-cliff 半自动 changelog（regex 自定义解析，官网确认在维护）；Gitee / GitHub Release 页。

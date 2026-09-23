@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F5）。</p>
+    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F5）。</p>
     <p><strong>触发条件：仅在 web.token 首次生成（或文件缺失/为空后重建）的写盘瞬间发生非优雅终止</strong> —— 窗口极窄。后果分两支：空文件可自愈（读取侧判空，下次启动重新生成）；<strong>非空半截</strong>会被当作有效密钥持久化。</p>
   </section>
 

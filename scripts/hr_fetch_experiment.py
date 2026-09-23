@@ -2,7 +2,7 @@
 """BTSchool HR 种子下载实验脚本 (独立实验程序, 不接入 auto-qb 主程序)。
 
 用途: 验证「HR 统计页解析 + cookie 下载 .torrent + infohash 计算」整条链路, 为
-docs/plans/26-09-22-2204-partial-hr-site-verify-plan.html (部分种子 HR 在线核实) 的 M1 探路。
+memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (部分种子 HR 在线核实) 的 M1 探路。
 页面样张: D:/Projects/站点页面/ (myhr.php 保存页, 已验证表格结构)。
 
 页面事实 (2026-09-22 样张核对):
@@ -71,21 +71,21 @@ DEFAULT_UA = (
 
 def bdecode(data: bytes, pos: int = 0):
     """最小 bencode 解码, 返回 (value, next_pos)。只服务于 .torrent 解析。"""
-    c = data[pos : pos + 1]
+    c = data[pos:pos + 1]
     if c == b"i":
         e = data.index(b"e", pos)
-        return int(data[pos + 1 : e]), e + 1
+        return int(data[pos + 1:e]), e + 1
     if c == b"l":
         pos += 1
         out = []
-        while data[pos : pos + 1] != b"e":
+        while data[pos:pos + 1] != b"e":
             v, pos = bdecode(data, pos)
             out.append(v)
         return out, pos + 1
     if c == b"d":
         pos += 1
         out = {}
-        while data[pos : pos + 1] != b"e":
+        while data[pos:pos + 1] != b"e":
             k, pos = bdecode(data, pos)
             v, pos = bdecode(data, pos)
             out[k] = v
@@ -94,7 +94,7 @@ def bdecode(data: bytes, pos: int = 0):
         colon = data.index(b":", pos)
         n = int(data[pos:colon])
         start = colon + 1
-        return data[start : start + n], start + n
+        return data[start:start + n], start + n
     raise ValueError(f"bencode 非法字节 @ {pos}: {data[pos : pos + 8]!r}")
 
 
@@ -110,7 +110,7 @@ def compute_infohashes(data: bytes) -> tuple[str, str, dict]:
     if not isinstance(top, dict) or b"info" not in top:
         raise ValueError("缺少 info dict, 不是 .torrent")
     pos = 1  # 跳过顶层 'd'
-    while data[pos : pos + 1] != b"e":
+    while data[pos:pos + 1] != b"e":
         key, p = bdecode(data, pos)
         val, p2 = bdecode(data, p)
         if key == b"info":
@@ -137,12 +137,18 @@ _SELFTEST_TORRENTS = [
     ),
 ]
 
-
 # ---------- 容错数值解析 ----------
 
 _SIZE_UNITS = {
-    "B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4,
-    "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3, "TIB": 1024**4,
+    "B": 1,
+    "KB": 1024,
+    "MB": 1024**2,
+    "GB": 1024**3,
+    "TB": 1024**4,
+    "KIB": 1024,
+    "MIB": 1024**2,
+    "GIB": 1024**3,
+    "TIB": 1024**4,
 }
 
 
@@ -200,12 +206,11 @@ def parse_dt(text: str) -> str | None:
 
 class _TableTree(HTMLParser):
     """收集 <tr>/<td> 树。row 节点: {"cells", "container"}; cell 节点: {"text", "hrefs", "rows"}。"""
-
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.root: list[dict] = []
         self._cells: list[dict] = []  # 打开的 cell 栈
-        self._rows: list[dict] = []   # 打开的 row 栈
+        self._rows: list[dict] = []  # 打开的 row 栈
 
     def handle_starttag(self, tag, attrs):
         if tag == "tr":
@@ -239,7 +244,6 @@ class _TableTree(HTMLParser):
 
     def flat_rows(self) -> list[tuple[dict, list, int]]:
         """遍历全部 row, 返回 (row, container, index); 仅收「全部 cell 无嵌套行」的扁平行。"""
-
         def walk(container: list, out: list) -> None:
             for i, row in enumerate(container):
                 if all(len(c["rows"]) == 0 for c in row["cells"]):
@@ -282,7 +286,7 @@ def parse_myhr(html: str) -> list[dict]:
     i_need, i_done, i_remain = col("还需做种时间"), col("完成时间"), col("剩余达标时间")
 
     out: list[dict] = []
-    for row in container[header_i + 1 :]:
+    for row in container[header_i + 1:]:
         cells = row["cells"]
         if not cells or not _cell_text(cells[0]).isdigit():
             break  # 数据区结束 (页脚/分页等)
@@ -343,7 +347,10 @@ def build_client(cookie: str | None, user_agent: str, base_url: str):
                 k, v = pair.split("=", 1)
                 cookies[k.strip()] = v.strip()
     return httpx.Client(
-        headers={"User-Agent": user_agent, "Accept-Language": "zh-CN,zh;q=0.9"},
+        headers={
+            "User-Agent": user_agent,
+            "Accept-Language": "zh-CN,zh;q=0.9"
+        },
         cookies=cookies,
         follow_redirects=True,
         timeout=20.0,
@@ -387,8 +394,14 @@ def download_torrent(client, base_url: str, tid: int, out_dir: Path) -> dict:
     out_path.write_bytes(data)
     name = info.get(b"name", b"?").decode("utf-8", "replace")
     return {
-        "tid": tid, "status": "downloaded", "path": str(out_path), "v1": v1, "v2": v2,
-        "bytes": len(data), "torrent_name": name, "content_type": ctype,
+        "tid": tid,
+        "status": "downloaded",
+        "path": str(out_path),
+        "v1": v1,
+        "v2": v2,
+        "bytes": len(data),
+        "torrent_name": name,
+        "content_type": ctype,
     }
 
 
@@ -432,7 +445,6 @@ class MiniWSError(RuntimeError):
 
 class MiniWS:
     """极小 WebSocket 客户端, 只满足 CDP 一问一答 (文本帧 + ping/pong + 分片累积)。"""
-
     def __init__(self, url: str, timeout: float = 10.0):
         u = urlparse(url)
         host = u.hostname or "127.0.0.1"
@@ -527,9 +539,7 @@ def _kill_profile_browsers(profile_dir: Path) -> None:
         "Select-Object -ExpandProperty ProcessId"
     )
     try:
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=20
-        )
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=20)
         for line in r.stdout.splitlines():
             pid = line.strip()
             if pid.isdigit():
@@ -543,8 +553,13 @@ def _launch_cdp_browser(browser: str, profile_dir: Path, headless: bool, url: st
     profile_abs = str(profile_dir.resolve())
     port = _free_debug_port()
     cmd = [
-        exe, f"--user-data-dir={profile_abs}", f"--remote-debugging-port={port}",
-        "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-crashpad",
+        exe,
+        f"--user-data-dir={profile_abs}",
+        f"--remote-debugging-port={port}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-gpu",
+        "--disable-crashpad",
         "--window-size=1150,860",
     ]
     if headless:
@@ -568,10 +583,8 @@ def _launch_cdp_browser(browser: str, profile_dir: Path, headless: bool, url: st
             time.sleep(0.3)
     if ver is None:
         _kill_profile_browsers(profile_dir)
-        raise SystemExit(
-            "浏览器调试端口 30s 未就绪; 若反复失败: 关闭残留进程后删除专用 profile 目录"
-            f"({profile_abs}) 并重跑 --auto-cookie-login。"
-        )
+        raise SystemExit("浏览器调试端口 30s 未就绪; 若反复失败: 关闭残留进程后删除专用 profile 目录"
+                         f"({profile_abs}) 并重跑 --auto-cookie-login。")
     return proc, ver
 
 
@@ -692,10 +705,16 @@ def print_rows(rows: list[dict]) -> None:
     print(" | ".join(h.ljust(w) for h, w in zip(head, widths)))
     print("-" * (sum(widths) + 3 * (len(widths) - 1)))
     for r in rows:
-        name = r["name"][: widths[1] - 1] + "…" if len(r["name"]) > widths[1] else r["name"]
+        name = r["name"][:widths[1] - 1] + "…" if len(r["name"]) > widths[1] else r["name"]
         cells = (
-            str(r["tid"]), name, r["uploaded_raw"], r["downloaded_raw"], r["ratio_raw"],
-            r["need_seed_raw"], r["done_raw"], r["remain_raw"],
+            str(r["tid"]),
+            name,
+            r["uploaded_raw"],
+            r["downloaded_raw"],
+            r["ratio_raw"],
+            r["need_seed_raw"],
+            r["done_raw"],
+            r["remain_raw"],
         )
         print(" | ".join(c.ljust(w) for c, w in zip(cells, widths)))
 
@@ -736,7 +755,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--page", type=int, help="翻页参数 (?page=N, 形态待在线验证)")
     ap.add_argument("--cookie", help="cookie 串 (推荐改用 --cookie-file 或 --auto-cookie; 进程参数可能被本机其他进程看到)")
     ap.add_argument("--cookie-file", help="cookie 串所在文件 (一行, 浏览器复制的 Cookie 请求头)")
-    ap.add_argument("--auto-cookie", action="store_true", help="无头拉起专用 profile 经 CDP 自动读 cookie (首次先 --auto-cookie-login)")
+    ap.add_argument(
+        "--auto-cookie", action="store_true", help="无头拉起专用 profile 经 CDP 自动读 cookie (首次先 --auto-cookie-login)"
+    )
     ap.add_argument("--auto-cookie-login", action="store_true", help="打开可见浏览器完成登录; 会话存专用 profile 不落明文")
     ap.add_argument("--browser", default="auto", help="auto | chrome | edge | 浏览器可执行文件完整路径")
     ap.add_argument("--profile-dir", default="auto-qb-data/hr-experiment/chrome-profile", help="专用浏览器 profile 目录")
@@ -802,7 +823,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nJSON 已写入 {args.json}")
 
     # ---- 下载 ----
-    targets = rows if args.all else rows[: max(0, args.download)]
+    targets = rows if args.all else rows[:max(0, args.download)]
     if client is None and targets:
         print("\n离线模式不下载; 在线下载请去掉 --html 并提供 cookie。")
         return 0

@@ -20,7 +20,7 @@
 
 ## 产出口径
 
-- **计划文档**: 用 `delivery-artifact` skill, 放 `docs/plans/`; **一律单文件 HTML** (出现 `.md` 即违规)。
+- **计划文档**: 用 `delivery-artifact` skill, 放 `memory-bank/plans/`; **一律单文件 HTML** (出现 `.md` 即违规)。
 - **HTML 一律 dark 主题**: 深色底 + 浅色字 + 样式里写 `color-scheme: dark`, **禁止浅底黑字**; 配色规格与文件命名见 [conventions/webui.md](memory-bank/conventions/webui.md)「HTML 文档一律 dark 主题」。
 
 ## 黄金法则 (来自设计原则, 违反即破坏设计)

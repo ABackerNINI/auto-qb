@@ -13,7 +13,7 @@
 留在原处只是副本）、取消 `_index.md`（时间戳文件名自带时间与主题，`ls` 即索引）、
 取消「取最近 N 条」与 `_recent.md` 缓存（条数不是稳定时间尺度，且截断会漏掉活跃切片）。
 
-- [计划 v1.1](../../docs/plans/26-09-22-2350-activecontext-conflict-plan.html)
+- [计划 v1.1](../plans/26-09-22-2350-activecontext-conflict-plan.html)
 - [档案](../tasks/26-09-22-memory-bank-activecontext-conflict.md)
 
 ## 子任务

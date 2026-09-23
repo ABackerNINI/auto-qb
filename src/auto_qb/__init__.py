@@ -1,6 +1,6 @@
 """auto_qb: PT Seed Manager for qBittorrent 包
 
-模块结构 (2026-09-22 方案 C 分层归拢, plan docs/plans/26-09-22-2112-src-layout-restructure-plan.html):
+模块结构 (2026-09-22 方案 C 分层归拢, plan memory-bank/plans/26-09-22-2112-src-layout-restructure-plan.html):
 - cli.py / __main__.py  入口 (argparse / python -m; pyproject.scripts 钉在 auto_qb.cli:main)
 - config/               配置层: 模型(models)/加载(loaders)/校验(validation)/schema/写回(writer)/影响分级(impact)
 - core/                 核心域: qbmanager(主协调者+8 mixin 组合) / taskqueue / qbapi / qbclient /

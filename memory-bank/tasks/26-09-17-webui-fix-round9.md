@@ -3,13 +3,13 @@
 **Status:** In Progress
 **Started:** 2026-09-17
 **Owner:** 主线 (单会话连续实施); 已提交 `49d3151` (develop 分支) —— 剩用户真机 `--dry-run` 走查反馈
-**Plan doc:** [docs/plans/26-09-17-0847-webui-fix-plan-round9.html](../../docs/plans/26-09-17-0847-webui-fix-plan-round9.html) (25 项分类拆解 / 根因定位 / 分阶段实施)
+**Plan doc:** [memory-bank/plans/26-09-17-0847-webui-fix-plan-round9.html](../plans/26-09-17-0847-webui-fix-plan-round9.html) (25 项分类拆解 / 根因定位 / 分阶段实施)
 **Legacy-ID:** TASK011
 **Summary:** 口径单点化 + 浮层锁定契约 + 选择模型互斥/派生 + 删除链统一 + 菜单分层 + 新端点 `/api/open-path`; 996 passed, 浏览器冒烟 25 项全过; 已提交 `49d3151` (剩用户真机 dry-run)
 
 ## 原始请求
 
-用户在 `docs/plans/26-09-17-0847-webui-fix-plan-round9.html` 计划基础上给出决策点裁决并下令开工:
+用户在 `memory-bank/plans/26-09-17-0847-webui-fix-plan-round9.html` 计划基础上给出决策点裁决并下令开工:
 
 > D3 只取qB当前值, D4 "0 值"已取消显示, D8 选B, 开始实施计划
 
@@ -70,4 +70,4 @@
 
 ## 历史会话纪要 (原文归档)
 
-(本档为单会话连续实施, 无跨会话纪要; 计划文档 `docs/plans/26-09-17-0847-webui-fix-plan-round9.html` 含完整的 25 项分类拆解与根因证据。)
+(本档为单会话连续实施, 无跨会话纪要; 计划文档 `memory-bank/plans/26-09-17-0847-webui-fix-plan-round9.html` 含完整的 25 项分类拆解与根因证据。)

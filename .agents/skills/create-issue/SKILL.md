@@ -1,6 +1,6 @@
 ---
 name: create-issue
-description: '计划外问题入池: 在 issues 目录生成 HTML 报告(8 类类型 × 便签/标准两档)并在 _index.md 登记类型+简述+链接。USE FOR: 需要把一个暂时不修的问题记成别人能直接开工的记录; 用户说"记个 issue"/"这个问题先记下来"/"创建 issue"/"入池"/"更新 issue 状态"/"issue 修完了"/"issues 索引重建" 时。DO NOT USE FOR: 本次计划内的缺陷 (直接修)、纯答疑、代码评审清单、大改造(走 tasks/ 档案或 docs/plans/ 计划)。判断"该不该现在修"见 scope-guard skill; 本 skill 只负责记。'
+description: '计划外问题入池: 在 issues 目录生成 HTML 报告(8 类类型 × 便签/标准两档)并在 _index.md 登记类型+简述+链接。USE FOR: 需要把一个暂时不修的问题记成别人能直接开工的记录; 用户说"记个 issue"/"这个问题先记下来"/"创建 issue"/"入池"/"更新 issue 状态"/"issue 修完了"/"issues 索引重建" 时。DO NOT USE FOR: 本次计划内的缺陷 (直接修)、纯答疑、代码评审清单、大改造(走 tasks/ 档案或 memory-bank/plans/ 计划)。判断"该不该现在修"见 scope-guard skill; 本 skill 只负责记。'
 user-invocable: true
 ---
 
@@ -32,7 +32,7 @@ user-invocable: true
 
 - `security` —— **不入池**。与 scope-guard 的例外 2 一致: 当场告知用户并修; 确需留痕时用 `bug` + 严重度"高"。
 - `regression` / `compatibility` —— 归 `bug`, 正文首行标注即可。
-- `epic` / `RFC` / 大改造 —— 不进 issues, 走 `memory-bank/tasks/` 档案或 `docs/plans/` 计划。
+- `epic` / `RFC` / 大改造 —— 不进 issues, 走 `memory-bank/tasks/` 档案或 `memory-bank/plans/` 计划。
 
 ## 档位(类型决定, `--tier` 可覆盖)
 
@@ -142,4 +142,4 @@ python .agents/skills/create-issue/scripts/gen_issues_index.py --check # 只比�
 - ❌ 文件名 / 时间戳凭记忆编 —— 必然与真实时间不符, 且与别的文件撞序。
 - ❌ 手改 `_index.md` —— 生成物, 重跑脚本即可。
 - ❌ 只改 meta 不改封面徽标(或反之) —— 两处漂移, 人读的和脚本读的不一致。
-- ❌ 把大改造塞进 issues —— 那该是 `tasks/` 档案或 `docs/plans/` 计划。
+- ❌ 把大改造塞进 issues —— 那该是 `tasks/` 档案或 `memory-bank/plans/` 计划。

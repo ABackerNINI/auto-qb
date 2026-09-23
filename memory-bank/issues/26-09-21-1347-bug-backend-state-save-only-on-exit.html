@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-21 后端崩溃安全性专项调查（静态读码 + 全库落盘点枚举，报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F1）。</p>
+    <p>2026-09-21 后端崩溃安全性专项调查（静态读码 + 全库落盘点枚举，报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F1）。</p>
     <p><strong>触发条件与平台、配置均无关</strong>：任何「非优雅终止」都命中 —— <code>taskkill /F</code>、原生崩溃/OOM、断电、系统关机/注销、直接关闭控制台窗口（Windows 的 CTRL_CLOSE_EVENT 不进入 Python 异常语义）。唯一优雅路径是 Ctrl+C（KeyboardInterrupt）与托盘「退出」（stop_event）。</p>
   </section>
 
@@ -223,7 +223,7 @@ finally:
     副作用台账越界 0。<strong>未提交</strong> —— 等用户明确「提交」指令。</p>
     <p><strong>知识库回写</strong>：AGENTS.md 黄金法则 3 改口径；behavior-core「仅退出落盘」条目改写；
     client-and-state 状态持久化段；config-reference keys.md 登记新键；testing/baseline.md 1176 → 1185；
-    speed_curve.py 注释同步。计划文档见 <code>docs/plans/26-09-22-1912-backend-state-periodic-flush-plan.html</code>。</p>
+    speed_curve.py 注释同步。计划文档见 <code>memory-bank/plans/26-09-22-1912-backend-state-periodic-flush-plan.html</code>。</p>
   </section>
 
   <footer>

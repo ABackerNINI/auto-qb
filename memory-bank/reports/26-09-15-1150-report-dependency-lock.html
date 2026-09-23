@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>依赖版本调研与锁定建议 — 报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="deps-env-modernization">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-15-1150">
+<meta name="doc-updated" content="26-09-23-2005">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1211; --paper: #161a18; --ink: #e4e6e2; --ink-dim: #a8ada6; --ink-faint: #737971;
+    --line: rgba(255,255,255,.10); --line-strong: rgba(255,255,255,.20);
+    --accent: #c9a227; --accent-soft: rgba(201,162,39,.12);
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+         font-size: 15.5px; line-height: 1.62; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 34px 80px; }
+  header { padding: 64px 0 30px; border-bottom: 1px solid var(--line-strong); }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+            color: var(--ink-faint); margin: 0 0 18px; }
+  .kicker b { color: var(--accent); font-weight: 500; }
+  h1 { font-size: 34px; line-height: 1.18; letter-spacing: -.02em; font-weight: 600; margin: 0 0 14px; }
+  .meta { font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); }
+  main { padding-top: 26px; }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; margin: 40px 0 12px;
+        padding-top: 14px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; font-weight: 600; margin: 28px 0 8px; }
+  p, li { max-width: 78ch; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  blockquote { margin: 18px 0; padding: 12px 18px; border-left: 2px solid var(--accent);
+                background: var(--accent-soft); }
+  blockquote p { margin: 0 0 6px; font-size: 14.5px; color: var(--ink-dim); }
+  blockquote p:last-child { margin-bottom: 0; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--paper);
+          border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--ink-dim);
+         background: var(--paper); border: 1px solid var(--line); padding: 16px 18px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 16px 0 22px; }
+  th { text-align: left; font-weight: 600; font-size: 12px; letter-spacing: .03em; text-transform: uppercase;
+        color: var(--ink-faint); border-bottom: 1px solid var(--line-strong); padding: 8px 10px 8px 0; }
+  td { border-bottom: 1px solid var(--line); padding: 8px 10px 8px 0; vertical-align: top; color: var(--ink-dim); }
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line-strong);
+            font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">AUTO-QB · 报告 · <b>依赖与发布</b></p>
+    <h1>依赖版本调研与锁定建议</h1>
+    <p class="meta">报告 · deps-env-modernization · 快照 2026-09-15 · 2026-09-23 由 md 转 HTML 并入 reports/</p>
+  </header>
+  <main>
+<h1>依赖版本调研与锁定建议 — auto-qb</h1>
+<blockquote><p>快照日期：2026-09-15 · 数据来源：<code>.venv</code> 实测（<code>pip list --outdated</code>）+ PyPI（<code>pip index versions</code>）+ GitHub Releases</p><p>范围：12 个直接依赖（Python）+ 3 个 GitHub Actions + venv 环境卫生。本报告只调研，未改动任何文件。</p></blockquote>
+<h2>核心结论</h2>
+<ol><li>依赖声明只有一处：<code>.github/workflows/requirements-dev.txt</code>，<strong>12 个直接依赖全部无版本约束</strong>，无 pyproject.toml / requirements.txt / lock 文件。</li><li>"全部最新版"基本成立：<strong>10/12 已是 PyPI 最新</strong>；仅 <code>filelock</code>（落后 1 个补丁版本）和 <code>uvicorn</code>（落后 1 个 minor 版本）小幅落后。</li><li>CI 的 GitHub Actions 有 2 个落后一个主版本：<code>checkout@v5</code>（最新 v6）、<code>setup-python@v6</code>（最新 v7.0.0）；<code>upload-artifact@v6</code> 已是最新。</li><li>推荐锁定方式：<strong>双层锁定</strong> —— requirements-dev.txt 直接依赖全部改 <code>==</code> 精确锁 + 用干净 venv <code>pip freeze</code> 生成全量 lock 文件供 CI 使用。当前 venv 混有约 20 个与项目无关的包，<strong>不要直接在现有 venv 里 freeze</strong>。</li></ol>
+<h2>依赖声明现状</h2>
+<table><thead><tr><th>声明位置</th><th>内容</th><th>锁定状态</th></tr></thead><tbody><tr><td><code>.github/workflows/requirements-dev.txt</code></td><td>10 个运行依赖 + 2 个测试依赖</td><td>全部未锁（每次 CI 装最新）</td></tr><tr><td><code>apm.lock.yaml</code></td><td>agent 技能包 gem-team 1.125.0（commit 026742a）</td><td>已锁，无需处理</td></tr><tr><td>pyproject.toml / requirements.txt / lock</td><td>不存在</td><td>—</td></tr></tbody></table>
+<h2>直接依赖版本盘点（12 个）</h2>
+<table><thead><tr><th>包</th><th>用途</th><th>venv 已装</th><th>PyPI 最新</th><th>状态</th><th>建议锁定</th></tr></thead><tbody><tr><td>pyyaml</td><td>config.yml 读取（yaml.BaseLoader 全字符串）</td><td>6.0.3</td><td>6.0.3</td><td>✅ 最新</td><td><code>pyyaml==6.0.3</code></td></tr><tr><td>qbittorrent-api</td><td>qBittorrent WebUI API 客户端</td><td>2026.8.1</td><td>2026.8.1</td><td>✅ 最新</td><td><code>qbittorrent-api==2026.8.1</code></td></tr><tr><td>filelock</td><td>单实例锁</td><td>3.32.5</td><td>3.32.6</td><td>⚠️ 落后 1 patch</td><td><code>filelock==3.32.6</code></td></tr><tr><td>pystray</td><td>系统托盘（仅 <code>--tray</code>）</td><td>0.19.5</td><td>0.19.5</td><td>✅ 最新</td><td><code>pystray==0.19.5</code></td></tr><tr><td>pillow</td><td>托盘图标绘制</td><td>12.3.0</td><td>12.3.0</td><td>✅ 最新</td><td><code>pillow==12.3.0</code></td></tr><tr><td>customtkinter</td><td>托盘 GUI 界面</td><td>6.0.0</td><td>6.0.0</td><td>✅ 最新</td><td><code>customtkinter==6.0.0</code></td></tr><tr><td>fastapi</td><td>WEB UI 后端</td><td>0.141.1</td><td>0.141.1</td><td>✅ 最新</td><td><code>fastapi==0.141.1</code></td></tr><tr><td>uvicorn</td><td>WEB UI 服务器（线程内运行）</td><td>0.52.4</td><td>0.53.0</td><td>⚠️ 落后 1 minor</td><td><code>uvicorn==0.53.0</code></td></tr><tr><td>ruamel.yaml</td><td>config 写回（保留注释 round-trip）</td><td>0.19.1</td><td>0.19.1</td><td>✅ 最新</td><td><code>ruamel.yaml==0.19.1</code></td></tr><tr><td>httpx</td><td>fastapi.testclient.TestClient 传输层（仅测试用）</td><td>0.28.1</td><td>0.28.1</td><td>✅ 最新</td><td><code>httpx==0.28.1</code></td></tr><tr><td>pytest</td><td>测试框架</td><td>9.1.1</td><td>9.1.1</td><td>✅ 最新</td><td><code>pytest==9.1.1</code></td></tr><tr><td>pytest-cov</td><td>覆盖率</td><td>7.1.0</td><td>7.1.0</td><td>✅ 最新</td><td><code>pytest-cov==7.1.0</code></td></tr></tbody></table>
+<h2>传递依赖映射（锁定需覆盖）</h2>
+<table><thead><tr><th>直接依赖</th><th>传递依赖</th></tr></thead><tbody><tr><td>qbittorrent-api</td><td>requests → charset-normalizer, idna, urllib3, certifi；six</td></tr><tr><td>fastapi</td><td>starlette；pydantic → pydantic-core, annotated-types, annotated-doc, typing-extensions, typing-inspection</td></tr><tr><td>uvicorn</td><td>click, h11；colorama（Windows）</td></tr><tr><td>httpx</td><td>anyio, certifi, httpcore, idna</td></tr><tr><td>pystray</td><td>pillow, six</td></tr><tr><td>customtkinter</td><td>darkdetect, packaging</td></tr><tr><td>pytest</td><td>iniconfig, packaging, pluggy, pygments；colorama（Windows）</td></tr><tr><td>pytest-cov</td><td>coverage, pluggy</td></tr><tr><td>pyyaml / filelock / pillow / ruamel.yaml</td><td>无强制依赖</td></tr></tbody></table>
+<h2>venv 环境卫生</h2>
+<ul><li>venv 基于 <strong>Python 3.12.0</strong>（系统 Python312）；CI 矩阵是 3.12 / 3.13，锁定值需两个版本都验证。</li><li><code>pyvenv.cfg</code> 显示 venv 创建于旧路径 <code>d:\Projects\auto-qb\.venv</code>（项目改名前的遗留），仍可用，但建议锁定时重建干净 venv。</li><li>venv 里的 <strong>pip 23.2.1 已落后</strong>（最新 26.2.1），顺手升级。</li><li>混入的无关包（约 20 个，建干净 venv 后自然消失）：environs、marshmallow、python-dotenv、argon2-cffi（+bindings）、cffi、pycparser、cryptography、rich、markdown-it-py、mdurl、jinja2、markupsafe、esprima、quickjs、prettyprinter、colorful、merge_args、watchfiles、websockets、httptools（后三个是 uvicorn[standard] 的 extra，项目代码未用到）。</li></ul>
+<h2>GitHub Actions 版本（ci.yml）</h2>
+<table><thead><tr><th>Action</th><th>ci.yml 现用</th><th>最新</th><th>状态</th><th>备注</th></tr></thead><tbody><tr><td>actions/checkout</td><td>v5</td><td>v6</td><td>落后 1 major</td><td>v6 强化凭据安全</td></tr><tr><td>actions/setup-python</td><td>v6</td><td>v7.0.0</td><td>落后 1 major</td><td>v7 移除 <code>pip-install</code> 输入（本项目未用，无影响）；ESM 迁移</td></tr><tr><td>actions/upload-artifact</td><td>v6</td><td>v6</td><td>✅ 最新</td><td>v6 需 runner ≥ 2.327.1，GitHub 托管 runner 已满足</td></tr></tbody></table>
+<h2>锁定方案对比</h2>
+<table><thead><tr><th>方案</th><th>做法</th><th>优点</th><th>缺点</th><th>适配度</th></tr></thead><tbody><tr><td><strong>A. 双层锁定（推荐）</strong></td><td>requirements-dev.txt 直接依赖全部 <code>==</code>；干净 venv <code>pip freeze</code> 生成 requirements-lock.txt；CI 改装 lock 文件</td><td>改动最小；本地/CI 完全可复现；传递依赖也锁死</td><td>升级需手动 bump + 回归测试</td><td>★★★</td></tr><tr><td>B. 范围锁定</td><td><code>pyyaml~=6.0</code>、<code>fastapi~=0.141</code> 等</td><td>patch 自动跟进</td><td>依赖仍会漂移，与"锁定"目标不符</td><td>★</td></tr><tr><td>C. pyproject.toml + uv / pip-tools</td><td>现代化依赖管理</td><td>最规范，带哈希校验可选</td><td>引入新工具链，改动最大</td><td>后续可选</td></tr></tbody></table>
+<h2>锁定时的注意点</h2>
+<ol><li><code>filelock</code>、<code>uvicorn</code> 建议直接锁到最新（3.32.6 / 0.53.0），而不是沿用本地旧版；锁完跑全量测试 + CI 3.12/3.13 双版本验证。</li><li><strong>不要在当前 venv 直接 <code>pip freeze</code></strong> —— 会把约 20 个无关包锁进 lock 文件；新建干净 venv 装完 12 个直接依赖后再 freeze。</li><li>uvicorn 的用法是线程内 <code>uvicorn.Config(app, host, port, log_level)</code>，不用 reload/watchfiles → <strong>普通 uvicorn 即可，不需要 <code>[standard]</code></strong>。</li><li>qbittorrent-api 用 CalVer 日期版本号（2026.8.1），跟随 qBittorrent 5.x API 语义演进；未来升级时重点回归 <code>test_qbmanager</code> / <code>test_snapshot_sync</code>（见 memory-bank/pitfalls.md）。</li><li>customtkinter 6.0.0 是刚发布的 6.x 大版本，当前 venv 已在用且托盘功能正常，锁定即可。</li><li>CI 的 checkout→v6、setup-python→v7 可顺手升级（本项目未用到 v7 移除的 <code>pip-install</code> 输入）。</li><li><code>apm.lock.yaml</code>（gem-team 1.125.0 @ 026742a）已锁定，无需处理。</li></ol>
+<h2>建议的目标 requirements-dev.txt（仅建议，未写入）</h2>
+<pre># 运行依赖 (锁定 @ 2026-09-15)
+pyyaml==6.0.3
+qbittorrent-api==2026.8.1
+filelock==3.32.6
+pystray==0.19.5
+pillow==12.3.0
+customtkinter==6.0.0
+fastapi==0.141.1
+uvicorn==0.53.0
+ruamel.yaml==0.19.1
+httpx==0.28.1
+
+# 开发/测试依赖
+pytest==9.1.1
+pytest-cov==7.1.0</pre>
+<h2>数据来源</h2>
+<ul><li>本地：<code>.venv</code>（Windows, Python 3.12.0）<code>pip list --outdated</code> / <code>pip index versions</code>，快照于 2026-09-15。</li><li>远端：PyPI（pip index 实时查询）；GitHub Releases（actions/setup-python releases 页全文读取；actions/checkout v6、actions/upload-artifact v6 经搜索结果确认）。</li></ul>
+  </main>
+  <footer>
+    memory-bank/reports/26-09-15-1150-report-dependency-lock.html
+  </footer>
+</div>
+</body>
+</html>

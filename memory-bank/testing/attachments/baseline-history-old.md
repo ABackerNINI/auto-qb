@@ -26,7 +26,7 @@
   ⚠ WSL 侧重测要 `cp -r` 一份**到 ~/ 下**(不要放 /tmp): 仓库副本落在临时目录里会让
   `test_sidefx.py::test_sidefx_is_temp_path` / `::test_sidefx_policy_flags_unknown_effects`
   两条**假红**(2026-09-20 实测: /tmp 副本 2 failed, 同代码挪到 ~/ 即 0 failed —— 不是回归)。
-  = 1055 + **主循环 × WebUI 解耦(docs/plans/26-09-20-0234-webui-decoupling-plan.html)** 新增 2 项:
+  = 1055 + **主循环 × WebUI 解耦(memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)** 新增 2 项:
   ① `test_qbmanager.py::test_qbmanager_source_has_no_web_state_fields` —— **静态防回潮守阵**:
   扫 `qbmanager.py` 源码不得再出现 19 个表现层字段名(`self._group_view` 等)。必要性在于
   兼容代理 `_WEB_STATE_ALIAS` 会把这类回潮**静默转发** ⇒ 代码照样能跑、diff 里看不出问题,

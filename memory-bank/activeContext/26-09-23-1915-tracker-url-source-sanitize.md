@@ -5,7 +5,7 @@
 
 ## 状态
 
-**计划**: [../../docs/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html](../../docs/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html)
+**计划**: [../plans/26-09-22-1801-tracker-url-source-sanitize-plan.html](../plans/26-09-22-1801-tracker-url-source-sanitize-plan.html)
 (基树 `00c61f8`; 行号已按包结构重构后的 `core/` · `infra/` · `webui/` 重取)。
 
 **已定的口径**(两轮讨论得出):
@@ -45,7 +45,7 @@
 
 ## 单点指针
 
-- 计划全文(含可行性分析 · 三方案对比 · 波次 · 风险 · 决策点) → [../../docs/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html](../../docs/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html)
+- 计划全文(含可行性分析 · 三方案对比 · 波次 · 风险 · 决策点) → [../plans/26-09-22-1801-tracker-url-source-sanitize-plan.html](../plans/26-09-22-1801-tracker-url-source-sanitize-plan.html)
 - 已修的日志端脱敏(issue) → [../issues/26-09-21-1408-bug-web-tracker-url-passkey-log.html](../issues/26-09-21-1408-bug-web-tracker-url-passkey-log.html)
 - 凭据脱敏长效约定 → [../conventions/code-style.md](../conventions/code-style.md)「日志规范」
 - 合并后工作区文件消失(含快进) → [../pitfalls/git/history-integration.md](../pitfalls/git/history-integration.md)

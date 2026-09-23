@@ -78,7 +78,7 @@
 12. **W7 范围按实测收窄**: 计划称 `tasks/` 有 4 份 >20 KB; 实测只有 `26-09-19-webui-responsiveness.md`
     (27,260 字符)超 24 KB 档 ⇒ W7 只需处理这一份 + 复核各档案的「历史会话纪要」段 ≤8,000。
 
-详见 [docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html](../../docs/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) (11 节: 问题 / 备选对比 / 判据 G1–G6 / 目标结构 / 格式规范 / 三条入口 / 机械后果 / 迁移映射 / 分波 / 守恒验收 / 风险与验证)。
+详见 [memory-bank/plans/26-09-22-1248-memory-bank-dir-refactor-plan.html](../plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) (11 节: 问题 / 备选对比 / 判据 G1–G6 / 目标结构 / 格式规范 / 三条入口 / 机械后果 / 迁移映射 / 分波 / 守恒验收 / 风险与验证)。
 
 ## 实现计划
 
@@ -102,7 +102,7 @@
 | ID | 内容 | 状态 | 更新 | 备注 |
 |----|------|------|------|------|
 | 0.1 | 现状普查 (体积 / 结构 / 引用面 / 守卫 / cap 余量) | Complete | 2026-09-22 | 数字见上表, 均为实测 |
-| 0.2 | 产出重构计划 (`docs/plans/26-09-22-1248-…plan.html`) | Complete | 2026-09-22 | 单文件 dark HTML, 11 节 |
+| 0.2 | 产出重构计划 (`memory-bank/plans/26-09-22-1248-…plan.html`) | Complete | 2026-09-22 | 单文件 dark HTML, 11 节 |
 | 0.3 | 立档 + 重建 tasks 索引 + 更新 activeContext | Complete | 2026-09-22 | 本轮不做 commit/push |
 | 0.4 | 计划增补: 脚本统一落 memory-bank skill 的 `scripts/` | Complete | 2026-09-22 | 含 `gen_tasks_index.py` 迁入与 11 处引用改写清单 (计划 §07) |
 | 0.5 | 计划增补: 全库逐文档落位 + 五步配方 + cap 分级 | Complete | 2026-09-22 | 8 份超标文档 → 9 目录 / ≈45 主题文件 + 8 存根; 波次扩为 W0–W8 (计划 §03/§04/§05/§06) |

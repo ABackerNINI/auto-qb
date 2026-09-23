@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F4）。</p>
+    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F4）。</p>
     <p><strong>触发条件：state.json 存在但不是合法 JSON</strong> —— 磁盘级损坏、外部工具/手工改写、或极老版本（原子写引入前）遗留的半截文件。<code>_load_state</code> 捕获 <code>JSONDecodeError</code> 后静默返回空字典，启动继续，无任何日志。与平台无关。附带发现：崩溃落在 <code>mkstemp</code> 与 <code>os.replace</code> 之间会残留 <code>state.json.*.tmp</code> 孤儿文件，启动无清理。</p>
   </section>
 

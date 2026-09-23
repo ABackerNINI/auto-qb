@@ -757,7 +757,7 @@ note  = <span class="a">"知识库索引: 两个生成物都必须自洽 (整目
     <li>入库演练：临时造一条假坑与一个假主题文件，各走完 DoD ⑤（选目录 → 写三行头 → 跑生成器 →
         闸门绿 → 删除）；同时给某条已有坑 <code>复发 +1</code>，确认 W8 候选清单能按它排序。</li>
     <li>全量回归：<code>uv run pytest tests -q</code> 绿，数字与基线一致（或按第 10 节第 8 条记录增量）。</li>
-    <li>历史不回改：<code>git diff --stat</code> 里 <code>docs/plans/</code> 只有本次新增的这一份；
+    <li>历史不回改：<code>git diff --stat</code> 里 <code>memory-bank/plans/</code> 只有本次新增的这一份；
         <code>memory-bank/tasks/</code> 的既有档案正文只在 W7 那波被动过，且只是纪要段外迁。</li>
   </ol>
   <p class="note">本方案不改 <code>src/</code> 业务逻辑、不改业务测试；仅 3 处源码注释里的 KB 路径会随对应波次更新。

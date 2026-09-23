@@ -3,7 +3,7 @@
 **Status:** Completed (2026-09-20 18:5x 实施并验证完毕; 未提交 —— 用户未下触发词; 剩用户真机走查)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话)
-**Plan doc:** `docs/plans/26-09-20-1836-webui-column-prefs-sync-plan.html`
+**Plan doc:** `memory-bank/plans/26-09-20-1836-webui-column-prefs-sync-plan.html`
 **Issue:** `memory-bank/issues/26-09-20-1800-bug-webui-column-prefs-reset.html`
 **Legacy-ID:** 无
 **Summary:** 真浏览器复现并定位：列偏好丢失**不是**存储没写进去、也不是读入被洗净，而是每个标签各持一份"加载时的快照"，`saveColState()` 又写整份 ⇒ last-writer-wins，先改的标签被静默吞掉。修法 F1 写入改 read-modify-write + F2 监听 `storage` 事件跨标签同步 + F3 visibilitychange 补漏；后端零改动，不升 `COLS_STORE_KEY`。
@@ -38,7 +38,7 @@
 |---|---|---|---|
 | 1 | 复现（真浏览器 + 桩服务） | ✅ | `col_repro.cjs` / `col_repro2.cjs`，多标签覆盖已复现 |
 | 2 | 根因定位 + 排除 4 条原假设 | ✅ | issue 报告 05 节改写 |
-| 3 | 计划文档 + 立档 | ✅ | 本档案 + `docs/plans/26-09-20-1836-...html` |
+| 3 | 计划文档 + 立档 | ✅ | 本档案 + `memory-bank/plans/26-09-20-1836-...html` |
 | 4 | F1/F2/F3 实施 | ✅ | `shared/columns.js`(saveColState 改 read-modify-write + 新增 adoptColState) + `shared/app.js`(storage 监听 / visibilitychange 补漏 / unmounted 摘除) |
 | 5 | 冒烟 + 单测 | ✅ | 新增「列设置多标签页互不覆盖」; ok 模式 56 项 0 失败 / error 模式 56 项 0 失败; `pytest` 1062 passed |
 | 6 | 红验(守阵灵敏度) | ✅ | 摘掉第二个标签的 storage 监听 ⇒ 缺陷如期复现(`["total_size"]`) |
@@ -58,11 +58,11 @@
   **红验**（摘掉标签 2 的 storage 监听）⇒ 缺陷如期复现 ⇒ 守阵钉得住；`pytest` **1062 passed**（未退化）。
   知识库回写：`pitfalls.md`（R10-09 条目加 ③ 多标签整份覆盖 + 判别法）、`modules.md`（列偏好写侧两约束）、
   `testing.md`（冒烟 54→56）。issue 置 `Fixed` 并重建索引。**未提交**（用户未下触发词）。
-- **09-21 12:48** 用户反馈仍复现 ⇒ 失败分析(`docs/26-09-21-1248-column-prefs-fix-failure-analysis.html`)实测:
+- **09-21 12:48** 用户反馈仍复现 ⇒ 失败分析(`memory-bank/reports/26-09-21-1248-column-prefs-fix-failure-analysis.html`)实测:
   显隐/列序已稳, 宽度另有通道(非手动页自适应 px 落盘/跨窗口互写)→ 二次修复入库 `6c1b7f4`;
   "隐藏列宽被抹"与结构脆弱性仍敞着。
 - **09-21 15:51** 用户定性"修复了很多次, 急需重新设计, 简化模型, 从根本上杜绝" ⇒ 双轨模型重设计计划
-  `docs/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html`(意图/生效分轨 + v5 按页子树 +
+  `memory-bank/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html`(意图/生效分轨 + v5 按页子树 +
   单一持久化漏斗), 待拍板 D1/D2/D3。
 - **09-21 16:09** 用户"按推荐实施"(D1 升 v5+迁移 / D2 fit=回全自动 / D3 origin 空存储提示) ⇒
   W1 数据层(`app.js`: v5 键链 + `migrateLegacyToV5` 内存迁移 + 意图态 colHidden/colOrder/colW + origin 提示挂点)

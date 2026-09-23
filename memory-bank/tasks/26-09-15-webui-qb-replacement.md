@@ -34,11 +34,11 @@
 
 | ID | 描述 | 状态 | 更新 | 备注 |
 |----|------|------|------|------|
-| 2.1 | 调研与计划 (替代 qB 可行性) | Complete | 2026-09-15 | `docs/plans/26-09-16-0123-webui-qb-replacement-plan.html` |
+| 2.1 | 调研与计划 (替代 qB 可行性) | Complete | 2026-09-15 | `memory-bank/plans/26-09-16-0123-webui-qb-replacement-plan.html` |
 | 2.2 | 波次一 (视图 + 详情 + 写命令) | Complete | 2026-09-16 | 964 passed |
 | 2.3 | 波次二 (管理包) | Complete | 2026-09-16 | 971 passed; 报告 `DELIVERY/webui-qb-replace-report.md` |
-| 2.4 | 波次三计划 (30→32 工作项) | Complete | 2026-09-16 | `docs/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html` |
-| 2.5 | 波次三盘点与交接 | Complete | 2026-09-17 | `docs/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html` |
+| 2.4 | 波次三计划 (30→32 工作项) | Complete | 2026-09-16 | `memory-bank/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html` |
+| 2.5 | 波次三盘点与交接 | Complete | 2026-09-17 | `memory-bank/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html` |
 | 2.6 | 波次三收口实施 (双 UI 同构) | Complete | 2026-09-17 | 988 passed; 星图 + 棱镜双车道 |
 | 2.7 | 复查修复 (弹窗/CSS/口径 6 项) | Complete | 2026-09-17 | 989 passed; 守阵扩展 |
 | 2.8 | 实机 CDP 双 UI 冒烟 + 真机 dry-run | Not Started | 2026-09-17 | 需浏览器自动化环境 |

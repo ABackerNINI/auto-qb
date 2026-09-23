@@ -74,7 +74,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
-    <p>审计的三个低危加固点（均 Open 未修，证据见 docs/26-09-21-1158 报告 S1-02/S1-03/S1-04）：① SSE <code>/api/events</code> 用 <code>?token=</code> 查询串兑底鉴权（EventSource 发不出 Authorization 头），反代场景密钥可进中间层日志；② <code>GET /api/config/public</code> 免鉴权可探测「是否处于免鉴权模式」，等于向攻击者广播 CSRF 面开关状态；③ uvicorn 未显式 <code>proxy_headers=False</code>，反代部署在本机时 XFF 可致 loopback 免鉴权误判（此条置信度低，直接连接不受影响）。</p>
+    <p>审计的三个低危加固点（均 Open 未修，证据见 memory-bank/reports/26-09-21-1158 报告 S1-02/S1-03/S1-04）：① SSE <code>/api/events</code> 用 <code>?token=</code> 查询串兑底鉴权（EventSource 发不出 Authorization 头），反代场景密钥可进中间层日志；② <code>GET /api/config/public</code> 免鉴权可探测「是否处于免鉴权模式」，等于向攻击者广播 CSRF 面开关状态；③ uvicorn 未显式 <code>proxy_headers=False</code>，反代部署在本机时 XFF 可致 loopback 免鉴权误判（此条置信度低，直接连接不受影响）。</p>
   </section>
 
   <section id="s2">

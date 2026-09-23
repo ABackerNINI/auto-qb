@@ -102,7 +102,7 @@
 | 22 | 全局状态体检 | 扫 `os.environ[` / `os.chdir` / `os.putenv`: 零环境变量改动, 唯一 `os.chdir` 在 `finally` 正确还原 ⇒ 无泄漏 | ✅ |
 | 23 | 守卫兼容性 | 横扫调用方式: `--collect-only` / `-k` / `-x` / 单文件 / 全量 —— 均无误报、无 INTERNALERROR | ✅ |
 | 24 | 文档漂移(部分) | 修正本会话**已报告过**的 2 项: `activeContext` 的"`想法.md` 含未提交改动"(实测干净, `3bface9`)+ `progress.md` 5 处纯文本旧路径 ⇒ 校验缺失数 0 | ✅ |
-| 25 | 文档漂移(档案路径) | 全量扫 30 个 md 共 53 处引用: 修正 `modules.md` + TASK001~011 里 **34 处** `docs/*.html` → `docs/plans/<日期-时间>-*` | ✅ |
+| 25 | 文档漂移(档案路径) | 全量扫 30 个 md 共 53 处引用: 修正 `modules.md` + TASK001~011 里 **34 处** `docs/*.html` → `memory-bank/plans/<日期-时间>-*` | ✅ |
 | 26 | 全仓链接体检 | 扫 77 个非 vendor md: **170 条 markdown 链接 + 107 条纯文本路径, 失效 0 / 缺失 0**; 另修 `tasks/` 里 5 处 `../docs` → `../../docs` 与 handover 内 2 处 wave3 引用 | ✅ |
 
 ## 进度日志
@@ -212,19 +212,19 @@
   最后入库 `3bface9`)⇒ 改成准确表述但保留"提交前用 `git status` 确认"的保护意图;
   `progress.md` 的纯文本旧路径(此前的链接扫描器只扫 markdown 链接, 这些纯文本一直漏着)——
   **实际有 5 处不是 2 处**: tracker-group-plan / webui-naming-plan / webui-redesign-plan /
-  dependency-lock-report / webui-optimization-plan-v3 ⇒ 全部改到 `docs/plans/<日期-时间>-*`,
+  dependency-lock-report / webui-optimization-plan-v3 ⇒ 全部改到 `memory-bank/plans/<日期-时间>-*`,
   自写脚本校验**缺失数 = 0**。
   ②**新发现但暂不改**: 全量扫 30 个 md 共 53 处引用, **另有 27 处** `docs/*.html` 缺失,
   分布在 `modules.md` 与 TASK001~TASK011 档案。**未自动改**: 属独立的档案清理任务、
-  会让本次提交文件数从 9 涨到 ~18, 且其中有一处把 `.md` / `.html` 两个版本挤成一个字符串的**畸形引用**(原写作 dependency-lock-report.md/.html, 且缺 `docs/plans/<日期-时间>-` 前缀)
+  会让本次提交文件数从 9 涨到 ~18, 且其中有一处把 `.md` / `.html` 两个版本挤成一个字符串的**畸形引用**(原写作 dependency-lock-report.md/.html, 且缺 `memory-bank/plans/<日期-时间>-` 前缀)
   (需要人判断原意)。已列入"待用户决定"。
 - 2026-09-18: 用户下令"提交后修复档案路径飘移"。提交 `e7a0e53`(9 文件 +848/-16; 提交前先摘掉
   `activeContext.md` 里 2 处必然过期的"未提交"标记 —— 这个教训已经踩过两次, 第三次终于提前处理了)。
   提交后本 worktree 分支 ref **第 11 次**静默丢失, `fix-branch-ref.sh` 一步修复。
-- 2026-09-18: **档案路径漂移清理**(用户指定)。先 `ls docs/plans/` 建完整映射表(14 个文件名),
+- 2026-09-18: **档案路径漂移清理**(用户指定)。先 `ls memory-bank/plans/` 建完整映射表(14 个文件名),
   再按**字面量**全文替换(纯文本引用此前被只扫 `[..](..)` 的链接扫描器漏掉): 共改 **34 处 / 11 个文件**
   (`modules.md` + TASK001~008、011 + TASK016), 自写脚本复核 **缺失数 = 0**。
-  **两个坑**: ①原本写作 dependency-lock-report.md/.html(还缺 `docs/plans/<日期-时间>-` 前缀), 看着像笔误, 实为"**`.md` 或 `.html` 两个都有**"的简写
+  **两个坑**: ①原本写作 dependency-lock-report.md/.html(还缺 `memory-bank/plans/<日期-时间>-` 前缀), 看着像笔误, 实为"**`.md` 或 `.html` 两个都有**"的简写
   (两个文件确实都存在)—— 差点被我"修正"成单一路径; ②我给这个简写写的智能替换会插入反引号,
   但同一文件里**第 3 处是纯文本**(无反引号包裹) ⇒ 留下悬空反引号, 复查时才发现并修掉。
   **教训: 按字面量批量替换文档路径时, 同一个模式在不同上下文(反引号内 vs 纯文本)需要的替换文本不一样 ——
@@ -237,7 +237,7 @@
     不属于本仓库的漂移。**教训: 全仓扫描必须先分流 vendor / 生成物, 否则会被噪声淹没而放弃修复。**
   - **本仓库自己的 3 类, 已修**: ①`memory-bank/tasks/*.md` 里 5 处 `](../docs/` 应为 `](../../docs/`
     (从 `tasks/` 到仓库根要上**两**级)—— **查过提交版确认是既有错误**(不是本次引入, 我的替换没改 `../` 层级,
-    只是沿用了原样); ②`docs/plans/...-wave3-handover.md` 里 2 处 wave3 计划引用;
+    只是沿用了原样); ②`memory-bank/plans/...-wave3-handover.md` 里 2 处 wave3 计划引用;
     ③TASK016 自己日志里描述"原畸形引用"时又写了那个字面量, 会让扫描器永久误报 ⇒ 去掉 `docs/` 前缀。
   复扫(排除 vendor): **77 个 md / 170 条链接 / 107 条纯文本, 失效 0、缺失 0**。
 - 2026-09-18: 全量 **1018 passed / 0 failed** —— 本次随文档漂移清理一并入库。

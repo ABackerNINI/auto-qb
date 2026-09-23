@@ -189,7 +189,7 @@ columns.js:318  saveColState() { localStorage.setItem(COLS_STORE_KEY, JSON.strin
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-    <p><b>方向已定</b>（详细计划见 <code>docs/plans/</code> 本轮计划文档；本报告不实施）：</p>
+    <p><b>方向已定</b>（详细计划见 <code>memory-bank/plans/</code> 本轮计划文档；本报告不实施）：</p>
     <ol>
       <li><b>F1 写入改 read-modify-write</b>：<code>saveColState()</code> 写前先读回存储，以存储为底、只覆盖<b>本次操作涉及的那一个 page</b> 的 <code>widths/hidden/manual/order</code> 四段，其余段取存储最新值（6 处调用点都能给出 page）。挡住“两个标签几乎同时写”的竞态。</li>
       <li><b>F2 监听 <code>storage</code> 事件做跨标签同步</b>（<b>关键</b>）：别的标签写了 <code>COLS_STORE_KEY</code> → 当前标签<b>整份采用存储值</b> + <code>$nextTick(materializeColumns)</code>。<br>

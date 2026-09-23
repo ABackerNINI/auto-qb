@@ -6,7 +6,7 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 
 **本类只管核心域**: 连接 / 主循环节拍 / 状态同步 / 任务执行 / 种子刷新。WEB UI 的表现层状态
 与节拍判据在 `web_runtime.WebUIRuntime`(门面), 主循环通过 `self.web` 的四个语义方法与它交互,
-不持有也不判断任何表现层字段(2026-09-20 拆出, 见 docs/plans/26-09-20-0234-webui-decoupling-plan.html)。
+不持有也不判断任何表现层字段(2026-09-20 拆出, 见 memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)。
 
 职责拆分(mixins 包, 各模块组合进本类):
 - mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务

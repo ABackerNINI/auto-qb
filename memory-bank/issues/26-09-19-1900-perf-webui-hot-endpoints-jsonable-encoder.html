@@ -211,7 +211,7 @@ curl -s "http://127.0.0.1:8099/api/search?q=Some.Show" | wc -c     # 1464051</co
     <ul>
       <li><code>src/auto_qb/web.py</code> —— <code>api_search</code>(271)、<code>api_torrent_detail</code>(602)、<code>api_torrent_trackers</code>(610)、<code>api_torrent_files</code>(618)、<code>api_torrent_peers</code>(626)；可选 <code>api_config_schema</code>(824)</li>
       <li><code>tests/test_web.py</code> —— 可把新端点并入 <code>test_api_state_skips_jsonable_encoder</code> 的循环清单（该测试用计数替身，加端点即可，成本极低且确定性）</li>
-      <li><code>docs/plans/26-09-19-1745-…review.html</code> §11 —— 补记这批端点的实测数字</li>
+      <li><code>memory-bank/plans/26-09-19-1745-…review.html</code> §11 —— 补记这批端点的实测数字</li>
       <li><code>memory-bank/pitfalls.md</code> —— 「热路径返回裸 dict 会被 FastAPI 白跑一遍 jsonable_encoder」条目，把已修范围从 2 个端点扩到全部</li>
     </ul>
   </section>

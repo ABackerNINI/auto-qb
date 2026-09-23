@@ -1,11 +1,11 @@
 # 文档形态统一 (plans/reports 入库 + 四形态协议)
-> 摘要: 四形态 (根报告 / plans / issues / tasks) 职责重叠、登记方式各异; 已拍板 plans + reports 收进 `memory-bank/`, 收敛为「四工位 + 一套协议」。**计划已出, 待拍板, 未开工, 未提交**。勘察要点: 计划与报告**零 meta / 零索引 / 零守卫**（44 份计划只有 `viewport` 一行）; 同一专题最多 5 份 (column-prefs / optimistic-ui); `docs/plans` 引用面 **209 处 / 90 文件**; 唯一运行时耦合 = `scripts/sim_baseline.py:27` 的 `BASELINE_PATH`; 决定**存量 51 份不改名**、状态词统一 5 词、主键 `doc-topic` + `_doc-map.md` 专题视图。
+> 摘要: 四形态 (根报告 / plans / issues / tasks) 职责重叠、登记方式各异; 已拍板 plans + reports 收进 `memory-bank/`, 收敛为「四工位 + 一套协议」。**按波次实施中: W0 协议落地 (`75bb0ca`) + W1 迁入库已提交** —— 47 份计划 + 7 份报告已进 `memory-bank/plans|reports/`, 228 处引用 + 2 处运行时路径 (`sim_baseline`/`sim_run` 的 `BASELINE_PATH`) 同步, 违规 md 转 dark HTML。勘察要点: 计划与报告**零 meta / 零索引 / 零守卫**; 同一专题最多 5 份 (column-prefs / optimistic-ui); 决定**存量 51 份不改名**、状态词统一 5 词、主键 `doc-topic` + `_doc-map.md` 专题视图。
 > 触发: 文档形态, 四形态, docs/plans, reports, 入库, 计划归档, 报告归档, doc-topic, doc-map, 状态词统一, 立档, 索引守卫, 重复文档
-> 最后活动: 2026-09-23 19:59
+> 最后活动: 2026-09-23 20:37
 
 ## 状态
 
-**计划**: [../../docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html](../../docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html)
+**计划**: [../plans/26-09-23-1959-memory-bank-doc-forms-plan.html](../plans/26-09-23-1959-memory-bank-doc-forms-plan.html)
 (只读勘察基树 `19fa6ee`; 计划自身随 W1 迁入 `memory-bank/plans/`)。
 **档案**: [../tasks/26-09-23-memory-bank-doc-forms.md](../tasks/26-09-23-memory-bank-doc-forms.md)
 
@@ -27,14 +27,15 @@
 
 ## 待办(下一步从这里接)
 
-1. **拍板 D1–D5**（计划 §07, 均给默认取值, 未否决即按默认执行）。
-2. **W0 → W5 实施**（计划 §04）; W1 是高风险步 —— `git mv` 与引用面修正**必须同一提交**。
-3. **提交**: 计划文档 + 档案 + 本切片均为新建, **用户尚未说「提交」**。
+1. **W2 补 meta** (47+7 份计划/报告注入 `doc-*`) + **状态词统一 5 词** (39 issues + 34 档案) + 档案补 `**Topics:**`
+2. **W3 生成器** (`gen_docs_index.py` / `gen_doc_map.py`) + README 索引登记 (随生成物一起落)
+3. **W4 守卫** (`tests/test_docs_forms.py` + 闸门 + `check_doc_links.is_frozen` 增补) → **W5 回写收口**
+4. 已提交: `dc9e832` (计划+立档) · `75bb0ca` (W0); 每波次单独提交 + 推 Gitee (GitHub 镜像直连不通, 只报一次)
 
 ## 单点指针
 
 - 计划全文(现场证据 · 目标形态 · 协议 · 波次 · 引用面 · 风险 · 决策点 · 验收判据) →
-  [../../docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html](../../docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html)
+  [../plans/26-09-23-1959-memory-bank-doc-forms-plan.html](../plans/26-09-23-1959-memory-bank-doc-forms-plan.html)
 - 上一个相邻重构(库内文档拆分, 与本次正交) → [../tasks/26-09-22-memory-bank-dir-refactor.md](../tasks/26-09-22-memory-bank-dir-refactor.md)
 - 编辑 HTML 的坑(meta 注入时必读) → [../pitfalls/docs/html-edit.md](../pitfalls/docs/html-edit.md)
 - 文档与代码冲突裁决 → [../pitfalls/docs/drift.md](../pitfalls/docs/drift.md)

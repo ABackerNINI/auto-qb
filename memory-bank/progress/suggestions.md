@@ -12,7 +12,7 @@
 
 ### 工程化 / 知识库（2026-09-20）
 
-- **create-issue skill 类型化改造（已实施）**: 计划 [26-09-20-0941](../../docs/plans/26-09-20-0941-issue-typing-plan.html)。
+- **create-issue skill 类型化改造（已实施）**: 计划 [26-09-20-0941](../plans/26-09-20-0941-issue-typing-plan.html)。
   ① 8 类类型进文件名第二段 `<时间>-<type>-<slug>.html`（bug / perf / docs / test / refactor / feat / chore / question，
   枚举单点在 `scripts/_common.py` 的 `TYPES`）；② 表单分两档 —— `light` 便签（现象一句话 + 位置，≤2 分钟）与
   `standard` 标准（现象 / 证据 / 影响面 / 定位锚点，≤10 分钟），根因与建议修法一律降为可选、默认"待查"；
@@ -21,7 +21,7 @@
   仓库根改 `.git` 向上探测（不再 `parents[4]`）、品牌 `--project` 可选注入、索引 HEADER 链接动态计算；
   ⑤ 存量 8 份报告已迁移（bug 4 / perf 3 / docs 1），17 处外链同步，索引顶部有 Open 按类型计数表。
   文件名与状态取值由生成器守卫（`--check` 可挂 CI）。单测 **1057 passed** 不变。
-- **提交推送流水线 skill（已实施，2026-09-20）**: 提案 [26-09-20-1128](../../docs/plans/26-09-20-1128-git-ship-skill-proposal.html)，
+- **提交推送流水线 skill（已实施，2026-09-20）**: 提案 [26-09-20-1128](../plans/26-09-20-1128-git-ship-skill-proposal.html)，
   落地 `.agents/skills/my-commit-flow/`（七步：预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee 主线
   → 尝试一次 GitHub 直连 → 查幽灵 diff）。脚本 `preflight.py`（只读预检）/ `commit.py`（逐路径 add + commit，
   **拒 `-A` / `.` / `*` 与红线文件**）/ `verify_ref.py`（ref 三处一致）/ `push.py`（先 fetch → 推主线 → 核对远端
@@ -33,7 +33,7 @@
 
 - **HTML 文档统一 dark 主题（已实施，2026-09-20 13:00）**: 用户指定"产出的 HTML 一律 dark"，已写进
   `AGENTS.md`「计划产出」节（深色底 + 浅色字 + `color-scheme: dark`，禁止浅底黑字）。存量同步：
-  `docs/plans/` 25 份中 9 份浅色计划文档（`26-09-15-1150 / 1241 / 1504 / 1534`、`26-09-16-1128`、
+  `memory-bank/plans/` 25 份中 9 份浅色计划文档（`26-09-15-1150 / 1241 / 1504 / 1534`、`26-09-16-1128`、
   `26-09-17-0346`、`26-09-19-1745 / 2245`、`26-09-20-0906`）重写 `:root` 配色盘转深色（保色相、
   只翻明度），另给 14 份原本就深色但缺声明的补了 `color-scheme: dark`；`memory-bank/issues/` 9 份
   本就是深色、未动。`resources/`（设计观摩稿 + 设置页候选稿）按用户裁定**不在本次范围** —— 那批的

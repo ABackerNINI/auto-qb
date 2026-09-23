@@ -106,7 +106,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>做「WEB UI 操作跟手性优化」的对抗性复核时（报告 <code>docs/plans/26-09-19-1745-webui-responsiveness-review.html</code>
+    <p>做「WEB UI 操作跟手性优化」的对抗性复核时（报告 <code>memory-bank/plans/26-09-19-1745-webui-responsiveness-review.html</code>
       §05.4）量到的：服务端同步线按 <code>sync_interval</code>（默认 1.5s）跑，每次 <code>_sync_line</code>
       只要视图脏且 Web 活跃就 <code>rebuild_views()</code>；而前端 <code>basePollMs()</code> 按<b>种子量</b>
       分档取 1.5s / 2s / 3s。两条节拍各自独立定档，中间没有任何协商。</p>
@@ -200,7 +200,7 @@ return 1500;  // 下界 1.5s = 服务端 sync_interval(再快只是多拿一次"
       <li><code>src/auto_qb/web.py</code> —— <code>/api/state</code> 的 rid 门控（若走 B，可能要回传档位信号）</li>
       <li><code>tests/test_qbmanager.py</code>（节拍用例，现有用例取值成对 0.05/0.2、5.0/5.0，改钳制时注意别让它们变得有意义变化）</li>
       <li><code>scripts/ui_smoke.cjs</code> —— 「轮询间隔按种子量分档」断言（走 A 时必须同步改期望值）</li>
-      <li><code>memory-bank/testing.md</code> / <code>docs/plans/26-09-19-1745-…review.html</code> §05.4</li>
+      <li><code>memory-bank/testing.md</code> / <code>memory-bank/plans/26-09-19-1745-…review.html</code> §05.4</li>
     </ul>
   </section>
 

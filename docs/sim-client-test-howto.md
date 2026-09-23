@@ -8,7 +8,7 @@
 > · **合成档**（`--source=synthetic`，默认）—— 造数，规模可控，是大部分场景的对照基准；
 > · **语料档**（`--source=corpus:<dir>`）—— **真机抓下来的 qB 数据离线回放**，专治合成数据的七类失真。
 > 两档的**阈值不混用**（`corpus.*` vs 裸 id），判读前先确认自己跑的是哪一档。
-> **完整计划与全部实测数字**：[plans/26-09-19-1433-sim-client-5000-plan.html](plans/26-09-19-1433-sim-client-5000-plan.html)
+> **完整计划与全部实测数字**：[memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html](../memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html)
 > **已知缺陷与待办**：根目录 [`TODO.md`](../TODO.md)
 
 ---
@@ -300,7 +300,7 @@ uv run python scripts/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
 ## 7. 语料模式（真实 qB 数据回放）
 
 合成档（`--source=synthetic`，默认）的七类失真见计划
-`plans/26-09-21-0024-qb-corpus-capture-replay-plan.html` 第 01 节：恒单文件、名称形态单一、
+`memory-bank/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html` 第 01 节：恒单文件、名称形态单一、
 状态分布是拍出来的、tags/category 恒空、数值均匀分布、负载模型是人造的、tracker 与 peers 恒假。
 **语料模式把这些换成真机抓下来的数据**（抓取 → 脱敏 → 离线回放），合成档保留为对照档。
 

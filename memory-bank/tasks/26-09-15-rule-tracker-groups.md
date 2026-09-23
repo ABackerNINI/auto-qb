@@ -36,7 +36,7 @@
 
 | ID | 描述 | 状态 | 更新 | 备注 |
 |----|------|------|------|------|
-| 7.1 | 计划文档 + 决策点 | Complete | 2026-09-15 | `docs/plans/26-09-15-1504-tracker-group-plan.html` |
+| 7.1 | 计划文档 + 决策点 | Complete | 2026-09-15 | `memory-bank/plans/26-09-15-1504-tracker-group-plan.html` |
 | 7.2 | 后端实施 (models/validation/loaders/impact) | Complete | 2026-09-15 | 已随提交入库 (`backend/develop`) |
 | 7.3 | 新条件插件 `tracker_group` | Complete | 2026-09-15 | 条件 15→16 |
 | 7.4 | 测试 + 真机冒烟 | Complete | 2026-09-15 | 884 passed |
@@ -54,4 +54,4 @@
 > 以下为 `activeContext.md` 会话纪要的**原文归档** (2026-09-17 机械迁移, 未删改; 含一处历史 GBK 编码损坏条目),
 > 按时间倒序保留。新增进展请写 `## 进度日志`, 不要再往 `activeContext.md` 堆长纪要。
 
-- 2026-09-15: tracker 分组计划会话 — 读 AGENTS/memory-bank(rule-system/config-reference)后摸底 TrackerConfig(models.py)/KNOWN_TRACKER_KEYS(sections.py)/TrackersCondition(conditions.py)/_PLUGIN_SPEC_VALIDATORS/GROUPS+TRACKER_FIELDS(schema)/TRACKER_FIELD_LEVELS(impact.py)/守卫测试, 产出 docs/plans/26-09-15-1504-tracker-group-plan.html (delivery-artifact Native 冷峻技术方向, 与既有计划同族), 未改任何代码。关键结论: 推荐 D1=方案 B(站点段新字段 groups, 组名即声明零引用错误面, TRACKER_FIELDS 加 str_list 后设置页自动渲染前端零改动)而非 A(顶层 tracker_groups 段, 唯一硬优势是引用校验但 B 无此错误面); D2=新条件插件 tracker_group(镜像 TrackersCondition, 走 utils.match_value); 守卫双面覆盖(站点键集合+条件插件表 15→16); 首要核实点 S0=TRACKER_FIELD_LEVELS 里 groups 列 L0 还是 L2(取决于 TorrentRecord.tracker_conf 热重载重绑定机制, 拿不准列 L2 保守)。待用户拍板 D1/D2/阶段 3(管理页按组筛选)后实施。
+- 2026-09-15: tracker 分组计划会话 — 读 AGENTS/memory-bank(rule-system/config-reference)后摸底 TrackerConfig(models.py)/KNOWN_TRACKER_KEYS(sections.py)/TrackersCondition(conditions.py)/_PLUGIN_SPEC_VALIDATORS/GROUPS+TRACKER_FIELDS(schema)/TRACKER_FIELD_LEVELS(impact.py)/守卫测试, 产出 memory-bank/plans/26-09-15-1504-tracker-group-plan.html (delivery-artifact Native 冷峻技术方向, 与既有计划同族), 未改任何代码。关键结论: 推荐 D1=方案 B(站点段新字段 groups, 组名即声明零引用错误面, TRACKER_FIELDS 加 str_list 后设置页自动渲染前端零改动)而非 A(顶层 tracker_groups 段, 唯一硬优势是引用校验但 B 无此错误面); D2=新条件插件 tracker_group(镜像 TrackersCondition, 走 utils.match_value); 守卫双面覆盖(站点键集合+条件插件表 15→16); 首要核实点 S0=TRACKER_FIELD_LEVELS 里 groups 列 L0 还是 L2(取决于 TorrentRecord.tracker_conf 热重载重绑定机制, 拿不准列 L2 保守)。待用户拍板 D1/D2/阶段 3(管理页按组筛选)后实施。

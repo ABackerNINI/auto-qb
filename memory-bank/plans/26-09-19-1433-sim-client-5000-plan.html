@@ -572,7 +572,7 @@ html { color-scheme: dark; }
 
   <p>四条设计约束：</p>
   <ul>
-    <li><strong>阈值必须有出处</strong>。安全类用硬阈值（0 次、必须相等）；性能类用基线阈值，首次实测后固化进 <code>docs/plans/&lt;plan&gt;.baseline.json</code>。</li>
+    <li><strong>阈值必须有出处</strong>。安全类用硬阈值（0 次、必须相等）；性能类用基线阈值，首次实测后固化进 <code>memory-bank/plans/&lt;plan&gt;.baseline.json</code>。</li>
     <li><strong>未固化的阈值不算失败</strong>。基线缺失时该项 <code>result</code> 记 <code>BASELINE</code>，<code>verdict</code> 计算时忽略 —— 否则第一次跑必然满屏红，反而掩盖真问题。</li>
     <li><strong><code>verdict</code> 规则单一</strong>：任一 FAIL → FAIL；无 FAIL 有 WARN → WARN；否则 OK。<code>BASELINE</code> 不参与。</li>
     <li><strong>统计层必须能独立存在</strong>。完整层可以因体积被裁剪（见下），统计层永远完整。</li>
@@ -949,7 +949,7 @@ tick k+2 … : 同上，永远停在这里 —— 只能重启进程</code></pre
 └── sim_autoqb.py  <b># auto-qb 子进程启动包装：装 SIGBREAK 处理器，让驱动器能优雅停机</b>
                    <b># （硬 kill = TerminateProcess，finally 不跑 -> state.json 不落盘）</b>
 
-docs/plans/
+memory-bank/plans/
 ├── 26-09-19-1433-sim-client-5000-plan.html      <b># 本文件</b>
 └── 26-09-19-1433-sim-client-5000.baseline.json  <b># W4 固化阈值，供统计层引用</b>
 

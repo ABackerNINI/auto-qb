@@ -1,6 +1,6 @@
 """规则条件表达式性能基准(dev-only): 把"表达式条件到底多贵"从感觉变成数字
 
-三层测量(口径见 docs/plans/26-09-20-2225-rule-conditions-expression-plan.html 第 07 节):
+三层测量(口径见 memory-bank/plans/26-09-20-2225-rule-conditions-expression-plan.html 第 07 节):
 
   ① **编译**   M 条规则的 parse + 语义校验总耗时 —— 只在启动时做一次, 不在热路径
   ② **单次求值** 按复杂度分档各跑 K 次取**中位数**(不取平均: 平均会被 GC/调度尖刺带跑)

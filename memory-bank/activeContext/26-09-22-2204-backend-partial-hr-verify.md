@@ -12,7 +12,7 @@
 BTSchool 实验脚本已产出（`scripts/`），`--auto-cookie` 全自动 CDP 通道实测通过
 （无头拉起 → CDP 抓取 → 干净报错 → 清理零残留），仅剩首次人工登录。
 
-- [计划](../../docs/plans/26-09-22-2204-partial-hr-site-verify-plan.html)
+- [计划](../plans/26-09-22-2204-partial-hr-site-verify-plan.html)
 - [档案](../tasks/26-09-22-backend-partial-hr-verify.md)
 
 ## 实测

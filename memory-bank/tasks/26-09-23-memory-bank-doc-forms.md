@@ -62,15 +62,15 @@
 状态词改写 → W3 两个生成器与双视图 → W4 守卫 (`tests/test_docs_forms.py` + 闸门 + `is_frozen` 增补) →
 W5 回写收口 (AGENTS 产出口径 / skill 阈值 #4 / create-issue 措辞 / TODO / `.codebuddy` 自动同步)。
 
-计划全文 → [../../docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html](../../docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html)
+计划全文 → [../plans/26-09-23-1959-memory-bank-doc-forms-plan.html](../plans/26-09-23-1959-memory-bank-doc-forms-plan.html)
 (本计划自身随 W1 迁入 `memory-bank/plans/`)。
 
 ## 子任务状态表
 
 | 波次 | 内容 | 状态 |
 |---|---|---|
-| W0 | 协议落地: 两目录 + `conventions/doc-forms.md` + `_common.py` 三处 + README 细路由 | Pending |
-| W1 | 迁入库: 51 份 HTML + 2 json 迁入; md 违规件转 HTML; 引用面同提交修正 | Pending |
+| W0 | 协议落地: 两目录 + `conventions/doc-forms.md` + `_common.py` 三处 + README 细路由 | Done |
+| W1 | 迁入库: 51 份 HTML + 2 json 迁入; md 违规件转 HTML; 引用面同提交修正 | Done |
 | W2 | 补 meta (51 份) + 存量状态词改写 (73 件) + 档案补 `**Topics:**` | Pending |
 | W3 | `gen_docs_index.py` + `gen_doc_map.py` + 双视图落地 | Pending |
 | W4 | `tests/test_docs_forms.py` + 提交闸门 + `check_doc_links.is_frozen` 增补 | Pending |
@@ -83,4 +83,10 @@ W5 回写收口 (AGENTS 产出口径 / skill 阈值 #4 / create-issue 措辞 / T
 - 2026-09-23 用户拍板: **plans 与 reports 都收进 memory-bank/**; 其余决策点按推荐默认取值。
 - 2026-09-23 计划文档落地 `docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html` (dark 单文件 HTML),
   本档案与 `activeContext/26-09-23-1959-memory-bank-doc-forms.md` 切片同批; **均未提交**。
+- 2026-09-23 **W0 已提交** `75bb0ca` (协议单点 + `_common.py` 接线 + README 指针; 索引登记整行随 W3 生成物).
+- 2026-09-23 **W1 已落**: `git mv` 47 份计划 (44 html + 2 语料 json + 1 md 违规件) + 7 份根报告 →
+  `memory-bank/plans|reports/`; 引用面 **86 + 6 个文件 / 228 处** 机械改路径 (相对链接按深度重算,
+  根相对文本改 `memory-bank/…`); 12 处 `.py` 文本 + **运行时路径两处** (`sim_baseline.BASELINE_PATH` ·
+  `sim_run.BASELINE_PATH`/`--baseline` 帮助文案) 同步; 违规 md 转单文件 dark HTML 并入 reports;
+  迁移记录类 4 份文档 (计划/档案/切片/doc-forms) 的旧路径叙述保留不改。
 - 待办: ① 用户拍板 (D1–D5 默认取值) ② W0 起实施; 实施前重跑一次 `git fetch gitee develop` 确认不落后。

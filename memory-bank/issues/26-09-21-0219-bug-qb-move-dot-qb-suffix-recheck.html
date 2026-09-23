@@ -177,7 +177,7 @@ qB 移动已完成的种子 -> 文件被临时改名为 "原名.!qB"
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 02:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-      <li>2026-09-22 20:38 — 认领（用户指派；计划：<a href="../../docs/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html">.!qB 过渡态容忍修复计划</a>），状态 <strong>In Progress</strong>。方案取建议修法 1 为主体 + 连续 3 次上限兜底残留（修法 2 降为备选，修法 3 已被现有代码部分覆盖）</li>
+      <li>2026-09-22 20:38 — 认领（用户指派；计划：<a href="../plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html">.!qB 过渡态容忍修复计划</a>），状态 <strong>In Progress</strong>。方案取建议修法 1 为主体 + 连续 3 次上限兜底残留（修法 2 降为备选，修法 3 已被现有代码部分覆盖）</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-09-22 20:38 —— 快进同步 676f761 后重跑锚点：<code>_check_missing_files</code> / <code>_handle_save_path_changes</code> / <code>_handle_state_transitions</code> / <code>_valid_for_representative</code> / <code>check_filelist</code> / <code>MoveToAction</code> 符号全部仍在，误判链路逻辑成立；现象未本地复现（无真机 qB），后缀成因维持「假设」定性，取证要求保留在计划 §07。</p>

@@ -8,7 +8,7 @@
 
 ## 进度日志
 
-- 2026-09-19 12:41 — 完成链路剖面诊断, 交付计划 `docs/plans/26-09-19-1241-webui-responsiveness-plan.html`
+- 2026-09-19 12:41 — 完成链路剖面诊断, 交付计划 `memory-bank/plans/26-09-19-1241-webui-responsiveness-plan.html`
   (Native HTML 单文件, 冷峻技术方向; 基线按 testing.md 的 1041 passed); 立档。
 - 2026-09-19 12:5x — 用户追问「命令即时唤醒会不会让 `max_tasks_per_tick` 语义失效」。核查 `taskqueue._pop_due`
   (per-call 预算)与两处自投递 `build_search_index`(web_view.py:513 / :699)后确认**会**, 且最坏形态是自激循环。

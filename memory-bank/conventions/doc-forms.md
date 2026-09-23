@@ -13,7 +13,7 @@
 | task | 实际怎么修、做到哪了 | `memory-bank/tasks/` | Markdown | **唯一滚动更新** | 执行与验证数字 |
 
 > 每条事实**只在一个工位有权威** —— 同一件事的其余件只引用、不重写 (重写必然漂移)。
-> 旧路径已废: `docs/plans/` → `plans/` · `docs/*.html`(报告) → `reports/` (2026-09-23 迁入)。
+> 旧路径已废: `docs/plans/` → `memory-bank/plans/` · `docs/*.html`(报告) → `memory-bank/reports/` (2026-09-23 迁入)。
 
 ## 决策树: 要记一件事 → 放哪儿
 

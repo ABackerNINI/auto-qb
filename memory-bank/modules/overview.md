@@ -3,7 +3,7 @@
 > 📅 **内容基线**: 2026-09-05 @ `51374bd`(全库逐文件核实, 见本库 [README.md](../README.md));
 > 文内带日期的条目为**增量更新**, 最新易变状态见 [activeContext.md](../activeContext.md)。
 > 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/`(除注明)。
-> ⚠ **2026-09-22 方案 C 目录迁移已落地**(plan docs/plans/26-09-22-2112): 本文与库内其它模块文档的
+> ⚠ **2026-09-22 方案 C 目录迁移已落地**(plan memory-bank/plans/26-09-22-2112): 本文与库内其它模块文档的
 > 单文件路径为迁移前快照, 速查表与迁移映射表已更新; 新结构 = 根目录只剩 cli.py + 分层/域包
 > (config / core / infra / rules / torrents / webui / tray), 旧根平铺文件与 mixins/ 的去向见下方映射表。
 

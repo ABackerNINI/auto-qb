@@ -9,7 +9,7 @@
 
 ## 原始请求
 
-- 2026-09-15: 拆分后端巨型源文件 (`qbmanager.py` / `config/schema.py` / `torrents.py` / `config/validation.py`), 计划见 `docs/plans/26-09-15-1124-backend-file-split-plan.html`。
+- 2026-09-15: 拆分后端巨型源文件 (`qbmanager.py` / `config/schema.py` / `torrents.py` / `config/validation.py`), 计划见 `memory-bank/plans/26-09-15-1124-backend-file-split-plan.html`。
 
 ## 思考过程与决策
 
@@ -49,4 +49,4 @@
 > 以下为 `activeContext.md` 会话纪要的**原文归档** (2026-09-17 机械迁移, 未删改; 含一处历史 GBK 编码损坏条目),
 > 按时间倒序保留。新增进展请写 `## 进度日志`, 不要再往 `activeContext.md` 堆长纪要。
 
-- 2026-09-15: 后端大文件拆分实施(三批次, 计划见 [docs/plans/26-09-15-1124-backend-file-split-plan.html](../../docs/plans/26-09-15-1124-backend-file-split-plan.html)) — 批次一 qbmanager.py 1118→647(视图簇→mixins/web_view.py WebviewMixin, 命令簇→mixins/web_commands.py WebCommandsMixin, 客户端构造→qbclient.py; QbManager 8 mixin, __init__ 组合根+全部状态留核心); 批次二 config/schema.py 855→包 5 文件(fields/trackers/rules/groups/__init__); 批次三 torrents.py 725→包 5 文件(compat/view/record/store) + config/validation.py 687→包 5 文件(core 助手+入口, validate_config 内延迟导入各段防环)。全程纯移动零行为变化, 调用方导入零改动(仅 test_web 的 SEARCH_INDEX_BUILD_BUDGET patch 目标改 web_view 模块); 实施前先把工作区遗留的第八轮改动(后端 singles+前端+test_web)验证后独立补交(362f292); 发现**既有测试顺序污染**: test_web+test_qbmanager 连跑 test_refresh_removed_grouping_disabled 必红(HEAD 基线同样复现, 全量绿), 待排查; dry-run 真机冒烟通过(109 种子同步/规则加载/任务创建/决策链); pytest 872 全绿; 提交 0c35474/572e154/8a4374d/5e69131; modules/systemPatterns 回写(8 mixin/包结构/依赖方向)。
+- 2026-09-15: 后端大文件拆分实施(三批次, 计划见 [memory-bank/plans/26-09-15-1124-backend-file-split-plan.html](../plans/26-09-15-1124-backend-file-split-plan.html)) — 批次一 qbmanager.py 1118→647(视图簇→mixins/web_view.py WebviewMixin, 命令簇→mixins/web_commands.py WebCommandsMixin, 客户端构造→qbclient.py; QbManager 8 mixin, __init__ 组合根+全部状态留核心); 批次二 config/schema.py 855→包 5 文件(fields/trackers/rules/groups/__init__); 批次三 torrents.py 725→包 5 文件(compat/view/record/store) + config/validation.py 687→包 5 文件(core 助手+入口, validate_config 内延迟导入各段防环)。全程纯移动零行为变化, 调用方导入零改动(仅 test_web 的 SEARCH_INDEX_BUILD_BUDGET patch 目标改 web_view 模块); 实施前先把工作区遗留的第八轮改动(后端 singles+前端+test_web)验证后独立补交(362f292); 发现**既有测试顺序污染**: test_web+test_qbmanager 连跑 test_refresh_removed_grouping_disabled 必红(HEAD 基线同样复现, 全量绿), 待排查; dry-run 真机冒烟通过(109 种子同步/规则加载/任务创建/决策链); pytest 872 全绿; 提交 0c35474/572e154/8a4374d/5e69131; modules/systemPatterns 回写(8 mixin/包结构/依赖方向)。

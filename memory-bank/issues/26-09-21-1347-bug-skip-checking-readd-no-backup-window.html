@@ -108,7 +108,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F3）。</p>
+    <p>2026-09-21 后端崩溃安全性专项调查（报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code>，报告编号 F3）。</p>
     <p><strong>触发条件：跳检动作（check 动作的 skip_checking 分支）执行中途发生非优雅终止</strong>，且落点在「删除已生效 → 重加未被 qB 接受」的缝隙内。跳检时序：阶段 2 导出 .torrent（<strong>仅进内存</strong>）→ 阶段 3a 删除种子（保留文件）+ 轮询确认消失（10 × 0.5s）→ 阶段 3b 以 <code>is_skip_checking=True</code> 重加。备份只在阶段 3b 的两条失败路径上触发。</p>
   </section>
 
@@ -202,7 +202,7 @@ L222-238  _backup_torrent: 落盘 skip-check-backup/&lt;hash&gt;.torrent
       三处还原后相关 <strong>81 passed</strong>（test_checking + test_actions）。</p>
     <p><strong>配套改动（测试基建）</strong>：<code>test_checking.py::make_mgr</code> 改为未指定 <code>state_file</code> 时自动发一份临时 state 文件 —— 跳检现在每次都真实落盘/删除备份，留空会写到 CWD = 仓库根（污染仓库且被 <code>sidefx</code> 判成越界删除）。</p>
     <p><strong>知识库回写</strong>：<code>rule-system.md</code>（跳检时序加"删除前备份/成功后清理"两步）、<code>config-reference.md</code>（<code>skip_check_backup</code> 与 <code>skip-check-backup/</code> 语义改为"删除前备份，成功后清理"）、<code>systemPatterns.md</code>、<code>docs/configuration.md</code>（跳检注意项）、<code>testing.md</code> 基线 1142 → 1145。</p>
-    <p class="hint">未动：崩溃安全报告 <code>docs/26-09-21-1329-backend-crash-safety-report.html</code> 里的 F3 条目（它是当时的快照，结论保留原样；修复结论以本报告为准）。</p>
+    <p class="hint">未动：崩溃安全报告 <code>memory-bank/reports/26-09-21-1329-backend-crash-safety-report.html</code> 里的 F3 条目（它是当时的快照，结论保留原样；修复结论以本报告为准）。</p>
   </section>
 
   <footer>

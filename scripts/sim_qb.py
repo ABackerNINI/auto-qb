@@ -15,7 +15,7 @@
 ❗R 盘即真实下载盘: 删除动作只在 <run>/fs/ 内生效, 受 B1-B4 四道边界校验约束,
   任一不过即拒绝(越界删除是不可逆的真实数据损失)。
 
-设计要点见 docs/plans/26-09-19-1433-sim-client-5000-plan.html 第 06/07/08 节。
+设计要点见 memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html 第 06/07/08 节。
 """
 from __future__ import annotations
 

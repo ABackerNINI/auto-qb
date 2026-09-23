@@ -7,7 +7,7 @@
 
 ## 原始请求
 
-用户 2026-09-22 23:20 提问:「分析如何解决多agent合作activeContext易冲突的问题」; 23:43 指令「产出计划然后提交」—— 产出计划文档(单文件 HTML, docs/plans/)并按「提交」口径 commit + push。
+用户 2026-09-22 23:20 提问:「分析如何解决多agent合作activeContext易冲突的问题」; 23:43 指令「产出计划然后提交」—— 产出计划文档(单文件 HTML, memory-bank/plans/)并按「提交」口径 commit + push。
 
 ## 思考过程与决策
 
@@ -22,7 +22,7 @@
 ## 实现计划
 
 计划文档(含目标结构、协议变化对照、波次、验收标准):
-[docs/plans/26-09-22-2350-activecontext-conflict-plan.html](../../docs/plans/26-09-22-2350-activecontext-conflict-plan.html)
+[memory-bank/plans/26-09-22-2350-activecontext-conflict-plan.html](../plans/26-09-22-2350-activecontext-conflict-plan.html)
 
 要点(v1.1 修订后): W1 结构拆分(`activeContext/` 目录 + 按专题的时间戳切片 + ≤1 KB 存根 +
 `_common` 的 `SLICE_FILE_RE` / `CAP_POLICY["slice"]` / `STUB_CANDIDATES` / `EXCLUDED_DIRS`) →
@@ -124,4 +124,4 @@ v1.1 与初稿的三处差异(2026-09-23 与用户确议, 理由见计划 §04):
     本 clone 已开 `git config rerere.enabled true`(**其余 clone 需各自开** —— 跨 clone 属红线, 本会话不代办)。
   - 计划 §05 W4 与 §07 AC-1…AC-7 已逐条标为实测通过; 未新增测试文件(建新文件需单独确认)。
 
-- **2026-09-22 23:20–23:50 (问答 → 计划产出)**: 先按问答轮完成根因分析(读 activeContext.md / collaboration.md / SKILL.md / pitfalls/git/history-integration.md + git grep 检索); 用户指令「产出计划然后提交」后转入执行: 开工 ff-only 同步 9 提交至 `d4dea8b`(含 W5 src 布局重构), 工作区干净; 立档查重(本 clone + 跨工作区 ls)无同名 slug; 闸门①等价动作 —— 干净代码态跑全量 `uv run pytest tests -q` = **1189 passed + 1 skipped**(32.9s, 覆盖率 91%, TMPDIR 已设 R:/Temp/auto-qb/tests), 与重构前基线一致; 计划 HTML 落盘 docs/plans/26-09-22-2350-activecontext-conflict-plan.html(25.6 KB, dark 主题)。仅文档, 未改代码。
+- **2026-09-22 23:20–23:50 (问答 → 计划产出)**: 先按问答轮完成根因分析(读 activeContext.md / collaboration.md / SKILL.md / pitfalls/git/history-integration.md + git grep 检索); 用户指令「产出计划然后提交」后转入执行: 开工 ff-only 同步 9 提交至 `d4dea8b`(含 W5 src 布局重构), 工作区干净; 立档查重(本 clone + 跨工作区 ls)无同名 slug; 闸门①等价动作 —— 干净代码态跑全量 `uv run pytest tests -q` = **1189 passed + 1 skipped**(32.9s, 覆盖率 91%, TMPDIR 已设 R:/Temp/auto-qb/tests), 与重构前基线一致; 计划 HTML 落盘 memory-bank/plans/26-09-22-2350-activecontext-conflict-plan.html(25.6 KB, dark 主题)。仅文档, 未改代码。
