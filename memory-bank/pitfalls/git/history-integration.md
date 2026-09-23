@@ -90,15 +90,21 @@
   否则任何 git 命令都报 `Unable to create '.git/index.lock'`; ③工作区文件成片消失但 HEAD 里还在 ⇒
   `git checkout -- <file>`; ④收尾 `git fsck --no-progress` 确认 0 broken link。
 
-### 非快进合并后, **合并未触及**的文件也可能整片从工作区消失(HEAD 与索引都还在)
+### 合并后(**快进也一样**), **未触及**的文件也可能整片从工作区消失(HEAD 与索引都还在)
 
-- **触发**: 工具 shell 里跑非快进合并合流两个分叉, 合并看起来只报 1 个冲突, 解决完提交后跑测试。
-- **判别**: 2026-09-22 合并目录化重构 W1–W3 实例: `git merge` 只报 `memory-bank/testing.md` 一处冲突,
-  提交后 `git status --short` 却冒出 **12 条 ` D`** —— `scripts/` 整个目录在工作区没了;
-  而 `git ls-tree HEAD scripts/` = 12、`git ls-files scripts` 也在 ⇒ **丢失只在工作区**, 提交与索引完好。
-  症状是 pytest **收集阶段**就崩(`FileNotFoundError: scripts/sim_fsmock.py`, 2 errors 全库一条都跑不了),
-  极易被误读成"上游把文件删了"而去改测试 —— 别改, 上游没删。
-- **处置**: ①先判哪一侧丢: `git ls-tree HEAD <dir>` 与 `git ls-files <dir>` 都在 ⇒ 只是工作区丢了;
-  ②`git restore --worktree -- <dir>` 从索引还原(**不动 HEAD、不动索引**, 比 `checkout --` 更窄);
-  ③`git status --short` 应为空 → 重跑全量测试确认。
-  **教训**: 合并收尾不能只看"冲突几个" —— 未触及文件也会在检出阶段被清掉, 必看 `git status` 行数。
+- **触发**: 工具 shell 里跑 `merge` —— **`--ff-only` 快进同样会触发**, 不只是非快进; 规律是"一次性改写大量文件的检出"。
+- **判别**: 两次实例, 共同点是**丢的都是本次改动之外的文件**:
+  - 2026-09-22 **非快进**合并 W1–W3: 只报 1 处冲突, 提交后冒出 **12 条 ` D`**(`scripts/` 整目录没了)。
+  - 2026-09-23 **快进**合并(`merge --ff-only`, 208 个文件变更): 冒出 **19 条 ` D`**, 而
+    **被删文件 ∩ 本次改动文件 = 0**(`git diff --name-only <旧> <新>` 比对得出) —— 全是被改动之外的。
+  - 两次 `git ls-tree HEAD <path>` 与 `git ls-files <path>` 都在 ⇒ **丢失只在工作区**, 提交与索引完好。
+  - 症状: pytest **收集阶段**就崩(`FileNotFoundError`)或 `uv` 报文件占用 —— 极易被误读成
+    "上游把文件删了"或"仓库损坏"而跑去改代码/改测试。**别改, 先按处置①判。**
+- **处置**: ①判哪一侧丢(`git ls-tree HEAD` / `git ls-files` 都在 ⇒ 只是工作区丢);
+  ②**全量核对存在性**(遍历 `git ls-files` 逐个查, 比只看 `git status` 更硬 —— 实例②靠它确认 1629 个文件零缺失);
+  ③`git restore --worktree -- <路径...>` 从索引还原(**不动 HEAD、不动索引**, 比 `checkout --` 更窄);
+  ④还原后**立刻复查** `git status --short`, 确认没有再次被删;
+  ⑤`git fsck --no-progress` 确认 0 broken link(排除对象库受损这种更严重的情况)。
+- **复发**: 1 —— 2026-09-23 快进后复踩(19 个文件)。**为什么没命中**: 本条上一版的标题写的是
+  "**非快进**合并后…", 执行者读到的是一条"不适用于我"的规则, 于是没做预防性检查。
+  **教训: 标题里的适用限定要写到事实的最宽边界, 别拿单次实例的形态去限定整条规则。**
