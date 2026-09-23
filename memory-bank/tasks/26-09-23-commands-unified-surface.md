@@ -173,6 +173,37 @@ v1.4 把闸门与红线写进包的 `config.toml`(= 领域配置进 command-flow
   `tmpdir.md` 已贴 cap, 为腾地方把本轮新写的那节又压了一遍。冻结快照(`plans/*.html`)、
   档案纪要(`tasks/*.md`)、叙述性文档(`progress/suggestions.md`)与别的专题的切片**刻意没动**。
   实测: `doc.caps` 报 `AGENTS.md 6999/8000`; 漂移 0 处; 全量 **1201 passed + 1 skipped**。
+- 2026-09-24 02:28: 用户反馈 skill 的 description"不清"、要突出"命令" ⇒ 重写 `commands` 的 description
+  (**175 → 307 字符**, 对齐同族 skill 的 220–315 区间): 首句改成"要跑测试 / 格式化 / 同步 / 提交 / 建索引
+  这类项目命令, 都先来这里找 —— 别自己拼、别去文档里抄"; USE FOR 里写进两件行为 —— ①**先 list 查重**
+  (想跑的 / 想加的多半已收录) ②带用户原话触发("跑一下测试"/"同步一下"/"提交"/"建索引"); DO NOT USE FOR 保留。
+  **教训: 上一版为压到 200 字符(套 skill-creator 的通用建议)丢掉了触发语, 反而更不清** —— 本项目同族
+  skill 本就在 220–315, 该跟的是同族写法。另: 查命令全树(`list --all`)时发现**常显命令被打印两遍**
+  —— 用户点头后**同轮修掉**: `_tree._level` 在 `show_all` 时不再把子包的 pin 往上浮(全树本就铺开,
+  每包由自己那层列, `★` 仍标 pin); 复验 `--all` 由 25 行(21 条 + 4 条重复)回到 **21 行零重复**,
+  且 `list` / `list <包>` / `list <包>/<子包>` / `list <包> --all` 四个视图逐一核过, 无重复无缺失。
+- 2026-09-24 02:35: 用户纠正描述 —— **"该 skill 与 scope-guard skill 并没有关系, 不应该提"**。
+  已删掉 DO NOT USE FOR 里那句"(见 scope-guard skill)"(全文再无 scope-guard 引用, 正文本来也没有),
+  并把随之悬空的"判断该不该做"补成自洽说法: "**只管"怎么跑", 不管"该不该跑"**"。终稿 **310 字符**
+  (仍在同族 220–315 区间)。口径已写进 activeContext 切片: **描述里不写与别的 skill 的交叉引用**。
+- 2026-09-24 02:50: 用户要求**省 token**: 去不必要的空格 + 把收录协议细节外置。三处改动 ——
+  ① 新建 `.agents/skills/commands/references/howto-add-command.md`(**1293 字符, 按需读**): 三条判据的判法、
+  命令的归宿表、`add` 的必填项与理由、防滥用, 全搬过去; SKILL.md 只留摘要 + 一行指针。
+  ② SKILL.md **2986 → 2068 字符(降 30.7%)**: 除搬走的细节外, 还删了与别节重复的内容(反模式两条、
+  引擎设计原理压成一句、表格去掉重复的"什么时候用"列), 并去掉半角逗号/斜杠/括号后的空格(**327 → 171 个**);
+  description 310 → 262。③ `CONTEXT_CAPS` 的 commands/SKILL.md **4200 → 2600**(实测 ~2140 含 CRLF, 留 ~20% 余量)
+  —— **上限跟着实测收, 才叫"恒定大小"**, 否则收完的成果会被慢慢吃回去。
+  另: 反漂移闸门扫描面从 `.agents/skills/**/SKILL.md` 扩到 `.agents/skills/**/*.md` —— 细节搬进 `references/`
+  后只扫 SKILL.md 会给搬出去的内容留盲区; 扩前实测 **0 命中**(不误伤别的 skill)。
+  实测: `doc.caps` SKILL.md **2068/2600** · AGENTS.md 6999/8000; 漂移 0 处; `kb.check` 全绿;
+  全量 **1201 passed + 1 skipped**。
+- 2026-09-24 03:05: 用户"修复 run doc.drift" —— 根因不是那条 task, 而是引擎**静默丢掉**调用方传的参数。
+  两处修: ① `_config.task_commands` 加判据 —— 传了参数而 `run` 里没有 `<args>` 占位符 → **STOP(rc=1)**
+  并提示"要么去掉参数, 要么在包里补 `<args>`"(`_takes_args`; **脚本类例外**: 额外参数直接接 argv 末尾);
+  ② `.commands/doc/config.toml` 的 `doc.drift` 补上 `<args>`(可传 `--list` 看正在盯的命令骨架)。
+  SKILL.md 的 STOP 清单同步补一条"参数给了不接参数的 task"(2089/2600)。
+  实测: `run doc.drift -- --list` 转发成功; `run doc.caps -- --strict` STOP rc=1 **且不执行**;
+  脚本类 `ship.commit -- --message-file … <路径>` 仍接 argv; 无参数路径不变; 全量 **1201 passed + 1 skipped**。
 
 ## 遗留 / 下一步
 

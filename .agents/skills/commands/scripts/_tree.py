@@ -61,12 +61,15 @@ def _level(owner: Pack | None, subs: dict[str, Pack], indent: int, show_all: boo
         if not sub.enabled and not show_all:
             continue
         lines.append(_pack_line(sub, indent))
-        # 常显浮一级: 子包里标了 pin 的命令, 在父级列表就能看到
-        for task in sorted(sub.tasks.values(), key=lambda t: t.id):
-            if task.pin:
-                lines.append(_task_line(task, indent + 2, star=True))
         if show_all:
+            # `--all` 是全树铺开: 每个包的任务交给它**自己那一层**列(pin 由 _task_line 标 ★),
+            # 不再往上浮 —— 否则递归进子包时, 同一批 pin 命令会被列第二遍(看着像 task id 重复)。
             lines += _level(sub, sub.subs, indent + 2, show_all)
+        else:
+            # 常显浮一级: 子包里标了 pin 的命令, 在父级列表就能看到
+            for task in sorted(sub.tasks.values(), key=lambda t: t.id):
+                if task.pin:
+                    lines.append(_task_line(task, indent + 2, star=True))
     return lines
 
 

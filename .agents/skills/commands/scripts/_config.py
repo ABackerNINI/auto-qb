@@ -341,7 +341,16 @@ def expand(text: str, root: Path, args: str = "", strict: bool = True) -> str:
 
 
 def task_commands(task: Task, root: Path, args: str = "", strict: bool = True) -> list[str]:
-    """把一条 task 变成**可直接执行**的命令行数组(占位符已展开)。"""
+    """把一条 task 变成**可直接执行**的命令行数组(占位符已展开)。
+
+    `args` 非空却**无处可去**时 STOP —— 静默丢掉调用方给的参数, 就是让"看起来跑过了"悄悄发生
+    (与引擎其余判据同源: 不静默降级)。脚本类不吃这条: 额外参数会直接接到 argv 末尾。
+    """
+    if args and not _takes_args(task):
+        raise ConfigError(
+            f"[STOP] {task.id} 不接参数(run 里没有 <args> 占位符), 但传入了: {args}"
+            " —— 要么去掉参数, 要么在包里给这条 run 补上 <args>"
+        )
     if task.script:
         if task.scripts_dir is None:
             raise ConfigError(f"[STOP] {task.id}: 所属包没有脚本目录")
@@ -350,6 +359,11 @@ def task_commands(task: Task, root: Path, args: str = "", strict: bool = True) -
             raise ConfigError(f"[STOP] {task.id}: 脚本不存在: {script_path}")
         return [" ".join(_quote(x) for x in _script_argv(script_path, task, args, strict))]
     return [expand(c, root, args, strict) for c in task.run]
+
+
+def _takes_args(task: Task) -> bool:
+    """这条 task 吃不吃额外参数: 脚本类吃(接到 argv 末尾); 命令类得写了 `<args>` 占位符才算吃。"""
+    return bool(task.script) or any("<args>" in cmd for cmd in task.run)
 
 
 def _script_argv(script_path: Path, task: Task, args: str, strict: bool) -> list[str]:

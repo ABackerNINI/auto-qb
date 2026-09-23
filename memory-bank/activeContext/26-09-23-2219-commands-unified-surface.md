@@ -1,7 +1,7 @@
 # commands — 项目命令统一调用面 (纯引擎 + 包式配置层)
 > 摘要: 同一条命令仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀实测 rc=1)。方案是把 skill 缩成**纯引擎** (只认识「包」与「命令」, 连"提交"都不知道), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒** (包私有配置引擎不读), 路由**不落盘**改为逐级查询 + `pin` 常显。**W1–W5 已全部实施**: 引擎三件 (`_config.py` / `_tree.py` / `run.py`) + 六个顶级包 (test / kb / dev / env / doc / my-commit-flow, 后者含 `ship/` 子包); `my-commit-flow` 从 skill 降为同名包 (`.commit-flow.toml` 改名 `.my-commit-flow.toml` 原样搬入), 旧 skill 已删除; 反漂移闸门 `scripts/check_command_drift.py` 把文档手抄形态判红, 63 处副本已全部收口到 0。**2026-09-24 优化轮**: SKILL.md 讲清两种记法 + description 收到 175 字符; 补 `pin` 数量守卫 (W4 声称的"层级完整性检查"里唯一缺的那条); 格式化闸门去双写 (改经引擎调 `dev.fmt`); SKILL.md 加恒定大小硬上限。
-> 触发: 命令在哪定义, commands, .commands, 包, task id, 反漂移, 手抄命令, 收录协议, add, pin, 常显, my-commit-flow 成包, 闸门位置, 两种记法, 沙箱假红
-> 最后活动: 2026-09-24 01:58
+> 触发: 命令在哪定义, commands, .commands, 包, task id, 反漂移, 手抄命令, 收录协议, add, pin, 常显, my-commit-flow 成包, 闸门位置, 两种记法, 沙箱假红, skill 描述
+> 最后活动: 2026-09-24 02:28
 
 ## 状态
 
@@ -21,11 +21,24 @@
 - **不降级原则**: 未知块内键 / `timeout` 非法 / 残留占位符 / 包级 `confirmed = false` / task id 全树重复 /
   包名与目录名不一致 / 子包目录不存在 → 一律 **STOP (rc=1)**; **顶层未知键是 WARN**(它可能正是包私有配置)。
 - **`SKILL.md` 是恒定大小文档**: 不出现任何可直接执行的命令, 也不含路由表本体; 硬上限挂在
-  `scripts/check_context_caps.py` 的 `CONTEXT_CAPS`(`.agents/skills/commands/SKILL.md` = 4200 字符)。
+  `scripts/check_context_caps.py` 的 `CONTEXT_CAPS`(`.agents/skills/commands/SKILL.md` = **2600** 字符 ——
+  2026-09-24 从 4200 收下来, **上限跟着实测收**才叫恒定大小)。
+  **细节一律外置到 `references/`**(按需读, 不进每次加载): 收录协议的 how-to 在
+  `references/howto-add-command.md`, SKILL.md 只留摘要 + 指针; 去掉半角逗号/斜杠/括号后的空格也是为省 token。
 - **两种记法, 别混**: 文档里写 `commands run <task>`(短、给人看); 真要敲 shell 时展开成
   `python <skill-dir:commands>/scripts/run.py <子命令>` —— `commands` 本身**不是**可执行程序。
 - **`pin` 是稀缺资源**: 一层视图里浮出的常显命令 > `MAX_PIN_PER_LEVEL`(8) → `list` 报 WARN。
   pin 滥用等于把平表搬回一级视图, 这是 W4 说的"层级完整性检查"里唯一没落机检的一条(2026-09-24 补上)。
+- **参数不许被静默丢掉**(2026-09-24 修): 调用方传了参数、而 task 的 `run` 里没有 `<args>` 占位符
+  → **STOP(rc=1)**, 并提示"要么去掉参数, 要么在包里补 `<args>`"(`_config._takes_args`;
+  **脚本类例外** —— 额外参数直接接到 argv 末尾, 如 `ship.commit -- --message-file … <路径>`)。
+  起因: `run doc.drift -- --list` 的 `--list` 曾被**静默丢弃**(正是"看起来跑过了"), `doc.drift` 已补 `<args>`。
+- **SKILL.md 的 description 要突出"命令"**(2026-09-24 用户反馈"描述不清"): 首句就写"要跑项目命令
+  就来这里找", 并写进两件行为 —— ①**先 list 找找**(想跑的 / 想加的多半已收录, 别自己拼、别手抄)
+  ②带用户原话触发("跑一下测试"/"同步一下"/"提交"/"建索引")。长度跟同族 skill(220–315 字符),
+  **不为压到 200 而丢触发语** —— 上一版压到 175 反而把"命令"埋进了实现细节。
+  **也不写与别的 skill 的交叉引用**: 用户 2026-09-24 明确"commands 与 scope-guard 并没有关系, 不应该提"
+  —— 原描述末尾那句"(见 scope-guard skill)"已删, 悬空的"判断该不该做"改成自洽说法(只管"怎么跑")。
 
 **已验的事** (别重做):
 
@@ -35,6 +48,15 @@
 - `pin` 守卫: 临时树里 3 条 pin 不报、9 条 pin 报(一级与子包两层都试过)。
 - 格式化闸门去双写: 预检把 `<changed:*.py>` 展开成 `run.py run dev.fmt -- <文件...>`, 引擎再展开成 `yapf -i <文件...>`
   —— 两段都实测过, 与旧闸门行为等价(仍是"只碰本次改过的 py")。
+- `list --all` 去重(2026-09-24 修): 曾把常显命令打印两遍(21 条命令显示成 25 行, 看着像 task id 重复,
+  而重复正是引擎的 STOP 判据)。改成 `--all` 时**不再往上浮** pin(全树本就铺开, 每包由自己那层列,
+  `★` 仍标 pin)。逐视图复验: `--all` 21 行零重复; `list` 3 / `list kb` 3 / `list test` 3 /
+  `list my-commit-flow` 4 / `my-commit-flow/ship` 2 / `my-commit-flow --all` 5 —— 无重复、无缺失。
+- 反漂移闸门扫描面扩到 `.agents/skills/**/*.md`(2026-09-24, 原为 `**/SKILL.md`): 细节搬进 `references/`
+  后只扫 SKILL.md 会给搬出去的内容留盲区。扩之前先跑过一遍**实测 0 命中**(不误伤别的 skill)。
+- 参数传递(2026-09-24): `run doc.drift -- --list` 转发成功(引擎只回末 3 行摘要 —— 要全文用 `show` 看命令再自己跑);
+  `run doc.caps -- --strict` **STOP rc=1 且不执行**; 脚本类 `ship.commit -- --message-file … <路径>` 仍接到 argv 末尾;
+  无参数时路径不变(`show test.full` 逐字一致)。
 
 **下一步 / 未收口**:
 

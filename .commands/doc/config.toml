@@ -16,7 +16,7 @@ when    = "改了 AGENTS.md 或 commands 的 SKILL.md 后自查"
 note    = "AGENTS.md 超 8000 字符注入时尾部被静默截断(写了也看不到); SKILL.md 有恒定大小硬上限"
 
 [tasks."doc.drift"]
-run     = ["python scripts/check_command_drift.py"]
+run     = ["python scripts/check_command_drift.py <args>"]
 timeout = 180
 when    = "文档里有没有人（含 agent）手抄了已收录的命令"
-note    = "命令只应在包里定义一份；文档里要写就写 task id"
+note    = "命令只应在包里定义一份；文档里要写就写 task id。<args> 可传 --list 看正在盯的命令骨架"

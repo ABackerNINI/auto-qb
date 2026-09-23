@@ -22,6 +22,8 @@ sys.path.insert(0, str(ENGINE))
 import _config as C  # noqa: E402
 
 # 扫哪些文档 —— 都是**决策点**: 执行者真的会来这里找命令
+# `.agents/skills/**/*.md`(不只 SKILL.md): skill 的 references/ 之类也是决策点, 而且
+# SKILL.md 为省 token 会把细节搬过去 —— 只扫 SKILL.md 等于给搬出去的内容留一块盲区。
 SCAN_GLOBS = (
     "AGENTS.md",
     "README.md",
@@ -29,7 +31,7 @@ SCAN_GLOBS = (
     "TODO.md",
     "memory-bank/**/*.md",
     ".github/**/*.md",
-    ".agents/skills/**/SKILL.md",
+    ".agents/skills/**/*.md",
 )
 
 # 显式豁免 —— 每一条都要说得出理由, 不加"先跑起来再说"的口子
