@@ -27,21 +27,36 @@ TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q
   **退出码非 0**、提交闸门误判红。
 - 改 H 盘权限**无效**; 只改 `TMP` / `TEMP` 也无效(Python 的 `tempfile` **先读 `TMPDIR`**);
   只加 `--basetemp` 也不行(测试里直接用 `tempfile` 的仍落 H: ⇒ 4 failed + 1 error)。
-- 备选 `C:/Users/11059/AppData/Local/Temp` → 1143 passed in 37.69s(更快), 但按约定**统一走 R 盘**。
+- 备选是 `C:/Users/11059/AppData/Local/Temp`(更快), 但按约定**统一走 R 盘**。
+  ⚠ 换盘**省不了多少** —— 本机文件操作的固定开销在 R: / D: / C: 上完全一致, 见下「耗时画像」。
 - 完整判据与"治本解"见 [../pitfalls/testing/tmpdir.md](../pitfalls/testing/tmpdir.md)。
 
 ## 环境纪律
 
-- **不要并发跑多个 pytest 进程**: 本项目有绑定本地端口的 `FakeQbServer` 用例, 且 sidefx 守卫按**会话**记账
-  (任何进程删了越界文件都会算到当前会话头上)⇒ 并发跑会出现**假的失败**。
+- **并发跑 pytest**: 既有说法"`FakeQbServer` 绑固定端口所以不能并行"**事实有误**
+  (它用 `("127.0.0.1", 0)`, 端口由内核分配)。系统层排除项调好之后, `-n 4` 全量 **5.0s**(串行 19.6s, 约 4×)
+  且**波动极小**, 建议作本地快车道; 但 sidefx 台账在并行下**不打印**(拦截仍在, 只是看不见)、
+  覆盖率与串行差 1 个单位 ⇒ 当**闸门**用之前先补控制器侧台账聚合。
+  取舍、样本与判据见 [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
 - 测试**基本全部使用 Fake, 不连真实 qBittorrent**(随时可全量运行)。唯一例外是
   `test_local_qb_service.py` 与 `test_ui.py::test_connect_failure_throttles_logging`(走 `FakeQbServer`)。
-- **耗时画像**(空载): 含 `--cov-branch` ≈ **40 秒**; `--no-cov` ≈ **30 秒**; Linux(WSL, ext4)≈ **12 秒**
-  —— Windows 慢约 3 倍, 差值主要来自 drvfs 与进程/文件操作。
-  ⚠ **别用 `| tail -N` 接 pytest** —— 会缓冲到进程结束才出输出, 容易误判成卡死。
+- **耗时画像**: **当前数字以 [baseline.md](baseline.md) 为准, 本节只记量级与成因**(避免两处各自漂移)。
+  2026-09-23 末态: 串行空载约 **19.6s**, 并行 `-n 4` 约 **5.0s**(同日更早是 61s / 75s 量级)。
+  Linux(WSL, ext4) 约 **12s** 量级(旧测)。
+  ⚠ **单次数字没有意义, 报耗时必须带区间** —— 逐次实测集只在 [baseline.md](baseline.md) 里枚举一处。
+  ❗**耗时曾被"每次文件操作的固定开销"支配**(不是 Python / 覆盖率): 初始态每次操作收
+  **20ms(写)/ 43ms(删)** 的固定过路费(与数据量无关, 三块盘一致), 全量一次建 577 个临时目录 ⇒ 约 26s。
+  **已由系统层排除项治好**(现 `mkdir` 0.13 / 写 0.21 / `remove` 0.16 / `rmdir` 0.14ms, 全部 <1ms)
+  ⇒ 全量 **75s → 19.6s**。⇒ 这 3.8× 来自**环境**不是代码; 若哪天又变慢, **先按操作类型逐项复测**,
+  并注意白名单**粒度**(只加项目子目录没用, 要按 Temp 目录加)。定位三步与探针见
+  [../pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md)。
+- ⚠ **别用 `| tail -N` 接 pytest** —— 会缓冲到进程结束才出输出, 容易误判成卡死。
+- ⚠ **别用"全量总时"判断某处优化省了多少** —— 会被别处抵消(实测: 守卫收尾从 4.7~9.0s 掉到 1.04s,
+  总时却没降, 因为同一次跑里另一处冒出 10s)。收益一律看 `--durations` 里**目标条目本身**或 A/B 两次跑。
+- ⚠ **有并发负载时测出的耗时一律是假的**(本机放大得特别狠: 同一份代码 62.87s ↔ 124.48s)。
 - ⚠ 主循环节拍类用例用**真实睡眠**(0.05~0.6s)观测节拍, **不能用 mocked 时钟** ——
   时间不前进会导致"两条线都不到期"的死循环, 用例会**挂死而非失败**。
-- 覆盖率现状: 总 **90%**(以 [baseline.md](baseline.md) 为准); 低洼是 `ui.py`(GUI 本体真机冒烟不单测);
+- 覆盖率现状: 总覆盖率**以 [baseline.md](baseline.md) 为准**(此处不抄数字); 低洼是 `ui.py`(GUI 本体真机冒烟不单测);
   近乎全绿(94%~100%): `config/impact.py` / `config/schema.py` / `logging.py` / `qbapi.py` /
   `registry.py` / `taskqueue.py` / `tracker.py`。
 

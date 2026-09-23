@@ -56,9 +56,17 @@ _GIB = 1024**3
 
 
 def _setup(tmp=None, **tor_kw):
-    """造 manager + ctx; tor 默认 200GiB / 分享率 2.0 / 已做种 4 天"""
-    td = tmp or tempfile.mkdtemp()
+    """造 manager + ctx; tor 默认 200GiB / 分享率 2.0 / 已做种 4 天
+
+    ❗不传 `tmp` 时**不用 `tempfile.mkdtemp()`**(2026-09-23 实测): 那个没人回收, 每跑一次就在
+    TMPDIR 根下留一个 `tmpXXXX` 目录 —— 实测已积到 1268 个。改挂 `TemporaryDirectory` 到 mgr 上:
+    随 mgr 释放即删, 且不会像"局部变量不返回"那样被提前回收(那会让 mgr 后续写 state.json 失败)。
+    """
+    holder = None if tmp else tempfile.TemporaryDirectory(prefix="autoqb-expr-")
+    td = tmp or holder.name
     mgr = make_manager(os.path.join(td, "state.json"))
+    if holder is not None:
+        mgr._test_tmpdir = holder  # 生命周期锚点: 见 docstring
     tor = FakeTorrent(size=200 * _GIB, uploaded=400 * _GIB, ratio=2.0, seeding_time=4 * 86400, **tor_kw)
     ctx = make_ctx(mgr, tor, FakeClient())
     return mgr, tor, ctx

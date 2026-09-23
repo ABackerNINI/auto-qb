@@ -12,6 +12,12 @@
   (`is_temp_path` / `policy_allows_known_effects` / `recorder_installed_and_records` /
   `rmtree_dir_fd_entries_not_flagged`)+ 1 条 ERROR, **看着像真失败, 实为临时目录搬家的假红**。
 - **处置**: 正确姿势 `uv run pytest tests -q --no-cov --basetemp "H:/Temp/<新目录>"` → 与基线一致。
+- **复发**: 2 —— 2026-09-23 复踩: 用 `--basetemp=R:/Temp/auto-qb/pa_bt`(在 TMPDIR
+  `R:/Temp/auto-qb/tests` **之外**)跑全量, 又是 4 failed + 1 error, 与 2026-09-22 同形。
+  **为什么没命中: 路由到了但文件没读** —— 本轮读过 [../../testing/run.md](../../testing/run.md),
+  该文件末行明确指向本文件, 但没顺着点开就自己开测, 于是把已记的坑当"新发现"重新踩了一遍。
+  同日复核补充: 只要 basetemp 落在 `tempfile.gettempdir()` **之内**就不假红 ——
+  `--basetemp=R:/Temp/auto-qb/tests/bt` 实测越界 **0** 条、守卫全绿。
 
 ### 测试基线的临时目录与覆盖率文件必须落在仓库外, 且 basetemp 目录本身必须**不存在**
 
@@ -28,8 +34,9 @@
 ### 速度画像: 直接跑全量即可, 不必挑子集
 
 - **触发**: 想"只跑相关文件"省时间。
-- **判别**: 空载全量约 **32 秒**(带 `--cov-branch`)/ **25 秒**(`--no-cov`);
-  并发污染下测出的"某文件 300 秒"是**假数字**。
+- **判别**: 空载全量 **19~20s**(2026-09-23 末态, 排除项调好之后; 同日更早分别是 54~81s 与 62~114s)——
+  **当前基线数字一律以 [../../testing/baseline.md](../../testing/baseline.md) 为准**, 此处不复述;
+  并发污染下测出的"某文件 300 秒"是**假数字**(本机放大得特别狠, 见 [perf-measurement.md](perf-measurement.md))。
 - **处置**: 直接跑全量。
   ⚠ **别用 `| tail -N` 接 pytest** —— 会缓冲到进程结束才出任何输出, 容易**误判成卡死**。
 

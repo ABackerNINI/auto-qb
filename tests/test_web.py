@@ -563,21 +563,44 @@ def _scan_template_transitions(path, rel, problems):
         problems.append(f"{rel} `<transition>` 未闭合(差 {depth})")
 
 
+# `node -e` 批量校验脚本(不落盘): 逐文件按 **CommonJS 包装**编译 —— 与 `node --check` 同语义, 但只起一个进程。
+# ⚠ 必须经 `Module.wrap`: 裸 `new vm.Script(src)` 按**经典脚本**解析, 会把顶层 `return`(CommonJS 下合法)
+#   判成语法错误 ⇒ 比原判据凭空变严(2026-09-23 实测: 同一批样本里只有该边界项判定不同)。
+_NODE_SYNTAX_CHECK = (
+    "const fs=require('fs'),vm=require('vm'),M=require('module');let bad=0;"
+    "for(const f of process.argv.slice(1)){"
+    "try{new vm.Script(M.wrap(fs.readFileSync(f,'utf8')),{filename:f});}"
+    "catch(e){bad++;console.error(f+'\\t'+e.message);}}"
+    "process.exit(bad?1:0);"
+)
+
+
 def _scan_js_syntax_with_node(js_files, problems):
-    """有 node 时用 `node --check` 对前端 JS 做**真**语法校验(2026-09-17 起本机已装 node)
+    """有 node 时对前端 JS 做**真**语法校验(2026-09-17 起本机已装 node)
 
     这是启发式扫描(注释孤儿续行等)之上的一道硬闸: 任何语法错误都能以 `文件:行` 形式报出。
     无 node(未装的机器/精简 CI)时**静默跳过**本项 —— 不引入 pytest skip(基线是 0 skipped),
     启发式扫描仍在拦最常见的那类损坏。
+
+    ❗2026-09-23 由「逐文件起一个 `node --check`」改为**单进程批量**: 20 个文件 = 20 次进程启动,
+    实测 7.4s, 其中 95% 是进程启动开销(批量 0.38s)。校验语义已逐样本对齐过 ——
+    6 个故障样本(注释孤儿续行 / 未闭括号 / 未闭字符串 / 未闭模板串 / 坏正则 / 未闭圆括号)
+    + 1 个正常样本 + 1 个顶层 `return` 边界样本, 判定与 `node --check` **8/8 一致**。
     """
     node = shutil.which("node")
     if not node:
         return
-    for path, rel in js_files:
-        proc = subprocess.run([node, "--check", path], capture_output=True, text=True)
-        if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout).strip().splitlines()
-            problems.append(f"{rel} node --check 报语法错误: {detail[0] if detail else 'unknown'}")
+    paths = [path for path, _rel in js_files]
+    if not paths:
+        return
+    proc = subprocess.run([node, "-e", _NODE_SYNTAX_CHECK, *paths], capture_output=True, text=True)
+    if proc.returncode == 0:
+        return
+    rel_of = {os.path.normcase(path): rel for path, rel in js_files}
+    for line in (proc.stderr or proc.stdout).strip().splitlines():
+        name, _, message = line.partition("\t")
+        rel = rel_of.get(os.path.normcase(name.strip()), name.strip())
+        problems.append(f"{rel} node 语法校验报错: {message.strip() or 'unknown'}")
 
 
 def _app_bundle_files():
@@ -875,7 +898,7 @@ def _scan_frontend_assets():
     1. 合并冲突标记残留(`<<<<<<<` / `>>>>>>>` / 单独一行 `=======`) —— 语法错误;
     2. JS 里"注释已闭合却仍留续行"(上一非空行以 `*/` 结尾, 本行又以 `*` 起头) ——
        整包 SyntaxError, app.js 不执行, Vue 从不 mount, `v-cloak` 的 #app 恒 display:none;
-    3. JS 语法硬校验: 有 node 时跑 `node --check`(见 _scan_js_syntax_with_node);
+    3. JS 语法硬校验: 有 node 时单进程批量校验(语义同 `node --check`, 见 _scan_js_syntax_with_node);
     4. CSS 规则块漏闭合(浏览器会把其后规则整段当声明丢弃) —— 见 _scan_css_blocks;
     5. 模板 `<transition>` 不配对 / 把弹窗包进 `<transition>`(只渲染首子节点 -> 弹窗全丢);
     6. 模板/样式里以 `/` 开头的 src|href 引用, 在 static 根下必须真实存在(防改名/漏档 404);
@@ -4326,12 +4349,20 @@ def test_cmd_timing_is_logged_without_browser(caplog):
 
 
 def _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0):
-    """一个只含单个种子的 QbManager(供回执时序类断言用)"""
+    """一个只含单个种子的 QbManager(供回执时序类断言用)
+
+    ❗临时目录**挂到 mgr 上**, 不用 `tempfile.mkdtemp()`(2026-09-23 实测): 后者没有任何人回收,
+    每跑一次就在 TMPDIR 根下留一个 `tmpXXXX` 目录 —— 实测已积到 1268 个。
+    也不能写成"函数内建 TemporaryDirectory 但不返回": 局部对象出函数即被回收, 目录当场消失,
+    mgr 后续写 state.json 会失败。挂给 mgr 后随 mgr 释放即删, 两头都对。
+    """
     import tempfile
 
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
-    mgr = make_manager(os.path.join(tempfile.mkdtemp(), "state.json"))
+    tmpdir = tempfile.TemporaryDirectory(prefix="autoqb-web-")
+    mgr = make_manager(os.path.join(tmpdir.name, "state.json"))
+    mgr._test_tmpdir = tmpdir  # 生命周期锚点: 见 docstring, 不能让它在这里被回收
     tor = FakeTorrent(hash="b" * 40, name="t", state=state, progress=progress)
     mgr.client = FakeClient()
     mgr.client.torrents[tor.hash] = tor

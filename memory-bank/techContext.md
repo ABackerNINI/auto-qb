@@ -25,7 +25,7 @@
 
 | 用途 | 固定路径 |
 |---|---|
-| 测试临时目录 | `R:/Temp/auto-qb/tests` —— 跑测试前 `TMPDIR=R:/Temp/auto-qb/tests`(实测 **1143 passed in 59.48s**) |
+| 测试临时目录 | `R:/Temp/auto-qb/tests` —— 跑测试前 `TMPDIR=R:/Temp/auto-qb/tests`(耗时数字以 [testing/baseline.md](testing/baseline.md) 为准, 此处不抄) |
 | 运行验证的独立配置 + data_dir | `R:/Temp/auto-qb/run-<名>/`(用后清理; 禁止用生产 `config.yml` / `auto-qb-data/`) |
 | `.git` 备份(高风险 git 操作前 `cp -a .git`) | `R:/Temp/auto-qb/git-backup-<YYYY-MM-DD>`(`.git` 仅 17M, 备份成本可忽略) |
 | 打包 / 抓取 / 归档前的一次性大产物 | `R:/Temp/auto-qb/<名>/` |
@@ -35,7 +35,10 @@
   - R 盘是**临时盘**: 需要长期留存的归档仍进 `D:/Projects/_archive/`, 别放这儿。
   - 依赖符号链接的工具 / 用例**不要**放 R 盘(它建不出真正的重解析点)。
   - 写之前先 `mkdir -p`; 空间只剩个位数 GB 时先清旧的 `run-*` / `git-backup-*`。
-  - 备选: C 盘 `C:/Users/11059/AppData/Local/Temp` 也可用(1143 passed in 37.69s, 最快), 但按本约定统一走 R 盘, 免得一处一个样。
+  - 备选: C 盘 `C:/Users/11059/AppData/Local/Temp` 也可用, 但按本约定统一走 R 盘, 免得一处一个样。
+    ⚠ **"C 盘更快"是旧印象, 已被实测推翻**(2026-09-23): 每次文件操作的固定开销在 R: / D: / C: 上
+    **完全一致**(写约 20ms / 删约 43ms, 与数据量无关)⇒ 换盘救不了耗时, 别为"换到 C 盘"折腾。
+    成因与探针见 [pitfalls/testing/perf-measurement.md](pitfalls/testing/perf-measurement.md)。
 
 ## 浏览器自动化环境(两条轨道)
 

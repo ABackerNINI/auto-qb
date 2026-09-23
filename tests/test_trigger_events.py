@@ -34,15 +34,25 @@ def _ev(trigger, actions, conditions=None, **kw):
 
 
 def _event_mgr(rules, tracker_rules=None, state_file=None):
-    """构造仅含事件规则的 manager(替换 make_manager 的示例规则; tracker 引用事件规则集)"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(
-            state_file or os.path.join(td, "state.json"),
-            tracker_rules=tracker_rules or ["@event_rules"],
-        )
-        mgr.config.rules_config = {"event_rules": rules}
-        mgr._load_rules()
-        return mgr
+    """构造仅含事件规则的 manager(替换 make_manager 的示例规则; tracker 引用事件规则集)
+
+    ❗临时目录**挂到 mgr 上**(2026-09-23 实测): 原写法 `with TemporaryDirectory()` 在函数
+    返回时就把目录删了, 而 `mgr.state_file` 仍指向该路径 —— 后续写 state.json(如
+    `test_event_checking_resume_fail` 里的 `seed_store`)会把目录**重新建出来**, 且此时
+    持有者已销毁 ⇒ 每跑一次全量就在 TMPDIR 根下留一个 `tmpXXXX`。挂给 mgr 后随 mgr 释放即删。
+    (诊断手段: 仓库外插件 `R:/Temp/auto-qb/plugins/pa_tmp_trace.py`, 包住 `tempfile.mkdtemp`
+    记录调用栈, 收尾打印仍存在的目录 —— 全量 577 个临时目录里只剩这 1 个泄漏点。)
+    """
+    holder = None if state_file else tempfile.TemporaryDirectory(prefix="autoqb-events-")
+    mgr = make_manager(
+        state_file or os.path.join(holder.name, "state.json"),
+        tracker_rules=tracker_rules or ["@event_rules"],
+    )
+    if holder is not None:
+        mgr._test_tmpdir = holder  # 生命周期锚点: 见 docstring
+    mgr.config.rules_config = {"event_rules": rules}
+    mgr._load_rules()
+    return mgr
 
 
 def _refresh(mgr, torrents, dry_run=False):

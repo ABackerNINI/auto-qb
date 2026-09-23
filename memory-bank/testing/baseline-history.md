@@ -6,6 +6,30 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 收集数**不变**(**1192**; 2026-09-23 **全量测试耗时归因与优化**, 见 [tasks/26-09-23-test-suite-perf.md](../tasks/26-09-23-test-suite-perf.md)):
+  **未增删用例**, 只做三处实测优化 + 补一份坑档 —— ①`tests/sidefx.py` 的 `report()` 把 `violations`
+  提到循环外(原写法每种 kind 重算一次 = 8 次 × 约 1600 条路径 × `os.path.realpath`)⇒ 收尾 teardown
+  **4.71~8.97s → 1.04~1.20s**; ②`tests/test_web.py` 的前端 JS 语法守阵由"20 次 `node --check` 进程"
+  改为**单进程批量**(`node -e` + `Module.wrap`; 裸 `vm.Script` 会把顶层 `return` 判错, 已对齐为
+  与 `--check` **8/8 一致**)⇒ 7.375s → 0.378s, `test_frontend_static_bundle_health` 4.06s → 0.27s;
+  ③修三处临时目录泄漏(`test_web` / `test_expr_eval` / **探针新查出** `test_trigger_events`)⇒
+  探针实测"每次全量建 **577** 个临时目录, 收尾残留 **2 → 1**", 剩下的 1 个是
+  `test_checking.py:155` 的模块级持有者, 进程退出即回收。全量 1191 passed + 1 skipped / TOTAL 91% / 越界 0。
+  ⚠ **耗时数字改口径**: 旧记录写单值(139.07s), 本轮同一条命令多次实测为
+  **62~114s**(中位约 75s, 极差 1.8 倍; 逐次枚举见 [baseline.md](baseline.md))
+  ⇒ 基线耗时**改为区间**, 理由与成因见 [baseline.md](baseline.md) 与
+  [pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md)。
+  同日续: 用户把**三盘 Temp 目录**加入文件安全白名单后复测, **写 20.19 → 0.58ms(34×)**、
+  串行中位 **75 → 61s**(54~81s); 但 `os.remove` 14.6ms / `os.rmdir` 52.7ms **仍被拦**
+  (一次全量 577 个临时目录 ⇒ 删除类 ≈ 26s, 占 44%)。并行 `-n 4` 中位 ~31s 但尾部最坏 209.77s。
+  同日再续: 用户继续调整设置后**删除也被治好** —— 四类操作全部 <1ms
+  (`mkdir` 0.13 / 写 0.21 / `remove` 0.16 / `rmdir` 0.14ms)⇒ 串行 **19.37~20.16s**(中位 ~19.6s),
+  并行 `-n 4` **5.00 / 5.06s**(波动消失)⇒ 相较最初的 75s 量级共 **3.8×**(并行 15×)。
+  ⚠ 这 3.8× 全部来自**环境**, 不是代码优化; 并行条目已从"不建议"翻转为"建议 `-n 4`" ——
+  见 [pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
+  另: 原候选"C 把 basetemp 钉进 TMPDIR 以省掉会话起始清理"实测**被推翻**(只把删除从收尾挪到起始 ——
+  `_pytest/tmpdir.py` 对显式给定且已存在的 basetemp 会先 `rm_rf`, RUN H setup 段 19.85s), **未实施**。
+
 - ↑ 收集数不变(**1192**; 2026-09-23 **tasks 索引渲染口径改造**): 未增删用例, 只消红 ——
   `gen_tasks_index.SUMMARY_MAX = 80`(摘要截断成一行) 让 `tasks/_index.md` **12,299 → 5,710**,
   那条既有红 `test_kb_files_respect_caps` 随之消失, 全量 **1191 passed + 1 skipped** / 139.07s / TOTAL 91%。

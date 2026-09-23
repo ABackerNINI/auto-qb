@@ -382,15 +382,23 @@ class SideFxRecorder:
         return [r for r in self.records if is_violation(r)]
 
     def report(self) -> str:
-        """人类可读的台账摘要(与 2026-09-18 普查报告同形态)"""
-        lines = [f"副作用台账: 共 {len(self.records)} 条, 越界 {len(self.violations)} 条"]
+        """人类可读的台账摘要(与 2026-09-18 普查报告同形态)
+
+        ❗`violations` **必须在循环外只求值一次**(2026-09-23 性能实测): 它内部对每条
+        FSDEL/SYMLINK 记录都要走 `is_temp_path` -> `_norm_path` -> `os.path.realpath`,
+        而本机 realpath 单次 0.18~0.48ms, 全量跑有 ~1600 条路径记录。原写法在 for 循环里
+        **每种 kind 重算一次**(8 次)= 约 1.4 万次 realpath, 会话收尾白白多花 4~7s
+        (实测: 该处优化后最后一个用例的 teardown 由 4.7~9.0s 降到 1.0s)。
+        """
+        violations = self.violations  # 单次求值; 见 docstring —— 循环内重算会把收尾拖成秒级
+        lines = [f"副作用台账: 共 {len(self.records)} 条, 越界 {len(violations)} 条"]
         for kind in ("POPEN", "LAUNCH", "REG", "REGVAL", "FSDEL", "SYMLINK", "BIND", "CONNECT"):
             total = sum(1 for k, _ in self.records if k == kind)
             if not total:
                 continue
-            bad = sum(1 for r in self.violations if r[0] == kind)
+            bad = sum(1 for r in violations if r[0] == kind)
             lines.append(f"  {kind:<8} {total:>4} 条, 越界 {bad}")
-        for kind, detail in self.violations[:20]:
+        for kind, detail in violations[:20]:
             lines.append(f"  !! {kind}: {detail!r}")
         return "\n".join(lines)
 

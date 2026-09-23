@@ -8,7 +8,30 @@
 
 **1192 collected: 1191 passed + 1 skipped / Windows** —— 2026-09-23 实测
 (activeContext 切片化 +1 守卫; 同日 `tasks/_index.md` 改索引渲染口径后又消掉一条既有红);
-TOTAL 91%, 139.07s。Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
+TOTAL **91%**(7729 语句 / 622 未覆盖 / 2636 分支), sidefx 台账 2036 条 / **越界 0**。
+Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
+
+### 耗时(❗必须带区间)
+
+**当前(2026-09-23 系统层排除项调整后)** —— 串行空载 4 次:
+**19.37 / 19.38 / 19.81 / 20.16s**(中位约 **19.6s**); 并行 `-n 4` **5.00 / 5.06s**(`-n 8` 4.88s)。
+
+**同日更早**(留档对照, 同一台机器 / 同一份代码 / 同一命令):
+- 只加文件安全白名单后: 串行 6 次 **53.51 / 56.37 / 60.06 / 62.41 / 73.66 / 80.68s**(中位 ~61s)
+- 白名单前: 串行 9 次 **62.87 / 71.12 / 72.71 / 74.36 / 74.99 / 77.32 / 84.36 / 102.12 / 114.49s**(中位 ~75s)
+
+> **本文件是这组数字的唯一枚举处** —— 其它文档只写量级与"见 baseline.md", 别再抄一遍(抄一份多一处漂移)。
+> 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
+
+- **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
+- 含 `--cov-branch` 时另有约 3~8s 覆盖率开销(本仓库 `pytest.ini` 默认带覆盖率)。
+- **成因(单点: [../pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md))**: 本机每次文件操作
+  曾收一笔**固定开销**(初始 写 20ms / 删 43ms, 三盘一致、与数据量无关; 一次全量建 577 个临时目录 ⇒ 约 26s)。
+  **已由系统层排除项治好** —— 现 `mkdir` 0.13ms / 写 0.21ms / `remove` 0.16ms / `rmdir` 0.14ms(全部 <1ms)。
+  ⇒ 这 3.8× 来自**环境**, 不是代码优化。
+- **并行(`-n 4`, 需 pytest-xdist, 尚未纳入闸门)**: **5.0s**(约 4×, 波动极小)⇒ 见
+  [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
+
 ⚠ throttle 守阵(`test_run_loop_throttles_without_stop_event`)文件级/全量跑偶发假红(Windows sleep(50ms) 精度 46ms < 0.05 下限, 容差无余量), 单跑恒绿 —— 已入池 [issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html](../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html), 稳态数字取自 deselect 该用例的全量。
 
 > ⚠ **只测一侧就更新会立刻产生漂移** —— 改了基线就把 Windows 与 Linux 两侧**都重测**再落数字。
