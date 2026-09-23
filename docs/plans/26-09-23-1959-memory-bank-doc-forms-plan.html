@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档形态统一 — 计划与报告入库 · 工程方案</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-doc-forms">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-23-1959">
+<meta name="doc-updated" content="26-09-23-1959">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-23-memory-bank-doc-forms.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1211;
+    --paper: #161a18;
+    --paper-2: #1b211e;
+    --ink: #e4e6e2;
+    --ink-dim: #a8ada6;
+    --ink-faint: #737971;
+    --line: rgba(255,255,255,.10);
+    --line-strong: rgba(255,255,255,.20);
+    --accent: #c9a227;
+    --accent-soft: rgba(201,162,39,.12);
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 36px 88px; }
+
+  /* ── 封面 ─────────────────────────────────────────── */
+  .cover { padding: 76px 0 40px; border-bottom: 1px solid var(--line-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 22px;
+  }
+  .kicker b { color: var(--accent); font-weight: 500; }
+  h1 {
+    font-size: 44px; line-height: 1.14; letter-spacing: -.02em; font-weight: 600;
+    margin: 0 0 14px; max-width: 20ch;
+  }
+  .sub { font-size: 20px; line-height: 1.45; color: var(--ink-dim); font-weight: 400; margin: 0 0 26px; max-width: 44ch; }
+  .lede { font-size: 16.5px; color: var(--ink-dim); max-width: 68ch; margin: 0 0 34px; }
+  .lede code, td code, li code, p code { font-family: var(--mono); font-size: .88em; color: var(--ink); background: var(--paper-2); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 0 34px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 16px; }
+  .facts div { padding: 3px 0; }
+  .facts b { color: var(--ink); font-weight: 600; }
+
+  /* ── 版面 ─────────────────────────────────────────── */
+  .cols { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 60px; align-items: start; }
+  nav.toc { position: sticky; top: 28px; padding-top: 46px; font-size: 13px; }
+  nav.toc .toc-h { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 12px; }
+  nav.toc a { display: block; color: var(--ink-dim); text-decoration: none; padding: 3.5px 0; border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px; }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a span { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 7px; }
+  main { padding-top: 46px; min-width: 0; }
+
+  section { margin-bottom: 66px; }
+  h2 {
+    font-size: 26px; line-height: 1.2; letter-spacing: -.015em; font-weight: 600;
+    margin: 0 0 6px; padding-top: 10px;
+  }
+  h2 .no { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--accent); letter-spacing: .06em; display: block; margin-bottom: 8px; }
+  .rule { width: 64px; height: 1px; background: var(--line-strong); margin: 14px 0 26px; }
+  h3 { font-size: 17px; font-weight: 600; letter-spacing: -.005em; margin: 34px 0 10px; }
+  h3 .tag { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: 8px; }
+  p { margin: 0 0 14px; max-width: 74ch; }
+  ul, ol { margin: 0 0 16px; padding-left: 22px; max-width: 74ch; }
+  li { margin-bottom: 7px; }
+  strong { font-weight: 600; }
+  em { font-style: normal; color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 18px 0 22px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink-faint); border-bottom: 1px solid var(--line-strong); padding: 8px 12px 8px 0;
+  }
+  td { border-bottom: 1px solid var(--line); padding: 10px 12px 10px 0; vertical-align: top; color: var(--ink-dim); }
+  td:first-child { color: var(--ink); }
+  td .mono, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .nowrap { white-space: nowrap; }
+
+  .note {
+    border-left: 2px solid var(--accent); background: var(--accent-soft);
+    padding: 14px 18px; margin: 20px 0 24px; font-size: 15px; color: var(--ink-dim);
+  }
+  .note b { color: var(--ink); }
+  .note.warn { border-left-color: #b4562f; background: rgba(180,86,47,.10); }
+
+  /* 流水线图 (纯 CSS, 无图) */
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line-strong); margin: 24px 0 8px; }
+  .flow .st { background: var(--paper); padding: 16px 16px 18px; }
+  .flow .st h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .flow .st .k { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); display: block; margin-bottom: 10px; }
+  .flow .st p { font-size: 13px; color: var(--ink-dim); margin: 0 0 10px; }
+  .flow .st .st-dir { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+  .flow-cap { font-size: 12.5px; color: var(--ink-faint); margin: 0 0 26px; font-family: var(--mono); }
+
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--ink-dim);
+    background: var(--paper); border: 1px solid var(--line); padding: 16px 18px; overflow-x: auto; margin: 16px 0 20px;
+  }
+  pre b { color: var(--ink); font-weight: 600; }
+  pre .add { color: #8fbf7f; }
+  pre .del { color: #c96f4a; }
+  pre .dim { color: var(--ink-faint); }
+
+  .dec { border: 1px solid var(--line-strong); border-top: 2px solid var(--accent); padding: 20px 22px 6px; margin: 0 0 18px; background: var(--paper); }
+  .dec h4 { margin: 0 0 8px; font-size: 15.5px; font-weight: 600; }
+  .dec .pick { font-family: var(--mono); font-size: 12px; color: var(--accent); display: block; margin-bottom: 10px; }
+  .dec p { font-size: 14.5px; color: var(--ink-dim); }
+
+  footer { border-top: 1px solid var(--line-strong); margin-top: 30px; padding-top: 20px; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 8px 30px; }
+  @media (max-width: 900px) {
+    .cols { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { position: static; padding-top: 30px; }
+    nav.toc a { display: inline-block; margin: 0 14px 0 0; border-left: 0; padding-left: 0; }
+    .flow { grid-template-columns: 1fr 1fr; }
+    h1 { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="cover">
+    <p class="kicker">AUTO-QB · 工程方案 · <b>文档形态</b></p>
+    <h1>文档形态统一：四个工位，一套协议</h1>
+    <p class="sub">计划与报告收进知识库，四类制品共用同一套类型、状态、元数据与索引。</p>
+    <p class="lede">
+      现状：计划（<code>docs/plans/</code>，44 份 HTML）、报告（<code>docs/</code> 根，7 份）、issue 池（<code>memory-bank/issues/</code>，39 份）、
+      任务档案（<code>memory-bank/tasks/</code>，34 份）四形态职责重叠、登记方式各异 —— 同一专题最多被讲述 5 遍，
+      而计划与报告两类<strong>零 meta、零索引、零守卫</strong>。本方案按已拍板方向把 plans 与 reports 一并收进
+      <code>memory-bank/</code>，并把四形态收敛到「同一条流水线的四个工位 + 一套协议」。
+    </p>
+    <div class="facts">
+      <div>日期 <b>2026-09-23 19:59</b></div>
+      <div>状态 <b>Open（待拍板）</b></div>
+      <div>类型 <b>plan</b></div>
+      <div>专题 <b>memory-bank-doc-forms</b></div>
+      <div>依据 <b>只读勘察 @ 19fa6ee</b></div>
+    </div>
+  </header>
+
+  <div class="cols">
+    <nav class="toc">
+      <div class="toc-h">目录</div>
+      <a href="#s01"><span>01</span>现场证据</a>
+      <a href="#s02"><span>02</span>目标形态</a>
+      <a href="#s03"><span>03</span>统一协议</a>
+      <a href="#s04"><span>04</span>迁移波次</a>
+      <a href="#s05"><span>05</span>引用面与成本</a>
+      <a href="#s06"><span>06</span>风险与边界</a>
+      <a href="#s07"><span>07</span>决策点</a>
+      <a href="#s08"><span>08</span>验收标准</a>
+    </nav>
+
+    <main>
+
+      <!-- ══════════════ 01 ══════════════ -->
+      <section id="s01">
+        <h2><span class="no">01</span>现场证据</h2>
+        <div class="rule"></div>
+
+        <p>四形态的数量与登记方式实测如下（<code>@ 19fa6ee</code>，只读勘察）：</p>
+
+        <table>
+          <thead><tr><th>形态</th><th>位置</th><th>数量</th><th>载体</th><th>状态机</th><th>索引 / 守卫</th></tr></thead>
+          <tbody>
+            <tr><td>报告</td><td class="mono">docs/*.html</td><td class="mono">7</td><td>HTML（dark）</td><td>无</td><td><strong>无 / 无</strong></td></tr>
+            <tr><td>计划</td><td class="mono">docs/plans/</td><td class="mono">44 + 1 md + 2 json</td><td>HTML（dark）</td><td>无（靠 <span class="mono">-v2/-v3</span> 堆版本）</td><td><strong>无 / 无</strong></td></tr>
+            <tr><td>issue 池</td><td class="mono">memory-bank/issues/</td><td class="mono">39</td><td>HTML（dark）</td><td>5 态</td><td>生成物索引 + pytest 守卫 + 闸门</td></tr>
+            <tr><td>任务档案</td><td class="mono">memory-bank/tasks/</td><td class="mono">34</td><td>Markdown</td><td>4 态</td><td>生成物索引 + pytest 守卫 + 闸门</td></tr>
+          </tbody>
+        </table>
+
+        <div class="flow">
+          <div class="st">
+            <span class="k">工位 1</span>
+            <h4>问题入池</h4>
+            <p>计划外、未认领。只记事实与锚点，不做分析。</p>
+            <span class="st-dir">memory-bank/issues/</span>
+          </div>
+          <div class="st">
+            <span class="k">工位 2</span>
+            <h4>方案定档</h4>
+            <p>要改动、需拍板。解法空间与取舍的唯一权威。</p>
+            <span class="st-dir">docs/plans/ → memory-bank/plans/</span>
+          </div>
+          <div class="st">
+            <span class="k">工位 3</span>
+            <h4>执行滚动</h4>
+            <p>跨会话执行档案。唯一滚动更新的制品。</p>
+            <span class="st-dir">memory-bank/tasks/</span>
+          </div>
+          <div class="st">
+            <span class="k">工位 4</span>
+            <h4>快照留档</h4>
+            <p>审计 / 故障 / 可行性取证。出厂即冻结。</p>
+            <span class="st-dir">docs/ → memory-bank/reports/</span>
+          </div>
+        </div>
+        <p class="flow-cap">↑ 四形态实际承担的是一条流水线的四个工位 —— 问题 → 决策 → 执行 → 快照。</p>
+
+        <h3>病症 ① 同一专题被讲述 4~5 遍<span class="tag">各遍独立演化</span></h3>
+        <ul>
+          <li><strong>column-prefs</strong>（列设置被重置）：根级报告 1 + 计划 2 + issue 1 + 档案 1 = <strong>5 份</strong>；</li>
+          <li><strong>optimistic-ui</strong>（乐观 UI）：根级报告 2 + 计划 2 + issue 1 = <strong>5 份</strong>。</li>
+        </ul>
+        <p>四份文档各写一遍根因与取舍，没有任何机制保证它们一致：链接靠人手写，跨件关联靠 slug 眼力比对，
+          没有统一主键把「同一件事的材料」串起来。</p>
+
+        <h3>病症 ② 两套状态、两套索引，而计划 / 报告零登记<span class="tag">后果已显形</span></h3>
+        <ul>
+          <li>状态词双轨：issues 用 <span class="mono">Open / In Progress / Fixed / WontFix / Duplicate</span>，
+              档案用 <span class="mono">In Progress / Pending / Completed / Abandoned</span> —— 同义不同词。</li>
+          <li><code>docs/plans/</code> 与 <code>docs/</code> 根<strong>没有任何 meta</strong>（44 份计划只有 <span class="mono">viewport</span> 一行），
+              机读不了类型、状态、专题；也没有 <span class="mono">_index.md</span>、没有守卫、没有闸门。</li>
+          <li>后果 1：存量违规无人拦 —— <span class="mono">docs/plans/26-09-15-1150-dependency-lock-report.md</span>
+              违反「计划一律单文件 HTML」；</li>
+          <li>后果 2：版本靠堆文件表达 —— <span class="mono">webui-optimization-plan</span> v1/v2/v3 三份并存，
+              <span class="mono">fix-plan-round9/round10</span> 与档案 <span class="mono">round9/10/11</span> 并存，
+              没有「哪份被谁取代」的记录；</li>
+          <li>后果 3：状态靠人记得改 —— 34 份档案里 18 份仍挂非终态（17 <span class="mono">In Progress</span> + 1 <span class="mono">Pending</span>），
+              其中若干正文已写明「剩实机走查 / 未提交」。</li>
+        </ul>
+
+        <h3>病症 ③ 发现路径只有 <span class="mono">ls</span> + <span class="mono">grep</span><span class="tag">跨形态入口不存在</span></h3>
+        <ul>
+          <li>根级 7 份报告中 3 份的全仓入链 ≤ 2 条；<span class="mono">26-09-21-0408-seed-group-status-mapping.html</span> 是 <strong>0 引用孤儿</strong>。</li>
+          <li>想查「column-prefs 的全部材料」需要在四个目录各 grep 一遍 —— 没有跨形态的专题视图。</li>
+        </ul>
+
+        <div class="note">
+          <b>病因一句话</b>：四个工位缺一套共同协议 —— 统一主键（专题）、统一类型、统一状态词、统一索引视图、统一生命周期规则。
+          目录分离本身不是病，<b>登记方式各自演化才是</b>。
+        </div>
+      </section>
+
+      <!-- ══════════════ 02 ══════════════ -->
+      <section id="s02">
+        <h2><span class="no">02</span>目标形态</h2>
+        <div class="rule"></div>
+
+        <p>已拍板：<strong>plans 与 reports 都收进 <code>memory-bank/</code></strong>。四个工位职责互斥，各有一条唯一权威：</p>
+
+        <table>
+          <thead><tr><th>工位</th><th>回答什么问题</th><th>目录（目标）</th><th>载体</th><th>寿命</th></tr></thead>
+          <tbody>
+            <tr><td>issue</td><td>要不要修、什么时候修</td><td class="mono">memory-bank/issues/</td><td>HTML</td><td>流转到终态即冻结</td></tr>
+            <tr><td>plan</td><td>怎么修、为什么这么修</td><td class="mono">memory-bank/plans/</td><td>HTML</td><td><em>拍板后冻结</em></td></tr>
+            <tr><td>report</td><td>当时现场是什么样</td><td class="mono">memory-bank/reports/</td><td>HTML</td><td>出厂即冻结</td></tr>
+            <tr><td>task</td><td>实际怎么修、做到哪了</td><td class="mono">memory-bank/tasks/</td><td>Markdown</td><td><em>唯一滚动更新</em></td></tr>
+          </tbody>
+        </table>
+
+        <p>目标目录树（<span class="mono">↑ 新增 / → 迁入</span>）：</p>
+        <pre>memory-bank/
+  plans/          <span class="dim">→ 由 docs/plans/ 迁入（44 html + 2 语料 json；1 md 违规件转 HTML）</span>
+  reports/        <span class="dim">↑ 由 docs/ 根迁入（7 html）</span>
+  issues/         <span class="dim">（不动：8 类型 × 两档 + _index.md）</span>
+  tasks/          <span class="dim">（不动：YY-MM-DD-slug.md + _index.md + attachments/）</span>
+  _doc-map.md     <span class="dim">↑ 跨形态专题视图（生成物；一行一专题）</span>
+  <span class="dim">activeContext/ · progress/ · pitfalls/ · conventions/ · …（不动）</span>
+
+docs/
+  configuration.md · sim-client-test-howto.md · context7/   <span class="dim">（用户文档与第三方缓存，不动）</span></pre>
+
+        <div class="note warn">
+          <b>不做的事（范围守恒）</b>：不合并四个目录为一种文件；不新增第五形态（会话状态仍归 <code>activeContext/</code>、
+          长期结论仍归 <code>progress/</code>）；不动 <code>tasks/</code>「不带时分、同天同专题必撞名」与
+          <code>activeContext/</code>「带时分、避撞名」两条已生效的命名规则；不改存量 51 份文件名；不碰
+          <code>config.yml</code> / <code>auto-qb-data/</code> 与 <code>TODO.md</code> / <code>想法.md</code> 的内容（仅修正指向计划文件的路径串）。
+        </div>
+      </section>
+
+      <!-- ══════════════ 03 ══════════════ -->
+      <section id="s03">
+        <h2><span class="no">03</span>统一协议</h2>
+        <div class="rule"></div>
+
+        <h3>P1 · 类型与命名<span class="tag">4 个 token</span></h3>
+        <p>唯一的分类维度是 <strong>4 个类型 token</strong>：<span class="mono">issue | plan | report | task</span>。
+          analysis / feasibility / audit / handover 一律归 <span class="mono">report</span>，不再自制词。</p>
+        <ul>
+          <li><strong>新件</strong>：<span class="mono">YY-MM-DD-HHMM-&lt;type&gt;-&lt;topic&gt;.html</span>
+              （<code>memory-bank/plans|reports/</code>），时间戳用命令取当前值；</li>
+          <li><strong>存量 51 份不改名</strong>：<code>docs/plans</code> 有 125 条唯一路径被全仓引用，改名的引用面远超收益 ——
+              类型由所在目录 + meta 判定，文件名 token 只是纯文本引用的可读性增强；</li>
+          <li>issues 现有 <span class="mono">&lt;stamp&gt;-&lt;type&gt;-&lt;slug&gt;.html</span> 与 tasks 现有
+              <span class="mono">YY-MM-DD-&lt;领域&gt;-&lt;专题&gt;.md</span> 已符合，不动。</li>
+        </ul>
+
+        <h3>P2 · 统一元数据 <span class="mono">doc-*</span><span class="tag">HTML 与 MD 同名字段</span></h3>
+        <pre>&lt;meta name="doc-type"    content="issue | plan | report | task"&gt;   <span class="dim">← 唯一分类维度</span>
+&lt;meta name="doc-topic"   content="memory-bank-doc-forms"&gt;        <span class="dim">← 跨形态串联主键（今天缺的就是它）</span>
+&lt;meta name="doc-status"  content="Open | In Progress | Done | Dropped | Superseded"&gt;
+&lt;meta name="doc-added"   content="26-09-23-1959"&gt;
+&lt;meta name="doc-updated" content="26-09-24-1012"&gt;
+&lt;meta name="doc-refs"    content="同专题其它件的相对路径（逗号分隔）"&gt;   <span class="dim">← 认领链 / 取代链</span></pre>
+        <p>任务档案用现有字段承载同一语义（<span class="mono">Status</span> / <span class="mono">Added</span> /
+          <span class="mono">Updated</span> / <span class="mono">Summary</span>），新增一行 <span class="mono">**Topics:**</span> 作主键；
+          issues 保留现有 <span class="mono">issue-*</span> meta，新增 <span class="mono">doc-topic</span> / <span class="mono">doc-refs</span>。</p>
+        <div class="note">
+          <b>刻意不做无收益的字段改名</b>：字段名不是漂移源，<b>状态词才是</b>。把 39 + 34 份存量的
+          <span class="mono">issue-status</span> / <span class="mono">Status</span> 全量改名为 <span class="mono">doc-status</span>
+          只增加迁移成本与守卫改动，不增加一致性 —— 生成器里一张字段映射表（单点）即可。
+        </div>
+
+        <h3>P3 · 统一状态词（5 词）<span class="tag">四形态共用</span></h3>
+        <pre>Open  →  In Progress  →  Done   |   Dropped   |   Superseded</pre>
+        <table>
+          <thead><tr><th>形态</th><th>旧词</th><th>新词</th><th>语义</th></tr></thead>
+          <tbody>
+            <tr><td>issue</td><td class="mono">Open</td><td class="mono">Open</td><td>未修，待排期</td></tr>
+            <tr><td>issue</td><td class="mono">In Progress</td><td class="mono">In Progress</td><td>已被某计划认领</td></tr>
+            <tr><td>issue</td><td class="mono">Fixed</td><td class="mono">Done</td><td>已修并验证（写明验证方式与数字）</td></tr>
+            <tr><td>issue</td><td class="mono">WontFix</td><td class="mono">Dropped</td><td>决定不修（写明理由）</td></tr>
+            <tr><td>issue</td><td class="mono">Duplicate</td><td class="mono">Superseded</td><td>与既有件重复 / 被他件取代（写明指向）</td></tr>
+            <tr><td>task</td><td class="mono">Pending</td><td class="mono">Open</td><td>已立档未开工</td></tr>
+            <tr><td>task</td><td class="mono">Completed</td><td class="mono">Done</td><td>完成</td></tr>
+            <tr><td>task</td><td class="mono">Abandoned</td><td class="mono">Dropped</td><td>放弃</td></tr>
+            <tr><td>plan</td><td>—（今天无状态）</td><td class="mono">Open / In Progress / Done / Superseded</td><td>待拍板 / 实施中 / 全部落地 / 被新版取代</td></tr>
+            <tr><td>report</td><td>—</td><td class="mono">Done</td><td>快照完成即终态，不再流转</td></tr>
+          </tbody>
+        </table>
+        <p>存量一次性脚本改写状态行与 meta（39 issues + 34 档案），守卫正则同步改成单一词表。</p>
+
+        <h3>P4 · 统一索引与专题视图<span class="tag">一个生成器，两个视图</span></h3>
+        <ul>
+          <li><strong>各形态索引</strong>：<span class="mono">memory-bank/plans/_index.md</span> 与
+              <span class="mono">memory-bank/reports/_index.md</span>（生成物，按状态分区，行 = 类型 · 简述 · 链接，与 issues 同款）；
+              issues / tasks 的索引已存在，不动。</li>
+          <li><strong>跨形态专题视图</strong>：<span class="mono">memory-bank/_doc-map.md</span> —— 按 <span class="mono">doc-topic</span>
+              聚合，<em>一行一专题</em>，列出该专题名下的 issue / 计划 / 报告 / 档案及各自状态。
+              这是「统一」的落点：用户与 AI 只从这一个入口即可看全一件事的全部材料。</li>
+          <li><strong>陈旧标记</strong>：生成器对 <span class="mono">In Progress</span> 且 <span class="mono">doc-updated</span> 超 30 天的件打 <span class="mono">⚠ 陈旧</span>
+              （只标不改状态）。</li>
+        </ul>
+
+        <h3>P5 · 生命周期与单一权威<span class="tag">正式消除职责重复</span></h3>
+        <ul>
+          <li><strong>每条事实只在一个工位有权威</strong>：修不修 → issue；怎么修 → plan（冻结）；实际怎么修 + 验证数字 → 档案 + <code>progress/</code>；现场快照 → report（冻结）。</li>
+          <li><strong>改名不建新文件</strong>：计划改版 = 同一文件内 <span class="mono">## 变更记录</span> 段 + 抬
+              <span class="mono">doc-updated</span> + 状态流转；禁止再出 <span class="mono">-v2 / -v3 / -roundN</span> 新文件（存量保留，新规只对新件生效）。</li>
+          <li><strong>认领链双向可查</strong>：issue 被认领时在其 <span class="mono">doc-refs</span> 指向档案，档案
+              <span class="mono">**Topics:**</span> + <span class="mono">doc-refs</span> 指回 issue；生成器校验双向一致，缺链即闸门红
+              （今天这条链只存在于正文散文里）。存量豁免，只校验 <span class="mono">doc-added ≥ 26-09-24</span> 的新件。</li>
+        </ul>
+
+        <h3>决策树：要记一件事 → 放哪儿<span class="tag">单点写入 conventions/doc-forms.md</span></h3>
+        <table>
+          <thead><tr><th>这一轮做的事</th><th>工位</th><th>载体</th></tr></thead>
+          <tbody>
+            <tr><td>撞见计划外的问题，暂时不修</td><td>issue</td><td class="mono">issues/&lt;stamp&gt;-&lt;type&gt;-&lt;slug&gt;.html</td></tr>
+            <tr><td>要改动，需要方案与拍板</td><td>plan</td><td class="mono">plans/&lt;stamp&gt;-plan-&lt;topic&gt;.html</td></tr>
+            <tr><td>做了一次审计 / 故障取证 / 可行性分析</td><td>report</td><td class="mono">reports/&lt;stamp&gt;-report-&lt;topic&gt;.html</td></tr>
+            <tr><td>跨会话推进的专题（≥2 会话 / ≥5 轮指令 / 出现波次表述）</td><td>task</td><td class="mono">tasks/YY-MM-DD-&lt;领域&gt;-&lt;专题&gt;.md</td></tr>
+            <tr><td>本次会话做到哪了</td><td>—</td><td class="mono">activeContext/&lt;stamp&gt;-&lt;topic&gt;.md</td></tr>
+            <tr><td>长期结论 / 已实现事实</td><td>—</td><td class="mono">progress/ 与主题文档</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ══════════════ 04 ══════════════ -->
+      <section id="s04">
+        <h2><span class="no">04</span>迁移波次</h2>
+        <div class="rule"></div>
+
+        <table>
+          <thead><tr><th>波次</th><th>内容</th><th>验收判据（可判定）</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="nowrap">W0<br><span class="mono">协议落地</span></td>
+              <td>
+                ① 新建 <code>memory-bank/plans/</code>、<code>memory-bank/reports/</code>（走 tasks/issues 模式：<strong>无
+                <span class="mono">_about.md</span>、自带生成器</strong>）；<br>
+                ② 新主题文件 <code>memory-bank/conventions/doc-forms.md</code>（决策树 + 协议单点，三行头）；<br>
+                ③ <code>_common.py</code>：<span class="mono">EXCLUDED_DIRS += ("plans", "reports")</span>、
+                <span class="mono">role_of()</span> 把三份新索引映射到 <span class="mono">index-auto</span> 档；<br>
+                ④ <code>memory-bank/README.md</code> 细路由登记两目录 + 专题视图。
+              </td>
+              <td class="mono">gen_kb_index.py --check 绿<br>pytest tests/test_memory_bank.py 绿<br>check_kb_structure 不把新目录判为孤儿</td>
+            </tr>
+            <tr>
+              <td class="nowrap">W1<br><span class="mono">迁入库</span></td>
+              <td>
+                ① <code>git mv</code>：44 计划 + 2 语料 json → <code>plans/</code>；7 报告 → <code>reports/</code>；<br>
+                ② md 违规件转 HTML 并入 <code>reports/</code>；<br>
+                ③ <strong>同一提交内</strong>修正引用面：活文档路径串 + <code>scripts/sim_baseline.py</code> 的
+                <span class="mono">BASELINE_PATH</span>（运行时读取，非注释）与 <code>sim_run.py</code> 默认值 + 9 份代码/脚本文档串 + 25 份留档 HTML 内链（仅路径串）。
+              </td>
+              <td class="mono">check_doc_links.py --all 绿<br>pytest test_doc_links green<br>sim_run.py --help 显示新默认路径<br>25 份 HTML 链接一次性核验 0 坏链</td>
+            </tr>
+            <tr>
+              <td class="nowrap">W2<br><span class="mono">补 meta</span></td>
+              <td>
+                ① 批量脚本给 44 计划 + 7 报告注入 <span class="mono">doc-type / doc-topic / doc-status / doc-added</span>
+                （topic 由文件名 slug 派生 + 人工过一遍；只加 meta，<strong>不动成文内容</strong>）；<br>
+                ② 存量状态词改写：39 issues + 34 档案 → 5 词表；档案补 <span class="mono">**Topics:**</span> 行。
+              </td>
+              <td class="mono">meta 完整率 51/51<br>状态取值全在 5 词表内<br>issues/_index.md 与 tasks/_index.md 重跑后自洽</td>
+            </tr>
+            <tr>
+              <td class="nowrap">W3<br><span class="mono">生成索引</span></td>
+              <td>
+                ① 新生成器 <code>gen_docs_index.py</code>（产 <span class="mono">plans/_index.md</span> +
+                <span class="mono">reports/_index.md</span>，含 <span class="mono">--check</span>）；<br>
+                ② 新生成器 <code>gen_doc_map.py</code> 产 <span class="mono">_doc-map.md</span>（按专题聚合 + 陈旧标记）。
+              </td>
+              <td class="mono">两个生成器 --check 绿<br>专题视图覆盖全部 doc-topic<br>孤儿件（无 topic）为 0</td>
+            </tr>
+            <tr>
+              <td class="nowrap">W4<br><span class="mono">守卫闸门</span></td>
+              <td>
+                ① 新增 <code>tests/test_docs_forms.py</code>：命名与扩展名合规（plans/reports 无 <span class="mono">.md</span>）、
+                meta 完整、状态词合法、两份索引与专题视图 == 生成结果、<span class="mono">color-scheme: dark</span> 存在
+                （把靠人眼的 dark 口径变成机检）、认领链双向一致（仅新件）；<br>
+                ② <code>.commit-flow.toml</code> 加闸门：<span class="mono">match = ["memory-bank/plans/", "memory-bank/reports/", "memory-bank/_doc-map.md"]</span> → 生成器 <span class="mono">--check</span>；<br>
+                ③ <code>check_doc_links.py</code>：<span class="mono">is_frozen</span> 增补 <span class="mono">reports</span>；确认新生成物在扫描面内链接有效。
+              </td>
+              <td class="mono">新守卫首跑全绿<br>故意改一个 meta → 当场红<br>preflight 完整跑通</td>
+            </tr>
+            <tr>
+              <td class="nowrap">W5<br><span class="mono">回写收口</span></td>
+              <td>
+                ① <code>AGENTS.md</code> 产出口径两行（计划路径）；② <code>memory-bank</code> skill 立档阈值 #4
+                的 <span class="mono">docs/*.html, DELIVERY/</span> 改为 <span class="mono">memory-bank/plans/ · memory-bank/reports/</span>；
+                ③ <code>create-issue</code> skill 的 4 处 <span class="mono">docs/plans/</span> 措辞；
+                ④ <code>gen_tasks_index.py</code> docstring、<code>TODO.md</code> 路径；
+                ⑤ <code>.codebuddy</code> 镜像由闸门 <code>sync_agent_skills.py</code> 自动同步；
+                ⑥ 本计划自身随 W1 迁入 <code>plans/</code>。
+              </td>
+              <td class="mono">check_context_caps.py 绿（AGENTS ≤ 8,000）<br>grep -rn "docs/plans" 仅剩留档 HTML 内的历史叙述<br>全量 pytest 绿 + 基线数字回写</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note warn">
+          <b>W1 是唯一的高风险步</b>：<code>git mv</code> 与引用面修正<strong>必须同一次提交完成</strong> ——
+          只搬不改会让 <span class="mono">check_doc_links</span> 与 <span class="mono">sim_baseline.py</span> 同时红。
+          搬运用 <code>git mv</code>（保留历史），逐路径暂存，逐项核 <span class="mono">check_doc_links</span>。
+        </div>
+      </section>
+
+      <!-- ══════════════ 05 ══════════════ -->
+      <section id="s05">
+        <h2><span class="no">05</span>引用面与成本</h2>
+        <div class="rule"></div>
+
+        <p><code>docs/plans/</code> 全仓共 <strong>209 处引用、90 个文件</strong>；<code>docs/</code> 根报告共 17 个引用文件。按类分布：</p>
+
+        <table>
+          <thead><tr><th>类</th><th>文件数</th><th>处置</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">memory-bank/tasks/</td><td class="mono">27</td><td>机械改路径串（历史叙述不动）</td></tr>
+            <tr><td class="mono">docs/plans/（自引）</td><td class="mono">15</td><td>机械改路径串（留档 HTML，仅路径）</td></tr>
+            <tr><td class="mono">memory-bank/progress/</td><td class="mono">10</td><td>活文档，改路径</td></tr>
+            <tr><td class="mono">memory-bank/issues/</td><td class="mono">9</td><td>机械改路径串</td></tr>
+            <tr><td class="mono">memory-bank/activeContext/</td><td class="mono">5</td><td>活文档，改路径</td></tr>
+            <tr><td class="mono">src/auto_qb/ · scripts/</td><td class="mono">3 + 6</td><td>文档串改路径；<em>sim_baseline.py 是运行时路径，必改 + 冒烟</em></td></tr>
+            <tr><td class="mono">memory-bank/testing · modules · conventions · rule-system · pitfalls · checklists</td><td class="mono">3 · 2 · 2 · 1 · 1 · 1</td><td>活文档，改路径</td></tr>
+            <tr><td class="mono">.agents/skills/</td><td class="mono">2</td><td>skill 文本（.codebuddy 镜像自动同步）</td></tr>
+            <tr><td class="mono">TODO.md · AGENTS.md · docs 根报告</td><td class="mono">3</td><td>根级文档，改路径</td></tr>
+          </tbody>
+        </table>
+
+        <ul>
+          <li><strong>不改名的依据</strong>：125 条唯一计划路径被引用 —— 改名会把上述全部面都变成
+              「改名 + 改引用」两项工作；而不改名时 W1 只是把 <span class="mono">docs/plans/</span> 一段前缀换成相对深度。</li>
+          <li><strong>运行时耦合只有一处</strong>：<span class="mono">scripts/sim_baseline.py:27</span> 的
+              <span class="mono">BASELINE_PATH</span> 与 <span class="mono">sim_run.py --baseline</span> 默认值
+              （语料基线 json 随迁）；其余 <span class="mono">src/</span> 与 <span class="mono">scripts/</span> 命中都是 docstring 里的「见计划 X」。</li>
+          <li><strong>留档内链</strong>：25 份 HTML 内部互引 <span class="mono">docs/plans/…</span>，迁移后会指空 ——
+              按 D4 默认<strong>只改路径串</strong>（不改任何成文内容），一次性脚本核验。</li>
+        </ul>
+      </section>
+
+      <!-- ══════════════ 06 ══════════════ -->
+      <section id="s06">
+        <h2><span class="no">06</span>风险与边界</h2>
+        <div class="rule"></div>
+
+        <table>
+          <thead><tr><th>风险</th><th>判别</th><th>处置（本方案的防线）</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>W1 只搬不改，留下坏链与运行时断点</td>
+              <td class="mono">check_doc_links 红 / sim_run.py 找不到基线</td>
+              <td>搬家与引用修正合成一次提交；W1 判据里含 <span class="mono">--all</span> 扫描与 <span class="mono">--help</span> 冒烟</td>
+            </tr>
+            <tr>
+              <td>新增目录被库内生成器/守卫误判（孤儿、cap 失控）</td>
+              <td class="mono">check_kb_structure 报孤儿 / 索引进 index 档常红</td>
+              <td>走 tasks/issues 既有例外模式：<span class="mono">EXCLUDED_DIRS</span> + <span class="mono">role_of</span> 映射 <span class="mono">index-auto</span>；W0 先用 <span class="mono">--check</span> 实测</td>
+            </tr>
+            <tr>
+              <td>meta 注入脚本改坏 HTML（标签损坏不会被渲染报错）</td>
+              <td class="mono">文件字符数突变 / 抽样打开异常</td>
+              <td>只往 <span class="mono">&lt;head&gt;</span> 追加 meta 行；按 [pitfalls/docs/html-edit.md] 的教训用整段插入而非片段替换；改动前后备份 + 计数比对</td>
+            </tr>
+            <tr>
+              <td>状态词批量改写波及守卫与生成器（多处正则）</td>
+              <td class="mono">tasks 状态行正则 / 生成器分区不一致</td>
+              <td>词表改动与守卫、生成器、skill 文本同一次提交；W2 判据要求两侧索引重跑自洽</td>
+            </tr>
+            <tr>
+              <td>多 clone 并行下批量改写产生冲突</td>
+              <td>合并冲突出现在 34 份档案正文</td>
+              <td>按协作约定走「先同步 → 再动」；改写只碰状态行与 meta 行（每文件 1~2 行），冲突面最小；索引是生成物，冲突重跑即可</td>
+            </tr>
+            <tr>
+              <td>scope 蔓延：顺手统一 TODO.md / 想法.md / AGENTS 结构</td>
+              <td>diff 里出现计划未列的文件</td>
+              <td>范围守恒（见 02 节「不做的事」）；只修正指向计划文件的路径串</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note">
+          <b>与 26-09-22「知识库目录化重构」的区别</b>：那次解决的是<b>库内文档超标</b>（拆文件 + 生成物索引 + 五步配方）；
+          这次解决的是<b>制品登记</b>（入库 + 类型 / 状态 / 主键 / 索引协议）。
+          两次的共同底座是同一套：生成物不手改、守卫盯一致性、单点不复述。
+        </div>
+      </section>
+
+      <!-- ══════════════ 07 ══════════════ -->
+      <section id="s07">
+        <h2><span class="no">07</span>决策点</h2>
+        <div class="rule"></div>
+
+        <p>五个决策点，均给出默认取值 —— 拍板时未否决即按默认执行。</p>
+
+        <div class="dec">
+          <span class="pick">D1 · 默认：统一 5 词表</span>
+          <h4>状态词是否一次性统一</h4>
+          <p>统一为 <span class="mono">Open / In Progress / Done / Dropped / Superseded</span>，存量脚本改写（39 issues + 34 档案）。
+             备选是在索引层做映射、文件保留旧词 —— 省迁移，但会长期养一张翻译表，必然漂移。</p>
+        </div>
+
+        <div class="dec">
+          <span class="pick">D2 · 默认：存量不改名，新件带 type token</span>
+          <h4>存量 51 份文件名是否对齐</h4>
+          <p>不改名（125 条唯一路径的引用面）；新件命名 <span class="mono">YY-MM-DD-HHMM-&lt;type&gt;-&lt;topic&gt;.html</span>。</p>
+        </div>
+
+        <div class="dec">
+          <span class="pick">D3 · 默认：两个视图都做</span>
+          <h4>索引形态</h4>
+          <p>各目录 <span class="mono">_index.md</span>（沿用 issues/tasks 模式）+ 跨形态 <span class="mono">_doc-map.md</span> 专题视图。
+             只做前者等于没解决「看全一件事」。</p>
+        </div>
+
+        <div class="dec">
+          <span class="pick">D4 · 默认：机械修正路径串</span>
+          <h4>25 份留档 HTML 的内链</h4>
+          <p>只改 <span class="mono">docs/plans/</span> 路径串，不改任何成文内容（与 2026-09-18 任务档案改名的处置同款：
+             只改路径，历史叙述保留）。</p>
+        </div>
+
+        <div class="dec">
+          <span class="pick">D5 · 默认：转 HTML 后并入 reports/</span>
+          <h4>存量 md 违规件怎么处置</h4>
+          <p><span class="mono">docs/plans/26-09-15-1150-dependency-lock-report.md</span>（依赖锁定调研，report 类型）
+             转为单文件 dark HTML，落 <span class="mono">reports/</span>，顺手清掉库内唯一的「计划目录出现 .md」违规。</p>
+        </div>
+      </section>
+
+      <!-- ══════════════ 08 ══════════════ -->
+      <section id="s08">
+        <h2><span class="no">08</span>验收标准</h2>
+        <div class="rule"></div>
+
+        <p>全部可判定，逐条对应命令：</p>
+        <pre><b>1</b> 目录      ls memory-bank/plans memory-bank/reports          <span class="dim">→ 51 份 HTML + 2 json, 0 个 .md</span>
+<b>2</b> meta      生成器 --check                                     <span class="dim">→ 51/51 件 meta 完整, 状态词合法</span>
+<b>3</b> 索引      gen_docs_index.py --check / gen_doc_map.py --check  <span class="dim">→ 生成物 == 磁盘</span>
+<b>4</b> 专题视图  python -c "…统计 _doc-map 行数 vs 唯一 topic 数"     <span class="dim">→ 覆盖 100%, 孤儿 0</span>
+<b>5</b> 守卫      uv run pytest tests -q --no-cov                    <span class="dim">→ 全绿, 基线数字回写 testing.md</span>
+<b>6</b> 链接      python scripts/check_doc_links.py --all             <span class="dim">→ 0 坏链</span>
+<b>7</b> 闸门      python .agents/skills/my-commit-flow/scripts/preflight.py  <span class="dim">→ 完整通过</span>
+<b>8</b> 运行时    uv run python scripts/sim_run.py --help             <span class="dim">→ 默认基线路径指向 memory-bank/plans/</span>
+<b>9</b> 口径      grep -rn "docs/plans" --exclude-dir=.git .          <span class="dim">→ 仅剩留档历史叙述(已声明豁免)</span>
+<b>10</b> 引导     python scripts/check_context_caps.py               <span class="dim">→ AGENTS.md ≤ 8,000 字符</span></pre>
+
+        <div class="note">
+          <b>收口定义</b>：W0–W5 全部落地 + 上述 10 条判据全绿 = 完成；此后新件的登记成本与 issue 相同（一条脚本 + 一段正文），
+          而「一件事的全部材料」有唯一入口（<span class="mono">_doc-map.md</span>）。
+        </div>
+      </section>
+
+      <footer>
+        <div>计划 · memory-bank-doc-forms</div>
+        <div>doc-added 26-09-23-1959</div>
+        <div>Native HTML · 单文件自包含 · dark</div>
+        <div>依据 git@19fa6ee 的只读勘察</div>
+      </footer>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

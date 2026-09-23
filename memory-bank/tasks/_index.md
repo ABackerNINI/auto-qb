@@ -29,6 +29,7 @@
 
 ## Pending
 
+- [26-09-23-memory-bank-doc-forms] 文档形态统一 (plans/reports 入库 + 四形态协议) - 四形态 (docs 根报告 / docs/plans 计划 / issues / tasks) 职责重叠且登记方式各异 —— 计划与报告零 meta / 零索引…
 - [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实 (抓 HR 统计页 + 下载 .torrent 算 infohash 对账建索引) 的可行性分析与实施计划 v1.1 待拍板 (v…
 
 ## Completed
