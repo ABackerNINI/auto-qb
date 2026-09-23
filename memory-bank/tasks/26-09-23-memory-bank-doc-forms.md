@@ -2,7 +2,7 @@
 
 **Status:** Open
 **Added:** 2026-09-23
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 **Summary:** 四形态 (docs 根报告 / docs/plans 计划 / issues / tasks) 职责重叠且登记方式各异 —— 计划与报告零 meta / 零索引 / 零守卫, 同一专题最多被讲述 5 遍; 已拍板 plans + reports 收进 memory-bank/, 收敛为「四工位 + 一套协议」(类型与命名 · `doc-*` meta · 5 词状态 · 双视图索引 · 生命周期与单一权威); **计划已出, W0–W5 待拍板后实施**
 **Topics:** memory-bank-doc-forms
 
@@ -72,7 +72,7 @@ W5 回写收口 (AGENTS 产出口径 / skill 阈值 #4 / create-issue 措辞 / T
 | W0 | 协议落地: 两目录 + `conventions/doc-forms.md` + `_common.py` 三处 + README 细路由 | Done |
 | W1 | 迁入库: 51 份 HTML + 2 json 迁入; md 违规件转 HTML; 引用面同提交修正 | Done |
 | W2 | 补 meta (51 份) + 存量状态词改写 (73 件) + 档案补 `**Topics:**` | Done |
-| W3 | `gen_docs_index.py` + `gen_doc_map.py` + 双视图落地 | Pending |
+| W3 | `gen_docs_index.py` + `gen_doc_map.py` + 双视图落地 | Done |
 | W4 | `tests/test_docs_forms.py` + 提交闸门 + `check_doc_links.is_frozen` 增补 | Pending |
 | W5 | 回写收口 (AGENTS / skill ×2 / TODO / 镜像同步 / 本计划自身) | Pending |
 
@@ -88,6 +88,12 @@ W5 回写收口 (AGENTS 产出口径 / skill 阈值 #4 / create-issue 措辞 / T
   `gen_tasks_index.STATUSES/STATUS_RE/EMPTY_HINT` · `tests/test_memory_bank.STATUS_RE` · 两份 SKILL.md ·
   `pitfalls/kb/tasks-archive.md`); 专题归并 **77 个 topic / 25 个跨形态簇** (column-prefs 5 件 · optimistic-ui 8 件 —— 正是勘察里点名的两处重复)。
 - 待办: 用户拍板 (D1–D5 默认取值) 已按默认执行; W3 → W5 继续。
+- 2026-09-24 00:19 **W3 已落**: 两个生成器 (均为 collect/build/--check 三段式, 与既有生成器同构) ——
+  `gen_docs_index.py` 产 `plans/_index.md` (6,227 字符) 与 `reports/_index.md` (1,597 字符),
+  `gen_doc_map.py` 产 `_doc-map.md` (9,111 字符, **27 个跨形态簇** + 52 个单件专题紧凑清单);
+  README 细路由与生成物清单登记两索引 + 专题视图 (README 压回 2,954 / 3,000 字符)。
+  取舍: 专题视图**不生成任何依赖时钟的内容** (如「陈旧 ⚠」) —— 那会让 `--check` 隔天就红, 生成物必须可复现。
+  途中同步远端 (另一 clone 的 `c526304` 调整根 README 排版 + 想法.md), 快进前核工作区 1,635 个跟踪文件全在。
 - 2026-09-23 **W0 已提交** `75bb0ca` (协议单点 + `_common.py` 接线 + README 指针; 索引登记整行随 W3 生成物).
 - 2026-09-23 **W1 已落**: `git mv` 47 份计划 (44 html + 2 语料 json + 1 md 违规件) + 7 份根报告 →
   `memory-bank/plans|reports/`; 引用面 **86 + 6 个文件 / 228 处** 机械改路径 (相对链接按深度重算,

@@ -9,30 +9,30 @@
 
 | 我要做的事 | 读 |
 |---|---|
-| **改代码前扫陷阱 / 跑 git 命令前** | [pitfalls/_index.md](pitfalls/_index.md) —— 7 类 (git · web-ui · backend · testing · ops · kb · docs) |
-| 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 基线数字单点在 [testing/baseline.md](testing/baseline.md) |
+| **改代码前扫陷阱 / 跑 git 命令前** | [pitfalls/_index.md](pitfalls/_index.md) —— 7 类, 按动作选类 |
+| 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 基线单点 [baseline.md](testing/baseline.md) |
 | 查配置键 | [config-reference/_index.md](config-reference/_index.md) |
 | 规则 / 条件 / 动作 | [rule-system/_index.md](rule-system/_index.md) |
 | 架构 / 主循环 / 数据层 / 任务队列 / WEB 运行时 | [systemPatterns/_index.md](systemPatterns/_index.md) |
-| 找功能位置 / 加新模块 | [modules/_index.md](modules/_index.md) —— 「在哪里改」速查在 [overview.md](modules/overview.md) |
+| 找功能位置 / 加新模块 | [modules/_index.md](modules/_index.md) |
 | 命名 / 风格 / 协作约定 | [conventions/_index.md](conventions/_index.md) |
 | 项目是什么 / 领域知识 | [productContext.md](productContext.md) · [projectbrief.md](projectbrief.md) |
 | 技术栈 / 环境 / 约束 | [techContext.md](techContext.md) |
 | 已实现 / 规划中 | [progress/_index.md](progress/_index.md) |
-| **现在做到哪 / 上次做到哪** | [activeContext/](activeContext/_about.md) —— 会话滚动状态切片; 读法 `python <skill-dir>/scripts/gen_active_recent.py` |
+| **现在做到哪 / 上次做到哪** | [activeContext/](activeContext/_about.md) —— 会话切片; 读法跑 `gen_active_recent.py` |
 | **下一步做什么** | `想法.md`(设计草稿待办) + [progress/roadmap.md](progress/roadmap.md)(规划中) |
 | **真机走查清单** | [checklists/_index.md](checklists/_index.md) —— 做走查时逐条勾 |
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
+| **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · [_doc-map.md](_doc-map.md) |
 
 ## 生成物 (冲突时**重跑脚本**, 不要手改)
 
 - 各目录的 `_index.md` —— `python .agents/skills/memory-bank/scripts/gen_kb_index.py` 扫主题文件的三行头元数据生成
 - [tasks/_index.md](tasks/_index.md) —— `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 扫档案 `Status` / `Summary` 生成
 - [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
-- 新增一个目录 = 建目录 + 写 `_about.md` + 主题文件(三行头) + **重跑生成器** + **在细路由表登记**一行(少一处守卫就红);
-  ⚠ 超 cap **先外迁再登记**(`progress/attachments/` 放超长叙事 · `tasks/attachments/` 放档案纪要段);
-  `*-history.md` 这类 `log` 流水触顶**轮转不删**(按 `_common.LOG_ROTATE_KEEP` 切约 1/3)。
+- [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) / [_doc-map.md](_doc-map.md) —— `gen_docs_index.py` / `gen_doc_map.py`(专题视图)
+- 新增目录 / 超 cap / 流水触顶的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。
 
 ## 一分钟速览
 
@@ -40,7 +40,7 @@
 - **形态**: 单机长驻 Python 程序, 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
 - **核心设计**: 所有工作统一为带 interval 的任务进单一时间优先堆; 增量同步 + `TorrentRecord` 独占种子数据; **主循环单线程, 是唯一改队列与 state_file 的线程**(详见 [systemPatterns/](systemPatterns/_index.md))。
 - **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字单点维护于 [testing/baseline.md](testing/baseline.md), 勿在他处手抄。
-- **文档**: 根 `README.md`(用户视角)与 `想法.md`(设计草稿)是上游文档; 本库是代码实况的核对版。
+- **文档**: 根 `README.md` 与 `想法.md` 是上游文档; 本库是代码实况核对版。
 - **制品形态**: 记一件事之前先读 [conventions/doc-forms.md](conventions/doc-forms.md) —— 四工位决策树与协议单点。
 
 > **黄金法则与常用命令: 单点定义在根 [AGENTS.md](../AGENTS.md)** —— 本文件不复述。
