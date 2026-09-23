@@ -103,7 +103,7 @@ PowerShell 的 `Get-MpComputerStatus` / `Get-MpPreference` 也无输出 ⇒ **�
 | M | 设置调整后复测(第三轮) | Complete | 2026-09-23 | 四类操作全部 **<1ms**; 串行 **19.37~20.16s**; 沙箱假设彻底排除 |
 | L | 落地并行(`-n 4` 设为默认) | Complete | 2026-09-23 | 加 `pytest-xdist==3.8.0` + `pytest.ini` 加 `-n 4` + conftest 补台账回传; 默认 **7.6s**(串行 `-n 0` 21s) |
 | N | 提交并推送 | Complete | 2026-09-23 | `1bde85d`; Gitee 与 GitHub `develop` 均一致; 无幽灵 diff |
-| O | 闸门命令自带 `TMPDIR` | Pending | 2026-09-23 | **遗留**: `.commit-flow.toml` 的闸门不设 `TMPDIR`, 忘导出即**假红**(本轮已复现); 属配置改动, 待拍板 |
+| O | 闸门命令自带 `TMPDIR` | Complete | 2026-09-23 | `.commit-flow.toml` 的 pytest 闸门改为 `set "TMPDIR=…" && uv run pytest …`; **不导出 TMPDIR 跑预检 7 条全过** |
 
 ## 进度日志
 
@@ -248,3 +248,18 @@ PowerShell 的 `Get-MpComputerStatus` / `Get-MpPreference` 也无输出 ⇒ **�
   且汇总行正确打出「越界 4 条」+ 四个 `--- worker N 有越界 ---`(可读性也回来了)。
 - **覆盖率口径**: 并行 `7729 / 623 / 2636 / **219**` vs 串行 `623 / **218**`, TOTAL 都是 91%
   ⇒ **分支 partial 多 1, 语句数一致**(早先记的"623 vs 622"有误, 已改正)。
+
+**③ 闸门自带 TMPDIR(用户: 「将TMPDIR加入.commit-flow.toml, 然后提交」)**:
+- `.commit-flow.toml` 的 pytest 闸门改为
+  `set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov`(TOML **字面串**写法,
+  免得为内层双引号转义)。
+- **踩坑与判据(都实测过)**: ①预检用 `subprocess.run(shell=True)`, Windows 上解析到 **COMSPEC → cmd.exe**
+  (`echo %COMSPEC%` → `C:\WINDOWS\System32\cmd.exe`), 所以 POSIX 的 `TMPDIR=x cmd` 前缀**不生效**(实测 rc=1);
+  ②cmd 的 `set VAR=value && cmd` 会把 `&&` 前的空格**并进 value** —— 实测 TMPDIR 变成
+  `'R:/Temp/auto-qb/tests '`(带尾随空格), 必须写成 `set "VAR=value" && cmd`;
+  ③查过闸门 schema 无 `env` 键(`GATE_KEYS = {match, run, note, auto, timeout}`, 未知键即 STOP),
+  所以只能走 shell 写法。
+- **验证**: **不导出 TMPDIR** 直接跑 `preflight.py` → 7 条闸门全过(pytest 那条 **5.7s**)。
+- **提交**: `f469492` ⚡️「测试改为默认并行(-n 4): 全量 21s → 7.6s, 并让闸门自带 TMPDIR」——
+  13 个路径。Gitee `develop` = `f469492` ✅; **GitHub 镜像滞后一个提交**(`1bde85d`),
+  按纪律只报一次、不重试。无幽灵 diff。
