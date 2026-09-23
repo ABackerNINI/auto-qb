@@ -1,9 +1,10 @@
 # 26-09-22-backend-partial-hr-verify — 部分种子 HR 的在线核实
 
-**Status:** Pending
+**Status:** Open
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
 **Summary:** 部分种子 HR 站点在线核实 (抓 HR 统计页 + 下载 .torrent 算 infohash 对账建索引) 的可行性分析与实施计划 v1.1 待拍板 (v1.1: HR 页八字段入模 / (站点,tid) 主键跨站隔离 / 防重复下载三层); 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, 开放问题 4 条待拍板后进 M0。
+**Topics:** backend-partial-hr-verify
 
 ## 原始请求
 

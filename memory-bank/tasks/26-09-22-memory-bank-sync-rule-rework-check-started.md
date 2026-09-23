@@ -1,9 +1,10 @@
 # 26-09-22-memory-bank-sync-rule-rework-check-started.md — 开工同步规则重写与 --check-started 开工自检
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
 **Summary:** AGENTS「会话协议·开始」①与 rebase 禁令互斥(a1f3476 补丁漏改①)致规则静默失效; 4 处 always-on 入口一次改全为 fetch + ls-remote + merge --ff-only(锚点改"首个执行动作前"+问答轮豁免), preflight 落后判据 ls-remote 现查并新增 --check-started 只读开工自检; skill 自测 34 passed / 全量 1189+1 / 两项真跑 exit 0
+**Topics:** memory-bank-git-rules
 
 ## 原始请求
 

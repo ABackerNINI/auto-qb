@@ -1,11 +1,12 @@
 # 26-09-14-memory-bank-migration — 知识库 (Memory Bank) 建设与仓库治理
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-14
 **Updated:** 2026-09-17
 **专题:** 知识库 / 跨 agent 协作 / worktree 同步
 **Legacy-ID:** TASK001
 **Summary:** `ai/` → `memory-bank/` 六核心文件迁移 + 跨 agent 入口统一 + 测试基线单点化 + worktree 同步 (2026-09-14 ~ 09-15)
+**Topics:** memory-bank-migration
 
 ## 原始请求
 

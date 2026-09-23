@@ -4,6 +4,7 @@
 **Added:** 2026-09-22
 **Updated:** 2026-09-23
 **Summary:** activeContext.md 全体收尾必写 + 「最后更新」滚动栈同段重写 → develop 汇合高频冲突; 已按 **A′ 时间戳切片 + D** 实施 W1–W3(取消 global.md / _index.md / 取最近 N 条与缓存文件), W4(merge-tree 预检) 可选未做。
+**Topics:** memory-bank-activecontext-conflict
 
 ## 原始请求
 

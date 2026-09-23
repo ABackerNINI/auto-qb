@@ -1,10 +1,11 @@
 # 26-09-19-memory-bank-session-git-rules-sync — 会话协议与 git 口径统一 (开工先拉分支 + 提交即推送)
 
-**Status:** Completed (全部入库, 最新 `4bb7f03`; 剩 GitHub 镜像滞后 3 个提交, 允许滞后)
+**Status:** Done (全部入库, 最新 `4bb7f03`; 剩 GitHub 镜像滞后 3 个提交, 允许滞后)
 **Started:** 2026-09-19
 **Owner:** 本 worktree 会话 (auto-qb-clone2, 单会话连续实施)
 **Plan doc:** (无 —— 用户指定规则 + 撞见的文档漂移, 未产出计划文档)
 **Summary:** 用户要求「记录进 AGENTS.md: 开始工作前先拉取远程分支, 避免在落后的分支上工作」。落地时发现同一条会话协议有 **4 处 always-on 入口** (`AGENTS.md` / `.github/copilot-instructions.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`), 只改一处等于其它三条路径下规则不存在 ⇒ 四处全改, 并把 memory-bank SKILL 的「会话开始 (3 步)」扩为 4 步。过程中撞见 `conventions.md` 仍写「🔴 绝对不要 push」与 `AGENTS.md` 现行「提交 = commit + 自动推送」矛盾 ⇒ 先入池 issue `26-09-19-2359-docs-memory-bank-push-rule-drift`(Open), 用户拍板方案 A 后改为 **入口文件单点定义 + 知识库只留指针**, issue 转 **Fixed**。共 7 笔提交, 闸门 `uv run pytest tests -q` **1054 passed** 全程未变。
+**Topics:** memory-bank-git-rules
 
 ## 原始请求
 

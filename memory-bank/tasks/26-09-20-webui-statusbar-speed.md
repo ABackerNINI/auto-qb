@@ -7,6 +7,7 @@
 **Issue:** [issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html](../issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html)
 **Plan doc:** [memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html](../plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html)
 **Summary:** 用户真机报「WEBUI 状态栏上传/下载速度不更新，永远显示 0」。入池后用户指派认领，先做复验与深入分析：根因是**状态栏在前端对 `groups` 求和，而 P1-1「按视图回传」在种子页不回 `groups`**（`VIEW_ARRAYS["torrent"] = ("torrents",)`）⇒ `this.groups` 永远停在初始 `[]` ⇒ 合计恒 0；次因是合计只遍历 `groups`，漏掉未归组 `singles`（桩实测少算 88.7%）。已用真 `create_app` + 合成种子桩服务复现（种子页响应里**没有 `groups` 键**，真值 15,206,400）。修复计划已产出（4 处改动 + 3 条守阵），**尚未动代码**。
+**Topics:** webui-statusbar
 
 ## 原始请求
 

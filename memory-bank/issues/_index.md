@@ -4,7 +4,7 @@
 > (`issue-status` / `issue-stamp` / `issue-title` / `issue-summary` / `issue-type`)生成;
 > 新增报告或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = **类型 · 简述 · 报告链接**(分区即状态); 状态改在报告 HTML 的封面徽标与
-> `<meta name="issue-status">`(两处一起改)。状态取值: `Open` / `In Progress` / `Fixed` / `WontFix` / `Duplicate`。
+> `<meta name="issue-status">`(两处一起改)。状态取值: `Open` / `In Progress` / `Done` / `Dropped` / `Superseded`。
 > 文件名 = `<YY-MM-DD-HHMM>-<type>-<slug>.html`, type 取值: bug / perf / docs / test / refactor / feat / chore / question。
 > **入池规则**: 计划外问题一律不改码, 只入池 —— 见 create-issue skill (../../.agents/skills/create-issue/SKILL.md)
 > (该不该现在修, 见 scope-guard skill)。
@@ -49,7 +49,7 @@
 
 - [bug] [qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查](26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html) — qB 移动种子时偶发追加 .!qB 后缀, 触发重新校验并误判缺文件
 
-## Fixed
+## Done
 
 - [bug] [config 校验缺少取值范围约束, 可配出合法格式但危险的值](26-09-22-1937-bug-config-value-range-validation.html) — validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧
 - [bug] [tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回](26-09-21-1408-bug-web-tracker-url-passkey-log.html) — P2: 私站 announce URL 内嵌 passkey, 轮转日志备份/同机进程是泄露面; 建议单点 sanitize_tracker_url 脱敏
@@ -70,10 +70,10 @@
 - [bug] [sync_interval 与前端分档轮询错配: >3000 种子时约一半视图重建无人消费](26-09-19-1900-bug-webui-poll-cadence-mismatch.html) — 服务端固定 1.5s 重建四视图, 前端 >3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向
 - [perf] [/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)](26-09-19-1900-perf-webui-hot-endpoints-jsonable-encoder.html) — /api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改
 
-## WontFix
+## Dropped
 
 (暂无)
 
-## Duplicate
+## Superseded
 
 (暂无)

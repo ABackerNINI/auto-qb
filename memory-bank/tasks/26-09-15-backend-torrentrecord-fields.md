@@ -1,11 +1,12 @@
 # 26-09-15-backend-torrentrecord-fields — TorrentRecord 全字段缓存 (快照 21 → 70 字段)
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** 数据层 / 为 WEB UI 供数
 **Legacy-ID:** TASK006
 **Summary:** 快照 21 → 70 字段 (`_raw` 降为兜底) + `to_dict()`; 基线 879 (2026-09-15)
+**Topics:** backend-torrentrecord-fields
 
 ## 原始请求
 

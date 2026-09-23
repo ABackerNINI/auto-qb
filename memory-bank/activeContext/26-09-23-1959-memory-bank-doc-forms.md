@@ -1,7 +1,7 @@
 # 文档形态统一 (plans/reports 入库 + 四形态协议)
-> 摘要: 四形态 (根报告 / plans / issues / tasks) 职责重叠、登记方式各异; 已拍板 plans + reports 收进 `memory-bank/`, 收敛为「四工位 + 一套协议」。**按波次实施中: W0 协议落地 (`75bb0ca`) + W1 迁入库已提交** —— 47 份计划 + 7 份报告已进 `memory-bank/plans|reports/`, 228 处引用 + 2 处运行时路径 (`sim_baseline`/`sim_run` 的 `BASELINE_PATH`) 同步, 违规 md 转 dark HTML。勘察要点: 计划与报告**零 meta / 零索引 / 零守卫**; 同一专题最多 5 份 (column-prefs / optimistic-ui); 决定**存量 51 份不改名**、状态词统一 5 词、主键 `doc-topic` + `_doc-map.md` 专题视图。
+> 摘要: 四形态 (根报告 / plans / issues / tasks) 职责重叠、登记方式各异; 已拍板 plans + reports 收进 `memory-bank/`, 收敛为「四工位 + 一套协议」。**按波次实施中: W0 协议 (`75bb0ca`) · W1 迁入库 (`b96d0cf`) · W2 补 meta/统一状态词已提交** —— 47 份计划 + 8 份报告在 `memory-bank/plans|reports/` (含违规 md 转 dark HTML), 51 份计划/报告已带 `doc-*` meta; 39 issues + 35 档案状态统一为 5 词表, 档案补 `**Topics:**`; 专题归并 **77 topic / 25 个跨形态簇** (column-prefs 5 件 · optimistic-ui 8 件)。勘察要点: 计划与报告**零 meta / 零索引 / 零守卫**; 同一专题最多 5 份 (column-prefs / optimistic-ui); 决定**存量 51 份不改名**、状态词统一 5 词、主键 `doc-topic` + `_doc-map.md` 专题视图。
 > 触发: 文档形态, 四形态, docs/plans, reports, 入库, 计划归档, 报告归档, doc-topic, doc-map, 状态词统一, 立档, 索引守卫, 重复文档
-> 最后活动: 2026-09-23 20:37
+> 最后活动: 2026-09-23 20:49
 
 ## 状态
 
@@ -27,10 +27,9 @@
 
 ## 待办(下一步从这里接)
 
-1. **W2 补 meta** (47+7 份计划/报告注入 `doc-*`) + **状态词统一 5 词** (39 issues + 34 档案) + 档案补 `**Topics:**`
-2. **W3 生成器** (`gen_docs_index.py` / `gen_doc_map.py`) + README 索引登记 (随生成物一起落)
-3. **W4 守卫** (`tests/test_docs_forms.py` + 闸门 + `check_doc_links.is_frozen` 增补) → **W5 回写收口**
-4. 已提交: `dc9e832` (计划+立档) · `75bb0ca` (W0); 每波次单独提交 + 推 Gitee (GitHub 镜像直连不通, 只报一次)
+1. **W3 生成器** (`gen_docs_index.py` / `gen_doc_map.py`) + README 索引登记 (随生成物一起落)
+2. **W4 守卫** (`tests/test_docs_forms.py` + 闸门 + `check_doc_links.is_frozen` 增补) → **W5 回写收口**
+3. 已提交: `dc9e832` (计划+立档) · `75bb0ca` (W0) · `b96d0cf` (W1); 每波次单独提交 + 推 Gitee (GitHub 镜像直连不通, 只报一次)
 
 ## 单点指针
 

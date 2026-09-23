@@ -6,6 +6,7 @@
 **Plan doc:** (无 —— 单点特性, 未产出计划文档)
 **Legacy-ID:** TASK015
 **Summary:** 状态列由笼统「错误」改为具体原因(`missingFiles`→"文件丢失" / `error`→tracker `msg` 原文); 后端 `refresh_error_reasons` 主循环 TTL(300s)+预算(5/轮)预取 + 显式置脏, 视图透出 `error_reason`, 前端 `stateText` 双 UI 生效; 1006 passed, 假 qB 服务浏览器冒烟实测; **已入库 `9723a76`** (剩用户真机走查)
+**Topics:** webui-error-reason
 
 ## 原始请求
 

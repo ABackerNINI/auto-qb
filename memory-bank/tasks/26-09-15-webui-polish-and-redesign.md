@@ -1,11 +1,12 @@
 # 26-09-15-webui-polish-and-redesign — WEB UI 打磨轮次与棱镜重设计 (第六 ~ 八轮 + 双界面命名)
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** WEB UI / 前端打磨 / 多主题
 **Legacy-ID:** TASK003
 **Summary:** `atlas`/`prism`/`shared` 目录化 + 五主题令牌 + 各轮冒烟全绿 (2026-09-15)
+**Topics:** webui-polish-and-redesign
 
 ## 原始请求
 

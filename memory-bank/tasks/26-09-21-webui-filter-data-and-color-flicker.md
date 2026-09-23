@@ -1,10 +1,11 @@
 # 26-09-21-webui-filter-data-and-color-flicker — 种子页筛选器无数据 + 辅种组暂停后状态色闪烁
 
-**Status:** Completed
+**Status:** Done
 **Started:** 2026-09-21
 **Updated:** 2026-09-21
 **Owner:** 主线 (auto-qb-clone2)
 **Summary:** 用户报两个 WEB UI 缺陷。**① 种子页筛选器无数据**: 筛选弹层的选项(标签/分类/站点/路径)一律遍历 `groups` 计算, 而种子页按视图分片**不回 `groups`**(`VIEW_ARRAYS["torrent"] = ("torrents",)`) ⇒ 四个弹层恒空、只剩"暂无数据"(H&R 是固定两档, 表现为 0/0 —— 更隐蔽); 与 issue 26-09-20-1646(状态栏速度)、BUG-8(追剧页成员索引)**同一类成因的第三次**, 故改法用"取数面单点"(`facetRows` + `_facetOptions`)并按视图定计数口径(组视图=组数, 种子页=种子数)。**② 辅种组暂停整组后颜色 灰→绿→灰**: 真值走 `torrents/info` **直查**, 比我们自己的 `/sync/maindata` **快照**新 ≤ `sync_interval`(1.5s); `onTruthEvent` 一到就 `delete pendingOps[h]`(撤掉值覆盖), 这 1.5s 内任何一次**视图发布**都会带着"命令前"的 kind 覆盖行对象 ⇒ 行被打回命令前的做种绿, 快照追上再变灰。修法 = 真值事件**只改覆盖的值(patch/prev)、不结束覆盖**, 收尾判据保持"服务端快照同意"(`_optimisticSettled`)。单测 **1142 passed**(基线不变, 只加守阵断言); 冒烟 ok **68 项 / 2 失败**(两条均为**既有**失败, 见下)、error **68 项 / 0 失败**、hang **8 项 / 0 失败**; 新增断言与静态守阵**均经红验**。
+**Topics:** webui-filter-data-and-color-flicker
 
 ## 原始请求
 

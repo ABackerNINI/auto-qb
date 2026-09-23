@@ -6,6 +6,7 @@
 **Deliverable:** [`resources/ui-component-libraries/modelscope.dsv4.1flash/`](../../resources/ui-component-libraries/modelscope.dsv4.1flash/README.md) (22 文件: 20 套组件库单页 + 挑选索引 `index.html` + 目录 `README.md`)
 **Legacy-ID:** TASK014
 **Summary:** 按设计哲学风格库 5 流派 × 20 preset 各出一套自包含组件库单页 + 挑选索引 + 目录 README (`resources/ui-component-libraries/modelscope.dsv4.1flash/`); 四轮自检 + 7 项缺陷修复; 996 passed; 已提交 `fae019a` (剩用户挑选与按需迭代)
+**Topics:** webui-component-libraries
 
 ## 原始请求
 

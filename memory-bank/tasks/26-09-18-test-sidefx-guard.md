@@ -6,6 +6,7 @@
 **Plan doc:** (无 —— 缺陷修复, 未产出计划文档)
 **Legacy-ID:** TASK016
 **Summary:** 真凶 `test_cli.py::test_main_qb_compat_error_clean_exit` 用 MagicMock 当配置 ⇒ 绕过 `notify_fatal` 守卫真发 Windows toast; 修 mock + 新增 `tests/conftest.py` 会话级通知器命令拦截; 另修 2 个环境依赖假失败(`APPDATA` 未设 / 沙箱把 `os.symlink` 落成真实目录) + `.gitignore` 补 `.coverage.*`; **1007 passed / 0 failed**; **已入库 `7ae21a1`** (剩用户再跑一次测试确认不再弹框)
+**Topics:** test-sidefx-guard
 
 ## 原始请求
 

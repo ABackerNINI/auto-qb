@@ -1,11 +1,12 @@
 # 26-09-15-docs-restructure — README 重构与配置文档分离
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** 文档 / 用户视角
 **Legacy-ID:** TASK009
 **Summary:** README 29KB→10KB + 抽出 `docs/configuration.md` (2026-09-15)
+**Topics:** docs-restructure
 
 ## 原始请求
 

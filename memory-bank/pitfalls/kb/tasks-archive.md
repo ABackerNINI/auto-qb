@@ -1,14 +1,15 @@
 # 任务档案与状态回扫
 
-> 摘要: 任务档案 `Status` 只能取 4 个英文单词; 推送后要回扫"未提交"标记, 但只改自己那一轮的。
+> 摘要: 任务档案 `Status` 只能取 4 个英文单词(2026-09-23 起为 `In Progress`/`Open`/`Done`/`Dropped`); 推送后要回扫"未提交"标记, 但只改自己那一轮的。
 > 触发: 立档, 改 Status, 重建索引, 推送后回扫, 标记未提交
 
 ### 任务档案的 `**Status:**` 只能取 4 个英文单词
 
 - **触发**: 新建 / 更新 `memory-bank/tasks/*.md` 的状态行。
-- **判别**: 取值只允许 `In Progress` / `Pending` / `Completed` / `Abandoned`; 写成 `✅ 完成` 会让
+- **判别**: 取值只允许 `In Progress` / `Open` / `Done` / `Dropped`(旧词 `Pending`/`Completed`/`Abandoned`
+  已按 5 词表统一改写); 写成 `✅ 完成` 会让
   **两条守阵同时红**(状态行缺失 + 索引分区不一致), 容易误判成"索引坏了"。
-  正确写法是 `Completed (…中文说明…)`。
+  正确写法是 `Done (…中文说明…)`。
 - **处置**: 改完**必须重跑** `python .agents/skills/memory-bank/scripts/gen_tasks_index.py`(索引是生成物, 不手改)。
   **立档前先按 slug 查重** —— 并行分支各自立档会造成重复档案 + 重复索引条目, 而 `_indexed_sections()` 是 dict,
   同 ID 重复登记会**静默覆盖**。

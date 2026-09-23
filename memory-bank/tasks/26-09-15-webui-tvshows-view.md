@@ -1,11 +1,12 @@
 # 26-09-15-webui-tvshows-view — 追剧视图 (tvshows)
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** WEB UI / 剧集聚合
 **Legacy-ID:** TASK008
 **Summary:** 剧/季/集解析 + 缺集计算 + atlas 三态视图, 已合入 develop; 遗留: prism 模板欠账 (2026-09-15)
+**Topics:** webui-shows-view
 
 ## 原始请求
 

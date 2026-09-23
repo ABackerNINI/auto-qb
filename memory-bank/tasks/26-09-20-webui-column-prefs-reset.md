@@ -1,12 +1,13 @@
 # 26-09-20-webui-column-prefs-reset — WebUI 列设置（顺序/显隐/宽度）被多标签页整份覆盖
 
-**Status:** Completed (2026-09-20 18:5x 实施并验证完毕; 未提交 —— 用户未下触发词; 剩用户真机走查)
+**Status:** Done (2026-09-20 18:5x 实施并验证完毕; 未提交 —— 用户未下触发词; 剩用户真机走查)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话)
 **Plan doc:** `memory-bank/plans/26-09-20-1836-webui-column-prefs-sync-plan.html`
 **Issue:** `memory-bank/issues/26-09-20-1800-bug-webui-column-prefs-reset.html`
 **Legacy-ID:** 无
 **Summary:** 真浏览器复现并定位：列偏好丢失**不是**存储没写进去、也不是读入被洗净，而是每个标签各持一份"加载时的快照"，`saveColState()` 又写整份 ⇒ last-writer-wins，先改的标签被静默吞掉。修法 F1 写入改 read-modify-write + F2 监听 `storage` 事件跨标签同步 + F3 visibilitychange 补漏；后端零改动，不升 `COLS_STORE_KEY`。
+**Topics:** webui-column-prefs
 
 ## 原始请求
 

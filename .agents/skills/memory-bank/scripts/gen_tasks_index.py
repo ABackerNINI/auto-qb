@@ -27,15 +27,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import find_root, gen_cmd, resolve_mb_dir  # noqa: E402
 
-STATUSES = ("In Progress", "Pending", "Completed", "Abandoned")
-STATUS_RE = re.compile(r"\*\*Status:\*\*\s*(In Progress|Pending|Completed|Abandoned)")
+STATUSES = ("In Progress", "Open", "Done", "Dropped")
+STATUS_RE = re.compile(r"\*\*Status:\*\*\s*(In Progress|Open|Done|Dropped)")
 SUMMARY_RE = re.compile(r"\*\*Summary:\*\*\s*(.+)")
 TITLE_RE = re.compile(r"^#\s+(\S+)\s*[—-]\s*(.+?)\s*$", re.MULTILINE)
 UPDATED_RE = re.compile(r"\*\*Updated:\*\*\s*(\d{4}-\d{2}-\d{2})")
 ADDED_RE = re.compile(r"\*\*(?:Added|Started):\*\*\s*(\d{4}-\d{2}-\d{2})")
 
 EMPTY_HINT = {
-    "Pending": "(暂无 — 下一步候选见 `想法.md` 待办与 [../progress/roadmap.md](../progress/roadmap.md))",
+    "Open": "(暂无 — 下一步候选见 `想法.md` 待办与 [../progress/roadmap.md](../progress/roadmap.md))",
 }
 
 # 索引行里摘要的截断长度。**这是索引不膨胀的关键**: 摘要全文只增不减, 若整条打进索引,
@@ -78,7 +78,7 @@ def collect(tasks_dir: Path) -> list[dict]:
         items.append(
             {
                 "slug": path.stem,
-                "status": status_match.group(1) if status_match else "Pending",
+                "status": status_match.group(1) if status_match else "Open",
                 "title": title_match.group(2) if title_match else path.stem,
                 "summary": summary_match.group(1).strip() if summary_match else "",
                 "updated": updated_match.group(1) if updated_match else "",

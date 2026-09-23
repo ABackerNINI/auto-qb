@@ -4,6 +4,7 @@
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
 **Summary:** 「版本管理」立项：git VCS 健在（develop @ 49eacb8 与 gitee 齐平），空白在软件版本/发布层 —— 本地与 gitee 0 tag、无 CHANGELOG、无发版流程、版本号双源已漂移（pyproject "0.1.0" vs `__init__.__version__` "0.2.0"）。方案已出待拍板：0.x 语义化 + `__init__` 单源（hatchling regex 动态接线）+ 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag；3 个决策点待用户拍板，批准后阶段 0（不涉码）先行。
+**Topics:** deps-version-management
 
 ## 原始请求
 

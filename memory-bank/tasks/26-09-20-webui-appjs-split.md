@@ -1,11 +1,12 @@
 # 26-09-20-webui-appjs-split — WEB UI `shared/app.js` 按域拆分为内核 + 15 个片段文件
 
-**Status:** Completed (已入库 `afef7ce` 并推送 Gitee; GitHub 镜像允许滞后)
+**Status:** Done (已入库 `afef7ce` 并推送 Gitee; GitHub 镜像允许滞后)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-20-0906-appjs-split-plan.html](../plans/26-09-20-0906-appjs-split-plan.html)
 **Legacy-ID:** 无
 **Summary:** 5045 行的 `shared/app.js`(Vue 3 CDN 单文件, 两套 UI 共用)按域拆成 **1001 行内核 + 15 个片段文件**: 293 个 methods 与 71 个 computed 按域搬走, `data()`/`watch`/生命周期与 HTTP·鉴权·轮询·视图切换留在内核。机制沿用仓库既有范式(`window.AQB_*` 全局 mixin, app.js 末尾 `app.mixin`), 不引入构建链。守阵 `test_frontend_static_bundle_health` 新增第 10 项「拆分接线」并把第 7/8/9 项改为按整包扫描; 单测 1055 passed 不变, 浏览器冒烟拆分前后均 54 项 0 失败。
+**Topics:** webui-appjs-split
 
 ## 原始请求
 

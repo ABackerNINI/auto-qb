@@ -1,11 +1,12 @@
 # 26-09-19-webui-cols-store-version-audit — WEB UI 列状态存储键 `autoqb_cols_v?` 版本沿革审计与口径回写
 
-**Status:** Completed (已入库 `ccedce8` + `8d68300`; GitHub 镜像滞后 1 个提交, 等网络恢复补推)
+**Status:** Done (已入库 `ccedce8` + `8d68300`; GitHub 镜像滞后 1 个提交, 等网络恢复补推)
 **Started:** 2026-09-19
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** 无 (本次为只读审计 + 知识库回写, 未出计划文档)
 **Legacy-ID:** 无
 **Summary:** 用 `git log -S` 逐键追溯列状态存储键的 4 次升版本(v1→v4, 集中在 2026-09-13 08:32 ~ 09-14 07:25), 确认 v4 之后 R10-09(`cb57bef`)已把政策反转为"列集变更一律不升版本"; 据此回写 `pitfalls.md`(2 处) / `systemPatterns.md` / `activeContext.md` 三条仍写着"加/减列**必须**升版本"的旧口径, 并补一条"不并发也会偶发的全量失败"判别法; 测试基线 1041 passed 不变。
+**Topics:** webui-cols-store-version
 
 ## 原始请求
 

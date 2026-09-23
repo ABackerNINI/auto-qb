@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="issue-slug" content="webui-truth-convergence">
 <meta name="issue-stamp" content="26-09-19-2024">
-<meta name="issue-status" content="Fixed">
+<meta name="issue-status" content="Done">
 <meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-optimistic-ui">
 <meta name="issue-tier" content="standard">
 <meta name="issue-title" content="乐观态要挂满 3 秒才消除: 「真值匹配即清」从未实现, 且回执后不立即拉真值">
 <meta name="issue-summary" content="pendingOps 只有超时/失败两个清除点(app.js:2315/2361), 真值到了也不清; 且 act*/bulk 回执后无 refresh, 真值要等下一轮轮询(&gt;3000 种子 3s) —— 用户报的「乐观后 2-4s 才恢复」">
@@ -97,7 +98,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-2024-webui-truth-convergence</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 20:24</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Fixed</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">用户真机实测（2026-09-19）</div></div>

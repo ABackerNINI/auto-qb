@@ -4,6 +4,7 @@
 **Added:** 2026-09-22
 **Updated:** 2026-09-22
 **Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; **W0–W8 全部完成** —— 8 份超标文档拆成 9 目录 / 40+ 主题文件 + tasks 消肿 + 链接机检, 12 条结构性守卫; 余 instructions 漂移重写待做
+**Topics:** memory-bank-dir-refactor
 
 ## 原始请求
 

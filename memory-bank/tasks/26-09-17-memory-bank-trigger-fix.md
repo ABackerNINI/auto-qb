@@ -6,6 +6,7 @@
 **专题:** 知识库治理 / 代理协作机制
 **Legacy-ID:** TASK010
 **Summary:** skill 载体 + always-on 阈值 + TASK001~TASK009 回填 + activeContext 瘦身 + 守卫测试完成; 待提交
+**Topics:** memory-bank-trigger-fix
 
 ## 原始请求
 

@@ -1,11 +1,12 @@
 # 26-09-15-backend-file-split — 后端大文件拆分
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** 架构 / 重构 (零行为变化)
 **Legacy-ID:** TASK004
 **Summary:** `qbmanager` / `schema` / `torrents` / `validation` 四包拆分, 纯移动零行为变化; 遗留: 既有测试顺序污染待排查 (2026-09-15)
+**Topics:** backend-file-split
 
 ## 原始请求
 

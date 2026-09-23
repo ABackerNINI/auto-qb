@@ -48,7 +48,7 @@ SKILL_SCRIPTS = ROOT / ".agents" / "skills" / "memory-bank" / "scripts"
 GEN = SKILL_SCRIPTS / "gen_tasks_index.py"
 SKILL = ROOT / ".agents" / "skills" / "memory-bank" / "SKILL.md"
 
-STATUSES = ("In Progress", "Pending", "Completed", "Abandoned")
+STATUSES = ("In Progress", "Open", "Done", "Dropped")
 
 # `memory-bank/activeContext/` 切片数上限 —— 切片无界增长是这个方案的已知代价, 给个可判定的收口线
 SLICE_COUNT_LIMIT = 40
@@ -58,7 +58,7 @@ DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
 LEGACY_PREFIX_RE = re.compile(r"^TASK\d{3}-")
 FILE_RE = re.compile(r"^(?:TASK\d{3}-|\d{2}-\d{2}-\d{2}-)[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
 INDEX_ID_RE = re.compile(r"- \[(TASK\d{3}|\d{2}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*)\]")
-STATUS_RE = re.compile(r"\*\*Status:\*\* (In Progress|Pending|Completed|Abandoned)")
+STATUS_RE = re.compile(r"\*\*Status:\*\* (In Progress|Open|Done|Dropped)")
 
 
 def _task_files() -> list[Path]:

@@ -1,10 +1,11 @@
 # 26-09-20-webui-decoupling — 主循环 × WebUI 解耦(门面 + 状态内聚)
 
-**Status:** Completed (代码已提交并推送 Gitee `5691c6f`; 剩用户真机走查(用户侧) + 兼容层清理择机)
+**Status:** Done (代码已提交并推送 Gitee `5691c6f`; 剩用户真机走查(用户侧) + 兼容层清理择机)
 **Started:** 2026-09-20
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html](../plans/26-09-20-0234-webui-decoupling-plan.html)
 **Summary:** QbManager 主循环里揉进了表现层的状态与节拍判据(19 个 Web 字段平铺在 `__init__`, 主循环替表现层做"要不要重建 / 要不要补刷新"的决策)。用 **门面(Facade)+ 空对象 + 沿用命令模式** 把状态与判据整体收进 `web_runtime.WebUIRuntime`, 主循环只剩四条语义调用; 行为逐条等价, 不引入新契约。**1055 → 1057 passed**(Windows) / **1055 + 2 skipped**(Linux WSL 沙箱), cov 92%, 红绿双验过; 浏览器冒烟未跑(Playwright 本机未装)。
+**Topics:** webui-decoupling
 
 ## 原始请求
 

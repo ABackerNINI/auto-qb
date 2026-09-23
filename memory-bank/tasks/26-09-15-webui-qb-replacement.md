@@ -6,6 +6,7 @@
 **专题:** WEB UI / 替代 qB 界面 / 后端 Web 层
 **Legacy-ID:** TASK002
 **Summary:** 32 工作项双 UI 同构 + 两大根因修复完成; 剩实机 CDP 双 UI 走查 + 真机 dry-run + prism 追剧模板, **未提交 git**
+**Topics:** webui-qb-replacement
 
 ## 原始请求
 

@@ -64,9 +64,9 @@ user-invocable: true
 - 必备章节: 标题行 `# <文件名> — 名称`、状态行(`Status`/`Added`/`Updated`/`Summary`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。`**Summary:**` 是 `_index.md` 摘要的数据源 ——
   索引里按 `gen_tasks_index.SUMMARY_MAX` **截断成一行**, 全文留在档案, 所以摘要写长不会把索引撑爆
   (2026-09-23 实测: 不截断时 33 个档案平均 350 字符/行、索引 12,299 撞 `index-auto` cap)。
-- **`**Status:**` 取值只能是这 4 个英文单词**: `In Progress` / `Pending` / `Completed` / `Abandoned` —— 守阵 `tests/test_memory_bank.py` 用正则 `\*\*Status:\*\* (In Progress|Pending|Completed|Abandoned)` 匹配, 并且 `gen_tasks_index.py` 按它决定档案落在 `_index.md` 的哪个分区。写成中文「完成」或加前缀符号(`✅ 完成` / `已完成`)会被判为**非法状态行**, 表现为两条守阵同时红(状态行缺失 + 索引分区不一致)。
+- **`**Status:**` 取值只能是这 4 个英文单词**: `In Progress` / `Open` / `Done` / `Dropped` —— 守阵 `tests/test_memory_bank.py` 用正则 `\*\*Status:\*\* (In Progress|Open|Done|Dropped)` 匹配, 并且 `gen_tasks_index.py` 按它决定档案落在 `_index.md` 的哪个分区。写成中文「完成」或加前缀符号(`✅ 完成` / `已完成`)会被判为**非法状态行**, 表现为两条守阵同时红(状态行缺失 + 索引分区不一致)。
 - 迁移期档案保留 `**Legacy-ID:** TASKnnn`, 供历史文档与历史对话中的旧编号回溯。
-- 状态取值仅四种: `In Progress` / `Pending` / `Completed` / `Abandoned`; `_index.md` 的分区必须用同样的词。
+- 状态取值仅四种: `In Progress` / `Open` / `Done` / `Dropped`; `_index.md` 的分区必须用同样的词。旧词映射见 [doc-forms 约定](../../../memory-bank/conventions/doc-forms.md)(`Pending`→Open · `Completed`→Done · `Abandoned`→Dropped)。
 - 一个专题一个档案(不逐会话建文件): 新会话追加**结论与决策**; 历史流水账原文归档在该档案的 `## 历史会话纪要 (原文归档)` 段。
 - 守卫: `tests/test_memory_bank.py` 校验索引↔文件双向一致、忽略日期前缀的 slug 唯一、命名规范、状态分区、必备章节、索引 == 生成结果 — 登记了没文件 / 有文件没登记都会让 pytest 失败。
 

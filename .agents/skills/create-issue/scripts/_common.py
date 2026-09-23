@@ -20,8 +20,8 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPTS_DIR.parent
 
-# 状态取值仅五种(与档位无关, 通用)
-STATUSES = ("Open", "In Progress", "Fixed", "WontFix", "Duplicate")
+# 状态取值仅五种(与档位无关, 通用); 2026-09-23 起与四形态统一 5 词表 (见 memory-bank/conventions/doc-forms.md)
+STATUSES = ("Open", "In Progress", "Done", "Dropped", "Superseded")
 
 # 类型枚举 —— 增删类型只改这一处
 TYPES = ("bug", "perf", "docs", "test", "refactor", "feat", "chore", "question")

@@ -27,12 +27,12 @@
 - [26-09-17-webui-fix-round11] WEB UI 第十一轮修复 (7 项 · 图标着色/明细排序/滚动条) - 图标着色(导航/状态栏) + 历史去文字 + 明细表点击排序 + 辅种表加保存路径/明细表删列 + 两个横向滚动条根因(表头撑页 / `.detail` 自成滚…
 - [26-09-17-webui-fix-round9] WEB UI 第九轮修复 (25 项 · FX-01~FX-25) - 口径单点化 + 浮层锁定契约 + 选择模型互斥/派生 + 删除链统一 + 菜单分层 + 新端点 `/api/open-path`; 996 passed, 浏览…
 
-## Pending
+## Open
 
 - [26-09-23-memory-bank-doc-forms] 文档形态统一 (plans/reports 入库 + 四形态协议) - 四形态 (docs 根报告 / docs/plans 计划 / issues / tasks) 职责重叠且登记方式各异 —— 计划与报告零 meta / 零索引…
 - [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实 (抓 HR 统计页 + 下载 .torrent 算 infohash 对账建索引) 的可行性分析与实施计划 v1.1 待拍板 (v…
 
-## Completed
+## Done
 
 - [26-09-22-memory-bank-sync-rule-rework-check-started] 开工同步规则重写与 --check-started 开工自检 - AGENTS「会话协议·开始」①与 rebase 禁令互斥(a1f3476 补丁漏改①)致规则静默失效; 4 处 always-on 入口一次改全为 fetch…
 - [26-09-21-qb-corpus-capture-replay] 真机 qB 语料抓取 / 脱敏 / 离线回放 - 把 `scripts/sim_qb.py` 的种子来源从"人造合成"换成"真机 qB 抓取 + 脱敏 + 离线回放", 合成档保留为对照。语料 = 一条原始流(…
@@ -51,6 +51,6 @@
 - [26-09-15-webui-polish-and-redesign] WEB UI 打磨轮次与棱镜重设计 (第六 ~ 八轮 + 双界面命名) - `atlas`/`prism`/`shared` 目录化 + 五主题令牌 + 各轮冒烟全绿 (2026-09-15)
 - [26-09-15-webui-tvshows-view] 追剧视图 (tvshows) - 剧/季/集解析 + 缺集计算 + atlas 三态视图, 已合入 develop; 遗留: prism 模板欠账 (2026-09-15)
 
-## Abandoned
+## Dropped
 
 (暂无)

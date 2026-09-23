@@ -1,11 +1,12 @@
 # 26-09-21-qb-corpus-capture-replay — 真机 qB 语料抓取 / 脱敏 / 离线回放
 
-**Status:** Completed (W0–W6 全部实施并验证; 残留约 13 条观感项待用户真机目视 —— 属别的条目, 不计入本计划闭环)
+**Status:** Done (W0–W6 全部实施并验证; 残留约 13 条观感项待用户真机目视 —— 属别的条目, 不计入本计划闭环)
 **Started:** 2026-09-21
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-21-0024-qb-corpus-capture-replay-plan.html](../plans/26-09-21-0024-qb-corpus-capture-replay-plan.html) (v3 已拍板) + [审查报告](../plans/26-09-21-0257-qb-corpus-capture-replay-plan-review.html)
 **Legacy-ID:** 无
 **Summary:** 把 `scripts/sim_qb.py` 的种子来源从"人造合成"换成"真机 qB 抓取 + 脱敏 + 离线回放", 合成档保留为对照。语料 = 一条原始流(首帧 T0 / 末帧必是全量)+ 流里没有的按 hash 元数据(files/trackers)+ 真值分组(groups.json)。**W0 真机实测已出数**(6 项, 其中 1 项推翻了计划 §07 的模型前提); **W1 抓取器 + W2 脱敏与等价类守恒已落地并通过全部 6 项自检与 2 道红验**; W3–W6 未开工。
+**Topics:** qb-corpus-capture-replay
 
 ## 原始请求
 

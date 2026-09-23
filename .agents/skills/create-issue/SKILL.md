@@ -87,15 +87,15 @@ python .agents/skills/create-issue/scripts/new_issue.py <slug> \
 
 ## 状态机
 
-状态写在报告 HTML 的**封面状态徽标**(`<span class="badge">`)与 `<head>` 的 `<meta name="issue-status">`(**两处一起改**, 索引只读 meta), 取值仅五种:
+状态写在报告 HTML 的**封面状态徽标**(`<span class="badge">`)与 `<head>` 的 `<meta name="issue-status">`(**两处一起改**, 索引只读 meta), 取值仅五种(2026-09-23 起与四形态统一 5 词表, 见 [doc-forms 约定](../../../memory-bank/conventions/doc-forms.md)):
 
 | 状态 | 含义 |
 |---|---|
 | `Open` | 未修, 待排期(新建默认) |
 | `In Progress` | 已被某个计划认领, 正在修 —— **认领人只能是"用户指派"或"用户已批准的计划"** |
-| `Fixed` | 已修并验证(写清验证方式与测试数字) |
-| `WontFix` | 决定不修(必须写明理由) |
-| `Duplicate` | 与既有 issue 重复(写明指向哪一条) |
+| `Done` | 已修并验证(写清验证方式与测试数字) —— 旧词 `Fixed` |
+| `Dropped` | 决定不修(必须写明理由) —— 旧词 `WontFix` |
+| `Superseded` | 与他件重复 / 被取代(写明指向哪一条) —— 旧词 `Duplicate` |
 
 改状态的唯一流程: **改 HTML 的两处状态 → 追加一行状态变更日志 → 重建索引**:
 
@@ -114,7 +114,7 @@ python .agents/skills/create-issue/scripts/gen_issues_index.py --check # 只比�
    没认领就改代码 = 越界, 没认领就置 `In Progress` 同样是越界。用户没指派时, 正确动作是把
    issue 留在 `Open`, 在回复里说明"要不要认领 / 什么时候修", 等一句明确的话。
 2. 开工置 `In Progress`, 先**复验**(防过期原则第 5 条), 再重建索引。
-3. 修完置 `Fixed`, 在报告里补"实际修法 / 验证方式 / 测试数字"; 与"建议修法"不同则保留建议原文并说明改道原因。
+3. 修完置 `Done`, 在报告里补"实际修法 / 验证方式 / 测试数字"; 与"建议修法"不同则保留建议原文并说明改道原因。
 4. 按 `memory-bank` skill 的收尾 DoD 跑测试、回写 `memory-bank/` 主题文档; 需要时同步更新报告正文。
 5. 重建索引, 让 `_index.md` 反映新状态。
 

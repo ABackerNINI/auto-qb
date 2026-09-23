@@ -1,6 +1,6 @@
 # 26-09-23-memory-bank-doc-forms — 文档形态统一 (plans/reports 入库 + 四形态协议)
 
-**Status:** Pending
+**Status:** Open
 **Added:** 2026-09-23
 **Updated:** 2026-09-23
 **Summary:** 四形态 (docs 根报告 / docs/plans 计划 / issues / tasks) 职责重叠且登记方式各异 —— 计划与报告零 meta / 零索引 / 零守卫, 同一专题最多被讲述 5 遍; 已拍板 plans + reports 收进 memory-bank/, 收敛为「四工位 + 一套协议」(类型与命名 · `doc-*` meta · 5 词状态 · 双视图索引 · 生命周期与单一权威); **计划已出, W0–W5 待拍板后实施**
@@ -71,7 +71,7 @@ W5 回写收口 (AGENTS 产出口径 / skill 阈值 #4 / create-issue 措辞 / T
 |---|---|---|
 | W0 | 协议落地: 两目录 + `conventions/doc-forms.md` + `_common.py` 三处 + README 细路由 | Done |
 | W1 | 迁入库: 51 份 HTML + 2 json 迁入; md 违规件转 HTML; 引用面同提交修正 | Done |
-| W2 | 补 meta (51 份) + 存量状态词改写 (73 件) + 档案补 `**Topics:**` | Pending |
+| W2 | 补 meta (51 份) + 存量状态词改写 (73 件) + 档案补 `**Topics:**` | Done |
 | W3 | `gen_docs_index.py` + `gen_doc_map.py` + 双视图落地 | Pending |
 | W4 | `tests/test_docs_forms.py` + 提交闸门 + `check_doc_links.is_frozen` 增补 | Pending |
 | W5 | 回写收口 (AGENTS / skill ×2 / TODO / 镜像同步 / 本计划自身) | Pending |
@@ -81,8 +81,13 @@ W5 回写收口 (AGENTS 产出口径 / skill 阈值 #4 / create-issue 措辞 / T
 - 2026-09-23 19:59 **只读勘察完成**: 四形态盘点 (44 / 7 / 39 / 34)、引用面实测 (209 处 / 90 文件)、
   运行时耦合定位 (`sim_baseline.py`)、零守卫盲区确认; 方案与 5 个决策点呈报。
 - 2026-09-23 用户拍板: **plans 与 reports 都收进 memory-bank/**; 其余决策点按推荐默认取值。
-- 2026-09-23 计划文档落地 `docs/plans/26-09-23-1959-memory-bank-doc-forms-plan.html` (dark 单文件 HTML),
-  本档案与 `activeContext/26-09-23-1959-memory-bank-doc-forms.md` 切片同批; **均未提交**。
+- 2026-09-23 **W1 已提交** `b96d0cf` (搬运 + 228 处引用 + 2 处运行时路径 + md 转 HTML; 全量 1191 passed)。
+- 2026-09-23 **W2 已落**: 51 份计划/报告注入 `doc-*` meta (含把一份 ad-hoc `doc-type=fix-plan` 归一为 `plan`);
+  39 issues 补 `doc-topic` + 徽标/meta 状态改写; 35 档案状态改写 (**Completed→Done ×15 · Pending→Open ×2 ·
+  In Progress 保持 ×17**) + 补 `**Topics:**`; 状态词查表单点同步 (`create-issue/_common.STATUSES` ·
+  `gen_tasks_index.STATUSES/STATUS_RE/EMPTY_HINT` · `tests/test_memory_bank.STATUS_RE` · 两份 SKILL.md ·
+  `pitfalls/kb/tasks-archive.md`); 专题归并 **77 个 topic / 25 个跨形态簇** (column-prefs 5 件 · optimistic-ui 8 件 —— 正是勘察里点名的两处重复)。
+- 待办: 用户拍板 (D1–D5 默认取值) 已按默认执行; W3 → W5 继续。
 - 2026-09-23 **W0 已提交** `75bb0ca` (协议单点 + `_common.py` 接线 + README 指针; 索引登记整行随 W3 生成物).
 - 2026-09-23 **W1 已落**: `git mv` 47 份计划 (44 html + 2 语料 json + 1 md 违规件) + 7 份根报告 →
   `memory-bank/plans|reports/`; 引用面 **86 + 6 个文件 / 228 处** 机械改路径 (相对链接按深度重算,

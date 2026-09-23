@@ -1,11 +1,12 @@
 # 26-09-15-deps-env-modernization — 依赖管理与运行环境现代化 (uv / pyproject / venv 重建)
 
-**Status:** Completed
+**Status:** Done
 **Added:** 2026-09-15
 **Updated:** 2026-09-15
 **专题:** 工程基建 / 依赖 / CI
 **Legacy-ID:** TASK005
 **Summary:** `pyproject` + `uv.lock` + CI 切 uv + 7 个 worktree venv 重建; 遗留: 无 (2026-09-15)
+**Topics:** deps-env-modernization
 
 ## 原始请求
 
