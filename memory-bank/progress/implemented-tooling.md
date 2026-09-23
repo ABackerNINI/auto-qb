@@ -1,7 +1,7 @@
 # 已实现 · 依赖 / 知识库 / CI
 
 > 摘要: 摘要: 依赖现代化与知识库机制本身的落地记录。
-> 触发: 做过没有, 依赖, uv, 知识库, 立档, 索引
+> 触发: 做过没有, 依赖, uv, 知识库, 立档, 索引, 瘦身, skill 瘦身, references, 上限
 
 ## 已实现 (✅, 有单测覆盖)
 
@@ -9,4 +9,11 @@
 - Memory Bank 触发机制修复 (2026-09-17): 补建真正的 skill 载体 `.agents/skills/memory-bank/SKILL.md` (会话开始 3 步 / 收尾 DoD 5 步 / 立档阈值 4 条 / 档案规范 / 反模式; 先建于 `.github/skills/`, 同日按仓库技能根惯例搬入 `.agents/skills/`), always-on 入口 (`AGENTS.md` + `.github/copilot-instructions.md` + `ai-lib.md`) 声明**可判定阈值**并指向 skill, `memory-bank.instructions.md` 顶部标注"本文件不负责触发 (applyTo 限定 memory-bank/**)"; 按**专题粒度**回填 `tasks/TASK001`~`TASK010` (30 条历史会话纪要原文按专题归档) 并重写 `_index.md`; `activeContext.md` 68 行 → 26 行 (恢复易变层定位); 新增守卫 `tests/test_memory_bank.py` (6 项, 红绿验证: 幽灵任务与纪要回流两类违例均被拦截); 基线 989 → **995 passed**
 - 依赖管理现代化 (2026-09-15): pyproject.toml(PEP 621 + hatchling, 12 直接依赖 == 锁死含 filelock 3.32.6 / uvicorn 0.53.0 最新, dev 走 PEP 735 依赖组, entry point `auto-qb = auto_qb.cli:main`) + uv.lock 全量锁 41 包 + `commands run env.sync` editable 安装(清除旧壳 venv 与约 20 个无关包); CI 切 astral-sh/setup-uv 固定 commit SHA (v10.1.0; 该 action 已不发布 `v10` 浮动标签, 写 `@v10` 会报 "unable to find version v10") + checkout@v6 + setup-python@v7 + uv sync/uv run; `uv build` sdist/wheel 打包就绪; 前置调研 memory-bank/reports/26-09-15-1150-report-dependency-lock.html; requirements-dev.txt 已被 pyproject 取代(随提交删除); README/AGENTS/testing/techContext 同步, 基线 872 passed (uv 环境)
 - **skills 全量安全审查 (2026-09-20, ✅ 已提交并推送 `a370354`, Gitee 主线成功; GitHub 镜像滞后 2 个提交)**: 按 skill-vetter 协议审查 26 个技能 —— 唯一红线是 `autoclaw-design-capability` 内 `design-skeletons/last30days` 的 `lib/chrome_cookies.py`(解密 Chrome cookie 取 X 会话 `auth_token`/`ct0`, 仅 macOS 可触发且该包被 sync 排除 ⇒ 不可达), 已**整体删除该骨架**; 另删 12MB 重复副本 `autoclaw-design-capability_noqa`, 同步清理 `sync_agent_skills.py` 的 `EXCLUDED` / autoclaw `INDEX.md`(骨架计数 83→82) / `NOTICE.md` / `pitfalls.md`。3 条次要发现已入池 `memory-bank/issues/`(hatch-pet 付费 API / 写 `USER.md` 口径冲突 / grill-me 空 stub)。审查报告 [memory-bank/reports/26-09-20-1429-skill-vetter-audit.html](../reports/26-09-20-1429-skill-vetter-audit.html)。**已补**: 实跑 `scripts/sync_agent_skills.py` 后 `my-commit-flow` 已链接进 `.codebuddy/skills`(现 24 个, = 25 个顶层 skill 减去被排除的 autoclaw), 读穿校验 OK、无悬空链接; **重启会话后才会出现在技能列表**。
+- **skills 瘦身 · "细节外置 references/ + 去空格 + 上限跟着实测收"三件套 (2026-09-24)**: 先做 `commands`, 再按同一思路做 `memory-bank`。
+  **commands**: 收录协议细节 → `.agents/skills/commands/references/howto-add-command.md`(1293 字符, **按需读**), SKILL.md **2986 → 2089 字符**(半角逗号/斜杠/括号后的空格 327 → 171 个), `CONTEXT_CAPS` 上限 **4200 → 2600**。
+  **memory-bank**: 知识库结构 / 脚本表 / activeContext 切片四条约定 / 检索纪律 / 扩类扩目录 → `.agents/skills/memory-bank/references/kb-structure.md`(3717 字符, **按需读**), SKILL.md **10114 → 5948 字符(-41%)**(空格 1254 → 580), 上限据此定 **7500**(此前无上限)。
+  **两条纪律**: ①**上限跟着实测收** —— 不收的话, 省下的会被慢慢吃回去; ②细节搬进 `references/` 后, 反漂移闸门扫描面从 `.agents/skills/**/SKILL.md` 扩到 `.agents/skills/**/*.md`(扩前实测 0 命中, 不误伤别的 skill), 否则搬出去的内容成了闸门盲区。
+  **改 memory-bank SKILL.md 前必读的守卫约束**: `tests/test_memory_bank.py` 要求它含 `会话开始` / `立档阈值` / `收尾 DoD` 三个 token, 且 **cap 表必须留在该文件里**(`test_skill_cap_table_matches_cap_policy` 钉住数值集合与行数 == `_common.CAP_POLICY`)—— 所以 cap 表不能像别节那样外置。
+  ⚠ **顺带发现(未改)**: 该 SKILL.md 的「收尾 DoD」标题写"5 步"、实际列了 6 条, 而 `AGENTS.md` 也写"5 步" —— 两边同错, 要订正得一起改(本次只把标题里的数字去掉, 不替它选一个数)。
+  实测: `test.full` **1201 passed + 1 skipped**; `doc.caps` commands 2089/2600 · memory-bank 5948/7500 · AGENTS.md 6999/8000; `doc.drift` 0 处。
 - **知识库瘦身 (2026-09-20, ✅ 已提交并推送 `9ccace6`, Gitee 与 GitHub 镜像均成功)**: 按"过时 / 重复 / 低价值"三分类清理根 `AGENTS.md` 与 `memory-bank/` —— **路由表与黄金法则单点收在 `AGENTS.md`**(`memory-bank/README.md` 改指针), 已完成条目从本文件迁出到 `progress.md` / 任务档案; `testing.md` 顶部基线数字**未动**(待补测 WSL 一侧再更)。提交时与上游 7 个提交 rebase, `AGENTS.md` 一处冲突按"保留上游新增的 HTML dark 主题规则 + 保留本轮压缩后的计划产出口径"解决。**知识库回写(pitfalls 新增「rebase --continue 被 VS Code 编辑器挂死 + packed-refs 陈旧致核 ref 假红」条目 + 本行状态更新)尚未提交。**

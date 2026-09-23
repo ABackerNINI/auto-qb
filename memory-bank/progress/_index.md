@@ -14,7 +14,7 @@
 | [implemented-core.md](implemented-core.md) | 摘要: 后端主干与内置功能的落地记录 —— 客户端 / 主循环 / 数据层 / 任务队列 / 托盘 / 通知 / 标签 / HR / 分组。 | 做过没有, 主循环, 数据层, 任务队列, 托盘, 通知, 标签, HR, 分组, 单实例锁 |
 | [implemented-rules.md](implemented-rules.md) | 摘要: 规则引擎、checking 动作、限速(单种 + 全局曲线)、fail-fast 配置校验的落地记录。 | 做过没有, 规则, 条件, 动作, checking, 限速, 配置校验 |
 | [implemented-testing.md](implemented-testing.md) | 摘要: 测试基座与副作用治理的落地记录; 语料回放线见 [roadmap.md](roadmap.md) 的对应小节。 | 做过没有, 测试, 副作用, 守阵, 基线 |
-| [implemented-tooling.md](implemented-tooling.md) | 摘要: 依赖现代化与知识库机制本身的落地记录。 | 做过没有, 依赖, uv, 知识库, 立档, 索引 |
+| [implemented-tooling.md](implemented-tooling.md) | 摘要: 依赖现代化与知识库机制本身的落地记录。 | 做过没有, 依赖, uv, 知识库, 立档, 索引, 瘦身, skill 瘦身, references, 上限 |
 | [implemented-webui-perf.md](implemented-webui-perf.md) | 摘要: 前端性能、交互时序与状态色的落地记录 —— app.js 拆分 / 轮询节拍 / 跟手性三波次 / 乐观 UI / 状态色收口 / 组件库。 | 跟手性, 性能, 乐观 UI, 轮询节拍, 状态色, app.js 拆分, 组件库, 命令埋点 |
 | [implemented-webui.md](implemented-webui.md) | 摘要: 前端界面与视图的落地记录 —— 设置页 / 追剧视图 / 双界面 / 错误原因 / 各轮修复。 | WEB UI 做过没有, 前端功能, 设置页, 视图, 状态色, 修复轮次, 双界面 |
 | [known-bugs.md](known-bugs.md) | 来自 `想法.md` 的已知缺陷, 以及代码里仍留着的 TODO 清单。 | 已知 BUG, TODO, 待办, 缺陷, 未修 |

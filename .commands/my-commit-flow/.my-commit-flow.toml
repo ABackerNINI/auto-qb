@@ -105,9 +105,9 @@ timeout = 60
 note  = "skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"
 
 [[gates]]
-# 两处都要盯: AGENTS.md 是项目引导(超 8000 字符注入时被截断), commands 的 SKILL.md 是
-# 每次加载 skill 都要读的恒定大小文件 —— 它一臃肿, 省 token 的初衷就没了。
-match = ["AGENTS.md", ".agents/skills/commands/"]
+# 两处都要盯: AGENTS.md 是项目引导(超 8000 字符注入时被截断), 各 skill 的 SKILL.md 是
+# 每次加载该 skill 都要读的恒定大小文件 —— 它一臃肿, 省 token 的初衷就没了。
+match = ["AGENTS.md", ".agents/skills/"]
 run   = ["python scripts/check_context_caps.py"]
 auto  = true
 timeout = 60

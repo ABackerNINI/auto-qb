@@ -38,9 +38,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # 它本该是"恒定大小"的文档, 没有硬上限就会被自己慢慢撑大, "省 token"的初衷先被它吃掉。
 # 2026-09-24 把收录协议的细节搬去 references/howto-add-command.md 后, 上限从 4200 收到 2600
 # (当时实测 ~2140 含 CRLF, 留 ~20% 余量)—— 上限跟着实测收, 才叫"恒定大小"。
+# memory-bank 的 SKILL.md 同理(它每次会话开始/收尾都要加载): 2026-09-24 把知识库结构/脚本表/
+# 切片约定搬去 references/kb-structure.md 后, 10114 → 5948 字符, 上限据此定 7500。
 CONTEXT_CAPS: dict[str, int] = {
     "AGENTS.md": 8000,
     ".agents/skills/commands/SKILL.md": 2600,
+    ".agents/skills/memory-bank/SKILL.md": 7500,
 }
 
 PASS, WARN, STOP = "PASS", "WARN", "STOP"
