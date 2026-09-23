@@ -65,10 +65,12 @@ note  = "issue 索引: skill 路径由预检定位, 找不到即 STOP"
 [[gates]]
 match = ["memory-bank/"]
 run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
-         "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check"]
+         "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
+         "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
+         "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check"]
 auto  = true
 timeout = 60
-note  = "知识库索引: 两个生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条)"
+note  = "知识库索引 + 制品索引与专题视图: 生成物都必须自洽 (整目录一条闸门, 不再按子目录各配一条)"
 
 [[gates]]
 match = ["memory-bank/activeContext/"]

@@ -13,7 +13,7 @@
 - 只查**相对**链接(跳过 `http(s)://` / `mailto:` / 纯锚点 `#x`)。
 - 目标存在即通过; 不存在则报"坏链"。
 - 允许"锚点"后缀(`path.md#sec`)—— 只校验 `path.md` 是否存在。
-- **历史留档例外**: `memory-bank/plans/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
+- **历史留档例外**: `memory-bank/plans/*.html` · `memory-bank/reports/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
   按存根策略本就允许指向旧路径)。
 - 默认扫 `memory-bank/` 与 `.github/`(后者是规则载体, 也有链接); `--all` 再加 `docs/` 与根级 md。
 """
@@ -39,9 +39,9 @@ EXTRA_DIRS = ("docs", )
 
 
 def is_frozen(path: pathlib.Path) -> bool:
-    """历史留档: 按存根策略允许指向旧路径, 不扫。"""
+    """历史留档: 按存根策略允许指向旧路径, 不扫 (`plans/` 与 `reports/` 的 HTML 制品 + issue 报告)。"""
     parts = path.parts
-    return ("plans" in parts and path.suffix == ".html") or ("issues" in parts and path.suffix == ".html")
+    return path.suffix == ".html" and ("plans" in parts or "reports" in parts or "issues" in parts)
 
 
 def scan_file(path: pathlib.Path, root: pathlib.Path) -> list[tuple[str, int, str]]:
