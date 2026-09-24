@@ -179,6 +179,21 @@ def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[b
     return proc.returncode == 0, out
 
 
+def _local_codepage() -> str:
+    """本地码页回退编码 —— 必须是原生子进程的真实输出编码, 不随 Python 的 UTF-8 模式变。
+
+    ❗不能用 `locale.getpreferredencoding(False)`: PYTHONUTF8=1 / -X utf8 下它返回
+    'utf-8' 而非码页, GBK 回退整条静默失效(2026-09-25 实测, 守阵
+    test_decode_falls_back_to_local_codepage 假红)。原生子进程不吃 PYTHONUTF8,
+    Windows 上恒按系统 ANSI 码页输出, 所以直接问系统要 (GetACP)。
+    """
+    if sys.platform == "win32":
+        import ctypes
+
+        return f"cp{ctypes.windll.kernel32.GetACP()}"
+    return locale.getpreferredencoding(False)
+
+
 def _decode(raw: bytes | None) -> str:
     """把子进程输出解成文本 —— ❗不假定它是 UTF-8。
 
@@ -187,7 +202,7 @@ def _decode(raw: bytes | None) -> str:
     按 UTF-8 硬解历史事故: 中文变 U+FFFD 且**静默** —— 退出码照旧 0, 只是人读不了。
     """
     data = raw or b""
-    for enc in ("utf-8", locale.getpreferredencoding(False)):
+    for enc in ("utf-8", _local_codepage()):
         try:
             return data.decode(enc)
         except UnicodeDecodeError:

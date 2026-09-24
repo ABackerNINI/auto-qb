@@ -6,26 +6,29 @@
 
 ## 当前基线
 
-**1579 collected: 1576 passed + 1 skipped / Windows** —— 2026-09-25 **扩展运行日志(分级 + 环形上限 + 选项页④区)**
-(本条 **+3 条(1576 → 1579)**, 全在 `tests/test_extension_proxy.py`: 日志分级/环形上限/超长截断/清空 1 条 ·
-选项页日志面接线(clear-logs 协议 / esc 转义 / 限渲染条数)1 条 · 轮询周期文案↔`POLL_MINUTES` 防漂 1 条。
-动机与设计见档案 `26-09-25-webui-ext-hr-logging`; 上一态见 [baseline-history.md](baseline-history.md)。)
-TOTAL **91%**(10905 语句 / 789 未覆盖 / 3582 分支 / 327 partial —— 并行采样; **HR 包 93%**:
-2782 / 143 / 766 / 91; 本轮无 .py 源码变更, 四项均不变), sidefx 台账并行汇总 / **越界 0**(2588~2592 采样波动)。
-⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
-`PYTHONUTF8=` 置空后复测 **2 passed** —— 已有记载的假红, 非回归(见下条 ⚠ 与 pitfalls/testing/patching.md)。
+**1580 collected: 1579 passed + 1 skipped / Windows** —— 2026-09-25 **commands 引擎 GBK 回退修复: 2 条"已知假红"转绿 + 1 条防回潮守阵**
+(收集数 **1579 → 1580**(+1)、失败 **2 → 0**: `test_commands_engine` 两条 GBK 码页守阵在注入 `PYTHONUTF8=1` 的
+本工具 shell 恒红, 红验证实一半是**真缺陷** —— `PYTHONUTF8` 只影响 Python 解释器, **原生子进程仍按系统 ANSI
+码页输出**, 回退链退化 `("utf-8", "utf-8")` 静默变 U+FFFD。修: 引擎 `_local_codepage` 改 `ctypes GetACP`
+(不吃 UTF-8 模式); 两条守阵把码页钉在 `_local_codepage` 接缝(monkeypatch → cp936, 跨机器确定性 —— GBK 字节
+在 cp1252 下也能"解成功"成乱码, 不钉缝在非中文环境照样红); 新增 `test_local_codepage_ignores_utf8_mode`
+(仅 win32 + UTF-8 模式有判据, 打回旧写法立即红)。过程与泛化见
+[../pitfalls/testing/patching.md](../pitfalls/testing/patching.md)。)
+TOTAL **91%**(10809 语句 / 789 未覆盖 / 3582 分支 / 326 partial —— 语句 10905 → 10809 随本 clone 快进合并
+fda13cd → 1516bd6 的 20 个主线提交(HR M1-M4 管道 / WebUI 运行日志端点等)而来, 非本轮所致),
+sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
-⚠ `test_commands_engine.py` 两条 GBK 码页守阵在**本工具 shell 恒红**(注入 `PYTHONUTF8=1`, 见
-[../pitfalls/testing/patching.md](../pitfalls/testing/patching.md)), `env -u PYTHONUTF8 -u PYTHONIOENCODING` 后全绿 —— 已有记载, 非回归。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 扩展运行日志)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **17.6 / 19.8 / 19.9 / 20.5s**(4 次采样: test.quick ×1 + test.full ×3)
+**当前(2026-09-25 GBK 回退修复)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **14.3 / 20.9 / 21.2s**(3 次采样, 全部 test.full)
 
-**上一态(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
+**上一态(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
+
+**更早(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
 
 **更早(2026-09-25 v2.6/v2.7 通道时序 + 增量落盘 / M4 多站点)**: 并行 19.3 / 20.0 / 21.7s 与 18.1 / 18.1 / 19.2s。
 ⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景 + 登录页场景各一次) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
