@@ -2,10 +2,10 @@
 //
 // 职责只有三条(计划 §6 的「哑取数器」):
 //   1. 定时(chrome.alarms)逐个实例问本地端点要任务;
-//   2. 按任务取内容 —— kind=page 用**隐藏窗口里的标签页**拿渲染后 DOM(带完整登录态, 能过挑战页,
-//      且不抢焦点、不出现在用户窗口里); kind=torrent 用 service worker 自己的 fetch
-//      (credentials: 'include');
-//   3. 把结果原样回传(POST), 然后关掉标签页。
+//   2. 按任务取内容 —— kind=page **先无界面直取**(service worker 的 fetch 带站点 cookie, 零标签零窗口),
+//      只在「拿到的内容看起来没渲染出来」时才退到**离屏 popup 窗口**里取 DOM; kind=torrent 也是
+//      service worker 自己 fetch(credentials: 'include');
+//   3. 把结果原样回传(POST)。
 //
 // 明确**不做**的事: 不解析页面、不判频控、不读 chrome.cookies、不碰 passkey ——
 // 解析与策略全在后端(能用 pytest 守住的那一侧), cookie 全程不离开浏览器。
@@ -19,6 +19,8 @@ const ALARM_NAME = 'hr-poll';
 const POLL_MINUTES = 5; // 与后端下发的 next_poll_s 同量级; 后端才是频控权威
 const PAGE_LOAD_TIMEOUT_MS = 60000;
 const PAGE_SETTLE_MS = 800; // 页面 complete 后再等一小会儿(部分站点是 XHR 填表)
+const OFFSCREEN_X = -32000; // 离屏坐标: 渲染兜底用的窗口放在屏幕外(Windows 允许完全离屏)
+const OFFSCREEN_Y = -32000;
 
 async function readConfig() {
   const got = await chrome.storage.local.get({
@@ -147,8 +149,11 @@ async function pollInstance(inst) {
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
   if (!tasks.length) return `${label}: 无任务`;
   const results = [];
+  const rendered = [];
   for (const task of tasks) {
-    results.push(await runTask(task));
+    const got = await runTask(task);
+    if (got.rendered) rendered.push(task.url);
+    results.push(got.payload);
   }
   let post;
   try {
@@ -161,19 +166,61 @@ async function pollInstance(inst) {
     return `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}`;
   }
   const okCount = results.filter((r) => r.ok).length;
-  return `${label}: 取 ${results.length} 条(成功 ${okCount}), 回传 HTTP ${post.status}`;
+  const how = rendered.length ? `其中 ${rendered.length} 条走渲染` : '全部直取(无界面)';
+  return `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how}), 回传 HTTP ${post.status}`;
+}
+
+/**
+ * 页面取数: **先无界面直取**(service worker 的 fetch 带站点 cookie, 零标签零窗口),
+ * 只有当拿到的内容「看起来没渲染出来」时才退到离屏窗口拿 DOM。
+ *
+ * ❗为什么要这样: 开任何界面都会打扰用户, 而用户已实报两次 —— 先是「抓数据时打开新标签」
+ * (`tabs.create({active:false})` 不保证窗口不被抬起来), 改成自建隐藏窗口后又变成「打开新窗口」
+ * (`state:'minimized'` 在用户平台上仍会先显示出来)。而站点侧页面(NexusPHP 这类)本来就是
+ * **服务端渲染**的表格, 直取即可; 需要 JS 的站点才走渲染通道。
+ */
+async function pageText(url) {
+  const html = await fetchText(url);
+  if (!needsRender(html)) return { text: html, rendered: false };
+  await noteStatus({ text: `直取到的内容不像已登录的页面, 改用离屏窗口渲染: ${url}` });
+  return { text: await pageSnapshot(url), rendered: true };
+}
+
+/** 直取(无界面): 与 .torrent 同一条路 —— service worker 发请求, `credentials:'include'` 带站点 cookie */
+async function fetchText(url) {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  if (!text) throw new Error('返回内容为空');
+  return text;
+}
+
+/**
+ * 直取的内容该不该改用渲染通道拿 —— 两个**通用结构信号**(不做站点解析):
+ * ① 没表格 ⇒ 多半要 JS 渲染, 或命中了挑战页;
+ * ② 有密码输入框 ⇒ 拿到的是登录页。❗第二种是 SameSite 的安全网: 无 `SameSite` 属性的 cookie 按
+ *    Lax 对待, 而扩展发起的 fetch 算**跨站**请求 ⇒ 有可能不带 cookie 而拿到登录页。
+ *    这时必须升级到渲染通道(那是真正的顶层导航, 一定带 cookie), 否则会把「未登录」误报成站点改版。
+ */
+function needsRender(html) {
+  return !hasTable(html) || /<input[^>]+type=["']?password/i.test(html);
+}
+
+/** 传输层粗判(不是站点解析): 连 `<table>` 都没有 ⇒ 多半要 JS 渲染, 或命中了挑战页 */
+function hasTable(html) {
+  return typeof html === 'string' && /<table[\s>]/i.test(html);
 }
 
 async function runTask(task) {
   try {
     if (task.kind === 'page') {
-      const text = await pageSnapshot(task.url);
-      return { id: task.id, ok: true, status: 200, url: task.url, text };
+      const page = await pageText(task.url);
+      return { rendered: page.rendered, payload: { id: task.id, ok: true, status: 200, url: task.url, text: page.text } };
     }
     const body = await fetchBinary(task.url);
-    return { id: task.id, ok: true, status: 200, url: task.url, body_b64: body };
+    return { rendered: false, payload: { id: task.id, ok: true, status: 200, url: task.url, body_b64: body } };
   } catch (e) {
-    return { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) };
+    return { rendered: false, payload: { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) } };
   }
 }
 
@@ -182,101 +229,59 @@ async function runTask(task) {
  *
  * ❗为什么不能直接在用户自己的窗口里 `chrome.tabs.create({ active: false })`:
  * `active:false` 只保证「不是那个窗口的活动标签」, **不保证窗口不被抬起来** —— 扩展被 alarm 唤醒时
- * 用户往往正在别的程序里, Chrome 仍会把窗口连同新标签一起显示出来, 用户看到的就是「抓数据时会打开
- * 新标签」而不是后台抓取(2026-09-25 实报)。所以取数一律在**自己的、永不聚焦的窗口**里做。
+ * 用户往往正在别的程序里, Chrome 仍会把窗口连同新标签一起显示出来(2026-09-25 实报 "打开新标签");
+ * 改成 `state:'minimized'` 的自建窗口后, 用户又实报 "打开新窗口" —— 最小化在部分平台上仍会先显示一下。
+ * 故这条路径只当**兜底**: 真正隐形靠 **离屏坐标 + popup(不进任务栏) + 不聚焦** 三重手段。
  */
 async function pageSnapshot(url) {
   const restoreFocus = await focusGuard();
-  const windowId = await ensureHiddenWindow();
-  const tab = await chrome.tabs.create({ url, active: false, windowId });
+  const win = await createOffscreenWindow(url);
+  const tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : 0;
   try {
-    await waitForComplete(tab.id, PAGE_LOAD_TIMEOUT_MS);
+    if (!tabId) throw new Error('离屏窗口没拿到标签页');
+    await waitForComplete(tabId, PAGE_LOAD_TIMEOUT_MS);
     await sleep(PAGE_SETTLE_MS);
     const frames = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId },
       func: () => document.documentElement.outerHTML,
     });
     const html = frames && frames[0] ? frames[0].result : '';
     if (!html) throw new Error('页面为空(未授予站点权限?)');
     return html;
-  } catch (e) {
-    // 最小化窗口可能让页面自己的延迟脚本变慢 ⇒ 连续失败时把它恢复成普通状态(仍不聚焦)
-    await relaxHiddenWindow(String((e && e.message) || e));
-    throw e;
   } finally {
-    await chrome.tabs.remove(tab.id).catch(() => {});
+    await chrome.windows.remove(win.id).catch(() => {}); // 连窗口带标签一起删: 不留脏窗口
     const note = await restoreFocus();
     if (note) await noteStatus({ text: note });
-    scheduleHiddenWindowClose();
   }
 }
 
-// ---------- 隐藏取数窗口 ----------
-
-const HIDDEN_WINDOW_IDLE_MS = 2 * 60 * 1000; // 空闲就关掉: 不长期留一个窗口占着
-let hiddenWindowId = 0;
-let hiddenWindowTimer = 0;
-let hiddenWindowMinimized = true;
-
-chrome.windows.onRemoved.addListener((id) => {
-  if (id === hiddenWindowId) hiddenWindowId = 0; // 用户把它关了: 下次重建
-});
-
-chrome.runtime.onSuspend.addListener(() => {
-  closeHiddenWindow(); // 挂起路径不能 await, 空闲计时器兜底
-});
-
-/** 取数窗口: 最小化 + `focused:false`(两重都要: 前者不占地方, 后者不被聚焦) */
-async function ensureHiddenWindow() {
-  if (hiddenWindowId) {
-    const alive = await chrome.windows.get(hiddenWindowId).catch(() => null);
-    if (alive) return hiddenWindowId;
-    hiddenWindowId = 0;
+/** 离屏 + 不聚焦 + 不进任务栏(popup): 三重手段都是为了用户看不见它(逐个降级试) */
+async function createOffscreenWindow(url) {
+  const base = { url, focused: false, left: OFFSCREEN_X, top: OFFSCREEN_Y, width: 900, height: 700 };
+  const attempts = [
+    Object.assign({ type: 'popup', state: 'minimized' }, base),
+    Object.assign({ type: 'popup' }, base),
+    Object.assign({ state: 'minimized' }, base),
+  ];
+  let lastError = null;
+  for (const options of attempts) {
+    try {
+      return await chrome.windows.create(options);
+    } catch (e) {
+      lastError = e; // 某些平台不接受 popup / 不接受创建时就最小化 ⇒ 继续降级
+    }
   }
-  let win;
-  try {
-    win = await chrome.windows.create({ focused: false, state: 'minimized' });
-  } catch (e) {
-    // 少数平台不接受直接建最小化窗口 ⇒ 先建再收起来(仍不聚焦)
-    win = await chrome.windows.create({ focused: false });
-    await chrome.windows.update(win.id, { state: 'minimized' }).catch(() => {});
-  }
-  hiddenWindowId = win.id;
-  hiddenWindowMinimized = true;
-  await noteStatus({ text: '取数用隐藏窗口完成(最小化, 不抢焦点; 空闲 2 分钟自动关闭)' });
-  return hiddenWindowId;
-}
-
-function scheduleHiddenWindowClose() {
-  clearTimeout(hiddenWindowTimer);
-  hiddenWindowTimer = setTimeout(closeHiddenWindow, HIDDEN_WINDOW_IDLE_MS);
-}
-
-async function closeHiddenWindow() {
-  clearTimeout(hiddenWindowTimer);
-  hiddenWindowTimer = 0;
-  const id = hiddenWindowId;
-  hiddenWindowId = 0;
-  if (id) await chrome.windows.remove(id).catch(() => {});
-}
-
-/** 最小化窗口里的页面可能被节流(延迟脚本变慢) ⇒ 失败一次就取消最小化, **仍然不聚焦** */
-async function relaxHiddenWindow(why) {
-  if (!hiddenWindowId || !hiddenWindowMinimized) return;
-  hiddenWindowMinimized = false;
-  await chrome.windows.update(hiddenWindowId, { state: 'normal' }).catch(() => {});
-  await chrome.windows.update(hiddenWindowId, { focused: false }).catch(() => {});
-  await noteStatus({ text: `取数窗口已取消最小化(${why}) —— 若仍失败, 看站点是否需人工过挑战页` });
+  throw lastError || new Error('建离屏窗口失败');
 }
 
 /**
- * 焦点守卫: 新建窗口/标签在个别平台仍会把浏览器抬到前台 ⇒ 记下**原聚焦窗口**, 取完还回去。
+ * 焦点守卫: 新建窗口在个别平台仍会把浏览器抬到前台 ⇒ 记下**原聚焦窗口**, 取完还回去。
  * 只还焦点, 不关不切用户自己的窗口与标签。
  */
 async function focusGuard() {
   const before = await chrome.windows.getLastFocused().catch(() => null);
   return async function restore() {
-    if (!before || !before.id || before.id === hiddenWindowId) return '';
+    if (!before || !before.id) return '';
     const now = await chrome.windows.getLastFocused().catch(() => null);
     if (!now || now.id === before.id) return '';
     const ok = await chrome.windows.update(before.id, { focused: true }).then(() => true).catch(() => false);

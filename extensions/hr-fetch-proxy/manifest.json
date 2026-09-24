@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "auto-qb HR 取数代理",
   "version": "1.0.0",
-  "description": "哑取数器: 按本地端点下发的清单, 在扩展自己的隐藏窗口里取 HR 统计页 / 取 .torrent 并回传。不读、不传 cookie, 不做任何解析与频控判断。",
+  "description": "哑取数器: 按本地端点下发的清单, 无界面直取 HR 统计页 / 取 .torrent 并回传(必要时用离屏窗口渲染)。不读、不传 cookie, 不做任何解析与频控判断。",
   "minimum_chrome_version": "116",
   "permissions": [
     "alarms",

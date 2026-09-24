@@ -21,8 +21,9 @@
 - **M2 上线后按用户实报修的三批**: ① **告警分级与归属** —— 频控节流与未到时刻降 INFO 并按根因去重、
   启动/关闭/热重载也降 INFO、同一事件只由一个角色告警（`alerted`）、被叫停（`HrChannelStopped`）不当故障；
   ② **`--hr-status` 只读现状报告**（不取数/不加锁/不写盘/不连 qB）; ③ **站点文件两层自愈**
-  （`.bak` 上一版 + 坏文件挪 `.bad-<ts>` 并从备份恢复）+ **页面取数在自己建的隐藏窗口**里做
-  （`active:false` 管不住窗口被抬起来）+ 只读口径补漏（取数失败分支同样要看 `persist`）。
+  （`.bak` 上一版 + 坏文件挪 `.bad-<ts>` 并从备份恢复）+ **页面取数分层**: 默认**无界面直取**
+  （后台 `fetch(credentials:'include')`）, 只在内容没 `<table>` 或看到密码输入框时用**离屏 popup 窗口**渲染兜底,
+  并带焦点守卫 + 只读口径补漏（取数失败分支同样要看 `persist`）。
 
 模块分工 / 字段口径 / 配置项 / 扩展行为: [modules/overview.md](../modules/overview.md) ·
 [docs/configuration.md](../../docs/configuration.md) · [扩展说明](../../extensions/hr-fetch-proxy/README.md);

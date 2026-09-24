@@ -6,25 +6,24 @@
 
 ## 当前基线
 
-**1502 collected: 1501 passed + 1 skipped / Windows** —— 2026-09-25 实测
-(本轮 **+2 条**: **扩展页面取数改用自己的隐藏窗口**(用户实报「抓数据时会打开新的标签而不是后台抓取」) ——
-`tests/test_extension_proxy.py` 新增两条**用假 chrome API 真跑 `background.js`** 的守阵:
-取数必须建**自己的**最小化窗口(`focused:false` / `state:'minimized'`)+ 每个 `tabs.create` 必带 `windowId` 且
-`active:false` + 取完删标签 + 空闲删窗口 + 焦点被抢后还回去。★红验: 去掉 `tabs.create` 的 `windowId` ⇒
-`test_page_fetch_runs_in_dedicated_hidden_window` 当场变红。
-上一轮明细(只读口径修复 / README 坏字符)与更早流水见 [baseline-history.md](baseline-history.md)。
-TOTAL **91%**(10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial), sidefx 台账 ≈2430 条(并行汇总, 单次采样) / **越界 0**。
+**1504 collected: 1503 passed + 1 skipped / Windows** —— 2026-09-25 实测
+(本轮 **+2 条**: **页面取数改「零界面优先」**(用户实报第二轮: 上一版的隐藏窗口又变成了「打开新窗口」) ——
+`tests/test_extension_proxy.py` 的守阵改成**一次 node 跑四个场景**(直取零界面 / 内容不像页面 ⇒ 离屏 popup /
+登录页也得升级 / 焦点被抢后还回去), 共 **12 条**; ★红验: 强制走渲染通道 ⇒
+`test_page_fetch_is_headless_when_html_looks_fine` 当场变红。
+上一轮明细(只读口径 / 扩展隐藏窗口)与更早流水见 [baseline-history.md](baseline-history.md)。
+TOTAL **91%**(10425 语句 / 778 未覆盖 / 3446 分支 / 308~309 partial —— 并行采样波动), sidefx 台账 ≈2430 条(并行汇总, 单次采样) / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 扩展隐藏窗口)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **22.90 / 22.98 / 23.18s**
-- 串行 `-n 0 --no-cov`(对照): **35.56s**
+**当前(2026-09-25 页面取数零界面优先)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **22.78 / 22.83 / 22.97s**
+- 串行 `-n 0 --no-cov`(对照): **35.25s**
 
-⚠ 本轮两条扩展守阵各**真跑一次 node**(各 ~1.5s) ⇒ 耗时比上一态高约 5s, 属预期的环境成本。
+⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
 
 ⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
 其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——
@@ -36,7 +35,7 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: **当前**并行 `10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial`, TOTAL **91%**。
+- **覆盖率口径**: **当前**并行 `10425 语句 / 778 未覆盖 / 3446 分支 / 308~309 partial`, TOTAL **91%**。
   下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
   并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
   ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。

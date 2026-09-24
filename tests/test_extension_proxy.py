@@ -16,6 +16,10 @@
 - test_protocol_matches_backend: 端点路径 / 鉴权头 / 回传字段名与 `hr.channel` + `HrResult` 一致(改一边漏改另一边必红)
 - test_options_normalizes_before_browser_api: 站点源与端点先归一化再进权限/存储 API(本次报错的形态)
 - test_options_rejections_are_always_handled: 选项页不得留下裸 Promise 拒绝(兜底 unhandledrejection + 逐个 catch)
+- test_page_fetch_is_headless_when_html_looks_fine: 直取能拿到页面时**不得开任何窗口/标签**(用户实报两轮)
+- test_page_fetch_renders_offscreen_only_when_needed: 只在内容不像页面时才升级, 且用**离屏 popup 窗口**
+- test_page_fetch_renders_when_direct_fetch_hits_login_page: 直取拿到登录页也要升级(SameSite 安全网)
+- test_page_fetch_hands_focus_back_when_window_steals_it: 万一窗口抢了焦点, 取完还回原窗口
 """
 import json
 import pathlib
@@ -224,14 +228,31 @@ def test_options_rejections_are_always_handled():
     assert "try {" in text, "授权/自测这类浏览器 API 调用必须包 try(它们会同步抛)"
 
 
-# ---------- 页面取数: 隐藏窗口(用户实报「抓数据时开着新标签」) ----------
+# ---------- 页面取数: 不打扰用户(实报两轮: 先「开新标签」后「开新窗口」) ----------
+
+#: 两个页面样本(单点定义: 注入给 node 脚本, Python 侧断言也用同一份)
+#: ① 服务端渲染的真页面(自带表格) ② 挑战页形态(短小、无表格 ⇒ 应当升级到渲染通道)
+PAGE_WITH_TABLE = '<html><body><table class="main"><tr><td>HR编号</td></tr></table></body></html>'
+CHALLENGE_LIKE = '<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>'
+#: 带表格的**登录页** —— 直取可能因为 SameSite 不带 cookie 而拿到它, 必须当成"要升级渲染"的信号
+LOGIN_LIKE = (
+    '<html><body><table><tr><td>登录</td></tr></table>'
+    '<form action="takelogin.php"><input type="password" name="password"></form></body></html>'
+)
 
 #: 用**假 chrome API** 真跑 background.js, 记录每一次窗口/标签调用 —— 纯字符串断言看不见调用形态。
-_NODE_RUN_PAGE_SNAPSHOT = """
+#: 三个场景一次跑完(省 node 启动开销): direct=直取(页面自带表格) / render=直取内容不像页面 ⇒ 离屏渲染 /
+#: steal=渲染时新窗口把浏览器抬到前台(看是否把焦点还回去)。
+_NODE_RUN_PAGE_FETCH = """
 const fs = require('fs');
 const vm = require('vm');
-const calls = [];
 const noop = { addListener() {} };
+const PAGE_URL = 'https://pt.example.com/myhr.php?hrtype=A';
+const PAGE_WITH_TABLE = __PAGE_WITH_TABLE__;
+const CHALLENGE_LIKE = __CHALLENGE_LIKE__;
+const LOGIN_LIKE = __LOGIN_LIKE__;
+let calls = [];
+let stealFocus = false;
 function record(name, ret) {
   return function () {
     const args = Array.prototype.slice.call(arguments);
@@ -239,96 +260,142 @@ function record(name, ret) {
     return Promise.resolve(typeof ret === 'function' ? ret.apply(null, args) : ret);
   };
 }
-const stealFocus = process.argv[2] === 'steal';   // 模拟"新建窗口把浏览器抬到前台"
+let focusedCalls = 0;
 const chrome = {
   alarms: { create: record('alarms.create'), onAlarm: noop },
   runtime: { onInstalled: noop, onStartup: noop, onMessage: noop, onSuspend: noop },
   permissions: { onAdded: noop },
   storage: { local: { get: async () => ({}), set: async () => {} } },   // noteStatus 只落状态
   windows: {
-    create: record('windows.create', () => ({ id: 777 })),
+    create: record('windows.create', () => ({ id: 777, tabs: [{ id: 42 }] })),
     get: async (id) => ({ id }),
-    getLastFocused: (() => { let n = 0; return async () => ({ id: (stealFocus && n++ > 0) ? 777 : 1 }); })(),
+    // 焦点守卫: 取数前返回用户窗口 1; 取数后若被抢走则返回我们建的窗口 777
+    getLastFocused: async () => ({ id: (stealFocus && ++focusedCalls > 1) ? 777 : 1 }),
     update: record('windows.update', () => ({})),
     remove: record('windows.remove', () => {}),
-    onRemoved: noop,
   },
   tabs: {
     create: record('tabs.create', () => ({ id: 42, windowId: 777 })),
     get: async () => ({ id: 42, status: 'complete' }),
     remove: record('tabs.remove', () => {}),
   },
-  scripting: { executeScript: async () => [{ result: '<html>page</html>' }] },
+  scripting: { executeScript: async () => [{ result: PAGE_WITH_TABLE }] },
 };
-const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON };
+let nextPage = PAGE_WITH_TABLE;
+const sandbox = {
+  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON,
+  fetch: async () => ({ ok: true, status: 200, text: async () => nextPage, json: async () => ({}) }),
+};
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
+async function scenario(name, page, steal) {
+  calls = []; focusedCalls = 0; stealFocus = Boolean(steal); nextPage = page;
+  const out = await sandbox.pageText(PAGE_URL);
+  return [name, { out, calls }];
+}
 (async () => {
-  const html = await sandbox.pageSnapshot('https://pt.example.com/myhr.php?hrtype=A');
-  await sandbox.closeHiddenWindow();   // 顺手验证空闲关闭(否则 2 分钟的计时器会拖住 node)
-  process.stdout.write(JSON.stringify({ html, calls }));
+  const rows = [];
+  rows.push(await scenario('direct', PAGE_WITH_TABLE, false));      // 直取: 页面自带表格
+  rows.push(await scenario('render', CHALLENGE_LIKE, false));       // 直取内容不像页面 ⇒ 离屏渲染
+  rows.push(await scenario('login', LOGIN_LIKE, false));            // 直取拿到登录页 ⇒ 也得升级渲染
+  rows.push(await scenario('steal', CHALLENGE_LIKE, true));         // 同上, 且新窗口抢了焦点
+  process.stdout.write(JSON.stringify(Object.fromEntries(rows)));
 })();
 """
 
+_PAGE_FETCH_TRACE: dict = {}
 
-def _page_snapshot_trace(mode: str = "") -> dict:
+
+def page_fetch_trace() -> dict:
+    """跑一次 node 拿三个场景的调用轨迹(缓存: 三个用例共用同一次 node 运行)"""
+    if _PAGE_FETCH_TRACE:
+        return _PAGE_FETCH_TRACE
     node = _node()
     if not node:
         return {}
-    args = [node, "-e", _NODE_RUN_PAGE_SNAPSHOT, str(BACKGROUND_JS)]
-    if mode:
-        args.append(mode)
-    proc = _run_node(args)
+    proc = _run_node(
+        [
+            node, "-e",
+            _NODE_RUN_PAGE_FETCH.replace("__PAGE_WITH_TABLE__", json.dumps(PAGE_WITH_TABLE)).replace(
+                "__CHALLENGE_LIKE__", json.dumps(CHALLENGE_LIKE)
+            ).replace("__LOGIN_LIKE__", json.dumps(LOGIN_LIKE)),
+            str(BACKGROUND_JS)
+        ]
+    )
     assert proc.returncode == 0, f"node 跑 background.js 失败: {proc.stderr.strip()}"
-    return json.loads(proc.stdout)
+    _PAGE_FETCH_TRACE.update(json.loads(proc.stdout))
+    return _PAGE_FETCH_TRACE
 
 
-def _arg_of(trace: dict, name: str, key: str):
-    """取某次调用里某个参数(断言用的小工具)"""
+def _calls(trace: dict, name: str) -> list:
+    return [c[0] for c in trace["calls"] if c[0] == name]
+
+
+def _first(trace: dict, name: str):
     for call in trace["calls"]:
-        if call[0] == name and call[1] and isinstance(call[1], dict) and key in call[1]:
-            return call[1][key]
+        if call[0] == name:
+            return call
     return None
 
 
-def test_page_fetch_runs_in_dedicated_hidden_window():
-    """❗页面取数必须在**自己的隐藏窗口**里: 用户窗口里开后台标签会连窗口一起被抬起来
+def test_page_fetch_is_headless_when_html_looks_fine():
+    """❗默认必须**无界面**: 直取(带站点 cookie 的 fetch)就能拿到页面时, 绝不打开任何窗口/标签
 
-    2026-09-25 用户实报「抓数据时会打开新的标签而不是后台抓取」: `chrome.tabs.create({active:false})`
-    只保证「不是那个窗口的活动标签」, **不保证窗口不被抬起来** —— 扩展被 alarm 唤醒时用户往往正在
-    别的程序里, Chrome 会把窗口连同新标签一起显示出来。故: 取数在自己建的窗口里做(最小化 + 不聚焦),
-    且**任何**标签创建都必须带上那个窗口 id(否则又回到用户窗口里)。
+    用户实报过两轮(先「抓数据时打开新标签」, 改完又「打开新窗口」)—— 所以这里钉死的不是
+    「窗口该怎么开」, 而是**能不开就不开**: 站点侧页面(NexusPHP 这类)本来就是服务端渲染的表格。
     """
-    trace = _page_snapshot_trace()
+    trace = page_fetch_trace()
     if not trace:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    assert trace["html"] == "<html>page</html>"
-
-    created = [c for c in trace["calls"] if c[0] == "windows.create"]
-    assert len(created) == 1, f"应当只建一个取数窗口: {trace['calls']}"
-    opts = created[0][1]
-    assert opts.get("focused") is False, "取数窗口绝不能抢焦点"
-    assert opts.get("state") == "minimized", "取数窗口要最小化(不占屏幕、不占任务栏焦点)"
-
-    tabs = [c for c in trace["calls"] if c[0] == "tabs.create"]
-    assert tabs, "页面取数仍要开标签页(需要真实渲染的 DOM)"
-    for call in tabs:
-        assert call[1].get("windowId") == 777, f"标签必须开在取数窗口里, 实际: {call[1]}"
-        assert call[1].get("active") is False, f"标签不得成为活动标签: {call[1]}"
-    assert "tabs.remove" in [c[0] for c in trace["calls"]], "取完要关标签(不留脏标签)"
+    direct = trace["direct"]
+    assert direct["out"] == {"text": PAGE_WITH_TABLE, "rendered": False}
+    assert _calls(direct, "windows.create") == [], f"直取时不得开窗口: {direct['calls']}"
+    assert _calls(direct, "tabs.create") == [], f"直取时不得开标签: {direct['calls']}"
 
 
-def test_hidden_window_is_closed_when_idle_and_focus_handed_back():
-    """空闲要能关掉那个窗口; 万一新建窗口把焦点抢走了, 取完要把焦点还回原窗口"""
-    trace = _page_snapshot_trace()
+def test_page_fetch_renders_offscreen_only_when_needed():
+    """直取内容不像页面(挑战页 / 需 JS 渲染)才退到渲染通道: **离屏 popup + 不聚焦**, 用完连窗口删掉"""
+    trace = page_fetch_trace()
     if not trace:
         return
-    removed = [c for c in trace["calls"] if c[0] == "windows.remove"]
-    assert [c[1] for c in removed] == [777], "空闲关闭必须真的删掉那个窗口"
+    render = trace["render"]
+    assert render["out"]["rendered"] is True, "内容里连表格都没有就该升级到渲染通道"
+    assert render["out"]["text"] == PAGE_WITH_TABLE, "渲染通道要返回 DOM 快照"
 
-    stolen = _page_snapshot_trace("steal")
-    if not stolen:
+    created = _first(render, "windows.create")
+    assert created is not None, f"渲染通道要自己建窗口: {render['calls']}"
+    opts = created[1]
+    assert opts.get("type") == "popup", "popup 不进任务栏(比普通窗口更难被用户看到)"
+    assert opts.get("state") == "minimized", "创建时就最小化(不再依赖后续 update)"
+    assert opts.get("focused") is False, "绝不能抢焦点"
+    assert opts.get("left") == -32000 and opts.get("top") == -32000, "必须离屏(最小化在部分平台仍会先显示)"
+    assert opts.get("url") == "https://pt.example.com/myhr.php?hrtype=A", "建窗口时直接带目标 URL"
+    assert _calls(render, "tabs.create") == [], "不得往用户窗口里开标签"
+    assert _calls(render, "windows.remove") == ["windows.remove"], "用完要连窗口一起删"
+
+
+def test_page_fetch_renders_when_direct_fetch_hits_login_page():
+    """直取拿到**登录页**(带表格, 所以表格判据放过它)时也要升级渲染 —— SameSite 的安全网
+
+    无 `SameSite` 属性的 cookie 按 Lax 对待, 而扩展发起的 fetch 算跨站子资源请求, 有可能不带 cookie。
+    若不把「登录页」当成升级信号, 就会把「扩展取不到登录态」误报成站点改版(表头缺失), 把排查引到
+    错的方向。渲染通道是真正的顶层导航, 一定带 cookie。
+    """
+    trace = page_fetch_trace()
+    if not trace:
         return
+    login = trace["login"]
+    assert login["out"]["rendered"] is True, "登录页要升级渲染, 不能当正常页面"
+    assert login["out"]["text"] == PAGE_WITH_TABLE, "升级后拿到的应当是渲染 DOM"
+    assert _calls(login, "windows.create") == ["windows.create"], "升级就要开那个离屏窗口"
+
+
+def test_page_fetch_hands_focus_back_when_window_steals_it():
+    """万一建窗口仍把浏览器抬到前台: 取完要把焦点还回原窗口(用户可能正在打字)"""
+    trace = page_fetch_trace()
+    if not trace:
+        return
+    stolen = trace["steal"]
     restore = [c for c in stolen["calls"] if c[0] == "windows.update" and c[1] == 1]
     assert restore and restore[0][2].get("focused") is True, \
-        f"焦点被抢走后要还回原窗口(否则用户正打字就被切走了): {stolen['calls']}"
+        f"焦点被抢走后要还回原窗口: {stolen['calls']}"
