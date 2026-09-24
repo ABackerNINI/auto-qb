@@ -1,9 +1,9 @@
 # 26-09-24-webui-ctx-menu-multi-select — 多选右键菜单目标 = 整个选中集合
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-24
 **Updated:** 2026-09-24
-**Summary:** 用户报"多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。根因: 四个 `open*Menu`(组/成员/剧/集)只记 anchor(`key`/`hash`/`episode`), 动作端点直接拿它拼 URL ⇒ 无论选了多少都只动被点的那一个(菜单照常弹出、照常成功、无任何报错)。修法: `menu.js::_ctxMulti` 判"这一行属于选中集合且集合范围 ≠ 该行自身范围", 四个入口各写 `menu.multi`; 双 UI 模板加 `v-if="menu.multi"` 批量分支, 动作整份复用批量浮条链路(`ctxAct`→`bulkAct` / `ctxDelete`→`bulkDelete`)。新增静态守阵 + 冒烟 12 条(双 UI × 六条), 均已红验。全量 **1233 passed + 1 skipped** / 冒烟 ok **84/0** · error **84/0** · hang **8/0**。**已修复 + 已回写, 待提交。**
+**Summary:** 用户报"多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。根因: 四个 `open*Menu`(组/成员/剧/集)只记 anchor(`key`/`hash`/`episode`), 动作端点直接拿它拼 URL ⇒ 无论选了多少都只动被点的那一个(菜单照常弹出、照常成功、无任何报错)。修法: `menu.js::_ctxMulti` 判"这一行属于选中集合且集合范围 ≠ 该行自身范围", 四个入口各写 `menu.multi`; 双 UI 模板加 `v-if="menu.multi"` 批量分支, 动作整份复用批量浮条链路(`ctxAct`→`bulkAct` / `ctxDelete`→`bulkDelete`)。同轮另修一个既有缺陷: 生成物的"怎么重建"提示(`_common.gen_cmd`)指错命令 ⇒ 让 `kb.index`/`kb.check` 覆盖面 ⊇ 提交闸门判红的生成物集合 + 提示按脚本查表。新增静态守阵 + 冒烟 12 条(双 UI × 六条), 均两处红验过。**已入库 `907890b`**(与主线 `5c518b3` 合流后实测: 全量 1376 passed + 1 skipped / 冒烟 ok 84/0 · error 84/0 · hang 8/0)。
 **Topics:** webui-ctx-menu-multi-select
 
 ## 原始请求
@@ -99,11 +99,11 @@ TMM / 分享率 / 打开目标文件夹 —— 它们对 N 个目标没有明确
 | 全量测试 + 三模式冒烟 | Done |
 | 知识库回写(pitfalls / baseline / smoke) | Done |
 | 修既有缺陷: 生成物重建提示指错命令 | Done |
-| 提交 / 推送 | Open(待用户显式指令) |
+| 提交 / 推送 | Done(已入库 `907890b`) |
 
 ## 待用户处置
 
-1. **提交**: 本轮只改代码与知识库, **未 commit / 未 push**(按请求边界, 提交需显式指令)。
+1. ~~提交~~ —— **已完成**: `907890b` 已推 Gitee(`ls-remote` == 本地) + GitHub 镜像同步成功。
 2. ~~既有缺陷(范围守恒, 仅报告, 未修)~~ —— **已按用户指令修复**, 见下方「进度日志 21:5x」。
 
 ## 进度日志
@@ -128,7 +128,7 @@ TMM / 分享率 / 打开目标文件夹 —— 它们对 N 个目标没有明确
   返回 utf-8 ⇒ `_decode` 的 GBK 回退不可达。`env -u PYTHONUTF8 -u PYTHONIOENCODING` 后 **24 passed**;
   干净环境全量 **1233 passed + 1 skipped** / TOTAL 91%(7782 / 622 / 2648)。**非本次改动引入**, 未修(范围守恒)。
 - 回写: `pitfalls/web-ui/overlays.md`(新条目 CTX-03)· `testing/baseline.md` + `baseline-history.md` ·
-  `testing/smoke.md`(冒烟规模 72 → 84)。待提交。
+  `testing/smoke.md`(冒烟规模 72 → 84)。**已随 `907890b` 入库**。
 - 回写踩到两个**生成物/容量**问题(均当场解决):
   ① `testing/baseline-history.md` 本就在 cap 边缘(HEAD 实测 23,4xx / 24,000 字符), 追加一条后
      **24,469 越线** ⇒ 按 `_common.LOG_ROTATE_KEEP`(2/3)从最老一端切 15 条到
@@ -164,3 +164,22 @@ TMM / 分享率 / 打开目标文件夹 —— 它们对 N 个目标没有明确
      `kb.check` 5 段全绿; `commands run test.pkg` **47 passed**; 全量 **1234 passed + 1 skipped**。
   ⑥新坑入库 `pitfalls/kb/discipline.md`「闸门能判红, 却没有一条能修的命令」(判据 = "照它做一遍, 红会不会
      消失", 而不是"提示里写了命令"), 并扩了该文件的三行头摘要/触发。
+- 2026-09-24 22:0x **提交 + 推送完成(`907890b`)**:
+  ①**提交前发现主线已前进**(`434e019` → `5c518b3` "HR 在线核实 M1", +142 条 / 46 个文件) ⇒
+    按「移出改动 → `merge --ff-only` → 施回改动」同步: `git diff --output` 出补丁(88,893 字节 / 21 文件)
+    + 另存 2 个新文件, `git restore .` 清树, `git merge --ff-only FETCH_HEAD` 快进, 再
+    `git apply --3way` 施回(**排除** 6 个生成物/重叠文件手工处置)。**全程未用 stash/rebase**。
+  ②**排除路径写错一处**: 我写的 `--exclude=memory-bank/testing/baseline-history-old.md` 漏了
+    `attachments/` 那一级 ⇒ 我并进 `-old.md` 的 15 条被施回。发现后 `git restore --staged --worktree`
+    撤回 —— 因为主线的轮转是**两级方案**(`-archive.md` = 中间段 / `-old.md` = 最老段), 那 15 条已在
+    `-archive.md` 里, 两份就是重复。
+  ③重叠 4 文件的处置: 生成物(`tasks/_index.md` / `_doc-map.md` / `pitfalls/kb/_index.md`)重跑 `kb.index`;
+    `baseline-history.md` 取主线版 + 我的新条目插在**条目区最前**(沿用主线的顶部 blockquote 指针);
+    `baseline.md` 数字取**合流后实测** `1375 → 1377`。
+  ④**闸门首跑被既有环境问题拦下**(与本任务无关): 本工具 shell 注入 `PYTHONUTF8=1` / `LC_ALL=C.UTF-8`
+    ⇒ `locale.getpreferredencoding(False)` 返回 utf-8 ⇒ `_decode` 的 GBK 回退不可达 ⇒
+    `test_commands_engine.py` 两条恒红。按上一轮已入库的判据加
+    `env -u PYTHONUTF8 -u PYTHONIOENCODING -u LC_ALL -u LANG` 前缀跑, 闸门即绿(整条提交/推送链都带)。
+  ⑤提交 `907890b`(22 文件 / **+720 −23**), 闸门 `test.quick` **1374 passed + 1 skipped**(4 worker),
+  ref 三处一致; 推送 Gitee 成功(`ls-remote` == 本地 `907890b`)→ GitHub 镜像**直连成功**
+  (`1845c9f..907890b`); 幽灵 diff 0。

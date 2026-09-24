@@ -1,12 +1,12 @@
 # WEB UI 多选右键菜单: 目标 = 整个选中集合
 
-> 摘要: 用户报"多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。根因是四个 `open*Menu` 只记 anchor、动作直接消费 anchor ⇒ 菜单照常弹出/照常成功但**只动一行**(无报错, 肉眼难辨)。修法: `menu.js::_ctxMulti` 判"该行属于选中集合且集合范围 ≠ 该行自身范围", 四入口各写 `menu.multi`; 双 UI 加 `v-if="menu.multi"` 批量分支, 动作整份复用批量浮条链路(`ctxAct`→`bulkAct` / `ctxDelete`→`bulkDelete`)。**已修复 + 已回写, 待提交**。
+> 摘要: 用户报"多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。根因是四个 `open*Menu` 只记 anchor、动作直接消费 anchor ⇒ 菜单照常弹出/照常成功但**只动一行**(无报错, 肉眼难辨)。修法: `menu.js::_ctxMulti` 判"该行属于选中集合且集合范围 ≠ 该行自身范围", 四入口各写 `menu.multi`; 双 UI 加 `v-if="menu.multi"` 批量分支, 动作整份复用批量浮条链路(`ctxAct`→`bulkAct` / `ctxDelete`→`bulkDelete`)。同轮另修一个既有缺陷(生成物重建提示指错命令)。**已入库 `907890b`**(含与主线 `5c518b3` 的合流)。
 > 触发: 多选, 右键菜单, 批量, 选中集合, ctx-menu, menu.multi, ctxAct, CTX-03, 只对一个种子生效
 > 最后活动: 2026-09-24 22:0x
 
 ## 状态
 
-**已完成**(本 clone, 未提交):
+**已完成**(本 clone, 已随 `907890b` 入库):
 
 - 根因: `openMenu`/`openMemberMenu`/`openShowMenu`/`openShowEpMenu` 只写 anchor(`key`/`hash`/`episode`),
   `act`/`actTorrent`/`actEpisode`/`del*`/`torrentCmd` 直接拿它拼端点 —— 选中集合从未参与。
@@ -32,11 +32,12 @@
   ②`_common.GEN_CMD_BY_SCRIPT` 按脚本查表(`gen_active_recent.py` → `kb.active --check`)。
   守阵 `test_memory_bank.py::test_gen_cmd_hints_name_real_tasks`(**两处红验**), 并端到端复现原症状验证。
 
-**实测**(提交时刻口径):
+**实测**(合流后、提交时刻口径):
 
-- 全量 **1234 passed + 1 skipped** / TOTAL 91%(7782 语句 / 622 未覆盖 / 2648 分支) / sidefx 越界 0。
+- 全量 **1376 passed + 1 skipped** / TOTAL 91%(9278 语句 / 727 未覆盖 / 3128 分支 / 277 partial) / sidefx 越界 0。
 - 冒烟(桩 3000 种子): ok **84/0** · error **84/0** · hang **8/0**。
 - `commands run test.pkg` **47 passed** · `kb.check` 5 段全绿 · `doc.caps` 无阻塞项。
+- 提交 `907890b`(22 文件 / +720 −23); Gitee `ls-remote` == 本地, GitHub 镜像同步成功; 幽灵 diff 0。
 
 ## 待用户处置
 
