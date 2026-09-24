@@ -10,7 +10,7 @@ r"""测试期"真实系统副作用"**记账器与判定策略**(2026-09-18 普�
 
 | 类别 | 记账入口 | 放行条件(不在放行条件内 = 越界) |
 |---|---|---|
-| `POPEN` | `subprocess.Popen.__init__` | 可执行名 ∈ `ALLOWED_EXECUTABLES` |
+| `POPEN` | `subprocess.Popen.__init__` | 可执行名 ∈ `ALLOWED_EXECUTABLES`, 或**临时目录里的 wrapper**(`commands` / `commands.cmd`) |
 | `REG` | `winreg.CreateKeyEx` / `DeleteKey` | 键路径 ∈ `ALLOWED_REG_KEYS` |
 | `REGVAL` | `winreg.SetValueEx` / `DeleteValue` | 值名 ∈ `ALLOWED_REG_VALUES` |
 | `FSDEL` | `os.remove` / `unlink` / `rmdir` + `shutil.rmtree` | 路径落在临时目录(带 `dir_fd` 的先补齐为绝对路径) |
@@ -49,6 +49,13 @@ from typing import Any, List, Optional, Tuple
 
 # 测试期允许启动的外部进程: 目前只有前端静态守阵的 node 语法校验
 ALLOWED_EXECUTABLES = frozenset({"node", "node.exe"})
+
+# 测试期允许启动的 **wrapper 脚本** —— 且必须落在临时目录里。
+# 为什么必须开这个口: `commands` wrapper 的核心承诺就是"`commands run <task>` 真能敲",
+# 所以那条用例必须**真跑一次**生成的脚本; 而 Windows 下 CreateProcess 不认 shebang,
+# 只能经 shell(→ cmd.exe)跑 `commands.cmd`。放行面收得很窄: 文件名就是这两个,
+# 且路径必须在临时目录(即用例自己刚生成的那一份)。
+ALLOWED_TEMP_WRAPPERS = frozenset({"commands", "commands.cmd"})
 
 # 允许写入的注册表键: autostart 的 HKCU Run 键(既有明文约定, 且用例在 finally 里自清理)。
 # 注意 AUMID 键**不在**其中 —— 它由 conftest 的守卫拦成空操作, 真落盘就是越界。
@@ -168,11 +175,30 @@ def _allowed_executable(args: Any) -> bool:
     return False
 
 
+def _allowed_temp_wrapper(args: Any) -> bool:
+    """临时目录里的 wrapper 脚本(`commands` / `commands.cmd`)。
+
+    两种形态都要认: 普通调用是 list(`args[0]` 即可执行文件), `shell=True` 时是一个命令串
+    (首个 token 才是可执行文件)。
+    """
+    if isinstance(args, (list, tuple)):
+        if not args:
+            return False
+        head = str(args[0])
+    elif isinstance(args, str):
+        head = args.strip().split(" ", 1)[0].strip('"')
+    else:
+        return False
+    if os.path.basename(head).lower() not in ALLOWED_TEMP_WRAPPERS:
+        return False
+    return is_temp_path(head)
+
+
 def is_violation(record: "Record") -> bool:
     """一条记录是否越界(不在放行清单里)"""
     kind, detail = record
     if kind == "POPEN":
-        return not _allowed_executable(detail)
+        return not (_allowed_executable(detail) or _allowed_temp_wrapper(detail))
     if kind == "REG":
         return not str(detail).startswith(ALLOWED_REG_KEYS)
     if kind == "REGVAL":

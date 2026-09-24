@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -23,7 +24,11 @@ import _tree as T  # noqa: E402
 
 STOP = 1
 FAILED = 3
-SUMMARY_LINES = 3  # 成功时只回最后几行 —— 常规路径不该把整段输出搬进上下文
+SUMMARY_LINES = 3  # 成功时回的最后几行(结论行, 如 "1207 passed")
+ANOMALY_MAX = 8  # 额外保留的异常行上限
+FAILURE_LINES = 40  # 失败时最多回多少行(要细节, 但也不是整段)
+# 异常行判据: 只认工具自己的分级标记与大写关键字 —— 小写的 "warnings"/"error" 是正常输出的一部分。
+_ANOMALY = re.compile(r"\[(?:WARN|STOP|FAIL)\]|\b(?:FAILED|ERROR|Traceback)\b")
 
 # ------------------------------------------------------------------ 子命令
 
@@ -55,11 +60,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         spent = time.time() - started
         if not ok:
             print(f"[FAIL] {task.id} rc!=0 ({spent:.1f}s)")
-            print(out.rstrip())
+            _emit(out, task.id, limit=FAILURE_LINES)
             return FAILED
         print(f"[ok] {task.id} ({spent:.1f}s)")
-        for line in _tail(out):
-            print(f"  {line}")
+        _emit(out, task.id)
     return 0
 
 
@@ -130,11 +134,20 @@ def cmd_add(args: argparse.Namespace) -> int:
 
 
 def _pick(tree: C.Tree, name: str) -> C.Task:
+    """取 task; **也接受包路径限定的写法** `包/子包.<task>`(取最后一个 `/` 之后)。
+
+    只认一种写法就会在"看起来对"的另一种上 STOP: `list` 里显示的是短 id(`ship.commit`),
+    而文档与人习惯写全路径(`my-commit-flow/ship.commit`)—— 两种都认, 少一次排障往返。
+    """
     task = tree.tasks.get(name)
+    short = name.rsplit("/", 1)[-1]
+    if task is None and short != name:
+        task = tree.tasks.get(short)
     if task is None:
-        near = [t for t in tree.tasks if name in t or t.startswith(name.split(".")[0])]
+        near = [t for t in tree.tasks if name in t or short in t or t.startswith(name.split(".")[0])]
         hint = f"  相近: {', '.join(sorted(near)[:8])}" if near else "  用 list 逐级找"
-        raise SystemExit(f"[STOP] 没有这个 task: {name}\n{hint}")
+        raise SystemExit(f"[STOP] 没有这个 task: {name}\n{hint}\n"
+                         "  写法: `run <id>`; id 见 list(子包可写 `包/子包.<task>`)")
     return task
 
 
@@ -162,9 +175,33 @@ def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[b
     return proc.returncode == 0, out
 
 
-def _tail(out: str) -> list[str]:
+def _digest(out: str, limit: int = SUMMARY_LINES) -> tuple[list[str], int]:
+    """把输出压成"结论 + 异常行", 返回 (要打印的行, 被略过的行数)。
+
+    ❗**只取末 N 行是错的**: 检查表这类输出的末几行是"无 STOP; 2 项 WARN"这类**结论**,
+    而 WARN 的**内容**在中段 —— 截掉之后调用方只能把整条命令重跑一遍才能看到,
+    省下的几行换来一整次重跑(实测: 预检被跑了两遍)。异常行必须留下。
+    行序保持原样 —— 摘要是"挑行", 不是"重排"。
+    """
     lines = [ln.rstrip() for ln in out.splitlines() if ln.strip()]
-    return lines[-SUMMARY_LINES:]
+    if len(lines) <= limit:
+        return lines, 0
+    keep = set(range(len(lines) - limit, len(lines)))
+    for i, line in enumerate(lines):
+        if len(keep) >= limit + ANOMALY_MAX:
+            break
+        if _ANOMALY.search(line):
+            keep.add(i)
+    picked = [lines[i] for i in sorted(keep)]
+    return picked, len(lines) - len(picked)
+
+
+def _emit(out: str, task_id: str, limit: int = SUMMARY_LINES) -> None:
+    picked, skipped = _digest(out, limit)
+    for line in picked:
+        print(f"  {line}")
+    if skipped:
+        print(f"  …(略过 {skipped} 行; 要看全文: show {task_id} 拿到命令后直接跑)")
 
 
 def _toml_block(args: argparse.Namespace) -> str:

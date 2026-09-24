@@ -12,20 +12,30 @@
 ## ⚠️ 最常见也最容易卡住的组合：落后主线 + 工作区脏
 
 预检这时会同时给「落后 N 个提交（STOP）」和「工作区脏（WARN）」。
-**别以为要先解决 STOP 才能提交 —— 恰恰相反，此时唯一安全的路是"先提交"**，
-让树变干净是后续一切操作的前提（不能用 stash：本环境下 stash 与拦截层叠加有毁库风险）。
+提交本身**不会被落后挡住**（`--phase commit` 只报 WARN），但**同步必须先于提交** ——
+顺序反过来就会掉进"`merge --ff-only` 必然失败"的坑（见下）。不能用 stash：
+本环境下 stash 与拦截层叠加有毁库风险。
 
 > ❗**本工具 shell 禁用 `git rebase`**（不看工作区脏不脏 —— 已炸三次，
 > 判据与事故实证见 `memory-bank/pitfalls/git/_index.md`）。
 > 本包的历史版本曾教"提交 → `git pull --rebase` → 推送"，那是**错的**，已订正。
 
-**正确顺序**（落后 + 树脏）：
+**正确顺序**（落后 + 树脏）：**先同步、后提交**（历史保持线性）。开工自检的「同步路径」行会把这套配方
+连同"有没有文件重叠"直接打出来 —— 重叠时**不要**照抄，先停下报告。
 
 ```
-1. commands run ship.commit ...   # 内部用 --phase commit 预检：落后只报 WARN，不会挡住提交
-2. 树变干净 → git fetch <主线> <分支> && git merge --ff-only FETCH_HEAD   ← 快进，不是 rebase
-3. 再跑一次 commands run my-commit-flow.preflight（确认不落后了）→ commands run ship.push
+1. 移出改动   git diff --output=<仓外>/wip.patch   # 改动文件另存一份到仓外（别用 `>`，见 pitfalls/git/sync-pull.md）
+2. 清空工作区 git restore --source=HEAD -- <改动文件>
+3. 快进       git fetch <主线> <分支> && git merge --ff-only FETCH_HEAD   ← 快进，不是 rebase
+4. 施回改动   git apply --3way --ignore-whitespace <patch> → git reset -q 变回未暂存
+5. 提交       commands run ship.commit ...   # 内部用 --phase commit 预检：落后只报 WARN，不挡提交
+6. 推送       commands run ship.push
 ```
+
+❗**别把第 3 步挪到提交之后**：本地一旦有了提交，它就不在远端 tip 的祖先链上，
+`merge --ff-only` 必然报 `Not possible to fast-forward, aborting.` —— 那时只剩"非快进合并"
+一条路（多一个合流提交，且本环境对 merge 本就敏感）。施回后按 `git diff --stat`
+与快进前的数字**逐项对账**，确认没缺漏再提交。
 
 **已经分叉**（本地有远端没有的提交，快进不了）时别硬合，走这条替代路径：
 
@@ -74,7 +84,7 @@ S6 ship.push 内部（--phase push --no-auto）→ 不跑闸门，只核状态
 
 | 脚本 | 职责 | 退出码 |
 |---|---|---|
-| `<包>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / **合流预判(`merge-tree`, 只读)** / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑 | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
+| `<包>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / **合流预判(`merge-tree`, 只读)** / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑、`--verbose` 闸门明细逐条列（默认只回"N 条全过 + 总耗时"）、`--check-started` 开工自检（只读：同步状态 / 合流预判 / **同步路径**） | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
 | `<包>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref（内部先跑一次 `--phase commit` 预检，闸门在这一步真跑） | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
 | `<包>/scripts/verify_ref.py [sha]` | ref 三处一致核对 | 0 一致 · 2 不一致 · 3 staged 暴增 |
 | `<包>/scripts/push.py [--skip-mirror] [--skip-preflight]` | 内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |

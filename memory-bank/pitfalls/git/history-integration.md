@@ -78,6 +78,12 @@
   (第三次事故就是照 skill 踩的)。
 - **处置**: 执行者自己要在跑 rebase 前先读本条; 走上面的"先同步远端、后提交"。
   `fetch` / `add` / `commit` / `reset` / `push` 实测安全; 涉及历史整合的优先让用户在自己终端做。
+- **复发**: 1 —— 2026-09-24 同一句话出现在**包自己的文档里**: `my-commit-flow` skill 退役成包时,
+  "让工作区变干净再 rebase"被原样搬进 `.commands/my-commit-flow/scripts/commit.py` 的 docstring,
+  而 `references/pipeline.md` 与包 README 把顺序写成"**先提交再快进**"。
+  **为什么没命中**: 本条只管"执行前先读", 没有任何机检扫仓库自己的文档/脚本里的 rebase 建议;
+  而"先提交再快进"看着无害 —— 实际**提交后 `merge --ff-only` 必然失败**(本地提交不在远端 tip 的祖先链上)。
+  三处文案已订正为"先同步远端、后提交"; **若再复发就该给它加一条 grep 闸门**(负向匹配 rebase 建议)。
 
 ### 事故恢复: 成本取决于有没有 `cp -a .git` 备份
 

@@ -228,6 +228,70 @@ class ClassifyMergeProbeTest(unittest.TestCase):
         self.assertEqual((level, item), (preflight.WARN, "合流预判"))
 
 
+class SyncRecipeTest(unittest.TestCase):
+    """sync_recipe 给的是**可执行的下一步**(纯函数) —— 只报"先同步 / 树脏先停下报告"
+    等于把"下一步该敲什么"留给执行者自己翻仓库(实测要 6 次只读 git 调用才拼出来)。"""
+
+    FETCH = "git fetch gitee develop"
+
+    def test_in_sync_has_no_recipe(self):
+        self.assertIsNone(preflight.sync_recipe(0, 0, 0, [], self.FETCH))
+
+    def test_behind_clean_tells_ff(self):
+        level, item, detail = preflight.sync_recipe(2, 0, 0, [], self.FETCH)
+        self.assertEqual((level, item), (preflight.PASS, "同步路径"))
+        self.assertIn("--ff-only", detail)
+        self.assertIn(self.FETCH, detail)
+
+    def test_behind_dirty_without_overlap_gives_recipe(self):
+        level, _, detail = preflight.sync_recipe(1, 0, 6, [], self.FETCH)
+        self.assertEqual(level, preflight.WARN)
+        for step in ("--output=", "restore", "--ff-only", "apply --3way"):
+            self.assertIn(step, detail, f"配方缺步骤: {step}")
+        self.assertIn("无文件重叠", detail)
+
+    def test_behind_dirty_with_overlap_refuses_recipe(self):
+        level, _, detail = preflight.sync_recipe(1, 0, 2, ["a.py", "b.md"], self.FETCH)
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("重叠 2 个文件", detail)
+        self.assertIn("先停下报告", detail)
+        self.assertNotIn("apply --3way", detail, "会撞时不给施回配方")
+
+    def test_diverged_points_at_pipeline_doc(self):
+        level, _, detail = preflight.sync_recipe(1, 2, 0, [], self.FETCH)
+        self.assertEqual(level, preflight.WARN)
+        self.assertIn("已分叉", detail)
+        self.assertIn("pipeline.md", detail)
+        self.assertNotIn("apply --3way", detail, "分叉不走机械配方")
+
+
+class SummarizeGatesTest(unittest.TestCase):
+    """全过时的摘要只给条数 + 总耗时 —— 原写法把每条展开后的命令(含绝对路径)拼成一行
+    ≈1.5 KB, 每次提交都出现却只是"过"的噪音; 明细交给 --verbose。"""
+
+    RESULTS = [
+        ("python /x/run.py run dev.fmt -- src/a.py", 0, 2.2, ""), ("python /x/run.py run test.quick", 0, 11.0, "")
+    ]
+
+    def test_summary_is_compact(self):
+        text = preflight.summarize_gates(self.RESULTS)
+        self.assertIn("2 条全过", text)
+        self.assertIn("13.2s", text)
+        self.assertNotIn("/x/run.py", text, "摘要里不该出现命令全文")
+
+    def test_verbose_lists_detail(self):
+        with tempfile.TemporaryDirectory() as td:
+            gate = {"match": [""], "run": [f'"{PY}" -c "pass"'], "auto": True, "timeout": 60, "note": "t"}
+            rows, _, _ = preflight.run_auto_gates([gate], {"root": Path(td), "changed": []}, verbose=True)
+        self.assertTrue(any(r[1] == "闸门明细" for r in rows), "verbose 下要逐条列出")
+        self.assertTrue(any(r[1] == "自动闸门" and "1 条全过" in r[2] for r in rows))
+
+    def test_short_strips_root_prefix(self):
+        root = Path("C:/repo")
+        self.assertEqual(preflight._short("python C:/repo/a.py", root), "python a.py")
+        self.assertEqual(preflight._short(r"python C:\repo\a.py", root), "python a.py")
+
+
 class NoTrackingRefAheadBehindTest(unittest.TestCase):
     """落后/领先判据一律走 ls-remote 现查的远端真值 —— 本工具 shell 里 refs/remotes/* 的
     写入会被静默丢弃, 跟踪 ref 是陈年快照, 曾据此报出假"落后 5"。"""

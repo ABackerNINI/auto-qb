@@ -17,4 +17,31 @@
   ⚠ **顺带发现(未改)**: 该 SKILL.md 的「收尾 DoD」标题写"5 步"、实际列了 6 条, 而 `AGENTS.md` 也写"5 步" —— 两边同错, 要订正得一起改(本次只把标题里的数字去掉, 不替它选一个数)。
   实测: `test.full` **1201 passed + 1 skipped**; `doc.caps` commands 2089/2600 · memory-bank 5948/7500 · AGENTS.md 6999/8000; `doc.drift` 0 处。
 - **知识库瘦身 (2026-09-20, ✅ 已提交并推送 `9ccace6`, Gitee 与 GitHub 镜像均成功)**: 按"过时 / 重复 / 低价值"三分类清理根 `AGENTS.md` 与 `memory-bank/` —— **路由表与黄金法则单点收在 `AGENTS.md`**(`memory-bank/README.md` 改指针), 已完成条目从本文件迁出到 `progress.md` / 任务档案; `testing.md` 顶部基线数字**未动**(待补测 WSL 一侧再更)。提交时与上游 7 个提交 rebase, `AGENTS.md` 一处冲突按"保留上游新增的 HTML dark 主题规则 + 保留本轮压缩后的计划产出口径"解决。**知识库回写(pitfalls 新增「rebase --continue 被 VS Code 编辑器挂死 + packed-refs 陈旧致核 ref 假红」条目 + 本行状态更新)尚未提交。**
+- **commands 引擎的三条已落地约定 (2026-09-24, 从 commands 切片迁出)**: ①**`doc` 键** —— `[tasks.*]` 可写
+  `doc = "<包内文档相对路径>"`, `show` 打印"深读"一行, 把"想看细节读哪份"接到决策点上; 基准目录**子包继承父包**
+  (否则子包写 `references/pipeline.md` 会 STOP), 指向的文件不存在即 STOP(指针指空 = 静默失效)。
+  ②**反漂移豁免不保护包内 README** —— `.commands/` 豁免的理由是"单点定义在这里", 但定义处是 `config.toml`,
+  故 `README.md` 不走豁免并加进 `SCAN_GLOBS`。③**阅读预算是一类新上限** —— `check_context_caps.py` 里
+  `CONTEXT_CAPS`(IDE 注入截断)与 `READ_BUDGET_CAPS`(被当入口就得整读)**语义不同, 分两组打印**, 判定与处置共用一套。
+
+- **commands W6 会话噪音治理 · 实测记录 (2026-09-24, 从 commands 切片迁出)**: 引擎摘要改成"末几行结论 + 异常行"后实测 ——
+  12 行检查表的 `[WARN]` 行**留在了摘要里**(与结论行同时在); 全量测试通过时**不额外抽行**(`run test.full` 输出 338 字符, 与旧行为一致);
+  预检经引擎的输出 551 字符(原先要么看不到 WARN、要么整段 2.4 KB)。闸门摘要收敛: `[PASS] 自动闸门 N 条全过 (共 X s)` 一行,
+  取代原先把 9~11 条展开后的命令(含绝对路径)拼成的 ≈1.5 KB 单行, 明细走 `--verbose`。
+  同步配方端到端: 用 `git commit-tree` + 临时 remote 造「远端领先 1 + 树脏 5」—— 无重叠出 5 步配方, 让假提交改一个**在途**文件
+  则改报"重叠 1 个文件 … 先停下报告"且不给施回配方(用完 `git remote remove`)。包测试入闸门: `test.pkg` 经引擎跑 47 passed。
+
+- **commands 引擎 / `my-commit-flow` 包的实测记录 (2026-09-24, 从 commands 切片迁出)**: 以下都是"改之前先确认过的事实", 免得重做 ——
+  ①**可插拔**: 临时加包 → 跑通 → 整包删除, 引擎 `list` / `run` 无异常; 往包里塞引擎不认识的私有配置, 引擎不报错也读不到。
+  ②**整包移走** `.commands/my-commit-flow` 后, 引擎仍能 `list` / `run` 其它 task。
+  ③**反漂移闸门**: 故意手抄 → 判红, 改成 `commands run <task>` → 转绿(63 → 0); 手抄**脚本类**(带解释器前缀)在 `.exe` 归一后同样判红。
+  ④**`pin` 守卫**: 临时树里 3 条 pin 不报、9 条报(一级与子包两层都试过)。
+  ⑤**格式化闸门去双写**: `<changed:*.py>` → `run.py run dev.fmt -- <文件…>` → 引擎再展开成 `yapf -i <文件…>`, 两段都实测过, 与旧闸门等价(仍只碰本次改过的 py)。
+  ⑥**`list --all` 去重**: 曾把常显命令打两遍(21 条显示成 25 行, 看着像 task id 重复)⇒ `--all` 时不再上浮 pin; 逐视图复验 `--all` 21 行零重复, `list` 3 / `kb` 3 / `test` 3 / `my-commit-flow` 4 / `ship` 2 / `my-commit-flow --all` 5。
+  ⑦**反漂移扫描面**扩到 `.agents/skills/**/*.md`(原 `**/SKILL.md`): 细节搬进 `references/` 后只扫 SKILL.md 会留盲区; 扩前实测 0 命中(不误伤别的 skill)。
+  ⑧**参数传递**: `run doc.drift -- --list` 转发成功; `run doc.caps -- --strict` **STOP rc=1 且不执行**; 脚本类 `ship.commit -- --message-file … <路径>` 仍接 argv 末尾; 无参数时 `show test.full` 与配置逐字一致。
+  ⑨**包内 README 纳管**: 反漂移豁免不保护它(单点定义处是 `config.toml` 而非 README), 已加进 `SCAN_GLOBS` 并给阅读预算 3000 字符。
+  ⑩**`<each:>` / `<changed:>` 只盯本次改动清单**, 不是文件系统 glob —— 没匹配上的 WARN 是**按设计跳过**, 不是闸门失效(WARN 文案已点明, 曾误读)。
+  ⑪**`doc` 指针基准由子包继承父包**(否则子包写 `references/pipeline.md` 会 STOP), 5 个 task 的 `show` 均打印出父包那份绝对路径。
+
 - **W3 遗留的文档漂移订正 (2026-09-24, 从 commands 切片迁出)**: `AGENTS.md` 那 3 处死链(指向已删除的 skill 与已搬走的 `.commit-flow.toml`)改指 `.commands/my-commit-flow/README.md` 与 `.my-commit-flow.toml`; `pitfalls/ops/_about.md`(连带两份 `_index.md`)/ `pitfalls/ops/prod-files.md` / `pitfalls/git/push.md` / `pitfalls/testing/tmpdir.md` / `conventions/collaboration.md` / `conventions/process.md` 的旧名一并订正。**刻意没动**: `plans/*.html` 与 `tasks/*.md`(冻结快照 / 纪要)、`progress/suggestions.md`(叙述)、`test_preflight.py` 的 glob 夹具字符串、别的专题的切片(按「各 clone 只写自己的切片」约定)。

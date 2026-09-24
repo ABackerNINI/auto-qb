@@ -46,6 +46,10 @@
 
 **命令一律经 `commands` 引擎调, 不在文档里抄** —— `commands run <task>` 里的 `<task>` 是包里的一条命令
 (映射表在 [.commands/](.commands/) 各包的 `config.toml`, 引擎是 [commands skill](.agents/skills/commands/SKILL.md))。
+❗**真敲前先装一次 wrapper**(幂等, 生成物已 gitignore):
+`uv run python .agents/skills/commands/scripts/install_wrapper.py` —— 装完 `commands run <task>` 直接可用
+(落仓库根 + PATH 目录); 没装时展开成 `uv run python .agents/skills/commands/scripts/run.py run <task>`。
+`<task>` 用 `list` 里的 id(子包可写 `ship.commit`, 也可写全 `包/子包.<task>`)。
 不知道调哪个就 `list` 逐级下钻(一级只出包 + 常显命令)。遇到**反复要跑 / 难拼 / 有陷阱写法**的命令,
 按 SKILL.md 的收录协议自己 `add` 进包 —— 命令集靠这个长大, 不是靠人维护。
 
@@ -83,7 +87,8 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤与机检一律走 task id**(不是文档): 预检 `my-commit-flow.preflight` → 闸门(预检内跑) → 逐路径暂存 `ship.commit` → 提交并核 ref 三处 `my-commit-flow.verify-ref` → 推 Gitee `ship.push` → 尝试一次 GitHub 直连(同在 `ship.push` 里)→ 查幽灵 diff。**本节只留口径, 不重复命令**; 原理与完整判据在包内 `references/`(排障才读)。
+> **步骤与机检一律走 task id**(不是文档): 开工同步 `my-commit-flow.sync` → 逐路径暂存并提交 `ship.commit`
+> (**内含预检 + 闸门 + 提交后核 ref 三处**, 所以**不要再单独跑一遍 preflight**; 只有"闸门要跑在回写知识库之前"这一条才需先单独跑)→ 推 Gitee `ship.push`(内含推送前预检 + 核远端 ref + 一次 GitHub 镜像尝试)→ 查幽灵 diff。**本节只留口径, 不重复命令**; 原理与完整判据在包内 `references/`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。

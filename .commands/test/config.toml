@@ -25,6 +25,12 @@ timeout = 900
 when    = "只要结论、不要覆盖率报表（快约 7s；提交闸门用这条）"
 note    = "同上必须 cmd.exe 写法；--no-cov 只跳报表，不影响通过与否"
 
+[tasks."test.pkg"]
+run     = ['uv run pytest .commands -q --no-cov -n 0']
+timeout = 300
+when    = "改了 .commands/ 下的包脚本或 commands 引擎 —— 它们的测试不在 testpaths(tests/) 里, 全量测试收不到"
+note    = "串行 -n 0: 用例少(47 条), 并行反而慢在 worker 启动; 这些脚本不建 pytest 临时目录符号链接, 故不需要 TMPDIR 前缀"
+
 [tasks."test.one"]
 run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest <args> -q -n 0']
 timeout = 900

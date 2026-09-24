@@ -13,6 +13,13 @@
   `baseline-history.md` 自测 24,151、守卫报 24,466, 差值 315 = 文件行数。**卡在临界值时
   `read_text()` 会给出"没超"的假绿灯**, 于是提交被闸门拦下。
 - **处置**: 量 cap 一律走 `_common.char_count()`(或等价地 `len(path.read_bytes().decode("utf-8"))`)。
+- **复发**: 1 —— 2026-09-24 撞的是**镜像形态**: 用 Python 改文件时 `read_text()`(universal newlines 折成 LF)
+  + `write_text(..., newline="")` ⇒ **整份文件从 CRLF 变 LF**, 而 cap 按**原始字节**数(CRLF 每行 +1)⇒
+  量到的数字**变小**: 同一个 `SKILL.md` 报 2529(实际检出态 2595/2600, 余量只剩 5),
+  切片报 5948(实际 **6040 > 6000**, `kb.check` 本应判红) —— **把"超限"藏起来了**。
+  仓库 `core.autocrlf=true`, 检出态就是 CRLF; 所以**写完文件要确认行尾没被改**。
+- **判据(最快)**: 改完跑 `git status`(或 `git diff`), 出现 `LF will be replaced by CRLF` 警告
+  ⇒ 该文件当前**不是检出态**, 此刻量到的字符数不可信; 归一(按扩展名分: `.md/.py/.toml` → CRLF)后重量。
 
 ### append-only 流水撞 `log` cap 时按设计**轮转**, 不是删内容
 

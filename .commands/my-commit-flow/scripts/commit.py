@@ -6,13 +6,14 @@
 
 流程:
   1. 跑 preflight(**用 --phase commit**: 落后主线只 WARN —— 落后 + 工作区脏时, 唯一安全的路是先提交
-     让工作区变干净再 rebase, 所以这里不能因为落后就挡住提交; 其余 STOP 照样拦)
+     让工作区变干净再**快进**(`merge --ff-only`, **不是 rebase**: 本环境 rebase 一律禁用),
+     所以这里不能因为落后就挡住提交; 其余 STOP 照样拦)
   2. `git add -- <你给的路径>` —— **逐路径**, 拒绝 `-A` / `.` / `*`
   3. `git commit -F <消息文件>`(中文首行 + 空行 + 细节; 规模数字要提交那一刻实测)
   4. 调 verify_ref 核对 ref 三处, 不一致 → 退出码 2 并给处置步骤
-  5. 打印下一步: push.py
+  5. 打印下一步: `commands run ship.push`(统一调用面, 不暴露裸脚本路径)
 
-不做 rebase / 不做 push —— 那是红线区, 交给执行者按 SKILL.md 判据手动跑。
+不做 rebase / 不做 push —— 那是红线区, 交给执行者按 `references/pipeline.md` 的判据手动跑。
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ for _stream in (sys.stdout, sys.stderr):
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import ConfigMissing, load_config  # noqa: E402
 
-SKILL_DIR = Path(__file__).resolve().parents[1]
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
 
 
@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0:
         return rc
 
-    print(f"\n下一步: python {SKILL_DIR.as_posix()}/scripts/push.py")
+    print("\n下一步: commands run ship.push")
     return 0
 
 

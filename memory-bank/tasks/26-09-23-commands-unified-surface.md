@@ -3,7 +3,7 @@
 **Status:** Open
 **Added:** 2026-09-23
 **Updated:** 2026-09-24
-**Summary:** 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell 实测 rc=1), 而"该抄哪一份"没有任何提示 ⇒ 直到某次拿到假红才暴露。方案: skill 缩成**纯引擎**(只认识「包」与「命令」, 连"提交"都不知道), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒**(私有配置引擎不读), 路由**不落盘**改为逐级查询 + `pin` 常显, 并配一条反漂移闸门让文档里的手抄形态直接判红。**W1–W5 已全部实施并提交**; 2026-09-24 优化轮补齐三处遗留 (SKILL.md 两种记法 + 恒定大小硬上限 / `pin` 数量守卫 / 格式化闸门去双写)。
+**Summary:** 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell 实测 rc=1), 而"该抄哪一份"没有任何提示 ⇒ 直到某次拿到假红才暴露。方案: skill 缩成**纯引擎**(只认识「包」与「命令」, 连"提交"都不知道), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒**(私有配置引擎不读), 路由**不落盘**改为逐级查询 + `pin` 常显, 并配一条反漂移闸门让文档里的手抄形态直接判红。**W1–W5 已全部实施并提交**; 2026-09-24 优化轮补齐三处遗留 (SKILL.md 两种记法 + 恒定大小硬上限 / `pin` 数量守卫 / 格式化闸门去双写)。**W6 会话噪音治理**(2026-09-24, 用户走查一次真实提交流程后提出"噪音多、token 高"): 引擎输出摘要改为**异常感知**(只取末几行会让 WARN 的内容消失, 实测逼出一次预检重跑)、task id 认包路径限定写法、闸门 PASS 行从 ≈1.5 KB 命令全文收成一行、开工自检给出**可执行的同步配方**(含重叠判定)、包/引擎的 47 条脚本测试首次挂上闸门。**W7 wrapper 入口**(2026-09-24, 用户要求「真正实现 `commands run <task.id>`」): 实测三个 shell 都不搜 cwd ⇒ 生成器落 **cwd + PATH 目录**两处(生成物 gitignore, 只认自己的标记行), 并把「低噪音包」的八条判据写进收录协议。
 **Topics:** commands-unified-surface
 
 ## 原始请求
@@ -132,6 +132,8 @@ v1.4 把闸门与红线写进包的 `config.toml`(= 领域配置进 command-flow
 | W4 | 反漂移闸门 + 文档收口 (63 → 0); 收录协议接到两个决策点 | Done |
 | W5 | 旧 skill 退场 + 引擎纯净度机检 (grep 为 0) | Done |
 | 优化轮 | SKILL.md 两种记法 + description 175 字符; `pin` 数量守卫; 格式化闸门去双写; SKILL.md 恒定大小硬上限 | Done |
+| W6 | 会话噪音治理: 引擎异常感知摘要 + id 包路径写法 + 闸门摘要收敛 + 开工自检同步配方 + 包测试入闸门 | Done |
+| W7 | wrapper 入口(真正实现 `commands run <task>`) + 低噪音包判据 + 收录协议同步 | Done |
 
 ## 进度日志
 
@@ -205,9 +207,77 @@ v1.4 把闸门与红线写进包的 `config.toml`(= 领域配置进 command-flow
   实测: `run doc.drift -- --list` 转发成功; `run doc.caps -- --strict` STOP rc=1 **且不执行**;
   脚本类 `ship.commit -- --message-file … <路径>` 仍接 argv; 无参数路径不变; 全量 **1201 passed + 1 skipped**。
 
+- 2026-09-24 18:1x: **W6 会话噪音治理**(起因: 用户走查上一轮的提交流程, 指出"噪音多、没达到设计初衷")。
+  先按"我在那次会话里到底多花了什么"逐条取证, 再逐条改:
+  ① **摘要只取末 3 行**(`run.py` 的 `_tail`)= 最大一笔 —— 预检的末 3 行是"决策点指针 / 无 STOP;2 项 WARN",
+  **WARN 的内容在中段被截掉**, 于是我把预检**跑了两遍**(21s×2)才看到那两条 WARN。改为 `_digest`:
+  末 3 行 + 异常行(`[WARN]`/`[STOP]`/`[FAIL]` + 大写 `FAILED`/`ERROR`/`Traceback`, 封顶 8 行, 去重、保序),
+  有省略时打印"略过 N 行 + `show` 怎么看全文"; 失败路径也封顶 40 行(原先整段 dump)。
+  ② **task id 只认短 id**: `show my-commit-flow.ship.commit` 直接 STOP(真实 id 是 `ship.commit`), 而
+  `AGENTS.md` 里三种写法混着写 ⇒ `_pick` 改为**两种都认**(`包/子包.<task>` 取最后一个 `/` 之后),
+  STOP 提示补上可解析的写法。③ **闸门 PASS 行 ≈1.5 KB**: 把 9~11 条展开后的命令(含绝对路径)拼成一行,
+  每次提交都出现却只是"过"的噪音 ⇒ 只回"11 条全过 (共 24.9s)", 明细走新加的 `--verbose`。
+  ④ **开工自检只说"先同步, 树脏先停下报告"** —— 这句话不含动作, 我实测要 6 次只读 git 调用才拼出下一步 ⇒
+  新增纯函数 `sync_recipe`, 打印 5 步配方(`--output=` / `restore` / `--ff-only` / `apply --3way` / `reset -q`),
+  并**先判与在途改动有没有文件重叠**: 重叠就**不给配方**、只报"先停下报告"(与全库"不静默降级"同源)。
+  ⑤ **入口不可解析**: 文档只写记法 `commands run <task>`, 我第一条命令就撞 `commands: command not found` ⇒
+  `AGENTS.md` 命令节补**真实入口**(`uv run python .agents/skills/commands/scripts/run.py run <task>`),
+  SKILL.md 的路径约定补"用项目自己的解释器跑它"。⑥ `commit.py` 结尾提示改成 `commands run ship.push`
+  (原先是裸脚本路径, 绕开统一调用面); ⑦ **包/引擎的测试没人跑**: `test_preflight.py` 47 条在
+  `testpaths(tests/)` 之外, 任何闸门都不跑它 ⇒ 补 task `test.pkg` + 闸门
+  `match = [".commands/", ".agents/skills/commands/"]`。
+  顺带**修掉两处会致败的旧文案**(都在提交流程的必经路径上, 属本轮范围):
+  `references/pipeline.md` 与包 README 停手点 #1 都写"**先提交再快进**" —— 提交后再 `merge --ff-only`
+  **必然失败**(本地提交不在远端 tip 的祖先链上), 已按 `AGENTS.md` 与
+  [pitfalls/git/history-integration.md](../pitfalls/git/history-integration.md)「先同步远端, 后提交」订正;
+  `commit.py` docstring 里"让工作区变干净再 **rebase**"与 rebase 禁令相撞(该条在 skill 退役时被漏搬)——
+  已改"快进", 并在 history-integration.md 的通用教训条记 `复发 +1`。
+  实测: `test.full` **1215 passed + 1 skipped**(+8 条引擎守阵; TOTAL 91% / 7768 语句 / 623 未覆盖);
+  `test.pkg` **47 passed**(原 34 → +13: `sync_recipe` 判定矩阵 5 条 + `summarize_gates` / `_short` 3 条 +
+  `_digest` / `_pick` 5 条另在 `tests/test_commands_engine.py`); 红验: 8 条引擎守阵在还原版上全红。
+  端到端: 假远端(`commit-tree` + 临时 remote)造「落后 1 + 树脏 5」—— 无重叠出配方, 有重叠改"先停下报告"。
+  文档闸门: `doc.caps` SKILL.md **2526/2600** · AGENTS.md 7499/8000 · 包 README 2831/3000; 漂移 0 处。
+
+- 2026-09-24 18:5x: **W7 wrapper 入口 + 低噪音包**(用户要求: "引导 agent 创建平台相关的命令 wrap 到当前工作目录,
+  真正实现 `commands run <task.id>`, 同时更新 howto-add-command, 引导 agent 创建低噪音的命令包")。
+  **先实测再设计** —— 三个 shell 对 cwd 的搜索规则不同, 这一步决定了落点:
+
+  | shell | cwd 里有 `commands` 时 bare 调用 | 原因 |
+  |---|---|---|
+  | Git Bash | ❌ command not found | PATH 不含 `.` |
+  | PowerShell | ❌ CommandNotFoundException | PowerShell 不搜 cwd |
+  | cmd.exe | ✅ | 唯一搜 cwd 的 |
+
+  ⇒ "只落当前工作目录"**达不到目标**, 于是与用户确认后落 **cwd + PATH 目录**两处:
+  新增 `install_wrapper.py`(生成器, 幂等): ①仓库根 → `commands`(POSIX)/`commands.cmd`(Windows);
+  ②PATH 目录(`~/bin` 优先, **在 PATH 上但不存在就建出来**) → **项目无关**那份, 从 `$PWD` 向上找 `.commands/`,
+  任意项目 bare 调用。生成物**不入库**(`.gitignore` `/commands` `/commands.cmd`)——单点定义在生成器里;
+  只认自己的标记行(别人的同名文件停手, `--force` 才覆盖); `--cwd-only` / `--uninstall` / `--dry-run`;
+  装完**自证**(真跑一次 `list` 并打印 rc)。解释器优先 `uv run python`: 包脚本是以**引擎的 `sys.executable`**
+  执行的, 这决定了包里 `script =` 任务跑在系统 python 还是项目 venv。
+  **实现期撞到的坑(全部实测, 已写进 [pitfalls/backend/platform-fs.md](../pitfalls/backend/platform-fs.md))**:
+  ①批处理 `rem` 行含**引号/括号/反引号** → 整份**静默退出 2 且无任何输出**(换成干净 rem 立刻正常);
+  ②`.cmd` 行尾必须 **CRLF**; ③消息必须 **ASCII**(cmd 按 OEM 码页读); ④Windows 下 CreateProcess 不认 shebang
+  ⇒ 只能经 shell 跑 `WinError 193`; ⑤Git Bash 的 PATH 条目是 **MSYS 形态**(`/c/...`), 与 `Path.home()` 直接比
+  **永远不相等**(实测把"已在 PATH 上"误判成"不在", 静默跳过 PATH 落点); ⑥`os.access(W_OK)` 在 Windows 目录上
+  给假否定 → 改**真实写探测**。
+  **低噪音包**: 用户要求的第三条落成 `howto-add-command.md` 新增一节(**八条判据** —— 输出自带静音 /
+  异常行可被机器认出 / 一条 = 一个动作 / `when` 一句话 / `note` 只写陷阱判据 / 长文进 `doc` / `timeout` 按最坏情况 /
+  `pin` 稀缺 + 收完自检三句), 并在 SKILL.md 的收录协议行里点出。**wrapper 与收录无关**(它只转发)也写明了。
+  文档: SKILL.md 新增「入口: 首次先装 wrapper」并把细节外置到新的 `references/wrapper.md`(1.8 KB, 按需读);
+  `AGENTS.md` 命令节的"真实入口"改成"先装 wrapper, 装完 `commands run <task>` 直接可用"。
+  实测: `test.full` **1224 passed + 1 skipped**(+9 条 wrapper 守阵; TOTAL 91% / 7768 语句 / 623 未覆盖);
+  端到端三形态通过(`./commands run <task>` / bare `commands list` / 从子目录向上找根), 不在项目里 rc=2 + 提示,
+  `--uninstall` 后重装幂等; `doc.caps` SKILL.md **2515/2600** · AGENTS.md 7616/8000; 漂移 0 处; sidefx 越界 0(台账 2051 条)
+  (新增放行面收窄到"临时目录里的 `commands` / `commands.cmd`", 理由是那条端到端用例必须真跑脚本)。
+
 ## 遗留 / 下一步
 
 - **A11 未判**: 需要一次真实会话里 agent 自发收录才算数。
+- **W7 未验项**: `.cmd` 已由生成器自证 + 端到端用例覆盖, 但**没在真终端里手敲过**
+  (本会话的 PowerShell 工具中途静默, 只剩生成器自证这条路); 换机器/换用户时重跑一次安装即自证。
+- **`run` 摘要的信息预算还有一处可收**(未做): 失败路径现在封顶 40 行, 但若某条 task 的失败输出里
+  异常行特别多, 摘要仍可能到 48 行 —— 目前没遇到, 先记着。
 - **记法问题**: 已在 SKILL.md 写成「两种记法」段(2026-09-24); 仍然**不做**跨平台 shim ——
   `commands` 只是给人看的短记法, 真敲时展开成 `python <skill-dir:commands>/scripts/run.py <子命令>`。
 - ~~**闸门仍有一处双写**: 格式化闸门 `yapf -i <changed:*.py>` 尚未收进 `dev.fmt`~~ ——

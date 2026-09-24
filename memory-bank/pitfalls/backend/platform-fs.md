@@ -1,7 +1,23 @@
 # 平台与文件系统
 
-> 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio
+> 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash
+
+### Windows 脚本三坑(批处理 rem / 行尾 / 码页) + PATH 条目的 MSYS 形态
+
+- **触发**: 写跨平台脚本(wrapper / 生成器), 或解析 `os.environ["PATH"]`(2026-09-24 实测)。
+- **判别(批处理)**: ①**`rem` 行里出现引号 / 括号 / 反引号 → 整份批处理静默退出、无任何输出** ——
+  同一份逻辑换成干净 rem 立刻正常; 症状是"退出码 2 却什么都不打印", 极难定位, 所以**注释只写纯 ASCII 短句**。
+  ②**行尾必须 CRLF**(LF 会被拆错行, 报 `'exist' 不是内部或外部命令` 这类怪错)。
+  ③**消息一律 ASCII** —— cmd 按 OEM 码页(本机 GBK)读批处理, 中文变 mojibake。
+  另: Windows 下 **CreateProcess 不认 shebang**, `.cmd` 只能经 shell(→ cmd.exe)跑;
+  直接 `subprocess.run([...cmd])` 报 `WinError 193 不是有效的 Win32 应用程序`。
+- **判别(PATH)**: Git Bash 里 `os.environ["PATH"]` 是 **MSYS 形态**(`/c/Users/x/bin`), 而 `Path.home()` 给
+  `C:\Users\x` ⇒ 直接比**永远不相等**(实测把"已在 PATH 上"误判成"不在 PATH 上", 于是"装到 PATH"静默跳过)。
+  `/usr/bin` 这类 MSYS 内部路径与 Windows 目录不可比, 要显式跳过。
+- **处置**: 批处理保持**最小特征集**; 行尾按扩展名分(`.cmd` → CRLF, sh → LF, 都无 BOM);
+  PATH 比较先归一(正则把 `/c/x` 折成 `c:\x`, `normcase` 后比); 目录可写性用**真实写探测**,
+  别用 `os.access(W_OK)`(它在 Windows 目录上会给假否定)。
 
 ### Windows Proactor 的 `_call_connection_lost` WinError 10054 是断连噪音, 不是崩溃
 

@@ -6,6 +6,29 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 收集数 **1216 → 1225**(+9; 2026-09-24 **commands W7: wrapper 入口**):
+  用户要求「真正实现 `commands run <task.id>`」。先实测三个 shell 对 cwd 的搜索规则(Git Bash 与 PowerShell
+  **都不搜**, 只有 cmd.exe 搜)⇒ 只落仓库根达不到目标, 与用户确认后落 **cwd + PATH 目录**两处: 新增生成器
+  `install_wrapper.py`(幂等 / 只认自己的标记行 / 生成物 gitignore / 装完自证), 解释器优先 `uv run python`
+  (包脚本以引擎的 `sys.executable` 执行, 这决定它们跑在系统 python 还是项目 venv)。
+  实测撞到 6 个坑, 全部写进 [pitfalls/backend/platform-fs.md](../pitfalls/backend/platform-fs.md):
+  批处理 `rem` 含引号/括号/反引号 → 静默退出 2 且无输出 · `.cmd` 必须 CRLF · 消息必须 ASCII ·
+  CreateProcess 不认 shebang(WinError 193) · Git Bash 的 PATH 条目是 MSYS 形态(直接比永远不相等) ·
+  `os.access(W_OK)` 在 Windows 目录上给假否定。同轮把「低噪音包」八条判据写进 `howto-add-command.md`。
+  新增 9 条守阵(含端到端真跑 wrapper), 全量 **1224 passed + 1 skipped** / TOTAL 91%(7768 语句 / 623 未覆盖)
+  / sidefx 2051 / 越界 0(sidefx 放行面收窄到「临时目录里的 `commands` / `commands.cmd`」)。
+
+- ↑ 收集数 **1208 → 1216**(+8; 2026-09-24 **commands 引擎的会话噪音治理**):
+  用户走查上一轮提交流程后指出"噪音多、没达到设计初衷"。逐条取证后改: 引擎 `run` 的摘要从
+  "只取末 3 行"改成**末几行结论 + 异常行**(只取末行会让检查表里 "2 项 WARN" 的**内容**消失,
+  实测逼出一次预检重跑 21s×2)、task id 认包路径限定写法(`包/子包.<task>`)、闸门 PASS 行从
+  ≈1.5 KB 命令全文收成一行、开工自检给出**可执行的同步配方**(含文件重叠判定)、
+  包/引擎的 47 条脚本测试首次挂上闸门。新增 `tests/test_commands_engine.py` **8 条**(均已在还原版上红验);
+  包内测试 34 → **47 条**(+13: `sync_recipe` 判定矩阵 / `summarize_gates` / `_short`)。
+  全量 **1215 passed + 1 skipped** / TOTAL 91%(7768 语句 / 623 未覆盖 / 2646 分支) / sidefx 2036 / 越界 0。
+  细节见 [pitfalls/kb/scripts.md](../pitfalls/kb/scripts.md)(摘要要按异常行挑)与
+  [tasks/26-09-23-commands-unified-surface.md](../tasks/26-09-23-commands-unified-surface.md) 的 W6。
+
 - ↑ 收集数 **1203 → 1208**(+5; 2026-09-24 **WEB 事件循环断连噪音降级**):
   用户报障 `ERROR - Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)`
   (`ConnectionResetError [WinError 10054]`) —— 判定为**网络波动**(对端 RST 后 asyncio 仍调

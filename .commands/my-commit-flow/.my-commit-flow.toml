@@ -52,6 +52,15 @@ timeout = 900
 note  = "全量测试(跳覆盖率报表): 经 commands 引擎跑 test.quick, 红了即 STOP"
 
 [[gates]]
+# ❗这些脚本测试**不在 pytest 的 testpaths(tests/) 里** —— 不挂这条就永远没人跑,
+#   等于"改了包却没有任何机检消费"(实测: 一条与 rebase 禁令相撞的旧文案在包里躺了很久)。
+match = [".commands/", ".agents/skills/commands/"]
+run   = ["python <skill-dir:commands>/scripts/run.py run test.pkg"]
+auto  = true
+timeout = 300
+note  = "包与引擎的脚本测试: 改了 .commands/ 或 commands 引擎就真跑一遍"
+
+[[gates]]
 match = ["memory-bank/issues/"]
 run   = ["python <skill-dir:create-issue>/scripts/gen_issues_index.py --check"]
 auto  = true

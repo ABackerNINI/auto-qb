@@ -55,3 +55,8 @@ USER.md
 
 # ?
 .mimosa/
+
+# commands wrapper: 由 commands skill 的 install_wrapper.py 按平台生成(Windows 多一份 .cmd),
+# 生成物不入库 —— 单点定义在生成器里, 入库就变成第 N+1 处副本
+/commands
+/commands.cmd

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import os
 import re
 import subprocess
 import sys
@@ -139,6 +140,46 @@ def classify_sync(remote_sha: str, head_sha: str, counts: tuple[int, int] | None
                   "提交时先同步远端再合流(树脏先停下报告)")
 
 
+def sync_recipe(behind: int, ahead: int, dirty: int, overlap: list[str], fetch_cmd: str) -> tuple[str, str, str] | None:
+    """落后 / 分叉 + 树脏时给出**可执行的下一步** —— 纯函数(便于自测), 不碰 git。
+
+    开工自检只说"先同步, 树脏先停下报告"是不够的: 这句话本身不含动作, 执行者只能自己
+    把仓库翻一遍(实测要 6 次只读 git 调用才拼出下一步)。这里把 AGENTS.md 的规范路径
+    (先同步后提交, 历史保持线性)落成配方。
+
+    ❗有**文件重叠**时不给配方: 施回会撞, 那已经不是机械步骤了 —— 如实报"先停下报告"
+    (与全库「不静默降级」同源)。分叉同理, 只给指针不给配方。
+    """
+    if behind <= 0:
+        return None
+    if ahead > 0:
+        return (
+            WARN,
+            "同步路径",
+            f"已分叉(本地独有 {ahead} / 远端新 {behind}) —— 提交后按 `references/pipeline.md` 的替代路径同步, "
+            "**别硬合**(本环境禁 rebase, 禁脏工作区做非快进合并)",
+        )
+    ff = f"`{fetch_cmd}` + `git merge --ff-only FETCH_HEAD`"
+    if not dirty:
+        return PASS, "同步路径", f"工作区干净, 直接快进: {ff}"
+    if overlap:
+        shown = "、".join(overlap[:3]) + ("…" if len(overlap) > 3 else "")
+        return (
+            WARN,
+            "同步路径",
+            f"落后 {behind} + 树脏 {dirty}, 且**与远端新提交重叠 {len(overlap)} 个文件**({shown}) —— "
+            "施回会撞, **先停下报告**, 不要自己解冲突",
+        )
+    return (
+        WARN,
+        "同步路径",
+        f"落后 {behind} + 树脏 {dirty}, 与远端新提交**无文件重叠** ⇒ 可走规范路径(先同步后提交): "
+        f"①`git diff --output=<仓外>/wip.patch`(改动文件另存一份到仓外) ②`git restore --source=HEAD -- <改动文件>` "
+        f"③{ff} ④`git apply --3way --ignore-whitespace <patch>` ⑤`git reset -q` 变回未暂存; "
+        "施回后按 `git diff --stat` 与快进前的数字逐项对账",
+    )
+
+
 def remotes() -> dict[str, str]:
     out: dict[str, str] = {}
     for line in git("remote", "-v").splitlines():
@@ -196,6 +237,16 @@ class ExpandError(RuntimeError):
 
 def _quote(path: str) -> str:
     return path if not re.search(r"\s", path) else f'"{path}"'
+
+
+def _short(cmd: str, root) -> str:
+    """命令里的仓库根绝对路径换成 `.` —— 明细行里那段前缀是常量, 每次重复纯属占地方。
+
+    两种分隔符都试: 展开出来的命令可能用 `/`(占位符来自配置)也可能用 `\\`(来自 git)。
+    """
+    for form in sorted({str(root), str(root).replace("\\", "/")}, key=len, reverse=True):
+        cmd = cmd.replace(form + "/", "").replace(form + "\\", "").replace(form, ".")
+    return cmd
 
 
 def _glob_match(path: str, pattern: str) -> bool:
@@ -267,15 +318,27 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
 # ------------------------------------------------------------------ 自动闸门执行
 
 
+def summarize_gates(results: list[tuple[str, int, float, str]]) -> str:
+    """全过时的一行摘要 —— **只给条数与总耗时**, 不把每条命令全文拼进来。
+
+    原写法把 9 条展开后的命令(含绝对路径)拼成一行 ≈1.5 KB: 它每次提交都出现, 却是"过"的
+    噪音 —— 要看是哪几条用 `--verbose`(明细按需, 不占常规路径的预算)。
+    """
+    total = sum(secs for _, _, secs, _ in results)
+    return f"{len(results)} 条全过 (共 {total:.1f}s)"
+
+
 def run_auto_gates(hits: list[dict],
                    ctx: dict,
-                   execute: bool = True) -> tuple[list[tuple[str, str, str]], list[str], list[tuple[str, str]]]:
+                   execute: bool = True,
+                   verbose: bool = False) -> tuple[list[tuple[str, str, str]], list[str], list[tuple[str, str]]]:
     """处理命中的闸门, 返回 (检查表行, 待人工命令, 失败命令的末 20 行输出)。
 
     - `auto = true` 且 `execute` → shell 执行, 红了进 STOP; 超时同样按失败计(不让卡死的命令挂住预检)
     - `auto = false` 或 `--no-auto` → 只把**展开后**的命令列给人(列占位符没法照着跑)
     - 展开失败 → STOP, 不降级
     - 匹配不到文件 → 记一行 WARN(可见但不挡提交)
+    - `verbose` → 全过时也逐条列出命令与耗时(默认只回条数 + 总耗时)
     """
     rows: list[tuple[str, str, str]] = []
     manual: list[str] = []
@@ -300,7 +363,7 @@ def run_auto_gates(hits: list[dict],
                 # 说清"跳过"是**按设计**(`<each:>` / `<changed:>` 只盯本次改动), 不是闸门失效 ——
                 # 否则这条 WARN 会被读成"闸门没跑起来", 反而引着人去改一个没坏的闸门
                 rows.append((WARN, "闸门", f"跳过(gate「{note}」): {skip}"
-                                           " —— 本次改动里没有匹配文件, 按设计跳过(**不是闸门失效**)"))
+                             " —— 本次改动里没有匹配文件, 按设计跳过(**不是闸门失效**)"))
                 continue
             if not auto or not execute:
                 manual.extend(cmds)
@@ -326,11 +389,13 @@ def run_auto_gates(hits: list[dict],
     failed = [r for r in results if r[1] != 0]
     if results:
         if not failed:
-            summary = " · ".join(f"{cmd} {secs:.1f}s" for cmd, _, secs, _ in results)
-            rows.append((PASS, "自动闸门", f"{len(results)} 条全过 ({summary})"))
+            rows.append((PASS, "自动闸门", summarize_gates(results)))
+            if verbose:
+                for cmd, _, secs, _ in results:
+                    rows.append((PASS, "闸门明细", f"{secs:5.1f}s  {_short(cmd, ctx['root'])}"))
         else:
             for cmd, rc, secs, out in failed:
-                rows.append((STOP, "自动闸门", f"{cmd} → rc={rc} ({secs:.1f}s)"))
+                rows.append((STOP, "自动闸门", f"{_short(cmd, ctx['root'])} → rc={rc} ({secs:.1f}s)"))
                 lines = [l for l in out.splitlines() if l.strip()]
                 tails.append((cmd, "\n".join(lines[-20:])))
             rows.append((WARN, "自动闸门", f"{len(results) - len(failed)} 条过 / {len(failed)} 条红"))
@@ -348,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--no-fetch", action="store_true", help="跳过 fetch(离线时用)")
     parser.add_argument("--no-auto", action="store_true", help="只列闸门命令、不执行(推送前的复跑用它 —— 闸门刚在提交前跑过)")
+    parser.add_argument("--verbose", action="store_true", help="闸门明细逐条列出(默认只回条数 + 总耗时)")
     parser.add_argument(
         "--check-started",
         action="store_true",
@@ -423,19 +489,29 @@ def main(argv: list[str] | None = None) -> int:
             except (RuntimeError, ValueError, IndexError):
                 counts = None
         level, msg = classify_sync(remote_sha, head_sha, counts)
-        dirty = bool(staged or unstaged)
+        mine = staged + unstaged
+        dirty = len(mine)
+        # 合流预判 / 重叠判定都只在**落后**且**本地已有远端 tip 对象**时做 —— 它们都是只读的;
+        # 没有对象就省略, 不为了凑几行去 fetch(开工自检承诺"不 fetch、不写任何 git 状态")。
+        has_obj = bool(counts and counts[0] > 0 and git_rc("cat-file", "-e", f"{remote_sha}^{{commit}}") == 0)
+        probe = (
+            [classify_merge_probe(git_rc("merge-tree", "--write-tree", "HEAD", remote_sha), "commit")]
+            if has_obj else []
+        )
+        overlap: list[str] = []
+        if has_obj and dirty:
+            remote_files = set(git("diff", "--name-only", "HEAD", remote_sha, check=False).splitlines())
+            overlap = sorted(set(mine) & remote_files)
+        recipe = sync_recipe(*counts, dirty, overlap, f"git fetch {MAIN} {BRANCH}") if counts else None
+        dirty_note = ""
+        if dirty:
+            # 指针只在真有「同步路径」那行时给 —— 齐平时指向一行不存在的行, 比不说更坏
+            dirty_note = " —— 树脏: 见上面的「同步路径」" if recipe else " —— 树脏(与主线齐平, 不影响开工)"
         rows_cs = [
             (level, "同步状态", msg),
-            # 合流预判: 只在**落后**且**本地已有远端 tip 对象**时做 —— 那是只读的;
-            # 没有对象就省略, 不为了凑一行去 fetch(开工自检承诺"不 fetch、不写任何 git 状态")。
-            *(
-                [classify_merge_probe(git_rc("merge-tree", "--write-tree", "HEAD", remote_sha), "commit")]
-                if counts and counts[0] > 0 and git_rc("cat-file", "-e", f"{remote_sha}^{{commit}}") == 0 else []
-            ),
-            (
-                WARN if dirty else PASS, "工作区", f"未暂存 {len(unstaged)} / 已暂存 {len(staged)}" +
-                (" —— 树脏: 只能 fetch + `merge --ff-only` 或先停下报告" if dirty else "")
-            ),
+            *probe,
+            *([recipe] if recipe else []),
+            (WARN if dirty else PASS, "工作区", f"未暂存 {len(unstaged)} / 已暂存 {len(staged)}{dirty_note}"),
         ]
         width = max(len(r[1]) for r in rows_cs)
         print("\n开工自检(--check-started, 全程只读):\n")
@@ -553,7 +629,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 9 闸门 —— auto = true 的直接跑(先展开、再执行), 其余列出来给人跑
     hits = gates_for(changed, cfg["gates"])
-    gate_rows, manual, tails = run_auto_gates(hits, ctx, execute=not args.no_auto)
+    gate_rows, manual, tails = run_auto_gates(hits, ctx, execute=not args.no_auto, verbose=args.verbose)
     rows.extend(gate_rows)
     if not hits:
         rows.append((PASS, "提交前闸门", "未命中配置里的闸门(仍按改动面自行判断)"))
