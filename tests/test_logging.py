@@ -6,6 +6,10 @@
 - test_setup_logging_file_no_dir: file 无目录部分 -> 跳过 makedirs 直接建文件
 - test_setup_logging_level_and_format: root level 与 format 按参数生效
 - test_setup_logging_file_always_debug: 文件 handler 跟随 level, auto_qb 放开/qbittorrentapi 封顶 INFO
+- test_filter_log_lines_follows_format_shape: 按格式串定位等级名(默认方括号 / 生产的破折号 / 带宽度字段名), 大小写不敏感, 空 level 全返
+- test_filter_log_lines_keeps_multiline_record: 多行记录(整段 traceback)的续行跟随其记录的取舍
+- test_filter_log_lines_unfilterable_returns_note: 格式无等级字段 / 已存行与格式不符 -> 回全部行 + note, 不静默给空
+- test_filter_log_lines_custom_field_specs: 字段宽度/数字/字面量 %% 等格式变体不影响等级定位
 
 注意: setup_logging 操作 root logger(清空并重建 handlers), 每个测试尾部必须恢复
 root level(WARNING)并清空 handlers, 避免污染同批其它测试的日志行为。
@@ -15,9 +19,19 @@ import os
 import tempfile
 from logging.handlers import RotatingFileHandler
 
-from auto_qb.infra.logging import setup_logging
+from auto_qb.config.models import LoggingConfig
+from auto_qb.infra.logging import NOTE_FORMAT_MISMATCH, NOTE_NO_LEVEL_FIELD, filter_log_lines, setup_logging
 
 _WARNING = logging.WARNING  # 30
+
+_DEFAULT_FMT = LoggingConfig().format  # 未配置 log.format 时的默认(等级带方括号)
+_DASH_FMT = "%(asctime)s - %(levelname)s - %(message)s"  # 生产 config.yml 同形(无方括号)
+
+
+def _lines(fmt, recs):
+    """按 fmt 渲染真实日志行(等级过滤的输入一律是格式化后的文本)"""
+    fmtr = logging.Formatter(fmt)
+    return [fmtr.format(logging.LogRecord(n, lv, "f.py", 1, msg, None, None)) for n, lv, msg in recs]
 
 
 def _reset_root():
@@ -142,3 +156,56 @@ def test_setup_logging_file_always_debug():
             logging.getLogger("auto_qb").setLevel(logging.NOTSET)
             logging.getLogger("qbittorrentapi").setLevel(logging.NOTSET)
             _restore_root()
+
+
+def test_filter_log_lines_follows_format_shape():
+    """等级名在行里的形状由 format 决定 —— 必须按格式串定位, 不能按 `[WARNING` 这类字面量捞"""
+    recs = [
+        ("auto_qb.core.x", logging.INFO, "启动完成"), ("auto_qb.core.y", logging.WARNING, "连接重试"),
+        ("auto_qb.core.z", logging.ERROR, "校验失败")
+    ]
+    for fmt in (_DEFAULT_FMT, _DASH_FMT, "%(levelname)s|%(asctime)s|%(message)s"):
+        lines = _lines(fmt, recs)
+        assert filter_log_lines(fmt, lines, "") == (lines, ""), fmt  # 空 level = 不过滤
+        for lv, want in (("INFO", lines[0]), ("WARNING", lines[1]), ("ERROR", lines[2])):
+            assert filter_log_lines(fmt, lines, lv) == ([want], ""), (fmt, lv)
+            assert filter_log_lines(fmt, lines, lv.lower()) == ([want], ""), (fmt, lv)  # 大小写不敏感
+        assert filter_log_lines(fmt, lines, "DEBUG") == ([], ""), fmt  # 没有 DEBUG 行 -> 空且不带 note
+
+
+def test_filter_log_lines_keeps_multiline_record():
+    """多行记录: 解析不出的行按上一记录的续行处理(traceback 每行都带不上等级标记)"""
+    header = _lines(_DEFAULT_FMT, [("auto_qb.core", logging.ERROR, "主循环异常: boom")])[0]
+    tail_lines = ["Traceback (most recent call last):", '  File "x.py", line 1', "RuntimeError: boom"]
+    nxt = _lines(_DEFAULT_FMT, [("auto_qb.core", logging.INFO, "下一轮")])[0]
+    lines = [header] + tail_lines + [nxt]
+
+    assert filter_log_lines(_DEFAULT_FMT, lines, "ERROR") == ([header] + tail_lines, "")
+    assert filter_log_lines(_DEFAULT_FMT, lines, "INFO") == ([nxt], ""), "续行不得被当成独立记录带走"
+    # 首行不可解析(文件从中间被 tail 截断): 等级未知, 归哪一条都不对 -> 丢掉
+    assert filter_log_lines(_DEFAULT_FMT, tail_lines + lines, "ERROR") == ([header] + tail_lines, "")
+
+
+def test_filter_log_lines_unfilterable_returns_note():
+    """两种"筛不了"必须回全部行 + note: 空结果与筛选失效在界面上不能长得一样"""
+    lines = _lines(
+        _DEFAULT_FMT, [("auto_qb.core.x", logging.INFO, "启动完成"), ("auto_qb.core.y", logging.WARNING, "连接重试")]
+    )
+    # ①格式里没有等级字段 -> 等级无从判定
+    assert filter_log_lines("%(asctime)s %(message)s", lines, "WARNING") == (lines, NOTE_NO_LEVEL_FIELD)
+    # ②格式有等级字段, 但行是另一种格式(改了 format, 旧行还在)
+    assert filter_log_lines("%(levelname)s %(message)s", lines, "WARNING") == (lines, NOTE_FORMAT_MISMATCH)
+    # 空文件不报"筛不了"(确实没有内容, 不是筛不了)
+    assert filter_log_lines(_DEFAULT_FMT, [], "WARNING") == ([], "")
+
+
+def test_filter_log_lines_custom_field_specs():
+    """字段宽度/数字类型/字面量 %% 等格式变体不得影响等级定位"""
+    for fmt in (
+        "%(asctime)s | %(name)-20s | %(levelname)-8s | %(lineno)d | %(message)s", "%(levelname)s%% %(message)s",
+        "%(asctime)s %(levelname)s %(message)s"
+    ):
+        hit = _lines(fmt, [("auto_qb.core.mixins", logging.WARNING, "连接重试")])[0]
+        miss = _lines(fmt, [("auto_qb.core.mixins", logging.INFO, "启动完成")])[0]
+        assert filter_log_lines(fmt, [miss, hit], "WARNING") == ([hit], ""), fmt
+        assert filter_log_lines(fmt, [miss, hit], "INFO") == ([miss], ""), fmt

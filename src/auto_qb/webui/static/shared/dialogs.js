@@ -186,6 +186,7 @@ window.AQB_DIALOGS = {
         const r = await this.api(`/api/log?${q.toString()}`);
         this.logs.lines = r.lines || [];
         this.logs.file = r.file || "";
+        this.logs.note = r.note || "";   // "筛不了"的说明(后端给): 空结果与筛选失效不再长得一样
         this.logs.loaded = true;
       } catch (e) {
         if (!e.auth) this.logs.error = e.message || "日志加载失败";

@@ -1487,6 +1487,7 @@
                   </div>
                 </header>
                 <div class="logs-body">
+                  <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
                   <div v-if="logs.loading && !logs.loaded" class="ce-placeholder loading">正在加载日志…</div>
                   <div v-else-if="logs.error" class="ce-placeholder">
                     <p class="error">{{ logs.error }}</p>
@@ -1874,6 +1875,7 @@
                     </span>
                   </div>
                   <div style="padding:12px 14px">
+                    <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
                     <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
                     <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>
                   </div>

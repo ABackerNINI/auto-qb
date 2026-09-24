@@ -8,6 +8,7 @@ import os
 from typing import List
 
 from fastapi import APIRouter
+from ....infra.logging import filter_log_lines
 from ..context import WebContext
 
 
@@ -17,21 +18,26 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/log")
     def api_log(lines: int = 200, level: str = ""):
-        """auto-qb 自身日志 tail(只读; qB 日志不在范围)。level 按 [LEVEL] 标记过滤;
-        日志文件未配置/不存在时返回空列表(前端空态)。"""
+        """auto-qb 自身日志 tail(只读; qB 日志不在范围)。level 按日志行的等级字段过滤;
+        日志文件未配置/不存在时返回空列表(前端空态)。
+
+        等级过滤按**格式串**定位等级名, 不能靠字面量 —— 生产配置的 format 是
+        `%(asctime)s - %(levelname)s - %(message)s`(不带方括号), 按 `[WARNING` 捞会恒空。
+        筛不了时(格式无等级字段 / 已存行与当前格式不符)仍回全部行 + note 说明, 不静默给空。
+        """
         manager.touch_web_client()
         path = getattr(manager.config.logging, "file", "") or ""
         out: List[str] = []
+        note = ""
         if path and os.path.isfile(path):
             n = max(10, min(int(lines or 200), 2000))
             with open(path, "rb") as f:
                 raw = f.read()[-256 * 1024:]
             all_lines = [ln for ln in raw.decode("utf-8", errors="replace").splitlines() if ln.strip()]
-            lv = (level or "").strip().upper()
-            if lv:
-                all_lines = [ln for ln in all_lines if f"[{lv}" in ln]
+            fmt = getattr(manager.config.logging, "format", "") or ""
+            all_lines, note = filter_log_lines(fmt, all_lines, level)
             out = all_lines[-n:]
-        return {"lines": out, "file": path}
+        return {"lines": out, "file": path, "note": note}
 
     @router.get("/api/cmd/{cmd_id}")
     def api_cmd_result(cmd_id: str):

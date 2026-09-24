@@ -632,6 +632,17 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+/* 日志"筛不了"的说明: 经典设置页与新版章节共用(两处 UI 都引本文件), 见 routes/system.py 的 note */
+.logs-note {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--warn);
+}
 
 /* 切换入口(放在经典设置页页头) */
 .hb-switch-entry { display: inline-flex; align-items: center; gap: 6px; }

@@ -548,7 +548,8 @@ const app = createApp({
       logs: {
         loading: false, error: "", loaded: false,
         lines: [], file: "",
-        level: "",            // ""=全部 | INFO | WARNING | ERROR(后端按 [LEVEL 标记过滤)
+        note: "",             // 后端"筛不了"的说明(格式无等级字段 / 已存行与格式不符)
+        level: "",            // ""=全部 | INFO | WARNING | ERROR(后端按配置格式串定位等级字段)
         num: 300,             // tail 行数(后端钳制 10..2000)
       },
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
@@ -867,7 +868,7 @@ const app = createApp({
       this.statsError = "";
       this.mgrOpen = "";
       this.mgrBusy = false;
-      this.logs = { loading: false, error: "", loaded: false, lines: [], file: "", level: "", num: 300 };
+      this.logs = { loading: false, error: "", loaded: false, lines: [], file: "", note: "", level: "", num: 300 };
       this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: "" };
       this.speedOverride = { up: "", down: "", busy: false };
       this.speedOpen = false;

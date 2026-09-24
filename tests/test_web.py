@@ -93,6 +93,9 @@
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
+- test_api_log_level_filter_follows_config_format: 等级过滤按 config.logging.format 定位等级名(生产格式无方括号, 按字面量 `[WARNING` 捞会恒空 —— 2026-09-25 真机 bug)
+- test_api_log_level_filter_keeps_multiline_record: 多行日志(整段 traceback)折行后跟随其记录的等级, 筛 ERROR 不丢栈
+- test_api_log_note_when_level_unfilterable: 筛不了(格式无等级字段 / 已存行与格式不符)回全部行 + note, 不静默给空
 - test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
@@ -4324,22 +4327,110 @@ def test_api_category_tag_list_endpoints(web_env):
     assert client.get("/api/tags", headers=auth).json() == {"tags": ["4K", "HDR"]}
 
 
+def _log_lines(fmt, recs):
+    """按 fmt 渲染真实日志行 —— 手写字符串一旦与 config.logging.format 不符,
+    测的就成了"格式不符"那条兜底路径, 真正的等级过滤反而没测到(本轮实测踩过)。
+    asctime 取自 record.created, 故同一 record 渲染两次结果一致、可用来对账。"""
+    fmtr = logging.Formatter(fmt)
+    return [fmtr.format(logging.LogRecord(name, lv, "f.py", 1, msg, None, None)) for name, lv, msg in recs]
+
+
 def test_api_log_endpoint(web_env):
-    """/api/log: 自身日志 tail + [LEVEL] 过滤; 文件未配置返回空"""
+    """/api/log: 自身日志 tail + 按配置格式串过滤等级; 文件未配置返回空
+
+    必须显式设 format: web_env 替身的 logging.format 是 `%(message)s`(没有等级字段),
+    直接拿它测等级过滤只会落到"筛不了"的兜底路径。"""
+    from auto_qb.config.models import LoggingConfig
+
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     log_path = os.path.join(mgr.data_dir, "auto-qb.log")
+    fmt = mgr.config.logging.format = LoggingConfig().format  # 未配置 log.format 时的默认
+    lines = _log_lines(
+        fmt, [
+            ("auto_qb.core.x", logging.INFO, "启动完成"), ("auto_qb.core.y", logging.WARNING, "连接重试"),
+            ("auto_qb.core.z", logging.ERROR, "校验失败")
+        ]
+    )
     with open(log_path, "w", encoding="utf-8") as f:
-        f.write("2026-09-16 01:00:00 [INFO] 启动完成\n")
-        f.write("2026-09-16 01:00:05 [WARNING] 连接重试\n")
-        f.write("2026-09-16 01:00:10 [ERROR] 校验失败\n")
+        f.write("\n".join(lines) + "\n")
     mgr.config.logging.file = log_path
     data = client.get("/api/log?lines=10", headers=auth).json()
-    assert len(data["lines"]) == 3 and data["file"] == log_path
-    data = client.get("/api/log?lines=10&level=warning", headers=auth).json()
-    assert len(data["lines"]) == 1 and "WARNING" in data["lines"][0]
+    assert len(data["lines"]) == 3 and data["file"] == log_path and data["note"] == ""
+    for lv, want in (("info", lines[0]), ("warning", lines[1]), ("error", lines[2])):
+        data = client.get(f"/api/log?lines=10&level={lv}", headers=auth).json()
+        assert data["lines"] == [want] and data["note"] == "", lv
     mgr.config.logging.file = ""
-    assert client.get("/api/log", headers=auth).json() == {"lines": [], "file": ""}
+    assert client.get("/api/log", headers=auth).json() == {"lines": [], "file": "", "note": ""}
+
+
+def test_api_log_level_filter_follows_config_format(web_env):
+    """等级过滤按 config.logging.format 定位等级名, 不能靠字面量 —— 生产配置的 format 是
+    `%(asctime)s - %(levelname)s - %(message)s`(无方括号), 旧实现按 `[WARNING` 捞 ⇒ 恒空,
+    界面只剩"日志文件暂无内容"(2026-09-25 真机报告)。"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    log_path = os.path.join(mgr.data_dir, "auto-qb.log")
+    mgr.config.logging.format = "%(asctime)s - %(levelname)s - %(message)s"  # 与 config.yml 同形
+    lines = _log_lines(
+        mgr.config.logging.format, [
+            ("auto_qb.core.x", logging.INFO, "启动完成"), ("auto_qb.core.y", logging.WARNING, "连接重试"),
+            ("auto_qb.core.z", logging.ERROR, "校验失败")
+        ]
+    )
+    assert "[WARNING" not in lines[1], "本用例的前提: 该格式的行里没有方括号等级标记"
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    mgr.config.logging.file = log_path
+    data = client.get("/api/log?lines=100&level=WARNING", headers=auth).json()
+    assert data["lines"] == [lines[1]] and data["note"] == ""
+    assert client.get("/api/log?lines=100&level=ERROR", headers=auth).json()["lines"] == [lines[2]]
+
+
+def test_api_log_level_filter_keeps_multiline_record(web_env):
+    """多行日志(exc_info=True 打出的整段 traceback)折行后每行都不带等级标记 —— 过滤按"记录"
+    取舍, 否则筛 ERROR 只剩标题行、用户真正要看的栈被丢掉。"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    log_path = os.path.join(mgr.data_dir, "auto-qb.log")
+    fmt = mgr.config.logging.format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    header = _log_lines(fmt, [("auto_qb.core", logging.ERROR, "主循环异常: boom")])[0]
+    body = ["Traceback (most recent call last):", '  File "x.py", line 1, in <module>', "RuntimeError: boom"]
+    nxt = _log_lines(fmt, [("auto_qb.core", logging.INFO, "下一轮")])[0]
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("\n".join([header] + body + [nxt]) + "\n")
+    mgr.config.logging.file = log_path
+    data = client.get("/api/log?lines=100&level=ERROR", headers=auth).json()
+    assert data["lines"] == [header] + body and data["note"] == ""
+
+
+def test_api_log_note_when_level_unfilterable(web_env):
+    """两种"筛不了"都回全部行 + note, 不静默给空 —— 否则"筛选失效"与"确实没有该等级日志"
+    在界面上长得一模一样(本轮 bug 的观感就是这个)。"""
+    from auto_qb.infra.logging import NOTE_FORMAT_MISMATCH, NOTE_NO_LEVEL_FIELD
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    log_path = os.path.join(mgr.data_dir, "auto-qb.log")
+    mgr.config.logging.format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    lines = _log_lines(
+        mgr.config.logging.format,
+        [("auto_qb.core.x", logging.INFO, "启动完成"), ("auto_qb.core.y", logging.WARNING, "连接重试")]
+    )
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    mgr.config.logging.file = log_path
+    # ①格式里没有等级字段 -> 等级无从判定
+    mgr.config.logging.format = "%(asctime)s %(message)s"
+    data = client.get("/api/log?lines=100&level=WARNING", headers=auth).json()
+    assert data["lines"] == lines and data["note"] == NOTE_NO_LEVEL_FIELD
+    # ②格式有等级字段, 但文件里的行是另一种格式(改了 format, 旧行还在) -> 一行都对不上
+    mgr.config.logging.format = "%(levelname)s|%(asctime)s|%(message)s"
+    data = client.get("/api/log?lines=100&level=WARNING", headers=auth).json()
+    assert data["lines"] == lines and data["note"] == NOTE_FORMAT_MISMATCH
+    # 不过滤时无论哪种格式都照常给全部行, 且不带 note
+    data = client.get("/api/log?lines=100", headers=auth).json()
+    assert data["lines"] == lines and data["note"] == ""
 
 
 def test_apply_web_config_toggle_enabled(monkeypatch):

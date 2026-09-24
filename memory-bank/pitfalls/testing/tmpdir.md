@@ -43,10 +43,9 @@
 ### 全量 pytest 报 `PermissionError: … pytest-current` 是临时目录被污染, **不是测试红**
 
 - **触发**: 全量 pytest 起不来 / 打完点号后报错(2026-09-21 实测)。
-- **判别**: 删除拦截层让 pytest 的 `garbage-*` 目录**删不掉、越堆越多**(实测 **283 个**),
-  下次运行时 `cleanup_numbered_dir → cleanup_dead_symlinks` 去 `resolve()` 那个已成死链的
-  `pytest-of-<user>/pytest-current` ⇒ `PermissionError [WinError 5]`,
-  **连汇总行都不打印**(极易误判成"测试全崩")。
+- **判别**: 删除拦截层让 pytest 的 `garbage-*` 目录**删不掉、越堆越多**(实测 **283 个**); 下次运行
+  `cleanup_dead_symlinks` 去 `resolve()` 已成死链的 `pytest-of-<user>/pytest-current` ⇒
+  `PermissionError [WinError 5]`, **连汇总行都不打印**(极易误判成"测试全崩")。
 - **处置**: **不要去删那些目录**(同样会被拦), 给 pytest 指一个全新临时根即可:
   `mkdir -p H:/Temp/pfresh && TMP=H:/Temp/pfresh TEMP=H:/Temp/pfresh uv run pytest tests -q`。
 
@@ -58,19 +57,16 @@
     `PermissionError [WinError 5] … pytest-current`, **退出码非 0** ⇒ 提交闸门会判红。
     **注意测试本身是过的**, 崩在 `pytest_sessionfinish` → `cleanup_dead_symlinks()`
     对 `pytest-current` 这个**符号链接**做 `.resolve().exists()`。
-  - **改 `H:\Temp` 的目录权限无效**(用户改过, 仍然红)。更精细的实测: 该链接
-    `stat(follow_symlinks=False)` **成功**(mode `0o120777` = 符号链接)、`readlink` **失败**、
-    `os.rmdir` / `os.unlink` **失败** —— 即"能列不能读、也删不掉"; 关沙箱跑同样如此,
-    所以**不是工具沙箱**, 是那个盘上的**重解析点读取被拒**。
+  - **改 `H:\Temp` 的目录权限无效**(用户改过, 仍然红); 关沙箱跑同样如此 ⇒ **不是工具沙箱**,
+    是那个盘上的**重解析点读取被拒**(实测: 该链接 stat 成功、`readlink` / `os.rmdir` / `os.unlink`
+    全失败 —— 能列不能读、也删不掉)。
   - **只改 `TMP` / `TEMP` 无效** —— Python 的 `tempfile` **先读 `TMPDIR`**。
   - **只加 `--basetemp <C 盘路径>` 也不行**: pytest 的 tmp_path 走了 C 盘,
     但测试里直接用 `tempfile` 的仍落 `H:\Temp` ⇒ 实测 **4 failed + 1 error**
     (含 `test_sidefx_rmtree_dir_fd_*` 这类 dir_fd 用例)。
-- **处置**(两档可用解, 都实测过): 跑之前把 `TMPDIR` 指到一个**不靠重解析点**的盘 ——
-  · `TMPDIR="C:/Users/11059/AppData/Local/Temp"` → **1143 passed in 37.69s**(最快)
-  · `TMPDIR="R:/Temp"` → **1143 passed in 58.85s / 63.29s**(两次均全过; R 盘**不支持符号链接** ——
-    `os.symlink` 能建但 `readlink` 报 `WinError 4390 不是一个重解析点`, 反倒**绕开了**上面的崩溃,
-    因为 pytest 的 `cleanup_dead_symlinks` 没东西可读)
+- **处置**(两档可用解, 都实测过): 跑之前把 `TMPDIR` 指到**不靠重解析点**的盘 ——
+  `C:/Users/11059/AppData/Local/Temp`(最快)或 `R:/Temp`(R 盘不支持符号链接: `readlink` 报
+  WinError 4390, pytest 的 `cleanup_dead_symlinks` 没东西可读, 反倒绕开崩溃); 两者全量均全过。
   用户自己的终端 `TMPDIR` 在 C 盘, **没有这个问题**。
   ⇒ 在工具 shell 里跑全量测试前**先设 `TMPDIR`**; 看到这个 `PermissionError` **先怀疑临时目录, 别当成代码回归**。
   📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
@@ -82,25 +78,28 @@
   POSIX 的 `TMPDIR=x cmd` 前缀**不生效**(实测 rc=1); 且**引号不能省** ——
   `set VAR=value && cmd` 会把 `&&` 前的空格并进 value(实测变成 `'R:/Temp/auto-qb/tests '`, 带尾随空格)。
 - **复发**: 1 —— 2026-09-23 走提交流水线时, 预检的 pytest 闸门**没带 TMPDIR**, 又抛
-  `PermissionError [WinError 5] … pytest-current`(rc=1)⇒ STOP。
-  **为什么没命中**: 本轮**读过本文件**、也知道要设 TMPDIR, 但只给**自己手工跑**的测试带了,
-  没意识到**闸门命令是配置里的另一条执行路径** —— 坑里记的是"跑测试时要设", 没写"闸门也是跑测试"。
-  ⇒ 收口方式即上面那条配置改动: **改配置比改记忆可靠**。
-- ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复了** ——
-  `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` **成功**
+  `PermissionError [WinError 5] … pytest-current`(rc=1)⇒ STOP。**为什么没命中**: 读过本文件也知道要设,
+  但只给**自己手工跑**的测试带了, 没意识到**闸门命令是配置里的另一条执行路径** —— 坑里记的是
+  "跑测试时要设", 没写"闸门也是跑测试"。⇒ 收口即上面那条配置改动: **改配置比改记忆可靠**。
+- **复发**: 2 —— 2026-09-25 在 Git Bash 手工跑子集, 把闸门的 cmd.exe 写法照搬
+  (`set "TMPDIR=..." && uv run pytest …`): bash 里 `set` 是位置参数内建, TMPDIR 没导出 ⇒ pytest 回落
+  `H:\Temp`, 照抛 `PermissionError … pytest-current`。**为什么没命中**: AGENTS.md「命令」节写明
+  "`TMPDIR` 已内置在 `test.*` 里, 不要再手工加前缀", 读了没照做。⇒ 只走 `commands run test.*`;
+  挑子集 `test.one -- '<路径> -k "<表达式>"'`(**整串加引号**, 否则 `-k` 空格被拆开)。
+- ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
+  `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需要能读那个重解析点), 之后在**默认 TMPDIR** 下跑
-  `uv run pytest tests -q --no-cov` 实测 **exit=0 / 1169 passed + 1 skipped**。
-  ⇒ 死链本身 `readlink` / `os.rmdir` / `os.unlink` / `icacls` **全被拒**(用户态修不掉),
-  但**可以连它的父目录一起搬走**, 新根由 pytest 自动重建。
-  ⚠ 同根的 `garbage-*` 一堆目录会一并搬走 —— 那是 pytest 自己的清理残渣, 无害;
+  `uv run pytest tests -q --no-cov` 实测 **exit=0**。死链本身 `readlink` / `os.rmdir` / `os.unlink` /
+  `icacls` 全被拒(用户态修不掉), 但**可以连它的父目录一起搬走**, 新根由 pytest 自动重建
+  (同根的 `garbage-*` 清理残渣一并搬走, 无害)。
   ⚠ 这是**环境修复不是仓库改动**, 换机器 / 换用户不适用 ⇒ 仍按上面的约定**优先设 `TMPDIR`**。
 
 ### ❗在工具**沙箱内**跑全量会假红: 沙箱拒写 `R:\Temp`, `TMPDIR` 等于没设
 
 - **触发**: 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的命令, 2026-09-24 实测。
-- **判别**: 点号全打完、**一条都没失败**(实测 `1201 passed, 1 skipped`), 却在收尾 `cleanup_dead_symlinks`
-  抛 `PermissionError [WinError 5] … pytest-current`; 输出里另有 `TRAE Sandbox Error: hit restricted` +
-  `Not allow operate files: R:\Temp\auto-qb\tests\…`。链路: 沙箱拒写 R 盘 ⇒ `TMPDIR` 也建不了目录 ⇒
-  pytest 回落 `H:\Temp`(重解析点读不了, 见上条)。⚠ 与上条成因**不同** —— 这条是**沙箱拦截**, 关沙箱即消失。
+- **判别**: 点号全打完、**一条都没失败**, 却在收尾 `cleanup_dead_symlinks` 抛
+  `PermissionError [WinError 5] … pytest-current`; 输出另有 `TRAE Sandbox Error: hit restricted` +
+  `Not allow operate files: R:\Temp\…`。链路: 沙箱拒写 R 盘 ⇒ `TMPDIR` 也建不了目录 ⇒
+  pytest 回落 `H:\Temp`(重解析点读不了, 见上条)。⚠ 与上条成因**不同** —— 这是**沙箱拦截**, 关沙箱即消失。
 - **处置**: 跑全量时**关沙箱**, **不是改命令**(命令是对的, 改了反而失去 TMPDIR 收口)。
   ⚠ 沙箱内的 `preflight` 命中 pytest 闸门时同样假红 —— 闸门继承调用方的沙箱。
