@@ -82,8 +82,10 @@
   的偏好**一起**消失 —— 与"应用每次重置设置"完全同形, 也是前四轮修复从未覆盖的通道(会话内刷新正常、
   其它网站正常、全局 `clear_browsing_data_on_shutdown` 未开, 三条现象都与它自洽)。
   **处置**: ①删掉 Edge 那条例外(改前备份 `Preferences.bak-autoqb-20260924`; 实测 `protection.macs` 与
-  `Secure Preferences` 都不含 `content_settings` ⇒ **无 MAC 保护**, 可直接改) —— **Chrome 那条待用户退出
-  Chrome 后处理**; ②`columns.js::_showColsOriginHint` 文案改为"事实 + 两条成因 + 自查路径", 并补
+  `Secure Preferences` 都不含 `content_settings` ⇒ **无 MAC 保护**, 可直接改); **Chrome 同类例外同日一并删除**
+  —— 先前那 8 个 `chrome.exe` 是别的会话遗留的**无窗口桩**(`--user-data-dir=H:\Temp\HeadlessChrome…`,
+  不碰用户 Default 配置), 关闭后按同法删; 复查两个浏览器的 `exceptions.cookies` 均为空;
+  ②`columns.js::_showColsOriginHint` 文案改为"事实 + 两条成因 + 自查路径", 并补
   `sessionStorage` 会话级去重(清站点数据环境下 localStorage 里的去重标记也会一起没, 否则每次开浏览器都弹);
   ③新增守阵 `test_frontend_cols_empty_hint_names_browser_clear_cause`; ④知识库回写:
   `pitfalls/web-ui/columns-persist.md` 新增 ❗ 条("两种重置"改"三种")+ `想法.md` 该条补结论 +
