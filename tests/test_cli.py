@@ -12,6 +12,8 @@
 - test_main_lock_error_clean_exit: SingleInstanceLockError(构造期锁竞争)干净退出返回 1, 无堆栈无"配置错误"前缀
 - test_main_qb_compat_error_clean_exit: QbCompatError(run 期 qB 版本不兼容)穿透 run 后干净退出返回 1, 无堆栈; 补发通知走 notify_fatal(测试内 mock —— MagicMock 的 config.notify 恒真, 不 mock 会真的发系统通知)
 - test_main_unrelated_value_error_not_swallowed: 非 AutoQbError 的 ValueError(程序 bug)不被误捕, 照常抛出
+- test_main_hr_status_mutex_with_hr_once: --hr-status 与 --hr-once 互斥 -> 退出码 2
+- test_main_hr_status_runs_report_without_qb: --hr-status 不构造 manager(不连 qB), 行数上限透传
 - test_main_tray_mutex_with_export: --tray 与 --export-yaml 互斥 -> 退出码 2
 - test_main_tray_mode_calls_run_tray: --tray 模式交由 ui.run_tray 托管
 - test_main_tray_second_instance_wakes_running: --tray 双开唤起已运行实例 -> 静默退出 0
@@ -195,6 +197,30 @@ def test_main_tray_mutex_with_export():
             main()
     assert ei.value.code == 2
     m_qb.assert_not_called()
+
+
+def test_main_hr_status_mutex_with_hr_once():
+    """--hr-status 与 --hr-once 互斥(前者读已有数据, 后者真去抓一轮): 退出码 2, 不构造 manager"""
+    with _patch_argv("auto-qb", "config.yml", "--hr-status", "--hr-once"), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        with pytest.raises(SystemExit) as ei:
+            main()
+    assert ei.value.code == 2
+    m_qb.assert_not_called()
+
+
+def test_main_hr_status_runs_report_without_qb():
+    """--hr-status: 不构造 manager(不连 qB), 直接出只读报告"""
+    with _patch_argv("auto-qb", "config.yml", "--hr-status", "--hr-status-rows", "3"), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb, \
+            mock.patch("auto_qb.cli.load_config") as m_conf, \
+            mock.patch("auto_qb.hr.report.run_hr_status", return_value=0) as m_report:
+        from auto_qb.cli import main
+        assert main() == 0
+    m_qb.assert_not_called()
+    assert m_conf.called
+    assert m_report.call_args[0][1] == 3, "行数上限要透传(--hr-status-rows)"
 
 
 def test_main_tray_mode_calls_run_tray():

@@ -1,4 +1,4 @@
-"""test_hr_report 测试计划: --hr-once 只读走查(不进主循环、不写盘、不连 qB)
+"""test_hr_report 测试计划: --hr-once 只读走查 / --hr-status 现状报告(均不进主循环、不写盘、不连 qB)
 
 ## 测试计划(每个测试函数一条)
 - test_build_fetcher_without_dir_is_null: 未给离线目录 -> NullFetcher(不静默直连站点)
@@ -8,29 +8,55 @@
 - test_run_hr_once_hints_when_no_site: 无站点配置 hr_check -> 明确提示并返回非 0
 - test_run_hr_once_reports_without_writing: 走查出报告(含站点文件路径与锁自检), 且**不写任何文件**
 - test_run_hr_once_null_channel_reports_hint: 无离线目录且通道未启用 -> 如实报「无可用取数通道」并给出提示
+- test_run_hr_status_hints_when_disabled: 状态报告在总开关关闭时也明确提示并返回非 0
+- test_run_hr_status_hints_when_no_site: 状态报告无可用站点时提示并返回非 0
+- test_run_hr_status_reports_data_without_fetching: 报告摊开档位/条目/放行/配额/明细, 且**站点文件一字未改**
+- test_run_hr_status_shows_incomplete_reason_and_pending: 不完备的原因与原样计数(待回填 infohash)都显示出来
+- test_run_hr_status_rows_limit: 明细行数受 --hr-status-rows 限制并如实提示未显示行数
+- test_run_hr_status_survives_broken_file: 站点文件坏掉时如实标 ⚠, 报告仍出得来
 """
 import io
 import pathlib
 
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
-from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_once
+from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_once, run_hr_status
+from auto_qb.hr.service import HrRefreshService
 
-from hr_helpers import EMPTY_TABLE_PAGE, myhr_page, row
+from hr_helpers import EMPTY_TABLE_PAGE, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
+
+SITE = "example"
 
 
-def _config(tmp_path, html_dir=None, *, enabled=True, site_mode="partial") -> Config:
+def _config(tmp_path, html_dir=None, *, enabled=True, site_mode="partial", data_dir=None) -> Config:
     cfg = Config()
-    cfg.data_dir = str(tmp_path / "data")
+    cfg.data_dir = str(data_dir or tmp_path / "data")
     # 间隔设 0: 走查会真的按 min_torrent_interval 等待, 测试不必真等 90s
     # (「等满而不放弃」的行为由 test_hr_service.test_diagnostic_sleeper_waits_instead_of_giving_up 覆盖)
     cfg.hr_check = HrCheckConfig(enabled=enabled, min_torrent_interval=0.0)
-    cfg.trackers["example"] = TrackerConfig(
-        name="example",
+    cfg.trackers[SITE] = TrackerConfig(
+        name=SITE,
         domains=["pt.example.com"],
         hr_check=SiteHrCheckConfig(mode=site_mode, hr_page_url="https://pt.example.com/myhr.php"),
     )
     return cfg
+
+
+def _seed(tmp_path, fetcher, *, site=None) -> None:
+    """用真服务把一份数据落到 <tmp_path>/hr/<site>.json —— 现状报告读的就是它
+
+    刻意不打钟(用真时钟): 报告里的「x 前 / 有效期至」才有意义。
+    """
+    HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(),
+        site_confs={
+            SITE: site or site_conf()
+        },
+        fetcher=fetcher,
+        owner="tester",
+        persist=True,
+    ).refresh_site(SITE)
 
 
 def _write_pages(directory: pathlib.Path, pages: dict) -> str:
@@ -126,3 +152,125 @@ def test_run_hr_once_null_channel_reports_hint(tmp_path):
     assert "no-channel" in text
     assert "未启用取数通道" in text
     assert "只能确认配置/路径/锁状态" in text
+
+
+# ---------- --hr-status: 现状报告 ----------
+
+
+def test_run_hr_status_hints_when_disabled(tmp_path):
+    """状态报告在总开关关闭时也明确提示并返回非 0"""
+    buf = io.StringIO()
+    assert run_hr_status(_config(tmp_path, enabled=False), out=buf) == 1
+    assert "hr_check.enabled=false" in buf.getvalue()
+
+
+def test_run_hr_status_hints_when_no_site(tmp_path):
+    """状态报告无可用站点时提示并返回非 0"""
+    cfg = Config()
+    cfg.data_dir = str(tmp_path)
+    cfg.hr_check = HrCheckConfig(enabled=True)
+    cfg.trackers["s"] = TrackerConfig(name="s", domains=["a.example"])
+    buf = io.StringIO()
+    assert run_hr_status(cfg, out=buf) == 1
+    assert "没有任何站点配置 hr_check" in buf.getvalue()
+
+
+def test_run_hr_status_reports_data_without_fetching(tmp_path):
+    """报告摊开档位/条目/放行/配额/明细, 且**站点文件一字未改**(读现状不动数据)"""
+    _seed(
+        tmp_path,
+        FakeFetcher(
+            pages={
+                "A": myhr_page([row(101)]),
+                "B": myhr_page([row(201)]),  # B 档 = 站点侧已达标
+                "C": EMPTY_TABLE_PAGE,
+            },
+            blobs={
+                101: torrent_blob("a.bin"),
+                201: torrent_blob("b.bin")
+            },
+        )
+    )
+    site_file = tmp_path / "hr" / f"{SITE}.json"
+    before = site_file.read_bytes()
+    cfg = _config(tmp_path, data_dir=tmp_path)
+    buf = io.StringIO()
+
+    code = run_hr_status(cfg, out=buf)
+
+    text = buf.getvalue()
+    assert code == 0
+    assert "只读: 不取数 / 不加锁 / 不写盘" in text
+    assert "覆盖证明=成立" in text
+    assert "数据: 索引条目 2" in text and "受管束种子 2 个" in text
+    assert "档位 A=1 B=1" in text
+    assert "配额: 本小时" in text and "熔断: 正常" in text
+    assert "已达标" in text, "站点点明已达标的那行(B 档)要看得见"
+    assert "未触发任何取数" in text
+    assert site_file.read_bytes() == before, "现状报告不得改写站点文件"
+
+
+def test_run_hr_status_shows_incomplete_reason_and_pending(tmp_path):
+    """不完备的原因、待回填 infohash、取种子失败计数都要能看见(这正是「数据对不对」的入口)"""
+    _seed(
+        tmp_path,
+        FakeFetcher(pages={
+            "A": myhr_page([row(101)], has_next=True),
+            "B": EMPTY_TABLE_PAGE,
+            "C": EMPTY_TABLE_PAGE
+        }),
+        site=site_conf(max_pages_per_refresh=1),  # 翻页上限挡住 => partial
+    )
+    buf = io.StringIO()
+
+    code = run_hr_status(_config(tmp_path, data_dir=tmp_path), out=buf)
+
+    text = buf.getvalue()
+    assert code == 0
+    assert "覆盖证明=不成立" in text
+    assert "最近一次刷新不完备的原因: 档位 A 达到单次翻页上限(1)仍未到底" in text
+    assert "待回填 infohash 1 条" in text
+    assert "取种子失败 1 条" in text, "没有 .torrent 的站点应如实记失败次数"
+    assert "101" in text
+
+
+def test_run_hr_status_rows_limit(tmp_path):
+    """明细行数受 --hr-status-rows 限制, 并如实提示还有多少行未显示"""
+    _seed(
+        tmp_path,
+        FakeFetcher(
+            pages={
+                "A": myhr_page([row(101), row(102), row(103)]),
+                "B": EMPTY_TABLE_PAGE,
+                "C": EMPTY_TABLE_PAGE
+            },
+            blobs={
+                101: torrent_blob("a.bin"),
+                102: torrent_blob("b.bin"),
+                103: torrent_blob("c.bin")
+            },
+        )
+    )
+    buf = io.StringIO()
+
+    assert run_hr_status(_config(tmp_path, data_dir=tmp_path), limit=1, out=buf) == 0
+
+    text = buf.getvalue()
+    assert "最多显示 1 行" in text
+    assert "还有 2 行未显示" in text
+    assert "103" not in text, "超出行数的条目不该出现在明细里(但站点文件里仍有)"
+
+
+def test_run_hr_status_survives_broken_file(tmp_path):
+    """站点文件坏掉时如实标 ⚠, 报告仍出得来(不能因一个站点的坏文件就整份看不到)"""
+    hr_dir = tmp_path / "hr"
+    hr_dir.mkdir(parents=True, exist_ok=True)
+    (hr_dir / f"{SITE}.json").write_text("{ 这不是 JSON", encoding="utf-8")
+    buf = io.StringIO()
+
+    assert run_hr_status(_config(tmp_path, data_dir=tmp_path), out=buf) == 0
+
+    text = buf.getvalue()
+    assert f"{SITE}.json" in text
+    assert "⚠" in text
+    assert "索引条目 0" in text

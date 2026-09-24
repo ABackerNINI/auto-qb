@@ -6,42 +6,37 @@
 
 ## 当前基线
 
-**1476 collected: 1475 passed + 1 skipped / Windows** —— 2026-09-24 实测(**合流后**)
-(本轮 **+91 条**: **HR 在线核实 M2 取数通道** —— 新增 `tests/test_hr_channel.py`(协议 / 密钥 /
-origin 与 URL 白名单) / `test_hr_queue.py`(派发式队列 + 叫停与恢复) / `test_hr_server.py`(端点路由
-与真 HTTP 往返、401/403/400/413/404、端口冲突 fail-fast) / `test_hr_fetcher_channel.py`(ChannelFetcher
-超时 / 失败 / 白名单 / 叫停) / `test_hr_worker.py`(取数线程 + 视图只在变化时抬 revision + 告警节流) /
-`test_hr_runtime.py`(运行时门面 + 热重载重挂 + 关停不必等满超时); 覆盖 `src/auto_qb/hr/` 全部模块
-(**86–100%**; 新模块 server 90% / channel 92% / fetcher 93% / runtime 94% / worker 97% / queue 97%) +
-`config/schema/hr.py` 100%; 逐次增量的完整流水见 [baseline-history.md](baseline-history.md));
-**同日再 +2 条**由另一会话并行落地(合流前它基于 M1): WEB UI **多选右键菜单目标 = 整个选中集合**
-(`test_web.py::test_frontend_ctx_menu_multi_select_targets_selection`) + **生成物重建提示指错命令**
-(`test_memory_bank.py::test_gen_cmd_hints_name_real_tasks`) —— 两边改动有 3 个文件重叠, 按
-「移出改动 → `merge --ff-only` → 施回改动」合流(细节见 [baseline-history.md](baseline-history.md));
-**再 +8 条**为扩展侧守阵(`tests/test_extension_proxy.py`: 用户实报两条报错 —— 裸域名直喂
-`chrome.permissions.request` 与端点未起时的 `Failed to fetch` —— 的回归钉)。
-TOTAL **91%**(10217 语句 / 763 未覆盖 / 3382 分支 / 304 partial), sidefx 台账 2357 条 / **越界 0**。
+**1502 collected: 1501 passed + 1 skipped / Windows** —— 2026-09-25 实测
+(本轮 **+2 条**: **扩展页面取数改用自己的隐藏窗口**(用户实报「抓数据时会打开新的标签而不是后台抓取」) ——
+`tests/test_extension_proxy.py` 新增两条**用假 chrome API 真跑 `background.js`** 的守阵:
+取数必须建**自己的**最小化窗口(`focused:false` / `state:'minimized'`)+ 每个 `tabs.create` 必带 `windowId` 且
+`active:false` + 取完删标签 + 空闲删窗口 + 焦点被抢后还回去。★红验: 去掉 `tabs.create` 的 `windowId` ⇒
+`test_page_fetch_runs_in_dedicated_hidden_window` 当场变红。
+上一轮明细(只读口径修复 / README 坏字符)与更早流水见 [baseline-history.md](baseline-history.md)。
+TOTAL **91%**(10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial), sidefx 台账 ≈2430 条(并行汇总, 单次采样) / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-24 M2 合流后 + 扩展守阵)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **17.70 / 16.39 / 17.84s**
-- 串行 `-n 0 --no-cov`(对照): **31.45s**
+**当前(2026-09-25 扩展隐藏窗口)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **22.90 / 22.98 / 23.18s**
+- 串行 `-n 0 --no-cov`(对照): **35.56s**
+
+⚠ 本轮两条扩展守阵各**真跑一次 node**(各 ~1.5s) ⇒ 耗时比上一态高约 5s, 属预期的环境成本。
 
 ⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
 其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——
 已修为「先叫停队列再 join」, 并有 `test_stop_is_prompt_while_waiting_for_extension` 守死。
 
-**上一态(2026-09-24 M1 末态)**: 并行 7.61–8.87s / 串行 21.15–21.56s / `-n 4 --no-cov` 5.00–5.17s。
+**上一态(2026-09-24 告警分档 + `--hr-status`)**: 并行 16.88–21.40s / 串行 30.93s。
 
 > **本文件是这组数字的唯一枚举处** —— 其它文档只写量级与"见 baseline.md", 别再抄一遍(抄一份多一处漂移)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: **当前**并行 `10217 语句 / 763 未覆盖 / 3382 分支 / 304 partial`, TOTAL **91%**。
+- **覆盖率口径**: **当前**并行 `10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial`, TOTAL **91%**。
   下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
   并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
   ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。

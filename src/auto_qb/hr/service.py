@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Mapping, Optional, Tuple
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
 from .adapters import build_adapter
 from .bencode import compute_infohashes, torrent_display_name
-from .fetcher import HrChannelUnavailable, HrFetchError, HrFetcher
+from .fetcher import HrChannelStopped, HrChannelUnavailable, HrFetchError, HrFetcher
 from .model import (
     CHANNEL_DISABLED,
     CHANNEL_OK,
@@ -52,6 +52,13 @@ ACTION_LOCKED = "skipped-locked"
 ACTION_NO_CHANNEL = "no-channel"
 ACTION_ERROR = "error"
 
+# 本轮「没跑完」的原因分类(告警分级与报告展示用)。
+# ❗被**自己的频控**拦下 ≠ 故障: 那是设计如此(保守不产生放行), 而且会持续几小时;
+#   真值得盯着的是页面/解析问题(可能是改版)。两者混成同一级会让用户在弹窗轰炸中开始忽略告警。
+REASON_NONE = ""  # 没有「没跑完」这回事(完整刷新 / 复用 / 不适用)
+REASON_BUDGET = "budget"  # 被自己的间隔/配额/时间窗拦下(可预期, 下轮继续)
+REASON_PARSE = "parse"  # 页面/字段/翻页问题(可能是改版) —— 值得告警
+
 #: 走查(--hr-once)单次最多等待的秒数: 防配置误设(如间隔 1H)把走查挂死
 DIAGNOSTIC_MAX_WAIT = 600.0
 
@@ -63,6 +70,11 @@ class HrRefreshResult:
     site: str
     action: str
     reason: str = ""
+    #: 没跑完的原因分类(REASON_*); 告警分层看它 —— 见模块顶部说明
+    reason_kind: str = REASON_NONE
+    #: 本轮是否**已由产生处**(本服务 / 存储层)报过 WARNING ⇒ 状态记录只记 INFO, 不重复告警
+    #: (2026-09-24 用户实报: 同一次取数超时被 service 与 worker 各告警一次)
+    alerted: bool = False
     complete: bool = False
     scopes_done: Tuple[str, ...] = ()
     pages_fetched: int = 0
@@ -166,6 +178,8 @@ class HrRefreshService:
                 result.lock_ok = session.writable
                 if session.read_error:
                     result.reason = session.read_error
+                    # 存储层已按自己的节流口径告过这一条(坏文件是持续状态) ⇒ 状态记录不重复告警
+                    result.alerted = session.read_alerted
                 self._refresh_locked(site, site_conf, adapter, session, result, anchors or {})
         except HrLockBusy as e:
             result.action = ACTION_LOCKED
@@ -173,6 +187,7 @@ class HrRefreshService:
         except Exception as e:  # 单站点失败不外抛
             result.action = ACTION_ERROR
             result.reason = f"{type(e).__name__}: {e}"
+            result.alerted = True  # 上面这条 WARNING 就是本轮对它的告警, worker 不再重复
             logger.warning(f"HR 站点 {site} | 刷新异常: {e}", exc_info=True)
         result.elapsed_s = max(0.0, self._now() - started)
         return result
@@ -232,6 +247,9 @@ class HrRefreshService:
         reached_last = True
         notes: List[str] = []
         max_missing = 0.0
+        #: 没跑完的两类原因分开记: 频控拦下(可预期) / 页面问题(值得告警)
+        budget_limited = False
+        parse_problem = False
 
         try:
             for scope in scopes:
@@ -240,6 +258,7 @@ class HrRefreshService:
                     allowed, why = budget.take()
                     if not allowed:
                         notes.append(f"配额/间隔受限({why})")
+                        budget_limited = True
                         got_all_pages = False
                         reached_last = False
                         break
@@ -253,6 +272,7 @@ class HrRefreshService:
                     result.pages_fetched += 1
                     if not parsed.header_found:
                         notes.append(f"档位 {scope} 第 {page} 页未找到 HR 表(疑似改版)")
+                        parse_problem = True
                         got_all_pages = False
                         reached_last = False
                         break
@@ -264,10 +284,17 @@ class HrRefreshService:
                 else:
                     # for-else: 到页数上限仍有下一页 ⇒ 没抓到底
                     notes.append(f"档位 {scope} 达到单次翻页上限({site_conf.max_pages_per_refresh})仍未到底")
+                    parse_problem = True
                     got_all_pages = False
                     reached_last = False
                 if got_all_pages:
                     scopes_done.append(scope)
+        except HrChannelStopped as e:
+            # 关停 / 热重挂时被叫停: 既不是「没通道」也不是故障 ⇒ 不告警、不计失败(不推进熔断),
+            # 本轮直接让位(下轮自会重来)。
+            result.action = ACTION_WAITING
+            result.reason = f"本轮取数被叫停(正在停止或重挂端点): {e}"
+            return
         except HrChannelUnavailable as e:
             result.action = ACTION_NO_CHANNEL
             result.reason = str(e)
@@ -277,8 +304,14 @@ class HrRefreshService:
             newly = record_failure(data.fuse, limits, self._now(), getattr(e, "retry_after", 0.0))
             result.action = ACTION_ERROR
             result.reason = str(e)
-            session.commit(self._now())
-            result.persisted = session.writable
+            result.alerted = True  # 下面这条 WARNING 已含原因与失败次数 ⇒ 状态记录只记 INFO
+            if self.persist:
+                # ❗失败计数/熔断也是**持久状态**: 只读口径(dry-run / hr.once)下同样不得落盘,
+                # 否则「不写文件」是句空话 —— 走查会把熔断写进站点文件, 影响正式实例的取数节奏。
+                status = session.commit(self._now())
+                result.persisted = status == "written"
+            else:
+                result.reason = f"{result.reason}; 只读模式, 未写盘"
             if newly:
                 logger.warning(f"HR 站点 {site} | 连续失败达阈值, 熔断至 {data.fuse.until_ts:.0f}: {e}")
             else:
@@ -301,6 +334,11 @@ class HrRefreshService:
             notes.append("刷新不完备")
         if max_missing > self.global_conf.parse_missing_rate_max:
             notes.append(f"必填字段缺失率 {max_missing:.0%} 超阈({self.global_conf.parse_missing_rate_max:.0%})")
+            parse_problem = True
+        if not complete:
+            # 分类判据: 只要沾了页面/字段/翻页问题就算 parse(**不明原因也保守当 parse** —— 宁可多看一眼);
+            # 纯被频控拦下的才是 budget
+            result.reason_kind = REASON_BUDGET if (budget_limited and not parse_problem) else REASON_PARSE
 
         now = self._now()
         data.refresh = HrRefreshMeta(

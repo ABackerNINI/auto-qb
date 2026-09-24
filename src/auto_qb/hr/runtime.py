@@ -101,7 +101,9 @@ class HrRuntime:
             self.worker.start()
         sites = ", ".join(self.service.enabled_sites()) if self.service else ""
         mode = "端点 + 取数" if self.fetch_enabled else "只读共享(本实例无取数通道)"
-        logger.warning(f"HR 在线核实已启动({mode}): 站点 {sites}; 站点文件目录 {self._sites_dir()}")
+        # ❗生命周期消息一律 INFO: 本仓 WARNING 以上会被 notify 推成**系统通知**, 而启动/关闭是
+        # 程序自己决定要发生的事 —— 用 WARNING 只会让用户每次重启吃三条通知(2026-09-24 用户实报)。
+        logger.info(f"HR 在线核实已启动({mode}): 站点 {sites}; 站点文件目录 {self._sites_dir()}")
         return True
 
     def stop(self) -> None:
@@ -129,13 +131,13 @@ class HrRuntime:
         new_ident = self._identity(self.global_conf)
         old_ident = self._identity(old)
         if new_ident != old_ident:
-            logger.warning(f"HR 取数通道监听身份变化 {old_ident} -> {new_ident}: 重挂端点与取数线程")
+            logger.info(f"HR 取数通道监听身份变化 {old_ident} -> {new_ident}: 重挂端点与取数线程")
             self.start()
             return
         if not self.enabled:
             # 关掉了: 收掉线程与端点(幂等)
             if self.worker is not None or self.endpoint is not None:
-                logger.warning("HR 在线核实已关闭: 停止端点与取数线程")
+                logger.info("HR 在线核实已关闭: 停止端点与取数线程")
             self.stop()
             return
         # L0 字段变化: 用新配置重建服务与线程, 端点保持不变

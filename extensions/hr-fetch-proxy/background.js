@@ -2,8 +2,9 @@
 //
 // 职责只有三条(计划 §6 的「哑取数器」):
 //   1. 定时(chrome.alarms)逐个实例问本地端点要任务;
-//   2. 按任务取内容 —— kind=page 用**后台标签页**拿渲染后 DOM(带完整登录态, 能过挑战页,
-//      且不抢焦点); kind=torrent 用 service worker 自己的 fetch(credentials: 'include');
+//   2. 按任务取内容 —— kind=page 用**隐藏窗口里的标签页**拿渲染后 DOM(带完整登录态, 能过挑战页,
+//      且不抢焦点、不出现在用户窗口里); kind=torrent 用 service worker 自己的 fetch
+//      (credentials: 'include');
 //   3. 把结果原样回传(POST), 然后关掉标签页。
 //
 // 明确**不做**的事: 不解析页面、不判频控、不读 chrome.cookies、不碰 passkey ——
@@ -176,9 +177,18 @@ async function runTask(task) {
   }
 }
 
-/** 后台标签页取渲染后 DOM: 带登录态、能过挑战页、不抢焦点 */
+/**
+ * 在**隐藏窗口**里取渲染后 DOM: 带登录态、能过挑战页、不抢焦点、不占用用户窗口
+ *
+ * ❗为什么不能直接在用户自己的窗口里 `chrome.tabs.create({ active: false })`:
+ * `active:false` 只保证「不是那个窗口的活动标签」, **不保证窗口不被抬起来** —— 扩展被 alarm 唤醒时
+ * 用户往往正在别的程序里, Chrome 仍会把窗口连同新标签一起显示出来, 用户看到的就是「抓数据时会打开
+ * 新标签」而不是后台抓取(2026-09-25 实报)。所以取数一律在**自己的、永不聚焦的窗口**里做。
+ */
 async function pageSnapshot(url) {
-  const tab = await chrome.tabs.create({ url, active: false });
+  const restoreFocus = await focusGuard();
+  const windowId = await ensureHiddenWindow();
+  const tab = await chrome.tabs.create({ url, active: false, windowId });
   try {
     await waitForComplete(tab.id, PAGE_LOAD_TIMEOUT_MS);
     await sleep(PAGE_SETTLE_MS);
@@ -189,9 +199,89 @@ async function pageSnapshot(url) {
     const html = frames && frames[0] ? frames[0].result : '';
     if (!html) throw new Error('页面为空(未授予站点权限?)');
     return html;
+  } catch (e) {
+    // 最小化窗口可能让页面自己的延迟脚本变慢 ⇒ 连续失败时把它恢复成普通状态(仍不聚焦)
+    await relaxHiddenWindow(String((e && e.message) || e));
+    throw e;
   } finally {
     await chrome.tabs.remove(tab.id).catch(() => {});
+    const note = await restoreFocus();
+    if (note) await noteStatus({ text: note });
+    scheduleHiddenWindowClose();
   }
+}
+
+// ---------- 隐藏取数窗口 ----------
+
+const HIDDEN_WINDOW_IDLE_MS = 2 * 60 * 1000; // 空闲就关掉: 不长期留一个窗口占着
+let hiddenWindowId = 0;
+let hiddenWindowTimer = 0;
+let hiddenWindowMinimized = true;
+
+chrome.windows.onRemoved.addListener((id) => {
+  if (id === hiddenWindowId) hiddenWindowId = 0; // 用户把它关了: 下次重建
+});
+
+chrome.runtime.onSuspend.addListener(() => {
+  closeHiddenWindow(); // 挂起路径不能 await, 空闲计时器兜底
+});
+
+/** 取数窗口: 最小化 + `focused:false`(两重都要: 前者不占地方, 后者不被聚焦) */
+async function ensureHiddenWindow() {
+  if (hiddenWindowId) {
+    const alive = await chrome.windows.get(hiddenWindowId).catch(() => null);
+    if (alive) return hiddenWindowId;
+    hiddenWindowId = 0;
+  }
+  let win;
+  try {
+    win = await chrome.windows.create({ focused: false, state: 'minimized' });
+  } catch (e) {
+    // 少数平台不接受直接建最小化窗口 ⇒ 先建再收起来(仍不聚焦)
+    win = await chrome.windows.create({ focused: false });
+    await chrome.windows.update(win.id, { state: 'minimized' }).catch(() => {});
+  }
+  hiddenWindowId = win.id;
+  hiddenWindowMinimized = true;
+  await noteStatus({ text: '取数用隐藏窗口完成(最小化, 不抢焦点; 空闲 2 分钟自动关闭)' });
+  return hiddenWindowId;
+}
+
+function scheduleHiddenWindowClose() {
+  clearTimeout(hiddenWindowTimer);
+  hiddenWindowTimer = setTimeout(closeHiddenWindow, HIDDEN_WINDOW_IDLE_MS);
+}
+
+async function closeHiddenWindow() {
+  clearTimeout(hiddenWindowTimer);
+  hiddenWindowTimer = 0;
+  const id = hiddenWindowId;
+  hiddenWindowId = 0;
+  if (id) await chrome.windows.remove(id).catch(() => {});
+}
+
+/** 最小化窗口里的页面可能被节流(延迟脚本变慢) ⇒ 失败一次就取消最小化, **仍然不聚焦** */
+async function relaxHiddenWindow(why) {
+  if (!hiddenWindowId || !hiddenWindowMinimized) return;
+  hiddenWindowMinimized = false;
+  await chrome.windows.update(hiddenWindowId, { state: 'normal' }).catch(() => {});
+  await chrome.windows.update(hiddenWindowId, { focused: false }).catch(() => {});
+  await noteStatus({ text: `取数窗口已取消最小化(${why}) —— 若仍失败, 看站点是否需人工过挑战页` });
+}
+
+/**
+ * 焦点守卫: 新建窗口/标签在个别平台仍会把浏览器抬到前台 ⇒ 记下**原聚焦窗口**, 取完还回去。
+ * 只还焦点, 不关不切用户自己的窗口与标签。
+ */
+async function focusGuard() {
+  const before = await chrome.windows.getLastFocused().catch(() => null);
+  return async function restore() {
+    if (!before || !before.id || before.id === hiddenWindowId) return '';
+    const now = await chrome.windows.getLastFocused().catch(() => null);
+    if (!now || now.id === before.id) return '';
+    const ok = await chrome.windows.update(before.id, { focused: true }).then(() => true).catch(() => false);
+    return ok ? `取数后已把焦点还回原窗口(${before.id})` : '';
+  };
 }
 
 /** 取 .torrent 二进制: 由 service worker 自己发(credentials include 带上站点 cookie) */

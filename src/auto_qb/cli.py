@@ -77,6 +77,18 @@ def main():
         metavar="DIR",
         help="搭配 --hr-once: 用目录里保存的 HR 页(按 <档位>.html 命名)作为离线页面替身, 验证解析与索引",
     )
+    parser.add_argument(
+        "--hr-status",
+        action="store_true",
+        help="HR 在线核实现状: 把已落盘的站点数据摊开(档位/下载量/剩余达标/放行/配额/熔断), 只读不取数",
+    )
+    parser.add_argument(
+        "--hr-status-rows",
+        type=int,
+        default=10,
+        metavar="N",
+        help="搭配 --hr-status: 每站点最多显示多少行明细(默认 10)",
+    )
     args = parser.parse_args()
 
     if args.tray and (args.export_yaml or args.export_torrents_info):
@@ -85,9 +97,21 @@ def main():
         parser.error("--hr-html-dir 需配合 --hr-once 使用")
     if args.hr_once and (args.tray or args.export_yaml or args.export_torrents_info):
         parser.error("--hr-once 与托盘/导出模式互斥")
+    if args.hr_status and (args.tray or args.export_yaml or args.export_torrents_info):
+        parser.error("--hr-status 与托盘/导出模式互斥")
+    if args.hr_status and args.hr_once:
+        parser.error("--hr-status 与 --hr-once 互斥(前者读已有数据, 后者真去抓一轮)")
+    if args.hr_status_rows < 1:
+        parser.error("--hr-status-rows 需为正整数")
 
     manager = None
     try:
+        # HR 在线核实现状: 连站点文件都不写, 更不连 qB —— 可与正常实例并发安全运行
+        if args.hr_status:
+            from .hr.report import run_hr_status
+
+            return run_hr_status(load_config(args.config), args.hr_status_rows)
+
         # HR 在线核实只读走查: 不持锁(不写任何文件)、不连 qB —— 可与正常实例并发
         if args.hr_once:
             from .hr.report import run_hr_once

@@ -35,6 +35,7 @@ from .channel import (
 )
 from .fetcher import (
     ChannelFetcher,
+    HrChannelStopped,
     HrChannelUnavailable,
     HrFetchError,
     HrFetcher,
@@ -88,6 +89,9 @@ from .service import (
     ACTION_REFRESHED,
     ACTION_REUSED,
     ACTION_WAITING,
+    REASON_BUDGET,
+    REASON_NONE,
+    REASON_PARSE,
     HrRefreshResult,
     HrRefreshService,
 )
@@ -138,6 +142,7 @@ __all__ = [
     "try_consume",
     # 取数通道
     "HrChannelUnavailable",
+    "HrChannelStopped",
     "HrFetchError",
     "HrFetcher",
     "NullFetcher",
@@ -181,6 +186,9 @@ __all__ = [
     "ACTION_REFRESHED",
     "ACTION_REUSED",
     "ACTION_WAITING",
+    "REASON_BUDGET",
+    "REASON_NONE",
+    "REASON_PARSE",
     "HrRefreshResult",
     "HrRefreshService",
 ]

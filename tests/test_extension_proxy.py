@@ -222,3 +222,113 @@ def test_options_rejections_are_always_handled():
     assert "unhandledrejection" in text, "要有兜底: 漏网的拒绝也得落到状态栏"
     assert text.count(".catch(") >= 5, "四个按钮 + 初始 load 都要 catch"
     assert "try {" in text, "授权/自测这类浏览器 API 调用必须包 try(它们会同步抛)"
+
+
+# ---------- 页面取数: 隐藏窗口(用户实报「抓数据时开着新标签」) ----------
+
+#: 用**假 chrome API** 真跑 background.js, 记录每一次窗口/标签调用 —— 纯字符串断言看不见调用形态。
+_NODE_RUN_PAGE_SNAPSHOT = """
+const fs = require('fs');
+const vm = require('vm');
+const calls = [];
+const noop = { addListener() {} };
+function record(name, ret) {
+  return function () {
+    const args = Array.prototype.slice.call(arguments);
+    calls.push([name].concat(args));
+    return Promise.resolve(typeof ret === 'function' ? ret.apply(null, args) : ret);
+  };
+}
+const stealFocus = process.argv[2] === 'steal';   // 模拟"新建窗口把浏览器抬到前台"
+const chrome = {
+  alarms: { create: record('alarms.create'), onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop, onSuspend: noop },
+  permissions: { onAdded: noop },
+  storage: { local: { get: async () => ({}), set: async () => {} } },   // noteStatus 只落状态
+  windows: {
+    create: record('windows.create', () => ({ id: 777 })),
+    get: async (id) => ({ id }),
+    getLastFocused: (() => { let n = 0; return async () => ({ id: (stealFocus && n++ > 0) ? 777 : 1 }); })(),
+    update: record('windows.update', () => ({})),
+    remove: record('windows.remove', () => {}),
+    onRemoved: noop,
+  },
+  tabs: {
+    create: record('tabs.create', () => ({ id: 42, windowId: 777 })),
+    get: async () => ({ id: 42, status: 'complete' }),
+    remove: record('tabs.remove', () => {}),
+  },
+  scripting: { executeScript: async () => [{ result: '<html>page</html>' }] },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
+(async () => {
+  const html = await sandbox.pageSnapshot('https://pt.example.com/myhr.php?hrtype=A');
+  await sandbox.closeHiddenWindow();   // 顺手验证空闲关闭(否则 2 分钟的计时器会拖住 node)
+  process.stdout.write(JSON.stringify({ html, calls }));
+})();
+"""
+
+
+def _page_snapshot_trace(mode: str = "") -> dict:
+    node = _node()
+    if not node:
+        return {}
+    args = [node, "-e", _NODE_RUN_PAGE_SNAPSHOT, str(BACKGROUND_JS)]
+    if mode:
+        args.append(mode)
+    proc = _run_node(args)
+    assert proc.returncode == 0, f"node 跑 background.js 失败: {proc.stderr.strip()}"
+    return json.loads(proc.stdout)
+
+
+def _arg_of(trace: dict, name: str, key: str):
+    """取某次调用里某个参数(断言用的小工具)"""
+    for call in trace["calls"]:
+        if call[0] == name and call[1] and isinstance(call[1], dict) and key in call[1]:
+            return call[1][key]
+    return None
+
+
+def test_page_fetch_runs_in_dedicated_hidden_window():
+    """❗页面取数必须在**自己的隐藏窗口**里: 用户窗口里开后台标签会连窗口一起被抬起来
+
+    2026-09-25 用户实报「抓数据时会打开新的标签而不是后台抓取」: `chrome.tabs.create({active:false})`
+    只保证「不是那个窗口的活动标签」, **不保证窗口不被抬起来** —— 扩展被 alarm 唤醒时用户往往正在
+    别的程序里, Chrome 会把窗口连同新标签一起显示出来。故: 取数在自己建的窗口里做(最小化 + 不聚焦),
+    且**任何**标签创建都必须带上那个窗口 id(否则又回到用户窗口里)。
+    """
+    trace = _page_snapshot_trace()
+    if not trace:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    assert trace["html"] == "<html>page</html>"
+
+    created = [c for c in trace["calls"] if c[0] == "windows.create"]
+    assert len(created) == 1, f"应当只建一个取数窗口: {trace['calls']}"
+    opts = created[0][1]
+    assert opts.get("focused") is False, "取数窗口绝不能抢焦点"
+    assert opts.get("state") == "minimized", "取数窗口要最小化(不占屏幕、不占任务栏焦点)"
+
+    tabs = [c for c in trace["calls"] if c[0] == "tabs.create"]
+    assert tabs, "页面取数仍要开标签页(需要真实渲染的 DOM)"
+    for call in tabs:
+        assert call[1].get("windowId") == 777, f"标签必须开在取数窗口里, 实际: {call[1]}"
+        assert call[1].get("active") is False, f"标签不得成为活动标签: {call[1]}"
+    assert "tabs.remove" in [c[0] for c in trace["calls"]], "取完要关标签(不留脏标签)"
+
+
+def test_hidden_window_is_closed_when_idle_and_focus_handed_back():
+    """空闲要能关掉那个窗口; 万一新建窗口把焦点抢走了, 取完要把焦点还回原窗口"""
+    trace = _page_snapshot_trace()
+    if not trace:
+        return
+    removed = [c for c in trace["calls"] if c[0] == "windows.remove"]
+    assert [c[1] for c in removed] == [777], "空闲关闭必须真的删掉那个窗口"
+
+    stolen = _page_snapshot_trace("steal")
+    if not stolen:
+        return
+    restore = [c for c in stolen["calls"] if c[0] == "windows.update" and c[1] == 1]
+    assert restore and restore[0][2].get("focused") is True, \
+        f"焦点被抢走后要还回原窗口(否则用户正打字就被切走了): {stolen['calls']}"

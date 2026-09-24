@@ -21,6 +21,8 @@
 - test_runtime_uses_anchors_provider: 取数线程经主循环提供的锚点提供者取锚点(M3 的交接面)
 - test_stop_is_prompt_while_waiting_for_extension: 取数线程正等扩展回传时 stop 也要立刻返回(不等满 request_timeout)
 - test_restart_after_stop_works: 关停再启动能重新正常工作(叫停标记不得残留)
+- test_start_stop_messages_are_info_not_warning: 启动/关闭类消息一律 INFO(它们会被 notify 推成系统通知)
+- test_apply_remount_message_is_info: 热重载重挂端点也是预期动作, 同样只记 INFO
 """
 import logging
 import socket
@@ -146,6 +148,39 @@ def test_port_conflict_is_fail_fast(tmp_path):
             second.start()
     finally:
         first.stop()
+
+
+def test_start_stop_messages_are_info_not_warning(tmp_path, caplog):
+    """启动 / 关闭 / 热重挂都是程序自己决定要发生的事 ⇒ INFO
+
+    本仓 WARNING 以上会被 notify 推成**系统通知** —— 用 WARNING 的后果是每次重启都吃几条通知,
+    用户看到的就是「一开就弹 warning」(2026-09-24 实报)。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    with caplog.at_level(logging.INFO, logger="auto_qb.hr"):
+        runtime.start()
+        runtime.stop()
+
+    noisy = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not noisy, f"生命周期消息不得用 WARNING: {noisy}"
+    assert any("已启动" in r.getMessage() and r.levelno == logging.INFO for r in caplog.records)
+    assert any("端点已启动" in r.getMessage() and r.levelno == logging.INFO for r in caplog.records)
+
+
+def test_apply_remount_message_is_info(tmp_path, caplog):
+    """改端口导致重挂端点: 这是热重载的预期动作, 同样只记 INFO"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    runtime.start()
+    try:
+        old = runtime.global_conf
+        runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True, port=_free_port()).hr_check
+        with caplog.at_level(logging.INFO, logger="auto_qb.hr"):
+            runtime.apply(old)
+        noisy = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not noisy, f"热重载消息不得用 WARNING: {noisy}"
+        assert any("重挂" in r.getMessage() for r in caplog.records), "重挂这事该说一声"
+    finally:
+        runtime.stop()
 
 
 def test_stop_releases_endpoint(tmp_path):

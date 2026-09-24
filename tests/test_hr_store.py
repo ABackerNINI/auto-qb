@@ -11,8 +11,15 @@
 - test_heartbeat_overwritten_degrades_to_readonly: 本实例心跳被覆盖 -> 同样退化为只读
 - test_commit_bumps_revision_and_heartbeat: 写入抬 revision 并记写者心跳, 文件始终是完整 JSON
 - test_read_unlocked_sees_complete_document: 无锁只读拿到完整文档(写入是原子替换)
+- test_write_keeps_previous_version_as_backup: 每次写入把上一版留为 `.bak`(读坏时的兜底)
+- test_corrupt_file_is_quarantined_and_recovered_from_backup: 坏文件挪到 `.bad-<ts>` 留证 + 从 `.bak` 恢复,
+  且恢复后的写入**不得**把好备份盖成坏内容
+- test_corrupt_file_without_backup_warns_once: 无备份 -> 空数据 + 同一坏文件只告警一次
+- test_repeated_read_failure_does_not_rewarn: 坏文件挪不走(被占用)时也不逐轮重报(降 DEBUG)
+- test_schema_mismatch_is_not_quarantined: schema 不符是版本迁移, 不挪走也不从备份猜
 """
 import json
+import logging
 
 import pytest
 
@@ -192,3 +199,97 @@ def test_read_unlocked_sees_complete_document(tmp_path):
         session.commit(now=1.0)
     data, err = store.read_unlocked()
     assert err is None and data.index[1].name == "x"
+
+
+# ---------- 站点文件读坏: 留证 + 备份兜底 + 只报一次 ----------
+
+
+def _write_versions(tmp_path, site="s", *, entries=(1, )):
+    """写两版(第二版多一条) —— 目的是让 `<site>.json.bak` 里躺着一份**好数据**"""
+    store = HrSiteStore(site, str(tmp_path), owner="me")
+    for revision, tids in enumerate((entries, entries + (2, )), start=1):
+        with store.hold() as session:
+            for tid in tids:
+                session.data.index[tid] = HrEntry(tid=tid, name=f"t{tid}")
+            assert session.commit(now=float(revision)) == "written"
+    return store
+
+
+def test_write_keeps_previous_version_as_backup(tmp_path):
+    """每次写入把上一版留为 `.bak`(读坏时的兜底: 索引 / 已取记录 / 放行记录都在里面)"""
+    _write_versions(tmp_path, entries=(1, ))
+    backup = tmp_path / "s.json.bak"
+    assert backup.exists()
+    assert json.loads(backup.read_text(encoding="utf-8"))["revision"] == 1
+    assert json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))["revision"] == 2
+
+
+def test_corrupt_file_is_quarantined_and_recovered_from_backup(tmp_path):
+    """坏文件: 挪到 `.bad-<ts>` 留证 + 从 `.bak` 恢复; 好备份不得被坏内容盖掉"""
+    store = _write_versions(tmp_path, entries=(1, ))
+    backup_before = (tmp_path / "s.json.bak").read_bytes()
+    (tmp_path / "s.json").write_text("", encoding="utf-8")  # 被清空(编辑器/同步盘/写盘中断)
+
+    with store.hold() as session:
+        assert "文件为空 0 字节" in session.read_error, session.read_error
+        assert session.recovered_from_backup is True
+        # `.bak` 是**上一版**(写入前复制): 能救回它里面的内容, 但最新一轮的改动救不回来
+        assert set(session.data.index) == {1}, "备份里的条目应当恢复出来"
+        assert "已从备份(.bak)恢复" in session.read_error
+        assert session.writable is True, "恢复后必须还能写回去(否则自愈反而变砖)"
+        assert session.commit(now=9.0) == "written"
+
+    data, err = store.read_unlocked()
+    assert err is None and set(data.index) == {1}
+    bad = list(tmp_path.glob("s.json.bad-*"))
+    assert len(bad) == 1 and bad[0].read_text(encoding="utf-8") == "", "坏文件要原样留证"
+    assert (tmp_path / "s.json.bak").read_bytes() == backup_before, "恢复后的写入不得把好备份盖成坏内容"
+
+
+def test_corrupt_file_without_backup_warns_once(tmp_path, caplog):
+    """没有备份时按空数据处理(保守回落未核实), 且**同一坏文件只告警一次**(逐轮重报 = 通知轰炸)"""
+    (tmp_path / "s.json").write_text("{ 这不是 json", encoding="utf-8")
+    store = HrSiteStore("s", str(tmp_path))
+
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.store"):
+        with store.hold() as session:
+            assert "备份不可用(没有备份文件)" in session.read_error
+            assert session.data.index == {}
+            assert session.read_alerted is True
+            assert session.commit(now=1.0) == "written"
+        with store.hold() as session:
+            assert session.read_error is None, "坏文件已挪走 => 这一轮读到的是新写的完整文档"
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1, [w.getMessage() for w in warnings]
+    assert "坏文件已挪走" in warnings[0].getMessage()
+
+
+def test_repeated_read_failure_does_not_rewarn(tmp_path, caplog):
+    """坏文件挪不走时(如被占用), 同一文本只 WARNING 一次, 后续轮次降 DEBUG"""
+    (tmp_path / "s.json").write_text("{ 坏", encoding="utf-8")
+    store = HrSiteStore("s", str(tmp_path))
+    store.quarantine = lambda: ""  # 模拟挪走失败(被别的程序占用)
+    alerted: list[bool] = []
+
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.store"):
+        for _ in range(3):
+            with store.hold() as session:
+                assert "坏文件未能挪走" in session.read_error
+                alerted.append(session.read_alerted)
+
+    assert alerted == [True, False, False], "坏文件是持续状态: 只报一次, 其余轮次降 DEBUG"
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1, f"同一坏文件只告警一次: {[w.getMessage() for w in warnings]}"
+
+
+def test_schema_mismatch_is_not_quarantined(tmp_path):
+    """schema_version 不符 = 版本迁移, 不是「坏文件」: 不挪走也不从备份恢复(备份里是同一个旧版本)"""
+    (tmp_path / "old.json").write_text(json.dumps({"schema_version": 99, "index": []}), encoding="utf-8")
+    store = HrSiteStore("old", str(tmp_path))
+    with store.hold() as session:
+        assert "schema_version=99" in session.read_error
+        assert session.recovered_from_backup is False
+        assert session.data.index == {}
+    assert (tmp_path / "old.json").exists()
+    assert not list(tmp_path.glob("old.json.bad-*"))

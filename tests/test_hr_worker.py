@@ -9,6 +9,12 @@
 - test_run_once_keeps_revision_when_reusing: 数据仍在有效期 -> 复用 -> 视图不变 -> revision 不抬
 - test_run_once_logs_no_channel_once_per_state: 无通道告警只报一次(分钟级轮询不得刷通知)
 - test_run_once_warns_on_partial_refresh: 刷新不完备(疑似改版) -> WARNING(service 不报这条)
+- test_pacing_is_info_not_warning_and_not_repeated: **被自己频控拦下**的 partial / 未到点 waiting 只记 INFO(
+  绝不 WARNING —— 会被 notify 推成系统通知), 且同状态不逐轮刷(数字抹掉后同键)
+- test_pacing_state_reminds_once_per_window: 节流态持续时按 channel_silence_warn 周期提醒一次(不静默消失)
+- test_worker_does_not_repeat_alert_owned_by_producer: 已由产生处告警的事件只记 INFO(不重复 WARNING)
+- test_stable_key_erases_countdowns: 状态指纹抹掉数字(倒计时变化不算状态变化)
+- test_worker_refresh_forgets_pacing_memory: 完整刷新后清节流记忆(下次再卡住要重新说明白)
 - test_silence_reminder_is_throttled: 通道静默按 channel_silence_warn 周期提醒一次
 - test_stop_without_start_is_ok: 未启动就 stop 不得报错
 - test_start_wake_and_stop: 线程能起、能被唤醒立刻干活、能停干净
@@ -23,9 +29,11 @@ import time
 from auto_qb.hr.fetcher import NullFetcher
 from auto_qb.hr.model import CHANNEL_OK, CHANNEL_SILENT
 from auto_qb.hr.resolve import HrSiteView, HrViewSet
-from auto_qb.hr.service import ACTION_NO_CHANNEL, ACTION_PARTIAL, ACTION_REFRESHED, ACTION_REUSED, HrRefreshService
-from auto_qb.hr.worker import HrViewPublisher, HrWorker, view_signature
-from hr_helpers import REVISED_PAGE, Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
+from auto_qb.hr.service import ACTION_ERROR, ACTION_NO_CHANNEL, ACTION_PARTIAL, ACTION_REFRESHED, ACTION_REUSED, \
+    REASON_BUDGET, HrRefreshResult, HrRefreshService
+from auto_qb.hr.worker import HrViewPublisher, HrWorker, stable_key, view_signature
+from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, \
+    torrent_blob
 
 TID_A = 313852
 TID_B = 313997
@@ -152,6 +160,110 @@ def test_run_once_warns_on_partial_refresh(tmp_path, caplog):
         worker.run_once()
     assert [r.action for r in worker.last_results] == [ACTION_PARTIAL]
     assert any(r.levelno >= logging.WARNING for r in caplog.records), "改版信号必须告警"
+
+
+def test_pacing_partial_is_info_not_warning_and_not_repeated(tmp_path, caplog):
+    """被**自己频控**拦下: 只记一条 INFO(绝不 WARNING), 且 partial↔waiting 交替不刷屏
+
+    用户实报(2026-09-24): 这两个状态本会持续几小时, 却按分钟级轮询打出 WARNING ⇒ notify 推成
+    系统通知 ⇒ 弹窗淹没。去重按「被拦的根因」(间隔/配额/熔断…) 而不是「本轮返回了哪个 action」——
+    同一个「等间隔」在轮次间会分别表现为 partial(首页抓到、第二页被拦)与 waiting。
+    """
+    clock = Clock()
+    pages = {"A": myhr_page([row(TID_A)], has_next=True), "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}
+    service = _service(
+        tmp_path,
+        FakeFetcher(pages=pages, blobs=_blobs(TID_A)),
+        clock=clock,
+        global_overrides={"min_torrent_interval": 3600.0},
+    )
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.worker"):
+        worker.run_once()  # 第一页抓到、第二页被自己的间隔拦住 => partial(budget, 根因=间隔)
+        clock.advance(61.0)  # 过掉截断轮次的 60s 短暂有效期
+        worker.run_once()  # 未到可取时刻 => waiting(同一根因)
+        clock.advance(1.0)
+        worker.run_once()  # 同上(倒计时数字变了, 抹掉后同键)
+
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING], \
+        f"频控截断不是故障, 不得 WARNING: {[(r.levelname, r.getMessage()) for r in caplog.records]}"
+    notes = [r for r in caplog.records if r.levelno == logging.INFO and "节流中" in r.getMessage()]
+    assert len(notes) == 1, f"一整个等间隔时期只说明白一次: {[n.getMessage() for n in notes]}"
+    assert "非故障" in notes[0].getMessage()
+    assert any(r.levelno == logging.DEBUG and "节流中" in r.getMessage() for r in caplog.records), \
+        "被去重的轮次仍要留在 DEBUG(排障时要看得见每轮到底在等什么)"
+
+
+def test_pacing_state_reminds_once_per_window(tmp_path, caplog):
+    """节流态持续时按 channel_silence_warn 周期提醒一次(既不满屏也不静默消失)"""
+    clock = Clock()
+    pages = {"A": myhr_page([row(TID_A)], has_next=True), "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}
+    service = _service(
+        tmp_path,
+        FakeFetcher(pages=pages, blobs=_blobs(TID_A)),
+        clock=clock,
+        global_overrides={
+            "min_torrent_interval": 3600.0,
+            "channel_silence_warn": 120.0
+        },
+    )
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+
+    with caplog.at_level(logging.INFO, logger="auto_qb.hr.worker"):
+        worker.run_once()  # partial(根因=间隔)
+        clock.advance(121.0)  # 超过一个提醒窗口
+        worker.run_once()  # waiting(同根因, 但到点了 => 再提醒一次)
+
+    notes = [r for r in caplog.records if "节流中" in r.getMessage()]
+    assert len(notes) == 2, f"超过一个提醒窗口后应再记一次: {[n.getMessage() for n in notes]}"
+
+
+def test_worker_refresh_forgets_pacing_memory(tmp_path, caplog):
+    """真有进展(完整刷新)后清掉节流记忆: 下次再卡住要重新说明白, 不能默默吞掉
+
+    这一条直接驱 `_note`(日志策略的单测): 端到端很难在同一个小时窗口里既完成完整刷新
+    又恰好再次被频控拦住(完整刷新要多次请求, 而配额就是按请求计的)。
+    """
+    clock = Clock()
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    pacing = HrRefreshResult(
+        site="pt.example.com", action=ACTION_PARTIAL, reason="配额/间隔受限(间隔: 还差 104s)", reason_kind=REASON_BUDGET
+    )
+    done = HrRefreshResult(site="pt.example.com", action=ACTION_REFRESHED, reason="")
+
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.worker"):
+        worker._note("pt.example.com", pacing)  # 说一次
+        worker._note("pt.example.com", pacing)  # 同根因 => 不重复(DEBUG)
+        worker._note("pt.example.com", done)  # 进展 => 清记忆
+        worker._note("pt.example.com", pacing)  # 再卡住 => 重新说一次
+
+    notes = [r for r in caplog.records if r.levelno == logging.INFO and "节流中" in r.getMessage()]
+    assert len(notes) == 2, f"清掉记忆后应重新说明白: {[n.getMessage() for n in notes]}"
+
+
+def test_worker_does_not_repeat_alert_owned_by_producer(tmp_path, caplog):
+    """已由产生处告警的事件(取数失败 / 文件读坏): 状态层只记 INFO, 不再打第二条 WARNING"""
+    clock = Clock()
+    service = _service(tmp_path, FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"}), clock=clock)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr"):
+        worker.run_once()
+
+    assert [r.action for r in worker.last_results] == [ACTION_ERROR]
+    by_level = [(r.levelname, r.getMessage()) for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len([1 for _lv, msg in by_level if "取数失败" in msg]) == 1, \
+        f"一次超时只该有一条 WARNING(产生处那条): {by_level}"
+    assert any("已在取数处告警" in r.getMessage() and r.levelno == logging.INFO for r in caplog.records), \
+        "状态变化仍要留一条 INFO(排障要看得到它何时开始出错)"
+
+
+def test_stable_key_erases_countdowns():
+    """状态指纹抹掉数字: 倒计时变化不算状态变化(否则就是逐轮刷屏的根因)"""
+    assert stable_key("未到可取时刻(间隔, 还差 104s)") == stable_key("未到可取时刻(间隔, 还差 51s)")
+    assert stable_key("a") != stable_key("b")
 
 
 def test_silence_reminder_is_throttled(tmp_path, caplog):

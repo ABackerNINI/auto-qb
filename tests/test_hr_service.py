@@ -21,17 +21,25 @@
 - test_no_channel_reports_instead_of_silent_direct_fetch: 无通道时如实上报, 绝不静默降级为后端直连
 - test_dry_run_fetches_nothing_and_writes_nothing: dry-run 清单恒空 + 不写文件
 - test_read_only_run_reports_without_persisting: hr.once 口径(抓取但只出报告, 不写文件)
+- test_read_only_run_does_not_persist_failure_counter: 只读口径下**取数失败**也不落盘(失败计数/熔断同属持久状态)
 - test_disabled_by_global_or_site: 总开关关闭 / 站点 mode=off -> 直接跳过
 - test_unknown_adapter_reports_error: adapter 名未登记 -> 明确报错而不是静默不抓
 - test_view_revision_only_moves_on_data_change: 视图 revision 只在数据实质变化时抬升(复用不抬)
 - test_parse_revision_is_incomplete: 页面改版(表头缺失) -> 覆盖证明不成立
+- test_reason_kind_separates_pacing_from_parse: 没跑完的原因分类 —— 被自己频控拦下=budget(可预期),
+  页面改版=parse(值得告警), 完整刷新=none
+- test_alert_ownership_is_marked_on_the_result: 告警归属 —— 取数失败/文件读坏已由产生处告警(alerted=True),
+  页面改版留给状态层告警(alerted=False)
+- test_cancelled_fetch_is_not_a_failure_nor_an_alert: 关停/热重挂时被叫停: 不告警不计失败不推熔断
 - test_empty_listing_is_complete: 表头在但 0 行是合法空结果, 覆盖证明仍成立
 """
+import logging
+
 import pytest
 
 from auto_qb.hr import ACTION_DISABLED, ACTION_ERROR, ACTION_LOCKED, ACTION_NO_CHANNEL, ACTION_PARTIAL, \
-    ACTION_REFRESHED, ACTION_REUSED, ACTION_WAITING, HrRefreshService
-from auto_qb.hr.fetcher import NullFetcher
+    ACTION_REFRESHED, ACTION_REUSED, ACTION_WAITING, REASON_BUDGET, REASON_NONE, REASON_PARSE, HrRefreshService
+from auto_qb.hr.fetcher import HrChannelStopped, NullFetcher
 from auto_qb.hr.model import SOURCE_EXEMPT, SOURCE_NOT_LISTED
 from auto_qb.hr.store import HrSiteStore
 from hr_helpers import (
@@ -348,6 +356,7 @@ def test_consecutive_failures_fuse_site(tmp_path):
         clock.advance(601)
         result = svc.refresh_site(SITE)
         assert result.action == ACTION_ERROR
+        assert result.persisted is True, "正式口径下失败计数要落盘(否则重启就忘了熔断)"
 
     data = _read(tmp_path)
     assert data.fuse.failures == 3
@@ -401,6 +410,69 @@ def test_no_channel_reports_instead_of_silent_direct_fetch(tmp_path):
     assert not (tmp_path / "hr" / f"{SITE}.json").exists()
 
 
+class _StoppedFetcher:
+    """通道层面的「被叫停」(关停 / 热重挂端点) —— 与「没通道」是两回事"""
+    def get_text(self, url: str) -> str:
+        raise HrChannelStopped(f"取数通道已停止(HR 取数线程正在停止): {url}")
+
+    def get_bytes(self, url: str) -> bytes:
+        raise HrChannelStopped("取数通道已停止")
+
+
+def test_cancelled_fetch_is_not_a_failure_nor_an_alert(tmp_path, caplog):
+    """被叫停: 既不是「没通道」也不是失败 —— 不告警、不计失败、不推进熔断、不留残余
+
+    用户实报「一开一关就弹 warning」的其中一条就是这个: 关停时取数线程恰好正在等回传, 被叫停后
+    旧代码把 `HrChannelUnavailable` 当成「无可用取数通道」告警了一次。
+    """
+    clock = Clock()
+    svc = _service(tmp_path, _StoppedFetcher(), clock)
+
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr"):
+        result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_WAITING
+    assert "被叫停" in result.reason
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING], \
+        f"关停是预期动作, 不该告警: {[r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]}"
+    data = _read(tmp_path)
+    assert data.fuse.failures == 0, "叫停不是取数失败, 不得推进熔断"
+    assert data.quota.last_fetch_ts == 0.0, "叫停发生在请求之前, 不该记账"
+
+
+def test_alert_ownership_is_marked_on_the_result(tmp_path, caplog):
+    """告警归属: 「谁产生原因谁告警」—— 状态层只在还没人告过时才 WARNING
+
+    同一次事件被两处各告一次 = 两条系统通知(2026-09-24 用户实报: 一次扩展超时收到两条)。
+    """
+    clock = Clock()
+    # ① 取数失败: 产生处(本模块)告警 ⇒ alerted=True
+    failed = _service(tmp_path / "a", FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"}),
+                      clock).refresh_site(SITE)
+    assert failed.action == ACTION_ERROR and failed.alerted is True
+
+    # ② 页面改版: 不是取数失败, 本模块不报 ⇒ 留给状态层(worker)告警
+    revised = _service(
+        tmp_path / "b", FakeFetcher({
+            "A": REVISED_PAGE,
+            "B": EMPTY_TABLE_PAGE,
+            "C": EMPTY_TABLE_PAGE
+        }, {}), clock
+    ).refresh_site(SITE)
+    assert revised.action == ACTION_PARTIAL and revised.alerted is False
+
+    # ③ 站点文件读坏: 存储层按自己的节流口径告警 ⇒ alerted=True 且全轮只一条 WARNING
+    hr_dir = tmp_path / "c" / "hr"
+    hr_dir.mkdir(parents=True)
+    (hr_dir / f"{SITE}.json").write_text("{ 坏", encoding="utf-8")
+    caplog.clear()  # 上面两条已经报过各自的告警, 只看这一轮
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr"):
+        broken = _service(tmp_path / "c", FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101)), clock).refresh_site(SITE)
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert "站点文件解析失败" in "".join(warnings) and len(warnings) == 1, warnings
+    assert broken.alerted is True
+
+
 def test_dry_run_fetches_nothing_and_writes_nothing(tmp_path):
     """dry-run: 清单恒空且零写入(零请求也零写入)"""
     clock = Clock()
@@ -428,6 +500,24 @@ def test_read_only_run_reports_without_persisting(tmp_path):
     assert "只读模式" in result.reason
     assert len(fetcher.byte_calls) == 1
     assert not (tmp_path / "hr" / f"{SITE}.json").exists()
+
+
+def test_read_only_run_does_not_persist_failure_counter(tmp_path):
+    """❗失败计数/熔断也是持久状态: 只读口径下取数失败同样不得落盘
+
+    (旧实现这里漏了 `persist` 判断 —— 走查一旦撞上取数失败就会把熔断写进站点文件,
+    而那份文件是**正式实例共用**的, 等于只读口令偷改了取数节奏。)
+    """
+    clock = Clock()
+    fetcher = FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"})
+    svc = _service(tmp_path, fetcher, clock, persist=False, allow_fetch=True)
+
+    result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_ERROR
+    assert result.persisted is False
+    assert "只读模式, 未写盘" in result.reason
+    assert not (tmp_path / "hr" / f"{SITE}.json").exists(), "只读走查不得写站点文件(含失败计数)"
     assert result.path == str(tmp_path / "hr" / f"{SITE}.json")
 
 
@@ -500,6 +590,41 @@ def test_empty_listing_is_complete(tmp_path):
     assert result.complete is True
     assert result.entries == 0
     assert _read(tmp_path).refresh.last_success_ts == clock.now
+
+
+def test_reason_kind_separates_pacing_from_parse(tmp_path):
+    """没跑完的原因分类: 频控截断=budget(可预期) / 页面改版=parse(值得告警) / 完整=none
+
+    这个分类是告警分级的依据(worker 只对 parse 类与失败才 WARNING) —— 混淆的后果是用户
+    被「本来就是这样」的频控每秒级弹窗淹没(2026-09-24 实报)。
+    """
+    clock = Clock()
+    # 频控: 间隔 90s 且不传 sleeper ⇒ 第二页被自己的频控拦住
+    pacing = _service(
+        tmp_path / "a",
+        FakeFetcher(_pages(a_rows=[row(101)], a_next=True), _blobs(101)),
+        clock,
+        glob=global_conf(min_torrent_interval=90.0),
+    ).refresh_site(SITE)
+    assert pacing.action == ACTION_PARTIAL and "间隔" in pacing.reason
+    assert pacing.reason_kind == REASON_BUDGET
+
+    # 页面改版: 表头缺失
+    revised = _service(
+        tmp_path / "b",
+        FakeFetcher({
+            "A": REVISED_PAGE,
+            "B": EMPTY_TABLE_PAGE,
+            "C": EMPTY_TABLE_PAGE
+        }, {}),
+        clock,
+    ).refresh_site(SITE)
+    assert revised.action == ACTION_PARTIAL and "疑似改版" in revised.reason
+    assert revised.reason_kind == REASON_PARSE
+
+    # 完整刷新: 没有「没跑完」这回事
+    done = _service(tmp_path / "c", FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101)), clock).refresh_site(SITE)
+    assert done.action == ACTION_REFRESHED and done.reason_kind == REASON_NONE
 
 
 @pytest.mark.parametrize("mode", ["partial", "all"])

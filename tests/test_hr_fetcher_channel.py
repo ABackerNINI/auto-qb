@@ -9,7 +9,7 @@
 - test_extension_failure_becomes_fetch_error: 扩展报失败(含 Retry-After) -> HrFetchError 带 retry_after
 - test_empty_body_is_failure: 回传成功但内容为空 -> 失败(不给解析器喂空页面)
 - test_unlisted_url_raises_before_dispatch: 白名单外 URL 直接拒, **任务都不下发**(SSRF 边界)
-- test_cancelled_queue_reports_channel_unavailable: 通道被叫停 -> HrChannelUnavailable(不计失败/燔断)
+- test_cancelled_queue_reports_channel_unavailable: 通道被叫停 -> HrChannelStopped(可区分, 不计失败/熔断)
 - test_requests_counter: 排障用的下发计数
 """
 import threading
@@ -20,6 +20,7 @@ from auto_qb.config.models import HrChannelConfig
 from auto_qb.hr.channel import HrChannelError, HrResult, UrlPolicy
 from auto_qb.hr.fetcher import (
     ChannelFetcher,
+    HrChannelStopped,
     HrChannelUnavailable,
     HrFetchError,
     NullFetcher,
@@ -157,11 +158,16 @@ def test_unlisted_url_raises_before_dispatch():
 
 
 def test_cancelled_queue_reports_channel_unavailable():
-    """通道被叫停(关停路径) -> HrChannelUnavailable: 与"等超时"分开, 不该计入失败与燔断"""
+    """通道被叫停(关停/热重挂路径) -> `HrChannelStopped`: 与「没通道」分开, 不该计入失败与熔断
+
+    必须是**子类**而不能只是父类: service 靠它把关停从「无可用取数通道」里分出去 ——
+    否则每次关停 (与每次改端口) 都要弹一条系统通知(2026-09-24 用户实报)。
+    """
     queue, fetcher = make_fetcher(timeout=30.0)
     queue.cancel_all("停止中")
-    with pytest.raises(HrChannelUnavailable) as err:
+    with pytest.raises(HrChannelStopped) as err:
         fetcher.get_text(URL)
+    assert isinstance(err.value, HrChannelUnavailable), "父类语义仍要成立(调用方兼容)"
     assert "停止" in str(err.value)
 
 

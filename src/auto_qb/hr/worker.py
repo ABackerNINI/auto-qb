@@ -10,11 +10,13 @@
   「是否过期」这类时间敏感判定在读取时现算, 不为时间流逝重发布。
 - ❗取数线程**不碰 state_file / 任务队列 / store**(静态守阵) —— 它只读写 `hr/` 目录与视图对象。
 
-告警节流(重要): 本项目的 WARNING 会被 notify 处理器推成**系统通知**, 而取数线程是分钟级轮询 ——
-"通道不可用"这类持续状态若每轮都 WARNING, 用户会被通知淹没。故: 状态**变化**时立刻告警,
-持续状态按 `channel_silence_warn` 周期提醒一次。
+> 告警分级(重要): 本项目的 WARNING 会被 notify 处理器推成**系统通知**, 而取数线程是分钟级轮询 ——
+所以这里把「没跑完」分成两类: **被自己的频控拦下**(可预期, 要持续几小时)只记一条 INFO,
+只有页面/字段/翻页问题(可能改版)与取数失败才 WARNING。混成一级的后果是弹窗轰炸 ⇒ 告警疲劳。
+持续状态的周期提醒一律按 `channel_silence_warn` 节流。
 """
 import logging
+import re
 import threading
 import time
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
@@ -27,14 +29,39 @@ from .service import (
     ACTION_REFRESHED,
     ACTION_REUSED,
     ACTION_WAITING,
+    REASON_BUDGET,
     HrRefreshResult,
     HrRefreshService,
 )
 
 logger = logging.getLogger(__name__)
 
-#: 视为「本轮正常」的动作(不告警, 只在状态变化时记 INFO)
-_OK_ACTIONS = (ACTION_REFRESHED, ACTION_REUSED, ACTION_WAITING)
+_DIGITS = re.compile(r"\d+")
+
+#: 节流原因类别(按此次序匹配第一个命中): 同一根因不论本轮返回 partial 还是 waiting 都算**同一种状态**
+_PACING_CLASSES = (("间隔", "间隔"), ("配额", "配额"), ("时间窗", "时间窗"), ("熔断", "熔断"), ("有效期", "有效期"), ("只读", "只读"))
+
+
+def stable_key(text: str) -> str:
+    """把随每轮变化的数字抹掉, 得到可比的「状态指纹」
+
+    例: `未到可取时刻(间隔, 还差 104s)` 与 `...还差 51s` 是**同一状态**, 抹掉数字后同键 ⇒ 不会逐轮刷屏。
+    """
+    return _DIGITS.sub("#", text or "")
+
+
+def pacing_class(text: str) -> str:
+    """节流原因类别: 「为什么被拦」而不是「本轮返回了哪个动作」
+
+    ❗这是去重的关键: 同一个「等间隔」根因在不同轮次会分别返回 `partial`(第一页抓到了、第二页被拦)
+    与 `waiting`(还没到可取时刻) —— 若拿 action 当键, 两者会交替刷屏(2026-09-24 实报)。
+    按根因归一后, 一整个「等间隔」时期只需说明白一次。
+    """
+    text = text or ""
+    for token, name in _PACING_CLASSES:
+        if token in text:
+            return name
+    return stable_key(text)
 
 
 def view_signature(views: HrViewSet) -> Tuple:
@@ -122,6 +149,9 @@ class HrWorker:
         self._last_results: List[HrRefreshResult] = []
         self._last_action: Dict[str, str] = {}
         self._last_warn_at: Dict[str, float] = {}
+        #: 「节流中」这类状态的记忆(站 → 状态指纹 / 上次记录时刻): 它们会持续几小时, 只记变化与周期提醒
+        self._pacing_key: Dict[str, str] = {}
+        self._pacing_at: Dict[str, float] = {}
         self._silence_warned_at = 0.0
         #: 静默告警的时间基准: 构造即记(否则「只调 run_once 不 start」的用法会拿 0 当基准, 立刻误报)
         self._started_at = self._now()
@@ -250,25 +280,50 @@ class HrWorker:
         return HrViewSet(views=views, generated_at=self._now())
 
     def _note(self, site: str, result: HrRefreshResult) -> None:
-        """按「状态变化立刻记 + 持续异常周期提醒」记日志(见模块 docstring)"""
+        """记日志(分档与理由见模块 docstring)
+
+        三档:
+        - 正常动作(刷新 / 复用): 变化时一条 INFO;
+        - **节流中**(未到取数时刻 / 本轮被自己的频控拦下): 状态指纹变化或超过 `channel_silence_warn`
+          才记一条 INFO —— *绝不 WARNING*: 它会被 notify 推成系统通知, 而这状态要持续几小时,
+          弹窗轰炸只会让用户开始忽略告警(2026-09-24 用户实报);
+        - 真值得盯的(页面/字段/翻页问题=可能改版、取数失败、无通道): WARNING, 变化时立即报,
+          持续时按 `channel_silence_warn` 周期提醒。
+        """
         prev = self._last_action.get(site)
         self._last_action[site] = result.action
-        if result.action == prev and result.action == ACTION_WAITING:
-            return  # 同一种等待态持续: 不重复记(间隔/配额未到是常态)
-        if result.action in _OK_ACTIONS:
-            if result.action != prev:
-                logger.info(f"HR 站点 {site} | {result.action}: {result.reason or '正常'}")
-            return
         now = self._now()
         warn_gap = max(60.0, float(self.service.global_conf.channel_silence_warn))
+
+        if result.action in (ACTION_REFRESHED, ACTION_REUSED):
+            if result.action != prev:
+                logger.info(f"HR 站点 {site} | {result.action}: {result.reason or '正常'}")
+            if result.action == ACTION_REFRESHED:
+                self._pacing_key.pop(site, None)  # 真有进展: 忘掉节流记忆, 下次再卡住要重新说明白
+            return
+
+        if result.action == ACTION_WAITING or result.reason_kind == REASON_BUDGET:
+            key = pacing_class(result.reason)
+            if self._pacing_key.get(site) != key or now - self._pacing_at.get(site, 0.0) >= warn_gap:
+                self._pacing_key[site] = key
+                self._pacing_at[site] = now
+                logger.info(f"HR 站点 {site} | {result.action}: {result.reason or '正常'}(节流中, 非故障)")
+            else:
+                logger.debug(f"HR 站点 {site} | {result.action}(节流中, 同状态不重复记): {result.reason}")
+            return
+
+        detail = result.reason or result.action
         if result.action != prev or now - self._last_warn_at.get(site, 0.0) >= warn_gap:
             self._last_warn_at[site] = now
-            detail = result.reason or result.action
             # 「无可用取数通道」由 service 报过一次(每站只报一次), 这里只记状态变化免重复;
             # 持续静默的**周期提醒**交给 _check_channel_silence(它是唯一知道通道接触时间的角色)。
             # 但「刷新不完备」不同: 那可能意味着页面改版/字段缺失却不是取数失败, service 不会报
             # ⇒ 必须在这里告警(改版会让放行证明不成立, 漏了这条用户就只会看到"没数据").
-            if result.action in (ACTION_PARTIAL, ACTION_ERROR):
+            # `alerted` 则相反: 产生处(取数失败 / 存储层读坏)已经打过 WARNING 了 —— 同一次事件
+            # 再打一遍就是两条系统通知(2026-09-24 用户实报: 一次超时拿到两条), 这里只记状态。
+            if result.alerted:
+                logger.info(f"HR 站点 {site} | {result.action}: {detail}(已在取数处告警)")
+            elif result.action in (ACTION_PARTIAL, ACTION_ERROR):
                 logger.warning(f"HR 站点 {site} | {result.action}: {detail}")
             else:
                 logger.info(f"HR 站点 {site} | {result.action}: {detail}")

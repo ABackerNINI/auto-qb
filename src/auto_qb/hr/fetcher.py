@@ -28,6 +28,15 @@ class HrChannelUnavailable(HrFetchError):
     """本实例没有可用取数通道(未启用 channel / 浏览器未开 / 扩展被停用)"""
 
 
+class HrChannelStopped(HrChannelUnavailable):
+    """取数被**叫停**(关停进程 / 热重挂端点时的主动放弃)
+
+    ❗与「没通道」分开: 这是程序自己决定的非事件 —— 若按「无可用取数通道」告警, 每次关停 (和每次改
+    端口) 都会弹一条系统通知, 而那明明是预期行为(2026-09-24 用户实报「一开/一关就弹 warning」)。
+    也不计失败次数: 叫停不是取数失败, 不该推进熔断。
+    """
+
+
 @runtime_checkable
 class HrFetcher(Protocol):
     """取数通道协议: 只负责「按 URL 取内容」, 无策略、无解析、不碰 cookie"""
@@ -89,16 +98,16 @@ class ChannelFetcher:
 
     def _fetch(self, url: str, kind: str, *, scope: str = "", tid: int = 0) -> HrResult:
         if self.queue.cancel_reason:
-            # 通道已叫停(关停路径): 连任务都不下发, 直接如实上报"通道不可用"
-            raise HrChannelUnavailable(f"取数通道已停止({self.queue.cancel_reason}): {url}")
+            # 通道已叫停(关停路径): 连任务都不下发, 直接如实上报「被叫停」(不是「没通道」)
+            raise HrChannelStopped(f"取数通道已停止({self.queue.cancel_reason}): {url}")
         site = self.policy.require(url)  # 白名单外直接抛 HrChannelError -> service 记失败
         task = self.queue.put(site, kind, url, scope=scope, tid=tid)
         self.requests += 1
         result = self.queue.wait(task.task_id, self.request_timeout)
         if result is None:
-            # 区分「被叫停」与「等超时」: 前者是关停路径(不该算一次失败), 后者才计入退避燔断
+            # 区分「被叫停」与「等超时」: 前者是关停路径(不该算一次失败), 后者才计入退避熔断
             if self.queue.cancel_reason:
-                raise HrChannelUnavailable(f"取数通道已停止({self.queue.cancel_reason}), 本轮放弃: {url}")
+                raise HrChannelStopped(f"取数通道已停止({self.queue.cancel_reason}), 本轮放弃: {url}")
             raise HrFetchError(f"等待浏览器扩展取数超时({self.request_timeout:.0f}s): {url}"
                                "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
         if not result.ok:

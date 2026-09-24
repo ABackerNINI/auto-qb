@@ -125,7 +125,8 @@ class HrChannelServer:
         thread = threading.Thread(target=server.serve_forever, name="auto-qb-hr-channel", daemon=True)
         thread.start()
         self._handle = HrEndpointHandle(server, thread, server.server_address[1])
-        logger.warning(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}(仅监听本机回环, 需 token 鉴权)")
+        # INFO 而非 WARNING: 本仓 WARNING 以上会被推成系统通知, 而「端点起来了」是预期内的事
+        logger.info(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}(仅监听本机回环, 需 token 鉴权)")
         return self._handle
 
     def stop(self, timeout: float = ENDPOINT_STOP_TIMEOUT) -> bool:
