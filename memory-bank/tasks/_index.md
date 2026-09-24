@@ -29,8 +29,8 @@
 
 ## Open
 
+- [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实 (取 HR 统计页 + 取 .torrent 算 infohash 对账建索引) 的可行性分析与实施计划 **v1.8**（决策…
 - [26-09-23-commands-unified-surface] 项目命令统一调用面 (纯引擎 + 包式配置层) - 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell…
-- [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实 (抓 HR 统计页 + 下载 .torrent 算 infohash 对账建索引) 的可行性分析与实施计划 v1.1 待拍板 (v…
 
 ## Done
 

@@ -8,7 +8,8 @@
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-09-22-2204">
-<meta name="doc-updated" content="26-09-22-2204">
+<meta name="doc-updated" content="26-09-24-2015">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
 <style>
   :root {
     color-scheme: dark;
@@ -57,7 +58,7 @@
   }
   .meta-row b { display: block; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: .06em; margin-bottom: 2px; }
 
-  /* ---------- 布局: 粘性目录 + 正文 ---------- */
+  /* ---------- 布局: 吸顶目录 + 正文 (两者均无「粘性」语义) ---------- */
   .layout { display: grid; grid-template-columns: 216px 1fr; gap: 56px; padding-top: 40px; }
   aside nav { position: sticky; top: 32px; }
   aside .toc-title {
@@ -176,13 +177,13 @@
 
   <!-- ============ 封面 ============ -->
   <header class="cover">
-    <div class="kicker">auto-qb · 工程计划 · v1.1 待拍板</div>
+    <div class="kicker">auto-qb · 工程计划 · v1.8 决策齐备 · 待开工</div>
     <h1>部分种子 HR 的在线核实</h1>
-    <p class="dek">对「部分种子 HR」站点: 抓取 HR 种子统计页, 下载列表中的 .torrent 计算 infohash, 与本地做种库对账, 建立按 infohash 的 HR 索引 —— 全程限速、可配置、后台执行、复用浏览器 cookie。本文是可行性分析与分阶段实施计划。</p>
+    <p class="dek">对「部分种子 HR」站点: 由<strong>浏览器扩展</strong>(打包形态无关, 跑在<strong>日常浏览器</strong>里, 不需要专用浏览器)以真实登录态取 HR 统计页与 .torrent, 后端算 infohash、与本地做种库对账, 建按 (站点, tid) 的 HR 索引。判定是三态 —— <strong>受管束 / 已核实不受管束 (安全放行) / 未核实</strong>, 且<strong>站点数据是权威</strong>: 触发与达标都看站点侧, 本地 qB 字段降为兵底与展示 (转移种子 / 多客户端下本地字段会骗人)。多实例<strong>共享站点数据</strong>: 站点分文件 + <strong>每站点一把锁</strong>, <strong>持锁期间完成读/抓/写全程</strong>, 有效期内直接复用; 取数节奏与主循环 tick 解耦, 只在数据变化时更新。首批站点 <strong>BTSchool</strong>。(cookie 全程不离开浏览器)</p>
     <div class="meta-row">
-      <div><b>日期</b>2026-09-22 22:04 · v1.1 修订 22:32</div>
-      <div><b>状态</b>待拍板 (开放问题 5 条)</div>
-      <div><b>影响面</b>站点对接层 · TorrentRecord · state_file</div>
+      <div><b>日期</b>2026-09-22 22:04 · v1.8 修订 2026-09-24 20:15 (文档漂移清理)</div>
+      <div><b>状态</b>决策齐备 (5/5 已拍板) · 待开工 (M0 余项为实测, 非决策)</div>
+      <div><b>影响面</b>取数通道 (扩展) · 判定语义 (三态·站点侧权威) · 取数线程与共享站点数据 · TorrentRecord</div>
       <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
     </div>
   </header>
@@ -197,14 +198,15 @@
         <a href="#s3">3 需求 → 技术含义</a>
         <a href="#s4">4 HR 名单获取</a>
         <a href="#s5">5 种子下载与对账</a>
-        <a href="#s6">6 Cookie 分层方案</a>
+        <a href="#s6">6 取数通道: 浏览器扩展</a>
         <a href="#s7">7 频控与配置设计</a>
         <a href="#s8">8 后台执行与线程模型</a>
         <a href="#s9">9 判定语义收口</a>
         <a href="#s10">10 风险清单</a>
         <a href="#s11">11 分阶段实施</a>
         <a href="#s12">12 测试与验收</a>
-        <a href="#s13">13 开放问题</a>
+        <a href="#s13">13 决策记录</a>
+        <a href="#s14">14 变更记录</a>
       </nav>
     </aside>
 
@@ -219,7 +221,7 @@
         <li><code>check_hr_condition()</code> — 是否「触发」HR (下载比例 / 下载量达到 <code>condition</code>, 或下载满); 兼作<strong>辅种排除</strong>依据;</li>
         <li><code>check_hr_satisfied()</code> — 触发之后, 做种时长达标或分享率达标即视为满足。</li>
       </ul>
-      <p>全部消费点都经这两个方法, 共四处: maintenance 打 HR 标签/分类 (<code>mixins/tags.py</code> <code>_add_hr_tag_or_category</code>)、WEB UI 的 HR 展示字段 (<code>mixins/web_view.py</code> <code>_hr_view_fields</code>)、规则条件 <code>hr</code> (<code>rules/conditions.py</code>, modes <code>condition-met / condition-not-met / satisfied</code>)、表达式变量 <code>tor.hr_condition_met</code> / <code>tor.hr_satisfied</code> (<code>rules/expr/env.py</code>)。</p>
+      <p>全部消费点都经这两个方法, 共四处: maintenance 打 HR 标签/分类 (<code>mixins/tags.py</code> <code>_add_hr_tag_or_category</code>)、WEB UI 的 HR 展示字段 (<code>webui/views.py</code> <code>_hr_view_fields</code>)、规则条件 <code>hr</code> (<code>rules/conditions.py</code>, modes <code>condition-met / condition-not-met / satisfied</code>)、表达式变量 <code>tor.hr_condition_met</code> / <code>tor.hr_satisfied</code> (<code>rules/expr/env.py</code>)。</p>
       <h3>问题: 部分种子 HR 站点上的两难</h3>
       <p>部分站点实行<strong>部分种子 HR 策略</strong>: 同一站点的种子只有一部分受 HR 约束, 且下载时站点不提供可机读的逐种标记, 只有「HR 种子统计页」(通常列出当前账号下受 HR 约束的种子清单)。静态模型在这种站点上只有两个坏选项:</p>
       <ul>
@@ -235,9 +237,11 @@
       <h2>可行性结论</h2>
       <div class="verdict">
         <div class="vt">总评 · 可行</div>
-        <p><strong>技术路线成立</strong>: 抓取 → 下载 → 算 infohash → 对账 → 建索引, 每一步都落在项目既有架构里, 不需要引入新线程模型或新存储。</p>
-        <p><strong>判定收口是最大的红利</strong>: 四个消费点全部经 <code>TorrentRecord</code> 两个方法, 只改一处收口, 上层零改动。</p>
-        <p><strong>cookie 是最大的不确定项</strong>: 「直接复用日常浏览器 cookie」在 2026 年的 Chrome/Edge 上有硬性技术墙 (App-Bound Encryption + Chrome 136 CDP 限制, 见 §6, 均已核实), 需要分层方案与用户配合。</p>
+        <p><strong>技术路线成立</strong>: 取数 (浏览器扩展代取) → 解析 → 算 infohash → 对账 → 建索引, 每一步都落在项目既有架构里。取数外移之后, 后端不再发起站点请求 ⇒ <strong>原计划的「许可令牌」机制整体作废</strong> —— 取数线程在 v1.5 以新职责回来 (只管 hr 文件与只读视图, 见 §8)。</p>
+        <p><strong>判定收口是最大的红利</strong>: 四个消费点全部经 <code>TorrentRecord</code> 两个方法; 但仍需在 record 上补一个「HR 身份」非快照字段, 且身份解析必须发生在主循环 (Web 线程也会读它, 见 §9) —— 比 v1.1 说的「只改一处收口」多一条边界约束。</p>
+        <p><strong>cookie 风险整体移除</strong>: 手工填写 / 导入 cookie 已否决 (把维护成本转嫁给用户 = 制造新麻烦); 取数改由<strong>浏览器扩展</strong>在真实浏览器上下文完成 ⇒ cookie 不离开浏览器, 后端零 cookie 依赖 (§6)。新增的风险面是「扩展端点被伪造注入」与「扩展分发维护」, 二者都可机检/可收敛。</p>
+        <p><strong>判定边界 (v1.4 定稿, 本计划的核心)</strong>: 把「索引里有没有」升级为<strong>三态</strong> —— 受管束 / <strong>已核实不受管束 (安全放行)</strong> / 未核实; 并确认<strong>站点数据是权威数据</strong>: 接入 <code>hr_check</code> 的站点 (partial / all) 的「是否触发 / 是否达标」一律看站点侧, 本地 qB 字段降为兜底与展示 —— 否则<strong>转移种子</strong> (A 客户端下载 → B 客户端保种, B 的 <code>downloaded</code>=0 被当辅种) 与多客户端场景会直接漏管。放行只发生在「一次<strong>完整成功</strong>的刷新」之后且<strong>仍在放行有效期内</strong> (<code>verified_ttl</code> 默认 = 刷新周期), 新种子另由<strong>新鲜度闸门</strong>兜住 —— 首要不漏 HR, 其次让确认为非 HR 的种子真的放行 (§9)。</p>
+        <p><strong>多实例是常态</strong>: 账号级状态 (索引 / 放行 / 已取记录 / 配额账本 / 熔断) <strong>不进 <code>state_file</code></strong>, 而是按<strong>站点分文件</strong>落在 hr 目录 (本地或共享), 由<strong>每站点一把文件锁</strong>保护 —— <strong>持锁期间完成「读 → 判有效期 → 必要时抓 → 写 → 释放」全程</strong>, 即使代码有 bug 也不可能两个实例同时读/写/抓同一站点; 拿不到锁的实例直接<strong>等下一轮</strong>。有效期内直接复用别的实例抓到的数据, <strong>并照样记一次配额</strong> (§5)。</p>
         <p><strong>账号安全是最大的运营风险</strong>: 访问频度必须默认极保守 + 全可配 + 熔断, 这恰是本需求的原始诉求, 设计上优先满足 (§7)。</p>
       </div>
       <div class="note"><b>边界判据</b> — 若某个站点其实提供了逐种 HR 标记 (详情页/搜索页图标) 或 JSON 接口, 则不需要本计划的「下载种子对比」重路线, adapter 直接读更便宜的来源即可。adapter 接口按「返回 HR 种子列表」抽象, 把这条路留开 (§4), M0 调研优先确认。</div>
@@ -251,11 +255,12 @@
         <thead><tr><th style="width:26%">原始需求</th><th>技术含义</th><th style="width:26%">落点</th></tr></thead>
         <tbody>
           <tr><td>部分种子无法本地判别是否 HR, 需上站点查询</td><td>新增「站点在线核实」能力: 登录态抓取 HR 统计页 + 解析种子列表</td><td>站点 adapter (新模块族)</td></tr>
-          <tr><td>把种子下载下来对比</td><td>下载列表内 .torrent → 计算 infohash v1/v2 → 与 qB 做种库对账 → 按 infohash 建 HR 索引</td><td>bencode/infohash 模块 + <code>state.hr_index</code></td></tr>
+          <tr><td>把种子下载下来对比</td><td>下载列表内 .torrent → 计算 infohash v1/v2 → 与 qB 做种库对账 → 按 infohash 建 HR 索引</td><td>bencode/infohash 模块 + 站点文件里的 <code>hr_index</code> (<strong>不进 <code>state_file</code></strong>, 见 §5)</td></tr>
           <tr><td>下载速度不能太快</td><td>相邻两次 .torrent 下载强制最小间隔 + 抖动 + 失败退避</td><td>频控器 (§7)</td></tr>
           <tr><td>次数需限制, 可配置</td><td>小时/天两级配额 + 单次刷新翻页上限, 全部配置键进校验</td><td>频控器 + validate_config</td></tr>
-          <tr><td>访问站点尽量在后台进行</td><td>不弹浏览器、不阻塞 2s 主循环; 取数移出主线程, 结果回主线程落盘</td><td>取数线程 + 令牌授权 (§8)</td></tr>
-          <tr><td>复用当前浏览器的 cookie</td><td>分层 cookie 方案: 手工导入起步 → 专用 profile + CDP 自动化; 日常浏览器直读已被技术墙挡死</td><td>§6 分层方案</td></tr>
+          <tr><td>访问站点尽量在后台进行</td><td>取数全部发生在浏览器侧 (后台标签页, 不抢焦点); 后端只收数据入队, 2s 主循环零阻塞</td><td>哑取数器 + 本地端点 (§6 / §8)</td></tr>
+          <tr><td>复用当前浏览器的 cookie</td><td>浏览器扩展代取: 复用日常浏览器登录态, <strong>cookie 不离开浏览器</strong> —— 后端不需要知道 cookie</td><td>§6 扩展通道</td></tr>
+          <tr><td>不因此引入新的凭据风险</td><td>后端零 cookie/passkey 依赖; 本地端点鉴权 + origin 白名单 + SSRF 白名单</td><td>§6 安全边界</td></tr>
         </tbody>
       </table>
     </section>
@@ -270,7 +275,7 @@
         <tbody>
           <tr><td>HR 编号 (种子编号, tid)</td><td><strong>站点内唯一 id</strong>: 去重、下载 URL、索引主键都落在 (站点, tid) 上; <strong>跨站点绝不混用</strong></td></tr>
           <tr><td>种子名称</td><td>展示与人工核对; 与本地种子的匹配仍以 infohash 为准 (名称不可靠)</td></tr>
-          <tr><td>上传量 / 下载量 / 分享率</td><td>站点侧权威流量快照: 展示与交叉核对用; 决策仍以 qB 本地实时值为准</td></tr>
+          <tr><td>上传量 / 下载量 / 分享率</td><td><strong>站点侧权威</strong> (账号级): 展示 + 达标判定的<strong>优先</strong>来源; 本地 qB 值降为兜底与交叉核对 (站点字段缺失才回落, WebUI 标注来源) —— 见 §9</td></tr>
           <tr><td>还需做种时间</td><td>距要求做种时长还差多少: 进度参照 + WEB UI 展示</td></tr>
           <tr><td>完成时间</td><td>语义 M0 与数值格式一并确认 (达标完成或下载完成); 已完成条目保留身份记录, 不从索引删除</td></tr>
           <tr><td>剩余达标时间</td><td>距达标/超期的时间余量: 展示与将来规则条件的扩展点</td></tr>
@@ -279,9 +284,20 @@
       <h3>Adapter 抽象</h3>
       <p>每站点一个 adapter, 接口统一为「给定登录态 + 分页游标, 返回结构化 HR 种子列表」: <code>{torrent_id, name, listed_ts, hr_requirement?}</code> + 是否还有下一页。解析实现按站点隔离:</p>
       <ul>
-        <li><strong>解析器选型</strong>: 首选标准库 <code>html.parser</code> 子类 (零新依赖, 行为可测); 仅当页面结构复杂到 stdlib 不堪用时, M0 再评估引入轻量解析器 (如 selectolax)。</li>
+        <li><strong>解析器选型</strong>: 标准库 <code>html.parser</code> 子类 (零新依赖, 行为可测) —— <strong>已实证够用</strong>: 实验脚本已用栈式树解析 BTSchool <code>myhr.php</code> (含 <code>&lt;td class="embedded"&gt;</code> 包裹表的嵌套), 样张全字段解析正确; 不再考虑引入第三方解析器。</li>
         <li><strong>更便宜的来源优先</strong>: 若站点有 JSON 接口或逐种标记, adapter 换实现不换接口, 并跳过 §5 的 .torrent 下载成本。</li>
       </ul>
+      <h3>抓取范围 (scope) 与覆盖证明</h3>
+      <p>HR 统计页按状态分档 (BTSchool 形态: <code>?hrtype=A</code> 考察中 / <code>B</code> 已达标 / <code>C</code> 未达标 / <code>D</code> 已免罪)。<strong>只抓 A 会把「已达标」的 HR 种子当成非 HR</strong> (身份与 satisfied 标记一起丢), 属漏 HR —— 故默认抓取范围 = <code>A + B + C</code> (D = 明确不受管束, 可配是否抓来展示); 范围写进站点配置 <code>hr_page_scopes</code>, 逐 scope 分页抓完。</p>
+      <p><strong>覆盖证明 (coverage)</strong> 是「安全放行」的<strong>唯一依据</strong> —— 每次刷新落一条站点级元数据, 只有它成立, 本次未命中才敢判「不受管束」:</p>
+<pre><code>hr_refresh[site] = {
+  last_success_ts,                    # 最近一次「完整成功」刷新完成时刻 (新鲜度闸门的比较基准)
+  scopes_done: [A,B,C],               # 本次真正抓全的 scope 集合
+  pages_fetched, reached_last_page,   # 翻页是否到底 (未到底 = 不完备 ⇒ 不产生放行)
+  entry_count, missing_field_rate,    # 解析健康度 (0 条 / 缺失率超阈 = 疑似改版)
+  complete: true,                     # 上述全部成立才为 true
+  reason: ""                          # 不完备原因 (分页未到底 / scope 失败 / 解析可疑 / 登录失效)
+}</code></pre>
       <h3>改版防护</h3>
       <p>解析结果做<strong>最小字段校验</strong>: HTTP 200 但解析出 0 条记录、或必填字段缺失率超阈 → 判定「页面可能改版」, 该站熔断 + WARNING (自动进 notify), <strong>绝不把空结果当真入库</strong> (空结果的错误语义是「该账号没有 HR 种子」, 二者必须可区分)。每站点样本 HTML 脱敏后进测试 fixture, 改版即测试红。</p>
     </section>
@@ -290,72 +306,155 @@
     <section id="s5">
       <div class="sec-no">§ 5</div>
       <h2>种子下载与 infohash 对账</h2>
-      <h3>下载</h3>
-      <p>HR 页列出的种子按站点 <code>torrent_url_pattern</code> 拼下载链接 (典型如 <code>download.php?id={id}</code>, PT 站通常还需 passkey 参数, 属配置的一部分)。请求带 cookie 与一致的 UA (§6)。文件落 <code>&lt;data_dir&gt;/hr-check/</code> (运行时数据目录, 已在 gitignore 范围内), 算完 infohash 即完成使命, 保留策略可配 (默认保留最近一份供排查)。</p>
+      <h3>取数 (由扩展代取)</h3>
+      <p>HR 页列出的种子按站点 <code>download_path</code> 拼出相对路径 (典型 <code>/download.php?id={id}</code>), 由<strong>扩展在页面上下文请求</strong> —— 登录态与 passkey 由页面自带, 后端不参与, 也不为此保留任何凭据配置 (§6)。二进制以 base64 回传, 后端只做解码 + 算 infohash, <strong>默认不落盘</strong>; 若日后定位需要保留原始字节, 一律落 <code>&lt;data_dir&gt;/hr-check/</code> (运行时数据区, 不进仓库)。</p>
       <h3>infohash 计算 — 一个必须做对的细节</h3>
-      <p>v1 infohash = <code>sha1</code> over info dict 的 <strong>bencode 原始字节切片</strong>, v2 = <code>sha256</code> 同理。实现上不能「decode 再 re-encode」—— 重编码的键序/整数表示可能与原文件不一致, 算出的 infohash 就错了。正确姿势: 自写极小 bencode 解析器时<strong>同步记录 info dict 在原文件中的字节偏移</strong>, 对原切片做哈希。解析器预计 60 行上下, 纯函数, 强测试覆盖 (往返 + 已知 infohash 向量 + 畸形输入拒绝)。替代方案是引入 <code>bencodepy</code>, 代价是多一个依赖, M0 拍板; 倾向自写, 符合项目零依赖风格。</p>
+      <p>v1 infohash = <code>sha1</code> over info dict 的 <strong>bencode 原始字节切片</strong>, v2 = <code>sha256</code> 同理。实现上不能「decode 再 re-encode」—— 重编码的键序/整数表示可能与原文件不一致, 算出的 infohash 就错了。正确姿势: 自写极小 bencode 解析器时<strong>同步记录 info dict 在原文件中的字节偏移</strong>, 对原切片做哈希。解析器预计 60 行上下, 纯函数, 强测试覆盖 (往返 + 已知 infohash 向量 + 畸形输入拒绝)。替代方案是引入 <code>bencodepy</code> (代价: 多一个依赖) —— <strong>已定自写</strong>: 实验脚本 <code>scripts/hr_fetch_experiment.py</code> 已带钉死向量 (§11「已完成」), 零新依赖。</p>
       <h3>与 qB 做种库对账</h3>
       <ul>
         <li>v1 种子: qB 的 <code>hash</code> 即 v1 infohash, <code>TorrentStore</code> 现有字段直接可对;</li>
         <li>v2-only 种子: qB (≥ 4.4) 的 <code>hash</code> 字段本身即 v2 infohash, 同样直接可对;</li>
-        <li>hybrid 种子: 双算双配; <code>infohash_v2</code> 是否已在快照字段里, M0 核对 <code>_SNAPSHOT_FIELDS</code>, 不在则评估增量成本。</li>
+        <li>hybrid 种子: 双算双配; <code>infohash_v1</code> / <code>infohash_v2</code> <strong>已在</strong> <code>torrents/compat.py</code> 的快照扩展字段里 (可选字段, 老版 qB 可能缺失 → 缺失时回落 <code>hash</code>)。</li>
       </ul>
       <h3>state 模型: (站点, tid) 为主键, infohash 是回填属性</h3>
       <p><strong>种子编号 (tid) 站点内唯一, 跨站点不混用</strong>; 同一内容 (同一 infohash) 辅种到多个站点时, 各站 HR 身份彼此独立 —— 索引一律以 (站点, tid) 为主键, infohash 在下载算出后一次性回填:</p>
-<pre><code>hr_index[site][tid] = {              # 页面行的站点侧事实, 每次页面刷新只更新字段 (不触发下载)
+<pre><code>hr_index[site][tid] = {              # 页面行的站点侧事实, 每次刷新只更新字段 (不触发取数)
   tid, name,                         # HR 编号 + 种子名称
-  uploaded, downloaded, ratio,       # 站点侧流量 (观察/展示用, 决策不替代 qB 本地实时值)
-  need_seed_time, done_ts, remain,   # 还需做种时间 / 完成时间 / 剩余达标时间
-  infohash: "…",                     # 首次下载算出后回填, 之后不再下载
+  lane: A|B|C|D,                     # 档位 (§4 scope): A考察中 / B已达标 / C未达标 / D已免罪
+  uploaded, downloaded, ratio,       # 站点侧流量 —— 账号级权威 (§9: partial 站点判定以它为准)
+  need_seed_time, done_ts, remain,   # 还需做种时间 / 完成时间 / 剩余达标时间 (账号级; 达标判定依据)
+  infohash: "…",                     # 首次取数后回填, 之后不再取
   first_seen, last_seen              # 生命周期 (配合 index_retention 淘汰)
 }
-hr_downloaded[site][tid] = {ts, infohash, name}   # 已下载记录: 「永不重下」的持久凭据
-hr_dl_fails[site][tid] = {count, last_ts}         # 下载失败记账, 达上限后冷却</code></pre>
+hr_downloaded[site][tid] = {ts, infohash, name}   # 已取记录: 「永不重取」的持久凭据
+hr_dl_fails[site][tid] = {count, last_ts}         # 取数失败记账, 达上限后冷却
+hr_verified[site][infohash] = {      # 已核实「不受管束」 (§9 放行层)
+  tid, verified_ts, source,          # source: absent(D 档免罪) | not-listed(完整刷新未列出)
+  anchor: {added_on, downloaded, completion_on, progress}   # 本实例下载锚点 (辅助: 提前作废放行)
+}
+hr_refresh[site] = {…}               # 覆盖证明 (§4): 产生放行结论的前提条件
+# ---- 以上全部是「账号级」状态: 与实例数无关, 落在 hr 文件里由实例共享 (见本节末「共享站点数据」) ----</code></pre>
       <p><strong>防重复下载三层</strong>: ① <code>hr_downloaded</code> 是廉价永久层 (每条仅 tid + infohash + ts + name) —— 页面条目后来消失、翻页遗漏、快照超期淘汰, 只要 (站点, tid) 在里面就<strong>绝不重下</strong>; ② <code>hr_index</code> 中已有 infohash 的条目, 刷新只更新页面字段; ③ 下载失败按 <code>max_download_retries</code> (默认 3) 计数, 达上限冷却, 不死循环烧配额。淘汰 (<code>index_retention</code>) 只作用于页面快照字段的陈旧条目, <strong>不触碰</strong> <code>hr_downloaded</code>。</p>
-      <p>判定反查: <code>TorrentRecord</code> 按 (站点, infohash) 查命中 —— infohash → tid 的反向映射在主循环加载 state 时于内存重建 (state 只存 tid 主键, 不存双份)。索引不只服务当前库: <strong>已做种种子命中 → 受 HR 管束; 辅种候选命中 → 排除辅种</strong>; 未命中走 <code>unknown_policy</code> (§9)。</p>
+      <p><strong>放行的有效期 (v1.4, 修正 v1.3 的「永久粘性」)</strong>: 放行不是一个状态, 而是「最近一次完整核实」的<strong>有时效</strong>结论 —— 有效期 = <code>min(下一次成功完整刷新, verified_ts + verified_ttl)</code>, 默认 <code>verified_ttl = refresh_interval</code>。理由在多客户端下才成立: 账号随时可能在<strong>别的客户端</strong>下载 (本地一个信号都没有), 发现它的唯一途径就是刷新。通道正常时每轮刷新都会给放行续期、收益照旧; 只有通道长期静默才会回落保守 (已有 <code>channel_silence_warn</code> 告警)。</p>
+      <p><strong>下载锚点是辅助信号, 不是放行的充分条件</strong>: 它只能<strong>提前</strong>让<strong>本实例</strong>的放行失效 (本实例二次下载 / 文件被删重下 / 删种重加), 覆盖不到别的客户端。故放行判定 = 「刷新背书 (必需) + 锚点未漂移 (本实例辅助)」。</p>
+      <h3>多实例: 共享站点数据 (带锁访问 · 有效期复用)</h3>
+      <p>多客户端 / 多实例是常态, 「同一账号只在一个实例启用」不现实; 而上面那些状态<strong>全部是账号级</strong>的 —— 所以它们<strong>不进 <code>state_file</code></strong>, 而是落在 hr 专属文件里 (本地目录 <code>&lt;data_dir&gt;/hr/</code>, 或 <code>shared_dir</code> 指向的共享目录), 由实例们共享:</p>
+<pre><code>&lt;shared_dir&gt;/hr/&lt;site&gt;.json   # 站点数据: 一个站点一个文件 (index / verified / refresh / 配额账本 / 熔断)
+&lt;shared_dir&gt;/hr/&lt;site&gt;.lock   # 每个站点文件一把锁 (filelock): 锁粒度 = 站点
+文件内: { schema_version, revision, fetched_at, expires_at, writer:{instance_id, heartbeat}, 站点数据… }</code></pre>
+      <ul>
+        <li><strong>带锁访问 (安全的关键)</strong>: 取数线程<strong>在持锁期间完成「读 → 判有效期 → 必要时抓 → 写 → 释放」全程</strong> —— 连抓取 (分钟级) 也在锁内。这样<strong>即使代码有 bug, 也不可能出现两个实例同时读/写/抓同一个站点</strong>; 拿不到锁 ⇒ 直接等下一轮 (不排队、不重试轰炸)。<span class="muted">锁粒度 = <strong>站点</strong> (一站点一锁): 抓站点 A 不阻塞站点 B, 减小数据更新延迟; 同一站点严格互斥。</span></li>
+        <li><strong>有效期 = 「本轮已完成」</strong>: 站点文件带 <code>expires_at</code> (= <code>fetched_at</code> + <code>refresh_interval</code>)。持锁实例读到<strong>仍在有效期内的数据</strong>时: 把它<strong>当作本次抓取的数据</strong>直接采用, <strong>并照样记一次配额消耗</strong> (按窗口键幂等) ⇒ 该窗口内不会再有第二次抓取。于是「站点访问频率」由<strong>数据有效期</strong>决定, 与「哪个实例实际抓的」无关。</li>
+        <li><strong>能力即角色 (v1.7: 推荐都启用)</strong>: 抓取能力 = 「本实例所在机器上有没有装着扩展的浏览器」—— <code>channel.enabled=true</code> 即本实例可被抓。硬边界是<strong>端点只听 <code>127.0.0.1</code>, 而浏览器只能连本机的 loopback</strong> ⇒ <span class="muted">跨机器的实例即使配了 <code>channel</code> 也没有本地浏览器可驱动, 只能只读共享数据 (数据过期就保守回落未核实)。</span><br><strong>所以推荐: 凡是本机有浏览器的实例都启用 <code>channel</code></strong> (不再「只留一台」): ① 消掉「唯一能抓的那台退出 ⇒ 抓取能力消失」的单点故障; ② 站点配在哪个实例上, 它就自己能抓 (不必把配置凑到一台); ③ 多通道<strong>不会</strong>造成双倍访问站点 —— 同站点有锁 + 有效期复用, 谁先拿到锁谁抓, 另一个读到效期内数据直接复用并记一次配额。一个浏览器服务多个实例只需在扩展里配 N 个端点 (名称 / 端口 / token, §6)。</li>
+        <li><strong>写者心跳自检</strong>: 站点文件记 <code>writer:{instance_id, heartbeat}</code>; 若本实例在锁内发现「自己的心跳被别人覆盖」或 <code>revision</code> 回退 ⇒ 判定<strong>锁在该共享目录上不生效</strong> ⇒ 告警并退化为单实例只读 (宁可保守, 不可双写)。</li>
+        <li><strong>合并式写入 (站点内)</strong>: 站点文件内的读-改-写仍在锁内完成 (只补自己新增的部分, 含「只取缺 infohash 的 tid」); 而<strong>跨站点天然无覆盖问题</strong> —— 每个实例只写自己负责的那个站点文件。</li>
+        <li><code>shared_dir</code> 留空 ⇒ 文件仍走 <code>&lt;data_dir&gt;/hr/</code>, 单实例行为不变 (同一套代码, 只是没人争锁)。</li>
+        <li><strong>节奏与 tick 解耦 (v1.6)</strong>: HR 的粒度是<strong>小时甚至天</strong> ⇒ 取数线程按自己的定时器 (<code>poll_interval</code>, 默认 <code>1M</code>) 醒来检查「哪个站点过期/需抓」, <strong>不随主循环 tick 跑</strong>; 视图只在<strong>数据实质变化</strong> (抓取成功 / 熔断进入退出 / 通道状态翻转) 时才抬 <code>revision</code> 并发布 ⇒ 主循环每 tick 只做一次廉价的版本比较, <strong>版本没变就零工作</strong>。<br>「是否还在有效期内」这类<strong>时间敏感判定在读取时现算</strong> (<code>now</code> vs <code>expires_at</code>), 不需要为「时间流逝」重发布。</li>
+      </ul>
+      <p class="muted">边界: 共享目录必须<strong>支持文件锁</strong>且各实例看到同一份文件 (本机 / 同一台 NAS 的 SMB 预期可用; NFS 部分可用; <strong>云同步盘 (OneDrive / 坚果云) 不可用</strong> —— 原子替换与锁都不可靠)。<code>filelock</code> 已是项目直接依赖, <code>infra/locking.py::SingleInstanceLock</code> 就是可抄的样板 (句柄随进程退出自动释放 ⇒ 进程被杀不会留下死锁)。</p>
+      <p>判定反查: <code>TorrentRecord</code> 按 (站点, infohash) 查三态 —— infohash → tid 的反向映射由<strong>取数线程</strong>在发布只读视图时就建好 (站点文件只存 tid 主键, 不存双份)。索引不只服务当前库: <strong>受管束 → 打 HR 标签/分类并纳入辅种排除; 安全放行 → 不排除辅种、不打标; 未核实 → 走 <code>unknown_policy</code></strong> (§9)。</p>
     </section>
 
-    <!-- ============ 6 Cookie ============ -->
+    <!-- ============ 6 取数通道 ============ -->
     <section id="s6">
       <div class="sec-no">§ 6</div>
-      <h2>Cookie 分层方案 (核心难点)</h2>
-      <p>「复用当前浏览器的 cookie」这个诉求, 在 2026 年的 Windows / Chromium 生态里有两条<strong>已核实的技术墙</strong>:</p>
+      <h2>取数通道: 浏览器扩展 (否决手工 cookie)</h2>
+      <p>取数是全链路里唯一必须「以你的登录态访问站点」的一步。先给结论: 通道选<strong>浏览器扩展</strong> —— 它是唯一既能复用日常浏览器登录态、又让 cookie 明文全程不离开浏览器的方案; 后端因此彻底不需要知道 cookie, v1.1 的 cookie 配置项与 cookie 失效风险管理一并移除。</p>
+      <div class="note">
+        <b>已否决 · 手工填写 / 导入 cookie</b> (2026-09-24 用户否决) —— 把 cookie 的维护 (到期、换设备、被登出、UA 不一致触发风控) 转嫁给用户, 是「制造新的麻烦」; 且 cookie 属长期凭据, 写进 <code>config.yml</code> (git 跟踪文件) 等于把凭据加进仓库。同理否决「直读浏览器 cookie 库」。
+      </div>
+      <p>下面两条技术墙是「取数通道为什么不能是后端自己发请求」的核心依据:</p>
       <div class="note">
         <b>事实 1 · App-Bound Encryption</b> — Chrome 自 v127 (2024-08) 起在 Windows 上将 cookie 解密密钥绑定到浏览器进程 (经 IElevator COM 服务授权), 其他进程从 cookie 库里拿到的只有密文; 传统的 DPAPI 用户级解密路线自此失效, 取证工业 (ElcomSoft, 2026-01) 与攻击面研究 (SpecterOps, 2025-08) 双侧确认。现存的「绕过」手法 (进程注入 / hollowing 冒充浏览器) 属窃密木马技术, 本项目<strong>不做</strong>。<span class="muted">[脚注 1]</span>
       </div>
       <div class="note">
-        <b>事实 2 · Chrome 136 的 CDP 限制</b> — Chrome 136 (2025-05) 起 <code>--remote-debugging-port</code> 在<strong>默认</strong> user-data-dir 上被直接忽略 (chromedriver v136 报错原文: 「DevTools remote debugging requires a non-default data directory」)。即: 经 CDP 附着日常浏览器读 cookie 的通道已死, 必须使用独立 <code>--user-data-dir</code>。<span class="muted">[脚注 2]</span>
+        <b>事实 2 · Chrome 136 的 CDP 限制</b> — Chrome 136 (2025-05) 起 <code>--remote-debugging-port</code> 在<strong>默认</strong> user-data-dir 上被直接忽略 (chromedriver v136 报错原文: 「DevTools remote debugging requires a non-default data directory」)。即: 经 CDP 附着日常浏览器读 cookie 的通道已死, 必须使用独立 <code>--user-data-dir</code>。<span class="muted">[脚注 2]</span> 即 CDP 路线只能配一个<strong>专用</strong> profile —— 需要一次人工登录 + 一个专用浏览器常驻, 相对「装一个扩展」是更重的用户侧成本 (该路线已有可运行的实验实现, 见 §11 备选通道)。
       </div>
       <table>
-        <thead><tr><th style="width:17%">方案</th><th style="width:30%">原理</th><th>优点</th><th>缺点 / 约束</th><th style="width:13%">结论</th></tr></thead>
+        <thead><tr><th style="width:17%">通道</th><th style="width:29%">原理</th><th>优点</th><th>缺点 / 约束</th><th style="width:13%">结论</th></tr></thead>
         <tbody>
           <tr>
-            <td>A 手工导入</td><td>站点配置里直接填 cookie 串 (或 cookie 文件路径)</td>
-            <td>零依赖、零配合成本、最稳; M1 即可用</td><td>cookie 到期需手动更新</td>
-            <td class="ok">M1 落地</td>
+            <td>扩展 · 哑取数器</td><td>MV3 扩展在真实浏览器上下文取 HR 页 (渲染后 DOM) 与 .torrent 二进制, 回传本地端点; <strong>扩展不调用 <code>chrome.cookies</code>, 不读不传 cookie</strong></td>
+            <td>复用日常浏览器登录态; cookie 全程不出浏览器; 后端零 cookie 配置与零 cookie 失效风险; 用户无感 (后台标签页)</td>
+            <td>需装一次扩展 (unpacked / 开发者模式); 浏览器需在运行; 新增本地端点 ⇒ 需鉴权与白名单 (见下「安全边界」)</td>
+            <td class="ok">主选</td>
           </tr>
           <tr>
-            <td>B 专用 profile + CDP</td><td>引导用户以独立 <code>--user-data-dir</code> 启动浏览器并登录 PT 站一次; auto-qb 经 DevTools 协议 (<code>Storage.getCookies</code>) 读取该 profile 的 cookie</td>
-            <td>一次登录长期复用; cookie 由浏览器自己解密, 是合法通道; Cloudflare 挑战可在该 profile 里人工过</td>
-            <td>需用户配合启动/登录; 是「专用浏览器」而非日常浏览器本体 (Chrome 136 限制所迫)</td>
-            <td class="ok">M4 落地 (推荐目标形态)</td>
+            <td>专用 profile + CDP</td><td>以独立 <code>--user-data-dir</code> 启动浏览器并人工登录一次; 脚本经 DevTools 协议 (<code>Storage.getCookies</code>) 取 cookie 后自己发请求</td>
+            <td>无需装扩展; <strong>已有可运行的实验实现</strong> (<code>scripts/hr_fetch_experiment.py --auto-cookie</code>); CF 挑战可在该 profile 里人工过</td>
+            <td>需专用浏览器常驻 + 一次人工登录; cookie 仍会进后端进程内存 (风险仍在, 只是换了个位置)</td>
+            <td class="muted">备选通道 (接口不变: 仍是「取 HTML/二进制」)</td>
           </tr>
           <tr>
-            <td>C 浏览器扩展</td><td>小扩展经 <code>chrome.cookies</code> API 把 PT 站 cookie 推给本地端点</td>
-            <td>真正复用日常浏览器</td><td>需开发、安装、维护扩展; 授权面更大</td><td class="muted">备选, 不排期</td>
+            <td>手工导入 cookie</td><td>配置里直接填 cookie 串 (或 cookie 文件路径)</td>
+            <td>实现最简</td><td>维护成本转嫁用户 (到期 / 换设备 / 被登出); 凭据进 git 跟踪的配置文件</td>
+            <td class="no">否决 (2026-09-24 用户)</td>
           </tr>
           <tr>
-            <td>D 直读 cookie 库</td><td>读 Chrome/Edge cookie 文件并解密</td>
-            <td>—</td><td>Chrome/Edge 被 ABE 挡死 (事实 1), 绕过属恶意技术, <strong>不做</strong>; Firefox 的 cookies.sqlite 为明文 SQLite, 运行中复制文件后可读 —— 若用户日常用 Firefox 可作为 B 的平替, M0 验证</td>
-            <td class="no">否决 (Firefox 待验证)</td>
+            <td>直读 cookie 库</td><td>读 Chrome/Edge/Firefox cookie 文件并解密</td>
+            <td>—</td><td>Chrome/Edge 被 ABE 挡死 (事实 1), 绕过属恶意技术, <strong>不做</strong>; Firefox 明文库虽可读, 但仍是「后端持有 cookie」, 与本节结论相悖</td>
+            <td class="no">否决</td>
           </tr>
         </tbody>
       </table>
+      <h3>扩展的两条实现路线: 解析放在哪一侧</h3>
+      <p>两种选项的根本分歧不在「取什么」, 而在「<strong>解析归谁</strong>」:</p>
+      <ul>
+        <li><strong>路线 1 · 扩展取整页 → 后端解析</strong>: 扩展把 HR 页 (渲染后 DOM 或原始 HTML) 与 .torrent 二进制原样回传, 后端做全部解析。</li>
+        <li><strong>路线 2 · 扩展现场解析 → 后端收结构化数据</strong>: 扩展在页面里直接抽字段, 只把 JSON 回传。</li>
+      </ul>
+      <table>
+        <thead><tr><th style="width:20%">维度</th><th>路线 1 · 后端解析 (推荐)</th><th>路线 2 · 扩展内解析</th></tr></thead>
+        <tbody>
+          <tr><td>扩展代码量</td><td class="ok">极小 (~200 行; 只做「取页/取二进制/回传」, 与站点无关)</td><td>大 (含站点解析 + 数值容错 + 字段校验; 随站点数线性增长)</td></tr>
+          <tr><td>站点改版的改动面</td><td class="ok"><strong>只改后端 Python</strong>: 改完发版即生效, 用户无需动扩展</td><td>改扩展: 用户需回 <code>chrome://extensions</code> 点 reload / 重装 —— 用户侧摩擦最贵</td></tr>
+          <tr><td>可测性</td><td class="ok">高: 脱敏 HTML fixture + pytest + 现有守阵直接复用; 实验脚本的解析器可原样搬进 <code>src/</code></td><td>低: 解析逻辑在 JS, 项目测试体系用不上; 后端只能靠「扩展回传的样本」事后复现</td></tr>
+          <tr><td>多站点扩展性</td><td class="ok">天然: 一个代理吃所有站点</td><td>每站一份解析器</td></tr>
+          <tr><td>抗改版的发现能力</td><td class="ok">后端可做「200 但 0 条 / 必填字段缺失率」守卫并熔断告警 (§4 已设计)</td><td>同样可做, 但代码在扩展里; 后端只能被动信任</td></tr>
+          <tr><td>流量</td><td>整页 HTML (几十~几百 KB; 可只回传表格所在容器 / gzip)</td><td class="ok">最小 (结构化 JSON, 数十字节/条)</td></tr>
+          <tr><td>失败可见性</td><td class="ok">后端拿得到原始页面 ⇒ 改版 / 登录失效 / 挑战页一眼可辨</td><td>后端只收到「空或畸形 JSON」, 排障靠猜</td></tr>
+          <tr><td>infohash 计算</td><td class="ok">后端纯函数 + 钉死向量 (已在实验脚本验证)</td><td>若也下沉到扩展 ⇒ 核心算法离开测试面 (WebCrypto 的 SHA-1 支持还不确定), 不推荐</td></tr>
+        </tbody>
+      </table>
+      <div class="verdict">
+        <div class="vt">结论 · 路线 1</div>
+        <p>判据一句话: <strong>最需要频繁修改、最需要自动化验证的那部分 (解析) 必须留在能用 pytest 守住的一侧</strong>; 扩展只做它不可替代的事 —— 在真实浏览器上下文里取数。</p>
+        <p>补一条必要的坦白: 若扩展上商店, 商店版可<strong>自动更新</strong>, 路线 2 的「用户侧重装」摩擦会被削弱 —— 但「审核/发版周期远慢于改后端」与「解析脱离 pytest/fixture 体系」两条仍在, 结论不变。反过来, 路线 1 的扩展几乎不需要改, 这也意味着<strong>上不上商店对本方案几乎不影响</strong>。</p>
+      </div>
+      <h3>推荐形态: 哑取数器 + 后端解析</h3>
+      <p><strong>取样上下文</strong>取「后台标签页 DOM 快照」而非 service worker 裸 <code>fetch</code>: 前者天然带完整登录态、能过 Cloudflare 挑战、拿的是渲染后 DOM, 且用户无感 (不抢焦点的后台标签)。二者都属路线 1 —— 解析仍然后端做。</p>
+      <p><strong>通道模型 = 拉取式</strong> (扩展按需拉任务, 而非后端主动下发): 扩展定时 (<code>chrome.alarms</code>, 建议 5 分钟) 问本地端点要任务 → 后端按频控返回「当前可取的清单」(URL + 期望间隔) → 扩展逐个取、回传 → 后端只入队, 主循环消费。好处: <strong>频控单一权威在后端</strong>; 熔断时扩展直接拿到空清单; 「浏览器没开」变成可告警的通道静默状态, 而不是后端空转。</p>
+      <p><strong>职责三分</strong>: 后端 = 决策 + 唯一写者 (频控 / 索引 / state); 扩展 = 哑取数器 (无策略、无解析、不碰 cookie API); 解析 = 后端纯函数 (钉死向量 + fixture 可测)。</p>
+      <h3>安全边界 (替代原 cookie 风险)</h3>
+      <ul>
+        <li><strong>端点鉴权</strong>: 仅监听 <code>127.0.0.1</code>, 必须带 token (留空则随机生成并持久化到 <code>data_dir/hr.token</code>, 同 <code>web.token</code> 口径); 无 token → 401 <strong>且不写任何 state</strong> —— 否则任意网页 JS 都能向 localhost POST 伪造 HR 数据, 进而影响删除/保护决策。</li>
+        <li><strong>CORS 白名单 (纵深防御, 非唯一防线)</strong>: 优先只放行固定扩展 id (<code>chrome-extension://&lt;id&gt;</code>) —— manifest 写 <code>key</code> 可把 id 固定下来 (unpacked 与打包版一致); 若某形态下 id 定不住, 兜底是放行 <code>chrome-extension://*</code> 但<strong>强制 token</strong> —— 真正的鉴权是 token, origin 白名单只是第二道。</li>
+        <li><strong>SSRF 白名单</strong>: 只接受配置里声明的站点域名与受限路径 ⇒ 端点不会变成「带登录态的任意站代理」。</li>
+        <li><strong>不可信输入</strong>: 收到的 HTML/二进制只解析、不执行、默认不落盘 (调试开关另论)。</li>
+        <li><strong>凭据面归零</strong>: 后端既不接收 cookie, 也不接收 passkey —— 「日志里出现 cookie/passkey」这条风险源整体消失 (本方案的直接收益)。</li>
+      </ul>
+      <h3>分发形态与授权代价 (能力与形态无关)</h3>
+      <p><strong>结论先说</strong>: 扩展的<strong>能力与分发形态无关</strong> —— unpacked (开发者模式加载) / 打包成 <code>.crx</code> 自行安装 / 上架商店, 用的是<strong>同一套 manifest 与 API</strong> (<code>host_permissions</code> / <code>alarms</code> / <code>scripting</code> / <code>tabs</code>), 区别只在<strong>怎么装、怎么更新</strong>。两个直接推论:</p>
+      <ul>
+        <li><strong>不需要专用浏览器</strong>: 扩展就跑在你日常用的 Chrome/Edge 里 —— 这正是选它的原因; 「专用浏览器」只是 CDP 备选通道的代价 (见上对比表)。</li>
+        <li>形态只影响两件事: ① <strong>更新方式</strong> (商店/打包版可自动更新; unpacked 需手动 reload) ② <strong>装载摩擦</strong> (unpacked 免上架, 但浏览器启动时对开发者模式扩展有提示、可关; 商店版需开发者账号与审核流程 —— 本期不做, 要用时以官方页面要求为准)。</li>
+      </ul>
+      <p><code>host_permissions</code> 只列目标站点 + <code>http://127.0.0.1/*</code>, 不给 <code>&lt;all_urls&gt;</code>。<span class="muted">推论: 「装一次扩展」是本方案唯一的一次性用户成本, 与打包形态无关; 换来的是「不要专用浏览器、不导出 cookie、不要人工登录」。</span></p>
+      <h3>待真机验证 (不臆断, 进 M0)</h3>
+      <ul>
+        <li>后台标签页是否被站点的「在线时长 / 浏览统计」识别 (低频 + 仅在需要取数时开, 观察即可)。</li>
+        <li>目标站 <code>download.php</code> 在页面上下文 <code>fetch</code> 是否直接返回二进制 (attachment 头不影响 fetch; 需确认站点不校验 Referer/XHR 头)。</li>
+        <li>passkey 是否已出现在页面上下文 (若在, 由扩展从页面链接/JS 变量取, <strong>不进配置</strong>)。</li>
+        <li>Cloudflare 挑战在后台标签页里是否需人工过。</li>
+        <li>目标站 HR 页的 <strong>scope 全集与各档语义</strong> (哪些档算受管束; 例: BTSchool 的 A/B/C 受管、D 不受管), 以及分页到底的判据。</li>
+        <li>扩展形态与 id 固定: 确认 unpacked 与打包版 ID 一致 (预期同一套 API, 只需验证 <code>key</code> 写法)。</li>
+      </ul>
       <h3>配套细节</h3>
       <ul>
-        <li><strong>UA 一致性</strong>: 默认使用与 cookie 同源的浏览器 UA, 避免浏览器 cookie + Python 默认 UA 的指纹不一致引起站点风控注意; 可按站点配置。</li>
-        <li><strong>passkey</strong>: 下载链接通常带 passkey 参数, 与 cookie 无关, 属站点配置的一部分。</li>
-        <li><strong>登录态检测与降级</strong>: 响应跳登录页 / 401 / 403 / Cloudflare 挑战页特征 → 判 cookie 失效或被挑战, 该站熔断 + WARNING 通知用户处理, <strong>不重试轰炸</strong>。方案 B 的 profile 平时不需要打开, 仅 (重新) 登录时人工使用, 自动化运行期间全程无窗口。</li>
+        <li><strong>UA 一致性</strong>: 无需配置 —— 请求由浏览器自己发, UA 与登录态天然同源 (v1.1 的 <code>user_agent</code> 配置项随之删除)。</li>
+        <li><strong>passkey</strong>: 不再进配置 (见上); 由扩展在页面上下文补齐下载参数。</li>
+        <li><strong>登录态检测与降级</strong>: 后端拿到的页面命中登录页 / 401 / 403 / Cloudflare 挑战页特征 → 该站熔断 + WARNING 通知用户处理, <strong>不重试轰炸</strong>; 通道连续静默 (浏览器长期未开) 同样告警。</li>
+        <li><strong>多实例下的归属 (v1.7)</strong>: 扩展开在哪个浏览器, 就服务于<strong>哪些</strong>实例 —— 扩展侧配<strong>实例端点列表</strong> (<code>[{name, endpoint, token}]</code>), <code>chrome.alarms</code> 逐个拉任务 ⇒ <strong>一个浏览器可同时服务同机的多个实例</strong> (各自不同端口 + 各自 token); 而<strong>跨机器的实例没有本地浏览器可连</strong> (端点只听 loopback) ⇒ 那台只能只读共享数据。<br><strong>推荐每台有浏览器的实例都启用 <code>channel</code></strong>: 多通道不会双倍访问站点 (同站点靠锁 + 有效期复用), 却消掉了「只有一台能抓」的单点故障; 扩展向未启用通道的实例拉清单会拿到 401 / 空, 属正常路径, 不重试。</li>
       </ul>
     </section>
 
@@ -365,39 +464,56 @@ hr_dl_fails[site][tid] = {count, last_ts}         # 下载失败记账, 达上�
       <h2>频控与配置设计</h2>
       <p>原则对齐项目黄金法则: <strong>幂等</strong> (配额窗口进 state_file, 重启不重置, 重放不重复下载)、<strong>保守默认</strong> (总开关默认关, 配额默认紧)、<strong>fail-fast</strong> (所有新键进 <code>validate_config</code> 并同步 <code>config/schema/</code>, 带上下限 —— 呼应 26-09-22 刚入库的取值范围收紧案)。</p>
       <h3>配置草案</h3>
-<pre><code>hr_check:                            # 全局 (新增顶层键, 默认整段缺省 = 功能关闭)
+<pre><code>hr_check:                            # 全局: 功能开关 + 频控默认 (新顶层键, 整段缺省 = 功能关闭)
   enabled: false                     # 总开关, 默认关 (黄金法则 2)
-  min_torrent_interval: "90S"        # 相邻两次 .torrent 下载最小间隔 (站点侧观感的核心)
-  max_torrents_per_hour: 20          # 小时配额 (全站合计)
-  max_torrents_per_day: 100          # 日配额 (全站合计)
-  request_timeout: "20S"             # 单请求超时 (connect 5s 固定, read 用本值)
-  failure_threshold: 3               # 连续失败 N 次 → 熔断
+  min_torrent_interval: "90S"        # 相邻两次站点请求最小间隔 (抖动只向上 +0~25% ⇒ 实测恒 >= 本值)
+  max_torrents_per_hour: 12          # 小时配额 (站点级独立计数)
+  max_torrents_per_day: 60           # 日配额   (站点级独立计数)
+  failure_threshold: 3               # 连续失败 N 次 → 该站熔断
   failure_cooldown: "12H"            # 熔断冷却时长
-  fetch_window: ""                   # 可选 "HH:MM-HH:MM", 仅该时段访问站点 (跨午夜, 同 notify 语义)
-  unknown_policy: hr                 # 索引未覆盖的种子按 hr (保守) | not-hr
-  index_retention: "30D"             # 页面快照条目保留时长 (已下载记录 hr_downloaded 不淘汰)
-  max_download_retries: 3            # 单个 .torrent 下载失败重试上限, 达到后冷却 (防烧配额)
+  allow_window: ""                   # 可选 "HH:MM-HH:MM", 仅该时段取数 (可跨午夜); 留空 = 全天
+                                     # ❗与 notify.quiet_hours 语义相反 (那个是「该时段不发」)
+  unknown_policy: hr                 # 未核实种子按 hr (保守) | not-hr; ❗新鲜度闸门恒按 hr, 不受本项影响
+  verified_ttl: "12H"                # 放行有效期 (默认对齐 refresh_interval): 超期未获新刷新背书 ⇒ 回落未核实
+                                     # ❗调大等于自愿放大"账号在别的客户端下载"的漏管窗口 (§9)
+  index_retention: "30D"             # 页面快照条目保留时长 (已取记录 hr_downloaded 不淘汰)
+  max_download_retries: 3            # 单个 .torrent 取数失败重试上限, 达到后冷却 (防烧配额)
+  channel_silence_warn: "6H"         # 通道静默多久告警 (浏览器长期未开 / 扩展被停用)
+  shared_dir: ""                     # 空 = 单实例 或 多实例但未配共享 (文件落 &lt;data_dir&gt;/hr/) ← 默认 (§7 部署引导)
+  lock_timeout: "0S"                 # 抢锁等待: 0 = 不等 (拿不到锁直接等下一轮); 锁粒度 = 站点, 抓取在锁内进行
+  poll_interval: "1M"                # 取数线程醒来检查的节奏 (与主循环 tick 无关): HR 粒度是小时~天, 不需高频
+
+  channel:                           # 本地取数通道 (原 hr_channel 并入); 推荐: 每台「本机有浏览器」的实例都启用 (§5/§6)
+    enabled: false                   # 本实例是否有浏览器扩展可驱动; 默认 false (保守), 装上扩展后开启
+    port: 8788                       # 仅监听 127.0.0.1; ❗同机多实例必须各用不同端口 (端口被占 ⇒ 启动即报错)
+    token: ""                        # 留空 = 随机生成并持久化到 data_dir/hr.token (同 web.token 口径); 扩展侧逐实例填
 
 trackers:
   &lt;site&gt;:
-    hr_check:                        # 站点级 (与既有 trackers.&lt;site&gt;.hr 并存)
-      mode: partial                  # all = 现状全站 HR | partial = 在线核实 | off
-      hr_page_url: "https://…/hr.php"
-      torrent_url_pattern: "https://…/download.php?id={id}&amp;passkey=…"
-      cookie: ""                     # 方案 A; 或 cookie_file 指向文件
-      user_agent: ""                 # 缺省 = 常见浏览器 UA
+    hr_check:                        # 站点级 (与既有 trackers.&lt;site&gt;.hr 并存; ❗mode != off 时该站 hr 段必填)
+      mode: partial                  # off = 该站不启用 | partial = 在线核实 (未核实按 unknown_policy)
+                                     # | all = 站点侧驱动 + 未核实恒受管束 (全站 HR, 不看 policy)
+      hr_page_url: "https://…/myhr.php"
+      hr_page_scopes: [A, B, C]      # 必抓范围 (A考察中 / B已达标 / C未达标); D=已免罪视为放行, 可加可不加
+      download_path: "/download.php?id={id}"    # 相对站点根; passkey 由扩展在页面上下文补, 不进配置
       refresh_interval: "12H"        # HR 页抓取周期
-      max_pages_per_refresh: 5       # 单次刷新最多翻页数 (翻页本身也限频)</code></pre>
+      max_pages_per_refresh: 5       # 单次刷新最多翻页数 (翻页同样计配额)
+      max_torrents_per_hour: 12      # 站点级覆盖 (缺省回退全局)</code></pre>
+      <div class="note"><b>新键的落地清单 (漏一处守卫就红)</b> — 每个新键要走完: <code>config/validation/core.py</code> 的 <code>KNOWN_CONFIG_KEYS</code> (顶层键) 与 <code>sections.py</code> 的已知键集 + 校验函数 → <code>config/schema/</code> (段与字段声明, 设置页据此渲染) → <code>config/models.py</code> 数据类 → <code>config/loaders.py</code> 解析 → <strong><code>config/impact.py</code> 热重载级别</strong> → <code>docs/configuration.md</code> 与 <code>memory-bank/config-reference/keys.md</code> 回写 → <code>tests/test_config_schema.py</code> 同步。</div>
+      <div class="note"><b>热重载级别 (合并 hr_channel 的代价)</b> — 站点级 <code>hr_check.*</code> 设 <strong>L0</strong> (每轮现读), 但配置变更时必须<strong>显式重置该站的熔断与退避状态</strong>; <code>hr_check.channel.*</code> (端口 / token / enabled) 必须设 <strong>L1</strong> (端点与取数线程需重挂, 与 <code>web</code> 段同款: 先停旧、等线程退出、再启新)。<br>⚠ 实现要求: <code>config/impact.py</code> 目前只按<strong>顶层键</strong>查表 (只有 <code>trackers</code> 有逐字段特判), 合并后 <code>channel.*</code> 会被算成 L0 —— 需补一张 <code>HR_CHECK_FIELD_LEVELS</code> 内部字段表 (仿 <code>TRACKER_FIELD_LEVELS</code>, ~10 行), 否则改端口会被当成「已热重载」而实际未生效。另 <code>shared_dir</code> 属 <strong>L1/R</strong> (改它要重挂共享层)。</div>
+      <div class="note"><b>多实例部署引导 (<code>shared_dir</code> 默认 = 数据目录)</b> — 单实例 (最常见) 保持 <code>shared_dir: ""</code> 即可, 文件落在 <code>&lt;data_dir&gt;/hr/</code>, 代码与多实例完全同构 (只是没人争锁)。<br><strong>多实例共享同一账号时, 需由用户把 <code>shared_dir</code> 指向所有实例都能看到的同一目录</strong> (同一台机器的同一路径 / NAS 的 SMB 路径; <span class="muted">云同步盘不可用 —— 锁与原子替换都不可靠</span>)。程序<strong>无法可靠判断「我是不是多实例」</strong>, 所以这里<strong>只引导不强求</strong>: 功能开启且 <code>shared_dir</code> 为空时, 启动时记<strong>一条 INFO 提示</strong> (指向本节与用户文档), <strong>不阻断启动</strong>, 由用户决定是否配置。<br>配套: ① 用户文档写「多实例怎么配」(目录要求 + <code>channel</code> 端口错开); ② 真机只读走查 <code>hr.once</code> 顺带打印<strong>实际文件路径 + 锁自检</strong> (M2 加), 便于确认该共享目录是否合适。</div>
       <h3>频控执行要点</h3>
       <table>
         <thead><tr><th style="width:24%">机制</th><th>设计</th></tr></thead>
         <tbody>
-          <tr><td>间隔 + 抖动</td><td><code>min_torrent_interval</code> 基础上 ±25% 抖动, 避免机器人式节拍; HR 页翻页共用同一间隔但可独立更慢</td></tr>
-          <tr><td>两级配额</td><td>小时/天配额窗口记 state (<code>hour_window</code> / <code>day_counts</code>), 到顶即静默等下一窗口, 不报错</td></tr>
-          <tr><td>失败退避与熔断</td><td>429/5xx 按 Retry-After 或指数退避; 连续失败达阈值 → 该站熔断至 <code>failure_cooldown</code>, 期间零请求</td></tr>
-          <tr><td>去重</td><td>只下载「页面上有、索引里没有」的种子 id (state 去重); 页面刷新本身受 <code>refresh_interval</code> 限制</td></tr>
+          <tr><td>间隔 + 抖动</td><td><code>min_torrent_interval</code> 基础上<strong>只向上</strong>抖动 +0~25% (向下抖会让实测间隔低于下限, 与验收标准矛盾, 也更容易被看成机器节拍); HR 页翻页共用同一间隔</td></tr>
+          <tr><td>两级配额</td><td>小时/天配额窗口记 state (<code>hour_window</code> / <code>day_counts</code>), <strong>按站点独立计数</strong>; 到顶即返回空清单, 不报错</td></tr>
+          <tr><td>失败退避与熔断</td><td>扩展上报的失败 (超时/429/5xx) 按 Retry-After 或指数退避; 连续失败达阈值 → 该站熔断至 <code>failure_cooldown</code>, 期间清单恒空 (零请求)</td></tr>
+          <tr><td>超时与重试</td><td><strong>后端不设请求超时</strong> (它不发请求); 超时判定在扩展侧, 以后端收到的失败上报为准, 并按 <code>max_download_retries</code> 计数冷却</td></tr>
+          <tr><td>去重</td><td>只取「页面上有、站点文件里没有 infohash」的种子 id (<code>hr_downloaded</code> 去重); 页面刷新本身受 <code>refresh_interval</code> 限制</td></tr>
           <tr><td>站点隔离</td><td>频控按站点独立计数; 一个站点熔断不占用、不拖累其它站点</td></tr>
-          <tr><td>落盘时机</td><td>频控写点与 <code>skip_check_day</code> 同级对待: 写点即时落盘 (重放代价最高), 其余靠周期落盘兜底</td></tr>
+          <tr><td>通道侧无策略</td><td>扩展不做任何频控判断 —— 它只按后端返回的清单 (含每条的「最早可取时间」) 干活; 宽限期、配额、熔断的<strong>单一权威在后端</strong></td></tr>
+          <tr><td>落盘时机</td><td>配额账本 / 熔断 / 已取记录都在<strong>站点文件里</strong> (不是 <code>state_file</code>, §5) ⇒ 持锁结束时随<strong>合并写一次性原子替换</strong>, 不会出现「记了配额却丢了已取凭据」的错位; 写失败/断电最坏重放一个 <code>refresh_interval</code> 窗口 (代价: 多发几个请求), 不会重复取 .torrent</td></tr>
         </tbody>
       </table>
     </section>
@@ -406,79 +522,131 @@ trackers:
     <section id="s8">
       <div class="sec-no">§ 8</div>
       <h2>后台执行与线程模型</h2>
-      <p>硬约束 (taskqueue 既有约定): <strong>主循环线程是唯一修改任务队列与 state_file 的线程, 全程无锁; 任何新功能必须维持这个假设。</strong>站点请求耗时不可控 (1s ~ 超时 20s), 与 2s tick 放在一起必须二选一:</p>
+      <p>硬约束 (taskqueue 既有约定): <strong>主循环线程是唯一修改任务队列与 state_file 的线程, 全程无锁</strong>。v1.5 的取数线程<strong>不碰这两样东西</strong> —— 它只管 hr 专属文件 (站点数据 + 锁) 与只读视图, 所以这个假设完好。职责彻底三分:</p>
       <table>
-        <thead><tr><th style="width:20%">方案</th><th>做法</th><th style="width:34%">评价</th></tr></thead>
+        <thead><tr><th style="width:20%">组件</th><th>职责</th><th style="width:34%">线程边界</th></tr></thead>
         <tbody>
-          <tr><td>甲 · 主循环内联</td><td>全局任务 handler 里直接发 HTTP, 单轮预算 1 个请求 + 短超时</td><td>实现最简; 代价: 最坏情况该 tick 停 ~20s, 2s 节拍的系统会有可感卡顿, 同步线一起被拖住</td></tr>
-          <tr><td>乙 · 取数线程 + 令牌 (推荐)</td><td>常驻 fetcher 线程<strong>只做 HTTP + 解析</strong>; 主循环按频控发「许可令牌」(command queue), fetcher 回吐结果 (result queue); 主循环 hr_check 任务每 tick 收结果 → 写 state → 按频控决定是否发新令牌</td><td>真后台, 主循环零阻塞; 先例充分 (Web 线程 <code>post_command</code> / <code>consume_commands</code> 同款模式); fetcher 永不触碰 store / 队列 / state_file, 单一写线程假设完好</td></tr>
+          <tr><td>扩展 (浏览器侧)</td><td>拉清单 → 后台标签页取页 / 取 .torrent → 回传</td><td>不在本进程; 无策略、无解析、不碰 cookie API</td></tr>
+          <tr><td>端点线程 (uvicorn)</td><td><code>GET /api/hr/tasks</code> 给清单; <code>POST /api/hr/result</code> 收数据</td><td><strong>只入队</strong> (不碰 store / 队列结构 / state_file / hr 文件); 生命周期复用 <code>webui/server/lifecycle.py</code> 的 handle (<code>stop()</code> / <code>wait()</code>)</td></tr>
+          <tr><td><strong>取数线程 (v1.5 新增)</strong></td><td>按 <code>poll_interval</code> <strong>自唤醒</strong> (不随主循环 tick) → <strong>持本站点锁</strong> → 读站点文件 → 判有效期 → (必要时) 经端点驱动扩展抓取 → 解析 / 算 infohash / 对账 → 合并写回 → <strong>只在数据变化时抬 <code>revision</code> 并发布不可变只读视图</strong></td><td>只管 <code>hr/</code> 目录与视图对象; <strong>不碰 state_file、不碰任务队列、不碰 store</strong>; 抓取在锁内进行 ⇒ 分钟级等待只发生在<strong>本线程</strong></td></tr>
+          <tr><td>主循环</td><td>每 tick 只比较视图 <code>revision</code> → <strong>变了才</strong>更新 record 三态并走既有判定 / 打标 (<strong>不变 ⇒ 零工作</strong>)</td><td>state_file 与队列的<strong>唯一写者</strong>不变; 读视图<strong>零等待</strong> (原子引用替换), 需要时只 <code>wake()</code> 取数线程 (非阻塞) —— <strong>绝不与取数线程同步握手</strong>, 所以抓取再慢也卡不住 2s 节拍</td></tr>
         </tbody>
       </table>
       <figure>
-        <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
+        <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" font-family="Consolas, monospace">
           <defs>
             <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
               <path d="M0,0 L8,4 L0,8 z" fill="#6b7783"/>
             </marker>
+            <marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#5eb6c2"/>
+            </marker>
           </defs>
-          <!-- 泳道背景 -->
           <rect x="10" y="18" width="860" height="128" fill="none" stroke="rgba(255,255,255,.09)"/>
-          <rect x="10" y="172" width="860" height="120" fill="none" stroke="rgba(255,255,255,.09)"/>
-          <text x="24" y="40" fill="#6b7783" font-size="11">主循环线程 (唯一写者 · 每 tick)</text>
-          <text x="24" y="194" fill="#6b7783" font-size="11">取数线程 (fetcher · 只做 HTTP + 解析, 不触碰 store / 队列 / state)</text>
-          <!-- 主循环侧 -->
-          <rect x="30" y="54" width="180" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
-          <text x="120" y="82" fill="#dfe6ec" font-size="12" text-anchor="middle">hr_check 全局任务</text>
-          <text x="120" y="102" fill="#93a0ac" font-size="10.5" text-anchor="middle">收结果 / 发令牌 / 熔断</text>
-          <rect x="300" y="54" width="190" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
-          <text x="395" y="82" fill="#dfe6ec" font-size="12" text-anchor="middle">state_file</text>
-          <text x="395" y="102" fill="#93a0ac" font-size="10.5" text-anchor="middle">hr_index · 配额窗口 · 熔断</text>
-          <rect x="580" y="54" width="260" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
-          <text x="710" y="76" fill="#dfe6ec" font-size="12" text-anchor="middle">TorrentStore / qB 对账</text>
-          <text x="710" y="96" fill="#93a0ac" font-size="10.5" text-anchor="middle">四个 HR 消费点读同一收口</text>
-          <line x1="210" y1="76" x2="296" y2="76" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
-          <line x1="490" y1="76" x2="576" y2="76" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
-          <line x1="120" y1="124" x2="120" y2="216" stroke="#5eb6c2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr)"/>
-          <text x="130" y="176" fill="#5eb6c2" font-size="10.5">① 许可令牌 (按频控发放)</text>
-          <line x1="300" y1="230" x2="214" y2="230" stroke="#5eb6c2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr)"/>
-          <text x="240" y="250" fill="#5eb6c2" font-size="10.5" text-anchor="middle">② 解析结果</text>
-          <!-- fetcher 侧 -->
-          <rect x="30" y="206" width="180" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
-          <text x="120" y="234" fill="#dfe6ec" font-size="12" text-anchor="middle">fetcher 线程</text>
-          <text x="120" y="254" fill="#93a0ac" font-size="10.5" text-anchor="middle">httpx 同步客户端</text>
-          <line x1="214" y1="240" x2="420" y2="240" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
-          <rect x="424" y="206" width="180" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
-          <text x="514" y="234" fill="#dfe6ec" font-size="12" text-anchor="middle">PT 站点</text>
-          <text x="514" y="254" fill="#93a0ac" font-size="10.5" text-anchor="middle">HR 统计页 / download.php</text>
-          <line x1="608" y1="240" x2="700" y2="240" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
-          <rect x="704" y="206" width="140" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
-          <text x="774" y="234" fill="#dfe6ec" font-size="12" text-anchor="middle">.torrent → infohash</text>
-          <text x="774" y="254" fill="#93a0ac" font-size="10.5" text-anchor="middle">data_dir/hr-check/</text>
-          <line x1="774" y1="206" x2="774" y2="150" stroke="none"/>
-          <path d="M 774 206 L 774 160 L 710 160 L 710 128" fill="none" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <rect x="10" y="168" width="860" height="158" fill="none" stroke="rgba(255,255,255,.09)"/>
+          <text x="24" y="40" fill="#6b7783" font-size="11">浏览器侧 (扩展 · 哑取数器 · 无策略 / 不解析 / 不碰 cookie API)</text>
+          <text x="24" y="190" fill="#6b7783" font-size="11">后端单进程 (端点只入队 · 取数线程持锁 · 主循环是 state 唯一写者)</text>
+          <rect x="30" y="54" width="190" height="72" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="125" y="80" fill="#dfe6ec" font-size="12" text-anchor="middle">扩展 (alarms 轮询)</text>
+          <text x="125" y="100" fill="#93a0ac" font-size="10.5" text-anchor="middle">拉清单 / 回报结果</text>
+          <rect x="290" y="54" width="210" height="72" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="395" y="80" fill="#dfe6ec" font-size="12" text-anchor="middle">后台标签页 (不抢焦点)</text>
+          <text x="395" y="100" fill="#93a0ac" font-size="10.5" text-anchor="middle">取 DOM 快照 / 取 .torrent</text>
+          <rect x="570" y="54" width="270" height="72" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="705" y="80" fill="#dfe6ec" font-size="12" text-anchor="middle">PT 站点</text>
+          <text x="705" y="100" fill="#93a0ac" font-size="10.5" text-anchor="middle">登录态由浏览器自带 · 后端零 cookie</text>
+          <line x1="220" y1="90" x2="286" y2="90" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <line x1="500" y1="90" x2="566" y2="90" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <rect x="270" y="200" width="270" height="30" fill="#151b21" stroke="#5eb6c2" stroke-dasharray="3 3"/>
+          <text x="405" y="220" fill="#5eb6c2" font-size="10.5" text-anchor="middle">hr/&lt;site&gt;.json + &lt;site&gt;.lock (每站点一把锁, 持锁期内读/抓/写)</text>
+          <rect x="30" y="248" width="210" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="135" y="274" fill="#dfe6ec" font-size="12" text-anchor="middle">端点线程 (127.0.0.1)</text>
+          <text x="135" y="294" fill="#93a0ac" font-size="10.5" text-anchor="middle">token + origin / SSRF 白名单</text>
+          <rect x="270" y="248" width="270" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="405" y="274" fill="#dfe6ec" font-size="12" text-anchor="middle">取数线程</text>
+          <text x="405" y="294" fill="#93a0ac" font-size="10.5" text-anchor="middle">不碰 state / 队列 / store</text>
+          <rect x="570" y="248" width="270" height="70" fill="#151b21" stroke="rgba(255,255,255,.16)"/>
+          <text x="705" y="274" fill="#dfe6ec" font-size="12" text-anchor="middle">主循环 (state 唯一写者)</text>
+          <text x="705" y="294" fill="#93a0ac" font-size="10.5" text-anchor="middle">只读视图 → 三态 → 判定/打标</text>
+          <line x1="240" y1="283" x2="266" y2="283" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <line x1="540" y1="283" x2="566" y2="283" stroke="#6b7783" stroke-width="1" marker-end="url(#arr)"/>
+          <path d="M 405 246 L 405 234" fill="none" stroke="#5eb6c2" stroke-width="1" stroke-dasharray="3 3" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+          <path d="M 125 126 L 125 244" fill="none" stroke="#5eb6c2" stroke-width="1" stroke-dasharray="3 3" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+          <text x="136" y="160" fill="#5eb6c2" font-size="10.5">扩展 ⇄ 端点: 拉清单 / 回报结果 (token 鉴权)</text>
+          <text x="548" y="240" fill="#5eb6c2" font-size="10.5">视图</text>
         </svg>
-        <figcaption>数据流: 主循环每 tick 消费 fetcher 结果并按频控发放许可令牌; 站点请求与 .torrent 解析全部发生在取数线程; 只有主循环写 state_file 与对账。dry-run 语义 = 主循环不发令牌、不写 state, 仅输出既有索引的对账预览。</figcaption>
+        <figcaption>数据流: 取数线程<strong>持锁</strong>完成「读站点文件 → 判有效期 → 必要时经端点驱动扩展抓取 → 解析 / 算 infohash → 合并写回」, 然后发布不可变只读视图; 主循环<strong>只读</strong>视图走三态判定。取数线程不碰 <code>state_file</code> / 任务队列 / store。dry-run 语义 = 清单恒空 + 不收结果 + 不写文件; 真机只读验证走 <code>hr.once</code> (§12)。</figcaption>
       </figure>
-      <p class="muted">补充: 取数线程内的解析 (bencode / HTML) 同样是纯 CPU 短任务, 放线程内可让主循环完全免于站点页面大小的波动。</p>
+      <p class="muted">补充: 解析 (HTML / bencode) 是纯 CPU 短任务, 在<strong>取数线程</strong>内做即可 —— 主循环因此完全免于页面体积与站点延迟的波动, 只做「读视图 + 判定」。</p>
     </section>
 
     <!-- ============ 9 判定收口 ============ -->
     <section id="s9">
       <div class="sec-no">§ 9</div>
       <h2>判定语义收口</h2>
-      <p><code>TorrentRecord</code> 新增「HR 身份解析」: 站点 <code>hr_check.mode = partial</code> 时, 先按 infohash 查 <code>state.hr_index[site]</code> 决定该种子是否受 HR 管束, 再进入既有 <code>check_hr_condition</code> / <code>check_hr_satisfied</code> 逻辑; 站点 <code>mode = all</code> 保持现状, <code>off</code> 则完全不按 HR 对待。</p>
+      <p>站点配了 <code>hr_check</code> 段 (<code>mode: all | partial</code>) 时, 先按 (站点, infohash) 解析出<strong>三态之一</strong> —— 受管束 / 已核实不受管束 / 未核实 —— 再进入既有 <code>check_hr_condition</code> / <code>check_hr_satisfied</code> 逻辑; <code>off</code> 则完全不按 HR 对待。<strong>站点侧数据是权威 (v1.4): 「是否触发 / 是否达标」一律看站点侧</strong>, 本地 qB 字段只作降级与展示; 三态数据由<strong>取数线程</strong>发布的只读视图提供 (§8)。</p>
+      <div class="note">
+        <b>「纯辅种不触发」是已知缺口, v1.5 全面修掉</b> —— 现有 <code>check_hr_condition</code> 用本地 <code>downloaded</code> 近似账号级义务, 于是把两类东西混为一谈:
+        <br>① <strong>真辅种</strong> (从未下载过该 tid) → 站点侧确实无 HR 义务 ⇒ 现状「不触发」结论是对的, 但那只是<strong>碰巧</strong>对; 现在由「清单未命中 ⇒ 安全放行」给出<strong>有依据</strong>的同一结论;
+        <br>② <strong>转移 / 重加 / 换客户端后的保种副本</strong> (本地 <code>downloaded</code>=0, 但账号欠着 HR) → 现状「不触发」= <strong>漏管</strong>。
+        <br>⇒ 结论: <strong>非 partial 站点也纳入该体系</strong> —— <code>mode: all</code> 的语义从「全站按 HR + 本地下载量触发」升级为「站点侧驱动 + 未核实默认受管束」; 与 <code>partial</code> 的唯一差别只剩<strong>未核实的默认值</strong>。前提是该站有可抓的 HR 统计页; 没有的站点只能留在未接入状态 (配 <code>hr</code> 段但不配 <code>hr_check</code>, 保持现状)。
+        <br><b>零静默变更</b>: 只有显式配了 <code>hr_check</code> 段的站点才走新语义; 且<strong>不要全局改掉</strong> <code>check_hr_condition</code> 的 downloaded 判断 (未接入的站点会静默改行为)。
+      </div>
+      <div class="note">
+        <b>为什么本地字段不可信 (v1.4 的核心修正)</b> —— PT 里<strong>转移种子</strong>是常态: A 客户端下载 → 文件搬给 B 客户端保种。<br>
+        此时 B 的 <code>downloaded</code> = 0 ⇒ 现有 <code>check_hr_condition</code> 的「纯辅种不触发」判定把它当辅种 ⇒ <strong>不打 HR 标签、不纳入保护、规则条件也不命中</strong>, 而账号在站点侧确实欠着这个 tid 的 HR —— 直接漏管。<br>
+        多客户端同理: 本地字段只描述「我管的这一个客户端」, 而 HR 是<strong>账号级</strong>义务。所以: <strong>站点数据是权威数据</strong>, 本地值降级为兵底路径与展示。
+      </div>
+      <h3>三态的定义 (本次收口的边界)</h3>
+      <table>
+        <thead><tr><th style="width:17%">态</th><th style="width:36%">成立条件</th><th>后果</th></tr></thead>
+        <tbody>
+          <tr><td><strong>受管束</strong> <code>hr</code></td><td>该 (站点, infohash) 出现在<strong>抓取范围内的清单</strong>里 (A 考察中 / B 已达标 / C 未达标); <code>mode: all</code> 站点上<strong>未核实也默认受管束</strong></td><td><strong>这本身就是「触发」</strong> (不再看本地 <code>downloaded</code>): 未达标 ⇒ 打 HR 标签/分类 + 纳入辅种排除; B 档 ⇒ 落 satisfied 分支。本地 <code>downloaded</code>=0 的转移副本同样受管束</td></tr>
+          <tr><td><strong>安全放行</strong> <code>verified_non_hr</code></td><td>由一次<strong>完整成功</strong>的刷新 (覆盖证明成立, §4) 确认: 该 infohash 不在 A/B/C 清单内, <strong>或</strong> 命中 D 档; 且该种子 <code>added_on</code> 早于该次刷新时刻; 且<strong>仍在放行有效期内</strong> (<code>verified_ttl</code>, §5) 且本实例锚点未漂移</td><td><strong>完全按非 HR 对待</strong>: 不打 HR 标签/分类、<strong>不排除辅种</strong>、HR 规则条件恒不命中 —— 这就是本功能的主要收益</td></tr>
+          <tr><td><strong>未核实</strong> <code>unknown</code></td><td>其余全部情形 (见下「未核实的四类边界」)</td><td>按 <code>unknown_policy</code> (默认 <code>hr</code> 保守); <code>mode: all</code> 站点恒受管束 (不看 policy)</td></tr>
+        </tbody>
+      </table>
+      <h3>「未核实」的四类边界 (穷举)</h3>
+      <ol>
+        <li><strong>从未成功刷新</strong>: 站点启用后首刷未完成 (功能刚打开 / 登录态未就绪 / 通道还没跑起来)。</li>
+        <li><strong>刷新不完备</strong>: 覆盖证明不成立 —— 分页没抓到底 (<code>max_pages_per_refresh</code> 截断)、任一 scope 抓取失败、解析校验未过 (0 条 / 字段缺失率超阈)、登录失效或被挑战。</li>
+        <li><strong>新鲜度闸门 (本地近似)</strong>: <strong>本实例</strong>种子的 <code>added_on</code> 晚于 <code>hr_refresh[site].last_success_ts</code> ⇒ 不可能出现在那次清单里, 无从核实 ⇒ 恒按受管束 (不受 <code>unknown_policy</code> 影响)。<span class="muted">它只覆盖本实例新增的种子; 别的客户端新下载的种子在本地要么不存在 (无关)、要么 <code>added_on</code> 很老 (闸门不介入) —— 后者只能靠刷新 + <code>verified_ttl</code> 兜。</span></li>
+        <li><strong>身份缺位</strong>: 该 tid 的 infohash 还没回填 (取 .torrent 失败 / 冷却中), 或站点维度不可得 (tracker 未匹配上任何配置)。</li>
+      </ol>
+      <div class="verdict">
+        <div class="vt">两个方向上的取舍 (v1.4 修订)</div>
+        <p><strong>不漏 HR (首要)</strong> —— 四重保证: ① <code>unknown_policy</code> 默认 <code>hr</code>; ② 新鲜度闸门 (本实例新种子恒受管束); ③ 不完备刷新不产生新放行; ④ <strong>放行有效期 = 刷新背书</strong> (<code>verified_ttl</code> 默认 = <code>refresh_interval</code>) —— ④ 专门覆盖「账号在别的客户端下载」这条本地看不见的路径。</p>
+        <p><strong>安全放行 (次要, 但正是做这个功能的目的)</strong> —— 放行只由「完整核实过、且不在清单里」产生, 而不是「没看见就放行」; 通道正常时每轮刷新自动续期, 收益不减; 只有通道静默到超期才回落保守。</p>
+        <p><strong>诚实说明代价</strong>: ① <code>unknown_policy=not-hr</code> 等于自愿放弃第①重保证 (②③④仍生效); ② <code>verified_ttl</code> 调大于 <code>refresh_interval</code> 等于自愿放大「别的客户端下载」的漏管窗口 —— 两项都要写进配置项文案。<br>反过来, 站点侧驱动的<strong>达标判定会晚 ≤ 一个刷新周期</strong>生效 (站点值滞后): 表现为「已达标仍多挂一会儿 HR 标签」, 属保守方向。</p>
+      </div>
+      <div class="note">
+        <b>身份判定的落点 (v1.4 定稿)</b> — 判定不能去查 <code>manager.state</code>: <code>TorrentRecord</code> 是纯快照 dataclass, 且 <code>_hr_view_fields</code> 也在 <strong>Web 线程</strong>被调用 (详情路由 <code>webui/server/routes/torrent_detail.py</code>), 反向依赖 state 会违反「Web 线程不得触碰 store / 队列 / state_file」。
+        <br><strong>做法</strong>: <strong>取数线程</strong>把三态做成<strong>不可变快照对象并整体替换引用</strong> (项目先例: 搜索索引整体替换引用, Web 线程并发只读安全), record 持有该视图的<strong>稳定引用</strong>, 读取时现算「三态 + 锚点校验」。
+        <br>为什么不用 v1.2 设想的「主循环预取写字段 + 置脏」: 锚点漂移 (本实例二次下载 / 转移) <strong>不会置脏</strong>, 那种写法要么漏更新、要么得每 tick 全量扫; 现算则零延迟、零置脏, 且天然只读不可变数据。
+      </div>
+      <div class="note"><b>配置期硬约束</b> — <code>check_hr_condition()</code> 第一行是 <code>if not self.tracker_conf.hr: return False</code>, 而站点没写 <code>hr</code> 段时 <code>tracker_conf.hr</code> 恒为 <code>None</code> (全局 <code>hr</code> 段只是站点段的字段兜底, 不会凭空生成站点 hr)。故必须在 <code>validate_config</code> 里 fail-fast: <strong>站点配了 <code>hr_check</code> 且 <code>mode != off</code> (partial / all) ⇒ 该站 <code>hr</code> 段必填 (<code>required_seeding_time</code>)</strong>; 否则整站保护静默失效, 且没有任何报错。</div>
+      <h3>完整判定表</h3>
       <table>
         <thead><tr><th style="width:34%">情形</th><th>判定</th></tr></thead>
         <tbody>
-          <tr><td>索引命中 (页面列出过)</td><td>受 HR 管束, 参数用站点 hr 配置; 若 HR 页本身给出要求做种时长/分享率且 M0 确认可抓, 则<strong>逐种覆盖</strong>站点配置, 语义更准</td></tr>
-          <tr><td>索引未命中</td><td>按 <code>unknown_policy</code> (默认 <code>hr</code> 保守: 宁可多保护) —— 首次成功刷新之前整站按 HR, 行为与现状「全站 HR」一致, 无回退风险</td></tr>
-          <tr><td>索引过期 (超 <code>refresh_interval</code> × 2 未刷新)</td><td>视为未覆盖, 回落 <code>unknown_policy</code>; 恢复刷新后自动收敛</td></tr>
-          <tr><td>功能关闭 / 非 partial 站点</td><td>完全走现状逻辑, 行为零变化</td></tr>
+          <tr><td>在 A/B/C 清单内</td><td><strong>受管束</strong> —— 不管本地 <code>downloaded</code> 是 0 (转移过来的保种副本) 还是大于 0; 参数用站点 <code>hr</code> 配置</td></tr>
+          <tr><td><code>mode: all</code> 站点 + 未核实</td><td><strong>受管束</strong> (全站 HR 的保守默认; 这是与 <code>partial</code> 的唯一差别)</td></tr>
+          <tr><td>真辅种 (从未下载过该 tid)</td><td>由「完整核实 + 清单未命中」给出<strong>安全放行</strong> —— 与现状「不触发」结论相同, 但依据从本地近似换成站点权威</td></tr>
+          <tr><td>在 D 档 (已免罪)</td><td><strong>安全放行</strong> (source=absent) + 写 <code>hr_verified</code> (含锚点)</td></tr>
+          <tr><td>不在清单内 + 覆盖证明成立 + <code>added_on</code> ≤ <code>last_success_ts</code> + 放行未过期 + 锚点未漂移</td><td><strong>安全放行</strong></td></tr>
+          <tr><td>放行已过期 (超 <code>verified_ttl</code> 无新刷新背书, 含通道静默)</td><td><strong>未核实</strong> → <code>unknown_policy</code> (默认 hr) + 告警一次</td></tr>
+          <tr><td>本实例锚点漂移 (<code>downloaded</code> 变小或增长、<code>added_on</code> / <code>completion_on</code> 变化、<code>progress</code> 从 1 退回)</td><td>放行<strong>立即作废</strong> → 未核实 → 保守; 等下次完整刷新重新核实</td></tr>
+          <tr><td>覆盖证明不成立 (首刷 / 分页未到底 / scope 失败 / 解析可疑)</td><td><strong>未核实</strong> → <code>unknown_policy</code></td></tr>
+          <tr><td><code>added_on</code> > <code>last_success_ts</code> (新鲜度闸门)</td><td><strong>未核实, 恒按受管束</strong> (不受 <code>unknown_policy</code> 影响)</td></tr>
+          <tr><td>本实例无通道 (§5「能力即角色」) 且共享数据已过期</td><td>未核实 → <code>unknown_policy</code> (保守); 该站 <code>mode: all</code> 则恒受管束</td></tr>
+          <tr><td>infohash 未回填 / 站点未匹配 tracker</td><td><strong>未核实</strong> → <code>unknown_policy</code></td></tr>
+          <tr><td>功能关闭 / 非 partial 站点</td><td>完全走现状逻辑, 行为零变化 (仍按本地字段)</td></tr>
+          <tr><td>站点启用了 <code>hr_check</code> (mode != off) 但未配 <code>hr</code> 段</td><td>配置期直接报错 (fail-fast), 不会进入运行期 —— 否则 <code>tracker_conf.hr</code> 为 <code>None</code>, 全部保护静默失效</td></tr>
         </tbody>
       </table>
-      <p>四个消费点 (打标 / 视图 / 规则条件 / 表达式) 与辅种排除<strong>全部零改动</strong> —— 它们本来就只调 <code>TorrentRecord</code> 两个方法。这是本方案在现有架构里改造面最小的根本原因。另注意 <code>check_hr_condition</code> 现有的「下载满即触发」兜底与「downloaded=0 纯辅种不触发」边界在 partial 站点下语义不变: 索引只回答「是否受管束」, 触发时机仍由下载量决定。</p>
-      <p>查询键是<strong>(站点, infohash)</strong>: 同一内容辅种到多个站点时, 各站 HR 身份彼此独立 (tid 同理不跨站混用) —— 站点维度来自种子既有的 <code>tracker_conf</code> 匹配, 无需新机制。页面给的进度字段 (还需做种时间 / 剩余达标时间 / 分享率) 是站点侧的定期快照, <strong>判定仍以 qB 本地实时值为准</strong> (与现有语义一致); 两套值天然互补 —— 本地值实时但会被重加清零, 站点值滞后但跨重加连续, 差异本身就是排查信息。</p>
-      <div class="note"><b>索引的反应式本性</b> — HR 页列出的是「当前账号已下载且受 HR 约束」的种子, 所以索引天然滞后: 刚下载的种子要等下一次页面刷新才现身。默认 <code>unknown_policy=hr</code> 正是为这段滞后兜底; 若用户接受把未核实种子当非 HR, 可配 <code>not-hr</code>, 但需自担漏管风险 (配置项描述里写明)。</div>
+      <p>四个消费点 (打标 <code>core/mixins/tags.py</code> / 视图与详情 <code>webui/views.py</code> / 规则条件 <code>rules/conditions.py</code> / 表达式 <code>rules/expr/env.py</code>) 的<strong>调用点零改动</strong> —— 它们本来就只调 <code>TorrentRecord</code> 两个方法。但 <strong>partial 站点上的语义变了 (必须在测试里钉住)</strong>: 触发不再由本地 <code>downloaded</code> 决定, 而由「站点清单命中」决定 —— 现有「下载满即触发」兜底与「<code>downloaded</code>=0 纯辅种不触发」<strong>只对非 partial 站点保留</strong>; partial 站点上 <code>downloaded</code>=0 的本地副本同样受管束、同样要打标 (它可能正是账号唯一在保种的副本)。</p>
+      <p>查询键是<strong>(站点, infohash)</strong>: 同一内容辅种到多个站点时, 各站 HR 身份彼此独立 (tid 同理不跨站混用), 站点维度来自种子既有的 <code>tracker_conf</code> 匹配。<strong>取数顺序 (v1.4)</strong>: <strong>站点侧值优先</strong> —— 达标看页面行的「还需做种时间 / 档位」 (B 档 / 剩余为 0 ⇒ 已达标); 站点字段缺失或解析不可用时才退回本地 <code>seeding_time</code> / <code>ratio</code> (降级, WebUI 标注「来源: 本地」), 站点恢复后自动切回。两套值都显示在 WebUI 便于对账: 本地值实时但会被重加 / 转移清零, 站点值是账号级权威但滞后一个刷新周期。</p>
+      <div class="note"><b>索引的反应式本性 + 多客户端现实</b> — HR 页列出的是「当前账号已下载且受 HR 约束」的种子, 所以索引天然滞后于下载: 刚下载的种子要等下一次<strong>完整</strong>刷新才可能现身 —— 而下载可能发生在<strong>任何一个客户端</strong>上。闸门 (本实例新种子) 与 <code>verified_ttl</code> (别的客户端) 合起来覆盖这段滞后。<br>可观测性要求: WebUI 要把<strong>三态 + 依据</strong>显示出来 (受管束 / 放行 (依据哪次刷新、是否即将过期) / 未核实 (为什么)), 否则用户没法判断放行是否可信。</div>
     </section>
 
     <!-- ============ 10 风险 ============ -->
@@ -488,13 +656,25 @@ trackers:
       <table>
         <thead><tr><th style="width:22%">风险</th><th style="width:20%">影响</th><th>缓解</th></tr></thead>
         <tbody>
-          <tr><td>访问频度不当 → 站点封号</td><td>账号</td><td>默认极保守配额 (90S 间隔 / 20 每时 / 100 每天) + 抖动 + 熔断 + fetch_window; dry-run 先行; 全部可配置收紧</td></tr>
-          <tr><td>cookie 失效 / 2FA / 被登出</td><td>抓取静默失败</td><td>登录态特征检测 (跳登录页 / 401 / 403) → 熔断 + WARNING 通知, 不重试轰炸</td></tr>
-          <tr><td>页面改版 → 解析崩坏</td><td>脏数据 / 空判断</td><td>最小字段校验; 「200 但 0 条」判改版告警, 不入库; adapter 隔离 + 脱敏 fixture 测试</td></tr>
-          <tr><td>Cloudflare 挑战</td><td>纯 HTTP 被挡</td><td>识别挑战页特征 → 停该站并提示走方案 B 的 profile 人工过; 不做自动对抗</td></tr>
-          <tr><td>v2 / hybrid infohash 错配</td><td>漏判</td><td>v1/v2 双算; 用原始字节切片算哈希 (§5); M0 核对 store 的 infohash_v2 字段可得性</td></tr>
-          <tr><td>误判方向: 误删 HR 种 vs 过度保护</td><td>账号 / 辅种收益</td><td><code>unknown_policy</code> 默认 <code>hr</code> (宁多保护); 索引过期回落保守侧; 删除类决策只认「确认受管束」才放宽</td></tr>
-          <tr><td>.torrent 下载的站点观感 (次数/流量)</td><td>账号</td><td>已下载记录 (<code>hr_downloaded</code>) 保证一种只下一次 + 失败重试上限冷却 + 配额硬顶; 文件落 data_dir 运行时区, 不进仓库</td></tr>
+          <tr><td>访问频度不当 → 站点封号</td><td>账号</td><td>默认极保守配额 (90S 间隔 / 12 每时 / 60 每天, 站点级独立) + 只向上抖动 + 熔断 + <code>allow_window</code>; dry-run 先行; 全部可配置收紧</td></tr>
+          <tr><td>扩展端点被伪造注入 (任意网页 JS 向 localhost POST 假数据)</td><td>误删 / 误保护</td><td>token 鉴权 (无 token → 401 且不写 state) + CORS 只放行固定扩展 id + SSRF 白名单; 收到的数据只写索引, 不直接触发删除类动作</td></tr>
+          <tr><td>通道静默 (浏览器没开 / 扩展被停用)</td><td>索引停止更新</td><td><code>channel_silence_warn</code> 逐时告警 (notify); <code>unknown_policy=hr</code> 兜底; WebUI 显示索引新鲜度</td></tr>
+          <tr><td>扩展分发与维护 (unpacked 加载 / 浏览器策略变化)</td><td>一次性成本 + 偶发失效</td><td>扩展保持极薄 (无解析 ⇒ 站点改版不需要更新扩展); 文档写清安装与重载; 备选 CDP 通道随时可切 (§6)</td></tr>
+          <tr><td>后台标签页被站点当成异常访问</td><td>账号</td><td>低频 + 仅在需要取数时开 + 不抢焦点; M0 观察站点是否对在线时长敏感</td></tr>
+          <tr><td>页面改版 → 解析崩坏</td><td>脏数据 / 空判断</td><td>最小字段校验; 「200 但 0 条」判改版告警, 不入库; adapter 隔离 + 脱敏 fixture 测试 (解析在后端 ⇒ 改版只改后端)</td></tr>
+          <tr><td>Cloudflare 挑战</td><td>扩展也取不到内容</td><td>页面上下文本身能过挑战; 若需人工过 → 熔断 + WARNING 提示开一次浏览器; 不做自动对抗</td></tr>
+          <tr><td>v2 / hybrid infohash 错配</td><td>漏判</td><td>v1/v2 双算 (原始字节切片); 快照已有 <code>infohash_v1</code> / <code>infohash_v2</code> 字段可直接对, 缺失时回落 <code>hash</code></td></tr>
+          <tr><td>漏判 HR (最危险方向)</td><td>账号处分</td><td>四重保证: <code>unknown_policy</code> 默认 <code>hr</code> + <strong>新鲜度闸门</strong> + <strong>不完备刷新不产生放行</strong> + <strong>放行有效期 (<code>verified_ttl</code>)</strong>; 另: scope 必抓 A+B+C (只抓 A 会把已达标种子误放行)</td></tr>
+          <tr><td><strong>转移种子</strong> (A 客户端下载 → B 客户端保种)</td><td>漏管</td><td><strong>站点侧驱动判定</strong> (§9): B 的 <code>downloaded</code>=0 不再被当辅种, 清单命中即受管束并打标; 回归用例钉住</td></tr>
+          <tr><td>多客户端: 账号在别的客户端发生下载/二次下载</td><td>漏管</td><td>本地无信号 ⇒ 靠刷新发现: 放行有效期 = <code>verified_ttl</code> (默认 = <code>refresh_interval</code>) + 通道静默告警; 调大 TTL 即风险自负 (配置文案写明)</td></tr>
+          <tr><td>多实例: 双倍访问站点 / 重复取 .torrent</td><td>账号 (频度) / 配额</td><td><strong>带锁访问 + 有效期复用</strong> (§5): 锁内完成读/抓/写, 效期内直接复用并记一次配额 ⇒ 站点访问频率由<strong>数据有效期</strong>决定, 与实例数无关</td></tr>
+          <tr><td>共享目录抖动 / 锁不生效 (网络盘语义)</td><td>双写覆盖或判定退化</td><td>写者心跳自检 + <code>revision</code> 回退检测 ⇒ 告警并退化为单实例只读 (保守); 合并式写入 + schema 版本校验 + 坏 JSON 不入库; 文档限定 <code>shared_dir</code> 适用面</td></tr>
+          <tr><td>锁被长时间占用 (抓取分钟级)</td><td>该站点本轮不更新</td><td>锁粒度 = <strong>站点</strong> ⇒ 只让该站点本轮让路, <strong>其它站点不受影响</strong>; 拿不到锁直接<strong>等下一轮</strong> (不排队、不重试轰炸); 抓取只在取数线程内等待, 主循环零感知 (§8)</td></tr>
+          <tr><td>所有实例都无可用通道 (浏览器全关 / 扩展被停用)</td><td>数据停止更新</td><td>判定安全 (未核实 ⇒ 保守) + 通道静默告警; <strong>推荐每台能跑浏览器的实例都启用 <code>channel</code></strong> ⇒ 消掉「只有一台能抓」的单点故障</td></tr>
+          <tr><td>同机多实例: 端口 / token 撞车 (两实例抢同一 <code>channel.port</code>)</td><td>其中一台通道起不来</td><td>端口被占 ⇒ <strong>启动即报错</strong> (fail-fast, 不静默降级); 文档引导<strong>每实例一个端口</strong>; token 各自持久化 (<code>data_dir/hr.token</code>) ⇒ 扩展侧逐实例配置, 互不串用 (打错 token ⇒ 401)</td></tr>
+          <tr><td>站点值滞后 ⇒ 达标晚判 ≤ 1 个刷新周期</td><td>多保护一会儿</td><td>保守方向, 可接受; WebUI 同时显示站点侧 / 本地两套值便于人工判断</td></tr>
+          <tr><td>过度保护 (把非 HR 当 HR)</td><td>辅种收益 / 白打标签</td><td>放行由「完整核实 + 不在清单内」产生, 通道正常时每轮刷新自动续期; WebUI 显示三态与放行依据, 用户可审计</td></tr>
+          <tr><td>.torrent 取数的站点观感 (次数/流量)</td><td>账号</td><td>已取记录 (<code>hr_downloaded</code>) 保证一种只取一次 + 失败重试上限冷却 + 配额硬顶; 二进制不落盘 (只算 infohash)</td></tr>
           <tr><td>同内容跨站点误配</td><td>误判</td><td>索引与反查一律带站点维度 ((站点, tid) 主键 / (站点, infohash) 反查), tid 与 infohash 均不跨站混用</td></tr>
           <tr><td>state_file 无界增长</td><td>运行时</td><td><code>index_retention</code> 只淘汰页面快照条目; 永久层 (<code>hr_downloaded</code>) 每条仅数十字节; 条目数超限告警</td></tr>
         </tbody>
@@ -508,30 +688,31 @@ trackers:
       <div class="mile">
         <div class="step">
           <div class="dot">M0</div>
-          <div class="mt">调研与拍板 <span>0.5 会话 · 依赖: 开放问题 5 条拍板</span></div>
-          <div class="mb">选定 1–2 个目标站点; 人工取 HR 统计页样本 HTML (脱敏进 fixture); 确认下载 URL / passkey 形态、各站字段完整度与数值格式 (页面行八字段已由用户确认, 待确认「完成时间」语义与时间/流量单位)、有无 JSON 或逐种标记; 拍板 bencode 自写 vs bencodepy、解析器选型、cookie 首发方案。<b>产出: 决策记录进任务档案。</b></div>
+          <div class="mt">实测收口 <span>0.5 会话 · 依赖: 无 (决策已齐) — 可与 M1/M2 并行</span></div>
+          <div class="mb">v1.1 的 M0 已大部分完成 (见本节末「已完成」)。<strong>前置决策 5 项已齐 (2026-09-24, §13)</strong>, 剩四项<strong>实测</strong> (非决策, 不阻塞 M1 开工, 可与 M1/M2 并行): ①下载 URL 形态 (<code>download.php?id={tid}</code> 是否需 passkey / 校验 Referer) ②BTSchool HR 页 <strong>scope 分档语义 + 分页到底判据</strong> ③后台标签页取数是否被站点在线时长识别 / CF 挑战 ④共享目录 filelock 互斥实测。<b>产出: 实测记录进任务档案。</b></div>
         </div>
         <div class="step">
           <div class="dot">M1</div>
-          <div class="mt">核心管道 (dry-run) <span>1–2 会话</span></div>
-          <div class="mb">bencode + infohash 模块 (纯函数 + 测试向量); adapter 接口 + 首站实现; 抓取 → 下载 → 对账 → <code>state.hr_index</code> ((站点, tid) 主键 + infohash 回填 + <code>hr_downloaded</code> 已下载层); 全局任务接入 (<code>_create_global_tasks</code> 同款); dry-run 全链路报告 (命中 / 未命中 / 新增), <b>不联动任何 qB 动作</b>。测试: fixture 解析、infohash 向量、频控窗口 (fake clock)、state 幂等。</div>
+          <div class="mt">核心管道 <span>1–2 会话 · 纯离线可做</span></div>
+          <div class="mb"><strong>首站 = BTSchool</strong> (adapter 只做这一个)。把 <code>scripts/hr_fetch_experiment.py</code> 的成果收敛进 <code>src/</code>: bencode/infohash (原始字节切片) + myhr 解析器 + 数值容错, 补 pytest (钉死向量 + 脱敏 fixture + 改版五类样本); 对账与索引 (<code>(站点, tid)</code> 主键 + infohash 回填 + <code>hr_downloaded</code> 永久层); 全局任务接入 (<code>_create_global_tasks</code> 同款)。<b>本阶段不需要浏览器</b> —— 开发与测试全走离线样本; <strong>页面数据由用户实施时提供</strong> (分页 / 各档 / 边界样本), 已有的 <code>D:/Projects/站点页面/myhr.php</code> 样张可直接开工, 缺样本时先按现有字段与容错设计写 adapter。</div>
         </div>
         <div class="step">
           <div class="dot">M2</div>
-          <div class="mt">频控与后台化 <span>1 会话</span></div>
-          <div class="mb">取数线程 + 令牌授权落地 (§8 方案乙); min_interval / 小时 / 天配额 / 抖动 / 退避 / 熔断 / fetch_window; 断点续抓 (重启不重复下载、窗口不重置); notify 接入 (失效 / 熔断 / 改版三类事件)。</div>
+          <div class="mt">取数通道 <span>1–2 会话</span></div>
+          <div class="mb">后端: <code>/api/hr/tasks</code> + <code>/api/hr/result</code> (token 鉴权 + origin / SSRF 白名单 + 只入队); <strong>取数线程</strong> (持锁 → 读站点文件 → 判有效期 → 必要时抓 → 合并写回 → 发布只读视图) + 频控 (间隔 / 配额账本 / 退避 / 熔断 / <code>allow_window</code> / 通道静默告警); <strong>共享站点数据 + 每站点一把锁</strong> (<code>shared_dir</code> / 锁粒度 = 站点 / 写者心跳自检 / 站点内合并写); 取数节奏按 <code>poll_interval</code> 自唤醒, 视图只在数据变化时发布; 扩展: MV3 薄代理 (alarms 轮询 → 后台标签页取 DOM 快照 / 取 .torrent → 回传 → 关标签) + <strong>实例端点列表</strong> (扩展里配 N 个实例: 名称 / 端口 / token, 逐个拉任务 ⇒ 一个浏览器可服务同机多个实例, §6); <strong>多实例部署引导</strong> (<code>shared_dir</code> 为空但功能开启 ⇒ INFO 提示; <code>hr.once</code> 打印实际路径与锁自检, §7)。<b>备选通道</b>: CDP 专用 profile (实验脚本已实现) —— 因用户已接受装扩展 ⇒ <strong>不排期</strong>, 仅作应急, 后端接口不变。</div>
         </div>
         <div class="step">
           <div class="dot">M3</div>
           <div class="mt">判定联动 <span>1 会话</span></div>
-          <div class="mb"><code>TorrentRecord</code> 收口改造 (§9); 四消费点 + 辅种排除回归; <code>unknown_policy</code> 生效; WEB UI 的 HR 展示补「来源: 站点核实 / 静态配置」标注 (可选)。真机 <code>--dry-run</code> 走查。</div>
+          <div class="mb"><code>TorrentRecord</code> 三态身份 (取数线程发布只读视图) + <strong>站点侧驱动的触发 / 达标</strong> (§9) + <code>mode: all</code> 纳入体系; 放行有效期与锚点校验; 四消费点回归 + <strong>转移种子 / 真辅种回归</strong>; <code>unknown_policy</code> 生效; WebUI 显示三态 / 依据 / 两套值 (需同步前端 H&R facet 守阵)。真机 <code>hr.once</code> 走查。</div>
         </div>
         <div class="step">
           <div class="dot">M4</div>
-          <div class="mt">Cookie 自动化 <span>1 会话 · 可选先做 Firefox 路线</span></div>
-          <div class="mb">专用 profile + CDP 读 cookie (DevTools 协议, httpx 直连 HTTP/WS); 用户引导文档 (如何启动、登录、放哪); Firefox cookies.sqlite 路线视 M0 验证结果决定做否。</div>
+          <div class="mt">多站点与打磨 <span>1 会话</span></div>
+          <div class="mb">第二 / 第三个站点 adapter; 索引新鲜度与进度展示; notify 四类事件 (登录失效 / 熔断 / 改版 / 通道静默); 用户文档 (扩展怎么装、怎么确认通道在工作)。</div>
         </div>
       </div>
+      <div class="note"><b>已完成 (2026-09-22/23 实验, 不属于计划外)</b> — <code>scripts/hr_fetch_experiment.py</code>: bencode + infohash v1/v2 (原始字节切片) + 自测钉死向量 11 项全过; BTSchool <code>myhr.php</code> 样张离线解析全字段正确; 限速下载 (实验脚本用 ±25% 抖动, 正式实现按 §7 只向上 +0–25% + 已存在跳过) 与 CDP 自动取 cookie (专用 profile, 零新依赖手写 WebSocket) 均已跑通机器链路。<b>该脚本即 M1 的输入</b>, 不是要重做的东西。</div>
     </section>
 
     <!-- ============ 12 测试与验收 ============ -->
@@ -540,34 +721,56 @@ trackers:
       <h2>测试与验收</h2>
       <h3>新增测试</h3>
       <ul>
-        <li><strong>bencode/infohash</strong>: 往返编码、已知 infohash 向量 (真实种子样本)、原始字节切片 vs 重编码的差异用例 (钉死 §5 的坑)、畸形输入拒绝;</li>
-        <li><strong>adapter 解析</strong>: 脱敏页面 fixture (正常 / 改版 0 条 / 缺字段 / 登录页跳转 / CF 挑战页五类样本);</li>
-        <li><strong>频控器</strong>: fake clock 下间隔 / 小时 / 天配额 / 抖动边界 / 熔断进入与退出 / 站点隔离;</li>
-        <li><strong>state 幂等与防重下</strong>: 重启重放不重复下载、窗口不重置; <code>unknown_policy</code> 两态; 索引过期回落; 已下载记录幂等 (页面条目消失再出现不重下); 失败重试达上限冷却; (站点, tid) 主键与 (站点, infohash) 反查; 同 infohash 跨站点身份独立;</li>
-        <li><strong>dry-run 零副作用守阵</strong>: dry-run 下不发令牌、不写 state、不发站点请求;</li>
-        <li><strong>线程边界</strong>: fetcher 线程不触碰 store/队列/state 的静态守卫 (仿既有守阵风格)。</li>
+        <li><strong>bencode/infohash</strong>: 往返编码、钉死 infohash 向量 (实验脚本已自带 2 条, 搬进测试时扩充到真实种子样本)、原始字节切片 vs 重编码的差异用例 (钉死 §5 的坑)、畸形输入拒绝;</li>
+        <li><strong>adapter 解析</strong>: 脱敏页面 fixture (正常 / 改版 0 条 / 缺字段 / 登录页跳转 / CF 挑战页五类样本; BTSchool 样张已有);</li>
+        <li><strong>频控器</strong>: fake clock 下间隔 / 小时 / 天配额 / 抖动只向上 / 熔断进入与退出 / 站点隔离;</li>
+        <li><strong>state 幂等与防重取</strong>: 重启重放不重复取数、窗口不重置; 已取记录幂等 (页面条目消失再出现不重取); 失败重试达上限冷却; (站点, tid) 主键与 (站点, infohash) 反查; 同 infohash 跨站点身份独立; <code>hr_verified</code> / <code>hr_refresh</code> 不被 L2 热重载或保存重放丢掉;</li>
+        <li><strong>三态判定矩阵 (v1.4 核心)</strong>: 逐行覆盖 §9 完整判定表 —— A/B/C 内 → 受管束 (含 <code>downloaded</code>=0 的转移副本); D 档 → 放行; 不在清单 + 覆盖证明成立 + <code>added_on</code> 早于刷新 + 未过期 + 锚点未漂移 → 放行; 放行过期 / 锚点漂移 / 覆盖证明不成立 → unknown; <code>added_on</code> 晚于刷新 → <strong>恒受管束, 即使 <code>unknown_policy=not-hr</code> 也不可绕过</strong>; infohash 未回填 → unknown;</li>
+        <li><strong>覆盖证明</strong>: 分页未到底 / 任一 scope 失败 / 0 条 / 缺失率超阈 —— 四种不完备各一条用例, 均不得产生放行;</li>
+        <li><strong>scope 完整性</strong>: 只抓 A 的配置必须被判「范围不全」(否则已达标种子会被误放行) —— 用 BTSchool 样张构造 A 命中 / B 命中的对照;</li>
+        <li><strong>转移种子 / 多客户端 (v1.4)</strong>: 本地 <code>downloaded</code>=0 但站点清单命中的种子 <strong>必须受管束并打 HR 标签</strong> (「纯辅种不触发」只对非 partial 站点生效); 站点侧达标 (档位 B / 剩余为 0) 优先于本地值; 站点字段缺失 ⇒ 回退本地且标注来源, 站点恢复后自动切回;</li>
+        <li><strong>放行有效期与锚点</strong>: 超 <code>verified_ttl</code> 无新刷新 ⇒ 放行失效回落 unknown; 锚点四种漂移各一条 ⇒ 立即失效; <strong>反向用例</strong>: 锚点未漂移且未过期 ⇒ 放行保持 (防误杀);</li>
+        <li><strong>共享站点数据与锁 (v1.5/v1.6)</strong>: <strong>锁粒度 = 站点</strong> (抓 A 不阻塞 B, 同站点严格互斥); 拿不到锁 ⇒ <strong>本轮直接跳过</strong> (不排队、不重试); 有效期内的数据 ⇒ 直接复用 + <strong>记一次配额</strong> (同一窗口不重复消耗); 站点内合并写不丢同站已有条目, 跨站点无覆盖; 心跳被覆盖 / <code>revision</code> 回退 ⇒ 告警并退化单实例只读; 坏 JSON / schema 版本不符 ⇒ 不入库且保守; <strong>无通道实例只读不写</strong> (静态守阵); <strong>取数线程不碰 state_file / 任务队列 / store</strong> (静态守阵);</li>
+        <li><strong>只在数据变化时更新 (v1.6)</strong>: 视图 <code>revision</code> 只在数据实质变化时抬升; 主循环版本未变 ⇒ 不做任何 record 更新; 「是否过期」为读取时现算, 不触发重发布;</li>
+        <li><strong>多实例通道与部署引导 (v1.7)</strong>: 同一浏览器配多个实例端点 ⇒ <strong>token 各自独立</strong> (A 的 token 打 B 的端点 ⇒ 401 且不写任何 state); 两实例都启用 <code>channel</code> 且配同一站点 ⇒ 锁 + 有效期保证<strong>站点只被访问一次</strong> (另一实例复用数据并记一次配额); 同机两实例用<strong>同一 <code>channel.port</code></strong> ⇒ 启动 fail-fast 报错 (不静默降级); <code>hr_check.enabled=true</code> 且 <code>shared_dir</code> 为空 ⇒ 启动时记一条<strong>引导提示</strong> (不阻断启动, 不写 state);</li>
+        <li><strong>通道安全守阵</strong>: 无 token → 401 且 <strong>不写 state</strong>; 非白名单 origin → 拒; 非白名单域名/路径 → 拒 (SSRF); 收到的畸形 JSON / 截断二进制不崩且不入库;</li>
+        <li><strong>dry-run 零副作用守阵</strong>: dry-run 下清单恒空、不收结果、不写 state (既零请求也零写入); <code>hr.once</code> 只出报告、不联动 qB;</li>
+        <li><strong>线程与热重载边界</strong>: 端点线程只入队 (不碰 store / 队列结构 / state 的静态守阵, 仿既有风格); <strong>L2 热重载后 <code>hr_index</code> / <code>hr_downloaded</code> / 配额窗口不被回滚</strong> (仿 <code>test_apply_new_config_l2_preserves_runtime_state</code>);</li>
+        <li><strong>无凭据守阵</strong>: 静态守卫 —— <code>src/</code> 内不出现读 cookie 库 / 写 cookie 文件的代码; 配置 schema 里没有 cookie / passkey 类键 (防日后被"顺手加回来")。</li>
       </ul>
       <h3>验收标准</h3>
       <ul>
-        <li>全量 <code>uv run pytest tests -q</code> 通过 (基线单点 <code>memory-bank/testing/baseline.md</code>, 当前 1190 collected 稳态 1188 passed + 1 skipped + 1 deselected, TOTAL 91%), 新模块覆盖率不低于均值;</li>
-        <li><code>--dry-run</code> 全链路: 零站点请求、零 state 写入、报告可读;</li>
-        <li>限速实测: 日志时间戳间隔 ≥ <code>min_torrent_interval</code> (含抖动下限);</li>
-        <li>断网 / 坏 cookie / 页面改版三条失败路径: 不 crash、不写脏 state、熔断与通知按预期;</li>
-        <li>重启后: 配额窗口与已下载集合保持, 无重复下载。</li>
+        <li>全量 <code>uv run pytest tests -q</code> 通过: 数字<strong>不要写在这里</strong>, 只认单点 <code>memory-bank/testing/baseline.md</code> (实测值回写 <code>testing.md</code>); 新模块覆盖率不低于均值;</li>
+        <li><code>--dry-run</code>: 清单恒空、零 state 写入、零站点请求、报告可读;</li>
+        <li>限速实测: 相邻清单条目的「最早可取时间」间隔 ≥ <code>min_torrent_interval</code> (抖动只向上, 故为硬下限);</li>
+        <li>失败路径: 浏览器未开 / 扩展停用 / 登录失效 / 页面改版 / 二进制截断 —— 不 crash、不写脏 state、熔断与通知按预期;</li>
+        <li>重启后: 配额窗口与已取集合保持, 无重复取数;</li>
+        <li>安全面: 无 token 的 POST 被拒且 state 无变化; 非白名单域名不被代理。</li>
       </ul>
     </section>
 
-    <!-- ============ 13 开放问题 ============ -->
+    <!-- ============ 13 决策记录 ============ -->
     <section id="s13">
       <div class="sec-no">§ 13</div>
-      <h2>开放问题 (待拍板)</h2>
-      <p class="muted">已解决 (2026-09-22 用户确认): HR 统计页行字段 = HR 编号 / 种子名称 / 上传量 / 下载量 / 分享率 / 还需做种时间 / 完成时间 / 剩余达标时间, tid 站点内唯一、跨站不混用 —— 已纳入 §4 / §5 / §9; 原开放问题「页面是否给出要求值」不再开放。</p>
+      <h2>决策记录 (原「开放问题」· 已全部拍板)</h2>
+      <p class="muted">5 项前置决策已由用户拍板 (2026-09-24), <strong>无待拍板项</strong>; 下面第二段是 M0 的<strong>实测清单</strong> (技术验证, 不是待决策)。已决策 (不再开放): 手工填写 cookie <strong>否决</strong> (2026-09-24 用户); <code>mode: all</code> 语义升级为「站点侧驱动 + 未核实默认受管束」(v1.5 起不再删除 —— 非 partial 站点也要纳入体系); bencode 自写 (实验脚本已带钉死向量); 抽样上下文选后台标签页 DOM; <strong>扩展形态无关</strong> (unpacked / 打包 .crx / 商店版能力相同, 都跑在日常浏览器里, 不需要专用浏览器); <strong>站点数据是权威数据</strong> —— 接入 <code>hr_check</code> 的站点 (partial / all) 的触发 / 达标都以站点侧为准, 本地 qB 字段只作降级与展示 (转移种子 / 多客户端下本地字段会骗人); <strong>判定取三态</strong> + 刷新不完备不产生放行 + <strong>放行有效期 = 刷新背书</strong> (<code>verified_ttl</code> 默认 = <code>refresh_interval</code>; v1.3 的「永久粘性」已作废); <strong>多实例共享站点数据</strong> (站点分文件 + <strong>每站点一把锁</strong> + 带锁访问 + 有效期复用即计配额; 能力即角色); <strong>取数节奏与主循环 tick 解耦</strong> (按 <code>poll_interval</code> 自醒, 视图只在数据变化时抬 <code>revision</code>); 身份判定用<strong>只读视图原子替换</strong> (取代 v1.2 的「预取写字段 + 置脏」); 抓取范围默认 <code>A+B+C</code>。已解决 (2026-09-22 用户确认): HR 统计页行字段 = HR 编号 / 种子名称 / 上传量 / 下载量 / 分享率 / 还需做种时间 / 完成时间 / 剩余达标时间, tid 站点内唯一、跨站不混用 —— 已纳入 §4 / §5 / §9。</p>
+      <table>
+        <thead><tr><th style="width:22%">决策项</th><th style="width:38%">拍板结果</th><th>落地位置</th></tr></thead>
+        <tbody>
+          <tr><td>取数通道拦板</td><td class="ok"><strong>接受装扩展</strong> (主选路线; unpacked 自用即可, 不必上商店) ⇒ CDP 专用 profile 降为应急备选, <strong>不排期</strong></td><td>§6 / §11 M2</td></tr>
+          <tr><td>首批站点</td><td class="ok"><strong>BTSchool</strong> (已有 <code>myhr.php</code> 样张与解析器) —— adapter 以它打头; <strong>页面数据实施时由用户提供</strong> (分页 / 各档 / 边界样本)</td><td>§11 M1</td></tr>
+          <tr><td>频度默认值</td><td class="ok"><strong>按推荐</strong>: 90S 间隔 / 每小时 12 / 每天 60 (均站点级独立); 只会更紧不会更松</td><td>§7</td></tr>
+          <tr><td><code>unknown_policy</code> + 放行有效期</td><td class="ok"><strong>按推荐</strong>: <code>unknown_policy = hr</code> (保守) 且 <code>verified_ttl</code> = <code>refresh_interval</code> (超期未获新背书 ⇒ 放行失效回落保守); 新鲜度闸门恒保守, 不受 policy 影响</td><td>§7 / §9</td></tr>
+          <tr><td><code>shared_dir</code> 放哪</td><td class="ok"><strong>默认放数据目录</strong> (<code>""</code> ⇒ <code>&lt;data_dir&gt;/hr/</code>); 多实例需要互通时<strong>引导用户自行改成共享目录</strong> (程序只提示不代决)</td><td>§7 多实例部署引导</td></tr>
+          <tr><td><code>channel.enabled</code> 启用范围<br><span class="muted">(用户追问「channel 不应该都启用吗」)</span></td><td class="ok"><strong>推荐: 每台「本机有浏览器」的实例都启用</strong> —— 能力硬边界是「本机有没有装扩展的浏览器」而不是名额; 多通道靠同站点锁 + 有效期复用保证<strong>不会双倍访问站点</strong>, 却消掉单点故障; 跨机器的实例没有本地浏览器可连 ⇒ 只能只读</td><td>§5 / §6 / §7</td></tr>
+        </tbody>
+      </table>
+      <h3>M0 待实测 (技术验证, 不是待决策)</h3>
       <ol>
-        <li><strong>首批站点</strong>: 先接哪 1–2 个站? (决定 adapter 顺序与 fixture 来源)</li>
-        <li><strong>频度默认值</strong>: 90S 间隔 / 每小时 20 个 / 每天 100 个的默认配额是否符合你对目标站点容忍度的判断? (只会更紧, 不会更松)</li>
-        <li><strong>unknown_policy 默认值</strong>: 未核实种子默认按 HR 保守处理 (首刷前整站按 HR, 等同现状) —— 是否接受? 若要默认 <code>not-hr</code> 需明确自担漏管风险。</li>
-        <li><strong>cookie 首发路径</strong>: M1 先用手工导入 (配置里填 cookie), M4 再做专用 profile + CDP 自动化 —— 分期是否可接受? 若日常浏览器是 Firefox, 可把 cookies.sqlite 路线提前验证。</li>
-        <li><strong>进度字段的用途边界</strong>: 还需做种时间 / 剩余达标时间本期只做「展示 + 交叉核对」, 不进判定; 是否要顺带透出到 WEB UI HR 列或规则条件 (如剩余达标时间阈值)? 默认: 本期不做, 列为后续扩展。</li>
+        <li><strong>下载 URL 形态</strong>: BTSchool <code>download.php?id={tid}</code> 在页面上下文 <code>fetch</code> 是否要 passkey、是否校验 Referer/XHR 头 (若需 passkey 则由扩展在页面上下文补, 不进配置)。</li>
+        <li><strong>BTSchool HR 页 scope 全集与各档语义</strong>: 哪些档算受管束 (例: A/B/C 受管、D 免罪), 以及<strong>分页到底的判据</strong> (决定覆盖证明怎么算)。</li>
+        <li><strong>后台标签页取数会不会被站点当成异常</strong>: 在线时长 / 浏览统计是否识别 (低频观察即可); Cloudflare 挑战在后台标签页里是否需人工过。</li>
+        <li><strong>共享目录上 filelock 互斥是否真生效</strong>: <strong>仅在用多实例时才需要</strong> (单实例默认数据目录不受影响); 判据 = 两实例同时抢 <code>&lt;site&gt;.lock</code> 只有一个写成功 + 写者心跳不被覆盖。</li>
       </ol>
       <div class="fn">
         <p>[1] The Hacker News, «Google Chrome Adds App-Bound Encryption to Protect Cookies», 2024-08-01 (thehackernews.com); SpecterOps, «Dough No! Revisiting Cookie Theft», 2025-08-27 (specterops.io); ElcomSoft blog, «Browser Forensics in 2026: App-Bound Encryption…», 2026-01-13 (blog.elcomsoft.com)。</p>
@@ -575,9 +778,30 @@ trackers:
       </div>
     </section>
 
+    <!-- ============ 14 变更记录 ============ -->
+    <section id="s14">
+      <div class="sec-no">§ 14</div>
+      <h2>变更记录</h2>
+      <table>
+        <thead><tr><th style="width:14%">版本</th><th style="width:16%">日期</th><th>改了什么 / 为什么</th></tr></thead>
+        <tbody>
+          <tr><td>v1.0</td><td>2026-09-22 22:04</td><td>初版: 可行性分析 + 分阶段实施计划 (cookie 分层方案 A/B/C/D)。</td></tr>
+          <tr><td>v1.1</td><td>2026-09-22 22:32</td><td>HR 页八字段入模; (站点, tid) 主键与跨站隔离; 防重复下载三层。</td></tr>
+          <tr><td>v1.2</td><td>2026-09-24 18:08</td><td>按「计划审核 + 用户否决手工 cookie」重写取数通道与相关各节:<br>① <strong>取数通道改浏览器扩展</strong> (§6 重写): 手工导入否决 (维护成本转嫁用户 + 凭据进仓库); 新增「路线 1 后端解析 vs 路线 2 扩展解析」成本/效果对比 → 结论路线 1 + 后台标签页 DOM 快照 + 拉取式任务; 新增通道安全边界 (token / origin / SSRF 白名单、防伪造注入); cookie 风险整体移除。<br>② <strong>线程模型简化</strong> (§8 重写): 取数线程 + 许可令牌作废 (后端不再发请求), 改为「端点线程只入队 + 主循环唯一写者」, 生命周期复用 <code>webui/server/lifecycle.py</code> 的 handle。<br>③ 修正 v1.1 的三处表述/事实: 身份字段落点 (record 不能反向依赖 state, 且 Web 线程会读它 → 仿 <code>tracker_error_msg</code> 主循环预取 + 置脏); 消费点文件路径 (<code>webui/views.py::_hr_view_fields</code>, 非不存在的 <code>mixins/web_view.py</code>); 测试基线数字删掉 (只引用 <code>testing/baseline.md</code> 单点)。<br>④ 收敛内部矛盾: 配额口径统一为站点级独立; 抖动改为只向上 (否则与验收下限矛盾); <code>fetch_window</code> 改名 <code>allow_window</code> 并声明与 <code>notify.quiet_hours</code> 语义相反 (后者是"该时段不发"); <code>mode: all</code> 删除; dry-run 与真机只读验证拆为 <code>--dry-run</code> / <code>hr.once</code>; 频控写点即时落盘只保留 <code>hr_downloaded</code>。<br>⑤ 新增配置期硬约束 (partial 站点必配 <code>hr</code> 段, 否则保护静默失效) 与测试守阵 (通道安全 / 无凭据 / L2 保索引)。<br>⑥ 里程碑重排并写入既有实验现状 (<code>scripts/hr_fetch_experiment.py</code>, 含钉死向量与 CDP 实测三坑)。</td></tr>
+          <tr><td>v1.3</td><td>2026-09-24 18:33</td><td>① <strong>扩展分发形态澄清</strong> (§6): 能力与形态<strong>无关</strong> —— unpacked / 打包 <code>.crx</code> / 商店版同一套 manifest 与 API; <strong>不需要专用浏览器</strong> (跑在日常浏览器里), 形态只影响装载与更新方式; id 固定改写成「优先固定, 否则白名单放通 + 强制 token」(token 才是真鉴权); 补一句商店版可自动更新对路线 2 摩擦的影响 (结论不变)。<br>② <strong>「未核实」边界收口 (本版核心, §9)</strong>: 判定改<strong>三态</strong> (受管束 / 安全放行 / 未核实); 穷举未核实的四类边界 (从未成功刷新 / 刷新不完备 / <strong>新鲜度闸门</strong> / 身份缺位); 闸门恒按受管束且<strong>不可被 <code>unknown_policy</code> 绕过</strong>; 放行只由「完整核实 + 不在清单内」产生; <strong>放行粘性</strong>修正了 v1.2 的「索引过期回落 unknown」(那会让通道静默期收益归零); 重写完整判定表与两方向取舍块。<br>③ 支撑件: §4 加<strong>抓取范围 (scope)</strong> —— 只抓 A 会把「已达标」的 HR 种子误放行 (默认改 <code>A+B+C</code>) 与<strong>覆盖证明</strong>字段; §5 state 加 <code>hr_verified</code> / <code>hr_refresh</code>; §7 配置加 <code>hr_page_scopes</code> 并标明闸门不受 policy 影响; §10 风险拆成「漏判 HR / 过度保护」两条; §12 新增三态矩阵 / 放行粘性 / 覆盖证明 / scope 完整性四组守阵。</td></tr>
+          <tr><td>v1.4</td><td>2026-09-24 18:56</td><td>按「多客户端是常态 + 转移种子普遍 + <strong>网站数据是权威数据</strong>」重写判定与状态归属:<br>① <strong>站点侧驱动判定</strong> (§9): partial 站点的「是否触发 / 是否达标」一律看站点侧 (清单命中即触发; 达标看档位 / 剩余时间), 本地 qB 字段降为兜底与展示 —— 治「A 客户端下载 → B 客户端保种 ⇒ B 的 <code>downloaded</code>=0 被当辅种」导致的漏管; 「纯辅种不触发」只对非 partial 站点保留。<br>② <strong>放行有效期取代永久粘性</strong> (§5/§9): <code>verified_ttl</code> 默认 = <code>refresh_interval</code> —— 账号随时可能在别的客户端下载, 本地看不见, 只能靠刷新背书; 下载锚点 (<code>added_on</code> / <code>downloaded</code> / <code>completion_on</code> / <code>progress</code>) 降为<strong>辅助</strong>信号, 只提前作废本实例的放行。<br>③ <strong>多实例账号级状态互通</strong> (§5/§6/§7): <code>role: publisher</code> 集中核实 + 原子发布 <code>hr_snapshot.json</code>, <code>consumer</code> 只读订阅 (不访问站点 / 不占配额) ⇒ 「同一账号只在一个实例启用」这条不现实约束取消, 且不会双倍访问站点。<br>④ 身份判定改为<strong>稳定引用 + 内容原子替换的只读视图</strong>, 读取时现算三态 + 锚点校验 (取代 v1.2 的「预取写字段 + 置脏」—— 锚点漂移不会置脏, 那种写法会漏更新)。<br>⑤ 支撑件: §10 加「转移种子 / 别处下载 / 多实例 / 快照陈旧 / 站点值滞后」五条风险; §11 M2 加共享快照、M3 改站点侧驱动; §12 加转移种子 / 放行有效期与锚点 / 共享快照 / 降级路径四组守阵; §13 开放问题回到 5 条 (新增部署形态)。</td></tr>
+          <tr><td>v1.5</td><td>2026-09-24 19:48</td><td>按用户定的「带锁访问 + 有效期复用 + 职责彻底分隔」重排多实例与线程模型:<br>① <strong>共享站点数据</strong> (§5): 账号级状态<strong>不进 <code>state_file</code></strong>, 改为<strong>站点分文件</strong> <code>&lt;shared_dir&gt;/hr/&lt;site&gt;.json</code> + <strong>唯一一把锁</strong> <code>hr.lock</code>; 取数线程<strong>持锁期间完成「读 → 判有效期 → 必要时抓 → 写 → 释放」全程</strong> (连分钟级抓取也在锁内) ⇒ 即使代码有 bug 也不可能两个实例同时读/写/抓; 拿不到锁直接<strong>等下一轮</strong>; 有效期 = 「本轮已完成」并照样记一次配额 ⇒ 站点访问频率由数据有效期决定; <strong>能力即角色</strong> (有无 <code>channel</code> 决定谁能抓); 写者心跳 + <code>revision</code> 回退自检锁是否真的生效。<br>② <strong>线程模型改三分职责</strong> (§8 重写): 扩展 / 端点线程 (只入队) / <strong>取数线程</strong> (持锁 + 解析 + 发布只读视图) / 主循环 (只读视图 + state 唯一写者); 主循环<strong>绝不与取数线程同步握手</strong> ⇒ 抓取再慢也卡不住 2s 节拍。<br>③ <strong>「纯辅种不触发」缺口修掉</strong> (§9): <code>mode: all</code> 语义升级为「站点侧驱动 + 未核实默认受管束」⇒ 非 partial 站点也纳入体系; 真辅种由「完整核实 + 清单未命中 ⇒ 放行」给出同一结论, 且<strong>零静默变更</strong> (只有配了 <code>hr_check</code> 段的站点走新语义)。<br>④ <code>hr_channel</code> 并入 <code>hr_check.channel</code> (§7), 并写明代价: 需给 <code>config/impact.py</code> 补一张 <code>HR_CHECK_FIELD_LEVELS</code> 内部字段表, 否则 <code>channel.*</code> 会被误判 L0。<br>⑤ 支撑件: §7 频控两行改 hr 文件口径; §10 新增「锁被长时间占用 / 锁不生效 / 通道实例退出」三条并改写两条; §12 加共享数据与锁的守阵组; §13 开放问题改为「<code>shared_dir</code> 放哪 + 哪台启用 <code>channel</code> + 实测 filelock 互斥」。</td></tr>
+          <tr><td>v1.6</td><td>2026-09-24 19:59</td><td>两处按用户澄清收窄:<br>① <strong>锁粒度 = 站点</strong> (§5/§7/§10/§12): 「锁单文件一个锁」= <strong>每个站点数据文件一把锁</strong> (<code>&lt;site&gt;.lock</code>), 不是全局一把 —— 抓站点 A 不阻塞站点 B, 减小数据更新延迟; 同站点仍严格互斥 (带锁访问全程不变); 跨站点因此天然无覆盖问题, 站点内的读-改-写仍在锁内。<br>② <strong>节奏与 tick 解耦</strong> (§5/§7/§8/§12): HR 粒度是小时~天 ⇒ 取数线程按 <code>poll_interval</code> (默认 1M) 自唤醒, <strong>不随主循环 tick</strong>; 视图只在<strong>数据实质变化</strong> (抓取成功 / 熔断 / 通道状态翻转) 时抬 <code>revision</code> 并发布 ⇒ 主循环每 tick 只做廉价版本比较, <strong>版本没变零工作</strong>; 「是否还在有效期」在读取时用 <code>now</code> vs <code>expires_at</code> 现算, 不为时间流逝重发布。</td></tr>
+          <tr><td>v1.7</td><td>2026-09-24 20:09</td><td>5 项前置决策拍板后定稿 (<strong>无待拍板项</strong>), 并按用户追问「channel 不应该都启用吗」放宽通道角色:<br>① <strong>决策落地</strong> (§13 改为决策记录 + M0 实测清单): 接受装扩展 (主选, 无需上商店) / 首站 <strong>BTSchool</strong> 且页面数据实施时由用户提供 / 频度按推荐 (90S·12 每时·60 每天, 站点级) / <code>unknown_policy=hr</code> + <code>verified_ttl=refresh_interval</code> / <code>shared_dir</code> 默认数据目录。<br>② <strong>channel 推荐「都启用」</strong> (§5/§6/§10/§11/§12): 抓取能力的硬边界不是「名额」而是<strong>本机有没有装扩展的浏览器</strong> (端点只听 <code>127.0.0.1</code>, 浏览器只连本机 loopback) ⇒ 凡本机有浏览器的实例都推荐启用; 多通道靠「同站点锁 + 有效期复用」保证不会双倍访问站点, 同时消掉单点故障; 扩展侧新增<strong>实例端点列表</strong> (<code>[{name, endpoint, token}]</code>, 一个浏览器可服务同机多实例); 新增同机多实例<strong>端口 / token 撞车</strong>风险行。<br>③ <strong>多实例部署引导</strong> (§7): <code>shared_dir</code> 留空 = 数据目录 (默认); 功能开启且留空 ⇒ 记一条 INFO 引导提示 (不阻断启动), 由用户决定是否改成共享目录; <code>hr.once</code> 顺带打印实际路径与锁自检; <code>channel.port</code> 同机多实例必须错开 (被占则启动报错)。</td></tr>
+          <tr><td>v1.8</td><td>2026-09-24 20:15</td><td><strong>文档漂移清理 (纯文档, 无设计变更)</strong> —— 多轮改写后逐节回扫, 消掉与现行设计矛盾的遗留:<br>① 删除 §6 中 <strong>v1.1 遗留的 cookie 分层方案表</strong> (A 手工导入「M1 落地」/ B CDP「M4 落地·推荐目标形态」/ C 扩展「备选不排期」) —— 与现行「扩展主选 / 手工导入否决 / CDP 不排期」直接矛盾。<br>② <strong>旧路径</strong> §1 <code>mixins/web_view.py</code> → <code>webui/views.py</code> (v1.2 已更正, §1 漏改)。<br>③ <strong>旧落点</strong> §3 <code>state.hr_index</code> → 站点文件里的 <code>hr_index</code> (v1.5 已把账号级状态移出 <code>state_file</code>)。<br>④ <strong>旧口径</strong> §4 流量字段「决策以 qB 本地值为准」→ 站点侧优先、本地兜底 (§9 自 v1.4 起已是站点侧权威)。<br>⑤ <strong>旧待办</strong> §5 bencode「M0 拍板」→ 已定自写 (实验脚本已带钉死向量); §11 M0 「依赖: 开放问题拍板」→ 依赖无、可与 M1/M2 并行; 实验脚本的 ±25% 抖动加注「正式实现按 §7 只向上」。<br>⑥ <strong>旧角色</strong> §9 判定表删「consumer 侧」行 (publisher/consumer 已于 v1.5 删除) → 改为「本实例无通道且共享数据已过期」; §2 「许可令牌作废」表述补明取数线程 v1.5 以新职责回来。<br>⑦ <strong>mode 语义补齐</strong>: §7 配置注释补 <code>all</code> 三态语义; §9 硬约束与判定表把「partial ⇒ hr 段必填」放宽为 <code>mode != off</code> (all 站点同需 <code>hr</code> 段参数); §9 未核实态补「<code>mode: all</code> 恒受管束」; §2/§13 「partial 站点」改「接入 <code>hr_check</code> 的站点」。<br>⑧ 导航与措辞: 目录与节注释 §13「开放问题」→「决策记录」; CSS 注释「粘性目录」→「吸顶目录」(避开已废弃的「放行粘性」撞词)。</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">下一段是 M0 的待实测清单 (§13)。</p>
+    </section>
+
     <div class="colophon">
-      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v1.1 — 2026-09-22 22:04 (v1.1 修订 22:32: HR 页八字段入模 / (站点, tid) 主键与跨站隔离 / 防重复下载三层) · auto-qb-clone5<br>
-      依据: memory-bank 路由 (config-reference / systemPatterns / modules) 与源码锚点 (TorrentRecord · mixins/tags · mixins/web_view · rules/conditions · rules/expr/env · qbmanager._create_global_tasks); 外部事实两条已核实见脚注。
+      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v1.8 — 2026-09-22 22:04 (v1.8 修订 2026-09-24 20:15: 文档漂移清理 —— 删遗留 cookie 分层表 / 修旧路径·旧落点·旧口径·旧角色·mode 语义) · auto-qb-clone2<br>
+      依据: memory-bank 路由 (config-reference / systemPatterns / modules / conventions) 与源码锚点 (TorrentRecord.check_hr_* · core/mixins/tags · webui/views.py::_hr_view_fields · webui/server/routes/torrent_detail.py · rules/conditions · rules/expr/env · qbmanager._create_global_tasks · webui/server/lifecycle.py · config/validation/core.py · config/impact.py); 既有实验 <code>scripts/hr_fetch_experiment.py</code>; 外部事实两条已核实见脚注。
     </div>
 
     </main>
