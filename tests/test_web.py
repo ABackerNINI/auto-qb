@@ -107,11 +107,17 @@
 - test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
+- test_web_loop_exception_handler_downgrades_connection_reset: 网络波动(WinError 10054 对端强迫关闭)降级为一行 INFO, 不再 ERROR + traceback
+- test_web_loop_noise_log_throttled_in_window: 断连日志按窗口节流(窗口内只记首条, 出窗口附抑制条数)
+- test_web_loop_exception_handler_delegates_real_bug: 反向守阵 —— 非波动异常交回 asyncio 默认处理器, 不吞
+- test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
+- test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857): 60 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 """
 import base64
+import errno
 import json
 import logging
 import os
@@ -3728,6 +3734,100 @@ def test_start_web_server_reports_failure_when_port_taken(tmp_path, caplog):
         assert handle.started is False, "端口被占用时不应报告就绪"
         assert any("WEB UI 启动失败" in r.message for r in caplog.records), "失败必须记 ERROR"
         stop_web_server(handle)
+
+
+def _noise_loop():
+    """异常处理器替身: 只关心「是否把异常交还给默认处理器」"""
+    return mock.MagicMock()
+
+
+def _reset_noise_state():
+    from auto_qb.webui.server import lifecycle as lc
+
+    lc._noise_state.update(at=0.0, suppressed=0)
+    return lc
+
+
+def test_web_loop_exception_handler_downgrades_connection_reset(caplog):
+    """网络波动(WinError 10054 对端强迫关闭): 降级为一行 INFO, 不再 ERROR + traceback(2026-09-24 实测)
+
+    Windows ProactorEventLoop 下客户端(关页面 / SSE 重连 / 抖动)断开时, asyncio 自己的回调
+    `_ProactorBasePipeTransport._call_connection_lost` 会抛 ConnectionResetError, 默认处理器
+    以 ERROR 整段 traceback 打出, 看着像崩溃。
+    """
+    lc = _reset_noise_state()
+    loop = _noise_loop()
+    context = {
+        "message": "Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)",
+        "exception": ConnectionResetError(10054, "远程主机强迫关闭了一个现有的连接。"),
+    }
+    with caplog.at_level(logging.INFO, logger="auto_qb.web"):
+        lc._web_loop_exception_handler(loop, context)
+
+    noise = [r for r in caplog.records if "WEB 连接被对端中断" in r.message]
+    assert len(noise) == 1 and noise[0].levelno == logging.INFO, "断连应记为一行 INFO"
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records), "不得再出现 ERROR"
+    loop.default_exception_handler.assert_not_called(), "波动型异常不应交给默认处理器"
+
+
+def test_web_loop_noise_log_throttled_in_window(caplog):
+    """断连日志按窗口节流: 窗口内只记首条, 出窗口时附被抑制条数(SSE 重连会成串刷屏)"""
+    lc = _reset_noise_state()
+    loop = _noise_loop()
+    context = {"exception": ConnectionResetError(10054, "远程主机强迫关闭了一个现有的连接。")}
+    with caplog.at_level(logging.INFO, logger="auto_qb.web"):
+        lc._web_loop_exception_handler(loop, context)
+        lc._web_loop_exception_handler(loop, context)
+        assert len([r for r in caplog.records if "WEB 连接被对端中断" in r.message]) == 1, "窗口内只记一条"
+
+        lc._noise_state["at"] -= lc.NET_NOISE_WINDOW  # 推进到窗口外
+        lc._web_loop_exception_handler(loop, context)
+
+    msgs = [r.message for r in caplog.records if "WEB 连接被对端中断" in r.message]
+    assert len(msgs) == 2, "出窗口后应再记一条"
+    assert "另有 1 条" in msgs[-1], "被抑制的条数要带出来, 不能静默丢"
+    loop.default_exception_handler.assert_not_called()
+
+
+def test_web_loop_exception_handler_delegates_real_bug(caplog):
+    """反向守阵: 非网络波动的异常(真 bug)一律不吞, 交回 asyncio 默认处理器"""
+    lc = _reset_noise_state()
+    loop = _noise_loop()
+    context = {"message": "Task exception was never retrieved", "exception": ValueError("真 bug")}
+    lc._web_loop_exception_handler(loop, context)
+
+    loop.default_exception_handler.assert_called_once_with(context), "真 bug 必须照旧走默认处理器(ERROR)"
+    assert not [r for r in caplog.records if "WEB 连接被对端中断" in r.message], "不得被误判成网络波动"
+
+
+def test_is_network_fluctuation_matrix():
+    """波动判定矩阵: 异常类 / winerror / errno 三条路都要认, 非 OSError 与"目标拒绝"不算"""
+    lc = _reset_noise_state()
+    assert lc._is_network_fluctuation(ConnectionResetError(10054, "远程主机强迫关闭了一个现有的连接。"))
+    assert lc._is_network_fluctuation(ConnectionAbortedError(10053, "软件中止"))
+    assert lc._is_network_fluctuation(BrokenPipeError(32, "管道断裂"))
+    assert lc._is_network_fluctuation(OSError(errno.ECONNRESET, "reset")), "errno 路(POSIX 语义)"
+    win_only = OSError("模拟: 只有 winerror 的 Windows 错误")  # Windows 上 errno 可能缺失/映射不到
+    win_only.winerror = 10054
+    assert lc._is_network_fluctuation(win_only), "winerror 兜底路不能少"
+    assert not lc._is_network_fluctuation(ValueError("真 bug")), "非 OSError 一律不算"
+    assert not lc._is_network_fluctuation(None), "上下文没有 exception 时不算"
+    assert not lc._is_network_fluctuation(OSError(errno.ECONNREFUSED, "拒绝")), "目标拒绝是配置/故障信号, 不是波动"
+
+
+def test_uvicorn_config_installs_loop_exception_handler():
+    """处理器必须真的装到服务事件循环上 —— 只定义不装载等于没修(循环在 asyncio.run 内才创建)"""
+    from fastapi import FastAPI
+
+    from auto_qb.webui.server import lifecycle as lc
+
+    config = lc._QuietLoopConfig(FastAPI(), host="127.0.0.1", port=8080, log_level="warning")
+    factory = config.get_loop_factory()
+    loop = factory()
+    try:
+        assert loop.get_exception_handler() is lc._web_loop_exception_handler, "服务循环必须挂上自定义处理器"
+    finally:
+        loop.close()
 
 
 # ---------- 管理端点(R2B: 分类/标签/限速/添加/导出/日志) ----------

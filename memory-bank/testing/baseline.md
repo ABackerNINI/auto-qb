@@ -6,12 +6,14 @@
 
 ## 当前基线
 
-**1203 collected: 1202 passed + 1 skipped / Windows** —— 2026-09-24 实测
+**1208 collected: 1207 passed + 1 skipped / Windows** —— 2026-09-24 实测
 (计划/报告入库 W4: +10 条文档形态守阵 `tests/test_docs_forms.py` —— 命名 / meta / 状态词 /
 索引自洽 / dark / 主键覆盖 / 认领链双向; 五条均已红验; 同日再 **+1**:
 `test_frontend_cols_empty_hint_names_browser_clear_cause` —— 空存储提示必须点名浏览器站点级
-"关闭窗口时清除"这条通道, 详见 [baseline-history.md](baseline-history.md));
-TOTAL **91%**(7729 语句 / 623 未覆盖 / 2636 分支), sidefx 台账 2032 条 / **越界 0**。
+"关闭窗口时清除"这条通道; 同日再 **+5**: WEB 事件循环断连噪音守阵 ——
+降级为 INFO / 窗口节流 / 真 bug 不吞 / 判定矩阵 / 处理器装载(`lifecycle.py` 96%),
+均已在无修复版本上红验, 详见 [baseline-history.md](baseline-history.md));
+TOTAL **91%**(7768 语句 / 623 未覆盖 / 2646 分支), sidefx 台账 2034 条 / **越界 0**。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)

@@ -1,7 +1,27 @@
 # 平台与文件系统
 
-> 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满
+> 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音 —— 与宿主环境强相关的一类坑。
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio
+
+### Windows Proactor 的 `_call_connection_lost` WinError 10054 是断连噪音, 不是崩溃
+
+- **触发**: 日志里出现 `ERROR - Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)`
+  + 整段 traceback, 末行 `ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。`
+  (2026-09-24 用户报障, WEB UI 在跑)。
+- **判别**: Python 3.12 `_ProactorSocketTransport._call_connection_lost` **无条件**调
+  `self._sock.shutdown(socket.SHUT_RDWR)`; 对端已经 RST(浏览器关页面 / SSE 重连 / 断网抖动)时这一句就抛
+  10054, asyncio 默认处理器把它按 **ERROR + traceback** 打出, 看着像崩溃。
+  ❗**参数是 `(None)` = 走的优雅关闭路径**(`_force_close(exc)` 那条会带实参) ⇒ 语义是
+  "服务端已在关连接, 对端又补了个 RST" —— **正常断连**。反过来说: 若 traceback 里是**别的异常类型**
+  (ValueError / KeyError…)或参数带实参, **不是噪音**, 得当真查。
+- **处置**: 已由 `webui/server/lifecycle.py` 的 `_web_loop_exception_handler` 降级成一行 INFO
+  (60s 窗口节流, 出窗口附被抑制条数), 经 `_QuietLoopConfig.get_loop_factory()` 挂到 uvicorn 事件循环上;
+  **其它异常一律 `loop.default_exception_handler(context)` 交回默认处理器, 不吞**。
+  ⚠ 循环是在 `asyncio.run` 内部才创建的, 服务线程里 `asyncio.get_event_loop()` 拿不到它 ——
+  只能从 `get_loop_factory`(uvicorn ≥0.36 替代 `setup_event_loop` 的扩展点)注入。
+- **本机复现**(不依赖时序竞态): 在一个请求处理里 `loop.call_soon(cb)`、`cb` 抛
+  `ConnectionResetError(10054, ...)` —— 原生 `uvicorn.Config` 打 ERROR + traceback, 换 `_QuietLoopConfig`
+  后只剩一行 INFO。守阵见 `tests/test_web.py` 的 5 条 `*_loop_exception* / *_noise_* / *_fluctuation`。
 
 ### 锁文件残留随平台不同 (是 `filelock` 语义, 不是 bug)
 

@@ -6,6 +6,18 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 收集数 **1203 → 1208**(+5; 2026-09-24 **WEB 事件循环断连噪音降级**):
+  用户报障 `ERROR - Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)`
+  (`ConnectionResetError [WinError 10054]`) —— 判定为**网络波动**(对端 RST 后 asyncio 仍调
+  `sock.shutdown`), 非本项目 bug。修法: `webui/server/lifecycle.py` 新增
+  `_web_loop_exception_handler`(波动型降级为一行 INFO + 60s 窗口节流, 其余异常照旧交给
+  asyncio 默认处理器) + `_QuietLoopConfig.get_loop_factory()` 把处理器挂到服务循环上。
+  新增 5 条守阵(降级 / 节流 / 真 bug 不吞 / 判定矩阵 / 处理器装载), **均已在还原版上红验**;
+  真机复现: 原生 `uvicorn.Config` 打 ERROR + traceback, 换 `_QuietLoopConfig` 后同一异常只剩一行 INFO。
+  `lifecycle.py` 覆盖率 **96%**; 全量 **1207 passed + 1 skipped** / TOTAL 91%
+  (7768 语句 / 623 未覆盖 / 2646 分支) / sidefx 2034 条 / 越界 0。
+  判别法与处置见 [pitfalls/backend/platform-fs.md](../pitfalls/backend/platform-fs.md)。
+
 - ↑ 收集数 **1202 → 1203**(+1; 2026-09-24 **浏览器站点级"关闭时清除站点数据"取证 + 空存储提示加固**):
   新增 `test_frontend_cols_empty_hint_names_browser_clear_cause` —— 钉住"空存储提示"必须同时点名
   ①origin 隔离(换地址/端口) ②浏览器站点级「关闭窗口时清除 Cookie 和站点数据」(Chromium cookie
