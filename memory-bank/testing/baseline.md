@@ -6,24 +6,33 @@
 
 ## 当前基线
 
-**1596 collected: 1595 passed + 1 skipped / Windows** —— 2026-09-25 **HR 超龄豁免(判定侧豁免 + 翻页早停)**
-(本条 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
+**1598 collected: 1597 passed + 1 skipped / Windows** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
+(HR 线 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
 (`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
-新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变)。动机与取舍见档案
-`26-09-22-backend-partial-hr-verify` 与计划 v2.8; 上一态见 [baseline-history.md](baseline-history.md)。)
-TOTAL **91%**(10849 语句 / 791 未覆盖 / 3598 分支 / 327 partial —— 并行采样), sidefx 台账并行汇总 / **越界 0**。
-⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
-`PYTHONUTF8=0` 后复测 **2 passed** —— 已有记载的假红, 非回归(见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md))。
+新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变), 动机与取舍见档案
+`26-09-22-backend-partial-hr-verify` 与计划 v2.8。master 线 **+2 条(1579 → 1581)**: GBK 防回潮守阵
+`test_local_codepage_ignores_utf8_mode` 1 条(引擎码页回退改问系统 ANSI 码页, 本会话 `PYTHONUTF8=1`
+下已全绿, 见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md))+ 搜索分隔符回归守阵 1 条
+(`test_search_torrents_separator_normalized` —— 空格查询词命中点/下划线/连字符分隔的种子名与文件名;
+views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.md](baseline-history.md)。)
+TOTAL **91%**(10853 语句 / 789 未覆盖 / 3598 分支 / 326 partial —— 并行采样 ×2; **HR 包 93%**:
+2790 / 145 / 778 / 92), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 HR 超龄豁免)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **19.9 / 36.8s**(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)
+**当前(2026-09-25 两线合一)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **20.5 / 18.8s**(2 次采样, 全部 test.full, 合并态)
 
-**上一态(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
+**上一态(2026-09-25 HR 超龄豁免)**: 并行 19.9 / 36.8s(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)。
+
+**更早(2026-09-25 搜索分隔符归一)**: 并行 17.0 / 17.9s(热采 2 次; 另有首跑冷缓存 37.6s 不计入, 全部 test.full)。
+
+**更早(2026-09-25 GBK 回退修复)**: 并行 14.3 / 20.9 / 21.2s(3 次采样, 全部 test.full)。
+
+**更早(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
 
 **更早(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
 
@@ -40,7 +49,7 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: **当前**并行 `10872 语句 / 788 未覆盖 / 3574 分支 / 325 partial`, TOTAL **91%**(HR 包 93%)。
+- **覆盖率口径**: **当前**并行 `10853 语句 / 789 未覆盖 / 3598 分支 / 326 partial`, TOTAL **91%**(HR 包 93%)。
   下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
   并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
   ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。

@@ -47,6 +47,7 @@
 - test_build_search_index_aborts_when_disconnected: qB 断连时中止构建且不写空索引
 - test_search_torrents_name_match: 种子名匹配(即时/大小写不敏感)
 - test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
+- test_search_torrents_separator_normalized: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的名与文件(回归 "cat and" 搜不到 The.Cat.and… 名)
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
@@ -2326,6 +2327,43 @@ def test_search_torrents_name_match():
         names = [x["hash"] for x in r["results"]]
         assert names == ["HA"], f"名称命中(小写): {r}"
         assert all(x["by"] == "name" for x in r["results"])
+
+
+def test_search_torrents_separator_normalized():
+    """search_torrents: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的种子名与文件名
+
+    回归(26-09-25): "The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb"
+    搜 "cat and" 不命中 —— 旧实现裸子串匹配, 查询词里的空格对不上名里的点号。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(
+            hash="HA", name="The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb", state="stalledUP"
+        )
+        t2 = FakeTorrent(hash="HB", name="Other.Show.S02", state="stalledUP")
+        client.files_map["HA"] = [_fake_file("The.Cat.and.the.Dragon.S01E01.1080p.WEB-DL.mkv", 0)]
+        client.files_map["HB"] = [_fake_file("the_cat_and_dragon_e02.mkv", 0)]
+        seed_store(mgr, [t1, t2])
+        mgr._build_search_index()
+
+        r = mgr.search_torrents("cat and")
+        # HA 名字命中(回归主案例), HB 的下划线文件名归一后也含 "cat and"(file 路径顺带覆盖)
+        assert [x["hash"] for x in r["results"]] == ["HA", "HB"], f"空格查询词应命中点号分隔名: {r}"
+        assert [x["by"] for x in r["results"]] == ["name", "file"]
+        assert [x["hash"] for x in mgr.search_torrents("web dl")["results"]] == ["HA"], "连字符分隔应命中"
+        # 对称: 点号查询词同样归一, 仍命中; 词序不同/纯分隔符不命中(子串语义本身未放宽)
+        assert [x["hash"] for x in mgr.search_torrents("cat.and")["results"]] == ["HA", "HB"]
+        assert mgr.search_torrents("dragon cat")["results"] == []
+        assert mgr.search_torrents("...")["results"] == []
+
+        # 文件命中: 下划线分隔的文件名按同一口径(HA 名与文件均不含该子串, 排除 seen 去重干扰)
+        r = mgr.search_torrents("and dragon e02")
+        assert [x["hash"] for x in r["results"]] == ["HB"], f"下划线文件名应命中: {r}"
+        assert r["results"][0]["by"] == "file"
 
 
 def test_search_torrents_file_match():

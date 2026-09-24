@@ -20,7 +20,8 @@
 - test_wrapper_repo_root_walk: 从深层子目录向上找到含 `.commands/` 的仓库根
 - test_wrapper_path_dir_picks_dir_on_path: 只在**已在 PATH 上**的目录里装"项目无关"那份; 在 PATH 上但不存在则建出来
 - test_wrapper_end_to_end_passes_args: 真跑一次生成的 wrapper —— 找到假引擎并把参数原样转过去(端到端)
-- test_decode_falls_back_to_local_codepage: 子进程按本地码页(GBK)输出中文时必须解出人话 —— 按 UTF-8 硬解会让"已生成 16 个索引"变一串 U+FFFD(2026-09-24 实测)
+- test_decode_falls_back_to_local_codepage: 子进程按本地码页(GBK)输出中文时必须解出人话 —— 按 UTF-8 硬解会让"已生成 16 个索引"变一串 U+FFFD(2026-09-24 实测); 码页钉在 `_local_codepage` 接缝(cp936), 不随环境漂
+- test_local_codepage_ignores_utf8_mode: 防回潮守阵(2026-09-25) —— 码页回退不得被 PYTHONUTF8=1 劫持成 utf-8(原生子进程仍按 ANSI 码页输出); 仅 win32 + UTF-8 模式下有判据
 - test_decode_prefers_utf8: UTF-8 是首选(子进程已被强制), 不能被本地码页抢解
 - test_decode_never_raises_on_garbage: 任意字节(含 None)都不抛 —— 解码失败不该让整条命令看起来失败
 - test_shell_child_env_forces_utf8_stdio: 子进程环境必须带 PYTHONIOENCODING=utf-8 —— 否则 Windows 上 Python 子进程被管道接住时按 cp936 输出
@@ -209,12 +210,31 @@ def test_wrapper_write_refuses_foreign_file(tmp_path):
 # ---------------------------------------------------------------- 子进程编码
 
 
-def test_decode_falls_back_to_local_codepage():
-    """回归守阵(2026-09-24 实测): 子进程按本地码页(GBK)输出中文时, 必须解出人话而非 U+FFFD"""
+def test_decode_falls_back_to_local_codepage(monkeypatch):
+    """回归守阵(2026-09-24 实测): 子进程按本地码页(GBK)输出中文时, 必须解出人话而非 U+FFFD
+
+    码页钉在 `_local_codepage` 接缝上 —— 守阵的主体是"回退链拿到 cp936 时解得动人",
+    不是"当前机器恰好是中文 Windows"(平台差异一律 monkeypatch 固定, 见
+    memory-bank/pitfalls/testing/patching.md); 环境免疫由 test_local_codepage_ignores_utf8_mode 单独守。
+    """
     mod = _engine()
+    monkeypatch.setattr(mod, "_local_codepage", lambda: "cp936")
     raw = "已生成 16 个索引".encode("gbk")
     assert mod._decode(raw) == "已生成 16 个索引"
     assert "\ufffd" not in mod._decode(raw)
+
+
+def test_local_codepage_ignores_utf8_mode():
+    """防回潮守阵(2026-09-25): 码页回退不得吃 Python 的 UTF-8 模式 —— 原生子进程仍按 ANSI 码页输出
+
+    PYTHONUTF8=1 会把 locale.getpreferredencoding(False) 劫持成 'utf-8', 回退若写它,
+    GBK 字节两轮全解不动、静默落 replace 变 U+FFFD(本工具 shell 恒红的根因)。
+    判据只在危险形态(win32 + UTF-8 模式)下成立, 其余环境两种写法同值, 跳过。
+    """
+    mod = _engine()
+    if sys.platform != "win32" or not sys.flags.utf8_mode:
+        pytest.skip("仅 win32 + PYTHONUTF8=1 环境有判据(非 UTF-8 模式下回退值相同)")
+    assert mod._local_codepage() != "utf-8"
 
 
 def test_decode_prefers_utf8():
@@ -272,6 +292,8 @@ def test_shell_injects_env_and_captures_bytes(monkeypatch):
 
 def test_shell_decodes_gbk_child_output(monkeypatch):
     """回归守阵(2026-09-24 实测形态): 子进程交回 GBK 字节时, 返回文本必须可读而非 U+FFFD"""
+    mod = _engine()
+    monkeypatch.setattr(mod, "_local_codepage", lambda: "cp936")
     _patch_run(
         monkeypatch,
         _FakeProc("已生成 16 个索引\n".encode("gbk"), "更新 memory-bank/tasks/_index.md\n".encode("gbk")),
