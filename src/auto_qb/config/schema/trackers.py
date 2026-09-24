@@ -1,6 +1,7 @@
 """schema 站点段: 站点字段表与站点 hr 子段(HR 输出字段全局/站点共用)"""
 from typing import Tuple
 from .fields import Field
+from .hr import SITE_HR_CHECK_FIELDS
 
 HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
     Field(
@@ -68,7 +69,11 @@ TRACKER_HR_FIELDS: Tuple[Field, ...] = (
         help="在要求时长之上再多做种这么久才判达标(留出缓冲, 避免刚好卡线被站点判未达标)"
     ),
     Field(
-        "condition", "HR 触发条件", "ratio", default="80%", help="开始 HR 管理的门槛: 下载比例达(如 80%)或下载量达(如 10MiB)就进入 HR 管理; 辅种(无下载量)不会触发"
+        "condition",
+        "HR 触发条件",
+        "ratio",
+        default="80%",
+        help="开始 HR 管理的门槛: 下载比例达(如 80%)或下载量达(如 10MiB)就进入 HR 管理; 辅种(无下载量)不会触发"
     ),
 ) + HR_OUTPUT_FIELDS
 
@@ -113,6 +118,16 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         optional=True,
         help="未配置该段 = 该站点不做 HR 管理(不打 HR 标签/分类)",
         fields=TRACKER_HR_FIELDS
+    ),
+    Field(
+        "hr_check",
+        "HR 在线核实",
+        "object",
+        default=None,
+        optional=True,
+        help="部分种子 HR 站点: 逐种子在线核实(取 HR 统计页 + 对账建索引); 未配置 = 该站不启用, 行为不变。"
+        "❗mode != off 时必须同时配置上面的 HR 规则段",
+        fields=SITE_HR_CHECK_FIELDS,
     ),
     Field(
         "rules",

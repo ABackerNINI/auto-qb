@@ -6,26 +6,13 @@
 
 ## 当前基线
 
-**1233 collected: 1232 passed + 1 skipped / Windows** —— 2026-09-24 实测
-(计划/报告入库 W4: +10 条文档形态守阵 `tests/test_docs_forms.py` —— 命名 / meta / 状态词 /
-索引自洽 / dark / 主键覆盖 / 认领链双向; 五条均已红验; 同日再 **+1**:
-`test_frontend_cols_empty_hint_names_browser_clear_cause` —— 空存储提示必须点名浏览器站点级
-"关闭窗口时清除"这条通道; 同日再 **+5**: WEB 事件循环断连噪音守阵 ——
-降级为 INFO / 窗口节流 / 真 bug 不吞 / 判定矩阵 / 处理器装载(`lifecycle.py` 96%);
-同日再 **+8**: `tests/test_commands_engine.py` —— commands 引擎的输出摘要与 id 解析
-(异常行必须留在摘要里 / 短输出不截断 / 异常行封顶 / 小写 warnings 不算异常 / 截断提示 /
-包路径限定 id / 未知 id 提示), 均已在还原版上红验;
-同日再 **+9**: 同文件的 wrapper 守阵 —— 平台差异 / 归属标记 / 批处理写法约束 / CRLF 无 BOM / 幂等 /
-拒改同名文件 / 向上找仓库根 / PATH 落点选择 / **端到端真跑 wrapper 转发参数**,
-详见 [baseline-history.md](baseline-history.md));
-同日再 **+7**: `tests/test_commands_engine.py` —— 引擎子进程编码守阵(子进程环境强制 UTF-8 stdio /
-按字节收输出 / `_decode` 的 GBK 回退与 UTF-8 优先 / 任意字节不抛 / GBK 子进程输出可读 / 失败 rc 不吞),
-  起因是 `commands run kb.index` 输出乱码(详见 [pitfalls/ops/console-encoding.md](../pitfalls/ops/console-encoding.md)),
-  详见 [baseline-history.md](baseline-history.md));
-同日再 **+1**: `test_web.py::test_add_torrent_receipt_and_optional_flags` —— 添加种子回执两形态
-(API 2.14.0 起的 JSON 元数据 / 旧文本 `"Ok."`)+ 两个 optional 选项(停止位 / 自动管理)必须显式下发
-+ 成功走 INFO, 四条断言各自反向对照红验过; 详见 [baseline-history.md](baseline-history.md)。
-TOTAL **91%**(7782 语句 / 622 未覆盖 / 2648 分支), sidefx 台账 2067 条 / **越界 0**。
+**1375 collected: 1374 passed + 1 skipped / Windows** —— 2026-09-24 实测
+(本轮 **+142 条**: **HR 在线核实 M1** —— 新增 `tests/test_hr_bencode.py` / `test_hr_parse.py` /
+`test_hr_store.py` / `test_hr_ratelimit.py` / `test_hr_resolve.py` / `test_hr_service.py` /
+`test_hr_config.py` / `test_hr_report.py`, 配套共享夹具 `tests/hr_helpers.py` 与脱敏页面 fixture
+`tests/fixtures/hr/nexusphp_myhr_{page1,last}.html`; 覆盖 `src/auto_qb/hr/` 全部模块 (86–100%) +
+`config/schema/hr.py` 100%; 逐次增量的完整流水见 [baseline-history.md](baseline-history.md))。
+TOTAL **91%**(9278 语句 / 727 未覆盖 / 3128 分支 / 277 partial), sidefx 台账 2212 条 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
@@ -46,7 +33,9 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: 并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
+- **覆盖率口径**: **当前**并行 `9278 语句 / 727 未覆盖 / 3128 分支 / 277 partial`, TOTAL **91%**。
+  下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
+  并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
   ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。
 - **成因(单点: [../pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md))**: 本机每次文件操作
   曾收一笔**固定开销**(初始 写 20ms / 删 43ms, 三盘一致、与数据量无关; 一次全量建 577 个临时目录 ⇒ 约 26s)。

@@ -1,0 +1,219 @@
+"""test_hr_resolve 测试计划: 三态判定(受管束 / 已核实不受管束 / 未核实)与不可变视图
+
+判定表逐行覆盖(计划 §9): 两个方向上的取舍都要钉住 —— 首要不漏 HR, 其次让确认为非 HR 的真的放行。
+
+## 测试计划(每个测试函数一条)
+- test_listed_entry_is_managed: 清单命中(A/B/C) -> 受管束(不看本地 downloaded)
+- test_unlisted_with_complete_refresh_is_released: 完整刷新未列出 + 未过期 -> 安全放行
+- test_release_requires_fresh_backing: 超 verified_ttl 无新刷新背书 -> 回落未核实
+- test_verified_record_backs_release: 有逐种放行记录时按记录时刻算有效期(D 档与未列出两种来源)
+- test_verified_record_expired_is_unknown: 放行记录超期 -> 未核实
+- test_freshness_gate_forces_hr: 本实例 added_on 晚于最近一次完整刷新 -> 恒受管束
+- test_freshness_gate_not_applied_before_first_success: 从未成功刷新走 unknown_policy, 不是闸门
+- test_unknown_policy_is_conservative_by_default: 未核实默认按 hr(保守)
+- test_unknown_policy_not_hr_releases: unknown_policy=not-hr 时未核实按非 HR 对待
+- test_incomplete_refresh_produces_no_release: 覆盖证明不成立 -> 未核实(不产生放行)
+- test_mode_all_unknown_is_managed: mode=all 站点未核实恒受管束(不看 policy)
+- test_anchor_drift_invalidates_release: 锚点四种漂移各一条 -> 放行立即作废
+- test_anchor_intact_keeps_release: 反向用例 —— 锚点未漂移且未过期时放行保持(防误杀)
+- test_missing_infohash_is_unknown: 身份缺位(infohash 未回填) -> 未核实
+- test_site_not_activated_is_unknown: 站点未接入 hr_check -> 未核实
+- test_build_site_view_filters_lane_and_active: 视图只收「受管束且最近一次刷新仍列出」的条目
+"""
+import pytest
+
+from auto_qb.hr.model import (
+    LANE_EXEMPT,
+    SOURCE_EXEMPT,
+    SOURCE_NOT_LISTED,
+    HrEntry,
+    HrRefreshMeta,
+    HrSiteData,
+    HrVerified,
+)
+from auto_qb.hr.resolve import (
+    POLICY_HR,
+    POLICY_NOT_HR,
+    HrAnchor,
+    HrIdentity,
+    HrSiteView,
+    build_site_view,
+    resolve_identity,
+)
+
+NOW = 2000.0
+TTL = 3600.0
+OK_TS = 1000.0  # 有效期内(1000 + 3600 = 4600 > 2000)
+STALE_NOW = 5000.0  # 在 OK_TS + TTL 之后: 放行已过期
+OLD_TS = -3000.0  # 连 positive 都不满足的最早期时间戳
+H1, H2, H3 = "aa" * 20, "bb" * 20, "cc" * 20
+
+
+def _view(*, mode="partial", complete=True, last_success_ts=OK_TS, ttl=TTL, listed=(), verified=()):
+    """构造判定视图; listed: [(infohash, tid, lane)]; verified: [HrVerified]"""
+    by_infohash = {h: HrEntry(tid=tid, infohash_v1=h, lane=lane) for h, tid, lane in listed}
+    return HrSiteView(
+        site="s",
+        mode=mode,
+        complete=complete,
+        last_success_ts=last_success_ts,
+        verified_ttl=ttl,
+        by_infohash=by_infohash,
+        verified={v.infohash: v
+                  for v in verified},
+    )
+
+
+def _verified(ts=OK_TS, source=SOURCE_NOT_LISTED, **anchor) -> HrVerified:
+    return HrVerified(infohash=H1, tid=101, verified_ts=ts, source=source, **anchor)
+
+
+def test_listed_entry_is_managed():
+    """清单命中 -> 受管束; 本地 downloaded=0 的转移副本与真辅种一视同仁(站点数据是权威)"""
+    view = _view(listed=[(H1, 101, "A")])
+    got = resolve_identity(view, H1, anchor=HrAnchor(added_on=1, downloaded=0), now=NOW)
+    assert got.identity is HrIdentity.HR
+    assert "档位 A" in got.reason
+    assert got.is_hr(POLICY_NOT_HR) is True  # policy 对已命中的条目不适用
+
+
+def test_unlisted_with_complete_refresh_is_released():
+    """完整刷新未列出 + 未过期 -> 安全放行(这就是本功能的主要收益)"""
+    got = resolve_identity(_view(), H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.VERIFIED_NON_HR
+    assert got.is_hr(POLICY_HR) is False
+
+
+def test_release_requires_fresh_backing():
+    """超 verified_ttl 无新刷新背书 -> 回落未核实(通道静默期不得无限放行)"""
+    got = resolve_identity(_view(last_success_ts=OK_TS), H1, anchor=HrAnchor(added_on=1), now=STALE_NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert "放行已过期" in got.reason
+    assert got.is_hr(POLICY_HR) is True
+
+
+def test_verified_record_backs_release():
+    """有逐种放行记录时按**记录时刻**算有效期(而不是最近刷新时刻)"""
+    got = resolve_identity(_view(verified=[_verified()]), H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.VERIFIED_NON_HR
+    assert "完整刷新未列出" in got.reason
+
+    exempt = _view(verified=[_verified(source=SOURCE_EXEMPT)])
+    got = resolve_identity(exempt, H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.VERIFIED_NON_HR
+    assert "D 档已免罪" in got.reason
+
+
+def test_verified_record_expired_is_unknown():
+    """放行记录超期 -> 未核实"""
+    got = resolve_identity(_view(verified=[_verified(ts=OLD_TS)]), H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert "放行已过期" in got.reason
+
+
+def test_freshness_gate_forces_hr():
+    """新鲜度闸门: 本实例 added_on 晚于最近一次完整刷新 -> 恒受管束, 不可被 policy 绕过"""
+    got = resolve_identity(_view(), H1, anchor=HrAnchor(added_on=int(OK_TS) + 10), now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert got.forced is True
+    assert "新鲜度闸门" in got.reason
+    # ❗关键: 即使显式配了 not-hr, 闸门命中时也必须按 HR(否则新种子会漏管)
+    assert got.is_hr(POLICY_NOT_HR) is True
+
+
+def test_freshness_gate_not_applied_before_first_success():
+    """从未成功刷新走 unknown_policy(与「刷新不完备」同类); 闸门需要一次成功刷新做基准"""
+    view = _view(complete=False, last_success_ts=0.0)
+    got = resolve_identity(view, H1, anchor=HrAnchor(added_on=99999), now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert got.forced is False
+    assert got.is_hr(POLICY_NOT_HR) is False
+
+
+def test_unknown_policy_is_conservative_by_default():
+    """未核实默认按 hr 保守(唯一能保证「不漏 HR」的默认值)"""
+    got = resolve_identity(_view(complete=False), H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert got.is_hr() is True
+    assert got.is_hr(POLICY_HR) is True
+
+
+def test_unknown_policy_not_hr_releases():
+    """unknown_policy=not-hr 时未核实按非 HR 对待(等于自愿放弃第一重保证, 配置文案要写清)"""
+    got = resolve_identity(_view(complete=False), H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.is_hr(POLICY_NOT_HR) is False
+
+
+def test_incomplete_refresh_produces_no_release():
+    """覆盖证明不成立(分页未到底 / scope 失败 / 解析可疑)-> 未核实, 不产生放行"""
+    view = _view(complete=False, last_success_ts=OK_TS)
+    got = resolve_identity(view, H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert got.is_hr(POLICY_HR) is True
+
+
+def test_mode_all_unknown_is_managed():
+    """mode=all 站点未核实恒受管束(全站 HR 的保守默认; 与 partial 的唯一差别)"""
+    got = resolve_identity(_view(mode="all", complete=False), H1, anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.HR
+    assert "mode=all" in got.reason
+
+
+@pytest.mark.parametrize(
+    "anchor,needle",
+    [
+        (HrAnchor(added_on=2, downloaded=1, completion_on=500, progress=0.8), "added_on"),
+        (HrAnchor(added_on=1, downloaded=0, completion_on=500, progress=0.8), "downloaded 变小"),
+        (HrAnchor(added_on=1, downloaded=5, completion_on=500, progress=0.8), "downloaded 增长"),
+        (HrAnchor(added_on=1, downloaded=1, completion_on=500, progress=0.4), "progress 退回"),
+    ],
+)
+def test_anchor_drift_invalidates_release(anchor, needle):
+    """锚点漂移(本实例二次下载 / 文件被删重下 / 删种重加)-> 放行立即作废"""
+    rec = _verified(anchor_added_on=1, anchor_downloaded=1, anchor_completion_on=500, anchor_progress=0.8)
+    got = resolve_identity(_view(verified=[rec]), H1, anchor=anchor, now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert "锚点漂移" in got.reason and needle in got.reason
+
+
+def test_anchor_intact_keeps_release():
+    """反向用例: 锚点未漂移且未过期 -> 放行保持(防误杀, 收益所在)"""
+    rec = _verified(anchor_added_on=1, anchor_downloaded=1, anchor_completion_on=500, anchor_progress=0.8)
+    view = _view(verified=[rec])
+    intact = HrAnchor(added_on=1, downloaded=1, completion_on=500, progress=0.8)
+    assert resolve_identity(view, H1, anchor=intact, now=NOW).identity is HrIdentity.VERIFIED_NON_HR
+    # 无锚点(别的客户端下载的种子)时仍按刷新背书放行
+    assert resolve_identity(view, H1, now=NOW).identity is HrIdentity.VERIFIED_NON_HR
+
+
+def test_missing_infohash_is_unknown():
+    """身份缺位(infohash 未回填 / 站点未匹配)-> 未核实"""
+    got = resolve_identity(_view(), "", anchor=HrAnchor(added_on=1), now=NOW)
+    assert got.identity is HrIdentity.UNKNOWN
+    assert "身份缺位" in got.reason
+
+
+def test_site_not_activated_is_unknown():
+    """站点未接入 hr_check(mode=off / 视图缺失)-> 未核实(既有逻辑不受影响)"""
+    assert resolve_identity(None, H1, now=NOW).identity is HrIdentity.UNKNOWN
+    assert resolve_identity(_view(mode="off"), H1, now=NOW).identity is HrIdentity.UNKNOWN
+
+
+def test_build_site_view_filters_lane_and_active():
+    """视图只收「受管束且最近一次刷新仍列出」的条目; D 档与非 active 都不进受管束集合"""
+    data = HrSiteData()
+    data.index[1] = HrEntry(tid=1, lane="A", infohash_v1=H1, active=True)
+    data.index[2] = HrEntry(tid=2, lane=LANE_EXEMPT, infohash_v1=H2, active=True)
+    data.index[3] = HrEntry(tid=3, lane="C", infohash_v1=H3, active=False)
+    data.refresh = HrRefreshMeta(last_success_ts=OK_TS, complete=True, scopes_done=["A"])
+    data.verified[H2] = HrVerified(infohash=H2, tid=2, verified_ts=OK_TS, source=SOURCE_EXEMPT)
+
+    view = build_site_view(
+        "s", "partial", data, verified_ttl=TTL, refresh_interval=TTL, channel_state="ok", generated_at=NOW
+    )
+
+    assert set(view.by_infohash) == {H1}
+    assert view.complete is True and view.last_success_ts == OK_TS
+    assert view.revision == data.revision
+    assert resolve_identity(view, H2, now=NOW).identity is HrIdentity.VERIFIED_NON_HR  # D 档免罪
+    assert resolve_identity(view, H3, now=NOW).identity is HrIdentity.VERIFIED_NON_HR  # 未列出 = 放行

@@ -61,6 +61,75 @@ class HRRule:
 
 
 @dataclass
+class HrChannelConfig:
+    """本地取数通道: 浏览器扩展拉清单/回传数据的本地端点(计划 §6)
+
+    enabled: 本实例是否有浏览器扩展可驱动; 默认 false(保守), 装上扩展后开启。
+      ⚠本机有浏览器的实例推荐都启用 —— 抓取能力的硬边界是「本机有没有装扩展的浏览器」,
+      而不是名额(端点只听 127.0.0.1, 浏览器只能连本机 loopback ⇒ 跨机器配了也驱动不了);
+      多通道不会双倍访问站点: 同站点靠「文件锁 + 有效期复用」保证只被访问一次。
+    port: 监听端口; 仅监听 127.0.0.1。同机多实例必须各用不同端口(被占 => 启动即报错)
+    token: 访问密钥; 留空 = 首次启动随机生成并持久化到 <data_dir>/hr.token(同 web.token 口径)
+    """
+
+    enabled: bool = False
+    port: int = 8788
+    token: str = ""
+
+
+@dataclass
+class HrCheckConfig:
+    """HR 在线核实的全局段: 功能开关 + 频控默认值(计划 §7)
+
+    整段缺省 = 功能关闭; 总开关 enabled 默认 false(保守默认, 黄金法则 2)。
+    所有新键都必须进 validate_config 并同步 config/schema(守卫测试会查)。
+    """
+
+    enabled: bool = False
+    min_torrent_interval: float = 90.0  # 相邻两次站点请求最小间隔(秒); 抖动只向上 +0~25%
+    max_torrents_per_hour: int = 12  # 小时配额(站点级独立计数)
+    max_torrents_per_day: int = 60  # 日配额(站点级独立计数)
+    failure_threshold: int = 3  # 连续失败 N 次 => 该站熔断
+    failure_cooldown: float = 12 * 3600.0  # 熔断冷却时长(秒)
+    allow_window: str = ""  # 仅该时段取数 "HH:MM-HH:MM"(可跨午夜); 空 = 全天。❗与 notify.quiet_hours 语义相反
+    unknown_policy: str = "hr"  # 未核实种子按 hr(保守) | not-hr; ❗新鲜度闸门恒按 hr, 不受本项影响
+    verified_ttl: Optional[float] = None  # 放行有效期(秒); None = 跟随站点 refresh_interval。❗调大 = 放大「别的客户端下载」的漏管窗口
+    index_retention: float = 30 * 86400.0  # 页面快照条目保留时长(秒); 已取记录 hr_downloaded 不淘汰
+    max_download_retries: int = 3  # 单个 .torrent 取数失败重试上限, 达到后冷却(防烧配额)
+    channel_silence_warn: float = 6 * 3600.0  # 通道静默多久告警(秒)
+    shared_dir: str = ""  # 空 = 多实例不共享(站点文件落 <data_dir>/hr/); 多实例互通时指向同一目录
+    lock_timeout: float = 0.0  # 抢锁等待(秒); 0 = 不等(拿不到锁直接等下一轮)
+    poll_interval: float = 60.0  # 取数线程醒来检查的节奏(秒), 与主循环 tick 无关
+    parse_missing_rate_max: float = 0.5  # 必填字段缺失率上限; 超过则判「页面可能改版」不产生放行
+    channel: HrChannelConfig = field(default_factory=HrChannelConfig)
+
+
+@dataclass
+class SiteHrCheckConfig:
+    """站点级 hr_check 段(计划 §7)
+
+    mode: off = 该站不启用 | partial = 在线核实(未核实按 unknown_policy)
+          | all = 站点侧驱动 + 未核实恒受管束(全站 HR, 不看 policy)
+    ❗mode != off 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
+      整站保护静默失效(配置期 fail-fast 拦下)。
+    """
+
+    mode: str = "off"
+    adapter: str = "nexusphp"
+    hr_page_url: str = ""  # mode != off 时必填
+    hr_page_scopes: List[str] = field(default_factory=lambda: ["A", "B", "C"])
+    download_path: str = "/download.php?id={id}"  # 相对站点根; passkey 由取数通道在页面上下文补
+    page_param: str = "page"
+    refresh_interval: float = 12 * 3600.0  # HR 页抓取周期(秒)
+    max_pages_per_refresh: int = 5  # 单次刷新最多翻页数(翻页同样计配额)
+    max_torrents_per_hour: Optional[int] = None  # 站点级覆盖; None = 回退全局
+
+    @property
+    def enabled(self) -> bool:
+        return self.mode != "off"
+
+
+@dataclass
 class TrackerConfig:
     name: str
     domains: List[str]
@@ -69,6 +138,7 @@ class TrackerConfig:
     upload_speed_limit: int = 0  # 字节/秒, 0 = 不限速; YAML 原始缺省 "0KiB/s"
     download_speed_limit: int = 0  # 字节/秒, 0 = 不限速
     hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
+    hr_check: Optional[SiteHrCheckConfig] = None  # HR 在线核实(站点级), None = 该站未接入
     rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
     groups: List[str] = field(default_factory=list)  # 站点分组(配置层声明, 不写种子); tracker_group 条件的匹配来源
     remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
@@ -220,6 +290,9 @@ class Config:
     web: WebConfig = field(default_factory=WebConfig)  # WEB UI(辅种管理)
 
     notify: NotifyConfig = field(default_factory=NotifyConfig)  # 主动通知: ERROR/WARNING 日志 -> 平台原生通知
+
+    # HR 在线核实(部分种子 HR 站点): 取 HR 统计页 + 取 .torrent 算 infohash 对账建索引
+    hr_check: HrCheckConfig = field(default_factory=HrCheckConfig)
 
     qbittorrent: QbittorrentConfig = field(default_factory=QbittorrentConfig)
     trackers: Dict[str, TrackerConfig] = field(default_factory=dict)

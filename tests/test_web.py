@@ -1375,7 +1375,7 @@ def test_config_schema_endpoint(web_env):
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     data = client.get("/api/config/schema", headers=auth).json()
     assert [g["key"] for g in data["groups"]] == [
-        "basic", "logging", "web", "notify", "maintenance", "speed", "trackers", "rules"
+        "basic", "logging", "web", "notify", "maintenance", "hr_check", "speed", "trackers", "rules"
     ]
     assert {p["name"] for p in data["plugins"]["condition"]} >= {"size", "tags", "state", "freespace"}
     assert {p["name"] for p in data["plugins"]["action"]} >= {"add_tags", "checking", "reannounce"}

@@ -1,28 +1,56 @@
 # 部分种子 HR 在线核实
-> 摘要: 计划 v1.8 已定稿（**决策 5/5 拍板** + 已做一轮文档漂移清理）；共享站点数据=站点分文件+**每站点一把锁**；取数节奏与 tick 解耦；**channel 推荐都启用**
-> 触发: 部分种子, HR 核实, 浏览器扩展, 三态判定, 带锁访问, 共享站点数据, 转移种子, 多客户端, BTSchool, channel 都启用, 文档漂移
-> 最后活动: 2026-09-24 20:15
+> 摘要: **M1 核心管道已落地**（`src/auto_qb/hr/` 10 模块 + 配置全链路 + `--hr-once` 只读走查）；余 **M2 取数通道 / M3 判定联动 / M4 多站点**。两条配置期 fail-fast 是防「整站保护静默失效」的关键
+> 触发: 部分种子, HR 核实, 浏览器扩展, 三态判定, 带锁访问, 共享站点数据, 转移种子, 多客户端, BTSchool, hr_check, hr_once, 取数通道
+> 最后活动: 2026-09-24 21:40
 
 ## 状态
 
-计划 **v1.8** 已定稿（决策 5/5 + 一轮文档漂移清理，**无待拍板项**），余 M0 四项**实测**（不阻塞 M1）。决策：①接受装扩展（unpacked 自用；CDP 专用 profile 降为应急不排期）②首站 **BTSchool**（页面数据实施时由用户提供，已有 myhr.php 样张）③频度按推荐（90S / 12 每时 / 60 每天，站点级独立）④`unknown_policy=hr` + `verified_ttl` = `refresh_interval`⑤`shared_dir` 默认数据目录（多实例由用户决定是否改共享目录，程序只给 INFO 引导）。
+**M1 已交付（2026-09-24，离线可做，不需要浏览器）**：新包 `src/auto_qb/hr/` —
 
-**判定（v1.4 起）**：站点数据是权威 —— 触发与达标都看站点侧（清单命中即触发；达标看档位/剩余时间），本地 qB 字段只作降级与展示。**v1.5 起 `mode: all` 也纳入**（语义升级为「站点侧驱动 + 未核实默认受管束」），因为「纯辅种不触发」用本地 `downloaded` 近似账号级义务：真辅种碰巧对，**转移/换客户端的保种副本会漏管**。零静默变更（只有配了 `hr_check` 段才走新语义）。
+| 模块 | 职责 |
+|---|---|
+| `bencode` | infohash 只取 **info 的原始字节切片**（定位跨度时只做字节跳跃，不解码 info）；畸形/深嵌套拒收 |
+| `parse` | 栈式 `<tr>/<td>` 树（容忍 NexusPHP 的 `<td class="embedded">` 包裹表）+ 数值容错（认不出返回 None，不猜） |
+| `adapters/` | 站点隔离；现只有 **NexusPHP `myhr.php` 九列形态**（首站 BTSchool）。`header_found` 是「改版」与「合法空结果」的唯一区分器 |
+| `model` | 站点文件内容：`index` / `downloaded` / `fails` / `verified` / `refresh` / `quota` / `fuse` |
+| `store` | **每站点一个 JSON + 一把 filelock**；持锁期间完成「读→判有效期→必要时抓→写→释放」全程；revision 回退或本实例心跳被覆盖 ⇒ 判锁不生效并**退化为只读** |
+| `ratelimit` | 间隔**只向上抖动** +0~25%、小时/天两级配额（按窗口键幂等）、失败退避熔断、`allow_window` 可跨午夜 |
+| `resolve` | **三态**（受管束 / 已核实不受管束 / 未核实）+ 新鲜度闸门 + 锚点漂移 + 放行有效期；不可变视图，时间敏感判定**读取时现算** |
+| `service` | 刷新管道。`persist` × `allow_fetch` 组合出三种口径：正常 / `--dry-run`（零请求零写入） / `hr.once`（抓但只读） |
+| `fetcher` | 取数通道协议 + `NullFetcher` —— 无通道时**如实上报**，绝不静默降级为后端直连（零 cookie 边界） |
+| `report` + `cli --hr-once` | 真机只读走查：不加锁、不写盘、不连 qB，可正常实例运行期间跑 |
 
-**多实例（v1.5/v1.6）**：账号级状态**不进 state_file**，走**站点分文件** `<shared_dir>/hr/<site>.json` + **每站点一把锁** `<site>.lock`（filelock，锁粒度 = 站点 ⇒ 抓 A 不阻塞 B，数据更新延迟随站点切分下降；同站点严格互斥）。取数线程**持锁期间完成「读→判有效期→必要时抓→写→释放」全程**（连分钟级抓取也在锁内）⇒ 即使有 bug 也不会两实例同时访问；拿不到锁**等下一轮**；**有效期 = 「本轮已完成」并照样记一次配额** ⇒ 访问频率由数据有效期决定；**能力即角色**（v1.7 起 = 本机有浏览器就能抓，推荐都启用，见下段）；写者心跳 + `revision` 回退自检锁是否生效；站点内读写合并（跨站点天然不互相覆盖）。publisher/consumer 已删除。
+配置全链路已通：`KNOWN_CONFIG_KEYS` + `KNOWN_HR_CHECK_KEYS`/`KNOWN_HR_CHANNEL_KEYS`/`KNOWN_SITE_HR_CHECK_KEYS` +
+校验器 + `config/schema/hr.py`（设置页新分组「HR 在线核实」+ 站点段 `hr_check`）+ `HR_CHECK_FIELD_LEVELS` +
+loaders + 设置页 Hub 文案/读数。
 
-**节奏（v1.6）**：HR 粒度是**小时~天** ⇒ 取数线程按自己的定时器 `poll_interval`（默认 `1M`）自醒，**不随主循环 tick**；视图只在**数据实质变化**时抬 `revision` 并发布 ⇒ 主循环每 tick 只比版本号，**没变就零工作**；「是否过期」为**读取时现算**（`now` vs `expires_at`），不为时间流逝重发布。
+**两条 fail-fast 是这一轮最值钱的防线**（都在配置期直接报错）：
+① 站点 `mode != off` 却没配 `hr` 段 —— 否则 `check_hr_condition` 首行 `if not self.tracker_conf.hr` 恒 False，
+整站保护**静默失效且无任何报错**；② `hr_page_scopes` 必须含 **A+B+C** —— 少抓一档会让该档种子在
+「完整刷新」里未列出而被**误放行**（漏 HR）。
 
-**线程（v1.5）**：三分职责 —— 扩展 / 端点线程(只入队) / **取数线程**(持锁+解析+发布不可变只读视图, **按 poll_interval 自醒**) / 主循环(**每 tick 只比视图版本号，变了才更新三态** + state 唯一写者)。主循环读视图零等待，只 `wake()` 取数线程（非阻塞）⇒ **抓取再慢也不卡 2s 节拍**。取数线程不碰 state_file/队列/store（守阵）。
+## 未完成
 
-**channel 启用范围（v1.7: 推荐都启用）**：抓取能力的硬边界不是「名额」而是**本机有没有装扩展的浏览器** —— 端点只听 `127.0.0.1`、浏览器只连本机 loopback ⇒ **跨机器**的实例配了也驱动不了（只能只读共享数据）；凡本机有浏览器的实例都推荐开：① 消掉单点故障 ② 站点配在哪台哪台自己能抓 ③ 多通道**不会双倍访问站点**（同站点靠锁 + 有效期复用）。扩展侧配**实例端点列表**（一个浏览器可服务同机多实例）；同机多实例端口必须错开（被占 ⇒ 启动报错），token 各自持久化（打错 ⇒ 401）。
+- **M2 取数通道**（1–2 会话）：MV3 薄代理（后台标签页取 DOM/.torrent + 回传，不碰 cookie API）+
+  本地端点（`127.0.0.1` + token + origin/SSRF 白名单，只入队）+ **取数线程**（按 `poll_interval` 自醒，
+  持锁，不碰 state_file/队列/store）+ 共享站点数据。
+  ❗落地时**必须同时**把 `HR_CHECK_FIELD_LEVELS` 的 `channel` / `shared_dir` 改为 **L1**，并在
+  `QbManager.apply_new_config` 的 L1 分支补端点「先停旧、等线程退出、再启新」的重挂
+  （`tests/test_hr_config.py::test_impact_channel_field_is_l0` 就是那条改动的固定桩）。
+- **M3 判定联动**（1 会话）：把三态接进 `TorrentRecord.check_hr_condition`/`check_hr_satisfied` 与四个消费点
+  （打标 / WebUI 视图 / `hr` 规则条件 / `tor.hr_*` 表达式），含 **`mode: all` 语义升级**（站点侧驱动 +
+  未核实恒受管束）与「转移种子」回归。判定逻辑本身已测好，缺的只是接线 + 前端 H&R facet。
+- **M4 多站点与打磨**（1 会话）：第二/第三个站点 adapter、索引新鲜度展示、notify 四类事件、用户文档。
 
-**取数通道（v1.2 起）**：手工 cookie 否决；扩展在后台标签页取 DOM 快照 + .torrent → 回传后端解析（哑取数器，不碰 cookie API）⇒ 后端零 cookie/passkey 依赖。`hr_channel` 已并入 `hr_check.channel`（代价：`impact.py` 需补 `HR_CHECK_FIELD_LEVELS`，否则 `channel.*` 被误判 L0）。
+## 待实测（计划 §13，不阻塞）
 
-- [计划](../plans/26-09-22-2204-partial-hr-site-verify-plan.html)
-- [档案](../tasks/26-09-22-backend-partial-hr-verify.md)
+`?page=N` 真实参数名与 passkey 形态 / BTSchool 各档语义与分页到底判据 / 后台标签页观感与 CF 挑战 /
+共享目录上 filelock 是否真互斥。部分结构已由本轮 fixture 钉死（灰色不可点的「下一页」判到底 /
+免罪链接 / 九列表头）。
+
+- [计划](../plans/26-09-22-2204-partial-hr-site-verify-plan.html) · [档案](../tasks/26-09-22-backend-partial-hr-verify.md)
 
 ## 实测
 
-selftest 11/11 + 离线样张解析 1 行全字段正确；计划 HTML 结构配平 + 浏览器实渲染通过；
-全量测试数字只认单点 `memory-bank/testing/baseline.md`（本切片不复述）。
+全部离线样本（脱敏 fixture 取自真实样张结构）在 `tests/test_hr_*.py` 8 个文件里；
+全量测试数字只认单点 [testing/baseline.md](../testing/baseline.md)（本切片不复述）。

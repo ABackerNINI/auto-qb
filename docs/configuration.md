@@ -145,6 +145,35 @@ config:
             # ...
 ```
 
+## HR 在线核实(`hr_check`)
+
+> 🚧 **尚未可用**: 离线管道已实现, **浏览器扩展取数通道(M2)未落地** —— 现在打开 `hr_check` 只会报
+> 「无可用取数通道」, 不会静默降级为后端直连站点。本节先记配置形状, 等取数通道落地后再同步用户体验文档。
+
+部分站点只对**一部分**种子计 H&R, 且不提供可机读的逐种标记 —— 只能上站查。`hr_check` 就是为此而生。
+
+- **全局段** `config.hr_check`: 总开关 + 频控默认值(间隔 / 小时与天配额 / 熔断 / 时间窗) + 本地取数通道
+  `channel{enabled, port, token}`(仅监听 `127.0.0.1`)。默认全关(保守默认)。
+- **站点段** `trackers.<站点>.hr_check`: `mode`(`off` 不启用 / `partial` 在线核实 / `all` 站点侧驱动 +
+  未核实恒受管束)、`hr_page_url`(HR 统计页, 启用时必填)、`hr_page_scopes`(默认 `[A, B, C]`)、
+  `download_path`(须含 `{id}` 占位符)、`refresh_interval` 等。
+
+两条配置期会直接报错的规则(都是为了不让人踩到「保护静默失效」):
+
+1. **`mode != off` 的站点必须同时配 `hr` 段** —— 否则该站的 HR 判定前置条件恒为假, 整站保护不会有任何提示地失效。
+2. **`hr_page_scopes` 必须含 A / B / C** —— 少抓一档, 该档的种子会在「完整刷新」里表现为未列出而被**误放行**。
+
+❗`hr_check.allow_window` 与 `notify.quiet_hours` **语义相反**: 那个是「这段时间不发通知」,
+本项是「只在这段时间取数」。
+
+只读走查(不写文件、不连 qB, 可与正式实例并发):
+
+```bash
+python src/auto-qb.py config.yml --hr-once
+# 用保存下来的页面离线验证解析与索引(目录里按 <档位>.html 命名, 如 A.html)
+python src/auto-qb.py config.yml --hr-once --hr-html-dir ./saved-pages
+```
+
 ## 全局限速曲线
 
 > 目前本软件不支持监控设备全局流量，所以需配置外部流量数据来源。

@@ -1,0 +1,40 @@
+<!-- HR 统计页 fixture: 最后一页形态 (域名/种子名已脱敏)。
+     要点: ① 灰色不可点的「下一页」在 NexusPHP 里是**无 <a> 的** <font><b>, 翻页到底的判据靠它
+           ② 表头存在但只有 1 行数据 —— 覆盖证明要求「表头在」(区分改版与合法空结果) -->
+<div id="outer">
+<h1>H&amp;R记录</h1>
+<p>
+<a href="https://pt.example.com/myhr.php?hrtype=A" class="faqlink"><b>考察中</b></a> |
+<a href="https://pt.example.com/myhr.php?hrtype=B"><b>已达标</b></a> |
+<a href="https://pt.example.com/myhr.php?hrtype=C"><b>未达标</b></a> |
+<a href="https://pt.example.com/myhr.php?hrtype=D"><b>已免罪</b></a><br><table class="main" width="940" border="0" cellspacing="0" cellpadding="0"><tbody><tr><td class="embedded" align="center"><table width="100%"><tbody><tr>
+                                <td class="colhead" align="center">HR编号</td>
+                                <td class="colhead" align="center">种子名称</td>
+                                <td class="colhead" align="center">上传量</td>
+                                <td class="colhead" align="center">下载量</td>
+                                <td class="colhead" align="center">分享率</td>
+                                <td class="colhead" align="center">还需做种时间</td>
+                                <td class="colhead" align="center">完成时间</td>
+                                <td class="colhead" align="center">剩余达标时间</td>
+                                <td class="colhead" align="center">20000魔力值免罪</td>
+                                </tr><tr>
+                                <td class="rowfollow nowrap" align="center">314011</td>
+                                <td class="rowfollow" align="left"><a href="https://pt.example.com/details.php?id=314011">EXAMPLE MOVIE 2026 2160p REMUX</a></td>
+                                <td class="rowfollow nowrap" align="center">0.00 KB</td>
+                                <td class="rowfollow nowrap" align="center">60.10 GB</td>
+                                <td class="rowfollow nowrap" align="center">0.512</td>
+                                <td class="rowfollow nowrap" align="center">1:05:09</td>
+                                <td class="rowfollow nowrap" align="center">2026-09-23 18:02:11</td>
+                                <td class="rowfollow nowrap" align="center">1天02:00:00</td>
+                                <td class="rowfollow nowrap" align="center"><a href="https://pt.example.com/myhr.php?hrtype=C&amp;USEBOUNS=314011"><b>购买免罪</b></a></td>
+
+                                </tr></tbody></table><p align="center"><font class="gray"><b>1&nbsp;-&nbsp;1</b></font><br><font class="gray"><b title="Alt+Pageup">&lt;&lt;&nbsp;上一页</b></font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font class="gray"><b title="Alt+Pagedown">下一页&nbsp;&gt;&gt;</b></font></p>
+</td></tr></tbody></table>
+</p></td></tr></tbody></table>
+<script type="text/javascript">
+//<![CDATA[
+var maxpage=0;
+var currentpage=0;
+//]]>
+</script>
+</div>

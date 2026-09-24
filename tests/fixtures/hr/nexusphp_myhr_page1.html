@@ -1,0 +1,50 @@
+<!-- HR 统计页 fixture: 截取自 BTSchool myhr.php 的真实结构 (域名/种子名已脱敏)。
+     要点: ① HR 表被 <td class="embedded"> 再套一层 <table> 包裹(解析器须容忍嵌套)
+           ② 表头九列, 含 "20000魔力值免罪" 列(内含 USEBOUNS 链接)
+           ③ 本页有真实可点的「下一页」链接(覆盖证明要求抓到底, 故要有翻页样本) -->
+<div id="outer">
+<h1>H&amp;R记录</h1>
+<p>
+<a href="https://pt.example.com/myhr.php?hrtype=A" class="faqlink"><b>考察中</b></a> |
+<a href="https://pt.example.com/myhr.php?hrtype=B"><b>已达标</b></a> |
+<a href="https://pt.example.com/myhr.php?hrtype=C"><b>未达标</b></a> |
+<a href="https://pt.example.com/myhr.php?hrtype=D"><b>已免罪</b></a><br><table class="main" width="940" border="0" cellspacing="0" cellpadding="0"><tbody><tr><td class="embedded" align="center"><table width="100%"><tbody><tr>
+                                <td class="colhead" align="center">HR编号</td>
+                                <td class="colhead" align="center">种子名称</td>
+                                <td class="colhead" align="center">上传量</td>
+                                <td class="colhead" align="center">下载量</td>
+                                <td class="colhead" align="center">分享率</td>
+                                <td class="colhead" align="center">还需做种时间</td>
+                                <td class="colhead" align="center">完成时间</td>
+                                <td class="colhead" align="center">剩余达标时间</td>
+                                <td class="colhead" align="center">20000魔力值免罪</td>
+                                </tr><tr>
+                                <td class="rowfollow nowrap" align="center">313852</td>
+                                <td class="rowfollow" align="left"><a href="https://pt.example.com/details.php?id=313852">EXAMPLE SHOW S01 Complete 1080p WEB-DL</a></td>
+                                <td class="rowfollow nowrap" align="center">0.00 KB</td>
+                                <td class="rowfollow nowrap" align="center">27.34 GB</td>
+                                <td class="rowfollow nowrap" align="center"><font color="#ff0000">0.000</font></td>
+                                <td class="rowfollow nowrap" align="center">2:42:17</td>
+                                <td class="rowfollow nowrap" align="center">2026-09-22 04:34:25</td>
+                                <td class="rowfollow nowrap" align="center">9天06:05:11</td>
+                                <td class="rowfollow nowrap" align="center"><a href="https://pt.example.com/myhr.php?hrtype=C&amp;USEBOUNS=313852"><b>购买免罪</b></a></td>
+                                </tr><tr>
+                                <td class="rowfollow nowrap" align="center">313997</td>
+                                <td class="rowfollow" align="left"><a href="https://pt.example.com/details.php?id=313997">EXAMPLE SHOW S02 Complete 1080p WEB-DL</a></td>
+                                <td class="rowfollow nowrap" align="center">1.50 GB</td>
+                                <td class="rowfollow nowrap" align="center">12.50 GB</td>
+                                <td class="rowfollow nowrap" align="center">1.234</td>
+                                <td class="rowfollow nowrap" align="center">0:10:00</td>
+                                <td class="rowfollow nowrap" align="center">2026-09-21 10:00:00</td>
+                                <td class="rowfollow nowrap" align="center">3天00:00:00</td>
+                                <td class="rowfollow nowrap" align="center"><a href="https://pt.example.com/myhr.php?hrtype=C&amp;USEBOUNS=313997"><b>购买免罪</b></a></td>
+                                </tr></tbody></table><p align="center"><font class="gray"><b>1&nbsp;-&nbsp;2</b></font><br><font class="gray"><b title="Alt+Pageup">&lt;&lt;&nbsp;上一页</b></font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://pt.example.com/myhr.php?hrtype=A&amp;page=1"><b>下一页&nbsp;&gt;&gt;</b></a></p>
+</td></tr></tbody></table>
+</p></td></tr></tbody></table>
+<script type="text/javascript">
+//<![CDATA[
+var maxpage=1;
+var currentpage=0;
+//]]>
+</script>
+</div>

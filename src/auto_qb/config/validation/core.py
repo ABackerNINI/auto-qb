@@ -25,6 +25,7 @@ KNOWN_CONFIG_KEYS = {
     "grouping",
     "notify",
     "web",
+    "hr_check",
     "trackers",
     "global_speed_limit_curve",
 }
@@ -155,6 +156,7 @@ def validate_config(data) -> List[str]:
         _validate_add_episode_tags,
         _validate_global_hr,
         _validate_grouping,
+        _validate_hr_check,
         _validate_log,
         _validate_notify,
         _validate_qbittorrent,
@@ -215,6 +217,7 @@ def validate_config(data) -> List[str]:
     _validate_grouping(cfg.get("grouping"), errors)
     _validate_notify(cfg.get("notify"), errors)
     _validate_web(cfg.get("web"), errors)
+    _validate_hr_check(cfg.get("hr_check"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
     # data(=cfg) 传给规则校验: expr 条件的"数据源门控"要看全局配置(如 traffic_source 有没有配)

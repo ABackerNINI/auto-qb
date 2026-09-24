@@ -42,6 +42,7 @@
 | 新流量数据源 | `core/curves.py` 加解析 + `core/mixins/speed_curve.py`/`config/validation.py` 扩展 traffic_source 校验 |
 | 新全局周期任务 | `core/qbmanager.py` `_create_global_tasks` 加 Task |
 | 新种子级内置任务 | `core/qbmanager.py` `_create_torrent_tasks` + handler |
+| **HR 在线核实**(取 HR 统计页 / 对账建索引 / 三态判定) | `hr/`(新包): `bencode` infohash · `parse` 表格抽取 · `adapters/` 站点隔离(现只有 NexusPHP `myhr.php`) · `store` 站点文件 + 每站点锁 · `ratelimit` 频控 · `resolve` 三态 · `service` 刷新管道 · `report` `--hr-once` 走查; 配置段在 `config/models.py` `HrCheckConfig`/`SiteHrCheckConfig`, schema 在 `config/schema/hr.py` |
 | 新 WEB 命令处理器 | `webui/commands.py` 加 `_cmd_*` + 命令表登记（单一入口） |
 | 新 WEB 端点 | `webui/server/routes/` 对应域 Router |
 | 新前端界面 | 与 `webui/` `tray/` 同级新建表现层包（落位规则见计划 §04） |

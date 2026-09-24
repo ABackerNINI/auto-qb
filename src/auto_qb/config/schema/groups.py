@@ -1,6 +1,7 @@
-"""schema 顶层分组: GROUPS 表(左导航 8 分组, 顺序即表单顺序)"""
+"""schema 顶层分组: GROUPS 表(左导航分组, 顺序即表单顺序)"""
 from typing import Tuple
 from .fields import Field, Group, LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS
+from .hr import HR_CHECK_FIELDS
 from .trackers import HR_OUTPUT_FIELDS
 
 GROUPS: Tuple[Group, ...] = (
@@ -339,6 +340,25 @@ GROUPS: Tuple[Group, ...] = (
             Field("hr", "HR 全局默认", "object", help="HR 动作(加标签/分类)的全局默认值; 站点 hr 段未设置对应字段时回退到这里", fields=HR_OUTPUT_FIELDS),
         ),
         icon="i-cards",
+    ),
+    Group(
+        "hr_check",
+        "HR 在线核实",
+        "部分种子 HR 站点的在线核实(取 HR 统计页 + 对账建索引)",
+        fields=(
+            Field(
+                "hr_check",
+                "在线核实",
+                "object",
+                default=None,
+                optional=True,
+                open=True,
+                help="部分站点只有一部分种子受 HR 约束, 且站点不提供可机读的逐种标记 ⇒ 逐种子在线核实; "
+                "未接入的站点行为完全不变",
+                fields=HR_CHECK_FIELDS,
+            ),
+        ),
+        icon="i-clock",
     ),
     Group(
         "speed",

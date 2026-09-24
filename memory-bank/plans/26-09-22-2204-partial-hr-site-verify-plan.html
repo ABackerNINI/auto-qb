@@ -8,7 +8,7 @@
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-09-22-2204">
-<meta name="doc-updated" content="26-09-24-2015">
+<meta name="doc-updated" content="26-09-24-2140">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
 <style>
   :root {
@@ -177,12 +177,12 @@
 
   <!-- ============ 封面 ============ -->
   <header class="cover">
-    <div class="kicker">auto-qb · 工程计划 · v1.8 决策齐备 · 待开工</div>
+    <div class="kicker">auto-qb · 工程计划 · v1.9 M1 已交付 · 余 M2/M3/M4</div>
     <h1>部分种子 HR 的在线核实</h1>
     <p class="dek">对「部分种子 HR」站点: 由<strong>浏览器扩展</strong>(打包形态无关, 跑在<strong>日常浏览器</strong>里, 不需要专用浏览器)以真实登录态取 HR 统计页与 .torrent, 后端算 infohash、与本地做种库对账, 建按 (站点, tid) 的 HR 索引。判定是三态 —— <strong>受管束 / 已核实不受管束 (安全放行) / 未核实</strong>, 且<strong>站点数据是权威</strong>: 触发与达标都看站点侧, 本地 qB 字段降为兜底与展示 (转移种子 / 多客户端下本地字段会骗人)。多实例<strong>共享站点数据</strong>: 站点分文件 + <strong>每站点一把锁</strong>, <strong>持锁期间完成读/抓/写全程</strong>, 有效期内直接复用; 取数节奏与主循环 tick 解耦, 只在数据变化时更新。首批站点 <strong>BTSchool</strong>。(cookie 全程不离开浏览器)</p>
     <div class="meta-row">
       <div><b>日期</b>2026-09-22 22:04 · v1.8 修订 2026-09-24 20:15 (文档漂移清理)</div>
-      <div><b>状态</b>决策齐备 (5/5 已拍板) · 待开工 (M0 余项为实测, 非决策)</div>
+      <div><b>状态</b>M1 核心管道已交付 (2026-09-24) · 余 M2 取数通道 / M3 判定联动 / M4 多站点</div>
       <div><b>影响面</b>取数通道 (扩展) · 判定语义 (三态·站点侧权威) · 取数线程与共享站点数据 · TorrentRecord</div>
       <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
     </div>
@@ -693,7 +693,7 @@ trackers:
         </div>
         <div class="step">
           <div class="dot">M1</div>
-          <div class="mt">核心管道 <span>1–2 会话 · 纯离线可做</span></div>
+          <div class="mt">核心管道 ✅ 已交付 <span>2026-09-24 · 新包 src/auto_qb/hr/ 10 模块 + 配置全链路 + --hr-once</span></div>
           <div class="mb"><strong>首站 = BTSchool</strong> (adapter 只做这一个)。把 <code>scripts/hr_fetch_experiment.py</code> 的成果收敛进 <code>src/</code>: bencode/infohash (原始字节切片) + myhr 解析器 + 数值容错, 补 pytest (钉死向量 + 脱敏 fixture + 改版五类样本); 对账与索引 (<code>(站点, tid)</code> 主键 + infohash 回填 + <code>hr_downloaded</code> 永久层); 全局任务接入 (<code>_create_global_tasks</code> 同款)。<b>本阶段不需要浏览器</b> —— 开发与测试全走离线样本; <strong>页面数据由用户实施时提供</strong> (分页 / 各档 / 边界样本), 已有的 <code>D:/Projects/站点页面/myhr.php</code> 样张可直接开工, 缺样本时先按现有字段与容错设计写 adapter。</div>
         </div>
         <div class="step">
@@ -794,13 +794,14 @@ trackers:
           <tr><td>v1.6</td><td>2026-09-24 19:59</td><td>两处按用户澄清收窄:<br>① <strong>锁粒度 = 站点</strong> (§5/§7/§10/§12): 「锁单文件一个锁」= <strong>每个站点数据文件一把锁</strong> (<code>&lt;site&gt;.lock</code>), 不是全局一把 —— 抓站点 A 不阻塞站点 B, 减小数据更新延迟; 同站点仍严格互斥 (带锁访问全程不变); 跨站点因此天然无覆盖问题, 站点内的读-改-写仍在锁内。<br>② <strong>节奏与 tick 解耦</strong> (§5/§7/§8/§12): HR 粒度是小时~天 ⇒ 取数线程按 <code>poll_interval</code> (默认 1M) 自唤醒, <strong>不随主循环 tick</strong>; 视图只在<strong>数据实质变化</strong> (抓取成功 / 熔断 / 通道状态翻转) 时抬 <code>revision</code> 并发布 ⇒ 主循环每 tick 只做廉价版本比较, <strong>版本没变零工作</strong>; 「是否还在有效期」在读取时用 <code>now</code> vs <code>expires_at</code> 现算, 不为时间流逝重发布。</td></tr>
           <tr><td>v1.7</td><td>2026-09-24 20:09</td><td>5 项前置决策拍板后定稿 (<strong>无待拍板项</strong>), 并按用户追问「channel 不应该都启用吗」放宽通道角色:<br>① <strong>决策落地</strong> (§13 改为决策记录 + M0 实测清单): 接受装扩展 (主选, 无需上商店) / 首站 <strong>BTSchool</strong> 且页面数据实施时由用户提供 / 频度按推荐 (90S·12 每时·60 每天, 站点级) / <code>unknown_policy=hr</code> + <code>verified_ttl=refresh_interval</code> / <code>shared_dir</code> 默认数据目录。<br>② <strong>channel 推荐「都启用」</strong> (§5/§6/§10/§11/§12): 抓取能力的硬边界不是「名额」而是<strong>本机有没有装扩展的浏览器</strong> (端点只听 <code>127.0.0.1</code>, 浏览器只连本机 loopback) ⇒ 凡本机有浏览器的实例都推荐启用; 多通道靠「同站点锁 + 有效期复用」保证不会双倍访问站点, 同时消掉单点故障; 扩展侧新增<strong>实例端点列表</strong> (<code>[{name, endpoint, token}]</code>, 一个浏览器可服务同机多实例); 新增同机多实例<strong>端口 / token 撞车</strong>风险行。<br>③ <strong>多实例部署引导</strong> (§7): <code>shared_dir</code> 留空 = 数据目录 (默认); 功能开启且留空 ⇒ 记一条 INFO 引导提示 (不阻断启动), 由用户决定是否改成共享目录; <code>hr.once</code> 顺带打印实际路径与锁自检; <code>channel.port</code> 同机多实例必须错开 (被占则启动报错)。</td></tr>
           <tr><td>v1.8</td><td>2026-09-24 20:15</td><td><strong>文档漂移清理 (纯文档, 无设计变更)</strong> —— 多轮改写后逐节回扫, 消掉与现行设计矛盾的遗留:<br>① 删除 §6 中 <strong>v1.1 遗留的 cookie 分层方案表</strong> (A 手工导入「M1 落地」/ B CDP「M4 落地·推荐目标形态」/ C 扩展「备选不排期」) —— 与现行「扩展主选 / 手工导入否决 / CDP 不排期」直接矛盾。<br>② <strong>旧路径</strong> §1 <code>mixins/web_view.py</code> → <code>webui/views.py</code> (v1.2 已更正, §1 漏改)。<br>③ <strong>旧落点</strong> §3 <code>state.hr_index</code> → 站点文件里的 <code>hr_index</code> (v1.5 已把账号级状态移出 <code>state_file</code>)。<br>④ <strong>旧口径</strong> §4 流量字段「决策以 qB 本地值为准」→ 站点侧优先、本地兜底 (§9 自 v1.4 起已是站点侧权威)。<br>⑤ <strong>旧待办</strong> §5 bencode「M0 拍板」→ 已定自写 (实验脚本已带钉死向量); §11 M0 「依赖: 开放问题拍板」→ 依赖无、可与 M1/M2 并行; 实验脚本的 ±25% 抖动加注「正式实现按 §7 只向上」。<br>⑥ <strong>旧角色</strong> §9 判定表删「consumer 侧」行 (publisher/consumer 已于 v1.5 删除) → 改为「本实例无通道且共享数据已过期」; §2 「许可令牌作废」表述补明取数线程 v1.5 以新职责回来。<br>⑦ <strong>mode 语义补齐</strong>: §7 配置注释补 <code>all</code> 三态语义; §9 硬约束与判定表把「partial ⇒ hr 段必填」放宽为 <code>mode != off</code> (all 站点同需 <code>hr</code> 段参数); §9 未核实态补「<code>mode: all</code> 恒受管束」; §2/§13 「partial 站点」改「接入 <code>hr_check</code> 的站点」。<br>⑧ 导航与措辞: 目录与节注释 §13「开放问题」→「决策记录」; CSS 注释「粘性目录」→「吸顶目录」(避开已废弃的「放行粘性」撞词); 错字「兵底」→「兜底」(2 处)。</td></tr>
+          <tr><td>v1.9</td><td>2026-09-24 21:40</td><td><strong>M1 落地标记 (无设计变更)</strong> —— 按用户「实施该计划」令落地计划的 M1: 新包 <code>src/auto_qb/hr/</code>(bencode 取 info 原始切片算 infohash · parse 容忍嵌入式包裹表 · adapters 隔离站点(现只有 NexusPHP <code>myhr.php</code>) · model/store(站点分文件 + 每站点一把锁 + 锁自检退化只读) · ratelimit(只向上抖动 + 两级配额 + 熔断 + 时间窗) · resolve(三态 + 新鲜度闸门 + 锚点漂移 + 放行有效期) · service(刷新管道: 正常 / dry-run 零请求零写入 / hr.once 只读) · fetcher(零 cookie 取数协议) · report(+ <code>--hr-once</code> 走查)) + 配置全链路(校验含两条 fail-fast · schema 新分组 · <code>HR_CHECK_FIELD_LEVELS</code> · loaders · 设置页 Hub 文案) + 8 个测试文件与脱敏页面 fixture。❗落地取数通道时 <code>channel</code>/<code>shared_dir</code> 需改 <strong>L1</strong> 并在 L1 分支补端点重挂(已写进 impact.py 注释与固定桩用例)。M2/M3/M4 未落地, 见 <a href="../tasks/26-09-22-backend-partial-hr-verify.md">任务档案</a>子任务状态表。</td></tr>
         </tbody>
       </table>
       <p class="muted">下一段是 M0 的待实测清单 (§13)。</p>
     </section>
 
     <div class="colophon">
-      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v1.8 — 2026-09-22 22:04 (v1.8 修订 2026-09-24 20:15: 文档漂移清理 —— 删遗留 cookie 分层表 / 修旧路径·旧落点·旧口径·旧角色·mode 语义) · auto-qb-clone2<br>
+      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v1.9 — 2026-09-22 22:04 (v1.9 修订 2026-09-24 21:40: 标记 M1 核心管道已交付; 余 M2 取数通道 / M3 判定联动 / M4 多站点) · auto-qb-clone2<br>
       依据: memory-bank 路由 (config-reference / systemPatterns / modules / conventions) 与源码锚点 (TorrentRecord.check_hr_* · core/mixins/tags · webui/views.py::_hr_view_fields · webui/server/routes/torrent_detail.py · rules/conditions · rules/expr/env · qbmanager._create_global_tasks · webui/server/lifecycle.py · config/validation/core.py · config/impact.py); 既有实验 <code>scripts/hr_fetch_experiment.py</code>; 外部事实两条已核实见脚注。
     </div>
 

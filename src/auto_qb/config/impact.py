@@ -31,6 +31,7 @@ SECTION_LEVELS = {
     "skip_checking_tag": LEVEL_L0,
     "grouping": LEVEL_L0,
     "add_episode_tags": LEVEL_L0,
+    "hr_check": LEVEL_L0,  # 字段级见表 HR_CHECK_FIELD_LEVELS(取数线程每轮从 self.config 现读)
     # L1: 轻量应用
     "logging": LEVEL_L1,
     "notify": LEVEL_L1,
@@ -50,7 +51,8 @@ SECTION_LEVELS = {
 }
 
 # trackers.X.<field> 字段级别(tags/移除/限速/hr 运行时动态读; domains/rules/groups 绑定固化:
-# groups 经 record.tracker_conf 引用被 tracker_group 条件读取, 热重载需 L2 重匹配才能看到新值)
+# groups 经 record.tracker_conf 引用被 tracker_group 条件读取, 热重载需 L2 重匹配才能看到新值;
+# hr_check 整段 L0: 刷新管道每轮从 self.config 现读站点配置)
 TRACKER_FIELD_LEVELS = {
     "tags": LEVEL_L0,
     "remove_tags": LEVEL_L0,
@@ -58,9 +60,35 @@ TRACKER_FIELD_LEVELS = {
     "upload_speed_limit": LEVEL_L0,
     "download_speed_limit": LEVEL_L0,
     "hr": LEVEL_L0,
+    "hr_check": LEVEL_L0,
     "domains": LEVEL_L2,
     "rules": LEVEL_L2,
     "groups": LEVEL_L2,
+}
+
+# hr_check 段内部字段级别(逐字段表, 未列出 = L2 保守)。当前**全部 L0**: 刷新管道每轮现读配置,
+# 替换 Config 对象即生效。
+# ❗落地取数通道(本地端点 + 取数线程)时, `channel` 与 `shared_dir` 必须改为 LEVEL_L1 ——
+#   端点与共享层需「先停旧、等线程退出、再启新」重挂(与 web 段同款), 并在
+#   QbManager.apply_new_config 的 L1 分支补上挂载动作; 否则改端口会被当成「已热重载」而实际未生效。
+HR_CHECK_FIELD_LEVELS = {
+    "enabled": LEVEL_L0,
+    "min_torrent_interval": LEVEL_L0,
+    "max_torrents_per_hour": LEVEL_L0,
+    "max_torrents_per_day": LEVEL_L0,
+    "failure_threshold": LEVEL_L0,
+    "failure_cooldown": LEVEL_L0,
+    "allow_window": LEVEL_L0,
+    "unknown_policy": LEVEL_L0,
+    "verified_ttl": LEVEL_L0,
+    "index_retention": LEVEL_L0,
+    "max_download_retries": LEVEL_L0,
+    "channel_silence_warn": LEVEL_L0,
+    "shared_dir": LEVEL_L0,
+    "lock_timeout": LEVEL_L0,
+    "poll_interval": LEVEL_L0,
+    "parse_missing_rate_max": LEVEL_L0,
+    "channel": LEVEL_L0,
 }
 
 
@@ -110,6 +138,19 @@ def _flatten_config(config: Any) -> dict:
     return {name: getattr(config, name) for name in vars(config)}
 
 
+def _diff_dataclass_fields(
+    old: Any, new: Any, prefix: str, changes: List[ConfigChange], levels: dict, default_level: str
+) -> None:
+    """两个 dataclass 实例逐字段 diff(未在 levels 中声明的字段按 default_level)"""
+    old_d, new_d = vars(old), vars(new)
+    for fname in sorted(set(old_d) | set(new_d)):
+        if old_d.get(fname) == new_d.get(fname):
+            continue
+        changes.append(
+            ConfigChange(f"{prefix}.{fname}", levels.get(fname, default_level), old_d.get(fname), new_d.get(fname))
+        )
+
+
 def diff_config_impacts(old: Any, new: Any) -> List[ConfigChange]:
     """递归 diff 新旧配置, 返回变更列表(含热重载级别), 按路径排序
 
@@ -126,6 +167,13 @@ def diff_config_impacts(old: Any, new: Any) -> List[ConfigChange]:
             old_t = old_v if isinstance(old_v, dict) else {}
             new_t = new_v if isinstance(new_v, dict) else {}
             _diff_trackers(old_t, new_t, changes)
+            continue
+        if name == "hr_check":
+            level = SECTION_LEVELS.get(name, LEVEL_L2)
+            if old_v is None or new_v is None:
+                changes.append(ConfigChange(name, level, old_v, new_v))
+            else:
+                _diff_dataclass_fields(old_v, new_v, name, changes, HR_CHECK_FIELD_LEVELS, LEVEL_L2)
             continue
         level = SECTION_LEVELS.get(name, LEVEL_L2)
         if isinstance(old_v, dict) and isinstance(new_v, dict) and level == LEVEL_L0:

@@ -10,5 +10,5 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [keys.md](keys.md) | 顶层键、trackers 站点段、限速曲线段、规则集段、变量与匹配语法、运行时文件、测试样例。 | 配置键, 配置项, trackers, 限速曲线, 规则集段, 变量替换, 匹配语法, 运行时文件 |
+| [keys.md](keys.md) | 顶层键、trackers 站点段、限速曲线段、规则集段、变量与匹配语法、运行时文件、测试样例。 | 配置键, 配置项, trackers, 限速曲线, 规则集段, 变量替换, 匹配语法, 运行时文件, hr_check, HR 在线核实 |
 | [loading-and-write.md](loading-and-write.md) | `load_config` 加载机制、图形化编辑器的写回、`validate_config` 全量聚合校验。 | 配置加载, load_config, 写回, 图形化编辑器, fail-fast, validate_config, 新配置键 |

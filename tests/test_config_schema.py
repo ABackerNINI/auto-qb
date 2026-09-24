@@ -5,6 +5,8 @@
 - test_object_section_keys_match_validation: 各对象段子键集合 == 对应 KNOWN_*_KEYS
 - test_tracker_fields_match_validation: 站点字段集合 == KNOWN_TRACKER_KEYS
 - test_tracker_hr_fields_match_validation: 站点 hr 字段集合 == KNOWN_TRACKER_HR_KEYS
+- test_site_hr_check_fields_match_validation: 站点 hr_check 字段集合 == KNOWN_SITE_HR_CHECK_KEYS
+- test_hr_check_field_levels_cover_validation_keys: impact 的 hr_check 字段级别表覆盖全部已知键(漏登记 = 静默按 L2)
 - test_rule_fields_cover_rule_known_keys: 规则级字段(+conditions/actions 专段) == RULE_KNOWN_KEYS
 - test_condition_plugins_cover_registry / test_action_plugins_cover_registry: 插件表覆盖全部已注册插件
 - test_field_kinds_are_declared: 所有 Field.kind 在 KINDS 中
@@ -20,15 +22,19 @@ import re
 import pytest
 
 from auto_qb.config import schema
+from auto_qb.config.impact import HR_CHECK_FIELD_LEVELS
 from auto_qb.config.validation import (
     CHECKING_ACTION_KNOWN_KEYS,
     DELETED_TRIGGER_ALLOWED_ACTIONS,
     KNOWN_CONFIG_KEYS,
     KNOWN_GROUPING_KEYS,
+    KNOWN_HR_CHANNEL_KEYS,
+    KNOWN_HR_CHECK_KEYS,
     KNOWN_HR_KEYS,
     KNOWN_LOG_KEYS,
     KNOWN_NOTIFY_KEYS,
     KNOWN_QBITTORRENT_KEYS,
+    KNOWN_SITE_HR_CHECK_KEYS,
     KNOWN_TRACKER_HR_KEYS,
     KNOWN_TRACKER_KEYS,
     KNOWN_WEB_KEYS,
@@ -76,12 +82,19 @@ def test_top_level_keys_match_validation():
         ("web", KNOWN_WEB_KEYS),
         ("notify", KNOWN_NOTIFY_KEYS),
         ("hr", KNOWN_HR_KEYS),
+        ("hr_check", KNOWN_HR_CHECK_KEYS),
+        ("channel", KNOWN_HR_CHANNEL_KEYS),
         ("add_episode_tags", KNOWN_ADD_EPISODE_TAGS_KEYS),
     ],
 )
 def test_object_section_keys_match_validation(top_key, known):
-    """各对象段子键集合必须与 validation 的已知键一致"""
-    assert set(_nested(top_key)) == known
+    """各对象段子键集合必须与 validation 的已知键一致
+
+    "channel" 不是顶层键而是 hr_check 下的子段, 故单独取它的字段表。
+    """
+    sub = {"channel": schema.HR_CHECK_CHANNEL_FIELDS}.get(top_key)
+    got = _field_map(sub) if sub is not None else _nested(top_key)
+    assert set(got) == known
 
 
 def test_tracker_fields_match_validation():
@@ -92,6 +105,16 @@ def test_tracker_fields_match_validation():
 def test_tracker_hr_fields_match_validation():
     """站点 hr 段字段集合 == KNOWN_TRACKER_HR_KEYS"""
     assert set(_field_map(schema.TRACKER_HR_FIELDS)) == KNOWN_TRACKER_HR_KEYS
+
+
+def test_site_hr_check_fields_match_validation():
+    """站点 hr_check 段字段集合 == KNOWN_SITE_HR_CHECK_KEYS"""
+    assert set(_field_map(schema.SITE_HR_CHECK_FIELDS)) == KNOWN_SITE_HR_CHECK_KEYS
+
+
+def test_hr_check_field_levels_cover_validation_keys():
+    """impact 的 hr_check 字段级别表必须覆盖全部已知键(漏登记 = 默认 L2 保守, 但会让分级结果失真)"""
+    assert set(HR_CHECK_FIELD_LEVELS) == KNOWN_HR_CHECK_KEYS
 
 
 def test_rule_fields_cover_rule_known_keys():

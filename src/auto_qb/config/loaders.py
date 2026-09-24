@@ -18,8 +18,11 @@ from .models import (
     GlobalSpeedLimitCurve,
     GroupingConfig,
     HRRule,
+    HrChannelConfig,
+    HrCheckConfig,
     LoggingConfig,
     NotifyConfig,
+    SiteHrCheckConfig,
     WebConfig,
     PeriodCurve,
     QbittorrentConfig,
@@ -118,7 +121,74 @@ def load_notify_config(spec: dict) -> NotifyConfig:
     )
 
 
-def load_tracker_config(name: str, spec: dict, hr: HRRule, global_remove_similar: bool) -> TrackerConfig:
+def load_hr_check_config(spec) -> HrCheckConfig:
+    """解析 config.hr_check 段(全局: 功能开关 + 频控默认 + 本地取数通道)
+
+    整段缺省 = 空字典 => 全部走字段默认(功能关闭, 保守默认)。
+    verified_ttl 缺省为 None(而非 12H): 它的正确默认是**跟随该站的 refresh_interval**,
+    而那是站点级才知道的值, 故这里保留 None 由 HrRefreshService.verified_ttl_for 解算。
+    """
+    d = HrCheckConfig()
+    if not isinstance(spec, dict):
+        return d
+    channel_spec = spec.get("channel")
+    channel_default = HrChannelConfig()
+    channel = HrChannelConfig(
+        enabled=_get(channel_spec, "enabled", channel_default.enabled, parse_bool)
+        if isinstance(channel_spec, dict) else channel_default.enabled,
+        port=_get(channel_spec, "port", channel_default.port, int)
+        if isinstance(channel_spec, dict) else channel_default.port,
+        token=_get(channel_spec, "token", channel_default.token)
+        if isinstance(channel_spec, dict) else channel_default.token,
+    )
+    return HrCheckConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        min_torrent_interval=_get(spec, "min_torrent_interval", d.min_torrent_interval, parse_time),
+        max_torrents_per_hour=_get(spec, "max_torrents_per_hour", d.max_torrents_per_hour, int),
+        max_torrents_per_day=_get(spec, "max_torrents_per_day", d.max_torrents_per_day, int),
+        failure_threshold=_get(spec, "failure_threshold", d.failure_threshold, int),
+        failure_cooldown=_get(spec, "failure_cooldown", d.failure_cooldown, parse_time),
+        allow_window=_get(spec, "allow_window", d.allow_window),
+        unknown_policy=_get(spec, "unknown_policy", d.unknown_policy, lambda v: str(v).strip().lower()),
+        verified_ttl=_get(spec, "verified_ttl", d.verified_ttl, parse_time),
+        index_retention=_get(spec, "index_retention", d.index_retention, parse_time),
+        max_download_retries=_get(spec, "max_download_retries", d.max_download_retries, int),
+        channel_silence_warn=_get(spec, "channel_silence_warn", d.channel_silence_warn, parse_time),
+        shared_dir=_get(spec, "shared_dir", d.shared_dir),
+        lock_timeout=_get(spec, "lock_timeout", d.lock_timeout, parse_time),
+        poll_interval=_get(spec, "poll_interval", d.poll_interval, parse_time),
+        parse_missing_rate_max=_get(spec, "parse_missing_rate_max", d.parse_missing_rate_max, float),
+        channel=channel,
+    )
+
+
+def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
+    """解析 trackers.<site>.hr_check 段(站点级); 缺省 = mode off(该站不启用)"""
+    d = SiteHrCheckConfig()
+    if not isinstance(spec, dict):
+        return d
+    return SiteHrCheckConfig(
+        mode=_get(spec, "mode", d.mode, lambda v: str(v).strip().lower()),
+        adapter=_get(spec, "adapter", d.adapter, lambda v: str(v).strip().lower()),
+        hr_page_url=_get(spec, "hr_page_url", d.hr_page_url),
+        hr_page_scopes=_get(spec, "hr_page_scopes", d.hr_page_scopes, lambda v: [str(s).strip().upper() for s in v]),
+        download_path=_get(spec, "download_path", d.download_path),
+        page_param=_get(spec, "page_param", d.page_param),
+        refresh_interval=_get(spec, "refresh_interval", d.refresh_interval, parse_time),
+        max_pages_per_refresh=_get(spec, "max_pages_per_refresh", d.max_pages_per_refresh, int),
+        max_torrents_per_hour=(
+            _get(spec, "max_torrents_per_hour", None, int) if "max_torrents_per_hour" in spec else None
+        ),
+    )
+
+
+def load_tracker_config(
+    name: str,
+    spec: dict,
+    hr: HRRule,
+    global_remove_similar: bool,
+    hr_check: Optional[SiteHrCheckConfig] = None,
+) -> TrackerConfig:
     d = TrackerConfig(name=name, domains=spec["domains"])
     return TrackerConfig(
         name=name,
@@ -128,6 +198,7 @@ def load_tracker_config(name: str, spec: dict, hr: HRRule, global_remove_similar
         upload_speed_limit=_get(spec, "upload_speed_limit", d.upload_speed_limit, parse_speed),
         download_speed_limit=_get(spec, "download_speed_limit", d.download_speed_limit, parse_speed),
         hr=hr,
+        hr_check=hr_check,
         rules=_get(spec, "rules", d.rules),
         groups=_get(spec, "groups", d.groups),
         # 站点未设置时回退全局值(运行参数, 非字段默认)
@@ -285,7 +356,8 @@ def load_config(config_path: str) -> Config:
     trackers = {}
     for name, tdata in cfg.get("trackers", {}).items():
         hr = load_tracker_hr(tdata["hr"], cfg.get("hr") or {}) if "hr" in tdata else None
-        trackers[name] = load_tracker_config(name, tdata, hr, global_remove_similar)
+        site_hr_check = load_site_hr_check_config(tdata.get("hr_check")) if "hr_check" in tdata else None
+        trackers[name] = load_tracker_config(name, tdata, hr, global_remove_similar, site_hr_check)
 
     # 全局标签清理格式: @tracker_tags 引用展开为所有 tracker 配置的 tags 并集
     tracker_tags = sorted({t for tc in trackers.values() for t in tc.tags})
@@ -321,6 +393,7 @@ def load_config(config_path: str) -> Config:
         grouping=load_grouping_config(_get(cfg, "grouping", {})),
         notify=load_notify_config(_get(cfg, "notify", {})),
         web=load_web_config(_get(cfg, "web", {})),
+        hr_check=load_hr_check_config(_get(cfg, "hr_check", {})),
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),

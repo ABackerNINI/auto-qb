@@ -55,6 +55,11 @@ const HUB_GROUP_META = {
     desc: "日志记在哪、留多久、记多细。",
     lede: "auto-qb 把运行日志记在哪、单个文件多大、留几个旧文件。日常用 INFO，排查问题时再开 DEBUG。",
   },
+  hr_check: {
+    title: "HR 在线核实",
+    desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实。",
+    lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启后 auto-qb 会定期取「我的 H&R」清单、逐种子对账；没接入的站点行为完全不变。取数由浏览器扩展完成，cookie 不离开浏览器。",
+  },
 };
 
 /* 富说明(样张第 4 节的五段结构: 它是什么 / 默认值 / 什么时候需要改 / 注意 / 容易和它搞混的)
@@ -91,6 +96,24 @@ const HUB_HELP = {
     when: ["站点有流量考核、超额会被处罚。", "想在夜间或月末自动省带宽。"],
     rel: [["站点 → 上传限速", "只管单个站点的种子"], ["每轮最大任务数", "无关，别看混"]],
   },
+  "hr_check.allow_window": {
+    tags: ["时间窗", "可留空"],
+    what: "只在设定的时段去站点取数；留空 = 全天都可以。",
+    def: "（全天）",
+    when: ["站点对夜间访问敏感，想避开高峰。", "自己常在白天用网，取数挑凌晨做。"],
+    rel: [
+      ["通知 → 免打扰时段", "❗语义正好相反：那个是「这段时间不要发通知」，本项是「只在这段时间取数」"],
+      ["HR 在线核实 → 请求最小间隔", "两者一起决定对站点的访问频度"],
+    ],
+  },
+  "hr_check.unknown_policy": {
+    tags: ["枚举", "改动有风险"],
+    what: "「还没核实过」的种子怎么算：按 H&R 管束（保守），还是按普通种子放行。",
+    def: "hr（保守）",
+    when: ["站点数据长期取不到，又不想让全站种子都被当成 H&R —— 改 not-hr 前先想清楚代价。"],
+    risk: "改成 not-hr 等于自愿放弃一重保底：首刷未完成、刷新不完备、通道静默期间，真正欠 H&R 的种子会被当成普通种子放行。",
+    rel: [["HR 在线核实 → 放行有效期", "另一个影响漏管窗口的旋钮"], ["站点 → HR 规则", "受管束的种子具体打什么标签、要求多久"]],
+  },
   "rules.overview": {
     tags: ["可选"],
     what: "一条规则就是「当满足条件时，执行这些动作」。规则按列表顺序逐条判断，不会命中一条就停。",
@@ -115,6 +138,7 @@ const HUB_OFF_KEYS = {
   web: ["config", "web", "enabled"],
   notify: ["config", "notify", "enabled"],
   maintenance: ["config", "grouping", "enabled"],
+  hr_check: ["config", "hr_check", "enabled"],
 };
 
 window.CONFIG_HUB = {
@@ -345,6 +369,12 @@ window.CONFIG_HUB = {
           return this.cfgText(["config", "logging", "level"], "INFO");
         case "maintenance":
           return this.cfgBool(["config", "grouping", "enabled"], "true") ? "辅种分组已启用" : "辅种分组未启用";
+        case "hr_check": {
+          const names = this.cfgTrackerNames().filter(
+            (n) => this.cfgText(["config", "trackers", n, "hr_check", "mode"], "off") !== "off"
+          );
+          return names.length ? `${names.length} 个站点在线核实` : "未配置站点";
+        }
         case "speed": {
           if (!this.cfgCurveEnabled()) return "未启用";
           const list = this.cfgCurveList();

@@ -1,7 +1,7 @@
 # 全部配置键与语法速查
 
 > 摘要: 顶层键、trackers 站点段、限速曲线段、规则集段、变量与匹配语法、运行时文件、测试样例。
-> 触发: 配置键, 配置项, trackers, 限速曲线, 规则集段, 变量替换, 匹配语法, 运行时文件
+> 触发: 配置键, 配置项, trackers, 限速曲线, 规则集段, 变量替换, 匹配语法, 运行时文件, hr_check, HR 在线核实
 
 ## 全部配置键 (顶层 `config:` 段)
 
@@ -24,8 +24,7 @@
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
 | `hr` | | 全局 HR 输出设置 (add_tag/add_category/overwrite_category/add_tag_for_satisfied/add_category_for_satisfied/overwrite_category_for_satisfied); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
-| `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) |
-| `global_speed_limit_curve` | 无=不启用 | 见下 |
+| `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) || `hr_check` | 默认关闭 | **HR 在线核实** (部分种子 HR 站点): `{enabled(false), min_torrent_interval("90S"), max_torrents_per_hour(12), max_torrents_per_day(60), failure_threshold(3), failure_cooldown("12H"), allow_window(""), unknown_policy(hr|not-hr), verified_ttl(留空=跟随站点 refresh_interval), index_retention("30D"), max_download_retries(3), channel_silence_warn("6H"), shared_dir(""), lock_timeout("0S"), poll_interval("1M"), parse_missing_rate_max(0.5), channel{enabled, port(8788), token}}`。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」); `unknown_policy`/`verified_ttl` 调松等于自愿放大漏管窗口。设置页「HR 在线核实」分组 || `global_speed_limit_curve` | 无=不启用 | 见下 |
 | `trackers` | {} | 站点配置, 见下 |
 | `<任意>_rules` | {} | 规则集 (键名以 `_rules` 结尾), 见 04 |
 
@@ -40,6 +39,7 @@
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
 | `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 |
+| `hr_check` | | **站点级在线核实**: `{mode(off|partial|all), adapter(nexusphp), hr_page_url(启用时必填), hr_page_scopes([A,B,C]), download_path("/download.php?id={id}"), page_param(page), refresh_interval("12H"), max_pages_per_refresh(5), max_torrents_per_hour(留空=回退全局)}`。❗两条配置期 fail-fast: **① `mode != off` 时该站 `hr` 段必填** —— 否则 `check_hr_condition` 首行 `if not self.tracker_conf.hr` 恒 False, 整站保护**静默失效**; **② `hr_page_scopes` 必须含 A+B+C** —— 少抓一档会让该档种子在「完整刷新」里未列出而被**误放行**(漏 HR)。`download_path` 必须含 `{id}` 占位符(站点差异由 adapter 承担) |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
 | `remove_similar_tags` | | 覆盖全局 |

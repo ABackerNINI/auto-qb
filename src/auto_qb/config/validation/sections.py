@@ -16,6 +16,47 @@ KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify"}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
+# hr_check(HR 在线核实, 计划 §7); 站点级与全局共用区分两套键集
+KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token"}
+
+KNOWN_HR_CHECK_KEYS = {
+    "enabled",
+    "min_torrent_interval",
+    "max_torrents_per_hour",
+    "max_torrents_per_day",
+    "failure_threshold",
+    "failure_cooldown",
+    "allow_window",
+    "unknown_policy",
+    "verified_ttl",
+    "index_retention",
+    "max_download_retries",
+    "channel_silence_warn",
+    "shared_dir",
+    "lock_timeout",
+    "poll_interval",
+    "parse_missing_rate_max",
+    "channel",
+}
+
+KNOWN_SITE_HR_CHECK_KEYS = {
+    "mode",
+    "adapter",
+    "hr_page_url",
+    "hr_page_scopes",
+    "download_path",
+    "page_param",
+    "refresh_interval",
+    "max_pages_per_refresh",
+    "max_torrents_per_hour",
+}
+
+#: 站点模式: off = 不启用 | partial = 在线核实 | all = 站点侧驱动 + 未核实恒受管束
+HR_CHECK_MODES = ("off", "partial", "all")
+
+#: 未核实种子的处置: hr = 保守按 HR(默认) | not-hr = 按非 HR(等于自愿放弃一重保证)
+HR_CHECK_UNKNOWN_POLICIES = ("hr", "not-hr")
+
 # notify.channels 已知渠道(v1 仅平台原生单渠道; 多渠道按 traffic_source 同模式演进)
 NOTIFY_CHANNELS = {"platform"}
 
@@ -38,6 +79,7 @@ KNOWN_TRACKER_KEYS = {
     "upload_speed_limit",
     "download_speed_limit",
     "hr",
+    "hr_check",
     "rules",
     "remove_similar_tags",
 }
@@ -105,6 +147,151 @@ def _validate_global_hr(spec, errors: List[str]) -> None:
     for key in ("overwrite_category", "overwrite_category_for_satisfied"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.hr.{key}", errors)
+
+
+def _validate_hr_check(spec, errors: List[str]) -> None:
+    """校验 config.hr_check 段(HR 在线核实: 功能开关 + 频控 + 本地取数通道)
+
+    整段缺省合法(走默认值 = 功能关闭); 保守默认, 故不配就什么都不发生。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.hr_check: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_HR_CHECK_KEYS, "config.hr_check", errors)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], "config.hr_check.enabled", errors)
+    # 间隔下限 5s: HR 站点的访问频度是账号安全的第一条防线, 过小等于「根本限不住」
+    if "min_torrent_interval" in spec:
+        _try_time(spec["min_torrent_interval"], "config.hr_check.min_torrent_interval", errors, min_s=5, max_s=86400)
+    for key, where in (
+        ("max_torrents_per_hour", "时"),
+        ("max_torrents_per_day", "天"),
+    ):
+        if key in spec:
+            _try_number(spec[key], f"config.hr_check.{key}(须为正整数, {where}配额)", errors, integer=True, min=1, max=10000)
+    if "failure_threshold" in spec:
+        _try_number(
+            spec["failure_threshold"], "config.hr_check.failure_threshold", errors, integer=True, min=1, max=100
+        )
+    if "failure_cooldown" in spec:
+        _try_time(spec["failure_cooldown"], "config.hr_check.failure_cooldown", errors, positive=True, max_s=30 * 86400)
+    if "allow_window" in spec:
+        # 语义与 notify.quiet_hours 相反(那个是「该时段不发」, 本项是「仅该时段取数」), 故文案必须写清
+        v = str(spec["allow_window"] or "").strip()
+        if v:
+            try:
+                start_s, end_s = v.split("-", 1)
+                parse_hm(start_s)
+                parse_hm(end_s)
+            except ValueError as e:
+                errors.append(f"config.hr_check.allow_window: 须为 'HH:MM-HH:MM'(可跨午夜): {e}")
+    if "unknown_policy" in spec:
+        if str(spec["unknown_policy"]).strip().lower() not in HR_CHECK_UNKNOWN_POLICIES:
+            errors.append(
+                f"config.hr_check.unknown_policy: 须为 {'/'.join(HR_CHECK_UNKNOWN_POLICIES)} 之一: "
+                f"'{spec['unknown_policy']}'"
+            )
+    # verified_ttl 下限 60s: 小于一个刷新粒度等于「放行当场失效」, 与默认跟随刷新周期的意图相反
+    if "verified_ttl" in spec:
+        _try_time(spec["verified_ttl"], "config.hr_check.verified_ttl", errors, min_s=60, max_s=30 * 86400)
+    if "index_retention" in spec:
+        _try_time(spec["index_retention"], "config.hr_check.index_retention", errors, min_s=86400, max_s=3650 * 86400)
+    if "max_download_retries" in spec:
+        _try_number(
+            spec["max_download_retries"], "config.hr_check.max_download_retries", errors, integer=True, min=1, max=10
+        )
+    if "channel_silence_warn" in spec:
+        _try_time(
+            spec["channel_silence_warn"],
+            "config.hr_check.channel_silence_warn",
+            errors,
+            positive=True,
+            max_s=30 * 86400
+        )
+    if "lock_timeout" in spec:
+        _try_time(spec["lock_timeout"], "config.hr_check.lock_timeout", errors, min_s=0, max_s=3600)
+    if "poll_interval" in spec:
+        _try_time(spec["poll_interval"], "config.hr_check.poll_interval", errors, positive=True, min_s=5, max_s=3600)
+    if "parse_missing_rate_max" in spec:
+        _try_number(spec["parse_missing_rate_max"], "config.hr_check.parse_missing_rate_max", errors, min=0, max=1)
+    if "token" in spec and not isinstance(spec["token"], str):
+        errors.append("config.hr_check.token: 必须是字符串")
+    if "shared_dir" in spec and not isinstance(spec["shared_dir"], str):
+        errors.append("config.hr_check.shared_dir: 必须是字符串")
+    if "channel" in spec:
+        channel = spec["channel"]
+        if not isinstance(channel, dict):
+            errors.append("config.hr_check.channel: 必须是字典")
+        else:
+            _check_unknown_keys(channel, KNOWN_HR_CHANNEL_KEYS, "config.hr_check.channel", errors)
+            if "enabled" in channel:
+                _try(parse_bool, channel["enabled"], "config.hr_check.channel.enabled", errors)
+            if "port" in channel:
+                try:
+                    port = int(channel["port"])
+                except (TypeError, ValueError):
+                    errors.append(f"config.hr_check.channel.port: 必须是整数: {channel['port']}")
+                else:
+                    if not 1 <= port <= 65535:
+                        errors.append(f"config.hr_check.channel.port: 超出范围 1-65535: {port}")
+            if "token" in channel and not isinstance(channel["token"], str):
+                errors.append("config.hr_check.channel.token: 必须是字符串")
+
+
+def _validate_site_hr_check(spec, where: str, errors: List[str]) -> None:
+    """校验 trackers.<site>.hr_check 段(站点级在线核实)
+
+    ❗fail-fast 重点: `mode != off` 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None,
+    `check_hr_condition` 恒 False, **整站保护静默失效**(且没有任何报错)。
+    """
+    if not isinstance(spec, dict):
+        errors.append(f"{where}: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_SITE_HR_CHECK_KEYS, where, errors)
+    mode = str(spec.get("mode", "off")).strip().lower()
+    if mode not in HR_CHECK_MODES:
+        errors.append(f"{where}.mode: 须为 {'/'.join(HR_CHECK_MODES)} 之一: '{spec.get('mode')}'")
+        return
+    if mode == "off":
+        return
+    if not str(spec.get("hr_page_url", "") or "").strip():
+        errors.append(f"{where}.hr_page_url: 缺少必填键 hr_page_url(HR 统计页地址)")
+    elif not str(spec["hr_page_url"]).strip().lower().startswith(("http://", "https://")):
+        errors.append(f"{where}.hr_page_url: 须为 http(s) 绝对地址: {spec['hr_page_url']}")
+    if "hr_page_scopes" in spec:
+        scopes = spec["hr_page_scopes"]
+        if not (isinstance(scopes, list) and scopes and all(isinstance(s, str) and s.strip() for s in scopes)):
+            errors.append(f"{where}.hr_page_scopes: 必须是非空字符串列表(如 [A, B, C])")
+        elif not set(s.strip().upper() for s in scopes) <= {"A", "B", "C", "D"}:
+            errors.append(f"{where}.hr_page_scopes: 只允许 A/B/C/D(考察中/已达标/未达标/已免罪): {scopes}")
+        elif not {"A", "B", "C"} <= set(s.strip().upper() for s in scopes):
+            # 只抓 A(考察中)会把「已达标」的 HR 种子当成非 HR ⇒ 覆盖证明成立时误放行 ⇒ 漏 HR
+            errors.append(
+                f"{where}.hr_page_scopes: 必须包含 A/B/C(考察中/已达标/未达标) —— 少抓一档会让该档种子"
+                "在完整刷新里「未列出」而被误放行; D(已免罪)可加可不加"
+            )
+    if "download_path" in spec:
+        path = str(spec["download_path"])
+        if "{id}" not in path:
+            errors.append(f"{where}.download_path: 必须包含 {{id}} 占位符(种子编号): {path}")
+    if "page_param" in spec and not str(spec["page_param"]).strip():
+        errors.append(f"{where}.page_param: 不能为空(不需要翻页参数时留空则无法翻页)")
+    if "refresh_interval" in spec:
+        _try_time(
+            spec["refresh_interval"], f"{where}.refresh_interval", errors, positive=True, min_s=60, max_s=30 * 86400
+        )
+    if "max_pages_per_refresh" in spec:
+        _try_number(
+            spec["max_pages_per_refresh"], f"{where}.max_pages_per_refresh", errors, integer=True, min=1, max=100
+        )
+    if "max_torrents_per_hour" in spec:
+        _try_number(
+            spec["max_torrents_per_hour"], f"{where}.max_torrents_per_hour", errors, integer=True, min=1, max=10000
+        )
+    if "adapter" in spec and not str(spec["adapter"]).strip():
+        errors.append(f"{where}.adapter: 不能为空")
 
 
 def _validate_grouping(spec, errors: List[str]) -> None:
@@ -182,6 +369,14 @@ def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
                 _check_rule_refs(tdata["rules"], rules_config, f"{where}.rules", errors)
         if "hr" in tdata:
             _validate_tracker_hr(tdata["hr"], f"{where}.hr", errors)
+        if "hr_check" in tdata:
+            _validate_site_hr_check(tdata["hr_check"], f"{where}.hr_check", errors)
+            # ❗mode != off 但没配 hr 段: check_hr_condition 恒 False(前置 `if not self.tracker_conf.hr`),
+            # 整站保护静默失效 —— 必须配置期拦下, 不能等到运行期悄无声息
+            mode = str(tdata["hr_check"].get("mode", "off")).strip().lower()
+            if mode != "off" and "hr" not in tdata:
+                errors.append(f"{where}: 配置了 hr_check(mode={mode}) 时必须同时配置 hr 段(要求做种时长等参数), "
+                              "否则该站保护会静默失效")
 
 
 def _validate_web(spec, errors: List[str]) -> None:

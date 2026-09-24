@@ -67,13 +67,33 @@ def main():
         action="store_true",
         help="Export torrents info to a file 'torrents.txt' for debugging"
     )
+    parser.add_argument(
+        "--hr-once",
+        action="store_true",
+        help="HR 在线核实只读走查: 跑一遍刷新管道并打印报告(不写文件、不联动 qB)",
+    )
+    parser.add_argument(
+        "--hr-html-dir",
+        metavar="DIR",
+        help="搭配 --hr-once: 用目录里保存的 HR 页(按 <档位>.html 命名)作为离线页面替身, 验证解析与索引",
+    )
     args = parser.parse_args()
 
     if args.tray and (args.export_yaml or args.export_torrents_info):
         parser.error("--tray 与导出模式互斥")
+    if args.hr_html_dir and not args.hr_once:
+        parser.error("--hr-html-dir 需配合 --hr-once 使用")
+    if args.hr_once and (args.tray or args.export_yaml or args.export_torrents_info):
+        parser.error("--hr-once 与托盘/导出模式互斥")
 
     manager = None
     try:
+        # HR 在线核实只读走查: 不持锁(不写任何文件)、不连 qB —— 可与正常实例并发
+        if args.hr_once:
+            from .hr.report import run_hr_once
+
+            return run_hr_once(load_config(args.config), args.hr_html_dir)
+
         # 出口模式不持锁(只读, 可与正常实例并发); 正常 run 模式持锁
         manager = QbManager(args.config, no_lock=bool(args.export_yaml or args.export_torrents_info))
 
