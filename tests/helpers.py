@@ -21,6 +21,7 @@ from auto_qb.config import (
     QbittorrentConfig,
     WebConfig,
 )  # noqa: E402
+from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, _VIEW_FIELDS, _VIEW_QUANTUM, view_field_value  # noqa: E402
@@ -815,6 +816,9 @@ class FakeConfig:
     global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
     notify = NotifyConfig()  # 主动通知(默认 disabled)
     web = WebConfig()  # WEB UI(默认 disabled)
+    # HR 在线核实(M2 起 QbManager 会读它): 默认关 = 不建端点、不建取数线程, 与真实默认一致
+    hr_check = HrCheckConfig()
+    data_dir = ""  # 由测试按需设置(HR 站点文件目录从它派生)
 
 
 def _hr_rule(**kw) -> HRRule:

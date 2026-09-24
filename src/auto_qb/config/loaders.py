@@ -140,6 +140,10 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         if isinstance(channel_spec, dict) else channel_default.port,
         token=_get(channel_spec, "token", channel_default.token)
         if isinstance(channel_spec, dict) else channel_default.token,
+        extension_id=_get(channel_spec, "extension_id", channel_default.extension_id)
+        if isinstance(channel_spec, dict) else channel_default.extension_id,
+        request_timeout=_get(channel_spec, "request_timeout", channel_default.request_timeout, parse_time)
+        if isinstance(channel_spec, dict) else channel_default.request_timeout,
     )
     return HrCheckConfig(
         enabled=_get(spec, "enabled", d.enabled, parse_bool),

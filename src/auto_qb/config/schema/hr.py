@@ -46,6 +46,22 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
         default="",
         help="访问密钥; 留空 = 首次启动随机生成并持久化到 <data_dir>/hr.token(扩展侧需逐实例填写)",
     ),
+    Field(
+        "extension_id",
+        "扩展 id(可选)",
+        "str",
+        default="",
+        placeholder="abcdefghijklmnopabcdefghijklmnop",
+        help="填了则只放行该扩展(32 位 a~p); 留空 = 放行任意扩展。❗真正的鉴权是 token, 本项只是第二道防线",
+    ),
+    Field(
+        "request_timeout",
+        "等扩展回传上限",
+        "time",
+        default="180S",
+        unit_default="S",
+        help="取数线程等扩展回传的上限; 超时按一次失败计。必须有 —— 否则扩展中途被关掉会让持锁的取数线程永久挂住",
+    ),
 )
 
 HR_CHECK_FIELDS: Tuple[Field, ...] = (

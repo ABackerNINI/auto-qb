@@ -66,11 +66,12 @@ TRACKER_FIELD_LEVELS = {
     "groups": LEVEL_L2,
 }
 
-# hr_check 段内部字段级别(逐字段表, 未列出 = L2 保守)。当前**全部 L0**: 刷新管道每轮现读配置,
-# 替换 Config 对象即生效。
-# ❗落地取数通道(本地端点 + 取数线程)时, `channel` 与 `shared_dir` 必须改为 LEVEL_L1 ——
-#   端点与共享层需「先停旧、等线程退出、再启新」重挂(与 web 段同款), 并在
-#   QbManager.apply_new_config 的 L1 分支补上挂载动作; 否则改端口会被当成「已热重载」而实际未生效。
+# hr_check 段内部字段级别(逐字段表, 未列出 = L2 保守)。
+# 绝大多数字段是 L0: 取数线程每轮从 self.config 现读配置(间隔/配额/策略/保留期…), 替换
+# Config 对象即生效; 站点级 `trackers.X.hr_check.*` 同理(见 TRACKER_FIELD_LEVELS)。
+# ❗两个例外必须是 L1(M2 起): `channel`(端点监听身份 + 扩展 token ⇒ 需「先停旧、等线程退出、
+#   再启新」重挂, 与 web 段同款)与 `shared_dir`(站点文件目录变了, 服务与取数线程得重建)。
+#   挂载动作在 QbManager.apply_new_config 的 L1 分支 -> HrRuntime.apply()。
 HR_CHECK_FIELD_LEVELS = {
     "enabled": LEVEL_L0,
     "min_torrent_interval": LEVEL_L0,
@@ -84,11 +85,11 @@ HR_CHECK_FIELD_LEVELS = {
     "index_retention": LEVEL_L0,
     "max_download_retries": LEVEL_L0,
     "channel_silence_warn": LEVEL_L0,
-    "shared_dir": LEVEL_L0,
+    "shared_dir": LEVEL_L1,
     "lock_timeout": LEVEL_L0,
     "poll_interval": LEVEL_L0,
     "parse_missing_rate_max": LEVEL_L0,
-    "channel": LEVEL_L0,
+    "channel": LEVEL_L1,
 }
 
 

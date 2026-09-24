@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>auto-qb HR 取数代理 · 选项</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; padding: 24px;
+      background: #0e1216; color: #dfe6ec;
+      font: 14px/1.7 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    h2 { font-size: 14px; margin: 24px 0 6px; color: #9fb0bd; font-weight: 600; }
+    p.hint { margin: 0 0 10px; color: #93a0ac; font-size: 13px; }
+    textarea {
+      width: 100%; box-sizing: border-box; min-height: 120px;
+      background: #151b21; color: #dfe6ec;
+      border: 1px solid rgba(255,255,255,.16); border-radius: 4px;
+      padding: 10px; font: 13px/1.6 Consolas, "Courier New", monospace;
+    }
+    button {
+      background: #1d242b; color: #dfe6ec; border: 1px solid rgba(255,255,255,.2);
+      border-radius: 4px; padding: 7px 14px; cursor: pointer; font-size: 13px; margin-right: 8px;
+    }
+    button:hover { background: #253039; }
+    button.primary { border-color: #5eb6c2; color: #8fd6df; }
+    code { color: #8fd6df; }
+    #status { margin-top: 10px; color: #93a0ac; font-size: 13px; white-space: pre-wrap; }
+    label.row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>auto-qb HR 取数代理</h1>
+  <p class="hint">哑取数器: 只按后端下发的清单取 HR 页与 .torrent, 不解析、不限速、不读 cookie。</p>
+
+  <label class="row"><input type="checkbox" id="enabled"> 启用轮询(每 5 分钟一次)</label>
+
+  <h2>① 实例端点</h2>
+  <p class="hint">
+    每行一个实例, JSON 格式: <code>{"name":"本机","endpoint":"http://127.0.0.1:8788","token":"..."}</code><br>
+    token 留空时后端会生成到 <code>&lt;data_dir&gt;/hr.token</code>, 打开它复制过来即可。同机多实例端口不能重复。
+  </p>
+  <textarea id="instances" spellcheck="false"></textarea>
+
+  <h2>② 站点权限</h2>
+  <p class="hint">
+    每行一个站点源(如 <code>https://pt.example.com/*</code>)。只申请你要核实的站点, 不给全站权限。
+  </p>
+  <textarea id="origins" spellcheck="false" style="min-height:70px"></textarea>
+
+  <div style="margin-top:16px">
+    <button class="primary" id="save">保存</button>
+    <button id="grant">申请站点权限</button>
+    <button id="poll">立即拉取一次</button>
+  </div>
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

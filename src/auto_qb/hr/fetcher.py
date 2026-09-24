@@ -7,8 +7,13 @@
   于是轮询拉取式通道(M2 的本地端点 + 扩展)、测试用的假通道、离线 fixture 通道可以互换。
 - `NullFetcher` 用于「本实例没有可用通道」(channel.enabled=false): 调用即抛 `HrChannelUnavailable`,
   由 service 转成「未核实 + 通道静默」, **绝不静默降级为后端直连**(那会破坏零 cookie 边界)。
+- `ChannelFetcher`(M2)是**真通道**: 把请求变成一条任务投给浏览器扩展, 阻塞等回传(有上限)。
 """
-from typing import Protocol, runtime_checkable
+import time
+from typing import Callable, Optional, Protocol, runtime_checkable
+
+from .channel import TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
+from .queue import HrTaskQueue
 
 
 class HrFetchError(RuntimeError):
@@ -48,3 +53,101 @@ class NullFetcher:
 def is_available(fetcher: HrFetcher) -> bool:
     """通道是否为真通道(供报告与展示; NullFetcher 视为不可用)"""
     return not isinstance(fetcher, NullFetcher)
+
+
+class ChannelFetcher:
+    """真通道(M2): 把取数请求交给浏览器扩展, 阻塞等回传。
+
+    为什么是**阻塞**的: 本对象只在取数线程里被调用, 而取数线程持站点锁、与主循环 2s 节拍
+    完全解耦(计划 §8) —— 「抓数据等几分钟」只发生在该线程内, 卡不住主循环。
+
+    `request_timeout` 必须有: 扩展中途被关掉时, 若无人叫停, 持锁的取数线程会永久挂住,
+    该站点就再也不会被刷新(而且锁也永远不释放)—— 超时即按一次失败计, 交给退避熔断处理。
+
+    ❗URL 先过 `UrlPolicy`(域名 + 路径白名单)再下发: 端点绝不成为「带登录态的任意站代理」。
+    """
+    def __init__(
+        self,
+        queue: HrTaskQueue,
+        *,
+        policy: UrlPolicy,
+        request_timeout: float = 180.0,
+        now_fn: Callable[[], float] = time.time,
+    ) -> None:
+        self.queue = queue
+        self.policy = policy
+        self.request_timeout = float(request_timeout)
+        self._now = now_fn
+        #: 便于报告与排障: 本实例实际下发的任务数(不代表配额)
+        self.requests = 0
+
+    def get_text(self, url: str) -> str:
+        return self._fetch(url, TASK_PAGE, scope=_scope_of(url)).text
+
+    def get_bytes(self, url: str) -> bytes:
+        return self._fetch(url, TASK_TORRENT, tid=_tid_of(url)).body
+
+    def _fetch(self, url: str, kind: str, *, scope: str = "", tid: int = 0) -> HrResult:
+        if self.queue.cancel_reason:
+            # 通道已叫停(关停路径): 连任务都不下发, 直接如实上报"通道不可用"
+            raise HrChannelUnavailable(f"取数通道已停止({self.queue.cancel_reason}): {url}")
+        site = self.policy.require(url)  # 白名单外直接抛 HrChannelError -> service 记失败
+        task = self.queue.put(site, kind, url, scope=scope, tid=tid)
+        self.requests += 1
+        result = self.queue.wait(task.task_id, self.request_timeout)
+        if result is None:
+            # 区分「被叫停」与「等超时」: 前者是关停路径(不该算一次失败), 后者才计入退避燔断
+            if self.queue.cancel_reason:
+                raise HrChannelUnavailable(f"取数通道已停止({self.queue.cancel_reason}), 本轮放弃: {url}")
+            raise HrFetchError(f"等待浏览器扩展取数超时({self.request_timeout:.0f}s): {url}"
+                               "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
+        if not result.ok:
+            detail = result.error or f"HTTP {result.status}"
+            raise HrFetchError(f"扩展取数失败({detail}): {url}", retry_after=result.retry_after)
+        if not result.body:
+            raise HrFetchError(f"扩展回传内容为空: {url}")
+        return result
+
+
+def _scope_of(url: str) -> str:
+    """从 URL 取档位(`hrtype=A`)—— 仅供排障展示, 解析不看它"""
+    for part in url.split("?", 1)[-1].split("&"):
+        if part.startswith("hrtype="):
+            return part.split("=", 1)[1]
+    return ""
+
+
+def _tid_of(url: str) -> int:
+    """从 URL 取种子 id(`id=123`)—— 仅供排障展示"""
+    for part in url.split("?", 1)[-1].split("&"):
+        if part.startswith("id="):
+            try:
+                return int(part.split("=", 1)[1])
+            except ValueError:
+                return 0
+    return 0
+
+
+def build_channel_fetcher(
+    *,
+    channel_conf,
+    enabled: bool,
+    queue: HrTaskQueue,
+    site_confs,
+) -> HrFetcher:
+    """按配置决定「真通道」还是「空通道」——**唯一**的分支点
+
+    `channel.enabled=false`(未装扩展 / 未启用)时返回 `NullFetcher`: 上层如实报「无可用
+    取数通道」并保守回落未核实, 而不是偷偷改成后端直连。
+    """
+    if not enabled or not channel_conf.enabled:
+        return NullFetcher("本实例未启用取数通道 (hr_check.channel.enabled=false): 装上浏览器扩展并开启后才会在线核实")
+    return ChannelFetcher(
+        queue, policy=UrlPolicy(site_confs), request_timeout=getattr(channel_conf, "request_timeout", 180.0)
+    )
+
+
+__all__ = [
+    "ChannelFetcher", "HrChannelUnavailable", "HrFetchError", "HrFetcher", "NullFetcher", "build_channel_fetcher",
+    "is_available"
+]

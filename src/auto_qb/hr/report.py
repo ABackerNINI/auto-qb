@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from ..config.models import Config
+from .channel import API_TASKS, describe_token_source, token_path
 from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher
 from .model import CHANNEL_OK, CHANNEL_SILENT
 from .service import DIAGNOSTIC_MAX_WAIT, HrRefreshResult, HrRefreshService
@@ -84,6 +85,7 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
 
     print(f"HR 在线核实走查(只读, 不写盘) 共 {len(enabled)} 个站点: {', '.join(enabled)}", file=out)
     print(f"站点文件目录: {service.dir}(单次等待上限 {DIAGNOSTIC_MAX_WAIT:.0f}s)", file=out)
+    _print_channel(config, service, out)
     print("-" * 92, file=out)
     started = time.time()
     results = service.refresh_all()
@@ -97,6 +99,30 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
     if isinstance(service.fetcher, NullFetcher):
         print("提示: 未提供离线页面(--hr-html-dir), 且取数通道未启用 ⇒ 本轮只能确认配置/路径/锁状态。", file=out)
     return 0
+
+
+def _print_channel(config: Config, service: HrRefreshService, out) -> None:
+    """通道自检段(计划 §7): 端点 / 密钥来源 / 共享目录 —— 都不含密钥内容"""
+    conf = config.hr_check
+    channel = conf.channel
+    state = "启用" if channel.enabled else "未启用(本实例无取数能力, 只会读共享数据)"
+    print(f"取数通道: {state}", file=out)
+    print(
+        f"    端点: http://127.0.0.1:{channel.port}{API_TASKS}   轮询节奏: {conf.poll_interval:g}s   "
+        f"等回传上限: {channel.request_timeout:g}s",
+        file=out
+    )
+    origin = f"只放行扩展 {channel.extension_id}" if channel.extension_id else "放行任意扩展 origin(靠 token 鉴权)"
+    print(
+        f"    密钥来源: {describe_token_source(channel.token, config.data_dir)}"
+        f"({token_path(config.data_dir)})   {origin}",
+        file=out
+    )
+    if conf.shared_dir:
+        print(f"    共享目录: {conf.shared_dir}(多实例共用同一份站点数据)", file=out)
+    else:
+        print(f"    共享目录: 未配置 ⇒ 站点文件落 {service.dir}; 多实例共享同一账号时需指向同一目录"
+              "(云同步盘不可用)", file=out)
 
 
 def _print_site(result: HrRefreshResult, view, out) -> None:

@@ -70,11 +70,17 @@ class HrChannelConfig:
       多通道不会双倍访问站点: 同站点靠「文件锁 + 有效期复用」保证只被访问一次。
     port: 监听端口; 仅监听 127.0.0.1。同机多实例必须各用不同端口(被占 => 启动即报错)
     token: 访问密钥; 留空 = 首次启动随机生成并持久化到 <data_dir>/hr.token(同 web.token 口径)
+    extension_id: 可选。填了则 CORS 只放行该扩展 id(chrome-extension://<id>); 留空 = 放行任意扩展
+      origin(**真鉴权仍是 token**, origin 白名单只是第二道 —— 见计划 §6)
+    request_timeout: 取数线程等扩展回传的上限(秒)。必须有: 扩展中途被关掉时, 若无上限,
+      持站点锁的取数线程会永久挂住(该站再也不会刷新、锁也永不释放); 超时按一次失败计入退避燔断
     """
 
     enabled: bool = False
     port: int = 8788
     token: str = ""
+    extension_id: str = ""
+    request_timeout: float = 180.0
 
 
 @dataclass

@@ -110,6 +110,9 @@ class HrRefreshService:
         self.dir = hr_dir(data_dir, global_conf.shared_dir)
         self._stores: Dict[str, HrSiteStore] = {}
         self._owner = owner
+        #: 「无可用取数通道」已告警过的站点: 取数线程是分钟级轮询, 每轮都 WARNING 会把
+        #: notify 的系统通知淹掉 —— 只在**状态变化**时报一次, 通道恢复后重置。
+        self._no_channel_warned: set = set()
 
     # ---------- 基础访问 ----------
 
@@ -268,7 +271,7 @@ class HrRefreshService:
         except HrChannelUnavailable as e:
             result.action = ACTION_NO_CHANNEL
             result.reason = str(e)
-            _warn_no_channel(site, e)
+            self._warn_no_channel(site, e)
             return
         except HrFetchError as e:
             newly = record_failure(data.fuse, limits, self._now(), getattr(e, "retry_after", 0.0))
@@ -283,6 +286,7 @@ class HrRefreshService:
             return
 
         record_success(data.fuse)
+        self._no_channel_warned.discard(site)  # 通道恢复: 下次真的没通道时再报一次
         entries_new = sum(1 for tid in entries_seen if tid not in data.downloaded)
         fetched, failed = self._fill_infohashes(adapter, data, entries_seen, budget, site_conf)
         complete = bool(scopes) and len(scopes_done) == len(scopes) and reached_last and max_missing <= \
@@ -494,6 +498,14 @@ class HrRefreshService:
             return CHANNEL_SILENT
         return CHANNEL_OK
 
+    def _warn_no_channel(self, site: str, err: Exception) -> None:
+        """无通道告警: **每个站点只报一次**(直到通道恢复) —— 分钟级轮询下逐轮告警会淹没通知"""
+        if site in self._no_channel_warned:
+            logger.debug(f"HR 站点 {site} | 无可用取数通道(已告警过, 不重复): {err}")
+            return
+        self._no_channel_warned.add(site)
+        logger.warning(f"HR 站点 {site} | 无可用取数通道, 本轮不做在线核实(保守回落未核实): {err}")
+
 
 def _verified_for(infohash: str, tid: int, source: str, now: float, anchor: Optional[HrAnchor] = None) -> HrVerified:
     a = anchor or HrAnchor()
@@ -507,10 +519,6 @@ def _verified_for(infohash: str, tid: int, source: str, now: float, anchor: Opti
         anchor_completion_on=a.completion_on,
         anchor_progress=a.progress,
     )
-
-
-def _warn_no_channel(site: str, err: Exception) -> None:
-    logger.warning(f"HR 站点 {site} | 无可用取数通道, 本轮不做在线核实(保守回落未核实): {err}")
 
 
 class _Budget:

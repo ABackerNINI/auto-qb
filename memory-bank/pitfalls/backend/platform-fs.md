@@ -1,7 +1,29 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn
+
+### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
+
+- **触发**: 用 stdlib `http.server.HTTPServer` / `socketserver` 起监听, 并希望「端口被占就报错」
+  (`hr/server.py` 的本地取数端点就是这样, 2026-09-24 M2 实测)。
+- **判别**: `HTTPServer.allow_reuse_address = 1`(类属性默认值); 它在 Windows 上映射成 `SO_REUSEADDR`,
+  而 Windows 的语义与 POSIX **不同** —— 它允许**第二个进程抢绑已经在监听的同一端口**(不是只绕过 TIME_WAIT)。
+  于是「同机第二个实例配了同一个 port ⇒ 启动即 fail-fast」这条守卫会**静默失效**: 两个进程都“启动成功”,
+  请求随机落到其中一个(实测表现为“扩展拉不到清单/时好时坏”)。
+- **处置**: 子类里 `allow_reuse_address = False`(**不要**靠 `SO_EXCLUSIVEADDRUSE` 自己折腾)。
+  Windows 上关掉它不会引来 TIME_WAIT 重绑难题 —— 监听端被 TIME_WAIT 阻住的场景实际上不出现在 Windows;
+  为了让重绑更干净, 响应带 `Connection: close`(每请求关连接)即可。
+- **副作用**: 这样“端口占用”才会真的报错, 而**报错本身是产品行为**(提示“同机多实例请错开端口”),
+  必须测: 起一个端点 → 同端口再起一个 → 断言抛错(见 `test_hr_server.py::test_port_conflict_fails_fast`)。
+
+### `HTTPServer.server_bind` 会顺手查一次 FQDN(无网机器上会拖启动)
+
+- **触发**: 同上, 起 stdlib HTTP 服务。
+- **判别**: `HTTPServer.server_bind` 除了 `bind` 还调 `socket.getfqdn(host)` 填 `server_name`;
+  127.0.0.1 也不例外 —— 无网/弱网机器上那次反向查询可能抱几秒(启动路径上不必要的等待)。
+- **处置**: 只服务回环时重写 `server_bind`: 直接调 `socketserver.TCPServer.server_bind(self)`,
+  再手动把 `server_name/server_port` 填成 `server_address` 的值。
 
 ### Windows 脚本三坑(批处理 rem / 行尾 / 码页) + PATH 条目的 MSYS 形态
 

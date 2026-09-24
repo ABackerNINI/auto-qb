@@ -47,6 +47,8 @@ from .qbclient import _new_client
 from ..rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ..webui import WebUIRuntime
+# HR 在线核实运行时门面(端点 + 取数线程 + 只读视图): 与 WebUIRuntime 同级, 见 __init__ 说明
+from ..hr.runtime import HrRuntime
 from ..torrents import (
     QbCompatError,
     TorrentRecord,
@@ -200,6 +202,11 @@ class QbManager(
         # (2026-09-20 从本类拆出: 原先 19 个表现层字段平铺在 __init__, 主循环因此要替表现层
         #  做"要不要重建 / 要不要补刷新"的判断。详见 web_runtime.py 的模块 docstring。)
         self.web = WebUIRuntime(self)
+        # HR 在线核实运行时: 本地取数端点 + 取数线程 + 只读视图(计划 §8)。
+        # 同 WebUIRuntime 的思路 —— 附属线程与文件句柄的生命周期不进核心域, 主循环只见门面:
+        # 每 tick 读 hr.view_set() 零等待, 需要用新数据时 hr.wake()(非阻塞)。
+        # 未启用(总开关关 / 无站点 mode != off)时它什么都建, 也不会起任何线程。
+        self.hr = HrRuntime(self)
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
@@ -323,6 +330,10 @@ class QbManager(
 
             # 密钥由 start_web_server 内部确定(显式配置或随机生成持久化到 data_dir/web.token)
             self.web.handle = start_web_server(self)
+        # HR 在线核实: 端点 + 取数线程(独立于 qB 连接 —— 扩展要能随时拉到清单)。
+        # 端口被占 => HrChannelBindError 直接穿透到 CLI 干净退出(fail-fast, 不静默降级)。
+        if not dry_run:
+            self.hr.start()
         if not dry_run:
             self._notify_handler = setup_notify(self.config.notify)
         try:
@@ -455,6 +466,7 @@ class QbManager(
         finally:
             if self.web.handle is not None:
                 self.web.handle.stop()
+            self.hr.stop()
             if not dry_run:
                 self.save_state()
             if self._lock is not None:
@@ -490,6 +502,7 @@ class QbManager(
         levels = sorted({c.level for c in changes if c.level != "R"})
         # L1 分支需对比新旧 web 段(替换后旧对象不可达)
         old_web = self.config.web
+        old_hr_check = self.config.hr_check
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
         # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_fields),
@@ -505,6 +518,7 @@ class QbManager(
             self._last_conn_ok = None
             self.connect()
             self._apply_web_config(old_web)
+            self.hr.apply(old_hr_check)
         if "L2" in levels:
             logger.warning("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
             self.task_queue = TaskQueue()

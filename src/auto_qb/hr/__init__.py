@@ -10,13 +10,41 @@
 - fetcher    取数通道抽象(后端零 cookie、零直连站点; 取数由浏览器扩展完成)
 - resolve    三态判定(受管束 / 已核实不受管束 / 未核实)+ 不可变只读视图
 - service    刷新管道(持锁 → 读 → 判有效期 → 必要时抓 → 写 → 释放)
+- channel    通道协议与安全边界(token / origin 白名单 / URL 白名单)
+- queue      任务队列(端点线程与取数线程之间的唯一交接面)
+- server     本地端点(127.0.0.1, 只入队)
+- worker     取数线程 + 只读视图发布(自唤醒, 不随主循环 tick)
+- runtime    运行时门面(端点 + 取数线程 + 热重载重挂)
 
 ❗本模块只读写 hr 文件与返回结果对象: **不碰 state_file / 任务队列 / store**
 (线程三分职责的硬约束, 见计划 §8)。
 """
 from .adapters import available_adapters, build_adapter
 from .bencode import bdecode, compute_infohashes, info_span, torrent_display_name
-from .fetcher import HrChannelUnavailable, HrFetchError, HrFetcher, NullFetcher, is_available
+from .channel import (
+    API_RESULT,
+    API_TASKS,
+    TASK_PAGE,
+    TASK_TORRENT,
+    TOKEN_HEADER,
+    ChannelStatus,
+    HrChannelBindError,
+    HrChannelError,
+    UrlPolicy,
+    resolve_token,
+)
+from .fetcher import (
+    ChannelFetcher,
+    HrChannelUnavailable,
+    HrFetchError,
+    HrFetcher,
+    NullFetcher,
+    build_channel_fetcher,
+    is_available,
+)
+from .queue import HrTaskQueue
+from .runtime import HrRuntime, HrRuntimeStatus
+from .server import HrChannelServer, HrEndpointHandle
 from .model import (
     ALL_LANES,
     CHANNEL_DISABLED,
@@ -64,6 +92,7 @@ from .service import (
     HrRefreshService,
 )
 from .store import HrLockBusy, HrSiteStore, hr_dir, instance_id
+from .worker import HrViewPublisher, HrWorker
 
 __all__ = [
     # bencode / 解析
@@ -113,6 +142,26 @@ __all__ = [
     "HrFetcher",
     "NullFetcher",
     "is_available",
+    "ChannelFetcher",
+    "build_channel_fetcher",
+    # 取数通道(M2): 协议 / 队列 / 端点 / 取数线程 / 运行时门面
+    "API_RESULT",
+    "API_TASKS",
+    "TASK_PAGE",
+    "TASK_TORRENT",
+    "TOKEN_HEADER",
+    "ChannelStatus",
+    "HrChannelBindError",
+    "HrChannelError",
+    "HrChannelServer",
+    "HrEndpointHandle",
+    "HrRuntime",
+    "HrRuntimeStatus",
+    "HrTaskQueue",
+    "HrViewPublisher",
+    "HrWorker",
+    "UrlPolicy",
+    "resolve_token",
     # 判定
     "POLICY_HR",
     "POLICY_NOT_HR",

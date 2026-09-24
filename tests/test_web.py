@@ -135,6 +135,7 @@ from unittest import mock
 import pytest
 
 from auto_qb import __version__
+from auto_qb.config.models import HrCheckConfig
 from auto_qb.infra.utils import decode_group_key, encode_group_key
 from auto_qb.webui import create_app
 
@@ -3631,7 +3632,9 @@ def test_apply_new_config_levels(monkeypatch):
 
         # ② L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
         mgr._notify_handler = std_logging.NullHandler()
-        mgr.config = SimpleNamespace(web=_web_stub(port=38080))  # 旧配置(复现真实新旧对比)
+        # 旧配置(复现真实新旧对比): hr_check 也要给上 —— apply_new_config 的 L1 分支要拿旧值
+        # 与新的 channel/shared_dir 比对(见 HrRuntime.apply), 缺了会 AttributeError
+        mgr.config = SimpleNamespace(web=_web_stub(port=38080), hr_check=HrCheckConfig())
         new_cfg.web = _web_stub(port=38081)  # 仅端口变化 -> 需重启
         old_handle = mock.MagicMock()
         mgr._web_handle = old_handle

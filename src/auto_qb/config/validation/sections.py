@@ -1,5 +1,6 @@
 """config 各段校验器: 顶层简单段(log/qbittorrent/hr/grouping/web/notify 等)"""
 import logging
+import re
 from typing import List
 
 from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed
@@ -17,7 +18,7 @@ KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify"}
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
 # hr_check(HR 在线核实, 计划 §7); 站点级与全局共用区分两套键集
-KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token"}
+KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
 
 KNOWN_HR_CHECK_KEYS = {
     "enabled",
@@ -53,6 +54,10 @@ KNOWN_SITE_HR_CHECK_KEYS = {
 
 #: 站点模式: off = 不启用 | partial = 在线核实 | all = 站点侧驱动 + 未核实恒受管束
 HR_CHECK_MODES = ("off", "partial", "all")
+#: Chrome 扩展 id 形态(32 位 a~p) —— 语义与 `hr.channel.EXTENSION_ID_RE` 一致。
+#: 此处**故意不复用** hr 包的那个常量: config 是被 hr 依赖的下层, 反向 import 会形成环;
+#: 两处等价性由 tests/test_hr_channel.py 的对照用例钉死。
+_EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 
 #: 未核实种子的处置: hr = 保守按 HR(默认) | not-hr = 按非 HR(等于自愿放弃一重保证)
 HR_CHECK_UNKNOWN_POLICIES = ("hr", "not-hr")
@@ -238,6 +243,22 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
                         errors.append(f"config.hr_check.channel.port: 超出范围 1-65535: {port}")
             if "token" in channel and not isinstance(channel["token"], str):
                 errors.append("config.hr_check.channel.token: 必须是字符串")
+            if "extension_id" in channel:
+                # 填了就按它钉死 CORS origin(chrome-extension://<id>); 留空 = 放行任意扩展 origin
+                # (真鉴权是 token, origin 白名单只是第二道)。id 形态错 = 写了也不会生效 ⇒ fail-fast
+                ext_id = str(channel["extension_id"] or "").strip()
+                if ext_id and not _EXTENSION_ID_RE.match(ext_id):
+                    errors.append(f"config.hr_check.channel.extension_id: 须为 32 位 Chrome 扩展 id(a~p): '{ext_id}'")
+            if "request_timeout" in channel:
+                # 下限 5s: 太短会让正常取数(分钟级)全判超时; 上限 1h: 太长会让持锁线程长期挂住
+                _try_time(
+                    channel["request_timeout"],
+                    "config.hr_check.channel.request_timeout",
+                    errors,
+                    positive=True,
+                    min_s=5,
+                    max_s=3600
+                )
 
 
 def _validate_site_hr_check(spec, where: str, errors: List[str]) -> None:

@@ -5,7 +5,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_defaults_when_absent: 整段缺省 -> 全默认(功能关闭), 不报错
-- test_global_section_parsed: 全局段解析(时间串 -> 秒 / 枚举归一 / channel 子段)
+- test_global_section_parsed: 全局段解析(时间串 -> 秒 / 枚举归一 / channel 子段含 M2 新键)
 - test_verified_ttl_default_is_none: verified_ttl 缺省为 None(由站点 refresh_interval 解算, 不在此处固化)
 - test_site_section_parsed: 站点段解析(scope 归一为大写 / 覆盖键生效)
 - test_unknown_keys_aggregated: hr_check / channel / 站点 hr_check 的未知键一次性报错
@@ -17,8 +17,11 @@
 - test_scopes_minimum_is_a_b_c: A+B+C 是最小合法集合(少抓一档 = 该档会被误放行), D 可加可不加
 - test_unknown_policy_enum: unknown_policy 只允许 hr / not-hr
 - test_ranges_and_formats: 间隔下限 / 端口范围 / 时间窗格式 / 缺失率范围等聚合报错
+- test_channel_extension_id_format: extension_id 只接受 32 位 a~p(形态错 = 写了也不会生效, 必须配置期拦下)
+- test_channel_request_timeout_range: request_timeout 上下限(太短误杀正常取数 / 太长挂死取数线程)
 - test_impact_hr_check_field_is_l0: hr_check 字段变更 -> L0 字段级路径
-- test_impact_channel_field_is_l0: channel 子段变更当前为 L0(落地取数通道时须改 L1 —— 见 impact 注释)
+- test_impact_channel_field_is_l1: channel 子段变更 -> L1(端点监听身份, 要重挂)
+- test_impact_shared_dir_is_l1: shared_dir 变更 -> L1(站点文件目录变了, 服务与线程要重建)
 - test_impact_site_hr_check_is_l0: 站点 hr_check 变更 -> trackers.<站点>.hr_check 一条 L0
 """
 import os
@@ -27,7 +30,7 @@ import pytest
 import yaml
 
 from auto_qb.config import ConfigError, load_config
-from auto_qb.config.impact import LEVEL_L0, diff_config_impacts
+from auto_qb.config.impact import LEVEL_L0, LEVEL_L1, diff_config_impacts
 from auto_qb.config.models import Config
 from auto_qb.config.validation import validate_config
 
@@ -85,11 +88,14 @@ def test_global_section_parsed(tmp_path):
                         "lock_timeout": "5S",
                         "poll_interval": "2M",
                         "parse_missing_rate_max": "0.3",
-                        "channel": {
-                            "enabled": "true",
-                            "port": "8899",
-                            "token": "abc"
-                        },
+                        "channel":
+                            {
+                                "enabled": "true",
+                                "port": "8899",
+                                "token": "abc",
+                                "extension_id": "a" * 32,
+                                "request_timeout": "90S",
+                            },
                     },
             }
         )
@@ -110,6 +116,8 @@ def test_global_section_parsed(tmp_path):
     assert hr_check.poll_interval == 120.0
     assert hr_check.parse_missing_rate_max == 0.3
     assert (hr_check.channel.enabled, hr_check.channel.port, hr_check.channel.token) == (True, 8899, "abc")
+    assert hr_check.channel.extension_id == "a" * 32
+    assert hr_check.channel.request_timeout == 90.0
 
 
 def test_verified_ttl_default_is_none(tmp_path):
@@ -337,7 +345,9 @@ def test_ranges_and_formats():
                     "poll_interval": "0S",
                     "parse_missing_rate_max": "1.5",
                     "channel": {
-                        "port": "99999"
+                        "port": "99999",
+                        "extension_id": "not-an-id",
+                        "request_timeout": "1S",
                     },
                 },
         }
@@ -345,9 +355,27 @@ def test_ranges_and_formats():
     text = "\n".join(errors)
     for needle in (
         "min_torrent_interval", "max_torrents_per_hour", "failure_threshold", "allow_window", "verified_ttl",
-        "index_retention", "max_download_retries", "poll_interval", "parse_missing_rate_max", "channel.port"
+        "index_retention", "max_download_retries", "poll_interval", "parse_missing_rate_max", "channel.port",
+        "channel.extension_id", "channel.request_timeout"
     ):
         assert needle in text, f"缺少 {needle} 的报错: {text}"
+
+
+def test_channel_extension_id_format():
+    """extension_id 只接受 32 位 a~p —— 形态错等于「配了也不生效」, 必须配置期拦下"""
+    assert _validate({"hr_check": {"channel": {"extension_id": ""}}}) == [], "留空合法 = 靠 token 鉴权"
+    assert _validate({"hr_check": {"channel": {"extension_id": "a" * 32}}}) == []
+    for bad in ("q" * 32, "a" * 31, "A" * 32, "1" * 32):
+        text = "\n".join(_validate({"hr_check": {"channel": {"extension_id": bad}}}))
+        assert "extension_id" in text, f"{bad} 应被拦下"
+
+
+def test_channel_request_timeout_range():
+    """request_timeout 上下限: 太短会误杀正常取数(分钟级), 太长会让持锁线程长期挂住"""
+    assert _validate({"hr_check": {"channel": {"request_timeout": "60S"}}}) == []
+    for bad in ("1S", "2H"):
+        text = "\n".join(_validate({"hr_check": {"channel": {"request_timeout": bad}}}))
+        assert "request_timeout" in text, f"{bad} 应被拦下"
 
 
 def test_allow_window_accepts_cross_midnight():
@@ -368,15 +396,29 @@ def test_impact_hr_check_field_is_l0():
     assert diff_config_impacts(Config(), Config()) == []
 
 
-def test_impact_channel_field_is_l0():
-    """channel 子段变更当前为 L0(整段一条)
+def test_impact_channel_field_is_l1():
+    """channel 子段变更 -> L1(端点监听身份变了, 必须「先停旧、等线程退出、再启新」重挂)
 
-    ❗落地本地取数通道(端点 + 取数线程)时必须把 channel / shared_dir 改为 L1 并在
-    apply_new_config 的 L1 分支补挂载动作 —— 本用例是那条改动的固定桩(改了就一起改)。
+    整段一条(不拆子字段): `hr_check.channel` 里任一字段变都意味着要重绑端口。
     """
     old, new = Config(), Config()
     new.hr_check.channel.port = 9999
-    assert [(c.path, c.level) for c in diff_config_impacts(old, new)] == [("hr_check.channel", LEVEL_L0)]
+    assert [(c.path, c.level) for c in diff_config_impacts(old, new)] == [("hr_check.channel", LEVEL_L1)]
+
+    old, new = Config(), Config()
+    new.hr_check.channel.enabled = True
+    assert [(c.path, c.level) for c in diff_config_impacts(old, new)] == [("hr_check.channel", LEVEL_L1)]
+
+    old, new = Config(), Config()
+    new.hr_check.channel.token = "given"
+    assert [(c.path, c.level) for c in diff_config_impacts(old, new)] == [("hr_check.channel", LEVEL_L1)]
+
+
+def test_impact_shared_dir_is_l1():
+    """shared_dir 变更 -> L1: 站点文件目录变了, 服务与取数线程得用新目录重建"""
+    old, new = Config(), Config()
+    new.hr_check.shared_dir = "//nas/share"
+    assert [(c.path, c.level) for c in diff_config_impacts(old, new)] == [("hr_check.shared_dir", LEVEL_L1)]
 
 
 def test_impact_site_hr_check_is_l0():
