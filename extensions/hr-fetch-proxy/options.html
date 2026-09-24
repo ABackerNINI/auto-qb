@@ -14,7 +14,7 @@
     h2 { font-size: 14px; margin: 24px 0 6px; color: #9fb0bd; font-weight: 600; }
     p.hint { margin: 0 0 10px; color: #93a0ac; font-size: 13px; }
     textarea {
-      width: 100%; box-sizing: border-box; min-height: 120px;
+      width: 100%; box-sizing: border-box; min-height: 110px;
       background: #151b21; color: #dfe6ec;
       border: 1px solid rgba(255,255,255,.16); border-radius: 4px;
       padding: 10px; font: 13px/1.6 Consolas, "Courier New", monospace;
@@ -26,7 +26,13 @@
     button:hover { background: #253039; }
     button.primary { border-color: #5eb6c2; color: #8fd6df; }
     code { color: #8fd6df; }
-    #status { margin-top: 10px; color: #93a0ac; font-size: 13px; white-space: pre-wrap; }
+    pre.example {
+      margin: 0 0 10px; padding: 8px 10px; background: #151b21;
+      border-left: 2px solid #5eb6c2; font: 12.5px/1.6 Consolas, monospace; color: #9fb0bd;
+      white-space: pre-wrap;
+    }
+    #status { margin-top: 12px; color: #93a0ac; font-size: 13px; white-space: pre-wrap; }
+    #hint { margin-top: 6px; color: #8fd6df; font-size: 12.5px; white-space: pre-wrap; }
     label.row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   </style>
 </head>
@@ -38,24 +44,31 @@
 
   <h2>① 实例端点</h2>
   <p class="hint">
-    每行一个实例, JSON 格式: <code>{"name":"本机","endpoint":"http://127.0.0.1:8788","token":"..."}</code><br>
-    token 留空时后端会生成到 <code>&lt;data_dir&gt;/hr.token</code>, 打开它复制过来即可。同机多实例端口不能重复。
+    每行一个实例。地址可以省 scheme(<code>127.0.0.1:8788</code> 也行), 保存时会归一化成
+    <code>http://127.0.0.1:8788</code>。token 从后端数据目录的 <code>hr.token</code> 整串复制。
   </p>
+  <pre class="example">{"name":"本机","endpoint":"127.0.0.1:8788","token":"把 hr.token 的内容粘到这里"}</pre>
   <textarea id="instances" spellcheck="false"></textarea>
 
   <h2>② 站点权限</h2>
   <p class="hint">
-    每行一个站点源(如 <code>https://pt.example.com/*</code>)。只申请你要核实的站点, 不给全站权限。
+    每行一个站点。<strong>可以只写域名</strong>, 保存/授权时会归一化成 Chrome 要求的匹配模式。
+    只申请你要核实的站点, 不给全站权限。
   </p>
-  <textarea id="origins" spellcheck="false" style="min-height:70px"></textarea>
+  <pre class="example">pt.btschool.club        →   https://pt.btschool.club/*
+https://pt.example.com  →   https://pt.example.com/*</pre>
+  <textarea id="origins" spellcheck="false"></textarea>
 
   <div style="margin-top:16px">
     <button class="primary" id="save">保存</button>
     <button id="grant">申请站点权限</button>
+    <button id="test">自测端点连通</button>
     <button id="poll">立即拉取一次</button>
   </div>
   <div id="status"></div>
+  <div id="hint"></div>
 
+  <script src="normalize.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
 
 ## 当前基线
 
-**1468 collected: 1467 passed + 1 skipped / Windows** —— 2026-09-24 实测(**合流后**)
+**1476 collected: 1475 passed + 1 skipped / Windows** —— 2026-09-24 实测(**合流后**)
 (本轮 **+91 条**: **HR 在线核实 M2 取数通道** —— 新增 `tests/test_hr_channel.py`(协议 / 密钥 /
 origin 与 URL 白名单) / `test_hr_queue.py`(派发式队列 + 叫停与恢复) / `test_hr_server.py`(端点路由
 与真 HTTP 往返、401/403/400/413/404、端口冲突 fail-fast) / `test_hr_fetcher_channel.py`(ChannelFetcher
@@ -17,17 +17,19 @@ origin 与 URL 白名单) / `test_hr_queue.py`(派发式队列 + 叫停与恢复
 **同日再 +2 条**由另一会话并行落地(合流前它基于 M1): WEB UI **多选右键菜单目标 = 整个选中集合**
 (`test_web.py::test_frontend_ctx_menu_multi_select_targets_selection`) + **生成物重建提示指错命令**
 (`test_memory_bank.py::test_gen_cmd_hints_name_real_tasks`) —— 两边改动有 3 个文件重叠, 按
-「移出改动 → `merge --ff-only` → 施回改动」合流(细节见 [baseline-history.md](baseline-history.md))。
-TOTAL **91%**(10217 语句 / 763 未覆盖 / 3382 分支 / 304 partial), sidefx 台账 2353 条 / **越界 0**。
+「移出改动 → `merge --ff-only` → 施回改动」合流(细节见 [baseline-history.md](baseline-history.md));
+**再 +8 条**为扩展侧守阵(`tests/test_extension_proxy.py`: 用户实报两条报错 —— 裸域名直喂
+`chrome.permissions.request` 与端点未起时的 `Failed to fetch` —— 的回归钉)。
+TOTAL **91%**(10217 语句 / 763 未覆盖 / 3382 分支 / 304 partial), sidefx 台账 2357 条 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-24 M2 合流后: 新增 6 个文件 / 91 条 + 真 socket 与线程用例)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **17.61 / 17.18 / 17.64s**
-- 串行 `-n 0 --no-cov`(对照): **30.16s**
+**当前(2026-09-24 M2 合流后 + 扩展守阵)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **17.70 / 16.39 / 17.84s**
+- 串行 `-n 0 --no-cov`(对照): **31.45s**
 
 ⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
 其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——

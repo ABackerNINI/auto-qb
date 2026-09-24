@@ -10,6 +10,9 @@
 // 解析与策略全在后端(能用 pytest 守住的那一侧), cookie 全程不离开浏览器。
 //
 // 配置在选项页(实例列表 + 站点权限), 存在 chrome.storage.local。
+// 地址归一化共用 normalize.js(选项页用 <script> 载入, 这里用 importScripts —— 同一份代码)。
+
+importScripts('normalize.js');
 
 const ALARM_NAME = 'hr-poll';
 const POLL_MINUTES = 5; // 与后端下发的 next_poll_s 同量级; 后端才是频控权威
@@ -36,7 +39,13 @@ async function noteStatus(patch) {
 }
 
 function schedule() {
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_MINUTES, delayInMinutes: 0.2 });
+  // ❗delayInMinutes 别小于 0.5 分钟: Chrome 对 alarm 有最小间隔限制(非 unpacked 时更严),
+  // 违规会直接抛错 —— 那会在安装/启动路径上变成一个看不懂的未捕获异常。
+  try {
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_MINUTES, delayInMinutes: 0.5 });
+  } catch (e) {
+    noteStatus({ text: `创建定时器失败: ${e.message || e}` });
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -88,29 +97,70 @@ function headers(inst) {
   return { 'X-Hr-Token': inst.token || '' };
 }
 
+/**
+ * 取数端点归一化(直接复用 normalize.js): 旧版本存下来的值可能是裸 host:port, 而
+ * `fetch("127.0.0.1:8788/x")` 会被当成**相对地址**解析到扩展自己的 origin, 失败时只报一句
+ * `TypeError: Failed to fetch`, 完全查不出原因。不合法(非回环/无端口)时返回空串, 由调用方报错。
+ */
+function safeEndpoint(raw) {
+  try {
+    return normalizeEndpoint(raw);
+  } catch (e) {
+    return '';
+  }
+}
+
+/** 网络层失败只会给 TypeError: Failed to fetch —— 替用户展開成可操作的排查清单 */
+function explainFetchError(url, e) {
+  const msg = String((e && e.message) || e);
+  if (msg.includes('Failed to fetch')) {
+    return (
+      `连不上 ${url}。逐条确认: ① 后端主程序在跑吗(--hr-once 是只读走查, **不会**起端点); ` +
+      '② config.yml 里 hr_check.enabled=true、至少一个站点 mode != off、且 hr_check.channel.enabled=true' +
+      '(三者缺一, 端点根本不会启动); ③ 端口对不对(后端启动日志会打「HR 取数通道端点已启动: http://127.0.0.1:<端口>」);' +
+      '④ 同机多实例端口是否撞车'
+    );
+  }
+  return msg;
+}
+
 async function pollInstance(inst) {
-  const base = String(inst.endpoint || '').replace(/\/+$/, '');
-  if (!base) return `${inst.name || '(未命名)'}: 端点为空`;
-  const res = await fetch(`${base}/api/hr/tasks`, { headers: headers(inst) });
+  const label = inst.name || inst.endpoint || '(未命名)';
+  const base = safeEndpoint(inst.endpoint);
+  if (!base) {
+    return `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式) —— 到选项页重新保存会自动纠正`;
+  }
+  const tasksUrl = `${base}/api/hr/tasks`;
+  let res;
+  try {
+    res = await fetch(tasksUrl, { headers: headers(inst) });
+  } catch (e) {
+    return `${label}: ${explainFetchError(tasksUrl, e)}`;
+  }
   if (res.status === 401) {
     // 该实例没启用取数通道 / token 不匹配 —— 属正常路径, **不重试**(后端会自己告警)
-    return `${inst.name || base}: 端点拒绝(401, token 或 channel.enabled 未开)`;
+    return `${label}: 端点拒绝(401, token 或 channel.enabled 未开)`;
   }
-  if (!res.ok) return `${inst.name || base}: 拉清单失败 HTTP ${res.status}`;
+  if (!res.ok) return `${label}: 拉清单失败 HTTP ${res.status}`;
   const data = await res.json();
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
-  if (!tasks.length) return `${inst.name || base}: 无任务`;
+  if (!tasks.length) return `${label}: 无任务`;
   const results = [];
   for (const task of tasks) {
     results.push(await runTask(task));
   }
-  const post = await fetch(`${base}/api/hr/result`, {
-    method: 'POST',
-    headers: Object.assign({ 'Content-Type': 'application/json' }, headers(inst)),
-    body: JSON.stringify({ results }),
-  });
+  let post;
+  try {
+    post = await fetch(`${base}/api/hr/result`, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers(inst)),
+      body: JSON.stringify({ results }),
+    });
+  } catch (e) {
+    return `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}`;
+  }
   const okCount = results.filter((r) => r.ok).length;
-  return `${inst.name || base}: 取 ${results.length} 条(成功 ${okCount}), 回传 HTTP ${post.status}`;
+  return `${label}: 取 ${results.length} 条(成功 ${okCount}), 回传 HTTP ${post.status}`;
 }
 
 async function runTask(task) {

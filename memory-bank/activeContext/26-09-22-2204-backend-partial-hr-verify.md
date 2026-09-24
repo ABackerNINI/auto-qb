@@ -29,6 +29,12 @@ L1 分支接上 `HrRuntime.apply`：监听身份（启用 / 端口 / 扩展 id /
 该站点期间锁死、进程退出被拖住。已内建在 `HrWorker.stop()`（先 `queue.cancel_all` 再 join），
 `HrRuntime._build` 用 `queue.resume()` 清残留标记。
 
+❗**扩展侧输入必须先归一化**（2026-09-24 用户实报两条报错后修）：裸域名直喂 `chrome.permissions.request` ⇒
+`Invalid value for origin pattern … Missing scheme separator`（未捕获拒绝）；端点没起时只有一句 `Failed to fetch`。
+现归一化只有一份 `normalize.js`（选项页 + 后台 `importScripts` 共用），选项页有**自测端点连通**；
+守阵 `tests/test_extension_proxy.py`。❗**端点要三个开关同时满足才启动**：`hr_check.enabled` + 站点 `mode != off`
++ `channel.enabled` —— 缺一就是“连不上”，文档已写在扩展 README 第一屏。
+
 ### M1 核心管道（2026-09-24 已交付，离线可做，不需要浏览器）
 
 | 模块 | 职责 |
