@@ -45,6 +45,14 @@ CHANNEL_TEXTS = {
 #: 档位顺序(展示固定顺序: A 考察中 / B 已达标 / C 未达标 / D 已免罪)
 LANE_ORDER = (LANE_SCOPE, LANE_SATISFIED, LANE_UNSATISFIED, LANE_EXEMPT)
 
+#: 档位人话(明细表等展示共用; 键 = 站点 scope 字母)
+LANE_TEXTS = {
+    LANE_SCOPE: "考察中",
+    LANE_SATISFIED: "已达标",
+    LANE_UNSATISFIED: "未达标",
+    LANE_EXEMPT: "已免罪",
+}
+
 
 @dataclass(slots=True)
 class QuotaStatus:
@@ -289,6 +297,7 @@ __all__ = [
     "build_site_statuses",
     "duration_text",
     "lane_counts",
+    "LANE_TEXTS",
     "site_status",
     "stamp_text",
 ]

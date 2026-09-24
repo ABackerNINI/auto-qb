@@ -596,7 +596,6 @@ class HrRefreshService:
         凭据、fails 是防烧配额的记账 —— 中途被杀不该丢, 丢了就是白烧配额重下。
         """
         fetched = failed = 0
-        now = self._now()
         cooldown = self.global_conf.failure_cooldown
         for tid, entry in entries.items():
             if entry.infohash_v1 or entry.infohash_v2:
@@ -607,7 +606,7 @@ class HrRefreshService:
                 continue
             fail = data.fails.get(tid)
             if fail is not None and fail.count >= self.global_conf.max_download_retries and \
-                    now - fail.last_ts < cooldown:
+                    self._now() - fail.last_ts < cooldown:
                 continue
             allowed, _why = budget.take()
             if not allowed:
@@ -624,7 +623,7 @@ class HrRefreshService:
                 failed += 1
                 fail = data.fails.setdefault(tid, HrDlFail(tid=tid))
                 fail.count += 1
-                fail.last_ts = now
+                fail.last_ts = self._now()
                 self._persist_step(session)
                 logger.warning(f"HR 站点 {adapter.site} | tid={tid} 取 .torrent 失败({fail.count} 次): {e}")
                 continue
@@ -634,13 +633,14 @@ class HrRefreshService:
                 failed += 1
                 fail = data.fails.setdefault(tid, HrDlFail(tid=tid))
                 fail.count += 1
-                fail.last_ts = now
+                fail.last_ts = self._now()
                 self._persist_step(session)
                 logger.warning(f"HR 站点 {adapter.site} | tid={tid} 返回内容不是合法 .torrent: {e}")
                 continue
             entry.infohash_v1, entry.infohash_v2 = v1, v2
+            # ts 是这一份 .torrent 自己的取回时刻 —— 一批里各条互不相同(整批共用开始时刻会让取证误读)
             data.downloaded[tid] = HrDownloaded(
-                tid=tid, ts=now, name=torrent_display_name(info) or entry.name, infohash_v1=v1, infohash_v2=v2
+                tid=tid, ts=self._now(), name=torrent_display_name(info) or entry.name, infohash_v1=v1, infohash_v2=v2
             )
             data.fails.pop(tid, None)
             fetched += 1

@@ -15,11 +15,16 @@
 - test_run_hr_status_quota_text_rolls_stale_windows: 配额展示按窗口键折算 —— 上一小时/昨天的计数
   不得标成「本小时/本天」(否则「本小时 7/12 · 还能取 12 次」自相矛盾, 2026-09-25 实报)
 - test_run_hr_status_rows_limit: 明细行数受 --hr-status-rows 限制并如实提示未显示行数
+- test_run_hr_status_rows_aligned_and_truncated: 明细列纵向对齐(CJK 按双宽计)/ 长名称截断 / 档位显示
+  实际意思 / 还需做种镜像站点形态(HH:MM:SS)/ 剩余达标时间不再显示 —— 它是「考核窗口」不是
+  「还需做种的量」, 摆出来会被读成后者(2026-09-25 实报: 9d21h 被当成还要做种 9 天)
 - test_run_hr_status_survives_broken_file: 站点文件坏掉时如实标 ⚠, 报告仍出得来
 """
 import io
 import pathlib
+import re
 import time
+import unicodedata
 
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
@@ -211,6 +216,8 @@ def test_run_hr_status_reports_data_without_fetching(tmp_path):
     assert "档位 A=1 B=1" in text
     assert "配额: 本小时" in text and "熔断: 正常" in text
     assert "已达标" in text, "站点点明已达标的那行(B 档)要看得见"
+    assert "上传量" in text and "还需做种" in text, "明细要摊出站点侧上传量与还需做种时间"
+    assert "剩余达标" not in text, "剩余达标时间是「考核窗口」不是「还需做种的量」, 不再显示"
     assert "未触发任何取数" in text
     assert site_file.read_bytes() == before, "现状报告不得改写站点文件"
 
@@ -289,6 +296,55 @@ def test_run_hr_status_rows_limit(tmp_path):
     assert "最多显示 1 行" in text
     assert "还有 2 行未显示" in text
     assert "103" not in text, "超出行数的条目不该出现在明细里(但站点文件里仍有)"
+
+
+def test_run_hr_status_rows_aligned_and_truncated(tmp_path):
+    """明细列纵向对齐(CJK 按双宽计)、长名称截断; 档位显示实际意思, 还需做种镜像站点形态"""
+    _seed(
+        tmp_path,
+        FakeFetcher(
+            pages={
+                "A":
+                    myhr_page(
+                        [
+                            row(101, "An Example Name That Is Definitely Longer Than Forty Display Cells 2026 1080p"),
+                            row(102, "短名"),
+                        ]
+                    ),
+                "B":
+                    EMPTY_TABLE_PAGE,
+                "C":
+                    EMPTY_TABLE_PAGE,
+            },
+            blobs={
+                101: torrent_blob("a.bin"),
+                102: torrent_blob("b.bin")
+            },
+        ),
+    )
+    buf = io.StringIO()
+
+    assert run_hr_status(_config(tmp_path, data_dir=tmp_path), out=buf) == 0
+
+    text = buf.getvalue()
+    assert "剩余达标" not in text
+    assert "考察中" in text, "档位要显示实际意思(A=考察中), 不是光秃秃的字母"
+    assert "01:00:00" in text, "还需做种镜像站点书写形态(HH:MM:SS)"
+    assert "0.500" in text, "分享率按站点侧 3 位小数显示"
+
+    def cells_width(s: str) -> int:
+        return sum(2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1 for ch in s)
+
+    detail = [ln for ln in text.splitlines() if re.match(r"^ {8}10[12]  考察中", ln)]
+    assert len(detail) == 2
+    starts = []
+    for ln in detail:
+        m = re.search(r"[0-9a-f]{12}$", ln.rstrip())
+        assert m, f"明细行应以 12 位 infohash 结尾: {ln!r}"
+        starts.append(cells_width(ln[:m.start()]))
+    assert len(set(starts)) == 1, "infohash 列要纵向对齐: CJK 短名行与截断长名行必须同一列位"
+    assert "…" in detail[0], "超宽名称要截断"
+    assert "短名" in detail[1]
 
 
 def test_run_hr_status_survives_broken_file(tmp_path):

@@ -2,13 +2,14 @@
 
 **Status:** Open
 **Added:** 2026-09-22
-**Updated:** 2026-09-24
+**Updated:** 2026-09-25
 **Summary:** 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 (2026-09-24/25): M1 = 新包 `src/auto_qb/hr/` 离线管道 + 配置全链路 + `--hr-once`; M2 = 本地端点
 (`/api/hr/tasks` + `/api/hr/result`, token + origin + URL 白名单) + 取数线程 (`hr/worker.py`) + 只读视图发布 +
 MV3 扩展 (`extensions/hr-fetch-proxy/`) + `channel`/`shared_dir` 转 **L1** 并接上热重载重挂;
 M3 = 三态接进 `TorrentRecord` 与四个消费点; M4 = 四类事件语文化 + 站点级状态单点与 WebUI 出口 +
-多站点隔离守阵与接入指南。
+多站点隔离守阵与接入指南。六批实报修复后 `--hr-status` 明细改版(档位人话/上传·下载·分享率·还需做种/
+CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件取回时刻。
 **只差真机走查**(M0 四项实测 + 装扩展后跑一轮真实取数) —— 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (§13 决策记录与 M0 实测清单)。
 **Topics:** backend-partial-hr-verify
 **Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html
@@ -48,6 +49,19 @@ M3 = 三态接进 `TorrentRecord` 与四个消费点; M4 = 四类事件语文化
 | M4 多站点与打磨 | **Done** | 2026-09-25: 四块一起交付 —— ①**四类事件语文化** `hr/events.py`(文案单点 + 标签前缀; **登录失效从熔断里摘出来**: 不计失败/不推熔断/只报一次并给动作, 原因仍写 `refresh.reason` 但**不碰** fetched_at 与新鲜度基准) + 通道静默告警补**受影响站点** ②**站点级状态单一点** `hr/status.py::site_status()`(CLI 与界面同一套数, 新增下次刷新/回填进度/「现在为什么不放行」) ③**WebUI 出口**: `GET /api/hr/status` + 设置页「HR 站点状态」章节(经典与 Hub 两入口 × 两套 UI) + **前端字段一致性守阵** ④**多站点**: `tests/test_hr_multisite.py` 5 条钉死「第二站点只改配置」与隔离(配额/熔断/锁/索引不串味) + `docs/configuration.md` 接入指南。全量 **1561 passed + 1 skipped** |
 
 ## 进度日志
+
+- **2026-09-25 05:01 (第七批: 取证误读修复 —— `--hr-status` 明细表改版 + 已取记录逐文件 ts)** —
+  用户拿 `hr/BTSchool.json` 取证问「是否短时间产生了大量种子下载」(分析结论: 无 —— 当天对站点仅 5 次请求
+  = 3 页 + 2 个 .torrent, 全在频控内; `downloaded[]` 是「已取 .torrent」凭据不是 qB 下载), 顺带点出两处真问题:
+  ① `hr_downloaded[].ts` **整批共用开始时刻**(同批两条微秒级相同 ⇒ 看着像瞬间批量下载, 取证误读);
+  ② `--hr-status` 明细的「剩余达标」列(9d21h)会被读成「还要做种 9 天」—— 它实际是**考核窗口**
+  (9d21h 内要完成做种要求), 真正的「还需做种时间」只有 16h57m。
+  修: ① `_fill_infohashes` 的 ts 改记**各 .torrent 自己的取回时刻**(顺带同源的 `fail.last_ts` 一并修准);
+  ② 明细表列 = tid / 档位(考察中·已达标·未达标·已免罪, 单点 `status.LANE_TEXTS`) / 上传量 / 下载量 / 分享率 /
+  还需做种(镜像站点书写形态 HH:MM:SS·「N天HH:MM:SS」) / 名称(按**显示格宽**截断 40) / infohash;
+  **剩余达标时间不再显示**; 列对齐走自写 `_dwidth/_pad`(str.format 按字符数对齐, CJK 双宽会错位)。
+  测试 +2(service 1 钉逐文件 ts / report 1 钉 CJK 对齐·截断·列改版), 全量
+  **1573 passed + 1 skipped**(TOTAL 91% / 10905 / 789 / 3582 / 327; HR 包 93%: 2782 / 143 / 766 / 91)。
 
 - **2026-09-25 03:50 (v2.7 实报修复: 增量落盘)** — 用户删 hr_check 数据重启实测:「BTSchool.lock 长期被持有 /
   后端无落盘, Ctrl+C 后才落盘」。诊断(无死锁): v2.6 修好后一轮真实跨多个扩展轮询周期(3 页 + 回填, 中间夹

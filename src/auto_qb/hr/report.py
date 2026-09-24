@@ -15,16 +15,17 @@
 """
 import logging
 import time
+import unicodedata
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..config.models import Config
 from ..infra.utils import fmt_size
 from .channel import API_TASKS, describe_token_source, token_path
 from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher
-from .model import HrSiteData
+from .model import HrEntry, HrSiteData
 from .service import DIAGNOSTIC_MAX_WAIT, HrRefreshResult, HrRefreshService
-from .status import CHANNEL_TEXTS, SiteStatus, ago_text, duration_text, site_status
+from .status import CHANNEL_TEXTS, LANE_TEXTS, SiteStatus, ago_text, site_status
 from .store import instance_id
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
     """`--hr-status` 只读现状报告: **不取数、不加锁、不写盘、不联动 qB**; 返回退出码(0 = 出报告成功)
 
     与 `--hr-once` 的分工: 走查证的是「流程能通」(它真去抓一轮), 现状证的是「**内容对不对**」——
-    把已落盘的站点文件摊开给人核对(档位分布 / 下载量 / 剩余达标 / 放行 / 配额 / 熔断),
+    把已落盘的站点文件摊开给人核对(档位分布 / 上传下载 / 分享率 / 还需做种 / 放行 / 配额 / 熔断),
     以及回答「为什么没放行」(覆盖证明成不成立、最近一次刷新的 reason)。
     """
     import sys
@@ -192,35 +193,80 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
 
 
 def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
-    """明细表(按档位·剩余达标时间排序): 给人拿站点页面核对「拉到的对不对」"""
+    """明细表(按档位·下载量排序): 给人拿站点页面核对「拉到的对不对」
+
+    列 = tid / 档位(实际意思) / 上传量 / 下载量 / 分享率 / 还需做种 / 名称 / infohash。
+    「剩余达标时间」**不进表**: 它是「距考核截止还剩多少窗口」, 不是还需做种的量 ——
+    摆在表里会被读成后者(2026-09-25 实报误读: 9d21h 被当成还要做种 9 天, 实际只需 16h57m)。
+    """
     rows = [e for e in data.index.values() if e.active]
     if not rows:
         print("    明细: (还没有数据 —— 先跑 --hr-once 或让扩展抓一轮)", file=out)
         return
     rows.sort(key=lambda e: (e.lane, -(e.downloaded_bytes or 0)))
     print(f"    明细(活跃 {len(rows)} 行, 按档位·下载量排序, 最多显示 {limit} 行):", file=out)
-    print(f"        {'tid':>9}  {'档':<2} {'下载量':>9}  {'剩余达标':<10} {'名称':<40} infohash", file=out)
-    for entry in rows[:limit]:
-        if entry.satisfied_by_site:
-            remain = "已达标"
-        elif entry.remain_seconds is None:
-            remain = "-"
-        else:
-            remain = duration_text(entry.remain_seconds)
-        name = _ellipsis(entry.name, 40)
-        ihash = entry.infohash_v1 or entry.infohash_v2
-        print(
-            f"        {entry.tid:>9}  {entry.lane:<2} {fmt_size(entry.downloaded_bytes or 0):>9}  {remain:<10} "
-            f"{name:<40} {ihash[:12] or '-'}",
-            file=out
-        )
+    headers = ("tid", "档位", "上传量", "下载量", "分享率", "还需做种", "名称", "infohash")
+    align_right = (True, False, True, True, True, True, False, False)
+    cells = [_status_row_cells(entry) for entry in rows[:limit]]
+    widths = [max([_dwidth(headers[i])] + [_dwidth(c[i]) for c in cells]) for i in range(len(headers))]
+    print("        " + "  ".join(_pad(h, w, right=r) for h, w, r in zip(headers, widths, align_right)), file=out)
+    for row in cells:
+        print("        " + "  ".join(_pad(c, w, right=r) for c, w, r in zip(row, widths, align_right)), file=out)
     if len(rows) > limit:
         print(f"        ...(还有 {len(rows) - limit} 行未显示; 站点文件里是完整数据)", file=out)
 
 
+def _status_row_cells(entry: HrEntry) -> Tuple[str, ...]:
+    """一行的各列文本(数值列右对齐由调用方按列位决定)"""
+    ihash = entry.infohash_v1 or entry.infohash_v2
+    return (
+        str(entry.tid),
+        LANE_TEXTS.get(entry.lane, entry.lane),
+        fmt_size(entry.uploaded_bytes or 0),
+        fmt_size(entry.downloaded_bytes or 0),
+        "-" if entry.ratio is None else f"{entry.ratio:.3f}",
+        _need_seed_text(entry.need_seed_seconds),
+        _ellipsis(entry.name, 40),
+        ihash[:12] or "-",
+    )
+
+
+def _need_seed_text(seconds: Optional[int]) -> str:
+    """还需做种时间, 镜像站点书写形态(「16:57:06」/「9天06:05:11」)方便逐格核对; 缺字段 = -"""
+    if seconds is None:
+        return "-"
+    days, rem = divmod(max(0, int(seconds)), 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    prefix = f"{days}天" if days else ""
+    return f"{prefix}{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _dwidth(text: str) -> int:
+    """终端显示格宽: 全角/宽字符算 2, 其余算 1 —— 混排对齐的唯一口径"""
+    return sum(2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1 for ch in text)
+
+
+def _pad(text: str, width: int, right: bool = False) -> str:
+    """按显示格宽补空格(str.format 的对齐按字符数, 遇 CJK 会错位, 不能用)"""
+    gap = max(0, width - _dwidth(text))
+    return f"{' ' * gap}{text}" if right else f"{text}{' ' * gap}"
+
+
 def _ellipsis(text: str, width: int) -> str:
+    """按显示格宽截断(超宽时保最后 1 格给 …)"""
     text = text or ""
-    return text if len(text) <= width else text[:width - 1] + "…"
+    if _dwidth(text) <= width:
+        return text
+    out: List[str] = []
+    used = 0
+    for ch in text:
+        w = 2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1
+        if used + w > width - 1:
+            break
+        out.append(ch)
+        used += w
+    return "".join(out) + "…"
 
 
 def _print_channel(config: Config, service: HrRefreshService, out) -> None:

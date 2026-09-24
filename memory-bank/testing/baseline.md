@@ -6,19 +6,12 @@
 
 ## 当前基线
 
-**1574 collected: 1571 passed + 1 skipped / Windows** —— 2026-09-25 **v2.6 通道时序修复 + v2.7 增量落盘实测**
-(本条 **+12 条(1562 → 1574)**: 不完备窗口 ≥2×poll 参数化 3 条 + 页面失败仍补下载 1 条 + 下载阶段让位不计
-tid 失败参数化 3 条 + 增量落盘(轮次中途报错已抓页面当场在文件里)1 条(`test_hr_service.py`) ·
-扩展回传登录页 ⇒ HrLoginExpired 1 条(`test_hr_fetcher_channel.py`) · Retry-After 以 cooldown 封顶 1 条
-(`test_hr_ratelimit.py`) · 配额展示按窗口键折算 1 条(`test_hr_report.py`) · 扩展 fetchBinary 登录页检测 1 条
-(`test_extension_proxy.py`, 真跑 node)。
-★红验 8 条: v2.6 七条(临时还原旧实现: 60s 窗口 / 关页面失败补下载 / 吞让位异常计 tid 失败 ⇒ 全红) +
-v2.7 一条(关增量提交 ⇒ 红), 还原后全绿。
-扩展轮询 5 分钟 → 1 分钟(background.js)与 KIND_LOGIN_PAGE 全链路见计划 v2.6/v2.7 变更行。
-上一态(M4 多站点与打磨 +20 / 对方的 HR 取数实报修复 +15 · M3 判定联动 +16 · 日志等级修复 +7)
-见 [baseline-history.md](baseline-history.md)。)
-TOTAL **91%**(10881 语句 / 788 未覆盖 / 3578 分支 / 324 partial —— 并行采样; **HR 包 93%**:
-2758 / 142 / 762 / 89), sidefx 台账并行汇总 / **越界 0**。
+**1576 collected: 1573 passed + 1 skipped / Windows** —— 2026-09-25 **v2.8 明细表改版 + 已取记录逐文件 ts 实测**
+(本条 **+2 条(1574 → 1576)**: `hr_downloaded[].ts` 改记各 .torrent 自己的取回时刻 1 条(`test_hr_service.py`) ·
+`--hr-status` 明细表 CJK 格宽对齐 / 长名截断 / 档位人话 / 还需做种镜像站点形态 / 剩余达标不显示 1 条
+(`test_hr_report.py`)。动机与列语义见计划 v2.8 变更行; 上一态见 [baseline-history.md](baseline-history.md)。)
+TOTAL **91%**(10905 语句 / 789 未覆盖 / 3582 分支 / 327 partial —— 并行采样; **HR 包 93%**:
+2782 / 143 / 766 / 91), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
 `PYTHONUTF8=` 置空后复测 **2 passed** —— 已有记载的假红, 非回归(见下条 ⚠ 与 pitfalls/testing/patching.md)。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
@@ -29,13 +22,13 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 v2.6 通道时序修复)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **19.3 / 20.0 / 21.7s**(3 次采样: test.quick ×2 + test.full ×1)
-- 串行 `-n 0 --no-cov`(对照): 本轮仅单文件抽查(≤1s), 未重测全量串行
+**当前(2026-09-25 v2.8 明细表改版)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **18.3 / 18.7 / 19.1s**(3 次采样: test.quick ×1 + test.full ×2)
 
+**上一态(2026-09-25 v2.6 通道时序修复 + v2.7 增量落盘)**: 并行 19.3 / 20.0 / 21.7s(test.quick ×2 + test.full ×1)。
 ⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景 + 登录页场景各一次) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
 
-**上一态(2026-09-25 M4 多站点与打磨)**: 并行 18.1 / 18.1 / 19.2s; 串行对照 35.25s(2026-09-24 采样)。
+**更早(2026-09-25 M4 多站点与打磨)**: 并行 18.1 / 18.1 / 19.2s; 串行对照 35.25s(2026-09-24 采样)。
 
 ⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
 其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——

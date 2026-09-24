@@ -3,6 +3,8 @@
 ## 测试计划(每个测试函数一条)
 - test_complete_refresh_builds_index_and_backfills_infohash: 完整刷新建索引 / 回填 infohash / 落已取记录 /
   覆盖证明成立 / 有效期 = now + refresh_interval
+- test_downloaded_ts_is_per_file_fetch_time: 已取记录的 ts 是各 .torrent **自己的取回时刻**
+  (整批共用开始时刻会让取证误读, 2026-09-25 实报)
 - test_complete_refresh_writes_verified_for_not_listed: 已取过 .torrent 但本次完整刷新未列出 -> 写放行记录
 - test_d_scope_is_exempt_and_verified: D 档(已免罪)条目本身不产生受管束, 但同样产生放行依据
 - test_valid_data_is_reused_without_any_request: 有效期内的数据直接复用, **零请求**(站点频率由有效期决定)
@@ -161,6 +163,28 @@ def test_complete_refresh_builds_index_and_backfills_infohash(tmp_path):
     assert data.refresh.entry_count == 3
     assert data.expires_at == clock.now + 12 * 3600.0
     assert data.fuse.failures == 0
+
+
+def test_downloaded_ts_is_per_file_fetch_time(tmp_path):
+    """已取记录的 ts 是各 .torrent 自己的取回时刻(不是整批共用一个) —— 取证时两条 ts 必须可区分"""
+    clock = Clock()
+    inner = FakeFetcher(_pages(a_rows=[row(101), row(102)]), _blobs(101, 102))
+
+    class _SlowBytes:
+        """每个 .torrent 让时钟走 125s(模拟逐个取回的耗时); 页面直通内层"""
+        def get_text(self, url: str) -> str:
+            return inner.get_text(url)
+
+        def get_bytes(self, url: str) -> bytes:
+            clock.advance(125.0)
+            return inner.get_bytes(url)
+
+    _service(tmp_path, _SlowBytes(), clock).refresh_site(SITE)
+
+    data = _read(tmp_path)
+    assert set(data.downloaded) == {101, 102}
+    assert data.downloaded[102].ts - data.downloaded[101].ts == 125.0
+    assert data.quota.last_fetch_ts == data.downloaded[102].ts, "配额「最近请求」与最后一个 .torrent 同刻"
 
 
 def test_complete_refresh_writes_verified_for_not_listed(tmp_path):
