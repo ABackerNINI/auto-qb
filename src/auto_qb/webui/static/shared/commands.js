@@ -539,6 +539,20 @@ window.AQB_COMMANDS = {
         6000
       );
     },
+    /* ---------------- CTX-03 批量右键菜单的动作入口 ----------------
+     * 多选右键时菜单升级为批量菜单(见 menu.js `_ctxMulti`), 动作**直接复用批量浮条的链路** ——
+     * 目标集合的权威仍是 selGroups / selMembers, 这里不再自己拆一遍, 免得两处口径漂移。
+     * 只多一件事: 先收起菜单 —— 菜单根节点是 `@click.stop`(见 index.html), 全局"点空白关闭"
+     * 接不到, 而 bulkAct/bulkDelete 是给浮条写的, 没有关闭菜单的责任。
+     */
+    ctxAct(action) {
+      this.menu.visible = false;
+      return this.bulkAct(action);
+    },
+    ctxDelete() {
+      this.menu.visible = false;
+      return this.bulkDelete();
+    },
     async actTorrent(action) {
       this.menu.visible = false;
       if (!this.menu.hash) return;

@@ -6,12 +6,16 @@
 
 ## 当前基线
 
-**1375 collected: 1374 passed + 1 skipped / Windows** —— 2026-09-24 实测
+**1377 collected: 1376 passed + 1 skipped / Windows** —— 2026-09-24 实测
 (本轮 **+142 条**: **HR 在线核实 M1** —— 新增 `tests/test_hr_bencode.py` / `test_hr_parse.py` /
 `test_hr_store.py` / `test_hr_ratelimit.py` / `test_hr_resolve.py` / `test_hr_service.py` /
 `test_hr_config.py` / `test_hr_report.py`, 配套共享夹具 `tests/hr_helpers.py` 与脱敏页面 fixture
 `tests/fixtures/hr/nexusphp_myhr_{page1,last}.html`; 覆盖 `src/auto_qb/hr/` 全部模块 (86–100%) +
-`config/schema/hr.py` 100%; 逐次增量的完整流水见 [baseline-history.md](baseline-history.md))。
+`config/schema/hr.py` 100%; 逐次增量的完整流水见 [baseline-history.md](baseline-history.md));
+同日再 **+2 条**(合流后实测 1375 → 1377): WEB UI **多选右键菜单目标 = 整个选中集合**
+(`test_web.py::test_frontend_ctx_menu_multi_select_targets_selection`) + **生成物重建提示指错命令**
+(`test_memory_bank.py::test_gen_cmd_hints_name_real_tasks`), 两条均两处红验过;
+详见 [baseline-history.md](baseline-history.md)。
 TOTAL **91%**(9278 语句 / 727 未覆盖 / 3128 分支 / 277 partial), sidefx 台账 2212 条 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。

@@ -82,6 +82,7 @@
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
+- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
@@ -1290,6 +1291,73 @@ def test_frontend_statusbar_speed_reads_server_totals():
             f"⇒ 状态栏恒为 0 或停在旧值(issue 26-09-20-1646)"
         )
         assert "status.totals" in body, f"{name} 必须读服务端恒回传的 status.totals: {body.strip()}"
+
+
+def test_frontend_ctx_menu_multi_select_targets_selection():
+    """多选右键菜单必须作用于**整个选中集合**, 不是被点的那一行(CTX-03)
+
+    用户报: "多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。
+    根因: 四个 open*Menu 只记 anchor(key/hash/episode), 动作端点直接拿它拼 URL ⇒ 无论选了多少,
+    都只动被点的那一个。而批量浮条早已有正确实现(bulkAct/bulkDelete 走 _bulkTargets)。
+
+    修法是让菜单在"被点的行属于选中集合"时升级为批量菜单, 动作复用批量浮条的链路。这条守阵
+    钉住三处**成对**关系(任一处漏改都会静默退化回单目标, 且 pytest/`node --check` 都看不见):
+      ① 四个 open*Menu 必须各自写入 `multi:` —— 漏一处, 那条路径的多选右键就仍是单目标;
+      ② 两套 UI 的批量分支必须**成对存在**且逐项一致(双 UI 是两条独立模板, 只改一边 = 另一边
+         用户看不到批量菜单), 且只能调 ctxAct/ctxDelete;
+      ③ ctxAct/ctxDelete 必须**复用** bulkAct/bulkDelete —— 自己再拆一遍目标集合就会与批量浮条
+         的口径漂移(虚拟行/组展开/失效目标跳过这三条语义都在 _bulkTargets 里)。
+    """
+    # ① 四个菜单入口都必须写 multi
+    openers = {
+        "shared/menu.js": ["openMenu(event, group)", "openMemberMenu(event, member)"],
+        "shared/shows.js": ["openShowEpMenu(event, show, ep)", "openShowMenu(event, show)"],
+    }
+    for rel, fns in openers.items():
+        text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+        for fn in fns:
+            m = re.search(rf"\n    {re.escape(fn)} \{{(.*?)\n    \}},", text, re.S)
+            assert m, f"{rel} 找不到 {fn}(改名或挪走了? 同步本守阵)"
+            body = m.group(1)
+            assert "_ctxMulti(" in body, (
+                f"{rel} 的 {fn} 没有调 _ctxMulti 计算 menu.multi —— 该路径的多选右键会退化成"
+                f"只作用于被点的那一行(CTX-03)"
+            )
+            assert "multi:" in body, f"{rel} 的 {fn} 没把 multi 写进 this.menu —— 模板读不到, 批量分支永不渲染"
+
+    # ② 两套 UI 的批量分支成对且逐项一致
+    branches = {}
+    for ui in ("atlas", "prism"):
+        text = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        m = re.search(r'<template v-if="menu\.multi">(.*?)</template>', text, re.S)
+        assert m, (
+            f"{ui}/index.html 的右键菜单没有 v-if=\"menu.multi\" 批量分支 —— "
+            f"多选右键拿不到批量动作(双 UI 必须成对改, 另一套有而它没有 = 半边用户没有该功能)"
+        )
+        branch = m.group(1)
+        # 归一空白后逐项比对: 两套 UI 的批量菜单是同一套语义, 不该各自演化
+        branches[ui] = re.sub(r"\s+", " ", branch).strip()
+        for call in ("ctxAct('resume')", "ctxAct('pause')", "ctxAct('reannounce')", "ctxAct('recheck')", "ctxDelete()"):
+            assert call in branch, f"{ui}/index.html 批量分支缺少 {call}"
+        assert "actTorrent(" not in branch and "actEpisode(" not in branch, (
+            f"{ui}/index.html 批量分支里出现了单目标/单集动作 —— 批量菜单必须整份走 ctxAct/ctxDelete"
+        )
+    assert branches["atlas"] == branches["prism"], (
+        "两套 UI 的批量右键菜单不一致(星图 vs 棱镜)—— 双 UI 必须成对改; 差异: "
+        f"atlas={branches['atlas'][:120]!r} / prism={branches['prism'][:120]!r}"
+    )
+
+    # ③ ctxAct/ctxDelete 复用批量浮条链路, 且先收起菜单(菜单根节点 @click.stop, 全局点空白关不掉)
+    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    for name, delegate in (("ctxAct(action)", "bulkAct(action)"), ("ctxDelete()", "bulkDelete()")):
+        m = re.search(rf"\n    {re.escape(name)} \{{(.*?)\n    \}},", cmd, re.S)
+        assert m, f"shared/commands.js 找不到 {name}(改名或挪走了? 同步本守阵)"
+        body = m.group(1)
+        assert delegate in body, (
+            f"{name} 必须复用批量浮条的 {delegate} —— 自己再拆一遍目标集合会与 _bulkTargets 的"
+            f"口径漂移(虚拟行/组展开/失效目标跳过), CTX-03"
+        )
+        assert "this.menu.visible = false" in body, f"{name} 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)"
 
 
 def test_api_group_commands_enqueue(web_env):

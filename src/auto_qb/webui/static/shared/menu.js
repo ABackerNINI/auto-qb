@@ -110,6 +110,36 @@ window.AQB_MENU = {
     _clearCtxSource() {
       document.querySelectorAll(".ctx-src").forEach((el) => el.classList.remove("ctx-src"));
     },
+    /* ---------------- CTX-03 多选右键: 目标升级为整个选中集合 ----------------
+     * 症状: 选中 N 行后右键, 菜单动作只作用于**被点的那一行**(用户报"多选时右键菜单应该对
+     * 所有选择的种子生效, 当前仅对鼠标指向的种子生效")。
+     * 语义: 被点的这一行**属于当前选中集合**时, 菜单升级为批量菜单(动作走 bulkAct / bulkDelete,
+     * 与批量浮条**同一条链路**); 不属于时保持原来的单种子/整组/整集菜单。
+     *
+     * ❗判据是"选中集合是否**等同于**这一行自身的范围", 不是"选中数 > 1":
+     *   选中 1 个辅种 + 右键它自己       -> 等同   -> 普通组菜单("暂停整组"才是对的文案)
+     *   选中 1 个辅种 + 右键它的成员行   -> 不等同 -> 批量菜单(否则文案说"该种子"、实际动整组)
+     * 成员/集/剧行按 **some** 判"属于": 行可能只是**半选**(由组选择派生命中的, 见 selHashSet),
+     * 那时它仍应被视为"在选中集合里", 否则用户右键自己刚选中的行却拿到单行菜单。
+     */
+    _ctxScopeKey(scope) {
+      const g = [...(scope.groupKeys || [])].sort();
+      const h = [...(scope.hashes || [])].sort();
+      return g.join("\u0001") + "\u0002" + h.join("\u0001");
+    },
+    _ctxMulti(anchorScope) {
+      const sel = this._bulkTargets();   // 选中集合拆解(组 key + 成员 hash; 与批量浮条同口径)
+      if (!sel.groupKeys.length && !sel.memberHashes.length) return false;
+      const gk = anchorScope.groupKeys || [];
+      const hs = anchorScope.hashes || [];
+      const inSel = gk.length
+        ? gk.every((k) => this.selGroups.includes(k))
+        : hs.some((h) => this.selHashSet.has(h));
+      if (!inSel) return false;
+      // 集合与该行范围一致 = 只选中了它自己 -> 仍是单目标菜单(文案/项目集不该变成批量)
+      return this._ctxScopeKey({ groupKeys: sel.groupKeys, hashes: sel.memberHashes }) !==
+        this._ctxScopeKey({ groupKeys: gk, hashes: hs });
+    },
     openMenu(event, group) {
       event.preventDefault();
       this._markCtxSource(event);
@@ -119,13 +149,25 @@ window.AQB_MENU = {
         return;
       }
       // 仅弹菜单, **不展开明细**(用户需要看明细时自己左键点行)
-      this.menu = { visible: true, ...this._menuPos(event), key: group.key, hash: null };
+      this.menu = {
+        visible: true,
+        ...this._menuPos(event),
+        key: group.key,
+        hash: null,
+        multi: this._ctxMulti({ groupKeys: [group.key] }),
+      };
     },
     openMemberMenu(event, member) {
       event.preventDefault();
       event.stopPropagation();
       this._markCtxSource(event);
-      this.menu = { visible: true, ...this._menuPos(event), key: null, hash: member.hash };
+      this.menu = {
+        visible: true,
+        ...this._menuPos(event),
+        key: null,
+        hash: member.hash,
+        multi: this._ctxMulti({ hashes: [member.hash] }),
+      };
     },
     /* ---------------- FX-15 次级菜单(flyout) ----------------
      * 入口按"PT 日常高频"与"qB 通用能力"分层: 一级只放高频动作, 队列/TMM/超级做种/

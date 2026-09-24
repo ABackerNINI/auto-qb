@@ -24,7 +24,7 @@
 - `scripts/ui_harness.py` —— 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
   (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`)。
 - `scripts/ui_smoke.cjs` —— Playwright 跑 **prism / atlas 双 UI** 断言。当前规模:
-  **72 项 0 失败**(ok 模式; 单 UI 各 36)/ **72 项 0 失败**(`--expect-cmd error`, 回滚路径)/
+  **84 项 0 失败**(ok 模式; 单 UI 各 42)/ **84 项 0 失败**(`--expect-cmd error`, 回滚路径)/
   **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4)。
 - 典型用法: 起桩服务 → 跑 `ui_smoke.cjs` → 关服务(**完整命令与 `NODE_PATH` 见 [browser-env.md](browser-env.md)**)。
 - 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、滚动总高与末行可达、
@@ -36,6 +36,10 @@
 - "轮询间隔按种子量分档"、"滚动到底不塌陷"。
 - **P1-2 占位总高 == 全量渲染**(同一帧序列里对照开关两侧 —— 见下方"读数时机"坑)。
 - **P0-4 批量合单数请求**。
+- **CTX-03 多选右键 = 对选中集合生效**(三视图各一条 + 种子页两条): 选中行右键出"批量暂停"、
+  **未选中行右键仍是单目标菜单**(负向对照)、点批量只发 **1** 条 bulk(0 条逐目标)、乐观覆盖整个集合;
+  追剧页 Ctrl 选两集 / 辅种页 Ctrl 选两组后右键均出批量菜单。判据刻意分两层 ——
+  只验文案会漏掉"文案对、动作错"这个最容易犯的形态, 故文案与**请求计数**两条都要。
 - **P0-3 整组 / 整集 / 整剧乐观**(组行 / 集行 / **剧行**各自的 `is-pending` 与状态色翻转 ——
   剧行是 [26-09-19-1959](../issues/26-09-19-1959-bug-webui-show-row-no-pending.html) 补的第三层:
   剧行默认折叠、集行不渲染, **只有剧行能显示"在飞"**)。

@@ -55,12 +55,15 @@ window.AQB_SHOWS = {
       event.preventDefault();
       event.stopPropagation();
       this._markCtxSource(event);
+      const hashes = this.memberHashesOf(ep.members);
       this.menu = {
         visible: true,
         ...this._menuPos(event),
         key: null,
         hash: null,
-        episode: { hashes: this.memberHashesOf(ep.members), label: `${show.name} ${this.epLabel(ep.key)}`, scope: "ep" },
+        episode: { hashes, label: `${show.name} ${this.epLabel(ep.key)}`, scope: "ep" },
+        // CTX-03: 该集属于选中集合且集合更大时升级为批量菜单(见 menu.js _ctxMulti)
+        multi: this._ctxMulti({ hashes }),
       };
     },
     /* FX-13: 整剧右键菜单。追剧页的"剧"这一层此前只有左键展开、没有 @contextmenu ——
@@ -83,7 +86,15 @@ window.AQB_SHOWS = {
         }
       }
       if (!hashes.length) return;
-      this.menu = { visible: true, ...this._menuPos(event), key: null, hash: null, episode: { hashes, label: show.name, scope: "show" } };
+      this.menu = {
+        visible: true,
+        ...this._menuPos(event),
+        key: null,
+        hash: null,
+        episode: { hashes, label: show.name, scope: "show" },
+        // CTX-03: 该剧属于选中集合且集合更大时升级为批量菜单(见 menu.js _ctxMulti)
+        multi: this._ctxMulti({ hashes }),
+      };
     },
     async actEpisode(action) {
       this.menu.visible = false;

@@ -32,6 +32,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
 - test_kb_scripts_import_cleanly: skill 的 5 个脚本都能 import
+- test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
 """
 
 from __future__ import annotations
@@ -381,3 +382,55 @@ def test_kb_scripts_import_cleanly() -> None:
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
         __import__(name)
+
+
+def test_gen_cmd_hints_name_real_tasks() -> None:
+    """生成物的"怎么重建"提示必须指向**真的能重建它**的命令(2026-09-24 实测缺陷)
+
+    原先 `_common.gen_cmd()` 忽略传入的脚本名, 一律返回 `commands run kb.index`, 而 `kb.index`
+    当时只跑 gen_tasks_index + gen_kb_index。于是 `_doc-map.md` / `plans|reports/_index.md` 的报错
+    文案("请运行 commands run kb.index")**照做一遍仍然是红的** —— 而提交闸门早就把这两条的
+    `--check` 挂上了, 形成"闸门能红、却没有一条能修的命令"。
+
+    三条断言(前两条都拦不住这个缺陷, 只有 ③ 判的是"跑那条命令真的会重建/校验它"):
+      ① 每个 `gen_cmd(root, "<脚本>")` 调用点的脚本名都在表里(新生成脚本忘了登记 ⇒ 退回默认值);
+      ② 表里每个 task id 在 `.commands/` 里真实存在(任务改名/删除后提示不能变成死指针);
+      ③ **提示说跑 `kb.index` 的脚本必须真的出现在 `kb.index` 的 run 列表里**(`kb.check` 同理)
+         —— 这同时钉住了"`kb.index` 的覆盖面 ⊇ 提交闸门判红的生成物集合"这条设计口径。
+    """
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    table = _common.GEN_CMD_BY_SCRIPT
+
+    # ① 调用点全覆盖
+    call_sites: set[str] = set()
+    for path in sorted(SKILL_SCRIPTS.glob("*.py")):
+        call_sites |= set(re.findall(r'gen_cmd\(\s*root\s*,\s*"([^"]+)"\s*\)', path.read_text(encoding="utf-8")))
+    assert call_sites, "一个 gen_cmd 调用点都没扫到(写法变了? 同步本守阵)"
+    missing = sorted(call_sites - set(table))
+    assert not missing, (f"这些脚本调了 gen_cmd 却不在 GEN_CMD_BY_SCRIPT 表里: {missing} —— "
+                         "会退回默认值 `kb.index`, 而它未必能重建该脚本的产出")
+
+    def task_body(task_id: str) -> str:
+        pack, _, name = task_id.partition(".")
+        cfg = ROOT / ".commands" / pack / "config.toml"
+        assert cfg.is_file(), f"提示里的包不存在: {cfg.relative_to(ROOT)}"
+        text = cfg.read_text(encoding="utf-8")
+        m = re.search(rf'^\[tasks\."{re.escape(task_id)}"\]\n(.*?)(?=^\[|\Z)', text, re.S | re.M)
+        assert m, f"{cfg.relative_to(ROOT)} 里找不到任务 `{task_id}` —— 表里的提示是死指针"
+        return m.group(1)
+
+    for script, hint in sorted(table.items()):
+        parts = hint.split()
+        assert parts[:2] == ["commands", "run"] and len(parts) >= 3, f"{script} 的提示不是 `commands run <task>`: {hint!r}"
+        task_id = parts[2]
+        body = task_body(task_id)  # ② 任务真实存在
+        if task_id == "kb.index":  # ③ 核心: 真的会重建它
+            assert script in body, (
+                f"{script} 的提示说跑 `{task_id}`, 但它的 run 列表里没有 {script} —— "
+                f"用户照做一遍仍然是红的(2026-09-24 实测的缺陷形态)"
+            )
+        elif task_id == "kb.check":
+            assert f"{script} --check" in body, (f"{script} 的提示说跑 `{task_id}`, 但它的 run 列表里没有 `{script} --check`")

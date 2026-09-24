@@ -727,6 +727,91 @@ async function smokeUi(browser, ui) {
     }
 
     /*
+     * CTX-03 多选右键 = 对**整个选中集合**生效。
+     * 用户报: "多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。
+     * 判据两条, 缺一不可 —— 只验文案会漏掉"文案对、动作错"这个最容易犯的形态:
+     *   ① 菜单文案: 右键**选中行** -> 出现"批量暂停"; 右键**未选中行** -> 仍是"暂停该种子"。
+     *   ② 实际投递: 点"批量暂停" -> 恰好 1 条 POST /api/torrents/bulk、0 条逐目标 pause。
+     *      修之前这里会是 5 条逐目标 pause(菜单只认被点的那一行), 断言即红。
+     * 这里刻意复用批量浮条的链路(ctxAct -> bulkAct), 目标集合权威仍是 selMembers。
+     */
+    {
+      const N = 5;
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(300);
+      const picked = await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm.selGroups = [];
+        vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash);
+        return vm.selMembers.length;
+      })()`);
+      const selHashes = await readInst(page, "vm.selMembers.slice()");
+      // 行是窗口化的: 只在**已渲染**的行里挑锚点(选中行 / 未选中行各一)
+      let selRow = null, otherRow = null;
+      for (const r of await page.$$(".torrent-row")) {
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (!selHashes.includes(h)) { if (!otherRow) otherRow = r; continue; }
+        if (!selRow) selRow = r;
+      }
+      const menuTexts = async () => {
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        return page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+      };
+      let selTexts = [], otherTexts = [];
+      if (selRow) {
+        await selRow.click({ button: "right" });
+        selTexts = await menuTexts();
+      }
+      if (otherRow) {
+        await otherRow.click({ button: "right" });   // 再右键会整份替换菜单, 不必先关
+        otherTexts = await menuTexts();
+      }
+      add(ui, "CTX-03 选中行右键 -> 批量菜单",
+        picked === N && selTexts.some((t) => t.includes("批量暂停")),
+        `选中 ${picked} 行 / 菜单: ${selTexts.slice(0, 6).join(" / ") || "(未打开)"}`);
+      add(ui, "CTX-03 未选中行右键 -> 仍是单目标菜单",
+        !!otherRow && otherTexts.some((t) => t.includes("暂停该种子")) && !otherTexts.some((t) => t.includes("批量")),
+        `菜单: ${otherTexts.slice(0, 6).join(" / ") || "(未打开)"}`);
+
+      // ② 实际投递: 点"批量暂停" -> 1 条 bulk / 0 条逐目标
+      const hits = { bulk: 0, single: 0 };
+      const onReq = (r) => {
+        const u = r.url();
+        if (u.includes("/api/torrents/bulk")) hits.bulk++;
+        else if (/\/api\/torrents\/[^/?]+\/pause(\?|$)/.test(u)) hits.single++;
+      };
+      page.on("request", onReq);
+      await armPending(page, ".torrent-row.is-pending, .group-row.is-pending");   // 点击**之前**装好
+      let ctxClicked = false;
+      if (selRow) {
+        await selRow.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        for (const h of await page.$$(".ctx-item")) {
+          const t = ((await h.textContent()) || "").trim();
+          if (t.includes("批量暂停")) { await armClick(page, h); await h.click(); ctxClicked = true; break; }
+        }
+      }
+      await page.waitForTimeout(1500);
+      page.off("request", onReq);
+      add(ui, "CTX-03 批量菜单动作合单为一条 bulk",
+        ctxClicked && hits.bulk === 1 && hits.single === 0,
+        `bulk ${hits.bulk} 次 / 逐目标 ${hits.single} 次`);
+      /* 乐观覆盖: error 模式回执是瞬间的, 乐观窗口在采样前就关了 ⇒ 按模式分流, 免得恒红(见 P0-4 的教训) */
+      const p = await readPending(page);
+      if (EXPECT_CMD === "error") {
+        const pendRows = await page.$$eval(".torrent-row.is-pending, .group-row.is-pending", (n) => n.length);
+        const pend = await readInst(page, "Object.keys(vm.pendingOps || {}).length");
+        add(ui, "CTX-03 批量菜单失败后回滚干净", pend === 0 && pendRows === 0,
+          `pendingOps ${pend} / 残留行 ${pendRows} / 目标 ${picked}`);
+      } else {
+        add(ui, "CTX-03 批量乐观覆盖整个选中集合", p.peak >= Math.min(picked, N),
+          `峰值 pendingOps ${p.peak}(@${p.peakT === null ? "-" : p.peakT + "ms"}) / 选中 ${picked}`);
+      }
+      await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
+      await page.waitForTimeout(400);
+    }
+
+    /*
      * P0-3 整组乐观(BUG-3): 整组暂停后**组行本身**必须立刻可见 —— 颜色随成员 kind 重算 + is-pending。
      * 只补成员 hash 不够: 组行的状态色取自 g.status.primary(不展开明细时看不到成员行),
      * 而组行此前也没有 is-pending 绑定 ⇒ 整组操作在感知层完全没有反馈。
@@ -940,10 +1025,57 @@ async function smokeUi(browser, ui) {
       }
     }
 
+    /*
+     * CTX-03 追剧视图: Ctrl 选中**两集** -> 右键其中一集 = 批量菜单(而不是"暂停整集")。
+     * 这里只判文案 —— "动作真的作用于整个集合"已由种子页那条(数请求)证明;
+     * 本条的职责是证明 menu.multi 在**三条视图**上都接上了, 不是只在种子页生效
+     * (三视图各有独立的 open*Menu: openMenu / openMemberMenu / openShowMenu / openShowEpMenu)。
+     */
+    {
+      const ep2 = await page.$$(".group-row.ep-row");
+      let texts = [];
+      if (ep2.length >= 2) {
+        await ep2[0].click({ modifiers: ["Control"] });   // 真实修饰键路径(selection.js 的 _toggleUnit)
+        await ep2[1].click({ modifiers: ["Control"] });
+        await ep2[0].click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        texts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+      }
+      add(ui, "CTX-03 追剧视图: 选中多集右键 -> 批量菜单",
+        ep2.length >= 2 && texts.some((t) => t.includes("批量暂停")) && !texts.some((t) => t.includes("暂停整集")),
+        `集行 ${ep2.length} / 菜单: ${texts.slice(0, 5).join(" / ") || "(未打开)"}`);
+      await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
+      await page.waitForTimeout(300);
+    }
+
     await nav[0].click();  // 回分组
     await page.waitForTimeout(600);
     const backRows = await page.$$eval(".group-row", (n) => n.length);
     add(ui, "切回分组视图有数据", backRows > 0, `${backRows} 行`);
+
+    /*
+     * CTX-03 辅种视图: Ctrl 选中**两个辅种组** -> 右键其中一个 = 批量菜单(而不是"暂停整组")。
+     * 负向对照由种子页那条承担(未选中行 -> 仍是单目标菜单), 这里只管"多选时升级"。
+     */
+    {
+      const g2 = await page.$$('.group-row[data-table="group"]');
+      let texts = [];
+      if (g2.length >= 2) {
+        await g2[0].click({ modifiers: ["Control"] });    // 真实修饰键路径(toggleGroupSel)
+        await g2[1].click({ modifiers: ["Control"] });
+        const selN = await readInst(page, "vm.selGroups.length");
+        await g2[0].click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        texts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+        add(ui, "CTX-03 辅种视图: 选中多组右键 -> 批量菜单",
+          selN === 2 && texts.some((t) => t.includes("批量暂停")) && !texts.some((t) => t.includes("暂停整组")),
+          `选中 ${selN} 组 / 菜单: ${texts.slice(0, 5).join(" / ") || "(未打开)"}`);
+      } else {
+        add(ui, "CTX-03 辅种视图: 选中多组右键 -> 批量菜单", false, `组行只有 ${g2.length} 行`);
+      }
+      await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
+      await page.waitForTimeout(300);
+    }
 
     /*
      * BUG-8: 刷新后停在追剧页**不能空白**。视图偏好是持久化的(localStorage), 而 P1-1 的

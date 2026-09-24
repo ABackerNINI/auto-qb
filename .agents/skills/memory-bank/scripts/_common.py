@@ -165,14 +165,35 @@ def char_count(path: Path) -> int:
     return len(path.read_bytes().decode("utf-8"))
 
 
+# 各生成脚本对应的**重建/校验**命令(task id 单点定义在 `.commands/kb/` 包里)。
+# ❗必须写"真的能重建 / 校验这个脚本产出"的那条: 2026-09-24 实测 —— 原先无论传什么都返回
+#   `kb.index`, 而 `kb.index` 当时只跑 gen_tasks_index + gen_kb_index ⇒ `_doc-map.md` /
+#   `plans|reports/_index.md` 的报错文案把用户指向一条**跑完仍然红**的命令(而提交闸门
+#   早就把这两条 `--check` 挂上了, 于是"闸门能红、却没有一条能修的命令")。
+# 守阵: `tests/test_memory_bank.py::test_gen_cmd_hints_name_real_tasks` —— 钉住
+#   "每个调用点的脚本都在表里" + "每个 task id 在 .commands/ 里真实存在"。
+GEN_CMD_BY_SCRIPT = {
+    "gen_tasks_index.py": "commands run kb.index",
+    "gen_kb_index.py": "commands run kb.index",
+    "gen_doc_map.py": "commands run kb.index",
+    "gen_docs_index.py": "commands run kb.index",
+    # 只校验不写文件的脚本 —— 它的"重跑"是校验命令, 不是重建命令
+    "gen_active_recent.py": "commands run kb.active --check",
+}
+
+
 def gen_cmd(root: Path, script: str) -> str:
-    """生成物头部里该写的**重建方式** —— 写 task id, 不写命令本体。
+    """生成物头部 / 报错文案里该写的**重建方式** —— 写 task id, 不写命令本体。
 
     命令只有一处定义(在 `.commands/kb/` 这个包里); 生成物、文档里再抄一份就是副本,
     而"哪一份才是生效的那份"并不写在命令旁边 —— 见 `scripts/check_command_drift.py`
     (那条机检会把手抄形态直接判红)。
+
+    ❗按脚本查表(`GEN_CMD_BY_SCRIPT`), **不要**退化成"所有脚本返回同一句":
+    脚本产出不同 ⇒ 修它的命令就不同, 指错命令比不给提示更费时间(照做一遍还是红的)。
+    未知脚本退回 `kb.index`(它是"重建全部生成物"的总入口, 至少不会指到一条无用的命令)。
     """
-    return "commands run kb.index"
+    return GEN_CMD_BY_SCRIPT.get(script, "commands run kb.index")
 
 
 # --------------------------------------------------------------------------- 元数据
@@ -220,8 +241,10 @@ def role_of(rel: str) -> str:
     rel = rel.replace("\\", "/")
     if rel == "AGENTS.md":
         return "agents"
-    if rel in ("memory-bank/tasks/_index.md", "memory-bank/issues/_index.md", "memory-bank/plans/_index.md",
-               "memory-bank/reports/_index.md", "memory-bank/_doc-map.md"):
+    if rel in (
+        "memory-bank/tasks/_index.md", "memory-bank/issues/_index.md", "memory-bank/plans/_index.md",
+        "memory-bank/reports/_index.md", "memory-bank/_doc-map.md"
+    ):
         return "index-auto"
     if rel.endswith(INDEX_NAME) or rel == "memory-bank/README.md":
         return "index"

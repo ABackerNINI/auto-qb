@@ -844,7 +844,30 @@
              · FX-14: "打开目标文件夹"走后端 /api/open-path(路径由服务端从自己的快照派生, 前端不传路径)。 -->
         <transition name="pop">
         <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
-          <template v-if="menu.episode">
+          <!-- CTX-03 批量菜单: 被右键的行属于当前选中集合时, 菜单升级为对**整个选中集合**生效
+               (与批量浮条同一套动作与链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
+               这里刻意只放"批量有意义"的动作 —— 详细信息/限速/重命名/导出/复制等单目标项
+               不出现在批量菜单里(它们对 N 个目标没有明确语义); 要单目标操作请不选中任何行再右键。 -->
+          <template v-if="menu.multi">
+            <div class="ctx-item" @click="ctxAct('resume')">
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>批量开始
+            </div>
+            <div class="ctx-item" @click="ctxAct('pause')">
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>批量暂停
+            </div>
+            <div class="ctx-item" @click="ctxAct('reannounce')">
+              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="ctxAct('recheck')">
+              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="ctxDelete()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>批量删除…
+            </div>
+          </template>
+          <template v-else-if="menu.episode">
             <div class="ctx-item" @click="actEpisode('resume')">
               <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>{{ menu.episode.scope === 'show' ? '开始整剧' : '开始整集' }}
             </div>

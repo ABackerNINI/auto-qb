@@ -449,7 +449,7 @@ const app = createApp({
       // FX-25: 拖动虚影(跟随光标的列名胶囊)。刻意不用 HTML5 draggable 的原生拖影 —— 它会与
       // "点击排序"与"列宽拖拽"互相干扰; 自绘虚影与现有 mousedown 阈值手势完全解耦。
       colGhost: null,                     // {label, x, y} | null
-      menu: { visible: false, x: 0, y: 0, key: null, hash: null },
+      menu: { visible: false, x: 0, y: 0, key: null, hash: null, multi: false },
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— "高级能力"/"复制" 两个子面板
       subMenu: "",        // "" | "advanced" | "copy"
       subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
