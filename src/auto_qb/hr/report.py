@@ -16,23 +16,15 @@
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from ..config.models import Config
 from ..infra.utils import fmt_size
 from .channel import API_TASKS, describe_token_source, token_path
 from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher
-from .model import (
-    CHANNEL_OK,
-    CHANNEL_SILENT,
-    LANE_EXEMPT,
-    LANE_SATISFIED,
-    LANE_SCOPE,
-    LANE_UNSATISFIED,
-    HrSiteData,
-)
-from .ratelimit import fuse_active, quota_left
+from .model import HrSiteData
 from .service import DIAGNOSTIC_MAX_WAIT, HrRefreshResult, HrRefreshService
+from .status import CHANNEL_TEXTS, SiteStatus, ago_text, duration_text, site_status
 from .store import instance_id
 
 logger = logging.getLogger(__name__)
@@ -154,62 +146,48 @@ def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
     for site in enabled:
         data, err = service.store(site).read_unlocked()
         view = service.build_view_for(site, data)
-        _print_status_site(site, data, view, service, err, now, limit, out)
+        # 字段口径单点在 status.site_status(): 与 WebUI 看到的是同一套数(否则会出现
+        # 「报告说待回填 2 条、界面说 3 条」这种没法排查的偏差)
+        _print_status_site(site_status(site, data, view, service, now, read_error=err or ""), data, limit, out)
     print("-" * 92, file=out)
     print("提示: 以上全部读自**已落盘数据**(原子替换, 读到的是完整的一份), 未触发任何取数。", file=out)
     print("      要看「现在能不能取到数」跑 --hr-once; 要在线核实请让浏览器扩展保持开启。", file=out)
     return 0
 
 
-def _print_status_site(
-    site: str, data: HrSiteData, view, service: HrRefreshService, err, now: float, limit: int, out
-) -> None:
-    """单站点现状段: 刷新 / 数据 / 配额 / 熔断 / 明细"""
-    conf = service.site_confs[site]
-    limits = service.limits_for(site)
-    channel = {CHANNEL_OK: "正常", CHANNEL_SILENT: "静默(长期没有成功刷新)"}.get(view.channel_state, "未启用")
+def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> None:
+    """单站点现状段: 刷新 / 数据 / 配额 / 熔断 / 明细(字段全来自 `status.site_status`)"""
     print(
-        f"[{site}] 模式={conf.mode}  覆盖证明={'成立' if view.complete else '不成立'}  通道={channel}  "
-        f"数据版本={data.revision}",
+        f"[{st.site}] 模式={st.mode}  覆盖证明={'成立' if st.complete else '不成立'}  通道={st.channel_text}  "
+        f"数据版本={st.revision}",
         file=out
     )
-    print(f"    文件: {service.site_path(site)}" + (f"  ⚠ {err}" if err else ""), file=out)
-    print(
-        f"    刷新: 上次取数 {_ago(data.fetched_at, now)}  最近完整刷新 {_ago(data.refresh.last_success_ts, now)}  "
-        f"本次数据有效期至 {_stamp(data.expires_at) if data.expires_at > 0 else '-'}",
-        file=out
-    )
+    print(f"    文件: {st.file_path}" + (f"  ⚠ {st.read_error}" if st.read_error else ""), file=out)
+    print(f"    刷新: {st.fresh_text}", file=out)
     page = (
-        f"档位 {','.join(data.refresh.scopes_done) or '-'}  页数 {data.refresh.pages_fetched}  "
-        f"抓到 {data.refresh.entry_count} 行  缺字段 {data.refresh.missing_field_rate:.0%}"
+        f"档位 {','.join(st.scopes_done) or '-'}  页数 {st.pages_fetched}  "
+        f"抓到 {st.entry_count} 行  缺字段 {st.missing_field_rate:.0%}"
     )
-    print(f"    {page}  上次写入者 {data.writer_instance or '-'}(心跳 {_ago(data.writer_heartbeat, now)})", file=out)
-    if data.refresh.reason:
-        print(f"    最近一次刷新不完备的原因: {data.refresh.reason}", file=out)
+    print(f"    {page}  上次写入者 {st.writer_instance or '-'}(心跳 {ago_text(st.writer_heartbeat, st.now)})", file=out)
+    if st.reason:
+        print(f"    最近一次刷新不完备的原因: {st.reason}", file=out)
+    if st.blocking:
+        print(f"    现在为什么不放行: {st.blocking}", file=out)
 
-    lanes = _lane_counts(data)
-    pending = sum(1 for e in data.index.values() if e.active and not e.infohash_v1 and not e.infohash_v2)
-    managed = len({e.tid for e in view.by_infohash.values()})
+    lanes = st.lanes
     print(
-        f"    数据: 索引条目 {len(data.index)}(活跃 {sum(1 for e in data.index.values() if e.active)})  "
-        f"档位 {LANE_SCOPE}={lanes.get(LANE_SCOPE, 0)} {LANE_SATISFIED}={lanes.get(LANE_SATISFIED, 0)} "
-        f"{LANE_UNSATISFIED}={lanes.get(LANE_UNSATISFIED, 0)} {LANE_EXEMPT}={lanes.get(LANE_EXEMPT, 0)}(免罪)  "
-        f"受管束种子 {managed} 个(infohash 键 {len(view.by_infohash)} 个: v1/v2 各一)",
+        f"    数据: 索引条目 {st.index_total}(活跃 {st.index_active})  "
+        f"档位 A={lanes.get('A', 0)} B={lanes.get('B', 0)} C={lanes.get('C', 0)} D={lanes.get('D', 0)}(免罪)  "
+        f"受管束种子 {st.managed} 个(infohash 键 {st.keys} 个: v1/v2 各一)",
         file=out
     )
     print(
-        f"    已取种子 {len(data.downloaded)} 条  取种子失败 {len(data.fails)} 条  "
-        f"待回填 infohash {pending} 条  放行记录 {len(data.verified)} 条",
+        f"    已取种子 {st.downloaded} 条  取种子失败 {st.fails} 条  "
+        f"待回填 infohash {st.pending_infohash} 条(进度 {st.backfill_ratio:.0%})  放行记录 {st.verified} 条",
         file=out
     )
-    fuse = "熔断中至 " + _stamp(data.fuse.until_ts) + f"({data.fuse.reason})" if fuse_active(data.fuse, now) else "正常"
-    print(
-        f"    配额: 本小时 {data.quota.hour_count}/{limits.max_per_hour}  本天 {data.quota.day_count}/{limits.max_per_day}  "
-        f"还能取 {quota_left(data.quota, limits, now)} 次  最近请求 {_ago(data.quota.last_fetch_ts, now)}  "
-        f"最小间隔 {limits.min_interval:g}s",
-        file=out
-    )
-    print(f"    熔断: {fuse}(连续失败 {data.fuse.failures})  时间窗: {limits.allow_window or '不限'}", file=out)
+    print(f"    配额: {st.quota.text}", file=out)
+    print(f"    熔断: {st.fuse.text}  时间窗: {st.allow_window or '不限'}", file=out)
     _print_status_rows(data, limit, out)
 
 
@@ -228,7 +206,7 @@ def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
         elif entry.remain_seconds is None:
             remain = "-"
         else:
-            remain = _duration(entry.remain_seconds)
+            remain = duration_text(entry.remain_seconds)
         name = _ellipsis(entry.name, 40)
         ihash = entry.infohash_v1 or entry.infohash_v2
         print(
@@ -238,35 +216,6 @@ def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
         )
     if len(rows) > limit:
         print(f"        ...(还有 {len(rows) - limit} 行未显示; 站点文件里是完整数据)", file=out)
-
-
-def _lane_counts(data: HrSiteData) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
-    for entry in data.index.values():
-        counts[entry.lane] = counts.get(entry.lane, 0) + 1
-    return counts
-
-
-def _duration(seconds: float) -> str:
-    seconds = int(max(0, seconds))
-    if seconds >= 86400:
-        return f"{seconds // 86400}d{seconds % 86400 // 3600}h"
-    if seconds >= 3600:
-        return f"{seconds // 3600}h{seconds % 3600 // 60}m"
-    if seconds >= 60:
-        return f"{seconds // 60}m{seconds % 60}s"
-    return f"{seconds}s"
-
-
-def _ago(ts: float, now: float) -> str:
-    """相对时间(报告给人看: 绝对时间戳要心算)"""
-    if not ts or ts <= 0:
-        return "从未"
-    return _duration(now - ts) + "前"
-
-
-def _stamp(ts: float) -> str:
-    return time.strftime("%m-%d %H:%M:%S", time.localtime(ts)) if ts and ts > 0 else "-"
 
 
 def _ellipsis(text: str, width: int) -> str:
@@ -308,7 +257,7 @@ def _print_site(result: HrRefreshResult, view, out) -> None:
         file=out
     )
     if view is not None:
-        channel = {CHANNEL_OK: "正常", CHANNEL_SILENT: "静默"}.get(view.channel_state, view.channel_state)
+        channel = CHANNEL_TEXTS.get(view.channel_state, view.channel_state)
         print(
             f"    视图: 模式={view.mode} 覆盖证明={'成立' if view.complete else '不成立'} "
             f"最近成功刷新={view.last_success_ts:.0f} 受管束={len(view.by_infohash)} 放行={len(view.verified)} "

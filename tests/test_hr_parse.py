@@ -202,7 +202,11 @@ def test_adapter_urls():
 
 
 def test_adapter_detects_login_and_challenge():
-    """登录页与挑战页特征识别(命中即熔断告警, 不重试轰炸)"""
+    """登录页与挑战页特征识别
+
+    命中登录页 ⇒ service 抛 `HrLoginExpired`(**不计失败、不推熔断**, 只报一次让人去登录 —— 重试无用);
+    命中挑战页 ⇒ 普通取数失败(走退避熔断)。两者分开的判据见 `events.LABELS` 的四类事件。
+    """
     adapter = _adapter()
     assert adapter.looks_like_login(LOGIN_PAGE) is True
     assert adapter.looks_like_login(load_fixture(PAGE1)) is False

@@ -21,6 +21,11 @@
   每轮都推进, 索引才可能长出可查键
 - test_extension_quota_refusal_yields_waiting_not_failure: 扩展侧硬上限挡下 ⇒ 本轮让位(不计失败、不推熔断,
   但报一次 WARNING 提醒后端频控可能失效)
+- test_login_page_is_not_a_fetch_failure: 页面是登录页 ⇒ **不算取数失败**(不计失败/不推熔断、只报一次 WARNING),
+  因为重试一万次也一样 —— 只有人去浏览器登录才会好
+- test_login_page_keeps_freshness_and_evidence_untouched: 登录失效**不得**动 fetched_at / 新鲜度基准 / 覆盖证明 /
+  放行记录 —— 它只能把原因写进 refresh.reason(报告与视图 notes 读它)
+- test_login_recovery_reports_again: 登录恢复(刷新成功)后重置告警位 ⇒ 再次失效时重新报一次
 - test_quota_exhaustion_stops_refresh_then_waits: 配额用尽时刷新截断; 同窗口后续轮次直接等下一轮
 - test_download_failure_counts_then_cools_down: 取 .torrent 失败计数, 达上限且冷却未过时不再尝试
 - test_consecutive_failures_fuse_site: 连续失败达阈值 -> 熔断, 期间零请求
@@ -64,6 +69,9 @@ from hr_helpers import (
 
 SITE = "example"
 PAGE2_URL = "https://pt.example.com/myhr.php?hrtype=A&page=2"
+
+#: 登录页(页面里有密码输入框 ⇒ adapter 判「登录态失效」; 与扩展侧「要升级到渲染通道」的信号同源)
+LOGIN_PAGE = '<html><body><form action="takelogin.php"><input type="password" name="password"></form></body></html>'
 
 
 def _pages(*, a_rows=(), a_next=False, b=EMPTY_TABLE_PAGE, c=EMPTY_TABLE_PAGE, page2=None):
@@ -456,6 +464,79 @@ def test_extension_quota_refusal_yields_waiting_not_failure(tmp_path, caplog):
     data = _read(tmp_path)
     assert data.fuse.failures == 0, "让位不是失败: 不推熔断"
     assert again.action == ACTION_WAITING
+
+
+def test_login_page_is_not_a_fetch_failure(tmp_path, caplog):
+    """页面是登录页 ⇒ **不算取数失败**: 不计失败、不推熔断、每站点只报一次 WARNING
+
+    与 `HrChannelQuota` 同一套判据(**能不能靠重试解决**): 超时可以重试, 登录失效重试一万次也一样。
+    若计入熔断, 用户只会看到「连续失败达阈值」, 而真正的动作要求(去登录)被埋掉。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher({"A": LOGIN_PAGE})
+    svc = _service(tmp_path, fetcher, clock)
+
+    with caplog.at_level(logging.INFO, logger="auto_qb.hr"):
+        result = svc.refresh_site(SITE)
+        again = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_ERROR and "登录态失效" in result.reason
+    assert result.alerted is True, "告警由 service 报(见下面), 状态层不重复报"
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len([w for w in warnings if "[HR 登录失效]" in w]) == 1, f"登录失效是人工事件, 每站只报一次: {warnings}"
+    assert any("登录态仍未恢复" in r.getMessage() for r in caplog.records if r.levelno == logging.INFO)
+    data = _read(tmp_path)
+    assert data.fuse.failures == 0, "登录失效不计失败: 重试无用, 算成失败只会掩盖真因"
+    assert again.action == ACTION_ERROR
+
+
+def test_login_page_keeps_freshness_and_evidence_untouched(tmp_path):
+    """登录失效**不得**动 fetched_at / 新鲜度基准 / 覆盖证明 / 放行记录
+
+    它只能把原因写进 `refresh.reason`(报告与视图 notes 读它) —— 若是顺手把 fetched_at 推进或
+    把 complete 置真, 就等于「登录失效反而给了新背书」, 那是会把不该放行的种子放出去的红线。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock)
+    good = svc.refresh_site(SITE)
+    assert good.complete is True and good.action == ACTION_REFRESHED
+    before = _read(tmp_path)
+
+    clock.advance(13 * 3600)  # 过有效期(默认 12H)才会真去抓页面
+    fetcher.pages = {"A": LOGIN_PAGE}  # 站点侧登录态掉了
+    bad = svc.refresh_site(SITE)
+
+    assert bad.action == ACTION_ERROR
+    after = _read(tmp_path)
+    assert after.fetched_at == before.fetched_at, "登录失效不得推进「上次取数」"
+    assert after.refresh.last_success_ts == before.refresh.last_success_ts
+    assert after.refresh.complete is before.refresh.complete
+    assert after.refresh.scopes_done == before.refresh.scopes_done
+    assert after.refresh.pages_fetched == before.refresh.pages_fetched
+    assert after.refresh.reason.startswith("[HR 登录失效]"), "但要在站点文件里留下可查的痕迹"
+    assert after.expires_at == before.expires_at, "有效期只由完整刷新决定"
+    assert after.index == before.index and after.verified == before.verified, "证据不会被登录失效改动"
+
+
+def test_login_recovery_reports_again(tmp_path, caplog):
+    """登录恢复(刷新成功)后重置告警位 ⇒ 再次失效时重新报一次"""
+    clock = Clock()
+    fetcher = FakeFetcher({"A": LOGIN_PAGE})
+    svc = _service(tmp_path, fetcher, clock)
+
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
+        svc.refresh_site(SITE)
+        fetcher.pages = _pages(a_rows=[row(101)])  # 用户去浏览器登录了
+        fetcher.blobs = _blobs(101)
+        good = svc.refresh_site(SITE)
+        clock.advance(24 * 3600)  # 过有效期, 下一轮真去抓
+        fetcher.pages = {"A": LOGIN_PAGE}  # 又掉了
+        svc.refresh_site(SITE)
+
+    assert good.action == ACTION_REFRESHED
+    logins = [r.getMessage() for r in caplog.records if "[HR 登录失效]" in r.getMessage()]
+    assert len(logins) == 2, f"恢复后再失效应当重新提醒一次: {logins}"
 
 
 def test_quota_exhaustion_stops_refresh_then_waits(tmp_path):

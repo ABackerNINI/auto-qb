@@ -1161,6 +1161,7 @@ app.mixin(window.AQB_SHOWS);
 app.mixin(window.AQB_DELETE);
 app.mixin(window.AQB_DRAWER);
 app.mixin(window.AQB_DIALOGS);
+app.mixin(window.AQB_HR_STATUS);
 app.mixin(window.CONFIG_EDITOR);
 app.mixin(window.CONFIG_RULES);
 app.mixin(window.CONFIG_HUB);

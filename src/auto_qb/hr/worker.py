@@ -21,6 +21,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
+from . import events
 from .resolve import HrSiteView, HrViewSet
 from .service import (
     ACTION_ERROR,
@@ -324,12 +325,16 @@ class HrWorker:
             if result.alerted:
                 logger.info(f"HR 站点 {site} | {result.action}: {detail}(已在取数处告警)")
             elif result.action in (ACTION_PARTIAL, ACTION_ERROR):
-                logger.warning(f"HR 站点 {site} | {result.action}: {detail}")
+                logger.warning(events.page_changed(site, result.action, detail))
             else:
                 logger.info(f"HR 站点 {site} | {result.action}: {detail}")
 
     def _check_channel_silence(self) -> None:
-        """通道静默告警: 浏览器长期未开 / 扩展被停用 / token 配错(每 warn_gap 提醒一次)"""
+        """通道静默告警: 浏览器长期未开 / 扩展被停用 / token 配错(每 warn_gap 提醒一次)
+
+        ❗本事件是**端点级**的(扩展连不上端点 ⇒ 任何站点都取不到数), 所以文案里要列出
+        **受影响站点** —— 只说「通道静默」而不说“哪些站点的数据在变旧”, 用户没法判断后果。
+        """
         endpoint = self.endpoint
         if endpoint is None:
             return
@@ -343,11 +348,8 @@ class HrWorker:
         if now - self._silence_warned_at < warn_gap:
             return  # 已提醒过, 本周期内不重复(防通知轰炸)
         self._silence_warned_at = now
-        where = "启动以来" if last <= 0 else f"上次联系后"
-        logger.warning(
-            f"HR 取数通道已静默 {silent / 3600:.1f}h({where}扩展未联系端点): "
-            "浏览器是否在运行 / 扩展是否启用 / 端点端口与 token 是否与扩展配置一致?"
-        )
+        where = "启动以来" if last <= 0 else "上次联系后"
+        logger.warning(events.channel_silent(silent / 3600, where, self.service.enabled_sites()))
 
 
 __all__ = ["HrViewPublisher", "HrWorker", "view_signature"]

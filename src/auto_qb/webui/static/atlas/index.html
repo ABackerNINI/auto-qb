@@ -1052,11 +1052,17 @@
                 <svg class="ico ico-sm ico-log" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
                 <span class="ce-side-label">运行日志</span>
               </button>
+              <!-- M4: HR 站点级状态(只读; 与 --hr-status 同一口径) —— 同样在 schema 分组之外 -->
+              <button class="ce-side-item" :class="{ active: cfg.activeGroup === '__hr' }" @click="openHrStatus()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hr"></use></svg>
+                <span class="ce-side-label">HR 站点状态</span>
+              </button>
             </aside>
 
             <section class="ce-main">
-              <!-- W4: __logs 章节时隐藏配置页头(同步状态/YAML 预览属配置上下文), 标题由 logs-head 提供 -->
-              <header v-if="cfg.activeGroup !== '__logs'" class="ce-head">
+              <!-- W4: __logs 章节时隐藏配置页头(同步状态/YAML 预览属配置上下文), 标题由 logs-head 提供;
+                   M4 的 __hr 章节同理(它也是只读现状章节) -->
+              <header v-if="cfg.activeGroup !== '__logs' && cfg.activeGroup !== '__hr'" class="ce-head">
                 <div class="ce-head-text">
                   <h2>
                     <svg class="ico ico-sm" :class="'icog-' + cfgActive.key" viewBox="0 0 16 16"><use :href="'#' + (cfgActive.icon || 'i-settings')"></use></svg>
@@ -1500,6 +1506,60 @@
                 </div>
               </div>
 
+              <!-- M4: HR 站点级状态(只读端点 /api/hr/status; 字段口径与 --hr-status 同一层)。
+                   与日志页同款: 打开时拉一次, 之后手动刷新(站点数据是小时级节奏, 不轮询) -->
+              <div v-else-if="cfg.activeGroup === '__hr'" class="logs-embed">
+                <header class="logs-head">
+                  <div class="logs-head-text">
+                    <h2><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hr"></use></svg>HR 站点状态</h2>
+                    <p class="ce-sub">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行(只读)</p>
+                  </div>
+                  <div class="logs-actions">
+                    <span v-if="hrsPollText()" class="logs-ctl">{{ hrsPollText() }}</span>
+                    <button class="ce-btn ghost small" :disabled="hrs.loading" @click="loadHrStatus(true)">
+                      <svg class="ico ico-sm" :class="{ spin: hrs.loading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
+                    </button>
+                  </div>
+                </header>
+                <div class="logs-body">
+                  <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
+                  <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
+                  <div v-if="hrs.loading && !hrs.loaded" class="ce-placeholder loading">正在读取站点状态…</div>
+                  <div v-else-if="hrs.error" class="ce-placeholder">
+                    <p class="error">{{ hrs.error }}</p>
+                    <button class="ce-btn" @click="loadHrStatus(true)">重试</button>
+                  </div>
+                  <div v-else-if="!hrs.sites.length" class="ce-placeholder">
+                    {{ hrs.enabled ? '还没有站点配置 hr_check 或取数线程未启动' : 'HR 在线核实未启用(配置里打开后这里会显示各站点现状)' }}
+                  </div>
+                  <div v-else class="hrs-list">
+                    <article v-for="s in hrs.sites" :key="s.site" class="hrs-site">
+                      <div class="hrs-site-head">
+                        <span class="hrs-site-name">{{ s.site }}</span>
+                        <span class="hrs-tag">{{ s.mode }}</span>
+                        <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
+                        <span class="hrs-tag">通道 {{ s.channel_text }}</span>
+                        <span v-if="s.stale" class="hrs-tag warn">数据已过期</span>
+                        <span v-if="s.fuse.active" class="hrs-tag error">熔断中</span>
+                      </div>
+                      <p class="hrs-line">{{ s.fresh_text }}</p>
+                      <p class="hrs-line">
+                        索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
+                        受管束 {{ s.managed }} 个 · 待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
+                      </p>
+                      <p class="hrs-line">
+                        已取种子 {{ s.downloaded }} · 取种子失败 {{ s.fails }} · 放行记录 {{ s.verified }}
+                      </p>
+                      <p class="hrs-line">{{ s.quota.text }}</p>
+                      <p class="hrs-line">熔断: {{ s.fuse.text }} · 时间窗: {{ s.allow_window || '不限' }}</p>
+                      <p v-if="s.reason" class="hrs-line warn">最近一次刷新不完备: {{ s.reason }}</p>
+                      <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
+                      <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
+                    </article>
+                  </div>
+                </div>
+              </div>
+
               <!-- 普通字段分组(卡片化) -->
               <div v-else class="ce-card">
                 <div class="ce-fields">
@@ -1878,6 +1938,54 @@
                     <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
                     <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
                     <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>
+                  </div>
+                </div>
+              </template>
+
+              <!-- M4: HR 站点状态(只读端点 /api/hr/status; 与 --hr-status 同一口径) -->
+              <template v-else-if="hub.view === '__hr'">
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">HR 站点状态</span>
+                    <span class="bh-n">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行</span>
+                    <span class="bh-r">
+                      <span v-if="hrsPollText()" class="bh-n">{{ hrsPollText() }}</span>
+                      <button class="hb-btn ghost sm" :disabled="hrs.loading" @click="loadHrStatus(true)">刷新</button>
+                    </span>
+                  </div>
+                  <div style="padding:12px 14px">
+                    <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
+                    <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
+                    <p v-if="hrs.loading && !hrs.loaded" class="hb-hp">正在读取站点状态…</p>
+                    <p v-else-if="hrs.error" class="hb-hp error">{{ hrs.error }}</p>
+                    <p v-else-if="!hrs.sites.length" class="hb-hp">
+                      {{ hrs.enabled ? '还没有站点配置 hr_check 或取数线程未启动' : 'HR 在线核实未启用(配置里打开后这里会显示各站点现状)' }}
+                    </p>
+                    <div v-else class="hrs-list">
+                      <article v-for="s in hrs.sites" :key="s.site" class="hrs-site">
+                        <div class="hrs-site-head">
+                          <span class="hrs-site-name">{{ s.site }}</span>
+                          <span class="hrs-tag">{{ s.mode }}</span>
+                          <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
+                          <span class="hrs-tag">通道 {{ s.channel_text }}</span>
+                          <span v-if="s.stale" class="hrs-tag warn">数据已过期</span>
+                          <span v-if="s.fuse.active" class="hrs-tag error">熔断中</span>
+                        </div>
+                        <p class="hrs-line">{{ s.fresh_text }}</p>
+                        <p class="hrs-line">
+                          索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
+                          受管束 {{ s.managed }} 个 · 待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
+                        </p>
+                        <p class="hrs-line">
+                          已取种子 {{ s.downloaded }} · 取种子失败 {{ s.fails }} · 放行记录 {{ s.verified }}
+                        </p>
+                        <p class="hrs-line">{{ s.quota.text }}</p>
+                        <p class="hrs-line">熔断: {{ s.fuse.text }} · 时间窗: {{ s.allow_window || '不限' }}</p>
+                        <p v-if="s.reason" class="hrs-line warn">最近一次刷新不完备: {{ s.reason }}</p>
+                        <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
+                        <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
+                      </article>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -2945,6 +3053,7 @@
   <script src="/shared/format.js"></script>
   <script src="/shared/decorate.js"></script>
   <script src="/shared/hr.js"></script>
+  <script src="/shared/hr_status.js"></script>
   <script src="/shared/sort.js"></script>
   <script src="/shared/menu.js"></script>
   <script src="/shared/commands.js"></script>

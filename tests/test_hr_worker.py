@@ -16,6 +16,7 @@
 - test_stable_key_erases_countdowns: 状态指纹抹掉数字(倒计时变化不算状态变化)
 - test_worker_refresh_forgets_pacing_memory: 完整刷新后清节流记忆(下次再卡住要重新说明白)
 - test_silence_reminder_is_throttled: 通道静默按 channel_silence_warn 周期提醒一次
+- test_silence_warning_names_affected_sites: 通道静默是**端点级**事件 ⇒ 文案里要列出受影响站点(M4 四类事件)
 - test_stop_without_start_is_ok: 未启动就 stop 不得报错
 - test_start_wake_and_stop: 线程能起、能被唤醒立刻干活、能停干净
 - test_anchors_provider_failure_is_ignored: 主循环提供锚点失败不影响刷新
@@ -292,6 +293,35 @@ def test_silence_reminder_is_throttled(tmp_path, caplog):
         worker.run_once()
     quiet = [r.getMessage() for r in caplog.records if "静默" in r.getMessage()]
     assert len(quiet) == 2, f"每个 warn_gap 只提醒一次: {quiet}"
+
+
+def test_silence_warning_names_affected_sites(tmp_path, caplog):
+    """通道静默是**端点级**事件 ⇒ 文案里要列出受影响站点(M4 四类事件)
+
+    只说「通道静默」而不说「哪些站点的数据在变旧」, 用户没法判断该不该管它 —— 而这条告警
+    在单实例多站点的部署里恰恰可能只影响其中一个站点的预期节奏。
+    """
+    clock = Clock()
+    service = _service(
+        tmp_path,
+        FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)),
+        clock=clock,
+        global_overrides={"channel_silence_warn": 3600.0}
+    )
+
+    class _Endpoint:
+        last_contact_ts = 0.0
+
+    worker = HrWorker(
+        service=service, publisher=HrViewPublisher(), endpoint=_Endpoint(), poll_interval=60.0, now_fn=clock
+    )
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
+        clock.advance(3601.0)
+        worker.run_once()
+
+    warns = [r.getMessage() for r in caplog.records if "[HR 通道静默]" in r.getMessage()]
+    assert len(warns) == 1, f"静默告警要用事件标签前缀: {warns}"
+    assert "受影响站点: pt.example.com" in warns[0], "端点级事件必须点出谁受影响"
 
 
 def test_stop_without_start_is_ok(tmp_path):

@@ -49,6 +49,21 @@ class HrChannelQuota(HrChannelUnavailable):
     """
 
 
+class HrLoginExpired(HrFetchError):
+    """站点页面是**登录页** ⇒ 浏览器里的登录态失效(M4 四类事件之一)
+
+    ❗与其它取数失败分开的理由(与 `HrChannelStopped` / `HrChannelQuota` 同一套判据: **能不能靠重试解决**):
+    - 超时 / HTTP 失败可以重试, 所以计失败 + 退避熔断;
+    - 登录失效**重试一万次也一样** —— 只有人去浏览器登录才会好。若把它计入熔断, 用户只会看到
+      「连续失败达阈值, 熔断至 …」, 而真正的动作要求(「去登录」)被埋掉; 反过来, 熔断冷却还会让
+      用户登录完继续白等一个冷却周期才恢复。
+
+    故 service 对它: **不计失败、不推进熔断**, 只报一次 WARNING(文案直接给动作), 并把原因写进
+    站点文件的 `refresh.reason`(失败路径里唯一持久可见的痕迹) —— 不碰 fetched_at / 覆盖证明 /
+    新鲜度基准, 所以证据链不会被动。
+    """
+
+
 @runtime_checkable
 class HrFetcher(Protocol):
     """取数通道协议: 只负责「按 URL 取内容」, 无策略、无解析、不碰 cookie"""
@@ -172,5 +187,5 @@ def build_channel_fetcher(
 
 __all__ = [
     "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelUnavailable", "HrFetchError", "HrFetcher",
-    "NullFetcher", "build_channel_fetcher", "is_available"
+    "HrLoginExpired", "NullFetcher", "build_channel_fetcher", "is_available"
 ]

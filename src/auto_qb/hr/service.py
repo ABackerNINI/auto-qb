@@ -15,13 +15,21 @@
 """
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
+from . import events
 from .adapters import build_adapter
 from .bencode import compute_infohashes, torrent_display_name
-from .fetcher import HrChannelQuota, HrChannelStopped, HrChannelUnavailable, HrFetchError, HrFetcher
+from .fetcher import (
+    HrChannelQuota,
+    HrChannelStopped,
+    HrChannelUnavailable,
+    HrFetchError,
+    HrFetcher,
+    HrLoginExpired,
+)
 from .model import (
     CHANNEL_DISABLED,
     CHANNEL_OK,
@@ -143,6 +151,9 @@ class HrRefreshService:
         #: 「扩展侧硬上限」已告警过的站点: 超限会持续到下一个窗口, 每轮都 WARNING 就是刷屏 ——
         #: 只在状态变化时报一次(与 `_no_channel_warned` 同一口径), 恢复正常后重置。
         self._ext_quota_warned: set = set()
+        #: 「登录失效」(M4 四类事件之一)已告警过的站点: 登录态没恢复前每轮都会命中登录页,
+        #: 每轮一条 WARNING 就是刷屏(而且它是**人工事件**, 报一次就够) —— 登录恢复后重置。
+        self._login_warned: set = set()
 
     # ---------- 基础访问 ----------
 
@@ -321,7 +332,8 @@ class HrRefreshService:
                     html = self.fetcher.get_text(adapter.page_url(scope, page))
                     budget.mark()
                     if adapter.looks_like_login(html):
-                        raise HrFetchError(f"命中登录页(档位 {scope} 第 {page} 页): 登录态失效, 需人工处理")
+                        # 登录失效 → 专用异常(见 HrLoginExpired): 不计失败、不推进熔断, 要的是人去看一眼
+                        raise HrLoginExpired(f"命中登录页(档位 {scope} 第 {page} 页): 登录态失效, 需人工处理")
                     if adapter.looks_like_challenge(html):
                         raise HrFetchError(f"命中挑战页(档位 {scope} 第 {page} 页)")
                     parsed = adapter.parse_page(scope, html)
@@ -363,6 +375,23 @@ class HrRefreshService:
             result.reason = str(e)
             self._warn_no_channel(site, e)
             return
+        except HrLoginExpired as e:
+            # 登录失效(四类事件之一): **只有人去浏览器登录才会好**, 故不算取数失败、不推进熔断 ——
+            # 计失败会把「去登录」这个动作要求掩盖成「站点坏了」(而且熔断冷却会让用户登录完还要白等)。
+            # 仍然留下的痕迹: ①一条 WARNING(文案直接给动作, 每站点一次) ②站点文件的 refresh.reason
+            # (报告与视图 notes 都读它) —— 但**不动** fetched_at / 覆盖证明 / 新鲜度基准, 这是红线:
+            # 登录失效不得变成新的放行背书, 也不得把老数据的新鲜度弄脏。
+            result.action = ACTION_ERROR
+            result.reason = str(e)
+            result.alerted = True  # 下面这条 WARNING 已含原因与动作 ⇒ 状态记录只记 INFO
+            data.refresh = replace(data.refresh, reason=events.login_expired_note(site, e))
+            if self.persist:
+                status = session.commit(self._now())
+                result.persisted = status == "written"
+            else:
+                result.reason = f"{result.reason}; 只读模式, 未写盘"
+            self._warn_login(site, e)
+            return
         except HrFetchError as e:
             newly = record_failure(data.fuse, limits, self._now(), getattr(e, "retry_after", 0.0))
             result.action = ACTION_ERROR
@@ -376,14 +405,15 @@ class HrRefreshService:
             else:
                 result.reason = f"{result.reason}; 只读模式, 未写盘"
             if newly:
-                logger.warning(f"HR 站点 {site} | 连续失败达阈值, 熔断至 {data.fuse.until_ts:.0f}: {e}")
+                logger.warning(events.fuse_opened(site, data.fuse.until_ts, e))
             else:
-                logger.warning(f"HR 站点 {site} | 取数失败({data.fuse.failures} 次): {e}")
+                logger.warning(events.fetch_failed(site, data.fuse.failures, limits.failure_threshold, e))
             return
 
         record_success(data.fuse)
         self._no_channel_warned.discard(site)  # 通道恢复: 下次真的没通道时再报一次
         self._ext_quota_warned.discard(site)  # 恢复正常: 下次再超限时重新报一次
+        self._login_warned.discard(site)  # 登录恢复: 下次真的又失效时再报一次
         entries_new = sum(1 for tid in entries_seen if tid not in data.downloaded)
         fetched, failed = self._fill_infohashes(adapter, data, entries_seen, budget, site_conf)
         complete = bool(scopes) and len(scopes_done) == len(scopes) and reached_last and max_missing <= \
@@ -607,6 +637,18 @@ class HrRefreshService:
             return
         self._no_channel_warned.add(site)
         logger.warning(f"HR 站点 {site} | 无可用取数通道, 本轮不做在线核实(保守回落未核实): {err}")
+
+    def _warn_login(self, site: str, err: Exception) -> None:
+        """登录失效告警: **每个站点只报一次**(直到登录恢复)
+
+        文案单点在 `events.login_expired` —— 必须含**动作**(去哪个浏览器登录哪个站点), 否则用户
+        只看到「失败了」; 标签前缀 `[HR 登录失效]` 让日志里这一类事件可 grep。
+        """
+        if site in self._login_warned:
+            logger.info(f"HR 站点 {site} | 登录态仍未恢复(已告警过, 本轮不做在线核实): {err}")
+            return
+        self._login_warned.add(site)
+        logger.warning(events.login_expired(site, err))
 
     def _warn_ext_quota(self, site: str, err: Exception) -> None:
         """扩展侧硬上限告警: 同样**只报一次**(超限会持续到下一个窗口)

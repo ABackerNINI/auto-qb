@@ -738,6 +738,21 @@
   font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;
   color: var(--fg-muted); white-space: pre-wrap; word-break: break-all; }
 
+/* M4: HR 站点状态章节 —— 骨架复用 .logs-embed/.logs-head/.logs-body, 这里只管内容排版 */
+.hrs-channel { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--fg-muted); font-size: 12.5px; }
+.hrs-list { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.hrs-site { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-card); padding: 10px 12px; }
+.hrs-site-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.hrs-site-name { font-weight: 600; font-size: 13.5px; color: var(--fg); }
+.hrs-tag { padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border-soft); color: var(--fg-dim); font-size: 11.5px; }
+.hrs-tag.ok { border-color: var(--accent-line); color: var(--accent); }
+.hrs-tag.warn { border-color: var(--warn-line); color: var(--warn); background: var(--warn-soft); }
+.hrs-tag.error { border-color: var(--error-line); color: var(--error); background: var(--error-soft); }
+.hrs-line { margin: 2px 0 0; color: var(--fg-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.hrs-line.warn { color: var(--warn); }
+.hrs-line.error { color: var(--error); }
+
 /* ================= 限速修改弹窗(SPD-04; 仅引用 tokens) =================
  * 交互改为 qB 式「点击限速 -> 弹窗修改」; 原左栏"限速对照卡 + 临时覆盖表单"随 .rail 一并退役。
  * 表单两方向都必填(后端语义: 两方向都设置, 0 = 不限); 曲线启用时为临时覆盖, 下一档位恢复。

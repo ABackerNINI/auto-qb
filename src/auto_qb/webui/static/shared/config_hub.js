@@ -193,6 +193,21 @@ window.CONFIG_HUB = {
         readout: this.logs && this.logs.file ? "已配置" : "日志文件未配置",
         badges: [],
       });
+      // M4: HR 站点状态(同样不在 schema 分组里 —— 它是**只读现状**, 不是配置项)。
+      // 未启用 hr_check 时不显示这张卡: 一张点进去只有「未启用」的卡比没有卡更烦人。
+      if (this.cfgBool(["config", "hr_check", "enabled"], "false")) {
+        cards.push({
+          key: "__hr",
+          icon: "i-hr",
+          title: "HR 站点状态",
+          label: "HR 站点状态",
+          desc: "各站点取到哪一步了：数据新鲜度、索引回填进度、配额与熔断。",
+          lede: "看每个站点的 HR 数据现状：取数通道通不通、数据多新、索引回填了多少、为什么现在不放行。只读，不会触发任何取数。",
+          led: "ok",
+          readout: this.hrs && this.hrs.loaded ? `${this.hrs.sites.length} 个站点` : "未读取",
+          badges: [],
+        });
+      }
       return cards;
     },
     /* 等宽读数: 「N 个分区 · 共 M 项 · K 项尚未保存」 */
@@ -310,6 +325,7 @@ window.CONFIG_HUB = {
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
       if (key === "__logs" && !this.logs.loaded) this.loadLogs();
+      if (key === "__hr" && !this.hrs.loaded) this.loadHrStatus();
       window.scrollTo({ top: 0 });
     },
     hubBack() {

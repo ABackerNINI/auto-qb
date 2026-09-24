@@ -118,9 +118,13 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857): 60 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857): 61 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_hr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
+- test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
+- test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
+  「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径)
+- test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
 """
 import base64
 import errno
@@ -1931,6 +1935,135 @@ def test_hr_view_fields_three_state(tmp_path):
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_triggered"] is False and fields["hr_state"] == "verified_non_hr"
     assert fields["hr_state_text"] == "已核实·安全放行" and fields["hr_satisfied_src"] == ""
+
+
+def _hr_status_env(mgr, tmp_path, *, complete=True):
+    """给 web 替身挂上一个**真** HR 服务(跑过一轮), 返回它 —— 站点文件与视图都是真的
+
+    替身 manager 的 config 是 SimpleNamespace(没有 hr_check 段), 所以这里显式补上, 并挂一个
+    `hr` 门面替身(真门面需要端点/线程, 与本端点的只读口径无关)。
+    """
+    from types import SimpleNamespace
+    import time
+
+    from auto_qb.hr.runtime import HrRuntimeStatus, HrRefreshService
+    from hr_helpers import Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
+
+    # ❗假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
+    # hr_helpers 默认的 2023 基准, 数据必然被判「已过有效期」—— 测的就不是想测的东西了
+    clock = Clock(start=time.time())
+    pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
+    if not complete:
+        pages["C"] = "<html><body>没有表格</body></html>"
+    svc = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(),
+        site_confs={"HHan": site_conf()},
+        fetcher=FakeFetcher(pages, {101: torrent_blob("t101.bin")}),
+        owner="tester",
+        now_fn=clock,
+    )
+    svc.refresh_site("HHan")
+    mgr.config.hr_check = HrCheckConfig(enabled=True)
+    mgr.hr = SimpleNamespace(
+        service=svc,
+        status=lambda: HrRuntimeStatus(
+            enabled=True,
+            sites=("HHan", ),
+            fetch_enabled=True,
+            worker_running=True,
+            poll_interval=300.0,
+            sites_dir=str(tmp_path / "hr"),
+            writer="tester",
+            channel=None,
+            note="",
+        ),
+    )
+    return svc
+
+
+def test_api_hr_status_disabled_returns_empty_state(web_env):
+    """未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端据此显示空态, 而不是报错)"""
+    mgr, client = web_env
+    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is False and body["sites"] == [] and body["channel"] == {}
+    assert "未启用" in body["note"], "要说明为什么没有数据, 不能静默空"
+
+
+def test_api_hr_status_reports_site_state(web_env, tmp_path):
+    """启用后逐站点摊开现状: 新鲜度/覆盖证明/索引与回填进度/配额/熔断/「现在为什么不放行」
+
+    与 `--hr-status` 共用 `hr.status` 一层 —— 这里断言的是那一层的字段真的透到了 HTTP。
+    """
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is True and body["fetch_enabled"] is True and body["worker_running"] is True
+    assert [s["site"] for s in body["sites"]] == ["HHan"]
+
+    site = body["sites"][0]
+    assert site["mode"] == "partial" and site["complete"] is True
+    assert site["index_total"] == 1 and site["index_active"] == 1
+    assert site["pending_infohash"] == 0 and site["backfill_ratio"] == 1.0
+    assert site["managed"] == 1 and site["keys"] == 2, "一个种子在 by_infohash 里占 v1/v2 两个键"
+    assert site["scopes_done"] == ["A", "B", "C"]
+    assert site["blocking"] == "", "完整刷新 + 有可查键 => 不挡路"
+    assert "上次取数" in site["fresh_text"] and "数据有效期至" in site["fresh_text"]
+    assert site["next_refresh_at"] > site["fetched_at"], "下次刷新 = 上次取数 + 周期"
+    assert "本小时" in site["quota"]["text"] and site["quota"]["hour_max"] > 0
+    assert site["fuse"]["active"] is False and "正常" in site["fuse"]["text"]
+    assert site["channel_text"] in ("正常", "未启用") and site["file_path"].endswith("HHan.json")
+
+
+def test_api_hr_status_names_the_blocking_step(web_env, tmp_path):
+    """覆盖证明不成立时, 状态里要直接说出「现在为什么不放行」(用户看到种子没放行时最想知道的一句)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path, complete=False)
+    body = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).json()
+    site = body["sites"][0]
+    assert site["complete"] is False
+    assert "覆盖证明不成立" in site["blocking"], f"要说清卡在哪一步: {site['blocking']!r}"
+
+
+def test_frontend_hr_status_fields_match_backend():
+    """前端 HR 状态章节引用的字段必须在后端快照里存在 —— 打错一个字段名就是**整段静默空白**
+
+    四个入口都扫(两套 UI × 经典设置页 / Console Hub): 这类错误后端全绿、pytest 也全绿,
+    只有真打开页面才看得出来(与 `_scan_page_class_wiring` 的挂件类名同一类故障), 故机检。
+    """
+    from pathlib import Path
+
+    from auto_qb.hr.status import SiteStatus
+
+    site_keys = set(SiteStatus(site="probe").to_dict().keys())
+    hrs_keys = {
+        "loaded", "loading", "error", "enabled", "note", "sites", "channel", "fetchEnabled", "workerRunning",
+        "pollInterval"
+    }
+    static = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "static"
+    # 锢点必须指向**章节自身**: 侧栏按钮里也有 `cfg.activeGroup === '__hr'`, 凭它取块会
+    # 扫到一片没有字段的模板区 ⇒ 守阵变成恒真(下面再加一道「必须扫到字段」兜住这个坑)
+    anchors = ('__hr\'" class="logs-embed"', 'hub.view === \'__hr')
+    for name in ("atlas/index.html", "prism/index.html"):
+        html = (static / name).read_text(encoding="utf-8")
+        for anchor in anchors:
+            idx = html.find(anchor)
+            assert idx > 0, f"{name} 缺少锚点 {anchor} —— 两个入口都要有(否则一半用户找不到)"
+            block = html[idx:idx + 4000]
+            cut = block.find("<!-- 普通")
+            if cut > 0:
+                block = block[:cut]
+            used_site = set(re.findall(r"\bs\.([a-z_]+)\b(?!\()", block))
+            assert used_site, f"{name} · {anchor}: 没扫到任何字段 —— 锚点失效, 这个守阵现在是恒真的"
+            missing = sorted(used_site - site_keys)
+            assert not missing, f"{name} · {anchor}: 模板引用了后端快照里没有的字段 {missing}(会整段空白)"
+            used_hrs = set(re.findall(r"\bhrs\.([A-Za-z_]+)\b(?!\()", block))
+            missing_hrs = sorted(used_hrs - hrs_keys)
+            assert not missing_hrs, f"{name} · {anchor}: 模板引用了 hrs 状态里没有的字段 {missing_hrs}"
 
 
 def test_build_group_view_hr_counts(tmp_path):
@@ -5120,6 +5253,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/traffic/history"),
     ("GET", "/newui"),
     ("GET", "/newui/{rest:path}"),
+    ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
 }
 
 
@@ -5140,7 +5274,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 60 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 61 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、
