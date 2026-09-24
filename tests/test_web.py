@@ -117,6 +117,7 @@
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857): 60 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
+- test_hr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
 """
 import base64
 import errno
@@ -1875,6 +1876,58 @@ def test_build_group_view_hr_tags(tmp_path):
     assert members["Pending.Show"]["hr_req_ratio"] == 0.0
     assert members["Done.Show"]["hr_triggered"] is True and members["Done.Show"]["hr_satisfied"] is True
     assert members["NoHR.Show"]["hr_triggered"] is False
+
+
+def test_hr_view_fields_three_state(tmp_path):
+    """详情字段透出站点侧三态与依据(WebUI 可观测性): 接入站点才有值, 未接入四项全空"""
+    from auto_qb.config import HRRule, TrackerConfig
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.core.qbmanager import QbManager
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement, HrSiteFacts
+    from auto_qb.torrents import TorrentRecord
+    from helpers import FakeTorrent, make_manager
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="HA", state="stalledUP", downloaded=0))
+    conf = TrackerConfig(
+        name="HHan", domains=["hhanclub.net"], hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7))
+    )
+    rec.tracker_conf = conf
+
+    # 未接入 hr_check: 四项全空(前端据此不显示三态行, 与既有四个字段的空值口径一致)
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_state"] == "" and fields["hr_state_text"] == "" and fields["hr_reason"] == ""
+    assert fields["hr_satisfied_src"] == ""
+
+    conf.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhanclub.net/myhr.php")
+    link = mock.Mock()
+    link.judge.return_value = HrJudgement(
+        identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 C)", site_satisfied=None, site="HHan"
+    )
+    rec.hr_link = link
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_triggered"] is True, "站点侧清单命中 => 受管束(本地 downloaded=0 不参与)"
+    assert fields["hr_state"] == "hr" and fields["hr_state_text"] == "受管束"
+    assert fields["hr_reason"] == "清单命中(档位 C)"
+    assert fields["hr_satisfied_src"] == "local", "站点没给达标结论 => 标注本地兜底"
+
+    link.judge.return_value = HrJudgement(
+        identity=HrIdentity.HR,
+        is_hr=True,
+        reason="清单命中(档位 B)",
+        site_satisfied=True,
+        facts=HrSiteFacts(lane="B", remain_seconds=0, ratio=1.5)
+    )
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_satisfied"] is True and fields["hr_satisfied_src"] == "site"
+    # 站点侧值(两套值对账): 已给的照传, 没给的空串 —— 未知与 0 必须可分(0 = 已达标)
+    assert fields["hr_site_lane"] == "B" and fields["hr_site_remain"] == 0
+    assert fields["hr_site_ratio"] == 1.5 and fields["hr_site_need"] == "" and fields["hr_site_dl"] == ""
+
+    link.judge.return_value = HrJudgement(identity=HrIdentity.VERIFIED_NON_HR, is_hr=False, reason="完整刷新未列出")
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_triggered"] is False and fields["hr_state"] == "verified_non_hr"
+    assert fields["hr_state_text"] == "已核实·安全放行" and fields["hr_satisfied_src"] == ""
 
 
 def test_build_group_view_hr_counts(tmp_path):

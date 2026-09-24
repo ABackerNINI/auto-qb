@@ -42,10 +42,42 @@ MV3 扩展 (`extensions/hr-fetch-proxy/`) + `channel`/`shared_dir` 转 **L1** �
 | M0 实测收口 (download URL 形态 / BTSchool scope 与分页判据 / 后台标签页观感 / 共享目录 filelock 互斥) | Pending | 4 项实测 (**不阻塞 M1**, 可与 M1/M2 并行); 部分已由本轮测试**钉死结构**(灰色「下一页」判到底 / 免罪链接 / 九列表头), 仍需真机确认 `?page=N` 参数名与 passkey |
 | M1 核心管道 (离线可做) | **Done** | 2026-09-24: `src/auto_qb/hr/` 10 个模块 (bencode/parse/adapters/model/store/ratelimit/resolve/service/fetcher/report) + 配置全链路 (校验/schema/impact/loader/Hub 文案) + `--hr-once` 只读走查; 8 个测试文件 + 共享夹具与脱敏 fixture, 全量 **1374 passed + 1 skipped** |
 | M2 取数通道 (扩展 + 本地端点 + 取数线程) | **Done** | 2026-09-24: `hr/channel.py`(协议 + 密钥 + origin/URL 白名单) · `hr/queue.py`(派发式队列) · `hr/server.py`(stdlib 端点, 仅听回环) · `ChannelFetcher` · `hr/worker.py`(取数线程 + 视图原子发布 + 告警节流) · `hr/runtime.py`(`QbManager.hr` 门面) · 扩展 `extensions/hr-fetch-proxy/`; `channel`/`shared_dir` 已改 **L1** 并在 L1 分支接上 `HrRuntime.apply`。**本轮挖出并修掉一个真缺陷**: 线程正等扩展回传时关停会白等到 `request_timeout` 且持着站点锁 ⇒ 改为先叫停队列再 join |
-| M3 判定联动 + 真机 `hr.once` 走查 | Pending | 1 会话; **原料已齐**: `resolve_identity` 三态(含新鲜度闸门 / 锚点漂移 / 放行有效期)已测; **M2 已把只读视图门面备好** —— 主循环用 `manager.hr.view_snapshot()` 取 `(revision, views)`(零等待、单次属性读取), 版本没变就不做任何 record 更新, 需要新数据时 `manager.hr.wake()`(非阻塞)。**要做的**: 接进 `TorrentRecord` 两个方法 + 四个消费点(打标 / WEB 视图 / `hr` 条件 / `tor.exp_*` 表达式), 并把 `mode: all` 升为「站点侧驱动 + 未核实恒受管束」。另需在主循环提供 `manager._hr_anchors`(取数线程已在调它, 现在恒空) |
+| M3 判定联动 | **Done** | 2026-09-25: 判定收口 `hr/resolve.py::judge_record`(+ `HrJudgement` / `HrSiteFacts`)与门面入口 `HrRuntime.judge()`; 记录侧只加 `hr_link` / `hr_judgement()` / `hr_anchor()`, **四个消费点调用点一行未动**(改的是它们共同调的 `check_hr_condition` / `check_hr_satisfied`), 站点侧优先、缺字段回落本地; 判定桥由 `TorrentStore` 挂上(门面稳定引用, 读取时现算 ⇒ 不置脏/不重写全库); `manager._hr_anchors()` 按站点给出 `{infohash: HrAnchor}`; `mode: all` 升为站点侧驱动(未核实恒受管束, policy 绕不过); WebUI 加三态/依据/来源与站点侧值字段 + 详情抽屉两行。全量 **1519 passed + 1 skipped** |
+| M3 真机 `hr.once` 走查 | Pending | 需用户装扩展后跑 `python src/auto-qb.py config.yml --hr-once` 与主程序, 确认: 端点拉得到任务 / 页面直取拿到表 / 三态在 WebUI 与日志上对得上。与 M0 四项实测同批做 |
 | M4 多站点与打磨 | Pending | 1 会话; 还需补 M2 到 M4 之间漏掉的 notify 四类事件(登录失效 / 熔断 / 改版 / 通道静默)—— 现在这四类只落日志(WARNING 会被 notify 处理器推成系统通知, 但没做"四类事件"语文化) |
 
 ## 进度日志
+
+- **2026-09-25 (M3 落地)** — 用户「继续 M3」令实施判定联动:
+  ① **判定收口**: `hr/resolve.py::judge_record(view, infohashes, anchor=, now=, unknown_policy=)` —— 两个 infohash
+  取**更保守**结论(命中 > 恒受管束 > 已放行 > 未核实), 返回 `HrJudgement`(身份 / 最终布尔 / 依据 / 站点侧达标结论 /
+  `HrSiteFacts` 站点侧展示值); 站点未接入或 `mode=off` 返回 **None = 本模块不适用**(调用方走既有本地逻辑)。
+  门面入口 `HrRuntime.judge()` 只查**总开关**(站点级开关由记录侧先挡 —— 它手里就有 `tracker_conf`,
+  不必每调用一次就遍历一遍配置)。
+  ② **落点(计划 §9 的「稳定引用 + 读取时现算」)**: 记录加 `hr_link`(判定桥) / `hr_judgement()` / `hr_anchor()`;
+  `check_hr_condition` 与 `check_hr_satisfied` 先问站点侧、站点没给再回落本地。**四个消费点(打标 / WEB 视图 /
+  `hr` 规则条件 / `tor.hr_*` 表达式)调用点一行未动** —— 改的是它们共同调用的那两个方法。判定桥 = `QbManager.hr`
+  门面的稳定引用(热重载不换对象), 由 `TorrentStore` 在记录构建/变更时挂上(`hr_link is not link` 才赋值),
+  读取时现算 ⇒ **锚点漂移与视图更新都不需要记录置脏**, 也不做全库重写。
+  ③ **零静默变更两道门**(缺一即回落本地): 站点配了 `hr_check` 且 `mode != off` + 全局 `hr_check.enabled`。
+  当前用户配置无 `hr_check` 段 ⇒ 行为与之前逐字一致(既有测试全绿就是这个口径的回归)。
+  ④ **锚点提供者**: `QbManager._hr_anchors()` 按站点给出 `{infohash: HrAnchor}`(只读遍历 `store.all()` 快照,
+  取数线程经 `anchors_fn` 异步要), 与 `HrWorker._collect_anchors` 的形状/站点键同源。
+  ⑤ **WebUI 可观测性**: 字段加 `hr_state` / `hr_state_text` / `hr_reason` / `hr_satisfied_src` +
+  站点侧值(档位 / 还需做种 / 剩余达标 / 分享率 / 站点下载量), 详情抽屉加两行(三态·依据 / 站点侧值),
+  安全放行用**中性色条**(不能把放行渲染成告警)。
+  ⑥ **两处实现期拍板**(计划未覆盖的边界, 已写进计划 v2.3): (a) 站点**还没发布过视图**时回落本地而不按
+  「未核实」算 —— 若按 policy 算, `mode: all` 站点会在启动窗口里让整站种子集体触发打标(千级标签风暴);
+  (b) 站点行**缺达标字段 ≠ 未达标**(新 `HrEntry.satisfied_verdict` 的 None 语义) —— 不知道就回落本地。
+  ⑦ **测试 +15 条**(收口判定 7 / 门面 3 / 记录接入 4 / 锚点 1 / WebUI 三态 1), 另把替身对齐真实模型:
+  `FakeTracker` 补 `hr_check`(缺它会让「站点未接入」路径在测试里 AttributeError 而非走本地逻辑),
+  `FakeTorrent` 补 `hr_judgement` / `hr_anchor`。★**红验已跑**(2 处反证, 共 4 红, 回滚后 89 绿):
+  ① 临时旁路判定桥(`check_hr_condition` 无视 `judged`) ⇒ `test_record_hr_follows_site_judgement` /
+  `test_record_hr_released_by_site_view` 变红; ② 站点未接入/无视图改成返回判定而非 `None` ⇒
+  `test_judge_record_not_applicable_when_site_off` / `test_judge_without_published_view_falls_back` 变红。
+  全量 **1519 passed + 1 skipped**(TOTAL 91% / 10534 / 779 / 3494 / 310~311; 并行 18.3 / 18.9 / 19.3s),
+  sidefx 越界 0。
+  下一步: **M4 多站点与打磨** + M0/真机走查(需用户装扩展)。
 
 - **2026-09-25 03:10** — 用户接着报「现在是打开新窗口而不是后台抓取」(上一版刚改的隐藏窗口):
   ① **根因**: `state:'minimized'` 不是灵药 —— 在用户平台上新建窗口仍会先显示一下, 用户看到的就是「弹出一个新窗口」。

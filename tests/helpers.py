@@ -693,6 +693,21 @@ class FakeTorrent:
         ratio_ok = hr.required_share_ratio > 0 and (self.ratio or 0) >= hr.required_share_ratio
         return seeding_ok or ratio_ok
 
+    def hr_anchor(self):
+        """与 TorrentRecord.hr_anchor 一致(由快照字段派生的下载锚点)"""
+        from auto_qb.hr.resolve import HrAnchor
+
+        return HrAnchor(
+            added_on=self.added_on,
+            downloaded=self.downloaded,
+            completion_on=self.completion_on,
+            progress=self.progress,
+        )
+
+    def hr_judgement(self):
+        """替身恒 None(未接判定桥): 即"站点未接入 -> 走本地口径", 与真记录未挂桥时同语义"""
+        return None
+
     # ---------- 记录级惰性接口(与 TorrentRecord 一致; client None -> RuntimeError) ----------
 
     # 快照字段(与 TorrentRecord._SNAPSHOT_FIELDS 一致; update_from 时逐字段复制)
@@ -785,6 +800,10 @@ class FakeTracker:
         self.remove_tags = []
         self.groups = groups or []  # 站点分组(配置层声明, tracker_group 条件匹配来源)
         self.hr = hr  # HRRule 或 None
+        # HR 在线核实(站点级): 与真实 TrackerConfig 对齐 —— 该字段在真模型上恒存在(默认 None),
+        # 记录侧 `hr_judgement()` 直接读它(未接入 = None => 走既有本地判定)。替身缺这个属性会
+        # 让"站点未接入"的路径在测试里直接 AttributeError(而不是走本地逻辑)。
+        self.hr_check = None
         self.rules = rules or []
         self.remove_similar_tags = remove_similar_tags
         self.upload_speed_limit = upload_speed_limit  # 字节/秒; 0 = 不限速(等价 UNLIMITED_SPEED)

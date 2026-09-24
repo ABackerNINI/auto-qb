@@ -32,6 +32,10 @@
 - test_view_field_value_quantizes_seeding_time: 视图量化: seeding_time 按分钟取整, 其余原样
 - test_store_seeding_time_quantized_no_repaint: 做种时长秒级递增不每轮置脏, 跨分钟才置脏
 - test_record_seeding_time_quantized_update_from: update_from 双通道(Mapping/对象)的分钟量化
+- test_record_hr_follows_site_judgement: 接入站点后 check_hr_* 听站点侧(转移种子 downloaded=0 也受管束)
+- test_record_hr_released_by_site_view: 已核实放行 -> 触发与达标都 False(本地 downloaded 再大也不算)
+- test_record_hr_falls_back_without_link: 未注入判定桥 / 站点未接入 / 桥返回 None -> 行为与既有本地逻辑完全一致(零静默变更)
+- test_store_attaches_hr_link: 注入的判定桥挂到新记录上(未注入时不引入 HR 依赖)
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
 - test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
 - test_store_extension_fields_dirty_view_and_quantum: 视图纪律(缓存≠展示): 扩展字段已进平铺视图置脏; eta 分钟量化; 非展示字段不置脏
@@ -220,6 +224,99 @@ def test_record_check_hr_on_real_record():
     # 无 hr: False
     rec.tracker_conf.hr = None
     assert rec.check_hr_condition() is False
+
+
+class _StubLink:
+    """最小判定桥(替身真实 HrRuntime): 记下入参, 返回给定判定(None = 本模块不适用)"""
+    def __init__(self, judged=None):
+        self.judged = judged
+        self.calls = []
+
+    def judge(self, site, infohashes, *, anchor=None, now=0.0):
+        self.calls.append((site, tuple(infohashes), anchor))
+        return self.judged
+
+
+def _hr_record(*, downloaded=0, total_size=100 * 1024**2, mode="partial"):
+    """真实 TorrentRecord + 已接入 hr_check 的站点配置(判定桥的挂载点)"""
+    from auto_qb.config import HRRule, TrackerConfig
+    from auto_qb.config.models import SiteHrCheckConfig
+
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stoppedDL"))
+    rec.infohash_v1 = "aa" * 20
+    rec.added_on = 1000
+    rec.total_size = total_size
+    rec.downloaded = downloaded
+    conf = TrackerConfig(
+        name="X", domains=["d.com"], hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7))
+    )
+    if mode is not None:
+        conf.hr_check = SiteHrCheckConfig(mode=mode, hr_page_url="https://x.com/myhr.php")
+    rec.tracker_conf = conf
+    return rec
+
+
+def test_record_hr_follows_site_judgement():
+    """接入站点后两个 check_* 听站点侧三态: 转移种子(A 客户端下载 → B 保种)downloaded=0 也受管束"""
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement
+
+    rec = _hr_record(downloaded=0)  # 本地看是纯辅种, 站点侧却是清单命中
+    link = _StubLink(HrJudgement(identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 A)"))
+    rec.hr_link = link
+    assert rec.check_hr_condition() is True, "名单命中即受管束, 与本地 downloaded=0 无关"
+    site, hashes, anchor = link.calls[0]
+    assert site == "X" and hashes == (rec.infohash_v1, rec.infohash_v2)
+    assert anchor == rec.hr_anchor() and anchor.added_on == 1000
+
+    link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=True)
+    assert rec.check_hr_satisfied() is True, "站点侧 B 档/剩余 0 => 直接达标"
+    link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=False)
+    assert rec.check_hr_satisfied() is False, "站点侧 C 档 => 直接未达标"
+    link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=None)
+    assert rec.check_hr_satisfied() is False, "站点没给达标字段 => 回落本地(做种不足)"
+    rec.seeding_time = 3 * 86400 + 12 * 3600
+    assert rec.check_hr_satisfied() is True, "回落本地时做种时长达标仍算达标(不能因缺字段误报)"
+
+
+def test_record_hr_released_by_site_view():
+    """已核实放行(安全放行): 触发与达标都 False —— 本地 downloaded 已满也不算, 否则漏管口径就白做了"""
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement
+
+    rec = _hr_record(downloaded=100 * 1024**2)
+    assert rec.check_hr_condition() is True, "前置: 本地口径下它确实触发(对照用)"
+    rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.VERIFIED_NON_HR, is_hr=False, reason="完整刷新未列出"))
+    assert rec.check_hr_condition() is False
+    assert rec.check_hr_satisfied() is False
+
+
+def test_record_hr_falls_back_without_link():
+    """零静默变更: 未注入判定桥 / 站点未接入(mode=off) / 桥返回 None -> 全是既有本地判断"""
+    from auto_qb.config.models import SiteHrCheckConfig
+
+    rec = _hr_record(downloaded=70 * 1024**2)
+    assert rec.hr_link is None
+    assert rec.hr_judgement() is None and rec.check_hr_condition() is True
+    link = _StubLink(None)
+    rec.hr_link = link
+    assert rec.hr_judgement() is None and rec.check_hr_condition() is True, "桥返回 None(总开关关) => 本地逻辑"
+    rec.tracker_conf.hr_check = None  # 该站未接入(桥在也不该问它)
+    asked = len(link.calls)
+    assert rec.hr_judgement() is None and rec.check_hr_condition() is True
+    assert len(link.calls) == asked, "站点未接入时不该读判定桥"
+    rec.tracker_conf.hr_check = SiteHrCheckConfig(mode="off")
+    assert rec.hr_judgement() is None and len(link.calls) == asked, "mode=off 不该打扰判定桥"
+
+
+def test_store_attaches_hr_link():
+    """store 注入的判定桥要挂到记录上; 未注入时纯数据层可用(不引入 HR 依赖)"""
+    store = TorrentStore()
+    link = _StubLink(None)
+    store.hr_link = link
+    store.refresh([FakeTorrent(hash="H1")])
+    assert store.get("H1").hr_link is link
+    plain = TorrentStore()
+    plain.refresh([FakeTorrent(hash="H2")])
+    assert plain.get("H2").hr_link is None
 
 
 def test_store_restore_torrent():
@@ -642,7 +739,7 @@ def test_record_seeding_time_quantized_update_from():
 def test_snapshot_fields_match_record_slots():
     """守卫: _SNAPSHOT_FIELDS ↔ TorrentRecord 声明字段一一对应(防漏声明/拼写错位);
     REQUIRED ⊆ SNAPSHOT; 除主键 hash 外全部字段带默认值"""
-    lazy_slots = {"_tags_set", "_state_enum", "_trackers_info", "_files", "_raw", "tracker_conf"}
+    lazy_slots = {"_tags_set", "_state_enum", "_trackers_info", "_files", "_raw", "tracker_conf", "hr_link"}
     # 错误原因(WebUI 状态列): 记录级派生展示字段, 非 qB 快照字段(不进字段表/不参与 apply_delta),
     # 由 WebviewMixin.refresh_error_reasons 在主循环预取后写入
     lazy_slots |= {"tracker_error_msg", "tracker_error_ts"}

@@ -1,4 +1,5 @@
 """TorrentRecord: 种子快照记录(种子数据的唯一所有者, slots + 惰性缓存 + HR 判定)"""
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, List, Optional, Set
@@ -6,6 +7,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Set
 from qbittorrentapi import TorrentState
 
 from ..config import TrackerConfig
+from ..hr.resolve import HrAnchor, HrJudgement
 from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
 
@@ -119,6 +121,12 @@ class TorrentRecord:
     _raw: Optional[Dict[str, Any]] = None
 
     tracker_conf: Optional[TrackerConfig] = None
+
+    #: HR 判定桥: `QbManager.hr` 门面(HrRuntime)的**稳定引用** —— 热重载不换对象, 故不必重挂。
+    #: 非快照字段: 不进 _SNAPSHOT_FIELDS/_raw, 不参与 apply_delta 与视图脏判定。
+    #: 读取时经它现算「三态 + 锚点校验」(计划 §9), 所以锚点漂移/视图更新都不需要"记录置脏",
+    #: 也就不用为了 HR 走一遍全库重建。未注入(None) ⇒ 两个 check_hr_* 走既有本地字段逻辑。
+    hr_link: Any = None
 
     def __getattr__(self, name: str) -> Any:
         """未声明字段(qB 新版本新增)兜底读取 `_raw`(前向兼容, 数据不丢)
@@ -273,16 +281,55 @@ class TorrentRecord:
 
 # ---------- 辅助方法 ----------
 
+    def hr_anchor(self) -> HrAnchor:
+        """本实例该种子的下载锚点(取数线程作废"已放行但本实例又下载了"的记录要用)"""
+        return HrAnchor(
+            added_on=self.added_on,
+            downloaded=self.downloaded,
+            completion_on=self.completion_on,
+            progress=self.progress,
+        )
+
+    def hr_judgement(self) -> Optional[HrJudgement]:
+        """站点侧三态判定(站点已接入才返回; None = 走本地字段逻辑)
+
+        ❗**零静默变更**闸门(计划 §9): 只有「站点配了 `hr_check` 且 `mode != off`」+「总开关开」
+        才走站点侧语义 —— 没接入的站点行为一个字都不变(它们的 downloaded 判断不动)。
+        ❗线程: 只读(快照字段 + tracker_conf + 站点视图的不可变快照), 无状态、无 API、无写盘,
+        故 Web 线程也安全(`_hr_view_fields` 与主循环同域)。
+        """
+        link = self.hr_link
+        conf = self.tracker_conf
+        if link is None or conf is None:
+            return None
+        site_conf = conf.hr_check
+        if site_conf is None or site_conf.mode == "off":
+            return None
+        return link.judge(
+            conf.name,
+            (self.infohash_v1, self.infohash_v2),
+            anchor=self.hr_anchor(),
+            now=time.time(),
+        )
+
     def check_hr_condition(self) -> bool:
-        """是否满足 HR 触发条件(下载比例或下载量), 用于排除辅种
+        """是否触发 HR(站点侧优先, 本地条件兜底), 用于排除辅种
 
         前置: tracker_conf 已在 _refresh_torrents 阶段匹配(无 None 防御, 早暴露调用路径错误)。
-        兜底边界: 未达触发量的种子, 把种子完整下载完(下载量 >= 种子大小)也视为触发——
-        否则触发量大于种子体积的小种子永远不会触发(想法.md 已知问题)。
-        downloaded=0 的纯辅种(添加时数据已完整, 对本站无下载消耗)与部分下载(如 1B)不触发。
+        站点接入后本条语义 = **站点侧身份**(计划 §9): 清单命中 ⇒ 受管束; 已核实不在清单 ⇒ 安全放行;
+        未核实 ⇒ 按 unknown_policy(新鲜度闸门恒受管束)。转移种子(A 客户端下载 → B 客户端保种,
+        B 的 downloaded=0)与多客户端场景正是靠这一点不漏管 —— 本地 downloaded 只当兜底与展示。
+
+        本地兜底边界(未接入站点原样保留): 未达触发量的种子, 把种子完整下载完
+        (下载量 >= 种子大小)也视为触发 —— 否则触发量大于种子体积的小种子永远不会触发
+        (想法.md 已知问题)。downloaded=0 的纯辅种(添加时数据已完整, 对本站无下载消耗)
+        与部分下载(如 1B)不触发。
         """
         if not self.tracker_conf.hr:
             return False
+        judged = self.hr_judgement()
+        if judged is not None:
+            return judged.is_hr
         hr = self.tracker_conf.hr
         cond_type, cond_value = hr.condition
         if cond_type == "dlratio":
@@ -296,12 +343,23 @@ class TorrentRecord:
         return self.total_size > 0 and self.downloaded >= self.total_size
 
     def check_hr_satisfied(self) -> bool:
-        """是否满足 HR 要求: 触发条件 + (做种时长 >= 要求时间 + 额外时间 或 分享率达标)"""
+        """是否满足 HR 要求: (站点侧达标结论) 或 本地(做种时长 >= 要求 + 额外 或 分享率达标)
+
+        站点侧优先(计划 §9): 档位 B / 剩余达标时间 0 ⇒ 直接达标; 档位 C ⇒ 直接未达标;
+        命中的那一行没给达标字段 ⇒ 回落本地时长/分享率(站点页面缺字段时不至于误报未达标)。
+        """
         if not self.tracker_conf.hr:
             return False
-        hr = self.tracker_conf.hr
-        if not self.check_hr_condition():
+        judged = self.hr_judgement()
+        if judged is not None:
+            if not judged.is_hr or judged.site_satisfied is False:
+                return False  # 站点侧已不视为受管束 / 明确未达标
+            if judged.site_satisfied:
+                return True
+            # 未核实(保守按 HR)或站点没给达标字段 ⇒ 本地兜底
+        elif not self.check_hr_condition():
             return False
+        hr = self.tracker_conf.hr
         seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
         ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio
         return seeding_ok or ratio_ok

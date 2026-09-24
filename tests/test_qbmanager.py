@@ -43,6 +43,7 @@
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
 - test_qbmanager_source_has_no_web_state_fields: 静态守阵(2026-09-20 解耦)——主循环源码不得再直接读写 19 个表现层字段(代理会静默转发, 只能靠扫描抓回潮)
 - test_web_state_alias_proxies_to_runtime: 兼容代理守阵——旧字段名与 self.web 的字段必须是同一份(读同一对象 / 写双向可见), 防"两份真相"
+- test_hr_anchors_from_store: HR 判定桥在构造时挂上 + 锚点按站点分组给出(QB 侧给取数线程的交接面)
 """
 import json
 import os
@@ -882,3 +883,34 @@ def test_web_state_alias_proxies_to_runtime():
         assert mgr.web.write_seq == 7
         mgr.web.write_seq = 8
         assert mgr._web_write_seq == 8
+
+
+def test_hr_anchors_from_store():
+    """HR 判定桥在构造时挂上 + 锚点提供者(主循环给取数线程的交接面, 计划 §9)
+
+    锚点形状/站点键必须与取数侧一致(`refresh_site(site, anchors)` 取 infohash -> HrAnchor),
+    否则「本实例二次下载 ⇒ 放行立即作废」永远发现不了 —— 而且不会报错。
+    """
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.hr.resolve import HrAnchor
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        assert mgr.store.hr_link is mgr.hr, "判定桥必须构造时就挂上(记录读取时现算, 不靠遍历刷新)"
+        assert mgr._hr_anchors() == {}, "站点未接入 hr_check -> 不上交任何锚点"
+
+        site = mgr.config.trackers["HHan"]
+        site.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhan/myhr.php")
+        # 用真记录(store.refresh), 不用 seed_store 的对象身份注入: 锚点由 record.hr_anchor() 派生
+        mgr.store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])
+        got = mgr.store.get("H1")
+        got.tracker_conf = site
+        got.infohash_v1 = "aa" * 20
+        got.added_on = 11
+        got.downloaded = 123
+        anchors = mgr._hr_anchors()  # H2 未匹配 tracker_conf -> 不进锚点
+        assert set(anchors) == {"HHan"} and set(anchors["HHan"]) == {"aa" * 20}
+        assert anchors["HHan"]["aa" * 20] == HrAnchor(added_on=11, downloaded=123, completion_on=-1, progress=0.0)
+
+        site.hr_check = SiteHrCheckConfig(mode="off")  # 站点关掉 -> 同样不上交
+        assert mgr._hr_anchors() == {}

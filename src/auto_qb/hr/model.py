@@ -74,14 +74,28 @@ class HrEntry:
     active: bool = True
 
     @property
+    def satisfied_verdict(self) -> Optional[bool]:
+        """站点侧对「是否达标」的**明确**结论; None = 站点没给(调用方本地兜底)。
+
+        档位 B/C 是站点的明确结论; 其余档位看剩余达标时间(0 = 已达标)。**缺字段不给结论** ——
+        「不知道」不能当成「未达标」, 否则本地已达标(做种时长/分享率够了)的种子会被误判,
+        进而漏加 satisfied 标签 / 误报未达标(计划 §9: 站点侧优先, 本地兜底)。
+        """
+        if self.lane == LANE_SATISFIED:
+            return True
+        if self.lane == LANE_UNSATISFIED:
+            return False
+        if self.remain_seconds is not None:
+            return self.remain_seconds == 0
+        return None
+
+    @property
     def satisfied_by_site(self) -> bool:
         """站点侧达标判据: 档位 B(已达标), 或剩余达标时间为 0 —— 站点数据是权威(计划 §9)。
 
         两者都不可得时返回 None 语义由调用方承担, 这里保守返回 False(不因缺字段就放行)。
         """
-        if self.lane == LANE_SATISFIED:
-            return True
-        return self.remain_seconds == 0
+        return self.satisfied_verdict is True
 
     def to_json(self) -> Dict[str, Any]:
         return {

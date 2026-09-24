@@ -10,6 +10,16 @@
 > (append-only 流水触顶时的处置: 从最老一端切到本文件 ≤ 16,000 字符, 原位留本行指针;
 > 最近一次轮转: 2026-09-25 触顶 24,000, 外迁最老 17 条, 本文件保留 10 条)
 
+- ↑ 收集数 **1504 → 1520**(**+16**; 2026-09-25 **M3 判定联动**):
+  三态判定接进 `TorrentRecord` —— 记录侧只加 `hr_link`(判定桥 = `QbManager.hr` 门面的**稳定引用**,
+  由 `TorrentStore` 在记录构建/变更时挂上)/ `hr_judgement()` / `hr_anchor()`, 而 `check_hr_condition` 与
+  `check_hr_satisfied` 改成「站点侧优先、站点没给再回落本地」⇒ **四个消费点(打标 / WebUI 视图 / `hr` 规则条件 /
+  `tor.hr_*` 表达式)调用点一行未动**; 判定收口在 `hr/resolve.py::judge_record`(多 infohash 取更保守者 +
+  `HrJudgement` / `HrSiteFacts`), 门面入口 `HrRuntime.judge()`; `mode: all` 升为站点侧驱动(未核实恒受管束);
+  `manager._hr_anchors()` 按站点给出 `{infohash: HrAnchor}`; WebUI 透出三态/依据/达标来源 + 站点侧值。
+  新增用例 16 条(收口判定 7 · 门面 3 · 记录接入 4 · 锚点 1 · WebUI 1) —— 收集数 1504 → 1520。
+  ★红验 2 处反证(旁路判定桥 / 站点未接入返回判定) ⇒ 4 条守阵变红, 回滚后 89 绿。
+  全量 **1519 passed + 1 skipped** / TOTAL 91%(10534 / 779 / 3494 / 310~311) / sidefx ≈2447 / 越界 0。
 - ↑ 收集数 **1502 → 1504**(**+2**; 2026-09-25 **页面取数改「零界面优先」**):
   上一版换来的隐藏窗口又被用户看成「打开新窗口」(`state:'minimized'` 在部分平台仍会先显示一下)。
   本版定型为**分层**: ①页面默认用扩展后台的 `fetch(credentials:'include')` **直取**(零标签零窗口);

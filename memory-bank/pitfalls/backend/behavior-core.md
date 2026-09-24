@@ -101,3 +101,24 @@
   主循环空转(**CPU 打满 + sync 请求放大数千倍**)。
 - **处置**: 一律经 `_throttle`; ⚠ **托管模式会掩盖该 bug** ⇒ 回归测试必须用**非托管**模式。
   另: 首连失败重试循环里 `stop_event is None or stop_event.wait(...)` 是**有意语义**, 不要一并改。
+
+### HR: 站点侧「没有可依据的数据」⇒ 回落本地, **不是**「未核实」(2026-09-25)
+
+- **触发**: 改 `TorrentRecord.hr_judgement()` / `hr/resolve.py::judge_record` 的返回语义, 或"顺手"把
+  「站点未接入 / `mode=off` / 站点还没发布过视图」统一当成「未核实」按 `unknown_policy` 处理。
+- **判别**: 「未核实」是**有数据但说不清**(刷新不完备 / 放行过期 / 身份缺位 / 新鲜度闸门), 按 policy 保守处理;
+  而「本站点侧压根没有可依据的数据」返回 `None` = **本模块不适用** ⇒ 调用方走**既有本地字段逻辑**。
+  两者的用户可见差别是巨大的: 按「未核实 + policy=hr」算, `mode: all` 站点会在**启动窗口**(取数线程还没发布
+  第一版视图)里让**整站种子集体触发打标** —— 千级标签风暴; 按「回落本地」算只是短暂少保护一会儿。
+- **处置**: 保持 `None` 语义; 两个方向都别"优化"(返回 False 会让未接入站点静默变成不触发 HR)。
+  守阵: `tests/test_hr_resolve.py::test_judge_record_not_applicable_when_site_off` /
+  `tests/test_hr_runtime.py::test_judge_without_published_view_falls_back`。
+
+### HR: 站点行**缺达标字段 ≠ 站点说未达标**(2026-09-25)
+
+- **触发**: 用站点侧结论判「是否达标」(`check_hr_satisfied`)时。
+- **判别**: `HrEntry.satisfied_by_site` 是**布尔**且缺字段时保守返回 False; 而 `satisfied_verdict`
+  对「站点没给」返回 **None** ⇒ 判定层(档位 A 且无剩余时间/无字段)回落**本地**做种时长与分享率。
+  把 None 当 False 会让**本地已达标**的种子被判未达标: 漏加 satisfied 标签/分类, WebUI 的 H&R 分档也误报未达标。
+- **处置**: 「不知道」不参与判定, 只回落本地; 新增站点字段时同步更新 `HrEntry.satisfied_verdict` 与
+  `HrSiteFacts`(WebUI 展示用, 空串 = 站点没给, 与 `0`「已达标」必须可分)。

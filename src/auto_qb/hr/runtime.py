@@ -14,13 +14,13 @@
 import logging
 import time
 from dataclasses import dataclass
-from typing import Mapping, Optional, Tuple
+from typing import Mapping, Optional, Sequence, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
 from .channel import ChannelStatus, describe_token_source, resolve_token, token_path
 from .fetcher import HrFetcher, NullFetcher, build_channel_fetcher, is_available
 from .queue import HrTaskQueue
-from .resolve import HrViewSet
+from .resolve import HrAnchor, HrJudgement, HrViewSet, judge_record
 from .server import HrChannelServer
 from .service import HrRefreshService
 from .store import hr_dir, instance_id
@@ -165,6 +165,32 @@ class HrRuntime:
     def view_snapshot(self) -> Tuple[int, HrViewSet]:
         """一次性取 (revision, views): 版本没变就不必做任何 record 更新"""
         return self.publisher.snapshot()
+
+    def judge(
+        self,
+        site: str,
+        infohashes: Sequence[str],
+        *,
+        anchor: Optional[HrAnchor] = None,
+        now: float = 0.0,
+    ) -> Optional[HrJudgement]:
+        """站点侧三态判定(M3 四个消费点的唯一入口; 返回 None = 本模块不适用 ⇒ 走本地逻辑)
+
+        调用方是 `TorrentRecord`(它持本门面的**稳定引用**, 读取时现算): 故本方法必须
+        **无状态、无写、无 API、零等待** —— 主循环与 Web 线程都会调它。
+        站点级开关(mode=off)由调用方事先挡掉(它手里有 tracker_conf, 不必回查配置迭代),
+        这里只检查**总开关**: 关掉它 = 全体回到既有本地行为(零静默变更的另一个方向)。
+        """
+        conf = self.global_conf
+        if not conf.enabled:
+            return None
+        return judge_record(
+            self.view_set().get(site),
+            infohashes,
+            anchor=anchor,
+            now=now,
+            unknown_policy=conf.unknown_policy,
+        )
 
     @property
     def revision(self) -> int:

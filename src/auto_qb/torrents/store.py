@@ -39,6 +39,10 @@ class TorrentStore:
     """
     def __init__(self, client: Any = None):
         self.client: Any = client
+        # HR 判定桥(QbManager 注入 `HrRuntime` 门面): 新记录构建/变更时挂到 record 上,
+        # 供 HR 四个消费点现算三态(计划 §9)。门面对象**稳定**(热重载不换), 故已挂过的
+        # 记录不必重挂 —— 未变化的记录也不会被本类碰到。None ⇒ 全部走本地字段逻辑。
+        self.hr_link: Any = None
         # 主索引: hash -> TorrentRecord(每轮原子替换引用, 记录对象跨 tick 保留)
         self.by_hash: Dict[str, TorrentRecord] = {}
         # 本程序自身发起删除、待下轮上报的 hash(remove_torrent 登记 / restore_torrent 撤销)
@@ -173,6 +177,7 @@ class TorrentStore:
         delta_fields: Dict[str, FrozenSet[str]] = {}
         state_changed: List[Tuple[str, Any]] = []
         member_to_key = self.member_to_key
+        hr_link = self.hr_link
         for h, src in patches.items():
             rec = prev.get(h)
             if rec is None:
@@ -190,6 +195,8 @@ class TorrentStore:
                         key = member_to_key.get(h)
                         if key is not None:
                             self.dirty_groups.add(key)
+            if hr_link is not None and rec.hr_link is not hr_link:
+                rec.hr_link = hr_link  # 只在需要时赋值: 反复过磅的静止种子不做无谓写
             by_hash[h] = rec
         if full:
             # 全量: by_hash 由本轮响应重建, 旧快照中未出现者即已删除

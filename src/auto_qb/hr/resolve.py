@@ -15,7 +15,7 @@ Web 线程与主循环并发只读安全; 「是否还在有效期」这类时�
 """
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Mapping, Optional
+from typing import Dict, Mapping, Optional, Sequence
 
 from .model import (
     CHANNEL_DISABLED,
@@ -84,6 +84,56 @@ class HrResolution:
         if self.identity is HrIdentity.VERIFIED_NON_HR:
             return False
         return self.forced or unknown_policy != POLICY_NOT_HR
+
+
+@dataclass(frozen=True, slots=True)
+class HrSiteFacts:
+    """命中那一行的**站点侧展示值**(计划 §9: 站点侧 / 本地两套值都显示, 便于对账)
+
+    从 HrEntry 拷成不可变对象: 视图里的 entry 是取数线程写入时复用的**可变**行对象,
+    直接把它带进判定结果会让读数方看到半新半旧的一行(映射不可变 ≠ 行不可变)。
+    """
+
+    lane: str = ""
+    need_seed_seconds: Optional[int] = None
+    remain_seconds: Optional[int] = None
+    ratio: Optional[float] = None
+    downloaded_bytes: Optional[int] = None
+
+    @classmethod
+    def of(cls, entry: HrEntry) -> "HrSiteFacts":
+        return cls(
+            lane=entry.lane,
+            need_seed_seconds=entry.need_seed_seconds,
+            remain_seconds=entry.remain_seconds,
+            ratio=entry.ratio,
+            downloaded_bytes=entry.downloaded_bytes,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HrJudgement:
+    """四个消费点最终要的语义(计划 §9): 身份 + 达标结论 + 依据 + 站点
+
+    `is_hr`: 已把 `unknown_policy` 与本实例锚点算进去的最终布尔(打标 / 规则 / 表达式 / 视图共用)。
+    `site_satisfied`: 站点侧对「是否达标」的**明确**结论; None = 站点没给 ⇒ 调用方本地兜底。
+    `facts`: 命中行的站点侧展示值(未命中 = None); `state_text`: 三态的中文说法单一来源。
+    """
+
+    identity: HrIdentity
+    is_hr: bool
+    reason: str = ""
+    site_satisfied: Optional[bool] = None
+    site: str = ""
+    facts: Optional[HrSiteFacts] = None
+
+    @property
+    def state_text(self) -> str:
+        if self.identity is HrIdentity.HR:
+            return "受管束"
+        if self.identity is HrIdentity.VERIFIED_NON_HR:
+            return "已核实·安全放行"
+        return "未核实"
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +240,63 @@ def resolve_identity(
     return HrResolution(HrIdentity.UNKNOWN, view.notes or "刷新不完备 / 从未成功刷新")
 
 
+# 判定优先级(两个 infohash 取更保守者): 清单命中 > 恒受管束 > 已核实放行 > 未核实。
+# 宁可多想一个, 不可漏一个 —— 漏 HR 的代价远大于多打一个标签。
+_RANK_HR = 3
+_RANK_FORCED = 2
+_RANK_RELEASED = 1
+_RANK_UNKNOWN = 0
+
+
+def _rank(res: HrResolution) -> int:
+    if res.identity is HrIdentity.HR:
+        return _RANK_HR
+    if res.forced:
+        return _RANK_FORCED
+    if res.identity is HrIdentity.VERIFIED_NON_HR:
+        return _RANK_RELEASED
+    return _RANK_UNKNOWN
+
+
+def judge_record(
+    view: Optional[HrSiteView],
+    infohashes: Sequence[str],
+    *,
+    anchor: Optional[HrAnchor] = None,
+    now: float = 0.0,
+    unknown_policy: str = POLICY_HR,
+) -> Optional[HrJudgement]:
+    """给 TorrentRecord 用的收口判定(四个消费点唯一入口; 读取时现算)。
+
+    返回 None 表示**本模块不适用**(站点未接入 / mode=off) ⇒ 调用方走既有本地字段逻辑 ——
+    这就是「零静默变更」的闸门: 没显式配 `hr_check` 的站点, 行为一个字都不变。
+
+    infohash 传 (v1, v2): 命中清单是站点侧事实, 两个键哪个命中都算命中(v2-only 页面同样成立);
+    取两者中**更保守**的结论(命中 > 恒受管束 > 已放行 > 未核实)。
+    """
+    if view is None or view.mode == "off":
+        return None
+    keys = [h for h in infohashes if h] or [""]
+    best: Optional[HrResolution] = None
+    best_key = keys[0]
+    for h in keys:
+        res = resolve_identity(view, h, anchor=anchor, now=now)
+        if best is None or _rank(res) > _rank(best):
+            best, best_key = res, h
+        if _rank(best) == _RANK_HR:
+            break  # 命中清单: 没有更保守的结论了
+    assert best is not None
+    entry = view.by_infohash.get(best_key)
+    return HrJudgement(
+        identity=best.identity,
+        is_hr=best.is_hr(unknown_policy),
+        reason=best.reason,
+        site_satisfied=entry.satisfied_verdict if entry is not None else None,
+        site=view.site,
+        facts=HrSiteFacts.of(entry) if entry is not None else None,
+    )
+
+
 def build_site_view(
     site: str,
     mode: str,
@@ -234,9 +341,12 @@ __all__ = [
     "POLICY_NOT_HR",
     "HrAnchor",
     "HrIdentity",
+    "HrJudgement",
     "HrResolution",
+    "HrSiteFacts",
     "HrSiteView",
     "HrViewSet",
     "build_site_view",
+    "judge_record",
     "resolve_identity",
 ]

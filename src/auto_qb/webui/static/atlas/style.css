@@ -1621,6 +1621,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .drawer-hr { border: 1px solid var(--border-soft); border-left: 2px solid var(--hr-pending); padding: 8px 12px;
   margin: 0 0 16px; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .drawer-hr.done { border-left-color: var(--hr-done); }
+/* 未触发(安全放行 / 未核实): 既不是"未达标"也不是"已达标", 左侧色条保持中性, 免得把安全放行渲染成告警 */
+.drawer-hr.info { border-left-color: var(--fg-dim); }
 .drawer-sec { margin: 0 0 18px; }
 .drawer-sec h4 { margin: 0 0 8px; font: 600 11px/1 ui-monospace, Consolas, monospace;
   letter-spacing: .1em; text-transform: uppercase; color: var(--fg-dim); }

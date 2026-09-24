@@ -166,12 +166,19 @@ class WebviewMixin:
 
     @staticmethod
     def _hr_view_fields(rec: TorrentRecord) -> dict:
-        """该成员的 HR 展示字段(标签文本 + 要求/达成布尔), 供前端渲染 H&R 栏与对照列
+        """该成员的 HR 展示字段(标签文本 + 要求/达成布尔 + 三态与依据), 供前端渲染 H&R 栏与对照列
 
         - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
         - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
         - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
         - hr_req_ratio: 要求分享率(0 = 不要求)
+        - hr_state / hr_state_text / hr_reason: 站点侧三态(hr / verified_non_hr / unknown) +
+          中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
+        - hr_satisfied_src: 达标结论的来源 site(站点侧权威) / local(本地时长/分享率兜底)
+        - hr_site_lane / hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl: 命中行的
+          **站点侧值**(档位 / 还需做种 / 剩余达标 / 分享率 / 下载量) —— 与本地实时值对照用:
+          本地值实时但会被重加/转移清零, 站点值是账号级权威但滞后一个刷新周期(计划 §9)
+          未命中/未接入一律空串 ""(未知与 0 必须可分: `hr_site_remain == 0` 是"已达标")
 
         判定委托 TorrentRecord.check_hr_condition/check_hr_satisfied, 标签文本经
         utils.replace_vars 解析 ${required_seeding_time}, 与维护流程(打 HR 标签)完全同源 ——
@@ -190,16 +197,51 @@ class WebviewMixin:
                 "hr_satisfied": False,
                 "hr_req_time": 0,
                 "hr_req_ratio": 0.0,
+                "hr_state": "",
+                "hr_state_text": "",
+                "hr_reason": "",
+                "hr_satisfied_src": "",
+                "hr_site_lane": "",
+                "hr_site_need": "",
+                "hr_site_remain": "",
+                "hr_site_ratio": "",
+                "hr_site_dl": "",
             }
         triggered = rec.check_hr_condition()
         satisfied = triggered and rec.check_hr_satisfied()
+        judged = rec.hr_judgement()  # 站点未接入返回 None(下面四个字段留空)
+        facts = judged.facts if judged is not None else None
         fields = {
-            "hr_tag": "",
-            "hr_tag_done": "",
-            "hr_triggered": triggered,
-            "hr_satisfied": satisfied,
-            "hr_req_time": hr.required_seeding_time + hr.extra_seeding_time,
-            "hr_req_ratio": hr.required_share_ratio,
+            "hr_tag":
+                "",
+            "hr_tag_done":
+                "",
+            "hr_triggered":
+                triggered,
+            "hr_satisfied":
+                satisfied,
+            "hr_req_time":
+                hr.required_seeding_time + hr.extra_seeding_time,
+            "hr_req_ratio":
+                hr.required_share_ratio,
+            "hr_state":
+                judged.identity.value if judged is not None else "",
+            "hr_state_text":
+                judged.state_text if judged is not None else "",
+            "hr_reason":
+                judged.reason if judged is not None else "",
+            "hr_satisfied_src":
+                ("site" if judged is not None and judged.site_satisfied is not None else "local") if triggered else "",
+            "hr_site_lane":
+                facts.lane if facts is not None else "",
+            "hr_site_need":
+                facts.need_seed_seconds if facts is not None and facts.need_seed_seconds is not None else "",
+            "hr_site_remain":
+                facts.remain_seconds if facts is not None and facts.remain_seconds is not None else "",
+            "hr_site_ratio":
+                facts.ratio if facts is not None and facts.ratio is not None else "",
+            "hr_site_dl":
+                facts.downloaded_bytes if facts is not None and facts.downloaded_bytes is not None else "",
         }
         if triggered:
             if satisfied:

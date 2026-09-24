@@ -207,6 +207,9 @@ class QbManager(
         # 每 tick 读 hr.view_set() 零等待, 需要用新数据时 hr.wake()(非阻塞)。
         # 未启用(总开关关 / 无站点 mode != off)时它什么都建, 也不会起任何线程。
         self.hr = HrRuntime(self)
+        # 判定桥: 记录持有门面的**稳定引用**(热重载不换对象), 读取时现算三态 ——
+        # 故锚点漂移/站点视图更新都不需要"记录置脏"或全库重建记录(计划 §9)。
+        self.store.hr_link = self.hr
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
@@ -664,6 +667,31 @@ class QbManager(
         if missing:
             raise QbCompatError(f"qBittorrent torrent info 缺少字段: {missing}; 请检查 qBittorrent 版本兼容性")
         self._schema_validated = True
+
+    def _hr_anchors(self) -> dict:
+        """本地种子锚点: {站点: {infohash: HrAnchor}} —— 供取数线程提前作废「本实例又下载了」的放行
+
+        锚点是**辅助信号**(计划 §9): 它只能让**本实例**的放行失效(二次下载 / 删种重加 /
+        文件重下), 覆盖不到别的客户端 —— 故放行仍以「刷新背书」为主, 锚点只把可疑的收回来。
+        ❗线程: 取数线程经 `HrRuntime._anchors` 异步要这份数据, 而 `store.by_hash` 由主循环
+        整体替换引用(读者看到的永远是某个完整快照)。故本方法**只读**: 不写状态、不发 API,
+        `rec.hr_anchor()` 也只把快照字段拷成不可变对象。
+        ❗站点键用 `tracker_conf.name`(= config.trackers 的键), 与取数线程的视图键同源。
+        """
+        out: dict = {}
+        for rec in self.store.all():
+            conf = rec.tracker_conf
+            if conf is None:
+                continue
+            site_conf = conf.hr_check
+            if site_conf is None or site_conf.mode == "off":
+                continue
+            anchor = rec.hr_anchor()
+            site = out.setdefault(conf.name, {})
+            for h in (rec.infohash_v1, rec.infohash_v2):
+                if h:
+                    site[h] = anchor
+        return out
 
     def _refresh_torrents(self, dry_run: bool = False):
         """种子列表刷新: 增量同步 -> 增删检测 -> 新种子创建内置+规则任务并归组,

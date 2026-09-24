@@ -19,6 +19,13 @@
 - test_missing_infohash_is_unknown: 身份缺位(infohash 未回填) -> 未核实
 - test_site_not_activated_is_unknown: 站点未接入 hr_check -> 未核实
 - test_build_site_view_filters_lane_and_active: 视图只收「受管束且最近一次刷新仍列出」的条目
+- test_judge_record_not_applicable_when_site_off: 站点未接入 / mode=off -> None(调用方走本地字段逻辑)
+- test_judge_record_hit_any_hash_wins: 两个 infohash 有一个命中清单 -> 受管束(命中即站点事实)
+- test_judge_record_prefers_conservative_over_release: 一键放行 + 一键恒受管束 -> 取恒受管束(policy 绕不过)
+- test_judge_record_carries_site_satisfied_verdict: 命中行的达标结论: B -> True / C -> False / 缺字段 -> None
+- test_judge_record_missing_hash_goes_through_policy: 两个 infohash 都空 -> 未核实(仍走 policy, 不是"不适用")
+- test_judge_record_mode_all_unlisted_is_managed: mode=all 未列出 -> 受管束
+- test_judge_record_carries_site_facts: 命中行带出站点侧值并**拷成不可变对象**(WebUI 两套值对账的数据源)
 """
 import pytest
 
@@ -38,6 +45,7 @@ from auto_qb.hr.resolve import (
     HrIdentity,
     HrSiteView,
     build_site_view,
+    judge_record,
     resolve_identity,
 )
 
@@ -217,3 +225,86 @@ def test_build_site_view_filters_lane_and_active():
     assert view.revision == data.revision
     assert resolve_identity(view, H2, now=NOW).identity is HrIdentity.VERIFIED_NON_HR  # D 档免罪
     assert resolve_identity(view, H3, now=NOW).identity is HrIdentity.VERIFIED_NON_HR  # 未列出 = 放行
+
+
+# ---------- judge_record: 四个消费点的收口入口(record 拿到的就是它) ----------
+
+
+def test_judge_record_not_applicable_when_site_off():
+    """站点未接入 / mode=off -> None = 「本模块不适用」, 调用方必须继续走本地字段逻辑
+
+    这是「零静默变更」的闸门: 返回 False 会让未接入站点全体变成不触发 HR(静默改行为)。
+    """
+    assert judge_record(None, (H1, ""), now=NOW) is None
+    assert judge_record(_view(mode="off"), (H1, ""), now=NOW) is None
+
+
+def test_judge_record_hit_any_hash_wins():
+    """两个 infohash 有一个命中清单 -> 受管束(v2-only 页面同样成立); 达标结论随命中行"""
+    view = _view(listed=[(H2, 102, "C")])
+    got = judge_record(view, (H1, H2), anchor=HrAnchor(added_on=1, downloaded=0), now=NOW)
+    assert got is not None and got.is_hr is True
+    assert got.identity is HrIdentity.HR and "清单命中" in got.reason
+    assert got.site == "s"
+
+
+def test_judge_record_prefers_conservative_over_release():
+    """一个键已核实放行 + 另一个键撞上新鲜度闸门 -> 取更保守的(恒受管束), policy 也绕不过"""
+    view = _view(verified=[_verified()])
+    anchor = HrAnchor(added_on=int(OK_TS) + 10)  # > last_success_ts: H2 走闸门(恒受管束)
+    got = judge_record(view, (H1, H2), anchor=anchor, now=NOW, unknown_policy=POLICY_NOT_HR)
+    assert got is not None
+    assert got.identity is HrIdentity.UNKNOWN and "新鲜度闸门" in got.reason
+    assert got.is_hr is True, "恒受管束不可被 unknown_policy=not-hr 绕过"
+
+
+def test_judge_record_carries_site_satisfied_verdict():
+    """命中行的达标结论原样带出: B -> True / C -> False / A 且无剩余时间字段 -> None(本地兜底)"""
+    anchor = HrAnchor(added_on=1, downloaded=0)
+    done = judge_record(_view(listed=[(H1, 101, "B")]), (H1, ""), anchor=anchor, now=NOW)
+    undone = judge_record(_view(listed=[(H1, 101, "C")]), (H1, ""), anchor=anchor, now=NOW)
+    unknown = judge_record(_view(listed=[(H1, 101, "A")]), (H1, ""), anchor=anchor, now=NOW)
+    assert done.site_satisfied is True and done.state_text == "受管束"
+    assert undone.site_satisfied is False
+    assert unknown.site_satisfied is None, "站点没给结论时必须回落本地, 不能当成未达标"
+
+
+def test_judge_record_missing_hash_goes_through_policy():
+    """两个 infohash 都空 -> 未核实(**不是**「不适用」): 该按 policy 保守处理, 不能静默放行"""
+    got = judge_record(_view(), ("", ""), now=NOW)
+    assert got is not None
+    assert got.identity is HrIdentity.UNKNOWN and got.is_hr is True
+    assert "身份缺位" in got.reason
+    relaxed = judge_record(_view(), ("", ""), now=NOW, unknown_policy=POLICY_NOT_HR)
+    assert relaxed.is_hr is False, "policy=not-hr 时未核实才放行(用户显式选的取舍)"
+
+
+def test_judge_record_mode_all_unlisted_is_managed():
+    """mode=all 站点未列出 -> 恒受管束(与 policy 无关)"""
+    got = judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW, unknown_policy=POLICY_NOT_HR)
+    assert got is not None and got.is_hr is True
+    assert "mode=all" in got.reason
+
+
+def test_judge_record_carries_site_facts():
+    """命中行带出站点侧值(档位/还需做种/剩余达标/分享率/下载量)—— WebUI 两套值对账的数据源
+
+    拷成不可变对象是刻意的: 视图里的行对象会被取数线程复用改写, 直接带引用会读到半新半旧的行。
+    """
+    entry = HrEntry(
+        tid=101,
+        infohash_v1=H1,
+        lane="C",
+        need_seed_seconds=3600,
+        remain_seconds=0,
+        ratio=1.25,
+        downloaded_bytes=4096,
+    )
+    view = HrSiteView(site="s", mode="partial", by_infohash={H1: entry})
+    got = judge_record(view, (H1, ""), anchor=HrAnchor(added_on=1, downloaded=0), now=NOW)
+    assert got is not None and got.facts is not None
+    assert got.facts.lane == "C" and got.facts.need_seed_seconds == 3600
+    assert got.facts.remain_seconds == 0 and got.facts.ratio == 1.25 and got.facts.downloaded_bytes == 4096
+    entry.remain_seconds = 99  # 取数线程复用行对象: 已拷出的判定结果不得跟着变
+    assert got.facts.remain_seconds == 0
+    assert judge_record(_view(), (H1, ""), anchor=HrAnchor(added_on=1), now=NOW).facts is None, "未命中无站点侧值"

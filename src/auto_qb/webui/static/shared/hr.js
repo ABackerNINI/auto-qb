@@ -69,6 +69,26 @@ window.AQB_HR = {
       if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时长/分享率要求`;
       return `已触发 HR ${g.hr_triggered} 个, 其中 ${g.hr_pending} 个尚未满足做种时长/分享率要求`;
     },
+    /* 站点侧三态行(详情抽屉): 身份 + 达标依据来源 + 依据原文 —— 全由后端算好,
+     * 前端只拼展示; 未接入 hr_check 的站点 hr_state 为空 ⇒ 返回空串(不显示这行) */
+    hrStateLine(m) {
+      if (!m.hr_state) return "";
+      const src = m.hr_triggered ? (m.hr_satisfied_src === "site" ? " · 达标依据: 站点" : " · 达标依据: 本地兜底") : "";
+      const why = m.hr_reason ? " · " + m.hr_reason : "";
+      return `${m.hr_state_text}${src}${why}`;
+    },
+    /* 站点侧值一行(与本地实时值对照): 空串 = 该字段站点没给; 0 要单独说"已达标"(未知 ≠ 0) */
+    hrSiteLine(m) {
+      if (!m.hr_site_lane) return "";
+      const parts = [`档位 ${m.hr_site_lane}`];
+      if (m.hr_site_need !== "") parts.push(`还需做种 ${fmtDuration(m.hr_site_need)}`);
+      if (m.hr_site_remain !== "") {
+        parts.push(m.hr_site_remain === 0 ? "已达标" : `剩余达标 ${fmtDuration(m.hr_site_remain)}`);
+      }
+      if (m.hr_site_ratio !== "") parts.push(`分享率 ${Number(m.hr_site_ratio).toFixed(2)}`);
+      if (m.hr_site_dl !== "") parts.push(`站点下载 ${fmtSize(m.hr_site_dl)}`);
+      return parts.join(" · ");
+    },
   },
   computed: {
     /* H&R 两档计数(只消费后端算好的组级/成员级布尔, 前端不重算模板/阈值, 见 pitfalls):

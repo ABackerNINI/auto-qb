@@ -6,22 +6,26 @@
 
 ## 当前基线
 
-**1504 collected: 1503 passed + 1 skipped / Windows** —— 2026-09-25 实测
-(本轮 **+2 条**: **页面取数改「零界面优先」**(用户实报第二轮: 上一版的隐藏窗口又变成了「打开新窗口」) ——
-`tests/test_extension_proxy.py` 的守阵改成**一次 node 跑四个场景**(直取零界面 / 内容不像页面 ⇒ 离屏 popup /
-登录页也得升级 / 焦点被抢后还回去), 共 **12 条**; ★红验: 强制走渲染通道 ⇒
-`test_page_fetch_is_headless_when_html_looks_fine` 当场变红。
-上一轮明细(只读口径 / 扩展隐藏窗口)与更早流水见 [baseline-history.md](baseline-history.md)。
-TOTAL **91%**(10425 语句 / 778 未覆盖 / 3446 分支 / 308~309 partial —— 并行采样波动), sidefx 台账 ≈2430 条(并行汇总, 单次采样) / **越界 0**。
+**1520 collected: 1519 passed + 1 skipped / Windows** —— 2026-09-25 实测
+(本轮 **+16 条**: **M3 判定联动** —— 站点侧三态接进 `TorrentRecord`(`hr_link` 稳定引用 + 读取时现算),
+四个消费点调用点未动; 新增用例: 收口判定 `judge_record` 7 条(`tests/test_hr_resolve.py`, 含「站点未接入 ⇒ None(不适用)
+vs 未核实」「多 infohash 取更保守者」「站点侧达标结论与展示值」「mode=all 未列出恒受管束」) · 门面 `judge()` 3 条
+(`tests/test_hr_runtime.py`) · 记录接入 4 条(`tests/test_torrents.py`: 转移种子 downloaded=0 也受管束 / 安全放行 /
+回落本地三道门 / store 挂桥) · 锚点提供者 1 条(`test_qbmanager.py`) · WebUI 三态与站点侧值 1 条(`test_web.py`) ·
+另加替身对齐(`FakeTracker` 补 `hr_check` / `FakeTorrent` 补 `hr_judgement`·`hr_anchor`)。
+★红验(2 处反证, 共 4 红): 旁路判定桥 ⇒ 记录接入 2 条红; 「站点未接入返回判定而非 None」⇒ 不适用两条红。
+上一轮明细(页面取数零界面优先 / 只读口径)与更早流水见 [baseline-history.md](baseline-history.md)。
+TOTAL **91%**(10534 语句 / 779 未覆盖 / 3494 分支 / 310~311 partial —— 并行采样),
+sidefx 台账 ≈2447 条(并行汇总, 单次采样) / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 页面取数零界面优先)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **22.78 / 22.83 / 22.97s**
-- 串行 `-n 0 --no-cov`(对照): **35.25s**
+**当前(2026-09-25 M3 判定联动)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **18.3 / 18.9 / 19.3s**(3 次采样)
+- 串行 `-n 0 --no-cov`(对照): **35.25s**(上一态采样, 本轮未重测串行)
 
 ⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
 
@@ -35,7 +39,7 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: **当前**并行 `10425 语句 / 778 未覆盖 / 3446 分支 / 308~309 partial`, TOTAL **91%**。
+- **覆盖率口径**: **当前**并行 `10534 语句 / 779 未覆盖 / 3494 分支 / 310~311 partial`, TOTAL **91%**。
   下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
   并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
   ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。

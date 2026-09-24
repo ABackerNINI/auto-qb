@@ -17,6 +17,9 @@
 - test_shared_dir_used_for_site_files: 配了 shared_dir -> 站点文件落在该目录
 - test_status_reports_paths_and_channel: 自检快照字段齐全(路径/写者/端点/密钥来源)
 - test_view_snapshot_and_wake_are_safe_when_not_started: 未启动时读视图/唤醒都安全
+- test_judge_is_none_when_disabled: 总开关关 -> judge 返回 None(消费方回落本地字段逻辑)
+- test_judge_reads_published_view: 启用时按**当前已发布**视图现算(命中清单 -> 受管束 + 站点达标结论)
+- test_judge_without_published_view_falls_back: 还没发布过视图(启动窗口) -> None, 不是"未核实"
 - test_apply_l0_rebuilds_service_without_worker_running: 未启动时 apply 不得把线程拉起来
 - test_runtime_uses_anchors_provider: 取数线程经主循环提供的锚点提供者取锚点(M3 的交接面)
 - test_stop_is_prompt_while_waiting_for_extension: 取数线程正等扩展回传时 stop 也要立刻返回(不等满 request_timeout)
@@ -32,7 +35,11 @@ import pytest
 
 from auto_qb.config.models import Config, HrChannelConfig, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.channel import HrChannelBindError
+from auto_qb.hr.model import HrEntry
+from auto_qb.hr.resolve import HrAnchor, HrIdentity, HrSiteView, HrViewSet
 from auto_qb.hr.runtime import HrRuntime
+
+H1 = "aa" * 20
 
 
 class _FakeManager:
@@ -290,6 +297,36 @@ def test_apply_l0_rebuilds_service_without_worker_running(tmp_path):
     runtime.apply(old)
     assert runtime.service is not None and runtime.service.global_conf.poll_interval == 15.0
     assert runtime.worker is None or not runtime.worker.started, "从未启动过就不该被 apply 拉起来"
+
+
+def test_judge_is_none_when_disabled(tmp_path):
+    """总开关关 -> judge 返回 None = 消费方回落既有本地判断(零静默变更的另一个方向)"""
+    runtime = make_runtime(tmp_path, enabled=False, channel=False)
+    runtime.publisher.publish(HrViewSet(views={"pt.example.com": HrSiteView(site="pt.example.com", mode="partial")}))
+    assert runtime.judge("pt.example.com", (H1, ), now=1.0) is None
+
+
+def test_judge_reads_published_view(tmp_path):
+    """启用时按**当前已发布**视图现算: 命中清单 -> 受管束, 并把站点侧达标结论一并带出"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    view = HrSiteView(
+        site="pt.example.com",
+        mode="partial",
+        by_infohash={H1: HrEntry(tid=7, infohash_v1=H1, lane="B")},
+    )
+    runtime.publisher.publish(HrViewSet(views={"pt.example.com": view}))
+    got = runtime.judge("pt.example.com", (H1, ""), anchor=HrAnchor(added_on=1, downloaded=0), now=1.0)
+    assert got is not None and got.is_hr is True
+    assert got.identity is HrIdentity.HR and got.site_satisfied is True
+
+
+def test_judge_without_published_view_falls_back(tmp_path):
+    """启用了但还没发布过视图(启动窗口) -> None: 站点侧没数据就回落本地
+
+    若把"没数据"当"未核实", mode=all 站点会在启动窗口里让整站种子集体触发打标(千级标签风暴)。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=False, mode="all")
+    assert runtime.judge("pt.example.com", (H1, ), now=1.0) is None
 
 
 def test_runtime_uses_anchors_provider(tmp_path):
