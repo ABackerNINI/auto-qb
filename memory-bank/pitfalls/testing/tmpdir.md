@@ -1,7 +1,7 @@
 # 临时目录与跑全量
 
-> 摘要: 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设会让会话收尾崩。
-> 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, COVERAGE_FILE, pytest-current, 耗时
+> 摘要: 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设会让收尾崩, 别手工加前缀。
+> 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 
@@ -81,11 +81,10 @@
   `PermissionError [WinError 5] … pytest-current`(rc=1)⇒ STOP。**为什么没命中**: 读过本文件也知道要设,
   但只给**自己手工跑**的测试带了, 没意识到**闸门命令是配置里的另一条执行路径** —— 坑里记的是
   "跑测试时要设", 没写"闸门也是跑测试"。⇒ 收口即上面那条配置改动: **改配置比改记忆可靠**。
-- **复发**: 2 —— 2026-09-25 在 Git Bash 手工跑子集, 把闸门的 cmd.exe 写法照搬
-  (`set "TMPDIR=..." && uv run pytest …`): bash 里 `set` 是位置参数内建, TMPDIR 没导出 ⇒ pytest 回落
-  `H:\Temp`, 照抛 `PermissionError … pytest-current`。**为什么没命中**: AGENTS.md「命令」节写明
-  "`TMPDIR` 已内置在 `test.*` 里, 不要再手工加前缀", 读了没照做。⇒ 只走 `commands run test.*`;
-  挑子集 `test.one -- '<路径> -k "<表达式>"'`(**整串加引号**, 否则 `-k` 空格被拆开)。
+- **复发**: 2+3 —— 2026-09-25 两踩: 手工加 `TMPDIR="$(cygpath -w /tmp)"` 前缀 ⇒ 指回 `H:\Temp` 照崩
+  (AGENTS.md 已写「不要再手工加前缀」, 读了没照做); `cmd //c` 嵌套引号挑子集 ⇒ 带引号的路径/`-k`
+  表达式被原样传给 pytest(且没意识到**别的绕法全部同坑**)。⇒ 只走 `commands run test.*`; 挑子集
+  `test.one -- '<路径> -k "<表达式>"'`(整串加引号); bash 前缀 `TMPDIR='R:\Temputo-qb	ests'` 亦有效。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需要能读那个重解析点), 之后在**默认 TMPDIR** 下跑

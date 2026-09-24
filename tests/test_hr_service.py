@@ -26,7 +26,14 @@
 - test_login_page_keeps_freshness_and_evidence_untouched: 登录失效**不得**动 fetched_at / 新鲜度基准 / 覆盖证明 /
   放行记录 —— 它只能把原因写进 refresh.reason(报告与视图 notes 读它)
 - test_login_recovery_reports_again: 登录恢复(刷新成功)后重置告警位 ⇒ 再次失效时重新报一次
-- test_quota_exhaustion_stops_refresh_then_waits: 配额用尽时刷新截断; 同窗口后续轮次直接等下一轮
+- test_quota_exhaustion_stops_refresh_then_waits: 配额用尽时刷新截断; 窗口内是零请求的复用轮,
+  过了不完备窗口(≥2×poll)才重新进入频率判定等下一轮
+- test_incomplete_window_covers_next_poll: 不完备刷新的有效期 ≥ 2×poll_interval(以刷新周期封顶) ——
+  否则「复用轮补下载」永远比 expires_at 晚一个 ε 轮不到(2026-09-25 实报修复)
+- test_page_failure_still_backfills_pending: 页面取数失败**不带走下载的名额** —— 待回填清单在
+  已持久化的索引里, 页面异常(超时/HTTP错)不得把回填一起跳过(2026-09-25 实报饿死残留)
+- test_download_phase_yield_events_are_not_tid_failures: 下载阶段的让位/人工事件(叫停/扩展硬上限/
+  登录页)都是 HrFetchError 子类, **不得**计入 tid 失败(否则关停三次 = 12h 冷却, 2026-09-25 实报)
 - test_download_failure_counts_then_cools_down: 取 .torrent 失败计数, 达上限且冷却未过时不再尝试
 - test_consecutive_failures_fuse_site: 连续失败达阈值 -> 熔断, 期间零请求
 - test_fuse_makes_next_round_wait: 熔断生效时返回等待(不报错)
@@ -52,7 +59,7 @@ import pytest
 
 from auto_qb.hr import ACTION_DISABLED, ACTION_ERROR, ACTION_LOCKED, ACTION_NO_CHANNEL, ACTION_PARTIAL, \
     ACTION_REFRESHED, ACTION_REUSED, ACTION_WAITING, REASON_BUDGET, REASON_NONE, REASON_PARSE, HrRefreshService
-from auto_qb.hr.fetcher import HrChannelStopped, NullFetcher
+from auto_qb.hr.fetcher import HrChannelQuota, HrChannelStopped, HrLoginExpired, NullFetcher
 from auto_qb.hr.model import SOURCE_EXEMPT, SOURCE_NOT_LISTED
 from auto_qb.hr.store import HrSiteStore
 from hr_helpers import (
@@ -103,6 +110,20 @@ def _read(tmp_path):
     data, err = HrSiteStore(SITE, str(tmp_path / "hr")).read_unlocked()
     assert err is None
     return data
+
+
+class _BytesFailFetcher:
+    """页面走内层 FakeFetcher, .torrent 一律抛给定异常 —— 测下载阶段的异常语义(让位/人工事件)"""
+    def __init__(self, inner, exc) -> None:
+        self._inner = inner
+        self._exc = exc
+
+    def get_text(self, url: str) -> str:
+        return self._inner.get_text(url)
+
+    def get_bytes(self, url: str) -> bytes:
+        self._inner.byte_calls.append(url)
+        raise self._exc
 
 
 def test_complete_refresh_builds_index_and_backfills_infohash(tmp_path):
@@ -540,7 +561,7 @@ def test_login_recovery_reports_again(tmp_path, caplog):
 
 
 def test_quota_exhaustion_stops_refresh_then_waits(tmp_path):
-    """配额用尽时刷新截断; 同窗口后续轮次直接等下一轮(不报错)"""
+    """配额用尽时刷新截断; 窗口内是零请求的复用轮, 过了不完备窗口才重新进入频率判定(不报错)"""
     clock = Clock()
     fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
     svc = _service(tmp_path, fetcher, clock, glob=global_conf(max_torrents_per_hour=1))
@@ -550,11 +571,105 @@ def test_quota_exhaustion_stops_refresh_then_waits(tmp_path):
     assert "配额" in first.reason
     assert len(fetcher.text_calls) == 1
 
-    clock.advance(61)  # 截断轮次只给 60s 的短暂有效期; 过了才重新进入频率判定
+    clock.advance(61)  # 不完备窗口(2×poll=120s)内: 复用轮 —— 不重抓页面; 配额仍冻结 ⇒ 下载也发不出
     second = svc.refresh_site(SITE)
-    assert second.action == ACTION_WAITING
-    assert "小时配额" in second.reason
+    assert second.action == ACTION_REUSED
+    assert len(fetcher.text_calls) == 1  # 零页面请求
+    assert len(fetcher.byte_calls) == 0
+
+    clock.advance(60)  # 过了不完备窗口: 重新进入频率判定
+    third = svc.refresh_site(SITE)
+    assert third.action == ACTION_WAITING
+    assert "小时配额" in third.reason
     assert len(fetcher.text_calls) == 1  # 零请求
+
+
+@pytest.mark.parametrize(
+    "exc, note",
+    [
+        (HrChannelStopped("正在停止"), "叫停"),
+        (HrChannelQuota("扩展侧硬上限挡下"), "硬上限"),
+        (HrLoginExpired("登录页"), "登录页"),
+    ],
+)
+def test_download_phase_yield_events_are_not_tid_failures(tmp_path, exc, note):
+    """下载阶段的让位/人工事件**不得**计入 tid 失败(2026-09-25 实报修复)
+
+    叫停 / 扩展硬上限 / 登录页都是 `HrFetchError` 的子类: 被 `_fill_infohashes` 的
+    `except HrFetchError` 吞掉的话, 关停 / 扩展限流 / 该去登录各来三次就把 tid 送进 12h 冷却 ——
+    把「程序要关了 / 第二道闸 / 去登录」伪装成「种子坏了」。现在原样上抛、折成备注。
+    """
+    clock = Clock()
+    inner = FakeFetcher(_pages(a_rows=[row(101)]), {})
+    svc = _service(tmp_path, _BytesFailFetcher(inner, exc), clock)
+
+    result = svc.refresh_site(SITE)
+
+    assert result.torrents_fetched == 0 and result.torrents_failed == 0
+    assert note in result.reason
+    assert _read(tmp_path).fails == {}, "让位/人工事件不是取数失败, 不得烧重试额度"
+
+
+@pytest.mark.parametrize(
+    "poll, refresh, expected",
+    [
+        (60.0, 12 * 3600.0, 120.0),  # 下限 120s(默认 poll 60s)
+        (300.0, 12 * 3600.0, 600.0),  # 2×poll
+        (300.0, 180.0, 180.0),  # 以刷新周期封顶
+    ],
+)
+def test_incomplete_window_covers_next_poll(tmp_path, poll, refresh, expected):
+    """不完备刷新的有效期 ≥ 2×poll_interval(以刷新周期封顶), 盖过下一轮
+
+    2026-09-25 实报: 窗口 60s == poll 60s, 而下一轮从「上一轮结束后再等 poll」才开始 ⇒ 现算时刻
+    永远比 expires_at 晚一个 ε ⇒ 复用轮(唯一给下载让名额的轮次)从不发生。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)], a_next=True), _blobs(101))
+    svc = _service(
+        tmp_path,
+        fetcher,
+        clock,
+        site=site_conf(max_pages_per_refresh=1, refresh_interval=refresh),
+        glob=global_conf(poll_interval=poll),
+    )
+
+    result = svc.refresh_site(SITE)
+
+    assert result.complete is False
+    data = _read(tmp_path)
+    assert data.expires_at - data.fetched_at == expected
+
+
+def test_page_failure_still_backfills_pending(tmp_path):
+    """页面取数失败**不带走下载的名额**(2026-09-25 实报饿死残留)
+
+    待回填清单来自**已持久化的索引**, 页面异常(超时/HTTP 错)不该让回填一起被跳过 —— 否则
+    「先页面后下载」的顺序在通道抖动时又会把下载饿死。预算闸门(熔断/配额/间隔)照常生效。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock)
+    svc.refresh_site(SITE)
+
+    # 造现场: 索引条目在但 infohash 没了(上一轮下载被拦), 下一轮页面开始报错(通道抖动)
+    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
+    with store.hold() as session:
+        session.data.index[101].infohash_v1 = ""
+        session.data.index[101].infohash_v2 = ""
+        session.data.downloaded.clear()
+        session.commit(clock.now)
+    clock.advance(12 * 3600 + 1)  # 推过刷新周期: 数据过期 ⇒ 走完整刷新路径(页面才会失败)
+    fetcher.pages = {}  # get_text 将抛 HrFetchError(假通道没有配置任何页面)
+    fetcher.byte_calls.clear()
+
+    result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_ERROR
+    assert len(fetcher.byte_calls) == 1, "页面失败后仍要补一次下载"
+    assert result.torrents_fetched == 1
+    data = _read(tmp_path)
+    assert data.index[101].infohash_v1 and 101 in data.downloaded, "回填结果要落盘"
 
 
 def test_download_failure_counts_then_cools_down(tmp_path):

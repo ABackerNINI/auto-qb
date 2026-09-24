@@ -125,6 +125,8 @@ def record_failure(fuse: HrFuse, limits: HrLimits, now: float, retry_after: floa
     退避: 站点给出 Retry-After 时按它; 否则指数退避(min_interval 不可得, 用 cooldown 的
     1/2^n 粒度不合适, 故直接以 cooldown 为上限、以失败次数翻倍)。
     """
+    #: 回传来的 Retry-After 不可信(畸形/恶意值能把熔断推到天荒地老): 以本站冷却时长封顶
+    retry_after = max(0.0, min(float(retry_after), limits.failure_cooldown))
     fuse.failures += 1
     fuse.reason = "连续失败"
     newly_fused = False

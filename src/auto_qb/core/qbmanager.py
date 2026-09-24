@@ -204,7 +204,8 @@ class QbManager(
         self.web = WebUIRuntime(self)
         # HR 在线核实运行时: 本地取数端点 + 取数线程 + 只读视图(计划 §8)。
         # 同 WebUIRuntime 的思路 —— 附属线程与文件句柄的生命周期不进核心域, 主循环只见门面:
-        # 每 tick 读 hr.view_set() 零等待, 需要用新数据时 hr.wake()(非阻塞)。
+        # 取数线程按 poll_interval 自唤醒, 主循环与判定路径只读视图(hr.view_set(), 零等待、
+        # 读取时现算三态); hr.wake() 是留给主循环的**可选**叫醒口(非阻塞, 当前无调用点)。
         # 未启用(总开关关 / 无站点 mode != off)时它什么都建, 也不会起任何线程。
         self.hr = HrRuntime(self)
         # 判定桥: 记录持有门面的**稳定引用**(热重载不换对象), 读取时现算三态 ——

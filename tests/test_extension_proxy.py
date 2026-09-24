@@ -23,6 +23,8 @@
 - test_site_caps_are_shared_single_source: 硬上限只有一份(site-caps.js), 后台与选项页都载入它
 - test_extension_quota_caps_and_refuses: 真跑 background.js —— 同站访问/下载各自计数, 超限即**拒发**
   (不发请求 + 回传 kind=ext-quota + retry_after); 窗口键变了计数归零
+- test_extension_torrent_login_page_detected: 真跑 background.js —— download.php 返回 HTML(登录页)时
+  回传 kind=login-page, 让后端按「HR 登录失效」处置而不烧 .torrent 重试额度(2026-09-25 实报)
 """
 import json
 import pathlib
@@ -472,9 +474,12 @@ const chrome = {
 };
 const sandbox = {
   chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL, btoa,
+  TextDecoder, TextEncoder,   // fetchBinary 解析响应头/首字节要用(真实 SW 里有, 桩必须同形)
   fetch: async () => {
     fetches += 1;
-    return { ok: true, status: 200, text: async () => PAGE, arrayBuffer: async () => new ArrayBuffer(8),
+    return { ok: true, status: 200,
+             headers: { get: () => 'application/octet-stream' },   // 与真实 Response 同形(fetchBinary 读 content-type)
+             text: async () => PAGE, arrayBuffer: async () => new ArrayBuffer(8),
              json: async () => ({}) };
   },
 };
@@ -535,7 +540,6 @@ def quota_trace() -> dict:
 
 def test_extension_quota_caps_and_refuses():
     """超限即**拒发**: 不发请求 + 回传 kind=ext-quota + retry_after(后端据此让位, 不计失败)
-
     ❗这条闸的意义在「后端出错时」: 后端频控写错 / 配置被改坏 / 有人手工灌任务时, 浏览器仍然
     打不爆站点。所以断言要看两件事: ①第 11 次被拒 ②**它真的没有发出请求**(只看回传字段不算数)。
     """
@@ -566,3 +570,59 @@ def test_extension_quota_windows_roll_over():
     assert "本日" in day.get("error", ""), day.get("error")
     assert day.get("retry_after", 0) > 0 and day.get("retry_after", 0) <= 86400
     assert trace["fetchesAtEnd"] == trace["fetchesAfterTorrent"] + 1, "日上限那次同样不得发出请求"
+
+
+#: download.php 返回 HTML(登录页)的场景: fetchBinary 必须识别并标 kind=login-page,
+#: 让后端按「HR 登录失效」处置(不计取数失败), 而不是回传 HTML 让 infohash 解析烧重试额度。
+_NODE_RUN_LOGIN_PAGE = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const DL_URL = 'https://pt.example.com/download.php?id=313852';
+const LOGIN_HTML = '<!doctype html><html><body><form action="takelogin.php">' +
+  '<input type="password" name="password"></form></body></html>';
+const store = {};
+function getWithDefaults(defaults) {
+  const out = {};
+  for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+  return Promise.resolve(out);
+}
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { local: {
+    get: (defaults) => getWithDefaults(defaults),
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = {
+  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL, btoa,
+  TextDecoder, TextEncoder,
+  fetch: async () => {
+    const bytes = new TextEncoder().encode(LOGIN_HTML);
+    return { ok: true, status: 200, headers: { get: () => 'text/html; charset=utf-8' },
+             text: async () => LOGIN_HTML, arrayBuffer: async () => bytes.buffer, json: async () => ({}) };
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+(async () => {
+  const r = await sandbox.runTask({ id: 't1', kind: 'torrent', url: DL_URL });
+  process.stdout.write(JSON.stringify({ payload: r.payload }));
+})();
+"""
+
+
+def test_extension_torrent_login_page_detected():
+    """download.php 返回 HTML ⇒ 回传 kind=login-page(后端按「登录失效」处置, 不计取数失败)"""
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node([node, "-e", _NODE_RUN_LOGIN_PAGE, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
+    assert proc.returncode == 0, f"node 跑 background.js 的登录页场景失败: {proc.stderr.strip()}"
+    payload = json.loads(proc.stdout)["payload"]
+    assert payload.get("ok") is False
+    assert payload.get("kind") == "login-page", f"必须标成登录页让后端免计失败: {payload}"
+    assert "登录" in payload.get("error", ""), payload.get("error")

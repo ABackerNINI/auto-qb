@@ -13,7 +13,8 @@
 时间相关字段的语义(易混, 明写):
 - `fetched_at`: 上次**尝试**取数的时刻(失败也会前进 —— 它回答"上次动过是什么时候");
 - `last_success_ts`: 上次**完整成功**刷新的时刻 —— 它才是新鲜度基准(不完备刷新不推进);
-- `expires_at`: 本次数据的有效期截止(完整刷新 = 周期, 不完备 = 最多 60s 的短暂窗口);
+- `expires_at`: 本次数据的有效期截止(完整刷新 = 周期, 不完备 = 至少 2×轮询间隔的短暂窗口、
+  以周期封顶 —— 窗口必须盖过下一轮, 否则「复用轮只补下载」永远轮不上, 见 service._do_fetch);
 - `next_refresh_at`: 下次**可能**去取的时刻(现在算: fetched_at + 刷新周期) —— 站点文件里不存它,
   因为它随周期配置变化, 存下来就会重复一份可能过期的副本。
 """
@@ -31,7 +32,7 @@ from .model import (
     LANE_UNSATISFIED,
     HrSiteData,
 )
-from .ratelimit import fuse_active, quota_left
+from .ratelimit import day_key, fuse_active, hour_key, quota_left
 from .resolve import HrSiteView
 
 #: 通道状态的人话(与 `--hr-status` 逐字一致 —— 两处口径必须相同)
@@ -178,10 +179,13 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
         reason=data.fuse.reason,
     )
     fuse.text = (f"熔断中至 {stamp_text(fuse.until_ts)}({fuse.reason})" if fuse.active else f"正常(连续失败 {fuse.failures})")
+    # 展示口径与 quota_left 同源: 窗口键已翻篇(上一小时 / 昨天)的计数不能标成「本小时 / 本天」,
+    # 否则会出现「本小时 7/12 · 还能取 12 次」的自相矛盾(2026-09-25 实报)
+    hk, dk = hour_key(now), day_key(now)
     quota = QuotaStatus(
-        hour=data.quota.hour_count,
+        hour=data.quota.hour_count if data.quota.hour_window == hk else 0,
         hour_max=limits.max_per_hour,
-        day=data.quota.day_count,
+        day=data.quota.day_count if data.quota.day_window == dk else 0,
         day_max=limits.max_per_day,
         left=quota_left(data.quota, limits, now),
         last_fetch_ts=data.quota.last_fetch_ts,

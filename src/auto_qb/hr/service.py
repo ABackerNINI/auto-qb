@@ -265,6 +265,34 @@ class HrRefreshService:
 
         self._do_fetch(site, site_conf, adapter, session, result, limits, anchors)
 
+    def _guarded_backfill(
+        self, site: str, adapter, data: HrSiteData, pending: Mapping[int, HrEntry], budget, result: HrRefreshResult
+    ) -> str:
+        """跑一次回填, 把「让位 / 人工事件」类异常折成一句备注(**不计失败、不丢本轮已有成果**)。
+
+        为什么必须包两层: `_fill_infohashes` 的间隔等待(可中断 sleeper)与 `get_bytes` 都可能抛
+        `HrChannelStopped` / `HrChannelQuota` / `HrLoginExpired` —— 这些是 `HrFetchError` 的**子类**:
+        - 漏到 `refresh_site` 的兜底 except ⇒ 被记成「刷新异常」WARNING(关停一次弹一条, 2026-09-24 实报同款);
+        - 被 `_fill_infohashes` 的 `except HrFetchError` 吞掉 ⇒ 烧掉该 tid 的重试额度(把「程序要关了 /
+          扩展限流 / 该去登录」伪装成「这个种子取不下来」, 三次就是 12h 冷却)。
+        故在 `_fill_infohashes` 里原样上抛、在这里折成备注。
+        """
+        try:
+            fetched, failed = self._fill_infohashes(adapter, data, pending, budget, site_conf=self.site_confs[site])
+        except HrChannelStopped as e:
+            return f"取 .torrent 被叫停(正在停止或重挂): {e}"
+        except HrChannelQuota as e:
+            self._warn_ext_quota(site, e)
+            return f"取 .torrent 被扩展侧硬上限挡下: {e}"
+        except HrLoginExpired as e:
+            self._warn_login(site, e)
+            return f"取 .torrent 命中登录页(需人工登录): {e}"
+        result.torrents_fetched = fetched
+        result.torrents_failed = failed
+        if fetched or failed:
+            result.snapshot = data
+        return ""
+
     def _backfill_on_reuse(
         self, site: str, data: HrSiteData, adapter, session, result: HrRefreshResult, limits: HrLimits, now: float
     ) -> None:
@@ -276,6 +304,8 @@ class HrRefreshService:
         有效期 ⇒ 下一轮又从头抓页面), `.torrent` 一次没取到 ⇒ 索引里 0 个 infohash 键 ⇒ 站点侧
         判定完全无从下手, 而整站种子会落到「未核实 ⇒ unknown_policy=hr」上去。
         故复用轮把名额全给下载: 每轮至少推进一条待回填, 索引才可能长出来。
+        ❗窗口必须盖过下一轮: 不完备有效期只有 60s 时, 下一轮开始时刻(上一轮结束后再等 poll_interval)
+        永远比 `expires_at` 晚一个 ε ⇒ 复用轮**从不发生**(窗口已改为 ≥ 2×poll_interval, 见 `_do_fetch`)。
 
         这里**不跑** `_refresh_verified`: 复用不是一次新的核实, 续放行有效期只能由真刷新给出。
         """
@@ -287,18 +317,42 @@ class HrRefreshService:
         budget = _Budget(
             data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
         )
-        fetched, failed = self._fill_infohashes(adapter, data, pending, budget, self.site_confs[site])
-        if not (fetched or failed):
+        note = self._guarded_backfill(site, adapter, data, pending, budget, result)
+        if not (result.torrents_fetched or result.torrents_failed):
             return
-        result.torrents_fetched = fetched
-        result.torrents_failed = failed
-        result.reason += f"; 顺带补 infohash: 成功 {fetched} 失败 {failed}"
+        result.reason += f"; 顺带补 infohash: 成功 {result.torrents_fetched} 失败 {result.torrents_failed}"
+        if note:
+            result.reason += f"; {note}"
         result.snapshot = data
         if self.persist:
             status = session.commit(self._now())
             result.persisted = status == "written"
             if status == "readonly":
                 result.reason += "; 锁自检失败, 未写盘(只读退化)"
+
+    def _backfill_on_page_failure(self, site: str, adapter, session, result: HrRefreshResult, limits: HrLimits) -> None:
+        """页面取数失败后**仍补一次下载**(2026-09-25 实报「页面异常 ⇒ 回填被跳过」的饿死残留)
+
+        待回填清单来自**已持久化的索引**(不依赖本轮页面), 页面失败不该把下载的名额一起带走。
+        预算闸门照常生效: 熔断(刚失败可能刚推到冷却)/ 配额 / 间隔任一不满足就自然空手而回。
+        """
+        if not self.allow_fetch:
+            return
+        data = session.data
+        pending = {tid: entry for tid, entry in data.index.items() if not (entry.infohash_v1 or entry.infohash_v2)}
+        if not pending:
+            return
+        budget = _Budget(
+            data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
+        )
+        note = self._guarded_backfill(site, adapter, data, pending, budget, result)
+        if note:
+            result.reason = (result.reason + "; " if result.reason else "") + note
+        if result.torrents_fetched or result.torrents_failed:
+            result.snapshot = data
+            if self.persist:
+                status = session.commit(self._now())
+                result.persisted = status == "written"
 
     def _do_fetch(
         self, site: str, site_conf: SiteHrCheckConfig, adapter, session, result, limits: HrLimits,
@@ -408,6 +462,9 @@ class HrRefreshService:
                 logger.warning(events.fuse_opened(site, data.fuse.until_ts, e))
             else:
                 logger.warning(events.fetch_failed(site, data.fuse.failures, limits.failure_threshold, e))
+            # 页面失败**不带走下载的名额**(2026-09-25 实报饿死残留): 待回填清单在已持久化的索引里,
+            # 预算闸门(熔断/配额/间隔)会自己决定这一 shot 能不能发。
+            self._backfill_on_page_failure(site, adapter, session, result, limits)
             return
 
         record_success(data.fuse)
@@ -415,14 +472,14 @@ class HrRefreshService:
         self._ext_quota_warned.discard(site)  # 恢复正常: 下次再超限时重新报一次
         self._login_warned.discard(site)  # 登录恢复: 下次真的又失效时再报一次
         entries_new = sum(1 for tid in entries_seen if tid not in data.downloaded)
-        fetched, failed = self._fill_infohashes(adapter, data, entries_seen, budget, site_conf)
+        dl_note = self._guarded_backfill(site, adapter, data, entries_seen, budget, result)
+        if dl_note:
+            notes.append(dl_note)
         complete = bool(scopes) and len(scopes_done) == len(scopes) and reached_last and max_missing <= \
             self.global_conf.parse_missing_rate_max
         self._merge_index(data, entries_seen, self._now(), complete, self.global_conf.index_retention)
         result.entries = len(data.index)
         result.entries_new = entries_new
-        result.torrents_fetched = fetched
-        result.torrents_failed = failed
 
         if not complete and not notes:
             notes.append("刷新不完备")
@@ -447,8 +504,14 @@ class HrRefreshService:
             reason="; ".join(notes),
         )
         data.fetched_at = now
-        # 有效期只由刷新周期决定; 不完备刷新不续放行(放行有效期仍以各记录的 verified_ts 计)
-        data.expires_at = now + site_conf.refresh_interval if complete else now + min(60.0, site_conf.refresh_interval)
+        # 有效期只由刷新周期决定; 不完备刷新不续放行(放行有效期仍以各记录的 verified_ts 计)。
+        # ❗不完备窗口必须盖过取数线程的**下一轮**(2026-09-25 实报修复): 窗口 60s == poll_interval 60s,
+        # 而下一轮从「上一轮结束后再等 poll_interval」才开始 ⇒ 现算时刻永远比 expires_at 晚一个 ε ⇒
+        # 复用轮(唯一给下载让名额的轮次)**从不发生**。取 2×poll_interval(下限 120s)、以刷新周期封顶;
+        # 判定不读 expires_at(三态按 last_success_ts / verified_ts 现算), 拉长它不产生任何放行,
+        # 只是给 `_backfill_on_reuse` 留一个不重抓页面的轮次。
+        backfill_window = min(max(120.0, 2.0 * self.global_conf.poll_interval), site_conf.refresh_interval)
+        data.expires_at = now + site_conf.refresh_interval if complete else now + backfill_window
         result.verified_count = self._refresh_verified(data, entries_seen, complete, now, anchors)
         result.complete = complete
         result.scopes_done = tuple(scopes_done)
@@ -527,6 +590,11 @@ class HrRefreshService:
             try:
                 blob = self.fetcher.get_bytes(adapter.download_url(tid))
                 budget.mark()
+            except (HrChannelStopped, HrChannelQuota, HrLoginExpired):
+                # 让位 / 人工事件, 不是「这个种子取失败」: 计数会烧掉 max_download_retries 额度,
+                # 把「程序要关了 / 扩展限流 / 该去登录」伪装成「种子坏了」。原样上抛,
+                # 由 `_guarded_backfill` 折成备注(见其 docstring)。
+                raise
             except HrFetchError as e:
                 failed += 1
                 fail = data.fails.setdefault(tid, HrDlFail(tid=tid))
@@ -661,7 +729,10 @@ class HrRefreshService:
             logger.info(f"HR 站点 {site} | 扩展侧硬上限仍生效(已告警过, 本轮让位): {err}")
             return
         self._ext_quota_warned.add(site)
-        logger.warning(f"HR 站点 {site} | 扩展侧硬上限挡下取数 ⇒ 后端频控可能失效(检查 hr_check 的间隔/配额配置与日志): {err}")
+        logger.warning(
+            f"HR 站点 {site} | 扩展侧硬上限挡下取数(第二道闸): 多半是后端频控失效(检查 hr_check 的间隔/配额配置"
+            "与日志), 也可能是扩展上限本就低于后端配额(10/时·50/天 vs 后端 12/时·60/天, 属正常优先)"
+        )
 
 
 def _verified_for(infohash: str, tid: int, source: str, now: float, anchor: Optional[HrAnchor] = None) -> HrVerified:

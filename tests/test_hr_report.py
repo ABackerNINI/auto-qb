@@ -12,16 +12,21 @@
 - test_run_hr_status_hints_when_no_site: 状态报告无可用站点时提示并返回非 0
 - test_run_hr_status_reports_data_without_fetching: 报告摊开档位/条目/放行/配额/明细, 且**站点文件一字未改**
 - test_run_hr_status_shows_incomplete_reason_and_pending: 不完备的原因与原样计数(待回填 infohash)都显示出来
+- test_run_hr_status_quota_text_rolls_stale_windows: 配额展示按窗口键折算 —— 上一小时/昨天的计数
+  不得标成「本小时/本天」(否则「本小时 7/12 · 还能取 12 次」自相矛盾, 2026-09-25 实报)
 - test_run_hr_status_rows_limit: 明细行数受 --hr-status-rows 限制并如实提示未显示行数
 - test_run_hr_status_survives_broken_file: 站点文件坏掉时如实标 ⚠, 报告仍出得来
 """
 import io
 import pathlib
+import time
 
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
+from auto_qb.hr.ratelimit import day_key
 from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_once, run_hr_status
 from auto_qb.hr.service import HrRefreshService
+from auto_qb.hr.store import HrSiteStore
 
 from hr_helpers import EMPTY_TABLE_PAGE, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
 
@@ -232,6 +237,31 @@ def test_run_hr_status_shows_incomplete_reason_and_pending(tmp_path):
     assert "待回填 infohash 1 条" in text
     assert "取种子失败 1 条" in text, "没有 .torrent 的站点应如实记失败次数"
     assert "101" in text
+
+
+def test_run_hr_status_quota_text_rolls_stale_windows(tmp_path):
+    """配额展示按窗口键折算: 窗口键翻篇后旧计数按 0 计, 与「还能取 N 次」同源一致"""
+    now = time.time()
+    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
+    with store.hold() as session:
+        session.data.quota.hour_window = "2000-01-01T00"  # 上一小时的窗口键(计数还挂着 7)
+        session.data.quota.hour_count = 7
+        session.data.quota.day_window = day_key(now)  # 天窗口仍是今天(计数有效)
+        session.data.quota.day_count = 18
+        session.commit(now)
+    cfg = _config(tmp_path, data_dir=tmp_path)
+    cfg.hr_check = HrCheckConfig(
+        enabled=True, min_torrent_interval=0.0, max_torrents_per_hour=12, max_torrents_per_day=60
+    )
+    buf = io.StringIO()
+
+    code = run_hr_status(cfg, out=buf)
+
+    text = buf.getvalue()
+    assert code == 0
+    assert "本小时 0/12" in text, "上一小时的计数不得标成「本小时」"
+    assert "本天 18/60" in text
+    assert "还能取 12 次" in text, "与展示的已用数同源: min(12-0, 60-18)=12"
 
 
 def test_run_hr_status_rows_limit(tmp_path):

@@ -49,6 +49,30 @@ M3 = 三态接进 `TorrentRecord` 与四个消费点; M4 = 四类事件语文化
 
 ## 进度日志
 
+- **2026-09-25 (审查修复: 通道时序错配 + 饿死残留, 计划 v2.6)** — 用户令「审查计划实施情况」并点名
+  「种子下载不触发」, 中途补报 02:20 实测日志「tid=327727 取 .torrent 失败: 等待浏览器扩展取数超时(180s)」。
+  审查结论: M1-M4 落地与计划一致、安全面(token/origin/SSRF/任务绑定/凭据归零)无高危, 但「不触发」的根因链清晰:
+  ① **主因 = 通道时序错配**: 扩展 `chrome.alarms` 5 分钟轮询 vs 后端 `request_timeout=180s` ⇒ 轮询周期 300s >
+  等待窗口 180s, 每条任务约四成概率因轮询相位落窗外直接超时(烧配额 + 计失败 ⇒ 3 次页面失败 = 12h 熔断);
+  计划 §6 原是「批量清单」模型, 实现却是「派一条等一条」⇒ `MAX_BATCH=16` 永远只装得下 1 条。
+  修: 扩展 `POLL_MINUTES` 5 → **1**(空轮询只打 loopback), `DEFAULT_POLL_HINT` 300 → 60, §6 补时序硬约束。
+  ② **v2.4 P1 的饿死残留**: 不完备有效期 60s == poll 60s ⇒ 下一轮永远晚一个 ε ⇒ 复用轮补下载从不发生;
+  且页面取数失败的 `except HrFetchError` 分支直接 return ⇒ 回填被一起跳过。修: 有效期 `max(120s, 2×poll)`
+  (判定不读 expires_at, 拉长不产生放行) + `_backfill_on_page_failure`(页面失败后仍补一次下载, 待回填来自
+  已持久化索引)。
+  ③ **下载阶段异常语义**: `HrChannelStopped` / `HrChannelQuota` / `HrLoginExpired` 是 `HrFetchError` 子类,
+  曾被 `_fill_infohashes` 吞掉计成 tid 失败(关停三次 = 12h 冷却) ⇒ 原样上抛 + `_guarded_backfill` 折成备注;
+  扩展 fetchBinary 检测 download.php 返回 HTML(SameSite 剥 cookie 实测风险) ⇒ 新 `KIND_LOGIN_PAGE` ⇒
+  后端按 `HrLoginExpired` 处置(不计失败)。
+  ④ 展示与边角: 配额展示按窗口键折算(修「本小时 7/12 · 还能取 12 次」自相矛盾)、`--hr-status` 去掉
+  「v1/v2 各一」硬编码后缀、Retry-After 以 cooldown 封顶、ext-quota 告警文案补「扩展上限本就低于后端配额」、
+  qbmanager 死注释校准。
+  ⑤ M0 实测收口: 下载 URL = `https://pt.btschool.club/download.php?id=<tid>`(用户实测, 计划 §13 已标)。
+  测试 +11(service 7 / fetcher_channel 1 / ratelimit 1 / report 1 / extension_proxy 1), ★红验 7 条(还原旧实现
+  全红); 全量 **1570 passed + 1 skipped**(TOTAL 91% / HR 包 93%; 本 shell PYTHONUTF8=1 的 2 条 GBK 假红
+  单独复测通过)。扩展需在 chrome://extensions **reload 一次**才吃到 1 分钟轮询与登录页检测。
+  计划文档已按用户令直接改原文档(v2.6 变更行 / 封面 / §6 / §13 / 页脚); 基线已回写。
+
 - **2026-09-25 (M4 多站点与打磨)** — 用户「继续 M4」令实施计划的最后一块。
   ① **先盘点**(子代理只读调研): 得到的关键结论是「站点隔离的工程骨架与 CLI 可观测性**已经具备**
   (站点分文件 / 每站点一把锁 / 每站点配额与熔断 / 站点级视图 / per-site adapter 工厂 / `--hr-status` 全摊开),

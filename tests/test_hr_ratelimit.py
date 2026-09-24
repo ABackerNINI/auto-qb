@@ -10,6 +10,7 @@
 - test_allow_window_gates_fetching: 时间窗限制(含跨午夜); 留空 = 全天不限制
 - test_record_failure_fuses_after_threshold: 连续失败达阈值进入冷却, 成功后退避清零
 - test_record_failure_honours_retry_after: 站点给出 Retry-After 时按它退避(未达阈值也生效)
+- test_record_failure_caps_retry_after_at_cooldown: Retry-After 以 failure_cooldown 封顶(回传值不可信)
 - test_limits_merge_site_overrides_global: 站点 max_torrents_per_hour 覆盖全局, 未配置回退全局
 """
 from datetime import datetime
@@ -148,6 +149,14 @@ def test_record_failure_honours_retry_after():
     fuse = HrFuse()
     assert record_failure(fuse, limits, NOW, retry_after=429.0) is False
     assert fuse.until_ts == NOW + 429.0
+
+
+def test_record_failure_caps_retry_after_at_cooldown():
+    """Retry-After 以本站冷却时长封顶 —— 回传值不可信(畸形/恶意值可把熔断推到天荒地老)"""
+    limits = _limits(failure_threshold=5, failure_cooldown=1800.0)
+    fuse = HrFuse()
+    assert record_failure(fuse, limits, NOW, retry_after=10**12) is False
+    assert fuse.until_ts == NOW + 1800.0, "超大的 Retry-After 被钳到 failure_cooldown"
 
 
 def test_limits_merge_site_overrides_global():

@@ -178,7 +178,7 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
     print(
         f"    数据: 索引条目 {st.index_total}(活跃 {st.index_active})  "
         f"档位 A={lanes.get('A', 0)} B={lanes.get('B', 0)} C={lanes.get('C', 0)} D={lanes.get('D', 0)}(免罪)  "
-        f"受管束种子 {st.managed} 个(infohash 键 {st.keys} 个: v1/v2 各一)",
+        f"受管束种子 {st.managed} 个(infohash 键 {st.keys} 个)",
         file=out
     )
     print(

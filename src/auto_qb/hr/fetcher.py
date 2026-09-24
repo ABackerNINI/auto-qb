@@ -12,7 +12,7 @@
 import time
 from typing import Callable, Optional, Protocol, runtime_checkable
 
-from .channel import KIND_EXT_QUOTA, TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
+from .channel import KIND_EXT_QUOTA, KIND_LOGIN_PAGE, TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
 from .queue import HrTaskQueue
 
 
@@ -139,6 +139,10 @@ class ChannelFetcher:
                                "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
         if not result.ok:
             detail = result.error or f"HTTP {result.status}"
+            if result.kind == KIND_LOGIN_PAGE:
+                # 扩展取 .torrent 拿到的是 HTML(登录页 / 未登录): 与页面命中登录页同一语义 ——
+                # 只有人工登录才会好, 不计取数失败(HrLoginExpired 分支: 不推熔断、每站报一次)
+                raise HrLoginExpired(f"扩展取到登录页而非内容({detail}): {url}")
             if result.kind == KIND_EXT_QUOTA:
                 raise HrChannelQuota(f"扩展侧硬上限挡下取数({detail}): {url}", retry_after=result.retry_after)
             raise HrFetchError(f"扩展取数失败({detail}): {url}", retry_after=result.retry_after)

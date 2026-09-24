@@ -17,7 +17,11 @@ importScripts('normalize.js');
 importScripts('site-caps.js');
 
 const ALARM_NAME = 'hr-poll';
-const POLL_MINUTES = 5; // 与后端下发的 next_poll_s 同量级; 后端才是频控权威
+// ❗轮询周期必须**小于**后端 `channel.request_timeout` 的等待窗口(默认 180s): 任务只有在窗口内
+// 等到下一次轮询才会被取走。v2.6 前按 5 分钟轮询, 每条任务约四成概率直接超时
+// (2026-09-25 实报「取 .torrent 失败: 等待浏览器扩展取数超时(180s)」)。1 分钟轮询只打本机
+// loopback 一次 GET, 成本可忽略; 后端才是站点频控的唯一权威 —— 空轮询不会碰到站点。
+const POLL_MINUTES = 1;
 const PAGE_LOAD_TIMEOUT_MS = 60000;
 const PAGE_SETTLE_MS = 800; // 页面 complete 后再等一小会儿(部分站点是 XHR 填表)
 const OFFSCREEN_X = -32000; // 离屏坐标: 渲染兜底用的窗口放在屏幕外(Windows 允许完全离屏)
@@ -183,6 +187,15 @@ class ExtQuotaError extends Error {
   }
 }
 
+/** 取 .torrent 时拿到的是 HTML(登录页/未登录): 抛它让后端按「登录失效」处置(不计取数失败) */
+class LoginPageError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'LoginPageError';
+    this.kind = 'login-page';
+  }
+}
+
 /**
  * 领一次额度: 超限返回 {ok:false, reason, retryAfter}; 否则计数 +1 并返回 {ok:true}。
  * 拿不到域名(畸形 URL)时不计数直接放行 —— 后端有 URL 白名单, 正常不会走到这类输入。
@@ -216,7 +229,7 @@ async function takeAllowance(kind, url) {
 async function requireAllowance(kind, url) {
   const got = await takeAllowance(kind, url);
   if (got.ok) return got;
-  await noteStatus({ text: `扩展侧硬上限挡下(${got.reason}); 后端频控可能失效 —— 本次请求未发出` });
+  await noteStatus({ text: `扩展侧硬上限挡下(${got.reason}); 后端频控可能失效(也可能扩展上限本就低于后端配额) —— 本次请求未发出` });
   throw new ExtQuotaError(`${got.reason}(host=${got.host})`, got.retryAfter);
 }
 
@@ -321,6 +334,9 @@ async function runTask(task) {
       // 扩展侧硬上限: 让后端能把它与「取数失败」区分开(前者只让位, 后者才计失败/熔断)
       payload.kind = 'ext-quota';
       payload.retry_after = e.retryAfter || 0;
+    } else if (e instanceof LoginPageError) {
+      // 登录页: 后端按「HR 登录失效」处置(不计失败 / 不推熔断 / 每站报一次并给动作)
+      payload.kind = 'login-page';
     }
     return { rendered: false, payload: payload };
   }
@@ -392,13 +408,23 @@ async function focusGuard() {
   };
 }
 
-/** 取 .torrent 二进制: 由 service worker 自己发(credentials include 带上站点 cookie) */
+/** 取 .torrent 二进制: 由 service worker 自己发(credentials include 带上站点 cookie)
+ *
+ * ❗拿到 HTML 必须报「登录页」而不是原样回传: 与页面直取的 needsRender 同一个根因(SameSite 剥
+ * cookie / 登录态失效会让 download.php 返回登录页), 但二进制没有解析层兜底 —— 不检测的话,
+ * 后端只会说「不是合法 .torrent」并烧掉该 tid 的重试额度(3 次后冷却 12h), 真因被埋掉。
+ */
 async function fetchBinary(url) {
   await requireAllowance('torrent', url);
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!buf.length) throw new Error('返回内容为空');
+  const contentType = ((res.headers && typeof res.headers.get === 'function' && res.headers.get('content-type')) || '').toLowerCase();
+  const head = new TextDecoder().decode(buf.subarray(0, 64)).trimStart().toLowerCase();
+  if (contentType.includes('text/html') || head.startsWith('<!doctype') || head.startsWith('<html')) {
+    throw new LoginPageError('download.php 返回 HTML(疑似登录页/未登录 —— 请在浏览器里登录该站点)');
+  }
   return toBase64(buf);
 }
 

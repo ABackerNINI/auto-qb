@@ -182,7 +182,7 @@ def test_pacing_partial_is_info_not_warning_and_not_repeated(tmp_path, caplog):
 
     with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.worker"):
         worker.run_once()  # 第一页抓到、第二页被自己的间隔拦住 => partial(budget, 根因=间隔)
-        clock.advance(61.0)  # 过掉截断轮次的 60s 短暂有效期
+        clock.advance(121.0)  # 过掉截断轮次的不完备窗口(2×poll=120s, v2.6 起 ≥ 2×poll_interval)
         worker.run_once()  # 未到可取时刻 => waiting(同一根因)
         clock.advance(1.0)
         worker.run_once()  # 同上(倒计时数字变了, 抹掉后同键)

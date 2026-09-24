@@ -9,6 +9,9 @@
 - test_extension_failure_becomes_fetch_error: 扩展报失败(含 Retry-After) -> HrFetchError 带 retry_after
 - test_extension_quota_refusal_is_not_a_fetch_failure: 扩展侧硬上限拒发(kind=ext-quota) -> HrChannelQuota
   (子类, 与「取数失败」分开: 不计失败/不推熔断)
+- test_login_page_result_is_not_a_fetch_failure: 扩展取 .torrent 拿到登录页(kind=login-page) -> HrLoginExpired
+  (只有人工登录才会好, 不计失败/不推熔断 —— 2026-09-25 实报: SameSite 剥 cookie 时 download.php 返回 HTML,
+  若按普通失败计数会烧掉该 tid 的重试额度)
 - test_empty_body_is_failure: 回传成功但内容为空 -> 失败(不给解析器喂空页面)
 - test_unlisted_url_raises_before_dispatch: 白名单外 URL 直接拒, **任务都不下发**(SSRF 边界)
 - test_cancelled_queue_reports_channel_unavailable: 通道被叫停 -> HrChannelStopped(可区分, 不计失败/熔断)
@@ -19,13 +22,14 @@ import threading
 import pytest
 
 from auto_qb.config.models import HrChannelConfig
-from auto_qb.hr.channel import KIND_EXT_QUOTA, HrChannelError, HrResult, UrlPolicy
+from auto_qb.hr.channel import KIND_EXT_QUOTA, KIND_LOGIN_PAGE, HrChannelError, HrResult, UrlPolicy
 from auto_qb.hr.fetcher import (
     ChannelFetcher,
     HrChannelQuota,
     HrChannelStopped,
     HrChannelUnavailable,
     HrFetchError,
+    HrLoginExpired,
     NullFetcher,
     build_channel_fetcher,
     is_available,
@@ -167,6 +171,27 @@ def test_extension_quota_refusal_is_not_a_fetch_failure():
         assert isinstance(err.value, HrChannelUnavailable), "父类语义成立(调用方兼容)"
         assert err.value.retry_after == 1800.0, "下一次可取的时刻要透传(让上层知道等多久)"
         assert "硬上限" in str(err.value)
+    finally:
+        auto.close()
+
+
+def test_login_page_result_is_not_a_fetch_failure():
+    """扩展取 .torrent 拿到登录页(kind='login-page') ⇒ `HrLoginExpired`: 不计取数失败
+
+    SameSite 剥 cookie / 登录态失效会让 download.php 返回 HTML 登录页 —— 只有人工登录才会好,
+    若按普通失败计数, 三次就把该 tid 送进 12h 冷却, 真因(去登录)被「种子坏了」掩盖。
+    """
+    queue, fetcher = make_fetcher()
+    auto = _Auto(
+        queue,
+        ok=False,
+        answer=b"",
+        error="download.php 返回 HTML(疑似登录页/未登录 —— 请在浏览器里登录该站点)",
+        kind=KIND_LOGIN_PAGE,
+    )
+    try:
+        with pytest.raises(HrLoginExpired):
+            fetcher.get_bytes(DL)
     finally:
         auto.close()
 

@@ -41,8 +41,11 @@ TASK_PAGE = "page"
 TASK_TORRENT = "torrent"
 TASK_KINDS = (TASK_PAGE, TASK_TORRENT)
 
-#: 建议的扩展轮询节奏(秒); 扩展侧用 chrome.alarms(最小 1 分钟), 这里只作提示回传给扩展
-DEFAULT_POLL_HINT = 300.0
+#: 建议的扩展轮询节奏(秒); 扩展侧 chrome.alarms 实际按 1 分钟轮询(v2.6 定版)。
+#: ❗时序硬约束: **轮询周期必须小于后端 `channel.request_timeout` 的等待窗口** —— 任务只有在
+#: 窗口内等到下一次轮询才会被取走。v2.6 前 5 分钟轮询对 180s 窗口, 每条任务约四成概率直接超时
+#: (2026-09-25 实报「取 .torrent 失败: 等待浏览器扩展取数超时」)。
+DEFAULT_POLL_HINT = 60.0
 
 #: 单次请求体上限(含 base64 膨胀) —— 防任意网页 JS 向 loopback 灌大体积数据打爆内存
 MAX_BODY_BYTES = 12 * 1024 * 1024
@@ -59,6 +62,9 @@ EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 #: 它与「取数失败」必须分开: 频控让位不是故障, 计成失败会把站点推进熔断、把「后端频控失效」
 #: 这个真问题掩盖成「站点坏了」。
 KIND_EXT_QUOTA = "ext-quota"
+#: 结果 kind: 扩展取 .torrent 拿到的是 HTML(登录页 / 未登录)。与页面命中登录页同一语义:
+#: 只有人工登录才会好, 不计取数失败(映射为 HrLoginExpired, 由 service 统一处置)。
+KIND_LOGIN_PAGE = "login-page"
 
 
 class HrChannelError(RuntimeError):
@@ -237,7 +243,7 @@ class HrResult:
     error: str = ""
     retry_after: float = 0.0
     received_at: float = 0.0
-    #: 扩展侧的错误分类(空 = 普通取数失败); 目前只有 KIND_EXT_QUOTA
+    #: 扩展侧的错误分类(空 = 普通取数失败); 目前只有 KIND_EXT_QUOTA / KIND_LOGIN_PAGE
     kind: str = ""
 
     @property
@@ -365,6 +371,8 @@ __all__ = [
     "DEFAULT_POLL_HINT",
     "EXTENSION_ID_RE",
     "EXTENSION_ORIGIN_PREFIX",
+    "KIND_EXT_QUOTA",
+    "KIND_LOGIN_PAGE",
     "MAX_BATCH",
     "MAX_BODY_BYTES",
     "ORIGIN_HEADER",

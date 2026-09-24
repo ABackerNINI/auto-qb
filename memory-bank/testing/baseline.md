@@ -6,15 +6,19 @@
 
 ## 当前基线
 
-**1562 collected: 1561 passed + 1 skipped / Windows** —— 2026-09-25 **M4 多站点与打磨实测**
-(本条 **+20 条(1541 → 1561)**: 四类事件文案单点 `hr/events.py` 7 条(`tests/test_hr_events.py`) ·
-登录失效不计熔断/不污染新鲜度/恢复后再报 3 条(`test_hr_service.py`) · 通道静默告警列受影响站点 1 条(`test_hr_worker.py`) ·
-站点级状态端点 3 条 + **前端字段一致性守阵** 1 条(`test_web.py`) · 多站点隔离守阵 5 条
-(`tests/test_hr_multisite.py`: 第二站点只改配置 / 配额与熔断不串味 / 锁不互挡 / 同 infohash 身份独立 / 现状逐站各一条)。
-★红验: 前端字段守阵(把 `s.backfill_ratio` 改成 `s.backfill_ratiox` ⇒ 红) + 登录失效与静默文案断言。
-两轮历史(HR 取数实报修复 +15 / 对方的 M3 判定联动 +16 · 日志等级修复 +7)见 [baseline-history.md](baseline-history.md)。)
-TOTAL **91%**(10831 语句 / 786 未覆盖 / 3556 分支 / 321 partial —— 并行采样),
-sidefx 台账 2550 条(并行汇总, 单次采样) / **越界 0**。
+**1573 collected: 1570 passed + 1 skipped / Windows** —— 2026-09-25 **v2.6 通道时序与饿死残留修复实测**
+(本条 **+11 条(1562 → 1573)**: 不完备窗口 ≥2×poll 参数化 3 条 + 页面失败仍补下载 1 条 + 下载阶段让位不计
+tid 失败参数化 3 条(`test_hr_service.py`) · 扩展回传登录页 ⇒ HrLoginExpired 1 条(`test_hr_fetcher_channel.py`) ·
+Retry-After 以 cooldown 封顶 1 条(`test_hr_ratelimit.py`) · 配额展示按窗口键折算 1 条(`test_hr_report.py`) ·
+扩展 fetchBinary 登录页检测 1 条(`test_extension_proxy.py`, 真跑 node)。
+★红验 7 条: 临时还原旧实现(60s 窗口 / 关页面失败补下载 / 吞让位异常计 tid 失败) ⇒ 上述 service 7 条全红, 还原后全绿。
+扩展轮询 5 分钟 → 1 分钟(background.js)与 KIND_LOGIN_PAGE 全链路见计划 v2.6 变更行。
+上一态(M4 多站点与打磨 +20 / 对方的 HR 取数实报修复 +15 · M3 判定联动 +16 · 日志等级修复 +7)
+见 [baseline-history.md](baseline-history.md)。)
+TOTAL **91%**(10872 语句 / 788 未覆盖 / 3574 分支 / 325 partial —— 并行采样; **HR 包 93%**:
+2749 / 142 / 758 / 90), sidefx 台账并行汇总 / **越界 0**。
+⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
+`PYTHONUTF8=` 置空后复测 **2 passed** —— 已有记载的假红, 非回归(见下条 ⚠ 与 pitfalls/testing/patching.md)。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 ⚠ `test_commands_engine.py` 两条 GBK 码页守阵在**本工具 shell 恒红**(注入 `PYTHONUTF8=1`, 见
@@ -23,11 +27,13 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 M4 多站点与打磨)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **18.1 / 18.1 / 19.2s**(3 次采样)
-- 串行 `-n 0 --no-cov`(对照): **35.25s**(上一态采样, 本轮未重测串行)
+**当前(2026-09-25 v2.6 通道时序修复)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **19.3 / 20.0 / 21.7s**(3 次采样: test.quick ×2 + test.full ×1)
+- 串行 `-n 0 --no-cov`(对照): 本轮仅单文件抽查(≤1s), 未重测全量串行
 
-⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
+⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景 + 登录页场景各一次) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
+
+**上一态(2026-09-25 M4 多站点与打磨)**: 并行 18.1 / 18.1 / 19.2s; 串行对照 35.25s(2026-09-24 采样)。
 
 ⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
 其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——
@@ -39,7 +45,7 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: **当前**并行 `10831 语句 / 786 未覆盖 / 3556 分支 / 321 partial`, TOTAL **91%**。
+- **覆盖率口径**: **当前**并行 `10872 语句 / 788 未覆盖 / 3574 分支 / 325 partial`, TOTAL **91%**(HR 包 93%)。
   下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
   并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
   ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。
