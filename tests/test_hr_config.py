@@ -7,7 +7,8 @@
 - test_defaults_when_absent: 整段缺省 -> 全默认(功能关闭), 不报错
 - test_global_section_parsed: 全局段解析(时间串 -> 秒 / 枚举归一 / channel 子段含 M2 新键)
 - test_verified_ttl_default_is_none: verified_ttl 缺省为 None(由站点 refresh_interval 解算, 不在此处固化)
-- test_site_section_parsed: 站点段解析(scope 归一为大写 / 覆盖键生效)
+- test_site_section_parsed: 站点段解析(scope 归一为大写 / 覆盖键生效 / 超龄豁免线)
+- test_completed_age_limit_range: 超龄豁免线 0(关闭)或 1D~3650D; 单位写错配置期拦下
 - test_unknown_keys_aggregated: hr_check / channel / 站点 hr_check 的未知键一次性报错
 - test_mode_requires_hr_section: mode != off 但缺 hr 段 -> 配置期直接报错(否则整站保护静默失效)
 - test_mode_off_does_not_require_hr_section: mode=off 时不要求 hr 段(该站就是不走 HR)
@@ -142,6 +143,7 @@ def test_site_section_parsed(tmp_path):
                                 hr_page_url="https://pt.example.com/myhr.php",
                                 hr_page_scopes=["a", "b", "c", "d"],
                                 max_torrents_per_hour="3",
+                                completed_age_limit="365D",
                             )
                     },
             }
@@ -153,11 +155,12 @@ def test_site_section_parsed(tmp_path):
     assert site.enabled is True
     assert site.hr_page_scopes == ["A", "B", "C", "D"]
     assert site.max_torrents_per_hour == 3
+    assert site.completed_age_limit == 365 * 86400.0
     assert site.refresh_interval == 12 * 3600.0
     assert site.download_path == "/download.php?id={id}"
     assert site.adapter == "nexusphp"
 
-    # 未配 max_torrents_per_hour 时保持 None(回退全局)
+    # 未配 max_torrents_per_hour 时保持 None(回退全局); 未配 completed_age_limit 时保持 0(关闭)
     cfg2 = load_config(
         _write(tmp_path, {
             "trackers": {
@@ -166,6 +169,25 @@ def test_site_section_parsed(tmp_path):
         })
     )
     assert cfg2.trackers["s"].hr_check.max_torrents_per_hour is None
+    assert cfg2.trackers["s"].hr_check.completed_age_limit == 0.0
+
+
+def test_completed_age_limit_range():
+    """超龄豁免线: 0(关闭)与 1D~3650D 合法; 单位写错(<1D, 如 365S)与离谱大值在配置期拦下
+
+    <1D 几乎必然是单位笔误 —— 那等于把整站刚完成的种子集体豁免, 必须 fail-fast 而不是静默生效。
+    """
+    site = {"mode": "partial", "hr_page_url": "https://pt.example.com/x"}
+
+    def errors_for(age) -> list:
+        return _validate({"trackers": {"s": {**_site(), "hr_check": {**site, "completed_age_limit": age}}}})
+
+    assert errors_for("365D") == []
+    assert errors_for("0S") == [], "显式 0 = 关闭, 合法"
+    assert errors_for("1D") == []
+    assert any("completed_age_limit" in e for e in errors_for("365S")), errors_for("365S")
+    assert any("completed_age_limit" in e for e in errors_for("4000D"))
+    assert any("completed_age_limit" in e for e in errors_for("abc"))
 
 
 def test_unknown_keys_aggregated():

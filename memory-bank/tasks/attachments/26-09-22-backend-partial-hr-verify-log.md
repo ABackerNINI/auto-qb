@@ -110,3 +110,49 @@
   ⑦ 全量 **1374 passed + 1 skipped / 8.83s**, TOTAL 91%(9278 语句 / 727 未覆盖 / 3128 分支 / 277 partial), sidefx 台账 2212 / 越界 0 → 基线已回写 `testing/baseline.md` + `baseline-history.md`(该文件本轮**触顶 24,000 字符 cap** ⇒ 按守卫给的处置从最老一端切到 ≤16,000, 外迁 `testing/attachments/baseline-history-archive.md` 并原位留指针)。
   ⑧ 踩坑记录: 改计划 HTML 时**又**吞了收尾标签(`old` 带了 `</tbody></table><p>`, `new` 只写到 `</tbody>`) ⇒ 已给 `pitfalls/docs/html-edit.md` 的对应条目记 **复发 +1** 与未命中原因; 另新增一条 `pitfalls/backend/page-scraping.md`(页面捉取里的松正则把完成时间当页脚区间, 必须锤定结构)。
   下一步(计划 §11): **M2 取数通道**(MV3 薄代理 + 本地端点 + 取数线程 + 共享站点数据), 之后 M3 才把三态接进 `TorrentRecord` 与四个消费点。
+
+- **2026-09-24 23:45** — 用户实报 M2 上线后的两个体验问题: ①「会弹 warning」(通知轰炸) ②「无法知晓拉取的数据是否正确」。
+  ① **定性(先判是不是 bug)**: 逐行读用户贴的日志 —— `partial: 配额/间隔受限(间隔: 还差 104s)` 与
+  `waiting: 未到可取时刻(间隔, 还差 51s)` **交替出现**, 一句故障都没有; 那正是后端按自己的频控节奏取数的常态
+  (一轮完整刷新 = 3 档位各翻到底 + 回填 .torrent, 而请求间隔 >= `min_torrent_interval` 90s ⇒ 默认要几分钟)。
+  真正的缺陷是**告警分级**: 取数线程 `_note` 把所有 `ACTION_PARTIAL` 一律 WARNING, 而 WARNING 会被 notify 推成
+  系统通知 ⇒ 每 60~90s 一次弹窗。更隐蔽的一半: 同一根因在轮次间动作不同(`partial` 首页抓到/第二页被拦 vs
+  `waiting` 没到时刻), 用 action 当「状态变化」判据等于逐轮都算变化, **去重形同虚设**。
+  ② **修法(分类在产生处做一次, 日志/报告/后续通知复用)**:
+  `HrRefreshResult` 新增 `reason_kind`(`REASON_NONE/BUDGET/PARSE`), `_do_fetch` 分别打 `budget_limited`
+  (频控 `take()` 被拒)与 `parse_problem`(表头缺失 / 翻页上限 / 必填字段缺失率超阈)两个标记, 判据口径:
+  **沾了页面问题就算 parse, 纯被频控拦下才是 budget, 不明原因保守当 parse**(宁可多看一眼)。
+  `worker._note` 三档: 正常动作变化时 INFO; **节流中**(WAITING 或 budget 类 partial)按「**被拦根因类别**」
+  (间隔/配额/时间窗/熔断/只读)去重 —— 一整个等间隔时期只说明白一次, 消息里明写「非故障」, 被去重的轮次降 DEBUG;
+  页面/解析类与失败才 WARNING, 持续时按 `channel_silence_warn` 周期提醒; 完整刷新后清掉节流记忆。
+  ③ **可见性**: 新增 `--hr-status [--hr-status-rows N]`(`report.run_hr_status`)—— **不取数、不加锁、不写盘、不连 qB**,
+  把已落盘数据摊开: 站点文件目录 / 通道自检 / 模式·覆盖证明·最近完整刷新·有效期 / 档位分布(A/B/C/D)与受管束种子数 /
+  已取与失败与**待回填 infohash** / 配额与熔断与时间窗 / 最近一次刷新不完备的**原样原因** / 明细表
+  (tid · 档位 · 下载量 · 剩余达标 · 名称 · infohash 前 12 位) —— 拿站点页面即可逐行对账。CLI 侧与托盘/导出/走查互斥。
+  ④ **守阵(16 条)**: service 3 类 `reason_kind` 分类 / worker ④ 频控截断**零 WARNING** 且同根因只记一条(降 DEBUG)、
+  持续态按窗提醒一次、完整刷新清记忆、`stable_key` 抹数字 / report 4 条(含「站点文件一字未改」与坏文件仍出报告)/
+  cli 2 条(互斥 + 不构造 manager 且行数透传)。★红验: 临时去掉 `REASON_BUDGET` 分支 ⇒ 三条 worker 用例立刻变红。
+  ⑤ 文档: `docs/configuration.md` 增 `--hr-status` 用法与「`partial: 配额/间隔受限` 不是故障、默认一轮要几分钟」;
+  扩展 README 排障表增同义一行; 新坑 [pitfalls/ops/alert-levels.md](../../pitfalls/ops/alert-levels.md)(判据=「故障
+  还是我们本来就要等」; 去重键要选根因不要选本轮返回值; 持续态不静默消失)。
+  ⑥ 全量 **1488 passed + 1 skipped / 16.88–21.40s**(TOTAL 91% / 10349 语句 / 768 未覆盖 / 3428 分支 / 308 partial),
+  sidefx 台账 2390 / 越界 0; 基线已回写。
+  下一步仍是 **M3 判定联动**; 用户待定: 是否把「`config.yml` 被 git 跟踪且含明文 qB 凭据」入池。
+
+- **2026-09-24 23:10** — 用户装上 M2 交付的扩展后实报两条报错 ⇒ 逐条定位并修掉(含可跑守阵)。
+  ① `Invalid value for origin pattern pt.btschool.club: Missing scheme separator.` —— 选项页把**原始输入**
+  直喂 `chrome.permissions.request`(它只吃带 scheme 的匹配模式), 而且那是**未捕获的 Promise 拒绝**。
+  ② `TypeError: Failed to fetch` —— 用户生产 `config.yml` **没有 `hr_check` 段**(只读确认, 未改), 端点从未启动
+  (让它启动需三个开关同时满足: `hr_check.enabled` + 站点 `mode != off` + `channel.enabled`); 而浏览器对
+  网络层失败只给这一句 ⇒ 用户无从下手, 这就是本次真正的用户体验缺陷。
+  修法: 输入**先归一化再交给浏览器 API**(裸域名→`https://host/*`; 端点补 scheme / `localhost` 折 `127.0.0.1` /
+  协议固定 http), 非法输入**逐条**报错、不拖垮整批; 归一化抽成 `normalize.js` **一份**(选项页 `<script>` +
+  后台 `importScripts` 共用 —— 两份分头演化必然漂移, 漂移的症状是“配了不生效”); 选项页新增
+  **自测端点连通**(把“连不上 / 401 / 403”分开)+ `unhandledrejection` 兜底(不再有英文红字裸奔);
+  README 补「端点何时才会启动」三个开关与排障表; manifest `host_permissions` 补 localhost /[::1] 别名。
+  新增 `tests/test_extension_proxy.py` 8 条(manifest 作用域 / **真跑** normalize.js / 归一化只有一份 /
+  与后端协议常量对照 / 调用顺序 / 不得留裸拒绝), ★红验过(去掉补 scheme 那行即变红);
+  过程中真被 `node --check` 漏挡一次(删了本地副本、引用还在的 `ReferenceError`, 语法是合法的) ⇒ 守阵坚持“执行”而非“查语法”。
+  坑入库: 新增 [pitfalls/web-ui/extension-bridge.md](../../pitfalls/web-ui/extension-bridge.md);
+  [pitfalls/ops/console-encoding.md](../../pitfalls/ops/console-encoding.md) 补“反向子进程解码(node 输出 UTF-8 而 `text=True` 按 locale 解 ⇒ 直接抛)”。
+  全量 **1475 passed + 1 skipped**; 基线已回写。下一步仍为 **M3 判定联动**(门面已备好)与 M0 真机实测。

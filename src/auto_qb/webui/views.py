@@ -172,8 +172,8 @@ class WebviewMixin:
         - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
         - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
         - hr_req_ratio: 要求分享率(0 = 不要求)
-        - hr_state / hr_state_text / hr_reason: 站点侧三态(hr / verified_non_hr / unknown) +
-          中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
+        - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
+          exempt=超龄豁免) + 中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
         - hr_satisfied_src: 达标结论的来源 site(站点侧权威) / local(本地时长/分享率兜底)
         - hr_site_lane / hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl: 命中行的
           **站点侧值**(档位 / 还需做种 / 剩余达标 / 分享率 / 下载量) —— 与本地实时值对照用:

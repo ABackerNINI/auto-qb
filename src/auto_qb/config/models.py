@@ -129,6 +129,10 @@ class SiteHrCheckConfig:
     refresh_interval: float = 12 * 3600.0  # HR 页抓取周期(秒)
     max_pages_per_refresh: int = 5  # 单次刷新最多翻页数(翻页同样计配额)
     max_torrents_per_hour: Optional[int] = None  # 站点级覆盖; None = 回退全局
+    # 超龄豁免线(秒): 完成时间早于该线的种子不再在线核实、不受管束(判定侧直接豁免),
+    # 取数侧也不再为它翻页 / 存索引 / 回填 .torrent; 0 = 关闭。保守默认: 豁免等于自愿接受
+    # 「站点其实还在管」的漏 HR 风险, 故只在站点级显式开启, 不设全局默认。
+    completed_age_limit: float = 0.0
 
     @property
     def enabled(self) -> bool:

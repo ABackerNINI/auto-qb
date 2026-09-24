@@ -7,6 +7,7 @@
 - 所有字段可 JSON 往返: 落盘一律走 to_json/from_json, 结构变更靠 schema_version 挡。
 """
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 SCHEMA_VERSION = 1
@@ -96,6 +97,20 @@ class HrEntry:
         两者都不可得时返回 None 语义由调用方承担, 这里保守返回 False(不因缺字段就放行)。
         """
         return self.satisfied_verdict is True
+
+    @property
+    def done_epoch(self) -> Optional[float]:
+        """完成时间的 epoch 秒; done_iso 缺失或不可解析返回 None(不猜 —— 超龄豁免判据依赖它)。
+
+        naive 时刻按**本地时区**折算: 站点展示的是站点当地时刻, 与本机的时区偏差是小时级,
+        对以「天」为单位的超龄判据不构成影响。
+        """
+        if not self.done_iso:
+            return None
+        try:
+            return datetime.fromisoformat(self.done_iso).timestamp()
+        except ValueError:
+            return None
 
     def to_json(self) -> Dict[str, Any]:
         return {

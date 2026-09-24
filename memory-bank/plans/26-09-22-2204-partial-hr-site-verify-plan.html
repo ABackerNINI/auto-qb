@@ -177,12 +177,12 @@
 
   <!-- ============ 封面 ============ -->
   <header class="cover">
-      <div class="kicker">auto-qb · 工程计划 · v2.8 M1+M2+M3+M4 均已交付 · 通道时序修复 · 增量落盘 · 明细表改版 · 余真机走查</div>
+      <div class="kicker">auto-qb · 工程计划 · v2.9 M1+M2+M3+M4 均已交付 · 通道时序修复 · 增量落盘 · 明细表改版 · 超龄豁免 · 余真机走查</div>
     <h1>部分种子 HR 的在线核实</h1>
     <p class="dek">对「部分种子 HR」站点: 由<strong>浏览器扩展</strong>(打包形态无关, 跑在<strong>日常浏览器</strong>里, 不需要专用浏览器)以真实登录态取 HR 统计页与 .torrent, 后端算 infohash、与本地做种库对账, 建按 (站点, tid) 的 HR 索引。判定是三态 —— <strong>受管束 / 已核实不受管束 (安全放行) / 未核实</strong>, 且<strong>站点数据是权威</strong>: 触发与达标都看站点侧, 本地 qB 字段降为兜底与展示 (转移种子 / 多客户端下本地字段会骗人)。多实例<strong>共享站点数据</strong>: 站点分文件 + <strong>每站点一把锁</strong>, <strong>持锁期间完成读/抓/写全程</strong>, 有效期内直接复用; 取数节奏与主循环 tick 解耦, 只在数据变化时更新。首批站点 <strong>BTSchool</strong>。(cookie 全程不离开浏览器)</p>
     <div class="meta-row">
       <div><b>日期</b>2026-09-22 22:04 · v1.8 修订 2026-09-24 20:15 (文档漂移清理)</div>
-      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts (2026-09-25) · 余真机走查</div>
+      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts (2026-09-25) + v2.9 超龄豁免与翻页早停 (2026-09-25) · 余真机走查</div>
       <div><b>影响面</b>取数通道 (扩展) · 判定语义 (三态·站点侧权威) · 取数线程与共享站点数据 · TorrentRecord</div>
       <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
     </div>
@@ -298,6 +298,7 @@
   complete: true,                     # 上述全部成立才为 true
   reason: ""                          # 不完备原因 (分页未到底 / scope 失败 / 解析可疑 / 登录失效)
 }</code></pre>
+      <div class="note"><b>翻页早停 (v2.9, 站点配了 <code>completed_age_limit</code> 时)</b> — 页面行的完成时间可以反过来省配额: 当前页<strong>每一行</strong>都有可解析完成时间、全部超过豁免线、且页内与跨页都呈<strong>完成时间倒序</strong> ⇒ 后续页只会更老, 本档位在豁免线内的清单已全覆盖, <strong>允许停翻且 scopes_done 照常计入</strong> —— 覆盖证明按「豁免线内全覆盖」成立, 放行照常产生。倒序证据不成立 (页内升序 / 跨页倒序链断裂 / 有行缺完成时间) 就照常翻到底: 错误方向的代价只是多花配额, 不是漏判。同时<strong>超龄行不入索引、不回填 .torrent</strong> (判定侧会豁免它们, 索引行留着只会白烧下载配额; 早停在 <code>refresh.reason</code> 留痕, <code>--hr-status</code> 可见)。</div>
       <h3>改版防护</h3>
       <p>解析结果做<strong>最小字段校验</strong>: HTTP 200 但解析出 0 条记录、或必填字段缺失率超阈 → 判定「页面可能改版」, 该站熔断 + WARNING (自动进 notify), <strong>绝不把空结果当真入库</strong> (空结果的错误语义是「该账号没有 HR 种子」, 二者必须可区分)。每站点样本 HTML 脱敏后进测试 fixture, 改版即测试红。</p>
     </section>
@@ -498,6 +499,8 @@ trackers:
       download_path: "/download.php?id={id}"    # 相对站点根; passkey 由扩展在页面上下文补, 不进配置
       refresh_interval: "12H"        # HR 页抓取周期
       max_pages_per_refresh: 5       # 单次刷新最多翻页数 (翻页同样计配额)
+      completed_age_limit: "0D"      # 超龄豁免线 (v2.9): 完成时间超过它的种子不再核实/管束; 0 = 关闭 (默认)
+                                     # 开启时 1D~3650D (单位写错配置期拦下); 取数侧顺带翻页早停 (§4)
       max_torrents_per_hour: 12      # 站点级覆盖 (缺省回退全局)</code></pre>
       <div class="note"><b>新键的落地清单 (漏一处守卫就红)</b> — 每个新键要走完: <code>config/validation/core.py</code> 的 <code>KNOWN_CONFIG_KEYS</code> (顶层键) 与 <code>sections.py</code> 的已知键集 + 校验函数 → <code>config/schema/</code> (段与字段声明, 设置页据此渲染) → <code>config/models.py</code> 数据类 → <code>config/loaders.py</code> 解析 → <strong><code>config/impact.py</code> 热重载级别</strong> → <code>docs/configuration.md</code> 与 <code>memory-bank/config-reference/keys.md</code> 回写 → <code>tests/test_config_schema.py</code> 同步。</div>
       <div class="note"><b>热重载级别 (合并 hr_channel 的代价)</b> — 站点级 <code>hr_check.*</code> 设 <strong>L0</strong> (每轮现读), 但配置变更时必须<strong>显式重置该站的熔断与退避状态</strong>; <code>hr_check.channel.*</code> (端口 / token / enabled) 必须设 <strong>L1</strong> (端点与取数线程需重挂, 与 <code>web</code> 段同款: 先停旧、等线程退出、再启新)。<br>⚠ 实现要求: <code>config/impact.py</code> 目前只按<strong>顶层键</strong>查表 (只有 <code>trackers</code> 有逐字段特判), 合并后 <code>channel.*</code> 会被算成 L0 —— 需补一张 <code>HR_CHECK_FIELD_LEVELS</code> 内部字段表 (仿 <code>TRACKER_FIELD_LEVELS</code>, ~10 行), 否则改端口会被当成「已热重载」而实际未生效。另 <code>shared_dir</code> 属 <strong>L1/R</strong> (改它要重挂共享层)。</div>
@@ -584,7 +587,7 @@ trackers:
     <section id="s9">
       <div class="sec-no">§ 9</div>
       <h2>判定语义收口</h2>
-      <p>站点配了 <code>hr_check</code> 段 (<code>mode: all | partial</code>) 时, 先按 (站点, infohash) 解析出<strong>三态之一</strong> —— 受管束 / 已核实不受管束 / 未核实 —— 再进入既有 <code>check_hr_condition</code> / <code>check_hr_satisfied</code> 逻辑; <code>off</code> 则完全不按 HR 对待。<strong>站点侧数据是权威 (v1.4): 「是否触发 / 是否达标」一律看站点侧</strong>, 本地 qB 字段只作降级与展示; 三态数据由<strong>取数线程</strong>发布的只读视图提供 (§8)。</p>
+      <p>站点配了 <code>hr_check</code> 段 (<code>mode: all | partial</code>) 时, 先按 (站点, infohash) 解析出<strong>三态之一</strong> —— 受管束 / 已核实不受管束 / 未核实 (v2.9 起另有一种 qB 侧的<strong>超龄豁免</strong>, 见三态表末行) —— 再进入既有 <code>check_hr_condition</code> / <code>check_hr_satisfied</code> 逻辑; <code>off</code> 则完全不按 HR 对待。<strong>站点侧数据是权威 (v1.4): 「是否触发 / 是否达标」一律看站点侧</strong>, 本地 qB 字段只作降级与展示; 三态数据由<strong>取数线程</strong>发布的只读视图提供 (§8)。</p>
       <div class="note">
         <b>「纯辅种不触发」是已知缺口, v1.5 全面修掉</b> —— 现有 <code>check_hr_condition</code> 用本地 <code>downloaded</code> 近似账号级义务, 于是把两类东西混为一谈:
         <br>① <strong>真辅种</strong> (从未下载过该 tid) → 站点侧确实无 HR 义务 ⇒ 现状「不触发」结论是对的, 但那只是<strong>碰巧</strong>对; 现在由「清单未命中 ⇒ 安全放行」给出<strong>有依据</strong>的同一结论;
@@ -597,13 +600,14 @@ trackers:
         此时 B 的 <code>downloaded</code> = 0 ⇒ 现有 <code>check_hr_condition</code> 的「纯辅种不触发」判定把它当辅种 ⇒ <strong>不打 HR 标签、不纳入保护、规则条件也不命中</strong>, 而账号在站点侧确实欠着这个 tid 的 HR —— 直接漏管。<br>
         多客户端同理: 本地字段只描述「我管的这一个客户端」, 而 HR 是<strong>账号级</strong>义务。所以: <strong>站点数据是权威数据</strong>, 本地值降级为兜底路径与展示。
       </div>
-      <h3>三态的定义 (本次收口的边界)</h3>
+      <h3>态的定义 (三态 + v2.9 超龄豁免)</h3>
       <table>
         <thead><tr><th style="width:17%">态</th><th style="width:36%">成立条件</th><th>后果</th></tr></thead>
         <tbody>
           <tr><td><strong>受管束</strong> <code>hr</code></td><td>该 (站点, infohash) 出现在<strong>抓取范围内的清单</strong>里 (A 考察中 / B 已达标 / C 未达标); <code>mode: all</code> 站点上<strong>未核实也默认受管束</strong></td><td><strong>这本身就是「触发」</strong> (不再看本地 <code>downloaded</code>): 未达标 ⇒ 打 HR 标签/分类 + 纳入辅种排除; B 档 ⇒ 落 satisfied 分支。本地 <code>downloaded</code>=0 的转移副本同样受管束</td></tr>
           <tr><td><strong>安全放行</strong> <code>verified_non_hr</code></td><td>由一次<strong>完整成功</strong>的刷新 (覆盖证明成立, §4) 确认: 该 infohash 不在 A/B/C 清单内, <strong>或</strong> 命中 D 档; 且该种子 <code>added_on</code> 早于该次刷新时刻; 且<strong>仍在放行有效期内</strong> (<code>verified_ttl</code>, §5) 且本实例锚点未漂移</td><td><strong>完全按非 HR 对待</strong>: 不打 HR 标签/分类、<strong>不排除辅种</strong>、HR 规则条件恒不命中 —— 这就是本功能的主要收益</td></tr>
           <tr><td><strong>未核实</strong> <code>unknown</code></td><td>其余全部情形 (见下「未核实的四类边界」)</td><td>按 <code>unknown_policy</code> (默认 <code>hr</code> 保守); <code>mode: all</code> 站点恒受管束 (不看 policy)</td></tr>
+          <tr><td><strong>超龄豁免</strong> <code>exempt</code> <span class="muted">(v2.9)</span></td><td>仅当站点配了 <code>completed_age_limit</code> &gt; 0 且种子锚点的<strong>本地完成时刻</strong>超过该线 —— qB 侧事实, 不依赖站点索引; <strong>压过清单命中</strong>与 <code>unknown_policy</code>, <code>mode: all</code> 也认</td><td>按用户显式声明<strong>不再核实、不受管束</strong> (WebUI 显示「超龄豁免」)。❗「站点其实还在管」的超龄种子会漏 HR —— 配置者自愿接受的风险 (§7/§13)</td></tr>
         </tbody>
       </table>
       <h3>「未核实」的四类边界 (穷举)</h3>
@@ -629,6 +633,7 @@ trackers:
       <table>
         <thead><tr><th style="width:34%">情形</th><th>判定</th></tr></thead>
         <tbody>
+          <tr><td>站点配了 <code>completed_age_limit</code> &gt; 0 且本地完成时刻超过该线 (v2.9)</td><td><strong>超龄豁免</strong> —— 直接按非 HR 对待, 不查索引、不看 <code>unknown_policy</code>、压过清单命中; 优先级最高 (在全部三态判定之前)</td></tr>
           <tr><td>在 A/B/C 清单内</td><td><strong>受管束</strong> —— 不管本地 <code>downloaded</code> 是 0 (转移过来的保种副本) 还是大于 0; 参数用站点 <code>hr</code> 配置</td></tr>
           <tr><td><code>mode: all</code> 站点 + 未核实</td><td><strong>受管束</strong> (全站 HR 的保守默认; 这是与 <code>partial</code> 的唯一差别)</td></tr>
           <tr><td>真辅种 (从未下载过该 tid)</td><td>由「完整核实 + 清单未命中」给出<strong>安全放行</strong> —— 与现状「不触发」结论相同, 但依据从本地近似换成站点权威</td></tr>
@@ -763,6 +768,7 @@ trackers:
           <tr><td><code>unknown_policy</code> + 放行有效期</td><td class="ok"><strong>按推荐</strong>: <code>unknown_policy = hr</code> (保守) 且 <code>verified_ttl</code> = <code>refresh_interval</code> (超期未获新背书 ⇒ 放行失效回落保守); 新鲜度闸门恒保守, 不受 policy 影响</td><td>§7 / §9</td></tr>
           <tr><td><code>shared_dir</code> 放哪</td><td class="ok"><strong>默认放数据目录</strong> (<code>""</code> ⇒ <code>&lt;data_dir&gt;/hr/</code>); 多实例需要互通时<strong>引导用户自行改成共享目录</strong> (程序只提示不代决)</td><td>§7 多实例部署引导</td></tr>
           <tr><td><code>channel.enabled</code> 启用范围<br><span class="muted">(用户追问「channel 不应该都启用吗」)</span></td><td class="ok"><strong>推荐: 每台「本机有浏览器」的实例都启用</strong> —— 能力硬边界是「本机有没有装扩展的浏览器」而不是名额; 多通道靠同站点锁 + 有效期复用保证<strong>不会双倍访问站点</strong>, 却消掉单点故障; 跨机器的实例没有本地浏览器可连 ⇒ 只能只读</td><td>§5 / §6 / §7</td></tr>
+          <tr><td>超龄豁免 <code>completed_age_limit</code><br><span class="muted">(2026-09-25 用户指令: 「完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」)</span></td><td class="ok"><strong>落地为站点级可选键</strong> (0 = 关闭, 默认不变; 开启时 1D~3650D): 判定侧超龄种子直接豁免 (<strong>压过清单命中</strong>), 取数侧超龄行不入索引/不回填 + 翻页早停 (倒序证据成立才停)。豁免的漏 HR 风险由配置者自愿接受</td><td>§4 / §7 / §9</td></tr>
         </tbody>
       </table>
       <h3>M0 待实测 (技术验证, 不是待决策)</h3>
@@ -804,6 +810,7 @@ trackers:
           <tr><td>v2.6</td><td>2026-09-25 (审查修复)</td><td><strong>「种子下载不触发」审查后的通道时序与饿死残留修复</strong> —— 用户报「种子下载不触发」后全文审查, 复审 02:20 实测日志(「tid=327727 取 .torrent 失败: 等待浏览器扩展取数超时(180s)」)定位到主因; 下载触发本身已被 v2.4 修活(02:20 真的派发了), 卡点在通道:<br>① <strong>轮询节奏与等待窗口根本性错配 (主因)</strong>: 扩展 <code>chrome.alarms</code> 按 5 分钟轮询, 后端每条任务只等 <code>request_timeout=180s</code> ⇒ 轮询周期 300s &gt; 窗口 180s, 每条任务约四成概率因「下一次轮询落在窗口外」直接超时(烧配额 + 计失败, 3 次页面失败 = 12h 熔断)。修: 扩展 <code>POLL_MINUTES</code> 5 → <strong>1 分钟</strong>(空轮询只打本机 loopback, 不碰站点), <code>DEFAULT_POLL_HINT</code> 300 → 60; §6 补<strong>时序硬约束</strong>: 轮询周期必须小于等待窗口。<br>② <strong>v2.4 P1 的饿死残留两处</strong>: (a) 不完备刷新有效期 60s == poll_interval 60s, 而下一轮从「上一轮结束后再等 poll」才开始 ⇒ 现算时刻永远比 expires_at 晚一个 ε ⇒ <strong>「复用轮只补下载」从不发生</strong>(死代码); 修: 有效期取 <code>max(120s, 2×poll_interval)</code>、以刷新周期封顶(判定不读 expires_at, 拉长不产生任何放行)。(b) 页面取数失败的 <code>except HrFetchError</code> 分支直接 return ⇒ 回填被一起跳过; 修: 新 <code>_backfill_on_page_failure</code> —— 页面失败后仍补一次下载(待回填清单来自<strong>已持久化的索引</strong>, 预算闸门照常生效)。<br>③ <strong>下载阶段异常语义修正</strong>: <code>HrChannelStopped</code> / <code>HrChannelQuota</code> / <code>HrLoginExpired</code> 都是 <code>HrFetchError</code> 的子类, 曾被 <code>_fill_infohashes</code> 的 <code>except HrFetchError</code> 吞掉计成 <strong>tid 失败</strong>(关停 / 扩展限流 / 登录失效各来三次就把该 tid 送进 12h 冷却)。修: 三类原样上抛, 新 <code>_guarded_backfill</code> 折成一句备注(不计失败、不丢本轮页面成果)。<br>④ <strong>扩展取 .torrent 的登录页检测</strong>: SameSite 剥 cookie 时 download.php 返回 HTML 登录页, 原样回传会被算「不是合法 .torrent」烧重试额度。修: fetchBinary 按 content-type / 首字节识别 HTML ⇒ 回传 <code>kind=login-page</code>(新), 后端映射为 <code>HrLoginExpired</code>(不计失败 / 每站报一次并给动作); node 桩补 <code>headers</code> / <code>TextDecoder</code> 同形。<br>⑤ <strong>展示与边角</strong>: 配额展示按窗口键折算(修复「本小时 7/12 · 还能取 12 次」自相矛盾 —— 跨窗口后旧计数被标成「本小时」); <code>--hr-status</code> 明细去掉「v1/v2 各一」硬编码后缀; <code>record_failure</code> 的 Retry-After 以 <code>failure_cooldown</code> 封顶(回传值不可信); 「扩展侧硬上限」告警文案补「也可能是扩展上限本就低于后端配额(10/时·50/天 vs 12/时·60/天)」; qbmanager 死注释(hr.wake 无调用点)校准。<br>⑥ <strong>M0 实测收口</strong>: BTSchool 下载 URL 形态 = <code>https://pt.btschool.club/download.php?id=&lt;tid&gt;</code>(2026-09-25 用户实测, 与 download_path 默认值一致; §13)。<br>⑦ <strong>测试 +11 条</strong>(service 7 · fetcher_channel 1 · ratelimit 1 · report 1 · extension_proxy 1), ★红验 7 条(临时还原旧实现: 窗口 / 页面失败补下载 / 下载阶段让位 ⇒ 全红, 还原后全绿); 全量 <strong>1570 passed + 1 skipped</strong>(TOTAL 91% / 10872 / 788 / 3574 / 325; HR 包 93%; 本 AI shell 注入 PYTHONUTF8=1 的 2 条 test_commands_engine 假红已单独复测通过)。</td></tr>
           <tr><td>v2.7</td><td>2026-09-25 (实报修复)</td><td><strong>增量落盘: 轮次不再「全程零写盘」</strong> —— 用户删 hr_check 数据重启实测:「BTSchool.lock 长期被持有 / 后端无落盘, Ctrl+C 后才落盘」。诊断: v2.6 修好后一轮**真实跨多个扩展轮询周期**(3 页 + 回填、中间夹间隔等待, 分钟级、按 §5/§8 **持锁进行** —— 无死锁, Ctrl+C 时取数线程被打断的间隔睡眠当即完成记账并落盘, 关停是快的), 但落盘只发生在**轮尾** ⇒ 中途 Ctrl+C / 断电会丢掉已抓页面与配额账本。修: **每抓到一页**就按 complete=False 语义合并 + 提交(只把命中的置 active, 保守方向), **每个 .torrent 结果**(hr_downloaded「永不重取」凭据 / fails 防烧配额记账)当场提交; 轮尾仍按完整语义再合并一次并写覆盖证明。顺带: 叫停备注措辞改「下载阶段被叫停」—— 叫停也可能打在**派发前的间隔睡眠**上(sleeper 可中断), 不一定是取 .torrent 时。⚠ 说明: <code>&lt;site&gt;.lock</code> 文件在 filelock 释放后**仍会存在**(锁是 OS 级、进程死即释放), 文件在 ≠ 被持有。<br>测试 +1(轮次中途报错时已抓页面当场在文件里), ★红验 1(去掉增量提交 ⇒ 红); 全量 <strong>1571 passed + 1 skipped</strong>(TOTAL 91% / 10881 / 788 / 3578 / 324; HR 包 93%)。</td></tr>
           <tr><td>v2.8</td><td>2026-09-25 (取证误读修复)</td><td><strong>--hr-status 明细表改版 + 已取记录逐文件 ts</strong> —— 用户拿 BTSchool 站点文件取证问「是否短时间大量下载」(结论: 无 —— 当天对站点仅 5 次请求 = 3 页 + 2 个 .torrent, 全在频控内; <code>downloaded[]</code> 是「已取 .torrent」凭据不是 qB 下载), 顺带点出两处真问题:<br>① <strong><code>hr_downloaded[].ts</code> 整批共用开始时刻</strong>: 同批两条微秒级相同 ⇒ 看着像瞬间批量下载。修: <code>_fill_infohashes</code> 的 ts 改记<strong>各 .torrent 自己的取回时刻</strong>(同源的 <code>fail.last_ts</code> 一并修准)。<br>② <strong>明细「剩余达标」列被误读</strong>: 9d21h 是<strong>考核窗口</strong>(9d21h 内要完成做种要求), 摆在表里会被读成「还要做种 9 天」(实际还需做种仅 16h57m)。修: 明细列 = tid / 档位(考察中·已达标·未达标·已免罪, 单点 <code>status.LANE_TEXTS</code>) / 上传量 / 下载量 / 分享率 / <strong>还需做种</strong>(镜像站点书写形态 <code>HH:MM:SS</code>·「N天HH:MM:SS」) / 名称(按显示格宽截断) / infohash; <strong>剩余达标时间不再显示</strong>。列对齐走自写 <code>_dwidth/_pad</code>(str.format 按字符数对齐, CJK 双宽会错位)。<br>测试 +2(service 1 钉逐文件 ts / report 1 钉 CJK 对齐·截断·列改版); 全量 <strong>1573 passed + 1 skipped</strong>(TOTAL 91% / 10905 / 789 / 3582 / 327; HR 包 93%: 2782 / 143 / 766 / 91)。</td></tr>
+          <tr><td>v2.9</td><td>2026-09-25 (新需求落地)</td><td><strong>超龄豁免: 完成时间超线的种子不再核实、不再翻页</strong> —— 用户指令「忽略下载时间超过一定期限的种子, 比如完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」。<br>① <strong>判定侧</strong> (§9): 新站点级键 <code>trackers.&lt;站&gt;.hr_check.completed_age_limit</code> (0 = 关闭, 默认行为不变; 开启时 1D~3650D, 单位写错配置期拦下); <code>judge_record</code> 对锚点里<strong>本地完成时刻</strong>超线的种子直接给第四态 <code>EXEMPT</code>「超龄豁免」—— 排在「无可查键回落本地」闸门<strong>之前</strong> (豁免是 qB 侧事实, 不依赖索引建到哪), <strong>压过清单命中</strong>与 <code>unknown_policy</code>, <code>mode: all</code> 也认 (配置者的显式取舍); 参数由记录侧从 <code>tracker_conf</code> 带进 (不多一次配置遍历)。<br>② <strong>取数侧</strong> (§4): 页面行超龄的<strong>不入索引、不回填 .torrent</strong> (省下配额; 完成时间不可解析的行保留 —— 不猜); 当前页整页超龄且<strong>页内 + 跨页都呈完成时间倒序</strong>才允许早停 —— 后续页只会更老, 本档位在豁免线内的清单已全覆盖, <strong>覆盖证明照常成立</strong> (complete 可达 ⇒ 放行照常产生); 倒序证据不成立就照常翻到底 (错误方向是多花配额, 不是漏判), 早停在 <code>refresh.reason</code> 留痕 (<code>--hr-status</code> 可见)。<br>③ <strong>测试 +17 条</strong> (判定 7 · 取数 8 · 门面透传 1 · 配置 1), ★红验 3 处 10 条守阵全红后还原; 全量 <strong>1593 passed + 1 skipped</strong> (TOTAL 91% / 10849 / 791 / 3598 / 327; 本 shell 2 条 GBK 假红按既有记载复测通过)。文档: configuration.md「超龄豁免」节 · config-reference/keys.md · testing/baseline.md。</td></tr>
         </tbody>
       </table>
       <p class="muted">下一段是 M0 的待实测清单 (§13)。</p>

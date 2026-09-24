@@ -211,6 +211,16 @@ SITE_HR_CHECK_FIELDS: Tuple[Field, ...] = (
     Field("refresh_interval", "刷新周期", "time", default="12H", unit_default="H", help="HR 页抓取周期; 放行有效期默认跟着它"),
     Field("max_pages_per_refresh", "单次翻页上限", "int", default="5", help="一次刷新最多翻几页; 到上限仍未到底 -> 本次覆盖证明不成立"),
     Field(
+        "completed_age_limit",
+        "超龄豁免线",
+        "time",
+        default="0S",
+        unit_default="D",
+        help="完成时间超过该时长的种子视为超龄: 判定侧直接豁免(不受管束、不再在线核实), 取数侧也不再为它"
+        "翻页/存索引/取 .torrent。0 = 关闭(默认)。❗豁免优先于清单命中 —— 站点其实还在管的超龄种子会漏 HR, "
+        "自愿接受后才开启; 页面按完成时间倒序时翻页早停才成立(乱序页面自动放弃早停, 只多花配额)",
+    ),
+    Field(
         "max_torrents_per_hour",
         "每小时配额(站点覆盖)",
         "int",

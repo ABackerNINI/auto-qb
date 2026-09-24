@@ -232,8 +232,8 @@ class _StubLink:
         self.judged = judged
         self.calls = []
 
-    def judge(self, site, infohashes, *, anchor=None, now=0.0):
-        self.calls.append((site, tuple(infohashes), anchor))
+    def judge(self, site, infohashes, *, anchor=None, now=0.0, completed_age_limit=0.0):
+        self.calls.append((site, tuple(infohashes), anchor, completed_age_limit))
         return self.judged
 
 
@@ -264,9 +264,10 @@ def test_record_hr_follows_site_judgement():
     link = _StubLink(HrJudgement(identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 A)"))
     rec.hr_link = link
     assert rec.check_hr_condition() is True, "名单命中即受管束, 与本地 downloaded=0 无关"
-    site, hashes, anchor = link.calls[0]
+    site, hashes, anchor, age_limit = link.calls[0]
     assert site == "X" and hashes == (rec.infohash_v1, rec.infohash_v2)
     assert anchor == rec.hr_anchor() and anchor.added_on == 1000
+    assert age_limit == 0.0, "未配置豁免线时透传 0(关闭), 豁免永不触发"
 
     link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=True)
     assert rec.check_hr_satisfied() is True, "站点侧 B 档/剩余 0 => 直接达标"

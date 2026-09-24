@@ -6,26 +6,26 @@
 
 ## 当前基线
 
-**1579 collected: 1576 passed + 1 skipped / Windows** —— 2026-09-25 **扩展运行日志(分级 + 环形上限 + 选项页④区)**
-(本条 **+3 条(1576 → 1579)**, 全在 `tests/test_extension_proxy.py`: 日志分级/环形上限/超长截断/清空 1 条 ·
-选项页日志面接线(clear-logs 协议 / esc 转义 / 限渲染条数)1 条 · 轮询周期文案↔`POLL_MINUTES` 防漂 1 条。
-动机与设计见档案 `26-09-25-webui-ext-hr-logging`; 上一态见 [baseline-history.md](baseline-history.md)。)
-TOTAL **91%**(10905 语句 / 789 未覆盖 / 3582 分支 / 327 partial —— 并行采样; **HR 包 93%**:
-2782 / 143 / 766 / 91; 本轮无 .py 源码变更, 四项均不变), sidefx 台账并行汇总 / **越界 0**(2588~2592 采样波动)。
+**1596 collected: 1595 passed + 1 skipped / Windows** —— 2026-09-25 **HR 超龄豁免(判定侧豁免 + 翻页早停)**
+(本条 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
+(`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
+新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变)。动机与取舍见档案
+`26-09-22-backend-partial-hr-verify` 与计划 v2.8; 上一态见 [baseline-history.md](baseline-history.md)。)
+TOTAL **91%**(10849 语句 / 791 未覆盖 / 3598 分支 / 327 partial —— 并行采样), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
-`PYTHONUTF8=` 置空后复测 **2 passed** —— 已有记载的假红, 非回归(见下条 ⚠ 与 pitfalls/testing/patching.md)。
+`PYTHONUTF8=0` 后复测 **2 passed** —— 已有记载的假红, 非回归(见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md))。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
-⚠ `test_commands_engine.py` 两条 GBK 码页守阵在**本工具 shell 恒红**(注入 `PYTHONUTF8=1`, 见
-[../pitfalls/testing/patching.md](../pitfalls/testing/patching.md)), `env -u PYTHONUTF8 -u PYTHONIOENCODING` 后全绿 —— 已有记载, 非回归。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 扩展运行日志)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **17.6 / 19.8 / 19.9 / 20.5s**(4 次采样: test.quick ×1 + test.full ×3)
+**当前(2026-09-25 HR 超龄豁免)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **19.9 / 36.8s**(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)
 
-**上一态(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
+**上一态(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
+
+**更早(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
 
 **更早(2026-09-25 v2.6/v2.7 通道时序 + 增量落盘 / M4 多站点)**: 并行 19.3 / 20.0 / 21.7s 与 18.1 / 18.1 / 19.2s。
 ⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景 + 登录页场景各一次) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。

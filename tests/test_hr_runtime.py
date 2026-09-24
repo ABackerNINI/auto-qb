@@ -20,6 +20,7 @@
 - test_judge_is_none_when_disabled: 总开关关 -> judge 返回 None(消费方回落本地字段逻辑)
 - test_judge_reads_published_view: 启用时按**当前已发布**视图现算(命中清单 -> 受管束 + 站点达标结论)
 - test_judge_without_published_view_falls_back: 还没发布过视图(启动窗口) -> None, 不是"未核实"
+- test_judge_passes_completed_age_limit: 超龄豁免线从调用方透传到判定收口(缺省 0 = 关闭)
 - test_sleeper_is_interruptible_by_stop: 锁内等待可中断 —— 关停/热重挂不必等它把间隔睡完
 - test_sleeper_returns_after_the_wait: 没被打断时按秒数返回(不提前也不卡住)
 - test_production_service_gets_a_sleeper: 生产服务必须带 sleeper(2026-09-25 实报: 不等待 ⇒ 下载被页面饿死)
@@ -437,3 +438,16 @@ def test_restart_after_stop_works(tmp_path):
         assert runtime.status().channel.listening
     finally:
         runtime.stop()
+
+
+def test_judge_passes_completed_age_limit(tmp_path):
+    """超龄豁免线从调用方透传到判定收口: 老种子 -> exempt; 缺省 0 -> 正常判定(零静默变更)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    view = HrSiteView(site="pt.example.com", mode="partial", by_infohash={H1: HrEntry(tid=7, infohash_v1=H1, lane="A")})
+    runtime.publisher.publish(HrViewSet(views={"pt.example.com": view}))
+    now = 1_800_000_000.0
+    old = HrAnchor(added_on=1, completion_on=now - 400 * 86400.0)
+    got = runtime.judge("pt.example.com", (H1, ""), anchor=old, now=now, completed_age_limit=365 * 86400.0)
+    assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
+    normal = runtime.judge("pt.example.com", (H1, ""), anchor=old, now=now)
+    assert normal.identity is HrIdentity.HR, "缺省 0 = 关闭, 老种子照常按清单命中判"

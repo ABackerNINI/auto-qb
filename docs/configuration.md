@@ -170,7 +170,7 @@ config:
   安装与配置步骤见 [扩展说明](../extensions/hr-fetch-proxy/README.md)。
 - **站点段** `trackers.<站点>.hr_check`: `mode`(`off` 不启用 / `partial` 在线核实 / `all` 站点侧驱动 +
   未核实恒受管束)、`hr_page_url`(HR 统计页, 启用时必填)、`hr_page_scopes`(默认 `[A, B, C]`)、
-  `download_path`(须含 `{id}` 占位符)、`refresh_interval` 等。
+  `download_path`(须含 `{id}` 占位符)、`refresh_interval` 等。可选的 `completed_age_limit`(超龄豁免线)见下节。
 
 两条配置期会直接报错的规则(都是为了不让人踩到「保护静默失效」):
 
@@ -193,6 +193,7 @@ config:
                 page_param: page              # 翻页参数名(缺省 page)
                 refresh_interval: 12H
                 max_pages_per_refresh: 5
+                completed_age_limit: 365D     # 可选: 超龄豁免线, 见下节; 不配 = 关闭
 ```
 
 - 站点之间**完全隔离**: 各自一个站点文件(`<data_dir>/hr/<站点>.json`)、各自一把锁、各自一套配额账本与熔断 ——
@@ -203,6 +204,20 @@ config:
 - `hr_page_url` 要填**登录后**能打开的那个页面; 后端不持有 cookie, 取数由浏览器扩展在登录态下完成。
 - 页数 / 档位名 / 下载路径这三样**拿不准就先跑一次走查**(`--hr-once`) —— 它会如实报「未找到 HR 表(疑似改版)」
   或「达到单次翻页上限仍未到底」, 而不是默默少抓。
+
+### 超龄豁免 `completed_age_limit`(可选, 默认关闭)
+
+站点级配置 `trackers.<站>.hr_check.completed_age_limit`(0 = 关闭; 开启时 1D~3650D): 完成时间超过该
+时长的种子视为**超龄**, 程序不再为它做任何 HR 核实 —— 这是「老种子站点早就不管了」的站点的省配额开关:
+
+- **判定侧**: 超龄种子直接豁免(界面三态显示「超龄豁免」), 不查索引、不受 `unknown_policy` 影响,
+  **也压过清单命中** —— 站点哪怕还列着它, 也按你的声明不管束。❗这意味着「站点其实还在管」的超龄种子
+  会漏 HR, 属自愿接受的风险, 想清楚了再开。
+- **取数侧**: 页面上超龄的行不再入索引、也不再为它下载 `.torrent`(省下配额); 当前页整页超龄且
+  页内、跨页都呈**完成时间倒序**时, 后续页不再翻(倒序证据不成立就照常翻到底, 最多多花配额,
+  不会漏判)。
+- 判定与翻页用的是**本地 qB 的完成时刻**(锚点 `completion_on`), 与站点页面展示的完成时间是两套值,
+  对「天」级阈值小时级的时差不构成影响。
 
 ❗`hr_check.allow_window` 与 `notify.quiet_hours` **语义相反**: 那个是「这段时间不发通知」,
 本项是「只在这段时间取数」。

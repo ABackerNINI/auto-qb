@@ -1,4 +1,4 @@
-"""三态判定收口(计划 §9): 受管束 / 已核实不受管束 / 未核实。
+"""判定收口(计划 §9): 受管束 / 已核实不受管束 / 未核实, 外加 qB 侧的**超龄豁免**。
 
 **站点数据是权威数据**: 接入 hr_check 的站点「是否触发 / 是否达标」一律看站点侧, 本地 qB 字段
 降为兜底与展示 —— 否则转移种子(A 客户端下载 → B 客户端保种, B 的 downloaded=0 被当辅种)
@@ -8,6 +8,9 @@
 - **不漏 HR 是首要**: unknown_policy 默认 hr + 新鲜度闸门 + 不完备刷新不产生放行 +
   放行有效期(verified_ttl)。
 - **安全放行** 只由「完整核实过、且不在清单里」产生, 而不是「没看见就放行」。
+- **超龄豁免是唯一由本地事实单方面给出的「不受管束」**: 完成时间超过 completed_age_limit 的
+  种子, 用户已显式声明「不再核实、不再管束」—— 它优先于站点侧一切结论(含清单命中),
+  且只在站点级显式配置了该键时存在(默认 0 = 永不出现, 零静默变更)。
 
 本模块是**纯函数 + 不可变视图**: 视图由取数线程整体替换引用(项目先例: 搜索索引整体替换引用),
 Web 线程与主循环并发只读安全; 「是否还在有效期」这类时间敏感判定在**读取时现算**,
@@ -31,11 +34,12 @@ POLICY_NOT_HR = "not-hr"
 
 
 class HrIdentity(str, Enum):
-    """种子的 HR 身份三态"""
+    """种子的 HR 身份(三态 + qB 侧超龄豁免)"""
 
     HR = "hr"  # 受管束(站点清单命中; 或 mode=all 下的未核实)
     VERIFIED_NON_HR = "verified_non_hr"  # 已核实不受管束(安全放行)
     UNKNOWN = "unknown"  # 未核实
+    EXEMPT = "exempt"  # 超龄豁免(完成时间超过 completed_age_limit; 见模块 docstring)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,10 +82,11 @@ class HrResolution:
         """落到「是否按 HR 对待」的布尔语义(四个消费点最终要的就是它)
 
         未核实时按 unknown_policy; 但 forced(新鲜度闸门)恒受管束, **不可被 policy 绕过**。
+        超龄豁免恒为 False —— 它不经过 policy, 是用户对这类种子的显式声明。
         """
-        if self.identity is HrIdentity.HR:
+        if self.identity in (HrIdentity.HR, ):
             return True
-        if self.identity is HrIdentity.VERIFIED_NON_HR:
+        if self.identity in (HrIdentity.VERIFIED_NON_HR, HrIdentity.EXEMPT):
             return False
         return self.forced or unknown_policy != POLICY_NOT_HR
 
@@ -133,6 +138,8 @@ class HrJudgement:
             return "受管束"
         if self.identity is HrIdentity.VERIFIED_NON_HR:
             return "已核实·安全放行"
+        if self.identity is HrIdentity.EXEMPT:
+            return "超龄豁免"
         return "未核实"
 
 
@@ -263,7 +270,7 @@ def _rank(res: HrResolution) -> int:
         return _RANK_HR
     if res.forced:
         return _RANK_FORCED
-    if res.identity is HrIdentity.VERIFIED_NON_HR:
+    if res.identity in (HrIdentity.VERIFIED_NON_HR, HrIdentity.EXEMPT):
         return _RANK_RELEASED
     return _RANK_UNKNOWN
 
@@ -275,6 +282,7 @@ def judge_record(
     anchor: Optional[HrAnchor] = None,
     now: float = 0.0,
     unknown_policy: str = POLICY_HR,
+    completed_age_limit: float = 0.0,
 ) -> Optional[HrJudgement]:
     """给 TorrentRecord 用的收口判定(四个消费点唯一入口; 读取时现算)。
 
@@ -284,9 +292,24 @@ def judge_record(
 
     infohash 传 (v1, v2): 命中清单是站点侧事实, 两个键哪个命中都算命中(v2-only 页面同样成立);
     取两者中**更保守**的结论(命中 > 恒受管束 > 已放行 > 未核实)。
+
+    `completed_age_limit` > 0 时(站点级配置, 记录侧从 tracker_conf 带进来): 锚点里**本地完成
+    时刻**超过该线的种子直接超龄豁免 —— 不查索引、不看 unknown_policy、也**压过清单命中**
+    (站点真还在管的超龄种子会漏 HR, 这是配置者显式接受的风险, 见模块 docstring「不变量」)。
+    它排在「无可查键回落本地」的闸门**之前**: 豁免是 qB 侧事实, 不依赖站点索引建到哪了。
     """
     if view is None or view.mode == "off":
         return None
+    if completed_age_limit > 0 and anchor is not None and anchor.completion_on > 0 and \
+            now - anchor.completion_on >= completed_age_limit:
+        age_days = (now - anchor.completion_on) / 86400
+        return HrJudgement(
+            identity=HrIdentity.EXEMPT,
+            is_hr=False,
+            reason=f"超龄豁免(本地完成于 {age_days:.0f} 天前, 超过豁免线 {completed_age_limit / 86400:.0f} 天, "
+            "不再在线核实)",
+            site=view.site,
+        )
     if view.mode != "all" and not view.has_lookup_keys:
         # ❗站点侧**一个可查键都没有**(索引里没回填出任何 infohash、也没有放行记录): 这时
         # 所有种子都会落到「未核实」, 而 unknown_policy 默认 hr ⇒ **整站种子集体按受管束处理**

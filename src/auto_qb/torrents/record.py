@@ -310,6 +310,8 @@ class TorrentRecord:
             (self.infohash_v1, self.infohash_v2),
             anchor=self.hr_anchor(),
             now=time.time(),
+            # 超龄豁免线也是站点级配置: 完成时间超过它的种子在判定收口处直接豁免(0 = 关闭)
+            completed_age_limit=site_conf.completed_age_limit,
         )
 
     def check_hr_condition(self) -> bool:

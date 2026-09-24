@@ -184,6 +184,7 @@ class HrRuntime:
         *,
         anchor: Optional[HrAnchor] = None,
         now: float = 0.0,
+        completed_age_limit: float = 0.0,
     ) -> Optional[HrJudgement]:
         """站点侧三态判定(M3 四个消费点的唯一入口; 返回 None = 本模块不适用 ⇒ 走本地逻辑)
 
@@ -191,6 +192,7 @@ class HrRuntime:
         **无状态、无写、无 API、零等待** —— 主循环与 Web 线程都会调它。
         站点级开关(mode=off)由调用方事先挡掉(它手里有 tracker_conf, 不必回查配置迭代),
         这里只检查**总开关**: 关掉它 = 全体回到既有本地行为(零静默变更的另一个方向)。
+        `completed_age_limit` 同理由调用方从站点配置带进(超龄豁免线, 0 = 关闭)。
         """
         conf = self.global_conf
         if not conf.enabled:
@@ -201,6 +203,7 @@ class HrRuntime:
             anchor=anchor,
             now=now,
             unknown_policy=conf.unknown_policy,
+            completed_age_limit=completed_age_limit,
         )
 
     @property

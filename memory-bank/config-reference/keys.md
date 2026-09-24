@@ -41,7 +41,7 @@
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
 | `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 |
-| `hr_check` | | **站点级在线核实**: `{mode(off|partial|all), adapter(nexusphp), hr_page_url(启用时必填), hr_page_scopes([A,B,C]), download_path("/download.php?id={id}"), page_param(page), refresh_interval("12H"), max_pages_per_refresh(5), max_torrents_per_hour(留空=回退全局)}`。❗两条配置期 fail-fast: **① `mode != off` 时该站 `hr` 段必填** —— 否则 `check_hr_condition` 首行 `if not self.tracker_conf.hr` 恒 False, 整站保护**静默失效**; **② `hr_page_scopes` 必须含 A+B+C** —— 少抓一档会让该档种子在「完整刷新」里未列出而被**误放行**(漏 HR)。`download_path` 必须含 `{id}` 占位符(站点差异由 adapter 承担) |
+| `hr_check` | | **站点级在线核实**: `{mode(off|partial|all), adapter(nexusphp), hr_page_url(启用时必填), hr_page_scopes([A,B,C]), download_path("/download.php?id={id}"), page_param(page), refresh_interval("12H"), max_pages_per_refresh(5), completed_age_limit(0=关闭; 开启时 1D~3650D), max_torrents_per_hour(留空=回退全局)}`。**超龄豁免(completed_age_limit)**: 完成时间超过该线的种子判定侧直接豁免(第四态 exempt「超龄豁免」, 压过清单命中、不受 unknown_policy 影响), 取数侧超龄行不入索引、不回填 .torrent, 整页超龄且页内+跨页呈完成时间倒序才早停翻页(证据不全就照常翻, 不漏判); ❗豁免 = 自愿接受「站点其实还在管」的漏 HR 风险。❗两条配置期 fail-fast: **① `mode != off` 时该站 `hr` 段必填** —— 否则 `check_hr_condition` 首行 `if not self.tracker_conf.hr` 恒 False, 整站保护**静默失效**; **② `hr_page_scopes` 必须含 A+B+C** —— 少抓一档会让该档种子在「完整刷新」里未列出而被**误放行**(漏 HR)。`download_path` 必须含 `{id}` 占位符(站点差异由 adapter 承担) |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
 | `remove_similar_tags` | | 覆盖全局 |

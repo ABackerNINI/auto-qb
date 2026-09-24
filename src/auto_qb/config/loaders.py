@@ -180,6 +180,7 @@ def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
         page_param=_get(spec, "page_param", d.page_param),
         refresh_interval=_get(spec, "refresh_interval", d.refresh_interval, parse_time),
         max_pages_per_refresh=_get(spec, "max_pages_per_refresh", d.max_pages_per_refresh, int),
+        completed_age_limit=_get(spec, "completed_age_limit", d.completed_age_limit, parse_time),
         max_torrents_per_hour=(
             _get(spec, "max_torrents_per_hour", None, int) if "max_torrents_per_hour" in spec else None
         ),

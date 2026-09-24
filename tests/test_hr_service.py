@@ -57,8 +57,17 @@
   页面改版留给状态层告警(alerted=False)
 - test_cancelled_fetch_is_not_a_failure_nor_an_alert: 关停/热重挂时被叫停: 不告警不计失败不推熔断
 - test_empty_listing_is_complete: 表头在但 0 行是合法空结果, 覆盖证明仍成立
+- test_age_window_off_keeps_old_rows: 豁免线未配置(0=默认) -> 超龄行照常入索引/回填(零静默变更守门)
+- test_age_window_filters_old_rows: 超龄行不入索引、不回填(省下它的 .torrent 配额); 线内行照常
+- test_early_stop_skips_remaining_pages: 整页超龄且倒序成立 -> 后续页不再请求; 本档位照常计入覆盖证明
+- test_early_stop_not_triggered_with_in_window_row: 页面里还有线内行 -> 不能早停, 翻到页尾
+- test_early_stop_requires_desc_order_within_page: 页内完成时间升序(非倒序排) -> 放弃早停, 继续翻
+- test_early_stop_requires_desc_order_across_pages: 跨页倒序链断了(本页有比上页最老行更新的行) -> 不早停
+- test_early_stop_blocked_by_missing_done_field: 页内有行缺完成时间 -> 不早停; 该行照常保留入索引
+- test_early_stop_blocked_when_prev_page_has_no_done: 上一页没有可解析完成时刻 -> 跨页证据缺失 -> 不早停
 """
 import logging
+from datetime import datetime
 
 import pytest
 
@@ -81,6 +90,8 @@ from hr_helpers import (
 
 SITE = "example"
 PAGE2_URL = "https://pt.example.com/myhr.php?hrtype=A&page=2"
+PAGE3_URL = "https://pt.example.com/myhr.php?hrtype=A&page=3"
+AGE_LIMIT = 365 * 86400.0  # 超龄豁免线(365 天)
 
 #: 登录页(页面里有密码输入框 ⇒ adapter 判「登录态失效」; 与扩展侧「要升级到渲染通道」的信号同源)
 LOGIN_PAGE = '<html><body><form action="takelogin.php"><input type="password" name="password"></form></body></html>'
@@ -1038,3 +1049,146 @@ def test_both_modes_refresh(tmp_path, mode):
     result = svc.refresh_site(SITE)
     assert result.action == ACTION_REFRESHED
     assert svc.build_views()[SITE].mode == mode
+
+
+# ---------- 超龄豁免: 行过滤 + 翻页早停(completed_age_limit; 计划 §8 增补) ----------
+
+
+def _done(clock: Clock, days_ago: float) -> str:
+    """按假时钟构造「N 天前」的完成时间串(本地时区往返, 与 HrEntry.done_epoch 同一解释)"""
+    return datetime.fromtimestamp(clock.now - days_ago * 86400).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def test_age_window_off_keeps_old_rows(tmp_path):
+    """豁免线未配置(0=默认) -> 超龄行照常入索引/回填(零静默变更守门)"""
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101, done=_done(clock, 400))]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock)
+
+    result = svc.refresh_site(SITE)
+
+    assert result.complete is True
+    data = _read(tmp_path)
+    assert set(data.index) == {101}
+    assert len(fetcher.byte_calls) == 1
+
+
+def test_age_window_filters_old_rows(tmp_path):
+    """超龄行不入索引、不回填(判定侧会豁免它们, 索引行留着只会白烧 .torrent 配额); 线内行照常"""
+    clock = Clock()
+    fetcher = FakeFetcher(
+        _pages(
+            a_rows=[row(101, done=_done(clock, 400)), row(102, done=_done(clock, 10))]
+        ),
+        _blobs(102),  # 101 的 .torrent 故意不给: 真去取了就是 bug
+    )
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.complete is True
+    data = _read(tmp_path)
+    assert set(data.index) == {102}
+    assert [FakeFetcher.tid_of(u) for u in fetcher.byte_calls] == [102]
+
+
+def test_early_stop_skips_remaining_pages(tmp_path):
+    """第 2 页整页超龄(倒序证据成立) -> 第 3 页不再请求; 本档位照常计入覆盖证明(complete 可达)"""
+    clock = Clock()
+    page2 = myhr_page([row(201, done=_done(clock, 400))], has_next=True)  # 明示还有第 3 页, 但不去了
+    fetcher = FakeFetcher(
+        _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2),
+        _blobs(101),
+    )
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.complete is True, "豁免线内的清单已全覆盖, 覆盖证明照常成立(放行照常产生)"
+    assert result.pages_fetched == 4, "A 翻到第 2 页即止(共 A2+B+C); 第 3 页一个请求都不花"
+    assert "早停" in result.reason
+    data = _read(tmp_path)
+    assert set(data.index) == {101}, "超龄页的行不进索引"
+
+
+def test_early_stop_not_triggered_with_in_window_row(tmp_path):
+    """第 2 页混着线内行 -> 不能早停, 继续翻到页尾(漏一条线内清单就是误放行)"""
+    clock = Clock()
+    page2 = myhr_page([row(201, done=_done(clock, 400)), row(202, done=_done(clock, 10))], has_next=True)
+    pages = _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2)
+    pages[PAGE3_URL] = myhr_page([], has_next=False)
+    fetcher = FakeFetcher(pages, _blobs(101, 202))
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.complete is True
+    assert result.pages_fetched == 5, "A 翻满 3 页 + B + C"
+    data = _read(tmp_path)
+    assert set(data.index) == {101, 202}, "超龄的 201 被滤掉, 线内的 101/202 照常入索引"
+
+
+def test_early_stop_requires_desc_order_within_page(tmp_path):
+    """整页超龄但页内完成时间**升序**(页面不是按完成时间倒序排) -> 放弃早停, 继续翻
+
+    早停的错误方向是把线内清单漏在后面 → 误放行; 倒序证据不成立时宁可多花配额。
+    """
+    clock = Clock()
+    page2 = myhr_page([row(201, done=_done(clock, 500)), row(202, done=_done(clock, 380))], has_next=True)
+    pages = _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2)
+    pages[PAGE3_URL] = myhr_page([], has_next=False)
+    fetcher = FakeFetcher(pages, _blobs(101, 201, 202))
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.pages_fetched == 5, "倒序证据不成立 → 不早停"
+    assert "早停" not in result.reason
+
+
+def test_early_stop_requires_desc_order_across_pages(tmp_path):
+    """跨页倒序链断了(第 2 页有比第 1 页最老行**更新**的行) -> 不早停, 继续翻"""
+    clock = Clock()
+    # 第 1 页: 线内 10 天 + 超龄 500 天(页内倒序成立); 第 2 页整页超龄, 但最老只到 480 天
+    page2 = myhr_page([row(201, done=_done(clock, 480)), row(202, done=_done(clock, 490))], has_next=True)
+    pages = _pages(a_rows=[row(101, done=_done(clock, 10)), row(102, done=_done(clock, 500))], a_next=True, page2=page2)
+    pages[PAGE3_URL] = myhr_page([], has_next=False)
+    fetcher = FakeFetcher(pages, _blobs(101))
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.pages_fetched == 5, "跨页倒序不成立 → 不早停"
+
+
+def test_early_stop_blocked_by_missing_done_field(tmp_path):
+    """整页超龄但有一行完成时间缺失/不可解析 -> 不早停(不猜); 该行照常保留入索引"""
+    clock = Clock()
+    page2 = myhr_page([row(201, done=_done(clock, 400)), row(202, done="--")], has_next=True)
+    pages = _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2)
+    pages[PAGE3_URL] = myhr_page([], has_next=False)
+    fetcher = FakeFetcher(pages, _blobs(101, 202))
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.pages_fetched == 5, "有行缺完成时间 → 超龄证据不全 → 不早停"
+    data = _read(tmp_path)
+    assert set(data.index) == {101, 202}, "201 超龄被滤; 202 完成时间未知, 保留(不猜)"
+
+
+def test_early_stop_blocked_when_prev_page_has_no_done(tmp_path):
+    """上一页没有可解析的完成时刻 -> 跨页倒序证据缺失 -> 不早停"""
+    clock = Clock()
+    page1_rows = [row(101, done="--"), row(102, done="—")]  # 两行完成时间都不可解析(照常保留)
+    page2 = myhr_page([row(201, done=_done(clock, 400))], has_next=True)
+    pages = _pages(a_rows=page1_rows, a_next=True, page2=page2)
+    pages[PAGE3_URL] = myhr_page([], has_next=False)
+    fetcher = FakeFetcher(pages, _blobs(101, 102))
+    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
+
+    result = svc.refresh_site(SITE)
+
+    assert result.pages_fetched == 5, "上一页没有完成时刻 → 跨页证据缺失 → 不早停"
+    data = _read(tmp_path)
+    assert set(data.index) == {101, 102}

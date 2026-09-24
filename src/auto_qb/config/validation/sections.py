@@ -3,7 +3,7 @@ import logging
 import re
 from typing import List
 
-from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed
+from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed, parse_time
 from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _try, _try_number, _try_time
 from .rules import _check_rule_refs
 
@@ -49,6 +49,7 @@ KNOWN_SITE_HR_CHECK_KEYS = {
     "page_param",
     "refresh_interval",
     "max_pages_per_refresh",
+    "completed_age_limit",
     "max_torrents_per_hour",
 }
 
@@ -307,6 +308,17 @@ def _validate_site_hr_check(spec, where: str, errors: List[str]) -> None:
         _try_number(
             spec["max_pages_per_refresh"], f"{where}.max_pages_per_refresh", errors, integer=True, min=1, max=100
         )
+    if "completed_age_limit" in spec:
+        # 0 = 关闭; 开启时下限 1d: HR 考核窗口没有以小时计的, 更小的值几乎必然是单位写错
+        # (比如本意 365D 写成 365S) —— 那等于把整站刚完成的种子集体豁免, 必须配置期拦下
+        where_age = f"{where}.completed_age_limit"
+        try:
+            age_s = parse_time(spec["completed_age_limit"])
+        except ValueError as e:
+            errors.append(f"{where_age}: {e}")
+        else:
+            if age_s != 0 and not 86400 <= age_s <= 3650 * 86400:
+                errors.append(f"{where_age}: 须为 0(关闭)或 1D~3650D: {spec['completed_age_limit']}")
     if "max_torrents_per_hour" in spec:
         _try_number(
             spec["max_torrents_per_hour"], f"{where}.max_torrents_per_hour", errors, integer=True, min=1, max=10000

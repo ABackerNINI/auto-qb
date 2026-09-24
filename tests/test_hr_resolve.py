@@ -28,6 +28,15 @@
 - test_judge_record_without_any_lookup_key_falls_back: 站点侧一个可查键都没有(索引没回填出 infohash)
   -> None(回落本地), **不**把「不知道」当受管束(2026-09-25 实报: 否则整站打标); mode=all 不受此闸门影响
 - test_judge_record_carries_site_facts: 命中行带出站点侧值并**拷成不可变对象**(WebUI 两套值对账的数据源)
+- test_judge_record_age_exempt_overrides_listing: 完成时间超豁免线 -> 超龄豁免, **压过清单命中**
+  (用户显式声明这类种子不再核实/管束)
+- test_judge_record_within_age_not_exempt: 完成时间在线内 -> 正常判定, 豁免不掺和
+- test_judge_record_age_limit_zero_disables: 豁免线 0(默认) -> 老种子也走正常判定(零静默变更守门)
+- test_judge_record_age_exempt_requires_known_completion: completion_on 缺位(0/负)或无锚点 -> 不豁免
+- test_judge_record_age_exempt_works_without_lookup_keys: 豁免排在「无可查键回落本地」闸门之前
+  (豁免是 qB 侧事实, 不依赖索引建到哪)
+- test_judge_record_age_exempt_applies_on_mode_all: mode=all 也认豁免(显式配置压过恒受管束)
+- test_judge_record_age_exempt_boundary_is_inclusive: 恰好等于豁免线 -> 豁免; 差一秒 -> 不豁免
 """
 import pytest
 
@@ -331,3 +340,106 @@ def test_judge_record_without_any_lookup_key_falls_back():
     # mode=all 是用户显式要的「全站受管束」: 不看索引现状
     forced = judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW)
     assert forced is not None and forced.is_hr is True
+
+
+# ---------- 超龄豁免(completed_age_limit; 计划 §9 增补) ----------
+# 独立时钟: 本文件顶部的 NOW=2000 是「秒级」小时间, 而豁免线以天计 —— 完成时刻必须为正
+# (completion_on > 0 守卫), 故这组用例统一用「第 N 天」的绝对时刻表达。
+
+AGE_LIMIT = 365 * 86400.0
+AGE_NOW = 400 * 86400.0  # 这组用例的「现在」: 第 400 天
+AGE_FRESH_TS = AGE_NOW - 60.0  # 刚刚完整刷新过(放行在有效期内)
+OLD_COMPLETION = 10 * 86400.0  # 第 10 天完成: 距今 390 天, 超过豁免线
+NEW_COMPLETION = AGE_NOW - 10 * 86400.0  # 10 天前完成: 线内
+
+
+def test_judge_record_age_exempt_overrides_listing():
+    """完成时间超豁免线 -> 超龄豁免(**压过清单命中**): 用户显式声明这类种子不再核实/管束
+
+    站点哪怕还列着 C 档(未达标)也一样 —— 这是配置者自愿接受的漏 HR 风险(schema help 与计划 §13 写明)。
+    """
+    view = _view(listed=[(H1, 101, "C")])
+    got = judge_record(
+        view,
+        (H1, ""),
+        anchor=HrAnchor(added_on=1, completion_on=OLD_COMPLETION),
+        now=AGE_NOW,
+        completed_age_limit=AGE_LIMIT,
+    )
+    assert got is not None and got.identity is HrIdentity.EXEMPT
+    assert got.is_hr is False and got.state_text == "超龄豁免"
+    assert "超龄豁免" in got.reason
+
+
+def test_judge_record_within_age_not_exempt():
+    """完成时间在线内 -> 正常判定(清单命中照旧受管束), 豁免不掺和"""
+    view = _view(listed=[(H1, 101, "A")])
+    got = judge_record(
+        view,
+        (H1, ""),
+        anchor=HrAnchor(added_on=1, completion_on=NEW_COMPLETION),
+        now=AGE_NOW,
+        completed_age_limit=AGE_LIMIT,
+    )
+    assert got.identity is HrIdentity.HR and got.is_hr is True
+
+
+def test_judge_record_age_limit_zero_disables():
+    """豁免线 0(默认) -> 老种子也走正常判定: 没显式配置就一个字的行为都不变(零静默变更守门)"""
+    view = _view(listed=[(H1, 101, "A")])
+    got = judge_record(view, (H1, ""), anchor=HrAnchor(added_on=1, completion_on=OLD_COMPLETION), now=AGE_NOW)
+    assert got.identity is HrIdentity.HR and got.is_hr is True
+
+
+def test_judge_record_age_exempt_requires_known_completion():
+    """completion_on 缺位(0/负 = 从未完成)或没有锚点 -> 不豁免, 走正常判定(不猜)"""
+    # 视图带一条新鲜放行记录(让「正常判定」有明确落点: 已核实不受管束), 豁免线开着但没触发
+    view = _view(verified=[_verified(ts=AGE_FRESH_TS)])
+    for anchor in (HrAnchor(added_on=1, completion_on=0), HrAnchor(added_on=1, completion_on=-1), None):
+        got = judge_record(view, (H1, ""), anchor=anchor, now=AGE_NOW, completed_age_limit=AGE_LIMIT)
+        assert got is not None and got.identity is HrIdentity.VERIFIED_NON_HR
+
+
+def test_judge_record_age_exempt_works_without_lookup_keys():
+    """豁免排在「无可查键回落本地」闸门**之前**: 索引还没长出任何键, 老种子照样豁免
+
+    豁免是 qB 侧事实, 不依赖站点索引建到哪 —— 否则首刷前老种子会被当「不适用」落回本地逻辑。
+    """
+    empty = _view(complete=True, last_success_ts=AGE_FRESH_TS)
+    assert empty.has_lookup_keys is False
+    got = judge_record(
+        empty,
+        (H1, ""),
+        anchor=HrAnchor(added_on=1, completion_on=OLD_COMPLETION),
+        now=AGE_NOW,
+        completed_age_limit=AGE_LIMIT,
+    )
+    assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
+
+
+def test_judge_record_age_exempt_applies_on_mode_all():
+    """mode=all 也认豁免: 显式配置的豁免线压过「未核实恒受管束」(配置者的显式取舍)"""
+    got = judge_record(
+        _view(mode="all", complete=False),
+        (H1, ""),
+        anchor=HrAnchor(completion_on=OLD_COMPLETION),
+        now=AGE_NOW,
+        completed_age_limit=AGE_LIMIT,
+    )
+    assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
+
+
+def test_judge_record_age_exempt_boundary_is_inclusive():
+    """恰好等于豁免线 -> 豁免(>= 判据); 差一秒不到 -> 不豁免"""
+    view = _view(verified=[_verified(ts=AGE_FRESH_TS)])
+    edge = judge_record(
+        view, (H1, ""), anchor=HrAnchor(completion_on=AGE_NOW - AGE_LIMIT), now=AGE_NOW, completed_age_limit=AGE_LIMIT
+    )
+    assert edge.identity is HrIdentity.EXEMPT
+    inside = judge_record(
+        view, (H1, ""),
+        anchor=HrAnchor(completion_on=AGE_NOW - AGE_LIMIT + 1),
+        now=AGE_NOW,
+        completed_age_limit=AGE_LIMIT
+    )
+    assert inside.identity is HrIdentity.VERIFIED_NON_HR

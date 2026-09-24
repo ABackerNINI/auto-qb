@@ -381,10 +381,13 @@ class HrRefreshService:
         #: 没跑完的两类原因分开记: 频控拦下(可预期) / 页面问题(值得告警)
         budget_limited = False
         parse_problem = False
+        #: 超龄豁免线(0 = 关闭): 开启时页面行按完成时间过滤 + 支持翻页早停(见 _apply_age_window)
+        age_limit = site_conf.completed_age_limit
 
         try:
             for scope in scopes:
                 got_all_pages = True
+                prev_page_dones: Optional[List[float]] = None  # 上一页的完成时刻(跨页倒序证据; None = 首页)
                 for page in range(1, max(1, site_conf.max_pages_per_refresh) + 1):
                     allowed, why = budget.take()
                     if not allowed:
@@ -409,7 +412,10 @@ class HrRefreshService:
                         reached_last = False
                         break
                     max_missing = max(max_missing, parsed.missing_field_rate)
-                    for entry in parsed.entries:
+                    kept, early_stop, page_dones = self._apply_age_window(
+                        parsed.entries, age_limit, self._now(), prev_page_dones
+                    )
+                    for entry in kept:
                         entries_seen[entry.tid] = entry
                     # 增量落盘(2026-09-25 实报「后端无落盘, Ctrl+C 后才落盘」): 一轮现在要跨多个扩展
                     # 轮询周期(分钟级、持锁进行), 只在轮尾写盘的话, 中途 Ctrl+C / 断电会把已抓的页面
@@ -418,6 +424,15 @@ class HrRefreshService:
                     self._merge_index(data, entries_seen, self._now(), False, self.global_conf.index_retention)
                     if self.persist:
                         session.commit(self._now())
+                    if early_stop:
+                        # 后续页只会更老 ⇒ 本档位在豁免线内的清单已全覆盖; 没翻到的页不值得再花配额
+                        if parsed.has_next:
+                            notes.append(
+                                f"档位 {scope} 第 {page} 页整页超龄(完成时间超过 {age_limit / 86400:.0f} 天), "
+                                "早停翻页(后续页不再取)"
+                            )
+                        break
+                    prev_page_dones = page_dones
                     if not parsed.has_next:
                         break
                 else:
@@ -578,6 +593,31 @@ class HrRefreshService:
                 entry = data.index[tid]
                 if not entry.active and entry.last_seen and now - entry.last_seen > retention:
                     del data.index[tid]
+
+    @staticmethod
+    def _apply_age_window(entries: List[HrEntry], limit: float, now: float,
+                          prev_page_dones: Optional[List[float]]) -> Tuple[List[HrEntry], bool, List[float]]:
+        """超龄行过滤 + 翻页早停信号(completed_age_limit 开启时; limit <= 0 原样返回, 零行为变更)。
+
+        - **过滤**: 完成时间超过 limit 的行不入索引 —— 判定侧对这些种子直接超龄豁免, 索引行留着
+          只会白白触发回填下载烧配额; 完成时间缺失/不可解析的行**保留**(不猜, 保守方向)。
+        - **早停**: 整页每行都有可解析完成时间、全部超龄、且页内与跨页都呈**完成时间倒序** ⇒
+          后续页只会更老, 本档位在豁免线内的清单已全覆盖, 可安全停翻。倒序证据不成立(页面按
+          别的东西排序 / 有行缺完成时间)就继续翻 —— 错误方向的代价只是多花配额, 不是漏判;
+          但一旦早停成立, 覆盖证明按「豁免线内全覆盖」计(可达 complete ⇒ 放行照常产生)。
+        返回 (保留行, 是否早停, 本页可解析的完成时刻列表)。`prev_page_dones` 为 None 表示首页
+        (无跨页约束), 为空列表表示上一页没有可解析的完成时刻(跨页证据缺失 ⇒ 不允许早停)。
+        """
+        if limit <= 0 or not entries:
+            return list(entries), False, []
+        dones = [e.done_epoch for e in entries if e.done_epoch is not None]
+        kept = [e for e in entries if e.done_epoch is None or now - e.done_epoch < limit]
+        early_stop = (
+            len(dones) == len(entries) and all(now - d >= limit for d in dones) and
+            all(dones[i] >= dones[i + 1] for i in range(len(dones) - 1)) and
+            (prev_page_dones is None or (prev_page_dones and min(prev_page_dones) >= max(dones)))
+        )
+        return kept, early_stop, dones
 
     def _fill_infohashes(
         self,
