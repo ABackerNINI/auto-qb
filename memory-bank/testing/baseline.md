@@ -6,27 +6,21 @@
 
 ## 当前基线
 
-**1580 collected: 1579 passed + 1 skipped / Windows** —— 2026-09-25 **commands 引擎 GBK 回退修复: 2 条"已知假红"转绿 + 1 条防回潮守阵**
-(收集数 **1579 → 1580**(+1)、失败 **2 → 0**: `test_commands_engine` 两条 GBK 码页守阵在注入 `PYTHONUTF8=1` 的
-本工具 shell 恒红, 红验证实一半是**真缺陷** —— `PYTHONUTF8` 只影响 Python 解释器, **原生子进程仍按系统 ANSI
-码页输出**, 回退链退化 `("utf-8", "utf-8")` 静默变 U+FFFD。修: 引擎 `_local_codepage` 改 `ctypes GetACP`
-(不吃 UTF-8 模式); 两条守阵把码页钉在 `_local_codepage` 接缝(monkeypatch → cp936, 跨机器确定性 —— GBK 字节
-在 cp1252 下也能"解成功"成乱码, 不钉缝在非中文环境照样红); 新增 `test_local_codepage_ignores_utf8_mode`
-(仅 win32 + UTF-8 模式有判据, 打回旧写法立即红)。过程与泛化见
-[../pitfalls/testing/patching.md](../pitfalls/testing/patching.md)。)
-TOTAL **91%**(10809 语句 / 789 未覆盖 / 3582 分支 / 326 partial —— 语句 10905 → 10809 随本 clone 快进合并
-fda13cd → 1516bd6 的 20 个主线提交(HR M1-M4 管道 / WebUI 运行日志端点等)而来, 非本轮所致),
-sidefx 台账并行汇总 / **越界 0**。
+**1581 collected: 1580 passed + 1 skipped / Windows** —— 2026-09-25 **WebUI 搜索分隔符归一修复**: 新增 1 条回归守阵
+(收集数 **1580 → 1581**(+1): `test_search_torrents_separator_normalized` —— 空格查询词命中点/下划线/连字符分隔的
+种子名与文件名, 回归 "The.Cat.and…MWeb" 搜 "cat and" 不命中; views.py 归一口径 `_search_norm` + 索引 `files_q` 预归一)。
+TOTAL **91%**(10813 语句 / 787 未覆盖 / 3582 分支 / 324 partial —— 语句 10809 → 10813 / 未覆盖 789 → 787, 本轮
+views.py 加 helper + tests 加用例的净效果), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 GBK 回退修复)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **14.3 / 20.9 / 21.2s**(3 次采样, 全部 test.full)
+**当前(2026-09-25 搜索分隔符归一)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **17.0 / 17.9s**(热采 2 次; 另有首跑冷缓存 37.6s 不计入, 全部 test.full)
 
-**上一态(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
+**上一态(2026-09-25 GBK 回退修复)**: 并行 14.3 / 20.9 / 21.2s(3 次采样, 全部 test.full)。
 
 **更早(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
 

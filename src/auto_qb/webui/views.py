@@ -13,6 +13,7 @@
 - self.web                  WebUIRuntime(快照 / 脏标记 / 搜索索引 / 命令投递)
 """
 import logging
+import re
 import time
 from typing import Dict, List
 
@@ -23,6 +24,17 @@ from ..torrents import TorrentRecord, view_field_value
 logger = logging.getLogger(__name__)
 
 SEARCH_INDEX_BUILD_BUDGET = 500  # 搜索索引单次构建最多拉取的文件列表数(限流, 避免首轮 N 次 qB API 阻塞主循环)
+
+# 搜索匹配口径: 种子名/文件名是 scene 命名(点/下划线/连字符等作分隔), 查询词却以空格分词 ——
+# 裸子串匹配时 "cat and" 对不上 "The.Cat.and…"。两侧统一把非文字字符折叠为单空格再匹配;
+# 下划线属 \w 须显式并入折叠集, \w 保留 Unicode 文字(CJK 名称可搜)。
+_SEARCH_SEP_RE = re.compile(r"[\W_]+")
+
+
+def _search_norm(s: str) -> str:
+    """搜索匹配归一: 分隔符折叠为单空格 + 小写 + 去首尾空 —— 查询词与种子名/文件名配对使用"""
+    return _SEARCH_SEP_RE.sub(" ", s).lower().strip()
+
 
 # 错误原因(状态列"错误"背后的具体原因)刷新: qB torrents/info **不含**错误文本, 原因只能从
 # torrents/trackers 的 msg 取 —— 故只对错误状态种子按 TTL 限额预取, 视图组装只读缓存。
@@ -596,7 +608,7 @@ class WebviewMixin:
         return {"list": out, "unrecognized": sorted(unrecognized)}
 
     def _build_search_index(self) -> None:
-        """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名]}), 单次限流拉取。
+        """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名], files_q[归一文件名]}), 单次限流拉取。
 
         **原子交换契约**: 每轮在**新字典**上重组(消失的种子不进新字典即淘汰), 完成后整体替换
         `_search_index` 引用 —— 绝不就地增删旧字典, 否则 Web 线程正在迭代时会抛
@@ -625,7 +637,7 @@ class WebviewMixin:
                     files = [f.name for f in rec.files(self.client)]
                 except Exception:
                     files = []
-                entry = {"name": rec.name, "files": files}
+                entry = {"name": rec.name, "files": files, "files_q": [_search_norm(f) for f in files]}
             else:
                 # 预算用尽: 剩余种子本轮不进新字典(下次调用续建), 保持脏
                 self.web.search_index = idx
@@ -648,6 +660,9 @@ class WebviewMixin:
 
     def search_torrents(self, q: str) -> dict:
         """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
+
+        匹配口径: q 与种子名/文件名都经 _search_norm 归一(分隔符折叠为空格 + 小写)后做子串匹配,
+        所以空格查询词能命中点/下划线/连字符分隔的 scene 命名, 反之亦然。
 
         种子名匹配即时遍历 store.by_hash(无 qB API); 文件列表匹配依赖 _search_index 缓存。
         返回 {"results": [..], "building": bool}——building 为 True 表示文件索引已过期/缺失,
@@ -678,23 +693,23 @@ class WebviewMixin:
                 "by": by,
             }
 
-        q = (q or "").strip().lower()
+        q = _search_norm(q or "")
         if not q:
             return {"results": [], "building": False}
         results = []
         seen = set()
-        # 种子名匹配(即时)
+        # 种子名匹配(即时, 分隔符归一口径: "cat and" 命中 "The.Cat.and…")
         for h, rec in self.store.by_hash.items():
-            if q in rec.name.lower():
+            if q in _search_norm(rec.name):
                 seen.add(h)
                 results.append(_view(rec, "name"))
-        # 文件列表匹配(依赖缓存索引)
+        # 文件列表匹配(依赖缓存索引, 命中构建期归一好的 files_q)
         idx = self.web.search_index
         if idx is not None:
             for h, entry in idx.items():
                 if h in seen:
                     continue
-                if any(q in fn.lower() for fn in entry["files"]):
+                if any(q in fq for fq in entry["files_q"]):
                     rec = self.store.by_hash.get(h)
                     if rec is None:
                         continue
