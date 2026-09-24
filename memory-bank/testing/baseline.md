@@ -6,17 +6,19 @@
 
 ## 当前基线
 
-**1573 collected: 1570 passed + 1 skipped / Windows** —— 2026-09-25 **v2.6 通道时序与饿死残留修复实测**
-(本条 **+11 条(1562 → 1573)**: 不完备窗口 ≥2×poll 参数化 3 条 + 页面失败仍补下载 1 条 + 下载阶段让位不计
-tid 失败参数化 3 条(`test_hr_service.py`) · 扩展回传登录页 ⇒ HrLoginExpired 1 条(`test_hr_fetcher_channel.py`) ·
-Retry-After 以 cooldown 封顶 1 条(`test_hr_ratelimit.py`) · 配额展示按窗口键折算 1 条(`test_hr_report.py`) ·
-扩展 fetchBinary 登录页检测 1 条(`test_extension_proxy.py`, 真跑 node)。
-★红验 7 条: 临时还原旧实现(60s 窗口 / 关页面失败补下载 / 吞让位异常计 tid 失败) ⇒ 上述 service 7 条全红, 还原后全绿。
-扩展轮询 5 分钟 → 1 分钟(background.js)与 KIND_LOGIN_PAGE 全链路见计划 v2.6 变更行。
+**1574 collected: 1571 passed + 1 skipped / Windows** —— 2026-09-25 **v2.6 通道时序修复 + v2.7 增量落盘实测**
+(本条 **+12 条(1562 → 1574)**: 不完备窗口 ≥2×poll 参数化 3 条 + 页面失败仍补下载 1 条 + 下载阶段让位不计
+tid 失败参数化 3 条 + 增量落盘(轮次中途报错已抓页面当场在文件里)1 条(`test_hr_service.py`) ·
+扩展回传登录页 ⇒ HrLoginExpired 1 条(`test_hr_fetcher_channel.py`) · Retry-After 以 cooldown 封顶 1 条
+(`test_hr_ratelimit.py`) · 配额展示按窗口键折算 1 条(`test_hr_report.py`) · 扩展 fetchBinary 登录页检测 1 条
+(`test_extension_proxy.py`, 真跑 node)。
+★红验 8 条: v2.6 七条(临时还原旧实现: 60s 窗口 / 关页面失败补下载 / 吞让位异常计 tid 失败 ⇒ 全红) +
+v2.7 一条(关增量提交 ⇒ 红), 还原后全绿。
+扩展轮询 5 分钟 → 1 分钟(background.js)与 KIND_LOGIN_PAGE 全链路见计划 v2.6/v2.7 变更行。
 上一态(M4 多站点与打磨 +20 / 对方的 HR 取数实报修复 +15 · M3 判定联动 +16 · 日志等级修复 +7)
 见 [baseline-history.md](baseline-history.md)。)
-TOTAL **91%**(10872 语句 / 788 未覆盖 / 3574 分支 / 325 partial —— 并行采样; **HR 包 93%**:
-2749 / 142 / 758 / 90), sidefx 台账并行汇总 / **越界 0**。
+TOTAL **91%**(10881 语句 / 788 未覆盖 / 3578 分支 / 324 partial —— 并行采样; **HR 包 93%**:
+2758 / 142 / 762 / 89), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
 `PYTHONUTF8=` 置空后复测 **2 passed** —— 已有记载的假红, 非回归(见下条 ⚠ 与 pitfalls/testing/patching.md)。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在

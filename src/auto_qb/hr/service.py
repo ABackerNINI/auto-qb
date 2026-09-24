@@ -266,7 +266,14 @@ class HrRefreshService:
         self._do_fetch(site, site_conf, adapter, session, result, limits, anchors)
 
     def _guarded_backfill(
-        self, site: str, adapter, data: HrSiteData, pending: Mapping[int, HrEntry], budget, result: HrRefreshResult
+        self,
+        site: str,
+        adapter,
+        data: HrSiteData,
+        pending: Mapping[int, HrEntry],
+        budget,
+        result: HrRefreshResult,
+        session=None
     ) -> str:
         """跑一次回填, 把「让位 / 人工事件」类异常折成一句备注(**不计失败、不丢本轮已有成果**)。
 
@@ -274,19 +281,22 @@ class HrRefreshService:
         `HrChannelStopped` / `HrChannelQuota` / `HrLoginExpired` —— 这些是 `HrFetchError` 的**子类**:
         - 漏到 `refresh_site` 的兜底 except ⇒ 被记成「刷新异常」WARNING(关停一次弹一条, 2026-09-24 实报同款);
         - 被 `_fill_infohashes` 的 `except HrFetchError` 吞掉 ⇒ 烧掉该 tid 的重试额度(把「程序要关了 /
-          扩展限流 / 该去登录」伪装成「这个种子取不下来」, 三次就是 12h 冷却)。
-        故在 `_fill_infohashes` 里原样上抛、在这里折成备注。
+          扩展限流 / 该去登录」伪装成「种子坏了」, 三次就是 12h 冷却)。
+        故在 `_fill_infohashes` 里原样上抛、在这里折成备注。❗叫停也可能打在**派发前的间隔睡眠**上
+        (sleeper 同样可中断), 故措辞是「下载阶段」而不是「取 .torrent 时」。
         """
         try:
-            fetched, failed = self._fill_infohashes(adapter, data, pending, budget, site_conf=self.site_confs[site])
+            fetched, failed = self._fill_infohashes(
+                adapter, data, pending, budget, site_conf=self.site_confs[site], session=session
+            )
         except HrChannelStopped as e:
-            return f"取 .torrent 被叫停(正在停止或重挂): {e}"
+            return f"下载阶段被叫停(正在停止或重挂): {e}"
         except HrChannelQuota as e:
             self._warn_ext_quota(site, e)
-            return f"取 .torrent 被扩展侧硬上限挡下: {e}"
+            return f"下载阶段被扩展侧硬上限挡下: {e}"
         except HrLoginExpired as e:
             self._warn_login(site, e)
-            return f"取 .torrent 命中登录页(需人工登录): {e}"
+            return f"下载阶段命中登录页(需人工登录): {e}"
         result.torrents_fetched = fetched
         result.torrents_failed = failed
         if fetched or failed:
@@ -317,7 +327,7 @@ class HrRefreshService:
         budget = _Budget(
             data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
         )
-        note = self._guarded_backfill(site, adapter, data, pending, budget, result)
+        note = self._guarded_backfill(site, adapter, data, pending, budget, result, session=session)
         if not (result.torrents_fetched or result.torrents_failed):
             return
         result.reason += f"; 顺带补 infohash: 成功 {result.torrents_fetched} 失败 {result.torrents_failed}"
@@ -345,7 +355,7 @@ class HrRefreshService:
         budget = _Budget(
             data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
         )
-        note = self._guarded_backfill(site, adapter, data, pending, budget, result)
+        note = self._guarded_backfill(site, adapter, data, pending, budget, result, session=session)
         if note:
             result.reason = (result.reason + "; " if result.reason else "") + note
         if result.torrents_fetched or result.torrents_failed:
@@ -401,6 +411,13 @@ class HrRefreshService:
                     max_missing = max(max_missing, parsed.missing_field_rate)
                     for entry in parsed.entries:
                         entries_seen[entry.tid] = entry
+                    # 增量落盘(2026-09-25 实报「后端无落盘, Ctrl+C 后才落盘」): 一轮现在要跨多个扩展
+                    # 轮询周期(分钟级、持锁进行), 只在轮尾写盘的话, 中途 Ctrl+C / 断电会把已抓的页面
+                    # 与配额账本一起丢掉 —— 每抓到一页就合并 + 提交(complete=False 语义: 只把命中的
+                    # 置 active, 保守方向); 轮尾仍按完整语义再合并一次并写覆盖证明。
+                    self._merge_index(data, entries_seen, self._now(), False, self.global_conf.index_retention)
+                    if self.persist:
+                        session.commit(self._now())
                     if not parsed.has_next:
                         break
                 else:
@@ -472,7 +489,7 @@ class HrRefreshService:
         self._ext_quota_warned.discard(site)  # 恢复正常: 下次再超限时重新报一次
         self._login_warned.discard(site)  # 登录恢复: 下次真的又失效时再报一次
         entries_new = sum(1 for tid in entries_seen if tid not in data.downloaded)
-        dl_note = self._guarded_backfill(site, adapter, data, entries_seen, budget, result)
+        dl_note = self._guarded_backfill(site, adapter, data, entries_seen, budget, result, session=session)
         if dl_note:
             notes.append(dl_note)
         complete = bool(scopes) and len(scopes_done) == len(scopes) and reached_last and max_missing <= \
@@ -563,12 +580,20 @@ class HrRefreshService:
                     del data.index[tid]
 
     def _fill_infohashes(
-        self, adapter, data: HrSiteData, entries: Mapping[int, HrEntry], budget, site_conf: SiteHrCheckConfig
+        self,
+        adapter,
+        data: HrSiteData,
+        entries: Mapping[int, HrEntry],
+        budget,
+        site_conf: SiteHrCheckConfig,
+        session=None
     ) -> Tuple[int, int]:
         """为「索引里还没有 infohash」的 tid 取 .torrent 算 infohash。
 
         防重复下载三层: ① hr_downloaded 永久层(在则绝不重下) ② 索引已有 infohash 的只更新字段
-        ③ 失败按 max_download_retries 计数, 达上限冷却。二进制默认不落盘(只算 infohash)。
+        ③ 失败按 max_download_retries 计数, 达上限后冷却。二进制默认不落盘(只算 infohash)。
+        `session` 给了就**每个结果落盘一次**(2026-09-25 实报): hr_downloaded 是「永不重取」的
+        凭据、fails 是防烧配额的记账 —— 中途被杀不该丢, 丢了就是白烧配额重下。
         """
         fetched = failed = 0
         now = self._now()
@@ -600,6 +625,7 @@ class HrRefreshService:
                 fail = data.fails.setdefault(tid, HrDlFail(tid=tid))
                 fail.count += 1
                 fail.last_ts = now
+                self._persist_step(session)
                 logger.warning(f"HR 站点 {adapter.site} | tid={tid} 取 .torrent 失败({fail.count} 次): {e}")
                 continue
             try:
@@ -609,6 +635,7 @@ class HrRefreshService:
                 fail = data.fails.setdefault(tid, HrDlFail(tid=tid))
                 fail.count += 1
                 fail.last_ts = now
+                self._persist_step(session)
                 logger.warning(f"HR 站点 {adapter.site} | tid={tid} 返回内容不是合法 .torrent: {e}")
                 continue
             entry.infohash_v1, entry.infohash_v2 = v1, v2
@@ -617,7 +644,13 @@ class HrRefreshService:
             )
             data.fails.pop(tid, None)
             fetched += 1
+            self._persist_step(session)
         return fetched, failed
+
+    def _persist_step(self, session) -> None:
+        """增量落盘的统一口(只在正式口径下写; 走查 persist=False 不落盘)。"""
+        if session is not None and self.persist:
+            session.commit(self._now())
 
     def _refresh_verified(
         self, data: HrSiteData, entries_seen: Mapping[int, HrEntry], complete: bool, now: float,

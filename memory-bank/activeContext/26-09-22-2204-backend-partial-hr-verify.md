@@ -59,6 +59,11 @@ M4 补上四类事件语文化、站点级状态单点与 WebUI 出口、多站�
   「扩展上限本就低于后端配额」。M0 下载 URL 实测收口: `https://pt.btschool.club/download.php?id=<tid>`。
   测试 +11, ★红验 7 条; 全量 **1570 passed + 1 skipped**(HR 包 93%)。
   ❗**用户侧动作: chrome://extensions 里 reload 扩展**(1 分钟轮询与登录页检测要重载才生效)。
+- **第六批实报修复(2026-09-25, 计划 v2.7)**: 用户删数据重启实测「lock 长期被持有 / 后端无落盘, Ctrl+C 后
+  才落盘」。诊断: 无死锁 —— 一轮真实跨多个扩展轮询周期(分钟级、持锁进行), Ctrl+C 打断的是派发前的间隔
+  睡眠, 轮次随即记账落盘; 但落盘只在**轮尾**。修: **增量落盘** —— 每抓到一页(complete=False 语义合并)与
+  每个 .torrent 结果(凭据/记账)当场提交, 轮尾仍完整合并 + 写覆盖证明。⚠ `<site>.lock` 文件释放后仍存在
+  属正常(OS 级锁, 文件在 ≠ 被持有)。测试 +1, ★红验 1; 全量 **1571 passed + 1 skipped**(HR 包 93%)。
 
 模块分工 / 字段口径 / 配置项 / 扩展行为: [modules/overview.md](../modules/overview.md) ·
 [docs/configuration.md](../../docs/configuration.md) · [扩展说明](../../extensions/hr-fetch-proxy/README.md);

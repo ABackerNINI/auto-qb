@@ -32,6 +32,9 @@
   否则「复用轮补下载」永远比 expires_at 晚一个 ε 轮不到(2026-09-25 实报修复)
 - test_page_failure_still_backfills_pending: 页面取数失败**不带走下载的名额** —— 待回填清单在
   已持久化的索引里, 页面异常(超时/HTTP错)不得把回填一起跳过(2026-09-25 实报饿死残留)
+- test_pages_persisted_incrementally_when_round_aborts: 每抓到一页就落盘(增量提交) —— 一轮跨多个
+  扩展轮询周期(分钟级、持锁进行), 只在轮尾写盘的话中途 Ctrl+C 会把已抓页面与配额账本全丢
+  (2026-09-25 实报「后端无落盘, Ctrl+C 后才落盘」)
 - test_download_phase_yield_events_are_not_tid_failures: 下载阶段的让位/人工事件(叫停/扩展硬上限/
   登录页)都是 HrFetchError 子类, **不得**计入 tid 失败(否则关停三次 = 12h 冷却, 2026-09-25 实报)
 - test_download_failure_counts_then_cools_down: 取 .torrent 失败计数, 达上限且冷却未过时不再尝试
@@ -672,6 +675,26 @@ def test_page_failure_still_backfills_pending(tmp_path):
     assert data.index[101].infohash_v1 and 101 in data.downloaded, "回填结果要落盘"
 
 
+def test_pages_persisted_incrementally_when_round_aborts(tmp_path):
+    """每抓到一页就落盘(增量提交): 轮次中途出错/被杀, 已抓页面不丢(2026-09-25 实报)
+
+    一轮要跨多个扩展轮询周期(分钟级、持锁进行 —— 计划 §5/§8 设计如此), 只在轮尾写盘的话,
+    中途 Ctrl+C / 断电会把已抓的页面与配额消耗一起丢掉。本用例让页面 A 成功、页面 B 报错:
+    文件里**当场**就该有 A 的条目(连同页面失败后的补下载), 而不是等轮尾。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101), fail_text_at={"B": "HTTP 503"})
+    svc = _service(tmp_path, fetcher, clock)
+
+    result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_ERROR
+    data = _read(tmp_path)
+    assert 101 in data.index and data.index[101].active is True, "页面 A 抓到就该已落盘, 而不是等轮尾"
+    assert 101 in data.downloaded, "页面失败后的补下载凭据(hr_downloaded)也要当场落盘"
+    assert data.index[101].infohash_v1, "回填出的 infohash 一并落盘"
+
+
 def test_download_failure_counts_then_cools_down(tmp_path):
     """取 .torrent 失败计数; 达上限且冷却未过时不再尝试(防烧配额)"""
     clock = Clock()
@@ -897,7 +920,11 @@ def test_unknown_adapter_reports_error(tmp_path):
 
 
 def test_view_revision_only_moves_on_data_change(tmp_path):
-    """视图 revision 只在数据实质变化时抬升(复用数据不抬, 主循环据此零工作)"""
+    """视图 revision 只在数据实质变化时抬升(复用数据不抬, 主循环据此零工作)
+
+    ❗一轮内的**增量落盘**(2026-09-25 实报)会让文件 revision 每轮抬多次(每页/每 torrent 一次) ——
+    但 worker 的**视图发布**仍只在轮尾一次, 主循环看到的仍是「每轮至多变一次」。
+    """
     clock = Clock()
     fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
     svc = _service(tmp_path, fetcher, clock)
@@ -905,13 +932,13 @@ def test_view_revision_only_moves_on_data_change(tmp_path):
     assert svc.build_views()[SITE].revision == 0
     svc.refresh_site(SITE)
     first = svc.build_views()[SITE]
-    assert first.revision == 1
+    assert first.revision >= 1, "完整刷新至少落盘一次(增量提交下会更多)"
     assert first.complete is True and first.mode == "partial"
     assert {e.tid for e in first.by_infohash.values()} == {101}  # 命中的 101 进了受管束集合
 
     svc.refresh_site(SITE)  # 复用, 不写盘
     again = svc.build_views()[SITE]
-    assert again.revision == 1 and again.last_success_ts == first.last_success_ts
+    assert again.revision == first.revision and again.last_success_ts == first.last_success_ts
 
 
 def test_parse_revision_is_incomplete(tmp_path):
