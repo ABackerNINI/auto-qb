@@ -13,9 +13,11 @@ pin    = true
 risky  = true
 when   = "用户显式说「提交」：逐路径暂存 + 提交 + 自动核 ref"
 note   = "参数经 <args> 传: -- <--message-file 文件> <路径...>; 直接拒绝 -A / . / *; 红线文件直接拒交"
+doc    = "references/pipeline.md"
 
 [tasks."ship.push"]
 script = "push.py"
 risky  = true
 when   = "提交之后推主线（必须成功）→ 核对远端 ref → 尝试一次镜像"
 note   = "镜像失败只报一次：不重试 / 不换代理 / 不改走 SSH / 不回滚主线"
+doc    = "references/pipeline.md"

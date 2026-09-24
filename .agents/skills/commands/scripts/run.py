@@ -82,6 +82,9 @@ def cmd_show(args: argparse.Namespace) -> int:
         print(f"  何时用: {task.when}")
     if task.note:
         print(f"  注意:   {task.note}")
+    if task.doc:
+        # "想看细节该读哪份"必须接到决策点上 —— 否则唯一的出路是回头整读包内 README
+        print(f"  深读:   {task.doc_path or task.doc}")
     print(f"  超时:   {task.timeout}s")
     # strict: 展不开就 STOP —— show 若把未展开的原文打印出来, 等于"看起来拿到了命令"
     for cmd in C.task_commands(task, tree.root, extra):
@@ -178,6 +181,8 @@ def _toml_block(args: argparse.Namespace) -> str:
     out.append(f"when    = {val(args.when)}")
     if args.note:
         out.append(f"note    = {val(args.note)}")
+    if args.doc:
+        out.append(f"doc     = {val(args.doc)}")
     if args.timeout:
         out.append(f"timeout = {args.timeout}")
     if args.pin:
@@ -217,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--script", default=None, help="包内脚本名")
     p_add.add_argument("--args", nargs="*", default=[], help="传给脚本的固定参数")
     p_add.add_argument("--note", default="", help="环境陷阱判据: 为什么必须这么写")
+    p_add.add_argument("--doc", default="", help="包内深读文档的相对路径(排障才读, 不进常规路径)")
     p_add.add_argument("--timeout", type=int, default=0)
     p_add.add_argument("--pin", action="store_true", help="常显: 浮到父级列表")
     p_add.add_argument("--risky", action="store_true", help="高风险: run 时先打印命令")

@@ -12,3 +12,4 @@
 |---|---|---|
 | [drift.md](drift.md) | 文档与代码冲突时的裁决顺序、`🚧` 标注到底是什么意思、以及哪些历史记录不必再查。 | 文档与代码不符, 看到 🚧 标注, 回写知识库, 想删"已实现"的标注 |
 | [html-edit.md](html-edit.md) | 用字符串替换改计划 / 报告 HTML 时容易吃掉 `</p>` 之类闭合标签, 浏览器与 IDE 预览都**静默容错**, 肉眼看不出。 | 改计划 HTML, 改 issue 报告, 编辑 HTML, 闭合标签, 标签不平衡, 渲染不对但没报错 |
+| [pack-readme-entry.md](pack-readme-entry.md) | 决策点文档(如 `AGENTS.md`)若把某条流程的"唯一去处"写成**包内 README 的链接**, 执行者只能整读它 —— 分层省下的 token 从另一头漏回来; 指针要写 task id, 细节外置到包内 `references/` 按需读。 | 提交流程要读文档, 包内 README, 整读 README, references, 深读指针, doc 键, 阅读预算, 命令漂移豁免 |

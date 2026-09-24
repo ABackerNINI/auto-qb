@@ -32,6 +32,7 @@ SCAN_GLOBS = (
     "memory-bank/**/*.md",
     ".github/**/*.md",
     ".agents/skills/**/*.md",
+    ".commands/*/README.md",  # 包内说明文档: 它是"入口"而不是"定义处", 里面的手抄同样是副本
 )
 
 # 显式豁免 —— 每一条都要说得出理由, 不加"先跑起来再说"的口子
@@ -43,7 +44,10 @@ EXEMPT = (
     "memory-bank/tasks/",  # 档案纪要: 记的是"当时做了什么", 不是"现在该跑什么"
     "docs/plans/",
     "resources/",
-    ".commands/",  # 配置层: 命令的单点定义就在这里
+    # 注意: `.commands/` 豁免的理由是"命令的单点定义就在这里" —— 但 **README.md 不是定义处**
+    # (定义处是 `<包>/config.toml`): 它是包内散文, 一旦被当入口就只能整读, 里面手抄的命令
+    # 同样是第 N 处副本、同样会漂移。所以豁免**不保护**它(见 scan() 里的 README 例外)。
+    ".commands/",
     "scripts/",  # 机检脚本自身
     ".workbuddy-ai/",
     # —— 下面两条是**逐文件**豁免, 都得说得出理由 ——
@@ -72,6 +76,11 @@ def skeleton(cmd: str) -> list[str]:
             continue
         if "/" in tok or "\\" in tok:
             tok = re.split(r"[\\/]", tok)[-1]  # 路径差异不算差异
+        # `.exe` 归一: 脚本类 task 的命令由引擎用 `sys.executable` 拼出, Windows 上首 token 是
+        # `python.exe`, 而文档里手抄的是 `python` —— 不归一的话, **脚本类命令的手抄永远判不出来**
+        # (它恰恰是最容易抄的一类: 看起来就是"照着包里的脚本名写一遍")。
+        if tok.lower().endswith(".exe"):
+            tok = tok[:-4]
         out.append(tok)
     return out
 
@@ -105,7 +114,8 @@ def scan() -> list[tuple[str, int, str, str]]:
         files += [p for p in ROOT.glob(pat) if p.is_file()]
     for path in sorted(set(files)):
         rel = path.relative_to(ROOT).as_posix()
-        if any(rel.startswith(e) for e in EXEMPT):
+        # 包内 README 不享受 `.commands/` 的豁免: 豁免保护的是"定义", 不是"包内散文"
+        if path.name != "README.md" and any(rel.startswith(e) for e in EXEMPT):
             continue
         try:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()

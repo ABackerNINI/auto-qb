@@ -33,7 +33,7 @@ PACK_ENV = "COMMAND_FLOW_PACK_DIR"  # 调包脚本时注入: 本包目录(让脚
 # 那比直接报错坏得多。付的价钱: 新增键必须先加进这里。
 PACK_KEYS = {"name", "when", "enabled", "version", "origin", "scripts_dir", "confirmed"}
 SUBPACK_KEYS = {"enabled"}
-TASK_KEYS = {"run", "script", "args", "when", "note", "timeout", "requires", "risky", "pin"}
+TASK_KEYS = {"run", "script", "args", "when", "note", "doc", "timeout", "requires", "risky", "pin"}
 
 DEFAULT_TIMEOUT = 600
 MAX_DEPTH = 8  # 层级上限: 套得太深会让人下钻到迷路
@@ -68,6 +68,8 @@ class Task:
     args: list[str] = field(default_factory=list)
     when: str = ""
     note: str = ""
+    doc: str = ""  # 包内"深读"文档的相对路径 —— 排障才读, 不进常规路径
+    doc_path: Path | None = None  # 解析后的绝对路径; 指向不存在的文件在加载期即 STOP
     timeout: int = DEFAULT_TIMEOUT
     requires: list[str] = field(default_factory=list)
     risky: bool = False
@@ -91,6 +93,7 @@ class Pack:
     version: str = ""
     origin: str = ""
     scripts_dir: Path | None = None
+    doc_dir: Path | None = None  # `doc` 相对路径的基准: 顶级包是自己的目录, 子包**继承父包**
     tasks: dict[str, Task] = field(default_factory=dict)
     subs: dict[str, Pack] = field(default_factory=dict)
 
@@ -230,6 +233,8 @@ def _load_pack(cfg_path: Path, pack_dir: Path, tree: Tree, parent: Pack | None, 
         version=str(raw_pack.get("version", "")),
         origin=str(raw_pack.get("origin", "")),
         scripts_dir=scripts_dir,
+        # 深读文档属于"包族": 子包与父包共用一套 references/, 故基准继承而非各自一份
+        doc_dir=pack_dir if parent is None else parent.doc_dir,
     )
 
     for tid, raw in sorted((data.get("tasks") or {}).items()):
@@ -285,6 +290,20 @@ def _load_task(tid: str, raw: object, pack: Pack, cfg_path: Path) -> Task:
             raise ConfigError(f"[STOP] {cfg_path}: tasks.{tid} 的 {key} 必须是字符串数组")
         return list(val)
 
+    doc = raw.get("doc", "")
+    if not isinstance(doc, str):
+        raise ConfigError(f"[STOP] {cfg_path}: tasks.{tid} 的 doc 必须是字符串(相对本包目录)")
+    doc_path: Path | None = None
+    if doc:
+        base = pack.doc_dir or pack.dir
+        doc_path = base / doc
+        # 指针指空 = 静默失效: 想看细节的人读不到, 只能回头整读包内 README —— 正是 doc 要防的事
+        if not doc_path.is_file():
+            raise ConfigError(
+                f"[STOP] {cfg_path}: tasks.{tid} 的 doc 指向的文件不存在: {doc_path}"
+                " —— 深读指针必须指向包内真实文件"
+            )
+
     return Task(
         id=tid,
         pack_path=pack.path,
@@ -293,6 +312,8 @@ def _load_task(tid: str, raw: object, pack: Pack, cfg_path: Path) -> Task:
         args=arr("args"),
         when=str(raw.get("when", "")),
         note=str(raw.get("note", "")),
+        doc=str(doc),
+        doc_path=doc_path,
         timeout=int(timeout),
         requires=arr("requires"),
         risky=bool(raw.get("risky", False)),

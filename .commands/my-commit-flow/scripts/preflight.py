@@ -297,7 +297,10 @@ def run_auto_gates(hits: list[dict],
                     rows.append((WARN, "人工闸门", f"展开失败, 需手工: {cmd} —— {exc}"))
                 continue
             if skip:
-                rows.append((WARN, "闸门", f"跳过(gate「{note}」): {skip}"))
+                # 说清"跳过"是**按设计**(`<each:>` / `<changed:>` 只盯本次改动), 不是闸门失效 ——
+                # 否则这条 WARN 会被读成"闸门没跑起来", 反而引着人去改一个没坏的闸门
+                rows.append((WARN, "闸门", f"跳过(gate「{note}」): {skip}"
+                                           " —— 本次改动里没有匹配文件, 按设计跳过(**不是闸门失效**)"))
                 continue
             if not auto or not execute:
                 manual.extend(cmds)

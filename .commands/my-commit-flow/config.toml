@@ -18,14 +18,17 @@ args   = ["--check-started"]
 pin    = true
 when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前"
 note   = "只读。落后即 STOP —— 禁止在落后分支上改代码。结果贴进回复"
+doc    = "references/pipeline.md"
 
 [tasks."my-commit-flow.preflight"]
 script  = "preflight.py"
 timeout = 900
 when    = "提交前完整预检（含真的跑 auto = true 的闸门）"
 note    = "闸门很贵（全量测试 / 索引自洽），有 STOP 先处理"
+doc     = "references/pipeline.md"
 
 [tasks."my-commit-flow.verify-ref"]
 script = "verify_ref.py"
 when   = "提交后核对 ref 三处一致（HEAD / refs/heads / packed-refs）"
 note   = "不要只看 commit 输出 —— ref 更新可能没落稳"
+doc    = "references/pipeline.md"

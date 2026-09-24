@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""提交前检查「IDE 上下文注入上限」—— 超限的文件尾部会被**静默截断**, 写了等于没写。
+"""提交前检查两类「上下文预算」—— IDE 注入上限(超限尾部被静默截断)与包内文档阅读预算(超限就得整读)。
 
 背景 (2026-09-20 取证)
 ----------------------
@@ -46,7 +46,24 @@ CONTEXT_CAPS: dict[str, int] = {
     ".agents/skills/memory-bank/SKILL.md": 7500,
 }
 
-PASS, WARN, STOP = "PASS", "WARN", "STOP"
+# 阅读预算 —— 与上面的"注入上限"不是一回事: 这些文件不被 IDE 注入, 但**指针一旦指向它们就只能整读**。
+# 上限的意义是让"包内说明文档"维持**索引形态**: 细节必须能外置到 references/ 按需读, 而不是长在这份文件里。
+# 否则省下的 token 会从另一头漏回来(实测: 提交流程里被当入口整读一次 ≈ 4–5k token)。
+# 2026-09-24 拆分: `.commands/my-commit-flow/README.md` 8212 → 2808 字符(七步表 / 停手点 / 六条反模式留索引,
+# 完整判据 → references/pipeline.md, 配置机制 → references/config.md, 反模式全集 → references/anti-patterns.md),
+# 上限据此定 3000。**上限跟着实测收**, 才叫预算。
+READ_BUDGET_CAPS: dict[str, int] = {
+    ".commands/my-commit-flow/README.md": 3000,
+}
+
+PASS, WARN, STOP, GROUP = "PASS", "WARN", "STOP", "GROUP"
+
+
+def _why(group: str) -> str:
+    """超限的后果按组而异 —— 两条上限的理由不同, 提示也得说中各自的那一处。"""
+    if group == "阅读预算":
+        return "被当作入口时只能整读, 省下的 token 从另一头漏回来; **细节应外置到 references/ 按需读**"
+    return "超出部分注入时被截断, 模型看不到"
 
 
 def git(*args: str) -> str:
@@ -79,37 +96,42 @@ def char_count(path: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="提交前检查 IDE 上下文注入上限")
+    parser = argparse.ArgumentParser(description="提交前检查 IDE 上下文注入上限与包内文档的阅读预算")
     parser.add_argument("--strict", action="store_true", help="只要超限就退出码 1(不管本次有没有改它)")
     parser.add_argument("--quiet", action="store_true", help="只打印非 PASS 项")
     args = parser.parse_args()
 
-    caps = CONTEXT_CAPS
     changed = changed_files()
     rows: list[tuple[str, str, str]] = []
-    for rel, limit in sorted(caps.items()):
-        path = REPO_ROOT / rel
-        if not path.is_file():
-            rows.append((WARN, rel, "配置里声明了但文件不存在"))
-            continue
-        size = char_count(path)
-        if size <= limit:
-            rows.append((PASS, rel, f"{size}/{limit} 字符 (余量 {limit - size})"))
-        elif rel in changed or args.strict:
-            rows.append(
-                (
-                    STOP, rel, f"{size} 字符 > 上限 {limit} (超 {size - limit}) —— 超出部分注入时被截断,"
-                    f" 模型看不到; **先精简到 {limit} 以内再提交**"
-                    f" (建议留 10% 余量: 削到 {int(limit * 0.9)})"
+    # 两组上限语义不同(注入截断 / 阅读预算), 但判定与处置一致 —— 合在一个循环里, 分组打印
+    for group, caps in (("IDE 注入上限", CONTEXT_CAPS), ("阅读预算", READ_BUDGET_CAPS)):
+        rows.append((GROUP, group, ""))
+        for rel, limit in sorted(caps.items()):
+            path = REPO_ROOT / rel
+            if not path.is_file():
+                rows.append((WARN, rel, "配置里声明了但文件不存在"))
+                continue
+            size = char_count(path)
+            if size <= limit:
+                rows.append((PASS, rel, f"{size}/{limit} 字符 (余量 {limit - size})"))
+            elif rel in changed or args.strict:
+                rows.append(
+                    (
+                        STOP, rel, f"{size} 字符 > 上限 {limit} (超 {size - limit}) —— {_why(group)};"
+                        f" **先精简到 {limit} 以内再提交**"
+                        f" (建议留 10% 余量: 削到 {int(limit * 0.9)})"
+                    )
                 )
-            )
-        else:
-            rows.append((WARN, rel, f"{size} 字符 > 上限 {limit} (超 {size - limit}) —— 本次没改它,"
-                         f" 但尾部目前是截断状态"))
+            else:
+                rows.append((WARN, rel, f"{size} 字符 > 上限 {limit} (超 {size - limit}) —— 本次没改它,"
+                             f" 但{_why(group)}"))
 
-    width = max(len(r[1]) for r in rows)
+    width = max(len(r[1]) for r in rows if r[0] != GROUP)
     print("\n上下文上限检查:\n")
     for level, rel, detail in rows:
+        if level == GROUP:
+            print(f"{rel}:")
+            continue
         if args.quiet and level == PASS:
             continue
         print(f"  [{level:4}] {rel.ljust(width)}  {detail}")

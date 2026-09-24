@@ -68,9 +68,9 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 > **完整禁令与事故判据单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
 - 🔴 **禁用 `git rebase`** (已炸 3 次, 工作区干净也照炸) 与 **`git stash`**; **非快进合并 + 工作区脏 = 必炸** (拦截层会顺着这次写入批量删 `.git/objects`)。落后主线改走「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。
-- **提交后必查 ref 三处**: `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `my-commit-flow/scripts/verify_ref.py` 并按它打印的步骤修。**不要只看 commit 输出**。
+- **提交后必查 ref 三处**: `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `commands run my-commit-flow.verify-ref` 并按它打印的步骤修。**不要只看 commit 输出**。
 - **判"推没推上"只看 `git ls-remote <远端> <分支>`** —— 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃, 且 `git push --dry-run` 永远"成功"。
-- 机检与停手点一律走 [my-commit-flow 包](.commands/my-commit-flow/README.md)。
+- 机检与停手点一律走 **task id**: `commands run my-commit-flow.preflight` / `ship.commit` / `ship.push` / `my-commit-flow.verify-ref`(`list my-commit-flow/ship` 看全流程, `show <task>` 看展开的命令与深读指针)。**包内 README 与 `references/` 只在排障 / 迁移时读** —— 日常整读它, 等于把"读整份文档找命令"的成本又搬回来。
 
 ## 🔴 跨仓库操作: 绝对禁止 (需显式强授权)
 
@@ -83,7 +83,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤、命令与机检脚本一律走 [my-commit-flow 包](.commands/my-commit-flow/README.md)** —— 预检 → 闸门 → 逐路径暂存 → 提交并核 ref 三处 → 推 Gitee → 尝试一次 GitHub 直连 → 查幽灵 diff。**本节只留口径, 不重复命令**。
+> **步骤与机检一律走 task id**(不是文档): 预检 `my-commit-flow.preflight` → 闸门(预检内跑) → 逐路径暂存 `ship.commit` → 提交并核 ref 三处 `my-commit-flow.verify-ref` → 推 Gitee `ship.push` → 尝试一次 GitHub 直连(同在 `ship.push` 里)→ 查幽灵 diff。**本节只留口径, 不重复命令**; 原理与完整判据在包内 `references/`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。

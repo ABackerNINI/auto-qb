@@ -29,16 +29,24 @@
   `python <skill-dir:commands>/scripts/run.py <子命令>` —— `commands` 本身**不是**可执行程序。
 - **`pin` 是稀缺资源**: 一层视图里浮出的常显命令 > `MAX_PIN_PER_LEVEL`(8) → `list` 报 WARN。
   pin 滥用等于把平表搬回一级视图, 这是 W4 说的"层级完整性检查"里唯一没落机检的一条(2026-09-24 补上)。
-- **参数不许被静默丢掉**(2026-09-24 修): 调用方传了参数、而 task 的 `run` 里没有 `<args>` 占位符
-  → **STOP(rc=1)**, 并提示"要么去掉参数, 要么在包里补 `<args>`"(`_config._takes_args`;
-  **脚本类例外** —— 额外参数直接接到 argv 末尾, 如 `ship.commit -- --message-file … <路径>`)。
-  起因: `run doc.drift -- --list` 的 `--list` 曾被**静默丢弃**(正是"看起来跑过了"), `doc.drift` 已补 `<args>`。
-- **SKILL.md 的 description 要突出"命令"**(2026-09-24 用户反馈"描述不清"): 首句就写"要跑项目命令
-  就来这里找", 并写进两件行为 —— ①**先 list 找找**(想跑的 / 想加的多半已收录, 别自己拼、别手抄)
-  ②带用户原话触发("跑一下测试"/"同步一下"/"提交"/"建索引")。长度跟同族 skill(220–315 字符),
-  **不为压到 200 而丢触发语** —— 上一版压到 175 反而把"命令"埋进了实现细节。
-  **也不写与别的 skill 的交叉引用**: 用户 2026-09-24 明确"commands 与 scope-guard 并没有关系, 不应该提"
-  —— 原描述末尾那句"(见 scope-guard skill)"已删, 悬空的"判断该不该做"改成自洽说法(只管"怎么跑")。
+- **参数不许被静默丢掉**(2026-09-24 修): 传了参数而 task 的 `run` 里没有 `<args>` → **STOP(rc=1)**
+  (**脚本类例外**: 额外参数接到 argv 末尾)。起因: `run doc.drift -- --list` 的 `--list` 曾被静默丢弃。
+- **SKILL.md 的 description 要突出"命令"**(2026-09-24 用户反馈"描述不清"): 首句写"要跑项目命令就来这里找",
+  并带两件行为 —— ①**先 list 找找**(别自己拼、别手抄) ②带用户原话触发("跑一下测试"/"提交"/"建索引")。
+  长度跟同族 skill(220–315 字符), **不为压到 200 而丢触发语**(压到 175 反而把"命令"埋进实现细节)。
+  **不写与别的 skill 的交叉引用**: 用户明确过"commands 与 scope-guard 并没有关系"。
+
+- **包内 README 只是索引, 不是入口** (2026-09-24): 决策点文档(如 `AGENTS.md`)写 task id, 不写包内文档链接 ——
+  曾把提交流程的"唯一去处"指到 `.commands/my-commit-flow/README.md`, 另一会话整读 8212 字符, 分层省下的
+  token 从另一头搬回来。现 README **2808 字符**(七步表 / 停手点 / 六条反模式 / 指针表), 细节外置到包内
+  `references/{pipeline,config,anti-patterns}.md`; 本环境 git 事实单点在 `pitfalls/git/_index.md`, 包内不复制。
+  纪律见 `pitfalls/docs/pack-readme-entry.md`。
+- **阅读预算是一类新上限** (2026-09-24): `check_context_caps.py` 里 `CONTEXT_CAPS`(IDE 注入截断)与
+  `READ_BUDGET_CAPS`(被当入口就得整读)**语义不同, 分两组打印**, 判定与处置共用一套。
+- **`doc` 键** (2026-09-24): `[tasks.*]` 可写 `doc = "<包内文档相对路径>"`, `show` 打印"深读"一行,
+  把"想看细节读哪份"接到决策点上; 基准目录**子包继承父包**, 指向的文件不存在即 STOP(指针指空 = 静默失效)。
+- **反漂移豁免不保护包内 README** (2026-09-24): `.commands/` 豁免的理由是"单点定义在这里", 但定义处是
+  `config.toml` —— 故 `path.name == "README.md"` 时不走豁免, 并加进 `SCAN_GLOBS`。
 
 **已验的事** (别重做):
 
@@ -46,28 +54,30 @@
 - 整包移走 `.commands/my-commit-flow` 后引擎仍能 `list` / `run` 其它 task。
 - 反漂移闸门: 故意手抄 → 判红, 改成 `commands run <task>` → 转绿(63 → 0)。
 - `pin` 守卫: 临时树里 3 条 pin 不报、9 条 pin 报(一级与子包两层都试过)。
-- 格式化闸门去双写: 预检把 `<changed:*.py>` 展开成 `run.py run dev.fmt -- <文件...>`, 引擎再展开成 `yapf -i <文件...>`
-  —— 两段都实测过, 与旧闸门行为等价(仍是"只碰本次改过的 py")。
-- `list --all` 去重(2026-09-24 修): 曾把常显命令打印两遍(21 条命令显示成 25 行, 看着像 task id 重复,
-  而重复正是引擎的 STOP 判据)。改成 `--all` 时**不再往上浮** pin(全树本就铺开, 每包由自己那层列,
-  `★` 仍标 pin)。逐视图复验: `--all` 21 行零重复; `list` 3 / `list kb` 3 / `list test` 3 /
-  `list my-commit-flow` 4 / `my-commit-flow/ship` 2 / `my-commit-flow --all` 5 —— 无重复、无缺失。
+- 格式化闸门去双写: 预检 `<changed:*.py>` → `run.py run dev.fmt -- <文件...>` → 引擎再展开成 `yapf -i <文件...>`,
+  两段都实测过, 与旧闸门等价(仍只碰本次改过的 py)。
+- `list --all` 去重(2026-09-24 修): 曾把常显命令打两遍(21 条显示成 25 行, 看着像 task id 重复 —— 而重复正是
+  引擎的 STOP 判据)。改为 `--all` 时不再上浮 pin。逐视图复验: `--all` 21 行零重复; `list` 3 / `kb` 3 / `test` 3 /
+  `my-commit-flow` 4 / `ship` 2 / `my-commit-flow --all` 5 —— 无重复、无缺失。
 - 反漂移闸门扫描面扩到 `.agents/skills/**/*.md`(2026-09-24, 原为 `**/SKILL.md`): 细节搬进 `references/`
   后只扫 SKILL.md 会给搬出去的内容留盲区。扩之前先跑过一遍**实测 0 命中**(不误伤别的 skill)。
 - 参数传递(2026-09-24): `run doc.drift -- --list` 转发成功(引擎只回末 3 行摘要 —— 要全文用 `show` 看命令再自己跑);
   `run doc.caps -- --strict` **STOP rc=1 且不执行**; 脚本类 `ship.commit -- --message-file … <路径>` 仍接到 argv 末尾;
   无参数时路径不变(`show test.full` 逐字一致)。
+- 包内 README 纳管 + 骨架 `.exe` 归一后的漂移闸门 (2026-09-24): 手抄 `run` 类命令 → 判红(指出应改成
+  `commands run doc.links`); 手抄脚本类(`<包>/scripts/preflight.py --check-started` 带解释器前缀)原先判不出
+  (引擎用 `sys.executable` 拼命令, 首 token 是 `python.exe`), 归一后同样判红; 删掉 → 转绿, 全仓无新增误伤。
+- `<each:>` / `<changed:>` 只盯**本次改动清单**, 不是文件系统 glob (2026-09-24 澄清): 没匹配上的 WARN 是
+  **按设计跳过**, 不是闸门失效 —— 我一度误读成"对 `.commands/**` 静默失效", 实测展开正常。WARN 文案已点明。
+- `doc` 指针 (2026-09-24): 子包里写 `doc = "references/pipeline.md"` 若按子包目录解析会 STOP
+  (文件在父包), 故改为**基准继承父包**; 5 个 task 的 `show` 均打印出父包那份绝对路径。
 
 **下一步 / 未收口**:
 
 - A11「自生长真的发生」还没判 —— 需要一次真实会话里 agent **自发**调 `add` 才算数。
+- **漂移闸门的 `.exe` 归一已修**(2026-09-24), 红绿验证见上一条。
+- **包内 README 的入口纪律已被机检兜住**(2026-09-24): 阅读预算 3000 字符 + 漂移闸门纳管。
+  想再加第二份包内说明文档, 先想清楚它会不会被当入口。
 - `check_command_drift.py` 有两条**逐文件豁免**(都写了理由): `pitfalls/testing/tmpdir.md`(命令形态就是判据)、
   `pitfalls/testing/patching.md`(WSL 另一条执行路径)。想收紧先读那两条理由。
-- **W3 遗留的文档漂移已修**(2026-09-24, 用户点头并入本轮): `AGENTS.md` 那 3 处死链改指
-  `.commands/my-commit-flow/README.md` 与 `.commands/my-commit-flow/.my-commit-flow.toml`;
-  `pitfalls/ops/_about.md`(连带生成的两份 `_index.md`)/ `pitfalls/ops/prod-files.md` /
-  `pitfalls/git/push.md` / `pitfalls/testing/tmpdir.md` / `conventions/collaboration.md` /
-  `conventions/process.md` 的旧名一并订正(`process.md` 里"skill + 23 用例"也改成"包 README + 34 用例")。
-  **刻意没动**: `plans/*.html` 与 `tasks/*.md`(冻结快照 / 纪要)、`progress/suggestions.md`(叙述)、
-  `test_preflight.py` 里的 glob 夹具字符串、以及**别的专题的 activeContext 切片**
-  (`26-09-23-1710-test-suite-perf.md`)—— 后者按「各 clone 只写自己的切片」约定不越界。
+- **W3 遗留的文档漂移已修**(2026-09-24)—— 明细已迁出到 `progress/implemented-tooling.md`。
