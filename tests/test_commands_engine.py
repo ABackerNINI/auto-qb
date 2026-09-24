@@ -20,6 +20,13 @@
 - test_wrapper_repo_root_walk: 从深层子目录向上找到含 `.commands/` 的仓库根
 - test_wrapper_path_dir_picks_dir_on_path: 只在**已在 PATH 上**的目录里装"项目无关"那份; 在 PATH 上但不存在则建出来
 - test_wrapper_end_to_end_passes_args: 真跑一次生成的 wrapper —— 找到假引擎并把参数原样转过去(端到端)
+- test_decode_falls_back_to_local_codepage: 子进程按本地码页(GBK)输出中文时必须解出人话 —— 按 UTF-8 硬解会让"已生成 16 个索引"变一串 U+FFFD(2026-09-24 实测)
+- test_decode_prefers_utf8: UTF-8 是首选(子进程已被强制), 不能被本地码页抢解
+- test_decode_never_raises_on_garbage: 任意字节(含 None)都不抛 —— 解码失败不该让整条命令看起来失败
+- test_shell_child_env_forces_utf8_stdio: 子进程环境必须带 PYTHONIOENCODING=utf-8 —— 否则 Windows 上 Python 子进程被管道接住时按 cp936 输出
+- test_shell_injects_env_and_captures_bytes: `_shell` 真把 _CHILD_ENV 合并进子进程环境(pack env 仍可覆盖), 且按字节收输出(不再 text 模式硬解)
+- test_shell_decodes_gbk_child_output: 子进程交回 GBK 字节(kb.index 实测形态)时, `_shell` 返回的文本必须可读
+- test_shell_failure_keeps_rc: 非 0 退出码照旧传出去(解码改动不能吞掉失败)
 """
 from __future__ import annotations
 
@@ -197,6 +204,89 @@ def test_wrapper_write_refuses_foreign_file(tmp_path):
     assert "[STOP]" in result and "别人的脚本" in target.read_text(encoding="utf-8")
     assert "已写入" in mod.write_one(target, mod.bodies("posix")["commands"], dry_run=False, force=True)
     assert mod.MARK in target.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------- 子进程编码
+
+
+def test_decode_falls_back_to_local_codepage():
+    """回归守阵(2026-09-24 实测): 子进程按本地码页(GBK)输出中文时, 必须解出人话而非 U+FFFD"""
+    mod = _engine()
+    raw = "已生成 16 个索引".encode("gbk")
+    assert mod._decode(raw) == "已生成 16 个索引"
+    assert "\ufffd" not in mod._decode(raw)
+
+
+def test_decode_prefers_utf8():
+    """UTF-8 是首选: 子进程已被强制 UTF-8, 不能被本地码页抢解成乱码"""
+    mod = _engine()
+    text = "更新 memory-bank/tasks/_index.md"
+    assert mod._decode(text.encode("utf-8")) == text
+
+
+def test_decode_never_raises_on_garbage():
+    """任意字节(含 None)都不抛 —— 解码失败不该让整条命令看起来失败了"""
+    mod = _engine()
+    assert mod._decode(None) == ""
+    assert mod._decode(b"\xff\xfe\x00\x81") != ""
+
+
+def test_shell_child_env_forces_utf8_stdio():
+    """子进程环境必须带 PYTHONIOENCODING=utf-8 —— Windows 上管道接住的 Python 子进程默认按 cp936 输出"""
+    assert _engine()._CHILD_ENV.get("PYTHONIOENCODING") == "utf-8"
+
+
+class _FakeProc:
+    """假子进程: 只提供 `_shell` 要读的三个属性。"""
+    def __init__(self, stdout: bytes, stderr: bytes = b"", returncode: int = 0):
+        self.stdout, self.stderr, self.returncode = stdout, stderr, returncode
+
+
+def _patch_run(monkeypatch, proc: _FakeProc) -> dict:
+    """换掉 subprocess.run 并回传收到的参数 —— **进程内**验证接线。
+
+    本项目测试禁止真起外部进程(`tests/sidefx.py` 的 POPEN 记账会判越界), 所以
+    "子进程给了什么字节"由假对象直接给, 反而比真跑更好控制。
+    """
+    mod = _engine()
+    seen: dict = {}
+
+    def fake(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen.update(kwargs)
+        return proc
+
+    monkeypatch.setattr(mod.subprocess, "run", fake)
+    return seen
+
+
+def test_shell_injects_env_and_captures_bytes(monkeypatch):
+    """接线守阵: 注入 _CHILD_ENV(pack env 仍可覆盖), 并按**字节**收输出。"""
+    seen = _patch_run(monkeypatch, _FakeProc(b"ok"))
+    ok, out = _engine()._shell("python x.py", 5, env={"CMD_PACK": "kb"})
+    assert ok and out == "ok"
+    assert seen["env"]["PYTHONIOENCODING"] == "utf-8", "子进程必须被强制 UTF-8 stdio"
+    assert seen["env"]["CMD_PACK"] == "kb", "包自己的环境变量不能被引擎覆盖"
+    assert not seen.get("text") and not seen.get("encoding"), "按字节收, 解码交给 _decode 兜底"
+
+
+def test_shell_decodes_gbk_child_output(monkeypatch):
+    """回归守阵(2026-09-24 实测形态): 子进程交回 GBK 字节时, 返回文本必须可读而非 U+FFFD"""
+    _patch_run(
+        monkeypatch,
+        _FakeProc("已生成 16 个索引\n".encode("gbk"), "更新 memory-bank/tasks/_index.md\n".encode("gbk")),
+    )
+    ok, out = _engine()._shell("python gen_index.py", 5)
+    assert ok
+    assert "已生成 16 个索引" in out and "更新 memory-bank/tasks/_index.md" in out
+    assert "\ufffd" not in out, "按 UTF-8 硬解 GBK 字节会得到一串 U+FFFD"
+
+
+def test_shell_failure_keeps_rc(monkeypatch):
+    """非 0 退出码照旧传出去 —— 解码改动不能把失败吞成成功"""
+    _patch_run(monkeypatch, _FakeProc("boom\n".encode("gbk"), returncode=1))
+    ok, out = _engine()._shell("python fail.py", 5)
+    assert not ok and "boom" in out
 
 
 def test_wrapper_repo_root_walk(tmp_path):

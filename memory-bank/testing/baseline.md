@@ -6,7 +6,7 @@
 
 ## 当前基线
 
-**1225 collected: 1224 passed + 1 skipped / Windows** —— 2026-09-24 实测
+**1232 collected: 1231 passed + 1 skipped / Windows** —— 2026-09-24 实测
 (计划/报告入库 W4: +10 条文档形态守阵 `tests/test_docs_forms.py` —— 命名 / meta / 状态词 /
 索引自洽 / dark / 主键覆盖 / 认领链双向; 五条均已红验; 同日再 **+1**:
 `test_frontend_cols_empty_hint_names_browser_clear_cause` —— 空存储提示必须点名浏览器站点级
@@ -18,7 +18,11 @@
 同日再 **+9**: 同文件的 wrapper 守阵 —— 平台差异 / 归属标记 / 批处理写法约束 / CRLF 无 BOM / 幂等 /
 拒改同名文件 / 向上找仓库根 / PATH 落点选择 / **端到端真跑 wrapper 转发参数**,
 详见 [baseline-history.md](baseline-history.md));
-TOTAL **91%**(7768 语句 / 623 未覆盖 / 2646 分支), sidefx 台账 2051 条 / **越界 0**。
+同日再 **+7**: `tests/test_commands_engine.py` —— 引擎子进程编码守阵(子进程环境强制 UTF-8 stdio /
+按字节收输出 / `_decode` 的 GBK 回退与 UTF-8 优先 / 任意字节不抛 / GBK 子进程输出可读 / 失败 rc 不吞),
+起因是 `commands run kb.index` 输出乱码(详见 [pitfalls/ops/console-encoding.md](../pitfalls/ops/console-encoding.md)),
+详见 [baseline-history.md](baseline-history.md));
+TOTAL **91%**(7768 语句 / 623 未覆盖 / 2646 分支), sidefx 台账 2049 条 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。

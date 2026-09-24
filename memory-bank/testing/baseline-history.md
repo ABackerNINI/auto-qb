@@ -6,6 +6,21 @@
 > 迁移说明(2026-09-22 W3): 本节原在 `testing.md` 顶部的 ```bash 围栏里当注释, 现原样外迁 ——
 > **只把 bash 注释标记转成 markdown 列表缩进**(内容逐字未改)。**当前数字**见 [baseline.md](baseline.md)。
 
+- ↑ 收集数 **1225 → 1232**(+7; 2026-09-24 **commands 引擎子进程编码**):
+  用户报「跑 `commands run kb.index` 输出乱码」。取证: 引擎自己的 stdout 是 UTF-8(`uv run` 给的),
+  但它 `shell=True` 起的**孙进程**(`kb.index` 的第二条包脚本)的 stdout 被管道接住时按**本地码页 cp936**
+  输出 ⇒ 引擎按 UTF-8 硬解 ⇒ 「已生成 16 个索引」变 `������ 16 ������`。拓原始字节确认是 GBK
+  (`b'\xd2\xd1\xc9\xfa\xb3\xc9 16 \xb8\xf6\xcb\xf7\xd2\xfd'`), **退出码照旧 0** —— 静默的坏, 只影响人读。
+  修法(引擎单点, 不动任何包脚本): ① 子进程环境注入 `PYTHONIOENCODING=utf-8`(只影响 stdio, 不像
+  `PYTHONUTF8=1` 连 `open()` 默认编码一起改; 放在 pack env 之前, 包仍可覆盖) ② `_shell` 改**按字节收** +
+  `_decode` 兜底解(UTF-8 → 本地码页 → `errors="replace"`) —— 非 Python 子进程仍可能给 GBK, 这一层兜住。
+  新增 7 条守阵(全在 `tests/test_commands_engine.py`), **红验**用 A/B 对照(修前解出 `������ 16 ������`,
+  守阵对差异敏感)。❗测试里**不真起子进程** —— `tests/sidefx.py` 的 POPEN 记账会判越界,
+  所以用假 `subprocess.run` 直接给字节。坑与判据写进
+  [pitfalls/ops/console-encoding.md](../pitfalls/ops/console-encoding.md), 引擎约定写进
+  [`.agents/skills/commands/references/howto-add-command.md`](../../.agents/skills/commands/references/howto-add-command.md)。
+  全量 **1231 passed + 1 skipped** / TOTAL 91%(7768 语句 / 623 未覆盖) / sidefx 台账 2049 / 越界 0。
+
 - ↑ 收集数 **1216 → 1225**(+9; 2026-09-24 **commands W7: wrapper 入口**):
   用户要求「真正实现 `commands run <task.id>`」。先实测三个 shell 对 cwd 的搜索规则(Git Bash 与 PowerShell
   **都不搜**, 只有 cmd.exe 搜)⇒ 只落仓库根达不到目标, 与用户确认后落 **cwd + PATH 目录**两处: 新增生成器

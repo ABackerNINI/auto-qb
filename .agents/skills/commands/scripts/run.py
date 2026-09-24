@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import locale
 import os
 import re
 import subprocess
@@ -29,6 +30,12 @@ ANOMALY_MAX = 8  # 额外保留的异常行上限
 FAILURE_LINES = 40  # 失败时最多回多少行(要细节, 但也不是整段)
 # 异常行判据: 只认工具自己的分级标记与大写关键字 —— 小写的 "warnings"/"error" 是正常输出的一部分。
 _ANOMALY = re.compile(r"\[(?:WARN|STOP|FAIL)\]|\b(?:FAILED|ERROR|Traceback)\b")
+
+# 子进程必须说 UTF-8。Windows 上 Python 子进程的 stdout 一旦被管道接住, 编码取的是
+# **本地码页**(本机 cp936) —— 中文按 GBK 出去, 而本引擎按 UTF-8 解, 结果是一串 U+FFFD:
+# 实测 2026-09-24 `已生成 16 个索引` 显示成 `������ 16 ������`(kb.index 这类包脚本)。
+# 放在 pack env **之前** —— 包仍然可以覆盖。
+_CHILD_ENV = {"PYTHONIOENCODING": "utf-8"}
 
 # ------------------------------------------------------------------ 子命令
 
@@ -159,20 +166,33 @@ def _extra(args: argparse.Namespace) -> str:
 
 
 def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[bool, str]:
-    full = {**os.environ, **(env or {})}
+    full = {**os.environ, **_CHILD_ENV, **(env or {})}
     proc = subprocess.run(
         cmd,
         shell=True,
         cwd=str(C.find_root()),
         capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         timeout=timeout,
         env=full,
     )
-    out = (proc.stdout or "") + (proc.stderr or "")
+    out = _decode(proc.stdout) + _decode(proc.stderr)
     return proc.returncode == 0, out
+
+
+def _decode(raw: bytes | None) -> str:
+    """把子进程输出解成文本 —— ❗不假定它是 UTF-8。
+
+    顺序: ① UTF-8 (子进程已被 `_CHILD_ENV` 强制, 也是 git / uv 这类工具的原生编码)
+    ② 本地码页 (非 Python 子进程仍可能按 cp936 输出中文) ③ 兜底 replace, 永不抛。
+    按 UTF-8 硬解历史事故: 中文变 U+FFFD 且**静默** —— 退出码照旧 0, 只是人读不了。
+    """
+    data = raw or b""
+    for enc in ("utf-8", locale.getpreferredencoding(False)):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 def _digest(out: str, limit: int = SUMMARY_LINES) -> tuple[list[str], int]:
