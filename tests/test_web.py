@@ -88,6 +88,7 @@
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
+- test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
@@ -3985,6 +3986,147 @@ def test_api_add_torrent_endpoint():
         assert adds[0][1]["tags"] == ["4K", "HDR"]
         # 空来源: 400
         assert tc.post("/api/torrents/add", json={}, headers=auth).status_code == 400
+
+
+def test_add_torrent_receipt_and_optional_flags():
+    """添加种子回执两形态 + 两个 optional 选项恒显式下发 + 成功走 INFO(2026-09-24 真机 bug)
+
+    ① 回执判定只认 `"Ok." in str(result)` ⇒ 在 qB 5.2.3(Web API 2.14.0 起 `/torrents/add` 改成
+       JSON 元数据 `{success_count, failure_count, pending_count, added_torrent_ids}`)恒为假 ⇒
+       种子明明加进去了, WEB UI 却弹"添加种子失败";
+    ② 停止位被"False 就不传"的过滤器吞掉 ⇒ qB 回落到**会话级**默认(SessionImpl::
+       initLoadTorrentParams 的 `addStopped.value_or(isAddTorrentStopped())`)⇒ 前端「添加后开始」
+       勾了没用。另: 停止位只能用 `is_stopped=` 传 —— 库内 `is_paused or is_stopped` 会把
+       `is_paused=False` 折成 None(实测请求体为空);
+       同类的「自动种子管理」也是 `std::optional`(缺省回落 `savePath 空 ∧ 全局未禁自动管理`),
+       一并按"恒显式"钉住;
+    ③ 成功路径原来记 WARNING, 而 NotifyHandler 挂在 auto_qb logger 上 ⇒ 每次添加成功都往桌面推
+       一条 WARNING 弹窗; 成功必须 INFO, 只有未被接受才 WARNING。
+    """
+    import base64
+    import logging
+
+    from fastapi.testclient import TestClient
+    from qbittorrentapi.torrents import TorrentsAddedMetadata
+
+    from auto_qb.webui import commands as web_commands
+    from helpers import FakeClient, make_manager
+
+    class _Capture(logging.Handler):
+        """级别采集器: 挂在**模块 logger** 上"""
+        def __init__(self):
+            super().__init__(level=logging.INFO)
+            self.records = []
+
+        def emit(self, record):
+            self.records.append(record)
+
+    with tempfile.TemporaryDirectory() as td:
+        # ❗不能用 caplog: make_manager 走 setup_logging, 那里有 `logging.getLogger().handlers.clear()`
+        #   —— 用例体内建 manager 会把 pytest 挂在 root 上的采集 handler 一并清掉, 之后一条也抓不到
+        #   (症状是"日志断言恒空")。挂模块 logger 不受 root 清理影响, 且能验到真实级别。
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr._web_token = "t"
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": "Bearer t"}
+        orig_add = client.torrents_add
+        cap = _Capture()
+        web_commands.logger.addHandler(cap)
+        try:
+
+            def add_returns(result):
+                """保留 FakeClient 的台账记录, 只替换返回值(顶替真机 qB 的响应形态)"""
+                client.torrents_add = lambda **kw: (orig_add(**kw), result)[1]
+
+            def post_add(paused, auto_tmm=False):
+                r = tc.post(
+                    "/api/torrents/add",
+                    json={
+                        "files_b64": [base64.b64encode(b"d8:announce").decode()],
+                        "paused": paused,
+                        "auto_tmm": auto_tmm,
+                    },
+                    headers=auth,
+                )
+                assert r.status_code == 200
+                cmd_id = r.json()["cmd_id"]
+                mgr._drain_web_commands()
+                return cmd_id
+
+            def add_logs():
+                return [(r.levelno, r.getMessage()) for r in cap.records if "添加种子" in r.getMessage()]
+
+            # ① 新形态(API >= 2.14.0): JSON 元数据 -> 受理; 成功必须是 INFO(改前: error + WARNING)
+            add_returns(
+                TorrentsAddedMetadata(
+                    {
+                        "success_count": 1,
+                        "failure_count": 0,
+                        "pending_count": 0,
+                        "added_torrent_ids": ["HASH123"]
+                    }
+                )
+            )
+            assert mgr._web_results[post_add(False)]["status"] == "ok"
+            assert [lvl for lvl, _ in add_logs()] == [logging.INFO], "受理成功不得走 WARNING(通知联动会直推桌面弹窗)"
+
+            # ② 部分失败 -> error 回执(部分成功也报错, 与 bulk 同一口径)且走 WARNING
+            cap.records.clear()
+            add_returns(
+                TorrentsAddedMetadata(
+                    {
+                        "success_count": 1,
+                        "failure_count": 1,
+                        "pending_count": 0,
+                        "added_torrent_ids": ["HASH123"]
+                    }
+                )
+            )
+            cid = post_add(False)
+            assert mgr._web_results[cid]["status"] == "error"
+            assert "成功 1 / 失败 1" in mgr._web_results[cid]["error"]
+            assert [lvl for lvl, _ in add_logs()] == [logging.WARNING]
+
+            # ③ 仅 pending(magnet 元数据未就绪)也是受理, 不是失败
+            add_returns(
+                TorrentsAddedMetadata(
+                    {
+                        "success_count": 0,
+                        "failure_count": 0,
+                        "pending_count": 1,
+                        "added_torrent_ids": []
+                    }
+                )
+            )
+            assert mgr._web_results[post_add(False)]["status"] == "ok"
+
+            # ④ 旧形态文本仍认(API < 2.14.0 的 "Ok."/"Fails.")
+            add_returns("Ok.")
+            assert mgr._web_results[post_add(False)]["status"] == "ok"
+            add_returns("Fails.")
+            assert mgr._web_results[post_add(False)]["status"] == "error"
+
+            # ⑤ 两个 optional 选项必须**显式**下发(省略 = 吃 qB 会话/全局默认, 勾选框失效):
+            #    停止位 + 自动种子管理。`use_auto_torrent_management` 由替身记 kw.get(...) ——
+            #    没传时是 None, 传 False 才是 False, 两者可分。
+            add_returns("Ok.")
+            post_add(False)
+            last = [c for c in client.calls if c[0] == "add"][-1][1]
+            assert last["is_stopped_raw"] is False, "省略 stopped 会吃 qB 会话默认(不自动开始) => 选项失效"
+            assert last["use_auto_torrent_management"] is False, "省略 autoTMM 会吃 qB 全局管理模式 => 选项失效"
+            assert last["paused"] is False
+            # 勾选方向: 两个都显式 True
+            post_add(True, auto_tmm=True)
+            last = [c for c in client.calls if c[0] == "add"][-1][1]
+            assert last["is_stopped_raw"] is True and last["paused"] is True
+            assert last["use_auto_torrent_management"] is True
+            post_add(True)
+            last = [c for c in client.calls if c[0] == "add"][-1][1]
+            assert last["is_stopped_raw"] is True and last["paused"] is True
+        finally:
+            web_commands.logger.removeHandler(cap)
 
 
 def test_api_export_endpoint(web_env):

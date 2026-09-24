@@ -1,7 +1,7 @@
 # 桩与仿真保真度
 
 > 摘要: 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。
-> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照
+> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, caplog, 日志断言, 回执判定
 
 ### 测试替身的"成功路径"往往顺手把状态补全
 
@@ -65,6 +65,25 @@
 - **判别**: 不撤掉守卫跑一次, 可能只是装了个**永远不触发的空壳**
   (如把 `torrents_removed` 抹回 `[]`, `snapshot_drop` 由 20 掉到 0 才能证明该判据有效)。
 - **处置**: 撤掉守卫 / 还原旧实现跑一次, 确认它**会报**。
+
+### 替身回不出"新响应形态" = 保真度缺口: 回执判定在替身上永远成立
+
+- **触发**: 给写端点的回执 / 结果判定加守卫。
+- **判别**: `FakeClient.torrents_add` 恒回**文本** `"Ok."`, 而真机 qB 5.2+(Web API 2.14.0)回的是
+  **JSON 元数据**(`TorrentsAddedMetadata`)⇒ "添加成功却报失败"能一路全绿到线上(2026-09-24 实例,
+  详见 [../backend/qb-api.md](../backend/qb-api.md) 的 `torrents/add` 响应形态一节)。
+- **处置**: 新形态用**库自己的返回类型**顶替(`from qbittorrentapi.torrents import TorrentsAddedMetadata`),
+  不要图省事用裸 dict —— 裸 dict 会把"库换了类型"这类回归一起放过; 替身里要写明它只模拟哪一版。
+
+### `make_manager` 会清空 root handlers ⇒ 用例体内建 manager 时 `caplog` 抓不到任何日志
+
+- **触发**: 用 `caplog` 断言日志级别 / 内容, 同时用例体内要建 manager。
+- **判别**: `helpers.make_manager` 走 `setup_logging`, 其中 `logging.getLogger().handlers.clear()`
+  会把 pytest 挂在 **root** 上的 caplog handler 一并清掉 ⇒ 之后所有记录都抓不到,
+  症状是"日志断言恒空"(不是没打日志)。**fixture 里**建 manager 没事(采集 handler 在 call 阶段重新挂),
+  **用例体内**建就会中招。
+- **处置**: 给**模块 logger** 自建采集 handler(`logging.getLogger("auto_qb.webui.commands")`,
+  它不受 root 清理影响), `try/finally` 里摘掉; 不要因此放弃日志断言 —— 日志级别即通知语义。
 
 ### 已知未修缺陷: qB 短暂断连后 auto-qb **无法自愈**
 

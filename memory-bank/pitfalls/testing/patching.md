@@ -1,7 +1,7 @@
 # 平台差异与打桩 (Windows / Linux)
 
-> 摘要: 「Windows 全绿 / Linux 全红」的四类根因与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台。
-> 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块
+> 摘要: 「Windows 全绿 / Linux 全红」的四类根因与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**。
+> 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红
 
 ### 「Windows 全绿 / Linux 全红」: 本机跑通不等于 CI 跑通 (Linux CI 一次红 4 项, 真根因三个)
 
@@ -19,6 +19,19 @@
   patch `qbmanager.Client` **无效**(`connect()` 走的是 `qbclient._new_client`)⇒
   **patch 真正被调用的名字**, 与网络解耦。
 - **处置**: 见下条判别法。
+
+### ❗本工具 shell 注入 `PYTHONUTF8=1` —— "本地码页回退"类断言在这里**假红**(2026-09-24 实测)
+
+- **触发**: 测试断言依赖 `locale.getpreferredencoding()` / 本地码页(GBK·cp936), 或跑 `commands run test.*` 时红。
+- **判别**: 本工具会话的环境里注入了 **`PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`**(还有 `LANG`/`LC_ALL=C.UTF-8`)
+  ⇒ `locale.getpreferredencoding(False)` 返回 **`utf-8`**、`sys.flags.utf8_mode == 1`, 而真机(未注入时)是 **`cp936`**。
+  症状: `tests/test_commands_engine.py` 的 GBK 回退两条
+  (`test_decode_falls_back_to_local_codepage` / `test_shell_decodes_gbk_child_output`)
+  在本 shell **恒红**(`'������ 16 ������' != '已生成 16 个索引'`), 在别人机器上全绿 ——
+  **不是代码坏了, 是环境把"本地码页"改了**。
+- **处置**: 判这类红先看 `env | grep -iE "python|lang|lc_"`; 要拿真值就
+  `env -u PYTHONUTF8 -u PYTHONIOENCODING <命令>`(此时 `getpreferredencoding()` 回到 `cp936`, 两条转绿)。
+  ⚠ 别顺手去改那些断言或引擎 —— 环境差异不是代码缺陷, 改法应是"测试里固定码页"(与四类平台差异同一条纪律)。
 
 ### 判别法: 四类"本机绿不算绿"
 

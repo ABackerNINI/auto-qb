@@ -1,7 +1,7 @@
 # qB API 与数据层
 
-> 摘要: qB 版本差异、`sync/maindata` 增量语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。
-> 触发: 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态
+> 摘要: qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。
+> 触发: 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理, 添加选项, optional 缺省, 添加回执
 
 ### qB 5.0+ 全局限速: `app.preferences` 的限速字段**已静默失效**
 
@@ -78,6 +78,43 @@
   ❗ 旧写法 `client._session.trust_env = False` **从未生效** —— `_session` 是**只读 property**,
   且 `build_base_url()` / `_initialize_context()` 会**重建 Session**。
 - **处置**: 本地判定取 `base_url` **解析后的 hostname**; 覆盖点必须落在 property 上。
+
+### `torrents/add` 的响应形态跨版本变了 —— 不能只认 `"Ok."`
+
+- **触发**: 判添加结果 / 写添加回执。
+- **判别**: Web API **2.14.0**(qB 5.2)起 `/api/v2/torrents/add` 由纯文本 `Ok.` / `Fails.` 改成 JSON
+  `{success_count, failure_count, pending_count, added_torrent_ids}`(qbittorrent-api 包成
+  `TorrentsAddedMetadata`, **dict 子类**) ⇒ `str(result)` 是
+  `"TorrentsAddedMetadata({'success_count': 1, ...})"`, 老写法 `"Ok." in str(result)` **恒为假**:
+  种子加成功了, WEB UI 照样弹"添加种子失败"(2026-09-24 实测 qB 5.2.3)。
+  `pending_count > 0`(magnet 元数据未就绪 / 走 search 插件下载)是**已受理**而非失败;
+  全部失败走 HTTP 409(`Conflict409Error`, 库直接抛, 不经返回值)。
+- **处置**: 判定统一走 `webui/commands.py::_add_outcome`(两形态都认, 且把计数写进回执详情);
+  别在别处再写一遍子串判定。
+
+### 添加选项: `std::optional` 的字段**省略 ≠ false** —— 缺省会回落 qB 会话/全局默认
+
+- **触发**: 改 WEB UI 添加种子对话框的选项 / 传 `torrents_add` 参数 / 加新选项。
+- **判别**(一条就能判, 不用猜): 看 qB `src/base/bittorrent/addtorrentparams.h` 的字段类型 ——
+  - `std::optional<bool>` / `std::optional<T>`: **缺省会 `value_or(会话默认)`**,
+    `SessionImpl::initLoadTorrentParams` 里逐条回落 ⇒ 省略该参数 = 把这个选项交给 qB 的
+    会话/全局设置决定, 前端那个勾选框等于失效。目前共 6 个:
+    `addStopped`(→`isAddTorrentStopped()`, 由 qB 自己的添加对话框/"不自动开始"写入)、
+    `useAutoTMM`(→`savePath 空 ∧ downloadPath 空 ∧ !isAutoTMMDisabledByDefault()`)、
+    `addToQueueTop`、`useDownloadPath`、`stopCondition`、`contentLayout`;
+  - 普通 `bool`(`sequential` / `firstLastPiecePriority`)与 `seedMode`: 缺省就是 `false`,
+    **省略安全** —— 别把这条规则无差别套上去。
+  实测症状(2026-09-24, qB 5.2.3): 「添加后开始」勾了也按停止添加; 「自动种子管理」未勾时
+  由 qB 全局管理模式决定(仅在"未勾 + 未填保存路径"这一支暴露 —— 填了路径时缺省恰好也是 false)。
+  ⚠ **第二层坑(只对停止位)**: qbittorrent-api 的 `is_stopped = is_paused or is_stopped` 会把
+  **`is_paused=False` 折成 `None`** ⇒ 只能用 `is_stopped=` 传。实测 `is_paused=False` 的请求体是
+  **空字符串**, `is_stopped=False` 才发出 `paused=false&stopped=false`。
+- **处置**: 本项目暴露的两个 optional 选项**恒显式下发** ——
+  `kwargs["is_stopped"] = bool(paused)`、`kwargs["use_auto_torrent_management"] = bool(auto_tmm)`
+  (且不能被"False 就不传"的过滤器吞掉, 它们要写在过滤器**之后**)。
+  qB 自家 WebUI 同此口径: `addtorrent.js` 恒传 `stopped=true/false`,
+  `autoTMM` 是 `<select name="autoTMM">`(Manual=false 默认 / Automatic=true)随表单恒提交。
+  守阵: `tests/test_web.py::test_add_torrent_receipt_and_optional_flags`(两个方向都钉)。
 
 ### `yaml.BaseLoader`: 配置全是字符串, 不要假设已给原生类型
 

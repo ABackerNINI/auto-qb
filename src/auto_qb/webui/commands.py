@@ -11,6 +11,7 @@
 """
 import logging
 import time
+from collections.abc import Mapping
 from typing import List, Optional
 
 from ..config import Config
@@ -92,6 +93,30 @@ CMD_SLOW_MS = 300.0
 #   改这里必须同步前端 TRUTH_HOLD_MS(前端"值覆盖"的保持上限)—— 两边各写各的必然漂移,
 #   已有静态守阵钉住。
 TRUTH_PUSH_CAP_MS = 8000.0
+
+
+def _add_outcome(result: object) -> tuple[bool, str]:
+    """判定一次 `torrents_add` 的结果 -> (是否受理, 详情文案); 两种响应形态都要认
+
+    - **Web API < 2.14.0**(qB 5.2 之前): 纯文本 `Ok.` / `Fails.`;
+    - **Web API >= 2.14.0**(qB 5.2 起, 用户实测 5.2.3): JSON 元数据
+      `{success_count, failure_count, pending_count, added_torrent_ids}`, qbittorrent-api 包成
+      `TorrentsAddedMetadata`(**dict 子类**, 见库内 torrents.py 的 `resp.json()` 分支)。
+
+    ❗2026-09-24 实测 bug: 老写法只认 `"Ok." in str(result)`, 在 5.2.3 上**恒为假** ——
+    `str(TorrentsAddedMetadata(...))` 是 `"TorrentsAddedMetadata({'success_count': 1, ...})"`,
+    于是"种子明明加进去了, WEB UI 却弹添加失败"。判据必须同时覆盖两形态。
+    `pending_count > 0` = 已受理但仍在异步处理(magnet 元数据未就绪 / 走 search 插件下载),
+    同样算受理成功 —— 它不是失败, 只是还没定下 info hash。
+    全部失败时 qB 回 HTTP 409, 库直接抛 `Conflict409Error`, 走不到这里(由命令分发层写 error 回执)。
+    """
+    if isinstance(result, Mapping):
+        success = int(result.get("success_count") or 0)
+        failure = int(result.get("failure_count") or 0)
+        pending = int(result.get("pending_count") or 0)
+        return (failure == 0 and (success + pending) > 0), f"成功 {success} / 失败 {failure} / 待定 {pending}"
+    text = str(result)
+    return ("Ok." in text), text or "无结果"
 
 
 class WebCommandsMixin:
@@ -531,29 +556,60 @@ class WebCommandsMixin:
         """WEB UI 添加种子: .torrent 原始 bytes 经命令队列传给主循环线程, 内存直交 qB(qbittorrent-api
         _normalize_torrent_files 原生支持 bytes) —— 零临时文件。
 
-        回执由本 handler 依 qB 结果串写("Ok."=ok, 其余 error) —— "指令已发"与"qB 接受"分开;
-        skip_checking 属高危选项, 前端默认关 + 警告, 此处照传(用户显式动作, 不做二次拦截)。"""
+        回执由本 handler 依 qB 结果串写(受理=ok, 否则 error, 两形态判定见 `_add_outcome`) ——
+        "指令已发"与"qB 接受"分开; skip_checking 属高危选项, 前端默认关 + 警告, 此处照传
+        (用户显式动作, 不做二次拦截)。
+
+        选项下发口径: **qB 侧 `std::optional` 的两个选项(停止位 / 自动管理)恒显式传布尔**,
+        其余普通 `bool` 选项为假时省略(缺省即 false, 省略安全) —— 判据见下方注释与
+        `memory-bank/pitfalls/backend/qb-api.md`。"""
         kwargs = dict(
             save_path=save_path or None,
             category=category or None,
             tags=tags or None,
-            is_paused=bool(paused),
             is_skip_checking=bool(skip_checking),
             is_sequential_download=bool(sequential),
             is_first_last_piece_priority=bool(first_last_piece_prio),
         )
         kwargs = {k: v for k, v in kwargs.items() if v not in (None, False)}
-        if auto_tmm:
-            kwargs["use_auto_torrent_management"] = True
+        # ❗停止位是**唯一必须显式下发**的布尔选项(既不能省, 也不能用 is_paused 传), 两处坑叠加
+        #   才会让前端「添加后开始」勾了等于没勾(2026-09-24 实测 bug):
+        #   ① qB 侧 `stopped` 缺省时**不是** false, 而是回落到会话级默认 —— SessionImpl::
+        #      initLoadTorrentParams 里 `addStopped.value_or(isAddTorrentStopped())`, 那个会话值由
+        #      qB 自己的添加对话框/选项("不自动开始")写入 ⇒ 用户勾了「添加后开始」照样按停止添加;
+        #   ② qbittorrent-api 的 `is_stopped = is_paused or is_stopped` 会把 **is_paused=False 折成
+        #      None**(`False or None` == None) ⇒ 传 is_paused=False 等于没传(实测请求体为空字符串);
+        #      只有 is_stopped=False 才会真的发出 `paused=false&stopped=false`。
+        #   qB 自家 WebUI 同此口径: addtorrent.js 恒传 stopped=true/false, 从不省略。
+        kwargs["is_stopped"] = bool(paused)
+        # 自动管理同理**必须显式下发**(qB 侧 `useAutoTMM` 也是 `std::optional`):
+        # 缺省时 `SessionImpl::initLoadTorrentParams` 走
+        # `value_or(savePath 空 ∧ downloadPath 空 ∧ !isAutoTMMDisabledByDefault())`
+        # ⇒ 不填保存路径且 qB 全局是"自动管理"时会被判成 True, 前端那个勾选框等于没勾。
+        # (填了保存路径时缺省恰好也得 false, 所以这个隐患只在"未勾 + 未填路径"这一支暴露。)
+        # qB 自家 WebUI 的 autoTMM 是 `<select name="autoTMM">`(Manual=false 默认 / Automatic=true),
+        # 随表单恒提交 —— 同此口径。
+        # ❗只有 qB 侧声明为 `std::optional` 的选项才需要这样显式下发; 普通 `bool` 的
+        #   (sequential / firstLastPiecePriority / skip_checking) 缺省就是 false, 省略安全。
+        kwargs["use_auto_torrent_management"] = bool(auto_tmm)
         results = []
         if files:
-            results.append(str(self.api.torrents_add(torrent_files=files, **kwargs)))
+            results.append(self.api.torrents_add(torrent_files=files, **kwargs))
         if urls:
-            results.append(str(self.api.torrents_add(urls=urls, **kwargs)))
-        ok = bool(results) and all("Ok." in s for s in results)
+            results.append(self.api.torrents_add(urls=urls, **kwargs))
+        outcomes = [_add_outcome(r) for r in results]
+        ok = bool(outcomes) and all(o[0] for o in outcomes)
+        detail = "; ".join(o[1] for o in outcomes)
         if cmd_id:
             if ok:
                 self._set_web_result(cmd_id, "ok")
             else:
-                self._set_web_result(cmd_id, "error", f"qB 未接受添加: {'; '.join(results) or '无结果'}")
-        logger.warning(f"WEB UI | 添加种子: 文件 {len(files or [])} 个, 链接 {len(urls or [])} 条 -> {results}")
+                self._set_web_result(cmd_id, "error", f"qB 未接受添加: {detail}")
+        # 级别即通知语义(见 conventions/code-style.md 日志规范): 受理成功走 INFO —— 原写法用
+        # WARNING, 而 NotifyHandler 挂在 auto_qb logger 上 ⇒ **每次添加成功都往桌面推一条
+        # "auto-qb WARNING" 弹窗**, 用户据此以为添加失败。
+        line = f"WEB UI | 添加种子: 文件 {len(files or [])} 个, 链接 {len(urls or [])} 条 -> {detail}"
+        if ok:
+            logger.info(line)
+        else:
+            logger.warning(line + "(qB 未接受)")

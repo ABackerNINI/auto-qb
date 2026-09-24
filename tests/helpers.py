@@ -189,6 +189,7 @@ class FakeClient:
         is_skip_checking=False,
         paused=False,
         is_paused=False,
+        is_stopped=None,
         contentLayout=None,
         ratio_limit=None,
         seeding_time_limit=None,
@@ -196,12 +197,18 @@ class FakeClient:
         share_limit_action=None,
         **kw
     ):
+        # is_paused / is_stopped 是同一个 qB 参数(`stopped`)的两个名字(qbittorrent-api 取
+        # `is_paused or is_stopped`); `is_stopped_raw` 原样记下**有没有显式传**(None = 没传),
+        # 供测试区分"显式下发 stopped=false"与"省略该参数"(后者会吃 qB 会话默认值, 见
+        # memory-bank/pitfalls/backend/qb-api.md 的添加选项一节)。
+        stopped = bool(paused or is_paused or is_stopped)
         self.calls.append(
             (
                 "add",
                 {
                     "is_skip_checking": is_skip_checking,
-                    "paused": paused or is_paused,
+                    "paused": stopped,
+                    "is_stopped_raw": is_stopped,
                     "upload_limit": upload_limit,
                     "download_limit": download_limit,
                     "contentLayout": contentLayout,
@@ -222,12 +229,17 @@ class FakeClient:
         # 保证 store.refresh / trackers_info 等按 .hash/.state 属性访问不崩
         self.torrents["HASH123"] = FakeTorrent(
             hash="HASH123",
-            state="pausedUP" if (paused or is_paused) else "stalledUP",
+            state="pausedUP" if stopped else "stalledUP",
             save_path=save_path or r"R:\Downloads",
             category=category or "",
             tags=tags or "",
         )
-        return "Ok."  # 与真机语义一致: qB /torrents/add 返回 "Ok."/"Fails."(web 添加回执依赖此判定)
+        # ⚠ 只模拟 **Web API < 2.14.0** 的文本形态("Ok."/"Fails."); 真机 qB 5.2+(API 2.14.0 起)
+        #   回的是 JSON 元数据 `{success_count, failure_count, pending_count, added_torrent_ids}`,
+        #   本替身**回不出**该形态 —— 这正是"添加成功却报失败"能溜到线上的口子(2026-09-24)。
+        #   新形态的守阵由 test_web.py::test_add_torrent_receipt_and_optional_flags 直接用
+        #   库内 TorrentsAddedMetadata 顶替返回值来钉(见 memory-bank/pitfalls/testing/stubs-sim.md)。
+        return "Ok."
 
     def torrents_add_tags(self, tags=None, torrent_hashes=None):
         self.tags.update(tags)
