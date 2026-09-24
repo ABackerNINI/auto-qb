@@ -65,12 +65,45 @@ function parseOrigins() {
 // ---------- 动作 ----------
 
 async function load() {
-  const got = await chrome.storage.local.get({ enabled: true, instances: [], siteOrigins: [], status: {} });
+  const got = await chrome.storage.local.get({
+    enabled: true, instances: [], siteOrigins: [], status: {}, siteLedger: {},
+  });
   $('enabled').checked = Boolean(got.enabled);
   $('instances').value = got.instances.map((i) => JSON.stringify(i)).join('\n');
   $('origins').value = got.siteOrigins.join('\n');
   const st = got.status || {};
   if (st.text) setStatus(`${new Date(st.at || Date.now()).toLocaleString()} — ${st.text}`);
+  renderCaps(got.siteLedger || {});
+}
+
+/**
+ * 展示两道闸的额度与今日/本小时用量。
+ * ❗阈值来自 site-caps.js(唯一事实源, 与后台共用) —— 这里**不写死数字**, 免得改了后台忘改这里,
+ * 用户按选项页显示的数字去理解行为, 结果对不上。
+ */
+function renderCaps(ledger) {
+  const now = Date.now();
+  const d = new Date(now);
+  const hk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}`;
+  const dk = hk.slice(0, 10);
+  const lines = Object.entries(SITE_CAPS).map(
+    ([kind, cap]) => `  ${cap.label.padEnd(14)} 每小时 ${cap.perHour} / 每天 ${cap.perDay}`
+  );
+  const hosts = Object.keys(ledger || {}).sort();
+  if (!hosts.length) {
+    lines.push('', '  用量: (还没有计数 —— 每次取数都从这里扣)', '', '  窗口键在本地时区整点/零点交错, 超限会一直等到下一个窗口。');
+  } else {
+    lines.push('', '  用量(未显示 = 0):');
+    for (const host of hosts) {
+      for (const [kind, cap] of Object.entries(SITE_CAPS)) {
+        const rec = (ledger[host] || {})[kind] || {};
+        const hour = rec.hk === hk ? (rec.hour || 0) : 0;
+        const day = rec.dk === dk ? (rec.day || 0) : 0;
+        if (hour || day) lines.push(`    ${host}  ${cap.label}: 本小时 ${hour}/${cap.perHour}, 本日 ${day}/${cap.perDay}`);
+      }
+    }
+  }
+  $('caps').textContent = lines.join('\n');
 }
 
 async function save() {

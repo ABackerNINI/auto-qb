@@ -12,7 +12,7 @@
 import time
 from typing import Callable, Optional, Protocol, runtime_checkable
 
-from .channel import TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
+from .channel import KIND_EXT_QUOTA, TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
 from .queue import HrTaskQueue
 
 
@@ -34,6 +34,18 @@ class HrChannelStopped(HrChannelUnavailable):
     ❗与「没通道」分开: 这是程序自己决定的非事件 —— 若按「无可用取数通道」告警, 每次关停 (和每次改
     端口) 都会弹一条系统通知, 而那明明是预期行为(2026-09-24 用户实报「一开/一关就弹 warning」)。
     也不计失败次数: 叫停不是取数失败, 不该推进熔断。
+    """
+
+
+class HrChannelQuota(HrChannelUnavailable):
+    """**扩展侧硬上限**挡下了这次请求(第二道闸)
+
+    后端自己有频控(间隔 + 配额 + 熔断), 扩展再独立计一层数(访问 10/时·50/天, 下种 50/时·200/天)
+    —— 这是为了「后端代码写错 / 配置被改坏」时也打不爆站点。
+
+    ❗由此触发说明**后端频控失效了**, 但**不能计成取数失败**: 那会把站点推进熔断、把一个配置/
+    逻辑问题掩盖成「站点坏了」。故 service 把它归到「本轮让位」——不计失败、不推进熔断、
+    告警只报一次(否则超限期内每轮一条, 变成刷屏)。
     """
 
 
@@ -112,6 +124,8 @@ class ChannelFetcher:
                                "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
         if not result.ok:
             detail = result.error or f"HTTP {result.status}"
+            if result.kind == KIND_EXT_QUOTA:
+                raise HrChannelQuota(f"扩展侧硬上限挡下取数({detail}): {url}", retry_after=result.retry_after)
             raise HrFetchError(f"扩展取数失败({detail}): {url}", retry_after=result.retry_after)
         if not result.body:
             raise HrFetchError(f"扩展回传内容为空: {url}")
@@ -157,6 +171,6 @@ def build_channel_fetcher(
 
 
 __all__ = [
-    "ChannelFetcher", "HrChannelUnavailable", "HrFetchError", "HrFetcher", "NullFetcher", "build_channel_fetcher",
-    "is_available"
+    "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelUnavailable", "HrFetchError", "HrFetcher",
+    "NullFetcher", "build_channel_fetcher", "is_available"
 ]

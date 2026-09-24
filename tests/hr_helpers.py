@@ -8,7 +8,7 @@ import pathlib
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from auto_qb.config.models import HrCheckConfig, SiteHrCheckConfig
-from auto_qb.hr.fetcher import HrFetchError
+from auto_qb.hr.fetcher import HrChannelQuota, HrFetchError
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures" / "hr"
 
@@ -123,11 +123,14 @@ class FakeFetcher:
         *,
         fail_text_at: Optional[Dict[str, str]] = None,
         fail_bytes_at: Optional[Dict[int, str]] = None,
+        quota: bool = False,
     ) -> None:
         self.pages = dict(pages or {})
         self.blobs = dict(blobs or {})
         self.fail_text_at = dict(fail_text_at or {})
         self.fail_bytes_at = dict(fail_bytes_at or {})
+        #: True = 每次都抛 HrChannelQuota(模拟扩展侧硬上限拒发, 与「取数失败」区分开)
+        self.quota = quota
         self.text_calls: List[str] = []
         self.byte_calls: List[str] = []
 
@@ -150,6 +153,8 @@ class FakeFetcher:
 
     def get_text(self, url: str) -> str:
         self.text_calls.append(url)
+        if self.quota:
+            raise HrChannelQuota("扩展侧硬上限挡下(HR 页访问 本小时达硬上限 10 次)")
         scope = self.scope_of(url)
         if scope in self.fail_text_at:
             raise HrFetchError(self.fail_text_at[scope])
@@ -161,6 +166,8 @@ class FakeFetcher:
 
     def get_bytes(self, url: str) -> bytes:
         self.byte_calls.append(url)
+        if self.quota:
+            raise HrChannelQuota("扩展侧硬上限挡下(.torrent 下载 本小时达硬上限 50 次)")
         tid = self.tid_of(url)
         if tid in self.fail_bytes_at:
             raise HrFetchError(self.fail_bytes_at[tid])

@@ -170,6 +170,16 @@ class HrSiteView:
     def freshness_ok(self, backed_ts: float, now: float) -> bool:
         return backed_ts > 0 and now <= self.backed_until(backed_ts)
 
+    @property
+    def has_lookup_keys(self) -> bool:
+        """站点侧是否**至少有一个可查的键**(清单命中的 infohash 或放行记录)
+
+        一个都没有时, 这个视图对判定没有任何信息量 —— 任何种子都只会得到「未核实」。
+        它的成因通常是「索引还没回填出第一个 infohash」(取数通道刚接通 / 下载被饿死),
+        详见 `judge_record` 里对应那道闸门。
+        """
+        return bool(self.by_infohash or self.verified)
+
 
 @dataclass(frozen=True, slots=True)
 class HrViewSet:
@@ -268,13 +278,21 @@ def judge_record(
 ) -> Optional[HrJudgement]:
     """给 TorrentRecord 用的收口判定(四个消费点唯一入口; 读取时现算)。
 
-    返回 None 表示**本模块不适用**(站点未接入 / mode=off) ⇒ 调用方走既有本地字段逻辑 ——
-    这就是「零静默变更」的闸门: 没显式配 `hr_check` 的站点, 行为一个字都不变。
+    返回 None 表示**本模块不适用**(站点未接入 / mode=off / 站点侧一个可查键都没有)
+    ⇒ 调用方走既有本地字段逻辑 —— 这就是「零静默变更」的闸门: 没显式配 `hr_check` 的站点,
+    行为一个字都不变。
 
     infohash 传 (v1, v2): 命中清单是站点侧事实, 两个键哪个命中都算命中(v2-only 页面同样成立);
     取两者中**更保守**的结论(命中 > 恒受管束 > 已放行 > 未核实)。
     """
     if view is None or view.mode == "off":
+        return None
+    if view.mode != "all" and not view.has_lookup_keys:
+        # ❗站点侧**一个可查键都没有**(索引里没回填出任何 infohash、也没有放行记录): 这时
+        # 所有种子都会落到「未核实」, 而 unknown_policy 默认 hr ⇒ **整站种子集体按受管束处理**
+        # (2026-09-25 实测: 30 分钟能打出一片 HR 标)。与「站点还没发布过视图」同口径 ——
+        # 没有可依据的数据时**回落本地字段逻辑**, 而不是把「不知道」当成「受管束」的结论。
+        # mode=all 例外: 那是用户显式要的「全站受管束」, 不看索引现状。
         return None
     keys = [h for h in infohashes if h] or [""]
     best: Optional[HrResolution] = None

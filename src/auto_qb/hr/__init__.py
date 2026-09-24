@@ -35,6 +35,7 @@ from .channel import (
 )
 from .fetcher import (
     ChannelFetcher,
+    HrChannelQuota,
     HrChannelStopped,
     HrChannelUnavailable,
     HrFetchError,

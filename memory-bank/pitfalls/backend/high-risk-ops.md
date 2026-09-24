@@ -74,3 +74,26 @@
   **调用点**旁边写一句为什么这里也要判; ②守阵要**双向**钉住: 只读口径下失败也不落盘
   (`test_read_only_run_does_not_persist_failure_counter`)+ 正式口径下失败必须落盘
   (`test_consecutive_failures_fuse_site` 的 `persisted is True`)。
+### HR: 频控门槛是「每次请求」—— 一轮内的多请求要么能等、要么会被前面的请求饿死(2026-09-25 实测)
+
+- **触发**: 改 `hr/service.py::_Budget` / `_refresh_locked` / `_do_fetch` 的请求顺序, 或把 `sleeper` 拿掉。
+- **判别**: 门槛口径是「相邻两次**请求**间隔 >= `min_torrent_interval`(抖动只向上)」, 一次刷新内的
+  **所有**请求共用它(页面 A/B/C / 翻页 / 每个 `.torrent` 都算)。而 `_do_fetch` 的顺序是「先页面后下载」
+  ⇒ 只要一轮里只能发出一个请求, 那个名额**永远**给页面, 下载一次也轮不上 —— 用户实测: 一小时内 11 次
+  请求全在重抓页面, `.torrent` 一次没取到, 索引 0 个 infohash 键 ⇒ 站点侧判定完全无从下手。
+- **处置**: 三道防护都不要删: ①生产路径**在锁内等满间隔**(`sleeper`; 计划 §8「连分钟级抓取也在锁内」)
+  + 两道上限(单次 300s / 一轮总等待 900s, 超额就让位而不是干等); ②等待必须**可中断**(关停/热重挂要
+  立刻打断, 否则 join 得等它睡完, 期间还持着站点锁); ③**复用轮只补下载**(`_backfill_on_reuse`):
+  数据在有效期内不重抓页面, 但把名额全给待回填的 `.torrent`。守阵:
+  `test_production_round_completes_with_sleeper` · `test_round_wait_budget_gives_up_instead_of_holding_lock` ·
+  `test_reused_round_still_backfills_pending_infohash`。
+
+### HR: 扩展侧硬上限触发时必须「让位」而不是「计失败」(2026-09-25 实测)
+
+- **触发**: 改 `HrChannelQuota` 的归类, 或把 `kind="ext-quota"` 当普通取数失败处理。
+- **判别**: 扩展有自己独立的计数(第二道闸: 访问 10/时·50/天, 下种 50/时·200/天), 超限就拒发。它一旦触发
+  说明**后端自己的频控没拦住**(配置被改坏 / 代码有 bug / 有人手工灌任务)—— 那是个该被看见的异常, 但
+  不是「站点故障」。计成失败会连续 3 次把站点**推进熔断**(默认 12h), 把一个配置/逻辑问题掩盖成「站点坏了」。
+- **处置**: 保持 ACTION_WAITING(不计失败、不推熔断) + 每个站点只报**一次** WARNING(超限会持续到下一个
+  窗口, 逐轮报就是刷屏)。守阵: `test_extension_quota_refusal_yields_waiting_not_failure` ·
+  `test_extension_quota_caps_and_refuses`(扩展侧真跑, 验「被拒不等于发了请求」)。

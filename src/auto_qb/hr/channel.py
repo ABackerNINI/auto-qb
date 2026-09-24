@@ -54,6 +54,12 @@ EXTENSION_ORIGIN_PREFIX = "chrome-extension://"
 #: Chrome 扩展 id: 32 位 a~p(配置里写了就按它钉死 origin)
 EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 
+#: 结果 kind: 扩展侧**硬上限**挡下了这次请求
+#: ❗扩展有自己的独立计数(第二道闸: 访问 10/时·50/天, 下种 50/时·200/天), 超限即拒发。
+#: 它与「取数失败」必须分开: 频控让位不是故障, 计成失败会把站点推进熔断、把「后端频控失效」
+#: 这个真问题掩盖成「站点坏了」。
+KIND_EXT_QUOTA = "ext-quota"
+
 
 class HrChannelError(RuntimeError):
     """通道层面的错误(畸形回传 / 非法 URL / 任务不匹配)"""
@@ -231,6 +237,8 @@ class HrResult:
     error: str = ""
     retry_after: float = 0.0
     received_at: float = 0.0
+    #: 扩展侧的错误分类(空 = 普通取数失败); 目前只有 KIND_EXT_QUOTA
+    kind: str = ""
 
     @property
     def text(self) -> str:
@@ -250,6 +258,8 @@ class HrResult:
             out["error"] = self.error
         if self.retry_after:
             out["retry_after"] = self.retry_after
+        if self.kind:
+            out["kind"] = self.kind
         return out
 
     @classmethod
@@ -268,6 +278,7 @@ class HrResult:
             url=str(raw.get("url") or ""),
             error=str(raw.get("error") or ""),
             retry_after=_as_float(raw.get("retry_after")),
+            kind=str(raw.get("kind") or ""),
         )
         body_b64 = raw.get("body_b64")
         text = raw.get("text")

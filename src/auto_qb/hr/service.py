@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Mapping, Optional, Tuple
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
 from .adapters import build_adapter
 from .bencode import compute_infohashes, torrent_display_name
-from .fetcher import HrChannelStopped, HrChannelUnavailable, HrFetchError, HrFetcher
+from .fetcher import HrChannelQuota, HrChannelStopped, HrChannelUnavailable, HrFetchError, HrFetcher
 from .model import (
     CHANNEL_DISABLED,
     CHANNEL_OK,
@@ -58,6 +58,14 @@ ACTION_ERROR = "error"
 REASON_NONE = ""  # 没有「没跑完」这回事(完整刷新 / 复用 / 不适用)
 REASON_BUDGET = "budget"  # 被自己的间隔/配额/时间窗拦下(可预期, 下轮继续)
 REASON_PARSE = "parse"  # 页面/字段/翻页问题(可能是改版) —— 值得告警
+
+# 生产路径在锁内等满频控间隔的两个上限(2026-09-25 修「下载被页面饿死」):
+# - 单次等待超 `PROD_REQUEST_WAIT_MAX` 就放弃本轮 —— 配额窗口 / 熔断冷却 / 时间窗这类分钟级
+#   以上的等待不该持着站点锁干等(合法的间隔等待是 90~113s, 远小于本值);
+# - 一轮刷新的**总等待**超 `PROD_ROUND_WAIT_MAX` 也放弃剩余请求(下轮继续), 避免一次刷新
+#   把站点锁长期占住(多实例时别人拿不到锁只能等下一轮)。
+PROD_REQUEST_WAIT_MAX = 300.0
+PROD_ROUND_WAIT_MAX = 900.0
 
 #: 走查(--hr-once)单次最多等待的秒数: 防配置误设(如间隔 1H)把走查挂死
 DIAGNOSTIC_MAX_WAIT = 600.0
@@ -109,6 +117,8 @@ class HrRefreshService:
         allow_fetch: bool = True,
         now_fn=time.time,
         sleeper: Optional[Callable[[float], None]] = None,
+        sleep_max: float = PROD_REQUEST_WAIT_MAX,
+        round_wait_max: float = PROD_ROUND_WAIT_MAX,
     ) -> None:
         self.data_dir = data_dir
         self.global_conf = global_conf
@@ -117,14 +127,22 @@ class HrRefreshService:
         self.persist = persist
         self.allow_fetch = allow_fetch
         self._now = now_fn
-        #: 走查模式可传入睡睡函数: 遇到间隔/配额门槛时**等满**而不是放弃本轮(生产不传 = 等下一轮)
+        #: 遇到频控门槛时**等满再发**(生产与走查都传: 不等待就没法在一次刷新里发多个请求 ——
+        #: 那会让「先页面后下载」的顺序把下载永久饿死, 见 `_backfill_on_reuse`);
+        #: 传 None 只在测试里用(退回「本轮放弃」的旧语义)。
         self._sleeper = sleeper
+        #: 单次 / 本轮总等待上限(秒); 走查模式放宽单次(要真跑完一轮), 总等待不限(0)
+        self.sleep_max = sleep_max
+        self.round_wait_max = round_wait_max
         self.dir = hr_dir(data_dir, global_conf.shared_dir)
         self._stores: Dict[str, HrSiteStore] = {}
         self._owner = owner
         #: 「无可用取数通道」已告警过的站点: 取数线程是分钟级轮询, 每轮都 WARNING 会把
         #: notify 的系统通知淹掉 —— 只在**状态变化**时报一次, 通道恢复后重置。
         self._no_channel_warned: set = set()
+        #: 「扩展侧硬上限」已告警过的站点: 超限会持续到下一个窗口, 每轮都 WARNING 就是刷屏 ——
+        #: 只在状态变化时报一次(与 `_no_channel_warned` 同一口径), 恢复正常后重置。
+        self._ext_quota_warned: set = set()
 
     # ---------- 基础访问 ----------
 
@@ -215,6 +233,7 @@ class HrRefreshService:
             result.scopes_done = tuple(data.refresh.scopes_done)
             result.reason = f"数据仍在有效期(至 {data.expires_at:.0f}), 直接复用"
             result.snapshot = data
+            self._backfill_on_reuse(site, data, adapter, session, result, limits, now)
             return
 
         if not self.allow_fetch:
@@ -235,12 +254,49 @@ class HrRefreshService:
 
         self._do_fetch(site, site_conf, adapter, session, result, limits, anchors)
 
+    def _backfill_on_reuse(
+        self, site: str, data: HrSiteData, adapter, session, result: HrRefreshResult, limits: HrLimits, now: float
+    ) -> None:
+        """复用轮: **只补下载**, 不碰页面(2026-09-25 实报修复)
+
+        ❗为什么必须有: `_Budget` 的门槛是「相邻两次**请求**间隔 >= min_torrent_interval(只向上抖动)」,
+        而 `_do_fetch` 的顺序是「先抓 A/B/C 页面, 后取 .torrent」⇒ 每个时间窗里**唯一**的那个名额
+        总被页面拿走。实测(2026-09-25): 一小时内 11 次请求全花在页面重抓上(不完备刷新只给 60s
+        有效期 ⇒ 下一轮又从头抓页面), `.torrent` 一次没取到 ⇒ 索引里 0 个 infohash 键 ⇒ 站点侧
+        判定完全无从下手, 而整站种子会落到「未核实 ⇒ unknown_policy=hr」上去。
+        故复用轮把名额全给下载: 每轮至少推进一条待回填, 索引才可能长出来。
+
+        这里**不跑** `_refresh_verified`: 复用不是一次新的核实, 续放行有效期只能由真刷新给出。
+        """
+        if not self.allow_fetch or fuse_active(data.fuse, now):
+            return
+        pending = {tid: entry for tid, entry in data.index.items() if not (entry.infohash_v1 or entry.infohash_v2)}
+        if not pending:
+            return
+        budget = _Budget(
+            data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
+        )
+        fetched, failed = self._fill_infohashes(adapter, data, pending, budget, self.site_confs[site])
+        if not (fetched or failed):
+            return
+        result.torrents_fetched = fetched
+        result.torrents_failed = failed
+        result.reason += f"; 顺带补 infohash: 成功 {fetched} 失败 {failed}"
+        result.snapshot = data
+        if self.persist:
+            status = session.commit(self._now())
+            result.persisted = status == "written"
+            if status == "readonly":
+                result.reason += "; 锁自检失败, 未写盘(只读退化)"
+
     def _do_fetch(
         self, site: str, site_conf: SiteHrCheckConfig, adapter, session, result, limits: HrLimits,
         anchors: Mapping[str, HrAnchor]
     ) -> None:
         data = session.data
-        budget = _Budget(data, limits, self._now, self._sleeper)
+        budget = _Budget(
+            data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
+        )
         scopes: List[str] = list(site_conf.hr_page_scopes)
         entries_seen: Dict[int, HrEntry] = {}
         scopes_done: List[str] = []
@@ -295,6 +351,13 @@ class HrRefreshService:
             result.action = ACTION_WAITING
             result.reason = f"本轮取数被叫停(正在停止或重挂端点): {e}"
             return
+        except HrChannelQuota as e:
+            # 扩展侧硬上限(第二道闸)挡下: 说明**后端自己的频控没生效** —— 但这仍不是「取数失败」,
+            # 计失败会把站点推进熔断、把配置/逻辑问题掩盖成「站点坏了」。故只让位 + 报一次。
+            result.action = ACTION_WAITING
+            result.reason = f"扩展侧硬上限挡下(后端频控可能失效), 本轮让位: {e}"
+            self._warn_ext_quota(site, e)
+            return
         except HrChannelUnavailable as e:
             result.action = ACTION_NO_CHANNEL
             result.reason = str(e)
@@ -320,6 +383,7 @@ class HrRefreshService:
 
         record_success(data.fuse)
         self._no_channel_warned.discard(site)  # 通道恢复: 下次真的没通道时再报一次
+        self._ext_quota_warned.discard(site)  # 恢复正常: 下次再超限时重新报一次
         entries_new = sum(1 for tid in entries_seen if tid not in data.downloaded)
         fetched, failed = self._fill_infohashes(adapter, data, entries_seen, budget, site_conf)
         complete = bool(scopes) and len(scopes_done) == len(scopes) and reached_last and max_missing <= \
@@ -544,6 +608,19 @@ class HrRefreshService:
         self._no_channel_warned.add(site)
         logger.warning(f"HR 站点 {site} | 无可用取数通道, 本轮不做在线核实(保守回落未核实): {err}")
 
+    def _warn_ext_quota(self, site: str, err: Exception) -> None:
+        """扩展侧硬上限告警: 同样**只报一次**(超限会持续到下一个窗口)
+
+        这条 WARNING 值得看一眼: 后端自己有频控, 正常**不该**惊动扩展的第二道闸 ——
+        真触发说明后端频控没生效(配置被改坏 / 代码有 bug / 手工灌任务), 光看「本轮让位」的信息级
+        日志会漏掉它。
+        """
+        if site in self._ext_quota_warned:
+            logger.info(f"HR 站点 {site} | 扩展侧硬上限仍生效(已告警过, 本轮让位): {err}")
+            return
+        self._ext_quota_warned.add(site)
+        logger.warning(f"HR 站点 {site} | 扩展侧硬上限挡下取数 ⇒ 后端频控可能失效(检查 hr_check 的间隔/配额配置与日志): {err}")
+
 
 def _verified_for(infohash: str, tid: int, source: str, now: float, anchor: Optional[HrAnchor] = None) -> HrVerified:
     a = anchor or HrAnchor()
@@ -565,25 +642,44 @@ class _Budget:
     - 间隔: 相邻两次请求间隔 >= min_torrent_interval(抖动只向上)
     - 配额: 小时/天两级, 到顶即停(返回空清单语义), 不报错
 
-    sleeper 非空时(走查模式)遇到门槛**等满再发**, 让单次走查也能跑完一轮;
-    生产路径不传 sleeper ⇒ 本轮直接放弃, 下一轮再来(绝不阻塞取数线程)。
+    sleeper 非空时遇到门槛**等满再发**(生产路径与走查路径都传 —— 不等待的话一次刷新只能发出
+    第一个请求, 「先页面后下载」的顺序会把下载永久饿死, 见 `_backfill_on_reuse`);
+    等待上限两档: 单次 `sleep_max`(超过说明是配额窗口 / 熔断 / 时间窗这类分钟级以上的等待),
+    本轮累计 `round_wait_max`(0 = 不限) —— 超限即放弃本轮, 不持着站点锁干等。
     """
     def __init__(
-        self, data: HrSiteData, limits: HrLimits, now_fn, sleeper: Optional[Callable[[float], None]] = None
+        self,
+        data: HrSiteData,
+        limits: HrLimits,
+        now_fn,
+        sleeper: Optional[Callable[[float], None]] = None,
+        *,
+        sleep_max: float = PROD_REQUEST_WAIT_MAX,
+        round_wait_max: float = PROD_ROUND_WAIT_MAX,
     ) -> None:
         self._data = data
         self._limits = limits
         self._now = now_fn
         self._sleeper = sleeper
+        self._sleep_max = sleep_max
+        self._round_wait_max = round_wait_max
+        self._waited = 0.0
+
+    @property
+    def waited(self) -> float:
+        """本轮已等掉的总秒数(供排障 / 断言) """
+        return self._waited
 
     def take(self) -> Tuple[bool, str]:
         now = self._now()
         due, why = next_allowed_at(self._data.quota, self._limits, self._data.fuse, now)
         if due > now:
             wait = due - now
-            if self._sleeper is None or wait > DIAGNOSTIC_MAX_WAIT:
+            if self._sleeper is None or wait > self._sleep_max or \
+                    (self._round_wait_max > 0 and self._waited + wait > self._round_wait_max):
                 return False, f"{why}: 还差 {wait:.0f}s"
             self._sleeper(wait)
+            self._waited += wait
             now = self._now()
         if not try_consume(self._data.quota, self._limits, now, 1):
             return False, "配额已用尽"

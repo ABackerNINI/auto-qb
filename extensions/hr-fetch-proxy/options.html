@@ -59,6 +59,13 @@
 https://pt.example.com  →   https://pt.example.com/*</pre>
   <textarea id="origins" spellcheck="false"></textarea>
 
+  <h2>③ 扩展侧硬上限</h2>
+  <p class="hint">
+    第二道闸: 即便后端频控失效, 浏览器也不会把站点打爆。超限时扩展**拒发**该请求并如实回传
+    (后端记成「本轮让位」, 不计失败)。阈值内置在 <code>site-caps.js</code>, 与后台共用同一份。
+  </p>
+  <pre class="example" id="caps">(载入中…)</pre>
+
   <div style="margin-top:16px">
     <button class="primary" id="save">保存</button>
     <button id="grant">申请站点权限</button>
@@ -69,6 +76,7 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
   <div id="hint"></div>
 
   <script src="normalize.js"></script>
+  <script src="site-caps.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

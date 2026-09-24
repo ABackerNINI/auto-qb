@@ -92,9 +92,12 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
         owner=instance_id(),
         persist=False,  # 只读走查: 不写站点文件
         allow_fetch=True,
-        # 走查是「把一轮跑完给人看」: 遇到间隔/配额门槛等满而不是放弃(上限 DIAGNOSTIC_MAX_WAIT)。
-        # 单次最多等几分钟, 与「抓数据等几分钟可接受」一致; 配额到顶仍然会停
+        # 走查是「把一轮跑完给人看」: 遇到间隔/配额门槛等满而不是放弃(单次上限 DIAGNOSTIC_MAX_WAIT)。
+        # 单次最多等几分钟, 与「抓数据等几分钟可接受」一致; 总等待不限(0) —— 走查本来就慢, 要的是跑完;
+        # 配额到顶仍然会停(那要等到下一个整点, 超出单次上限 ⇒ 放弃本轮)。
         sleeper=time.sleep,
+        sleep_max=DIAGNOSTIC_MAX_WAIT,
+        round_wait_max=0.0,
     )
 
     print(f"HR 在线核实走查(只读, 不写盘) 共 {len(enabled)} 个站点: {', '.join(enabled)}", file=out)

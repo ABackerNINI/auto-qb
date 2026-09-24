@@ -12,7 +12,15 @@
   不产生/不续期放行
 - test_incomplete_refresh_keeps_previous_verification: 不完备刷新不清空既有放行记录
 - test_min_interval_blocks_second_request: 相邻两次请求间隔 >= min_torrent_interval(抖动只向上)
-- test_diagnostic_sleeper_waits_instead_of_giving_up: 走查模式(传入 sleeper)遇到间隔门槛等满再发, 能跑完一轮
+- test_diagnostic_sleeper_waits_instead_of_giving_up: 传入 sleeper 时遇到间隔门槛等满再发, 能跑完一轮
+- test_production_round_completes_with_sleeper: 生产路径也传 sleeper ⇒ 一次刷新能跑完 A/B/C + 下载
+  (2026-09-25 实报修复: 以前只能发出第一个请求, 下载永远轮不上)
+- test_round_wait_budget_gives_up_instead_of_holding_lock: 本轮总等待有上限 ⇒ 放弃剩下的请求(不持锁干等)
+- test_oversized_wait_is_not_waited_out_in_lock: 单次等待超上限(配额窗口/熔断/时间窗)直接放弃
+- test_reused_round_still_backfills_pending_infohash: 复用轮**也要**补下载(不碰页面) —— 待回填 infohash
+  每轮都推进, 索引才可能长出可查键
+- test_extension_quota_refusal_yields_waiting_not_failure: 扩展侧硬上限挡下 ⇒ 本轮让位(不计失败、不推熔断,
+  但报一次 WARNING 提醒后端频控可能失效)
 - test_quota_exhaustion_stops_refresh_then_waits: 配额用尽时刷新截断; 同窗口后续轮次直接等下一轮
 - test_download_failure_counts_then_cools_down: 取 .torrent 失败计数, 达上限且冷却未过时不再尝试
 - test_consecutive_failures_fuse_site: 连续失败达阈值 -> 熔断, 期间零请求
@@ -69,7 +77,7 @@ def _blobs(*tids):
     return {tid: torrent_blob(name=f"{tid}.bin") for tid in tids}
 
 
-def _service(tmp_path, fetcher, clock, *, site=None, glob=None, persist=True, allow_fetch=True):
+def _service(tmp_path, fetcher, clock, *, site=None, glob=None, persist=True, allow_fetch=True, **extra):
     return HrRefreshService(
         data_dir=str(tmp_path),
         global_conf=glob or global_conf(),
@@ -79,6 +87,7 @@ def _service(tmp_path, fetcher, clock, *, site=None, glob=None, persist=True, al
         persist=persist,
         allow_fetch=allow_fetch,
         now_fn=clock,
+        **extra,
     )
 
 
@@ -301,6 +310,152 @@ def test_diagnostic_sleeper_waits_instead_of_giving_up(tmp_path):
     assert len(fetcher.text_calls) == 3 and len(fetcher.byte_calls) == 1
     assert len(waits) == 3  # 第一次请求无需等, 其后 3 次(2 页 + 1 .torrent)各等一次
     assert all(w >= 90.0 for w in waits), waits
+
+
+def test_production_round_completes_with_sleeper(tmp_path):
+    """生产路径也传 sleeper ⇒ 一次刷新能把 A/B/C 与待回填的 .torrent 都跑完(2026-09-25 实报修复)
+
+    以前生产不传 sleeper(`_Budget` 一遇门槛就放弃), 而页面永远排在下载前面 ⇒ **唯一的一个名额
+    总被页面拿走**: 用户实测一小时内 11 次请求全花在页面重抓上, `.torrent` 一次没取到, 索引里
+    0 个 infohash 键 ⇒ 站点侧判定完全无从下手。本用例钉死「能跑完一轮」这个结果面。
+    """
+    clock = Clock()
+    waits: list[float] = []
+
+    def sleeper(seconds: float) -> None:
+        waits.append(seconds)
+        clock.advance(seconds)
+
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock, glob=global_conf(min_torrent_interval=90.0), sleeper=sleeper)
+
+    result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_REFRESHED and result.complete is True
+    assert [FakeFetcher.scope_of(u) for u in fetcher.text_calls] == ["A", "B", "C"]
+    assert result.torrents_fetched == 1, "待回填的 .torrent 必须拿到名额(以前永远轮不上)"
+    assert len(waits) == 3 and all(w >= 90.0 for w in waits)
+
+
+def test_round_wait_budget_gives_up_instead_of_holding_lock(tmp_path):
+    """本轮总等待超预算 ⇒ 放弃剩余请求(下轮继续), 不持着站点锁干等(多实例下别人只等拿锁)"""
+    clock = Clock()
+    waits: list[float] = []
+
+    def sleeper(seconds: float) -> None:
+        waits.append(seconds)
+        clock.advance(seconds)
+
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(
+        tmp_path,
+        fetcher,
+        clock,
+        glob=global_conf(min_torrent_interval=90.0),
+        sleeper=sleeper,
+        round_wait_max=150.0,
+    )
+
+    result = svc.refresh_site(SITE)
+
+    assert len(waits) == 1, f"第二次等待(90s)会超 150s 预算 ⇒ 不该再等: {waits}"
+    assert result.action == ACTION_PARTIAL and result.complete is False
+    assert fetcher.byte_calls == [], "页面都没抓完, 下载自然还没轮到"
+    assert "间隔" in result.reason
+
+
+def test_oversized_wait_is_not_waited_out_in_lock(tmp_path):
+    """单次等待超上限 ⇒ 直接放弃本轮剩余请求, **一次也不等**(配额窗口/熔断/超长间隔都在此列)"""
+    clock = Clock()
+    waits: list[float] = []
+
+    def sleeper(seconds: float) -> None:
+        waits.append(seconds)
+        clock.advance(seconds)
+
+    # 把间隔配到 400s(> 单次上限 300s): 第一个请求照常发出, 第二个请求的等待就超限了
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock, glob=global_conf(min_torrent_interval=400.0), sleeper=sleeper)
+
+    result = svc.refresh_site(SITE)
+
+    assert waits == [], "超单次上限就放弃, 不该在锁里干等"
+    assert len(fetcher.text_calls) == 1 and fetcher.byte_calls == []
+    assert result.action == ACTION_PARTIAL and result.complete is False
+    assert "间隔" in result.reason and "还差" in result.reason
+
+
+def test_reused_round_still_backfills_pending_infohash(tmp_path):
+    """复用轮**也要**补下载(不碰页面): 待回填的 infohash 每轮都推进, 索引才可能长出可查键
+
+    背景(2026-09-25 用户实报): 页面与下载共用同一个间隔门槛, 页面又永远排在下载前面 ⇒ 复用轮
+    要是空转, 下载就永远拿不到名额。本用例把「索引里有行但没 infohash」的现场造出来, 验证下一轮
+    (数据仍在有效期 ⇒ 不重抓页面)**照样把 .torrent 取回来**并落盘。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock)
+    svc.refresh_site(SITE)
+
+    # 造现场: 索引条目在、但 infohash 没了(比如上一轮下载被频控拦下), 永久层也一并清掉
+    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
+    with store.hold() as session:
+        session.data.index[101].infohash_v1 = ""
+        session.data.index[101].infohash_v2 = ""
+        session.data.downloaded.clear()
+        session.commit(clock.now)
+    fetcher.text_calls.clear()
+    fetcher.byte_calls.clear()
+
+    result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_REUSED and "直接复用" in result.reason
+    assert fetcher.text_calls == [], "复用轮不得再碰页面(那正是把下载饿死的元凶)"
+    assert len(fetcher.byte_calls) == 1 and result.torrents_fetched == 1
+    assert "顺带补 infohash: 成功 1 失败 0" in result.reason
+    assert result.persisted is True, "回填结果要落盘, 否则视图永远长不出可查键"
+    data = _read(tmp_path)
+    assert data.index[101].infohash_v1 and 101 in data.downloaded
+    assert list(svc.build_views()[SITE].by_infohash), "补齐后视图里应当真有可查的 infohash 键"
+
+
+def test_reused_round_without_pending_is_still_zero_request(tmp_path):
+    """反向守阵: 没有待回填时, 复用轮连下载都不试 —— 不允许把「补下载」变成每轮白试一次"""
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
+    svc = _service(tmp_path, fetcher, clock)
+    svc.refresh_site(SITE)
+    text_calls, byte_calls = len(fetcher.text_calls), len(fetcher.byte_calls)
+
+    result = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_REUSED
+    assert (len(fetcher.text_calls), len(fetcher.byte_calls)) == (text_calls, byte_calls)
+    assert result.torrents_fetched == 0 and "顺带补 infohash" not in result.reason
+
+
+def test_extension_quota_refusal_yields_waiting_not_failure(tmp_path, caplog):
+    """扩展侧硬上限挡下 ⇒ 本轮让位: 不计失败、不推熔断, 但报一次 WARNING(后端频控可能失效)
+
+    扩展有自己独立的计数(访问 10/时·15/天…, 见 site-caps.js)作第二道闸。它触发说明**后端频控
+    没拦住** —— 那是个该被看见的异常; 但不能计成取数失败, 否则会把站点推进熔断, 把一个配置/逻辑
+    问题掩盖成「站点坏了」。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101), quota=True)
+    svc = _service(tmp_path, fetcher, clock)
+
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
+        result = svc.refresh_site(SITE)
+        again = svc.refresh_site(SITE)
+
+    assert result.action == ACTION_WAITING and "让位" in result.reason
+    assert result.alerted is False, "告警由 service 自己报(见下面), 不重复"
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len([w for w in warnings if "扩展侧硬上限" in w]) == 1, f"只报一次(超限会持续到下一窗口): {warnings}"
+    data = _read(tmp_path)
+    assert data.fuse.failures == 0, "让位不是失败: 不推熔断"
+    assert again.action == ACTION_WAITING
 
 
 def test_quota_exhaustion_stops_refresh_then_waits(tmp_path):

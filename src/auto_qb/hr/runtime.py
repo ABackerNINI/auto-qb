@@ -12,13 +12,14 @@
   「我是不是多实例」**, 故只引导不强求, 不阻断启动, 由用户决定是否配置。
 """
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
 from .channel import ChannelStatus, describe_token_source, resolve_token, token_path
-from .fetcher import HrFetcher, NullFetcher, build_channel_fetcher, is_available
+from .fetcher import HrChannelStopped, HrFetcher, NullFetcher, build_channel_fetcher, is_available
 from .queue import HrTaskQueue
 from .resolve import HrAnchor, HrJudgement, HrViewSet, judge_record
 from .server import HrChannelServer
@@ -27,6 +28,9 @@ from .store import hr_dir, instance_id
 from .worker import HrViewPublisher, HrWorker
 
 logger = logging.getLogger(__name__)
+
+#: 中断检查的粒度(秒): 睡够这么长就回头看一眼是否该叫停 —— 关停响应的上限
+_SLEEP_SLICE = 1.0
 
 
 @dataclass(slots=True)
@@ -60,6 +64,10 @@ class HrRuntime:
         self.service: Optional[HrRefreshService] = None
         self.fetcher: HrFetcher = NullFetcher("HR 在线核实未启动")
         self.token = ""
+        #: 锁内等待的中断位: stop()/热重挂先置位, 再停线程 —— 否则关停要等它把这次间隔睡完
+        #: (而且它还持着站点锁)。与 queue.resume() 同一套「叫停」语义: 睡眠被打断 ⇒ 抛
+        #: HrChannelStopped ⇒ 本轮让位, 不计失败也不告警。
+        self._sleep_stop = threading.Event()
 
     # ---------- 配置读取 ----------
 
@@ -112,7 +120,9 @@ class HrRuntime:
         ⚠ 线程可能正持着站点锁等扩展回传 —— `HrWorker.stop()` 会**先叫停取数通道**再 join,
         否则一次正常关停要白等到 `channel.request_timeout`(默认 180s), 期间该站点锁死、
         进程退出也被拖住。
+        ⚠ 同理, 线程也可能正睡在频控间隔里(`sleeper`): 先置中断位再停, 否则要等它睡完。
         """
+        self._sleep_stop.set()
         if self.worker is not None:
             self.worker.stop()
             self.worker = None
@@ -144,6 +154,7 @@ class HrRuntime:
         running = self.worker is not None
         self.service = None
         if self.worker is not None:
+            self._sleep_stop.set()  # 线程可能正睡在频控间隔里: 先打断再 join(否则白等它睡完)
             self.worker.stop()
             self.worker = None
         self._build(keep_endpoint=True)
@@ -198,6 +209,22 @@ class HrRuntime:
 
     # ---------- 内部 ----------
 
+    def sleeper(self, seconds: float) -> None:
+        """锁内等待频控间隔(交给 service 的 sleeper) —— **必须可中断**
+
+        `stop()`(含热重挂) 会置 `_sleep_stop`: 被打断即抛 `HrChannelStopped`, 由 service 记成
+        「本轮让位」—— 不计失败、不告警、不推进熔断(与关停时叫停取数同一口径)。
+        """
+        deadline = time.monotonic() + max(0.0, seconds)
+        while True:
+            if self._sleep_stop.is_set():
+                raise HrChannelStopped("取数通道已停止(正在关停或重挂): 放弃本轮剩余的等待")
+            remain = deadline - time.monotonic()
+            if remain <= 0:
+                return
+            if self._sleep_stop.wait(min(remain, _SLEEP_SLICE)):
+                raise HrChannelStopped("取数通道已停止(正在关停或重挂): 放弃本轮剩余的等待")
+
     def _build(self, *, keep_endpoint: bool = False) -> None:
         """建立队列 / 服务 / (端点) / 取数线程"""
         conf = self.global_conf
@@ -206,6 +233,7 @@ class HrRuntime:
             self.queue = HrTaskQueue()
         # 清掉上次关停留下的叫停标记(重启/热重载后必须能正常等回传)
         self.queue.resume()
+        self._sleep_stop.clear()
         self.fetcher = build_channel_fetcher(
             channel_conf=conf.channel, enabled=self.enabled, queue=self.queue, site_confs=site_confs
         )
@@ -218,6 +246,10 @@ class HrRuntime:
             persist=True,
             # 无通道实例只读共享数据(别人抓的), 不发起任何请求
             allow_fetch=self.fetch_enabled,
+            # ❗生产也要等满间隔(计划 §8「连分钟级抓取也在锁内」): 不等就没法在一次刷新里发出
+            # 第二个请求 ⇒ 「先页面后下载」的顺序会把下载饿死(2026-09-25 实报)。等待在取数线程
+            # 内发生, 卡不住主循环 2s 节拍; 单次/本轮两个上限见 service 的常量。
+            sleeper=self.sleeper,
         )
         if self.fetch_enabled:
             self.token = resolve_token(conf.channel.token, self.config.data_dir)

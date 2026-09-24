@@ -44,9 +44,28 @@ MV3 扩展 (`extensions/hr-fetch-proxy/`) + `channel`/`shared_dir` 转 **L1** �
 | M2 取数通道 (扩展 + 本地端点 + 取数线程) | **Done** | 2026-09-24: `hr/channel.py`(协议 + 密钥 + origin/URL 白名单) · `hr/queue.py`(派发式队列) · `hr/server.py`(stdlib 端点, 仅听回环) · `ChannelFetcher` · `hr/worker.py`(取数线程 + 视图原子发布 + 告警节流) · `hr/runtime.py`(`QbManager.hr` 门面) · 扩展 `extensions/hr-fetch-proxy/`; `channel`/`shared_dir` 已改 **L1** 并在 L1 分支接上 `HrRuntime.apply`。**本轮挖出并修掉一个真缺陷**: 线程正等扩展回传时关停会白等到 `request_timeout` 且持着站点锁 ⇒ 改为先叫停队列再 join |
 | M3 判定联动 | **Done** | 2026-09-25: 判定收口 `hr/resolve.py::judge_record`(+ `HrJudgement` / `HrSiteFacts`)与门面入口 `HrRuntime.judge()`; 记录侧只加 `hr_link` / `hr_judgement()` / `hr_anchor()`, **四个消费点调用点一行未动**(改的是它们共同调的 `check_hr_condition` / `check_hr_satisfied`), 站点侧优先、缺字段回落本地; 判定桥由 `TorrentStore` 挂上(门面稳定引用, 读取时现算 ⇒ 不置脏/不重写全库); `manager._hr_anchors()` 按站点给出 `{infohash: HrAnchor}`; `mode: all` 升为站点侧驱动(未核实恒受管束, policy 绕不过); WebUI 加三态/依据/来源与站点侧值字段 + 详情抽屉两行。全量 **1519 passed + 1 skipped** |
 | M3 真机 `hr.once` 走查 | Pending | 需用户装扩展后跑 `python src/auto-qb.py config.yml --hr-once` 与主程序, 确认: 端点拉得到任务 / 页面直取拿到表 / 三态在 WebUI 与日志上对得上。与 M0 四项实测同批做 |
+| 实报修复: 下载被饿死 + 扩展第二道闸 | **Done** | 2026-09-25: 用户贴 `--hr-status` + 站点文件报「种子似乎没有下载成功」⇒ 三个真缺陷: ①**下载被页面饿死**(频控门槛是「相邻两次请求」而页面永远排前面; 复用轮只补下载) ②**生产路径不等间隔**(计划 §8 本意是在锁内等满; 一次刷新只能发第一个请求 ⇒ 覆盖证明永不成立) ③**无可用索引键 ⇒ 整站按受管束打标**(无键时回落本地); ④ 扩展侧硬上限 `site-caps.js`(访问 10/时·50/天, 下种 50/时·200/天, 超限拒发 + `kind=ext-quota` ⇒ 后端让位不计失败)。合流后全量 **1541 passed + 1 skipped**(本分支合流前 1534) |
 | M4 多站点与打磨 | Pending | 1 会话; 还需补 M2 到 M4 之间漏掉的 notify 四类事件(登录失效 / 熔断 / 改版 / 通道静默)—— 现在这四类只落日志(WARNING 会被 notify 处理器推成系统通知, 但没做"四类事件"语文化) |
 
 ## 进度日志
+
+- **2026-09-25 (实报修复: 下载被饿死 + 扩展第二道闸)** — 用户贴 `--hr-status` 与 `BTSchool.json` 报
+  「种子似乎没有下载成功」, 并授权修 P1/P2/P3 + 给扩展加硬上限(暂定 访问 10/时·50/天, 下种 50/时·200/天)。
+  ① **先定位**: 报告里 `已取种子 0 条 / 取种子失败 0 条 / 待回填 infohash 1 条 / 受管束种子 0 个`
+  = `.torrent` **一次都没取过**(不是失败), 扩展只被派了一个页面任务(扩展侧日志「取 1 条(成功 1; 全部直取)」)
+  ⇒ 责任在后端的频控与流水线顺序, 不在扩展。
+  ② **三个真缺陷**: (a) `_Budget` 的口径是「相邻两次**请求**间隔 >= 90s」, 而 `_do_fetch` 先抓 A/B/C
+  页面再取 .torrent ⇒ 每个窗口唯一的名额总被页面吃掉; 不完备刷新只给 60s 有效期 ⇒ 下一轮又从页面开始,
+  本小时 11 次配额全烧在重抓页面上。(b) 生产路径 `sleeper=None`(计划 §8 本意是在锁内等满) ⇒ 一次刷新
+  只能发出第一个请求, `scopes_done=[A]` / `complete=False` ⇒ **永远没有安全放行**。(c) 索引 0 个 infohash 时
+  所有种子落「未核实」⇒ 按 `unknown_policy=hr` **整站种子集体按受管束打标**。
+  ③ **修法与守阵**: 复用轮只补下载(`_backfill_on_reuse`) · 门面提供可中断的锁内等待 + 单次/本轮两道上限 ·
+  `has_lookup_keys` 为假时 `judge_record` 返回 None(回落本地, `mode: all` 不受影响) · 扩展 `site-caps.js`
+  独立计数 + 超限拒发(`kind=ext-quota`, 后端 `HrChannelQuota` ⇒ ACTION_WAITING, 不计失败不推熔断, 只报一次 WARNING)。
+  ④ **测试 +15 条**, ★**红验 4 处**(关掉补下载 / 关掉等待 / 关掉无键闸门 / 关掉扩展拒发 ⇒ 对应守阵全红)。
+  合流后全量 **1541 passed + 1 skipped**(本分支合流前 1534); 坑已回写 `pitfalls/backend/high-risk-ops.md` 与 `behavior-core.md`; 
+  文档: 扩展 README(第二道闸章节 + 修正「间隔受限不是故障」的旧口径) · 根 README · docs/configuration.md。
+  ⚠ 仍待用户真机确认: 取 .torrent 后索引是否长出键、三态在 WebUI 上是否正确(以及那 2 次 `fuse.failures` 的来源)。
 
 - **2026-09-25 (M3 落地)** — 用户「继续 M3」令实施判定联动:
   ① **判定收口**: `hr/resolve.py::judge_record(view, infohashes, anchor=, now=, unknown_policy=)` —— 两个 infohash

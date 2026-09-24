@@ -10,6 +10,7 @@
 - test_url_policy_allows_declared_host_and_paths: 同域名的 HR 页与下载路径放行, 他站/他路径/非 http 拒
 - test_url_policy_require_raises_on_unlisted: require 非白名单 URL 抛 HrChannelError(下发前 fail-fast)
 - test_result_from_json_text_and_binary: text 与 body_b64 两种回传都能解析
+- test_result_carries_extension_quota_kind: 扩展侧硬上限的回传带 kind=ext-quota(与扩展侧常量必须一致)
 - test_result_from_json_rejects_malformed: 缺 id / base64 坏 / 成功但无体 -> HrChannelError
 - test_parse_results_single_and_batch: 单条与 {"results":[...]} 批量都可
 - test_decode_json_rejects_garbage: 非 JSON 字节 -> HrChannelError
@@ -23,6 +24,7 @@ import pytest
 from auto_qb.config.validation import sections as validation_sections
 from auto_qb.hr.channel import (
     EXTENSION_ID_RE,
+    KIND_EXT_QUOTA,
     HrChannelError,
     HrResult,
     UrlPolicy,
@@ -128,6 +130,27 @@ def test_result_from_json_text_and_binary():
     assert blob.body == b"\x00\x01\x02"
     fail = HrResult.from_json({"id": "t3", "ok": False, "error": "HTTP 403", "retry_after": 30})
     assert not fail.ok and fail.error == "HTTP 403" and fail.retry_after == 30.0
+
+
+def test_result_carries_extension_quota_kind():
+    """扩展侧硬上限的回传带 kind='ext-quota' —— 后端据此让位而不是计一次取数失败
+
+    ❗两边的常量必须一致(`hr.channel.KIND_EXT_QUOTA` ↔ `extensions/.../background.js` 里写死的那串),
+    否则最坏情况是「配额让位」被当成「站点故障」: 熔断 + 告警, 真正的问题(后端频控失效)反而被掩盖。
+    """
+    quota = HrResult.from_json(
+        {
+            "id": "t9",
+            "ok": False,
+            "url": "https://pt.example.com/myhr.php",
+            "error": "HR 页访问 本小时达硬上限 10 次(host=pt.example.com)",
+            "retry_after": 1800,
+            "kind": KIND_EXT_QUOTA,
+        }
+    )
+    assert quota.kind == KIND_EXT_QUOTA and quota.retry_after == 1800.0
+    assert HrResult.from_json({"id": "t10", "ok": False, "error": "HTTP 403"}).kind == "", "普通失败不带 kind"
+    assert "kind" not in HrResult(task_id="t1", ok=True).to_json(), "kind 为空时不进线上格式"
 
 
 def test_result_from_json_rejects_malformed():

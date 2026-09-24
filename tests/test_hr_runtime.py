@@ -20,6 +20,9 @@
 - test_judge_is_none_when_disabled: 总开关关 -> judge 返回 None(消费方回落本地字段逻辑)
 - test_judge_reads_published_view: 启用时按**当前已发布**视图现算(命中清单 -> 受管束 + 站点达标结论)
 - test_judge_without_published_view_falls_back: 还没发布过视图(启动窗口) -> None, 不是"未核实"
+- test_sleeper_is_interruptible_by_stop: 锁内等待可中断 —— 关停/热重挂不必等它把间隔睡完
+- test_sleeper_returns_after_the_wait: 没被打断时按秒数返回(不提前也不卡住)
+- test_production_service_gets_a_sleeper: 生产服务必须带 sleeper(2026-09-25 实报: 不等待 ⇒ 下载被页面饿死)
 - test_apply_l0_rebuilds_service_without_worker_running: 未启动时 apply 不得把线程拉起来
 - test_runtime_uses_anchors_provider: 取数线程经主循环提供的锚点提供者取锚点(M3 的交接面)
 - test_stop_is_prompt_while_waiting_for_extension: 取数线程正等扩展回传时 stop 也要立刻返回(不等满 request_timeout)
@@ -29,12 +32,14 @@
 """
 import logging
 import socket
+import threading
 import time
 
 import pytest
 
 from auto_qb.config.models import Config, HrChannelConfig, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.channel import HrChannelBindError
+from auto_qb.hr.fetcher import HrChannelStopped
 from auto_qb.hr.model import HrEntry
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, HrSiteView, HrViewSet
 from auto_qb.hr.runtime import HrRuntime
@@ -327,6 +332,53 @@ def test_judge_without_published_view_falls_back(tmp_path):
     """
     runtime = make_runtime(tmp_path, enabled=True, channel=False, mode="all")
     assert runtime.judge("pt.example.com", (H1, ), now=1.0) is None
+
+
+def test_sleeper_is_interruptible_by_stop(tmp_path):
+    """锁内等待必须可中断: 关停(含热重挂)不能等它把这次间隔睡完 —— 那期间还持着站点锁
+
+    生产路径现在会在锁内等满频控间隔(最多几分钟), 所以这条必须成立, 否则一次关停要等好几分钟,
+    共享目录下其它实例也一直被挡在锁外。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    errs: list = []
+
+    def run():
+        try:
+            runtime.sleeper(30.0)
+        except HrChannelStopped as e:
+            errs.append(e)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    time.sleep(0.1)  # 让它真的睡进去
+    started = time.monotonic()
+    runtime.stop()
+    thread.join(5.0)
+
+    assert errs and "停止" in str(errs[0]), "被打断要抛 HrChannelStopped(service 据此记「本轮让位」)"
+    assert time.monotonic() - started < 2.0, "关停是秒级的事, 不能等它睡完"
+
+
+def test_sleeper_returns_after_the_wait(tmp_path):
+    """没被打断时按秒数返回(不提前也不卡住)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    started = time.monotonic()
+    runtime.sleeper(0.2)
+    elapsed = time.monotonic() - started
+    assert 0.15 <= elapsed < 2.0, elapsed
+
+
+def test_production_service_gets_a_sleeper(tmp_path):
+    """生产服务必须拿到 sleeper —— 2026-09-25 实报: 不等待 ⇒ 一次刷新只发出第一个请求, 下载被饿死"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime.start()
+    try:
+        assert runtime.service is not None
+        assert runtime.service._sleeper is not None
+        assert runtime.service._sleeper == runtime.sleeper, "接的必须是门面那个可中断的等待"
+    finally:
+        runtime.stop()
 
 
 def test_runtime_uses_anchors_provider(tmp_path):

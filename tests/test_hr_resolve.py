@@ -25,6 +25,8 @@
 - test_judge_record_carries_site_satisfied_verdict: 命中行的达标结论: B -> True / C -> False / 缺字段 -> None
 - test_judge_record_missing_hash_goes_through_policy: 两个 infohash 都空 -> 未核实(仍走 policy, 不是"不适用")
 - test_judge_record_mode_all_unlisted_is_managed: mode=all 未列出 -> 受管束
+- test_judge_record_without_any_lookup_key_falls_back: 站点侧一个可查键都没有(索引没回填出 infohash)
+  -> None(回落本地), **不**把「不知道」当受管束(2026-09-25 实报: 否则整站打标); mode=all 不受此闸门影响
 - test_judge_record_carries_site_facts: 命中行带出站点侧值并**拷成不可变对象**(WebUI 两套值对账的数据源)
 """
 import pytest
@@ -270,12 +272,16 @@ def test_judge_record_carries_site_satisfied_verdict():
 
 
 def test_judge_record_missing_hash_goes_through_policy():
-    """两个 infohash 都空 -> 未核实(**不是**「不适用」): 该按 policy 保守处理, 不能静默放行"""
-    got = judge_record(_view(), ("", ""), now=NOW)
+    """两个 infohash 都空 -> 未核实(**不是**「不适用」): 该按 policy 保守处理, 不能静默放行
+
+    前提: 站点侧**有**可查的键(否则走 `test_judge_record_without_any_lookup_key_falls_back` 那道闸门)。
+    """
+    view = _view(listed=[(H3, 103, "A")])  # 视图里有键, 只是这个种子自己没有 infohash
+    got = judge_record(view, ("", ""), now=NOW)
     assert got is not None
     assert got.identity is HrIdentity.UNKNOWN and got.is_hr is True
     assert "身份缺位" in got.reason
-    relaxed = judge_record(_view(), ("", ""), now=NOW, unknown_policy=POLICY_NOT_HR)
+    relaxed = judge_record(view, ("", ""), now=NOW, unknown_policy=POLICY_NOT_HR)
     assert relaxed.is_hr is False, "policy=not-hr 时未核实才放行(用户显式选的取舍)"
 
 
@@ -307,4 +313,21 @@ def test_judge_record_carries_site_facts():
     assert got.facts.remain_seconds == 0 and got.facts.ratio == 1.25 and got.facts.downloaded_bytes == 4096
     entry.remain_seconds = 99  # 取数线程复用行对象: 已拷出的判定结果不得跟着变
     assert got.facts.remain_seconds == 0
-    assert judge_record(_view(), (H1, ""), anchor=HrAnchor(added_on=1), now=NOW).facts is None, "未命中无站点侧值"
+    assert judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW).facts is None, "未命中无站点侧值"
+
+
+def test_judge_record_without_any_lookup_key_falls_back():
+    """站点侧**一个可查键都没有** ⇒ None(回落本地), 而不是「未核实 ⇒ unknown_policy=hr ⇒ 全站受管束」
+
+    2026-09-25 用户实报: 取数通道刚接通时索引还没有任何 infohash(下载被频控饿死), 而按「未核实」判会
+    让该站**全部**种子集体触发打标。判据取「有没有可查的键」而不是「有没有抓过页面」: 抓过但一个键都
+    回填不出来时, 这个视图对判定同样没有信息量。
+    """
+    empty = _view(complete=True, last_success_ts=OK_TS)  # 抓得完整, 但索引里 0 个 infohash / 0 条放行
+    assert empty.has_lookup_keys is False
+    assert judge_record(empty, (H1, ""), now=NOW) is None
+    # 一旦有了键(哪怕只是一条放行记录), 闸门就打开, 回到正常判定
+    assert judge_record(_view(verified=[_verified()]), (H1, ""), now=NOW) is not None
+    # mode=all 是用户显式要的「全站受管束」: 不看索引现状
+    forced = judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW)
+    assert forced is not None and forced.is_hr is True

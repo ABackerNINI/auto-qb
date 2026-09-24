@@ -111,6 +111,10 @@
   两者的用户可见差别是巨大的: 按「未核实 + policy=hr」算, `mode: all` 站点会在**启动窗口**(取数线程还没发布
   第一版视图)里让**整站种子集体触发打标** —— 千级标签风暴; 按「回落本地」算只是短暂少保护一会儿。
 - **处置**: 保持 `None` 语义; 两个方向都别"优化"(返回 False 会让未接入站点静默变成不触发 HR)。
+  **同类第二例(2026-09-25)**: 站点**已接入但一个可查键都没有**(索引里 0 个 infohash、0 条放行)时,
+  `judge_record` 同样返回 None(回落本地) —— 否则该站全部种子落「未核实」, 按 `unknown_policy=hr`
+  **整站集体打标**。判据是 `HrSiteView.has_lookup_keys`;**`mode: all` 不受此闸门影响**(用户显式要全站受管束)。
+  守阵: `tests/test_hr_resolve.py::test_judge_record_without_any_lookup_key_falls_back`。
   守阵: `tests/test_hr_resolve.py::test_judge_record_not_applicable_when_site_off` /
   `tests/test_hr_runtime.py::test_judge_without_published_view_falls_back`。
 

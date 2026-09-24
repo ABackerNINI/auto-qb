@@ -14,6 +14,7 @@
 // 地址归一化共用 normalize.js(选项页用 <script> 载入, 这里用 importScripts —— 同一份代码)。
 
 importScripts('normalize.js');
+importScripts('site-caps.js');
 
 const ALARM_NAME = 'hr-poll';
 const POLL_MINUTES = 5; // 与后端下发的 next_poll_s 同量级; 后端才是频控权威
@@ -53,6 +54,8 @@ function schedule() {
 
 chrome.runtime.onInstalled.addListener(() => {
   schedule();
+  // 把上限写进 storage: 选项页据此展示「两道闸的当前额度」, 免得两处各写一份阈值(必漂移)
+  chrome.storage.local.set({ siteCaps: SITE_CAPS });
   noteStatus({ text: '已安装: 请在选项页填实例端点与 token, 并授予站点权限' });
 });
 
@@ -127,6 +130,96 @@ function explainFetchError(url, e) {
   return msg;
 }
 
+// ---------- 扩展侧硬上限(第二道闸: 后端出错时的兜底) ----------
+//
+// ❗为什么扩展也要限: 后端有自己的频控(间隔 + 两级配额 + 熔断), 但那是**同一个进程里的代码**。
+// 它写错 / 配置被改坏 / 有人手工灌任务时, 浏览器会把站点打爆 —— 而承受后果的是用户的账号。
+// 故这里加一道**独立**计数: 口径与阈值见 site-caps.js(唯一事实源), 用户可在选项页看到用量。
+// 超限时**拒绝该次请求**并如实回传 kind='ext-quota'(后端据此让位, 不计失败、不推熔断)。
+
+/** 计数窗口键(本地时区, 与后端 hour_key/day_key 同口径, 便于对账) */
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function hourKey(now) {
+  const d = new Date(now);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}`;
+}
+
+function dayKey(now) {
+  const d = new Date(now);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function secondsToNextHour(now) {
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+  next.setHours(new Date(now).getHours() + 1);
+  return Math.max(1, Math.round((next.getTime() - now) / 1000));
+}
+
+function secondsToNextDay(now) {
+  const next = new Date(now);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(new Date(now).getDate() + 1);
+  return Math.max(1, Math.round((next.getTime() - now) / 1000));
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname;
+  } catch (e) {
+    return '';
+  }
+}
+
+/** 超限(或将要超限)时抛它 —— 与「取数失败」区分开: 后端收到后只让位, 不计失败、不告警级联 */
+class ExtQuotaError extends Error {
+  constructor(message, retryAfter) {
+    super(message);
+    this.name = 'ExtQuotaError';
+    this.retryAfter = Math.round(retryAfter || 0);
+  }
+}
+
+/**
+ * 领一次额度: 超限返回 {ok:false, reason, retryAfter}; 否则计数 +1 并返回 {ok:true}。
+ * 拿不到域名(畸形 URL)时不计数直接放行 —— 后端有 URL 白名单, 正常不会走到这类输入。
+ */
+async function takeAllowance(kind, url) {
+  const cap = SITE_CAPS[kind];
+  const host = hostOf(url);
+  if (!cap || !host) return { ok: true, host: host };
+  const now = Date.now();
+  const hk = hourKey(now);
+  const dk = dayKey(now);
+  const got = await chrome.storage.local.get({ [SITE_LEDGER_KEY]: {} });
+  const ledger = got[SITE_LEDGER_KEY] || {};
+  const site = ledger[host] || {};
+  const rec = site[kind] || {};
+  const usedHour = rec.hk === hk ? (rec.hour || 0) : 0; // 窗口键不同 = 新窗口, 计数从头算
+  const usedDay = rec.dk === dk ? (rec.day || 0) : 0;
+  if (usedHour + 1 > cap.perHour) {
+    return { ok: false, host: host, retryAfter: secondsToNextHour(now), reason: `${cap.label} 本小时达硬上限 ${cap.perHour} 次` };
+  }
+  if (usedDay + 1 > cap.perDay) {
+    return { ok: false, host: host, retryAfter: secondsToNextDay(now), reason: `${cap.label} 本日达硬上限 ${cap.perDay} 次` };
+  }
+  site[kind] = { hk: hk, dk: dk, hour: usedHour + 1, day: usedDay + 1 };
+  ledger[host] = site;
+  await chrome.storage.local.set({ [SITE_LEDGER_KEY]: ledger });
+  return { ok: true, host: host, used: usedHour + 1, cap: cap.perHour };
+}
+
+/** 取数前的最后一道检查: 超限即拒发(并把原因写进状态栏, 用户能看出是"第二道闸"挡的) */
+async function requireAllowance(kind, url) {
+  const got = await takeAllowance(kind, url);
+  if (got.ok) return got;
+  await noteStatus({ text: `扩展侧硬上限挡下(${got.reason}); 后端频控可能失效 —— 本次请求未发出` });
+  throw new ExtQuotaError(`${got.reason}(host=${got.host})`, got.retryAfter);
+}
+
 async function pollInstance(inst) {
   const label = inst.name || inst.endpoint || '(未命名)';
   const base = safeEndpoint(inst.endpoint);
@@ -166,8 +259,10 @@ async function pollInstance(inst) {
     return `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}`;
   }
   const okCount = results.filter((r) => r.ok).length;
+  const quotaCount = results.filter((r) => r.kind === 'ext-quota').length;
   const how = rendered.length ? `其中 ${rendered.length} 条走渲染` : '全部直取(无界面)';
-  return `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how}), 回传 HTTP ${post.status}`;
+  const blocked = quotaCount ? `; 扩展侧硬上限挡下 ${quotaCount} 条(后端频控可能失效)` : '';
+  return `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how})${blocked}, 回传 HTTP ${post.status}`;
 }
 
 /**
@@ -188,6 +283,7 @@ async function pageText(url) {
 
 /** 直取(无界面): 与 .torrent 同一条路 —— service worker 发请求, `credentials:'include'` 带站点 cookie */
 async function fetchText(url) {
+  await requireAllowance('page', url);
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
@@ -220,7 +316,13 @@ async function runTask(task) {
     const body = await fetchBinary(task.url);
     return { rendered: false, payload: { id: task.id, ok: true, status: 200, url: task.url, body_b64: body } };
   } catch (e) {
-    return { rendered: false, payload: { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) } };
+    const payload = { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) };
+    if (e instanceof ExtQuotaError) {
+      // 扩展侧硬上限: 让后端能把它与「取数失败」区分开(前者只让位, 后者才计失败/熔断)
+      payload.kind = 'ext-quota';
+      payload.retry_after = e.retryAfter || 0;
+    }
+    return { rendered: false, payload: payload };
   }
 }
 
@@ -234,6 +336,7 @@ async function runTask(task) {
  * 故这条路径只当**兜底**: 真正隐形靠 **离屏坐标 + popup(不进任务栏) + 不聚焦** 三重手段。
  */
 async function pageSnapshot(url) {
+  await requireAllowance('page', url); // 渲染是**第二次**访问同一站(顶层导航), 同样计额
   const restoreFocus = await focusGuard();
   const win = await createOffscreenWindow(url);
   const tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : 0;
@@ -291,6 +394,7 @@ async function focusGuard() {
 
 /** 取 .torrent 二进制: 由 service worker 自己发(credentials include 带上站点 cookie) */
 async function fetchBinary(url) {
+  await requireAllowance('torrent', url);
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());

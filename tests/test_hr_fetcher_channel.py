@@ -7,6 +7,8 @@
 - test_get_bytes_returns_binary: .torrent 走二进制路径, 任务带 tid
 - test_timeout_raises_fetch_error: 无人回传 => 超时抛 HrFetchError(不能让持锁线程永久挂住)
 - test_extension_failure_becomes_fetch_error: 扩展报失败(含 Retry-After) -> HrFetchError 带 retry_after
+- test_extension_quota_refusal_is_not_a_fetch_failure: 扩展侧硬上限拒发(kind=ext-quota) -> HrChannelQuota
+  (子类, 与「取数失败」分开: 不计失败/不推熔断)
 - test_empty_body_is_failure: 回传成功但内容为空 -> 失败(不给解析器喂空页面)
 - test_unlisted_url_raises_before_dispatch: 白名单外 URL 直接拒, **任务都不下发**(SSRF 边界)
 - test_cancelled_queue_reports_channel_unavailable: 通道被叫停 -> HrChannelStopped(可区分, 不计失败/熔断)
@@ -17,9 +19,10 @@ import threading
 import pytest
 
 from auto_qb.config.models import HrChannelConfig
-from auto_qb.hr.channel import HrChannelError, HrResult, UrlPolicy
+from auto_qb.hr.channel import KIND_EXT_QUOTA, HrChannelError, HrResult, UrlPolicy
 from auto_qb.hr.fetcher import (
     ChannelFetcher,
+    HrChannelQuota,
     HrChannelStopped,
     HrChannelUnavailable,
     HrFetchError,
@@ -36,12 +39,13 @@ DL = "https://pt.example.com/download.php?id=313852"
 
 class _Auto:
     """自动应答的假扩展: 后台线程把队列里的任务取走并回传(模拟真扩展的拉取式行为)"""
-    def __init__(self, queue, *, answer=b"<html>ok</html>", ok=True, error="", retry_after=0.0, delay=0.0):
+    def __init__(self, queue, *, answer=b"<html>ok</html>", ok=True, error="", retry_after=0.0, delay=0.0, kind=""):
         self.queue = queue
         self.answer = answer
         self.ok = ok
         self.error = error
         self.retry_after = retry_after
+        self.kind = kind
         self.delay = delay
         self._stop = threading.Event()
         self.seen = []
@@ -62,7 +66,8 @@ class _Auto:
                         url=task.url,
                         body=body,
                         error=self.error,
-                        retry_after=self.retry_after
+                        retry_after=self.retry_after,
+                        kind=self.kind,
                     )
                 )
             self._stop.wait(0.005)
@@ -136,6 +141,32 @@ def test_extension_failure_becomes_fetch_error():
             fetcher.get_text(URL)
         assert err.value.retry_after == 42.0, "站点给的 Retry-After 要透传给退避逻辑"
         assert "429" in str(err.value)
+    finally:
+        auto.close()
+
+
+def test_extension_quota_refusal_is_not_a_fetch_failure():
+    """扩展侧硬上限拒发(kind='ext-quota') ⇒ `HrChannelQuota`: 与「取数失败」分开
+
+    扩展有自己的独立计数(第二道闸: 访问 10/时·50/天, 下种 50/时·200/天), 超限就拒发。它触发
+    说明**后端频控没拦住** —— 那要被看见, 但不能计成取数失败: 否则会把站点推进熔断, 把配置/逻辑
+    问题掩盖成「站点坏了」。
+    """
+    queue, fetcher = make_fetcher()
+    auto = _Auto(
+        queue,
+        ok=False,
+        answer=b"",
+        error="HR 页访问 本小时达硬上限 10 次(host=pt.example.com)",
+        retry_after=1800.0,
+        kind=KIND_EXT_QUOTA,
+    )
+    try:
+        with pytest.raises(HrChannelQuota) as err:
+            fetcher.get_text(URL)
+        assert isinstance(err.value, HrChannelUnavailable), "父类语义成立(调用方兼容)"
+        assert err.value.retry_after == 1800.0, "下一次可取的时刻要透传(让上层知道等多久)"
+        assert "硬上限" in str(err.value)
     finally:
         auto.close()
 

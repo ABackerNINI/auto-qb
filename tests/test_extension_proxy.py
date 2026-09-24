@@ -20,6 +20,9 @@
 - test_page_fetch_renders_offscreen_only_when_needed: 只在内容不像页面时才升级, 且用**离屏 popup 窗口**
 - test_page_fetch_renders_when_direct_fetch_hits_login_page: 直取拿到登录页也要升级(SameSite 安全网)
 - test_page_fetch_hands_focus_back_when_window_steals_it: 万一窗口抢了焦点, 取完还回原窗口
+- test_site_caps_are_shared_single_source: 硬上限只有一份(site-caps.js), 后台与选项页都载入它
+- test_extension_quota_caps_and_refuses: 真跑 background.js —— 同站访问/下载各自计数, 超限即**拒发**
+  (不发请求 + 回传 kind=ext-quota + retry_after); 窗口键变了计数归零
 """
 import json
 import pathlib
@@ -34,10 +37,11 @@ from auto_qb.hr.channel import API_RESULT, API_TASKS, TOKEN_HEADER, HrChannelErr
 EXT_DIR = pathlib.Path(__file__).resolve().parents[1] / "extensions" / "hr-fetch-proxy"
 MANIFEST = EXT_DIR / "manifest.json"
 NORMALIZE_JS = EXT_DIR / "normalize.js"
+SITE_CAPS_JS = EXT_DIR / "site-caps.js"
 BACKGROUND_JS = EXT_DIR / "background.js"
 OPTIONS_JS = EXT_DIR / "options.js"
 OPTIONS_HTML = EXT_DIR / "options.html"
-JS_FILES = (NORMALIZE_JS, BACKGROUND_JS, OPTIONS_JS)
+JS_FILES = (NORMALIZE_JS, SITE_CAPS_JS, BACKGROUND_JS, OPTIONS_JS)
 
 #: 归一化的行为钉死表 —— **含用户 2026-09-24 实际踩到的两种写法**。
 #: (kind, 输入, 期望输出或 None=应当报错)
@@ -160,6 +164,22 @@ def test_normalizers_are_shared_not_duplicated():
     assert _read(OPTIONS_HTML).index("normalize.js") < _read(OPTIONS_HTML).index("options.js"), "载入顺序: 归一化在前"
 
 
+def test_site_caps_are_shared_single_source():
+    """硬上限只有一份(site-caps.js): 后台用 importScripts、选项页用 <script> —— 都不许写死阈值
+
+    两份分头演化的后果很具体: 选项页显示的数字与实际生效的阈值不符, 用户据此理解行为, 结果对不上。
+    """
+    caps = _read(SITE_CAPS_JS)
+    assert "SITE_CAPS" in caps and "perHour" in caps and "perDay" in caps
+    assert "importScripts('site-caps.js')" in _read(BACKGROUND_JS)
+    html = _read(OPTIONS_HTML)
+    assert "site-caps.js" in html and html.index("site-caps.js") < html.index("options.js"), "载入顺序: 常量在前"
+    for path in (BACKGROUND_JS, OPTIONS_JS):
+        assert not re.search(r"(?m)^const SITE_CAPS", _read(path)), f"{path.name} 又定义了一份阈值"
+        assert "SITE_CAPS[" in _read(path) or "Object.entries(SITE_CAPS)" in _read(path), \
+            f"{path.name} 应当消耗共享阈值而不是写死数字"
+
+
 # ---------- 与后端的协议 ----------
 
 
@@ -251,6 +271,7 @@ const PAGE_URL = 'https://pt.example.com/myhr.php?hrtype=A';
 const PAGE_WITH_TABLE = __PAGE_WITH_TABLE__;
 const CHALLENGE_LIKE = __CHALLENGE_LIKE__;
 const LOGIN_LIKE = __LOGIN_LIKE__;
+const store = {};
 let calls = [];
 let stealFocus = false;
 function record(name, ret) {
@@ -265,7 +286,16 @@ const chrome = {
   alarms: { create: record('alarms.create'), onAlarm: noop },
   runtime: { onInstalled: noop, onStartup: noop, onMessage: noop, onSuspend: noop },
   permissions: { onAdded: noop },
-  storage: { local: { get: async () => ({}), set: async () => {} } },   // noteStatus 只落状态
+  storage: {
+    local: {
+      get: (defaults) => {
+        const out = {};
+        for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+        return Promise.resolve(out);
+      },
+      set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+    },
+  },   // 真存真读: noteStatus 与硬上限台账都要跨调用可见
   windows: {
     create: record('windows.create', () => ({ id: 777, tabs: [{ id: 42 }] })),
     get: async (id) => ({ id }),
@@ -287,7 +317,8 @@ const sandbox = {
   fetch: async () => ({ ok: true, status: 200, text: async () => nextPage, json: async () => ({}) }),
 };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 async function scenario(name, page, steal) {
   calls = []; focusedCalls = 0; stealFocus = Boolean(steal); nextPage = page;
   const out = await sandbox.pageText(PAGE_URL);
@@ -315,11 +346,13 @@ def page_fetch_trace() -> dict:
         return {}
     proc = _run_node(
         [
-            node, "-e",
+            node,
+            "-e",
             _NODE_RUN_PAGE_FETCH.replace("__PAGE_WITH_TABLE__", json.dumps(PAGE_WITH_TABLE)).replace(
                 "__CHALLENGE_LIKE__", json.dumps(CHALLENGE_LIKE)
             ).replace("__LOGIN_LIKE__", json.dumps(LOGIN_LIKE)),
-            str(BACKGROUND_JS)
+            str(BACKGROUND_JS),
+            str(SITE_CAPS_JS),
         ]
     )
     assert proc.returncode == 0, f"node 跑 background.js 失败: {proc.stderr.strip()}"
@@ -399,3 +432,137 @@ def test_page_fetch_hands_focus_back_when_window_steals_it():
     restore = [c for c in stolen["calls"] if c[0] == "windows.update" and c[1] == 1]
     assert restore and restore[0][2].get("focused") is True, \
         f"焦点被抢走后要还回原窗口: {stolen['calls']}"
+
+
+# ---------- 扩展侧硬上限(第二道闸: 后端出错时的兜底, 2026-09-25 用户指定) ----------
+
+#: 用**真** storage(内存)真跑 background.js: 台账必须真存真读, 否则「计数」是自欺欺人。
+#: 四个场景一次跑完: ①页面上限 10/时(第 11 次被拒且**不发请求**) ②下载有独立额度(页面用满照样能下)
+#: ③窗口键过期 ⇒ 计数归零 ④日上限 50 ⇒ 拒发且 retry_after 指向次日
+_NODE_RUN_QUOTA = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const PAGE_URL = 'https://pt.example.com/myhr.php?hrtype=A';
+const DL_URL = 'https://pt.example.com/download.php?id=313852';
+const PAGE = __PAGE_WITH_TABLE__;
+const store = {};
+let fetches = 0;
+function getWithDefaults(defaults) {
+  const out = {};
+  for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+  return Promise.resolve(out);
+}
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { local: {
+    get: (defaults) => getWithDefaults(defaults),
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+  windows: {
+    create: async () => ({ id: 1, tabs: [{ id: 1 }] }),
+    getLastFocused: async () => ({ id: 1 }),
+    update: async () => ({}),
+    remove: async () => {},
+  },
+  tabs: { create: async () => ({ id: 1 }), get: async () => ({ status: 'complete' }), remove: async () => {} },
+  scripting: { executeScript: async () => [{ result: PAGE }] },
+};
+const sandbox = {
+  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL, btoa,
+  fetch: async () => {
+    fetches += 1;
+    return { ok: true, status: 200, text: async () => PAGE, arrayBuffer: async () => new ArrayBuffer(8),
+             json: async () => ({}) };
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+const LEDGER = vm.runInContext('SITE_LEDGER_KEY', sandbox);
+const HOST = 'pt.example.com';
+const page = (id) => sandbox.runTask({ id: id, kind: 'page', url: PAGE_URL }).then((r) => r.payload);
+const torrent = (id) => sandbox.runTask({ id: id, kind: 'torrent', url: DL_URL }).then((r) => r.payload);
+(async () => {
+  const out = { pages: [], torrent: null, afterRollover: null, dayRefusal: null, ledgerKey: LEDGER };
+  for (let i = 1; i <= 11; i += 1) out.pages.push(await page('p' + i));
+  out.fetchesAfterPages = fetches;
+  out.torrent = await torrent('t1');            // 下载与访问分开计数: 页面用满不影响它
+  out.fetchesAfterTorrent = fetches;
+  const led = store[LEDGER] || {};
+  led[HOST].page.hk = '1970-01-01T00';          // 造「小时窗口已经翻篇」
+  store[LEDGER] = led;
+  out.afterRollover = await page('p12');        // 计数归零 ⇒ 又能取
+  const led2 = store[LEDGER] || {};
+  led2[HOST].page = {
+    hk: vm.runInContext('hourKey(Date.now())', sandbox),
+    dk: vm.runInContext('dayKey(Date.now())', sandbox),
+    hour: 1,
+    day: 50,                                    // 日上限已到
+  };
+  store[LEDGER] = led2;
+  out.dayRefusal = await page('p13');
+  out.fetchesAtEnd = fetches;
+  out.ledger = store[LEDGER];
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+_QUOTA_TRACE: dict = {}
+
+
+def quota_trace() -> dict:
+    """跑一次 node 拿四个场景的结果(缓存: 两个用例共用同一次 node 运行)"""
+    if _QUOTA_TRACE:
+        return _QUOTA_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node(
+        [
+            node, "-e",
+            _NODE_RUN_QUOTA.replace("__PAGE_WITH_TABLE__", json.dumps(PAGE_WITH_TABLE)),
+            str(BACKGROUND_JS),
+            str(SITE_CAPS_JS)
+        ]
+    )
+    assert proc.returncode == 0, f"node 跑 background.js 的配额场景失败: {proc.stderr.strip()}"
+    _QUOTA_TRACE.update(json.loads(proc.stdout))
+    return _QUOTA_TRACE
+
+
+def test_extension_quota_caps_and_refuses():
+    """超限即**拒发**: 不发请求 + 回传 kind=ext-quota + retry_after(后端据此让位, 不计失败)
+
+    ❗这条闸的意义在「后端出错时」: 后端频控写错 / 配置被改坏 / 有人手工灌任务时, 浏览器仍然
+    打不爆站点。所以断言要看两件事: ①第 11 次被拒 ②**它真的没有发出请求**(只看回传字段不算数)。
+    """
+    trace = quota_trace()
+    if not trace:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    pages = trace["pages"]
+    ok_pages = [p for p in pages if p.get("ok")]
+    refused = [p for p in pages if not p.get("ok")]
+    assert len(ok_pages) == 10, f"本小时访问上限 10 次: {[p.get('error') for p in pages]}"
+    assert len(refused) == 1, "第 11 次必须被拒"
+    assert refused[0].get("kind") == "ext-quota", f"要能被后端识别成配额让位: {refused[0]}"
+    assert refused[0].get("retry_after", 0) > 0, "要告诉后端下一个窗口还有多久"
+    assert "本小时" in refused[0].get("error", ""), refused[0].get("error")
+    assert trace["fetchesAfterPages"] == 10, f"被拒的那次**不得发出请求**(发出去就白算安全网): {trace}"
+    assert trace["torrent"].get("ok") is True, "下载与访问分开计数: 页面用满不该挡住 .torrent"
+    assert trace["fetchesAfterTorrent"] == 11
+
+
+def test_extension_quota_windows_roll_over():
+    """窗口键翻篇就归零(与后端同一套口径), 日上限独立生效 —— 不能出现「一次超限永久停摆」"""
+    trace = quota_trace()
+    if not trace:
+        return
+    assert trace["afterRollover"].get("ok") is True, f"小时窗口翻篇后应恢复: {trace['afterRollover']}"
+    day = trace["dayRefusal"]
+    assert day.get("ok") is False and day.get("kind") == "ext-quota"
+    assert "本日" in day.get("error", ""), day.get("error")
+    assert day.get("retry_after", 0) > 0 and day.get("retry_after", 0) <= 86400
+    assert trace["fetchesAtEnd"] == trace["fetchesAfterTorrent"] + 1, "日上限那次同样不得发出请求"
