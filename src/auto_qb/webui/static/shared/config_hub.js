@@ -16,9 +16,10 @@ const HUB_MODE_KEY = "autoqb.settings.hub";
 /* 分区文案: 每条回答「它管什么 / 现在什么状态」; 缺省回退 schema 的 label / help */
 const HUB_GROUP_META = {
   basic: {
-    title: "连接 qBittorrent",
-    desc: "auto-qb 通过 qB 的 Web UI 管理种子。这里填地址、端口和登录账号。",
-    lede: "auto-qb 通过 qBittorrent 的 Web UI 读取和修改种子。把地址和登录信息填对，它就能接管种子管理。每行末尾的「?」可以看这一项的完整说明。",
+    // 标题用「常规」而非「连接 qBittorrent」: 本组除 qB 连接外还有主循环节奏 / 数据目录等常规项
+    title: "常规",
+    desc: "连上 qBittorrent 的 Web UI，再定好 auto-qb 自己的运行节奏和数据放在哪。",
+    lede: "上半部分是连接 qBittorrent：把地址和登录信息填对，auto-qb 就能接管种子管理。下半部分是 auto-qb 自己的常规设置：多久检查一次、一轮最多干多少活、运行状态和日志存在哪个目录。每行末尾的「?」可以看这一项的完整说明。",
   },
   maintenance: {
     title: "自动化",
@@ -72,7 +73,7 @@ const HUB_HELP = {
     what: "qBittorrent 的 Web UI 监听在哪个端口。auto-qb 就是从这个端口去读种子、改种子的。",
     def: "8080",
     when: ["你在 qB 里把 Web UI 端口改过（以 qB 里显示的为准）。", "一台机器上跑多个 qB 实例，端口被占用。"],
-    rel: [["界面 → 端口", "auto-qb 自己的界面端口，不是 qB 的"], ["连接 → 主机", "端口填对了但主机写错，一样连不上"]],
+    rel: [["界面 → 端口", "auto-qb 自己的界面端口，不是 qB 的"], ["常规 → 主机", "端口填对了但主机写错，一样连不上"]],
   },
   "web.host": {
     tags: ["字符串"],
