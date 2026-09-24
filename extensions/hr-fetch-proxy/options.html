@@ -34,13 +34,35 @@
     #status { margin-top: 12px; color: #93a0ac; font-size: 13px; white-space: pre-wrap; }
     #hint { margin-top: 6px; color: #8fd6df; font-size: 12.5px; white-space: pre-wrap; }
     label.row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    input[type='number'], select {
+      background: #151b21; color: #dfe6ec;
+      border: 1px solid rgba(255,255,255,.16); border-radius: 4px;
+      padding: 4px 8px; font-size: 13px;
+    }
+    .logbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    #logCount { color: #93a0ac; font-size: 12.5px; margin-right: auto; }
+    #logView {
+      margin-top: 8px; max-height: 480px; overflow: auto;
+      background: #10151a; border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
+      font: 12px/1.6 Consolas, "Courier New", monospace;
+    }
+    .log-row { padding: 3px 8px; border-bottom: 1px solid rgba(255,255,255,.05); }
+    .lt { color: #6b7b88; margin-right: 8px; }
+    .lv { display: inline-block; min-width: 48px; font-weight: 700; margin-right: 8px; }
+    .lv.debug { color: #7d8b96; }
+    .lv.info { color: #8fd6df; }
+    .lv.warn { color: #e5c07b; }
+    .lv.error { color: #e06c75; }
+    .lc { color: #9fb0bd; margin-right: 8px; }
+    .lm { color: #dfe6ec; }
+    .ld { color: #7d8b96; margin-left: 8px; }
   </style>
 </head>
 <body>
   <h1>auto-qb HR 取数代理</h1>
   <p class="hint">哑取数器: 只按后端下发的清单取 HR 页与 .torrent, 不解析、不限速、不读 cookie。</p>
 
-  <label class="row"><input type="checkbox" id="enabled"> 启用轮询(每 5 分钟一次)</label>
+  <label class="row"><input type="checkbox" id="enabled"> 启用轮询(每 1 分钟向端点拉一次任务清单, 空轮询不碰站点)</label>
 
   <h2>① 实例端点</h2>
   <p class="hint">
@@ -74,6 +96,35 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
   </div>
   <div id="status"></div>
   <div id="hint"></div>
+
+  <h2>④ 运行日志</h2>
+  <p class="hint">
+    后台把每次轮询 / 收到的命令 / 站点请求(类型 · 站点 · HTTP 结果 · 耗时)/ 回传与后端响应逐条记下来,
+    只存本地(chrome.storage), 不上传。两个设置改动<strong>即时生效</strong>, 不用点「保存」。
+  </p>
+  <label class="row">
+    最多保留 <input type="number" id="logMax" min="10" max="10000" step="10" style="width:90px"> 条(上限 10000, 超出丢最旧)
+    　记录 <select id="logLevel">
+      <option value="debug">debug(全部, 最详细)</option>
+      <option value="info">info 及以上(默认)</option>
+      <option value="warn">warn 及以上</option>
+      <option value="error">仅 error</option>
+    </select>
+  </label>
+  <label class="row">
+    显示 <select id="logFilter">
+      <option value="debug">全部级别</option>
+      <option value="info">info 及以上</option>
+      <option value="warn">warn 及以上</option>
+      <option value="error">仅 error</option>
+    </select>
+  </label>
+  <div class="logbar">
+    <span id="logCount"></span>
+    <button id="logRefresh">刷新</button>
+    <button id="logClear">清空日志</button>
+  </div>
+  <div id="logView"></div>
 
   <script src="normalize.js"></script>
   <script src="site-caps.js"></script>

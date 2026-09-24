@@ -19,4 +19,4 @@
 | [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |
 | [smoke.md](smoke.md) | `ui_harness.py` + `ui_smoke.cjs` 是本仓库唯一能覆盖前端渲染的手段; 这里是它的环境坑与验证手法。 | 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色 |
 | [stubs-sim.md](stubs-sim.md) | 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。 | 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, caplog, 日志断言, 回执判定, FakeConfig, 假配置, 新配置键 |
-| [tmpdir.md](tmpdir.md) | 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设会让收尾崩, 别手工加前缀。 | 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集 |
+| [tmpdir.md](tmpdir.md) | 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设收尾会崩, 别手工加前缀。 | 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集 |

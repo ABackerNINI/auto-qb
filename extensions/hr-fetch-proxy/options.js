@@ -66,7 +66,7 @@ function parseOrigins() {
 
 async function load() {
   const got = await chrome.storage.local.get({
-    enabled: true, instances: [], siteOrigins: [], status: {}, siteLedger: {},
+    enabled: true, instances: [], siteOrigins: [], status: {}, siteLedger: {}, logMax: 1000, logLevel: 'info',
   });
   $('enabled').checked = Boolean(got.enabled);
   $('instances').value = got.instances.map((i) => JSON.stringify(i)).join('\n');
@@ -74,6 +74,9 @@ async function load() {
   const st = got.status || {};
   if (st.text) setStatus(`${new Date(st.at || Date.now()).toLocaleString()} — ${st.text}`);
   renderCaps(got.siteLedger || {});
+  $('logMax').value = String(got.logMax);
+  $('logLevel').value = got.logLevel;
+  await refreshLogs(); // 首次进页面就出日志; 之后后台每次落盘会经 onChanged 自动刷新
 }
 
 /**
@@ -202,6 +205,102 @@ async function poll() {
   }
 }
 
+// ---------- ④ 运行日志 ----------
+//
+// 这里只做「读 + 过滤 + 清空 + 设置」; 写入全在后台(环形缓冲, 唯一写入口)。两个设置改动**即时生效**。
+// ❗清空必须经后台(clear-logs): 后台内存里还留着缓冲, 选项页直接改 storage 会在它下一次落盘时
+// 被旧数据盖回去(后台没应答时的兜底路径除外 —— 后台会采纳外部清空, 见 background.js 的 onChanged)。
+
+const LOG_RANK = { debug: 0, info: 1, warn: 2, error: 3 };
+const LOG_LV_TEXT = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
+const LOG_RENDER_CAP = 3000; // 一次最多渲染的行数: 10000 行 DOM 会把选项页卡住, 更早的靠过滤看
+let logAll = [];
+let logFilterMin = 0;
+let logRenderTimer = null;
+
+function clampLogMaxInput() {
+  let n = Math.round(Number($('logMax').value));
+  if (!Number.isFinite(n)) n = 1000;
+  n = Math.min(10000, Math.max(10, n));
+  $('logMax').value = String(n);
+  return n;
+}
+
+/** 日志明细里有站点 URL / 页面片段, innerHTML 前必须转义 —— 这是选项页自己的注入面 */
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function logTime(t) {
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return '(时间缺失)';
+  const p = (n, w) => String(n).padStart(w || 2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+function logDetail(e) {
+  const fixed = { t: 1, lvl: 1, cat: 1, msg: 1 };
+  return Object.keys(e)
+    .filter((k) => !fixed[k])
+    .map((k) => `${k}=${e[k]}`)
+    .join(' · ');
+}
+
+function renderLogs() {
+  const rows = logAll.filter((e) => (LOG_RANK[e.lvl] === undefined ? 1 : LOG_RANK[e.lvl]) >= logFilterMin);
+  const tail = rows.slice(-LOG_RENDER_CAP);
+  $('logView').innerHTML =
+    tail
+      .map((e) => {
+        const det = logDetail(e);
+        const lv = LOG_RANK[e.lvl] === undefined ? 'info' : e.lvl;
+        return (
+          `<div class="log-row"><span class="lt">${logTime(e.t)}</span>` +
+          `<span class="lv ${lv}">${LOG_LV_TEXT[lv]}</span>` +
+          `<span class="lc">${esc(e.cat || '')}</span><span class="lm">${esc(e.msg || '')}</span>` +
+          (det ? `<span class="ld">${esc(det)}</span>` : '') +
+          '</div>'
+        );
+      })
+      .join('') || '<div class="log-row"><span class="ld">(暂无日志 —— 点「立即拉取一次」, 或把记录级别调到 debug)</span></div>';
+  const clipped = rows.length > LOG_RENDER_CAP ? `(只渲染最近 ${LOG_RENDER_CAP} 条, 更早的请收窄过滤)` : '';
+  $('logCount').textContent = `共 ${logAll.length} 条 · 过滤后 ${rows.length} 条 ${clipped}`;
+}
+
+async function refreshLogs() {
+  const got = await chrome.storage.local.get({ logs: [] });
+  logAll = Array.isArray(got.logs) ? got.logs : [];
+  renderLogs();
+}
+
+/** 后台每次落盘都自动重渲染(防抖): 「立即拉取」跑完日志自己刷出来, 不用手点 */
+function scheduleLogRender() {
+  if (logRenderTimer) return;
+  logRenderTimer = setTimeout(() => {
+    logRenderTimer = null;
+    refreshLogs().catch((e) => setStatus(`刷新日志失败: ${e.message || e}`));
+  }, 300);
+}
+
+async function applyLogSettings() {
+  const max = clampLogMaxInput();
+  const lvl = $('logLevel').value;
+  await chrome.storage.local.set({ logMax: max, logLevel: lvl });
+  setStatus(`日志设置已生效: 最多留 ${max} 条, 记录 ${lvl} 及以上(更低的直接丢弃, 不占额度)`);
+}
+
+async function clearLogsClick() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'clear-logs' });
+    if (!(res && res.ok)) setStatus(`清空失败: ${(res && res.error) || '未知原因'}`);
+  } catch (e) {
+    // 后台没应答(多半刚被回收): 直接落 storage —— 后台醒来初始化时会读到这份空数组
+    await chrome.storage.local.set({ logs: [] });
+    setStatus(`经 storage 直接清空(后台未应答: ${e.message || e})`);
+  }
+  await refreshLogs();
+}
+
 // 兜底: 任何漏网的拒绝都在这里落到状态栏, 不再出现 "Uncaught (in promise)"
 window.addEventListener('unhandledrejection', (ev) => {
   setStatus(`未处理的错误: ${(ev.reason && ev.reason.message) || ev.reason}`);
@@ -212,4 +311,15 @@ $('grant').addEventListener('click', () => grant().catch((e) => setStatus(String
 $('test').addEventListener('click', () => testEndpoint().catch((e) => setStatus(String(e))));
 $('poll').addEventListener('click', () => poll().catch((e) => setStatus(String(e))));
 $('enabled').addEventListener('change', () => save().catch((e) => setStatus(String(e))));
+$('logMax').addEventListener('change', () => applyLogSettings().catch((e) => setStatus(String(e))));
+$('logLevel').addEventListener('change', () => applyLogSettings().catch((e) => setStatus(String(e))));
+$('logFilter').addEventListener('change', () => {
+  logFilterMin = LOG_RANK[$('logFilter').value] || 0;
+  renderLogs();
+});
+$('logRefresh').addEventListener('click', () => refreshLogs().catch((e) => setStatus(String(e))));
+$('logClear').addEventListener('click', () => clearLogsClick().catch((e) => setStatus(String(e))));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.logs) scheduleLogRender();
+});
 load().catch((e) => setStatus(`读取配置失败: ${e.message || e}`));

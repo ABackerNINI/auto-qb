@@ -25,6 +25,13 @@
   (不发请求 + 回传 kind=ext-quota + retry_after); 窗口键变了计数归零
 - test_extension_torrent_login_page_detected: 真跑 background.js —— download.php 返回 HTML(登录页)时
   回传 kind=login-page, 让后端按「HR 登录失效」处置而不烧 .torrent 重试额度(2026-09-25 实报)
+- test_logger_levels_ring_truncation_and_clear: 真跑 background.js —— 运行日志分级(低于记录级别直接丢)、
+  环形上限(丢最旧)、超长字段截断(页面 HTML 整份进日志会撑爆 storage 配额)、清空后落盘为空数组
+- test_log_ui_wiring_and_escape: 选项页日志面 —— 清空走 clear-logs 协议(两边一致, 直接改 storage
+  会被后台内存缓冲盖回)、渲染过 esc 转义(明细含站点 URL/页面片段)、限渲染条数、
+  storage.onChanged 自动刷新、日志容器在脚本之前
+- test_options_poll_label_matches_background: 选项页「启用轮询(每 N 分钟…)」文案与 background.js 的
+  POLL_MINUTES 同步(漂移史: 文案停在 5 分钟, 实际 v2.6 起已改 1 分钟, 用户照文案理解行为必对不上)
 """
 import json
 import pathlib
@@ -289,6 +296,7 @@ const chrome = {
   runtime: { onInstalled: noop, onStartup: noop, onMessage: noop, onSuspend: noop },
   permissions: { onAdded: noop },
   storage: {
+    onChanged: noop,   // background.js 顶层注册了「设置联动 / 外部清空采纳」监听
     local: {
       get: (defaults) => {
         const out = {};
@@ -315,7 +323,7 @@ const chrome = {
 };
 let nextPage = PAGE_WITH_TABLE;
 const sandbox = {
-  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON,
+  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
   fetch: async () => ({ ok: true, status: 200, text: async () => nextPage, json: async () => ({}) }),
 };
 vm.createContext(sandbox);
@@ -459,7 +467,7 @@ const chrome = {
   alarms: { create() {}, onAlarm: noop },
   runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
   permissions: { onAdded: noop },
-  storage: { local: {
+  storage: { onChanged: noop, local: {   // onChanged: background.js 顶层注册了「设置联动 / 外部清空采纳」监听
     get: (defaults) => getWithDefaults(defaults),
     set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
   } },
@@ -591,7 +599,7 @@ const chrome = {
   alarms: { create() {}, onAlarm: noop },
   runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
   permissions: { onAdded: noop },
-  storage: { local: {
+  storage: { onChanged: noop, local: {   // onChanged: background.js 顶层注册了「设置联动 / 外部清空采纳」监听
     get: (defaults) => getWithDefaults(defaults),
     set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
   } },
@@ -626,3 +634,104 @@ def test_extension_torrent_login_page_detected():
     assert payload.get("ok") is False
     assert payload.get("kind") == "login-page", f"必须标成登录页让后端免计失败: {payload}"
     assert "登录" in payload.get("error", ""), payload.get("error")
+
+
+# ---------- 运行日志(分级 + 环形上限 + 落 storage) ----------
+
+#: 真跑 background.js 的日志场景: ①默认记录级别 info ⇒ debug 直接丢, 且条目字段齐全、超长字段截断
+#: ②环形上限 10 ⇒ 灌 25 条只留最新 10 条 ③记录级别实时生效(debug 收得进 / error 起滤掉 info)
+#: ④clearLogs 清空后 storage 里是空数组。
+_NODE_RUN_LOGGER = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const store = {};
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { onChanged: noop, local: {   // onChanged: background.js 顶层注册了「设置联动 / 外部清空采纳」监听
+    get: (defaults) => {
+      const out = {};
+      for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+      return Promise.resolve(out);
+    },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+(async () => {
+  const out = {};
+  await sandbox.log('debug', '任务', 'debug 行(应被丢)');
+  await sandbox.log('info', '命令', '收到命令', { 站点: 'pt.example.com', url: 'https://pt.example.com/x', 耗时: '12ms' });
+  await sandbox.log('warn', '配额', 'warn 行');
+  await sandbox.log('error', '任务', 'error 行', { url: 'ab'.repeat(1000) });
+  await sandbox.flushLogs();
+  out.byLevel = (store.logs || []).map((e) => e.lvl);
+  out.fields = (store.logs || [])[0];
+  const longEntry = (store.logs || []).find((e) => e.lvl === 'error');
+  out.longLen = (longEntry.url || '').length;
+  out.longMark = (longEntry.url || '').includes('…(共');
+  sandbox.applyLogSettings(10, undefined);
+  for (let i = 1; i <= 25; i += 1) await sandbox.log('info', '任务', '行 ' + i);
+  await sandbox.flushLogs();
+  out.ringLen = store.logs.length;
+  out.ringFirst = store.logs[0].msg;
+  out.ringLast = store.logs[store.logs.length - 1].msg;
+  sandbox.applyLogSettings(undefined, 'debug');
+  await sandbox.log('debug', '任务', 'debug 行(应收)');
+  sandbox.applyLogSettings(undefined, 'error');
+  await sandbox.log('info', '任务', 'info 行(应被丢)');
+  await sandbox.flushLogs();
+  out.debugKept = store.logs.some((e) => e.msg === 'debug 行(应收)');
+  out.infoDropped = !store.logs.some((e) => e.msg === 'info 行(应被丢)');
+  await sandbox.clearLogs();
+  out.afterClear = Array.isArray(store.logs) && store.logs.length === 0;
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+def test_logger_levels_ring_truncation_and_clear():
+    """运行日志: 分级(低于记录级别直接丢) / 环形上限(丢最旧) / 超长截断 / 清空 —— 真跑 background.js"""
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node([node, "-e", _NODE_RUN_LOGGER, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
+    assert proc.returncode == 0, f"node 跑 background.js 的日志场景失败: {proc.stderr.strip()}"
+    got = json.loads(proc.stdout)
+    assert got["byLevel"] == ["info", "warn", "error"], f"低于记录级别(debug)要直接丢弃: {got['byLevel']}"
+    fields = got["fields"]
+    for key in ("t", "lvl", "cat", "msg", "站点", "url", "耗时"):
+        assert key in fields, f"日志条目缺字段 {key}: {fields}"
+    assert got["longMark"] and got["longLen"] < 450, f"超长字段必须截断(整份 HTML 进日志会撑爆配额): {got}"
+    assert got["ringLen"] == 10 and got["ringFirst"] == "行 16" and got["ringLast"] == "行 25", f"环形缓冲要丢最旧的: {got}"
+    assert got["debugKept"] and got["infoDropped"], f"记录级别要实时生效: {got}"
+    assert got["afterClear"], f"清空后 storage 里应是空数组: {got}"
+
+
+def test_log_ui_wiring_and_escape():
+    """选项页日志面: 清空走后台协议(直接改 storage 会被后台内存缓冲盖回)、渲染必须转义、限渲染条数"""
+    js = _read(OPTIONS_JS)
+    bg = _read(BACKGROUND_JS)
+    html = _read(OPTIONS_HTML)
+    assert "'clear-logs'" in js and "'clear-logs'" in bg, "清空要经后台清(内存缓冲是唯一写入口)"
+    assert "logMax" in js and "logLevel" in js, "条数上限与记录级别要能落盘"
+    assert "logFilter" in html and "logView" in html, "分级显示的过滤控件与日志视图要在页面上"
+    assert html.index("logView") < html.index("options.js"), "日志容器要在脚本之前(否则 getElementById 拿不到)"
+    assert "esc(" in js, "日志渲染必须过 HTML 转义(明细含站点 URL/页面片段, 裸插 innerHTML 是注入面)"
+    assert "chrome.storage.onChanged" in js, "后台落盘后选项页要自动刷出来(不用手点刷新)"
+    assert "LOG_RENDER_CAP" in js, "全量渲染 10000 行会卡死选项页, 必须限渲染条数"
+
+
+def test_options_poll_label_matches_background():
+    """选项页的轮询周期文案必须与 background.js 的 POLL_MINUTES 同步(漂移史: 文案停在 5 分钟,
+    实际 v2.6 起已改 1 分钟 —— 用户按选项页显示的数字理解行为, 对不上就把排查引向歧途)"""
+    bg = _read(BACKGROUND_JS)
+    html = _read(OPTIONS_HTML)
+    m = re.search(r"const POLL_MINUTES = (\d+);", bg)
+    assert m, "POLL_MINUTES 常量要存在(改用别的名字时这条断言一起改)"
+    assert f"每 {m.group(1)} 分钟" in html, f"选项页轮询周期文案与 POLL_MINUTES={m.group(1)} 不一致, 两处要同步改"

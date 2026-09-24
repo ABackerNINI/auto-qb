@@ -1,7 +1,7 @@
 # 浏览器扩展 ↔ 本地端点
 
-> 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。
-> 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup
+> 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。另含 MV3 落盘设施(运行日志/台账)的 storage 口径与 promise 串行链自引用死锁(静默, 无报错)。
+> 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup, 运行日志, 日志分级, 环形缓冲, storage.local, 防抖落盘, promise 死锁, 串行链
 
 ## 两条实测报错 → 根因 → 处置
 
@@ -27,6 +27,12 @@
   ②只有「没表格 / 出现密码输入框」这类**通用结构信号**才升级到渲染通道;
   ③渲染通道用**离屏 popup**(`type:'popup'`, 屏幕外坐标, `focused:false`, 逐个降级尝试), 用完删窗口,
   并带一道**焦点守卫**。代价: 最小化/离屏窗口里的页面脚本可能被节流 ⇒ 只在兜底路径上, 且有 60s 上限。
+- **MV3 落盘类设施(日志/台账)的唯一事实源是 `chrome.storage`**: service worker 随时被回收, 内存缓冲
+  只是加速 —— 醒来先读存量, 之后防抖**整份**写回(读→append→写在并发下互相覆盖丢条)。
+  ⚠ **promise 串行链禁止按名字引用自己**(2026-09-25 实抓): `flush` 把 `chain = p.catch(...)` 重新赋值后,
+  链内回调再按名字读 `chain` 拿到的是**自己** ⇒ 等自己 = **首刷即死锁**, 且**无报错无日志**(node 事件循环
+  排空后 rc=0 静默退出, 浏览器侧表现为日志永远落不了盘)。写法: 回调前先把队尾**存局部变量**再排队。
+  这类错只有「真跑 + await 返回值」的守阵抓得到 —— `node --check` 与不 await 的场景都看不见。
 
 ## 直取与渲染的分工(2026-09-25 定型)
 
@@ -40,12 +46,13 @@
 
 ## 守阵
 
-`tests/test_extension_proxy.py`(**12 条**): manifest 作用域(MV3 / 只申请回环 / **绝不 `<all_urls>`** / 站点走可选权限) ·
+`tests/test_extension_proxy.py`(**14 条**): manifest 作用域(MV3 / 只申请回环 / **绝不 `<all_urls>`** / 站点走可选权限) ·
 **真跑** `normalize.js`(裸域名 / localhost / https / 非法输入) · 归一化只有一份且载入顺序正确 ·
 **与后端协议常量对照**(端点路径 / 鉴权头 / 回传字段名, 用 `HrResult.from_json` 实测) ·
 调用顺序(归一化先于权限/存储 API) · 不得留裸拒绝 ·
 **用假 chrome API 真跑** `background.js` 的四个场景(直取零界面 / 内容不像页面时用离屏 popup / 登录页也得升级 /
-焦点被抢后还回去)。
+焦点被抢后还回去) · **运行日志**(分级阈值丢 debug / 环形上限丢最旧 / 超长字段截断 / 清空落盘空数组;
+选项页 clear-logs 协议两边一致 + innerHTML 前必须 esc 转义 + 限渲染 3000 行)。
 
 ⚠ 红验过: 去掉“补 scheme”那行 ⇒ `test_normalizers_behave` 当场变红;
 强制走渲染通道 ⇒ `test_page_fetch_is_headless_when_html_looks_fine` 当场变红。

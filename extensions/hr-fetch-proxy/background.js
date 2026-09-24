@@ -11,6 +11,7 @@
 // 解析与策略全在后端(能用 pytest 守住的那一侧), cookie 全程不离开浏览器。
 //
 // 配置在选项页(实例列表 + 站点权限), 存在 chrome.storage.local。
+// 运行日志(分级 + 环形上限, 选项页④区过滤查看)也落 chrome.storage.local —— 见下方「运行日志」节。
 // 地址归一化共用 normalize.js(选项页用 <script> 载入, 这里用 importScripts —— 同一份代码)。
 
 importScripts('normalize.js');
@@ -40,11 +41,155 @@ async function readConfig() {
   };
 }
 
-async function noteStatus(patch) {
+async function noteStatus(patch, lvl) {
   const prev = await chrome.storage.local.get({ status: {} });
   const status = Object.assign({}, prev.status, patch, { at: Date.now() });
   await chrome.storage.local.set({ status });
+  // 状态栏只留**最后一句**, 同样的内容同步进运行日志(level 由调用方给: 配额/异常要标 warn/error)
+  if (patch && patch.text) log(lvl || 'info', '状态', patch.text);
 }
+
+// ---------- 运行日志(分级 + 环形上限, 落 chrome.storage.local) ----------
+//
+// ❗为什么需要: 状态栏只有**最后一句**, 一轮里多实例多任务的经过全被覆盖掉; 排查「这条为什么失败 /
+// 后端到底收到了什么」必须看时序。故把关键事件逐条落成带级别的日志, 选项页④区可按级别过滤查看:
+//   · 分级: debug/info/warn/error。低于「记录级别」的直接丢弃(选项页可设, 默认 info);
+//   · 环形上限: 只留最近 N 条(选项页可设 10–10000, 默认 1000; 10000 是用户指定的硬上限) ——
+//     再大单次落盘的序列化开始拖慢 SW, 且 storage.local 配额(10MB)吃紧;
+//   · 字段收敛: 每条 = 时间 + 级别 + 类别 + 摘要 + 明细(站点/url/类型/HTTP/耗时/字节数/后端响应…),
+//     单字段超长一律截断 —— 页面 HTML 动辄几 MB, 整份进日志 10000 条就把配额打爆了。
+//
+// MV3 的 service worker 随时被回收, 所以**唯一事实源是 storage**: SW 醒来后第一次写日志时把存量
+// 读进内存当缓冲底, 之后只增删内存数组, 防抖 300ms **整份**写回。整份写回(而不是读→append→写)是
+// 故意的: log() 是 fire-and-forget, 读改写在两个并发 log 之间会互相覆盖丢条 —— 内存数组是唯一写入口。
+const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+const LOG_KEY = 'logs';
+const LOG_MAX_KEY = 'logMax';
+const LOG_LEVEL_KEY = 'logLevel';
+const LOG_DEFAULT_MAX = 1000;
+const LOG_HARD_MAX = 10000; // 用户指定的硬上限: 条数设置再大也不许超过它
+const LOG_FLUSH_MS = 300;
+const LOG_TRUNC = 400; // 单字段截断长度(字符)
+
+let logBuf = null; // 环形缓冲(initLogBuffer 之后才有值; log() 会先等它)
+let logMaxCache = LOG_DEFAULT_MAX;
+let logLevelCache = 'info';
+let logInitPromise = null;
+let logFlushTimer = null;
+let logFlushChain = Promise.resolve();
+let logSelfWriteAt = 0; // 最近一次自己落盘的时刻: 区分「自己写的」与「外部改的」(见 onChanged)
+
+function clampLogMax(v) {
+  const n = Math.round(Number(v) || 0);
+  return Math.min(LOG_HARD_MAX, Math.max(10, n));
+}
+
+/** 明细字段收敛: 空值剔除、非字符串 JSON 化、超长截断 —— 10000 条也撑不爆 storage 配额 */
+function compactDetail(detail) {
+  const out = {};
+  if (!detail || typeof detail !== 'object') return out;
+  for (const [k, v] of Object.entries(detail)) {
+    if (v === undefined || v === null || v === '') continue;
+    let s = typeof v === 'string' ? v : JSON.stringify(v);
+    if (s === undefined) continue; // JSON.stringify(函数) === undefined
+    if (s.length > LOG_TRUNC) s = s.slice(0, LOG_TRUNC) + `…(共 ${s.length} 字符)`;
+    out[k] = s;
+  }
+  return out;
+}
+
+/**
+ * 写一条日志(fire-and-forget, 返回值仅供测试 await): 低于记录级别的直接丢。
+ * ❗绝不让日志反噬主流程: 初始化/追加/落盘任何一步失败都吞掉, 取数照跑。
+ */
+function log(lvl, cat, msg, detail) {
+  if (!logInitPromise) logInitPromise = initLogBuffer();
+  const lvlName = Object.prototype.hasOwnProperty.call(LOG_LEVELS, lvl) ? lvl : 'info';
+  return logInitPromise.then(() => {
+    if (LOG_LEVELS[lvlName] < LOG_LEVELS[logLevelCache]) return;
+    logBuf.push(
+      Object.assign(
+        {
+          t: Date.now(),
+          lvl: lvlName,
+          cat: String(cat || '').slice(0, 20) || '其它',
+          msg: String(msg === undefined || msg === null ? '' : msg).slice(0, LOG_TRUNC * 2),
+        },
+        compactDetail(detail)
+      )
+    );
+    if (logBuf.length > logMaxCache) logBuf.splice(0, logBuf.length - logMaxCache);
+    scheduleLogFlush();
+  }).catch(() => {});
+}
+
+async function initLogBuffer() {
+  try {
+    const got = await chrome.storage.local.get({ [LOG_KEY]: [], [LOG_MAX_KEY]: LOG_DEFAULT_MAX, [LOG_LEVEL_KEY]: 'info' });
+    logBuf = Array.isArray(got[LOG_KEY]) ? got[LOG_KEY] : [];
+    logMaxCache = clampLogMax(got[LOG_MAX_KEY]);
+    if (Object.prototype.hasOwnProperty.call(LOG_LEVELS, got[LOG_LEVEL_KEY])) logLevelCache = got[LOG_LEVEL_KEY];
+    if (logBuf.length > logMaxCache) logBuf.splice(0, logBuf.length - logMaxCache);
+  } catch (e) {
+    logBuf = logBuf || []; // 读不到就当空: 丢一轮日志可以接受, 主流程不能被它卡住
+  }
+}
+
+/** 条数/记录级别设置的统一入口(storage.onChanged 与测试都走这里), 收紧上限时顺手裁剪 */
+function applyLogSettings(maxValue, levelValue) {
+  if (maxValue !== undefined) logMaxCache = clampLogMax(maxValue);
+  if (levelValue !== undefined && Object.prototype.hasOwnProperty.call(LOG_LEVELS, levelValue)) logLevelCache = levelValue;
+  if (logBuf && logBuf.length > logMaxCache) logBuf.splice(0, logBuf.length - logMaxCache);
+}
+
+function scheduleLogFlush() {
+  if (logFlushTimer) return;
+  logFlushTimer = setTimeout(() => {
+    logFlushTimer = null;
+    flushLogs();
+  }, LOG_FLUSH_MS);
+}
+
+/** 整份写回(串行化: 前一笔没写完不叠下一笔); pollAll 收尾会 await 它, 让「立即拉取」立刻可见 */
+function flushLogs() {
+  if (!logInitPromise) return Promise.resolve();
+  const prev = logFlushChain; // ❗先取队尾再排队: 回调里若按名字引用 logFlushChain, 那时它已被改成
+  const p = logInitPromise.then(() => // 「本次 flush 自己」, 等自己 = 首刷即死锁(实测抓过)
+    prev.then(() => {
+      logSelfWriteAt = Date.now();
+      return chrome.storage.local.set({ [LOG_KEY]: logBuf }).catch((e) => {
+        console.warn('日志落盘失败(等下一笔再试):', e);
+      });
+    })
+  );
+  logFlushChain = p.catch(() => {});
+  return p;
+}
+
+async function clearLogs() {
+  if (!logInitPromise) logInitPromise = initLogBuffer();
+  await logInitPromise;
+  logBuf.length = 0;
+  await flushLogs();
+  log('info', '命令', '日志已清空(选项页)'); // 留一条证明清过 + 时间点; 随下一次防抖落盘
+}
+
+// 设置缓存联动: 选项页改了条数/级别, SW 不重启也要生效。
+// 外部清空采纳: 选项页在后台没应答时会直接把 storage 里的 logs 置空 —— 内存必须采纳这份新数组,
+// 否则旧缓冲在下一次落盘时会把「已清空」盖回去。1 秒内自己刚写过的忽略(那本来就是同一份数据)。
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes[LOG_MAX_KEY] || changes[LOG_LEVEL_KEY]) {
+    applyLogSettings(
+      changes[LOG_MAX_KEY] ? changes[LOG_MAX_KEY].newValue : undefined,
+      changes[LOG_LEVEL_KEY] ? changes[LOG_LEVEL_KEY].newValue : undefined
+    );
+  }
+  if (changes[LOG_KEY] && logBuf && Date.now() - logSelfWriteAt > 1000) {
+    logBuf.length = 0;
+    if (Array.isArray(changes[LOG_KEY].newValue)) logBuf.push(...changes[LOG_KEY].newValue);
+  }
+});
 
 function schedule() {
   // ❗delayInMinutes 别小于 0.5 分钟: Chrome 对 alarm 有最小间隔限制(非 unpacked 时更严),
@@ -52,7 +197,7 @@ function schedule() {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_MINUTES, delayInMinutes: 0.5 });
   } catch (e) {
-    noteStatus({ text: `创建定时器失败: ${e.message || e}` });
+    noteStatus({ text: `创建定时器失败: ${e.message || e}` }, 'error');
   }
 }
 
@@ -60,23 +205,35 @@ chrome.runtime.onInstalled.addListener(() => {
   schedule();
   // 把上限写进 storage: 选项页据此展示「两道闸的当前额度」, 免得两处各写一份阈值(必漂移)
   chrome.storage.local.set({ siteCaps: SITE_CAPS });
+  log('info', '系统', `扩展安装/更新: v${(chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '?'}, 轮询周期 ${POLL_MINUTES} 分钟`);
   noteStatus({ text: '已安装: 请在选项页填实例端点与 token, 并授予站点权限' });
 });
 
-chrome.runtime.onStartup.addListener(schedule);
+chrome.runtime.onStartup.addListener(() => {
+  schedule();
+  log('info', '系统', '浏览器启动, 轮询已排程');
+});
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
-    pollAll().catch((e) => noteStatus({ text: `轮询异常: ${e}` }));
+    pollAll('定时').catch((e) => noteStatus({ text: `轮询异常: ${e}` }, 'error'));
   }
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === 'poll-now') {
-    pollAll()
+    log('info', '命令', '收到命令: 立即拉取(来自选项页)');
+    pollAll('手动(选项页)')
       .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true; // 异步 sendResponse
+  }
+  if (msg && msg.type === 'clear-logs') {
+    // 清空必须走后台: 后台内存里留着环形缓冲, 选项页直接改 storage 会在下一次落盘时被盖回去
+    clearLogs()
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
   }
   return false;
 });
@@ -85,22 +242,30 @@ chrome.permissions.onAdded.addListener(() => noteStatus({ text: '站点权限已
 
 // ---------- 主流程 ----------
 
-async function pollAll() {
-  const conf = await readConfig();
-  if (!conf.enabled) return;
-  if (!conf.instances.length) {
-    await noteStatus({ text: '未配置实例端点(打开选项页填写)' });
-    return;
-  }
-  const lines = [];
-  for (const inst of conf.instances) {
-    try {
-      lines.push(await pollInstance(inst));
-    } catch (e) {
-      lines.push(`${inst.name || inst.endpoint}: 失败 ${e}`);
+async function pollAll(trigger) {
+  try {
+    const conf = await readConfig();
+    log('info', '轮询', `轮询开始(${trigger || '定时'}): ${conf.instances.length} 个实例`, { 扩展启用: conf.enabled ? '是' : '否' });
+    if (!conf.enabled) return;
+    if (!conf.instances.length) {
+      await noteStatus({ text: '未配置实例端点(打开选项页填写)' });
+      return;
     }
+    const lines = [];
+    for (const inst of conf.instances) {
+      try {
+        lines.push(await pollInstance(inst));
+      } catch (e) {
+        // pollInstance 内部错误都自己消化了, 走到这是意外异常(如响应 JSON 解析炸了) —— 原样记下来
+        const line = `${inst.name || inst.endpoint}: 失败 ${e}`;
+        lines.push(line);
+        log('error', '轮询', line);
+      }
+    }
+    await noteStatus({ text: lines.join('; ') || '无事可做' });
+  } finally {
+    await flushLogs(); // 本轮立刻落盘: 「立即拉取」一返回, 选项页就能刷出全程日志
   }
-  await noteStatus({ text: lines.join('; ') || '无事可做' });
 }
 
 function headers(inst) {
@@ -178,6 +343,14 @@ function hostOf(url) {
   }
 }
 
+/** 请求日志的标准明细(类型/站点/url/耗时) + 调用方补充 —— 每条请求带同一套字段, 排查才有可比性 */
+function reqDetail(reqType, url, t0, extra) {
+  return Object.assign(
+    { 类型: reqType, 站点: hostOf(url), url: url, 耗时: t0 === undefined ? undefined : `${Date.now() - t0}ms` },
+    extra || {}
+  );
+}
+
 /** 超限(或将要超限)时抛它 —— 与「取数失败」区分开: 后端收到后只让位, 不计失败、不告警级联 */
 class ExtQuotaError extends Error {
   constructor(message, retryAfter) {
@@ -229,7 +402,11 @@ async function takeAllowance(kind, url) {
 async function requireAllowance(kind, url) {
   const got = await takeAllowance(kind, url);
   if (got.ok) return got;
-  await noteStatus({ text: `扩展侧硬上限挡下(${got.reason}); 后端频控可能失效(也可能扩展上限本就低于后端配额) —— 本次请求未发出` });
+  await noteStatus(
+    { text: `扩展侧硬上限挡下(${got.reason}); 后端频控可能失效(也可能扩展上限本就低于后端配额) —— 本次请求未发出` },
+    'warn'
+  );
+  log('warn', '配额', `扩展侧硬上限拒发(kind=${kind}): ${got.reason}`, { 站点: got.host, url: url });
   throw new ExtQuotaError(`${got.reason}(host=${got.host})`, got.retryAfter);
 }
 
@@ -237,42 +414,62 @@ async function pollInstance(inst) {
   const label = inst.name || inst.endpoint || '(未命名)';
   const base = safeEndpoint(inst.endpoint);
   if (!base) {
+    log('warn', '请求', `${label}: 端点写法不对, 本实例跳过`, { 端点: inst.endpoint });
     return `${label}: 端点写法不对(需 127.0.0.1:<端口> 这种带端口的形式) —— 到选项页重新保存会自动纠正`;
   }
   const tasksUrl = `${base}/api/hr/tasks`;
+  const t0 = Date.now();
   let res;
   try {
     res = await fetch(tasksUrl, { headers: headers(inst) });
   } catch (e) {
+    log('error', '请求', `拉任务清单失败: ${explainFetchError(tasksUrl, e)}`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label }));
     return `${label}: ${explainFetchError(tasksUrl, e)}`;
   }
   if (res.status === 401) {
     // 该实例没启用取数通道 / token 不匹配 —— 属正常路径, **不重试**(后端会自己告警)
+    log('warn', '请求', '端点拒绝(401, token 或 channel.enabled 未开)', reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: '401' }));
     return `${label}: 端点拒绝(401, token 或 channel.enabled 未开)`;
   }
-  if (!res.ok) return `${label}: 拉清单失败 HTTP ${res.status}`;
+  if (!res.ok) {
+    log('error', '请求', `拉清单失败 HTTP ${res.status}`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: String(res.status) }));
+    return `${label}: 拉清单失败 HTTP ${res.status}`;
+  }
   const data = await res.json();
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
-  if (!tasks.length) return `${label}: 无任务`;
+  log('info', '命令', `任务清单到手: ${tasks.length} 条`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label, HTTP: '200' }));
+  if (!tasks.length) return `${label}: 无任务`; // 与旧行为一致: 无任务**不回传**(不打后端的 result 端点)
   const results = [];
   const rendered = [];
   for (const task of tasks) {
+    log('info', '命令', `收到命令: kind=${task.kind} id=${task.id}`, { 站点: hostOf(task.url), url: task.url, 实例: label });
     const got = await runTask(task);
     if (got.rendered) rendered.push(task.url);
     results.push(got.payload);
   }
+  const resultUrl = `${base}/api/hr/result`;
+  const pt0 = Date.now();
   let post;
   try {
-    post = await fetch(`${base}/api/hr/result`, {
+    post = await fetch(resultUrl, {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, headers(inst)),
       body: JSON.stringify({ results }),
     });
   } catch (e) {
+    log('error', '请求', `回传失败: ${explainFetchError(base, e)}`, reqDetail('回传结果', resultUrl, pt0, { 实例: label, 条数: results.length }));
     return `${label}: 取到 ${results.length} 条但回传失败 —— ${explainFetchError(base, e)}`;
   }
+  // 「返回后端结果」: 响应体也留一份截断快照 —— 对账「扩展说发了, 后端说没收到」就靠它
+  const respText = await post.text().catch(() => '');
   const okCount = results.filter((r) => r.ok).length;
   const quotaCount = results.filter((r) => r.kind === 'ext-quota').length;
+  log(
+    post.ok ? 'info' : 'error',
+    '请求',
+    `回传 ${results.length} 条(成功 ${okCount}${quotaCount ? `, 配额让位 ${quotaCount}` : ''}) → HTTP ${post.status}`,
+    reqDetail('回传结果', resultUrl, pt0, { 实例: label, HTTP: String(post.status), 后端响应: respText })
+  );
   const how = rendered.length ? `其中 ${rendered.length} 条走渲染` : '全部直取(无界面)';
   const blocked = quotaCount ? `; 扩展侧硬上限挡下 ${quotaCount} 条(后端频控可能失效)` : '';
   return `${label}: 取 ${results.length} 条(成功 ${okCount}; ${how})${blocked}, 回传 HTTP ${post.status}`;
@@ -297,10 +494,12 @@ async function pageText(url) {
 /** 直取(无界面): 与 .torrent 同一条路 —— service worker 发请求, `credentials:'include'` 带站点 cookie */
 async function fetchText(url) {
   await requireAllowance('page', url);
+  const t0 = Date.now();
   const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`); // 失败由 runTask 的 catch 统一记 error, 这层不重复记
   const text = await res.text();
   if (!text) throw new Error('返回内容为空');
+  log('info', '请求', `页面直取成功(${text.length} 字符)`, reqDetail('页面直取', url, t0, { HTTP: '200', 字符数: String(text.length) }));
   return text;
 }
 
@@ -321,6 +520,7 @@ function hasTable(html) {
 }
 
 async function runTask(task) {
+  log('debug', '任务', `开始执行 id=${task.id}(kind=${task.kind})`, { 站点: hostOf(task.url), url: task.url });
   try {
     if (task.kind === 'page') {
       const page = await pageText(task.url);
@@ -329,6 +529,13 @@ async function runTask(task) {
     const body = await fetchBinary(task.url);
     return { rendered: false, payload: { id: task.id, ok: true, status: 200, url: task.url, body_b64: body } };
   } catch (e) {
+    // 配额拒发在 requireAllowance 里已记 warn, 不重复; 登录页降半级记 warn(不是故障, 是要人处置)
+    if (!(e instanceof ExtQuotaError)) {
+      log(e instanceof LoginPageError ? 'warn' : 'error', '任务', `任务 ${task.id} 失败(kind=${task.kind}): ${e && e.message ? e.message : e}`, {
+        站点: hostOf(task.url),
+        url: task.url,
+      });
+    }
     const payload = { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) };
     if (e instanceof ExtQuotaError) {
       // 扩展侧硬上限: 让后端能把它与「取数失败」区分开(前者只让位, 后者才计失败/熔断)
@@ -353,6 +560,8 @@ async function runTask(task) {
  */
 async function pageSnapshot(url) {
   await requireAllowance('page', url); // 渲染是**第二次**访问同一站(顶层导航), 同样计额
+  const t0 = Date.now();
+  log('info', '请求', '离屏窗口渲染开始', reqDetail('页面渲染(离屏窗口)', url));
   const restoreFocus = await focusGuard();
   const win = await createOffscreenWindow(url);
   const tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : 0;
@@ -366,6 +575,7 @@ async function pageSnapshot(url) {
     });
     const html = frames && frames[0] ? frames[0].result : '';
     if (!html) throw new Error('页面为空(未授予站点权限?)');
+    log('info', '请求', `渲染取到 DOM(${html.length} 字符)`, reqDetail('页面渲染(离屏窗口)', url, t0, { 字符数: String(html.length) }));
     return html;
   } finally {
     await chrome.windows.remove(win.id).catch(() => {}); // 连窗口带标签一起删: 不留脏窗口
@@ -416,6 +626,7 @@ async function focusGuard() {
  */
 async function fetchBinary(url) {
   await requireAllowance('torrent', url);
+  const t0 = Date.now();
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
@@ -425,6 +636,7 @@ async function fetchBinary(url) {
   if (contentType.includes('text/html') || head.startsWith('<!doctype') || head.startsWith('<html')) {
     throw new LoginPageError('download.php 返回 HTML(疑似登录页/未登录 —— 请在浏览器里登录该站点)');
   }
+  log('info', '请求', `种子下载成功(${buf.length} 字节)`, reqDetail('种子下载', url, t0, { HTTP: '200', 字节数: String(buf.length) }));
   return toBase64(buf);
 }
 

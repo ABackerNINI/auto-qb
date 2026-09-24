@@ -6,12 +6,12 @@
 
 ## 当前基线
 
-**1576 collected: 1573 passed + 1 skipped / Windows** —— 2026-09-25 **v2.8 明细表改版 + 已取记录逐文件 ts 实测**
-(本条 **+2 条(1574 → 1576)**: `hr_downloaded[].ts` 改记各 .torrent 自己的取回时刻 1 条(`test_hr_service.py`) ·
-`--hr-status` 明细表 CJK 格宽对齐 / 长名截断 / 档位人话 / 还需做种镜像站点形态 / 剩余达标不显示 1 条
-(`test_hr_report.py`)。动机与列语义见计划 v2.8 变更行; 上一态见 [baseline-history.md](baseline-history.md)。)
+**1579 collected: 1576 passed + 1 skipped / Windows** —— 2026-09-25 **扩展运行日志(分级 + 环形上限 + 选项页④区)**
+(本条 **+3 条(1576 → 1579)**, 全在 `tests/test_extension_proxy.py`: 日志分级/环形上限/超长截断/清空 1 条 ·
+选项页日志面接线(clear-logs 协议 / esc 转义 / 限渲染条数)1 条 · 轮询周期文案↔`POLL_MINUTES` 防漂 1 条。
+动机与设计见档案 `26-09-25-webui-ext-hr-logging`; 上一态见 [baseline-history.md](baseline-history.md)。)
 TOTAL **91%**(10905 语句 / 789 未覆盖 / 3582 分支 / 327 partial —— 并行采样; **HR 包 93%**:
-2782 / 143 / 766 / 91), sidefx 台账并行汇总 / **越界 0**。
+2782 / 143 / 766 / 91; 本轮无 .py 源码变更, 四项均不变), sidefx 台账并行汇总 / **越界 0**(2588~2592 采样波动)。
 ⚠ 本 AI shell 注入 `PYTHONUTF8=1` ⇒ `test_commands_engine` 两条 GBK 守阵在**本会话恒红**(2 failed);
 `PYTHONUTF8=` 置空后复测 **2 passed** —— 已有记载的假红, 非回归(见下条 ⚠ 与 pitfalls/testing/patching.md)。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
@@ -22,13 +22,13 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 v2.8 明细表改版)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **18.3 / 18.7 / 19.1s**(3 次采样: test.quick ×1 + test.full ×2)
+**当前(2026-09-25 扩展运行日志)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **17.6 / 19.8 / 19.9 / 20.5s**(4 次采样: test.quick ×1 + test.full ×3)
 
-**上一态(2026-09-25 v2.6 通道时序修复 + v2.7 增量落盘)**: 并行 19.3 / 20.0 / 21.7s(test.quick ×2 + test.full ×1)。
+**上一态(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
+
+**更早(2026-09-25 v2.6/v2.7 通道时序 + 增量落盘 / M4 多站点)**: 并行 19.3 / 20.0 / 21.7s 与 18.1 / 18.1 / 19.2s。
 ⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景 + 登录页场景各一次) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
-
-**更早(2026-09-25 M4 多站点与打磨)**: 并行 18.1 / 18.1 / 19.2s; 串行对照 35.25s(2026-09-24 采样)。
 
 ⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
 其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——
