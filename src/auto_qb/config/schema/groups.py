@@ -100,6 +100,15 @@ GROUPS: Tuple[Group, ...] = (
                 help="运行状态存档(重启后接着上次进度继续); 留空 = <data_dir>/state.json",
                 risk="修改后需重启进程才生效"
             ),
+            Field(
+                "schema_version",
+                "配置 schema 版本",
+                "int",
+                default="1",
+                min=1,
+                help="配置文件格式版本标记(升级链, 计划 26-09-26-0506): 旧版本配置加载时自动逐级迁移, 无需手写",
+                risk="文件格式标记, 程序保存时自动盖章 —— 请勿手改",
+            ),
         ),
         icon="i-settings",
     ),

@@ -12,6 +12,7 @@
 - test_gen_tracker_name: 域名转合法站点名(非法字符替换/既有占用与批内冲突加 _N 后缀)
 - test_export_yaml_template_append: 模板导出追加
 - test_export_yaml_template_only_missing_dry_run: 仅缺失 dry-run 导出
+- test_export_yaml_template_stamps_schema_version: 导出模板统一带当前 schema 版本章
 - test_export_yaml_template_name_collision: 名称冲突处理
 """
 import os
@@ -188,3 +189,20 @@ def test_export_yaml_template_name_collision():
         with open(out_path, "r", encoding="utf-8") as f:
             data = yaml.load(f, Loader=yaml.BaseLoader)
         assert "hdchina_org_1" in data["config"]["trackers"]
+
+
+def test_export_yaml_template_stamps_schema_version():
+    """写出侧打标(计划 26-09-26-0506): 导出的模板统一带当前 schema 版本章"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = os.path.join(td, "config.yml")
+        out_path = os.path.join(td, "out.yml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            yaml.dump({"config": {"trackers": {}}}, f, allow_unicode=True)
+        client = FakeClient()
+        client.torrents_trackers = lambda h: []
+        cfg = _make_config_with_trackers()
+
+        exporter.export_yaml_template(client, cfg, cfg_path, out_path, dry_run=False, only_missing=False)
+        with open(out_path, "r", encoding="utf-8") as f:
+            data = yaml.load(f, Loader=yaml.BaseLoader)
+        assert data["config"]["schema_version"] == "1", "模板必须带当前版本章(BaseLoader 读回为字符串)"

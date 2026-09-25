@@ -10,7 +10,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-SCHEMA_VERSION = 1
+from ..infra.versioning import CURRENT_VERSIONS
+
+# 站点文件 schema 版本: 单一事实来源是 infra.versioning.CURRENT_VERSIONS(升级链框架,
+# 计划 26-09-26-0506), 这里保留原名作别名。注意本别名是**导入期取值**, 只作 dataclass 默认 /
+# from_json 回填; 写盘盖章由 store 调用时动态读 CURRENT_VERSIONS(测试替换版本表才不会错位)。
+SCHEMA_VERSION = CURRENT_VERSIONS["hr_site"]
 
 # 档位(scope): A 考察中 / B 已达标 / C 未达标 / D 已免罪
 LANE_SCOPE = "A"

@@ -11,6 +11,7 @@ import yaml
 
 from ..config import UNLIMITED_SPEED, _strip_none
 from ..infra.utils import convert_bool_in_dict, extract_tracker_hostnames
+from ..infra.versioning import CURRENT_VERSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,8 @@ def export_yaml_template(api, config, config_path: str, output_path: str, dry_ru
         trackers_config[gen_tracker_name(domain, taken)] = build_tracker_entry(domain)
 
     export_config["config"]["trackers"] = trackers_config
+    # 写出侧打标(计划 26-09-26-0506): 模板统一带当前 schema 版本, 用户拿去填键即被版本链接管
+    export_config["config"]["schema_version"] = CURRENT_VERSIONS["config"]
 
     # 4. 写入 YAML 文件
     if not dry_run:

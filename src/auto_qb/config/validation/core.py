@@ -15,6 +15,7 @@ KNOWN_CONFIG_KEYS = {
     "interval",
     "data_dir",
     "state_file",
+    "schema_version",
     "log",
     "remove_similar_tags",
     "add_episode_tags",
@@ -206,6 +207,14 @@ def validate_config(data) -> List[str]:
         _try_time(cfg["interval"], "config.interval", errors, min_s=1, max_s=86400)
     if "state_file" in cfg and not str(cfg["state_file"]).strip():
         errors.append("config.state_file: 不能为空")
+    if "schema_version" in cfg:
+        # 文件格式标记(计划 26-09-26-0506), 不是行为配置: 须为整数且 >= 1; 高于程序支持的版本
+        # 由 load_config 的迁移分派报错(那里能同时说清两个版本号), 这里只挡形状错误。
+        # int() 对 dict/list 抛 TypeError(逃出 _try 的 ValueError 网), 先剥成 str 再试 ——
+        # 与 BaseLoader「标量全为字符串」的常态一致。
+        parsed_version = _try(lambda v: int(str(v)), cfg["schema_version"], "config.schema_version(须为整数)", errors)
+        if parsed_version is not None and parsed_version < 1:
+            errors.append("config.schema_version: 须 >= 1")
     if "remove_similar_tags" in cfg:
         _try(parse_bool, cfg["remove_similar_tags"], "config.remove_similar_tags", errors)
     if "add_episode_tags" in cfg:

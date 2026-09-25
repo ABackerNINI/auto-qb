@@ -6,6 +6,15 @@
 
 ## 当前基线
 
+**1665 collected: 1664 passed + 1 skipped / Windows** —— 2026-09-26 **落盘文件 schema 版本号与逐级升级链**
+(计划 `26-09-26-0506-plan-schema-version-chain`; 新增 infra/versioning.py 框架 + state/hr/config 三类集成)。
+TOTAL **92%**(11112 语句 / 783 未覆盖 / 3692 分支 / 331 partial)。**+24 条**: test_versioning.py 新建 12 条
+(detect_version 口径 7 + migrate 链语义 5) / test_rule_engine.py +5(旧格式加载+盖章 / 未来版本 fail-fast 不碰 .bak /
+.bak 回退过链 / 物化方法 / run() 接线守阵) / test_hr_store.py +2(旧迁新拒 commit 物化 / 迁移 INFO 只报一次) /
+test_config.py +2(schema_version 加载与迁移分派 / validate 形状防御) / test_config_writer.py +2(写回与预览盖章) /
+test_exporter.py +1(模板盖章); 另 test_rule_engine 3 处断言跟上「文件带版本章」新行为。
+
+
 **1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **提交流程「先合并远端, 再收尾回写」定稿**
 (档案 `26-09-26-my-commit-flow-merge-first-writeback`; 仅 .commands 包脚本与流程文档, src/tests 零改动, 数字与下条持平)。
 TOTAL **92%**(11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial —— 实测 330–331 随并行调度抖动, 非代码差异)。

@@ -15,6 +15,7 @@
 | `interval` | `"60s"` | 默认任务间隔 (maintenance/全局任务), 从上一轮结束起算 |
 | `data_dir` | `"auto-qb-data"` | 运行时数据主目录; state/锁/日志/跳检备份默认均派生其下 (显式配 `state_file`/`log.file` 优先; 留空走默认) |
 | `state_file` | `<data_dir>/state.json` | 状态文件; 未显式配置时由 data_dir 派生 (显式配置优先), 须可写 |
+| `schema_version` | `1` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 加载时缺失=v1, 落后则沿链迁移(运行期不写回, 下次 WebUI 保存时由 writer 盖章), 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写 |
 | `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
 | `add_episode_tags` | `{enabled: false, add_tag_single: "zE${episode_first}", add_tag_multi: "zE${episode_first}-${episode_last}"}` | 种子添加时加集数标签; `enabled` 总开关; `add_tag_single`/`add_tag_multi` 模板, 含 `${episode_first}`/`${episode_last}` 占位, 多集仅在集数连续时生成 |
@@ -80,7 +81,7 @@ global_speed_limit_curve:
 
 | 文件 | 性质 |
 |------|------|
-| `auto-qb-data/state.json` | ★ 生产状态 (gitignore, 位于数据目录 auto-qb-data/)。实测结构: `upload_snapshots.{daily,weekly,monthly} = {key, baseline{hash: uploaded}}`; `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}` (跳检删除前备份的元数据, 重加成功后移除); `reannounce_ts = {hash: 上次reannounce时间戳}`; `recheck_fails = {hash: {date, count}}`(当日连续校验失败); `skip_check_day = {hash: "YYYY-MM-DD"}`(跨规则同日跳检去重) |
+| `auto-qb-data/state.json` | ★ 生产状态 (gitignore, 位于数据目录 auto-qb-data/)。实测结构: 顶层 `schema_version`(升级链版本章, 缺失=v1 存量口径, 计划 26-09-26-0506); `upload_snapshots.{daily,weekly,monthly} = {key, baseline{hash: uploaded}}`; `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}` (跳检删除前备份的元数据, 重加成功后移除); `reannounce_ts = {hash: 上次reannounce时间戳}`; `recheck_fails = {hash: {date, count}}`(当日连续校验失败); `skip_check_day = {hash: "YYYY-MM-DD"}`(跨规则同日跳检去重) |
 | `auto-qb-data/state.lock` / `state.lock.meta.json` | 单实例锁及伴生 meta (由 state_file 派生: 去扩展名 + `.lock`, meta 再加 `.meta.json`) |
 | `auto-qb-data/logs/auto-qb.log` | RotatingFileHandler, maxBytes 按 `log.max_bytes`, 5 备份 (log.file 未配置时默认落盘此路径, 显式配 `log.file` 优先; setup_logging 自动建 logs/ 子目录) |
 | `auto-qb-data/skip-check-backup/` | 跳检**删除前**落盘的 .torrent 备份 (由 dirname(state_file) 派生, 与状态同目录); 重加确认成功后由 `_clear_backup` 删除, 只有重加失败 / 缝隙内崩溃才会留下 |

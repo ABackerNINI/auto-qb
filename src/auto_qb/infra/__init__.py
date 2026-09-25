@@ -3,6 +3,7 @@
 由根目录平铺文件归拢而来（plan 26-09-22-2112 · 方案 C · W4a）:
 - errors.py    AutoQbError 错误根（CLI 单点捕获）+ ConfigError / SingleInstanceLockError / QbCompatError
 - locking.py   单实例锁（filelock + 伴生 meta.json）
+- versioning.py 落盘文件 schema 版本与逐级升级链（CURRENT_VERSIONS / MIGRATIONS / detect_version / migrate）
 - logging.py   日志配置（控制台 + RotatingFileHandler；⚠ 与 stdlib logging 同名，包内一律相对导入）
 - utils.py     通用工具（解析/匹配/路径/变量替换）
 - notify.py    主动通知（WinRT toast / notify-send / osascript，零第三方依赖）

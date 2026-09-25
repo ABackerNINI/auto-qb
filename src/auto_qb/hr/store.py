@@ -25,8 +25,10 @@ from typing import Any, Dict, Iterator, Optional, Tuple
 
 from filelock import FileLock, Timeout
 
+from ..infra.errors import SchemaVersionError
 from ..infra.utils import BACKUP_SUFFIX, atomic_write
-from .model import SCHEMA_VERSION, HrSiteData
+from ..infra.versioning import CURRENT_VERSIONS, migrate
+from .model import HrSiteData
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,8 @@ class HrSiteStore:
         self._unsafe_warned = False
         #: 读坏已告警过的文本: 坏文件是**持续状态**, 逐轮重报会变成通知轰炸
         self._read_error_warned = ""
+        #: 迁移 INFO 只报一次的标记(读路径含无锁只读, 逐轮重报同样是轰炸)
+        self._migration_logged = False
 
     # ---------- 锁 ----------
 
@@ -115,20 +119,35 @@ class HrSiteStore:
         return self._parse(text)
 
     def _parse(self, text: str) -> Tuple[HrSiteData, Optional[str], bool]:
-        """解析站点文件文本 → (数据, 错误原因, 是否属于「坏文件」)"""
+        """解析站点文件文本 → (数据, 错误原因, 是否属于「坏文件」)
+
+        版本处理(计划 26-09-26-0506「旧迁新拒」): 版本落后 -> 沿链迁移后照常解析; 比程序新 /
+        非法值 -> 维持「不符即拒」(未来版本不猜), 且 recoverable=False —— 备份里也是同一个
+        新版本, 回退没有意义(既有判例)。迁移只在内存生效, 随下次 HrLockSession.commit 物化。
+        """
         try:
             raw: Dict[str, Any] = json.loads(text)
         except ValueError as e:
             return HrSiteData(), f"站点文件解析失败: {e}{self._file_hint(text)}", True
         if not isinstance(raw, dict):
             return HrSiteData(), f"站点文件根节点不是字典{self._file_hint(text)}", True
-        version = raw.get("schema_version")
-        if version != SCHEMA_VERSION:
-            return HrSiteData(), f"站点文件 schema_version={version} 与期望 {SCHEMA_VERSION} 不符", False
+        try:
+            raw, desc = migrate("hr_site", raw)
+        except SchemaVersionError as e:
+            return HrSiteData(), f"站点文件 {e}{self._file_hint(text)}", False
+        if desc:
+            self._log_migration_once(desc)
         try:
             return HrSiteData.from_json(raw), None, False
         except (TypeError, ValueError, KeyError) as e:
             return HrSiteData(), f"站点文件字段解析失败: {e}{self._file_hint(text)}", True
+
+    def _log_migration_once(self, desc: str) -> None:
+        """迁移完成 INFO 只报一次(同 _warn_read_error 的防轰炸理由)"""
+        if self._migration_logged:
+            return
+        self._migration_logged = True
+        logger.info(f"HR 站点 {self.site} | 站点文件 schema 已迁移 {desc}(内存生效, 随下次写回物化)")
 
     def _file_hint(self, text: str = "") -> str:
         """坏文件取证串: 大小 + 开头字节 —— 「空文件」与「被写坏的内容」一眼可分
@@ -221,7 +240,7 @@ class HrSiteStore:
         才 `keep_backup=False` —— 否则会把唯一一份好备份盖成坏的(与 `state.json` 自愈同一个坑)。
         """
         data.revision += 1
-        data.schema_version = SCHEMA_VERSION
+        data.schema_version = CURRENT_VERSIONS["hr_site"]
         data.writer_instance = self.owner
         data.writer_heartbeat = now
         payload = json.dumps(data.to_json(), ensure_ascii=False, sort_keys=True)

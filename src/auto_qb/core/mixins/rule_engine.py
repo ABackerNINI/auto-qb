@@ -13,6 +13,7 @@ from ...config import Config
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ...rules import Rule, RuleContext
 from ...infra import utils
+from ...infra.versioning import CURRENT_VERSIONS, migrate
 from ...torrents import TorrentRecord
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ class RuleEngineMixin:
     rules: List[Rule]
     enabled_rules: List[Rule]
     task_queue: TaskQueue
+    # 最近一次 _load_state 发生的 schema 迁移描述("v1→v2"; 无迁移为空串) —— 供 run() 持锁后物化
+    _state_migration_desc: str = ""
 
     # ---------- 规则: 加载 / 状态持久化 ----------
 
@@ -75,28 +78,50 @@ class RuleEngineMixin:
           "用了备份"), 并把恢复出的内容**写回主文件**(自愈): 否则下次 save_state 会把损坏
           内容复制成新的 .bak, 把唯一一份好备份盖掉 —— 那等于这次恢复白做
         - 备份也不可用: 返回 {}(与修复前一致, 不阻塞启动, 但一路告警留痕)
+
+        读回的 dict 一律过 schema 升级链(versioning.migrate, 计划 26-09-26-0506): 磁盘版本
+        落后则在内存完成迁移, 描述记入 _state_migration_desc 供 run() 持锁后物化落盘; 版本
+        比程序新 / 非法值 -> SchemaVersionError 直接放出去 fail-fast —— **不算** _CORRUPT:
+        版本问题不是内容损坏, 混进三态模型会触发错误的 .bak 回退(备份里也是同一个新版本)。
         """
+        self._state_migration_desc = ""
         data = self._read_state_file(self.state_file)
         if data is not _CORRUPT:
-            return data if isinstance(data, dict) else {}
+            return self._migrate_state_dict(data if isinstance(data, dict) else {})
 
         bak_path = self.state_file + utils.BACKUP_SUFFIX
         logger.warning(f"状态文件损坏, 无法解析(原样保留待查, 不删除): {self.state_file}")
         bak = self._read_state_file(bak_path)
         if isinstance(bak, dict):
             logger.info(f"已用备份恢复状态: {bak_path}({len(bak)} 个键) —— 执行历史与跨日去重以备份为准")
+            bak = self._migrate_state_dict(bak)
             self._write_back_recovered(bak)
             return bak
         logger.warning(f"备份 {bak_path} 也不可用 -> 状态从空开始: 规则执行历史与跨日去重记录会丢失(同一天可能重复跳检)")
         return {}
 
+    def _migrate_state_dict(self, data: dict) -> dict:
+        """加载出的状态过 schema 升级链; 迁移描述记入 _state_migration_desc(供物化点与测试)"""
+        data, desc = migrate("state", data)
+        if desc:
+            self._state_migration_desc = desc
+            logger.debug(f"state.json schema 已迁移 {desc}(内存生效)")
+        return data
+
+    def _state_write_payload(self, data: dict) -> dict:
+        """落盘载荷: 顶部盖 schema_version 章(不改内存真相) —— save_state / _write_back_recovered 共用"""
+        return {**data, "schema_version": CURRENT_VERSIONS["state"]}
+
     def _write_back_recovered(self, data: dict) -> None:
         """把从备份恢复出的状态写回主文件(**不带** keep_backup: 免得把损坏内容复制成新的 .bak)
 
         自愈失败只告警、不阻断启动: 内存里已是恢复出的状态, 下次正常落盘同样能修好主文件。
+        写回载荷盖 schema_version 章(备份与主文件同版本, 盖章让恢复出的文件即刻带上版本标记)。
         """
         try:
-            utils.atomic_write(self.state_file, lambda f: json.dump(data, f, ensure_ascii=False, indent=2))
+            utils.atomic_write(
+                self.state_file, lambda f: json.dump(self._state_write_payload(data), f, ensure_ascii=False, indent=2)
+            )
         except OSError as e:
             logger.warning(f"把备份状态写回 {self.state_file} 失败(不阻断启动, 下次落盘会再试): {e}")
 
@@ -136,14 +161,33 @@ class RuleEngineMixin:
         原实现 `open(path, "w")` 会先 truncate: 写盘途中进程被杀 / 磁盘满 ⇒ state.json 变成半截
         文件, 而 state 没有备份 ⇒ 执行历史(exec_history)与跨日去重(skip_check_day)全丢, 重启后
         规则重放(同一天可能对同一种子重复跳检)。原子写保证目标文件"要么全旧、要么全新",
-        .bak 再兜一层"新内容本身写错了"的情况。
+        .bak 再兜一层"新内容本身写错了"的情况。写前盖 schema_version 章(见 _state_write_payload)。
         """
         try:
             utils.atomic_write(
-                self.state_file, lambda f: json.dump(self.state, f, ensure_ascii=False, indent=2), keep_backup=True
+                self.state_file,
+                lambda f: json.dump(self._state_write_payload(self.state), f, ensure_ascii=False, indent=2),
+                keep_backup=True,
             )
         except OSError as e:
             logger.warning(f"保存状态文件失败: {e}")
+
+    def _materialize_state_migration(self, dry_run: bool) -> None:
+        """启动序列的迁移物化: 磁盘状态文件版本 < CURRENT 时立即落盘一次新版本(计划 26-09-26-0506)
+
+        调用点在 run() 内 —— 只在**已持锁**后执行(与 _cleanup_orphan_tmp 同判据: 持锁 ⇒ 没有
+        别的实例在写); __init__ 的早期加载只做内存迁移、不落盘(未持锁写盘违背单一写线程判据)。
+        dry-run 不落盘(与退出路径 `if not dry_run` 口径一致), 只留 INFO 说明内存已迁移。
+        幂等性: 迁移链的输入是磁盘上的真实版本, 落盘前崩溃则文件保持旧版本完整内容,
+        下次启动从旧版本重放同一条链(黄金法则 1)。
+        """
+        if not self._state_migration_desc:
+            return
+        if dry_run:
+            logger.info(f"state.json schema 已迁移 {self._state_migration_desc}(dry-run 仅内存生效, 不落盘)")
+            return
+        logger.info(f"state.json schema 已迁移 {self._state_migration_desc}, 物化落盘")
+        self.save_state()
 
     def _maybe_flush_state(self, now: float):
         """周期落盘(仅主循环线程调用): 把非优雅终止的状态丢失窗口压到 state_save_interval 以内

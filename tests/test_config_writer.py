@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_read_tree_scalars_are_strings: 读出的树与 BaseLoader 语义一致(标量全为字符串)
 - test_read_tree_missing_or_empty_file: 文件不存在/空/非映射 -> 空 config 段
+- test_write_tree_stamps_schema_version: 写回侧打标: 保存后 config.schema_version 盖当前版本(int 无引号)
 - test_write_tree_requires_config_root: 缺少 config 根段 -> ValueError
 - test_write_tree_invalid_rejected_without_touching_disk: 非法值 -> ConfigError 且磁盘不变
 - test_write_tree_preserves_comments_and_plain_scalars: 写回保留注释, 未修改标量保持原书写风格
@@ -362,3 +363,25 @@ def test_unmask_tree_restores_from_disk(tmp_path):
     text = _text(path)
     assert "password: p" in text, f"未改密码不应被写成占位串: {text}"
     assert "5s" in text, "真正改动的字段仍应写回"
+
+
+def test_write_tree_stamps_schema_version(tmp_path):
+    """写回侧打标(计划 26-09-26-0506): WebUI 保存后 config.schema_version 盖成当前版本(int, 无引号)"""
+    path = _make(tmp_path, BASE + "  main_tick: 2s\n")
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["main_tick"] = "3s"
+    write_tree(path, tree, old, _bak(tmp_path))
+
+    text = _text(path)
+    assert "schema_version: 1" in text, "写回必须带当前版本章"
+    assert "'1'" not in text, "版本章必须是 int —— 盖成字符串会被 ruamel 写成带引号的 '1'"
+
+
+def test_preview_tree_stamps_schema_version(tmp_path):
+    """预览与写入同口径: preview_tree 同样带版本章(UI 看到的 = 将写出的)"""
+    path = _make(tmp_path, BASE)
+    old = load_config(path)
+    tree = read_tree(path)
+    text = preview_tree(path, tree, old)
+    assert "schema_version: 1" in text

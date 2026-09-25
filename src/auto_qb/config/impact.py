@@ -46,6 +46,9 @@ SECTION_LEVELS = {
     # R: 进程身份
     "state_file": LEVEL_R,
     "data_dir": LEVEL_R,
+    # 文件格式标记(计划 26-09-26-0506): 不进 Config dataclass, 正常不进 diff; 显式登记 L0,
+    # 真出现时(手工构造等)也不该按默认 L2 触发结构重建
+    "schema_version": LEVEL_L0,
     # trackers: 特殊处理(字段级), 见 _tracker_field_level
     "trackers": None,
 }
