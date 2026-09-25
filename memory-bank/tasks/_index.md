@@ -31,6 +31,7 @@
 ## Open
 
 - [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
+- [26-09-25-deps-docker-deploy] Docker 部署方案 (调研 + 计划) - 调研 auto-qb 的 Docker 部署方式并出方案。调研结论: 仓库无任何容器化资产 (绿地); 运行形态对容器友好 (stdout 恒有日志、运行态全收…
 - [26-09-23-commands-unified-surface] 项目命令统一调用面 (纯引擎 + 包式配置层) - 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell…
 
 ## Done

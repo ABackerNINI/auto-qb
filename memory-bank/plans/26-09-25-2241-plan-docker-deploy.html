@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="docker-deploy">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-25-2241">
+<meta name="doc-updated" content="26-09-25-2241">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-25-deps-docker-deploy.md">
+<title>auto-qb · Docker 部署方案</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101014;
+    --paper: #15151b;
+    --ink: #e3e3e8;
+    --ink-2: #b9b9c3;
+    --ink-3: #9191a0;
+    --hair: rgba(255,255,255,.09);
+    --hair-strong: rgba(255,255,255,.16);
+    --accent: #d9a45a;
+    --code-bg: #1a1a22;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.62;
+  }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(217,164,90,.35); }
+  a:hover { border-bottom-color: var(--accent); }
+
+  .layout {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 56px 40px 96px;
+    display: grid;
+    grid-template-columns: 208px minmax(0, 1fr);
+    column-gap: 56px;
+  }
+
+  /* ---------- 侧栏 TOC ---------- */
+  nav.toc { position: sticky; top: 56px; align-self: start; }
+  nav.toc .toc-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3);
+    padding-bottom: 12px; border-bottom: 1px solid var(--hair); margin-bottom: 14px;
+  }
+  nav.toc ol { list-style: none; }
+  nav.toc li { margin: 0; }
+  nav.toc a {
+    display: block; padding: 5px 0;
+    font-size: 12.5px; color: var(--ink-2); border-bottom: none;
+  }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .toc-num {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    display: inline-block; width: 26px;
+  }
+
+  /* ---------- 封面 ---------- */
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  header.cover { padding: 24px 0 0; }
+  header.cover h1 {
+    font-size: 46px; font-weight: 600; letter-spacing: -.02em;
+    line-height: 1.15; margin: 18px 0 20px;
+  }
+  header.cover .lede {
+    font-size: 16.5px; line-height: 1.7; color: var(--ink-2);
+    max-width: 62ch;
+  }
+  .meta-row {
+    margin-top: 34px; padding: 14px 0;
+    border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair);
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  }
+  .meta-row b { color: var(--ink-2); font-weight: 500; }
+  .meta-row .chip {
+    border: 1px solid var(--hair-strong); border-radius: 3px;
+    padding: 1px 8px; color: var(--accent);
+  }
+
+  /* ---------- 章节 ---------- */
+  section { margin-top: 72px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .sec-num {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  }
+  h2 {
+    font-size: 26px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2;
+  }
+  .sec-rule { border: none; border-top: 1px solid var(--hair-strong); margin: 14px 0 18px; }
+  h3 {
+    font-size: 16.5px; font-weight: 550; margin: 30px 0 10px;
+  }
+  p { margin: 10px 0; max-width: 74ch; color: var(--ink); }
+  p.small, .small { font-size: 13px; color: var(--ink-3); }
+  strong { font-weight: 550; color: var(--ink); }
+  code {
+    font-family: var(--mono); font-size: .88em;
+    background: var(--code-bg); border: 1px solid var(--hair);
+    border-radius: 3px; padding: .5px 5px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--hair); border-radius: 3px;
+    padding: 16px 18px; overflow-x: auto; margin: 14px 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.65; color: var(--ink-2); }
+  .cap {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin: 18px 0 6px;
+  }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 8px; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 500;
+    text-align: left; padding: 8px 14px 8px 0;
+    border-bottom: 1px solid var(--hair-strong);
+  }
+  td {
+    font-size: 13.5px; line-height: 1.6; color: var(--ink-2);
+    padding: 10px 14px 10px 0; vertical-align: top;
+    border-bottom: 1px solid var(--hair);
+  }
+  td:first-child { color: var(--ink); }
+  td .mono, .mono { font-family: var(--mono); font-size: 12px; }
+  .warn { color: var(--accent); }
+
+  /* ---------- 决策条目 ---------- */
+  .decision { margin: 26px 0; padding-left: 18px; border-left: 1px solid var(--hair-strong); }
+  .decision .d-id {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--accent);
+  }
+  .decision h3 { margin: 4px 0 8px; }
+  .decision .rec {
+    font-size: 13px; color: var(--ink-3); margin: 2px 0 8px;
+  }
+  .decision .rec b { color: var(--ink); font-weight: 550; }
+
+  /* ---------- 阶段列表 ---------- */
+  ul.dash { list-style: none; margin: 8px 0; }
+  ul.dash li {
+    padding: 5px 0 5px 22px; position: relative;
+    font-size: 13.5px; color: var(--ink-2); max-width: 74ch;
+  }
+  ul.dash li::before {
+    content: "—"; position: absolute; left: 0; color: var(--ink-3);
+  }
+  ul.dash li b { color: var(--ink); font-weight: 550; }
+
+  /* ---------- 收尾 ---------- */
+  footer.colophon {
+    margin-top: 88px; padding-top: 20px; border-top: 1px solid var(--hair-strong);
+    font-family: var(--mono); font-size: 11.5px; line-height: 2; color: var(--ink-3);
+  }
+  footer.colophon b { color: var(--ink-2); font-weight: 500; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; padding: 40px 22px 72px; }
+    nav.toc { position: static; margin-bottom: 8px; }
+    nav.toc ol { display: none; }
+    header.cover h1 { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <div class="toc-label">Contents</div>
+  <ol>
+    <li><a href="#s1"><span class="toc-num">01</span>调研结论</a></li>
+    <li><a href="#s2"><span class="toc-num">02</span>目标与非目标</a></li>
+    <li><a href="#s3"><span class="toc-num">03</span>决策点 D1–D7</a></li>
+    <li><a href="#s4"><span class="toc-num">04</span>交付物清单</a></li>
+    <li><a href="#s5"><span class="toc-num">05</span>分阶段实施</a></li>
+    <li><a href="#s6"><span class="toc-num">06</span>风险与未决</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="cover">
+  <div class="kicker">auto-qb · plan · docker-deploy</div>
+  <h1>Docker 部署方案</h1>
+  <p class="lede">
+    调研结论先行: auto-qb 是单进程长驻 Python 程序, 与容器的契约面很小 —— 配置文件、数据目录、Web 端口三条边界,
+    持久化与日志已天然容器友好。真正的缺口只有一处: <strong>SIGTERM 优雅退出</strong>。
+    本方案给出镜像、编排、文档的完整取舍, 按 P1–P4 分阶段实施, 全程不触碰 <code>config.yml</code> 与 <code>auto-qb-data/</code> 两条红线。
+  </p>
+  <div class="meta-row">
+    <span>Status <span class="chip">Open · 待拍板</span></span>
+    <span>Added <b>2026-09-25</b></span>
+    <span>调研基线 <b>9d09f1f8</b> (gitee/develop 齐平)</span>
+    <span>任务档案 <b>tasks/26-09-25-deps-docker-deploy.md</b></span>
+  </div>
+</header>
+
+<!-- ============================== 01 调研结论 ============================== -->
+<section id="s1">
+  <div class="sec-head"><span class="sec-num">01</span><h2>调研结论 —— 代码实况与部署的对应关系</h2></div>
+  <hr class="sec-rule">
+  <p>
+    仓库当前<strong>没有任何容器化资产</strong> (无 Dockerfile / compose / .dockerignore, 知识库中也无相关讨论),
+    属绿地规划。以下十条事实全部核对自代码与配置参考, 是后面所有取舍的依据:
+  </p>
+
+  <div class="cap">表 1 · 运行形态事实 → 部署含义</div>
+  <table>
+    <thead><tr><th style="width:34%">事实</th><th style="width:26%">代码依据</th><th>对部署的含义</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>入口为 console script <span class="mono">auto-qb</span> = <span class="mono">auto_qb.cli:main</span>; 配置路径是位置参数, 默认 <span class="mono">config.yml</span></td>
+        <td class="mono">pyproject.toml [project.scripts]<br>cli.py:40–92</td>
+        <td>ENTRYPOINT 直指 CLI, 配置路径放 CMD, 挂载路径可自由约定</td>
+      </tr>
+      <tr>
+        <td>单进程长驻: 主循环 2s tick 任务堆驱动; filelock 单实例锁, 锁文件在 data_dir</td>
+        <td class="mono">memory-bank/README.md 速览<br>cli.py:122</td>
+        <td>一容器 = 一实例; 同数据卷双开会被锁拒绝 —— 是预期保护, 不是故障</td>
+      </tr>
+      <tr>
+        <td>Web UI: FastAPI + uvicorn <strong>线程</strong>内嵌; <span class="mono">web.enabled / host / port / token</span>; Web UI 保存配置时<strong>写回 config.yml</strong> 并自动留 .bak</td>
+        <td class="mono">webui/server/lifecycle.py<br>docs/configuration.md</td>
+        <td>容器需放行 web.port; 配置目录挂载<strong>必须可写</strong> (挂只读会废掉 Web UI 配置能力)</td>
+      </tr>
+      <tr>
+        <td>日志: stdout 恒有 console handler; 另默认落盘 <span class="mono">&lt;data_dir&gt;/logs/auto-qb.log</span> (RotatingFileHandler)</td>
+        <td class="mono">infra/logging.py:101,116</td>
+        <td><span class="mono">docker logs</span> 开箱可用, 文件日志随数据卷持久化</td>
+      </tr>
+      <tr>
+        <td>运行态全部收口在 data_dir (默认 <span class="mono">auto-qb-data/</span>): state.json / 单实例锁 / 日志 / web.token / hr/ / 跳检备份</td>
+        <td class="mono">docs/configuration.md 通用约定</td>
+        <td>一个 named volume 挂 /data 即完成全部持久化; <strong>无需挂载种子下载目录</strong> —— 程序只经 qB API 操作, 从不直接碰 torrent 文件</td>
+      </tr>
+      <tr>
+        <td>状态落盘: 优雅退出立即写盘 + 周期落盘 <span class="mono">state_save_interval</span> (默认 120s, 配置下限 30s)</td>
+        <td class="mono">config/models.py:270<br>qbmanager.py:427</td>
+        <td>即使无信号处理, 强杀丢窗口也有上界; 上界即周期间隔</td>
+      </tr>
+      <tr>
+        <td><span class="warn">信号缺口: 只捕 KeyboardInterrupt, 未注册 SIGTERM</span></td>
+        <td class="mono">cli.py:138 (唯一退出处理)</td>
+        <td><span class="mono">docker stop</span> 发 SIGTERM → 进程立即终止, finally 落盘不走 → 丢最多一个周期 (默认 120s) 的运行态。全方案唯一的代码缺口</td>
+      </tr>
+      <tr>
+        <td>GUI 三件 (pystray / customtkinter / Pillow) 仅 <span class="mono">--tray</span> 分支懒加载; 桌面通知面向桌面会话</td>
+        <td class="mono">cli.py:132 (延迟导入)<br>techContext.md</td>
+        <td>容器不带 GUI 依赖也完整可用; notify 容器内预期不可用, 容器配置默认关闭</td>
+      </tr>
+      <tr>
+        <td>时区敏感: HR 窗口、每日限速曲线按<strong>本地时间</strong>计算与展示</td>
+        <td class="mono">hr/events.py:61 等 (time.localtime)</td>
+        <td>镜像必须可配 TZ, 否则默认 UTC 会平移全部「每天」语义的窗口</td>
+      </tr>
+      <tr>
+        <td>依赖: 12 个直接依赖全部 <span class="mono">==</span> 精确锁定 + uv.lock 全量锁; Python ≥ 3.12; hatchling 打包 <span class="mono">src/auto_qb</span></td>
+        <td class="mono">pyproject.toml</td>
+        <td>镜像内 <span class="mono">uv sync --frozen --no-dev</span> 可逐字节复现构建</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================== 02 目标 ============================== -->
+<section id="s2">
+  <div class="sec-head"><span class="sec-num">02</span><h2>目标与非目标</h2></div>
+  <hr class="sec-rule">
+  <h3>目标</h3>
+  <ul class="dash">
+    <li><b>一条命令起服务</b>: <span class="mono">docker compose up -d</span> 后, 浏览器打开 Web UI 即可完成全部配置。</li>
+    <li><b>状态跨重启续接</b>: stop / start (乃至宿主机重启) 后, 标签历史、规则账本、限速状态接着上次继续。</li>
+    <li><b>优雅停机</b> (P3 后): <span class="mono">docker stop</span> 走既有优雅退出路径, 落盘后再退出, 退出码 0。</li>
+    <li><b>构建可复现</b>: 镜像内依赖只认 uv.lock, 不出现「锁外漂浮」的包。</li>
+    <li><b>红线不受影响</b>: 仓库根的 <span class="mono">config.yml</span> 与 <span class="mono">auto-qb-data/</span> 不进镜像、不进 .dockerignore 白名单、不进 compose 示例。</li>
+  </ul>
+  <h3>非目标</h3>
+  <ul class="dash">
+    <li>多副本 / 高可用 —— 单实例锁天然拒绝双开, 本方案不绕过它。</li>
+    <li>镜像发布到 registry (GHCR 等) —— 列为 P4 可选项, 首期只本地构建。</li>
+    <li>qBittorrent 本身的容器化 —— 用户 qB 跑在哪是既有事实, 本方案只解决「连得上」。</li>
+    <li>托盘 / 状态窗口 / 桌面通知等桌面能力 —— 无桌面环境, 属预期不可用。</li>
+  </ul>
+</section>
+
+<!-- ============================== 03 决策点 ============================== -->
+<section id="s3">
+  <div class="sec-head"><span class="sec-num">03</span><h2>决策点 D1–D7</h2></div>
+  <hr class="sec-rule">
+
+  <div class="decision">
+    <div class="d-id">D1 · 镜像构建方式</div>
+    <h3>uv 多阶段构建</h3>
+    <p class="rec"><b>推荐:</b> builder 层用 <span class="mono">ghcr.io/astral-sh/uv</span> 镜像跑 <span class="mono">uv sync --frozen --no-dev</span>, 运行层 <span class="mono">python:3.12-slim</span> 只拷 venv。<b>备选:</b> <span class="mono">uv export</span> 出 requirements.txt 再 pip 安装 —— 运行层更干净, 但多一道导出物, 漂移风险与维护成本都更高。</p>
+    <p>推荐理由: 与 CI (astral-sh/setup-uv) 和本机开发同一把锁, 复现性最强; uv 官方镜像模式成熟, 不引入新工具链。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-id">D2 · GUI 依赖处置</div>
+    <h3>第一期保留在镜像里</h3>
+    <p class="rec"><b>推荐:</b> 不动依赖布局, 镜像照装 pystray / customtkinter / Pillow (仅托盘模式加载, 容器内永远不触发)。<b>备选:</b> 把三件挪进 PEP 735 依赖组或 extras, 容器不装。</p>
+    <p>备选的瘦身收益预估十几 MB 级 (P1 实测回填), 代价是动 pyproject + uv.lock + env.sync 口径 + 托盘安装说明, 还可能碰依赖锁定纪律。不值得在首期付, 列入 P4 可选。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-id">D3 · 配置与数据面</div>
+    <h3>可写的 config 目录 + named data 卷</h3>
+    <p class="rec"><b>推荐:</b> bind mount 一个 config 目录 (放 config.yml, <strong>可写</strong> —— Web UI 保存与 .bak 备份都要写回) + named volume 挂 <span class="mono">/data</span> 作 data_dir。容器示例配置以 <span class="mono">minimal.yml</span> 为底, 改两处: <span class="mono">data_dir: /data</span> 与 <span class="mono">web.host: 0.0.0.0</span>。</p>
+    <p>两个必须写进部署文档的坑: ① <span class="mono">web.host</span> 默认 <span class="mono">127.0.0.1</span> 在容器里等于自断访问, 示例配置必须改 0.0.0.0, 并保留 README 的安全提示 (token 必填 / 反代 / 防火墙); ② <span class="mono">logging.file</span> 留空的语义是「落到默认文件路径」, 不是「关闭文件日志」。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-id">D4 · 到 qB 的网络路径</div>
+    <h3>按 qB 的实际位置分三案, 不用 host 网络模式</h3>
+    <ul class="dash">
+      <li><b>qB 在宿主机</b> (用户当前场景, Docker Desktop): <span class="mono">qbittorrent.host: host.docker.internal</span>, 开箱即用; Linux 宿主由 compose 补 <span class="mono">extra_hosts: host.docker.internal:host-gateway</span>。</li>
+      <li><b>qB 也进同一 compose</b>: 直接填服务名, 走 compose 内部网络。</li>
+      <li><b>qB 在 NAS / 远程</b>: 直接填 IP, 与容器化无关。</li>
+    </ul>
+    <p><span class="mono">network_mode: host</span> 虽然省事, 但会把 web.port 与 qB WebUI 的默认 8080 冲突暴露出来, 且失去端口映射的显式性 —— 不采用。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-id">D5 · 优雅退出</div>
+    <h3>P3 补 SIGTERM 处理 (全方案唯一代码改动)</h3>
+    <p class="rec"><b>推荐:</b> 在入口注册 SIGTERM handler, 转入与 KeyboardInterrupt 相同的优雅关闭路径 (落盘 → 停 uvicorn → 退出码 0); compose 侧配 <span class="mono">stop_grace_period</span>。<b>不做的话:</b> docker stop 直接杀进程, 尾部最多 120s (默认周期) 的运行态丢失, 且 restart 场景每次都吃这个损失。</p>
+    <p>改动集中、风险低, 收益直接兑现黄金法则 3 (状态持久化) 的容器场景; 具体实现与测试策略见 P3。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-id">D6 · 健康检查</div>
+    <h3>用 python 内联探活, 探 web.port</h3>
+    <p>slim 镜像没有 curl / wget, healthcheck 用一行 python (<span class="mono">urllib.request.urlopen</span>) 探 Web UI 端口。容器示例配置里 <span class="mono">web.enabled</span> 恒为 true, 避免健康检查探测一个不存在的端口; 具体探活路径 (根路径 307 → 默认 UI) 在 P2 实测定型。</p>
+  </div>
+
+  <div class="decision">
+    <div class="d-id">D7 · 时区</div>
+    <h3>ENV TZ + tzdata, 默认 Asia/Shanghai</h3>
+    <p>slim 基础镜像需显式装 tzdata; TZ 经 compose environment 可覆盖。HR 窗口、每日曲线、日志时间戳都随宿主钟, 避免默认 UTC 的整体平移。实施时核对 state 里时间戳的语义 (epoch 与本地串的混用点), 确保换 TZ 不产生双写歧义。</p>
+  </div>
+</section>
+
+<!-- ============================== 04 交付物 ============================== -->
+<section id="s4">
+  <div class="sec-head"><span class="sec-num">04</span><h2>交付物清单</h2></div>
+  <hr class="sec-rule">
+
+  <div class="cap">新增文件 (5 个, 全部在仓库根与 docs/)</div>
+  <table>
+    <thead><tr><th style="width:30%">文件</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">Dockerfile</td><td>多阶段构建: uv sync --frozen --no-dev → python:3.12-slim 运行层; ENTRYPOINT auto-qb</td></tr>
+      <tr><td class="mono">.dockerignore</td><td>排除 <strong>config.yml (红线)</strong>、auto-qb-data/、.venv、tests、test_yamls、memory-bank、docs、.git、根 assets/、.commands、.agents 等 —— 镜像里只留运行必需</td></tr>
+      <tr><td class="mono">compose.yaml</td><td>单服务编排: 端口映射 / 双卷 / TZ / stop_grace_period / healthcheck / extra_hosts</td></tr>
+      <tr><td class="mono">docker/config.example.yml</td><td>容器化示例配置 (minimal.yml 为底, data_dir=/data, web.host=0.0.0.0, notify 关闭) —— 不动 minimal.yml 本身</td></tr>
+      <tr><td class="mono">docs/deployment.md</td><td>部署文档: 构建 / 配置 / 升级 / docker logs 排障 / 与宿主直跑的差异 (或并入 README 部署节, 实施时按篇幅定)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="cap">compose.yaml · 样例 (实施时以实测为准)</div>
+  <pre><code>services:
+  auto-qb:
+    build: .
+    container_name: auto-qb
+    restart: unless-stopped
+    stop_grace_period: 30s          # P3 落地前此值无效果 (SIGTERM 即杀)
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "8081:8080"                 # 宿主 8081 → 容器 web.port (避开宿主 qB 的 8080)
+    volumes:
+      - ./config:/config            # config.yml 所在; 必须可写 (Web UI 保存 + .bak)
+      - auto-qb-data:/data          # data_dir: 状态/锁/日志/token
+    # qB 在 Linux 宿主机时需要; Docker Desktop 免:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:                    # 探活实现 P2 实测定型
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    command: ["/config/config.yml"]
+
+volumes:
+  auto-qb-data:</code></pre>
+
+  <div class="cap">Dockerfile · 样例 (要点示意, 实施时以实测为准)</div>
+  <pre><code>FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --no-editable
+
+FROM python:3.12-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH" \
+    TZ=Asia/Shanghai
+ENTRYPOINT ["auto-qb"]
+CMD ["/config/config.yml"]</code></pre>
+  <p class="small">
+    注: <span class="mono">--no-editable</span> 让项目以普通 wheel 形态装入 venv (镜像内代码与 venv 不脱节);
+    <span class="mono">uv.lock</span> 在 builder 层单独 COPY 以利用层缓存 —— 依赖不变时, 改源码不触发重装。
+    GUI 三件随锁文件装入 (D2), 不额外装任何 X / GTK 系统库 —— 它们只在托盘分支被 import。
+  </p>
+</section>
+
+<!-- ============================== 05 分阶段 ============================== -->
+<section id="s5">
+  <div class="sec-head"><span class="sec-num">05</span><h2>分阶段实施</h2></div>
+  <hr class="sec-rule">
+  <p>P1 + P2 属纯新增文件, 预估一次会话可完成; P3 是代码改动, 单独成段以便独立验证与回退; P4 全部可延后。</p>
+
+  <h3>P1 · 镜像化</h3>
+  <ul class="dash">
+    <li>产出 <span class="mono">Dockerfile</span> + <span class="mono">.dockerignore</span>, 本地 <span class="mono">docker build</span>。</li>
+    <li><b>验收</b>: 构建成功; <span class="mono">docker run --rm &lt;img&gt; auto-qb --help</span> 输出正常; 用假 qB 地址的配置启动 → 走 fail-fast 路径, stderr 报「无法连接」, 退出码 1, 无堆栈。</li>
+    <li>实测记录: 镜像体积、构建耗时、GUI 三件实际占用。</li>
+  </ul>
+
+  <h3>P2 · 编排与文档</h3>
+  <ul class="dash">
+    <li>产出 <span class="mono">compose.yaml</span> + <span class="mono">docker/config.example.yml</span> + <span class="mono">docs/deployment.md</span>; healthcheck 探活路径实测定型。</li>
+    <li><b>验收</b>: <span class="mono">docker compose up -d</span> 后浏览器可登录 Web UI (token 从 /data/web.token 取); <span class="mono">docker logs</span> 有 INFO 日志流; 在 Web UI 改一处配置 → config.yml 写回 + .bak 出现; stop / start 后状态续接 (规则历史不重置); 手动起第二个容器实例 → 被单实例锁拒绝, 提示干净。</li>
+  </ul>
+
+  <h3>P3 · 优雅退出 (唯一代码改动)</h3>
+  <ul class="dash">
+    <li>入口注册 SIGTERM handler → 复用 KeyboardInterrupt 优雅关闭路径 (save_state → WebServerHandle.stop → 退出码 0)。改动面预估仅 cli.py / 主循环退出路径一处, 不碰任务队列结构 (单一写线程红线)。</li>
+    <li><b>测试</b>: 平台相关断言按守则 monkeypatch 固定 <span class="mono">sys.platform</span>; 容器内以真实 <span class="mono">docker stop</span> 实测兜底。</li>
+    <li><b>验收</b>: docker stop 后日志出现 <span class="mono">Shutting down...</span>, state.json mtime 更新, 容器退出码 0; 既有全量测试无回归。</li>
+  </ul>
+
+  <h3>P4 · 可选延后</h3>
+  <ul class="dash">
+    <li>CI 增加 docker build job (只 build 冒烟, 不推送)。</li>
+    <li>GHCR 镜像发布与版本 tag 策略 (与 deps-version-management 的版本管理对齐)。</li>
+    <li>GUI 依赖分组瘦身 (D2 备选)。</li>
+    <li>非 root 运行 (PUID/PGID 或固定 uid) —— 现阶段容器内写面只有 config 与 data 两卷, root 可接受。</li>
+  </ul>
+</section>
+
+<!-- ============================== 06 风险 ============================== -->
+<section id="s6">
+  <div class="sec-head"><span class="sec-num">06</span><h2>风险与未决</h2></div>
+  <hr class="sec-rule">
+  <table>
+    <thead><tr><th style="width:40%">风险 / 未决</th><th>处置</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>notify (桌面通知) 在无显示环境的实际行为未验证</td>
+        <td>容器示例配置 <span class="mono">notify.enabled: false</span>; P2 实测一次留档, 行为若异常仅记 issue 不扩范围</td>
+      </tr>
+      <tr>
+        <td><span class="mono">uv sync --no-editable</span> 与 hatchling 的安装形态细节</td>
+        <td>P1 构建后以 <span class="mono">python -c "import auto_qb; print(auto_qb.__file__)"</span> 验证来源是 venv 而非残留路径</td>
+      </tr>
+      <tr>
+        <td>Docker Desktop bind mount 的写性能与 inotify</td>
+        <td>config 写回频率极低 (人工保存触发), 风险可忽略; data 走 named volume 天然规避</td>
+      </tr>
+      <tr>
+        <td>换 TZ 后 state 里已有时间戳的语义歧义</td>
+        <td>D7 已列核对点; 若发现本地串与 epoch 混存, 只记 issue, 不在本方案内扩改</td>
+      </tr>
+      <tr>
+        <td>镜像体积无实测数字</td>
+        <td>本文不预估精确值, P1 实测后回填本件与任务档案</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer class="colophon">
+  <b>调研基线</b> — commit 9d09f1f8 (2026-09-25, 与 gitee/develop 齐平); 关键代码位置: cli.py · infra/logging.py · config/models.py · webui/server/lifecycle.py · docs/configuration.md<br>
+  <b>执行进展</b> — 方案拍板后本件冻结 (状态改 In Progress), 进展一律记任务档案 tasks/26-09-25-deps-docker-deploy.md<br>
+  <b>变更记录</b> — 26-09-25-2241 初版 (调研 + 方案 + 分阶段)
+</footer>
+
+</main>
+</div>
+</body>
+</html>

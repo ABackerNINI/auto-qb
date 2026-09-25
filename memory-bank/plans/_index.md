@@ -17,6 +17,7 @@
 
 ## Open
 
+- [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
 ## Done
