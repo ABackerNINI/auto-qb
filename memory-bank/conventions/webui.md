@@ -32,6 +32,16 @@
   限速取数、`cellSeedingTime/cellRatio/cellPeers/cellAvailability/cellTime` 单元格口径、`_deleteDetails` 删除详情行、`colAlignCss` 列对齐),
   模板里只引用不重算。新增展示口径时先问"它是否已被别处实现"。
 
+## WEB UI 按钮体系 .bt (2026-09-26 第十一轮)
+
+全部动作按钮收敛一族 `.bt`, 两套 UI 同一套语义类名、外观各按其设计语言(方案定案与全状态陈列见 `plans/26-09-26-0538-plan-webui-button-3-proposals.html`):
+
+- **语义变体**: `.bt`(次钮, 默认) / `.bt.primary`(主) / `.bt.ghost`(幽灵) / `.bt.danger`(危险·描边) / `.bt.danger-solid`(危险·实心, 用于确认框的危险确认) / `.bt.icon`(图标钮) / `.bt.sm`(小档 28px)。标准档: 星图/棱镜均 34px。
+- **两套配方**: 星图 B(胶囊 999px, 主钮=品牌渐变+inset 高光, hover 泛 accent 柔光) / 棱镜 C(圆角 5px 强声明, 主钮=实心 accent+深色字, 按下 scale(.98))。
+- **状态纪律**: hover 换 accent-line 描边 / 按下反馈 / `:focus-visible` ring / 禁用 .45 / 加载中 `.spin` 图标; `<button>` 一律显式 `color`(UA 默认色坑见 pitfalls/web-ui/layout-css.md)。
+- **双色令牌族**(`--on-accent/--on-accent-ink/--on-error`): 实心 accent/error 底上的前景色, 星图 `:root` 一处 + 棱镜五主题各一处成对声明(亮色主题翻转为白字), 改值必须全处同改 —— 与状态色族同纪律。
+- **存量家族归属**: ce-btn/ce-icon 已退役(守阵 `test_frontend_button_system_paired` 钉零残留); bulk-btn/row-btn/prio-btn 保持紧凑尺寸只并入配色与状态语言(.bulk-inline/.status-strip 实测高度不动); 登录页与页签/筛选 chip 不入族(各自视觉语言), 设置页 hb-*(Ash Thorp)保留其形。
+
 ## HTML 文档一律 dark 主题 (2026-09-20 用户指定)
 
 - **适用**: 所有产出的单文件 HTML —— 计划文档 / issue 报告 / 交付物 / 演示页。**一律深色底 + 浅色字, 禁止浅底黑字**。

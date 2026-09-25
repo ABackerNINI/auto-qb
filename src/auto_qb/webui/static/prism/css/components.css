@@ -19,13 +19,9 @@
   border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 14px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.login-card button { width: 100%; padding: 10px; border: 0; border-radius: var(--radius-sm);
-  background: var(--accent); color: var(--bg); font-size: 14px; font-weight: 600; cursor: pointer;
-  transition: filter var(--dur) var(--ease); }
-.login-card button:hover:not(:disabled) { filter: brightness(1.08); }
-.login-card button:disabled { opacity: .5; cursor: default; }
-.login-card button.secondary { margin-top: 8px; background: transparent; color: var(--fg-muted);
-  border: 1px solid var(--border); font-weight: 400; }
+/* 登录卡按钮走统一 .bt 体系(C 方案): 这里只管铺满一行的布局, 外观全由 .bt 提供 */
+.login-card .bt { width: 100%; }
+.login-card .bt.ghost { margin-top: 8px; }
 /* FX-01 配套: 加载卡与密钥表单等高(表单实测约 218px) —— 否则\"加载卡 -> 表单\"这一步
  * 本身还会跳一次高度, 只是把闪现换成了跳动。 */
 .login-loading { display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -287,7 +283,7 @@
  * 宽度取尺寸令牌族的“**宽**”档(与添加窗口同档): 目录路径才是这个窗口的主体内容, 窄框放不下。 */
 .modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
 .db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
-.db-bar > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+.db-bar > .bt { flex: 0 0 auto; white-space: nowrap; }
 /* R10-11 修订: 路径**必须看得见** —— 原先单行省略, 长路径只剩开头几个字符。
  * 现改为最多 3 行换行(任意字符处断行, 中文与分隔符都不会溢出), 盘符/多级目录一眼可读;
  * 更长的仍可悬停看 title。 */
@@ -308,7 +304,7 @@
 .db-new .add-dialog-input { flex: 1 1 auto; min-width: 0; }
 /* 按钮不许被输入框挤掉宽度: input 的 flex-basis 是 100%(width:100%), 不锁按钮就会把
  * "新建"压成两行(实测: 文字竖排) */
-.db-new > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+.db-new > .bt { flex: 0 0 auto; white-space: nowrap; }
 
 /* ================= 选项胶囊(FX-20 / FX-24) =================
  * 勾选框从本项目的交互语汇中退役: 选项一律是"无勾选框的整行切换胶囊" ——
@@ -330,30 +326,41 @@
 .opt-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .modal-opts { display: flex; flex-direction: column; gap: 8px; margin: -6px 0 16px; }
 
-/* ---------------- 表单控件(ce-*) ---------------- */
-.ce-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), filter var(--dur) var(--ease); }
-.ce-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
-.ce-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
-.ce-btn.primary:hover { filter: brightness(1.08); }
-.ce-btn.ghost { background: transparent; }
-.ce-btn.ghost:hover { background: var(--surface-2); }
-.ce-btn.danger { color: var(--error); border-color: var(--error-line); background: transparent; }
-.ce-btn.danger:hover { background: var(--error-soft); }
-.ce-btn.small { padding: 5px 10px; font-size: 12px; }
-.ce-btn:disabled { opacity: .45; cursor: not-allowed; }
-
-.ce-icon { flex: 0 0 auto; width: 28px; height: 28px; display: inline-grid; place-items: center;
-  border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 13px; line-height: 1;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease); }
-.ce-icon:hover { background: var(--surface-2); color: var(--accent-hi); border-color: var(--border-strong); }
-.ce-icon.danger:hover { background: var(--error-soft); color: var(--error); border-color: var(--error-line); }
-.ce-icon.flat { border-color: transparent; background: transparent; }
-.ce-icon.flat:hover { background: var(--surface-2); border-color: transparent; }
-.ce-icon:disabled { opacity: .3; cursor: default; }
-.ce-icon:disabled:hover { background: transparent; border-color: var(--border); color: var(--fg-dim); }
+/* ================= 按钮体系(C 方案 · 强声明双色, 2026-09-26) =================
+ * 全部动作按钮收敛一族 .bt: 语义变体 = primary(实心 accent + 深色字) / 默认(次钮) /
+ * ghost(幽灵) / danger(危险·描边) / danger-solid(危险·实心) / icon(图标钮) + sm 小档。
+ * 双色配方: 实心 accent 上用 --on-accent-ink(五主题逐个校准对比度, 亮色主题翻转为白字)。
+ * 状态纪律: hover 换底色+描边 / 按下 scale(.98) / 键盘聚焦 ring / 禁用 .45 / 加载中用 .spin 图标。
+ * 方案定案与全状态陈列见 memory-bank/plans/26-09-26-0538-webui-button-3-proposals.html;
+ * 星图侧为 B 方案(胶囊统一)配方, 两套 UI 语义类名一致、外观各按其设计语言。
+ * ⚠ <button> 一律显式声明 color(UA 默认色跟随系统配色, 见 pitfalls/web-ui/layout-css.md)。 */
+.bt { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 34px; padding: 0 16px; border-radius: 5px; border: 1px solid var(--border-strong);
+  background: transparent; color: var(--fg); font-size: 13px; font-weight: 600; cursor: pointer;
+  user-select: none; white-space: nowrap; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), filter var(--dur) var(--ease),
+    transform 80ms var(--ease-out); }
+.bt:hover:not(:disabled) { background: var(--surface-2); border-color: var(--accent-line); }
+.bt:active:not(:disabled) { transform: scale(.98); }
+.bt:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.bt:disabled { opacity: .45; cursor: not-allowed; }
+.bt.sm { height: 28px; padding: 0 12px; font-size: 12px; }
+.bt.primary { background: var(--accent); border-color: transparent; color: var(--on-accent-ink); }
+.bt.primary:hover:not(:disabled) { background: var(--accent-hi); border-color: transparent; box-shadow: var(--shadow-2); }
+.bt.primary:active:not(:disabled) { transform: scale(.98); box-shadow: none; }
+.bt.ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+.bt.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+.bt.danger { background: transparent; border-color: var(--error-line); color: var(--error); }
+.bt.danger:hover:not(:disabled) { background: var(--error-soft); border-color: var(--error); }
+.bt.danger-solid { background: var(--error); border-color: transparent; color: var(--on-error); }
+.bt.danger-solid:hover:not(:disabled) { filter: brightness(1.08); border-color: transparent; box-shadow: var(--shadow-2); }
+.bt.danger-solid:active:not(:disabled) { transform: scale(.98); box-shadow: none; }
+.bt.icon { width: 32px; height: 32px; padding: 0; background: transparent; border-color: transparent;
+  color: var(--fg-muted); border-radius: 5px; }
+.bt.icon:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+.bt.icon:disabled { opacity: .3; }
+.bt.icon:disabled:hover { background: transparent; }
 
 .ce-spacer { flex: 1; }
 
@@ -371,11 +378,11 @@
 .search-clear:hover { background: var(--surface-2); color: var(--fg); }
 .search-clear .ico { width: 12px; height: 12px; }
 
-/* 按下反馈(可点元素统一轻微回缩) */
+/* 按下反馈(可点元素统一轻微回缩; .bt 的按下态自成一体, 见按钮体系段) */
 .tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
-.ce-btn:active, .ce-icon:active, .ctx-item:active, .pop-item:active, .col-menu-item:active,
+.ctx-item:active, .pop-item:active, .col-menu-item:active,
 .theme-item:active { transform: scale(.975); }
-.ce-icon:active, .ctx-item:active { transform: scale(.96); }
+.ctx-item:active { transform: scale(.96); }
 
 select option { background: var(--bg-elev); color: var(--fg); }
 .col-menu { max-height: 70vh; overflow-y: auto; }
@@ -485,7 +492,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
   background: var(--bg); color: var(--fg); font-size: 13.5px; }
 .modal-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .drawer-toolbar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
-.drawer-toolbar .ce-btn { display: inline-flex; align-items: center; gap: 6px; }
+.drawer-toolbar .bt { display: inline-flex; align-items: center; gap: 6px; }
 .drawer-toolbar-hint { font-size: 11.5px; color: var(--fg-dim); }
 .drawer-table th.th-act { width: 1%; }
 .drawer-table td.cell-act { white-space: nowrap; text-align: right; padding-top: 4px; }
@@ -531,7 +538,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .mgr-new { display: flex; gap: 8px; }
 .mgr-new .add-dialog-input { flex: 1 1 auto; width: auto; min-width: 0; }
 .mgr-new .add-dialog-input + .add-dialog-input { flex: 1.4 1 auto; }
-.mgr-new .ce-btn { flex: 0 0 auto; }
+.mgr-new .bt { flex: 0 0 auto; }
 .mgr-hint { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px;
   border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
   color: var(--warn); font-size: 11.5px; line-height: 1.5; }

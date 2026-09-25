@@ -24,6 +24,12 @@
   --accent-hi: #60a5fa;
   --accent-soft: rgba(59, 130, 246, .16);
   --ring: rgba(59, 130, 246, .45);
+  /* 按钮体系派生令牌(2026-09-26): 实心 accent / 实心 error 底上的前景色 ——
+   * --on-accent 渐变主钮用(亮 accent 上白字), --on-accent-ink 实心主钮用(双色配方深字),
+   * --on-error 实心危险钮前景。与棱镜五主题成对声明(conventions/webui.md 令牌分工)。 */
+  --on-accent: #fff;
+  --on-accent-ink: #0b1220;
+  --on-error: #2b0d0d;
   --green: #34d399;
   --green-soft: rgba(52, 211, 153, .16);
   --blue: #38bdf8;
@@ -209,13 +215,9 @@ button { font-family: inherit; }
   border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 14px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.login-card button { width: 100%; padding: 10px; border: 0; border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent)); color: #fff; font-size: 14px;
-  font-weight: 600; cursor: pointer; transition: filter var(--dur) var(--ease); }
-.login-card button:hover:not(:disabled) { filter: brightness(1.07); }
-.login-card button:disabled { opacity: .5; cursor: default; }
-.login-card button.secondary { margin-top: 8px; background: transparent; color: var(--fg-muted);
-  border: 1px solid var(--border); font-weight: 400; }
+/* 登录卡按钮走统一 .bt 体系(B 方案): 这里只管铺满一行的布局, 外观全由 .bt 提供 */
+.login-card .bt { width: 100%; }
+.login-card .bt.ghost { margin-top: 8px; }
 
 /* ---------------- 顶栏(吸顶 + 毛玻璃)与状态条 ---------------- */
 .sticky-head { position: sticky; top: 0; z-index: 30; }
@@ -785,32 +787,43 @@ button { font-family: inherit; }
 .ce-note.error { color: var(--error); }
 .ce-note.error::before { background: var(--error); }
 
-/* 图标按钮(对话框关闭 / 文件行操作等) */
-.ce-icon { flex: 0 0 auto; width: 28px; height: 28px; display: inline-grid; place-items: center;
-  border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 13px; line-height: 1;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease); }
-.ce-icon:hover { background: var(--surface-2); color: var(--accent-hi); border-color: var(--border-strong); }
-.ce-icon.danger:hover { background: var(--error-soft); color: var(--error); border-color: rgba(248, 113, 113, .5); }
-.ce-icon.flat { border-color: transparent; background: transparent; }
-.ce-icon.flat:hover { background: var(--surface-2); border-color: transparent; }
-.ce-icon:disabled { opacity: .3; cursor: default; }
-.ce-icon:disabled:hover { background: transparent; border-color: var(--border); color: var(--fg-dim); }
-
-/* 按钮 */
-.ce-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), filter var(--dur) var(--ease); }
-.ce-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
-.ce-btn.primary { background: linear-gradient(180deg, var(--accent-hi), var(--accent));
-  border-color: var(--accent); color: #fff; font-weight: 600; }
-.ce-btn.primary:hover { filter: brightness(1.07); }
-.ce-btn.ghost { background: transparent; }
-.ce-btn.ghost:hover { background: var(--surface-2); }
-.ce-btn.danger { color: var(--error); border-color: rgba(248, 113, 113, .35); background: transparent; }
-.ce-btn.danger:hover { background: var(--error-soft); border-color: rgba(248, 113, 113, .5); }
-.ce-btn.small { padding: 5px 10px; font-size: 12px; }
-.ce-btn:disabled { opacity: .45; cursor: not-allowed; }
+/* ================= 按钮体系(B 方案 · 胶囊统一, 2026-09-26) =================
+ * 全部动作按钮收敛一族 .bt: 语义变体 = primary(渐变主钮) / 默认(次钮) / ghost(幽灵) /
+ * danger(危险·描边) / danger-solid(危险·实心) / icon(圆形图标钮) + sm 小档。
+ * 状态纪律: hover 提亮+描边换 accent / 按下下沉 1px / 键盘聚焦 ring / 禁用 .45 / 加载中用 .spin 图标。
+ * 方案定案与全状态陈列见 memory-bank/plans/26-09-26-0538-webui-button-3-proposals.html;
+ * 棱镜侧为 C 方案(强声明双色)配方, 两套 UI 语义类名一致、外观各按其设计语言。
+ * ⚠ <button> 一律显式声明 color(UA 默认色跟随系统配色, 见 pitfalls/web-ui/layout-css.md)。 */
+.bt { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 34px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--border-strong);
+  background: var(--bg-row); color: var(--fg); font-size: 13px; font-weight: 500; cursor: pointer;
+  user-select: none; white-space: nowrap; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), filter var(--dur) var(--ease),
+    transform 80ms var(--ease-out); }
+.bt:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent-line); }
+.bt:active:not(:disabled) { transform: translateY(1px); }
+.bt:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.bt:disabled { opacity: .45; cursor: not-allowed; }
+.bt.sm { height: 28px; padding: 0 12px; font-size: 12px; }
+.bt.primary { background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  border-color: var(--accent-line); color: var(--on-accent); font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), var(--shadow-1); }
+.bt.primary:hover:not(:disabled) { filter: brightness(1.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 0 0 3px var(--accent-soft); }
+.bt.primary:active:not(:disabled) { filter: brightness(.96); box-shadow: var(--shadow-1); }
+.bt.ghost { background: transparent; border-color: var(--border-soft); color: var(--fg-soft); }
+.bt.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+.bt.danger { background: transparent; border-color: var(--error-line); color: var(--error); }
+.bt.danger:hover:not(:disabled) { background: var(--error-soft); border-color: var(--error); }
+.bt.danger-solid { background: var(--error); border-color: var(--error-line); color: var(--on-error); font-weight: 600; }
+.bt.danger-solid:hover:not(:disabled) { filter: brightness(1.07); box-shadow: 0 0 0 3px var(--error-soft); }
+.bt.danger-solid:active:not(:disabled) { filter: brightness(.96); box-shadow: none; }
+.bt.icon { width: 30px; height: 30px; padding: 0; background: transparent; border-color: transparent;
+  color: var(--fg-muted); }
+.bt.icon:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+.bt.icon:disabled { opacity: .3; }
+.bt.icon:disabled:hover { background: transparent; }
 
 .ce-spacer { flex: 1; }
 
@@ -845,8 +858,6 @@ button { font-family: inherit; }
 .ce-chart-legend .ce-lg-x, .ce-chart-legend .ce-lg-y { white-space: nowrap; }
 .ce-chart-legend .ce-lg-note { margin-left: auto; }
 
-button.primary { background: var(--accent); }
-
 /* ---------------- 顶栏搜索框(pill + 前置图标 + 清除钮) ---------------- */
 .top-search { display: flex; align-items: center; gap: 8px; }
 .search-box { position: relative; display: flex; align-items: center; }
@@ -874,8 +885,8 @@ button.primary { background: var(--accent); }
  */
 /* 按下反馈: 可点元素统一轻微回缩(纯视觉, 不影响可访问性) */
 .tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
-.ce-btn:active, .ce-icon:active, .ctx-item:active, .pop-item:active, .col-menu-item:active { transform: scale(.975); }
-.ce-icon:active, .ctx-item:active { transform: scale(.96); }
+.ctx-item:active, .pop-item:active, .col-menu-item:active { transform: scale(.975); }
+.ctx-item:active { transform: scale(.96); }
 /* hover 抬升: 仅限卡片类元素(行本身已有 translateY(-1px), 不重复) */
 .badge, .tag-chip, .site-chip, .cat-chip, .pop-item {
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
@@ -995,12 +1006,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 可折叠箭头的展开回弹 */
 .g-name .caret {
   transition: transform var(--dur) var(--ease-spring), color var(--dur) var(--ease); }
-/* 可点击控件的按下反馈(补上 transform 过渡, 否则 :active 缩放会瞬跳) */
-.ce-btn, .ce-icon, .dist-chip, .tabs button {
+/* 可点击控件的按下反馈(补上 transform 过渡, 否则 :active 缩放会瞬跳)
+ * .bt 的过渡与按下态自成一体(见按钮体系段), 这里只管 chip / 页签 */
+.dist-chip, .tabs button {
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
     color var(--dur) var(--ease), filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease-out); }
-.ce-btn:active:not(:disabled), .ce-icon:active:not(:disabled), .dist-chip:active,
-.tabs button:active { transform: scale(.97); }
+.dist-chip:active, .tabs button:active { transform: scale(.97); }
 /* 浮层出现节奏统一(内容仍各自定义, 这里只统一缓动) */
 .detail, .ctx-menu, .toast, .modal { animation-timing-function: var(--ease-out); }
 
@@ -1060,17 +1071,23 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
 .bulk-inline .bulk-hr-warn { font-size: 11.5px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
+/* 批量浮条按钮(2026-09-26 并入 .bt 体系 B 方案): 胶囊 + 次钮配色语言(底 bg-row/描边 border-strong,
+ * hover 换 accent 描边); 高度保持 21px 紧凑档不动 —— .bulk-inline 容器 27px 与 .status-strip 的
+ * min-height 是实测锁定(FIX-06/FX-09), 浮条专属语义(图标语义色 / danger / ghost)保留在此 */
 .bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 10px; border-radius: 999px;
-  border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
+  border: 1px solid var(--border-strong); background: var(--bg-row); color: var(--fg);
   font-size: 12px; line-height: 1; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.bulk-btn:hover { background: var(--surface-2); color: var(--fg); }
+.bulk-btn:hover { background: var(--bg-hover); border-color: var(--accent-line); }
+.bulk-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.bulk-btn:disabled { opacity: .45; cursor: not-allowed; }
 .bulk-btn .ico-play { color: var(--green); }
 .bulk-btn .ico-pause { color: var(--warn); }
 .bulk-btn .ico-sync { color: var(--blue); }
-.bulk-btn.danger { color: var(--error); border-color: rgba(248, 113, 113, .35); }
-.bulk-btn.danger:hover { background: var(--error-soft); }
+.bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
+.bulk-btn.danger:hover { background: var(--error-soft); border-color: var(--error); }
 .bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
+.bulk-btn.ghost:hover { border-color: transparent; background: var(--surface-2); color: var(--fg); }
 /* 操作段出入场(transition name="bulk"): 滑入 + 淡入 */
 .bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
 .bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
@@ -1115,7 +1132,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 宽度取尺寸令牌族的“**宽**”档(与添加窗口同档): 目录路径才是这个窗口的主体内容。 */
 .modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
 .db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
-.db-bar > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+.db-bar > .bt { flex: 0 0 auto; white-space: nowrap; }
 /* R10-11 修订: 路径**必须看得见** —— 原先单行省略, 长路径只剩开头几个字符;
  * 现改为最多 3 行换行(任意字符处断行), 盘符/多级目录一眼可读, 更长的仍可悬停看 title。 */
 .db-path { flex: 1; min-width: 0; padding: 5px 9px; border-radius: var(--radius-sm); background: var(--bg-sunken);
@@ -1135,7 +1152,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .db-new { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .db-new .add-dialog-input { flex: 1 1 auto; min-width: 0; }
 /* 按钮不许被输入框挤掉宽度(input 的 flex-basis = 100%, 不锁按钮会把"新建"压成两行) */
-.db-new > .ce-btn { flex: 0 0 auto; white-space: nowrap; }
+.db-new > .bt { flex: 0 0 auto; white-space: nowrap; }
 
 /* 多选项与单选 checkbox 同视觉(删除前强制汇报 / 同时删除磁盘文件) */
 
@@ -1452,18 +1469,18 @@ select option { background: var(--bg-elev); color: var(--fg); }
   background: var(--bg); color: var(--fg); font-size: 13.5px; }
 .modal-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .drawer-toolbar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
-.drawer-toolbar .ce-btn { display: inline-flex; align-items: center; gap: 6px; }
+.drawer-toolbar .bt { display: inline-flex; align-items: center; gap: 6px; }
 .drawer-toolbar-hint { font-size: 11.5px; color: var(--fg-dim); }
 .drawer-table th.th-act { width: 1%; }
 .drawer-table td.cell-act { white-space: nowrap; text-align: right; padding-top: 4px; }
 .row-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
-  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
+  border: 0; border-radius: 999px; background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 .row-btn:hover { background: var(--bg-hover); color: var(--fg); }
 .row-btn.danger:hover { background: var(--error-soft); color: var(--error); }
 .drawer-table td.clickable { cursor: pointer; }
 .drawer-table tr.sel td { background: var(--accent-soft); }
-.prio-btn { padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+.prio-btn { padding: 2px 9px; border: 1px solid var(--border); border-radius: 999px;
   background: transparent; color: var(--fg-soft); font: inherit; font-size: 11.5px; cursor: pointer;
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .prio-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -1498,7 +1515,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .mgr-new { display: flex; gap: 8px; }
 .mgr-new .add-dialog-input { flex: 1 1 auto; width: auto; min-width: 0; }
 .mgr-new .add-dialog-input + .add-dialog-input { flex: 1.4 1 auto; }
-.mgr-new .ce-btn { flex: 0 0 auto; }
+.mgr-new .bt { flex: 0 0 auto; }
 .mgr-hint { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px;
   border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
   color: var(--warn); font-size: 11.5px; line-height: 1.5; }

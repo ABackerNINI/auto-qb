@@ -106,6 +106,7 @@
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
+- test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
@@ -1091,6 +1092,74 @@ def test_frontend_static_bundle_health():
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
+
+
+def test_frontend_button_system_paired():
+    """按钮体系(.bt)迁移守阵(2026-09-26, 方案 B 星图胶囊 / C 棱镜双色) —— "两套 UI 成对改"的静态兜底
+
+    迁移是一次大批量类名替换(ce-btn/ce-icon -> bt 变体), 最危险的残缺形态是"只改一边"或
+    "模板换了 CSS 没换"(页面静默回退到 UA 默认按钮)。四类机械断言:
+    ① 旧类名 ce-btn / ce-icon 在全部前端语料(html/css/js)里零残留;
+    ② .bt 体系块与六个语义变体在两套 CSS 各有成对定义(星图 style.css / 棱镜 components.css);
+    ③ 两套 index.html 的 bt 变体用量逐类相等(模板本就同构, 数量不等 = 单边漏改/误删);
+    ④ 双色配方令牌 --on-accent / --on-accent-ink / --on-error 在星图 :root 与棱镜五主题成对声明
+      (缺一个主题, 该主题实心主钮/危险钮的前景色会掉回继承或 UA 默认)。
+    """
+    atl = os.path.join(STATIC_ROOT, "atlas")
+    pri = os.path.join(STATIC_ROOT, "prism")
+    atl_html = open(os.path.join(atl, "index.html"), encoding="utf-8").read()
+    pri_html = open(os.path.join(pri, "index.html"), encoding="utf-8").read()
+    atl_css = open(os.path.join(atl, "style.css"), encoding="utf-8").read()
+    pri_css = open(os.path.join(pri, "css", "components.css"), encoding="utf-8").read()
+
+    # ① 旧类名零残留(全语料: static 树下全部 html/css/js, 排除 vendor; 类名若只留在注释里
+    #    也应清理, 留着会误导下一次死类判定)
+    corpus_files = []
+    for root, dirs, files in os.walk(STATIC_ROOT):
+        dirs[:] = [d for d in dirs if d != "vendor"]
+        for f in files:
+            if f.endswith((".html", ".css", ".js")):
+                corpus_files.append(os.path.join(root, f))
+    leftovers = []
+    for f in corpus_files:
+        text = open(f, encoding="utf-8").read()
+        for bad in ("ce-btn", "ce-icon"):
+            if bad in text:
+                leftovers.append(f"{os.path.relpath(f, STATIC_ROOT)}:{bad}")
+    assert not leftovers, f"旧按钮类名必须零残留: {leftovers}"
+
+    # ② .bt 体系块与变体在两套 CSS 成对定义
+    variants = ["primary", "ghost", "danger", "danger-solid", "icon", "sm"]
+    for css, name in ((atl_css, "atlas/style.css"), (pri_css, "prism/css/components.css")):
+        assert re.search(r"^\.bt \{", css, re.M), f"{name} 缺 .bt 体系块"
+        for v in variants:
+            assert re.search(rf"^\.bt\.{re.escape(v)} \{{", css, re.M), f"{name} 缺 .bt.{v} 变体"
+
+    # ③ 两套模板的 bt 用量逐类相等(class="bt ..." 静态写法; :class 动态绑定单独对账)
+    def _bt_counts(html):
+        counts = {}
+        for m in re.finditer(r'class="(bt[^"]*)"', html):
+            for cls in m.group(1).split():
+                if cls == "bt" or cls.startswith("bt-"):
+                    counts[cls] = counts.get(cls, 0) + 1
+                elif cls in ("primary", "ghost", "danger", "danger-solid", "icon", "sm"):
+                    counts[f"~{cls}"] = counts.get(f"~{cls}", 0) + 1
+        return counts
+
+    a_cnt, p_cnt = _bt_counts(atl_html), _bt_counts(pri_html)
+    assert a_cnt == p_cnt, f"两套模板 bt 用量不成对: atlas={a_cnt} prism={p_cnt}"
+    assert a_cnt, "模板里没有任何 bt 按钮(迁移被整体回退?)"
+    for dyn in ("'danger-solid'", "'primary'"):
+        assert atl_html.count(dyn) == pri_html.count(dyn) and atl_html.count(dyn) >= 1, \
+            f"站内确认框的动态变体绑定 {dyn} 未成对"
+
+    # ④ 双色配方令牌成对声明(星图 :root 一处 + 棱镜五主题各一处)
+    for tok in ("--on-accent:", "--on-accent-ink:", "--on-error:"):
+        assert atl_css.count(tok) == 1, f"星图 :root 应恰好声明一次 {tok}"
+        themes = os.path.join(pri, "css", "themes")
+        for tf in os.listdir(themes):
+            tcss = open(os.path.join(themes, tf), encoding="utf-8").read()
+            assert tok in tcss, f"棱镜主题 {tf} 缺 {tok}(五主题须成对)"
 
 
 def test_frontend_hr_safety_wiring():

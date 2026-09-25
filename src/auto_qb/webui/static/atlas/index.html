@@ -109,8 +109,8 @@
         </div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
         <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password" required>
-        <button type="submit" :disabled="!tokenInput.trim() || authPending">{{ authPending ? '验证中…' : '进入' }}</button>
-        <button v-if="authErrorKind === 'unavailable'" type="button" class="secondary"
+        <button type="submit" class="bt primary" :disabled="!tokenInput.trim() || authPending">{{ authPending ? '验证中…' : '进入' }}</button>
+        <button v-if="authErrorKind === 'unavailable'" type="button" class="bt ghost"
                 @click="retryAuth" :disabled="authPending">重试连接</button>
         <p v-if="authError" class="error">{{ authError }}</p>
       </form>
@@ -212,10 +212,10 @@
                 <svg v-else-if="colVisible('show', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
               </div>
               <div class="col-menu-actions">
-                <button class="ce-btn ghost small" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail'); resetAllColumnWidths('torrent'); resetAllColumnWidths('show')">
+                <button class="bt ghost sm" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail'); resetAllColumnWidths('torrent'); resetAllColumnWidths('show')">
                   恢复默认列宽
                 </button>
-                <button class="ce-btn ghost small" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail'); fitColumnsToWindow('torrent'); fitColumnsToWindow('show')">
+                <button class="bt ghost sm" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail'); fitColumnsToWindow('torrent'); fitColumnsToWindow('show')">
                   适应窗口宽度
                 </button>
               </div>
@@ -1584,7 +1584,7 @@
       <div class="modal-title">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
         <span>限速</span>
-        <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeSpeedDialog">
+        <button class="bt icon add-dialog-x" title="关闭" @click="closeSpeedDialog">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
         </button>
       </div>
@@ -1607,8 +1607,8 @@
         <p v-else class="add-dialog-hint">两方向都需填写 · 0 = 不限速</p>
       </div>
       <div class="modal-actions">
-        <button class="ce-btn ghost" @click="closeSpeedDialog">取消</button>
-        <button class="ce-btn primary" :disabled="!speedOvReady || speedOverride.busy"
+        <button class="bt ghost" @click="closeSpeedDialog">取消</button>
+        <button class="bt primary" :disabled="!speedOvReady || speedOverride.busy"
                 title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedDialog">
           <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
           <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
@@ -1681,11 +1681,11 @@
                     <svg class="ico ico-sm" :class="icoTone(r.icon)" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
                     <span class="k">{{ r.label }}</span>
                     <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
-                    <button v-if="r.act === 'open'" type="button" class="ce-icon flat f-row-act" :title="'打开' + r.label"
+                    <button v-if="r.act === 'open'" type="button" class="bt icon f-row-act" :title="'打开' + r.label"
                             @click="openTargetPath('torrent', drawer.hash)">
                       <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
                     </button>
-                    <button v-else-if="r.act === 'copy'" type="button" class="ce-icon flat f-row-act" :title="'复制' + r.label"
+                    <button v-else-if="r.act === 'copy'" type="button" class="bt icon f-row-act" :title="'复制' + r.label"
                             @click="_copyText(String(r.text), r.label)">
                       <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
                     </button>
@@ -1705,7 +1705,7 @@
             <!-- Tracker: 虚拟条目(**/[DHT]/[PeX]/[LSD])弱化显示; 顶部添加 + 行内编辑/删除(D 轮) -->
             <template v-else-if="drawer.tab === 'trackers'">
               <div class="drawer-toolbar">
-                <button class="ce-btn ghost small" @click="trackerAdd()">
+                <button class="bt ghost sm" @click="trackerAdd()">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加 tracker
                 </button>
               </div>
@@ -1762,7 +1762,7 @@
             <!-- 内容: 文件树(目录聚合大小, 文件 进度/优先级); 行点选供重命名, 优先级点改(D 轮) -->
             <template v-else-if="drawer.tab === 'content'">
               <div class="drawer-toolbar">
-                <button class="ce-btn ghost small" @click="renameFileRow()">
+                <button class="bt ghost sm" @click="renameFileRow()">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
                 </button>
                 <span class="drawer-toolbar-hint">点击行名选中文件/目录 · 点击优先级修改</span>
@@ -1802,7 +1802,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
           <span>qBittorrent 统计</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeStats">
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeStats">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -1811,7 +1811,7 @@
                错误仅在无数据时占位重试, 有数据时顶部细条提示并保留上次结果 -->
           <div v-if="statsError && !statsServer" class="ce-placeholder">
             <p class="error">{{ statsError }}</p>
-            <button class="ce-btn" @click="loadStats()">重试</button>
+            <button class="bt" @click="loadStats()">重试</button>
           </div>
           <!-- FIX-04 首开兜底: 无值分支必须兜住 loading 期 — 否则首开(statsServer 尚为 null)落入 v-else
                字段列表分支, 模板解引用 null 直接渲染崩溃; 文案随加载态切换(加载中/暂无统计) -->
@@ -1849,10 +1849,10 @@
           </template>
         </div>
         <div class="modal-actions">
-          <button class="ce-btn ghost" :disabled="statsLoading" @click="loadStats()">
+          <button class="bt ghost" :disabled="statsLoading" @click="loadStats()">
             <svg class="ico ico-sm" :class="{ spin: statsLoading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
           </button>
-          <button class="ce-btn primary" @click="closeStats">关闭</button>
+          <button class="bt primary" @click="closeStats">关闭</button>
         </div>
       </div>
     </div>
@@ -1869,7 +1869,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
           <span>添加种子</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeAddTorrent">
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeAddTorrent">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -1882,7 +1882,7 @@
                 <span>选择 .torrent 文件(可多选)…</span>
                 <input type="file" multiple accept=".torrent" @change="onAddFilePick">
               </label>
-              <button type="button" class="ce-btn ghost add-dialog-linkbtn" @click="toggleAddUrls">
+              <button type="button" class="bt ghost add-dialog-linkbtn" @click="toggleAddUrls">
                 <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg>
                 {{ addShowUrls ? '收起链接' : '添加链接' }}
               </button>
@@ -1932,7 +1932,7 @@
                 <!-- R10-11 决策 D2-A: "选择位置"改为**服务端目录浏览**(列目录 + 上溯 + 新建文件夹,
                      回填绝对路径) —— 浏览器物理上拿不到本地绝对路径, 只能由服务端给;
                      输入框聚焦仍弹已知历史路径候选, 两个入口互补。 -->
-                <button type="button" class="ce-btn ghost add-dialog-pathbtn" @click.stop="openDirBrowse()">选择位置…</button>
+                <button type="button" class="bt ghost add-dialog-pathbtn" @click.stop="openDirBrowse()">选择位置…</button>
               </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
@@ -2003,8 +2003,8 @@
         </div>
 
         <div class="modal-actions">
-          <button class="ce-btn ghost" :disabled="addSubmitting" @click="closeAddTorrent">取消</button>
-          <button class="ce-btn primary" :disabled="!addCanSubmit" @click="submitAddTorrent">
+          <button class="bt ghost" :disabled="addSubmitting" @click="closeAddTorrent">取消</button>
+          <button class="bt primary" :disabled="!addCanSubmit" @click="submitAddTorrent">
             <svg v-if="addSubmitting" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
             {{ addSubmitting ? '提交中…' : '添加' }}
           </button>
@@ -2019,13 +2019,13 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
           <span>选择保存位置</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeDirBrowse">
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeDirBrowse">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
         <div class="add-dialog-body">
           <div class="db-bar">
-            <button class="ce-btn ghost small" :disabled="!dirBrowse.parent" title="上一级(到允许根为止)" @click="dirUp()">
+            <button class="bt ghost sm" :disabled="!dirBrowse.parent" title="上一级(到允许根为止)" @click="dirUp()">
               上一级
             </button>
             <span class="db-path" :title="dirBrowse.path || '起始位置'">{{ dirBrowse.path || "请选择起始目录(仅限已有保存路径)" }}</span>
@@ -2043,13 +2043,13 @@
           <div class="db-new">
             <input v-model="dirBrowse.newName" class="add-dialog-input" type="text"
                    placeholder="新建文件夹名" @keyup.enter="dirMkdir()">
-            <button class="ce-btn ghost small" :disabled="!dirBrowse.newName.trim() || dirBrowse.busy" @click="dirMkdir()">新建</button>
+            <button class="bt ghost sm" :disabled="!dirBrowse.newName.trim() || dirBrowse.busy" @click="dirMkdir()">新建</button>
           </div>
           <p class="add-dialog-hint">只能浏览已有保存路径及其子目录(安全边界); 其它位置请直接在输入框填写。</p>
         </div>
         <div class="modal-actions">
-          <button class="ce-btn ghost" @click="closeDirBrowse">取消</button>
-          <button class="ce-btn primary" :disabled="!dirBrowse.path" @click="dirPick()">选择该文件夹</button>
+          <button class="bt ghost" @click="closeDirBrowse">取消</button>
+          <button class="bt primary" :disabled="!dirBrowse.path" @click="dirPick()">选择该文件夹</button>
         </div>
       </div>
     </div>
@@ -2060,7 +2060,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
           <span>管理分类</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeMgr">
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeMgr">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -2068,7 +2068,7 @@
           <div v-if="mgrLoading" class="ce-placeholder loading">正在加载分类…</div>
           <div v-else-if="mgrError" class="ce-placeholder">
             <p class="error">{{ mgrError }}</p>
-            <button class="ce-btn" @click="loadMgr()">重试</button>
+            <button class="bt" @click="loadMgr()">重试</button>
           </div>
           <template v-else>
             <div class="mgr-list">
@@ -2076,8 +2076,8 @@
                 <span class="mgr-name" :title="c.name">{{ c.name }}</span>
                 <span class="mgr-sub" :class="{ dim: !c.save_path }" :title="c.save_path || '未设置保存路径'">{{ c.save_path || '未设置保存路径' }}</span>
                 <span class="mgr-acts">
-                  <button class="ce-btn ghost small" :disabled="mgrBusy" @click="mgrEditCatPath(c.name)">改路径…</button>
-                  <button class="ce-btn ghost small danger" :disabled="mgrBusy" @click="mgrDeleteCategory(c.name)">删除</button>
+                  <button class="bt ghost sm" :disabled="mgrBusy" @click="mgrEditCatPath(c.name)">改路径…</button>
+                  <button class="bt danger sm" :disabled="mgrBusy" @click="mgrDeleteCategory(c.name)">删除</button>
                 </span>
               </div>
               <p v-if="!mgrCategories.length" class="mgr-empty">暂无分类, 在下方新建</p>
@@ -2087,12 +2087,12 @@
                      autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
               <input v-model="mgrNewCatPath" class="add-dialog-input" type="text" placeholder="保存路径(可空)"
                      autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
-              <button class="ce-btn primary" :disabled="!mgrNewCatName.trim() || mgrBusy" @click="submitMgrCategory">添加</button>
+              <button class="bt primary" :disabled="!mgrNewCatName.trim() || mgrBusy" @click="submitMgrCategory">添加</button>
             </div>
           </template>
         </div>
         <div class="modal-actions">
-          <button class="ce-btn primary" @click="closeMgr">关闭</button>
+          <button class="bt primary" @click="closeMgr">关闭</button>
         </div>
       </div>
     </div>
@@ -2102,7 +2102,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
           <span>管理标签</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeMgr">
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeMgr">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -2110,14 +2110,14 @@
           <div v-if="mgrLoading" class="ce-placeholder loading">正在加载标签…</div>
           <div v-else-if="mgrError" class="ce-placeholder">
             <p class="error">{{ mgrError }}</p>
-            <button class="ce-btn" @click="loadMgr()">重试</button>
+            <button class="bt" @click="loadMgr()">重试</button>
           </div>
           <template v-else>
             <div class="mgr-list">
               <div v-for="t in mgrTags" :key="t" class="mgr-row">
                 <span class="mgr-name" :title="t">{{ t }}</span>
                 <span class="mgr-acts">
-                  <button class="ce-btn ghost small danger" :disabled="mgrBusy" @click="mgrDeleteTag(t)">删除</button>
+                  <button class="bt danger sm" :disabled="mgrBusy" @click="mgrDeleteTag(t)">删除</button>
                 </span>
               </div>
               <p v-if="!mgrTags.length" class="mgr-empty">暂无标签, 在下方新建</p>
@@ -2125,7 +2125,7 @@
             <div class="mgr-new">
               <input v-model="mgrNewTags" class="add-dialog-input" type="text" placeholder="新标签(逗号分隔可批量, 如 HR, Keep)"
                      autocomplete="off" spellcheck="false" @keyup.enter="submitMgrTags">
-              <button class="ce-btn primary" :disabled="!mgrNewTags.trim() || mgrBusy" @click="submitMgrTags">添加</button>
+              <button class="bt primary" :disabled="!mgrNewTags.trim() || mgrBusy" @click="submitMgrTags">添加</button>
             </div>
             <div class="mgr-hint">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>
@@ -2134,7 +2134,7 @@
           </template>
         </div>
         <div class="modal-actions">
-          <button class="ce-btn primary" @click="closeMgr">关闭</button>
+          <button class="bt primary" @click="closeMgr">关闭</button>
         </div>
       </div>
     </div>
@@ -2147,7 +2147,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
           <span>标签与分类</span>
-          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeMeta">
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeMeta">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -2189,7 +2189,7 @@
             <div class="mgr-new">
               <input v-model="metaNewTags" class="add-dialog-input" type="text" placeholder="新标签(逗号分隔可批量)"
                      autocomplete="off" spellcheck="false" @keyup.enter="metaAddNewTags">
-              <button class="ce-btn primary" :disabled="!metaNewTags.trim() || metaBusy" @click="metaAddNewTags">添加</button>
+              <button class="bt primary" :disabled="!metaNewTags.trim() || metaBusy" @click="metaAddNewTags">添加</button>
             </div>
           </div>
           <div class="mgr-hint">
@@ -2198,7 +2198,7 @@
           </div>
         </div>
         <div class="modal-actions">
-          <button class="ce-btn primary" @click="closeMeta">完成</button>
+          <button class="bt primary" @click="closeMeta">完成</button>
         </div>
       </div>
     </div>
@@ -2219,7 +2219,7 @@
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
             <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
-            <button v-if="String(d.value || '').length" type="button" class="ce-icon flat d-copy" :title="'复制' + d.label"
+            <button v-if="String(d.value || '').length" type="button" class="bt icon d-copy" :title="'复制' + d.label"
                     @click="_copyText(String(d.value), d.label)">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
             </button>
@@ -2244,8 +2244,8 @@
           <span>{{ c.label }}</span>
         </label>
         <div class="modal-actions">
-          <button class="ce-btn ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
-          <button class="ce-btn" :class="modal.danger ? 'danger' : 'primary'" @click="resolveModal(true)">
+          <button class="bt ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
+          <button class="bt" :class="modal.danger ? 'danger-solid' : 'primary'" @click="resolveModal(true)">
             {{ modal.okText }}
           </button>
         </div>
@@ -2263,7 +2263,7 @@
             <button v-for="g in ['day', 'month', 'year']" :key="g" :class="{ active: historyGran === g }"
                     @click="historyGran = g">{{ { day: '天', month: '月', year: '年' }[g] }}</button>
           </div>
-          <button class="ce-icon flat" title="关闭" @click="historyOpen = false">
+          <button class="bt icon" title="关闭" @click="historyOpen = false">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>

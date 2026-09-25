@@ -6,7 +6,17 @@
 
 ## 当前基线
 
-**1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR D 档已免罪来源单列 (v3.4) × webui 种子级标签/分类编辑**
+**1642 collected: 1641 passed + 1 skipped / Windows** —— 2026-09-26 **webui 按钮体系重构(星图 B 胶囊 × 棱镜 C 双色)**
+(档案 `26-09-26-webui-button-system`; 工作区含另一条未提交线「Console Hub 分区重组」的改动, 本数字为**合并工作树重测**)。
+
+- **本轮 +1 条**(test_web.py): `test_frontend_button_system_paired` 按钮体系守阵 —— ce-btn/ce-icon 全语料零残留 /
+  `.bt` 六变体两套 CSS 成对定义 / 两套模板 bt 用量逐类相等 / 双色令牌(`--on-accent/--on-accent-ink/--on-error`)
+  星图 `:root` + 棱镜五主题成对声明。落地面: 两套 UI 全动作按钮 ce-btn/ce-icon → `.bt` 族(43 处/边 + 站内确认框
+  `danger-solid` 动态绑定 + 登录页); `.bt` 配方入 atlas style.css(B 胶囊)与 prism components.css(C 双色);
+  bulk/row/prio/login 家族对齐(紧凑档尺寸不动); 新增计划制品
+  [plans/26-09-26-0538-plan-webui-button-3-proposals.html](../plans/26-09-26-0538-plan-webui-button-3-proposals.html)。
+
+**上一态: 1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR D 档已免罪来源单列 (v3.4) × webui 种子级标签/分类编辑**
 (档案 `26-09-22-backend-partial-hr-verify` v3.4 + `26-09-26-webui-torrent-meta-edit`; 两轮并行开发, 本条为**合并树重测**)。
 
 - **HR v3.4 轮 +2 条**: test_hr_resolve.py +2(`test_judge_record_carries_verified_source` D 档放行记录透传
@@ -26,7 +36,7 @@
   add_tags/remove_tags/set_category(载荷加 tags/category 键) + 前端即时编辑对话框(shared/dialogs.js,
   .opt-pill 切换胶囊, atlas 首次引入该组件)。
 
-TOTAL **92%**(11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial)。
+TOTAL **92%**(11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial); 本轮实改前端静态资源, 后端语句数与覆盖不变(partial 330→331 来自守阵分支)。
 
 **上一态: 1639 collected: 1638 passed + 1 skipped / Windows** —— 2026-09-26 **webui 种子级标签/分类编辑**(远端单线, 合并前)。
 **上一态: 1638 collected: 1637 passed + 1 skipped / Windows** —— 2026-09-26 **HR D 档已免罪来源单列 (v3.4 缺口落地)**(本 clone 单线, 合并前)。

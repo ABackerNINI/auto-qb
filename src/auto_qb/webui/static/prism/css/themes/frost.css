@@ -88,4 +88,10 @@
   --sel-bg: rgba(80, 97, 214, .11);
   --sel-line: rgba(80, 97, 214, .38);
   --sel-bar: #5061d6;
+  /* 按钮体系派生令牌(2026-09-26, 与星图 :root 成对声明): 实心 accent / 实心 error 底上的前景色。
+   * --on-accent-ink = C 方案实心主钮的深色字(亮色主题 accent 偏深, 翻转为白字保对比度) */
+  --on-accent: #fff;
+  --on-accent-ink: #fff;
+  --on-error: #fff;
+
 }

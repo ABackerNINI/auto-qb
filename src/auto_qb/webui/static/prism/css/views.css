@@ -341,19 +341,25 @@
 /* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
 .bulk-inline .bulk-hr-warn { font-size: 11px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
+/* 批量浮条按钮(2026-09-26 并入 .bt 体系 C 方案): 描边次钮语言(透明底 + border-strong,
+ * hover 换 accent 描边); 高度保持 20px 紧凑档不动 —— .bulk-inline 容器 26px 与 .status-strip 的
+ * min-height 是实测锁定(FX-06/FX-09) */
 .bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
+  border: 1px solid var(--border-strong); background: transparent; color: var(--fg);
   font-size: 11.5px; line-height: 1; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.bulk-btn:hover { background: var(--surface-2); color: var(--fg); }
+.bulk-btn:hover { background: var(--surface-2); border-color: var(--accent-line); color: var(--fg); }
+.bulk-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.bulk-btn:disabled { opacity: .45; cursor: not-allowed; }
 .bulk-btn .ico-play { color: var(--green); }
 .bulk-btn .ico-pause { color: var(--warn); }
 .bulk-btn .ico-sync { color: var(--blue); }
 .bulk-btn .ico-tag { color: var(--indigo); }
 .bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
-.bulk-btn.danger:hover { background: var(--error-soft); }
+.bulk-btn.danger:hover { background: var(--error-soft); border-color: var(--error); }
 .bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
+.bulk-btn.ghost:hover { border-color: transparent; background: var(--surface-2); color: var(--fg); }
 .bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
 .bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
 

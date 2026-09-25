@@ -26,6 +26,7 @@
 
 ## Done
 
+- [26-09-26-0538] [auto-qb WEB UI · 按钮体系重构 · 3 组方案模板(供挑选)](26-09-26-0538-plan-webui-button-3-proposals.html) — `webui-button-system`
 - [26-09-25-1823] [计划 · HR 在线核实的 WEB UI 呈现（删除安全档位 × 来源档位）](26-09-25-1823-plan-webui-hr-safety-display.html) — `webui-hr-safety-display`
 - [26-09-23-1959] [文档形态统一 — 计划与报告入库 · 工程方案](26-09-23-1959-memory-bank-doc-forms-plan.html) — `memory-bank-doc-forms`
 - [26-09-22-2112] [src/auto_qb 目录结构优化 · 分层归拢计划（方案 C 定稿）](26-09-22-2112-src-layout-restructure-plan.html) — `src-layout-restructure`
