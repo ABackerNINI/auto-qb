@@ -76,25 +76,25 @@ class HrEntry:
 
     @property
     def satisfied_verdict(self) -> Optional[bool]:
-        """站点侧对「是否达标」的**明确**结论; None = 站点没给(调用方本地兜底)。
+        """站点侧对「是否达标」的结论; None = 无档位结论(调用方本地兜底)。
 
-        档位 B/C 是站点的明确结论; 其余档位看剩余达标时间(0 = 已达标)。**缺字段不给结论** ——
-        「不知道」不能当成「未达标」, 否则本地已达标(做种时长/分享率够了)的种子会被误判,
-        进而漏加 satisfied 标签 / 误报未达标(计划 §9: 站点侧优先, 本地兜底)。
+        计划 §9 v3.0(**档位即结论**, 命中即停): A 考察中 ⇒ 未达标(义务仍在) / B 已达标 ⇒ 已达标 /
+        C 未达标 ⇒ 未达标(站点明确判定考核未通过) —— 命中档位就是站点的权威结论, **不看页面数值
+        字段、不回落本地**(本地值不得越级推翻站点清单结论)。「剩余达标时间」是考核窗口倒计时
+        (v2.8 实证, 归零 = 考核到期而非已达标), 不参与达标推导, 只作展示。D 已免罪不进命中清单
+        (`resolve.build_site_view` 排除, 放行走 `hr_verified`), 未知档位才 None。
         """
         if self.lane == LANE_SATISFIED:
             return True
-        if self.lane == LANE_UNSATISFIED:
+        if self.lane in (LANE_SCOPE, LANE_UNSATISFIED):
             return False
-        if self.remain_seconds is not None:
-            return self.remain_seconds == 0
         return None
 
     @property
     def satisfied_by_site(self) -> bool:
-        """站点侧达标判据: 档位 B(已达标), 或剩余达标时间为 0 —— 站点数据是权威(计划 §9)。
+        """站点侧达标判据: 档位即结论(计划 §9 v3.0) —— B 已达标 True, A 考察中 / C 未达标 False。
 
-        两者都不可得时返回 None 语义由调用方承担, 这里保守返回 False(不因缺字段就放行)。
+        「剩余达标时间」不参与推导(它是考核窗口倒计时, v2.8 实证); 无档位结论时由调用方本地兜底。
         """
         return self.satisfied_verdict is True
 

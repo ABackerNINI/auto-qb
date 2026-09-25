@@ -22,7 +22,9 @@
 - test_judge_record_not_applicable_when_site_off: 站点未接入 / mode=off -> None(调用方走本地字段逻辑)
 - test_judge_record_hit_any_hash_wins: 两个 infohash 有一个命中清单 -> 受管束(命中即站点事实)
 - test_judge_record_prefers_conservative_over_release: 一键放行 + 一键恒受管束 -> 取恒受管束(policy 绕不过)
-- test_judge_record_carries_site_satisfied_verdict: 命中行的达标结论: B -> True / C -> False / 缺字段 -> None
+- test_judge_record_carries_site_satisfied_verdict: 命中行的达标结论(档位即结论, 计划 §9 v3.0): B -> True / A -> False / C -> False
+- test_lane_verdict_ignores_remain_and_local: A 档命中即未达标 —— 剩余达标时间归零 / 缺失都不改变结论(退出达标推导), 本地值不得越级
+- test_judge_record_double_hit_prefers_lane_order: hybrid 双命中取达标结论档位序更靠前者(A > B > C), 与键序无关; 受管束结论不变
 - test_judge_record_missing_hash_goes_through_policy: 两个 infohash 都空 -> 未核实(仍走 policy, 不是"不适用")
 - test_judge_record_mode_all_unlisted_is_managed: mode=all 未列出 -> 受管束
 - test_judge_record_without_any_lookup_key_falls_back: 站点侧一个可查键都没有(索引没回填出 infohash)
@@ -270,14 +272,51 @@ def test_judge_record_prefers_conservative_over_release():
 
 
 def test_judge_record_carries_site_satisfied_verdict():
-    """命中行的达标结论原样带出: B -> True / C -> False / A 且无剩余时间字段 -> None(本地兜底)"""
+    """命中行的达标结论原样带出(档位即结论, 计划 §9 v3.0): B -> True / A -> False / C -> False
+
+    A 档(考察中)恒未达标 —— 本地字段再够线也不得越级推翻站点清单结论; 「剩余达标时间」退出推导。
+    """
     anchor = HrAnchor(added_on=1, downloaded=0)
     done = judge_record(_view(listed=[(H1, 101, "B")]), (H1, ""), anchor=anchor, now=NOW)
+    scope = judge_record(_view(listed=[(H1, 101, "A")]), (H1, ""), anchor=anchor, now=NOW)
     undone = judge_record(_view(listed=[(H1, 101, "C")]), (H1, ""), anchor=anchor, now=NOW)
-    unknown = judge_record(_view(listed=[(H1, 101, "A")]), (H1, ""), anchor=anchor, now=NOW)
     assert done.site_satisfied is True and done.state_text == "受管束"
+    assert scope.site_satisfied is False, "考察中 = 站点说义务仍在, 恒未达标(不看数值字段)"
     assert undone.site_satisfied is False
-    assert unknown.site_satisfied is None, "站点没给结论时必须回落本地, 不能当成未达标"
+
+
+def test_lane_verdict_ignores_remain_and_local():
+    """A 档命中即未达标: 剩余达标时间归零 / 缺失都不改变结论(remain 退出达标推导)
+
+    旧实现(已废除)用「remain_seconds == 0 ⇒ 已达标」推导 —— v2.8 实证该字段是考核窗口倒计时,
+    归零 = 考核到期(方向相反); 「缺字段回落本地」则让本地值越权推翻站点的明确清单结论。
+    """
+    anchor = HrAnchor(added_on=1, downloaded=0)
+    # _view 构造的条目 remain_seconds=None(旧实现此时回落本地): 新语义下 A 档直接 False
+    missing = judge_record(_view(listed=[(H1, 101, "A")]), (H1, ""), anchor=anchor, now=NOW)
+    assert missing.site_satisfied is False, "缺字段 ≠ 站点没给结论: 档位本身就是结论"
+    entry = HrEntry(tid=101, infohash_v1=H1, lane="A", remain_seconds=0)
+    view = HrSiteView(site="s", mode="partial", by_infohash={H1: entry})
+    zero = judge_record(view, (H1, ""), anchor=anchor, now=NOW)
+    assert zero.site_satisfied is False, "剩余达标时间归零 = 考核到期, 不是已达标"
+
+
+def test_judge_record_double_hit_prefers_lane_order():
+    """hybrid 双命中取达标结论档位序更靠前者(计划 §9 v3.0: A 考察中 > B 已达标 > C 未达标)
+
+    旧实现按 infohash 迭代序取首命中, 无档位序; 受管束结论不受影响(任一命中即受管束)。
+    """
+    anchor = HrAnchor(added_on=1, downloaded=0)
+    view = _view(listed=[(H1, 101, "B"), (H2, 102, "A")])
+    # v1 -> B(已达标) / v2 -> A(考察中): 取 A, 恒未达标 —— 两个键序都得同一结论
+    got = judge_record(view, (H1, H2), anchor=anchor, now=NOW)
+    assert got.is_hr is True and got.facts.lane == "A" and got.site_satisfied is False
+    got = judge_record(view, (H2, H1), anchor=anchor, now=NOW)
+    assert got.is_hr is True and got.facts.lane == "A" and got.site_satisfied is False
+    # B > C: v1 -> C / v2 -> B, 取 B(已达标)
+    view = _view(listed=[(H1, 101, "C"), (H2, 102, "B")])
+    got = judge_record(view, (H2, H1), anchor=anchor, now=NOW)
+    assert got.is_hr is True and got.facts.lane == "B" and got.site_satisfied is True
 
 
 def test_judge_record_missing_hash_goes_through_policy():

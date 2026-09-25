@@ -153,7 +153,7 @@ def test_adapter_parse_first_page():
     assert first.remain_seconds == 9 * 86400 + 6 * 3600 + 5 * 60 + 11
     assert second.tid == 313997
     assert second.ratio == 1.234
-    # 站点侧达标判据(计划 §9「站点数据是权威」): 档位 B 或剩余为 0
+    # 站点侧达标结论(计划 §9 v3.0: 档位即结论): A 考察中 / C 未达标 ⇒ False, B 已达标 ⇒ True
     assert first.satisfied_by_site is False
     assert parsed.entries[0].infohash_v1 == ""
 
