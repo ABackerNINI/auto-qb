@@ -47,6 +47,7 @@
 - test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
 - test_sanitize_tracker_url: tracker URL 脱敏只留主地址(query/path/fragment 整段丢, 任意凭据参数名都覆盖; udp 端口/userinfo 处理)
 - test_sanitize_tracker_url_unparseable: 空/非字符串/解析不出 host -> 占位串且不抛异常(日志路径不得打断业务)
+- test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
 """
 import os
 import pytest
@@ -634,3 +635,22 @@ def test_sanitize_tracker_url_unparseable():
     # urlparse 自身抛异常(畸形输入)也不能冒泡出去 —— 脱敏在日志路径上, 炸了就打断 qB 写操作
     with mock.patch("auto_qb.infra.utils.urlparse", side_effect=ValueError("boom")):
         assert sanitize_tracker_url("https://pt.example.com/announce?passkey=abc") == SANITIZE_FALLBACK
+
+
+def test_display_host():
+    """display_host: 回环地址统一显示 localhost, 其余原样(只改展示, 不改监听面)
+
+    动机(2026-09-25): 浏览器把 127.0.0.1 与 localhost 当两个 origin, 列偏好/登录态各存一份,
+    提示里给 localhost 才能让用户每次都落在同一个 origin 上。
+    """
+    from auto_qb.infra.utils import display_host
+
+    # 回环的四种写法都折成 localhost(含 IPv6 与 IPv4-mapped)
+    for h in ("127.0.0.1", "::1", "::ffff:127.0.0.1", "0:0:0:0:0:0:0:1", " 127.0.0.1 ", "::FFFF:127.0.0.1"):
+        assert display_host(h) == "localhost", f"{h!r} 应显示为 localhost"
+    # 对外地址原样返回(不能把 0.0.0.0 / 局域网 IP 也折掉, 否则掩盖暴露面)
+    for h in ("0.0.0.0", "192.168.1.10", "qb.example.com"):
+        assert display_host(h) == h
+    # 非字符串(配置缺失/取错类型)原样返回: 调用方都在日志路径上, 不该炸
+    for bad in ("", None, 123):
+        assert display_host(bad) == bad

@@ -2,7 +2,8 @@
 
 职责与边界(硬约束):
 
-- 两个端点: `GET /api/hr/tasks` 给扩展「当前可取的清单」, `POST /api/hr/result` 收回传;
+- 三个端点: `GET /api/hr/tasks` 给扩展「当前可取的清单」, `POST /api/hr/result` 收回传,
+  `GET /api/hr/sites` 给选项页「需要授权的站点清单」(只读辅助, 同样过 token + origin 两道关);
 - 端点线程**只入队** —— 除了内存队列它什么都不碰: 不写 state_file / hr 站点文件 / 任务队列,
   也不解析页面(解析在取数线程, 见 service.py); 因此「任意网页 JS 打端点」最坏只能污染一条
   待解析的结果, 而那条结果还得先通过「任务 id 确实派发过 + 域名一致」两道关;
@@ -20,10 +21,11 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
-from typing import Any, Callable, Dict, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .channel import (
     API_RESULT,
+    API_SITES,
     API_TASKS,
     DEFAULT_POLL_HINT,
     MAX_BODY_BYTES,
@@ -97,6 +99,7 @@ class HrChannelServer:
         extension_id: str = "",
         poll_hint: float = DEFAULT_POLL_HINT,
         now_fn: Callable[[], float] = time.time,
+        sites_fn: Optional[Callable[[], List[Tuple[str, str]]]] = None,
     ) -> None:
         self.queue = queue
         self.token = token
@@ -104,6 +107,9 @@ class HrChannelServer:
         self.port = int(port)
         self.extension_id = extension_id
         self.poll_hint = poll_hint
+        #: 返回 [(站点名, 匹配模式), ...] —— 每次请求现读(不是构造时快照): 热重载加了站点
+        #: 不改变端点监听身份(不重绑), 构造期快照会把新站点漏在授权清单外面。
+        self.sites_fn = sites_fn
         self._now = now_fn
         self._state_lock = threading.Lock()
         self._last_contact_ts = 0.0
@@ -204,6 +210,8 @@ class HrChannelServer:
 
         if method == "GET" and route_path == API_TASKS:
             return 200, cors, self._tasks_response()
+        if method == "GET" and route_path == API_SITES:
+            return 200, cors, self._sites_response()
         if method == "POST" and route_path == API_RESULT:
             if len(body) > MAX_BODY_BYTES:
                 return 413, cors, _json({"error": "body too large"})
@@ -219,6 +227,24 @@ class HrChannelServer:
                 "server_time": round(self._now(), 3),
             }
         )
+
+    def _sites_response(self) -> bytes:
+        """需要授权的站点清单(扩展选项页勾选用的只读辅助, 不碰任何状态)。
+
+        sites_fn 抛异常(如配置热重载窗口)不该打死端点线程: 回 200 + 空清单 + error,
+        扩展把 error 原样亮给用户, 下一轮点一下就好。
+        """
+        sites: List[Dict[str, str]] = []
+        error = ""
+        if self.sites_fn is not None:
+            try:
+                for site, origin in self.sites_fn():
+                    if site and origin:
+                        sites.append({"site": site, "origin": origin})
+            except Exception as e:
+                logger.warning(f"HR 取数通道 | 生成站点授权清单失败: {e}", exc_info=True)
+                error = f"站点清单生成失败: {e}"
+        return _json({"sites": sites, "error": error, "server_time": round(self._now(), 3)})
 
     def _result_response(self, body: bytes, cors: Dict[str, str]) -> Tuple[int, Dict[str, str], bytes]:
         try:

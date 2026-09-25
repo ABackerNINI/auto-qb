@@ -317,6 +317,26 @@ def sanitize_tracker_url(url) -> str:
     return f"{scheme}://{netloc.lower()}" if scheme else netloc.lower()
 
 
+# 展示口径的回环地址集合(IPv4 / IPv6 / IPv4-mapped / IPv6 全写法), 命中即统一显示成 localhost
+DISPLAY_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "::ffff:127.0.0.1", "0:0:0:0:0:0:0:1"})
+
+
+def display_host(host) -> str:
+    """给用户看的地址: 回环地址一律写成 localhost, 其余(含对外地址)原样
+
+    只改**展示**, 不动监听面(绑定仍用配置里的原值)。原因(2026-09-25 实测):
+    浏览器把 `127.0.0.1` 与 `localhost` 视作**两个不同 origin**, localStorage(列偏好 / 登录态)
+    各存一份, 而且 127.0.0.1 上的那份更容易被浏览器顺手清掉 —— 提示统一给 `localhost`,
+    用户每次点开都是同一个 origin, 偏好不会"莫名其妙回默认"。
+
+    - 入参异常(空 / 非字符串)原样返回: 调用方都在日志路径上, 不该因为取不到值就炸。
+    """
+    if not isinstance(host, str):
+        return host
+    raw = host.strip()
+    return "localhost" if raw.lower() in DISPLAY_LOOPBACK_HOSTS else raw
+
+
 def match_tracker_confs(trackers: dict, urls: list):
     """按 hostname 精确匹配 tracker 配置(含子域名), 返回所有匹配的 TrackerConfig"""
     hosts = set()

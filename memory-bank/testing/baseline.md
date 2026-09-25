@@ -6,109 +6,71 @@
 
 ## 当前基线
 
-**1624 collected: 1623 passed + 1 skipped / Windows** —— 2026-09-26 **webui 一键导入缺失站点**
-(档案 `26-09-26-webui-sites-import`)。**+7 条**: test_web.py +6(后端 5:
+**1636 collected: 1635 passed + 1 skipped / Windows** —— 2026-09-26 **webui 一键导入缺失站点**
+(档案 `26-09-26-webui-sites-import`; 数字为**再合流远端 9 笔[HR 未达标红档/扩展选项页终态/webui 修复/docker 验收]后的合并树重测**)。
+**+7 条**: test_web.py +6(后端 5:
 `test_sites_missing_scans_and_builds_defaults` 缺失域名生成默认条目且已配置域名不重复 /
 `test_sites_missing_name_conflict_suffix` 站点名冲突 `_N` 后缀 / `test_sites_missing_all_covered_returns_empty`
 全覆盖空返回 / `test_sites_missing_requires_connected_client` 断连 503 / `test_sites_missing_api_failure_maps_502`
 扫描失败 502 带原因; 前端接线 1: `test_frontend_sites_import_wiring`); test_exporter.py +1
-(`test_gen_tracker_name` 新提取的站点名生成单测); 金清单 `_GOLDEN_ROUTES` 同步 +1
-(`GET /api/sites/missing`, 路由总数 61→62)。落地面: `core/exporter.py` 提取 `gen_tracker_name`
+(`test_gen_tracker_name` 新提取的站点名生成单测); 金清单 `_GOLDEN_ROUTES` +1
+(`GET /api/sites/missing`, 合并树 62 条)。落地面: `core/exporter.py` 提取 `gen_tracker_name`
 (export_yaml_template 改调, 行为不变) + 新路由模块 `webui/server/routes/sites.py` + 前端
 `config_hub.js::hubImportSites()` 与两套 UI「⤓ 导入缺失站点」按钮。
-TOTAL **92%**(10952 语句 / 785 未覆盖 / 3624 分支 / 327 partial)。
+TOTAL **92%**(10993 语句 / 787 未覆盖 / 3642 分支 / 328 partial)。
 
-**上一态: 1617 collected: 1616 passed + 1 skipped** —— 2026-09-25 **示例配置守阵**
-(`pitfalls/docs/drift.md` 的根治 follow-up: minimal.yml 漂移修复后, 把"示例无守卫会静默漂移"钉成测试;
-数字为合入远端 full-checking 竞态修复(+3)后的合并树实测)。
-**+2 条** (test_config.py): `test_example_minimal_yml_passes_fail_fast` —— minimal.yml 过 fail-fast 校验
-+ 钉 README 开箱语义(web.enabled / add_episode_tags.enabled 均为 True); `test_example_docker_config_yml_passes_fail_fast`
-—— docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 /
-notify 关, compose.yaml 的端口映射与 healthcheck 依赖)。minimal 守阵**红验过**: git HEAD 旧布尔形态 → 红,
-修复版 → 绿。TOTAL **91%**(10924 语句 / 785 未覆盖 / 3622 分支 / 326 partial)。
+**上一态: 1629 collected: 1628 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR 未达标红档语义修正轮 × 扩展选项页终态**
+(档案 `26-09-25-webui-hr-safety-display` 修正1–3 + `26-09-22-backend-partial-hr-verify` v3.3; 两轮并行开发, 本条为**合流树重测**)。
 
-**上一态: 1612 collected: 1611 passed + 1 skipped** —— 2026-09-25 **Docker 部署 P1–P3**
-(计划 `26-09-25-2241-plan-docker-deploy`, 档案 `26-09-25-deps-docker-deploy`)。**+4 条** (test_cli.py
-SIGTERM 优雅退出, plan P3 唯一代码改动的守阵): `test_main_normal_mode_installs_sigterm_handler`
-(main() 入口注册 SIGTERM handler) / `test_sigterm_handler_raises_keyboard_interrupt`(handler 触发即抛
-KeyboardInterrupt 复用 Ctrl+C 路径, 且先置 SIG_IGN 防清理窗口被打断) / `test_install_sigterm_handler_registers`
-(平台允许注册时真注册; 真实 SIGTERM 投递由容器 docker stop 兜底, 本机无 Docker 未做) /
-`test_install_sigterm_handler_registration_failure_ignored`(注册失败静默跳过)。
-落地面: cli.py `_install_sigterm_handler` + `_sigterm_to_keyboardinterrupt`; 新增 Dockerfile / .dockerignore /
-compose.yaml / docker/config.example.yml / docs/deployment.md。
-TOTAL **91%**(10902 语句 / 791 未覆盖 / 3612 分支 / 326 partial)。另: docker/config.example.yml 与
-minimal.yml 均过 load_config 实测 ✓ (minimal.yml 的 add_episode_tags 旧形态已于同日修复为字典形态)。
+- **HR 红档轮 +0 条, 改 4 处断言/守阵**: test_hr_resolve C 档断言改 `SAFETY_FAILED`(「考核未通过」终态独立红档);
+  test_web 接线守阵安全档位键集扩四档(danger/failed/safe/unknown)、CSS 成对清单加 `.m-pair.hr-fail`、
+  考察中短语断言去「义务未了」。⚠ 合流时修入树缺陷: 远端 `hr/server.py` 的 `sites_fn` 注解用了 `List`
+  但 typing 导入行没有 → 全库 import 级 NameError(89 errors), 合并解决里补 `List` 修复。
+- **扩展选项页轮 +1 条**: `test_extension_proxy.py::test_background_events_ring_dual_write`(后台/日志同源
+  双写事件环契约) + 三档接线守阵改写 `test_options_swiss_wiring`; 落地面 background.js 事件环 +
+  选项页按样张 A 重写, 新增制品 [plans/26-09-26-0031-plan-hr-ext-options-style.html](../plans/26-09-26-0031-plan-hr-ext-options-style.html)。
+- **mockup 轮踩坑**: 新建 plans/ 制品缺五元 meta + 父计划未反链 → 文档守阵红(补齐即绿; 认领链同因)。
 
-**上一态: 1611 collected: 1610 passed + 1 skipped / Windows** —— 2026-09-25 **full-checking 首样本竞态修复**
-(切片 `26-09-25-2348-full-checking-verdict-fix`, 取证报告
-[26-09-25-0853-report-full-checking-verdict-poison](../reports/26-09-25-0853-report-full-checking-verdict-poison.html))。**+3 条**:
-`test_checking.py` 首样本竞态回归(快照未见 checking 不计败, 走到成功零失败记录)/ 启动宽限保险丝
-(`CHECK_START_GIVEUP` 耗尽判败防活锁)/ 1.6 假失败自愈(记录指向已完成成员即清除不推断);
-另改造 `test_checking_full_checking_fail_retry`(见过 checking 才判败)、
-`test_checking_recheck_fail_cooldown`(patch GIVEUP=0 跳过前提, 只钉冷却算术)、
-`test_trigger_events` 失败用例(补 checkingDL 阶段满足判定前提)。
+TOTAL **92%**(11064 语句 / 787 未覆盖 / 3640 分支 / 329 partial); dev.fmt 已跑。
 
-**上一态: 1608 collected: 1607 passed + 1 skipped / Windows** —— 2026-09-25 **WEB UI 展开态跨视图记忆**
-(切片 `26-09-25-1835-webui-expand-state-across-views`)。**+1 条**:
-`test_web.py::test_frontend_expand_state_survives_view_switch` —— 静态钉住"切视图不得置空展开态"
-(禁 `setViewMode` 里回潮 `expandedKey/expandedShows/expandedShowEp = null`)+ 还回前必须验那一行还在
-(`this.groups.some`)+ `groupWin` 退避判据必须带"展开的组确实在可见集合里"。
-真浏览器冒烟同轮 **102 项 0 失败**(双 UI), 含 4 条真点击断言, 且**红绿双验**过。
-另: 同轮把主线 `441ffe4` 遗留的 `pitfalls/testing/tmpdir.md` 超 cap(工作区口径 6,042 > 6,000, 超 42)
-压回 **5,980**, 并修掉该文件一处被转义吃掉的控制字符乱码 —— 否则闸门必红。
+**上一态: 1629 collected: 1628 passed + 1 skipped / Windows** —— 2026-09-26 **HR 扩展选项页终态实施: 风格 A 瑞士网格 + 两表 + 日志收起**
+(档案 `26-09-22-backend-partial-hr-verify` v3.3; 数字为**合流远端 `700a11b` 五笔[webui 修复/docker 验收]后重测**)。
+本轮 **+1 条**: `test_extension_proxy.py::test_background_events_ring_dual_write` —— 真跑 background.js 六类场景
+(页面成功×2 / HTTP 失败 / .torrent 成功 / 登录页 / 配额让位), 钉死后台与日志**同源双写**的结构化事件环契约
+(tag 分类 ok/quota/login/error + host/kind/ms/bytes); 另把三档接线守阵改写为 `test_options_swiss_wiring`
+(单一风格定案 + 三档共存机制不得回潮)。落地面: `background.js` 事件环(EVENT_CAP=50, 防抖整份写回,
+五个事件点) + 选项页按样张 A 重写(①连接 ②站点权限 ③站点现状表 ④取数明细表 + 折叠区[日志/硬上限/高级 JSON]);
+表内阈值从 `SITE_CAPS` 取不写死。**新增制品** [plans/26-09-26-0031-plan-hr-ext-options-style.html](../plans/26-09-26-0031-plan-hr-ext-options-style.html)
+(三套风格选型, 用户选定 A)。
 
-**上一态: 1607 collected: 1606 passed + 1 skipped** —— 2026-09-25 **HR 删除安全档位 WEB UI 呈现落地**
-(计划 [26-09-25-1823-plan-webui-hr-safety-display](../plans/26-09-25-1823-plan-webui-hr-safety-display.html),
-档案 `26-09-25-webui-hr-safety-display`)。**+4 条**: `test_hr_resolve.py` safety_display 三档位派生 3 条
-(站点档位即结论 A/C 不能删·B 可删且来源记「在线」/ 身份层放行·超龄豁免恒可删与 mode=all·新鲜度闸门落
-「策略」桶 / judged None 回落本地兜底) + `test_web.py::test_frontend_hr_safety_wiring` 前端接线守阵
-(hr.js token 映射表与后端 `SRC_*` 常量逐字一致 / 做种时长列两套 UI 各 3 处换绑 hrDurClass·hrSrcBadge·
-hrDurTitle / 新样式两套 CSS 成对 / js 引用的 `m.hr_*` 字段 ⊆ `_hr_view_fields` 键集); 另把
-`test_hr_view_fields_three_state` 扩到新三字段(站点档位 A/B/C 与本地兜底路径各一)并让
-`_scan_filter_facets` 同查 `hrSrcOptions`。落地面: 后端 `hr/resolve.py::safety_display` 删除安全档位 ×
-来源档位派生单点 + `views.py::_hr_view_fields` 透出 `hr_safety`/`hr_safety_text`/`hr_safety_src`
-(**退役二值 `hr_satisfied_src`**); 前端做种时长列按安全档位着色(站点结论优先于本地)+ 来源 2 字徽标 +
-悬停全文、删除确认框 HR 风险点名行、H&R 筛选两档→四档 + HR 来源副筛选、批量条「含 N 个不能删」。
-TOTAL **91%**(10991 语句 / 791 未覆盖 / 3612 分支 / 327 partial; `hr/resolve.py` 98% / `webui/views.py` 97%);
-双 UI 浏览器冒烟 **94 项全过 0 失败**(桩服务 1500 种子)。
-**上一态 2026-09-25 HR v3.0 达标判定来源优先级: 1602 collected: 1601 passed + 1 skipped**
-(+2 守阵 `test_hr_resolve.py`: `test_lane_verdict_ignores_remain_and_local` —— A 档命中即未达标, 剩余达标时间
-归零/缺失都不改结论(退出达标推导); `test_judge_record_double_hit_prefers_lane_order` —— hybrid 双命中按
-档位序 A>B>C 取, 与键序无关; 连同改写的 `test_judge_record_carries_site_satisfied_verdict` 共 **3 条红验全红**
-后还原)。落地面: `hr/model.py::satisfied_verdict` 改**档位即结论**(A 考察中/C 未达标 ⇒ False, B ⇒ True;
-删「A/D 档看剩余达标时间归零⇒已达标」推导 —— v2.8 实证该字段是考核窗口倒计时, 方向相反 —— 与缺字段
-回落本地) + `hr/resolve.py::judge_record` 双命中档位序; 动机见计划 v3.0 §9/§12/§14 与档案
-`26-09-22-backend-partial-hr-verify`。
-**上一态 2026-09-25 两线合一: 1601 collected: 1600 passed + 1 skipped** —— HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
-(HR 线 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
-(`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
-新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变), 动机与取舍见档案
-`26-09-22-backend-partial-hr-verify` 与计划 v2.8。master 线 **+2 条(1579 → 1581)**: GBK 防回潮守阵
-`test_local_codepage_ignores_utf8_mode` 1 条(引擎码页回退改问系统 ANSI 码页, 本会话 `PYTHONUTF8=1`
-下已全绿, 见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md))+ 搜索分隔符回归守阵 1 条
-(`test_search_torrents_separator_normalized` —— 空格查询词命中点/下划线/连字符分隔的种子名与文件名;
-views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.md](baseline-history.md)。)
-**同日 DND-01 拖拽添加种子 +1 守阵**(`test_frontend_add_torrent_drag_drop_wiring`, 全局拖拽接线四点:
-事件对称/drop 必 preventDefault/判据不放宽 text/plain/双 UI 遮罩成对 —— 1597 → 1598, 见切片
-`26-09-25-0848-webui-dnd-add-torrent`);
-**同日右键次级菜单 +1 守阵**(`test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close`,
-钉住「一级只有一个「更多操作」入口 / 移出父项延迟收起 / hover 图标规则限直接子级且压特异性」——
-1598 → **1599**, 见切片 `26-09-24-2310-webui-ctx-submenu` 与档案 `26-09-24-webui-ctx-submenu`);
-**同日 UI 位置持久化 +1 守阵**(`test_web.py::test_frontend_page_location_persisted` —— 顶层 `page` 与设置分区
-`hub.view` 落盘 + 读侧白名单 + **启动补一次 `cfgLoad`** + 分区 key 对 schema 校验, 用户报"设置页刷新会回到种子页" ——
-1599 → **1600**, 见切片 `26-09-25-1655-webui-page-location-persist` 与档案 `26-09-25-webui-page-location-persist`)。
-TOTAL **91%**(10950 语句 / 791 未覆盖 / 3594 分支 / 326 partial —— 并行采样; **HR 包 93%**:
-2814 / 147 / 774 / 93), sidefx 台账并行汇总 / **越界 0**。
+**上一态: 1621 collected: 1620 passed + 1 skipped / Windows** —— 2026-09-26 **合流轮: 设置页 `[object Object]` 修复 + WEB UI 地址改展示 localhost**
+(远端 docker 部署 / full-checking 首样本竞态两批先合入, 再以 `git rebase` 施回本轮两笔; 基线为**合流后重测**数字)。**+2 条**:
+hub 字段覆盖守阵(`tpl-hub-field` 逐个覆盖 `cfgFlatten` 全部非叶子项类型) + `display_host` 三条口径
+(回环折 `localhost` / 含 `0.0.0.0` 原样返回 / 非字符串不炸)。合流冲突 3 处(baseline / pitfalls/docs/_index / lifecycle 手工合并)。
+
+**上一态: 1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
+(档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**: 首连失败退出码契约(test_cli/test_qbmanager/test_ui)
++ 「WEB UI 已启动 / 配置热重载完成」按 INFO 记的日志断言(⚠ 抓日志挂目标 logger, caplog 挂 root 会被
+setup_logging 清空)。
+
+> **2026-09-25 及更早的逐轮状态**(示例配置守阵 / HR 扩展配置简化 / full-checking 首样本竞态 /
+> 展开态跨视图记忆 / HR 删除安全档位落地 / HR v3.0 档位即结论 / 两线合一 + DND 拖拽·右键次级菜单·
+> UI 位置持久化)已迁出 → [baseline-history.md](baseline-history.md)。
+
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 HR v3.0 达标来源优先级)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **18.6 / 18.1s**(2 次采样, 全部 test.full)
+**当前(2026-09-26 一键导入合流树)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **18.3 / 56.0s**(2 次采样, 全部 test.full; 56.0s 为同机其它 clone 并行工作时的负载离群, 18.3 为常态)
 
-**上一态(2026-09-25 两线合一)**: 并行 20.5 / 18.8s(2 次采样, 全部 test.full, 合并态)。
+**上一态(2026-09-26 HR v3.3 扩展终态)**: 并行 17.1 / 18.1s(2 次采样, 全部 test.full)。
+
+**上一态(2026-09-25 HR v3.0 达标来源优先级)**: 并行 18.6 / 18.1s(2 次采样, 全部 test.full)。
+
+**更早(2026-09-25 两线合一)**: 并行 20.5 / 18.8s(2 次采样, 全部 test.full, 合并态)。
 
 **更早(2026-09-25 HR 超龄豁免)**: 并行 19.9 / 36.8s(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)。
 

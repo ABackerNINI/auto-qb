@@ -60,6 +60,16 @@ from ..infra.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
+
+class QbConnectError(AutoQbError):
+    """无法连接 qBittorrent(非托管模式首连失败)
+
+    走 CLI 的 AutoQbError 统一出口: stderr 干净消息、无堆栈、退出码 1
+    (docs/deployment.md 排障表承诺的契约, 与 ConfigError/SingleInstanceLockError 同路径)。
+    托管模式(--tray/托管 UI)不抛 —— 首连失败按 main_tick 重试保持常驻, 见 run()。
+    """
+
+
 # 等真值落地时的重新同步间隔(秒): resume 后 qB 要过一会儿才翻状态, 不能干等一个 sync_interval
 # (真机大库 2s)。只在有真值等待时生效, 由 TRUTH_PUSH_CAP_MS 兜底不会无限空转。
 TRUTH_RETRY_S = 0.2
@@ -322,7 +332,8 @@ class QbManager(
         - pause_event: 置位期间完全旁观(不刷新/不执行任务, qB 自身行为不受影响),
           恢复后的首次 refresh 以增量 diff 补上暂停期间的状态变化
         - 托管模式(非 None)首连失败不退出, 按 main_tick 重试直至成功或收到停止 —— 托盘应用保持常驻;
-          非托管模式首连失败直接返回(历史行为)
+          非托管模式首连失败抛 QbConnectError -> CLI 干净退出码 1(fail-fast, docker/compose 重启策略
+          据此判失败; 容器里配合 restart 策略由 Docker 自带退避接管, qB 恢复后下一轮自动接上)
         """
         self._pause_event = pause_event
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
@@ -342,10 +353,18 @@ class QbManager(
             self._notify_handler = setup_notify(self.config.notify)
         try:
             main_tick = self.config.main_tick
-            # 首连失败: 托管模式按 main_tick 重试直至成功/停止; 非托管模式直接返回(历史行为,
-            # 与主循环节流的 _throttle 语义不同 —— 此处不可替换为 _throttle)
+            # 首连失败: 托管模式按 main_tick 重试直至成功/停止; 非托管模式 fail-fast 抛
+            # QbConnectError(退出码 1, docs/deployment.md 契约)。条件本身是有意语义(见
+            # behavior-core.md: 不要把 or 改成 and), 只允许改 None 分支的处置。
             while not self.connect():
                 if stop_event is None or stop_event.wait(main_tick):
+                    if stop_event is None:
+                        qb = self.config.qbittorrent
+                        raise QbConnectError(
+                            f"无法连接 qBittorrent {qb.host}:{qb.port}: 请检查 qB 是否在运行、"
+                            "Web UI 地址/端口/凭据是否正确"
+                            "(容器里连宿主机 qB 应填 host.docker.internal; 详细失败原因见上方日志)"
+                        )
                     return
                 logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
             self.state = self._load_state()
@@ -535,7 +554,9 @@ class QbManager(
             self.client = None
             self._last_conn_ok = None
             self.connect()
-        logger.warning(
+        # 生命周期消息按 INFO 记(pitfalls/ops/alert-levels.md: 按配置做的动作不许用 WARNING,
+        # 否则 notify 开启时每次保存配置都弹一条通知); "需重启进程"仍保留在消息文本里
+        logger.info(
             f"配置热重载完成: 级别 {levels or ['L0']}, 变更 {len(changes)} 项" +
             (f", 需重启进程: {restart_required}" if restart_required else "")
         )

@@ -39,7 +39,8 @@
   (豁免是 qB 侧事实, 不依赖索引建到哪)
 - test_judge_record_age_exempt_applies_on_mode_all: mode=all 也认豁免(显式配置压过恒受管束)
 - test_judge_record_age_exempt_boundary_is_inclusive: 恰好等于豁免线 -> 豁免; 差一秒 -> 不豁免
-- test_safety_display_site_lanes_map_to_verdict: 站点命中档位即删除安全结论(A/C 不能删 / B 可删), 来源记「在线」
+- test_safety_display_site_lanes_map_to_verdict: 站点命中档位即删除安全结论(A 考察中=danger 橙·不能删 /
+  C 未达标=failed 红·考核未通过(2026-09-25 用户修正: 终态独立醒目档, 移出不能删桶) / B 可删), 来源记「在线」
 - test_safety_display_identity_layers: 身份层结论 —— 放行/超龄豁免恒可删; mode=all 未命中与新鲜度闸门落「策略」桶; 宽松 policy 未核实
 - test_safety_display_local_fallback_when_judged_none: judged None(未接入/无键) => 本地兜底, 未触发 = 不适用
 """
@@ -63,6 +64,7 @@ from auto_qb.hr.resolve import (
     HrSiteFacts,
     HrSiteView,
     SAFETY_DANGER,
+    SAFETY_FAILED,
     SAFETY_NONE,
     SAFETY_SAFE,
     SAFETY_UNKNOWN,
@@ -506,14 +508,16 @@ def test_judge_record_age_exempt_boundary_is_inclusive():
 
 
 def test_safety_display_site_lanes_map_to_verdict():
-    """站点命中行的档位即删除安全结论(v3.0 口径): A/C -> 不能删, B -> 可删, 来源都是「在线」
+    """站点命中行的档位即删除安全结论(v3.0 口径): A -> 不能删·danger(橙, 进行中),
+    C -> 考核未通过·failed(红, 考核期已过的终态 —— 2026-09-25 用户修正: 独立醒目档,
+    删除无新增惩罚, 移出「不能删」桶), B -> 可删; 来源都是「在线」
 
     这是 WEB UI 「一眼分清能不能删」的判定源: 档位即结论, 不看页面数值字段。
     """
     for lane, safety, src, keyword in (
         ("A", SAFETY_DANGER, SRC_SITE_SCOPE, "考察中"),
         ("B", SAFETY_SAFE, SRC_SITE_SATISFIED, "已达标"),
-        ("C", SAFETY_DANGER, SRC_SITE_UNSATISFIED, "未达标"),
+        ("C", SAFETY_FAILED, SRC_SITE_UNSATISFIED, "未达标"),
     ):
         got = safety_display(
             HrJudgement(HrIdentity.HR, True, facts=HrSiteFacts(lane=lane)),

@@ -8,7 +8,8 @@
 
 > **更早的流水已外迁** → [attachments/baseline-history-archive.md](attachments/baseline-history-archive.md)
 > (append-only 流水触顶时的处置: 从最老一端切到本文件 ≤ 16,000 字符, 原位留本行指针;
-> 最近一次轮转: 2026-09-25 触顶 24,000, 外迁最老 17 条, 本文件保留 10 条)
+> 最近一次轮转: 2026-09-26 触顶 24,000, 外迁最老 1 条(添加种子回执轮, 相对链接已按 attachments/ 重写);
+> 2026-09-25 曾触顶外迁最老 17 条)
 
 - ↑ **耗时采样归档**(2026-09-26 轮转: baseline.md 触 evergreen cap 10,000, 把 2026-09-24/25 的"更早"耗时段从
   baseline.md 切到此处; 当前基线只留区间结论): 禁令解除回写 19.5 / 18.5s(2 failed 为当时已记载的 GBK 假红,
@@ -19,6 +20,46 @@
   `request_timeout`, 已修为「先叫停队列再 join」并有 `test_stop_is_prompt_while_waiting_for_extension` 守死)·
   GBK 回退修复 14.3 / 20.9 / 21.2s · 扩展运行日志 17.6 / 19.8 / 19.9 / 20.5s · 2026-09-24 告警分档 +
   `--hr-status` 并行 16.88–21.40s / 串行 30.93s。
+
+> **2026-09-26 自 baseline.md 迁出**(合流去重时让位给新条目; 2026-09-25 各轮状态快照, 内容照旧):
+
+- **1617 collected: 1616 passed + 1 skipped** —— 2026-09-25 **示例配置守阵**(`pitfalls/docs/drift.md`
+  根治 follow-up): +2 条(test_config.py) —— minimal.yml 与 docker/config.example.yml 过 fail-fast 校验,
+  并分别钉 README 开箱语义与容器契约字段; minimal 守阵**红验过**。TOTAL **91%**(10924 语句 / 785 未覆盖 /
+  3622 分支 / 326 partial)。
+- **1618 collected: 1617 passed + 1 skipped**(clone3 中间态, 已被合流重测覆盖) —— 2026-09-25 HR
+  `/api/hr/sites` + 站点勾选授权(+7 条, 明细见档案 v3.1)。
+- **1611 collected: 1610 passed + 1 skipped / Windows** —— 2026-09-25 **full-checking 首样本竞态修复**
+  (切片 `26-09-25-2348-full-checking-verdict-fix`, 取证报告
+  [26-09-25-0853-report-full-checking-verdict-poison](../reports/26-09-25-0853-report-full-checking-verdict-poison.html))。**+3 条**:
+  首样本竞态回归 / 启动宽限保险丝(`CHECK_START_GIVEUP`) / 1.6 假失败自愈; 另改造 3 条相关用例。
+- **1615 collected: 1614 passed + 1 skipped**(clone3, 合并远端 1610 之前的旧基座实测) —— 2026-09-25
+  **HR 扩展配置简化(端点 /api/hr/sites + 站点勾选授权)** + `test_extension_proxy.py` 2 条 +
+  `test_hr_runtime.py::test_site_origins_served_live_for_extension`。落地面: 只读 `GET /api/hr/sites`
+  + 扩展选项页三模板表单 / 站点权限拉清单勾选 + 一键申请。TOTAL **91%**(10920 语句 / 792 未覆盖 /
+  3626 分支 / 327 partial)。
+- **1608 collected: 1607 passed + 1 skipped** —— 2026-09-25 **WEB UI 展开态跨视图记忆**(切片
+  `26-09-25-1835-webui-expand-state-across-views`)。**+1 条**
+  `test_frontend_expand_state_survives_view_switch`(切视图不得置空展开态, 还回前必须验行还在);
+  同轮压回 `pitfalls/testing/tmpdir.md` 超 cap 并修掉一处控制字符乱码。
+- **1607 collected: 1606 passed + 1 skipped** —— 2026-09-25 **HR 删除安全档位 WEB UI 呈现落地**
+  (计划 `26-09-25-1823-plan-webui-hr-safety-display`, 档案 `26-09-25-webui-hr-safety-display`)。**+4 条**:
+  `test_hr_resolve.py` safety_display 三档位派生 3 条(站点档位即结论 / 身份层 / judged None 回落) +
+  `test_web.py::test_frontend_hr_safety_wiring` 前端接线守阵(token 映射表逐字一致 / 做种时长列 6 处换绑 /
+  新样式两套 CSS 成对 / `m.hr_*` 字段 ⊆ `_hr_view_fields` 键集); 另扩 `test_hr_view_fields_three_state`
+  与 `_scan_filter_facets` 同查 `hrSrcOptions`。落地面: `hr/resolve.py::safety_display` 派生单点 +
+  `views.py` 透出三字段(退役二值 `hr_satisfied_src`); 前端做种时长列按档位着色 + 来源徽标 + 悬停全文、
+  删除确认框点名、H&R 筛选两档→四档 + 来源副筛选、批量条「含 N 个不能删」。
+  TOTAL **91%**(10991 语句 / 791 未覆盖 / 3612 分支 / 327 partial; resolve.py 98% / views.py 97%);
+  双 UI 浏览器冒烟 **94 项全过 0 失败**(桩服务 1500 种子)。
+- **1602 collected: 1601 passed + 1 skipped** —— 2026-09-25 **HR v3.0 达标判定来源优先级**: +2 守阵 +
+  改写 1, **3 条红验全红**; `satisfied_verdict` 改**档位即结论**(A 考察中/C 未达标 ⇒ False, B ⇒ True) +
+  `judge_record` 双命中按档位序取; 动机见计划 v3.0 §9/§12/§14 与档案 `26-09-22-backend-partial-hr-verify`。
+- **1601 collected: 1600 passed + 1 skipped** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop, **+17 条**:
+  判定收口 7 + 取数侧过滤/早停 8 + 门面透传 1 + 配置解析 1; 新键 `completed_age_limit`) 并入 GBK 修复/
+  搜索分隔符(master, **+2 条**); 同日 DND 拖拽 / 右键次级菜单 / UI 位置持久化各 +1(1597→1600 链)。
+  TOTAL **91%**(10950 语句 / 791 未覆盖 / 3594 分支 / 326 partial —— 并行采样; **HR 包 93%**: 2814 / 147 /
+  774 / 93), sidefx 台账并行汇总 / **越界 0**。
 
 - ↑ 收集数 **1598 → 1599**(**+1**; 2026-09-24/25 **WEB UI 右键次级菜单三条 CTX-04/05/06**):
   `test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close` —— 用户报 ①二级菜单图标
@@ -293,22 +334,3 @@
   全量 **1374 passed + 1 skipped** / TOTAL 91%(9278 语句 / 727 未覆盖 / 3128 分支 / 277 partial) /
   sidefx 台账 2212 / 越界 0。⚠ 余下 **M2(取数通道 + 取数线程) / M3(判定联动四消费点) / M4(多站点)**
   未落地 —— 本档案「子任务状态表」逐项记状态。
-- ↑ 收集数 **1232 → 1233**(+1; 2026-09-24 **WEB UI 添加种子回执与 optional 选项**):
-  用户报"添加种子显示失败 + 桌面弹 WARNING 但实际添加成功, 且「添加后开始」不生效"。三条根因:
-  ① 回执只认 `"Ok." in str(result)`, 而 qB 5.2+(Web API 2.14.0)的 `/torrents/add` 已改回 JSON 元数据
-  (`TorrentsAddedMetadata`, dict 子类)⇒ 判定恒假; ② 停止位被"False 就不传"的过滤器吞掉 ⇒ qB 回落到
-  **会话级**默认 `isAddTorrentStopped()`, 勾了也按停止添加; 另 qbittorrent-api 的
-  `is_paused or is_stopped` 会把 `is_paused=False` 折成 `None`(实测请求体空串)⇒ 只能用 `is_stopped=`;
-  ③ 成功路径记 WARNING, 而 NotifyHandler 挂在 `auto_qb` logger 上 ⇒ 每次成功都推桌面弹窗。
-  同轮按用户"修复同类隐患"把 `use_auto_torrent_management` 一并改成恒显式(它同为 `std::optional`,
-  未勾 + 未填保存路径时会吃 qB 全局管理模式); 判据升级为"看 `addtorrentparams.h` 的字段类型 ——
-  optional 的必须显式, 普通 bool 省略安全"。
-  修法: 新增 `webui/commands.py::_add_outcome` 双形态判定 + 恒显式下发 `is_stopped` /
-  `use_auto_torrent_management` + 成功 INFO / 未受理才 WARNING。替身同步补 `is_stopped` 与
-  `is_stopped_raw`(保真度)。用例名 `test_add_torrent_receipt_and_optional_flags`(四条断言全红验)。
-  两条新坑写进 [pitfalls/backend/qb-api.md](../pitfalls/backend/qb-api.md) 与
-  [pitfalls/testing/stubs-sim.md](../pitfalls/testing/stubs-sim.md)(含 `make_manager` 清 root handlers
-  ⇒ 用例体内建 manager 时 caplog 恒空)。⚠ 本轮开工时与主线齐平, 提交前发现主线已前进 2 个提交
-  (`9d7a3eb` / `2e2e2b5`)⇒ 按"移出改动 → `merge --ff-only` → 施回改动"同步(重叠仅 3 个文件:
-  两个基线文档 + 生成物 `tasks/_index.md`), 故本条收集数在**合流后**的 1232 基础上 +1。
-  全量 **1232 passed + 1 skipped** / TOTAL 91%(7782 语句 / 622 未覆盖 / 2648 分支) / sidefx 2067 / 越界 0。

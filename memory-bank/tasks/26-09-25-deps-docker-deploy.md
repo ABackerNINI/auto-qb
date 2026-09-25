@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-09-25
-**Updated:** 2026-09-25
-**Summary:** 调研 auto-qb 的 Docker 部署方式并出方案。调研结论: 仓库无任何容器化资产 (绿地); 运行形态对容器友好 (stdout 恒有日志、运行态全收口 data_dir、只经 qB API 不碰 torrent 文件、GUI 三件仅托盘懒加载), 唯一代码缺口是**未注册 SIGTERM** (docker stop 即杀, 丢最多一个 state_save_interval 周期的运行态)。方案: uv 多阶段构建 (python:3.12-slim + uv sync --frozen --no-dev) + compose 单服务 (config 可写目录 + /data named volume + TZ) + 容器示例配置 (minimal.yml 底, data_dir=/data, web.host=0.0.0.0), P1 镜像 → P2 编排文档 → P3 SIGTERM 优雅退出 (唯一代码改动) → P4 可选 (CI build / GHCR / GUI 依赖分组 / 非 root)。决策点 D1–D7 与验收标准单点在计划文档。**P1–P3 已实施**: 5 交付物全部落地, cli.py 注册 SIGTERM→KeyboardInterrupt (4 条单测), 全量无回归; **本机无 Docker, docker build / compose up / docker stop 真机验收待用户机器执行**; 示例配置因 minimal.yml 本身过时改用 add_episode_tags 字典形态。追加: minimal.yml 漂移修复 + 示例守阵 2 条(test_config.py)。**已提交**(2026-09-26, gitee/develop)。
+**Updated:** 2026-09-26
+**Summary:** 调研 auto-qb 的 Docker 部署方式并出方案。调研结论: 仓库无任何容器化资产 (绿地); 运行形态对容器友好 (stdout 恒有日志、运行态全收口 data_dir、只经 qB API 不碰 torrent 文件、GUI 三件仅托盘懒加载), 唯一代码缺口是**未注册 SIGTERM** (docker stop 即杀, 丢最多一个 state_save_interval 周期的运行态)。方案: uv 多阶段构建 (python:3.12-slim + uv sync --frozen --no-dev) + compose 单服务 (config 可写目录 + /data named volume + TZ) + 容器示例配置 (minimal.yml 底, data_dir=/data, web.host=0.0.0.0), P1 镜像 → P2 编排文档 → P3 SIGTERM 优雅退出 (唯一代码改动) → P4 可选 (CI build / GHCR / GUI 依赖分组 / 非 root)。决策点 D1–D7 与验收标准单点在计划文档。**P1–P3 已实施**: 5 交付物全部落地, cli.py 注册 SIGTERM→KeyboardInterrupt (4 条单测), 全量无回归; **本机无 Docker, docker build / compose up / docker stop 真机验收待用户机器执行**; 示例配置因 minimal.yml 本身过时改用 add_episode_tags 字典形态。追加: minimal.yml 漂移修复 + 示例守阵 2 条(test_config.py)。**已提交**(2026-09-26, gitee/develop)。追加: **真机验收全部通过**(2026-09-26, Docker Desktop 真机, 全功能关闭冒烟配置连真实 qB): build 223s/252MB、up→healthy 12~21s、stop 退出码 0、锁拒绝退出码 1、WebUI token/写回/.bak/热重载/状态续接全过, 91 种子库零写入(前后快照 tags/category 零差异)。真机验收揪出并修复: ①非托管首连失败退出码 0 与文档承诺的 1 不符 → 抛 QbConnectError 走干净退出码 1(+2 守阵, 全量 1619 collected: 1618 passed + 1 skipped, 92%); ②两条生命周期日志(WEB UI 已启动/配置热重载完成)WARNING→INFO(alert-levels 契约, +2 守阵); ③config/ 部署凭据目录补进 .gitignore。docs/deployment.md 重写为完整操作手册(架构/步骤/验证清单/升级回滚/备份迁移/健康检查/退出码契约/排障/实测基线)。现场已清理(容器/卷/网络全删)。
 **Topics:** docker-deploy
 **Refs:** memory-bank/plans/26-09-25-2241-plan-docker-deploy.html
 
@@ -31,10 +31,11 @@
 |---|---|---|
 | 调研 (代码实况 + 部署约束) | Done | 十条事实全核对自代码 (cli.py / infra/logging.py / config/models.py / webui/server/lifecycle.py / docs/configuration.md / pyproject.toml); 详计划文档 §1 表 1 |
 | 方案与取舍 (D1–D7) | Done | 计划文档 §3; 用户令实施即拍板, 计划状态已改 In Progress |
-| P1 镜像化 (Dockerfile + .dockerignore) | Done | 两文件落地 + 对 plan 样例的两处修正(见进度日志); ❗docker build 本机未跑(无 Docker Desktop), 镜像体积/构建耗时/GUI 三件占用**未实测** |
-| P2 编排与文档 (compose + 示例配置 + 部署文档) | Done | compose.yaml + docker/config.example.yml + docs/deployment.md 落地; 示例配置过 load_config 实测 ✓, compose YAML 解析实测 ✓; ❗compose up / WebUI 登录 / 写回+bak / 状态续接 / 双开拒锁等真机验收**未做** |
-| P3 SIGTERM 优雅退出 (唯一代码改动) | Done | cli.py: `_install_sigterm_handler` + `_sigterm_to_keyboardinterrupt`(转 KeyboardInterrupt 复用既有路径 + 首信号后 SIG_IGN 保护清理窗口); test_cli.py +4 条单测; 全量 1612 collected: 1611 passed + 1 skipped 无回归; ❗容器内真实 docker stop 实测(Shutting down... / state mtime / 退出码 0)**待 Docker 环境** |
-| P4 可选 (CI build / GHCR / GUI 瘦身 / 非 root) | Pending | 全部可延后, 不阻塞交付 |
+| P1 镜像化 (Dockerfile + .dockerignore) | Done | 两文件落地 + 对 plan 样例的两处修正(见进度日志); 真机实测: 252MB / 冷构建 223s / 重建 9s / GUI 三件 6.9MB; `--help` 退出码 0; 安装形态 venv(无 editable 残留) ✓ |
+| P2 编排与文档 (compose + 示例配置 + 部署文档) | Done | 真机验收全过: up→healthy 12~21s / connected:true+91 种子 / token 401 鉴权 / 写回注释保留+.bak 落 /data / 热重载 L0 / 状态续接(token+upload_snapshots) / 双开拒锁退出码 1 / unhealthy 成因②web.enabled=false 实测坐实 |
+| P3 SIGTERM 优雅退出 (唯一代码改动) | Done | 真机 docker stop: 退出码 0 / 约 1s / state.json mtime == 「停止」日志瞬间(save_state 确实走到); ❗计划验收文本的「Shutting down...」实际不出现 —— run() 内部 except KeyboardInterrupt 记「停止」, cli.py 那条永不触发(功能等价, 文档已按实测改写) |
+| P4 可选 (CI build / GHCR / GUI 瘦身 / 非 root) | Pending | 全部可延后, 不阻塞交付; GUI 瘦身收益实测下修为 6.9MB(计划预估「十几 MB」偏大) |
+| 真机验收 + 缺陷修复 (2026-09-26) | Done | 退出码契约修复(QbConnectError)+日志级别降 INFO+.gitignore 补 config/ + deployment.md 重写; 详见进度日志 |
 
 ## 进度日志
 
@@ -47,3 +48,12 @@
   - **坑**: ①minimal.yml 本身已过不了当前 fail-fast 校验(`add_episode_tags: true` 旧形态, 现要求字典) —— 抄它当底子直接翻车, 已记 `pitfalls/docs/drift.md`; minimal.yml 的修复属计划外, **未动, 报告交用户决定**。②计划外发现: `.dockerignore` 不能排除 README.md/LICENSE(同上 hatchling 元数据)。
   - **未做/待办**: 本机无 Docker Desktop, P1/P2/P3 的真机验收(build / compose up / docker stop)全部待用户在有 Docker 的机器执行; 体积/耗时数字未实测不回填计划文档; **未提交** —— 等显式提交指令。
 - **2026-09-26 (minimal.yml 修复 + 示例守阵 + 提交)** — 用户令修复 minimal.yml: `add_episode_tags` 改字典形态(`enabled: true`), 过 load_config ✓ —— 注意旧布尔写法在 schema 改版后被静默解析成**关**(enabled 默认 false), 不只是校验红。用户令补示例守阵: test_config.py +2 条(minimal 开箱语义 + docker 示例容器契约字段), minimal 守阵红验过(HEAD 旧形态 → 红)。全量 **1614 collected: 1613 passed + 1 skipped**, 91% 覆盖率, 17.0s。用户令提交: ✨ 一笔入库(gitee/develop), 知识库旗标随主提交更新。剩余待办不变: Docker 真机验收。
+
+- **2026-09-26 01:33 (真机验收 + 缺陷修复 + 文档重写)** — 用户令「验证 docker 部署」(全功能关闭, 连真实 qB 127.0.0.1:16585), 后令「清理现场 / 修复问题 / 重写部署文档」。
+  - **验收(P1/P2/P3 全过, 数字进 deployment.md §14)**: build 223s → 252MB; up→healthy 12~21s; `/api/status` connected:true + torrents:91; 零 ERROR; TZ +08:00 正确; token 64 位免日志落 /data/web.token; 无 token /api/* 401; 配置写回注释保留 + .bak 落 /data(不在 config/ 旁) + 热重载 L0; stop/start 续接(token 与 upload_snapshots); 双开拒锁干净退出码 1; stop 退出码 0 且 state.json mtime == 停止日志瞬间。**零写入证明**: 前后快照 91 种子 hash 指纹一致、45 标签一致、逐种子 tags/category 零差异(仅 2 个 stalledUP→uploading 属正常做种)。
+  - **修复①退出码契约**: 非托管首连失败原为静默 return(退出码 0), 与 docs/plan 承诺的「退出码 1」不符, 且配合 `restart: unless-stopped` 造成"连不上 qB"与"优雅停机"外观不可分(实测 40s 内 RestartCount 9, Docker 退避上限 1 次/分钟)。改为抛 `QbConnectError`(qbmanager.py, AutoQbError 体系 → stderr 干净消息退出码 1); 托管模式(--tray)保持常驻重试不变; behavior-core.md 警告的 `stop_event is None or stop_event.wait(...)` 有意语义**未动**。真机复验: 假地址 → 退出码 1 + 干净 stderr 无堆栈。测试: test_qbmanager/test_ui 两条"直接返回"守阵改判 raise + test_cli +1 条干净退出守阵。
+  - **修复②日志级别**: 「WEB UI 已启动」「配置热重载完成」WARNING→INFO(pitfalls/ops/alert-levels.md 契约: 生命周期/热重载是预期动作, notify 开启时每次启动/保存配置都弹通知); 守阵 +2(test_web.py, 用挂在目标 logger 的 Grab handler —— caplog 挂 root 会被 setup_logging 清空, 现场踩到即改)。
+  - **修复③凭据防护**: `config/`(docs 指引的部署配置目录, 含真实 qB 凭据)补进 .gitignore —— 此前 git 可见, 一次 `git add -A` 即泄漏。
+  - **文档**: docs/deployment.md 重写为 14 节完整手册(架构/前置/快速开始/配置详解含 qB 地址三案与 web.enabled↔healthcheck 耦合/验证清单/运维/升级回滚含 state 兼容警告/备份迁移/健康检查语义/退出码与重启行为/宿主差异/安全/排障速查含 Git Bash 路径坑/实测基线); docker/config.example.yml 的 web.enabled 注释补耦合后果。
+  - **坑**: ①Git Bash 把 docker 的**容器内**路径参数也做 POSIX→Windows 转换(`cat /data/web.token` 变 `D:/Program Files/Git/data/...`), `MSYS_NO_PATHCONV=1` 解 —— 已记 pitfalls/ops/msys-container-path.md; ②手工子集跑 pytest 裸 `uv run pytest` 又踩 TMPDIR 坑(复发, 见该条)。
+  - **现场**: 容器/卷/网络已 `down -v` 清空, 临时 fail-fast 配置已删; 仓库余 config/config.yml(已 gitignore, 用户可留作即用配置)。**未提交** —— 等显式提交指令。

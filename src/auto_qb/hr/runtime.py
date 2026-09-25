@@ -18,7 +18,13 @@ from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
-from .channel import ChannelStatus, describe_token_source, resolve_token, token_path
+from .channel import (
+    ChannelStatus,
+    describe_token_source,
+    host_of,
+    resolve_token,
+    token_path,
+)
 from .fetcher import HrChannelStopped, HrFetcher, NullFetcher, build_channel_fetcher, is_available
 from .queue import HrTaskQueue
 from .resolve import HrAnchor, HrJudgement, HrViewSet, judge_record
@@ -262,6 +268,7 @@ class HrRuntime:
                     token=self.token,
                     port=conf.channel.port,
                     extension_id=conf.channel.extension_id,
+                    sites_fn=self._site_origins,
                 )
         elif not keep_endpoint:
             self.endpoint = None
@@ -273,6 +280,25 @@ class HrRuntime:
             poll_interval=conf.poll_interval,
             anchors_fn=self._anchors,
         )
+
+    def _site_origins(self) -> list:
+        """需要授权的站点清单(扩展选项页「勾选站点 → 一键申请权限」的数据源)。
+
+        与 UrlPolicy 同一来源(各站点 hr_page_url 的 host): 扩展要能无界面直取 HR 页与
+        .torrent, 站点权限就必须覆盖这两个 URL 的域名。每次请求现读配置 —— 热重载加站点
+        不重绑端点, 快照会把新站点漏在授权清单外面。
+        """
+        out = []
+        for name, conf in self.site_confs().items():
+            if not conf.enabled:
+                continue
+            url = conf.hr_page_url
+            host = host_of(url)
+            if not host:
+                continue
+            scheme = url.split("://", 1)[0].lower() if "://" in url else "https"
+            out.append((name, f"{scheme}://{host}/*"))
+        return out
 
     def _anchors(self) -> Mapping[str, Mapping[str, object]]:
         """本地种子锚点: 由主循环以不可变数据交接(M3 接入; 现在没有提供者)"""

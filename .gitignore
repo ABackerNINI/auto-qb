@@ -10,6 +10,10 @@ test.py
 # 运行时数据目录(2026-09-09: 状态/单实例锁/日志/跳检备份集中到 auto-qb-data/)
 auto-qb-data/
 
+# Docker 部署的配置目录(docs/deployment.md 快速开始: cp docker/config.example.yml config/config.yml
+# 后填真实 qB 凭据) —— 凭据不入库, 与根 config.yml 同一红线口径
+config/
+
 # 测试跳检备份残留(state_file 配在仓库根时的兜底)
 skip-check-backup/
 

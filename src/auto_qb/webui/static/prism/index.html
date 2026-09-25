@@ -2320,85 +2320,142 @@
   <!-- 新版设置页的字段行模板: 标签 | 控件 | 「?」(说明进就近浮窗, 不再占常驻位置)。
        控件语义来自 shared/config_editor.js 的 CE_FIELD_BASE(读写同一套), 这里只负责版式。 -->
   <script type="text/x-template" id="tpl-hub-field">
-    <div v-if="visible" class="hb-row" :class="[ce.hubRowClass(item), { bare: isBare, 'hb-inactive': greyed }]"
-         :data-hb-key="ce.hubKey(path)">
-      <div v-if="!isBare" class="hb-lb">
-        {{ f.label }}<span v-if="f.required" class="lb-req">*</span>
-        <span v-if="isDefault()" class="hb-badge">默认</span>
+    <div v-if="visible">
+      <!-- 非叶子项三段: section(可选段) / group(普通 object 段) / subcard(父字段的相关设置子卡)
+           ⚠ 这三个分支**不能省** —— cfgFlatten 会把嵌套 object 展开成这三类项; 少了它们, 段项会
+           落进下面叶子字段的 <input v-else> 分支, 值被 String(对象) 成 "[object Object]"
+           (2026-09-25 实测: 站点页「HR 规则」「HR 在线核实」与规则页 checking 的两个分支都成了
+           `[object Object]` —— 经典页 tpl-ce-field 有这三支, 清理死代码时随模板一起被删掉了)。
+           子项递归回本组件(全局注册的 hub-field 可自引用), 与叶子字段共用同一套 cfg* 读写;
+           ce 由 CE_FIELD_BASE 的 provide 层层透传, 任意深度拿到的都是根实例。 -->
+      <div v-if="item.type === 'section'" class="hb-blk hb-sub" :class="{ 'hb-inactive': !sectionExists() }"
+           :data-hb-key="ce.hubKey(path)">
+        <div class="hb-blk-hd">
+          <span class="bh-t">{{ f.label }}</span>
+          <span class="bh-n">{{ sectionSummary }}</span>
+          <span class="bh-r">
+            <label class="hb-switch" title="控制该配置段是否写入配置文件">
+              <input type="checkbox" :checked="sectionExists()" @change="toggleSection($event.target.checked)">
+              <span class="hb-sw-track"></span>
+              <span class="hb-sw-text">{{ sectionExists() ? '启用' : '关闭' }}</span>
+            </label>
+            <button class="hb-btn ghost sm" :aria-expanded="sectionOpen"
+                    @click="ce.cfgSectionToggle(path)">{{ sectionOpen ? '收起' : '展开' }}</button>
+            <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
+                    :aria-label="f.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
+          </span>
+        </div>
+        <template v-if="sectionExists() && sectionOpen">
+          <hub-field v-for="sub in item.items" :key="ce.hubKey(sub.path)" :item="sub"></hub-field>
+        </template>
       </div>
-      <div class="hb-ct">
-        <label v-if="f.kind === 'bool'" class="hb-switch" :class="ce.hubToneOf(item)">
-          <input type="checkbox" :checked="boolValue()" @change="setBool($event.target.checked)">
-          <span class="hb-sw-track"></span>
-          <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
-        </label>
 
-        <select v-else-if="f.kind === 'enum'" class="hb-select" :class="ce.hubToneOf(item)"
-                :value="textValue()" @change="set($event.target.value)">
-          <option v-if="!f.required" value="">(未配置)</option>
-          <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
-        </select>
-
-        <div v-else-if="isList" class="hb-list">
-          <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
-            <input class="hb-input" :class="{ 'hb-mono': ce.hubMonoOf(item) }" :value="it"
-                   :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
-            <button class="hb-btn ghost sm" title="删除该项" @click="listRemove(i)">✕</button>
-          </div>
-          <button class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
+      <!-- 普通 object 段: 默认折叠(用户点过以本地图为准, 未点过跟随 schema 的 open);
+           折叠态仍给「已配置 n/m 项」摘要, 让用户不展开也看得出这段有没有配过 -->
+      <div v-else-if="item.type === 'group'" class="hb-blk hb-sub" :data-hb-key="ce.hubKey(path)">
+        <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
+             :title="groupOpen ? '点击收起' : '点击展开'" @click="toggleGroup()" @keyup.enter="toggleGroup()">
+          <span class="bh-t">{{ item.label }}</span>
+          <span class="bh-n">{{ groupSummary }}</span>
+          <span class="bh-r">
+            <button class="hb-btn ghost sm" :aria-expanded="groupOpen"
+                    @click.stop="toggleGroup()">{{ groupOpen ? '收起' : '展开' }}</button>
+            <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
+                    :aria-label="item.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
+          </span>
         </div>
+        <template v-if="groupOpen">
+          <hub-field v-for="sub in item.items" :key="ce.hubKey(sub.path)" :item="sub"></hub-field>
+        </template>
+      </div>
 
-        <div v-else-if="f.kind === 'rules_ref'" class="hb-list">
-          <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
-            <input class="hb-input hb-mono" :value="it" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
-                   @input="listSet(i, $event.target.value)">
-            <button class="hb-btn ghost sm" title="删除该引用" @click="listRemove(i)">✕</button>
-          </div>
-          <select class="hb-select" :value="''" @change="refPick($event)">
-            <option value="">从已有规则集/规则中选择…</option>
-            <optgroup v-for="g in ce.ceRefOptions()" :key="g.group" :label="g.group">
-              <option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
-            </optgroup>
+      <!-- 相关设置子卡: 随父字段一起显隐(见 visible); 子项少, 常显不折叠 -->
+      <div v-else-if="item.type === 'subcard'" class="hb-blk hb-sub" :data-hb-key="ce.hubKey(path)">
+        <div class="hb-blk-hd"><span class="bh-t">{{ item.label }}</span></div>
+        <hub-field v-for="sub in item.items" :key="ce.hubKey(sub.path)" :item="sub"></hub-field>
+      </div>
+
+      <!-- 叶子字段: 标签 | 控件 | 「?」 -->
+      <div v-else class="hb-row" :class="[ce.hubRowClass(item), { bare: isBare, 'hb-inactive': greyed }]"
+           :data-hb-key="ce.hubKey(path)">
+        <div v-if="!isBare" class="hb-lb">
+          {{ f.label }}<span v-if="f.required" class="lb-req">*</span>
+          <span v-if="isDefault()" class="hb-badge">默认</span>
+        </div>
+        <div class="hb-ct">
+          <label v-if="f.kind === 'bool'" class="hb-switch" :class="ce.hubToneOf(item)">
+            <input type="checkbox" :checked="boolValue()" @change="setBool($event.target.checked)">
+            <span class="hb-sw-track"></span>
+            <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
+          </label>
+
+          <select v-else-if="f.kind === 'enum'" class="hb-select" :class="ce.hubToneOf(item)"
+                  :value="textValue()" @change="set($event.target.value)">
+            <option v-if="!f.required" value="">(未配置)</option>
+            <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
           </select>
-        </div>
 
-        <div v-else-if="f.kind === 'keyed_list'" class="hb-checks">
-          <label v-for="o in f.options" :key="o" class="hb-check">
-            <input type="checkbox" :checked="checkedKey(o)" @change="toggleKey(o)">
-            <span>{{ o }}</span>
+          <div v-else-if="isList" class="hb-list">
+            <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
+              <input class="hb-input" :class="{ 'hb-mono': ce.hubMonoOf(item) }" :value="it"
+                     :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
+              <button class="hb-btn ghost sm" title="删除该项" @click="listRemove(i)">✕</button>
+            </div>
+            <button class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
+          </div>
+
+          <div v-else-if="f.kind === 'rules_ref'" class="hb-list">
+            <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
+              <input class="hb-input hb-mono" :value="it" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
+                     @input="listSet(i, $event.target.value)">
+              <button class="hb-btn ghost sm" title="删除该引用" @click="listRemove(i)">✕</button>
+            </div>
+            <select class="hb-select" :value="''" @change="refPick($event)">
+              <option value="">从已有规则集/规则中选择…</option>
+              <optgroup v-for="g in ce.ceRefOptions()" :key="g.group" :label="g.group">
+                <option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div v-else-if="f.kind === 'keyed_list'" class="hb-checks">
+            <label v-for="o in f.options" :key="o" class="hb-check">
+              <input type="checkbox" :checked="checkedKey(o)" @change="toggleKey(o)">
+              <span>{{ o }}</span>
+            </label>
+          </div>
+
+          <!-- 数值 + 单位: 写回仍是单个字符串(30M / 10MiB), 与磁盘同构; 合法性由后端夹紧 -->
+          <div v-else-if="hasUnit" class="hb-unit">
+            <input class="hb-input hb-mono hb-w-sm" type="text" :value="unitParts.num"
+                   :placeholder="f.placeholder || ''"
+                   @input="ce.cfgSetUnit(path, $event.target.value, unitParts.unit)">
+            <select class="hb-select" :value="unitParts.unit" @change="ce.cfgSetUnit(path, unitParts.num, $event.target.value)">
+              <option v-for="u in unitOptions" :key="u" :value="u">{{ unitLabel(u) }}</option>
+            </select>
+          </div>
+
+          <template v-else>
+            <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
+                   :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
+                   :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" @input="set($event.target.value)">
+            <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>
+          </template>
+
+          <button v-if="f.kind === 'expr'" class="hb-btn ghost sm" @click="ce.cfgExprTry(path)">试算</button>
+
+          <!-- 布尔型从属项: 父字段的内联额外开关(比单独占一张子卡更符合从属语义) -->
+          <label v-for="inl in item.inline" :key="inl.field.key" class="hb-switch"
+                 :title="inl.field.risk || inl.field.help || ''">
+            <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
+            <span class="hb-sw-track"></span>
+            <span class="hb-sw-text">{{ inl.field.label }}</span>
           </label>
         </div>
 
-        <!-- 数值 + 单位: 写回仍是单个字符串(30M / 10MiB), 与磁盘同构; 合法性由后端夹紧 -->
-        <div v-else-if="hasUnit" class="hb-unit">
-          <input class="hb-input hb-mono hb-w-sm" type="text" :value="unitParts.num"
-                 :placeholder="f.placeholder || ''"
-                 @input="ce.cfgSetUnit(path, $event.target.value, unitParts.unit)">
-          <select class="hb-select" :value="unitParts.unit" @change="ce.cfgSetUnit(path, unitParts.num, $event.target.value)">
-            <option v-for="u in unitOptions" :key="u" :value="u">{{ unitLabel(u) }}</option>
-          </select>
-        </div>
-
-        <template v-else>
-          <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
-                 :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
-                 :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" @input="set($event.target.value)">
-          <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>
-        </template>
-
-        <button v-if="f.kind === 'expr'" class="hb-btn ghost sm" @click="ce.cfgExprTry(path)">试算</button>
-
-        <!-- 布尔型从属项: 父字段的内联额外开关(比单独占一张子卡更符合从属语义) -->
-        <label v-for="inl in item.inline" :key="inl.field.key" class="hb-switch"
-               :title="inl.field.risk || inl.field.help || ''">
-          <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
-          <span class="hb-sw-track"></span>
-          <span class="hb-sw-text">{{ inl.field.label }}</span>
-        </label>
+        <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
+                :aria-label="f.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
       </div>
-
-      <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
-              :aria-label="f.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
     </div>
   </script>
 

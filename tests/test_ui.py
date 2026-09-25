@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_run_stop_event_exit: stop_event 置位 -> run 立即退出并落盘
-- test_run_unmanaged_connect_fail_returns: 非托管模式首连失败直接返回(历史行为)
+- test_run_unmanaged_connect_fail_raises: 非托管模式首连失败抛 QbConnectError(fail-fast, 不重试)
 - test_run_managed_connect_retry: 托管模式首连失败按 tick 重试直至成功, 期间不退出
 - test_run_pause_event_skips_ticks: pause_event 置位期间完全不执行 _tick, 停止信号仍响应
 - test_status_snapshot: 只读快照(种子数/连接态/暂停态)
@@ -29,7 +29,7 @@ import pytest
 from auto_qb.infra import autostart, notify as notify_mod
 from auto_qb.config import NotifyConfig
 from auto_qb.infra.notify import NotifyHandler, PlatformChannel
-from auto_qb.core.qbmanager import QbManager
+from auto_qb.core.qbmanager import QbConnectError, QbManager
 from auto_qb.tray import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from auto_qb.config import QbittorrentConfig
 from helpers import FakeClient, FakeConfig, FakeQbServer, FakeTorrent, make_manager, seed_store
@@ -74,14 +74,15 @@ def test_run_stop_event_exit(tmp_path):
     assert (tmp_path / "state.json").exists(), "退出前应保存状态"
 
 
-def test_run_unmanaged_connect_fail_returns(tmp_path):
-    """非托管模式(无 stop_event)首连失败直接返回, 不重试(历史行为)"""
+def test_run_unmanaged_connect_fail_raises(tmp_path):
+    """非托管模式(无 stop_event)首连失败抛 QbConnectError(fail-fast -> CLI 退出码 1), 不重试"""
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
     calls = []
     mgr.connect = lambda: calls.append(1) and False
-    mgr.run(dry_run=True)
-    assert len(calls) == 1, "首连失败应直接返回, 不重试"
+    with pytest.raises(QbConnectError):
+        mgr.run(dry_run=True)
+    assert len(calls) == 1, "首连失败应立即抛出, 不重试"
 
 
 def test_run_managed_connect_retry(tmp_path):

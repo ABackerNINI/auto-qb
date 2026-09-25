@@ -90,6 +90,7 @@
 - test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
+- test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrDurTitle、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
@@ -121,6 +122,7 @@
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
 - test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
+- test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
 - test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
@@ -1096,7 +1098,7 @@ def test_frontend_hr_safety_wiring():
       逐字一致 —— 来源档位是前后端契约, 打错字徽标静默消失;
     ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + 挂 hrSrcBadge/
       hrDurTitle —— 漏一处那一列就不显示安全档位;
-    ③ hr-unk / hr-src / bulk-hr-warn 三条新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
+    ③ hr-unk / hr-fail / hr-src / bulk-hr-warn 新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
     ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
     """
@@ -1118,8 +1120,9 @@ def test_frontend_hr_safety_wiring():
 
     assert _map_keys("HR_SRC_BADGES") == src_tokens, "HR_SRC_BADGES 键与后端 SRC_* 不一致"
     assert _map_keys("HR_SRC_BUCKETS") == src_tokens, "HR_SRC_BUCKETS 键与后端 SRC_* 不一致"
+    # 四个安全档位(2026-09-25 用户修正起 failed=未达标终态红档): failed 由前端映射 hr-fail 红
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
-        assert _map_keys(name) == {"danger", "safe", "unknown"}, f"{name} 键集应为三个安全档位"
+        assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
 
     # ② 做种时长列换绑: 两套 UI 各 3 处
     for ui in ("atlas", "prism"):
@@ -1138,7 +1141,7 @@ def test_frontend_hr_safety_wiring():
     atlas_css = open(os.path.join(STATIC_ROOT, "atlas", "style.css"), encoding="utf-8").read()
     prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
     for css, name in ((atlas_css, "atlas/style.css"), (prism_css, "prism/css/views.css")):
-        for rule in (".m-pair.hr-unk", ".m-pair .hr-src", ".bulk-hr-warn"):
+        for rule in (".m-pair.hr-unk", ".m-pair.hr-fail", ".m-pair .hr-src", ".bulk-hr-warn"):
             assert rule in css, f"{name} 缺 {rule} 规则 —— 两套 UI 必须成对定义"
 
     # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
@@ -1463,6 +1466,55 @@ def test_frontend_expand_state_survives_view_switch():
     win = m.group(1)
     assert "if (this.expandedKey) return" not in win, ("groupWin 仍只按 expandedKey 非空退避 —— 过期的键会让行窗口永久退化成全量渲染")
     assert "this.expandedKey" in win and ".some(" in win, ("groupWin 的退避判据必须带上'展开的组确实在可见集合里'这一条")
+
+
+def test_frontend_hub_field_covers_non_leaf_items():
+    """hub-field 必须覆盖 cfgFlatten 产出的**全部**项类型 —— 缺了非叶子那三支就显示 `[object Object]`
+
+    现象与定性(2026-09-25 用户报「设置页部分设置项显示 [object Object]」):
+    `cfgFlatten` 把嵌套 object 展开成 **四种** item.type —— field(叶子) / section(可选段) /
+    group(普通 object 段) / subcard(父字段的相关设置子卡)。`tpl-hub-field` 的控件分支
+    (bool / enum / list / rules_ref / keyed_list / 数值+单位) 末尾是一个**无条件**的 `<input v-else>`,
+    值取 `cfgInputValue` → `cfgScalar` → `String(value)`: 叶子字段存的是标量没问题, 而
+    section / group / subcard 这条路径上存的是**对象**(如 `config.trackers.<站点>.hr`),
+    `String({...})` 恰好是 "[object Object]" ⇒ 站点页「HR 规则」「HR 在线核实」与规则页
+    checking 的 with_reference / without_reference 两个分支整行都显示这个串; 更糟的是**随手一改
+    就把配置写成这个字符串**, 保存时后端校验才报错。
+
+    根因: 经典设置页的 `tpl-ce-field` 有这三支, 清理死代码时随模板一起被删, 而 `cfgFlatten`
+    仍会产出这三类项, 站点 / 规则两个专段又把扁平结果直接交给 hub-field(普通分区页的
+    `hubBlocks` 只挑 `type === "field"`, 所以只有这两个专段暴露出来)。
+
+    守阵两条:
+    ① 两套皮肤的模板都必须**逐个**判 `item.type === '<非叶子类型>'`, 类型名单从 config_editor.js
+       的 cfgFlatten 实读(将来新增类型忘了加分支 → 立刻红, 不靠人记);
+    ② 叶子分支必须是链尾的 `v-else` —— 否则非叶子项会有绕回兜底 input 的路径。
+    """
+    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    kinds = set(re.findall(r'type:\s*"(field|section|group|subcard)"', editor))
+    assert "field" in kinds, "config_editor.js 里找不到 cfgFlatten 的 type: \"field\"(改名/挪走了? 同步本守阵)"
+    non_leaf = sorted(k for k in kinds if k != "field")
+    assert non_leaf, ("config_editor.js 的 cfgFlatten 不再产出任何非叶子项类型 —— "
+                      "若嵌套段真的取消了, 本守阵该跟着撤, 别让它空转")
+
+    for skin in ("prism", "atlas"):
+        html = open(os.path.join(STATIC_ROOT, skin, "index.html"), encoding="utf-8").read()
+        m = re.search(r'<script type="text/x-template" id="tpl-hub-field">(.*?)\n  </script>', html, re.S)
+        assert m, f"{skin}/index.html 找不到 tpl-hub-field 模板(改名/挪走了? 同步本守阵)"
+        tpl = m.group(1)
+        for kind in non_leaf:
+            assert f"item.type === '{kind}'" in tpl, (
+                f"{skin} 的 tpl-hub-field 缺 `item.type === '{kind}'` 分支 —— 该类项会落进叶子字段的"
+                "兜底 <input>, 值被 String(对象) 成 '[object Object]'(且一改就把配置写成这个串)"
+            )
+            assert "item.items" in tpl, f"{skin} 的 tpl-hub-field 未递归渲染 item.items —— 段内子字段会整段消失"
+        assert re.search(
+            r'<div\s+v-else\s+class="hb-row"', tpl
+        ), (f"{skin} 的 tpl-hub-field 叶子分支不是链尾的 <div v-else class=\"hb-row\"> —— "
+            "非叶子项仍有掉进兜底 input 的路径")
+        assert 'v-if="item.type === \'section\'"' in tpl, (
+            f"{skin} 的 tpl-hub-field 首个分支必须带 v-if(链头), 否则 v-else-if 链不成立"
+        )
 
 
 def test_frontend_statusbar_speed_reads_server_totals():
@@ -2336,7 +2388,7 @@ def test_hr_view_fields_three_state(tmp_path):
     )
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "site_scope"
-    assert fields["hr_safety_text"] == "在线·考察中，义务未了"
+    assert fields["hr_safety_text"] == "在线·考察中"
 
     link.judge.return_value = HrJudgement(
         identity=HrIdentity.HR,
@@ -4276,12 +4328,25 @@ def test_state_kind_maps_states(state, kind):
 
 def test_apply_new_config_levels(monkeypatch):
     """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 重挂日志/通知+重连+web 重启;
-    L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用"""
+    L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用;
+    完成消息按 INFO 记(alert-levels 契约: 热重载是预期动作, WARNING 会被 notify 推成通知)"""
     import logging as std_logging
 
     from auto_qb.core import qbmanager as qbm
     from auto_qb.config.impact import ConfigChange
     from helpers import make_manager
+
+    # 日志抓取用挂在目标 logger 上的 Grab handler —— 不用 caplog:
+    # make_manager 会走 setup_logging 清空 root handlers(logging.py:98), caplog 挂在 root 上抓不到
+    grabbed = []
+
+    class Grab(std_logging.Handler):
+        def emit(self, record):
+            grabbed.append(record)
+
+    grab = Grab()
+    qbm_logger = std_logging.getLogger("auto_qb.core.qbmanager")
+    qbm_logger.addHandler(grab)
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4300,10 +4365,18 @@ def test_apply_new_config_levels(monkeypatch):
 
         # ① L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
         queue_before = mgr.task_queue
-        res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
+        try:
+            res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
+        finally:
+            qbm_logger.removeHandler(grab)  # 先摘 handler, 断言失败也不跨测试泄漏
         assert res == {"applied": True, "levels": ["L0"], "changes": 1, "restart_required": []}, res
         assert mgr.config is new_cfg
         assert mgr.task_queue is queue_before, "L0 不应重建任务队列"
+        # 生命周期消息守阵: 完成消息必须是 INFO, 不得用 WARNING(否则 notify 开启时每次保存配置弹通知)
+        done_logs = [r for r in grabbed if "配置热重载完成" in r.getMessage()]
+        assert done_logs, "热重载完成应留一行日志"
+        assert done_logs[-1].levelno == std_logging.INFO, \
+            f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
 
         # ② L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
         mgr._notify_handler = std_logging.NullHandler()
@@ -4432,6 +4505,43 @@ def test_stop_web_server_releases_port_for_restart(tmp_path):
     finally:
         if h1.thread.is_alive():  # 断言失败时清理, 不掩盖原异常
             stop_web_server(h1)
+
+
+def test_start_web_server_started_message_is_info(tmp_path):
+    """「WEB UI 已启动」按 INFO 记(pitfalls/ops/alert-levels.md 契约)
+
+    启动是程序按配置做的动作, WARNING 会被 notify 推成系统通知 —— 每次启动弹一条,
+    即用户实报的「一开就弹 warning」。监听地址在消息文本里, 暴露面信息不丢。
+    日志抓取用挂在目标 logger 上的 Grab handler(caplog 挂 root, 会被 setup_logging 清掉)。
+    """
+    import logging as std_logging
+
+    from auto_qb.webui import start_web_server, stop_web_server
+
+    grabbed = []
+
+    class Grab(std_logging.Handler):
+        def emit(self, record):
+            grabbed.append(record)
+
+    grab = Grab()
+    web_logger = std_logging.getLogger("auto_qb.web")
+    web_logger.addHandler(grab)
+    try:
+        cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
+        mgr = _make_web_manager(tmp_path, cfg_text)
+        mgr.config.web.port = _free_port()
+        h = start_web_server(mgr)
+        try:
+            assert h.started, "服务应监听成功"
+            started = [r for r in grabbed if "WEB UI 已启动" in r.getMessage()]
+            assert started, "启动应留一行日志(含监听地址与密钥路径)"
+            assert started[-1].levelno == std_logging.INFO, \
+                f"启动是预期动作, 应记 INFO(实为 {started[-1].levelname})"
+        finally:
+            stop_web_server(h)
+    finally:
+        web_logger.removeHandler(grab)
 
 
 def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):

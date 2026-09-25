@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [access-url.md](access-url.md) | 启动日志 / README / dev 脚本里指向本程序 WEB UI 的地址**只能**写 `localhost`, 不能写 `127.0.0.1`(2026-09-25 落地, 起因: 两者在浏览器眼里是两个 origin, 且 `127.0.0.1` 那份 localStorage 更容易被浏览器清掉); 而**绑定地址** `config.web.host` 恰恰相反 —— 必须留 `127.0.0.1`, 两件事混在一个变量里写就是本坑的复发形态。 | 启动日志, WEB UI 已启动, 访问地址, 打开浏览器, 127.0.0.1, localhost, origin 隔离, localStorage 被清, 偏好回默认, 改文档里的地址, dev_webui, display_host |
 | [drift.md](drift.md) | 文档与代码冲突时的裁决顺序、`🚧` 标注到底是什么意思、示例配置文件自己也会漂移, 以及哪些历史记录不必再查。 | 文档与代码不符, 看到 🚧 标注, 回写知识库, 想删"已实现"的标注, 示例配置过时, 抄示例当底子, minimal.yml, 新示例 yml |
 | [html-edit.md](html-edit.md) | 用字符串替换改计划 / 报告 HTML 时容易吃掉 `</p>` 之类闭合标签, 也容易**残留整块旧内容** —— 浏览器与 IDE 预览都**静默容错**, 肉眼看不出。 | 改计划 HTML, 改 issue 报告, 编辑 HTML, 闭合标签, 标签不平衡, 旧块残留, 渲染不对但没报错 |
 | [md-edit.md](md-edit.md) | 在 Markdown 文档(尤其 `memory-bank/tasks/*.md` / `activeContext/*.md` 的头部元数据块)上做字符串替换时, 把**下一行的字段标签**一起卷进 `old` 会静默删掉它 —— md 没有闭合标签, 删了不报错, 渲染出来只是"少了一个字段"。 | 改任务档案, 改 activeContext 切片, 头部元数据, Status/Updated/Summary 字段, 字符串替换, 替换片段吞掉整行, Markdown 静默丢失 |

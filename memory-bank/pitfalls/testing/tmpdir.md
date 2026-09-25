@@ -85,6 +85,7 @@
   `test.one -- '<路径> -k "<表达式>"'`(整串加引号); bash 前缀 `TMPDIR='R:/Temp/auto-qb/tests'` 亦有效。
 - **复发**: 4+5 —— 2026-09-25 两踩同因: 裸跑 `uv run pytest <单文件>` 与手工设 TMPDIR(POSIX 前缀 / `cmd //c` 直写)都绕开引擎 ⇒ 默认 `H:\Temp` 收尾同崩 `PermissionError … pytest-current`。
   **为什么没命中**: 把"单文件小跑"当例外 + 禁令开工扫过、动手没重读 ⇒ 临时排查也一律 `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑可兜底。
+- **复发**: 6 —— 2026-09-26: 图快裸跑 `uv run pytest <三文件>` ⇒ 收尾同崩。**为什么没命中**: 本会话刚读过仍绕开引擎 —— 收口只在 `commands run test.*` 路径上。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需能读那个重解析点), 之后在**默认 TMPDIR** 下跑
@@ -92,12 +93,5 @@
   `icacls` 全被拒(用户态修不掉), 但**可连它的父目录一起搬走**, 新根由 pytest 自动重建
   (`garbage-*` 残渣一并搬走, 无害)。⚠ 是**环境修复不是仓库改动**, 换机器不适用 ⇒ 仍优先设 `TMPDIR`。
 
-### ❗在工具**沙箱内**跑全量会假红: 沙箱拒写 `R:\Temp`, `TMPDIR` 等于没设
-
-- **触发**: 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的命令, 2026-09-24 实测。
-- **判别**: 点号全打完、**一条都没失败**, 却在收尾 `cleanup_dead_symlinks` 抛
-  `PermissionError [WinError 5] … pytest-current`; 输出另有 `TRAE Sandbox Error: hit restricted` +
-  `Not allow operate files: R:\Temp\…`。链路: 沙箱拒写 R 盘 ⇒ `TMPDIR` 也建不了目录 ⇒
-  pytest 回落 `H:\Temp`(重解析点读不了, 见上条)。⚠ 与上条成因**不同** —— 这是**沙箱拦截**, 关沙箱即消失。
-- **处置**: 跑全量时**关沙箱**, **不是改命令**(命令是对的, 改了反而失去 TMPDIR 收口)。
-  ⚠ 沙箱内的 `preflight` 命中 pytest 闸门时同样假红 —— 闸门继承调用方的沙箱。
+**❗在工具沙箱内跑全量也会假红**(另案): 沙箱拒写 `R:\Temp` ⇒ `TMPDIR` 等于没设 ⇒ 回落 `H:\Temp` 收尾崩 ——
+点号全过也判红, 关沙箱即消失。已拆至 [sandbox-full-run.md](sandbox-full-run.md)(2026-09-26, 本文件超 cap 拆分)。

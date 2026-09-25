@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-09-25
-**Updated:** 2026-09-25
-**Summary:** WEB UI 一眼分清「哪些种子可以安全删除」。后端 `hr/resolve.py::safety_display` 派生**删除安全档位**(danger/safe/unknown/none) × **来源档位**(在线·考察中/已达标/未达标/已核实、策略、本地兜底、本地超龄豁免、未核实 —— 对齐 v3.0 优先级链), `views.py::_hr_view_fields` 透出 `hr_safety`/`hr_safety_text`/`hr_safety_src`(退役二值 `hr_satisfied_src`); 前端做种时长列(两套 UI 各 3 处)按档位着色(站点结论优先于本地) + 来源 2 字徽标 + 悬停全文, 删除确认框点名 HR 风险, H&R 筛选两档→四档 + 来源副筛选, 批量条「含 N 个不能删」。+4 测试, 全量 **1606 passed + 1 skipped**, 双 UI 冒烟 94 项全过。**未提交**。
+**Updated:** 2026-09-26
+**Summary:** WEB UI 一眼分清「哪些种子可以安全删除」。后端 `hr/resolve.py::safety_display` 派生**删除安全档位**(danger=考察中橙 / failed=考核未通过红·终态 / safe / unknown / none) × **来源档位**(在线·考察中/已达标/未达标/已核实、策略、本地兜底、本地超龄豁免、未核实 —— 对齐 v3.0 优先级链), `views.py::_hr_view_fields` 透出 `hr_safety`/`hr_safety_text`/`hr_safety_src`(退役二值 `hr_satisfied_src`); 前端做种时长列(两套 UI 各 3 处)按档位着色(站点结论优先于本地) + 来源 2 字徽标 + 悬停全文, 删除确认框点名 HR 风险, H&R 筛选四桶(不能删/考核未通过/可删/未核实) + 来源副筛选, 批量条「含 N 个不能删」。**2026-09-26 语义修正轮**(用户三连反馈, 见进度日志): failed 独立红档 + 桶名「考核未通过」并移出删除点名 + 界面撤 A/B/C 档与「义务未了」措辞。P1–P4 已随 441ffe4 入库; 修正轮随本轮提交。全量 **1618 passed + 1 skipped**(TOTAL 92%)。
 **Topics:** webui-hr-safety-display
 **Refs:** memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/tasks/26-09-22-backend-partial-hr-verify.md
 
@@ -39,6 +39,7 @@
 | P3 筛选扩档 | Done | `hr.js` `_hrBucketMember` 改消费 `hr_safety`(旧服务端回落本地布尔)、组级改 `_hrBuckets` 集合、`hrOptions` 两档→四档 + 新 `hrSrcOptions`; `filters.js` filteredGroups/searchUncovered 两处 pass + `filterDefs` 加「HR 来源」+ clearFilters/filtersActive; `app.js` 加 `hrSrcFilter`; 模板筛选摘要行 +1 |
 | P4 批量条统计 | Done | `bulkHrWarnText()` 从 `_bulkTargets` 派生 danger 计数, 批量条渲染「⚠ 含 N 个不能删」(两套模板 + 两套 CSS `.bulk-hr-warn`) |
 | 测试与守阵 | Done | +4 条与扩展 1 条(见 baseline 顶部); `_scan_filter_facets` 同查 `hrSrcOptions`; 双 UI 浏览器冒烟 94 项全过 0 失败 |
+| 语义修正轮(修正1–3) | Done | 用户三连反馈定稿: failed 红档终态化 + 桶名「考核未通过」移出删除点名 + 界面撤 A/B/C 档与「义务未了」; 见计划文档 §8 修正1–3 与进度日志 2026-09-26 条 |
 | 真机走查 | Pending | 装扩展跑真实取数后确认: 命中行的档位徽标与 `--hr-status` 明细一致 / 删除确认框点名真实触发 / 筛选计数与行数对得上 |
 
 ## 进度日志
@@ -49,3 +50,9 @@
   ③ **测试**: 定向 44 项全绿; 全量 **1606 passed + 1 skipped**(TOTAL 91% / 10991 / 791 / 3612 / 327; resolve.py 98%); 冒烟 94 项 0 失败。红验说明: 派生函数为纯转译, 守阵把"档位→结论/来源"钉成预期值表(无旧实现可还原, 以映射表逐项断言代替红验)。
   ④ **回写**: baseline 顶部、本档案、切片、progress/implemented-webui、README HR 段一条; 计划文档状态 In Progress→Done。tmpdir 坑复发 +1(又手工加 TMPDIR 前缀直跑 pytest, 没先走 commands 引擎)。
   ⑤ 未提交 —— 等用户显式指令。
+- **2026-09-26 02:24 (语义修正轮, 用户三连反馈定稿)** — 用户先后纠正: ①已达标/未达标/已免罪都是**考核期已过的终态**, 只有考察中进行中(弹窗模板轮提出); ②未达标要独立醒目红色, 不能是绿、也不与考察中混橙; ③「义务未了」措辞删除、A/B/C 档描述撤出界面、未达标叫「不能删」不符合实际(终态删除无新增惩罚)。
+  ① **后端**: `safety_display` 新增 `SAFETY_FAILED="failed"`(C 档命中 → failed/「在线·未达标」), 考察中短语去「义务未了」尾巴; 桶名在前端 `HR_SAFETY_BUCKETS` 单点映射: failed → **「考核未通过」**, 不再叫「不能删」。
+  ② **前端**: `hr.js` 映射 `failed → hr-fail` 红(--error 族, 两套 CSS 成对); `delete_flow.js` `HR_NO_DELETE` 收窄回 {danger} —— 终态删除无新增风险, 确认框点名与批量「含 N 个不能删」均不计 failed; `hrSiteLine` 去「档位 X」前缀; `hrOptions` 扩四桶(不能删/考核未通过/可删/未核实)。
+  ③ **测试**: 守阵同步(SAFETY_FAILED 断言 / 四档键集 / hr-fail 成对规则 / 短语断言); 全量 **1618 passed + 1 skipped**(TOTAL 92%)。
+  ④ **回写**: 计划文档 §3 档位表拆两行 + D6 决策 + 修正1–3 变更记录; baseline 顶部; 本档案。**坑**: 新建 plans/ HTML 缺五元 meta 且父计划未反向引用 → 文档守阵 6 红(kb.index 后恢复), 元数据契约本就在 doc-forms 约定里, 建文件前没路由到。
+  ⑤ 修正轮随本轮提交(模板与弹窗落码见档案 `26-09-26-webui-hr-popup`)。
