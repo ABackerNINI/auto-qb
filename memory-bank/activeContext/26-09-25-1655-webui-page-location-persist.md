@@ -2,14 +2,14 @@
 
 > 摘要: 用户指令「修复问题: 设置页刷新会回到种子页」—— 顶层 `page` 与设置分区 `hub.view` 都是纯内存态 ⇒
 > F5 必掉回辅种页 + 设置首页。已修完并验证(3 个 shared 片段 + 静态守阵 + 冒烟场景, 双 UI 已红绿双验),
-> **未提交**(等用户显式说"提交")。关键第二处: 只改初值不够, 设置页配置树按需加载 ⇒ `startPolling()` 尾部
+> **已入库 `27ffa9c`**。关键第二处: 只改初值不够, 设置页配置树按需加载 ⇒ `startPolling()` 尾部
 > 必须补一次 `cfgLoad()`, 否则首屏停在「配置加载失败 + 重试」而 `page` 值看着是对的。
 > 触发: 设置页刷新, 回到种子页, 页面位置, page 持久化, hub.view, initialPage, persistUiPage, hubRestore
 > 最后活动: 2026-09-25 16:57
 
 ## 状态
 
-**代码 + 守阵 + 验证全部完成, 未提交。** 全量 `test.full` **1601 collected: 1600 passed + 1 skipped** /
+**Done(2026-09-25, 已入库 `27ffa9c`)。** 全量 `test.full` **1601 collected: 1600 passed + 1 skipped** /
 TOTAL 91% 不变; 冒烟双 UI 各 46 项 0 失败; 缺陷版红验复现 `刷新后 page=groups, hub=hub, schema=false`。
 
 ## 本轮完成
@@ -26,7 +26,7 @@ TOTAL 91% 不变; 冒烟双 UI 各 46 项 0 失败; 缺陷版红验复现 `刷�
 
 ## 下一步
 
-1. **等用户显式说「提交」** 才走 `ship.commit` / `ship.push`(本轮指令是"修复问题", 不含提交授权)。
+1. ✅ 已入库 `27ffa9c`。
 2. 用户真机走查: 在设置页(任意分区)按 F5 / 重开浏览器, 确认仍停在原分区(走查清单已登记)。
 3. ⚠ 未做(不在本次范围, 已入池):
    `memory-bank/issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html` ——

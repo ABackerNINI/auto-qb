@@ -221,7 +221,7 @@ finally:
     （KeyError = exec_history 不在 / FileNotFoundError = state.json 从未写盘）；还原后全绿。</p>
     <p><strong>测试数字</strong>：全量 <strong>1185 passed + 1 skipped</strong>（Windows 本地 --no-cov；
     改动前基线 1176，+9 守阵）—— <code>TMPDIR="R:/Temp/auto-qb/tests" uv run pytest tests -q --no-cov</code>；
-    副作用台账越界 0。<strong>未提交</strong> —— 等用户明确「提交」指令。</p>
+    副作用台账越界 0。<strong>已入库 `ffb7440`</strong>。</p>
     <p><strong>知识库回写</strong>：AGENTS.md 黄金法则 3 改口径；behavior-core「仅退出落盘」条目改写；
     client-and-state 状态持久化段；config-reference keys.md 登记新键；testing/baseline.md 1176 → 1185；
     speed_curve.py 注释同步。计划文档见 <code>memory-bank/plans/26-09-22-1912-backend-state-periodic-flush-plan.html</code>。</p>

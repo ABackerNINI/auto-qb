@@ -55,7 +55,7 @@
 - **TASK014 UI 组件库 20 式** (`fae019a`) —— 挑选与按需迭代
 
 - **WEBUI 状态栏上传/下载速度恒为 0 (2026-09-20, ✅ 已修并验证 → issue 置 `Fixed`; 剩用户真机走查)**: 根因**已实测确认** —— 状态栏在前端对 `groups` 求和(`decorate.js:136-141`), 而 P1-1 按视图回传把 `groups` 从种子页裁掉了(`VIEW_ARRAYS["torrent"]=("torrents",)`, `web_view.py:48`) + 前端「键不存在保留原引用」(`app.js:883`) ⇒ 种子页上 `this.groups` 恒为 `[]` ⇒ 恒 0。次因: 合计漏 `singles`, 桩实测(50组+200未归组)**少算 88.7%**。复验方式: 起 `scripts/ui_harness.py --torrents 300` 直接 curl 两视图比对(种子页响应**无 groups 键**, 真值 15,206,400)。修法选定「服务端算 `status.totals` 恒回传 + 前端改读」(候选 C 用 `server.dl_info_speed` 因桩里 `server_state=null` 不可测, 仅备选)。计划 [memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html](../plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html); 档案 [tasks/26-09-20-webui-statusbar-speed.md](../tasks/26-09-20-webui-statusbar-speed.md); 报告 [issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html](../issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html)。⚠ 与 2026-09-19 的 BUG-8(追剧页成员索引被裁致永久空白)**同类**: 跨视图的常驻消费者去依赖按视图裁剪的阵列, 建议顺手排查还有没有第三个。
-  **已实施(未提交)**: F1 `_build_speed_totals()`(`web_view.py`) / F2 `speed_totals` 与四视图同临界区发布(`web_runtime.py`) /
+  **已实施(已入库 `d53ea63`)**: F1 `_build_speed_totals()`(`web_view.py`) / F2 `speed_totals` 与四视图同临界区发布(`web_runtime.py`) /
   F3 `status.totals` 恒回传(`web.py`, **并把 `ensure_group_state()` 提到 status 字典之前** —— 否则字典字面量先求值,
   totals 慢一拍且首轮为 0) / F4 前端 `totalDl|totalUl` 改读 `status.totals`(`decorate.js`, 两套模板零改动)。
   实测: 桩服务种子页 `totals={dl:15206400, ul:45926400}`(= groups+singles 真值; 修复前种子页无此键、合计仅 1723392);
@@ -106,6 +106,6 @@
   实测: 默认三列 = 绝对/相对/绝对; 只切「添加于」→ 另两列不动; 存储 `{"added_on":"rel","last_activity":"rel",
   "completion_on":"rel","latest":"abs"}`; 刷新保持; 分组页「添加于」与种子页共用同一设置(按列 key 不按 page);
   做种时长右键无切换项。冒烟 56 项 0 失败; 单测 130 passed。
-  ✅ **跨标签同步已补(2026-09-20 21:52, 未提交)**: `adoptTimeFmt()`(`format.js`)整份采用存储值 ——
+  ✅ **跨标签同步已补(2026-09-20 21:52, 已入库 `067bffd`)**: `adoptTimeFmt()`(`format.js`)整份采用存储值 ——
   F2 `storage` 监听(`_onTimeFmtStore`, 与列偏好**独立**监听: 两个 key 生命周期不同, 合一个监听只会让判据纠缠)
   + F3 回到可见时补对齐一次; `unmounted` 里撤监听。实测两标签双向同步(B 切相对 → A 立即跟随; A 切回绝对 → B 跟随)。

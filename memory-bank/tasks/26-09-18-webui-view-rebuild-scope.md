@@ -1,6 +1,6 @@
 # 26-09-18-webui-view-rebuild-scope — WEB UI 视图重建范围收口 (种子速度刷新滞后)
 
-**Status:** In Progress (代码/测试/文档已完, **未提交**; 剩用户真机走查)
+**Status:** In Progress (代码/测试/文档已完, **已入库 `6c98c63`**; 剩用户真机走查)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html](../plans/26-09-18-1743-webui-speed-refresh-fix-plan.html)

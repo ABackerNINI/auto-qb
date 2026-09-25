@@ -9,6 +9,6 @@
 > 守阵 `test_local_codepage_ignores_utf8_mode`(仅 win32+UTF-8 模式有判据, 打回旧写法立即红, 红验过)。
 > 全量 **1580 collected: 1579 passed + 1 skipped**(耗时 14.3/20.9/21.2s, TOTAL 91%: 10809/789/3582/326)。
 > KB 已回写: pitfalls/testing/patching.md(条目改"已修"定性) · testing/baseline.md + baseline-history.md。
-> **改动未提交**(等用户显式「提交」); 本机无 Python/uv, 已装 uv 0.12.18 到用户目录并完成依赖同步
+> **已入库 `a760da0`**; 本机无 Python/uv, 已装 uv 0.12.18 到用户目录并完成依赖同步
 > (收录为 env.sync, 经 commands 引擎跑)。
 > 最后活动: 2026-09-25 06:43
