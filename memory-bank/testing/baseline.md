@@ -15,6 +15,9 @@
 下已全绿, 见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md))+ 搜索分隔符回归守阵 1 条
 (`test_search_torrents_separator_normalized` —— 空格查询词命中点/下划线/连字符分隔的种子名与文件名;
 views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.md](baseline-history.md)。)
+**同日 DND-01 拖拽添加种子 +1 守阵**(`test_frontend_add_torrent_drag_drop_wiring`, 全局拖拽接线四点:
+事件对称/drop 必 preventDefault/判据不放宽 text/plain/双 UI 遮罩成对 —— 1597 → 1598, 见切片
+`26-09-25-0848-webui-dnd-add-torrent`)。
 TOTAL **91%**(10853 语句 / 789 未覆盖 / 3598 分支 / 326 partial —— 并行采样 ×2; **HR 包 93%**:
 2790 / 145 / 778 / 92), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在

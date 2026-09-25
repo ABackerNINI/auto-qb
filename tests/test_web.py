@@ -91,6 +91,7 @@
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
+- test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
 - test_api_log_endpoint: /api/log tail 与 level 过滤(未配置空)
@@ -1368,6 +1369,59 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             f"口径漂移(虚拟行/组展开/失效目标跳过), CTX-03"
         )
         assert "this.menu.visible = false" in body, f"{name} 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)"
+
+
+def test_frontend_add_torrent_drag_drop_wiring():
+    """DND-01 全局拖拽添加种子接线守阵(静态防回潮)
+
+    拖拽进料口的关键点全在 JS/HTML 静态结构里, pytest 运行时看不见:
+      ① window 级 drag 事件四件套(dragenter/dragover/dragleave/drop) add/remove 严格对称
+         —— 漏 remove = 卸载后幽灵监听重复 ingest;
+      ② drop handler 必须 preventDefault —— 删掉它浏览器会直接打开 .torrent / 跳转链接,
+         表现为"拖进去弹出的是文件内容页";
+      ③ 接管判据只认 "Files"/"text/uri-list" —— 若放宽到 text/plain, 页面内拖选中文本、
+         拖词进输入框的原生行为会被误拦;
+      ④ 双 UI 的落点遮罩成对存在(v-if="addDragOver"), app.js 有 addDragOver 状态 ——
+         只改一套皮肤 = 另一套用户拖了没反应。
+    """
+    import re
+
+    add_js = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    # ① 四件套 add/remove 对称
+    added, removed = set(), set()
+    for hook, bucket in (("mounted", added), ("unmounted", removed)):
+        m = re.search(rf"\n  {hook}\(\) \{{(.*?)\n  \}},", add_js, re.S)
+        assert m, f"add_torrent.js 找不到 {hook} 钩子(DND-01 监听挂载点, 改名或挪走了? 同步本守阵)"
+        for ev in re.findall(r'window\.(?:add|remove)EventListener\("([a-z]+)"', m.group(1)):
+            bucket.add(ev)
+    expect = {"dragenter", "dragover", "dragleave", "drop"}
+    assert added == expect, f"mounted 缺 drag 事件: {expect - added}(少一个就有一条路径不接管)"
+    assert removed == added, f"unmounted 与 mounted 不对称: add={sorted(added)} / remove={sorted(removed)}"
+
+    # ② drop handler 必须拦默认行为 + depth 归零灭遮罩
+    m = re.search(r"\n    _addDragDrop\(e\) \{(.*?)\n    \},", add_js, re.S)
+    assert m, "add_torrent.js 找不到 _addDragDrop(drop 分流入口, 改名或挪走了? 同步本守阵)"
+    assert "preventDefault()" in m.group(1
+                                        ), ("_addDragDrop 少了 preventDefault —— 浏览器会直接打开 .torrent/链接而不是交给添加对话框(DND-01)")
+
+    # ③ 接管判据只认文件与链接, 不得放宽到 text/plain
+    m = re.search(r"\n    _addDragTakes\(e\) \{(.*?)\n    \},", add_js, re.S)
+    assert m, "add_torrent.js 找不到 _addDragTakes(接管判据, 改名或挪走了? 同步本守阵)"
+    takes = m.group(1)
+    assert 'types.includes("Files")' in takes and 'types.includes("text/uri-list")' in takes, (
+        "_addDragTakes 必须显式认 Files 与 text/uri-list(接管面收窄到拖文件/拖链接)"
+    )
+    assert "text/plain" not in takes, ("_addDragTakes 不得认 text/plain —— 会误拦页面内拖选中文本/拖词进输入框的原生行为(DND-01)")
+
+    # ④ app.js 状态 + 双 UI 遮罩成对
+    app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    assert "addDragOver: false" in app_js, "app.js 缺 addDragOver 状态(遮罩显隐没有数据源)"
+    for ui in ("atlas", "prism"):
+        html = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        assert 'class="add-drop-mask"' in html and 'v-if="addDragOver"' in html, (
+            f"{ui}/index.html 缺拖拽落点遮罩(.add-drop-mask + v-if=\"addDragOver\")—— "
+            f"该皮肤用户拖文件进页面没有落点反馈(双 UI 必须成对改)"
+        )
 
 
 def test_api_group_commands_enqueue(web_env):

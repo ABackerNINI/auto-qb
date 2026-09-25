@@ -1,4 +1,4 @@
-/* auto-qb WEB UI · 添加种子弹窗(分类标签联动/目录浏览/文件与链接提交)
+/* auto-qb WEB UI · 添加种子弹窗(分类标签联动/目录浏览/文件与链接提交/全局拖拽进料 DND-01)
  *
  * app.js 按域拆分出的片段(2026-09-20)。约定与 config_editor.js / config_rules.js 同一范式:
  * 挂到 window.AQB_ADD, 由 app.js 末尾 app.mixin(window.AQB_ADD) 注入同一个 Vue 实例 ——
@@ -8,6 +8,21 @@
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_ADD = {
+  /* DND-01: 全局拖拽监听挂 window(照 config_hub 的钩子先例); _dragDepth 非响应式(只驱动
+   * addDragOver 布尔, 不进 data 免依赖追踪)。remove 与 add 引用同一 method 实例, 严格对称。 */
+  mounted() {
+    this._dragDepth = 0;
+    window.addEventListener("dragenter", this._addDragEnter);
+    window.addEventListener("dragover", this._addDragOver);
+    window.addEventListener("dragleave", this._addDragLeave);
+    window.addEventListener("drop", this._addDragDrop);
+  },
+  unmounted() {
+    window.removeEventListener("dragenter", this._addDragEnter);
+    window.removeEventListener("dragover", this._addDragOver);
+    window.removeEventListener("dragleave", this._addDragLeave);
+    window.removeEventListener("drop", this._addDragDrop);
+  },
   methods: {
     /* ---------------- 添加种子对话框(R1B): multipart 提交不走 this.api()(它强制 application/json 会破坏 multipart boundary),
      * 用原生 fetch + Bearer(this.token); 回执仍复用 waitCmd 轮询 /api/cmd/{id} ---------------- */
@@ -261,6 +276,78 @@ window.AQB_ADD = {
     },
     removeAddFile(i) {
       this.addFiles = this.addFiles.filter((_, idx) => idx !== i);
+    },
+    /* ---------------- DND-01 全局拖拽添加(文件 + magnet/URL 链接) ----------------
+     * 监听绑在 window(两皮肤共用, 入口 = 页面任意位置); 只接管两类拖拽 ——
+     * types 含 "Files"(拖文件)或 "text/uri-list"(从浏览器拖链接), 其余(页面内拖选中文本、
+     * 拖纯文本进输入框)一律放行不 preventDefault, 原生行为不受影响。
+     * depth 计数解决经典抖动: dragenter/leave 在子元素间交替成对触发, 归零才算真正离开。 */
+    _addDragTakes(e) {
+      const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
+      return types.includes("Files") || types.includes("text/uri-list");
+    },
+    _addDragEnter(e) {
+      if (!this._addDragTakes(e)) return;
+      e.preventDefault();
+      this._dragDepth += 1;
+      this.addDragOver = true;
+    },
+    _addDragOver(e) {
+      if (!this._addDragTakes(e)) return;
+      e.preventDefault();  // dragover 阶段也必须持续 preventDefault, drop 才被允许
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    },
+    _addDragLeave(e) {
+      if (!this._addDragTakes(e)) return;
+      this._dragDepth = Math.max(0, this._dragDepth - 1);
+      if (!this._dragDepth) this.addDragOver = false;
+    },
+    _addDragDrop(e) {
+      if (!this._addDragTakes(e)) return;
+      e.preventDefault();  // 不拦 = 浏览器直接打开 .torrent / 跳转链接
+      this._dragDepth = 0;
+      this.addDragOver = false;
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length) this._addIngestFiles(dt.files);
+      else this._addIngestLinks(dt);
+    },
+    _addIngestFiles(fileList) {
+      const picks = [], ignored = [];
+      for (const f of Array.from(fileList || [])) {
+        if ((f.name || "").toLowerCase().endsWith(".torrent")) picks.push(f);
+        else ignored.push(f);  // 含拖入的文件夹(目录条目 size=0 无扩展名), 不做递归遍历
+      }
+      if (!picks.length) {
+        if (ignored.length) this.toast("拖入的不是 .torrent 文件, 已忽略", "warn");
+        return;
+      }
+      if (!this.addOpen) this.openAddTorrent();  // 必须先开窗再填(openAddTorrent 会清空 addFiles)
+      let added = 0;
+      for (const f of picks) {
+        // 与文件选择(onAddFilePick)同口径去重: 同名同大小视为重复
+        if (!this.addFiles.some((x) => x.name === f.name && x.size === f.size)) {
+          this.addFiles.push(f);
+          added += 1;
+        }
+      }
+      if (ignored.length) this.toast(`已忽略 ${ignored.length} 个非 .torrent 项`, "warn", 4000);
+      else if (!added) this.toast("文件已在列表中", "warn", 3000);
+    },
+    _addIngestLinks(dt) {
+      if (!dt) return;
+      let text = "";
+      try {
+        text = dt.getData("text/uri-list") || dt.getData("text/plain") || "";
+      } catch (err) {
+        return;  // 受保护数据读不到就当没有
+      }
+      // uri-list 的标题行/注释行(# 开头)不匹配链接前缀, 按行过滤天然排除
+      const lines = String(text).split(/\r?\n/).map((l) => l.trim())
+        .filter((l) => /^(magnet:\?|https?:\/\/)/i.test(l));
+      if (!lines.length) return;
+      if (!this.addOpen) this.openAddTorrent();
+      this.addShowUrls = true;  // 展开链接域让用户看见拖进来的内容; 追加不覆盖已输入
+      this.addUrls = (this.addUrls.trimEnd() ? this.addUrls.trimEnd() + "\n" : "") + lines.join("\n");
     },
     addUrlCount() {
       return this.addUrls.split(/\r?\n/).filter((l) => l.trim()).length;

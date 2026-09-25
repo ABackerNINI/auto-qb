@@ -511,6 +511,7 @@ const app = createApp({
       bootstrapping: true,
       // 添加种子对话框(R1B): 来源 = .torrent 多选 + magnet/URL 文本域混合; 提交走 JSON(base64 文件)
       addOpen: false,
+      addDragOver: false,     // 全局拖拽遮罩(拖 .torrent 文件/链接进页面任意位置时点亮, drop/拖离即灭)
       addSubmitting: false,   // 提交中(按钮 loading, 阻止重复提交与误关闭)
       addFiles: [],           // 已选 .torrent File 对象(展示用元信息; 前端读为 base64 随 JSON 上送)
       addUrls: "",            // magnet / http(s) 链接, 每行一条

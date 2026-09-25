@@ -2300,6 +2300,17 @@
         </template>
       </div>
     </div>
+
+    <!-- DND-01 全局拖拽落点提示: 拖 .torrent 文件/链接进页面任意位置时点亮(addDragOver 由
+         window 级 dragenter/leave 的 depth 计数驱动, 见 add_torrent.js); pointer-events:none
+         不接事件也不产生自身 dragenter/leave 抖动, drop 统一由 window 收 -->
+    <div v-if="addDragOver" class="add-drop-mask" aria-hidden="true">
+      <div class="add-drop-box">
+        <svg class="ico" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
+        <p>松开以添加种子</p>
+        <span>.torrent 文件或 magnet / URL 链接</span>
+      </div>
+    </div>
   </div>
 
   <!-- 字段渲染组件模板(单一模板适配全部字段类型; 组件定义见 config_editor.js) -->
