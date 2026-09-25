@@ -86,6 +86,9 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
   测试 **+2**(`test_judge_record_carries_verified_source` 透传 / `test_safety_display_site_exempt_split_from_released`
   分流) + test_web 字段级 D 档断言块; 守阵 SRC_* 常量数 8→9; ★**红验 3 条全红**(临时还原旧分支)后还原;
   全量 **1637 passed + 1 skipped**(TOTAL 92% / 10998 / 787 / 3644 / 328); 基线已回写。
+  **已入库 `a497fba`**: 合并远端 4 笔(docker 部署 / 种子级标签分类编辑 / 分享率列对齐 / 切片回写)后经
+  合并提交 `d72a538` 推送, 合并树重测 **1640 passed + 1 skipped**(TOTAL 92% / 11013 / 787 / 3656 / 331),
+  baseline 已记合并条目。
 
 - **2026-09-26 01:30 (v3.3 落地: 选项页终态实施 —— 风格 A 瑞士网格 + 两表 + 日志收起)** — 用户令「实施」
   (前情: 三套风格选型定 A, 见上一条选型结论)。用户另令「扩展需要 HR 在线核实详情表, 把冗长 log 总结成表格,

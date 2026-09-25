@@ -58,7 +58,8 @@
   (A 考察中 = 唯一进行中; 优先级链与 v3.0 落地逐字一致, 无实现缺口); 用户令「修复缺口」⇒ 同日落地
   `SRC_SITE_EXEMPT`「在线·已免罪」: D 档放行出处经 `HrJudgement.verified_source` 透传, 不再与
   「未列出」共用「在线·已核实」徽标(缺席式放行原样 site_released)。测试 +2, 全量
-  1637 passed + 1 skipped(红验 3 条全红后还原)。
+  1637 passed + 1 skipped(红验 3 条全红后还原); **已入库 `a497fba`**, 合并远端 4 笔后经 `d72a538`
+  推送, 合并树重测 1640 passed + 1 skipped。
 
 模块分工 / 字段口径 / 配置项 / 扩展行为: [modules/overview.md](../modules/overview.md) ·
 [docs/configuration.md](../../docs/configuration.md) · [扩展说明](../../extensions/hr-fetch-proxy/README.md)。
