@@ -12,6 +12,10 @@ M3 = 三态接进 `TorrentRecord` 与四个消费点; M4 = 四类事件语文化
 CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件取回时刻。
 **v2.9 超龄豁免已落地 (2026-09-25)**: 新站点级键 `completed_age_limit`(0=关闭) —— 完成时间超线的种子
 判定侧直接豁免(第四态 `EXEMPT`, 压过清单命中), 取数侧超龄行不入索引/不回填 + 翻页早停(倒序证据成立才停)。
+**v3.0 达标判定来源优先级已落地 (2026-09-25 17:37)**: 在线考察中 > 在线已达标 >
+在线未达标 > 本地 —— 档位即站点的达标结论(A 恒未达标/B 已达标/C 未达标, 命中即停), 页面数值字段降为展示,
+本地仅兜底; `satisfied_verdict` 删「A/D 档看剩余达标时间归零、缺字段回落本地」路径, `judge_record`
+双命中按档位序取; +2 守阵红验 3 条全红, 全量 1601 passed + 1 skipped。
 **只差真机走查**(M0 四项实测 + 装扩展后跑一轮真实取数) —— 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (§13 决策记录与 M0 实测清单)。
 **Topics:** backend-partial-hr-verify
 **Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html
@@ -50,8 +54,35 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 | 实报修复: 下载被饿死 + 扩展第二道闸 | **Done** | 2026-09-25: 用户贴 `--hr-status` + 站点文件报「种子似乎没有下载成功」⇒ 三个真缺陷: ①**下载被页面饿死**(频控门槛是「相邻两次请求」而页面永远排前面; 复用轮只补下载) ②**生产路径不等间隔**(计划 §8 本意是在锁内等满; 一次刷新只能发第一个请求 ⇒ 覆盖证明永不成立) ③**无可用索引键 ⇒ 整站按受管束打标**(无键时回落本地); ④ 扩展侧硬上限 `site-caps.js`(访问 10/时·50/天, 下种 50/时·200/天, 超限拒发 + `kind=ext-quota` ⇒ 后端让位不计失败)。合流后全量 **1541 passed + 1 skipped**(本分支合流前 1534) |
 | M4 多站点与打磨 | **Done** | 2026-09-25: 四块一起交付 —— ①**四类事件语文化** `hr/events.py`(文案单点 + 标签前缀; **登录失效从熔断里摘出来**: 不计失败/不推熔断/只报一次并给动作, 原因仍写 `refresh.reason` 但**不碰** fetched_at 与新鲜度基准) + 通道静默告警补**受影响站点** ②**站点级状态单一点** `hr/status.py::site_status()`(CLI 与界面同一套数, 新增下次刷新/回填进度/「现在为什么不放行」) ③**WebUI 出口**: `GET /api/hr/status` + 设置页「HR 站点状态」章节(经典与 Hub 两入口 × 两套 UI) + **前端字段一致性守阵** ④**多站点**: `tests/test_hr_multisite.py` 5 条钉死「第二站点只改配置」与隔离(配额/熔断/锁/索引不串味) + `docs/configuration.md` 接入指南。全量 **1561 passed + 1 skipped** |
 | v2.9 超龄豁免 (判定侧豁免 + 翻页早停) | **Done** | 2026-09-25: 用户指令「完成时间超过一年(可配)的种子没有必要验证 HR, 甚至也没有必要往下翻页」⇒ 新站点级键 `completed_age_limit`(0=关闭, 1D~3650D): 判定收口 `judge_record` 对本地完成时刻超线的种子给第四态 `EXEMPT`(排在「无可查键回落本地」之前, 压过清单命中与 unknown_policy, mode=all 也认); 取数侧超龄行不入索引/不回填 + 整页超龄且页内跨页倒序成立才早停(覆盖证明照常成立)。判定 7 + 取数 8 + 门面 1 + 配置 1 = 17 条测试, 红验 10 条全红; 全量 **1593 passed + 1 skipped**。计划 v2.9 (§4/§7/§9/§13/§14) |
+| v3.0 达标判定来源优先级 (档位即结论) | **Done** | 2026-09-25 17:37: 用户指令「在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息」⇒ 计划 v3.0 (17:10) 收口后当轮落地 —— ① `hr/model.py::satisfied_verdict` 三档全档位即结论 (A/C ⇒ False · B ⇒ True · D/未知档位才 None), 删「A/D 档看 remain_seconds==0 ⇒ 已达标」推导 (v2.8 已实证该字段是考核窗口倒计时, 方向相反) 与缺字段回落本地; ② `hr/resolve.py::judge_record` 双命中改按 (判定档位, 达标档位序) 取更保守者 (新增 `_lane_rank`, 删「首命中即 break」); ③ `check_hr_satisfied` 分支逻辑不变 (site_satisfied 非 None 即采纳), 仅 docstring 同步。测试 +2 (`test_lane_verdict_ignores_remain_and_local` / `test_judge_record_double_hit_prefers_lane_order`) + 改写 1, 红验 3 条全红; 全量 **1601 passed + 1 skipped**。计划 v3.0 (§9/§12/§13/§14) |
 
 ## 进度日志
+
+- **2026-09-25 17:37 (v3.0 落地: 达标判定来源优先级 —— 档位即结论)** — 接上一条计划收口, 用户令「修复问题, 落地」。
+  ① `hr/model.py::satisfied_verdict`: A/B/C 三档**全部档位即结论** (A 考察中 / C 未达标 ⇒ False, B 已达标 ⇒ True),
+  删「A/D 档看 remain_seconds == 0 ⇒ 已达标」推导 (v2.8 已实证该字段是考核窗口倒计时, 归零 = 考核到期, 方向
+  相反) 与「缺字段回落本地」路径 (本地值不得越级推翻站点清单结论); D 已免罪不进命中清单, 未知档位才 None。
+  ② `hr/resolve.py::judge_record`: 双命中 (hybrid 两 hash 映两个 tid) 改按 `(判定档位, 达标档位序)`
+  取更保守者 —— 新增 `_lane_rank` (A=3 > B=2 > C=1), 删「首命中即 break」; 与键序无关。
+  ③ `torrents/record.py::check_hr_satisfied` 分支逻辑不变 (site_satisfied 非 None 即采纳; mode=all 未核实的
+  None 仍回落本地), 仅 docstring 同步; 四个消费点调用点零改动。
+  ④ 测试 **+2** (`test_lane_verdict_ignores_remain_and_local`: A 档命中 + remain 归零/缺失都 ⇒ False, 本地
+  不可越级; `test_judge_record_double_hit_prefers_lane_order`: B+A 双命中取 A、C+B 取 B, 两键序同结论)
+  + 改写 1 (`test_judge_record_carries_site_satisfied_verdict`: A 档期望 None → False); test_hr_parse 注释与
+  测试计划 docstring 同步。★**红验 3 条全红** (临时还原旧实现: A 档回落 None + 去档位序) 后还原全绿。
+  ⑤ 全量 **1601 passed + 1 skipped / 18.6·18.1s** (TOTAL 91% / 10950 / 791 / 3594 / 326; HR 包 93%:
+  2814 / 147 / 774 / 93); 基线已回写; 计划 v3.0 标记已落地 (§14 落地实况⑤)。
+
+- **2026-09-25 17:10 (计划 v3.0: 达标判定来源优先级 —— 仅计划修订, 代码待落地)** — 用户指令: 「HR在线核实优先级:
+  在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息」。核查现行实现, 两处与该优先级冲突:
+  ① `hr/model.py::satisfied_verdict` 对 A/D 档用「剩余达标时间 == 0 ⇒ 已达标」推导 —— v2.8 已实证该字段是
+  **考核窗口倒计时**, 归零 = 考核到期(方向相反); ② A 档缺字段时 None 回落本地, 本地值越权推翻站点的明确清单结论。
+  计划 v3.0 收口: §9 新增「达标判定的来源优先级」节(档位即结论: A 恒未达标 / B 已达标 / C 未达标, 命中即停,
+  数值字段降为展示与进度参照; 本地仅在清单未命中 / 站点不可查时兜底; hybrid 双命中按 A>B>C 取);
+  §2 判定边界补句 / §4 流量字段行改口径 / §9 三态表受管束行改写 / M3 落地实况拍板②标注取代 /
+  §12 守阵更新(A 档命中+本地够线⇒仍未达标 · 双命中取序 · remain 退出推导) / §13 决策记录补行 /
+  §14 变更记录 v3.0 / 封面元信息与 colophon。**纯文档修订, 无代码变更, 测试基线不变**;
+  落地时改 `satisfied_verdict` + `judge_record` 并补 §12 新守阵。
 
 - **2026-09-25 (v2.9: 超龄豁免 —— 判定侧豁免 + 翻页早停)** — 用户指令: 「忽略下载时间超过一定期限的种子,
   比如完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」。同步: 本 clone 落后 Gitee
@@ -248,30 +279,5 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
   ③ 全量 **1499 passed + 1 skipped / 17.90–22.91s**(TOTAL 91% / 10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial),
   sidefx ≈2430 / 越界 0; 基线已回写。
   下一步仍是 **M3 判定联动**; 仍待定: `config.yml` 明文凭据入库。
-
-- **2026-09-25 00:30** — 用户补充上一次提交版本的完整日志(含重启段) ⇒ 又从日志里读出**四件事**, 逐条定位:
-  ① `WARNING HR 取数通道端点已启动` / `WARNING HR 在线核实已启动` —— **生命周期消息用错级别**: 本仓 WARNING 以上
-  会被 notify 推成系统通知, 用户重启一次连吃三条 ⇒ 启动 / 关闭 / 热重载重挂全改 INFO。
-  ② 一次扩展取数超时被 **两处各告警一次**(service 的 `取数失败(1 次): …` 与 worker 的 `error: …`) ⇒ 一次收两条通知;
-  改成「谁产生原因谁告警」: 结果对象新增 `alerted`, 产生处(取数失败 / 刷新异常 / 存储层读坏)报 WARNING 后
-  状态层只记 INFO。
-  ③ `WARNING HR 站点 BTSchool | 站点文件解析失败: Expecting value: line 1 column 1 (char 0)` = **站点文件是空的**。
-  给站点文件补两层保护: 写盘默认把上一版留为 `.bak`; 读到坏文件**先把现场挪到 `.bad-<ts>`**(否则下一次写盘
-  就把它覆盖掉、线索永远消失)再试 `.bak` 兜底, 取证串带上大小与开头字节(「空文件」与「内容坏」一眼可分),
-  同一文本只告警一次(持续状态不逐轮重报)。
-  ④ 过程中挖出**两个真缺陷**(都是守阵自己抓到的): (a)**恢复出来的备份必然比本进程上次写的旧** ⇒ 锁自检的
-  「revision 回退」把这次自愈判成「锁不生效」而退化为只读, 该站点从此写不回去 —— **自愈反而变砖**; 修法是
-  恢复后重置写者心跳基线, 并且恢复后的第一次写盘**不得**再复制 `.bak`(否则好备份被坏内容盖掉, 与 `state.json`
-  自愈同一个坑)。(b)关停 / 热重挂时被叫停的取数长着 `HrChannelUnavailable` 的皮 ⇒ **每次关停都告警一条
-  「无可用取数通道」且误计失败次数**; 分出子类 `HrChannelStopped`, service 按「非事件」处理(不告警、不计失败、
-  不推熔断, 本轮转 WAITING)。
-  ⑤ 测试 **+10**(store 5 / runtime 2 / service 2 / worker 1)并把 fetcher 的叫停用例改为钉住子类;
-  ★红验: 去掉 `alerted` / 启动消息打回 WARNING / 叫停降回父类 ⇒ 四条守阵当场变红。
-  ⑥ 全量 **1498 passed + 1 skipped / 18.08–22.89s**(TOTAL 91% / 10423 语句 / 778 未覆盖 / 3444 分支 / 308 partial),
-  sidefx ≈2430 / 越界 0; 文档(配置说明 / 扩展 README / 根 README)与新坑
-  [pitfalls/ops/alert-levels.md](../pitfalls/ops/alert-levels.md)(扩写为四条判据 + 两个同族旧账)已回写, 基线已更新。
-  ⑦ **顺带发现但未动(待你定)**: `service._do_fetch` 的取数失败分支 `session.commit()` **没看 `self.persist`**
-  ⇒ `--hr-once` 声称「不写文件」但取数失败时会写熔断计数, 与文档承诺不符。
-  下一步仍是 **M3 判定联动**; 另两个待定: `config.yml` 明文凭据入池 / README 里一个坏 emoji。
 
 - （本段更早的进度纪要已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md) —— 触顶处置见 `.agents/skills/memory-bank/scripts/_common.py` 的 `TASK_LOG_CAP`）

@@ -1169,6 +1169,42 @@ async function smokeUi(browser, ui) {
     add(ui, "顶栏三视图按钮存在", false, `nav.tabs button = ${nav.length}`);
   }
 
+  /*
+   * 设置页位置持久化(2026-09-25 用户报"设置页刷新会回到种子页"): 顶层 page 与设置分区
+   * (`hub.view`)原本都是**纯内存态** ⇒ F5 必掉回辅种页 + 设置首页, 编辑到一半的位置全丢。
+   * 这里走真实手势(点设置 → 进分区 → 刷新)复现用户路径。
+   * ❗断言里必须含 `cfg.schema` 非空 —— 只改初值不改启动路径的写法会让刷新停在
+   * 「配置加载失败 + 重试」(设置页配置树是**按需加载**的), 而 page 值看着是对的。
+   */
+  {
+    try {
+      await page.click("nav.tabs-right button");   // 顶栏右侧「设置」
+      await page.waitForSelector(".hb-grid .hb-card", { timeout: 20000 }).catch(() => null);
+      const cards = await page.$$(".hb-grid .hb-card");
+      if (cards.length) await cards[0].click();    // 进第一个分区(真实手势)
+      await page.waitForTimeout(500);
+      const read = `(() => { const vm = ${INST}; return {
+        page: vm.page, hub: vm.hub.view, schema: !!vm.cfg.schema,
+        crumb: (document.querySelector(".hb-crumb .cb-now") || {}).textContent || "",
+        store: localStorage.getItem("autoqb.ui.page") + "|" + localStorage.getItem("autoqb.ui.hub"),
+      }; })()`;
+      const s1 = await page.evaluate(read);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(3500);   // 等鉴权 + 首轮轮询 + 补的那次 cfgLoad
+      const s2 = await page.evaluate(read);
+      add(ui, "设置页刷新保持位置(顶层页 + 分区 + 配置已加载)",
+        cards.length > 0 && s1.page === "settings" && s1.schema && s1.hub !== "hub" && s1.crumb
+        && s2.page === "settings" && s2.schema && s2.hub === s1.hub && s2.crumb === s1.crumb,
+        `进入: ${JSON.stringify(s1)} 刷新后: ${JSON.stringify(s2)}`);
+      // 收尾: 清掉位置偏好并回辅种页, 别把后续断言带到设置页
+      await page.evaluate(`localStorage.removeItem("autoqb.ui.page"); localStorage.removeItem("autoqb.ui.hub");`);
+      await page.click("nav.tabs button");
+      await page.waitForTimeout(800);
+    } catch (e) {
+      add(ui, "设置页刷新保持位置(顶层页 + 分区 + 配置已加载)", false, e.message);
+    }
+  }
+
   /* 列设置多标签页同步(issue 26-09-20-1800): 两个标签各改一次列, 谁也不许吞掉谁。
    * 旧实现: 每个标签各持"页面加载时的快照" + saveColState 整份写回 ⇒ **last-writer-wins**,
    * 先改的那个标签的改动被静默吞掉 —— 用户在真机上的说法是"列设置经常被重置"。

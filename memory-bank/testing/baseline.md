@@ -6,7 +6,15 @@
 
 ## 当前基线
 
-**1600 collected: 1599 passed + 1 skipped / Windows** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
+**1602 collected: 1601 passed + 1 skipped / Windows** —— 2026-09-25 **HR v3.0 达标判定来源优先级落地**
+(+2 守阵 `test_hr_resolve.py`: `test_lane_verdict_ignores_remain_and_local` —— A 档命中即未达标, 剩余达标时间
+归零/缺失都不改结论(退出达标推导); `test_judge_record_double_hit_prefers_lane_order` —— hybrid 双命中按
+档位序 A>B>C 取, 与键序无关; 连同改写的 `test_judge_record_carries_site_satisfied_verdict` 共 **3 条红验全红**
+后还原)。落地面: `hr/model.py::satisfied_verdict` 改**档位即结论**(A 考察中/C 未达标 ⇒ False, B ⇒ True;
+删「A/D 档看剩余达标时间归零⇒已达标」推导 —— v2.8 实证该字段是考核窗口倒计时, 方向相反 —— 与缺字段
+回落本地) + `hr/resolve.py::judge_record` 双命中档位序; 动机见计划 v3.0 §9/§12/§14 与档案
+`26-09-22-backend-partial-hr-verify`。
+**上一态 2026-09-25 两线合一: 1601 collected: 1600 passed + 1 skipped** —— HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
 (HR 线 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
 (`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
 新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变), 动机与取舍见档案
@@ -20,19 +28,24 @@ views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.
 `26-09-25-0848-webui-dnd-add-torrent`);
 **同日右键次级菜单 +1 守阵**(`test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close`,
 钉住「一级只有一个「更多操作」入口 / 移出父项延迟收起 / hover 图标规则限直接子级且压特异性」——
-1598 → **1599**, 见切片 `26-09-24-2310-webui-ctx-submenu` 与档案 `26-09-24-webui-ctx-submenu`)。
-TOTAL **91%**(10949 语句 / 789 未覆盖 / 3598 分支 / 325 partial —— 并行采样; **HR 包 93%**:
-2790 / 145 / 778 / 92), sidefx 台账并行汇总 / **越界 0**。
+1598 → **1599**, 见切片 `26-09-24-2310-webui-ctx-submenu` 与档案 `26-09-24-webui-ctx-submenu`);
+**同日 UI 位置持久化 +1 守阵**(`test_web.py::test_frontend_page_location_persisted` —— 顶层 `page` 与设置分区
+`hub.view` 落盘 + 读侧白名单 + **启动补一次 `cfgLoad`** + 分区 key 对 schema 校验, 用户报"设置页刷新会回到种子页" ——
+1599 → **1600**, 见切片 `26-09-25-1655-webui-page-location-persist` 与档案 `26-09-25-webui-page-location-persist`)。
+TOTAL **91%**(10950 语句 / 791 未覆盖 / 3594 分支 / 326 partial —— 并行采样; **HR 包 93%**:
+2814 / 147 / 774 / 93), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 ### 耗时(❗必须带区间)
 
-**当前(2026-09-25 两线合一)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **20.5 / 18.8s**(2 次采样, 全部 test.full, 合并态)
+**当前(2026-09-25 HR v3.0 达标来源优先级)** —— 带覆盖率(即默认 `addopts`):
+- **并行 `-n 4`(默认)**: **18.6 / 18.1s**(2 次采样, 全部 test.full)
 
-**上一态(2026-09-25 HR 超龄豁免)**: 并行 19.9 / 36.8s(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)。
+**上一态(2026-09-25 两线合一)**: 并行 20.5 / 18.8s(2 次采样, 全部 test.full, 合并态)。
+
+**更早(2026-09-25 HR 超龄豁免)**: 并行 19.9 / 36.8s(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)。
 
 **更早(2026-09-25 搜索分隔符归一)**: 并行 17.0 / 17.9s(热采 2 次; 另有首跑冷缓存 37.6s 不计入, 全部 test.full)。
 

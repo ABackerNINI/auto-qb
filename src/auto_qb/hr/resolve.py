@@ -23,6 +23,9 @@ from typing import Dict, Mapping, Optional, Sequence
 from .model import (
     CHANNEL_DISABLED,
     LANE_EXEMPT,
+    LANE_SATISFIED,
+    LANE_SCOPE,
+    LANE_UNSATISFIED,
     SOURCE_EXEMPT,
     HrEntry,
     HrVerified,
@@ -264,6 +267,10 @@ _RANK_FORCED = 2
 _RANK_RELEASED = 1
 _RANK_UNKNOWN = 0
 
+# 达标结论的档位序(计划 §9 v3.0, 用户指令): 考察中 > 已达标 > 未达标。
+# 双命中(hybrid 两 hash 映到两个 tid)时达标结论取序靠前者; 受管束结论不受影响(任一命中即受管束)。
+_LANE_RANK_ORDER = {LANE_SCOPE: 3, LANE_SATISFIED: 2, LANE_UNSATISFIED: 1}
+
 
 def _rank(res: HrResolution) -> int:
     if res.identity is HrIdentity.HR:
@@ -273,6 +280,11 @@ def _rank(res: HrResolution) -> int:
     if res.identity in (HrIdentity.VERIFIED_NON_HR, HrIdentity.EXEMPT):
         return _RANK_RELEASED
     return _RANK_UNKNOWN
+
+
+def _lane_rank(entry: Optional[HrEntry]) -> int:
+    """命中行的达标结论档位序(A=3 > B=2 > C=1); 非命中行 / 未知档位 0"""
+    return _LANE_RANK_ORDER.get(entry.lane, 0) if entry is not None else 0
 
 
 def judge_record(
@@ -291,7 +303,8 @@ def judge_record(
     行为一个字都不变。
 
     infohash 传 (v1, v2): 命中清单是站点侧事实, 两个键哪个命中都算命中(v2-only 页面同样成立);
-    取两者中**更保守**的结论(命中 > 恒受管束 > 已放行 > 未核实)。
+    取两者中**更保守**的结论(命中 > 恒受管束 > 已放行 > 未核实)。同为命中时按达标结论的档位序
+    取(A 考察中 > B 已达标 > C 未达标, 计划 §9 v3.0) —— 与键序无关; 受管束结论不受影响。
 
     `completed_age_limit` > 0 时(站点级配置, 记录侧从 tracker_conf 带进来): 锚点里**本地完成
     时刻**超过该线的种子直接超龄豁免 —— 不查索引、不看 unknown_policy、也**压过清单命中**
@@ -320,12 +333,13 @@ def judge_record(
     keys = [h for h in infohashes if h] or [""]
     best: Optional[HrResolution] = None
     best_key = keys[0]
+    best_lane = 0
     for h in keys:
         res = resolve_identity(view, h, anchor=anchor, now=now)
-        if best is None or _rank(res) > _rank(best):
-            best, best_key = res, h
-        if _rank(best) == _RANK_HR:
-            break  # 命中清单: 没有更保守的结论了
+        lane = _lane_rank(view.by_infohash.get(h)) if res.identity is HrIdentity.HR else 0
+        # 同为命中时取达标结论更保守的档位(A 考察中 > B 已达标 > C 未达标), 与键序无关
+        if best is None or (_rank(res), lane) > (_rank(best), best_lane):
+            best, best_key, best_lane = res, h, lane
     assert best is not None
     entry = view.by_infohash.get(best_key)
     return HrJudgement(

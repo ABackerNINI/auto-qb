@@ -8,7 +8,7 @@
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-09-22-2204">
-<meta name="doc-updated" content="26-09-24-2140">
+<meta name="doc-updated" content="26-09-25-1710">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
 <style>
   :root {
@@ -177,12 +177,12 @@
 
   <!-- ============ 封面 ============ -->
   <header class="cover">
-      <div class="kicker">auto-qb · 工程计划 · v2.9 M1+M2+M3+M4 均已交付 · 通道时序修复 · 增量落盘 · 明细表改版 · 超龄豁免 · 余真机走查</div>
+      <div class="kicker">auto-qb · 工程计划 · v3.0 达标判定来源优先级 (档位即结论) · M1+M2+M3+M4 均已交付 · 超龄豁免 · 余真机走查</div>
     <h1>部分种子 HR 的在线核实</h1>
     <p class="dek">对「部分种子 HR」站点: 由<strong>浏览器扩展</strong>(打包形态无关, 跑在<strong>日常浏览器</strong>里, 不需要专用浏览器)以真实登录态取 HR 统计页与 .torrent, 后端算 infohash、与本地做种库对账, 建按 (站点, tid) 的 HR 索引。判定是三态 —— <strong>受管束 / 已核实不受管束 (安全放行) / 未核实</strong>, 且<strong>站点数据是权威</strong>: 触发与达标都看站点侧, 本地 qB 字段降为兜底与展示 (转移种子 / 多客户端下本地字段会骗人)。多实例<strong>共享站点数据</strong>: 站点分文件 + <strong>每站点一把锁</strong>, <strong>持锁期间完成读/抓/写全程</strong>, 有效期内直接复用; 取数节奏与主循环 tick 解耦, 只在数据变化时更新。首批站点 <strong>BTSchool</strong>。(cookie 全程不离开浏览器)</p>
     <div class="meta-row">
-      <div><b>日期</b>2026-09-22 22:04 · v1.8 修订 2026-09-24 20:15 (文档漂移清理)</div>
-      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts (2026-09-25) + v2.9 超龄豁免与翻页早停 (2026-09-25) · 余真机走查</div>
+      <div><b>日期</b>2026-09-22 22:04 · v3.0 修订 2026-09-25 17:10 (达标判定来源优先级)</div>
+      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts + v2.9 超龄豁免与翻页早停 + v3.0 达标判定来源优先级 (2026-09-25, 均已落地) · 余真机走查</div>
       <div><b>影响面</b>取数通道 (扩展) · 判定语义 (三态·站点侧权威) · 取数线程与共享站点数据 · TorrentRecord</div>
       <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
     </div>
@@ -240,7 +240,7 @@
         <p><strong>技术路线成立</strong>: 取数 (浏览器扩展代取) → 解析 → 算 infohash → 对账 → 建索引, 每一步都落在项目既有架构里。取数外移之后, 后端不再发起站点请求 ⇒ <strong>原计划的「许可令牌」机制整体作废</strong> —— 取数线程在 v1.5 以新职责回来 (只管 hr 文件与只读视图, 见 §8)。</p>
         <p><strong>判定收口是最大的红利</strong>: 四个消费点全部经 <code>TorrentRecord</code> 两个方法; 但仍需在 record 上补一个「HR 身份」非快照字段, 且身份解析必须发生在主循环 (Web 线程也会读它, 见 §9) —— 比 v1.1 说的「只改一处收口」多一条边界约束。</p>
         <p><strong>cookie 风险整体移除</strong>: 手工填写 / 导入 cookie 已否决 (把维护成本转嫁给用户 = 制造新麻烦); 取数改由<strong>浏览器扩展</strong>在真实浏览器上下文完成 ⇒ cookie 不离开浏览器, 后端零 cookie 依赖 (§6)。新增的风险面是「扩展端点被伪造注入」与「扩展分发维护」, 二者都可机检/可收敛。</p>
-        <p><strong>判定边界 (v1.4 定稿, 本计划的核心)</strong>: 把「索引里有没有」升级为<strong>三态</strong> —— 受管束 / <strong>已核实不受管束 (安全放行)</strong> / 未核实; 并确认<strong>站点数据是权威数据</strong>: 接入 <code>hr_check</code> 的站点 (partial / all) 的「是否触发 / 是否达标」一律看站点侧, 本地 qB 字段降为兜底与展示 —— 否则<strong>转移种子</strong> (A 客户端下载 → B 客户端保种, B 的 <code>downloaded</code>=0 被当辅种) 与多客户端场景会直接漏管。放行只发生在「一次<strong>完整成功</strong>的刷新」之后且<strong>仍在放行有效期内</strong> (<code>verified_ttl</code> 默认 = 刷新周期), 新种子另由<strong>新鲜度闸门</strong>兜住 —— 首要不漏 HR, 其次让确认为非 HR 的种子真的放行 (§9)。</p>
+        <p><strong>判定边界 (v1.4 定稿, 本计划的核心)</strong>: 把「索引里有没有」升级为<strong>三态</strong> —— 受管束 / <strong>已核实不受管束 (安全放行)</strong> / 未核实; 并确认<strong>站点数据是权威数据</strong>: 接入 <code>hr_check</code> 的站点 (partial / all) 的「是否触发 / 是否达标」一律看站点侧, 本地 qB 字段降为兜底与展示 —— 否则<strong>转移种子</strong> (A 客户端下载 → B 客户端保种, B 的 <code>downloaded</code>=0 被当辅种) 与多客户端场景会直接漏管。放行只发生在「一次<strong>完整成功</strong>的刷新」之后且<strong>仍在放行有效期内</strong> (<code>verified_ttl</code> 默认 = 刷新周期), 新种子另由<strong>新鲜度闸门</strong>兜住 —— 首要不漏 HR, 其次让确认为非 HR 的种子真的放行 (§9)。达标判定的数据来源另按用户指令钉死优先级 (v3.0): <strong>在线考察中 &gt; 在线已达标 &gt; 在线未达标 &gt; 本地</strong> —— 档位即站点结论, 本地仅兜底 (§9)。</p>
         <p><strong>多实例是常态</strong>: 账号级状态 (索引 / 放行 / 已取记录 / 配额账本 / 熔断) <strong>不进 <code>state_file</code></strong>, 而是按<strong>站点分文件</strong>落在 hr 目录 (本地或共享), 由<strong>每站点一把文件锁</strong>保护 —— <strong>持锁期间完成「读 → 判有效期 → 必要时抓 → 写 → 释放」全程</strong>, 即使代码有 bug 也不可能两个实例同时读/写/抓同一站点; 拿不到锁的实例直接<strong>等下一轮</strong>。有效期内直接复用别的实例抓到的数据, <strong>并照样记一次配额</strong> (§5)。</p>
         <p><strong>账号安全是最大的运营风险</strong>: 访问频度必须默认极保守 + 全可配 + 熔断, 这恰是本需求的原始诉求, 设计上优先满足 (§7)。</p>
       </div>
@@ -275,7 +275,7 @@
         <tbody>
           <tr><td>HR 编号 (种子编号, tid)</td><td><strong>站点内唯一 id</strong>: 去重、下载 URL、索引主键都落在 (站点, tid) 上; <strong>跨站点绝不混用</strong></td></tr>
           <tr><td>种子名称</td><td>展示与人工核对; 与本地种子的匹配仍以 infohash 为准 (名称不可靠)</td></tr>
-          <tr><td>上传量 / 下载量 / 分享率</td><td><strong>站点侧权威</strong> (账号级): 展示 + 达标判定的<strong>优先</strong>来源; 本地 qB 值降为兜底与交叉核对 (站点字段缺失才回落, WebUI 标注来源) —— 见 §9</td></tr>
+          <tr><td>上传量 / 下载量 / 分享率</td><td><strong>站点侧权威</strong> (账号级): 展示与对账; 达标判定看<strong>档位结论</strong> (v3.0, §9 来源优先级), 数值字段不再参与达标推导; 本地 qB 值仅在无档位结论时兜底 (WebUI 标注来源) —— 见 §9</td></tr>
           <tr><td>还需做种时间</td><td>距要求做种时长还差多少: 进度参照 + WEB UI 展示</td></tr>
           <tr><td>完成时间</td><td>语义 M0 与数值格式一并确认 (达标完成或下载完成); 已完成条目保留身份记录, 不从索引删除</td></tr>
           <tr><td>剩余达标时间</td><td>距达标/超期的时间余量: 展示与将来规则条件的扩展点</td></tr>
@@ -604,7 +604,7 @@ trackers:
       <table>
         <thead><tr><th style="width:17%">态</th><th style="width:36%">成立条件</th><th>后果</th></tr></thead>
         <tbody>
-          <tr><td><strong>受管束</strong> <code>hr</code></td><td>该 (站点, infohash) 出现在<strong>抓取范围内的清单</strong>里 (A 考察中 / B 已达标 / C 未达标); <code>mode: all</code> 站点上<strong>未核实也默认受管束</strong></td><td><strong>这本身就是「触发」</strong> (不再看本地 <code>downloaded</code>): 未达标 ⇒ 打 HR 标签/分类 + 纳入辅种排除; B 档 ⇒ 落 satisfied 分支。本地 <code>downloaded</code>=0 的转移副本同样受管束</td></tr>
+          <tr><td><strong>受管束</strong> <code>hr</code></td><td>该 (站点, infohash) 出现在<strong>抓取范围内的清单</strong>里 (A 考察中 / B 已达标 / C 未达标); <code>mode: all</code> 站点上<strong>未核实也默认受管束</strong></td><td><strong>这本身就是「触发」</strong> (不再看本地 <code>downloaded</code>): A/C 档 ⇒ 未达标 (v3.0: 档位即结论, 恒不看本地) ⇒ 打 HR 标签/分类 + 纳入辅种排除; B 档 ⇒ 落 satisfied 分支。本地 <code>downloaded</code>=0 的转移副本同样受管束</td></tr>
           <tr><td><strong>安全放行</strong> <code>verified_non_hr</code></td><td>由一次<strong>完整成功</strong>的刷新 (覆盖证明成立, §4) 确认: 该 infohash 不在 A/B/C 清单内, <strong>或</strong> 命中 D 档; 且该种子 <code>added_on</code> 早于该次刷新时刻; 且<strong>仍在放行有效期内</strong> (<code>verified_ttl</code>, §5) 且本实例锚点未漂移</td><td><strong>完全按非 HR 对待</strong>: 不打 HR 标签/分类、<strong>不排除辅种</strong>、HR 规则条件恒不命中 —— 这就是本功能的主要收益</td></tr>
           <tr><td><strong>未核实</strong> <code>unknown</code></td><td>其余全部情形 (见下「未核实的四类边界」)</td><td>按 <code>unknown_policy</code> (默认 <code>hr</code> 保守); <code>mode: all</code> 站点恒受管束 (不看 policy)</td></tr>
           <tr><td><strong>超龄豁免</strong> <code>exempt</code> <span class="muted">(v2.9)</span></td><td>仅当站点配了 <code>completed_age_limit</code> &gt; 0 且种子锚点的<strong>本地完成时刻</strong>超过该线 —— qB 侧事实, 不依赖站点索引; <strong>压过清单命中</strong>与 <code>unknown_policy</code>, <code>mode: all</code> 也认</td><td>按用户显式声明<strong>不再核实、不受管束</strong> (WebUI 显示「超龄豁免」)。❗「站点其实还在管」的超龄种子会漏 HR —— 配置者自愿接受的风险 (§7/§13)</td></tr>
@@ -650,7 +650,18 @@ trackers:
         </tbody>
       </table>
       <p>四个消费点 (打标 <code>core/mixins/tags.py</code> / 视图与详情 <code>webui/views.py</code> / 规则条件 <code>rules/conditions.py</code> / 表达式 <code>rules/expr/env.py</code>) 的<strong>调用点零改动</strong> —— 它们本来就只调 <code>TorrentRecord</code> 两个方法。但 <strong>partial 站点上的语义变了 (必须在测试里钉住)</strong>: 触发不再由本地 <code>downloaded</code> 决定, 而由「站点清单命中」决定 —— 现有「下载满即触发」兜底与「<code>downloaded</code>=0 纯辅种不触发」<strong>只对非 partial 站点保留</strong>; partial 站点上 <code>downloaded</code>=0 的本地副本同样受管束、同样要打标 (它可能正是账号唯一在保种的副本)。</p>
-      <p>查询键是<strong>(站点, infohash)</strong>: 同一内容辅种到多个站点时, 各站 HR 身份彼此独立 (tid 同理不跨站混用), 站点维度来自种子既有的 <code>tracker_conf</code> 匹配。<strong>取数顺序 (v1.4)</strong>: <strong>站点侧值优先</strong> —— 达标看页面行的「还需做种时间 / 档位」 (B 档 / 剩余为 0 ⇒ 已达标); 站点字段缺失或解析不可用时才退回本地 <code>seeding_time</code> / <code>ratio</code> (降级, WebUI 标注「来源: 本地」), 站点恢复后自动切回。两套值都显示在 WebUI 便于对账: 本地值实时但会被重加 / 转移清零, 站点值是账号级权威但滞后一个刷新周期。</p>
+      <p>查询键是<strong>(站点, infohash)</strong>: 同一内容辅种到多个站点时, 各站 HR 身份彼此独立 (tid 同理不跨站混用), 站点维度来自种子既有的 <code>tracker_conf</code> 匹配。两套值都显示在 WebUI 便于对账: 本地值实时但会被重加 / 转移清零, 站点值是账号级权威但滞后一个刷新周期。</p>
+      <h3>达标判定的来源优先级 (v3.0, 2026-09-25 用户指令)</h3>
+      <p>「是否达标」按以下顺序取用数据源, 命中即停, 排在后面的不再参与:</p>
+<pre><code>在线信息.考察中 (A 档命中)  &gt;  在线信息.已达标 (B 档命中)  &gt;  在线信息.未达标 (C 档命中)  &gt;  本地信息</code></pre>
+      <ul>
+        <li><strong>档位本身就是站点的达标结论</strong>: 命中 A 档 (考察中) ⇒ 站点说义务仍在 ⇒ <strong>未达标</strong>; 命中 B 档 ⇒ <strong>已达标</strong>; 命中 C 档 (未达标) ⇒ 站点明确判定考核未通过 ⇒ <strong>未达标</strong>。三种命中<strong>都不看页面数值字段、也不回落本地</strong> —— 站点把它列在这一档, 就是最权威的结论 (取代 v1.4 的「B 档 / 剩余为 0 ⇒ 已达标, 字段缺失才退本地」)。</li>
+        <li><strong>页面数值字段降为展示与进度参照</strong>: 「剩余达标时间」已被 v2.8 实证是<strong>考核窗口倒计时</strong> —— 归零含义是「考核到期」而非「已达标」, 以它推导达标方向是反的; 废除现行实现「A/D 档看 remain_seconds==0 ⇒ 已达标、缺字段回落本地」的路径 (含 v2.3 的「缺字段不给结论就回落本地」拍板 —— 档位命中时不存在「不知道」)。「还需做种时间 / 剩余达标时间」只进 WebUI 展示与进度参照。</li>
+        <li><strong>本地信息是最后兜底</strong>: 仅当<strong>清单未命中</strong> (infohash 不在 A/B/C 里) 或站点侧不可查时, 才按既有本地字段 (<code>seeding_time</code> / <code>ratio</code>) 判达标, WebUI 标注「来源: 本地」, 站点恢复后自动切回。</li>
+        <li><strong>多 infohash 双命中 (hybrid 种子两个 hash 映到两个 tid) 按本优先级取</strong>: 两个命中的档位不同时取序靠前者 (A &gt; B &gt; C); <strong>受管束结论不受影响</strong> —— 任一命中即受管束 (上文三态)。</li>
+        <li>D 档 (已免罪) 不进命中清单 (本节放行层), 不参与本优先级。</li>
+      </ul>
+      <p class="muted">三态判定 (受管束 / 安全放行 / 未核实, 上文完整判定表) 一字不变 —— 本优先级只收口「达标与否」的判定来源; A/B/C 命中 ⇒ 受管束、D ⇒ 放行的旧规原样保留。</p>
       <div class="note"><b>索引的反应式本性 + 多客户端现实</b> — HR 页列出的是「当前账号已下载且受 HR 约束」的种子, 所以索引天然滞后于下载: 刚下载的种子要等下一次<strong>完整</strong>刷新才可能现身 —— 而下载可能发生在<strong>任何一个客户端</strong>上。闸门 (本实例新种子) 与 <code>verified_ttl</code> (别的客户端) 合起来覆盖这段滞后。<br>可观测性要求: WebUI 要把<strong>三态 + 依据</strong>显示出来 (受管束 / 放行 (依据哪次刷新、是否即将过期) / 未核实 (为什么)), 否则用户没法判断放行是否可信。</div>
     </section>
 
@@ -709,7 +720,7 @@ trackers:
         <div class="step">
           <div class="dot">M3</div>
           <div class="mt">判定联动 ✅ 已交付 <span>2026-09-25 · TorrentRecord 收口 + 四消费点 + mode: all 升维 + 锚点提供者</span></div>
-          <div class="mb"><code>TorrentRecord</code> 三态身份 (取数线程发布只读视图) + <strong>站点侧驱动的触发 / 达标</strong> (§9) + <code>mode: all</code> 纳入体系; 放行有效期与锚点校验; 四消费点回归 + <strong>转移种子 / 真辅种回归</strong>; <code>unknown_policy</code> 生效; WebUI 显示三态 / 依据 / 两套值 (需同步前端 H&R facet 守阵)。真机 <code>hr.once</code> 走查。<br><br><strong>落地实况</strong>: 判定收口在 <code>hr/resolve.py::judge_record</code>(新增 <code>HrJudgement</code> + <code>HrSiteFacts</code>: 身份 / 最终布尔 / 依据 / 站点侧达标结论与展示值), 门面入口 <code>HrRuntime.judge()</code>, 记录侧仅 <code>hr_judgement()</code> / <code>hr_anchor()</code> 两个新方法 —— <strong>四个消费点(打标 / WebUI 视图 / <code>hr</code> 规则条件 / <code>tor.hr_*</code> 表达式)的调用点一行未动</strong>, 改的是它们共同调用的 <code>check_hr_condition</code> / <code>check_hr_satisfied</code>。判定桥是 <code>QbManager.hr</code> 门面的<strong>稳定引用</strong>(热重载不换对象), 由 <code>TorrentStore</code> 在记录构建/变更时挂上(只在需要时赋值), 读取时现算 ⇒ 锚点漂移与视图更新都<strong>不需要记录置脏</strong>、不做全库重写。<strong>零静默变更</strong>两道门: 站点必配 <code>hr_check</code> 且 <code>mode != off</code> + 全局 <code>hr_check.enabled</code>; 未接入站点(含 全部现有用户默认配置)行为一字未变。<code>manager._hr_anchors()</code> 按站点给出 <code>{infohash: HrAnchor}</code>(只读遍历快照, 取数线程经 <code>anchors_fn</code> 异步要)。WebUI: 成员字段新增 <code>hr_state</code> / <code>hr_state_text</code> / <code>hr_reason</code> / <code>hr_satisfied_src</code> + 站点侧值 <code>hr_site_lane</code> / <code>need</code> / <code>remain</code> / <code>ratio</code> / <code>dl</code>, 详情抽屉新增两行(三态·依据 / 站点侧值), 安全放行用中性色条(不渲染成告警)。<br>❗两处实现期拍板: ① <strong>站点还没发布过视图(启动窗口) ⇒ 回落本地</strong>, 不按「未核实」算 —— 否则 <code>mode: all</code> 站点会在启动窗口里让整站种子集体打标(千级标签风暴); ② <strong>站点行缺达标字段 ≠ 站点说未达标</strong>(<code>HrEntry.satisfied_verdict</code> 的 None 语义) —— 不知道就回落本地, 不当成未达标。</div>
+          <div class="mb"><code>TorrentRecord</code> 三态身份 (取数线程发布只读视图) + <strong>站点侧驱动的触发 / 达标</strong> (§9) + <code>mode: all</code> 纳入体系; 放行有效期与锚点校验; 四消费点回归 + <strong>转移种子 / 真辅种回归</strong>; <code>unknown_policy</code> 生效; WebUI 显示三态 / 依据 / 两套值 (需同步前端 H&R facet 守阵)。真机 <code>hr.once</code> 走查。<br><br><strong>落地实况</strong>: 判定收口在 <code>hr/resolve.py::judge_record</code>(新增 <code>HrJudgement</code> + <code>HrSiteFacts</code>: 身份 / 最终布尔 / 依据 / 站点侧达标结论与展示值), 门面入口 <code>HrRuntime.judge()</code>, 记录侧仅 <code>hr_judgement()</code> / <code>hr_anchor()</code> 两个新方法 —— <strong>四个消费点(打标 / WebUI 视图 / <code>hr</code> 规则条件 / <code>tor.hr_*</code> 表达式)的调用点一行未动</strong>, 改的是它们共同调用的 <code>check_hr_condition</code> / <code>check_hr_satisfied</code>。判定桥是 <code>QbManager.hr</code> 门面的<strong>稳定引用</strong>(热重载不换对象), 由 <code>TorrentStore</code> 在记录构建/变更时挂上(只在需要时赋值), 读取时现算 ⇒ 锚点漂移与视图更新都<strong>不需要记录置脏</strong>、不做全库重写。<strong>零静默变更</strong>两道门: 站点必配 <code>hr_check</code> 且 <code>mode != off</code> + 全局 <code>hr_check.enabled</code>; 未接入站点(含 全部现有用户默认配置)行为一字未变。<code>manager._hr_anchors()</code> 按站点给出 <code>{infohash: HrAnchor}</code>(只读遍历快照, 取数线程经 <code>anchors_fn</code> 异步要)。WebUI: 成员字段新增 <code>hr_state</code> / <code>hr_state_text</code> / <code>hr_reason</code> / <code>hr_satisfied_src</code> + 站点侧值 <code>hr_site_lane</code> / <code>need</code> / <code>remain</code> / <code>ratio</code> / <code>dl</code>, 详情抽屉新增两行(三态·依据 / 站点侧值), 安全放行用中性色条(不渲染成告警)。<br>❗两处实现期拍板: ① <strong>站点还没发布过视图(启动窗口) ⇒ 回落本地</strong>, 不按「未核实」算 —— 否则 <code>mode: all</code> 站点会在启动窗口里让整站种子集体打标(千级标签风暴); ② <strong>站点行缺达标字段 ≠ 站点说未达标</strong>(<code>HrEntry.satisfied_verdict</code> 的 None 语义) —— 不知道就回落本地, 不当成未达标。(v3.0 取代: 档位即达标结论, A/B/C 命中不再缺字段回落 —— 见 §9 来源优先级)</div>
         </div>
         <div class="step">
           <div class="dot">M4</div>
@@ -733,7 +744,8 @@ trackers:
         <li><strong>三态判定矩阵 (v1.4 核心)</strong>: 逐行覆盖 §9 完整判定表 —— A/B/C 内 → 受管束 (含 <code>downloaded</code>=0 的转移副本); D 档 → 放行; 不在清单 + 覆盖证明成立 + <code>added_on</code> 早于刷新 + 未过期 + 锚点未漂移 → 放行; 放行过期 / 锚点漂移 / 覆盖证明不成立 → unknown; <code>added_on</code> 晚于刷新 → <strong>恒受管束, 即使 <code>unknown_policy=not-hr</code> 也不可绕过</strong>; infohash 未回填 → unknown;</li>
         <li><strong>覆盖证明</strong>: 分页未到底 / 任一 scope 失败 / 0 条 / 缺失率超阈 —— 四种不完备各一条用例, 均不得产生放行;</li>
         <li><strong>scope 完整性</strong>: 只抓 A 的配置必须被判「范围不全」(否则已达标种子会被误放行) —— 用 BTSchool 样张构造 A 命中 / B 命中的对照;</li>
-        <li><strong>转移种子 / 多客户端 (v1.4)</strong>: 本地 <code>downloaded</code>=0 但站点清单命中的种子 <strong>必须受管束并打 HR 标签</strong> (「纯辅种不触发」只对非 partial 站点生效); 站点侧达标 (档位 B / 剩余为 0) 优先于本地值; 站点字段缺失 ⇒ 回退本地且标注来源, 站点恢复后自动切回;</li>
+        <li><strong>转移种子 / 多客户端 (v1.4)</strong>: 本地 <code>downloaded</code>=0 但站点清单命中的种子 <strong>必须受管束并打 HR 标签</strong> (「纯辅种不触发」只对非 partial 站点生效); 达标判定按来源优先级 (v3.0): A 档命中恒未达标 / B 档已达标 / C 档未达标, 均优先于本地; 本地字段仅在无档位结论时兜底且标注来源, 站点恢复后自动切回;</li>
+        <li><strong>达标来源优先级 (v3.0)</strong>: A 档命中 + 本地字段已够线 ⇒ 仍判未达标 (本地不可越级推翻档位结论); B 档 ⇒ 已达标; C 档 ⇒ 未达标; 档位命中时「剩余达标时间」归零 / 缺失<strong>都不改变</strong>结论 (剩余达标时间退出达标推导, 只留展示); hybrid 双命中 A+B ⇒ 取 A (优先级序); 三态与受管束结论不受本优先级影响;</li>
         <li><strong>放行有效期与锚点</strong>: 超 <code>verified_ttl</code> 无新刷新 ⇒ 放行失效回落 unknown; 锚点四种漂移各一条 ⇒ 立即失效; <strong>反向用例</strong>: 锚点未漂移且未过期 ⇒ 放行保持 (防误杀);</li>
         <li><strong>共享站点数据与锁 (v1.5/v1.6)</strong>: <strong>锁粒度 = 站点</strong> (抓 A 不阻塞 B, 同站点严格互斥); 拿不到锁 ⇒ <strong>本轮直接跳过</strong> (不排队、不重试); 有效期内的数据 ⇒ 直接复用 + <strong>记一次配额</strong> (同一窗口不重复消耗); 站点内合并写不丢同站已有条目, 跨站点无覆盖; 心跳被覆盖 / <code>revision</code> 回退 ⇒ 告警并退化单实例只读; 坏 JSON / schema 版本不符 ⇒ 不入库且保守; <strong>无通道实例只读不写</strong> (静态守阵); <strong>取数线程不碰 state_file / 任务队列 / store</strong> (静态守阵);</li>
         <li><strong>只在数据变化时更新 (v1.6)</strong>: 视图 <code>revision</code> 只在数据实质变化时抬升; 主循环版本未变 ⇒ 不做任何 record 更新; 「是否过期」为读取时现算, 不触发重发布;</li>
@@ -769,6 +781,7 @@ trackers:
           <tr><td><code>shared_dir</code> 放哪</td><td class="ok"><strong>默认放数据目录</strong> (<code>""</code> ⇒ <code>&lt;data_dir&gt;/hr/</code>); 多实例需要互通时<strong>引导用户自行改成共享目录</strong> (程序只提示不代决)</td><td>§7 多实例部署引导</td></tr>
           <tr><td><code>channel.enabled</code> 启用范围<br><span class="muted">(用户追问「channel 不应该都启用吗」)</span></td><td class="ok"><strong>推荐: 每台「本机有浏览器」的实例都启用</strong> —— 能力硬边界是「本机有没有装扩展的浏览器」而不是名额; 多通道靠同站点锁 + 有效期复用保证<strong>不会双倍访问站点</strong>, 却消掉单点故障; 跨机器的实例没有本地浏览器可连 ⇒ 只能只读</td><td>§5 / §6 / §7</td></tr>
           <tr><td>超龄豁免 <code>completed_age_limit</code><br><span class="muted">(2026-09-25 用户指令: 「完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」)</span></td><td class="ok"><strong>落地为站点级可选键</strong> (0 = 关闭, 默认不变; 开启时 1D~3650D): 判定侧超龄种子直接豁免 (<strong>压过清单命中</strong>), 取数侧超龄行不入索引/不回填 + 翻页早停 (倒序证据成立才停)。豁免的漏 HR 风险由配置者自愿接受</td><td>§4 / §7 / §9</td></tr>
+          <tr><td>达标判定来源优先级<br><span class="muted">(2026-09-25 用户指令)</span></td><td class="ok"><strong>在线信息.考察中 &gt; 在线信息.已达标 &gt; 在线信息.未达标 &gt; 本地信息</strong> —— 档位即站点的达标结论 (A 恒未达标 / B 已达标 / C 未达标), 页面数值字段降为展示与进度参照, 本地字段仅在无档位结论时兜底; 多 infohash 双命中按同序取 (A &gt; B &gt; C); 三态判定不变</td><td>§9 / §12</td></tr>
         </tbody>
       </table>
       <h3>M0 待实测 (技术验证, 不是待决策)</h3>
@@ -811,13 +824,14 @@ trackers:
           <tr><td>v2.7</td><td>2026-09-25 (实报修复)</td><td><strong>增量落盘: 轮次不再「全程零写盘」</strong> —— 用户删 hr_check 数据重启实测:「BTSchool.lock 长期被持有 / 后端无落盘, Ctrl+C 后才落盘」。诊断: v2.6 修好后一轮**真实跨多个扩展轮询周期**(3 页 + 回填、中间夹间隔等待, 分钟级、按 §5/§8 **持锁进行** —— 无死锁, Ctrl+C 时取数线程被打断的间隔睡眠当即完成记账并落盘, 关停是快的), 但落盘只发生在**轮尾** ⇒ 中途 Ctrl+C / 断电会丢掉已抓页面与配额账本。修: **每抓到一页**就按 complete=False 语义合并 + 提交(只把命中的置 active, 保守方向), **每个 .torrent 结果**(hr_downloaded「永不重取」凭据 / fails 防烧配额记账)当场提交; 轮尾仍按完整语义再合并一次并写覆盖证明。顺带: 叫停备注措辞改「下载阶段被叫停」—— 叫停也可能打在**派发前的间隔睡眠**上(sleeper 可中断), 不一定是取 .torrent 时。⚠ 说明: <code>&lt;site&gt;.lock</code> 文件在 filelock 释放后**仍会存在**(锁是 OS 级、进程死即释放), 文件在 ≠ 被持有。<br>测试 +1(轮次中途报错时已抓页面当场在文件里), ★红验 1(去掉增量提交 ⇒ 红); 全量 <strong>1571 passed + 1 skipped</strong>(TOTAL 91% / 10881 / 788 / 3578 / 324; HR 包 93%)。</td></tr>
           <tr><td>v2.8</td><td>2026-09-25 (取证误读修复)</td><td><strong>--hr-status 明细表改版 + 已取记录逐文件 ts</strong> —— 用户拿 BTSchool 站点文件取证问「是否短时间大量下载」(结论: 无 —— 当天对站点仅 5 次请求 = 3 页 + 2 个 .torrent, 全在频控内; <code>downloaded[]</code> 是「已取 .torrent」凭据不是 qB 下载), 顺带点出两处真问题:<br>① <strong><code>hr_downloaded[].ts</code> 整批共用开始时刻</strong>: 同批两条微秒级相同 ⇒ 看着像瞬间批量下载。修: <code>_fill_infohashes</code> 的 ts 改记<strong>各 .torrent 自己的取回时刻</strong>(同源的 <code>fail.last_ts</code> 一并修准)。<br>② <strong>明细「剩余达标」列被误读</strong>: 9d21h 是<strong>考核窗口</strong>(9d21h 内要完成做种要求), 摆在表里会被读成「还要做种 9 天」(实际还需做种仅 16h57m)。修: 明细列 = tid / 档位(考察中·已达标·未达标·已免罪, 单点 <code>status.LANE_TEXTS</code>) / 上传量 / 下载量 / 分享率 / <strong>还需做种</strong>(镜像站点书写形态 <code>HH:MM:SS</code>·「N天HH:MM:SS」) / 名称(按显示格宽截断) / infohash; <strong>剩余达标时间不再显示</strong>。列对齐走自写 <code>_dwidth/_pad</code>(str.format 按字符数对齐, CJK 双宽会错位)。<br>测试 +2(service 1 钉逐文件 ts / report 1 钉 CJK 对齐·截断·列改版); 全量 <strong>1573 passed + 1 skipped</strong>(TOTAL 91% / 10905 / 789 / 3582 / 327; HR 包 93%: 2782 / 143 / 766 / 91)。</td></tr>
           <tr><td>v2.9</td><td>2026-09-25 (新需求落地)</td><td><strong>超龄豁免: 完成时间超线的种子不再核实、不再翻页</strong> —— 用户指令「忽略下载时间超过一定期限的种子, 比如完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」。<br>① <strong>判定侧</strong> (§9): 新站点级键 <code>trackers.&lt;站&gt;.hr_check.completed_age_limit</code> (0 = 关闭, 默认行为不变; 开启时 1D~3650D, 单位写错配置期拦下); <code>judge_record</code> 对锚点里<strong>本地完成时刻</strong>超线的种子直接给第四态 <code>EXEMPT</code>「超龄豁免」—— 排在「无可查键回落本地」闸门<strong>之前</strong> (豁免是 qB 侧事实, 不依赖索引建到哪), <strong>压过清单命中</strong>与 <code>unknown_policy</code>, <code>mode: all</code> 也认 (配置者的显式取舍); 参数由记录侧从 <code>tracker_conf</code> 带进 (不多一次配置遍历)。<br>② <strong>取数侧</strong> (§4): 页面行超龄的<strong>不入索引、不回填 .torrent</strong> (省下配额; 完成时间不可解析的行保留 —— 不猜); 当前页整页超龄且<strong>页内 + 跨页都呈完成时间倒序</strong>才允许早停 —— 后续页只会更老, 本档位在豁免线内的清单已全覆盖, <strong>覆盖证明照常成立</strong> (complete 可达 ⇒ 放行照常产生); 倒序证据不成立就照常翻到底 (错误方向是多花配额, 不是漏判), 早停在 <code>refresh.reason</code> 留痕 (<code>--hr-status</code> 可见)。<br>③ <strong>测试 +17 条</strong> (判定 7 · 取数 8 · 门面透传 1 · 配置 1), ★红验 3 处 10 条守阵全红后还原; 全量 <strong>1593 passed + 1 skipped</strong> (TOTAL 91% / 10849 / 791 / 3598 / 327; 本 shell 2 条 GBK 假红按既有记载复测通过)。文档: configuration.md「超龄豁免」节 · config-reference/keys.md · testing/baseline.md。</td></tr>
+          <tr><td>v3.0</td><td>2026-09-25 17:10<br>(落地 17:37)</td><td><strong>达标判定来源优先级: 档位即结论</strong> (2026-09-25 用户指令; 计划收口 17:10, <strong>已落地</strong> 17:37) —— 「是否达标」的数据来源钉死为 <strong>在线信息.考察中(A) &gt; 在线信息.已达标(B) &gt; 在线信息.未达标(C) &gt; 本地信息</strong>:<br>① <strong>§9 新增「达标判定的来源优先级」节</strong>: 命中 A/B/C 任一档位即为站点的达标结论 (A 恒未达标 / B 已达标 / C 未达标), 不再看页面数值字段、不回落本地; <strong>废除「A/D 档看 remain_seconds==0 ⇒ 已达标、缺字段回落本地」的路径</strong> (含 v2.3「缺字段不给结论就回落本地」拍板) —— v2.8 已实证「剩余达标时间」是考核窗口倒计时, 归零 = 考核到期而非已达标, 以它推导达标方向是反的; 且 A 档缺字段回落本地会让本地值越权推翻站点的明确结论。<br>② 页面数值字段 (剩余达标时间 / 还需做种时间) 降为 WebUI 展示与进度参照; 本地字段仅在清单未命中 / 站点不可查时兜底 (标注「来源: 本地」)。<br>③ 多 infohash 双命中 (hybrid 两 hash 映两个 tid) 按 A &gt; B &gt; C 取达标结论 (原实现按 infohash 迭代序取首命中, 无档位序); 三态判定与「A/B/C 命中 ⇒ 受管束」一字不变。<br>④ 支撑件: §2 判定边界补句 · §4 流量字段行改口径 · §9 三态表受管束行改写 · M3 落地实况拍板②标注取代 · §12 守阵更新 · §13 决策记录补行。<br>⑤ <strong>落地实况 (17:37)</strong>: <code>hr/model.py::satisfied_verdict</code> 改三档全档位即结论 (A/C ⇒ False · B ⇒ True · D/未知档位才 None; 删 remain 推导), <code>satisfied_by_site</code> docstring 同步; <code>hr/resolve.py::judge_record</code> 双命中改按 <code>(判定档位, 达标档位序)</code> 取更保守者 (新增 <code>_lane_rank</code>, 删「首命中即 break」), docstring 同步; <code>torrents/record.py::check_hr_satisfied</code> docstring 同步 (分支逻辑不变 —— site_satisfied 非 None 即采纳)。§12 新守阵 2 条 (<code>test_lane_verdict_ignores_remain_and_local</code> / <code>test_judge_record_double_hit_prefers_lane_order</code>) + 改写 1 条 (<code>test_judge_record_carries_site_satisfied_verdict</code>), <strong>红验 3 条全红</strong> (临时还原旧实现) 后还原; 测试 <strong>+2</strong>, 全量 <strong>1601 passed + 1 skipped</strong> (TOTAL 91% / 10950 / 791 / 3594 / 326; HR 包 93%: 2814 / 147 / 774 / 93)。测试计划 docstring 与 test_hr_parse 注释同步。</td></tr>
         </tbody>
       </table>
       <p class="muted">下一段是 M0 的待实测清单 (§13)。</p>
     </section>
 
     <div class="colophon">
-      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v2.0 — 2026-09-22 22:04 (v2.8 修订 2026-09-25: --hr-status 明细表改版 + hr_downloaded ts 逐文件取回时刻; v2.7 增量落盘 —— 每页/每 torrent 当场提交, 轮次不再全程零写盘; v2.6 通道时序与饿死残留修复; M0 下载 URL 形态实测收口; M1-M4 均已落地, 余真机走查) · auto-qb-clone2<br>
+      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v3.0 — 2026-09-22 22:04 (v3.0 修订 2026-09-25: 达标判定来源优先级 —— 在线考察中 &gt; 在线已达标 &gt; 在线未达标 &gt; 本地, 档位即结论, 已落地; v2.9 超龄豁免与翻页早停; v2.8 --hr-status 明细表改版; v2.7 增量落盘; v2.6 通道时序修复; M1-M4 均已落地, 余真机走查) · auto-qb-clone2<br>
       依据: memory-bank 路由 (config-reference / systemPatterns / modules / conventions) 与源码锚点 (TorrentRecord.check_hr_* · core/mixins/tags · webui/views.py::_hr_view_fields · webui/server/routes/torrent_detail.py · rules/conditions · rules/expr/env · qbmanager._create_global_tasks · webui/server/lifecycle.py · config/validation/core.py · config/impact.py); 既有实验 <code>scripts/hr_fetch_experiment.py</code>; 外部事实两条已核实见脚注。
     </div>
 

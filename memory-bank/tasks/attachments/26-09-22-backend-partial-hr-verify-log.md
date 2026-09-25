@@ -156,3 +156,28 @@
   坑入库: 新增 [pitfalls/web-ui/extension-bridge.md](../../pitfalls/web-ui/extension-bridge.md);
   [pitfalls/ops/console-encoding.md](../../pitfalls/ops/console-encoding.md) 补“反向子进程解码(node 输出 UTF-8 而 `text=True` 按 locale 解 ⇒ 直接抛)”。
   全量 **1475 passed + 1 skipped**; 基线已回写。下一步仍为 **M3 判定联动**(门面已备好)与 M0 真机实测。
+
+- **2026-09-25 00:30** — 用户补充上一次提交版本的完整日志(含重启段) ⇒ 又从日志里读出**四件事**, 逐条定位:
+  ① `WARNING HR 取数通道端点已启动` / `WARNING HR 在线核实已启动` —— **生命周期消息用错级别**: 本仓 WARNING 以上
+  会被 notify 推成系统通知, 用户重启一次连吃三条 ⇒ 启动 / 关闭 / 热重载重挂全改 INFO。
+  ② 一次扩展取数超时被 **两处各告警一次**(service 的 `取数失败(1 次): …` 与 worker 的 `error: …`) ⇒ 一次收两条通知;
+  改成「谁产生原因谁告警」: 结果对象新增 `alerted`, 产生处(取数失败 / 刷新异常 / 存储层读坏)报 WARNING 后
+  状态层只记 INFO。
+  ③ `WARNING HR 站点 BTSchool | 站点文件解析失败: Expecting value: line 1 column 1 (char 0)` = **站点文件是空的**。
+  给站点文件补两层保护: 写盘默认把上一版留为 `.bak`; 读到坏文件**先把现场挪到 `.bad-<ts>`**(否则下一次写盘
+  就把它覆盖掉、线索永远消失)再试 `.bak` 兜底, 取证串带上大小与开头字节(「空文件」与「内容坏」一眼可分),
+  同一文本只告警一次(持续状态不逐轮重报)。
+  ④ 过程中挖出**两个真缺陷**(都是守阵自己抓到的): (a)**恢复出来的备份必然比本进程上次写的旧** ⇒ 锁自检的
+  「revision 回退」把这次自愈判成「锁不生效」而退化为只读, 该站点从此写不回去 —— **自愈反而变砖**; 修法是
+  恢复后重置写者心跳基线, 并且恢复后的第一次写盘**不得**再复制 `.bak`(否则好备份被坏内容盖掉, 与 `state.json`
+  自愈同一个坑)。(b)关停 / 热重挂时被叫停的取数长着 `HrChannelUnavailable` 的皮 ⇒ **每次关停都告警一条
+  「无可用取数通道」且误计失败次数**; 分出子类 `HrChannelStopped`, service 按「非事件」处理(不告警、不计失败、
+  不推熔断, 本轮转 WAITING)。
+  ⑤ 测试 **+10**(store 5 / runtime 2 / service 2 / worker 1)并把 fetcher 的叫停用例改为钉住子类;
+  ★红验: 去掉 `alerted` / 启动消息打回 WARNING / 叫停降回父类 ⇒ 四条守阵当场变红。
+  ⑥ 全量 **1498 passed + 1 skipped / 18.08–22.89s**(TOTAL 91% / 10423 语句 / 778 未覆盖 / 3444 分支 / 308 partial),
+  sidefx ≈2430 / 越界 0; 文档(配置说明 / 扩展 README / 根 README)与新坑
+  [pitfalls/ops/alert-levels.md](../../pitfalls/ops/alert-levels.md)(扩写为四条判据 + 两个同族旧账)已回写, 基线已更新。
+  ⑦ **顺带发现但未动(待你定)**: `service._do_fetch` 的取数失败分支 `session.commit()` **没看 `self.persist`**
+  ⇒ `--hr-once` 声称「不写文件」但取数失败时会写熔断计数, 与文档承诺不符。
+  下一步仍是 **M3 判定联动**; 另两个待定: `config.yml` 明文凭据入池 / README 里一个坏 emoji。
