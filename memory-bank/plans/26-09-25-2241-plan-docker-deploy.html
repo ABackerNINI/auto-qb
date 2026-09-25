@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="docker-deploy">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-09-25-2241">
-<meta name="doc-updated" content="26-09-25-2241">
+<meta name="doc-updated" content="26-09-25-2320">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-25-deps-docker-deploy.md">
 <title>auto-qb · Docker 部署方案</title>
 <style>
@@ -203,7 +203,7 @@
     本方案给出镜像、编排、文档的完整取舍, 按 P1–P4 分阶段实施, 全程不触碰 <code>config.yml</code> 与 <code>auto-qb-data/</code> 两条红线。
   </p>
   <div class="meta-row">
-    <span>Status <span class="chip">Open · 待拍板</span></span>
+    <span>Status <span class="chip">In Progress · P1–P3 已实施</span></span>
     <span>Added <b>2026-09-25</b></span>
     <span>调研基线 <b>9d09f1f8</b> (gitee/develop 齐平)</span>
     <span>任务档案 <b>tasks/26-09-25-deps-docker-deploy.md</b></span>
@@ -492,7 +492,7 @@ CMD ["/config/config.yml"]</code></pre>
 <footer class="colophon">
   <b>调研基线</b> — commit 9d09f1f8 (2026-09-25, 与 gitee/develop 齐平); 关键代码位置: cli.py · infra/logging.py · config/models.py · webui/server/lifecycle.py · docs/configuration.md<br>
   <b>执行进展</b> — 方案拍板后本件冻结 (状态改 In Progress), 进展一律记任务档案 tasks/26-09-25-deps-docker-deploy.md<br>
-  <b>变更记录</b> — 26-09-25-2241 初版 (调研 + 方案 + 分阶段)
+  <b>变更记录</b> — 26-09-25-2241 初版 (调研 + 方案 + 分阶段); 26-09-25-2320 拍板实施, P1–P3 交付物与 SIGTERM 代码落地 (单测 +4, 全量 1611 passed 无回归), 进展与未实测项 (docker build / compose up / docker stop 真机验收) 单点在任务档案
 </footer>
 
 </main>

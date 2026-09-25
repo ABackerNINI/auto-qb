@@ -38,10 +38,13 @@
 - test_validate_tracker_groups: 站点 groups 非列表/空串项报错(fail-fast)
 - test_load_tracker_groups: groups 解析回填 TrackerConfig, 未配置默认空列表
 - test_validate_state_save_interval: state_save_interval 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
+- test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
+- test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关 —— compose.yaml 的端口映射与 healthcheck 依赖)
 """
 import logging
 import os
 import tempfile
+from pathlib import Path
 
 import pytest
 import yaml
@@ -1161,3 +1164,28 @@ def test_validate_value_ranges():
         )
         assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      interval: 5S\n") == ""
         assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      cooldown: 0S\n") == ""
+
+
+# ---------- 示例配置守阵: 示例文件没有守卫会随 schema 演进静默漂移(pitfalls/docs/drift.md, 2026-09-25 实证) ----------
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_example_minimal_yml_passes_fail_fast():
+    """minimal.yml 必须过 fail-fast 校验(README 快速开始的入口配置)。
+    曾因 add_episode_tags 旧布尔形态漂移: 校验红是小事, 真坑是 enabled 默认 false 被静默解析成关。
+    除"能加载"外钉住 README 承诺的开箱语义: Web UI 默认开启 + 集数标签默认开启。"""
+    config = load_config(str(ROOT / "minimal.yml"))
+    assert config.web.enabled is True
+    assert config.add_episode_tags.enabled is True
+
+
+def test_example_docker_config_yml_passes_fail_fast():
+    """docker/config.example.yml 必须过 fail-fast 校验, 且容器契约字段不被改坏
+    (compose.yaml 的端口映射 / named volume / healthcheck 都写死依赖这些值)。"""
+    config = load_config(str(ROOT / "docker" / "config.example.yml"))
+    assert config.data_dir == "/data"  # compose: named volume auto-qb-data -> /data
+    assert config.web.host == "0.0.0.0"  # 容器内 127.0.0.1 = 端口映射过去谁也连不上
+    assert config.web.enabled is True  # healthcheck 探的就是这个端口
+    assert config.web.port == 8080  # compose ports "8081:8080" 与 healthcheck 写死 8080
+    assert config.notify.enabled is False  # 容器无桌面会话, 平台通知预期不可用

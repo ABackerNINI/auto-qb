@@ -18,7 +18,12 @@
 - test_main_tray_mode_calls_run_tray: --tray 模式交由 ui.run_tray 托管
 - test_main_tray_second_instance_wakes_running: --tray 双开唤起已运行实例 -> 静默退出 0
 - test_main_tray_second_instance_wake_fail_returns_1: --tray 双开唤起失败 -> 常规锁错误退出 1
+- test_main_normal_mode_installs_sigterm_handler: main() 入口注册 SIGTERM handler(P3, docker stop 优雅退出)
+- test_sigterm_handler_raises_keyboard_interrupt: handler 触发即抛 KeyboardInterrupt(复用 Ctrl+C 路径), 且置 SIG_IGN 防清理期被打断
+- test_install_sigterm_handler_registers: 平台允许注册时真注册(Windows/Linux 均允许注册; 真实 SIGTERM 投递由容器 docker stop 实测兜底)
+- test_install_sigterm_handler_registration_failure_ignored: 注册失败(非主线程/平台不支持)静默跳过, 不影响启动
 """
+import signal
 import sys
 from unittest import mock
 
@@ -265,3 +270,49 @@ def test_main_tray_second_instance_wake_fail_returns_1(capsys):
     err = capsys.readouterr().err
     assert "另一实例已持有锁" in err
     assert "Traceback" not in err
+
+
+# ---------- SIGTERM 优雅退出(plan 26-09-25-2241 P3, 全方案唯一代码改动) ----------
+
+
+def test_main_normal_mode_installs_sigterm_handler():
+    """main() 入口注册 SIGTERM handler(docker stop -> Ctrl+C 同款优雅关闭路径的入口)"""
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb, \
+            mock.patch("auto_qb.cli.signal.signal") as m_sig:
+        from auto_qb import cli
+        from auto_qb.cli import main
+        main()
+    m_sig.assert_called_once_with(signal.SIGTERM, cli._sigterm_to_keyboardinterrupt)
+    m_qb.assert_called_once()
+
+
+def test_sigterm_handler_raises_keyboard_interrupt():
+    """SIGTERM handler: 触发即抛 KeyboardInterrupt 复用 Ctrl+C 路径; 且先置 SIG_IGN,
+    清理期间(finally 落盘/停服)再到的 SIGTERM 不打断收尾"""
+    from auto_qb.cli import _sigterm_to_keyboardinterrupt as handler
+    orig = signal.getsignal(signal.SIGTERM)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            handler(signal.SIGTERM, None)
+        assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN, "首个信号后应改 SIG_IGN 保护清理窗口"
+    finally:
+        signal.signal(signal.SIGTERM, orig)
+
+
+def test_install_sigterm_handler_registers():
+    """平台允许注册时真注册(Windows/Linux 均允许注册, 差异只在信号投递; 真实投递由容器 docker stop 兜底)"""
+    from auto_qb import cli
+    orig = signal.getsignal(signal.SIGTERM)
+    try:
+        cli._install_sigterm_handler()
+        assert signal.getsignal(signal.SIGTERM) is cli._sigterm_to_keyboardinterrupt
+    finally:
+        signal.signal(signal.SIGTERM, orig)
+
+
+def test_install_sigterm_handler_registration_failure_ignored():
+    """注册失败(signal.signal 抛 ValueError = 非主线程 / OSError = 平台不支持)静默跳过, 不影响启动"""
+    from auto_qb import cli
+    with mock.patch("auto_qb.cli.signal.signal", side_effect=ValueError("not main thread")):
+        cli._install_sigterm_handler()  # 不应抛出

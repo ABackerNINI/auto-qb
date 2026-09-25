@@ -10,7 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [drift.md](drift.md) | 文档与代码冲突时的裁决顺序、`🚧` 标注到底是什么意思、以及哪些历史记录不必再查。 | 文档与代码不符, 看到 🚧 标注, 回写知识库, 想删"已实现"的标注 |
+| [drift.md](drift.md) | 文档与代码冲突时的裁决顺序、`🚧` 标注到底是什么意思、示例配置文件自己也会漂移, 以及哪些历史记录不必再查。 | 文档与代码不符, 看到 🚧 标注, 回写知识库, 想删"已实现"的标注, 示例配置过时, 抄示例当底子, minimal.yml, 新示例 yml |
 | [html-edit.md](html-edit.md) | 用字符串替换改计划 / 报告 HTML 时容易吃掉 `</p>` 之类闭合标签, 也容易**残留整块旧内容** —— 浏览器与 IDE 预览都**静默容错**, 肉眼看不出。 | 改计划 HTML, 改 issue 报告, 编辑 HTML, 闭合标签, 标签不平衡, 旧块残留, 渲染不对但没报错 |
 | [md-edit.md](md-edit.md) | 在 Markdown 文档(尤其 `memory-bank/tasks/*.md` / `activeContext/*.md` 的头部元数据块)上做字符串替换时, 把**下一行的字段标签**一起卷进 `old` 会静默删掉它 —— md 没有闭合标签, 删了不报错, 渲染出来只是"少了一个字段"。 | 改任务档案, 改 activeContext 切片, 头部元数据, Status/Updated/Summary 字段, 字符串替换, 替换片段吞掉整行, Markdown 静默丢失 |
 | [pack-readme-entry.md](pack-readme-entry.md) | 决策点文档(如 `AGENTS.md`)若把某条流程的"唯一去处"写成**包内 README 的链接**, 执行者只能整读它 —— 分层省下的 token 从另一头漏回来; 指针要写 task id, 细节外置到包内 `references/` 按需读。 | 提交流程要读文档, 包内 README, 整读 README, references, 深读指针, doc 键, 阅读预算, 命令漂移豁免 |

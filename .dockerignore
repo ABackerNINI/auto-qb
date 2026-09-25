@@ -1,0 +1,50 @@
+# 镜像里只留运行必需 (plan 26-09-25-2241 · 交付物)
+# ⚠ README.md 与 LICENSE 刻意不在排除清单: pyproject.toml 的 readme 是显式文件引用,
+#   hatchling 构建 wheel 期要读, 排除会让 Dockerfile 的 uv sync 直接失败
+# 🔴 红线: 生产配置与运行时数据绝不进镜像 (AGENTS.md; 容器场景走 bind mount / named volume)
+config.yml
+auto-qb-data/
+
+# 版本控制与 AI 工具链
+.git/
+.gitignore
+.zcode/
+.trae/
+.agents/
+.commands/
+apm.yml
+apm.lock.yaml
+apm_modules/
+skills-lock.json
+env.sh
+commands/
+commands.cmd
+
+# 开发 / 测试 / 文档资产
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+cov-report.txt
+dist/
+tests/
+test_yamls/
+scripts/
+extensions/
+resources/
+assets/
+docs/
+memory-bank/
+logs/
+skip-check-backup/
+minimal.yml
+uv.lock.bak
+
+# 杂项文档 (README.md / LICENSE 除外, 见顶部说明)
+AGENTS.md
+CLAUDE.md
+TODO.md
+想法.md

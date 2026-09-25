@@ -161,6 +161,11 @@ uv run auto-qb --tray
 
 > 上面是用户可见的入口; `commands run dev.run -- config.yml` 走的是同一份源码入口,两者等价。
 
+### Docker 部署
+
+不想装 Python 环境也可以用 Docker:`docker compose up -d --build` 一条命令起服务,状态跨重启续接。
+构建 / 配置 / 升级 / 排障见 **[部署文档](docs/deployment.md)**。
+
 ## 命令行参数
 
 | 参数                         | 说明                                                                    |

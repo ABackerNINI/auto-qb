@@ -6,7 +6,28 @@
 
 ## 当前基线
 
-**1611 collected: 1610 passed + 1 skipped / Windows** —— 2026-09-25 **full-checking 首样本竞态修复**
+**1617 collected: 1616 passed + 1 skipped / Windows** —— 2026-09-25 **示例配置守阵**
+(`pitfalls/docs/drift.md` 的根治 follow-up: minimal.yml 漂移修复后, 把"示例无守卫会静默漂移"钉成测试;
+数字为合入远端 full-checking 竞态修复(+3)后的合并树实测)。
+**+2 条** (test_config.py): `test_example_minimal_yml_passes_fail_fast` —— minimal.yml 过 fail-fast 校验
++ 钉 README 开箱语义(web.enabled / add_episode_tags.enabled 均为 True); `test_example_docker_config_yml_passes_fail_fast`
+—— docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 /
+notify 关, compose.yaml 的端口映射与 healthcheck 依赖)。minimal 守阵**红验过**: git HEAD 旧布尔形态 → 红,
+修复版 → 绿。TOTAL **91%**(10924 语句 / 785 未覆盖 / 3622 分支 / 326 partial)。
+
+**上一态: 1612 collected: 1611 passed + 1 skipped** —— 2026-09-25 **Docker 部署 P1–P3**
+(计划 `26-09-25-2241-plan-docker-deploy`, 档案 `26-09-25-deps-docker-deploy`)。**+4 条** (test_cli.py
+SIGTERM 优雅退出, plan P3 唯一代码改动的守阵): `test_main_normal_mode_installs_sigterm_handler`
+(main() 入口注册 SIGTERM handler) / `test_sigterm_handler_raises_keyboard_interrupt`(handler 触发即抛
+KeyboardInterrupt 复用 Ctrl+C 路径, 且先置 SIG_IGN 防清理窗口被打断) / `test_install_sigterm_handler_registers`
+(平台允许注册时真注册; 真实 SIGTERM 投递由容器 docker stop 兜底, 本机无 Docker 未做) /
+`test_install_sigterm_handler_registration_failure_ignored`(注册失败静默跳过)。
+落地面: cli.py `_install_sigterm_handler` + `_sigterm_to_keyboardinterrupt`; 新增 Dockerfile / .dockerignore /
+compose.yaml / docker/config.example.yml / docs/deployment.md。
+TOTAL **91%**(10902 语句 / 791 未覆盖 / 3612 分支 / 326 partial)。另: docker/config.example.yml 与
+minimal.yml 均过 load_config 实测 ✓ (minimal.yml 的 add_episode_tags 旧形态已于同日修复为字典形态)。
+
+**上一态: 1611 collected: 1610 passed + 1 skipped / Windows** —— 2026-09-25 **full-checking 首样本竞态修复**
 (切片 `26-09-25-2348-full-checking-verdict-fix`, 取证报告
 [26-09-25-0853-report-full-checking-verdict-poison](../reports/26-09-25-0853-report-full-checking-verdict-poison.html))。**+3 条**:
 `test_checking.py` 首样本竞态回归(快照未见 checking 不计败, 走到成功零失败记录)/ 启动宽限保险丝

@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+import signal
 import sys
 
 from .config import DEFAULT_CONFIG_FILE, ConfigError, load_config
@@ -35,6 +36,27 @@ def export_torrents_info(manager: QbManager, output_file: str):
         return False
     manager.export_torrents_info(output_file)
     return True
+
+
+def _sigterm_to_keyboardinterrupt(signum, frame):
+    """SIGTERM 处理: 转 KeyboardInterrupt, 复用 Ctrl+C 的整条优雅关闭路径(见 _install_sigterm_handler)"""
+    # 首个信号后改 SIG_IGN: 清理期间(finally 落盘/停服)再到的 SIGTERM 不打断收尾
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    raise KeyboardInterrupt
+
+
+def _install_sigterm_handler() -> None:
+    """注册 SIGTERM -> 优雅退出(容器/服务化场景: docker stop / systemctl stop 发 SIGTERM)
+
+    SIGTERM 默认处置直接杀进程, 主循环 finally 的停 WEB/HR -> save_state -> 放锁全不走,
+    运行态丢失上界 = state_save_interval(默认 120s)。handler 在主线程执行, 抛出的
+    KeyboardInterrupt 从主循环栈冒出, 写点全在主循环线程, 不破单一写线程红线。
+    注册失败(非主线程 / 平台不支持)静默跳过 —— 与改动前行为一致, Ctrl+C 不受影响。
+    """
+    try:
+        signal.signal(signal.SIGTERM, _sigterm_to_keyboardinterrupt)
+    except (OSError, ValueError):
+        pass
 
 
 def main():
@@ -103,6 +125,9 @@ def main():
         parser.error("--hr-status 与 --hr-once 互斥(前者读已有数据, 后者真去抓一轮)")
     if args.hr_status_rows < 1:
         parser.error("--hr-status-rows 需为正整数")
+
+    # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(所有模式一致; KeyboardInterrupt 统一在下面捕获)
+    _install_sigterm_handler()
 
     manager = None
     try:

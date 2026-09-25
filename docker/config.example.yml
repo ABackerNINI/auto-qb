@@ -1,0 +1,63 @@
+---
+# 容器化示例配置 (plan 26-09-25-2241 · D3): 以 minimal.yml 为底, 按容器场景改了四处
+#   ① data_dir: /data —— 对齐 compose.yaml 的 named volume
+#   ② qbittorrent.host: host.docker.internal —— qB 跑宿主机时容器内的访问入口(D4 案 1; Linux 宿主由 compose extra_hosts 补)
+#   ③ web.host: "0.0.0.0" —— 容器里 127.0.0.1 等于自断访问(端口映射探不到)
+#   ④ notify.enabled: false 显式写死 —— 无桌面环境, 平台通知预期不可用
+# 用法: cp docker/config.example.yml config/config.yml, 改好 qbittorrent 三项后 docker compose up -d --build
+# 🔴 qB 凭据请占位替换, 不要把真实密码提交进仓库
+config:
+    interval: 60S
+    remove_similar_tags: true
+
+    # 运行时数据主目录: 状态/单实例锁/日志/web.token 全落这里(compose 挂 named volume auto-qb-data:/data)
+    data_dir: /data
+
+    # 全局 HR 默认输出设置(站点 hr: 段未设置时兜底)
+    hr:
+        add_tag: "" # 满足HR触发条件的种子添加标签, 支持变量
+        add_category: "!!HR${required_seeding_time}!!" # 分类格式, 支持变量
+        overwrite_category: false
+        add_tag_for_satisfied: "" # 做种时间已满足HR要求时间+额外时间的种子添加标签
+        add_category_for_satisfied: "--HR${required_seeding_time}--"
+        overwrite_category_for_satisfied: false
+
+    # 单集标签: 布尔总开关 + 单集/多集模板(字典形态是当前 schema 的口径)
+    add_episode_tags:
+        enabled: true
+
+    # 种子分组管理(辅种管理)
+    grouping:
+        enabled: true # 启用种子分组管理
+        missing_tag: MISSING # 文件丢失时整组添加的标签
+
+    # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
+    delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
+        - "M-Team - TP:ignore_case"
+        - "regex:^BTSCHOOL"
+    delete_tags_if_has_no_torrents: # 彻底删除无种子的标签格式(仅当没有任何种子使用时删除)
+        - "@tracker_tags:ignore_case" # 引用全部 tracker 配置的标签
+        - "regex:^zE.*"
+        - "regex:^ORPHAN"
+
+    qbittorrent:
+        host: host.docker.internal # qB 在宿主机; 同一 compose 里跑 qB 则直接填服务名; NAS/远程填 IP
+        port: 8080 # qB WebUI 端口(注意与本程序 web.port 区分)
+        username: "your-qb-username" # 🔴 替换成真实账号
+        password: "your-qb-password" # 🔴 替换成真实密码
+
+    # Web UI: 辅种管理 + 图形化配置编辑(推荐的日常配置方式; 快速开始即从此进入)
+    web:
+        enabled: true       # 容器示例恒为 true(健康检查探的就是这个端口)
+        host: "0.0.0.0"     # ❗容器内必须 0.0.0.0: 默认 127.0.0.1 时端口映射过去谁也连不上。
+                            #   ⚠️ 对外暴露会把可删除种子、可改配置的管理界面放到网络上 ——
+                            #   务必保留 token 鉴权, 并配合防火墙 / 反向代理(与 README 安全提示同口径)
+        port: 8080          # 本程序 Web UI 端口(与 qB WebUI 端口区分; 改动需同步 compose 的 ports 与 healthcheck)
+        token: ""           # 访问密钥; 留空首次启动随机生成 -> /data/web.token(docker exec auto-qb cat /data/web.token)
+        skip_local_verify: false  # 容器内 127.0.0.1 只有健康检查; 浏览器从宿主经端口映射访问, 保持 false 强制鉴权
+
+    # 主动通知: 容器无桌面会话, 平台原生通知预期不可用, 显式关闭(默认也是 false, 写死免疑虑)
+    notify:
+        enabled: false
+
+    trackers:

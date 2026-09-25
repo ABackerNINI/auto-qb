@@ -26,7 +26,7 @@
 - **backend-partial-hr-verify** (2) — 计划 [26-09-22-2204](plans/26-09-22-2204-partial-hr-site-verify-plan.html) `Open` · 档案 [26-09-22](tasks/26-09-22-backend-partial-hr-verify.md) `Open`
 - **backend-torrentrecord-fields** (2) — 计划 [26-09-15-1302](plans/26-09-15-1302-record-full-fields-plan.html) `Done` · 档案 [26-09-15](tasks/26-09-15-backend-torrentrecord-fields.md) `Done`
 - **deps-env-modernization** (2) — 报告 [26-09-15-1150](reports/26-09-15-1150-report-dependency-lock.html) `Done` · 档案 [26-09-15](tasks/26-09-15-deps-env-modernization.md) `Done`
-- **docker-deploy** (2) — 计划 [26-09-25-2241](plans/26-09-25-2241-plan-docker-deploy.html) `Open` · 档案 [26-09-25](tasks/26-09-25-deps-docker-deploy.md) `Open`
+- **docker-deploy** (2) — 计划 [26-09-25-2241](plans/26-09-25-2241-plan-docker-deploy.html) `In Progress` · 档案 [26-09-25](tasks/26-09-25-deps-docker-deploy.md) `In Progress`
 - **memory-bank-activecontext-conflict** (2) — 计划 [26-09-22-2350](plans/26-09-22-2350-activecontext-conflict-plan.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-memory-bank-activecontext-conflict.md) `In Progress`
 - **memory-bank-dir-refactor** (2) — 计划 [26-09-22-1248](plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) `Done` · 档案 [26-09-22](tasks/26-09-22-memory-bank-dir-refactor.md) `In Progress`
 - **memory-bank-doc-forms** (2) — 计划 [26-09-23-1959](plans/26-09-23-1959-memory-bank-doc-forms-plan.html) `Done` · 档案 [26-09-23](tasks/26-09-23-memory-bank-doc-forms.md) `Done`

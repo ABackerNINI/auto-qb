@@ -12,7 +12,9 @@ config:
         add_category_for_satisfied: "--HR${required_seeding_time}--"
         overwrite_category_for_satisfied: false
 
-    add_episode_tags: true
+    # 单集标签: 种子添加时自动打集数标签(字典形态; enabled 默认 false, 需显式开启)
+    add_episode_tags:
+        enabled: true
 
     # 种子分组管理(辅种管理)
     grouping:

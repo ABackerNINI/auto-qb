@@ -1,0 +1,32 @@
+# auto-qb 单服务编排 (plan 26-09-25-2241 · D3/D4/D6/D7)
+# 用法: 先 cp docker/config.example.yml config/config.yml 并填好 qB 地址, 再 docker compose up -d --build
+# 详见 docs/deployment.md
+services:
+  auto-qb:
+    build: .
+    image: auto-qb:latest
+    container_name: auto-qb
+    restart: unless-stopped
+    stop_grace_period: 30s # 优雅退出宽限(cli.py 已注册 SIGTERM -> 落盘后退出码 0)
+    environment:
+      TZ: Asia/Shanghai # HR 窗口/每日限速曲线按本地时间, 按宿主时区改
+    ports:
+      - "8081:8080" # 宿主 8081 -> 容器 web.port(避开宿主 qB WebUI 的 8080; 改 config.web.port 需同步这里与 healthcheck)
+    volumes:
+      - ./config:/config # config.yml 所在; 必须可写(Web UI 保存写回 + 自动 .bak, 挂只读会废掉配置能力)
+      - auto-qb-data:/data # data_dir: state.json / 单实例锁 / 日志 / web.token / hr/ / 跳检备份
+    # qB 跑在 Linux 宿主机时, 容器内访问 host.docker.internal 靠这条; Docker Desktop(Windows/macOS)自带, 免
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # slim 无 curl/wget, 用 python 内联探活; GET / 307 -> /atlas/ 静态页, 非 /api 路径免 token。
+      # 8080 = 容器内 config.web.port(config.example.yml 的默认值), 改了要同步
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    command: ["/config/config.yml"] # ENTRYPOINT auto-qb 的配置路径位置参数
+
+volumes:
+  auto-qb-data:
