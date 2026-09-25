@@ -46,9 +46,10 @@
 
 **命令一律经 `commands` 引擎调, 不在文档里抄** —— `commands run <task>` 里的 `<task>` 是包里的一条命令
 (映射表在 [.commands/](.commands/) 各包的 `config.toml`, 引擎是 [commands skill](.agents/skills/commands/SKILL.md))。
-❗**真敲前先装一次 wrapper**(幂等, 生成物已 gitignore):
-`uv run python .agents/skills/commands/scripts/install_wrapper.py` —— 装完 `commands run <task>` 直接可用
-(落仓库根 + PATH 目录); 没装时展开成 `uv run python .agents/skills/commands/scripts/run.py run <task>`。
+❗`commands run <task>` **先直接试跑**, 报 command not found 才装一次 wrapper(幂等, 生成物已 gitignore):
+`uv run python .agents/skills/commands/scripts/install_wrapper.py`(落仓库根 + PATH 目录,
+PATH 那份用户级、跨 clone 共享 —— 装过一次就一直命中, 多数会话免装); 没装时也可展开
+`uv run python .agents/skills/commands/scripts/run.py run <task>`。
 `<task>` 用 `list` 里的 id(子包可写 `ship.commit`, 也可写全 `包/子包.<task>`)。
 不知道调哪个就 `list` 逐级下钻(一级只出包 + 常显命令)。遇到**反复要跑 / 难拼 / 有陷阱写法**的命令,
 按 SKILL.md 的收录协议自己 `add` 进包 —— 命令集靠这个长大, 不是靠人维护。

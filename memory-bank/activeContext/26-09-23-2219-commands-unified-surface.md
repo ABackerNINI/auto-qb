@@ -1,7 +1,7 @@
 # commands — 项目命令统一调用面 (纯引擎 + 包式配置层)
 > 摘要: 同一条命令仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常"。方案: skill 缩成**纯引擎**(只认识「包」与「命令」), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒**, 路由**不落盘**改为逐级查询 + `pin` 常显, 反漂移闸门把文档手抄形态判红(63 → 0)。**W1–W6 已实施**: 引擎三件 + 六个顶级包(后者含 `ship/` 子包, 旧 skill 已删); 优化轮(两种记法 / `pin` 守卫 / 闸门去双写 / SKILL.md 硬上限); **W6 会话噪音治理**(异常感知摘要 / id 包路径写法 / 闸门摘要收敛 / 开工自检同步配方 / 包测试入闸门)。全过程与实测数字见档案。
 > 触发: 命令在哪定义, commands, .commands, 包, task id, 反漂移, 手抄命令, 收录协议, add, pin, 常显, my-commit-flow 成包, 闸门位置, 两种记法, 沙箱假红, skill 描述, 摘要, 噪音, token, 入口, 包测试没跑
-> 最后活动: 2026-09-24 18:10
+> 最后活动: 2026-09-25 08:48
 
 ## 状态
 
@@ -56,6 +56,8 @@
   PATH 目录(`~/bin`, **项目无关**: 从 `$PWD` 向上找 `.commands/`)。生成物**不入库**, 单点定义在
   `install_wrapper.py`; 只认自己的标记行(别人同名文件不碰, `--force` 才覆盖); 解释器优先 `uv run python`
   —— 包脚本以**引擎的 `sys.executable`** 跑, 这决定它们跑在哪个环境。细节见 `references/wrapper.md`。
+- **wrapper 安装时机改按需** (2026-09-25): 「先装」→「**先试跑, command not found 才装**」—— PATH 那份
+  用户级、装过就命中; 落点/幂等/自证不变。三处文档已同步 (AGENTS/SKILL/wrapper.md)。
 - **低噪音包是收录的验收面** (2026-09-24 W7): 八条判据(输出自带静音 / 异常行可被机器认出 / 一条 = 一个动作 /
   `when` 一句话 / `note` 只写陷阱判据 / 长文进 `doc` / `timeout` 按最坏情况 / `pin` 稀缺)落进
   `references/howto-add-command.md` —— 包会被**反复读到**, "收进来"只是第一步。
@@ -67,11 +69,9 @@
 **已验的事** (别重做):
 
 > 早先那批(可插拔 / 反漂移红绿 / `pin` 守卫 / 格式化闸门 / `list --all` 去重 / 参数传递 / 包内 README 纳管 /
-> `<each:>` 语义 / `doc` 指针基准)已沉淀到 [../progress/implemented-tooling.md](../progress/implemented-tooling.md)
+> `<each:>` 语义 / `doc` 指针基准 / W6 噪音治理)已沉淀到 [../progress/implemented-tooling.md](../progress/implemented-tooling.md)
 > 「commands 引擎 / my-commit-flow 包的实测记录」一条 —— 要核对细节去那里, 别在这里堆。
 
-- W6(摘要 / 闸门摘要 / 同步配方 / 包测试入闸门)的实测数字已沉淀到
-  [../progress/implemented-tooling.md](../progress/implemented-tooling.md) 的同名条目。
 - wrapper 端到端(W7): `./commands run <task>`、bare `commands list`(PATH 那份)、从子目录向上找仓库根
   —— 三种形态实测通过; 不在项目里 → rc=2 + 提示; `--uninstall` 后重装幂等。测试把这条承诺钉住:
   `test_wrapper_end_to_end_passes_args`(假仓库根 + 假引擎, 断言参数原样转发)。

@@ -13,11 +13,11 @@ user-invocable: true
 
 引擎只认识**包**与**命令**:项目事实全在包里,它只读 `<包>/config.toml` —— 所以**加命令只有"放进某个包"这一条路**,包外的文件引擎扫不到(静默失效)。
 
-## 入口:先装 wrapper
+## 入口:先试跑, 失败才装
 
-`commands` 不是可执行程序,**cwd 也不在任何 shell 的搜索路径里**(实测 Git Bash / PS 都不搜)——
-所以首次用先装一次(幂等):`python <skill-dir:commands>/scripts/install_wrapper.py`。
-装完 `commands run <task>` 直接可用;落点 / 撤销 / 批处理坑见 [references/wrapper.md](references/wrapper.md)。
+`commands run <task>` **直接试跑**; 报 command not found 才装一次(幂等):
+`python <skill-dir:commands>/scripts/install_wrapper.py`(落仓库根 + PATH 目录, PATH 那份跨项目共享)。
+落点 / 撤销 / 批处理坑见 [references/wrapper.md](references/wrapper.md)。
 
 ## 记法
 

@@ -6,7 +6,7 @@
 
 ## 当前基线
 
-**1598 collected: 1597 passed + 1 skipped / Windows** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
+**1599 collected: 1598 passed + 1 skipped / Windows** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
 (HR 线 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
 (`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
 新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变), 动机与取舍见档案
@@ -18,7 +18,7 @@ views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.
 **同日 DND-01 拖拽添加种子 +1 守阵**(`test_frontend_add_torrent_drag_drop_wiring`, 全局拖拽接线四点:
 事件对称/drop 必 preventDefault/判据不放宽 text/plain/双 UI 遮罩成对 —— 1597 → 1598, 见切片
 `26-09-25-0848-webui-dnd-add-torrent`)。
-TOTAL **91%**(10853 语句 / 789 未覆盖 / 3598 分支 / 326 partial —— 并行采样 ×2; **HR 包 93%**:
+TOTAL **91%**(10853 语句 / 789 未覆盖 / 3598 分支 / 325 partial —— 并行采样 ×2; **HR 包 93%**:
 2790 / 145 / 778 / 92), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。

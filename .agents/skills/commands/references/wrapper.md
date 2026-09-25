@@ -2,6 +2,12 @@
 
 > [SKILL.md](../SKILL.md) 只留一句摘要; 这里放"为什么这么装"与批处理的坑 —— **排障 / 换平台时才读**。
 
+## 使用流程: 先试跑, 失败才装(2026-09-25 起)
+
+bare `commands run <task>` **直接试跑** —— PATH 那份是用户级文件, 装过一次就一直在, 多数会话免装;
+报 command not found 才跑 `install_wrapper.py`(幂等; 落点目录本就在 PATH 上, 装完即生效, 无需重开 shell)。
+装了却不正常(找不到引擎 / 转发异常)→ 重装一次幂等覆盖, 或先 `--dry-run` 看落点。
+
 ## 为什么需要它(2026-09-24 实测)
 
 `commands run <task>` 一直是**文档记法**, 真敲时要展开成 `python <skill-dir:commands>/scripts/run.py run <task>`,
