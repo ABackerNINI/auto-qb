@@ -1,7 +1,7 @@
 # Vue 语义与 SVG
 
-> 摘要: Vue Options API 的三类静默白屏(computed 当函数 / 带参 computed / 三者同名)与 SVG 属性大小写 —— 都**没有运行时提示**。
-> 触发: 改前端模板, 改 computed, 改 methods, 改 SVG, 加图标, 白屏, 整块不渲染
+> 摘要: Vue Options API 的四类静默白屏(computed 当函数 / 带参 computed / 三者同名 / methods 里裸调用跨模块 methods)与 SVG 属性大小写 —— 都**没有运行时提示**。
+> 触发: 改前端模板, 改 computed, 改 methods, 改 SVG, 加图标, 白屏, 整块不渲染, 裸调用, 漏 this
 
 ### computed 在模板里是**属性**, 不能当函数调用
 
@@ -36,6 +36,25 @@
 - **触发**: 起新名时没查重。
 - **判别**: 同名后调用方拿到的是**属性**, 抛错形态同上(整块不渲染)。
 - **处置**: 起名后在三处都 grep 一遍。
+
+### methods 函数体内**裸调用**跨模块 methods(漏 `this.`)—— 数据分支不进就埋着, 站点一接入就整树白屏
+
+- **触发**: 在 A 模块(`window.AQB_HR` 等 mixin 对象)的 methods 里调 B 模块的 methods(如 format.js 的
+  `fmtDuration` / `fmtSize`)时写成裸调用 `fmtDuration(v)`。其它 shared 文件全用 `this.fmtDuration`,
+  唯独一处漏 —— 真实发生过(2026-09-25): `hr.js::hrSiteLine` 三处裸调用, 441ffe4 把它挂进
+  `hrDurTitle` 的做种时长列 `:title` 绑定后, 站点接入(BTSchool)数据下**每行渲染必踩** ⇒
+  `ReferenceError` → Vue 3 卸掉整棵组件树 → **全页白屏**(用户报"webui 无任何显示")。
+- **判别**: 三个雷叠加才爆, 单看哪个都正常:
+  ①裸调用所在**分支有数据门槛**(hrSiteLine 131 行 `if (!m.hr_site_lane) return ""` —— 桩数据/未接入
+  站点恒提前返回, 雷埋着不响; 冒烟 96 项全绿);
+  ②被**提升到列表渲染路径**(详情抽屉偶发 → 列表每行每轮必经);
+  ③**生产数据恰好踩中分支**(站点接入且清单命中)。白屏无任何 UI 提示, 栈只在 DevTools console;
+  vue.global.prod 的报错是渲染函数内的 ReferenceError, 一眼看不出是哪个 mixin 文件。
+- **处置**: methods 互调**一律 `this.`**(Vue 把所有 mixin 的 methods 合并到组件代理上, `this.` 恒可用;
+  裸标识符只走 JS 词法作用域 → 模块对象 → window, methods 不在其中 —— **模板里能用 ≠ 全局可用**,
+  模板的 with(proxy) 作用域与 methods 函数体是两套解析规则)。修复即补三处 `this.`(hr.js)。
+  复现手法: `scripts/ui_harness.py --hr-site` 注入站点判定全分支(见 testing/stubs-sim.md 的替身盲区),
+  浏览器切到种子视图即白; 修复后 96 项冒烟全绿。
 
 ### 模板里不允许下划线前缀标识符
 
