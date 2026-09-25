@@ -19,6 +19,7 @@ from typing import Dict, List
 
 from qbittorrentapi import TorrentState, TrackerStatus
 
+from ..hr.resolve import safety_display
 from ..torrents import TorrentRecord, view_field_value
 
 logger = logging.getLogger(__name__)
@@ -186,7 +187,9 @@ class WebviewMixin:
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
           exempt=超龄豁免) + 中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
-        - hr_satisfied_src: 达标结论的来源 site(站点侧权威) / local(本地时长/分享率兜底)
+        - hr_safety / hr_safety_text / hr_safety_src: 删除安全档位(danger/safe/unknown/none) +
+          含来源的人话短语 + 来源档位 token —— 派生单点在 hr.resolve.safety_display(不新造判定,
+          只转译既有结论); 站点未配 HR 全空串(前端整列不显示)
         - hr_site_lane / hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl: 命中行的
           **站点侧值**(档位 / 还需做种 / 剩余达标 / 分享率 / 下载量) —— 与本地实时值对照用:
           本地值实时但会被重加/转移清零, 站点值是账号级权威但滞后一个刷新周期(计划 §9)
@@ -212,7 +215,9 @@ class WebviewMixin:
                 "hr_state": "",
                 "hr_state_text": "",
                 "hr_reason": "",
-                "hr_satisfied_src": "",
+                "hr_safety": "",
+                "hr_safety_text": "",
+                "hr_safety_src": "",
                 "hr_site_lane": "",
                 "hr_site_need": "",
                 "hr_site_remain": "",
@@ -223,6 +228,7 @@ class WebviewMixin:
         satisfied = triggered and rec.check_hr_satisfied()
         judged = rec.hr_judgement()  # 站点未接入返回 None(下面四个字段留空)
         facts = judged.facts if judged is not None else None
+        safety = safety_display(judged, triggered=triggered, satisfied=satisfied)
         fields = {
             "hr_tag":
                 "",
@@ -242,8 +248,12 @@ class WebviewMixin:
                 judged.state_text if judged is not None else "",
             "hr_reason":
                 judged.reason if judged is not None else "",
-            "hr_satisfied_src":
-                ("site" if judged is not None and judged.site_satisfied is not None else "local") if triggered else "",
+            "hr_safety":
+                safety.safety,
+            "hr_safety_text":
+                safety.text,
+            "hr_safety_src":
+                safety.src,
             "hr_site_lane":
                 facts.lane if facts is not None else "",
             "hr_site_need":

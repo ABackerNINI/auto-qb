@@ -1,11 +1,11 @@
 # 26-09-18-webui-view-rebuild-scope — WEB UI 视图重建范围收口 (种子速度刷新滞后)
 
-**Status:** In Progress (代码/测试/文档已完, **未提交**; 剩用户真机走查)
+**Status:** In Progress (代码/测试/文档已完, **已入库 `6c98c63`**; 剩用户真机走查)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html](../plans/26-09-18-1743-webui-speed-refresh-fix-plan.html)
 **Legacy-ID:** TASK017
-**Summary:** 真因: 主循环 `_tick` 只重建 `_group_view` 却清掉共享脏标记 ⇒ singles/shows/flat 被饿死(版本号照常自增 ⇒ 前端换上陈旧数组), 状态栏因取 groups 求和反而正常; 同源: 置脏在 grouping 门控内 ⇒ 分组关闭时标记被吞。修法: 唯一入口 `rebuild_views()` + 置脏移出门控 + 前端取消 idle 退避并把 `server_state` 并入 `/api/state`; **1021 passed / 0 failed** (基线 1018, 红绿验证); **未提交** (剩用户真机走查)
+**Summary:** 真因: 主循环 `_tick` 只重建 `_group_view` 却清掉共享脏标记 ⇒ singles/shows/flat 被饿死(版本号照常自增 ⇒ 前端换上陈旧数组), 状态栏因取 groups 求和反而正常; 同源: 置脏在 grouping 门控内 ⇒ 分组关闭时标记被吞。修法: 唯一入口 `rebuild_views()` + 置脏移出门控 + 前端取消 idle 退避并把 `server_state` 并入 `/api/state`; **1021 passed / 0 failed** (基线 1018, 红绿验证); **已入库 `6c98c63`** (剩用户真机走查)
 **Topics:** webui-view-rebuild
 
 ## 原始请求

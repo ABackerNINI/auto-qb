@@ -21,7 +21,7 @@
   （**详述已外迁** → [attachments/webui-longform.md](attachments/webui-longform.md)）
 - WEB UI 替代 qB 界面 · 波次三 (2026-09-17 收口完成): 32 工作项 (FIX7/TBL8/DLG4/CTX3/SPD4/NAV3/RFB2/PRS1) 全部落地, **星图(atlas)与棱镜(prism)双 UI 同构**。后端: peers 端点修复(`sync_torrent_peers`)/`/api/paths` 已知目录聚合/bulk 组键模式/成员与单种透出 num_seeds·num_leechs·num_complete·num_incomplete/SPD-01 末档 clamp 回归锁定/SPD-03 `global_speed_limit_curve.enabled` 全管线(models+validation+loaders+设置页开关)。前端: 表格层(空值留白与"不限速"文案退役、状态底与七列三档数值色阶、去名称状态图标、列拖动重排+右键列选择器、补列、全宽布局、rail 退役改底部状态栏、批量段并入筛选行)、弹窗(删除确认框加宽+计数语义、添加种子改版与位置选择)、右键(彩色图标集/触发源强调/原生右键屏蔽)、限速(预览末档压缩、点击弹窗修改)、导航 IA(分组/种子/追剧升一级导航、设置右移、统计入状态栏、日志并入设置页、动态 logo)、详情抽屉纯展示重构、设置页重构(栅格令牌化/宽度放开/文案用户化/风险注记统一)。计划 [memory-bank/plans/26-09-16-1128-webui-qb-replace-wave3-plan.html](../plans/26-09-16-1128-webui-qb-replace-wave3-plan.html) + 派工契约 `.cluster/webui-w3/` + 交接 [memory-bank/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html](../plans/26-09-17-0346-webui-qb-replace-wave3-handover.html); 基线 971→**988 passed**; 待人工: 浏览器 CDP 双 UI 走查 + 真机 dry-run。- tracker 分组·站点 groups 字段 + tracker_group 条件 (2026-09-15): 站点段新增可选 groups(字符串列表, 配置层声明不写种子, 组名自由命名无需预定义), 规则条件新增 tracker_group(镜像 TrackersCondition, 或关系, regex:/ignore_case, 无 tracker_conf 恒 False); 校验经 _check_str_list(非列表/纯空白项报错; 空串项被 _strip_none 统一视为未配置剔除, 项目既有约定), spec 校验走 _validate_pattern_list_spec; schema 双登记(TRACKER_FIELDS str_list + CONDITION_PLUGINS, 守卫自动 15→16); 热重载 groups=LEVEL_L2(S0 核实: record.tracker_conf 仅 added 流程绑定一次, L2 reset_runtime 置空重匹配才见新值, 与 domains/rules 同级; L0 会读到旧 conf 对象); Web UI 设置页借 str_list 控件零前端改动即可编辑保存; 测试 +4(test_conditions 条件 2 + test_config 校验/加载 2, helpers.FakeTracker 加 groups 参数), 基线 884 passed; 真机 dry-run 冒烟通过(119 种子同步/规则加载/决策链, 动作被 dry_run 抑制); 计划 memory-bank/plans/26-09-15-1504-tracker-group-plan.html(D1=方案 B 站点字段/D2=tracker_group 已拍板); 后续阶段 2/3 前端: 设置页 groups 下拉快捷追加 + 辅种管理页按组筛选; README(5 处 15→16 种)/docs/configuration.md(示例+条件表)/memory-bank(rule-system 16 条件+config-reference+testing 基线)/想法.md 回写; 已随本提交入库
   （**详述已外迁** → [attachments/webui-longform.md](attachments/webui-longform.md)）
-- **🆕 列设置重置 · 双轨模型重设计 —— 已实施完毕(未提交), 剩真机走查**: 用户定性"修复了很多次,
+- **🆕 列设置重置 · 双轨模型重设计 —— 已实施完毕(已入库 `e5c31d1`), 剩真机走查**: 用户定性"修复了很多次,
   急需重新设计, 简化模型, 从根本上杜绝"; 计划
   [memory-bank/plans/26-09-21-1551-column-prefs-intent-redesign-plan.html](../plans/26-09-21-1551-column-prefs-intent-redesign-plan.html),
   D1(升 v5+迁移)/D2(fit=回全自动)/D3(origin 空存储提示)已按推荐全部落地。
@@ -34,5 +34,5 @@
   全自动页不落px / 隐藏列保宽 / v4→v5 迁移)双 UI 全 PASS; 全量 **1142 passed**(39.88s, Windows)。
   **真机走查清单**: ①固定地址双标签各改列宽/显隐互刷不丢 ②固化页隐藏一列→拖宽→再显示 px 原样回来
   ③"适应窗口"=回全自动(继续随窗口自适应, 不再固化快照 —— 行为变化点) ④换地址打开出 origin 提示(一次)。
-  ⚠ 用户实例是 `D:\Projects\auto-qb` 的 editable install —— **本 clone 未提交前不会同步过去**, 需提交推送后拉取。
+  ⚠ 用户实例是 `D:\Projects\auto-qb` 的 editable install —— 已入库 `e5c31d1`, 需在那边拉取后才生效。
 - **乐观 UI「撤下」改造 (P0–P3)** —— **详述已外迁**: [attachments/optimistic-ui.md](attachments/optimistic-ui.md)

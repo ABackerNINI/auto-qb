@@ -20,7 +20,7 @@ h1, h2, h3 { font-family: var(--font-display); }
 
 /* 数值一律 mono + 等宽位(避免刷新时数字跳动; 数据密集界面的基本功) */
 .g-stat, .m-stat, .m-hash, .m-progress .val, .m-pair, .g-count, .h-cell,
-.pop-count, .ce-num, .hist-axis text, .topbar .ver {
+.pop-count, .hist-axis text, .topbar .ver {
   font-variant-numeric: tabular-nums; }
 .g-stat, .m-stat, .m-hash, .sb-item .val, .m-pair .val { font-family: var(--font-mono); }
 

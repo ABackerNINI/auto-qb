@@ -69,6 +69,7 @@ window.AQB_FILTERS = {
       this.categoryFilter = [];
       this.siteFilter = [];
       this.hrFilter = [];
+      this.hrSrcFilter = [];
       this.filterMenu = "";
       this.expandedKey = null;
     },
@@ -95,7 +96,7 @@ window.AQB_FILTERS = {
     },
     filtersActive() {
       return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length || this.categoryFilter.length ||
-        this.siteFilter.length || this.hrFilter.length || (this.searchQuery || "").trim());
+        this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length || (this.searchQuery || "").trim());
     },
     /* 四个筛选器的定义(模板只遍历这一份, 不再手写四块相同结构)
      * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径见 facetRows
@@ -105,8 +106,11 @@ window.AQB_FILTERS = {
         { kind: "tag", label: "标签", icon: "i-tag", options: this.tagOptions, selected: this.tagFilter, field: "tagFilter" },
         { kind: "category", label: "分类", icon: "i-folder", options: this.categoryOptions, selected: this.categoryFilter, field: "categoryFilter" },
         { kind: "site", label: "站点", icon: "i-globe", options: this.siteOptions, selected: this.siteFilter, field: "siteFilter" },
-        // H&R 筛选(R07): 固定两档, 计数口径与其它筛选器同一份(见 hr.js hrOptions); 三个视图共用同一条筛选状态
+        // H&R 筛选(2026-09-25 起四档: 不能删/可删/未核实, 口径见 hr.js hrOptions); 三个视图共用同一条筛选状态
         { kind: "hr", label: "H&R", icon: "i-hr", options: this.hrOptions, selected: this.hrFilter, field: "hrFilter" },
+        // HR 来源副筛选(在线核实/本地兜底/策略): 结论来自优先级链哪一档 —— "只看本地兜底"
+        // 正是最需要等在线核实结果的一批种子(计划 webui-hr-safety-display §5 P3)
+        { kind: "hr-src", label: "HR 来源", icon: "i-hr", options: this.hrSrcOptions, selected: this.hrSrcFilter, field: "hrSrcFilter" },
         { kind: "path", label: "路径", icon: "i-folder-open", options: this.pathOptions, selected: this.pathFilter, field: "pathFilter" },
       ];
     },
@@ -132,9 +136,13 @@ window.AQB_FILTERS = {
       const q = (this.searchQuery || "").trim();
       let base = this.sortedGroups;
       if (this.kindFilter) base = base.filter((g) => g.members.some((m) => m.kind === this.kindFilter));
-      // 多选筛选: 同一筛选器内为"或"(任一命中), 不同筛选器之间为"且"; H&R 见 _hrBucket 口径
+      // 多选筛选: 同一筛选器内为"或"(任一命中), 不同筛选器之间为"且";
+      // H&R 见 _hrBuckets 口径(组内任一成员落该档即保留整组)
       if (this.hrFilter.length) {
-        base = base.filter((g) => this.hrFilter.includes(this._hrBucket(g)));
+        base = base.filter((g) => this.hrFilter.some((b) => this._hrBuckets(g).includes(b)));
+      }
+      if (this.hrSrcFilter.length) {
+        base = base.filter((g) => this.hrSrcFilter.some((b) => this._hrSrcBuckets(g).includes(b)));
       }
       if (this.pathFilter.length) {
         base = base.filter((g) => this.pathFilter.includes(g.save_path));
@@ -163,6 +171,7 @@ window.AQB_FILTERS = {
       for (const r of this.searchUncovered) {
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
         if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(r))) continue;
+        if (this.hrSrcFilter.length && !this.hrSrcFilter.includes(this._hrSrcBucketMember(r))) continue;
         if (this.pathFilter.length && !this.pathFilter.includes(r.save_path || "")) continue;
         if (this.tagFilter.length && !(r.tags || []).some((t) => this.tagFilter.includes(t))) continue;
         if (this.categoryFilter.length && !this.categoryFilter.includes(r.category || "")) continue;

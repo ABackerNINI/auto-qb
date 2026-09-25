@@ -10,7 +10,7 @@
 - 测试期禁止真实系统通知 (2026-09-18): 用户报"测试时会弹出系统通知框"。**主犯**: `test_cli.py::test_main_qb_compat_error_clean_exit` 把 `manager` 设成 `MagicMock` ⇒ `cli.py` 致命退出路径的 `notify_fatal(msg, manager.config.notify)` 拿到**恒真 MagicMock**, 守卫 `if not config or not config.enabled` 放行 ⇒ 真的构造 `PlatformChannel()` 发一条 Windows toast(**诊断探针实测抓到, 标题 `auto-qb 已停止`**)。**从犯**: 测试里写 `PlatformChannel("linux")` 只是换后端, `NotifyHandler` 后台 daemon 线程照样真跑 `notify-send`(装了通知器的机器/CI 上就是真弹)。**两层处置**: ①根源 —— 该用例 mock `auto_qb.cli.notify_fatal` 并断言调用(顺带覆盖"致命退出补发通知"); ②安全网 —— 新增 `tests/conftest.py` 会话级 autouse 夹具, 把通知器命令名(`notify-send`/`osascript`/`powershell`/`pwsh`)拦在 `subprocess.run` 之前(抛 `OSError` = "机器上没装通知器"), `send()` 仍返回 False; 命令**构造**与 `node --check` 等非通知器子进程不受影响。**实测**: 全量真实 send **4 → 0**(win32 1 → 0); 基线 1006 → **1007 passed**(+`test_notify_real_send_blocked_under_pytest`)。**方法论坑(差点误判)**: 探针输出写 stderr 会被 pytest 按用例捕获、通过的用例直接丢弃 ⇒ 统计得 0 的**假阴性**, 必须写**文件**; 且统计一律用 **ASCII 标记**(中文串 grep 会误报 0); **已入库 `7ae21a1`**
 - 测试环境假失败清理 (2026-09-18): 全量测试在本机曾有 **2 个稳定失败**, 排查确认都是**环境能力**差异、生产代码无问题。① `test_notify.py::test_notify_legacy_shortcut_cleanup` —— `PlatformChannel._legacy_shortcut_paths()` 在 `APPDATA` 未设时直接返回 `[]`, 用例里 `os.path.exists` 的 monkeypatch 因此从未被问到, `removed` 恒空 ⇒ 补 `monkeypatch.setenv("APPDATA", ...)`(顺带真正覆盖了路径拼接分支, 此前等于空跑); ② `test_web.py::test_api_fs_dirs_endpoint` 第⑤条"符号链接逃逸" —— 本机 `os.symlink(dir, link, target_is_directory=True)` **返回成功却落成真实目录**(实测 `islink=False` / `lstat mode=0o40777`), 根本不存在逃逸链接, 断言无意义 ⇒ 建链后补一道 `os.path.islink()` 判定再断言(与用例原有"Windows 无权限建链 -> 跳过"同口径; 真机能建真链接时照常断言, 覆盖率不减); ③ 顺带修噪声: `.gitignore` 补 `.coverage.*`(原 `.coverage` 是**精确名**不含通配, 覆盖率并行数据 `.coverage.<host>.<pid>.<rand>` 会漏进 `git status`); ④ `test_notify.py` 头部测试计划清单补齐 4 项漏登记(`test_notify_emit_exception_swallowed` / `test_notify_close_twice_safe` / `test_notify_fatal_channel_error_swallowed` / `test_notify_legacy_shortcut_cleanup`)。**实测 1007 passed / 0 failed**(修前 1006 passed + 1 failed); 判据("单跑通过+全量失败" ⇒ 先查环境, 排除环境前不动 `src/`)入 [pitfalls.md](../pitfalls.md); **已入库 `7ae21a1`**
 - 测试: 基线数字单点维护于 [testing.md](../testing.md) 顶部 (2026-09-14 起, 此处不再手抄; ui.py GUI 本体真机冒烟)
-- **🆕 平台语义守阵补齐(未提交)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
+- **🆕 平台语义守阵补齐(已入库 `84f92dd`)**: 用户要求"项目要 win + linux 双兼容(含 `src/` `tests/` `sim_qb`)"。
   普查结论: `src/` 已跨平台(winreg / ctypes.windll / os.startfile 全在 `sys.platform` 分支内;
   `add_long_path_prefix_for_win` 非 Windows 原样返回; autostart 有 win32/darwin/linux 三支); `tests/`
   已在 Linux CI 全绿(Windows 行为一律 `monkeypatch.setattr(sys,"platform","win32")` 在 Linux 上测)。
@@ -20,9 +20,9 @@
   路径是**宿主形态** ⇒ 必须跟随宿主 FS, **不能统一到 `ntpath`**(只换 normcase 会混分隔符 ⇒ 全线误拒,
   已实测: 真子路径 `True→False`)。`src/` 与 sim_qb 的平台分支**一行未动**。
   **已入库 `84f92dd`**(Gitee + GitHub 均推上)。
-  ✅ 后续(未提交): B2 段已从 `sim_qb.py --self-test` **下沉**进 `tests/`(该自检要真起 HTTP + 真装
+  ✅ 后续(已入库 `80dd5b3`): B2 段已从 `sim_qb.py --self-test` **下沉**进 `tests/`(该自检要真起 HTTP + 真装
   qbittorrentapi, CI 从不执行)⇒ 全量 **1147 passed + 1 skipped**。
-  ✅ 其四(**未提交**): `--self-test` 里的 **B3 / D4** 两段也已下沉(B3 钉两侧 / D4 走合成档),
+  ✅ 其四(**已入库 `1421ca9`**): `--self-test` 里的 **B3 / D4** 两段也已下沉(B3 钉两侧 / D4 走合成档),
   全量 **1149 passed + 1 skipped**;`--self-test` 现只剩"真机往返"类自检(全量/增量/files 与磁盘一致)。
   ⚠ 剩余: `web.py::_within_roots` 的大小写守阵**只能在 Linux 上真跑**(本机 skip), 由 CI 验
   (上一批 `84f92dd` 的 CI run 72 = success ⇒ 已在 ubuntu 上真跑并通过)。

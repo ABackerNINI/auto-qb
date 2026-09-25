@@ -16,7 +16,7 @@
   **改 memory-bank SKILL.md 前必读的守卫约束**: `tests/test_memory_bank.py` 要求它含 `会话开始` / `立档阈值` / `收尾 DoD` 三个 token, 且 **cap 表必须留在该文件里**(`test_skill_cap_table_matches_cap_policy` 钉住数值集合与行数 == `_common.CAP_POLICY`)—— 所以 cap 表不能像别节那样外置。
   ⚠ **顺带发现(未改)**: 该 SKILL.md 的「收尾 DoD」标题写"5 步"、实际列了 6 条, 而 `AGENTS.md` 也写"5 步" —— 两边同错, 要订正得一起改(本次只把标题里的数字去掉, 不替它选一个数)。
   实测: `test.full` **1201 passed + 1 skipped**; `doc.caps` commands 2089/2600 · memory-bank 5948/7500 · AGENTS.md 6999/8000; `doc.drift` 0 处。
-- **知识库瘦身 (2026-09-20, ✅ 已提交并推送 `9ccace6`, Gitee 与 GitHub 镜像均成功)**: 按"过时 / 重复 / 低价值"三分类清理根 `AGENTS.md` 与 `memory-bank/` —— **路由表与黄金法则单点收在 `AGENTS.md`**(`memory-bank/README.md` 改指针), 已完成条目从本文件迁出到 `progress.md` / 任务档案; `testing.md` 顶部基线数字**未动**(待补测 WSL 一侧再更)。提交时与上游 7 个提交 rebase, `AGENTS.md` 一处冲突按"保留上游新增的 HTML dark 主题规则 + 保留本轮压缩后的计划产出口径"解决。**知识库回写(pitfalls 新增「rebase --continue 被 VS Code 编辑器挂死 + packed-refs 陈旧致核 ref 假红」条目 + 本行状态更新)尚未提交。**
+- **知识库瘦身 (2026-09-20, ✅ 已提交并推送 `9ccace6`, Gitee 与 GitHub 镜像均成功)**: 按"过时 / 重复 / 低价值"三分类清理根 `AGENTS.md` 与 `memory-bank/` —— **路由表与黄金法则单点收在 `AGENTS.md`**(`memory-bank/README.md` 改指针), 已完成条目从本文件迁出到 `progress.md` / 任务档案; `testing.md` 顶部基线数字**未动**(待补测 WSL 一侧再更)。提交时与上游 7 个提交 rebase, `AGENTS.md` 一处冲突按"保留上游新增的 HTML dark 主题规则 + 保留本轮压缩后的计划产出口径"解决。**知识库回写(pitfalls 新增「rebase --continue 被 VS Code 编辑器挂死 + packed-refs 陈旧致核 ref 假红」条目 + 本行状态更新)已入库 `060844e`。**
 - **commands 引擎的三条已落地约定 (2026-09-24, 从 commands 切片迁出)**: ①**`doc` 键** —— `[tasks.*]` 可写
   `doc = "<包内文档相对路径>"`, `show` 打印"深读"一行, 把"想看细节读哪份"接到决策点上; 基准目录**子包继承父包**
   (否则子包写 `references/pipeline.md` 会 STOP), 指向的文件不存在即 STOP(指针指空 = 静默失效)。

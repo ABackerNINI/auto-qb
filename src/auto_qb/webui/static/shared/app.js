@@ -493,8 +493,9 @@ const app = createApp({
       tagFilter: [],
       categoryFilter: [],
       siteFilter: [],
-      hrFilter: [],          // H&R 筛选(达标/未达标; 与其它多选筛选器同形, 口径见 _hrBucket)
-      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "hr" | "path"
+      hrFilter: [],          // H&R 筛选(不能删/可删/未核实; 与其它多选筛选器同形, 口径见 _hrBuckets)
+      hrSrcFilter: [],       // HR 来源筛选(在线核实/本地兜底/策略; 口径见 hr.js hrSrcOptions)
+      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "hr" | "hr-src" | "path"
       popFlip: false,         // 筛选弹层视口翻转(锚点靠右时改为右对齐, 避免伸出屏幕)
       colFlip: false,         // 列选择器弹层视口翻转(同上)
       toasts: [],             // 站内提示条(替代 alert)
@@ -1201,6 +1202,6 @@ app.mixin(window.AQB_HR_STATUS);
 app.mixin(window.CONFIG_EDITOR);
 app.mixin(window.CONFIG_RULES);
 app.mixin(window.CONFIG_HUB);
-app.component("ce-field", window.CE_FIELD_COMPONENT);
+/* 只有 hub-field 一个字段渲染组件 —— 它的行为基座 CE_FIELD_BASE 不注册(不是组件, 见 config_editor.js) */
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
 app.mount("#app");

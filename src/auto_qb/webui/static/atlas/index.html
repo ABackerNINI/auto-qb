@@ -254,6 +254,7 @@
             <div v-if="selectedCount" class="bulk-inline">
               <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
               <span class="bulk-count">已选 <b>{{ bulkCountText() }}</b></span>
+              <span v-if="bulkHrWarnText()" class="bulk-hr-warn">⚠ {{ bulkHrWarnText() }}</span>
               <span class="bulk-sep"></span>
               <button class="bulk-btn" @click="bulkAct('resume')">
                 <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
@@ -283,6 +284,7 @@
             <template v-if="categoryFilter.length">分类“{{ categoryFilter.join('/') }}” </template>
             <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
             <template v-if="hrFilter.length">H&R“{{ hrFilter.join('/') }}” </template>
+            <template v-if="hrSrcFilter.length">HR 来源“{{ hrSrcFilter.join('/') }}” </template>
             <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
             → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ` 个${l10nGroup}` }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
             <template v-if="searchBuilding"> · 索引构建中…</template>
@@ -473,9 +475,10 @@
                     <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                   </span>
                   <!-- 做种时长/分享率: 口径单点化(FX-02/04) -->
-                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
                     {{ cellSeedingTime(m) }}
                     <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                    <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                   </span>
                   <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                     {{ cellRatio(m) }}
@@ -581,9 +584,10 @@
                 <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
                 <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
-                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
                   {{ cellSeedingTime(m) }}
                   <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                  <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                 </div>
                 <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                   {{ cellRatio(m) }}
@@ -761,9 +765,10 @@
                             <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                             <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                           </span>
-                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
                             {{ cellSeedingTime(m) }}
                             <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                            <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                           </span>
                           <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                             {{ cellRatio(m) }}
@@ -2254,162 +2259,6 @@
       </div>
     </div>
   </div>
-
-  <!-- 字段渲染组件模板(单一模板适配全部字段类型; 组件定义见 config_editor.js) -->
-  <script type="text/x-template" id="tpl-ce-field">
-    <div v-if="visible" class="ce-item">
-      <!-- object 段标题(默认折叠, 同 section): 标题 + 摘要 + 折叠箭头; 子项以 item.items 嵌套,
-           v-show 控制显隐 —— 设置页字段多, 默认折叠让用户先看概览再决定展开哪段 -->
-      <div v-if="item.type === 'group'" class="ce-group" :class="'ceg-' + (item.colorIndex || 0)" :style="indent">
-        <div class="ce-group-head" @click="toggleGroup()" role="button" tabindex="0"
-             @keyup.enter="toggleGroup()" :title="groupOpen ? '点击收起' : '点击展开'">
-          <svg class="ico ico-sm caret" :class="{ open: groupOpen }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-          <span class="ce-group-title">{{ item.label }}</span>
-          <span class="ce-group-sum">{{ groupSummary }}</span>
-          <span v-if="item.help" class="ce-inline-help">{{ item.help }}</span>
-        </div>
-        <div v-show="groupOpen" class="ce-group-body">
-          <ce-field v-for="sub in item.items" :key="sub.path.join('.')" :item="sub"></ce-field>
-        </div>
-      </div>
-
-      <!-- 相关设置子卡(schema group_of 归入父字段之下): 只放与父字段强相关的少量选项 -->
-      <div v-else-if="item.type === 'subcard'" class="ce-subcard" :style="indent">
-        <div class="ce-subcard-head">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-          <span>{{ item.label }}</span>
-        </div>
-        <div class="ce-subcard-body">
-          <ce-field v-for="sub in item.items" :key="sub.path.join('.')" :item="sub"></ce-field>
-        </div>
-      </div>
-
-      <!-- 可选段(如站点 HR 规则 / checking 分支): **默认折叠**, 标题行仍可见开关与摘要 -->
-      <div v-else-if="item.type === 'section'" class="ce-section" :class="{ 'ce-inactive': !sectionExists() }" :style="indent">
-        <div class="ce-section-head">
-          <button class="ce-icon flat" :title="sectionOpen ? '收起' : '展开'" @click="ce.cfgSectionToggle(path)">
-            <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-          </button>
-          <label class="ce-switch" title="控制该配置段是否写入配置文件">
-            <input type="checkbox" :checked="sectionExists()" @change="toggleSection($event.target.checked)">
-            <span class="ce-slider"></span>
-          </label>
-          <span class="ce-section-title">{{ f.label }}</span>
-          <span class="ce-section-sum">{{ sectionSummary }}</span>
-          <!-- RFB-02 件2: 风险标识 = 紧凑图标(不再是"盾牌 + 风险"文字徽标), 说明见段内 .ce-note -->
-          <svg v-if="f.risk" class="ico ico-sm ico-risk" viewBox="0 0 16 16" title="该段存在风险, 详见段内说明"><use href="#i-shield"></use></svg>
-        </div>
-        <div v-show="sectionOpen && sectionExists()" class="ce-section-body">
-          <ce-field v-for="sub in item.items" :key="sub.path.join('.')" :item="sub"></ce-field>
-        </div>
-      </div>
-
-      <!-- 叶子字段: 未启用(grey_if 不满足)时灰显但仍可编辑
-           仅 bare(插件 spec, 无标签)用单列满宽; 其余(含列表)保持"标签 | 控件"两列,
-           这样所有输入框的左缘在整页任何位置都对齐 -->
-      <div v-else class="ce-field" :class="{ 'ce-field-block': isBare, 'ce-inactive': greyed }" :style="indent">
-        <label v-if="!isBare" class="ce-label">
-          {{ f.label }}<span v-if="f.required" class="ce-req" title="必填">*</span>
-          <span v-if="isDefault()" class="ce-tag" title="当前未显式配置, 此处显示默认值">默认</span>
-          <!-- RFB-02 件2: 风险标识 = 紧凑图标, 说明走下方 .ce-note(不再用文字徽标) -->
-          <svg v-if="f.risk" class="ico ico-sm ico-risk" viewBox="0 0 16 16" title="该项存在风险, 详见下方说明"><use href="#i-shield"></use></svg>
-          <!-- 布尔型从属项: 作为父字段的**内联额外开关**(比单独占一张子卡更符合从属语义) -->
-          <label v-for="inl in item.inline" :key="inl.field.key" class="ce-switch ce-inline-switch"
-                 :title="inl.field.risk || inl.field.help || ''">
-            <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
-            <span class="ce-slider"></span>
-            <span class="ce-switch-text">{{ inl.field.label }}</span>
-          </label>
-        </label>
-        <div class="ce-ctl">
-          <label v-if="f.kind === 'bool'" class="ce-switch">
-            <input type="checkbox" :checked="boolValue()" @change="setBool($event.target.checked)">
-            <span class="ce-slider"></span>
-            <span class="ce-switch-text">{{ boolValue() ? '启用' : '关闭' }}</span>
-          </label>
-
-          <select v-else-if="f.kind === 'enum'" class="ce-input ce-select" :value="textValue()" @change="set($event.target.value)">
-            <option v-if="!f.required" value="">(未配置)</option>
-            <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
-          </select>
-
-              <div v-else-if="isList" class="ce-list" :class="{ 'is-pattern': f.kind === 'pattern_list' }">
-            <!-- pattern_list(如彻底删除标签/删除无种子标签): list 区默认折叠, 折叠态显示已配置条数;
-                 str_list 不折叠(通常较短且与父字段紧耦合, 折叠反损可读性) -->
-            <div v-if="f.kind === 'pattern_list'" class="ce-list-head" role="button" tabindex="0"
-                 @click="toggleList()" @keyup.enter="toggleList()"
-                 :title="listOpen ? '点击收起' : '点击展开'">
-              <svg class="ico ico-sm caret" :class="{ open: listOpen }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-              <span class="ce-list-sum">{{ listSummary }}</span>
-            </div>
-            <div v-show="f.kind !== 'pattern_list' || listOpen" class="ce-list-body">
-              <div v-for="(it, i) in list()" :key="i" class="ce-list-row">
-                <input class="ce-input" :value="it" :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
-                <button class="ce-icon danger" title="删除该项" @click="listRemove(i)">
-                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-                </button>
-              </div>
-              <button class="ce-btn ghost small" @click="listAdd()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加
-              </button>
-            </div>
-          </div>
-          <!-- 规则引用: 输入框(可直接粘贴修改) + 下拉快捷追加(避免手写错规则集名) -->
-          <div v-else-if="f.kind === 'rules_ref'" class="ce-list">
-            <div v-for="(it, i) in list()" :key="i" class="ce-list-row">
-              <input class="ce-input" :value="it" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
-                     @input="listSet(i, $event.target.value)">
-              <button class="ce-icon danger" title="删除该引用" @click="listRemove(i)">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-              </button>
-            </div>
-            <div class="ce-list-row">
-              <select class="ce-input ce-select" value="" @change="refPick($event)">
-                <option value="">从已有规则集/规则中选择…</option>
-                <optgroup v-for="g in ce.ceRefOptions()" :key="g.group" :label="g.group">
-                  <option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
-                </optgroup>
-              </select>
-              <button class="ce-btn ghost small" @click="listAdd()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>手动添加
-              </button>
-            </div>
-            <p v-if="!list().length" class="ce-help">留空 = 该站点不执行任何规则</p>
-          </div>
-
-          <div v-else-if="f.kind === 'keyed_list'" class="ce-checks">
-            <label v-for="o in f.options" :key="o" class="ce-check">
-              <input type="checkbox" :checked="checkedKey(o)" @change="toggleKey(o)">
-              <span>{{ o }}</span>
-            </label>
-          </div>
-
-          <!-- 数值 + 单位下拉: 时间/大小/速度统一拆为两半, 免去手写 30M / 10MiB / 6MiB/s;
-               时间单位下拉显示中文(秒/分/时/天), value 仍是 S/M/H/D 与后端解析一致 -->
-          <div v-else-if="hasUnit" class="ce-unit-group">
-            <input class="ce-input ce-num" type="text" :value="unitParts.num" :placeholder="f.placeholder || ''"
-                   @input="setUnitNum($event.target.value)">
-            <select class="ce-input ce-select ce-unit-select" :value="unitParts.unit"
-                    @change="setUnitName($event.target.value)">
-              <option v-for="u in unitOptions" :key="u" :value="u">{{ unitLabel(u) }}</option>
-            </select>
-          </div>
-
-          <template v-else>
-            <input class="ce-input" :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
-                   :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" @input="set($event.target.value)">
-            <span v-if="f.unit" class="ce-unit">{{ f.unit }}</span>
-          </template>
-
-          <!-- 表达式(expr): 即时试算/校验(后端 /api/expr/eval), 免得等到保存才知道写错 -->
-          <button v-if="f.kind === 'expr'" class="ce-btn ghost small" @click="ce.cfgExprTry(path)">试算</button>
-          <p v-if="f.help" class="ce-help">{{ f.help }}</p>
-          <!-- 风险提示(RFB-02 件2): 统一注记 —— 色点 + 行内小字, 不再用盾牌徽标与大框 -->
-          <p v-if="f.risk" class="ce-note warn">{{ f.risk }}</p>
-        </div>
-      </div>
-    </div>
-  </script>
 
   <script type="text/x-template" id="tpl-hub-field">
     <div v-if="visible" class="hb-row" :class="[ce.hubRowClass(item), { bare: isBare, 'hb-inactive': greyed }]"

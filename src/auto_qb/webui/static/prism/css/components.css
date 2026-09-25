@@ -354,69 +354,6 @@
 .ce-icon:disabled { opacity: .3; cursor: default; }
 .ce-icon:disabled:hover { background: transparent; border-color: var(--border); color: var(--fg-dim); }
 
-.ce-input { flex: 1 1 220px; max-width: 420px; min-width: 120px; padding: 7px 11px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px;
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-.ce-input:hover { border-color: var(--border-strong); }
-.ce-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.ce-input::placeholder { color: var(--fg-dim); }
-.ce-input.ce-select { flex: 0 1 240px; }
-.ce-unit-group { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; }
-.ce-unit-group .ce-input { max-width: none; min-width: 0; }
-.ce-unit-group .ce-num { flex: 0 0 92px; width: 92px; border-top-right-radius: 0;
-  border-bottom-right-radius: 0; text-align: right; }
-.ce-unit-group .ce-unit-select { flex: 0 0 auto; width: auto; min-width: 76px; max-width: 110px;
-  margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0;
-  background: var(--bg-sunken); color: var(--fg-muted); }
-.ce-unit-group .ce-unit-select:focus { position: relative; z-index: 1; }
-.ce-unit { font-size: 12px; color: var(--fg-dim); }
-
-.ce-switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
-.ce-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
-.ce-slider { position: relative; width: 38px; height: 21px; border-radius: 999px; background: var(--border-strong);
-  transition: background var(--dur) var(--ease); flex: 0 0 auto; }
-.ce-slider::after { content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px;
-  border-radius: 50%; background: var(--fg-muted);
-  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease); }
-.ce-switch:hover .ce-slider { background: var(--fg-dim); }
-.ce-switch input:checked + .ce-slider { background: var(--accent); }
-.ce-switch input:checked + .ce-slider::after { transform: translateX(17px); background: var(--bg); }
-.ce-switch input:focus-visible + .ce-slider { box-shadow: 0 0 0 3px var(--ring); }
-.ce-switch-text { font-size: 12px; color: var(--fg-dim); }
-.ce-inline-switch { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--border-soft); }
-.ce-inline-switch .ce-slider { width: 30px; height: 17px; }
-.ce-inline-switch .ce-slider::after { width: 13px; height: 13px; top: 2px; left: 2px; }
-.ce-inline-switch input:checked + .ce-slider::after { transform: translateX(13px); }
-.ce-inline-switch .ce-switch-text { font-size: 11.5px; color: var(--fg-dim); }
-
-.ce-checks { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.ce-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
-.ce-check input { accent-color: var(--accent); width: 15px; height: 15px; }
-
-.ce-list { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; }
-.ce-list-row { display: flex; align-items: center; gap: 6px; }
-.ce-list-row .ce-input { flex: 1 1 auto; max-width: 460px; }
-.ce-list.is-pattern { padding: 6px 8px; border-radius: var(--radius); background: var(--surface-1);
-  border: 1px solid var(--border-soft); border-left: 3px solid var(--pink); }
-.ce-list.is-pattern .ce-list-head { display: flex; align-items: center; gap: 6px; cursor: pointer;
-  user-select: none; padding: 2px 4px; transition: background var(--dur) var(--ease); }
-.ce-list.is-pattern .ce-list-head:hover { background: var(--surface-2); }
-.ce-list.is-pattern .ce-list-head .caret { color: var(--pink); opacity: .65;
-  transform: rotate(0deg); transition: transform var(--dur) var(--ease-spring); }
-.ce-list.is-pattern .ce-list-head .caret.open { transform: rotate(90deg); }
-.ce-list-sum { font-size: 11.5px; color: var(--fg-dim); }
-.ce-list-body { padding-top: 4px; }
-
-.ce-risk { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: var(--radius-sm);
-  background: var(--warn-soft); color: var(--warn); font-size: 10.5px; white-space: nowrap; }
-.ce-risk .ico { width: 11px; height: 11px; }
-.ce-risk-line { flex-basis: 100%; display: flex; align-items: flex-start; gap: 7px; margin: 2px 0 0;
-  padding: 6px 10px; border-radius: var(--radius-sm); background: var(--error-soft);
-  border: 1px solid var(--error-line); color: var(--fg-soft); font-size: 12px; line-height: 1.5; }
-.ce-risk-line .ico { flex: 0 0 auto; margin-top: 1px; color: var(--error); }
-.ce-help { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--fg-dim); line-height: 1.5; }
-.ce-tag { font-size: 10.5px; padding: 1px 6px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--fg-dim); }
-.ce-req { color: var(--error); }
 .ce-spacer { flex: 1; }
 
 /* 顶栏搜索框 */
@@ -439,27 +376,6 @@
 .theme-item:active { transform: scale(.975); }
 .ce-icon:active, .ctx-item:active { transform: scale(.96); }
 
-/* 设置页下拉外观统一(仍为原生 select, 仅外观) */
-select.ce-input, .ce-select, .ce-unit-group .ce-unit-select {
-  appearance: none; -webkit-appearance: none; -moz-appearance: none;
-  padding-right: 30px; border-radius: var(--radius-sm); cursor: pointer; text-overflow: ellipsis;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23808f9f' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.3 6.3 8 10l3.7-3.7'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 9px center; background-size: 12px 12px;
-}
-select.ce-input:hover, .ce-select:hover, .ce-unit-group .ce-unit-select:hover {
-  border-color: var(--border-strong);
-}
-select.ce-input:focus, .ce-select:focus, .ce-unit-group .ce-unit-select:focus {
-  border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); outline: none;
-}
-.ce-unit-group .ce-unit-select {
-  padding-right: 26px;
-  background-position: right 7px center;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-top-right-radius: var(--radius-sm);
-  border-bottom-right-radius: var(--radius-sm);
-}
 select option { background: var(--bg-elev); color: var(--fg); }
 .col-menu { max-height: 70vh; overflow-y: auto; }
 
