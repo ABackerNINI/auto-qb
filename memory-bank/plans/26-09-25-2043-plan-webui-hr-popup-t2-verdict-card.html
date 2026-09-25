@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-hr-popup-t2">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-25-2043">
+<meta name="doc-updated" content="26-09-25-2218">
+<meta name="doc-refs" content="memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html">
+<title>HR 悬停弹窗模板 · T2 结论卡 · auto-qb</title>
+<style>
+/* ================================================================
+   T2 · 结论卡 (verdict-first) —— HR 悬停弹窗三选一模板
+   结构: 结论带(档位柔底+档位色文字) → hero 单焦点区 → 本地/站点两列小字 → 依据
+   页面 chrome 恒 dark; 两套演示区各自持有真实令牌块(值拷贝自两套 UI 源文件),
+   组件规则一律只引用 var(--*)。
+   ================================================================ */
+
+/* ---------- 页面 chrome 令牌(仅 chrome 用, 不进弹窗/表格) ---------- */
+:root {
+  color-scheme: dark;
+  --pg-bg: #0b0e13;
+  --pg-panel: #10151d;
+  --pg-border: #1f2937;
+  --pg-border-strong: #2c3a52;
+  --pg-fg: #e7ebf1;
+  --pg-muted: #96a2b5;
+  --pg-dim: #6c7a8e;
+  --pg-accent: #3b82f6;
+  --pg-accent-hi: #93c5fd;
+  --pg-accent-soft: rgba(59, 130, 246, .14);
+  --pg-accent-line: rgba(59, 130, 246, .5);
+  --pg-radius: 12px;
+  --pg-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--pg-bg); color: var(--pg-fg);
+  font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 30px 28px 44px; }
+a { color: var(--pg-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------- 页头 ---------- */
+.kicker { font-size: 11px; letter-spacing: .14em; color: var(--pg-dim); }
+h1 { margin: 6px 0 8px; font-size: 24px; font-weight: 650; letter-spacing: .01em; }
+.pos { margin: 0 0 10px; color: var(--pg-muted); font-size: 13px; max-width: 76ch; }
+.diff { margin: 0 0 16px; padding-left: 18px; color: var(--pg-muted); font-size: 12.5px; line-height: 1.85; }
+.diff li::marker { color: var(--pg-dim); }
+.diff b { color: var(--pg-fg); font-weight: 600; }
+.tpl-switch { display: flex; gap: 8px; align-items: center; margin-bottom: 26px; }
+.tpl-switch .cap { font-size: 11px; color: var(--pg-dim); margin-right: 2px; }
+.tpl-chip {
+  display: inline-flex; align-items: center; padding: 4px 13px; border-radius: 999px;
+  border: 1px solid var(--pg-border); color: var(--pg-muted); font-size: 12px;
+  background: var(--pg-panel); transition: color 160ms cubic-bezier(.2,.8,.3,1), border-color 160ms cubic-bezier(.2,.8,.3,1);
+}
+a.tpl-chip:hover { color: var(--pg-fg); text-decoration: none; border-color: var(--pg-border-strong); }
+.tpl-chip.cur {
+  border-color: var(--pg-accent-line); color: var(--pg-accent-hi);
+  background: var(--pg-accent-soft); cursor: default; font-weight: 600;
+}
+
+/* ---------- 演示区框架 ---------- */
+.demo {
+  position: relative; margin: 0 0 26px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--pg-radius);
+  background: var(--bg); color: var(--fg);
+}
+.demo-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--hairline);
+}
+.demo-head h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--fg); }
+.style-note { margin: 2px 0 0; font-size: 11.5px; color: var(--fg-dim); }
+.demo-body { padding: 16px 18px 18px; }
+.hint { margin: 10px 2px 0; font-size: 11.5px; color: var(--fg-muted); line-height: 1.7; }
+
+/* ---------- atlas(星图) 令牌块 —— 值拷贝自 atlas/style.css :root ---------- */
+.demo-atlas {
+  --bg: #0e1218; --bg-card: #151b24; --bg-row: #111722; --bg-hover: #1c2534; --bg-elev: #1a2231;
+  --fg: #e7ebf1; --fg-muted: #96a2b5; --fg-dim: #6c7a8e; --fg-soft: #b9c4d4;
+  --accent: #3b82f6; --accent-hi: #60a5fa; --accent-soft: rgba(59,130,246,.16); --accent-line: rgba(59,130,246,.45);
+  --green: #34d399; --green-soft: rgba(52,211,153,.16); --green-line: rgba(52,211,153,.42);
+  --hr-pending: #ff8a3d; --hr-pending-soft: rgba(255,138,61,.18); --hr-pending-line: rgba(255,138,61,.5);
+  --error: #f87171; --error-soft: rgba(248,113,113,.16); --error-line: rgba(248,113,113,.45);
+  --teal: #2dd4bf; --violet: #a78bfa;
+  --border: #253045; --border-strong: #37455f; --border-soft: rgba(255,255,255,.07);
+  --surface-2: rgba(255,255,255,.06); --hairline: rgba(255,255,255,.055);
+  --paused: var(--fg-muted);
+  --radius-lg: 14px; --radius: 10px; --radius-sm: 7px;
+  --shadow-3: 0 20px 48px rgba(0,0,0,.42);
+  --ease: cubic-bezier(.2,.8,.3,1); --dur: 160ms;
+}
+
+/* ---------- prism(棱镜) 结构令牌 —— 值拷贝自 prism/css/tokens.css ---------- */
+.demo-prism {
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --radius-lg: 8px; --radius: 6px; --radius-sm: 4px;
+  --shadow-3: 0 14px 40px rgba(0,0,0,.3);
+  --ease: cubic-bezier(.2,.8,.3,1); --dur: 160ms;
+  font-family: var(--font-ui);
+}
+/* 主题值块 —— 值拷贝自 prism/css/themes/*.css, 切主题 = 本节点 data-theme 换值 */
+.demo-prism[data-theme="ocean"] {
+  color-scheme: dark;
+  --bg: #0d1724; --bg-card: #15233a; --bg-row: #112034; --bg-hover: #1c3050; --bg-elev: #1b2d4b;
+  --fg: #e9eff7; --fg-muted: #9cadc6; --fg-dim: #6e84a3; --fg-soft: #bccadd;
+  --accent: #3aa6a6; --accent-hi: #5cc3c3; --accent-soft: rgba(58,166,166,.15); --accent-line: rgba(58,166,166,.45);
+  --green: #3fd699; --green-soft: rgba(63,214,153,.15); --green-line: rgba(63,214,153,.42);
+  --hr-pending: #ff8f45; --hr-pending-soft: rgba(255,143,69,.18); --hr-pending-line: rgba(255,143,69,.5);
+  --error: #f3766f; --error-soft: rgba(243,118,111,.15); --error-line: rgba(243,118,111,.45);
+  --teal: #2fd4bf; --violet: #ab8ffa;
+  --border: #23395a; --border-strong: #34507c; --border-soft: rgba(255,255,255,.07);
+  --surface-2: rgba(255,255,255,.06); --hairline: rgba(255,255,255,.055);
+  --paused: var(--fg-muted);
+}
+.demo-prism[data-theme="galaxy"] {
+  color-scheme: dark;
+  --bg: #151021; --bg-card: #221a38; --bg-row: #1c1530; --bg-hover: #322653; --bg-elev: #2b2149;
+  --fg: #ece8f6; --fg-muted: #a89dc7; --fg-dim: #7d72a0; --fg-soft: #c6bcde;
+  --accent: #b79fe0; --accent-hi: #ccb8ec; --accent-soft: rgba(183,159,224,.14); --accent-line: rgba(183,159,224,.4);
+  --green: #5fd6a8; --green-soft: rgba(95,214,168,.15); --green-line: rgba(95,214,168,.42);
+  --hr-pending: #ff9a55; --hr-pending-soft: rgba(255,154,85,.18); --hr-pending-line: rgba(255,154,85,.5);
+  --error: #f08080; --error-soft: rgba(240,128,128,.15); --error-line: rgba(240,128,128,.45);
+  --teal: #4adccc; --violet: #a678f0;
+  --border: #372a55; --border-strong: #4d3b74; --border-soft: rgba(255,255,255,.07);
+  --surface-2: rgba(255,255,255,.06); --hairline: rgba(255,255,255,.055);
+  --paused: var(--fg-muted);
+}
+.demo-prism[data-theme="frost"] {
+  color-scheme: light;
+  --bg: #f2f6fb; --bg-card: #fdfeff; --bg-row: #f7fafd; --bg-hover: #e9f1f9; --bg-elev: #ffffff;
+  --fg: #1b2a3a; --fg-muted: #52708c; --fg-dim: #6f88a0; --fg-soft: #3a5470;
+  --accent: #3d6aa3; --accent-hi: #4f80bd; --accent-soft: rgba(61,106,163,.1); --accent-line: rgba(61,106,163,.35);
+  --green: #178a5c; --green-soft: rgba(23,138,92,.12); --green-line: rgba(23,138,92,.38);
+  --hr-pending: #c56a1a; --hr-pending-soft: rgba(197,106,26,.14); --hr-pending-line: rgba(197,106,26,.4);
+  --error: #bc4438; --error-soft: rgba(188,68,56,.12); --error-line: rgba(188,68,56,.4);
+  --teal: #0f8f81; --violet: #7153cf;
+  --border: #d3e0ee; --border-strong: #b3c9de; --border-soft: rgba(27,42,58,.08);
+  --surface-2: rgba(27,42,58,.06); --hairline: rgba(27,42,58,.07);
+  --paused: var(--fg-muted);
+  /* 亮色主题阴影减淡(frost 对结构令牌的主题级覆盖) */
+  --shadow-3: 0 14px 40px rgba(27,42,58,.14);
+}
+
+/* ---------- 演示表格(两套 UI 同一骨架, 行观感各随令牌) ---------- */
+.tbl-host {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-card); overflow: hidden;
+}
+.demo-prism .tbl-host { border-color: var(--border-soft); } /* prism 高程靠 hairline, 阴影更轻 */
+.tbl-host table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tbl-host th:nth-child(2) { width: 64px; }
+.tbl-host th:nth-child(3) { width: 212px; }
+.tbl-host th:nth-child(4) { width: 122px; }
+.tbl-host thead th {
+  padding: 7px 10px; font-size: 11px; font-weight: 600; text-align: center;
+  color: var(--fg-dim); letter-spacing: .04em; border-bottom: 1px solid var(--border);
+}
+.demo-prism .tbl-host thead th { font-family: var(--font-display); }
+.tbl-host th:first-child, .tbl-host td:first-child { text-align: left; }
+.tbl-host tbody td {
+  padding: 7px 10px; font-size: 12.5px; text-align: center;
+  border-bottom: 1px solid var(--border-soft);
+}
+.tbl-host tbody tr:last-child td { border-bottom: none; }
+.tbl-host tbody tr { background: var(--bg-row); transition: background var(--dur) var(--ease); }
+.tbl-host tbody tr:hover { background: var(--bg-hover); }
+.c-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.c-site { color: var(--fg-muted); font-size: 12px; }
+
+/* 做种时长 / 分享率对 + 来源徽标 —— 两套 UI 同值规则(对齐 .m-pair / .hr-src 真实规则) */
+.demo-atlas .m-pair, .demo-prism .m-pair {
+  display: inline-flex; align-items: baseline; gap: 3px; font-variant-numeric: tabular-nums;
+}
+.demo-atlas .m-pair .req, .demo-prism .m-pair .req { color: var(--fg-dim); font-size: 11.5px; }
+.demo-atlas .m-pair.m-dur, .demo-prism .m-pair.m-dur { color: var(--teal); }
+.demo-atlas .m-pair.m-ratio, .demo-prism .m-pair.m-ratio { color: var(--violet); }
+.demo-atlas .m-pair.pending, .demo-prism .m-pair.pending { color: var(--hr-pending); }
+.demo-atlas .m-pair.reached, .demo-prism .m-pair.reached { color: var(--green); }
+.demo-atlas .m-pair.hr-unk, .demo-prism .m-pair.hr-unk { color: var(--paused); }
+/* hr-fail = 未达标终态(2026-09-25 用户修正): 独立红色档, 与考察中的 pending 橙分色 */
+.demo-atlas .m-pair.hr-fail, .demo-prism .m-pair.hr-fail { color: var(--error); }
+.demo-atlas .m-pair .hr-src, .demo-prism .m-pair .hr-src {
+  color: var(--fg-muted); font-size: 10px; line-height: 1.5;
+  border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 3px;
+  align-self: center; white-space: nowrap;
+}
+/* 触发面暗示: 可触发的对悬停时给虚线下划线 */
+.demo [data-hr] { cursor: default; }
+.demo [data-hr]:hover {
+  text-decoration: underline dotted; text-decoration-color: var(--border-strong); text-underline-offset: 3px;
+}
+
+/* prism: 数字/时长走 mono 数据字体 */
+.demo-prism .m-pair, .demo-prism .kv .v, .demo-prism .hp-hero-num { font-family: var(--font-mono); }
+
+/* ---------- prism 主题切换 ---------- */
+.theme-switch { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--fg-dim); }
+.theme-switch button {
+  font: inherit; font-size: 11px; padding: 3px 11px; cursor: pointer;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
+  background: var(--bg-card); color: var(--fg-muted);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.theme-switch button:hover { color: var(--fg); }
+.theme-switch button.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-hi); font-weight: 600; }
+
+/* ================================================================
+   HR 悬停弹窗 · T2 结论卡
+   同一 markup (renderCard 产出) 供 交互弹窗 与 常显样张 共用;
+   档位状态经 .hp-s-* 注入三个局部变量(--band-bg/--band-line/--band-fg),
+   两套作用域只需各自提供底层令牌。
+   ================================================================ */
+.demo-atlas .hp-card, .demo-prism .hp-card {
+  position: relative; width: 280px; max-width: 340px; padding: 0; text-align: left;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3); color: var(--fg); font-size: 12px; line-height: 1.5;
+}
+.hp-s-danger { --band-bg: var(--hr-pending-soft); --band-line: var(--hr-pending-line); --band-fg: var(--hr-pending); }
+/* failed = 未达标终态(2026-09-25 用户修正): 独立红色档, 与考察中的 danger 橙分色 */
+.hp-s-failed { --band-bg: var(--error-soft); --band-line: var(--error-line); --band-fg: var(--error); }
+.hp-s-safe   { --band-bg: var(--green-soft);       --band-line: var(--green-line);       --band-fg: var(--green); }
+.hp-s-unknown{ --band-bg: var(--surface-2);        --band-line: var(--border-soft);      --band-fg: var(--fg-muted); }
+
+/* ① 顶部结论带: 柔和档位底 + 档位色文字, 主文案 = 档位词 + 结论短语, 右侧来源徽标 */
+.hp-band {
+  display: flex; align-items: flex-start; gap: 6px; padding: 9px 11px;
+  background: var(--band-bg); border-bottom: 1px solid var(--band-line);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+/* 档位词 19px/600 = WCAG 大字号(≥18.66px bold), 亮色主题下档位色文字也稳过 3:1;
+   短语用中性 fg-soft 保证小字号 4.5:1, 档位语义由柔底 + 档位色大词承担 */
+.hp-word { flex: 0 0 auto; font-size: 19px; font-weight: 600; line-height: 1.2; letter-spacing: .01em; color: var(--band-fg); white-space: nowrap; }
+.hp-phrase { flex: 1 1 auto; min-width: 0; padding-top: 4px; font-size: 11.5px; line-height: 1.5; color: var(--fg-soft); }
+.hp-chips { display: flex; gap: 4px; flex: 0 0 auto; margin-left: auto; padding-top: 6px; }
+.hp-chip {
+  font-size: 10px; line-height: 1.5; padding: 0 5px; border-radius: 3px; white-space: nowrap;
+  border: 1px solid var(--border-soft); color: var(--fg-muted); background: var(--bg-card);
+}
+.hp-chip.is-src { border-color: var(--band-line); }
+/* 生命周期 chip(2026-09-25 语义修正): 已达标/未达标/免罪 = 考核期已过的终态(已结束),
+ * 仅 site_scope(考察中)是进行中(考核中)。ongoing chip 用档位色描边(考察中恒 danger 带)。 */
+.hp-chip.is-cycle.ongoing { color: var(--hr-pending); border-color: var(--hr-pending-line); }
+
+/* ② hero 单焦点区 */
+.hp-body { padding: 2px 12px 9px; }
+.hp-hero { padding: 8px 0 9px; }
+.hp-hero-label { margin-bottom: 2px; font-size: 10.5px; color: var(--fg-muted); letter-spacing: .02em; }
+.hp-hero-num {
+  font-size: 19px; font-weight: 600; line-height: 1.25; letter-spacing: .01em;
+  color: var(--band-fg); font-variant-numeric: tabular-nums;
+}
+.hp-hero-ok {
+  display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px;
+  border: 1px solid var(--band-line); border-radius: 999px;
+  color: var(--band-fg); font-size: 19px; font-weight: 600; line-height: 1.2;
+}
+.hp-hero-ok svg { flex: 0 0 auto; width: 15px; height: 15px; }
+.hp-hero-note {
+  display: inline-flex; align-items: flex-start; gap: 6px; padding: 2px 0;
+  color: var(--fg-soft); font-size: 12.5px; font-weight: 500; line-height: 1.55;
+}
+.hp-hero-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }
+
+/* ③ 本地/站点两列小字(dim 标签 + 值), 无站点值收成单列 */
+.hp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; padding: 2px 0 2px; }
+.hp-cols.single { grid-template-columns: 1fr; }
+.hp-col-t {
+  display: flex; align-items: center; gap: 5px; margin: 4px 0 3px;
+  font-size: 10px; color: var(--fg-muted); letter-spacing: .08em;
+}
+.hp-col-t::before { content: ""; width: 3px; height: 9px; border-radius: 2px; background: var(--border-strong); }
+.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 11.5px; line-height: 1.8; }
+.kv .k { flex: 0 0 auto; font-size: 10.5px; color: var(--fg-muted); white-space: nowrap; }
+.kv .v { min-width: 0; text-align: right; color: var(--fg-soft); font-variant-numeric: tabular-nums; }
+.kv .v .req { color: var(--fg-dim); font-size: 10.5px; }
+
+/* 角注 + 底部依据 */
+.hp-foot { display: flex; align-items: center; gap: 5px; padding: 6px 0 0; color: var(--fg-muted); font-size: 10.5px; }
+.hp-foot svg { flex: 0 0 auto; }
+.hp-reason {
+  margin-top: 9px; padding: 7px 12px 10px; border-top: 1px solid var(--border-soft);
+  color: var(--fg-muted); font-size: 11px; line-height: 1.6;
+}
+.hp-reason .rk {
+  display: inline-block; margin-right: 6px; padding: 0 4px;
+  font-size: 10px; color: var(--fg-muted); border: 1px solid var(--border-soft); border-radius: 3px;
+}
+
+/* 指向箭头(仅交互弹窗; 方向随翻转换边) */
+.hp-arrow { display: none; position: absolute; width: 10px; height: 10px; background: var(--bg-card); transform: rotate(45deg); }
+.hp-below .hp-arrow {
+  display: block; top: -6px; left: var(--ax, 50%); margin-left: -5px;
+  border-top: 1px solid var(--border-strong); border-left: 1px solid var(--border-strong);
+}
+.hp-above .hp-arrow {
+  display: block; bottom: -6px; left: var(--ax, 50%); margin-left: -5px;
+  border-bottom: 1px solid var(--border-strong); border-right: 1px solid var(--border-strong);
+}
+
+/* 交互弹窗: 单例 DOM, fixed 定位 + 进出场动效
+ * ❗选择器必须压过上面的 `.demo-atlas .hp-card`(0,2,0, position:relative) —— 否则 fixed 被覆盖,
+ *   弹窗按 relative 排进文档流, 看起来"悬停没反应" */
+.demo-atlas .hp-fly, .demo-prism .hp-fly {
+  position: fixed; z-index: 140;
+  visibility: hidden; opacity: 0; pointer-events: none;
+  transform: translateY(4px) scale(.98);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s var(--dur);
+}
+.hp-fly.show {
+  visibility: visible; opacity: 1; pointer-events: auto; transform: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hp-fly { transition: none; transform: none; }
+}
+
+/* ---------- 弹窗全态样张(常显) ---------- */
+.samples { margin-top: 24px; }
+.samples h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--fg); }
+.samples .hint { margin: 0 0 14px; }
+.sample-grid { display: flex; flex-wrap: wrap; gap: 20px 30px; align-items: flex-start; }
+.sample { display: flex; flex-direction: column; align-items: center; gap: 7px; margin: 0; }
+.sample-cap { font-size: 10.5px; color: var(--fg-muted); letter-spacing: .08em; }
+.sample .trig { font-size: 12.5px; }
+.sample-arrow { color: var(--fg-dim); display: flex; }
+
+/* ---------- footer 实现说明 ---------- */
+.notes { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--pg-border); }
+.notes h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--pg-fg); }
+.notes ol { margin: 0; padding-left: 20px; color: var(--pg-muted); font-size: 12px; line-height: 1.9; }
+.notes li b { color: var(--pg-fg); font-weight: 600; }
+.notes code {
+  font-family: var(--pg-mono); font-size: 11px; padding: 0 4px; border-radius: 4px;
+  background: var(--pg-panel); border: 1px solid var(--pg-border); color: var(--pg-accent-hi);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-head">
+    <div class="kicker">auto-qb · HR 悬停弹窗 · 三选一模板</div>
+    <h1>模板 T2 · 结论卡</h1>
+    <p class="pos">结论先行的一秒判断卡: 顶部档位色结论带直接回答「能不能删」, hero 区只放一个最关键的量, 其余明细降级为两列小字渐进披露 —— 服务只想扫一眼就做删除决定的场景。</p>
+    <ul class="diff">
+      <li><b>结论带置顶</b>: 档位词 + 结论短语压成一条档位色横带, 先判断后证据; 不像 T1 档案卡那样按「结论/依据/站点侧值/本地值」逐区平铺完整规格。</li>
+      <li><b>hero 单一焦点</b>: 只保留一个最关键量(还需做种大号 mono / 已达标 check 徽记 / 白话短语), 其余数值全部降权成小字; T3 进度仪表则是把时间账目逐段铺开、以过程感取胜。</li>
+      <li><b>窄卡单列纵读</b>: 卡身收窄 ~280px, 信息不删但强分层 —— 本地/站点两列 kv 小字、依据与「站点值滞后」角注垫底, 扫读路径一条直线到底。</li>
+    </ul>
+    <nav class="tpl-switch" aria-label="模板切换">
+      <span class="cap">三版模板</span>
+      <a class="tpl-chip" href="26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html">T1 · 档案卡</a>
+      <span class="tpl-chip cur" aria-current="page">T2 · 结论卡</span>
+      <a class="tpl-chip" href="26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html">T3 · 进度仪表</a>
+    </nav>
+  </header>
+
+  <section class="demo demo-atlas" id="demo-atlas">
+    <div class="demo-head">
+      <div>
+        <h2>演示区一 · atlas(星图)</h2>
+        <p class="style-note">冷灰蓝 · 圆角 10/14 · 深阴影浮层 · 悬停「做种时长」或行内来源徽标触发</p>
+      </div>
+    </div>
+    <div class="demo-body">
+      <div class="tbl-host" id="atlas-tbl"></div>
+      <div class="samples">
+        <h3>弹窗全态样张(常显)</h3>
+        <p class="hint">R1–R7 七个全态, 每张上方为小号触发器示意(做种时长 chip + 来源徽标), 箭头朝下指向弹窗; 与表格悬停弹窗同一 markup 渲染。R8 无 hr_safety, 不触发(见表内末行)。</p>
+        <div class="sample-grid" id="sample-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="demo demo-prism" id="demo-prism" data-theme="ocean">
+    <div class="demo-head">
+      <div>
+        <h2>演示区二 · prism(棱镜)</h2>
+        <p class="style-note">紧圆角 8/6/4 · hairline 高程 · mono 数据字体 · 数字/时长 tabular-nums</p>
+      </div>
+      <div class="theme-switch" id="theme-switch">
+        <span>主题</span>
+        <button type="button" data-t="ocean" class="on">ocean</button>
+        <button type="button" data-t="galaxy">galaxy</button>
+        <button type="button" data-t="frost">frost(亮色)</button>
+      </div>
+    </div>
+    <div class="demo-body">
+      <div class="tbl-host" id="prism-tbl"></div>
+      <p class="hint">悬停任一行「做种时长」或行内来源徽标查看弹窗; 右上切换主题验证令牌自适配(ocean / galaxy 暗色 · frost 亮色), 演示区样式只引用 var(--*), 弹窗跟随 data-theme 换值。</p>
+      <div class="samples">
+        <h3>弹窗全态样张(常显 · prism 皮肤)</h3>
+        <p class="hint">与上方 atlas 样张同一 markup, 令牌取自本区 data-theme —— 切主题后样张随动。</p>
+        <div class="sample-grid" id="sample-grid-prism"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="notes">
+    <h2>实现说明</h2>
+    <ol>
+      <li><b>触发面与延迟</b>: 触发面 = 做种时长单元格(<code>.m-dur</code>)整体或行内来源徽标(<code>.hr-src</code>); mouseenter 120ms 后显示, mouseleave 160ms 后隐藏, 移入弹窗保持显示(可选中复制); ESC / 页面滚动即关; 无 <code>hr_safety</code> 的行(R8)不触发。</li>
+      <li><b>定位</b>: <code>position: fixed</code> 锚定触发矩形; 优先上方(间距 10px), 上方空间不足翻下方; 横向夹取视口(8px 边距); 弹窗带指向箭头, 方向随翻转换边, 水平对准触发中心并夹在卡内。</li>
+      <li><b>字段映射</b>: 结论←<code>hr_safety_text</code>, 色←<code>hr_safety</code>, 徽标←<code>hr_safety_src</code>, 依据←<code>hr_reason</code>; 站点侧值←<code>hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl</code>(与详情抽屉 hrSiteLine 同源); 本地←<code>seeding_time / hr_req_time / ratio / hr_req_ratio</code>; 旧 <code>:title="hrDurTitle(m)"</code> 移除。</li>
+      <li><b>落点</b>: shared/hr.js 单点渲染方法 + 6 处模板绑定(两 UI × 组内成员/种子页/明细三语境) + 两套 CSS 同值规则; z-index 140, 高于 ctx-menu 100 与 speed-pop 131。</li>
+      <li><b>本方向(T2 结论卡)实现要点</b>: 结论带 = 档位柔底(<code>--hr-pending-soft</code> / <code>--error-soft</code> / <code>--green-soft</code> / 中性 <code>--surface-2</code> 同族; 未达标为独立红档 <code>hp-s-failed</code>, 与考察中橙分色 —— 2026-09-25 用户修正)+ 档位色 600 字重档位词, 右侧并排生命周期 chip(考核中/已结束)与来源徽标; hero 只取一个已有字段(站点 need → 大号数字 / safe 已达标 → check 线性徽记 / 策略与未核 → 白话短语, 禁止现场做减法); failed 桶名「考核未通过」(终态已成立, 不叫不能删 —— 2026-09-25 用户修正), 移出删除点名集合; <b>生命周期</b>(2026-09-25 语义修正): 已达标/未达标/免罪均为考核期已过的终态, 标「已结束」, 不再显示还需/剩余倒计时(R3 hero 改白话「考核期已过，结果未达标」); 仅考察中标「考核中」并显示还需做种大数。映射 ← <code>hr_safety_src</code>: site_scope=考核中; site_satisfied / site_unsatisfied / site_released / local_exempt=已结束; policy / local / unverified 不标。本地/站点 kv 两列降权, 无站点值收成单列; 常显样张与交互弹窗同一 render 函数出 markup, mockup 与将来 Vue 组件同构。</li>
+    </ol>
+  </footer>
+
+</div>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 线性图标(1.6-1.8 stroke, currentColor, 禁 emoji) ---------- */
+  var ICO = {
+    check: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.6"/></svg>',
+    clock: '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.3 1.5"/></svg>',
+    shield: '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.8l5.3 2.1v3.7c0 3.4-2.3 5.8-5.3 6.6-3-.8-5.3-3.2-5.3-6.6V3.9L8 1.8z"/></svg>',
+    down: '<svg viewBox="0 0 12 14" width="12" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v10.4M2.4 8.2L6 11.8l3.6-3.6"/></svg>',
+    flag: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14.5V2.5"/><path d="M4 3h8.6L10 6.2l2.6 3.2H4"/></svg>'
+  };
+
+  /* ---------- 共用演示数据(三版模板同源, 数值与文案不得改动) ----------
+   * dur/ratio: 表格单元格; rec: 弹窗记录(字段映射见页脚 ③)
+   * local/site 项 = [标签, 值, (可选)参考值] */
+  var ROWS = [
+    { id: 'r1', name: 'Valhalla.Shards.2024.2160p.WEB-DL.DDP5.1.H.264-MG', site: '星陨',
+      dur: { t: '4天3小时', req: '30天', cls: 'pending', src: '在线' },
+      ratio: { v: '1.02', req: '', cls: '' },
+      rec: { state: 'danger', word: '不能删', phrase: '在线·考察中', src: '在线', cycle: 'ongoing',
+        hero: { type: 'need', label: '还需做种', value: '25天21小时' },
+        local: [['已做种', '4天3小时'], ['要求', '30天'], ['分享率', '1.02']],
+        site: [['分享率', '1.02'], ['下载量', '45.2 GB']], foot: true,
+        reason: 'H&R 清单命中' } },
+    { id: 'r2', name: 'Pacific.Archives.2019.1080p.BluRay.x264-OLDHAM', site: '星陨',
+      dur: { t: '45天6小时', req: '30天', cls: 'reached', src: '在线' },
+      ratio: { v: '1.36', req: '1.00', cls: 'reached' },
+      rec: { state: 'safe', word: '可删', phrase: '在线·已达标', src: '在线', cycle: 'ended',
+        hero: { type: 'ok', text: '已达标' },
+        local: [['已做种', '45天6小时'], ['要求', '30天'], ['分享率', '1.36', '1.00']],
+        site: [['考核结果', '已达标'], ['分享率', '1.36'], ['下载量', '12.8 GB']], foot: true,
+        reason: 'H&R 清单命中' } },
+    { id: 'r3', name: 'Cosmos.Deep.Field.S02E03.1080p.WEB.h264-GRP', site: '极光',
+      dur: { t: '2天8小时', req: '14天', cls: 'hr-fail', src: '在线' },
+      ratio: { v: '0.71', req: '1.00', cls: 'pending' },
+      rec: { state: 'failed', word: '考核未通过', phrase: '在线·未达标', src: '在线', cycle: 'ended',
+        hero: { type: 'phrase', icon: 'flag', text: '考核期已过，结果未达标' },
+        local: [['已做种', '2天8小时'], ['要求', '14天'], ['分享率', '0.71', '1.00']],
+        site: [['分享率', '0.71'], ['下载量', '8.4 GB']], foot: true,
+        reason: 'H&R 清单命中' } },
+    { id: 'r4', name: 'Vintage.Radio.Drama.Collection.1998.MP3-ARCH', site: '榕城',
+      dur: { t: '62天1小时', req: '30天', cls: 'reached', src: '本地' },
+      ratio: { v: '1.42', req: '', cls: '' },
+      rec: { state: 'safe', word: '可删', phrase: '本地·兜底，已达标', src: '本地',
+        hero: { type: 'num', label: '已做种', value: '62天1小时' },
+        local: [['要求', '30天'], ['分享率', '1.42']],
+        site: null, foot: false,
+        reason: '站点无可查键，按本地时长·分享率判定' } },
+    { id: 'r5', name: 'Nightfall.Chronicles.2023.720p.HDTV.x264-SHY', site: '极光',
+      dur: { t: '6天12小时', req: '21天', cls: 'pending', src: '策略' },
+      ratio: { v: '0.55', req: '1.00', cls: 'pending' },
+      rec: { state: 'danger', word: '不能删', phrase: '策略·未核实，按受管束', src: '策略',
+        hero: { type: 'phrase', icon: 'shield', text: '站点还没核实，先按受管束扣着' },
+        local: [['已做种', '6天12小时'], ['要求', '21天'], ['分享率', '0.55', '1.00']],
+        site: null, foot: false,
+        reason: 'mode=all：未核实一律按受管束管理（保守）' } },
+    { id: 'r6', name: 'Ancient.Maps.Restoration.Pack.1972.PDF-SCAN', site: '星陨',
+      dur: { t: '402天', req: '', cls: 'reached', src: '本地' },
+      ratio: { v: '2.10', req: '', cls: '' },
+      rec: { state: 'safe', word: '可删', phrase: '本地·超龄豁免', src: '本地', cycle: 'ended',
+        hero: { type: 'num', label: '已做种', value: '402天' },
+        local: [['时长要求', '无'], ['分享率', '2.10']],
+        site: null, foot: false,
+        reason: '完成时间超过 completed_age_limit（300 天），义务视为已了' } },
+    { id: 'r7', name: 'Aurora.Borealis.Timelapse.4K.PACK-ICE', site: '极光',
+      dur: { t: '9天', req: '', cls: 'hr-unk', src: '未核' },
+      ratio: { v: '0.31', req: '', cls: '' },
+      rec: { state: 'unknown', word: '未核实', phrase: '', src: '未核',
+        hero: { type: 'phrase', icon: 'clock', text: '等站点核实' },
+        local: [['已做种', '9天'], ['要求', '无'], ['分享率', '0.31']],
+        site: null, foot: false,
+        reason: '宽松策略：站点尚未查到该种子，暂不按受管束' } },
+    { id: 'r8', name: 'ubuntu-24.04.3-live-server-amd64.iso', site: '—',
+      dur: { t: '120天', req: '', cls: '', src: '' },
+      ratio: { v: '3.85', req: '', cls: '' },
+      rec: null }
+  ];
+
+  /* ---------- 工具 ---------- */
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ---------- T2 结论卡 · 唯一 markup 产出(交互弹窗与常显样张共用) ---------- */
+  function renderCard(r) {
+    var h = '<div class="hp-band"><span class="hp-word">' + esc(r.word) + '</span>';
+    if (r.phrase && r.phrase !== r.word) h += '<span class="hp-phrase">' + esc(r.phrase) + '</span>';
+    var cyc = r.cycle ? '<span class="hp-chip is-cycle ' + r.cycle + '">'
+      + (r.cycle === 'ongoing' ? '考核中' : '已结束') + '</span>' : '';
+    h += '<span class="hp-chips">' + cyc
+      + '<span class="hp-chip is-src">' + esc(r.src) + '</span></span></div>';
+    h += '<div class="hp-body">';
+    /* ② hero 单焦点: 站点 need/本地大数 → 大号数字; safe 已达标 → check 徽记; 无站点值的 danger/unknown → 白话短语 */
+    if (r.hero.type === 'need' || r.hero.type === 'num') {
+      h += '<div class="hp-hero"><div class="hp-hero-label">' + esc(r.hero.label) + '</div>'
+        + '<div class="hp-hero-num">' + esc(r.hero.value) + '</div></div>';
+    } else if (r.hero.type === 'ok') {
+      h += '<div class="hp-hero"><span class="hp-hero-ok">' + ICO.check + '<b>' + esc(r.hero.text) + '</b></span></div>';
+    } else {
+      var ico = r.hero.icon === 'shield' ? ICO.shield : ICO.clock;
+      h += '<div class="hp-hero"><span class="hp-hero-note">' + ico + '<span>' + esc(r.hero.text) + '</span></span></div>';
+    }
+    /* ③ 本地/站点两列小字; 无站点值收成单列(站点区整块不出现) */
+    var hasSite = !!(r.site && r.site.length);
+    h += '<div class="hp-cols' + (hasSite ? '' : ' single') + '">';
+    h += '<div class="hp-col"><div class="hp-col-t">本地</div>';
+    r.local.forEach(function (it) { h += kv(it[0], it[1], it[2]); });
+    h += '</div>';
+    if (hasSite) {
+      h += '<div class="hp-col"><div class="hp-col-t">站点</div>';
+      r.site.forEach(function (it) { h += kv(it[0], it[1], it[2]); });
+      h += '</div>';
+    }
+    h += '</div>';
+    if (r.foot) h += '<div class="hp-foot">' + ICO.clock + '站点值滞后一个刷新周期</div>';
+    h += '</div>';
+    /* ④ 底部依据 hr_reason */
+    h += '<div class="hp-reason"><span class="rk">依据</span>' + esc(r.reason) + '</div>';
+    return h;
+  }
+  function kv(k, v, req) {
+    return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v)
+      + (req ? ' <span class="req">/ ' + esc(req) + '</span>' : '') + '</span></div>';
+  }
+
+  /* ---------- 演示表格(同一份数据渲染两套 UI) ---------- */
+  function pairCell(p) {
+    return '<span class="m-pair m-dur ' + p.cls + '"' + (p.hrf ? ' data-hr="' + p.hrf + '" tabindex="0"' : '') + '>'
+      + esc(p.t)
+      + (p.req ? ' <span class="req">/ ' + esc(p.req) + '</span>' : '')
+      + (p.src ? ' <span class="hr-src">' + esc(p.src) + '</span>' : '')
+      + '</span>';
+  }
+  function buildTable(host) {
+    var rows = ROWS.map(function (r) {
+      var dur = { t: r.dur.t, req: r.dur.req, cls: r.dur.cls, src: r.dur.src, hrf: r.rec ? r.id : null };
+      var ratio = '<span class="m-pair m-ratio ' + r.ratio.cls + '">' + esc(r.ratio.v)
+        + (r.ratio.req ? ' <span class="req">/ ' + esc(r.ratio.req) + '</span>' : '') + '</span>';
+      return '<tr><td class="c-name">' + esc(r.name) + '</td><td class="c-site">' + esc(r.site) + '</td>'
+        + '<td class="c-dur">' + pairCell(dur) + '</td><td class="c-ratio">' + ratio + '</td></tr>';
+    }).join('');
+    host.innerHTML = '<table><thead><tr><th>名称</th><th>站点</th><th>做种时长</th><th>分享率</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>';
+  }
+
+  /* ---------- 常显样张: 触发器示意 + 朝下箭头 + 与交互弹窗同一 markup ---------- */
+  function buildSamples(host) {
+    host.innerHTML = ROWS.filter(function (r) { return r.rec; }).map(function (r) {
+      return '<figure class="sample">'
+        + '<span class="sample-cap">' + r.id.toUpperCase() + '</span>'
+        + '<span class="trig"><span class="m-pair m-dur ' + r.dur.cls + '">' + esc(r.dur.t)
+        + (r.dur.req ? ' <span class="req">/ ' + esc(r.dur.req) + '</span>' : '')
+        + ' <span class="hr-src">' + esc(r.dur.src) + '</span></span></span>'
+        + '<span class="sample-arrow">' + ICO.down + '</span>'
+        + '<div class="hp-card hp-s-' + r.rec.state + '">' + renderCard(r.rec) + '</div>'
+        + '</figure>';
+    }).join('');
+  }
+
+  /* ---------- 交互弹窗(每个演示区一个单例; 移动进弹窗不隐藏, ESC/滚动关闭) ---------- */
+  var SHOW_DELAY = 120, HIDE_DELAY = 160;
+  function makePopper(scope) {
+    var card = document.createElement('div');
+    card.className = 'hp-card hp-fly';
+    card.setAttribute('role', 'tooltip');
+    scope.appendChild(card);
+    var cur = null, showT = 0, hideT = 0;
+
+    function findT(e) {
+      var t = e.target;
+      return (t && t.closest) ? t.closest('[data-hr]') : null;
+    }
+    function show(t) {
+      var id = t.getAttribute('data-hr');
+      var row = null;
+      for (var i = 0; i < ROWS.length; i++) { if (ROWS[i].id === id) { row = ROWS[i]; break; } }
+      if (!row || !row.rec) return;
+      card.className = 'hp-card hp-fly hp-s-' + row.rec.state;
+      card.innerHTML = renderCard(row.rec) + '<i class="hp-arrow" aria-hidden="true"></i>';
+      var r = t.getBoundingClientRect();
+      var w = card.offsetWidth, h = card.offsetHeight; /* visibility:hidden 仍占布局, 可测 */
+      var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+      var left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), vw - w - 8); /* 横向夹取视口 8px */
+      var top, side;
+      if (r.top >= h + 18) { side = 'hp-above'; top = r.top - 10 - h; }  /* 优先上方, 间距 10px */
+      else { side = 'hp-below'; top = r.bottom + 10; }                    /* 不足翻下方 */
+      top = Math.min(top, vh - 8 - h);
+      card.classList.add(side);
+      card.style.left = Math.round(left) + 'px';
+      card.style.top = Math.round(Math.max(8, top)) + 'px';
+      var ax = Math.min(Math.max(14, r.left + r.width / 2 - left), w - 14); /* 箭头对准触发中心并夹在卡内 */
+      card.style.setProperty('--ax', Math.round(ax) + 'px');
+      void card.offsetWidth; /* 先以隐藏态完成布局, 再进场, 保证动效稳定 */
+      card.classList.add('show');
+    }
+    function hide() { card.classList.remove('show'); cur = null; }
+
+    scope.addEventListener('mouseover', function (e) {
+      var t = findT(e); if (!t) return;
+      if (t === cur) {
+        clearTimeout(hideT);
+        if (!card.classList.contains('show')) { clearTimeout(showT); showT = setTimeout(function () { show(t); }, SHOW_DELAY); }
+        return;
+      }
+      clearTimeout(showT); clearTimeout(hideT); cur = t;
+      showT = setTimeout(function () { show(t); }, SHOW_DELAY);
+    });
+    scope.addEventListener('mouseout', function (e) {
+      var t = findT(e); if (!t || t !== cur) return;
+      clearTimeout(showT);
+      hideT = setTimeout(hide, HIDE_DELAY);
+    });
+    scope.addEventListener('focusin', function (e) {
+      var t = findT(e); if (!t) return;
+      clearTimeout(showT); clearTimeout(hideT); cur = t; show(t); /* 键盘可达: 聚焦即显 */
+    });
+    scope.addEventListener('focusout', function (e) {
+      var t = findT(e); if (!t || t !== cur) return;
+      hideT = setTimeout(hide, HIDE_DELAY);
+    });
+    card.addEventListener('mouseenter', function () { clearTimeout(hideT); }); /* 移入弹窗不隐藏(可选中复制) */
+    card.addEventListener('mouseleave', function () { hideT = setTimeout(hide, HIDE_DELAY); });
+    return { hide: hide };
+  }
+
+  /* ---------- 初始化 ---------- */
+  buildTable(document.getElementById('atlas-tbl'));
+  buildTable(document.getElementById('prism-tbl'));
+  buildSamples(document.getElementById('sample-grid'));
+  buildSamples(document.getElementById('sample-grid-prism'));
+
+  var poppers = [makePopper(document.getElementById('demo-atlas')), makePopper(document.getElementById('demo-prism'))];
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') poppers.forEach(function (p) { p.hide(); });
+  });
+  window.addEventListener('scroll', function () { poppers.forEach(function (p) { p.hide(); }); }, true);
+  window.addEventListener('resize', function () { poppers.forEach(function (p) { p.hide(); }); });
+
+  /* prism 主题切换 = 演示区根节点 data-theme 换值, 弹窗随之跟随 */
+  var prismDemo = document.getElementById('demo-prism');
+  var themeBtns = Array.prototype.slice.call(document.querySelectorAll('#theme-switch button'));
+  themeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      prismDemo.setAttribute('data-theme', b.getAttribute('data-t'));
+      themeBtns.forEach(function (x) { x.classList.toggle('on', x === b); });
+    });
+  });
+})();
+</script>
+</body>
+</html>

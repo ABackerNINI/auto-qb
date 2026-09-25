@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-hr-popup-t3">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-25-2043">
+<meta name="doc-updated" content="26-09-25-2218">
+<meta name="doc-refs" content="memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html,memory-bank/tasks/26-09-26-webui-hr-popup.md">
+<title>HR 悬停弹窗模板 · T3 进度仪表 · auto-qb</title>
+<style>
+/* ============ 页面级令牌 ============
+ * chrome 与 atlas 演示区: 取自 atlas/style.css :root 的真实令牌。
+ * prism 演示区: 颜色由下方 [data-theme] 块按真实 themes/*.css 提供,
+ * 结构令牌(圆角/字体)由 .pz-zone 作用域提供 —— prism 区规则只引用 var(--*)。 */
+:root{
+  color-scheme: dark;
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --bg: #0e1218; --bg-card: #151b24; --bg-row: #111722; --bg-hover: #1c2534; --bg-elev: #1a2231;
+  --fg: #e7ebf1; --fg-muted: #96a2b5; --fg-dim: #6c7a8e; --fg-soft: #b9c4d4;
+  --accent: #3b82f6; --accent-hi: #60a5fa; --accent-soft: rgba(59,130,246,.16); --accent-line: rgba(59,130,246,.45);
+  --green: #34d399; --green-soft: rgba(52,211,153,.16); --green-line: rgba(52,211,153,.42);
+  --teal: #2dd4bf; --violet: #a78bfa;
+  --hr-pending: #ff8a3d; --hr-pending-soft: rgba(255,138,61,.18);
+  --error: #f87171; --error-soft: rgba(248,113,113,.16);
+  --border: #253045; --border-strong: #37455f; --border-soft: rgba(255,255,255,.07);
+  --surface-1: rgba(255,255,255,.028); --surface-2: rgba(255,255,255,.06);
+  --paused: var(--fg-muted);
+  --radius-lg: 14px; --radius: 10px; --radius-sm: 7px;
+  --shadow-3: 0 20px 48px rgba(0,0,0,.42);
+  --ease: cubic-bezier(.2,.8,.3,1); --dur: 160ms;
+}
+/* prism 主题色(照抄 prism/css/themes/*.css 的颜色段) */
+[data-theme="ocean"]{
+  color-scheme: dark;
+  --bg: #0d1724; --bg-card: #15233a; --bg-row: #112034; --bg-hover: #1c3050; --bg-elev: #1b2d4b;
+  --fg: #e9eff7; --fg-muted: #9cadc6; --fg-dim: #6e84a3; --fg-soft: #bccadd;
+  --accent: #3aa6a6; --accent-hi: #5cc3c3; --accent-soft: rgba(58,166,166,.15);
+  --green: #3fd699; --green-soft: rgba(63,214,153,.15); --green-line: rgba(63,214,153,.42);
+  --teal: #2fd4bf; --violet: #ab8ffa;
+  --hr-pending: #ff8f45; --hr-pending-soft: rgba(255,143,69,.18);
+  --error: #f3766f; --error-soft: rgba(243,118,111,.15);
+  --border: #23395a; --border-strong: #34507c; --border-soft: rgba(255,255,255,.07);
+  --surface-1: rgba(255,255,255,.03); --surface-2: rgba(255,255,255,.06);
+  --paused: var(--fg-muted);
+  --shadow-3: 0 14px 40px rgba(0,0,0,.3);
+}
+[data-theme="galaxy"]{
+  color-scheme: dark;
+  --bg: #151021; --bg-card: #221a38; --bg-row: #1c1530; --bg-hover: #322653; --bg-elev: #2b2149;
+  --fg: #ece8f6; --fg-muted: #a89dc7; --fg-dim: #7d72a0; --fg-soft: #c6bcde;
+  --accent: #b79fe0; --accent-hi: #ccb8ec; --accent-soft: rgba(183,159,224,.14);
+  --green: #5fd6a8; --green-soft: rgba(95,214,168,.15); --green-line: rgba(95,214,168,.42);
+  --teal: #4adccc; --violet: #a678f0;
+  --hr-pending: #ff9a55; --hr-pending-soft: rgba(255,154,85,.18);
+  --error: #f08080; --error-soft: rgba(240,128,128,.15);
+  --border: #372a55; --border-strong: #4d3b74; --border-soft: rgba(255,255,255,.07);
+  --surface-1: rgba(255,255,255,.03); --surface-2: rgba(255,255,255,.06);
+  --paused: var(--fg-muted);
+  --shadow-3: 0 14px 40px rgba(0,0,0,.3);
+}
+[data-theme="frost"]{
+  color-scheme: light;
+  --bg: #f2f6fb; --bg-card: #fdfeff; --bg-row: #f7fafd; --bg-hover: #e9f1f9; --bg-elev: #ffffff;
+  --fg: #1b2a3a; --fg-muted: #52708c; --fg-dim: #6f88a0; --fg-soft: #3a5470;
+  --accent: #3d6aa3; --accent-hi: #4f80bd; --accent-soft: rgba(61,106,163,.1);
+  --green: #178a5c; --green-soft: rgba(23,138,92,.12); --green-line: rgba(23,138,92,.38);
+  --teal: #0f8f81; --violet: #7153cf;
+  --hr-pending: #c56a1a; --hr-pending-soft: rgba(197,106,26,.14);
+  --error: #bc4438; --error-soft: rgba(188,68,56,.12);
+  --border: #d3e0ee; --border-strong: #b3c9de; --border-soft: rgba(27,42,58,.08);
+  --surface-1: rgba(27,42,58,.035); --surface-2: rgba(27,42,58,.06);
+  --paused: var(--fg-muted);
+  --shadow-3: 0 14px 40px rgba(27,42,58,.14);
+}
+/* prism 结构令牌(照抄 tokens.css: 紧圆角 + Bahnschrift/Cascadia) —— 区根与 prism 弹窗共用 */
+.pz-zone, .hrpop.skin-prism{
+  --radius-lg: 8px; --radius: 6px; --radius-sm: 4px;
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+}
+
+/* ============ 页面 chrome ============ */
+*{ box-sizing: border-box; }
+html, body{ margin:0; padding:0; background:var(--bg); color:var(--fg);
+  font: 14px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
+:focus-visible{ outline: 2px solid var(--accent); outline-offset: 1px; }
+.hd{ border-bottom:1px solid var(--border-soft); background:var(--bg-card); }
+.hd-in{ max-width:1060px; margin:0 auto; padding:26px 20px 20px; }
+.kicker{ font-size:11px; letter-spacing:.14em; color:var(--fg-dim); }
+.hd h1{ margin:8px 0 6px; font-size:22px; font-weight:650; letter-spacing:.01em; }
+.pos{ margin:0 0 10px; font-size:13px; color:var(--fg-muted); max-width:76ch; }
+.diff{ margin:0 0 14px; padding-left:18px; color:var(--fg-dim); font-size:12px; line-height:1.75; }
+.diff li::marker{ color:var(--accent); }
+.tpl-nav{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.tpl-nav a, .tpl-nav .cur{ font-size:12px; line-height:1.5; padding:3px 12px; border-radius:999px;
+  border:1px solid var(--border); color:var(--fg-muted); text-decoration:none; }
+.tpl-nav a:hover{ color:var(--accent-hi); border-color:var(--accent-line); background:var(--accent-soft); }
+.tpl-nav .cur{ color:var(--accent-hi); background:var(--accent-soft); border-color:var(--accent-line);
+  font-weight:600; cursor:default; }
+main{ max-width:1060px; margin:0 auto; padding:24px 20px 8px; }
+::selection{ background:var(--accent-soft); }
+.noscript-warn{ max-width:1060px; margin:14px auto 0; padding:9px 14px;
+  border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--bg-card); color:var(--fg-muted); font-size:12px; }
+
+/* ============ 演示区骨架 ============ */
+/* 演示区显式取本作用域前景色 —— 否则子元素从 body 继承的是**已计算**的 atlas 色值,
+ * prism 切 frost 亮色后标题/正文会变成浅灰字压浅底(对比度塌掉) */
+.zone{ color:var(--fg); }
+.zone + .zone{ margin-top:28px; }
+.zone-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:0 2px 10px; }
+.zone-head h2{ margin:0; font-size:15px; font-weight:600; }
+.zone-note{ font-size:11.5px; color:var(--fg-dim); }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+table{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:12.5px; }
+th{ text-align:left; font-weight:600; font-size:11px; color:var(--fg-dim); letter-spacing:.06em;
+  padding:9px 12px; border-bottom:1px solid var(--border); background:var(--bg-card); }
+td{ padding:8px 12px; border-bottom:1px solid var(--border-soft); background:var(--bg-row);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+tr:last-child td{ border-bottom:none; }
+tbody tr{ transition: background var(--dur) var(--ease); }
+tbody tr:hover td{ background:var(--bg-hover); }
+td[data-hr]{ cursor:default; }
+.c-name{ color:var(--fg); }
+.c-site{ color:var(--fg-muted); font-size:12px; }
+col.w-name{ width:46%; } col.w-site{ width:11%; } col.w-dur{ width:26%; } col.w-ratio{ width:17%; }
+
+/* 做种时长 / 分享率对 —— 与两套 UI 真实规则同口径(atlas style.css L913-933 / prism views.css L303-322) */
+.m-pair{ display:inline-flex; align-items:baseline; gap:3px; font-variant-numeric:tabular-nums; }
+.m-pair .req{ color:var(--fg-dim); font-size:11.5px; }
+.m-pair.m-dur{ color:var(--teal); }
+.m-pair.m-ratio{ color:var(--violet); }
+.m-pair.pending{ color:var(--hr-pending); }
+.m-pair.reached{ color:var(--green); }
+.m-pair.hr-unk{ color:var(--paused); }
+/* hr-fail = 未达标终态(2026-09-25 用户修正): 独立红色档, 与考察中的 pending 橙分色 */
+.m-pair.hr-fail{ color:var(--error); }
+.m-pair .hr-src{ color:var(--fg-muted); font-size:10px; line-height:1.5;
+  border:1px solid var(--border-soft); border-radius:3px; padding:0 3px;
+  align-self:center; white-space:nowrap; }
+/* prism 数据字体: 数字/时长走 mono + tabular-nums */
+.pz-zone .m-pair{ font-family:var(--font-mono); }
+
+/* prism 主题切换 */
+.theme-sw{ margin-left:auto; display:inline-flex; gap:3px; padding:3px;
+  border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-card); }
+.theme-sw button{ font:11.5px/1.5 var(--font-ui); color:var(--fg-muted); background:transparent;
+  border:none; border-radius:var(--radius-sm); padding:3px 10px; cursor:pointer; }
+.theme-sw button:hover{ color:var(--fg); background:var(--surface-2); }
+.theme-sw button.on{ color:var(--accent-hi); background:var(--accent-soft); }
+
+/* ============ 弹窗全态样张 ============ */
+.samples{ margin-top:20px; }
+.samples-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:0 2px 14px; }
+.samples-head h3{ margin:0; font-size:13.5px; font-weight:600; }
+.samples-flow{ display:flex; flex-wrap:wrap; gap:26px 20px; align-items:flex-start; }
+.sample{ width:300px; }
+.s-meta{ display:flex; align-items:center; justify-content:center; gap:8px; }
+.s-id{ font-family:var(--font-mono); font-style:normal; font-size:10.5px; color:var(--fg-dim); }
+.s-arrow{ display:flex; justify-content:center; color:var(--fg-dim); margin:3px 0 4px; }
+.s-arrow svg{ width:14px; height:14px; }
+
+/* ============ HR 悬停弹窗 · T3 进度仪表 ============ */
+/* 单例 DOM: 悬停时由 JS 填充并定位; 样张区以 .static 常显同一 markup。 */
+.hrpop{ position:fixed; z-index:140; width:300px; padding:12px 13px; color:var(--fg);
+  opacity:0; transform:translateY(4px) scale(.98); pointer-events:none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.hrpop.on{ opacity:1; transform:none; pointer-events:auto; }
+.hrpop.pre{ transition:none; }
+.hrpop.skin-atlas{ background:var(--bg-card); border:1px solid var(--border-strong);
+  box-shadow:var(--shadow-3); border-radius:var(--radius); }
+.hrpop.skin-prism{ background:var(--bg-card); border:1px solid var(--border-strong);
+  box-shadow:var(--shadow-3); border-radius:var(--radius-lg); }
+.hrpop.static{ position:static; opacity:1; transform:none; pointer-events:auto; transition:none; }
+/* 指向箭头: 方向随上下翻转换边 */
+.hp-arrow{ position:absolute; width:10px; height:10px; background:var(--bg-card);
+  transform:rotate(45deg); display:none; }
+.hrpop.above .hp-arrow{ display:block; bottom:-5.5px;
+  border-right:1px solid var(--border-strong); border-bottom:1px solid var(--border-strong); }
+.hrpop.below .hp-arrow{ display:block; top:-5.5px;
+  border-left:1px solid var(--border-strong); border-top:1px solid var(--border-strong); }
+
+/* ① 结论行: 档位色结论短语 + 来源徽标 + 生命周期 chip(紧凑, 不占大块) */
+.hp-head{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.hp-dot{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+.hp-dot.danger{ background:var(--hr-pending); }
+.hp-dot.safe{ background:var(--green); }
+.hp-dot.unknown{ background:var(--paused); }
+.hp-verdict{ font-size:12.5px; font-weight:600; letter-spacing:.01em; }
+.hp-verdict.danger{ color:var(--hr-pending); }
+.hp-verdict.safe{ color:var(--green); }
+.hp-verdict.unknown{ color:var(--paused); }
+/* 生命周期 chip(2026-09-25 语义修正): 已达标/未达标/免罪均为考核期已过的终态(已结束)。
+ * 零冗余(2026-09-25 精修): 考察中的短语已含「考察中」, 进行中不再出章 —— 仅终态标「已结束」。 */
+.hp-cyc{ font-size:10px; line-height:1.5; border:1px solid transparent; border-radius:3px;
+  padding:0 5px; white-space:nowrap; }
+.hp-cyc.ended{ color:var(--fg-muted); background:var(--surface-1); border-color:var(--border-soft); }
+
+/* ② 进度轨道: 本地粗轨(6px) + 站点细轨(3px); 已过段 = 档位色, 未达段 = 轨道底色 */
+.hp-gauge{ margin-top:11px; display:grid; gap:5px; }
+.hg-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.hg-legend{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; color:var(--fg-dim); }
+.hg-dot{ width:7px; height:7px; border-radius:50%; flex:0 0 auto; }
+.hg-dot.danger{ background:var(--hr-pending); }
+.hg-dot.safe{ background:var(--green); }
+.hg-dot.unknown{ background:var(--paused); }
+.hg-dot.hollow.danger{ background:transparent; border:1.5px solid var(--hr-pending); }
+.hg-dot.hollow.safe{ background:transparent; border:1.5px solid var(--green); }
+.hg-dot.hollow.unknown{ background:transparent; border:1.5px solid var(--paused); }
+.hg-tag{ font-size:10.5px; line-height:1.5; padding:1px 8px; border-radius:999px; font-weight:600; white-space:nowrap; }
+.hg-tag.danger{ color:var(--hr-pending); background:var(--hr-pending-soft); }
+.hg-tag.safe{ color:var(--green); background:var(--green-soft); }
+.hg-track{ display:flex; align-items:center; gap:8px; }
+.hg-end{ flex:0 0 auto; font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+  font-size:11px; color:var(--fg-muted); }
+.hg-rail{ position:relative; flex:1; height:6px; border-radius:999px; background:var(--surface-2); overflow:hidden; }
+.hg-rail.site{ height:3px; }
+.hg-rail .fill{ position:absolute; top:0; bottom:0; left:0; display:block; border-radius:inherit; }
+.fill.danger{ background:var(--hr-pending); }
+.fill.safe{ background:var(--green); }
+.fill.unknown{ background:var(--paused); }
+.hg-rail.site .fill{ opacity:.55; }
+.hg-site{ display:flex; align-items:center; gap:8px; margin-top:1px; }
+/* failed = 未达标终态(2026-09-25 用户修正): 独立红色档, 与考察中的 danger 橙分色 */
+.hp-dot.failed{ background:var(--error); }
+.hp-verdict.failed{ color:var(--error); }
+.hg-dot.failed{ background:var(--error); }
+.hg-dot.hollow.failed{ background:transparent; border:1.5px solid var(--error); }
+.hg-tag.failed{ color:var(--error); background:var(--error-soft); }
+.fill.failed{ background:var(--error); }
+
+/* ②' 档位徽记: 无时间要求(豁免/未核实)时轨道收起, 不留空轨 */
+.hp-badge{ margin-top:11px; display:flex; width:max-content; align-items:center; gap:7px;
+  padding:6px 10px; border-radius:var(--radius-sm); font-size:11.5px; font-weight:600; }
+.hp-badge svg{ width:14px; height:14px; flex:0 0 auto; }
+.hp-badge.safe{ color:var(--green); background:var(--green-soft); border:1px solid var(--green-line); }
+.hp-badge.unknown{ color:var(--fg-muted); background:var(--surface-1); border:1px solid var(--border-soft); }
+
+/* ③ 数值条: mono 紧排 kv */
+.hp-kv{ margin-top:10px; display:flex; flex-wrap:wrap; gap:5px 6px; }
+.kv{ display:inline-flex; align-items:baseline; gap:5px; padding:2.5px 8px;
+  border-radius:var(--radius-sm); background:var(--surface-1); }
+.kv i{ font-style:normal; font-size:10.5px; color:var(--fg-dim); white-space:nowrap; }
+.kv b{ font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+  font-weight:600; font-size:11.5px; color:var(--fg-soft); white-space:nowrap; }
+.kv em{ font-style:normal; font-weight:400; color:var(--fg-dim); }
+
+/* ④ 底部: 依据原文 + 站点滞后角注 */
+.hp-foot{ margin-top:10px; padding-top:8px; border-top:1px solid var(--border-soft); display:grid; gap:3px; }
+.hp-reason, .hp-lag{ display:flex; align-items:flex-start; gap:6px; }
+.hp-reason svg, .hp-lag svg{ width:12px; height:12px; flex:0 0 auto; margin-top:2px; color:var(--fg-dim); }
+.hp-reason{ font-size:11px; line-height:1.55; color:var(--fg-muted); overflow-wrap:anywhere; }
+.hp-lag{ font-size:10.5px; line-height:1.5; color:var(--fg-dim); }
+
+/* ============ footer 实现说明 ============ */
+.ft{ border-top:1px solid var(--border-soft); margin-top:32px; background:var(--bg-card); }
+.ft-in{ max-width:1060px; margin:0 auto; padding:18px 20px 28px; }
+.ft-title{ margin:0 0 8px; font-size:12px; letter-spacing:.08em; color:var(--fg-muted); }
+.ft ol{ margin:0; padding-left:20px; color:var(--fg-dim); font-size:11.5px; line-height:1.8; }
+.ft b{ color:var(--fg-muted); font-weight:600; }
+
+@media (max-width: 760px){
+  .panel{ overflow-x:auto; }
+  table{ min-width:720px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .hrpop{ transition:none; }
+  tbody tr{ transition:none; }
+}
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <div class="hd-in">
+    <div class="kicker">auto-qb · HR 悬停弹窗 · 三选一模板</div>
+    <h1>模板 T3 · 进度仪表</h1>
+    <p class="pos">把 HR 义务画成时间进度 —— 本地粗轨对照站点细轨, 「还差多少」一眼直觉, 贴合 prism 的工程仪器气质。</p>
+    <ul class="diff">
+      <li>与 T1 档案卡 / T2 结论卡不同: 结论压成一行不占大块, 版面让给双轨进度与 mono 数值条。</li>
+      <li>T3 独有双轨对照: 本地 6px 主轨(已做种/要求) + 站点 3px 细轨(还需/达标), 本地与站点差异并排可见。</li>
+      <li>无时间要求(超龄豁免 / 未核实)时轨道收起换成状态徽记, 不留空轨。</li>
+      <li>零冗余(2026-09-25 精修): 结论短语已含来源与进行中状态 —— 不重复出「在线」「考核中」章; 数值条只留行内看不到的站点侧值(本地值表格行可见, 不上弹窗); 轨道角标只在结论没说时出现(还需 X / 考核期已过 / 已超出 X), 站点轨不带数值端点。</li>
+    </ul>
+    <nav class="tpl-nav" aria-label="模板切换">
+      <a href="26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html">T1 · 档案卡</a>
+      <a href="26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html">T2 · 结论卡</a>
+      <span class="cur" aria-current="page">T3 · 进度仪表</span>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <noscript><div class="noscript-warn">本页的演示表格与弹窗样张由脚本渲染, 当前环境未启用 JavaScript —— 请启用后刷新查看完整演示。</div></noscript>
+  <!-- ============ 演示区一 · atlas(星图) ============ -->
+  <section class="zone" id="at-zone">
+    <div class="zone-head">
+      <h2>演示区一 · atlas(星图)</h2>
+      <span class="zone-note">冷灰蓝 · 圆角 10 · 深阴影浮层 —— 做种时长单元格可真实悬停</span>
+    </div>
+    <div class="panel">
+      <table>
+        <colgroup><col class="w-name"><col class="w-site"><col class="w-dur"><col class="w-ratio"></colgroup>
+        <thead><tr><th>名称</th><th>站点</th><th>做种时长</th><th>分享率</th></tr></thead>
+        <tbody id="at-body"></tbody>
+      </table>
+    </div>
+    <div class="samples">
+      <div class="samples-head">
+        <h3>弹窗全态样张(常显)</h3>
+        <span class="zone-note">atlas 皮肤 · 七种状态全列 · 图例: 实心点 = 本地轨, 空心点 = 站点轨; prism 皮肤请在下方演示区悬停查看(可切主题)</span>
+      </div>
+      <div class="samples-flow" id="samples"></div>
+    </div>
+  </section>
+
+  <!-- ============ 演示区二 · prism(棱镜) ============ -->
+  <section class="zone pz-zone" data-theme="ocean" id="pz-zone">
+    <div class="zone-head">
+      <h2>演示区二 · prism(棱镜)</h2>
+        <span class="zone-note">紧圆角 8/6/4 · hairline 高程 · mono 数据字体 · 悬停做种时长单元格看弹窗 —— 切主题验证令牌自适配</span>
+      <div class="theme-sw" role="group" aria-label="prism 主题切换">
+        <button type="button" data-sw="ocean" class="on">ocean</button>
+        <button type="button" data-sw="galaxy">galaxy</button>
+        <button type="button" data-sw="frost">frost</button>
+      </div>
+    </div>
+    <div class="panel">
+      <table>
+        <colgroup><col class="w-name"><col class="w-site"><col class="w-dur"><col class="w-ratio"></colgroup>
+        <thead><tr><th>名称</th><th>站点</th><th>做种时长</th><th>分享率</th></tr></thead>
+        <tbody id="pz-body"></tbody>
+      </table>
+    </div>
+    <div class="samples">
+      <div class="samples-head">
+        <h3>弹窗全态样张(常显 · prism 皮肤)</h3>
+        <span class="zone-note">与上方 atlas 样张同一 markup, 令牌取自本区 data-theme —— 切主题后样张随动</span>
+      </div>
+      <div class="samples-flow" id="samples-prism"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="ft">
+  <div class="ft-in">
+    <p class="ft-title">实现说明</p>
+    <ol>
+      <li><b>触发与延迟</b> —— 触发面 = 做种时长单元格(.m-dur 所在单元格整体)或其中来源徽标(.hr-src); mouseenter 120ms 后显示, mouseleave 160ms 宽限后隐藏, 移入弹窗不隐藏(可悬停选中复制); ESC / 页面滚动即时关闭; 无 hr_safety 的行(R8 ubuntu 镜像)不触发。样张区的触发器为静态示意, 不绑定悬停。</li>
+      <li><b>定位</b> —— position:fixed 锚定触发矩形: 优先上方(间距 10px), 上方空间不足翻下方; 横向夹取视口(8px 边距); 箭头指向触发矩形中心并随翻转换向。</li>
+      <li><b>字段映射</b> —— 结论←hr_safety_text; 配色←hr_safety(danger 橙=考察中 / failed 红=考核未通过终态, 2026-09-25 用户修正 / safe 绿 / unknown 灰); 徽标←hr_safety_src; 依据←hr_reason; 站点侧值←hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl(与详情抽屉 hrSiteLine 同源); 本地值←seeding_time / hr_req_time / ratio / hr_req_ratio; 旧 :title="hrDurTitle(m)" 移除。前端只做比例呈现(已做种/要求、站点还需/要求)与着色, 不重算判定; 站点值滞后一个刷新周期, 以角注提示。</li>
+      <li><b>落点</b> —— shared/hr.js 单点渲染方法 + 6 处模板绑定(两 UI × 组内成员/种子页/明细三语境) + atlas style.css 与 prism css 各一份同值规则; z-index 140, 高于 ctx-menu(100) 与 speed-pop(131)。</li>
+      <li><b>T3 实现要点</b> —— 双轨进度: 本地主轨 6px(已做种/要求比例, 档位色填充), 站点细轨 3px(仅站点给出 need/remain 时出现, 半透明填充区分, 小图例「本地/站点」, 不带数值端点 —— 数值由角标承载); 轨道角标只在结论短语没说时出现: 考察中 = 还需 X, 本地兜底 = 已超出 X, 终态未达标 = 考核期已过(已达标不重复出角标); 无时长要求时轨道收起换状态徽记(盾形线性图标, 只说「无时长要求」, 不与结论重复); 数值条 = 站点侧值专用(站点分享率/站点下载), 本地值不上弹窗(表格行可见), 无站点侧值时整条不渲染; 生命周期 chip 仅终态标「已结束」(考察中短语已含, 不重复); 来源章移除(结论短语已含在线/本地/策略/未核); 本 mockup 用 vanilla JS, 实装时渲染逻辑进 shared/hr.js。</li>
+    </ol>
+  </div>
+</footer>
+
+<!-- 单例弹窗 DOM -->
+<div class="hrpop" id="hrpop" role="tooltip" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---- 线性图标(1.7 stroke, currentColor) ---- */
+var ICONS = {
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  shieldCheck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z"/><path d="M9 12l2.2 2.2L15.5 9.7"/></svg>',
+  shieldDash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z" stroke-dasharray="3.2 2.6"/><path d="M10.2 9.4a1.9 1.9 0 1 1 2.9 1.6c-.7.5-1.1.9-1.1 1.7"/><path d="M12 15.7h.01"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
+};
+
+/* ---- HR 弹窗数据(全部为后端算好字段的展示映射, 前端只呈现不判定) ---- */
+var HR = {
+  r1: { verdict:'在线·考察中', lane:'danger', src:'在线', cycle:'ongoing',
+    gauge:{ tag:{tone:'danger', text:'还需 25天21小时'},
+      local:{ seeded:'4天3小时', req:'30天', pct:13.8 },
+      site:{ tone:'danger', pct:86.2 } },
+    kv:[ ['站点分享率','1.02'], ['站点下载','45.2 GB'] ],
+    reason:'H&R 清单命中', lag:true },
+  r2: { verdict:'在线·已达标', lane:'safe', src:'在线', cycle:'ended',
+    /* 零冗余: 结论已说「已达标」, 不再出角标; 站点轨满格自明, 不带数值端点 */
+    gauge:{ local:{ seeded:'45天6小时', req:'30天', pct:100 },
+      site:{ tone:'safe', pct:100 } },
+    kv:[ ['站点分享率','1.36'], ['站点下载','12.8 GB'] ],
+    reason:'H&R 清单命中', lag:true },
+  r3: { verdict:'在线·未达标', lane:'failed', src:'在线', cycle:'ended',
+    /* 考核期已过的终态(2026-09-25 语义修正): 不再画站点细轨与还需倒计时, tag 改「考核期已过」;
+     * 2026-09-25 用户修正: 未达标为独立红色档(failed), 与考察中的 danger 橙分色 */
+    gauge:{ tag:{tone:'failed', text:'考核期已过'},
+      local:{ seeded:'2天8小时', req:'14天', pct:16.7 } },
+    kv:[ ['站点分享率','0.71'], ['站点下载','8.4 GB'] ],
+    reason:'H&R 清单命中', lag:true },
+  r4: { verdict:'本地·兜底，已达标', lane:'safe', src:'本地',
+    gauge:{ tag:{tone:'safe', text:'已超出 32天1小时'},
+      local:{ seeded:'62天1小时', req:'30天', pct:100 } },
+    kv:[ ],
+    reason:'站点无可查键，按本地时长·分享率判定', lag:false },
+  r5: { verdict:'策略·未核实，按受管束', lane:'danger', src:'策略',
+    gauge:{ tag:{tone:'danger', text:'还需 14天12小时'},
+      local:{ seeded:'6天12小时', req:'21天', pct:31 } },
+    kv:[ ],
+    reason:'mode=all：未核实一律按受管束管理（保守）', lag:false },
+  r6: { verdict:'本地·超龄豁免', lane:'safe', src:'本地', cycle:'ended',
+    badge:{ icon:'shieldCheck', text:'无时长要求' },
+    kv:[ ],
+    reason:'完成时间超过 completed_age_limit（300 天），义务视为已了', lag:false },
+  r7: { verdict:'未核实', lane:'unknown', src:'未核',
+    badge:{ icon:'shieldDash', text:'无时长要求' },
+    kv:[ ],
+    reason:'宽松策略：站点尚未查到该种子，暂不按受管束', lag:false }
+};
+
+/* ---- 演示表格行(R1..R8, 两区共用同一份) ---- */
+var ROWS = [
+  { id:'r1', name:'Valhalla.Shards.2024.2160p.WEB-DL.DDP5.1.H.264-MG', site:'星陨',
+    dur:['4天3小时','30天','pending'], src:'在线', ratio:['1.02',null,null] },
+  { id:'r2', name:'Pacific.Archives.2019.1080p.BluRay.x264-OLDHAM', site:'星陨',
+    dur:['45天6小时','30天','reached'], src:'在线', ratio:['1.36','1.00','reached'] },
+  { id:'r3', name:'Cosmos.Deep.Field.S02E03.1080p.WEB.h264-GRP', site:'极光',
+    dur:['2天8小时','14天','hr-fail'], src:'在线', ratio:['0.71','1.00','pending'] },
+  { id:'r4', name:'Vintage.Radio.Drama.Collection.1998.MP3-ARCH', site:'榕城',
+    dur:['62天1小时','30天','reached'], src:'本地', ratio:['1.42',null,null] },
+  { id:'r5', name:'Nightfall.Chronicles.2023.720p.HDTV.x264-SHY', site:'极光',
+    dur:['6天12小时','21天','pending'], src:'策略', ratio:['0.55','1.00','pending'] },
+  { id:'r6', name:'Ancient.Maps.Restoration.Pack.1972.PDF-SCAN', site:'星陨',
+    dur:['402天',null,'reached'], src:'本地', ratio:['2.10',null,null] },
+  { id:'r7', name:'Aurora.Borealis.Timelapse.4K.PACK-ICE', site:'极光',
+    dur:['9天',null,'hr-unk'], src:'未核', ratio:['0.31',null,null] },
+  { id:null, name:'ubuntu-24.04.3-live-server-amd64.iso', site:'—',
+    dur:['120天',null,null], src:null, ratio:['3.85',null,null] }
+];
+
+function rowHtml(r){
+  var dc = r.dur[2] ? ' ' + r.dur[2] : '';
+  var rc = r.ratio[2] ? ' ' + r.ratio[2] : '';
+  var trg = r.id ? ' data-hr="' + r.id + '" tabindex="0"' : '';
+  return '<tr>'
+    + '<td class="c-name" title="' + r.name + '">' + r.name + '</td>'
+    + '<td class="c-site">' + r.site + '</td>'
+    + '<td class="c-dur"' + trg + '><span class="m-pair m-dur' + dc + '">' + r.dur[0]
+      + (r.dur[1] ? '<span class="req">/ ' + r.dur[1] + '</span>' : '')
+      + (r.src ? '<span class="hr-src">' + r.src + '</span>' : '') + '</span></td>'
+    + '<td class="c-ratio"><span class="m-pair m-ratio' + rc + '">' + r.ratio[0]
+      + (r.ratio[1] ? '<span class="req">/ ' + r.ratio[1] + '</span>' : '') + '</span></td>'
+    + '</tr>';
+}
+
+/* ---- 弹窗 markup(单例与常显样张共用同一渲染) ---- */
+function popInner(d){
+  var lane = d.lane;
+  /* 零冗余(2026-09-25 精修): 结论短语已含来源(在线·/本地·/策略·)与进行中状态(考察中),
+   * 来源章与「考核中」章不再渲染, 仅终态标「已结束」。 */
+  var cyc = d.cycle === 'ended' ? '<span class="hp-cyc ended">已结束</span>' : '';
+  var mid = '';
+  if (d.gauge){
+    var g = d.gauge;
+    mid = '<div class="hp-gauge">'
+      + '<div class="hg-top"><span class="hg-legend"><i class="hg-dot ' + lane + '"></i>本地</span>'
+      + (g.tag ? '<span class="hg-tag ' + g.tag.tone + '">' + g.tag.text + '</span>' : '')
+      + '</div>'
+      + '<div class="hg-track"><span class="hg-end">' + g.local.seeded + '</span>'
+      + '<span class="hg-rail main"><i class="fill ' + lane + '" style="width:' + g.local.pct + '%"></i></span>'
+      + '<span class="hg-end">' + g.local.req + '</span></div>'
+      + (g.site
+        ? '<div class="hg-site"><span class="hg-legend"><i class="hg-dot hollow ' + g.site.tone + '"></i>站点</span>'
+          + '<span class="hg-rail site"><i class="fill ' + g.site.tone + '" style="width:' + g.site.pct + '%"></i></span></div>'
+        : '')
+      + '</div>';
+  } else if (d.badge){
+    mid = '<div class="hp-badge ' + lane + '">' + (ICONS[d.badge.icon] || '')
+      + '<span>' + d.badge.text + '</span></div>';
+  }
+  /* 数值条只留站点侧值(本地值表格行可见, 不重复上弹窗); 空则整条不渲染 */
+  var kv = (d.kv && d.kv.length)
+    ? '<div class="hp-kv">' + d.kv.map(function(p){
+        return '<span class="kv"><i>' + p[0] + '</i><b>' + p[1]
+          + (p[2] ? ' <em>' + p[2] + '</em>' : '') + '</b></span>';
+      }).join('') + '</div>'
+    : '';
+  return '<div class="hp-head"><i class="hp-dot ' + lane + '"></i>'
+    + '<span class="hp-verdict ' + lane + '">' + d.verdict + '</span>' + cyc + '</div>'
+    + mid
+    + kv
+    + '<div class="hp-foot"><div class="hp-reason">' + ICONS.doc + '<span>' + d.reason + '</span></div>'
+    + (d.lag ? '<div class="hp-lag">' + ICONS.clock + '<span>站点值滞后一个刷新周期</span></div>' : '')
+    + '</div>';
+}
+
+/* ---- 渲染两张演示表(同一份行数据) ---- */
+var rowsHtml = ROWS.map(rowHtml).join('');
+var atBody = document.getElementById('at-body');
+var pzBody = document.getElementById('pz-body');
+if (atBody) atBody.innerHTML = rowsHtml;
+if (pzBody) pzBody.innerHTML = rowsHtml;
+
+/* ---- 单例弹窗: 悬停调度 + fixed 定位 + 翻转/夹取 ---- */
+var hrpop = document.getElementById('hrpop');
+var pzZone = document.getElementById('pz-zone');
+var showT = 0, hideT = 0, fadeT = 0;
+
+function place(trg){
+  var r = trg.getBoundingClientRect();
+  var pw = hrpop.offsetWidth, ph = hrpop.offsetHeight;
+  var vw = window.innerWidth, vh = window.innerHeight, gap = 10, m = 8;
+  var left = r.left + r.width / 2 - pw / 2;
+  left = Math.max(m, Math.min(vw - pw - m, left));
+  var below = (r.top - gap - ph) < m;
+  var top = below ? (r.bottom + gap) : (r.top - gap - ph);
+  if (below && top + ph > vh - m) top = Math.max(m, vh - m - ph);
+  hrpop.classList.toggle('above', !below);
+  hrpop.classList.toggle('below', below);
+  hrpop.style.left = Math.round(left) + 'px';
+  hrpop.style.top = Math.round(top) + 'px';
+  var ax = Math.max(14, Math.min(pw - 14, r.left + r.width / 2 - left));
+  var arrow = hrpop.querySelector('.hp-arrow');
+  if (arrow) arrow.style.left = Math.round(ax - 5) + 'px';
+}
+
+function showPop(trg){
+  var d = HR[trg.getAttribute('data-hr')];
+  if (!d || !hrpop) return;
+  var prism = !!(pzZone && trg.closest && trg.closest('#pz-zone'));
+  var theme = prism ? (pzZone.getAttribute('data-theme') || 'ocean') : null;
+  var wasOn = hrpop.classList.contains('on');
+  hrpop.className = 'hrpop ' + (prism ? 'skin-prism' : 'skin-atlas');
+  if (theme) hrpop.setAttribute('data-theme', theme); else hrpop.removeAttribute('data-theme');
+  hrpop.innerHTML = '<i class="hp-arrow"></i>' + popInner(d);
+  hrpop.hidden = false;
+  if (wasOn){ place(trg); return; }
+  hrpop.classList.add('pre');
+  place(trg);
+  void hrpop.offsetHeight;
+  hrpop.classList.remove('pre');
+  hrpop.classList.add('on');
+}
+
+function hideNow(){
+  clearTimeout(showT); clearTimeout(hideT);
+  if (!hrpop || hrpop.hidden) return;
+  hrpop.classList.remove('on');
+  clearTimeout(fadeT);
+  fadeT = setTimeout(function(){ if (!hrpop.classList.contains('on')) hrpop.hidden = true; }, 180);
+}
+function scheduleShow(trg){
+  clearTimeout(hideT); clearTimeout(fadeT); clearTimeout(showT);
+  showT = setTimeout(function(){ showPop(trg); }, 120);
+}
+function scheduleHide(){
+  clearTimeout(showT);
+  clearTimeout(hideT);
+  hideT = setTimeout(hideNow, 160);
+}
+
+Array.prototype.forEach.call(document.querySelectorAll('td[data-hr]'), function(td){
+  td.addEventListener('mouseenter', function(){ scheduleShow(td); });
+  td.addEventListener('mouseleave', scheduleHide);
+  td.addEventListener('focus', function(){ scheduleShow(td); });
+  td.addEventListener('blur', scheduleHide);
+});
+if (hrpop){
+  hrpop.addEventListener('mouseenter', function(){ clearTimeout(hideT); clearTimeout(fadeT); });
+  hrpop.addEventListener('mouseleave', scheduleHide);
+}
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') hideNow(); });
+window.addEventListener('scroll', hideNow, true);
+window.addEventListener('resize', hideNow);
+
+/* ---- prism 主题切换(区根 data-theme 换值; 开着的 prism 弹窗同步跟随) ---- */
+var swBtns = document.querySelectorAll('.theme-sw button');
+Array.prototype.forEach.call(swBtns, function(btn){
+  btn.addEventListener('click', function(){
+    var t = btn.getAttribute('data-sw');
+    if (pzZone) pzZone.setAttribute('data-theme', t);
+    Array.prototype.forEach.call(swBtns, function(b){ b.classList.toggle('on', b === btn); });
+    if (hrpop && !hrpop.hidden && hrpop.classList.contains('skin-prism')) hrpop.setAttribute('data-theme', t);
+  });
+});
+
+/* ---- 弹窗全态样张(R1..R7, 同一 markup 静态常显; atlas / prism 皮肤各摆一组) ---- */
+function renderSamples(hostId, skin){
+  var host = document.getElementById(hostId);
+  if (!host) return;
+  host.innerHTML = ROWS.filter(function(r){ return r.id && HR[r.id]; }).map(function(r){
+    var d = HR[r.id];
+    var pair = '<span class="m-pair m-dur ' + r.dur[2] + '">' + r.dur[0]
+      + (r.dur[1] ? '<span class="req">/ ' + r.dur[1] + '</span>' : '')
+      + '<span class="hr-src">' + d.src + '</span></span>';
+    return '<div class="sample">'
+      + '<div class="s-meta"><i class="s-id">' + r.id.toUpperCase() + '</i>' + pair + '</div>'
+      + '<div class="s-arrow">' + ICONS.chev + '</div>'
+      + '<div class="hrpop ' + skin + ' static" role="tooltip">' + popInner(d) + '</div>'
+      + '</div>';
+  }).join('');
+}
+renderSamples('samples', 'skin-atlas');
+renderSamples('samples-prism', 'skin-prism');
+})();
+</script>
+</body>
+</html>

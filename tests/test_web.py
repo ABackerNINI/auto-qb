@@ -1091,7 +1091,7 @@ def test_frontend_hr_safety_wiring():
       逐字一致 —— 来源档位是前后端契约, 打错字徽标静默消失;
     ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + 挂 hrSrcBadge/
       hrDurTitle —— 漏一处那一列就不显示安全档位;
-    ③ hr-unk / hr-src / bulk-hr-warn 三条新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
+    ③ hr-unk / hr-fail / hr-src / bulk-hr-warn 新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
     ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
     """
@@ -1113,8 +1113,9 @@ def test_frontend_hr_safety_wiring():
 
     assert _map_keys("HR_SRC_BADGES") == src_tokens, "HR_SRC_BADGES 键与后端 SRC_* 不一致"
     assert _map_keys("HR_SRC_BUCKETS") == src_tokens, "HR_SRC_BUCKETS 键与后端 SRC_* 不一致"
+    # 四个安全档位(2026-09-25 用户修正起 failed=未达标终态红档): failed 由前端映射 hr-fail 红
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
-        assert _map_keys(name) == {"danger", "safe", "unknown"}, f"{name} 键集应为三个安全档位"
+        assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
 
     # ② 做种时长列换绑: 两套 UI 各 3 处
     for ui in ("atlas", "prism"):
@@ -1133,7 +1134,7 @@ def test_frontend_hr_safety_wiring():
     atlas_css = open(os.path.join(STATIC_ROOT, "atlas", "style.css"), encoding="utf-8").read()
     prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
     for css, name in ((atlas_css, "atlas/style.css"), (prism_css, "prism/css/views.css")):
-        for rule in (".m-pair.hr-unk", ".m-pair .hr-src", ".bulk-hr-warn"):
+        for rule in (".m-pair.hr-unk", ".m-pair.hr-fail", ".m-pair .hr-src", ".bulk-hr-warn"):
             assert rule in css, f"{name} 缺 {rule} 规则 —— 两套 UI 必须成对定义"
 
     # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
@@ -2227,7 +2228,7 @@ def test_hr_view_fields_three_state(tmp_path):
     )
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "site_scope"
-    assert fields["hr_safety_text"] == "在线·考察中，义务未了"
+    assert fields["hr_safety_text"] == "在线·考察中"
 
     link.judge.return_value = HrJudgement(
         identity=HrIdentity.HR,

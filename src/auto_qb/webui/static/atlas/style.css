@@ -918,9 +918,12 @@ button.primary { background: var(--accent); }
 .m-pair.pending { color: var(--hr-pending); }
 .m-pair.reached { color: var(--green); }
 /* 删除安全档位(2026-09-25, 计划 webui-hr-safety-display): hr-unk = 未核实(中性灰, 与"不适用"
- * 的默认 teal 区分); hr-src = 来源徽标(结论来自优先级链哪一档: 在线/本地/策略/未核, 2 字芯片)。
+ * 的默认 teal 区分); hr-fail = 未达标终态(2026-09-25 用户修正: 考核期已过、结果已成立,
+ * 独立醒目红档, 不与考察中的 pending 橙混用、也不是可删绿); hr-src = 来源徽标(结论来自
+ * 优先级链哪一档: 在线/本地/策略/未核, 2 字芯片)。
  * 两套 UI 必须同口径 —— 改这里时同步 prism/css/views.css 的同名规则。 */
 .m-pair.hr-unk { color: var(--paused); }
+.m-pair.hr-fail { color: var(--error); }
 .m-pair .hr-src {
   color: var(--fg-muted);
   font-size: 10px;

@@ -7,6 +7,13 @@
  * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DELETE);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+
+/* 「不能删」档位集(2026-09-25): danger=考察中(进行中, 橙) —— 删除可能新增 H&R 惩罚, 点名拦截。
+ * failed=考核未通过(终态红档)**不在**此集合: 考核期已过、结果已成立, 删除无新增惩罚,
+ * 点名「不能删」不符合实际(2026-09-25 用户修正)。token 由后端 hr.resolve.safety_display 单点派生,
+ * 前端只集合比对; 两处消费(批量条风险计数 / 确认框点名)必须同用本集合。 */
+const HR_NO_DELETE = new Set(["danger"]);
+
 window.AQB_DELETE = {
   methods: {
     /* DLG-02: 批量删除文案按选择构成计数(仅辅种=N 个辅种 / 仅种子=N 个种子)。
@@ -24,13 +31,13 @@ window.AQB_DELETE = {
       if (memberHashes.length) parts.push(`${memberHashes.length} 个种子`);
       return parts.join("、");
     },
-    /* 批量条 HR 风险提示(P4, 2026-09-25): 选中目标里「不能删」(hr_safety=danger, 后端算好)的
-     * 种子数 —— 与删除链同一目标集合派生, 不按视图阵列另算; 无风险返回空串(不渲染) */
+    /* 批量条 HR 风险提示(P4, 2026-09-25): 选中目标里「不能删」(HR_NO_DELETE: danger/failed,
+     * 后端算好)的种子数 —— 与删除链同一目标集合派生, 不按视图阵列另算; 无风险返回空串(不渲染) */
     bulkHrWarnText() {
       const { groupKeys, memberHashes } = this._bulkTargets();
       if (!groupKeys.length && !memberHashes.length) return "";
       const n = this._deleteMembers(groupKeys, memberHashes)
-        .filter((m) => m.hr_safety === "danger").length;
+        .filter((m) => HR_NO_DELETE.has(m.hr_safety)).length;
       return n ? `含 ${n} 个不能删` : "";
     },
     /* 批量条删除按钮文案: 计数文本前缀"删除", 空选中退化为纯"删除" */
@@ -99,10 +106,10 @@ window.AQB_DELETE = {
       for (const h of hashes || []) collect(this.memberByHash.get(h));
       return [...seen.values()];
     },
-    /* HR 风险点名(P2, 2026-09-25): 目标里 hr_safety=danger(不能删)的种子 —— 按来源短语去重,
-     * 名字最多列 3 个; count=0 返回 null(确认框不加风险行) */
+    /* HR 风险点名(P2, 2026-09-25): 目标里「不能删」(HR_NO_DELETE: danger/failed)的种子 ——
+     * 按来源短语去重, 名字最多列 3 个; count=0 返回 null(确认框不加风险行) */
     _hrRiskOf(members) {
-      const risky = members.filter((m) => m.hr_safety === "danger");
+      const risky = members.filter((m) => HR_NO_DELETE.has(m.hr_safety));
       if (!risky.length) return null;
       const srcs = [...new Set(risky.map((m) => m.hr_safety_text).filter(Boolean))].join(" / ");
       const names = risky.slice(0, 3).map((m) => m.name || m.hash.slice(0, 12)).join("、");
@@ -132,7 +139,7 @@ window.AQB_DELETE = {
       const hashes = targets.hashes || [];
       if (!keys.length && !hashes.length) return;
       const details = this._deleteDetails(keys, hashes);
-      // P2 HR 风险点名(2026-09-25): 目标含「不能删」(hr_safety=danger)种子时, 确认框点名
+      // P2 HR 风险点名(2026-09-25): 目标含「不能删」(HR_NO_DELETE: danger/failed)种子时, 确认框点名
       // 数量 + 来源档位 + 前几个名字 —— 最后一道防误删闸门(来源短语由后端算好, 前端只拼)
       const risk = this._hrRiskOf(this._deleteMembers(keys, hashes));
       if (risk) {

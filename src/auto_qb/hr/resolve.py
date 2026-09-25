@@ -354,9 +354,12 @@ def judge_record(
 
 # ---------------- 删除安全档位 × 来源档位(计划 webui-hr-safety-display §3) ----------------
 # WEB UI 展示单点: views.py 与 CLI 报告共用; 前端只做 token -> 徽标文字映射, 不重算判定。
-# 颜色只编码「能不能删」(danger/safe/unknown/none), 来源用文字徽标编码(2 字芯片)。
+# 颜色编码安全档位(danger 橙=考察中进行中 / failed 红=未达标终态 / safe 绿 / unknown 灰 /
+# none 无色; 2026-09-25 用户修正: C 档未达标是考核期已过的终态, 独立红色档, 不与考察中混橙),
+# 来源用文字徽标编码(2 字芯片)。
 
-SAFETY_DANGER = "danger"  # 不能删: HR 义务未了, 删除可能吃 H&R
+SAFETY_DANGER = "danger"  # 不能删(进行中): 考察中, 删除可能吃 H&R
+SAFETY_FAILED = "failed"  # 不能删(终态): 考核期已过仍未达标, 结果已成立 —— 独立醒目红色
 SAFETY_SAFE = "safe"  # 可删: 义务已了或从未有
 SAFETY_UNKNOWN = "unknown"  # 未核实: 站点还没查到它(宽松 policy 才出现)
 SAFETY_NONE = "none"  # 不适用: 站点未配 HR / 从未触发
@@ -385,9 +388,10 @@ def safety_display(judged: Optional["HrJudgement"], *, triggered: bool, satisfie
 
     `judged is None` = 站点未接入 / mode=off / 无可查键(judge_record 的回落口径), 此时
     triggered/satisfied 就是本地字段逻辑的结论, 来源记「本地·兜底」。站点命中行的档位即结论
-    (计划 §9 v3.0): A 考察中 / C 未达标 ⇒ 不能删, B 已达标 ⇒ 可删; 身份层结论(安全放行 /
-    超龄豁免)恒可删; 未核实却被按受管束管束的(mode=all / unknown_policy=hr / 新鲜度闸门)
-    归「策略」桶 —— 管束不由站点档位结论产生, 但结论仍是不能删(保守), 具体成因看 reason。
+    (计划 §9 v3.0): A 考察中 ⇒ 不能删(danger 橙, 进行中); C 未达标 ⇒ 不能删(failed 红,
+    考核期已过的终态 —— 2026-09-25 用户修正, 与考察中分色); B 已达标 ⇒ 可删; 身份层结论
+    (安全放行 / 超龄豁免)恒可删; 未核实却被按受管束管束的(mode=all / unknown_policy=hr /
+    新鲜度闸门)归「策略」桶 —— 管束不由站点档位结论产生, 但结论仍是不能删(保守), 具体成因看 reason。
     """
     if judged is None:
         if triggered:
@@ -411,9 +415,9 @@ def safety_display(judged: Optional["HrJudgement"], *, triggered: bool, satisfie
     if lane == LANE_SATISFIED:
         return HrSafetyDisplay(SAFETY_SAFE, SRC_SITE_SATISFIED, "在线·已达标")
     if lane == LANE_SCOPE:
-        return HrSafetyDisplay(SAFETY_DANGER, SRC_SITE_SCOPE, "在线·考察中，义务未了")
+        return HrSafetyDisplay(SAFETY_DANGER, SRC_SITE_SCOPE, "在线·考察中")
     if lane == LANE_UNSATISFIED:
-        return HrSafetyDisplay(SAFETY_DANGER, SRC_SITE_UNSATISFIED, "在线·未达标")
+        return HrSafetyDisplay(SAFETY_FAILED, SRC_SITE_UNSATISFIED, "在线·未达标")
     return HrSafetyDisplay(SAFETY_DANGER, SRC_POLICY, "策略·未核实，按受管束")
 
 

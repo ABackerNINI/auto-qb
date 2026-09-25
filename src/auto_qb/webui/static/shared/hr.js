@@ -10,9 +10,13 @@
 
 /* 删除安全档位 × 来源档位的 token -> 展示映射(2026-09-25, 计划 webui-hr-safety-display §3):
  * token 由后端 hr.resolve.safety_display 单点派生, 前端只做映射与着色 —— 判定与来源不得在 JS 重算。
- * 颜色只编码「能不能删」(复用既有 pending/reached 语义色), 来源用 2 字徽标编码。 */
-const HR_SAFETY_CLASSES = { danger: "pending", safe: "reached", unknown: "hr-unk" };
-const HR_SAFETY_BUCKETS = { danger: "不能删", safe: "可删", unknown: "未核实" };
+ * 颜色编码安全档位五档(2026-09-25 用户修正): danger 橙=考察中进行中 / failed 红=未达标终态
+ * (考核期已过, 独立醒目色, 不与考察中混橙、更不是可删绿) / safe 绿 / unknown 灰;
+ * danger 与 failed 同属「不能删」桶。来源用 2 字徽标编码。 */
+const HR_SAFETY_CLASSES = { danger: "pending", failed: "hr-fail", safe: "reached", unknown: "hr-unk" };
+/* 桶名(2026-09-25 用户修正): failed = 考核期已过仍未达标, 结果已成立的**终态** —— 删除不会新增
+ * 惩罚, 叫「不能删」不符合实际, 独立成「考核未通过」桶(红), 不进 delete_flow 的删除点名集合 */
+const HR_SAFETY_BUCKETS = { danger: "不能删", failed: "考核未通过", safe: "可删", unknown: "未核实" };
 const HR_SRC_BADGES = {
   site_scope: "在线", site_satisfied: "在线", site_unsatisfied: "在线", site_released: "在线",
   policy: "策略", local: "本地", local_exempt: "本地", unverified: "未核",
@@ -66,7 +70,7 @@ window.AQB_HR = {
       if (!m.hr_safety) return "";
       return [m.hr_safety_text, m.hr_reason, this.hrSiteLine(m)].filter(Boolean).join(" · ");
     },
-    /* H&R 筛选档位(2026-09-25 起四档: 不能删/可删/未核实): 组级消费组内成员档位集合、
+    /* H&R 筛选档位(2026-09-25 起四桶: 不能删/考核未通过/可删/未核实): 组级消费组内成员档位集合、
      * 成员级消费 hr_safety; 旧服务端(无 hr_safety 字段)回落本地布尔, 词汇映射进新档位。
      * 只比较后端算好的字段, 前端不重算模板/阈值(pitfalls: HR 判定前后端各写一遍 = 自定义标签立即失效) */
     /* 成员级筛选谓词: 单种子平铺/追剧集行/未识别桶共用同一套条件
@@ -129,10 +133,11 @@ window.AQB_HR = {
     /* 站点侧值一行(与本地实时值对照): 空串 = 该字段站点没给; 0 要单独说"已达标"(未知 ≠ 0)
      * ❗fmtDuration/fmtSize 是 methods(format.js), 必须经 this 调 —— 裸调用在渲染函数里
      *   ReferenceError, Vue 3 会卸掉整棵组件树(白屏); 站点未接入(hr_site_lane 空)时本方法
-     *   131 行提前返回, 裸调用永远不被求值 ⇒ 雷埋着不响, 站点接入后每行 title 都踩中。 */
+     *   提前返回, 裸调用永远不被求值 ⇒ 雷埋着不响, 站点接入后每行 title 都踩中。
+     * 档位前缀已撤(2026-09-25 用户修正): A/B/C 是站点内部档位词, 界面不展示。 */
     hrSiteLine(m) {
       if (!m.hr_site_lane) return "";
-      const parts = [`档位 ${m.hr_site_lane}`];
+      const parts = [];
       if (m.hr_site_need !== "") parts.push(`还需做种 ${this.fmtDuration(m.hr_site_need)}`);
       if (m.hr_site_remain !== "") {
         parts.push(m.hr_site_remain === 0 ? "已达标" : `剩余达标 ${this.fmtDuration(m.hr_site_remain)}`);
@@ -143,12 +148,12 @@ window.AQB_HR = {
     },
   },
   computed: {
-    /* H&R 四档计数(不能删/可删/未核实; 从未触发的行不属于任何档, 与旧两档口径一致):
+    /* H&R 四桶计数(不能删/考核未通过/可删/未核实; 从未触发的行不属于任何桶):
      * 只消费后端算好的 hr_safety, 前端不重算判定; 组行 = 组内出现过的档位各计 1(计数 = 含该档的组数),
      * 种子行按自身。❗取数面走 `facetRows`(**单点**, 见 filters.js): 组视图按组计数、种子页按种子计数。
      * (原先一律遍历 decoratedGroups ⇒ 种子页(按视图分片不回 groups)恒得 0/0 —— issue 见 filters.js) */
     hrOptions() {
-      const counts = { "不能删": 0, "可删": 0, "未核实": 0 };
+      const counts = { "不能删": 0, "考核未通过": 0, "可删": 0, "未核实": 0 };
       for (const r of this.facetRows) {
         const buckets = r.members ? this._hrBuckets(r) : [this._hrBucketMember(r)].filter(Boolean);
         for (const b of buckets) if (b in counts) counts[b] += 1;

@@ -6,6 +6,14 @@
 
 ## 当前基线
 
+**1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **HR 未达标红档语义修正轮**
+(档案 `26-09-25-webui-hr-safety-display` 修正1–3)。**+0 条, 改 4 处断言/守阵**:
+test_hr_resolve C 档断言改 `SAFETY_FAILED`(「考核未通过」终态独立红档); test_web 接线守阵
+安全档位键集扩四档(danger/failed/safe/unknown)、CSS 成对清单加 `.m-pair.hr-fail`、考察中短语
+断言去「义务未了」。test.quick 中途 6 红系新建 plans/ 模板缺五元 meta + 父计划未反链
+(补齐即绿; 认领链同因, 档案 Refs 需目标回指)。TOTAL **92%**(11028 语句 / 786 未覆盖 /
+3624 分支 / 327 partial), 22.9s; dev.fmt 已跑。
+
 **1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
 (档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**:
 test_cli.py `test_main_qb_connect_error_clean_exit`(非托管首连失败 → QbConnectError 干净退出码 1,
@@ -76,15 +84,10 @@ TOTAL **91%**(10991 语句 / 791 未覆盖 / 3612 分支 / 327 partial; `hr/reso
 删「A/D 档看剩余达标时间归零⇒已达标」推导 —— v2.8 实证该字段是考核窗口倒计时, 方向相反 —— 与缺字段
 回落本地) + `hr/resolve.py::judge_record` 双命中档位序; 动机见计划 v3.0 §9/§12/§14 与档案
 `26-09-22-backend-partial-hr-verify`。
-**上一态 2026-09-25 两线合一: 1601 collected: 1600 passed + 1 skipped** —— HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
-(HR 线 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
-(`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
-新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变), 动机与取舍见档案
-`26-09-22-backend-partial-hr-verify` 与计划 v2.8。master 线 **+2 条(1579 → 1581)**: GBK 防回潮守阵
-`test_local_codepage_ignores_utf8_mode` 1 条(引擎码页回退改问系统 ANSI 码页, 本会话 `PYTHONUTF8=1`
-下已全绿, 见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md))+ 搜索分隔符回归守阵 1 条
-(`test_search_torrents_separator_normalized` —— 空格查询词命中点/下划线/连字符分隔的种子名与文件名;
-views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.md](baseline-history.md)。)
+**上一态 2026-09-25 两线合一: 1601 collected: 1600 passed + 1 skipped** —— HR 超龄豁免(develop)并入
+GBK 修复/搜索分隔符(master): HR 线 +17 条(判定收口超龄豁免/取数侧/门面/配置, 新键
+`trackers.<站>.hr_check.completed_age_limit`)+ master 线 +2 条(GBK 防回潮 + 搜索分隔符归一);
+增量明细见 [baseline-history.md](baseline-history.md) 与档案 `26-09-22-backend-partial-hr-verify`。
 **同日 DND-01 拖拽添加种子 +1 守阵**(`test_frontend_add_torrent_drag_drop_wiring`, 全局拖拽接线四点:
 事件对称/drop 必 preventDefault/判据不放宽 text/plain/双 UI 遮罩成对 —— 1597 → 1598, 见切片
 `26-09-25-0848-webui-dnd-add-torrent`);

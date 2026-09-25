@@ -187,7 +187,8 @@ class WebviewMixin:
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
           exempt=超龄豁免) + 中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
-        - hr_safety / hr_safety_text / hr_safety_src: 删除安全档位(danger/safe/unknown/none) +
+        - hr_safety / hr_safety_text / hr_safety_src: 删除安全档位(danger/failed/safe/unknown/none,
+          failed = 未达标终态红档, 2026-09-25 用户修正) +
           含来源的人话短语 + 来源档位 token —— 派生单点在 hr.resolve.safety_display(不新造判定,
           只转译既有结论); 站点未配 HR 全空串(前端整列不显示)
         - hr_site_lane / hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl: 命中行的

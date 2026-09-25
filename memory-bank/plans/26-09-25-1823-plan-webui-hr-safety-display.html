@@ -7,8 +7,8 @@
 <meta name="doc-topic" content="webui-hr-safety-display">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-09-25-1823">
-<meta name="doc-updated" content="26-09-25-1914">
-<meta name="doc-refs" content="memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html,memory-bank/tasks/26-09-22-backend-partial-hr-verify.md,memory-bank/tasks/26-09-25-webui-hr-safety-display.md">
+<meta name="doc-updated" content="26-09-25-2254">
+<meta name="doc-refs" content="memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html,memory-bank/tasks/26-09-22-backend-partial-hr-verify.md,memory-bank/tasks/26-09-25-webui-hr-safety-display.md,memory-bank/tasks/26-09-26-webui-hr-popup.md,memory-bank/plans/26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html,memory-bank/plans/26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html,memory-bank/plans/26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html">
 <title>计划 · HR 在线核实的 WEB UI 呈现（删除安全档位 × 来源档位）</title>
 <style>
   :root {
@@ -128,14 +128,15 @@
   <h2><span class="no">§3</span>核心设计：安全档位 × 来源档位（后端单点）</h2>
   <p><code>_hr_view_fields</code> 新增三个展示字段，判定与来源<b>在前后端各说一遍的坑直接堵死</b>（前端只做 token → 徽标文字映射，不重算）：</p>
   <ul>
-    <li><code>hr_safety</code> — 删除安全档位：<code>danger</code> / <code>safe</code> / <code>unknown</code> / <code>none</code>；</li>
+    <li><code>hr_safety</code> — 删除安全档位：<code>danger</code>（考察中·橙）/ <code>failed</code>（未达标终态·红，2026-09-25 用户修正）/ <code>safe</code> / <code>unknown</code> / <code>none</code>；</li>
     <li><code>hr_safety_text</code> — 含来源的完整人话短语（全 UI 唯一口径，如「在线·考察中，义务未了」「本地·兜底，已达标」）；</li>
     <li><code>hr_safety_src</code> — 来源档位 token（下表）。</li>
   </ul>
   <h3>安全档位（颜色语义）</h3>
   <table>
     <tr><th>档位</th><th>判定（后端单点，不新造）</th><th class="c">颜色</th><th>含义</th></tr>
-    <tr><td><span class="pill warn">不能删</span></td><td><code>hr_triggered &amp;&amp; !hr_satisfied</code>（涵盖站点 A/C；默认 <code>unknown_policy=hr</code> 的未核实也落这档）</td><td class="c">复用既有 pending 橙</td><td>HR 义务未了，删除可能吃 H&amp;R</td></tr>
+    <tr><td><span class="pill warn">不能删·考察中</span></td><td>站点 A 档命中（考察中）；以及策略受管束（<code>mode=all</code> / <code>unknown_policy=hr</code> / 新鲜度闸门的未核实）</td><td class="c">复用既有 pending 橙</td><td>考核进行中，删除可能吃 H&amp;R</td></tr>
+    <tr><td><span class="pill" style="color:#f87171;border-color:rgba(248,113,113,.45)">考核未通过</span></td><td>站点 C 档命中（考核期已过仍未达标，终态）</td><td class="c">独立红档 <code>hr-fail</code>（--error 族）</td><td>考核结果已成立的终态 —— 2026-09-25 用户修正：删除无新增惩罚，不叫「不能删」、不进删除点名；独立醒目红，不与考察中混橙、不能是绿</td></tr>
     <tr><td><span class="pill ok">可删</span></td><td>已达标（站点 B 档或本地够线）；或站点安全放行（<code>verified_non_hr</code>）；或超龄豁免（<code>exempt</code>）</td><td class="c">复用既有 reached 青</td><td>义务已了或从未有</td></tr>
     <tr><td><span class="pill dim">未核实</span></td><td><code>state=unknown</code> 且未被按受管束管束（宽松 policy 才出现）</td><td class="c">中性 dim</td><td>站点还没查到它</td></tr>
     <tr><td><span class="pill dim">不适用</span></td><td>站点未配 HR / 从未触发</td><td class="c">无色（—）</td><td>无约束</td></tr>
@@ -146,7 +147,7 @@
     <tr><th><code>hr_safety_src</code></th><th>产生条件</th><th>安全档位</th><th class="c">单元格徽标</th></tr>
     <tr><td><code>site_scope</code> 在线·考察中</td><td>站点清单命中，档位 A</td><td>不能删</td><td class="c"><span class="pill">在线</span></td></tr>
     <tr><td><code>site_satisfied</code> 在线·已达标</td><td>站点清单命中，档位 B</td><td>可删</td><td class="c"><span class="pill">在线</span></td></tr>
-    <tr><td><code>site_unsatisfied</code> 在线·未达标</td><td>站点清单命中，档位 C</td><td>不能删</td><td class="c"><span class="pill">在线</span></td></tr>
+    <tr><td><code>site_unsatisfied</code> 在线·未达标</td><td>站点清单命中，档位 C</td><td>不能删（<code>failed</code> 红）</td><td class="c"><span class="pill">在线</span></td></tr>
     <tr><td><code>site_released</code> 在线·已核实</td><td>完整核实且不在清单（安全放行）</td><td>可删</td><td class="c"><span class="pill">在线</span></td></tr>
     <tr><td><code>policy</code> 策略·受管束</td><td>mode=all 未核实恒受管束 / unknown_policy=hr 落受管束</td><td>不能删</td><td class="c"><span class="pill">策略</span></td></tr>
     <tr><td><code>local</code> 本地·兜底</td><td>站点无可查键 / 无档位结论，按本地时长·分享率判定</td><td>按本地结论</td><td class="c"><span class="pill">本地</span></td></tr>
@@ -221,6 +222,7 @@
     <tr><td>D3</td><td>颜色只编码「能不能删」，来源用文字徽标编码</td><td>避免把颜色语义乘出 4×8 组合；色盲与多色混乱风险都压在文字上兜底</td></tr>
     <tr><td>D4</td><td>不新造色族，安全配色复用既有 pending/reached 令牌，未核实用中性 dim</td><td>两套 UI 令牌同值纪律的维护成本最低；未核实态低频（仅宽松 policy），不值得一个新色族</td></tr>
     <tr><td>D5</td><td>种子页做种时长列默认隐藏的现状不动</td><td>列显隐偏好本就存浏览器，用户已按需开启；改默认值反而打扰既有用户</td></tr>
+    <tr><td>D6</td><td>未达标（C 档）独立红色档：<code>hr_safety</code> 新增 <code>failed</code> token（--error 族），与考察中的 pending 橙分色，也绝不是可删绿；桶名「考核未通过」，<b>不在</b>「不能删」集合 —— 终态已成立，删除无新增惩罚，删除确认不点名、批量统计不计（2026-09-25 二次修正）；界面不出现 A/B/C 档描述、「义务未了」措辞撤除</td><td>用户修正（2026-09-25）：已达标 / 未达标 / 已免罪都是考核期已过的<b>终态</b>，只有考察中是进行中 —— 终态未达标要有自己的醒目颜色；「不能删」与 A/B/C 档描述都不符合界面实际需要</td></tr>
   </table>
 </section>
 
@@ -229,6 +231,9 @@
   <table>
     <tr><th>版本</th><th>时间</th><th>内容</th></tr>
     <tr><td>v3</td><td>26-09-25 18:23</td><td>吸收用户两条指令定稿并立档：①复用做种时长列不新增列（D1）；②结论带来源档位 hr_safety_src 八 token（D2）。筛选加来源副档；抽屉二值来源字段退役。</td></tr>
+    <tr><td>修正3</td><td>26-09-25 22:54</td><td>弹窗方向定稿 <b>T3 进度仪表</b>(用户选定), 精修去冗余(用户指令): ①来源章移除 —— 结论短语已含在线/本地/策略前缀; ②「考核中」章移除 —— 考察中短语已含, 生命周期 chip 仅终态标「已结束」; ③站点细轨去数值端点(数值由角标承载); ④角标只在结论没说时出现(还需 X / 考核期已过 / 已超出 X), 已达标不重复出; ⑤数值条仅站点侧值, 本地值不上弹窗(表格行可见), 无站点侧值整条不渲染; ⑥状态徽记只说「无时长要求」, 不与结论重复。</td></tr>
+    <tr><td>修正2</td><td>26-09-25 22:43</td><td>措辞与桶名修正(用户三轮反馈定稿): ①「在线·考察中，义务未了」→「在线·考察中」; ②A/B/C 档描述全部撤出界面(弹窗档位章移除, 抽屉 hrSiteLine 去「档位 X」前缀); ③failed 桶由「不能删」更名「考核未通过」并移出删除点名/批量统计(终态已成立, 删除无新增惩罚), HR 筛选扩为四桶(不能删/考核未通过/可删/未核实)。全量 <b>1607 passed + 1 skipped</b>。</td></tr>
+    <tr><td>修正1</td><td>26-09-25 22:18</td><td>未达标语义修正落地: ①后端 <code>safety_display</code> 给 C 档新增 <code>failed</code> 红档(终态, 与考察中橙分色), 前端 hr.js 映射 <code>hr-fail</code> + 两套 CSS 同值 + delete_flow「不能删」集合扩为 danger+failed; ②已达标/未达标/免罪按考核期已过的终态呈现(弹窗加「考核中/已结束」生命周期 chip, 终态不再显示还需/剩余倒计时); ③悬停层改弹窗方案(三版模板 T1 档案卡 / T2 结论卡 / T3 进度仪表评选中, 见 doc-refs)。全量 <b>1607 passed + 1 skipped</b>。</td></tr>
     <tr><td>落地</td><td>26-09-25 19:14</td><td>P1–P4 一次全部落地并验收: 后端 safety_display 单点 + 三字段透出(退役 hr_satisfied_src);前端 6 处单元格换绑+徽标+悬停、删除链点名、筛选四档+来源副筛选、批量统计。全量 <b>1606 passed + 1 skipped</b>(TOTAL 91%), 双 UI 冒烟 94 项 0 失败; 档案 memory-bank/tasks/26-09-25-webui-hr-safety-display.md。</tr>
     <tr><td>v2</td><td>26-09-25（讨论）</td><td>用户纠正「做种时长列担任 HR 职责」后，P1 从「新增 HR 列」改为「合入做种时长单元格」；取消 HR 列排序。</td></tr>
     <tr><td>v1</td><td>26-09-25（讨论）</td><td>初版：四档安全档位 + 新增 HR 列 + 删除链点名 + 筛选扩档 + 排序/统计。</td></tr>

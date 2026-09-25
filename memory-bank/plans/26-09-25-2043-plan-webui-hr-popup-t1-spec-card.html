@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-hr-popup-t1">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-25-2043">
+<meta name="doc-updated" content="26-09-25-2218">
+<meta name="doc-refs" content="memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html">
+<title>HR 悬停弹窗模板 · T1 档案卡 · auto-qb</title>
+<style>
+/* ================================================================
+   auto-qb · HR 悬停弹窗模板 T1「档案卡」(spec-card)
+   核心概念: 一张对账单 —— 结论 / 本地与站点双侧 kv 逐行 / 依据 / 滞后角注,
+   信息最全、逐行可对账; 层级靠排版不靠大色块。
+   令牌事实照抄: atlas/style.css :root · prism css/tokens.css + themes/*.css。
+   ================================================================ */
+:root {
+  color-scheme: dark;
+  /* ---- 页面 chrome 令牌(恒 dark; 仅 chrome 使用, 不进弹窗/表格) ---- */
+  --pg-bg: #0a0d12;
+  --pg-panel: #10151d;
+  --pg-border: #1f2836;
+  --pg-fg: #e7ebf1;
+  --pg-muted: #96a2b5;
+  --pg-dim: #6c7a8e;
+  --pg-accent: #60a5fa;
+  --pg-accent-soft: rgba(96, 165, 250, .14);
+
+  /* ---- 字体栈(照抄 prism tokens.css / atlas body) ---- */
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+  /* ---- atlas 令牌(照抄 atlas/style.css :root 摘要; 兼作弹窗单例的兜底作用域) ---- */
+  --bg: #0e1218;
+  --bg-card: #151b24;
+  --bg-row: #111722;
+  --bg-hover: #1c2534;
+  --bg-elev: #1a2231;
+  --fg: #e7ebf1;
+  --fg-muted: #96a2b5;
+  --fg-dim: #6c7a8e;
+  --fg-soft: #b9c4d4;
+  --accent: #3b82f6;
+  --accent-hi: #60a5fa;
+  --accent-soft: rgba(59, 130, 246, .16);
+  --green: #34d399;
+  --green-soft: rgba(52, 211, 153, .16);
+  --violet: #a78bfa;
+  --teal: #2dd4bf;
+  --teal-soft: rgba(45, 212, 191, .16);
+  --hr-pending: #ff8a3d;
+  --hr-pending-soft: rgba(255, 138, 61, .18);
+  --error: #f87171;
+  --border: #253045;
+  --border-strong: #37455f;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .028);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+  --paused: var(--fg-muted);
+  --radius-lg: 14px;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, .32);
+  --shadow-3: 0 20px 48px rgba(0, 0, 0, .42);
+  --ease: cubic-bezier(.2, .8, .3, 1);
+  --dur: 160ms;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--pg-bg);
+  color: var(--pg-fg);
+  font: 14px/1.6 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 30px clamp(16px, 4vw, 48px) 56px;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
+
+/* ================= 页头 chrome ================= */
+.kicker { font-size: 11px; font-weight: 600; letter-spacing: .18em; color: var(--pg-dim); text-transform: uppercase; }
+h1 { margin: 8px 0 6px; font-size: 24px; line-height: 1.3; letter-spacing: .01em; }
+.lede { margin: 0 0 12px; font-size: 13px; color: var(--pg-muted); max-width: 62em; }
+.diffs { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; max-width: 72em; }
+.diffs li { position: relative; padding-left: 16px; font-size: 12.5px; color: var(--pg-muted); }
+.diffs li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 6px; height: 6px;
+  border-radius: 2px; background: var(--pg-accent-soft); border: 1px solid var(--pg-accent); }
+.diffs b { color: var(--pg-fg); font-weight: 600; }
+.switch { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.sw-item { display: inline-block; font-size: 12px; line-height: 1; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--pg-border); color: var(--pg-muted); text-decoration: none;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+a.sw-item:hover { color: var(--pg-fg); border-color: var(--pg-accent); }
+.sw-item.cur { background: var(--pg-accent-soft); color: var(--pg-accent); border-color: transparent;
+  font-weight: 600; cursor: default; }
+
+/* ================= 演示区框架(chrome) ================= */
+.demo { margin-top: 28px; background: var(--pg-panel); border: 1px solid var(--pg-border);
+  border-radius: var(--radius-lg); padding: 18px 20px 20px; }
+.demo-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 14px; }
+.demo-title { font-size: 15px; font-weight: 700; }
+.demo-note { font-size: 11.5px; color: var(--pg-dim); }
+.theme-sw { margin-left: auto; display: flex; gap: 6px; }
+.stage { padding: 14px; background: var(--bg); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg); color: var(--fg); }
+
+/* ================= 表格(两套 UI 同构, 值随作用域令牌) ================= */
+.tbl { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.tbl-head, .trow { display: grid; grid-template-columns: minmax(0, 1fr) 92px 210px 150px;
+  gap: 12px; align-items: center; padding: 8px 12px; }
+.tbl-head { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; color: var(--fg-dim);
+  border-bottom: 1px solid var(--border); background: var(--bg-elev); }
+.trow { background: var(--bg-row); border-bottom: 1px dashed var(--border-soft);
+  font-size: 12.5px; transition: background var(--dur) var(--ease); }
+.trow:last-child { border-bottom: none; }
+.trow:hover { background: var(--bg-hover); }
+.c-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-site { color: var(--fg-muted); font-size: 12px; }
+.c-dur, .c-ratio { text-align: right; }
+.c-dur[data-hr] { cursor: help; }
+
+/* 做种时长 / 分享率 pair + 来源徽标(照抄两套 UI 的 .m-pair / .hr-src 同值规则) */
+.m-pair { display: inline-flex; align-items: baseline; gap: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.m-pair .req { color: var(--fg-dim); font-size: 11.5px; }
+.m-pair.m-dur { color: var(--teal); }
+.m-pair.m-ratio { color: var(--violet); }
+.m-pair.pending { color: var(--hr-pending); }
+.m-pair.reached { color: var(--green); }
+.m-pair.hr-unk { color: var(--paused); }
+/* hr-fail = 未达标终态(2026-09-25 用户修正): 独立红色档, 与考察中的 pending 橙分色 */
+.m-pair.hr-fail { color: var(--error); }
+.m-pair .hr-src { color: var(--fg-muted); font-size: 10px; line-height: 1.5;
+  border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 3px;
+  align-self: center; white-space: nowrap; }
+
+/* prism 侧覆盖(只引用令牌; 数字/时长 mono + tabular-nums) */
+.prism-scope .trow { border-bottom: 1px solid var(--hairline); }
+.prism-scope .tbl-head { font-family: var(--font-display); font-size: 11px; letter-spacing: .06em; }
+.prism-scope .m-pair, .prism-scope .c-site { font-family: var(--font-mono); }
+.prism-scope .m-pair { font-size: 12px; }
+.prism-scope .trow { font-family: var(--font-ui); }
+
+/* ================= T1 档案卡弹窗(单例与常显样张同 markup) ================= */
+.hr-pop { position: fixed; z-index: 140; width: 320px; max-width: 340px; padding: 12px 14px;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3); color: var(--fg); font-size: 12px; line-height: 1.5;
+  opacity: 0; transform: translateY(4px) scale(.98); pointer-events: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.hr-pop.on { opacity: 1; transform: none; pointer-events: auto; }
+.hr-pop.static { position: relative; opacity: 1; transform: none; pointer-events: auto; }
+/* 档位色: 左色条(语义色只出现在这里与结论短语) */
+.hr-pop::before { content: ""; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--tone, var(--fg-muted)); }
+.hr-pop[data-tone="danger"] { --tone: var(--hr-pending); }
+.hr-pop[data-tone="failed"] { --tone: var(--error); }
+.hr-pop[data-tone="safe"] { --tone: var(--green); }
+.hr-pop[data-tone="unknown"] { --tone: var(--paused); }
+
+.hp-head { display: flex; align-items: center; gap: 8px; padding-bottom: 9px; margin-bottom: 9px;
+  border-bottom: 1px solid var(--border-soft); }
+.hp-verdict { min-width: 0; font-size: 13px; font-weight: 600; color: var(--tone, var(--fg)); letter-spacing: .01em; }
+.hp-src-badge { margin-left: auto; flex: none; font-size: 10px; line-height: 1.6; color: var(--fg-muted);
+  background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 5px; }
+
+.hp-sec + .hp-sec { margin-top: 9px; }
+.hp-sec-title { display: flex; align-items: center; gap: 5px; margin-bottom: 2px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .08em; color: var(--fg-dim); }
+.hp-sec-title .ico { width: 12px; height: 12px; flex: none; opacity: .85; }
+/* 生命周期 chip(2026-09-25 语义修正): 已达标/未达标/免罪均为考核期已过的终态(已结束),
+ * 仅 site_scope(考察中)是进行中(考核中)。颜色仍只编码可删性, 时间态交给 chip。 */
+.hp-cycle { flex: none; font-size: 10px; line-height: 1.5; border: 1px solid transparent;
+  border-radius: 3px; padding: 0 4px; }
+.hp-cycle.ongoing { color: var(--hr-pending); background: var(--hr-pending-soft); }
+.hp-cycle.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
+.hp-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  padding: 4px 0; border-bottom: 1px solid var(--hairline); }
+.hp-kv:last-child { border-bottom: none; }
+.hp-k { flex: none; font-size: 11.5px; color: var(--fg-dim); }
+.hp-v { font-size: 12px; color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
+
+.hp-foot { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border-soft); }
+.hp-reason { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.55; color: var(--fg-dim); }
+.hp-reason-tag { flex: none; font-size: 10px; line-height: 1.6; color: var(--fg-muted);
+  border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 4px; margin-top: 1px; }
+.hp-note { display: flex; align-items: center; gap: 5px; margin-top: 5px;
+  font-size: 10.5px; color: var(--fg-dim); opacity: .85; }
+.hp-note .ico { width: 11px; height: 11px; flex: none; }
+
+/* 指向箭头(方向随翻转; 常显样张由 .spec-arrow 承担, 此处隐藏) */
+.hr-pop .hp-arrow { position: absolute; left: var(--arrow-x, 24px); margin-left: -5px;
+  width: 10px; height: 10px; background: var(--bg-card); border-radius: 1px; }
+.hr-pop.below .hp-arrow { top: -5px; transform: rotate(45deg);
+  border-left: 1px solid var(--border-strong); border-top: 1px solid var(--border-strong); }
+.hr-pop.above .hp-arrow { bottom: -5px; transform: rotate(45deg);
+  border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
+.spec .hp-arrow { display: none; }
+
+/* prism 侧弹窗覆盖(只引用令牌) */
+.prism-scope .hr-pop, .hr-pop[data-theme] { border-radius: var(--radius-lg); }
+.prism-scope .hp-v, .hr-pop[data-theme] .hp-v { font-family: var(--font-mono); }
+.prism-scope .hp-verdict, .hr-pop[data-theme] .hp-verdict { font-family: var(--font-display); }
+
+/* ================= 常显样张布局 ================= */
+.samples { margin-top: 16px; }
+.samples h3 { margin: 0 0 12px; font-size: 12.5px; font-weight: 600; color: var(--fg-muted); }
+.spec-wrap { display: flex; flex-wrap: wrap; gap: 22px 28px; align-items: flex-start; }
+.spec { display: flex; flex-direction: column; align-items: center; }
+.spec-id { font-size: 10.5px; letter-spacing: .12em; color: var(--fg-dim); margin-bottom: 4px; }
+.spec-trig { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; }
+.spec-arrow { position: relative; z-index: 1; width: 10px; height: 10px; margin: 2px 0 -5px;
+  background: var(--bg-card); border-right: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong); transform: rotate(45deg); border-radius: 1px; }
+
+/* ================= prism 主题令牌(照抄 themes/*.css 颜色段; 切主题 = 根节点 data-theme 换值) ================= */
+[data-theme="ocean"] {
+  color-scheme: dark;
+  --bg: #0d1724;
+  --bg-card: #15233a;
+  --bg-row: #112034;
+  --bg-hover: #1c3050;
+  --bg-elev: #1b2d4b;
+  --fg: #e9eff7;
+  --fg-muted: #9cadc6;
+  --fg-dim: #6e84a3;
+  --fg-soft: #bccadd;
+  --accent: #3aa6a6;
+  --accent-hi: #5cc3c3;
+  --accent-soft: rgba(58, 166, 166, .15);
+  --accent-line: rgba(58, 166, 166, .45);
+  --green: #3fd699;
+  --violet: #ab8ffa;
+  --teal: #2fd4bf;
+  --hr-pending: #ff8f45;
+  --error: #f3766f;
+  --border: #23395a;
+  --border-strong: #34507c;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+  --paused: var(--fg-muted);
+  --radius-lg: 8px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, .22);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, .3);
+}
+[data-theme="galaxy"] {
+  color-scheme: dark;
+  --bg: #151021;
+  --bg-card: #221a38;
+  --bg-row: #1c1530;
+  --bg-hover: #322653;
+  --bg-elev: #2b2149;
+  --fg: #ece8f6;
+  --fg-muted: #a89dc7;
+  --fg-dim: #7d72a0;
+  --fg-soft: #c6bcde;
+  --accent: #b79fe0;
+  --accent-hi: #ccb8ec;
+  --accent-soft: rgba(183, 159, 224, .14);
+  --accent-line: rgba(183, 159, 224, .4);
+  --green: #5fd6a8;
+  --violet: #a678f0;
+  --teal: #4adccc;
+  --hr-pending: #ff9a55;
+  --error: #f08080;
+  --border: #372a55;
+  --border-strong: #4d3b74;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+  --paused: var(--fg-muted);
+  --radius-lg: 8px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, .22);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, .3);
+}
+[data-theme="frost"] {
+  color-scheme: light;
+  --bg: #f2f6fb;
+  --bg-card: #fdfeff;
+  --bg-row: #f7fafd;
+  --bg-hover: #e9f1f9;
+  --bg-elev: #ffffff;
+  --fg: #1b2a3a;
+  --fg-muted: #52708c;
+  --fg-dim: #6f88a0;
+  --fg-soft: #3a5470;
+  --accent: #3d6aa3;
+  --accent-hi: #4f80bd;
+  --accent-soft: rgba(61, 106, 163, .1);
+  --accent-line: rgba(61, 106, 163, .35);
+  --green: #178a5c;
+  --violet: #7153cf;
+  --teal: #0f8f81;
+  --hr-pending: #c56a1a;
+  --error: #bc4438;
+  --border: #d3e0ee;
+  --border-strong: #b3c9de;
+  --border-soft: rgba(27, 42, 58, .08);
+  --surface-1: rgba(27, 42, 58, .035);
+  --surface-2: rgba(27, 42, 58, .06);
+  --hairline: rgba(27, 42, 58, .07);
+  --paused: var(--fg-muted);
+  --radius-lg: 8px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow-2: 0 6px 18px rgba(27, 42, 58, .1);
+  --shadow-3: 0 14px 40px rgba(27, 42, 58, .14);
+}
+/* 主题切换按钮(在 prism 作用域内, 只引用令牌) */
+.theme-btn { font-family: var(--font-ui); font-size: 11px; line-height: 1; padding: 5px 11px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-soft);
+  background: transparent; color: var(--fg-muted); cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.theme-btn:hover { color: var(--fg); border-color: var(--border-strong); }
+.theme-btn.on { background: var(--accent-soft); color: var(--accent-hi); border-color: var(--accent-line); }
+
+/* ================= 页脚说明 ================= */
+footer { margin-top: 30px; border-top: 1px solid var(--pg-border); padding-top: 16px; }
+footer h2 { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--pg-fg); }
+footer ol { margin: 0; padding-left: 18px; display: grid; gap: 7px; }
+footer li { font-size: 12px; line-height: 1.7; color: var(--pg-muted); }
+footer li b { color: var(--pg-fg); font-weight: 600; }
+footer code { font-family: var(--font-mono); font-size: 11px; color: var(--pg-fg);
+  background: var(--pg-accent-soft); border-radius: 3px; padding: 0 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hr-pop, .trow, .theme-btn, .sw-item { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <p class="kicker">auto-qb · HR 悬停弹窗 · 三选一模板</p>
+  <h1>模板 T1 · 档案卡</h1>
+  <p class="lede">一张 HR 对账单 —— 结论、本地与站点双侧数值、依据一次给全, 服务「要弄清为什么 / 本地与站点对不上账」的核对场景; 悬停做种时长单元格或来源徽标即得。</p>
+  <ul class="diffs">
+    <li><b>信息最全</b> —— 结论短语、本地/站点两组逐行 kv、依据原文与站点滞后角注一卡给全; T2 结论卡只留结论与关键值, T3 进度仪表以图形进度为主。</li>
+    <li><b>逐行可对账</b> —— label 左(dim)/value 右(fg)的 kv 排版 + hairline 分隔, 数字右对齐 tabular-nums, 专为双侧数值逐行对照。</li>
+    <li><b>层级靠排版不靠大色块</b> —— 语义色只出现在左色条与结论短语; 站点侧值缺失时「站点」小节整体消失, 卡高随信息量伸缩。</li>
+  </ul>
+  <nav class="switch" aria-label="模板切换">
+    <span class="sw-item cur" aria-current="page">T1 · 档案卡(当前)</span>
+    <a class="sw-item" href="26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html">T2 · 结论卡</a>
+    <a class="sw-item" href="26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html">T3 · 进度仪表</a>
+  </nav>
+</header>
+
+<!-- ================= 演示区一 · atlas(星图) ================= -->
+<section class="demo" id="atlas-demo" aria-label="演示区一 atlas">
+  <div class="demo-head">
+    <span class="demo-title">演示区一 · atlas(星图)</span>
+    <span class="demo-note">冷灰蓝 · 圆角 10/14 · 深阴影浮层 —— 弹窗表面对齐 .ctx-menu: bg-card + border-strong + shadow-3</span>
+  </div>
+  <div class="stage">
+    <div id="atlas-tbl"></div>
+    <div class="samples">
+      <h3>弹窗全态样张(常显) — R1..R7, 第 8 行无 HR 不触发</h3>
+      <div class="spec-wrap" id="atlas-samples"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 演示区二 · prism(棱镜) ================= -->
+<section class="demo prism-scope" id="prism-demo" data-theme="ocean" aria-label="演示区二 prism">
+  <div class="demo-head">
+    <span class="demo-title">演示区二 · prism(棱镜)</span>
+    <span class="demo-note">hairline 高程 · 圆角 8/6/4 · mono 数据字体 —— 表面对齐 .speed-pop; 右上切主题, 验证弹窗令牌自适配</span>
+    <span class="theme-sw" role="group" aria-label="prism 主题切换">
+      <button type="button" class="theme-btn on" data-theme="ocean">ocean</button>
+      <button type="button" class="theme-btn" data-theme="galaxy">galaxy</button>
+      <button type="button" class="theme-btn" data-theme="frost">frost(亮色)</button>
+    </span>
+  </div>
+  <div class="stage">
+    <div id="prism-tbl"></div>
+    <div class="samples">
+      <h3>弹窗全态样张(常显) — R1..R7, 第 8 行无 HR 不触发</h3>
+      <div class="spec-wrap" id="prism-samples"></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <h2>实现说明</h2>
+  <ol>
+    <li><b>触发与延迟</b>: 触发面 = 做种时长单元格(<code>.m-dur</code>)整体或行内 <code>.hr-src</code> 徽标; mouseenter 120ms 显示, mouseleave 160ms 宽限后隐藏, 移入弹窗不隐藏(文字可选中复制); ESC 或滚动立即关闭; 无 hr_safety 的行(样表第 8 行)不触发。</li>
+    <li><b>定位</b>: <code>position: fixed</code> 锚定触发单元格矩形, 优先上方(间距 10px), 上方空间不足翻下方, 横向夹取视口(边距 8px); 指向箭头随翻转换边, 箭头 x 跟随触发中心(<code>--arrow-x</code>)。</li>
+    <li><b>字段映射</b>: 结论 &larr; <code>hr_safety_text</code>; 档位色 &larr; <code>hr_safety</code>(danger/failed/safe/unknown/none; failed=未达标红档, 2026-09-25 用户修正, 与考察中橙分色); 徽标 &larr; <code>hr_safety_src</code>; 依据 &larr; <code>hr_reason</code>; 站点侧值 &larr; <code>hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl</code>(与详情抽屉 hrSiteLine 同源, 滞后一个刷新周期); 本地 &larr; <code>seeding_time / hr_req_time / ratio / hr_req_ratio</code>。前端只做比较与着色, 不重算结论; 旧 <code>:title="hrDurTitle(m)"</code> 移除。</li>
+    <li><b>生命周期</b>(2026-09-25 语义修正): 已达标 / 未达标 / 免罪(安全放行、超龄豁免)均为<b>考核期已过的终态</b>, 弹窗标「已结束」; 仅考察中(<code>site_scope</code>)是进行中, 标「考核中」并显示还需/剩余倒计时。已结束态不渲染还需/剩余行(即便站点字段非空)。映射 ← <code>hr_safety_src</code>: site_scope=考核中; site_satisfied / site_unsatisfied / site_released / local_exempt=已结束; policy / local / unverified 无考核期概念, 不标。</li>
+    <li><b>落点</b>: <code>shared/hr.js</code> 单点方法产出弹窗数据 + 6 处模板绑定(两套 UI × 组内成员/种子页/明细三语境) + 两套 CSS 同值规则; z-index 140, 高于 ctx-menu(100) 与 speed-pop(131)。</li>
+    <li><b>T1 档案卡要点</b>: 左色条 + 档位色结论短语 + 来源徽标构成头部; 「本地」「站点」两小节 kv 逐行(label 左 dim / value 右 fg, tabular-nums), 行间 hairline 分隔, 站点小节按 <code>hr_site_*</code> 有无整体显隐; 底部「依据」+ 滞后角注; 宽 320px(max 340), 内边距 12/14, 字号 10.5–13px 层级; prism 侧数值走 <code>--font-mono</code>、结论走 <code>--font-display</code>; 层级全靠排版, 无大色块。</li>
+  </ol>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---- 共用演示数据(与任务书逐字一致; 前端只展示, 不重算判定) ---- */
+  var ROWS = [
+    { id: 'r1', siteName: '星陨', name: 'Valhalla.Shards.2024.2160p.WEB-DL.DDP5.1.H.264-MG', site: '星陨',
+      dur: '4天3小时', durReq: '30天', durState: 'pending', src: '在线',
+      ratio: '1.02', ratioReq: '', ratioState: '',
+      verdict: '在线·考察中', tone: 'danger', cycle: 'ongoing',
+      local: [['已做种', '4天3小时'], ['要求', '30天'], ['分享率', '1.02']],
+      siteKvs: [['还需做种', '25天21小时'], ['站点分享率', '1.02'], ['站点下载', '45.2 GB']],
+      reason: 'H&R 清单命中', note: true },
+    { id: 'r2', siteName: '星陨', name: 'Pacific.Archives.2019.1080p.BluRay.x264-OLDHAM', site: '星陨',
+      dur: '45天6小时', durReq: '30天', durState: 'reached', src: '在线',
+      ratio: '1.36', ratioReq: '1.00', ratioState: 'reached',
+      verdict: '在线·已达标', tone: 'safe', cycle: 'ended',
+      local: [['已做种', '45天6小时'], ['要求', '30天'], ['分享率', '1.36'], ['要求分享率', '1.00']],
+      siteKvs: [['考核结果', '已达标'], ['站点分享率', '1.36'], ['站点下载', '12.8 GB']],
+      reason: 'H&R 清单命中', note: true },
+    { id: 'r3', siteName: '极光', name: 'Cosmos.Deep.Field.S02E03.1080p.WEB.h264-GRP', site: '极光',
+      dur: '2天8小时', durReq: '14天', durState: 'hr-fail', src: '在线',
+      ratio: '0.71', ratioReq: '1.00', ratioState: 'pending',
+      verdict: '在线·未达标', tone: 'failed', cycle: 'ended',
+      local: [['已做种', '2天8小时'], ['要求', '14天'], ['分享率', '0.71'], ['要求分享率', '1.00']],
+      siteKvs: [['站点分享率', '0.71'], ['站点下载', '8.4 GB']],
+      reason: 'H&R 清单命中', note: true },
+    { id: 'r4', siteName: '榕城', name: 'Vintage.Radio.Drama.Collection.1998.MP3-ARCH', site: '榕城',
+      dur: '62天1小时', durReq: '30天', durState: 'reached', src: '本地',
+      ratio: '1.42', ratioReq: '', ratioState: '',
+      verdict: '本地·兜底，已达标', tone: 'safe',
+      local: [['已做种', '62天1小时'], ['要求', '30天'], ['分享率', '1.42']],
+      siteKvs: null,
+      reason: '站点无可查键，按本地时长·分享率判定', note: false },
+    { id: 'r5', siteName: '极光', name: 'Nightfall.Chronicles.2023.720p.HDTV.x264-SHY', site: '极光',
+      dur: '6天12小时', durReq: '21天', durState: 'pending', src: '策略',
+      ratio: '0.55', ratioReq: '1.00', ratioState: 'pending',
+      verdict: '策略·未核实，按受管束', tone: 'danger',
+      local: [['已做种', '6天12小时'], ['要求', '21天'], ['分享率', '0.55'], ['要求分享率', '1.00']],
+      siteKvs: null,
+      reason: 'mode=all：未核实一律按受管束管理（保守）', note: false },
+    { id: 'r6', siteName: '星陨', name: 'Ancient.Maps.Restoration.Pack.1972.PDF-SCAN', site: '星陨',
+      dur: '402天', durReq: '', durState: 'reached', src: '本地',
+      ratio: '2.10', ratioReq: '', ratioState: '',
+      verdict: '本地·超龄豁免', tone: 'safe', cycle: 'ended',
+      local: [['已做种', '402天'], ['要求', '无时长要求'], ['分享率', '2.10']],
+      siteKvs: null,
+      reason: '完成时间超过 completed_age_limit（300 天），义务视为已了', note: false },
+    { id: 'r7', siteName: '极光', name: 'Aurora.Borealis.Timelapse.4K.PACK-ICE', site: '极光',
+      dur: '9天', durReq: '', durState: 'hr-unk', src: '未核',
+      ratio: '0.31', ratioReq: '', ratioState: '',
+      verdict: '未核实', tone: 'unknown',
+      local: [['已做种', '9天'], ['要求', '无要求'], ['分享率', '0.31']],
+      siteKvs: null,
+      reason: '宽松策略：站点尚未查到该种子，暂不按受管束', note: false },
+    { id: 'r8', siteName: '—', name: 'ubuntu-24.04.3-live-server-amd64.iso', site: '—',
+      dur: '120天', durReq: '', durState: '', src: '',
+      ratio: '3.85', ratioReq: '', ratioState: '',
+      verdict: '', tone: 'none', lane: '',
+      local: [], siteKvs: null, reason: '', note: false }
+  ];
+
+  /* SVG 线性图标(1.7 stroke, currentColor) */
+  var ICO_LOCAL = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+  var ICO_SITE = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.7 2.5 2.7 14.5 0 17"/><path d="M12 3.5c-2.7 2.5-2.7 14.5 0 17"/></svg>';
+  var ICO_CLOCK = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+
+  function findRow(id) {
+    for (var i = 0; i < ROWS.length; i++) { if (ROWS[i].id === id) return ROWS[i]; }
+    return null;
+  }
+
+  /* ---- 片段构造(表格单元格与样张触发器共用同一 markup) ---- */
+  function pairHTML(r) {
+    var req = r.durReq ? '<span class="req">/ ' + r.durReq + '</span>' : '';
+    var src = r.src ? '<span class="hr-src">' + r.src + '</span>' : '';
+    return '<span class="m-pair m-dur ' + r.durState + '">' + r.dur + req + src + '</span>';
+  }
+  function ratioHTML(r) {
+    var req = r.ratioReq ? '<span class="req">/ ' + r.ratioReq + '</span>' : '';
+    return '<span class="m-pair m-ratio ' + r.ratioState + '">' + r.ratio + req + '</span>';
+  }
+  function kvHTML(kv) {
+    return '<div class="hp-kv"><span class="hp-k">' + kv[0] + '</span><span class="hp-v">' + kv[1] + '</span></div>';
+  }
+  /* T1 档案卡: 头部结论条 + 本地/站点两组 kv + 依据与角注 */
+  function popInnerHTML(r) {
+    var cyc = r.cycle ? '<span class="hp-cycle ' + r.cycle + '">'
+      + (r.cycle === 'ongoing' ? '考核中' : '已结束') + '</span>' : '';
+    var siteSec = r.siteKvs
+      ? '<div class="hp-sec"><div class="hp-sec-title">' + ICO_SITE + '<span>站点</span></div>'
+        + r.siteKvs.map(kvHTML).join('') + '</div>'
+      : '';
+    var note = (r.siteKvs && r.note)
+      ? '<div class="hp-note">' + ICO_CLOCK + '<span>站点值滞后一个刷新周期</span></div>'
+      : '';
+    return '<div class="hp-head"><span class="hp-verdict">' + r.verdict + '</span>'
+      + '<span class="hp-src-badge">' + r.src + '</span>' + cyc + '</div>'
+      + '<div class="hp-body">'
+      + '<div class="hp-sec"><div class="hp-sec-title">' + ICO_LOCAL + '<span>本地</span></div>'
+      + r.local.map(kvHTML).join('') + '</div>'
+      + siteSec + '</div>'
+      + '<div class="hp-foot"><div class="hp-reason"><span class="hp-reason-tag">依据</span>'
+      + '<span>' + r.reason + '</span></div>' + note + '</div>'
+      + '<i class="hp-arrow"></i>';
+  }
+
+  function el(html) {
+    var t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstChild;
+  }
+
+  /* ---- 表格(4 列 × 8 行; .c-dur 带 data-hr 的行可触发弹窗) ---- */
+  function buildTable(mount, area) {
+    var head = '<div class="tbl-head"><span>名称</span><span>站点</span>'
+      + '<span class="c-dur">做种时长</span><span class="c-ratio">分享率</span></div>';
+    var rows = ROWS.map(function (r) {
+      var trig = r.tone !== 'none' ? ' data-hr="' + r.id + '"' : '';
+      return '<div class="trow">'
+        + '<span class="c-name" title="' + r.name + '">' + r.name + '</span>'
+        + '<span class="c-site">' + r.siteName + '</span>'
+        + '<span class="c-dur"' + trig + '>' + pairHTML(r) + '</span>'
+        + '<span class="c-ratio">' + ratioHTML(r) + '</span>'
+        + '</div>';
+    }).join('');
+    mount.innerHTML = '<div class="tbl">' + head + rows + '</div>';
+    mount.querySelectorAll('.c-dur[data-hr]').forEach(function (cell) {
+      cell.addEventListener('mouseenter', function () { enter(cell, area); });
+      cell.addEventListener('mouseleave', leave);
+    });
+  }
+
+  /* ---- 常显样张: 触发器示意(时长 chip + 徽标, 箭头朝下) + 同一 markup 的弹窗 ---- */
+  function buildSamples(mount) {
+    var frag = document.createDocumentFragment();
+    ROWS.forEach(function (r, i) {
+      if (r.tone === 'none') return;
+      var spec = el('<div class="spec">'
+        + '<span class="spec-id">R' + (i + 1) + '</span>'
+        + '<span class="spec-trig">' + pairHTML(r) + '</span>'
+        + '<i class="spec-arrow"></i></div>');
+      var p = el('<div class="hr-pop static" role="tooltip" aria-hidden="true"></div>');
+      p.setAttribute('data-tone', r.tone);
+      p.innerHTML = popInnerHTML(r);
+      spec.appendChild(p);
+      frag.appendChild(spec);
+    });
+    mount.appendChild(frag);
+  }
+
+  /* ---- 单例弹窗: enter 120ms / leave 160ms 宽限; fixed 锚定, 优先上方, 翻转 + 夹取 ---- */
+  var pop = el('<div class="hr-pop" id="hr-pop" role="tooltip"></div>');
+  document.body.appendChild(pop);
+  var curId = null, curArea = null, enterT = 0, leaveT = 0;
+
+  function prismTheme() {
+    var sec = document.getElementById('prism-demo');
+    return (sec && sec.getAttribute('data-theme')) || 'ocean';
+  }
+  function enter(cell, area) {
+    var id = cell.getAttribute('data-hr');
+    clearTimeout(leaveT);
+    if (pop.classList.contains('on') && curId === id && curArea === area) return;
+    clearTimeout(enterT);
+    enterT = setTimeout(function () { show(id, area, cell); }, 120);
+  }
+  function leave() {
+    clearTimeout(enterT);
+    clearTimeout(leaveT);
+    leaveT = setTimeout(hide, 160);
+  }
+  function show(id, area, cell) {
+    var r = findRow(id);
+    if (!r || r.tone === 'none') return;
+    curId = id; curArea = area;
+    pop.className = 'hr-pop';
+    pop.setAttribute('data-tone', r.tone);
+    if (area === 'prism') { pop.setAttribute('data-theme', prismTheme()); }
+    else { pop.removeAttribute('data-theme'); }
+    pop.innerHTML = popInnerHTML(r);
+
+    pop.style.visibility = 'hidden';
+    var rect = cell.getBoundingClientRect();
+    var pw = pop.offsetWidth, ph = pop.offsetHeight;
+    var vw = window.innerWidth, vh = window.innerHeight, m = 8, gap = 10;
+    var below = false;
+    var top = rect.top - ph - gap;
+    if (top < m) { below = true; top = rect.bottom + gap; }
+    if (top + ph > vh - m) { top = Math.max(m, vh - m - ph); }
+    var left = rect.left + rect.width / 2 - pw / 2;
+    left = Math.min(Math.max(m, left), Math.max(m, vw - pw - m));
+    pop.style.top = top + 'px';
+    pop.style.left = left + 'px';
+    var ax = Math.min(Math.max(18, rect.left + rect.width / 2 - left), pw - 18);
+    pop.style.setProperty('--arrow-x', ax + 'px');
+    pop.style.visibility = '';
+    pop.classList.add(below ? 'below' : 'above');
+    cell.setAttribute('aria-describedby', 'hr-pop');
+    requestAnimationFrame(function () { pop.classList.add('on'); });
+  }
+  function hide() {
+    clearTimeout(enterT);
+    clearTimeout(leaveT);
+    pop.classList.remove('on');
+    curId = null; curArea = null;
+    var t = document.querySelector('[aria-describedby="hr-pop"]');
+    if (t) { t.removeAttribute('aria-describedby'); }
+  }
+
+  pop.addEventListener('mouseenter', function () { clearTimeout(leaveT); });
+  pop.addEventListener('mouseleave', leave);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { hide(); } });
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+
+  /* ---- prism 主题切换: 演示区根节点 data-theme 换值, 弹窗跟随(单例显隐重建) ---- */
+  var prismSec = document.getElementById('prism-demo');
+  document.querySelectorAll('.theme-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      prismSec.setAttribute('data-theme', btn.getAttribute('data-theme'));
+      document.querySelectorAll('.theme-btn').forEach(function (b) {
+        b.classList.toggle('on', b === btn);
+      });
+      hide();
+    });
+  });
+
+  /* ---- 渲染 ---- */
+  buildTable(document.getElementById('atlas-tbl'), 'atlas');
+  buildSamples(document.getElementById('atlas-samples'));
+  buildTable(document.getElementById('prism-tbl'), 'prism');
+  buildSamples(document.getElementById('prism-samples'));
+})();
+</script>
+</body>
+</html>
