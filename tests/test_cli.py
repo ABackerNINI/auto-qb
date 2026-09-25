@@ -11,6 +11,7 @@
 - test_main_config_error_clean_exit: ConfigError 提前捕获, stderr 无堆栈, 返回 1
 - test_main_lock_error_clean_exit: SingleInstanceLockError(构造期锁竞争)干净退出返回 1, 无堆栈无"配置错误"前缀
 - test_main_qb_compat_error_clean_exit: QbCompatError(run 期 qB 版本不兼容)穿透 run 后干净退出返回 1, 无堆栈; 补发通知走 notify_fatal(测试内 mock —— MagicMock 的 config.notify 恒真, 不 mock 会真的发系统通知)
+- test_main_qb_connect_error_clean_exit: QbConnectError(非托管首连失败)穿透 run 后干净退出返回 1, stderr 带地址与处置提示、无堆栈无"配置错误"前缀(docker 部署排障契约: 连不上 qB -> 退出码 1)
 - test_main_unrelated_value_error_not_swallowed: 非 AutoQbError 的 ValueError(程序 bug)不被误捕, 照常抛出
 - test_main_hr_status_mutex_with_hr_once: --hr-status 与 --hr-once 互斥 -> 退出码 2
 - test_main_hr_status_runs_report_without_qb: --hr-status 不构造 manager(不连 qB), 行数上限透传
@@ -180,6 +181,24 @@ def test_main_qb_compat_error_clean_exit(capsys):
     assert "Traceback" not in err
     assert m_notify.call_args[0][0] == "qBittorrent torrent info 缺少字段: ['foo']; 请检查版本兼容性", \
         "致命退出应把消息补发给 notify_fatal"
+
+
+def test_main_qb_connect_error_clean_exit(capsys):
+    """QbConnectError(非托管首连失败, run 内抛出): 穿透后干净退出返回 1, 无堆栈无"配置错误"前缀;
+    消息带 qB 地址与处置提示(docker 部署排障契约, docs/deployment.md)"""
+    from auto_qb.core.qbmanager import QbConnectError
+    manager = mock.MagicMock()
+    manager.run.side_effect = QbConnectError("无法连接 qBittorrent 127.0.0.1:16585: 请检查 qB 是否在运行、Web UI 地址/端口/凭据是否正确")
+    with _patch_argv("auto-qb", "config.yml"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager), \
+            mock.patch("auto_qb.cli.notify_fatal"):
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 1
+    err = capsys.readouterr().err
+    assert "无法连接 qBittorrent 127.0.0.1:16585" in err
+    assert "配置错误" not in err
+    assert "Traceback" not in err
 
 
 def test_main_unrelated_value_error_not_swallowed():

@@ -174,7 +174,9 @@ def start_web_server(manager) -> WebServerHandle:
     thread.start()
     handle = WebServerHandle(server, thread)
     if _wait_until_started(handle, WEB_START_TIMEOUT):
-        logger.warning(
+        # 生命周期消息按 INFO 记(pitfalls/ops/alert-levels.md: 启动类不许用 WARNING, 否则 notify
+        # 开启时每次启动都弹通知; 监听地址本身在消息文本里, 0.0.0.0 的暴露面由配置 UI 的 risk 提示兜底)
+        logger.info(
             f"WEB UI 已启动: http://{manager.config.web.host}:{manager.config.web.port} "
             f"(密钥见 {os.path.join(os.path.dirname(manager.state_file) or '.', 'web.token')})"
         )

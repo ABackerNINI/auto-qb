@@ -115,6 +115,7 @@
 - test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
 - test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
+- test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
 - test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
 - test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
@@ -4166,12 +4167,25 @@ def test_state_kind_maps_states(state, kind):
 
 def test_apply_new_config_levels(monkeypatch):
     """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 重挂日志/通知+重连+web 重启;
-    L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用"""
+    L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用;
+    完成消息按 INFO 记(alert-levels 契约: 热重载是预期动作, WARNING 会被 notify 推成通知)"""
     import logging as std_logging
 
     from auto_qb.core import qbmanager as qbm
     from auto_qb.config.impact import ConfigChange
     from helpers import make_manager
+
+    # 日志抓取用挂在目标 logger 上的 Grab handler —— 不用 caplog:
+    # make_manager 会走 setup_logging 清空 root handlers(logging.py:98), caplog 挂在 root 上抓不到
+    grabbed = []
+
+    class Grab(std_logging.Handler):
+        def emit(self, record):
+            grabbed.append(record)
+
+    grab = Grab()
+    qbm_logger = std_logging.getLogger("auto_qb.core.qbmanager")
+    qbm_logger.addHandler(grab)
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4190,10 +4204,18 @@ def test_apply_new_config_levels(monkeypatch):
 
         # ① L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
         queue_before = mgr.task_queue
-        res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
+        try:
+            res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
+        finally:
+            qbm_logger.removeHandler(grab)  # 先摘 handler, 断言失败也不跨测试泄漏
         assert res == {"applied": True, "levels": ["L0"], "changes": 1, "restart_required": []}, res
         assert mgr.config is new_cfg
         assert mgr.task_queue is queue_before, "L0 不应重建任务队列"
+        # 生命周期消息守阵: 完成消息必须是 INFO, 不得用 WARNING(否则 notify 开启时每次保存配置弹通知)
+        done_logs = [r for r in grabbed if "配置热重载完成" in r.getMessage()]
+        assert done_logs, "热重载完成应留一行日志"
+        assert done_logs[-1].levelno == std_logging.INFO, \
+            f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
 
         # ② L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
         mgr._notify_handler = std_logging.NullHandler()
@@ -4322,6 +4344,43 @@ def test_stop_web_server_releases_port_for_restart(tmp_path):
     finally:
         if h1.thread.is_alive():  # 断言失败时清理, 不掩盖原异常
             stop_web_server(h1)
+
+
+def test_start_web_server_started_message_is_info(tmp_path):
+    """「WEB UI 已启动」按 INFO 记(pitfalls/ops/alert-levels.md 契约)
+
+    启动是程序按配置做的动作, WARNING 会被 notify 推成系统通知 —— 每次启动弹一条,
+    即用户实报的「一开就弹 warning」。监听地址在消息文本里, 暴露面信息不丢。
+    日志抓取用挂在目标 logger 上的 Grab handler(caplog 挂 root, 会被 setup_logging 清掉)。
+    """
+    import logging as std_logging
+
+    from auto_qb.webui import start_web_server, stop_web_server
+
+    grabbed = []
+
+    class Grab(std_logging.Handler):
+        def emit(self, record):
+            grabbed.append(record)
+
+    grab = Grab()
+    web_logger = std_logging.getLogger("auto_qb.web")
+    web_logger.addHandler(grab)
+    try:
+        cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
+        mgr = _make_web_manager(tmp_path, cfg_text)
+        mgr.config.web.port = _free_port()
+        h = start_web_server(mgr)
+        try:
+            assert h.started, "服务应监听成功"
+            started = [r for r in grabbed if "WEB UI 已启动" in r.getMessage()]
+            assert started, "启动应留一行日志(含监听地址与密钥路径)"
+            assert started[-1].levelno == std_logging.INFO, \
+                f"启动是预期动作, 应记 INFO(实为 {started[-1].levelname})"
+        finally:
+            stop_web_server(h)
+    finally:
+        web_logger.removeHandler(grab)
 
 
 def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):

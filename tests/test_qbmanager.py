@@ -20,7 +20,7 @@
 - test_drain_bumps_write_seq_before_writing_receipt: BUG-5 顺序——回执写入时写序号须已自增
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
-- test_run_connect_failure: 连接失败 run 直接返回不进入主循环
+- test_run_connect_failure: 非托管首连失败抛 QbConnectError(fail-fast -> CLI 退出码 1), 不进入主循环
 - test_reconnect_backoff_and_reset: 重连指数退避(间隔翻倍、上限 30s、未到点不重试)且连接成功后归零
 - test_run_main_loop: 主循环: _tick 异常被捕获, KeyboardInterrupt 停止, finally 清理
 - test_tick_full_flow: 快速队列到期任务执行全流程(含 check 轮询任务首轮发送)
@@ -60,7 +60,7 @@ from qbittorrentapi import APIConnectionError, Client
 from auto_qb.config import QbittorrentConfig
 from auto_qb.infra.errors import AutoQbError
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbManager, _throttle
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
@@ -400,11 +400,12 @@ def test_run_due_dies():
 
 
 def test_run_connect_failure():
-    """run: 连接失败直接返回, 不进入主循环"""
+    """run: 非托管首连失败抛 QbConnectError(fail-fast, 经 finally 清理后穿透到 CLI 退出码 1), 不进入主循环"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.connect = mock.Mock(return_value=False)
-        mgr.run(dry_run=False)  # 不应抛异常/不应调用 _tick
+        with pytest.raises(QbConnectError):
+            mgr.run(dry_run=False)  # 抛错前 finally 应已清理; 不应调用 _tick
         mgr.connect.assert_called_once()
 
 

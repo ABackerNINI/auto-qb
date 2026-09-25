@@ -1,6 +1,5 @@
-# Docker 部署 (P1–P3 已实施并入库, 待真机验收)
+# Docker 部署 (真机验收通过 + 缺陷修复 + 文档重写, 待提交)
 
-> 摘要: 计划 `memory-bank/plans/26-09-25-2241-plan-docker-deploy.html` 拍板后实施完毕 (状态 In Progress)。落地 5 交付物: Dockerfile + .dockerignore (uv 多阶段, builder/runtime 都钉 bookworm, README/LICENSE 必须留 —— pyproject readme 元数据), compose.yaml + docker/config.example.yml (过 load_config 实测 ✓; data_dir=/data / web.host=0.0.0.0 / notify 关), docs/deployment.md + README 指针; P3 唯一代码改动: cli.py 注册 SIGTERM→KeyboardInterrupt 复用优雅关闭路径 (test_cli.py +4 条)。追加: ①minimal.yml 漂移修复(add_episode_tags 字典形态); ②示例守阵 test_config.py +2 条(minimal 开箱语义 + docker 容器契约字段), 红验过; 全量 1614 collected: 1613 passed + 1 skipped。任务档案 `memory-bank/tasks/26-09-25-deps-docker-deploy.md`。**已提交**(2026-09-26, gitee/develop)。
-> 最后活动: 2026-09-26
-> 下一步: 有 Docker 的机器上跑真机验收 (docker build / compose up / docker stop 三组验收标准在计划 §5, 体积耗时数字回填计划与档案)
-
+> 摘要: 真机验收(Docker Desktop · Windows, 全功能关闭冒烟配置连真实 qB 127.0.0.1:16585)**全部通过**: build 223s/252MB(重建 9s)、up→healthy 12~21s、`/api/status` connected:true+91 种子、stop 退出码 0(state.json mtime==停止日志瞬间)、双开拒锁退出码 1、WebUI token/401/写回(.bak 落 /data)/热重载/状态续接全过, **91 种子库零写入**(前后快照 tags/category 零差异); 计划 §5 的「未实测项」全部实测回填(数字单点: docs/deployment.md §14)。验收揪出并修复三件: ①非托管首连失败退出码 0≠文档承诺的 1 → `QbConnectError` 干净退出(qbmanager.py, 托管模式不变, behavior-core 的 `or` 有意语义未动; 测试 +2 改 2); ②「WEB UI 已启动」「配置热重载完成」WARNING→INFO(alert-levels 契约; 守阵 +2 —— ⚠ 抓日志要用挂目标 logger 的 Grab handler, caplog 挂 root 会被 setup_logging 清掉); ③`config/` 部署凭据目录补进 .gitignore。docs/deployment.md 重写为 14 节手册(含 web.enabled↔healthcheck 耦合、退出码契约表、Git Bash `MSYS_NO_PATHCONV=1` 坑 → 已记 pitfalls/ops/msys-container-path.md)。全量 **1619 collected: 1618 passed + 1 skipped, 92%**(baseline.md 顶部)。任务档案 `tasks/26-09-25-deps-docker-deploy.md`(进度日志 2026-09-26 01:33 条)。现场已清(down -v, 容器/卷/网络无残留; config/config.yml 留作即用配置, 已 gitignore)。
+> 最后活动: 2026-09-26 01:35
+> 下一步: 等用户显式「提交」指令(修复 + 文档 + 知识库回写一并入库); P4 可选项(CI build / GHCR / 非 root)仍 Pending 不阻塞

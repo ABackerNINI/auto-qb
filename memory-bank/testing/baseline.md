@@ -6,7 +6,16 @@
 
 ## 当前基线
 
-**1617 collected: 1616 passed + 1 skipped / Windows** —— 2026-09-25 **示例配置守阵**
+**1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
+(档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**:
+test_cli.py `test_main_qb_connect_error_clean_exit`(非托管首连失败 → QbConnectError 干净退出码 1,
+docker 排障契约守阵); test_web.py `test_start_web_server_started_message_is_info` + `test_apply_new_config_levels`
+加断言(「WEB UI 已启动」「配置热重载完成」按 INFO 记, alert-levels 契约; ⚠ 抓日志用挂在目标 logger 的
+Grab handler, caplog 挂 root 会被 setup_logging 清空)。test_qbmanager.py `test_run_connect_failure` 与
+test_ui.py `test_run_unmanaged_connect_fail_raises` 由"直接返回"改判抛错(退出码契约修复的同步改判)。
+TOTAL **92%**(11027 语句 / 786 未覆盖 / 3624 分支 / 327 partial), 17.7s(复跑 22.4s 同 passed); dev.fmt 已跑。
+
+**上一态: 1617 collected: 1616 passed + 1 skipped** —— 2026-09-25 **示例配置守阵**
 (`pitfalls/docs/drift.md` 的根治 follow-up: minimal.yml 漂移修复后, 把"示例无守卫会静默漂移"钉成测试;
 数字为合入远端 full-checking 竞态修复(+3)后的合并树实测)。
 **+2 条** (test_config.py): `test_example_minimal_yml_passes_fail_fast` —— minimal.yml 过 fail-fast 校验
