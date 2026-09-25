@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>full-checking 误报「校验未通过」与批量不触发 · 故障取证分析 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="full-checking-verdict">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-25-0853">
+<meta name="doc-updated" content="26-09-25-0853">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:76ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+  pre .c{color:var(--ink-3)} pre .em{color:var(--accent)}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);font-weight:400}
+  td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  td code{white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:12.5px}
+
+  .verdict{background:linear-gradient(180deg,rgba(200,164,92,.09),rgba(200,164,92,.04));border:1px solid rgba(200,164,92,.35);border-radius:10px;padding:18px 22px;margin:20px 0}
+  .verdict h3{margin:0 0 8px;color:var(--accent);font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);font-weight:400}
+  .verdict p, .verdict li{color:var(--ink)}
+  .note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--ink-2)}
+  .danger{border-left-color:var(--bad)}
+  .good{border-left-color:var(--good)}
+
+  /* 时间线图 */
+  .tl{margin:18px 0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .tl-row{display:grid;grid-template-columns:150px 130px 1fr;border-bottom:1px solid var(--line);font-size:13px}
+  .tl-row:last-child{border-bottom:none}
+  .tl-row.hd{background:var(--surface-2);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .tl-row>div{padding:9px 14px}
+  .tl-t{font-family:var(--mono);color:var(--ink-2);white-space:nowrap}
+  .tl-who{font-family:var(--mono);font-size:12px;color:var(--blue);white-space:nowrap}
+  .tl-bad .tl-t{color:var(--bad)} .tl-bad em{color:var(--bad);font-style:normal;font-weight:600}
+  .tl-good em{color:var(--good);font-style:normal;font-weight:600}
+
+  .path{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .foot{border-top:1px solid var(--line-2);padding:24px 0 60px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono);line-height:2}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:static;display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Fault Forensics · auto-qb · full-checking</p>
+  <h1>full-checking 误报「校验未通过」与批量不触发<br>故障取证分析</h1>
+  <p class="lede">两个现象同源, 是一条因果链的两段: 校验结果轮询的<b>首样本竞态误判</b>产生假「校验失败」记录 → 该记录进入当日失败冷却并被即时落盘 → 同组其它成员被决策链 1.6「失败推断」静默拦截。误报的 WARNING 是链头, 批量不触发且无日志是链尾。</p>
+  <p class="meta">取证基线 <b>develop @ 7fcdc9c6</b> (与 Gitee 主线齐平) · 现象时间 <b>2026-09-25 06:25</b> · 取证时间 <b>2026-09-25 08:53</b> · 性质 <b>只读取证, 未改任何文件</b></p>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s0"><span class="no">0</span>结论速览</a>
+  <a href="#s1"><span class="no">1</span>现象与日志证据</a>
+  <a href="#s2"><span class="no">2</span>机制取证(代码现场)</a>
+  <a href="#s3"><span class="no">3</span>问题一根因: 首样本竞态</a>
+  <a href="#s4"><span class="no">4</span>问题二根因: 冷却毒化链</a>
+  <a href="#s5"><span class="no">5</span>现场验证清单</a>
+  <a href="#s6"><span class="no">6</span>修复方向建议</a>
+  <a href="#s7"><span class="no">7</span>影响面与未定案点</a>
+</nav>
+
+<main>
+
+<!-- ============ 0 ============ -->
+<h2 id="s0">0 · 结论速览</h2>
+
+<div class="verdict">
+<h3>核心结论</h3>
+<p><strong>问题一(误报 WARNING)</strong>: 校验结果轮询子任务(<code>check-checking-result</code>)的失败判定分支把「<strong>recheck 尚未被 qB 应用/尚未进同步快照</strong>」误读成「校验已跑完但未通过」。提交 recheck 后约 2s 的第一个任务线 tick 采样时, 种子状态还不是 checking 且 progress=0.0(跨种刚添加的典型初值), 三个条件恰好落进失败分支 —— 而此时 qB 侧的校验要么马上开始、要么已在进行, 最终正常完成。<strong>这是判定语义缺陷, 不是偶发抖动</strong>: 代码没有「本轮曾观察到 checking 态」或「启动宽限」的前提, 首个满足条件的样本立即定罪。</p>
+<p><strong>问题二(批量概率性不触发)</strong>: 误判会调用 <code>_bump_recheck_fail</code> 写入 <code>state["recheck_fails"][hash]</code> 当日失败计数并<strong>即时落盘</strong>。此后同组、文件映射一致(同一物理数据)的其它成员在决策链 1.6 被直接跳过; 该 skip 日志是 <strong>DEBUG 级</strong>, 生产 INFO 日志下完全不可见 —— 即「无相关 log」。重启不解(state.json 当日记录仍在), <strong>次日按日期口径自动归零恢复</strong>; 手动强校验当然成功, 因为数据本来就是好的。</p>
+<p><strong>用户假设验证</strong>: 成立。<code>full_checking.py:208-228</code> 的 <code>_skip_on_group_check_failed</code> 就是「同组校验失败(误判) + 文件映射一致 → 不再校验」的实现, 冷却即 <code>recheck_fails</code> 当日计数。「误判」的来源正是问题一 —— <strong>两个问题是一个 bug 的两段表现</strong>, 掐断问题一的判定, 问题二的毒源随之消失。</p>
+</div>
+
+<!-- ============ 1 ============ -->
+<h2 id="s1">1 · 现象与日志证据</h2>
+
+<h3>1.1 现象 A: 校验实际成功, 却报「校验未通过」</h3>
+<pre>2026-09-25 06:25:10,218 - WARNING - 规则[skip_checking_rules.r_rule] '种子名' [HDFans] (0b23c9d4) | <span class="em">校验未通过(第1次, progress=0.0)</span></pre>
+<p>日志解剖: 规则 <code>r_rule</code>(R 盘全量校验, interval 5M + cooldown 5M, 有/无参考两段均 <code>full-checking</code>, basic_check=filelist) ; hash <code>0b23c9d4…</code> ; 第 1 次失败计数 ; <strong>progress=0.0</strong>。实际结果: 该种子校验成功(progress 达 1)。</p>
+
+<h3>1.2 现象 B: 一批辅种同时加入, 部分触发 full-checking、部分不触发</h3>
+<ul>
+  <li>同批中部分种子正常出现「full-checking 校验已提交」→「校验成功」日志;</li>
+  <li>未触发的种子<strong>没有任何相关日志</strong>(连 skip 的痕迹都没有);</li>
+  <li>对未触发种子手动强制校验: 成功(数据完好);</li>
+  <li><strong>重启程序后依然不触发</strong>(当日观察)。</li>
+</ul>
+
+<h3>1.3 配置现场(与推演相关部分)</h3>
+<table>
+<tr><th>项</th><th>值</th><th>含义</th></tr>
+<tr><td class="mono">r_rule</td><td class="mono">interval: 5M · cooldown: 5M</td><td>interval 型周期规则, 每 5 分钟重扫; skip 不记执行, 无冷却叠加</td></tr>
+<tr><td class="mono">with_reference / without_reference</td><td class="mono">均 full-checking, auto_start=false</td><td>健康路径下同组每个成员都会逐个提交 full-checking(组内串行)</td></tr>
+<tr><td class="mono">basic_check</td><td class="mono">filelist</td><td>同组「已完成且未校验」成员皆可为参考(宽松模式)</td></tr>
+<tr><td class="mono">main_tick / sync_interval</td><td class="mono">2.0s / 1.5s (默认)</td><td>任务线与同步线双时间线, 是竞态窗口的标尺</td></tr>
+</table>
+
+<!-- ============ 2 ============ -->
+<h2 id="s2">2 · 机制取证(代码现场)</h2>
+
+<h3>2.1 full-checking 提交与轮询判定 <span class="path">rules/actions/full_checking.py</span></h3>
+<p><code>_execute_full_checking</code>(52-139 行)先向任务队列登记轮询子任务(kind=check, interval=2s), 再同步发送 <code>torrents_recheck</code>, 动作返回 pending(规则断点)。轮询 handler <code>poll</code>(92-121 行)每个周期查 store 快照, 三分支:</p>
+<table>
+<tr><th>分支</th><th>条件</th><th>行为</th><th>日志可见性</th></tr>
+<tr><td>等</td><td class="mono">state_enum.is_checking</td><td>REQUEUE, 下轮再采</td><td>—</td></tr>
+<tr><td>成</td><td class="mono">progress >= 1.0</td><td>晋升 verified_references + 清除失败计数 + 重入队 origin 续跑</td><td>INFO「校验成功」</td></tr>
+<tr><td class="mono" style="color:var(--bad)">败</td><td class="mono">其余一切(state 非 checking 且 progress&lt;1)</td><td><strong>立即</strong> _bump_recheck_fail + 重入队 origin(默认重置)</td><td><strong>WARNING「校验未通过(第N次…)」</strong></td></tr>
+</table>
+<p class="path">full_checking.py:101-115 · is_checking 判据见 qbittorrentapi TorrentState(仅 CHECKING_UPLOAD / CHECKING_DOWNLOAD / CHECKING_RESUME_DATA 三态)</p>
+
+<h3>2.2 失败冷却: 当日计数 + 即时落盘 <span class="path">full_checking.py:28-46, 73-74</span></h3>
+<ul>
+  <li><code>_recheck_fail_count</code>: 读 <code>state["recheck_fails"][hash]</code>, <strong>仅当记录日期 == 今天</strong>才有效 —— 次日自动归零(28-33 行)。</li>
+  <li><code>_bump_recheck_fail</code>: 计数 +1 后<strong>立即 <code>save_state()</code></strong>(45 行) —— 假失败记录当场写进 state.json, 重启不清。</li>
+  <li>入口闸门: 当日连续失败 ≥ <code>RECHECK_FAIL_LIMIT</code>(3)则 skip「今日不再重试」(73-74 行) —— 该 skip 同样是 <strong>DEBUG 级</strong>。</li>
+</ul>
+
+<h3>2.3 决策链 1.6: 组内失败推断 <span class="path">full_checking.py:208-228</span></h3>
+<pre><span class="c"># _skip_on_group_check_failed: 组内其它成员校验失败且文件映射一致 -> 结果必然相同, 直接跳过</span>
+for h in members:
+    if h == hash or _recheck_fail_count(manager, h) <= 0:   <span class="c"># 只要有失败记录(≥1 次)即命中, 不要求达上限</span>
+        continue
+    if sizes.get(h) == mine:                                <span class="c"># 文件映射(相对路径->大小)完全一致</span>
+        return ActionResult.skip(<span class="em">f"同组种子 {h[:8]} 校验失败且文件映射一致(同一物理数据), 不再校验"</span>)</pre>
+<p>关键点: 触发条件是同组任一成员<strong>当日失败计数 ≥ 1</strong> —— 1 次假失败就足以毒化全组; 文件映射一致性判据(<code>group_sizes</code> 相对路径→大小映射相等)对真实辅种恒成立。</p>
+
+<h3>2.4 日志可见性: skip 全部 DEBUG 级 <span class="path">rules/base.py:255-256</span></h3>
+<pre><span class="c"># Rule.process 动作结果分流:</span>
+elif result.is_skipped:
+    logger.<span class="em">debug</span>(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")</pre>
+<p>决策链 0(非暂停未完成)/ 1(组内有下载)/ 1.5(让位等待)/ 1.6(失败推断)/ 冷却上限等一切 skip 都走此分支。只有轮询的「校验未通过」是 WARNING、「校验成功/校验已提交」是 INFO。<strong>「部分种子不触发且无相关 log」由此完全解释: 它们每 5 分钟被扫一次、每 5 分钟被 skip 一次, 只是日志级别看不见。</strong></p>
+
+<h3>2.5 双时间线节拍与首样本时机 <span class="path">core/qbmanager.py:357-375 · core/taskqueue.py:130-150</span></h3>
+<ul>
+  <li><strong>同步线</strong>(sync_interval 1.5s): 拉 qB <code>/sync/torrents</code> 增量, store 记录原地更新 —— 轮询读到的永远是「最近一次同步完成时」的快照。</li>
+  <li><strong>任务线</strong>(main_tick 2.0s): <code>run_due</code> 执行到期任务。轮询子任务 <code>add_task</code> 时 <code>next_run=now</code>, 但因 run_due 先快照后执行, <strong>首样本必然落在下一个任务线 tick(≈提交后 2s)</strong>。</li>
+  <li>每个任务线 tick 最多执行 <code>max_tasks_per_tick</code>(20)个任务 —— 批量加入时任务积压, 各任务被摊到多个 tick 上。</li>
+</ul>
+<div class="note">仓内自证「状态翻转有延迟」: <span class="path">qbmanager.py:401-403</span> 注释明确写过 ——「qB 真值<strong>要过一会儿才翻状态</strong>, 紧跟着的那次补刷新读到的还是命令前的值」。这是对 WebUI 命令线的记录, 但机制(发出 API 请求 → qB 异步应用 → 下一次同步才进快照)与 recheck 完全同构。</div>
+
+<h3>2.6 常量与默认值一览</h3>
+<table>
+<tr><th>常量</th><th>值</th><th>位置</th></tr>
+<tr><td class="mono">CHECK_RESULT_INTERVAL</td><td>2.0s(轮询周期)</td><td class="path">full_checking.py:19</td></tr>
+<tr><td class="mono">RECHECK_FAIL_LIMIT</td><td>3 次/日/种</td><td class="path">full_checking.py:22</td></tr>
+<tr><td class="mono">GROUP_CHECK_WAIT_LIMIT</td><td>2h(1.5 等待上限)</td><td class="path">full_checking.py:25</td></tr>
+<tr><td class="mono">main_tick / sync_interval / max_tasks_per_tick</td><td>2.0s / 1.5s / 20</td><td class="path">config/models.py:266-268</td></tr>
+</table>
+
+<!-- ============ 3 ============ -->
+<h2 id="s3">3 · 问题一根因: 首样本竞态</h2>
+
+<h3>3.1 竞态时序</h3>
+<div class="tl">
+<div class="tl-row hd"><div>时刻</div><div>执行线</div><div>事件</div></div>
+<div class="tl-row"><div class="tl-t">t0</div><div class="tl-who">任务线</div><div>规则任务走决策链 → 登记<strong>轮询子任务</strong> → 发 <code>torrents_recheck</code>(HTTP 同步返回, qB 异步应用) → 动作 pending</div></div>
+<div class="tl-row"><div class="tl-t">t0+~0.75s</div><div class="tl-who">同步线</div><div>同步增量: qB 尚未应用 recheck(或应用在本次同步完成后) → 快照仍是 stoppedDL / progress=0.0</div></div>
+<div class="tl-row tl-bad"><div class="tl-t">t0+~2.0s</div><div class="tl-who">任务线</div><div><strong>轮询首样本</strong>: is_checking=False 且 progress=0.0 → 落入失败分支 → <em>WARNING「校验未通过(第1次, progress=0.0)」</em> + 写当日失败计数(即时落盘) + origin 重置重入队</div></div>
+<div class="tl-row"><div class="tl-t">t0+~2.2s</div><div class="tl-who">同步线</div><div>同步增量: 快照此刻才见到 checking 态 —— <strong>判定已经做出, 迟了</strong></div></div>
+<div class="tl-row tl-good"><div class="tl-t">t0+数秒~</div><div class="tl-who">qB</div><div>qB 侧校验正常执行完毕, progress→1.0 —— <em>「实际校验成功」</em></div></div>
+</div>
+
+<h3>3.2 三个叠加因素</h3>
+<ol>
+  <li><strong>qB 应用延迟</strong>: recheck 是透传请求, qB 收到到种子状态翻转存在异步间隙; 批量加入、qB 繁忙(校验队列串行)时间隙拉长。</li>
+  <li><strong>同步快照滞后</strong>: 同步线 1.5s 节拍 + 增量轮只含有变化的种子 —— recheck 应用后总要等下一轮同步才进快照; 首样本读到的快照可能比判定时刻旧最多 ~1.5s。</li>
+  <li><strong>判定无前提</strong>(决定性): 失败分支不要求「本轮曾观察到 checking 态」, 也没有启动宽限 —— 只要某个样本恰好落在「未开检」窗口内就定罪。<span class="path">taskqueue.py:169-171</span> 注释显示同 tick 重入导致的同类误判已被防住(「避免同批重入导致未校验即误判失败」), 但<strong>跨 tick 的快照陈旧这层没防</strong>。</li>
+</ol>
+
+<h3>3.3 误判之后的分叉 —— 这正是问题二的入口</h3>
+<p>失败分支把 origin(规则任务)重置重入队, 下一个 tick 重走完整决策链。此时种子的 qB 状态决定走向:</p>
+<table>
+<tr><th>分支</th><th>重跑时种子状态</th><th>走向</th><th>失败计数</th><th>后果</th></tr>
+<tr><td class="mono">b·自愈</td><td>仍是 stoppedDL(recheck 未应用)</td><td>再次到达 full-checking → 重发 recheck + 新轮询 → 新轮询等到 checking → 成功</td><td>成功时被 pop 清除</td><td>仅留下一条噪音 WARNING</td></tr>
+<tr><td class="mono" style="color:var(--bad)">a·毒化</td><td>已翻转(checkingResumeData / 已完成)</td><td><strong>决策链 0 拦截</strong>(<span class="path">checking.py:83-84</span> 仅放行「暂停中未完成」) → 规则终了</td><td><strong>无人清除</strong></td><td>假失败记录常驻当日; progress=1 后决策链 0 永远 skip, 记录再无清除机会</td></tr>
+<tr><td class="mono" style="color:var(--bad)">c·三连击</td><td>长时间未应用(qB 极忙)</td><td>每次重跑都重发 recheck 又都误判 → 3 次后「今日不再重试」skip(DEBUG)</td><td>=3, 常驻</td><td>毒化更深, 且与分支 a 同样无人清除</td></tr>
+</table>
+<p><strong>概率来源</strong>: 分支 a 需要状态翻转恰好落在「首样本之后、origin 重跑之前」的窄窗内 —— 单发时是小概率; 而<strong>批量加入时任务积压把 origin 重跑推迟数个 tick, 几乎必然落在翻转之后</strong>, 毒化概率被显著放大。这与「一批辅种同时加入时」的现象高度吻合。</p>
+
+<!-- ============ 4 ============ -->
+<h2 id="s4">4 · 问题二根因: 冷却毒化链</h2>
+
+<h3>4.1 全链推演(以同组 A、B、C 为例, A 先被扫到)</h3>
+<table>
+<tr><th>#</th><th>阶段</th><th>机制位置</th><th>日志可见性</th></tr>
+<tr><td>1</td><td>批量辅种加入, A/B/C 同组(同一物理数据, 文件映射一致)</td><td>qB 添加 → 规则扫描</td><td>—</td></tr>
+<tr><td>2</td><td>A 提交 full-checking; B/C 经 1.5 让位等待</td><td class="path">full_checking.py:141-206</td><td>DEBUG「组内有种子校验进行中, 推迟等待」</td></tr>
+<tr><td style="color:var(--bad)">3</td><td>A 的轮询首样本误判 → WARNING + <code>recheck_fails[A]=1</code>(即时落盘)</td><td class="path">full_checking.py:108-115</td><td><strong>WARNING(现象 A)</strong></td></tr>
+<tr><td style="color:var(--bad)">4</td><td>A 的 origin 重跑撞上决策链 0(checking/已完成) → 规则终了, 计数无人清除</td><td class="path">checking.py:83-84</td><td>DEBUG「种子非暂停中未完成状态」</td></tr>
+<tr><td>5</td><td>qB 侧 A 校验正常完成(progress=1) → B/C 等待条件解除, 复活重走决策链</td><td class="path">full_checking.py:185-188</td><td>DEBUG「组内校验已完成, 恢复决策」</td></tr>
+<tr><td style="color:var(--bad)">6</td><td>B/C 各自命中决策链 1.6: A 有失败记录 + 文件映射一致 → <strong>skip, 不再校验</strong></td><td class="path">full_checking.py:208-228</td><td>DEBUG「同组种子 … 不再校验」→ <strong>现象 B 的「无相关 log」</strong></td></tr>
+<tr><td>7</td><td>此后每 5 分钟重扫, 1.6 每次 skip; A 自身被决策链 0(progress=1)永久 skip</td><td class="path">r_rule interval 5M</td><td>全 DEBUG, 生产不可见</td></tr>
+<tr><td>8</td><td>手动强校验成功(qB 侧数据本来就好); 重启后 recheck_fails 仍在(state.json, 当日日期) → 依旧不触发</td><td class="path">full_checking.py:28-33, 45</td><td><strong>现象 B 的「手动成功 / 重启无效」</strong></td></tr>
+<tr><td class="mono" style="color:var(--good)">9</td><td>次日: 计数按日期口径归零 → 全组恢复触发能力(自动自愈)</td><td class="path">full_checking.py:31</td><td>—</td></tr>
+</table>
+
+<h3>4.2 用户假设逐点对照</h3>
+<table>
+<tr><th>用户假设 / 观察</th><th>代码对应</th><th>结论</th></tr>
+<tr><td>「同组种子校验失败(误判)」</td><td>问题一的首样本竞态产生假失败记录(<code>recheck_fails</code>)</td><td>成立, 且「误判」来源可精确定位</td></tr>
+<tr><td>「且文件映射一致(同一物理数据)」</td><td>1.6 的 <code>sizes.get(h) == mine</code> 判据(<span class="path">full_checking.py:226</span>)</td><td>成立</td></tr>
+<tr><td>「不再校验, 冷却相关」</td><td>1.6 失败推断 + <code>RECHECK_FAIL_LIMIT</code> 当日冷却; 冷却计数即时落盘(<span class="path">behavior-core.md:77</span> 已知设计)</td><td>成立</td></tr>
+<tr><td>「无相关 log」</td><td>skip 一律 DEBUG(<span class="path">base.py:255-256</span>)</td><td>成立, 属可观测性缺口</td></tr>
+<tr><td>「重启程序依然不触发」</td><td><code>recheck_fails</code> 即时落盘, 重启不清; 仅次日按日期归零</td><td>成立(当日性)</td></tr>
+</table>
+
+<h3>4.3 为什么「部分成功触发、部分不触发」</h3>
+<ul>
+  <li><strong>组间差异</strong>: 每个组第一只被扫到的成员决定全组命运 —— 它若干净走完(首样本采到 checking 或落在分支 b), 全组随后逐个提交(配置两段均 full-checking, 组内 1.5 串行); 它若落进分支 a/c, 全组被 1.6 拦截。一批辅种跨多个组 → 现象呈「部分成功、部分哑火」。</li>
+  <li><strong>组内时间序</strong>: 同组内排在 A 之前/并发窗口内被处理的成员不受毒化, 排在其后的全部被拦。</li>
+</ul>
+
+<!-- ============ 5 ============ -->
+<h2 id="s5">5 · 现场验证清单(无需改代码)</h2>
+<p>以下步骤可直接证实/证伪本报告结论。注意 <code>auto-qb-data/</code> 是运行时数据, <strong>只读不写</strong>。</p>
+<ol>
+  <li><strong>验毒源(最直接)</strong> —— 查 state.json 的失败计数, 期望看到 date=今日、count≥1 的条目, hash 应为对应组内第一只被扫到的种子(如 0b23c9d4…):
+<pre>uv run python -c "import json; d=json.load(open('auto-qb-data/state.json', encoding='utf-8')); print(json.dumps(d.get('recheck_fails'), indent=2, ensure_ascii=False))"</pre>
+  若 0b23c9d4 有 count≥1 且当天该种子实际校验成功 —— 误报+毒化实锤。</li>
+  <li><strong>验「无 log 即 skip」</strong> —— 日志级别临时调 DEBUG(或 WebUI 日志级别热调), 等一个 5M 扫描周期, 应能看到: 「动作[checking] 跳过: 同组种子 xxxxxxxx 校验失败且文件映射一致(同一物理数据), 不再校验」。</li>
+  <li><strong>验数据无误</strong> —— qB 中 0b23c9d4 现状应为 progress=1.0、无错误态(即当日那次「失败」与物理数据无关)。</li>
+  <li><strong>验次日自愈</strong> —— 次日(或手动把 state.json 中该条 date 改旧后重启)观察被拦种子是否恢复触发。</li>
+</ol>
+
+<!-- ============ 6 ============ -->
+<h2 id="s6">6 · 修复方向建议(供拍板, 本报告未实现)</h2>
+
+<h3>6.1 P1: 失败判定加「已见 checking」前提(掐断毒源)</h3>
+<ul>
+  <li><strong>核心判据</strong>: 只有在本轮询周期内<strong>曾观察到 is_checking</strong> 之后出现的「非 checking 且 progress&lt;1」才允许判败 —— 真实的校验失败必然经过 checking 态, 该判据不损失对真损坏数据的保护, <code>RECHECK_FAIL_LIMIT</code> 的防死循环语义原样保留。</li>
+  <li><strong>启动宽限兜底</strong>: 未见过 checking 时进入宽限(如 60s, 建议可配), 宽限内一律 REQUEUE; 宽限到期仍未开检 → 重发一次 recheck 而非计败(防 API 请求被 qB 静默丢弃的极端情形)。宽限值定多大可依 §7 未定案点的真机观察校准。</li>
+  <li><strong>不改</strong>: 「先登记在途、再发 recheck」的顺序(<span class="path">pitfalls/backend/concurrency.md:27-32</span> 已有硬约束)与冷却计数即时落盘(<span class="path">behavior-core.md:77</span>)。</li>
+</ul>
+
+<h3>6.2 P2: 假失败记录自愈 + 1.6 推断前置校验(解毒)</h3>
+<ul>
+  <li><strong>自愈</strong>: <code>_recheck_fail_count</code> 命中时若该 hash 当前 progress≥1(检查实际已完成 = 记录必为假), 顺手清除记录(均在主循环线程, 无并发风险)。即使未来再出现新型假记录, 也会在下一轮扫描时自动消解。</li>
+  <li><strong>1.6 前置校验</strong>: 推断前校验「失败者仍是未完成的暂停态」; 已完成/已删除的失败记录视为陈旧, 不参与推断。与自愈二选一即可, 同时做更稳。</li>
+</ul>
+
+<h3>6.3 可观测性: 关键 skip 提级</h3>
+<ul>
+  <li>决策链 1.6 的「同组失败推断」skip 提到 INFO(本次故障中它就是唯一的哑火原因, 却不可见); 决策链 0 / 1.5 / 「今日不再重试」可保持 DEBUG 或同样提级 —— 以「用户排障时需要看到的最低集合」为准。</li>
+  <li>误判发生时可在 WARNING 里带上「本轮是否曾观察到 checking」字段, 为后续定位留指纹。</li>
+</ul>
+
+<h3>6.4 测试影响</h3>
+<ul>
+  <li><span class="path">tests/test_checking.py:1280-1304</span> (<code>test_checking_full_checking_fail_retry</code>) 现把「非 checking + progress=0.5 → 判败」语义固化 —— 修判定需同步改造该用例(fail 模拟应改为「曾见 checking 后落回」)。</li>
+  <li>建议新增回归: ① 首样本未见 checking → REQUEUE 而非判败; ② 宽限到期仍未开检 → 重发 recheck 不计败; ③ 假失败记录 + 同组成员 → 1.6 拦截 → 记录自愈后恢复触发的 e2e。</li>
+</ul>
+
+<!-- ============ 7 ============ -->
+<h2 id="s7">7 · 影响面与未定案点</h2>
+
+<h3>7.1 影响面</h3>
+<ul>
+  <li><strong>受影响</strong>: full-checking 轮询判定(<code>poll</code> 失败分支)与决策链 1.6 失败推断; 波及所有用 full-checking 的规则(r_rule / i_rule / h_rule 的无参考段 / hhan_checking_rules)。</li>
+  <li><strong>不受影响</strong>: skip-checking 四阶段流程; 决策链 1(组内有活跃下载); 「先登记后 recheck」顺序; 冷却即时落盘设计本身(它只是把假记录放大成了跨重启问题)。</li>
+  <li><strong>假阴性评估</strong>: 真实损坏数据的校验失败必然经过 checking 态, §6.1 判据不会放过它; 1.6 对「真失败」的推断语义(同组同数据 → 必然同结果)保持有效。</li>
+</ul>
+
+<h3>7.2 未定案点(不影响结论, 影响参数标定)</h3>
+<ul>
+  <li>qB 对「已受理但排队未开检」的 recheck 报告何种状态(checkingResumeData 与否)未真机验证 —— 本结论不依赖它(日志已证明存在「非 checking 且 progress=0.0」的采样点), 但它决定 §6.1 启动宽限该定多大。</li>
+  <li><code>recheck_fails</code> 条目仅在成功/种子删除时清除, 陈旧条目(过去日期)会常驻 state.json —— 轻微足迹问题, 与本故障独立, 修复时可顺带按日期清理。</li>
+</ul>
+
+<div class="foot">
+  取证范围: src/auto_qb/rules/actions/{full_checking,checking}.py · rules/base.py · core/{taskqueue,qbmanager}.py · torrents/store.py · config/models.py · config.yml(r_rule 段) · tests/test_checking.py · memory-bank/pitfalls/backend/{concurrency,behavior-core}.md<br>
+  本报告为只读取证快照(出厂即冻结); 修复方案拍板后请另立 plan 制品, doc-topic 建议沿用 <code>full-checking-verdict</code> 串联。
+</div>
+
+</main>
+</div>
+</div>
+</body>
+</html>

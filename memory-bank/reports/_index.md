@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-09-25-0853] [full-checking 误报「校验未通过」与批量不触发 · 故障取证分析 · auto-qb](26-09-25-0853-report-full-checking-verdict-poison.html) — `full-checking-verdict`
 - [26-09-21-1329] [后端崩溃安全性调查报告 · auto-qb](26-09-21-1329-backend-crash-safety-report.html) — `backend-state-persistence`
 - [26-09-21-1248] [列设置重置 · 历次修复复盘与失败原因分析](26-09-21-1248-column-prefs-fix-failure-analysis.html) — `webui-column-prefs`
 - [26-09-21-1158] [auto-qb 项目审计调查报告 · 2026-09-21](26-09-21-1158-auto-qb-project-audit.html) — `auto-qb-project`

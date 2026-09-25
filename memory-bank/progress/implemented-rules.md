@@ -7,6 +7,11 @@
 
 - 规则引擎: interval 触发 + 16 条件 + 12 动作 + execute_once/cooldown 去重 + 断点续跑 + stop_following_rules_if; 事件触发 (interval/on_* 四值 trigger + 事件分派引擎 + rule-event 断点续跑 + on_torrent_deleted 动作白名单 `print_torrent_details`, 2026-09-12 落地, 设计细节见下"事件触发(规则)规划")
 - checking 动作: filelist/piecehashes/custom 三种参考判定 + full-checking (异步轮询) + skip-checking (导出→删除→重加, 同日去重+备份)
+  ; **轮询判败前提 + 假失败自愈 (2026-09-25)**: 判败要求「曾见 checking 态」或 `CHECK_START_GIVEUP`(600s)宽限耗尽
+  (修首样本竞态: 快照滞后被误判「校验未通过 progress=0.0」, 假失败计数经决策链 1.6 毒化同组 → 批量辅种部分不触发);
+  1.6 推断前自愈清除指向已完成/已删除成员的假记录; 判定/拒绝类 skip(冷却上限/1.6 推断)提级 INFO;
+  recheck 发送失败经 `submitted` 标记让已登记轮询立即消亡。取证报告
+  [26-09-25-0853-report-full-checking-verdict-poison](../reports/26-09-25-0853-report-full-checking-verdict-poison.html)
 - tracker 单种限速 (奇数保护)
 - 全局限速曲线: Traffic Monitor 数据源, DAY/MONTH/ND 聚合, 全程分档覆盖, 取最严 (2026-09 最近的大功能, commit ee88bc8..20481f3)
 - fail-fast 全量配置校验 (2026-09-05): `config.validate_config` 聚合校验未知键/必填项/值格式/规则 spec/引用存在性; 留空(空串/None)走默认值; Rule 构造报错带规则名上下文; `load_*` 解析函数已剥离全部检查(先验证再解析, 解析假定配置正确)

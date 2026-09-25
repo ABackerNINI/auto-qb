@@ -6,7 +6,16 @@
 
 ## 当前基线
 
-**1608 collected: 1607 passed + 1 skipped / Windows** —— 2026-09-25 **WEB UI 展开态跨视图记忆**
+**1611 collected: 1610 passed + 1 skipped / Windows** —— 2026-09-25 **full-checking 首样本竞态修复**
+(切片 `26-09-25-2348-full-checking-verdict-fix`, 取证报告
+[26-09-25-0853-report-full-checking-verdict-poison](../reports/26-09-25-0853-report-full-checking-verdict-poison.html))。**+3 条**:
+`test_checking.py` 首样本竞态回归(快照未见 checking 不计败, 走到成功零失败记录)/ 启动宽限保险丝
+(`CHECK_START_GIVEUP` 耗尽判败防活锁)/ 1.6 假失败自愈(记录指向已完成成员即清除不推断);
+另改造 `test_checking_full_checking_fail_retry`(见过 checking 才判败)、
+`test_checking_recheck_fail_cooldown`(patch GIVEUP=0 跳过前提, 只钉冷却算术)、
+`test_trigger_events` 失败用例(补 checkingDL 阶段满足判定前提)。
+
+**上一态: 1608 collected: 1607 passed + 1 skipped / Windows** —— 2026-09-25 **WEB UI 展开态跨视图记忆**
 (切片 `26-09-25-1835-webui-expand-state-across-views`)。**+1 条**:
 `test_web.py::test_frontend_expand_state_survives_view_switch` —— 静态钉住"切视图不得置空展开态"
 (禁 `setViewMode` 里回潮 `expandedKey/expandedShows/expandedShowEp = null`)+ 还回前必须验那一行还在

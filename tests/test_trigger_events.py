@@ -321,6 +321,9 @@ def test_event_checking_resume_fail():
         tor.tracker_conf = mgr.config.trackers["HHan"]
         task = mgr._apply_event_rule(rule, "H1")
         assert task.resume_index == 1 and ("recheck", None) in mgr.client.calls
+        # 校验中(见过 checking 态, 满足失败判定前提) -> 轮询续延
+        seed_store(mgr, [_pause_target(state="checkingDL")])
+        mgr.task_queue.run_due(False, t0 + 0.5)
         # 校验失败(progress 仍 <1) -> 轮询 bump 失败计数 + 默认重置 origin 重走决策链
         mgr.client.calls.clear()
         seed_store(mgr, [_pause_target(progress=0.4)])  # 仍未完成

@@ -47,9 +47,12 @@
 - test_checking_full_checking_resume_continues_actions: 断点续跑: 校验成功后执行断点后的剩余动作
 - test_checking_full_checking_resume_skips_conditions: 断点续跑跳过条件评估(条件变化不影响续跑)
 - test_checking_full_checking_resume_skips_dedup: 断点续跑跳过去重(execute_once=once 不拦截续跑)
-- test_checking_full_checking_fail_retry: 任务队列驱动: 校验未通过 -> 子任务 reset+重新入队 origin 重试
+- test_checking_full_checking_fail_retry: 任务队列驱动: 见过 checking 后落回未完成才判败 -> 子任务 reset+重新入队 origin 重试
+- test_checking_full_checking_first_sample_race_not_failed: 首样本竞态回归(2026-09-25 故障): 快照未见 checking 不计败, 走到成功零失败记录
+- test_checking_full_checking_giveup_condemns: 启动宽限耗尽(CHECK_START_GIVEUP)仍未见 checking -> 判败走冷却(防活锁保险丝)
 - test_checking_group_full_checking_serialized: 组内校验串行(决策链 1.5): B 让位等待, A 成功晋升参考后 B 重走决策链走跳检
 - test_checking_group_skip_on_same_data_fail: 组内校验失败推断(决策链 1.6): 文件映射一致 -> B 不再校验
+- test_checking_group_fail_record_healed_when_member_completed: 1.6 假失败自愈: 记录指向已完成成员 -> 记录清除且不推断
 - test_checking_group_no_infer_when_sizes_differ: 组内文件映射不一致 -> 不推断, B 照常校验
 - test_checking_group_wait_external_entry_skip: 组内校验中且无任务驱动 -> skip
 - test_checking_group_wait_timeout_force_resume: 等待超时强制恢复重判(防在途登记泄漏活锁)
@@ -549,7 +552,11 @@ def test_checking_no_reference_full_checking():
 
 
 def test_checking_recheck_fail_cooldown():
-    """任务队列驱动: 校验连续失败达上限 -> 冷却当日不再重试(防损坏文件的 recheck 死循环), 次日重置"""
+    """任务队列驱动: 校验连续失败达上限 -> 冷却当日不再重试(防损坏文件的 recheck 死循环), 次日重置
+
+    用 CHECK_START_GIVEUP=0 跳过「已见 checking」判定前提: 本测试钉的是冷却闸门算术,
+    不是判定前提本身(前提语义见 test_checking_full_checking_fail_retry / giveup 用例)。
+    """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
@@ -563,26 +570,27 @@ def test_checking_recheck_fail_cooldown():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
 
-    # 第 1 次执行: 提交 recheck -> 让位; 轮询(+0.5)判失败(count=1) -> origin reschedule(+60s)
-    run_queue(mgr, t0)
-    run_queue(mgr, t0 + 0.5)
-    assert client.calls.count(("recheck", None)) == 1
-    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1
+    with patch("auto_qb.rules.actions.full_checking.CHECK_START_GIVEUP", 0.0):
+        # 第 1 次执行: 提交 recheck -> 让位; 轮询(+0.5)判失败(count=1) -> origin 重入队
+        run_queue(mgr, t0)
+        run_queue(mgr, t0 + 0.5)
+        assert client.calls.count(("recheck", None)) == 1
+        assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1
 
-    # 第 2 次: gate(1<3) -> 再提交; 轮询失败 count=2
-    run_queue(mgr, t0 + 61.0)
-    run_queue(mgr, t0 + 61.5)
-    assert client.calls.count(("recheck", None)) == 2
-    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 2
+        # 第 2 次: gate(1<3) -> 再提交; 轮询失败 count=2
+        run_queue(mgr, t0 + 61.0)
+        run_queue(mgr, t0 + 61.5)
+        assert client.calls.count(("recheck", None)) == 2
+        assert mgr.state["recheck_fails"]["HASH123"]["count"] == 2
 
-    # 第 3 次: gate(2<3) -> 再提交; 轮询失败 count=3
-    run_queue(mgr, t0 + 121.5)
-    run_queue(mgr, t0 + 122.0)
-    assert client.calls.count(("recheck", None)) == 3
-    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 3
+        # 第 3 次: gate(2<3) -> 再提交; 轮询失败 count=3
+        run_queue(mgr, t0 + 121.5)
+        run_queue(mgr, t0 + 122.0)
+        assert client.calls.count(("recheck", None)) == 3
+        assert mgr.state["recheck_fails"]["HASH123"]["count"] == 3
 
-    # 第 4 次执行: 冷却生效 -> skip, 不再提交(失败计数保留, 次日重置)
-    run_queue(mgr, t0 + 182.0)
+        # 第 4 次执行: 冷却生效 -> skip, 不再提交(失败计数保留, 次日重置)
+        run_queue(mgr, t0 + 182.0)
     assert client.calls.count(("recheck", None)) == 3, "冷却期内不应再提交"
     assert _recheck_fail_count(mgr, "HASH123") == 3
 
@@ -1278,7 +1286,11 @@ def test_checking_full_checking_resume_skips_dedup():
 
 
 def test_checking_full_checking_fail_retry():
-    """任务队列驱动: 校验未通过(progress<1) -> 子任务 origin.reset() + 重新入队(重走决策链) """
+    """任务队列驱动: 见过 checking 后落回未完成 -> 判败 -> 子任务 origin.reset() + 重新入队(重走决策链)
+
+    失败判定前提(首样本竞态修复): 未曾观察到 checking 态不算失败(宽限窗口内继续轮询),
+    快照见 checking 后再落回未完成才定罪 —— 真实校验失败必然经过 checking 态。
+    """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
@@ -1292,9 +1304,18 @@ def test_checking_full_checking_fail_retry():
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
     assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "首次执行应记录断点且不重入队"
-    # 校验完成但 progress<1(文件不完整) -> 失败 -> 子任务 reset + 重新入队
-    seed_store(mgr, [make_target(state="pausedDL", progress=0.5)])
+    # 首样本: 快照仍是提交前状态(非 checking, progress=0.0) -> 宽限窗口内继续轮询, 不计败
+    seed_store(mgr, [make_target()])
     run_queue(mgr, t0 + 2.5)
+    assert mgr.state.get("recheck_fails", {}).get("HASH123") is None, "未见 checking 不得计败"
+    assert any(p.kind == "check" for p in mgr.task_queue._fast), "轮询任务应 REQUEUE 存活"
+    # 快照见 checking(校验已启动) -> 继续轮询
+    seed_store(mgr, [make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 5.0)
+    # 校验跑完仍未完成(真实失败) -> 定罪: 计败 + origin reset 重入队
+    seed_store(mgr, [make_target(state="pausedDL", progress=0.5)])
+    run_queue(mgr, t0 + 7.5)
+    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "见过 checking 后的未完成才计败"
     assert origin.state == PENDING, "失败后应由子任务重新入队重试"
     assert origin.resume_index is None, "失败应重置断点(重走完整决策链)"
     assert mgr.store.verified_references == set(), "失败不应晋升参考"
@@ -1302,6 +1323,66 @@ def test_checking_full_checking_fail_retry():
     # 重走决策链: origin 到期 -> 重新 full-checking(再次 pending + 再发 recheck)
     run_queue(mgr, t0 + 60.5)
     assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "重走决策链应再次校验(再次记录断点)"
+
+
+def test_checking_full_checking_first_sample_race_not_failed():
+    """首样本竞态回归(2026-09-25 故障): recheck 已提交但快照未见 checking(progress=0.0)
+
+    旧行为: WARNING「校验未通过(第1次, progress=0.0)」+ recheck_fails 当日落盘, 经决策链
+    1.6 毒化同组(文件映射一致的成员全部被拒检)。新行为: 宽限窗口内继续轮询, 快照见
+    checking 后正常走完 -> 校验成功, 全程零失败记录。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    seed_store(mgr, [make_target()])
+    t0 = time.time()
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123")
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    run_queue(mgr, t0)  # 提交 recheck + 登记轮询
+    # 故障时序还原: 提交后 ~2s 首样本, 快照仍是提交前状态(非 checking, progress=0.0)
+    seed_store(mgr, [make_target()])
+    run_queue(mgr, t0 + 2.5)
+    assert mgr.state.get("recheck_fails", {}).get("HASH123") is None, "首样本竞态不得计败"
+    assert any(p.kind == "check" for p in mgr.task_queue._fast), "轮询应继续而不是消亡"
+    # qB 应用 recheck: 快照见 checking -> 校验完成 -> 成功路径
+    seed_store(mgr, [make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 5.0)
+    seed_store(mgr, [make_target(state="pausedUP", progress=1.0)])
+    run_queue(mgr, t0 + 7.5)
+    assert "HASH123" in mgr.store.verified_references, "校验成功应晋升参考"
+    assert mgr.state.get("recheck_fails", {}).get("HASH123") is None, "成功路径无失败记录"
+    assert origin.state == PENDING and origin.resume_index == 1, "成功应保留断点等续跑"
+    run_queue(mgr, t0 + 60.5)
+    assert mgr.state.get("exec_history"), "续跑完成应记录执行历史"
+
+
+def test_checking_full_checking_giveup_condemns():
+    """启动宽限保险丝: CHECK_START_GIVEUP 耗尽仍未见 checking -> 判败走冷却(防轮询活锁)
+
+    qB 重启丢请求等极端情形下 recheck 永不生效, 无保险丝则轮询无限等待。判败后 origin
+    重走决策链重新提交, 请求恢复生效后自然续上。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    seed_store(mgr, [make_target()])
+    t0 = time.time()
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr._create_rule_task(rule, "HASH123")
+    origin.interval = 60.0
+    mgr.task_queue.add_task(origin, t0)
+    run_queue(mgr, t0)
+    with patch("auto_qb.rules.actions.full_checking.CHECK_START_GIVEUP", 0.0):
+        seed_store(mgr, [make_target()])  # 快照恒为提交前状态: 永未见 checking
+        run_queue(mgr, t0 + 2.5)
+    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "宽限耗尽应判败"
+    assert origin.state == PENDING and origin.resume_index is None, "判败应重置 origin 重走决策链"
+    assert not any(p.kind == "check" for p in mgr.task_queue._fast), "轮询任务应消亡"
 
 
 # ============================================================
@@ -1376,6 +1457,34 @@ def test_checking_group_skip_on_same_data_fail():
     run_queue(mgr)
     assert client.calls.count(("recheck", None)) == 0, f"同数据失败推断: B 不应提交 recheck: {client.calls}"
     assert tb.state == PENDING and tb.resume_index is None, "B 应正常完成(周期重入队)"
+
+
+def test_checking_group_fail_record_healed_when_member_completed():
+    """决策链 1.6 假失败自愈: 失败记录指向的成员已完成(progress>=1) -> 记录清除且不推断
+
+    2026-09-25 误判故障解毒: A 的「失败」与数据无关(实际校验已通过)时, B 不得被推断拦截,
+    记录就地清除(否则毒化持续到次日)。A 已完成 -> B 经决策链 2 以 A 为参考走跳检。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA", state="pausedUP", progress=1.0)  # A 已完成: 记录必为假失败
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
+    mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 100}
+    mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
+    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr._create_rule_task(rule, "HB")
+    mgr.task_queue.add_task(tb, time.time())
+    run_queue(mgr)
+    assert "HA" not in mgr.state.get("recheck_fails", {}), "假失败记录应被自愈清除"
+    assert client.calls.count(("recheck", None)) == 0, "A 已完成可为参考, B 走跳检而非 full-checking"
+    add_call = [c for c in client.calls if c[0] == "add"]
+    assert add_call and add_call[0][1]["is_skip_checking"] is True, f"B 应以 A 为参考走跳检: {client.calls}"
 
 
 def test_checking_group_no_infer_when_sizes_differ():

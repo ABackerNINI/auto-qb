@@ -32,7 +32,8 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
          已完成(progress=1)/活跃中(下载/做种中)种子一律跳过(避免已完成种子被反复校验)
       1. 组内有活跃下载种子(is_downloading) -> skip(整组未完成, 不进行任何校验, 包括跳检)
       1.5. 组内其它成员 full-checking 在途 -> 让位等待(组内校验串行, FullCheckingMixin)
-      1.6. 组内其它成员校验失败且文件映射一致 -> 结果必然相同, skip(失败推断, FullCheckingMixin)
+      1.6. 组内其它成员校验失败且文件映射一致 -> 结果必然相同, skip(失败推断, FullCheckingMixin;
+           记录指向已完成/已删除成员时先自愈清除 —— 假失败不得参与推断)
       2. 按 basic_check 从同组"已完成且未校验"成员筛选参考种子, 并集内存 verified_references
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
       4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
@@ -41,7 +42,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
          结果轮询子任务(快速队列, interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功
          (progress>=1) -> on_success()(晋升 verified_references(仅内存) + auto_start) + 重新
          入队 origin(resume_index 保留 -> 规则续跑执行后续动作, 由 Rule.process 统一记录执行);
-         失败/异常 -> origin.reset() + 重新入队(重走决策链); 种子删除 -> 仅子任务消亡(规则任务终了)
+         失败(曾见 checking 后落回未完成, 或 CHECK_START_GIVEUP 宽限耗尽仍未开检)/异常 ->
+           origin.reset() + 重新入队(重走决策链); 种子删除 -> 仅子任务消亡(规则任务终了);
+           宽限窗口内「未见 checking」的样本只 REQUEUE 不计败(首样本竞态修复)
     """
     name = "checking"
 
