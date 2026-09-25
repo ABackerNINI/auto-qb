@@ -68,7 +68,9 @@ const DETAIL_COLUMNS = [
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
   { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", sortable: true, align: "left" },
   // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值); Hash 不可排序(无语义), 其余列均可
-  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "right" },
+  // 2026-09-26 用户要求: 分享率列左对齐(与相邻数值列的右对齐不同, 值含 "实际 / HR 要求" 两段,
+  // 左对齐起读更稳); 对齐单点在列模型, 由 colAlignCss 同时作用于表头与值(两套 UI 同源)
+  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "left" },
   // TBL-06: 添加于(_member_view 已透出), 与 Hash 同置表尾低频区
   // (保存路径列 2026-09-17 移出本表 -> 见 GROUP_COLUMNS: 组内路径天然一致, 只保留组级一处)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
@@ -91,7 +93,8 @@ const TORRENT_COLUMNS = [
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
-  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  // 2026-09-26 用户要求: 与明细表同口径(见 DETAIL_COLUMNS 的 ratio 注释) —— 分享率左对齐
+  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "left" },
   { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   // 与分组表/明细表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
