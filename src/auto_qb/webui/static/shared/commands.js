@@ -553,6 +553,13 @@ window.AQB_COMMANDS = {
       this.menu.visible = false;
       return this.bulkDelete();
     },
+    /* 批量右键菜单的"标签/分类…"入口: 目标集合的权威在对话框(openMetaDialog 传空 =
+     * 整个选中集合, 与批量浮条同口径), 这里只负责先收起菜单(菜单根 @click.stop,
+     * 全局"点空白关闭"接不到) */
+    ctxMeta() {
+      this.menu.visible = false;
+      return this.openMetaDialog(null);
+    },
     async actTorrent(action) {
       this.menu.visible = false;
       if (!this.menu.hash) return;

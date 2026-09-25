@@ -6,7 +6,19 @@
 
 ## 当前基线
 
-**1636 collected: 1635 passed + 1 skipped / Windows** —— 2026-09-26 **webui 一键导入缺失站点**
+**1639 collected: 1638 passed + 1 skipped / Windows** —— 2026-09-26 **webui 种子级标签/分类编辑**
+(档案 `26-09-26-webui-torrent-meta-edit`)。
+**+3 条**(test_web.py): `test_api_t_bulk_tags_category_enqueue` bulk 标签/分类动作入队(tags 过滤空段非空才透传 /
+category 按键存在性透传, 空串=清除分类要保留 / 未提供时载荷不带键历史形态不变) /
+`test_drain_web_commands_bulk_torrents_tags_category` 标签/分类命令执行(单次调用带全部在册 hash /
+缺 tags 或缺 category 键 error 回执 / 空串分类合法) /
+`test_frontend_meta_dialog_paired` 标签/分类对话框守阵(双 UI 成对: metaOpen 对话框 + 浮条/批量菜单/单种子菜单三处入口;
+shared 接线 openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路; .meta-dialog/.opt-pill 两套 CSS 成对)。
+落地面: `/api/torrents/bulk` 动作表扩 add_tags/remove_tags/set_category(载荷加 tags/category 键) +
+前端即时编辑对话框(shared/dialogs.js, .opt-pill 切换胶囊, atlas 首次引入该组件)。
+TOTAL **92%**(11008 语句 / 787 未覆盖 / 3654 分支 / 330 partial)。
+
+**上一态: 1636 collected: 1635 passed + 1 skipped / Windows** —— 2026-09-26 **webui 一键导入缺失站点**
 (档案 `26-09-26-webui-sites-import`; 数字为**再合流远端 9 笔[HR 未达标红档/扩展选项页终态/webui 修复/docker 验收]后的合并树重测**)。
 **+7 条**: test_web.py +6(后端 5:
 `test_sites_missing_scans_and_builds_defaults` 缺失域名生成默认条目且已配置域名不重复 /

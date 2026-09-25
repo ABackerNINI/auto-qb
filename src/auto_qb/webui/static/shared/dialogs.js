@@ -170,6 +170,196 @@ window.AQB_DIALOGS = {
         this.mgrBusy = false;
       }
     },
+    /* ---------------- 标签/分类编辑对话框: 对选中集合**即时**增删标签/改分类 ----------------
+     * 与管理对话框(FE-2C2, 全局定义的增删)互补: 这里只改"种子上打了什么"。
+     * 交互为即时模式(照 qB 官方 WebUI): 点胶囊即投递一条 bulk 命令(add_tags/remove_tags),
+     * 每条命令独立回执, 不设"应用/取消" —— 对话框只是把候选摊开, 关闭即完。
+     * 目标集合在打开时刻锁定(遮罩下选择不会变); 单种子右键传 hash, 批量(浮条/批量菜单)传空
+     * = 整个选中集合(与批量浮条同口径 _bulkTargets)。
+     * 新分类/新标签走"先建后设": 创建命令与打标命令按 FIFO 在主循环顺序执行, 创建失败
+     * (典型 = 已存在的 409)不影响后续设置 —— 真正决定成败的是 set/add 的回执。
+     */
+    openMetaDialog(singleHash) {
+      this.menu.visible = false;
+      const targets = singleHash
+        ? { groupKeys: [], memberHashes: [singleHash] }
+        : this._bulkTargets();
+      if (!targets.groupKeys.length && !targets.memberHashes.length) return;
+      this.metaTargets = targets;
+      this.metaOpen = true;
+      this.metaCatMenu = false;
+      this.metaCatHi = -1;
+      this.metaNewTags = "";
+      this.metaBusy = false;
+      const members = this._metaExpandHashes(targets)
+        .map((h) => this.memberByHash.get(h))
+        .filter(Boolean);
+      this.metaCount = this._metaExpandHashes(targets).length;
+      this.metaCommonTags = this._metaCommonTags(members);
+      const cat = this._metaCommonCategory(members);
+      this.metaCat = cat.value;
+      this.metaCatDiff = cat.diff;
+      this.metaCatInput = cat.value;
+      this.loadMetaOptions();
+    },
+    closeMeta() {
+      if (this.metaBusy) return;  // 命令回执等待期不允许误关(与管理对话框同口径)
+      this.metaOpen = false;
+    },
+    /* 目标展开(预览共同值用): 与后端 bulk 的 keys 展开同口径(组级联全部在册成员);
+     * 投递仍整份传 keys + hashes, 展开去重的单一权威在后端, 前端这份只为算交集/计数 */
+    _metaExpandHashes(targets) {
+      const hashes = [...targets.memberHashes];
+      for (const k of targets.groupKeys) {
+        const g = this._findGroup(k);
+        if (g) for (const m of g.members) hashes.push(m.hash);
+      }
+      return [...new Set(hashes)];
+    },
+    /* 共同标签(交集): 与 decorate._commonTags 同口径取交集, 但**不过滤站点同名标签** ——
+     * 那条过滤是组级**展示**口径(站点列已有同名值, 展示纯冗余); 编辑场景必须能看到并
+     * 移除这类标签, 不能复用 */
+    _metaCommonTags(members) {
+      const sets = members.map((m) => new Set(m.tags || []));
+      if (!sets.length) return [];
+      let common = [...sets[0]];
+      for (const s of sets.slice(1)) common = common.filter((t) => s.has(t));
+      return common.sort((a, b) => a.localeCompare(b));
+    },
+    _metaCommonCategory(members) {
+      const vals = members.map((m) => m.category || "");
+      const diff = vals.some((v) => v !== vals[0]);
+      return { value: diff ? "" : vals[0], diff };
+    },
+    async loadMetaOptions() {
+      // 并行拉分类/标签候选; 单端点失败静默降级为空(不阻塞对话框, 照 loadAddOptions 先例)
+      const safe = async (url, pick) => {
+        try {
+          return pick(await this.api(url));
+        } catch (e) {
+          return [];
+        }
+      };
+      const [cats, tags] = await Promise.all([
+        safe("/api/categories", (r) => Object.keys(r.categories || {}).sort((a, b) => a.localeCompare(b))),
+        safe("/api/tags", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
+      ]);
+      if (this.metaOpen) {  // 仅对话框仍开着时回填(慢响应不得污染下一次打开)
+        this.metaCategories = cats;
+        this.metaTags = tags;
+      }
+    },
+    /* bulk 投递统一走这里: 与 bulkAct 同链路(api + waitCmd + toast 三态), 但目标集合用
+     * 打开时刻锁定的 metaTargets, 且不做乐观贴片 —— 标签/分类由 bulk 的 RESYNC 补刷新落行 */
+    async _metaBulk(action, extra, okText) {
+      const { groupKeys, memberHashes } = this.metaTargets;
+      const t0 = this._newCmdStats(action);
+      this._markCmdPatch(t0);
+      this.metaBusy = true;
+      try {
+        const resp = await this.api("/api/torrents/bulk", {
+          method: "POST",
+          body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes, ...extra }),
+        });
+        this._markCmdPost(t0);
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          this.toast(`已执行: ${okText}`, "ok", 2500);
+          return true;
+        }
+        this.toast(`${okText}失败: ${r.error}`, "error", 8000);
+        return false;
+      } catch (e) {
+        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+        return false;
+      } finally {
+        this.metaBusy = false;
+      }
+    },
+    async metaToggleTag(tag) {
+      if (this.metaBusy) return;
+      const has = this.metaCommonTags.includes(tag);
+      const ok = await this._metaBulk(
+        has ? "remove_tags" : "add_tags", { tags: [tag] },
+        (has ? "移除标签「" : "添加标签「") + tag + "」"
+      );
+      if (ok) {  // 对话框内的即时确认(行数据等 bulk 的 RESYNC 补刷新落下来)
+        this.metaCommonTags = has
+          ? this.metaCommonTags.filter((t) => t !== tag)
+          : [...this.metaCommonTags, tag].sort((a, b) => a.localeCompare(b));
+      }
+    },
+    async metaAddNewTags() {
+      if (this.metaBusy) return;
+      const tags = this.metaNewTags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
+      if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
+      const fresh = tags.filter((t) => !this.metaTags.includes(t));
+      if (fresh.length) {
+        // 新标签定义先入队创建(定义列表/管理对话框可见); 已存在时创建失败不影响后续打标
+        try {
+          await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags: fresh }) });
+        } catch (e) {
+          if (!e.auth) this.toast("创建标签失败(可能已存在), 继续尝试打标", "warn", 4000);
+        }
+        this.metaTags = [...new Set([...this.metaTags, ...fresh])].sort((a, b) => a.localeCompare(b));
+      }
+      const ok = await this._metaBulk("add_tags", { tags }, `添加标签「${tags.join(", ")}」`);
+      if (ok) {
+        this.metaCommonTags = [...new Set([...this.metaCommonTags, ...tags])].sort((a, b) => a.localeCompare(b));
+        this.metaNewTags = "";
+      }
+    },
+    async metaSetCategory(name) {
+      name = (name || "").trim();
+      this.metaCatMenu = false;
+      this.metaCatHi = -1;
+      if (name === this.metaCat && !this.metaCatDiff) return;  // 未变化: 静默返回(不给"已设置"的假反馈)
+      if (name && !this.metaCategories.includes(name)) {
+        try {
+          await this.api("/api/categories", { method: "POST", body: JSON.stringify({ name }) });
+        } catch (e) {
+          if (!e.auth) this.toast(`创建分类「${name}」失败(可能已存在), 继续尝试设置`, "warn", 4000);
+        }
+        this.metaCategories = [...this.metaCategories, name].sort((a, b) => a.localeCompare(b));
+      }
+      const ok = await this._metaBulk("set_category", { category: name }, name ? `设置分类「${name}」` : "清除分类");
+      if (ok) {
+        this.metaCat = name;
+        this.metaCatDiff = false;
+        this.metaCatInput = name;
+      }
+    },
+    openMetaCatMenu() {
+      this.metaCatHi = this.metaCategories.indexOf(this.metaCatInput.trim());
+      this.metaCatMenu = true;
+      this._hiScroll("metaCatList");
+    },
+    metaCatFiltered() {
+      const q = this.metaCatInput.trim().toLowerCase();
+      if (!q) return this.metaCategories;
+      return this.metaCategories.filter((c) => c.toLowerCase().includes(q));
+    },
+    onMetaCatKeydown(e) {
+      // 下拉未开时不接管按键(回车走应用); 开启后: 上下循环高亮, 回车选高亮项, Esc 只收面板(阻断冒泡不关对话框)
+      const opts = this.metaCatFiltered();
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && opts.length) {
+        e.preventDefault();
+        if (!this.metaCatMenu) {
+          this.metaCatMenu = true;
+          this.metaCatHi = e.key === "ArrowDown" ? -1 : 0;
+        }
+        this.metaCatHi = (this.metaCatHi + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
+        this._hiScroll("metaCatList");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const picked = this.metaCatMenu && this.metaCatHi >= 0 ? opts[this.metaCatHi] : this.metaCatInput;
+        this.metaSetCategory(picked);
+      } else if (e.key === "Escape" && this.metaCatMenu) {
+        e.stopPropagation();
+        this.metaCatMenu = false;
+        this.metaCatHi = -1;
+      }
+    },
     /* ---------------- 日志 tail(FE-2C): /api/log 只读(等级过滤 + 行数选择 + 手动刷新, 不轮询);
          入口在 Console Hub「运行日志」分区, 顶层 page 只有 groups/settings ---------------- */
     async loadLogs() {
