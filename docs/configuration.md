@@ -117,7 +117,8 @@ config:
     # example_rules:
     #     rule1: ...
 
-    # tracker 站点配置 (也可在 Web UI 设置页增删改; 用 YAML 时建议先 `--export-yaml missing.yml --only-missing` 导出骨架再改)
+    # tracker 站点配置 (也可在 Web UI 设置页增删改, 「站点」分区可一键导入缺失站点自动生成默认配置;
+    # 用 YAML 时建议先 `--export-yaml missing.yml --only-missing` 导出骨架再改)
     trackers:
         tracker1:                                  # 自定义 tracker 站点名称
             domains:                               # 站点域名，可以有多个

@@ -1154,6 +1154,7 @@
                     {{ name }}<span class="p-n">{{ hubCount(cfgTracker(name)) }}</span>
                   </button>
                   <button class="hb-pill" @click="hubAddTracker()">＋ 新增站点</button>
+                  <button class="hb-pill" :disabled="hub.importing" @click="hubImportSites()">⤓ 导入缺失站点</button>
                 </div>
                 <div v-if="cfg.trackerKey" class="hb-blk hb-cut">
                   <div class="hb-blk-hd">

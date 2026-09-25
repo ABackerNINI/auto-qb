@@ -6,7 +6,19 @@
 
 ## 当前基线
 
-**1617 collected: 1616 passed + 1 skipped / Windows** —— 2026-09-25 **示例配置守阵**
+**1624 collected: 1623 passed + 1 skipped / Windows** —— 2026-09-26 **webui 一键导入缺失站点**
+(档案 `26-09-26-webui-sites-import`)。**+7 条**: test_web.py +6(后端 5:
+`test_sites_missing_scans_and_builds_defaults` 缺失域名生成默认条目且已配置域名不重复 /
+`test_sites_missing_name_conflict_suffix` 站点名冲突 `_N` 后缀 / `test_sites_missing_all_covered_returns_empty`
+全覆盖空返回 / `test_sites_missing_requires_connected_client` 断连 503 / `test_sites_missing_api_failure_maps_502`
+扫描失败 502 带原因; 前端接线 1: `test_frontend_sites_import_wiring`); test_exporter.py +1
+(`test_gen_tracker_name` 新提取的站点名生成单测); 金清单 `_GOLDEN_ROUTES` 同步 +1
+(`GET /api/sites/missing`, 路由总数 61→62)。落地面: `core/exporter.py` 提取 `gen_tracker_name`
+(export_yaml_template 改调, 行为不变) + 新路由模块 `webui/server/routes/sites.py` + 前端
+`config_hub.js::hubImportSites()` 与两套 UI「⤓ 导入缺失站点」按钮。
+TOTAL **92%**(10952 语句 / 785 未覆盖 / 3624 分支 / 327 partial)。
+
+**上一态: 1617 collected: 1616 passed + 1 skipped** —— 2026-09-25 **示例配置守阵**
 (`pitfalls/docs/drift.md` 的根治 follow-up: minimal.yml 漂移修复后, 把"示例无守卫会静默漂移"钉成测试;
 数字为合入远端 full-checking 竞态修复(+3)后的合并树实测)。
 **+2 条** (test_config.py): `test_example_minimal_yml_passes_fail_fast` —— minimal.yml 过 fail-fast 校验
@@ -106,18 +118,7 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
 **更早(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
 
-**更早(2026-09-25 禁令解除回写, 两线合一前的旧基线)**: 并行 19.5 / 18.5s(2 次采样; 2 failed 为当时已记载的 GBK 假红, 已随 a760da0 修复)。
-
-**更早(2026-09-25 v2.8 明细表改版)**: 并行 18.3 / 18.7 / 19.1s(test.quick ×1 + test.full ×2)。
-
-**更早(2026-09-25 v2.6/v2.7 通道时序 + 增量落盘 / M4 多站点)**: 并行 19.3 / 20.0 / 21.7s 与 18.1 / 18.1 / 19.2s。
-⚠ 扩展守阵真跑 node(现为一次运行覆盖四个场景 + 登录页场景各一次) ⇒ 耗时比 M1 末态高约 5s, 属预期的环境成本。
-
-⚠ M2 用例含真回环 socket、线程启停与「等扩展回传」场景 ⇒ 整体比 M1 末态(~9s)慢约一倍;
-其中一处 10s 级浪费是**真缺陷**(关停时线程正阻塞等扩展回传, 白等到 `request_timeout`)——
-已修为「先叫停队列再 join」, 并有 `test_stop_is_prompt_while_waiting_for_extension` 守死。
-
-**上一态(2026-09-24 告警分档 + `--hr-status`)**: 并行 16.88–21.40s / 串行 30.93s。
+**更早(2026-09-25 禁令解除回写 → 2026-09-24 告警分档各轮)**: 并行 14.3–21.7s 区间多次采样; 扩展守阵真跑 node 比 M1 末态高约 5s(预期环境成本); M2 关停白等扩展回传的 10s 级浪费为**真缺陷**已修(「先叫停队列再 join」+ 守阵 `test_stop_is_prompt_while_waiting_for_extension`)。逐次采样数字见 [baseline-history.md](baseline-history.md)「耗时采样归档」条。
 
 > **本文件是这组数字的唯一枚举处** —— 其它文档只写量级与"见 baseline.md", 别再抄一遍(抄一份多一处漂移)。
 > 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。

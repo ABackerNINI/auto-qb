@@ -9,6 +9,7 @@
 - test_capitalize_special_tag: 特殊标签大写化
 - test_gen_default_tag: 生成默认标签
 - test_build_tracker_entry: 构建 tracker 条目
+- test_gen_tracker_name: 域名转合法站点名(非法字符替换/既有占用与批内冲突加 _N 后缀)
 - test_export_yaml_template_append: 模板导出追加
 - test_export_yaml_template_only_missing_dry_run: 仅缺失 dry-run 导出
 - test_export_yaml_template_name_collision: 名称冲突处理
@@ -113,6 +114,16 @@ def test_build_tracker_entry():
     assert entry["tags"] == ["HDChina"]
     assert entry["hr"]["required_seeding_time"] == "3D"
     assert entry["upload_speed_limit"] == "0KiB/s"
+
+
+def test_gen_tracker_name():
+    """域名转合法站点名: 非法字符替换下划线; 既有占用与批内清洗同名加 _N 后缀并就地登记"""
+    taken = {"hdchina_org"}
+    assert exporter.gen_tracker_name("hdchina.org", taken) == "hdchina_org_1", "既有占用 -> _1"
+    assert exporter.gen_tracker_name("a.b.com", taken) == "a_b_com"
+    assert exporter.gen_tracker_name("a-b.com", taken) == "a_b_com_1", "批内清洗同名 -> 递增后缀"
+    assert "a_b_com_1" in taken, "新名应登记回 taken"
+    assert exporter.gen_tracker_name("kufirc.com", set()) == "kufirc_com"
 
 
 def test_export_yaml_template_append():

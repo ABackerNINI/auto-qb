@@ -34,6 +34,12 @@
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_web_token_not_printed_in_logs: 生成的访问密钥不进任何日志(WARNING 会被 notify 推送, 且 /api/log 可读回)
 - test_config_tree_masks_secrets: /api/config 掩码敏感字段, 且"读取→原样保存"不会把密码写成占位串
+- test_sites_missing_scans_and_builds_defaults: GET /api/sites/missing 未配置域名生成默认条目(domains/tags/占位限速/hr 示例值与 --export-yaml 同源); 已配置域名双向包含不重复
+- test_sites_missing_name_conflict_suffix: 站点名冲突(既有配置占用/批内同名) -> _N 后缀(与 CLI 导出同一套 gen_tracker_name)
+- test_sites_missing_all_covered_returns_empty: 全部域名已被覆盖 -> sites 空数组
+- test_sites_missing_requires_connected_client: qB 断连 -> 503(不得拿空扫描冒充"没有缺失站点")
+- test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
+- test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
@@ -1871,6 +1877,110 @@ def test_config_tree_masks_secrets(web_env):
     text = open(mgr.config_path, encoding="utf-8").read()
     assert "password: p" in text, f"原样保存不得把密码写成占位串: {text}"
     assert data["mask_sentinel"] not in text
+
+
+def _site_scan_env(web_env, trackers_by_hash):
+    """给 web_env 的 manager 挂上站点扫描所需的最小 api/client 替身"""
+    from types import SimpleNamespace
+
+    mgr, client = web_env
+    mgr.client = object()  # require_client 只判 None
+    # collect_all_tracker_hostnames 按 tor.hash 属性取 hash(QbApi 同形), 不能给 dict
+    torrents = [SimpleNamespace(hash=h) for h in trackers_by_hash]
+    mgr.api = SimpleNamespace(
+        torrents_info=lambda **kw: list(torrents),
+        torrents_trackers=lambda h: list(trackers_by_hash.get(h, [])),
+    )
+    return mgr, client
+
+
+def test_sites_missing_scans_and_builds_defaults(web_env):
+    """GET /api/sites/missing: 未配置域名生成默认条目; 已配置域名(双向包含)不重复出现"""
+    mgr, client = _site_scan_env(
+        web_env,
+        {
+            "T1": [{
+                "url": "https://tracker.d.com/announce"
+            }, {
+                "url": "http://tracker.newsite.org/announce"
+            }],
+            "T2": [{
+                "url": "https://tracker.d.com/announce"
+            }],
+        },
+    )
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    data = client.get("/api/sites/missing", headers=auth).json()
+    assert data["torrents"] == 2 and data["domains"] == 2
+    assert [s["name"] for s in data["sites"]] == ["tracker_newsite_org"]
+    entry = data["sites"][0]["entry"]
+    assert entry["domains"] == ["tracker.newsite.org"]
+    assert entry["tags"] == ["Newsite"], "默认标签 = 倒数第二级域名首字母大写"
+    assert entry["upload_speed_limit"] == "0KiB/s", "占位限速与 --export-yaml 同源"
+    assert entry["hr"]["required_seeding_time"] == "3D", "hr 示例值与 --export-yaml 同源"
+
+
+def test_sites_missing_name_conflict_suffix(web_env):
+    """站点名冲突: 既有配置占用目标名 / 批内清洗同名 -> _N 后缀(与 CLI 导出同一套 gen_tracker_name)"""
+    from types import SimpleNamespace
+
+    mgr, client = _site_scan_env(
+        web_env,
+        {"T1": [{
+            "url": "http://a.b.com/announce"
+        }, {
+            "url": "http://a-b.com/announce"
+        }]},
+    )
+    mgr.config.trackers["a_b_com"] = SimpleNamespace(domains=["zzz.com"])  # 占用目标名但域名不覆盖缺失域
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    data = client.get("/api/sites/missing", headers=auth).json()
+    assert [s["name"] for s in data["sites"]] == ["a_b_com_1", "a_b_com_2"]
+
+
+def test_sites_missing_all_covered_returns_empty(web_env):
+    """全部域名已被配置覆盖 -> sites 空数组(前端据此提示"没有发现未配置的站点")"""
+    mgr, client = _site_scan_env(web_env, {"T1": [{"url": "https://tracker.d.com/announce"}]})
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    data = client.get("/api/sites/missing", headers=auth).json()
+    assert data["sites"] == []
+
+
+def test_sites_missing_requires_connected_client(web_env):
+    """qB 断连 -> 503(不得拿空扫描结果冒充"没有缺失站点")"""
+    mgr, client = web_env  # stub 默认 client=None
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.get("/api/sites/missing", headers=auth).status_code == 503
+
+
+def test_sites_missing_api_failure_maps_502(web_env):
+    """扫描中途 qB 调用失败 -> 502 带原因(不裸 500)"""
+    from types import SimpleNamespace
+
+    def _boom(**kw):
+        raise RuntimeError("boom")
+
+    mgr, client = web_env
+    mgr.client = object()
+    mgr.api = SimpleNamespace(torrents_info=_boom)
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    resp = client.get("/api/sites/missing", headers=auth)
+    assert resp.status_code == 502 and "boom" in resp.json()["detail"]
+
+
+def test_frontend_sites_import_wiring():
+    """一键导入缺失站点的前端接线守阵(2026-09-26)
+
+    两套 UI 的站点 pill 行都必须挂「⤓ 导入缺失站点」按钮并调用 config_hub.js 的
+    hubImportSites —— 漏一套那套 UI 就没有入口; 防重入标志 hub.importing 必须存在。
+    """
+    hub_js = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    assert "async hubImportSites()" in hub_js, "config_hub.js 缺 hubImportSites 方法"
+    assert "this.hub.importing" in hub_js, "缺防重入标志 hub.importing"
+    for ui in ("atlas", "prism"):
+        html = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        assert "hubImportSites()" in html, f"{ui} 站点分区缺导入按钮"
+        assert "导入缺失站点" in html, f"{ui} 缺导入按钮文案"
 
 
 def test_group_key_codec_roundtrip():
@@ -5630,6 +5740,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/newui"),
     ("GET", "/newui/{rest:path}"),
     ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
+    ("GET", "/api/sites/missing"),  # 站点导入: 未配置站点扫描(只读; 与 --export-yaml --only-missing 同口径)
 }
 
 

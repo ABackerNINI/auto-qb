@@ -581,6 +581,45 @@ window.CONFIG_HUB = {
       this.cfg.newTrackerName = n;
       this.cfgTrackerAdd();
     },
+    async hubImportSites() {
+      /* 一键导入缺失站点(对齐 CLI --export-yaml --only-missing): 后端只读扫描,
+       * 条目填入编辑器待审 —— 示例值不未经审阅生效, 保存走既有 cfgSave 路径 */
+      if (this.hub.importing) return;
+      this.hub.importing = true;
+      try {
+        const res = await this.api("/api/sites/missing");
+        const sites = res.sites || [];
+        if (!sites.length) {
+          this.toast("没有发现未配置的站点", "ok");
+          return;
+        }
+        const list = sites.map((s) => `${s.name}(${s.domain})`).join("、");
+        const ok = await this.confirmDialog(
+          `导入 ${sites.length} 个缺失站点`,
+          `将按默认配置填入编辑器: ${list}。默认限速为不限、HR 为示例值 —— 保存前请在编辑器中核对。`,
+          { okText: "导入" }
+        );
+        if (!ok) return;
+        const trackers = { ...(this.cfgConfig().trackers || {}) };
+        let added = 0;
+        for (const s of sites) {
+          if (trackers[s.name]) continue; // 已存在同名键(如待生效热重载)不覆盖
+          trackers[s.name] = s.entry;
+          if (!added) this.cfg.trackerKey = s.name;
+          added++;
+        }
+        if (!added) {
+          this.toast("站点已存在, 没有可导入项", "error");
+          return;
+        }
+        this.cfgSetPath([...this.cfgConfigPath(), "trackers"], trackers);
+        this.toast(`已填入 ${added} 个站点, 核对后点「保存」生效`, "ok", 6000);
+      } catch (e) {
+        this.toast("导入失败: " + (e.message || "未知错误"), "error", 9000);
+      } finally {
+        this.hub.importing = false;
+      }
+    },
     async hubAddRuleGroup() {
       const name = await this.promptDialog("新增规则集", "", { placeholder: "规则集名(自动补 _rules)", okText: "添加" });
       if (name === null || name === undefined) return;

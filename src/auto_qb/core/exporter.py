@@ -65,6 +65,18 @@ def gen_default_tag(domain: str) -> str:
     return capitalize_special_tag(default_tag.capitalize())
 
 
+def gen_tracker_name(domain: str, taken: set) -> str:
+    """生成合法站点名: 非法字符替换为下划线, 与 taken 冲突时加 _N 后缀并就地登记"""
+    name = re.sub(r"[^a-zA-Z0-9_]", "_", domain)
+    base_name = name
+    counter = 1
+    while name in taken:
+        name = f"{base_name}_{counter}"
+        counter += 1
+    taken.add(name)
+    return name
+
+
 def build_tracker_entry(domain: str) -> dict:
     """为单个域名生成 tracker 配置条目"""
     return {
@@ -113,15 +125,9 @@ def export_yaml_template(api, config, config_path: str, output_path: str, dry_ru
 
     trackers_config = export_config.get("config", {}).get("trackers", {})
 
+    taken = set(trackers_config)
     for domain in sorted(missing_domains):
-        # 生成合法名称: 去除点号和横线, 限制为字母数字下划线
-        name = re.sub(r"[^a-zA-Z0-9_]", "_", domain)
-        base_name = name
-        counter = 1
-        while name in trackers_config:
-            name = f"{base_name}_{counter}"
-            counter += 1
-        trackers_config[name] = build_tracker_entry(domain)
+        trackers_config[gen_tracker_name(domain, taken)] = build_tracker_entry(domain)
 
     export_config["config"]["trackers"] = trackers_config
 
