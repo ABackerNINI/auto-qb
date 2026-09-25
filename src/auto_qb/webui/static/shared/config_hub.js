@@ -466,9 +466,17 @@ window.CONFIG_HUB = {
         rel: (rich && rich.rel) || [],
       };
     },
+    /* ⚠ 对象/数组型默认值(如 trackers / rules 的 default={}、channels 的 default=["platform"])不能
+       直接进 cfgScalar —— String({}) 是 "[object Object]", 会在「?」说明浮窗的「默认值」一栏里
+       原样显示给读者。空的一律归「（空）」, 非空对象按条目数给一句人话。 */
     hubDefaultText(field) {
       const d = field.default;
       if (d === null || d === undefined || d === "") return "（空）";
+      if (Array.isArray(d)) return d.length ? d.join("、") : "（空）";
+      if (typeof d === "object") {
+        const n = Object.keys(d).length;
+        return n ? `（对象: ${n} 项, 由子项决定）` : "（空）";
+      }
       return this.cfgScalar(d);
     },
     hubAsk(item, ev) {

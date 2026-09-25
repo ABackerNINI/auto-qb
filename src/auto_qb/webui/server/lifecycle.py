@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import uvicorn
 
+from ...infra.utils import display_host
 from .common import ensure_web_token
 from .factory import create_app
 
@@ -173,18 +174,19 @@ def start_web_server(manager) -> WebServerHandle:
     thread = threading.Thread(target=_run_server, args=(server, ), name="auto-qb-web", daemon=True)
     thread.start()
     handle = WebServerHandle(server, thread)
+    # 地址一律按展示口径给(回环 -> localhost): 浏览器把 127.0.0.1 与 localhost 当两个 origin,
+    # localStorage 各存一份且 127.0.0.1 那份更易被清理 —— 提示写 localhost, 用户每次都落同一 origin
+    shown = display_host(manager.config.web.host)
     if _wait_until_started(handle, WEB_START_TIMEOUT):
         # 生命周期消息按 INFO 记(pitfalls/ops/alert-levels.md: 启动类不许用 WARNING, 否则 notify
         # 开启时每次启动都弹通知; 监听地址本身在消息文本里, 0.0.0.0 的暴露面由配置 UI 的 risk 提示兜底)
         logger.info(
-            f"WEB UI 已启动: http://{manager.config.web.host}:{manager.config.web.port} "
+            f"WEB UI 已启动: http://{shown}:{manager.config.web.port} "
             f"(密钥见 {os.path.join(os.path.dirname(manager.state_file) or '.', 'web.token')})"
         )
     else:
-        logger.error(
-            f"WEB UI 启动失败: {manager.config.web.host}:{manager.config.web.port} 无法监听"
-            "(端口被占用? 详见上方 uvicorn 错误)"
-        )
+        logger.error(f"WEB UI 启动失败: {shown}:{manager.config.web.port} 无法监听"
+                     "(端口被占用? 详见上方 uvicorn 错误)")
     return handle
 
 

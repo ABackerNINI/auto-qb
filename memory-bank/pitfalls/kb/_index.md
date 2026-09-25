@@ -10,7 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [cap-counting.md](cap-counting.md) | 守卫的字符数比编辑器统计**每行多 1**(CRLF); append-only 流水撞 `log` cap 的正解是**轮转**; 而生成式索引撞 cap 时先查**渲染口径**而不是先搬条目。 | 判断文件是否超 cap, 字符数对不上, baseline-history 超 cap, 追加流水, log 档, 轮转, attachments, tasks/_index 超 cap, 索引膨胀 |
+| [cap-counting.md](cap-counting.md) | 守卫的字符数比编辑器统计**每行多 1**(CRLF); append-only 流水撞 `log` cap 的正解是**轮转**; 而生成式索引撞 cap 时先查**渲染口径**而不是先搬条目。 | 判断文件是否超 cap, 字符数对不上, baseline-history 超 cap, 追加流水, log 档, 轮转, attachments, tasks/_index 超 cap, 索引膨胀, 新增主题放哪个类, 类索引贴顶 |
 | [discipline.md](discipline.md) | 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、测试写在没人跑的地方等于没写。 | 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红 |
 | [refs-rename.md](refs-rename.md) | 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑。 | 改名, 移动文档, 重命名, 生成索引, 写链接, relative_to, relpath |
 | [request-boundary.md](request-boundary.md) | 开工先判这一轮是"问答 / 只读"还是"执行任务" —— 把问答当执行任务去做, 是本仓库的**红线**。 | 用户提问, 想延伸排查, 想顺手入池 issue, 想顺手立档, 想 commit |

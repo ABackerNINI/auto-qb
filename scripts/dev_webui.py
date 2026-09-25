@@ -113,7 +113,7 @@ def main() -> int:
     ap.add_argument("--qb-port", default="8080", help="qBittorrent WebUI 端口(默认 8080)")
     ap.add_argument("--qb-user", default="", help="qB 用户名(默认空)")
     ap.add_argument("--qb-password", default="", help="qB 密码(默认空)")
-    ap.add_argument("--web-host", default="127.0.0.1", help="WEB UI 监听地址(默认 127.0.0.1)")
+    ap.add_argument("--web-host", default="127.0.0.1", help="WEB UI 监听地址(默认 127.0.0.1; 打印/打开的仍是 localhost)")
     ap.add_argument("--web-port", type=int, default=8177, help="WEB UI 端口(默认 8177, 避开常用端口)")
     ap.add_argument("--main-tick", type=float, default=2.0, help="主循环间隔(秒, 默认 2)")
     ap.add_argument("--data-dir", default="", help="运行时数据目录(默认系统临时目录下的一个子目录)")
@@ -163,7 +163,10 @@ def main() -> int:
     with open(cfg_path, "w", encoding="utf-8") as f:
         f.write(text)
 
-    url = f"http://{args.web_host}:{web_port}/atlas/"
+    # 展示口径(回环 -> localhost): 与后端启动日志同一个地址, 浏览器 localStorage 才落同一个 origin
+    from auto_qb.infra.utils import display_host
+
+    url = f"http://{display_host(args.web_host)}:{web_port}/atlas/"
     print("=" * 68)
     print("auto-qb · 最小配置 · 只开 WEB UI")
     print("=" * 68)

@@ -6,31 +6,32 @@
 
 ## 当前基线
 
-**1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **HR 未达标红档语义修正轮**
+**1621 collected: 1620 passed + 1 skipped / Windows** —— 2026-09-26 **HR 未达标红档语义修正轮**
 (档案 `26-09-25-webui-hr-safety-display` 修正1–3)。**+0 条, 改 4 处断言/守阵**:
 test_hr_resolve C 档断言改 `SAFETY_FAILED`(「考核未通过」终态独立红档); test_web 接线守阵
 安全档位键集扩四档(danger/failed/safe/unknown)、CSS 成对清单加 `.m-pair.hr-fail`、考察中短语
 断言去「义务未了」。test.quick 中途 6 红系新建 plans/ 模板缺五元 meta + 父计划未反链
-(补齐即绿; 认领链同因, 档案 Refs 需目标回指)。TOTAL **92%**(11028 语句 / 786 未覆盖 /
-3624 分支 / 327 partial), 22.9s; dev.fmt 已跑。
+(补齐即绿; 认领链同因, 档案 Refs 需目标回指)。TOTAL **92%**(11036 语句 / 786 未覆盖 /
+3626 分支 / 328 partial), 16.3s(合流轮 +2 条后的合并树实测); dev.fmt 已跑。
 
-**1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
-(档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**:
-test_cli.py `test_main_qb_connect_error_clean_exit`(非托管首连失败 → QbConnectError 干净退出码 1,
-docker 排障契约守阵); test_web.py `test_start_web_server_started_message_is_info` + `test_apply_new_config_levels`
-加断言(「WEB UI 已启动」「配置热重载完成」按 INFO 记, alert-levels 契约; ⚠ 抓日志用挂在目标 logger 的
-Grab handler, caplog 挂 root 会被 setup_logging 清空)。test_qbmanager.py `test_run_connect_failure` 与
-test_ui.py `test_run_unmanaged_connect_fail_raises` 由"直接返回"改判抛错(退出码契约修复的同步改判)。
-TOTAL **92%**(11027 语句 / 786 未覆盖 / 3624 分支 / 327 partial), 17.7s(复跑 22.4s 同 passed); dev.fmt 已跑。
+**上一态: 1621 collected: 1620 passed + 1 skipped / Windows** —— 2026-09-26 **合流轮: 设置页 `[object Object]` 修复 + WEB UI 地址改展示 localhost**
+(远端 docker 部署 / full-checking 首样本竞态两批先合入, 再以 `git rebase` 施回本轮两笔; 基线为**合流后重测**数字)。**+2 条**:
+`test_web.py::test_frontend_hub_field_covers_non_leaf_items` —— 静态钉住 `tpl-hub-field` 必须逐个覆盖
+`cfgFlatten` 产出的**全部非叶子项类型**(类型名单从 `config_editor.js` 实读), 叶子分支必须是链尾 `<div v-else class="hb-row">`;
+`test_utils.py::test_display_host` —— 钉住 `infra.utils.display_host()` 三条口径(回环四种写法折 `localhost` /
+对外地址含 `0.0.0.0` 原样返回 / 非字符串原样返回不炸)。
+合流冲突 3 处(`baseline.md` 取远端版本后按本轮重测改写、`pitfalls/docs/_index.md` 取远端版本后 `kb.index` 重建、
+`lifecycle.py` 手工合并: 「WEB UI 已启动」按 INFO 记的远端改动 + 地址改展示 `localhost` 的本轮改动**都保留**)。
 
-**上一态: 1617 collected: 1616 passed + 1 skipped** —— 2026-09-25 **示例配置守阵**
-(`pitfalls/docs/drift.md` 的根治 follow-up: minimal.yml 漂移修复后, 把"示例无守卫会静默漂移"钉成测试;
-数字为合入远端 full-checking 竞态修复(+3)后的合并树实测)。
-**+2 条** (test_config.py): `test_example_minimal_yml_passes_fail_fast` —— minimal.yml 过 fail-fast 校验
-+ 钉 README 开箱语义(web.enabled / add_episode_tags.enabled 均为 True); `test_example_docker_config_yml_passes_fail_fast`
-—— docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 /
-notify 关, compose.yaml 的端口映射与 healthcheck 依赖)。minimal 守阵**红验过**: git HEAD 旧布尔形态 → 红,
-修复版 → 绿。TOTAL **91%**(10924 语句 / 785 未覆盖 / 3622 分支 / 326 partial)。
+**上一态: 1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
+(档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**: 首连失败退出码契约(test_cli/test_qbmanager/test_ui)
++ 「WEB UI 已启动 / 配置热重载完成」按 INFO 记的日志断言(⚠ 抓日志挂目标 logger, caplog 挂 root 会被
+setup_logging 清空)。TOTAL **92%**(11027 语句 / 786 未覆盖 / 3624 分支 / 327 partial)。
+
+**上一态: 1617 collected: 1616 passed + 1 skipped** —— 2026-09-25 **示例配置守阵**(`pitfalls/docs/drift.md`
+根治 follow-up): +2 条(test_config.py) —— minimal.yml 与 docker/config.example.yml 过 fail-fast 校验,
+并分别钉 README 开箱语义与容器契约字段; minimal 守阵**红验过**。TOTAL **91%**(10924 语句 / 785 未覆盖 /
+3622 分支 / 326 partial)。
 
 **上一态: 1612 collected: 1611 passed + 1 skipped** —— 2026-09-25 **Docker 部署 P1–P3**
 (计划 `26-09-25-2241-plan-docker-deploy`, 档案 `26-09-25-deps-docker-deploy`)。**+4 条** (test_cli.py
