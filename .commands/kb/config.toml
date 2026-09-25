@@ -14,10 +14,10 @@ when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
 note    = "❗四条必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏了后两条, 于是 _doc-map.md 的报错文案指过来跑完仍红"
 
 [tasks."kb.active"]
-run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py <args>"]
 timeout = 60
 when    = "看会话滚动状态（在办专题切片，按最后活动倒序）"
-note    = "只打印不写文件；加 --check 变成只校验"
+note    = "只打印不写文件；<args> 可传 --check 只校验（已挂进 kb.check）"
 
 [tasks."kb.baseline"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py <args>"]
