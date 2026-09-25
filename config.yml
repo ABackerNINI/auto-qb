@@ -71,6 +71,13 @@ config:
         add_category_for_satisfied: '--HR${required_seeding_time}--'    # 做种时长满足要求时添加的分类格式
         overwrite_category_for_satisfied: false                         # 做种时长满足要求时是否覆盖分类
 
+    hr_check:
+        enabled: true
+        channel:
+            enabled: true
+            port: 18788
+            token: 123456
+
     # 全局限速曲线
     global_speed_limit_curve:
         interval: 10M
@@ -210,7 +217,7 @@ config:
             enabled: true
             interval: 5M
             cooldown: 5M
-            conditions:
+            conditions: ''
             actions:
               - checking:
                     basic_check: filelist
@@ -474,6 +481,9 @@ config:
                 required_share_ratio: 1.1
                 extra_seeding_time: 12H
                 condition: 80%
+            hr_check:
+                mode: partial
+                hr_page_url: "https://pt.btschool.club/myhr.php"
             rules:
               - '@add_drive_letter_tag_rules'
               - '@skip_checking_rules'
