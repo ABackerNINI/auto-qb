@@ -77,6 +77,18 @@
   (如把 `torrents_removed` 抹回 `[]`, `snapshot_drop` 由 20 掉到 0 才能证明该判据有效)。
 - **处置**: 撤掉守卫 / 还原旧实现跑一次, 确认它**会报**。
 
+### 替身"恒走默认分支"= 功能域整体缺席: 冒烟全绿不代表该形态渲染过
+
+- **触发**: 给「站点接入后才生效」的前端展示排障, 或给 FakeTorrent 加新消费链路。
+- **判别**: `FakeTorrent.hr_judgement()` **恒 None**(替身没接判定桥)⇒ 浏览器冒烟从头到尾只渲染过
+  `judged=None` 的回落形态, safety_display 的**站点命中分支**(site_*/policy/unverified 的
+  hr_safety_src token、详情抽屉站点侧值行)在前端**从未被真渲染过**。2026-09-25 生产首爆:
+  BTSchool 接入后 `hrDurTitle -> hrSiteLine` 每行必走站点分支, 里面裸调用 `fmtDuration`
+  ReferenceError ⇒ 整树白屏(见 ../web-ui/vue-reactivity.md)—— 而冒烟 96 项全绿。
+- **处置**: `scripts/ui_harness.py --hr-site` 注入**真实 HrJudgement** 轮转全分支(含 judged=None 回落),
+  站点接入形态的改动必须在 `--hr-site` 桩上跑冒烟; 新替身方法恒返回默认值时, 要自问
+  "真对象的非默认形态有没有对应的注入开关"。
+
 ### 替身回不出"新响应形态" = 保真度缺口: 回执判定在替身上永远成立
 
 - **触发**: 给写端点的回执 / 结果判定加守卫。

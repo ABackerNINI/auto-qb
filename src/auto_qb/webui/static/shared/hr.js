@@ -126,16 +126,19 @@ window.AQB_HR = {
       const why = m.hr_reason ? " · " + m.hr_reason : "";
       return `${m.hr_safety_text || m.hr_state_text}${why}`;
     },
-    /* 站点侧值一行(与本地实时值对照): 空串 = 该字段站点没给; 0 要单独说"已达标"(未知 ≠ 0) */
+    /* 站点侧值一行(与本地实时值对照): 空串 = 该字段站点没给; 0 要单独说"已达标"(未知 ≠ 0)
+     * ❗fmtDuration/fmtSize 是 methods(format.js), 必须经 this 调 —— 裸调用在渲染函数里
+     *   ReferenceError, Vue 3 会卸掉整棵组件树(白屏); 站点未接入(hr_site_lane 空)时本方法
+     *   131 行提前返回, 裸调用永远不被求值 ⇒ 雷埋着不响, 站点接入后每行 title 都踩中。 */
     hrSiteLine(m) {
       if (!m.hr_site_lane) return "";
       const parts = [`档位 ${m.hr_site_lane}`];
-      if (m.hr_site_need !== "") parts.push(`还需做种 ${fmtDuration(m.hr_site_need)}`);
+      if (m.hr_site_need !== "") parts.push(`还需做种 ${this.fmtDuration(m.hr_site_need)}`);
       if (m.hr_site_remain !== "") {
-        parts.push(m.hr_site_remain === 0 ? "已达标" : `剩余达标 ${fmtDuration(m.hr_site_remain)}`);
+        parts.push(m.hr_site_remain === 0 ? "已达标" : `剩余达标 ${this.fmtDuration(m.hr_site_remain)}`);
       }
       if (m.hr_site_ratio !== "") parts.push(`分享率 ${Number(m.hr_site_ratio).toFixed(2)}`);
-      if (m.hr_site_dl !== "") parts.push(`站点下载 ${fmtSize(m.hr_site_dl)}`);
+      if (m.hr_site_dl !== "") parts.push(`站点下载 ${this.fmtSize(m.hr_site_dl)}`);
       return parts.join(" · ");
     },
   },

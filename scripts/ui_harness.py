@@ -105,6 +105,58 @@ _RESUME_TODO = "downloading"
 _TRUTH_DELAY = 0.12
 
 
+def _inject_hr_site(torrents):
+    """--hr-site: 按种子轮转注入**真实 HrJudgement**(站点接入形态) —— 冒烟的既知盲区:
+
+    FakeTorrent.hr_judgement 恒 None(替身没接判定桥), 故桩冒烟从头到尾只渲染过
+    safety_display 的 judged=None 分支(本地兜底/不适用); 站点命中(在线/策略/未核实)
+    的 hr_safety_src token 与详情抽屉 hrStateLine 新短语在前端从未被真渲染过。
+    这里 monkeypatch 每个种子的 hr_judgement, 轮转覆盖全部分支(含 judged=None 回落):
+    只构造真 dataclass, 不接取数链 —— _hr_view_fields 消费的就是这些对象, 与真机同构。
+    """
+    from auto_qb.hr.resolve import (
+        HrIdentity,
+        HrJudgement,
+        HrSiteFacts,
+        LANE_SATISFIED,
+        LANE_SCOPE,
+        LANE_UNSATISFIED,
+    )
+
+    def _mk(i):
+        lane = [LANE_SCOPE, LANE_SATISFIED, LANE_UNSATISFIED][i % 3]
+        identity = [
+            HrIdentity.HR,
+            HrIdentity.VERIFIED_NON_HR,
+            HrIdentity.EXEMPT,
+            HrIdentity.UNKNOWN,
+            None,  # 未接入: 回落 judged=None(本地兜底口径)
+        ][i % 5]
+        if identity is None:
+            return None
+        facts = HrSiteFacts(
+            lane=lane if identity is HrIdentity.HR else "",
+            need_seed_seconds=3600 * (i % 48),
+            remain_seconds=3600 * (i % 12),
+            ratio=(i % 30) / 10,
+            downloaded_bytes=None,
+        )
+        return HrJudgement(
+            identity=identity,
+            is_hr=identity is HrIdentity.HR,
+            reason="站点清单命中" if identity is HrIdentity.HR else (
+                "在线核实: 未命中清单，按身份处理" if identity is HrIdentity.VERIFIED_NON_HR else
+                "完成时间超龄，本地豁免" if identity is HrIdentity.EXEMPT else "站点清单暂无此种子"
+            ),
+            site_satisfied=(lane == LANE_SATISFIED) if identity is HrIdentity.HR else None,
+            site="BTSchool",
+            facts=facts,
+        )
+
+    for i, tor in enumerate(torrents):
+        tor.hr_judgement = lambda i=i: _mk(i)  # 实例级覆盖: 真记录该方法无参
+
+
 def _target_hashes(mgr, cmd: str, body: dict):
     """命令影响到的 hash 列表(桩里没有真实 qB, 只能按 payload 展开)"""
     if cmd in ("pause_torrent", "resume_torrent"):
@@ -254,6 +306,11 @@ def main() -> int:
     ap.add_argument("--torrents", type=int, default=1500, help="合成种子总数")
     ap.add_argument("--groups", type=int, default=200, help="归组数量(每组 2 个种子)")
     ap.add_argument("--no-groups", action="store_true", help="不建分组(纯平铺)")
+    ap.add_argument(
+        "--hr-site",
+        action="store_true",
+        help="注入站点接入形态的真实 HrJudgement(轮转全分支) —— 冒烟盲区复现用, 见 _inject_hr_site",
+    )
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
         "--state-revert-ms",
@@ -293,6 +350,9 @@ def main() -> int:
 
     site_conf = mgr.config.trackers["HHan"]
     torrents = _make_torrents(args.torrents, site_conf)
+    if args.hr_site:
+        _inject_hr_site(torrents)
+        print(f"[harness] HR 站点判定已注入: {args.torrents} 个种子轮转全分支")
     seed_store(mgr, torrents)
     for tor in torrents:  # 抽屉/详情端点按 hash 取, 与 store 保持一致
         mgr.client.torrents[tor.hash] = tor
