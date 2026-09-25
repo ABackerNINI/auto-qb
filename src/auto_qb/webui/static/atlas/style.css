@@ -774,70 +774,6 @@ button { font-family: inherit; }
 @keyframes loading-glow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
 .ce-placeholder.loading { animation: loading-glow 1.8s ease-in-out infinite; }
 
-/* 普通 object 段(group): 默认折叠的整体容器(同 section 思路)。
- * 折叠态 = 标题行 + 摘要; 展开才显示子字段 —— 设置页字段很多, 让"展开"成为用户主动选择。
- * 同组多段循环色(.ceg-0..5)给标题左侧 3px 色条, 一眼分辨"是哪种类型的配置段";
- * 文字色保持 --fg 高对比(色条只做识别, 不损可读性) —— 与 ai/08"对比色留给 HR/错误"原则一致。 */
-/* 展开/折叠密度: 头部内边距与段间距用同一套数值(折叠头行高一致, 视觉密度统一);
- * 段间距 8px 与卡片间距 14px 拉开层级: 段内 < 段间 < 卡间 */
-.ce-group { margin: 8px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
-  background: var(--surface-1); border-left: 3px solid var(--accent);
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-.ce-group:hover { border-color: var(--border); box-shadow: var(--shadow-1); }
-.ce-group.ceg-0 { border-left-color: var(--blue); }
-.ce-group.ceg-1 { border-left-color: var(--violet); }
-.ce-group.ceg-2 { border-left-color: var(--teal); }
-.ce-group.ceg-3 { border-left-color: var(--pink); }
-.ce-group.ceg-4 { border-left-color: var(--indigo); }
-.ce-group.ceg-5 { border-left-color: var(--cyan); }
-.ce-group-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer;
-  user-select: none; transition: background var(--dur) var(--ease); }
-.ce-group-head:hover { background: var(--surface-2); }
-.ce-group-head .caret { color: var(--accent); opacity: .55; transform: rotate(0deg);
-  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
-.ce-group-head:hover .caret { opacity: 1; }
-.ce-group-head .caret.open { transform: rotate(90deg); }
-/* 标题分级(由大到小): 卡片题 14.5 > group 段 13.5 > section 段 13 > subcard 12 —— 层级一眼可达 */
-.ce-group-title { font-size: 13.5px; font-weight: 600; color: var(--fg); }
-.ce-group-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
-/* 折叠/展开动效: max-height 过渡, 起始/结束 overflow:hidden(避免撑高时溢出);
-   动画时长 180ms + ease-out, "手感"级, 不抢注意力(全局 prefers-reduced-motion 已降级) */
-.ce-group-body { overflow: hidden; padding: 2px 9px 10px; }
-.ce-group-body[style*="display: none"] { padding: 0; }
-.ce-inline-help { font-weight: 400; font-size: 12px; color: var(--fg-dim); }
-
-/* pattern_list 折叠头(delete_tags/delete_tags_if_has_no_torrents 自动命中):
-   同 group/section 的"折叠 = 主动展开"原则; str_list 不折叠(无 .is-pattern class, head 不渲染) */
-.ce-list.is-pattern { padding: 6px 8px; border-radius: var(--radius); background: var(--surface-1);
-  border: 1px solid var(--border-soft); border-left: 3px solid var(--pink); }
-.ce-list.is-pattern .ce-list-head { display: flex; align-items: center; gap: 6px; cursor: pointer;
-  user-select: none; padding: 2px 4px; transition: background var(--dur) var(--ease); }
-.ce-list.is-pattern .ce-list-head:hover { background: var(--surface-2); }
-.ce-list.is-pattern .ce-list-head .caret { color: var(--pink); opacity: .65;
-  transform: rotate(0deg); transition: transform var(--dur) var(--ease-spring); }
-.ce-list.is-pattern .ce-list-head .caret.open { transform: rotate(90deg); }
-.ce-list-sum { font-size: 11.5px; color: var(--fg-dim); }
-.ce-list-body { padding-top: 4px; }
-
-/* 字段行: 标签列**定宽**(栅格令牌 --ce-label-w) -> 全表输入框左缘严格对齐;
- * group/section/subcard 容器的内边距按自身边框宽度折算后与 --ce-row-pad-x 一致, 嵌套层级不错位 */
-.ce-field { display: grid; grid-template-columns: var(--ce-label-w) minmax(0, 1fr); gap: var(--ce-ctl-gap); align-items: start;
-  padding: 7px var(--ce-row-pad-x); border-radius: var(--radius); background: transparent; border: 1px solid transparent;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    opacity var(--dur) var(--ease); }
-.ce-field:hover { background: var(--surface-2); border-color: var(--border-soft); }
-.ce-field-block { grid-template-columns: 1fr; }
-.ce-label { display: flex; align-items: center; gap: 6px; min-height: 34px; font-size: 13px; color: var(--fg); }
-.ce-req { color: var(--error); }
-.ce-tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--fg-dim); }
-.ce-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.ce-help { flex-basis: 100%; max-width: var(--ce-input-max); margin: 0; font-size: 12px; color: var(--fg-dim); line-height: 1.5; }
-
-/* 未启用项(grey_if 不满足): 灰显但仍可编辑 —— 保留可操作性, 只降低视觉权重 */
-.ce-field.ce-inactive { opacity: .45; }
-.ce-field.ce-inactive:hover { opacity: .8; }
-
 /* 统一注记(段级/字段级警告与提示): 行内小字 + 色点, 不再用大框横幅。
  * 网格双列(色点列 + 文本列): 换行时文字悬挂缩进; 字段行内独占一行(宽度与输入区对齐) */
 .ce-note { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: start;
@@ -848,82 +784,8 @@ button { font-family: inherit; }
 .ce-note.warn::before { background: var(--warn); }
 .ce-note.error { color: var(--error); }
 .ce-note.error::before { background: var(--error); }
-.ce-ctl .ce-note { flex: 1 1 100%; }
 
-/* 相关设置子卡(group_of): 缩进 + 左侧强调线, 表明从属于上一字段。
- * 头部色用 teal(青)与 group 的多色 / section 的紫拉开层级 —— 三种段一眼可辨 */
-.ce-subcard { margin: 6px 0 10px; padding: 6px 10px 8px; border-radius: var(--radius);
-  background: var(--bg-sunken); border: 1px solid var(--border-soft); border-left: 2px solid var(--teal); }
-.ce-subcard-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 4px;
-  font-size: 12px; font-weight: 500; color: var(--fg-muted); }
-.ce-subcard-head .ico { color: var(--teal); transform: rotate(90deg); }
-.ce-subcard .ce-field { grid-template-columns: var(--ce-label-w) minmax(0, 1fr); padding: 7px 0; }
-.ce-subcard .ce-field .ce-help { margin-top: -2px; }
-
-/* 可选段(站点 HR / checking 分支等): 默认折叠的整体容器
- * 折叠态 = 一行(折叠箭头 + 开关 + 段名 + 摘要), 展开才显示内部字段 ——
- * 设置页字段很多, 让"展开"成为用户主动选择, 页面高度才能可控。
- * 配色用 violet(紫)与 group 的多色 / subcard 的青区分开 —— 三种段一眼可辨。 */
-.ce-section { margin: 8px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
-  background: var(--surface-1); border-left: 3px solid var(--violet);
-  transition: border-color var(--dur) var(--ease), opacity var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease); }
-.ce-section:hover { border-color: var(--border); box-shadow: var(--shadow-1); }
-.ce-section-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
-.ce-section-head .caret { color: var(--violet); opacity: .55; transform: rotate(0deg);
-  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
-.ce-section:hover .ce-section-head .caret { opacity: 1; }
-.ce-section-title { font-size: 13px; font-weight: 600; color: var(--fg); }
-.ce-section-sum { font-size: 11.5px; color: var(--fg-dim); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
-.ce-section-body { padding: 2px 9px 10px 9px; }
-/* 段内展开后的行奇偶区隔: 偶数行叠加极淡表面色(现有令牌), 长列表更容易横向跟行;
- * 容器自身保留分组底色(surface-1), hover 仍以描边浮出 —— 两种提示并存不冲突 */
-.ce-group-body > .ce-item:nth-child(even) > .ce-field,
-.ce-section-body > .ce-item:nth-child(even) > .ce-field { background: var(--surface-2); }
-
-/* 布尔型从属项的内联开关(挂在父字段标签右侧): 从属语义靠紧邻与弱化字重体现 */
-.ce-inline-switch { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--border-soft); }
-.ce-inline-switch .ce-slider { width: 30px; height: 17px; }
-.ce-inline-switch .ce-slider::after { width: 13px; height: 13px; top: 2px; left: 2px; }
-.ce-inline-switch input:checked + .ce-slider::after { transform: translateX(13px); }
-.ce-inline-switch .ce-switch-text { font-size: 11.5px; color: var(--fg-dim); }
-
-.ce-input { flex: 1 1 240px; max-width: var(--ce-input-max); min-width: 120px; padding: 7px 11px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border); background: var(--bg-row); color: var(--fg); font-size: 13px;
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-.ce-input:hover { border-color: var(--border-strong); }
-.ce-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.ce-input::placeholder { color: var(--fg-dim); }
-/* 数值 + 单位下拉: 数值框不必很宽, 单位框贴合内容; 两者间距紧贴成视觉整体的一个控件 */
-.ce-unit-group { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; }
-.ce-unit-group .ce-input { max-width: none; min-width: 0; }
-.ce-unit-group .ce-num { flex: 0 0 92px; width: 92px; border-top-right-radius: 0;
-  border-bottom-right-radius: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.ce-unit-group .ce-unit-select { flex: 0 0 auto; width: auto; min-width: 76px; max-width: 110px;
-  margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0;
-  background: var(--bg-sunken); color: var(--fg-muted); }
-.ce-unit-group .ce-unit-select:focus { position: relative; z-index: 1; }
-.ce-unit { font-size: 12px; color: var(--fg-dim); }
-
-/* 开关 */
-.ce-switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
-.ce-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
-.ce-slider { position: relative; width: 38px; height: 21px; border-radius: 999px; background: #24374f;
-  transition: background var(--dur) var(--ease); flex: 0 0 auto; }
-.ce-slider::after { content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px;
-  border-radius: 50%; background: var(--fg-muted);
-  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease); }
-.ce-switch:hover .ce-slider { background: #2b415c; }
-.ce-switch input:checked + .ce-slider { background: var(--accent); }
-.ce-switch input:checked + .ce-slider::after { transform: translateX(17px); background: #fff; }
-.ce-switch input:focus-visible + .ce-slider { box-shadow: 0 0 0 3px var(--ring); }
-.ce-switch-text { font-size: 12px; color: var(--fg-dim); }
-
-/* 列表 */
-.ce-list { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; }
-.ce-list-row { display: flex; align-items: center; gap: 6px; }
-.ce-list-row .ce-input { flex: 1 1 auto; max-width: var(--ce-input-max); }
+/* 图标按钮(对话框关闭 / 文件行操作等) */
 .ce-icon { flex: 0 0 auto; width: 28px; height: 28px; display: inline-grid; place-items: center;
   border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 13px; line-height: 1;
@@ -934,11 +796,6 @@ button { font-family: inherit; }
 .ce-icon.flat:hover { background: var(--surface-2); border-color: transparent; }
 .ce-icon:disabled { opacity: .3; cursor: default; }
 .ce-icon:disabled:hover { background: transparent; border-color: var(--border); color: var(--fg-dim); }
-
-/* 复选(渠道) */
-.ce-checks { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.ce-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
-.ce-check input { accent-color: var(--accent); width: 15px; height: 15px; }
 
 /* 按钮 */
 .ce-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm);
@@ -1092,38 +949,6 @@ button.primary { background: var(--accent); }
   .layout { padding: 12px 12px calc(24px + var(--statusbar-h)); }
 }
 
-/* ============ 设置页下拉外观统一(2026-09-14, **仅外观**) ============
- * 目标: 设置页的枚举/单位/规则引用下拉与顶栏筛选器弹层观感一致(圆角 + 自绘 caret)。
- * 范围限定(用户确认): 只改外观 —— 仍是原生 <select>, 键盘操作/无障碍/选项语义全部保留,
- * 不改 config_editor.js 的控件契约(见 ai/06 列计划约定与 ai/08 前端耦合约束)。
- */
-/* 选择器列表中的 `.ce-unit-group .ce-unit-select` 是必需的: 该控件另有 `background: var(--bg-sunken)`
- * 简写规则(specificity 0,2,0)会把 background-image 重置掉, 必须用同等以上强度重新声明 caret
- */
-select.ce-input, .ce-select, .ce-unit-group .ce-unit-select {
-  appearance: none; -webkit-appearance: none; -moz-appearance: none;
-  padding-right: 30px; border-radius: var(--radius-sm); cursor: pointer; text-overflow: ellipsis;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2393a7c4' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.3 6.3 8 10l3.7-3.7'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 9px center; background-size: 12px 12px;
-}
-select.ce-input:hover, .ce-select:hover, .ce-unit-group .ce-unit-select:hover {
-  border-color: var(--border-strong);
-}
-select.ce-input:focus, .ce-select:focus, .ce-unit-group .ce-unit-select:focus {
-  border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); outline: none;
-}
-/* 单位下拉与数值框拼接(右侧保持方角), caret 位置相应内收。
- * 圆角必须在此**重新声明左侧为 0**: 上方 caret 规则里的 `border-radius` 会覆盖
- * .ce-unit-group 原有的拼接圆角(同为 0,2,0 但顺序更靠后), 不补回则拼接处出现双圆角缝。
- */
-.ce-unit-group .ce-unit-select {
-  padding-right: 26px;
-  background-position: right 7px center;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-top-right-radius: var(--radius-sm);
-  border-bottom-right-radius: var(--radius-sm);
-}
 /* 原生下拉列表(popup)在深色主题下的底色(部分平台可生效, 比刺眼白底更协调) */
 select option { background: var(--bg-elev); color: var(--fg); }
 /* 列选择器弹层列多时可滚动(不再靠固定 380px 宽硬塞) */
@@ -1151,7 +976,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 进度条填充: 数值变化平滑过渡, 不再瞬间跳变 */
 .m-progress .bar > i { transition: width var(--dur-slow) var(--ease-out); }
 /* 可折叠箭头的展开回弹 */
-.g-name .caret, .ce-subcard-head .ico {
+.g-name .caret {
   transition: transform var(--dur) var(--ease-spring), color var(--dur) var(--ease); }
 /* 可点击控件的按下反馈(补上 transform 过渡, 否则 :active 缩放会瞬跳) */
 .ce-btn, .ce-icon, .dist-chip, .tabs button {
@@ -1669,11 +1494,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 选项行( FIX-02 "管理标签"项 hover 背景变透明 ); 用同色渐变把高光叠进 --bg-elev, 仍只引用令牌 */
 .pop-mgr-btn:hover { color: var(--fg); background: linear-gradient(var(--surface-2), var(--surface-2)), var(--bg-elev); }
 
-/* ================= 日志页(FE-2C) —— 与设置页同型的顶层页; 无自动轮询 =================
- * mono 等宽原始行; 页头含等级/行数选择与手动刷新, 页体独立滚动。
- */
-.logs-page { display: flex; flex-direction: column; padding: 16px 12px 18px;
-  height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 20px); animation: page-in .2s var(--ease-out); }
 /* M4: HR 站点状态(2026-09-25 起并入 Console Hub「HR 在线核实」分区页尾) —— 这里只管内容排版 */
 .hrs-channel { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--bg-card); color: var(--fg-muted); font-size: 12.5px; }
@@ -1751,12 +1571,9 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .speed-pop .speed-dialog-grid { grid-template-columns: 1fr 1fr; margin: 0; }
 .speed-pop .modal-field input { width: 100%; }
 .speed-pop .speed-mode-line { margin: 0; }
-/* 设置页: 页面骨架 + 字段行栅格令牌。栅格令牌(label 宽/列间距/控件最大宽/行内边距)单点声明,
- * 全部 .ce-field 行与嵌套容器(group/section/subcard)共用同一套 —— 同层输入框左缘逐级严格对齐,
- * 控件最大宽放开到 --ce-input-max, 宽屏下不再「页面很宽、内容只占一窄条」。 */
+/* 设置页: 页面骨架。2026-09-25 起设置页只有 Console Hub 一套版式(经典页已移除), 字段行栅格
+ * 令牌(label 宽 / 列间距 / 行内边距)随之退役 —— 它们只被已删的 `.ce-field` 行用;
+ * `--ce-input-max` 保留, 仍被 `.ce-note`(统一注记)引用。 */
 .ce-page { padding: 16px 12px calc(24px + var(--statusbar-h)); display: flex; flex-direction: column;
-  --ce-label-w: 200px;    /* 字段标签列宽(全部层级一致) */
-  --ce-ctl-gap: 12px;     /* 标签列与控件列的间距 */
   --ce-input-max: 720px;  /* 输入控件/说明文字的最大宽度(页面利用率) */
-  --ce-row-pad-x: 12px;   /* 字段行水平内边距(嵌套容器按边框宽度同步折算, 见各 body) */
 }

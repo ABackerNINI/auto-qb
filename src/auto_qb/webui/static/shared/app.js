@@ -1201,6 +1201,6 @@ app.mixin(window.AQB_HR_STATUS);
 app.mixin(window.CONFIG_EDITOR);
 app.mixin(window.CONFIG_RULES);
 app.mixin(window.CONFIG_HUB);
-app.component("ce-field", window.CE_FIELD_COMPONENT);
+/* 只有 hub-field 一个字段渲染组件 —— 它的行为基座 CE_FIELD_BASE 不注册(不是组件, 见 config_editor.js) */
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
 app.mount("#app");

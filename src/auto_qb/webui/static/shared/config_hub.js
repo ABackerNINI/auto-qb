@@ -615,9 +615,9 @@ window.CONFIG_HUB = {
   },
 };
 
-/* 字段渲染组件: 复用 ce-field 的全部读写逻辑(同一棵 YAML 树、同一套控件语义),
+/* 字段渲染组件: 复用 CE_FIELD_BASE 的全部读写逻辑(同一棵 YAML 树、同一套控件语义),
  * 只换成 console-hub 的行模板(标签 | 控件 | 「?」)。 */
-window.HUB_FIELD_COMPONENT = Object.assign({}, window.CE_FIELD_COMPONENT, {
+window.HUB_FIELD_COMPONENT = Object.assign({}, window.CE_FIELD_BASE, {
   name: "hub-field",
   template: "#tpl-hub-field",
 });

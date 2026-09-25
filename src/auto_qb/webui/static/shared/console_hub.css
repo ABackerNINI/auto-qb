@@ -1,8 +1,13 @@
 /* auto-qb 设置页 · 新版(Console Hub)样式系统
  *
  * 来源: resources/settings-page-templates/05-console-hub.html(方案 A+C+D 三合一)。
- * 本文件是那份样张的**原样复刻**(版式 / 控件规格 / 发光配方 / 切角位置一律照搬),
- * 只做了两处必要的工程化替换:
+ * 本文件以那份样张为**基线**(版式 / 控件规格 / 发光配方 / 切角位置照搬), 必要的偏离有两类:
+ *   ① 工程化替换(类名加 `hb-` 前缀 / 颜色全部走主题令牌) —— 见下方两条;
+ *   ② **用户实测后按需调过的控件**(样张保持原值不动, 它是设计参考素材): 开关尺寸与两态配色
+ *      (见 `.hb-switch` 段) / `.hb-list > .hb-select` 的 flex 复位(见 `.hb-list` 段)。
+ *      这类改动一律在**本文件对应规则处**写明「原来是什么、为什么改、实测数字」, 不要只改值。
+ *
+ * 两处必要的工程化替换:
  *   ① 类名统一加 `hb-` 前缀 —— 原样张用的 .card / .row / .blk / .pill / .pop 与表格页
  *      既有类名撞车(.row 在种子表里是行), 不前缀化会两边互相污染。视觉零差异。
  *   ② 颜色全部走主题令牌 —— 不写死 Ash Thorp 的暖炭/暖橙(那是"皮肤", 与版式是两件事),
@@ -169,16 +174,28 @@
 }
 .hb-btn.ghost:hover { background: transparent; color: var(--accent-hi); box-shadow: none; }
 
-/* ---- 开关 (Fathom · 方角 44×24 + 18px 纯白滑块, 行程 20px) ---- */
+/* ---- 开关 (Fathom · 方角 38×21 + 15px 纯白滑块, 行程 17px) ----
+ * 2026-09-25 用户报两件事, 都在这里收口:
+ *   ① 「设置页所有『启用』按钮偏大」→ 尺寸整族等比收 0.86(44×24 / 18 / 20 → 38×21 / 15 / 17),
+ *      比值不变, 只是整体小一号;
+ *   ② 「『关闭』与『启用』两态颜色太接近, 一眼分不出」→ 静息态底色**脱离 --tone 族**:
+ *      原来用 --tone-line(= accent 45% 透明), 与选中态的实心 accent 同一色相、只差透明度,
+ *      真浏览器量出来两态分别是 accent 45% 与 accent 100%(实测 atlas rgb(59,130,246)/0.45 vs
+ *      rgb(59,130,246)), 只能靠滑块位置分辨。改为中性实心底 --border-strong
+ *      —— 「关 = 中性灰蓝实心, 开 = accent 实心」一眼可分; 两态文字同步拉开(--fg-dim → --fg)。
+ * ⚠ 中性底必须挑「两套 UI 五主题都定义」的令牌(border-strong 全部满足), 否则棱镜浅色主题
+ *   (frost / golden)会落回 transparent。也**不要**改回 --surface-2 —— 暗底上它只有白 6%,
+ *   读作"没颜色", 白滑块压上去几乎没有对比(conventions/webui.md「暂停/其它不铺底」同源教训)。
+ * ⚠ important / danger 两个变体只覆盖**选中态**底色(warn / error), 静息态统一走中性底。 */
 .hb-switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; font-size: 13px; }
 .hb-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .hb-switch .hb-sw-track {
   position: relative;
   flex: none;
-  width: 44px;
-  height: 24px;
+  width: 38px;
+  height: 21px;
   border-radius: 0;
-  background: var(--tone-line);
+  background: var(--border-strong);
   transition: background .2s var(--ease);
 }
 .hb-switch input:checked + .hb-sw-track { background: var(--accent); }
@@ -187,20 +204,20 @@
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   border-radius: 0;
   background: #fff;
   transition: transform .2s var(--ease);
 }
-.hb-switch input:checked + .hb-sw-track::after { transform: translateX(20px); }
+.hb-switch input:checked + .hb-sw-track::after { transform: translateX(17px); }
 .hb-switch input:focus-visible + .hb-sw-track {
   outline: 2px solid var(--accent-hi);
   outline-offset: 2px;
   box-shadow: var(--glow-soft);
 }
 .hb-switch input:checked + .hb-sw-track { box-shadow: 0 0 10px -3px var(--accent); }
-.hb-switch .hb-sw-text { color: var(--fg-muted); font-size: 12.5px; }
+.hb-switch .hb-sw-text { color: var(--fg-dim); font-size: 12.5px; }
 .hb-switch input:checked ~ .hb-sw-text { color: var(--fg); }
 .hb-switch.important { --tone: var(--warn); }
 .hb-switch.important input:checked + .hb-sw-track { background: var(--warn); }
@@ -425,6 +442,13 @@
 .hb-ct .hb-list { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
 .hb-list-row { display: flex; gap: 6px; align-items: center; }
 .hb-list-row .hb-input, .hb-list-row .hb-select { flex: 1 1 auto; }
+/* ⚠ 独立下拉(rules_ref 的「从已有规则集/规则中选择…」)是 .hb-list 的**直接子项**, 而 .hb-list
+ * 是 column 方向 —— 上面 `.hb-ct .hb-input, .hb-ct .hb-select{flex:0 1 250px}` 那条的 flex-basis
+ * 会落到**主轴 = 高度**上, 把它撑成 250px 高的竖条(2026-09-25 用户报"按钮变形过高";
+ * 真浏览器实测 460×250, 而同一条选择器在 row 方向的 enum 上是正常的 250×37)。
+ * 这里显式复位: 主轴回 auto(高度=内容高), 宽度仍由 .hb-list 的 align-items:stretch 拉满。
+ * 修法只碰这个方向串味, 不动 .hb-ct 那条 —— 它服务的是横向排布的 enum / unit 下拉。 */
+.hb-list > .hb-select { flex: none; }
 .hb-unit { display: flex; gap: 6px; align-items: center; }
 .hb-unit .hb-input { flex: 0 0 104px; }
 .hb-checks { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -642,9 +666,6 @@
   line-height: 1.6;
   color: var(--warn);
 }
-
-/* 切换入口(放在经典设置页页头) */
-.hb-switch-entry { display: inline-flex; align-items: center; gap: 6px; }
 
 @media (max-width: 760px) {
   .hb-row { grid-template-columns: 1fr; gap: 6px; }

@@ -924,22 +924,25 @@ window.CONFIG_EDITOR = {
   },
 };
 
-/* 字段渲染组件: 单一模板适配全部 kind
+/* 字段渲染组件的**行为基座**(不是一个组件, 不要拿去 app.component 注册)
  *
  * 通过 inject("ce") 调用根实例上的 cfg* 方法 —— 无构建链下这是复用控件、避免模板重复的最轻方案。
- * 模板见 index.html 的 <script type="text/x-template" id="tpl-ce-field">。
+ * 唯一消费者是 `config_hub.js` 的 `HUB_FIELD_COMPONENT`: 它 `Object.assign` 拷走这里全部读写方法,
+ * 只换掉 `name` 与 `template`(即"同一套控件语义, 两套版式")。
+ *
+ * ⚠ 2026-09-25: 经典设置页移除后, 原 `ce-field` 组件与 `tpl-ce-field` 模板已不可达, 一并删除;
+ *   这里随之摘掉只服务那个组件的 `name` / `template` 两个键。**基座本身不能删** —— 删了 hub 侧
+ *   会连带失去全部 cfg* 读写(inject/provide 链 + 方法都在这里)。守阵 `_scan_mixin_wiring` 的
+ *   "定义即需接线" 规则已把 "被别的全局 Object.assign 消费" 也算作接线。
  */
-window.CE_FIELD_COMPONENT = {
-  name: "ce-field",
-  template: "#tpl-ce-field",
+window.CE_FIELD_BASE = {
   props: { item: { type: Object, required: true } },
   inject: ["ce"],
   /* 全局 mixin(app.mixin(CONFIG_EDITOR))给**每个**组件都挂了 provide(){ce:this},
-   * 于是嵌套 ce-field 的 inject 会被中间层 ce-field 截获 —— 拿到的是该 ce-field 实例,
-   * 它的 cfg 是 data() 新建的本地副本(嵌套字段只显默认值、编辑不进根树)。
-   * 这里把自己**注入到的 ce 原样再 provide 下去**: 顶层 ce-field 注入的是根实例,
-   * 任意深度的嵌套 ce-field 沿链拿到的都是同一个根(Vue 选项初始化 inject 先于 provide,
-   * 此时 this.ce 已就绪)。group/section/subcard 三层嵌套都依赖此行为。 */
+   * 于是嵌套字段组件的 inject 会被中间层截获 —— 拿到的是该实例, 它的 cfg 是 data() 新建的
+   * 本地副本(嵌套字段只显默认值、编辑不进根树)。这里把自己**注入到的 ce 原样再 provide 下去**:
+   * 顶层注入的是根实例, 任意深度的嵌套组件沿链拿到的都是同一个根(Vue 选项初始化 inject 先于
+   * provide, 此时 this.ce 已就绪)。group/section/subcard 三层嵌套都依赖此行为。 */
   provide() {
     return { ce: this.ce };
   },

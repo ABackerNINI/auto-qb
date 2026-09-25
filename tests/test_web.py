@@ -541,9 +541,10 @@ _EP_MEMBERS_RE = re.compile(r"\b(?:ep|e)\.members\b")
 def _scan_css_blocks(path, rel, problems):
     """CSS 规则块守阵: 顶层规则开了块却没闭合, 而下一非空行又开了新规则 -> 漏写 `; }`
 
-    (2026-09-17 实测: prism/css/views.css 有一条 `.ce-subcard .ce-field { … padding: 7px 0` 漏了
+    (2026-09-17 实测: prism/css/views.css 曾有一条 `.ce-subcard .ce-field { … padding: 7px 0` 漏了
     `; }`, 浏览器把其后约 200 条规则整段当作"未结束的声明块"丢弃 —— 棱镜大半样式静默消失而
-    pytest 全绿。注意**全文件花括号计数是配平的**(别处有多余 `}`), 只数括号查不出来。)
+    pytest 全绿。注意**全文件花括号计数是配平的**(别处有多余 `}`), 只数括号查不出来。
+    该规则本身已随经典设置页的死代码清理删除, 此处只作判据来源留档。)
     """
     with open(path, encoding="utf-8") as f:
         lines = f.read().splitlines()
@@ -685,9 +686,18 @@ def _scan_mixin_wiring(problems):
             problems.append(f"{rel} 未被 prism/index.html 的 <script> 引用(拆分片段漏挂 -> 整块功能静默消失)")
 
     app_text = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
-    # mixin 与 component 两种注入都算已接线(ce-field 走 app.component)
+    # 三种"已接线"形态:
+    #   ① mixin    —— window.AQB_* 注入 Vue 实例
+    #   ② component —— 注册为组件(如 hub-field 走 app.component)
+    #   ③ **行为基座** —— 被另一个全局用 `Object.assign({}, window.X, …)` 拷走复用(如 config_hub.js
+    #      的 HUB_FIELD_COMPONENT 拷 config_editor.js 的 CE_FIELD_BASE)。它本身不是组件、不注册,
+    #      但成员确实在跑 ⇒ 不该报"定义了没注入"。
+    #      ⚠ 只认 `Object.assign({}, window.X` 这一种形态(本项目唯一的复用写法), 不要放宽成"出现即算"。
+    #      (2026-09-25: 经典设置页移除后 ce-field 组件与 tpl-ce-field 模板删除, 基座随之改名去组件化。)
     registered = set(re.findall(r"app\.mixin\(window\.(\w+)\)", app_text))
     registered |= set(re.findall(r"app\.component\(\s*\"[^\"]+\"\s*,\s*window\.(\w+)\)", app_text))
+    for path, _rel in bundle:
+        registered |= set(re.findall(r"Object\.assign\(\{\},\s*window\.(\w+)", open(path, encoding="utf-8").read()))
     seen = {}
     for path, rel in bundle:
         text = open(path, encoding="utf-8").read()
