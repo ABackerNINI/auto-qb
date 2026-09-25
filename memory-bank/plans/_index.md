@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
 - [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`
 - [26-09-23-2008] [commands — 项目命令统一调用面 · 工程方案](26-09-23-2008-commands-plan.html) — `commands-unified-command-surface`
 - [26-09-22-2350] [activeContext 多 clone 冲突治理 — 工程方案](26-09-22-2350-activecontext-conflict-plan.html) — `memory-bank-activecontext-conflict`
