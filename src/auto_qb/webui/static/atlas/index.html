@@ -1084,6 +1084,9 @@
                 </button>
               </div>
 
+              <!-- 「有 N 项建议你看一下」警示条暂时隐藏(2026-09-26): 伪警示, 只复述 schema 静态风险文案,
+                   不反映配置健康, 见 issues/26-09-22-2002-bug-webui-config-health-warning;
+                   真修(改渲染后端 warnings)后取消本注释包裹恢复。分区卡 LED warn / 「含风险」徽标不受影响。
               <div v-if="hubRiskList.length" class="hb-attn">
                 <svg class="hb-ico lg at-ico" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13z"/><path d="M8 6.5v3M8 11.6v.6"/></svg>
                 <div class="at-body">
@@ -1092,6 +1095,7 @@
                 </div>
                 <button class="hb-btn ghost at-go" @click="hubGo(hubRiskList[0].group)">去看 →</button>
               </div>
+              -->
 
               <div class="hb-grid">
                 <button v-for="c in hubCards" :key="c.key" class="hb-card" @click="hubGo(c.key)">

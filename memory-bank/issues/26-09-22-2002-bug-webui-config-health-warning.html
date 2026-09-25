@@ -172,7 +172,7 @@ return out.slice(0, 8);
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p>方向已与用户讨论(2026-09-22), 细节未拍板, <strong>暂不施行</strong>:</p>
     <ol>
-      <li><strong>撤掉首页伪警示条</strong> —— 「哪些分区有风险项」已由分区卡 LED warn 态(<code>hubLedOf</code>)表达, 全局条属重复。</li>
+      <li><strong>撤掉首页伪警示条</strong> —— 「哪些分区有风险项」已由分区卡 LED warn 态(<code>hubLedOf</code>)表达, 全局条属重复。<span style="color: var(--accent-ink)">(2026-09-26 已以「暂时隐藏」形态先行: atlas / prism 两套模板同段注释包裹并留恢复标记, 代码与 CSS 均未删, 真修后随第 3 条恢复)</span></li>
       <li><strong>后端补真警示数据源(核心)</strong>: load_config(或校验层)收集 tree 中 schema 不认识的键(含 <code>*_rules</code> 段内、<code>trackers</code> 段内未知子键)→ 新增 <strong>warnings 分级</strong>(不进 errors —— 未知键不拦启动, 守「保守默认」黄金法则)→ <code>/api/config</code> GET/PUT 响应带出。</li>
       <li><strong>警示条改渲染 warnings</strong>: 条件性出现(无则整条消失), 每条给去向, 复用 <code>hubJump</code> 精确落点(需给规则卡头补 <code>data-hb-key</code>, 两套 HTML 成对改)。</li>
       <li>二档(可选, 未拍板是否同批): 危险取值组合检查(web.host 对外暴露 + 密钥未设等); 手改 config.yml 热重载失败状态透出。</li>
@@ -184,6 +184,7 @@ return out.slice(0, 8);
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-22 20:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-26 — 用户拍板: 首页警示条(「有 N 项建议你看一下」)<strong>暂时隐藏</strong> —— atlas / prism 两套 <code>index.html</code> 同段注释包裹, 注释里留了指向本报告的恢复标记; 分区卡 LED warn 与「含风险」徽标仍由 <code>hubRiskList</code> 驱动、不受影响。属缓解非修复: 真修(后端 warnings 数据源 + 警示条改渲染 warnings, 即第 2/3 条)未动, 状态保持 <strong>Open</strong>。</li>
     </ul>
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
