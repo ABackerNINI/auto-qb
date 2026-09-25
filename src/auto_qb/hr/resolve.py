@@ -352,6 +352,71 @@ def judge_record(
     )
 
 
+# ---------------- 删除安全档位 × 来源档位(计划 webui-hr-safety-display §3) ----------------
+# WEB UI 展示单点: views.py 与 CLI 报告共用; 前端只做 token -> 徽标文字映射, 不重算判定。
+# 颜色只编码「能不能删」(danger/safe/unknown/none), 来源用文字徽标编码(2 字芯片)。
+
+SAFETY_DANGER = "danger"  # 不能删: HR 义务未了, 删除可能吃 H&R
+SAFETY_SAFE = "safe"  # 可删: 义务已了或从未有
+SAFETY_UNKNOWN = "unknown"  # 未核实: 站点还没查到它(宽松 policy 才出现)
+SAFETY_NONE = "none"  # 不适用: 站点未配 HR / 从未触发
+
+SRC_SITE_SCOPE = "site_scope"  # 在线·考察中(清单命中档位 A)
+SRC_SITE_SATISFIED = "site_satisfied"  # 在线·已达标(档位 B)
+SRC_SITE_UNSATISFIED = "site_unsatisfied"  # 在线·未达标(档位 C)
+SRC_SITE_RELEASED = "site_released"  # 在线·已核实(安全放行)
+SRC_POLICY = "policy"  # 策略·受管束(mode=all 未核实 / unknown_policy=hr / 新鲜度闸门)
+SRC_LOCAL = "local"  # 本地·兜底(站点未接入 / 没视图 / 没可查键)
+SRC_LOCAL_EXEMPT = "local_exempt"  # 本地·超龄豁免
+SRC_UNVERIFIED = "unverified"  # 未核实(宽松 policy)
+
+
+@dataclass(frozen=True, slots=True)
+class HrSafetyDisplay:
+    """删除安全档位的展示三元组(safety 决定颜色, src 决定来源徽标, text 是全 UI 唯一的人话口径)"""
+
+    safety: str
+    src: str
+    text: str
+
+
+def safety_display(judged: Optional["HrJudgement"], *, triggered: bool, satisfied: bool) -> HrSafetyDisplay:
+    """由判定结果派生「删除安全档位 × 来源档位」—— 不新造判定, 只转译既有结论。
+
+    `judged is None` = 站点未接入 / mode=off / 无可查键(judge_record 的回落口径), 此时
+    triggered/satisfied 就是本地字段逻辑的结论, 来源记「本地·兜底」。站点命中行的档位即结论
+    (计划 §9 v3.0): A 考察中 / C 未达标 ⇒ 不能删, B 已达标 ⇒ 可删; 身份层结论(安全放行 /
+    超龄豁免)恒可删; 未核实却被按受管束管束的(mode=all / unknown_policy=hr / 新鲜度闸门)
+    归「策略」桶 —— 管束不由站点档位结论产生, 但结论仍是不能删(保守), 具体成因看 reason。
+    """
+    if judged is None:
+        if triggered:
+            return HrSafetyDisplay(
+                SAFETY_SAFE if satisfied else SAFETY_DANGER,
+                SRC_LOCAL,
+                "本地·兜底，已达标" if satisfied else "本地·兜底，未达标",
+            )
+        return HrSafetyDisplay(SAFETY_NONE, "", "")
+    identity = judged.identity
+    if identity is HrIdentity.EXEMPT:
+        return HrSafetyDisplay(SAFETY_SAFE, SRC_LOCAL_EXEMPT, "本地·超龄豁免")
+    if identity is HrIdentity.VERIFIED_NON_HR:
+        return HrSafetyDisplay(SAFETY_SAFE, SRC_SITE_RELEASED, "在线·已核实，安全放行")
+    if identity is HrIdentity.UNKNOWN:
+        if triggered:
+            return HrSafetyDisplay(SAFETY_DANGER, SRC_POLICY, "策略·未核实，按受管束")
+        return HrSafetyDisplay(SAFETY_UNKNOWN, SRC_UNVERIFIED, "未核实")
+    # identity == HR: 站点清单命中(mode=all 未核实的恒受管束没有 facts, 一并落策略桶)
+    lane = judged.facts.lane if judged.facts is not None else ""
+    if lane == LANE_SATISFIED:
+        return HrSafetyDisplay(SAFETY_SAFE, SRC_SITE_SATISFIED, "在线·已达标")
+    if lane == LANE_SCOPE:
+        return HrSafetyDisplay(SAFETY_DANGER, SRC_SITE_SCOPE, "在线·考察中，义务未了")
+    if lane == LANE_UNSATISFIED:
+        return HrSafetyDisplay(SAFETY_DANGER, SRC_SITE_UNSATISFIED, "在线·未达标")
+    return HrSafetyDisplay(SAFETY_DANGER, SRC_POLICY, "策略·未核实，按受管束")
+
+
 def build_site_view(
     site: str,
     mode: str,
@@ -398,10 +463,12 @@ __all__ = [
     "HrIdentity",
     "HrJudgement",
     "HrResolution",
+    "HrSafetyDisplay",
     "HrSiteFacts",
     "HrSiteView",
     "HrViewSet",
     "build_site_view",
     "judge_record",
     "resolve_identity",
+    "safety_display",
 ]

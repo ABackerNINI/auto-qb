@@ -84,6 +84,7 @@
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrDurTitle、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
@@ -869,9 +870,10 @@ def _scan_filter_facets(text, rel, problems):
                 f"{rel} computed.{name} 没走 _facetOptions 单点 —— 各自遍历集合会在种子页"
                 "(按视图分片不回 groups)算出空选项, 弹层只剩\"暂无数据\""
             )
-    body = _computed_body(text, "hrOptions")
-    if body is not None and "facetRows" not in body:
-        problems.append(f"{rel} computed.hrOptions 没走 facetRows 单点 —— 种子页不回 groups ⇒ H&R 两档恒 0/0")
+    for name in ("hrOptions", "hrSrcOptions"):
+        body = _computed_body(text, name)
+        if body is not None and "facetRows" not in body:
+            problems.append(f"{rel} computed.{name} 没走 facetRows 单点 —— 种子页不回 groups ⇒ H&R 档位恒 0/0")
     if "_memberValueOptions" in text:
         problems.append(f"{rel} 残留 _memberValueOptions —— 选项一律走 facetRows/_facetOptions 单点"
                         "(按组算的第二条口径正是本次故障的成因)")
@@ -1077,6 +1079,81 @@ def test_frontend_static_bundle_health():
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
+
+
+def test_frontend_hr_safety_wiring():
+    """删除安全档位的前端接线守阵(2026-09-25, 计划 webui-hr-safety-display)
+
+    四类"字段/令牌打错 = pytest 全绿但页面静默空白或配色失效"的故障形态, 一律机械钉住:
+    ① hr.js 的 token 映射表(HR_SRC_BADGES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
+      逐字一致 —— 来源档位是前后端契约, 打错字徽标静默消失;
+    ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + 挂 hrSrcBadge/
+      hrDurTitle —— 漏一处那一列就不显示安全档位;
+    ③ hr-unk / hr-src / bulk-hr-warn 三条新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
+    ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
+      M4 设置页守阵同款思路)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    hr_js = open(os.path.join(shared, "hr.js"), encoding="utf-8").read()
+    resolve_py = open(
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "hr", "resolve.py"),
+        encoding="utf-8",
+    ).read()
+
+    # ① 来源 token 契约: 后端常量集 == 前端两张映射表的键集
+    src_tokens = set(re.findall(r'^SRC_[A-Z_]+ = "([a-z_]+)"', resolve_py, re.M))
+    assert len(src_tokens) == 8, f"resolve.py 的 SRC_* 常量应为 8 个, 实测 {sorted(src_tokens)}"
+
+    def _map_keys(name):
+        m = re.search(rf"const {name} = \{{(.*?)\}};", hr_js, re.S)
+        assert m, f"hr.js 缺 const {name}"
+        return set(re.findall(r"([a-z_]+):", m.group(1)))
+
+    assert _map_keys("HR_SRC_BADGES") == src_tokens, "HR_SRC_BADGES 键与后端 SRC_* 不一致"
+    assert _map_keys("HR_SRC_BUCKETS") == src_tokens, "HR_SRC_BUCKETS 键与后端 SRC_* 不一致"
+    for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
+        assert _map_keys(name) == {"danger", "safe", "unknown"}, f"{name} 键集应为三个安全档位"
+
+    # ② 做种时长列换绑: 两套 UI 各 3 处
+    for ui in ("atlas", "prism"):
+        html = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        for needle, want in (
+            (':class="hrDurClass(m)"', 3),
+            ('v-if="hrSrcBadge(m)"', 3),
+            (':title="hrDurTitle(m) || null"', 3),
+        ):
+            got = html.count(needle)
+            assert got == want, f"{ui} 里 `{needle}` 应出现 {want} 处, 实测 {got}"
+        # 旧绑定不得残留(换绑遗漏的形态)
+        assert ':class="hrTimeClass(m)"' not in html, f"{ui} 仍有做种时长列挂着旧 hrTimeClass —— 漏换绑"
+
+    # ③ 新样式两套 CSS 成对
+    atlas_css = open(os.path.join(STATIC_ROOT, "atlas", "style.css"), encoding="utf-8").read()
+    prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
+    for css, name in ((atlas_css, "atlas/style.css"), (prism_css, "prism/css/views.css")):
+        for rule in (".m-pair.hr-unk", ".m-pair .hr-src", ".bulk-hr-warn"):
+            assert rule in css, f"{name} 缺 {rule} 规则 —— 两套 UI 必须成对定义"
+
+    # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
+    from auto_qb.core.qbmanager import QbManager
+    from auto_qb.torrents import TorrentRecord
+    from helpers import FakeTorrent
+
+    keys = set(QbManager._hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HX"))))
+    assert keys, "_hr_view_fields 连空配置分支都该返回全键集"
+    used = set()
+    for name in sorted(os.listdir(shared)):
+        if name.endswith(".js"):
+            used |= set(re.findall(r"\bm\.(hr_[a-z_]+)", open(os.path.join(shared, name), encoding="utf-8").read()))
+    for ui in ("atlas", "prism"):
+        used |= set(
+            re.findall(
+                r"\bm\.(hr_[a-z_]+)",
+                open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+            )
+        )
+    unknown = used - keys
+    assert not unknown, f"前端引用了后端不存在的 HR 字段: {sorted(unknown)}(字段打错 = 页面静默空白)"
 
 
 def test_frontend_member_window_functions_live_in_methods():
@@ -2064,7 +2141,7 @@ def test_build_group_view_hr_tags(tmp_path):
 
 
 def test_hr_view_fields_three_state(tmp_path):
-    """详情字段透出站点侧三态与依据(WebUI 可观测性): 接入站点才有值, 未接入四项全空"""
+    """详情字段透出站点侧三态与依据 + 删除安全档位×来源(WebUI 可观测性): 接入站点才有值, 未接入全空"""
     from auto_qb.config import HRRule, TrackerConfig
     from auto_qb.config.models import SiteHrCheckConfig
     from auto_qb.core.qbmanager import QbManager
@@ -2079,10 +2156,11 @@ def test_hr_view_fields_three_state(tmp_path):
     )
     rec.tracker_conf = conf
 
-    # 未接入 hr_check: 四项全空(前端据此不显示三态行, 与既有四个字段的空值口径一致)
+    # 未接入 hr_check: 三态四项全空(前端据此不显示三态行, 与既有四个字段的空值口径一致);
+    # 本地未触发 => 删除安全 = 不适用(无色无徽标)
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_state"] == "" and fields["hr_state_text"] == "" and fields["hr_reason"] == ""
-    assert fields["hr_satisfied_src"] == ""
+    assert fields["hr_safety"] == "none" and fields["hr_safety_text"] == "" and fields["hr_safety_src"] == ""
 
     conf.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhanclub.net/myhr.php")
     link = mock.Mock()
@@ -2094,7 +2172,22 @@ def test_hr_view_fields_three_state(tmp_path):
     assert fields["hr_triggered"] is True, "站点侧清单命中 => 受管束(本地 downloaded=0 不参与)"
     assert fields["hr_state"] == "hr" and fields["hr_state_text"] == "受管束"
     assert fields["hr_reason"] == "清单命中(档位 C)"
-    assert fields["hr_satisfied_src"] == "local", "站点没给达标结论 => 标注本地兜底"
+    # 删除安全档位: 命中但替身没给档位 facts => 保守落「策略」桶(真机命中行必带档位, 见下一分支)
+    assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "policy"
+    assert fields["hr_safety_text"] == "策略·未核实，按受管束"
+
+    # 真实命中行带档位(A 考察中): 档位即结论(v3.0) —— 在线·考察中, 不能删(本地值不参与)
+    link.judge.return_value = HrJudgement(
+        identity=HrIdentity.HR,
+        is_hr=True,
+        reason="清单命中(档位 A)",
+        site_satisfied=False,
+        facts=HrSiteFacts(lane="A"),
+        site="HHan",
+    )
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "site_scope"
+    assert fields["hr_safety_text"] == "在线·考察中，义务未了"
 
     link.judge.return_value = HrJudgement(
         identity=HrIdentity.HR,
@@ -2104,7 +2197,10 @@ def test_hr_view_fields_three_state(tmp_path):
         facts=HrSiteFacts(lane="B", remain_seconds=0, ratio=1.5)
     )
     fields = QbManager._hr_view_fields(rec)
-    assert fields["hr_satisfied"] is True and fields["hr_satisfied_src"] == "site"
+    assert fields["hr_satisfied"] is True
+    # 删除安全档位: B 档已达标 => 可删, 来源「在线·已达标」(站点结论优先于本地时长)
+    assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_satisfied"
+    assert fields["hr_safety_text"] == "在线·已达标"
     # 站点侧值(两套值对账): 已给的照传, 没给的空串 —— 未知与 0 必须可分(0 = 已达标)
     assert fields["hr_site_lane"] == "B" and fields["hr_site_remain"] == 0
     assert fields["hr_site_ratio"] == 1.5 and fields["hr_site_need"] == "" and fields["hr_site_dl"] == ""
@@ -2112,7 +2208,33 @@ def test_hr_view_fields_three_state(tmp_path):
     link.judge.return_value = HrJudgement(identity=HrIdentity.VERIFIED_NON_HR, is_hr=False, reason="完整刷新未列出")
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_triggered"] is False and fields["hr_state"] == "verified_non_hr"
-    assert fields["hr_state_text"] == "已核实·安全放行" and fields["hr_satisfied_src"] == ""
+    assert fields["hr_state_text"] == "已核实·安全放行"
+    # 删除安全档位: 安全放行 => 可删, 来源「在线·已核实」
+    assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_released"
+    assert fields["hr_safety_text"] == "在线·已核实，安全放行"
+
+    # 本地兜底路径(judge 返回 None: 站点侧无可查键/未发布视图): triggered/satisfied 就是本地结论,
+    # 来源记「本地·兜底」—— 呈现口径与打标流程同源, 不会出现"标签说达标、徽章说不能删"
+    rec2 = TorrentRecord.from_torrent(
+        FakeTorrent(hash="HB", state="stalledUP", size=512**2, total_size=512**2, downloaded=512**2, seeding_time=3600)
+    )
+    rec2.tracker_conf = conf
+    rec2.hr_link = link
+    link.judge.return_value = None
+    fields = QbManager._hr_view_fields(rec2)
+    assert fields["hr_triggered"] is True and fields["hr_satisfied"] is False
+    assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "local"
+    assert fields["hr_safety_text"] == "本地·兜底，未达标"
+    rec3 = TorrentRecord.from_torrent(
+        FakeTorrent(
+            hash="HC", state="stalledUP", size=512**2, total_size=512**2, downloaded=512**2, seeding_time=4 * 86400
+        )
+    )
+    rec3.tracker_conf = conf
+    rec3.hr_link = link
+    fields = QbManager._hr_view_fields(rec3)
+    assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "local"
+    assert fields["hr_safety_text"] == "本地·兜底，已达标"
 
 
 def _hr_status_env(mgr, tmp_path, *, complete=True):

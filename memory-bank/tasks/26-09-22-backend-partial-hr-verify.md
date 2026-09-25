@@ -18,7 +18,7 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 双命中按档位序取; +2 守阵红验 3 条全红, 全量 1601 passed + 1 skipped。
 **只差真机走查**(M0 四项实测 + 装扩展后跑一轮真实取数) —— 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (§13 决策记录与 M0 实测清单)。
 **Topics:** backend-partial-hr-verify
-**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html
+**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md
 
 ## 原始请求
 

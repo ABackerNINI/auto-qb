@@ -917,6 +917,20 @@ button.primary { background: var(--accent); }
 /* HR 状态对照(仅覆盖实际值): 未达 = 暖色提醒, 已达 = 绿色 */
 .m-pair.pending { color: var(--hr-pending); }
 .m-pair.reached { color: var(--green); }
+/* 删除安全档位(2026-09-25, 计划 webui-hr-safety-display): hr-unk = 未核实(中性灰, 与"不适用"
+ * 的默认 teal 区分); hr-src = 来源徽标(结论来自优先级链哪一档: 在线/本地/策略/未核, 2 字芯片)。
+ * 两套 UI 必须同口径 —— 改这里时同步 prism/css/views.css 的同名规则。 */
+.m-pair.hr-unk { color: var(--paused); }
+.m-pair .hr-src {
+  color: var(--fg-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  padding: 0 3px;
+  align-self: center;
+  white-space: nowrap;
+}
 /* 弹层内的多选行(新交互): 整行可点、无可见勾选框、选中用左侧色条 + 淡底 + 亮字。
  * 焦点必须用 `:focus-visible` 而非 `:focus-within` —— 行本身带 tabindex, 鼠标点击也会聚焦它,
  * `:focus-within` 会在点击选中的那一刻画出整圈 outline(用户反馈的"点击选中时的边框");
@@ -1040,6 +1054,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
   background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card); }
 .bulk-inline .bulk-count { font-size: 12.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
 .bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
+/* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
+.bulk-inline .bulk-hr-warn { font-size: 11.5px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
 .bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 10px; border-radius: 999px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);

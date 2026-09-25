@@ -306,6 +306,20 @@
 .m-pair.m-ratio { color: var(--violet); }
 .m-pair.pending { color: var(--hr-pending); }
 .m-pair.reached { color: var(--green); }
+/* 删除安全档位(2026-09-25, 计划 webui-hr-safety-display): hr-unk = 未核实(中性灰, 与"不适用"
+ * 的默认 teal 区分); hr-src = 来源徽标(结论来自优先级链哪一档: 在线/本地/策略/未核, 2 字芯片)。
+ * 两套 UI 必须同口径 —— 改这里时同步 atlas/style.css 的同名规则。 */
+.m-pair.hr-unk { color: var(--paused); }
+.m-pair .hr-src {
+  color: var(--fg-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  padding: 0 3px;
+  align-self: center;
+  white-space: nowrap;
+}
 
 /* 校验中呼吸 */
 .g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
@@ -321,6 +335,8 @@
   background: linear-gradient(180deg, var(--accent-soft), transparent 70%), var(--bg-card); }
 .bulk-inline .bulk-count { font-size: 11.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
 .bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
+/* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
+.bulk-inline .bulk-hr-warn { font-size: 11px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
 .bulk-sep { width: 1px; height: 16px; background: var(--border); }
 .bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px;
   border-radius: var(--radius-sm);

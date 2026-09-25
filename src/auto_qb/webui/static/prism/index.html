@@ -281,6 +281,7 @@
             <div v-if="selectedCount" class="bulk-inline">
               <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
               <span class="bulk-count">已选 <b>{{ bulkCountText() }}</b></span>
+              <span v-if="bulkHrWarnText()" class="bulk-hr-warn">⚠ {{ bulkHrWarnText() }}</span>
               <span class="bulk-sep"></span>
               <button class="bulk-btn" @click="bulkAct('resume')">
                 <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
@@ -310,6 +311,7 @@
             <template v-if="categoryFilter.length">分类“{{ categoryFilter.join('/') }}” </template>
             <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
             <template v-if="hrFilter.length">H&R“{{ hrFilter.join('/') }}” </template>
+            <template v-if="hrSrcFilter.length">HR 来源“{{ hrSrcFilter.join('/') }}” </template>
             <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
             → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ` 个${l10nGroup}` }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
             <template v-if="searchBuilding"> · 索引构建中…</template>
@@ -499,9 +501,10 @@
                     <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                   </span>
                   <!-- 做种时长/分享率: 口径单点化(FX-02/04) —— 0 分钟且无 HR 要求 与 进度为 0 的种子不显示 -->
-                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
                     {{ cellSeedingTime(m) }}
                     <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                    <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                   </span>
                   <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                     {{ cellRatio(m) }}
@@ -607,9 +610,10 @@
                 <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
                 <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
-                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
                   {{ cellSeedingTime(m) }}
                   <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                  <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                 </div>
                 <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                   {{ cellRatio(m) }}
@@ -787,9 +791,10 @@
                             <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                             <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                           </span>
-                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrTimeClass(m)">
+                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
                             {{ cellSeedingTime(m) }}
                             <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                            <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                           </span>
                           <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                             {{ cellRatio(m) }}

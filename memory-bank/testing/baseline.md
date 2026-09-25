@@ -6,7 +6,21 @@
 
 ## 当前基线
 
-**1602 collected: 1601 passed + 1 skipped / Windows** —— 2026-09-25 **HR v3.0 达标判定来源优先级落地**
+**1607 collected: 1606 passed + 1 skipped / Windows** —— 2026-09-25 **HR 删除安全档位 WEB UI 呈现落地**
+(计划 [26-09-25-1823-plan-webui-hr-safety-display](../plans/26-09-25-1823-plan-webui-hr-safety-display.html),
+档案 `26-09-25-webui-hr-safety-display`)。**+4 条**: `test_hr_resolve.py` safety_display 三档位派生 3 条
+(站点档位即结论 A/C 不能删·B 可删且来源记「在线」/ 身份层放行·超龄豁免恒可删与 mode=all·新鲜度闸门落
+「策略」桶 / judged None 回落本地兜底) + `test_web.py::test_frontend_hr_safety_wiring` 前端接线守阵
+(hr.js token 映射表与后端 `SRC_*` 常量逐字一致 / 做种时长列两套 UI 各 3 处换绑 hrDurClass·hrSrcBadge·
+hrDurTitle / 新样式两套 CSS 成对 / js 引用的 `m.hr_*` 字段 ⊆ `_hr_view_fields` 键集); 另把
+`test_hr_view_fields_three_state` 扩到新三字段(站点档位 A/B/C 与本地兜底路径各一)并让
+`_scan_filter_facets` 同查 `hrSrcOptions`。落地面: 后端 `hr/resolve.py::safety_display` 删除安全档位 ×
+来源档位派生单点 + `views.py::_hr_view_fields` 透出 `hr_safety`/`hr_safety_text`/`hr_safety_src`
+(**退役二值 `hr_satisfied_src`**); 前端做种时长列按安全档位着色(站点结论优先于本地)+ 来源 2 字徽标 +
+悬停全文、删除确认框 HR 风险点名行、H&R 筛选两档→四档 + HR 来源副筛选、批量条「含 N 个不能删」。
+TOTAL **91%**(10991 语句 / 791 未覆盖 / 3612 分支 / 327 partial; `hr/resolve.py` 98% / `webui/views.py` 97%);
+双 UI 浏览器冒烟 **94 项全过 0 失败**(桩服务 1500 种子)。
+**上一态 2026-09-25 HR v3.0 达标判定来源优先级: 1602 collected: 1601 passed + 1 skipped**
 (+2 守阵 `test_hr_resolve.py`: `test_lane_verdict_ignores_remain_and_local` —— A 档命中即未达标, 剩余达标时间
 归零/缺失都不改结论(退出达标推导); `test_judge_record_double_hit_prefers_lane_order` —— hybrid 双命中按
 档位序 A>B>C 取, 与键序无关; 连同改写的 `test_judge_record_carries_site_satisfied_verdict` 共 **3 条红验全红**

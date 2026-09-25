@@ -84,9 +84,8 @@
   (AGENTS.md 已写「不要再手工加前缀」, 读了没照做); `cmd //c` 嵌套引号挑子集 ⇒ 带引号的路径/`-k`
   表达式被原样传给 pytest(且没意识到**别的绕法全部同坑**)。⇒ 只走 `commands run test.*`; 挑子集
   `test.one -- '<路径> -k "<表达式>"'`(整串加引号); bash 前缀 `TMPDIR='R:\Temputo-qb	ests'` 亦有效。
-- **复发**: 4 —— 2026-09-25 裸跑 `uv run pytest <单文件>`(默认 TMPDIR=`H:\Temp`)⇒ 收尾同崩
-  `PermissionError … pytest-current`(全过)。**为什么没命中**: 把"单文件小跑"当成 `test.*` 的例外。
-  ⇒ 一律 `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑可兜底。
+- **复发**: 4+5 —— 2026-09-25 两踩同因: 裸跑 `uv run pytest <单文件>` 与手工设 TMPDIR(POSIX 前缀 / `cmd //c` 直写)都绕开引擎 ⇒ 默认 `H:\Temp` 收尾同崩 `PermissionError … pytest-current`。
+  **为什么没命中**: 把"单文件小跑"当例外 + 禁令开工扫过、动手没重读 ⇒ 临时排查也一律 `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑可兜底。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需要能读那个重解析点), 之后在**默认 TMPDIR** 下跑

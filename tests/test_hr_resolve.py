@@ -39,6 +39,9 @@
   (豁免是 qB 侧事实, 不依赖索引建到哪)
 - test_judge_record_age_exempt_applies_on_mode_all: mode=all 也认豁免(显式配置压过恒受管束)
 - test_judge_record_age_exempt_boundary_is_inclusive: 恰好等于豁免线 -> 豁免; 差一秒 -> 不豁免
+- test_safety_display_site_lanes_map_to_verdict: 站点命中档位即删除安全结论(A/C 不能删 / B 可删), 来源记「在线」
+- test_safety_display_identity_layers: 身份层结论 —— 放行/超龄豁免恒可删; mode=all 未命中与新鲜度闸门落「策略」桶; 宽松 policy 未核实
+- test_safety_display_local_fallback_when_judged_none: judged None(未接入/无键) => 本地兜底, 未触发 = 不适用
 """
 import pytest
 
@@ -56,10 +59,25 @@ from auto_qb.hr.resolve import (
     POLICY_NOT_HR,
     HrAnchor,
     HrIdentity,
+    HrJudgement,
+    HrSiteFacts,
     HrSiteView,
+    SAFETY_DANGER,
+    SAFETY_NONE,
+    SAFETY_SAFE,
+    SAFETY_UNKNOWN,
+    SRC_LOCAL,
+    SRC_LOCAL_EXEMPT,
+    SRC_POLICY,
+    SRC_SITE_RELEASED,
+    SRC_SITE_SATISFIED,
+    SRC_SITE_SCOPE,
+    SRC_SITE_UNSATISFIED,
+    SRC_UNVERIFIED,
     build_site_view,
     judge_record,
     resolve_identity,
+    safety_display,
 )
 
 NOW = 2000.0
@@ -482,3 +500,62 @@ def test_judge_record_age_exempt_boundary_is_inclusive():
         completed_age_limit=AGE_LIMIT
     )
     assert inside.identity is HrIdentity.VERIFIED_NON_HR
+
+
+# ---------------- 删除安全档位 × 来源档位(计划 webui-hr-safety-display §3) ----------------
+
+
+def test_safety_display_site_lanes_map_to_verdict():
+    """站点命中行的档位即删除安全结论(v3.0 口径): A/C -> 不能删, B -> 可删, 来源都是「在线」
+
+    这是 WEB UI 「一眼分清能不能删」的判定源: 档位即结论, 不看页面数值字段。
+    """
+    for lane, safety, src, keyword in (
+        ("A", SAFETY_DANGER, SRC_SITE_SCOPE, "考察中"),
+        ("B", SAFETY_SAFE, SRC_SITE_SATISFIED, "已达标"),
+        ("C", SAFETY_DANGER, SRC_SITE_UNSATISFIED, "未达标"),
+    ):
+        got = safety_display(
+            HrJudgement(HrIdentity.HR, True, facts=HrSiteFacts(lane=lane)),
+            triggered=True,
+            satisfied=lane == "B",
+        )
+        assert (got.safety, got.src) == (safety, src), f"档位 {lane} => {safety}/{src}"
+        assert "在线" in got.text and keyword in got.text, "人话短语要含来源与档位关键词"
+
+
+def test_safety_display_identity_layers():
+    """身份层结论: 放行 / 超龄豁免恒可删(来源分在线/本地); 管束但不来自档位的落「策略」桶
+
+    - VERIFIED_NON_HR(完整核实未列出) -> 可删·在线·已核实
+    - EXEMPT(本地超龄豁免) -> 可删·本地
+    - mode=all 未命中(恒受管束, 无 facts) 与 新鲜度闸门(UNKNOWN+triggered) -> 不能删·策略
+    - 宽松 policy 下未核实(UNKNOWN 未被管束) -> 未核实·unverified
+    """
+    released = safety_display(HrJudgement(HrIdentity.VERIFIED_NON_HR, False), triggered=False, satisfied=False)
+    assert (released.safety, released.src) == (SAFETY_SAFE, SRC_SITE_RELEASED)
+    exempt = safety_display(HrJudgement(HrIdentity.EXEMPT, False), triggered=False, satisfied=False)
+    assert (exempt.safety, exempt.src) == (SAFETY_SAFE, SRC_LOCAL_EXEMPT)
+    mode_all = safety_display(
+        HrJudgement(HrIdentity.HR, True, reason="mode=all 且未核实 ⇒ 恒受管束"), triggered=True, satisfied=False
+    )
+    assert (mode_all.safety, mode_all.src) == (SAFETY_DANGER, SRC_POLICY)
+    gate = safety_display(HrJudgement(HrIdentity.UNKNOWN, True), triggered=True, satisfied=False)
+    assert (gate.safety, gate.src) == (SAFETY_DANGER, SRC_POLICY), "新鲜度闸门也是「管束不来自档位」"
+    loose = safety_display(HrJudgement(HrIdentity.UNKNOWN, False), triggered=False, satisfied=False)
+    assert (loose.safety, loose.src) == (SAFETY_UNKNOWN, SRC_UNVERIFIED)
+
+
+def test_safety_display_local_fallback_when_judged_none():
+    """judged None(站点未接入 / mode=off / 无可查键) => 来源记「本地·兜底」; 从未触发 = 不适用
+
+    此时 triggered/satisfied 就是本地字段逻辑的结论 —— WebUI 呈现口径与打标流程同源。
+    """
+    danger = safety_display(None, triggered=True, satisfied=False)
+    assert (danger.safety, danger.src) == (SAFETY_DANGER, SRC_LOCAL)
+    assert "本地" in danger.text and "未达标" in danger.text
+    safe = safety_display(None, triggered=True, satisfied=True)
+    assert (safe.safety, safe.src) == (SAFETY_SAFE, SRC_LOCAL)
+    assert "已达标" in safe.text
+    none = safety_display(None, triggered=False, satisfied=False)
+    assert (none.safety, none.src, none.text) == (SAFETY_NONE, "", ""), "不适用 = 无色无徽标无短语"
