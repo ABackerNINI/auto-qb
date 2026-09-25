@@ -37,7 +37,7 @@
 - **webui-decoupling** (2) — 计划 [26-09-20-0234](plans/26-09-20-0234-webui-decoupling-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-decoupling.md) `Done`
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 
-## 单件专题 (仅登记, 55 个)
+## 单件专题 (仅登记, 57 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-unified-command-surface · commands-unified-surface
 - commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock · docs-readme-modules-drift · docs-restructure
@@ -48,5 +48,6 @@
 - web-runtime-host-protocol · web-tracker-url-passkey-log · webui-appjs-split · webui-cols-store-version · webui-component-libraries
 - webui-config-health-warning · webui-ctx-menu-multi-select · webui-ctx-submenu · webui-error-reason · webui-ext-hr-logging
 - webui-filter-data-and-color-flicker · webui-fix-plan-round10 · webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11 · webui-fix-round9
-- webui-hot-endpoints-jsonable-encoder · webui-log-level-filter · webui-naming · webui-polish-and-redesign · webui-redesign · webui-speed-refresh-fix
+- webui-hot-endpoints-jsonable-encoder · webui-log-level-filter · webui-naming · webui-page-location-persist · webui-polish-and-redesign
+- webui-redesign · webui-settings-unsaved-changes · webui-speed-refresh-fix
 - webui-view-rebuild

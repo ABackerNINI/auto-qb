@@ -6,7 +6,7 @@
 
 ## 当前基线
 
-**1600 collected: 1599 passed + 1 skipped / Windows** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
+**1601 collected: 1600 passed + 1 skipped / Windows** —— 2026-09-25 **两线合一**: HR 超龄豁免(develop)并入 GBK 修复/搜索分隔符(master)
 (HR 线 **+17 条(1579 → 1596)**: 判定收口超龄豁免 7 条(`test_hr_resolve.py`)+ 取数侧行过滤与翻页早停 8 条
 (`test_hr_service.py`)+ 门面透传 1 条(`test_hr_runtime.py`)+ 配置解析与取值范围 1 条(`test_hr_config.py`);
 新键 `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认不变), 动机与取舍见档案
@@ -20,7 +20,10 @@ views.py 归一口径 `_search_norm`)。两线增量明细见 [baseline-history.
 `26-09-25-0848-webui-dnd-add-torrent`);
 **同日右键次级菜单 +1 守阵**(`test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close`,
 钉住「一级只有一个「更多操作」入口 / 移出父项延迟收起 / hover 图标规则限直接子级且压特异性」——
-1598 → **1599**, 见切片 `26-09-24-2310-webui-ctx-submenu` 与档案 `26-09-24-webui-ctx-submenu`)。
+1598 → **1599**, 见切片 `26-09-24-2310-webui-ctx-submenu` 与档案 `26-09-24-webui-ctx-submenu`);
+**同日 UI 位置持久化 +1 守阵**(`test_web.py::test_frontend_page_location_persisted` —— 顶层 `page` 与设置分区
+`hub.view` 落盘 + 读侧白名单 + **启动补一次 `cfgLoad`** + 分区 key 对 schema 校验, 用户报"设置页刷新会回到种子页" ——
+1599 → **1600**, 见切片 `26-09-25-1655-webui-page-location-persist` 与档案 `26-09-25-webui-page-location-persist`)。
 TOTAL **91%**(10949 语句 / 789 未覆盖 / 3598 分支 / 325 partial —— 并行采样; **HR 包 93%**:
 2790 / 145 / 778 / 92), sidefx 台账并行汇总 / **越界 0**。
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在

@@ -18,6 +18,7 @@
 - test_frontend_col_manual_flag_not_revived: 反向守阵 —— manual 标志位(colManual)不得复活(v5 下 w 非空即固化页)
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
+- test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -1281,6 +1282,55 @@ def test_frontend_cols_empty_hint_names_browser_clear_cause():
     assert "edge://settings/content/all" in body, "提示必须给出可自查的浏览器设置路径(否则用户无从下手)"
     assert "sessionStorage" in body, "缺少 sessionStorage 兜底 ⇒ 清站点数据的环境下每次开浏览器都弹"
     assert "localStorage.setItem(COLS_ORIGIN_HINT_KEY" in body, "普通场景的跨会话去重标记(只弹一次)被删了"
+
+
+def test_frontend_page_location_persisted():
+    """顶层 page 与设置分区必须持久化 —— 刷新后停在原页(2026-09-25 用户报"设置页刷新会回到种子页")
+
+    `page` 原本是**纯内存态**、初值恒 "groups" ⇒ 在设置页按 F5 必掉回辅种页, 编辑位置全丢;
+    设置页里的分区(`hub.view`)同理, 只持久化顶层页会让「设置 → 站点」刷新后落到设置首页。
+    两条都只有真浏览器看得见(pytest 全绿、界面行为退化), 故在此静态钉住四件事:
+    ① 读侧**白名单**(只认 "settings", 不信任存储内容) + 写侧唯一漏斗;
+    ② **启动必须补一次 cfgLoad** —— 设置页的配置树是按需加载的, 只改初值不改启动路径,
+       首屏会停在「配置加载失败 + 重试」(`cfg.schema` 永远为 null);
+    ③ 恢复的分区 key 必须**对 schema 校验** —— 分区会随版本改名/删除, 否则停在空白分区;
+    ④ 恢复走 `hubGo`(懒加载与默认选中项都在那条路径里, 自己重写必漏一半)。
+    """
+    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    m = re.search(r"function initialPage\(\)\s*\{(.*?)\n\}", app, re.S)
+    assert m, "app.js 找不到 initialPage()(改名或挪走了? 同步本守阵)"
+    assert "autoqb.ui.page" in m.group(1), "initialPage 未读 autoqb.ui.page —— 页面位置没有持久化"
+    assert '=== "settings" ? "settings" : "groups"' in m.group(1), (
+        "initialPage 必须白名单式取值(只认 settings, 其余落 groups) —— 直接回填存储内容会把脏值当页名"
+    )
+    assert re.search(r"^\s*page:\s*initialPage\(\),", app, re.M), "data() 的 page 初值未走 initialPage()"
+
+    m = re.search(r"persistUiPage\(\)\s*\{(.*?)\n    \},", app, re.S)
+    assert m, "app.js 找不到 persistUiPage()(改名或挪走了? 同步本守阵)"
+    assert "autoqb.ui.page" in m.group(1), "persistUiPage 未写 autoqb.ui.page"
+    m_watch = re.search(r"^\s*page\(\)\s*\{(.*?)\n    \},", app, re.S | re.M)
+    assert m_watch and "this.persistUiPage()" in m_watch.group(1), ("watch(page) 未调 persistUiPage —— 切页不落盘, 刷新后仍掉回辅种页")
+    m_poll = re.search(r"startPolling\(\)\s*\{(.*?)\n    \},", app, re.S)
+    assert m_poll, "app.js 找不到 startPolling()(改名或挪走了? 同步本守阵)"
+    poll = m_poll.group(1)
+    assert 'this.page === "settings"' in poll and "this.cfgLoad()" in poll, (
+        "startPolling 未在恢复到设置页时补一次 cfgLoad —— 首屏停在「配置加载失败 + 重试」"
+        "(设置页的配置树是按需加载的)"
+    )
+
+    hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    m = re.search(r"function initialHubView\(\)\s*\{(.*?)\n\}", hub, re.S)
+    assert m and "autoqb.ui.hub" in m.group(1), "config_hub.js 的 initialHubView 未读 autoqb.ui.hub"
+    assert re.search(r"^\s*view:\s*initialHubView\(\),", hub, re.M), "hub.view 初值未走 initialHubView()"
+    assert re.search(r'"hub\.view"\(v\)\s*\{', hub), "缺少 hub.view 的 watcher —— 分区切换不落盘"
+    assert 'localStorage.setItem("autoqb.ui.hub"' in hub, "hub.view 的 watcher 未写 autoqb.ui.hub"
+    m = re.search(r"hubRestore\(\)\s*\{(.*?)\n    \},", hub, re.S)
+    assert m, "config_hub.js 找不到 hubRestore()(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "this.cfg.schema" in body and "groups.some" in body, ("hubRestore 未对 schema 校验分区 key —— 分区改名/删除后刷新会停在空白分区")
+    assert "this.hubGo(" in body, "hubRestore 应复用 hubGo(否则漏掉 trackers/rules 选中项与日志/HR 懒加载)"
+    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    assert "this.hubRestore()" in ed, "cfgLoad 成功后未调 hubRestore(schema 到手那一刻才校验得了分区 key)"
 
 
 def test_frontend_statusbar_speed_reads_server_totals():

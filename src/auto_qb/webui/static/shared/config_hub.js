@@ -140,11 +140,23 @@ const HUB_OFF_KEYS = {
   hr_check: ["config", "hr_check", "enabled"],
 };
 
+/* 设置分区初值(持久化用户偏好): 刷新后回到上次看的分区, 而不是设置首页 ——
+ * 只把顶层 page 持久化的话, 在「设置 → 站点」按 F5 会落到设置首页, 位置照样丢一半。
+ * 这里只**取值**; 合法性等 schema 到手后由 hubRestore() 校验(分区 key 由 schema 定义,
+ * 模块加载时读不到, 且升级后可能改名/删除)。 */
+function initialHubView() {
+  try {
+    return localStorage.getItem("autoqb.ui.hub") || "hub";
+  } catch {
+    return "hub";
+  }
+}
+
 window.CONFIG_HUB = {
   data() {
     return {
       hub: {
-        view: "hub",       // "hub" | 分组 key | "__logs"
+        view: initialHubView(),  // "hub" | 分组 key | "__logs"(持久化, 见 initialHubView)
         query: "",         // 首页搜索框
         help: null,        // 浮窗内容 { t, k, tags, what, def, when, risk, rel }
         helpKey: "",       // 当前打开的浮窗对应的字段路径(再点一次 = 关闭)
@@ -153,6 +165,15 @@ window.CONFIG_HUB = {
         focusKey: "",      // 搜索跳转后要高亮的行
       },
     };
+  },
+  watch: {
+    /* 分区切换即用户意图, 落盘后才经得起 F5(与顶层 page 同口径, 见 app.js persistUiPage)。
+     * 写入失败(隐私模式/配额满)只影响刷新后的落点, 不该打断导航 —— 故吞掉异常。 */
+    "hub.view"(v) {
+      try {
+        localStorage.setItem("autoqb.ui.hub", v || "hub");
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回设置首页 */ }
+    },
   },
   computed: {
     /* 首页卡片: 图标 + 标题 + 一句人话描述 + LED 状态 + 读数徽标 */
@@ -307,6 +328,20 @@ window.CONFIG_HUB = {
         const el = document.querySelector(`[data-hb-key="${hit.key}"]`);
         if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
       });
+    },
+    /* 从存储恢复的分区 key 必须**在 schema 里还认得出**才允许采用 —— schema 是模块级常量,
+     * 版本升级后分区可能改名 / 删除, 不校验就会让刷新停在空白分区(且页面上没有任何提示)。
+     * 采用时复用 hubGo: trackers / rules 的默认选中项与日志 / HR 的懒加载都在那条路径里,
+     * 自己重写一遍就会漏掉其中一半。由 cfgLoad 成功后调用(那一刻 schema 才到手)。 */
+    hubRestore() {
+      const v = this.hub.view;
+      if (!v || v === "hub") return;
+      const known = v === "__logs" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
+      if (!known) {
+        this.hub.view = "hub";
+        return;
+      }
+      this.hubGo(v);
     },
     hubKey(path) {
       return Array.isArray(path) ? path.join(".") : String(path);

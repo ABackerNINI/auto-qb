@@ -59,11 +59,15 @@ Get-Date -Format "yy-MM-dd-HHmm"      # PowerShell
 ```bash
 python .agents/skills/create-issue/scripts/new_issue.py <slug> \
   --type docs --title "中文标题" --summary "一句话简述(进索引)" \
-  [--module webui] [--tier light] [--dir memory-bank/issues] [--project 项目名]
+  [--module webui] [--topic 专题] [--tier light] [--dir memory-bank/issues] [--project 项目名]
 ```
 
 - `<slug>`: 小写英文短横线, 建议 `<领域>-<专题>`(只是建议, 分类职责已交给 type)。
 - `--type`: **必填**, 不在 8 类枚举里直接报错。
+- `--topic`: `doc-topic` 跨形态串联主键(默认 = slug)。**多条 issue 属于同一专题时显式指定同一个值**
+  (如 `webui-optimistic-ui` 下挂 3 条), 这样 `_doc-map.md` 的专题视图才把它们串成一条线。
+  不传 = 一题一专题。**该 meta 不可省** —— 缺了该 issue 会从专题视图里静默漏掉
+  (守卫 `tests/test_docs_forms.py::test_issue_topics_present` 判红)。
 - 产出 `<issues dir>/<时间>-<类型>-<slug>.html`, 例 `26-09-19-2359-docs-memory-bank-push-rule-drift.html`。
 - 脚本随后**自动重建 `_index.md`** 并打印路径; 文件已存在则报错退出, 不覆盖。
 - `--dir` 不传时按 `memory-bank/issues` → `issues` → `docs/issues` 探测已存在的那个; 都不存在则要求显式指定。
@@ -127,7 +131,7 @@ python .agents/skills/create-issue/scripts/gen_issues_index.py --check # 只比�
 | issues 目录 | 探测 `memory-bank/issues` → `issues` → `docs/issues` | `--dir <相对仓库根的路径>` |
 | 仓库根 | 向上探测 `.git`(目录或 worktree 的 `.git` 文件) | `--root <路径>` |
 | 项目名 | 模板里不出现项目名 | `--project <名>` 注入封面 kicker |
-| meta 名 | `issue-slug / -stamp / -type / -tier / -status / -title / -summary`(无项目前缀) | 不用改 |
+| meta 名 | `issue-slug / -stamp / -type / -tier / -status / -title / -summary` + `doc-topic`(无项目前缀) | 不用改 |
 | 语言 | 中文模板 | 替换 `assets/*.html` |
 | 类型枚举 | `scripts/_common.py` 的 `TYPES` | 改这一处即可 |
 

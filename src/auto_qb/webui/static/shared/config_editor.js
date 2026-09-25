@@ -149,6 +149,8 @@ window.CONFIG_EDITOR = {
         this.cfgSetTree(conf.tree);
         if (!this.cfg.trackerKey) this.cfg.trackerKey = Object.keys(this.cfgConfig().trackers || {})[0] || null;
         if (!this.cfg.ruleGroupKey) this.cfg.ruleGroupKey = Object.keys(this.cfgRuleGroups())[0] || null;
+        // schema 到手才认得出分区 key: 校验并恢复上次看的分区(刷新保持位置; 见 config_hub.hubRestore)
+        this.hubRestore();
       } catch (e) {
         this.cfg.error = e.message || "配置加载失败";
       } finally {

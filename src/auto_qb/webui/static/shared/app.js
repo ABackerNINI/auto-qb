@@ -338,6 +338,21 @@ function initialViewMode() {
   }
 }
 
+/* 顶层页面初值(持久化用户偏好, 与 initialViewMode 同口径)。
+ *
+ * 为什么要有: `page` 原本是**纯内存态**、初值恒 "groups" ⇒ 在设置页按 F5 必掉回辅种页
+ * (2026-09-25 用户报"设置页刷新会回到种子页"), 编辑到一半的位置全丢。
+ * 白名单式取值: 只认 "settings", 其余(含脏值/被清空)一律落回 "groups" —— 不信任存储内容。
+ * ⚠ 只把初值改成读存储**还不够**: 设置页的配置树是按需加载的, 启动路径必须补一次
+ * cfgLoad(见 startPolling 尾部), 否则首屏停在「配置加载失败 + 重试」。 */
+function initialPage() {
+  try {
+    return localStorage.getItem("autoqb.ui.page") === "settings" ? "settings" : "groups";
+  } catch {
+    return "groups";
+  }
+}
+
 /* 状态优先级**单点表**(数值越小越"该被看到"): "一组/一集种子的聚合状态取哪个"。
  *
  * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态
@@ -373,7 +388,7 @@ const app = createApp({
       // 于是进主界面后首个请求就被自己的守卫判成无凭证 -> 登出回密钥页("必须先输一次才进得去")。
       // 现在守卫一律看 authMode: "local" = 本机免鉴权(直接放行, 且不发空 Bearer), "token" = 密钥流程。
       authMode: "token",
-      page: "groups",
+      page: initialPage(),  // 顶层页面: "groups" | "settings"(持久化, 见 initialPage)
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)
       torrents: [],           // 种子页数据源: 全量种子平铺数组(SEED_ITEM, 与 groups 同门控回传)
@@ -731,6 +746,7 @@ const app = createApp({
   watch: {
     // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)
     page() {
+      this.persistUiPage();  // 位置即用户意图: 落盘后才经得起 F5(见 initialPage)
       this.$nextTick(() => {
         this._syncHeadHeight();
         this.recomputeEffective();
@@ -979,6 +995,12 @@ const app = createApp({
       // 状态栏常显统计(server_state)已随 /api/state.status.server 每轮回传 —— 登录首轮的
       // refresh() 即可填上, 不再需要为"限制速度/连接/剩余"单独补一次 /api/stats(FX-08 旧做法)。
       this.refresh();
+      /* 刷新后停在设置页(page 持久化, 见 initialPage): 配置树是**按需加载**的
+       * (cfgLoad 只在 openSettings / 页内"重试"里调) —— 不在这里补一次, 首屏就停在
+       * 「配置加载失败 + 重试」(cfg.schema 永远为 null)。
+       * 放在 startPolling 里是因为它是两条登录路径(本机免鉴权 / 密钥验证通过)的**唯一汇合点**,
+       * 到这儿鉴权已放行, 这次请求必定带得上凭证。 */
+      if (this.page === "settings" && !this.cfg.schema && !this.cfg.loading) this.cfgLoad();
     },
     stopPolling() {
       if (this.pollTimer) clearTimeout(this.pollTimer);
@@ -1123,6 +1145,15 @@ const app = createApp({
       }
     },
     /* ---------------- 单种子视图交互(R08)与信息栏模式(R09) ---------------- */
+    /* 顶层页面持久化(**唯一写入口**, 与列偏好同纪律): 只落"用户切到哪一页"这个意图,
+     * 不落任何派生值; 读侧白名单在 initialPage()。写入失败(隐私模式/配额满)只影响
+     * 刷新后的落点, 不该打断切页 —— 故吞掉异常。
+     * ⚠ 方法名不能叫 persistPage —— columns.js 已占用该名(列状态漏斗), 同名会互相覆盖。 */
+    persistUiPage() {
+      try {
+        localStorage.setItem("autoqb.ui.page", this.page === "settings" ? "settings" : "groups");
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回落辅种页 */ }
+    },
     /* W4: 顶栏一级导航(分组/种子/追剧)入口 — 复用 viewMode 三态; 从设置页点击时先回到辅种页,
      * 列宽重实体化契约由 watch(page) 与 setViewMode 内的 $nextTick 各自兜底, 路径与既有切页一致 */
     goView(mode) {
