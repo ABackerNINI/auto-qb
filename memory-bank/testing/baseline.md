@@ -6,7 +6,16 @@
 
 ## 当前基线
 
-**1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
+**1621 collected: 1620 passed + 1 skipped / Windows** —— 2026-09-26 **合流轮: 设置页 `[object Object]` 修复 + WEB UI 地址改展示 localhost**
+(远端 docker 部署 / full-checking 首样本竞态两批先合入, 再以 `git rebase` 施回本轮两笔; 基线为**合流后重测**数字)。**+2 条**:
+`test_web.py::test_frontend_hub_field_covers_non_leaf_items` —— 静态钉住 `tpl-hub-field` 必须逐个覆盖
+`cfgFlatten` 产出的**全部非叶子项类型**(类型名单从 `config_editor.js` 实读), 叶子分支必须是链尾 `<div v-else class="hb-row">`;
+`test_utils.py::test_display_host` —— 钉住 `infra.utils.display_host()` 三条口径(回环四种写法折 `localhost` /
+对外地址含 `0.0.0.0` 原样返回 / 非字符串原样返回不炸)。
+合流冲突 3 处(`baseline.md` 取远端版本后按本轮重测改写、`pitfalls/docs/_index.md` 取远端版本后 `kb.index` 重建、
+`lifecycle.py` 手工合并: 「WEB UI 已启动」按 INFO 记的远端改动 + 地址改展示 `localhost` 的本轮改动**都保留**)。
+
+**上一态: 1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
 (档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**:
 test_cli.py `test_main_qb_connect_error_clean_exit`(非托管首连失败 → QbConnectError 干净退出码 1,
 docker 排障契约守阵); test_web.py `test_start_web_server_started_message_is_info` + `test_apply_new_config_levels`
