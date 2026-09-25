@@ -1,15 +1,14 @@
 # 已实现 · 客户端 / 主循环 / 状态 / 内置功能
 
-> 摘要: 摘要: 后端主干与内置功能的落地记录 —— 客户端 / 主循环 / 数据层 / 任务队列 / 托盘 / 通知 / 标签 / HR / 分组。
+> 摘要: 后端主干与内置功能的落地记录 —— 客户端 / 主循环 / 数据层 / 任务队列 / 托盘 / 通知 / 标签 / HR / 分组。
 > 触发: 做过没有, 主循环, 数据层, 任务队列, 托盘, 通知, 标签, HR, 分组, 单实例锁
 
 ## 已实现 (✅, 有单测覆盖)
 - **落盘文件 schema 版本号与逐级升级链 (2026-09-26, 计划 26-09-26-0506)**: state.json / hr/<site>.json / config.yml
-  三类落盘文件统一带 `schema_version`, 框架单点 `infra/versioning.py`(版本表 + 相邻版本迁移表 + detect/migrate)
-  + 新错误根 `SchemaVersionError`。字段缺失 = v1(存量零迁移); 落后沿链迁移, 比程序新 fail-fast(不回退 .bak)。
-  集成: state 双单点过链盖章 + 持锁后物化; hr 旧迁新拒; config 校验前分派 + 键六处同步。
-  测试 +24 条(test_versioning 新建 12); 全量 **1664 passed + 1 skipped / TOTAL 92%**;
-  档案 [tasks/26-09-26-schema-version-chain.md](../tasks/26-09-26-schema-version-chain.md); **未提交**(待用户显式指令)。
+  带 `schema_version`; 单点 `infra/versioning.py`(版本表 + 相邻迁移表 + detect/migrate) + `SchemaVersionError`。
+  缺字段 = v1(零迁移), 落后沿链迁移, 比程序新 fail-fast(不回退 .bak); 集成: state 过链盖章 + 持锁后物化,
+  hr 旧迁新拒, config 校验前分派 + 键六处同步。+24 条(versioning 12); **1664 passed + 1 skipped / 92%**;
+  档案 [26-09-26-schema-version-chain](../tasks/26-09-26-schema-version-chain.md); 已入库。
 
 - **HR 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 计划 v3.4)**: 用户指令钉死「优先级
   在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息(= v3.0 已落码), 最终态

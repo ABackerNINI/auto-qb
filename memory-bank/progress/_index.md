@@ -11,7 +11,7 @@
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
 | [evolution.md](evolution.md) | 从 git log 提炼的演进脉络 —— 用来理解「为什么现在是这样」。 | 演进, 为什么是这样, 历史脉络, 设计由来 |
-| [implemented-core.md](implemented-core.md) | 摘要: 后端主干与内置功能的落地记录 —— 客户端 / 主循环 / 数据层 / 任务队列 / 托盘 / 通知 / 标签 / HR / 分组。 | 做过没有, 主循环, 数据层, 任务队列, 托盘, 通知, 标签, HR, 分组, 单实例锁 |
+| [implemented-core.md](implemented-core.md) | 后端主干与内置功能的落地记录 —— 客户端 / 主循环 / 数据层 / 任务队列 / 托盘 / 通知 / 标签 / HR / 分组。 | 做过没有, 主循环, 数据层, 任务队列, 托盘, 通知, 标签, HR, 分组, 单实例锁 |
 | [implemented-rules.md](implemented-rules.md) | 摘要: 规则引擎、checking 动作、限速(单种 + 全局曲线)、fail-fast 配置校验的落地记录。 | 做过没有, 规则, 条件, 动作, checking, 限速, 配置校验 |
 | [implemented-testing.md](implemented-testing.md) | 摘要: 测试基座与副作用治理的落地记录; 语料回放线见 [roadmap.md](roadmap.md) 的对应小节。 | 做过没有, 测试, 副作用, 守阵, 基线 |
 | [implemented-tooling.md](implemented-tooling.md) | 摘要: 依赖现代化与知识库机制本身的落地记录。 | 做过没有, 依赖, uv, 知识库, 立档, 索引, 瘦身, skill 瘦身, references, 上限 |

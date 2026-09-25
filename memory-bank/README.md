@@ -3,14 +3,14 @@
 > 面向 AI 助手的项目知识库。目标: 让 AI 在不重读全部源码的前提下, 快速建立对项目的准确心智模型, 并安全地修改代码。
 > **若代码与本文冲突, 以代码为准并回写更新本文。**
 > **入口链**: 根 [AGENTS.md](../AGENTS.md)(粗路由) → **本文件**(库内细路由) → 各 `_index.md` → 主题文件。
-> ⚠ **检索纪律: 先索引、后 grep、禁止整读**; 不确定关键词时 `grep -rn "<词>" memory-bank/` 兜底(主题文件头都写了 `触发:` 动作词)。
+> ⚠ **检索纪律: 先索引、后 grep、禁止整读**; 不确定关键词时 `grep -rn "<词>" memory-bank/` 兜底。
 
 ## 库内细路由 (我要做的事 → 读哪份)
 
 | 我要做的事 | 读 |
 |---|---|
 | **改代码前扫陷阱 / 跑 git 命令前** | [pitfalls/_index.md](pitfalls/_index.md) —— 7 类, 按动作选类 |
-| 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 基线单点 [baseline.md](testing/baseline.md) |
+| 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 最新基线 `commands run kb.baseline`; 口径 [baseline.md](testing/baseline.md) |
 | 查配置键 | [config-reference/_index.md](config-reference/_index.md) |
 | 规则 / 条件 / 动作 | [rule-system/_index.md](rule-system/_index.md) |
 | 架构 / 主循环 / 数据层 / 任务队列 / WEB 运行时 | [systemPatterns/_index.md](systemPatterns/_index.md) |
@@ -33,14 +33,14 @@
 - [tasks/_index.md](tasks/_index.md) —— `commands run kb.index` 扫档案 `Status` / `Summary` 生成
 - [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
 - [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) / [_doc-map.md](_doc-map.md) —— `gen_docs_index.py` / `gen_doc_map.py`(专题视图)
-- 新增目录 / 超 cap / 流水触顶的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。
+- 新增目录 / 超 cap 的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。
 
 ## 一分钟速览
 
 - **项目**: `auto-qb` — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具 (标签/分类/HR 管理、辅种分组与缺文件检查、自定义规则引擎、tracker 级限速、全局限速曲线)。
 - **形态**: 单机长驻 Python 程序, 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
 - **核心设计**: 所有工作统一为带 interval 的任务进单一时间优先堆; 增量同步 + `TorrentRecord` 独占种子数据; **主循环单线程, 是唯一改队列与 state_file 的线程**(详见 [systemPatterns/](systemPatterns/_index.md))。
-- **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字单点维护于 [testing/baseline.md](testing/baseline.md), 勿在他处手抄。
+- **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字一条一切片(`commands run kb.baseline`), 勿手抄。
 - **文档**: 根 `README.md` 与 `想法.md` 是上游文档; 本库是代码实况核对版。
 - **制品形态**: 记一件事之前先读 [conventions/doc-forms.md](conventions/doc-forms.md) —— 四工位决策树与协议单点。
 

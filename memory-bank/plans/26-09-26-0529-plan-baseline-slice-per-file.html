@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="baseline-slice-per-file">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-26-0529">
+<meta name="doc-updated" content="26-09-26-0638">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-26-memory-bank-baseline-slice-per-file.md">
+<title>测试基线切片化 · 单文件改每条一档</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0b0d0f; color: #eceff1;
+    font: 15px/1.65 "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  code, .mono, pre {
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  }
+  a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(224,164,88,.45); }
+  .frame { display: flex; max-width: 1460px; margin: 0 auto; }
+  nav.toc {
+    width: 218px; flex: none; padding: 56px 0 80px 28px;
+    position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow: auto;
+  }
+  nav.toc .t { font-size: 11px; letter-spacing: .1em; color: #7d868c; margin: 0 0 12px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; }
+  nav.toc li { margin: 0 0 7px; }
+  nav.toc a { border: 0; color: #9aa4ab; font-size: 13px; display: block; padding: 2px 0; }
+  nav.toc a b { color: #6f7880; font-weight: 400; margin-right: 8px; font-size: 11px; }
+  main { flex: 1; min-width: 0; padding: 56px 44px 96px 52px; }
+
+  .kicker { font-size: 12px; letter-spacing: .1em; color: #e0a458; margin: 0 0 14px; }
+  h1 { font-size: 42px; line-height: 1.12; letter-spacing: -.02em; font-weight: 600; margin: 0 0 18px; }
+  .lede { max-width: 66ch; color: #b9c2c9; font-size: 16px; margin: 0 0 26px; }
+  .lede strong { color: #eceff1; font-weight: 550; }
+  .meta-row { display: flex; gap: 34px; padding: 14px 0 0; border-top: 1px solid rgba(255,255,255,.08); max-width: 760px; }
+  .meta-row div { font-size: 12.5px; color: #7d868c; }
+  .meta-row b { display: block; color: #c6ced4; font-weight: 550; margin-top: 2px; }
+
+  section { margin-top: 84px; }
+  .s-head { display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid rgba(255,255,255,.1); padding-bottom: 12px; margin-bottom: 22px; }
+  .s-no { font-size: 15px; color: #e0a458; letter-spacing: .04em; }
+  h2 { font-size: 23px; font-weight: 600; letter-spacing: -.01em; margin: 0; }
+  h3 { font-size: 15.5px; font-weight: 550; margin: 30px 0 10px; }
+  p { max-width: 68ch; margin: 0 0 14px; color: #c6ced4; }
+  p b, li b { color: #eceff1; font-weight: 550; }
+  ul, ol { max-width: 68ch; margin: 0 0 14px; padding-left: 22px; color: #c6ced4; }
+  li { margin: 0 0 7px; }
+
+  pre {
+    background: #101417; border: 1px solid rgba(255,255,255,.08);
+    padding: 16px 20px; font-size: 12.8px; line-height: 1.62; color: #c6ced4;
+    overflow-x: auto; margin: 0 0 16px; max-width: 860px;
+  }
+  pre .c { color: #6f7880; }
+  pre .hl { color: #e0a458; }
+  table { border-collapse: collapse; width: 100%; max-width: 980px; margin: 0 0 18px; font-size: 13.2px; }
+  th, td { text-align: left; padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+  th { color: #7d868c; font-weight: 550; font-size: 11.5px; letter-spacing: .07em; }
+  td:first-child { white-space: nowrap; }
+  td .mono { font-size: 12.3px; color: #d8dee2; }
+  .verdict { color: #9aa4ab; }
+  .pass { color: #7fbf8e; } .drop { color: #cf7f6f; }
+
+  .aside {
+    border: 1px solid rgba(255,255,255,.08); background: #101417;
+    padding: 14px 18px; max-width: 68ch; font-size: 13.2px; color: #9aa4ab; margin: 0 0 18px;
+  }
+  .aside b { color: #c6ced4; }
+  code { font-size: .92em; background: #15191d; padding: 1px 5px; color: #d8dee2; }
+
+  footer.colophon {
+    margin-top: 96px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08);
+    font-size: 12px; color: #6f7880; max-width: 68ch;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+<nav class="toc">
+  <p class="t">CONTENTS</p>
+  <ol>
+    <li><a href="#s0"><b>00</b>前案否决记录</a></li>
+    <li><a href="#s1"><b>01</b>定案与依据</a></li>
+    <li><a href="#s2"><b>02</b>目标形态</a></li>
+    <li><a href="#s3"><b>03</b>代码面改动</a></li>
+    <li><a href="#s4"><b>04</b>数据面迁移</a></li>
+    <li><a href="#s5"><b>05</b>引用方回写</a></li>
+    <li><a href="#s6"><b>06</b>实施顺序与验证</a></li>
+    <li><a href="#s7"><b>07</b>风险与边界</a></li>
+  </ol>
+</nav>
+<main>
+
+<p class="kicker">PLAN · memory-bank/testing · 26-09-26-0529</p>
+<h1>测试基线切片化：单文件改每条一档</h1>
+<p class="lede">把 <strong>baseline.md 一个文件堆 9 组状态、baseline-history.md 再垫两层流水</strong>的存储，改造成
+<strong>一条基线一个切片文件、脚本列最近 3 条、不设 _index.md</strong> 的多文件形态 —— 改造方法整体照搬
+activeContext 切片的时间戳命名与「文件名即索引」纪律。前案（单文件 + 人手维护窗口 3 组）已被否决，本篇为 v2 定案稿。</p>
+<div class="meta-row">
+  <div>状态<b>Done（已实施，见档案）</b></div>
+  <div>触发<b>用户定案（2026-09-26 会话）</b></div>
+  <div>涉及<b>纯文档 + skill 脚本，src/tests 零改动</b></div>
+  <div>前置自检<b>my-commit-flow.sync PASS @ 2b19f42e</b></div>
+</div>
+
+<section id="s0">
+  <div class="s-head"><span class="s-no">§00</span><h2>前案否决记录</h2></div>
+  <p>v1 计划是「baseline.md 单文件保留、人手只留最近 3 组、挤出的迁 history」。三处不成立：</p>
+  <ol>
+    <li><b>热写点单点没消除</b> —— 全体 clone 收尾仍写 baseline.md 同一段，多 clone 合并撞车面不减反保；</li>
+    <li><b>窗口靠人手维护</b> —— 「保留 3 组」是纪律不是机制，漏迁一次窗口就漂；</li>
+    <li><b>时序藏在文件内部</b> —— 第几组、谁比谁新，靠读正文才知道，脚本与守卫都无法判定。</li>
+  </ol>
+  <p>用户定案改为<b>文件系统承载时序与窗口</b>：时间戳文件名自带顺序，「最近 3 条」由脚本截取，写入方永远只新建自己的文件 —— 撞车面从「同一段」缩到「零」。</p>
+</section>
+
+<section id="s1">
+  <div class="s-head"><span class="s-no">§01</span><h2>定案与依据</h2></div>
+  <p>三条用户定案（2026-09-26）：<b>① 每个文件一条基线；② 由脚本列出最近 3 条；③ 不需要 _index.md。</b>
+  改造方法的母本是 activeContext 目录化 —— 其四条约定与机制文件逐条映射：</p>
+  <table>
+    <tr><th>activeContext 侧（已运行）</th><th>基线侧对应（本计划落地）</th></tr>
+    <tr><td>切片命名 <span class="mono">YY-MM-DD-HHMM-&lt;slug&gt;.md</span>，定宽前缀保证字典序 == 时间序</td><td>同款命名，复用 <span class="mono">_common.py::SLICE_FILE_RE</span>，不新造正则</td></tr>
+    <tr><td>切片三行头元数据（<span class="mono"># 标题 / &gt; 摘要: / &gt; 最后活动:</span>）</td><td>同构三行头，排序键换 <span class="mono">&gt; 基线时间:</span>（缺失回退文件名前缀）</td></tr>
+    <tr><td><span class="mono">gen_active_recent.py</span> 只打印不写文件，「ls 本身就是索引」</td><td><span class="mono">gen_baseline_recent.py</span> 同构，差异是<b>默认截取最近 3 条</b>（见 §02）</td></tr>
+    <tr><td>不设目录索引，防「缓存文件过期比没有更危险」</td><td>同样不设 _index.md，且把「不许补 _index」写进口径段防手贱</td></tr>
+  </table>
+</section>
+
+<section id="s2">
+  <div class="s-head"><span class="s-no">§02</span><h2>目标形态</h2></div>
+<pre>
+memory-bank/testing/
+├── baseline.md            <span class="c">← 转长青入口：口径 + 常驻警告 + 耗时/覆盖率口径，不再存任何数字</span>
+├── <span class="c">baseline-history.md     ← 拆解后删除（条目全部转切片）</span>
+├── attachments/           <span class="c">← 冷库原样不动（仅供深排障，非热写点）</span>
+└── <span class="hl">baselines/              ← 新增：一条基线一个切片</span>
+   ├── <span class="hl">26-09-26-0502-my-commit-flow-merge-first-writeback.md</span>   <span class="c">← 最新 = 当前基线</span>
+   ├── 26-09-26-1700-two-line-merge-retest.md
+   ├── 26-09-26-1700-webui-torrent-meta-edit-single.md
+   ├── <span class="c">…（更旧的切片，仅供排障）</span>
+   └── 26-09-25-0000-hr-v30-source-priority.md
+</pre>
+
+  <h3>切片 anatomy</h3>
+<pre>
+# 1641 collected / 1640 passed + 1 skipped —— 提交流程「先合并远端再收尾」定稿
+&gt; 摘要: 仅 .commands 包脚本与流程文档改动, src/tests 零改动, 数字与上态持平
+&gt; 基线时间: 2026-09-26 05:02        <span class="c">← 排序键, 缺失回退文件名前缀</span>
+&gt; 档案: 26-09-26-my-commit-flow-merge-first-writeback
+
+TOTAL 92% (11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial)
+耗时: 并行 -n4 18.3s(常态) / 56.0s(负载离群), 2 次采样
+增量: +0 条 …(逐条明细照旧体例)
+</pre>
+
+  <h3>窗口语义：为什么这里可以截断而 activeContext 不行</h3>
+  <p><span class="mono">gen_active_recent.py</span> 的设计约束 2 明确「不做取最近 N 条截断」，理由是切片是<b>活的专题</b>（创建早但仍在推进，截断会漏）。基线条目相反：<b>不可变的一次性快照</b>，写完不改，最新一条恒为事实源 —— 截断语义成立，且这正是用户定案。脚本给 <span class="mono">--all</span> / <span class="mono">-n N</span> 供排障全量，默认 3。</p>
+
+  <h3>同日多条的时序回填（迁移期真实工程点）</h3>
+  <p>存量条目多数只有日期没有时分。约定：<b>排序正确性靠切片头「基线时间」字段，不靠文件名</b>；文件名前缀只是回退与人类检索。迁移时从可考来源回填时分 —— 事件对应在办切片的取切片时间戳（如 1641 合流重测 ← <span class="mono">26-09-26-1700-webui-torrent-meta-edit</span>），对应任务档案的取档案时点；不可考的写 <span class="mono">00:00</span> 并在摘要注明「当日序位第 N」。脚本排序 = 基线时间字段为主键、文件名为次级稳定键。</p>
+</section>
+
+<section id="s3">
+  <div class="s-head"><span class="s-no">§03</span><h2>代码面改动（4 个触点）</h2></div>
+  <table>
+    <tr><th>触点</th><th>改动</th></tr>
+    <tr>
+      <td><span class="mono">.agents/skills/memory-bank/<br>scripts/gen_baseline_recent.py</span></td>
+      <td><b>新增</b>，镜像 <span class="mono">gen_active_recent.py</span>（198 行）骨架：UTF-8 stdout 兜底 / <span class="mono">SLICE_FILE_RE</span> 命名校验 / 三行头校验 / cap 检查照抄。差异：默认输出最近 <b>3</b> 条倒序；<span class="mono">--all</span>/<span class="mono">-n N</span> 全量或改条数；<span class="mono">--check</span> 只校验挂闸门；扫描目录 <span class="mono">memory-bank/testing/baselines/</span>。</td>
+    </tr>
+    <tr>
+      <td><span class="mono">.agents/skills/memory-bank/<br>scripts/_common.py</span></td>
+      <td><span class="mono">role_of()</span> 登记 <span class="mono">memory-bank/testing/baselines/</span> 前缀 → 新角色 <span class="mono">baseline-slice</span>；<span class="mono">CAP_POLICY</span> 加该角色 cap <b>4000 字符</b>（存量最长条目约 0.9k，单条本就该短，超了说明把流水又堆回来了）。不加目录级索引要求 —— 无 _index 是特性。</td>
+    </tr>
+    <tr>
+      <td><span class="mono">.commands/kb/config.toml</span></td>
+      <td>加 <span class="mono">[tasks."kb.baseline"]</span>（run 新脚本；when：看测试基线 / 最新数字 / 历史基线排障）；<span class="mono">kb.check</span> 集合同步追加 <span class="mono">--check</span> 一条 —— 「闸门能判红的，这里就得有重建/校验入口」的既有口径。</td>
+    </tr>
+    <tr>
+      <td><span class="mono">tests/test_memory_bank.py</span></td>
+      <td><span class="mono">test_kb_scripts_import_cleanly</span> 的脚本清单加新脚本（5 → 6）；如 caps/角色断言有直抄需同步。跑绿为准。</td>
+    </tr>
+  </table>
+</section>
+
+<section id="s4">
+  <div class="s-head"><span class="s-no">§04</span><h2>数据面迁移（一次性，机械）</h2></div>
+  <p>来源两层：<b>baseline.md</b> 现堆 9 组状态（1641 定稿 / 1641 合流重测 / 1639 / 1638 / 1636 / 1629×2 / 1621 / 1619）；
+  <b>baseline-history.md</b>（37,635 字符 / 336 行）的逐轮条目与「耗时采样归档」聚合条。逐条转切片，一组一文件：</p>
+  <table>
+    <tr><th>存量条目</th><th>切片文件名（slug 定案）</th><th>时分来源</th></tr>
+    <tr><td>1641 · 先合并远端再收尾定稿（当前）</td><td><span class="mono">26-09-26-0502-my-commit-flow-merge-first-writeback.md</span></td><td>档案时点 0502</td></tr>
+    <tr><td>1641 · 两线合流重测（HR v3.4 × webui 编辑）</td><td><span class="mono">26-09-26-1700-two-line-merge-retest.md</span></td><td>合流切片 1700</td></tr>
+    <tr><td>1639 / 1638 · 合并前两线单行态</td><td><span class="mono">…-single-line-webui-meta.md</span> / <span class="mono">…-single-line-hr-v34.md</span></td><td>切片回填 / 0000+序位</td></tr>
+    <tr><td>1636 · 一键导入缺失站点（+7 明细）</td><td><span class="mono">26-09-26-0234-webui-sites-import.md</span></td><td>切片 0234</td></tr>
+    <tr><td>1629×2 / 1621 / 1619</td><td>hr-safety-rework / ext-options-terminal / docker-accept-fix / full-checking-race</td><td>逐条对切片与档案回填</td></tr>
+    <tr><td>baseline-history.md 其余逐轮条目</td><td>按事件 slug 逐条立档</td><td>日期有、时分 0000 + 序位</td></tr>
+    <tr><td>「耗时采样归档」聚合条</td><td><b>按轮拆散</b>，各轮耗时写进该轮切片的耗时字段</td><td>随属主条目</td></tr>
+  </table>
+  <div class="aside"><b>⚠ 链接改写是唯一易错点</b>：切片在 <span class="mono">testing/baselines/</span> 子目录，原 testing/ 层相对链接整体加深一层 ——
+  <span class="mono">../issues/… → ../../issues/…</span>、<span class="mono">../pitfalls/… → ../../pitfalls/…</span>、<span class="mono">../plans/… → ../../plans/…</span>。迁移完用
+  <span class="mono">grep -n "](\.\./" baselines/</span> 清点，两层的都算漏改。</div>
+  <p><b>attachments/ 不动</b>：它是 append-only 流水触顶时的冷库外迁（2026-09-25/26 两次轮转产物），只服务深排障，不是热写点 —— 拆它无收益，按范围守恒保留。</p>
+</section>
+
+<section id="s5">
+  <div class="s-head"><span class="s-no">§05</span><h2>引用方回写（4 处）</h2></div>
+  <ol>
+    <li><b>根 AGENTS.md</b>：命令节「基线数字见 memory-bank/testing/baseline.md 顶部」→「最新基线由 <span class="mono">commands run kb.baseline</span> 列出（默认 3 条；排障 --all）」。⚠ 该文件 8000 字符硬上限，改完跑 <span class="mono">doc.caps</span> 自查。</li>
+    <li><b>memory-bank/README.md</b>：细路由表里指向 baseline.md 的行同步改指 kb.baseline。</li>
+    <li><b>memory-bank SKILL.md</b>：收尾 DoD 第 4 步「跑 test.full 并把实测数字记进 testing/baseline.md」→「新建基线切片文件（baselines/ 下，命名与 anatomy 见 baseline.md 口径段）」。</li>
+    <li><b>pitfalls/ 与其它文档的数字锚点</b>：实施前 <span class="mono">grep -rn "baseline.md" memory-bank/ tests/ .commands/</span> 清点，凡指向具体数字位置的一并改指。</li>
+  </ol>
+  <p><b>baseline.md 转型后的口径段</b>（长青入口，非索引）承载：最新切片 = 单点事实源 / 窗口 3 条由脚本列、旧切片排障 <span class="mono">--all</span> / <b>本目录不设 _index.md，也不许补</b> / 常驻警告四条照迁（47 条包内脚本走 test.pkg、Linux 未重测 1060+2、throttle 假红 issue 链接、双侧重测警告）。</p>
+</section>
+
+<section id="s6">
+  <div class="s-head"><span class="s-no">§06</span><h2>实施顺序与验证</h2></div>
+  <ol>
+    <li><b>机制先行</b>：_common.py 登记 → 新脚本 → kb 包任务 → 守卫测试同步；<span class="mono">gen_baseline_recent.py --check</span> 在空目录上跑出绿（目录不存在的宽容分支照抄 activeRecent 的「尚未目录化不算错」）。</li>
+    <li><b>一次性迁移</b>：§04 映射表逐条立切片 + 链接加深 + 时分回填。</li>
+    <li><b>收口</b>：baseline.md 转型（裁到口径 + 警告 + 耗时覆盖率口径），baseline-history.md 删除，头部迁移说明并成一句话。</li>
+    <li><b>引用方回写</b>：§05 四处。</li>
+    <li><b>验证与收尾</b>：<span class="mono">commands run kb.baseline</span>（应列 3 条、最新为 1641 定稿）→ <span class="mono">kb.check</span> → <span class="mono">kb.index</span> → <span class="mono">commands run test.full</span>（纯文档 + skill 脚本改动，数字应与 1641 基线持平）→ 收尾 DoD 五步；本任务跨多文件达立档阈值，<b>tasks/ 立档时补本计划的 doc-refs 双向认领链</b>（meta 五元已备，现不声明 refs 以免单向认领红）。</li>
+  </ol>
+</section>
+
+<section id="s7">
+  <div class="s-head"><span class="s-no">§07</span><h2>风险与边界</h2></div>
+  <ul>
+    <li><b>gen_docs_index / gen_doc_map 对新子目录的遍历行为未实测</b> —— 第 1 步做完就跑 <span class="mono">kb.check</span> 验证；若把切片扫进 docs 索引或报未知目录，把 <span class="mono">testing/baselines/</span> 登记进对应豁免表（与 activeContext 同待遇）。</li>
+    <li><b>存量子条目的时分回填要对档案核对</b>，回填错只影响同日排序，不影响数字正确性；摘要注明序位兜底。</li>
+    <li><b>cap 4000 可能需要一两次校准</b> —— 以存量最长条目 ~0.9k 计，4 倍余量；真超了说明该把明细下沉档案，不是调 cap。</li>
+    <li><b>范围外不动</b>：attachments/ 冷库、config.yml / auto-qb-data 红线、my-commit-flow 闸门逻辑（已核实其 baseline 引用只在注释文案，不解析结构）、test_rule_engine.py 的无关同名。</li>
+    <li><b>附带收益</b>：全体 clone 收尾从「同写 baseline.md 一段」变「各写各的新文件」，多 clone 合并撞车面归零 —— 这正是 v1 三缺陷的总解。</li>
+  </ul>
+</section>
+
+<footer class="colophon">
+  26-09-26-0529 · plan/baseline-slice-per-file · 状态 Done(2026-09-26 实施, 档案 26-09-26-memory-bank-baseline-slice-per-file) · 前案（单文件窗口 3 组）已否决并入本稿 §00 ·
+  事实基线：baseline.md 12,740 字符 9 组 / baseline-history.md 37,635 字符 / attachments/ 冷库两轮转 / gen_active_recent.py 198 行 · 开工自检 sync PASS @ 2b19f42e
+</footer>
+
+</main>
+</div>
+</body>
+</html>

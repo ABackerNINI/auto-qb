@@ -42,6 +42,6 @@
 
 ### 收尾回写落在陈旧基线上 → 合并时 baseline/切片必撞 (多 clone 最热写点)
 
-- **触发**: 多 clone 并行下收到「提交」, 直接按收尾 DoD 回写 (baseline.md / activeContext 切片 / 各 _index) 再提交 —— 开工时同步过, 但会话期间别的 clone 已推进 develop (2026-09-26 用户点名: "baseline 总是撞")。
+- **触发**: 多 clone 并行下收到「提交」, 直接按收尾 DoD 回写 (基线切片 / activeContext 切片 / 各 _index) 再提交 —— 开工时同步过, 但会话期间别的 clone 已推进 develop (2026-09-26 用户点名: "baseline 总是撞")。
 - **判别**: 回写前 `git ls-remote gitee develop` 对比本地 HEAD (别信 `status -sb` 快照) —— 不齐平就是在陈旧基线上动手; 撞车现场是 push 被拒后已分叉, `apply --3way` 在 baseline.md / 切片上报冲突 (两边都在文件尾追加)。
 - **处置**: 收到「提交」先 `commands run my-commit-flow.sync` 预检 → 落后按「同步路径」合并远端 → **然后**才收尾回写 → `ship.commit` (落后被 `--phase commit` 预检 STOP, 2026-09-26 起废除旧 WARN 放行) → `ship.push`。流程单点: `.commands/my-commit-flow/references/pipeline.md`。

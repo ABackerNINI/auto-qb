@@ -10,8 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [baseline-history.md](baseline-history.md) | 测试基线的**逐次增量流水**(最近在上), 每次增删用例都记一条 —— 用来回答"这个数字是怎么来的"。 | 基线为什么是这个数, 某条用例何时加的, 覆盖率变化, 历史增量 |
-| [baseline.md](baseline.md) | 全库的测试基线数字 (passed / skipped / 覆盖率 / 耗时) **只在本文件维护** —— | 基线, 测试数字, passed, skipped, 覆盖率, 耗时, 改了测试, 记基线, 数字对不上 |
+| [baseline.md](baseline.md) | 测试基线数字**一条基线一个切片**存放在 `baselines/`, 最新一条 = 单点事实源, `commands run kb.baseline` 列最近 3 条; | 基线, 测试数字, passed, skipped, 覆盖率, 耗时, 改了测试, 记基线, 数字对不上 |
 | [browser-env.md](browser-env.md) | 冒烟用哪个浏览器、装在哪、版本怎么对齐、换机器怎么一条命令自检 —— 环境侧的全部事实。 | 浏览器, 冒烟环境, agent-browser, Playwright, chromium, NODE_PATH, 浏览器版本, 换机器自检 |
 | [file-conventions.md](file-conventions.md) | 十条逐条约定 —— 从 docstring 清单、命名、平台固定, 到"不得产生真实系统副作用"与"不得依赖宿主环境能力"。 | 写测试, 加测试文件, 测试命名, 平台相关测试, monkeypatch, 副作用, 环境能力, 测试计划清单 |
 | [guards.md](guards.md) | 全库**机械守阵**的汇总 —— 一条 = 守阵名 + 钉住的结论 + 怎么红验。新增守阵时登记到这里。 | 守阵, 静态守卫, 防回潮, 红验, 钉住, 加守卫, 守卫清单 |

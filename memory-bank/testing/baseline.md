@@ -1,133 +1,40 @@
-# 测试基线 (单点事实源)
+# 测试基线 (口径与警告)
 
-> 摘要: 全库的测试基线数字 (passed / skipped / 覆盖率 / 耗时) **只在本文件维护** ——
-> README / AGENTS.md / progress.md / 各主题文档一律**引用**此处, 更新基线时只改这里。
+> 摘要: 测试基线数字**一条基线一个切片**存放在 `baselines/`, 最新一条 = 单点事实源, `commands run kb.baseline` 列最近 3 条;
+> 本文件只承载记录体例 / 常驻警告 / 耗时与覆盖率口径, **不存任何基线数字**。
 > 触发: 基线, 测试数字, passed, skipped, 覆盖率, 耗时, 改了测试, 记基线, 数字对不上
 
-## 当前基线
+## 口径 (2026-09-26 切片化定案: ①每文件一条基线 ②脚本列最近 3 条 ③不设 _index)
 
-**1665 collected: 1664 passed + 1 skipped / Windows** —— 2026-09-26 **落盘文件 schema 版本号与逐级升级链**
-(计划 `26-09-26-0506-plan-schema-version-chain`; 新增 infra/versioning.py 框架 + state/hr/config 三类集成)。
-TOTAL **92%**(11112 语句 / 783 未覆盖 / 3692 分支 / 331 partial)。**+24 条**: test_versioning.py 新建 12 条
-(detect_version 口径 7 + migrate 链语义 5) / test_rule_engine.py +5(旧格式加载+盖章 / 未来版本 fail-fast 不碰 .bak /
-.bak 回退过链 / 物化方法 / run() 接线守阵) / test_hr_store.py +2(旧迁新拒 commit 物化 / 迁移 INFO 只报一次) /
-test_config.py +2(schema_version 加载与迁移分派 / validate 形状防御) / test_config_writer.py +2(写回与预览盖章) /
-test_exporter.py +1(模板盖章); 另 test_rule_engine 3 处断言跟上「文件带版本章」新行为。
+- **记录新基线 = 新建切片文件**: `baselines/YY-MM-DD-HHMM-<slug>.md`, 三行头
+  `# <数字> —— <事件>` / `> 摘要:` / `> 基线时间: YYYY-MM-DD HH:MM`(排序键, 选填 `> 档案:`),
+  正文放 TOTAL / 耗时 / 增量明细 —— 体例照最新一条切片抄。**切片写完不改**(不可变的一次性快照)。
+- **看基线**: `commands run kb.baseline`(默认最近 3 条, 最新一条恒为当前事实源; 排障 `--all` / `-n N` 看全量)。
+- **无 `_index.md` 是特性, 也不许补** —— 时间戳文件名即索引, 缓存式索引比没有更危险。
+- **其它文档一律引用不手抄**: README / AGENTS.md / progress / 各主题文档只写量级与"见 kb.baseline",
+  数字抄一份多一处漂移。
+- **更早流水**: 2026-09-24 及更早的逐轮条目已一并切片化入 `baselines/`(按 `--all` 查);
+  append-only 时代轮转出去的最老段在 [attachments/baseline-history-archive.md](attachments/baseline-history-archive.md)
+  (冷库, 仅供深排障)。
 
-
-**1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **提交流程「先合并远端, 再收尾回写」定稿**
-(档案 `26-09-26-my-commit-flow-merge-first-writeback`; 仅 .commands 包脚本与流程文档, src/tests 零改动, 数字与下条持平)。
-TOTAL **92%**(11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial —— 实测 330–331 随并行调度抖动, 非代码差异)。
-
-**上一态: 1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR D 档已免罪来源单列 (v3.4) × webui 种子级标签/分类编辑**
-(档案 `26-09-22-backend-partial-hr-verify` v3.4 + `26-09-26-webui-torrent-meta-edit`; 两轮并行开发, 本条为**合并树重测**)。
-
-- **HR v3.4 轮 +2 条**: test_hr_resolve.py +2(`test_judge_record_carries_verified_source` D 档放行记录透传
-  `verified_source=SOURCE_EXEMPT`、两种缺席式放行恒空串 / `test_safety_display_site_exempt_split_from_released`
-  D 档已免罪「在线·已免罪」与缺席证据「在线·已核实，安全放行」分开编码); test_web.py +0 改 2 处
-  (`test_hr_view_fields_three_state` 加 D 档字段级断言块 `hr_safety_src == "site_exempt"` /
-  `test_frontend_hr_safety_wiring` SRC_* 常量数守阵 8→9)。落地面: `hr/resolve.py` 新增
-  `SRC_SITE_EXEMPT` + `HrResolution.released_src` / `HrJudgement.verified_source` 透传 +
-  `safety_display` 分流; 前端 `shared/hr.js` 两张映射表各 +1 键(徽标「在线」/ 来源桶「在线核实」,
-  无新 CSS —— 徽标 class 固定 hr-src)。
-- **种子级标签/分类编辑轮 +3 条**(test_web.py): `test_api_t_bulk_tags_category_enqueue` bulk 标签/分类动作入队
-  (tags 过滤空段非空才透传 / category 按键存在性透传, 空串=清除分类要保留 / 未提供时载荷不带键历史形态不变) /
-  `test_drain_web_commands_bulk_torrents_tags_category` 标签/分类命令执行(单次调用带全部在册 hash /
-  缺 tags 或缺 category 键 error 回执 / 空串分类合法) / `test_frontend_meta_dialog_paired` 标签/分类对话框守阵
-  (双 UI 成对: metaOpen 对话框 + 浮条/批量菜单/单种子菜单三处入口; shared 接线 openMetaDialog 锁定目标 +
-  metaToggleTag 走 bulk 链路; .meta-dialog/.opt-pill 两套 CSS 成对)。落地面: `/api/torrents/bulk` 动作表扩
-  add_tags/remove_tags/set_category(载荷加 tags/category 键) + 前端即时编辑对话框(shared/dialogs.js,
-  .opt-pill 切换胶囊, atlas 首次引入该组件)。
-
-TOTAL **92%**(11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial)。
-
-**上一态: 1639 collected: 1638 passed + 1 skipped / Windows** —— 2026-09-26 **webui 种子级标签/分类编辑**(远端单线, 合并前)。
-**上一态: 1638 collected: 1637 passed + 1 skipped / Windows** —— 2026-09-26 **HR D 档已免罪来源单列 (v3.4 缺口落地)**(本 clone 单线, 合并前)。
-
-**上一态: 1636 collected: 1635 passed + 1 skipped / Windows** —— 2026-09-26 **webui 一键导入缺失站点**
-(档案 `26-09-26-webui-sites-import`; 数字为**再合流远端 9 笔[HR 未达标红档/扩展选项页终态/webui 修复/docker 验收]后的合并树重测**)。
-**+7 条**: test_web.py +6(后端 5:
-`test_sites_missing_scans_and_builds_defaults` 缺失域名生成默认条目且已配置域名不重复 /
-`test_sites_missing_name_conflict_suffix` 站点名冲突 `_N` 后缀 / `test_sites_missing_all_covered_returns_empty`
-全覆盖空返回 / `test_sites_missing_requires_connected_client` 断连 503 / `test_sites_missing_api_failure_maps_502`
-扫描失败 502 带原因; 前端接线 1: `test_frontend_sites_import_wiring`); test_exporter.py +1
-(`test_gen_tracker_name` 新提取的站点名生成单测); 金清单 `_GOLDEN_ROUTES` +1
-(`GET /api/sites/missing`, 合并树 62 条)。落地面: `core/exporter.py` 提取 `gen_tracker_name`
-(export_yaml_template 改调, 行为不变) + 新路由模块 `webui/server/routes/sites.py` + 前端
-`config_hub.js::hubImportSites()` 与两套 UI「⤓ 导入缺失站点」按钮。
-TOTAL **92%**(10993 语句 / 787 未覆盖 / 3642 分支 / 328 partial)。
-
-**上一态: 1629 collected: 1628 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR 未达标红档语义修正轮 × 扩展选项页终态**
-(档案 `26-09-25-webui-hr-safety-display` 修正1–3 + `26-09-22-backend-partial-hr-verify` v3.3; 两轮并行开发, 本条为**合流树重测**)。
-
-- **HR 红档轮 +0 条, 改 4 处断言/守阵**: test_hr_resolve C 档断言改 `SAFETY_FAILED`(「考核未通过」终态独立红档);
-  test_web 接线守阵安全档位键集扩四档(danger/failed/safe/unknown)、CSS 成对清单加 `.m-pair.hr-fail`、
-  考察中短语断言去「义务未了」。⚠ 合流时修入树缺陷: 远端 `hr/server.py` 的 `sites_fn` 注解用了 `List`
-  但 typing 导入行没有 → 全库 import 级 NameError(89 errors), 合并解决里补 `List` 修复。
-- **扩展选项页轮 +1 条**: `test_extension_proxy.py::test_background_events_ring_dual_write`(后台/日志同源
-  双写事件环契约) + 三档接线守阵改写 `test_options_swiss_wiring`; 落地面 background.js 事件环 +
-  选项页按样张 A 重写, 新增制品 [plans/26-09-26-0031-plan-hr-ext-options-style.html](../plans/26-09-26-0031-plan-hr-ext-options-style.html)。
-- **mockup 轮踩坑**: 新建 plans/ 制品缺五元 meta + 父计划未反链 → 文档守阵红(补齐即绿; 认领链同因)。
-
-TOTAL **92%**(11064 语句 / 787 未覆盖 / 3640 分支 / 329 partial); dev.fmt 已跑。
-
-**上一态: 1629 collected: 1628 passed + 1 skipped / Windows** —— 2026-09-26 **HR 扩展选项页终态实施: 风格 A 瑞士网格 + 两表 + 日志收起**
-(档案 `26-09-22-backend-partial-hr-verify` v3.3; 数字为**合流远端 `700a11b` 五笔[webui 修复/docker 验收]后重测**)。
-本轮 **+1 条**: `test_extension_proxy.py::test_background_events_ring_dual_write` —— 真跑 background.js 六类场景
-(页面成功×2 / HTTP 失败 / .torrent 成功 / 登录页 / 配额让位), 钉死后台与日志**同源双写**的结构化事件环契约
-(tag 分类 ok/quota/login/error + host/kind/ms/bytes); 另把三档接线守阵改写为 `test_options_swiss_wiring`
-(单一风格定案 + 三档共存机制不得回潮)。落地面: `background.js` 事件环(EVENT_CAP=50, 防抖整份写回,
-五个事件点) + 选项页按样张 A 重写(①连接 ②站点权限 ③站点现状表 ④取数明细表 + 折叠区[日志/硬上限/高级 JSON]);
-表内阈值从 `SITE_CAPS` 取不写死。**新增制品** [plans/26-09-26-0031-plan-hr-ext-options-style.html](../plans/26-09-26-0031-plan-hr-ext-options-style.html)
-(三套风格选型, 用户选定 A)。
-
-**上一态: 1621 collected: 1620 passed + 1 skipped / Windows** —— 2026-09-26 **合流轮: 设置页 `[object Object]` 修复 + WEB UI 地址改展示 localhost**
-(远端 docker 部署 / full-checking 首样本竞态两批先合入, 再以 `git rebase` 施回本轮两笔; 基线为**合流后重测**数字)。**+2 条**:
-hub 字段覆盖守阵(`tpl-hub-field` 逐个覆盖 `cfgFlatten` 全部非叶子项类型) + `display_host` 三条口径
-(回环折 `localhost` / 含 `0.0.0.0` 原样返回 / 非字符串不炸)。合流冲突 3 处(baseline / pitfalls/docs/_index / lifecycle 手工合并)。
-
-**上一态: 1619 collected: 1618 passed + 1 skipped / Windows** —— 2026-09-26 **Docker 真机验收修复轮**
-(档案 `26-09-25-deps-docker-deploy`)。**+2 条, 改 2 条**: 首连失败退出码契约(test_cli/test_qbmanager/test_ui)
-+ 「WEB UI 已启动 / 配置热重载完成」按 INFO 记的日志断言(⚠ 抓日志挂目标 logger, caplog 挂 root 会被
-setup_logging 清空)。
-
-> **2026-09-25 及更早的逐轮状态**(示例配置守阵 / HR 扩展配置简化 / full-checking 首样本竞态 /
-> 展开态跨视图记忆 / HR 删除安全档位落地 / HR v3.0 档位即结论 / 两线合一 + DND 拖拽·右键次级菜单·
-> UI 位置持久化)已迁出 → [baseline-history.md](baseline-history.md)。
+## 常驻警告 (看数字前先读)
 
 ⚠ 另有 **47 条**包内脚本测试(`.commands/my-commit-flow/scripts/test_preflight.py`)—— 它们在
 `testpaths(tests/)` **之外**, 走 `commands run test.pkg`, 已挂进提交闸门(`match = [".commands/", ".agents/skills/commands/"]`)。
 Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 
-### 耗时(❗必须带区间)
+⚠ throttle 守阵(`test_run_loop_throttles_without_stop_event`)文件级/全量跑偶发假红(Windows sleep(50ms) 精度 46ms < 0.05 下限, 容差无余量), 单跑恒绿 —— 已入池 [issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html](../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html), 稳态数字取自 deselect 该用例的全量。
 
-**当前(2026-09-26 一键导入合流树)** —— 带覆盖率(即默认 `addopts`):
-- **并行 `-n 4`(默认)**: **18.3 / 56.0s**(2 次采样, 全部 test.full; 56.0s 为同机其它 clone 并行工作时的负载离群, 18.3 为常态)
+> ⚠ **只测一侧就更新会立刻产生漂移** —— 改了基线就把 Windows 与 Linux 两侧**都重测**再落数字。
+> 两侧**收集数相同**但 passed 可能不同(Windows 专属用例在 Linux 上 skip), 比较时别拿 passed 直接比。
 
-**上一态(2026-09-26 HR v3.3 扩展终态)**: 并行 17.1 / 18.1s(2 次采样, 全部 test.full)。
-
-**上一态(2026-09-25 HR v3.0 达标来源优先级)**: 并行 18.6 / 18.1s(2 次采样, 全部 test.full)。
-
-**更早(2026-09-25 两线合一)**: 并行 20.5 / 18.8s(2 次采样, 全部 test.full, 合并态)。
-
-**更早(2026-09-25 HR 超龄豁免)**: 并行 19.9 / 36.8s(2 次采样; 后者为同机其它 clone 并行工作时的负载离群, 前者为常态)。
-
-**更早(2026-09-25 搜索分隔符归一)**: 并行 17.0 / 17.9s(热采 2 次; 另有首跑冷缓存 37.6s 不计入, 全部 test.full)。
-
-**更早(2026-09-25 GBK 回退修复)**: 并行 14.3 / 20.9 / 21.2s(3 次采样, 全部 test.full)。
-
-**更早(2026-09-25 扩展运行日志)**: 并行 17.6 / 19.8 / 19.9 / 20.5s(test.quick ×1 + test.full ×3)。
-
-**更早(2026-09-25 禁令解除回写 → 2026-09-24 告警分档各轮)**: 并行 14.3–21.7s 区间多次采样; 扩展守阵真跑 node 比 M1 末态高约 5s(预期环境成本); M2 关停白等扩展回传的 10s 级浪费为**真缺陷**已修(「先叫停队列再 join」+ 守阵 `test_stop_is_prompt_while_waiting_for_extension`)。逐次采样数字见 [baseline-history.md](baseline-history.md)「耗时采样归档」条。
-
-> **本文件是这组数字的唯一枚举处** —— 其它文档只写量级与"见 baseline.md", 别再抄一遍(抄一份多一处漂移)。
-> 上面的列表是**采样快照**, 不必随每次跑更新; 要更新的只是"范围 / 中位"这层结论。
+## 耗时与覆盖率口径 (❗报耗时必须带区间)
 
 - **单次数字没有意义** —— 报耗时必须带区间; 旧记录的"139.07s"同样是**单次采样**, 不宜再当基准。
-- **覆盖率口径**: **当前**并行 `10853 语句 / 789 未覆盖 / 3598 分支 / 326 partial`, TOTAL **91%**(HR 包 93%)。
-  下面这组"并行 vs 串行"的对照取自 2026-09-23 采样(结论不变, 数字不再逐轮重采):
-  并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`, TOTAL 都是 **91%**
-  ⇒ 换默认并行后**分支 partial 多 1**(语句数一致)。
+  每轮的采样快照随该轮切片存档(见 `baselines/` 各条的"耗时"行), 不必随每次跑更新; 要更新的是"范围 / 中位"这层结论。
+- **覆盖率口径**(方法示例, 数字为 2026-09-23 采样): 并行 `10853 语句 / 789 未覆盖 / 3598 分支 / 326 partial`,
+  TOTAL **91%**(HR 包 93%); "并行 vs 串行"对照: 并行 `7729 语句 / 623 未覆盖 / **219** 分支` vs 串行 `623 / **218**`,
+  TOTAL 都是 **91%** ⇒ 换默认并行后**分支 partial 多 1**(语句数一致; 结论不变, 数字不再逐轮重采)。
 - **成因(单点: [../pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md))**: 本机每次文件操作
   曾收一笔**固定开销**(初始 写 20ms / 删 43ms, 三盘一致、与数据量无关; 一次全量建 577 个临时目录 ⇒ 约 26s)。
   **已由系统层排除项治好** —— 现 `mkdir` 0.13ms / 写 0.21ms / `remove` 0.16ms / `rmdir` 0.14ms(全部 <1ms)。
@@ -135,12 +42,3 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
 - **并行**: 已是**默认**(`pytest.ini` 的 `addopts = -n 4`, dev 依赖 `pytest-xdist==3.8.0`);
   单文件排查用 `-n 0`。台账回传与覆盖率差异见
   [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
-
-⚠ throttle 守阵(`test_run_loop_throttles_without_stop_event`)文件级/全量跑偶发假红(Windows sleep(50ms) 精度 46ms < 0.05 下限, 容差无余量), 单跑恒绿 —— 已入池 [issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html](../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html), 稳态数字取自 deselect 该用例的全量。
-
-> ⚠ **只测一侧就更新会立刻产生漂移** —— 改了基线就把 Windows 与 Linux 两侧**都重测**再落数字。
-> 两侧**收集数相同**但 passed 可能不同(Windows 专属用例在 Linux 上 skip), 比较时别拿 passed 直接比。
-
-## 变更流水
-
-逐次增量的完整流水(最近在上)已外迁 → [baseline-history.md](baseline-history.md)。

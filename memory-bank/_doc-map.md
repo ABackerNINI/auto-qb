@@ -7,7 +7,7 @@
 > [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) ·
 > [issues/_index.md](issues/_index.md) · [tasks/_index.md](tasks/_index.md)。
 
-## 跨形态专题 (≥2 件) —— 30 个
+## 跨形态专题 (≥2 件) —— 31 个
 
 - **webui-optimistic-ui** (8) — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) `Done` · issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) `Done` · issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) `Done` · issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) `Done` · 计划 [26-09-19-2245](plans/26-09-19-2245-webui-optimistic-settle-plan.html) `Done` · 计划 [26-09-20-2139](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) `Done` · 报告 [26-09-20-1806](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) `Done` · 报告 [26-09-20-2131](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) `Done`
 - **backend-state-persistence** (5) — issue [26-09-21-1347](issues/26-09-21-1347-bug-backend-hot-reload-l2-state-rollback.html) `Done` · issue [26-09-21-1347](issues/26-09-21-1347-bug-backend-state-save-only-on-exit.html) `Done` · issue [26-09-21-1347](issues/26-09-21-1347-bug-web-token-non-atomic-write.html) `Open` · 计划 [26-09-22-1912](plans/26-09-22-1912-backend-state-periodic-flush-plan.html) `Done` · 报告 [26-09-21-1329](reports/26-09-21-1329-backend-crash-safety-report.html) `Done`
@@ -26,6 +26,7 @@
 - **backend-file-split** (2) — 计划 [26-09-15-1124](plans/26-09-15-1124-backend-file-split-plan.html) `Done` · 档案 [26-09-15](tasks/26-09-15-backend-file-split.md) `Done`
 - **backend-schema-version-chain** (2) — 计划 [26-09-26-0506](plans/26-09-26-0506-plan-schema-version-chain.html) `Done` · 档案 [26-09-26](tasks/26-09-26-schema-version-chain.md) `Done`
 - **backend-torrentrecord-fields** (2) — 计划 [26-09-15-1302](plans/26-09-15-1302-record-full-fields-plan.html) `Done` · 档案 [26-09-15](tasks/26-09-15-backend-torrentrecord-fields.md) `Done`
+- **baseline-slice-per-file** (2) — 计划 [26-09-26-0529](plans/26-09-26-0529-plan-baseline-slice-per-file.html) `Done` · 档案 [26-09-26](tasks/26-09-26-memory-bank-baseline-slice-per-file.md) `Done`
 - **deps-env-modernization** (2) — 报告 [26-09-15-1150](reports/26-09-15-1150-report-dependency-lock.html) `Done` · 档案 [26-09-15](tasks/26-09-15-deps-env-modernization.md) `Done`
 - **docker-deploy** (2) — 计划 [26-09-25-2241](plans/26-09-25-2241-plan-docker-deploy.html) `In Progress` · 档案 [26-09-25](tasks/26-09-25-deps-docker-deploy.md) `In Progress`
 - **memory-bank-activecontext-conflict** (2) — 计划 [26-09-22-2350](plans/26-09-22-2350-activecontext-conflict-plan.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-memory-bank-activecontext-conflict.md) `In Progress`
