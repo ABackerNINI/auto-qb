@@ -6,7 +6,16 @@
 
 ## 当前基线
 
-**1607 collected: 1606 passed + 1 skipped / Windows** —— 2026-09-25 **HR 删除安全档位 WEB UI 呈现落地**
+**1608 collected: 1607 passed + 1 skipped / Windows** —— 2026-09-25 **WEB UI 展开态跨视图记忆**
+(切片 `26-09-25-1835-webui-expand-state-across-views`)。**+1 条**:
+`test_web.py::test_frontend_expand_state_survives_view_switch` —— 静态钉住"切视图不得置空展开态"
+(禁 `setViewMode` 里回潮 `expandedKey/expandedShows/expandedShowEp = null`)+ 还回前必须验那一行还在
+(`this.groups.some`)+ `groupWin` 退避判据必须带"展开的组确实在可见集合里"。
+真浏览器冒烟同轮 **102 项 0 失败**(双 UI), 含 4 条真点击断言, 且**红绿双验**过。
+另: 同轮把主线 `441ffe4` 遗留的 `pitfalls/testing/tmpdir.md` 超 cap(工作区口径 6,042 > 6,000, 超 42)
+压回 **5,980**, 并修掉该文件一处被转义吃掉的控制字符乱码 —— 否则闸门必红。
+
+**上一态: 1607 collected: 1606 passed + 1 skipped** —— 2026-09-25 **HR 删除安全档位 WEB UI 呈现落地**
 (计划 [26-09-25-1823-plan-webui-hr-safety-display](../plans/26-09-25-1823-plan-webui-hr-safety-display.html),
 档案 `26-09-25-webui-hr-safety-display`)。**+4 条**: `test_hr_resolve.py` safety_display 三档位派生 3 条
 (站点档位即结论 A/C 不能删·B 可删且来源记「在线」/ 身份层放行·超龄豁免恒可删与 mode=all·新鲜度闸门落

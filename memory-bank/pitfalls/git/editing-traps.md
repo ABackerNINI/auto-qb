@@ -1,7 +1,7 @@
 # 编辑与工具陷阱 (git / 文本)
 
 > 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。
-> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号
+> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
@@ -73,6 +73,11 @@
 - **判别**: 写 `\n` 进文件, 落盘可能变成 `/n` 或 `//n`, 生成物里就出现**字面量** `\n`(本工具环境实测)。
 - **处置**: **规避: 多行内容用三引号 + 真实换行**(`f"""..."""`), 完全不用转义序列;
   或用编辑工具逐行改, **别走 heredoc**。
+- **同族(2026-09-25 实测, 更隐蔽)**: 把 **Windows 路径**写进 Python 字符串字面量 ⇒ `\a` / `\t` / `\n`
+  被当转义**吃掉**, 落盘成**控制字符**。现场: `tmpdir.md` 里的
+  `R:\Temp\auto-qb\tests` 变成 `R:` + BEL(0x07) + `uto-qb` + TAB(0x09) + `ests` ——
+  **肉眼看着像对的**(控制字符在编辑器里几乎不可见), `grep` 也命中, 只有 `repr()` 才露馅;
+  且 cap 计数会**少算**这几行。⇒ 写路径一律用**正斜杠**; 怀疑某行被吃字符时先 `repr(行)` 看一眼。
 
 - **触发**: 一条消息里对同一文件发多个 Edit。
 - **判别**: 工具逐个报成功, 实际**只有一部分落盘**。

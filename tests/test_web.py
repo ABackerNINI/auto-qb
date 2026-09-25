@@ -19,6 +19,7 @@
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
+- test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -1418,6 +1419,44 @@ def test_frontend_page_location_persisted():
     assert "this.hubGo(" in body, "hubRestore 应复用 hubGo(否则漏掉 trackers/rules 选中项与日志/HR 懒加载)"
     ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     assert "this.hubRestore()" in ed, "cfgLoad 成功后未调 hubRestore(schema 到手那一刻才校验得了分区 key)"
+
+
+def test_frontend_expand_state_survives_view_switch():
+    """展开态必须跨视图带走 —— 切走收进桶、切回还回去(2026-09-25 用户报「辅种页切到种子页再切回, 展开的组收起来了」)
+
+    现象与定性:
+    旧 `setViewMode` 里三行 `expandedKey / expandedShows / expandedShowEp = null`, 展开态**随切页丢掉**。
+    展开态是"我正盯着这一组"这种临时意图, 跟"停在哪个视图"一样该跟着人走 —— 切到种子页再切回来,
+    应该还是原来展开的那一组(不是"重新点开一次")。
+    改法是**按视图分桶暂存**(`expandMemo`): 切走收进桶并清空实时字段(展开态仍不串台到别的视图),
+    切回还回该视图最后一次的展开。
+
+    两条反向约束(少一条就会把修好的东西又弄坏):
+    ① **还回前必须验"那一行还在"** —— 组可能已被删或被筛掉;
+    ② `groupWin` 的退避判据必须同步成"**当前真的有面板**" —— 只判 `expandedKey` 非空的话,
+       一个过期的键会让行窗口永久退避(大库上 = 悄悄关掉 P1-2 优化, 界面看着完全正常, 只是滚动变卡)。
+    """
+    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    m = re.search(r"setViewMode\(mode\)\s*\{(.*?)\n    \},", app, re.S)
+    assert m, "app.js 找不到 setViewMode(mode)(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "this.stashExpandState()" in body, "setViewMode 未 stash 展开态 —— 切页即丢, 切回不还原"
+    assert "this.restoreExpandState(mode)" in body, "setViewMode 未 restore 展开态 —— 切回分组页展开的组收起来了"
+    dropped = re.findall(r"this\.expanded(?:Key|Shows|ShowEp)\s*=", body)
+    assert not dropped, (f"setViewMode 里仍有 {len(dropped)} 处置空展开态的赋值 —— 展开态会随切页丢掉(应走 stash/restore)")
+
+    m = re.search(r"restoreExpandState\(mode\)\s*\{(.*?)\n    \},", app, re.S)
+    assert m, "app.js 找不到 restoreExpandState(mode)(改名或挪走了? 同步本守阵)"
+    restore = m.group(1)
+    assert "this.groups.some(" in restore, ("restoreExpandState 未验展开的组是否还在 —— 组已被删/被筛掉时留下悬空 expandedKey")
+    assert "this.expandedKey = key" in restore, "restoreExpandState 未把分组展开键还回 expandedKey"
+
+    cols = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    m = re.search(r"groupWin\(\)\s*\{(.*?)\n    \},", cols, re.S)
+    assert m, "columns.js 找不到 groupWin()(改名或挪走了? 同步本守阵)"
+    win = m.group(1)
+    assert "if (this.expandedKey) return" not in win, ("groupWin 仍只按 expandedKey 非空退避 —— 过期的键会让行窗口永久退化成全量渲染")
+    assert "this.expandedKey" in win and ".some(" in win, ("groupWin 的退避判据必须带上'展开的组确实在可见集合里'这一条")
 
 
 def test_frontend_statusbar_speed_reads_server_totals():

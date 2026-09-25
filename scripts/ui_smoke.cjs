@@ -225,6 +225,44 @@ async function smokeUi(browser, ui) {
   add(ui, "分组视图渲染", groupRows > 0, `${groupRows} 行`);
   await page.screenshot({ path: path.join(SHOTS, `${ui}-1-groups.png`) });
 
+  /*
+   * 展开态跨视图记忆(2026-09-25 用户报「辅种页切到种子页再切回, 展开的组收起来了」):
+   * 展开 = "我正盯着这一组"这种临时意图, 切走再切回必须还是那一组。三层断言缺一层都会放过一档:
+   * ①切走后实时字段清空(展开态**不串台**到种子视图 —— 修法是分桶暂存, 不是把字段留在原处不管);
+   * ②切回后 `expandedKey` 还原成**同一个组 key**(不是"随便展开了一个");
+   * ③DOM 里 `.detail` 真渲染出来(只判字段会放过"值还原了、面板没画"这一档)。
+   * 走**真实点击**(onGroupClick -> toggleExpand)而不是直接改 vm 字段 —— 值对而面板没画正是要抓的形态。
+   */
+  {
+    const navX = await page.$$("nav.tabs button");
+    const gRow = await page.$('.group-row[data-table="group"]');
+    const gKey = gRow ? await gRow.evaluate((n) => n.getAttribute("data-key")) : null;
+    add(ui, "展开态跨视图: 取到组行", !!gKey, `key=${gKey}`);
+    if (gRow && gKey) {
+      // force:true —— 页面每 2s 整表重渲染会抢走点击(见本文件「页面每 2s 整表重渲染」条);
+      // click 失败不让整轮崩, 让下面那条断言如实报 FAIL(值没展开), 而不是抛异常中断后面 90 项。
+      await gRow.click({ force: true }).catch(() => {});
+      await page.waitForSelector(".detail", { timeout: 5000 }).catch(() => null);
+      const opened = await readInst(page, "vm.expandedKey");
+      add(ui, "展开分组: 明细面板出现", opened === gKey, `expandedKey=${opened} / 行 key=${gKey}`);
+      if (navX.length >= 3) {
+        await navX[1].click();   // 切种子页
+        await page.waitForTimeout(400);
+        const away = await readInst(page, "vm.expandedKey");
+        add(ui, "切到种子视图: 展开态不串台(实时字段清空)", away === null, `expandedKey=${away}`);
+        await navX[0].click();   // 切回辅种页
+        await page.waitForTimeout(700);
+        const back = await readInst(page, "vm.expandedKey");
+        const detailN = await page.$$eval(".detail", (n) => n.length);
+        add(ui, "切回辅种视图: 展开的组还在(跨视图记忆)",
+          back === gKey && detailN > 0, `expandedKey=${back} / .detail ${detailN} 个`);
+      }
+      // 收起还原现场(后面的断言按收起态的行集合写); 用真实方法 toggleExpand 而不是直接赋 null
+      await page.evaluate(`(() => { const vm = ${INST}; if (vm.expandedKey) vm.toggleExpand(vm.expandedKey, null); })()`);
+      await page.waitForTimeout(200);
+    }
+  }
+
   // 三视图切换(P1-1: 只回传当前视图数组 ⇒ 切过去必须仍有数据, 不能被上一轮抹空)
   const nav = await page.$$("nav.tabs button");
   if (nav.length >= 3) {
