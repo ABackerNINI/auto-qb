@@ -64,6 +64,7 @@ config:
         skip_local_verify: false  # 本机(127.0.0.1)访问跳过密钥鉴权直接进入; 对外暴露仍强制
 
     # 主动通知: WARNING 及以上日志推送系统原生通知(默认关闭)
+    # ❗容器部署无效: 无桌面会话, 且 slim 镜像没有 notify-send —— send() 只返回 False, 静默无通知
     notify:
         enabled: true              # 启用主动通知
         min_level: WARNING         # 通知最低日志级别: INFO / WARNING / ERROR
@@ -85,7 +86,9 @@ config:
     # 种子分组管理(辅种管理)
     grouping:
         enabled: true             # 启用种子分组
-        check_missing_files: true # 启用缺文件检查
+        check_missing_files: true # 启用缺文件检查(❗容器部署必须设为 false: 程序读 qB 报回的宿主保存路径,
+                                  #   容器里看不到那块盘 ⇒ 恒判定"文件缺失" ⇒ 误暂停整组并打 MISSING 标签。
+                                  #   详见 docs/deployment.md §11.3)
         missing_tag: MISSING      # 文件丢失时整组添加的标签
 
     # 全局自动彻底删除标签
@@ -502,6 +505,7 @@ config:
   - `filelist`：分组已保证文件列表与大小一致，候选直接作为参考（最宽松）
   - `piecehashes`：额外对比双方每个数据块的 hash 列表完全相同（不读取实际文件）；直接转种有效，重新制作且块大小不同的种子无效（较严格）
   - `custom`：运行外部程序判定（参数 `<候选hash> <保存路径>`，返回码 0 即视为参考，需配 `custom_basic_check_program_path`）
+    - ❗**容器部署不可用**：该程序不在镜像里，`FileNotFoundError` 被吞掉后每个候选都判为「非参考」并刷一条 WARNING。容器内请改用 `filelist` / `piecehashes`（同组文件一致性由分组保证，与能否读到磁盘无关）
   - 此外，历史上全量校验通过的种子会记入内存参考集，同样可作参考（程序重启后重新积累）
 - 确定参考后按段执行（`with_reference` / `without_reference` 两段均可独立 `enabled: false` 关闭）：
   - **有参考种子**：`full-checking` 为 qB 自带全量哈希校验 __<font color="green">安全</font>__；`skip-checking` 跳检 __<font color="orange">风险相对可控</font>__
