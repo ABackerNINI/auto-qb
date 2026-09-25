@@ -12,12 +12,11 @@
   (`is_temp_path` / `policy_allows_known_effects` / `recorder_installed_and_records` /
   `rmtree_dir_fd_entries_not_flagged`)+ 1 条 ERROR, **看着像真失败, 实为临时目录搬家的假红**。
 - **处置**: 正确姿势 `uv run pytest tests -q --no-cov --basetemp "H:/Temp/<新目录>"` → 与基线一致。
-- **复发**: 2 —— 2026-09-23 复踩: 用 `--basetemp=R:/Temp/auto-qb/pa_bt`(在 TMPDIR
-  `R:/Temp/auto-qb/tests` **之外**)跑全量, 又是 4 failed + 1 error, 与 2026-09-22 同形。
-  **为什么没命中: 路由到了但文件没读** —— 本轮读过 [../../testing/run.md](../../testing/run.md),
-  该文件末行明确指向本文件, 但没顺着点开就自己开测, 于是把已记的坑当"新发现"重新踩了一遍。
-  同日复核补充: 只要 basetemp 落在 `tempfile.gettempdir()` **之内**就不假红 ——
-  `--basetemp=R:/Temp/auto-qb/tests/bt` 实测越界 **0** 条、守卫全绿。
+- **复发**: 2 —— 2026-09-23 复踩: `--basetemp=R:/Temp/auto-qb/pa_bt`(在 TMPDIR `R:/Temp/auto-qb/tests`
+  **之外**)跑全量, 又是 4 failed + 1 error, 同形。**为什么没命中: 路由到了但文件没读** ——
+  [../../testing/run.md](../../testing/run.md) 末行明确指向本文件, 没顺着点开就自己开测,
+  把已记的坑当"新发现"重踩。同日复核: basetemp 落在 `tempfile.gettempdir()` **之内**即不假红
+  (`--basetemp=R:/Temp/auto-qb/tests/bt` 实测越界 0 条、守卫全绿)。
 
 ### 测试基线的临时目录与覆盖率文件必须落在仓库外, 且 basetemp 目录本身必须**不存在**
 
@@ -83,16 +82,15 @@
 - **复发**: 2+3 —— 2026-09-25 两踩: 手工加 `TMPDIR="$(cygpath -w /tmp)"` 前缀 ⇒ 指回 `H:\Temp` 照崩
   (AGENTS.md 已写「不要再手工加前缀」, 读了没照做); `cmd //c` 嵌套引号挑子集 ⇒ 带引号的路径/`-k`
   表达式被原样传给 pytest(且没意识到**别的绕法全部同坑**)。⇒ 只走 `commands run test.*`; 挑子集
-  `test.one -- '<路径> -k "<表达式>"'`(整串加引号); bash 前缀 `TMPDIR='R:\Temputo-qb	ests'` 亦有效。
+  `test.one -- '<路径> -k "<表达式>"'`(整串加引号); bash 前缀 `TMPDIR='R:/Temp/auto-qb/tests'` 亦有效。
 - **复发**: 4+5 —— 2026-09-25 两踩同因: 裸跑 `uv run pytest <单文件>` 与手工设 TMPDIR(POSIX 前缀 / `cmd //c` 直写)都绕开引擎 ⇒ 默认 `H:\Temp` 收尾同崩 `PermissionError … pytest-current`。
   **为什么没命中**: 把"单文件小跑"当例外 + 禁令开工扫过、动手没重读 ⇒ 临时排查也一律 `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑可兜底。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
-  (改名只作用于**目录项**, 不需要能读那个重解析点), 之后在**默认 TMPDIR** 下跑
+  (改名只作用于**目录项**, 不需能读那个重解析点), 之后在**默认 TMPDIR** 下跑
   `uv run pytest tests -q --no-cov` 实测 **exit=0**。死链本身 `readlink` / `os.rmdir` / `os.unlink` /
-  `icacls` 全被拒(用户态修不掉), 但**可以连它的父目录一起搬走**, 新根由 pytest 自动重建
-  (同根的 `garbage-*` 清理残渣一并搬走, 无害)。
-  ⚠ 是**环境修复不是仓库改动**, 换机器 / 换用户不适用 ⇒ 仍优先设 `TMPDIR`。
+  `icacls` 全被拒(用户态修不掉), 但**可连它的父目录一起搬走**, 新根由 pytest 自动重建
+  (`garbage-*` 残渣一并搬走, 无害)。⚠ 是**环境修复不是仓库改动**, 换机器不适用 ⇒ 仍优先设 `TMPDIR`。
 
 ### ❗在工具**沙箱内**跑全量会假红: 沙箱拒写 `R:\Temp`, `TMPDIR` 等于没设
 

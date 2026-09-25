@@ -679,7 +679,12 @@ window.AQB_COLUMNS = {
      * 位置偏离"第 i 行在 i×step"的假设(硬约束 ②); 此时回退全量渲染, 宁可慢也不能错位。 */
     groupWin() {
       const n = this.filteredGroups.length;
-      if (this.expandedKey) return { active: false, start: 0, end: n, padTop: 0, padBottom: 0 };
+      // ❗退避判据必须是"**当前真的有面板**", 不能只看 expandedKey 非空: 展开态现在会跨视图带回
+      // (切回分组页时原组可能已被删/被筛掉, 见 app.js restoreExpandState), 为一个不存在的面板退避
+      // = 大库上永久退化成全量渲染, 且用户完全看不出原因(界面一切正常, 只是滚动变卡)。
+      if (this.expandedKey && this.filteredGroups.some((g) => g.key === this.expandedKey)) {
+        return { active: false, start: 0, end: n, padTop: 0, padBottom: 0 };
+      }
       return this._rowWindow("group", this.filteredGroups, "groupTable");
     },
     visibleGroups() {

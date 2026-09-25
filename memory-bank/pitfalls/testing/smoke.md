@@ -1,23 +1,23 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
 > 摘要: `ui_harness.py` + `ui_smoke.cjs` 是本仓库唯一能覆盖前端渲染的手段; 这里是它的环境坑与验证手法。
-> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色
+> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存
 
 ### 能力与定位
 
 - **触发**: 改任何前端渲染逻辑。
-- **判别**: 能力 = `scripts/ui_harness.py`(真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子 + 命令泵)
-  + `scripts/ui_smoke.cjs`(Playwright, 两套 UI 各若干项断言 + 内置 A/B)。
-  前端渲染逻辑**无法靠 pytest 覆盖** ⇒ **改前端必做冒烟**。
-- **处置**: 两种模式都要跑: `ok` 看正向、`--expect-cmd error` 看回滚。
+- **判别**: 能力 = `ui_harness.py`(真 `create_app`+`QbManager`+`FakeClient`+合成种子+命令泵)
+  + `ui_smoke.cjs`(Playwright, 双 UI 断言 + 内置 A/B)。前端渲染**pytest 覆盖不到** ⇒ **改前端必做冒烟**。
+- **处置**: `ok`(看正向)与 `--expect-cmd error`(看回滚)两种模式都要跑。
 
-### Playwright 与浏览器: 缓存里的 chromium 版本常与 playwright 期望的不一致
+### Playwright 从哪来: 本 clone 无 `node_modules` ⇒ 挂 **npx 缓存**的 `NODE_PATH`
 
-- **触发**: 起冒烟。
-- **判别**: 版本不匹配 ⇒ 启动失败。
-- **处置**: 用 `chromium.launch({ channel: "msedge" })`(**系统 Edge 永远可用**),
-  或 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright-core@<对齐版本>`。
-  ❗**ESM 的 `import` 不认 `NODE_PATH`** ⇒ 冒烟脚本必须写成 **CJS**(`require`)。
+- **触发**: `Cannot find module 'playwright'`, 或版本不匹配报 `Executable doesn't exist`(2026-09-25 实测)。
+- **判别**: `node_modules` **不在 `.gitignore` 里** ⇒ 就地 `npm i` 会污染 git status; 而 playwright
+  已在 **npx 缓存**(`npx --no-install playwright --version` 有版本号就是它)。
+- **处置**: `NODE_PATH='…\_npx\<hash>\node_modules' node scripts/ui_smoke.cjs --base …`
+  (❗ESM 的 `import` 不认 `NODE_PATH`, 冒烟脚本必须 CJS); 版本对齐 `playwright-core@1.63` ↔ `chromium-1243`;
+  换不到退回 `chromium.launch({channel:"msedge"})`(**Edge 恒可用**)。
 
 ### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
 
@@ -27,10 +27,11 @@
   "前端模板写错导致白屏"**完全同形**, 极易误判成自己的改动炸了。两种成因都实测到过:
   ①**端口被占** —— uvicorn 只打一行 `[Errno 10048] …每个套接字地址只允许使用一次` 就退出,
   而**旧进程仍在服务旧代码**(旧代码可能连 `/prism/` 路由都没有 ⇒ 页面是 `{"detail":"Not Found"}`,
-  `curl /api/config/public` 却返回 200 ⇒ 看起来"服务是好的");
+  `curl /api/...` 却仍 200 ⇒ 看着"服务是好的");
   ②**后台进程随 shell 调用结束被杀** —— 用 `(cmd &)` 起的服务在本次 Bash 调用返回后就没了,
   下一轮冒烟是 `ERR_CONNECTION_REFUSED`(而 `curl` 在**同一次调用内**是通的, 于是误以为服务活着)。
-- **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`), 不要 `(cmd &)`;
+- **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`)—— `ui_harness.py` 是**长驻**的(uvicorn.run 阻塞),
+  别指望 `dev.harness` 会返回; 不要 `(cmd &)`;
   ②起完**立刻看 harness 日志第一行**(它会打印实际监听地址与种子/组数), 端口被占就换端口;
   ③怀疑服务不对时先 `curl <base>/prism/` —— 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
 
@@ -79,7 +80,7 @@
 - **处置**: 每轮**独立 profile**; 起服务前按命令行过滤清 smoke edge
   (`CommandLine -match "edge-smoke"`, **不能全杀 msedge**), 并确认端口无监听
   (kill 后端口释放有延迟, 立即重启必 **10048**)。
-  收尾用 **PowerShell** 关端口(`Get-NetTCPConnection -LocalPort N -State Listen` → `Stop-Process`):
+  收尾用 **PowerShell** 关端口(`Get-NetTCPConnection -LocalPort N` → `Stop-Process`):
   `uv run python` 是**父子进程**, 按 netstat 的 PID 杀经常**杀不掉父进程** ⇒
   新桩服务 bind 失败而旧服务继续应答 ⇒ **你以为换了参数, 实际还在用旧服务**。
 
@@ -105,14 +106,13 @@
   骨架在但某块区域空 = 模板表达式错误, **只能真机看页面**。
 - **处置**: 定位**无需 node** —— 起静态服务 + 在 `page.addInitScript` 里挂
   `window.addEventListener('error', ...)` 拿 `filename:lineno`。
-  静态扫描守阵 `test_frontend_static_bundle_health`(冲突标记 / JS 注释孤儿续行 / 模板引用的静态资源)。
+  静态扫描守阵见 `test_frontend_static_bundle_health`。
 
 ### 验证手法(可复用, 比静态阅读快)
 
 - **触发**: 怀疑"某个键在某个视图下缺了"。
-- **判别**: 起 `commands run dev.harness -- --torrents 300 --port <空闲端口>`
-  (合成种子自带非零 `dlspeed`/`upspeed`), 再 `curl "…/api/state?view=<X>"` **逐视图比对响应键与合计**。
-- **处置**: 一眼看出哪个键在某个视图下缺了。
+- **判别**: 起桩服务(`--torrents 300 --port <空闲端口>`, 合成种子自带非零 `dlspeed`/`upspeed`),
+  再 `curl "…/api/state?view=<X>"` **逐视图比对响应键与合计** ⇒ 一眼看出哪个键缺了。
 
 ### 时序型缺陷可以在浏览器里"逐步喂时序"复现, 不必等真机
 

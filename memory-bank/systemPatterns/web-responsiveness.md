@@ -50,7 +50,10 @@
   行仍是 flex 列里"渲染完整单元格序列"的元素, 只靠上下两个 `.row-pad` 占位撑高度,
   这样 `:nth-child` 列对齐与 `[data-table]` 列宽协议全部保持有效。高度必须**逐行实测 + 前缀和 +
   二分**(真实数据行高不齐: H&R 行多一行 ⇒ 43.7px 与 65.4px 混排, 等高假设会漂上百像素);
-  展开成员行会插队打断边界 ⇒ 有 `expandedKey` 时 group 窗口**退避回全量**。
+  展开成员行会插队打断边界 ⇒ **展开的组当前确实在可见集合里**时 group 窗口**退避回全量**
+  (判据是 `expandedKey && filteredGroups.some(k)`, 不是只判 `expandedKey` 非空 —— 展开态会跨视图
+  带回(`app.js` 的 `stashExpandState`/`restoreExpandState`), 组可能已被删/被筛掉, 只判非空会让
+  窗口为一个不存在的面板**永久**退避, 症状是"界面一切正常, 只是滚动变卡")。
   ⚠ 附带发现: **别在 computed 里对响应式大对象做展开复制** —— `filteredTorrents` 里的
   `{ ...r, hit }` 单项 74 字段 × 3000 条 = 22 万次 Proxy `get` 陷阱, **单这一句 68ms**,
   比整个窗口渲染还贵; 改成原引用出栈 + 模板现问 `isHit(m)` 后 115ms → 5ms。
