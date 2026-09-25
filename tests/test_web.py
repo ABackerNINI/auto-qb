@@ -1111,7 +1111,7 @@ def test_frontend_hr_safety_wiring():
 
     # ① 来源 token 契约: 后端常量集 == 前端两张映射表的键集
     src_tokens = set(re.findall(r'^SRC_[A-Z_]+ = "([a-z_]+)"', resolve_py, re.M))
-    assert len(src_tokens) == 8, f"resolve.py 的 SRC_* 常量应为 8 个, 实测 {sorted(src_tokens)}"
+    assert len(src_tokens) == 9, f"resolve.py 的 SRC_* 常量应为 9 个(v3.4 起 D 档已免罪单列 site_exempt), 实测 {sorted(src_tokens)}"
 
     def _map_keys(name):
         m = re.search(rf"const {name} = \{{(.*?)\}};", hr_js, re.S)
@@ -2413,6 +2413,20 @@ def test_hr_view_fields_three_state(tmp_path):
     # 删除安全档位: 安全放行 => 可删, 来源「在线·已核实」
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_released"
     assert fields["hr_safety_text"] == "在线·已核实，安全放行"
+
+    # D 档已免罪(v3.4, 2026-09-26 用户指令): 站点明确终态结论, 来源单列「在线·已免罪」,
+    # 不与缺席证据 site_released 混一个 token
+    from auto_qb.hr.model import SOURCE_EXEMPT
+
+    link.judge.return_value = HrJudgement(
+        identity=HrIdentity.VERIFIED_NON_HR,
+        is_hr=False,
+        reason="已核实放行(D 档已免罪, 依据刷新 1)",
+        verified_source=SOURCE_EXEMPT,
+    )
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_exempt"
+    assert fields["hr_safety_text"] == "在线·已免罪"
 
     # 本地兜底路径(judge 返回 None: 站点侧无可查键/未发布视图): triggered/satisfied 就是本地结论,
     # 来源记「本地·兜底」—— 呈现口径与打标流程同源, 不会出现"标签说达标、徽章说不能删"

@@ -32,7 +32,7 @@
 |---|---|---|
 | 三版候选模板 | Done | T1 档案卡 / T2 结论卡 / T3 进度仪表, 单文件可交互, 共用 fixture; Playwright 实测悬停/翻转/主题跟随 0 console 错误 |
 | T3 定稿 + 零冗余精修 | Done | 用户选定 T3; 冗余清理六条见「思考与决策」; 计划文档 §8 修正3 |
-| 落码 shared/hr.js | Pending | 弹窗数据组装 + 单例 fixed 定位 + 翻转/夹取/延迟调度; hrSiteLine 去档位前缀已随修正轮入库 |
+| 落码 shared/hr.js | Pending | 弹窗数据组装 + 单例 fixed 定位 + 翻转/夹取/延迟调度; hrSiteLine 去档位前缀已随修正轮入库; ✅主计划 §9 v3.4 的展示缺口已落地上游(2026-09-26 用户令「修复缺口」): D 档已免罪单列 `SRC_SITE_EXEMPT`「在线·已免罪」(经 `HrJudgement.verified_source` 透传), 本轮落码直接消费该 token |
 | 落码 6 处模板 + 两套 CSS | Pending | 换掉 :title="hrDurTitle(m)"; CSS 成对(atlas style.css / prism css/*), 守阵补 hr-pop 规则成对断言 |
 | 浏览器冒烟 + baseline | Pending | 双 UI × 三语境 × ocean/galaxy/frost; 数字进 testing/baseline.md |
 

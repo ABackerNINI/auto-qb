@@ -42,6 +42,9 @@
 - test_safety_display_site_lanes_map_to_verdict: 站点命中档位即删除安全结论(A 考察中=danger 橙·不能删 /
   C 未达标=failed 红·考核未通过(2026-09-25 用户修正: 终态独立醒目档, 移出不能删桶) / B 可删), 来源记「在线」
 - test_safety_display_identity_layers: 身份层结论 —— 放行/超龄豁免恒可删; mode=all 未命中与新鲜度闸门落「策略」桶; 宽松 policy 未核实
+- test_judge_record_carries_verified_source: 放行来源透传(v3.4) —— D 档已免罪记录 => SOURCE_EXEMPT, 缺席式放行 => 空串
+- test_safety_display_site_exempt_split_from_released: D 档已免罪(站点明确终态)与「未列出」(缺席证据)分开编码 ——
+  同为 safe, 来源 site_exempt·「在线·已免罪」 vs site_released·「在线·已核实，安全放行」(2026-09-26 用户指令)
 - test_safety_display_local_fallback_when_judged_none: judged None(未接入/无键) => 本地兜底, 未触发 = 不适用
 """
 import pytest
@@ -71,6 +74,7 @@ from auto_qb.hr.resolve import (
     SRC_LOCAL,
     SRC_LOCAL_EXEMPT,
     SRC_POLICY,
+    SRC_SITE_EXEMPT,
     SRC_SITE_RELEASED,
     SRC_SITE_SATISFIED,
     SRC_SITE_SCOPE,
@@ -548,6 +552,46 @@ def test_safety_display_identity_layers():
     assert (gate.safety, gate.src) == (SAFETY_DANGER, SRC_POLICY), "新鲜度闸门也是「管束不来自档位」"
     loose = safety_display(HrJudgement(HrIdentity.UNKNOWN, False), triggered=False, satisfied=False)
     assert (loose.safety, loose.src) == (SAFETY_UNKNOWN, SRC_UNVERIFIED)
+
+
+def test_judge_record_carries_verified_source():
+    """放行来源透传(v3.4, 计划 §9 状态模型): D 档已免罪记录 => verified_source=SOURCE_EXEMPT,
+    缺席式放行(逐种未列出记录 / 反应式「完整刷新未列出」) => 空串 —— 展示层据此分开编码
+
+    终态模型下「已免罪」是站点的明确结论, 不得与「没看见」混在一个 token 里。
+    """
+    exempt_j = judge_record(_view(verified=[_verified(source=SOURCE_EXEMPT)]), (H1, ""), now=NOW)
+    assert exempt_j.identity is HrIdentity.VERIFIED_NON_HR
+    assert exempt_j.verified_source == SOURCE_EXEMPT, "D 档放行要带上 SOURCE_EXEMPT 出处"
+    per_seed = judge_record(_view(verified=[_verified()]), (H1, ""), now=NOW)
+    assert per_seed.identity is HrIdentity.VERIFIED_NON_HR
+    assert per_seed.verified_source == "", "逐种未列出记录是缺席证据, 不带出处"
+    reactive = judge_record(_view(listed=[(H2, 2, "B")], verified=()), (H1, ""), now=NOW)
+    assert reactive.identity is HrIdentity.VERIFIED_NON_HR
+    assert reactive.verified_source == "", "反应式放行(完整刷新未列出)也是缺席证据"
+
+
+def test_safety_display_site_exempt_split_from_released():
+    """D 档已免罪与「未列出」分开呈现(v3.4, 2026-09-26 用户指令): 判定层同为 VERIFIED_NON_HR +
+    safe 可删, 但来源档位不同 —— 站点明确终态结论 site_exempt·「在线·已免罪」 vs
+    缺席证据 site_released·「在线·已核实，安全放行」
+    """
+    exempt = safety_display(
+        HrJudgement(HrIdentity.VERIFIED_NON_HR, False, verified_source=SOURCE_EXEMPT),
+        triggered=False,
+        satisfied=False,
+    )
+    assert (exempt.safety, exempt.src, exempt.text) == (SAFETY_SAFE, SRC_SITE_EXEMPT, "在线·已免罪")
+    released = safety_display(
+        HrJudgement(HrIdentity.VERIFIED_NON_HR, False, reason="完整刷新未列出"),
+        triggered=False,
+        satisfied=False,
+    )
+    assert (released.safety, released.src, released.text) == (
+        SAFETY_SAFE,
+        SRC_SITE_RELEASED,
+        "在线·已核实，安全放行",
+    )
 
 
 def test_safety_display_local_fallback_when_judged_none():

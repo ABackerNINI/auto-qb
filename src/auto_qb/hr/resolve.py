@@ -75,11 +75,16 @@ class HrAnchor:
 
 @dataclass(frozen=True, slots=True)
 class HrResolution:
-    """判定结果: 三态 + 依据(展示与审计用) + 是否「恒受管束」(policy 不适用)"""
+    """判定结果: 三态 + 依据(展示与审计用) + 是否「恒受管束」(policy 不适用)
+
+    `released_src`: 放行依据是 D 档已免罪记录时 = SOURCE_EXEMPT(站点的明确终态结论),
+    缺席式放行(完整刷新未列出)为空串 —— 展示层据此把两者分开(v3.4, 计划 §9 状态模型)。
+    """
 
     identity: HrIdentity
     reason: str = ""
     forced: bool = False
+    released_src: str = ""
 
     def is_hr(self, unknown_policy: str = POLICY_HR) -> bool:
         """落到「是否按 HR 对待」的布尔语义(四个消费点最终要的就是它)
@@ -134,6 +139,7 @@ class HrJudgement:
     site_satisfied: Optional[bool] = None
     site: str = ""
     facts: Optional[HrSiteFacts] = None
+    verified_source: str = ""  # 放行记录来源: SOURCE_EXEMPT = D 档已免罪(终态), 空 = 缺席式放行(v3.4)
 
     @property
     def state_text(self) -> str:
@@ -235,7 +241,11 @@ def resolve_identity(
                 return HrResolution(HrIdentity.UNKNOWN, f"锚点漂移: {drift}")
         if view.freshness_ok(ver.verified_ts, now):
             src = "D 档已免罪" if ver.source == SOURCE_EXEMPT else "完整刷新未列出"
-            return HrResolution(HrIdentity.VERIFIED_NON_HR, f"已核实放行({src}, 依据刷新 {ver.verified_ts:.0f})")
+            return HrResolution(
+                HrIdentity.VERIFIED_NON_HR,
+                f"已核实放行({src}, 依据刷新 {ver.verified_ts:.0f})",
+                released_src=SOURCE_EXEMPT if ver.source == SOURCE_EXEMPT else "",
+            )
         return HrResolution(HrIdentity.UNKNOWN, "放行已过期(超 verified_ttl 无新刷新背书)")
 
     # 没有逐种放行记录: 由「完整刷新 + 未列出」当场推出结论(反应式, 索引天然滞后于下载)
@@ -349,6 +359,7 @@ def judge_record(
         site_satisfied=entry.satisfied_verdict if entry is not None else None,
         site=view.site,
         facts=HrSiteFacts.of(entry) if entry is not None else None,
+        verified_source=best.released_src,
     )
 
 
@@ -356,7 +367,8 @@ def judge_record(
 # WEB UI 展示单点: views.py 与 CLI 报告共用; 前端只做 token -> 徽标文字映射, 不重算判定。
 # 颜色编码安全档位(danger 橙=考察中进行中 / failed 红=未达标终态 / safe 绿 / unknown 灰 /
 # none 无色; 2026-09-25 用户修正: C 档未达标是考核期已过的终态, 独立红色档, 不与考察中混橙),
-# 来源用文字徽标编码(2 字芯片)。
+# 来源用文字徽标编码(2 字芯片)。v3.4(2026-09-26 用户指令): D 档已免罪是站点的明确终态结论,
+# 与「完整刷新未列出」(缺席证据)分开编码 —— 混在一个 token 里 WebUI 就看不出谁被免过罪。
 
 SAFETY_DANGER = "danger"  # 不能删(进行中): 考察中, 删除可能吃 H&R
 SAFETY_FAILED = "failed"  # 不能删(终态): 考核期已过仍未达标, 结果已成立 —— 独立醒目红色
@@ -367,7 +379,8 @@ SAFETY_NONE = "none"  # 不适用: 站点未配 HR / 从未触发
 SRC_SITE_SCOPE = "site_scope"  # 在线·考察中(清单命中档位 A)
 SRC_SITE_SATISFIED = "site_satisfied"  # 在线·已达标(档位 B)
 SRC_SITE_UNSATISFIED = "site_unsatisfied"  # 在线·未达标(档位 C)
-SRC_SITE_RELEASED = "site_released"  # 在线·已核实(安全放行)
+SRC_SITE_RELEASED = "site_released"  # 在线·已核实(安全放行 = 缺席证据: 完整刷新未列出 / 反应式)
+SRC_SITE_EXEMPT = "site_exempt"  # 在线·已免罪(D 档终态 —— 站点明确结论, v3.4 与缺席证据分开)
 SRC_POLICY = "policy"  # 策略·受管束(mode=all 未核实 / unknown_policy=hr / 新鲜度闸门)
 SRC_LOCAL = "local"  # 本地·兜底(站点未接入 / 没视图 / 没可查键)
 SRC_LOCAL_EXEMPT = "local_exempt"  # 本地·超龄豁免
@@ -390,8 +403,10 @@ def safety_display(judged: Optional["HrJudgement"], *, triggered: bool, satisfie
     triggered/satisfied 就是本地字段逻辑的结论, 来源记「本地·兜底」。站点命中行的档位即结论
     (计划 §9 v3.0): A 考察中 ⇒ 不能删(danger 橙, 进行中); C 未达标 ⇒ 不能删(failed 红,
     考核期已过的终态 —— 2026-09-25 用户修正, 与考察中分色); B 已达标 ⇒ 可删; 身份层结论
-    (安全放行 / 超龄豁免)恒可删; 未核实却被按受管束管束的(mode=all / unknown_policy=hr /
-    新鲜度闸门)归「策略」桶 —— 管束不由站点档位结论产生, 但结论仍是不能删(保守), 具体成因看 reason。
+    (安全放行 / 超龄豁免)恒可删 —— 其中 D 档已免罪是站点明确终态结论, 来源单列「在线·已免罪」
+    (v3.4, 2026-09-26 用户指令), 其余放行(缺席证据)记「在线·已核实」; 未核实却被按受管束管束的
+    (mode=all / unknown_policy=hr / 新鲜度闸门)归「策略」桶 —— 管束不由站点档位结论产生,
+    但结论仍是不能删(保守), 具体成因看 reason。
     """
     if judged is None:
         if triggered:
@@ -405,6 +420,9 @@ def safety_display(judged: Optional["HrJudgement"], *, triggered: bool, satisfie
     if identity is HrIdentity.EXEMPT:
         return HrSafetyDisplay(SAFETY_SAFE, SRC_LOCAL_EXEMPT, "本地·超龄豁免")
     if identity is HrIdentity.VERIFIED_NON_HR:
+        if judged.verified_source == SOURCE_EXEMPT:
+            # D 档已免罪 = 站点明确终态结论(v3.4), 不得与「没看见」的缺席证据共用徽标
+            return HrSafetyDisplay(SAFETY_SAFE, SRC_SITE_EXEMPT, "在线·已免罪")
         return HrSafetyDisplay(SAFETY_SAFE, SRC_SITE_RELEASED, "在线·已核实，安全放行")
     if identity is HrIdentity.UNKNOWN:
         if triggered:

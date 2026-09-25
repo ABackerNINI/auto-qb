@@ -65,6 +65,28 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 
 ## 进度日志
 
+- **2026-09-26 (v3.4 状态模型重新梳理: 三个终态都已结束 —— 纯文档)** — 用户指令: 「HR在线核实计划重新梳理,
+  优先级: 在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息, 最终态: 已达标 | 未达标 | 已免罪,
+  3 个状态都代表着结束状态」。
+  ① **优先级链核查**: 与 v3.0 落地口径逐字一致 (`judge_record` 档位即结论 + `_lane_rank` A>B>C>本地兜底),
+  无实现缺口。
+  ② **终态语义收口**: 「已达标/未达标/已免罪是考核期已过的终态」此前只散在展示层档案
+  (webui-hr-safety-display 修正轮 / webui-hr-popup) 与代码注释 (`resolve.py` SAFETY_* 段), 主计划 §9
+  **零处提及「终态」** —— 本轮在 §9 v3.0 优先级节之前新增「状态模型」节: A 考察中 = 唯一进行中;
+  B/C/D = 三个终态 (各自展示落点: safe 绿 / failed 红·考核未通过 / 安全放行)。
+  ③ **记录展示缺口**: WebUI 来源徽标把 D 档已免罪折进「在线·已核实，安全放行」(`SRC_SITE_RELEASED`),
+  与「完整刷新未列出」共用 token —— 终态模型下应分开呈现, 拟随 webui-hr-popup 落码轮补
+  `SRC_SITE_EXEMPT`, **待用户确认**。
+  ④ 计划封面 / 页脚 / §14 变更记录补 v3.4 (版本注: v3.1-v3.3 记于各自档案); 本档案与 activeContext 切片
+  同步; webui-hr-popup 档案落码行挂缺口备忘。
+  ⑤ **落地实况 (同日, 用户令「修复缺口」)**: `hr/resolve.py` 新增 `SRC_SITE_EXEMPT`("site_exempt",
+  「在线·已免罪」), `HrResolution.released_src` / `HrJudgement.verified_source` 透传 D 档放行出处,
+  `safety_display` 据此分流(D 档 ⇒ site_exempt; 缺席式放行 ⇒ site_released 原样); 前端 `shared/hr.js`
+  两张映射表各 +1 键(徽标「在线」/ 来源桶「在线核实」; 徽标 class 固定 hr-src, 无新 CSS)。
+  测试 **+2**(`test_judge_record_carries_verified_source` 透传 / `test_safety_display_site_exempt_split_from_released`
+  分流) + test_web 字段级 D 档断言块; 守阵 SRC_* 常量数 8→9; ★**红验 3 条全红**(临时还原旧分支)后还原;
+  全量 **1637 passed + 1 skipped**(TOTAL 92% / 10998 / 787 / 3644 / 328); 基线已回写。
+
 - **2026-09-26 01:30 (v3.3 落地: 选项页终态实施 —— 风格 A 瑞士网格 + 两表 + 日志收起)** — 用户令「实施」
   (前情: 三套风格选型定 A, 见上一条选型结论)。用户另令「扩展需要 HR 在线核实详情表, 把冗长 log 总结成表格,
   log 收起仅排障用; 先计划两张表展示哪些信息, 更新模板 A」—— 两表规划已并入选型文档后一并实施。

@@ -5,6 +5,17 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **HR 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 计划 v3.4)**: 用户指令钉死「优先级
+  在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息(= v3.0 已落码), 最终态
+  已达标 | 未达标 | 已免罪, 三个状态都代表结束状态」—— 终态语义收口进主计划 §9 新「状态模型」节
+  (A 考察中 = 唯一进行中; 终态展示落点: safe 绿可删 / failed 红考核未通过 / 安全放行)。修复展示缺口:
+  WebUI 曾把 D 档已免罪折进「在线·已核实」(与「完整刷新未列出」缺席证据共用 `SRC_SITE_RELEASED`) ⇒
+  新增 `SRC_SITE_EXEMPT`「在线·已免罪」, `HrResolution.released_src` / `HrJudgement.verified_source`
+  透传 D 档放行出处, `safety_display` 分流(缺席式放行原样 site_released); 前端 `shared/hr.js`
+  两张映射表 +1 键(徽标「在线」/ 来源桶「在线核实」, 无新 CSS)。测试 +2 + test_web 字段级 D 档
+  断言块, 守阵 SRC_* 常量 8→9, ★红验 3 条全红; 全量 **1637 passed + 1 skipped**(TOTAL 92%);
+  计划 [plans/26-09-22-2204-partial-hr-site-verify-plan.html](../plans/26-09-22-2204-partial-hr-site-verify-plan.html)
+  §9/§14 v3.4; 档案 [tasks/26-09-22-backend-partial-hr-verify.md](../tasks/26-09-22-backend-partial-hr-verify.md)
 - **浏览器扩展运行日志(分级 + 环形上限 + 选项页④区) (2026-09-25)**: `extensions/hr-fetch-proxy` 加日志 ——
   条数 10–10000 可设(默认 1000, 环形丢最旧), 四级 debug/info/warn/error(记录阈值默认 info + 选项页分级过滤),
   明细含毫秒时间 / 收到的命令(kind·id·站点) / 请求类型(拉清单/页面直取/页面渲染/种子下载)与 HTTP 结果 /

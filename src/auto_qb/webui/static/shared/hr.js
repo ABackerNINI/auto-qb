@@ -17,12 +17,14 @@ const HR_SAFETY_CLASSES = { danger: "pending", failed: "hr-fail", safe: "reached
 /* 桶名(2026-09-25 用户修正): failed = 考核期已过仍未达标, 结果已成立的**终态** —— 删除不会新增
  * 惩罚, 叫「不能删」不符合实际, 独立成「考核未通过」桶(红), 不进 delete_flow 的删除点名集合 */
 const HR_SAFETY_BUCKETS = { danger: "不能删", failed: "考核未通过", safe: "可删", unknown: "未核实" };
+/* v3.4(2026-09-26 用户指令): site_exempt = D 档已免罪, 站点的明确终态结论 —— 与 site_released
+ * (完整刷新未列出 = 缺席证据)分开编码, 同属「在线」徽标与「在线核实」来源桶 */
 const HR_SRC_BADGES = {
-  site_scope: "在线", site_satisfied: "在线", site_unsatisfied: "在线", site_released: "在线",
+  site_scope: "在线", site_satisfied: "在线", site_unsatisfied: "在线", site_released: "在线", site_exempt: "在线",
   policy: "策略", local: "本地", local_exempt: "本地", unverified: "未核",
 };
 const HR_SRC_BUCKETS = {
-  site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实",
+  site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
   policy: "策略", local: "本地兜底", local_exempt: "本地兜底", unverified: "",
 };
 
