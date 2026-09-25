@@ -67,6 +67,12 @@
 - 2026-09-24 23:0x —— 三条一次修完(6 个源文件); 全量 1375 passed + 1 skipped
   (GBK 两条因本 shell `PYTHONUTF8=1` 恒红, 非代码缺陷); 冒烟 92 项 0 失败(单 UI 各 46);
   红验: 回退棱镜 CSS + 父项 `mouseleave` ⇒ CTX-04/CTX-05 变红, 已恢复。
+- 2026-09-25 15:17 —— **已入库 `3a8dabd`**(19 文件)。提交前发现落后主线 10 个提交, 且工作区是
+  「17 已暂存 + 2 `UU`」的中间态 ⇒ 按 `pitfalls/git/sync-pull.md` 重做同步(备份 `.git` →
+  `git diff HEAD --output` 出仓补丁 → 清树 → `merge --ff-only` → `git apply --3way`)。
+  两边在 `test_web.py` 同一位置各加一个测试 ⇒ 冲突**取并集**;`_doc-map.md` / `tasks/_index.md`
+  是生成物 ⇒ 取主线版后重跑 `kb.index`。合流后复测: 全量 **1599 passed + 1 skipped / 0 failed**
+  / 冒烟 92 项 0 失败; 推送 Gitee + GitHub 镜像两侧 `ls-remote` 均 == 本地; 幽灵 diff 0 行。
 
 ## 改动
 
