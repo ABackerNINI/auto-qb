@@ -34,6 +34,8 @@ user-invocable: true
 
 ## 收尾 DoD (缺一不可)
 
+> **由「提交」触发时, 先合并远端再进入下面各步**: `commands run my-commit-flow.sync` 预检 → 远端有更新按「同步路径」合并 —— 回写件 (baseline / 切片 / 各 _index) 是全体 clone 的最热写点, 在陈旧基线上写合并必撞 (单点: my-commit-flow [pipeline.md](../../../.commands/my-commit-flow/references/pipeline.md), 2026-09-26 定稿)。
+
 1. **activeContext 切片**: 写/更新 `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md`(含 `# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`)。**同一专题跨会话沿用同一个 slug** —— 新会话更新「最后活动」与「正在进行」, 不新建文件(只在换专题时新建); 已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**; 超 14 天没动 → 蒸馏后删除。它是易变层, 不是流水账。四条约定见 [references/kb-structure.md](references/kb-structure.md)。
 2. **tasks/**: 命中阈值 → 按下方「任务档案规范」定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。
 3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只改** `testing/baseline.md` 顶部(单点事实源, 其它文档一律引用不手抄 —— `testing.md` 自 2026-09-22 目录化起只是存根)。

@@ -11,7 +11,7 @@ confirmed = true
 script = "commit.py"
 pin    = true
 risky  = true
-when   = "用户显式说「提交」：逐路径暂存 + 提交 + 自动核 ref"
+when   = "用户显式说「提交」：逐路径暂存 + 提交 + 自动核 ref（落后未合流会被内含预检 STOP —— 先按「同步路径」合并远端再回来）"
 note   = "参数经 <args> 传: -- <--message-file 文件> <路径...>; 直接拒绝 -A / . / *; 红线文件直接拒交"
 doc    = "references/pipeline.md"
 

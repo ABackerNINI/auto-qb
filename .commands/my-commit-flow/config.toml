@@ -16,8 +16,8 @@ enabled = true
 script = "preflight.py"
 args   = ["--check-started"]
 pin    = true
-when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前"
-note   = "只读。落后即 STOP —— 禁止在落后分支上改代码。结果贴进回复"
+when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前；以及收到「提交」后的第一步（收尾回写之前）"
+note   = "只读。落后即按「同步路径」合并远端 —— 禁止在落后基线上改代码 / 回写文档。结果贴进回复"
 doc    = "references/pipeline.md"
 
 [tasks."my-commit-flow.preflight"]

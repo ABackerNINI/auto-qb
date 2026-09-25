@@ -6,7 +6,11 @@
 
 ## 当前基线
 
-**1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR D 档已免罪来源单列 (v3.4) × webui 种子级标签/分类编辑**
+**1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **提交流程「先合并远端, 再收尾回写」定稿**
+(档案 `26-09-26-my-commit-flow-merge-first-writeback`; 仅 .commands 包脚本与流程文档, src/tests 零改动, 数字与下条持平)。
+TOTAL **92%**(11013 语句 / 787 未覆盖 / 3656 分支 / 331 partial —— 实测 330–331 随并行调度抖动, 非代码差异)。
+
+**上一态: 1641 collected: 1640 passed + 1 skipped / Windows** —— 2026-09-26 **两线合流: HR D 档已免罪来源单列 (v3.4) × webui 种子级标签/分类编辑**
 (档案 `26-09-22-backend-partial-hr-verify` v3.4 + `26-09-26-webui-torrent-meta-edit`; 两轮并行开发, 本条为**合并树重测**)。
 
 - **HR v3.4 轮 +2 条**: test_hr_resolve.py +2(`test_judge_record_carries_verified_source` D 档放行记录透传
