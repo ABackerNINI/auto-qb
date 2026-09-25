@@ -7,7 +7,7 @@
   0. **先跑一次预检(`--phase push --no-auto`)** —— 原先是让人在推送前手动跑一遍, 现收进脚本:
      本脚本自己会 fetch + 判落后, 但**不查**工作区脏 / 上游 / 红线又被改出来 / 镜像远端是否存在,
      这四项靠预检补上。闸门不重复跑(它们刚在提交前跑过, 且会改工作区), 故固定 `--no-auto`。
-  1. 再 `git fetch` + `ls-remote` 看是否落后 —— 落后就 STOP(不自动 rebase, 那是红线区);
+  1. 再 `git fetch` + `ls-remote` 看是否落后 —— 落后就 STOP(不自动合流, 由执行者按判据手动跑);
      判据 = ls-remote 现查的远端 tip 对比本地 HEAD, **不读 refs/remotes**(其写入在本环境会被静默丢弃)
   2. `git push <main> <branch>`; 失败原样输出并退出(主线瞬时 reset 可重试一次)
   3. 核对远端 ref == 本地 HEAD(`git ls-remote`);`git status -sb` 不应再有 ahead
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"本地没有远端 tip({remote_tip[:8]})的对象(fetch 失败?) —— 无法判断是否落后, 不推。\n")
         return 1
     if int(behind_ahead[0]) > 0:
-        sys.stderr.write(f"落后远端 {behind_ahead[0]} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净; 禁 rebase), 不推。\n")
+        sys.stderr.write(f"落后远端 {behind_ahead[0]} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净), 不推。\n")
         return 1
     print(f"  远端 {remote_tip[:8]}: 齐平(本地领先 {behind_ahead[1]} 个)")
 

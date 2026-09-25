@@ -7,14 +7,14 @@
 
 > **「按任务读哪份文档」的单点在 [memory-bank/README.md](memory-bank/README.md) 的细路由表** —— 本文件不复述, 免得两处各自演化。三条动作级提示:
 > - **改代码前**: 读 [pitfalls/_index.md](memory-bank/pitfalls/_index.md) —— 7 类 (git · web-ui · backend · testing · ops · kb · docs), 按动作选类再进类索引。
-> - **跑 git 命令前**: 必读 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md) —— 本工具 shell 里 `rebase` / `merge` / `stash` 都会毁 `.git`。
+> - **跑 git 命令前**: 必读 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md) —— ref 静默丢弃 / 推送只认 `ls-remote` 等本机硬约束单点在里面 (旧 rebase/merge/stash 毁库禁令已随拦截层修复于 2026-09-25 解除)。
 > - **检索纪律**: 先索引、后 grep、**禁止整读**任一目录; 不确定关键词时 `grep -rn "<词>" memory-bank/` 兜底。
 
 ## 会话协议
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理** (`stash` 被禁); 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `commands run my-commit-flow.sync` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理**; 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `commands run my-commit-flow.sync` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并把实测数字记进 `testing/baseline.md` / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
@@ -69,9 +69,9 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 ## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有)
 
 > **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「协作约定」。
-> **完整禁令与事故判据单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
+> **完整判据与事故档案单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
-- 🔴 **禁用 `git rebase`** (已炸 3 次, 工作区干净也照炸) 与 **`git stash`**; **非快进合并 + 工作区脏 = 必炸** (拦截层会顺着这次写入批量删 `.git/objects`)。落后主线改走「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。
+- ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后主线首选「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。
 - **提交后必查 ref 三处**: `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `commands run my-commit-flow.verify-ref` 并按它打印的步骤修。**不要只看 commit 输出**。
 - **判"推没推上"只看 `git ls-remote <远端> <分支>`** —— 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃, 且 `git push --dry-run` 永远"成功"。
 - 机检与停手点一律走 **task id**: `commands run my-commit-flow.preflight` / `ship.commit` / `ship.push` / `my-commit-flow.verify-ref`(`list my-commit-flow/ship` 看全流程, `show <task>` 看展开的命令与深读指针)。**包内 README 与 `references/` 只在排障 / 迁移时读** —— 日常整读它, 等于把"读整份文档找命令"的成本又搬回来。

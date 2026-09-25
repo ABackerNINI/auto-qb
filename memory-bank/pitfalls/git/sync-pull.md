@@ -10,7 +10,7 @@
 - **处置**: **push 前先 `git fetch`**; 分支落后主线时**先 fetch 再动手**, 否则会把别人已修好的问题重做一遍。
   真有重叠: ①`stash push -u` 留档 ②rebase 到主线 ③只把**主线没有的增量**重做 ④被取代的计划文档**必须加存档声明**。
   ⚠ 协作主线是 **Gitee 的 `develop`**, **不要用 GitHub 镜像判断进度**;
-  ⚠ 本 shell 里 rebase 禁用(见 [history-integration.md](history-integration.md)), 第 ② 步改走 `merge --ff-only`。
+  (旧版注明"本 shell 里 rebase 禁用、第 ② 步改走 `merge --ff-only`" —— 该禁令 2026-09-25 已解除, 见 [history-integration.md](history-integration.md), 本流程可照跑。)
 
 ### 同步上游(未提交改动 + 行尾导致快进合并被拒)的安全流程
 

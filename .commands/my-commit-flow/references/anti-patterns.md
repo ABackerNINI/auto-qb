@@ -1,7 +1,8 @@
 # 反模式全集（排障 / 迁移才读）
 
 > 索引在 [../README.md](../README.md)，README 只留最致命的六条。
-> **本环境专属的 git 事实**（rebase / stash 为什么禁用、`ls-remote` 为什么是唯一判据）单点在
+> **本环境专属的 git 事实**（`ls-remote` 为什么是唯一判据；旧 rebase / stash 毁库禁令已于 2026-09-25
+> 解除，事故档案同在）单点在
 > `memory-bank/pitfalls/git/_index.md` —— 换仓库要重新确认，这里不复制一份。
 
 ## 暂存与提交
@@ -14,9 +15,9 @@
 
 ## 合流
 
-- ❌ 脏工作区直接 rebase / merge —— 触发 stash 的合并路径在本环境下有毁库风险；**rebase 一律禁用**，快进用 `merge --ff-only`。
-- ❌ 看到「落后主线」的 STOP 就先去 rebase —— 工作区脏时那是最危险的一步；先提交再快进。
-- ❌ 用 `git stash` 把工作区"弄干净"再去 rebase —— 本环境下 stash 有毁库风险，用提交或移出改动。
+- ❌ 脏工作区直接历史整合（rebase / 非快进 merge）—— 先提交或移出改动弄干净工作区；快进用 `merge --ff-only`。
+- ❌ 看到「落后主线」的 STOP 就急着去合流 —— 工作区脏时先提交再快进。
+- ❌ stash / 施回后不对账 —— 按 `git diff --stat` 逐项核对，确认没缺漏再继续。
 - ❌ 用几分钟前的 `git status -sb` 判断"与主线一致" —— 那是上次 fetch 的快照。
 - ❌ push 被拒后立刻 `--force` —— 先看清远端多了什么。
 

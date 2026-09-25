@@ -32,8 +32,8 @@
 
 - ❌ `git add -A` / `git add .` —— 混进他人改动；脚本已直接拒绝。
 - ❌ 只看 commit 输出就当成功 —— ref 可能没落稳，必须核三处。
-- ❌ 脏工作区直接 rebase / merge —— **rebase 一律禁用**，快进用 `merge --ff-only`。
-- ❌ 看到「落后主线」的 STOP 就先去 rebase —— 工作区脏时那是最危险的一步，先提交。
+- ❌ 脏工作区直接历史整合（rebase / 非快进 merge）—— 先提交或移出改动弄干净工作区；快进用 `merge --ff-only`。
+- ❌ 看到「落后主线」的 STOP 就急着去合流 —— 工作区脏时先提交再快进。
 - ❌ 推完才回写知识库 / 文档 —— 已推送不能 amend 强推，只能再补一笔。
 - ❌ 提交消息沿用会话中途量的数字 —— 必须提交那一刻实测。
 
@@ -45,7 +45,8 @@
 | 外置配置 / 占位符 / `auto`·`timeout`·`each_limit` / 探测规则 | `references/config.md` |
 | 反模式全集 | `references/anti-patterns.md` |
 
-本环境专属的 git 事实（rebase / stash 为何禁用、判"推没推上"只看 `git ls-remote`）单点在
+本环境专属的 git 事实（判"推没推上"只看 `git ls-remote`、ref 三处核对；旧 rebase / stash 毁库禁令
+已于 2026-09-25 解除，档案同在该索引）单点在
 `memory-bank/pitfalls/git/_index.md` —— 换仓库要重新确认，本包不复制一份。
 
 > 路径约定：`<包>` = 本包目录（`<仓库根>/.commands/my-commit-flow`），先用 Glob 定位（`**/my-commit-flow/scripts/*.py`），别照抄路径。

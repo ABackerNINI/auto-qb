@@ -1,19 +1,20 @@
 # 编辑与工具陷阱 (git / 文本)
 
-> 摘要: 工具 shell 里改文件的九类静默事故 —— 编辑器挂死、stash 毁库、行尾被归一、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除。
+> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。
 > 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
 - **触发**: 跑上面这几条命令。
 - **判别**: 本机 `core.editor` 是 `code --wait`, 无可交互窗口 ⇒ **永久等待**(实测挂 6 分钟)。
-- **处置**: 命令前加 `GIT_EDITOR=true`(必要时再加 `GIT_SEQUENCE_EDITOR=:`); 更好的做法是**不跑这些命令**
-  (见 [history-integration.md](history-integration.md))。
+- **处置**: 命令前加 `GIT_EDITOR=true`(必要时再加 `GIT_SEQUENCE_EDITOR=:`); 这是编辑器挂死问题,
+  与已解除的 rebase/merge/stash 毁库禁令无关 —— 禁令解除后这些命令可跑, 但本条仍适用。
 
-### 在工具 shell 里不要用 `git stash`
+### 对照旧代码: `git archive` + `PYTHONPATH` 方案 (stash 已恢复可用, 本方案免改工作区)
 
 - **触发**: 想"改动前 vs 改动后"对照, 又不想改工作区。
-- **判别**: 与"非快进 + 脏 = 必炸"同源 —— stash 会真写对象, 拦截层顺着写入删 `.git/objects`。
+- **判别**: 旧版写"不要用 `git stash`", 理由是拦截层会顺着 stash 写入删 `.git/objects` —— 该问题
+  2026-09-25 已修复, stash 禁令解除; 但"对照旧代码不动工作区"这个需求本身, 下面的方案更直接。
 - **处置**: 用 `git archive` + `PYTHONPATH` 取旧代码:
   ```bash
   git archive HEAD src | tar -x -C .workbuddy-ai/tmp/aqb_old

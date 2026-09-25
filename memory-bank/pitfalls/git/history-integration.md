@@ -1,9 +1,13 @@
 # Git 历史整合 (merge / rebase / 重放)
 
-> 摘要: 本工具 shell 里**任何走 git 内部临时目录或 stash 机制的历史整合操作(merge / rebase / stash)都可能被删除拦截层顺手清掉 `.git`** —— 「非快进 + 脏 = 必炸」, rebase 一律禁用。
+> 摘要: 历史整合(merge/rebase/stash)曾因删除拦截层批量删 `.git/objects` 而被禁 —— 该问题 2026-09-25 已修复, **禁令解除**; 本文件保留作事故档案与恢复手册, 高风险历史整合前仍建议 `cp -a .git <备份>`。
 > 触发: 落后主线要同步, 想跑 git rebase, git merge, 合并, 变基, .git 损坏, 事故恢复
 
-## 两条禁令
+## ✅ 状态: 禁令已解除 (2026-09-25)
+
+拦截层根因已修复, rebase / merge / stash 恢复可用; 以下为事故档案与仍有效的判据/恢复手册 —— 高风险历史整合前照旧先 `cp -a .git <备份>`。
+
+## 两条禁令 (已解除)
 
 ### ❗「非快进合并 + 工作区脏」会删掉整个 `.git` 对象库 (重大事故)
 
@@ -24,7 +28,7 @@
   `.git/logs/` 被删、当前提交对象也没了; 第二次加了 `GIT_SEQUENCE_EDITOR=:` + `GIT_EDITOR=:` +
   `-c rebase.autosquash=false` 仍以 **SIGTERM** 收场, `.git` 只剩 `COMMIT_EDITMSG` 与 `FETCH_HEAD`。
   ⇒ 只要 rebase 报 `could not mark as interactive`, **立刻停手, 别重试**。
-- **处置**: **禁用 rebase**, 改用下面的"可用替代"。
+- **处置**: ~~禁用 rebase~~(旧环境处置, 已解除), 改用下面的"可用替代"。
 
 ### ❗ rebase 第三次事故形态不同: 判别法要放宽到"HEAD 读不出来"
 
@@ -53,7 +57,8 @@
 
 - **触发**: 本地 1 个提交, 远端多了 1 个, 想把它重放到远端之上。
 - **判别**: 前提是**工作区必须干净**; 有用户在途改动(如 `想法.md`)时先
-  `git diff -- <file> > x.patch` 再 `git apply -R x.patch` 让它干净, 重放完 `git apply x.patch` 还原, **别用 stash**。
+  `git diff -- <file> > x.patch` 再 `git apply -R x.patch` 让它干净, 重放完 `git apply x.patch` 还原
+  (旧版"别用 stash"是已解除的拦截层禁令 —— 现在 stash / patch 皆可)。
 - **处置**: ① `cp -a .git <备份>`; ② **只读判冲突**(不动工作区):
   `git merge-tree --write-tree --merge-base=<merge-base> <远端 tip> <我的 HEAD>` —— 返回**单个 tree oid 且 exit 0 即无冲突**;
   ③ `git log -1 --format=%B HEAD > msg` + `git commit-tree <该 tree> -p <远端 tip> -F msg` 得到重放后的提交;
@@ -78,12 +83,9 @@
   (第三次事故就是照 skill 踩的)。
 - **处置**: 执行者自己要在跑 rebase 前先读本条; 走上面的"先同步远端、后提交"。
   `fetch` / `add` / `commit` / `reset` / `push` 实测安全; 涉及历史整合的优先让用户在自己终端做。
-- **复发**: 1 —— 2026-09-24 同一句话出现在**包自己的文档里**: `my-commit-flow` skill 退役成包时,
-  "让工作区变干净再 rebase"被原样搬进 `.commands/my-commit-flow/scripts/commit.py` 的 docstring,
-  而 `references/pipeline.md` 与包 README 把顺序写成"**先提交再快进**"。
-  **为什么没命中**: 本条只管"执行前先读", 没有任何机检扫仓库自己的文档/脚本里的 rebase 建议;
-  而"先提交再快进"看着无害 —— 实际**提交后 `merge --ff-only` 必然失败**(本地提交不在远端 tip 的祖先链上)。
-  三处文案已订正为"先同步远端、后提交"; **若再复发就该给它加一条 grep 闸门**(负向匹配 rebase 建议)。
+- **复发**: 1 —— 2026-09-24 "让工作区变干净再 rebase"被原样搬进包内 `commit.py` docstring 与
+  references/README(顺序写成"先提交再快进"); 为什么没命中: 没有任何机检扫包内文档;
+  三处已订正为"先同步远端、后提交", 再复发就加 grep 闸门。
 
 ### 事故恢复: 成本取决于有没有 `cp -a .git` 备份
 

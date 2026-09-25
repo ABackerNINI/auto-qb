@@ -6,14 +6,14 @@
 
 流程:
   1. 跑 preflight(**用 --phase commit**: 落后主线只 WARN —— 落后 + 工作区脏时, 唯一安全的路是先提交
-     让工作区变干净再**快进**(`merge --ff-only`, **不是 rebase**: 本环境 rebase 一律禁用),
+     让工作区变干净再**快进**(`merge --ff-only`),
      所以这里不能因为落后就挡住提交; 其余 STOP 照样拦)
   2. `git add -- <你给的路径>` —— **逐路径**, 拒绝 `-A` / `.` / `*`
   3. `git commit -F <消息文件>`(中文首行 + 空行 + 细节; 规模数字要提交那一刻实测)
   4. 调 verify_ref 核对 ref 三处, 不一致 → 退出码 2 并给处置步骤
   5. 打印下一步: `commands run ship.push`(统一调用面, 不暴露裸脚本路径)
 
-不做 rebase / 不做 push —— 那是红线区, 交给执行者按 `references/pipeline.md` 的判据手动跑。
+不替执行者做历史整合 / push —— 交给执行者按 `references/pipeline.md` 的判据手动跑。
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         from preflight import main as preflight_main  # noqa: E402
 
         print("=== 预检 ===")
-        # commit 阶段: 落后主线不算 STOP(推送前再 rebase), 其余红线照旧拦
+        # commit 阶段: 落后主线不算 STOP(推送阶段再合流), 其余红线照旧拦
         if preflight_main(["--phase", "commit"]) != 0:
             sys.stderr.write("预检有 STOP, 未提交。\n")
             return 1

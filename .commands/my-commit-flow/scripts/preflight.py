@@ -157,7 +157,7 @@ def sync_recipe(behind: int, ahead: int, dirty: int, overlap: list[str], fetch_c
             WARN,
             "同步路径",
             f"已分叉(本地独有 {ahead} / 远端新 {behind}) —— 提交后按 `references/pipeline.md` 的替代路径同步, "
-            "**别硬合**(本环境禁 rebase, 禁脏工作区做非快进合并)",
+            "**别硬合**(非快进合并前先把工作区弄干净)",
         )
     ff = f"`{fetch_cmd}` + `git merge --ff-only FETCH_HEAD`"
     if not dirty:
@@ -606,7 +606,7 @@ def main(argv: list[str] | None = None) -> int:
     rows.append(
         (
             WARN if unstaged else PASS, "工作区",
-            f"未暂存 {len(unstaged)} 个 / 已暂存 {len(staged)} 个" + (" —— **脏工作区不做非快进合并 / rebase**(红线)" if unstaged else "")
+            f"未暂存 {len(unstaged)} 个 / 已暂存 {len(staged)} 个" + (" —— **脏工作区不做非快进合并**(先弄干净工作区)" if unstaged else "")
         )
     )
 
