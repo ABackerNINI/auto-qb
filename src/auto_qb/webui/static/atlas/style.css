@@ -659,7 +659,12 @@ button { font-family: inherit; }
   font-size: 13px; cursor: pointer; transition: background var(--dur) var(--ease); }
 .ctx-item:hover { background: var(--bg-hover); }
 .ctx-item .ico { color: var(--fg-dim); }
-.ctx-item:hover .ico { color: var(--fg-muted); }
+/* CTX-04: hover 只提亮**该项自己**那颗图标 —— 两处刻意的写法, 缺一就会回到"整片图标变灰":
+ * ① `>` 限定直接子级: 子面板(.ctx-sub)是父项的 DOM 后代, 用后代选择器时 hover 父项会连子面板
+ *    的图标一起拉灰(用户报的"二级菜单图标 hover 变灰"就是这条);
+ * ② `:where(:hover)` 把 :hover 的特异性压成 0 -> 本条只有 0,2,0, 与下面那批语义色规则同重,
+ *    按源码顺序让位给语义色 => 有色图标 hover 时保持本族色(变灰等于把语义色抹掉)。 */
+.ctx-item:where(:hover) > .ico { color: var(--fg-muted); }
 /* 菜单图标按**语义**着色(而不是统一灰): 一眼区分正向/反向/高风险操作 */
 .ctx-item .ico-play { color: var(--green); }
 .ctx-item .ico-pause { color: var(--warn); }

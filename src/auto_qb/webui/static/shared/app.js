@@ -450,9 +450,12 @@ const app = createApp({
       // "点击排序"与"列宽拖拽"互相干扰; 自绘虚影与现有 mousedown 阈值手势完全解耦。
       colGhost: null,                     // {label, x, y} | null
       menu: { visible: false, x: 0, y: 0, key: null, hash: null, multi: false },
-      // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— "高级能力"/"复制" 两个子面板
-      subMenu: "",        // "" | "advanced" | "copy"
+      // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
+      // 队列/TMM/超级做种/强制开始/分享率限制/复制族 都在它里面(见 conventions/webui.md)
+      subMenu: "",        // "" | "advanced"
       subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
+      // CTX-05: 移出后延迟收起的定时器句柄(0 = 无挂起); 延迟只用于跨过父项与子面板之间的缝隙
+      _subCloseTimer: 0,
       // 表头右键菜单(TBL-05): 针对**该列**的操作 —— 隐藏「列名」(隐藏单列)/升序/降序/打开列选择器
       headMenu: { visible: false, x: 0, y: 0, page: "", key: "", label: "", sortable: false, locked: false },
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
@@ -737,6 +740,7 @@ const app = createApp({
     "menu.visible"(v) {
       if (!v) {
         this._clearCtxSource();
+        this.keepSub();     // CTX-05: 撤掉挂起的延迟收起(否则一级关了之后还会再触发一次)
         this.subMenu = "";  // FX-15: 一级菜单关闭时子面板一并收起
       }
     },

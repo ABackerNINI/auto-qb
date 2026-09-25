@@ -83,6 +83,7 @@
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
+- test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
@@ -1422,6 +1423,68 @@ def test_frontend_add_torrent_drag_drop_wiring():
             f"{ui}/index.html 缺拖拽落点遮罩(.add-drop-mask + v-if=\"addDragOver\")—— "
             f"该皮肤用户拖文件进页面没有落点反馈(双 UI 必须成对改)"
         )
+
+
+def test_frontend_ctx_submenu_single_entry_and_hover_close():
+    """右键菜单的次级菜单: 一级只留「更多操作」一个入口, 且移出后必须收起 (CTX-04 / CTX-05 / CTX-06)
+
+    三条用户报的故障形态, 全部是"pytest 全绿 + node --check 全绿 + 界面废掉"那一类:
+      ① **二级菜单图标 hover 变灰**: `.ctx-item:hover .ico` 是后代选择器, 而 `.ctx-sub` 是父项的
+         DOM 后代 —— hover 父项会把整个子面板的图标一起刷成 `--fg-muted`, 语义色全被抹平。
+         修法两处缺一不可: `>` 限定直接子级 + `:where(:hover)` 把特异性压到 0(让位给语义色规则)。
+      ② **移出不消失**: 只有 mouseenter 展开、没有任何 mouseleave, 鼠标移到别的菜单项上子面板
+         会一直挂在屏幕上。修法挂**父项**的 mouseleave 延迟收起(子面板上再挂一条会在
+         "从面板回到父项"时误收起), 延迟只为跨过父项与面板之间那 4px 缝隙。
+      ③ **复制族并成第二个子面板**: 一级出现两个"更多"入口, 用户得先选"该进哪个"。
+         CTX-06 把 复制名称/哈希/magnet 并入「更多操作」末尾。
+    """
+    # ① CSS 的 hover 规则: 直接子级 + 特异性压制(改回后代选择器 = 整片子面板变灰)
+    css = {
+        "atlas": os.path.join(STATIC_ROOT, "atlas", "style.css"),
+        "prism": os.path.join(STATIC_ROOT, "prism", "css", "components.css"),
+    }
+    for ui, path in css.items():
+        text = open(path, encoding="utf-8").read()
+        assert ".ctx-item:where(:hover) > .ico" in text, (
+            f"{ui} 的右键菜单 hover 规则必须是 `.ctx-item:where(:hover) > .ico` —— "
+            f"用后代选择器会把整个子面板的图标一起拉灰, 用不带 :where 的写法会压过语义色规则(CTX-04)"
+        )
+        assert not re.search(r"\.ctx-item:hover\s+\.ico\b",
+                             text), (f"{ui} 仍存在后代写法的 `.ctx-item:hover .ico` —— hover 父项会连子面板图标一起变灰(CTX-04)")
+
+    # ② 两套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内
+    for ui in ("atlas", "prism"):
+        text = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        m = re.search(r'<div class="ctx-item has-sub".*?\n            </div>\n', text, re.S)
+        assert m, f"{ui}/index.html 找不到次级菜单父项(改名或挪走了? 同步本守阵)"
+        block = m.group(0)
+        assert "更多操作" in block, f"{ui} 的次级菜单入口文案不是「更多操作」"
+        assert "@mouseleave=\"scheduleSubClose()\"" in block, (
+            f"{ui} 次级菜单父项缺 @mouseleave=\"scheduleSubClose()\" —— 鼠标移出后子面板不会消失(CTX-05)"
+        )
+        assert "@mouseenter=\"keepSub()\"" in block, (
+            f"{ui} 子面板缺 @mouseenter=\"keepSub()\" —— 跨过父项与面板之间 4px 缝隙时会被收掉, 鼠标进不去子面板"
+        )
+        assert block.count("class=\"ctx-sub\""
+                          ) == 1, (f"{ui} 一级菜单出现 {block.count('class=\"ctx-sub\"')} 个子面板 —— 只允许「更多操作」一个入口(CTX-06)")
+        for kind in ("name", "hash", "magnet"):
+            assert f"copyTorrentInfo('{kind}')" in block, (
+                f"{ui} 的复制族缺 copyTorrentInfo('{kind}') —— 复制项必须并进「更多操作」(CTX-06)"
+            )
+        assert "subMenu === 'copy'" not in text, (f"{ui} 仍残留 subMenu === 'copy' 分支 —— 复制已并入「更多操作」, 双入口会回潮(CTX-06)")
+
+    # ③ 收起的两个方法必须存在且挂在延迟上(同步收起 = 鼠标进不去子面板)
+    menu = open(os.path.join(STATIC_ROOT, "shared", "menu.js"), encoding="utf-8").read()
+    for name, needle in (("keepSub()", "clearTimeout"), ("scheduleSubClose()", "setTimeout")):
+        m = re.search(rf"\n    {re.escape(name)} \{{(.*?)\n    \}},", menu, re.S)
+        assert m, f"shared/menu.js 找不到 {name}(改名或挪走了? 同步本守阵)"
+        assert needle in m.group(1), f"{name} 必须走 {needle}(延迟收起/撤销挂起), 实现漂移了"
+    delay = re.search(r"const SUB_CLOSE_DELAY_MS = (\d+);", menu)
+    assert delay and int(delay.group(1)) > 0, "SUB_CLOSE_DELAY_MS 必须为正整数(0 = 同步收起, 进不去子面板)"
+    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    assert "_subCloseTimer: 0," in app, "app.js data 必须声明 _subCloseTimer(未声明的属性不进响应式, 且易漂移)"
+    assert re.search(r'"menu\.visible"\(v\) \{\n(?:.*\n){0,4}?.*this\.keepSub\(\);',
+                     app), ("menu.visible 关闭时必须 keepSub() 撤掉挂起的收起 —— 否则一级关掉后定时器还会再触发一次")
 
 
 def test_api_group_commands_enqueue(web_env):

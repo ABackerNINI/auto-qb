@@ -24,8 +24,8 @@
 - `scripts/ui_harness.py` —— 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
   (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`)。
 - `scripts/ui_smoke.cjs` —— Playwright 跑 **prism / atlas 双 UI** 断言。当前规模:
-  **84 项 0 失败**(ok 模式; 单 UI 各 42)/ **84 项 0 失败**(`--expect-cmd error`, 回滚路径)/
-  **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4)。
+  **92 项 0 失败**(ok 模式; 单 UI 各 46)/ **84 项 0 失败**(`--expect-cmd error`, 回滚路径 —— error 轮未重跑,
+  数字仍是加 CTX-04~06 之前的)/ **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4)。
 - 典型用法: 起桩服务 → 跑 `ui_smoke.cjs` → 关服务(**完整命令与 `NODE_PATH` 见 [browser-env.md](browser-env.md)**)。
 - 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、滚动总高与末行可达、
   主线程长任务、**批量动作是否真的合成一条请求**(靠 `page.on("request")` 数 `/api/torrents/bulk` 与逐目标端点的次数 ——
@@ -49,7 +49,14 @@
 - **种子页筛选器有数据(计数 = 种子数)**(选项非空 + 计数 == 用 `vm.torrents` 现数的真值 + 弹层 DOM 真有项)。
 - **真值事件后不被陈旧快照打回**(`page.route` 注入陈旧 payload ⇒ 行色必须不变、覆盖必须还在;
   再由"快照同意"那一版收工 —— **红验撤掉修复即变红**)。
+- **CTX-04 / CTX-05 / CTX-06 右键次级菜单**(双 UI 各四条): ①悬停父项时子面板图标**仍是语义色**
+  (读 `.ctx-sub .ico-queue` 的 computed color, 须 == `var(--teal)` 且 != `var(--fg-muted)` ——
+  **用色值不用截图**, 修之前恒等于灰); ②移到别的菜单项后 450ms, `.ctx-sub` 必须为 0;
+  ③一级 `has-sub` 恰好 1 个且文案「更多操作」; ④复制三项在该面板内。**已对 HEAD 红验**
+  (回退棱镜的 CSS 与父项 `mouseleave` ⇒ ①②变红)。
 - **BUG-8 刷新后追剧页不空白**、**BUG-9 辅种页复制磁力可用**。
+- ⚠ `[prism] P0-3 剧行乐观` 实测抖过一次(双 UI 同轮跑, 机器负载高时 1.5s 轮询内未捕获),
+  单 UI 重跑 46/0 ⇒ **时序抖动, 不是回归**; 看到它单独红先重跑一次再判。
 
 ### 那两条"恒红"是**断言量错了对象**, 不是代码回归(2026-09-22 已修)
 

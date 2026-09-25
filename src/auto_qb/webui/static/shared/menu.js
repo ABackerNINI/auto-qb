@@ -7,6 +7,10 @@
  * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_MENU);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* 次级菜单"移出后收起"的宽限时长(ms): 只用于让指针跨过父项与子面板之间的 4px 缝隙,
+ * 与 --dur 无关 —— 太长会有"移开了还挂着"的粘滞感, 太短会进不去子面板。 */
+const SUB_CLOSE_DELAY_MS = 180;
+
 window.AQB_MENU = {
   methods: {
     /* ---------------- 表头右键菜单(TBL-05): 按列操作 ----------------
@@ -171,15 +175,40 @@ window.AQB_MENU = {
     },
     /* ---------------- FX-15 次级菜单(flyout) ----------------
      * 入口按"PT 日常高频"与"qB 通用能力"分层: 一级只放高频动作, 队列/TMM/超级做种/
-     * 强制开始/分享率限制/复制族 一律进次级菜单(原则已写入 memory-bank conventions.md)。
+     * 强制开始/分享率限制/复制族 一律进「更多操作」(原则已写入 memory-bank conventions.md)。
      * hover 与点击都能展开(键盘走 Enter/Space); 子面板按父项右缘判定是否需要向左翻。
+     *
+     * CTX-05 收起: 只靠 mouseenter 展开的话, 鼠标移到别的菜单项上子面板会一直挂着
+     * (用户报"二级菜单在鼠标移出时不会消失")。收起挂在**父项**的 mouseleave 上 —— 子面板是
+     * 父项的 DOM 后代, mouseleave 只在"指针离开父项**及其全部后代**"时触发, 所以
+     * 父项 → 面板 / 面板 → 父项 都不会误收起, 面板上再挂一条 mouseleave 反而会在
+     * "从面板回到父项"时把面板收掉(而父项不会再收一次 mouseenter)。面板自身只挂
+     * mouseenter 撤销挂起的收起。
+     * 延迟时长只为一件事: 让指针跨过父项与面板之间那 4px 缝隙(.ctx-sub 的
+     * left: calc(100% + 4px))—— 同步收起会在过缝瞬间关掉面板, 表现为"鼠标进不去子面板"。
      */
     openSub(name, ev) {
+      this.keepSub();
       this.subMenu = name;
       this.subFlip = this._menuOverflowsRight(ev && ev.currentTarget, 200);
     },
+    /* 指针落在父项或子面板上: 撤销挂起的收起(子面板上不要再算 flip —— 锚点是父项不是面板) */
+    keepSub() {
+      if (this._subCloseTimer) {
+        clearTimeout(this._subCloseTimer);
+        this._subCloseTimer = 0;
+      }
+    },
+    scheduleSubClose() {
+      this.keepSub();
+      this._subCloseTimer = setTimeout(() => {
+        this._subCloseTimer = 0;
+        this.subMenu = "";
+      }, SUB_CLOSE_DELAY_MS);
+    },
     toggleSub(name, ev) {
       if (this.subMenu === name) {
+        this.keepSub();   // 点开又点关: 撤销可能挂着的收起, 否则 180ms 后又被收一次
         this.subMenu = "";
         return;
       }

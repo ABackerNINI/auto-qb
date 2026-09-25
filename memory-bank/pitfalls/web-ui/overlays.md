@@ -37,6 +37,21 @@
 - **判别**: Vue 不移除元素, `opacity:0` 的 `position:fixed` 层**吃掉所有点击**。
 - **处置**: 加固 —— `<transition :duration="200">` + `.xx-leave-active { pointer-events: none }`。
 
+### flyout 次级菜单: hover 规则会连子面板一起染色 / 只挂 mouseenter 就永远不收
+
+- **触发**: 改右键次级菜单(`.ctx-item.has-sub` + `.ctx-sub`)、改菜单图标 hover 态。
+- **判别**: ① `.ctx-item:hover .ico { color: … }` 是**后代**选择器, 而子面板是父项的 DOM 后代 ⇒
+  hover 父项会把**整个子面板**的图标一起刷成同一个颜色(用户报"二级菜单图标 hover 变灰");
+  单纯加 `>` 还不够 —— 不带 `:where()` 时 hover 规则 0,3,0 会压过语义色规则 0,2,0, 有色图标照样变灰。
+  ② 只写 `@mouseenter` 展开、不写收起 ⇒ 鼠标移到别的菜单项上子面板一直挂着(用户报"移出不消失")。
+  ③ 收起**不能同步**: 面板 `left: calc(100% + 4px)`, 指针跨 4px 缝隙的瞬间不在父项也不在面板上,
+  同步收起 = "鼠标根本进不去子面板"。
+- **处置**: ① `.ctx-item:where(:hover) > .ico`(`>` 限直接子级 + `:where()` 把 :hover 特异性压到 0,
+  与语义色规则同重并按源码顺序让位); ② 收起挂**父项**的 `mouseleave`(mouseleave 只在离开父项
+  **及其全部后代**时触发 ⇒ 父项↔面板互切不会误收; 面板上再挂一条 mouseleave 反而会在
+  "从面板回到父项"时误收, 因为父项不会再收一次 mouseenter), 面板自身只挂 `mouseenter` 撤销挂起的收起;
+  ③ 延迟 ~180ms 收起, 一级菜单关闭时撤销挂起的定时器。守阵: `test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close`。
+
 ### 删除编排在前端而非后端
 
 - **触发**: 改"删除前强制汇报"。

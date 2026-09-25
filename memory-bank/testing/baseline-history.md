@@ -10,6 +10,20 @@
 > (append-only 流水触顶时的处置: 从最老一端切到本文件 ≤ 16,000 字符, 原位留本行指针;
 > 最近一次轮转: 2026-09-25 触顶 24,000, 外迁最老 17 条, 本文件保留 10 条)
 
+- ↑ 收集数 **1598 → 1599**(**+1**; 2026-09-24/25 **WEB UI 右键次级菜单三条 CTX-04/05/06**):
+  `test_web.py::test_frontend_ctx_submenu_single_entry_and_hover_close` —— 用户报 ①二级菜单图标
+  hover 变灰 ②二级菜单移出不消失 ③「复制」二级菜单移入「更多操作」。
+  ①是两层叠加: `.ctx-item:hover .ico` 是**后代**选择器而 `.ctx-sub` 是父项 DOM 后代 ⇒ hover 父项把
+  **整个子面板**的图标刷成 `--fg-muted`; 且只加 `>` 不够(hover 规则 0,3,0 压过语义色 0,2,0)⇒ 终解
+  `.ctx-item:where(:hover) > .ico`(`>` 限直接子级 + `:where()` 把 `:hover` 特异性压到 0, 按源码顺序让位)。
+  ②收起挂**父项** `mouseleave` 延迟 180ms(`scheduleSubClose`/`keepSub`; 面板上再挂一条会在
+  "从面板回到父项"时误收; 延迟只为跨过 `.ctx-sub` 的 4px 缝隙)。③复制族并入「更多操作」末尾,
+  一级 `has-sub` 2 → 1 个。冒烟 `scripts/ui_smoke.cjs` **+8 条**(双 UI × 四), 已对 HEAD 红验;
+  冒烟 84 → **92 项 0 失败**(单 UI 各 46)。⚠ 本轮与主线 10 个提交合流(两边 `test_web.py` 同一位置
+  各加一个测试 ⇒ `--3way` 冲突, 取并集; `_doc-map.md` 是生成物, 取主线版后重跑 `kb.index`),
+  基线数字取**合流后实测**: **1599 passed + 1 skipped / 0 failed**(本 shell 的 GBK 假红已由主线
+  `a760da0` 修掉, 不再需要 `env -u PYTHONUTF8`)。
+
 - ↑ 收集数 **1579 → 1596**(**+17**; 2026-09-25 **HR 超龄豁免: 判定侧豁免 + 翻页早停**): 用户新需求
   「完成时间超过一定期限(如一年)的种子不再验证 HR、也不再翻页」。新站点级键
   `trackers.<站>.hr_check.completed_age_limit`(0=关闭, 默认行为不变): 判定收口 `judge_record`

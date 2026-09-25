@@ -924,12 +924,16 @@
             </div>
             <div class="ctx-sep"></div>
             <!-- FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子控制,
-                 不是"高级"能力; 只改文案与语义, 子项集合不动); hover 与点击均可展开 -->
+                 不是"高级"能力; 只改文案与语义, 子项集合不动); hover 与点击均可展开;
+                 CTX-06: 复制族(名称/哈希/magnet)由独立子面板并入本面板末尾 —— 一级只留这一个入口,
+                 两个"更多"并排会让"该进哪个"变成一次选择; 移出父项/面板后延迟收起(CTX-05) -->
             <div class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }"
-                 @mouseenter="openSub('advanced', $event)" @click.stop="toggleSub('advanced', $event)">
+                 @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('advanced', $event)">
               <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>更多操作
               <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }" @click.stop>
+              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   @click.stop @mouseenter="keepSub()">
                 <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
                   <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
                 </div>
@@ -955,14 +959,8 @@
                 <div class="ctx-item" @click="editShareLimits()">
                   <svg class="ico ico-sm ico-percent" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
                 </div>
-              </div>
-            </div>
-            <!-- FX-15 次级菜单(复制族): 三个复制项从一级下沉 -->
-            <div class="ctx-item has-sub" :class="{ open: subMenu === 'copy' }"
-                 @mouseenter="openSub('copy', $event)" @click.stop="toggleSub('copy', $event)">
-              <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制
-              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-              <div v-if="subMenu === 'copy'" class="ctx-sub" :class="{ 'flip-x': subFlip }" @click.stop>
+                <!-- CTX-06: 复制族并入「更多操作」(此前是并列的第二个子面板) -->
+                <div class="ctx-sep"></div>
                 <div class="ctx-item" @click="copyTorrentInfo('name')">
                   <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
                 </div>

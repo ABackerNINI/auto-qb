@@ -812,6 +812,75 @@ async function smokeUi(browser, ui) {
     }
 
     /*
+     * CTX-04 / CTX-05 / CTX-06 —— 右键**次级菜单**的三条(2026-09-24 用户报, 都是"pytest 全绿、
+     * node --check 全绿、界面废掉"那一类; 判据一律取**可测的事实**, 不靠截图):
+     *   ① 图标 hover 变灰(CTX-04): `.ctx-item:hover .ico` 是**后代**选择器, 而 `.ctx-sub` 是父项的
+     *      DOM 后代 ⇒ hover「更多操作」会把整个子面板的图标刷成 --fg-muted, 语义色全被抹平。
+     *      判据: 悬停父项时读子面板首项图标的 computed color, 必须仍是语义色(队列族 --teal),
+     *      且不等于 --fg-muted —— 修之前这里恒等于 --fg-muted。
+     *   ② 移出不消失(CTX-05): 只有 mouseenter 展开、没有任何收起 ⇒ 鼠标移到别的菜单项上
+     *      子面板一直挂在屏幕上。判据: hover 到另一个一级项 → 450ms 后 .ctx-sub 必须为 0。
+     *   ③ 一级两个"更多"入口(CTX-06): 复制族曾单列第二个子面板 ⇒ 用户得先选"该进哪个"。
+     *      判据: 一级 has-sub 恰好 1 个且文案是「更多操作」, 复制三项在它展开的面板里。
+     */
+    {
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(200);
+      const row0 = (await page.$$(".torrent-row"))[0];
+      if (!row0) {
+        add(ui, "CTX-04/05/06 次级菜单", false, "页面上没有 .torrent-row 可右键(前置条件变了?)");
+      } else {
+        await row0.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        // ③ 一级只允许一个次级菜单入口
+        const subs = await page.$$(".ctx-menu > .ctx-item.has-sub");
+        const subTexts = [];
+        for (const h of subs) subTexts.push(((await h.textContent()) || "").trim());
+        add(ui, "CTX-06 一级只有一个次级菜单入口(更多操作)",
+          subs.length === 1 && subTexts[0].includes("更多操作"),
+          `入口 ${subs.length} 个: ${subTexts.join(" / ") || "(无)"}`);
+
+        // 展开子面板(hover 父项 —— 与用户路径一致)
+        await subs[0].hover();
+        await page.waitForSelector(".ctx-sub", { timeout: 3000 }).catch(() => null);
+        const panelText = await page.$eval(".ctx-sub", (n) => n.textContent).catch(() => "");
+        const flat = panelText.replace(/\s+/g, " ");
+        add(ui, "CTX-06 复制族并入「更多操作」",
+          ["复制名称", "复制哈希", "复制 magnet"].every((t) => flat.includes(t)),
+          `面板: ${flat.slice(0, 90) || "(未展开)"}`);
+
+        // ① 悬停父项时子面板图标必须仍是语义色(队列族 --teal), 不是 --fg-muted
+        const probe = await page.evaluate(`(() => {
+          const el = document.querySelector(".ctx-sub .ico-queue");
+          if (!el) return null;
+          const mk = (v) => { const s = document.createElement("span"); s.style.color = v; document.body.appendChild(s); return s; };
+          const muted = mk("var(--fg-muted)"), teal = mk("var(--teal)");
+          const out = {
+            icon: getComputedStyle(el).color,
+            muted: getComputedStyle(muted).color,
+            teal: getComputedStyle(teal).color,
+          };
+          muted.remove(); teal.remove();
+          return out;
+        })()`);
+        add(ui, "CTX-04 悬停父项时子面板图标仍是语义色(不变灰)",
+          !!probe && probe.icon === probe.teal && probe.icon !== probe.muted,
+          probe ? `图标 ${probe.icon} / 语义色(--teal) ${probe.teal} / 灰(--fg-muted) ${probe.muted}`
+            : "(子面板没展开, 读不到图标)");
+
+        // ② 移到别的菜单项上 -> 子面板必须收起(延迟 ~180ms, 故等 450ms 再看)
+        const firstItem = await page.$(".ctx-menu > .ctx-item");
+        if (firstItem) await firstItem.hover();
+        await page.waitForTimeout(450);
+        const still = await page.$$eval(".ctx-sub", (ns) => ns.length);
+        add(ui, "CTX-05 移出父项后子面板收起", still === 0, `残留 .ctx-sub ${still} 个`);
+
+        await page.keyboard.press("Escape");   // 收尾关菜单, 免得影响后续断言
+        await page.waitForTimeout(150);
+      }
+    }
+
+    /*
      * P0-3 整组乐观(BUG-3): 整组暂停后**组行本身**必须立刻可见 —— 颜色随成员 kind 重算 + is-pending。
      * 只补成员 hash 不够: 组行的状态色取自 g.status.primary(不展开明细时看不到成员行),
      * 而组行此前也没有 is-pending 绑定 ⇒ 整组操作在感知层完全没有反馈。

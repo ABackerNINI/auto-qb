@@ -19,6 +19,21 @@
   或 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright-core@<对齐版本>`。
   ❗**ESM 的 `import` 不认 `NODE_PATH`** ⇒ 冒烟脚本必须写成 **CJS**(`require`)。
 
+### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
+
+- **触发**: 起 `scripts/ui_harness.py` 后跑 `ui_smoke.cjs`, 报
+  `冒烟整体执行 — page.waitForFunction: Timeout 30000ms exceeded`(或 `ERR_CONNECTION_REFUSED`)。
+- **判别**: 冒烟第一条断言是"`.group-row` 出现", 桩服务没服务到当前代码时它会超时, 症状与
+  "前端模板写错导致白屏"**完全同形**, 极易误判成自己的改动炸了。两种成因都实测到过:
+  ①**端口被占** —— uvicorn 只打一行 `[Errno 10048] …每个套接字地址只允许使用一次` 就退出,
+  而**旧进程仍在服务旧代码**(旧代码可能连 `/prism/` 路由都没有 ⇒ 页面是 `{"detail":"Not Found"}`,
+  `curl /api/config/public` 却返回 200 ⇒ 看起来"服务是好的");
+  ②**后台进程随 shell 调用结束被杀** —— 用 `(cmd &)` 起的服务在本次 Bash 调用返回后就没了,
+  下一轮冒烟是 `ERR_CONNECTION_REFUSED`(而 `curl` 在**同一次调用内**是通的, 于是误以为服务活着)。
+- **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`), 不要 `(cmd &)`;
+  ②起完**立刻看 harness 日志第一行**(它会打印实际监听地址与种子/组数), 端口被占就换端口;
+  ③怀疑服务不对时先 `curl <base>/prism/` —— 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
+
 ### 页面 hidden 态(VS Code 内置页 / 未 bringToFront)
 
 - **触发**: 在隐藏页面上跑交互。
