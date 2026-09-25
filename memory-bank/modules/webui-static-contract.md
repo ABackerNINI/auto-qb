@@ -27,5 +27,6 @@
 - **弹窗尺寸令牌族(R10-12)**: `--modal-w-narrow/base/form/add` + `--modal-wide-w`(超宽; 两套 UI 同值同族)。新增弹窗只选档, 不写新数字。**添加种子窗口的保存路径独占一整行**(`.add-dialog-grid` 为 2 列 + `.add-dialog-pathfield` 跨列) —— 路径是最长的输入, 与分类/标签并三列时只能看到开头一截。
 - **浮层锚定契约**(FX-18): 绝对定位浮层的容器必须有 `position: relative`; 自绘候选面板一律走 `.pop-menu` 家族; 原生 `<datalist>` 已退役。
 - **无遮罩浮层**: `.speed-pop`(限速)必须是状态栏的**兄弟节点**(`.statusbar` 有 `overflow: hidden`, 嵌进去会被裁掉), 只由 JS 写 `left` 并夹取到视口内; **限额浮层只有这一个载体**(旧 `.modal.speed-dialog` 已删, R10-04)。
-- **选项语汇**: 勾选框已从浮层/对话框退役, 一律用 `.opt-pill` 切换胶囊(危险项加 `.danger`)。
+- **选项语汇**: 勾选框已从浮层/对话框退役, 一律用 `.opt-pill` 切换胶囊(危险项加 `.danger`)。2026-09-26 起该组件**两套 UI 都有定义**(atlas 首次引入, 照 prism/components.css 同源搬入, 令牌两套同值) —— 首个使用场景是种子级「标签/分类」编辑对话框的标签切换胶囊(亮 = 选中种子共同拥有, 点击即投递 bulk add_tags/remove_tags)。
 - **后端(第十轮新增/变更)**: `GET /api/fs/dirs`(服务端目录浏览: 只列目录 + 允许根白名单 + realpath 边界判域 + 符号链接逃逸防护; `path` 空 = 返回允许根列表) 与 `POST /api/fs/mkdir`(单层名字 + 幂等 + 同名文件 409; 本项目唯一文件系统**写**能力); `POST /api/open-path` 对单文件种子改为**定位选中**(`open_path(path, select=True)`), 响应多一个 `select` 字段。
+  - ⚠ **容器部署下这三个端点全部不可用**(允许根 / 目标路径都是 qB 报回的**宿主**保存路径, 容器内 `realpath` 落不到任何根内): `fs/dirs` 与 `fs/mkdir` → 403/404;`open-path` → **404**(路径不可见), 若把下载目录挂成可见则改抛 **500**(`xdg-open` 缺失且未捕获)。`GET /api/paths` 是纯字符串聚合、不校验存在性, 仍照常返回宿主路径 —— 手填有效路径添加种子照样可用。判据见 [pitfalls/ops/docker-host-features.md](../pitfalls/ops/docker-host-features.md) 与 `docs/deployment.md` §11。

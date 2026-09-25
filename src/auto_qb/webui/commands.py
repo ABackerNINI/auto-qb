@@ -445,19 +445,42 @@ class WebCommandsMixin:
         logger.info(f"WEB UI | 种子 {hash[:8]} 重命名{'文件夹' if is_folder else '文件'}: {old_path} -> {new_path}")
 
     # 批量动作 -> API 调用(单次调用传全部 hashes, 不逐个循环; delete 透传 delete_files)
+    # extra = {"tags": [...], "category": str}: add_tags/remove_tags/set_category 的载荷,
+    # 其余动作忽略它(签名统一 4 参, 免得逐动作特判)。add_tags/remove_tags 的 tags 已在
+    # 入口校验非空; set_category 的 category 允许空串(qB 语义 = 清除分类), None 时不会走到。
     _BULK_ACTIONS = {
         "pause":
-            lambda api, hashes, delete_files: api.torrents_pause(torrent_hashes=hashes),
+            lambda api, hashes, delete_files, extra: api.torrents_pause(torrent_hashes=hashes),
         "resume":
-            lambda api, hashes, delete_files: api.torrents_resume(torrent_hashes=hashes),
+            lambda api, hashes, delete_files, extra: api.torrents_resume(torrent_hashes=hashes),
         "recheck":
-            lambda api, hashes, delete_files: api.torrents_recheck(torrent_hashes=hashes),
+            lambda api, hashes, delete_files, extra: api.torrents_recheck(torrent_hashes=hashes),
         "delete":
-            lambda api, hashes, delete_files: api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files),
+            lambda api, hashes, delete_files, extra: api.
+            torrents_delete(torrent_hashes=hashes, delete_files=delete_files),
+        "add_tags":
+            lambda api, hashes, delete_files, extra: api.torrents_add_tags(tags=extra["tags"], torrent_hashes=hashes),
+        "remove_tags":
+            lambda api, hashes, delete_files, extra: api.
+            torrents_remove_tags(tags=extra["tags"], torrent_hashes=hashes),
+        "set_category":
+            lambda api, hashes, delete_files, extra: api.
+            torrents_set_category(category=extra["category"], torrent_hashes=hashes),
     }
 
+    # 标签/分类动作(种子级): QbApi 侧已同步 store 快照(update_torrent_fields),
+    # 走 bulk_torrents 的 RESYNC 补刷新让前端尽快看到新值。
+    _TAG_ACTIONS = frozenset({"add_tags", "remove_tags"})
+
     def _cmd_bulk_torrents(
-        self, hashes=None, action: str = "", cmd_id: str = "", delete_files: bool = False, keys=None
+        self,
+        hashes=None,
+        action: str = "",
+        cmd_id: str = "",
+        delete_files: bool = False,
+        keys=None,
+        tags=None,
+        category=None,
     ):
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
@@ -468,18 +491,32 @@ class WebCommandsMixin:
         - 组键模式(DLG-02): keys 为分组 key 列表(tuple, Web 层已解码), 逐组展开成员
           (经 _group_hashes 按快照过滤, 级联全部在册成员)并与 hashes 合并去重; 组不存在或
           成员全部不在快照计一个缺失组, 缺失文案与种子缺失分列(纯 hash 模式文案不变, 前端契约保持)
+        - 标签/分类动作: add_tags/remove_tags 需非空 tags; set_category 的 category 允许
+          空串(清除分类), 未提供(None)才报错 —— 两者由 Web 层按"提供才透传"的同一约定组装
         """
         req = [h for h in (hashes or []) if h]
         keys = [k for k in (keys or []) if k]
         fn = self._BULK_ACTIONS.get(action)
         if fn is None:
             if cmd_id:
-                self._set_web_result(cmd_id, "error", f"未知批量动作: {action}(可选 pause/resume/recheck/delete)")
+                self._set_web_result(
+                    cmd_id, "error",
+                    f"未知批量动作: {action}(可选 pause/resume/recheck/delete/add_tags/remove_tags/set_category)"
+                )
             return
         if not req and not keys:
             if cmd_id:
                 self._set_web_result(cmd_id, "error", "未提供任何 hash 或组")
             return
+        if action in self._TAG_ACTIONS and not [t for t in (tags or []) if t]:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "未提供标签")
+            return
+        if action == "set_category" and category is None:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "未提供分类(空串=清除分类)")
+            return
+        extra = {"tags": [t for t in (tags or []) if t], "category": category or ""}
         known = [h for h in req if self.store.get(h) is not None]
         missing = len(req) - len(known)
         seen = set(known)
@@ -492,7 +529,7 @@ class WebCommandsMixin:
             else:
                 missing_groups += 1
         if known:
-            fn(self.api, known, delete_files)
+            fn(self.api, known, delete_files, extra)
         msgs = []
         if missing:
             msgs.append(f"{missing}/{len(req)} 个种子不存在或已被删除")

@@ -152,6 +152,13 @@ def build_router(ctx: WebContext) -> APIRouter:
         keys = [_group_key_param(str(k)) for k in (b.get("keys") or []) if k]
         if keys:
             payload["keys"] = keys
+        # 标签/分类动作: 同样"提供才透传"(queue 载荷不带多余键)。
+        # tags 非空才入; category 按键存在性入(payload 允许空串 = qB 语义的"清除分类")
+        tags = [str(t).strip() for t in (b.get("tags") or []) if str(t).strip()]
+        if tags:
+            payload["tags"] = tags
+        if b.get("category") is not None:
+            payload["category"] = str(b["category"]).strip()
         return _enqueue("bulk_torrents", payload)
 
     @router.post("/api/torrents/add")

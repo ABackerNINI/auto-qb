@@ -295,6 +295,9 @@
               <button class="bulk-btn" @click="bulkAct('recheck')">
                 <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
               </button>
+              <button class="bulk-btn" @click="openMetaDialog(null)">
+                <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类
+              </button>
               <button class="bulk-btn danger" @click="bulkDelete()">
                 <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ bulkDeleteLabel() }}…
               </button>
@@ -867,6 +870,9 @@
             <div class="ctx-item" @click="ctxAct('recheck')">
               <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
             </div>
+            <div class="ctx-item" @click="ctxMeta()">
+              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
+            </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="ctxDelete()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>批量删除…
@@ -916,6 +922,9 @@
             </div>
             <div class="ctx-item" @click="editRename()">
               <svg class="ico ico-sm ico-rename" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
+            </div>
+            <div class="ctx-item" @click="openMetaDialog(menu.hash)">
+              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item" @click="torrentCmd('recheck', null, '重新校验')">
@@ -2171,6 +2180,70 @@
         </div>
         <div class="modal-actions">
           <button class="ce-btn primary" @click="closeMgr">关闭</button>
+        </div>
+      </div>
+    </div>
+    <!-- 标签/分类编辑对话框: 对选中集合(或单种子)**即时**增删标签/改分类; 写操作走 /api/torrents/bulk
+         (add_tags/remove_tags/set_category), 每次点击独立命令独立回执, 无"应用/取消"(照 qB 官方交互)。
+         目标集合打开时锁定; 分类/标签候选打开时拉取; 复用 .modal/.add-dialog 视觉体系(.meta-dialog)。
+         逻辑在 shared/dialogs.js(AQB_DIALOGS), 两套 UI 成对 -->
+    <div v-if="metaOpen" class="modal-mask" @click.self="closeMeta">
+      <div class="modal add-dialog meta-dialog" role="dialog" aria-modal="true" aria-label="标签与分类">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
+          <span>标签与分类</span>
+          <button class="ce-icon flat add-dialog-x" title="关闭" @click="closeMeta">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <p class="meta-targets">作用于 <b>{{ metaCount }}</b> 个种子(打开时锁定)</p>
+          <div class="add-dialog-field add-dialog-combo">
+            <label class="add-dialog-label" for="meta-category">分类(留空 = 无分类)</label>
+            <div class="add-input-row">
+              <input id="meta-category" v-model="metaCatInput" class="add-dialog-input" type="text"
+                     placeholder="下拉选择或自由输入, 留空 = 清除分类" autocomplete="off" spellcheck="false"
+                     @focus="openMetaCatMenu" @click.stop="openMetaCatMenu"
+                     @input="metaCatHi = -1; metaCatMenu = true" @keydown="onMetaCatKeydown($event)">
+              <transition name="pop">
+                <div v-if="metaCatMenu" class="pop-menu add-pop" @click.stop ref="metaCatList">
+                  <div class="pop-item add-pop-item" @mousedown.prevent="metaSetCategory('')">
+                    <span class="pop-value">(无分类)</span>
+                  </div>
+                  <div v-for="(c, i) in metaCatFiltered()" :key="c" class="pop-item add-pop-item"
+                       :class="{ on: i === metaCatHi }" :data-hi="i === metaCatHi ? '1' : '0'"
+                       @mousedown.prevent="metaSetCategory(c)" @mouseenter="metaCatHi = i">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
+                    <span class="pop-value">{{ c }}</span>
+                  </div>
+                  <p v-if="!metaCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
+                </div>
+              </transition>
+            </div>
+            <p v-if="metaCatDiff" class="add-dialog-hint">选中种子的分类不一致, 输入框已清空; 设置后将统一覆盖</p>
+          </div>
+          <div class="add-dialog-field">
+            <label class="add-dialog-label">标签(点击胶囊切换: 亮 = 选中种子已全部拥有)</label>
+            <div class="meta-tags">
+              <button v-for="t in metaTags" :key="t" type="button" class="opt-pill"
+                      :class="{ on: metaCommonTags.includes(t) }" :disabled="metaBusy" @click="metaToggleTag(t)">
+                <span class="opt-dot"></span>{{ t }}
+              </button>
+              <p v-if="!metaTags.length" class="mgr-empty">暂无标签, 在下方输入添加</p>
+            </div>
+            <div class="mgr-new">
+              <input v-model="metaNewTags" class="add-dialog-input" type="text" placeholder="新标签(逗号分隔可批量)"
+                     autocomplete="off" spellcheck="false" @keyup.enter="metaAddNewTags">
+              <button class="ce-btn primary" :disabled="!metaNewTags.trim() || metaBusy" @click="metaAddNewTags">添加</button>
+            </div>
+          </div>
+          <div class="mgr-hint">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>
+            <span>操作即时生效(每次点击单独投递); 行内标签/分类列稍后自动刷新</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="ce-btn primary" @click="closeMeta">完成</button>
         </div>
       </div>
     </div>

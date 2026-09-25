@@ -1,9 +1,11 @@
 ---
-# 容器化示例配置 (plan 26-09-25-2241 · D3): 以 minimal.yml 为底, 按容器场景改了四处
+# 容器化示例配置 (plan 26-09-25-2241 · D3): 以 minimal.yml 为底, 按容器场景改了五处
 #   ① data_dir: /data —— 对齐 compose.yaml 的 named volume
 #   ② qbittorrent.host: host.docker.internal —— qB 跑宿主机时容器内的访问入口(D4 案 1; Linux 宿主由 compose extra_hosts 补)
 #   ③ web.host: "0.0.0.0" —— 容器里 127.0.0.1 等于自断访问(端口映射探不到)
 #   ④ notify.enabled: false 显式写死 —— 无桌面环境, 平台通知预期不可用
+#   ⑤ grouping.check_missing_files: false —— 缺文件扫描读宿主磁盘, 不关会误暂停整组并打 MISSING 标签
+#      (2026-09-26 补; 逐项依据见 docs/deployment.md §11)
 # 用法: cp docker/config.example.yml config/config.yml, 改好 qbittorrent 三项后 docker compose up -d --build
 # 🔴 qB 凭据请占位替换, 不要把真实密码提交进仓库
 config:
@@ -29,6 +31,10 @@ config:
     # 种子分组管理(辅种管理)
     grouping:
         enabled: true # 启用种子分组管理
+        # ❗容器场景必须 false: 缺文件扫描读的是 qB 报回的**宿主**保存路径, 容器内看不见那块盘
+        #   ⇒ 恒判定"文件缺失" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)。默认 true, 不显式关就会踩。
+        #   想保留该功能: 把下载目录挂到与 qB 完全相同的绝对路径后再开(见 docs/deployment.md §11.5)
+        check_missing_files: false
         missing_tag: MISSING # 文件丢失时整组添加的标签
 
     # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):

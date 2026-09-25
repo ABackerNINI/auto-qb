@@ -350,6 +350,7 @@
 .bulk-btn .ico-play { color: var(--green); }
 .bulk-btn .ico-pause { color: var(--warn); }
 .bulk-btn .ico-sync { color: var(--blue); }
+.bulk-btn .ico-tag { color: var(--indigo); }
 .bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
 .bulk-btn.danger:hover { background: var(--error-soft); }
 .bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }

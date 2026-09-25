@@ -207,6 +207,7 @@
 .ctx-item .ico-play { color: var(--green); }
 .ctx-item .ico-pause { color: var(--warn); }
 .ctx-item .ico-sync { color: var(--blue); }
+.ctx-item .ico-tag { color: var(--indigo); }
 .ctx-item.danger { color: var(--error); }
 .ctx-item.danger .ico { color: currentColor; }
 .ctx-item.danger:hover { background: var(--error-soft); }
@@ -535,6 +536,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn);
   color: var(--warn); font-size: 11.5px; line-height: 1.5; }
 .mgr-hint .ico { flex: 0 0 auto; }
+
+/* 标签/分类编辑对话框: 对选中集合即时增删标签/改分类(逻辑 shared/dialogs.js; 两套 UI 成对) */
+.modal.meta-dialog { width: var(--modal-w-form); }
+.meta-targets { margin: 0 0 12px; color: var(--fg-dim); font-size: 12.5px; }
+.meta-targets b { color: var(--fg); }
+.meta-tags { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto; margin: 2px 0 12px; }
 
 /* 筛选弹层底部管理入口(FE-2C2): sticky 吸底(长列表滚动时管理入口不滚走), 顶部细线与列表区分隔 */
 .pop-mgr-btn { position: sticky; bottom: -8px; display: flex; align-items: center; gap: 6px;

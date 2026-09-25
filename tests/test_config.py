@@ -39,7 +39,7 @@
 - test_load_tracker_groups: groups 解析回填 TrackerConfig, 未配置默认空列表
 - test_validate_state_save_interval: state_save_interval 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
 - test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
-- test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关 —— compose.yaml 的端口映射与 healthcheck 依赖)
+- test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
 """
 import logging
 import os
@@ -1189,3 +1189,5 @@ def test_example_docker_config_yml_passes_fail_fast():
     assert config.web.enabled is True  # healthcheck 探的就是这个端口
     assert config.web.port == 8080  # compose ports "8081:8080" 与 healthcheck 写死 8080
     assert config.notify.enabled is False  # 容器无桌面会话, 平台通知预期不可用
+    # 缺文件扫描读的是 qB 报回的宿主保存路径 —— 容器内恒"不存在" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)
+    assert config.grouping.check_missing_files is False

@@ -68,7 +68,9 @@ const DETAIL_COLUMNS = [
   { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
   { key: "seeding_time", label: "做种时长", tpl: "minmax(124px, 1.1fr)", sortable: true, align: "left" },
   // 分享率: 显示 实际/HR 要求(未配置分享率要求时只显示实际值); Hash 不可排序(无语义), 其余列均可
-  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "right" },
+  // 2026-09-26 用户要求: 分享率列左对齐(与相邻数值列的右对齐不同, 值含 "实际 / HR 要求" 两段,
+  // 左对齐起读更稳); 对齐单点在列模型, 由 colAlignCss 同时作用于表头与值(两套 UI 同源)
+  { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "left" },
   // TBL-06: 添加于(_member_view 已透出), 与 Hash 同置表尾低频区
   // (保存路径列 2026-09-17 移出本表 -> 见 GROUP_COLUMNS: 组内路径天然一致, 只保留组级一处)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
@@ -91,7 +93,8 @@ const TORRENT_COLUMNS = [
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
-  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  // 2026-09-26 用户要求: 与明细表同口径(见 DETAIL_COLUMNS 的 ratio 注释) —— 分享率左对齐
+  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "left" },
   { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   // 与分组表/明细表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
@@ -592,6 +595,22 @@ const app = createApp({
       mgrNewCatPath: "",     // 新建分类行: 保存路径(可空)
       mgrNewTags: "",        // 新建标签行: 逗号分隔可批量
       mgrBusy: false,        // 写操作回执等待中(防重复提交 + 关闭窗口误触)
+      // 标签/分类编辑对话框: 对选中集合(或单种子)**即时**增删标签/改分类
+      // 写操作走 /api/torrents/bulk(add_tags/remove_tags/set_category), 每次点击独立命令独立回执;
+      // 目标集合在打开时刻锁定(对话框有遮罩, 期间选择不会变化), 打开时另拉一次分类/标签候选。
+      metaOpen: false,
+      metaTargets: { groupKeys: [], memberHashes: [] },  // 打开时刻锁定的目标(groupKeys 为 URL 编码态)
+      metaCount: 0,          // 打开时刻的目标种子数(展示用)
+      metaCategories: [],    // 分类候选(GET /api/categories, 打开时拉)
+      metaTags: [],          // 标签候选(GET /api/tags, 打开时拉 + 输入的新标签并入)
+      metaCommonTags: [],    // 打开时刻选中集合的**共同标签**(胶囊勾选态基准; 不过滤站点同名标签)
+      metaCat: "",           // 打开时刻的共同分类("" = 无分类)
+      metaCatDiff: false,    // 选中集合分类不一致(混合态: 输入框置空 + 提示覆盖语义)
+      metaCatInput: "",      // 分类输入框(自由输入 + 下拉候选; 回车/候选点击应用)
+      metaCatMenu: false,    // 分类下拉展开态
+      metaCatHi: -1,         // 分类下拉键盘高亮
+      metaNewTags: "",       // 新标签输入(逗号分隔可批量)
+      metaBusy: false,       // 有命令在飞(防误关 + 防重复投递)
     };
   },
   computed: {
@@ -656,6 +675,7 @@ const app = createApp({
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
       else if (this.speedOpen) this.closeSpeedDialog();  // 限速弹窗(SPD-04): 与统计面板同层
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
+      else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
@@ -895,6 +915,8 @@ const app = createApp({
       this.statsError = "";
       this.mgrOpen = "";
       this.mgrBusy = false;
+      this.metaOpen = false;
+      this.metaBusy = false;
       this.logs = { loading: false, error: "", loaded: false, lines: [], file: "", note: "", level: "", num: 300 };
       this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: "" };
       this.speedOverride = { up: "", down: "", busy: false };

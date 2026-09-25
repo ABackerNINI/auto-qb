@@ -67,12 +67,14 @@
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
 - test_api_t_bulk_group_keys_enqueue: bulk 组键模式(DLG-02): keys 编码组键入队解码回 tuple, 可与 hashes 混合; 纯 hash 载荷不带 keys 键; 无密钥 401
+- test_api_t_bulk_tags_category_enqueue: bulk 标签/分类动作入队 —— tags 过滤空串非空才透传、category 按键存在性透传(空串=清除分类要保留)、未提供时载荷不带键(历史形态不变); 无密钥 401
 - test_drain_web_commands_torrent_write_actions: 二轮写命令正常执行(参数透传/cmd_id 回执 ok/限速位置同步快照)
 - test_drain_web_commands_torrent_write_unknown_hash_skips: 二轮写命令未知 hash 静默跳过不调 API
 - test_drain_web_commands_share_limits_and_queue_mapping: share-limits 缺省维度 -2 补齐; queue 动作映射; 未知动作 error 回执
 - test_drain_web_commands_torrent_write_param_errors: 写命令参数错误 -> error 回执且不调 API, 后续命令继续
 - test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
 - test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
+- test_drain_web_commands_bulk_torrents_tags_category: bulk 标签/分类命令执行 —— add_tags/remove_tags/set_category 单次调用带全部 hash; 缺 tags / 缺 category 键 error 回执; 空串分类(清除)合法; 标签非空校验
 - test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
 - test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
@@ -95,6 +97,7 @@
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrDurTitle、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
+- test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
@@ -1604,6 +1607,52 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             f"口径漂移(虚拟行/组展开/失效目标跳过), CTX-03"
         )
         assert "this.menu.visible = false" in body, f"{name} 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)"
+
+
+def test_frontend_meta_dialog_paired():
+    """标签/分类编辑对话框守阵(静态防回潮)
+
+    对选中集合(或单种子)即时增删标签/改分类。风险形态与批量菜单守阵(CTX-03)同源:
+      ① 双 UI 是两条独立模板, 只改一边 = 另一边用户没有入口(两套 UI 必须成对改);
+      ② 对话框的投递必须走 bulk 链路(/api/torrents/bulk), 目标集合口径单点在
+         _bulkTargets/openMetaDialog —— 自己再拆一遍就会与批量浮条口径漂移;
+      ③ .opt-pill(atlas 此前没有该组件)与 .meta-dialog 的 CSS 必须两套成对定义,
+         模板用到的类在 CSS 无定义 = 静默裸样式(挂件类名错配的变体)。
+    """
+    # ① 双 UI 成对: metaOpen 对话框 + 三处入口(批量浮条 / 批量菜单 ctxMeta / 单种子菜单)
+    for ui in ("atlas", "prism"):
+        text = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        assert 'v-if="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(双 UI 必须成对改)"
+        assert text.count('openMetaDialog(null)'
+                         ) == 1, (f"{ui}/index.html 批量浮条应恰有一处 openMetaDialog(null)(批量菜单入口走 ctxMeta)")
+        assert 'openMetaDialog(menu.hash)' in text, f"{ui}/index.html 单种子右键菜单缺少标签/分类入口"
+        assert "ctxMeta()" in text, f"{ui}/index.html 批量右键菜单缺少 ctxMeta 入口"
+    # ② shared 逻辑接线(逻辑层两套共用, 只在 shared 出现)
+    dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
+    for token in (
+        "openMetaDialog(singleHash)",
+        "closeMeta()",
+        "_metaBulk(action, extra, okText)",
+        "metaToggleTag(tag)",
+        "metaAddNewTags()",
+        "metaSetCategory(name)",
+        "_bulkTargets()",
+        "/api/torrents/bulk",
+    ):
+        assert token in dlg, f"shared/dialogs.js 缺少 {token}(改名或挪走了? 同步本守阵)"
+    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    m = re.search(r"\n    ctxMeta\(\) \{(.*?)\n    \},", cmd, re.S)
+    assert m, "shared/commands.js 找不到 ctxMeta(改名或挪走了? 同步本守阵)"
+    assert "this.menu.visible = false" in m.group(1), ("ctxMeta 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)")
+    assert "openMetaDialog(null)" in m.group(1), ("ctxMeta 必须复用 openMetaDialog 打开对话框 —— 目标集合口径单点在它里面")
+    # ③ CSS 成对: .meta-dialog 与 .opt-pill 两套 UI 都要有定义
+    for css in (
+        os.path.join(STATIC_ROOT, "atlas", "style.css"),
+        os.path.join(STATIC_ROOT, "prism", "css", "components.css"),
+    ):
+        t = open(css, encoding="utf-8").read()
+        assert ".meta-dialog" in t, f"{css} 缺少 .meta-dialog 定义"
+        assert ".opt-pill" in t, f"{css} 缺少 .opt-pill 定义(atlas 此前没有该组件, 易漏)"
 
 
 def test_frontend_add_torrent_drag_drop_wiring():
@@ -3425,6 +3474,97 @@ def test_api_t_bulk_group_keys_enqueue(web_env):
     assert client.post("/api/torrents/bulk", json={"keys": [key], "action": "delete"}).status_code == 401
 
 
+def test_api_t_bulk_tags_category_enqueue(web_env):
+    """bulk 标签/分类动作入队: tags 过滤空段非空才透传; category 按键存在性透传(空串=清除分类要保留);
+    未提供时载荷不带这两个键(纯 pause 调用的队列载荷与历史形态完全一致); 无密钥 401"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    cases = [
+        # add_tags: 空段过滤后透传
+        (
+            {
+                "hashes": ["HA"],
+                "action": "add_tags",
+                "tags": ["HR", "", "Keep"]
+            },
+            {
+                "hashes": ["HA"],
+                "action": "add_tags",
+                "delete_files": False,
+                "tags": ["HR", "Keep"]
+            },
+        ),
+        (
+            {
+                "hashes": ["HA"],
+                "action": "remove_tags",
+                "tags": ["HR"]
+            },
+            {
+                "hashes": ["HA"],
+                "action": "remove_tags",
+                "delete_files": False,
+                "tags": ["HR"]
+            },
+        ),
+        # set_category: category="" 也必须透传(清除分类的语义靠空串承载, 按键存在性判断)
+        (
+            {
+                "hashes": ["HA"],
+                "action": "set_category",
+                "category": ""
+            },
+            {
+                "hashes": ["HA"],
+                "action": "set_category",
+                "delete_files": False,
+                "category": ""
+            },
+        ),
+        (
+            {
+                "hashes": ["HA"],
+                "action": "set_category",
+                "category": "电影"
+            },
+            {
+                "hashes": ["HA"],
+                "action": "set_category",
+                "delete_files": False,
+                "category": "电影"
+            },
+        ),
+        # 历史形态: 不带 tags/category 的载荷不加新键
+        (
+            {
+                "hashes": ["HA"],
+                "action": "pause"
+            },
+            {
+                "hashes": ["HA"],
+                "action": "pause",
+                "delete_files": False
+            },
+        ),
+    ]
+    for body, want_payload in cases:
+        resp = client.post("/api/torrents/bulk", headers=auth, json=body)
+        assert resp.status_code == 200, f"{body}: {resp.text}"
+        assert resp.json()["queued"] is True
+        cmd, payload = mgr.web_commands.get_nowait()
+        assert cmd == "bulk_torrents"
+        payload.pop("cmd_id")
+        payload.pop("_queued_ts", None)  # P0-0 埋点元数据, 不参与入队参数断言
+        assert payload == want_payload, body
+    assert client.post(
+        "/api/torrents/bulk", json={
+            "hashes": ["HA"],
+            "action": "add_tags",
+            "tags": ["x"]
+        }
+    ).status_code == 401
+
+
 def test_drain_web_commands_torrent_write_actions():
     """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速/保存路径写后同步快照"""
     with tempfile.TemporaryDirectory() as td:
@@ -3792,6 +3932,78 @@ def test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing():
         mgr._drain_web_commands()
         assert client.calls[-1] == ("resume", ["HB"]), client.calls[-1]
         assert mgr._web_results["g4"]["status"] == "ok"
+
+
+def test_drain_web_commands_bulk_torrents_tags_category():
+    """bulk 标签/分类命令: 单次 API 调用带全部在册 hash; 缺 tags / 缺 category 键 error 回执;
+    空串分类(清除)合法; 标签缺失计数照常分列(同一聚合回执链路)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # add_tags: 一次调用(tags 由替身记录; 作用范围/缺失过滤与 pause 共用同一链路), 部分缺失回执 error 带计数
+        mgr.web_commands.put(
+            (
+                "bulk_torrents",
+                {
+                    "hashes": ["HA", "HB", "GONE"],
+                    "action": "add_tags",
+                    "tags": ["HR", "Keep"],
+                    "cmd_id": "t1"
+                },
+            )
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("add_tags", ["HR", "Keep"]), client.calls[-1]
+        r = mgr._web_results["t1"]
+        assert r["status"] == "error" and "1/3" in r["error"], r
+        # remove_tags
+        mgr.web_commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "remove_tags",
+                "tags": ["HR"],
+                "cmd_id": "t2"
+            })
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("remove_tags", ["HR"]), client.calls[-1]
+        assert mgr._web_results["t2"]["status"] == "ok"
+        # set_category: 非空
+        mgr.web_commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA", "HB"],
+                "action": "set_category",
+                "category": "电影",
+                "cmd_id": "t3"
+            })
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("set_category", "电影"), client.calls[-1]
+        assert mgr._web_results["t3"]["status"] == "ok"
+        # set_category: category="" = 清除分类, 合法(只有 None/缺键才 error)
+        mgr.web_commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "set_category",
+                "category": "",
+                "cmd_id": "t4"
+            })
+        )
+        mgr._drain_web_commands()
+        assert client.calls[-1] == ("set_category", ""), client.calls[-1]
+        assert mgr._web_results["t4"]["status"] == "ok"
+        # add_tags 缺 tags -> error 回执, 不调 API
+        before = list(client.calls)
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "add_tags", "cmd_id": "t5"}))
+        mgr._drain_web_commands()
+        assert client.calls == before, "缺 tags 不应调用 qB API"
+        r = mgr._web_results["t5"]
+        assert r["status"] == "error" and "标签" in r["error"], r
+        # set_category 缺 category 键(None) -> error 回执
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "set_category", "cmd_id": "t6"}))
+        mgr._drain_web_commands()
+        assert client.calls == before, "缺 category 不应调用 qB API"
+        r = mgr._web_results["t6"]
+        assert r["status"] == "error" and "分类" in r["error"], r
 
 
 def test_cmd_trackers_write_invalidates_lazy_cache():
