@@ -9,7 +9,9 @@
 
 ## 状态
 
-**已修完并验证(未提交, 等用户指令)。** 全量 `test.full` **1603 passed + 1 skipped / 0 failed**。
+**Done(2026-09-25, 已入库 `2541c4e`)。** 全量 `test.full` **1607 passed + 1 skipped / 0 failed**;
+浏览器冒烟 102 项 0 失败(红绿双验)。⚠ 该提交同时带上主线 `441ffe4` 遗留的
+`pitfalls/testing/tmpdir.md` 超 cap 修复(否则闸门必红)。
 
 ## 关键判据
 
