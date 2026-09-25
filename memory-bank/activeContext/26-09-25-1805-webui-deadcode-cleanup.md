@@ -5,14 +5,29 @@
 > `ce-field` 组件注册; ②其行为基座 `CE_FIELD_COMPONENT` → `CE_FIELD_BASE`(去掉 `name`/`template`,
 > **逻辑层不能删** —— hub 侧靠它拿全部 `cfg*` 读写); ③只被该模板引用的 **40 个 `.ce-*` 类**
 > (含 `is-pattern`/`ceg-*` 动态类)共 **177 条 CSS 规则 / 约 250 行**, 外加 `.hb-switch-entry`、
-> `.logs-page` 两处历史死类。**已修完并验证, 已提交。**
+> `.logs-page` 两处历史死类。**已修完并验证, 已入库 `c4fcc0c`。**
 > 触发: 死代码, 死类, 经典设置页遗留, tpl-ce-field, ce-field, CE_FIELD_BASE, ce-* CSS, hb-switch-entry, logs-page
-> 最后活动: 2026-09-25 18:05
+> 最后活动: 2026-09-25 18:20
 
 ## 状态
 
-**Done(2026-09-25, 已提交)。** 全量 `test.full` **1600 passed + 1 skipped / 0 failed**(与基线一致);
+**Done(2026-09-25, 已入库 `c4fcc0c`)。** 全量 `test.full` **1600 passed + 1 skipped / 0 failed**(与基线一致);
 浏览器冒烟 **94 项 0 失败**(与清理前逐项相同); 反向校验"被引用但 CSS 无定义"的集合**未扩大**。
+
+## 提交与推送
+
+- **提交**: `c4fcc0c`, 18 个路径, **+244 / −702**(与上一轮的控件样式修复合为一个提交 —— 两者同属
+  「设置页前端」且同一会话产出; 分开提交会因 `pitfalls/web-ui/_index.md` 是两处共用的**生成物**
+  而使前一提交的索引与内容不自洽)。
+- ⚠ **提交时远端已前进 1 个提交**(`ea31f97` HR 达标判定, 会话期间别人推的)⇒ 本地已提交 + 远端独有
+  = 分叉。按 [pitfalls/git/history-integration.md](../pitfalls/git/history-integration.md)「单提交重放的
+  最省事版」落回, **全程未用 rebase / merge / stash**: `cp -a .git` 备份 → `merge-tree --write-tree`
+  只读判冲突(单 tree oid + exit 0 = 无冲突) → `commit-tree -p <远端 tip>` → `reset --hard` → 核 ref
+  三处 → 全量测试 → 推送。实测 `235aba2` → `c4fcc0c`, 18 个文件清单与原提交逐项一致。
+- **推送**: Gitee(权威)`ls-remote` = `c4fcc0c` == 本地 ✓; GitHub 镜像由 `ship.push` 报「已推
+  `ea31f97..c4fcc0c`」, 但直连复验 `Recv failure: Connection was reset` —— 按纪律只报告一次,
+  不重试 / 不换代理(GitHub 只是镜像, 允许滞后)。
+- 集成后全量测试: **1602 passed + 1 skipped / 0 failed**(1600 + 远端 HR 提交带的 2 条)。
 
 ## 关键判据(为什么"逻辑层不能删")
 
